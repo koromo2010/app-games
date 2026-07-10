@@ -10,8 +10,9 @@ import {
   fallbackAvatarColor,
   makeRandomAvatarColor,
   normalizePlayerName,
+  loadPersistentPlayerSession,
   readPlayerSession,
-  savePlayerSession,
+  savePersistentPlayerSession,
 } from "@/lib/player-session";
 import {
   getTopicKey,
@@ -417,6 +418,16 @@ export function WordWolfGame() {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
+    let isMounted = true;
+    loadPersistentPlayerSession()
+      .then((session) => {
+        if (!isMounted || !session) return;
+        setPlayerName(session.name);
+        setAvatarColor(session.avatarColor);
+        setAvatarImage(session.avatarImage);
+      })
+      .catch(() => undefined);
+
     const lastCode = localStorage.getItem("wordwolf-last-room");
     const lastPlayer = localStorage.getItem("wordwolf-last-player");
     if (!lastCode) return;
@@ -431,7 +442,10 @@ export function WordWolfGame() {
       }
     }, 0);
 
-    return () => window.clearTimeout(timer);
+    return () => {
+      isMounted = false;
+      window.clearTimeout(timer);
+    };
   }, []);
 
   useEffect(() => {
@@ -630,7 +644,7 @@ export function WordWolfGame() {
 
     if (!nextName.trim() || nextName.trim() === "名無し") return;
 
-    savePlayerSession({
+    void savePersistentPlayerSession({
       name: normalizedName,
       avatarColor,
       avatarImage,
@@ -647,7 +661,7 @@ export function WordWolfGame() {
   const commitPlayerName = () => {
     const normalizedName = normalizePlayerName(playerName);
     setPlayerName(normalizedName);
-    savePlayerSession({
+    void savePersistentPlayerSession({
       name: normalizedName,
       avatarColor,
       avatarImage,
@@ -665,7 +679,7 @@ export function WordWolfGame() {
     setAvatarColor(nextColor);
     setIsAvatarPickerOpen(false);
     if (playerName.trim()) {
-      savePlayerSession({
+      void savePersistentPlayerSession({
         name: playerName.trim(),
         avatarColor: nextColor,
         avatarImage,
@@ -683,7 +697,7 @@ export function WordWolfGame() {
   const updateAvatarImage = (nextImage: string | null) => {
     setAvatarImage(nextImage);
     if (playerName.trim()) {
-      savePlayerSession({
+      void savePersistentPlayerSession({
         name: playerName.trim(),
         avatarColor,
         avatarImage: nextImage,

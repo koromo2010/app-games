@@ -1,15 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   defaultAvatarImage,
   fallbackAvatarColor,
   makeRandomAvatarColor,
   normalizePlayerName,
   pickRandomDefaultAvatarImage,
+  loadPersistentPlayerSession,
   readPlayerSession,
-  savePlayerSession,
+  savePersistentPlayerSession,
   clearPlayerSession,
 } from "@/lib/player-session";
 
@@ -57,18 +58,43 @@ export function GameLobby() {
     return readPlayerSession()?.avatarImage || pickRandomDefaultAvatarImage();
   });
   const [message, setMessage] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
   const isLoggedIn = Boolean(name.trim());
 
-  const saveProfile = () => {
-    const loginName = normalizePlayerName(name);
+  useEffect(() => {
+    let isMounted = true;
 
-    savePlayerSession({
-      name: loginName,
-      avatarColor,
-      avatarImage,
-    });
-    setName(loginName);
-    setMessage("ログインしました。");
+    loadPersistentPlayerSession()
+      .then((session) => {
+        if (!isMounted || !session) return;
+        setName(session.name);
+        setAvatarColor(session.avatarColor);
+        setAvatarImage(session.avatarImage || defaultAvatarImage);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+  const saveProfile = async () => {
+    const loginName = normalizePlayerName(name);
+    setIsSaving(true);
+    setMessage("");
+
+    try {
+      const result = await savePersistentPlayerSession({
+        name: loginName,
+        avatarColor,
+        avatarImage,
+      });
+      setName(result.session.name);
+      setAvatarColor(result.session.avatarColor);
+      setAvatarImage(result.session.avatarImage || defaultAvatarImage);
+      setMessage(result.persistent ? "ログインしました。" : "ローカルに保存しました。永続化にはストレージ設定が必要です。");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const logout = () => {
@@ -134,7 +160,7 @@ export function GameLobby() {
               value={name}
               onChange={(event) => setName(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === "Enter") saveProfile();
+                if (event.key === "Enter") void saveProfile();
               }}
               className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
               placeholder="空欄なら自動生成"
@@ -143,10 +169,11 @@ export function GameLobby() {
 
           <button
             type="button"
-            onClick={saveProfile}
-            className="mt-4 w-full rounded-lg bg-cyan-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-500"
+            onClick={() => void saveProfile()}
+            disabled={isSaving}
+            className="mt-4 w-full rounded-lg bg-cyan-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-500 disabled:bg-slate-300"
           >
-            ログイン
+            {isSaving ? "ログイン中..." : "ログイン"}
           </button>
 
           {message && (

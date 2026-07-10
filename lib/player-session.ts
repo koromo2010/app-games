@@ -1,11 +1,14 @@
 export type PlayerSession = {
+  id?: string;
   name: string;
   avatarColor: string;
   avatarImage: string | null;
+  createdAt?: number;
   updatedAt: number;
 };
 
 const playerSessionKey = "app-games-player-session";
+const playerSessionIdKey = "app-games-player-id";
 const legacyAvatarColorKey = "wordwolf-avatar-color";
 const legacyAvatarImageKey = "wordwolf-avatar-image";
 
@@ -83,9 +86,11 @@ export function readPlayerSession(): PlayerSession | null {
     if (!name) return null;
 
     return {
+      id: typeof parsed.id === "string" ? parsed.id : localStorage.getItem(playerSessionIdKey) || undefined,
       name,
       avatarColor,
       avatarImage,
+      createdAt: typeof parsed.createdAt === "number" ? parsed.createdAt : undefined,
       updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : Date.now(),
     };
   } catch {
@@ -97,15 +102,20 @@ export function savePlayerSession(session: Omit<PlayerSession, "updatedAt">) {
   if (typeof window === "undefined") return;
 
   const nextSession: PlayerSession = {
+    id: session.id || localStorage.getItem(playerSessionIdKey) || undefined,
     name: session.name.trim(),
     avatarColor: isAvatarColor(session.avatarColor) ? session.avatarColor : fallbackAvatarColor,
     avatarImage: isAvatarImage(session.avatarImage) ? session.avatarImage : null,
+    createdAt: session.createdAt,
     updatedAt: Date.now(),
   };
 
   if (!nextSession.name) return;
 
   localStorage.setItem(playerSessionKey, JSON.stringify(nextSession));
+  if (nextSession.id) {
+    localStorage.setItem(playerSessionIdKey, nextSession.id);
+  }
   localStorage.setItem(legacyAvatarColorKey, nextSession.avatarColor);
   if (nextSession.avatarImage) {
     localStorage.setItem(legacyAvatarImageKey, nextSession.avatarImage);
@@ -117,6 +127,67 @@ export function savePlayerSession(session: Omit<PlayerSession, "updatedAt">) {
 export function clearPlayerSession() {
   if (typeof window === "undefined") return;
   localStorage.removeItem(playerSessionKey);
+  localStorage.removeItem(playerSessionIdKey);
   localStorage.removeItem(legacyAvatarColorKey);
   localStorage.removeItem(legacyAvatarImageKey);
+}
+
+export async function loadPersistentPlayerSession() {
+  if (typeof window === "undefined") return null;
+
+  const id = localStorage.getItem(playerSessionIdKey);
+  if (!id) return readPlayerSession();
+
+  const response = await fetch(`/api/player-session?id=${encodeURIComponent(id)}`, {
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    return readPlayerSession();
+  }
+
+  const data = (await response.json()) as { session?: PlayerSession };
+  if (!data.session) return readPlayerSession();
+
+  savePlayerSession(data.session);
+  return data.session;
+}
+
+export async function savePersistentPlayerSession(session: Omit<PlayerSession, "updatedAt">) {
+  const localSession: PlayerSession = {
+    ...session,
+    id: session.id || (typeof window !== "undefined" ? localStorage.getItem(playerSessionIdKey) || undefined : undefined),
+    updatedAt: Date.now(),
+  };
+  savePlayerSession(localSession);
+
+  const response = await fetch("/api/player-session", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(localSession),
+  });
+
+  if (!response.ok) {
+    return {
+      session: readPlayerSession() ?? localSession,
+      persistent: false,
+      status: response.status,
+    };
+  }
+
+  const data = (await response.json()) as { session?: PlayerSession };
+  if (!data.session) {
+    return {
+      session: readPlayerSession() ?? localSession,
+      persistent: false,
+      status: response.status,
+    };
+  }
+
+  savePlayerSession(data.session);
+  return {
+    session: data.session,
+    persistent: true,
+    status: response.status,
+  };
 }
