@@ -637,6 +637,19 @@ export function WordWolfGame() {
     setError("部屋を解散しました。");
   };
 
+  const logout = () => {
+    localStorage.removeItem("wordwolf-last-room");
+    localStorage.removeItem("wordwolf-last-player");
+    setRoom(null);
+    setActivePlayerId("");
+    setPlayerName("");
+    setRoomPassphrase("");
+    setJoinCode("");
+    setJoinableRooms([]);
+    setIsAvatarPickerOpen(false);
+    setError("ログアウトしました。");
+  };
+
   const updateAvatarColor = (nextColor: string) => {
     setAvatarColor(nextColor);
     setIsAvatarPickerOpen(false);
@@ -974,6 +987,15 @@ export function WordWolfGame() {
                 />
               </button>
               <span className="max-w-[140px] truncate font-semibold text-cyan-50">{headerName}</span>
+              {(activePlayerId || playerName.trim()) && (
+                <button
+                  type="button"
+                  onClick={logout}
+                  className="rounded-md border border-white/10 px-2 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10 hover:text-white"
+                >
+                  ログアウト
+                </button>
+              )}
               {isAvatarPickerOpen && (
                 <div className="absolute right-0 top-11 z-50 w-64 rounded-lg border border-white/15 bg-slate-950/95 p-3 shadow-2xl">
                   <p className="text-xs font-semibold text-cyan-100">アイコン色</p>
