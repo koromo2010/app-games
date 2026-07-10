@@ -440,6 +440,7 @@ export function WordWolfGame() {
   });
   const [isAvatarPickerOpen, setIsAvatarPickerOpen] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
+  const [isDebugAuthing, setIsDebugAuthing] = useState(false);
   const [isRulesOpen, setIsRulesOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
@@ -742,9 +743,41 @@ export function WordWolfGame() {
     setAndSaveRoom({ ...room, players: [...room.players, player] });
   };
 
-  const toggleDebugMode = () => {
+  const toggleDebugMode = async () => {
     if (!room || room.phase !== "lobby") return;
-    setAndSaveRoom({ ...room, debugMode: !room.debugMode });
+
+    if (room.debugMode) {
+      setAndSaveRoom({ ...room, debugMode: false });
+      setError("");
+      return;
+    }
+
+    const password = window.prompt("デバッグモードのパスワードを入力してください。");
+    if (password === null) return;
+
+    setIsDebugAuthing(true);
+    setError("");
+
+    try {
+      const response = await fetch("/api/debug-auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+
+      if (!response.ok) {
+        setError(response.status === 503
+          ? "デバッグ用パスワードが未設定です。管理者に確認してください。"
+          : "デバッグ用パスワードが違います。");
+        return;
+      }
+
+      setAndSaveRoom({ ...room, debugMode: true });
+    } catch {
+      setError("デバッグモードを切り替えられませんでした。もう一度試してください。");
+    } finally {
+      setIsDebugAuthing(false);
+    }
   };
 
   const setClueLogVisibility = (clueLogVisibility: ClueLogVisibility) => {
@@ -1059,14 +1092,14 @@ export function WordWolfGame() {
               <button
                 type="button"
                 onClick={toggleDebugMode}
-                disabled={room.phase !== "lobby"}
+                disabled={room.phase !== "lobby" || isDebugAuthing}
                 className={`rounded-lg border px-3 py-1.5 font-semibold shadow-sm transition disabled:cursor-not-allowed disabled:opacity-50 ${
                   room.debugMode
                     ? "border-cyan-200 bg-cyan-200 text-slate-950 hover:bg-cyan-100"
                     : "border-white/15 bg-white/10 text-cyan-50 hover:bg-white/15"
                 }`}
               >
-                {room.debugMode ? "デバッグ ON" : "デバッグ OFF"}
+                {isDebugAuthing ? "確認中..." : room.debugMode ? "デバッグ ON" : "デバッグ OFF"}
               </button>
             )}
             <button
