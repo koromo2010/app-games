@@ -1247,104 +1247,107 @@ export function WordWolfGame() {
 
       <section className="mx-auto grid max-w-6xl gap-4 px-4 py-5 lg:grid-cols-[340px_1fr]">
         <aside className="space-y-4">
-          <div className={panelClass}>
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase text-cyan-700">Entry</p>
-                <h2 className="text-lg font-bold text-slate-950">名前と部屋</h2>
-              </div>
-              <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500">local</span>
-            </div>
-            <label className="mt-3 block text-sm font-medium text-slate-700">
-              表示名
-              <input
-                value={playerName}
-                onChange={(event) => setPlayerName(event.target.value)}
-                className={`mt-1 ${inputClass}`}
-                placeholder="例: 佐藤"
-              />
-            </label>
-            <label className="mt-3 block text-sm font-medium text-slate-700">
-              合言葉（任意）
-              <input
-                value={roomPassphrase}
-                onChange={(event) => setRoomPassphrase(event.target.value)}
-                className={`mt-1 ${inputClass}`}
-                placeholder="空欄なら合言葉なし"
-                type="password"
-              />
-            </label>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <button
-                onClick={createRoom}
-                className={cyanButtonClass}
-              >
-                部屋を作成
-              </button>
-              <button
-                onClick={showJoinChoices}
-                className={subtleButtonClass}
-              >
-                参加
-              </button>
-            </div>
-            <input
-              value={joinCode}
-              onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
-              className={`mt-2 font-mono uppercase ${inputClass}`}
-              placeholder="ROOM CODE"
-              maxLength={4}
-            />
-            {isJoinListOpen && (
-              <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-semibold text-slate-800">参加できる部屋</p>
-                  <button
-                    onClick={showJoinChoices}
-                    className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
-                  >
-                    更新
-                  </button>
+          {!room && (
+            <div className={panelClass}>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase text-cyan-700">Entry</p>
+                  <h2 className="text-lg font-bold text-slate-950">名前と部屋</h2>
                 </div>
-                <div className="mt-3 space-y-2">
-                  {joinableRooms.length === 0 ? (
-                    <p className="rounded-lg bg-white px-3 py-4 text-center text-sm text-slate-500">
-                      未開始の部屋はありません。
-                    </p>
-                  ) : (
-                    joinableRooms.map((choice) => (
-                      <button
-                        key={choice.code}
-                        onClick={() => joinRoom(choice.code)}
-                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-sm transition hover:border-cyan-400 hover:bg-cyan-50"
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-mono text-base font-bold">{choice.code}</span>
-                          <span className="text-xs text-slate-500">
-                            {choice.hasPassphrase ? "合言葉あり" : "合言葉なし"}
-                          </span>
-                        </div>
-                        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-600">
-                          <span>host: {choice.hostName}</span>
-                          <span>{choice.playerCount}/6人</span>
-                          <span>{choice.roundsTotal}周</span>
-                        </div>
-                      </button>
-                    ))
+                <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500">local</span>
+              </div>
+              <label className="mt-3 block text-sm font-medium text-slate-700">
+                表示名
+                <input
+                  value={playerName}
+                  onChange={(event) => setPlayerName(event.target.value)}
+                  className={`mt-1 ${inputClass}`}
+                  placeholder="例: 佐藤"
+                />
+              </label>
+              <label className="mt-3 block text-sm font-medium text-slate-700">
+                合言葉（任意）
+                <input
+                  value={roomPassphrase}
+                  onChange={(event) => setRoomPassphrase(event.target.value)}
+                  className={`mt-1 ${inputClass}`}
+                  placeholder="空欄なら合言葉なし"
+                  type="password"
+                />
+              </label>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <button
+                  onClick={createRoom}
+                  className={cyanButtonClass}
+                >
+                  部屋を作成
+                </button>
+                <button
+                  onClick={showJoinChoices}
+                  className={subtleButtonClass}
+                >
+                  参加
+                </button>
+              </div>
+              <input
+                value={joinCode}
+                onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
+                className={`mt-2 font-mono uppercase ${inputClass}`}
+                placeholder="ROOM CODE"
+                maxLength={4}
+              />
+              {isJoinListOpen && (
+                <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-slate-800">参加できる部屋</p>
+                    <button
+                      onClick={showJoinChoices}
+                      className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                    >
+                      更新
+                    </button>
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    {joinableRooms.length === 0 ? (
+                      <p className="rounded-lg bg-white px-3 py-4 text-center text-sm text-slate-500">
+                        未開始の部屋はありません。
+                      </p>
+                    ) : (
+                      joinableRooms.map((choice) => (
+                        <button
+                          key={choice.code}
+                          onClick={() => joinRoom(choice.code)}
+                          className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-left text-sm transition hover:border-cyan-400 hover:bg-cyan-50"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-mono text-base font-bold">{choice.code}</span>
+                            <span className="text-xs text-slate-500">
+                              {choice.hasPassphrase ? "合言葉あり" : "合言葉なし"}
+                            </span>
+                          </div>
+                          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-600">
+                            <span>host: {choice.hostName}</span>
+                            <span>{choice.playerCount}/6人</span>
+                            <span>{choice.roundsTotal}周</span>
+                          </div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                  {joinCode.trim() && (
+                    <button
+                      onClick={() => joinRoom()}
+                      className={`mt-3 w-full ${subtleButtonClass}`}
+                    >
+                      入力したコードで参加
+                    </button>
                   )}
                 </div>
-                {joinCode.trim() && (
-                  <button
-                    onClick={() => joinRoom()}
-                    className={`mt-3 w-full ${subtleButtonClass}`}
-                  >
-                    入力したコードで参加
-                  </button>
-                )}
-              </div>
-            )}
-            {error && <p className="mt-3 rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
-          </div>
+              )}
+            </div>
+          )}
+
+          {error && <p className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
 
           {room && (
             <div className={panelClass}>
