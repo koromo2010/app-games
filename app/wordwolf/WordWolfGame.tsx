@@ -3,6 +3,16 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import {
+  avatarColorOptions,
+  clearPlayerSession,
+  defaultAvatarImage,
+  defaultAvatarImages,
+  fallbackAvatarColor,
+  makeRandomAvatarColor,
+  readPlayerSession,
+  savePlayerSession,
+} from "@/lib/player-session";
+import {
   getTopicKey,
   isValidWordWolfTopic,
   normalizeGuess,
@@ -84,34 +94,8 @@ const lobbyRounds = [1, 2, 3, 4];
 const turnTimeLimitOptions = [0, 30, 60, 90, 120];
 const noWolfChance = 0.1;
 const roomStoragePrefix = "wordwolf-room-";
-const avatarColorKey = "wordwolf-avatar-color";
-const avatarImageKey = "wordwolf-avatar-image";
 const topicHistoryKey = "wordwolf-topic-history";
 const topicHistoryLimit = 30;
-const defaultAvatarImages = [
-  "/wordwolf-avatars/avatar-01.svg",
-  "/wordwolf-avatars/avatar-02.svg",
-  "/wordwolf-avatars/avatar-03.svg",
-  "/wordwolf-avatars/avatar-04.svg",
-  "/wordwolf-avatars/avatar-05.svg",
-  "/wordwolf-avatars/avatar-06.svg",
-  "/wordwolf-avatars/avatar-07.svg",
-  "/wordwolf-avatars/avatar-08.svg",
-  "/wordwolf-avatars/avatar-09.svg",
-  "/wordwolf-avatars/avatar-10.svg",
-];
-const defaultAvatarImage = defaultAvatarImages[0];
-const fallbackAvatarColor = "#22d3ee";
-const avatarColorOptions = [
-  "#22d3ee",
-  "#38bdf8",
-  "#a78bfa",
-  "#f472b6",
-  "#fb7185",
-  "#f59e0b",
-  "#84cc16",
-  "#14b8a6",
-];
 const panelClass = "rounded-lg border border-white/10 bg-white/[0.96] p-4 shadow-[0_18px_50px_rgba(15,23,42,0.16)]";
 const mutedPanelClass = "rounded-lg border border-slate-200 bg-slate-50/90";
 const inputClass =
@@ -140,24 +124,6 @@ function getOwnerId() {
 
 function makeRoomCode() {
   return Math.random().toString(36).slice(2, 6).toUpperCase();
-}
-
-function makeRandomAvatarColor() {
-  return `#${Math.floor(Math.random() * 0x1000000)
-    .toString(16)
-    .padStart(6, "0")}`;
-}
-
-function isAvatarColor(value: string | null): value is string {
-  return Boolean(value?.match(/^#[0-9a-fA-F]{6}$/));
-}
-
-function isAvatarImage(value: string | null): value is string {
-  return Boolean(
-    value?.startsWith("data:image/") ||
-      value === "/wordwolf-default-avatar.png" ||
-      defaultAvatarImages.includes(value ?? ""),
-  );
 }
 
 function getRoomKey(code: string) {
@@ -419,7 +385,10 @@ function ClueLogPanel({ room }: { room: Room }) {
 export function WordWolfGame() {
   const [room, setRoom] = useState<Room | null>(null);
   const [activePlayerId, setActivePlayerId] = useState("");
-  const [playerName, setPlayerName] = useState("");
+  const [playerName, setPlayerName] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return readPlayerSession()?.name ?? "";
+  });
   const [roomPassphrase, setRoomPassphrase] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [joinableRooms, setJoinableRooms] = useState<RoomChoice[]>([]);
@@ -430,13 +399,12 @@ export function WordWolfGame() {
   const [avatarColor, setAvatarColor] = useState(() => {
     const randomColor = makeRandomAvatarColor();
     if (typeof window === "undefined") return randomColor;
-    const savedAvatarColor = localStorage.getItem(avatarColorKey);
-    return isAvatarColor(savedAvatarColor) ? savedAvatarColor : randomColor;
+    const savedSession = readPlayerSession();
+    return savedSession?.avatarColor ?? randomColor;
   });
   const [avatarImage, setAvatarImage] = useState<string | null>(() => {
     if (typeof window === "undefined") return null;
-    const savedAvatarImage = localStorage.getItem(avatarImageKey);
-    return isAvatarImage(savedAvatarImage) ? savedAvatarImage : null;
+    return readPlayerSession()?.avatarImage ?? null;
   });
   const [isAvatarPickerOpen, setIsAvatarPickerOpen] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
@@ -561,7 +529,7 @@ export function WordWolfGame() {
     const name = playerName.trim();
     const passphrase = roomPassphrase.trim();
     if (!name) {
-      setError("名前を入れてください。");
+      setError("ゲームロビーでプレイヤー登録をしてください。");
       return;
     }
 
@@ -590,7 +558,7 @@ export function WordWolfGame() {
     const name = playerName.trim();
     const passphrase = roomPassphrase.trim();
     if (!name) {
-      setError("名前を入力してください。");
+      setError("ゲームロビーでプレイヤー登録をしてください。");
       return;
     }
     if (!code) {
@@ -642,6 +610,7 @@ export function WordWolfGame() {
   };
 
   const logout = () => {
+    clearPlayerSession();
     localStorage.removeItem("wordwolf-last-room");
     localStorage.removeItem("wordwolf-last-player");
     setRoom(null);
@@ -657,7 +626,13 @@ export function WordWolfGame() {
   const updateAvatarColor = (nextColor: string) => {
     setAvatarColor(nextColor);
     setIsAvatarPickerOpen(false);
-    localStorage.setItem(avatarColorKey, nextColor);
+    if (playerName.trim()) {
+      savePlayerSession({
+        name: playerName.trim(),
+        avatarColor: nextColor,
+        avatarImage,
+      });
+    }
 
     if (!room || !activePlayerId) return;
 
@@ -669,10 +644,12 @@ export function WordWolfGame() {
 
   const updateAvatarImage = (nextImage: string | null) => {
     setAvatarImage(nextImage);
-    if (nextImage) {
-      localStorage.setItem(avatarImageKey, nextImage);
-    } else {
-      localStorage.removeItem(avatarImageKey);
+    if (playerName.trim()) {
+      savePlayerSession({
+        name: playerName.trim(),
+        avatarColor,
+        avatarImage: nextImage,
+      });
     }
 
     if (!room || !activePlayerId) return;
@@ -1252,19 +1229,26 @@ export function WordWolfGame() {
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase text-cyan-700">Entry</p>
-                  <h2 className="text-lg font-bold text-slate-950">名前と部屋</h2>
+                  <h2 className="text-lg font-bold text-slate-950">部屋</h2>
                 </div>
                 <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500">local</span>
               </div>
-              <label className="mt-3 block text-sm font-medium text-slate-700">
-                表示名
-                <input
-                  value={playerName}
-                  onChange={(event) => setPlayerName(event.target.value)}
-                  className={`mt-1 ${inputClass}`}
-                  placeholder="例: 佐藤"
-                />
-              </label>
+              {playerName.trim() ? (
+                <div className="mt-3 rounded-lg border border-cyan-100 bg-cyan-50 px-3 py-2 text-sm text-cyan-950">
+                  <p className="text-xs font-semibold text-cyan-700">プレイヤー</p>
+                  <p className="mt-0.5 font-bold">{playerName.trim()}</p>
+                </div>
+              ) : (
+                <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-950">
+                  <p className="font-semibold">先にロビーでプレイヤー登録してください。</p>
+                  <Link
+                    href="/games"
+                    className="mt-2 inline-flex rounded-lg bg-amber-200 px-3 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-100"
+                  >
+                    ゲームロビーへ
+                  </Link>
+                </div>
+              )}
               <label className="mt-3 block text-sm font-medium text-slate-700">
                 合言葉（任意）
                 <input
@@ -1278,12 +1262,14 @@ export function WordWolfGame() {
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <button
                   onClick={createRoom}
+                  disabled={!playerName.trim()}
                   className={cyanButtonClass}
                 >
                   部屋を作成
                 </button>
                 <button
                   onClick={showJoinChoices}
+                  disabled={!playerName.trim()}
                   className={subtleButtonClass}
                 >
                   参加
