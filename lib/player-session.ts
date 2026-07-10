@@ -41,6 +41,10 @@ export function makeRandomAvatarColor() {
     .padStart(6, "0")}`;
 }
 
+export function pickRandomDefaultAvatarImage() {
+  return defaultAvatarImages[Math.floor(Math.random() * defaultAvatarImages.length)] ?? defaultAvatarImage;
+}
+
 export function isAvatarColor(value: string | null): value is string {
   return Boolean(value?.match(/^#[0-9a-fA-F]{6}$/));
 }

@@ -3,11 +3,10 @@
 import Link from "next/link";
 import { useState } from "react";
 import {
-  avatarColorOptions,
   defaultAvatarImage,
-  defaultAvatarImages,
   fallbackAvatarColor,
   makeRandomAvatarColor,
+  pickRandomDefaultAvatarImage,
   readPlayerSession,
   savePlayerSession,
   clearPlayerSession,
@@ -54,7 +53,7 @@ export function GameLobby() {
   });
   const [avatarImage, setAvatarImage] = useState<string | null>(() => {
     if (typeof window === "undefined") return defaultAvatarImage;
-    return readPlayerSession()?.avatarImage || defaultAvatarImage;
+    return readPlayerSession()?.avatarImage || pickRandomDefaultAvatarImage();
   });
   const [message, setMessage] = useState("");
   const isLoggedIn = Boolean(name.trim());
@@ -81,7 +80,7 @@ export function GameLobby() {
     localStorage.removeItem("wordwolf-last-player");
     setName("");
     setAvatarColor(makeRandomAvatarColor());
-    setAvatarImage(defaultAvatarImage);
+    setAvatarImage(pickRandomDefaultAvatarImage());
     setMessage("ログアウトしました。");
   };
 
@@ -145,36 +144,21 @@ export function GameLobby() {
             />
           </label>
 
-          <p className="mt-4 text-xs font-semibold text-slate-600">アイコン色</p>
-          <div className="mt-2 grid grid-cols-8 gap-2">
-            {avatarColorOptions.map((color) => (
-              <button
-                key={color}
-                type="button"
-                onClick={() => setAvatarColor(color)}
-                className={`h-8 w-8 rounded-full border transition hover:scale-105 ${
-                  avatarColor === color ? "border-slate-950 ring-2 ring-cyan-300" : "border-slate-300"
-                }`}
-                style={{ backgroundColor: color }}
-                aria-label={`${color} を選択`}
-              />
-            ))}
-          </div>
-
-          <p className="mt-4 text-xs font-semibold text-slate-600">アイコン画像</p>
-          <div className="mt-2 grid grid-cols-5 gap-2">
-            {defaultAvatarImages.map((image, index) => (
-              <button
-                key={image}
-                type="button"
-                onClick={() => setAvatarImage(image)}
-                className={`h-10 w-10 overflow-hidden rounded-full border bg-cover bg-center transition hover:scale-105 ${
-                  avatarImage === image ? "border-slate-950 ring-2 ring-cyan-300" : "border-slate-300"
-                }`}
-                style={{ backgroundColor: avatarColor, backgroundImage: `url(${image})` }}
-                aria-label={`アイコン画像 ${index + 1} を選択`}
-              />
-            ))}
+          <div className="mt-4 flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+            <span
+              className="h-12 w-12 shrink-0 rounded-full border border-white bg-cover bg-center shadow-sm"
+              style={{
+                backgroundColor: avatarColor,
+                backgroundImage: `url(${avatarImage || defaultAvatarImage})`,
+              }}
+              aria-hidden="true"
+            />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-slate-950">アイコンは自動で決まります</p>
+              <p className="mt-1 text-xs leading-5 text-slate-500">
+                変更したいときは、ゲーム画面のヘッダーにあるアイコンから選べます。
+              </p>
+            </div>
           </div>
 
           <button
