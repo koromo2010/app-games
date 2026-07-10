@@ -2,7 +2,10 @@ import { loadStoredPlayerSession, saveStoredPlayerSession } from "@/lib/player-s
 import { normalizePlayerName } from "@/lib/player-session";
 
 function isStoreNotConfigured(error: unknown) {
-  return error instanceof Error && error.message === "PLAYER_STORE_NOT_CONFIGURED";
+  return error instanceof Error && (
+    error.message === "PLAYER_STORE_NOT_CONFIGURED" ||
+    error.message === "REDIS_STORE_NOT_CONFIGURED"
+  );
 }
 
 export async function GET(request: Request) {

@@ -195,6 +195,85 @@ function deleteHostedRooms(ownerId: string, fallbackHostId: string) {
     .forEach((room) => deleteRoom(room.code));
 }
 
+async function saveRoomToStore(room: Room) {
+  saveRoom(room);
+
+  try {
+    await fetch("/api/wordwolf/rooms", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ room }),
+    });
+  } catch {
+    // Local storage keeps solo/browser-tab testing usable when the remote store is unavailable.
+  }
+}
+
+async function loadRoomFromStore(code: string) {
+  try {
+    const response = await fetch(`/api/wordwolf/rooms?code=${encodeURIComponent(code)}`, {
+      cache: "no-store",
+    });
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error("ROOM_FETCH_FAILED");
+
+    const data = (await response.json()) as { room?: Room };
+    if (!data.room) return null;
+
+    const normalizedRoom = {
+      ...data.room,
+      passphrase: data.room.passphrase ?? "",
+      gameMode: normalizeGameMode(data.room.gameMode),
+      clueLogVisibility: data.room.clueLogVisibility ?? "result",
+      turnTimeLimitSeconds: data.room.turnTimeLimitSeconds ?? 0,
+      currentTurnStartedAt: data.room.currentTurnStartedAt ?? null,
+      topicDictionarySource: normalizeTopicDictionarySource(data.room.topicDictionarySource ?? data.room.topicSourceMode),
+      topicPairDistance: normalizeTopicPairDistance(data.room.topicPairDistance ?? data.room.topicSourceMode),
+    };
+    saveRoom(normalizedRoom);
+    return normalizedRoom;
+  } catch {
+    return loadRoom(code);
+  }
+}
+
+async function listJoinableRoomsFromStore() {
+  try {
+    const response = await fetch("/api/wordwolf/rooms", { cache: "no-store" });
+    if (!response.ok) throw new Error("ROOM_LIST_FAILED");
+
+    const data = (await response.json()) as { rooms?: RoomChoice[] };
+    return Array.isArray(data.rooms) ? data.rooms : [];
+  } catch {
+    return listJoinableRooms();
+  }
+}
+
+async function deleteRoomFromStore(code: string) {
+  deleteRoom(code);
+
+  try {
+    await fetch(`/api/wordwolf/rooms?code=${encodeURIComponent(code)}`, {
+      method: "DELETE",
+    });
+  } catch {
+    // Already removed locally; remote cleanup can be retried by host actions later.
+  }
+}
+
+async function deleteHostedRoomsFromStore(ownerId: string, fallbackHostId: string) {
+  deleteHostedRooms(ownerId, fallbackHostId);
+
+  try {
+    const params = new URLSearchParams({ ownerId, fallbackHostId });
+    await fetch(`/api/wordwolf/rooms?${params.toString()}`, {
+      method: "DELETE",
+    });
+  } catch {
+    // Keep local fallback behavior.
+  }
+}
+
 function createEmptyRoom(
   hostName: string,
   passphrase: string,
@@ -428,23 +507,27 @@ export function WordWolfGame() {
       })
       .catch(() => undefined);
 
+    let timer: number | undefined;
     const lastCode = localStorage.getItem("wordwolf-last-room");
     const lastPlayer = localStorage.getItem("wordwolf-last-player");
-    if (!lastCode) return;
+    if (lastCode) {
+      loadRoomFromStore(lastCode)
+        .then((savedRoom) => {
+          if (!isMounted || !savedRoom) return;
 
-    const savedRoom = loadRoom(lastCode);
-    if (!savedRoom) return;
-
-    const timer = window.setTimeout(() => {
-      setRoom(savedRoom);
-      if (lastPlayer && savedRoom.players.some((player) => player.id === lastPlayer)) {
-        setActivePlayerId(lastPlayer);
-      }
-    }, 0);
+          timer = window.setTimeout(() => {
+            setRoom(savedRoom);
+            if (lastPlayer && savedRoom.players.some((player) => player.id === lastPlayer)) {
+              setActivePlayerId(lastPlayer);
+            }
+          }, 0);
+        })
+        .catch(() => undefined);
+    }
 
     return () => {
       isMounted = false;
-      window.clearTimeout(timer);
+      if (timer) window.clearTimeout(timer);
     };
   }, []);
 
@@ -452,7 +535,7 @@ export function WordWolfGame() {
     if (!room) return;
 
     const timer = window.setInterval(() => {
-      const latest = loadRoom(room.code);
+      void loadRoomFromStore(room.code).then((latest) => {
       if (latest && latest.updatedAt !== room.updatedAt) {
         setRoom(latest);
       } else if (!latest) {
@@ -460,6 +543,7 @@ export function WordWolfGame() {
         setActivePlayerId("");
         setError("部屋が解散されました。");
       }
+      });
     }, 700);
 
     const onStorage = (event: StorageEvent) => {
@@ -471,8 +555,9 @@ export function WordWolfGame() {
         return;
       }
 
-      const latest = loadRoom(room.code);
-      if (latest) setRoom(latest);
+      void loadRoomFromStore(room.code).then((latest) => {
+        if (latest) setRoom(latest);
+      });
     };
 
     window.addEventListener("storage", onStorage);
@@ -536,11 +621,11 @@ export function WordWolfGame() {
   const setAndSaveRoom = useCallback((nextRoom: Room) => {
     const stampedRoom = stampRoom(nextRoom);
     setRoom(stampedRoom);
-    saveRoom(stampedRoom);
+    void saveRoomToStore(stampedRoom);
     localStorage.setItem("wordwolf-last-room", stampedRoom.code);
   }, []);
 
-  const createRoom = () => {
+  const createRoom = async () => {
     const name = playerName.trim();
     const passphrase = roomPassphrase.trim();
     if (!name) {
@@ -550,7 +635,7 @@ export function WordWolfGame() {
 
     const ownerId = getOwnerId();
     const fallbackHostId = activePlayerId || localStorage.getItem("wordwolf-last-player") || "";
-    deleteHostedRooms(ownerId, fallbackHostId);
+    await deleteHostedRoomsFromStore(ownerId, fallbackHostId);
 
     const created = createEmptyRoom(name, passphrase, ownerId, avatarColor, avatarImage);
     setIsJoinListOpen(false);
@@ -561,14 +646,14 @@ export function WordWolfGame() {
     setError("");
   };
 
-  const showJoinChoices = () => {
-    const rooms = listJoinableRooms();
+  const showJoinChoices = async () => {
+    const rooms = await listJoinableRoomsFromStore();
     setJoinableRooms(rooms);
     setIsJoinListOpen(true);
     setError(rooms.length > 0 ? "" : "参加できる未開始の部屋がありません。");
   };
 
-  const joinRoom = (selectedCode = joinCode) => {
+  const joinRoom = async (selectedCode = joinCode) => {
     const code = selectedCode.trim().toUpperCase();
     const name = playerName.trim();
     const passphrase = roomPassphrase.trim();
@@ -581,7 +666,7 @@ export function WordWolfGame() {
       return;
     }
 
-    const targetRoom = loadRoom(code);
+    const targetRoom = await loadRoomFromStore(code);
     if (!targetRoom) {
       setError("その部屋が見つかりません。同じブラウザ内で作った部屋コードを使ってください。");
       return;
@@ -610,11 +695,11 @@ export function WordWolfGame() {
     setError("");
   };
 
-  const dissolveRoom = () => {
+  const dissolveRoom = async () => {
     if (!room || !isHost) return;
     if (!window.confirm("部屋を解散しますか？参加者はこの部屋に戻れなくなります。")) return;
 
-    deleteRoom(room.code);
+    await deleteRoomFromStore(room.code);
     if (localStorage.getItem("wordwolf-last-room") === room.code) {
       localStorage.removeItem("wordwolf-last-room");
       localStorage.removeItem("wordwolf-last-player");
