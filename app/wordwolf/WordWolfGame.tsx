@@ -441,6 +441,9 @@ export function WordWolfGame() {
   const [isAvatarPickerOpen, setIsAvatarPickerOpen] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [isDebugAuthing, setIsDebugAuthing] = useState(false);
+  const [isDebugPasswordOpen, setIsDebugPasswordOpen] = useState(false);
+  const [debugPassword, setDebugPassword] = useState("");
+  const [debugPasswordError, setDebugPasswordError] = useState("");
   const [isRulesOpen, setIsRulesOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
@@ -743,7 +746,7 @@ export function WordWolfGame() {
     setAndSaveRoom({ ...room, players: [...room.players, player] });
   };
 
-  const toggleDebugMode = async () => {
+  const toggleDebugMode = () => {
     if (!room || room.phase !== "lobby") return;
 
     if (room.debugMode) {
@@ -752,27 +755,35 @@ export function WordWolfGame() {
       return;
     }
 
-    const password = window.prompt("デバッグモードのパスワードを入力してください。");
-    if (password === null) return;
+    setDebugPassword("");
+    setDebugPasswordError("");
+    setIsDebugPasswordOpen(true);
+  };
+
+  const confirmDebugPassword = async () => {
+    if (!room || room.phase !== "lobby" || room.debugMode) return;
 
     setIsDebugAuthing(true);
     setError("");
+    setDebugPasswordError("");
 
     try {
       const response = await fetch("/api/debug-auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ password: debugPassword }),
       });
 
       if (!response.ok) {
-        setError(response.status === 503
+        setDebugPasswordError(response.status === 503
           ? "デバッグ用パスワードが未設定です。管理者に確認してください。"
           : "デバッグ用パスワードが違います。");
         return;
       }
 
       setAndSaveRoom({ ...room, debugMode: true });
+      setDebugPassword("");
+      setIsDebugPasswordOpen(false);
     } catch {
       setError("デバッグモードを切り替えられませんでした。もう一度試してください。");
     } finally {
@@ -1112,6 +1123,59 @@ export function WordWolfGame() {
           </div>
         </div>
       </section>
+
+      {isDebugPasswordOpen && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/70 px-4 py-6 backdrop-blur-sm">
+          <form
+            className="w-full max-w-sm rounded-lg border border-white/20 bg-white p-5 shadow-2xl"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void confirmDebugPassword();
+            }}
+          >
+            <p className="text-xs font-semibold uppercase text-cyan-700">Debug mode</p>
+            <h2 className="mt-1 text-xl font-bold text-slate-950">パスワード確認</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              デバッグモードをONにするにはパスワードが必要です。
+            </p>
+            <input
+              autoFocus
+              type="password"
+              value={debugPassword}
+              onChange={(event) => setDebugPassword(event.target.value)}
+              className="mt-4 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-950 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
+              placeholder="パスワード"
+              autoComplete="off"
+            />
+            {debugPasswordError && (
+              <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
+                {debugPasswordError}
+              </p>
+            )}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDebugPasswordOpen(false);
+                  setDebugPassword("");
+                  setDebugPasswordError("");
+                }}
+                className={subtleButtonClass}
+                disabled={isDebugAuthing}
+              >
+                キャンセル
+              </button>
+              <button
+                type="submit"
+                className={cyanButtonClass}
+                disabled={!debugPassword || isDebugAuthing}
+              >
+                {isDebugAuthing ? "確認中..." : "ONにする"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {isRulesOpen && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/70 px-4 py-6 backdrop-blur-sm">
