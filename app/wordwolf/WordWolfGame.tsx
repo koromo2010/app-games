@@ -9,6 +9,7 @@ import {
   defaultAvatarImages,
   fallbackAvatarColor,
   makeRandomAvatarColor,
+  normalizePlayerName,
   readPlayerSession,
   savePlayerSession,
 } from "@/lib/player-session";
@@ -623,6 +624,43 @@ export function WordWolfGame() {
     setError("入力情報をリセットしました。");
   };
 
+  const updatePlayerName = (nextName: string) => {
+    setPlayerName(nextName);
+    const normalizedName = normalizePlayerName(nextName);
+
+    if (!nextName.trim() || nextName.trim() === "名無し") return;
+
+    savePlayerSession({
+      name: normalizedName,
+      avatarColor,
+      avatarImage,
+    });
+
+    if (!room || !activePlayerId) return;
+
+    const players = room.players.map((player) =>
+      player.id === activePlayerId ? { ...player, name: normalizedName } : player,
+    );
+    setAndSaveRoom({ ...room, players });
+  };
+
+  const commitPlayerName = () => {
+    const normalizedName = normalizePlayerName(playerName);
+    setPlayerName(normalizedName);
+    savePlayerSession({
+      name: normalizedName,
+      avatarColor,
+      avatarImage,
+    });
+
+    if (!room || !activePlayerId) return;
+
+    const players = room.players.map((player) =>
+      player.id === activePlayerId ? { ...player, name: normalizedName } : player,
+    );
+    setAndSaveRoom({ ...room, players });
+  };
+
   const updateAvatarColor = (nextColor: string) => {
     setAvatarColor(nextColor);
     setIsAvatarPickerOpen(false);
@@ -1019,7 +1057,22 @@ export function WordWolfGame() {
               )}
               {isAvatarPickerOpen && (
                 <div className="absolute right-0 top-11 z-50 w-64 rounded-lg border border-white/15 bg-slate-950/95 p-3 shadow-2xl">
-                  <p className="text-xs font-semibold text-cyan-100">アイコン色</p>
+                  <label className="block text-xs font-semibold text-cyan-100">
+                    プレイヤー名
+                    <input
+                      value={playerName}
+                      onChange={(event) => updatePlayerName(event.target.value)}
+                      onBlur={commitPlayerName}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.currentTarget.blur();
+                        }
+                      }}
+                      className="mt-2 w-full rounded-md border border-white/15 bg-white/10 px-2 py-1.5 text-sm font-semibold text-cyan-50 outline-none transition placeholder:text-slate-500 focus:border-cyan-200"
+                      placeholder="空欄なら自動生成"
+                    />
+                  </label>
+                  <p className="mt-3 text-xs font-semibold text-cyan-100">アイコン色</p>
                   <div className="mt-2 grid grid-cols-8 gap-2">
                     {avatarColorOptions.map((color) => (
                       <button

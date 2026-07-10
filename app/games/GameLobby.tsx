@@ -6,6 +6,7 @@ import {
   defaultAvatarImage,
   fallbackAvatarColor,
   makeRandomAvatarColor,
+  normalizePlayerName,
   pickRandomDefaultAvatarImage,
   readPlayerSession,
   savePlayerSession,
@@ -59,19 +60,15 @@ export function GameLobby() {
   const isLoggedIn = Boolean(name.trim());
 
   const saveProfile = () => {
-    const trimmedName = name.trim();
-    if (!trimmedName) {
-      setMessage("表示名を入力してください。");
-      return;
-    }
+    const loginName = normalizePlayerName(name);
 
     savePlayerSession({
-      name: trimmedName,
+      name: loginName,
       avatarColor,
       avatarImage,
     });
-    setName(trimmedName);
-    setMessage("プレイヤー情報を保存しました。");
+    setName(loginName);
+    setMessage("ログインしました。");
   };
 
   const logout = () => {
@@ -132,7 +129,7 @@ export function GameLobby() {
           </div>
 
           <label className="mt-4 block text-sm font-medium text-slate-700">
-            表示名
+            プレイヤー名
             <input
               value={name}
               onChange={(event) => setName(event.target.value)}
@@ -140,33 +137,16 @@ export function GameLobby() {
                 if (event.key === "Enter") saveProfile();
               }}
               className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
-              placeholder="例: 佐藤"
+              placeholder="空欄なら自動生成"
             />
           </label>
-
-          <div className="mt-4 flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
-            <span
-              className="h-12 w-12 shrink-0 rounded-full border border-white bg-cover bg-center shadow-sm"
-              style={{
-                backgroundColor: avatarColor,
-                backgroundImage: `url(${avatarImage || defaultAvatarImage})`,
-              }}
-              aria-hidden="true"
-            />
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-slate-950">アイコンは自動で決まります</p>
-              <p className="mt-1 text-xs leading-5 text-slate-500">
-                変更したいときは、ゲーム画面のヘッダーにあるアイコンから選べます。
-              </p>
-            </div>
-          </div>
 
           <button
             type="button"
             onClick={saveProfile}
             className="mt-4 w-full rounded-lg bg-cyan-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-500"
           >
-            保存してログイン
+            ログイン
           </button>
 
           {message && (

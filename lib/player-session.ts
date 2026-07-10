@@ -45,6 +45,15 @@ export function pickRandomDefaultAvatarImage() {
   return defaultAvatarImages[Math.floor(Math.random() * defaultAvatarImages.length)] ?? defaultAvatarImage;
 }
 
+export function makeRandomPlayerName() {
+  return `プレイヤー${Math.floor(Math.random() * 9000) + 1000}`;
+}
+
+export function normalizePlayerName(name: string) {
+  const trimmedName = name.trim();
+  return trimmedName && trimmedName !== "名無し" ? trimmedName : makeRandomPlayerName();
+}
+
 export function isAvatarColor(value: string | null): value is string {
   return Boolean(value?.match(/^#[0-9a-fA-F]{6}$/));
 }
