@@ -514,7 +514,7 @@ export function WordWolfGame() {
   const voteActor = isDebugMode ? nextVotePlayer : activePlayer;
   const guessActor = isDebugMode ? wolfPlayer : activePlayer;
   const isHost = Boolean(room && activePlayerId === room.hostId);
-  const headerName = activePlayer?.name || playerName.trim() || "未ログイン";
+  const headerName = activePlayer?.name || playerName.trim() || "ゲスト";
   const headerAvatarColor = activePlayer?.avatarColor || avatarColor;
   const headerAvatarImage = activePlayer?.avatarImage || avatarImage || defaultAvatarImage;
   const displayWordPlayer = isDebugMode && room?.phase === "clue" ? currentPlayer : activePlayer;
@@ -647,7 +647,7 @@ export function WordWolfGame() {
     setJoinCode("");
     setJoinableRooms([]);
     setIsAvatarPickerOpen(false);
-    setError("ログアウトしました。");
+    setError("入力情報をリセットしました。");
   };
 
   const updateAvatarColor = (nextColor: string) => {
@@ -1154,7 +1154,7 @@ export function WordWolfGame() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase text-cyan-700">Entry</p>
-                <h2 className="text-lg font-bold text-slate-950">ログイン / 部屋</h2>
+                <h2 className="text-lg font-bold text-slate-950">名前と部屋</h2>
               </div>
               <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500">local</span>
             </div>
@@ -1479,10 +1479,10 @@ export function WordWolfGame() {
             <div className="min-h-[560px] rounded-lg border border-white/10 bg-white/[0.96] p-6 shadow-[0_18px_50px_rgba(15,23,42,0.16)]">
               <div className="grid min-h-[500px] place-items-center rounded-lg border border-dashed border-cyan-200 bg-[radial-gradient(circle_at_50%_20%,rgba(34,211,238,0.18),transparent_34%),linear-gradient(135deg,#ffffff_0%,#f8fafc_55%,#ecfeff_100%)]">
                 <div className="max-w-md text-center">
-                  <p className="text-sm font-semibold text-cyan-700">Prototype ready</p>
-                  <h2 className="mt-2 text-3xl font-black text-slate-950">部屋を作って、そのままテスト開始</h2>
+                  <p className="text-sm font-semibold text-cyan-700">準備完了</p>
+                  <h2 className="mt-2 text-3xl font-black text-slate-950">名前を入れて部屋を作成</h2>
                   <p className="mt-3 text-sm leading-6 text-slate-600">
-                    現段階では同じブラウザ内のタブ間同期で遊べます。1人で開始するとテスト用プレイヤーが自動補充され、流れを確認できます。
+                    まずは名前を入力して、部屋を作成するか参加できる部屋を選んでください。1人で動作確認するときは、部屋作成後にデバッグモードをONにすると流れを確認できます。
                   </p>
                 </div>
               </div>
@@ -1547,7 +1547,7 @@ export function WordWolfGame() {
                   <p className="text-xs font-semibold uppercase text-cyan-700">Lobby</p>
                   <h2 className="mt-1 text-2xl font-black text-slate-950">ロビー</h2>
                   <p className="mt-2 text-sm leading-6 text-slate-600">
-                    部屋コードを共有して参加してもらいます。プロトタイプでは、1人で開始してもテスト用プレイヤーが自動補充されます。
+                    部屋コードを共有して参加してもらいます。1人で動作確認するときは、デバッグモードをONにしてください。
                   </p>
                 </div>
               )}
