@@ -73,9 +73,14 @@ export type WordWolfRoomChoice = {
 
 const roomKeyPrefix = "wordwolf:room:";
 const roomIndexKey = "wordwolf:rooms";
+const playerActiveRoomKeyPrefix = "wordwolf:player-active-room:";
 
 function roomKey(code: string) {
   return `${roomKeyPrefix}${code.trim().toUpperCase()}`;
+}
+
+function playerActiveRoomKey(playerId: string) {
+  return `${playerActiveRoomKeyPrefix}${playerId}`;
 }
 
 function normalizeGameMode(value: unknown): GameMode {
@@ -152,6 +157,37 @@ export async function loadStoredWordWolfRoom(code: string) {
   }
 }
 
+async function savePlayerActiveRooms(room: WordWolfRoom) {
+  await Promise.all(
+    room.players.map((player) =>
+      redisCommand<"OK">(["SET", playerActiveRoomKey(player.id), room.code]),
+    ),
+  );
+}
+
+async function deletePlayerActiveRoom(playerId: string, roomCode: string) {
+  const savedCode = await redisCommand<string | null>(["GET", playerActiveRoomKey(playerId)]);
+  if (savedCode?.trim().toUpperCase() === roomCode.trim().toUpperCase()) {
+    await redisCommand<number>(["DEL", playerActiveRoomKey(playerId)]);
+  }
+}
+
+export async function loadStoredPlayerActiveRoom(playerId: string) {
+  const normalizedPlayerId = playerId.trim();
+  if (!normalizedPlayerId) return null;
+
+  const code = await redisCommand<string | null>(["GET", playerActiveRoomKey(normalizedPlayerId)]);
+  if (!code) return null;
+
+  const room = await loadStoredWordWolfRoom(code);
+  if (!room || !room.players.some((player) => player.id === normalizedPlayerId)) {
+    await redisCommand<number>(["DEL", playerActiveRoomKey(normalizedPlayerId)]);
+    return null;
+  }
+
+  return room;
+}
+
 export async function saveStoredWordWolfRoom(room: unknown) {
   let normalizedRoom = normalizeRoom(room);
   if (!normalizedRoom) {
@@ -168,14 +204,20 @@ export async function saveStoredWordWolfRoom(room: unknown) {
 
   await redisCommand<"OK">(["SET", roomKey(normalizedRoom.code), JSON.stringify(normalizedRoom)]);
   await redisCommand<number>(["SADD", roomIndexKey, normalizedRoom.code]);
+  await savePlayerActiveRooms(normalizedRoom);
 
   return normalizedRoom;
 }
 
 export async function deleteStoredWordWolfRoom(code: string) {
   const normalizedCode = code.trim().toUpperCase();
+  const room = await loadStoredWordWolfRoom(normalizedCode);
   await redisCommand<number>(["DEL", roomKey(normalizedCode)]);
   await redisCommand<number>(["SREM", roomIndexKey, normalizedCode]);
+
+  if (room) {
+    await Promise.all(room.players.map((player) => deletePlayerActiveRoom(player.id, normalizedCode)));
+  }
 }
 
 export async function listStoredWordWolfRooms() {

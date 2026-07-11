@@ -238,6 +238,33 @@ async function loadRoomFromStore(code: string) {
   }
 }
 
+async function loadActiveRoomFromStore(playerId: string) {
+  try {
+    const response = await fetch(`/api/wordwolf/rooms?playerId=${encodeURIComponent(playerId)}`, {
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error("ACTIVE_ROOM_FETCH_FAILED");
+
+    const data = (await response.json()) as { room?: Room | null };
+    if (!data.room) return null;
+
+    const normalizedRoom = {
+      ...data.room,
+      passphrase: data.room.passphrase ?? "",
+      gameMode: normalizeGameMode(data.room.gameMode),
+      clueLogVisibility: data.room.clueLogVisibility ?? "result",
+      turnTimeLimitSeconds: data.room.turnTimeLimitSeconds ?? 0,
+      currentTurnStartedAt: data.room.currentTurnStartedAt ?? null,
+      topicDictionarySource: normalizeTopicDictionarySource(data.room.topicDictionarySource ?? data.room.topicSourceMode),
+      topicPairDistance: normalizeTopicPairDistance(data.room.topicPairDistance ?? data.room.topicSourceMode),
+    };
+    saveRoom(normalizedRoom);
+    return normalizedRoom;
+  } catch {
+    return null;
+  }
+}
+
 async function listJoinableRoomsFromStore() {
   try {
     const response = await fetch("/api/wordwolf/rooms", { cache: "no-store" });
@@ -496,33 +523,43 @@ export function WordWolfGame() {
       };
     }
 
+    let timer: number | undefined;
     loadPersistentPlayerSession()
-      .then((session) => {
+      .then(async (session) => {
         if (!isMounted || !session) return;
+
+        const accountId = session.id ?? "";
         setPlayerName(session.name);
-        setPlayerAccountId(session.id ?? "");
+        setPlayerAccountId(accountId);
         setAvatarColor(session.avatarColor);
         setAvatarImage(session.avatarImage);
+
+        const lastCode = localStorage.getItem("wordwolf-last-room");
+        const lastPlayer = localStorage.getItem("wordwolf-last-player");
+        let savedRoom = lastCode ? await loadRoomFromStore(lastCode) : null;
+        if (!savedRoom && accountId) {
+          savedRoom = await loadActiveRoomFromStore(accountId);
+        }
+
+        if (!isMounted || !savedRoom) return;
+
+        const restoredPlayerId =
+          lastPlayer && savedRoom.players.some((player) => player.id === lastPlayer)
+            ? lastPlayer
+            : savedRoom.players.some((player) => player.id === accountId)
+              ? accountId
+              : "";
+
+        timer = window.setTimeout(() => {
+          setRoom(savedRoom);
+          if (restoredPlayerId) {
+            setActivePlayerId(restoredPlayerId);
+            localStorage.setItem("wordwolf-last-player", restoredPlayerId);
+          }
+          localStorage.setItem("wordwolf-last-room", savedRoom.code);
+        }, 0);
       })
       .catch(() => undefined);
-
-    let timer: number | undefined;
-    const lastCode = localStorage.getItem("wordwolf-last-room");
-    const lastPlayer = localStorage.getItem("wordwolf-last-player");
-    if (lastCode) {
-      loadRoomFromStore(lastCode)
-        .then((savedRoom) => {
-          if (!isMounted || !savedRoom) return;
-
-          timer = window.setTimeout(() => {
-            setRoom(savedRoom);
-            if (lastPlayer && savedRoom.players.some((player) => player.id === lastPlayer)) {
-              setActivePlayerId(lastPlayer);
-            }
-          }, 0);
-        })
-        .catch(() => undefined);
-    }
 
     return () => {
       isMounted = false;

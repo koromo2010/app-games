@@ -2,6 +2,7 @@ import {
   deleteStoredHostedWordWolfRooms,
   deleteStoredWordWolfRoom,
   listStoredJoinableWordWolfRooms,
+  loadStoredPlayerActiveRoom,
   loadStoredWordWolfRoom,
   saveStoredWordWolfRoom,
 } from "@/lib/wordwolf-room-store";
@@ -13,6 +14,7 @@ function isStoreNotConfigured(error: unknown) {
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
+  const playerId = url.searchParams.get("playerId");
 
   try {
     if (code) {
@@ -21,6 +23,11 @@ export async function GET(request: Request) {
         return Response.json({ error: "Room not found" }, { status: 404 });
       }
 
+      return Response.json({ room });
+    }
+
+    if (playerId) {
+      const room = await loadStoredPlayerActiveRoom(playerId);
       return Response.json({ room });
     }
 

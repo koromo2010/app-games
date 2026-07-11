@@ -48,6 +48,13 @@ const games = [
 
 type AuthMode = "login" | "register";
 
+type ActiveWordWolfRoom = {
+  code: string;
+  phase: "lobby" | "clue" | "vote" | "wolfGuess" | "result";
+  players: { id: string; name: string }[];
+  updatedAt: number;
+};
+
 const errorMessages: Record<string, string> = {
   INVALID_JSON: "入力内容を読み取れませんでした。",
   STORE_NOT_CONFIGURED: "プレイヤー保存用ストレージが未設定です。",
@@ -79,6 +86,14 @@ function formatDate(timestamp: number) {
   }).format(new Date(timestamp));
 }
 
+function activeRoomPhaseLabel(phase: ActiveWordWolfRoom["phase"]) {
+  if (phase === "lobby") return "待機中";
+  if (phase === "clue") return "発言中";
+  if (phase === "vote") return "投票中";
+  if (phase === "wolfGuess") return "逆転回答";
+  return "結果表示";
+}
+
 export function GameLobby() {
   const [name, setName] = useState("");
   const [playerId, setPlayerId] = useState("");
@@ -91,6 +106,8 @@ export function GameLobby() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [stats, setStats] = useState<PlayerStatsResponse | null>(null);
   const [isStatsLoading, setIsStatsLoading] = useState(false);
+  const [activeRoom, setActiveRoom] = useState<ActiveWordWolfRoom | null>(null);
+  const [isActiveRoomLoading, setIsActiveRoomLoading] = useState(false);
 
   const loadStats = async (targetPlayerId: string) => {
     if (!targetPlayerId) return;
@@ -107,6 +124,30 @@ export function GameLobby() {
     } finally {
       setIsStatsLoading(false);
     }
+  };
+
+  const loadActiveRoom = async (targetPlayerId: string) => {
+    if (!targetPlayerId) return;
+
+    setIsActiveRoomLoading(true);
+    try {
+      const response = await fetch(`/api/wordwolf/rooms?playerId=${encodeURIComponent(targetPlayerId)}`, {
+        cache: "no-store",
+      });
+      const data = (await response.json()) as { room?: ActiveWordWolfRoom | null };
+      setActiveRoom(response.ok && data.room ? data.room : null);
+    } catch {
+      setActiveRoom(null);
+    } finally {
+      setIsActiveRoomLoading(false);
+    }
+  };
+
+  const rememberActiveRoom = () => {
+    if (!activeRoom || !playerId) return;
+
+    localStorage.setItem("wordwolf-last-room", activeRoom.code);
+    localStorage.setItem("wordwolf-last-player", playerId);
   };
 
   useEffect(() => {
@@ -129,6 +170,7 @@ export function GameLobby() {
         setIsLoggedIn(authenticated);
         if (authenticated && session.id) {
           void loadStats(session.id);
+          void loadActiveRoom(session.id);
         }
       })
       .catch(() => undefined);
@@ -149,6 +191,7 @@ export function GameLobby() {
     setIsLoggedIn(true);
     if (session.id) {
       void loadStats(session.id);
+      void loadActiveRoom(session.id);
     }
   };
 
@@ -196,6 +239,7 @@ export function GameLobby() {
     setAvatarImage(pickRandomDefaultAvatarImage());
     setIsLoggedIn(false);
     setStats(null);
+    setActiveRoom(null);
     setMessage("ログアウトしました。");
   };
 
@@ -317,6 +361,39 @@ export function GameLobby() {
               </p>
             )}
           </div>
+
+          {isLoggedIn && (activeRoom || isActiveRoomLoading) && (
+            <div className="rounded-lg border border-cyan-200 bg-cyan-50 p-4 shadow-[0_18px_50px_rgba(15,23,42,0.16)]">
+              <p className="text-xs font-semibold uppercase text-cyan-700">Resume</p>
+              <h2 className="mt-1 text-lg font-bold text-slate-950">前回の部屋</h2>
+              {isActiveRoomLoading && !activeRoom ? (
+                <p className="mt-3 text-sm text-slate-600">復帰できる部屋を確認中...</p>
+              ) : activeRoom ? (
+                <>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                    <div className="rounded-lg bg-white px-3 py-2">
+                      <p className="text-xs text-slate-500">ROOM</p>
+                      <p className="font-bold text-slate-950">{activeRoom.code}</p>
+                    </div>
+                    <div className="rounded-lg bg-white px-3 py-2">
+                      <p className="text-xs text-slate-500">状態</p>
+                      <p className="font-bold text-slate-950">{activeRoomPhaseLabel(activeRoom.phase)}</p>
+                    </div>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-600">
+                    {activeRoom.players.length}人参加中 / {formatDate(activeRoom.updatedAt)}更新
+                  </p>
+                  <Link
+                    href="/wordwolf"
+                    onClick={rememberActiveRoom}
+                    className="mt-3 inline-flex w-full justify-center rounded-lg bg-cyan-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-500"
+                  >
+                    この部屋に戻る
+                  </Link>
+                </>
+              ) : null}
+            </div>
+          )}
 
           {isLoggedIn && (
             <div className="rounded-lg border border-white/10 bg-white/[0.96] p-4 shadow-[0_18px_50px_rgba(15,23,42,0.18)]">
