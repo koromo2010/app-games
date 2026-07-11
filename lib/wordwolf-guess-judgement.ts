@@ -18,16 +18,43 @@ type FeedbackRecord = {
   updatedAt: number;
 };
 
+type ConceptFeedbackEntry = {
+  normalized: string;
+  label: string;
+  accepted: number;
+  rejected: number;
+  updatedAt: number;
+};
+
+type ConceptFeedbackRecord = {
+  entries: ConceptFeedbackEntry[];
+  updatedAt: number;
+};
+
 const feedbackKeyPrefix = "wordwolf:guess-feedback:";
+const conceptFeedbackKeyPrefix = "wordwolf:guess-concept-feedback:";
+const maxConceptFeedbackEntries = 60;
+const maxLlmExamples = 8;
 
 function feedbackKey(correctWord: string, guessWord: string) {
   return feedbackKeyPrefix + normalizeGuess(correctWord) + "::" + normalizeGuess(guessWord);
+}
+
+function conceptFeedbackKey(correctWord: string) {
+  return conceptFeedbackKeyPrefix + normalizeGuess(correctWord);
 }
 
 function emptyFeedback(): FeedbackRecord {
   return {
     accepted: 0,
     rejected: 0,
+    updatedAt: Date.now(),
+  };
+}
+
+function emptyConceptFeedback(): ConceptFeedbackRecord {
+  return {
+    entries: [],
     updatedAt: Date.now(),
   };
 }
@@ -47,6 +74,40 @@ function parseFeedback(value: unknown): FeedbackRecord {
   }
 }
 
+function normalizeConceptEntry(value: unknown): ConceptFeedbackEntry | null {
+  if (!value || typeof value !== "object") return null;
+
+  const parsed = value as Partial<ConceptFeedbackEntry>;
+  const normalized = typeof parsed.normalized === "string" ? parsed.normalized : normalizeGuess(parsed.label ?? "");
+  if (!normalized) return null;
+
+  return {
+    normalized,
+    label: typeof parsed.label === "string" && parsed.label.trim() ? parsed.label.trim() : normalized,
+    accepted: typeof parsed.accepted === "number" ? Math.max(0, Math.floor(parsed.accepted)) : 0,
+    rejected: typeof parsed.rejected === "number" ? Math.max(0, Math.floor(parsed.rejected)) : 0,
+    updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : Date.now(),
+  };
+}
+
+function parseConceptFeedback(value: unknown): ConceptFeedbackRecord {
+  if (!value || typeof value !== "string") return emptyConceptFeedback();
+
+  try {
+    const parsed = JSON.parse(value) as Partial<ConceptFeedbackRecord>;
+    const entries = Array.isArray(parsed.entries)
+      ? parsed.entries.map(normalizeConceptEntry).filter((entry): entry is ConceptFeedbackEntry => Boolean(entry))
+      : [];
+
+    return {
+      entries: entries.slice(0, maxConceptFeedbackEntries),
+      updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : Date.now(),
+    };
+  } catch {
+    return emptyConceptFeedback();
+  }
+}
+
 async function loadFeedback(correctWord: string, guessWord: string) {
   try {
     const raw = await redisCommand<string | null>(["GET", feedbackKey(correctWord, guessWord)]);
@@ -54,6 +115,18 @@ async function loadFeedback(correctWord: string, guessWord: string) {
   } catch (error) {
     if (error instanceof Error && error.message === "REDIS_STORE_NOT_CONFIGURED") {
       return emptyFeedback();
+    }
+    throw error;
+  }
+}
+
+async function loadConceptFeedback(correctWord: string) {
+  try {
+    const raw = await redisCommand<string | null>(["GET", conceptFeedbackKey(correctWord)]);
+    return parseConceptFeedback(raw);
+  } catch (error) {
+    if (error instanceof Error && error.message === "REDIS_STORE_NOT_CONFIGURED") {
+      return emptyConceptFeedback();
     }
     throw error;
   }
@@ -99,6 +172,12 @@ function levenshteinDistance(left: string, right: string) {
   return previous[right.length] ?? 0;
 }
 
+function similarityScore(left: string, right: string) {
+  const longerLength = Math.max(left.length, right.length);
+  if (longerLength === 0) return 0;
+  return 1 - levenshteinDistance(left, right) / longerLength;
+}
+
 function fuzzyJudgement(guessWord: string, correctWord: string, feedback: FeedbackRecord) {
   const guess = normalizeGuess(guessWord);
   const correct = normalizeGuess(correctWord);
@@ -110,9 +189,7 @@ function fuzzyJudgement(guessWord: string, correctWord: string, feedback: Feedba
     return makeJudgement(true, "exact", "\u5b8c\u5168\u4e00\u81f4\u3057\u307e\u3057\u305f\u3002", 1, feedback);
   }
 
-  const longerLength = Math.max(guess.length, correct.length);
-  const distance = levenshteinDistance(guess, correct);
-  const similarity = longerLength > 0 ? 1 - distance / longerLength : 0;
+  const similarity = similarityScore(guess, correct);
   const includes = guess.length >= 3 && correct.length >= 3 && (guess.includes(correct) || correct.includes(guess));
 
   if (similarity >= 0.86 || includes) {
@@ -132,6 +209,52 @@ function fuzzyJudgement(guessWord: string, correctWord: string, feedback: Feedba
     Math.max(0.2, similarity),
     feedback,
   );
+}
+
+function conceptFeedbackJudgement(guessWord: string, feedback: FeedbackRecord, conceptFeedback: ConceptFeedbackRecord) {
+  const guess = normalizeGuess(guessWord);
+  if (!guess) return null;
+
+  const exactEntry = conceptFeedback.entries.find((entry) => entry.normalized === guess);
+  if (exactEntry && exactEntry.accepted !== exactEntry.rejected) {
+    const accepted = exactEntry.accepted > exactEntry.rejected;
+    return makeJudgement(
+      accepted,
+      "feedback",
+      accepted
+        ? "\u3053\u306e\u6b63\u89e3\u8a9e\u3067\u904e\u53bb\u306b\u6b63\u89e3\u6271\u3044\u3055\u308c\u305f\u56de\u7b54\u3067\u3059\u3002"
+        : "\u3053\u306e\u6b63\u89e3\u8a9e\u3067\u904e\u53bb\u306b\u4e0d\u6b63\u89e3\u6271\u3044\u3055\u308c\u305f\u56de\u7b54\u3067\u3059\u3002",
+      0.92,
+      feedback,
+    );
+  }
+
+  const closeAccepted = conceptFeedback.entries.find(
+    (entry) => entry.accepted > entry.rejected && similarityScore(guess, entry.normalized) >= 0.94,
+  );
+  if (closeAccepted) {
+    return makeJudgement(
+      true,
+      "feedback",
+      "\u904e\u53bb\u306b\u6b63\u89e3\u6271\u3044\u3055\u308c\u305f\u8a00\u3044\u63db\u3048\u306b\u8fd1\u3044\u56de\u7b54\u3067\u3059\u3002",
+      0.82,
+      feedback,
+    );
+  }
+
+  return null;
+}
+
+function feedbackExamples(conceptFeedback: ConceptFeedbackRecord, accepted: boolean) {
+  return conceptFeedback.entries
+    .filter((entry) => (accepted ? entry.accepted > entry.rejected : entry.rejected > entry.accepted))
+    .sort((left, right) => {
+      const leftCount = accepted ? left.accepted : left.rejected;
+      const rightCount = accepted ? right.accepted : right.rejected;
+      return rightCount - leftCount || right.updatedAt - left.updatedAt;
+    })
+    .slice(0, maxLlmExamples)
+    .map((entry) => entry.label);
 }
 
 function isLlmEnabled() {
@@ -157,29 +280,39 @@ function parseLlmJudgement(text: string, feedback: FeedbackRecord): WordWolfGues
   }
 }
 
-async function judgeWithLlm(guessWord: string, correctWord: string, feedback: FeedbackRecord) {
+async function judgeWithLlm(
+  guessWord: string,
+  correctWord: string,
+  feedback: FeedbackRecord,
+  conceptFeedback: ConceptFeedbackRecord,
+) {
   const { default: OpenAI } = await import("openai");
   const client = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
     maxRetries: 0,
     timeout: 4500,
   });
+  const acceptedExamples = feedbackExamples(conceptFeedback, true);
+  const rejectedExamples = feedbackExamples(conceptFeedback, false);
 
   const response = await client.responses.create({
     model: "gpt-4.1-mini",
     input:
       "You judge a Word Wolf reverse answer. Treat the guess as accepted only when it is essentially the same concept as the correct word. " +
+      "Accepted/rejected examples are table memory for this exact correct word. Use them as the play group's house style when judging synonym boundaries. " +
       "Accept spelling variants, abbreviations, formal/common names, common English/Japanese translation differences, and very common aliases. " +
       "Reject merely related words, same-category but different items, broader/narrower concepts, rules, ingredients, places, people, or close-but-distinct games/sports. " +
       "Return JSON only: {\"accepted\":boolean,\"confidence\":0-1,\"reason\":\"short Japanese reason\"}\n" +
-      "Correct word: " + correctWord + "\nGuess: " + guessWord,
+      "Correct word: " + correctWord + "\nGuess: " + guessWord +
+      "\nPreviously accepted examples for this correct word: " + (acceptedExamples.length ? acceptedExamples.join(", ") : "none") +
+      "\nPreviously rejected examples for this correct word: " + (rejectedExamples.length ? rejectedExamples.join(", ") : "none"),
   });
 
   return parseLlmJudgement(response.output_text, feedback);
 }
 
 export async function judgeWordWolfGuess(guessWord: string, correctWord: string): Promise<WordWolfGuessJudgement> {
-  const feedback = await loadFeedback(correctWord, guessWord);
+  const [feedback, conceptFeedback] = await Promise.all([loadFeedback(correctWord, guessWord), loadConceptFeedback(correctWord)]);
 
   if (feedback.accepted !== feedback.rejected) {
     return makeJudgement(
@@ -191,12 +324,15 @@ export async function judgeWordWolfGuess(guessWord: string, correctWord: string)
     );
   }
 
+  const conceptJudgement = conceptFeedbackJudgement(guessWord, feedback, conceptFeedback);
+  if (conceptJudgement) return conceptJudgement;
+
   const simple = fuzzyJudgement(guessWord, correctWord, feedback);
   if (simple.source === "exact") return simple;
 
   if (isLlmEnabled()) {
     try {
-      return (await judgeWithLlm(guessWord, correctWord, feedback)) ?? simple;
+      return (await judgeWithLlm(guessWord, correctWord, feedback, conceptFeedback)) ?? simple;
     } catch (error) {
       console.error("[wordwolf/guess] falling back to fuzzy judgement", error);
     }
@@ -205,15 +341,54 @@ export async function judgeWordWolfGuess(guessWord: string, correctWord: string)
   return simple;
 }
 
+function updateConceptFeedback(
+  conceptFeedback: ConceptFeedbackRecord,
+  guessWord: string,
+  accepted: boolean,
+): ConceptFeedbackRecord {
+  const normalized = normalizeGuess(guessWord);
+  if (!normalized) return conceptFeedback;
+
+  const now = Date.now();
+  const entries = conceptFeedback.entries.map((entry) => ({ ...entry }));
+  const existing = entries.find((entry) => entry.normalized === normalized);
+
+  if (existing) {
+    existing.label = guessWord.trim() || existing.label;
+    existing.accepted += accepted ? 1 : 0;
+    existing.rejected += accepted ? 0 : 1;
+    existing.updatedAt = now;
+  } else {
+    entries.push({
+      normalized,
+      label: guessWord.trim() || normalized,
+      accepted: accepted ? 1 : 0,
+      rejected: accepted ? 0 : 1,
+      updatedAt: now,
+    });
+  }
+
+  return {
+    entries: entries
+      .sort((left, right) => right.accepted + right.rejected - (left.accepted + left.rejected) || right.updatedAt - left.updatedAt)
+      .slice(0, maxConceptFeedbackEntries),
+    updatedAt: now,
+  };
+}
+
 export async function recordWordWolfGuessFeedback(guessWord: string, correctWord: string, accepted: boolean) {
-  const feedback = await loadFeedback(correctWord, guessWord);
+  const [feedback, conceptFeedback] = await Promise.all([loadFeedback(correctWord, guessWord), loadConceptFeedback(correctWord)]);
   const nextFeedback = {
     ...feedback,
     accepted: feedback.accepted + (accepted ? 1 : 0),
     rejected: feedback.rejected + (accepted ? 0 : 1),
     updatedAt: Date.now(),
   };
+  const nextConceptFeedback = updateConceptFeedback(conceptFeedback, guessWord, accepted);
 
-  await redisCommand<"OK">(["SET", feedbackKey(correctWord, guessWord), JSON.stringify(nextFeedback)]);
+  await Promise.all([
+    redisCommand<"OK">(["SET", feedbackKey(correctWord, guessWord), JSON.stringify(nextFeedback)]),
+    redisCommand<"OK">(["SET", conceptFeedbackKey(correctWord), JSON.stringify(nextConceptFeedback)]),
+  ]);
   return nextFeedback;
 }
