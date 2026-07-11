@@ -84,6 +84,13 @@ function normalizeWolfCount(value: unknown, playerCount: number) {
   return Math.max(1, Math.min(maxWolfCount(playerCount), count));
 }
 
+const allowedRoundsTotal = [1, 2, 3, 4];
+
+function normalizeRoundsTotal(value: unknown) {
+  const round = typeof value === "number" && Number.isFinite(value) ? Math.floor(value) : 3;
+  return allowedRoundsTotal.includes(round) ? round : 3;
+}
+
 function normalizeGuessJudgement(value: unknown): WordWolfGuessJudgement | null {
   if (!value || typeof value !== "object") return null;
 
@@ -157,7 +164,7 @@ function normalizeRoom(value: unknown): WordWolfRoom | null {
     clueMode: normalizeClueMode(parsed.clueMode),
     randomizeTurnOrder: parsed.randomizeTurnOrder ?? true,
     players: players as Player[],
-    roundsTotal: typeof parsed.roundsTotal === "number" ? parsed.roundsTotal : 3,
+    roundsTotal: normalizeRoundsTotal(parsed.roundsTotal),
     turnTimeLimitSeconds: typeof parsed.turnTimeLimitSeconds === "number" ? parsed.turnTimeLimitSeconds : 0,
     currentRound: typeof parsed.currentRound === "number" ? parsed.currentRound : 1,
     currentTurnIndex: typeof parsed.currentTurnIndex === "number" ? parsed.currentTurnIndex : 0,

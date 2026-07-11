@@ -123,6 +123,12 @@ function normalizeWolfCount(value: unknown, playerCount: number) {
 }
 
 const lobbyRounds = [1, 2, 3, 4];
+
+function normalizeRoundsTotal(value: unknown) {
+  const round = typeof value === "number" && Number.isFinite(value) ? Math.floor(value) : 3;
+  return lobbyRounds.includes(round) ? round : 3;
+}
+
 const turnTimeLimitOptions = [0, 30, 60, 90, 120];
 const noWolfChance = 0.1;
 const roomStoragePrefix = "wordwolf-room-";
@@ -172,6 +178,7 @@ function loadRoom(code: string): Room | null {
       clueLogVisibility: room.clueLogVisibility ?? "result",
       clueMode: normalizeClueMode(room.clueMode),
       randomizeTurnOrder: room.randomizeTurnOrder ?? true,
+      roundsTotal: normalizeRoundsTotal(room.roundsTotal),
       turnTimeLimitSeconds: room.turnTimeLimitSeconds ?? 0,
       currentTurnStartedAt: room.currentTurnStartedAt ?? null,
       wolfIds: normalizeWolfIds(room),
@@ -256,6 +263,7 @@ async function loadRoomFromStore(code: string) {
       clueLogVisibility: data.room.clueLogVisibility ?? "result",
       clueMode: normalizeClueMode(data.room.clueMode),
       randomizeTurnOrder: data.room.randomizeTurnOrder ?? true,
+      roundsTotal: normalizeRoundsTotal(data.room.roundsTotal),
       turnTimeLimitSeconds: data.room.turnTimeLimitSeconds ?? 0,
       currentTurnStartedAt: data.room.currentTurnStartedAt ?? null,
       wolfIds: normalizeWolfIds(data.room),
@@ -293,6 +301,7 @@ async function loadActiveRoomFromStore(playerId: string) {
       clueLogVisibility: data.room.clueLogVisibility ?? "result",
       clueMode: normalizeClueMode(data.room.clueMode),
       randomizeTurnOrder: data.room.randomizeTurnOrder ?? true,
+      roundsTotal: normalizeRoundsTotal(data.room.roundsTotal),
       turnTimeLimitSeconds: data.room.turnTimeLimitSeconds ?? 0,
       currentTurnStartedAt: data.room.currentTurnStartedAt ?? null,
       wolfIds: normalizeWolfIds(data.room),
@@ -716,6 +725,11 @@ export function WordWolfGame() {
     ?.map((candidateId) => room.players.find((player) => player.id === candidateId)?.name)
     .filter((name): name is string => Boolean(name))
     .join("、") ?? "";
+  const roundProgressLabel = room?.runoffCandidateIds?.length && room.currentRound > room.roundsTotal
+    ? "追加"
+    : room
+      ? `${room.currentRound}/${room.roundsTotal}`
+      : "";
   const phaseTimeLimitSeconds = room?.turnTimeLimitSeconds && room.currentTurnStartedAt
     ? room.phase === "clue"
       ? room.turnTimeLimitSeconds
@@ -1152,6 +1166,7 @@ export function WordWolfGame() {
       const topic = await fetchTopicWithFallback(room.topicDictionarySource, room.topicPairDistance, room.topicHint);
       const basePlayers = room.debugMode ? fillSoloTestPlayers(room.players) : room.players;
       const players = room.randomizeTurnOrder ? shufflePlayers(basePlayers) : basePlayers;
+      const roundsTotal = normalizeRoundsTotal(room.roundsTotal);
       const shouldHaveWolf = room.gameMode === "wordwolf" || Math.random() >= noWolfChance;
       const wolfCount = shouldHaveWolf ? normalizeWolfCount(room.wolfCount, players.length) : 0;
       const wolves = shouldHaveWolf ? pickWolves(players, wolfCount) : [];
@@ -1162,6 +1177,7 @@ export function WordWolfGame() {
         debugMode: room.debugMode,
         phase: "clue",
         currentRound: 1,
+        roundsTotal,
         currentTurnIndex: 0,
         currentTurnStartedAt: Date.now(),
         wolfId: wolfIds[0] ?? null,
@@ -1347,7 +1363,6 @@ export function WordWolfGame() {
             votes: {},
             runoffCandidateIds: null,
             currentRound: extraRound,
-            roundsTotal: Math.max(baseRoom.roundsTotal, extraRound),
             currentTurnIndex: 0,
             currentTurnStartedAt: Date.now(),
           });
@@ -1358,7 +1373,6 @@ export function WordWolfGame() {
           ...runoffRoom,
           phase: "clue",
           currentRound: extraRound,
-          roundsTotal: Math.max(baseRoom.roundsTotal, extraRound),
           currentTurnIndex: getFirstClueTurnIndex({ ...runoffRoom, phase: "clue", currentRound: extraRound }),
           currentTurnStartedAt: Date.now(),
         });
@@ -2085,7 +2099,7 @@ export function WordWolfGame() {
                     周回数
                     <select
                       value={room.roundsTotal}
-                      onChange={(event) => setAndSaveRoom({ ...room, roundsTotal: Number(event.target.value) })}
+                      onChange={(event) => setAndSaveRoom({ ...room, roundsTotal: normalizeRoundsTotal(Number(event.target.value)) })}
                       className={`mt-1 ${inputClass}`}
                     >
                       {lobbyRounds.map((round) => (
@@ -2313,7 +2327,7 @@ export function WordWolfGame() {
                     </div>
                     <div className="rounded-lg bg-slate-100 px-2 py-2">
                       <p className="text-xs text-slate-500">周回</p>
-                      <p className="font-bold text-slate-950">{room.currentRound}/{room.roundsTotal}</p>
+                      <p className="font-bold text-slate-950">{roundProgressLabel}</p>
                     </div>
                     <div className="rounded-lg bg-slate-100 px-2 py-2">
                       <p className="text-xs text-slate-500">投票</p>
@@ -2379,7 +2393,7 @@ export function WordWolfGame() {
                       </h2>
                     </div>
                     <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950">
-                      {room.currentRound}{"\u5468\u76ee"}
+                      {room.runoffCandidateIds?.length && room.currentRound > room.roundsTotal ? "追加発言" : `${room.currentRound}周目`}
                     </p>
                   </div>
                   {room.runoffCandidateIds?.length ? (
