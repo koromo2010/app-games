@@ -710,6 +710,58 @@ export function WordWolfGame() {
     room && shouldShowClueLog
       ? "mx-auto grid max-w-[1500px] gap-4 px-4 py-5 lg:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)_360px]"
       : "mx-auto grid max-w-6xl gap-4 px-4 py-5 lg:grid-cols-[340px_1fr]";
+  const isMyClueTurn = Boolean(room?.phase === "clue" && canSubmitClue);
+  const isMyVoteTurn = Boolean(room?.phase === "vote" && voteActor);
+  const isMyFinalAnswerTurn = Boolean(room?.phase === "wolfGuess" && guessActor?.id === room.wolfId);
+  const isMyActionTurn = isMyClueTurn || isMyVoteTurn || isMyFinalAnswerTurn;
+  const phaseVisual = room
+    ? room.phase === "clue"
+      ? {
+          label: room.clueMode === "simultaneous" ? "同時投稿モード" : "投稿モード",
+          title: isMyClueTurn ? "あなたの投稿待ちです" : "発言を待っています",
+          detail: room.clueMode === "simultaneous"
+            ? `この周の投稿 ${clueSubmittedCount}/${clueParticipants.length}`
+            : currentPlayer
+              ? `現在の手番: ${currentPlayer.name}`
+              : "手番を確認中",
+          className: "border-cyan-200 bg-cyan-50 text-cyan-950",
+          pillClassName: "bg-cyan-600 text-white",
+        }
+      : room.phase === "vote"
+        ? {
+            label: isRunoffVote ? "決選投票モード" : "投票モード",
+            title: isMyVoteTurn ? "あなたの投票待ちです" : "投票を待っています",
+            detail: `投票 ${votedCount}/${voteVoters.length}`,
+            className: "border-violet-200 bg-violet-50 text-violet-950",
+            pillClassName: "bg-violet-600 text-white",
+          }
+        : room.phase === "wolfGuess"
+          ? {
+              label: "逆転回答モード",
+              title: isMyFinalAnswerTurn ? "狼の逆転回答待ちです" : "逆転回答を待っています",
+              detail: accusedPlayer ? `投票対象: ${accusedPlayer.name}` : "投票結果を確認中",
+              className: "border-amber-200 bg-amber-50 text-amber-950",
+              pillClassName: "bg-amber-600 text-white",
+            }
+          : room.phase === "result"
+            ? {
+                label: "結果発表",
+                title: resultTitle,
+                detail: "投票結果とお題を確認できます",
+                className: "border-emerald-200 bg-emerald-50 text-emerald-950",
+                pillClassName: "bg-emerald-600 text-white",
+              }
+            : {
+                label: "ロビー",
+                title: "ゲーム開始前です",
+                detail: isHost ? "ルールを設定してゲームを開始できます" : "ホストの開始を待っています",
+                className: "border-slate-200 bg-slate-50 text-slate-950",
+                pillClassName: "bg-slate-800 text-white",
+              }
+    : null;
+  const activeStatusPanelClass = `${panelClass} ${
+    isMyActionTurn ? "border-cyan-300 bg-cyan-50/95 shadow-[0_0_0_3px_rgba(34,211,238,0.18),0_18px_50px_rgba(8,145,178,0.18)] animate-pulse" : ""
+  }`;
 
   const setAndSaveRoom = useCallback((nextRoom: Room) => {
     const stampedRoom = stampRoom(nextRoom);
@@ -2156,7 +2208,27 @@ export function WordWolfGame() {
             </div>
           ) : (
             <>
-              <div className={panelClass}>
+              {phaseVisual && (
+                <div className={`rounded-lg border p-4 shadow-[0_18px_50px_rgba(15,23,42,0.12)] ${phaseVisual.className}`}>
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className={`inline-flex rounded-full px-3 py-1 text-xs font-black ${phaseVisual.pillClassName}`}>
+                        {phaseVisual.label}
+                      </p>
+                      <h2 className="mt-3 text-3xl font-black tracking-normal">{phaseVisual.title}</h2>
+                      <p className="mt-1 text-sm font-semibold opacity-80">{phaseVisual.detail}</p>
+                    </div>
+                    {isMyActionTurn && (
+                      <div className="rounded-lg border border-white/70 bg-white/80 px-4 py-3 text-center shadow-sm">
+                        <span className="inline-flex h-3 w-3 animate-ping rounded-full bg-cyan-500" aria-hidden="true" />
+                        <p className="mt-2 text-sm font-black text-slate-950">あなたの番です</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className={activeStatusPanelClass}>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="text-xs font-semibold uppercase text-cyan-700">Active player</p>
@@ -2179,7 +2251,7 @@ export function WordWolfGame() {
                 </div>
 
                 {ownWord && (
-                  <div className="mt-4 rounded-lg border border-cyan-200 bg-cyan-50 p-4">
+                  <div className={`mt-4 rounded-lg border p-4 ${isMyActionTurn ? "border-cyan-300 bg-white shadow-sm" : "border-cyan-200 bg-cyan-50"}`}>
                     <p className="text-xs font-semibold uppercase text-cyan-700">Your topic</p>
                     <p className="mt-1 text-3xl font-black text-cyan-950">{ownWord}</p>
                   </div>
@@ -2220,7 +2292,7 @@ export function WordWolfGame() {
               )}
 
               {room.phase === "clue" && (
-                <div className={panelClass}>
+                <div className={`rounded-lg border p-4 shadow-[0_18px_50px_rgba(15,23,42,0.16)] ${isMyClueTurn ? "border-cyan-300 bg-cyan-50/95" : "border-white/10 bg-white/[0.96]"}`}>
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <p className="text-xs font-semibold uppercase text-cyan-700">
@@ -2258,7 +2330,7 @@ export function WordWolfGame() {
                     onChange={(event) => setClueInput(event.target.value)}
                     onKeyDown={submitClueOnEnter}
                     disabled={!canSubmitClue}
-                    className={`mt-4 min-h-28 resize-y ${inputClass}`}
+                    className={`mt-4 min-h-28 resize-y ${inputClass} ${isMyClueTurn ? "border-cyan-400 bg-white ring-2 ring-cyan-400/20" : ""}`}
                     placeholder="\u304a\u984c\u305d\u306e\u3082\u306e\u3092\u8a00\u308f\u305a\u306b\u95a2\u9023\u3059\u308b\u3053\u3068\u3092\u66f8\u304d\u8fbc\u3080"
                   />
                   <button
@@ -2271,8 +2343,8 @@ export function WordWolfGame() {
                 </div>
               )}
               {room.phase === "vote" && (
-                <div className={panelClass}>
-                  <p className="text-xs font-semibold uppercase text-cyan-700">Vote</p>
+                <div className={`rounded-lg border p-4 shadow-[0_18px_50px_rgba(15,23,42,0.16)] ${isMyVoteTurn ? "border-violet-300 bg-violet-50/95" : "border-white/10 bg-white/[0.96]"}`}>
+                  <p className="text-xs font-semibold uppercase text-violet-700">Vote</p>
                   <h2 className="mt-1 text-2xl font-black text-slate-950">
                     {isRunoffVote ? "\u6c7a\u9078\u6295\u7968" : room.gameMode === "may-no-wolf" ? "\u8ffd\u653e\u6295\u7968" : "\u8ab0\u304c\u72fc\u304b\u6295\u7968"}
                   </h2>
@@ -2305,8 +2377,8 @@ export function WordWolfGame() {
                         disabled={!voteActor}
                         className={`rounded-lg border px-3 py-3 text-left font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${
                           selectedVoteTargetId === player.id
-                            ? "border-cyan-500 bg-cyan-50 text-cyan-950"
-                            : "border-slate-200 bg-slate-50 text-slate-800 hover:bg-slate-100"
+                            ? "border-violet-500 bg-violet-100 text-violet-950"
+                            : "border-slate-200 bg-white text-slate-800 hover:bg-violet-50"
                         }`}
                       >
                         {player.name}
@@ -2317,7 +2389,7 @@ export function WordWolfGame() {
                 </div>
               )}
               {room.phase === "wolfGuess" && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 p-5 shadow-[0_18px_50px_rgba(120,53,15,0.16)]">
+                <div className={`rounded-lg border border-amber-200 bg-amber-50 p-5 shadow-[0_18px_50px_rgba(120,53,15,0.16)] ${isMyFinalAnswerTurn ? "animate-pulse ring-4 ring-amber-300/30" : ""}`}>
                   <p className="text-xs font-semibold uppercase text-amber-700">Final chance</p>
                   <h2 className="mt-1 text-2xl font-black text-slate-950">{"\u72fc\u304c\u898b\u3064\u304b\u308a\u307e\u3057\u305f"}</h2>
                   <p className="mt-2 text-sm leading-6 text-slate-700">
