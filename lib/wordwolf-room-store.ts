@@ -38,6 +38,7 @@ export type WordWolfRoom = {
   gameMode: GameMode;
   debugMode?: boolean;
   clueLogVisibility: ClueLogVisibility;
+  randomizeTurnOrder: boolean;
   players: Player[];
   roundsTotal: number;
   turnTimeLimitSeconds: number;
@@ -176,6 +177,7 @@ function normalizeRoom(value: unknown): WordWolfRoom | null {
     gameMode: normalizeGameMode(parsed.gameMode),
     debugMode: Boolean(parsed.debugMode),
     clueLogVisibility: parsed.clueLogVisibility === "always" ? "always" : "result",
+    randomizeTurnOrder: parsed.randomizeTurnOrder ?? true,
     players: players as Player[],
     roundsTotal: typeof parsed.roundsTotal === "number" ? parsed.roundsTotal : 3,
     turnTimeLimitSeconds: typeof parsed.turnTimeLimitSeconds === "number" ? parsed.turnTimeLimitSeconds : 0,

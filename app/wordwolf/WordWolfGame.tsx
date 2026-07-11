@@ -56,6 +56,7 @@ type Room = {
   gameMode: GameMode;
   debugMode?: boolean;
   clueLogVisibility: ClueLogVisibility;
+  randomizeTurnOrder: boolean;
   players: Player[];
   roundsTotal: number;
   turnTimeLimitSeconds: number;
@@ -148,6 +149,15 @@ function getRoomKey(code: string) {
   return `${roomStoragePrefix}${code.toUpperCase()}`;
 }
 
+function shufflePlayers(players: Player[]) {
+  const shuffled = [...players];
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+  return shuffled;
+}
+
 function saveRoom(room: Room) {
   localStorage.setItem(getRoomKey(room.code), JSON.stringify(stampRoom(room)));
 }
@@ -167,6 +177,7 @@ function loadRoom(code: string): Room | null {
       passphrase: room.passphrase ?? "",
       gameMode: normalizeGameMode(room.gameMode),
       clueLogVisibility: room.clueLogVisibility ?? "result",
+      randomizeTurnOrder: room.randomizeTurnOrder ?? true,
       turnTimeLimitSeconds: room.turnTimeLimitSeconds ?? 0,
       currentTurnStartedAt: room.currentTurnStartedAt ?? null,
       topicDictionarySource: normalizeTopicDictionarySource(room.topicDictionarySource ?? room.topicSourceMode),
@@ -244,6 +255,7 @@ async function loadRoomFromStore(code: string) {
       passphrase: data.room.passphrase ?? "",
       gameMode: normalizeGameMode(data.room.gameMode),
       clueLogVisibility: data.room.clueLogVisibility ?? "result",
+      randomizeTurnOrder: data.room.randomizeTurnOrder ?? true,
       turnTimeLimitSeconds: data.room.turnTimeLimitSeconds ?? 0,
       currentTurnStartedAt: data.room.currentTurnStartedAt ?? null,
       topicDictionarySource: normalizeTopicDictionarySource(data.room.topicDictionarySource ?? data.room.topicSourceMode),
@@ -274,6 +286,7 @@ async function loadActiveRoomFromStore(playerId: string) {
       passphrase: data.room.passphrase ?? "",
       gameMode: normalizeGameMode(data.room.gameMode),
       clueLogVisibility: data.room.clueLogVisibility ?? "result",
+      randomizeTurnOrder: data.room.randomizeTurnOrder ?? true,
       turnTimeLimitSeconds: data.room.turnTimeLimitSeconds ?? 0,
       currentTurnStartedAt: data.room.currentTurnStartedAt ?? null,
       topicDictionarySource: normalizeTopicDictionarySource(data.room.topicDictionarySource ?? data.room.topicSourceMode),
@@ -342,6 +355,7 @@ function createEmptyRoom(
     phase: "lobby",
     gameMode: "wordwolf",
     clueLogVisibility: "result",
+    randomizeTurnOrder: true,
     players: [player],
     roundsTotal: 3,
     turnTimeLimitSeconds: 0,
@@ -1001,6 +1015,11 @@ export function WordWolfGame() {
     setAndSaveRoom({ ...room, gameMode });
   };
 
+  const setRandomizeTurnOrder = (randomizeTurnOrder: boolean) => {
+    if (!room || room.phase !== "lobby") return;
+    setAndSaveRoom({ ...room, randomizeTurnOrder });
+  };
+
   const setTurnTimeLimit = (turnTimeLimitSeconds: number) => {
     if (!room || room.phase !== "lobby") return;
     setAndSaveRoom({ ...room, turnTimeLimitSeconds });
@@ -1029,7 +1048,8 @@ export function WordWolfGame() {
       }
 
       const topic = await fetchTopicWithFallback(room.topicDictionarySource, room.topicPairDistance);
-      const players = room.debugMode ? fillSoloTestPlayers(room.players) : room.players;
+      const basePlayers = room.debugMode ? fillSoloTestPlayers(room.players) : room.players;
+      const players = room.randomizeTurnOrder ? shufflePlayers(basePlayers) : basePlayers;
       const shouldHaveWolf = room.gameMode === "wordwolf" || Math.random() >= noWolfChance;
       const wolf = shouldHaveWolf ? pickWolf(players) : null;
       setAndSaveRoom({
@@ -1783,6 +1803,35 @@ export function WordWolfGame() {
                       ))}
                     </select>
                   </label>
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">{"\u767a\u8a00\u9806"}</p>
+                    <div className="mt-1 grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setRandomizeTurnOrder(true)}
+                        aria-pressed={room.randomizeTurnOrder}
+                        className={`rounded-lg border px-3 py-2 text-left text-sm font-semibold ${
+                          room.randomizeTurnOrder
+                            ? "border-cyan-500 bg-cyan-50 text-cyan-950 shadow-sm"
+                            : "border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100"
+                        }`}
+                      >
+                        {"\u30e9\u30f3\u30c0\u30e0"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setRandomizeTurnOrder(false)}
+                        aria-pressed={!room.randomizeTurnOrder}
+                        className={`rounded-lg border px-3 py-2 text-left text-sm font-semibold ${
+                          !room.randomizeTurnOrder
+                            ? "border-cyan-500 bg-cyan-50 text-cyan-950 shadow-sm"
+                            : "border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100"
+                        }`}
+                      >
+                        {"\u5165\u5ba4\u9806"}
+                      </button>
+                    </div>
+                  </div>
                   <label className="block text-sm font-medium text-slate-700">
                     お題ソース
                     <select
