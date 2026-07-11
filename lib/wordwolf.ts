@@ -75,25 +75,25 @@ const curatedWidePairTopics: TopicCandidate[] = [
 ];
 
 const properNounNearPairTopics: TopicCandidate[] = [
-  { villageWord: "東京タワー", wolfWord: "通天閣", reason: "有名な都市のランドマークだが、場所と印象が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
+  { villageWord: "横浜ランドマークタワー", wolfWord: "あべのハルカス", reason: "有名な高層ビルだが、地域や施設の印象が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
   { villageWord: "京都", wolfWord: "奈良", reason: "歴史ある観光地だが、街の規模や代表的な見どころが違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
   { villageWord: "セブン-イレブン", wolfWord: "ローソン", reason: "有名なコンビニブランドだが、商品や店舗の印象が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
-  { villageWord: "大谷翔平", wolfWord: "イチロー", reason: "有名な野球選手だが、時代やプレースタイルが違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
+  { villageWord: "読売ジャイアンツ", wolfWord: "阪神タイガース", reason: "有名なプロ野球チームだが、本拠地やファン文化が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
   { villageWord: "YouTube", wolfWord: "TikTok", reason: "動画サービスとして有名だが、視聴体験や投稿文化が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
   { villageWord: "iPhone", wolfWord: "Pixel", reason: "有名なスマートフォンだが、メーカーや使い心地が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
 ];
 
 const properNounBalancedPairTopics: TopicCandidate[] = [
-  { villageWord: "富士山", wolfWord: "エベレスト", reason: "有名な山だが、国や登山の難しさが違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
+  { villageWord: "箱根", wolfWord: "日光", reason: "有名な観光地だが、地域や旅の目的が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
   { villageWord: "任天堂", wolfWord: "ソニー", reason: "有名な日本企業だが、ゲームでの立ち位置や主力事業が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
-  { villageWord: "ドラえもん", wolfWord: "アンパンマン", reason: "有名なキャラクターだが、作品の雰囲気や役割が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
+  { villageWord: "週刊少年ジャンプ", wolfWord: "週刊少年マガジン", reason: "有名な漫画雑誌だが、連載作品や読者の印象が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
   { villageWord: "鬼滅の刃", wolfWord: "呪術廻戦", reason: "近年有名な漫画作品だが、世界観や戦い方が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
   { villageWord: "Amazon", wolfWord: "楽天市場", reason: "有名な通販サービスだが、買い物体験や運営の印象が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
   { villageWord: "東京ディズニーランド", wolfWord: "ユニバーサル・スタジオ・ジャパン", reason: "有名なテーマパークだが、地域や作品の方向性が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
 ];
 
 const properNounWidePairTopics: TopicCandidate[] = [
-  { villageWord: "マリオ", wolfWord: "ピカチュウ", reason: "有名なゲームキャラクターだが、作品ジャンルや印象が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
+  { villageWord: "Nintendo Switch", wolfWord: "PlayStation 5", reason: "有名なゲーム機だが、メーカーや遊ばれ方の印象が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
   { villageWord: "トヨタ", wolfWord: "ホンダ", reason: "有名な自動車メーカーだが、ブランドイメージや得意分野が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
   { villageWord: "東京大学", wolfWord: "早稲田大学", reason: "有名な大学だが、設立背景や校風が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
   { villageWord: "スターバックス", wolfWord: "ドトール", reason: "有名なカフェチェーンだが、価格帯や店内の雰囲気が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },

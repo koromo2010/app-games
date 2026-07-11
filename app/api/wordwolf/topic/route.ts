@@ -167,6 +167,9 @@ async function generateLlmTopic(
           "Proper noun mode: use only reasonably famous proper nouns that ordinary Japanese players are likely to know.",
           "Allowed types include people, fictional characters, works, brands/products, organizations, facilities, regions, landmarks, and events.",
           "Pair the same semantic type and layer: person with person, character with character, work with work, brand/product with brand/product, place/landmark with place/landmark, organization with organization.",
+          "Prefer categories where several other famous alternatives also exist, so early clues do not uniquely identify the answer. Good examples: convenience-store chains, coffee chains, universities, train lines, theme parks, video platforms, sports teams, long-running TV shows, manga magazines, game consoles, smartphone brands, and city landmarks.",
+          "Avoid uniquely iconic one-of-one names where a generic clue immediately reveals the answer, such as a single nationally symbolic mountain, a once-in-a-generation athlete, or an overwhelmingly famous mascot with no plausible alternatives.",
+          "Do not choose pairs whose main shared clue is just 'very famous'. They must share a broad category with at least 3 plausible wrong guesses players might imagine.",
           "Avoid obscure names, private/internal names, and pairs that require specialist knowledge.",
         ].join(" ")
       : [
