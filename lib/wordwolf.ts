@@ -81,6 +81,9 @@ const properNounNearPairTopics: TopicCandidate[] = [
   { villageWord: "読売ジャイアンツ", wolfWord: "阪神タイガース", reason: "有名なプロ野球チームだが、本拠地やファン文化が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
   { villageWord: "YouTube", wolfWord: "TikTok", reason: "動画サービスとして有名だが、視聴体験や投稿文化が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
   { villageWord: "iPhone", wolfWord: "Pixel", reason: "有名なスマートフォンだが、メーカーや使い心地が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
+  { villageWord: "縄文時代", wolfWord: "弥生時代", reason: "学校で学ぶ日本史の時代区分だが、暮らしや文化の印象が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
+  { villageWord: "鎌倉幕府", wolfWord: "室町幕府", reason: "日本史で有名な武家政権だが、時代や政治の特徴が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
+  { villageWord: "微分", wolfWord: "積分", reason: "数学で並んで学ぶ単元だが、扱う考え方や使いどころが違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
 ];
 
 const properNounBalancedPairTopics: TopicCandidate[] = [
@@ -90,6 +93,10 @@ const properNounBalancedPairTopics: TopicCandidate[] = [
   { villageWord: "鬼滅の刃", wolfWord: "呪術廻戦", reason: "近年有名な漫画作品だが、世界観や戦い方が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
   { villageWord: "Amazon", wolfWord: "楽天市場", reason: "有名な通販サービスだが、買い物体験や運営の印象が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
   { villageWord: "東京ディズニーランド", wolfWord: "ユニバーサル・スタジオ・ジャパン", reason: "有名なテーマパークだが、地域や作品の方向性が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
+  { villageWord: "関ヶ原の戦い", wolfWord: "桶狭間の戦い", reason: "日本史で有名な合戦だが、時代背景や勝敗の語られ方が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
+  { villageWord: "大化の改新", wolfWord: "明治維新", reason: "日本史の大きな政治改革だが、時代や社会への影響が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
+  { villageWord: "日米和親条約", wolfWord: "日米修好通商条約", reason: "幕末に学ぶ条約だが、内容や日本社会への影響が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
+  { villageWord: "万有引力", wolfWord: "相対性理論", reason: "理科で触れる有名な物理の考え方だが、扱う現象や時代が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
 ];
 
 const properNounWidePairTopics: TopicCandidate[] = [
@@ -99,6 +106,34 @@ const properNounWidePairTopics: TopicCandidate[] = [
   { villageWord: "スターバックス", wolfWord: "ドトール", reason: "有名なカフェチェーンだが、価格帯や店内の雰囲気が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
   { villageWord: "東海道新幹線", wolfWord: "山手線", reason: "有名な鉄道路線だが、移動距離や使う場面が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
   { villageWord: "紅白歌合戦", wolfWord: "M-1グランプリ", reason: "有名なテレビ番組・イベントだが、内容や楽しみ方が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
+  { villageWord: "フランス革命", wolfWord: "産業革命", reason: "世界史で有名な変革だが、政治中心か経済・技術中心かが違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
+  { villageWord: "国際連盟", wolfWord: "国際連合", reason: "世界史・公民で学ぶ国際組織だが、成立時期や仕組みが違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
+  { villageWord: "古事記", wolfWord: "万葉集", reason: "国語や日本史で出る古典だが、内容の性格や読まれ方が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
+];
+
+const hintTopicGroups: Array<{
+  aliases: readonly string[];
+  candidates: readonly TopicCandidate[];
+}> = [
+  {
+    aliases: ["将棋", "shogi"],
+    candidates: [
+      { villageWord: "飛車", wolfWord: "角行", reason: "将棋の大駒だが、動き方と使われ方が違う", dictionarySource: "curated-pairs", pairDistance: "near", sourceMode: "curated-pairs" },
+      { villageWord: "王将", wolfWord: "玉将", reason: "将棋の中心となる駒だが、呼び方や使われる場面の印象が違う", dictionarySource: "curated-pairs", pairDistance: "near", sourceMode: "curated-pairs" },
+      { villageWord: "居飛車", wolfWord: "振り飛車", reason: "将棋の戦型だが、飛車を置く場所と序盤の考え方が違う", dictionarySource: "curated-pairs", pairDistance: "balanced", sourceMode: "curated-pairs" },
+      { villageWord: "矢倉", wolfWord: "美濃囲い", reason: "将棋の囲いだが、形や相性のよい戦型が違う", dictionarySource: "curated-pairs", pairDistance: "balanced", sourceMode: "curated-pairs" },
+      { villageWord: "名人戦", wolfWord: "竜王戦", reason: "将棋の大きなタイトル戦だが、制度や序列の印象が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
+      { villageWord: "羽生善治", wolfWord: "藤井聡太", reason: "将棋で非常に有名な棋士だが、活躍した時代や語られ方が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
+    ],
+  },
+  {
+    aliases: ["歴史", "日本史", "世界史", "社会", "勉強", "学習", "受験", "テスト"],
+    candidates: [
+      ...properNounNearPairTopics.slice(-3),
+      ...properNounBalancedPairTopics.slice(-4),
+      ...properNounWidePairTopics.slice(-3),
+    ],
+  },
 ];
 
 const jaDailySets: TopicSet[] = [
@@ -290,6 +325,56 @@ function orderedFallbackDistances(pairDistance: TopicPairDistance): TopicPairDis
   ];
 }
 
+function normalizeHint(value: string) {
+  return normalizeTopicWord(value).replace(/[ 　・･、。,.!！?？]/g, "");
+}
+
+function candidateMatchesHint(topic: TopicCandidate, hint: string) {
+  const searchText = normalizeHint(`${topic.villageWord} ${topic.wolfWord} ${topic.reason}`);
+  return searchText.includes(hint);
+}
+
+function uniqueCandidates(candidates: TopicCandidate[]) {
+  const seen = new Set<string>();
+  return candidates.filter((topic) => {
+    const key = `${getTopicKey(topic)}:${topic.pairDistance ?? ""}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function getHintCandidates(localSource: TopicDictionarySource, topicHint: string) {
+  const hint = normalizeHint(topicHint);
+  if (!hint) return [];
+
+  const explicitCandidates = hintTopicGroups
+    .filter((group) => group.aliases.some((alias) => normalizeHint(alias).includes(hint) || hint.includes(normalizeHint(alias))))
+    .flatMap((group) => group.candidates);
+  const localCandidates = Object.values(localTopicDecks[localSource])
+    .flat()
+    .filter((topic) => candidateMatchesHint(topic, hint));
+
+  return uniqueCandidates([...explicitCandidates, ...localCandidates]);
+}
+
+function pickHintedTopic(
+  candidates: TopicCandidate[],
+  pairDistance: TopicPairDistance,
+  excludeKeys: string[],
+  excludeWords: string[],
+) {
+  if (candidates.length === 0) return null;
+
+  const strictTopic = orderedFallbackDistances(pairDistance)
+    .map((distance) => pickFreshFromCandidates(candidates.filter((topic) => topic.pairDistance === distance), excludeKeys, excludeWords))
+    .find((topic): topic is WordWolfTopic => Boolean(topic));
+
+  if (strictTopic) return strictTopic;
+
+  return pickFromCandidates(candidates, excludeKeys, excludeWords);
+}
+
 function makeBalancedCandidates(sets: readonly TopicSet[], dictionarySource: TopicDictionarySource) {
   const candidates: TopicCandidate[] = [];
   const pairDistance: TopicPairDistance = "balanced";
@@ -408,9 +493,13 @@ export function pickFallbackTopic(
   dictionarySource: TopicDictionarySource = "curated-pairs",
   pairDistance: TopicPairDistance = "balanced",
   excludeWords: string[] = [],
+  topicHint = "",
 ): WordWolfTopic {
   const localSource = normalizeTopicDictionarySource(dictionarySource);
   const distance = normalizeTopicPairDistance(pairDistance);
+  const hintedTopic = pickHintedTopic(getHintCandidates(localSource, topicHint), distance, excludeKeys, excludeWords);
+  if (hintedTopic) return hintedTopic;
+
   const strictTopic = orderedFallbackDistances(distance)
     .map((candidateDistance) => pickFreshFromCandidates(localTopicDecks[localSource][candidateDistance], excludeKeys, excludeWords))
     .find((topic): topic is WordWolfTopic => Boolean(topic));

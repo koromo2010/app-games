@@ -634,14 +634,14 @@ async function fetchTopicWithFallback(
     });
 
     if (!response.ok) {
-      const topic = pickFallbackTopic(history, dictionarySource, pairDistance, dailyWords);
+      const topic = pickFallbackTopic(history, dictionarySource, pairDistance, dailyWords, normalizedTopicHint);
       rememberTopic(topic);
       return topic;
     }
 
     const topic = (await response.json()) as WordWolfTopic;
     if (!isValidWordWolfTopic(topic) || !isTopicUnusedToday(topic, history, dailyWords)) {
-      const fallbackTopic = pickFallbackTopic(history, dictionarySource, pairDistance, dailyWords);
+      const fallbackTopic = pickFallbackTopic(history, dictionarySource, pairDistance, dailyWords, normalizedTopicHint);
       rememberTopic(fallbackTopic);
       return fallbackTopic;
     }
@@ -649,7 +649,7 @@ async function fetchTopicWithFallback(
     rememberTopic(topic);
     return topic;
   } catch {
-    const topic = pickFallbackTopic(history, dictionarySource, pairDistance, dailyWords);
+    const topic = pickFallbackTopic(history, dictionarySource, pairDistance, dailyWords, normalizedTopicHint);
     rememberTopic(topic);
     return topic;
   } finally {

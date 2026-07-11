@@ -176,11 +176,16 @@ async function generateLlmTopic(
           "General word mode: use common Japanese nouns, not proper nouns.",
           "Pair the same semantic type and layer: object with object, place with place, activity/concept with activity/concept, person/living thing with the same kind.",
         ].join(" ");
+  const studyScopePrompt =
+    dictionarySource === "proper-noun"
+      ? "Also include school-study friendly named topics when useful: historical events, eras, wars, reforms, treaties, laws, classical works, theories, formulas, school subjects, and widely taught terms. Keep the pair on the same learning layer, such as event with event, era with era, treaty with treaty, theory with theory, or formula with formula."
+      : "";
 
   const avoidLines = [
     topicKindPrompt,
+    studyScopePrompt,
     topicHint
-      ? `Theme hint: choose a pair related to "${topicHint}", while still obeying the selected source mode, semantic layer matching, and pair distance. Do not use the hint itself unless it is a natural topic word.`
+      ? `Theme hint is a hard requirement: the pair must be directly related to "${topicHint}". If the hint is a game, subject, genre, person, place, historical field, or hobby, choose words from that field. Do not ignore the hint. Do not use the hint itself unless it is a natural topic word.`
       : "",
     "Do not pair an object with a place, a person with a work, or an abstract concept with a concrete object.",
     excludeWords.length > 0 ? `exclude words used today: ${excludeWords.join(", ")}` : "",
@@ -204,7 +209,7 @@ export async function GET(request: Request) {
   const allExcludeKeys = normalizeList([...excludeKeys, ...storedUsage.usedPairs]);
   const allExcludeWords = normalizeList([...excludeWords, ...storedUsage.dailyWords]);
 
-  const fallbackTopic = () => pickFallbackTopic(allExcludeKeys, dictionarySource, pairDistance, allExcludeWords);
+  const fallbackTopic = () => pickFallbackTopic(allExcludeKeys, dictionarySource, pairDistance, allExcludeWords, topicHint);
 
   if (!isLlmEnabled(dictionarySource)) {
     const topic = fallbackTopic();
