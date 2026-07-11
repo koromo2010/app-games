@@ -7,6 +7,7 @@ export type PlayerGameResult = {
   gameType: "wordwolf";
   roomCode: string;
   roomCreatedAt: number;
+  gameNumber: number;
   finishedAt: number;
   playerId: string;
   playerName: string;
@@ -129,10 +130,11 @@ export async function recordWordWolfGameResults(room: WordWolfRoom) {
   const finishedAt = room.updatedAt || Date.now();
   const results: PlayerGameResult[] = room.players.map((player) => ({
     schemaVersion: 1,
-    id: `wordwolf:${room.code}:${room.createdAt}:${player.id}`,
+    id: `wordwolf:${room.code}:${room.createdAt}:${room.gameNumber}:${player.id}`,
     gameType: "wordwolf",
     roomCode: room.code,
     roomCreatedAt: room.createdAt,
+    gameNumber: room.gameNumber,
     finishedAt,
     playerId: player.id,
     playerName: player.name,

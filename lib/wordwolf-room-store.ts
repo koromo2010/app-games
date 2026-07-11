@@ -57,6 +57,9 @@ export type WordWolfRoom = {
   wolfGuess: string;
   winner: "village" | "wolf" | "players" | null;
   resultText: string;
+  scores: Record<string, number>;
+  gamesPlayed: number;
+  gameNumber: number;
   statsRecordedAt?: number;
   createdAt: number;
   updatedAt: number;
@@ -91,6 +94,45 @@ function isPhase(value: unknown): value is Phase {
   return value === "lobby" || value === "clue" || value === "vote" || value === "wolfGuess" || value === "result";
 }
 
+function normalizeScores(value: unknown) {
+  if (!value || typeof value !== "object") return {};
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([playerId, score]) => playerId && typeof score === "number" && Number.isFinite(score))
+      .map(([playerId, score]) => [playerId, Math.max(0, Math.floor(score as number))]),
+  );
+}
+
+function didPlayerWin(room: WordWolfRoom, playerId: string) {
+  if (room.winner === "players") {
+    return room.accusedId ? playerId !== room.accusedId : true;
+  }
+
+  if (room.winner === "village") {
+    return playerId !== room.wolfId;
+  }
+
+  return playerId === room.wolfId;
+}
+
+function addRoomScore(room: WordWolfRoom) {
+  if (room.phase !== "result" || !room.winner) return room;
+
+  const scores = { ...room.scores };
+  for (const player of room.players) {
+    if (didPlayerWin(room, player.id)) {
+      scores[player.id] = (scores[player.id] ?? 0) + 1;
+    }
+  }
+
+  return {
+    ...room,
+    scores,
+    gamesPlayed: room.gamesPlayed + 1,
+  };
+}
+
 function normalizeRoom(value: unknown): WordWolfRoom | null {
   if (!value || typeof value !== "object") return null;
 
@@ -98,6 +140,7 @@ function normalizeRoom(value: unknown): WordWolfRoom | null {
   const code = typeof parsed.code === "string" ? parsed.code.trim().toUpperCase() : "";
   const hostId = typeof parsed.hostId === "string" ? parsed.hostId : "";
   const players = Array.isArray(parsed.players) ? parsed.players.filter((player) => player?.id && player?.name) : [];
+  const gamesPlayed = typeof parsed.gamesPlayed === "number" ? Math.max(0, Math.floor(parsed.gamesPlayed)) : 0;
 
   if (!code || !hostId || players.length === 0) return null;
 
@@ -129,6 +172,9 @@ function normalizeRoom(value: unknown): WordWolfRoom | null {
     wolfGuess: typeof parsed.wolfGuess === "string" ? parsed.wolfGuess : "",
     winner: parsed.winner === "village" || parsed.winner === "wolf" || parsed.winner === "players" ? parsed.winner : null,
     resultText: typeof parsed.resultText === "string" ? parsed.resultText : "",
+    scores: normalizeScores(parsed.scores),
+    gamesPlayed,
+    gameNumber: typeof parsed.gameNumber === "number" ? Math.max(1, Math.floor(parsed.gameNumber)) : gamesPlayed + 1,
     statsRecordedAt: typeof parsed.statsRecordedAt === "number" ? parsed.statsRecordedAt : undefined,
     createdAt: typeof parsed.createdAt === "number" ? parsed.createdAt : Date.now(),
     updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : Date.now(),
@@ -195,6 +241,7 @@ export async function saveStoredWordWolfRoom(room: unknown) {
   }
 
   if (normalizedRoom.phase === "result" && normalizedRoom.winner && !normalizedRoom.statsRecordedAt) {
+    normalizedRoom = addRoomScore(normalizedRoom);
     await recordWordWolfGameResults(normalizedRoom);
     normalizedRoom = {
       ...normalizedRoom,

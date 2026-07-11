@@ -75,6 +75,9 @@ type Room = {
   wolfGuess: string;
   winner: "village" | "wolf" | "players" | null;
   resultText: string;
+  scores: Record<string, number>;
+  gamesPlayed: number;
+  gameNumber: number;
   statsRecordedAt?: number;
   createdAt: number;
   updatedAt: number;
@@ -91,6 +94,16 @@ type RoomChoice = {
 
 function normalizeGameMode(value: unknown): GameMode {
   return value === "may-no-wolf" || value === "no-wolf" ? "may-no-wolf" : "wordwolf";
+}
+
+function normalizeRoomScores(value: unknown) {
+  if (!value || typeof value !== "object") return {};
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([playerId, score]) => playerId && typeof score === "number" && Number.isFinite(score))
+      .map(([playerId, score]) => [playerId, Math.max(0, Math.floor(score as number))]),
+  );
 }
 
 const lobbyRounds = [1, 2, 3, 4];
@@ -156,6 +169,9 @@ function loadRoom(code: string): Room | null {
       currentTurnStartedAt: room.currentTurnStartedAt ?? null,
       topicDictionarySource: normalizeTopicDictionarySource(room.topicDictionarySource ?? room.topicSourceMode),
       topicPairDistance: normalizeTopicPairDistance(room.topicPairDistance ?? room.topicSourceMode),
+      scores: normalizeRoomScores(room.scores),
+      gamesPlayed: room.gamesPlayed ?? 0,
+      gameNumber: room.gameNumber ?? Math.max(1, (room.gamesPlayed ?? 0) + 1),
     };
   } catch {
     return null;
@@ -230,6 +246,9 @@ async function loadRoomFromStore(code: string) {
       currentTurnStartedAt: data.room.currentTurnStartedAt ?? null,
       topicDictionarySource: normalizeTopicDictionarySource(data.room.topicDictionarySource ?? data.room.topicSourceMode),
       topicPairDistance: normalizeTopicPairDistance(data.room.topicPairDistance ?? data.room.topicSourceMode),
+      scores: normalizeRoomScores(data.room.scores),
+      gamesPlayed: data.room.gamesPlayed ?? 0,
+      gameNumber: data.room.gameNumber ?? Math.max(1, (data.room.gamesPlayed ?? 0) + 1),
     };
     saveRoom(normalizedRoom);
     return normalizedRoom;
@@ -257,6 +276,9 @@ async function loadActiveRoomFromStore(playerId: string) {
       currentTurnStartedAt: data.room.currentTurnStartedAt ?? null,
       topicDictionarySource: normalizeTopicDictionarySource(data.room.topicDictionarySource ?? data.room.topicSourceMode),
       topicPairDistance: normalizeTopicPairDistance(data.room.topicPairDistance ?? data.room.topicSourceMode),
+      scores: normalizeRoomScores(data.room.scores),
+      gamesPlayed: data.room.gamesPlayed ?? 0,
+      gameNumber: data.room.gameNumber ?? Math.max(1, (data.room.gamesPlayed ?? 0) + 1),
     };
     saveRoom(normalizedRoom);
     return normalizedRoom;
@@ -337,6 +359,9 @@ function createEmptyRoom(
     wolfGuess: "",
     winner: null,
     resultText: "",
+    scores: {},
+    gamesPlayed: 0,
+    gameNumber: 1,
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
@@ -572,7 +597,12 @@ export function WordWolfGame() {
 
     const timer = window.setInterval(() => {
       void loadRoomFromStore(room.code).then((latest) => {
-      if (latest && latest.updatedAt !== room.updatedAt) {
+      if (
+        latest &&
+        (latest.updatedAt !== room.updatedAt ||
+          latest.statsRecordedAt !== room.statsRecordedAt ||
+          latest.gamesPlayed !== room.gamesPlayed)
+      ) {
         setRoom(latest);
       } else if (!latest) {
         setRoom(null);
@@ -653,6 +683,14 @@ export function WordWolfGame() {
         room.turnTimeLimitSeconds - Math.floor((now - room.currentTurnStartedAt) / 1000),
       )
     : null;
+  const roomScoreRows = room
+    ? room.players
+        .map((player) => ({
+          player,
+          wins: room.scores[player.id] ?? 0,
+        }))
+        .sort((left, right) => right.wins - left.wins || left.player.joinedAt - right.player.joinedAt)
+    : [];
 
   const setAndSaveRoom = useCallback((nextRoom: Room) => {
     const stampedRoom = stampRoom(nextRoom);
@@ -1125,7 +1163,7 @@ export function WordWolfGame() {
     });
   };
 
-  const resetToLobby = (targetRoom: Room): Room => ({
+  const resetToLobby = (targetRoom: Room, advanceGame = false): Room => ({
     ...targetRoom,
     phase: "lobby",
     currentRound: 1,
@@ -1142,12 +1180,13 @@ export function WordWolfGame() {
     wolfGuess: "",
     winner: null,
     resultText: "",
+    gameNumber: advanceGame ? (targetRoom.gameNumber ?? 1) + 1 : targetRoom.gameNumber,
     statsRecordedAt: undefined,
   });
 
   const resetRoom = () => {
     if (!room) return;
-    setAndSaveRoom(resetToLobby(room));
+    setAndSaveRoom(resetToLobby(room, true));
     setGuessInput("");
     setClueInput("");
   };
@@ -1595,6 +1634,25 @@ export function WordWolfGame() {
                     {player.id === room.hostId && <span className="text-xs text-slate-500">host</span>}
                   </button>
                 ))}
+              </div>
+
+              <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-bold text-slate-950">部屋内戦績</p>
+                  <span className="rounded-md bg-white px-2 py-1 text-xs font-semibold text-slate-500">
+                    {room.gamesPlayed}戦
+                  </span>
+                </div>
+                <div className="mt-3 space-y-2">
+                  {roomScoreRows.map(({ player, wins }) => (
+                    <div key={player.id} className="flex items-center justify-between gap-3 text-sm">
+                      <span className="min-w-0 truncate text-slate-700">{player.name}</span>
+                      <span className="shrink-0 rounded-md bg-white px-2 py-1 font-bold text-slate-950">
+                        {wins}勝
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {isHost && (

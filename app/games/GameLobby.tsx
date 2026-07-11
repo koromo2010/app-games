@@ -382,9 +382,9 @@ export function GameLobby() {
           {isLoggedIn && (activeRoom || isActiveRoomLoading) && (
             <div className="rounded-lg border border-cyan-200 bg-cyan-50 p-4 shadow-[0_18px_50px_rgba(15,23,42,0.16)]">
               <p className="text-xs font-semibold uppercase text-cyan-700">Resume</p>
-              <h2 className="mt-1 text-lg font-bold text-slate-950">前回の部屋</h2>
+              <h2 className="mt-1 text-lg font-bold text-slate-950">部屋に復帰</h2>
               {isActiveRoomLoading && !activeRoom ? (
-                <p className="mt-3 text-sm text-slate-600">復帰できる部屋を確認中...</p>
+                <p className="mt-3 text-sm text-slate-600">復帰先を確認中...</p>
               ) : activeRoom ? (
                 <>
                   <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
@@ -405,7 +405,7 @@ export function GameLobby() {
                     onClick={rememberActiveRoom}
                     className="mt-3 inline-flex w-full justify-center rounded-lg bg-cyan-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-500"
                   >
-                    この部屋に戻る
+                    この部屋に復帰
                   </Link>
                 </>
               ) : null}
