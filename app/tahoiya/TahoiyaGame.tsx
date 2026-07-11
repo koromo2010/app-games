@@ -1,0 +1,770 @@
+"use client";
+
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+import {
+  defaultAvatarImage,
+  fallbackAvatarColor,
+  isPlayerAuthenticated,
+  loadPersistentPlayerSession,
+  makeRandomAvatarColor,
+} from "@/lib/player-session";
+import type { TahoiyaDefinitionOption, TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomChoice, TahoiyaTopic } from "@/lib/tahoiya-types";
+import { cyanButtonClass, dangerButtonClass, inputClass, panelClass, primaryButtonClass, subtleButtonClass } from "../wordwolf/styles";
+
+const roomStoragePrefix = "tahoiya-room-";
+
+function makeId(prefix: string) {
+  return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function makeRoomCode() {
+  return Math.random().toString(36).slice(2, 6).toUpperCase();
+}
+
+function getOwnerId() {
+  const saved = localStorage.getItem("tahoiya-owner-id");
+  if (saved) return saved;
+
+  const ownerId = makeId("owner");
+  localStorage.setItem("tahoiya-owner-id", ownerId);
+  return ownerId;
+}
+
+function getRoomKey(code: string) {
+  return `${roomStoragePrefix}${code.toUpperCase()}`;
+}
+
+function stampRoom(room: TahoiyaRoom) {
+  return { ...room, updatedAt: Date.now() };
+}
+
+function shuffle<T>(items: T[]) {
+  const next = [...items];
+  for (let index = next.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
+  }
+  return next;
+}
+
+function createPlayer(name: string, avatarColor = makeRandomAvatarColor(), avatarImage?: string | null, id?: string): TahoiyaPlayer {
+  return {
+    id: id ?? makeId("player"),
+    name,
+    avatarColor,
+    avatarImage: avatarImage || undefined,
+    joinedAt: Date.now(),
+  };
+}
+
+function normalizeRoom(room: TahoiyaRoom): TahoiyaRoom {
+  return {
+    ...room,
+    passphrase: room.passphrase ?? "",
+    players: Array.isArray(room.players) ? room.players : [],
+    parentId: room.parentId || room.hostId,
+    round: room.round ?? 1,
+    fakeDefinitions: room.fakeDefinitions ?? {},
+    options: room.options ?? [],
+    votes: room.votes ?? {},
+    scores: room.scores ?? {},
+    topicSource: room.topicSource ?? "pending",
+    updatedAt: room.updatedAt ?? Date.now(),
+  };
+}
+
+function saveRoomLocally(room: TahoiyaRoom) {
+  localStorage.setItem(getRoomKey(room.code), JSON.stringify(stampRoom(room)));
+}
+
+function loadRoomLocally(code: string): TahoiyaRoom | null {
+  const raw = localStorage.getItem(getRoomKey(code));
+  if (!raw) return null;
+
+  try {
+    return normalizeRoom(JSON.parse(raw) as TahoiyaRoom);
+  } catch {
+    return null;
+  }
+}
+
+function listRoomsLocally() {
+  const rooms: TahoiyaRoom[] = [];
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+    if (!key?.startsWith(roomStoragePrefix)) continue;
+    const room = loadRoomLocally(key.slice(roomStoragePrefix.length));
+    if (room) rooms.push(room);
+  }
+  return rooms;
+}
+
+function listJoinableRoomsLocally(): TahoiyaRoomChoice[] {
+  return listRoomsLocally()
+    .filter((room) => room.phase === "lobby" && room.players.length < 8)
+    .map((room) => ({
+      code: room.code,
+      hostName: room.players.find((player) => player.id === room.hostId)?.name ?? "Unknown",
+      playerCount: room.players.length,
+      phase: room.phase,
+      hasPassphrase: Boolean(room.passphrase),
+      updatedAt: room.updatedAt,
+    }))
+    .sort((left, right) => right.updatedAt - left.updatedAt);
+}
+
+function deleteRoomLocally(code: string) {
+  localStorage.removeItem(getRoomKey(code));
+}
+
+async function saveRoomToStore(room: TahoiyaRoom) {
+  saveRoomLocally(room);
+  try {
+    await fetch("/api/tahoiya/rooms", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ room }),
+    });
+  } catch {
+    // Local storage keeps prototype testing usable when Redis is unavailable.
+  }
+}
+
+async function loadRoomFromStore(code: string) {
+  try {
+    const response = await fetch(`/api/tahoiya/rooms?code=${encodeURIComponent(code)}`, { cache: "no-store" });
+    if (response.status === 404) return null;
+    if (!response.ok) throw new Error("ROOM_FETCH_FAILED");
+    const data = (await response.json()) as { room?: TahoiyaRoom };
+    if (!data.room) return null;
+    const normalized = normalizeRoom(data.room);
+    saveRoomLocally(normalized);
+    return normalized;
+  } catch {
+    return loadRoomLocally(code);
+  }
+}
+
+async function listJoinableRoomsFromStore() {
+  try {
+    const response = await fetch("/api/tahoiya/rooms", { cache: "no-store" });
+    if (!response.ok) throw new Error("ROOM_LIST_FAILED");
+    const data = (await response.json()) as { rooms?: TahoiyaRoomChoice[] };
+    return Array.isArray(data.rooms) ? data.rooms : [];
+  } catch {
+    return listJoinableRoomsLocally();
+  }
+}
+
+async function deleteRoomFromStore(code: string) {
+  deleteRoomLocally(code);
+  try {
+    await fetch(`/api/tahoiya/rooms?code=${encodeURIComponent(code)}`, { method: "DELETE" });
+  } catch {
+    // Local delete already happened.
+  }
+}
+
+function createEmptyRoom(host: TahoiyaPlayer, passphrase: string, ownerId: string): TahoiyaRoom {
+  return {
+    code: makeRoomCode(),
+    hostId: host.id,
+    ownerId,
+    passphrase,
+    phase: "lobby",
+    players: [host],
+    parentId: host.id,
+    round: 1,
+    word: "",
+    reading: "",
+    realDefinition: "",
+    topicNote: "",
+    topicSource: "pending",
+    fakeDefinitions: {},
+    options: [],
+    votes: {},
+    scores: {},
+    resultText: "",
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+}
+
+function nextParentId(room: TahoiyaRoom) {
+  const currentIndex = room.players.findIndex((player) => player.id === room.parentId);
+  const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % room.players.length : 0;
+  return room.players[nextIndex]?.id ?? room.hostId;
+}
+
+function createOptions(room: TahoiyaRoom): TahoiyaDefinitionOption[] {
+  return shuffle([
+    {
+      id: makeId("real"),
+      text: room.realDefinition,
+      authorId: null,
+      isReal: true,
+    },
+    ...Object.entries(room.fakeDefinitions).map(([playerId, text]) => ({
+      id: makeId("fake"),
+      text,
+      authorId: playerId,
+      isReal: false,
+    })),
+  ]);
+}
+
+function scoreRound(room: TahoiyaRoom) {
+  const scores = { ...room.scores };
+  const resultLines: string[] = [];
+
+  for (const [voterId, optionId] of Object.entries(room.votes)) {
+    const option = room.options.find((item) => item.id === optionId);
+    const voter = room.players.find((player) => player.id === voterId);
+    if (!option || !voter) continue;
+
+    if (option.isReal) {
+      scores[voterId] = (scores[voterId] ?? 0) + 2;
+      resultLines.push(`${voter.name} が本物を当てて +2`);
+    } else if (option.authorId) {
+      const author = room.players.find((player) => player.id === option.authorId);
+      scores[option.authorId] = (scores[option.authorId] ?? 0) + 1;
+      resultLines.push(`${author?.name ?? "Unknown"} の偽語釈に票が入り +1`);
+    }
+  }
+
+  return {
+    scores,
+    resultText: resultLines.length > 0 ? resultLines.join(" / ") : "得点は入りませんでした。",
+  };
+}
+
+function submittedCount(room: TahoiyaRoom) {
+  return room.players.filter((player) => player.id !== room.parentId && room.fakeDefinitions[player.id]).length;
+}
+
+function voterCount(room: TahoiyaRoom) {
+  return room.players.filter((player) => player.id !== room.parentId && room.votes[player.id]).length;
+}
+
+export function TahoiyaGame() {
+  const [room, setRoom] = useState<TahoiyaRoom | null>(null);
+  const [playerId, setPlayerId] = useState("");
+  const [playerName, setPlayerName] = useState("");
+  const [avatarColor, setAvatarColor] = useState(fallbackAvatarColor);
+  const [avatarImage, setAvatarImage] = useState<string | null>(defaultAvatarImage);
+  const [passphrase, setPassphrase] = useState("");
+  const [joinCode, setJoinCode] = useState("");
+  const [joinableRooms, setJoinableRooms] = useState<TahoiyaRoomChoice[]>([]);
+  const [activePlayerId, setActivePlayerId] = useState("");
+  const [definitionInput, setDefinitionInput] = useState("");
+  const [selectedOptionId, setSelectedOptionId] = useState("");
+  const [isStarting, setIsStarting] = useState(false);
+  const [message, setMessage] = useState("");
+  const roomCode = room?.code;
+
+  useEffect(() => {
+    let mounted = true;
+    loadPersistentPlayerSession()
+      .then((session) => {
+        if (!mounted || !session) return;
+        setPlayerId(session.id ?? "");
+        setActivePlayerId(session.id ?? "");
+        setPlayerName(session.name);
+        setAvatarColor(session.avatarColor);
+        setAvatarImage(session.avatarImage || defaultAvatarImage);
+      })
+      .catch(() => undefined);
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!roomCode) return undefined;
+    const timer = window.setInterval(() => {
+      void loadRoomFromStore(roomCode).then((latest) => {
+        if (latest) setRoom(latest);
+      });
+    }, 1500);
+    return () => window.clearInterval(timer);
+  }, [roomCode]);
+
+  const activePlayer = room?.players.find((player) => player.id === activePlayerId) ?? null;
+  const parent = room?.players.find((player) => player.id === room.parentId) ?? null;
+  const isHost = Boolean(room && playerId === room.hostId);
+  const isParent = Boolean(room && activePlayerId === room.parentId);
+  const writingDone = room ? submittedCount(room) >= Math.max(0, room.players.length - 1) : false;
+  const votingDone = room ? voterCount(room) >= Math.max(0, room.players.length - 1) : false;
+
+  const sortedScores = useMemo(() => {
+    if (!room) return [];
+    return [...room.players].sort((left, right) => (room.scores[right.id] ?? 0) - (room.scores[left.id] ?? 0));
+  }, [room]);
+
+  const setAndSaveRoom = (nextRoom: TahoiyaRoom) => {
+    const stamped = stampRoom(nextRoom);
+    setRoom(stamped);
+    void saveRoomToStore(stamped);
+  };
+
+  const refreshJoinableRooms = async () => {
+    setJoinableRooms(await listJoinableRoomsFromStore());
+  };
+
+  const createRoom = async () => {
+    if (!isPlayerAuthenticated() || !playerId || !playerName) {
+      setMessage("先にゲームロビーでログインしてください。");
+      return;
+    }
+
+    const ownerId = getOwnerId();
+    const host = createPlayer(playerName, avatarColor, avatarImage, playerId);
+    const nextRoom = createEmptyRoom(host, passphrase, ownerId);
+    setAndSaveRoom(nextRoom);
+    setActivePlayerId(host.id);
+    setMessage("");
+  };
+
+  const joinRoom = async (targetCode = joinCode) => {
+    if (!isPlayerAuthenticated() || !playerId || !playerName) {
+      setMessage("先にゲームロビーでログインしてください。");
+      return;
+    }
+
+    const code = targetCode.trim().toUpperCase();
+    const target = await loadRoomFromStore(code);
+    if (!target) {
+      setMessage("部屋が見つかりません。");
+      return;
+    }
+    if (target.phase !== "lobby") {
+      setMessage("開始済みの部屋には参加できません。");
+      return;
+    }
+    if (target.passphrase && target.passphrase !== passphrase) {
+      setMessage("合言葉が違います。");
+      return;
+    }
+
+    const existing = target.players.find((player) => player.id === playerId);
+    const nextRoom = existing
+      ? target
+      : {
+          ...target,
+          players: [...target.players, createPlayer(playerName, avatarColor, avatarImage, playerId)].slice(0, 8),
+        };
+    setAndSaveRoom(nextRoom);
+    setActivePlayerId(playerId);
+    setMessage("");
+  };
+
+  const addTestPlayer = () => {
+    if (!room || room.phase !== "lobby") return;
+    const count = room.players.length + 1;
+    setAndSaveRoom({
+      ...room,
+      players: [...room.players, createPlayer(`テスト${count}`)].slice(0, 8),
+    });
+  };
+
+  const startRound = async () => {
+    if (!room || isStarting) return;
+    if (room.players.length < 2) {
+      setMessage("2人以上で開始できます。テストプレイヤー追加でもOKです。");
+      return;
+    }
+
+    setIsStarting(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/tahoiya/topic", { cache: "no-store" });
+      const topic = (await response.json()) as TahoiyaTopic;
+      setAndSaveRoom({
+        ...room,
+        phase: "writing",
+        word: topic.word,
+        reading: topic.reading,
+        realDefinition: topic.realDefinition,
+        topicNote: topic.note,
+        topicSource: topic.source,
+        fakeDefinitions: {},
+        options: [],
+        votes: {},
+        resultText: "",
+      });
+      setDefinitionInput("");
+      setSelectedOptionId("");
+    } finally {
+      setIsStarting(false);
+    }
+  };
+
+  const submitDefinition = () => {
+    if (!room || !activePlayer || isParent || !definitionInput.trim()) return;
+    setAndSaveRoom({
+      ...room,
+      fakeDefinitions: {
+        ...room.fakeDefinitions,
+        [activePlayer.id]: definitionInput.trim(),
+      },
+    });
+    setDefinitionInput("");
+  };
+
+  const autoFillTestDefinitions = () => {
+    if (!room || room.phase !== "writing") return;
+    const nextDefinitions = { ...room.fakeDefinitions };
+    for (const player of room.players) {
+      if (player.id === room.parentId || nextDefinitions[player.id]) continue;
+      nextDefinitions[player.id] = `${room.word}とは、古くから使われる道具または小屋の一種。地域によって呼び名が異なる。`;
+    }
+    setAndSaveRoom({ ...room, fakeDefinitions: nextDefinitions });
+  };
+
+  const publishOptions = () => {
+    if (!room || room.phase !== "writing" || !writingDone) return;
+    setAndSaveRoom({
+      ...room,
+      phase: "voting",
+      options: createOptions(room),
+      votes: {},
+    });
+    setSelectedOptionId("");
+  };
+
+  const castVote = () => {
+    if (!room || !activePlayer || isParent || !selectedOptionId) return;
+    setAndSaveRoom({
+      ...room,
+      votes: {
+        ...room.votes,
+        [activePlayer.id]: selectedOptionId,
+      },
+    });
+    setSelectedOptionId("");
+  };
+
+  const finishRound = () => {
+    if (!room || room.phase !== "voting" || !votingDone) return;
+    const result = scoreRound(room);
+    setAndSaveRoom({
+      ...room,
+      phase: "result",
+      scores: result.scores,
+      resultText: result.resultText,
+    });
+  };
+
+  const nextRound = () => {
+    if (!room) return;
+    setAndSaveRoom({
+      ...room,
+      phase: "lobby",
+      parentId: nextParentId(room),
+      round: room.round + 1,
+      word: "",
+      reading: "",
+      realDefinition: "",
+      topicNote: "",
+      topicSource: "pending",
+      fakeDefinitions: {},
+      options: [],
+      votes: {},
+      resultText: "",
+    });
+  };
+
+  const dissolveRoom = async () => {
+    if (!room) return;
+    const code = room.code;
+    setRoom(null);
+    await deleteRoomFromStore(code);
+  };
+
+  return (
+    <main className="min-h-screen bg-slate-950 text-slate-950">
+      <header className="sticky top-0 z-20 border-b border-white/10 bg-slate-950/95 text-white backdrop-blur">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
+          <div>
+            <p className="text-xs font-semibold uppercase text-amber-200">Dictionary bluffing</p>
+            <h1 className="text-2xl font-black">たほい屋</h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link href="/games" className={subtleButtonClass}>
+              ゲームロビー
+            </Link>
+            <span className="rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-sm font-semibold text-white">
+              {playerName || "未ログイン"}
+            </span>
+          </div>
+        </div>
+      </header>
+
+      <section className="mx-auto grid max-w-6xl gap-4 px-4 py-5 lg:grid-cols-[340px_1fr]">
+        <aside className="space-y-4">
+          <div className={panelClass}>
+            <p className="text-xs font-semibold uppercase text-amber-700">Entry</p>
+            <h2 className="text-lg font-bold text-slate-950">部屋</h2>
+            {!room ? (
+              <div className="mt-4 space-y-3">
+                <label className="block text-sm font-medium text-slate-700">
+                  合言葉
+                  <input
+                    value={passphrase}
+                    onChange={(event) => setPassphrase(event.target.value)}
+                    className={`mt-1 ${inputClass}`}
+                    placeholder="空欄なら合言葉なし"
+                  />
+                </label>
+                <button onClick={() => void createRoom()} className={`w-full ${primaryButtonClass}`}>
+                  部屋を作成
+                </button>
+                <button onClick={() => void refreshJoinableRooms()} className={`w-full ${subtleButtonClass}`}>
+                  参加できる部屋を表示
+                </button>
+                {joinableRooms.length > 0 && (
+                  <div className="space-y-2">
+                    {joinableRooms.map((choice) => (
+                      <button
+                        key={choice.code}
+                        type="button"
+                        onClick={() => void joinRoom(choice.code)}
+                        className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-left text-sm transition hover:bg-white"
+                      >
+                        <span className="font-bold text-slate-950">{choice.code}</span>
+                        <span className="ml-2 text-slate-500">
+                          {choice.hostName} / {choice.playerCount}人
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <input
+                  value={joinCode}
+                  onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
+                  className={inputClass}
+                  placeholder="ROOM CODE"
+                />
+                <button onClick={() => void joinRoom()} className={`w-full ${cyanButtonClass}`}>
+                  コードで参加
+                </button>
+              </div>
+            ) : (
+              <div className="mt-4 space-y-3">
+                <div className="rounded-lg bg-slate-100 p-3">
+                  <p className="text-xs text-slate-500">ROOM</p>
+                  <p className="text-xl font-black text-slate-950">{room.code}</p>
+                </div>
+                <p className="text-sm text-slate-600">
+                  親: <span className="font-bold text-slate-950">{parent?.name ?? "未設定"}</span>
+                </p>
+                <label className="block text-sm font-medium text-slate-700">
+                  操作プレイヤー
+                  <select value={activePlayerId} onChange={(event) => setActivePlayerId(event.target.value)} className={`mt-1 ${inputClass}`}>
+                    {room.players.map((player) => (
+                      <option key={player.id} value={player.id}>
+                        {player.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {room.phase === "lobby" && (
+                  <>
+                    <button onClick={addTestPlayer} disabled={room.players.length >= 8} className={`w-full ${subtleButtonClass}`}>
+                      テストプレイヤー追加
+                    </button>
+                    <button onClick={() => void startRound()} disabled={isStarting} className={`w-full ${primaryButtonClass}`}>
+                      {isStarting ? "お題生成中..." : "ラウンド開始"}
+                    </button>
+                  </>
+                )}
+                {isHost && (
+                  <button onClick={() => void dissolveRoom()} className={`w-full ${dangerButtonClass}`}>
+                    部屋を解散
+                  </button>
+                )}
+              </div>
+            )}
+            {message && <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900">{message}</p>}
+          </div>
+
+          {room && (
+            <div className={panelClass}>
+              <p className="text-xs font-semibold uppercase text-amber-700">Score</p>
+              <h2 className="text-lg font-bold text-slate-950">得点</h2>
+              <div className="mt-3 space-y-2">
+                {sortedScores.map((player) => (
+                  <div key={player.id} className="flex items-center justify-between rounded-lg bg-slate-100 px-3 py-2 text-sm">
+                    <span className="font-semibold text-slate-800">{player.name}</span>
+                    <span className="font-black text-slate-950">{room.scores[player.id] ?? 0}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </aside>
+
+        <section className="space-y-4">
+          {!room ? (
+            <div className="min-h-[520px] rounded-lg border border-white/10 bg-white/[0.96] p-6 shadow-[0_18px_50px_rgba(15,23,42,0.16)]">
+              <div className="grid min-h-[460px] place-items-center rounded-lg border border-dashed border-amber-200 bg-[linear-gradient(135deg,#ffffff_0%,#f8fafc_55%,#fff7ed_100%)]">
+                <div className="max-w-md text-center">
+                  <p className="text-sm font-semibold text-amber-700">Prototype ready</p>
+                  <h2 className="mt-2 text-3xl font-black text-slate-950">辞書の本物を見抜く</h2>
+                  <p className="mt-3 text-sm leading-6 text-slate-600">
+                    親だけが本物の語釈を見て、他のプレイヤーはそれっぽい偽語釈を作ります。本物を当てるか、自分の偽語釈に票を集めると得点です。
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className={panelClass}>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-xs font-semibold uppercase text-amber-700">Round {room.round}</p>
+                    <h2 className="mt-1 text-3xl font-black text-slate-950">
+                      {room.phase === "lobby" ? "開始待ち" : room.word}
+                      {room.reading ? <span className="ml-2 text-base font-semibold text-slate-500">({room.reading})</span> : null}
+                    </h2>
+                  </div>
+                  <span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700">{room.phase}</span>
+                </div>
+                {room.phase !== "lobby" && isParent && (
+                  <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+                    <p className="text-xs font-semibold uppercase text-amber-700">本物の語釈</p>
+                    <p className="mt-1 text-lg font-bold text-slate-950">{room.realDefinition}</p>
+                    <p className="mt-2 text-xs text-slate-500">{room.topicNote}</p>
+                  </div>
+                )}
+              </div>
+
+              {room.phase === "lobby" && (
+                <div className={panelClass}>
+                  <p className="text-xs font-semibold uppercase text-amber-700">Players</p>
+                  <h2 className="text-2xl font-black text-slate-950">参加者</h2>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {room.players.map((player) => (
+                      <div key={player.id} className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-800">
+                        {player.name}
+                        {player.id === room.parentId ? <span className="ml-2 text-amber-700">親</span> : null}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {room.phase === "writing" && (
+                <div className={panelClass}>
+                  <p className="text-xs font-semibold uppercase text-amber-700">Fake definition</p>
+                  <h2 className="text-2xl font-black text-slate-950">偽語釈を書く</h2>
+                  <p className="mt-2 text-sm text-slate-600">
+                    投稿: {submittedCount(room)}/{room.players.length - 1}
+                  </p>
+                  {isParent ? (
+                    <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm font-semibold text-amber-900">親は本物の語釈を混ぜる役です。他の人の投稿を待ちます。</p>
+                  ) : (
+                    <>
+                      <textarea
+                        value={definitionInput}
+                        onChange={(event) => setDefinitionInput(event.target.value)}
+                        className={`mt-4 min-h-28 resize-y ${inputClass}`}
+                        placeholder="辞書に載っていそうな語釈を書く"
+                      />
+                      <button onClick={submitDefinition} disabled={!definitionInput.trim()} className={`mt-3 ${cyanButtonClass}`}>
+                        偽語釈を投稿
+                      </button>
+                    </>
+                  )}
+                  {isHost && (
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button onClick={autoFillTestDefinitions} className={subtleButtonClass}>
+                        未投稿をテスト入力
+                      </button>
+                      <button onClick={publishOptions} disabled={!writingDone} className={primaryButtonClass}>
+                        語釈を並べる
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {room.phase === "voting" && (
+                <div className={panelClass}>
+                  <p className="text-xs font-semibold uppercase text-amber-700">Vote</p>
+                  <h2 className="text-2xl font-black text-slate-950">本物を選ぶ</h2>
+                  <p className="mt-2 text-sm text-slate-600">
+                    投票: {voterCount(room)}/{room.players.length - 1}
+                  </p>
+                  {isParent ? (
+                    <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm font-semibold text-amber-900">親は投票しません。みんなの投票を待ちます。</p>
+                  ) : (
+                    <div className="mt-4 grid gap-2">
+                      {room.options.map((option, index) => (
+                        <button
+                          key={option.id}
+                          onClick={() => setSelectedOptionId(option.id)}
+                          className={`rounded-lg border px-3 py-3 text-left text-sm font-semibold ${
+                            selectedOptionId === option.id
+                              ? "border-amber-500 bg-amber-50 text-amber-950"
+                              : "border-slate-200 bg-slate-50 text-slate-800 hover:bg-white"
+                          }`}
+                        >
+                          {index + 1}. {option.text}
+                        </button>
+                      ))}
+                      <button onClick={castVote} disabled={!selectedOptionId} className={cyanButtonClass}>
+                        投票する
+                      </button>
+                    </div>
+                  )}
+                  {isHost && (
+                    <button onClick={finishRound} disabled={!votingDone} className={`mt-4 ${primaryButtonClass}`}>
+                      採点する
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {room.phase === "result" && (
+                <div className={panelClass}>
+                  <p className="text-xs font-semibold uppercase text-amber-700">Result</p>
+                  <h2 className="text-3xl font-black text-slate-950">結果</h2>
+                  <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+                    <p className="text-xs font-semibold uppercase text-amber-700">本物</p>
+                    <p className="mt-1 text-lg font-black text-slate-950">{room.realDefinition}</p>
+                  </div>
+                  <div className="mt-4 grid gap-2">
+                    {room.options.map((option, index) => {
+                      const author = option.authorId ? room.players.find((player) => player.id === option.authorId) : null;
+                      const votes = Object.entries(room.votes)
+                        .filter(([, optionId]) => optionId === option.id)
+                        .map(([voterId]) => room.players.find((player) => player.id === voterId)?.name ?? "Unknown");
+                      return (
+                        <div key={option.id} className={`rounded-lg border px-3 py-3 text-sm ${option.isReal ? "border-amber-300 bg-amber-50" : "border-slate-200 bg-slate-50"}`}>
+                          <p className="font-bold text-slate-950">
+                            {index + 1}. {option.text}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {option.isReal ? "本物" : `作者: ${author?.name ?? "Unknown"}`} / 投票: {votes.length ? votes.join(", ") : "なし"}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="mt-4 text-sm font-semibold text-slate-700">{room.resultText}</p>
+                  {isHost && (
+                    <button onClick={nextRound} className={`mt-4 ${primaryButtonClass}`}>
+                      次のラウンドへ
+                    </button>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </section>
+      </section>
+    </main>
+  );
+}
