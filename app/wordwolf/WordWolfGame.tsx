@@ -706,6 +706,10 @@ export function WordWolfGame() {
         }))
         .sort((left, right) => right.wins - left.wins || left.player.joinedAt - right.player.joinedAt)
     : [];
+  const wordwolfLayoutClass =
+    room && shouldShowClueLog
+      ? "mx-auto grid max-w-[1500px] gap-4 px-4 py-5 lg:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)_360px]"
+      : "mx-auto grid max-w-6xl gap-4 px-4 py-5 lg:grid-cols-[340px_1fr]";
 
   const setAndSaveRoom = useCallback((nextRoom: Room) => {
     const stampedRoom = stampRoom(nextRoom);
@@ -1709,7 +1713,7 @@ export function WordWolfGame() {
         </div>
       )}
 
-      <section className="mx-auto grid max-w-6xl gap-4 px-4 py-5 lg:grid-cols-[340px_1fr]">
+      <section className={wordwolfLayoutClass}>
         <aside className="space-y-4">
           {!room && (
             <div className={panelClass}>
@@ -2439,11 +2443,14 @@ export function WordWolfGame() {
                   )}
                 </div>
               )}
-
-              {shouldShowClueLog && <ClueLogPanel room={room} />}
             </>
           )}
         </section>
+        {shouldShowClueLog && room && (
+          <aside className="lg:col-span-2 xl:col-span-1 xl:sticky xl:top-[104px] xl:self-start">
+            <ClueLogPanel room={room} />
+          </aside>
+        )}
       </section>
     </main>
   );

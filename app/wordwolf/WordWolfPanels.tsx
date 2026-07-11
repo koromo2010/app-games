@@ -40,7 +40,7 @@ export function VoteHistoryPanel({ room }: { room: Room }) {
 
 export function ClueLogPanel({ room }: { room: Room }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white/[0.96] p-3 shadow-[0_12px_34px_rgba(15,23,42,0.12)]">
+    <div className="rounded-lg border border-white/10 bg-white/[0.96] p-3 shadow-[0_18px_50px_rgba(15,23,42,0.16)]">
       <div className="flex items-center justify-between gap-2">
         <div>
           <p className="text-xs font-semibold uppercase text-cyan-700">Timeline</p>
@@ -50,9 +50,9 @@ export function ClueLogPanel({ room }: { room: Room }) {
           {room.clues.length} posts
         </span>
       </div>
-      <div className="mt-3 grid gap-1.5">
+      <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-1">
         {room.clues.length === 0 ? (
-          <p className={`${mutedPanelClass} px-3 py-4 text-center text-sm text-slate-500`}>
+          <p className={`${mutedPanelClass} px-3 py-4 text-center text-sm text-slate-500 md:col-span-2 xl:col-span-1`}>
             {"\u307e\u3060\u6295\u7a3f\u306f\u3042\u308a\u307e\u305b\u3093\u3002"}
           </p>
         ) : (
@@ -61,15 +61,15 @@ export function ClueLogPanel({ room }: { room: Room }) {
             return (
               <div
                 key={`${clue.playerId}-${clue.round}-${clue.at}`}
-                className="grid gap-2 rounded border border-slate-200 bg-slate-50/80 px-2.5 py-2 text-sm sm:grid-cols-[88px_1fr]"
+                className="rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2.5 text-sm"
               >
-                <div className="flex min-w-0 items-center gap-1.5 sm:block">
+                <div className="flex min-w-0 items-center justify-between gap-2">
                   <p className="truncate text-xs font-bold text-slate-950">{player?.name ?? "Unknown"}</p>
-                  <p className="shrink-0 rounded bg-white px-1.5 py-0.5 text-[11px] font-semibold text-slate-500 sm:mt-1 sm:inline-block">
+                  <p className="shrink-0 rounded bg-white px-1.5 py-0.5 text-[11px] font-semibold text-slate-500">
                     {clue.round}{"\u5468\u76ee"}
                   </p>
                 </div>
-                <p className="min-w-0 whitespace-pre-wrap break-words leading-5 text-slate-700">{clue.text}</p>
+                <p className="mt-2 min-w-0 whitespace-pre-wrap break-words leading-5 text-slate-700">{clue.text}</p>
               </div>
             );
           })
