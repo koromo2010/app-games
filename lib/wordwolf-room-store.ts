@@ -29,6 +29,13 @@ type Clue = {
   at: number;
 };
 
+type VoteRound = {
+  round: number;
+  votes: Record<string, string>;
+  candidateIds: string[];
+  at: number;
+};
+
 export type WordWolfRoom = {
   code: string;
   hostId: string;
@@ -55,6 +62,8 @@ export type WordWolfRoom = {
   topicSourceMode?: TopicSourceMode;
   clues: Clue[];
   votes: Record<string, string>;
+  voteHistory: VoteRound[];
+  runoffCandidateIds: string[] | null;
   accusedId: string | null;
   wolfGuess: string;
   wolfGuessJudgement: WordWolfGuessJudgement | null;
@@ -105,6 +114,29 @@ function normalizeScores(value: unknown) {
       .filter(([playerId, score]) => playerId && typeof score === "number" && Number.isFinite(score))
       .map(([playerId, score]) => [playerId, Math.max(0, Math.floor(score as number))]),
   );
+}
+
+function normalizeVoteHistory(value: unknown): VoteRound[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item, index) => {
+      if (!item || typeof item !== "object") return null;
+      const parsed = item as Partial<VoteRound>;
+      return {
+        round: typeof parsed.round === "number" ? Math.max(1, Math.floor(parsed.round)) : index + 1,
+        votes: parsed.votes && typeof parsed.votes === "object" ? (parsed.votes as Record<string, string>) : {},
+        candidateIds: Array.isArray(parsed.candidateIds)
+          ? parsed.candidateIds.filter((candidateId): candidateId is string => typeof candidateId === "string")
+          : [],
+        at: typeof parsed.at === "number" ? parsed.at : Date.now(),
+      };
+    })
+    .filter((item): item is VoteRound => Boolean(item));
+}
+
+function normalizeRunoffCandidateIds(value: unknown) {
+  return Array.isArray(value) ? value.filter((candidateId): candidateId is string => typeof candidateId === "string") : null;
 }
 
 function normalizeGuessJudgement(value: unknown): WordWolfGuessJudgement | null {
@@ -193,6 +225,8 @@ function normalizeRoom(value: unknown): WordWolfRoom | null {
     topicPairDistance: normalizeTopicPairDistance(parsed.topicPairDistance ?? parsed.topicSourceMode),
     clues: Array.isArray(parsed.clues) ? (parsed.clues as Clue[]) : [],
     votes: parsed.votes && typeof parsed.votes === "object" ? (parsed.votes as Record<string, string>) : {},
+    voteHistory: normalizeVoteHistory(parsed.voteHistory),
+    runoffCandidateIds: normalizeRunoffCandidateIds(parsed.runoffCandidateIds),
     accusedId: typeof parsed.accusedId === "string" ? parsed.accusedId : null,
     wolfGuess: typeof parsed.wolfGuess === "string" ? parsed.wolfGuess : "",
     wolfGuessJudgement: normalizeGuessJudgement(parsed.wolfGuessJudgement),

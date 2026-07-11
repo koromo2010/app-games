@@ -47,6 +47,13 @@ type Clue = {
   at: number;
 };
 
+type VoteRound = {
+  round: number;
+  votes: Record<string, string>;
+  candidateIds: string[];
+  at: number;
+};
+
 type Room = {
   code: string;
   hostId: string;
@@ -73,6 +80,8 @@ type Room = {
   topicSourceMode?: TopicSourceMode;
   clues: Clue[];
   votes: Record<string, string>;
+  voteHistory: VoteRound[];
+  runoffCandidateIds: string[] | null;
   accusedId: string | null;
   wolfGuess: string;
   wolfGuessJudgement: WordWolfGuessJudgement | null;
@@ -107,6 +116,29 @@ function normalizeRoomScores(value: unknown) {
       .filter(([playerId, score]) => playerId && typeof score === "number" && Number.isFinite(score))
       .map(([playerId, score]) => [playerId, Math.max(0, Math.floor(score as number))]),
   );
+}
+
+function normalizeVoteHistory(value: unknown): VoteRound[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item, index) => {
+      if (!item || typeof item !== "object") return null;
+      const parsed = item as Partial<VoteRound>;
+      return {
+        round: typeof parsed.round === "number" ? Math.max(1, Math.floor(parsed.round)) : index + 1,
+        votes: parsed.votes && typeof parsed.votes === "object" ? (parsed.votes as Record<string, string>) : {},
+        candidateIds: Array.isArray(parsed.candidateIds)
+          ? parsed.candidateIds.filter((candidateId): candidateId is string => typeof candidateId === "string")
+          : [],
+        at: typeof parsed.at === "number" ? parsed.at : Date.now(),
+      };
+    })
+    .filter((item): item is VoteRound => Boolean(item));
+}
+
+function normalizeRunoffCandidateIds(value: unknown) {
+  return Array.isArray(value) ? value.filter((candidateId): candidateId is string => typeof candidateId === "string") : null;
 }
 
 const lobbyRounds = [1, 2, 3, 4];
@@ -180,6 +212,8 @@ function loadRoom(code: string): Room | null {
       randomizeTurnOrder: room.randomizeTurnOrder ?? true,
       turnTimeLimitSeconds: room.turnTimeLimitSeconds ?? 0,
       currentTurnStartedAt: room.currentTurnStartedAt ?? null,
+      voteHistory: normalizeVoteHistory(room.voteHistory),
+      runoffCandidateIds: normalizeRunoffCandidateIds(room.runoffCandidateIds),
       topicDictionarySource: normalizeTopicDictionarySource(room.topicDictionarySource ?? room.topicSourceMode),
       topicPairDistance: normalizeTopicPairDistance(room.topicPairDistance ?? room.topicSourceMode),
       scores: normalizeRoomScores(room.scores),
@@ -258,6 +292,8 @@ async function loadRoomFromStore(code: string) {
       randomizeTurnOrder: data.room.randomizeTurnOrder ?? true,
       turnTimeLimitSeconds: data.room.turnTimeLimitSeconds ?? 0,
       currentTurnStartedAt: data.room.currentTurnStartedAt ?? null,
+      voteHistory: normalizeVoteHistory(data.room.voteHistory),
+      runoffCandidateIds: normalizeRunoffCandidateIds(data.room.runoffCandidateIds),
       topicDictionarySource: normalizeTopicDictionarySource(data.room.topicDictionarySource ?? data.room.topicSourceMode),
       topicPairDistance: normalizeTopicPairDistance(data.room.topicPairDistance ?? data.room.topicSourceMode),
       scores: normalizeRoomScores(data.room.scores),
@@ -289,6 +325,8 @@ async function loadActiveRoomFromStore(playerId: string) {
       randomizeTurnOrder: data.room.randomizeTurnOrder ?? true,
       turnTimeLimitSeconds: data.room.turnTimeLimitSeconds ?? 0,
       currentTurnStartedAt: data.room.currentTurnStartedAt ?? null,
+      voteHistory: normalizeVoteHistory(data.room.voteHistory),
+      runoffCandidateIds: normalizeRunoffCandidateIds(data.room.runoffCandidateIds),
       topicDictionarySource: normalizeTopicDictionarySource(data.room.topicDictionarySource ?? data.room.topicSourceMode),
       topicPairDistance: normalizeTopicPairDistance(data.room.topicPairDistance ?? data.room.topicSourceMode),
       scores: normalizeRoomScores(data.room.scores),
@@ -371,6 +409,8 @@ function createEmptyRoom(
     topicPairDistance: "balanced",
     clues: [],
     votes: {},
+    voteHistory: [],
+    runoffCandidateIds: null,
     accusedId: null,
     wolfGuess: "",
     wolfGuessJudgement: null,
@@ -479,20 +519,78 @@ async function fetchTopicWithFallback(
   }
 }
 
-function getVoteTarget(room: Room) {
-  const counts = room.players.map((player) => ({
-    playerId: player.id,
-    count: Object.values(room.votes).filter((vote) => vote === player.id).length,
-  }));
-  const max = Math.max(...counts.map((item) => item.count), 0);
-  const top = counts.filter((item) => item.count === max);
+function getVoteCandidates(room: Room) {
+  if (!room.runoffCandidateIds?.length) return room.players;
 
-  if (max === 0 || top.length !== 1) return null;
-  return top[0].playerId;
+  const candidateIds = new Set(room.runoffCandidateIds);
+  return room.players.filter((player) => candidateIds.has(player.id));
+}
+
+function getVoteCounts(room: Room, votes = room.votes) {
+  return getVoteCandidates(room).map((player) => ({
+    playerId: player.id,
+    count: Object.values(votes).filter((vote) => vote === player.id).length,
+  }));
+}
+
+function getTopVoteTargetIds(room: Room, votes = room.votes) {
+  const counts = getVoteCounts(room, votes);
+  const max = Math.max(...counts.map((item) => item.count), 0);
+  if (max === 0) return [];
+  return counts.filter((item) => item.count === max).map((item) => item.playerId);
+}
+
+function getVoteTarget(room: Room, votes = room.votes) {
+  const top = getTopVoteTargetIds(room, votes);
+  return top.length === 1 ? top[0] : null;
+}
+
+function createVoteRound(room: Room, votes: Record<string, string>): VoteRound {
+  return {
+    round: room.voteHistory.length + 1,
+    votes,
+    candidateIds: getVoteCandidates(room).map((player) => player.id),
+    at: Date.now(),
+  };
 }
 
 function getNextVotePlayer(room: Room) {
   return room.players.find((player) => !room.votes[player.id]) ?? null;
+}
+
+function VoteHistoryPanel({ room }: { room: Room }) {
+  if (room.voteHistory.length === 0) return null;
+
+  return (
+    <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+      <p className="text-xs font-semibold uppercase text-slate-500">Vote results</p>
+      <h3 className="mt-1 text-lg font-black text-slate-950">{"\u6295\u7968\u7d50\u679c"}</h3>
+      <div className="mt-3 space-y-3">
+        {room.voteHistory.map((round) => (
+          <div key={`${round.round}-${round.at}`} className="rounded-lg bg-white p-3 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-bold text-slate-950">{round.round}{"\u56de\u76ee"}</p>
+              <p className="text-xs font-semibold text-slate-500">
+                {round.candidateIds.length < room.players.length ? "\u6c7a\u9078" : "\u521d\u56de"}
+              </p>
+            </div>
+            <dl className="mt-2 grid gap-2 sm:grid-cols-2">
+              {Object.entries(round.votes).map(([voterId, targetId]) => {
+                const voter = room.players.find((player) => player.id === voterId);
+                const target = room.players.find((player) => player.id === targetId);
+                return (
+                  <div key={`${round.round}-${voterId}`} className="rounded bg-slate-100 px-2 py-1 text-sm text-slate-700">
+                    <dt className="inline font-semibold text-slate-950">{voter?.name ?? "Unknown"}</dt>
+                    <dd className="inline"> {"\u2192"} {target?.name ?? "Unknown"}</dd>
+                  </div>
+                );
+              })}
+            </dl>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function ClueLogPanel({ room }: { room: Room }) {
@@ -668,7 +766,7 @@ export function WordWolfGame() {
   const nextVotePlayer = room ? getNextVotePlayer(room) : null;
   const isDebugMode = Boolean(room?.debugMode);
   const clueActor = isDebugMode ? currentPlayer : activePlayer;
-  const voteActor = isDebugMode ? nextVotePlayer : activePlayer;
+  const voteActor = nextVotePlayer && (isDebugMode || nextVotePlayer.id === activePlayer?.id) ? nextVotePlayer : null;
   const guessActor = isDebugMode ? wolfPlayer : activePlayer;
   const isHost = Boolean(room && activePlayerId === room.hostId);
   const headerName = activePlayer?.name || playerName.trim() || "ゲスト";
@@ -693,13 +791,22 @@ export function WordWolfGame() {
         ? "サンプル辞書"
         : "未取得";
   const votedCount = room ? Object.keys(room.votes).length : 0;
+  const voteCandidates = room ? getVoteCandidates(room) : [];
+  const isRunoffVote = Boolean(room?.runoffCandidateIds?.length);
+  const phaseTimeLimitSeconds = room?.turnTimeLimitSeconds && room.currentTurnStartedAt
+    ? room.phase === "clue"
+      ? room.turnTimeLimitSeconds
+      : room.phase === "vote" || room.phase === "wolfGuess"
+        ? room.turnTimeLimitSeconds * 2
+        : 0
+    : 0;
   const shouldShowClueLog = Boolean(
     room && (room.clueLogVisibility === "always" || room.phase === "result"),
   );
-  const turnSecondsLeft = room?.phase === "clue" && room.turnTimeLimitSeconds > 0 && room.currentTurnStartedAt
+  const turnSecondsLeft = room?.currentTurnStartedAt && phaseTimeLimitSeconds > 0
     ? Math.max(
         0,
-        room.turnTimeLimitSeconds - Math.floor((now - room.currentTurnStartedAt) / 1000),
+        phaseTimeLimitSeconds - Math.floor((now - room.currentTurnStartedAt) / 1000),
       )
     : null;
   const roomScoreRows = room
@@ -1067,6 +1174,8 @@ export function WordWolfGame() {
         topicSource: topic.source,
         clues: [],
         votes: {},
+        voteHistory: [],
+        runoffCandidateIds: null,
         accusedId: null,
         wolfGuess: "",
         wolfGuessJudgement: null,
@@ -1093,7 +1202,7 @@ export function WordWolfGame() {
       currentTurnIndex: isLastPlayer ? 0 : room.currentTurnIndex + 1,
       currentRound: isLastPlayer && !isLastRound ? room.currentRound + 1 : room.currentRound,
       phase: isLastPlayer && isLastRound ? "vote" : "clue",
-      currentTurnStartedAt: isLastPlayer && isLastRound ? null : Date.now(),
+      currentTurnStartedAt: Date.now(),
     };
 
     setClueInput("");
@@ -1130,13 +1239,30 @@ export function WordWolfGame() {
     void submitWolfGuess();
   };
 
-  const castVote = (targetId: string) => {
+  const castVote = useCallback((targetId: string) => {
     if (!room || !voteActor || room.phase !== "vote") return;
+    if (!getVoteCandidates(room).some((player) => player.id === targetId)) return;
+
     const votes = { ...room.votes, [voteActor.id]: targetId };
     const nextRoom = { ...room, votes };
 
     if (Object.keys(votes).length >= room.players.length) {
-      const accusedId = getVoteTarget(nextRoom);
+      const voteRound = createVoteRound(room, votes);
+      const voteHistory = [...room.voteHistory, voteRound];
+      const topTargetIds = getTopVoteTargetIds(nextRoom, votes);
+
+      if (topTargetIds.length > 1) {
+        setAndSaveRoom({
+          ...nextRoom,
+          votes: {},
+          voteHistory,
+          runoffCandidateIds: topTargetIds,
+          currentTurnStartedAt: Date.now(),
+        });
+        return;
+      }
+
+      const accusedId = topTargetIds[0] ?? getVoteTarget(nextRoom, votes);
       if (room.gameMode === "may-no-wolf" && !room.wolfId) {
         const loserName = nextRoom.players.find((player) => player.id === accusedId)?.name;
         setAndSaveRoom({
@@ -1144,16 +1270,25 @@ export function WordWolfGame() {
           phase: "result",
           currentTurnStartedAt: null,
           accusedId,
+          voteHistory,
+          runoffCandidateIds: null,
           winner: "players",
           resultText: accusedId
-            ? `狼はいませんでした。投票で選ばれた${loserName ?? "プレイヤー"}の負けです。`
-            : "狼はいませんでした。投票が割れたため敗者なしです。",
+            ? "\u72fc\u306f\u3044\u307e\u305b\u3093\u3067\u3057\u305f\u3002\u6295\u7968\u3067\u9078\u3070\u308c\u305f" + (loserName ?? "\u30d7\u30ec\u30a4\u30e4\u30fc") + "\u306e\u8ca0\u3051\u3067\u3059\u3002"
+            : "\u72fc\u306f\u3044\u307e\u305b\u3093\u3067\u3057\u305f\u3002\u6295\u7968\u304c\u5272\u308c\u305f\u305f\u3081\u6c7a\u7740\u306f\u3064\u304d\u307e\u305b\u3093\u3002",
         });
         return;
       }
 
       if (accusedId && accusedId === room.wolfId) {
-        setAndSaveRoom({ ...nextRoom, phase: "wolfGuess", accusedId, currentTurnStartedAt: null });
+        setAndSaveRoom({
+          ...nextRoom,
+          phase: "wolfGuess",
+          accusedId,
+          voteHistory,
+          runoffCandidateIds: null,
+          currentTurnStartedAt: Date.now(),
+        });
         return;
       }
 
@@ -1162,21 +1297,23 @@ export function WordWolfGame() {
         phase: "result",
         currentTurnStartedAt: null,
         accusedId,
+        voteHistory,
+        runoffCandidateIds: null,
         winner: "wolf",
         resultText: accusedId
-          ? "投票で狼を当てられませんでした。狼の勝利です。"
-          : "投票が割れました。狼の勝利です。",
+          ? "\u6295\u7968\u3067\u72fc\u3092\u5f53\u3066\u3089\u308c\u307e\u305b\u3093\u3067\u3057\u305f\u3002\u72fc\u306e\u52dd\u5229\u3067\u3059\u3002"
+          : "\u6295\u7968\u304c\u5272\u308c\u307e\u3057\u305f\u3002\u72fc\u306e\u52dd\u5229\u3067\u3059\u3002",
       });
       return;
     }
 
-    setAndSaveRoom(nextRoom);
-  };
+    setAndSaveRoom({ ...nextRoom, currentTurnStartedAt: Date.now() });
+  }, [room, setAndSaveRoom, voteActor]);
 
-  const submitWolfGuess = async () => {
+  const submitWolfGuess = useCallback(async (isTimeout = false) => {
     if (!room || !guessActor || guessActor.id !== room.wolfId || isGuessJudging) return;
 
-    const guess = guessInput.trim();
+    const guess = isTimeout ? "\u6642\u9593\u5207\u308c" : guessInput.trim();
     if (!guess) return;
 
     setIsGuessJudging(true);
@@ -1221,8 +1358,42 @@ export function WordWolfGame() {
         ? "\u9006\u8ee2\u56de\u7b54\u3092\u6b63\u89e3\u6271\u3044\u306b\u3057\u307e\u3057\u305f\u3002\u72fc\u306e\u52dd\u5229\u3067\u3059\u3002"
         : "\u9006\u8ee2\u56de\u7b54\u306f\u4e0d\u6b63\u89e3\u6271\u3044\u3067\u3059\u3002\u6751\u5074\u306e\u52dd\u5229\u3067\u3059\u3002",
     });
-  };
+  }, [guessActor, guessInput, isGuessJudging, room, setAndSaveRoom]);
 
+  useEffect(() => {
+    if (
+      !room ||
+      room.phase !== "vote" ||
+      room.turnTimeLimitSeconds <= 0 ||
+      turnSecondsLeft !== 0 ||
+      !nextVotePlayer ||
+      voteActor?.id !== nextVotePlayer.id
+    ) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      const candidates = getVoteCandidates(room);
+      const target = candidates[Math.floor(Math.random() * candidates.length)];
+      if (target) castVote(target.id);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [castVote, nextVotePlayer, room, turnSecondsLeft, voteActor]);
+
+  useEffect(() => {
+    if (
+      !room ||
+      room.phase !== "wolfGuess" ||
+      room.turnTimeLimitSeconds <= 0 ||
+      turnSecondsLeft !== 0 ||
+      guessActor?.id !== room.wolfId
+    ) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => void submitWolfGuess(true), 0);
+    return () => window.clearTimeout(timer);
+  }, [guessActor, room, submitWolfGuess, turnSecondsLeft]);
   const submitGuessFeedback = async (accepted: boolean) => {
     if (!room || !room.wolfGuess || !room.villageWord) return;
 
@@ -1255,6 +1426,8 @@ export function WordWolfGame() {
     topicSource: "pending",
     clues: [],
     votes: {},
+    voteHistory: [],
+    runoffCandidateIds: null,
     accusedId: null,
     wolfGuess: "",
     wolfGuessJudgement: null,
@@ -2039,14 +2212,28 @@ export function WordWolfGame() {
                 <div className={panelClass}>
                   <p className="text-xs font-semibold uppercase text-cyan-700">Vote</p>
                   <h2 className="mt-1 text-2xl font-black text-slate-950">
-                    {room.gameMode === "may-no-wolf" ? "追放投票" : "誰が狼か投票"}
+                    {isRunoffVote ? "\u6c7a\u9078\u6295\u7968" : room.gameMode === "may-no-wolf" ? "\u8ffd\u653e\u6295\u7968" : "\u8ab0\u304c\u72fc\u304b\u6295\u7968"}
                   </h2>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">
+                    {nextVotePlayer ? nextVotePlayer.name : "-"} {"\u304c\u6295\u7968\u3059\u308b\u756a\u3067\u3059\u3002"}
+                  </p>
+                  {isRunoffVote && (
+                    <p className="mt-2 text-sm leading-6 text-slate-600">
+                      {"\u540c\u7968\u306e\u5019\u88dc\u3060\u3051\u3067\u3082\u3046\u4e00\u5468\u6295\u7968\u3057\u307e\u3059\u3002"}
+                    </p>
+                  )}
+                  {turnSecondsLeft !== null && (
+                    <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950">
+                      {"\u6b8b\u308a"} {turnSecondsLeft} {"\u79d2"}
+                    </div>
+                  )}
                   <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                    {room.players.map((player) => (
+                    {voteCandidates.map((player) => (
                       <button
                         key={player.id}
                         onClick={() => castVote(player.id)}
-                        className={`rounded-lg border px-3 py-3 text-left font-semibold ${
+                        disabled={voteActor?.id !== nextVotePlayer?.id}
+                        className={`rounded-lg border px-3 py-3 text-left font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${
                           voteActor && room.votes[voteActor.id] === player.id
                             ? "border-cyan-500 bg-cyan-50 text-cyan-950"
                             : "border-slate-200 bg-slate-50 text-slate-800 hover:bg-slate-100"
@@ -2056,23 +2243,28 @@ export function WordWolfGame() {
                       </button>
                     ))}
                   </div>
+                  <VoteHistoryPanel room={room} />
                 </div>
               )}
-
               {room.phase === "wolfGuess" && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 p-5 shadow-[0_18px_50px_rgba(120,53,15,0.16)]">
                   <p className="text-xs font-semibold uppercase text-amber-700">Final chance</p>
-                  <h2 className="mt-1 text-2xl font-black text-slate-950">狼が見つかりました</h2>
+                  <h2 className="mt-1 text-2xl font-black text-slate-950">{"\u72fc\u304c\u898b\u3064\u304b\u308a\u307e\u3057\u305f"}</h2>
                   <p className="mt-2 text-sm leading-6 text-slate-700">
-                    投票対象は {accusedPlayer?.name} です。狼は村側のお題を当てれば逆転勝利です。
+                    {"\u6295\u7968\u5bfe\u8c61\u306f"} {accusedPlayer?.name} {"\u3067\u3059\u3002\u72fc\u306f\u6751\u5074\u306e\u304a\u984c\u3092\u5f53\u3066\u308c\u3070\u9006\u8ee2\u52dd\u5229\u3067\u3059\u3002"}
                   </p>
+                  {turnSecondsLeft !== null && (
+                    <div className="mt-4 rounded-lg border border-amber-300 bg-white/70 px-3 py-2 text-sm font-semibold text-amber-950">
+                      {"\u6b8b\u308a"} {turnSecondsLeft} {"\u79d2"}
+                    </div>
+                  )}
                   <input
                     value={guessInput}
                     onChange={(event) => setGuessInput(event.target.value)}
                     onKeyDown={submitGuessOnEnter}
                     disabled={guessActor?.id !== room.wolfId}
                     className="mt-4 w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 disabled:bg-amber-100"
-                    placeholder="村側のお題を入力"
+                    placeholder="\u6751\u5074\u306e\u304a\u984c\u3092\u5165\u529b"
                   />
                   <button
                     onClick={() => void submitWolfGuess()}
@@ -2083,12 +2275,12 @@ export function WordWolfGame() {
                   </button>
                 </div>
               )}
-
               {room.phase === "result" && (
                 <div className={panelClass}>
                   <p className="text-xs font-semibold uppercase text-cyan-700">Result</p>
                   <h2 className="mt-1 text-3xl font-black text-slate-950">{resultTitle}</h2>
                   <p className="mt-3 text-sm leading-6 text-slate-700">{room.resultText}</p>
+                  <VoteHistoryPanel room={room} />
                   {hasWolfInCurrentGame && room.wolfGuess && (
                     <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
                       <div className="flex flex-wrap items-center justify-between gap-2">
