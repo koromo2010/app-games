@@ -122,6 +122,11 @@ function normalizeWolfCount(value: unknown, playerCount: number) {
   return Math.max(1, Math.min(maxWolfCount(playerCount), count));
 }
 
+function normalizeStoredWolfCount(value: unknown) {
+  const count = typeof value === "number" && Number.isFinite(value) ? Math.floor(value) : 1;
+  return Math.max(1, Math.min(20, count));
+}
+
 const lobbyRounds = [1, 2, 3, 4];
 
 function normalizeRoundsTotal(value: unknown) {
@@ -132,9 +137,24 @@ function normalizeRoundsTotal(value: unknown) {
 const turnTimeLimitOptions = [0, 30, 60, 90, 120];
 const noWolfChance = 0.1;
 const roomStoragePrefix = "wordwolf-room-";
+const roomDefaultsStoragePrefix = "wordwolf-room-defaults-";
 const topicHistoryKey = "wordwolf-topic-history";
 const topicDailyWordHistoryKey = "wordwolf-topic-daily-words";
 const topicRequestHistoryLimit = 500;
+
+type WordWolfRoomDefaults = Pick<
+  Room,
+  | "gameMode"
+  | "clueLogVisibility"
+  | "clueMode"
+  | "randomizeTurnOrder"
+  | "roundsTotal"
+  | "turnTimeLimitSeconds"
+  | "wolfCount"
+  | "topicDictionarySource"
+  | "topicPairDistance"
+  | "topicHint"
+>;
 
 function makeId(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
@@ -155,6 +175,108 @@ function makeRoomCode() {
 
 function getRoomKey(code: string) {
   return `${roomStoragePrefix}${code.toUpperCase()}`;
+}
+
+function getRoomDefaultsKey(playerId: string, ownerId: string) {
+  return `${roomDefaultsStoragePrefix}${playerId || ownerId || "local"}`;
+}
+
+function getDefaultRoomSettings(): WordWolfRoomDefaults {
+  return {
+    gameMode: "wordwolf",
+    clueLogVisibility: "always",
+    clueMode: "turn",
+    randomizeTurnOrder: true,
+    roundsTotal: 3,
+    turnTimeLimitSeconds: 0,
+    wolfCount: 1,
+    topicDictionarySource: "llm",
+    topicPairDistance: "balanced",
+    topicHint: "",
+  };
+}
+
+function normalizeRoomDefaults(value: unknown): WordWolfRoomDefaults {
+  const defaults = getDefaultRoomSettings();
+  if (!value || typeof value !== "object") return defaults;
+
+  const parsed = value as Partial<WordWolfRoomDefaults>;
+  return {
+    gameMode: normalizeGameMode(parsed.gameMode),
+    clueLogVisibility: parsed.clueLogVisibility === "result" ? "result" : defaults.clueLogVisibility,
+    clueMode: normalizeClueMode(parsed.clueMode),
+    randomizeTurnOrder: typeof parsed.randomizeTurnOrder === "boolean" ? parsed.randomizeTurnOrder : defaults.randomizeTurnOrder,
+    roundsTotal: normalizeRoundsTotal(parsed.roundsTotal),
+    turnTimeLimitSeconds: turnTimeLimitOptions.includes(parsed.turnTimeLimitSeconds ?? -1)
+      ? parsed.turnTimeLimitSeconds ?? defaults.turnTimeLimitSeconds
+      : defaults.turnTimeLimitSeconds,
+    wolfCount: normalizeStoredWolfCount(parsed.wolfCount),
+    topicDictionarySource: normalizeTopicDictionarySource(parsed.topicDictionarySource),
+    topicPairDistance: normalizeTopicPairDistance(parsed.topicPairDistance),
+    topicHint: typeof parsed.topicHint === "string" ? parsed.topicHint.slice(0, 80) : defaults.topicHint,
+  };
+}
+
+function loadRoomDefaults(playerId: string, ownerId: string) {
+  const raw = localStorage.getItem(getRoomDefaultsKey(playerId, ownerId));
+  if (!raw) return getDefaultRoomSettings();
+
+  try {
+    return normalizeRoomDefaults(JSON.parse(raw));
+  } catch {
+    return getDefaultRoomSettings();
+  }
+}
+
+function saveRoomDefaults(room: Room) {
+  const defaults = normalizeRoomDefaults({
+    gameMode: room.gameMode,
+    clueLogVisibility: room.clueLogVisibility,
+    clueMode: room.clueMode,
+    randomizeTurnOrder: room.randomizeTurnOrder,
+    roundsTotal: room.roundsTotal,
+    turnTimeLimitSeconds: room.turnTimeLimitSeconds,
+    wolfCount: room.wolfCount,
+    topicDictionarySource: room.topicDictionarySource,
+    topicPairDistance: room.topicPairDistance,
+    topicHint: room.topicHint,
+  });
+
+  localStorage.setItem(getRoomDefaultsKey(room.hostId, room.ownerId ?? ""), JSON.stringify(defaults));
+  return defaults;
+}
+
+async function loadRoomDefaultsFromStore(playerId: string, ownerId: string) {
+  const localDefaults = loadRoomDefaults(playerId, ownerId);
+
+  try {
+    const params = new URLSearchParams({ game: "wordwolf", playerId });
+    const response = await fetch(`/api/room-defaults?${params.toString()}`, { cache: "no-store" });
+    if (!response.ok) throw new Error("ROOM_DEFAULTS_FETCH_FAILED");
+
+    const data = (await response.json()) as { defaults?: unknown };
+    if (!data.defaults) return localDefaults;
+
+    const defaults = normalizeRoomDefaults(data.defaults);
+    localStorage.setItem(getRoomDefaultsKey(playerId, ownerId), JSON.stringify(defaults));
+    return defaults;
+  } catch {
+    return localDefaults;
+  }
+}
+
+async function saveRoomDefaultsToStore(room: Room) {
+  const defaults = saveRoomDefaults(room);
+
+  try {
+    await fetch("/api/room-defaults", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ game: "wordwolf", playerId: room.hostId, defaults }),
+    });
+  } catch {
+    // Local defaults are enough for browser-tab testing when Redis is unavailable.
+  }
 }
 
 function saveRoom(room: Room) {
@@ -365,34 +487,37 @@ function createEmptyRoom(
   ownerId: string,
   avatarColor: string,
   avatarImage?: string | null,
+  hostId?: string,
+  savedDefaults?: WordWolfRoomDefaults,
 ): { room: Room; player: Player } {
-  const player = createPlayer(hostName, avatarColor, avatarImage);
+  const player = createPlayer(hostName, avatarColor, avatarImage, hostId);
+  const defaults = savedDefaults ?? loadRoomDefaults(player.id, ownerId);
   const room: Room = {
     code: makeRoomCode(),
     hostId: player.id,
     ownerId,
     passphrase,
     phase: "lobby",
-    gameMode: "wordwolf",
-    clueLogVisibility: "always",
-    clueMode: "turn",
-    randomizeTurnOrder: true,
+    gameMode: defaults.gameMode,
+    clueLogVisibility: defaults.clueLogVisibility,
+    clueMode: defaults.clueMode,
+    randomizeTurnOrder: defaults.randomizeTurnOrder,
     players: [player],
-    roundsTotal: 3,
-    turnTimeLimitSeconds: 0,
+    roundsTotal: defaults.roundsTotal,
+    turnTimeLimitSeconds: defaults.turnTimeLimitSeconds,
     currentRound: 1,
     currentTurnIndex: 0,
     currentTurnStartedAt: null,
     wolfId: null,
     wolfIds: [],
-    wolfCount: 1,
+    wolfCount: defaults.wolfCount,
     villageWord: "",
     wolfWord: "",
     topicReason: "",
     topicSource: "pending",
-    topicDictionarySource: "llm",
-    topicPairDistance: "balanced",
-    topicHint: "",
+    topicDictionarySource: defaults.topicDictionarySource,
+    topicPairDistance: defaults.topicPairDistance,
+    topicHint: defaults.topicHint,
     clues: [],
     votes: {},
     voteHistory: [],
@@ -717,8 +842,12 @@ export function WordWolfGame() {
   const clueSubmittedCount = room?.phase === "clue" ? getClueSubmittedCount(room) : 0;
   const canSubmitClue = Boolean(clueActor) && (room?.clueMode === "simultaneous" || clueActor?.id === currentPlayer?.id);
   const voteCandidates = room ? getVoteCandidates(room) : [];
+  const allowedWolfCount = room ? maxWolfCount(room.players.length) : 1;
   const wolfCountOptions = room
-    ? Array.from({ length: maxWolfCount(room.players.length) }, (_, index) => index + 1)
+    ? Array.from(new Set([
+        ...Array.from({ length: allowedWolfCount }, (_, index) => index + 1),
+        normalizeStoredWolfCount(room.wolfCount),
+      ])).sort((left, right) => left - right)
     : [1];
   const isRunoffVote = Boolean(room?.runoffCandidateIds?.length);
   const runoffCandidateNames = room?.runoffCandidateIds
@@ -820,6 +949,7 @@ export function WordWolfGame() {
     const stampedRoom = stampRoom(nextRoom);
     setRoom(stampedRoom);
     void saveRoomToStore(stampedRoom);
+    void saveRoomDefaultsToStore(stampedRoom);
     localStorage.setItem("wordwolf-last-room", stampedRoom.code);
   }, []);
 
@@ -835,10 +965,8 @@ export function WordWolfGame() {
     const fallbackHostId = activePlayerId || localStorage.getItem("wordwolf-last-player") || "";
     await deleteHostedRoomsFromStore(ownerId, fallbackHostId);
 
-    const created = createEmptyRoom(name, passphrase, ownerId, avatarColor, avatarImage);
-    created.player.id = playerAccountId;
-    created.room.hostId = playerAccountId;
-    created.room.players = [created.player];
+    const defaults = await loadRoomDefaultsFromStore(playerAccountId, ownerId);
+    const created = createEmptyRoom(name, passphrase, ownerId, avatarColor, avatarImage, playerAccountId, defaults);
     setIsJoinListOpen(false);
     setJoinableRooms([]);
     setActivePlayerId(created.player.id);
@@ -2080,14 +2208,18 @@ export function WordWolfGame() {
                           key={count}
                           type="button"
                           onClick={() => setWolfCount(count)}
+                          disabled={count > allowedWolfCount}
                           aria-pressed={room.wolfCount === count}
                           className={`rounded-lg border px-3 py-2 text-left text-sm font-semibold ${
                             room.wolfCount === count
                               ? "border-rose-500 bg-rose-50 text-rose-950 shadow-sm"
-                              : "border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100"
+                              : count > allowedWolfCount
+                                ? "border-slate-200 bg-slate-100 text-slate-400"
+                                : "border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100"
                           }`}
                         >
                           {count}人
+                          {count > allowedWolfCount ? "（人数待ち）" : ""}
                         </button>
                       ))}
                     </div>

@@ -13,6 +13,9 @@ import type { TahoiyaAnswererMode, TahoiyaDefinitionOption, TahoiyaPlayer, Tahoi
 import { cyanButtonClass, dangerButtonClass, inputClass, panelClass, primaryButtonClass, subtleButtonClass } from "../wordwolf/styles";
 
 const roomStoragePrefix = "tahoiya-room-";
+const roomDefaultsStoragePrefix = "tahoiya-room-defaults-";
+
+type TahoiyaRoomDefaults = Pick<TahoiyaRoom, "answererMode">;
 
 function makeId(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
@@ -33,6 +36,66 @@ function getOwnerId() {
 
 function getRoomKey(code: string) {
   return `${roomStoragePrefix}${code.toUpperCase()}`;
+}
+
+function getRoomDefaultsKey(playerId: string, ownerId: string) {
+  return `${roomDefaultsStoragePrefix}${playerId || ownerId || "local"}`;
+}
+
+function normalizeRoomDefaults(value: unknown): TahoiyaRoomDefaults {
+  if (!value || typeof value !== "object") return { answererMode: "random" };
+  const parsed = value as Partial<TahoiyaRoomDefaults>;
+  return { answererMode: parsed.answererMode === "manual" ? "manual" : "random" };
+}
+
+function loadRoomDefaults(playerId: string, ownerId: string) {
+  const raw = localStorage.getItem(getRoomDefaultsKey(playerId, ownerId));
+  if (!raw) return normalizeRoomDefaults(null);
+
+  try {
+    return normalizeRoomDefaults(JSON.parse(raw));
+  } catch {
+    return normalizeRoomDefaults(null);
+  }
+}
+
+function saveRoomDefaults(room: TahoiyaRoom) {
+  const defaults = normalizeRoomDefaults(room);
+  localStorage.setItem(getRoomDefaultsKey(room.hostId, room.ownerId ?? ""), JSON.stringify(defaults));
+  return defaults;
+}
+
+async function loadRoomDefaultsFromStore(playerId: string, ownerId: string) {
+  const localDefaults = loadRoomDefaults(playerId, ownerId);
+
+  try {
+    const params = new URLSearchParams({ game: "tahoiya", playerId });
+    const response = await fetch(`/api/room-defaults?${params.toString()}`, { cache: "no-store" });
+    if (!response.ok) throw new Error("ROOM_DEFAULTS_FETCH_FAILED");
+
+    const data = (await response.json()) as { defaults?: unknown };
+    if (!data.defaults) return localDefaults;
+
+    const defaults = normalizeRoomDefaults(data.defaults);
+    localStorage.setItem(getRoomDefaultsKey(playerId, ownerId), JSON.stringify(defaults));
+    return defaults;
+  } catch {
+    return localDefaults;
+  }
+}
+
+async function saveRoomDefaultsToStore(room: TahoiyaRoom) {
+  const defaults = saveRoomDefaults(room);
+
+  try {
+    await fetch("/api/room-defaults", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ game: "tahoiya", playerId: room.hostId, defaults }),
+    });
+  } catch {
+    // Local defaults keep prototype testing usable when Redis is unavailable.
+  }
 }
 
 function stampRoom(room: TahoiyaRoom) {
@@ -169,7 +232,13 @@ async function deleteRoomFromStore(code: string) {
   }
 }
 
-function createEmptyRoom(host: TahoiyaPlayer, passphrase: string, ownerId: string): TahoiyaRoom {
+function createEmptyRoom(
+  host: TahoiyaPlayer,
+  passphrase: string,
+  ownerId: string,
+  savedDefaults?: TahoiyaRoomDefaults,
+): TahoiyaRoom {
+  const defaults = savedDefaults ?? loadRoomDefaults(host.id, ownerId);
   return {
     code: makeRoomCode(),
     hostId: host.id,
@@ -179,7 +248,7 @@ function createEmptyRoom(host: TahoiyaPlayer, passphrase: string, ownerId: strin
     debugMode: false,
     players: [host],
     parentId: host.id,
-    answererMode: "random",
+    answererMode: defaults.answererMode,
     answererId: "",
     round: 1,
     word: "",
@@ -337,6 +406,7 @@ export function TahoiyaGame() {
     const stamped = stampRoom(nextRoom);
     setRoom(stamped);
     void saveRoomToStore(stamped);
+    void saveRoomDefaultsToStore(stamped);
   };
 
   const refreshJoinableRooms = async () => {
@@ -351,7 +421,8 @@ export function TahoiyaGame() {
 
     const ownerId = getOwnerId();
     const host = createPlayer(playerName, avatarColor, avatarImage, playerId);
-    const nextRoom = createEmptyRoom(host, passphrase, ownerId);
+    const defaults = await loadRoomDefaultsFromStore(playerId, ownerId);
+    const nextRoom = createEmptyRoom(host, passphrase, ownerId, defaults);
     setAndSaveRoom(nextRoom);
     setActivePlayerId(host.id);
     setMessage("");
