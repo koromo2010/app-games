@@ -419,7 +419,7 @@ function createEmptyRoom(
     wolfWord: "",
     topicReason: "",
     topicSource: "pending",
-    topicDictionarySource: "ja-daily",
+    topicDictionarySource: "llm",
     topicPairDistance: "balanced",
     clues: [],
     votes: {},
@@ -897,9 +897,11 @@ export function WordWolfGame() {
   const hasWolfInCurrentGame = Boolean(room?.wolfId);
   const topicSourceLabel =
     room?.topicSource === "llm"
-      ? "LLM生成"
+      ? room.topicDictionarySource === "proper-noun"
+        ? "固有名詞"
+        : "一般単語"
       : room?.topicSource === "fallback"
-        ? "サンプル辞書"
+        ? "代替辞書"
         : "未取得";
   const voteVoters = room ? getVoteVoters(room) : [];
   const votedCount = room ? voteVoters.filter((player) => room.votes[player.id]).length : 0;
@@ -1925,7 +1927,7 @@ export function WordWolfGame() {
               <section>
                 <h3 className="text-base font-bold text-slate-950">お題とログ</h3>
                 <p className="mt-2">
-                  お題はサンプルリストまたはLLM生成から取得します。発言ログは部屋設定で、常に表示するかゲーム終了後だけ表示するかを選べます。
+                  お題は一般単語または固有名詞から選べます。どちらも型が近い言葉同士になるように生成します。発言ログは部屋設定で、常に表示するかゲーム終了後だけ表示するかを選べます。
                 </p>
               </section>
             </div>
@@ -2266,10 +2268,8 @@ export function WordWolfGame() {
                       }
                       className={`mt-1 ${inputClass}`}
                     >
-                      <option value="ja-daily">サンプル: 日本語日常語</option>
-                      <option value="en-common">サンプル: 英語common nouns</option>
-                      <option value="curated-pairs">サンプル: 固定ペア</option>
-                      <option value="llm">LLM生成</option>
+                      <option value="llm">一般単語</option>
+                      <option value="proper-noun">固有名詞</option>
                     </select>
                   </label>
                   <div>

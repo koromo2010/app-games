@@ -13,13 +13,17 @@ import {
 import { redisCommand } from "@/lib/redis-store";
 
 const baseTopicPrompt =
-  "ワードウルフ用のお題ペアを1組作ってください。3-6人で3周ほど話す前提です。一般的な日本語名詞で、共通点を話せるが同じ言葉の言い換えではない組み合わせにしてください。JSONのみで返してください: {\"villageWord\":\"...\",\"wolfWord\":\"...\",\"reason\":\"...\"}";
+  "ワードウルフ用のお題ペアを1組作ってください。3-6人で3周ほど話す前提です。日本語で、共通点を話せるが同じ言葉の言い換えではない組み合わせにしてください。JSONのみで返してください: {\"villageWord\":\"...\",\"wolfWord\":\"...\",\"reason\":\"...\"}";
 
 const usedPairKey = "wordwolf:topic:pairs";
 const dailyWordKeyPrefix = "wordwolf:topic:daily-words:";
 
 function isLlmEnabled(dictionarySource: TopicDictionarySource) {
-  return dictionarySource === "llm" && process.env.WORDWOLF_USE_LLM === "true" && Boolean(process.env.OPENAI_API_KEY);
+  return (
+    (dictionarySource === "llm" || dictionarySource === "proper-noun") &&
+    process.env.WORDWOLF_USE_LLM === "true" &&
+    Boolean(process.env.OPENAI_API_KEY)
+  );
 }
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
@@ -89,7 +93,11 @@ async function rememberStoredTopicUsage(topic: WordWolfTopic) {
   }
 }
 
-function parseTopic(text: string, pairDistance: TopicPairDistance): WordWolfTopic | null {
+function parseTopic(
+  text: string,
+  pairDistance: TopicPairDistance,
+  dictionarySource: Extract<TopicDictionarySource, "llm" | "proper-noun">,
+): WordWolfTopic | null {
   try {
     const parsed = JSON.parse(text) as Partial<WordWolfTopic>;
     if (!parsed.villageWord || !parsed.wolfWord) return null;
@@ -99,9 +107,9 @@ function parseTopic(text: string, pairDistance: TopicPairDistance): WordWolfTopi
       wolfWord: String(parsed.wolfWord).trim(),
       reason: String(parsed.reason || "近いカテゴリだが体験や用途が違うペアです。"),
       source: "llm",
-      dictionarySource: "llm",
+      dictionarySource,
       pairDistance,
-      sourceMode: "llm",
+      sourceMode: dictionarySource === "proper-noun" ? "proper-noun" : "llm",
     } satisfies WordWolfTopic;
 
     return isValidWordWolfTopic(topic) ? topic : null;
@@ -122,7 +130,12 @@ function getTopicRequestOptions(request: Request) {
   };
 }
 
-async function generateLlmTopic(excludeKeys: string[], excludeWords: string[], pairDistance: TopicPairDistance) {
+async function generateLlmTopic(
+  excludeKeys: string[],
+  excludeWords: string[],
+  pairDistance: TopicPairDistance,
+  dictionarySource: Extract<TopicDictionarySource, "llm" | "proper-noun">,
+) {
   const { default: OpenAI } = await import("openai");
   const client = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -142,8 +155,22 @@ async function generateLlmTopic(excludeKeys: string[], excludeWords: string[], p
       ? `${baseTopicPrompt}\n${distancePrompt}\n最近出たので避けるペア: ${excludeKeys.join(", ")}`
       : `${baseTopicPrompt}\n${distancePrompt}`;
 
+  const topicKindPrompt =
+    dictionarySource === "proper-noun"
+      ? [
+          "Proper noun mode: use only reasonably famous proper nouns that ordinary Japanese players are likely to know.",
+          "Allowed types include people, fictional characters, works, brands/products, organizations, facilities, regions, landmarks, and events.",
+          "Pair the same semantic type and layer: person with person, character with character, work with work, brand/product with brand/product, place/landmark with place/landmark, organization with organization.",
+          "Avoid obscure names, private/internal names, and pairs that require specialist knowledge.",
+        ].join(" ")
+      : [
+          "General word mode: use common Japanese nouns, not proper nouns.",
+          "Pair the same semantic type and layer: object with object, place with place, activity/concept with activity/concept, person/living thing with the same kind.",
+        ].join(" ");
+
   const avoidLines = [
-    "match semantic layer: object with object, place with place, activity/concept with activity/concept, person/living thing with the same kind; do not pair an object with a place or abstract concept.",
+    topicKindPrompt,
+    "Do not pair an object with a place, a person with a work, or an abstract concept with a concrete object.",
     excludeWords.length > 0 ? `exclude words used today: ${excludeWords.join(", ")}` : "",
   ].filter(Boolean);
   const promptWithExclusions = `${prompt}${avoidLines.length > 0 ? `\n${avoidLines.join("\n")}` : ""}`;
@@ -156,7 +183,7 @@ async function generateLlmTopic(excludeKeys: string[], excludeWords: string[], p
     4500,
   );
 
-  return parseTopic(response.output_text, pairDistance);
+  return parseTopic(response.output_text, pairDistance, dictionarySource);
 }
 
 export async function GET(request: Request) {
@@ -175,7 +202,12 @@ export async function GET(request: Request) {
 
   try {
     for (let attempt = 0; attempt < 3; attempt += 1) {
-      const topic = await generateLlmTopic(allExcludeKeys, allExcludeWords, pairDistance);
+      const topic = await generateLlmTopic(
+        allExcludeKeys,
+        allExcludeWords,
+        pairDistance,
+        dictionarySource === "proper-noun" ? "proper-noun" : "llm",
+      );
       if (topic && isTopicAllowed(topic, allExcludeKeys, allExcludeWords)) {
         await rememberStoredTopicUsage(topic);
         return Response.json(topic);

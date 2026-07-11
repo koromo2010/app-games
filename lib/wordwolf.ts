@@ -1,4 +1,4 @@
-export type TopicDictionarySource = "ja-daily" | "en-common" | "curated-pairs" | "llm";
+export type TopicDictionarySource = "ja-daily" | "en-common" | "curated-pairs" | "llm" | "proper-noun";
 export type TopicPairDistance = "near" | "balanced" | "wide";
 
 export type TopicSourceMode =
@@ -9,7 +9,8 @@ export type TopicSourceMode =
   | "en-common-balanced"
   | "en-common-wide"
   | "curated-pairs"
-  | "llm";
+  | "llm"
+  | "proper-noun";
 
 export type WordWolfTopic = {
   villageWord: string;
@@ -73,6 +74,33 @@ const curatedWidePairTopics: TopicCandidate[] = [
   { villageWord: "スーパー", wolfWord: "コンビニ", reason: "買い物をする場所だが、品ぞろえと使う場面が違う", dictionarySource: "curated-pairs", pairDistance: "wide", sourceMode: "curated-pairs" },
 ];
 
+const properNounNearPairTopics: TopicCandidate[] = [
+  { villageWord: "東京タワー", wolfWord: "通天閣", reason: "有名な都市のランドマークだが、場所と印象が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
+  { villageWord: "京都", wolfWord: "奈良", reason: "歴史ある観光地だが、街の規模や代表的な見どころが違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
+  { villageWord: "セブン-イレブン", wolfWord: "ローソン", reason: "有名なコンビニブランドだが、商品や店舗の印象が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
+  { villageWord: "大谷翔平", wolfWord: "イチロー", reason: "有名な野球選手だが、時代やプレースタイルが違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
+  { villageWord: "YouTube", wolfWord: "TikTok", reason: "動画サービスとして有名だが、視聴体験や投稿文化が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
+  { villageWord: "iPhone", wolfWord: "Pixel", reason: "有名なスマートフォンだが、メーカーや使い心地が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
+];
+
+const properNounBalancedPairTopics: TopicCandidate[] = [
+  { villageWord: "富士山", wolfWord: "エベレスト", reason: "有名な山だが、国や登山の難しさが違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
+  { villageWord: "任天堂", wolfWord: "ソニー", reason: "有名な日本企業だが、ゲームでの立ち位置や主力事業が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
+  { villageWord: "ドラえもん", wolfWord: "アンパンマン", reason: "有名なキャラクターだが、作品の雰囲気や役割が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
+  { villageWord: "鬼滅の刃", wolfWord: "呪術廻戦", reason: "近年有名な漫画作品だが、世界観や戦い方が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
+  { villageWord: "Amazon", wolfWord: "楽天市場", reason: "有名な通販サービスだが、買い物体験や運営の印象が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
+  { villageWord: "東京ディズニーランド", wolfWord: "ユニバーサル・スタジオ・ジャパン", reason: "有名なテーマパークだが、地域や作品の方向性が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
+];
+
+const properNounWidePairTopics: TopicCandidate[] = [
+  { villageWord: "マリオ", wolfWord: "ピカチュウ", reason: "有名なゲームキャラクターだが、作品ジャンルや印象が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
+  { villageWord: "トヨタ", wolfWord: "ホンダ", reason: "有名な自動車メーカーだが、ブランドイメージや得意分野が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
+  { villageWord: "東京大学", wolfWord: "早稲田大学", reason: "有名な大学だが、設立背景や校風が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
+  { villageWord: "スターバックス", wolfWord: "ドトール", reason: "有名なカフェチェーンだが、価格帯や店内の雰囲気が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
+  { villageWord: "東海道新幹線", wolfWord: "山手線", reason: "有名な鉄道路線だが、移動距離や使う場面が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
+  { villageWord: "紅白歌合戦", wolfWord: "M-1グランプリ", reason: "有名なテレビ番組・イベントだが、内容や楽しみ方が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
+];
+
 const jaDailySets: TopicSet[] = [
   { id: "food", label: "日本語日常: 食べ物", layer: "object", words: ["カレー", "ラーメン", "ピザ", "寿司", "天ぷら", "弁当", "サンドイッチ", "お好み焼き", "牛丼", "焼肉"] },
   { id: "outing", label: "日本語日常: 外出先", layer: "place", words: ["映画館", "図書館", "本屋", "水族館", "動物園", "美術館", "温泉", "ホテル", "カラオケ", "ゲームセンター"] },
@@ -132,7 +160,9 @@ export function combineTopicSourceMode(
   dictionarySource: TopicDictionarySource,
   pairDistance: TopicPairDistance,
 ): TopicSourceMode {
-  if (dictionarySource === "curated-pairs" || dictionarySource === "llm") return dictionarySource;
+  if (dictionarySource === "curated-pairs" || dictionarySource === "llm" || dictionarySource === "proper-noun") {
+    return dictionarySource;
+  }
   return `${dictionarySource}-${pairDistance}`;
 }
 
@@ -159,18 +189,25 @@ export function normalizeTopicSourceMode(value: unknown): TopicSourceMode {
     value === "en-common-balanced" ||
     value === "en-common-wide" ||
     value === "curated-pairs" ||
-    value === "llm"
+    value === "llm" ||
+    value === "proper-noun"
   ) {
     return value;
   }
 
   if (value === "ja-daily") return "ja-daily-balanced";
   if (value === "en-common") return "en-common-balanced";
-  return "curated-pairs";
+  return "llm";
 }
 
 export function normalizeTopicDictionarySource(value: unknown): TopicDictionarySource {
-  if (value === "ja-daily" || value === "en-common" || value === "curated-pairs" || value === "llm") {
+  if (
+    value === "ja-daily" ||
+    value === "en-common" ||
+    value === "curated-pairs" ||
+    value === "llm" ||
+    value === "proper-noun"
+  ) {
     return value;
   }
 
@@ -335,6 +372,11 @@ const localTopicDecks: Record<TopicDictionarySource, Record<TopicPairDistance, T
     balanced: makeBalancedCandidates(jaDailySets, "ja-daily"),
     wide: makeWideCandidates(jaDailySets, jaDailyWideGroups, "ja-daily"),
   },
+  "proper-noun": {
+    near: properNounNearPairTopics,
+    balanced: properNounBalancedPairTopics,
+    wide: properNounWidePairTopics,
+  },
 };
 
 export function pickFallbackTopic(
@@ -343,7 +385,7 @@ export function pickFallbackTopic(
   pairDistance: TopicPairDistance = "balanced",
   excludeWords: string[] = [],
 ): WordWolfTopic {
-  const localSource = dictionarySource === "llm" ? "llm" : normalizeTopicDictionarySource(dictionarySource);
+  const localSource = normalizeTopicDictionarySource(dictionarySource);
   const distance = normalizeTopicPairDistance(pairDistance);
 
   return pickFromCandidates(localTopicDecks[localSource][distance], excludeKeys, excludeWords);
