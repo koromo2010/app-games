@@ -9,6 +9,7 @@ export type PlayerSession = {
 
 const playerSessionKey = "app-games-player-session";
 const playerSessionIdKey = "app-games-player-id";
+const playerAuthenticatedKey = "app-games-player-authenticated";
 const legacyAvatarColorKey = "wordwolf-avatar-color";
 const legacyAvatarImageKey = "wordwolf-avatar-image";
 
@@ -124,10 +125,21 @@ export function savePlayerSession(session: Omit<PlayerSession, "updatedAt">) {
   }
 }
 
+export function markPlayerAuthenticated() {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(playerAuthenticatedKey, "1");
+}
+
+export function isPlayerAuthenticated() {
+  if (typeof window === "undefined") return false;
+  return localStorage.getItem(playerAuthenticatedKey) === "1" && Boolean(readPlayerSession());
+}
+
 export function clearPlayerSession() {
   if (typeof window === "undefined") return;
   localStorage.removeItem(playerSessionKey);
   localStorage.removeItem(playerSessionIdKey);
+  localStorage.removeItem(playerAuthenticatedKey);
   localStorage.removeItem(legacyAvatarColorKey);
   localStorage.removeItem(legacyAvatarImageKey);
 }

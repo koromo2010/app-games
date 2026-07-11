@@ -8,6 +8,7 @@ import {
   defaultAvatarImage,
   defaultAvatarImages,
   fallbackAvatarColor,
+  isPlayerAuthenticated,
   makeRandomAvatarColor,
   normalizePlayerName,
   loadPersistentPlayerSession,
@@ -486,6 +487,12 @@ export function WordWolfGame() {
 
   useEffect(() => {
     let isMounted = true;
+    if (!isPlayerAuthenticated()) {
+      return () => {
+        isMounted = false;
+      };
+    }
+
     loadPersistentPlayerSession()
       .then((session) => {
         if (!isMounted || !session) return;

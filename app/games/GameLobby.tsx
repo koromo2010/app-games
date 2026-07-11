@@ -3,14 +3,16 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
+  clearPlayerSession,
   defaultAvatarImage,
   fallbackAvatarColor,
+  isPlayerAuthenticated,
   makeRandomAvatarColor,
-  normalizePlayerName,
+  markPlayerAuthenticated,
   pickRandomDefaultAvatarImage,
   loadPersistentPlayerSession,
-  savePersistentPlayerSession,
-  clearPlayerSession,
+  savePlayerSession,
+  type PlayerSession,
 } from "@/lib/player-session";
 
 const games = [
@@ -43,13 +45,31 @@ const games = [
   },
 ];
 
+type AuthMode = "login" | "register";
+
+const errorMessages: Record<string, string> = {
+  INVALID_JSON: "入力内容を読み取れませんでした。",
+  STORE_NOT_CONFIGURED: "プレイヤー保存用ストレージが未設定です。",
+  NAME_REQUIRED: "プレイヤー名を入力してください。",
+  PASSWORD_INVALID: "パスワードは4文字以上128文字以内で入力してください。",
+  ALREADY_EXISTS: "そのプレイヤー名はすでに使われています。",
+  INVALID_CREDENTIALS: "プレイヤー名またはパスワードが違います。",
+  UNKNOWN: "アカウント処理に失敗しました。",
+};
+
+function authMessage(code: unknown) {
+  return typeof code === "string" ? errorMessages[code] ?? errorMessages.UNKNOWN : errorMessages.UNKNOWN;
+}
+
 export function GameLobby() {
   const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
   const [avatarColor, setAvatarColor] = useState(fallbackAvatarColor);
   const [avatarImage, setAvatarImage] = useState<string | null>(defaultAvatarImage);
   const [message, setMessage] = useState("");
+  const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [isSaving, setIsSaving] = useState(false);
-  const isLoggedIn = Boolean(name.trim());
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -62,9 +82,11 @@ export function GameLobby() {
           setAvatarImage(pickRandomDefaultAvatarImage());
           return;
         }
+
         setName(session.name);
         setAvatarColor(session.avatarColor);
         setAvatarImage(session.avatarImage || defaultAvatarImage);
+        setIsLoggedIn(isPlayerAuthenticated());
       })
       .catch(() => undefined);
 
@@ -72,21 +94,45 @@ export function GameLobby() {
       isMounted = false;
     };
   }, []);
-  const saveProfile = async () => {
-    const loginName = normalizePlayerName(name);
+
+  const applySession = (session: PlayerSession) => {
+    savePlayerSession(session);
+    markPlayerAuthenticated();
+    setName(session.name);
+    setAvatarColor(session.avatarColor);
+    setAvatarImage(session.avatarImage || defaultAvatarImage);
+    setPassword("");
+    setIsLoggedIn(true);
+  };
+
+  const submitAccount = async () => {
+    const trimmedName = name.trim();
     setIsSaving(true);
     setMessage("");
 
     try {
-      const result = await savePersistentPlayerSession({
-        name: loginName,
-        avatarColor,
-        avatarImage,
+      const response = await fetch("/api/player-account", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: authMode,
+          name: trimmedName,
+          password,
+          avatarColor,
+          avatarImage,
+        }),
       });
-      setName(result.session.name);
-      setAvatarColor(result.session.avatarColor);
-      setAvatarImage(result.session.avatarImage || defaultAvatarImage);
-      setMessage(result.persistent ? "ログインしました。" : "ローカルに保存しました。永続化にはストレージ設定が必要です。");
+      const data = (await response.json()) as { session?: PlayerSession; error?: string };
+
+      if (!response.ok || !data.session) {
+        setMessage(authMessage(data.error));
+        return;
+      }
+
+      applySession(data.session);
+      setMessage(authMode === "register" ? "アカウントを作成してログインしました。" : "ログインしました。");
+    } catch {
+      setMessage("通信に失敗しました。もう一度試してください。");
     } finally {
       setIsSaving(false);
     }
@@ -97,8 +143,10 @@ export function GameLobby() {
     localStorage.removeItem("wordwolf-last-room");
     localStorage.removeItem("wordwolf-last-player");
     setName("");
+    setPassword("");
     setAvatarColor(makeRandomAvatarColor());
     setAvatarImage(pickRandomDefaultAvatarImage());
+    setIsLoggedIn(false);
     setMessage("ログアウトしました。");
   };
 
@@ -111,7 +159,7 @@ export function GameLobby() {
             <div>
               <h1 className="text-3xl font-black tracking-normal sm:text-4xl">ゲームロビー</h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-200">
-                ここでプレイヤー登録をして、遊ぶゲームを選びます。
+                プレイヤーアカウントでログインして、遊ぶゲームを選びます。
               </p>
             </div>
             <div className="flex items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-3 py-2">
@@ -124,7 +172,7 @@ export function GameLobby() {
                 aria-hidden="true"
               />
               <span className="max-w-[160px] truncate text-sm font-semibold text-cyan-50">
-                {isLoggedIn ? name : "未登録"}
+                {isLoggedIn ? name : "未ログイン"}
               </span>
             </div>
           </div>
@@ -135,8 +183,8 @@ export function GameLobby() {
         <aside className="rounded-lg border border-white/10 bg-white/[0.96] p-4 shadow-[0_18px_50px_rgba(15,23,42,0.18)]">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold uppercase text-cyan-700">Player</p>
-              <h2 className="text-lg font-bold text-slate-950">プレイヤー登録</h2>
+              <p className="text-xs font-semibold uppercase text-cyan-700">Account</p>
+              <h2 className="text-lg font-bold text-slate-950">プレイヤーアカウント</h2>
             </div>
             {isLoggedIn && (
               <button
@@ -149,27 +197,69 @@ export function GameLobby() {
             )}
           </div>
 
+          {!isLoggedIn && (
+            <div className="mt-4 grid grid-cols-2 gap-2 rounded-lg bg-slate-100 p-1">
+              {([
+                ["login", "ログイン"],
+                ["register", "新規作成"],
+              ] as const).map(([mode, label]) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => {
+                    setAuthMode(mode);
+                    setMessage("");
+                  }}
+                  className={`rounded-md px-3 py-2 text-sm font-semibold transition ${
+                    authMode === mode
+                      ? "bg-white text-slate-950 shadow-sm"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+
           <label className="mt-4 block text-sm font-medium text-slate-700">
             プレイヤー名
             <input
               value={name}
               onChange={(event) => setName(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") void saveProfile();
-              }}
-              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
-              placeholder="空欄なら自動生成"
+              disabled={isLoggedIn}
+              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 disabled:bg-slate-100"
+              placeholder="例: yusuke"
             />
           </label>
 
-          <button
-            type="button"
-            onClick={() => void saveProfile()}
-            disabled={isSaving}
-            className="mt-4 w-full rounded-lg bg-cyan-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-500 disabled:bg-slate-300"
-          >
-            {isSaving ? "ログイン中..." : "ログイン"}
-          </button>
+          {!isLoggedIn && (
+            <label className="mt-3 block text-sm font-medium text-slate-700">
+              パスワード
+              <input
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") void submitAccount();
+                }}
+                type="password"
+                autoComplete={authMode === "register" ? "new-password" : "current-password"}
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                placeholder="4文字以上"
+              />
+            </label>
+          )}
+
+          {!isLoggedIn && (
+            <button
+              type="button"
+              onClick={() => void submitAccount()}
+              disabled={isSaving}
+              className="mt-4 w-full rounded-lg bg-cyan-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-500 disabled:bg-slate-300"
+            >
+              {isSaving ? "確認中..." : authMode === "register" ? "アカウント作成" : "ログイン"}
+            </button>
+          )}
 
           {message && (
             <p className="mt-3 rounded-lg border border-cyan-100 bg-cyan-50 px-3 py-2 text-sm font-semibold text-cyan-800">
@@ -205,7 +295,7 @@ export function GameLobby() {
                     <span className={`inline-flex rounded-lg px-3 py-2 text-sm font-semibold shadow-sm ${
                       isLoggedIn ? "bg-cyan-600 text-white" : "bg-slate-200 text-slate-500"
                     }`}>
-                      {isLoggedIn ? "遊ぶ" : "登録してから遊ぶ"}
+                      {isLoggedIn ? "遊ぶ" : "ログインしてから遊ぶ"}
                     </span>
                   ) : (
                     <span className="inline-flex rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-400">
@@ -232,7 +322,7 @@ export function GameLobby() {
               <button
                 key={game.title}
                 type="button"
-                onClick={() => setMessage("先にプレイヤー登録を保存してください。")}
+                onClick={() => setMessage("先にプレイヤーアカウントでログインしてください。")}
                 className="block text-left"
               >
                 {card}
