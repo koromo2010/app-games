@@ -11,7 +11,6 @@ import {
   makeRandomAvatarColor,
   normalizePlayerName,
   loadPersistentPlayerSession,
-  readPlayerSession,
   savePersistentPlayerSession,
 } from "@/lib/player-session";
 import {
@@ -466,10 +465,7 @@ function ClueLogPanel({ room }: { room: Room }) {
 export function WordWolfGame() {
   const [room, setRoom] = useState<Room | null>(null);
   const [activePlayerId, setActivePlayerId] = useState("");
-  const [playerName, setPlayerName] = useState(() => {
-    if (typeof window === "undefined") return "";
-    return readPlayerSession()?.name ?? "";
-  });
+  const [playerName, setPlayerName] = useState("");
   const [roomPassphrase, setRoomPassphrase] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [joinableRooms, setJoinableRooms] = useState<RoomChoice[]>([]);
@@ -477,16 +473,8 @@ export function WordWolfGame() {
   const [clueInput, setClueInput] = useState("");
   const [guessInput, setGuessInput] = useState("");
   const [error, setError] = useState("");
-  const [avatarColor, setAvatarColor] = useState(() => {
-    const randomColor = makeRandomAvatarColor();
-    if (typeof window === "undefined") return randomColor;
-    const savedSession = readPlayerSession();
-    return savedSession?.avatarColor ?? randomColor;
-  });
-  const [avatarImage, setAvatarImage] = useState<string | null>(() => {
-    if (typeof window === "undefined") return null;
-    return readPlayerSession()?.avatarImage ?? null;
-  });
+  const [avatarColor, setAvatarColor] = useState(fallbackAvatarColor);
+  const [avatarImage, setAvatarImage] = useState<string | null>(null);
   const [isAvatarPickerOpen, setIsAvatarPickerOpen] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [isDebugAuthing, setIsDebugAuthing] = useState(false);

@@ -9,7 +9,6 @@ import {
   normalizePlayerName,
   pickRandomDefaultAvatarImage,
   loadPersistentPlayerSession,
-  readPlayerSession,
   savePersistentPlayerSession,
   clearPlayerSession,
 } from "@/lib/player-session";
@@ -45,18 +44,9 @@ const games = [
 ];
 
 export function GameLobby() {
-  const [name, setName] = useState(() => {
-    if (typeof window === "undefined") return "";
-    return readPlayerSession()?.name ?? "";
-  });
-  const [avatarColor, setAvatarColor] = useState(() => {
-    if (typeof window === "undefined") return fallbackAvatarColor;
-    return readPlayerSession()?.avatarColor ?? makeRandomAvatarColor();
-  });
-  const [avatarImage, setAvatarImage] = useState<string | null>(() => {
-    if (typeof window === "undefined") return defaultAvatarImage;
-    return readPlayerSession()?.avatarImage || pickRandomDefaultAvatarImage();
-  });
+  const [name, setName] = useState("");
+  const [avatarColor, setAvatarColor] = useState(fallbackAvatarColor);
+  const [avatarImage, setAvatarImage] = useState<string | null>(defaultAvatarImage);
   const [message, setMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const isLoggedIn = Boolean(name.trim());
@@ -66,7 +56,12 @@ export function GameLobby() {
 
     loadPersistentPlayerSession()
       .then((session) => {
-        if (!isMounted || !session) return;
+        if (!isMounted) return;
+        if (!session) {
+          setAvatarColor(makeRandomAvatarColor());
+          setAvatarImage(pickRandomDefaultAvatarImage());
+          return;
+        }
         setName(session.name);
         setAvatarColor(session.avatarColor);
         setAvatarImage(session.avatarImage || defaultAvatarImage);
