@@ -2395,7 +2395,6 @@ export function WordWolfGame() {
                       </button>
                     ))}
                   </div>
-                  <VoteHistoryPanel room={room} />
                 </div>
               )}
               {room.phase === "wolfGuess" && (
