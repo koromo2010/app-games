@@ -1,15 +1,22 @@
 import {
   normalizeTopicDictionarySource,
+  getTopicKey,
+  getTopicWords,
   normalizeTopicPairDistance,
+  normalizeTopicWord,
   isValidWordWolfTopic,
   pickFallbackTopic,
   type TopicDictionarySource,
   type TopicPairDistance,
   type WordWolfTopic,
 } from "@/lib/wordwolf";
+import { redisCommand } from "@/lib/redis-store";
 
 const baseTopicPrompt =
   "ワードウルフ用のお題ペアを1組作ってください。3-6人で3周ほど話す前提です。一般的な日本語名詞で、共通点を話せるが同じ言葉の言い換えではない組み合わせにしてください。JSONのみで返してください: {\"villageWord\":\"...\",\"wolfWord\":\"...\",\"reason\":\"...\"}";
+
+const usedPairKey = "wordwolf:topic:pairs";
+const dailyWordKeyPrefix = "wordwolf:topic:daily-words:";
 
 function isLlmEnabled(dictionarySource: TopicDictionarySource) {
   return dictionarySource === "llm" && process.env.WORDWOLF_USE_LLM === "true" && Boolean(process.env.OPENAI_API_KEY);
@@ -32,6 +39,54 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
       },
     );
   });
+}
+
+function getJstDateKey() {
+  return new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+function getDailyWordKey(dateKey = getJstDateKey()) {
+  return `${dailyWordKeyPrefix}${dateKey}`;
+}
+
+function normalizeList(values: string[]) {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
+function isTopicAllowed(topic: WordWolfTopic, excludeKeys: string[], excludeWords: string[]) {
+  const excludedKeys = new Set(excludeKeys);
+  const excludedWords = new Set(excludeWords.map(normalizeTopicWord).filter(Boolean));
+
+  return !excludedKeys.has(getTopicKey(topic)) && getTopicWords(topic).every((word) => !excludedWords.has(word));
+}
+
+async function loadStoredTopicUsage() {
+  try {
+    const [usedPairs, dailyWords] = await Promise.all([
+      redisCommand<string[]>(["SMEMBERS", usedPairKey]),
+      redisCommand<string[]>(["SMEMBERS", getDailyWordKey()]),
+    ]);
+
+    return {
+      usedPairs: Array.isArray(usedPairs) ? usedPairs : [],
+      dailyWords: Array.isArray(dailyWords) ? dailyWords : [],
+    };
+  } catch {
+    return { usedPairs: [], dailyWords: [] };
+  }
+}
+
+async function rememberStoredTopicUsage(topic: WordWolfTopic) {
+  try {
+    const dailyWordKey = getDailyWordKey();
+    await Promise.all([
+      redisCommand<number>(["SADD", usedPairKey, getTopicKey(topic)]),
+      redisCommand<number>(["SADD", dailyWordKey, ...getTopicWords(topic)]),
+      redisCommand<number>(["EXPIRE", dailyWordKey, 60 * 60 * 24 * 3]),
+    ]);
+  } catch {
+    // Topic history is best-effort; generation still works when Redis is unavailable.
+  }
 }
 
 function parseTopic(text: string, pairDistance: TopicPairDistance): WordWolfTopic | null {
@@ -60,19 +115,14 @@ function getTopicRequestOptions(request: Request) {
   const legacyMode = url.searchParams.get("mode");
 
   return {
-    excludeKeys:
-      url.searchParams
-        .get("exclude")
-        ?.split(",")
-        .map((key) => key.trim())
-        .filter(Boolean)
-        .slice(0, 30) ?? [],
+    excludeKeys: normalizeList(url.searchParams.get("exclude")?.split(",") ?? []).slice(0, 500),
+    excludeWords: normalizeList(url.searchParams.get("excludeWords")?.split(",") ?? []).slice(0, 500),
     dictionarySource: normalizeTopicDictionarySource(url.searchParams.get("source") ?? legacyMode),
     pairDistance: normalizeTopicPairDistance(url.searchParams.get("distance") ?? legacyMode),
   };
 }
 
-async function generateLlmTopic(excludeKeys: string[], pairDistance: TopicPairDistance) {
+async function generateLlmTopic(excludeKeys: string[], excludeWords: string[], pairDistance: TopicPairDistance) {
   const { default: OpenAI } = await import("openai");
   const client = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -92,10 +142,16 @@ async function generateLlmTopic(excludeKeys: string[], pairDistance: TopicPairDi
       ? `${baseTopicPrompt}\n${distancePrompt}\n最近出たので避けるペア: ${excludeKeys.join(", ")}`
       : `${baseTopicPrompt}\n${distancePrompt}`;
 
+  const avoidLines = [
+    "match semantic layer: object with object, place with place, activity/concept with activity/concept, person/living thing with the same kind; do not pair an object with a place or abstract concept.",
+    excludeWords.length > 0 ? `exclude words used today: ${excludeWords.join(", ")}` : "",
+  ].filter(Boolean);
+  const promptWithExclusions = `${prompt}${avoidLines.length > 0 ? `\n${avoidLines.join("\n")}` : ""}`;
+
   const response = await withTimeout(
     client.responses.create({
       model: "gpt-4.1-mini",
-      input: prompt,
+      input: promptWithExclusions,
     }),
     4500,
   );
@@ -104,17 +160,35 @@ async function generateLlmTopic(excludeKeys: string[], pairDistance: TopicPairDi
 }
 
 export async function GET(request: Request) {
-  const { excludeKeys, dictionarySource, pairDistance } = getTopicRequestOptions(request);
+  const { excludeKeys, excludeWords, dictionarySource, pairDistance } = getTopicRequestOptions(request);
+  const storedUsage = await loadStoredTopicUsage();
+  const allExcludeKeys = normalizeList([...excludeKeys, ...storedUsage.usedPairs]);
+  const allExcludeWords = normalizeList([...excludeWords, ...storedUsage.dailyWords]);
+
+  const fallbackTopic = () => pickFallbackTopic(allExcludeKeys, dictionarySource, pairDistance, allExcludeWords);
 
   if (!isLlmEnabled(dictionarySource)) {
-    return Response.json(pickFallbackTopic(excludeKeys, dictionarySource, pairDistance));
+    const topic = fallbackTopic();
+    await rememberStoredTopicUsage(topic);
+    return Response.json(topic);
   }
 
   try {
-    const topic = await generateLlmTopic(excludeKeys, pairDistance);
-    return Response.json(topic ?? pickFallbackTopic(excludeKeys, dictionarySource, pairDistance));
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const topic = await generateLlmTopic(allExcludeKeys, allExcludeWords, pairDistance);
+      if (topic && isTopicAllowed(topic, allExcludeKeys, allExcludeWords)) {
+        await rememberStoredTopicUsage(topic);
+        return Response.json(topic);
+      }
+    }
+
+    const topic = fallbackTopic();
+    await rememberStoredTopicUsage(topic);
+    return Response.json(topic);
   } catch (error) {
     console.error("[wordwolf/topic] falling back to local topic", error);
-    return Response.json(pickFallbackTopic(excludeKeys, dictionarySource, pairDistance));
+    const topic = fallbackTopic();
+    await rememberStoredTopicUsage(topic);
+    return Response.json(topic);
   }
 }

@@ -23,9 +23,12 @@ export type WordWolfTopic = {
 
 type TopicCandidate = Omit<WordWolfTopic, "source">;
 
+type TopicLayer = "object" | "place" | "activity" | "person" | "living";
+
 type TopicSet = {
   id: string;
   label: string;
+  layer: TopicLayer;
   words: readonly string[];
 };
 
@@ -71,12 +74,12 @@ const curatedWidePairTopics: TopicCandidate[] = [
 ];
 
 const jaDailySets: TopicSet[] = [
-  { id: "food", label: "日本語日常: 食べ物", words: ["カレー", "ラーメン", "ピザ", "寿司", "天ぷら", "弁当", "サンドイッチ", "お好み焼き", "牛丼", "焼肉"] },
-  { id: "outing", label: "日本語日常: 外出先", words: ["映画館", "図書館", "本屋", "水族館", "動物園", "美術館", "温泉", "ホテル", "カラオケ", "ゲームセンター"] },
-  { id: "transport", label: "日本語日常: 移動", words: ["電車", "バス", "タクシー", "自転車", "新幹線", "飛行機", "駅", "空港", "レンタカー", "フェリー"] },
-  { id: "home", label: "日本語日常: 暮らし", words: ["冷蔵庫", "洗濯機", "掃除機", "電子レンジ", "エアコン", "テレビ", "財布", "鍵", "傘", "カレンダー"] },
-  { id: "work", label: "日本語日常: 学校・仕事", words: ["宿題", "会議", "資料", "発表", "ノート", "メール", "名刺", "教科書", "面接", "締切"] },
-  { id: "drink", label: "日本語日常: 飲み物", words: ["コーヒー", "紅茶", "緑茶", "ジュース", "牛乳", "炭酸水", "味噌汁", "スープ", "水", "スポーツドリンク"] },
+  { id: "food", label: "日本語日常: 食べ物", layer: "object", words: ["カレー", "ラーメン", "ピザ", "寿司", "天ぷら", "弁当", "サンドイッチ", "お好み焼き", "牛丼", "焼肉"] },
+  { id: "outing", label: "日本語日常: 外出先", layer: "place", words: ["映画館", "図書館", "本屋", "水族館", "動物園", "美術館", "温泉", "ホテル", "カラオケ", "ゲームセンター"] },
+  { id: "transport", label: "日本語日常: 移動", layer: "object", words: ["電車", "バス", "タクシー", "自転車", "新幹線", "飛行機", "駅", "空港", "レンタカー", "フェリー"] },
+  { id: "home", label: "日本語日常: 暮らし", layer: "object", words: ["冷蔵庫", "洗濯機", "掃除機", "電子レンジ", "エアコン", "テレビ", "財布", "鍵", "傘", "カレンダー"] },
+  { id: "work", label: "日本語日常: 学校・仕事", layer: "activity", words: ["宿題", "会議", "資料", "発表", "ノート", "メール", "名刺", "教科書", "面接", "締切"] },
+  { id: "drink", label: "日本語日常: 飲み物", layer: "object", words: ["コーヒー", "紅茶", "緑茶", "ジュース", "牛乳", "炭酸水", "味噌汁", "スープ", "水", "スポーツドリンク"] },
 ];
 
 const jaDailyWideGroups: TopicGroup[] = [
@@ -88,19 +91,19 @@ const jaDailyWideGroups: TopicGroup[] = [
 ];
 
 const enCommonSets: TopicSet[] = [
-  { id: "animals", label: "English common: animals", words: ["dog", "cat", "horse", "rabbit", "lion", "tiger", "bear", "monkey", "penguin", "dolphin"] },
-  { id: "sports", label: "English common: sports", words: ["baseball", "basketball", "tennis", "golf", "swimming", "running", "boxing", "skiing", "volleyball", "cycling"] },
-  { id: "tools", label: "English common: tools", words: ["hammer", "scissors", "knife", "spoon", "camera", "phone", "laptop", "printer", "clock", "backpack"] },
-  { id: "places", label: "English common: places", words: ["school", "hospital", "airport", "museum", "library", "restaurant", "beach", "park", "station", "theater"] },
-  { id: "nature", label: "English common: nature", words: ["mountain", "river", "forest", "ocean", "flower", "rain", "snow", "wind", "island", "desert"] },
-  { id: "jobs", label: "English common: jobs", words: ["doctor", "teacher", "chef", "driver", "artist", "engineer", "farmer", "pilot", "nurse", "writer"] },
+  { id: "animals", label: "English common: animals", layer: "living", words: ["dog", "cat", "horse", "rabbit", "lion", "tiger", "bear", "monkey", "penguin", "dolphin"] },
+  { id: "sports", label: "English common: sports", layer: "activity", words: ["baseball", "basketball", "tennis", "golf", "swimming", "running", "boxing", "skiing", "volleyball", "cycling"] },
+  { id: "tools", label: "English common: tools", layer: "object", words: ["hammer", "scissors", "knife", "spoon", "camera", "phone", "laptop", "printer", "clock", "backpack"] },
+  { id: "places", label: "English common: places", layer: "place", words: ["school", "hospital", "airport", "museum", "library", "restaurant", "beach", "park", "station", "theater"] },
+  { id: "nature", label: "English common: nature", layer: "place", words: ["mountain", "river", "forest", "ocean", "flower", "rain", "snow", "wind", "island", "desert"] },
+  { id: "jobs", label: "English common: jobs", layer: "person", words: ["doctor", "teacher", "chef", "driver", "artist", "engineer", "farmer", "pilot", "nurse", "writer"] },
 ];
 
 const enCommonWideGroups: TopicGroup[] = [
   { label: "active things", setIds: ["animals", "sports"] },
   { label: "public life", setIds: ["places", "jobs"] },
   { label: "daily objects", setIds: ["tools", "places"] },
-  { label: "outdoors", setIds: ["nature", "sports"] },
+  { label: "outdoor places", setIds: ["places", "nature"] },
   { label: "human and nature", setIds: ["jobs", "nature"] },
 ];
 
@@ -179,8 +182,12 @@ export function normalizeTopicPairDistance(value: unknown): TopicPairDistance {
   return splitTopicSourceMode(normalizeTopicSourceMode(value)).pairDistance;
 }
 
-function normalizeTopicWord(word: string) {
+export function normalizeTopicWord(word: string) {
   return word.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+export function getTopicWords(topic: Pick<WordWolfTopic, "villageWord" | "wolfWord">) {
+  return [normalizeTopicWord(topic.villageWord), normalizeTopicWord(topic.wolfWord)].filter(Boolean);
 }
 
 export function normalizeGuess(word: string) {
@@ -198,11 +205,26 @@ export function isValidWordWolfTopic(topic: Pick<WordWolfTopic, "villageWord" | 
   return villageWord.length > 0 && wolfWord.length > 0 && villageWord !== wolfWord;
 }
 
-function pickFromCandidates(candidates: TopicCandidate[], excludeKeys: string[]): WordWolfTopic {
+function pickFromCandidates(
+  candidates: TopicCandidate[],
+  excludeKeys: string[],
+  excludeWords: string[] = [],
+): WordWolfTopic {
   const excluded = new Set(excludeKeys);
+  const excludedWords = new Set(excludeWords.map(normalizeTopicWord).filter(Boolean));
   const validCandidates = candidates.filter(isValidWordWolfTopic);
-  const remaining = validCandidates.filter((topic) => !excluded.has(getTopicKey(topic)));
-  const pool = remaining.length > 0 ? remaining : validCandidates.length > 0 ? validCandidates : curatedPairTopics;
+  const freshCandidates = validCandidates.filter(
+    (topic) => !excluded.has(getTopicKey(topic)) && getTopicWords(topic).every((word) => !excludedWords.has(word)),
+  );
+  const unusedPairCandidates = validCandidates.filter((topic) => !excluded.has(getTopicKey(topic)));
+  const pool =
+    freshCandidates.length > 0
+      ? freshCandidates
+      : unusedPairCandidates.length > 0
+        ? unusedPairCandidates
+        : validCandidates.length > 0
+          ? validCandidates
+          : curatedPairTopics;
   const topic = randomItem(pool);
   return { ...topic, source: "fallback" };
 }
@@ -264,7 +286,15 @@ function makeWideCandidates(
     const groupSets = group.setIds.map((id) => setMap.get(id)).filter((set): set is TopicSet => Boolean(set));
     if (groupSets.length < 2) continue;
 
-    const [firstSet, secondSet] = sampleTwo(groupSets);
+    const layerGroups = new Map<TopicLayer, TopicSet[]>();
+    for (const set of groupSets) {
+      layerGroups.set(set.layer, [...(layerGroups.get(set.layer) ?? []), set]);
+    }
+
+    const alignedSetGroups = [...layerGroups.values()].filter((setsInLayer) => setsInLayer.length >= 2);
+    if (alignedSetGroups.length === 0) continue;
+
+    const [firstSet, secondSet] = sampleTwo(randomItem(alignedSetGroups));
     const shuffledFirst = shuffle(firstSet.words);
     const shuffledSecond = shuffle(secondSet.words);
     const pairCount = Math.min(shuffledFirst.length, shuffledSecond.length, 4);
@@ -311,9 +341,10 @@ export function pickFallbackTopic(
   excludeKeys: string[] = [],
   dictionarySource: TopicDictionarySource = "curated-pairs",
   pairDistance: TopicPairDistance = "balanced",
+  excludeWords: string[] = [],
 ): WordWolfTopic {
   const localSource = dictionarySource === "llm" ? "llm" : normalizeTopicDictionarySource(dictionarySource);
   const distance = normalizeTopicPairDistance(pairDistance);
 
-  return pickFromCandidates(localTopicDecks[localSource][distance], excludeKeys);
+  return pickFromCandidates(localTopicDecks[localSource][distance], excludeKeys, excludeWords);
 }

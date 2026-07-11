@@ -16,6 +16,7 @@ import {
 } from "@/lib/player-session";
 import {
   getTopicKey,
+  getTopicWords,
   isValidWordWolfTopic,
   normalizeGuess,
   normalizeTopicDictionarySource,
@@ -154,7 +155,8 @@ const turnTimeLimitOptions = [0, 30, 60, 90, 120];
 const noWolfChance = 0.1;
 const roomStoragePrefix = "wordwolf-room-";
 const topicHistoryKey = "wordwolf-topic-history";
-const topicHistoryLimit = 30;
+const topicDailyWordHistoryKey = "wordwolf-topic-daily-words";
+const topicRequestHistoryLimit = 500;
 const panelClass = "rounded-lg border border-white/10 bg-white/[0.96] p-4 shadow-[0_18px_50px_rgba(15,23,42,0.16)]";
 const mutedPanelClass = "rounded-lg border border-slate-200 bg-slate-50/90";
 const inputClass =
@@ -475,6 +477,10 @@ function fillSoloTestPlayers(players: Player[]) {
   return nextPlayers;
 }
 
+function getJstDateKey() {
+  return new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
 function loadTopicHistory() {
   try {
     const parsed = JSON.parse(localStorage.getItem(topicHistoryKey) || "[]");
@@ -484,10 +490,26 @@ function loadTopicHistory() {
   }
 }
 
+function loadDailyTopicWords() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(topicDailyWordHistoryKey) || "{}") as {
+      date?: unknown;
+      words?: unknown;
+    };
+    if (parsed.date !== getJstDateKey() || !Array.isArray(parsed.words)) return [];
+    return parsed.words.filter((item): item is string => typeof item === "string");
+  } catch {
+    return [];
+  }
+}
+
 function rememberTopic(topic: WordWolfTopic) {
   const key = getTopicKey(topic);
   const history = loadTopicHistory().filter((item) => item !== key);
-  localStorage.setItem(topicHistoryKey, JSON.stringify([key, ...history].slice(0, topicHistoryLimit)));
+  localStorage.setItem(topicHistoryKey, JSON.stringify([key, ...history]));
+
+  const dailyWords = new Set([...loadDailyTopicWords(), ...getTopicWords(topic)]);
+  localStorage.setItem(topicDailyWordHistoryKey, JSON.stringify({ date: getJstDateKey(), words: [...dailyWords] }));
 }
 
 async function fetchTopicWithFallback(
@@ -496,10 +518,15 @@ async function fetchTopicWithFallback(
 ): Promise<WordWolfTopic> {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), 1500);
-  const history = loadTopicHistory().slice(0, topicHistoryLimit);
+  const history = loadTopicHistory();
+  const requestHistory = history.slice(0, topicRequestHistoryLimit);
+  const dailyWords = loadDailyTopicWords();
   const params = new URLSearchParams({ source: dictionarySource, distance: pairDistance });
-  if (history.length > 0) {
-    params.set("exclude", history.join(","));
+  if (requestHistory.length > 0) {
+    params.set("exclude", requestHistory.join(","));
+  }
+  if (dailyWords.length > 0) {
+    params.set("excludeWords", dailyWords.join(","));
   }
 
   try {
@@ -508,14 +535,14 @@ async function fetchTopicWithFallback(
     });
 
     if (!response.ok) {
-      const topic = pickFallbackTopic(history, dictionarySource, pairDistance);
+      const topic = pickFallbackTopic(history, dictionarySource, pairDistance, dailyWords);
       rememberTopic(topic);
       return topic;
     }
 
     const topic = (await response.json()) as WordWolfTopic;
     if (!isValidWordWolfTopic(topic)) {
-      const fallbackTopic = pickFallbackTopic(history, dictionarySource, pairDistance);
+      const fallbackTopic = pickFallbackTopic(history, dictionarySource, pairDistance, dailyWords);
       rememberTopic(fallbackTopic);
       return fallbackTopic;
     }
@@ -523,7 +550,7 @@ async function fetchTopicWithFallback(
     rememberTopic(topic);
     return topic;
   } catch {
-    const topic = pickFallbackTopic(history, dictionarySource, pairDistance);
+    const topic = pickFallbackTopic(history, dictionarySource, pairDistance, dailyWords);
     rememberTopic(topic);
     return topic;
   } finally {
