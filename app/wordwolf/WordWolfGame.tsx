@@ -405,7 +405,7 @@ function createEmptyRoom(
     passphrase,
     phase: "lobby",
     gameMode: "wordwolf",
-    clueLogVisibility: "result",
+    clueLogVisibility: "always",
     clueMode: "turn",
     randomizeTurnOrder: true,
     players: [player],
@@ -685,20 +685,20 @@ function VoteHistoryPanel({ room }: { room: Room }) {
 
 function ClueLogPanel({ room }: { room: Room }) {
   return (
-    <div className={panelClass}>
-      <div className="flex items-center justify-between gap-3">
+    <div className="rounded-lg border border-slate-200 bg-white/[0.96] p-3 shadow-[0_12px_34px_rgba(15,23,42,0.12)]">
+      <div className="flex items-center justify-between gap-2">
         <div>
           <p className="text-xs font-semibold uppercase text-cyan-700">Timeline</p>
-          <h2 className="text-xl font-bold text-slate-950">発言ログ</h2>
+          <h2 className="text-lg font-black text-slate-950">{"\u767a\u8a00\u30ed\u30b0"}</h2>
         </div>
-        <span className="rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
+        <span className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">
           {room.clues.length} posts
         </span>
       </div>
-      <div className="mt-4 space-y-3">
+      <div className="mt-3 grid gap-1.5">
         {room.clues.length === 0 ? (
-          <p className={`${mutedPanelClass} px-3 py-6 text-center text-sm text-slate-500`}>
-            まだ投稿はありません。
+          <p className={`${mutedPanelClass} px-3 py-4 text-center text-sm text-slate-500`}>
+            {"\u307e\u3060\u6295\u7a3f\u306f\u3042\u308a\u307e\u305b\u3093\u3002"}
           </p>
         ) : (
           room.clues.map((clue) => {
@@ -706,13 +706,15 @@ function ClueLogPanel({ room }: { room: Room }) {
             return (
               <div
                 key={`${clue.playerId}-${clue.round}-${clue.at}`}
-                className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm"
+                className="grid gap-2 rounded border border-slate-200 bg-slate-50/80 px-2.5 py-2 text-sm sm:grid-cols-[88px_1fr]"
               >
-                <div className="flex items-center justify-between gap-3">
-                  <p className="font-semibold text-slate-950">{player?.name ?? "Unknown"}</p>
-                  <p className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-500">{clue.round}周目</p>
+                <div className="flex min-w-0 items-center gap-1.5 sm:block">
+                  <p className="truncate text-xs font-bold text-slate-950">{player?.name ?? "Unknown"}</p>
+                  <p className="shrink-0 rounded bg-white px-1.5 py-0.5 text-[11px] font-semibold text-slate-500 sm:mt-1 sm:inline-block">
+                    {clue.round}{"\u5468\u76ee"}
+                  </p>
                 </div>
-                <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-slate-700">{clue.text}</p>
+                <p className="min-w-0 whitespace-pre-wrap break-words leading-5 text-slate-700">{clue.text}</p>
               </div>
             );
           })
@@ -915,7 +917,9 @@ export function WordWolfGame() {
         : 0
     : 0;
   const shouldShowClueLog = Boolean(
-    room && (room.clueLogVisibility === "always" || room.phase === "result"),
+    room &&
+      room.phase !== "lobby" &&
+      (room.clueLogVisibility === "always" || room.clueMode === "simultaneous" || room.phase === "result"),
   );
   const turnSecondsLeft = room?.currentTurnStartedAt && phaseTimeLimitSeconds > 0
     ? Math.max(
