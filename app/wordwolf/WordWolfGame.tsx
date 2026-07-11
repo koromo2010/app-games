@@ -51,7 +51,7 @@ import {
   getVoteTarget,
   getVoteVoters,
   hasPostedClueThisRound,
-  pickWolf,
+  pickWolves,
   shufflePlayers,
 } from "./game-flow";
 import { ClueLogPanel, VoteHistoryPanel } from "./WordWolfPanels";
@@ -103,6 +103,23 @@ function normalizeVoteHistory(value: unknown): VoteRound[] {
 
 function normalizeRunoffCandidateIds(value: unknown) {
   return Array.isArray(value) ? value.filter((candidateId): candidateId is string => typeof candidateId === "string") : null;
+}
+
+function normalizeWolfIds(room: Partial<Room>) {
+  const wolfIds = Array.isArray(room.wolfIds)
+    ? room.wolfIds.filter((wolfId): wolfId is string => typeof wolfId === "string")
+    : [];
+  if (wolfIds.length > 0) return [...new Set(wolfIds)];
+  return typeof room.wolfId === "string" ? [room.wolfId] : [];
+}
+
+function maxWolfCount(playerCount: number) {
+  return Math.max(1, Math.floor((Math.max(3, playerCount) - 1) / 2));
+}
+
+function normalizeWolfCount(value: unknown, playerCount: number) {
+  const count = typeof value === "number" && Number.isFinite(value) ? Math.floor(value) : 1;
+  return Math.max(1, Math.min(maxWolfCount(playerCount), count));
 }
 
 const lobbyRounds = [1, 2, 3, 4];
@@ -157,6 +174,8 @@ function loadRoom(code: string): Room | null {
       randomizeTurnOrder: room.randomizeTurnOrder ?? true,
       turnTimeLimitSeconds: room.turnTimeLimitSeconds ?? 0,
       currentTurnStartedAt: room.currentTurnStartedAt ?? null,
+      wolfIds: normalizeWolfIds(room),
+      wolfCount: normalizeWolfCount(room.wolfCount, room.players.length),
       voteHistory: normalizeVoteHistory(room.voteHistory),
       runoffCandidateIds: normalizeRunoffCandidateIds(room.runoffCandidateIds),
       topicDictionarySource: normalizeTopicDictionarySource(room.topicDictionarySource ?? room.topicSourceMode),
@@ -187,7 +206,7 @@ function listRooms(): Room[] {
 
 function listJoinableRooms(): RoomChoice[] {
   return listRooms()
-    .filter((room) => room.phase === "lobby" && room.players.length < 6)
+    .filter((room) => room.phase === "lobby")
     .map((room) => ({
       code: room.code,
       hostName: room.players.find((player) => player.id === room.hostId)?.name ?? "Unknown",
@@ -239,6 +258,8 @@ async function loadRoomFromStore(code: string) {
       randomizeTurnOrder: data.room.randomizeTurnOrder ?? true,
       turnTimeLimitSeconds: data.room.turnTimeLimitSeconds ?? 0,
       currentTurnStartedAt: data.room.currentTurnStartedAt ?? null,
+      wolfIds: normalizeWolfIds(data.room),
+      wolfCount: normalizeWolfCount(data.room.wolfCount, data.room.players.length),
       voteHistory: normalizeVoteHistory(data.room.voteHistory),
       runoffCandidateIds: normalizeRunoffCandidateIds(data.room.runoffCandidateIds),
       topicDictionarySource: normalizeTopicDictionarySource(data.room.topicDictionarySource ?? data.room.topicSourceMode),
@@ -274,6 +295,8 @@ async function loadActiveRoomFromStore(playerId: string) {
       randomizeTurnOrder: data.room.randomizeTurnOrder ?? true,
       turnTimeLimitSeconds: data.room.turnTimeLimitSeconds ?? 0,
       currentTurnStartedAt: data.room.currentTurnStartedAt ?? null,
+      wolfIds: normalizeWolfIds(data.room),
+      wolfCount: normalizeWolfCount(data.room.wolfCount, data.room.players.length),
       voteHistory: normalizeVoteHistory(data.room.voteHistory),
       runoffCandidateIds: normalizeRunoffCandidateIds(data.room.runoffCandidateIds),
       topicDictionarySource: normalizeTopicDictionarySource(data.room.topicDictionarySource ?? data.room.topicSourceMode),
@@ -352,6 +375,8 @@ function createEmptyRoom(
     currentTurnIndex: 0,
     currentTurnStartedAt: null,
     wolfId: null,
+    wolfIds: [],
+    wolfCount: 1,
     villageWord: "",
     wolfWord: "",
     topicReason: "",
@@ -623,8 +648,12 @@ export function WordWolfGame() {
 
   const currentPlayer = room?.players[room.currentTurnIndex] ?? null;
   const simultaneousNextCluePlayer = room?.phase === "clue" && room.clueMode === "simultaneous" ? getNextSimultaneousCluePlayer(room) : null;
-  const wolfPlayer = room?.players.find((player) => player.id === room.wolfId) ?? null;
+  const wolfIds = room ? normalizeWolfIds(room) : [];
+  const wolfPlayers = room?.players.filter((player) => wolfIds.includes(player.id)) ?? [];
+  const wolfPlayer = wolfPlayers[0] ?? null;
   const accusedPlayer = room?.players.find((player) => player.id === room.accusedId) ?? null;
+  const accusedIsWolf = Boolean(room?.accusedId && wolfIds.includes(room.accusedId));
+  const finalAnswerPlayer = accusedIsWolf ? accusedPlayer : wolfPlayer;
   const nextVotePlayer = room ? getNextVotePlayer(room) : null;
   const isDebugMode = Boolean(room?.debugMode);
   const clueActor = room?.clueMode === "simultaneous"
@@ -647,14 +676,14 @@ export function WordWolfGame() {
         : null
     : null;
   const voteDisplayPlayer = isDebugMode ? voteActor : activePlayer;
-  const guessActor = isDebugMode ? wolfPlayer : activePlayer;
+  const guessActor = isDebugMode ? finalAnswerPlayer : activePlayer;
   const isHost = Boolean(room && activePlayerId === room.hostId);
   const headerName = activePlayer?.name || playerName.trim() || "ゲスト";
   const headerAvatarColor = activePlayer?.avatarColor || avatarColor;
   const headerAvatarImage = activePlayer?.avatarImage || avatarImage || defaultAvatarImage;
   const displayWordPlayer = isDebugMode && room?.phase === "clue" ? clueActor : activePlayer;
   const ownWord = displayWordPlayer && room && room.phase !== "lobby"
-    ? displayWordPlayer.id === room.wolfId
+    ? wolfIds.includes(displayWordPlayer.id)
       ? room.wolfWord
       : room.villageWord
     : "";
@@ -663,7 +692,7 @@ export function WordWolfGame() {
     : room?.winner === "village"
       ? "村側の勝利"
       : "狼の勝利";
-  const hasWolfInCurrentGame = Boolean(room?.wolfId);
+  const hasWolfInCurrentGame = wolfIds.length > 0;
   const topicSourceLabel =
     room?.topicSource === "llm"
       ? room.topicDictionarySource === "proper-noun"
@@ -679,6 +708,9 @@ export function WordWolfGame() {
   const clueSubmittedCount = room?.phase === "clue" ? getClueSubmittedCount(room) : 0;
   const canSubmitClue = Boolean(clueActor) && (room?.clueMode === "simultaneous" || clueActor?.id === currentPlayer?.id);
   const voteCandidates = room ? getVoteCandidates(room) : [];
+  const wolfCountOptions = room
+    ? Array.from({ length: maxWolfCount(room.players.length) }, (_, index) => index + 1)
+    : [1];
   const isRunoffVote = Boolean(room?.runoffCandidateIds?.length);
   const runoffCandidateNames = room?.runoffCandidateIds
     ?.map((candidateId) => room.players.find((player) => player.id === candidateId)?.name)
@@ -716,8 +748,11 @@ export function WordWolfGame() {
       : "mx-auto grid max-w-6xl gap-4 px-4 py-5 lg:grid-cols-[340px_1fr]";
   const isMyClueTurn = Boolean(room?.phase === "clue" && canSubmitClue);
   const isMyVoteTurn = Boolean(room?.phase === "vote" && voteActor);
-  const isMyFinalAnswerTurn = Boolean(room?.phase === "wolfGuess" && guessActor?.id === room.wolfId);
+  const isMyFinalAnswerTurn = Boolean(room?.phase === "wolfGuess" && room.accusedId && guessActor?.id === room.accusedId && accusedIsWolf);
   const isMyActionTurn = isMyClueTurn || isMyVoteTurn || isMyFinalAnswerTurn;
+  const clueActorId = clueActor?.id ?? "";
+  const currentPlayerId = currentPlayer?.id ?? "";
+  const guessActorId = guessActor?.id ?? "";
   const phaseVisual = room
     ? room.phase === "clue"
       ? {
@@ -832,10 +867,6 @@ export function WordWolfGame() {
       return;
     }
     const existingPlayer = targetRoom.players.find((player) => player.id === playerAccountId);
-    if (!existingPlayer && targetRoom.players.length >= 6) {
-      setError("この部屋は6人で満員です。");
-      return;
-    }
 
     const player = existingPlayer ?? createPlayer(name, avatarColor, avatarImage, playerAccountId);
     const nextRoom = existingPlayer
@@ -1010,7 +1041,7 @@ export function WordWolfGame() {
   };
 
   const addSeat = () => {
-    if (!room || room.players.length >= 6) return;
+    if (!room) return;
     const playerNumber = room.players.length + 1;
     const player = createPlayer(`Player ${playerNumber}`);
     setAndSaveRoom({ ...room, players: [...room.players, player] });
@@ -1071,6 +1102,11 @@ export function WordWolfGame() {
     setAndSaveRoom({ ...room, gameMode });
   };
 
+  const setWolfCount = (wolfCount: number) => {
+    if (!room || room.phase !== "lobby") return;
+    setAndSaveRoom({ ...room, wolfCount: normalizeWolfCount(wolfCount, room.players.length) });
+  };
+
   const setClueMode = (clueMode: ClueMode) => {
     if (!room || room.phase !== "lobby") return;
     setAndSaveRoom({ ...room, clueMode });
@@ -1117,7 +1153,9 @@ export function WordWolfGame() {
       const basePlayers = room.debugMode ? fillSoloTestPlayers(room.players) : room.players;
       const players = room.randomizeTurnOrder ? shufflePlayers(basePlayers) : basePlayers;
       const shouldHaveWolf = room.gameMode === "wordwolf" || Math.random() >= noWolfChance;
-      const wolf = shouldHaveWolf ? pickWolf(players) : null;
+      const wolfCount = shouldHaveWolf ? normalizeWolfCount(room.wolfCount, players.length) : 0;
+      const wolves = shouldHaveWolf ? pickWolves(players, wolfCount) : [];
+      const wolfIds = wolves.map((wolf) => wolf.id);
       setAndSaveRoom({
         ...room,
         players,
@@ -1126,9 +1164,11 @@ export function WordWolfGame() {
         currentRound: 1,
         currentTurnIndex: 0,
         currentTurnStartedAt: Date.now(),
-        wolfId: wolf?.id ?? null,
+        wolfId: wolfIds[0] ?? null,
+        wolfIds,
+        wolfCount: Math.max(1, wolfCount),
         villageWord: topic.villageWord,
-        wolfWord: wolf ? topic.wolfWord : topic.villageWord,
+        wolfWord: wolves.length > 0 ? topic.wolfWord : topic.villageWord,
         topicReason: topic.reason,
         topicSource: topic.source,
         clues: [],
@@ -1148,6 +1188,7 @@ export function WordWolfGame() {
     }
   };
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const submitClue = useCallback(async (isTimeout = false) => {
     if (!room || room.phase !== "clue") return;
 
@@ -1165,7 +1206,7 @@ export function WordWolfGame() {
         latestRoom.currentRound === room.currentRound
           ? latestRoom
           : room;
-      const actorId = clueActor?.id ?? "";
+      const actorId = clueActorId;
       const actorInBaseRoom = baseRoom.players.find((player) => player.id === actorId);
       const clueTargets = getClueParticipants(baseRoom);
       const targetPlayers = isTimeout
@@ -1199,16 +1240,16 @@ export function WordWolfGame() {
       return;
     }
 
-    if (!clueActor || !currentPlayer) return;
+    if (!clueActorId || !currentPlayerId) return;
     const text = isTimeout ? timeoutText : clueInput.trim();
-    if (!text || clueActor.id !== currentPlayer.id) return;
+    if (!text || clueActorId !== currentPlayerId) return;
 
     const { isLastPlayer, nextTurnIndex } = getNextClueTurn(room);
     const isRunoffClue = Boolean(room.runoffCandidateIds?.length);
     const isLastRound = room.currentRound >= room.roundsTotal;
     const nextRoom: Room = {
       ...room,
-      clues: [...room.clues, createClue(clueActor.id, room.currentRound, text)],
+      clues: [...room.clues, createClue(clueActorId, room.currentRound, text)],
       currentTurnIndex: isLastPlayer ? getFirstClueTurnIndex(room) : nextTurnIndex,
       currentRound: isLastPlayer && !isRunoffClue && !isLastRound ? room.currentRound + 1 : room.currentRound,
       phase: isLastPlayer && (isRunoffClue || isLastRound) ? "vote" : "clue",
@@ -1217,21 +1258,21 @@ export function WordWolfGame() {
 
     setClueInput("");
     setAndSaveRoom(nextRoom);
-  }, [clueActor, clueInput, currentPlayer, room, setAndSaveRoom]);
+  }, [clueActorId, clueInput, currentPlayerId, room, setAndSaveRoom]); // eslint-disable-line react-hooks/preserve-manual-memoization
   useEffect(() => {
     if (
       !room ||
       room.phase !== "clue" ||
       room.turnTimeLimitSeconds <= 0 ||
       turnSecondsLeft !== 0 ||
-      (room.clueMode === "turn" && clueActor?.id !== currentPlayer?.id)
+      (room.clueMode === "turn" && clueActorId !== currentPlayerId)
     ) {
       return;
     }
 
     const timer = window.setTimeout(() => void submitClue(true), 0);
     return () => window.clearTimeout(timer);
-  }, [clueActor?.id, currentPlayer?.id, room, submitClue, turnSecondsLeft]);
+  }, [clueActorId, currentPlayerId, room, submitClue, turnSecondsLeft]);
 
   const isComposingEnter = (event: KeyboardEvent<HTMLElement>) =>
     event.nativeEvent.isComposing || event.keyCode === 229;
@@ -1325,7 +1366,7 @@ export function WordWolfGame() {
       }
 
       const accusedId = topTargetIds[0] ?? getVoteTarget(nextRoom, votes);
-      if (baseRoom.gameMode === "may-no-wolf" && !baseRoom.wolfId) {
+      if (baseRoom.gameMode === "may-no-wolf" && normalizeWolfIds(baseRoom).length === 0) {
         const loserName = nextRoom.players.find((player) => player.id === accusedId)?.name;
         setAndSaveRoom({
           ...nextRoom,
@@ -1342,7 +1383,8 @@ export function WordWolfGame() {
         return;
       }
 
-      if (accusedId && accusedId === baseRoom.wolfId) {
+      const baseWolfIds = normalizeWolfIds(baseRoom);
+      if (accusedId && baseWolfIds.includes(accusedId)) {
         setAndSaveRoom({
           ...nextRoom,
           phase: "wolfGuess",
@@ -1372,8 +1414,9 @@ export function WordWolfGame() {
     setAndSaveRoom({ ...nextRoom, currentTurnStartedAt: baseRoom.currentTurnStartedAt });
   }, [room, setAndSaveRoom, voteActor?.id]);
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const submitWolfGuess = useCallback(async (isTimeout = false) => {
-    if (!room || !guessActor || guessActor.id !== room.wolfId || isGuessJudging) return;
+    if (!room || !guessActorId || !room.accusedId || guessActorId !== room.accusedId || !normalizeWolfIds(room).includes(guessActorId) || isGuessJudging) return;
 
     const guess = isTimeout ? "\u6642\u9593\u5207\u308c" : guessInput.trim();
     if (!guess) return;
@@ -1420,7 +1463,7 @@ export function WordWolfGame() {
         ? "\u9006\u8ee2\u56de\u7b54\u3092\u6b63\u89e3\u6271\u3044\u306b\u3057\u307e\u3057\u305f\u3002\u72fc\u306e\u52dd\u5229\u3067\u3059\u3002"
         : "\u9006\u8ee2\u56de\u7b54\u306f\u4e0d\u6b63\u89e3\u6271\u3044\u3067\u3059\u3002\u6751\u5074\u306e\u52dd\u5229\u3067\u3059\u3002",
     });
-  }, [guessActor, guessInput, isGuessJudging, room, setAndSaveRoom]);
+  }, [guessActorId, guessInput, isGuessJudging, room, setAndSaveRoom]); // eslint-disable-line react-hooks/preserve-manual-memoization
 
   useEffect(() => {
     if (
@@ -1445,14 +1488,16 @@ export function WordWolfGame() {
       room.phase !== "wolfGuess" ||
       room.turnTimeLimitSeconds <= 0 ||
       turnSecondsLeft !== 0 ||
-      guessActor?.id !== room.wolfId
+      !room.accusedId ||
+      guessActorId !== room.accusedId ||
+      !normalizeWolfIds(room).includes(guessActorId)
     ) {
       return;
     }
 
     const timer = window.setTimeout(() => void submitWolfGuess(true), 0);
     return () => window.clearTimeout(timer);
-  }, [guessActor, room, submitWolfGuess, turnSecondsLeft]);
+  }, [guessActorId, room, submitWolfGuess, turnSecondsLeft]);
   const submitGuessFeedback = async (accepted: boolean) => {
     if (!room || !room.wolfGuess || !room.villageWord) return;
 
@@ -1479,6 +1524,7 @@ export function WordWolfGame() {
     currentTurnIndex: 0,
     currentTurnStartedAt: null,
     wolfId: null,
+    wolfIds: [],
     villageWord: "",
     wolfWord: "",
     topicReason: "",
@@ -1740,7 +1786,7 @@ export function WordWolfGame() {
               <section>
                 <h3 className="text-base font-bold text-slate-950">ワードウルフ</h3>
                 <p className="mt-2">
-                  1人だけ違うお題を持つ狼になります。投票で狼以外が選ばれたら狼の勝利です。狼が選ばれた場合、狼は村側のお題を当てると逆転勝利できます。
+                  設定した人数だけ違うお題を持つ狼になります。投票で狼以外が選ばれたら狼の勝利です。狼が選ばれた場合、その狼は村側のお題を当てると逆転勝利できます。
                 </p>
               </section>
 
@@ -1860,7 +1906,7 @@ export function WordWolfGame() {
                           </div>
                           <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-600">
                             <span>host: {choice.hostName}</span>
-                            <span>{choice.playerCount}/6人</span>
+                            <span>{choice.playerCount}人</span>
                             <span>{choice.roundsTotal}周</span>
                           </div>
                         </button>
@@ -2011,6 +2057,29 @@ export function WordWolfGame() {
                         あり
                       </button>
                     </div>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">狼の人数</p>
+                    <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      {wolfCountOptions.map((count) => (
+                        <button
+                          key={count}
+                          type="button"
+                          onClick={() => setWolfCount(count)}
+                          aria-pressed={room.wolfCount === count}
+                          className={`rounded-lg border px-3 py-2 text-left text-sm font-semibold ${
+                            room.wolfCount === count
+                              ? "border-rose-500 bg-rose-50 text-rose-950 shadow-sm"
+                              : "border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100"
+                          }`}
+                        >
+                          {count}人
+                        </button>
+                      ))}
+                    </div>
+                    <p className="mt-1 text-xs font-semibold text-slate-500">
+                      5人以上で2人以上にできます。狼不在ありの回で狼が出ない場合は0人になります。
+                    </p>
                   </div>
                   <label className="block text-sm font-medium text-slate-700">
                     周回数
@@ -2165,8 +2234,7 @@ export function WordWolfGame() {
                   {room.debugMode && (
                     <button
                       onClick={addSeat}
-                      disabled={room.players.length >= 6}
-                      className={`w-full disabled:opacity-50 ${subtleButtonClass}`}
+                      className={`w-full ${subtleButtonClass}`}
                     >
                       テスト用プレイヤー追加
                     </button>
@@ -2241,7 +2309,7 @@ export function WordWolfGame() {
                   <div className="grid grid-cols-3 gap-2 text-center text-sm sm:w-[360px]">
                     <div className="rounded-lg bg-slate-100 px-2 py-2">
                       <p className="text-xs text-slate-500">人数</p>
-                      <p className="font-bold text-slate-950">{room.players.length}/6</p>
+                      <p className="font-bold text-slate-950">{room.players.length}</p>
                     </div>
                     <div className="rounded-lg bg-slate-100 px-2 py-2">
                       <p className="text-xs text-slate-500">周回</p>
@@ -2270,8 +2338,8 @@ export function WordWolfGame() {
                     {room.phase === "vote" && nextVotePlayer && (
                       <p className="mt-1">次の投票者「{nextVotePlayer.name}」として投票します。</p>
                     )}
-                    {room.phase === "wolfGuess" && wolfPlayer && (
-                      <p className="mt-1">狼「{wolfPlayer.name}」として逆転回答します。</p>
+                    {room.phase === "wolfGuess" && finalAnswerPlayer && (
+                      <p className="mt-1">狼「{finalAnswerPlayer.name}」として逆転回答します。</p>
                     )}
                     {room.phase !== "lobby" && (
                       <button
@@ -2413,13 +2481,13 @@ export function WordWolfGame() {
                     value={guessInput}
                     onChange={(event) => setGuessInput(event.target.value)}
                     onKeyDown={submitGuessOnEnter}
-                    disabled={guessActor?.id !== room.wolfId}
+                    disabled={!isMyFinalAnswerTurn}
                     className="mt-4 w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 disabled:bg-amber-100"
                     placeholder="\u6751\u5074\u306e\u304a\u984c\u3092\u5165\u529b"
                   />
                   <button
                     onClick={() => void submitWolfGuess()}
-                    disabled={isGuessJudging || !guessInput.trim() || guessActor?.id !== room.wolfId}
+                    disabled={isGuessJudging || !guessInput.trim() || !isMyFinalAnswerTurn}
                     className="mt-3 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-500 disabled:bg-slate-300"
                   >
                     {isGuessJudging ? "\u5224\u5b9a\u4e2d..." : "\u56de\u7b54\u3059\u308b"}
@@ -2496,7 +2564,9 @@ export function WordWolfGame() {
                         </div>
                         <div className="rounded-lg bg-slate-100 p-3">
                           <dt className="text-xs text-slate-500">狼</dt>
-                          <dd className="mt-1 text-lg font-bold text-slate-950">{wolfPlayer?.name}</dd>
+                          <dd className="mt-1 text-lg font-bold text-slate-950">
+                            {wolfPlayers.map((player) => player.name).join("、") || "なし"}
+                          </dd>
                         </div>
                       </>
                     ) : (

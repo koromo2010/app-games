@@ -67,6 +67,23 @@ function normalizeRunoffCandidateIds(value: unknown) {
   return Array.isArray(value) ? value.filter((candidateId): candidateId is string => typeof candidateId === "string") : null;
 }
 
+function normalizeWolfIds(room: Partial<WordWolfRoom>) {
+  const wolfIds = Array.isArray(room.wolfIds)
+    ? room.wolfIds.filter((wolfId): wolfId is string => typeof wolfId === "string")
+    : [];
+  if (wolfIds.length > 0) return [...new Set(wolfIds)];
+  return typeof room.wolfId === "string" ? [room.wolfId] : [];
+}
+
+function maxWolfCount(playerCount: number) {
+  return Math.max(1, Math.floor((Math.max(3, playerCount) - 1) / 2));
+}
+
+function normalizeWolfCount(value: unknown, playerCount: number) {
+  const count = typeof value === "number" && Number.isFinite(value) ? Math.floor(value) : 1;
+  return Math.max(1, Math.min(maxWolfCount(playerCount), count));
+}
+
 function normalizeGuessJudgement(value: unknown): WordWolfGuessJudgement | null {
   if (!value || typeof value !== "object") return null;
 
@@ -94,10 +111,10 @@ function didPlayerWin(room: WordWolfRoom, playerId: string) {
   }
 
   if (room.winner === "village") {
-    return playerId !== room.wolfId;
+    return !normalizeWolfIds(room).includes(playerId);
   }
 
-  return playerId === room.wolfId;
+  return normalizeWolfIds(room).includes(playerId);
 }
 
 function addRoomScore(room: WordWolfRoom) {
@@ -146,6 +163,8 @@ function normalizeRoom(value: unknown): WordWolfRoom | null {
     currentTurnIndex: typeof parsed.currentTurnIndex === "number" ? parsed.currentTurnIndex : 0,
     currentTurnStartedAt: typeof parsed.currentTurnStartedAt === "number" ? parsed.currentTurnStartedAt : null,
     wolfId: typeof parsed.wolfId === "string" ? parsed.wolfId : null,
+    wolfIds: normalizeWolfIds(parsed),
+    wolfCount: normalizeWolfCount(parsed.wolfCount, players.length),
     villageWord: typeof parsed.villageWord === "string" ? parsed.villageWord : "",
     wolfWord: typeof parsed.wolfWord === "string" ? parsed.wolfWord : "",
     topicReason: typeof parsed.topicReason === "string" ? parsed.topicReason : "",
@@ -266,7 +285,7 @@ export async function listStoredWordWolfRooms() {
 export async function listStoredJoinableWordWolfRooms() {
   const rooms = await listStoredWordWolfRooms();
   return rooms
-    .filter((room) => room.phase === "lobby" && room.players.length < 6)
+    .filter((room) => room.phase === "lobby")
     .map(makeChoice)
     .sort((left, right) => right.updatedAt - left.updatedAt);
 }

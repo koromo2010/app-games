@@ -106,21 +106,27 @@ export function normalizePlayerStatsGameFilter(value: unknown): PlayerStatsGameF
   return value === "wordwolf" ? "wordwolf" : "all";
 }
 
+function wolfIds(room: WordWolfRoom) {
+  if (Array.isArray(room.wolfIds) && room.wolfIds.length > 0) return room.wolfIds;
+  return room.wolfId ? [room.wolfId] : [];
+}
+
 function didPlayerWin(room: WordWolfRoom, playerId: string) {
   if (room.winner === "players") {
     return room.accusedId ? playerId !== room.accusedId : true;
   }
 
   if (room.winner === "village") {
-    return playerId !== room.wolfId;
+    return !wolfIds(room).includes(playerId);
   }
 
-  return playerId === room.wolfId;
+  return wolfIds(room).includes(playerId);
 }
 
 function playerRole(room: WordWolfRoom, playerId: string): PlayerGameResult["role"] {
-  if (!room.wolfId) return "no-wolf";
-  return playerId === room.wolfId ? "wolf" : "village";
+  const ids = wolfIds(room);
+  if (ids.length === 0) return "no-wolf";
+  return ids.includes(playerId) ? "wolf" : "village";
 }
 
 export async function recordWordWolfGameResults(room: WordWolfRoom) {
@@ -142,7 +148,7 @@ export async function recordWordWolfGameResults(room: WordWolfRoom) {
     won: didPlayerWin(room, player.id),
     winner,
     gameMode: room.gameMode,
-    hadWolf: Boolean(room.wolfId),
+    hadWolf: wolfIds(room).length > 0,
     accusedId: room.accusedId,
     playerCount: room.players.length,
     roundsTotal: room.roundsTotal,

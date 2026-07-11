@@ -11,8 +11,9 @@ export function shufflePlayers(players: Player[]) {
   return shuffled;
 }
 
-export function pickWolf(players: Player[]) {
-  return players[Math.floor(Math.random() * players.length)];
+export function pickWolves(players: Player[], count: number) {
+  const wolfCount = Math.max(0, Math.min(players.length, Math.floor(count)));
+  return shufflePlayers(players).slice(0, wolfCount);
 }
 
 export function createClue(playerId: string, round: number, text: string): Clue {

@@ -46,6 +46,8 @@ export type Room = {
   currentTurnIndex: number;
   currentTurnStartedAt: number | null;
   wolfId: string | null;
+  wolfIds: string[];
+  wolfCount: number;
   villageWord: string;
   wolfWord: string;
   topicReason: string;
