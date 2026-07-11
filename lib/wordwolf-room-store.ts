@@ -12,6 +12,7 @@ import { recordWordWolfGameResults } from "@/lib/player-stats-store";
 
 type Phase = "lobby" | "clue" | "vote" | "wolfGuess" | "result";
 type ClueLogVisibility = "always" | "result";
+type ClueMode = "turn" | "simultaneous";
 type GameMode = "wordwolf" | "may-no-wolf";
 
 type Player = {
@@ -45,6 +46,7 @@ export type WordWolfRoom = {
   gameMode: GameMode;
   debugMode?: boolean;
   clueLogVisibility: ClueLogVisibility;
+  clueMode: ClueMode;
   randomizeTurnOrder: boolean;
   players: Player[];
   roundsTotal: number;
@@ -100,6 +102,10 @@ function playerActiveRoomKey(playerId: string) {
 
 function normalizeGameMode(value: unknown): GameMode {
   return value === "may-no-wolf" || value === "no-wolf" ? "may-no-wolf" : "wordwolf";
+}
+
+function normalizeClueMode(value: unknown): ClueMode {
+  return value === "simultaneous" ? "simultaneous" : "turn";
 }
 
 function isPhase(value: unknown): value is Phase {
@@ -209,6 +215,7 @@ function normalizeRoom(value: unknown): WordWolfRoom | null {
     gameMode: normalizeGameMode(parsed.gameMode),
     debugMode: Boolean(parsed.debugMode),
     clueLogVisibility: parsed.clueLogVisibility === "always" ? "always" : "result",
+    clueMode: normalizeClueMode(parsed.clueMode),
     randomizeTurnOrder: parsed.randomizeTurnOrder ?? true,
     players: players as Player[],
     roundsTotal: typeof parsed.roundsTotal === "number" ? parsed.roundsTotal : 3,
