@@ -36,6 +36,8 @@ export type PlayerStatsResponse = {
   recent: PlayerGameResult[];
 };
 
+export type PlayerStatsGameFilter = "all" | PlayerGameResult["gameType"];
+
 const playerResultsKeyPrefix = "player-results:";
 const resultEventKeyPrefix = "game-result-event:";
 
@@ -97,6 +99,10 @@ function parseResult(value: unknown): PlayerGameResult | null {
   } catch {
     return null;
   }
+}
+
+export function normalizePlayerStatsGameFilter(value: unknown): PlayerStatsGameFilter {
+  return value === "wordwolf" ? "wordwolf" : "all";
 }
 
 function didPlayerWin(room: WordWolfRoom, playerId: string) {
@@ -164,7 +170,10 @@ export async function recordWordWolfGameResults(room: WordWolfRoom) {
   return recorded;
 }
 
-export async function getPlayerStats(playerId: string): Promise<PlayerStatsResponse> {
+export async function getPlayerStats(
+  playerId: string,
+  gameFilter: PlayerStatsGameFilter = "all",
+): Promise<PlayerStatsResponse> {
   const rawResults = await redisCommand<string[]>([
     "ZREVRANGE",
     playerResultsKey(playerId),
@@ -174,13 +183,15 @@ export async function getPlayerStats(playerId: string): Promise<PlayerStatsRespo
   const results = rawResults
     .map(parseResult)
     .filter((result): result is PlayerGameResult => Boolean(result));
+  const filteredResults =
+    gameFilter === "all" ? results : results.filter((result) => result.gameType === gameFilter);
   const todayStart = startOfToday();
   const monthStart = startOfMonth();
 
   return {
-    today: summarize(results.filter((result) => result.finishedAt >= todayStart)),
-    month: summarize(results.filter((result) => result.finishedAt >= monthStart)),
-    total: results.length > 0 ? summarize(results) : emptySummary(),
-    recent: results.slice(0, 10),
+    today: summarize(filteredResults.filter((result) => result.finishedAt >= todayStart)),
+    month: summarize(filteredResults.filter((result) => result.finishedAt >= monthStart)),
+    total: filteredResults.length > 0 ? summarize(filteredResults) : emptySummary(),
+    recent: filteredResults.slice(0, 10),
   };
 }

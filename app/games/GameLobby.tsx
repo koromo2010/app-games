@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   clearPlayerSession,
   defaultAvatarImage,
@@ -14,7 +14,7 @@ import {
   savePlayerSession,
   type PlayerSession,
 } from "@/lib/player-session";
-import type { PlayerStatsResponse } from "@/lib/player-stats-store";
+import type { PlayerStatsGameFilter, PlayerStatsResponse } from "@/lib/player-stats-store";
 
 const games = [
   {
@@ -54,6 +54,11 @@ type ActiveWordWolfRoom = {
   players: { id: string; name: string }[];
   updatedAt: number;
 };
+
+const statsGameOptions = [
+  { value: "all", label: "全ゲーム" },
+  { value: "wordwolf", label: "ワードウルフ" },
+] as const satisfies readonly { value: PlayerStatsGameFilter; label: string }[];
 
 const errorMessages: Record<string, string> = {
   INVALID_JSON: "入力内容を読み取れませんでした。",
@@ -106,15 +111,20 @@ export function GameLobby() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [stats, setStats] = useState<PlayerStatsResponse | null>(null);
   const [isStatsLoading, setIsStatsLoading] = useState(false);
+  const [selectedStatsGame, setSelectedStatsGame] = useState<PlayerStatsGameFilter>("wordwolf");
   const [activeRoom, setActiveRoom] = useState<ActiveWordWolfRoom | null>(null);
   const [isActiveRoomLoading, setIsActiveRoomLoading] = useState(false);
 
-  const loadStats = async (targetPlayerId: string) => {
+  const loadStats = useCallback(async (targetPlayerId: string, gameFilter: PlayerStatsGameFilter) => {
     if (!targetPlayerId) return;
 
     setIsStatsLoading(true);
     try {
-      const response = await fetch(`/api/player-stats?playerId=${encodeURIComponent(targetPlayerId)}`, {
+      const params = new URLSearchParams({
+        playerId: targetPlayerId,
+        gameType: gameFilter,
+      });
+      const response = await fetch(`/api/player-stats?${params.toString()}`, {
         cache: "no-store",
       });
       const data = (await response.json()) as { stats?: PlayerStatsResponse };
@@ -124,9 +134,9 @@ export function GameLobby() {
     } finally {
       setIsStatsLoading(false);
     }
-  };
+  }, []);
 
-  const loadActiveRoom = async (targetPlayerId: string) => {
+  const loadActiveRoom = useCallback(async (targetPlayerId: string) => {
     if (!targetPlayerId) return;
 
     setIsActiveRoomLoading(true);
@@ -141,13 +151,20 @@ export function GameLobby() {
     } finally {
       setIsActiveRoomLoading(false);
     }
-  };
+  }, []);
 
   const rememberActiveRoom = () => {
     if (!activeRoom || !playerId) return;
 
     localStorage.setItem("wordwolf-last-room", activeRoom.code);
     localStorage.setItem("wordwolf-last-player", playerId);
+  };
+
+  const changeStatsGame = (gameFilter: PlayerStatsGameFilter) => {
+    setSelectedStatsGame(gameFilter);
+    if (playerId) {
+      void loadStats(playerId, gameFilter);
+    }
   };
 
   useEffect(() => {
@@ -169,7 +186,7 @@ export function GameLobby() {
         const authenticated = isPlayerAuthenticated();
         setIsLoggedIn(authenticated);
         if (authenticated && session.id) {
-          void loadStats(session.id);
+          void loadStats(session.id, "wordwolf");
           void loadActiveRoom(session.id);
         }
       })
@@ -178,7 +195,7 @@ export function GameLobby() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [loadActiveRoom, loadStats]);
 
   const applySession = (session: PlayerSession) => {
     savePlayerSession(session);
@@ -190,7 +207,7 @@ export function GameLobby() {
     setPassword("");
     setIsLoggedIn(true);
     if (session.id) {
-      void loadStats(session.id);
+      void loadStats(session.id, selectedStatsGame);
       void loadActiveRoom(session.id);
     }
   };
@@ -397,14 +414,29 @@ export function GameLobby() {
 
           {isLoggedIn && (
             <div className="rounded-lg border border-white/10 bg-white/[0.96] p-4 shadow-[0_18px_50px_rgba(15,23,42,0.18)]">
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="text-xs font-semibold uppercase text-cyan-700">Stats</p>
                   <h2 className="text-lg font-bold text-slate-950">戦績</h2>
                 </div>
+                <label className="sr-only" htmlFor="stats-game-filter">
+                  戦績ゲーム
+                </label>
+                <select
+                  id="stats-game-filter"
+                  value={selectedStatsGame}
+                  onChange={(event) => changeStatsGame(event.target.value as PlayerStatsGameFilter)}
+                  className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-700 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                >
+                  {statsGameOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
                 <button
                   type="button"
-                  onClick={() => void loadStats(playerId)}
+                  onClick={() => void loadStats(playerId, selectedStatsGame)}
                   className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
                 >
                   更新
