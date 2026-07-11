@@ -241,12 +241,16 @@ function scoreRound(room: TahoiyaRoom) {
   };
 }
 
+function getAnswerers(room: TahoiyaRoom) {
+  return room.players.filter((player) => player.id !== room.parentId);
+}
+
 function submittedCount(room: TahoiyaRoom) {
-  return room.players.filter((player) => player.id !== room.parentId && room.fakeDefinitions[player.id]).length;
+  return getAnswerers(room).filter((player) => room.fakeDefinitions[player.id]).length;
 }
 
 function voterCount(room: TahoiyaRoom) {
-  return room.players.filter((player) => player.id !== room.parentId && room.votes[player.id]).length;
+  return getAnswerers(room).filter((player) => room.votes[player.id]).length;
 }
 
 export function TahoiyaGame() {
@@ -298,8 +302,10 @@ export function TahoiyaGame() {
   const parent = room?.players.find((player) => player.id === room.parentId) ?? null;
   const isHost = Boolean(room && playerId === room.hostId);
   const isParent = Boolean(room && activePlayer?.id === room.parentId);
-  const writingDone = room ? submittedCount(room) >= Math.max(0, room.players.length - 1) : false;
-  const votingDone = room ? voterCount(room) >= Math.max(0, room.players.length - 1) : false;
+  const answerers = room ? getAnswerers(room) : [];
+  const answererCount = answerers.length;
+  const writingDone = room ? submittedCount(room) >= answererCount : false;
+  const votingDone = room ? voterCount(room) >= answererCount : false;
   const nextWriter = room?.phase === "writing"
     ? room.players.find((player) => player.id !== room.parentId && !room.fakeDefinitions[player.id])
     : null;
@@ -400,8 +406,8 @@ export function TahoiyaGame() {
   const startRound = async () => {
     if (!room || isStarting) return;
     const startingRoom = withMinimumDebugPlayers(room);
-    if (startingRoom.players.length < 2) {
-      setMessage("2人以上で開始できます。テストプレイヤー追加でもOKです。");
+    if (getAnswerers(startingRoom).length < 1) {
+      setMessage("出題者とは別に、回答者が1人以上必要です。");
       return;
     }
 
@@ -613,7 +619,8 @@ export function TahoiyaGame() {
                   <p className="text-xl font-black text-slate-950">{room.code}</p>
                 </div>
                 <p className="text-sm text-slate-600">
-                  親: <span className="font-bold text-slate-950">{parent?.name ?? "未設定"}</span>
+                  出題者: <span className="font-bold text-slate-950">{parent?.name ?? "未設定"}</span>
+                  <span className="ml-2 text-xs font-semibold text-slate-500">回答者 {answererCount}人</span>
                 </p>
                 {room.phase === "lobby" && isHost && (
                   <button
@@ -690,7 +697,7 @@ export function TahoiyaGame() {
                   <p className="text-sm font-semibold text-amber-700">Prototype ready</p>
                   <h2 className="mt-2 text-3xl font-black text-slate-950">辞書の本物を見抜く</h2>
                   <p className="mt-3 text-sm leading-6 text-slate-600">
-                    親だけが本物の語釈を見て、他のプレイヤーはそれっぽい偽語釈を作ります。本物を当てるか、自分の偽語釈に票を集めると得点です。
+                    出題者だけが本物の語釈を見て、回答者はそれっぽい偽語釈を作ります。本物を当てるか、自分の偽語釈に票を集めると得点です。
                   </p>
                 </div>
               </div>
@@ -737,7 +744,11 @@ export function TahoiyaGame() {
                     {room.players.map((player) => (
                       <div key={player.id} className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-800">
                         {player.name}
-                        {player.id === room.parentId ? <span className="ml-2 text-amber-700">親</span> : null}
+                        {player.id === room.parentId ? (
+                          <span className="ml-2 text-amber-700">出題者</span>
+                        ) : (
+                          <span className="ml-2 text-cyan-700">回答者</span>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -749,10 +760,10 @@ export function TahoiyaGame() {
                   <p className="text-xs font-semibold uppercase text-amber-700">Fake definition</p>
                   <h2 className="text-2xl font-black text-slate-950">偽語釈を書く</h2>
                   <p className="mt-2 text-sm text-slate-600">
-                    投稿: {submittedCount(room)}/{room.players.length - 1}
+                    回答者の投稿: {submittedCount(room)}/{answererCount}
                   </p>
                   {isParent ? (
-                    <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm font-semibold text-amber-900">親は本物の語釈を混ぜる役です。他の人の投稿を待ちます。</p>
+                    <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm font-semibold text-amber-900">出題者は本物の語釈を混ぜる役です。回答者の投稿を待ちます。</p>
                   ) : (
                     <>
                       <textarea
@@ -786,10 +797,10 @@ export function TahoiyaGame() {
                   <p className="text-xs font-semibold uppercase text-amber-700">Vote</p>
                   <h2 className="text-2xl font-black text-slate-950">本物を選ぶ</h2>
                   <p className="mt-2 text-sm text-slate-600">
-                    投票: {voterCount(room)}/{room.players.length - 1}
+                    回答者の投票: {voterCount(room)}/{answererCount}
                   </p>
                   {isParent ? (
-                    <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm font-semibold text-amber-900">親は投票しません。みんなの投票を待ちます。</p>
+                    <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm font-semibold text-amber-900">出題者は投票しません。回答者の投票を待ちます。</p>
                   ) : (
                     <div className="mt-4 grid gap-2">
                       {room.options.map((option, index) => (
