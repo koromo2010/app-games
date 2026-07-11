@@ -82,6 +82,7 @@ type Room = {
   topicSource: WordWolfTopic["source"] | "pending";
   topicDictionarySource: TopicDictionarySource;
   topicPairDistance: TopicPairDistance;
+  topicHint: string;
   topicSourceMode?: TopicSourceMode;
   clues: Clue[];
   votes: Record<string, string>;
@@ -227,6 +228,7 @@ function loadRoom(code: string): Room | null {
       runoffCandidateIds: normalizeRunoffCandidateIds(room.runoffCandidateIds),
       topicDictionarySource: normalizeTopicDictionarySource(room.topicDictionarySource ?? room.topicSourceMode),
       topicPairDistance: normalizeTopicPairDistance(room.topicPairDistance ?? room.topicSourceMode),
+      topicHint: typeof room.topicHint === "string" ? room.topicHint : "",
       scores: normalizeRoomScores(room.scores),
       gamesPlayed: room.gamesPlayed ?? 0,
       gameNumber: room.gameNumber ?? Math.max(1, (room.gamesPlayed ?? 0) + 1),
@@ -308,6 +310,7 @@ async function loadRoomFromStore(code: string) {
       runoffCandidateIds: normalizeRunoffCandidateIds(data.room.runoffCandidateIds),
       topicDictionarySource: normalizeTopicDictionarySource(data.room.topicDictionarySource ?? data.room.topicSourceMode),
       topicPairDistance: normalizeTopicPairDistance(data.room.topicPairDistance ?? data.room.topicSourceMode),
+      topicHint: typeof data.room.topicHint === "string" ? data.room.topicHint : "",
       scores: normalizeRoomScores(data.room.scores),
       gamesPlayed: data.room.gamesPlayed ?? 0,
       gameNumber: data.room.gameNumber ?? Math.max(1, (data.room.gamesPlayed ?? 0) + 1),
@@ -342,6 +345,7 @@ async function loadActiveRoomFromStore(playerId: string) {
       runoffCandidateIds: normalizeRunoffCandidateIds(data.room.runoffCandidateIds),
       topicDictionarySource: normalizeTopicDictionarySource(data.room.topicDictionarySource ?? data.room.topicSourceMode),
       topicPairDistance: normalizeTopicPairDistance(data.room.topicPairDistance ?? data.room.topicSourceMode),
+      topicHint: typeof data.room.topicHint === "string" ? data.room.topicHint : "",
       scores: normalizeRoomScores(data.room.scores),
       gamesPlayed: data.room.gamesPlayed ?? 0,
       gameNumber: data.room.gameNumber ?? Math.max(1, (data.room.gamesPlayed ?? 0) + 1),
@@ -421,6 +425,7 @@ function createEmptyRoom(
     topicSource: "pending",
     topicDictionarySource: "llm",
     topicPairDistance: "balanced",
+    topicHint: "",
     clues: [],
     votes: {},
     voteHistory: [],
@@ -515,6 +520,7 @@ function rememberTopic(topic: WordWolfTopic) {
 async function fetchTopicWithFallback(
   dictionarySource: TopicDictionarySource,
   pairDistance: TopicPairDistance,
+  topicHint: string,
 ): Promise<WordWolfTopic> {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), 1500);
@@ -522,6 +528,10 @@ async function fetchTopicWithFallback(
   const requestHistory = history.slice(0, topicRequestHistoryLimit);
   const dailyWords = loadDailyTopicWords();
   const params = new URLSearchParams({ source: dictionarySource, distance: pairDistance });
+  const normalizedTopicHint = topicHint.trim().slice(0, 80);
+  if (normalizedTopicHint) {
+    params.set("hint", normalizedTopicHint);
+  }
   if (requestHistory.length > 0) {
     params.set("exclude", requestHistory.join(","));
   }
@@ -1267,6 +1277,11 @@ export function WordWolfGame() {
     setAndSaveRoom({ ...room, topicPairDistance });
   };
 
+  const setTopicHint = (topicHint: string) => {
+    if (!room || room.phase !== "lobby") return;
+    setAndSaveRoom({ ...room, topicHint: topicHint.slice(0, 80) });
+  };
+
   const startGame = async () => {
     if (!room || isStarting) return;
 
@@ -1279,7 +1294,7 @@ export function WordWolfGame() {
         return;
       }
 
-      const topic = await fetchTopicWithFallback(room.topicDictionarySource, room.topicPairDistance);
+      const topic = await fetchTopicWithFallback(room.topicDictionarySource, room.topicPairDistance, room.topicHint);
       const basePlayers = room.debugMode ? fillSoloTestPlayers(room.players) : room.players;
       const players = room.randomizeTurnOrder ? shufflePlayers(basePlayers) : basePlayers;
       const shouldHaveWolf = room.gameMode === "wordwolf" || Math.random() >= noWolfChance;
@@ -2271,6 +2286,16 @@ export function WordWolfGame() {
                       <option value="llm">一般単語</option>
                       <option value="proper-noun">固有名詞</option>
                     </select>
+                  </label>
+                  <label className="block text-sm font-medium text-slate-700">
+                    お題の方向性
+                    <input
+                      value={room.topicHint}
+                      onChange={(event) => setTopicHint(event.target.value)}
+                      className={`mt-1 ${inputClass}`}
+                      maxLength={80}
+                      placeholder="例: 夏、映画、食べ物、スポーツ"
+                    />
                   </label>
                   <div>
                     <p className="text-sm font-medium text-slate-700">ペアの距離</p>

@@ -61,6 +61,7 @@ export type WordWolfRoom = {
   topicSource: WordWolfTopic["source"] | "pending";
   topicDictionarySource: TopicDictionarySource;
   topicPairDistance: TopicPairDistance;
+  topicHint: string;
   topicSourceMode?: TopicSourceMode;
   clues: Clue[];
   votes: Record<string, string>;
@@ -230,6 +231,7 @@ function normalizeRoom(value: unknown): WordWolfRoom | null {
     topicSource: parsed.topicSource === "llm" || parsed.topicSource === "fallback" ? parsed.topicSource : "pending",
     topicDictionarySource: normalizeTopicDictionarySource(parsed.topicDictionarySource ?? parsed.topicSourceMode),
     topicPairDistance: normalizeTopicPairDistance(parsed.topicPairDistance ?? parsed.topicSourceMode),
+    topicHint: typeof parsed.topicHint === "string" ? parsed.topicHint.slice(0, 80) : "",
     clues: Array.isArray(parsed.clues) ? (parsed.clues as Clue[]) : [],
     votes: parsed.votes && typeof parsed.votes === "object" ? (parsed.votes as Record<string, string>) : {},
     voteHistory: normalizeVoteHistory(parsed.voteHistory),

@@ -57,6 +57,10 @@ function normalizeList(values: string[]) {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }
 
+function normalizeTopicHint(value: string | null) {
+  return (value ?? "").trim().replace(/\s+/g, " ").slice(0, 80);
+}
+
 function isTopicAllowed(topic: WordWolfTopic, excludeKeys: string[], excludeWords: string[]) {
   const excludedKeys = new Set(excludeKeys);
   const excludedWords = new Set(excludeWords.map(normalizeTopicWord).filter(Boolean));
@@ -127,6 +131,7 @@ function getTopicRequestOptions(request: Request) {
     excludeWords: normalizeList(url.searchParams.get("excludeWords")?.split(",") ?? []).slice(0, 500),
     dictionarySource: normalizeTopicDictionarySource(url.searchParams.get("source") ?? legacyMode),
     pairDistance: normalizeTopicPairDistance(url.searchParams.get("distance") ?? legacyMode),
+    topicHint: normalizeTopicHint(url.searchParams.get("hint")),
   };
 }
 
@@ -135,6 +140,7 @@ async function generateLlmTopic(
   excludeWords: string[],
   pairDistance: TopicPairDistance,
   dictionarySource: Extract<TopicDictionarySource, "llm" | "proper-noun">,
+  topicHint: string,
 ) {
   const { default: OpenAI } = await import("openai");
   const client = new OpenAI({
@@ -170,6 +176,9 @@ async function generateLlmTopic(
 
   const avoidLines = [
     topicKindPrompt,
+    topicHint
+      ? `Theme hint: choose a pair related to "${topicHint}", while still obeying the selected source mode, semantic layer matching, and pair distance. Do not use the hint itself unless it is a natural topic word.`
+      : "",
     "Do not pair an object with a place, a person with a work, or an abstract concept with a concrete object.",
     excludeWords.length > 0 ? `exclude words used today: ${excludeWords.join(", ")}` : "",
   ].filter(Boolean);
@@ -187,7 +196,7 @@ async function generateLlmTopic(
 }
 
 export async function GET(request: Request) {
-  const { excludeKeys, excludeWords, dictionarySource, pairDistance } = getTopicRequestOptions(request);
+  const { excludeKeys, excludeWords, dictionarySource, pairDistance, topicHint } = getTopicRequestOptions(request);
   const storedUsage = await loadStoredTopicUsage();
   const allExcludeKeys = normalizeList([...excludeKeys, ...storedUsage.usedPairs]);
   const allExcludeWords = normalizeList([...excludeWords, ...storedUsage.dailyWords]);
@@ -207,6 +216,7 @@ export async function GET(request: Request) {
         allExcludeWords,
         pairDistance,
         dictionarySource === "proper-noun" ? "proper-noun" : "llm",
+        topicHint,
       );
       if (topic && isTopicAllowed(topic, allExcludeKeys, allExcludeWords)) {
         await rememberStoredTopicUsage(topic);
