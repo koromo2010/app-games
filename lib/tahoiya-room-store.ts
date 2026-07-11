@@ -1,5 +1,5 @@
 import { redisCommand } from "@/lib/redis-store";
-import type { TahoiyaDefinitionOption, TahoiyaPhase, TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomChoice } from "@/lib/tahoiya-types";
+import type { TahoiyaAnswererMode, TahoiyaDefinitionOption, TahoiyaPhase, TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomChoice } from "@/lib/tahoiya-types";
 
 const roomKeyPrefix = "tahoiya:room:";
 const roomIndexKey = "tahoiya:rooms";
@@ -15,6 +15,10 @@ function playerActiveRoomKey(playerId: string) {
 
 function isPhase(value: unknown): value is TahoiyaPhase {
   return value === "lobby" || value === "writing" || value === "voting" || value === "result";
+}
+
+function isAnswererMode(value: unknown): value is TahoiyaAnswererMode {
+  return value === "manual" || value === "random";
 }
 
 function normalizeScores(value: unknown) {
@@ -84,6 +88,8 @@ function normalizeRoom(value: unknown): TahoiyaRoom | null {
     debugMode: Boolean(parsed.debugMode),
     players,
     parentId,
+    answererMode: isAnswererMode(parsed.answererMode) ? parsed.answererMode : "random",
+    answererId: typeof parsed.answererId === "string" ? parsed.answererId : "",
     round: typeof parsed.round === "number" ? Math.max(1, Math.floor(parsed.round)) : 1,
     word: typeof parsed.word === "string" ? parsed.word : "",
     reading: typeof parsed.reading === "string" ? parsed.reading : undefined,
