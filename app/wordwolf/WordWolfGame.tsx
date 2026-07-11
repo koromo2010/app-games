@@ -601,6 +601,11 @@ function rememberTopic(topic: WordWolfTopic) {
   localStorage.setItem(topicDailyWordHistoryKey, JSON.stringify({ date: getJstDateKey(), words: [...dailyWords] }));
 }
 
+function isTopicUnusedToday(topic: WordWolfTopic, history: string[], dailyWords: string[]) {
+  const usedWords = new Set(dailyWords);
+  return !history.includes(getTopicKey(topic)) && getTopicWords(topic).every((word) => !usedWords.has(word));
+}
+
 async function fetchTopicWithFallback(
   dictionarySource: TopicDictionarySource,
   pairDistance: TopicPairDistance,
@@ -635,7 +640,7 @@ async function fetchTopicWithFallback(
     }
 
     const topic = (await response.json()) as WordWolfTopic;
-    if (!isValidWordWolfTopic(topic)) {
+    if (!isValidWordWolfTopic(topic) || !isTopicUnusedToday(topic, history, dailyWords)) {
       const fallbackTopic = pickFallbackTopic(history, dictionarySource, pairDistance, dailyWords);
       rememberTopic(fallbackTopic);
       return fallbackTopic;

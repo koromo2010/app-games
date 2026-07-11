@@ -266,6 +266,30 @@ function pickFromCandidates(
   return { ...topic, source: "fallback" };
 }
 
+function pickFreshFromCandidates(
+  candidates: TopicCandidate[],
+  excludeKeys: string[],
+  excludeWords: string[] = [],
+): WordWolfTopic | null {
+  const excluded = new Set(excludeKeys);
+  const excludedWords = new Set(excludeWords.map(normalizeTopicWord).filter(Boolean));
+  const freshCandidates = candidates
+    .filter(isValidWordWolfTopic)
+    .filter((topic) => !excluded.has(getTopicKey(topic)) && getTopicWords(topic).every((word) => !excludedWords.has(word)));
+
+  if (freshCandidates.length === 0) return null;
+
+  const topic = randomItem(freshCandidates);
+  return { ...topic, source: "fallback" };
+}
+
+function orderedFallbackDistances(pairDistance: TopicPairDistance): TopicPairDistance[] {
+  return [
+    pairDistance,
+    ...(["near", "balanced", "wide"] as const).filter((distance) => distance !== pairDistance),
+  ];
+}
+
 function makeBalancedCandidates(sets: readonly TopicSet[], dictionarySource: TopicDictionarySource) {
   const candidates: TopicCandidate[] = [];
   const pairDistance: TopicPairDistance = "balanced";
@@ -387,6 +411,11 @@ export function pickFallbackTopic(
 ): WordWolfTopic {
   const localSource = normalizeTopicDictionarySource(dictionarySource);
   const distance = normalizeTopicPairDistance(pairDistance);
+  const strictTopic = orderedFallbackDistances(distance)
+    .map((candidateDistance) => pickFreshFromCandidates(localTopicDecks[localSource][candidateDistance], excludeKeys, excludeWords))
+    .find((topic): topic is WordWolfTopic => Boolean(topic));
+
+  if (strictTopic) return strictTopic;
 
   return pickFromCandidates(localTopicDecks[localSource][distance], excludeKeys, excludeWords);
 }
