@@ -75,6 +75,7 @@ type Room = {
   wolfGuess: string;
   winner: "village" | "wolf" | "players" | null;
   resultText: string;
+  statsRecordedAt?: number;
   createdAt: number;
   updatedAt: number;
 };
@@ -324,9 +325,10 @@ function createPlayer(
   name: string,
   avatarColor = makeRandomAvatarColor(),
   avatarImage?: string | null,
+  id?: string,
 ): Player {
   return {
-    id: makeId("player"),
+    id: id ?? makeId("player"),
     name,
     avatarColor,
     avatarImage: avatarImage || undefined,
@@ -466,6 +468,7 @@ function ClueLogPanel({ room }: { room: Room }) {
 export function WordWolfGame() {
   const [room, setRoom] = useState<Room | null>(null);
   const [activePlayerId, setActivePlayerId] = useState("");
+  const [playerAccountId, setPlayerAccountId] = useState("");
   const [playerName, setPlayerName] = useState("");
   const [roomPassphrase, setRoomPassphrase] = useState("");
   const [joinCode, setJoinCode] = useState("");
@@ -497,6 +500,7 @@ export function WordWolfGame() {
       .then((session) => {
         if (!isMounted || !session) return;
         setPlayerName(session.name);
+        setPlayerAccountId(session.id ?? "");
         setAvatarColor(session.avatarColor);
         setAvatarImage(session.avatarImage);
       })
@@ -623,7 +627,7 @@ export function WordWolfGame() {
   const createRoom = async () => {
     const name = playerName.trim();
     const passphrase = roomPassphrase.trim();
-    if (!name) {
+    if (!name || !playerAccountId) {
       setError("ゲームロビーでプレイヤー登録をしてください。");
       return;
     }
@@ -633,6 +637,9 @@ export function WordWolfGame() {
     await deleteHostedRoomsFromStore(ownerId, fallbackHostId);
 
     const created = createEmptyRoom(name, passphrase, ownerId, avatarColor, avatarImage);
+    created.player.id = playerAccountId;
+    created.room.hostId = playerAccountId;
+    created.room.players = [created.player];
     setIsJoinListOpen(false);
     setJoinableRooms([]);
     setActivePlayerId(created.player.id);
@@ -652,7 +659,7 @@ export function WordWolfGame() {
     const code = selectedCode.trim().toUpperCase();
     const name = playerName.trim();
     const passphrase = roomPassphrase.trim();
-    if (!name) {
+    if (!name || !playerAccountId) {
       setError("ゲームロビーでプレイヤー登録をしてください。");
       return;
     }
@@ -674,13 +681,16 @@ export function WordWolfGame() {
       setError("合言葉が違います。");
       return;
     }
-    if (targetRoom.players.length >= 6) {
+    const existingPlayer = targetRoom.players.find((player) => player.id === playerAccountId);
+    if (!existingPlayer && targetRoom.players.length >= 6) {
       setError("この部屋は6人で満員です。");
       return;
     }
 
-    const player = createPlayer(name, avatarColor, avatarImage);
-    const nextRoom = { ...targetRoom, players: [...targetRoom.players, player] };
+    const player = existingPlayer ?? createPlayer(name, avatarColor, avatarImage, playerAccountId);
+    const nextRoom = existingPlayer
+      ? targetRoom
+      : { ...targetRoom, players: [...targetRoom.players, player] };
     setJoinCode(code);
     setIsJoinListOpen(false);
     setJoinableRooms([]);
@@ -710,6 +720,7 @@ export function WordWolfGame() {
     localStorage.removeItem("wordwolf-last-player");
     setRoom(null);
     setActivePlayerId("");
+    setPlayerAccountId("");
     setPlayerName("");
     setRoomPassphrase("");
     setJoinCode("");
@@ -1094,6 +1105,7 @@ export function WordWolfGame() {
     wolfGuess: "",
     winner: null,
     resultText: "",
+    statsRecordedAt: undefined,
   });
 
   const resetRoom = () => {

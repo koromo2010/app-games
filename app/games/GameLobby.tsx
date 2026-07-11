@@ -14,6 +14,7 @@ import {
   savePlayerSession,
   type PlayerSession,
 } from "@/lib/player-session";
+import type { PlayerStatsResponse } from "@/lib/player-stats-store";
 
 const games = [
   {
@@ -61,8 +62,26 @@ function authMessage(code: unknown) {
   return typeof code === "string" ? errorMessages[code] ?? errorMessages.UNKNOWN : errorMessages.UNKNOWN;
 }
 
+function statItems(stats: PlayerStatsResponse | null) {
+  return [
+    ["当日", stats?.today],
+    ["月間", stats?.month],
+    ["通算", stats?.total],
+  ] as const;
+}
+
+function formatDate(timestamp: number) {
+  return new Intl.DateTimeFormat("ja-JP", {
+    month: "numeric",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(timestamp));
+}
+
 export function GameLobby() {
   const [name, setName] = useState("");
+  const [playerId, setPlayerId] = useState("");
   const [password, setPassword] = useState("");
   const [avatarColor, setAvatarColor] = useState(fallbackAvatarColor);
   const [avatarImage, setAvatarImage] = useState<string | null>(defaultAvatarImage);
@@ -70,6 +89,25 @@ export function GameLobby() {
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [isSaving, setIsSaving] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [stats, setStats] = useState<PlayerStatsResponse | null>(null);
+  const [isStatsLoading, setIsStatsLoading] = useState(false);
+
+  const loadStats = async (targetPlayerId: string) => {
+    if (!targetPlayerId) return;
+
+    setIsStatsLoading(true);
+    try {
+      const response = await fetch(`/api/player-stats?playerId=${encodeURIComponent(targetPlayerId)}`, {
+        cache: "no-store",
+      });
+      const data = (await response.json()) as { stats?: PlayerStatsResponse };
+      setStats(response.ok && data.stats ? data.stats : null);
+    } catch {
+      setStats(null);
+    } finally {
+      setIsStatsLoading(false);
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -84,9 +122,14 @@ export function GameLobby() {
         }
 
         setName(session.name);
+        setPlayerId(session.id ?? "");
         setAvatarColor(session.avatarColor);
         setAvatarImage(session.avatarImage || defaultAvatarImage);
-        setIsLoggedIn(isPlayerAuthenticated());
+        const authenticated = isPlayerAuthenticated();
+        setIsLoggedIn(authenticated);
+        if (authenticated && session.id) {
+          void loadStats(session.id);
+        }
       })
       .catch(() => undefined);
 
@@ -99,10 +142,14 @@ export function GameLobby() {
     savePlayerSession(session);
     markPlayerAuthenticated();
     setName(session.name);
+    setPlayerId(session.id ?? "");
     setAvatarColor(session.avatarColor);
     setAvatarImage(session.avatarImage || defaultAvatarImage);
     setPassword("");
     setIsLoggedIn(true);
+    if (session.id) {
+      void loadStats(session.id);
+    }
   };
 
   const submitAccount = async () => {
@@ -143,10 +190,12 @@ export function GameLobby() {
     localStorage.removeItem("wordwolf-last-room");
     localStorage.removeItem("wordwolf-last-player");
     setName("");
+    setPlayerId("");
     setPassword("");
     setAvatarColor(makeRandomAvatarColor());
     setAvatarImage(pickRandomDefaultAvatarImage());
     setIsLoggedIn(false);
+    setStats(null);
     setMessage("ログアウトしました。");
   };
 
@@ -180,91 +229,150 @@ export function GameLobby() {
       </section>
 
       <section className="mx-auto grid max-w-6xl gap-4 px-4 py-6 lg:grid-cols-[340px_1fr]">
-        <aside className="rounded-lg border border-white/10 bg-white/[0.96] p-4 shadow-[0_18px_50px_rgba(15,23,42,0.18)]">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-xs font-semibold uppercase text-cyan-700">Account</p>
-              <h2 className="text-lg font-bold text-slate-950">プレイヤーアカウント</h2>
+        <aside className="space-y-4">
+          <div className="rounded-lg border border-white/10 bg-white/[0.96] p-4 shadow-[0_18px_50px_rgba(15,23,42,0.18)]">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase text-cyan-700">Account</p>
+                <h2 className="text-lg font-bold text-slate-950">プレイヤーアカウント</h2>
+              </div>
+              {isLoggedIn && (
+                <button
+                  type="button"
+                  onClick={logout}
+                  className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+                >
+                  ログアウト
+                </button>
+              )}
             </div>
-            {isLoggedIn && (
+
+            {!isLoggedIn && (
+              <div className="mt-4 grid grid-cols-2 gap-2 rounded-lg bg-slate-100 p-1">
+                {([
+                  ["login", "ログイン"],
+                  ["register", "新規作成"],
+                ] as const).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => {
+                      setAuthMode(mode);
+                      setMessage("");
+                    }}
+                    className={`rounded-md px-3 py-2 text-sm font-semibold transition ${
+                      authMode === mode
+                        ? "bg-white text-slate-950 shadow-sm"
+                        : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <label className="mt-4 block text-sm font-medium text-slate-700">
+              プレイヤー名
+              <input
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                disabled={isLoggedIn}
+                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 disabled:bg-slate-100"
+                placeholder="例: yusuke"
+              />
+            </label>
+
+            {!isLoggedIn && (
+              <label className="mt-3 block text-sm font-medium text-slate-700">
+                パスワード
+                <input
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void submitAccount();
+                  }}
+                  type="password"
+                  autoComplete={authMode === "register" ? "new-password" : "current-password"}
+                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                  placeholder="4文字以上"
+                />
+              </label>
+            )}
+
+            {!isLoggedIn && (
               <button
                 type="button"
-                onClick={logout}
-                className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+                onClick={() => void submitAccount()}
+                disabled={isSaving}
+                className="mt-4 w-full rounded-lg bg-cyan-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-500 disabled:bg-slate-300"
               >
-                ログアウト
+                {isSaving ? "確認中..." : authMode === "register" ? "アカウント作成" : "ログイン"}
               </button>
+            )}
+
+            {message && (
+              <p className="mt-3 rounded-lg border border-cyan-100 bg-cyan-50 px-3 py-2 text-sm font-semibold text-cyan-800">
+                {message}
+              </p>
             )}
           </div>
 
-          {!isLoggedIn && (
-            <div className="mt-4 grid grid-cols-2 gap-2 rounded-lg bg-slate-100 p-1">
-              {([
-                ["login", "ログイン"],
-                ["register", "新規作成"],
-              ] as const).map(([mode, label]) => (
+          {isLoggedIn && (
+            <div className="rounded-lg border border-white/10 bg-white/[0.96] p-4 shadow-[0_18px_50px_rgba(15,23,42,0.18)]">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase text-cyan-700">Stats</p>
+                  <h2 className="text-lg font-bold text-slate-950">戦績</h2>
+                </div>
                 <button
-                  key={mode}
                   type="button"
-                  onClick={() => {
-                    setAuthMode(mode);
-                    setMessage("");
-                  }}
-                  className={`rounded-md px-3 py-2 text-sm font-semibold transition ${
-                    authMode === mode
-                      ? "bg-white text-slate-950 shadow-sm"
-                      : "text-slate-500 hover:text-slate-800"
-                  }`}
+                  onClick={() => void loadStats(playerId)}
+                  className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
                 >
-                  {label}
+                  更新
                 </button>
-              ))}
+              </div>
+
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                {statItems(stats).map(([label, summary]) => (
+                  <div key={label} className="rounded-lg bg-slate-100 px-3 py-2">
+                    <p className="text-xs font-semibold text-slate-500">{label}</p>
+                    <p className="mt-1 text-lg font-black text-slate-950">{summary?.winRate ?? 0}%</p>
+                    <p className="text-[11px] text-slate-500">
+                      {summary?.wins ?? 0}勝 / {summary?.played ?? 0}戦
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4">
+                <p className="text-xs font-semibold uppercase text-slate-500">Recent</p>
+                {isStatsLoading ? (
+                  <p className="mt-2 text-sm text-slate-500">読み込み中...</p>
+                ) : stats?.recent.length ? (
+                  <div className="mt-2 space-y-2">
+                    {stats.recent.slice(0, 5).map((result) => (
+                      <div key={result.id} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm">
+                        <div>
+                          <p className="font-semibold text-slate-800">{result.won ? "勝利" : "敗北"}</p>
+                          <p className="text-xs text-slate-500">
+                            {formatDate(result.finishedAt)} / {result.role === "wolf" ? "狼" : result.role === "no-wolf" ? "狼なし" : "村"}
+                          </p>
+                        </div>
+                        <span className={`rounded-md px-2 py-1 text-xs font-bold ${
+                          result.won ? "bg-cyan-100 text-cyan-700" : "bg-rose-100 text-rose-700"
+                        }`}>
+                          {result.won ? "WIN" : "LOSE"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-sm text-slate-500">まだ記録はありません。</p>
+                )}
+              </div>
             </div>
-          )}
-
-          <label className="mt-4 block text-sm font-medium text-slate-700">
-            プレイヤー名
-            <input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              disabled={isLoggedIn}
-              className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 disabled:bg-slate-100"
-              placeholder="例: yusuke"
-            />
-          </label>
-
-          {!isLoggedIn && (
-            <label className="mt-3 block text-sm font-medium text-slate-700">
-              パスワード
-              <input
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") void submitAccount();
-                }}
-                type="password"
-                autoComplete={authMode === "register" ? "new-password" : "current-password"}
-                className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
-                placeholder="4文字以上"
-              />
-            </label>
-          )}
-
-          {!isLoggedIn && (
-            <button
-              type="button"
-              onClick={() => void submitAccount()}
-              disabled={isSaving}
-              className="mt-4 w-full rounded-lg bg-cyan-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-500 disabled:bg-slate-300"
-            >
-              {isSaving ? "確認中..." : authMode === "register" ? "アカウント作成" : "ログイン"}
-            </button>
-          )}
-
-          {message && (
-            <p className="mt-3 rounded-lg border border-cyan-100 bg-cyan-50 px-3 py-2 text-sm font-semibold text-cyan-800">
-              {message}
-            </p>
           )}
         </aside>
 

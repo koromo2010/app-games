@@ -7,6 +7,7 @@ import {
   type WordWolfTopic,
 } from "@/lib/wordwolf";
 import { redisCommand } from "@/lib/redis-store";
+import { recordWordWolfGameResults } from "@/lib/player-stats-store";
 
 type Phase = "lobby" | "clue" | "vote" | "wolfGuess" | "result";
 type ClueLogVisibility = "always" | "result";
@@ -56,6 +57,7 @@ export type WordWolfRoom = {
   wolfGuess: string;
   winner: "village" | "wolf" | "players" | null;
   resultText: string;
+  statsRecordedAt?: number;
   createdAt: number;
   updatedAt: number;
 };
@@ -122,6 +124,7 @@ function normalizeRoom(value: unknown): WordWolfRoom | null {
     wolfGuess: typeof parsed.wolfGuess === "string" ? parsed.wolfGuess : "",
     winner: parsed.winner === "village" || parsed.winner === "wolf" || parsed.winner === "players" ? parsed.winner : null,
     resultText: typeof parsed.resultText === "string" ? parsed.resultText : "",
+    statsRecordedAt: typeof parsed.statsRecordedAt === "number" ? parsed.statsRecordedAt : undefined,
     createdAt: typeof parsed.createdAt === "number" ? parsed.createdAt : Date.now(),
     updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : Date.now(),
   };
@@ -150,9 +153,17 @@ export async function loadStoredWordWolfRoom(code: string) {
 }
 
 export async function saveStoredWordWolfRoom(room: unknown) {
-  const normalizedRoom = normalizeRoom(room);
+  let normalizedRoom = normalizeRoom(room);
   if (!normalizedRoom) {
     throw new Error("INVALID_WORDWOLF_ROOM");
+  }
+
+  if (normalizedRoom.phase === "result" && normalizedRoom.winner && !normalizedRoom.statsRecordedAt) {
+    await recordWordWolfGameResults(normalizedRoom);
+    normalizedRoom = {
+      ...normalizedRoom,
+      statsRecordedAt: Date.now(),
+    };
   }
 
   await redisCommand<"OK">(["SET", roomKey(normalizedRoom.code), JSON.stringify(normalizedRoom)]);
