@@ -26,6 +26,7 @@ import {
   type TopicSourceMode,
   type WordWolfTopic,
 } from "@/lib/wordwolf";
+import type { WordWolfGuessJudgement } from "@/lib/wordwolf-guess-judgement";
 
 type Phase = "lobby" | "clue" | "vote" | "wolfGuess" | "result";
 type ClueLogVisibility = "always" | "result";
@@ -73,6 +74,7 @@ type Room = {
   votes: Record<string, string>;
   accusedId: string | null;
   wolfGuess: string;
+  wolfGuessJudgement: WordWolfGuessJudgement | null;
   winner: "village" | "wolf" | "players" | null;
   resultText: string;
   scores: Record<string, number>;
@@ -357,6 +359,7 @@ function createEmptyRoom(
     votes: {},
     accusedId: null,
     wolfGuess: "",
+    wolfGuessJudgement: null,
     winner: null,
     resultText: "",
     scores: {},
@@ -528,6 +531,8 @@ export function WordWolfGame() {
   const [isJoinListOpen, setIsJoinListOpen] = useState(false);
   const [clueInput, setClueInput] = useState("");
   const [guessInput, setGuessInput] = useState("");
+  const [isGuessJudging, setIsGuessJudging] = useState(false);
+  const [guessFeedbackMessage, setGuessFeedbackMessage] = useState("");
   const [error, setError] = useState("");
   const [avatarColor, setAvatarColor] = useState(fallbackAvatarColor);
   const [avatarImage, setAvatarImage] = useState<string | null>(null);
@@ -1044,6 +1049,7 @@ export function WordWolfGame() {
         votes: {},
         accusedId: null,
         wolfGuess: "",
+        wolfGuessJudgement: null,
         winner: null,
         resultText: "",
       });
@@ -1101,7 +1107,7 @@ export function WordWolfGame() {
   const submitGuessOnEnter = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Enter" || isComposingEnter(event)) return;
     event.preventDefault();
-    submitWolfGuess();
+    void submitWolfGuess();
   };
 
   const castVote = (targetId: string) => {
@@ -1147,20 +1153,73 @@ export function WordWolfGame() {
     setAndSaveRoom(nextRoom);
   };
 
-  const submitWolfGuess = () => {
-    if (!room || !guessActor || guessActor.id !== room.wolfId) return;
-    const isCorrect = normalizeGuess(guessInput) === normalizeGuess(room.villageWord);
+  const submitWolfGuess = async () => {
+    if (!room || !guessActor || guessActor.id !== room.wolfId || isGuessJudging) return;
+
+    const guess = guessInput.trim();
+    if (!guess) return;
+
+    setIsGuessJudging(true);
+    setGuessFeedbackMessage("");
+
+    let judgement: WordWolfGuessJudgement;
+    try {
+      const response = await fetch("/api/wordwolf/guess", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ guess, correct: room.villageWord }),
+      });
+      const payload = (await response.json()) as { judgement?: WordWolfGuessJudgement };
+      if (!response.ok || !payload.judgement) {
+        throw new Error("GUESS_JUDGEMENT_FAILED");
+      }
+      judgement = payload.judgement;
+    } catch {
+      const accepted = normalizeGuess(guess) === normalizeGuess(room.villageWord);
+      judgement = {
+        accepted,
+        source: accepted ? "exact" : "fuzzy",
+        reason: accepted
+          ? "\u5b8c\u5168\u4e00\u81f4\u3057\u307e\u3057\u305f\u3002"
+          : "\u5224\u5b9a\u306b\u5931\u6557\u3057\u305f\u305f\u3081\u5b8c\u5168\u4e00\u81f4\u306e\u307f\u3067\u5224\u5b9a\u3057\u307e\u3057\u305f\u3002",
+        confidence: accepted ? 1 : 0,
+        feedbackAccepted: 0,
+        feedbackRejected: 0,
+      };
+    } finally {
+      setIsGuessJudging(false);
+    }
 
     setAndSaveRoom({
       ...room,
       phase: "result",
       currentTurnStartedAt: null,
-      wolfGuess: guessInput.trim(),
-      winner: isCorrect ? "wolf" : "village",
-      resultText: isCorrect
-        ? "狼が村のお題を当てました。逆転で狼の勝利です。"
-        : "狼は村のお題を外しました。村側の勝利です。",
+      wolfGuess: guess,
+      wolfGuessJudgement: judgement,
+      winner: judgement.accepted ? "wolf" : "village",
+      resultText: judgement.accepted
+        ? "\u9006\u8ee2\u56de\u7b54\u3092\u6b63\u89e3\u6271\u3044\u306b\u3057\u307e\u3057\u305f\u3002\u72fc\u306e\u52dd\u5229\u3067\u3059\u3002"
+        : "\u9006\u8ee2\u56de\u7b54\u306f\u4e0d\u6b63\u89e3\u6271\u3044\u3067\u3059\u3002\u6751\u5074\u306e\u52dd\u5229\u3067\u3059\u3002",
     });
+  };
+
+  const submitGuessFeedback = async (accepted: boolean) => {
+    if (!room || !room.wolfGuess || !room.villageWord) return;
+
+    setGuessFeedbackMessage("");
+    try {
+      const response = await fetch("/api/wordwolf/guess-feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ guess: room.wolfGuess, correct: room.villageWord, accepted }),
+      });
+      if (!response.ok) throw new Error("GUESS_FEEDBACK_FAILED");
+      setGuessFeedbackMessage(
+        accepted ? "\u6b63\u89e3\u6271\u3044\u3068\u3057\u3066\u8a18\u61b6\u3057\u307e\u3057\u305f\u3002" : "\u4e0d\u6b63\u89e3\u6271\u3044\u3068\u3057\u3066\u8a18\u61b6\u3057\u307e\u3057\u305f\u3002",
+      );
+    } catch {
+      setGuessFeedbackMessage("\u4fdd\u5b58\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002\u3042\u3068\u3067\u3082\u3046\u4e00\u5ea6\u8a66\u3057\u3066\u304f\u3060\u3055\u3044\u3002");
+    }
   };
 
   const resetToLobby = (targetRoom: Room, advanceGame = false): Room => ({
@@ -1178,6 +1237,7 @@ export function WordWolfGame() {
     votes: {},
     accusedId: null,
     wolfGuess: "",
+    wolfGuessJudgement: null,
     winner: null,
     resultText: "",
     gameNumber: advanceGame ? (targetRoom.gameNumber ?? 1) + 1 : targetRoom.gameNumber,
@@ -1966,11 +2026,11 @@ export function WordWolfGame() {
                     placeholder="村側のお題を入力"
                   />
                   <button
-                    onClick={submitWolfGuess}
-                    disabled={!guessInput.trim() || guessActor?.id !== room.wolfId}
+                    onClick={() => void submitWolfGuess()}
+                    disabled={isGuessJudging || !guessInput.trim() || guessActor?.id !== room.wolfId}
                     className="mt-3 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-500 disabled:bg-slate-300"
                   >
-                    回答する
+                    {isGuessJudging ? "\u5224\u5b9a\u4e2d..." : "\u56de\u7b54\u3059\u308b"}
                   </button>
                 </div>
               )}
@@ -1980,6 +2040,57 @@ export function WordWolfGame() {
                   <p className="text-xs font-semibold uppercase text-cyan-700">Result</p>
                   <h2 className="mt-1 text-3xl font-black text-slate-950">{resultTitle}</h2>
                   <p className="mt-3 text-sm leading-6 text-slate-700">{room.resultText}</p>
+                  {hasWolfInCurrentGame && room.wolfGuess && (
+                    <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="text-xs font-semibold uppercase text-amber-700">Final answer review</p>
+                          <h3 className="mt-1 text-lg font-black text-slate-950">{"\u9006\u8ee2\u56de\u7b54\u306e\u5224\u5b9a"}</h3>
+                        </div>
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-bold ${
+                            room.wolfGuessJudgement?.accepted
+                              ? "bg-cyan-100 text-cyan-900"
+                              : "bg-rose-100 text-rose-900"
+                          }`}
+                        >
+                          {room.wolfGuessJudgement?.accepted ? "\u6b63\u89e3\u6271\u3044" : "\u4e0d\u6b63\u89e3\u6271\u3044"}
+                        </span>
+                      </div>
+                      <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+                        <div className="rounded-lg bg-white/70 p-3">
+                          <dt className="text-xs font-semibold text-slate-500">{"\u5b9f\u56de\u7b54"}</dt>
+                          <dd className="mt-1 text-lg font-bold text-slate-950">{room.wolfGuess}</dd>
+                        </div>
+                        <div className="rounded-lg bg-white/70 p-3">
+                          <dt className="text-xs font-semibold text-slate-500">{"\u6b63\u89e3"}</dt>
+                          <dd className="mt-1 text-lg font-bold text-slate-950">{room.villageWord}</dd>
+                        </div>
+                      </dl>
+                      {room.wolfGuessJudgement && (
+                        <p className="mt-3 text-sm leading-6 text-slate-700">
+                          {"\u5224\u5b9a\u7406\u7531"}: {room.wolfGuessJudgement.reason} / source: {room.wolfGuessJudgement.source} / confidence: {Math.round(room.wolfGuessJudgement.confidence * 100)}%
+                        </p>
+                      )}
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void submitGuessFeedback(true)}
+                          className="rounded-lg border border-cyan-200 bg-cyan-100 px-3 py-2 text-sm font-bold text-cyan-950 transition hover:bg-cyan-50"
+                        >
+                          {"\u6b63\u89e3\u6271\u3044\u3067\u8a18\u61b6"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void submitGuessFeedback(false)}
+                          className="rounded-lg border border-rose-200 bg-rose-100 px-3 py-2 text-sm font-bold text-rose-950 transition hover:bg-rose-50"
+                        >
+                          {"\u4e0d\u6b63\u89e3\u6271\u3044\u3067\u8a18\u61b6"}
+                        </button>
+                      </div>
+                      {guessFeedbackMessage && <p className="mt-2 text-sm font-semibold text-slate-700">{guessFeedbackMessage}</p>}
+                    </div>
+                  )}
                   <dl className="mt-4 grid gap-3 sm:grid-cols-3">
                     <div className="rounded-lg bg-slate-100 p-3">
                       <dt className="text-xs text-slate-500">村側のお題</dt>

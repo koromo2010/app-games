@@ -6,6 +6,7 @@ import {
   type TopicSourceMode,
   type WordWolfTopic,
 } from "@/lib/wordwolf";
+import type { WordWolfGuessJudgement } from "@/lib/wordwolf-guess-judgement";
 import { redisCommand } from "@/lib/redis-store";
 import { recordWordWolfGameResults } from "@/lib/player-stats-store";
 
@@ -55,6 +56,7 @@ export type WordWolfRoom = {
   votes: Record<string, string>;
   accusedId: string | null;
   wolfGuess: string;
+  wolfGuessJudgement: WordWolfGuessJudgement | null;
   winner: "village" | "wolf" | "players" | null;
   resultText: string;
   scores: Record<string, number>;
@@ -102,6 +104,27 @@ function normalizeScores(value: unknown) {
       .filter(([playerId, score]) => playerId && typeof score === "number" && Number.isFinite(score))
       .map(([playerId, score]) => [playerId, Math.max(0, Math.floor(score as number))]),
   );
+}
+
+function normalizeGuessJudgement(value: unknown): WordWolfGuessJudgement | null {
+  if (!value || typeof value !== "object") return null;
+
+  const parsed = value as Partial<WordWolfGuessJudgement>;
+  const source =
+    parsed.source === "exact" || parsed.source === "feedback" || parsed.source === "llm" || parsed.source === "fuzzy"
+      ? parsed.source
+      : "fuzzy";
+
+  if (typeof parsed.accepted !== "boolean") return null;
+
+  return {
+    accepted: parsed.accepted,
+    source,
+    reason: typeof parsed.reason === "string" ? parsed.reason : "",
+    confidence: typeof parsed.confidence === "number" ? Math.max(0, Math.min(1, parsed.confidence)) : 0,
+    feedbackAccepted: typeof parsed.feedbackAccepted === "number" ? Math.max(0, Math.floor(parsed.feedbackAccepted)) : 0,
+    feedbackRejected: typeof parsed.feedbackRejected === "number" ? Math.max(0, Math.floor(parsed.feedbackRejected)) : 0,
+  };
 }
 
 function didPlayerWin(room: WordWolfRoom, playerId: string) {
@@ -170,6 +193,7 @@ function normalizeRoom(value: unknown): WordWolfRoom | null {
     votes: parsed.votes && typeof parsed.votes === "object" ? (parsed.votes as Record<string, string>) : {},
     accusedId: typeof parsed.accusedId === "string" ? parsed.accusedId : null,
     wolfGuess: typeof parsed.wolfGuess === "string" ? parsed.wolfGuess : "",
+    wolfGuessJudgement: normalizeGuessJudgement(parsed.wolfGuessJudgement),
     winner: parsed.winner === "village" || parsed.winner === "wolf" || parsed.winner === "players" ? parsed.winner : null,
     resultText: typeof parsed.resultText === "string" ? parsed.resultText : "",
     scores: normalizeScores(parsed.scores),
