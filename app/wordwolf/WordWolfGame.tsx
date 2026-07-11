@@ -1916,8 +1916,13 @@ export function WordWolfGame() {
                 </button>
               )}
 
-              {room.phase === "lobby" && isHost && (
-                <div className="mt-4 space-y-3">
+              {room.phase === "lobby" && (
+                <fieldset disabled={!isHost} className="mt-4 space-y-3 disabled:opacity-75">
+                  {!isHost && (
+                    <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
+                      ルール設定はホストだけが変更できます。
+                    </p>
+                  )}
                   <div>
                     <p className="text-sm font-medium text-slate-700">狼不在</p>
                     <div className="mt-1 grid grid-cols-2 gap-2">
@@ -2121,12 +2126,12 @@ export function WordWolfGame() {
                   </label>
                   <button
                     onClick={startGame}
-                    disabled={isStarting}
+                    disabled={!isHost || isStarting}
                     className={`w-full ${primaryButtonClass}`}
                   >
                     {isStarting ? "お題生成中..." : "ゲーム開始"}
                   </button>
-                </div>
+                </fieldset>
               )}
             </div>
           )}
