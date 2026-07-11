@@ -24,91 +24,45 @@ import {
   pickFallbackTopic,
   type TopicDictionarySource,
   type TopicPairDistance,
-  type TopicSourceMode,
   type WordWolfTopic,
 } from "@/lib/wordwolf";
+import type {
+  ClueLogVisibility,
+  ClueMode,
+  GameMode,
+  Player,
+  Room,
+  RoomChoice,
+  VoteRound,
+} from "@/lib/wordwolf-game-types";
 import type { WordWolfGuessJudgement } from "@/lib/wordwolf-guess-judgement";
-
-type Phase = "lobby" | "clue" | "vote" | "wolfGuess" | "result";
-type ClueLogVisibility = "always" | "result";
-type ClueMode = "turn" | "simultaneous";
-type GameMode = "wordwolf" | "may-no-wolf";
-
-const abstainVoteId = "__abstain__";
-
-type Player = {
-  id: string;
-  name: string;
-  joinedAt: number;
-  avatarColor?: string;
-  avatarImage?: string;
-};
-
-type Clue = {
-  playerId: string;
-  round: number;
-  text: string;
-  at: number;
-};
-
-type VoteRound = {
-  round: number;
-  votes: Record<string, string>;
-  candidateIds: string[];
-  at: number;
-};
-
-type Room = {
-  code: string;
-  hostId: string;
-  ownerId?: string;
-  passphrase: string;
-  phase: Phase;
-  gameMode: GameMode;
-  debugMode?: boolean;
-  clueLogVisibility: ClueLogVisibility;
-  clueMode: ClueMode;
-  randomizeTurnOrder: boolean;
-  players: Player[];
-  roundsTotal: number;
-  turnTimeLimitSeconds: number;
-  currentRound: number;
-  currentTurnIndex: number;
-  currentTurnStartedAt: number | null;
-  wolfId: string | null;
-  villageWord: string;
-  wolfWord: string;
-  topicReason: string;
-  topicSource: WordWolfTopic["source"] | "pending";
-  topicDictionarySource: TopicDictionarySource;
-  topicPairDistance: TopicPairDistance;
-  topicHint: string;
-  topicSourceMode?: TopicSourceMode;
-  clues: Clue[];
-  votes: Record<string, string>;
-  voteHistory: VoteRound[];
-  runoffCandidateIds: string[] | null;
-  accusedId: string | null;
-  wolfGuess: string;
-  wolfGuessJudgement: WordWolfGuessJudgement | null;
-  winner: "village" | "wolf" | "players" | null;
-  resultText: string;
-  scores: Record<string, number>;
-  gamesPlayed: number;
-  gameNumber: number;
-  statsRecordedAt?: number;
-  createdAt: number;
-  updatedAt: number;
-};
-
-type RoomChoice = {
-  code: string;
-  hostName: string;
-  playerCount: number;
-  roundsTotal: number;
-  hasPassphrase: boolean;
-  updatedAt: number;
-};
+import {
+  abstainVoteId,
+  createClue,
+  createVoteRound,
+  getClueParticipants,
+  getClueSubmittedCount,
+  getFirstClueTurnIndex,
+  getNextClueTurn,
+  getNextSimultaneousCluePlayer,
+  getNextVotePlayer,
+  getTopVoteTargetIds,
+  getVoteCandidates,
+  getVoteTarget,
+  getVoteVoters,
+  hasPostedClueThisRound,
+  pickWolf,
+  shufflePlayers,
+} from "./game-flow";
+import { ClueLogPanel, VoteHistoryPanel } from "./WordWolfPanels";
+import {
+  cyanButtonClass,
+  dangerButtonClass,
+  inputClass,
+  panelClass,
+  primaryButtonClass,
+  subtleButtonClass,
+} from "./styles";
 
 function normalizeGameMode(value: unknown): GameMode {
   return value === "may-no-wolf" || value === "no-wolf" ? "may-no-wolf" : "wordwolf";
@@ -158,18 +112,6 @@ const roomStoragePrefix = "wordwolf-room-";
 const topicHistoryKey = "wordwolf-topic-history";
 const topicDailyWordHistoryKey = "wordwolf-topic-daily-words";
 const topicRequestHistoryLimit = 500;
-const panelClass = "rounded-lg border border-white/10 bg-white/[0.96] p-4 shadow-[0_18px_50px_rgba(15,23,42,0.16)]";
-const mutedPanelClass = "rounded-lg border border-slate-200 bg-slate-50/90";
-const inputClass =
-  "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 disabled:bg-slate-100";
-const primaryButtonClass =
-  "rounded-lg bg-slate-950 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:bg-slate-300";
-const cyanButtonClass =
-  "rounded-lg bg-cyan-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-500 disabled:bg-slate-300";
-const subtleButtonClass =
-  "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 transition hover:border-slate-400 hover:bg-slate-50";
-const dangerButtonClass =
-  "rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-100";
 
 function makeId(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
@@ -190,15 +132,6 @@ function makeRoomCode() {
 
 function getRoomKey(code: string) {
   return `${roomStoragePrefix}${code.toUpperCase()}`;
-}
-
-function shufflePlayers(players: Player[]) {
-  const shuffled = [...players];
-  for (let index = shuffled.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
-    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
-  }
-  return shuffled;
 }
 
 function saveRoom(room: Room) {
@@ -464,14 +397,6 @@ function createPlayer(
   };
 }
 
-function pickWolf(players: Player[]) {
-  return players[Math.floor(Math.random() * players.length)];
-}
-
-function createClue(playerId: string, round: number, text: string): Clue {
-  return { playerId, round, text, at: Date.now() };
-}
-
 function fillSoloTestPlayers(players: Player[]) {
   const nextPlayers = [...players];
 
@@ -566,172 +491,6 @@ async function fetchTopicWithFallback(
   } finally {
     window.clearTimeout(timer);
   }
-}
-
-function getRunoffCandidates(room: Room) {
-  if (!room.runoffCandidateIds?.length) return room.players;
-
-  const candidateIds = new Set(room.runoffCandidateIds);
-  return room.players.filter((player) => candidateIds.has(player.id));
-}
-
-function getClueParticipants(room: Room) {
-  return room.phase === "clue" && room.runoffCandidateIds?.length ? getRunoffCandidates(room) : room.players;
-}
-
-function getFirstClueTurnIndex(room: Room) {
-  const firstParticipant = getClueParticipants(room)[0];
-  return firstParticipant ? Math.max(0, room.players.findIndex((player) => player.id === firstParticipant.id)) : 0;
-}
-
-function getNextClueTurn(room: Room) {
-  const participants = getClueParticipants(room);
-  const currentPlayer = room.players[room.currentTurnIndex];
-  const currentParticipantIndex = Math.max(
-    0,
-    participants.findIndex((player) => player.id === currentPlayer?.id),
-  );
-  const isLastPlayer = currentParticipantIndex >= participants.length - 1;
-  const nextParticipant = isLastPlayer ? participants[0] : participants[currentParticipantIndex + 1];
-
-  return {
-    isLastPlayer,
-    nextTurnIndex: nextParticipant ? Math.max(0, room.players.findIndex((player) => player.id === nextParticipant.id)) : 0,
-  };
-}
-
-function hasPostedClueThisRound(room: Room, playerId: string) {
-  return room.clues.some((clue) => clue.round === room.currentRound && clue.playerId === playerId);
-}
-
-function getClueSubmittedCount(room: Room) {
-  return getClueParticipants(room).filter((player) => hasPostedClueThisRound(room, player.id)).length;
-}
-
-function getNextSimultaneousCluePlayer(room: Room) {
-  return getClueParticipants(room).find((player) => !hasPostedClueThisRound(room, player.id)) ?? null;
-}
-function getVoteCandidates(room: Room) {
-  if (!room.runoffCandidateIds?.length) return room.players;
-
-  const candidateIds = new Set(room.runoffCandidateIds);
-  return room.players.filter((player) => candidateIds.has(player.id));
-}
-
-function getVoteVoters(room: Room) {
-  if (!room.runoffCandidateIds?.length) return room.players;
-
-  const candidateIds = new Set(room.runoffCandidateIds);
-  return room.players.filter((player) => !candidateIds.has(player.id));
-}
-
-function getVoteCounts(room: Room, votes = room.votes) {
-  return getVoteCandidates(room).map((player) => ({
-    playerId: player.id,
-    count: Object.values(votes).filter((vote) => vote === player.id).length,
-  }));
-}
-
-function getTopVoteTargetIds(room: Room, votes = room.votes) {
-  const counts = getVoteCounts(room, votes);
-  const max = Math.max(...counts.map((item) => item.count), 0);
-  if (max === 0) return [];
-  return counts.filter((item) => item.count === max).map((item) => item.playerId);
-}
-
-function getVoteTarget(room: Room, votes = room.votes) {
-  const top = getTopVoteTargetIds(room, votes);
-  return top.length === 1 ? top[0] : null;
-}
-
-function createVoteRound(room: Room, votes: Record<string, string>): VoteRound {
-  return {
-    round: room.voteHistory.length + 1,
-    votes,
-    candidateIds: getVoteCandidates(room).map((player) => player.id),
-    at: Date.now(),
-  };
-}
-
-function getNextVotePlayer(room: Room) {
-  return getVoteVoters(room).find((player) => !room.votes[player.id]) ?? null;
-}
-
-function VoteHistoryPanel({ room }: { room: Room }) {
-  if (room.voteHistory.length === 0) return null;
-
-  return (
-    <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
-      <p className="text-xs font-semibold uppercase text-slate-500">Vote results</p>
-      <h3 className="mt-1 text-lg font-black text-slate-950">{"\u6295\u7968\u7d50\u679c"}</h3>
-      <div className="mt-3 space-y-3">
-        {room.voteHistory.map((round) => (
-          <div key={`${round.round}-${round.at}`} className="rounded-lg bg-white p-3 shadow-sm">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-sm font-bold text-slate-950">{round.round}{"\u56de\u76ee"}</p>
-              <p className="text-xs font-semibold text-slate-500">
-                {round.candidateIds.length < room.players.length ? "\u6c7a\u9078" : "\u521d\u56de"}
-              </p>
-            </div>
-            <dl className="mt-2 grid gap-2 sm:grid-cols-2">
-              {Object.entries(round.votes).map(([voterId, targetId]) => {
-                const voter = room.players.find((player) => player.id === voterId);
-                const target = room.players.find((player) => player.id === targetId);
-                const targetName = targetId === abstainVoteId ? "\u6295\u7968\u305b\u305a" : target?.name ?? "Unknown";
-                return (
-                  <div key={`${round.round}-${voterId}`} className="rounded bg-slate-100 px-2 py-1 text-sm text-slate-700">
-                    <dt className="inline font-semibold text-slate-950">{voter?.name ?? "Unknown"}</dt>
-                    <dd className="inline"> {"\u2192"} {targetName}</dd>
-                  </div>
-                );
-              })}
-            </dl>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ClueLogPanel({ room }: { room: Room }) {
-  return (
-    <div className="rounded-lg border border-slate-200 bg-white/[0.96] p-3 shadow-[0_12px_34px_rgba(15,23,42,0.12)]">
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <p className="text-xs font-semibold uppercase text-cyan-700">Timeline</p>
-          <h2 className="text-lg font-black text-slate-950">{"\u767a\u8a00\u30ed\u30b0"}</h2>
-        </div>
-        <span className="rounded bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-600">
-          {room.clues.length} posts
-        </span>
-      </div>
-      <div className="mt-3 grid gap-1.5">
-        {room.clues.length === 0 ? (
-          <p className={`${mutedPanelClass} px-3 py-4 text-center text-sm text-slate-500`}>
-            {"\u307e\u3060\u6295\u7a3f\u306f\u3042\u308a\u307e\u305b\u3093\u3002"}
-          </p>
-        ) : (
-          room.clues.map((clue) => {
-            const player = room.players.find((item) => item.id === clue.playerId);
-            return (
-              <div
-                key={`${clue.playerId}-${clue.round}-${clue.at}`}
-                className="grid gap-2 rounded border border-slate-200 bg-slate-50/80 px-2.5 py-2 text-sm sm:grid-cols-[88px_1fr]"
-              >
-                <div className="flex min-w-0 items-center gap-1.5 sm:block">
-                  <p className="truncate text-xs font-bold text-slate-950">{player?.name ?? "Unknown"}</p>
-                  <p className="shrink-0 rounded bg-white px-1.5 py-0.5 text-[11px] font-semibold text-slate-500 sm:mt-1 sm:inline-block">
-                    {clue.round}{"\u5468\u76ee"}
-                  </p>
-                </div>
-                <p className="min-w-0 whitespace-pre-wrap break-words leading-5 text-slate-700">{clue.text}</p>
-              </div>
-            );
-          })
-        )}
-      </div>
-    </div>
-  );
 }
 
 export function WordWolfGame() {
