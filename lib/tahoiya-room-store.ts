@@ -81,6 +81,7 @@ function normalizeRoom(value: unknown): TahoiyaRoom | null {
     ownerId: typeof parsed.ownerId === "string" ? parsed.ownerId : undefined,
     passphrase: typeof parsed.passphrase === "string" ? parsed.passphrase : "",
     phase: isPhase(parsed.phase) ? parsed.phase : "lobby",
+    debugMode: Boolean(parsed.debugMode),
     players,
     parentId,
     round: typeof parsed.round === "number" ? Math.max(1, Math.floor(parsed.round)) : 1,

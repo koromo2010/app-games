@@ -29,6 +29,7 @@ export type TahoiyaRoom = {
   ownerId?: string;
   passphrase: string;
   phase: TahoiyaPhase;
+  debugMode?: boolean;
   players: TahoiyaPlayer[];
   parentId: string;
   round: number;

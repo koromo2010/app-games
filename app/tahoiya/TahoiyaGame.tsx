@@ -62,6 +62,7 @@ function normalizeRoom(room: TahoiyaRoom): TahoiyaRoom {
   return {
     ...room,
     passphrase: room.passphrase ?? "",
+    debugMode: Boolean(room.debugMode),
     players: Array.isArray(room.players) ? room.players : [],
     parentId: room.parentId || room.hostId,
     round: room.round ?? 1,
@@ -173,6 +174,7 @@ function createEmptyRoom(host: TahoiyaPlayer, passphrase: string, ownerId: strin
     ownerId,
     passphrase,
     phase: "lobby",
+    debugMode: false,
     players: [host],
     parentId: host.id,
     round: 1,
@@ -290,12 +292,20 @@ export function TahoiyaGame() {
     return () => window.clearInterval(timer);
   }, [roomCode]);
 
-  const activePlayer = room?.players.find((player) => player.id === activePlayerId) ?? null;
+  const isDebugMode = Boolean(room?.debugMode);
+  const operationPlayerId = isDebugMode ? activePlayerId : playerId;
+  const activePlayer = room?.players.find((player) => player.id === operationPlayerId) ?? null;
   const parent = room?.players.find((player) => player.id === room.parentId) ?? null;
   const isHost = Boolean(room && playerId === room.hostId);
-  const isParent = Boolean(room && activePlayerId === room.parentId);
+  const isParent = Boolean(room && activePlayer?.id === room.parentId);
   const writingDone = room ? submittedCount(room) >= Math.max(0, room.players.length - 1) : false;
   const votingDone = room ? voterCount(room) >= Math.max(0, room.players.length - 1) : false;
+  const nextWriter = room?.phase === "writing"
+    ? room.players.find((player) => player.id !== room.parentId && !room.fakeDefinitions[player.id])
+    : null;
+  const nextVoter = room?.phase === "voting"
+    ? room.players.find((player) => player.id !== room.parentId && !room.votes[player.id])
+    : null;
 
   const sortedScores = useMemo(() => {
     if (!room) return [];
@@ -360,7 +370,7 @@ export function TahoiyaGame() {
   };
 
   const addTestPlayer = () => {
-    if (!room || room.phase !== "lobby") return;
+    if (!room || room.phase !== "lobby" || !room.debugMode) return;
     const count = room.players.length + 1;
     setAndSaveRoom({
       ...room,
@@ -368,9 +378,29 @@ export function TahoiyaGame() {
     });
   };
 
+  const setDebugMode = (debugMode: boolean) => {
+    if (!room || room.phase !== "lobby") return;
+    const nextRoom = { ...room, debugMode };
+    setAndSaveRoom(nextRoom);
+    if (!debugMode) {
+      setActivePlayerId(playerId);
+    }
+  };
+
+  const withMinimumDebugPlayers = (baseRoom: TahoiyaRoom) => {
+    if (!baseRoom.debugMode || baseRoom.players.length >= 3) return baseRoom;
+
+    const players = [...baseRoom.players];
+    while (players.length < 3) {
+      players.push(createPlayer(`テスト${players.length + 1}`));
+    }
+    return { ...baseRoom, players };
+  };
+
   const startRound = async () => {
     if (!room || isStarting) return;
-    if (room.players.length < 2) {
+    const startingRoom = withMinimumDebugPlayers(room);
+    if (startingRoom.players.length < 2) {
       setMessage("2人以上で開始できます。テストプレイヤー追加でもOKです。");
       return;
     }
@@ -381,7 +411,7 @@ export function TahoiyaGame() {
       const response = await fetch("/api/tahoiya/topic", { cache: "no-store" });
       const topic = (await response.json()) as TahoiyaTopic;
       setAndSaveRoom({
-        ...room,
+        ...startingRoom,
         phase: "writing",
         word: topic.word,
         reading: topic.reading,
@@ -393,6 +423,8 @@ export function TahoiyaGame() {
         votes: {},
         resultText: "",
       });
+      const firstWriter = startingRoom.players.find((player) => player.id !== startingRoom.parentId);
+      if (firstWriter) setActivePlayerId(firstWriter.id);
       setDefinitionInput("");
       setSelectedOptionId("");
     } finally {
@@ -402,13 +434,18 @@ export function TahoiyaGame() {
 
   const submitDefinition = () => {
     if (!room || !activePlayer || isParent || !definitionInput.trim()) return;
-    setAndSaveRoom({
+    const nextRoom = {
       ...room,
       fakeDefinitions: {
         ...room.fakeDefinitions,
         [activePlayer.id]: definitionInput.trim(),
       },
-    });
+    };
+    setAndSaveRoom(nextRoom);
+    if (isDebugMode) {
+      const next = nextRoom.players.find((player) => player.id !== nextRoom.parentId && !nextRoom.fakeDefinitions[player.id]);
+      if (next) setActivePlayerId(next.id);
+    }
     setDefinitionInput("");
   };
 
@@ -424,25 +461,44 @@ export function TahoiyaGame() {
 
   const publishOptions = () => {
     if (!room || room.phase !== "writing" || !writingDone) return;
-    setAndSaveRoom({
+    const nextRoom = {
       ...room,
       phase: "voting",
       options: createOptions(room),
       votes: {},
-    });
+    } satisfies TahoiyaRoom;
+    setAndSaveRoom(nextRoom);
+    const firstVoter = nextRoom.players.find((player) => player.id !== nextRoom.parentId);
+    if (firstVoter) setActivePlayerId(firstVoter.id);
     setSelectedOptionId("");
   };
 
   const castVote = () => {
     if (!room || !activePlayer || isParent || !selectedOptionId) return;
-    setAndSaveRoom({
+    const nextRoom = {
       ...room,
       votes: {
         ...room.votes,
         [activePlayer.id]: selectedOptionId,
       },
-    });
+    };
+    setAndSaveRoom(nextRoom);
+    if (isDebugMode) {
+      const next = nextRoom.players.find((player) => player.id !== nextRoom.parentId && !nextRoom.votes[player.id]);
+      if (next) setActivePlayerId(next.id);
+    }
     setSelectedOptionId("");
+  };
+
+  const autoFillTestVotes = () => {
+    if (!room || room.phase !== "voting" || room.options.length === 0) return;
+    const nextVotes = { ...room.votes };
+    for (const player of room.players) {
+      if (player.id === room.parentId || nextVotes[player.id]) continue;
+      const option = room.options.find((item) => item.authorId !== player.id) ?? room.options[0];
+      if (option) nextVotes[player.id] = option.id;
+    }
+    setAndSaveRoom({ ...room, votes: nextVotes });
   };
 
   const finishRound = () => {
@@ -559,21 +615,42 @@ export function TahoiyaGame() {
                 <p className="text-sm text-slate-600">
                   親: <span className="font-bold text-slate-950">{parent?.name ?? "未設定"}</span>
                 </p>
-                <label className="block text-sm font-medium text-slate-700">
-                  操作プレイヤー
-                  <select value={activePlayerId} onChange={(event) => setActivePlayerId(event.target.value)} className={`mt-1 ${inputClass}`}>
-                    {room.players.map((player) => (
-                      <option key={player.id} value={player.id}>
-                        {player.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                {room.phase === "lobby" && isHost && (
+                  <button
+                    type="button"
+                    onClick={() => setDebugMode(!room.debugMode)}
+                    className={`w-full rounded-lg border px-3 py-2 text-sm font-bold transition ${
+                      room.debugMode
+                        ? "border-amber-400 bg-amber-100 text-amber-950"
+                        : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    デバッグモード {room.debugMode ? "ON" : "OFF"}
+                  </button>
+                )}
+                {isDebugMode ? (
+                  <label className="block text-sm font-medium text-slate-700">
+                    操作プレイヤー
+                    <select value={activePlayer?.id ?? activePlayerId} onChange={(event) => setActivePlayerId(event.target.value)} className={`mt-1 ${inputClass}`}>
+                      {room.players.map((player) => (
+                        <option key={player.id} value={player.id}>
+                          {player.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : (
+                  <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+                    操作中: <span className="font-bold text-slate-950">{activePlayer?.name ?? playerName}</span>
+                  </div>
+                )}
                 {room.phase === "lobby" && (
                   <>
-                    <button onClick={addTestPlayer} disabled={room.players.length >= 8} className={`w-full ${subtleButtonClass}`}>
-                      テストプレイヤー追加
-                    </button>
+                    {isDebugMode && (
+                      <button onClick={addTestPlayer} disabled={room.players.length >= 8} className={`w-full ${subtleButtonClass}`}>
+                        テストプレイヤー追加
+                      </button>
+                    )}
                     <button onClick={() => void startRound()} disabled={isStarting} className={`w-full ${primaryButtonClass}`}>
                       {isStarting ? "お題生成中..." : "ラウンド開始"}
                     </button>
@@ -631,6 +708,18 @@ export function TahoiyaGame() {
                   </div>
                   <span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700">{room.phase}</span>
                 </div>
+                {isDebugMode && (
+                  <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
+                    <p className="font-bold">デバッグモード中</p>
+                    <p className="mt-1">
+                      {room.phase === "writing" && nextWriter
+                        ? `次の未投稿: ${nextWriter.name}`
+                        : room.phase === "voting" && nextVoter
+                          ? `次の未投票: ${nextVoter.name}`
+                          : "操作プレイヤーを切り替えながら一人で流れを確認できます。"}
+                    </p>
+                  </div>
+                )}
                 {room.phase !== "lobby" && isParent && (
                   <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
                     <p className="text-xs font-semibold uppercase text-amber-700">本物の語釈</p>
@@ -679,9 +768,11 @@ export function TahoiyaGame() {
                   )}
                   {isHost && (
                     <div className="mt-4 flex flex-wrap gap-2">
-                      <button onClick={autoFillTestDefinitions} className={subtleButtonClass}>
-                        未投稿をテスト入力
-                      </button>
+                      {isDebugMode && (
+                        <button onClick={autoFillTestDefinitions} className={subtleButtonClass}>
+                          未投稿をテスト入力
+                        </button>
+                      )}
                       <button onClick={publishOptions} disabled={!writingDone} className={primaryButtonClass}>
                         語釈を並べる
                       </button>
@@ -720,9 +811,16 @@ export function TahoiyaGame() {
                     </div>
                   )}
                   {isHost && (
-                    <button onClick={finishRound} disabled={!votingDone} className={`mt-4 ${primaryButtonClass}`}>
-                      採点する
-                    </button>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {isDebugMode && (
+                        <button onClick={autoFillTestVotes} className={subtleButtonClass}>
+                          未投票をテスト投票
+                        </button>
+                      )}
+                      <button onClick={finishRound} disabled={!votingDone} className={primaryButtonClass}>
+                        採点する
+                      </button>
+                    </div>
                   )}
                 </div>
               )}
