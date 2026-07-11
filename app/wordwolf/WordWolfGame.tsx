@@ -680,6 +680,10 @@ export function WordWolfGame() {
   const canSubmitClue = Boolean(clueActor) && (room?.clueMode === "simultaneous" || clueActor?.id === currentPlayer?.id);
   const voteCandidates = room ? getVoteCandidates(room) : [];
   const isRunoffVote = Boolean(room?.runoffCandidateIds?.length);
+  const runoffCandidateNames = room?.runoffCandidateIds
+    ?.map((candidateId) => room.players.find((player) => player.id === candidateId)?.name)
+    .filter((name): name is string => Boolean(name))
+    .join("、") ?? "";
   const phaseTimeLimitSeconds = room?.turnTimeLimitSeconds && room.currentTurnStartedAt
     ? room.phase === "clue"
       ? room.turnTimeLimitSeconds
@@ -2311,9 +2315,12 @@ export function WordWolfGame() {
                     </p>
                   </div>
                   {room.runoffCandidateIds?.length ? (
-                    <p className="mt-3 text-sm leading-6 text-slate-600">
-                      {"\u540c\u7968\u306e\u5019\u88dc\u3060\u3051\u304c\u3082\u30461\u5468\u767a\u8a00\u3057\u3001\u305d\u306e\u5f8c\u306b\u6c7a\u9078\u6295\u7968\u3057\u307e\u3059\u3002"}
-                    </p>
+                    <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm leading-6 text-violet-950">
+                      <p className="font-black">同率投票です。もう一度発言してから決選投票します。</p>
+                      <p className="mt-1 font-semibold">
+                        対象: {runoffCandidateNames || "同率の候補"}
+                      </p>
+                    </div>
                   ) : null}
                   {room.clueMode === "simultaneous" && (
                     <p className="mt-3 text-sm leading-6 text-slate-600">
@@ -2360,9 +2367,12 @@ export function WordWolfGame() {
                     </p>
                   ) : null}
                   {isRunoffVote && (
-                    <p className="mt-2 text-sm leading-6 text-slate-600">
-                      {"\u540c\u7968\u306e\u5019\u88dc\u304c\u8ffd\u52a0\u767a\u8a00\u3057\u305f\u5f8c\u3001\u5019\u88dc\u4ee5\u5916\u306e\u30d7\u30ec\u30a4\u30e4\u30fc\u3060\u3051\u304c\u6295\u7968\u3057\u307e\u3059\u3002"}
-                    </p>
+                    <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm leading-6 text-violet-950">
+                      <p className="font-black">同率投票のため決選投票です。</p>
+                      <p className="mt-1 font-semibold">
+                        対象: {runoffCandidateNames || "同率の候補"}。候補以外のプレイヤーだけが投票します。
+                      </p>
+                    </div>
                   )}
                   {turnSecondsLeft !== null && (
                     <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950">
