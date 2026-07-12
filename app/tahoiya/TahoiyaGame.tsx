@@ -238,6 +238,20 @@ async function loadRoomFromStore(code: string) {
   }
 }
 
+async function loadActiveRoomFromStore(playerId: string) {
+  try {
+    const response = await fetch(`/api/tahoiya/rooms?playerId=${encodeURIComponent(playerId)}`, { cache: "no-store" });
+    if (!response.ok) throw new Error("ACTIVE_ROOM_FETCH_FAILED");
+    const data = (await response.json()) as { room?: TahoiyaRoom | null };
+    if (!data.room) return null;
+    const normalized = normalizeRoom(data.room);
+    saveRoomLocally(normalized);
+    return normalized;
+  } catch {
+    return null;
+  }
+}
+
 async function listJoinableRoomsFromStore() {
   try {
     const response = await fetch("/api/tahoiya/rooms", { cache: "no-store" });
@@ -255,6 +269,20 @@ async function deleteRoomFromStore(code: string) {
     await fetch(`/api/tahoiya/rooms?code=${encodeURIComponent(code)}`, { method: "DELETE" });
   } catch {
     // Local delete already happened.
+  }
+}
+
+async function deleteHostedRoomsFromStore(ownerId: string, fallbackHostId: string) {
+  for (const localRoom of listRoomsLocally()) {
+    if (localRoom.ownerId === ownerId || (!localRoom.ownerId && localRoom.hostId === fallbackHostId)) {
+      deleteRoomLocally(localRoom.code);
+    }
+  }
+  try {
+    const params = new URLSearchParams({ ownerId, fallbackHostId });
+    await fetch(`/api/tahoiya/rooms?${params.toString()}`, { method: "DELETE" });
+  } catch {
+    // Local cleanup keeps room creation usable when Redis is unavailable.
   }
 }
 
@@ -394,13 +422,19 @@ export function TahoiyaGame() {
   useEffect(() => {
     let mounted = true;
     loadPersistentPlayerSession()
-      .then((session) => {
+      .then(async (session) => {
         if (!mounted || !session) return;
-        setPlayerId(session.id ?? "");
-        setActivePlayerId(session.id ?? "");
+        const accountId = session.id ?? "";
+        setPlayerId(accountId);
+        setActivePlayerId(accountId);
         setPlayerName(session.name);
         setAvatarColor(session.avatarColor);
         setAvatarImage(session.avatarImage || defaultAvatarImage);
+        if (!accountId) return;
+        const activeRoom = await loadActiveRoomFromStore(accountId);
+        if (!mounted || !activeRoom) return;
+        setRoom(activeRoom);
+        setActivePlayerId(accountId);
       })
       .catch(() => undefined);
     return () => {
@@ -412,7 +446,12 @@ export function TahoiyaGame() {
     if (!roomCode) return undefined;
     const timer = window.setInterval(() => {
       void loadRoomFromStore(roomCode).then((latest) => {
-        if (latest) setRoom(latest);
+        if (latest) {
+          setRoom(latest);
+        } else {
+          setRoom(null);
+          setMessage("部屋が解散されました。");
+        }
       });
     }, 1500);
     return () => window.clearInterval(timer);
@@ -446,6 +485,8 @@ export function TahoiyaGame() {
     if (!room) return [];
     return [...room.players].sort((left, right) => (room.scores[right.id] ?? 0) - (room.scores[left.id] ?? 0));
   }, [room]);
+  const definitionLength = room ? Array.from(room.realDefinition.replace(/。$/, "")).length : 0;
+  const definitionGranularity = definitionLength <= 28 ? "brief" : definitionLength <= 50 ? "standard" : "detailed";
 
   const setAndSaveRoom = (nextRoom: TahoiyaRoom) => {
     const stamped = stampRoom(nextRoom);
@@ -465,6 +506,7 @@ export function TahoiyaGame() {
     }
 
     const ownerId = getOwnerId();
+    await deleteHostedRoomsFromStore(ownerId, playerId);
     const host = createPlayer(playerName, avatarColor, avatarImage, playerId);
     const defaults = await loadRoomDefaultsFromStore(playerId, ownerId);
     const nextRoom = createEmptyRoom(host, passphrase, ownerId, defaults);
@@ -480,6 +522,13 @@ export function TahoiyaGame() {
     }
 
     const code = targetCode.trim().toUpperCase();
+    const activeRoom = await loadActiveRoomFromStore(playerId);
+    if (activeRoom && activeRoom.code !== code) {
+      setRoom(activeRoom);
+      setActivePlayerId(playerId);
+      setMessage(`すでに部屋 ${activeRoom.code} に参加しています。1人が保持できる部屋は1つです。`);
+      return;
+    }
     const target = await loadRoomFromStore(code);
     if (!target) {
       setMessage("部屋が見つかりません。");
@@ -1139,7 +1188,18 @@ export function TahoiyaGame() {
                     投票: {voterCount(room)}/{voterTarget}
                   </p>
                   {!isAllVoteMode && !isAnswerer ? (
-                    <p className="mt-4 rounded-lg bg-slate-100 p-3 text-sm font-semibold text-slate-700">偽説明を書いた人は投票しません。回答者の投票を待ちます。</p>
+                    <div className="mt-4 space-y-3">
+                      <p className={`rounded-lg p-3 text-sm font-semibold ${votingDone ? "bg-emerald-50 text-emerald-900" : "bg-slate-100 text-slate-700"}`}>
+                        {votingDone ? "回答者が投票しました。ホストの結果発表を待っています。" : "回答者が候補を見比べています。投票先は結果発表まで非公開です。"}
+                      </p>
+                      <div className="grid gap-2">
+                        {room.options.map((option, index) => (
+                          <div key={option.id} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-sm font-semibold text-slate-800">
+                            {index + 1}. {option.text}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   ) : (
                     <div className="mt-4 grid gap-2">
                       {hasActivePlayerVoted && !votingDone && (
@@ -1243,7 +1303,8 @@ export function TahoiyaGame() {
                         answererMode: room.answererMode,
                         showRealDefinitionToWriters: room.showRealDefinitionToWriters,
                         difficulty: "very-hard",
-                        definitionStyle: "simple-definition",
+                        definitionStyle: definitionGranularity,
+                        definitionLength,
                         punctuationStyle: "no-parentheses",
                       }}
                       outcome={{
