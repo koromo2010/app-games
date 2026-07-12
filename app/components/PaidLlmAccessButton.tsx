@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { freeGroqLlmModel, freeLlmModel, paidLlmModel } from "@/lib/llm-model";
 
 type AccessSource = "personal" | "game-fields" | null;
@@ -86,6 +87,15 @@ export function PaidLlmAccessButton() {
     return () => window.clearTimeout(timer);
   }, []);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isOpen]);
+
   const connect = async (mode: "personal" | "game-fields") => {
     setIsSaving(true);
     setMessage("");
@@ -169,9 +179,9 @@ export function PaidLlmAccessButton() {
         </span>
       </button>
 
-      {isOpen && (
-        <div className="fixed inset-0 z-[70] grid place-items-center overflow-y-auto bg-slate-950/70 px-4 py-6 text-slate-950 backdrop-blur-sm">
-          <div role="dialog" aria-modal="true" aria-labelledby="llm-access-title" className="my-auto w-full max-w-lg rounded-lg border border-white/20 bg-white p-5 shadow-2xl">
+      {isOpen && createPortal(
+        <div className="fixed inset-0 z-[9999] grid place-items-center overflow-y-auto bg-slate-950/70 px-4 py-6 text-slate-950 backdrop-blur-sm">
+          <div role="dialog" aria-modal="true" aria-labelledby="llm-access-title" className="my-auto max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-lg border border-white/20 bg-white p-5 shadow-2xl">
             <p className="text-xs font-semibold uppercase text-emerald-700">AI API access</p>
             <h2 id="llm-access-title" className="mt-1 text-xl font-bold">利用するAI API</h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">
@@ -290,7 +300,8 @@ export function PaidLlmAccessButton() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );
