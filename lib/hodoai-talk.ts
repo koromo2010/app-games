@@ -14,6 +14,13 @@ export type HodoaiPlayer = {
 
 export type HodoaiPhase = "clue" | "arrange" | "result" | "finished";
 
+export type HodoaiConfig = {
+  roundsTotal: number;
+  clueTimeLimitSeconds: number;
+  arrangeTimeLimitSeconds: number;
+  debugMode: boolean;
+};
+
 export type HodoaiRoundResult = {
   round: number;
   theme: HodoaiTheme;
@@ -30,7 +37,31 @@ export type HodoaiGameState = {
   order: string[];
   totalPoints: number;
   history: HodoaiRoundResult[];
+  config: HodoaiConfig;
+  phaseStartedAt: number;
 };
+
+export const defaultHodoaiConfig: HodoaiConfig = {
+  roundsTotal: 3,
+  clueTimeLimitSeconds: 0,
+  arrangeTimeLimitSeconds: 0,
+  debugMode: false,
+};
+
+export function normalizeHodoaiConfig(value: unknown): HodoaiConfig {
+  const parsed = value && typeof value === "object" ? value as Partial<HodoaiConfig> : {};
+  const rounds = typeof parsed.roundsTotal === "number" ? Math.floor(parsed.roundsTotal) : 3;
+  const normalizeTime = (seconds: unknown) => {
+    const valueInSeconds = typeof seconds === "number" && Number.isFinite(seconds) ? Math.floor(seconds) : 0;
+    return Math.max(0, Math.min(3600, valueInSeconds));
+  };
+  return {
+    roundsTotal: Math.max(1, Math.min(4, rounds)),
+    clueTimeLimitSeconds: normalizeTime(parsed.clueTimeLimitSeconds),
+    arrangeTimeLimitSeconds: normalizeTime(parsed.arrangeTimeLimitSeconds),
+    debugMode: parsed.debugMode === true,
+  };
+}
 
 export const hodoaiThemes: HodoaiTheme[] = [
   { id: "snack", title: "休憩中にうれしい食べ物", lowLabel: "少しうれしい", highLabel: "最高にうれしい" },
@@ -62,7 +93,14 @@ function shuffle<T>(items: T[]) {
   return result;
 }
 
-export function createHodoaiRound(names: string[], round = 1, totalPoints = 0, history: HodoaiRoundResult[] = []): HodoaiGameState {
+export function createHodoaiRound(
+  names: string[],
+  round = 1,
+  totalPoints = 0,
+  history: HodoaiRoundResult[] = [],
+  configInput: unknown = defaultHodoaiConfig,
+): HodoaiGameState {
+  const config = normalizeHodoaiConfig(configInput);
   const previousThemeId = history.at(-1)?.theme.id;
   const candidates = hodoaiThemes.filter((theme) => theme.id !== previousThemeId);
   const theme = candidates[Math.floor(Math.random() * candidates.length)] ?? hodoaiThemes[0];
@@ -77,6 +115,8 @@ export function createHodoaiRound(names: string[], round = 1, totalPoints = 0, h
     order: shuffle(players.map((player) => player.id)),
     totalPoints,
     history,
+    config,
+    phaseStartedAt: Date.now(),
   };
 }
 
@@ -98,10 +138,11 @@ export function pointsForInversions(inversions: number) {
   return 0;
 }
 
-export function hodoaiFinalMessage(points: number) {
-  if (points >= 8) return "息ぴったり！ 言葉の距離感がよくそろいました。";
-  if (points >= 5) return "いい塩梅！ 次は満点が狙えそうです。";
-  if (points >= 2) return "伸びしろ十分。意外な感じ方も楽しめました。";
+export function hodoaiFinalMessage(points: number, maxPoints = 9) {
+  const ratio = maxPoints > 0 ? points / maxPoints : 0;
+  if (ratio >= 0.85) return "息ぴったり！ 言葉の距離感がよくそろいました。";
+  if (ratio >= 0.5) return "いい塩梅！ 次は満点が狙えそうです。";
+  if (ratio >= 0.2) return "伸びしろ十分。意外な感じ方も楽しめました。";
   return "大発見の連続！ みんなの違いがよく見えました。";
 }
 

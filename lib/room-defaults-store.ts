@@ -6,9 +6,10 @@ import {
 } from "@/lib/wordwolf";
 import type { ClueLogVisibility, ClueMode, GameMode } from "@/lib/wordwolf-game-types";
 import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
+import { normalizeHodoaiConfig } from "@/lib/hodoai-talk";
 import { redisCommand } from "@/lib/redis-store";
 
-export type RoomDefaultsGame = "wordwolf" | "tahoiya";
+export type RoomDefaultsGame = "wordwolf" | "tahoiya" | "hodoai-talk";
 
 export type StoredWordWolfRoomDefaults = {
   gameMode: GameMode;
@@ -31,7 +32,13 @@ export type StoredTahoiyaRoomDefaults = {
   actionTimeLimitSeconds: number;
 };
 
-export type StoredRoomDefaults = StoredWordWolfRoomDefaults | StoredTahoiyaRoomDefaults;
+export type StoredHodoaiRoomDefaults = {
+  roundsTotal: number;
+  clueTimeLimitSeconds: number;
+  arrangeTimeLimitSeconds: number;
+};
+
+export type StoredRoomDefaults = StoredWordWolfRoomDefaults | StoredTahoiyaRoomDefaults | StoredHodoaiRoomDefaults;
 
 const roomDefaultsKeyPrefix = "room-defaults:";
 const lobbyRounds = [1, 2, 3, 4];
@@ -41,7 +48,7 @@ function roomDefaultsKey(game: RoomDefaultsGame, playerId: string) {
 }
 
 function normalizeGame(value: unknown): RoomDefaultsGame | null {
-  return value === "wordwolf" || value === "tahoiya" ? value : null;
+  return value === "wordwolf" || value === "tahoiya" || value === "hodoai-talk" ? value : null;
 }
 
 function normalizeGameMode(value: unknown): GameMode {
@@ -90,8 +97,19 @@ function normalizeTahoiyaDefaults(value: unknown): StoredTahoiyaRoomDefaults {
   };
 }
 
+function normalizeHodoaiDefaults(value: unknown): StoredHodoaiRoomDefaults {
+  const config = normalizeHodoaiConfig(value);
+  return {
+    roundsTotal: config.roundsTotal,
+    clueTimeLimitSeconds: config.clueTimeLimitSeconds,
+    arrangeTimeLimitSeconds: config.arrangeTimeLimitSeconds,
+  };
+}
+
 export function normalizeStoredRoomDefaults(game: RoomDefaultsGame, value: unknown): StoredRoomDefaults {
-  return game === "wordwolf" ? normalizeWordWolfDefaults(value) : normalizeTahoiyaDefaults(value);
+  if (game === "wordwolf") return normalizeWordWolfDefaults(value);
+  if (game === "tahoiya") return normalizeTahoiyaDefaults(value);
+  return normalizeHodoaiDefaults(value);
 }
 
 export async function loadStoredRoomDefaults(gameInput: unknown, playerIdInput: unknown) {
