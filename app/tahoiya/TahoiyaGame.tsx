@@ -404,6 +404,25 @@ function voterCount(room: TahoiyaRoom) {
   return room.answererId && room.votes[room.answererId] ? 1 : 0;
 }
 
+function advanceToVoting(room: TahoiyaRoom): TahoiyaRoom {
+  return {
+    ...room,
+    phase: "voting",
+    options: createOptions(room),
+    votes: {},
+  };
+}
+
+function advanceToResult(room: TahoiyaRoom): TahoiyaRoom {
+  const result = scoreRound(room);
+  return {
+    ...room,
+    phase: "result",
+    scores: result.scores,
+    resultText: result.resultText,
+  };
+}
+
 export function TahoiyaGame() {
   const [room, setRoom] = useState<TahoiyaRoom | null>(null);
   const [playerId, setPlayerId] = useState("");
@@ -683,19 +702,24 @@ export function TahoiyaGame() {
 
   const submitDefinition = () => {
     if (!room || !activePlayer || isAnswerer || writingDone || !definitionInput.trim()) return;
-    const nextRoom = {
+    const submittedRoom = {
       ...room,
       fakeDefinitions: {
         ...room.fakeDefinitions,
         [activePlayer.id]: definitionInput.trim(),
       },
     };
+    const allSubmitted = submittedCount(submittedRoom) >= getDefinitionWriters(submittedRoom).length;
+    const nextRoom = allSubmitted ? advanceToVoting(submittedRoom) : submittedRoom;
     setAndSaveRoom(nextRoom);
     if (isDebugMode) {
-      const next = getDefinitionWriters(nextRoom).find((player) => !nextRoom.fakeDefinitions[player.id]);
+      const next = nextRoom.phase === "voting"
+        ? nextRoom.playMode === "all-vote" ? nextRoom.players[0] : getAnswerer(nextRoom)
+        : getDefinitionWriters(nextRoom).find((player) => !nextRoom.fakeDefinitions[player.id]);
       if (next) setActivePlayerId(next.id);
     }
     setDefinitionInput("");
+    if (allSubmitted) setSelectedOptionId("");
   };
 
   const autoFillTestDefinitions = () => {
@@ -705,19 +729,10 @@ export function TahoiyaGame() {
       if ((room.playMode === "single-answerer" && player.id === room.answererId) || nextDefinitions[player.id]) continue;
       nextDefinitions[player.id] = "特定の作業に使われる古い道具の一種。";
     }
-    setAndSaveRoom({ ...room, fakeDefinitions: nextDefinitions });
-  };
-
-  const publishOptions = () => {
-    if (!room || room.phase !== "writing" || !writingDone) return;
-    const nextRoom = {
-      ...room,
-      phase: "voting",
-      options: createOptions(room),
-      votes: {},
-    } satisfies TahoiyaRoom;
+    const completedRoom = { ...room, fakeDefinitions: nextDefinitions };
+    const nextRoom = advanceToVoting(completedRoom);
     setAndSaveRoom(nextRoom);
-    const firstVoter = room.playMode === "all-vote" ? room.players[0] : answerer;
+    const firstVoter = nextRoom.playMode === "all-vote" ? nextRoom.players[0] : getAnswerer(nextRoom);
     if (firstVoter) setActivePlayerId(firstVoter.id);
     setSelectedOptionId("");
   };
@@ -726,15 +741,18 @@ export function TahoiyaGame() {
     if (!room || !activePlayer || votingDone || (!isAllVoteMode && !isAnswerer) || !selectedOptionId) return;
     const selectedOption = room.options.find((option) => option.id === selectedOptionId);
     if (!selectedOption || selectedOption.authorId === activePlayer.id) return;
-    const nextRoom = {
+    const votedRoom = {
       ...room,
       votes: {
         ...room.votes,
         [activePlayer.id]: selectedOptionId,
       },
     };
+    const requiredVotes = votedRoom.playMode === "all-vote" ? votedRoom.players.length : 1;
+    const allVoted = voterCount(votedRoom) >= requiredVotes;
+    const nextRoom = allVoted ? advanceToResult(votedRoom) : votedRoom;
     setAndSaveRoom(nextRoom);
-    if (isDebugMode && room.playMode === "all-vote") {
+    if (isDebugMode && nextRoom.phase === "voting" && room.playMode === "all-vote") {
       const next = room.players.find((player) => !nextRoom.votes[player.id]);
       if (next) setActivePlayerId(next.id);
     }
@@ -752,18 +770,8 @@ export function TahoiyaGame() {
       const option = room.options.find((item) => item.authorId !== voter.id);
       if (option) nextVotes[voter.id] = option.id;
     }
-    setAndSaveRoom({ ...room, votes: nextVotes });
-  };
-
-  const finishRound = () => {
-    if (!room || room.phase !== "voting" || !votingDone) return;
-    const result = scoreRound(room);
-    setAndSaveRoom({
-      ...room,
-      phase: "result",
-      scores: result.scores,
-      resultText: result.resultText,
-    });
+    const votedRoom = { ...room, votes: nextVotes };
+    setAndSaveRoom(advanceToResult(votedRoom));
   };
 
   const nextRound = () => {
@@ -1179,17 +1187,11 @@ export function TahoiyaGame() {
                       )}
                     </>
                   )}
-                  {isHost && (
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {isDebugMode && (
-                        <button onClick={autoFillTestDefinitions} className={subtleButtonClass}>
-                          未投稿をテスト入力
-                        </button>
-                      )}
-                      <button onClick={publishOptions} disabled={!writingDone} className={primaryButtonClass}>
-                        説明を並べる
-                      </button>
-                    </div>
+                  <p className="mt-4 text-xs font-semibold text-slate-500">全員の偽説明がそろうと、自動で投票へ進みます。</p>
+                  {isHost && isDebugMode && (
+                    <button onClick={autoFillTestDefinitions} className={`mt-3 ${subtleButtonClass}`}>
+                      未投稿をテスト入力
+                    </button>
                   )}
                 </div>
               )}
@@ -1245,17 +1247,11 @@ export function TahoiyaGame() {
                       </button>
                     </div>
                   )}
-                  {isHost && (
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {isDebugMode && (
-                        <button onClick={autoFillTestVotes} className={subtleButtonClass}>
-                          未投票をテスト投票
-                        </button>
-                      )}
-                      <button onClick={finishRound} disabled={!votingDone} className={primaryButtonClass}>
-                        採点する
-                      </button>
-                    </div>
+                  <p className="mt-4 text-xs font-semibold text-slate-500">必要な投票がそろうと、自動で採点して結果を表示します。</p>
+                  {isHost && isDebugMode && (
+                    <button onClick={autoFillTestVotes} className={`mt-3 ${subtleButtonClass}`}>
+                      未投票をテスト投票
+                    </button>
                   )}
                 </div>
               )}
