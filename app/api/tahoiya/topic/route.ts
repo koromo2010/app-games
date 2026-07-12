@@ -1,13 +1,13 @@
 import {
   gameLlmFallbackNotice,
   generateGameLlmText,
-  getGameLlmAttemptModes,
   resolveGameLlmMode,
   type GameLlmMode,
 } from "@/lib/game-llm";
 import type { GameGenerationMeta } from "@/lib/game-ai-types";
 import { formatGameFeedbackContext, retrieveGameFeedback } from "@/lib/game-feedback-store";
 import { redisCommand } from "@/lib/redis-store";
+import { withGameGenerationCache } from "@/lib/game-generation-cache";
 import type { TahoiyaTopic } from "@/lib/tahoiya-types";
 
 const tahoiyaTopicPromptVersion = "tahoiya-topic-v6";
@@ -186,13 +186,12 @@ function simplifyDefinition(value: unknown) {
   return firstSentence ? `${firstSentence}。` : "";
 }
 
-function parseTopic(text: string, definitionStyle: DefinitionStyle): TahoiyaTopic | null {
+function parseTopic(text: string): TahoiyaTopic | null {
   try {
     const parsed = JSON.parse(text) as Partial<TahoiyaTopic>;
     const realDefinition = simplifyDefinition(parsed.realDefinition);
     const definitionLength = Array.from(realDefinition.replace(/。$/, "")).length;
-    const styleRule = definitionStyleRules[definitionStyle];
-    if (!parsed.word || !realDefinition || definitionLength < 4 || definitionLength > styleRule.max) return null;
+    if (!parsed.word || !realDefinition || definitionLength < 4 || definitionLength > 60) return null;
 
     return {
       word: String(parsed.word).trim(),
@@ -207,11 +206,11 @@ function parseTopic(text: string, definitionStyle: DefinitionStyle): TahoiyaTopi
   }
 }
 
-function parseVerifiedTopic(text: string, definitionStyle: DefinitionStyle): TahoiyaTopic | null {
+function parseVerifiedTopic(text: string): TahoiyaTopic | null {
   try {
     const parsed = JSON.parse(text) as Partial<TahoiyaTopic> & { valid?: boolean };
     if (parsed.valid !== true) return null;
-    return parseTopic(JSON.stringify(parsed), definitionStyle);
+    return parseTopic(JSON.stringify(parsed));
   } catch {
     return null;
   }
@@ -242,7 +241,7 @@ async function generateTopic(
   const prompt = [instructions, feedbackContext].filter(Boolean).join("\n\n");
 
   const generated = await generateGameLlmText(prompt, mode);
-  const topic = parseTopic(generated.text, definitionStyle);
+  const topic = parseTopic(generated.text);
   if (!topic) return null;
 
   const verificationPrompt = [
@@ -255,8 +254,11 @@ async function generateTopic(
     "JSONのみで返してください: {\"valid\":trueまたはfalse,\"word\":\"...\",\"reading\":\"...\",\"realDefinition\":\"...\",\"note\":\"...\",\"sourceDetail\":\"...\"}",
     `検証候補: ${JSON.stringify(topic)}`,
   ].join("\n");
-  const verified = await generateGameLlmText(verificationPrompt, mode);
-  const verifiedTopic = parseVerifiedTopic(verified.text, definitionStyle);
+  const verified = await generateGameLlmText(verificationPrompt, mode, {
+    preferredProvider: generated.provider,
+    excludedProviders: generated.attemptedProviders.filter((provider) => provider !== generated.provider),
+  });
+  const verifiedTopic = parseVerifiedTopic(verified.text);
   return verifiedTopic
     ? {
         ...verifiedTopic,
@@ -272,7 +274,7 @@ async function generateTopic(
     : null;
 }
 
-export async function GET() {
+async function generateTopicResponse() {
   const usedWords = await loadUsedTopicWords();
   const mode = await resolveGameLlmMode();
   const feedbackRecords = await retrieveGameFeedback({
@@ -304,19 +306,35 @@ export async function GET() {
     return fallbackResponse();
   }
 
-  let lastError: unknown = null;
-  for (const attemptMode of getGameLlmAttemptModes(mode)) {
-    try {
-      const topic = await generateTopic(attemptMode, feedbackContext, retrievedFeedbackIds, blockedWords);
-      if (topic && !blockedWordSet.has(normalizeTopicWord(topic.word))) {
-        await rememberUsedTopicWord(topic.word);
-        return Response.json(topic);
-      }
-    } catch (error) {
-      lastError = error;
+  try {
+    const topic = await generateTopic(mode, feedbackContext, retrievedFeedbackIds, blockedWords);
+    if (topic && !blockedWordSet.has(normalizeTopicWord(topic.word))) {
+      await rememberUsedTopicWord(topic.word);
+      return Response.json(topic);
     }
+  } catch (error) {
+    console.error("[tahoiya/topic] falling back to local topic", error);
   }
-
-  if (lastError) console.error("[tahoiya/topic] falling back to local topic", lastError);
   return fallbackResponse();
+}
+
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const roomCode = url.searchParams.get("roomCode")?.trim().toUpperCase() ?? "";
+  const round = url.searchParams.get("round")?.trim() ?? "";
+  const requestKey = roomCode && round ? `${roomCode}:${round}` : "";
+  if (!requestKey) return generateTopicResponse();
+
+  try {
+    const cached = await withGameGenerationCache("tahoiya-topic", requestKey, async () => {
+      const response = await generateTopicResponse();
+      return { status: response.status, body: await response.json() };
+    });
+    return Response.json(cached.body, { status: cached.status });
+  } catch (error) {
+    if (error instanceof Error && error.message === "GAME_GENERATION_IN_PROGRESS") {
+      return Response.json({ error: "お題を生成中です。少し待ってからもう一度お試しください。" }, { status: 409 });
+    }
+    throw error;
+  }
 }

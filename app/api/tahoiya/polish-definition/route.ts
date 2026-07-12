@@ -1,6 +1,5 @@
 import {
   generateGameLlmText,
-  getGameLlmAttemptModes,
   resolveGameLlmMode,
 } from "@/lib/game-llm";
 
@@ -41,20 +40,18 @@ export async function POST(request: Request) {
       return Response.json({ error: "利用できるAI APIがありません。" }, { status: 503 });
     }
 
-    for (const attemptMode of getGameLlmAttemptModes(mode)) {
-      try {
-        const generated = await generateGameLlmText(prompt, attemptMode);
-        const polishedText = parsePolishedText(generated.text);
-        if (polishedText) {
-          return Response.json({
-            text: polishedText,
-            provider: generated.provider,
-            model: generated.model,
-          });
-        }
-      } catch (error) {
-        console.warn(`[tahoiya/polish-definition] ${attemptMode} attempt failed`, error);
+    try {
+      const generated = await generateGameLlmText(prompt, mode);
+      const polishedText = parsePolishedText(generated.text);
+      if (polishedText) {
+        return Response.json({
+          text: polishedText,
+          provider: generated.provider,
+          model: generated.model,
+        });
       }
+    } catch (error) {
+      console.warn("[tahoiya/polish-definition] provider chain failed", error);
     }
 
     return Response.json({ error: "偽説明を整えられませんでした。" }, { status: 503 });

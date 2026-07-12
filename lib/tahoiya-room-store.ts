@@ -1,5 +1,6 @@
 import { redisCommand } from "@/lib/redis-store";
-import type { TahoiyaAnswererMode, TahoiyaDefinitionOption, TahoiyaPhase, TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomChoice } from "@/lib/tahoiya-types";
+import { randomUUID } from "node:crypto";
+import type { TahoiyaAnswererMode, TahoiyaDefinitionOption, TahoiyaPhase, TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomAction, TahoiyaRoomChoice } from "@/lib/tahoiya-types";
 import { normalizeGameGenerationMeta } from "@/lib/game-ai-types";
 import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
 
@@ -22,6 +23,8 @@ function isPhase(value: unknown): value is TahoiyaPhase {
 function isAnswererMode(value: unknown): value is TahoiyaAnswererMode {
   return value === "manual" || value === "random";
 }
+
+const phaseOrder: Record<TahoiyaPhase, number> = { lobby: 0, writing: 1, voting: 2, result: 3 };
 
 function normalizeScores(value: unknown) {
   if (!value || typeof value !== "object") return {};
@@ -84,6 +87,7 @@ function normalizeRoom(value: unknown): TahoiyaRoom | null {
 
   return {
     code,
+    revision: typeof parsed.revision === "number" ? Math.max(0, Math.floor(parsed.revision)) : 0,
     hostId,
     ownerId: typeof parsed.ownerId === "string" ? parsed.ownerId : undefined,
     passphrase: typeof parsed.passphrase === "string" ? parsed.passphrase : "",
@@ -113,6 +117,142 @@ function normalizeRoom(value: unknown): TahoiyaRoom | null {
     createdAt: typeof parsed.createdAt === "number" ? parsed.createdAt : Date.now(),
     updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : Date.now(),
   };
+}
+
+function definitionWriterIds(room: TahoiyaRoom) {
+  return room.playMode === "all-vote"
+    ? room.players.map((player) => player.id)
+    : room.players.filter((player) => player.id !== room.answererId).map((player) => player.id);
+}
+
+function voterIds(room: TahoiyaRoom) {
+  return room.playMode === "all-vote"
+    ? room.players.map((player) => player.id)
+    : room.answererId ? [room.answererId] : [];
+}
+
+function shuffle<T>(items: T[]) {
+  const result = [...items];
+  for (let index = result.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [result[index], result[swapIndex]] = [result[swapIndex], result[index]];
+  }
+  return result;
+}
+
+function createDefinitionOptions(room: TahoiyaRoom): TahoiyaDefinitionOption[] {
+  return shuffle([
+    { id: `real-${randomUUID()}`, text: room.realDefinition, authorId: null, isReal: true },
+    ...Object.entries(room.fakeDefinitions).map(([playerId, text]) => ({
+      id: `fake-${randomUUID()}`,
+      text,
+      authorId: playerId,
+      isReal: false,
+    })),
+  ]);
+}
+
+function scoreRoom(room: TahoiyaRoom) {
+  const scores = { ...room.scores };
+  const scoreLines: string[] = [];
+  const voteCounts = Object.values(room.votes).reduce<Record<string, number>>((counts, optionId) => {
+    counts[optionId] = (counts[optionId] ?? 0) + 1;
+    return counts;
+  }, {});
+  const maxVotes = Math.max(0, ...Object.values(voteCounts));
+  const leaders = room.options.filter((option) => maxVotes > 0 && (voteCounts[option.id] ?? 0) === maxVotes);
+  const leaderNames = leaders.map((option) => option.isReal
+    ? "本物の説明"
+    : `${room.players.find((player) => player.id === option.authorId)?.name ?? "Unknown"}の偽説明`);
+  const leadResult = leaderNames.length > 0
+    ? `最多得票: ${leaderNames.join("・")}（${maxVotes}票）${leaderNames.length > 1 ? " 同率" : ""}`
+    : "投票はありませんでした。";
+
+  for (const [voterId, optionId] of Object.entries(room.votes)) {
+    const option = room.options.find((item) => item.id === optionId);
+    const voter = room.players.find((player) => player.id === voterId);
+    if (!option || !voter) continue;
+    if (option.isReal) {
+      scores[voterId] = (scores[voterId] ?? 0) + 2;
+      scoreLines.push(`${voter.name} が本物を当てて +2`);
+    } else if (option.authorId) {
+      const author = room.players.find((player) => player.id === option.authorId);
+      scores[option.authorId] = (scores[option.authorId] ?? 0) + 1;
+      scoreLines.push(`${author?.name ?? "Unknown"} の偽説明に票が入り +1`);
+    }
+  }
+
+  return {
+    ...room,
+    phase: "result" as const,
+    phaseStartedAt: null,
+    scores,
+    resultText: `${leadResult} / ${scoreLines.length > 0 ? scoreLines.join(" / ") : "得点は入りませんでした。"}`,
+  };
+}
+
+function writingComplete(room: TahoiyaRoom) {
+  const writers = definitionWriterIds(room);
+  return writers.length > 0 && writers.every((playerId) => Boolean(room.fakeDefinitions[playerId]));
+}
+
+function votingComplete(room: TahoiyaRoom) {
+  const voters = voterIds(room);
+  return voters.length > 0 && voters.every((playerId) => Boolean(room.votes[playerId]));
+}
+
+function timedOut(room: TahoiyaRoom, now = Date.now()) {
+  return Boolean(
+    room.phaseStartedAt &&
+    room.actionTimeLimitSeconds > 0 &&
+    now >= room.phaseStartedAt + room.actionTimeLimitSeconds * 1000
+  );
+}
+
+function advanceToVoting(room: TahoiyaRoom) {
+  return {
+    ...room,
+    phase: "voting" as const,
+    options: createDefinitionOptions(room),
+    votes: {},
+    phaseStartedAt: Date.now(),
+  };
+}
+
+function reconcileProgress(room: TahoiyaRoom) {
+  if (room.phase === "writing" && (writingComplete(room) || timedOut(room))) return advanceToVoting(room);
+  if (room.phase === "voting" && (votingComplete(room) || timedOut(room))) return scoreRoom(room);
+  return room;
+}
+
+async function compareAndSetRoom(expectedRevision: number, room: TahoiyaRoom) {
+  return redisCommand<number>([
+    "EVAL",
+    "local raw=redis.call('GET',KEYS[1]); if not raw then return -1 end; local current=cjson.decode(raw); if tonumber(current.revision or 0)~=tonumber(ARGV[1]) then return 0 end; redis.call('SET',KEYS[1],ARGV[2]); return 1",
+    "1",
+    roomKey(room.code),
+    String(expectedRevision),
+    JSON.stringify(room),
+  ]);
+}
+
+async function mutateStoredTahoiyaRoom(code: string, mutate: (room: TahoiyaRoom) => TahoiyaRoom) {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const current = await loadStoredTahoiyaRoom(code);
+    if (!current) throw new Error("TAHOIYA_ROOM_NOT_FOUND");
+    const changed = mutate(current);
+    if (changed === current) return current;
+    const next = normalizeRoom({
+      ...changed,
+      revision: current.revision + 1,
+      updatedAt: Date.now(),
+    });
+    if (!next) throw new Error("INVALID_TAHOIYA_ROOM");
+    const saved = await compareAndSetRoom(current.revision, next);
+    if (saved === 1) return next;
+    if (saved === -1) throw new Error("TAHOIYA_ROOM_NOT_FOUND");
+  }
+  throw new Error("TAHOIYA_ROOM_CONFLICT");
 }
 
 function makeChoice(room: TahoiyaRoom): TahoiyaRoomChoice {
@@ -148,6 +288,13 @@ export async function loadStoredTahoiyaRoom(code: string) {
   }
 }
 
+export async function loadAndReconcileStoredTahoiyaRoom(code: string) {
+  const room = await loadStoredTahoiyaRoom(code);
+  if (!room) return null;
+  if (reconcileProgress(room) === room) return room;
+  return mutateStoredTahoiyaRoom(code, reconcileProgress);
+}
+
 export async function loadStoredTahoiyaPlayerActiveRoom(playerId: string) {
   const normalizedPlayerId = playerId.trim();
   if (!normalizedPlayerId) return null;
@@ -155,7 +302,7 @@ export async function loadStoredTahoiyaPlayerActiveRoom(playerId: string) {
   const code = await redisCommand<string | null>(["GET", playerActiveRoomKey(normalizedPlayerId)]);
   if (!code) return null;
 
-  const room = await loadStoredTahoiyaRoom(code);
+  const room = await loadAndReconcileStoredTahoiyaRoom(code);
   if (!room || !room.players.some((player) => player.id === normalizedPlayerId)) {
     await redisCommand<number>(["DEL", playerActiveRoomKey(normalizedPlayerId)]);
     return null;
@@ -164,35 +311,131 @@ export async function loadStoredTahoiyaPlayerActiveRoom(playerId: string) {
   return room;
 }
 
-export async function saveStoredTahoiyaRoom(room: unknown) {
-  let normalizedRoom = normalizeRoom(room);
+export async function saveStoredTahoiyaRoom(room: unknown, actorId = "") {
+  const normalizedRoom = normalizeRoom(room);
   if (!normalizedRoom) {
     throw new Error("INVALID_TAHOIYA_ROOM");
   }
 
   const existingRoom = await loadStoredTahoiyaRoom(normalizedRoom.code).catch(() => null);
-  if (existingRoom && existingRoom.round === normalizedRoom.round && normalizedRoom.phase !== "lobby") {
-    normalizedRoom = {
-      ...normalizedRoom,
-      fakeDefinitions: { ...existingRoom.fakeDefinitions, ...normalizedRoom.fakeDefinitions },
-      votes: { ...existingRoom.votes, ...normalizedRoom.votes },
-      options:
-        (existingRoom.phase === "voting" || existingRoom.phase === "result") && existingRoom.options.length > 0
-          ? existingRoom.options
-          : normalizedRoom.options,
-    };
+  if (!existingRoom) {
+    if (actorId && actorId !== normalizedRoom.hostId) throw new Error("TAHOIYA_ROOM_FORBIDDEN");
+    const createdRoom = { ...normalizedRoom, revision: 0, updatedAt: Date.now() };
+    const created = await redisCommand<"OK" | null>(["SET", roomKey(createdRoom.code), JSON.stringify(createdRoom), "NX"]);
+    if (created === "OK") {
+      await redisCommand<number>(["SADD", roomIndexKey, createdRoom.code]);
+      await savePlayerActiveRooms(createdRoom);
+      return createdRoom;
+    }
   }
 
-  await redisCommand<"OK">(["SET", roomKey(normalizedRoom.code), JSON.stringify(normalizedRoom)]);
-  await redisCommand<number>(["SADD", roomIndexKey, normalizedRoom.code]);
-  await savePlayerActiveRooms(normalizedRoom);
+  const savedRoom = await mutateStoredTahoiyaRoom(normalizedRoom.code, (current) => {
+    if (actorId && !normalizedRoom.players.some((player) => player.id === actorId)) {
+      throw new Error("TAHOIYA_ROOM_FORBIDDEN");
+    }
+    const actorIsHost = !actorId || actorId === current.hostId;
+    const isLobbyJoin = current.phase === "lobby" && normalizedRoom.phase === "lobby";
+    if (!actorIsHost && !isLobbyJoin) throw new Error("TAHOIYA_ROOM_FORBIDDEN");
+    if (normalizedRoom.round < current.round) return current;
+    if (normalizedRoom.round === current.round && phaseOrder[normalizedRoom.phase] < phaseOrder[current.phase]) return current;
 
-  return normalizedRoom;
+    const players = isLobbyJoin
+      ? [...new Map([...current.players, ...normalizedRoom.players].map((player) => [player.id, player])).values()]
+      : normalizedRoom.players;
+    if (!actorIsHost && isLobbyJoin) {
+      const joiningPlayer = normalizedRoom.players.find((player) => player.id === actorId);
+      if (!joiningPlayer) throw new Error("TAHOIYA_ROOM_FORBIDDEN");
+      return {
+        ...current,
+        players: [...new Map([...current.players, joiningPlayer].map((player) => [player.id, player])).values()],
+      };
+    }
+    const sameRound = current.round === normalizedRoom.round;
+    return {
+      ...normalizedRoom,
+      players,
+      fakeDefinitions: sameRound
+        ? { ...current.fakeDefinitions, ...normalizedRoom.fakeDefinitions }
+        : normalizedRoom.fakeDefinitions,
+      votes: sameRound ? { ...current.votes, ...normalizedRoom.votes } : normalizedRoom.votes,
+      options:
+        sameRound && phaseOrder[current.phase] >= phaseOrder.voting && current.options.length > 0
+          ? current.options
+          : normalizedRoom.options,
+    };
+  });
+
+  await redisCommand<number>(["SADD", roomIndexKey, savedRoom.code]);
+  await savePlayerActiveRooms(savedRoom);
+  return savedRoom;
 }
 
-export async function deleteStoredTahoiyaRoom(code: string) {
+export async function applyStoredTahoiyaRoomAction(code: string, action: TahoiyaRoomAction) {
+  return mutateStoredTahoiyaRoom(code, (current) => {
+    if (action.round !== current.round) return current;
+    const actorIsHost = action.actorId === current.hostId;
+    const actorIsMember = current.players.some((player) => player.id === action.actorId);
+    if (!actorIsMember) throw new Error("TAHOIYA_ROOM_FORBIDDEN");
+
+    if (action.type === "submit-definition") {
+      const canActForPlayer = action.actorId === action.playerId || (current.debugMode && actorIsHost);
+      if (!canActForPlayer || current.phase !== "writing" || !definitionWriterIds(current).includes(action.playerId)) {
+        return current;
+      }
+      const text = action.text.trim().replace(/\s+/g, " ").slice(0, 240);
+      if (!text) return current;
+      return reconcileProgress({
+        ...current,
+        fakeDefinitions: { ...current.fakeDefinitions, [action.playerId]: text },
+      });
+    }
+
+    if (action.type === "cast-vote") {
+      const canActForPlayer = action.actorId === action.playerId || (current.debugMode && actorIsHost);
+      if (!canActForPlayer || current.phase !== "voting" || !voterIds(current).includes(action.playerId)) return current;
+      const option = current.options.find((item) => item.id === action.optionId);
+      if (!option || option.authorId === action.playerId) return current;
+      return reconcileProgress({
+        ...current,
+        votes: { ...current.votes, [action.playerId]: option.id },
+      });
+    }
+
+    if (action.type === "advance-phase") {
+      if (!actorIsHost) throw new Error("TAHOIYA_ROOM_FORBIDDEN");
+      if (action.target === "voting" && current.phase === "writing") {
+        return action.force || writingComplete(current) || timedOut(current) ? advanceToVoting(current) : current;
+      }
+      if (action.target === "result" && current.phase === "voting") {
+        return action.force || votingComplete(current) || timedOut(current) ? scoreRoom(current) : current;
+      }
+      return current;
+    }
+
+    if (!actorIsHost || !current.debugMode) throw new Error("TAHOIYA_ROOM_FORBIDDEN");
+    if (action.type === "debug-fill-definitions" && current.phase === "writing") {
+      const fakeDefinitions = { ...current.fakeDefinitions };
+      for (const playerId of definitionWriterIds(current)) {
+        fakeDefinitions[playerId] ||= "特定の作業に使われる古い道具の一種。";
+      }
+      return reconcileProgress({ ...current, fakeDefinitions });
+    }
+    if (action.type === "debug-fill-votes" && current.phase === "voting") {
+      const votes = { ...current.votes };
+      for (const playerId of voterIds(current)) {
+        const option = current.options.find((item) => item.authorId !== playerId);
+        if (option) votes[playerId] = option.id;
+      }
+      return reconcileProgress({ ...current, votes });
+    }
+    return current;
+  });
+}
+
+export async function deleteStoredTahoiyaRoom(code: string, actorId = "") {
   const normalizedCode = code.trim().toUpperCase();
   const room = await loadStoredTahoiyaRoom(normalizedCode);
+  if (room && actorId && actorId !== room.hostId) throw new Error("TAHOIYA_ROOM_FORBIDDEN");
   await redisCommand<number>(["DEL", roomKey(normalizedCode)]);
   await redisCommand<number>(["SREM", roomIndexKey, normalizedCode]);
 

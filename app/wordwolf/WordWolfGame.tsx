@@ -606,12 +606,16 @@ async function fetchTopicWithFallback(
   dictionarySource: TopicDictionarySource,
   pairDistance: TopicPairDistance,
   topicHint: string,
+  roomCode: string,
+  gameNumber: number,
 ): Promise<WordWolfTopic> {
   const requiresLlm = dictionarySource === "llm" || dictionarySource === "proper-noun";
   const history = loadTopicHistory();
   const requestHistory = history.slice(0, topicRequestHistoryLimit);
   const dailyWords = loadDailyTopicWords();
   const params = new URLSearchParams({ source: dictionarySource, distance: pairDistance });
+  params.set("roomCode", roomCode);
+  params.set("gameNumber", String(gameNumber));
   const normalizedTopicHint = topicHint.trim().slice(0, 80);
   if (normalizedTopicHint) {
     params.set("hint", normalizedTopicHint);
@@ -623,7 +627,7 @@ async function fetchTopicWithFallback(
     params.set("excludeWords", dailyWords.join(","));
   }
 
-  const maxAttempts = requiresLlm ? 4 : 1;
+  const maxAttempts = 1;
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     const controller = new AbortController();
@@ -689,6 +693,8 @@ export function WordWolfGame() {
   const [debugPasswordError, setDebugPasswordError] = useState("");
   const [isRulesOpen, setIsRulesOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const roomCode = room?.code;
+  const roomPhase = room?.phase;
 
   useEffect(() => {
     let isMounted = true;
@@ -743,27 +749,36 @@ export function WordWolfGame() {
   }, []);
 
   useEffect(() => {
-    if (!room) return;
+    if (!roomCode || !roomPhase) return;
+    const code = roomCode;
 
-    const timer = window.setInterval(() => {
-      void loadRoomFromStore(room.code).then((latest) => {
-      if (
-        latest &&
-        (latest.updatedAt !== room.updatedAt ||
-          latest.statsRecordedAt !== room.statsRecordedAt ||
-          latest.gamesPlayed !== room.gamesPlayed)
-      ) {
-        setRoom(latest);
-      } else if (!latest) {
-        setRoom(null);
-        setActivePlayerId("");
-        setError("部屋が解散されました。");
-      }
+    const refreshRoom = () => {
+      if (document.visibilityState !== "visible") return;
+      void loadRoomFromStore(code).then((latest) => {
+        if (latest) {
+          setRoom((current) => {
+            if (!current || current.code !== code) return current;
+            return latest.updatedAt !== current.updatedAt ||
+              latest.statsRecordedAt !== current.statsRecordedAt ||
+              latest.gamesPlayed !== current.gamesPlayed
+              ? latest
+              : current;
+          });
+        } else {
+          setRoom(null);
+          setActivePlayerId("");
+          setError("部屋が解散されました。");
+        }
       });
-    }, 700);
+    };
+    const intervalMs = roomPhase === "lobby" || roomPhase === "result" ? 5000 : 2000;
+    const timer = window.setInterval(refreshRoom, intervalMs);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") refreshRoom();
+    };
 
     const onStorage = (event: StorageEvent) => {
-      if (event.key !== getRoomKey(room.code)) return;
+      if (event.key !== getRoomKey(code)) return;
       if (!event.newValue) {
         setRoom(null);
         setActivePlayerId("");
@@ -771,17 +786,19 @@ export function WordWolfGame() {
         return;
       }
 
-      void loadRoomFromStore(room.code).then((latest) => {
+      void loadRoomFromStore(code).then((latest) => {
         if (latest) setRoom(latest);
       });
     };
 
     window.addEventListener("storage", onStorage);
+    document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
       window.clearInterval(timer);
       window.removeEventListener("storage", onStorage);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [room]);
+  }, [roomCode, roomPhase]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -1306,7 +1323,13 @@ export function WordWolfGame() {
         return;
       }
 
-      const topic = await fetchTopicWithFallback(room.topicDictionarySource, room.topicPairDistance, room.topicHint);
+      const topic = await fetchTopicWithFallback(
+        room.topicDictionarySource,
+        room.topicPairDistance,
+        room.topicHint,
+        room.code,
+        room.gameNumber,
+      );
       setError(topic.notice ?? "");
       const basePlayers = room.debugMode ? fillSoloTestPlayers(room.players) : room.players;
       const players = room.randomizeTurnOrder ? shufflePlayers(basePlayers) : basePlayers;

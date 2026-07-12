@@ -1,74 +1,93 @@
-import { generateFreeLlmText, hasFreeLlmApi } from "@/lib/free-llm";
+import { hasGeminiApiKey, generateGeminiText } from "@/lib/gemini";
+import { hasGroqApiKey, generateGroqText } from "@/lib/groq";
 import { hasPaidLlmAccess } from "@/lib/llm-access";
 import { freeGroqLlmModel, freeLlmModel, paidLlmModel } from "@/lib/llm-model";
 
 /**
  * Shared LLM gateway for every game in app-games.
- * New games should use this module instead of calling provider APIs directly.
+ * Provider failover belongs here so individual games never repeat the chain.
  */
 export type GameLlmMode = "paid" | "free" | "local";
 export type GameLlmProvider = "openai" | "gemini" | "groq";
+
+export type GameLlmGenerationOptions = {
+  preferredProvider?: GameLlmProvider;
+  excludedProviders?: GameLlmProvider[];
+};
 
 export const gameLlmFallbackNotice =
   "無料AI（Gemini・Groq）を利用できなかったため、ローカル候補を使用しています。";
 
 export async function resolveGameLlmMode(): Promise<GameLlmMode> {
   if (await hasPaidLlmAccess()) return "paid";
-  if (hasFreeLlmApi()) return "free";
+  if (hasGeminiApiKey() || hasGroqApiKey()) return "free";
   return "local";
 }
 
-export function getGameLlmAttemptModes(mode: GameLlmMode): Array<Exclude<GameLlmMode, "local">> {
-  if (mode === "local") return [];
-  if (mode === "paid" && hasFreeLlmApi()) return ["paid", "free"];
-  return [mode];
+function providerOrder(mode: Exclude<GameLlmMode, "local">, options: GameLlmGenerationOptions) {
+  const available: GameLlmProvider[] = [
+    ...(mode === "paid" ? ["openai" as const] : []),
+    ...(hasGeminiApiKey() ? ["gemini" as const] : []),
+    ...(hasGroqApiKey() ? ["groq" as const] : []),
+  ];
+  const excluded = new Set(options.excludedProviders ?? []);
+  const ordered = options.preferredProvider && available.includes(options.preferredProvider)
+    ? [options.preferredProvider, ...available.filter((provider) => provider !== options.preferredProvider)]
+    : available;
+  return [...new Set(ordered)].filter((provider) => !excluded.has(provider));
 }
 
-async function generateFreeGameLlmText(prompt: string, startedAt: number) {
-  const result = await generateFreeLlmText(prompt);
-  return {
-    ...result,
-    model: result.provider === "gemini" ? freeLlmModel : freeGroqLlmModel,
-    mode: "free" as const,
-    latencyMs: Date.now() - startedAt,
-  };
+async function generateOpenAiText(prompt: string) {
+  const { default: OpenAI } = await import("openai");
+  const client = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+    maxRetries: 0,
+    timeout: 6000,
+  });
+  const response = await client.responses.create({
+    model: paidLlmModel,
+    reasoning: { effort: "none" },
+    input: prompt,
+  });
+  const text = response.output_text.trim();
+  if (!text) throw new Error("OpenAI API returned no text.");
+  return text;
 }
 
-export async function generateGameLlmText(prompt: string, mode: Exclude<GameLlmMode, "local">) {
-  const startedAt = Date.now();
-  if (mode === "free") {
-    return generateFreeGameLlmText(prompt, startedAt);
+async function callProvider(provider: GameLlmProvider, prompt: string) {
+  if (provider === "openai") {
+    return { text: await generateOpenAiText(prompt), model: paidLlmModel, mode: "paid" as const };
   }
+  if (provider === "gemini") {
+    return { text: await generateGeminiText(prompt), model: freeLlmModel, mode: "free" as const };
+  }
+  return { text: await generateGroqText(prompt), model: freeGroqLlmModel, mode: "free" as const };
+}
 
-  try {
-    const { default: OpenAI } = await import("openai");
-    const client = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-      maxRetries: 0,
-      timeout: 6000,
-    });
-    const response = await client.responses.create({
-      model: paidLlmModel,
-      reasoning: { effort: "none" },
-      input: prompt,
-    });
+export async function generateGameLlmText(
+  prompt: string,
+  mode: Exclude<GameLlmMode, "local">,
+  options: GameLlmGenerationOptions = {},
+) {
+  const startedAt = Date.now();
+  const attemptedProviders: GameLlmProvider[] = [];
+  const errors: unknown[] = [];
 
-    const text = response.output_text.trim();
-    if (!text) throw new Error("OpenAI API returned no text.");
-    return {
-      text,
-      provider: "openai" as const,
-      model: paidLlmModel,
-      mode,
-      latencyMs: Date.now() - startedAt,
-    };
-  } catch (paidError) {
-    if (!hasFreeLlmApi()) throw paidError;
-    console.warn("[game-llm] OpenAI unavailable; trying the free provider chain", paidError);
+  for (const provider of providerOrder(mode, options)) {
+    attemptedProviders.push(provider);
     try {
-      return await generateFreeGameLlmText(prompt, startedAt);
-    } catch (freeError) {
-      throw new AggregateError([paidError, freeError], "No paid or free LLM API completed the request.");
+      const generated = await callProvider(provider, prompt);
+      return {
+        ...generated,
+        provider,
+        attemptedProviders,
+        latencyMs: Date.now() - startedAt,
+      };
+    } catch (error) {
+      errors.push(error);
+      console.warn(`[game-llm] ${provider} unavailable; trying the next provider`, error);
     }
   }
+
+  throw new AggregateError(errors, "No paid or free LLM API completed the request.");
 }

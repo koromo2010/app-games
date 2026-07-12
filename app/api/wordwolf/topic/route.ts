@@ -13,13 +13,13 @@ import {
 import {
   gameLlmFallbackNotice,
   generateGameLlmText,
-  getGameLlmAttemptModes,
   resolveGameLlmMode,
   type GameLlmMode,
 } from "@/lib/game-llm";
 import type { GameGenerationMeta } from "@/lib/game-ai-types";
 import { formatGameFeedbackContext, retrieveGameFeedback } from "@/lib/game-feedback-store";
 import { redisCommand } from "@/lib/redis-store";
+import { withGameGenerationCache } from "@/lib/game-generation-cache";
 
 const baseTopicPrompt =
   "ワードウルフ用のお題ペアを1組作ってください。3-6人で3周ほど話す前提です。日本語で、共通点を話せるが同じ言葉の言い換えではない組み合わせにしてください。JSONのみで返してください: {\"villageWord\":\"...\",\"wolfWord\":\"...\",\"reason\":\"...\"}";
@@ -205,7 +205,7 @@ async function generateLlmTopic(
     : null;
 }
 
-export async function GET(request: Request) {
+async function generateTopicResponse(request: Request) {
   const { excludeKeys, excludeWords, dictionarySource, pairDistance, topicHint } = getTopicRequestOptions(request);
   const storedUsage = await loadStoredTopicUsage();
   const allExcludeKeys = normalizeList([...excludeKeys, ...storedUsage.usedPairs]);
@@ -233,55 +233,23 @@ export async function GET(request: Request) {
     return Response.json(topic);
   }
 
-  const deadline = Date.now() + (mode === "paid" ? 28000 : 14000);
-  let lastError: unknown = null;
-  let attempts = 0;
-
-  while (Date.now() < deadline && (mode === "paid" || attempts < 1)) {
-    attempts += 1;
-    try {
-      const topic = await generateLlmTopic(
-        allExcludeKeys,
-        allExcludeWords,
-        pairDistance,
-        dictionarySource === "proper-noun" ? "proper-noun" : "llm",
-        topicHint,
-        mode,
-        feedbackContext,
-        retrievedFeedbackIds,
-      );
-      if (topic && isTopicAllowed(topic, allExcludeKeys, allExcludeWords)) {
-        await rememberStoredTopicUsage(topic);
-        return Response.json(topic);
-      }
-    } catch (error) {
-      lastError = error;
+  try {
+    const topic = await generateLlmTopic(
+      allExcludeKeys,
+      allExcludeWords,
+      pairDistance,
+      dictionarySource === "proper-noun" ? "proper-noun" : "llm",
+      topicHint,
+      mode,
+      feedbackContext,
+      retrievedFeedbackIds,
+    );
+    if (topic && isTopicAllowed(topic, allExcludeKeys, allExcludeWords)) {
+      await rememberStoredTopicUsage(topic);
+      return Response.json(topic);
     }
-  }
-
-  if (lastError) {
-    console.error("[wordwolf/topic] LLM topic generation did not complete", lastError);
-  }
-
-  if (mode === "paid" && getGameLlmAttemptModes(mode).includes("free")) {
-    try {
-      const topic = await generateLlmTopic(
-        allExcludeKeys,
-        allExcludeWords,
-        pairDistance,
-        dictionarySource === "proper-noun" ? "proper-noun" : "llm",
-        topicHint,
-        "free",
-        feedbackContext,
-        retrievedFeedbackIds,
-      );
-      if (topic && isTopicAllowed(topic, allExcludeKeys, allExcludeWords)) {
-        await rememberStoredTopicUsage(topic);
-        return Response.json(topic);
-      }
-    } catch (error) {
-      console.error("[wordwolf/topic] free provider fallback did not complete", error);
-    }
+  } catch (error) {
+    console.error("[wordwolf/topic] provider chain did not complete", error);
   }
 
   const topic = {
@@ -291,4 +259,25 @@ export async function GET(request: Request) {
   };
   await rememberStoredTopicUsage(topic);
   return Response.json(topic);
+}
+
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const roomCode = url.searchParams.get("roomCode")?.trim().toUpperCase() ?? "";
+  const gameNumber = url.searchParams.get("gameNumber")?.trim() ?? "";
+  const requestKey = roomCode && gameNumber ? `${roomCode}:${gameNumber}` : "";
+  if (!requestKey) return generateTopicResponse(request);
+
+  try {
+    const cached = await withGameGenerationCache("wordwolf-topic", requestKey, async () => {
+      const response = await generateTopicResponse(request);
+      return { status: response.status, body: await response.json() };
+    });
+    return Response.json(cached.body, { status: cached.status });
+  } catch (error) {
+    if (error instanceof Error && error.message === "GAME_GENERATION_IN_PROGRESS") {
+      return Response.json({ error: "お題を生成中です。少し待ってからもう一度お試しください。" }, { status: 409 });
+    }
+    throw error;
+  }
 }

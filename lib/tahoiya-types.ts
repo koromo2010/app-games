@@ -30,6 +30,7 @@ export type TahoiyaDefinitionOption = {
 
 export type TahoiyaRoom = {
   code: string;
+  revision: number;
   hostId: string;
   ownerId?: string;
   passphrase: string;
@@ -59,6 +60,13 @@ export type TahoiyaRoom = {
   createdAt: number;
   updatedAt: number;
 };
+
+export type TahoiyaRoomAction =
+  | { type: "submit-definition"; actorId: string; playerId: string; round: number; text: string }
+  | { type: "cast-vote"; actorId: string; playerId: string; round: number; optionId: string }
+  | { type: "advance-phase"; actorId: string; round: number; target: "voting" | "result"; force?: boolean }
+  | { type: "debug-fill-definitions"; actorId: string; round: number }
+  | { type: "debug-fill-votes"; actorId: string; round: number };
 
 export type TahoiyaRoomChoice = {
   code: string;

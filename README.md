@@ -21,6 +21,8 @@ The shared provider order is:
 
 Provider model IDs are centralized in `lib/llm-model.ts`.
 
+Provider failover runs only inside the shared gateway. Game routes must not repeat the provider chain. Topic generation is cached per room and round so duplicate clicks or tabs reuse the same result instead of spending another LLM request.
+
 ## Shared feedback and RAG
 
 AI output feedback is shared infrastructure for every game:
@@ -39,6 +41,8 @@ Every multiplayer game must expose the current room configuration to all partici
 Room configuration defaults are stored per game and per player in Redis, with local storage as an offline fallback. New games should use `lib/game-room-defaults-client.ts` for loading and saving, and add their server-side normalizer to `lib/room-defaults-store.ts`.
 
 Multiplayer games should use the shared time-limit options and normalizer in `lib/game-room-config.ts`. A time limit of `0` always means no limit; game-specific phase behavior may decide how partial submissions are handled when time expires.
+
+Tahoiya gameplay mutations are revisioned server actions. The server rejects stale phase rollback, reapplies concurrent submissions with compare-and-set, and decides completion or timeout transitions without depending on the host browser.
 
 ## Development
 
