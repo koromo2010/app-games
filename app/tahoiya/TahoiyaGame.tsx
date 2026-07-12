@@ -12,6 +12,7 @@ import {
 import type { TahoiyaAnswererMode, TahoiyaDefinitionOption, TahoiyaPlayMode, TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomChoice, TahoiyaTopic } from "@/lib/tahoiya-types";
 import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
 import { GameFeedbackPanel } from "../components/GameFeedbackPanel";
+import { RoomConfigSummary } from "../components/RoomConfigSummary";
 import { cyanButtonClass, dangerButtonClass, inputClass, panelClass, primaryButtonClass, subtleButtonClass } from "../wordwolf/styles";
 
 const roomStoragePrefix = "tahoiya-room-";
@@ -486,7 +487,19 @@ export function TahoiyaGame() {
     return [...room.players].sort((left, right) => (room.scores[right.id] ?? 0) - (room.scores[left.id] ?? 0));
   }, [room]);
   const definitionLength = room ? Array.from(room.realDefinition.replace(/。$/, "")).length : 0;
-  const definitionGranularity = definitionLength <= 28 ? "brief" : definitionLength <= 50 ? "standard" : "detailed";
+  const definitionGranularity = definitionLength <= 14 ? "brief" : definitionLength <= 25 ? "standard" : "detailed";
+  const roomConfigItems = room
+    ? [
+        { label: "遊び方", value: room.playMode === "all-vote" ? "全員作成・全員投票" : "回答者1人" },
+        ...(room.playMode === "single-answerer"
+          ? [{ label: "回答者", value: answerer?.name ?? (room.answererMode === "random" ? "開始時にランダム" : "未指定") }]
+          : []),
+        { label: "正解情報", value: room.showRealDefinitionToWriters ? "偽説明担当に見せる" : "結果まで見せない" },
+        { label: "偽説明", value: "1人1つ・全員完了まで修正可" },
+        { label: "投票", value: room.playMode === "all-vote" ? "1人1票・自分には投票不可" : "回答者のみ1票" },
+        { label: "正解文の長さ", value: "約10字・20字・30字を混在" },
+      ]
+    : [];
 
   const setAndSaveRoom = (nextRoom: TahoiyaRoom) => {
     const stamped = stampRoom(nextRoom);
@@ -985,6 +998,7 @@ export function TahoiyaGame() {
                     </div>
                   </div>
                 )}
+                <RoomConfigSummary items={roomConfigItems} />
                 {isDebugMode ? (
                   <label className="block text-sm font-medium text-slate-700">
                     操作プレイヤー

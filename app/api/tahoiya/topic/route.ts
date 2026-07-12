@@ -9,14 +9,14 @@ import { formatGameFeedbackContext, retrieveGameFeedback } from "@/lib/game-feed
 import { redisCommand } from "@/lib/redis-store";
 import type { TahoiyaTopic } from "@/lib/tahoiya-types";
 
-const tahoiyaTopicPromptVersion = "tahoiya-topic-v5";
+const tahoiyaTopicPromptVersion = "tahoiya-topic-v6";
 const usedTopicWordsKey = "tahoiya:topic:used-words";
 type DefinitionStyle = "brief" | "standard" | "detailed";
 
-const definitionStyleRules: Record<DefinitionStyle, { min: number; max: number; instruction: string }> = {
-  brief: { min: 12, max: 28, instruction: "短く端的な12〜28文字の説明" },
-  standard: { min: 29, max: 50, instruction: "対象や用途を少し補った29〜50文字の標準的な説明" },
-  detailed: { min: 51, max: 85, instruction: "特徴や用途まで含めた51〜85文字の詳しい説明" },
+const definitionStyleRules: Record<DefinitionStyle, { max: number; instruction: string }> = {
+  brief: { max: 14, instruction: "10文字程度の短く端的な説明" },
+  standard: { max: 25, instruction: "20文字程度の標準的な説明" },
+  detailed: { max: 38, instruction: "30文字程度で特徴や用途を少し補った説明" },
 };
 
 function pickDefinitionStyle(): DefinitionStyle {
@@ -46,7 +46,7 @@ const fallbackTopics: TahoiyaTopic[] = [
   {
     word: "筌",
     reading: "うけ",
-    realDefinition: "川や湖の水中に仕掛け、入り込んだ魚やウナギなどを逃げられなくして捕らえる竹製の漁具。",
+    realDefinition: "川や湖に仕掛け、入り込んだ魚を逃がさず捕らえる竹製の漁具。",
     note: "一般には知られにくい古い漁具の名称。",
     sourceDetail: "ローカル収録候補。国語辞典にある漁具としての語義をゲーム用に簡潔化。",
     source: "fallback",
@@ -54,7 +54,7 @@ const fallbackTopics: TahoiyaTopic[] = [
   {
     word: "襤褸",
     reading: "らんる",
-    realDefinition: "使い古してぼろぼろになった衣服。",
+    realDefinition: "ぼろぼろになった衣服。",
     note: "日常語ではないが偽の意味を想像しやすい語。",
     sourceDetail: "ローカル収録候補。国語辞典にある衣服の語義をゲーム用に簡潔化。",
     source: "fallback",
@@ -62,7 +62,7 @@ const fallbackTopics: TahoiyaTopic[] = [
   {
     word: "鰾",
     reading: "うきぶくろ",
-    realDefinition: "魚の体内にある袋状の器官で、内部に含む気体の量を変えることにより、水中を浮き沈みする際の浮力を調節するもの。",
+    realDefinition: "魚の体内にある袋状の器官で、気体量を変えて水中での浮力を調節するもの。",
     note: "実在する意味を知らなくても説明を捏造しやすい語。",
     sourceDetail: "ローカル収録候補。国語辞典や生物学辞典の語義をゲーム用に簡潔化。",
     source: "fallback",
@@ -112,7 +112,7 @@ function parseTopic(text: string, definitionStyle: DefinitionStyle): TahoiyaTopi
     const realDefinition = simplifyDefinition(parsed.realDefinition);
     const definitionLength = Array.from(realDefinition.replace(/。$/, "")).length;
     const styleRule = definitionStyleRules[definitionStyle];
-    if (!parsed.word || !realDefinition || definitionLength < styleRule.min || definitionLength > styleRule.max) return null;
+    if (!parsed.word || !realDefinition || definitionLength < 4 || definitionLength > styleRule.max) return null;
 
     return {
       word: String(parsed.word).trim(),
@@ -153,7 +153,7 @@ async function generateTopic(
     "専門的すぎる固有名詞、差別語、性的または残虐な語、現代人物名は避けてください。",
     "realDefinitionには意味だけを書き、読み方、語源、用例、別名、漢字の説明を含めないでください。",
     "realDefinitionは括弧を使わず、一文にしてください。複数の意味を並べないでください。",
-    `今回は${definitionRule.instruction}にしてください。毎回同じ詳しさにせず、指定された粒度へ厳密に合わせてください。`,
+    `今回は${definitionRule.instruction}を目安にしてください。意味を自然に説明できることを優先し、文字数を合わせるための不要な言い換えや情報追加はしないでください。`,
     "readingは専用フィールドにだけ入れてください。noteは選定理由を短く書いてください。",
     "sourceDetailには、その語と語義を確認できる辞書名・辞典の種類・典拠など、確実な確認情報を短く書いてください。不確かな辞書名を創作しないでください。",
     usedWords.length > 0 ? `過去に出題済みなので絶対に使わない見出し語: ${usedWords.slice(0, 500).join("、")}` : "",
@@ -170,7 +170,7 @@ async function generateTopic(
     "見出し語が実在する日本語の語であり、readingがその見出し語の正しい読みであり、realDefinitionがその意味に正確に対応する場合だけvalidをtrueにしてください。",
     "単なる当て字、読みと意味の取り違え、存在が不確かな語、一般人が意味を知っている語、説明が不正確な候補はvalidをfalseにしてください。",
     "少しでも確信がなければvalidをfalseにしてください。推測で修正や補完をしないでください。",
-    `validがtrueの場合も、realDefinitionは意味だけの一文とし、${definitionRule.instruction}にしてください。読み方、語源、用例、別名、漢字の説明、括弧を含めないでください。`,
+    `validがtrueの場合も、realDefinitionは意味だけの一文とし、${definitionRule.instruction}を目安にしてください。自然な説明を無理に引き延ばさず、読み方、語源、用例、別名、漢字の説明、括弧を含めないでください。`,
     "sourceDetailの辞書名や確認情報が不確か、または創作の可能性がある場合もvalidをfalseにしてください。",
     "JSONのみで返してください: {\"valid\":trueまたはfalse,\"word\":\"...\",\"reading\":\"...\",\"realDefinition\":\"...\",\"note\":\"...\",\"sourceDetail\":\"...\"}",
     `検証候補: ${JSON.stringify(topic)}`,

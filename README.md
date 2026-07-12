@@ -32,6 +32,10 @@ AI output feedback is shared infrastructure for every game:
 
 The first retrieval implementation uses Redis indexes plus game/task/settings tags. The stored schema also keeps stable feedback IDs and generation metadata so retrieval can later move to embeddings/vector search without replacing the UI or provider gateway.
 
+## Shared room UI
+
+Every multiplayer game must expose the current room configuration to all participants, while only the host can change it. New games should render configuration values with `app/components/RoomConfigSummary.tsx` so clients can verify the rules before play starts and while the room is active.
+
 ## Development
 
 ```bash
