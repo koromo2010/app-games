@@ -89,6 +89,7 @@ function normalizeRoom(value: unknown): TahoiyaRoom | null {
     debugMode: Boolean(parsed.debugMode),
     players,
     parentId,
+    playMode: parsed.playMode === "all-vote" ? "all-vote" : "single-answerer",
     answererMode: isAnswererMode(parsed.answererMode) ? parsed.answererMode : "random",
     showRealDefinitionToWriters: parsed.showRealDefinitionToWriters !== false,
     answererId: typeof parsed.answererId === "string" ? parsed.answererId : "",

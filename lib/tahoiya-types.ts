@@ -1,5 +1,6 @@
 export type TahoiyaPhase = "lobby" | "writing" | "voting" | "result";
 export type TahoiyaAnswererMode = "manual" | "random";
+export type TahoiyaPlayMode = "single-answerer" | "all-vote";
 
 export type TahoiyaPlayer = {
   id: string;
@@ -36,6 +37,7 @@ export type TahoiyaRoom = {
   debugMode?: boolean;
   players: TahoiyaPlayer[];
   parentId: string;
+  playMode: TahoiyaPlayMode;
   answererMode: TahoiyaAnswererMode;
   showRealDefinitionToWriters: boolean;
   answererId: string;

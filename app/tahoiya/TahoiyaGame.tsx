@@ -9,7 +9,7 @@ import {
   loadPersistentPlayerSession,
   makeRandomAvatarColor,
 } from "@/lib/player-session";
-import type { TahoiyaAnswererMode, TahoiyaDefinitionOption, TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomChoice, TahoiyaTopic } from "@/lib/tahoiya-types";
+import type { TahoiyaAnswererMode, TahoiyaDefinitionOption, TahoiyaPlayMode, TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomChoice, TahoiyaTopic } from "@/lib/tahoiya-types";
 import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
 import { GameFeedbackPanel } from "../components/GameFeedbackPanel";
 import { cyanButtonClass, dangerButtonClass, inputClass, panelClass, primaryButtonClass, subtleButtonClass } from "../wordwolf/styles";
@@ -32,7 +32,7 @@ const tahoiyaFeedbackReasons = [
   { value: "other", label: "その他" },
 ];
 
-type TahoiyaRoomDefaults = Pick<TahoiyaRoom, "answererMode" | "showRealDefinitionToWriters">;
+type TahoiyaRoomDefaults = Pick<TahoiyaRoom, "playMode" | "answererMode" | "showRealDefinitionToWriters">;
 
 function makeId(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
@@ -61,10 +61,11 @@ function getRoomDefaultsKey(playerId: string, ownerId: string) {
 
 function normalizeRoomDefaults(value: unknown): TahoiyaRoomDefaults {
   if (!value || typeof value !== "object") {
-    return { answererMode: "random", showRealDefinitionToWriters: true };
+    return { playMode: "single-answerer", answererMode: "random", showRealDefinitionToWriters: true };
   }
   const parsed = value as Partial<TahoiyaRoomDefaults>;
   return {
+    playMode: parsed.playMode === "all-vote" ? "all-vote" : "single-answerer",
     answererMode: parsed.answererMode === "manual" ? "manual" : "random",
     showRealDefinitionToWriters: parsed.showRealDefinitionToWriters !== false,
   };
@@ -150,6 +151,7 @@ function normalizeRoom(room: TahoiyaRoom): TahoiyaRoom {
     debugMode: Boolean(room.debugMode),
     players: Array.isArray(room.players) ? room.players : [],
     parentId: room.parentId || room.hostId,
+    playMode: room.playMode === "all-vote" ? "all-vote" : "single-answerer",
     answererMode: room.answererMode === "manual" ? "manual" : "random",
     showRealDefinitionToWriters: room.showRealDefinitionToWriters !== false,
     answererId: typeof room.answererId === "string" ? room.answererId : "",
@@ -272,6 +274,7 @@ function createEmptyRoom(
     debugMode: false,
     players: [host],
     parentId: host.id,
+    playMode: defaults.playMode,
     answererMode: defaults.answererMode,
     showRealDefinitionToWriters: defaults.showRealDefinitionToWriters,
     answererId: "",
@@ -311,7 +314,20 @@ function createOptions(room: TahoiyaRoom): TahoiyaDefinitionOption[] {
 
 function scoreRound(room: TahoiyaRoom) {
   const scores = { ...room.scores };
-  const resultLines: string[] = [];
+  const scoreLines: string[] = [];
+  const voteCounts = Object.values(room.votes).reduce<Record<string, number>>((counts, optionId) => {
+    counts[optionId] = (counts[optionId] ?? 0) + 1;
+    return counts;
+  }, {});
+  const maxVotes = Math.max(0, ...Object.values(voteCounts));
+  const leaders = room.options.filter((option) => (voteCounts[option.id] ?? 0) === maxVotes && maxVotes > 0);
+  const leaderNames = leaders.map((option) => {
+    if (option.isReal) return "本物の説明";
+    return `${room.players.find((player) => player.id === option.authorId)?.name ?? "Unknown"}の偽説明`;
+  });
+  const leadResult = leaderNames.length > 0
+    ? `最多得票: ${leaderNames.join("・")}（${maxVotes}票）${leaderNames.length > 1 ? " 同率" : ""}`
+    : "投票はありませんでした。";
 
   for (const [voterId, optionId] of Object.entries(room.votes)) {
     const option = room.options.find((item) => item.id === optionId);
@@ -320,17 +336,17 @@ function scoreRound(room: TahoiyaRoom) {
 
     if (option.isReal) {
       scores[voterId] = (scores[voterId] ?? 0) + 2;
-      resultLines.push(`${voter.name} が本物を当てて +2`);
+      scoreLines.push(`${voter.name} が本物を当てて +2`);
     } else if (option.authorId) {
       const author = room.players.find((player) => player.id === option.authorId);
       scores[option.authorId] = (scores[option.authorId] ?? 0) + 1;
-      resultLines.push(`${author?.name ?? "Unknown"} の偽説明に票が入り +1`);
+      scoreLines.push(`${author?.name ?? "Unknown"} の偽説明に票が入り +1`);
     }
   }
 
   return {
     scores,
-    resultText: resultLines.length > 0 ? resultLines.join(" / ") : "得点は入りませんでした。",
+    resultText: `${leadResult} / ${scoreLines.length > 0 ? scoreLines.join(" / ") : "得点は入りませんでした。"}`,
   };
 }
 
@@ -339,10 +355,12 @@ function getAnswererCandidates(room: TahoiyaRoom) {
 }
 
 function getAnswerer(room: TahoiyaRoom) {
+  if (room.playMode === "all-vote") return null;
   return getAnswererCandidates(room).find((player) => player.id === room.answererId) ?? null;
 }
 
 function getDefinitionWriters(room: TahoiyaRoom) {
+  if (room.playMode === "all-vote") return room.players;
   return room.players.filter((player) => player.id !== room.answererId);
 }
 
@@ -351,6 +369,9 @@ function submittedCount(room: TahoiyaRoom) {
 }
 
 function voterCount(room: TahoiyaRoom) {
+  if (room.playMode === "all-vote") {
+    return room.players.filter((player) => room.votes[player.id]).length;
+  }
   return room.answererId && room.votes[room.answererId] ? 1 : 0;
 }
 
@@ -401,18 +422,24 @@ export function TahoiyaGame() {
   const operationPlayerId = isDebugMode ? activePlayerId : playerId;
   const activePlayer = room?.players.find((player) => player.id === operationPlayerId) ?? null;
   const isHost = Boolean(room && playerId === room.hostId);
+  const isAllVoteMode = room?.playMode === "all-vote";
   const answererCandidates = room ? getAnswererCandidates(room) : [];
   const answerer = room ? getAnswerer(room) : null;
-  const isAnswerer = Boolean(room && activePlayer?.id === room.answererId);
+  const isAnswerer = Boolean(room && !isAllVoteMode && activePlayer?.id === room.answererId);
+  const hasActivePlayerSubmitted = Boolean(room && activePlayer && room.fakeDefinitions[activePlayer.id]);
+  const hasActivePlayerVoted = Boolean(room && activePlayer && room.votes[activePlayer.id]);
   const definitionWriters = room ? getDefinitionWriters(room) : [];
   const definitionWriterCount = definitionWriters.length;
   const writingDone = room ? submittedCount(room) >= definitionWriterCount : false;
-  const votingDone = room ? voterCount(room) >= 1 : false;
+  const voterTarget = room ? (room.playMode === "all-vote" ? room.players.length : 1) : 1;
+  const votingDone = room ? voterCount(room) >= voterTarget : false;
   const nextWriter = room?.phase === "writing"
     ? definitionWriters.find((player) => !room.fakeDefinitions[player.id])
     : null;
   const nextVoter = room?.phase === "voting"
-    ? answerer && !room.votes[answerer.id] ? answerer : null
+    ? room.playMode === "all-vote"
+      ? room.players.find((player) => !room.votes[player.id]) ?? null
+      : answerer && !room.votes[answerer.id] ? answerer : null
     : null;
 
   const sortedScores = useMemo(() => {
@@ -516,6 +543,16 @@ export function TahoiyaGame() {
     });
   };
 
+  const setPlayMode = (playMode: TahoiyaPlayMode) => {
+    if (!room || room.phase !== "lobby") return;
+    setAndSaveRoom({
+      ...room,
+      playMode,
+      answererId: playMode === "all-vote" ? "" : room.answererId,
+      showRealDefinitionToWriters: playMode === "all-vote" ? false : room.showRealDefinitionToWriters,
+    });
+  };
+
   const setManualAnswerer = (answererId: string) => {
     if (!room || room.phase !== "lobby") return;
     setAndSaveRoom({ ...room, answererId });
@@ -530,19 +567,19 @@ export function TahoiyaGame() {
     if (!room || isStarting) return;
     const startingRoom = withMinimumDebugPlayers(room);
     if (startingRoom.players.length < 3) {
-      setMessage("回答者1人と偽説明を書く人2人以上、合計3人以上が必要です。");
+      setMessage("ゲーム開始には3人以上が必要です。");
       return;
     }
     const candidates = getAnswererCandidates(startingRoom);
-
-    const selectedAnswererId =
-      startingRoom.answererMode === "random"
+    const selectedAnswererId = startingRoom.playMode === "all-vote"
+      ? ""
+      : startingRoom.answererMode === "random"
         ? shuffle(candidates)[0]?.id ?? ""
         : candidates.some((player) => player.id === startingRoom.answererId)
           ? startingRoom.answererId
           : "";
 
-    if (!selectedAnswererId) {
+    if (startingRoom.playMode === "single-answerer" && !selectedAnswererId) {
       setMessage("回答者を指定するか、ランダムで選ぶ設定にしてください。");
       return;
     }
@@ -583,7 +620,7 @@ export function TahoiyaGame() {
   };
 
   const submitDefinition = () => {
-    if (!room || !activePlayer || isAnswerer || !definitionInput.trim()) return;
+    if (!room || !activePlayer || isAnswerer || writingDone || !definitionInput.trim()) return;
     const nextRoom = {
       ...room,
       fakeDefinitions: {
@@ -603,7 +640,7 @@ export function TahoiyaGame() {
     if (!room || room.phase !== "writing") return;
     const nextDefinitions = { ...room.fakeDefinitions };
     for (const player of room.players) {
-      if (player.id === room.answererId || nextDefinitions[player.id]) continue;
+      if ((room.playMode === "single-answerer" && player.id === room.answererId) || nextDefinitions[player.id]) continue;
       nextDefinitions[player.id] = "特定の作業に使われる古い道具の一種。";
     }
     setAndSaveRoom({ ...room, fakeDefinitions: nextDefinitions });
@@ -618,12 +655,15 @@ export function TahoiyaGame() {
       votes: {},
     } satisfies TahoiyaRoom;
     setAndSaveRoom(nextRoom);
-    if (answerer) setActivePlayerId(answerer.id);
+    const firstVoter = room.playMode === "all-vote" ? room.players[0] : answerer;
+    if (firstVoter) setActivePlayerId(firstVoter.id);
     setSelectedOptionId("");
   };
 
   const castVote = () => {
-    if (!room || !activePlayer || !isAnswerer || !selectedOptionId) return;
+    if (!room || !activePlayer || votingDone || (!isAllVoteMode && !isAnswerer) || !selectedOptionId) return;
+    const selectedOption = room.options.find((option) => option.id === selectedOptionId);
+    if (!selectedOption || selectedOption.authorId === activePlayer.id) return;
     const nextRoom = {
       ...room,
       votes: {
@@ -632,14 +672,24 @@ export function TahoiyaGame() {
       },
     };
     setAndSaveRoom(nextRoom);
+    if (isDebugMode && room.playMode === "all-vote") {
+      const next = room.players.find((player) => !nextRoom.votes[player.id]);
+      if (next) setActivePlayerId(next.id);
+    }
     setSelectedOptionId("");
   };
 
   const autoFillTestVotes = () => {
-    if (!room || room.phase !== "voting" || room.options.length === 0 || !room.answererId) return;
+    if (!room || room.phase !== "voting" || room.options.length === 0) return;
     const nextVotes = { ...room.votes };
-    const option = room.options[0];
-    if (option && !nextVotes[room.answererId]) nextVotes[room.answererId] = option.id;
+    const voters = room.playMode === "all-vote"
+      ? room.players
+      : room.players.filter((player) => player.id === room.answererId);
+    for (const voter of voters) {
+      if (nextVotes[voter.id]) continue;
+      const option = room.options.find((item) => item.authorId !== voter.id);
+      if (option) nextVotes[voter.id] = option.id;
+    }
     setAndSaveRoom({ ...room, votes: nextVotes });
   };
 
@@ -656,7 +706,7 @@ export function TahoiyaGame() {
 
   const nextRound = () => {
     if (!room) return;
-    const nextAnswererId = room.answererMode === "manual" ? room.answererId : "";
+    const nextAnswererId = room.playMode === "single-answerer" && room.answererMode === "manual" ? room.answererId : "";
     setAndSaveRoom({
       ...room,
       phase: "lobby",
@@ -759,7 +809,11 @@ export function TahoiyaGame() {
                   <p className="text-xl font-black text-slate-950">{room.code}</p>
                 </div>
                 <p className="text-sm text-slate-600">
-                  回答者: <span className="font-bold text-slate-950">{answerer?.name ?? (room.answererMode === "random" ? "開始時にランダム" : "未指定")}</span>
+                  {room.playMode === "all-vote" ? (
+                    <span className="font-bold text-slate-950">全員作成・全員投票</span>
+                  ) : (
+                    <>回答者: <span className="font-bold text-slate-950">{answerer?.name ?? (room.answererMode === "random" ? "開始時にランダム" : "未指定")}</span></>
+                  )}
                 </p>
                 {room.phase === "lobby" && isHost && (
                   <div className="space-y-3">
@@ -774,6 +828,39 @@ export function TahoiyaGame() {
                     >
                       デバッグモード {room.debugMode ? "ON" : "OFF"}
                     </button>
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                      <p className="text-sm font-bold text-slate-950">遊び方</p>
+                      <div className="mt-2 grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setPlayMode("single-answerer")}
+                          className={`rounded-lg border px-3 py-2 text-sm font-bold ${
+                            room.playMode === "single-answerer"
+                              ? "border-amber-500 bg-amber-100 text-amber-950"
+                              : "border-slate-300 bg-white text-slate-700"
+                          }`}
+                        >
+                          回答者1人
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPlayMode("all-vote")}
+                          className={`rounded-lg border px-3 py-2 text-sm font-bold ${
+                            room.playMode === "all-vote"
+                              ? "border-cyan-500 bg-cyan-100 text-cyan-950"
+                              : "border-slate-300 bg-white text-slate-700"
+                          }`}
+                        >
+                          全員投票
+                        </button>
+                      </div>
+                      <p className="mt-2 text-xs text-slate-500">
+                        {room.playMode === "all-vote"
+                          ? "全員が偽説明を書き、全員で投票して最多得票を競います。"
+                          : "1人だけが回答し、それ以外の参加者が偽説明を書きます。"}
+                      </p>
+                    </div>
+                    {room.playMode === "single-answerer" && (
                     <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                       <p className="text-sm font-bold text-slate-950">回答者の決め方</p>
                       <div className="mt-2 grid grid-cols-2 gap-2">
@@ -818,6 +905,7 @@ export function TahoiyaGame() {
                         </p>
                       )}
                     </div>
+                    )}
                     <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                       <p className="text-sm font-bold text-slate-950">本物の説明を見せる</p>
                       <p className="mt-1 text-xs text-slate-500">偽説明を書く人に、AIが用意した本物の説明を表示するか選べます。</p>
@@ -910,7 +998,7 @@ export function TahoiyaGame() {
                   <p className="text-sm font-semibold text-amber-700">Prototype ready</p>
                   <h2 className="mt-2 text-3xl font-black text-slate-950">辞書の本物を見抜く</h2>
                   <p className="mt-3 text-sm leading-6 text-slate-600">
-                    回答者を1人選び、それ以外の全員がお題を見て偽説明を作ります。回答者は並んだ説明から本物を選びます。
+                    回答者1人で遊ぶルールと、全員が偽説明を書いて全員投票するルールを選べます。
                   </p>
                 </div>
               </div>
@@ -953,7 +1041,9 @@ export function TahoiyaGame() {
                     {room.players.map((player) => (
                       <div key={player.id} className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-800">
                         {player.name}
-                        {player.id === room.answererId ? (
+                        {room.playMode === "all-vote" ? (
+                          <span className="ml-2 text-cyan-700">偽説明・投票</span>
+                        ) : player.id === room.answererId ? (
                           <span className="ml-2 text-cyan-700">回答者</span>
                         ) : (
                           <span className="ml-2 text-slate-500">
@@ -991,19 +1081,39 @@ export function TahoiyaGame() {
                             )}
                           </div>
                           <p className="mt-2 text-xs font-semibold text-amber-800">
-                            この説明を参考に、回答者を迷わせる別の説明を作ってください。
+                            この説明を参考に、{room.playMode === "all-vote" ? "ほかの参加者" : "回答者"}を迷わせる別の説明を作ってください。
                           </p>
                         </div>
                       )}
-                      <textarea
-                        value={definitionInput}
-                        onChange={(event) => setDefinitionInput(event.target.value)}
-                        className={`mt-4 min-h-28 resize-y ${inputClass}`}
-                        placeholder="辞書に載っていそうな短い説明を書く"
-                      />
-                      <button onClick={submitDefinition} disabled={!definitionInput.trim()} className={`mt-3 ${cyanButtonClass}`}>
-                        偽説明を投稿
-                      </button>
+                      {hasActivePlayerSubmitted && writingDone ? (
+                        <div className="mt-4 rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-900">
+                          全員の偽説明がそろったため、提出内容は確定しました。
+                        </div>
+                      ) : (
+                        <>
+                          {hasActivePlayerSubmitted && (
+                            <div className="mt-4 rounded-lg bg-cyan-50 p-3 text-sm font-semibold text-cyan-900">
+                              <p>提出済みです。全員が提出するまでは上書きできます。</p>
+                              <button
+                                type="button"
+                                onClick={() => setDefinitionInput(room.fakeDefinitions[activePlayer?.id ?? ""] ?? "")}
+                                className="mt-2 rounded-lg border border-cyan-300 bg-white px-3 py-1.5 text-xs font-bold text-cyan-900"
+                              >
+                                現在の説明を編集する
+                              </button>
+                            </div>
+                          )}
+                          <textarea
+                            value={definitionInput}
+                            onChange={(event) => setDefinitionInput(event.target.value)}
+                            className={`mt-4 min-h-28 resize-y ${inputClass}`}
+                            placeholder="辞書に載っていそうな短い説明を書く"
+                          />
+                          <button onClick={submitDefinition} disabled={!definitionInput.trim()} className={`mt-3 ${cyanButtonClass}`}>
+                            {hasActivePlayerSubmitted ? "偽説明を上書き" : "偽説明を投稿"}
+                          </button>
+                        </>
+                      )}
                     </>
                   )}
                   {isHost && (
@@ -1024,29 +1134,40 @@ export function TahoiyaGame() {
               {room.phase === "voting" && (
                 <div className={panelClass}>
                   <p className="text-xs font-semibold uppercase text-amber-700">Vote</p>
-                  <h2 className="text-2xl font-black text-slate-950">本物を選ぶ</h2>
+                  <h2 className="text-2xl font-black text-slate-950">{room.playMode === "all-vote" ? "最多得票を決める" : "本物を選ぶ"}</h2>
                   <p className="mt-2 text-sm text-slate-600">
-                    回答者の投票: {voterCount(room)}/1
+                    投票: {voterCount(room)}/{voterTarget}
                   </p>
-                  {!isAnswerer ? (
+                  {!isAllVoteMode && !isAnswerer ? (
                     <p className="mt-4 rounded-lg bg-slate-100 p-3 text-sm font-semibold text-slate-700">偽説明を書いた人は投票しません。回答者の投票を待ちます。</p>
                   ) : (
                     <div className="mt-4 grid gap-2">
-                      {room.options.map((option, index) => (
+                      {hasActivePlayerVoted && !votingDone && (
+                        <p className="rounded-lg bg-cyan-50 p-3 text-sm font-semibold text-cyan-900">
+                          投票済みです。全員が投票するまでは別の候補へ変更できます。
+                        </p>
+                      )}
+                      {room.options.map((option, index) => {
+                        const isOwnDefinition = option.authorId === activePlayer?.id;
+                        return (
                         <button
                           key={option.id}
+                          disabled={isOwnDefinition}
                           onClick={() => setSelectedOptionId(option.id)}
                           className={`rounded-lg border px-3 py-3 text-left text-sm font-semibold ${
-                            selectedOptionId === option.id
+                            isOwnDefinition
+                              ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
+                              : selectedOptionId === option.id
                               ? "border-amber-500 bg-amber-50 text-amber-950"
                               : "border-slate-200 bg-slate-50 text-slate-800 hover:bg-white"
                           }`}
                         >
-                          {index + 1}. {option.text}
+                          {index + 1}. {option.text}{isOwnDefinition ? "（自分の説明）" : ""}
                         </button>
-                      ))}
-                      <button onClick={castVote} disabled={!selectedOptionId} className={cyanButtonClass}>
-                        投票する
+                        );
+                      })}
+                      <button onClick={castVote} disabled={!selectedOptionId || votingDone} className={cyanButtonClass}>
+                        {hasActivePlayerVoted ? "投票を変更" : "投票する"}
                       </button>
                     </div>
                   )}
@@ -1054,7 +1175,7 @@ export function TahoiyaGame() {
                     <div className="mt-4 flex flex-wrap gap-2">
                       {isDebugMode && (
                         <button onClick={autoFillTestVotes} className={subtleButtonClass}>
-                          回答者をテスト投票
+                          未投票をテスト投票
                         </button>
                       )}
                       <button onClick={finishRound} disabled={!votingDone} className={primaryButtonClass}>
@@ -1118,6 +1239,7 @@ export function TahoiyaGame() {
                       reasonOptions={tahoiyaFeedbackReasons}
                       settings={{
                         playerCount: room.players.length,
+                        playMode: room.playMode,
                         answererMode: room.answererMode,
                         showRealDefinitionToWriters: room.showRealDefinitionToWriters,
                         difficulty: "very-hard",
