@@ -13,7 +13,7 @@ export async function generateGroqText(prompt: string, quality: "standard" | "hi
     apiKey,
     baseURL: "https://api.groq.com/openai/v1",
     maxRetries: 0,
-    timeout: quality === "high" ? 15000 : 6000,
+    timeout: quality === "high" ? 30000 : 6000,
   });
   const response = await client.responses.create({
     model: freeGroqLlmModel,
