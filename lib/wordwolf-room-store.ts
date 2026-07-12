@@ -8,6 +8,7 @@ import { redisCommand } from "@/lib/redis-store";
 import { recordWordWolfGameResults } from "@/lib/player-stats-store";
 import { normalizeGameGenerationMeta } from "@/lib/game-ai-types";
 import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
+import { isMultiplayerRoomExpired, multiplayerRoomExpiryArgs } from "@/lib/multiplayer-room-lifecycle";
 
 export type WordWolfRoom = Room;
 export type WordWolfRoomChoice = RoomChoice;
@@ -217,7 +218,15 @@ export async function loadStoredWordWolfRoom(code: string) {
   if (!raw) return null;
 
   try {
-    return normalizeRoom(JSON.parse(raw));
+    const room = normalizeRoom(JSON.parse(raw));
+    if (!room) return null;
+    if (isMultiplayerRoomExpired(room.updatedAt)) {
+      await redisCommand<number>(["DEL", roomKey(room.code)]);
+      await redisCommand<number>(["SREM", roomIndexKey, room.code]);
+      await Promise.all(room.players.map((player) => deletePlayerActiveRoom(player.id, room.code)));
+      return null;
+    }
+    return room;
   } catch {
     return null;
   }
@@ -226,7 +235,7 @@ export async function loadStoredWordWolfRoom(code: string) {
 async function savePlayerActiveRooms(room: WordWolfRoom) {
   await Promise.all(
     room.players.map((player) =>
-      redisCommand<"OK">(["SET", playerActiveRoomKey(player.id), room.code]),
+      redisCommand<"OK">(["SET", playerActiveRoomKey(player.id), room.code, ...multiplayerRoomExpiryArgs()]),
     ),
   );
 }
@@ -269,7 +278,7 @@ export async function saveStoredWordWolfRoom(room: unknown) {
     };
   }
 
-  await redisCommand<"OK">(["SET", roomKey(normalizedRoom.code), JSON.stringify(normalizedRoom)]);
+  await redisCommand<"OK">(["SET", roomKey(normalizedRoom.code), JSON.stringify(normalizedRoom), ...multiplayerRoomExpiryArgs()]);
   await redisCommand<number>(["SADD", roomIndexKey, normalizedRoom.code]);
   await savePlayerActiveRooms(normalizedRoom);
 
@@ -290,6 +299,8 @@ export async function deleteStoredWordWolfRoom(code: string) {
 export async function listStoredWordWolfRooms() {
   const codes = await redisCommand<string[]>(["SMEMBERS", roomIndexKey]);
   const rooms = await Promise.all(codes.map((code) => loadStoredWordWolfRoom(code)));
+  const missingCodes = codes.filter((_, index) => !rooms[index]);
+  if (missingCodes.length > 0) await redisCommand<number>(["SREM", roomIndexKey, ...missingCodes]);
   return rooms.filter((room): room is WordWolfRoom => Boolean(room));
 }
 

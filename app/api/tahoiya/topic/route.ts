@@ -19,6 +19,7 @@ import {
 } from "@/lib/tahoiya-topic-catalog";
 import { hasVeryCommonSpokenHomophone, type TahoiyaSourceEntry } from "@/lib/tahoiya-source-library";
 import type { TahoiyaDifficulty, TahoiyaTopic } from "@/lib/tahoiya-types";
+import { parseLlmJson } from "@/lib/llm-json";
 
 const tahoiyaTopicPromptVersion = "tahoiya-topic-v10";
 const tahoiyaBatchPromptVersion = "tahoiya-source-batch-v1";
@@ -303,8 +304,8 @@ function simplifyDefinition(value: unknown) {
 }
 
 function parseTopic(text: string): TahoiyaTopic | null {
-  try {
-    const parsed = JSON.parse(text) as Partial<TahoiyaTopic>;
+    const parsed = parseLlmJson<Partial<TahoiyaTopic>>(text);
+    if (!parsed) return null;
     const realDefinition = simplifyDefinition(parsed.realDefinition);
     const definitionLength = Array.from(realDefinition.replace(/。$/, "")).length;
     if (!parsed.word || !realDefinition || definitionLength < 4 || definitionLength > 60) return null;
@@ -317,32 +318,22 @@ function parseTopic(text: string): TahoiyaTopic | null {
       sourceDetail: String(parsed.sourceDetail || "LLMによる生成後、別の校閲プロンプトで読みと意味を再確認。"),
       source: "llm",
     };
-  } catch {
-    return null;
-  }
 }
 
 function parseVerifiedTopic(text: string): TahoiyaTopic | null {
-  try {
-    const parsed = JSON.parse(text) as Partial<TahoiyaTopic> & { valid?: boolean };
-    if (parsed.valid !== true) return null;
-    return parseTopic(JSON.stringify(parsed));
-  } catch {
-    return null;
-  }
+  const parsed = parseLlmJson<Partial<TahoiyaTopic> & { valid?: boolean }>(text);
+  if (!parsed || parsed.valid !== true) return null;
+  return parseTopic(JSON.stringify(parsed));
 }
 
 function parseTopicCandidates(text: string) {
-  try {
-    const parsed = JSON.parse(text) as { candidates?: unknown } & Partial<TahoiyaTopic>;
+    const parsed = parseLlmJson<{ candidates?: unknown } & Partial<TahoiyaTopic>>(text);
+    if (!parsed) return [];
     const rawCandidates = Array.isArray(parsed.candidates) ? parsed.candidates : [parsed];
     const candidates = rawCandidates
       .map((candidate) => parseTopic(JSON.stringify(candidate)))
       .filter((candidate): candidate is TahoiyaTopic => Boolean(candidate));
     return [...new Map(candidates.map((candidate) => [normalizeTopicWord(candidate.word), candidate])).values()].slice(0, 3);
-  } catch {
-    return [];
-  }
 }
 
 function independentReviewerProvider(provider: GameLlmProvider): GameLlmProvider {
@@ -454,9 +445,8 @@ function difficultyAnchorTags(difficulty: BatchReviewItem["difficulty"]) {
 }
 
 function parseBatchReview(text: string, sources: TahoiyaSourceEntry[]): ParsedBatchReviewItem[] {
-  try {
-    const parsed = JSON.parse(text) as { items?: unknown[] };
-    if (!Array.isArray(parsed.items)) return [];
+    const parsed = parseLlmJson<{ items?: unknown[] }>(text);
+    if (!parsed || !Array.isArray(parsed.items)) return [];
     const byId = new Map(sources.map((source) => [source.id, source]));
     return parsed.items.flatMap((raw) => {
       if (!raw || typeof raw !== "object") return [];
@@ -482,9 +472,6 @@ function parseBatchReview(text: string, sources: TahoiyaSourceEntry[]): ParsedBa
           : String(item.difficultyReason || "RAGフィードバック基準による絶対評価。"),
       }];
     });
-  } catch {
-    return [];
-  }
 }
 
 async function reviewSourceBatch(

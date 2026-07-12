@@ -2,16 +2,13 @@ import {
   generateGameLlmText,
   resolveGameLlmMode,
 } from "@/lib/game-llm";
+import { parseLlmJson } from "@/lib/llm-json";
 
 function parsePolishedText(value: string) {
-  try {
-    const parsed = JSON.parse(value) as { text?: unknown };
-    const text = typeof parsed.text === "string" ? parsed.text.trim().replace(/\s+/g, " ") : "";
-    if (!text || text.length > 240) return null;
-    return text;
-  } catch {
-    return null;
-  }
+  const parsed = parseLlmJson<{ text?: unknown }>(value);
+  const text = typeof parsed?.text === "string" ? parsed.text.trim().replace(/\s+/g, " ") : "";
+  if (!text || text.length > 240) return null;
+  return text;
 }
 
 export async function POST(request: Request) {

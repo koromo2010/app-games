@@ -28,6 +28,7 @@ import {
   rememberWordWolfTopicCandidate,
   rememberWordWolfTopicExperience,
 } from "@/lib/wordwolf-topic-catalog";
+import { parseLlmJson } from "@/lib/llm-json";
 
 const baseTopicPrompt =
   "ワードウルフ用のお題ペアを1組作ってください。3-6人で3周ほど話す前提です。日本語で、共通点を話せるが同じ言葉の言い換えではない組み合わせにしてください。JSONのみで返してください: {\"villageWord\":\"...\",\"wolfWord\":\"...\",\"reason\":\"...\"}";
@@ -65,12 +66,12 @@ function parseTopic(
   pairDistance: TopicPairDistance,
   dictionarySource: Extract<TopicDictionarySource, "llm" | "proper-noun">,
 ): WordWolfTopic | null {
-  try {
-    const parsed = JSON.parse(text) as Partial<WordWolfTopic> & {
+    const parsed = parseLlmJson<Partial<WordWolfTopic> & {
       alternativeCandidates?: unknown;
       pairIsCanonical?: unknown;
       sharedNameCue?: unknown;
-    };
+    }>(text);
+    if (!parsed) return null;
     if (!parsed.villageWord || !parsed.wolfWord) return null;
 
     if (dictionarySource === "proper-noun") {
@@ -92,9 +93,6 @@ function parseTopic(
     } satisfies WordWolfTopic;
 
     return isValidWordWolfTopic(topic) && (dictionarySource !== "proper-noun" || isStrictProperNounTopic(topic)) ? topic : null;
-  } catch {
-    return null;
-  }
 }
 
 function getTopicRequestOptions(request: Request) {

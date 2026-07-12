@@ -1,4 +1,5 @@
 import { redisCommand } from "@/lib/redis-store";
+import { isMultiplayerRoomExpired, multiplayerRoomExpiryArgs, multiplayerRoomTtlSeconds } from "@/lib/multiplayer-room-lifecycle";
 import { randomUUID } from "node:crypto";
 import {
   clueHasNumber,
@@ -194,11 +195,12 @@ function reconcileProgress(room: HodoaiRoom) {
 async function compareAndSetRoom(expectedRevision: number, room: HodoaiRoom) {
   return redisCommand<number>([
     "EVAL",
-    "local raw=redis.call('GET',KEYS[1]); if not raw then return -1 end; local current=cjson.decode(raw); if tonumber(current.revision or 0)~=tonumber(ARGV[1]) then return 0 end; redis.call('SET',KEYS[1],ARGV[2]); return 1",
+    "local raw=redis.call('GET',KEYS[1]); if not raw then return -1 end; local current=cjson.decode(raw); if tonumber(current.revision or 0)~=tonumber(ARGV[1]) then return 0 end; redis.call('SET',KEYS[1],ARGV[2],'EX',ARGV[3]); return 1",
     "1",
     roomKey(room.code),
     String(expectedRevision),
     JSON.stringify(room),
+    String(multiplayerRoomTtlSeconds),
   ]);
 }
 
@@ -229,7 +231,7 @@ function makeChoice(room: HodoaiRoom): HodoaiRoomChoice {
 }
 
 async function saveActiveRooms(room: HodoaiRoom) {
-  await Promise.all(room.players.filter((player) => !player.isDummy).map((player) => redisCommand<"OK">(["SET", playerActiveRoomKey(player.id), room.code])));
+  await Promise.all(room.players.filter((player) => !player.isDummy).map((player) => redisCommand<"OK">(["SET", playerActiveRoomKey(player.id), room.code, ...multiplayerRoomExpiryArgs()])));
 }
 
 async function clearActiveRoom(playerId: string, code: string) {
@@ -257,7 +259,15 @@ export async function loadStoredHodoaiRoom(code: string) {
   const raw = await redisCommand<string | null>(["GET", roomKey(code)]);
   if (!raw) return null;
   try {
-    return normalizeRoom(JSON.parse(raw));
+    const room = normalizeRoom(JSON.parse(raw));
+    if (!room) return null;
+    if (isMultiplayerRoomExpired(room.updatedAt)) {
+      await redisCommand<number>(["DEL", roomKey(room.code)]);
+      await redisCommand<number>(["SREM", roomIndexKey, room.code]);
+      await Promise.all(room.players.map((player) => clearActiveRoom(player.id, room.code)));
+      return null;
+    }
+    return room;
   } catch {
     return null;
   }
@@ -287,7 +297,7 @@ export async function createStoredHodoaiRoom(value: unknown, actorId: string) {
   const room = normalizeRoom(value);
   if (!room || actorId !== room.hostId) throw new Error("INVALID_HODOAI_ROOM");
   const created = { ...room, revision: 0, phase: "lobby" as const, values: {}, clues: {}, order: [], history: [], totalPoints: 0, updatedAt: Date.now() };
-  const saved = await redisCommand<"OK" | null>(["SET", roomKey(created.code), JSON.stringify(created), "NX"]);
+  const saved = await redisCommand<"OK" | null>(["SET", roomKey(created.code), JSON.stringify(created), "NX", ...multiplayerRoomExpiryArgs()]);
   if (saved !== "OK") throw new Error("HODOAI_ROOM_CONFLICT");
   await redisCommand<number>(["SADD", roomIndexKey, created.code]);
   await saveActiveRooms(created);
@@ -392,6 +402,8 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
 export async function listJoinableHodoaiRooms() {
   const codes = await redisCommand<string[]>(["SMEMBERS", roomIndexKey]);
   const rooms = await Promise.all(codes.map((code) => loadStoredHodoaiRoom(code)));
+  const missingCodes = codes.filter((_, index) => !rooms[index]);
+  if (missingCodes.length > 0) await redisCommand<number>(["SREM", roomIndexKey, ...missingCodes]);
   return rooms.filter((room): room is HodoaiRoom => Boolean(room && room.phase === "lobby")).map(makeChoice).sort((a, b) => b.updatedAt - a.updatedAt);
 }
 

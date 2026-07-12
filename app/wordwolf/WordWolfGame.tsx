@@ -60,6 +60,7 @@ import {
   shufflePlayers,
 } from "./game-flow";
 import { ClueLogPanel, VoteHistoryPanel } from "./WordWolfPanels";
+import { WordWolfActionPanels } from "./WordWolfActionPanels";
 import {
   cyanButtonClass,
   dangerButtonClass,
@@ -2404,137 +2405,37 @@ export function WordWolfGame() {
                 </div>
               )}
 
-              {room.phase === "clue" && (
-                <div className={`rounded-lg border p-4 shadow-[0_18px_50px_rgba(15,23,42,0.16)] ${isMyClueTurn ? "border-cyan-300 bg-cyan-50/95" : "border-white/10 bg-white/[0.96]"}`}>
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <p className="text-xs font-semibold uppercase text-cyan-700">
-                        {room.clueMode === "simultaneous" ? "Simultaneous post" : "Current turn"}
-                      </p>
-                      <h2 className="mt-1 text-3xl font-black text-slate-950">
-                        {room.runoffCandidateIds?.length
-                        ? "\u6c7a\u9078\u524d\u306e\u8ffd\u52a0\u767a\u8a00"
-                        : room.clueMode === "simultaneous"
-                          ? "\u5168\u54e1\u540c\u6642\u6295\u7a3f"
-                          : currentPlayer?.name}
-                      </h2>
-                    </div>
-                    <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950">
-                      {room.runoffCandidateIds?.length && room.currentRound > room.roundsTotal ? "追加発言" : `${room.currentRound}周目`}
-                    </p>
-                  </div>
-                  {room.runoffCandidateIds?.length ? (
-                    <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm leading-6 text-violet-950">
-                      <p className="font-black">同率投票です。もう一度発言してから決選投票します。</p>
-                      <p className="mt-1 font-semibold">
-                        対象: {runoffCandidateNames || "同率の候補"}
-                      </p>
-                    </div>
-                  ) : null}
-                  {room.clueMode === "simultaneous" && (
-                    <p className="mt-3 text-sm leading-6 text-slate-600">
-                      {"\u3053\u306e\u5468\u306e\u6295\u7a3f"}: {clueSubmittedCount}/{clueParticipants.length}
-                    </p>
-                  )}
-                  {turnSecondsLeft !== null && (
-                    <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950">
-                      {"\u6b8b\u308a"} {turnSecondsLeft} {"\u79d2"}
-                    </div>
-                  )}
-                  <textarea
-                    value={clueInput}
-                    onChange={(event) => setClueInput(event.target.value)}
-                    onKeyDown={submitClueOnEnter}
-                    disabled={!canSubmitClue}
-                    className={`mt-4 min-h-28 resize-y ${inputClass} ${isMyClueTurn ? "border-cyan-400 bg-white ring-2 ring-cyan-400/20" : ""}`}
-                    placeholder="\u304a\u984c\u305d\u306e\u3082\u306e\u3092\u8a00\u308f\u305a\u306b\u95a2\u9023\u3059\u308b\u3053\u3068\u3092\u66f8\u304d\u8fbc\u3080"
-                  />
-                  <button
-                    onClick={() => void submitClue()}
-                    disabled={!clueInput.trim() || !canSubmitClue}
-                    className={`mt-3 ${cyanButtonClass}`}
-                  >
-                    {room.clueMode === "simultaneous" ? "\u6295\u7a3f\u3059\u308b" : "\u6295\u7a3f\u3057\u3066\u6b21\u3078"}
-                  </button>
-                </div>
-              )}
-              {room.phase === "vote" && (
-                <div className={`rounded-lg border p-4 shadow-[0_18px_50px_rgba(15,23,42,0.16)] ${isMyVoteTurn ? "border-violet-300 bg-violet-50/95" : "border-white/10 bg-white/[0.96]"}`}>
-                  <p className="text-xs font-semibold uppercase text-violet-700">Vote</p>
-                  <h2 className="mt-1 text-2xl font-black text-slate-950">
-                    {isRunoffVote ? "\u6c7a\u9078\u6295\u7968" : room.gameMode === "may-no-wolf" ? "\u8ffd\u653e\u6295\u7968" : "\u8ab0\u304c\u72fc\u304b\u6295\u7968"}
-                  </h2>
-                  <p className="mt-2 text-sm leading-6 text-slate-600">
-                    {"\u5168\u54e1\u304c\u540c\u6642\u306b\u6295\u7968\u3067\u304d\u307e\u3059\u3002\u6295\u7968"}: {votedCount}/{voteVoters.length}
-                  </p>
-                  {voteDisplayPlayer && room.votes[voteDisplayPlayer.id] ? (
-                    <p className="mt-1 text-sm font-semibold text-cyan-700">{"\u6295\u7968\u6e08\u307f\u3067\u3059\u3002\u4ed6\u306e\u30d7\u30ec\u30a4\u30e4\u30fc\u3092\u5f85\u3063\u3066\u3044\u307e\u3059\u3002"}</p>
-                  ) : null}
-                  {isDebugMode && voteActor ? (
-                    <p className="mt-1 text-sm font-semibold text-slate-600">
-                      {voteActor.name}{"\u306e\u6295\u7968\u3092\u64cd\u4f5c\u4e2d"}
-                    </p>
-                  ) : null}
-                  {isRunoffVote && (
-                    <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm leading-6 text-violet-950">
-                      <p className="font-black">同率投票のため決選投票です。</p>
-                      <p className="mt-1 font-semibold">
-                        対象: {runoffCandidateNames || "同率の候補"}。候補以外のプレイヤーだけが投票します。
-                      </p>
-                    </div>
-                  )}
-                  {turnSecondsLeft !== null && (
-                    <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-950">
-                      {"\u6b8b\u308a"} {turnSecondsLeft} {"\u79d2"}
-                    </div>
-                  )}
-                  <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                    {voteCandidates.map((player) => (
-                      <button
-                        key={player.id}
-                        onClick={() => void castVote(player.id)}
-                        disabled={!voteActor}
-                        className={`rounded-lg border px-3 py-3 text-left font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${
-                          selectedVoteTargetId === player.id
-                            ? "border-violet-500 bg-violet-100 text-violet-950"
-                            : "border-slate-200 bg-white text-slate-800 hover:bg-violet-50"
-                        }`}
-                      >
-                        {player.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {room.phase === "wolfGuess" && (
-                <div className={`rounded-lg border border-amber-200 bg-amber-50 p-5 shadow-[0_18px_50px_rgba(120,53,15,0.16)] ${isMyFinalAnswerTurn ? "animate-pulse ring-4 ring-amber-300/30" : ""}`}>
-                  <p className="text-xs font-semibold uppercase text-amber-700">Final chance</p>
-                  <h2 className="mt-1 text-2xl font-black text-slate-950">{"\u72fc\u304c\u898b\u3064\u304b\u308a\u307e\u3057\u305f"}</h2>
-                  <p className="mt-2 text-sm leading-6 text-slate-700">
-                    {"\u6295\u7968\u5bfe\u8c61\u306f"} {accusedPlayer?.name} {"\u3067\u3059\u3002\u72fc\u306f\u6751\u5074\u306e\u304a\u984c\u3092\u5f53\u3066\u308c\u3070\u9006\u8ee2\u52dd\u5229\u3067\u3059\u3002"}
-                  </p>
-                  {turnSecondsLeft !== null && (
-                    <div className="mt-4 rounded-lg border border-amber-300 bg-white/70 px-3 py-2 text-sm font-semibold text-amber-950">
-                      {"\u6b8b\u308a"} {turnSecondsLeft} {"\u79d2"}
-                    </div>
-                  )}
-                  <input
-                    value={guessInput}
-                    onChange={(event) => setGuessInput(event.target.value)}
-                    onKeyDown={submitGuessOnEnter}
-                    disabled={!isMyFinalAnswerTurn}
-                    className="mt-4 w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 disabled:bg-amber-100"
-                    placeholder="\u6751\u5074\u306e\u304a\u984c\u3092\u5165\u529b"
-                  />
-                  <button
-                    onClick={() => void submitWolfGuess()}
-                    disabled={isGuessJudging || !guessInput.trim() || !isMyFinalAnswerTurn}
-                    className="mt-3 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-500 disabled:bg-slate-300"
-                  >
-                    {isGuessJudging ? "\u5224\u5b9a\u4e2d..." : "\u56de\u7b54\u3059\u308b"}
-                  </button>
-                </div>
-              )}
+              <WordWolfActionPanels
+                room={room}
+                currentPlayer={currentPlayer}
+                runoffCandidateNames={runoffCandidateNames}
+                clueSubmittedCount={clueSubmittedCount}
+                clueParticipantCount={clueParticipants.length}
+                turnSecondsLeft={turnSecondsLeft}
+                clueInput={clueInput}
+                setClueInput={setClueInput}
+                onClueKeyDown={submitClueOnEnter}
+                onSubmitClue={() => void submitClue()}
+                canSubmitClue={canSubmitClue}
+                isMyClueTurn={isMyClueTurn}
+                isMyVoteTurn={isMyVoteTurn}
+                isRunoffVote={isRunoffVote}
+                votedCount={votedCount}
+                voteVoterCount={voteVoters.length}
+                voteDisplayPlayer={voteDisplayPlayer}
+                voteActor={voteActor}
+                isDebugMode={isDebugMode}
+                voteCandidates={voteCandidates}
+                selectedVoteTargetId={selectedVoteTargetId}
+                onCastVote={(playerId) => void castVote(playerId)}
+                isMyFinalAnswerTurn={isMyFinalAnswerTurn}
+                accusedPlayer={accusedPlayer}
+                guessInput={guessInput}
+                setGuessInput={setGuessInput}
+                onGuessKeyDown={submitGuessOnEnter}
+                onSubmitGuess={() => void submitWolfGuess()}
+                isGuessJudging={isGuessJudging}
+              />
               {room.phase === "result" && (
                 <div className={panelClass}>
                   <p className="text-xs font-semibold uppercase text-cyan-700">Result</p>

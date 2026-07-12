@@ -1,4 +1,5 @@
 import { generateGameLlmText, resolveGameLlmMode, type GameLlmMode } from "@/lib/game-llm";
+import { parseLlmJson } from "@/lib/llm-json";
 import { redisCommand } from "@/lib/redis-store";
 import { normalizeGuess } from "@/lib/wordwolf";
 
@@ -259,9 +260,8 @@ function feedbackExamples(conceptFeedback: ConceptFeedbackRecord, accepted: bool
 }
 
 function parseLlmJudgement(text: string, feedback: FeedbackRecord): WordWolfGuessJudgement | null {
-  try {
-    const parsed = JSON.parse(text) as Partial<WordWolfGuessJudgement>;
-    if (typeof parsed.accepted !== "boolean") return null;
+    const parsed = parseLlmJson<Partial<WordWolfGuessJudgement>>(text);
+    if (!parsed || typeof parsed.accepted !== "boolean") return null;
 
     return makeJudgement(
       parsed.accepted,
@@ -272,9 +272,6 @@ function parseLlmJudgement(text: string, feedback: FeedbackRecord): WordWolfGues
       typeof parsed.confidence === "number" ? Math.max(0, Math.min(1, parsed.confidence)) : 0.7,
       feedback,
     );
-  } catch {
-    return null;
-  }
 }
 
 async function judgeWithLlm(

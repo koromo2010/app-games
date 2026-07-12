@@ -3,12 +3,11 @@ import { randomUUID } from "node:crypto";
 import type { TahoiyaAnswererMode, TahoiyaDefinitionOption, TahoiyaPhase, TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomAction, TahoiyaRoomChoice } from "@/lib/tahoiya-types";
 import { normalizeGameGenerationMeta } from "@/lib/game-ai-types";
 import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
+import { isMultiplayerRoomExpired, multiplayerRoomTtlSeconds } from "@/lib/multiplayer-room-lifecycle";
 
 const roomKeyPrefix = "tahoiya:room:";
 const roomIndexKey = "tahoiya:rooms";
 const playerActiveRoomKeyPrefix = "tahoiya:player-active-room:";
-const roomTtlSeconds = 6 * 60 * 60;
-const roomTtlMs = roomTtlSeconds * 1000;
 
 function roomKey(code: string) {
   return `${roomKeyPrefix}${code.trim().toUpperCase()}`;
@@ -238,7 +237,7 @@ async function compareAndSetRoom(expectedRevision: number, room: TahoiyaRoom) {
     roomKey(room.code),
     String(expectedRevision),
     JSON.stringify(room),
-    String(roomTtlSeconds),
+    String(multiplayerRoomTtlSeconds),
   ]);
 }
 
@@ -274,7 +273,7 @@ function makeChoice(room: TahoiyaRoom): TahoiyaRoomChoice {
 
 async function savePlayerActiveRooms(room: TahoiyaRoom) {
   await Promise.all(room.players.map((player) => redisCommand<"OK">([
-    "SET", playerActiveRoomKey(player.id), room.code, "EX", String(roomTtlSeconds),
+    "SET", playerActiveRoomKey(player.id), room.code, "EX", String(multiplayerRoomTtlSeconds),
   ])));
 }
 
@@ -292,7 +291,7 @@ export async function loadStoredTahoiyaRoom(code: string) {
   try {
     const room = normalizeRoom(JSON.parse(raw));
     if (!room) return null;
-    if (Date.now() - room.updatedAt > roomTtlMs) {
+    if (isMultiplayerRoomExpired(room.updatedAt)) {
       await redisCommand<number>(["DEL", roomKey(room.code)]);
       await redisCommand<number>(["SREM", roomIndexKey, room.code]);
       await Promise.all(room.players.map((player) => deletePlayerActiveRoom(player.id, room.code)));
@@ -338,7 +337,7 @@ export async function saveStoredTahoiyaRoom(room: unknown, actorId = "") {
     if (actorId && actorId !== normalizedRoom.hostId) throw new Error("TAHOIYA_ROOM_FORBIDDEN");
     const createdRoom = { ...normalizedRoom, revision: 0, updatedAt: Date.now() };
     const created = await redisCommand<"OK" | null>([
-      "SET", roomKey(createdRoom.code), JSON.stringify(createdRoom), "NX", "EX", String(roomTtlSeconds),
+      "SET", roomKey(createdRoom.code), JSON.stringify(createdRoom), "NX", "EX", String(multiplayerRoomTtlSeconds),
     ]);
     if (created === "OK") {
       await redisCommand<number>(["SADD", roomIndexKey, createdRoom.code]);
