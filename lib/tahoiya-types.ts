@@ -14,6 +14,7 @@ export type TahoiyaTopic = {
   reading?: string;
   realDefinition: string;
   note: string;
+  sourceDetail: string;
   source: "llm" | "fallback";
   notice?: string;
   generation?: GameGenerationMeta;
@@ -36,12 +37,14 @@ export type TahoiyaRoom = {
   players: TahoiyaPlayer[];
   parentId: string;
   answererMode: TahoiyaAnswererMode;
+  showRealDefinitionToWriters: boolean;
   answererId: string;
   round: number;
   word: string;
   reading?: string;
   realDefinition: string;
   topicNote: string;
+  topicSourceDetail: string;
   topicSource: TahoiyaTopic["source"] | "pending";
   topicGeneration?: GameGenerationMeta;
   fakeDefinitions: Record<string, string>;

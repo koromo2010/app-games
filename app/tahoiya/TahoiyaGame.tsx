@@ -32,7 +32,7 @@ const tahoiyaFeedbackReasons = [
   { value: "other", label: "その他" },
 ];
 
-type TahoiyaRoomDefaults = Pick<TahoiyaRoom, "answererMode">;
+type TahoiyaRoomDefaults = Pick<TahoiyaRoom, "answererMode" | "showRealDefinitionToWriters">;
 
 function makeId(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
@@ -60,9 +60,14 @@ function getRoomDefaultsKey(playerId: string, ownerId: string) {
 }
 
 function normalizeRoomDefaults(value: unknown): TahoiyaRoomDefaults {
-  if (!value || typeof value !== "object") return { answererMode: "random" };
+  if (!value || typeof value !== "object") {
+    return { answererMode: "random", showRealDefinitionToWriters: true };
+  }
   const parsed = value as Partial<TahoiyaRoomDefaults>;
-  return { answererMode: parsed.answererMode === "manual" ? "manual" : "random" };
+  return {
+    answererMode: parsed.answererMode === "manual" ? "manual" : "random",
+    showRealDefinitionToWriters: parsed.showRealDefinitionToWriters !== false,
+  };
 }
 
 function loadRoomDefaults(playerId: string, ownerId: string) {
@@ -146,6 +151,7 @@ function normalizeRoom(room: TahoiyaRoom): TahoiyaRoom {
     players: Array.isArray(room.players) ? room.players : [],
     parentId: room.parentId || room.hostId,
     answererMode: room.answererMode === "manual" ? "manual" : "random",
+    showRealDefinitionToWriters: room.showRealDefinitionToWriters !== false,
     answererId: typeof room.answererId === "string" ? room.answererId : "",
     round: room.round ?? 1,
     fakeDefinitions: room.fakeDefinitions ?? {},
@@ -153,6 +159,7 @@ function normalizeRoom(room: TahoiyaRoom): TahoiyaRoom {
     votes: room.votes ?? {},
     scores: room.scores ?? {},
     topicSource: room.topicSource ?? "pending",
+    topicSourceDetail: room.topicSourceDetail ?? "",
     updatedAt: room.updatedAt ?? Date.now(),
   };
 }
@@ -266,12 +273,14 @@ function createEmptyRoom(
     players: [host],
     parentId: host.id,
     answererMode: defaults.answererMode,
+    showRealDefinitionToWriters: defaults.showRealDefinitionToWriters,
     answererId: "",
     round: 1,
     word: "",
     reading: "",
     realDefinition: "",
     topicNote: "",
+    topicSourceDetail: "",
     topicSource: "pending",
     fakeDefinitions: {},
     options: [],
@@ -512,6 +521,11 @@ export function TahoiyaGame() {
     setAndSaveRoom({ ...room, answererId });
   };
 
+  const setShowRealDefinitionToWriters = (showRealDefinitionToWriters: boolean) => {
+    if (!room || room.phase !== "lobby") return;
+    setAndSaveRoom({ ...room, showRealDefinitionToWriters });
+  };
+
   const startRound = async () => {
     if (!room || isStarting) return;
     const startingRoom = withMinimumDebugPlayers(room);
@@ -538,7 +552,11 @@ export function TahoiyaGame() {
     setMessage("");
     try {
       const response = await fetch("/api/tahoiya/topic", { cache: "no-store" });
-      const topic = (await response.json()) as TahoiyaTopic;
+      const topic = (await response.json()) as TahoiyaTopic & { error?: string };
+      if (!response.ok || !topic.word || !topic.realDefinition) {
+        setMessage(topic.notice || topic.error || "お題を生成できませんでした。");
+        return;
+      }
       setMessage(topic.notice ?? "");
       setAndSaveRoom({
         ...playableRoom,
@@ -547,6 +565,7 @@ export function TahoiyaGame() {
         reading: topic.reading,
         realDefinition: topic.realDefinition,
         topicNote: topic.note,
+        topicSourceDetail: topic.sourceDetail,
         topicSource: topic.source,
         topicGeneration: topic.generation,
         fakeDefinitions: {},
@@ -647,6 +666,7 @@ export function TahoiyaGame() {
       reading: "",
       realDefinition: "",
       topicNote: "",
+      topicSourceDetail: "",
       topicSource: "pending",
       topicGeneration: undefined,
       fakeDefinitions: {},
@@ -798,6 +818,34 @@ export function TahoiyaGame() {
                         </p>
                       )}
                     </div>
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                      <p className="text-sm font-bold text-slate-950">本物の説明を見せる</p>
+                      <p className="mt-1 text-xs text-slate-500">偽説明を書く人に、AIが用意した本物の説明を表示するか選べます。</p>
+                      <div className="mt-2 grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowRealDefinitionToWriters(true)}
+                          className={`rounded-lg border px-3 py-2 text-sm font-bold ${
+                            room.showRealDefinitionToWriters
+                              ? "border-amber-500 bg-amber-100 text-amber-950"
+                              : "border-slate-300 bg-white text-slate-700"
+                          }`}
+                        >
+                          見せる
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowRealDefinitionToWriters(false)}
+                          className={`rounded-lg border px-3 py-2 text-sm font-bold ${
+                            !room.showRealDefinitionToWriters
+                              ? "border-cyan-500 bg-cyan-100 text-cyan-950"
+                              : "border-slate-300 bg-white text-slate-700"
+                          }`}
+                        >
+                          見せない
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )}
                 {isDebugMode ? (
@@ -879,9 +927,6 @@ export function TahoiyaGame() {
                         : room.phase === "writing" && isAnswerer
                           ? "お題は準備中"
                           : room.word}
-                      {room.reading && !(room.phase === "writing" && isAnswerer) ? (
-                        <span className="ml-2 text-base font-semibold text-slate-500">({room.reading})</span>
-                      ) : null}
                     </h2>
                   </div>
                   <span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700">{room.phase}</span>
@@ -932,6 +977,24 @@ export function TahoiyaGame() {
                     <p className="mt-4 rounded-lg bg-cyan-50 p-3 text-sm font-semibold text-cyan-900">回答者にはお題を表示しません。説明が並ぶまで待ちます。</p>
                   ) : (
                     <>
+                      {room.showRealDefinitionToWriters && (
+                        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+                          <p className="text-xs font-semibold uppercase text-amber-700">AIが用意した正解情報</p>
+                          <p className="mt-1 text-lg font-bold text-slate-950">{room.realDefinition}</p>
+                          {room.reading && (
+                            <p className="mt-2 text-sm font-semibold text-slate-700">読み: {room.reading}</p>
+                          )}
+                          <div className="mt-3 border-t border-amber-200 pt-3 text-xs leading-5 text-slate-600">
+                            <p><span className="font-bold text-slate-800">出典・確認情報:</span> {room.topicSourceDetail || room.topicNote}</p>
+                            {room.topicNote && room.topicNote !== room.topicSourceDetail && (
+                              <p><span className="font-bold text-slate-800">選定補足:</span> {room.topicNote}</p>
+                            )}
+                          </div>
+                          <p className="mt-2 text-xs font-semibold text-amber-800">
+                            この説明を参考に、回答者を迷わせる別の説明を作ってください。
+                          </p>
+                        </div>
+                      )}
                       <textarea
                         value={definitionInput}
                         onChange={(event) => setDefinitionInput(event.target.value)}
@@ -1009,6 +1072,21 @@ export function TahoiyaGame() {
                   <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
                     <p className="text-xs font-semibold uppercase text-amber-700">本物</p>
                     <p className="mt-1 text-lg font-black text-slate-950">{room.realDefinition}</p>
+                    {room.reading && (
+                      <p className="mt-2 text-sm font-semibold text-slate-700">読み: {room.reading}</p>
+                    )}
+                    <div className="mt-3 border-t border-amber-200 pt-3 text-xs leading-5 text-slate-600">
+                      <p><span className="font-bold text-slate-800">出典・確認情報:</span> {room.topicSourceDetail || room.topicNote}</p>
+                      {room.topicNote && room.topicNote !== room.topicSourceDetail && (
+                        <p><span className="font-bold text-slate-800">選定補足:</span> {room.topicNote}</p>
+                      )}
+                      {room.topicGeneration && (
+                        <p>
+                          <span className="font-bold text-slate-800">生成:</span>{" "}
+                          {room.topicGeneration.provider} / {room.topicGeneration.model} / {room.topicGeneration.promptVersion}
+                        </p>
+                      )}
+                    </div>
                   </div>
                   <div className="mt-4 grid gap-2">
                     {room.options.map((option, index) => {
@@ -1041,6 +1119,7 @@ export function TahoiyaGame() {
                       settings={{
                         playerCount: room.players.length,
                         answererMode: room.answererMode,
+                        showRealDefinitionToWriters: room.showRealDefinitionToWriters,
                         difficulty: "very-hard",
                         definitionStyle: "simple-definition",
                         punctuationStyle: "no-parentheses",
