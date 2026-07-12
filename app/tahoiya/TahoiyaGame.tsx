@@ -436,6 +436,8 @@ export function TahoiyaGame() {
   const [definitionInput, setDefinitionInput] = useState("");
   const [selectedOptionId, setSelectedOptionId] = useState("");
   const [isStarting, setIsStarting] = useState(false);
+  const [isPolishingDefinition, setIsPolishingDefinition] = useState(false);
+  const [polishMessage, setPolishMessage] = useState("");
   const [message, setMessage] = useState("");
   const roomCode = room?.code;
 
@@ -694,6 +696,7 @@ export function TahoiyaGame() {
       const firstWriter = getDefinitionWriters(playableRoom)[0];
       if (firstWriter) setActivePlayerId(firstWriter.id);
       setDefinitionInput("");
+      setPolishMessage("");
       setSelectedOptionId("");
     } finally {
       setIsStarting(false);
@@ -719,7 +722,32 @@ export function TahoiyaGame() {
       if (next) setActivePlayerId(next.id);
     }
     setDefinitionInput("");
+    setPolishMessage("");
     if (allSubmitted) setSelectedOptionId("");
+  };
+
+  const polishDefinition = async () => {
+    if (!room || isAnswerer || writingDone || !definitionInput.trim() || isPolishingDefinition) return;
+    setIsPolishingDefinition(true);
+    setPolishMessage("");
+    try {
+      const response = await fetch("/api/tahoiya/polish-definition", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ word: room.word, text: definitionInput.trim() }),
+      });
+      const data = (await response.json()) as { text?: string; provider?: string; model?: string; error?: string };
+      if (!response.ok || !data.text) {
+        setPolishMessage(data.error || "偽説明を整えられませんでした。");
+        return;
+      }
+      setDefinitionInput(data.text);
+      setPolishMessage(`辞書調に整えました（${data.provider ?? "AI"} / ${data.model ?? "model"}）。内容を確認してから投稿してください。`);
+    } catch {
+      setPolishMessage("偽説明を整えられませんでした。");
+    } finally {
+      setIsPolishingDefinition(false);
+    }
   };
 
   const autoFillTestDefinitions = () => {
@@ -794,6 +822,9 @@ export function TahoiyaGame() {
       votes: {},
       resultText: "",
     });
+    setDefinitionInput("");
+    setPolishMessage("");
+    setSelectedOptionId("");
   };
 
   const dissolveRoom = async () => {
@@ -1182,13 +1213,30 @@ export function TahoiyaGame() {
                           )}
                           <textarea
                             value={definitionInput}
-                            onChange={(event) => setDefinitionInput(event.target.value)}
+                            onChange={(event) => {
+                              setDefinitionInput(event.target.value);
+                              setPolishMessage("");
+                            }}
                             className={`mt-4 min-h-28 resize-y ${inputClass}`}
                             placeholder="辞書に載っていそうな短い説明を書く"
+                            maxLength={240}
                           />
-                          <button onClick={submitDefinition} disabled={!definitionInput.trim()} className={`mt-3 ${cyanButtonClass}`}>
-                            {hasActivePlayerSubmitted ? "偽説明を上書き" : "偽説明を投稿"}
-                          </button>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              onClick={() => void polishDefinition()}
+                              disabled={!definitionInput.trim() || isPolishingDefinition}
+                              className={subtleButtonClass}
+                            >
+                              {isPolishingDefinition ? "AIで整形中..." : "辞書っぽく整える（AI）"}
+                            </button>
+                            <button onClick={submitDefinition} disabled={!definitionInput.trim() || isPolishingDefinition} className={cyanButtonClass}>
+                              {hasActivePlayerSubmitted ? "偽説明を上書き" : "偽説明を投稿"}
+                            </button>
+                          </div>
+                          {polishMessage && (
+                            <p className="mt-2 text-xs font-semibold text-slate-600">{polishMessage}</p>
+                          )}
                         </>
                       )}
                     </>
