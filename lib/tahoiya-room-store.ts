@@ -7,6 +7,8 @@ import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
 const roomKeyPrefix = "tahoiya:room:";
 const roomIndexKey = "tahoiya:rooms";
 const playerActiveRoomKeyPrefix = "tahoiya:player-active-room:";
+const roomTtlSeconds = 6 * 60 * 60;
+const roomTtlMs = roomTtlSeconds * 1000;
 
 function roomKey(code: string) {
   return `${roomKeyPrefix}${code.trim().toUpperCase()}`;
@@ -116,7 +118,9 @@ function normalizeRoom(value: unknown): TahoiyaRoom | null {
     scores: normalizeScores(parsed.scores),
     resultText: typeof parsed.resultText === "string" ? parsed.resultText : "",
     createdAt: typeof parsed.createdAt === "number" ? parsed.createdAt : Date.now(),
-    updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : Date.now(),
+    updatedAt: typeof parsed.updatedAt === "number"
+      ? parsed.updatedAt
+      : typeof parsed.createdAt === "number" ? parsed.createdAt : Date.now(),
   };
 }
 
@@ -229,11 +233,12 @@ function reconcileProgress(room: TahoiyaRoom) {
 async function compareAndSetRoom(expectedRevision: number, room: TahoiyaRoom) {
   return redisCommand<number>([
     "EVAL",
-    "local raw=redis.call('GET',KEYS[1]); if not raw then return -1 end; local current=cjson.decode(raw); if tonumber(current.revision or 0)~=tonumber(ARGV[1]) then return 0 end; redis.call('SET',KEYS[1],ARGV[2]); return 1",
+    "local raw=redis.call('GET',KEYS[1]); if not raw then return -1 end; local current=cjson.decode(raw); if tonumber(current.revision or 0)~=tonumber(ARGV[1]) then return 0 end; redis.call('SET',KEYS[1],ARGV[2],'EX',ARGV[3]); return 1",
     "1",
     roomKey(room.code),
     String(expectedRevision),
     JSON.stringify(room),
+    String(roomTtlSeconds),
   ]);
 }
 
@@ -268,7 +273,9 @@ function makeChoice(room: TahoiyaRoom): TahoiyaRoomChoice {
 }
 
 async function savePlayerActiveRooms(room: TahoiyaRoom) {
-  await Promise.all(room.players.map((player) => redisCommand<"OK">(["SET", playerActiveRoomKey(player.id), room.code])));
+  await Promise.all(room.players.map((player) => redisCommand<"OK">([
+    "SET", playerActiveRoomKey(player.id), room.code, "EX", String(roomTtlSeconds),
+  ])));
 }
 
 async function deletePlayerActiveRoom(playerId: string, roomCode: string) {
@@ -283,7 +290,15 @@ export async function loadStoredTahoiyaRoom(code: string) {
   if (!raw) return null;
 
   try {
-    return normalizeRoom(JSON.parse(raw));
+    const room = normalizeRoom(JSON.parse(raw));
+    if (!room) return null;
+    if (Date.now() - room.updatedAt > roomTtlMs) {
+      await redisCommand<number>(["DEL", roomKey(room.code)]);
+      await redisCommand<number>(["SREM", roomIndexKey, room.code]);
+      await Promise.all(room.players.map((player) => deletePlayerActiveRoom(player.id, room.code)));
+      return null;
+    }
+    return room;
   } catch {
     return null;
   }
@@ -322,7 +337,9 @@ export async function saveStoredTahoiyaRoom(room: unknown, actorId = "") {
   if (!existingRoom) {
     if (actorId && actorId !== normalizedRoom.hostId) throw new Error("TAHOIYA_ROOM_FORBIDDEN");
     const createdRoom = { ...normalizedRoom, revision: 0, updatedAt: Date.now() };
-    const created = await redisCommand<"OK" | null>(["SET", roomKey(createdRoom.code), JSON.stringify(createdRoom), "NX"]);
+    const created = await redisCommand<"OK" | null>([
+      "SET", roomKey(createdRoom.code), JSON.stringify(createdRoom), "NX", "EX", String(roomTtlSeconds),
+    ]);
     if (created === "OK") {
       await redisCommand<number>(["SADD", roomIndexKey, createdRoom.code]);
       await savePlayerActiveRooms(createdRoom);
@@ -448,6 +465,8 @@ export async function deleteStoredTahoiyaRoom(code: string, actorId = "") {
 export async function listStoredTahoiyaRooms() {
   const codes = await redisCommand<string[]>(["SMEMBERS", roomIndexKey]);
   const rooms = await Promise.all(codes.map((code) => loadStoredTahoiyaRoom(code)));
+  const missingCodes = codes.filter((_, index) => !rooms[index]);
+  if (missingCodes.length > 0) await redisCommand<number>(["SREM", roomIndexKey, ...missingCodes]);
   return rooms.filter((room): room is TahoiyaRoom => Boolean(room));
 }
 
