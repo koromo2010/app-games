@@ -77,6 +77,7 @@ function normalizeRoom(value: unknown): TahoiyaRoom | null {
   const hostId = typeof parsed.hostId === "string" ? parsed.hostId : "";
   const players = normalizePlayers(parsed.players);
   const parentId = typeof parsed.parentId === "string" ? parsed.parentId : hostId;
+  const playMode = parsed.playMode === "all-vote" ? "all-vote" : "single-answerer";
 
   if (!code || !hostId || players.length === 0) return null;
 
@@ -89,9 +90,9 @@ function normalizeRoom(value: unknown): TahoiyaRoom | null {
     debugMode: Boolean(parsed.debugMode),
     players,
     parentId,
-    playMode: parsed.playMode === "all-vote" ? "all-vote" : "single-answerer",
+    playMode,
     answererMode: isAnswererMode(parsed.answererMode) ? parsed.answererMode : "random",
-    showRealDefinitionToWriters: parsed.showRealDefinitionToWriters !== false,
+    showRealDefinitionToWriters: playMode === "single-answerer" && parsed.showRealDefinitionToWriters !== false,
     answererId: typeof parsed.answererId === "string" ? parsed.answererId : "",
     round: typeof parsed.round === "number" ? Math.max(1, Math.floor(parsed.round)) : 1,
     word: typeof parsed.word === "string" ? parsed.word : "",

@@ -23,7 +23,9 @@ export type StoredWordWolfRoomDefaults = {
 };
 
 export type StoredTahoiyaRoomDefaults = {
+  playMode: "single-answerer" | "all-vote";
   answererMode: "manual" | "random";
+  showRealDefinitionToWriters: boolean;
 };
 
 export type StoredRoomDefaults = StoredWordWolfRoomDefaults | StoredTahoiyaRoomDefaults;
@@ -78,7 +80,12 @@ function normalizeWordWolfDefaults(value: unknown): StoredWordWolfRoomDefaults {
 
 function normalizeTahoiyaDefaults(value: unknown): StoredTahoiyaRoomDefaults {
   const parsed = value && typeof value === "object" ? value as Partial<StoredTahoiyaRoomDefaults> : {};
-  return { answererMode: parsed.answererMode === "manual" ? "manual" : "random" };
+  const playMode = parsed.playMode === "all-vote" ? "all-vote" : "single-answerer";
+  return {
+    playMode,
+    answererMode: parsed.answererMode === "manual" ? "manual" : "random",
+    showRealDefinitionToWriters: playMode === "single-answerer" && parsed.showRealDefinitionToWriters !== false,
+  };
 }
 
 export function normalizeStoredRoomDefaults(game: RoomDefaultsGame, value: unknown): StoredRoomDefaults {

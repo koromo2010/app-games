@@ -14,6 +14,7 @@ import {
   loadPersistentPlayerSession,
   savePersistentPlayerSession,
 } from "@/lib/player-session";
+import { loadPlayerRoomDefaults, savePlayerRoomDefaults } from "@/lib/game-room-defaults-client";
 import {
   getTopicKey,
   getTopicWords,
@@ -245,7 +246,16 @@ function loadRoomDefaults(playerId: string, ownerId: string) {
   }
 }
 
-function saveRoomDefaults(room: Room) {
+async function loadRoomDefaultsFromStore(playerId: string, ownerId: string) {
+  return loadPlayerRoomDefaults({
+    game: "wordwolf",
+    playerId,
+    localStorageKey: getRoomDefaultsKey(playerId, ownerId),
+    normalize: normalizeRoomDefaults,
+  });
+}
+
+async function saveRoomDefaultsToStore(room: Room) {
   const defaults = normalizeRoomDefaults({
     gameMode: room.gameMode,
     clueLogVisibility: room.clueLogVisibility,
@@ -258,42 +268,12 @@ function saveRoomDefaults(room: Room) {
     topicPairDistance: room.topicPairDistance,
     topicHint: room.topicHint,
   });
-
-  localStorage.setItem(getRoomDefaultsKey(room.hostId, room.ownerId ?? ""), JSON.stringify(defaults));
-  return defaults;
-}
-
-async function loadRoomDefaultsFromStore(playerId: string, ownerId: string) {
-  const localDefaults = loadRoomDefaults(playerId, ownerId);
-
-  try {
-    const params = new URLSearchParams({ game: "wordwolf", playerId });
-    const response = await fetch(`/api/room-defaults?${params.toString()}`, { cache: "no-store" });
-    if (!response.ok) throw new Error("ROOM_DEFAULTS_FETCH_FAILED");
-
-    const data = (await response.json()) as { defaults?: unknown };
-    if (!data.defaults) return localDefaults;
-
-    const defaults = normalizeRoomDefaults(data.defaults);
-    localStorage.setItem(getRoomDefaultsKey(playerId, ownerId), JSON.stringify(defaults));
-    return defaults;
-  } catch {
-    return localDefaults;
-  }
-}
-
-async function saveRoomDefaultsToStore(room: Room) {
-  const defaults = saveRoomDefaults(room);
-
-  try {
-    await fetch("/api/room-defaults", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ game: "wordwolf", playerId: room.hostId, defaults }),
-    });
-  } catch {
-    // Local defaults are enough for browser-tab testing when Redis is unavailable.
-  }
+  await savePlayerRoomDefaults({
+    game: "wordwolf",
+    playerId: room.hostId,
+    localStorageKey: getRoomDefaultsKey(room.hostId, room.ownerId ?? ""),
+    defaults,
+  });
 }
 
 function saveRoom(room: Room) {

@@ -9,6 +9,7 @@ import {
   loadPersistentPlayerSession,
   makeRandomAvatarColor,
 } from "@/lib/player-session";
+import { loadPlayerRoomDefaults, savePlayerRoomDefaults } from "@/lib/game-room-defaults-client";
 import type { TahoiyaAnswererMode, TahoiyaDefinitionOption, TahoiyaPlayMode, TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomChoice, TahoiyaTopic } from "@/lib/tahoiya-types";
 import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
 import { GameFeedbackPanel } from "../components/GameFeedbackPanel";
@@ -65,10 +66,11 @@ function normalizeRoomDefaults(value: unknown): TahoiyaRoomDefaults {
     return { playMode: "single-answerer", answererMode: "random", showRealDefinitionToWriters: true };
   }
   const parsed = value as Partial<TahoiyaRoomDefaults>;
+  const playMode = parsed.playMode === "all-vote" ? "all-vote" : "single-answerer";
   return {
-    playMode: parsed.playMode === "all-vote" ? "all-vote" : "single-answerer",
+    playMode,
     answererMode: parsed.answererMode === "manual" ? "manual" : "random",
-    showRealDefinitionToWriters: parsed.showRealDefinitionToWriters !== false,
+    showRealDefinitionToWriters: playMode === "single-answerer" && parsed.showRealDefinitionToWriters !== false,
   };
 }
 
@@ -83,43 +85,23 @@ function loadRoomDefaults(playerId: string, ownerId: string) {
   }
 }
 
-function saveRoomDefaults(room: TahoiyaRoom) {
-  const defaults = normalizeRoomDefaults(room);
-  localStorage.setItem(getRoomDefaultsKey(room.hostId, room.ownerId ?? ""), JSON.stringify(defaults));
-  return defaults;
-}
-
 async function loadRoomDefaultsFromStore(playerId: string, ownerId: string) {
-  const localDefaults = loadRoomDefaults(playerId, ownerId);
-
-  try {
-    const params = new URLSearchParams({ game: "tahoiya", playerId });
-    const response = await fetch(`/api/room-defaults?${params.toString()}`, { cache: "no-store" });
-    if (!response.ok) throw new Error("ROOM_DEFAULTS_FETCH_FAILED");
-
-    const data = (await response.json()) as { defaults?: unknown };
-    if (!data.defaults) return localDefaults;
-
-    const defaults = normalizeRoomDefaults(data.defaults);
-    localStorage.setItem(getRoomDefaultsKey(playerId, ownerId), JSON.stringify(defaults));
-    return defaults;
-  } catch {
-    return localDefaults;
-  }
+  return loadPlayerRoomDefaults({
+    game: "tahoiya",
+    playerId,
+    localStorageKey: getRoomDefaultsKey(playerId, ownerId),
+    normalize: normalizeRoomDefaults,
+  });
 }
 
 async function saveRoomDefaultsToStore(room: TahoiyaRoom) {
-  const defaults = saveRoomDefaults(room);
-
-  try {
-    await fetch("/api/room-defaults", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ game: "tahoiya", playerId: room.hostId, defaults }),
-    });
-  } catch {
-    // Local defaults keep prototype testing usable when Redis is unavailable.
-  }
+  const defaults = normalizeRoomDefaults(room);
+  await savePlayerRoomDefaults({
+    game: "tahoiya",
+    playerId: room.hostId,
+    localStorageKey: getRoomDefaultsKey(room.hostId, room.ownerId ?? ""),
+    defaults,
+  });
 }
 
 function stampRoom(room: TahoiyaRoom) {
@@ -146,15 +128,16 @@ function createPlayer(name: string, avatarColor = makeRandomAvatarColor(), avata
 }
 
 function normalizeRoom(room: TahoiyaRoom): TahoiyaRoom {
+  const playMode = room.playMode === "all-vote" ? "all-vote" : "single-answerer";
   return {
     ...room,
     passphrase: room.passphrase ?? "",
     debugMode: Boolean(room.debugMode),
     players: Array.isArray(room.players) ? room.players : [],
     parentId: room.parentId || room.hostId,
-    playMode: room.playMode === "all-vote" ? "all-vote" : "single-answerer",
+    playMode,
     answererMode: room.answererMode === "manual" ? "manual" : "random",
-    showRealDefinitionToWriters: room.showRealDefinitionToWriters !== false,
+    showRealDefinitionToWriters: playMode === "single-answerer" && room.showRealDefinitionToWriters !== false,
     answererId: typeof room.answererId === "string" ? room.answererId : "",
     round: room.round ?? 1,
     fakeDefinitions: room.fakeDefinitions ?? {},
@@ -608,10 +591,10 @@ export function TahoiyaGame() {
   };
 
   const withMinimumDebugPlayers = (baseRoom: TahoiyaRoom) => {
-    if (!baseRoom.debugMode || baseRoom.players.length >= 3) return baseRoom;
+    if (!baseRoom.debugMode || baseRoom.players.length >= 2) return baseRoom;
 
     const players = [...baseRoom.players];
-    while (players.length < 3) {
+    while (players.length < 2) {
       players.push(createPlayer(`テスト${players.length + 1}`));
     }
     return { ...baseRoom, players };
@@ -649,8 +632,8 @@ export function TahoiyaGame() {
   const startRound = async () => {
     if (!room || !isHost || isStarting) return;
     const startingRoom = withMinimumDebugPlayers(room);
-    if (startingRoom.players.length < 3) {
-      setMessage("ゲーム開始には3人以上が必要です。");
+    if (startingRoom.players.length < 2) {
+      setMessage("ゲーム開始には2人以上が必要です。");
       return;
     }
     const candidates = getAnswererCandidates(startingRoom);
@@ -1007,6 +990,7 @@ export function TahoiyaGame() {
                       )}
                     </div>
                     )}
+                    {room.playMode === "single-answerer" && (
                     <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                       <p className="text-sm font-bold text-slate-950">本物の説明を見せる</p>
                       <p className="mt-1 text-xs text-slate-500">偽説明を書く人に、AIが用意した本物の説明を表示するか選べます。</p>
@@ -1035,6 +1019,7 @@ export function TahoiyaGame() {
                         </button>
                       </div>
                     </div>
+                    )}
                   </div>
                 )}
                 <RoomConfigSummary items={roomConfigItems} />
@@ -1175,7 +1160,7 @@ export function TahoiyaGame() {
                     <p className="mt-4 rounded-lg bg-cyan-50 p-3 text-sm font-semibold text-cyan-900">回答者にはお題を表示しません。説明が並ぶまで待ちます。</p>
                   ) : (
                     <>
-                      {room.showRealDefinitionToWriters && (
+                      {room.playMode === "single-answerer" && room.showRealDefinitionToWriters && (
                         <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
                           <p className="text-xs font-semibold uppercase text-amber-700">AIが用意した正解情報</p>
                           <p className="mt-1 text-lg font-bold text-slate-950">{room.realDefinition}</p>
@@ -1189,7 +1174,7 @@ export function TahoiyaGame() {
                             )}
                           </div>
                           <p className="mt-2 text-xs font-semibold text-amber-800">
-                            この説明を参考に、{room.playMode === "all-vote" ? "ほかの参加者" : "回答者"}を迷わせる別の説明を作ってください。
+                            この説明を参考に、回答者を迷わせる別の説明を作ってください。
                           </p>
                         </div>
                       )}
