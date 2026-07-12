@@ -2,16 +2,22 @@ import type { TahoiyaDifficulty, TahoiyaTopic } from "@/lib/tahoiya-types";
 import { normalizeGameGenerationMeta } from "@/lib/game-ai-types";
 import { retrieveGameFeedback } from "@/lib/game-feedback-store";
 import { redisCommand } from "@/lib/redis-store";
+import { tahoiyaSeedTopics, type TahoiyaCatalogDifficulty } from "@/lib/tahoiya-seed-topics";
 
 const catalogKey = "tahoiya:topic:catalog:v1";
 
 type TahoiyaTopicCatalogRecord = {
   topic: TahoiyaTopic;
-  difficulty: TahoiyaDifficulty;
+  difficulty: TahoiyaCatalogDifficulty;
   experiencedPlayerIds: string[];
   createdAt: number;
   lastUsedAt: number;
   useCount: number;
+  genre?: string;
+  sourceLibrary?: string;
+  sourceUrl?: string;
+  difficultyReason?: string;
+  difficultyJudgedBy?: string;
 };
 
 function normalizeWord(value: string) {
@@ -27,17 +33,49 @@ function parseRecord(value: string): TahoiyaTopicCatalogRecord | null {
         ...parsed.topic,
         generation: normalizeGameGenerationMeta(parsed.topic.generation),
       },
-      difficulty: parsed.difficulty === "extreme" ? "extreme" : "standard",
+      difficulty: parsed.difficulty === "easy" || parsed.difficulty === "extreme" ? parsed.difficulty : "standard",
       experiencedPlayerIds: Array.isArray(parsed.experiencedPlayerIds)
         ? parsed.experiencedPlayerIds.filter((id): id is string => typeof id === "string" && Boolean(id))
         : [],
       createdAt: typeof parsed.createdAt === "number" ? parsed.createdAt : Date.now(),
       lastUsedAt: typeof parsed.lastUsedAt === "number" ? parsed.lastUsedAt : 0,
       useCount: typeof parsed.useCount === "number" ? Math.max(0, Math.floor(parsed.useCount)) : 0,
+      genre: typeof parsed.genre === "string" ? parsed.genre : undefined,
+      sourceLibrary: typeof parsed.sourceLibrary === "string" ? parsed.sourceLibrary : undefined,
+      sourceUrl: typeof parsed.sourceUrl === "string" ? parsed.sourceUrl : undefined,
+      difficultyReason: typeof parsed.difficultyReason === "string" ? parsed.difficultyReason : undefined,
+      difficultyJudgedBy: typeof parsed.difficultyJudgedBy === "string" ? parsed.difficultyJudgedBy : undefined,
     };
   } catch {
     return null;
   }
+}
+
+export async function ensureTahoiyaSeedCandidates() {
+  const now = Date.now();
+  const args = tahoiyaSeedTopics.flatMap((seed) => {
+    const record: TahoiyaTopicCatalogRecord = {
+      topic: seed.topic,
+      difficulty: seed.difficulty,
+      experiencedPlayerIds: [],
+      createdAt: now,
+      lastUsedAt: 0,
+      useCount: 0,
+      genre: seed.genre,
+      sourceLibrary: seed.sourceLibrary,
+      sourceUrl: seed.sourceUrl,
+      difficultyReason: seed.difficultyReason,
+      difficultyJudgedBy: seed.difficultyJudgedBy,
+    };
+    return [normalizeWord(seed.topic.word), JSON.stringify(record)];
+  });
+  await redisCommand<number>([
+    "EVAL",
+    "local added=0; for i=1,#ARGV,2 do added=added+redis.call('HSETNX',KEYS[1],ARGV[i],ARGV[i+1]); end; return added",
+    "1",
+    catalogKey,
+    ...args,
+  ]);
 }
 
 async function loadTopicRatingScores() {

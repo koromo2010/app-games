@@ -10,7 +10,7 @@ Party game prototypes built with Next.js.
 - `/wordwolf` - Wordwolf prototype
 - `/tahoiya` - Tahoiya prototype
 - `/northern-branch` - Private-use Northern Branch outline prototype (requires `PRIVATE_GAME_ACCESS_KEY`)
-- `/hodoai-talk` - Private-use online room game for logged-in players (requires `PRIVATE_GAME_ACCESS_KEY`)
+- `/hodoai-talk` - Private-use original scale-and-clue game (requires `PRIVATE_GAME_ACCESS_KEY`)
 
 ## Private game access
 
@@ -64,6 +64,15 @@ Room configuration defaults are stored per game and per player in Redis, with lo
 Multiplayer games should use the shared time-limit presets, manual seconds input, and normalizer in `lib/game-room-config.ts` and `app/components/RoomTimeLimitControl.tsx`. A time limit of `0` always means no limit; game-specific phase behavior may decide how partial submissions are handled when time expires.
 
 Tahoiya gameplay mutations are revisioned server actions. The server rejects stale phase rollback, reapplies concurrent submissions with compare-and-set, and decides completion or timeout transitions without depending on the host browser.
+
+## Vocabulary sources
+
+The curated Tahoiya seed catalog uses or references terminology from the following open vocabulary sources. Definitions stored by Game Fields are short game-oriented paraphrases, not reproduced dictionary entries.
+
+- [JMdict/EDICT](https://www.edrdg.org/wiki/index.php/JMdict-EDICT_Dictionary_Project), Electronic Dictionary Research and Development Group, licensed under [CC BY-SA 4.0](https://www.edrdg.org/edrdg/licence.html).
+- [Medical Subject Headings (MeSH)](https://meshb.nlm.nih.gov/), courtesy of the U.S. National Library of Medicine, under the [NLM data terms and conditions](https://www.nlm.nih.gov/databases/download/terms_and_conditions.html).
+- [Getty Vocabularies / Art & Architecture Thesaurus](https://www.getty.edu/research/tools/vocabularies/), J. Paul Getty Trust, licensed under ODC-By 1.0. Contributor and record-level sources should also be retained when bulk ingestion is added.
+- [National Diet Library](https://www.ndl.go.jp/), used as a historical-material discovery reference under the applicable [content reuse terms](https://www.ndl.go.jp/use/reproduction).
 
 ## Development
 

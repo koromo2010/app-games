@@ -11,6 +11,7 @@ import { withGameGenerationCache } from "@/lib/game-generation-cache";
 import { loadStoredTahoiyaRoom } from "@/lib/tahoiya-room-store";
 import {
   findReusableTahoiyaTopic,
+  ensureTahoiyaSeedCandidates,
   loadExperiencedTahoiyaWords,
   loadTahoiyaCatalogWords,
   rememberTahoiyaTopicCandidate,
@@ -447,6 +448,7 @@ async function generateTopicResponse(
   previewOnly = false,
   forceNew = false,
 ) {
+  await ensureTahoiyaSeedCandidates().catch(() => undefined);
   const feedbackRecords = await retrieveGameFeedback({
     game: "tahoiya",
     task: "tahoiya.topic",
