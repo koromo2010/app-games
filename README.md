@@ -9,6 +9,11 @@ Party game prototypes built with Next.js.
 - `/games` - game lobby
 - `/wordwolf` - Wordwolf prototype
 - `/tahoiya` - Tahoiya prototype
+- `/northern-branch` - Private-use Northern Branch outline prototype (requires `PRIVATE_GAME_ACCESS_KEY`)
+
+## Private game access
+
+Set the server-side environment variable `PRIVATE_GAME_ACCESS_KEY`. Entering the same value in the unlabeled access field on the game lobby reveals private-use game cards and issues a 30-day HttpOnly access cookie.
 
 ## Shared game LLM gateway
 

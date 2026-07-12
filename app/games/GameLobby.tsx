@@ -95,6 +95,8 @@ export function GameLobby() {
   const [selectedStatsGame, setSelectedStatsGame] = useState<PlayerStatsGameFilter>("wordwolf");
   const [activeRoom, setActiveRoom] = useState<ActiveWordWolfRoom | null>(null);
   const [isActiveRoomLoading, setIsActiveRoomLoading] = useState(false);
+  const [privateAccessKey, setPrivateAccessKey] = useState("");
+  const [privateUnlocked, setPrivateUnlocked] = useState(false);
 
   const loadStats = useCallback(async (targetPlayerId: string, gameFilter: PlayerStatsGameFilter) => {
     if (!targetPlayerId) return;
@@ -178,6 +180,33 @@ export function GameLobby() {
       isMounted = false;
     };
   }, [loadActiveRoom, loadStats]);
+
+  useEffect(() => {
+    fetch("/api/private-game-access", { cache: "no-store" })
+      .then((response) => response.json())
+      .then((data: { unlocked?: boolean }) => setPrivateUnlocked(data.unlocked === true))
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (privateUnlocked || privateAccessKey.length < 8) return;
+    const timer = window.setTimeout(() => {
+      fetch("/api/private-game-access", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: privateAccessKey }),
+      })
+        .then((response) => response.json())
+        .then((data: { unlocked?: boolean }) => {
+          if (data.unlocked) {
+            setPrivateUnlocked(true);
+            setPrivateAccessKey("");
+          }
+        })
+        .catch(() => undefined);
+    }, 450);
+    return () => window.clearTimeout(timer);
+  }, [privateAccessKey, privateUnlocked]);
 
   const applySession = (session: PlayerSession) => {
     savePlayerSession(session);
@@ -334,6 +363,14 @@ export function GameLobby() {
               </div>
             </div>
           </div>
+          <input
+            type="password"
+            value={privateAccessKey}
+            onChange={(event) => setPrivateAccessKey(event.target.value)}
+            aria-label="access key"
+            autoComplete="off"
+            className="mt-4 h-7 w-28 rounded-md border border-white/10 bg-white/[0.04] px-2 text-xs text-white opacity-30 outline-none transition focus:border-white/30 focus:opacity-100"
+          />
         </div>
       </section>
 
@@ -637,7 +674,7 @@ export function GameLobby() {
         </aside>
 
         <div className="grid gap-4 md:grid-cols-3">
-          {games.map((game) => {
+          {games.filter((game) => !game.private || privateUnlocked).map((game) => {
             const card = (
               <article className="h-full rounded-lg border border-white/10 bg-white/[0.96] p-4 shadow-[0_18px_50px_rgba(15,23,42,0.18)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_60px_rgba(15,23,42,0.24)]">
                 <div className={`h-24 rounded-lg bg-gradient-to-br ${game.accent}`} />
