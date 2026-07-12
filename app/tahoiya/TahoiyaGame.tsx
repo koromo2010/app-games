@@ -453,6 +453,8 @@ export function TahoiyaGame() {
   const isAnswerer = Boolean(room && !isAllVoteMode && activePlayer?.id === room.answererId);
   const hasActivePlayerSubmitted = Boolean(room && activePlayer && room.fakeDefinitions[activePlayer.id]);
   const hasActivePlayerVoted = Boolean(room && activePlayer && room.votes[activePlayer.id]);
+  const savedVoteOptionId = room && activePlayer ? room.votes[activePlayer.id] ?? "" : "";
+  const displayedVoteOptionId = selectedOptionId || savedVoteOptionId;
   const definitionWriters = room ? getDefinitionWriters(room) : [];
   const definitionWriterCount = definitionWriters.length;
   const writingDone = room ? submittedCount(room) >= definitionWriterCount : false;
@@ -1064,6 +1066,11 @@ export function TahoiyaGame() {
                   </div>
                 )}
                 <RoomConfigSummary items={roomConfigItems} />
+                {room.phase === "lobby" && !isHost && (
+                  <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
+                    部屋設定は参加者全員に表示され、変更できるのはホストだけです。
+                  </p>
+                )}
                 {isDebugMode ? (
                   <label className="block text-sm font-medium text-slate-700">
                     操作プレイヤー
@@ -1329,12 +1336,15 @@ export function TahoiyaGame() {
                           className={`rounded-lg border px-3 py-3 text-left text-sm font-semibold ${
                             isOwnDefinition
                               ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400"
-                              : selectedOptionId === option.id
+                              : displayedVoteOptionId === option.id && selectedOptionId
                               ? "border-amber-500 bg-amber-50 text-amber-950"
+                              : displayedVoteOptionId === option.id
+                              ? "border-cyan-500 bg-cyan-50 text-cyan-950"
                               : "border-slate-200 bg-slate-50 text-slate-800 hover:bg-white"
                           }`}
                         >
-                          {index + 1}. {option.text}{isOwnDefinition ? "（自分の説明）" : ""}
+                          {index + 1}. {option.text}
+                          {isOwnDefinition ? "（自分の説明）" : displayedVoteOptionId === option.id && !selectedOptionId ? "（投票済み）" : ""}
                         </button>
                         );
                       })}
