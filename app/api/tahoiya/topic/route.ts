@@ -13,7 +13,7 @@ import { loadStoredTahoiyaRoom } from "@/lib/tahoiya-room-store";
 import { findReusableTahoiyaTopic, rememberTahoiyaTopicExperience } from "@/lib/tahoiya-topic-catalog";
 import type { TahoiyaDifficulty, TahoiyaTopic } from "@/lib/tahoiya-types";
 
-const tahoiyaTopicPromptVersion = "tahoiya-topic-v8";
+const tahoiyaTopicPromptVersion = "tahoiya-topic-v9";
 export const maxDuration = 180;
 const usedTopicWordsKey = "tahoiya:topic:used-words";
 type DefinitionStyle = "brief" | "standard" | "detailed";
@@ -40,6 +40,30 @@ function localGenerationMeta(retrievedFeedbackIds: string[]): GameGenerationMeta
 }
 
 const fallbackTopics: TahoiyaTopic[] = [
+  {
+    word: "グリザイユ",
+    reading: "ぐりざいゆ",
+    realDefinition: "灰色の濃淡を中心に単色で描く絵画技法。",
+    note: "実在するカタカナの美術用語で、意味を想像しにくい語。",
+    sourceDetail: "ローカル収録候補。Tateの美術用語解説にある技法の説明をゲーム用に簡潔化。",
+    source: "fallback",
+  },
+  {
+    word: "カホキア",
+    reading: "かほきあ",
+    realDefinition: "北米で栄えた大規模な先住民都市の遺跡。",
+    note: "一般には知られにくい実在の歴史地名。",
+    sourceDetail: "ローカル収録候補。UNESCO世界遺産センターの遺跡解説をゲーム用に簡潔化。",
+    source: "fallback",
+  },
+  {
+    word: "キジ島",
+    reading: "きじとう",
+    realDefinition: "多くの丸屋根を持つ木造教会群で知られるロシアの島。",
+    note: "字面から所在や特徴を推測しにくい実在の地名。",
+    sourceDetail: "ローカル収録候補。UNESCO世界遺産センターの木造教会群の解説をゲーム用に簡潔化。",
+    source: "fallback",
+  },
   {
     word: "虎落笛",
     reading: "もがりぶえ",
@@ -139,6 +163,30 @@ const fallbackTopics: TahoiyaTopic[] = [
 ];
 
 const extremeFallbackTopics: TahoiyaTopic[] = [
+  {
+    word: "タッシリ・ナジェール",
+    reading: "たっしり・なじぇーる",
+    realDefinition: "先史時代の岩絵が多数残るサハラの高原。",
+    note: "難語好きでも意味を知る人が少ない実在の地名。",
+    sourceDetail: "ローカル収録候補。UNESCO世界遺産センターの岩絵群の解説をゲーム用に簡潔化。",
+    source: "fallback",
+  },
+  {
+    word: "チャタル・ヒュユク",
+    reading: "ちゃたる・ひゅゆく",
+    realDefinition: "密集した住居跡が残るトルコの新石器時代集落。",
+    note: "実在確認ができ、一般にはほとんど知られていない遺跡名。",
+    sourceDetail: "ローカル収録候補。UNESCO世界遺産センターの新石器時代集落の解説をゲーム用に簡潔化。",
+    source: "fallback",
+  },
+  {
+    word: "アナモルフォーシス",
+    reading: "あなもるふぉーしす",
+    realDefinition: "特定の角度や器具を通すと正しく見える歪像技法。",
+    note: "長いカタカナ語であり、意味を類推しにくい美術用語。",
+    sourceDetail: "ローカル収録候補。美術館の技法解説にある歪像の説明をゲーム用に簡潔化。",
+    source: "fallback",
+  },
   {
     word: "侘傺",
     reading: "たてい",
@@ -319,7 +367,7 @@ async function generateTopic(
   const difficultyRules = difficulty === "extreme"
     ? [
         "今回は高難易度モードです。難語好きや読書家でも意味を知らない可能性が高い、使用頻度が極端に低い見出し語だけを選んでください。",
-        "古語辞典、漢語辞典、専門辞典に載る語も対象にして構いませんが、固有名詞ではなく、短い語義を正確に示せる語に限ります。",
+        "古語辞典、漢語辞典、専門辞典、信頼できる百科事典に載る語を対象にし、短い語義を正確に示せるものに限ります。",
         "難しい漢字で書いた身近な物の名前、一般語の異表記、有名な難読語、漢字から意味を容易に推測できる語は除外してください。",
       ]
     : ["今回は通常モードです。一般的な日本人の大人がまず意味を知らない難語を選んでください。"];
@@ -328,7 +376,10 @@ async function generateTopic(
     ...difficultyRules,
     "よく知られた物を難しい漢字で書いただけの語ではなく、言葉や意味そのものが広く知られていないものを優先してください。",
     "参加者がもっともらしい偽説明を複数考えられる語を選んでください。造語や実在が確認できない語は禁止です。",
-    "専門的すぎる固有名詞、差別語、性的または残虐な語、現代人物名は避けてください。",
+    "一般名詞だけでなく、実在する固有名詞とカタカナの専門語・外来語も候補に含めてください。",
+    "固有名詞は、一般には知られていない歴史上の場所、遺跡、地形、文化、作品、過去の人物などから選べます。現代人物名、企業名、商品名、流行語は避けてください。",
+    "カタカナ語は、単に英語を音写しただけの有名語ではなく、日本語の辞書や専門辞典で意味を確認できる使用頻度の低い語にしてください。",
+    "3候補をすべて同種にせず、一般語、固有名詞、固有名詞ではないカタカナ語を各1候補ずつ出してください。差別語、性的または残虐な語は避けてください。",
     "realDefinitionには意味だけを書き、読み方、語源、用例、別名、漢字の説明を含めないでください。",
     "realDefinitionは括弧を使わず、一文にしてください。複数の意味を並べないでください。",
     `今回は${definitionRule.instruction}を目安にしてください。意味を自然に説明できることを優先し、文字数を合わせるための不要な言い換えや情報追加はしないでください。`,
@@ -350,10 +401,11 @@ async function generateTopic(
     difficulty === "extreme"
       ? "高難易度モードなので、難語に詳しい人でも意味を知る可能性が低い語だけを有効とし、有名な難読語や身近な物の難しい表記は無効にしてください。"
       : "通常モードとして、一般的な大人が意味を知らない十分な難しさがあるか確認してください。",
-    "見出し語が実在する日本語の語であり、readingがその見出し語の正しい読みであり、realDefinitionがその意味に正確に対応する場合だけvalidをtrueにしてください。",
+    "見出し語が日本語の辞書・専門辞典・信頼できる百科事典で確認できる一般語、固有名詞、カタカナ語であり、readingが正しく、realDefinitionがその意味に正確に対応する場合だけvalidをtrueにしてください。",
     "単なる当て字、読みと意味の取り違え、存在が不確かな語、一般人が意味を知っている語、説明が不正確な候補はvalidをfalseにしてください。",
     "少しでも確信がなければvalidをfalseにしてください。推測で修正や補完をしないでください。",
     "実在・読み・語義・典拠に疑いがある候補は除外してください。複数が有効なら、一般的な大人が意味を知らず、字面だけでは意味を推測しにくく、偽説明を作りやすい候補を優先してください。",
+    "固有名詞は現代人物・企業・商品ではないこと、カタカナ語は日本語で実際に用いられる見出し語であることも確認してください。",
     `validがtrueの場合も、realDefinitionは意味だけの一文とし、${definitionRule.instruction}を目安にしてください。自然な説明を無理に引き延ばさず、読み方、語源、用例、別名、漢字の説明、括弧を含めないでください。`,
     "sourceDetailの辞書名や確認情報が不確か、または創作の可能性がある場合もvalidをfalseにしてください。",
     "JSONのみで返してください: {\"valid\":trueまたはfalse,\"word\":\"...\",\"reading\":\"...\",\"realDefinition\":\"...\",\"note\":\"...\",\"sourceDetail\":\"...\"}",
