@@ -27,6 +27,7 @@ import {
   type WordWolfTopic,
 } from "@/lib/wordwolf";
 import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
+import { GameFeedbackPanel } from "../components/GameFeedbackPanel";
 import type {
   ClueLogVisibility,
   ClueMode,
@@ -64,6 +65,21 @@ import {
   primaryButtonClass,
   subtleButtonClass,
 } from "./styles";
+
+const wordwolfFeedbackReasons = [
+  { value: "distance-too-close", label: "距離が近すぎる", rating: "bad" as const },
+  { value: "distance-too-far", label: "距離が遠すぎる", rating: "bad" as const },
+  { value: "type-mismatch", label: "種類・型が揃っていない", rating: "bad" as const },
+  { value: "too-obscure", label: "片方がマイナー", rating: "bad" as const },
+  { value: "too-obvious", label: "答えが露骨すぎる", rating: "bad" as const },
+  { value: "conversation-flat", label: "会話が広がらない", rating: "bad" as const },
+  { value: "duplicate", label: "お題が重複している", rating: "bad" as const },
+  { value: "inappropriate", label: "不適切・扱いにくい", rating: "bad" as const },
+  { value: "distance-good", label: "ちょうどよい距離", rating: "good" as const },
+  { value: "conversation-good", label: "会話が盛り上がった", rating: "good" as const },
+  { value: "familiar", label: "知名度がちょうどよい", rating: "good" as const },
+  { value: "other", label: "その他" },
+];
 
 function normalizeGameMode(value: unknown): GameMode {
   return value === "may-no-wolf" || value === "no-wolf" ? "may-no-wolf" : "wordwolf";
@@ -1338,6 +1354,7 @@ export function WordWolfGame() {
         topicReason: topic.reason,
         topicSource: topic.source,
         topicFallbackExhausted: Boolean(topic.fallbackExhausted),
+        topicGeneration: topic.generation,
         clues: [],
         votes: {},
         voteHistory: [],
@@ -1695,6 +1712,7 @@ export function WordWolfGame() {
     topicReason: "",
     topicSource: "pending",
     topicFallbackExhausted: false,
+    topicGeneration: undefined,
     clues: [],
     votes: {},
     voteHistory: [],
@@ -2750,6 +2768,29 @@ export function WordWolfGame() {
                   <p className="mt-3 text-xs leading-5 text-slate-500">
                     お題理由: {room.topicReason} / 取得元: {topicSourceLabel}
                   </p>
+                  {room.topicGeneration && (activePlayerId || playerAccountId) && (
+                    <GameFeedbackPanel
+                      artifactId={`wordwolf:${room.code}:${room.gameNumber}:${room.villageWord}:${room.wolfWord}`}
+                      artifactText={`村側=${room.villageWord} / 狼側=${room.wolfWord} / 理由=${room.topicReason}`}
+                      game="wordwolf"
+                      task="wordwolf.topic"
+                      playerId={activePlayerId || playerAccountId}
+                      generation={room.topicGeneration}
+                      reasonOptions={wordwolfFeedbackReasons}
+                      settings={{
+                        dictionarySource: room.topicDictionarySource,
+                        pairDistance: room.topicPairDistance,
+                        topicHint: room.topicHint,
+                        playerCount: room.players.length,
+                        wolfCount: wolfIds.length,
+                      }}
+                      outcome={{
+                        winner: room.winner ?? "unknown",
+                        accusedIsWolf,
+                        voteRounds: room.voteHistory.length,
+                      }}
+                    />
+                  )}
                   {isHost && (
                     <div className="mt-4">
                       <p className="text-sm leading-6 text-slate-600">

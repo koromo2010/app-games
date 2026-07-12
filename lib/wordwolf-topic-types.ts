@@ -20,9 +20,11 @@ export type WordWolfTopic = {
   source: "llm" | "fallback";
   fallbackExhausted?: boolean;
   notice?: string;
+  generation?: GameGenerationMeta;
   dictionarySource?: TopicDictionarySource;
   pairDistance?: TopicPairDistance;
   sourceMode?: TopicSourceMode;
 };
 
 export type TopicCandidate = Omit<WordWolfTopic, "source">;
+import type { GameGenerationMeta } from "@/lib/game-ai-types";

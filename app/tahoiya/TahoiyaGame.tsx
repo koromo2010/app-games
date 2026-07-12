@@ -11,10 +11,23 @@ import {
 } from "@/lib/player-session";
 import type { TahoiyaAnswererMode, TahoiyaDefinitionOption, TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomChoice, TahoiyaTopic } from "@/lib/tahoiya-types";
 import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
+import { GameFeedbackPanel } from "../components/GameFeedbackPanel";
 import { cyanButtonClass, dangerButtonClass, inputClass, panelClass, primaryButtonClass, subtleButtonClass } from "../wordwolf/styles";
 
 const roomStoragePrefix = "tahoiya-room-";
 const roomDefaultsStoragePrefix = "tahoiya-room-defaults-";
+
+const tahoiyaFeedbackReasons = [
+  { value: "too-famous", label: "単語が有名すぎる", rating: "bad" as const },
+  { value: "too-difficult", label: "難しすぎる", rating: "bad" as const },
+  { value: "hard-to-fake", label: "偽語釈を作りにくい", rating: "bad" as const },
+  { value: "definition-questionable", label: "読み・語釈が怪しい", rating: "bad" as const },
+  { value: "existence-questionable", label: "実在するか怪しい", rating: "bad" as const },
+  { value: "difficulty-good", label: "ちょうどよい難易度", rating: "good" as const },
+  { value: "easy-to-fake", label: "偽語釈を作りやすかった", rating: "good" as const },
+  { value: "conversation-good", label: "盛り上がった", rating: "good" as const },
+  { value: "other", label: "その他" },
+];
 
 type TahoiyaRoomDefaults = Pick<TahoiyaRoom, "answererMode">;
 
@@ -545,6 +558,7 @@ export function TahoiyaGame() {
         realDefinition: topic.realDefinition,
         topicNote: topic.note,
         topicSource: topic.source,
+        topicGeneration: topic.generation,
         fakeDefinitions: {},
         options: [],
         votes: {},
@@ -649,6 +663,7 @@ export function TahoiyaGame() {
       realDefinition: "",
       topicNote: "",
       topicSource: "pending",
+      topicGeneration: undefined,
       fakeDefinitions: {},
       options: [],
       votes: {},
@@ -1039,6 +1054,25 @@ export function TahoiyaGame() {
                     })}
                   </div>
                   <p className="mt-4 text-sm font-semibold text-slate-700">{room.resultText}</p>
+                  {room.topicGeneration && operationPlayerId && (
+                    <GameFeedbackPanel
+                      artifactId={`tahoiya:${room.code}:${room.round}:${room.word}`}
+                      artifactText={`単語=${room.word} / 読み=${room.reading ?? ""} / 語釈=${room.realDefinition} / 注記=${room.topicNote}`}
+                      game="tahoiya"
+                      task="tahoiya.topic"
+                      playerId={operationPlayerId}
+                      generation={room.topicGeneration}
+                      reasonOptions={tahoiyaFeedbackReasons}
+                      settings={{
+                        playerCount: room.players.length,
+                        answererMode: room.answererMode,
+                      }}
+                      outcome={{
+                        correctVotes: Object.entries(room.votes).filter(([, optionId]) => room.options.find((option) => option.id === optionId)?.isReal).length,
+                        fakeDefinitionCount: Object.keys(room.fakeDefinitions).length,
+                      }}
+                    />
+                  )}
                   {isHost && (
                     <button onClick={nextRound} className={`mt-4 ${primaryButtonClass}`}>
                       次のラウンドへ

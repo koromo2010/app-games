@@ -16,6 +16,7 @@ export type TahoiyaTopic = {
   note: string;
   source: "llm" | "fallback";
   notice?: string;
+  generation?: GameGenerationMeta;
 };
 
 export type TahoiyaDefinitionOption = {
@@ -42,6 +43,7 @@ export type TahoiyaRoom = {
   realDefinition: string;
   topicNote: string;
   topicSource: TahoiyaTopic["source"] | "pending";
+  topicGeneration?: GameGenerationMeta;
   fakeDefinitions: Record<string, string>;
   options: TahoiyaDefinitionOption[];
   votes: Record<string, string>;
@@ -59,3 +61,4 @@ export type TahoiyaRoomChoice = {
   hasPassphrase: boolean;
   updatedAt: number;
 };
+import type { GameGenerationMeta } from "@/lib/game-ai-types";

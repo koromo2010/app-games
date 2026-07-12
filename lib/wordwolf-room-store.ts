@@ -6,6 +6,7 @@ import type { Clue, ClueMode, GameMode, Phase, Player, Room, RoomChoice, VoteRou
 import type { WordWolfGuessJudgement } from "@/lib/wordwolf-guess-judgement";
 import { redisCommand } from "@/lib/redis-store";
 import { recordWordWolfGameResults } from "@/lib/player-stats-store";
+import { normalizeGameGenerationMeta } from "@/lib/game-ai-types";
 
 export type WordWolfRoom = Room;
 export type WordWolfRoomChoice = RoomChoice;
@@ -177,6 +178,7 @@ function normalizeRoom(value: unknown): WordWolfRoom | null {
     topicReason: typeof parsed.topicReason === "string" ? parsed.topicReason : "",
     topicSource: parsed.topicSource === "llm" || parsed.topicSource === "fallback" ? parsed.topicSource : "pending",
     topicFallbackExhausted: Boolean(parsed.topicFallbackExhausted),
+    topicGeneration: normalizeGameGenerationMeta(parsed.topicGeneration),
     topicDictionarySource: normalizeTopicDictionarySource(parsed.topicDictionarySource ?? parsed.topicSourceMode),
     topicPairDistance: normalizeTopicPairDistance(parsed.topicPairDistance ?? parsed.topicSourceMode),
     topicHint: typeof parsed.topicHint === "string" ? parsed.topicHint.slice(0, 80) : "",

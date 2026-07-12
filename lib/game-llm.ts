@@ -1,6 +1,6 @@
 import { generateFreeLlmText, hasFreeLlmApi } from "@/lib/free-llm";
 import { hasPaidLlmAccess } from "@/lib/llm-access";
-import { paidLlmModel } from "@/lib/llm-model";
+import { freeGroqLlmModel, freeLlmModel, paidLlmModel } from "@/lib/llm-model";
 
 /**
  * Shared LLM gateway for every game in app-games.
@@ -19,8 +19,15 @@ export async function resolveGameLlmMode(): Promise<GameLlmMode> {
 }
 
 export async function generateGameLlmText(prompt: string, mode: Exclude<GameLlmMode, "local">) {
+  const startedAt = Date.now();
   if (mode === "free") {
-    return generateFreeLlmText(prompt);
+    const result = await generateFreeLlmText(prompt);
+    return {
+      ...result,
+      model: result.provider === "gemini" ? freeLlmModel : freeGroqLlmModel,
+      mode,
+      latencyMs: Date.now() - startedAt,
+    };
   }
 
   const { default: OpenAI } = await import("openai");
@@ -37,5 +44,11 @@ export async function generateGameLlmText(prompt: string, mode: Exclude<GameLlmM
 
   const text = response.output_text.trim();
   if (!text) throw new Error("OpenAI API returned no text.");
-  return { text, provider: "openai" as const };
+  return {
+    text,
+    provider: "openai" as const,
+    model: paidLlmModel,
+    mode,
+    latencyMs: Date.now() - startedAt,
+  };
 }

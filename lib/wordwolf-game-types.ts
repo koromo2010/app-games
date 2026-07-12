@@ -1,5 +1,6 @@
 import type { TopicDictionarySource, TopicPairDistance, TopicSourceMode, WordWolfTopic } from "@/lib/wordwolf";
 import type { WordWolfGuessJudgement } from "@/lib/wordwolf-guess-judgement";
+import type { GameGenerationMeta } from "@/lib/game-ai-types";
 
 export type Phase = "lobby" | "clue" | "vote" | "wolfGuess" | "result";
 export type ClueLogVisibility = "always" | "result";
@@ -53,6 +54,7 @@ export type Room = {
   topicReason: string;
   topicSource: WordWolfTopic["source"] | "pending";
   topicFallbackExhausted: boolean;
+  topicGeneration?: GameGenerationMeta;
   topicDictionarySource: TopicDictionarySource;
   topicPairDistance: TopicPairDistance;
   topicHint: string;

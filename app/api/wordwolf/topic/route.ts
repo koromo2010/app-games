@@ -16,6 +16,8 @@ import {
   resolveGameLlmMode,
   type GameLlmMode,
 } from "@/lib/game-llm";
+import type { GameGenerationMeta } from "@/lib/game-ai-types";
+import { formatGameFeedbackContext, retrieveGameFeedback } from "@/lib/game-feedback-store";
 import { redisCommand } from "@/lib/redis-store";
 
 const baseTopicPrompt =
@@ -23,6 +25,18 @@ const baseTopicPrompt =
 
 const usedPairKey = "wordwolf:topic:pairs";
 const dailyWordKeyPrefix = "wordwolf:topic:daily-words:";
+const wordwolfTopicPromptVersion = "wordwolf-topic-v1";
+
+function localGenerationMeta(retrievedFeedbackIds: string[]): GameGenerationMeta {
+  return {
+    provider: "local",
+    model: "local-topic-data",
+    mode: "local",
+    promptVersion: wordwolfTopicPromptVersion,
+    latencyMs: 0,
+    retrievedFeedbackIds,
+  };
+}
 
 function getJstDateKey() {
   return new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -122,6 +136,8 @@ async function generateLlmTopic(
   dictionarySource: Extract<TopicDictionarySource, "llm" | "proper-noun">,
   topicHint: string,
   mode: Exclude<GameLlmMode, "local">,
+  feedbackContext: string,
+  retrievedFeedbackIds: string[],
 ) {
   const distancePrompt =
     pairDistance === "near"
@@ -166,10 +182,26 @@ async function generateLlmTopic(
     "Do not pair an object with a place, a person with a work, or an abstract concept with a concrete object.",
     excludeWords.length > 0 ? `exclude words used today: ${excludeWords.join(", ")}` : "",
   ].filter(Boolean);
-  const promptWithExclusions = `${prompt}${avoidLines.length > 0 ? `\n${avoidLines.join("\n")}` : ""}`;
+  const promptWithExclusions = [
+    `${prompt}${avoidLines.length > 0 ? `\n${avoidLines.join("\n")}` : ""}`,
+    feedbackContext,
+  ].filter(Boolean).join("\n\n");
 
-  const { text } = await generateGameLlmText(promptWithExclusions, mode);
-  return parseTopic(text, pairDistance, dictionarySource);
+  const generated = await generateGameLlmText(promptWithExclusions, mode);
+  const topic = parseTopic(generated.text, pairDistance, dictionarySource);
+  return topic
+    ? {
+        ...topic,
+        generation: {
+          provider: generated.provider,
+          model: generated.model,
+          mode: generated.mode,
+          promptVersion: wordwolfTopicPromptVersion,
+          latencyMs: generated.latencyMs,
+          retrievedFeedbackIds,
+        },
+      }
+    : null;
 }
 
 export async function GET(request: Request) {
@@ -179,13 +211,23 @@ export async function GET(request: Request) {
   const allExcludeWords = normalizeList([...excludeWords, ...storedUsage.dailyWords]);
   const requiresLlm = dictionarySource === "llm" || dictionarySource === "proper-noun";
   const mode = requiresLlm ? await resolveGameLlmMode() : "local";
+  const feedbackRecords = requiresLlm
+    ? await retrieveGameFeedback({
+        game: "wordwolf",
+        task: "wordwolf.topic",
+        queryTags: [dictionarySource, pairDistance, topicHint].filter(Boolean),
+      }).catch(() => [])
+    : [];
+  const feedbackContext = formatGameFeedbackContext(feedbackRecords);
+  const retrievedFeedbackIds = feedbackRecords.map((record) => record.id);
 
   const fallbackTopic = () => pickFallbackTopic(allExcludeKeys, dictionarySource, pairDistance, allExcludeWords, topicHint);
 
   if (!requiresLlm || mode === "local") {
-    const topic = requiresLlm
+    const baseTopic = requiresLlm
       ? { ...fallbackTopic(), notice: gameLlmFallbackNotice }
       : fallbackTopic();
+    const topic = { ...baseTopic, generation: localGenerationMeta(retrievedFeedbackIds) };
     await rememberStoredTopicUsage(topic);
     return Response.json(topic);
   }
@@ -204,6 +246,8 @@ export async function GET(request: Request) {
         dictionarySource === "proper-noun" ? "proper-noun" : "llm",
         topicHint,
         mode,
+        feedbackContext,
+        retrievedFeedbackIds,
       );
       if (topic && isTopicAllowed(topic, allExcludeKeys, allExcludeWords)) {
         await rememberStoredTopicUsage(topic);
@@ -222,6 +266,7 @@ export async function GET(request: Request) {
     const topic = {
       ...fallbackTopic(),
       notice: gameLlmFallbackNotice,
+      generation: localGenerationMeta(retrievedFeedbackIds),
     };
     await rememberStoredTopicUsage(topic);
     return Response.json(topic);

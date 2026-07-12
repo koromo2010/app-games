@@ -1,5 +1,6 @@
 import { redisCommand } from "@/lib/redis-store";
 import type { TahoiyaAnswererMode, TahoiyaDefinitionOption, TahoiyaPhase, TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomChoice } from "@/lib/tahoiya-types";
+import { normalizeGameGenerationMeta } from "@/lib/game-ai-types";
 
 const roomKeyPrefix = "tahoiya:room:";
 const roomIndexKey = "tahoiya:rooms";
@@ -96,6 +97,7 @@ function normalizeRoom(value: unknown): TahoiyaRoom | null {
     realDefinition: typeof parsed.realDefinition === "string" ? parsed.realDefinition : "",
     topicNote: typeof parsed.topicNote === "string" ? parsed.topicNote : "",
     topicSource: parsed.topicSource === "llm" || parsed.topicSource === "fallback" ? parsed.topicSource : "pending",
+    topicGeneration: normalizeGameGenerationMeta(parsed.topicGeneration),
     fakeDefinitions: normalizeStringRecord(parsed.fakeDefinitions),
     options: normalizeOptions(parsed.options),
     votes: normalizeStringRecord(parsed.votes),
