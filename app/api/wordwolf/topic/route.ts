@@ -191,6 +191,7 @@ async function generateLlmTopic(
   const response = await withTimeout(
     client.responses.create({
       model: paidLlmModel,
+      reasoning: { effort: "none" },
       input: promptWithExclusions,
     }),
     4500,

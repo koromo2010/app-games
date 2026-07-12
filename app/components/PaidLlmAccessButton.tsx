@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { paidLlmModel } from "@/lib/llm-model";
 
 type LlmAccessStatus = {
   enabled: boolean;
@@ -13,7 +14,7 @@ const defaultStatus: LlmAccessStatus = {
   enabled: false,
   configured: false,
   hasApiKey: false,
-  model: "gpt-4.1-mini",
+  model: paidLlmModel,
 };
 
 export function PaidLlmAccessButton() {
@@ -107,7 +108,12 @@ export function PaidLlmAccessButton() {
             : "border-white/15 bg-white/10 text-slate-100 hover:bg-white/15"
         }`}
       >
-        API: {status.enabled ? "有料" : "無料"}
+        <span className="flex flex-col items-center leading-tight">
+          <span>API: {status.enabled ? "有料" : "無料"}</span>
+          <span className="text-[10px] font-semibold opacity-80">
+            {status.enabled ? status.model : `有料時: ${status.model}`}
+          </span>
+        </span>
       </button>
 
       {isOpen && (

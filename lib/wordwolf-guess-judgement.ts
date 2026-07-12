@@ -294,6 +294,7 @@ async function judgeWithLlm(
 
   const response = await client.responses.create({
     model: paidLlmModel,
+    reasoning: { effort: "none" },
     input:
       "You judge a Word Wolf reverse answer. Treat the guess as accepted only when it is essentially the same concept as the correct word. " +
       "Accepted/rejected examples are table memory for this exact correct word. Use them as the play group's house style when judging synonym boundaries. " +

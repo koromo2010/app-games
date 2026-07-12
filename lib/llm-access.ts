@@ -1,7 +1,8 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
+import { paidLlmModel } from "@/lib/llm-model";
 
-export const paidLlmModel = "gpt-4.1-mini";
+export { paidLlmModel };
 
 const paidLlmCookieName = "app_games_paid_llm";
 const paidLlmCookieMaxAge = 60 * 60 * 8;
@@ -62,4 +63,3 @@ export async function disablePaidLlmAccess() {
   const cookieStore = await cookies();
   cookieStore.delete(paidLlmCookieName);
 }
-
