@@ -7,6 +7,7 @@ import type { WordWolfGuessJudgement } from "@/lib/wordwolf-guess-judgement";
 import { redisCommand } from "@/lib/redis-store";
 import { recordWordWolfGameResults } from "@/lib/player-stats-store";
 import { normalizeGameGenerationMeta } from "@/lib/game-ai-types";
+import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
 
 export type WordWolfRoom = Room;
 export type WordWolfRoomChoice = RoomChoice;
@@ -166,7 +167,7 @@ function normalizeRoom(value: unknown): WordWolfRoom | null {
     randomizeTurnOrder: parsed.randomizeTurnOrder ?? true,
     players: players as Player[],
     roundsTotal: normalizeRoundsTotal(parsed.roundsTotal),
-    turnTimeLimitSeconds: typeof parsed.turnTimeLimitSeconds === "number" ? parsed.turnTimeLimitSeconds : 0,
+    turnTimeLimitSeconds: normalizeCommonTimeLimit(parsed.turnTimeLimitSeconds),
     currentRound: typeof parsed.currentRound === "number" ? parsed.currentRound : 1,
     currentTurnIndex: typeof parsed.currentTurnIndex === "number" ? parsed.currentTurnIndex : 0,
     currentTurnStartedAt: typeof parsed.currentTurnStartedAt === "number" ? parsed.currentTurnStartedAt : null,

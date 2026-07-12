@@ -15,7 +15,7 @@ import {
   savePersistentPlayerSession,
 } from "@/lib/player-session";
 import { loadPlayerRoomDefaults, savePlayerRoomDefaults } from "@/lib/game-room-defaults-client";
-import { commonTimeLimitOptions, normalizeCommonTimeLimit } from "@/lib/game-room-config";
+import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
 import {
   getTopicKey,
   getTopicWords,
@@ -30,6 +30,7 @@ import {
 } from "@/lib/wordwolf";
 import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
 import { GameFeedbackPanel } from "../components/GameFeedbackPanel";
+import { RoomTimeLimitControl } from "../components/RoomTimeLimitControl";
 import type {
   ClueLogVisibility,
   ClueMode,
@@ -1293,7 +1294,7 @@ export function WordWolfGame() {
 
   const setTurnTimeLimit = (turnTimeLimitSeconds: number) => {
     if (!room || room.phase !== "lobby") return;
-    setAndSaveRoom({ ...room, turnTimeLimitSeconds });
+    setAndSaveRoom({ ...room, turnTimeLimitSeconds: normalizeCommonTimeLimit(turnTimeLimitSeconds) });
   };
 
   const setTopicDictionarySource = (topicDictionarySource: TopicDictionarySource) => {
@@ -2314,20 +2315,7 @@ export function WordWolfGame() {
                       </button>
                     </div>
                   </div>
-                  <label className="block text-sm font-medium text-slate-700">
-                    持ち時間
-                    <select
-                      value={room.turnTimeLimitSeconds}
-                      onChange={(event) => setTurnTimeLimit(Number(event.target.value))}
-                      className={`mt-1 ${inputClass}`}
-                    >
-                      {commonTimeLimitOptions.map((seconds) => (
-                        <option key={seconds} value={seconds}>
-                          {seconds === 0 ? "なし" : `${seconds}秒`}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <RoomTimeLimitControl label="持ち時間" value={room.turnTimeLimitSeconds} onChange={setTurnTimeLimit} />
                   <div>
                     <p className="text-sm font-medium text-slate-700">{"\u767a\u8a00\u9806"}</p>
                     <div className="mt-1 grid grid-cols-2 gap-2">

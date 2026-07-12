@@ -10,11 +10,12 @@ import {
   makeRandomAvatarColor,
 } from "@/lib/player-session";
 import { loadPlayerRoomDefaults, savePlayerRoomDefaults } from "@/lib/game-room-defaults-client";
-import { commonTimeLimitOptions, normalizeCommonTimeLimit } from "@/lib/game-room-config";
+import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
 import type { TahoiyaAnswererMode, TahoiyaPlayMode, TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomAction, TahoiyaRoomChoice, TahoiyaTopic } from "@/lib/tahoiya-types";
 import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
 import { GameFeedbackPanel } from "../components/GameFeedbackPanel";
 import { RoomConfigSummary } from "../components/RoomConfigSummary";
+import { RoomTimeLimitControl } from "../components/RoomTimeLimitControl";
 import { cyanButtonClass, dangerButtonClass, inputClass, panelClass, primaryButtonClass, subtleButtonClass } from "../wordwolf/styles";
 
 const roomStoragePrefix = "tahoiya-room-";
@@ -1014,20 +1015,7 @@ export function TahoiyaGame() {
                       </div>
                     </div>
                     )}
-                    <label className="block text-sm font-medium text-slate-700">
-                      制限時間
-                      <select
-                        value={room.actionTimeLimitSeconds}
-                        onChange={(event) => setActionTimeLimit(Number(event.target.value))}
-                        className={`mt-1 ${inputClass}`}
-                      >
-                        {commonTimeLimitOptions.map((seconds) => (
-                          <option key={seconds} value={seconds}>
-                            {seconds === 0 ? "なし" : `${seconds}秒`}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                    <RoomTimeLimitControl label="制限時間" value={room.actionTimeLimitSeconds} onChange={setActionTimeLimit} />
                   </div>
                 )}
                 <RoomConfigSummary items={roomConfigItems} />
