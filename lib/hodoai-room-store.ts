@@ -1,4 +1,5 @@
 import { redisCommand } from "@/lib/redis-store";
+import { randomUUID } from "node:crypto";
 import {
   clueHasNumber,
   countHodoaiInversions,
@@ -45,6 +46,7 @@ function normalizePlayers(value: unknown): HodoaiPlayer[] {
       joinedAt: typeof player.joinedAt === "number" ? player.joinedAt : Date.now(),
       avatarColor: typeof player.avatarColor === "string" ? player.avatarColor : undefined,
       avatarImage: typeof player.avatarImage === "string" ? player.avatarImage : undefined,
+      isDummy: player.isDummy === true,
     }));
 }
 
@@ -227,7 +229,7 @@ function makeChoice(room: HodoaiRoom): HodoaiRoomChoice {
 }
 
 async function saveActiveRooms(room: HodoaiRoom) {
-  await Promise.all(room.players.map((player) => redisCommand<"OK">(["SET", playerActiveRoomKey(player.id), room.code])));
+  await Promise.all(room.players.filter((player) => !player.isDummy).map((player) => redisCommand<"OK">(["SET", playerActiveRoomKey(player.id), room.code])));
 }
 
 async function clearActiveRoom(playerId: string, code: string) {
@@ -317,12 +319,30 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
     }
     if (action.type === "set-debug") {
       if (!actorIsHost || current.phase !== "lobby") throw new Error("HODOAI_ROOM_FORBIDDEN");
-      return { ...current, debugMode: action.enabled };
+      return {
+        ...current,
+        debugMode: action.enabled,
+        players: action.enabled ? current.players : current.players.filter((player) => !player.isDummy),
+      };
     }
     if (action.type === "start-game") {
       if (!actorIsHost || current.phase !== "lobby") throw new Error("HODOAI_ROOM_FORBIDDEN");
       if (current.players.length < 2 && !current.debugMode) throw new Error("HODOAI_NOT_ENOUGH_PLAYERS");
       return beginRound({ ...current, round: 1, history: [], totalPoints: 0 }, 1);
+    }
+    if (action.type === "debug-add-player") {
+      if (!actorIsHost || !current.debugMode || current.phase !== "lobby") throw new Error("HODOAI_ROOM_FORBIDDEN");
+      if (current.players.length >= hodoaiTechnicalPlayerLimit) throw new Error("HODOAI_ROOM_FULL");
+      const dummyNumber = current.players.filter((player) => player.isDummy).length + 1;
+      const colors = ["#38bdf8", "#a78bfa", "#f472b6", "#f59e0b", "#84cc16", "#14b8a6"];
+      const player: HodoaiPlayer = {
+        id: `dummy-${randomUUID()}`,
+        name: `ダミー${dummyNumber}`,
+        joinedAt: Date.now(),
+        avatarColor: colors[(dummyNumber - 1) % colors.length],
+        isDummy: true,
+      };
+      return { ...current, players: [...current.players, player] };
     }
     if (action.type === "submit-clue") {
       if (current.phase !== "clue" || action.round !== current.round || current.clues[action.actorId]) return current;

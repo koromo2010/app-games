@@ -11,6 +11,7 @@ export type HodoaiPlayer = {
   joinedAt: number;
   avatarColor?: string;
   avatarImage?: string;
+  isDummy?: boolean;
 };
 
 export type HodoaiPhase = "lobby" | "clue" | "arrange" | "result";
@@ -73,7 +74,8 @@ export type HodoaiRoomAction =
   | { type: "next-round"; actorId: string; round: number }
   | { type: "reset-game"; actorId: string }
   | { type: "debug-fill-clues"; actorId: string; round: number }
-  | { type: "debug-sort"; actorId: string; round: number };
+  | { type: "debug-sort"; actorId: string; round: number }
+  | { type: "debug-add-player"; actorId: string };
 
 export const defaultHodoaiConfig: HodoaiConfig = {
   roundsTotal: 3,
