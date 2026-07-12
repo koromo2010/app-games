@@ -17,8 +17,6 @@ import {
 import { loadPlayerRoomDefaults, savePlayerRoomDefaults } from "@/lib/game-room-defaults-client";
 import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
 import {
-  getTopicKey,
-  getTopicWords,
   isValidWordWolfTopic,
   normalizeGuess,
   normalizeTopicDictionarySource,
@@ -159,9 +157,6 @@ function normalizeRoundsTotal(value: unknown) {
 const noWolfChance = 0.1;
 const roomStoragePrefix = "wordwolf-room-";
 const roomDefaultsStoragePrefix = "wordwolf-room-defaults-";
-const topicHistoryKey = "wordwolf-topic-history";
-const topicDailyWordHistoryKey = "wordwolf-topic-daily-words";
-const topicRequestHistoryLimit = 500;
 
 type WordWolfRoomDefaults = Pick<
   Room,
@@ -565,46 +560,6 @@ function fillSoloTestPlayers(players: Player[]) {
   return nextPlayers;
 }
 
-function getJstDateKey() {
-  return new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
-}
-
-function loadTopicHistory() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(topicHistoryKey) || "[]");
-    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
-function loadDailyTopicWords() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(topicDailyWordHistoryKey) || "{}") as {
-      date?: unknown;
-      words?: unknown;
-    };
-    if (parsed.date !== getJstDateKey() || !Array.isArray(parsed.words)) return [];
-    return parsed.words.filter((item): item is string => typeof item === "string");
-  } catch {
-    return [];
-  }
-}
-
-function rememberTopic(topic: WordWolfTopic) {
-  const key = getTopicKey(topic);
-  const history = loadTopicHistory().filter((item) => item !== key);
-  localStorage.setItem(topicHistoryKey, JSON.stringify([key, ...history]));
-
-  const dailyWords = new Set([...loadDailyTopicWords(), ...getTopicWords(topic)]);
-  localStorage.setItem(topicDailyWordHistoryKey, JSON.stringify({ date: getJstDateKey(), words: [...dailyWords] }));
-}
-
-function isTopicUnusedToday(topic: WordWolfTopic, history: string[], dailyWords: string[]) {
-  const usedWords = new Set(dailyWords);
-  return !history.includes(getTopicKey(topic)) && getTopicWords(topic).every((word) => !usedWords.has(word));
-}
-
 async function fetchTopicWithFallback(
   dictionarySource: TopicDictionarySource,
   pairDistance: TopicPairDistance,
@@ -613,9 +568,6 @@ async function fetchTopicWithFallback(
   gameNumber: number,
 ): Promise<WordWolfTopic> {
   const requiresLlm = dictionarySource === "llm" || dictionarySource === "proper-noun";
-  const history = loadTopicHistory();
-  const requestHistory = history.slice(0, topicRequestHistoryLimit);
-  const dailyWords = loadDailyTopicWords();
   const params = new URLSearchParams({ source: dictionarySource, distance: pairDistance });
   params.set("roomCode", roomCode);
   params.set("gameNumber", String(gameNumber));
@@ -623,13 +575,6 @@ async function fetchTopicWithFallback(
   if (normalizedTopicHint) {
     params.set("hint", normalizedTopicHint);
   }
-  if (requestHistory.length > 0) {
-    params.set("exclude", requestHistory.join(","));
-  }
-  if (dailyWords.length > 0) {
-    params.set("excludeWords", dailyWords.join(","));
-  }
-
   const maxAttempts = 1;
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
@@ -644,26 +589,19 @@ async function fetchTopicWithFallback(
 
       if (!response.ok) {
         if (requiresLlm) continue;
-        const topic = pickFallbackTopic(history, dictionarySource, pairDistance, dailyWords, normalizedTopicHint);
-        rememberTopic(topic);
-        return topic;
+        return pickFallbackTopic([], dictionarySource, pairDistance, [], normalizedTopicHint);
       }
 
       const topic = (await response.json()) as WordWolfTopic;
-      if (!isValidWordWolfTopic(topic) || !isTopicUnusedToday(topic, history, dailyWords)) {
+      if (!isValidWordWolfTopic(topic)) {
         if (requiresLlm) continue;
-        const fallbackTopic = pickFallbackTopic(history, dictionarySource, pairDistance, dailyWords, normalizedTopicHint);
-        rememberTopic(fallbackTopic);
-        return fallbackTopic;
+        return pickFallbackTopic([], dictionarySource, pairDistance, [], normalizedTopicHint);
       }
 
-      rememberTopic(topic);
       return topic;
     } catch {
       if (requiresLlm) continue;
-      const topic = pickFallbackTopic(history, dictionarySource, pairDistance, dailyWords, normalizedTopicHint);
-      rememberTopic(topic);
-      return topic;
+      return pickFallbackTopic([], dictionarySource, pairDistance, [], normalizedTopicHint);
     } finally {
       window.clearTimeout(timer);
     }
@@ -1269,6 +1207,7 @@ export function WordWolfGame() {
     if (!room) throw new Error("部屋の設定を読み込めませんでした。");
     const params = new URLSearchParams({
       test: "1",
+      roomCode: room.code,
       source: room.topicDictionarySource,
       distance: room.topicPairDistance,
     });

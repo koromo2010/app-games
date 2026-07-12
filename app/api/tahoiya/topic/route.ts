@@ -7,15 +7,17 @@ import {
 } from "@/lib/game-llm";
 import type { GameGenerationMeta } from "@/lib/game-ai-types";
 import { formatGameFeedbackContext, retrieveGameFeedback } from "@/lib/game-feedback-store";
-import { redisCommand } from "@/lib/redis-store";
 import { withGameGenerationCache } from "@/lib/game-generation-cache";
 import { loadStoredTahoiyaRoom } from "@/lib/tahoiya-room-store";
-import { findReusableTahoiyaTopic, rememberTahoiyaTopicExperience } from "@/lib/tahoiya-topic-catalog";
+import {
+  findReusableTahoiyaTopic,
+  loadExperiencedTahoiyaWords,
+  rememberTahoiyaTopicExperience,
+} from "@/lib/tahoiya-topic-catalog";
 import type { TahoiyaDifficulty, TahoiyaTopic } from "@/lib/tahoiya-types";
 
 const tahoiyaTopicPromptVersion = "tahoiya-topic-v10";
 export const maxDuration = 180;
-const usedTopicWordsKey = "tahoiya:topic:used-words";
 type DefinitionStyle = "brief" | "standard" | "detailed" | "long" | "extended" | "maximum";
 
 const definitionStyleRules: Record<DefinitionStyle, { max: number; instruction: string }> = {
@@ -288,23 +290,6 @@ function getFeedbackBlockedWords(records: Awaited<ReturnType<typeof retrieveGame
   });
 }
 
-async function loadUsedTopicWords() {
-  try {
-    const words = await redisCommand<string[]>(["SMEMBERS", usedTopicWordsKey]);
-    return Array.isArray(words) ? words : [];
-  } catch {
-    return [];
-  }
-}
-
-async function rememberUsedTopicWord(word: string) {
-  try {
-    await redisCommand<number>(["SADD", usedTopicWordsKey, normalizeTopicWord(word)]);
-  } catch {
-    // Topic history is best-effort; generation still works when Redis is unavailable.
-  }
-}
-
 function pickFallbackTopic(usedWords: string[], difficulty: TahoiyaDifficulty) {
   const used = new Set(usedWords.map(normalizeTopicWord));
   const source = difficulty === "extreme" ? extremeFallbackTopics : fallbackTopics;
@@ -455,17 +440,14 @@ async function generateTopic(
 }
 
 async function generateTopicResponse(difficulty: TahoiyaDifficulty, playerIds: string[], previewOnly = false) {
-  const usedWords = await loadUsedTopicWords();
   const feedbackRecords = await retrieveGameFeedback({
     game: "tahoiya",
     task: "tahoiya.topic",
     queryTags: [difficulty === "extreme" ? "extreme-difficulty" : "very-hard", "varied-definition-length", "no-parentheses"],
   }).catch(() => []);
   const feedbackBlockedWords = getFeedbackBlockedWords(feedbackRecords);
-  const blockedWords = [...new Set([
-    ...usedWords.map(normalizeTopicWord),
-    ...feedbackBlockedWords,
-  ])];
+  const experiencedWords = await loadExperiencedTahoiyaWords(playerIds).catch(() => []);
+  const blockedWords = [...new Set([...experiencedWords, ...feedbackBlockedWords])];
   const blockedWordSet = new Set(blockedWords);
   const feedbackContext = formatGameFeedbackContext(feedbackRecords);
   const retrievedFeedbackIds = feedbackRecords.map((record) => record.id);
@@ -475,31 +457,35 @@ async function generateTopicResponse(difficulty: TahoiyaDifficulty, playerIds: s
     return Response.json(reusableTopic);
   }
 
-  const fallbackResponse = async () => {
-    const topic = pickFallbackTopic(blockedWords, difficulty);
-    if (!topic) {
-      return Response.json({ error: "候補枯渇", notice: "未出題のローカル候補がありません。" }, { status: 503 });
-    }
-    if (!previewOnly) await rememberUsedTopicWord(topic.word);
+  const localTopic = pickFallbackTopic(blockedWords, difficulty);
+  if (localTopic) {
     const responseTopic: TahoiyaTopic = {
-      ...topic,
+      ...localTopic,
+      generation: localGenerationMeta(retrievedFeedbackIds),
+    };
+    if (!previewOnly) await rememberTahoiyaTopicExperience(responseTopic, difficulty, playerIds).catch(() => undefined);
+    return Response.json(responseTopic);
+  }
+
+  const mode = await resolveGameLlmMode();
+  if (mode === "local") {
+    const reusedTopic = pickFallbackTopic(feedbackBlockedWords, difficulty);
+    if (!reusedTopic) {
+      return Response.json({ error: "候補枯渇", notice: "利用できるローカル候補がありません。" }, { status: 503 });
+    }
+    const responseTopic: TahoiyaTopic = {
+      ...reusedTopic,
       notice: gameLlmFallbackNotice,
       generation: localGenerationMeta(retrievedFeedbackIds),
     };
     if (!previewOnly) await rememberTahoiyaTopicExperience(responseTopic, difficulty, playerIds).catch(() => undefined);
     return Response.json(responseTopic);
-  };
-
-  const mode = await resolveGameLlmMode();
-  if (mode === "local") {
-    return fallbackResponse();
   }
 
   try {
     const topic = await generateTopic(mode, difficulty, feedbackContext, retrievedFeedbackIds, blockedWords);
     if (topic && !blockedWordSet.has(normalizeTopicWord(topic.word))) {
       if (!previewOnly) {
-        await rememberUsedTopicWord(topic.word);
         await rememberTahoiyaTopicExperience(topic, difficulty, playerIds).catch(() => undefined);
       }
       return Response.json(topic);
@@ -507,7 +493,17 @@ async function generateTopicResponse(difficulty: TahoiyaDifficulty, playerIds: s
   } catch (error) {
     console.error("[tahoiya/topic] falling back to local topic", error);
   }
-  return fallbackResponse();
+  const reusedTopic = pickFallbackTopic(feedbackBlockedWords, difficulty);
+  if (!reusedTopic) {
+    return Response.json({ error: "候補枯渇", notice: "ワードを生成できませんでした。" }, { status: 503 });
+  }
+  const responseTopic: TahoiyaTopic = {
+    ...reusedTopic,
+    notice: gameLlmFallbackNotice,
+    generation: localGenerationMeta(retrievedFeedbackIds),
+  };
+  if (!previewOnly) await rememberTahoiyaTopicExperience(responseTopic, difficulty, playerIds).catch(() => undefined);
+  return Response.json(responseTopic);
 }
 
 export async function GET(request: Request) {

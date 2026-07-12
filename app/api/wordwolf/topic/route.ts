@@ -18,14 +18,17 @@ import {
 } from "@/lib/game-llm";
 import type { GameGenerationMeta } from "@/lib/game-ai-types";
 import { formatGameFeedbackContext, retrieveGameFeedback } from "@/lib/game-feedback-store";
-import { redisCommand } from "@/lib/redis-store";
 import { withGameGenerationCache } from "@/lib/game-generation-cache";
+import { loadStoredWordWolfRoom } from "@/lib/wordwolf-room-store";
+import {
+  findReusableWordWolfTopic,
+  loadExperiencedWordWolfWords,
+  rememberWordWolfTopicExperience,
+} from "@/lib/wordwolf-topic-catalog";
 
 const baseTopicPrompt =
   "ワードウルフ用のお題ペアを1組作ってください。3-6人で3周ほど話す前提です。日本語で、共通点を話せるが同じ言葉の言い換えではない組み合わせにしてください。JSONのみで返してください: {\"villageWord\":\"...\",\"wolfWord\":\"...\",\"reason\":\"...\"}";
 
-const usedPairKey = "wordwolf:topic:pairs";
-const dailyWordKeyPrefix = "wordwolf:topic:daily-words:";
 const wordwolfTopicPromptVersion = "wordwolf-topic-v2";
 
 function localGenerationMeta(retrievedFeedbackIds: string[]): GameGenerationMeta {
@@ -37,14 +40,6 @@ function localGenerationMeta(retrievedFeedbackIds: string[]): GameGenerationMeta
     latencyMs: 0,
     retrievedFeedbackIds,
   };
-}
-
-function getJstDateKey() {
-  return new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
-}
-
-function getDailyWordKey(dateKey = getJstDateKey()) {
-  return `${dailyWordKeyPrefix}${dateKey}`;
 }
 
 function normalizeList(values: string[]) {
@@ -60,35 +55,6 @@ function isTopicAllowed(topic: WordWolfTopic, excludeKeys: string[], excludeWord
   const excludedWords = new Set(excludeWords.map(normalizeTopicWord).filter(Boolean));
 
   return !excludedKeys.has(getTopicKey(topic)) && getTopicWords(topic).every((word) => !excludedWords.has(word));
-}
-
-async function loadStoredTopicUsage() {
-  try {
-    const [usedPairs, dailyWords] = await Promise.all([
-      redisCommand<string[]>(["SMEMBERS", usedPairKey]),
-      redisCommand<string[]>(["SMEMBERS", getDailyWordKey()]),
-    ]);
-
-    return {
-      usedPairs: Array.isArray(usedPairs) ? usedPairs : [],
-      dailyWords: Array.isArray(dailyWords) ? dailyWords : [],
-    };
-  } catch {
-    return { usedPairs: [], dailyWords: [] };
-  }
-}
-
-async function rememberStoredTopicUsage(topic: WordWolfTopic) {
-  try {
-    const dailyWordKey = getDailyWordKey();
-    await Promise.all([
-      redisCommand<number>(["SADD", usedPairKey, getTopicKey(topic)]),
-      redisCommand<number>(["SADD", dailyWordKey, ...getTopicWords(topic)]),
-      redisCommand<number>(["EXPIRE", dailyWordKey, 60 * 60 * 24 * 3]),
-    ]);
-  } catch {
-    // Topic history is best-effort; generation still works when Redis is unavailable.
-  }
 }
 
 function parseTopic(
@@ -228,13 +194,12 @@ async function generateLlmTopic(
     : null;
 }
 
-async function generateTopicResponse(request: Request, previewOnly = false) {
+async function generateTopicResponse(request: Request, playerIds: string[], previewOnly = false) {
   const { excludeKeys, excludeWords, dictionarySource, pairDistance, topicHint } = getTopicRequestOptions(request);
-  const storedUsage = await loadStoredTopicUsage();
-  const allExcludeKeys = normalizeList([...excludeKeys, ...storedUsage.usedPairs]);
-  const allExcludeWords = normalizeList([...excludeWords, ...storedUsage.dailyWords]);
+  const experiencedWords = await loadExperiencedWordWolfWords(playerIds).catch(() => []);
+  const allExcludeKeys = excludeKeys;
+  const allExcludeWords = normalizeList([...excludeWords, ...experiencedWords]);
   const requiresLlm = dictionarySource === "llm" || dictionarySource === "proper-noun";
-  const mode = requiresLlm ? await resolveGameLlmMode() : "local";
   const feedbackRecords = requiresLlm
     ? await retrieveGameFeedback({
         game: "wordwolf",
@@ -244,15 +209,33 @@ async function generateTopicResponse(request: Request, previewOnly = false) {
     : [];
   const feedbackContext = formatGameFeedbackContext(feedbackRecords);
   const retrievedFeedbackIds = feedbackRecords.map((record) => record.id);
+  const remember = async (topic: WordWolfTopic) => {
+    if (!previewOnly) await rememberWordWolfTopicExperience(topic, playerIds).catch(() => undefined);
+  };
 
-  const fallbackTopic = () => pickFallbackTopic(allExcludeKeys, dictionarySource, pairDistance, allExcludeWords, topicHint);
+  const reusableTopic = await findReusableWordWolfTopic({
+    dictionarySource,
+    pairDistance,
+    topicHint,
+    playerIds,
+    blockedWords: allExcludeWords,
+  }).catch(() => null);
+  if (reusableTopic) {
+    await remember(reusableTopic);
+    return Response.json(reusableTopic);
+  }
 
+  const localTopic = pickFallbackTopic(allExcludeKeys, dictionarySource, pairDistance, allExcludeWords, topicHint);
+  if (!localTopic.fallbackExhausted) {
+    const topic = { ...localTopic, generation: localGenerationMeta(retrievedFeedbackIds) };
+    await remember(topic);
+    return Response.json(topic);
+  }
+
+  const mode = requiresLlm ? await resolveGameLlmMode() : "local";
   if (!requiresLlm || mode === "local") {
-    const baseTopic = requiresLlm
-      ? { ...fallbackTopic(), notice: gameLlmFallbackNotice }
-      : fallbackTopic();
-    const topic = { ...baseTopic, generation: localGenerationMeta(retrievedFeedbackIds) };
-    if (!previewOnly) await rememberStoredTopicUsage(topic);
+    const topic = { ...localTopic, notice: gameLlmFallbackNotice, generation: localGenerationMeta(retrievedFeedbackIds) };
+    await remember(topic);
     return Response.json(topic);
   }
 
@@ -268,7 +251,7 @@ async function generateTopicResponse(request: Request, previewOnly = false) {
       retrievedFeedbackIds,
     );
     if (topic && isTopicAllowed(topic, allExcludeKeys, allExcludeWords)) {
-      if (!previewOnly) await rememberStoredTopicUsage(topic);
+      await remember(topic);
       return Response.json(topic);
     }
   } catch (error) {
@@ -276,11 +259,11 @@ async function generateTopicResponse(request: Request, previewOnly = false) {
   }
 
   const topic = {
-    ...fallbackTopic(),
+    ...localTopic,
     notice: gameLlmFallbackNotice,
     generation: localGenerationMeta(retrievedFeedbackIds),
   };
-  if (!previewOnly) await rememberStoredTopicUsage(topic);
+  await remember(topic);
   return Response.json(topic);
 }
 
@@ -289,12 +272,14 @@ export async function GET(request: Request) {
   const previewOnly = url.searchParams.get("test") === "1";
   const roomCode = url.searchParams.get("roomCode")?.trim().toUpperCase() ?? "";
   const gameNumber = url.searchParams.get("gameNumber")?.trim() ?? "";
+  const room = roomCode ? await loadStoredWordWolfRoom(roomCode).catch(() => null) : null;
+  const playerIds = room?.players.map((player) => player.id) ?? [];
   const requestKey = roomCode && gameNumber ? `${roomCode}:${gameNumber}` : "";
-  if (!requestKey || previewOnly) return generateTopicResponse(request, previewOnly);
+  if (!requestKey || previewOnly) return generateTopicResponse(request, playerIds, previewOnly);
 
   try {
     const cached = await withGameGenerationCache(wordwolfTopicPromptVersion, requestKey, async () => {
-      const response = await generateTopicResponse(request);
+      const response = await generateTopicResponse(request, playerIds);
       return { status: response.status, body: await response.json() };
     });
     return Response.json(cached.body, { status: cached.status });

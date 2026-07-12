@@ -667,7 +667,7 @@ export function TahoiyaGame() {
 
   const testWordGeneration = async (): Promise<DebugWordGenerationResult> => {
     if (!room) throw new Error("部屋の設定を読み込めませんでした。");
-    const params = new URLSearchParams({ test: "1", difficulty: room.topicDifficulty });
+    const params = new URLSearchParams({ test: "1", roomCode: room.code, difficulty: room.topicDifficulty });
     const response = await fetch(`/api/tahoiya/topic?${params.toString()}`, { cache: "no-store" });
     const topic = (await response.json()) as TahoiyaTopic & { error?: string };
     if (!response.ok || !topic.word || !topic.realDefinition) {

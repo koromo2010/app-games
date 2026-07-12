@@ -66,6 +66,17 @@ export async function findReusableTahoiyaTopic(
   } satisfies TahoiyaTopic;
 }
 
+export async function loadExperiencedTahoiyaWords(playerIds: string[]) {
+  if (playerIds.length === 0) return [];
+  const values = await redisCommand<string[]>(["HVALS", catalogKey]);
+  return (Array.isArray(values) ? values : [])
+    .map(parseRecord)
+    .filter((record): record is TahoiyaTopicCatalogRecord => Boolean(
+      record && playerIds.some((playerId) => record.experiencedPlayerIds.includes(playerId)),
+    ))
+    .map((record) => normalizeWord(record.topic.word));
+}
+
 export async function rememberTahoiyaTopicExperience(
   topic: TahoiyaTopic,
   difficulty: TahoiyaDifficulty,
