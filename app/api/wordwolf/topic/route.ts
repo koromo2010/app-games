@@ -13,6 +13,7 @@ import {
 import {
   gameLlmFallbackNotice,
   generateGameLlmText,
+  getGameLlmAttemptModes,
   resolveGameLlmMode,
   type GameLlmMode,
 } from "@/lib/game-llm";
@@ -262,15 +263,32 @@ export async function GET(request: Request) {
     console.error("[wordwolf/topic] LLM topic generation did not complete", lastError);
   }
 
-  if (mode === "free") {
-    const topic = {
-      ...fallbackTopic(),
-      notice: gameLlmFallbackNotice,
-      generation: localGenerationMeta(retrievedFeedbackIds),
-    };
-    await rememberStoredTopicUsage(topic);
-    return Response.json(topic);
+  if (mode === "paid" && getGameLlmAttemptModes(mode).includes("free")) {
+    try {
+      const topic = await generateLlmTopic(
+        allExcludeKeys,
+        allExcludeWords,
+        pairDistance,
+        dictionarySource === "proper-noun" ? "proper-noun" : "llm",
+        topicHint,
+        "free",
+        feedbackContext,
+        retrievedFeedbackIds,
+      );
+      if (topic && isTopicAllowed(topic, allExcludeKeys, allExcludeWords)) {
+        await rememberStoredTopicUsage(topic);
+        return Response.json(topic);
+      }
+    } catch (error) {
+      console.error("[wordwolf/topic] free provider fallback did not complete", error);
+    }
   }
 
-  return Response.json({ error: "LLM topic generation did not complete." }, { status: 503 });
+  const topic = {
+    ...fallbackTopic(),
+    notice: gameLlmFallbackNotice,
+    generation: localGenerationMeta(retrievedFeedbackIds),
+  };
+  await rememberStoredTopicUsage(topic);
+  return Response.json(topic);
 }

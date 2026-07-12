@@ -645,7 +645,7 @@ export function TahoiyaGame() {
   };
 
   const startRound = async () => {
-    if (!room || isStarting) return;
+    if (!room || !isHost || isStarting) return;
     const startingRoom = withMinimumDebugPlayers(room);
     if (startingRoom.players.length < 3) {
       setMessage("ゲーム開始には3人以上が必要です。");
@@ -1024,7 +1024,8 @@ export function TahoiyaGame() {
                   </div>
                 )}
                 {room.phase === "lobby" && (
-                  <>
+                  isHost ? (
+                    <>
                     {isDebugMode && (
                       <button onClick={addTestPlayer} disabled={room.players.length >= 8} className={`w-full ${subtleButtonClass}`}>
                         テストプレイヤー追加
@@ -1033,7 +1034,12 @@ export function TahoiyaGame() {
                     <button onClick={() => void startRound()} disabled={isStarting} className={`w-full ${primaryButtonClass}`}>
                       {isStarting ? "お題生成中..." : "ラウンド開始"}
                     </button>
-                  </>
+                    </>
+                  ) : (
+                    <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-center text-xs font-semibold text-slate-600">
+                      ホストのラウンド開始を待っています。
+                    </p>
+                  )
                 )}
                 {isHost && (
                   <button onClick={() => void dissolveRoom()} className={`w-full ${dangerButtonClass}`}>

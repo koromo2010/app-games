@@ -18,37 +18,57 @@ export async function resolveGameLlmMode(): Promise<GameLlmMode> {
   return "local";
 }
 
+export function getGameLlmAttemptModes(mode: GameLlmMode): Array<Exclude<GameLlmMode, "local">> {
+  if (mode === "local") return [];
+  if (mode === "paid" && hasFreeLlmApi()) return ["paid", "free"];
+  return [mode];
+}
+
+async function generateFreeGameLlmText(prompt: string, startedAt: number) {
+  const result = await generateFreeLlmText(prompt);
+  return {
+    ...result,
+    model: result.provider === "gemini" ? freeLlmModel : freeGroqLlmModel,
+    mode: "free" as const,
+    latencyMs: Date.now() - startedAt,
+  };
+}
+
 export async function generateGameLlmText(prompt: string, mode: Exclude<GameLlmMode, "local">) {
   const startedAt = Date.now();
   if (mode === "free") {
-    const result = await generateFreeLlmText(prompt);
+    return generateFreeGameLlmText(prompt, startedAt);
+  }
+
+  try {
+    const { default: OpenAI } = await import("openai");
+    const client = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+      maxRetries: 0,
+      timeout: 6000,
+    });
+    const response = await client.responses.create({
+      model: paidLlmModel,
+      reasoning: { effort: "none" },
+      input: prompt,
+    });
+
+    const text = response.output_text.trim();
+    if (!text) throw new Error("OpenAI API returned no text.");
     return {
-      ...result,
-      model: result.provider === "gemini" ? freeLlmModel : freeGroqLlmModel,
+      text,
+      provider: "openai" as const,
+      model: paidLlmModel,
       mode,
       latencyMs: Date.now() - startedAt,
     };
+  } catch (paidError) {
+    if (!hasFreeLlmApi()) throw paidError;
+    console.warn("[game-llm] OpenAI unavailable; trying the free provider chain", paidError);
+    try {
+      return await generateFreeGameLlmText(prompt, startedAt);
+    } catch (freeError) {
+      throw new AggregateError([paidError, freeError], "No paid or free LLM API completed the request.");
+    }
   }
-
-  const { default: OpenAI } = await import("openai");
-  const client = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-    maxRetries: 0,
-    timeout: 6000,
-  });
-  const response = await client.responses.create({
-    model: paidLlmModel,
-    reasoning: { effort: "none" },
-    input: prompt,
-  });
-
-  const text = response.output_text.trim();
-  if (!text) throw new Error("OpenAI API returned no text.");
-  return {
-    text,
-    provider: "openai" as const,
-    model: paidLlmModel,
-    mode,
-    latencyMs: Date.now() - startedAt,
-  };
 }
