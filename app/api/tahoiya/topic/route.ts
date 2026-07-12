@@ -8,7 +8,7 @@ import type { GameGenerationMeta } from "@/lib/game-ai-types";
 import { formatGameFeedbackContext, retrieveGameFeedback } from "@/lib/game-feedback-store";
 import type { TahoiyaTopic } from "@/lib/tahoiya-types";
 
-const tahoiyaTopicPromptVersion = "tahoiya-topic-v2";
+const tahoiyaTopicPromptVersion = "tahoiya-topic-v3";
 
 function localGenerationMeta(retrievedFeedbackIds: string[]): GameGenerationMeta {
   return {
@@ -84,6 +84,16 @@ function parseTopic(text: string): TahoiyaTopic | null {
   }
 }
 
+function parseVerifiedTopic(text: string): TahoiyaTopic | null {
+  try {
+    const parsed = JSON.parse(text) as Partial<TahoiyaTopic> & { valid?: boolean };
+    if (parsed.valid !== true) return null;
+    return parseTopic(JSON.stringify(parsed));
+  } catch {
+    return null;
+  }
+}
+
 async function generateTopic(
   mode: Exclude<GameLlmMode, "local">,
   feedbackContext: string,
@@ -104,15 +114,28 @@ async function generateTopic(
 
   const generated = await generateGameLlmText(prompt, mode);
   const topic = parseTopic(generated.text);
-  return topic
+  if (!topic) return null;
+
+  const verificationPrompt = [
+    "あなたは日本語辞書の校閲者です。次のたほい屋用候補を厳格に検証してください。",
+    "見出し語が実在する日本語の語であり、readingがその見出し語の正しい読みであり、realDefinitionがその意味に正確に対応する場合だけvalidをtrueにしてください。",
+    "単なる当て字、読みと意味の取り違え、存在が不確かな語、一般人が意味を知っている語、説明が不正確な候補はvalidをfalseにしてください。",
+    "少しでも確信がなければvalidをfalseにしてください。推測で修正や補完をしないでください。",
+    "validがtrueの場合も、realDefinitionは意味だけの45文字以内の一文にし、読み方、語源、用例、別名、漢字の説明、括弧を含めないでください。",
+    "JSONのみで返してください: {\"valid\":trueまたはfalse,\"word\":\"...\",\"reading\":\"...\",\"realDefinition\":\"...\",\"note\":\"...\"}",
+    `検証候補: ${JSON.stringify(topic)}`,
+  ].join("\n");
+  const verified = await generateGameLlmText(verificationPrompt, mode);
+  const verifiedTopic = parseVerifiedTopic(verified.text);
+  return verifiedTopic
     ? {
-        ...topic,
+        ...verifiedTopic,
         generation: {
-          provider: generated.provider,
-          model: generated.model,
-          mode: generated.mode,
+          provider: verified.provider,
+          model: verified.model,
+          mode: verified.mode,
           promptVersion: tahoiyaTopicPromptVersion,
-          latencyMs: generated.latencyMs,
+          latencyMs: generated.latencyMs + verified.latencyMs,
           retrievedFeedbackIds,
         },
       }

@@ -19,7 +19,7 @@ const roomDefaultsStoragePrefix = "tahoiya-room-defaults-";
 
 const tahoiyaFeedbackReasons = [
   { value: "too-difficult", label: "難しすぎる", rating: "bad" as const },
-  { value: "too-easy", label: "単語が簡単すぎる", rating: "bad" as const },
+  { value: "want-harder-word", label: "もっと難しい単語にしてほしい", rating: "bad" as const },
   { value: "hard-to-fake", label: "偽説明を作りにくい", rating: "bad" as const },
   { value: "definition-too-complex", label: "本物の説明が複雑", rating: "bad" as const },
   { value: "definition-questionable", label: "読み・説明が怪しい", rating: "bad" as const },
