@@ -1313,6 +1313,7 @@ export function WordWolfGame() {
       }
 
       const topic = await fetchTopicWithFallback(room.topicDictionarySource, room.topicPairDistance, room.topicHint);
+      setError(topic.notice ?? "");
       const basePlayers = room.debugMode ? fillSoloTestPlayers(room.players) : room.players;
       const players = room.randomizeTurnOrder ? shufflePlayers(basePlayers) : basePlayers;
       const roundsTotal = normalizeRoundsTotal(room.roundsTotal);

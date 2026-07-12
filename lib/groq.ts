@@ -1,0 +1,26 @@
+import { freeGroqLlmModel } from "@/lib/llm-model";
+
+export function hasGroqApiKey() {
+  return Boolean(process.env.GROQ_API_KEY?.trim());
+}
+
+export async function generateGroqText(prompt: string) {
+  const apiKey = process.env.GROQ_API_KEY?.trim();
+  if (!apiKey) throw new Error("GROQ_API_KEY is not configured.");
+
+  const { default: OpenAI } = await import("openai");
+  const client = new OpenAI({
+    apiKey,
+    baseURL: "https://api.groq.com/openai/v1",
+    maxRetries: 0,
+    timeout: 6000,
+  });
+  const response = await client.responses.create({
+    model: freeGroqLlmModel,
+    input: prompt,
+  });
+
+  const text = response.output_text.trim();
+  if (!text) throw new Error("Groq API returned no text.");
+  return text;
+}

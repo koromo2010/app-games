@@ -536,6 +536,7 @@ export function TahoiyaGame() {
     try {
       const response = await fetch("/api/tahoiya/topic", { cache: "no-store" });
       const topic = (await response.json()) as TahoiyaTopic;
+      setMessage(topic.notice ?? "");
       setAndSaveRoom({
         ...playableRoom,
         phase: "writing",

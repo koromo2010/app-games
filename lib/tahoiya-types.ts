@@ -15,6 +15,7 @@ export type TahoiyaTopic = {
   realDefinition: string;
   note: string;
   source: "llm" | "fallback";
+  notice?: string;
 };
 
 export type TahoiyaDefinitionOption = {

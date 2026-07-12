@@ -19,6 +19,7 @@ export type WordWolfTopic = {
   reason: string;
   source: "llm" | "fallback";
   fallbackExhausted?: boolean;
+  notice?: string;
   dictionarySource?: TopicDictionarySource;
   pairDistance?: TopicPairDistance;
   sourceMode?: TopicSourceMode;

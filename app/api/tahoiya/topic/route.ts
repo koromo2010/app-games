@@ -1,4 +1,9 @@
-import { hasPaidLlmAccess, paidLlmModel } from "@/lib/llm-access";
+import {
+  gameLlmFallbackNotice,
+  generateGameLlmText,
+  resolveGameLlmMode,
+  type GameLlmMode,
+} from "@/lib/game-llm";
 import type { TahoiyaTopic } from "@/lib/tahoiya-types";
 
 const fallbackTopics: TahoiyaTopic[] = [
@@ -53,58 +58,33 @@ function parseTopic(text: string): TahoiyaTopic | null {
   }
 }
 
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`Timed out after ${timeoutMs}ms`)), timeoutMs);
-    promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (error: unknown) => {
-        clearTimeout(timer);
-        reject(error);
-      },
-    );
-  });
-}
+async function generateTopic(mode: Exclude<GameLlmMode, "local">) {
+  const prompt = [
+    "国語辞典を使ったパーティーゲーム『たほい屋』用のお題を1つ作ってください。",
+    "日本語の実在語で、一般参加者が意味を知らなさそうだが、偽の語釈を作りやすい語を選んでください。",
+    "専門的すぎる固有名詞、差別語、性的/残虐な語、現代人物名は避けてください。",
+    "本物の辞書語釈として使える短い説明を付けてください。",
+    "JSONのみで返してください: {\"word\":\"...\",\"reading\":\"...\",\"realDefinition\":\"...\",\"note\":\"...\"}",
+  ].join("\n");
 
-async function generateTopic() {
-  const { default: OpenAI } = await import("openai");
-  const client = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-    maxRetries: 0,
-    timeout: 4000,
-  });
-
-  const response = await withTimeout(
-    client.responses.create({
-      model: paidLlmModel,
-      reasoning: { effort: "none" },
-      input: [
-        "国語辞典を使ったパーティーゲーム『たほい屋』用のお題を1つ作ってください。",
-        "日本語の実在語で、一般参加者が意味を知らなさそうだが、偽の語釈を作りやすい語を選んでください。",
-        "専門的すぎる固有名詞、差別語、性的/残虐な語、現代人物名は避けてください。",
-        "本物の辞書語釈として使える短い説明を付けてください。",
-        "JSONのみで返してください: {\"word\":\"...\",\"reading\":\"...\",\"realDefinition\":\"...\",\"note\":\"...\"}",
-      ].join("\n"),
-    }),
-    4500,
-  );
-
-  return parseTopic(response.output_text);
+  const { text } = await generateGameLlmText(prompt, mode);
+  return parseTopic(text);
 }
 
 export async function GET() {
-  if (!(await hasPaidLlmAccess())) {
-    return Response.json(pickFallbackTopic());
+  const mode = await resolveGameLlmMode();
+  if (mode === "local") {
+    return Response.json({ ...pickFallbackTopic(), notice: gameLlmFallbackNotice });
   }
 
   try {
-    const topic = await generateTopic();
+    const topic = await generateTopic(mode);
     return Response.json(topic ?? pickFallbackTopic());
   } catch (error) {
     console.error("[tahoiya/topic] falling back to local topic", error);
-    return Response.json(pickFallbackTopic());
+    return Response.json({
+      ...pickFallbackTopic(),
+      notice: gameLlmFallbackNotice,
+    });
   }
 }

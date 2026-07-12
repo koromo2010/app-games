@@ -7,6 +7,9 @@ import {
   paidLlmModel,
   verifyPaidLlmPassword,
 } from "@/lib/llm-access";
+import { hasGeminiApiKey } from "@/lib/gemini";
+import { hasGroqApiKey } from "@/lib/groq";
+import { freeGroqLlmModel, freeLlmModel } from "@/lib/llm-model";
 
 export async function GET() {
   return Response.json({
@@ -14,6 +17,10 @@ export async function GET() {
     configured: hasPaidLlmPassword(),
     hasApiKey: hasOpenAiApiKey(),
     model: paidLlmModel,
+    hasFreeApiKey: hasGeminiApiKey(),
+    freeModel: freeLlmModel,
+    hasGroqApiKey: hasGroqApiKey(),
+    groqModel: freeGroqLlmModel,
   });
 }
 
@@ -50,6 +57,10 @@ export async function POST(request: Request) {
     configured: true,
     hasApiKey: true,
     model: paidLlmModel,
+    hasFreeApiKey: hasGeminiApiKey(),
+    freeModel: freeLlmModel,
+    hasGroqApiKey: hasGroqApiKey(),
+    groqModel: freeGroqLlmModel,
   });
 }
 
@@ -60,6 +71,9 @@ export async function DELETE() {
     configured: hasPaidLlmPassword(),
     hasApiKey: hasOpenAiApiKey(),
     model: paidLlmModel,
+    hasFreeApiKey: hasGeminiApiKey(),
+    freeModel: freeLlmModel,
+    hasGroqApiKey: hasGroqApiKey(),
+    groqModel: freeGroqLlmModel,
   });
 }
-

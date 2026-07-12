@@ -1,13 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { paidLlmModel } from "@/lib/llm-model";
+import { freeGroqLlmModel, freeLlmModel, paidLlmModel } from "@/lib/llm-model";
 
 type LlmAccessStatus = {
   enabled: boolean;
   configured: boolean;
   hasApiKey: boolean;
   model: string;
+  hasFreeApiKey: boolean;
+  freeModel: string;
+  hasGroqApiKey: boolean;
+  groqModel: string;
 };
 
 const defaultStatus: LlmAccessStatus = {
@@ -15,6 +19,10 @@ const defaultStatus: LlmAccessStatus = {
   configured: false,
   hasApiKey: false,
   model: paidLlmModel,
+  hasFreeApiKey: false,
+  freeModel: freeLlmModel,
+  hasGroqApiKey: false,
+  groqModel: freeGroqLlmModel,
 };
 
 export function PaidLlmAccessButton() {
@@ -70,6 +78,10 @@ export function PaidLlmAccessButton() {
         configured: Boolean(data.configured),
         hasApiKey: Boolean(data.hasApiKey),
         model: typeof data.model === "string" ? data.model : defaultStatus.model,
+        hasFreeApiKey: Boolean(data.hasFreeApiKey),
+        freeModel: typeof data.freeModel === "string" ? data.freeModel : defaultStatus.freeModel,
+        hasGroqApiKey: Boolean(data.hasGroqApiKey),
+        groqModel: typeof data.groqModel === "string" ? data.groqModel : defaultStatus.groqModel,
       });
       setPassword("");
       setIsOpen(false);
@@ -111,7 +123,13 @@ export function PaidLlmAccessButton() {
         <span className="flex flex-col items-center leading-tight">
           <span>API: {status.enabled ? "有料" : "無料"}</span>
           <span className="text-[10px] font-semibold opacity-80">
-            {status.enabled ? status.model : "ローカル（API不使用）"}
+            {status.enabled
+              ? status.model
+              : status.hasFreeApiKey
+                ? `${status.freeModel}${status.hasGroqApiKey ? " → Groq" : ""}`
+                : status.hasGroqApiKey
+                  ? status.groqModel
+                  : "ローカル（API不使用）"}
           </span>
         </span>
       </button>
@@ -128,12 +146,19 @@ export function PaidLlmAccessButton() {
             <p className="text-xs font-semibold uppercase text-emerald-700">Paid API access</p>
             <h2 className="mt-1 text-xl font-bold">有料API接続</h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              OFF の間は無料のローカル候補を使います。ON にすると、このブラウザの操作だけ OpenAI API を使います。
+              OFF の間は無料の Gemini API、次に Groq を使い、両方利用できない場合だけローカル候補へ戻ります。ON にすると、このブラウザの操作だけ OpenAI API を使います。
             </p>
             <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
               <p>状態: {status.enabled ? "有料API ON" : "無料モード"}</p>
               <p>
-                使用中: {status.enabled ? status.model : "ローカル候補（API不使用）"}
+                使用中:{" "}
+                {status.enabled
+                  ? status.model
+                  : status.hasFreeApiKey
+                    ? `${status.freeModel}${status.hasGroqApiKey ? ` → ${status.groqModel}` : ""}`
+                    : status.hasGroqApiKey
+                      ? status.groqModel
+                      : "ローカル候補（API不使用）"}
               </p>
             </div>
             <input

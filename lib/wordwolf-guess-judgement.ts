@@ -1,4 +1,4 @@
-import { hasPaidLlmAccess, paidLlmModel } from "@/lib/llm-access";
+import { generateGameLlmText, resolveGameLlmMode, type GameLlmMode } from "@/lib/game-llm";
 import { redisCommand } from "@/lib/redis-store";
 import { normalizeGuess } from "@/lib/wordwolf";
 
@@ -278,35 +278,26 @@ function parseLlmJudgement(text: string, feedback: FeedbackRecord): WordWolfGues
 }
 
 async function judgeWithLlm(
+  mode: Exclude<GameLlmMode, "local">,
   guessWord: string,
   correctWord: string,
   feedback: FeedbackRecord,
   conceptFeedback: ConceptFeedbackRecord,
 ) {
-  const { default: OpenAI } = await import("openai");
-  const client = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-    maxRetries: 0,
-    timeout: 4500,
-  });
   const acceptedExamples = feedbackExamples(conceptFeedback, true);
   const rejectedExamples = feedbackExamples(conceptFeedback, false);
+  const prompt =
+    "You judge a Word Wolf reverse answer. Treat the guess as accepted only when it is essentially the same concept as the correct word. " +
+    "Accepted/rejected examples are table memory for this exact correct word. Use them as the play group's house style when judging synonym boundaries. " +
+    "Accept spelling variants, abbreviations, formal/common names, common English/Japanese translation differences, and very common aliases. " +
+    "Reject merely related words, same-category but different items, broader/narrower concepts, rules, ingredients, places, people, or close-but-distinct games/sports. " +
+    "Return JSON only: {\"accepted\":boolean,\"confidence\":0-1,\"reason\":\"short Japanese reason\"}\n" +
+    "Correct word: " + correctWord + "\nGuess: " + guessWord +
+    "\nPreviously accepted examples for this correct word: " + (acceptedExamples.length ? acceptedExamples.join(", ") : "none") +
+    "\nPreviously rejected examples for this correct word: " + (rejectedExamples.length ? rejectedExamples.join(", ") : "none");
 
-  const response = await client.responses.create({
-    model: paidLlmModel,
-    reasoning: { effort: "none" },
-    input:
-      "You judge a Word Wolf reverse answer. Treat the guess as accepted only when it is essentially the same concept as the correct word. " +
-      "Accepted/rejected examples are table memory for this exact correct word. Use them as the play group's house style when judging synonym boundaries. " +
-      "Accept spelling variants, abbreviations, formal/common names, common English/Japanese translation differences, and very common aliases. " +
-      "Reject merely related words, same-category but different items, broader/narrower concepts, rules, ingredients, places, people, or close-but-distinct games/sports. " +
-      "Return JSON only: {\"accepted\":boolean,\"confidence\":0-1,\"reason\":\"short Japanese reason\"}\n" +
-      "Correct word: " + correctWord + "\nGuess: " + guessWord +
-      "\nPreviously accepted examples for this correct word: " + (acceptedExamples.length ? acceptedExamples.join(", ") : "none") +
-      "\nPreviously rejected examples for this correct word: " + (rejectedExamples.length ? rejectedExamples.join(", ") : "none"),
-  });
-
-  return parseLlmJudgement(response.output_text, feedback);
+  const { text } = await generateGameLlmText(prompt, mode);
+  return parseLlmJudgement(text, feedback);
 }
 
 export async function judgeWordWolfGuess(guessWord: string, correctWord: string): Promise<WordWolfGuessJudgement> {
@@ -328,11 +319,18 @@ export async function judgeWordWolfGuess(guessWord: string, correctWord: string)
   const simple = fuzzyJudgement(guessWord, correctWord, feedback);
   if (simple.source === "exact") return simple;
 
-  if (await hasPaidLlmAccess()) {
+  const mode = await resolveGameLlmMode();
+  if (mode !== "local") {
     try {
-      return (await judgeWithLlm(guessWord, correctWord, feedback, conceptFeedback)) ?? simple;
+      return (await judgeWithLlm(mode, guessWord, correctWord, feedback, conceptFeedback)) ?? simple;
     } catch (error) {
       console.error("[wordwolf/guess] falling back to fuzzy judgement", error);
+      if (mode === "free") {
+        return {
+          ...simple,
+          reason: `${simple.reason} 無料AI（Gemini・Groq）を利用できなかったため、簡易判定を使用しました。`,
+        };
+      }
     }
   }
 

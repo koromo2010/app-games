@@ -10,7 +10,12 @@ import {
   type TopicPairDistance,
   type WordWolfTopic,
 } from "@/lib/wordwolf";
-import { hasPaidLlmAccess, paidLlmModel } from "@/lib/llm-access";
+import {
+  gameLlmFallbackNotice,
+  generateGameLlmText,
+  resolveGameLlmMode,
+  type GameLlmMode,
+} from "@/lib/game-llm";
 import { redisCommand } from "@/lib/redis-store";
 
 const baseTopicPrompt =
@@ -18,25 +23,6 @@ const baseTopicPrompt =
 
 const usedPairKey = "wordwolf:topic:pairs";
 const dailyWordKeyPrefix = "wordwolf:topic:daily-words:";
-
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error(`Timed out after ${timeoutMs}ms`));
-    }, timeoutMs);
-
-    promise.then(
-      (value) => {
-        clearTimeout(timer);
-        resolve(value);
-      },
-      (error: unknown) => {
-        clearTimeout(timer);
-        reject(error);
-      },
-    );
-  });
-}
 
 function getJstDateKey() {
   return new Date(Date.now() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -135,14 +121,8 @@ async function generateLlmTopic(
   pairDistance: TopicPairDistance,
   dictionarySource: Extract<TopicDictionarySource, "llm" | "proper-noun">,
   topicHint: string,
+  mode: Exclude<GameLlmMode, "local">,
 ) {
-  const { default: OpenAI } = await import("openai");
-  const client = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-    maxRetries: 0,
-    timeout: 4000,
-  });
-
   const distancePrompt =
     pairDistance === "near"
       ? "ペアの距離は近い設定です。誰でも共通点をすぐ理解できる類語・兄弟語・同じ用途の組み合わせにしてください。ただし完全な同義語や単なる言い換えは避け、話すと違いが出る余地を残してください。"
@@ -188,16 +168,8 @@ async function generateLlmTopic(
   ].filter(Boolean);
   const promptWithExclusions = `${prompt}${avoidLines.length > 0 ? `\n${avoidLines.join("\n")}` : ""}`;
 
-  const response = await withTimeout(
-    client.responses.create({
-      model: paidLlmModel,
-      reasoning: { effort: "none" },
-      input: promptWithExclusions,
-    }),
-    4500,
-  );
-
-  return parseTopic(response.output_text, pairDistance, dictionarySource);
+  const { text } = await generateGameLlmText(promptWithExclusions, mode);
+  return parseTopic(text, pairDistance, dictionarySource);
 }
 
 export async function GET(request: Request) {
@@ -206,20 +178,24 @@ export async function GET(request: Request) {
   const allExcludeKeys = normalizeList([...excludeKeys, ...storedUsage.usedPairs]);
   const allExcludeWords = normalizeList([...excludeWords, ...storedUsage.dailyWords]);
   const requiresLlm = dictionarySource === "llm" || dictionarySource === "proper-noun";
-  const canUsePaidLlm = requiresLlm ? await hasPaidLlmAccess() : false;
+  const mode = requiresLlm ? await resolveGameLlmMode() : "local";
 
   const fallbackTopic = () => pickFallbackTopic(allExcludeKeys, dictionarySource, pairDistance, allExcludeWords, topicHint);
 
-  if (!requiresLlm || !canUsePaidLlm) {
-    const topic = fallbackTopic();
+  if (!requiresLlm || mode === "local") {
+    const topic = requiresLlm
+      ? { ...fallbackTopic(), notice: gameLlmFallbackNotice }
+      : fallbackTopic();
     await rememberStoredTopicUsage(topic);
     return Response.json(topic);
   }
 
-  const deadline = Date.now() + 28000;
+  const deadline = Date.now() + (mode === "paid" ? 28000 : 14000);
   let lastError: unknown = null;
+  let attempts = 0;
 
-  while (Date.now() < deadline) {
+  while (Date.now() < deadline && (mode === "paid" || attempts < 1)) {
+    attempts += 1;
     try {
       const topic = await generateLlmTopic(
         allExcludeKeys,
@@ -227,6 +203,7 @@ export async function GET(request: Request) {
         pairDistance,
         dictionarySource === "proper-noun" ? "proper-noun" : "llm",
         topicHint,
+        mode,
       );
       if (topic && isTopicAllowed(topic, allExcludeKeys, allExcludeWords)) {
         await rememberStoredTopicUsage(topic);
@@ -240,5 +217,15 @@ export async function GET(request: Request) {
   if (lastError) {
     console.error("[wordwolf/topic] LLM topic generation did not complete", lastError);
   }
+
+  if (mode === "free") {
+    const topic = {
+      ...fallbackTopic(),
+      notice: gameLlmFallbackNotice,
+    };
+    await rememberStoredTopicUsage(topic);
+    return Response.json(topic);
+  }
+
   return Response.json({ error: "LLM topic generation did not complete." }, { status: 503 });
 }
