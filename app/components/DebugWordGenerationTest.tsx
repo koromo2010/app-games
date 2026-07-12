@@ -16,9 +16,23 @@ export type DebugWordGenerationResult = {
 
 type DebugWordGenerationTestProps = {
   onGenerate: (forceNew: boolean) => Promise<DebugWordGenerationResult>;
+  heading?: string;
+  description?: string;
+  forceNewTitle?: string;
+  forceNewDescription?: string;
+  forceNewButtonLabel?: string;
+  forceNewRepeatLabel?: string;
 };
 
-export function DebugWordGenerationTest({ onGenerate }: DebugWordGenerationTestProps) {
+export function DebugWordGenerationTest({
+  onGenerate,
+  heading = "ワード生成だけテスト",
+  description = "現在の設定で生成結果だけ確認します。部屋・ラウンド・出題履歴は変更しません。",
+  forceNewTitle = "新規ワード生成",
+  forceNewDescription = "ON: AIで新規生成　OFF: ローカル候補の選択をテスト",
+  forceNewButtonLabel = "新規ワード生成をテスト",
+  forceNewRepeatLabel = "別の新規ワードを生成",
+}: DebugWordGenerationTestProps) {
   const [result, setResult] = useState<DebugWordGenerationResult | null>(null);
   const [error, setError] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
@@ -40,9 +54,9 @@ export function DebugWordGenerationTest({ onGenerate }: DebugWordGenerationTestP
 
   return (
     <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
-      <p className="text-sm font-black text-amber-950">ワード生成だけテスト</p>
+      <p className="text-sm font-black text-amber-950">{heading}</p>
       <p className="mt-1 text-xs leading-5 text-amber-800">
-        現在の設定で生成結果だけ確認します。部屋・ラウンド・出題履歴は変更しません。
+        {description}
       </p>
       <label className="mt-3 flex cursor-pointer items-start gap-2 rounded-lg border border-amber-200 bg-white p-3">
         <input
@@ -53,9 +67,9 @@ export function DebugWordGenerationTest({ onGenerate }: DebugWordGenerationTestP
           className="mt-0.5 size-4 accent-amber-600"
         />
         <span>
-          <span className="block text-sm font-bold text-amber-950">新規ワード生成</span>
+          <span className="block text-sm font-bold text-amber-950">{forceNewTitle}</span>
           <span className="mt-0.5 block text-xs leading-5 text-amber-800">
-            ON: AIで新規生成　OFF: ローカル候補の選択をテスト
+            {forceNewDescription}
           </span>
         </span>
       </label>
@@ -68,7 +82,7 @@ export function DebugWordGenerationTest({ onGenerate }: DebugWordGenerationTestP
         {isGenerating
           ? "ワード生成中..."
           : forceNew
-            ? result ? "別の新規ワードを生成" : "新規ワード生成をテスト"
+            ? result ? forceNewRepeatLabel : forceNewButtonLabel
             : result ? "別のローカル候補を確認" : "ローカル候補をテスト"}
       </button>
       {error && (

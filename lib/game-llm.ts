@@ -14,6 +14,7 @@ export type GameLlmGenerationOptions = {
   preferredProvider?: GameLlmProvider;
   excludedProviders?: GameLlmProvider[];
   quality?: "standard" | "high";
+  timeoutMs?: number;
 };
 
 export const gameLlmFallbackNotice =
@@ -42,12 +43,12 @@ async function providerOrder(mode: Exclude<GameLlmMode, "local">, options: GameL
   return [...new Set(ordered)].filter((provider) => !excluded.has(provider));
 }
 
-async function generateOpenAiText(prompt: string, quality: "standard" | "high", apiKey: string) {
+async function generateOpenAiText(prompt: string, quality: "standard" | "high", apiKey: string, timeoutMs?: number) {
   const { default: OpenAI } = await import("openai");
   const client = new OpenAI({
     apiKey,
     maxRetries: 0,
-    timeout: quality === "high" ? 30000 : 6000,
+    timeout: timeoutMs ?? (quality === "high" ? 30000 : 6000),
   });
   const response = await client.responses.create({
     model: paidLlmModel,
@@ -64,6 +65,7 @@ async function callProvider(
   prompt: string,
   quality: "standard" | "high",
   requestedMode: Exclude<GameLlmMode, "local">,
+  timeoutMs?: number,
 ) {
   const personal = requestedMode === "personal" ? await getPersonalLlmAccess() : null;
   const personalApiKey = personal?.provider === provider ? personal.apiKey : undefined;
@@ -71,7 +73,7 @@ async function callProvider(
     const apiKey = personalApiKey || (requestedMode === "paid" ? process.env.OPENAI_API_KEY?.trim() : "");
     if (!apiKey) throw new Error("OpenAI API access is not available.");
     return {
-      text: await generateOpenAiText(prompt, quality, apiKey),
+      text: await generateOpenAiText(prompt, quality, apiKey, timeoutMs),
       model: paidLlmModel,
       mode: personalApiKey ? "personal" as const : "paid" as const,
       billingSource: personalApiKey ? "personal" as const : "game-fields" as const,
@@ -79,14 +81,14 @@ async function callProvider(
   }
   if (provider === "gemini") {
     return {
-      text: await generateGeminiText(prompt, { quality, apiKey: personalApiKey }),
+      text: await generateGeminiText(prompt, { quality, apiKey: personalApiKey, timeoutMs }),
       model: freeLlmModel,
       mode: personalApiKey ? "personal" as const : "free" as const,
       billingSource: personalApiKey ? "personal" as const : undefined,
     };
   }
   return {
-    text: await generateGroqText(prompt, quality, personalApiKey),
+    text: await generateGroqText(prompt, quality, personalApiKey, timeoutMs),
     model: freeGroqLlmModel,
     mode: personalApiKey ? "personal" as const : "free" as const,
     billingSource: personalApiKey ? "personal" as const : undefined,
@@ -106,7 +108,7 @@ export async function generateGameLlmText(
   for (const provider of await providerOrder(mode, options)) {
     attemptedProviders.push(provider);
     try {
-      const generated = await callProvider(provider, prompt, quality, mode);
+      const generated = await callProvider(provider, prompt, quality, mode, options.timeoutMs);
       return {
         ...generated,
         provider,

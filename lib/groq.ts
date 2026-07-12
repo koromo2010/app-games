@@ -8,6 +8,7 @@ export async function generateGroqText(
   prompt: string,
   quality: "standard" | "high" = "standard",
   apiKeyOverride?: string,
+  timeoutMs?: number,
 ) {
   const apiKey = apiKeyOverride?.trim() || process.env.GROQ_API_KEY?.trim();
   if (!apiKey) throw new Error("GROQ_API_KEY is not configured.");
@@ -17,7 +18,7 @@ export async function generateGroqText(
     apiKey,
     baseURL: "https://api.groq.com/openai/v1",
     maxRetries: 0,
-    timeout: quality === "high" ? 30000 : 6000,
+    timeout: timeoutMs ?? (quality === "high" ? 30000 : 6000),
   });
   const response = await client.responses.create({
     model: freeGroqLlmModel,

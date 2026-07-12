@@ -311,23 +311,36 @@ async function collectInaturalistTerms(source: TahoiyaSourceRegistryRecord, curs
 
 async function collectFromSource(source: TahoiyaSourceRegistryRecord) {
   const rawCursor = await redisCommand<string | null>(["HGET", cursorKey, source.id]);
-  const cursor = Number.parseInt(rawCursor || "0", 10) || 0;
-  const collectors: Record<SourceStrategy, () => Promise<TahoiyaSourceEntry[]>> = {
-    "mesh-lookup": () => collectMeshTerms(source, cursor),
-    "getty-sparql": () => collectGettyTerms(source, cursor),
-    "loc-suggest": () => collectLocTerms(source, cursor),
-    "openalex-topics": () => collectOpenAlexTerms(source, cursor),
-    "gbif-species": () => collectGbifTerms(source, cursor),
-    "worms-taxa": () => collectWormsTerms(source, cursor),
-    "lobid-gnd": () => collectLobidTerms(source, cursor),
-    "wikidata-sparql": () => collectSparqlTerms(source, cursor),
-    "agrovoc-sparql": () => collectSparqlTerms(source, cursor),
-    "dbpedia-sparql": () => collectSparqlTerms(source, cursor),
-    "inaturalist-taxa": () => collectInaturalistTerms(source, cursor),
-  };
-  const entries = await collectors[source.strategy]();
-  await redisCommand<number>(["HSET", cursorKey, source.id, String(cursor + 1)]);
-  return entries;
+  const initialCursor = Number.parseInt(rawCursor || "0", 10) || 0;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const cursor = initialCursor + attempt;
+    try {
+      const collectors: Record<SourceStrategy, () => Promise<TahoiyaSourceEntry[]>> = {
+        "mesh-lookup": () => collectMeshTerms(source, cursor),
+        "getty-sparql": () => collectGettyTerms(source, cursor),
+        "loc-suggest": () => collectLocTerms(source, cursor),
+        "openalex-topics": () => collectOpenAlexTerms(source, cursor),
+        "gbif-species": () => collectGbifTerms(source, cursor),
+        "worms-taxa": () => collectWormsTerms(source, cursor),
+        "lobid-gnd": () => collectLobidTerms(source, cursor),
+        "wikidata-sparql": () => collectSparqlTerms(source, cursor),
+        "agrovoc-sparql": () => collectSparqlTerms(source, cursor),
+        "dbpedia-sparql": () => collectSparqlTerms(source, cursor),
+        "inaturalist-taxa": () => collectInaturalistTerms(source, cursor),
+      };
+      const entries = await collectors[source.strategy]();
+      await redisCommand<number>(["HSET", cursorKey, source.id, String(cursor + 1)]);
+      if (entries.length > 0) {
+        console.info(`[tahoiya/source] ${source.id} fetched ${entries.length} entries on attempt ${attempt + 1}`);
+        return entries;
+      }
+      console.warn(`[tahoiya/source] ${source.id} returned no entries on attempt ${attempt + 1}`);
+    } catch (error) {
+      console.warn(`[tahoiya/source] ${source.id} failed on attempt ${attempt + 1}`, error);
+    }
+  }
+  await redisCommand<number>(["HSET", cursorKey, source.id, String(initialCursor + 3)]);
+  return [];
 }
 
 async function storeStagedEntries(entries: TahoiyaSourceEntry[]) {
@@ -345,6 +358,8 @@ export async function refreshTahoiyaSourceShelf(sourceIds?: string[]) {
   const selected = sourceIds?.length ? sources.filter((source) => sourceIds.includes(source.id)) : sources;
   const settled = await Promise.allSettled(selected.map(collectFromSource));
   const entries = settled.flatMap((result) => result.status === "fulfilled" ? result.value : []);
+  const successfulSources = new Set(entries.map((entry) => entry.sourceRegistryId));
+  console.info(`[tahoiya/source] refreshed ${successfulSources.size}/${selected.length} sources: ${[...successfulSources].join(",")}`);
   await storeStagedEntries(entries);
   return entries;
 }

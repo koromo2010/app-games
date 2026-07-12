@@ -512,7 +512,7 @@ async function reviewSourceBatch(
     feedbackContext.slice(0, 1_500),
   ].filter(Boolean).join("\n\n");
   console.info(`[tahoiya/topic] reviewing ${sources.length} sources with ${prompt.length} prompt chars`);
-  const generated = await generateGameLlmText(prompt, mode, { quality: "standard" });
+  const generated = await generateGameLlmText(prompt, mode, { quality: "standard", timeoutMs: 25_000 });
   const reviewed = parseBatchReview(generated.text, sources);
   if (reviewed.length !== sources.length) throw new Error(`Batch review returned ${reviewed.length}/${sources.length} items`);
   const generation: GameGenerationMeta = {
@@ -569,6 +569,9 @@ async function generateTopicResponse(
       await remember(reusableTopic);
       return Response.json(reusableTopic);
     }
+    return Response.json({
+      error: "参加者全員が未使用の候補がありません。デバッグ画面から候補DBを補充してください。",
+    }, { status: 503 });
   }
 
   const mode = await resolveGameLlmMode();
@@ -576,42 +579,6 @@ async function generateTopicResponse(
     return Response.json({ error: "候補DBに未使用語がなく、新規候補を審査できるAI APIもありません。" }, { status: 503 });
   }
 
-  if (forceNew) {
-    try {
-      const sources = await loadUnreviewedTahoiyaSources(10);
-      if (sources.length < 10) {
-        return Response.json({ error: `未審査の素材候補が${sources.length}件しかありません。素材ライブラリを補充してください。` }, { status: 409 });
-      }
-      const batch = await reviewSourceBatch(mode, sources, feedbackContext, retrievedFeedbackIds);
-      await rememberTahoiyaReviewedBatch(
-        sources.map((source) => source.id),
-        batch.candidates,
-        retrievedFeedbackIds,
-      );
-      return Response.json({
-        batch: batch.reviewed.map((item) => ({
-          sourceId: item.source.id,
-          accepted: item.accepted,
-          word: item.word,
-          reading: item.reading,
-          realDefinition: item.realDefinition,
-          note: item.note,
-          difficulty: item.difficulty,
-          difficultyReason: item.difficultyReason,
-          genre: item.source.genre,
-          sourceLibrary: item.source.sourceLibrary,
-        })),
-        registeredCount: batch.candidates.length,
-        generation: batch.generation,
-      });
-    } catch (error) {
-      console.error("[tahoiya/topic] source batch review failed", error);
-      return Response.json({ error: "素材候補10件のAI審査に失敗しました。もう一度お試しください。" }, { status: 503 });
-    }
-  }
-
-  // A real round also refills the playable catalog in batches. One LLM call
-  // therefore pays for several future rounds instead of producing one word.
   try {
     const sources = await loadUnreviewedTahoiyaSources(10);
     if (sources.length < 10) {
@@ -623,18 +590,25 @@ async function generateTopicResponse(
       batch.candidates,
       retrievedFeedbackIds,
     );
-    const selected = batch.candidates.find((candidate) => candidate.difficulty === difficulty);
-    if (selected) {
-      await rememberTahoiyaTopicExperience(selected.topic, difficulty, playerIds).catch(() => undefined);
-      return Response.json(selected.topic);
-    }
     return Response.json({
-      error: `10件を審査して${batch.candidates.length}件登録しましたが、現在の難易度に合う新規候補がありませんでした。`,
+      batch: batch.reviewed.map((item) => ({
+        sourceId: item.source.id,
+        accepted: item.accepted,
+        word: item.word,
+        reading: item.reading,
+        realDefinition: item.realDefinition,
+        note: item.note,
+        difficulty: item.difficulty,
+        difficultyReason: item.difficultyReason,
+        genre: item.source.genre,
+        sourceLibrary: item.source.sourceLibrary,
+      })),
       registeredCount: batch.candidates.length,
-    }, { status: 422 });
+      generation: batch.generation,
+    });
   } catch (error) {
-    console.error("[tahoiya/topic] catalog batch refill failed", error);
-    return Response.json({ error: "取得元10件の一括審査に失敗しました。旧ローカル候補には切り替えません。" }, { status: 503 });
+    console.error("[tahoiya/topic] source batch review failed", error);
+    return Response.json({ error: "素材候補10件のAI審査に失敗しました。もう一度お試しください。" }, { status: 503 });
   }
 
 }

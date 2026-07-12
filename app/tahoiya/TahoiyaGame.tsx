@@ -1256,7 +1256,15 @@ export function TahoiyaGame() {
                     <>
                     {isDebugMode && (
                       <>
-                        <DebugWordGenerationTest onGenerate={testWordGeneration} />
+                        <DebugWordGenerationTest
+                          onGenerate={testWordGeneration}
+                          heading="候補DBの補充・確認"
+                          description="通常ゲームではAIを呼びません。ここで10件を一括審査し、採用語を候補DBへ未使用状態で保存します。"
+                          forceNewTitle="候補DBを10件補充"
+                          forceNewDescription="ON: 異なる10取得元から収集してAI審査　OFF: 保存済み候補を確認"
+                          forceNewButtonLabel="10件を審査して候補DBへ補充"
+                          forceNewRepeatLabel="さらに10件を補充"
+                        />
                         <button onClick={addTestPlayer} disabled={room.players.length >= 8} className={`w-full ${subtleButtonClass}`}>
                           テストプレイヤー追加
                         </button>
