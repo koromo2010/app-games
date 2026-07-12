@@ -110,6 +110,11 @@ export async function loadExperiencedTahoiyaWords(playerIds: string[]) {
     .map((record) => normalizeWord(record.topic.word));
 }
 
+export async function loadTahoiyaCatalogWords() {
+  const words = await redisCommand<string[]>(["HKEYS", catalogKey]);
+  return Array.isArray(words) ? words.map(normalizeWord).filter(Boolean) : [];
+}
+
 export async function rememberTahoiyaTopicExperience(
   topic: TahoiyaTopic,
   difficulty: TahoiyaDifficulty,

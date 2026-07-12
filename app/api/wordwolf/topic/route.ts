@@ -23,6 +23,7 @@ import { loadStoredWordWolfRoom } from "@/lib/wordwolf-room-store";
 import {
   findReusableWordWolfTopic,
   loadExperiencedWordWolfWords,
+  loadWordWolfCatalogWords,
   rememberWordWolfTopicCandidate,
   rememberWordWolfTopicExperience,
 } from "@/lib/wordwolf-topic-catalog";
@@ -195,11 +196,14 @@ async function generateLlmTopic(
     : null;
 }
 
-async function generateTopicResponse(request: Request, playerIds: string[], previewOnly = false) {
+async function generateTopicResponse(request: Request, playerIds: string[], previewOnly = false, forceNew = false) {
   const { excludeKeys, excludeWords, dictionarySource, pairDistance, topicHint } = getTopicRequestOptions(request);
-  const experiencedWords = await loadExperiencedWordWolfWords(playerIds).catch(() => []);
+  const [experiencedWords, catalogWords] = await Promise.all([
+    loadExperiencedWordWolfWords(playerIds).catch(() => []),
+    forceNew ? loadWordWolfCatalogWords().catch(() => []) : Promise.resolve([]),
+  ]);
   const allExcludeKeys = excludeKeys;
-  const allExcludeWords = normalizeList([...excludeWords, ...experiencedWords]);
+  const allExcludeWords = normalizeList([...excludeWords, ...experiencedWords, ...catalogWords]);
   const requiresLlm = dictionarySource === "llm" || dictionarySource === "proper-noun";
   const feedbackRecords = requiresLlm
     ? await retrieveGameFeedback({
@@ -218,26 +222,32 @@ async function generateTopicResponse(request: Request, playerIds: string[], prev
     }
   };
 
-  const reusableTopic = await findReusableWordWolfTopic({
-    dictionarySource,
-    pairDistance,
-    topicHint,
-    playerIds,
-    blockedWords: allExcludeWords,
-  }).catch(() => null);
-  if (reusableTopic) {
-    await remember(reusableTopic);
-    return Response.json(reusableTopic);
-  }
+  if (!forceNew) {
+    const reusableTopic = await findReusableWordWolfTopic({
+      dictionarySource,
+      pairDistance,
+      topicHint,
+      playerIds,
+      blockedWords: allExcludeWords,
+    }).catch(() => null);
+    if (reusableTopic) {
+      await remember(reusableTopic);
+      return Response.json(reusableTopic);
+    }
 
-  const localTopic = pickFallbackTopic(allExcludeKeys, dictionarySource, pairDistance, allExcludeWords, topicHint);
-  if (!localTopic.fallbackExhausted) {
-    const topic = { ...localTopic, generation: localGenerationMeta(retrievedFeedbackIds) };
-    await remember(topic);
-    return Response.json(topic);
+    const localTopic = pickFallbackTopic(allExcludeKeys, dictionarySource, pairDistance, allExcludeWords, topicHint);
+    if (!localTopic.fallbackExhausted) {
+      const topic = { ...localTopic, generation: localGenerationMeta(retrievedFeedbackIds) };
+      await remember(topic);
+      return Response.json(topic);
+    }
   }
 
   const mode = requiresLlm ? await resolveGameLlmMode() : "local";
+  if (forceNew && mode === "local") {
+    return Response.json({ error: "新規ワード生成に利用できるAI APIがありません。" }, { status: 503 });
+  }
+  const localTopic = pickFallbackTopic(allExcludeKeys, dictionarySource, pairDistance, allExcludeWords, topicHint);
   if (!requiresLlm || mode === "local") {
     const topic = { ...localTopic, notice: gameLlmFallbackNotice, generation: localGenerationMeta(retrievedFeedbackIds) };
     await remember(topic);
@@ -263,6 +273,10 @@ async function generateTopicResponse(request: Request, playerIds: string[], prev
     console.error("[wordwolf/topic] provider chain did not complete", error);
   }
 
+  if (forceNew) {
+    return Response.json({ error: "AIによる新規ワード生成に失敗しました。もう一度お試しください。" }, { status: 503 });
+  }
+
   const topic = {
     ...localTopic,
     notice: gameLlmFallbackNotice,
@@ -275,12 +289,13 @@ async function generateTopicResponse(request: Request, playerIds: string[], prev
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const previewOnly = url.searchParams.get("test") === "1";
+  const forceNew = previewOnly && url.searchParams.get("forceNew") === "1";
   const roomCode = url.searchParams.get("roomCode")?.trim().toUpperCase() ?? "";
   const gameNumber = url.searchParams.get("gameNumber")?.trim() ?? "";
   const room = roomCode ? await loadStoredWordWolfRoom(roomCode).catch(() => null) : null;
   const playerIds = room?.players.map((player) => player.id) ?? [];
   const requestKey = roomCode && gameNumber ? `${roomCode}:${gameNumber}` : "";
-  if (!requestKey || previewOnly) return generateTopicResponse(request, playerIds, previewOnly);
+  if (!requestKey || previewOnly) return generateTopicResponse(request, playerIds, previewOnly, forceNew);
 
   try {
     const cached = await withGameGenerationCache(wordwolfTopicPromptVersion, requestKey, async () => {

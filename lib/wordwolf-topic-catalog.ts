@@ -81,6 +81,14 @@ export async function loadExperiencedWordWolfWords(playerIds: string[]) {
   return experiencedWords;
 }
 
+export async function loadWordWolfCatalogWords() {
+  const values = await redisCommand<string[]>(["HVALS", catalogKey]);
+  return (Array.isArray(values) ? values : [])
+    .map(parseRecord)
+    .filter((record): record is WordWolfTopicCatalogRecord => Boolean(record))
+    .flatMap((record) => getTopicWords(record.topic));
+}
+
 export async function findReusableWordWolfTopic(input: {
   dictionarySource: TopicDictionarySource;
   pairDistance: TopicPairDistance;

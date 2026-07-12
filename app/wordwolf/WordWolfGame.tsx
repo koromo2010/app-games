@@ -1207,6 +1207,7 @@ export function WordWolfGame() {
     if (!room) throw new Error("部屋の設定を読み込めませんでした。");
     const params = new URLSearchParams({
       test: "1",
+      forceNew: "1",
       roomCode: room.code,
       source: room.topicDictionarySource,
       distance: room.topicPairDistance,
