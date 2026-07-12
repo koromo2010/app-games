@@ -7,6 +7,7 @@ export type GameGenerationMeta = {
   retrievedFeedbackIds: string[];
   reviewProvider?: "openai" | "gemini" | "groq" | "local";
   reviewModel?: string;
+  reusedFromCatalog?: boolean;
 };
 
 export type GameFeedbackRating = "good" | "bad";
@@ -51,5 +52,6 @@ export function normalizeGameGenerationMeta(value: unknown): GameGenerationMeta 
         ? parsed.reviewProvider
         : undefined,
     reviewModel: typeof parsed.reviewModel === "string" ? parsed.reviewModel.slice(0, 100) : undefined,
+    reusedFromCatalog: parsed.reusedFromCatalog === true ? true : undefined,
   };
 }

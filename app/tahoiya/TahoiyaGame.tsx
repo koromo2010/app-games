@@ -11,7 +11,7 @@ import {
 } from "@/lib/player-session";
 import { loadPlayerRoomDefaults, savePlayerRoomDefaults } from "@/lib/game-room-defaults-client";
 import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
-import type { TahoiyaAnswererMode, TahoiyaPlayMode, TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomAction, TahoiyaRoomChoice, TahoiyaTopic } from "@/lib/tahoiya-types";
+import type { TahoiyaAnswererMode, TahoiyaDifficulty, TahoiyaPlayMode, TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomAction, TahoiyaRoomChoice, TahoiyaTopic } from "@/lib/tahoiya-types";
 import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
 import { GameFeedbackPanel } from "../components/GameFeedbackPanel";
 import { RoomConfigSummary } from "../components/RoomConfigSummary";
@@ -36,7 +36,7 @@ const tahoiyaFeedbackReasons = [
   { value: "other", label: "その他" },
 ];
 
-type TahoiyaRoomDefaults = Pick<TahoiyaRoom, "playMode" | "answererMode" | "showRealDefinitionToWriters" | "actionTimeLimitSeconds">;
+type TahoiyaRoomDefaults = Pick<TahoiyaRoom, "playMode" | "topicDifficulty" | "answererMode" | "showRealDefinitionToWriters" | "actionTimeLimitSeconds">;
 
 function makeId(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
@@ -65,12 +65,13 @@ function getRoomDefaultsKey(playerId: string, ownerId: string) {
 
 function normalizeRoomDefaults(value: unknown): TahoiyaRoomDefaults {
   if (!value || typeof value !== "object") {
-    return { playMode: "single-answerer", answererMode: "random", showRealDefinitionToWriters: true, actionTimeLimitSeconds: 0 };
+    return { playMode: "single-answerer", topicDifficulty: "standard", answererMode: "random", showRealDefinitionToWriters: true, actionTimeLimitSeconds: 0 };
   }
   const parsed = value as Partial<TahoiyaRoomDefaults>;
   const playMode = parsed.playMode === "all-vote" ? "all-vote" : "single-answerer";
   return {
     playMode,
+    topicDifficulty: parsed.topicDifficulty === "extreme" ? "extreme" : "standard",
     answererMode: parsed.answererMode === "manual" ? "manual" : "random",
     showRealDefinitionToWriters: playMode === "single-answerer" && parsed.showRealDefinitionToWriters !== false,
     actionTimeLimitSeconds: normalizeCommonTimeLimit(parsed.actionTimeLimitSeconds),
@@ -140,6 +141,7 @@ function normalizeRoom(room: TahoiyaRoom): TahoiyaRoom {
     players: Array.isArray(room.players) ? room.players : [],
     parentId: room.parentId || room.hostId,
     playMode,
+    topicDifficulty: room.topicDifficulty === "extreme" ? "extreme" : "standard",
     answererMode: room.answererMode === "manual" ? "manual" : "random",
     showRealDefinitionToWriters: playMode === "single-answerer" && room.showRealDefinitionToWriters !== false,
     actionTimeLimitSeconds: normalizeCommonTimeLimit(room.actionTimeLimitSeconds),
@@ -320,6 +322,7 @@ function createEmptyRoom(
     players: [host],
     parentId: host.id,
     playMode: defaults.playMode,
+    topicDifficulty: defaults.topicDifficulty,
     answererMode: defaults.answererMode,
     showRealDefinitionToWriters: defaults.showRealDefinitionToWriters,
     actionTimeLimitSeconds: defaults.actionTimeLimitSeconds,
@@ -477,6 +480,7 @@ export function TahoiyaGame() {
   const roomConfigItems = room
     ? [
         { label: "遊び方", value: room.playMode === "all-vote" ? "全員作成・全員投票" : "回答者1人" },
+        { label: "お題難易度", value: room.topicDifficulty === "extreme" ? "高難易度" : "通常" },
         ...(room.playMode === "single-answerer"
           ? [{ label: "回答者", value: answerer?.name ?? (room.answererMode === "random" ? "開始時にランダム" : "未指定") }]
           : []),
@@ -627,6 +631,11 @@ export function TahoiyaGame() {
     }, true);
   };
 
+  const setTopicDifficulty = (topicDifficulty: TahoiyaDifficulty) => {
+    if (!room || room.phase !== "lobby") return;
+    setAndSaveRoom({ ...room, topicDifficulty }, true);
+  };
+
   const setManualAnswerer = (answererId: string) => {
     if (!room || room.phase !== "lobby") return;
     setAndSaveRoom({ ...room, answererId }, true);
@@ -667,7 +676,11 @@ export function TahoiyaGame() {
     setIsStarting(true);
     setMessage("");
     try {
-      const topicParams = new URLSearchParams({ roomCode: playableRoom.code, round: String(playableRoom.round) });
+      const topicParams = new URLSearchParams({
+        roomCode: playableRoom.code,
+        round: String(playableRoom.round),
+        difficulty: playableRoom.topicDifficulty,
+      });
       const response = await fetch(`/api/tahoiya/topic?${topicParams.toString()}`, { cache: "no-store" });
       const topic = (await response.json()) as TahoiyaTopic & { error?: string };
       if (!response.ok || !topic.word || !topic.realDefinition) {
@@ -937,6 +950,38 @@ export function TahoiyaGame() {
                         {room.playMode === "all-vote"
                           ? "全員が偽説明を書き、全員で投票して最多得票を競います。"
                           : "1人だけが回答し、それ以外の参加者が偽説明を書きます。"}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                      <p className="text-sm font-bold text-slate-950">お題の難易度</p>
+                      <div className="mt-2 grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setTopicDifficulty("standard")}
+                          className={`rounded-lg border px-3 py-2 text-sm font-bold ${
+                            room.topicDifficulty === "standard"
+                              ? "border-cyan-500 bg-cyan-100 text-cyan-950"
+                              : "border-slate-300 bg-white text-slate-700"
+                          }`}
+                        >
+                          通常
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTopicDifficulty("extreme")}
+                          className={`rounded-lg border px-3 py-2 text-sm font-bold ${
+                            room.topicDifficulty === "extreme"
+                              ? "border-rose-500 bg-rose-100 text-rose-950"
+                              : "border-slate-300 bg-white text-slate-700"
+                          }`}
+                        >
+                          高難易度
+                        </button>
+                      </div>
+                      <p className="mt-2 text-xs text-slate-500">
+                        {room.topicDifficulty === "extreme"
+                          ? "難語好きでも知らないほど使用頻度の低い語を優先します。"
+                          : "一般的な大人が意味を知らない難語を選びます。"}
                       </p>
                     </div>
                     {room.playMode === "single-answerer" && (
@@ -1333,6 +1378,7 @@ export function TahoiyaGame() {
                         <p>
                           <span className="font-bold text-slate-800">生成:</span>{" "}
                           {room.topicGeneration.provider} / {room.topicGeneration.model} / {room.topicGeneration.promptVersion}
+                          {room.topicGeneration.reusedFromCatalog ? " / 保存済み問題を再利用" : ""}
                         </p>
                       )}
                     </div>
@@ -1370,7 +1416,8 @@ export function TahoiyaGame() {
                         playMode: room.playMode,
                         answererMode: room.answererMode,
                         showRealDefinitionToWriters: room.showRealDefinitionToWriters,
-                        difficulty: "very-hard",
+                        difficulty: room.topicDifficulty,
+                        reusedFromCatalog: room.topicGeneration.reusedFromCatalog === true,
                         definitionStyle: definitionGranularity,
                         definitionLength,
                         punctuationStyle: "no-parentheses",

@@ -25,6 +25,7 @@ export type StoredWordWolfRoomDefaults = {
 
 export type StoredTahoiyaRoomDefaults = {
   playMode: "single-answerer" | "all-vote";
+  topicDifficulty: "standard" | "extreme";
   answererMode: "manual" | "random";
   showRealDefinitionToWriters: boolean;
   actionTimeLimitSeconds: number;
@@ -82,6 +83,7 @@ function normalizeTahoiyaDefaults(value: unknown): StoredTahoiyaRoomDefaults {
   const playMode = parsed.playMode === "all-vote" ? "all-vote" : "single-answerer";
   return {
     playMode,
+    topicDifficulty: parsed.topicDifficulty === "extreme" ? "extreme" : "standard",
     answererMode: parsed.answererMode === "manual" ? "manual" : "random",
     showRealDefinitionToWriters: playMode === "single-answerer" && parsed.showRealDefinitionToWriters !== false,
     actionTimeLimitSeconds: normalizeCommonTimeLimit(parsed.actionTimeLimitSeconds),

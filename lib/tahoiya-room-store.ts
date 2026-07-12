@@ -96,6 +96,7 @@ function normalizeRoom(value: unknown): TahoiyaRoom | null {
     players,
     parentId,
     playMode,
+    topicDifficulty: parsed.topicDifficulty === "extreme" ? "extreme" : "standard",
     answererMode: isAnswererMode(parsed.answererMode) ? parsed.answererMode : "random",
     showRealDefinitionToWriters: playMode === "single-answerer" && parsed.showRealDefinitionToWriters !== false,
     actionTimeLimitSeconds: normalizeCommonTimeLimit(parsed.actionTimeLimitSeconds),

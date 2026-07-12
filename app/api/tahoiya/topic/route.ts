@@ -9,9 +9,11 @@ import type { GameGenerationMeta } from "@/lib/game-ai-types";
 import { formatGameFeedbackContext, retrieveGameFeedback } from "@/lib/game-feedback-store";
 import { redisCommand } from "@/lib/redis-store";
 import { withGameGenerationCache } from "@/lib/game-generation-cache";
-import type { TahoiyaTopic } from "@/lib/tahoiya-types";
+import { loadStoredTahoiyaRoom } from "@/lib/tahoiya-room-store";
+import { findReusableTahoiyaTopic, rememberTahoiyaTopicExperience } from "@/lib/tahoiya-topic-catalog";
+import type { TahoiyaDifficulty, TahoiyaTopic } from "@/lib/tahoiya-types";
 
-const tahoiyaTopicPromptVersion = "tahoiya-topic-v7";
+const tahoiyaTopicPromptVersion = "tahoiya-topic-v8";
 export const maxDuration = 180;
 const usedTopicWordsKey = "tahoiya:topic:used-words";
 type DefinitionStyle = "brief" | "standard" | "detailed";
@@ -136,6 +138,73 @@ const fallbackTopics: TahoiyaTopic[] = [
   },
 ];
 
+const extremeFallbackTopics: TahoiyaTopic[] = [
+  {
+    word: "侘傺",
+    reading: "たてい",
+    realDefinition: "失意のまま進退に迷うさま。",
+    note: "日常ではまず使われず、字面から意味を推測しにくい語。",
+    sourceDetail: "ローカル収録候補。漢語辞典にある失意の語義をゲーム用に簡潔化。",
+    source: "fallback",
+  },
+  {
+    word: "齏粉",
+    reading: "せいふん",
+    realDefinition: "細かく砕かれて粉々になること。",
+    note: "読みも意味も一般にはほとんど知られていない語。",
+    sourceDetail: "ローカル収録候補。国語辞典にある粉砕の語義をゲーム用に簡潔化。",
+    source: "fallback",
+  },
+  {
+    word: "罅隙",
+    reading: "かげき",
+    realDefinition: "物にできた割れ目やすき間。",
+    note: "構成する字からも読みと意味を当てにくい語。",
+    sourceDetail: "ローカル収録候補。国語辞典にある裂け目の語義をゲーム用に簡潔化。",
+    source: "fallback",
+  },
+  {
+    word: "縕袍",
+    reading: "おんぽう",
+    realDefinition: "古い綿を入れて作った粗末な着物。",
+    note: "古典由来で現代の一般語彙から大きく外れる衣服名。",
+    sourceDetail: "ローカル収録候補。古語辞典にある衣服の語義をゲーム用に簡潔化。",
+    source: "fallback",
+  },
+  {
+    word: "輓近",
+    reading: "ばんきん",
+    realDefinition: "現在に近い過去の時期。",
+    note: "意味の手掛かりが少ない古い漢語。",
+    sourceDetail: "ローカル収録候補。国語辞典にある近年の語義をゲーム用に簡潔化。",
+    source: "fallback",
+  },
+  {
+    word: "倥偬",
+    reading: "こうそう",
+    realDefinition: "物事に追われて慌ただしいこと。",
+    note: "読みも用法も一般にはなじみが薄い漢語。",
+    sourceDetail: "ローカル収録候補。国語辞典にある多忙の語義をゲーム用に簡潔化。",
+    source: "fallback",
+  },
+  {
+    word: "灑掃",
+    reading: "さいそう",
+    realDefinition: "水をまいてから掃き清めること。",
+    note: "古い生活動作を表し、現代ではほぼ使われない語。",
+    sourceDetail: "ローカル収録候補。漢語辞典にある清掃の語義をゲーム用に簡潔化。",
+    source: "fallback",
+  },
+  {
+    word: "飆風",
+    reading: "ひょうふう",
+    realDefinition: "急に激しく吹き起こる風。",
+    note: "気象語としても非常に使用頻度が低い語。",
+    sourceDetail: "ローカル収録候補。国語辞典にある強風の語義をゲーム用に簡潔化。",
+    source: "fallback",
+  },
+];
+
 function normalizeTopicWord(value: string) {
   return value.normalize("NFKC").trim().toLocaleLowerCase("ja");
 }
@@ -172,9 +241,10 @@ async function rememberUsedTopicWord(word: string) {
   }
 }
 
-function pickFallbackTopic(usedWords: string[]) {
+function pickFallbackTopic(usedWords: string[], difficulty: TahoiyaDifficulty) {
   const used = new Set(usedWords.map(normalizeTopicWord));
-  const candidates = fallbackTopics.filter((topic) => !used.has(normalizeTopicWord(topic.word)));
+  const source = difficulty === "extreme" ? extremeFallbackTopics : fallbackTopics;
+  const candidates = source.filter((topic) => !used.has(normalizeTopicWord(topic.word)));
   return candidates.length > 0 ? candidates[Math.floor(Math.random() * candidates.length)] : null;
 }
 
@@ -239,15 +309,23 @@ function independentReviewerProvider(provider: GameLlmProvider): GameLlmProvider
 
 async function generateTopic(
   mode: Exclude<GameLlmMode, "local">,
+  difficulty: TahoiyaDifficulty,
   feedbackContext: string,
   retrievedFeedbackIds: string[],
   usedWords: string[],
 ) {
   const definitionStyle = pickDefinitionStyle();
   const definitionRule = definitionStyleRules[definitionStyle];
+  const difficultyRules = difficulty === "extreme"
+    ? [
+        "今回は高難易度モードです。難語好きや読書家でも意味を知らない可能性が高い、使用頻度が極端に低い見出し語だけを選んでください。",
+        "古語辞典、漢語辞典、専門辞典に載る語も対象にして構いませんが、固有名詞ではなく、短い語義を正確に示せる語に限ります。",
+        "難しい漢字で書いた身近な物の名前、一般語の異表記、有名な難読語、漢字から意味を容易に推測できる語は除外してください。",
+      ]
+    : ["今回は通常モードです。一般的な日本人の大人がまず意味を知らない難語を選んでください。"];
   const instructions = [
     "国語辞典を使ったパーティーゲーム『たほい屋』用のお題候補を3つ作ってください。",
-    "日本語として実在し、一般的な日本人の大人がまず意味を知らない難語を選んでください。",
+    ...difficultyRules,
     "よく知られた物を難しい漢字で書いただけの語ではなく、言葉や意味そのものが広く知られていないものを優先してください。",
     "参加者がもっともらしい偽説明を複数考えられる語を選んでください。造語や実在が確認できない語は禁止です。",
     "専門的すぎる固有名詞、差別語、性的または残虐な語、現代人物名は避けてください。",
@@ -269,6 +347,9 @@ async function generateTopic(
 
   const verificationPrompt = [
     "あなたは日本語辞書の厳格な校閲者です。次のたほい屋用候補を比較し、事実性・難しさ・偽説明の作りやすさが最も優れた1候補だけを選んでください。",
+    difficulty === "extreme"
+      ? "高難易度モードなので、難語に詳しい人でも意味を知る可能性が低い語だけを有効とし、有名な難読語や身近な物の難しい表記は無効にしてください。"
+      : "通常モードとして、一般的な大人が意味を知らない十分な難しさがあるか確認してください。",
     "見出し語が実在する日本語の語であり、readingがその見出し語の正しい読みであり、realDefinitionがその意味に正確に対応する場合だけvalidをtrueにしてください。",
     "単なる当て字、読みと意味の取り違え、存在が不確かな語、一般人が意味を知っている語、説明が不正確な候補はvalidをfalseにしてください。",
     "少しでも確信がなければvalidをfalseにしてください。推測で修正や補完をしないでください。",
@@ -304,42 +385,52 @@ async function generateTopic(
     : null;
 }
 
-async function generateTopicResponse() {
+async function generateTopicResponse(difficulty: TahoiyaDifficulty, playerIds: string[]) {
   const usedWords = await loadUsedTopicWords();
-  const mode = await resolveGameLlmMode();
   const feedbackRecords = await retrieveGameFeedback({
     game: "tahoiya",
     task: "tahoiya.topic",
-    queryTags: ["very-hard", "varied-definition-length", "no-parentheses"],
+    queryTags: [difficulty === "extreme" ? "extreme-difficulty" : "very-hard", "varied-definition-length", "no-parentheses"],
   }).catch(() => []);
+  const feedbackBlockedWords = getFeedbackBlockedWords(feedbackRecords);
   const blockedWords = [...new Set([
     ...usedWords.map(normalizeTopicWord),
-    ...getFeedbackBlockedWords(feedbackRecords),
+    ...feedbackBlockedWords,
   ])];
   const blockedWordSet = new Set(blockedWords);
   const feedbackContext = formatGameFeedbackContext(feedbackRecords);
   const retrievedFeedbackIds = feedbackRecords.map((record) => record.id);
+  const reusableTopic = await findReusableTahoiyaTopic(difficulty, playerIds, feedbackBlockedWords).catch(() => null);
+  if (reusableTopic) {
+    await rememberTahoiyaTopicExperience(reusableTopic, difficulty, playerIds).catch(() => undefined);
+    return Response.json(reusableTopic);
+  }
+
   const fallbackResponse = async () => {
-    const topic = pickFallbackTopic(blockedWords);
+    const topic = pickFallbackTopic(blockedWords, difficulty);
     if (!topic) {
       return Response.json({ error: "候補枯渇", notice: "未出題のローカル候補がありません。" }, { status: 503 });
     }
     await rememberUsedTopicWord(topic.word);
-    return Response.json({
+    const responseTopic: TahoiyaTopic = {
       ...topic,
       notice: gameLlmFallbackNotice,
       generation: localGenerationMeta(retrievedFeedbackIds),
-    });
+    };
+    await rememberTahoiyaTopicExperience(responseTopic, difficulty, playerIds).catch(() => undefined);
+    return Response.json(responseTopic);
   };
 
+  const mode = await resolveGameLlmMode();
   if (mode === "local") {
     return fallbackResponse();
   }
 
   try {
-    const topic = await generateTopic(mode, feedbackContext, retrievedFeedbackIds, blockedWords);
+    const topic = await generateTopic(mode, difficulty, feedbackContext, retrievedFeedbackIds, blockedWords);
     if (topic && !blockedWordSet.has(normalizeTopicWord(topic.word))) {
       await rememberUsedTopicWord(topic.word);
+      await rememberTahoiyaTopicExperience(topic, difficulty, playerIds).catch(() => undefined);
       return Response.json(topic);
     }
   } catch (error) {
@@ -352,12 +443,17 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const roomCode = url.searchParams.get("roomCode")?.trim().toUpperCase() ?? "";
   const round = url.searchParams.get("round")?.trim() ?? "";
-  const requestKey = roomCode && round ? `${roomCode}:${round}` : "";
-  if (!requestKey) return generateTopicResponse();
+  const room = roomCode ? await loadStoredTahoiyaRoom(roomCode).catch(() => null) : null;
+  const difficulty: TahoiyaDifficulty = room?.topicDifficulty === "extreme" || url.searchParams.get("difficulty") === "extreme"
+    ? "extreme"
+    : "standard";
+  const playerIds = room?.players.map((player) => player.id) ?? [];
+  const requestKey = roomCode && round ? `${roomCode}:${round}:${difficulty}` : "";
+  if (!requestKey) return generateTopicResponse(difficulty, playerIds);
 
   try {
     const cached = await withGameGenerationCache(tahoiyaTopicPromptVersion, requestKey, async () => {
-      const response = await generateTopicResponse();
+      const response = await generateTopicResponse(difficulty, playerIds);
       return { status: response.status, body: await response.json() };
     });
     return Response.json(cached.body, { status: cached.status });
