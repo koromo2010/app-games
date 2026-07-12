@@ -47,9 +47,7 @@ async function generateOpenAiText(prompt: string, quality: "standard" | "high") 
   });
   const response = await client.responses.create({
     model: paidLlmModel,
-    reasoning: quality === "high"
-      ? { mode: "pro", effort: "high" }
-      : { effort: "none" },
+    reasoning: { effort: quality === "high" ? "high" : "none" },
     input: prompt,
   });
   const text = response.output_text.trim();

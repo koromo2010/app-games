@@ -18,6 +18,7 @@ export async function generateGroqText(prompt: string, quality: "standard" | "hi
   const response = await client.responses.create({
     model: freeGroqLlmModel,
     ...(quality === "high" ? { reasoning: { effort: "high" as const } } : {}),
+    ...(quality === "high" ? { max_output_tokens: 8192 } : {}),
     input: prompt,
   });
 
