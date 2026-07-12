@@ -21,6 +21,7 @@
 | 共通部屋設定 | `lib/room-defaults-store.ts`, `lib/game-room-defaults-client.ts`, `app/components/RoomConfigSummary.tsx` |
 | 共通時間制限 | `lib/game-room-config.ts`, `app/components/RoomTimeLimitControl.tsx` |
 | 共通デバッグ認証 | `app/components/DebugModeButton.tsx`, `app/api/debug-auth/route.ts` |
+| アカウント・メール復旧 | `lib/player-account-store.ts`, `lib/player-password-reset.ts`, `lib/email.ts`, `app/api/player-account/route.ts`, `app/api/player-password-reset/route.ts`, `app/reset-password` |
 | ワードウルフ | `app/wordwolf`, `app/api/wordwolf`, `lib/wordwolf-room-store.ts` |
 | たほい屋 | `app/tahoiya/TahoiyaGame.tsx`, `app/api/tahoiya`, `lib/tahoiya-room-store.ts`, `lib/tahoiya-types.ts` |
 | たほい屋の問題再利用 | `lib/tahoiya-topic-catalog.ts`, `app/api/tahoiya/topic/route.ts` |
@@ -34,9 +35,20 @@
 - `GEMINI_API_KEY`
 - `GROQ_API_KEY`
 - `DEBUG_MODE_PASSWORD`
+- `RESEND_API_KEY`
+- `EMAIL_FROM`（任意。既定値 `Game Fields <noreply@game-fields.com>`）
+- `APP_BASE_URL`（推奨。本番は `https://game-fields.com`）
 - `UPSTASH_REDIS_REST_URL` または `KV_REST_API_URL`
 - `UPSTASH_REDIS_REST_TOKEN` または `KV_REST_API_TOKEN`
 - 既存の `KV_*`, `REDIS_URL` も環境に設定されている場合がある
+
+### メール送信の初期設定
+
+パスワード復旧メールはResendから送る。Resendで `game-fields.com` を追加し、案内されたSPF/DKIM等のDNSレコードを設定してドメイン認証を完了する。その後、Vercelへ `RESEND_API_KEY` を登録する。送信元を変える場合だけ `EMAIL_FROM` を設定する。
+
+アカウント作成時のメール登録は任意。既存アカウントはログイン後、現在のパスワードを再入力してメールを追加・変更できる。メールアドレスそのものはクライアントの保存セッションへ含めず、登録有無だけを保持する。
+
+再設定リンクは1時間有効で、一度使うとRedisから削除される。同じメールアドレスからの発行は60秒に1回まで。発行APIは、登録の有無にかかわらず同じ成功応答を返す。
 
 ## 4. 共通LLM方針
 
@@ -118,6 +130,8 @@ npm run build
 変更後はlintとproduction buildを通す。UI状態を変えた場合は、ホストと非ホスト、通常モードとデバッグモード、フェーズ遷移前後を確認する。
 
 `main` へのpushでVercelが自動デプロイする。公開作業の完了条件は以下。
+
+ChatGPT Workではスレッドごとに作業環境が新しくなり、前スレッドにあったローカルcheckoutやGitHub CLI（`gh`）が存在しない場合がある。最初にリポジトリを取得して最新mainとの一致を確認する。`gh` がなくても接続済みのGitHubアプリが使える場合は、GitHub APIでblob、tree、commitを作成し、mainのrefをfast-forward更新して公開できる。CLIがないことだけを理由に公開不可と判断せず、GitHub連携ツールの利用可否を確認する。
 
 1. GitHubのmainへ意図したファイルだけをコミット
 2. Vercel対象デプロイが `READY`

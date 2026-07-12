@@ -3,6 +3,7 @@ export type PlayerSession = {
   name: string;
   avatarColor: string;
   avatarImage: string | null;
+  hasRecoveryEmail?: boolean;
   createdAt?: number;
   updatedAt: number;
 };
@@ -91,6 +92,7 @@ export function readPlayerSession(): PlayerSession | null {
       name,
       avatarColor,
       avatarImage,
+      hasRecoveryEmail: parsed.hasRecoveryEmail === true,
       createdAt: typeof parsed.createdAt === "number" ? parsed.createdAt : undefined,
       updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : Date.now(),
     };
@@ -107,6 +109,7 @@ export function savePlayerSession(session: Omit<PlayerSession, "updatedAt">) {
     name: session.name.trim(),
     avatarColor: isAvatarColor(session.avatarColor) ? session.avatarColor : fallbackAvatarColor,
     avatarImage: isAvatarImage(session.avatarImage) ? session.avatarImage : null,
+    hasRecoveryEmail: session.hasRecoveryEmail === true,
     createdAt: session.createdAt,
     updatedAt: Date.now(),
   };

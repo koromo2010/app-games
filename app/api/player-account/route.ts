@@ -1,11 +1,12 @@
 import {
   loginPlayerAccount,
   registerPlayerAccount,
+  updatePlayerAccountEmail,
   type PlayerAccountAuthInput,
 } from "@/lib/player-account-store";
 
 type PlayerAccountRequest = PlayerAccountAuthInput & {
-  mode?: "login" | "register";
+  mode?: "login" | "register" | "update-email";
 };
 
 function isStoreNotConfigured(error: unknown) {
@@ -22,6 +23,10 @@ function statusForError(error: unknown) {
       return { code: "PASSWORD_INVALID", status: 400 };
     case "PLAYER_ACCOUNT_ALREADY_EXISTS":
       return { code: "ALREADY_EXISTS", status: 409 };
+    case "PLAYER_ACCOUNT_EMAIL_INVALID":
+      return { code: "EMAIL_INVALID", status: 400 };
+    case "PLAYER_ACCOUNT_EMAIL_ALREADY_EXISTS":
+      return { code: "EMAIL_ALREADY_EXISTS", status: 409 };
     case "PLAYER_ACCOUNT_INVALID_CREDENTIALS":
       return { code: "INVALID_CREDENTIALS", status: 401 };
     default:
@@ -41,7 +46,9 @@ export async function POST(request: Request) {
   try {
     const session = body.mode === "register"
       ? await registerPlayerAccount(body)
-      : await loginPlayerAccount(body);
+      : body.mode === "update-email"
+        ? await updatePlayerAccountEmail(body)
+        : await loginPlayerAccount(body);
 
     return Response.json({ session });
   } catch (error) {

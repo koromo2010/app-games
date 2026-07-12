@@ -25,6 +25,7 @@ function normalizeStoredSession(id: string, value: unknown): PlayerSession | nul
     name,
     avatarColor,
     avatarImage,
+    hasRecoveryEmail: parsed.hasRecoveryEmail === true,
     createdAt: typeof parsed.createdAt === "number" ? parsed.createdAt : Date.now(),
     updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : Date.now(),
   };
@@ -50,6 +51,7 @@ export async function saveStoredPlayerSession(session: Omit<PlayerSession, "upda
     name: session.name.trim(),
     avatarColor: isAvatarColor(session.avatarColor) ? session.avatarColor : fallbackAvatarColor,
     avatarImage: isAvatarImage(session.avatarImage) ? session.avatarImage : null,
+    hasRecoveryEmail: session.hasRecoveryEmail === true,
     createdAt: previous?.createdAt ?? session.createdAt ?? now,
     updatedAt: session.updatedAt ?? now,
   };

@@ -56,3 +56,15 @@ Tahoiya gameplay mutations are revisioned server actions. The server rejects sta
 npm install
 npm run dev
 ```
+
+## Password recovery email
+
+Player accounts may optionally register a recovery email address. New accounts can add it during registration, and existing accounts can add or change it after confirming the current password. Password reset links expire after one hour and can be used only once.
+
+Configure these server-side environment variables:
+
+- `RESEND_API_KEY`
+- `EMAIL_FROM` (optional; defaults to `Game Fields <noreply@game-fields.com>`)
+- `APP_BASE_URL` (recommended; `https://game-fields.com` in production)
+
+Verify `game-fields.com` in Resend before using the default sender. Never expose the Resend API key to the browser.

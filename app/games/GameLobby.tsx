@@ -38,6 +38,8 @@ const errorMessages: Record<string, string> = {
   NAME_REQUIRED: "プレイヤー名を入力してください。",
   PASSWORD_INVALID: "パスワードは4文字以上128文字以内で入力してください。",
   ALREADY_EXISTS: "そのプレイヤー名はすでに使われています。",
+  EMAIL_INVALID: "メールアドレスの形式を確認してください。",
+  EMAIL_ALREADY_EXISTS: "そのメールアドレスは別のアカウントで使われています。",
   INVALID_CREDENTIALS: "プレイヤー名またはパスワードが違います。",
   UNKNOWN: "アカウント処理に失敗しました。",
 };
@@ -75,12 +77,19 @@ export function GameLobby() {
   const [name, setName] = useState("");
   const [playerId, setPlayerId] = useState("");
   const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("");
+  const [resetEmail, setResetEmail] = useState("");
+  const [updateEmailPassword, setUpdateEmailPassword] = useState("");
+  const [showPasswordReset, setShowPasswordReset] = useState(false);
   const [avatarColor, setAvatarColor] = useState(fallbackAvatarColor);
   const [avatarImage, setAvatarImage] = useState<string | null>(defaultAvatarImage);
   const [message, setMessage] = useState("");
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [isSaving, setIsSaving] = useState(false);
+  const [isRequestingReset, setIsRequestingReset] = useState(false);
+  const [isUpdatingEmail, setIsUpdatingEmail] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [hasRecoveryEmail, setHasRecoveryEmail] = useState(false);
   const [stats, setStats] = useState<PlayerStatsResponse | null>(null);
   const [isStatsLoading, setIsStatsLoading] = useState(false);
   const [selectedStatsGame, setSelectedStatsGame] = useState<PlayerStatsGameFilter>("wordwolf");
@@ -155,6 +164,7 @@ export function GameLobby() {
         setPlayerId(session.id ?? "");
         setAvatarColor(session.avatarColor);
         setAvatarImage(session.avatarImage || defaultAvatarImage);
+        setHasRecoveryEmail(session.hasRecoveryEmail === true);
         const authenticated = isPlayerAuthenticated();
         setIsLoggedIn(authenticated);
         if (authenticated && session.id) {
@@ -176,6 +186,9 @@ export function GameLobby() {
     setPlayerId(session.id ?? "");
     setAvatarColor(session.avatarColor);
     setAvatarImage(session.avatarImage || defaultAvatarImage);
+    setEmail("");
+    setUpdateEmailPassword("");
+    setHasRecoveryEmail(session.hasRecoveryEmail === true);
     setPassword("");
     setIsLoggedIn(true);
     if (session.id) {
@@ -197,6 +210,7 @@ export function GameLobby() {
           mode: authMode,
           name: trimmedName,
           password,
+          email: authMode === "register" ? email : undefined,
           avatarColor,
           avatarImage,
         }),
@@ -217,6 +231,60 @@ export function GameLobby() {
     }
   };
 
+  const requestPasswordReset = async () => {
+    setIsRequestingReset(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/player-password-reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "request", email: resetEmail }),
+      });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        setMessage(data.error === "EMAIL_NOT_CONFIGURED"
+          ? "メール送信機能がまだ設定されていません。管理者に連絡してください。"
+          : "再設定メールの送信処理に失敗しました。時間をおいて再度お試しください。");
+        return;
+      }
+      setMessage("登録済みのメールアドレスであれば、再設定用メールを送信しました。");
+      setShowPasswordReset(false);
+      setResetEmail("");
+    } catch {
+      setMessage("通信に失敗しました。もう一度試してください。");
+    } finally {
+      setIsRequestingReset(false);
+    }
+  };
+
+  const updateRecoveryEmail = async () => {
+    setIsUpdatingEmail(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/player-account", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "update-email",
+          name,
+          password: updateEmailPassword,
+          email,
+        }),
+      });
+      const data = (await response.json()) as { session?: PlayerSession; error?: string };
+      if (!response.ok || !data.session) {
+        setMessage(authMessage(data.error));
+        return;
+      }
+      applySession(data.session);
+      setMessage("復旧用メールアドレスを登録しました。");
+    } catch {
+      setMessage("通信に失敗しました。もう一度試してください。");
+    } finally {
+      setIsUpdatingEmail(false);
+    }
+  };
+
   const logout = () => {
     clearPlayerSession();
     localStorage.removeItem("wordwolf-last-room");
@@ -224,6 +292,11 @@ export function GameLobby() {
     setName("");
     setPlayerId("");
     setPassword("");
+    setEmail("");
+    setResetEmail("");
+    setUpdateEmailPassword("");
+    setShowPasswordReset(false);
+    setHasRecoveryEmail(false);
     setAvatarColor(makeRandomAvatarColor());
     setAvatarImage(pickRandomDefaultAvatarImage());
     setIsLoggedIn(false);
@@ -336,6 +409,23 @@ export function GameLobby() {
               </label>
             )}
 
+            {!isLoggedIn && authMode === "register" && (
+              <label className="mt-3 block text-sm font-medium text-slate-700">
+                メールアドレス <span className="font-normal text-slate-400">（任意）</span>
+                <input
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  type="email"
+                  autoComplete="email"
+                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                  placeholder="you@example.com"
+                />
+                <span className="mt-1 block text-xs font-normal leading-5 text-slate-500">
+                  登録しておくと、パスワードを忘れた場合にメールから再設定できます。
+                </span>
+              </label>
+            )}
+
             {!isLoggedIn && (
               <button
                 type="button"
@@ -345,6 +435,92 @@ export function GameLobby() {
               >
                 {isSaving ? "確認中..." : authMode === "register" ? "アカウント作成" : "ログイン"}
               </button>
+            )}
+
+            {!isLoggedIn && authMode === "login" && !showPasswordReset && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowPasswordReset(true);
+                  setMessage("");
+                }}
+                className="mt-3 w-full text-center text-sm font-semibold text-cyan-700 underline-offset-4 hover:underline"
+              >
+                パスワードを忘れた方
+              </button>
+            )}
+
+            {!isLoggedIn && authMode === "login" && showPasswordReset && (
+              <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <p className="text-sm font-bold text-slate-800">パスワードを再設定</p>
+                <p className="mt-1 text-xs leading-5 text-slate-500">登録したメールアドレスへ、1時間有効な再設定リンクを送ります。</p>
+                <input
+                  value={resetEmail}
+                  onChange={(event) => setResetEmail(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void requestPasswordReset();
+                  }}
+                  type="email"
+                  autoComplete="email"
+                  className="mt-3 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                  placeholder="登録したメールアドレス"
+                />
+                <div className="mt-2 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void requestPasswordReset()}
+                    disabled={isRequestingReset || !resetEmail.trim()}
+                    className="flex-1 rounded-lg bg-cyan-600 px-3 py-2 text-sm font-semibold text-white transition hover:bg-cyan-500 disabled:bg-slate-300"
+                  >
+                    {isRequestingReset ? "送信中..." : "再設定メールを送る"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowPasswordReset(false)}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-600"
+                  >
+                    閉じる
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {isLoggedIn && (
+              <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-bold text-slate-800">復旧用メール</p>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                    hasRecoveryEmail ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"
+                  }`}>
+                    {hasRecoveryEmail ? "登録済み" : "未登録"}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs leading-5 text-slate-500">登録すると、パスワードを忘れた場合にメールから再設定できます。変更には現在のパスワードが必要です。</p>
+                <input
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  type="email"
+                  autoComplete="email"
+                  className="mt-3 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                  placeholder="you@example.com"
+                />
+                <input
+                  value={updateEmailPassword}
+                  onChange={(event) => setUpdateEmailPassword(event.target.value)}
+                  type="password"
+                  autoComplete="current-password"
+                  className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20"
+                  placeholder="現在のパスワード"
+                />
+                <button
+                  type="button"
+                  onClick={() => void updateRecoveryEmail()}
+                  disabled={isUpdatingEmail || !email.trim() || !updateEmailPassword}
+                  className="mt-2 w-full rounded-lg border border-cyan-600 bg-white px-3 py-2 text-sm font-semibold text-cyan-700 transition hover:bg-cyan-50 disabled:border-slate-300 disabled:text-slate-400"
+                >
+                  {isUpdatingEmail ? "登録中..." : "メールアドレスを登録・変更"}
+                </button>
+              </div>
             )}
 
             {message && (
