@@ -1,5 +1,4 @@
 import {
-  gameLlmFallbackNotice,
   generateGameLlmText,
   resolveGameLlmMode,
   type GameLlmMode,
@@ -11,8 +10,6 @@ import { withGameGenerationCache } from "@/lib/game-generation-cache";
 import { loadStoredTahoiyaRoom } from "@/lib/tahoiya-room-store";
 import {
   findReusableTahoiyaTopic,
-  loadExperiencedTahoiyaWords,
-  loadTahoiyaCatalogWords,
   loadUnreviewedTahoiyaSources,
   rememberTahoiyaReviewedBatch,
   rememberTahoiyaTopicCandidate,
@@ -51,17 +48,6 @@ function pickDefinitionStyle(): DefinitionStyle {
     if (roll < 0) return choice.style;
   }
   return "brief";
-}
-
-function localGenerationMeta(retrievedFeedbackIds: string[]): GameGenerationMeta {
-  return {
-    provider: "local",
-    model: "local-topic-data",
-    mode: "local",
-    promptVersion: tahoiyaTopicPromptVersion,
-    latencyMs: 0,
-    retrievedFeedbackIds,
-  };
 }
 
 const fallbackTopics: TahoiyaTopic[] = [
@@ -298,7 +284,7 @@ function getFeedbackBlockedWords(records: Awaited<ReturnType<typeof retrieveGame
   });
 }
 
-function pickFallbackTopic(usedWords: string[], difficulty: TahoiyaDifficulty) {
+export function pickFallbackTopic(usedWords: string[], difficulty: TahoiyaDifficulty) {
   const used = new Set(usedWords.map(normalizeTopicWord));
   const source = difficulty === "extreme" ? extremeFallbackTopics : fallbackTopics;
   const candidates = source.filter((topic) => !used.has(normalizeTopicWord(topic.word)));
@@ -364,7 +350,7 @@ function independentReviewerProvider(provider: GameLlmProvider): GameLlmProvider
   return "openai";
 }
 
-async function generateTopic(
+export async function generateTopic(
   mode: Exclude<GameLlmMode, "local">,
   difficulty: TahoiyaDifficulty,
   feedbackContext: string,
@@ -506,6 +492,11 @@ async function reviewSourceBatch(
   feedbackContext: string,
   retrievedFeedbackIds: string[],
 ) {
+  const compactSources = sources.map((source) => ({
+    id: source.id,
+    word: source.word.slice(0, 120),
+    sourceLibrary: source.sourceLibrary.slice(0, 120),
+  }));
   const prompt = [
     "たほい屋の素材ライブラリから渡す10語を、各語独立に検証・絶対評価してください。語同士を相対比較して順位を付けてはいけません。",
     "acceptedは、実在・読み・意味を典拠と素材の手掛かりから確信でき、たほい屋で偽説明を作れる語だけtrueにします。不確実、一般的すぎる、差別的、性的、残虐ならfalseです。",
@@ -517,9 +508,10 @@ async function reviewSourceBatch(
     "difficultyReasonには、知名度、字面からの推測可能性、専門性、偽説明の作りやすさを根拠として短く記述してください。",
     "入力のsourceIdを必ず維持し、入力全件を同じ順序で返してください。JSON以外は返さないでください。",
     "形式: {\"items\":[{\"sourceId\":\"...\",\"accepted\":true,\"word\":\"...\",\"reading\":\"...\",\"realDefinition\":\"...\",\"note\":\"...\",\"difficulty\":\"easy|standard|extreme\",\"difficultyReason\":\"...\"}]}",
-    `素材: ${JSON.stringify(sources)}`,
-    feedbackContext,
+    `素材: ${JSON.stringify(compactSources)}`,
+    feedbackContext.slice(0, 1_500),
   ].filter(Boolean).join("\n\n");
+  console.info(`[tahoiya/topic] reviewing ${sources.length} sources with ${prompt.length} prompt chars`);
   const generated = await generateGameLlmText(prompt, mode, { quality: "standard" });
   const reviewed = parseBatchReview(generated.text, sources);
   if (reviewed.length !== sources.length) throw new Error(`Batch review returned ${reviewed.length}/${sources.length} items`);
@@ -562,12 +554,6 @@ async function generateTopicResponse(
     queryTags: [difficulty === "extreme" ? "extreme-difficulty" : "very-hard", "varied-definition-length", "no-parentheses"],
   }).catch(() => []);
   const feedbackBlockedWords = getFeedbackBlockedWords(feedbackRecords);
-  const [experiencedWords, catalogWords] = await Promise.all([
-    loadExperiencedTahoiyaWords(playerIds).catch(() => []),
-    forceNew ? loadTahoiyaCatalogWords().catch(() => []) : Promise.resolve([]),
-  ]);
-  const blockedWords = [...new Set([...experiencedWords, ...feedbackBlockedWords, ...catalogWords])];
-  const blockedWordSet = new Set(blockedWords);
   const feedbackContext = formatGameFeedbackContext(feedbackRecords);
   const retrievedFeedbackIds = feedbackRecords.map((record) => record.id);
   const remember = async (topic: TahoiyaTopic) => {
@@ -587,20 +573,7 @@ async function generateTopicResponse(
 
   const mode = await resolveGameLlmMode();
   if (mode === "local") {
-    if (forceNew) {
-      return Response.json({ error: "新規ワード生成に利用できるAI APIがありません。" }, { status: 503 });
-    }
-    const reusedTopic = pickFallbackTopic(feedbackBlockedWords, difficulty);
-    if (!reusedTopic) {
-      return Response.json({ error: "候補枯渇", notice: "利用できるローカル候補がありません。" }, { status: 503 });
-    }
-    const responseTopic: TahoiyaTopic = {
-      ...reusedTopic,
-      notice: gameLlmFallbackNotice,
-      generation: localGenerationMeta(retrievedFeedbackIds),
-    };
-    await remember(responseTopic);
-    return Response.json(responseTopic);
+    return Response.json({ error: "候補DBに未使用語がなく、新規候補を審査できるAI APIもありません。" }, { status: 503 });
   }
 
   if (forceNew) {
@@ -641,43 +614,29 @@ async function generateTopicResponse(
   // therefore pays for several future rounds instead of producing one word.
   try {
     const sources = await loadUnreviewedTahoiyaSources(10);
-    if (sources.length === 10) {
-      const batch = await reviewSourceBatch(mode, sources, feedbackContext, retrievedFeedbackIds);
-      await rememberTahoiyaReviewedBatch(
-        sources.map((source) => source.id),
-        batch.candidates,
-        retrievedFeedbackIds,
-      );
-      const selected = batch.candidates.find((candidate) => candidate.difficulty === difficulty);
-      if (selected) {
-        await rememberTahoiyaTopicExperience(selected.topic, difficulty, playerIds).catch(() => undefined);
-        return Response.json(selected.topic);
-      }
+    if (sources.length < 10) {
+      return Response.json({ error: `異なる取得元から素材を10件揃えられませんでした（${sources.length}件）。` }, { status: 503 });
     }
+    const batch = await reviewSourceBatch(mode, sources, feedbackContext, retrievedFeedbackIds);
+    await rememberTahoiyaReviewedBatch(
+      sources.map((source) => source.id),
+      batch.candidates,
+      retrievedFeedbackIds,
+    );
+    const selected = batch.candidates.find((candidate) => candidate.difficulty === difficulty);
+    if (selected) {
+      await rememberTahoiyaTopicExperience(selected.topic, difficulty, playerIds).catch(() => undefined);
+      return Response.json(selected.topic);
+    }
+    return Response.json({
+      error: `10件を審査して${batch.candidates.length}件登録しましたが、現在の難易度に合う新規候補がありませんでした。`,
+      registeredCount: batch.candidates.length,
+    }, { status: 422 });
   } catch (error) {
     console.error("[tahoiya/topic] catalog batch refill failed", error);
+    return Response.json({ error: "取得元10件の一括審査に失敗しました。旧ローカル候補には切り替えません。" }, { status: 503 });
   }
 
-  try {
-    const topic = await generateTopic(mode, difficulty, feedbackContext, retrievedFeedbackIds, blockedWords);
-    if (topic && !blockedWordSet.has(normalizeTopicWord(topic.word))) {
-      await remember(topic);
-      return Response.json(topic);
-    }
-  } catch (error) {
-    console.error("[tahoiya/topic] falling back to local topic", error);
-  }
-  const reusedTopic = pickFallbackTopic(feedbackBlockedWords, difficulty);
-  if (!reusedTopic) {
-    return Response.json({ error: "候補枯渇", notice: "ワードを生成できませんでした。" }, { status: 503 });
-  }
-  const responseTopic: TahoiyaTopic = {
-    ...reusedTopic,
-    notice: gameLlmFallbackNotice,
-    generation: localGenerationMeta(retrievedFeedbackIds),
-  };
-  await remember(responseTopic);
-  return Response.json(responseTopic);
 }
 
 export async function GET(request: Request) {

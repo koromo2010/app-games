@@ -188,6 +188,7 @@ export async function findReusableTahoiyaTopic(
     .map(parseRecord)
     .filter((record): record is TahoiyaTopicCatalogRecord => Boolean(
       record &&
+      record.topic.source === "llm" &&
       record.difficulty === difficulty &&
       !blocked.has(normalizeWord(record.topic.word)) &&
       playerIds.every((playerId) => !record.experiencedPlayerIds.includes(playerId)),

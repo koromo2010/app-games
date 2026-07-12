@@ -116,7 +116,7 @@ function parseSourceEntry(raw: string): TahoiyaSourceEntry | null {
       sourceRegistryId: parsed.sourceRegistryId || parsed.id.split(":")[0],
       word: parsed.word,
       reading: parsed.reading,
-      hint: parsed.hint || "専門語彙ライブラリの見出し語。",
+      hint: (parsed.hint || "専門語彙ライブラリの見出し語。").slice(0, 240),
       genre: parsed.genre || "専門用語",
       sourceLibrary: parsed.sourceLibrary,
       sourceUrl: parsed.sourceUrl,
@@ -211,7 +211,15 @@ async function collectGettyTerms(source: TahoiyaSourceRegistryRecord, cursor: nu
 }
 
 function sourceEntry(source: TahoiyaSourceRegistryRecord, resource: string, word: string, hint: string): TahoiyaSourceEntry {
-  return { id: `${source.id}:${resource}`, sourceRegistryId: source.id, word, hint, genre: source.genre, sourceLibrary: source.name, sourceUrl: resource };
+  return {
+    id: `${source.id}:${resource}`,
+    sourceRegistryId: source.id,
+    word: word.slice(0, 120),
+    hint: hint.replace(/\s+/g, " ").trim().slice(0, 240),
+    genre: source.genre,
+    sourceLibrary: source.name,
+    sourceUrl: resource,
+  };
 }
 
 async function collectLocTerms(source: TahoiyaSourceRegistryRecord, cursor: number) {
