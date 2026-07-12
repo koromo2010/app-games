@@ -1,6 +1,12 @@
 name: Generate Tahoiya candidate catalog
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/generate-tahoiya-candidates.yml
+      - scripts/generate-tahoiya-candidates.ts
+      - lib/tahoiya-source-library.ts
   workflow_dispatch:
     inputs:
       target_total:
@@ -36,7 +42,7 @@ jobs:
       - run: npm ci
 
       - name: Generate and review candidates
-        run: npm run tahoiya:generate -- --target=${{ inputs.target_total }} --max-batches=${{ inputs.max_batches }}
+        run: npm run tahoiya:generate -- --target=${{ inputs.target_total || '100' }} --max-batches=${{ inputs.max_batches || '80' }}
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           TAHOIYA_GENERATOR_MODEL: ${{ vars.TAHOIYA_GENERATOR_MODEL }}
