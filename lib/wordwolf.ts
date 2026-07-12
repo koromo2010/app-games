@@ -54,28 +54,28 @@ const curatedWidePairTopics: TopicCandidate[] = [
 ];
 
 const properNounNearPairTopics: TopicCandidate[] = [
-  { villageWord: "横浜ランドマークタワー", wolfWord: "あべのハルカス", reason: "有名な高層ビルだが、地域や施設の印象が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
-  { villageWord: "京都", wolfWord: "奈良", reason: "歴史ある観光地だが、街の規模や代表的な見どころが違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
-  { villageWord: "ローソン", wolfWord: "ミニストップ", reason: "コンビニブランドだが、商品や店舗の印象が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
-  { villageWord: "読売ジャイアンツ", wolfWord: "阪神タイガース", reason: "有名なプロ野球チームだが、本拠地やファン文化が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
-  { villageWord: "ABEMA", wolfWord: "TVer", reason: "動画配信サービスとして知られるが、番組の見方や使う場面が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
-  { villageWord: "iPhone", wolfWord: "Pixel", reason: "有名なスマートフォンだが、メーカーや使い心地が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
-  { villageWord: "縄文時代", wolfWord: "弥生時代", reason: "学校で学ぶ日本史の時代区分だが、暮らしや文化の印象が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
-  { villageWord: "鎌倉幕府", wolfWord: "室町幕府", reason: "日本史で有名な武家政権だが、時代や政治の特徴が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
-  { villageWord: "フェルマー", wolfWord: "ガウス", reason: "数学史で有名な人物だが、連想される定理や分野の印象が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
+  { villageWord: "横浜ランドマークタワー", wolfWord: "東京タワー", reason: "都市を代表する展望施設だが、地域や建物の役割が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
+  { villageWord: "京都", wolfWord: "金沢", reason: "歴史的な街並みで知られる観光都市だが、地域や文化の印象が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
+  { villageWord: "ローソン", wolfWord: "ドン・キホーテ", reason: "身近な小売チェーンだが、店の規模や利用場面が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
+  { villageWord: "読売ジャイアンツ", wolfWord: "福岡ソフトバンクホークス", reason: "全国的に知られるプロ野球チームだが、リーグや本拠地が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
+  { villageWord: "ABEMA", wolfWord: "Netflix", reason: "映像をネットで見るサービスだが、番組構成や視聴スタイルが違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
+  { villageWord: "iPhone", wolfWord: "Nintendo Switch", reason: "日常的に持ち歩くデジタル機器だが、通信とゲームで中心用途が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
+  { villageWord: "縄文時代", wolfWord: "平安時代", reason: "学校で学ぶ日本史の時代区分だが、社会や文化の特徴が大きく違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
+  { villageWord: "鬼滅の刃", wolfWord: "名探偵コナン", reason: "広く知られた漫画作品だが、時代設定や物語の型が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
+  { villageWord: "フェルマー", wolfWord: "パスカル", reason: "フランスの数学史で知られる人物だが、代表的な業績の印象が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
 ];
 
 const properNounBalancedPairTopics: TopicCandidate[] = [
-  { villageWord: "箱根", wolfWord: "日光", reason: "有名な観光地だが、地域や旅の目的が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
-  { villageWord: "任天堂", wolfWord: "ソニー", reason: "有名な日本企業だが、ゲームでの立ち位置や主力事業が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
-  { villageWord: "週刊少年ジャンプ", wolfWord: "週刊少年マガジン", reason: "有名な漫画雑誌だが、連載作品や読者の印象が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
-  { villageWord: "鬼滅の刃", wolfWord: "呪術廻戦", reason: "近年有名な漫画作品だが、世界観や戦い方が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
-  { villageWord: "Amazon", wolfWord: "楽天市場", reason: "有名な通販サービスだが、買い物体験や運営の印象が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
-  { villageWord: "東京ディズニーランド", wolfWord: "ユニバーサル・スタジオ・ジャパン", reason: "有名なテーマパークだが、地域や作品の方向性が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
-  { villageWord: "関ヶ原の戦い", wolfWord: "桶狭間の戦い", reason: "日本史で有名な合戦だが、時代背景や勝敗の語られ方が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
-  { villageWord: "大化の改新", wolfWord: "明治維新", reason: "日本史の大きな政治改革だが、時代や社会への影響が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
-  { villageWord: "日米和親条約", wolfWord: "日米修好通商条約", reason: "幕末に学ぶ条約だが、内容や日本社会への影響が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
-  { villageWord: "ファラデー", wolfWord: "マクスウェル", reason: "物理学史で有名な人物だが、実験と理論で語られ方が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
+  { villageWord: "箱根", wolfWord: "長崎", reason: "旅行先として有名だが、温泉地と港町で旅の印象が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
+  { villageWord: "任天堂", wolfWord: "カプコン", reason: "日本のゲーム企業だが、代表作品や得意分野の印象が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
+  { villageWord: "週刊少年ジャンプ", wolfWord: "モーニング", reason: "漫画雑誌として知られるが、主な読者層や作品傾向が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
+  { villageWord: "ドラえもん", wolfWord: "進撃の巨人", reason: "有名な漫画作品だが、対象年代や世界観が大きく違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
+  { villageWord: "Amazon", wolfWord: "メルカリ", reason: "ネットで商品を買えるサービスだが、販売主体や取引方法が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
+  { villageWord: "東京ディズニーランド", wolfWord: "ハウステンボス", reason: "大型観光施設だが、作品世界と街並みで体験の中心が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
+  { villageWord: "関ヶ原の戦い", wolfWord: "西南戦争", reason: "日本史の大きな武力衝突だが、時代と政治背景が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
+  { villageWord: "大化の改新", wolfWord: "廃藩置県", reason: "日本史の統治制度を変えた出来事だが、時代と改革内容が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
+  { villageWord: "日米和親条約", wolfWord: "ベルサイユ条約", reason: "歴史で学ぶ国際条約だが、締結時代や目的が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
+  { villageWord: "ファラデー", wolfWord: "メンデル", reason: "科学史で有名な人物だが、物理と生物で研究分野が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
 ];
 
 const properNounWidePairTopics: TopicCandidate[] = [
@@ -85,9 +85,9 @@ const properNounWidePairTopics: TopicCandidate[] = [
   { villageWord: "スターバックス", wolfWord: "成城石井", reason: "街で見かける食品系チェーンだが、飲食店と食品スーパーで体験が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
   { villageWord: "東海道新幹線", wolfWord: "山手線", reason: "有名な鉄道路線だが、移動距離や使う場面が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
   { villageWord: "紅白歌合戦", wolfWord: "M-1グランプリ", reason: "有名なテレビ番組・イベントだが、内容や楽しみ方が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
-  { villageWord: "フランス革命", wolfWord: "産業革命", reason: "世界史で有名な変革だが、政治中心か経済・技術中心かが違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
-  { villageWord: "国際連盟", wolfWord: "国際連合", reason: "世界史・公民で学ぶ国際組織だが、成立時期や仕組みが違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
-  { villageWord: "古事記", wolfWord: "万葉集", reason: "国語や日本史で出る古典だが、内容の性格や読まれ方が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
+  { villageWord: "フランス革命", wolfWord: "明治維新", reason: "社会体制を大きく変えた歴史的事件だが、国や変革の進み方が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
+  { villageWord: "国際連盟", wolfWord: "欧州連合", reason: "複数国が参加する国際組織だが、成立目的や統合の深さが違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
+  { villageWord: "古事記", wolfWord: "源氏物語", reason: "日本の古典作品だが、神話・歴史と物語文学で性格が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
 ];
 
 const hintTopicGroups = createHintTopicGroups(properNounNearPairTopics, properNounBalancedPairTopics, properNounWidePairTopics);

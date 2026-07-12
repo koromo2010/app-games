@@ -26,7 +26,7 @@ const baseTopicPrompt =
 
 const usedPairKey = "wordwolf:topic:pairs";
 const dailyWordKeyPrefix = "wordwolf:topic:daily-words:";
-const wordwolfTopicPromptVersion = "wordwolf-topic-v1";
+const wordwolfTopicPromptVersion = "wordwolf-topic-v2";
 
 function localGenerationMeta(retrievedFeedbackIds: string[]): GameGenerationMeta {
   return {
@@ -97,8 +97,19 @@ function parseTopic(
   dictionarySource: Extract<TopicDictionarySource, "llm" | "proper-noun">,
 ): WordWolfTopic | null {
   try {
-    const parsed = JSON.parse(text) as Partial<WordWolfTopic>;
+    const parsed = JSON.parse(text) as Partial<WordWolfTopic> & {
+      alternativeCandidates?: unknown;
+      pairIsCanonical?: unknown;
+      sharedNameCue?: unknown;
+    };
     if (!parsed.villageWord || !parsed.wolfWord) return null;
+
+    if (dictionarySource === "proper-noun") {
+      const alternatives = Array.isArray(parsed.alternativeCandidates)
+        ? [...new Set(parsed.alternativeCandidates.filter((item): item is string => typeof item === "string" && Boolean(item.trim())).map((item) => item.trim()))]
+        : [];
+      if (alternatives.length < 4 || parsed.pairIsCanonical !== false || parsed.sharedNameCue !== false) return null;
+    }
 
     const topic = {
       villageWord: String(parsed.villageWord).trim(),
@@ -140,8 +151,13 @@ async function generateLlmTopic(
   feedbackContext: string,
   retrievedFeedbackIds: string[],
 ) {
-  const distancePrompt =
-    pairDistance === "near"
+  const distancePrompt = dictionarySource === "proper-noun"
+    ? pairDistance === "near"
+      ? "固有名詞の『近い』です。同じ広いカテゴリで共通点はすぐ分かる一方、片方を見ても相方が一意に絞れない組み合わせにしてください。同じ作品内の二人、定番ライバル、隣接する時代、前後編、同じシリーズの代表2作、二大ブランドのような狭い兄弟ペアは禁止です。"
+      : pairDistance === "wide"
+        ? "固有名詞の『遠い』です。人物なら人物、作品なら作品、場所なら場所という型を揃えつつ、共通する広い文脈を一つ挟んでつながる二段連想の組み合わせにしてください。片方の名前から相方を直接連想する定番関係は禁止です。"
+        : "固有名詞の『普通』です。同じ大きな文脈に属するが、狭い分類・時代・地域・用途は異なる組み合わせにしてください。同業二強、宿敵、隣接時代、同一シリーズなど、片方の名前だけで相方を当てられる関係は禁止です。"
+    : pairDistance === "near"
       ? "ペアの距離は近い設定です。誰でも共通点をすぐ理解できる類語・兄弟語・同じ用途の組み合わせにしてください。ただし完全な同義語や単なる言い換えは避け、話すと違いが出る余地を残してください。"
       : pairDistance === "wide"
         ? "ペアの距離は遠い設定です。Aから共通語を一つ挟んでBにつながるくらいまで離してよいです。例: A -> 共通語 -> B の二段連想で同じ広い文脈に戻れる組み合わせにしてください。物は物、場所は場所、人物は人物、作品は作品など意味のレイヤーは必ず揃えてください。同じ語群の一番有名なものと二番目に有名なものを並べるのは避けてください。"
@@ -161,6 +177,9 @@ async function generateLlmTopic(
           "Prefer categories where several other famous alternatives also exist, so early clues do not uniquely identify the answer. Good examples: convenience-store chains, coffee chains, universities, train lines, theme parks, video platforms, sports teams, long-running TV shows, manga magazines, game consoles, smartphone brands, and city landmarks.",
           "Do not use bare abstract concepts or opposing ideology words as proper nouns. For school topics, use named people, named works, named events, named treaties, named laws, named places, named institutions, or person-named laws/theories.",
           "Do not pair the most famous item and the second most famous item in the same narrow group. Prefer a third/fourth option, a different subfield, or a two-hop association that still shares a broad context.",
+          "The pair must belong to a category with at least six plausible well-known candidates. List at least four other plausible candidates in alternativeCandidates; neither chosen answer may appear in that list.",
+          "Set pairIsCanonical to false only after confirming the names are not a famous duo, rivalry, direct predecessor/successor, adjacent eras, two sides of one event, or the standard two examples people mention together.",
+          "Set sharedNameCue to false only when the two names do not share a revealing title pattern, franchise name, numbered sequence, organization prefix, or distinctive suffix that exposes their relationship.",
           "Avoid uniquely iconic one-of-one names where a generic clue immediately reveals the answer, such as a single nationally symbolic mountain, a once-in-a-generation athlete, or an overwhelmingly famous mascot with no plausible alternatives.",
           "Do not choose pairs whose main shared clue is just 'very famous'. They must share a broad category with at least 3 plausible wrong guesses players might imagine.",
           "Avoid obscure names, private/internal names, and pairs that require specialist knowledge.",
@@ -181,6 +200,9 @@ async function generateLlmTopic(
       ? `Theme hint is a hard requirement: the pair must be directly related to "${topicHint}". If the hint is a game, subject, genre, person, place, historical field, or hobby, choose words from that field. Do not ignore the hint. Do not use the hint itself unless it is a natural topic word.`
       : "",
     "Do not pair an object with a place, a person with a work, or an abstract concept with a concrete object.",
+    dictionarySource === "proper-noun"
+      ? "Before answering, test each selected name by itself. If an ordinary player could guess the other answer from the name alone without hearing any clue, reject the pair and choose a less canonical relation. Return JSON with villageWord, wolfWord, reason, alternativeCandidates (at least 4 strings), pairIsCanonical (must be false), and sharedNameCue (must be false)."
+      : "",
     excludeWords.length > 0 ? `exclude words used today: ${excludeWords.join(", ")}` : "",
   ].filter(Boolean);
   const promptWithExclusions = [
@@ -269,7 +291,7 @@ export async function GET(request: Request) {
   if (!requestKey) return generateTopicResponse(request);
 
   try {
-    const cached = await withGameGenerationCache("wordwolf-topic", requestKey, async () => {
+    const cached = await withGameGenerationCache(wordwolfTopicPromptVersion, requestKey, async () => {
       const response = await generateTopicResponse(request);
       return { status: response.status, body: await response.json() };
     });
