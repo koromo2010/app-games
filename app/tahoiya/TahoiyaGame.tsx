@@ -18,13 +18,16 @@ const roomStoragePrefix = "tahoiya-room-";
 const roomDefaultsStoragePrefix = "tahoiya-room-defaults-";
 
 const tahoiyaFeedbackReasons = [
-  { value: "too-famous", label: "単語が有名すぎる", rating: "bad" as const },
   { value: "too-difficult", label: "難しすぎる", rating: "bad" as const },
-  { value: "hard-to-fake", label: "偽語釈を作りにくい", rating: "bad" as const },
-  { value: "definition-questionable", label: "読み・語釈が怪しい", rating: "bad" as const },
+  { value: "too-easy", label: "単語が簡単すぎる", rating: "bad" as const },
+  { value: "hard-to-fake", label: "偽説明を作りにくい", rating: "bad" as const },
+  { value: "definition-too-complex", label: "本物の説明が複雑", rating: "bad" as const },
+  { value: "definition-questionable", label: "読み・説明が怪しい", rating: "bad" as const },
   { value: "existence-questionable", label: "実在するか怪しい", rating: "bad" as const },
   { value: "difficulty-good", label: "ちょうどよい難易度", rating: "good" as const },
-  { value: "easy-to-fake", label: "偽語釈を作りやすかった", rating: "good" as const },
+  { value: "appropriately-obscure", label: "ちゃんと知らない難語だった", rating: "good" as const },
+  { value: "definition-simple", label: "本物の説明が簡潔", rating: "good" as const },
+  { value: "easy-to-fake", label: "偽説明を作りやすかった", rating: "good" as const },
   { value: "conversation-good", label: "盛り上がった", rating: "good" as const },
   { value: "other", label: "その他" },
 ];
@@ -280,12 +283,6 @@ function createEmptyRoom(
   };
 }
 
-function nextParentId(room: TahoiyaRoom) {
-  const currentIndex = room.players.findIndex((player) => player.id === room.parentId);
-  const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % room.players.length : 0;
-  return room.players[nextIndex]?.id ?? room.hostId;
-}
-
 function createOptions(room: TahoiyaRoom): TahoiyaDefinitionOption[] {
   return shuffle([
     {
@@ -318,7 +315,7 @@ function scoreRound(room: TahoiyaRoom) {
     } else if (option.authorId) {
       const author = room.players.find((player) => player.id === option.authorId);
       scores[option.authorId] = (scores[option.authorId] ?? 0) + 1;
-      resultLines.push(`${author?.name ?? "Unknown"} の偽語釈に票が入り +1`);
+      resultLines.push(`${author?.name ?? "Unknown"} の偽説明に票が入り +1`);
     }
   }
 
@@ -329,7 +326,7 @@ function scoreRound(room: TahoiyaRoom) {
 }
 
 function getAnswererCandidates(room: TahoiyaRoom) {
-  return room.players.filter((player) => player.id !== room.parentId);
+  return room.players;
 }
 
 function getAnswerer(room: TahoiyaRoom) {
@@ -337,7 +334,7 @@ function getAnswerer(room: TahoiyaRoom) {
 }
 
 function getDefinitionWriters(room: TahoiyaRoom) {
-  return room.players.filter((player) => player.id !== room.parentId && player.id !== room.answererId);
+  return room.players.filter((player) => player.id !== room.answererId);
 }
 
 function submittedCount(room: TahoiyaRoom) {
@@ -394,9 +391,7 @@ export function TahoiyaGame() {
   const isDebugMode = Boolean(room?.debugMode);
   const operationPlayerId = isDebugMode ? activePlayerId : playerId;
   const activePlayer = room?.players.find((player) => player.id === operationPlayerId) ?? null;
-  const parent = room?.players.find((player) => player.id === room.parentId) ?? null;
   const isHost = Boolean(room && playerId === room.hostId);
-  const isParent = Boolean(room && activePlayer?.id === room.parentId);
   const answererCandidates = room ? getAnswererCandidates(room) : [];
   const answerer = room ? getAnswerer(room) : null;
   const isAnswerer = Boolean(room && activePlayer?.id === room.answererId);
@@ -520,11 +515,11 @@ export function TahoiyaGame() {
   const startRound = async () => {
     if (!room || isStarting) return;
     const startingRoom = withMinimumDebugPlayers(room);
-    const candidates = getAnswererCandidates(startingRoom);
-    if (candidates.length < 1) {
-      setMessage("出題者とは別に、回答者が1人以上必要です。");
+    if (startingRoom.players.length < 3) {
+      setMessage("回答者1人と偽説明を書く人2人以上、合計3人以上が必要です。");
       return;
     }
+    const candidates = getAnswererCandidates(startingRoom);
 
     const selectedAnswererId =
       startingRoom.answererMode === "random"
@@ -539,11 +534,6 @@ export function TahoiyaGame() {
     }
 
     const playableRoom = { ...startingRoom, answererId: selectedAnswererId };
-    if (getDefinitionWriters(playableRoom).length < 1) {
-      setMessage("回答者とは別に、偽語釈を書く参加者が1人以上必要です。");
-      return;
-    }
-
     setIsStarting(true);
     setMessage("");
     try {
@@ -574,7 +564,7 @@ export function TahoiyaGame() {
   };
 
   const submitDefinition = () => {
-    if (!room || !activePlayer || isParent || isAnswerer || !definitionInput.trim()) return;
+    if (!room || !activePlayer || isAnswerer || !definitionInput.trim()) return;
     const nextRoom = {
       ...room,
       fakeDefinitions: {
@@ -594,8 +584,8 @@ export function TahoiyaGame() {
     if (!room || room.phase !== "writing") return;
     const nextDefinitions = { ...room.fakeDefinitions };
     for (const player of room.players) {
-      if (player.id === room.parentId || player.id === room.answererId || nextDefinitions[player.id]) continue;
-      nextDefinitions[player.id] = `${room.word}とは、古くから使われる道具または小屋の一種。地域によって呼び名が異なる。`;
+      if (player.id === room.answererId || nextDefinitions[player.id]) continue;
+      nextDefinitions[player.id] = "特定の作業に使われる古い道具の一種。";
     }
     setAndSaveRoom({ ...room, fakeDefinitions: nextDefinitions });
   };
@@ -647,15 +637,10 @@ export function TahoiyaGame() {
 
   const nextRound = () => {
     if (!room) return;
-    const newParentId = nextParentId(room);
-    const nextAnswererId =
-      room.answererMode === "manual" && room.answererId && room.answererId !== newParentId
-        ? room.answererId
-        : "";
+    const nextAnswererId = room.answererMode === "manual" ? room.answererId : "";
     setAndSaveRoom({
       ...room,
       phase: "lobby",
-      parentId: newParentId,
       answererId: nextAnswererId,
       round: room.round + 1,
       word: "",
@@ -754,10 +739,7 @@ export function TahoiyaGame() {
                   <p className="text-xl font-black text-slate-950">{room.code}</p>
                 </div>
                 <p className="text-sm text-slate-600">
-                  出題者: <span className="font-bold text-slate-950">{parent?.name ?? "未設定"}</span>
-                  <span className="ml-2 text-xs font-semibold text-slate-500">
-                    回答者: {answerer?.name ?? (room.answererMode === "random" ? "開始時にランダム" : "未指定")}
-                  </span>
+                  回答者: <span className="font-bold text-slate-950">{answerer?.name ?? (room.answererMode === "random" ? "開始時にランダム" : "未指定")}</span>
                 </p>
                 {room.phase === "lobby" && isHost && (
                   <div className="space-y-3">
@@ -812,7 +794,7 @@ export function TahoiyaGame() {
                         </label>
                       ) : (
                         <p className="mt-2 text-xs font-semibold text-slate-500">
-                          ラウンド開始時に、出題者以外から1人を回答者に選びます。
+                          ラウンド開始時に、参加者全員から1人を回答者に選びます。
                         </p>
                       )}
                     </div>
@@ -880,7 +862,7 @@ export function TahoiyaGame() {
                   <p className="text-sm font-semibold text-amber-700">Prototype ready</p>
                   <h2 className="mt-2 text-3xl font-black text-slate-950">辞書の本物を見抜く</h2>
                   <p className="mt-3 text-sm leading-6 text-slate-600">
-                    出題者だけが本物の語釈を見ます。ほかの参加者が偽語釈を作り、回答者は本物がどれかを選びます。
+                    回答者を1人選び、それ以外の全員がお題を見て偽説明を作ります。回答者は並んだ説明から本物を選びます。
                   </p>
                 </div>
               </div>
@@ -892,8 +874,14 @@ export function TahoiyaGame() {
                   <div>
                     <p className="text-xs font-semibold uppercase text-amber-700">Round {room.round}</p>
                     <h2 className="mt-1 text-3xl font-black text-slate-950">
-                      {room.phase === "lobby" ? "開始待ち" : room.word}
-                      {room.reading ? <span className="ml-2 text-base font-semibold text-slate-500">({room.reading})</span> : null}
+                      {room.phase === "lobby"
+                        ? "開始待ち"
+                        : room.phase === "writing" && isAnswerer
+                          ? "お題は準備中"
+                          : room.word}
+                      {room.reading && !(room.phase === "writing" && isAnswerer) ? (
+                        <span className="ml-2 text-base font-semibold text-slate-500">({room.reading})</span>
+                      ) : null}
                     </h2>
                   </div>
                   <span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700">{room.phase}</span>
@@ -910,13 +898,6 @@ export function TahoiyaGame() {
                     </p>
                   </div>
                 )}
-                {room.phase !== "lobby" && isParent && (
-                  <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
-                    <p className="text-xs font-semibold uppercase text-amber-700">本物の語釈</p>
-                    <p className="mt-1 text-lg font-bold text-slate-950">{room.realDefinition}</p>
-                    <p className="mt-2 text-xs text-slate-500">{room.topicNote}</p>
-                  </div>
-                )}
               </div>
 
               {room.phase === "lobby" && (
@@ -927,13 +908,11 @@ export function TahoiyaGame() {
                     {room.players.map((player) => (
                       <div key={player.id} className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-800">
                         {player.name}
-                        {player.id === room.parentId ? (
-                          <span className="ml-2 text-amber-700">出題者</span>
-                        ) : player.id === room.answererId ? (
+                        {player.id === room.answererId ? (
                           <span className="ml-2 text-cyan-700">回答者</span>
                         ) : (
                           <span className="ml-2 text-slate-500">
-                            {room.answererMode === "random" ? "回答者候補" : "偽語釈"}
+                            {room.answererMode === "random" ? "回答者候補・偽説明" : "偽説明"}
                           </span>
                         )}
                       </div>
@@ -944,25 +923,23 @@ export function TahoiyaGame() {
 
               {room.phase === "writing" && (
                 <div className={panelClass}>
-                  <p className="text-xs font-semibold uppercase text-amber-700">Fake definition</p>
-                  <h2 className="text-2xl font-black text-slate-950">偽語釈を書く</h2>
+                  <p className="text-xs font-semibold uppercase text-amber-700">Fake explanation</p>
+                  <h2 className="text-2xl font-black text-slate-950">偽説明を書く</h2>
                   <p className="mt-2 text-sm text-slate-600">
-                    偽語釈: {submittedCount(room)}/{definitionWriterCount}
+                    偽説明: {submittedCount(room)}/{definitionWriterCount}
                   </p>
-                  {isParent ? (
-                    <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm font-semibold text-amber-900">出題者は本物の語釈を混ぜる役です。偽語釈の投稿を待ちます。</p>
-                  ) : isAnswerer ? (
-                    <p className="mt-4 rounded-lg bg-cyan-50 p-3 text-sm font-semibold text-cyan-900">回答者は偽語釈を書きません。語釈が並ぶまで待ちます。</p>
+                  {isAnswerer ? (
+                    <p className="mt-4 rounded-lg bg-cyan-50 p-3 text-sm font-semibold text-cyan-900">回答者にはお題を表示しません。説明が並ぶまで待ちます。</p>
                   ) : (
                     <>
                       <textarea
                         value={definitionInput}
                         onChange={(event) => setDefinitionInput(event.target.value)}
                         className={`mt-4 min-h-28 resize-y ${inputClass}`}
-                        placeholder="辞書に載っていそうな語釈を書く"
+                        placeholder="辞書に載っていそうな短い説明を書く"
                       />
                       <button onClick={submitDefinition} disabled={!definitionInput.trim()} className={`mt-3 ${cyanButtonClass}`}>
-                        偽語釈を投稿
+                        偽説明を投稿
                       </button>
                     </>
                   )}
@@ -974,7 +951,7 @@ export function TahoiyaGame() {
                         </button>
                       )}
                       <button onClick={publishOptions} disabled={!writingDone} className={primaryButtonClass}>
-                        語釈を並べる
+                        説明を並べる
                       </button>
                     </div>
                   )}
@@ -988,10 +965,8 @@ export function TahoiyaGame() {
                   <p className="mt-2 text-sm text-slate-600">
                     回答者の投票: {voterCount(room)}/1
                   </p>
-                  {isParent ? (
-                    <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm font-semibold text-amber-900">出題者は投票しません。回答者の投票を待ちます。</p>
-                  ) : !isAnswerer ? (
-                    <p className="mt-4 rounded-lg bg-slate-100 p-3 text-sm font-semibold text-slate-700">偽語釈を書いた人は投票しません。回答者の投票を待ちます。</p>
+                  {!isAnswerer ? (
+                    <p className="mt-4 rounded-lg bg-slate-100 p-3 text-sm font-semibold text-slate-700">偽説明を書いた人は投票しません。回答者の投票を待ちます。</p>
                   ) : (
                     <div className="mt-4 grid gap-2">
                       {room.options.map((option, index) => (
@@ -1066,6 +1041,9 @@ export function TahoiyaGame() {
                       settings={{
                         playerCount: room.players.length,
                         answererMode: room.answererMode,
+                        difficulty: "very-hard",
+                        definitionStyle: "simple-definition",
+                        punctuationStyle: "no-parentheses",
                       }}
                       outcome={{
                         correctVotes: Object.entries(room.votes).filter(([, optionId]) => room.options.find((option) => option.id === optionId)?.isReal).length,
