@@ -1,13 +1,13 @@
 import { createNorthernOfferDeck, northernBuildings, northernCards, northernCardLabel, shuffle } from "@/lib/northern-branch-data";
-import type { NorthernActionResult, NorthernBuildingId, NorthernCardId, NorthernGameAction, NorthernGameState, NorthernOffer, NorthernPlayer } from "@/lib/northern-branch-types";
+import type { NorthernActionResult, NorthernBuildingId, NorthernCardId, NorthernGameAction, NorthernGameState, NorthernOffer, NorthernPlayer, NorthernPlayerSeed } from "@/lib/northern-branch-types";
 
 const handLimit = 7;
 const victoryPoints = 10;
 
-function makePlayer(name: string, index: number): NorthernPlayer {
+function makePlayer(seed: NorthernPlayerSeed, index: number): NorthernPlayer {
   return {
-    id: `player-${index + 1}`,
-    name: name.trim() || `プレイヤー${index + 1}`,
+    id: seed.id,
+    name: seed.name.trim() || `プレイヤー${index + 1}`,
     hand: [`fund-${index + 3}` as NorthernCardId],
     buildings: [], usedBuildings: [], points: 0,
   };
@@ -28,9 +28,9 @@ function drawOffers(state: NorthernGameState): NorthernGameState {
   return { ...state, offers, offerDeck: deck, discard };
 }
 
-export function createNorthernGame(playerNames: string[]): NorthernGameState {
+export function createNorthernGame(playerSeeds: NorthernPlayerSeed[]): NorthernGameState {
   return drawOffers({
-    status: "playing", players: playerNames.slice(0, 4).map(makePlayer), activePlayerIndex: 0,
+    status: "playing", players: playerSeeds.slice(0, 4).map(makePlayer), activePlayerIndex: 0,
     turn: 1, mainActionUsed: false, offerDeck: createNorthernOfferDeck(), offers: [], discard: [],
     winnerId: null, log: ["北の都で商会経営を始めました。"],
   });

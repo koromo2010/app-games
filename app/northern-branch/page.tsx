@@ -5,8 +5,8 @@ import { privateGameCookieMatches, privateGameCookieName } from "@/lib/private-g
 import { NorthernBranchGame } from "./NorthernBranchGame";
 
 export const metadata: Metadata = {
-  title: "Northern Branch Prototype | App Games",
-  description: "A private-use resource management game prototype.",
+  title: "ノーザンブランチ | Game Fields",
+  description: "ログインしたプレイヤー同士で遊ぶ、個人利用枠のオンライン資源管理ゲーム。",
 };
 
 export default async function NorthernBranchPage() {

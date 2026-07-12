@@ -57,9 +57,15 @@ export type NorthernPlayer = {
   id: string;
   name: string;
   hand: NorthernCardId[];
+  handCount?: number;
   buildings: NorthernBuildingId[];
   usedBuildings: NorthernBuildingId[];
   points: number;
+};
+
+export type NorthernPlayerSeed = {
+  id: string;
+  name: string;
 };
 
 export type NorthernGameState = {
@@ -85,3 +91,46 @@ export type NorthernGameAction =
 export type NorthernActionResult =
   | { ok: true; state: NorthernGameState; notice: string }
   | { ok: false; state: NorthernGameState; notice: string };
+
+export type NorthernRoomPlayer = {
+  id: string;
+  name: string;
+  joinedAt: number;
+  avatarColor?: string;
+  avatarImage?: string;
+  isDummy?: boolean;
+};
+
+export type NorthernRoomPhase = "lobby" | "playing" | "finished";
+
+export type NorthernRoom = {
+  code: string;
+  revision: number;
+  hostId: string;
+  ownerId?: string;
+  passphrase: string;
+  phase: NorthernRoomPhase;
+  players: NorthernRoomPlayer[];
+  debugMode: boolean;
+  game: NorthernGameState | null;
+  notice: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type NorthernRoomChoice = {
+  code: string;
+  hostName: string;
+  playerCount: number;
+  hasPassphrase: boolean;
+  updatedAt: number;
+};
+
+export type NorthernRoomAction =
+  | { type: "join-room"; actorId: string; player: NorthernRoomPlayer; passphrase: string }
+  | { type: "leave-room"; actorId: string }
+  | { type: "set-debug"; actorId: string; enabled: boolean }
+  | { type: "debug-add-player"; actorId: string }
+  | { type: "start-game"; actorId: string }
+  | { type: "game-action"; actorId: string; action: NorthernGameAction }
+  | { type: "reset-game"; actorId: string };
