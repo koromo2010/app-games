@@ -26,6 +26,7 @@ const roomDefaultsStoragePrefix = "tahoiya-room-defaults-";
 const tahoiyaFeedbackReasons = [
   { value: "too-difficult", label: "難しすぎる", rating: "bad" as const },
   { value: "want-harder-word", label: "もっと難しい単語にしてほしい", rating: "bad" as const },
+  { value: "homophone-too-easy", label: "身近な同音語があり簡単すぎる", rating: "bad" as const },
   { value: "hard-to-fake", label: "偽説明を作りにくい", rating: "bad" as const },
   { value: "definition-too-complex", label: "本物の説明が複雑", rating: "bad" as const },
   { value: "definition-questionable", label: "読み・説明が怪しい", rating: "bad" as const },
@@ -37,6 +38,8 @@ const tahoiyaFeedbackReasons = [
   { value: "conversation-good", label: "盛り上がった", rating: "good" as const },
   { value: "other", label: "その他" },
 ];
+
+const tahoiyaSkipReasons = tahoiyaFeedbackReasons.filter((reason) => reason.rating === "bad");
 
 type TahoiyaRoomDefaults = Pick<TahoiyaRoom, "playMode" | "topicDifficulty" | "answererMode" | "showRealDefinitionToWriters" | "actionTimeLimitSeconds">;
 
@@ -388,6 +391,9 @@ export function TahoiyaGame() {
   const [isStarting, setIsStarting] = useState(false);
   const [isPolishingDefinition, setIsPolishingDefinition] = useState(false);
   const [polishMessage, setPolishMessage] = useState("");
+  const [skipReason, setSkipReason] = useState("");
+  const [skipComment, setSkipComment] = useState("");
+  const [isSkippingTopic, setIsSkippingTopic] = useState(false);
   const [message, setMessage] = useState("");
   const [now, setNow] = useState(() => Date.now());
   const roomCode = room?.code;
@@ -866,6 +872,96 @@ export function TahoiyaGame() {
     await runRoomAction({ type: "debug-fill-votes", actorId: playerId, round: room.round });
   };
 
+  const skipDebugTopic = async () => {
+    if (!room || !isHost || !isDebugMode || room.phase === "lobby" || !skipReason || isSkippingTopic) return;
+    if (!room.topicGeneration) {
+      setMessage("このお題には生成情報がないため、フィードバックを保存できません。");
+      return;
+    }
+    const currentRoom = room;
+    setIsSkippingTopic(true);
+    setMessage("");
+    try {
+      const feedbackResponse = await fetch("/api/game-feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          artifactId: `tahoiya:${currentRoom.code}:${currentRoom.round}:${currentRoom.word}:debug-skip`,
+          artifactText: `単語=${currentRoom.word} / 読み=${currentRoom.reading ?? ""} / 語釈=${currentRoom.realDefinition} / 注記=${currentRoom.topicNote}`,
+          game: "tahoiya",
+          task: "tahoiya.topic",
+          rating: "bad",
+          reasonTags: [skipReason, "debug-skip"],
+          comment: skipComment,
+          playerId,
+          generation: currentRoom.topicGeneration,
+          settings: {
+            playerCount: currentRoom.players.length,
+            playMode: currentRoom.playMode,
+            difficulty: currentRoom.topicDifficulty,
+            debugMode: true,
+          },
+          outcome: { skipped: true, phase: currentRoom.phase },
+        }),
+      });
+      if (!feedbackResponse.ok) {
+        const data = (await feedbackResponse.json().catch(() => ({}))) as { error?: string };
+        throw new Error(data.error || "フィードバックを保存できませんでした。");
+      }
+
+      const nextRoundNumber = currentRoom.round + 1;
+      const candidates = getAnswererCandidates(currentRoom);
+      const nextAnswererId = currentRoom.playMode === "all-vote"
+        ? ""
+        : currentRoom.answererMode === "random"
+          ? shuffle(candidates)[0]?.id ?? ""
+          : currentRoom.answererId;
+      const topicParams = new URLSearchParams({
+        roomCode: currentRoom.code,
+        round: String(nextRoundNumber),
+        difficulty: currentRoom.topicDifficulty,
+      });
+      const topicResponse = await fetch(`/api/tahoiya/topic?${topicParams.toString()}`, { cache: "no-store" });
+      const topic = (await topicResponse.json()) as TahoiyaTopic & { error?: string };
+      if (!topicResponse.ok || !topic.word || !topic.realDefinition) {
+        throw new Error(topic.notice || topic.error || "次のお題を生成できませんでした。");
+      }
+      const nextRoom: TahoiyaRoom = {
+        ...currentRoom,
+        phase: "writing",
+        phaseStartedAt: Date.now(),
+        answererId: nextAnswererId,
+        round: nextRoundNumber,
+        word: topic.word,
+        reading: topic.reading,
+        realDefinition: topic.realDefinition,
+        topicNote: topic.note,
+        topicSourceDetail: topic.sourceDetail,
+        topicSource: topic.source,
+        topicGeneration: topic.generation,
+        fakeDefinitions: {},
+        options: [],
+        votes: {},
+        resultText: "",
+      };
+      const saved = await saveRoomToStore(nextRoom, playerId);
+      if (!saved) throw new Error("次のお題を部屋へ保存できませんでした。");
+      setRoom(saved);
+      setSkipReason("");
+      setSkipComment("");
+      setDefinitionInput("");
+      setSelectedOptionId("");
+      setPolishMessage("");
+      const firstWriter = getDefinitionWriters(saved)[0];
+      if (firstWriter) setActivePlayerId(firstWriter.id);
+      setMessage("フィードバックを保存し、次のお題へ進みました。");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "お題をスキップできませんでした。");
+    } finally {
+      setIsSkippingTopic(false);
+    }
+  };
+
   const nextRound = () => {
     if (!room) return;
     const nextAnswererId = room.playMode === "single-answerer" && room.answererMode === "manual" ? room.answererId : "";
@@ -1248,6 +1344,39 @@ export function TahoiyaGame() {
                           ? `次の未投票: ${nextVoter.name}`
                           : "操作プレイヤーを切り替えながら一人で流れを確認できます。"}
                     </p>
+                    {isHost && room.phase !== "lobby" && (
+                      <div className="mt-3 border-t border-amber-200 pt-3">
+                        <p className="font-bold">お題をスキップ</p>
+                        <p className="mt-1 text-xs leading-5 text-amber-800">問題点をフィードバックへ保存して、同じ設定の次のお題へ進みます。</p>
+                        <select
+                          value={skipReason}
+                          onChange={(event) => setSkipReason(event.target.value)}
+                          disabled={isSkippingTopic}
+                          className={`mt-2 ${inputClass}`}
+                        >
+                          <option value="">スキップ理由を選択</option>
+                          {tahoiyaSkipReasons.map((reason) => (
+                            <option key={reason.value} value={reason.value}>{reason.label}</option>
+                          ))}
+                        </select>
+                        <textarea
+                          value={skipComment}
+                          onChange={(event) => setSkipComment(event.target.value)}
+                          disabled={isSkippingTopic}
+                          maxLength={800}
+                          placeholder="補足（任意）"
+                          className={`mt-2 min-h-20 resize-y ${inputClass}`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void skipDebugTopic()}
+                          disabled={!skipReason || isSkippingTopic}
+                          className="mt-2 w-full rounded-lg border border-rose-300 bg-white px-3 py-2 text-sm font-bold text-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {isSkippingTopic ? "保存して次のお題を準備中..." : "フィードバックを保存して次のお題へ"}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

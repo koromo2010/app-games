@@ -116,7 +116,7 @@
 
 ### たほい屋のお題生成
 
-- `lib/tahoiya-seed-topics.ts` に、オープンな専門語彙源から人手確認した初期シードを保持する。各レコードは `easy | standard | extreme` のLLM難易度判定、ジャンル、参照ライブラリ、URL、判定理由を持つ。難易度は候補間の相対順位ではなく、RAGフィードバックタグをアンカーにした `tahoiya-rag-absolute-v1` の絶対評価とし、参照したフィードバックIDも保存する。簡単は `want-harder-word`、普通は `difficulty-good`・`appropriately-obscure`・`easy-to-fake`、高難易度は `too-difficult`・`hard-to-fake` を基準にする。API初回利用時にゲーム専用Redis候補DBへ登録し、同じLLMシードの更新時は使用済みプレイヤー・使用回数を保持して判定メタデータだけ更新する。利用者生成など同名の既存候補は上書きしない。
+- `lib/tahoiya-source-library.ts` に専門語彙の取得元レジストリを定義し、Redisの `tahoiya:source:registry:v1` へ登録する。固定語リストではなく、MeSH、Getty各語彙、LCSH、OpenAlex、GBIF、WoRMS、GND、Wikidata、AGROVOC、DBpedia、iNaturalistなど13取得元から、新規作成時にランダムな異なる10取得元を選び、各1語を素材棚へ取得する。10語は1回のLLMで検証し、RAGタグをアンカーに `easy | standard | extreme` を絶対評価して採用分を候補DBへ一括登録する。同音の身近な日常語がある場合は専門的意味が難しくても `easy` とする。
 - 初期参照元はJMdict（CC BY-SA 4.0）、NLM MeSH（NLM出典表示条件）、Getty AAT（ODC-By 1.0）、国立国会図書館の公開コンテンツ。大量取込を実装する場合は、各提供元の更新・表示・継承条件を別途満たすこと。
 
 通常の新規生成は、高品質設定で3候補を一度に作り、可能なら別プロバイダーで1候補を校閲する。NGリストを最初のプロンプトへ渡し、無駄な再生成を避ける。

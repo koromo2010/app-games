@@ -19,7 +19,7 @@ import {
   rememberTahoiyaTopicExperience,
   type TahoiyaReviewedCandidate,
 } from "@/lib/tahoiya-topic-catalog";
-import type { TahoiyaSourceEntry } from "@/lib/tahoiya-source-library";
+import { hasVeryCommonSpokenHomophone, type TahoiyaSourceEntry } from "@/lib/tahoiya-source-library";
 import type { TahoiyaDifficulty, TahoiyaTopic } from "@/lib/tahoiya-types";
 
 const tahoiyaTopicPromptVersion = "tahoiya-topic-v10";
@@ -287,6 +287,7 @@ function getFeedbackBlockedWords(records: Awaited<ReturnType<typeof retrieveGame
     "existence-questionable",
     "definition-questionable",
     "want-harder-word",
+    "homophone-too-easy",
     "too-easy",
     "too-famous",
   ]);
@@ -474,7 +475,9 @@ function parseBatchReview(text: string, sources: TahoiyaSourceEntry[]): ParsedBa
       if (!raw || typeof raw !== "object") return [];
       const item = raw as Partial<BatchReviewItem>;
       const source = item.sourceId ? byId.get(item.sourceId) : undefined;
-      const difficulty = item.difficulty === "easy" || item.difficulty === "extreme" ? item.difficulty : "standard";
+      const llmDifficulty = item.difficulty === "easy" || item.difficulty === "extreme" ? item.difficulty : "standard";
+      const hasEasyHomophone = hasVeryCommonSpokenHomophone(String(item.reading || source?.reading || ""));
+      const difficulty = hasEasyHomophone ? "easy" : llmDifficulty;
       const realDefinition = simplifyDefinition(item.realDefinition);
       const definitionLength = Array.from(realDefinition.replace(/。$/, "")).length;
       if (!source || !item.word || !item.reading || !realDefinition || definitionLength < 4 || definitionLength > 60) return [];
@@ -487,7 +490,9 @@ function parseBatchReview(text: string, sources: TahoiyaSourceEntry[]): ParsedBa
         realDefinition,
         note: String(item.note || "素材ライブラリをRAG基準で審査。"),
         difficulty,
-        difficultyReason: String(item.difficultyReason || "RAGフィードバック基準による絶対評価。"),
+        difficultyReason: hasEasyHomophone
+          ? `読みが日常語と同音で、聞いた瞬間に簡単な意味を連想できるため簡単判定。${String(item.difficultyReason || "")}`.trim()
+          : String(item.difficultyReason || "RAGフィードバック基準による絶対評価。"),
       }];
     });
   } catch {
@@ -504,7 +509,9 @@ async function reviewSourceBatch(
   const prompt = [
     "たほい屋の素材ライブラリから渡す10語を、各語独立に検証・絶対評価してください。語同士を相対比較して順位を付けてはいけません。",
     "acceptedは、実在・読み・意味を典拠と素材の手掛かりから確信でき、たほい屋で偽説明を作れる語だけtrueにします。不確実、一般的すぎる、差別的、性的、残虐ならfalseです。",
+    "素材のwordが外国語の場合、辞書・専門分野で実際に定着した日本語見出し語と読みが確認できるときだけ、その日本語名へ変換してaccepted=trueにしてください。直訳や即席のカタカナ転写は禁止し、定着した日本語名がなければaccepted=falseにしてください。",
     "difficultyは必ず絶対基準です。easy=RAGの『もっと難しい語がほしい』相当で一般成人が意味を知るか字面から容易に推測できる。standard=『難易度が良い・適度に珍しい・偽説明を作りやすい』相当。extreme=『難しすぎる・偽説明も作りにくい』相当。",
+    "たほい屋では読みを参加者に伝えます。専門的な意味が難しくても、その読みが『亀』『橋』『雨』『雲』など非常に身近な別の語と同音で、参加者が簡単な意味をすぐ作れる場合は必ずeasyにしてください。専門分野での意味だけを見てstandardやextremeにしてはいけません。",
     "easyもaccepted=trueなら保存対象です。ゲーム設定に合わないという理由で除外しないでください。",
     "realDefinitionは意味だけを自然な日本語一文、60文字以内で書き、読み・語源・用例・括弧を含めません。",
     "difficultyReasonには、知名度、字面からの推測可能性、専門性、偽説明の作りやすさを根拠として短く記述してください。",

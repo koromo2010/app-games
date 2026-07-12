@@ -2,11 +2,18 @@ import type { TahoiyaDifficulty, TahoiyaTopic } from "@/lib/tahoiya-types";
 import { normalizeGameGenerationMeta } from "@/lib/game-ai-types";
 import { retrieveGameFeedback } from "@/lib/game-feedback-store";
 import { redisCommand } from "@/lib/redis-store";
-import type { TahoiyaCatalogDifficulty } from "@/lib/tahoiya-seed-topics";
-import { tahoiyaSourceLibrary, type TahoiyaSourceEntry } from "@/lib/tahoiya-source-library";
+import {
+  hasVeryCommonSpokenHomophone,
+  loadTahoiyaSourceRegistry,
+  loadTahoiyaSourceShelf,
+  refreshTahoiyaSourceShelf,
+  type TahoiyaSourceEntry,
+} from "@/lib/tahoiya-source-library";
 
 const catalogKey = "tahoiya:topic:catalog:v1";
 const reviewedSourceKey = "tahoiya:source-library:reviewed:v1";
+
+export type TahoiyaCatalogDifficulty = "easy" | "standard" | "extreme";
 
 type TahoiyaTopicCatalogRecord = {
   topic: TahoiyaTopic;
@@ -39,7 +46,9 @@ function parseRecord(value: string): TahoiyaTopicCatalogRecord | null {
         ...parsed.topic,
         generation: normalizeGameGenerationMeta(parsed.topic.generation),
       },
-      difficulty: parsed.difficulty === "easy" || parsed.difficulty === "extreme" ? parsed.difficulty : "standard",
+      difficulty: hasVeryCommonSpokenHomophone(parsed.topic.reading)
+        ? "easy"
+        : parsed.difficulty === "easy" || parsed.difficulty === "extreme" ? parsed.difficulty : "standard",
       experiencedPlayerIds: Array.isArray(parsed.experiencedPlayerIds)
         ? parsed.experiencedPlayerIds.filter((id): id is string => typeof id === "string" && Boolean(id))
         : [],
@@ -66,21 +75,37 @@ function parseRecord(value: string): TahoiyaTopicCatalogRecord | null {
 }
 
 export async function loadUnreviewedTahoiyaSources(limit = 10): Promise<TahoiyaSourceEntry[]> {
-  const [catalogWords, reviewedIds] = await Promise.all([
+  const [catalogWords, reviewedIds, registry] = await Promise.all([
     loadTahoiyaCatalogWords(),
     redisCommand<string[]>(["SMEMBERS", reviewedSourceKey]).catch(() => []),
+    loadTahoiyaSourceRegistry(),
   ]);
   const blockedWords = new Set(catalogWords);
   const reviewed = new Set(Array.isArray(reviewedIds) ? reviewedIds : []);
-  const available = tahoiyaSourceLibrary.filter((entry) =>
-    !reviewed.has(entry.id) && !blockedWords.has(normalizeWord(entry.word))
-  );
-  // Rotate the shelf so repeated batches cover different genres without a fixed order.
-  return available
-    .map((entry) => ({ entry, sort: Math.random() }))
+  const shuffledSourceIds = registry
+    .map((source) => ({ id: source.id, sort: Math.random() }))
     .sort((left, right) => left.sort - right.sort)
-    .map(({ entry }) => entry)
-    .slice(0, Math.max(1, limit));
+    .map(({ id }) => id);
+
+  const availableForSource = (shelf: TahoiyaSourceEntry[], sourceId: string) => shelf.filter((entry) =>
+    entry.sourceRegistryId === sourceId &&
+    !reviewed.has(entry.id) &&
+    !blockedWords.has(normalizeWord(entry.word))
+  );
+  const selectOnePerSource = (shelf: TahoiyaSourceEntry[]) => shuffledSourceIds.flatMap((sourceId) => {
+    const candidates = availableForSource(shelf, sourceId);
+    return candidates.length > 0 ? [candidates[Math.floor(Math.random() * candidates.length)]] : [];
+  }).slice(0, Math.max(1, limit));
+
+  let shelf = await loadTahoiyaSourceShelf();
+  let selected = selectOnePerSource(shelf);
+  if (selected.length < limit) {
+    const missingSourceIds = shuffledSourceIds.filter((sourceId) => availableForSource(shelf, sourceId).length === 0);
+    await refreshTahoiyaSourceShelf(missingSourceIds);
+    shelf = await loadTahoiyaSourceShelf();
+    selected = selectOnePerSource(shelf);
+  }
+  return selected;
 }
 
 export type TahoiyaReviewedCandidate = {
