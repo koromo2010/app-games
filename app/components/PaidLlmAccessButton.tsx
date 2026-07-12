@@ -111,7 +111,7 @@ export function PaidLlmAccessButton() {
         <span className="flex flex-col items-center leading-tight">
           <span>API: {status.enabled ? "有料" : "無料"}</span>
           <span className="text-[10px] font-semibold opacity-80">
-            {status.enabled ? status.model : `有料時: ${status.model}`}
+            {status.enabled ? status.model : "ローカル（API不使用）"}
           </span>
         </span>
       </button>
@@ -132,7 +132,9 @@ export function PaidLlmAccessButton() {
             </p>
             <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
               <p>状態: {status.enabled ? "有料API ON" : "無料モード"}</p>
-              <p>モデル: {status.model}</p>
+              <p>
+                使用中: {status.enabled ? status.model : "ローカル候補（API不使用）"}
+              </p>
             </div>
             <input
               autoFocus
