@@ -2,9 +2,11 @@ import type { TahoiyaDifficulty, TahoiyaTopic } from "@/lib/tahoiya-types";
 import { normalizeGameGenerationMeta } from "@/lib/game-ai-types";
 import { retrieveGameFeedback } from "@/lib/game-feedback-store";
 import { redisCommand } from "@/lib/redis-store";
-import { tahoiyaSeedTopics, type TahoiyaCatalogDifficulty } from "@/lib/tahoiya-seed-topics";
+import type { TahoiyaCatalogDifficulty } from "@/lib/tahoiya-seed-topics";
+import { tahoiyaSourceLibrary, type TahoiyaSourceEntry } from "@/lib/tahoiya-source-library";
 
 const catalogKey = "tahoiya:topic:catalog:v1";
+const reviewedSourceKey = "tahoiya:source-library:reviewed:v1";
 
 type TahoiyaTopicCatalogRecord = {
   topic: TahoiyaTopic;
@@ -63,35 +65,68 @@ function parseRecord(value: string): TahoiyaTopicCatalogRecord | null {
   }
 }
 
-export async function ensureTahoiyaSeedCandidates(difficultyFeedbackIds: string[] = []) {
+export async function loadUnreviewedTahoiyaSources(limit = 10): Promise<TahoiyaSourceEntry[]> {
+  const [catalogWords, reviewedIds] = await Promise.all([
+    loadTahoiyaCatalogWords(),
+    redisCommand<string[]>(["SMEMBERS", reviewedSourceKey]).catch(() => []),
+  ]);
+  const blockedWords = new Set(catalogWords);
+  const reviewed = new Set(Array.isArray(reviewedIds) ? reviewedIds : []);
+  const available = tahoiyaSourceLibrary.filter((entry) =>
+    !reviewed.has(entry.id) && !blockedWords.has(normalizeWord(entry.word))
+  );
+  // Rotate the shelf so repeated batches cover different genres without a fixed order.
+  return available
+    .map((entry) => ({ entry, sort: Math.random() }))
+    .sort((left, right) => left.sort - right.sort)
+    .map(({ entry }) => entry)
+    .slice(0, Math.max(1, limit));
+}
+
+export type TahoiyaReviewedCandidate = {
+  source: TahoiyaSourceEntry;
+  topic: TahoiyaTopic;
+  difficulty: TahoiyaCatalogDifficulty;
+  difficultyReason: string;
+  feedbackAnchorTags: string[];
+};
+
+export async function rememberTahoiyaReviewedBatch(
+  reviewedSourceIds: string[],
+  candidates: TahoiyaReviewedCandidate[],
+  difficultyFeedbackIds: string[],
+) {
   const now = Date.now();
-  const args = tahoiyaSeedTopics.flatMap((seed) => {
+  const catalogArgs = candidates.flatMap((candidate) => {
     const record: TahoiyaTopicCatalogRecord = {
-      topic: seed.topic,
-      difficulty: seed.difficulty,
+      topic: candidate.topic,
+      difficulty: candidate.difficulty,
       experiencedPlayerIds: [],
       createdAt: now,
       lastUsedAt: 0,
       useCount: 0,
-      genre: seed.genre,
-      sourceLibrary: seed.sourceLibrary,
-      sourceUrl: seed.sourceUrl,
-      difficultyReason: seed.difficultyReason,
-      difficultyJudgedBy: seed.difficultyJudgedBy,
-      difficultyEvaluation: seed.difficultyEvaluation,
-      difficultyRubricVersion: seed.difficultyRubricVersion,
-      feedbackAnchorTags: seed.feedbackAnchorTags,
+      genre: candidate.source.genre,
+      sourceLibrary: candidate.source.sourceLibrary,
+      sourceUrl: candidate.source.sourceUrl,
+      difficultyReason: candidate.difficultyReason,
+      difficultyJudgedBy: "llm-rag-batch",
+      difficultyEvaluation: "absolute",
+      difficultyRubricVersion: "tahoiya-rag-absolute-v1",
+      feedbackAnchorTags: candidate.feedbackAnchorTags,
       difficultyFeedbackIds: difficultyFeedbackIds.slice(0, 20),
     };
-    return [normalizeWord(seed.topic.word), JSON.stringify(record)];
+    return [normalizeWord(candidate.topic.word), JSON.stringify(record)];
   });
   await redisCommand<number>([
     "EVAL",
-    "local changed=0; for i=1,#ARGV,2 do local raw=redis.call('HGET',KEYS[1],ARGV[i]); local incoming=cjson.decode(ARGV[i+1]); if not raw then redis.call('HSET',KEYS[1],ARGV[i],ARGV[i+1]); changed=changed+1; else local current=cjson.decode(raw); if current.difficultyJudgedBy and string.find(current.difficultyJudgedBy,'llm%-curation') then incoming.experiencedPlayerIds=current.experiencedPlayerIds or {}; incoming.createdAt=current.createdAt or incoming.createdAt; incoming.lastUsedAt=current.lastUsedAt or 0; incoming.useCount=current.useCount or 0; redis.call('HSET',KEYS[1],ARGV[i],cjson.encode(incoming)); changed=changed+1; end end end; return changed",
+    "local added=0; for i=1,#ARGV,2 do if redis.call('HSETNX',KEYS[1],ARGV[i],ARGV[i+1])==1 then added=added+1 end end; return added",
     "1",
     catalogKey,
-    ...args,
+    ...catalogArgs,
   ]);
+  if (reviewedSourceIds.length > 0) {
+    await redisCommand<number>(["SADD", reviewedSourceKey, ...reviewedSourceIds]);
+  }
 }
 
 async function loadTopicRatingScores() {

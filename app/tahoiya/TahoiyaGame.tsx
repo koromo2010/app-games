@@ -670,8 +670,47 @@ export function TahoiyaGame() {
     const params = new URLSearchParams({ test: "1", roomCode: room.code, difficulty: room.topicDifficulty });
     if (forceNew) params.set("forceNew", "1");
     const response = await fetch(`/api/tahoiya/topic?${params.toString()}`, { cache: "no-store" });
-    const topic = (await response.json()) as TahoiyaTopic & { error?: string };
-    if (!response.ok || !topic.word || !topic.realDefinition) {
+    const topic = (await response.json()) as TahoiyaTopic & {
+      error?: string;
+      registeredCount?: number;
+      batch?: Array<{
+        accepted: boolean;
+        word: string;
+        reading: string;
+        realDefinition: string;
+        note: string;
+        difficulty: "easy" | "standard" | "extreme";
+        difficultyReason: string;
+        genre: string;
+        sourceLibrary: string;
+      }>;
+    };
+    if (!response.ok) {
+      throw new Error(topic.notice || topic.error || "ワードを生成できませんでした。");
+    }
+    if (forceNew && topic.batch) {
+      const difficultyLabel = { easy: "簡単すぎる", standard: "普通", extreme: "高難易度" } as const;
+      return {
+        fields: [
+          { label: "一括審査", value: `${topic.batch.length}件` },
+          { label: "候補DBへ登録", value: `${topic.registeredCount ?? 0}件（全プレイヤー未使用）` },
+        ],
+        items: topic.batch.map((item) => ({
+          title: item.word,
+          status: item.accepted ? `採用・${difficultyLabel[item.difficulty]}` : "除外",
+          fields: [
+            { label: "読み", value: item.reading },
+            { label: "説明", value: item.realDefinition },
+            { label: "絶対評価の理由", value: item.difficultyReason },
+            { label: "分野・素材元", value: `${item.genre} / ${item.sourceLibrary}` },
+            { label: "注記", value: item.note },
+          ],
+        })),
+        notice: "10件を相対比較せず、RAGフィードバック基準で個別に絶対評価しました。採用語は履歴を付けず候補DBへ登録済みです。",
+        generation: topic.generation,
+      };
+    }
+    if (!topic.word || !topic.realDefinition) {
       throw new Error(topic.notice || topic.error || "ワードを生成できませんでした。");
     }
     return {

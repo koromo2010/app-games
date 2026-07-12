@@ -5,6 +5,11 @@ import type { GameGenerationMeta } from "@/lib/game-ai-types";
 
 export type DebugWordGenerationResult = {
   fields: Array<{ label: string; value: string }>;
+  items?: Array<{
+    title: string;
+    status?: string;
+    fields: Array<{ label: string; value: string }>;
+  }>;
   notice?: string;
   generation?: GameGenerationMeta;
 };
@@ -77,6 +82,22 @@ export function DebugWordGenerationTest({ onGenerate }: DebugWordGenerationTestP
             <div key={field.label}>
               <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{field.label}</p>
               <p className="whitespace-pre-wrap break-words text-sm font-semibold leading-6 text-slate-950">{field.value || "—"}</p>
+            </div>
+          ))}
+          {result.items?.map((item, index) => (
+            <div key={`${item.title}-${index}`} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-black text-slate-950">{index + 1}. {item.title}</p>
+                {item.status && <span className="rounded-full bg-white px-2 py-1 text-[11px] font-bold text-slate-700">{item.status}</span>}
+              </div>
+              <div className="mt-2 space-y-2">
+                {item.fields.map((field) => (
+                  <div key={field.label}>
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">{field.label}</p>
+                    <p className="whitespace-pre-wrap break-words text-xs font-semibold leading-5 text-slate-900">{field.value || "—"}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
           {result.notice && <p className="text-xs leading-5 text-amber-800">{result.notice}</p>}

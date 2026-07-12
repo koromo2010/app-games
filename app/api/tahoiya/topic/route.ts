@@ -11,15 +11,19 @@ import { withGameGenerationCache } from "@/lib/game-generation-cache";
 import { loadStoredTahoiyaRoom } from "@/lib/tahoiya-room-store";
 import {
   findReusableTahoiyaTopic,
-  ensureTahoiyaSeedCandidates,
   loadExperiencedTahoiyaWords,
   loadTahoiyaCatalogWords,
+  loadUnreviewedTahoiyaSources,
+  rememberTahoiyaReviewedBatch,
   rememberTahoiyaTopicCandidate,
   rememberTahoiyaTopicExperience,
+  type TahoiyaReviewedCandidate,
 } from "@/lib/tahoiya-topic-catalog";
+import type { TahoiyaSourceEntry } from "@/lib/tahoiya-source-library";
 import type { TahoiyaDifficulty, TahoiyaTopic } from "@/lib/tahoiya-types";
 
 const tahoiyaTopicPromptVersion = "tahoiya-topic-v10";
+const tahoiyaBatchPromptVersion = "tahoiya-source-batch-v1";
 export const maxDuration = 180;
 type DefinitionStyle = "brief" | "standard" | "detailed" | "long" | "extended" | "maximum";
 
@@ -442,6 +446,103 @@ async function generateTopic(
     : null;
 }
 
+type BatchReviewItem = {
+  sourceId: string;
+  accepted: boolean;
+  word: string;
+  reading: string;
+  realDefinition: string;
+  note: string;
+  difficulty: "easy" | "standard" | "extreme";
+  difficultyReason: string;
+};
+
+type ParsedBatchReviewItem = BatchReviewItem & { source: TahoiyaSourceEntry };
+
+function difficultyAnchorTags(difficulty: BatchReviewItem["difficulty"]) {
+  if (difficulty === "easy") return ["want-harder-word"];
+  if (difficulty === "extreme") return ["too-difficult", "hard-to-fake"];
+  return ["difficulty-good", "appropriately-obscure", "easy-to-fake"];
+}
+
+function parseBatchReview(text: string, sources: TahoiyaSourceEntry[]): ParsedBatchReviewItem[] {
+  try {
+    const parsed = JSON.parse(text) as { items?: unknown[] };
+    if (!Array.isArray(parsed.items)) return [];
+    const byId = new Map(sources.map((source) => [source.id, source]));
+    return parsed.items.flatMap((raw) => {
+      if (!raw || typeof raw !== "object") return [];
+      const item = raw as Partial<BatchReviewItem>;
+      const source = item.sourceId ? byId.get(item.sourceId) : undefined;
+      const difficulty = item.difficulty === "easy" || item.difficulty === "extreme" ? item.difficulty : "standard";
+      const realDefinition = simplifyDefinition(item.realDefinition);
+      const definitionLength = Array.from(realDefinition.replace(/。$/, "")).length;
+      if (!source || !item.word || !item.reading || !realDefinition || definitionLength < 4 || definitionLength > 60) return [];
+      return [{
+        source,
+        sourceId: source.id,
+        accepted: item.accepted === true,
+        word: String(item.word).trim(),
+        reading: String(item.reading).trim(),
+        realDefinition,
+        note: String(item.note || "素材ライブラリをRAG基準で審査。"),
+        difficulty,
+        difficultyReason: String(item.difficultyReason || "RAGフィードバック基準による絶対評価。"),
+      }];
+    });
+  } catch {
+    return [];
+  }
+}
+
+async function reviewSourceBatch(
+  mode: Exclude<GameLlmMode, "local">,
+  sources: TahoiyaSourceEntry[],
+  feedbackContext: string,
+  retrievedFeedbackIds: string[],
+) {
+  const prompt = [
+    "たほい屋の素材ライブラリから渡す10語を、各語独立に検証・絶対評価してください。語同士を相対比較して順位を付けてはいけません。",
+    "acceptedは、実在・読み・意味を典拠と素材の手掛かりから確信でき、たほい屋で偽説明を作れる語だけtrueにします。不確実、一般的すぎる、差別的、性的、残虐ならfalseです。",
+    "difficultyは必ず絶対基準です。easy=RAGの『もっと難しい語がほしい』相当で一般成人が意味を知るか字面から容易に推測できる。standard=『難易度が良い・適度に珍しい・偽説明を作りやすい』相当。extreme=『難しすぎる・偽説明も作りにくい』相当。",
+    "easyもaccepted=trueなら保存対象です。ゲーム設定に合わないという理由で除外しないでください。",
+    "realDefinitionは意味だけを自然な日本語一文、60文字以内で書き、読み・語源・用例・括弧を含めません。",
+    "difficultyReasonには、知名度、字面からの推測可能性、専門性、偽説明の作りやすさを根拠として短く記述してください。",
+    "入力のsourceIdを必ず維持し、入力全件を同じ順序で返してください。JSON以外は返さないでください。",
+    "形式: {\"items\":[{\"sourceId\":\"...\",\"accepted\":true,\"word\":\"...\",\"reading\":\"...\",\"realDefinition\":\"...\",\"note\":\"...\",\"difficulty\":\"easy|standard|extreme\",\"difficultyReason\":\"...\"}]}",
+    `素材: ${JSON.stringify(sources)}`,
+    feedbackContext,
+  ].filter(Boolean).join("\n\n");
+  const generated = await generateGameLlmText(prompt, mode, { quality: "standard" });
+  const reviewed = parseBatchReview(generated.text, sources);
+  if (reviewed.length !== sources.length) throw new Error(`Batch review returned ${reviewed.length}/${sources.length} items`);
+  const generation: GameGenerationMeta = {
+    provider: generated.provider,
+    model: generated.model,
+    mode: generated.mode,
+    billingSource: generated.billingSource,
+    promptVersion: tahoiyaBatchPromptVersion,
+    latencyMs: generated.latencyMs,
+    retrievedFeedbackIds,
+  };
+  const candidates: TahoiyaReviewedCandidate[] = reviewed.filter((item) => item.accepted).map((item) => ({
+    source: item.source,
+    difficulty: item.difficulty,
+    difficultyReason: item.difficultyReason,
+    feedbackAnchorTags: difficultyAnchorTags(item.difficulty),
+    topic: {
+      word: item.word,
+      reading: item.reading,
+      realDefinition: item.realDefinition,
+      note: item.note,
+      sourceDetail: `${item.source.sourceLibrary}（${item.source.genre}）の素材をLLMで検証。`,
+      source: "llm",
+      generation,
+    },
+  }));
+  return { reviewed, candidates, generation };
+}
+
 async function generateTopicResponse(
   difficulty: TahoiyaDifficulty,
   playerIds: string[],
@@ -453,7 +554,6 @@ async function generateTopicResponse(
     task: "tahoiya.topic",
     queryTags: [difficulty === "extreme" ? "extreme-difficulty" : "very-hard", "varied-definition-length", "no-parentheses"],
   }).catch(() => []);
-  await ensureTahoiyaSeedCandidates(feedbackRecords.map((record) => record.id)).catch(() => undefined);
   const feedbackBlockedWords = getFeedbackBlockedWords(feedbackRecords);
   const [experiencedWords, catalogWords] = await Promise.all([
     loadExperiencedTahoiyaWords(playerIds).catch(() => []),
@@ -506,6 +606,40 @@ async function generateTopicResponse(
     return Response.json(responseTopic);
   }
 
+  if (forceNew) {
+    try {
+      const sources = await loadUnreviewedTahoiyaSources(10);
+      if (sources.length < 10) {
+        return Response.json({ error: `未審査の素材候補が${sources.length}件しかありません。素材ライブラリを補充してください。` }, { status: 409 });
+      }
+      const batch = await reviewSourceBatch(mode, sources, feedbackContext, retrievedFeedbackIds);
+      await rememberTahoiyaReviewedBatch(
+        sources.map((source) => source.id),
+        batch.candidates,
+        retrievedFeedbackIds,
+      );
+      return Response.json({
+        batch: batch.reviewed.map((item) => ({
+          sourceId: item.source.id,
+          accepted: item.accepted,
+          word: item.word,
+          reading: item.reading,
+          realDefinition: item.realDefinition,
+          note: item.note,
+          difficulty: item.difficulty,
+          difficultyReason: item.difficultyReason,
+          genre: item.source.genre,
+          sourceLibrary: item.source.sourceLibrary,
+        })),
+        registeredCount: batch.candidates.length,
+        generation: batch.generation,
+      });
+    } catch (error) {
+      console.error("[tahoiya/topic] source batch review failed", error);
+      return Response.json({ error: "素材候補10件のAI審査に失敗しました。もう一度お試しください。" }, { status: 503 });
+    }
+  }
+
   try {
     const topic = await generateTopic(mode, difficulty, feedbackContext, retrievedFeedbackIds, blockedWords);
     if (topic && !blockedWordSet.has(normalizeTopicWord(topic.word))) {
@@ -514,9 +648,6 @@ async function generateTopicResponse(
     }
   } catch (error) {
     console.error("[tahoiya/topic] falling back to local topic", error);
-  }
-  if (forceNew) {
-    return Response.json({ error: "AIによる新規ワード生成に失敗しました。もう一度お試しください。" }, { status: 503 });
   }
   const reusedTopic = pickFallbackTopic(feedbackBlockedWords, difficulty);
   if (!reusedTopic) {
