@@ -6,7 +6,7 @@
 
 - 作業対象: `app-games`
 - GitHub: `https://github.com/koromo2010/app-games`
-- Vercel本番: `https://app-games-orcin.vercel.app`
+- 本番: `https://www.game-fields.com`（Vercel URL: `https://app-games-orcin.vercel.app`）
 - Next.js App Router / React 19 / TypeScript
 - RedisはUpstash互換REST APIを使用
 - 元の `paper-ai-app` とは完全に別物として扱う
@@ -32,7 +32,7 @@
 
 - `OPENAI_API_KEY`
 - `LLM_ACCESS_PASSWORD`
-- `LLM_SESSION_SECRET`（32文字以上。利用者持込APIキーのCookie暗号化専用）
+- `LLM_SESSION_SECRET`（32文字以上を推奨。利用者持込APIキーのCookie暗号化専用。未設定時は既存のサーバー秘密値から導出）
 - `GEMINI_API_KEY`
 - `GROQ_API_KEY`
 - `DEBUG_MODE_PASSWORD`
@@ -71,7 +71,7 @@
 
 ゲーム側はどちらも `lib/game-llm.ts` のpaidモードとして扱う。`GameGenerationMeta.billingSource` に `personal` または `game-fields` を記録するため、将来の原価・利用量分析で区別できる。決済実装時は `lib/llm-access.ts` のGame Fields提供枠の認可を差し替え、ゲーム固有ルートは変更しない。
 
-利用者持込キーは入力時にOpenAIの `/v1/me` で検証する。平文をRedis、プレイヤーアカウント、ログ、localStorageへ保存しない。AES-256-GCMで暗号化したHttpOnly・SameSite=Lax Cookieへ最大8時間だけ保持し、切断時に削除する。暗号化には32文字以上の `LLM_SESSION_SECRET` が必須。入力画面では専用Project APIキー、権限制限、利用上限設定を案内する。
+利用者持込キーは入力時にOpenAIのモデル取得APIで、現在の有料モデルを利用できるか検証する。平文をRedis、プレイヤーアカウント、ログ、localStorageへ保存しない。AES-256-GCMで暗号化したHttpOnly・SameSite=Lax Cookieへ最大8時間だけ保持し、切断時に削除する。暗号化には32文字以上の `LLM_SESSION_SECRET` を推奨し、未設定時は既存の `LLM_ACCESS_PASSWORD` と `OPENAI_API_KEY` からサーバー内で秘密値を導出する。入力画面では専用Project APIキー、権限制限、利用上限設定を案内する。
 
 ## 5. マルチプレイ共通ルール
 

@@ -15,7 +15,15 @@ function getAccessPassword() {
 }
 
 function getSessionSecret() {
-  return process.env.LLM_SESSION_SECRET?.trim() ?? "";
+  const configured = process.env.LLM_SESSION_SECRET?.trim() ?? "";
+  if (configured.length >= 32) return configured;
+
+  const accessPassword = getAccessPassword();
+  const sharedApiKey = process.env.OPENAI_API_KEY?.trim() ?? "";
+  if (!accessPassword || !sharedApiKey) return "";
+  return createHash("sha256")
+    .update(`app-games-llm-session-fallback:${accessPassword}:${sharedApiKey}`)
+    .digest("hex");
 }
 
 function sessionEncryptionKey() {
@@ -153,12 +161,14 @@ export async function verifyPersonalOpenAiApiKey(apiKey: string) {
   const normalized = apiKey.trim();
   if (normalized.length < 20 || normalized.length > 512 || /\s/.test(normalized)) return false;
 
-  const response = await fetch("https://api.openai.com/v1/me", {
-    headers: { Authorization: `Bearer ${normalized}` },
-    cache: "no-store",
-    signal: AbortSignal.timeout(8000),
-  });
-  if (response.status === 401 || response.status === 403) return false;
-  if (!response.ok) throw new Error(`OPENAI_KEY_VALIDATION_FAILED_${response.status}`);
-  return true;
+  const { default: OpenAI } = await import("openai");
+  const client = new OpenAI({ apiKey: normalized, maxRetries: 0, timeout: 10000 });
+  try {
+    await client.models.retrieve(paidLlmModel);
+    return true;
+  } catch (error) {
+    const status = typeof error === "object" && error && "status" in error ? Number(error.status) : 0;
+    if ([400, 401, 403, 404].includes(status)) return false;
+    throw error;
+  }
 }

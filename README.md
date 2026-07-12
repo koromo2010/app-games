@@ -34,7 +34,7 @@ The shared access panel separates two paid OpenAI billing sources:
 - Personal API: the player supplies a dedicated OpenAI Project API key and is billed directly by OpenAI.
 - Game Fields API: the app uses its own `OPENAI_API_KEY`. It currently uses an invite/test password and is designed so that authorization can later be replaced by a purchase or credit entitlement.
 
-Personal keys are validated server-side, never stored in Redis, player accounts, logs, or localStorage, and are retained for at most eight hours in an AES-256-GCM encrypted HttpOnly cookie. Configure a server-only `LLM_SESSION_SECRET` of at least 32 characters. Players should use a dedicated restricted Project API key with spend controls rather than their primary key.
+Personal keys are validated server-side against the active paid model, never stored in Redis, player accounts, logs, or localStorage, and are retained for at most eight hours in an AES-256-GCM encrypted HttpOnly cookie. A server-only `LLM_SESSION_SECRET` of at least 32 characters is recommended; until it is configured, the existing server-only access password and shared OpenAI key are combined to derive the encryption secret. Players should use a dedicated restricted Project API key with spend controls rather than their primary key.
 
 ## Shared feedback and RAG
 

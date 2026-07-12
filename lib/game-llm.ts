@@ -90,7 +90,8 @@ export async function generateGameLlmText(
       };
     } catch (error) {
       errors.push(error);
-      console.warn(`[game-llm] ${provider} unavailable; trying the next provider`, error);
+      const status = typeof error === "object" && error && "status" in error ? String(error.status) : "unknown";
+      console.warn(`[game-llm] ${provider} unavailable (status: ${status}); trying the next provider`);
     }
   }
 

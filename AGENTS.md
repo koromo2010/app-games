@@ -6,7 +6,7 @@
 
 - このプロジェクトは `app-games`。`paper-ai-app` とは完全に別のアプリとして扱う。
 - GitHub: `koromo2010/app-games`
-- Production: `https://app-games-orcin.vercel.app`
+- Production: `https://www.game-fields.com`（Vercel URLも利用可能）
 - Next.js App Router / React 19 / TypeScript / Redis（Upstash互換）。
 
 ## Non-negotiable architecture
