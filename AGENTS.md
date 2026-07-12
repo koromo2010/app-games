@@ -1,6 +1,6 @@
 # App Games agent guide
 
-このリポジトリを編集するAI・開発者は、作業開始時に `README.md` と `docs/DEVELOPMENT_HANDOFF.md` を読むこと。
+このリポジトリを編集するAI・開発者は、作業開始時に `README.md` と `docs/DEVELOPMENT_HANDOFF.md` を読むこと。お題DB、既出判定、問題再利用を変更する場合は `docs/TOPIC_HISTORY_DATABASE.md` も先に読むこと。
 
 ## Project identity
 
@@ -22,6 +22,7 @@
 - 1プレイヤーが保持できるアクティブな部屋は各ゲームで1つ。
 - サーバーを正として投稿、投票、フェーズ遷移を処理する。クライアントだけで完了判定しない。
 - AI生成物には `GameGenerationMeta` を保持し、Good/Badと自由記述のフィードバックへつなぐ。
+- お題候補へ経験済みプレイヤー配列を増やし続けない。長期設計では、候補と品質統計は候補DB、経験済み候補IDはゲーム別・プレイヤー別Redis Setへ分離する。
 - 既存のユーザー変更を消さない。秘密情報や `.env.local` をコミットしない。
 
 ## Verification and publishing
