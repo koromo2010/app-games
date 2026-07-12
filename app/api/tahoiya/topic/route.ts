@@ -443,6 +443,7 @@ async function generateTopic(
           provider: generated.provider,
           model: generated.model,
           mode: generated.mode,
+          billingSource: generated.billingSource,
           promptVersion: tahoiyaTopicPromptVersion,
           latencyMs: generated.latencyMs + verified.latencyMs,
           retrievedFeedbackIds,

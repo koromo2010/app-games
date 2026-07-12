@@ -1,6 +1,6 @@
 import { hasGeminiApiKey, generateGeminiText } from "@/lib/gemini";
 import { hasGroqApiKey, generateGroqText } from "@/lib/groq";
-import { hasPaidLlmAccess } from "@/lib/llm-access";
+import { getActiveOpenAiApiKey, hasPaidLlmAccess } from "@/lib/llm-access";
 import { freeGroqLlmModel, freeLlmModel, paidLlmModel } from "@/lib/llm-model";
 
 /**
@@ -39,9 +39,11 @@ function providerOrder(mode: Exclude<GameLlmMode, "local">, options: GameLlmGene
 }
 
 async function generateOpenAiText(prompt: string, quality: "standard" | "high") {
+  const access = await getActiveOpenAiApiKey();
+  if (!access) throw new Error("OpenAI API access is not available.");
   const { default: OpenAI } = await import("openai");
   const client = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
+    apiKey: access.apiKey,
     maxRetries: 0,
     timeout: quality === "high" ? 30000 : 6000,
   });
@@ -52,17 +54,18 @@ async function generateOpenAiText(prompt: string, quality: "standard" | "high") 
   });
   const text = response.output_text.trim();
   if (!text) throw new Error("OpenAI API returned no text.");
-  return text;
+  return { text, billingSource: access.source };
 }
 
 async function callProvider(provider: GameLlmProvider, prompt: string, quality: "standard" | "high") {
   if (provider === "openai") {
-    return { text: await generateOpenAiText(prompt, quality), model: paidLlmModel, mode: "paid" as const };
+    const generated = await generateOpenAiText(prompt, quality);
+    return { ...generated, model: paidLlmModel, mode: "paid" as const };
   }
   if (provider === "gemini") {
-    return { text: await generateGeminiText(prompt, { quality }), model: freeLlmModel, mode: "free" as const };
+    return { text: await generateGeminiText(prompt, { quality }), model: freeLlmModel, mode: "free" as const, billingSource: undefined };
   }
-  return { text: await generateGroqText(prompt, quality), model: freeGroqLlmModel, mode: "free" as const };
+  return { text: await generateGroqText(prompt, quality), model: freeGroqLlmModel, mode: "free" as const, billingSource: undefined };
 }
 
 export async function generateGameLlmText(

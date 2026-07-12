@@ -2,6 +2,7 @@ export type GameGenerationMeta = {
   provider: "openai" | "gemini" | "groq" | "local";
   model: string;
   mode: "paid" | "free" | "local";
+  billingSource?: "personal" | "game-fields";
   promptVersion: string;
   latencyMs: number;
   retrievedFeedbackIds: string[];
@@ -42,6 +43,10 @@ export function normalizeGameGenerationMeta(value: unknown): GameGenerationMeta 
     provider,
     model: typeof parsed.model === "string" ? parsed.model.slice(0, 100) : "local",
     mode,
+    billingSource:
+      parsed.billingSource === "personal" || parsed.billingSource === "game-fields"
+        ? parsed.billingSource
+        : undefined,
     promptVersion: typeof parsed.promptVersion === "string" ? parsed.promptVersion.slice(0, 100) : "unknown",
     latencyMs: typeof parsed.latencyMs === "number" ? Math.max(0, Math.round(parsed.latencyMs)) : 0,
     retrievedFeedbackIds: Array.isArray(parsed.retrievedFeedbackIds)

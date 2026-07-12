@@ -219,6 +219,7 @@ async function generateLlmTopic(
           provider: generated.provider,
           model: generated.model,
           mode: generated.mode,
+          billingSource: generated.billingSource,
           promptVersion: wordwolfTopicPromptVersion,
           latencyMs: generated.latencyMs,
           retrievedFeedbackIds,

@@ -16,7 +16,7 @@ All games must access AI providers through `lib/game-llm.ts`. New games should n
 
 The shared provider order is:
 
-1. Paid mode first attempt: OpenAI (`OPENAI_API_KEY`)
+1. Paid mode first attempt: OpenAI (the user's temporary personal key, or Game Fields `OPENAI_API_KEY` access)
 2. If OpenAI fails or its structured output is rejected: Gemini (`GEMINI_API_KEY`)
 3. Free fallback: Groq (`GROQ_API_KEY`)
 4. Final fallback: local game data with a user-visible notice
@@ -26,6 +26,15 @@ Provider model IDs are centralized in `lib/llm-model.ts`.
 Provider failover runs only inside the shared gateway. Game routes must not repeat the provider chain. Topic generation is cached per room and round so duplicate clicks or tabs reuse the same result instead of spending another LLM request.
 
 Quality-critical tasks may pass `quality: "high"` to the shared gateway. Tahoiya topic generation uses high reasoning to create three candidates, then prefers a different provider for independent review and records both the generating and reviewing providers in `GameGenerationMeta`.
+
+## Paid API access
+
+The shared access panel separates two paid OpenAI billing sources:
+
+- Personal API: the player supplies a dedicated OpenAI Project API key and is billed directly by OpenAI.
+- Game Fields API: the app uses its own `OPENAI_API_KEY`. It currently uses an invite/test password and is designed so that authorization can later be replaced by a purchase or credit entitlement.
+
+Personal keys are validated server-side, never stored in Redis, player accounts, logs, or localStorage, and are retained for at most eight hours in an AES-256-GCM encrypted HttpOnly cookie. Configure a server-only `LLM_SESSION_SECRET` of at least 32 characters. Players should use a dedicated restricted Project API key with spend controls rather than their primary key.
 
 ## Shared feedback and RAG
 
