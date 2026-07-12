@@ -10,6 +10,7 @@ import { withGameGenerationCache } from "@/lib/game-generation-cache";
 import { loadStoredTahoiyaRoom } from "@/lib/tahoiya-room-store";
 import {
   findReusableTahoiyaTopic,
+  ensureTahoiyaGitCandidates,
   loadUnreviewedTahoiyaSources,
   rememberTahoiyaReviewedBatch,
   rememberTahoiyaTopicCandidate,
@@ -564,6 +565,9 @@ async function generateTopicResponse(
     }
   };
   if (!forceNew) {
+    await ensureTahoiyaGitCandidates().catch((error) => {
+      console.error("[tahoiya/topic] Git candidate sync failed", error);
+    });
     const reusableTopic = await findReusableTahoiyaTopic(difficulty, playerIds, feedbackBlockedWords).catch(() => null);
     if (reusableTopic) {
       await remember(reusableTopic);

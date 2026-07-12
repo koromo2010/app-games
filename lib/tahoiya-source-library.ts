@@ -1,4 +1,4 @@
-import { redisCommand } from "@/lib/redis-store";
+import { redisCommand } from "./redis-store.ts";
 
 export type TahoiyaSourceEntry = {
   id: string;
@@ -14,7 +14,9 @@ export type TahoiyaSourceEntry = {
 type SourceStrategy =
   | "mesh-lookup" | "getty-sparql" | "loc-suggest" | "openalex-topics"
   | "gbif-species" | "worms-taxa" | "lobid-gnd" | "wikidata-sparql"
-  | "agrovoc-sparql" | "dbpedia-sparql" | "inaturalist-taxa";
+  | "agrovoc-sparql" | "dbpedia-sparql" | "inaturalist-taxa"
+  | "met-collection" | "openlibrary-subjects" | "pbdb-taxa" | "itis-names"
+  | "musicbrainz-instruments" | "worldbank-indicators" | "europepmc-mesh";
 
 export type TahoiyaSourceRegistryRecord = {
   id: string;
@@ -34,7 +36,7 @@ const registryKey = "tahoiya:source:registry:v1";
 const stagingKey = "tahoiya:source:staging:v1";
 const cursorKey = "tahoiya:source:cursor:v1";
 
-const defaultSourceRegistry: TahoiyaSourceRegistryRecord[] = [
+export const defaultTahoiyaSourceRegistry: TahoiyaSourceRegistryRecord[] = [
   {
     id: "nlm-mesh",
     name: "NLM Medical Subject Headings (MeSH)",
@@ -84,6 +86,13 @@ const defaultSourceRegistry: TahoiyaSourceRegistryRecord[] = [
   { id: "fao-agrovoc", name: "FAO AGROVOC", genre: "農学・食品・環境・生物", endpoint: "https://agrovoc.fao.org/sparql", sourceUrl: "https://www.fao.org/agrovoc/", license: "CC BY 4.0", attribution: "FAO AGROVOC", strategy: "agrovoc-sparql", enabled: true },
   { id: "dbpedia", name: "DBpedia Ontology Concepts", genre: "歴史・地理・科学・文化一般", endpoint: "https://dbpedia.org/sparql", sourceUrl: "https://www.dbpedia.org/", license: "CC BY-SA / GFDL", attribution: "DBpedia", strategy: "dbpedia-sparql", enabled: true },
   { id: "inaturalist", name: "iNaturalist Taxonomy", genre: "動物学・植物学・菌類学", endpoint: "https://api.inaturalist.org/v1/taxa", sourceUrl: "https://www.inaturalist.org/pages/api+reference", license: "iNaturalist API terms", attribution: "iNaturalist", strategy: "inaturalist-taxa", enabled: true },
+  { id: "met-museum", name: "The Metropolitan Museum of Art Collection", genre: "美術史・工芸・考古", endpoint: "https://collectionapi.metmuseum.org/public/collection/v1", sourceUrl: "https://metmuseum.github.io/", license: "CC0", attribution: "The Metropolitan Museum of Art", strategy: "met-collection", enabled: true, seedQueries: ["ceramic", "textile", "ritual", "armor", "manuscript", "sculpture", "instrument", "vessel"] },
+  { id: "openlibrary", name: "Open Library Subjects", genre: "文学・歴史・社会・学術一般", endpoint: "https://openlibrary.org/subjects", sourceUrl: "https://openlibrary.org/developers/api", license: "Open Library data terms", attribution: "Open Library / Internet Archive", strategy: "openlibrary-subjects", enabled: true, seedQueries: ["archaeology", "folklore", "medicine", "linguistics", "geology", "navigation", "mythology", "ethnology"] },
+  { id: "paleobiodb", name: "Paleobiology Database", genre: "古生物学・地質学", endpoint: "https://paleobiodb.org/data1.2/taxa/list.json", sourceUrl: "https://paleobiodb.org/data1.2/", license: "CC BY 4.0", attribution: "Paleobiology Database", strategy: "pbdb-taxa", enabled: true, seedQueries: ["Mammalia", "Dinosauria", "Trilobita", "Ammonoidea", "Brachiopoda", "Echinodermata"] },
+  { id: "itis", name: "Integrated Taxonomic Information System", genre: "分類学・生物学", endpoint: "https://www.itis.gov/ITISWebService/jsonservice/searchByCommonName", sourceUrl: "https://www.itis.gov/ws_description.html", license: "Public domain", attribution: "Integrated Taxonomic Information System", strategy: "itis-names", enabled: true, seedQueries: ["sponge", "coral", "moss", "fern", "beetle", "mollusk", "fungus", "algae"] },
+  { id: "musicbrainz", name: "MusicBrainz Instrument Vocabulary", genre: "音楽学・民族楽器", endpoint: "https://musicbrainz.org/ws/2/instrument", sourceUrl: "https://musicbrainz.org/doc/MusicBrainz_API", license: "CC0/CC BY-SA", attribution: "MusicBrainz", strategy: "musicbrainz-instruments", enabled: true, seedQueries: ["type:string", "type:wind", "type:percussion", "type:electronic", "description:traditional"] },
+  { id: "worldbank", name: "World Bank Indicators", genre: "経済学・人口学・国際開発", endpoint: "https://api.worldbank.org/v2/indicator", sourceUrl: "https://datahelpdesk.worldbank.org/knowledgebase/topics/125589-developer-information", license: "CC BY 4.0", attribution: "World Bank", strategy: "worldbank-indicators", enabled: true },
+  { id: "europepmc", name: "Europe PMC MeSH Headings", genre: "医学・生命科学・薬学", endpoint: "https://www.ebi.ac.uk/europepmc/webservices/rest/search", sourceUrl: "https://europepmc.org/RestfulWebService", license: "Europe PMC terms", attribution: "Europe PMC", strategy: "europepmc-mesh", enabled: true, seedQueries: ["neurology", "pathology", "immunology", "anatomy", "hematology", "toxicology", "embryology", "microbiology"] },
 ];
 
 const commonSpokenWords = new Set([
@@ -127,7 +136,7 @@ function parseSourceEntry(raw: string): TahoiyaSourceEntry | null {
 }
 
 export async function ensureTahoiyaSourceRegistry() {
-  await Promise.all(defaultSourceRegistry.map((source) => redisCommand<number>([
+  await Promise.all(defaultTahoiyaSourceRegistry.map((source) => redisCommand<number>([
     "HSETNX", registryKey, source.id, JSON.stringify(source),
   ])));
 }
@@ -309,25 +318,125 @@ async function collectInaturalistTerms(source: TahoiyaSourceRegistryRecord, curs
     : []);
 }
 
+async function collectMetTerms(source: TahoiyaSourceRegistryRecord, cursor: number) {
+  const query = source.seedQueries?.[cursor % (source.seedQueries?.length || 1)] || "artifact";
+  const search = await fetchJson(`${source.endpoint}/search?hasImages=true&q=${encodeURIComponent(query)}`) as { objectIDs?: number[] };
+  const ids = search.objectIDs || [];
+  if (ids.length === 0) return [];
+  const selected = ids.slice((cursor * 7) % Math.max(1, ids.length), ((cursor * 7) % Math.max(1, ids.length)) + 8);
+  const objects = await Promise.all(selected.map((id) => fetchJson(`${source.endpoint}/objects/${id}`).catch(() => null))) as Array<null | {
+    objectID?: number; objectName?: string; classification?: string; culture?: string; medium?: string;
+  }>;
+  return objects.flatMap((item) => {
+    if (!item?.objectID) return [];
+    const word = item.objectName?.trim() || item.classification?.trim() || "";
+    return word ? [sourceEntry(source, `https://www.metmuseum.org/art/collection/search/${item.objectID}`, word, [item.classification, item.culture, item.medium].filter(Boolean).join("; "))] : [];
+  });
+}
+
+async function collectOpenLibraryTerms(source: TahoiyaSourceRegistryRecord, cursor: number) {
+  const subject = source.seedQueries?.[cursor % (source.seedQueries?.length || 1)] || "history";
+  const data = await fetchJson(`${source.endpoint}/${encodeURIComponent(subject)}.json?limit=50&offset=${(cursor % 20) * 50}`) as {
+    works?: Array<{ key?: string; subject?: string[] }>;
+  };
+  return (data.works || []).flatMap((work) => (work.subject || []).slice(0, 5).flatMap((word) =>
+    work.key && word ? [sourceEntry(source, `https://openlibrary.org${work.key}`, word, `Open Library subject related to ${subject}`)] : []
+  ));
+}
+
+async function collectPbdbTerms(source: TahoiyaSourceRegistryRecord, cursor: number) {
+  const base = source.seedQueries?.[cursor % (source.seedQueries?.length || 1)] || "Mammalia";
+  const url = new URL(source.endpoint);
+  url.searchParams.set("base_name", base);
+  url.searchParams.set("show", "attr");
+  url.searchParams.set("limit", "100");
+  const data = await fetchJson(url.toString()) as { records?: Array<{ oid?: string; nam?: string; rnk?: string }> };
+  return (data.records || []).flatMap((item) => item.oid && item.nam
+    ? [sourceEntry(source, `https://paleobiodb.org/classic/checkTaxonInfo?taxon_no=${item.oid.replace(/\D/g, "")}`, item.nam, `${item.rnk || "taxon"} within ${base}. 日本語の定着名がある場合だけ採用する。`)]
+    : []);
+}
+
+async function collectItisTerms(source: TahoiyaSourceRegistryRecord, cursor: number) {
+  const query = source.seedQueries?.[cursor % (source.seedQueries?.length || 1)] || "coral";
+  const data = await fetchJson(`${source.endpoint}?srchKey=${encodeURIComponent(query)}`) as {
+    commonNames?: Array<{ commonName?: string; tsn?: string }>;
+  };
+  return (data.commonNames || []).flatMap((item) => item.commonName && item.tsn
+    ? [sourceEntry(source, `https://www.itis.gov/servlet/SingleRpt/SingleRpt?search_topic=TSN&search_value=${item.tsn}`, item.commonName, `ITIS common name matched by ${query}. 日本語の定着名がある場合だけ採用する。`)]
+    : []);
+}
+
+async function collectMusicBrainzTerms(source: TahoiyaSourceRegistryRecord, cursor: number) {
+  const query = source.seedQueries?.[cursor % (source.seedQueries?.length || 1)] || "type:string";
+  const url = new URL(source.endpoint);
+  url.searchParams.set("query", query);
+  url.searchParams.set("limit", "100");
+  url.searchParams.set("fmt", "json");
+  const data = await fetchJson(url.toString()) as { instruments?: Array<{ id?: string; name?: string; type?: string; description?: string }> };
+  return (data.instruments || []).flatMap((item) => item.id && item.name
+    ? [sourceEntry(source, `https://musicbrainz.org/instrument/${item.id}`, item.name, item.description || item.type || "Musical instrument")]
+    : []);
+}
+
+async function collectWorldBankTerms(source: TahoiyaSourceRegistryRecord, cursor: number) {
+  const url = new URL(source.endpoint);
+  url.searchParams.set("format", "json");
+  url.searchParams.set("per_page", "100");
+  url.searchParams.set("page", String((cursor % 200) + 1));
+  const data = await fetchJson(url.toString()) as [unknown, Array<{ id?: string; name?: string; sourceNote?: string }>];
+  return (Array.isArray(data?.[1]) ? data[1] : []).flatMap((item) => item.id && item.name
+    ? [sourceEntry(source, `https://data.worldbank.org/indicator/${item.id}`, item.name, item.sourceNote || "World Bank indicator")]
+    : []);
+}
+
+async function collectEuropePmcTerms(source: TahoiyaSourceRegistryRecord, cursor: number) {
+  const query = source.seedQueries?.[cursor % (source.seedQueries?.length || 1)] || "pathology";
+  const url = new URL(source.endpoint);
+  url.searchParams.set("query", query);
+  url.searchParams.set("format", "json");
+  url.searchParams.set("resultType", "core");
+  url.searchParams.set("pageSize", "50");
+  url.searchParams.set("page", String((cursor % 20) + 1));
+  const data = await fetchJson(url.toString()) as {
+    resultList?: { result?: Array<{ id?: string; meshHeadingList?: { meshHeading?: Array<{ descriptorName?: string }> } }> };
+  };
+  return (data.resultList?.result || []).flatMap((article) =>
+    (article.meshHeadingList?.meshHeading || []).flatMap((heading) => article.id && heading.descriptorName
+      ? [sourceEntry(source, `https://europepmc.org/article/MED/${article.id}`, heading.descriptorName, `MeSH heading from Europe PMC result for ${query}`)]
+      : [])
+  );
+}
+
+function sourceCollectors(source: TahoiyaSourceRegistryRecord, cursor: number): Record<SourceStrategy, () => Promise<TahoiyaSourceEntry[]>> {
+  return {
+    "mesh-lookup": () => collectMeshTerms(source, cursor),
+    "getty-sparql": () => collectGettyTerms(source, cursor),
+    "loc-suggest": () => collectLocTerms(source, cursor),
+    "openalex-topics": () => collectOpenAlexTerms(source, cursor),
+    "gbif-species": () => collectGbifTerms(source, cursor),
+    "worms-taxa": () => collectWormsTerms(source, cursor),
+    "lobid-gnd": () => collectLobidTerms(source, cursor),
+    "wikidata-sparql": () => collectSparqlTerms(source, cursor),
+    "agrovoc-sparql": () => collectSparqlTerms(source, cursor),
+    "dbpedia-sparql": () => collectSparqlTerms(source, cursor),
+    "inaturalist-taxa": () => collectInaturalistTerms(source, cursor),
+    "met-collection": () => collectMetTerms(source, cursor),
+    "openlibrary-subjects": () => collectOpenLibraryTerms(source, cursor),
+    "pbdb-taxa": () => collectPbdbTerms(source, cursor),
+    "itis-names": () => collectItisTerms(source, cursor),
+    "musicbrainz-instruments": () => collectMusicBrainzTerms(source, cursor),
+    "worldbank-indicators": () => collectWorldBankTerms(source, cursor),
+    "europepmc-mesh": () => collectEuropePmcTerms(source, cursor),
+  };
+}
+
 async function collectFromSource(source: TahoiyaSourceRegistryRecord) {
   const rawCursor = await redisCommand<string | null>(["HGET", cursorKey, source.id]);
   const initialCursor = Number.parseInt(rawCursor || "0", 10) || 0;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const cursor = initialCursor + attempt;
     try {
-      const collectors: Record<SourceStrategy, () => Promise<TahoiyaSourceEntry[]>> = {
-        "mesh-lookup": () => collectMeshTerms(source, cursor),
-        "getty-sparql": () => collectGettyTerms(source, cursor),
-        "loc-suggest": () => collectLocTerms(source, cursor),
-        "openalex-topics": () => collectOpenAlexTerms(source, cursor),
-        "gbif-species": () => collectGbifTerms(source, cursor),
-        "worms-taxa": () => collectWormsTerms(source, cursor),
-        "lobid-gnd": () => collectLobidTerms(source, cursor),
-        "wikidata-sparql": () => collectSparqlTerms(source, cursor),
-        "agrovoc-sparql": () => collectSparqlTerms(source, cursor),
-        "dbpedia-sparql": () => collectSparqlTerms(source, cursor),
-        "inaturalist-taxa": () => collectInaturalistTerms(source, cursor),
-      };
+      const collectors = sourceCollectors(source, cursor);
       const entries = await collectors[source.strategy]();
       await redisCommand<number>(["HSET", cursorKey, source.id, String(cursor + 1)]);
       if (entries.length > 0) {
@@ -341,6 +450,42 @@ async function collectFromSource(source: TahoiyaSourceRegistryRecord) {
   }
   await redisCommand<number>(["HSET", cursorKey, source.id, String(initialCursor + 3)]);
   return [];
+}
+
+async function collectFromSourceAt(source: TahoiyaSourceRegistryRecord, cursor: number) {
+  const collectors = sourceCollectors(source, cursor);
+  return collectors[source.strategy]();
+}
+
+export async function collectTahoiyaSourceBatchFromApis(input: {
+  limit?: number;
+  blockedSourceIds?: string[];
+  blockedWords?: string[];
+} = {}) {
+  const limit = Math.max(1, Math.min(10, input.limit ?? 10));
+  const blockedSourceIds = new Set(input.blockedSourceIds ?? []);
+  const blockedWords = new Set((input.blockedWords ?? []).map((word) => word.normalize("NFKC").trim().toLocaleLowerCase("ja")));
+  const sources = defaultTahoiyaSourceRegistry
+    .filter((source) => source.enabled)
+    .map((source) => ({ source, sort: Math.random() }))
+    .sort((left, right) => left.sort - right.sort)
+    .map(({ source }) => source);
+  const collected = await Promise.all(sources.map(async (source) => {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const cursor = Math.floor(Math.random() * 10_000) + attempt;
+      try {
+        const entries = (await collectFromSourceAt(source, cursor)).filter((entry) =>
+          !blockedSourceIds.has(entry.id) &&
+          !blockedWords.has(entry.word.normalize("NFKC").trim().toLocaleLowerCase("ja"))
+        );
+        if (entries.length > 0) return entries[Math.floor(Math.random() * entries.length)];
+      } catch (error) {
+        console.warn(`[tahoiya/generator] ${source.id} attempt ${attempt + 1} failed`, error);
+      }
+    }
+    return null;
+  }));
+  return collected.filter((entry): entry is TahoiyaSourceEntry => Boolean(entry)).slice(0, limit);
 }
 
 async function storeStagedEntries(entries: TahoiyaSourceEntry[]) {

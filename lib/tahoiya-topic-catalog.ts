@@ -1,4 +1,5 @@
 import type { TahoiyaDifficulty, TahoiyaTopic } from "@/lib/tahoiya-types";
+import gitCandidateData from "@/data/tahoiya-candidates.json";
 import { normalizeGameGenerationMeta } from "@/lib/game-ai-types";
 import { retrieveGameFeedback } from "@/lib/game-feedback-store";
 import { redisCommand } from "@/lib/redis-store";
@@ -12,6 +13,7 @@ import {
 
 const catalogKey = "tahoiya:topic:catalog:v1";
 const reviewedSourceKey = "tahoiya:source-library:reviewed:v1";
+const gitCatalogVersionKey = "tahoiya:topic:git-catalog-version:v1";
 
 export type TahoiyaCatalogDifficulty = "easy" | "standard" | "extreme";
 
@@ -31,6 +33,22 @@ type TahoiyaTopicCatalogRecord = {
   difficultyRubricVersion?: string;
   feedbackAnchorTags?: string[];
   difficultyFeedbackIds?: string[];
+};
+
+type GitCandidate = {
+  word: string;
+  reading: string;
+  realDefinition: string;
+  note: string;
+  difficulty: TahoiyaCatalogDifficulty;
+  difficultyReason: string;
+  feedbackAnchorTags: string[];
+  genre: string;
+  sourceLibrary: string;
+  sourceUrl: string;
+  sourceEntryId: string;
+  generatedAt: string;
+  generation: unknown;
 };
 
 function normalizeWord(value: string) {
@@ -72,6 +90,58 @@ function parseRecord(value: string): TahoiyaTopicCatalogRecord | null {
   } catch {
     return null;
   }
+}
+
+export async function ensureTahoiyaGitCandidates() {
+  const data = gitCandidateData as { updatedAt?: string; candidates?: GitCandidate[] };
+  const version = data.updatedAt?.trim() || "";
+  const candidates = Array.isArray(data.candidates) ? data.candidates : [];
+  if (!version || candidates.length === 0) return 0;
+  const currentVersion = await redisCommand<string | null>(["GET", gitCatalogVersionKey]);
+  if (currentVersion === version) return 0;
+
+  let added = 0;
+  for (let offset = 0; offset < candidates.length; offset += 100) {
+    const args = candidates.slice(offset, offset + 100).flatMap((candidate) => {
+      const generation = normalizeGameGenerationMeta(candidate.generation);
+      const topic: TahoiyaTopic = {
+        word: candidate.word,
+        reading: candidate.reading,
+        realDefinition: candidate.realDefinition,
+        note: candidate.note,
+        sourceDetail: `${candidate.sourceLibrary}からGitHub生成プログラムで収集・審査。`,
+        source: "llm",
+        generation,
+      };
+      const record: TahoiyaTopicCatalogRecord = {
+        topic,
+        difficulty: hasVeryCommonSpokenHomophone(candidate.reading) ? "easy" : candidate.difficulty,
+        experiencedPlayerIds: [],
+        createdAt: Date.parse(candidate.generatedAt) || Date.now(),
+        lastUsedAt: 0,
+        useCount: 0,
+        genre: candidate.genre,
+        sourceLibrary: candidate.sourceLibrary,
+        sourceUrl: candidate.sourceUrl,
+        difficultyReason: candidate.difficultyReason,
+        difficultyJudgedBy: "github-action-llm",
+        difficultyEvaluation: "absolute",
+        difficultyRubricVersion: "tahoiya-rag-absolute-v1",
+        feedbackAnchorTags: candidate.feedbackAnchorTags,
+        difficultyFeedbackIds: [],
+      };
+      return [normalizeWord(candidate.word), JSON.stringify(record)];
+    });
+    if (args.length === 0) continue;
+    added += await redisCommand<number>([
+      "EVAL",
+      "local n=0; for i=1,#ARGV,2 do if redis.call('HSETNX',KEYS[1],ARGV[i],ARGV[i+1])==1 then n=n+1 end end; return n",
+      "1", catalogKey, ...args,
+    ]);
+  }
+  await redisCommand<string>(["SET", gitCatalogVersionKey, version]);
+  console.info(`[tahoiya/catalog] synced ${added}/${candidates.length} Git candidates for ${version}`);
+  return added;
 }
 
 export async function loadUnreviewedTahoiyaSources(limit = 10): Promise<TahoiyaSourceEntry[]> {

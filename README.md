@@ -75,6 +75,21 @@ The curated Tahoiya seed catalog uses or references terminology from the followi
 - [Getty Vocabularies / Art & Architecture Thesaurus](https://www.getty.edu/research/tools/vocabularies/), J. Paul Getty Trust, licensed under ODC-By 1.0. Contributor and record-level sources should also be retained when bulk ingestion is added.
 - [National Diet Library](https://www.ndl.go.jp/), used as a historical-material discovery reference under the applicable [content reuse terms](https://www.ndl.go.jp/use/reproduction).
 
+### Tahoiya candidate generation
+
+Tahoiya candidates are generated separately from gameplay. The manual GitHub Actions workflow
+`Generate Tahoiya candidate catalog` randomly chooses 10 distinct sources from the configured
+20-source registry, collects one unseen heading from each, and reviews all 10 in one LLM request.
+Accepted words are appended to `data/tahoiya-candidates.json`; reruns continue from the existing
+catalog until the requested total (100 for the first run) is reached. After checking quality and API
+cost, the same workflow can continue the catalog toward 1000. The deployed app imports only new
+JSON records into Redis with `HSETNX`, so existing per-player usage history is preserved.
+
+Before running the workflow, add `OPENAI_API_KEY` under GitHub repository Settings → Secrets and
+variables → Actions. An optional Actions variable `TAHOIYA_GENERATOR_MODEL` selects the review model;
+when omitted, the script uses `gpt-5.6-sol`. The generation job uses the configured paid API and may
+take several hours. Gameplay itself does not call these external vocabulary sources or the review LLM.
+
 ## Development
 
 ```bash
