@@ -38,6 +38,8 @@ Every multiplayer game must expose the current room configuration to all partici
 
 Room configuration defaults are stored per game and per player in Redis, with local storage as an offline fallback. New games should use `lib/game-room-defaults-client.ts` for loading and saving, and add their server-side normalizer to `lib/room-defaults-store.ts`.
 
+Multiplayer games should use the shared time-limit options and normalizer in `lib/game-room-config.ts`. A time limit of `0` always means no limit; game-specific phase behavior may decide how partial submissions are handled when time expires.
+
 ## Development
 
 ```bash

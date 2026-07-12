@@ -15,6 +15,7 @@ import {
   savePersistentPlayerSession,
 } from "@/lib/player-session";
 import { loadPlayerRoomDefaults, savePlayerRoomDefaults } from "@/lib/game-room-defaults-client";
+import { commonTimeLimitOptions, normalizeCommonTimeLimit } from "@/lib/game-room-config";
 import {
   getTopicKey,
   getTopicWords,
@@ -152,7 +153,6 @@ function normalizeRoundsTotal(value: unknown) {
   return lobbyRounds.includes(round) ? round : 3;
 }
 
-const turnTimeLimitOptions = [0, 30, 60, 90, 120];
 const noWolfChance = 0.1;
 const roomStoragePrefix = "wordwolf-room-";
 const roomDefaultsStoragePrefix = "wordwolf-room-defaults-";
@@ -225,9 +225,7 @@ function normalizeRoomDefaults(value: unknown): WordWolfRoomDefaults {
     clueMode: normalizeClueMode(parsed.clueMode),
     randomizeTurnOrder: typeof parsed.randomizeTurnOrder === "boolean" ? parsed.randomizeTurnOrder : defaults.randomizeTurnOrder,
     roundsTotal: normalizeRoundsTotal(parsed.roundsTotal),
-    turnTimeLimitSeconds: turnTimeLimitOptions.includes(parsed.turnTimeLimitSeconds ?? -1)
-      ? parsed.turnTimeLimitSeconds ?? defaults.turnTimeLimitSeconds
-      : defaults.turnTimeLimitSeconds,
+    turnTimeLimitSeconds: normalizeCommonTimeLimit(parsed.turnTimeLimitSeconds),
     wolfCount: normalizeStoredWolfCount(parsed.wolfCount),
     topicDictionarySource: normalizeTopicDictionarySource(parsed.topicDictionarySource),
     topicPairDistance: normalizeTopicPairDistance(parsed.topicPairDistance),
@@ -2300,7 +2298,7 @@ export function WordWolfGame() {
                       onChange={(event) => setTurnTimeLimit(Number(event.target.value))}
                       className={`mt-1 ${inputClass}`}
                     >
-                      {turnTimeLimitOptions.map((seconds) => (
+                      {commonTimeLimitOptions.map((seconds) => (
                         <option key={seconds} value={seconds}>
                           {seconds === 0 ? "なし" : `${seconds}秒`}
                         </option>

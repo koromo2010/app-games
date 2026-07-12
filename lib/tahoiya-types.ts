@@ -40,6 +40,8 @@ export type TahoiyaRoom = {
   playMode: TahoiyaPlayMode;
   answererMode: TahoiyaAnswererMode;
   showRealDefinitionToWriters: boolean;
+  actionTimeLimitSeconds: number;
+  phaseStartedAt: number | null;
   answererId: string;
   round: number;
   word: string;

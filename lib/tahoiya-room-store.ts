@@ -1,6 +1,7 @@
 import { redisCommand } from "@/lib/redis-store";
 import type { TahoiyaAnswererMode, TahoiyaDefinitionOption, TahoiyaPhase, TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomChoice } from "@/lib/tahoiya-types";
 import { normalizeGameGenerationMeta } from "@/lib/game-ai-types";
+import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
 
 const roomKeyPrefix = "tahoiya:room:";
 const roomIndexKey = "tahoiya:rooms";
@@ -93,6 +94,8 @@ function normalizeRoom(value: unknown): TahoiyaRoom | null {
     playMode,
     answererMode: isAnswererMode(parsed.answererMode) ? parsed.answererMode : "random",
     showRealDefinitionToWriters: playMode === "single-answerer" && parsed.showRealDefinitionToWriters !== false,
+    actionTimeLimitSeconds: normalizeCommonTimeLimit(parsed.actionTimeLimitSeconds),
+    phaseStartedAt: typeof parsed.phaseStartedAt === "number" ? parsed.phaseStartedAt : null,
     answererId: typeof parsed.answererId === "string" ? parsed.answererId : "",
     round: typeof parsed.round === "number" ? Math.max(1, Math.floor(parsed.round)) : 1,
     word: typeof parsed.word === "string" ? parsed.word : "",
@@ -162,9 +165,22 @@ export async function loadStoredTahoiyaPlayerActiveRoom(playerId: string) {
 }
 
 export async function saveStoredTahoiyaRoom(room: unknown) {
-  const normalizedRoom = normalizeRoom(room);
+  let normalizedRoom = normalizeRoom(room);
   if (!normalizedRoom) {
     throw new Error("INVALID_TAHOIYA_ROOM");
+  }
+
+  const existingRoom = await loadStoredTahoiyaRoom(normalizedRoom.code).catch(() => null);
+  if (existingRoom && existingRoom.round === normalizedRoom.round && normalizedRoom.phase !== "lobby") {
+    normalizedRoom = {
+      ...normalizedRoom,
+      fakeDefinitions: { ...existingRoom.fakeDefinitions, ...normalizedRoom.fakeDefinitions },
+      votes: { ...existingRoom.votes, ...normalizedRoom.votes },
+      options:
+        (existingRoom.phase === "voting" || existingRoom.phase === "result") && existingRoom.options.length > 0
+          ? existingRoom.options
+          : normalizedRoom.options,
+    };
   }
 
   await redisCommand<"OK">(["SET", roomKey(normalizedRoom.code), JSON.stringify(normalizedRoom)]);

@@ -5,6 +5,7 @@ import {
   type TopicPairDistance,
 } from "@/lib/wordwolf";
 import type { ClueLogVisibility, ClueMode, GameMode } from "@/lib/wordwolf-game-types";
+import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
 import { redisCommand } from "@/lib/redis-store";
 
 export type RoomDefaultsGame = "wordwolf" | "tahoiya";
@@ -26,13 +27,13 @@ export type StoredTahoiyaRoomDefaults = {
   playMode: "single-answerer" | "all-vote";
   answererMode: "manual" | "random";
   showRealDefinitionToWriters: boolean;
+  actionTimeLimitSeconds: number;
 };
 
 export type StoredRoomDefaults = StoredWordWolfRoomDefaults | StoredTahoiyaRoomDefaults;
 
 const roomDefaultsKeyPrefix = "room-defaults:";
 const lobbyRounds = [1, 2, 3, 4];
-const turnTimeLimitOptions = [0, 30, 60, 90, 120];
 
 function roomDefaultsKey(game: RoomDefaultsGame, playerId: string) {
   return `${roomDefaultsKeyPrefix}${game}:${playerId}`;
@@ -68,9 +69,7 @@ function normalizeWordWolfDefaults(value: unknown): StoredWordWolfRoomDefaults {
     clueMode: normalizeClueMode(parsed.clueMode),
     randomizeTurnOrder: typeof parsed.randomizeTurnOrder === "boolean" ? parsed.randomizeTurnOrder : true,
     roundsTotal: normalizeRoundsTotal(parsed.roundsTotal),
-    turnTimeLimitSeconds: turnTimeLimitOptions.includes(parsed.turnTimeLimitSeconds ?? -1)
-      ? parsed.turnTimeLimitSeconds ?? 0
-      : 0,
+    turnTimeLimitSeconds: normalizeCommonTimeLimit(parsed.turnTimeLimitSeconds),
     wolfCount: normalizeWolfCount(parsed.wolfCount),
     topicDictionarySource: normalizeTopicDictionarySource(parsed.topicDictionarySource),
     topicPairDistance: normalizeTopicPairDistance(parsed.topicPairDistance),
@@ -85,6 +84,7 @@ function normalizeTahoiyaDefaults(value: unknown): StoredTahoiyaRoomDefaults {
     playMode,
     answererMode: parsed.answererMode === "manual" ? "manual" : "random",
     showRealDefinitionToWriters: playMode === "single-answerer" && parsed.showRealDefinitionToWriters !== false,
+    actionTimeLimitSeconds: normalizeCommonTimeLimit(parsed.actionTimeLimitSeconds),
   };
 }
 

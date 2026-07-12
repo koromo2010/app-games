@@ -10,6 +10,7 @@ import {
   makeRandomAvatarColor,
 } from "@/lib/player-session";
 import { loadPlayerRoomDefaults, savePlayerRoomDefaults } from "@/lib/game-room-defaults-client";
+import { commonTimeLimitOptions, normalizeCommonTimeLimit } from "@/lib/game-room-config";
 import type { TahoiyaAnswererMode, TahoiyaDefinitionOption, TahoiyaPlayMode, TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomChoice, TahoiyaTopic } from "@/lib/tahoiya-types";
 import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
 import { GameFeedbackPanel } from "../components/GameFeedbackPanel";
@@ -34,7 +35,7 @@ const tahoiyaFeedbackReasons = [
   { value: "other", label: "その他" },
 ];
 
-type TahoiyaRoomDefaults = Pick<TahoiyaRoom, "playMode" | "answererMode" | "showRealDefinitionToWriters">;
+type TahoiyaRoomDefaults = Pick<TahoiyaRoom, "playMode" | "answererMode" | "showRealDefinitionToWriters" | "actionTimeLimitSeconds">;
 
 function makeId(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
@@ -63,7 +64,7 @@ function getRoomDefaultsKey(playerId: string, ownerId: string) {
 
 function normalizeRoomDefaults(value: unknown): TahoiyaRoomDefaults {
   if (!value || typeof value !== "object") {
-    return { playMode: "single-answerer", answererMode: "random", showRealDefinitionToWriters: true };
+    return { playMode: "single-answerer", answererMode: "random", showRealDefinitionToWriters: true, actionTimeLimitSeconds: 0 };
   }
   const parsed = value as Partial<TahoiyaRoomDefaults>;
   const playMode = parsed.playMode === "all-vote" ? "all-vote" : "single-answerer";
@@ -71,6 +72,7 @@ function normalizeRoomDefaults(value: unknown): TahoiyaRoomDefaults {
     playMode,
     answererMode: parsed.answererMode === "manual" ? "manual" : "random",
     showRealDefinitionToWriters: playMode === "single-answerer" && parsed.showRealDefinitionToWriters !== false,
+    actionTimeLimitSeconds: normalizeCommonTimeLimit(parsed.actionTimeLimitSeconds),
   };
 }
 
@@ -138,6 +140,8 @@ function normalizeRoom(room: TahoiyaRoom): TahoiyaRoom {
     playMode,
     answererMode: room.answererMode === "manual" ? "manual" : "random",
     showRealDefinitionToWriters: playMode === "single-answerer" && room.showRealDefinitionToWriters !== false,
+    actionTimeLimitSeconds: normalizeCommonTimeLimit(room.actionTimeLimitSeconds),
+    phaseStartedAt: typeof room.phaseStartedAt === "number" ? room.phaseStartedAt : null,
     answererId: typeof room.answererId === "string" ? room.answererId : "",
     round: room.round ?? 1,
     fakeDefinitions: room.fakeDefinitions ?? {},
@@ -289,6 +293,8 @@ function createEmptyRoom(
     playMode: defaults.playMode,
     answererMode: defaults.answererMode,
     showRealDefinitionToWriters: defaults.showRealDefinitionToWriters,
+    actionTimeLimitSeconds: defaults.actionTimeLimitSeconds,
+    phaseStartedAt: null,
     answererId: "",
     round: 1,
     word: "",
@@ -393,6 +399,7 @@ function advanceToVoting(room: TahoiyaRoom): TahoiyaRoom {
     phase: "voting",
     options: createOptions(room),
     votes: {},
+    phaseStartedAt: Date.now(),
   };
 }
 
@@ -403,6 +410,7 @@ function advanceToResult(room: TahoiyaRoom): TahoiyaRoom {
     phase: "result",
     scores: result.scores,
     resultText: result.resultText,
+    phaseStartedAt: null,
   };
 }
 
@@ -422,6 +430,7 @@ export function TahoiyaGame() {
   const [isPolishingDefinition, setIsPolishingDefinition] = useState(false);
   const [polishMessage, setPolishMessage] = useState("");
   const [message, setMessage] = useState("");
+  const [now, setNow] = useState(() => Date.now());
   const roomCode = room?.code;
 
   useEffect(() => {
@@ -462,6 +471,11 @@ export function TahoiyaGame() {
     return () => window.clearInterval(timer);
   }, [roomCode]);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   const isDebugMode = Boolean(room?.debugMode);
   const operationPlayerId = isDebugMode ? activePlayerId : playerId;
   const activePlayer = room?.players.find((player) => player.id === operationPlayerId) ?? null;
@@ -477,6 +491,11 @@ export function TahoiyaGame() {
   const writingDone = room ? submittedCount(room) >= definitionWriterCount : false;
   const voterTarget = room ? (room.playMode === "all-vote" ? room.players.length : 1) : 1;
   const votingDone = room ? voterCount(room) >= voterTarget : false;
+  const phaseDeadline = room?.phaseStartedAt && room.actionTimeLimitSeconds > 0
+    ? room.phaseStartedAt + room.actionTimeLimitSeconds * 1000
+    : null;
+  const remainingSeconds = phaseDeadline ? Math.max(0, Math.ceil((phaseDeadline - now) / 1000)) : null;
+  const phaseTimedOut = phaseDeadline !== null && now >= phaseDeadline;
   const nextWriter = room?.phase === "writing"
     ? definitionWriters.find((player) => !room.fakeDefinitions[player.id])
     : null;
@@ -502,14 +521,42 @@ export function TahoiyaGame() {
         { label: "偽説明", value: "1人1つ・全員完了まで修正可" },
         { label: "投票", value: room.playMode === "all-vote" ? "1人1票・自分には投票不可" : "回答者のみ1票" },
         { label: "正解文の長さ", value: "約10字・20字・30字を混在" },
+        { label: "制限時間", value: room.actionTimeLimitSeconds > 0 ? `${room.actionTimeLimitSeconds}秒` : "なし" },
       ]
     : [];
+
+  useEffect(() => {
+    if (!room || playerId !== room.hostId) return;
+    const shouldAdvanceWriting = room.phase === "writing" && (writingDone || phaseTimedOut);
+    const shouldAdvanceVoting = room.phase === "voting" && (votingDone || phaseTimedOut);
+    if (!shouldAdvanceWriting && !shouldAdvanceVoting) return;
+
+    const advancedRoom = stampRoom(
+      shouldAdvanceWriting ? advanceToVoting(room) : advanceToResult(room),
+    );
+    const timer = window.setTimeout(() => {
+      setRoom(advancedRoom);
+      void saveRoomToStore(advancedRoom);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [phaseTimedOut, playerId, room, votingDone, writingDone]);
 
   const setAndSaveRoom = (nextRoom: TahoiyaRoom) => {
     const stamped = stampRoom(nextRoom);
     setRoom(stamped);
     void saveRoomToStore(stamped);
     void saveRoomDefaultsToStore(stamped);
+  };
+
+  const forceAdvanceToVoting = () => {
+    if (!room || !isHost || room.phase !== "writing") return;
+    setAndSaveRoom(advanceToVoting(room));
+    setSelectedOptionId("");
+  };
+
+  const forceAdvanceToResult = () => {
+    if (!room || !isHost || room.phase !== "voting") return;
+    setAndSaveRoom(advanceToResult(room));
   };
 
   const refreshJoinableRooms = async () => {
@@ -629,6 +676,11 @@ export function TahoiyaGame() {
     setAndSaveRoom({ ...room, showRealDefinitionToWriters });
   };
 
+  const setActionTimeLimit = (actionTimeLimitSeconds: number) => {
+    if (!room || room.phase !== "lobby") return;
+    setAndSaveRoom({ ...room, actionTimeLimitSeconds: normalizeCommonTimeLimit(actionTimeLimitSeconds) });
+  };
+
   const startRound = async () => {
     if (!room || !isHost || isStarting) return;
     const startingRoom = withMinimumDebugPlayers(room);
@@ -664,6 +716,7 @@ export function TahoiyaGame() {
       setAndSaveRoom({
         ...playableRoom,
         phase: "writing",
+        phaseStartedAt: Date.now(),
         word: topic.word,
         reading: topic.reading,
         realDefinition: topic.realDefinition,
@@ -800,6 +853,7 @@ export function TahoiyaGame() {
       topicSourceDetail: "",
       topicSource: "pending",
       topicGeneration: undefined,
+      phaseStartedAt: null,
       fakeDefinitions: {},
       options: [],
       votes: {},
@@ -1020,6 +1074,20 @@ export function TahoiyaGame() {
                       </div>
                     </div>
                     )}
+                    <label className="block text-sm font-medium text-slate-700">
+                      制限時間
+                      <select
+                        value={room.actionTimeLimitSeconds}
+                        onChange={(event) => setActionTimeLimit(Number(event.target.value))}
+                        className={`mt-1 ${inputClass}`}
+                      >
+                        {commonTimeLimitOptions.map((seconds) => (
+                          <option key={seconds} value={seconds}>
+                            {seconds === 0 ? "なし" : `${seconds}秒`}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                   </div>
                 )}
                 <RoomConfigSummary items={roomConfigItems} />
@@ -1110,7 +1178,14 @@ export function TahoiyaGame() {
                           : room.word}
                     </h2>
                   </div>
-                  <span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700">{room.phase}</span>
+                  <div className="flex items-center gap-2">
+                    {remainingSeconds !== null && (room.phase === "writing" || room.phase === "voting") && (
+                      <span className={`rounded-lg px-3 py-2 text-sm font-black ${remainingSeconds <= 10 ? "bg-rose-100 text-rose-800" : "bg-amber-100 text-amber-900"}`}>
+                        残り {remainingSeconds}秒
+                      </span>
+                    )}
+                    <span className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700">{room.phase}</span>
+                  </div>
                 </div>
                 {isDebugMode && (
                   <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">
@@ -1227,10 +1302,17 @@ export function TahoiyaGame() {
                     </>
                   )}
                   <p className="mt-4 text-xs font-semibold text-slate-500">全員の偽説明がそろうと、自動で投票へ進みます。</p>
-                  {isHost && isDebugMode && (
-                    <button onClick={autoFillTestDefinitions} className={`mt-3 ${subtleButtonClass}`}>
-                      未投稿をテスト入力
-                    </button>
+                  {isHost && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {isDebugMode && (
+                        <button onClick={autoFillTestDefinitions} className={subtleButtonClass}>
+                          未投稿をテスト入力
+                        </button>
+                      )}
+                      <button onClick={forceAdvanceToVoting} className={primaryButtonClass}>
+                        投票へ進む（手動）
+                      </button>
+                    </div>
                   )}
                 </div>
               )}
@@ -1287,10 +1369,17 @@ export function TahoiyaGame() {
                     </div>
                   )}
                   <p className="mt-4 text-xs font-semibold text-slate-500">必要な投票がそろうと、自動で採点して結果を表示します。</p>
-                  {isHost && isDebugMode && (
-                    <button onClick={autoFillTestVotes} className={`mt-3 ${subtleButtonClass}`}>
-                      未投票をテスト投票
-                    </button>
+                  {isHost && (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {isDebugMode && (
+                        <button onClick={autoFillTestVotes} className={subtleButtonClass}>
+                          未投票をテスト投票
+                        </button>
+                      )}
+                      <button onClick={forceAdvanceToResult} className={primaryButtonClass}>
+                        結果へ進む（手動）
+                      </button>
+                    </div>
                   )}
                 </div>
               )}
