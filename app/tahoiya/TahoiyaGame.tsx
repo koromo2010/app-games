@@ -665,9 +665,10 @@ export function TahoiyaGame() {
     setAndSaveRoom({ ...room, actionTimeLimitSeconds: normalizeCommonTimeLimit(actionTimeLimitSeconds) }, true);
   };
 
-  const testWordGeneration = async (): Promise<DebugWordGenerationResult> => {
+  const testWordGeneration = async (forceNew: boolean): Promise<DebugWordGenerationResult> => {
     if (!room) throw new Error("部屋の設定を読み込めませんでした。");
-    const params = new URLSearchParams({ test: "1", forceNew: "1", roomCode: room.code, difficulty: room.topicDifficulty });
+    const params = new URLSearchParams({ test: "1", roomCode: room.code, difficulty: room.topicDifficulty });
+    if (forceNew) params.set("forceNew", "1");
     const response = await fetch(`/api/tahoiya/topic?${params.toString()}`, { cache: "no-store" });
     const topic = (await response.json()) as TahoiyaTopic & { error?: string };
     if (!response.ok || !topic.word || !topic.realDefinition) {

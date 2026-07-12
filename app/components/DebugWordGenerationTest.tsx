@@ -10,20 +10,21 @@ export type DebugWordGenerationResult = {
 };
 
 type DebugWordGenerationTestProps = {
-  onGenerate: () => Promise<DebugWordGenerationResult>;
+  onGenerate: (forceNew: boolean) => Promise<DebugWordGenerationResult>;
 };
 
 export function DebugWordGenerationTest({ onGenerate }: DebugWordGenerationTestProps) {
   const [result, setResult] = useState<DebugWordGenerationResult | null>(null);
   const [error, setError] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
+  const [forceNew, setForceNew] = useState(true);
 
   const generate = async () => {
     if (isGenerating) return;
     setIsGenerating(true);
     setError("");
     try {
-      setResult(await onGenerate());
+      setResult(await onGenerate(forceNew));
     } catch (caught) {
       setResult(null);
       setError(caught instanceof Error ? caught.message : "ワード生成のテストに失敗しました。");
@@ -38,13 +39,32 @@ export function DebugWordGenerationTest({ onGenerate }: DebugWordGenerationTestP
       <p className="mt-1 text-xs leading-5 text-amber-800">
         現在の設定で生成結果だけ確認します。部屋・ラウンド・出題履歴は変更しません。
       </p>
+      <label className="mt-3 flex cursor-pointer items-start gap-2 rounded-lg border border-amber-200 bg-white p-3">
+        <input
+          type="checkbox"
+          checked={forceNew}
+          onChange={(event) => setForceNew(event.target.checked)}
+          disabled={isGenerating}
+          className="mt-0.5 size-4 accent-amber-600"
+        />
+        <span>
+          <span className="block text-sm font-bold text-amber-950">新規ワード生成</span>
+          <span className="mt-0.5 block text-xs leading-5 text-amber-800">
+            ON: AIで新規生成　OFF: ローカル候補の選択をテスト
+          </span>
+        </span>
+      </label>
       <button
         type="button"
         onClick={() => void generate()}
         disabled={isGenerating}
         className="mt-3 w-full rounded-lg border border-amber-400 bg-white px-3 py-2 text-sm font-bold text-amber-950 transition hover:bg-amber-100 disabled:cursor-wait disabled:opacity-60"
       >
-        {isGenerating ? "ワード生成中..." : result ? "もう一度生成" : "ワード生成をテスト"}
+        {isGenerating
+          ? "ワード生成中..."
+          : forceNew
+            ? result ? "別の新規ワードを生成" : "新規ワード生成をテスト"
+            : result ? "別のローカル候補を確認" : "ローカル候補をテスト"}
       </button>
       {error && (
         <p role="alert" className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold leading-5 text-rose-700">

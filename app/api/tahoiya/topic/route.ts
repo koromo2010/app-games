@@ -532,10 +532,10 @@ async function generateTopicResponse(
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const previewOnly = url.searchParams.get("test") === "1";
-  const forceNew = previewOnly && url.searchParams.get("forceNew") === "1";
   const roomCode = url.searchParams.get("roomCode")?.trim().toUpperCase() ?? "";
   const round = url.searchParams.get("round")?.trim() ?? "";
   const room = roomCode ? await loadStoredTahoiyaRoom(roomCode).catch(() => null) : null;
+  const forceNew = previewOnly && room?.debugMode === true && url.searchParams.get("forceNew") === "1";
   const difficulty: TahoiyaDifficulty = room?.topicDifficulty === "extreme" || url.searchParams.get("difficulty") === "extreme"
     ? "extreme"
     : "standard";

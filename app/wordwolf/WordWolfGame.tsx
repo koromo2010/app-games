@@ -1203,15 +1203,15 @@ export function WordWolfGame() {
     setAndSaveRoom({ ...room, topicHint: topicHint.slice(0, 80) });
   };
 
-  const testWordGeneration = async (): Promise<DebugWordGenerationResult> => {
+  const testWordGeneration = async (forceNew: boolean): Promise<DebugWordGenerationResult> => {
     if (!room) throw new Error("部屋の設定を読み込めませんでした。");
     const params = new URLSearchParams({
       test: "1",
-      forceNew: "1",
       roomCode: room.code,
       source: room.topicDictionarySource,
       distance: room.topicPairDistance,
     });
+    if (forceNew) params.set("forceNew", "1");
     if (room.topicHint.trim()) params.set("hint", room.topicHint.trim().slice(0, 80));
     const response = await fetch(`/api/wordwolf/topic?${params.toString()}`, { cache: "no-store" });
     const topic = (await response.json()) as WordWolfTopic & { error?: string };
