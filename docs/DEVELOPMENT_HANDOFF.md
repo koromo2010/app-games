@@ -20,6 +20,7 @@
 | 共通フィードバック/RAG | `lib/game-feedback-store.ts`, `lib/game-ai-types.ts`, `app/api/game-feedback/route.ts`, `app/components/GameFeedbackPanel.tsx` |
 | 共通部屋設定 | `lib/room-defaults-store.ts`, `lib/game-room-defaults-client.ts`, `app/components/RoomConfigSummary.tsx` |
 | 共通時間制限 | `lib/game-room-config.ts`, `app/components/RoomTimeLimitControl.tsx` |
+| 共通デバッグ認証 | `app/components/DebugModeButton.tsx`, `app/api/debug-auth/route.ts` |
 | ワードウルフ | `app/wordwolf`, `app/api/wordwolf`, `lib/wordwolf-room-store.ts` |
 | たほい屋 | `app/tahoiya/TahoiyaGame.tsx`, `app/api/tahoiya`, `lib/tahoiya-room-store.ts`, `lib/tahoiya-types.ts` |
 | たほい屋の問題再利用 | `lib/tahoiya-topic-catalog.ts`, `app/api/tahoiya/topic/route.ts` |
@@ -32,6 +33,7 @@
 - `LLM_ACCESS_PASSWORD`
 - `GEMINI_API_KEY`
 - `GROQ_API_KEY`
+- `DEBUG_MODE_PASSWORD`
 - `UPSTASH_REDIS_REST_URL` または `KV_REST_API_URL`
 - `UPSTASH_REDIS_REST_TOKEN` または `KV_REST_API_TOKEN`
 - 既存の `KV_*`, `REDIS_URL` も環境に設定されている場合がある
@@ -56,6 +58,7 @@
 - 投稿・投票がそろったらサーバー側で自動遷移する。
 - 自動遷移しなかった場合の手動ボタンはホスト向けに残すが、必要条件を満たすまで表示しない。
 - 時間制限は共通プリセットと秒数手入力に対応し、`0` は制限なし。
+- デバッグモードは各ゲームのトップバーにあるホスト専用 `DebugModeButton` から切り替える。ONにするときは `DEBUG_MODE_PASSWORD` を共有APIで検証し、ゲームごとのパスワードUIは作らない。
 
 ## 6. ワードウルフ現行仕様の要点
 

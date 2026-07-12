@@ -13,6 +13,7 @@ import { loadPlayerRoomDefaults, savePlayerRoomDefaults } from "@/lib/game-room-
 import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
 import type { TahoiyaAnswererMode, TahoiyaDifficulty, TahoiyaPlayMode, TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomAction, TahoiyaRoomChoice, TahoiyaTopic } from "@/lib/tahoiya-types";
 import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
+import { DebugModeButton } from "../components/DebugModeButton";
 import { GameFeedbackPanel } from "../components/GameFeedbackPanel";
 import { RoomConfigSummary } from "../components/RoomConfigSummary";
 import { RoomTimeLimitControl } from "../components/RoomTimeLimitControl";
@@ -847,6 +848,13 @@ export function TahoiyaGame() {
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
             <PaidLlmAccessButton />
+            {room && isHost && (
+              <DebugModeButton
+                enabled={Boolean(room.debugMode)}
+                disabled={room.phase !== "lobby"}
+                onChange={setDebugMode}
+              />
+            )}
             <Link href="/games" className={subtleButtonClass}>
               ゲームロビー
             </Link>
@@ -921,17 +929,6 @@ export function TahoiyaGame() {
                 </p>
                 {room.phase === "lobby" && isHost && (
                   <div className="space-y-3">
-                    <button
-                      type="button"
-                      onClick={() => setDebugMode(!room.debugMode)}
-                      className={`w-full rounded-lg border px-3 py-2 text-sm font-bold transition ${
-                        room.debugMode
-                          ? "border-amber-400 bg-amber-100 text-amber-950"
-                          : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
-                      }`}
-                    >
-                      デバッグモード {room.debugMode ? "ON" : "OFF"}
-                    </button>
                     <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
                       <p className="text-sm font-bold text-slate-950">遊び方</p>
                       <div className="mt-2 grid grid-cols-2 gap-2">
