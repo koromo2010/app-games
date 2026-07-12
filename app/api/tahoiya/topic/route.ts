@@ -448,12 +448,12 @@ async function generateTopicResponse(
   previewOnly = false,
   forceNew = false,
 ) {
-  await ensureTahoiyaSeedCandidates().catch(() => undefined);
   const feedbackRecords = await retrieveGameFeedback({
     game: "tahoiya",
     task: "tahoiya.topic",
     queryTags: [difficulty === "extreme" ? "extreme-difficulty" : "very-hard", "varied-definition-length", "no-parentheses"],
   }).catch(() => []);
+  await ensureTahoiyaSeedCandidates(feedbackRecords.map((record) => record.id)).catch(() => undefined);
   const feedbackBlockedWords = getFeedbackBlockedWords(feedbackRecords);
   const [experiencedWords, catalogWords] = await Promise.all([
     loadExperiencedTahoiyaWords(playerIds).catch(() => []),

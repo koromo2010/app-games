@@ -18,6 +18,10 @@ type TahoiyaTopicCatalogRecord = {
   sourceUrl?: string;
   difficultyReason?: string;
   difficultyJudgedBy?: string;
+  difficultyEvaluation?: "absolute";
+  difficultyRubricVersion?: string;
+  feedbackAnchorTags?: string[];
+  difficultyFeedbackIds?: string[];
 };
 
 function normalizeWord(value: string) {
@@ -45,13 +49,21 @@ function parseRecord(value: string): TahoiyaTopicCatalogRecord | null {
       sourceUrl: typeof parsed.sourceUrl === "string" ? parsed.sourceUrl : undefined,
       difficultyReason: typeof parsed.difficultyReason === "string" ? parsed.difficultyReason : undefined,
       difficultyJudgedBy: typeof parsed.difficultyJudgedBy === "string" ? parsed.difficultyJudgedBy : undefined,
+      difficultyEvaluation: parsed.difficultyEvaluation === "absolute" ? "absolute" : undefined,
+      difficultyRubricVersion: typeof parsed.difficultyRubricVersion === "string" ? parsed.difficultyRubricVersion : undefined,
+      feedbackAnchorTags: Array.isArray(parsed.feedbackAnchorTags)
+        ? parsed.feedbackAnchorTags.filter((tag): tag is string => typeof tag === "string")
+        : undefined,
+      difficultyFeedbackIds: Array.isArray(parsed.difficultyFeedbackIds)
+        ? parsed.difficultyFeedbackIds.filter((id): id is string => typeof id === "string").slice(0, 20)
+        : undefined,
     };
   } catch {
     return null;
   }
 }
 
-export async function ensureTahoiyaSeedCandidates() {
+export async function ensureTahoiyaSeedCandidates(difficultyFeedbackIds: string[] = []) {
   const now = Date.now();
   const args = tahoiyaSeedTopics.flatMap((seed) => {
     const record: TahoiyaTopicCatalogRecord = {
@@ -66,12 +78,16 @@ export async function ensureTahoiyaSeedCandidates() {
       sourceUrl: seed.sourceUrl,
       difficultyReason: seed.difficultyReason,
       difficultyJudgedBy: seed.difficultyJudgedBy,
+      difficultyEvaluation: seed.difficultyEvaluation,
+      difficultyRubricVersion: seed.difficultyRubricVersion,
+      feedbackAnchorTags: seed.feedbackAnchorTags,
+      difficultyFeedbackIds: difficultyFeedbackIds.slice(0, 20),
     };
     return [normalizeWord(seed.topic.word), JSON.stringify(record)];
   });
   await redisCommand<number>([
     "EVAL",
-    "local added=0; for i=1,#ARGV,2 do added=added+redis.call('HSETNX',KEYS[1],ARGV[i],ARGV[i+1]); end; return added",
+    "local changed=0; for i=1,#ARGV,2 do local raw=redis.call('HGET',KEYS[1],ARGV[i]); local incoming=cjson.decode(ARGV[i+1]); if not raw then redis.call('HSET',KEYS[1],ARGV[i],ARGV[i+1]); changed=changed+1; else local current=cjson.decode(raw); if current.difficultyJudgedBy and string.find(current.difficultyJudgedBy,'llm%-curation') then incoming.experiencedPlayerIds=current.experiencedPlayerIds or {}; incoming.createdAt=current.createdAt or incoming.createdAt; incoming.lastUsedAt=current.lastUsedAt or 0; incoming.useCount=current.useCount or 0; redis.call('HSET',KEYS[1],ARGV[i],cjson.encode(incoming)); changed=changed+1; end end end; return changed",
     "1",
     catalogKey,
     ...args,

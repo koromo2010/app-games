@@ -11,6 +11,9 @@ export type TahoiyaSeedTopic = {
   sourceUrl: string;
   difficultyReason: string;
   difficultyJudgedBy: "llm-curation-2026-07";
+  difficultyEvaluation: "absolute";
+  difficultyRubricVersion: "tahoiya-rag-absolute-v1";
+  feedbackAnchorTags: string[];
 };
 
 const seedGeneration: GameGenerationMeta = {
@@ -22,10 +25,22 @@ const seedGeneration: GameGenerationMeta = {
   retrievedFeedbackIds: [],
 };
 
-function seed(input: Omit<TahoiyaSeedTopic, "difficultyJudgedBy">): TahoiyaSeedTopic {
+function feedbackAnchorTags(difficulty: TahoiyaCatalogDifficulty) {
+  if (difficulty === "easy") return ["want-harder-word"];
+  if (difficulty === "extreme") return ["too-difficult", "hard-to-fake"];
+  return ["difficulty-good", "appropriately-obscure", "easy-to-fake"];
+}
+
+function seed(input: Omit<
+  TahoiyaSeedTopic,
+  "difficultyJudgedBy" | "difficultyEvaluation" | "difficultyRubricVersion" | "feedbackAnchorTags"
+>): TahoiyaSeedTopic {
   return {
     ...input,
     difficultyJudgedBy: "llm-curation-2026-07",
+    difficultyEvaluation: "absolute",
+    difficultyRubricVersion: "tahoiya-rag-absolute-v1",
+    feedbackAnchorTags: feedbackAnchorTags(input.difficulty),
     topic: { ...input.topic, generation: seedGeneration },
   };
 }
