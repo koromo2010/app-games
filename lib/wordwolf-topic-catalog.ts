@@ -3,6 +3,7 @@ import { retrieveGameFeedback } from "@/lib/game-feedback-store";
 import {
   getTopicKey,
   getTopicWords,
+  isStrictProperNounTopic,
   normalizeTopicWord,
   type TopicDictionarySource,
   type TopicPairDistance,
@@ -109,6 +110,7 @@ export async function findReusableWordWolfTopic(input: {
     .filter((record): record is WordWolfTopicCatalogRecord => Boolean(
       record &&
       record.topic.dictionarySource === input.dictionarySource &&
+      (input.dictionarySource !== "proper-noun" || isStrictProperNounTopic(record.topic)) &&
       record.topic.pairDistance === input.pairDistance &&
       getTopicWords(record.topic).every((word) => !blocked.has(word)) &&
       (!normalizedHint || normalizeTopicWord(
@@ -163,7 +165,7 @@ export async function rememberWordWolfTopicExperience(topic: WordWolfTopic, play
 
 export async function rememberWordWolfTopicCandidate(topic: WordWolfTopic) {
   const words = getTopicWords(topic);
-  if (words.length !== 2) return;
+  if (words.length !== 2 || (topic.dictionarySource === "proper-noun" && !isStrictProperNounTopic(topic))) return;
   const now = Date.now();
   const seed: WordWolfTopicCatalogRecord = {
     topic,

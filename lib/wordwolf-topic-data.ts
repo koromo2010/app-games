@@ -60,7 +60,6 @@ export const additionalProperNounWidePairTopics: TopicCandidate[] = [
   { villageWord: "アメリカ独立宣言", wolfWord: "フランス人権宣言", reason: "近代史で有名な宣言だが、背景となる革命や内容の印象が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
   { villageWord: "国富論", wolfWord: "社会契約論", reason: "社会科で名前を聞く古典的な著作だが、経済思想と政治思想で焦点が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
   { villageWord: "国会", wolfWord: "最高裁判所", reason: "公民で学ぶ国家機関だが、立法と司法で役割が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
-  { villageWord: "日本国憲法", wolfWord: "民法", reason: "法律として有名だが、国家の基本ルールと生活上の権利関係で違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
   { villageWord: "世界恐慌", wolfWord: "リーマン・ショック", reason: "経済危機として有名な出来事だが、時代や金融の背景が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
   { villageWord: "ニクソン・ショック", wolfWord: "プラザ合意", reason: "経済史で出る国際金融の出来事だが、起きた背景や影響が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
   { villageWord: "阪神・淡路大震災", wolfWord: "伊勢湾台風", reason: "日本の大きな自然災害名だが、災害の種類や時代が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },

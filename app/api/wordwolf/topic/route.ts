@@ -5,6 +5,7 @@ import {
   normalizeTopicPairDistance,
   normalizeTopicWord,
   isValidWordWolfTopic,
+  isStrictProperNounTopic,
   pickFallbackTopic,
   type TopicDictionarySource,
   type TopicPairDistance,
@@ -90,7 +91,7 @@ function parseTopic(
       sourceMode: dictionarySource === "proper-noun" ? "proper-noun" : "llm",
     } satisfies WordWolfTopic;
 
-    return isValidWordWolfTopic(topic) ? topic : null;
+    return isValidWordWolfTopic(topic) && (dictionarySource !== "proper-noun" || isStrictProperNounTopic(topic)) ? topic : null;
   } catch {
     return null;
   }
@@ -143,7 +144,7 @@ async function generateLlmTopic(
           "Allowed types include people, fictional characters, works, brands/products, organizations, facilities, regions, landmarks, and events.",
           "Pair the same semantic type and layer: person with person, character with character, work with work, brand/product with brand/product, place/landmark with place/landmark, organization with organization.",
           "Prefer categories where several other famous alternatives also exist, so early clues do not uniquely identify the answer. Good examples: convenience-store chains, coffee chains, universities, train lines, theme parks, video platforms, sports teams, long-running TV shows, manga magazines, game consoles, smartphone brands, and city landmarks.",
-          "Do not use bare abstract concepts or opposing ideology words as proper nouns. For school topics, use named people, named works, named events, named treaties, named laws, named places, named institutions, or person-named laws/theories.",
+          "Do not use common category words, subject names, abstract concepts, or ideology words as proper nouns. Bare legal categories such as 民法, 刑法, 商法, 憲法, 法律, 条例 are common nouns and are strictly forbidden. A law-related answer is allowed only when it has a distinctive full proper name such as 日本国憲法; named people, works, events, treaties, places, and institutions are preferred.",
           "Do not pair the most famous item and the second most famous item in the same narrow group. Prefer a third/fourth option, a different subfield, or a two-hop association that still shares a broad context.",
           "The pair must belong to a category with at least six plausible well-known candidates. List at least four other plausible candidates in alternativeCandidates; neither chosen answer may appear in that list.",
           "Set pairIsCanonical to false only after confirming the names are not a famous duo, rivalry, direct predecessor/successor, adjacent eras, two sides of one event, or the standard two examples people mention together.",

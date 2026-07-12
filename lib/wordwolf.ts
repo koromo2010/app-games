@@ -236,6 +236,18 @@ export function isValidWordWolfTopic(topic: Pick<WordWolfTopic, "villageWord" | 
   return villageWord.length > 0 && wolfWord.length > 0 && villageWord !== wolfWord;
 }
 
+const genericWordsRejectedAsProperNouns = new Set([
+  "民法", "刑法", "商法", "憲法", "法律", "法令", "条例",
+  "政治", "経済", "歴史", "地理", "国語", "数学", "物理", "化学", "生物",
+  "資本主義", "社会主義", "民主主義", "共産主義", "市場", "国会", "内閣",
+]);
+
+export function isStrictProperNounTopic(topic: Pick<WordWolfTopic, "villageWord" | "wolfWord">) {
+  return [topic.villageWord, topic.wolfWord]
+    .map((word) => word.normalize("NFKC").trim())
+    .every((word) => word.length > 0 && !genericWordsRejectedAsProperNouns.has(word));
+}
+
 function pickFromCandidates(
   candidates: TopicCandidate[],
   excludeKeys: string[],
@@ -477,14 +489,17 @@ export function pickFallbackTopic(
 ): WordWolfTopic {
   const localSource = normalizeTopicDictionarySource(dictionarySource);
   const distance = normalizeTopicPairDistance(pairDistance);
-  const hintedTopic = pickHintedTopic(getHintCandidates(localSource, topicHint), distance, excludeKeys, excludeWords);
+  const strictProperNouns = (topics: TopicCandidate[]) => localSource === "proper-noun"
+    ? topics.filter(isStrictProperNounTopic)
+    : topics;
+  const hintedTopic = pickHintedTopic(strictProperNouns(getHintCandidates(localSource, topicHint)), distance, excludeKeys, excludeWords);
   if (hintedTopic) return hintedTopic;
 
   const strictTopic = orderedFallbackDistances(distance)
-    .map((candidateDistance) => pickFreshFromCandidates(localTopicDecks[localSource][candidateDistance], excludeKeys, excludeWords))
+    .map((candidateDistance) => pickFreshFromCandidates(strictProperNouns(localTopicDecks[localSource][candidateDistance]), excludeKeys, excludeWords))
     .find((topic): topic is WordWolfTopic => Boolean(topic));
 
   if (strictTopic) return strictTopic;
 
-  return pickFromCandidates(localTopicDecks[localSource][distance], excludeKeys, excludeWords);
+  return pickFromCandidates(strictProperNouns(localTopicDecks[localSource][distance]), excludeKeys, excludeWords);
 }
