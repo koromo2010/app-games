@@ -13,19 +13,35 @@ import { loadStoredTahoiyaRoom } from "@/lib/tahoiya-room-store";
 import { findReusableTahoiyaTopic, rememberTahoiyaTopicExperience } from "@/lib/tahoiya-topic-catalog";
 import type { TahoiyaDifficulty, TahoiyaTopic } from "@/lib/tahoiya-types";
 
-const tahoiyaTopicPromptVersion = "tahoiya-topic-v9";
+const tahoiyaTopicPromptVersion = "tahoiya-topic-v10";
 export const maxDuration = 180;
 const usedTopicWordsKey = "tahoiya:topic:used-words";
-type DefinitionStyle = "brief" | "standard" | "detailed";
+type DefinitionStyle = "brief" | "standard" | "detailed" | "long" | "extended" | "maximum";
 
 const definitionStyleRules: Record<DefinitionStyle, { max: number; instruction: string }> = {
   brief: { max: 14, instruction: "10文字程度の短く端的な説明" },
   standard: { max: 25, instruction: "20文字程度の標準的な説明" },
   detailed: { max: 38, instruction: "30文字程度で特徴や用途を少し補った説明" },
+  long: { max: 46, instruction: "40文字程度で特徴を自然に補った説明" },
+  extended: { max: 55, instruction: "50文字程度で意味の理解に必要な情報を含めた説明" },
+  maximum: { max: 60, instruction: "55文字から60文字以内の詳しい説明" },
 };
 
 function pickDefinitionStyle(): DefinitionStyle {
-  return ["brief", "standard", "detailed"][Math.floor(Math.random() * 3)] as DefinitionStyle;
+  const weightedStyles: Array<{ style: DefinitionStyle; weight: number }> = [
+    { style: "brief", weight: 35 },
+    { style: "standard", weight: 28 },
+    { style: "detailed", weight: 20 },
+    { style: "long", weight: 10 },
+    { style: "extended", weight: 5 },
+    { style: "maximum", weight: 2 },
+  ];
+  let roll = Math.random() * 100;
+  for (const choice of weightedStyles) {
+    roll -= choice.weight;
+    if (roll < 0) return choice.style;
+  }
+  return "brief";
 }
 
 function localGenerationMeta(retrievedFeedbackIds: string[]): GameGenerationMeta {
@@ -382,7 +398,7 @@ async function generateTopic(
     "3候補をすべて同種にせず、一般語、固有名詞、固有名詞ではないカタカナ語を各1候補ずつ出してください。差別語、性的または残虐な語は避けてください。",
     "realDefinitionには意味だけを書き、読み方、語源、用例、別名、漢字の説明を含めないでください。",
     "realDefinitionは括弧を使わず、一文にしてください。複数の意味を並べないでください。",
-    `今回は${definitionRule.instruction}を目安にしてください。意味を自然に説明できることを優先し、文字数を合わせるための不要な言い換えや情報追加はしないでください。`,
+    `今回は${definitionRule.instruction}を目安とし、${definitionRule.max}文字以内にしてください。意味を自然に説明できることを優先し、文字数を合わせるための不要な言い換えや情報追加はしないでください。`,
     "readingは専用フィールドにだけ入れてください。noteは選定理由を短く書いてください。",
     "sourceDetailには、その語と語義を確認できる辞書名・辞典の種類・典拠など、確実な確認情報を短く書いてください。不確かな辞書名を創作しないでください。",
     "3候補は互いに異なる分野・字面・意味にし、最終校閲者が比較して最良の1つを選べるようにしてください。",
@@ -406,7 +422,7 @@ async function generateTopic(
     "少しでも確信がなければvalidをfalseにしてください。推測で修正や補完をしないでください。",
     "実在・読み・語義・典拠に疑いがある候補は除外してください。複数が有効なら、一般的な大人が意味を知らず、字面だけでは意味を推測しにくく、偽説明を作りやすい候補を優先してください。",
     "固有名詞は現代人物・企業・商品ではないこと、カタカナ語は日本語で実際に用いられる見出し語であることも確認してください。",
-    `validがtrueの場合も、realDefinitionは意味だけの一文とし、${definitionRule.instruction}を目安にしてください。自然な説明を無理に引き延ばさず、読み方、語源、用例、別名、漢字の説明、括弧を含めないでください。`,
+    `validがtrueの場合も、realDefinitionは意味だけの一文とし、${definitionRule.instruction}を目安に${definitionRule.max}文字以内にしてください。自然な説明を無理に引き延ばさず、読み方、語源、用例、別名、漢字の説明、括弧を含めないでください。`,
     "sourceDetailの辞書名や確認情報が不確か、または創作の可能性がある場合もvalidをfalseにしてください。",
     "JSONのみで返してください: {\"valid\":trueまたはfalse,\"word\":\"...\",\"reading\":\"...\",\"realDefinition\":\"...\",\"note\":\"...\",\"sourceDetail\":\"...\"}",
     `検証候補一覧: ${JSON.stringify(topics)}`,

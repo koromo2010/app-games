@@ -478,7 +478,17 @@ export function TahoiyaGame() {
     return [...room.players].sort((left, right) => (room.scores[right.id] ?? 0) - (room.scores[left.id] ?? 0));
   }, [room]);
   const definitionLength = room ? Array.from(room.realDefinition.replace(/。$/, "")).length : 0;
-  const definitionGranularity = definitionLength <= 14 ? "brief" : definitionLength <= 25 ? "standard" : "detailed";
+  const definitionGranularity = definitionLength <= 14
+    ? "brief"
+    : definitionLength <= 25
+      ? "standard"
+      : definitionLength <= 38
+        ? "detailed"
+        : definitionLength <= 46
+          ? "long"
+          : definitionLength <= 55
+            ? "extended"
+            : "maximum";
   const roomConfigItems = room
     ? [
         { label: "遊び方", value: room.playMode === "all-vote" ? "全員作成・全員投票" : "回答者1人" },
@@ -489,7 +499,7 @@ export function TahoiyaGame() {
         { label: "正解情報", value: room.showRealDefinitionToWriters ? "偽説明担当に見せる" : "結果まで見せない" },
         { label: "偽説明", value: "1人1つ・全員完了まで修正可" },
         { label: "投票", value: room.playMode === "all-vote" ? "1人1票・自分には投票不可" : "回答者のみ1票" },
-        { label: "正解文の長さ", value: "約10字・20字・30字を混在" },
+        { label: "正解文の長さ", value: "10〜30字中心・40〜60字は低確率" },
         { label: "制限時間", value: room.actionTimeLimitSeconds > 0 ? `${room.actionTimeLimitSeconds}秒` : "なし" },
       ]
     : [];
