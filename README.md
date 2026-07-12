@@ -2,6 +2,8 @@
 
 Party game prototypes built with Next.js.
 
+> AI・別スレッドで開発を再開する場合は、最初に [`AGENTS.md`](./AGENTS.md) と [`docs/DEVELOPMENT_HANDOFF.md`](./docs/DEVELOPMENT_HANDOFF.md) を読んでください。現在の仕様、共通設計、主要ファイル、検証・デプロイ手順をまとめています。
+
 ## Routes
 
 - `/games` - game lobby

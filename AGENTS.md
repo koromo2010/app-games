@@ -1,0 +1,34 @@
+# App Games agent guide
+
+このリポジトリを編集するAI・開発者は、作業開始時に `README.md` と `docs/DEVELOPMENT_HANDOFF.md` を読むこと。
+
+## Project identity
+
+- このプロジェクトは `app-games`。`paper-ai-app` とは完全に別のアプリとして扱う。
+- GitHub: `koromo2010/app-games`
+- Production: `https://app-games-orcin.vercel.app`
+- Next.js App Router / React 19 / TypeScript / Redis（Upstash互換）。
+
+## Non-negotiable architecture
+
+- ゲームからLLM事業者を直接呼ばない。必ず `lib/game-llm.ts` を通す。
+- APIキーをクライアントへ出さない。
+- マルチプレイの部屋設定は参加者全員に表示し、変更はロビーのホストだけに許可する。
+- 部屋設定のデフォルトはゲーム別・プレイヤー別に保存する。
+- 1プレイヤーが保持できるアクティブな部屋は各ゲームで1つ。
+- サーバーを正として投稿、投票、フェーズ遷移を処理する。クライアントだけで完了判定しない。
+- AI生成物には `GameGenerationMeta` を保持し、Good/Badと自由記述のフィードバックへつなぐ。
+- 既存のユーザー変更を消さない。秘密情報や `.env.local` をコミットしない。
+
+## Verification and publishing
+
+変更後は最低限、次を実行する。
+
+```bash
+npm run lint
+npm run build
+```
+
+`main` へのpushでVercel本番が自動デプロイされる。変更を公開した場合は、対象コミットのデプロイが `READY` になったことまで確認する。
+
+アーキテクチャ、ゲームルール、環境変数、主要ファイル、デプロイ方法を変えた場合は、同じ変更内で `docs/DEVELOPMENT_HANDOFF.md` も更新すること。
