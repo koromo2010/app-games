@@ -576,16 +576,6 @@ async function generateTopicResponse(
       await remember(reusableTopic);
       return Response.json(reusableTopic);
     }
-
-    const localTopic = pickFallbackTopic(blockedWords, difficulty);
-    if (localTopic) {
-      const responseTopic: TahoiyaTopic = {
-        ...localTopic,
-        generation: localGenerationMeta(retrievedFeedbackIds),
-      };
-      await remember(responseTopic);
-      return Response.json(responseTopic);
-    }
   }
 
   const mode = await resolveGameLlmMode();
@@ -638,6 +628,27 @@ async function generateTopicResponse(
       console.error("[tahoiya/topic] source batch review failed", error);
       return Response.json({ error: "素材候補10件のAI審査に失敗しました。もう一度お試しください。" }, { status: 503 });
     }
+  }
+
+  // A real round also refills the playable catalog in batches. One LLM call
+  // therefore pays for several future rounds instead of producing one word.
+  try {
+    const sources = await loadUnreviewedTahoiyaSources(10);
+    if (sources.length === 10) {
+      const batch = await reviewSourceBatch(mode, sources, feedbackContext, retrievedFeedbackIds);
+      await rememberTahoiyaReviewedBatch(
+        sources.map((source) => source.id),
+        batch.candidates,
+        retrievedFeedbackIds,
+      );
+      const selected = batch.candidates.find((candidate) => candidate.difficulty === difficulty);
+      if (selected) {
+        await rememberTahoiyaTopicExperience(selected.topic, difficulty, playerIds).catch(() => undefined);
+        return Response.json(selected.topic);
+      }
+    }
+  } catch (error) {
+    console.error("[tahoiya/topic] catalog batch refill failed", error);
   }
 
   try {
