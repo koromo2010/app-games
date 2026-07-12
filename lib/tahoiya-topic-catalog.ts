@@ -1,5 +1,6 @@
 import type { TahoiyaDifficulty, TahoiyaTopic } from "@/lib/tahoiya-types";
 import { normalizeGameGenerationMeta } from "@/lib/game-ai-types";
+import { retrieveGameFeedback } from "@/lib/game-feedback-store";
 import { redisCommand } from "@/lib/redis-store";
 
 const catalogKey = "tahoiya:topic:catalog:v1";
@@ -39,6 +40,25 @@ function parseRecord(value: string): TahoiyaTopicCatalogRecord | null {
   }
 }
 
+async function loadTopicRatingScores() {
+  const records = await retrieveGameFeedback({
+    game: "tahoiya",
+    task: "tahoiya.topic",
+    goodLimit: 200,
+    badLimit: 200,
+  });
+  const scores = new Map<string, { good: number; bad: number }>();
+  for (const record of records) {
+    const match = record.artifactText.match(/(?:^|\s\/\s)単語=([^/]+)/);
+    if (!match?.[1]) continue;
+    const word = normalizeWord(match[1]);
+    const current = scores.get(word) ?? { good: 0, bad: 0 };
+    current[record.rating] += 1;
+    scores.set(word, current);
+  }
+  return scores;
+}
+
 export async function findReusableTahoiyaTopic(
   difficulty: TahoiyaDifficulty,
   playerIds: string[],
@@ -46,7 +66,10 @@ export async function findReusableTahoiyaTopic(
 ) {
   if (playerIds.length === 0) return null;
   const blocked = new Set(blockedWords.map(normalizeWord));
-  const values = await redisCommand<string[]>(["HVALS", catalogKey]);
+  const [values, ratingScores] = await Promise.all([
+    redisCommand<string[]>(["HVALS", catalogKey]),
+    loadTopicRatingScores().catch(() => new Map<string, { good: number; bad: number }>()),
+  ]);
   const candidates = (Array.isArray(values) ? values : [])
     .map(parseRecord)
     .filter((record): record is TahoiyaTopicCatalogRecord => Boolean(
@@ -55,7 +78,17 @@ export async function findReusableTahoiyaTopic(
       !blocked.has(normalizeWord(record.topic.word)) &&
       playerIds.every((playerId) => !record.experiencedPlayerIds.includes(playerId)),
     ))
-    .sort((left, right) => left.useCount - right.useCount || left.lastUsedAt - right.lastUsedAt);
+    .sort((left, right) => {
+      const leftRating = ratingScores.get(normalizeWord(left.topic.word)) ?? { good: 0, bad: 0 };
+      const rightRating = ratingScores.get(normalizeWord(right.topic.word)) ?? { good: 0, bad: 0 };
+      const leftScore = leftRating.good - leftRating.bad;
+      const rightScore = rightRating.good - rightRating.bad;
+      return rightScore - leftScore ||
+        rightRating.good - leftRating.good ||
+        leftRating.bad - rightRating.bad ||
+        left.useCount - right.useCount ||
+        left.lastUsedAt - right.lastUsedAt;
+    });
   const record = candidates[0];
   if (!record) return null;
   return {

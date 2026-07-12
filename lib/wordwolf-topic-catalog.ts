@@ -1,4 +1,5 @@
 import { normalizeGameGenerationMeta } from "@/lib/game-ai-types";
+import { retrieveGameFeedback } from "@/lib/game-feedback-store";
 import {
   getTopicKey,
   getTopicWords,
@@ -46,6 +47,25 @@ function parseRecord(value: string): WordWolfTopicCatalogRecord | null {
   }
 }
 
+async function loadTopicRatingScores() {
+  const records = await retrieveGameFeedback({
+    game: "wordwolf",
+    task: "wordwolf.topic",
+    goodLimit: 200,
+    badLimit: 200,
+  });
+  const scores = new Map<string, { good: number; bad: number }>();
+  for (const record of records) {
+    const match = record.artifactText.match(/村側=([^/]+)\s*\/\s*狼側=([^/]+)/);
+    if (!match?.[1] || !match[2]) continue;
+    const key = getTopicKey({ villageWord: match[1].trim(), wolfWord: match[2].trim() });
+    const current = scores.get(key) ?? { good: 0, bad: 0 };
+    current[record.rating] += 1;
+    scores.set(key, current);
+  }
+  return scores;
+}
+
 export async function loadExperiencedWordWolfWords(playerIds: string[]) {
   if (playerIds.length === 0) return [];
   const raw = await redisCommand<string[]>(["HGETALL", wordExperienceKey]);
@@ -72,7 +92,10 @@ export async function findReusableWordWolfTopic(input: {
   const experiencedWords = await loadExperiencedWordWolfWords(input.playerIds);
   const blocked = new Set([...input.blockedWords, ...experiencedWords].map(normalizeTopicWord));
   const normalizedHint = normalizeTopicWord(input.topicHint);
-  const values = await redisCommand<string[]>(["HVALS", catalogKey]);
+  const [values, ratingScores] = await Promise.all([
+    redisCommand<string[]>(["HVALS", catalogKey]),
+    loadTopicRatingScores().catch(() => new Map<string, { good: number; bad: number }>()),
+  ]);
   const candidates = (Array.isArray(values) ? values : [])
     .map(parseRecord)
     .filter((record): record is WordWolfTopicCatalogRecord => Boolean(
@@ -84,7 +107,17 @@ export async function findReusableWordWolfTopic(input: {
         `${record.topic.villageWord} ${record.topic.wolfWord} ${record.topic.reason}`,
       ).includes(normalizedHint)),
     ))
-    .sort((left, right) => left.useCount - right.useCount || left.lastUsedAt - right.lastUsedAt);
+    .sort((left, right) => {
+      const leftRating = ratingScores.get(getTopicKey(left.topic)) ?? { good: 0, bad: 0 };
+      const rightRating = ratingScores.get(getTopicKey(right.topic)) ?? { good: 0, bad: 0 };
+      const leftScore = leftRating.good - leftRating.bad;
+      const rightScore = rightRating.good - rightRating.bad;
+      return rightScore - leftScore ||
+        rightRating.good - leftRating.good ||
+        leftRating.bad - rightRating.bad ||
+        left.useCount - right.useCount ||
+        left.lastUsedAt - right.lastUsedAt;
+    });
   const record = candidates[0];
   if (!record) return null;
   return {
