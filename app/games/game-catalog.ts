@@ -30,10 +30,10 @@ export const games = [
     private: true,
   },
   {
-    title: "ほどあいトーク",
+    title: "ことばで数ならべ",
     status: "Private online prototype",
-    href: "/hodoai-talk",
-    players: "2-8人",
+    href: "/kotoba-de-kazu-narabe",
+    players: "2人以上",
     time: "10-20分",
     summary: "各自の端末で秘密の目盛りを言葉にし、全員のヒントを低い順に並べる協力ゲーム。",
     accent: "from-sky-300 via-amber-200 to-fuchsia-300",

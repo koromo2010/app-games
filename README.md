@@ -10,7 +10,8 @@ Party game prototypes built with Next.js.
 - `/wordwolf` - Wordwolf prototype
 - `/tahoiya` - Tahoiya prototype
 - `/northern-branch` - Private-use Northern Branch outline prototype (requires `PRIVATE_GAME_ACCESS_KEY`)
-- `/hodoai-talk` - Private-use original scale-and-clue game (requires `PRIVATE_GAME_ACCESS_KEY`)
+- `/kotoba-de-kazu-narabe` - Private-use online room game for logged-in players (requires `PRIVATE_GAME_ACCESS_KEY`)
+- `/hodoai-talk` - Redirect to `/kotoba-de-kazu-narabe`
 
 ## Private game access
 

@@ -4,6 +4,7 @@ import {
   countHodoaiInversions,
   dealHodoaiValues,
   hodoaiThemes,
+  hodoaiTechnicalPlayerLimit,
   normalizeHodoaiConfig,
   pickHodoaiTheme,
   pointsForInversions,
@@ -37,7 +38,7 @@ function normalizePlayers(value: unknown): HodoaiPlayer[] {
   if (!Array.isArray(value)) return [];
   return value
     .filter((player): player is HodoaiPlayer => Boolean(player?.id && player?.name))
-    .slice(0, 8)
+    .slice(0, hodoaiTechnicalPlayerLimit)
     .map((player) => ({
       id: String(player.id),
       name: String(player.name).trim().slice(0, 20),
@@ -297,7 +298,7 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
       if (current.phase !== "lobby" || action.actorId !== action.player.id) throw new Error("HODOAI_ROOM_FORBIDDEN");
       if (current.passphrase && current.passphrase !== action.passphrase.trim()) throw new Error("HODOAI_BAD_PASSPHRASE");
       if (current.players.some((player) => player.id === action.actorId)) return current;
-      if (current.players.length >= 8) throw new Error("HODOAI_ROOM_FULL");
+      if (current.players.length >= hodoaiTechnicalPlayerLimit) throw new Error("HODOAI_ROOM_FULL");
       return { ...current, players: [...current.players, action.player] };
     }
 

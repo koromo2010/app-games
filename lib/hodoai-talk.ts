@@ -82,6 +82,9 @@ export const defaultHodoaiConfig: HodoaiConfig = {
   debugMode: false,
 };
 
+// 0～120の重複しない目盛りは最大121人分あるが、同期量と画面操作を守る安全上限は50人とする。
+export const hodoaiTechnicalPlayerLimit = 50;
+
 export function normalizeHodoaiConfig(value: unknown): HodoaiConfig {
   const parsed = value && typeof value === "object" ? value as Partial<HodoaiConfig> : {};
   const rounds = typeof parsed.roundsTotal === "number" ? Math.floor(parsed.roundsTotal) : 3;
