@@ -1,283 +1,343 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { GamePhaseTimer } from "@/app/components/GamePhaseTimer";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
+import { GamePhaseTimer } from "@/app/components/GamePhaseTimer";
 import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
 import { loadPlayerRoomDefaults, savePlayerRoomDefaults } from "@/lib/game-room-defaults-client";
 import {
+  defaultAvatarImage,
+  fallbackAvatarColor,
+  isPlayerAuthenticated,
+  loadPersistentPlayerSession,
+  type PlayerSession,
+} from "@/lib/player-session";
+import {
   clueHasNumber,
-  countHodoaiInversions,
-  createHodoaiRound,
-  defaultHodoaiConfig,
   hodoaiFinalMessage,
   normalizeHodoaiConfig,
-  pointsForInversions,
   type HodoaiConfig,
-  type HodoaiGameState,
+  type HodoaiPlayer,
+  type HodoaiRoom,
+  type HodoaiRoomAction,
+  type HodoaiRoomChoice,
 } from "@/lib/hodoai-talk";
 
-const storageKey = "hodoai-talk-private-prototype-v1";
-const defaultsStorageKey = "hodoai-talk-room-defaults-v1";
-const ownerIdStorageKey = "hodoai-talk-owner-id";
+const lastRoomKey = "hodoai-last-room";
+const defaultsStorageKey = "hodoai-room-defaults-v2";
+const ownerIdKey = "hodoai-owner-id";
+
+function makeRoomCode() {
+  return Math.random().toString(36).slice(2, 6).toUpperCase();
+}
 
 function getOwnerId() {
-  const stored = localStorage.getItem(ownerIdStorageKey);
-  if (stored) return stored;
+  const saved = localStorage.getItem(ownerIdKey);
+  if (saved) return saved;
   const created = crypto.randomUUID();
-  localStorage.setItem(ownerIdStorageKey, created);
+  localStorage.setItem(ownerIdKey, created);
   return created;
 }
 
-function normalizeStoredDefaults(value: unknown) {
-  const config = normalizeHodoaiConfig(value);
-  return { ...config, debugMode: false };
+function normalizeDefaults(value: unknown) {
+  return { ...normalizeHodoaiConfig(value), debugMode: false };
 }
 
-function normalizeStoredGame(value: unknown): HodoaiGameState | null {
-  if (!value || typeof value !== "object") return null;
-  const parsed = value as Partial<HodoaiGameState>;
-  if (!Array.isArray(parsed.players) || !Array.isArray(parsed.order) || !parsed.theme || !parsed.phase) return null;
-  return {
-    ...parsed,
-    config: normalizeHodoaiConfig(parsed.config),
-    phaseStartedAt: typeof parsed.phaseStartedAt === "number" ? parsed.phaseStartedAt : Date.now(),
-  } as HodoaiGameState;
-}
-
-function formatTimeLimit(seconds: number) {
+function formatTime(seconds: number) {
   return seconds === 0 ? "なし" : `${seconds}秒`;
 }
 
-function debugClue(value: number) {
-  const clues = ["ほとんど当てはまらない", "ほんの少し", "やや控えめ", "ほどほど", "なかなか", "かなり", "とても", "最高クラス"];
-  return clues[Math.min(clues.length - 1, Math.floor(value / 16))];
+function apiMessage(status: number, fallback: string) {
+  if (status === 401) return "合言葉が違います。";
+  if (status === 403) return "この操作を行う権限がありません。";
+  if (status === 404) return "部屋が見つかりません。";
+  if (status === 409) return "部屋の状態が更新されました。もう一度お試しください。";
+  if (status === 503) return "部屋サーバーを利用できません。少し待ってお試しください。";
+  return fallback;
 }
 
-function Scale({ low, high }: { low: string; high: string }) {
+async function loadRoom(code: string, playerId: string) {
+  const params = new URLSearchParams({ code, playerId });
+  const response = await fetch(`/api/hodoai/rooms?${params.toString()}`, { cache: "no-store" });
+  if (!response.ok) return null;
+  const data = (await response.json()) as { room?: HodoaiRoom };
+  return data.room ?? null;
+}
+
+async function loadActiveRoom(playerId: string) {
+  const response = await fetch(`/api/hodoai/rooms?playerId=${encodeURIComponent(playerId)}`, { cache: "no-store" });
+  if (!response.ok) return null;
+  const data = (await response.json()) as { room?: HodoaiRoom | null };
+  return data.room ?? null;
+}
+
+function PlayerRow({ player, isHost, isMe }: { player: HodoaiPlayer; isHost: boolean; isMe: boolean }) {
   return (
-    <div>
-      <div className="h-2 rounded-full bg-gradient-to-r from-sky-400 via-amber-300 to-fuchsia-400" />
-      <div className="mt-2 flex justify-between gap-4 text-xs font-bold text-slate-300">
-        <span>0｜{low}</span><span className="text-right">{high}｜120</span>
-      </div>
-    </div>
+    <li className={`flex items-center gap-3 rounded-xl border p-3 ${isMe ? "border-cyan-300 bg-cyan-300/10" : "border-white/10 bg-white/[0.04]"}`}>
+      <span className="h-9 w-9 shrink-0 rounded-full border border-white/30 bg-cover bg-center" style={{ backgroundColor: player.avatarColor || fallbackAvatarColor, backgroundImage: `url(${player.avatarImage || defaultAvatarImage})` }} aria-hidden="true" />
+      <span className="min-w-0 flex-1 truncate font-bold">{player.name}{isMe ? "（あなた）" : ""}</span>
+      {isHost && <span className="rounded-md bg-amber-300 px-2 py-1 text-xs font-black text-slate-950">ホスト</span>}
+    </li>
   );
 }
 
 export function HodoaiTalkGame() {
-  const [names, setNames] = useState(["プレイヤー1", "プレイヤー2", "プレイヤー3"]);
-  const [game, setGame] = useState<HodoaiGameState | null>(null);
+  const [session, setSession] = useState<PlayerSession | null>(null);
+  const [room, setRoom] = useState<HodoaiRoom | null>(null);
   const [ready, setReady] = useState(false);
-  const [revealed, setRevealed] = useState(false);
+  const [error, setError] = useState("");
+  const [passphrase, setPassphrase] = useState("");
+  const [joinCode, setJoinCode] = useState("");
+  const [choices, setChoices] = useState<HodoaiRoomChoice[]>([]);
+  const [showChoices, setShowChoices] = useState(false);
   const [clue, setClue] = useState("");
-  const [notice, setNotice] = useState("");
-  const [config, setConfig] = useState<HodoaiConfig>(defaultHodoaiConfig);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     let active = true;
-    const timer = window.setTimeout(async () => {
-      try {
-        const stored = localStorage.getItem(storageKey);
-        const storedGame = stored ? normalizeStoredGame(JSON.parse(stored)) : null;
-        if (storedGame) setGame(storedGame);
-        const defaults = await loadPlayerRoomDefaults({
-          game: "hodoai-talk",
-          playerId: getOwnerId(),
-          localStorageKey: defaultsStorageKey,
-          normalize: normalizeStoredDefaults,
-        });
-        if (active && !storedGame) setConfig(defaults);
-      } catch {
-        localStorage.removeItem(storageKey);
-      } finally {
-        if (active) setReady(true);
+    let timer: number | undefined;
+    if (!isPlayerAuthenticated()) {
+      timer = window.setTimeout(() => setReady(true), 0);
+      return () => {
+        active = false;
+        if (timer) window.clearTimeout(timer);
+      };
+    }
+    loadPersistentPlayerSession().then(async (savedSession) => {
+      if (!active) return;
+      if (!savedSession?.id) {
+        setReady(true);
+        return;
       }
-    }, 0);
+      setSession(savedSession);
+      const lastCode = localStorage.getItem(lastRoomKey);
+      const savedRoom = lastCode ? await loadRoom(lastCode, savedSession.id) : await loadActiveRoom(savedSession.id);
+      if (!active) return;
+      timer = window.setTimeout(() => {
+        if (savedRoom) {
+          setRoom(savedRoom);
+          localStorage.setItem(lastRoomKey, savedRoom.code);
+        }
+        setReady(true);
+      }, 0);
+    }).catch(() => {
+      if (active) setReady(true);
+    });
     return () => {
       active = false;
-      window.clearTimeout(timer);
+      if (timer) window.clearTimeout(timer);
     };
   }, []);
 
-  useEffect(() => {
-    if (!ready || !game) return;
-    localStorage.setItem(storageKey, JSON.stringify(game));
-  }, [game, ready]);
+  const roomCode = room?.code;
+  const roomPhase = room?.phase;
+  const playerId = session?.id ?? "";
 
+  useEffect(() => {
+    if (!roomCode || !roomPhase || !playerId) return;
+    const refresh = () => {
+      if (document.visibilityState !== "visible") return;
+      void loadRoom(roomCode, playerId).then((latest) => {
+        if (!latest) {
+          setRoom(null);
+          localStorage.removeItem(lastRoomKey);
+          setError("部屋が解散されたか、参加情報がなくなりました。");
+          return;
+        }
+        setRoom((current) => current?.revision === latest.revision ? current : latest);
+      });
+    };
+    const interval = window.setInterval(refresh, roomPhase === "lobby" || roomPhase === "result" ? 5000 : 2000);
+    const onVisible = () => { if (document.visibilityState === "visible") refresh(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [playerId, roomCode, roomPhase]);
+
+  const isHost = Boolean(room && playerId === room.hostId);
+  const submittedCount = room ? room.players.filter((player) => Boolean(room.clues[player.id])).length : 0;
   const orderedPlayers = useMemo(() => {
-    if (!game) return [];
-    return game.order.flatMap((id) => {
-      const player = game.players.find((candidate) => candidate.id === id);
+    if (!room) return [];
+    return room.order.flatMap((id) => {
+      const player = room.players.find((item) => item.id === id);
       return player ? [player] : [];
     });
-  }, [game]);
+  }, [room]);
+  const latestResult = room?.history.at(-1);
+  const configItems = room ? [
+    { label: "参加人数", value: `${room.players.length}/8人` },
+    { label: "ラウンド", value: `${room.roundsTotal}回` },
+    { label: "ヒント時間", value: formatTime(room.clueTimeLimitSeconds) },
+    { label: "相談時間", value: formatTime(room.arrangeTimeLimitSeconds) },
+    { label: "合言葉", value: room.passphrase ? "あり" : "なし" },
+    { label: "デバッグ", value: room.debugMode ? "ON" : "OFF" },
+  ] : [];
 
-  const currentPlayer = game?.players[game.cluePlayerIndex];
-  const activeConfig = game?.config ?? config;
-  const configItems = [
-    { label: "プレイヤー", value: `${game?.players.length ?? names.length}人` },
-    { label: "ラウンド", value: `${activeConfig.roundsTotal}回` },
-    { label: "ヒント時間", value: formatTimeLimit(activeConfig.clueTimeLimitSeconds) },
-    { label: "相談時間", value: formatTimeLimit(activeConfig.arrangeTimeLimitSeconds) },
-    { label: "デバッグ", value: activeConfig.debugMode ? "ON" : "OFF" },
-  ];
+  const runAction = useCallback(async (action: HodoaiRoomAction) => {
+    if (!room) return null;
+    setIsSaving(true);
+    try {
+      const response = await fetch("/api/hodoai/rooms", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: room.code, action }),
+      });
+      if (!response.ok) {
+        setError(apiMessage(response.status, "操作を保存できませんでした。"));
+        return null;
+      }
+      const data = (await response.json()) as { room: HodoaiRoom };
+      setRoom(data.room);
+      setError("");
+      return data.room;
+    } catch {
+      setError("通信できませんでした。接続を確認してください。");
+      return null;
+    } finally {
+      setIsSaving(false);
+    }
+  }, [room]);
 
-  const startGame = () => {
-    const cleanNames = names.map((name, index) => name.trim() || `プレイヤー${index + 1}`);
-    setGame(createHodoaiRound(cleanNames, 1, 0, [], config));
-    void savePlayerRoomDefaults({
-      game: "hodoai-talk",
-      playerId: getOwnerId(),
-      localStorageKey: defaultsStorageKey,
-      defaults: normalizeStoredDefaults(config),
-    });
-    setRevealed(false);
-    setClue("");
-    setNotice("");
+  const createRoom = async () => {
+    if (!session?.id) return;
+    setIsSaving(true);
+    const ownerId = getOwnerId();
+    try {
+      await fetch(`/api/hodoai/rooms?ownerId=${encodeURIComponent(ownerId)}&fallbackHostId=${encodeURIComponent(session.id)}`, { method: "DELETE" });
+      const defaults = await loadPlayerRoomDefaults({ game: "hodoai-talk", playerId: session.id, localStorageKey: defaultsStorageKey, normalize: normalizeDefaults });
+      const now = Date.now();
+      const host: HodoaiPlayer = { id: session.id, name: session.name, joinedAt: now, avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined };
+      const nextRoom: HodoaiRoom = {
+        code: makeRoomCode(), revision: 0, hostId: session.id, ownerId, passphrase: passphrase.trim(), phase: "lobby", players: [host],
+        ...defaults, debugMode: false, round: 1, theme: null, values: {}, clues: {}, order: [], totalPoints: 0, history: [], phaseStartedAt: null, createdAt: now, updatedAt: now,
+      };
+      const response = await fetch("/api/hodoai/rooms", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ room: nextRoom, actorId: session.id }) });
+      if (!response.ok) {
+        setError(apiMessage(response.status, "部屋を作成できませんでした。"));
+        return;
+      }
+      const data = (await response.json()) as { room: HodoaiRoom };
+      setRoom(data.room);
+      localStorage.setItem(lastRoomKey, data.room.code);
+      setError("");
+    } catch {
+      setError("部屋を作成できませんでした。");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const resetGame = () => {
-    localStorage.removeItem(storageKey);
-    setGame(null);
-    setRevealed(false);
-    setClue("");
-    setNotice("");
+  const listRooms = async () => {
+    const response = await fetch("/api/hodoai/rooms", { cache: "no-store" });
+    if (!response.ok) {
+      setError(apiMessage(response.status, "部屋一覧を取得できませんでした。"));
+      return;
+    }
+    const data = (await response.json()) as { rooms?: HodoaiRoomChoice[] };
+    setChoices(data.rooms ?? []);
+    setShowChoices(true);
+    setError(data.rooms?.length ? "" : "参加できる未開始の部屋がありません。");
   };
 
-  const submitClue = () => {
-    const cleanClue = clue.trim();
-    if (!game || !currentPlayer || cleanClue.length < 2) {
-      setNotice("ヒントを2文字以上で入力してください。");
+  const joinRoom = async (selectedCode = joinCode) => {
+    if (!session?.id) return;
+    const code = selectedCode.trim().toUpperCase();
+    if (!code) {
+      setError("部屋コードを入力してください。");
       return;
     }
-    if (clueHasNumber(cleanClue)) {
-      setNotice("数字そのものはヒントに使えません。言葉だけで表現してください。");
+    const player: HodoaiPlayer = { id: session.id, name: session.name, joinedAt: Date.now(), avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined };
+    setIsSaving(true);
+    try {
+      const response = await fetch("/api/hodoai/rooms", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code, action: { type: "join-room", actorId: session.id, player, passphrase } satisfies HodoaiRoomAction }) });
+      if (!response.ok) {
+        setError(apiMessage(response.status, "部屋へ参加できませんでした。"));
+        return;
+      }
+      const data = (await response.json()) as { room: HodoaiRoom };
+      setRoom(data.room);
+      setShowChoices(false);
+      localStorage.setItem(lastRoomKey, data.room.code);
+      setError("");
+    } catch {
+      setError("部屋へ参加できませんでした。");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const dissolveRoom = async () => {
+    if (!room || !session?.id || !isHost || !window.confirm("部屋を解散しますか？")) return;
+    const response = await fetch(`/api/hodoai/rooms?code=${encodeURIComponent(room.code)}&actorId=${encodeURIComponent(session.id)}`, { method: "DELETE" });
+    if (!response.ok) {
+      setError("部屋を解散できませんでした。");
       return;
     }
-    const isLast = game.cluePlayerIndex === game.players.length - 1;
-    setGame({
-      ...game,
-      players: game.players.map((player) => player.id === currentPlayer.id ? { ...player, clue: cleanClue } : player),
-      cluePlayerIndex: isLast ? game.cluePlayerIndex : game.cluePlayerIndex + 1,
-      phase: isLast ? "arrange" : "clue",
-      phaseStartedAt: Date.now(),
-    });
-    setClue("");
-    setRevealed(false);
-    setNotice(isLast ? "全員のヒントがそろいました。相談して順番を決めましょう。" : "画面を隠して、次の人へ端末を渡してください。");
+    setRoom(null);
+    localStorage.removeItem(lastRoomKey);
+  };
+
+  const leaveRoom = async () => {
+    if (!room || !session?.id || isHost) return;
+    const saved = await runAction({ type: "leave-room", actorId: session.id });
+    if (!saved) return;
+    setRoom(null);
+    localStorage.removeItem(lastRoomKey);
+  };
+
+  const updateConfig = async (updates: Partial<Omit<HodoaiConfig, "debugMode">>) => {
+    if (!room || !session?.id || !isHost) return;
+    const config = normalizeHodoaiConfig({ ...room, ...updates, debugMode: room.debugMode });
+    const saved = await runAction({ type: "update-config", actorId: session.id, config: { roundsTotal: config.roundsTotal, clueTimeLimitSeconds: config.clueTimeLimitSeconds, arrangeTimeLimitSeconds: config.arrangeTimeLimitSeconds } });
+    if (saved) void savePlayerRoomDefaults({ game: "hodoai-talk", playerId: session.id, localStorageKey: defaultsStorageKey, defaults: normalizeDefaults(saved) });
   };
 
   const moveClue = (index: number, direction: -1 | 1) => {
-    if (!game) return;
+    if (!room || !session?.id || !isHost) return;
     const target = index + direction;
-    if (target < 0 || target >= game.order.length) return;
-    const order = [...game.order];
+    if (target < 0 || target >= room.order.length) return;
+    const order = [...room.order];
     [order[index], order[target]] = [order[target], order[index]];
-    setGame({ ...game, order });
+    void runAction({ type: "reorder", actorId: session.id, round: room.round, order });
   };
 
-  const revealResult = () => {
-    if (!game) return;
-    const inversions = countHodoaiInversions(game);
-    const points = pointsForInversions(inversions);
-    const result = { round: game.round, theme: game.theme, inversions, points };
-    setGame({ ...game, phase: "result", totalPoints: game.totalPoints + points, history: [...game.history, result], phaseStartedAt: Date.now() });
-    setNotice(inversions === 0 ? "完全一致！ 見事な並びです。" : `前後が入れ替わった組み合わせは${inversions}組でした。`);
-  };
-
-  const continueGame = () => {
-    if (!game) return;
-    if (game.round >= game.config.roundsTotal) {
-      setGame({ ...game, phase: "finished" });
+  const submitClue = () => {
+    if (!room || !session?.id) return;
+    const text = clue.trim();
+    if (text.length < 2) {
+      setError("ヒントを2文字以上で入力してください。");
       return;
     }
-    setGame(createHodoaiRound(game.players.map((player) => player.name), game.round + 1, game.totalPoints, game.history, game.config));
-    setRevealed(false);
-    setClue("");
-    setNotice("新しいお題です。最初の人へ端末を渡してください。");
-  };
-
-  const setDebugMode = (enabled: boolean) => {
-    if (game) {
-      setGame({ ...game, config: { ...game.config, debugMode: enabled } });
-    } else {
-      setConfig((current) => ({ ...current, debugMode: enabled }));
+    if (clueHasNumber(text)) {
+      setError("数字そのものはヒントに使えません。");
+      return;
     }
-    setNotice(enabled ? "デバッグモードを有効にしました。" : "デバッグモードを終了しました。");
+    void runAction({ type: "submit-clue", actorId: session.id, round: room.round, text }).then((saved) => { if (saved) setClue(""); });
   };
 
-  const fillDebugClues = () => {
-    if (!game?.config.debugMode) return;
-    setGame({
-      ...game,
-      players: game.players.map((player) => ({ ...player, clue: player.clue || debugClue(player.value) })),
-      cluePlayerIndex: game.players.length - 1,
-      phase: "arrange",
-      phaseStartedAt: Date.now(),
-    });
-    setRevealed(false);
-    setClue("");
-    setNotice("デバッグ用ヒントを入力しました。");
-  };
+  if (!ready) return <main className="min-h-screen bg-slate-950 p-8 text-white">ログイン情報と部屋を確認中...</main>;
 
-  const sortCorrectlyForDebug = () => {
-    if (!game?.config.debugMode) return;
-    const order = [...game.players].sort((left, right) => left.value - right.value).map((player) => player.id);
-    setGame({ ...game, order });
-    setNotice("正解順へ並べ替えました。");
-  };
+  if (!session?.id) {
+    return <main className="min-h-screen bg-slate-950 px-4 py-12 text-white"><div className="mx-auto max-w-lg rounded-2xl border border-white/10 bg-white/[0.06] p-6 text-center"><h1 className="text-3xl font-black">ほどあいトーク</h1><p className="mt-4 leading-7 text-slate-300">このゲームはログインしたプレイヤー同士で遊びます。ゲームロビーでログインしてください。</p><Link href="/games" className="mt-6 inline-flex rounded-xl bg-cyan-400 px-5 py-3 font-black text-cyan-950">ゲームロビーへ</Link></div></main>;
+  }
 
-  if (!ready) return <main className="min-h-screen bg-slate-950 p-8 text-white">保存データを確認中...</main>;
-
-  if (!game) {
+  if (!room) {
     return (
       <main className="min-h-screen bg-[radial-gradient(circle_at_top,#164e63_0%,#1e293b_42%,#020617_82%)] px-4 py-8 text-white">
-        <div className="mx-auto max-w-3xl">
-          <div className="flex items-center justify-between gap-3">
-            <Link href="/games" className="text-sm font-bold text-cyan-200 hover:text-white">← ゲームロビー</Link>
-            <DebugModeButton enabled={config.debugMode} onChange={setDebugMode} />
-          </div>
-          <section className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-slate-950/75 shadow-2xl backdrop-blur">
-            <div className="bg-gradient-to-r from-sky-400 via-amber-300 to-fuchsia-400 px-6 py-8 text-slate-950">
-              <p className="text-xs font-black uppercase tracking-[0.28em]">Private original prototype</p>
-              <h1 className="mt-2 text-4xl font-black sm:text-6xl">ほどあいトーク</h1>
-              <p className="mt-3 max-w-xl font-bold leading-7">見えない目盛りを言葉で伝え、みんなの感覚を低い順に並べる協力ゲーム。</p>
+        <div className="mx-auto max-w-4xl">
+          <div className="flex items-center justify-between"><Link href="/games" className="text-sm font-bold text-cyan-200">← ゲームロビー</Link><span className="text-sm font-bold">{session.name}</span></div>
+          <section className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-slate-950/80 shadow-2xl">
+            <div className="bg-gradient-to-r from-sky-400 via-amber-300 to-fuchsia-400 px-6 py-8 text-slate-950"><p className="text-xs font-black uppercase tracking-[0.28em]">Online room game</p><h1 className="mt-2 text-4xl font-black sm:text-6xl">ほどあいトーク</h1><p className="mt-3 font-bold">各自の端末で秘密の目盛りを確認し、言葉の距離感をそろえる協力ゲーム。</p></div>
+            <div className="grid gap-6 p-6 md:grid-cols-2">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-5"><h2 className="text-xl font-black">部屋を作る</h2><p className="mt-2 text-sm leading-6 text-slate-400">あなたがホストになり、設定と進行を管理します。</p><label className="mt-4 block text-sm font-bold">合言葉（任意）<input type="password" value={passphrase} maxLength={40} onChange={(event) => setPassphrase(event.target.value)} className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-white outline-none" /></label><button type="button" disabled={isSaving} onClick={createRoom} className="mt-4 w-full rounded-xl bg-amber-300 px-4 py-3 font-black text-slate-950 disabled:opacity-50">新しい部屋を作る</button></div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-5"><h2 className="text-xl font-black">部屋に参加</h2><label className="mt-4 block text-sm font-bold">部屋コード<input value={joinCode} maxLength={4} onChange={(event) => setJoinCode(event.target.value.toUpperCase())} className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 font-mono text-lg uppercase text-white outline-none" /></label><label className="mt-3 block text-sm font-bold">合言葉<input type="password" value={passphrase} maxLength={40} onChange={(event) => setPassphrase(event.target.value)} className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-white outline-none" /></label><div className="mt-4 grid grid-cols-2 gap-2"><button type="button" disabled={isSaving} onClick={() => void joinRoom()} className="rounded-xl bg-cyan-400 px-3 py-3 font-black text-cyan-950 disabled:opacity-50">コードで参加</button><button type="button" onClick={() => void listRooms()} className="rounded-xl border border-white/20 px-3 py-3 font-black">部屋一覧</button></div></div>
             </div>
-            <div className="p-6">
-              <div className="rounded-2xl border border-cyan-300/25 bg-cyan-300/10 p-4 text-sm leading-6 text-cyan-50">
-                独自の名称・お題・採点方式で作った個人利用向け試作です。市販ゲームの画像、文章、固有モードは使用していません。
-              </div>
-              <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                {["① 数字をこっそり確認", "② 言葉のヒントを出す", "③ 全員で並べて採点"].map((item) => <div key={item} className="rounded-xl bg-white/[0.06] p-3 text-sm font-bold">{item}</div>)}
-              </div>
-              <div className="mt-6 space-y-3">
-                {names.map((name, index) => (
-                  <label key={`name-${index}`} className="block text-sm font-bold text-slate-200">
-                    プレイヤー {index + 1}
-                    <input value={name} maxLength={20} onChange={(event) => setNames((current) => current.map((item, itemIndex) => itemIndex === index ? event.target.value : item))} className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-white outline-none focus:border-cyan-300" />
-                  </label>
-                ))}
-              </div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                <button type="button" disabled={names.length >= 8} onClick={() => setNames((current) => [...current, `プレイヤー${current.length + 1}`])} className="rounded-lg border border-white/20 px-3 py-2 text-sm font-bold disabled:opacity-40">プレイヤー追加</button>
-                <button type="button" disabled={names.length <= 2} onClick={() => setNames((current) => current.slice(0, -1))} className="rounded-lg border border-white/20 px-3 py-2 text-sm font-bold disabled:opacity-40">1人減らす</button>
-              </div>
-              <div className="mt-6 grid gap-4 rounded-2xl border border-white/10 bg-white/[0.06] p-4 sm:grid-cols-2">
-                <label className="text-sm font-bold text-slate-200">ラウンド数
-                  <select value={config.roundsTotal} onChange={(event) => setConfig((current) => ({ ...current, roundsTotal: Number(event.target.value) }))} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none">
-                    {[1, 2, 3, 4].map((rounds) => <option key={rounds} value={rounds}>{rounds}回</option>)}
-                  </select>
-                </label>
-                <div className="sm:row-span-3"><RoomConfigSummary items={configItems} title="今回のゲーム設定" /></div>
-                <RoomTimeLimitControl label="1人のヒント時間" value={config.clueTimeLimitSeconds} onChange={(seconds) => setConfig((current) => ({ ...current, clueTimeLimitSeconds: seconds }))} />
-                <RoomTimeLimitControl label="全員の相談時間" value={config.arrangeTimeLimitSeconds} onChange={(seconds) => setConfig((current) => ({ ...current, arrangeTimeLimitSeconds: seconds }))} />
-              </div>
-              <p className="mt-3 text-xs leading-5 text-slate-400">設定はこの端末用に保存されます。時間切れ後も入力や相談を終えてから進められます。</p>
-              <button type="button" onClick={startGame} className="mt-6 w-full rounded-xl bg-amber-300 px-4 py-3 font-black text-slate-950 hover:bg-amber-200">{config.roundsTotal}ラウンド始める</button>
-            </div>
+            {showChoices && <div className="border-t border-white/10 p-6"><h2 className="font-black">参加できる部屋</h2><div className="mt-3 grid gap-2 sm:grid-cols-2">{choices.map((choice) => <button key={choice.code} type="button" onClick={() => { setJoinCode(choice.code); void joinRoom(choice.code); }} className="rounded-xl border border-white/10 bg-white/[0.05] p-4 text-left"><span className="font-mono text-lg font-black text-cyan-300">{choice.code}</span><span className="ml-3 font-bold">{choice.hostName}</span><span className="mt-1 block text-xs text-slate-400">{choice.playerCount}人・{choice.roundsTotal}ラウンド・合言葉{choice.hasPassphrase ? "あり" : "なし"}</span></button>)}</div></div>}
+            {error && <p className="mx-6 mb-6 rounded-xl border border-rose-300/30 bg-rose-300/10 p-3 text-sm font-bold text-rose-100">{error}</p>}
           </section>
         </div>
       </main>
@@ -285,49 +345,22 @@ export function HodoaiTalkGame() {
   }
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,#0e7490_0%,#172033_35%,#020617_75%)] px-4 py-6 text-white">
-      <div className="mx-auto max-w-4xl">
-        <header className="flex flex-wrap items-center justify-between gap-3">
-          <div><Link href="/games" className="text-xs font-bold text-cyan-200 hover:text-white">← ゲームロビー</Link><h1 className="mt-1 text-2xl font-black">ほどあいトーク</h1></div>
-          <div className="flex flex-wrap justify-end gap-2 text-sm font-bold"><DebugModeButton enabled={game.config.debugMode} onChange={setDebugMode} /><span className="rounded-lg bg-white/10 px-3 py-2">{Math.min(game.round, game.config.roundsTotal)} / {game.config.roundsTotal} ラウンド</span><span className="rounded-lg bg-amber-300 px-3 py-2 text-slate-950">合計 {game.totalPoints}点</span><button type="button" onClick={resetGame} className="rounded-lg border border-white/15 px-3 py-2">最初から</button></div>
-        </header>
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top,#0e7490_0%,#172033_35%,#020617_75%)] text-white">
+      <header className="border-b border-white/10 bg-slate-950/70"><div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4"><div><Link href="/games" className="text-xs font-bold text-cyan-200">← ゲームロビー</Link><h1 className="mt-1 text-2xl font-black">ほどあいトーク <span className="font-mono text-base text-amber-300">#{room.code}</span></h1></div><div className="flex flex-wrap items-center gap-2">{isHost && room.phase === "lobby" && <DebugModeButton enabled={room.debugMode} disabled={isSaving} onChange={(enabled) => runAction({ type: "set-debug", actorId: playerId, enabled }).then(() => undefined)} />}<span className="rounded-lg bg-white/10 px-3 py-2 text-sm font-bold">{session.name}</span>{isHost ? <button type="button" onClick={() => void dissolveRoom()} className="rounded-lg border border-rose-300/30 px-3 py-2 text-sm font-bold text-rose-100">部屋を解散</button> : room.phase === "lobby" && <button type="button" onClick={() => void leaveRoom()} className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold">退出</button>}</div></div></header>
+      <div className="mx-auto grid max-w-6xl gap-4 px-4 py-5 lg:grid-cols-[280px_minmax(0,1fr)]">
+        <aside className="space-y-4"><section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4"><div className="flex items-center justify-between"><h2 className="font-black">参加者</h2><span className="text-sm text-slate-400">{room.players.length}/8</span></div><ul className="mt-3 space-y-2">{room.players.map((player) => <PlayerRow key={player.id} player={player} isHost={player.id === room.hostId} isMe={player.id === playerId} />)}</ul></section><RoomConfigSummary items={configItems} /></aside>
+        <div className="space-y-4">
+          {error && <p className="rounded-xl border border-rose-300/30 bg-rose-300/10 p-3 text-sm font-bold text-rose-100">{error}</p>}
+          {room.phase === "lobby" && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><h2 className="text-2xl font-black">ゲーム開始前</h2>{isHost ? <div className="mt-5 grid gap-4 sm:grid-cols-2"><label className="text-sm font-bold">ラウンド数<select value={room.roundsTotal} onChange={(event) => void updateConfig({ roundsTotal: Number(event.target.value) })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-950">{[1,2,3,4].map((value) => <option key={value} value={value}>{value}回</option>)}</select></label><div className="sm:row-span-3 rounded-xl border border-cyan-300/20 bg-cyan-300/10 p-4 text-sm leading-6 text-cyan-50">ホストだけが設定と開始を操作できます。開始後、各プレイヤーの目盛りは本人の画面だけに表示されます。</div><RoomTimeLimitControl label="全員のヒント時間" value={room.clueTimeLimitSeconds} onChange={(seconds) => void updateConfig({ clueTimeLimitSeconds: seconds })} /><RoomTimeLimitControl label="並べ替え相談時間" value={room.arrangeTimeLimitSeconds} onChange={(seconds) => void updateConfig({ arrangeTimeLimitSeconds: seconds })} /></div> : <p className="mt-4 rounded-xl bg-white/[0.05] p-4 text-slate-300">ホストが設定してゲームを開始するまでお待ちください。</p>} {isHost && <button type="button" disabled={isSaving || (room.players.length < 2 && !room.debugMode)} onClick={() => void runAction({ type: "start-game", actorId: playerId })} className="mt-6 w-full rounded-xl bg-amber-300 px-4 py-4 text-lg font-black text-slate-950 disabled:opacity-40">{room.players.length < 2 && !room.debugMode ? "2人以上で開始できます" : "このメンバーで開始"}</button>}</section>}
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_240px]">
-          <div className="rounded-xl border border-white/10 bg-white/[0.06] p-3 text-sm leading-6 text-slate-300">この端末では最初のプレイヤーがホストです。設定とデバッグ操作はホストが管理してください。</div>
-          <RoomConfigSummary items={configItems} />
+          {room.phase !== "lobby" && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.22em] text-amber-300">第{room.round}/{room.roundsTotal}ラウンド</p><h2 className="mt-2 text-2xl font-black sm:text-4xl">{room.theme?.title}</h2></div><span className="rounded-xl bg-amber-300 px-4 py-2 font-black text-slate-950">合計 {room.totalPoints}点</span></div>{room.theme && <div className="mt-5"><div className="h-2 rounded-full bg-gradient-to-r from-sky-400 via-amber-300 to-fuchsia-400" /><div className="mt-2 flex justify-between gap-4 text-xs font-bold text-slate-300"><span>0｜{room.theme.lowLabel}</span><span className="text-right">{room.theme.highLabel}｜120</span></div></div>}</section>}
+
+          {room.phase === "clue" && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-black">秘密の目盛りからヒントを出す</h2><p className="mt-1 text-sm text-slate-400">提出 {submittedCount}/{room.players.length}人</p></div>{room.phaseStartedAt && <GamePhaseTimer key={room.phaseStartedAt} durationSeconds={room.clueTimeLimitSeconds} startedAt={room.phaseStartedAt} label="ヒント時間" />}</div>{typeof room.values[playerId] === "number" && <div className="mt-5 rounded-2xl border border-amber-300/40 bg-amber-300/10 p-5 text-center"><p className="text-sm font-bold text-amber-100">あなたの目盛り</p><p className="mt-1 text-7xl font-black text-amber-300">{room.values[playerId]}</p></div>}{room.clues[playerId] ? <div className="mt-5 rounded-xl border border-emerald-300/30 bg-emerald-300/10 p-4"><p className="font-black text-emerald-100">提出済み：{room.clues[playerId]}</p><p className="mt-1 text-sm text-slate-300">全員の提出を待っています。他のヒントはまだ見えません。</p></div> : <div className="mt-5"><label className="block text-sm font-bold">数字を使わないヒント<input value={clue} maxLength={40} onChange={(event) => setClue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") submitClue(); }} className="mt-2 w-full rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-lg text-white outline-none focus:border-amber-300" /></label><button type="button" disabled={isSaving} onClick={submitClue} className="mt-3 w-full rounded-xl bg-amber-300 px-4 py-3 font-black text-slate-950 disabled:opacity-50">ヒントを提出</button></div>}{isHost && room.debugMode && <button type="button" onClick={() => void runAction({ type: "debug-fill-clues", actorId: playerId, round: room.round })} className="mt-4 w-full rounded-xl border border-cyan-300/30 bg-cyan-300/10 px-4 py-3 text-sm font-black text-cyan-100">デバッグ：未提出ヒントを自動入力</button>}</section>}
+
+          {room.phase === "arrange" && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-black">低いと思う順に並べる</h2><p className="mt-1 text-sm text-slate-400">相談しながらホストが順番を操作します。</p></div>{room.phaseStartedAt && <GamePhaseTimer key={room.phaseStartedAt} durationSeconds={room.arrangeTimeLimitSeconds} startedAt={room.phaseStartedAt} label="相談時間" />}</div>{isHost && room.debugMode && <button type="button" onClick={() => void runAction({ type: "debug-sort", actorId: playerId, round: room.round })} className="mt-4 w-full rounded-xl border border-cyan-300/30 bg-cyan-300/10 px-4 py-3 text-sm font-black text-cyan-100">デバッグ：正解順に並べる</button>}<ol className="mt-4 space-y-2">{orderedPlayers.map((player, index) => <li key={player.id} className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3"><span className="w-7 text-center font-black text-cyan-300">{index + 1}</span><div className="min-w-0 flex-1"><p className="font-black">{room.clues[player.id]}</p><p className="text-xs text-slate-400">{player.name}{room.debugMode && isHost && typeof room.values[player.id] === "number" ? `・${room.values[player.id]}` : ""}</p></div>{isHost && <div className="flex gap-1"><button type="button" disabled={index === 0 || isSaving} onClick={() => moveClue(index, -1)} aria-label={`${player.name}のヒントを上へ`} className="rounded-lg border border-white/15 px-3 py-2 disabled:opacity-30">↑</button><button type="button" disabled={index === orderedPlayers.length - 1 || isSaving} onClick={() => moveClue(index, 1)} aria-label={`${player.name}のヒントを下へ`} className="rounded-lg border border-white/15 px-3 py-2 disabled:opacity-30">↓</button></div>}</li>)}</ol>{isHost ? <button type="button" disabled={isSaving} onClick={() => void runAction({ type: "score-round", actorId: playerId, round: room.round })} className="mt-5 w-full rounded-xl bg-fuchsia-400 px-4 py-3 font-black text-fuchsia-950 disabled:opacity-50">この順番で答えを見る</button> : <p className="mt-4 rounded-xl bg-white/[0.05] p-3 text-center text-sm font-bold text-slate-300">ホストが順番を確定するまでお待ちください。</p>}</section>}
+
+          {room.phase === "result" && latestResult && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><h2 className="text-2xl font-black">答え合わせ</h2><div className="mt-4 space-y-2">{latestResult.order.map((id, index) => { const player = room.players.find((item) => item.id === id); return <div key={id} className="grid grid-cols-[2rem_1fr_auto] items-center gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3"><span className="text-center font-black text-cyan-300">{index + 1}</span><div><p className="font-black">{latestResult.clues[id]}</p><p className="text-xs text-slate-400">{player?.name}</p></div><span className="text-2xl font-black text-amber-300">{latestResult.values[id]}</span></div>; })}</div><div className="mt-5 rounded-2xl bg-gradient-to-r from-cyan-400 to-amber-300 p-5 text-center text-slate-950"><p className="font-black">このラウンド +{latestResult.points}点</p><p className="mt-1 text-sm font-bold">並び違い {latestResult.inversions}組・合計 {room.totalPoints}点</p></div>{room.round >= room.roundsTotal && <p className="mt-5 text-center text-lg font-black">{hodoaiFinalMessage(room.totalPoints, room.roundsTotal * 3)}</p>}{isHost ? <button type="button" disabled={isSaving} onClick={() => void runAction(room.round >= room.roundsTotal ? { type: "reset-game", actorId: playerId } : { type: "next-round", actorId: playerId, round: room.round })} className="mt-5 w-full rounded-xl bg-amber-300 px-4 py-3 font-black text-slate-950 disabled:opacity-50">{room.round >= room.roundsTotal ? "同じ部屋でもう一度" : "次のラウンドへ"}</button> : <p className="mt-4 text-center text-sm font-bold text-slate-300">ホストの操作を待っています。</p>}</section>}
         </div>
-
-        <section className="mt-5 rounded-3xl border border-white/10 bg-slate-950/80 p-5 shadow-2xl sm:p-8">
-          {game.phase !== "finished" && <><p className="text-xs font-black uppercase tracking-[0.24em] text-amber-300">今回のものさし</p><h2 className="mt-2 text-2xl font-black sm:text-4xl">{game.theme.title}</h2><div className="mt-5"><Scale low={game.theme.lowLabel} high={game.theme.highLabel} /></div></>}
-          {notice && <div className="mt-5 rounded-xl border border-cyan-300/25 bg-cyan-300/10 p-3 text-sm font-bold text-cyan-50">{notice}</div>}
-          {game.phase === "clue" && <div className="mt-4"><GamePhaseTimer key={`clue-${game.phaseStartedAt}`} durationSeconds={game.config.clueTimeLimitSeconds} startedAt={game.phaseStartedAt} label="ヒント時間" /></div>}
-          {game.phase === "arrange" && <div className="mt-4"><GamePhaseTimer key={`arrange-${game.phaseStartedAt}`} durationSeconds={game.config.arrangeTimeLimitSeconds} startedAt={game.phaseStartedAt} label="相談時間" /></div>}
-
-          {game.phase === "clue" && currentPlayer && (
-            <div className="mt-7">
-              {game.config.debugMode && <button type="button" onClick={fillDebugClues} className="mb-4 w-full rounded-xl border border-cyan-300/40 bg-cyan-300/10 px-4 py-3 text-sm font-black text-cyan-100">デバッグ：残り全員のヒントを自動入力</button>}
-              {!revealed ? (
-                <div className="text-center"><p className="text-lg font-black">{currentPlayer.name}さんの番</p><p className="mt-2 text-sm text-slate-400">ほかの人は画面を見ないでください。</p><button type="button" onClick={() => { setRevealed(true); setNotice(""); }} className="mt-5 w-full rounded-2xl bg-cyan-400 px-4 py-8 text-xl font-black text-cyan-950">自分の目盛りを見る</button></div>
-              ) : (
-                <div><div className="rounded-2xl border border-amber-300/40 bg-amber-300/10 p-6 text-center"><p className="text-sm font-bold text-amber-100">あなたの目盛り</p><p className="mt-2 text-7xl font-black text-amber-300">{currentPlayer.value}</p><p className="mt-2 text-xs text-slate-300">この位置らしいものを、数字を使わず表現しよう</p></div><label className="mt-5 block text-sm font-bold">言葉のヒント<input autoFocus value={clue} maxLength={40} onChange={(event) => setClue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") submitClue(); }} placeholder="例：雨上がりの公園" className="mt-2 w-full rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-lg text-white outline-none placeholder:text-slate-500 focus:border-amber-300" /></label><button type="button" onClick={submitClue} className="mt-4 w-full rounded-xl bg-amber-300 px-4 py-3 font-black text-slate-950">ヒントを決めて画面を隠す</button></div>
-              )}
-            </div>
-          )}
-
-          {game.phase === "arrange" && (
-            <div className="mt-7"><div className="flex items-end justify-between gap-3"><div><p className="font-black">低そうなヒントから並べる</p><p className="mt-1 text-sm text-slate-400">相談は自由。矢印で順番を動かしてください。</p></div><span className="text-xs font-bold text-slate-400">上＝0側</span></div>{game.config.debugMode && <button type="button" onClick={sortCorrectlyForDebug} className="mt-4 w-full rounded-xl border border-cyan-300/40 bg-cyan-300/10 px-4 py-3 text-sm font-black text-cyan-100">デバッグ：正解順に並べる</button>}<ol className="mt-4 space-y-2">{orderedPlayers.map((player, index) => <li key={player.id} className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.06] p-3"><span className="w-7 text-center text-sm font-black text-cyan-300">{index + 1}</span><span className="min-w-0 flex-1 font-black">{player.clue}{game.config.debugMode && <span className="ml-2 text-xs text-amber-300">({player.value})</span>}</span><div className="flex gap-1"><button type="button" aria-label={`${player.clue}を上へ`} disabled={index === 0} onClick={() => moveClue(index, -1)} className="rounded-lg border border-white/15 px-3 py-2 disabled:opacity-25">↑</button><button type="button" aria-label={`${player.clue}を下へ`} disabled={index === orderedPlayers.length - 1} onClick={() => moveClue(index, 1)} className="rounded-lg border border-white/15 px-3 py-2 disabled:opacity-25">↓</button></div></li>)}</ol><button type="button" onClick={revealResult} className="mt-5 w-full rounded-xl bg-fuchsia-400 px-4 py-3 font-black text-fuchsia-950">この順番で答えを見る</button></div>
-          )}
-
-          {game.phase === "result" && (
-            <div className="mt-7"><div className="grid gap-2">{orderedPlayers.map((player, index) => <div key={player.id} className="grid grid-cols-[2rem_1fr_auto] items-center gap-3 rounded-xl border border-white/10 bg-white/[0.06] p-3"><span className="text-center text-sm font-black text-cyan-300">{index + 1}</span><div><p className="font-black">{player.clue}</p><p className="text-xs text-slate-400">{player.name}</p></div><span className="text-2xl font-black text-amber-300">{player.value}</span></div>)}</div><div className="mt-5 rounded-2xl bg-gradient-to-r from-cyan-400 to-amber-300 p-5 text-center text-slate-950"><p className="text-sm font-black">このラウンド</p><p className="mt-1 text-5xl font-black">+{game.history.at(-1)?.points ?? 0}点</p><p className="mt-2 text-sm font-bold">並び違い {game.history.at(-1)?.inversions ?? 0}組</p></div><button type="button" onClick={continueGame} className="mt-5 w-full rounded-xl bg-amber-300 px-4 py-3 font-black text-slate-950">{game.round >= game.config.roundsTotal ? "最終結果へ" : "次のラウンドへ"}</button></div>
-          )}
-
-          {game.phase === "finished" && (
-            <div className="py-8 text-center"><p className="text-xs font-black uppercase tracking-[0.3em] text-cyan-300">Game finished</p><h2 className="mt-3 text-3xl font-black">{game.config.roundsTotal}ラウンド合計</h2><p className="mt-3 text-8xl font-black text-amber-300">{game.totalPoints}<span className="text-2xl"> / {game.config.roundsTotal * 3}点</span></p><p className="mx-auto mt-5 max-w-lg text-lg font-bold leading-8 text-slate-200">{hodoaiFinalMessage(game.totalPoints, game.config.roundsTotal * 3)}</p><div className="mx-auto mt-7 grid max-w-lg gap-2 sm:grid-cols-3">{game.history.map((result) => <div key={result.round} className="rounded-xl bg-white/[0.06] p-3"><p className="text-xs text-slate-400">第{result.round}ラウンド</p><p className="mt-1 text-2xl font-black text-amber-300">{result.points}点</p></div>)}</div><button type="button" onClick={resetGame} className="mt-7 rounded-xl bg-cyan-400 px-8 py-3 font-black text-cyan-950">もう一度遊ぶ</button></div>
-          )}
-        </section>
-
-        <p className="mt-4 text-center text-xs leading-5 text-slate-400">採点：並び違い 0組＝3点 / 1組＝2点 / 2～3組＝1点 / 4組以上＝0点。ネット対戦には未対応です。</p>
       </div>
     </main>
   );

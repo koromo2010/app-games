@@ -31,11 +31,11 @@ export const games = [
   },
   {
     title: "ほどあいトーク",
-    status: "Private prototype",
+    status: "Private online prototype",
     href: "/hodoai-talk",
     players: "2-8人",
     time: "10-20分",
-    summary: "見えない目盛りを言葉で伝え、全員のヒントを低い順に並べる協力ゲーム。",
+    summary: "各自の端末で秘密の目盛りを言葉にし、全員のヒントを低い順に並べる協力ゲーム。",
     accent: "from-sky-300 via-amber-200 to-fuchsia-300",
     private: true,
   },

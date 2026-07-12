@@ -8,11 +8,12 @@ export type HodoaiTheme = {
 export type HodoaiPlayer = {
   id: string;
   name: string;
-  value: number;
-  clue: string;
+  joinedAt: number;
+  avatarColor?: string;
+  avatarImage?: string;
 };
 
-export type HodoaiPhase = "clue" | "arrange" | "result" | "finished";
+export type HodoaiPhase = "lobby" | "clue" | "arrange" | "result";
 
 export type HodoaiConfig = {
   roundsTotal: number;
@@ -26,20 +27,53 @@ export type HodoaiRoundResult = {
   theme: HodoaiTheme;
   inversions: number;
   points: number;
+  order: string[];
+  values: Record<string, number>;
+  clues: Record<string, string>;
 };
 
-export type HodoaiGameState = {
-  round: number;
+export type HodoaiRoom = HodoaiConfig & {
+  code: string;
+  revision: number;
+  hostId: string;
+  ownerId?: string;
+  passphrase: string;
   phase: HodoaiPhase;
-  theme: HodoaiTheme;
   players: HodoaiPlayer[];
-  cluePlayerIndex: number;
+  round: number;
+  theme: HodoaiTheme | null;
+  values: Record<string, number>;
+  clues: Record<string, string>;
   order: string[];
   totalPoints: number;
   history: HodoaiRoundResult[];
-  config: HodoaiConfig;
-  phaseStartedAt: number;
+  phaseStartedAt: number | null;
+  createdAt: number;
+  updatedAt: number;
 };
+
+export type HodoaiRoomChoice = {
+  code: string;
+  hostName: string;
+  playerCount: number;
+  roundsTotal: number;
+  hasPassphrase: boolean;
+  updatedAt: number;
+};
+
+export type HodoaiRoomAction =
+  | { type: "join-room"; actorId: string; player: HodoaiPlayer; passphrase: string }
+  | { type: "leave-room"; actorId: string }
+  | { type: "update-config"; actorId: string; config: Omit<HodoaiConfig, "debugMode"> }
+  | { type: "set-debug"; actorId: string; enabled: boolean }
+  | { type: "start-game"; actorId: string }
+  | { type: "submit-clue"; actorId: string; round: number; text: string }
+  | { type: "reorder"; actorId: string; round: number; order: string[] }
+  | { type: "score-round"; actorId: string; round: number; force?: boolean }
+  | { type: "next-round"; actorId: string; round: number }
+  | { type: "reset-game"; actorId: string }
+  | { type: "debug-fill-clues"; actorId: string; round: number }
+  | { type: "debug-sort"; actorId: string; round: number };
 
 export const defaultHodoaiConfig: HodoaiConfig = {
   roundsTotal: 3,
@@ -52,8 +86,8 @@ export function normalizeHodoaiConfig(value: unknown): HodoaiConfig {
   const parsed = value && typeof value === "object" ? value as Partial<HodoaiConfig> : {};
   const rounds = typeof parsed.roundsTotal === "number" ? Math.floor(parsed.roundsTotal) : 3;
   const normalizeTime = (seconds: unknown) => {
-    const valueInSeconds = typeof seconds === "number" && Number.isFinite(seconds) ? Math.floor(seconds) : 0;
-    return Math.max(0, Math.min(3600, valueInSeconds));
+    const number = typeof seconds === "number" && Number.isFinite(seconds) ? Math.floor(seconds) : 0;
+    return Math.max(0, Math.min(3600, number));
   };
   return {
     roundsTotal: Math.max(1, Math.min(4, rounds)),
@@ -84,7 +118,7 @@ export const hodoaiThemes: HodoaiTheme[] = [
   { id: "challenge", title: "みんなで挑戦したいこと", lowLabel: "見守りたい", highLabel: "参加したい" },
 ];
 
-function shuffle<T>(items: T[]) {
+export function shuffleHodoai<T>(items: T[]) {
   const result = [...items];
   for (let index = result.length - 1; index > 0; index -= 1) {
     const swapIndex = Math.floor(Math.random() * (index + 1));
@@ -93,39 +127,23 @@ function shuffle<T>(items: T[]) {
   return result;
 }
 
-export function createHodoaiRound(
-  names: string[],
-  round = 1,
-  totalPoints = 0,
-  history: HodoaiRoundResult[] = [],
-  configInput: unknown = defaultHodoaiConfig,
-): HodoaiGameState {
-  const config = normalizeHodoaiConfig(configInput);
-  const previousThemeId = history.at(-1)?.theme.id;
-  const candidates = hodoaiThemes.filter((theme) => theme.id !== previousThemeId);
-  const theme = candidates[Math.floor(Math.random() * candidates.length)] ?? hodoaiThemes[0];
-  const values = shuffle(Array.from({ length: 121 }, (_, index) => index)).slice(0, names.length);
-  const players = names.map((name, index) => ({ id: `p-${round}-${index}`, name, value: values[index], clue: "" }));
-  return {
-    round,
-    phase: "clue",
-    theme,
-    players,
-    cluePlayerIndex: 0,
-    order: shuffle(players.map((player) => player.id)),
-    totalPoints,
-    history,
-    config,
-    phaseStartedAt: Date.now(),
-  };
+export function pickHodoaiTheme(history: HodoaiRoundResult[]) {
+  const used = new Set(history.map((result) => result.theme.id));
+  const unused = hodoaiThemes.filter((theme) => !used.has(theme.id));
+  const candidates = unused.length > 0 ? unused : hodoaiThemes;
+  return candidates[Math.floor(Math.random() * candidates.length)] ?? hodoaiThemes[0];
 }
 
-export function countHodoaiInversions(state: HodoaiGameState) {
-  const values = state.order.map((id) => state.players.find((player) => player.id === id)?.value ?? 0);
+export function dealHodoaiValues(players: HodoaiPlayer[]) {
+  const values = shuffleHodoai(Array.from({ length: 121 }, (_, index) => index)).slice(0, players.length);
+  return Object.fromEntries(players.map((player, index) => [player.id, values[index]]));
+}
+
+export function countHodoaiInversions(order: string[], values: Record<string, number>) {
   let inversions = 0;
-  for (let left = 0; left < values.length; left += 1) {
-    for (let right = left + 1; right < values.length; right += 1) {
-      if (values[left] > values[right]) inversions += 1;
+  for (let left = 0; left < order.length; left += 1) {
+    for (let right = left + 1; right < order.length; right += 1) {
+      if ((values[order[left]] ?? 0) > (values[order[right]] ?? 0)) inversions += 1;
     }
   }
   return inversions;
@@ -138,7 +156,7 @@ export function pointsForInversions(inversions: number) {
   return 0;
 }
 
-export function hodoaiFinalMessage(points: number, maxPoints = 9) {
+export function hodoaiFinalMessage(points: number, maxPoints: number) {
   const ratio = maxPoints > 0 ? points / maxPoints : 0;
   if (ratio >= 0.85) return "息ぴったり！ 言葉の距離感がよくそろいました。";
   if (ratio >= 0.5) return "いい塩梅！ 次は満点が狙えそうです。";
