@@ -1,3 +1,4 @@
+import { hasPaidLlmAccess, paidLlmModel } from "@/lib/llm-access";
 import type { TahoiyaTopic } from "@/lib/tahoiya-types";
 
 const fallbackTopics: TahoiyaTopic[] = [
@@ -78,7 +79,7 @@ async function generateTopic() {
 
   const response = await withTimeout(
     client.responses.create({
-      model: "gpt-4.1-mini",
+      model: paidLlmModel,
       input: [
         "国語辞典を使ったパーティーゲーム『たほい屋』用のお題を1つ作ってください。",
         "日本語の実在語で、一般参加者が意味を知らなさそうだが、偽の語釈を作りやすい語を選んでください。",
@@ -94,7 +95,7 @@ async function generateTopic() {
 }
 
 export async function GET() {
-  if (process.env.WORDWOLF_USE_LLM !== "true" || !process.env.OPENAI_API_KEY) {
+  if (!(await hasPaidLlmAccess())) {
     return Response.json(pickFallbackTopic());
   }
 

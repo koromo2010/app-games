@@ -15,6 +15,7 @@ import {
   type PlayerSession,
 } from "@/lib/player-session";
 import type { PlayerStatsGameFilter, PlayerStatsResponse } from "@/lib/player-stats-store";
+import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
 import { games } from "./game-catalog";
 
 type AuthMode = "login" | "register";
@@ -243,18 +244,21 @@ export function GameLobby() {
                 プレイヤーアカウントでログインして、遊ぶゲームを選びます。
               </p>
             </div>
-            <div className="flex items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-3 py-2">
-              <span
-                className="h-8 w-8 rounded-full border border-white/60 bg-cover bg-center"
-                style={{
-                  backgroundColor: avatarColor,
-                  backgroundImage: `url(${avatarImage || defaultAvatarImage})`,
-                }}
-                aria-hidden="true"
-              />
-              <span className="max-w-[160px] truncate text-sm font-semibold text-cyan-50">
-                {isLoggedIn ? name : "未ログイン"}
-              </span>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <PaidLlmAccessButton />
+              <div className="flex items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-3 py-2">
+                <span
+                  className="h-8 w-8 rounded-full border border-white/60 bg-cover bg-center"
+                  style={{
+                    backgroundColor: avatarColor,
+                    backgroundImage: `url(${avatarImage || defaultAvatarImage})`,
+                  }}
+                  aria-hidden="true"
+                />
+                <span className="max-w-[160px] truncate text-sm font-semibold text-cyan-50">
+                  {isLoggedIn ? name : "未ログイン"}
+                </span>
+              </div>
             </div>
           </div>
         </div>

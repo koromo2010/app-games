@@ -1,4 +1,4 @@
-import { additionalProperNounBalancedPairTopics, additionalProperNounNearPairTopics, additionalProperNounWidePairTopics, createHintTopicGroups } from "@/lib/wordwolf-topic-data";
+import { additionalProperNounNearPairTopics, additionalProperNounWidePairTopics, createHintTopicGroups } from "@/lib/wordwolf-topic-data";
 import type { TopicCandidate, TopicDictionarySource, TopicPairDistance, TopicSourceMode, WordWolfTopic } from "@/lib/wordwolf-topic-types";
 
 export type { TopicDictionarySource, TopicPairDistance, TopicSourceMode, WordWolfTopic } from "@/lib/wordwolf-topic-types";
@@ -56,13 +56,13 @@ const curatedWidePairTopics: TopicCandidate[] = [
 const properNounNearPairTopics: TopicCandidate[] = [
   { villageWord: "横浜ランドマークタワー", wolfWord: "あべのハルカス", reason: "有名な高層ビルだが、地域や施設の印象が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
   { villageWord: "京都", wolfWord: "奈良", reason: "歴史ある観光地だが、街の規模や代表的な見どころが違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
-  { villageWord: "セブン-イレブン", wolfWord: "ローソン", reason: "有名なコンビニブランドだが、商品や店舗の印象が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
+  { villageWord: "ローソン", wolfWord: "ミニストップ", reason: "コンビニブランドだが、商品や店舗の印象が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
   { villageWord: "読売ジャイアンツ", wolfWord: "阪神タイガース", reason: "有名なプロ野球チームだが、本拠地やファン文化が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
-  { villageWord: "YouTube", wolfWord: "TikTok", reason: "動画サービスとして有名だが、視聴体験や投稿文化が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
+  { villageWord: "ABEMA", wolfWord: "TVer", reason: "動画配信サービスとして知られるが、番組の見方や使う場面が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
   { villageWord: "iPhone", wolfWord: "Pixel", reason: "有名なスマートフォンだが、メーカーや使い心地が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
   { villageWord: "縄文時代", wolfWord: "弥生時代", reason: "学校で学ぶ日本史の時代区分だが、暮らしや文化の印象が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
   { villageWord: "鎌倉幕府", wolfWord: "室町幕府", reason: "日本史で有名な武家政権だが、時代や政治の特徴が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
-  { villageWord: "微分", wolfWord: "積分", reason: "数学で並んで学ぶ単元だが、扱う考え方や使いどころが違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
+  { villageWord: "フェルマー", wolfWord: "ガウス", reason: "数学史で有名な人物だが、連想される定理や分野の印象が違う", dictionarySource: "proper-noun", pairDistance: "near", sourceMode: "proper-noun" },
 ];
 
 const properNounBalancedPairTopics: TopicCandidate[] = [
@@ -75,14 +75,14 @@ const properNounBalancedPairTopics: TopicCandidate[] = [
   { villageWord: "関ヶ原の戦い", wolfWord: "桶狭間の戦い", reason: "日本史で有名な合戦だが、時代背景や勝敗の語られ方が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
   { villageWord: "大化の改新", wolfWord: "明治維新", reason: "日本史の大きな政治改革だが、時代や社会への影響が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
   { villageWord: "日米和親条約", wolfWord: "日米修好通商条約", reason: "幕末に学ぶ条約だが、内容や日本社会への影響が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
-  { villageWord: "万有引力", wolfWord: "相対性理論", reason: "理科で触れる有名な物理の考え方だが、扱う現象や時代が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
+  { villageWord: "ファラデー", wolfWord: "マクスウェル", reason: "物理学史で有名な人物だが、実験と理論で語られ方が違う", dictionarySource: "proper-noun", pairDistance: "balanced", sourceMode: "proper-noun" },
 ];
 
 const properNounWidePairTopics: TopicCandidate[] = [
-  { villageWord: "Nintendo Switch", wolfWord: "PlayStation 5", reason: "有名なゲーム機だが、メーカーや遊ばれ方の印象が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
-  { villageWord: "トヨタ", wolfWord: "ホンダ", reason: "有名な自動車メーカーだが、ブランドイメージや得意分野が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
-  { villageWord: "東京大学", wolfWord: "早稲田大学", reason: "有名な大学だが、設立背景や校風が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
-  { villageWord: "スターバックス", wolfWord: "ドトール", reason: "有名なカフェチェーンだが、価格帯や店内の雰囲気が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
+  { villageWord: "Nintendo Switch", wolfWord: "Kindle", reason: "手元で使う娯楽系デバイスだが、遊ぶ機器と読む機器で体験が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
+  { villageWord: "トヨタ", wolfWord: "無印良品", reason: "日本発の有名ブランドだが、移動手段と生活用品で連想が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
+  { villageWord: "京都大学", wolfWord: "東京藝術大学", reason: "有名な大学だが、総合大学と芸術系大学で語られ方が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
+  { villageWord: "スターバックス", wolfWord: "成城石井", reason: "街で見かける食品系チェーンだが、飲食店と食品スーパーで体験が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
   { villageWord: "東海道新幹線", wolfWord: "山手線", reason: "有名な鉄道路線だが、移動距離や使う場面が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
   { villageWord: "紅白歌合戦", wolfWord: "M-1グランプリ", reason: "有名なテレビ番組・イベントだが、内容や楽しみ方が違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
   { villageWord: "フランス革命", wolfWord: "産業革命", reason: "世界史で有名な変革だが、政治中心か経済・技術中心かが違う", dictionarySource: "proper-noun", pairDistance: "wide", sourceMode: "proper-noun" },
@@ -95,18 +95,21 @@ const hintTopicGroups = createHintTopicGroups(properNounNearPairTopics, properNo
 const jaDailySets: TopicSet[] = [
   { id: "food", label: "日本語日常: 食べ物", layer: "object", words: ["カレー", "ラーメン", "ピザ", "寿司", "天ぷら", "弁当", "サンドイッチ", "お好み焼き", "牛丼", "焼肉"] },
   { id: "outing", label: "日本語日常: 外出先", layer: "place", words: ["映画館", "図書館", "本屋", "水族館", "動物園", "美術館", "温泉", "ホテル", "カラオケ", "ゲームセンター"] },
-  { id: "transport", label: "日本語日常: 移動", layer: "object", words: ["電車", "バス", "タクシー", "自転車", "新幹線", "飛行機", "駅", "空港", "レンタカー", "フェリー"] },
+  { id: "transport-vehicles", label: "日本語日常: 乗り物", layer: "object", words: ["電車", "バス", "タクシー", "自転車", "新幹線", "飛行機", "レンタカー", "フェリー", "地下鉄", "バイク"] },
+  { id: "transport-places", label: "日本語日常: 移動する場所", layer: "place", words: ["駅", "空港", "バス停", "港", "駐車場", "改札", "ホーム", "ターミナル", "サービスエリア", "レンタカー店"] },
   { id: "home", label: "日本語日常: 暮らし", layer: "object", words: ["冷蔵庫", "洗濯機", "掃除機", "電子レンジ", "エアコン", "テレビ", "財布", "鍵", "傘", "カレンダー"] },
-  { id: "work", label: "日本語日常: 学校・仕事", layer: "activity", words: ["宿題", "会議", "資料", "発表", "ノート", "メール", "名刺", "教科書", "面接", "締切"] },
+  { id: "work-tasks", label: "日本語日常: 学校・仕事の行動", layer: "activity", words: ["宿題", "会議", "発表", "面接", "打ち合わせ", "研修", "プレゼン", "試験", "面談", "復習"] },
+  { id: "study-items", label: "日本語日常: 学校・仕事の道具", layer: "object", words: ["資料", "ノート", "教科書", "プリント", "参考書", "問題集", "辞書", "ファイル", "名刺", "履歴書"] },
+  { id: "daily-activities", label: "日本語日常: 日常の行動", layer: "activity", words: ["買い物", "散歩", "旅行", "読書", "料理", "運動", "掃除", "勉強", "ゲーム", "昼寝"] },
   { id: "drink", label: "日本語日常: 飲み物", layer: "object", words: ["コーヒー", "紅茶", "緑茶", "ジュース", "牛乳", "炭酸水", "味噌汁", "スープ", "水", "スポーツドリンク"] },
 ];
 
 const jaDailyWideGroups: TopicGroup[] = [
-  { label: "日常レジャー", setIds: ["food", "outing"] },
-  { label: "生活と移動", setIds: ["transport", "home"] },
-  { label: "仕事と休憩", setIds: ["work", "drink"] },
-  { label: "外出全般", setIds: ["outing", "transport"] },
-  { label: "家と食事", setIds: ["home", "food"] },
+  { label: "食事と休憩", setIds: ["food", "drink"] },
+  { label: "生活のもの", setIds: ["home", "study-items"] },
+  { label: "移動のもの", setIds: ["transport-vehicles", "home"] },
+  { label: "外出する場所", setIds: ["outing", "transport-places"] },
+  { label: "行動全般", setIds: ["work-tasks", "daily-activities"] },
 ];
 
 const enCommonSets: TopicSet[] = [
@@ -244,17 +247,15 @@ function pickFromCandidates(
   const freshCandidates = validCandidates.filter(
     (topic) => !excluded.has(getTopicKey(topic)) && getTopicWords(topic).every((word) => !excludedWords.has(word)),
   );
-  const unusedPairCandidates = validCandidates.filter((topic) => !excluded.has(getTopicKey(topic)));
-  const pool =
-    freshCandidates.length > 0
-      ? freshCandidates
-      : unusedPairCandidates.length > 0
-        ? unusedPairCandidates
-        : validCandidates.length > 0
-          ? validCandidates
-          : curatedPairTopics;
+  const fallbackExhausted = freshCandidates.length === 0;
+  const pool = fallbackExhausted ? (validCandidates.length > 0 ? validCandidates : curatedPairTopics) : freshCandidates;
   const topic = randomItem(pool);
-  return { ...topic, source: "fallback" };
+  return {
+    ...topic,
+    reason: fallbackExhausted ? `候補が尽きたため、使用済み候補を再利用しています。${topic.reason}` : topic.reason,
+    source: "fallback",
+    fallbackExhausted,
+  };
 }
 
 function pickFreshFromCandidates(
@@ -328,29 +329,7 @@ function pickHintedTopic(
 
   if (strictTopic) return strictTopic;
 
-  return pickFromCandidates(candidates, excludeKeys, excludeWords);
-}
-
-function makeBalancedCandidates(sets: readonly TopicSet[], dictionarySource: TopicDictionarySource) {
-  const candidates: TopicCandidate[] = [];
-  const pairDistance: TopicPairDistance = "balanced";
-
-  for (const set of sets) {
-    for (let index = 0; index < set.words.length; index += 1) {
-      const villageWord = set.words[index];
-      const wolfWord = set.words[(index + 2) % set.words.length];
-      candidates.push({
-        villageWord,
-        wolfWord,
-        reason: `${set.label}: 同じカテゴリに入る言葉だが、場面や使い方が少し違う`,
-        dictionarySource,
-        pairDistance,
-        sourceMode: combineTopicSourceMode(dictionarySource, pairDistance),
-      });
-    }
-  }
-
-  return candidates;
+  return null;
 }
 
 function makeNearCandidates(sets: readonly TopicSet[], dictionarySource: TopicDictionarySource) {
@@ -364,7 +343,7 @@ function makeNearCandidates(sets: readonly TopicSet[], dictionarySource: TopicDi
       candidates.push({
         villageWord,
         wolfWord,
-        reason: `${set.label}: かなり近いカテゴリに入る言葉だが、細かい場面や使い方が違う`,
+        reason: `${set.label}: 共通点が分かりやすい近い言葉だが、細かい場面や使い方が違う`,
         dictionarySource,
         pairDistance,
         sourceMode: combineTopicSourceMode(dictionarySource, pairDistance),
@@ -416,30 +395,75 @@ function makeWideCandidates(
   return candidates;
 }
 
+function makeVeryWideCandidates(sets: readonly TopicSet[], dictionarySource: TopicDictionarySource) {
+  const candidates: TopicCandidate[] = [];
+  const pairDistance: TopicPairDistance = "wide";
+  const setsByLayer = new Map<TopicLayer, TopicSet[]>();
+
+  for (const set of sets) {
+    setsByLayer.set(set.layer, [...(setsByLayer.get(set.layer) ?? []), set]);
+  }
+
+  for (const sameLayerSets of setsByLayer.values()) {
+    if (sameLayerSets.length < 2) continue;
+
+    for (let setIndex = 0; setIndex < sameLayerSets.length; setIndex += 1) {
+      const firstSet = sameLayerSets[setIndex];
+      const secondSet = sameLayerSets[(setIndex + 1) % sameLayerSets.length];
+      if (firstSet.id === secondSet.id) continue;
+
+      const shuffledFirst = shuffle(firstSet.words);
+      const shuffledSecond = shuffle(secondSet.words);
+      const pairCount = Math.min(shuffledFirst.length, shuffledSecond.length, 3);
+
+      for (let index = 0; index < pairCount; index += 1) {
+        candidates.push({
+          villageWord: shuffledFirst[index],
+          wolfWord: shuffledSecond[index],
+          reason: `${firstSet.label} / ${secondSet.label}: 間に一つ共通語を置くとつながる広い関係`,
+          dictionarySource,
+          pairDistance,
+          sourceMode: combineTopicSourceMode(dictionarySource, pairDistance),
+        });
+      }
+    }
+  }
+
+  return candidates;
+}
+
+function asDistance(topics: readonly TopicCandidate[], pairDistance: TopicPairDistance) {
+  return topics.map((topic) => ({
+    ...topic,
+    pairDistance,
+    sourceMode: combineTopicSourceMode(topic.dictionarySource ?? "curated-pairs", pairDistance),
+  }));
+}
+
 const localTopicDecks: Record<TopicDictionarySource, Record<TopicPairDistance, TopicCandidate[]>> = {
   "curated-pairs": {
     near: curatedNearPairTopics,
-    balanced: curatedPairTopics,
+    balanced: asDistance(curatedWidePairTopics, "balanced"),
     wide: curatedWidePairTopics,
   },
   "ja-daily": {
     near: makeNearCandidates(jaDailySets, "ja-daily"),
-    balanced: makeBalancedCandidates(jaDailySets, "ja-daily"),
-    wide: makeWideCandidates(jaDailySets, jaDailyWideGroups, "ja-daily"),
+    balanced: asDistance(makeWideCandidates(jaDailySets, jaDailyWideGroups, "ja-daily"), "balanced"),
+    wide: makeVeryWideCandidates(jaDailySets, "ja-daily"),
   },
   "en-common": {
     near: makeNearCandidates(enCommonSets, "en-common"),
-    balanced: makeBalancedCandidates(enCommonSets, "en-common"),
-    wide: makeWideCandidates(enCommonSets, enCommonWideGroups, "en-common"),
+    balanced: asDistance(makeWideCandidates(enCommonSets, enCommonWideGroups, "en-common"), "balanced"),
+    wide: makeVeryWideCandidates(enCommonSets, "en-common"),
   },
   llm: {
     near: makeNearCandidates(jaDailySets, "ja-daily"),
-    balanced: makeBalancedCandidates(jaDailySets, "ja-daily"),
-    wide: makeWideCandidates(jaDailySets, jaDailyWideGroups, "ja-daily"),
+    balanced: asDistance(makeWideCandidates(jaDailySets, jaDailyWideGroups, "ja-daily"), "balanced"),
+    wide: makeVeryWideCandidates(jaDailySets, "ja-daily"),
   },
   "proper-noun": {
     near: [...properNounNearPairTopics, ...additionalProperNounNearPairTopics],
-    balanced: [...properNounBalancedPairTopics, ...additionalProperNounBalancedPairTopics],
+    balanced: asDistance([...properNounWidePairTopics, ...additionalProperNounWidePairTopics], "balanced"),
     wide: [...properNounWidePairTopics, ...additionalProperNounWidePairTopics],
   },
 };

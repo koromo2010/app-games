@@ -1,3 +1,4 @@
+import { hasPaidLlmAccess, paidLlmModel } from "@/lib/llm-access";
 import { redisCommand } from "@/lib/redis-store";
 import { normalizeGuess } from "@/lib/wordwolf";
 
@@ -257,10 +258,6 @@ function feedbackExamples(conceptFeedback: ConceptFeedbackRecord, accepted: bool
     .map((entry) => entry.label);
 }
 
-function isLlmEnabled() {
-  return process.env.WORDWOLF_USE_LLM === "true" && Boolean(process.env.OPENAI_API_KEY);
-}
-
 function parseLlmJudgement(text: string, feedback: FeedbackRecord): WordWolfGuessJudgement | null {
   try {
     const parsed = JSON.parse(text) as Partial<WordWolfGuessJudgement>;
@@ -296,7 +293,7 @@ async function judgeWithLlm(
   const rejectedExamples = feedbackExamples(conceptFeedback, false);
 
   const response = await client.responses.create({
-    model: "gpt-4.1-mini",
+    model: paidLlmModel,
     input:
       "You judge a Word Wolf reverse answer. Treat the guess as accepted only when it is essentially the same concept as the correct word. " +
       "Accepted/rejected examples are table memory for this exact correct word. Use them as the play group's house style when judging synonym boundaries. " +
@@ -330,7 +327,7 @@ export async function judgeWordWolfGuess(guessWord: string, correctWord: string)
   const simple = fuzzyJudgement(guessWord, correctWord, feedback);
   if (simple.source === "exact") return simple;
 
-  if (isLlmEnabled()) {
+  if (await hasPaidLlmAccess()) {
     try {
       return (await judgeWithLlm(guessWord, correctWord, feedback, conceptFeedback)) ?? simple;
     } catch (error) {

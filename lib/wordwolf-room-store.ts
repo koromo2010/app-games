@@ -176,6 +176,7 @@ function normalizeRoom(value: unknown): WordWolfRoom | null {
     wolfWord: typeof parsed.wolfWord === "string" ? parsed.wolfWord : "",
     topicReason: typeof parsed.topicReason === "string" ? parsed.topicReason : "",
     topicSource: parsed.topicSource === "llm" || parsed.topicSource === "fallback" ? parsed.topicSource : "pending",
+    topicFallbackExhausted: Boolean(parsed.topicFallbackExhausted),
     topicDictionarySource: normalizeTopicDictionarySource(parsed.topicDictionarySource ?? parsed.topicSourceMode),
     topicPairDistance: normalizeTopicPairDistance(parsed.topicPairDistance ?? parsed.topicSourceMode),
     topicHint: typeof parsed.topicHint === "string" ? parsed.topicHint.slice(0, 80) : "",

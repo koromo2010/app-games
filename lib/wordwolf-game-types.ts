@@ -52,6 +52,7 @@ export type Room = {
   wolfWord: string;
   topicReason: string;
   topicSource: WordWolfTopic["source"] | "pending";
+  topicFallbackExhausted: boolean;
   topicDictionarySource: TopicDictionarySource;
   topicPairDistance: TopicPairDistance;
   topicHint: string;

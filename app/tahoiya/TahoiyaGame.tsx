@@ -10,6 +10,7 @@ import {
   makeRandomAvatarColor,
 } from "@/lib/player-session";
 import type { TahoiyaAnswererMode, TahoiyaDefinitionOption, TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomChoice, TahoiyaTopic } from "@/lib/tahoiya-types";
+import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
 import { cyanButtonClass, dangerButtonClass, inputClass, panelClass, primaryButtonClass, subtleButtonClass } from "../wordwolf/styles";
 
 const roomStoragePrefix = "tahoiya-room-";
@@ -669,7 +670,8 @@ export function TahoiyaGame() {
             <p className="text-xs font-semibold uppercase text-amber-200">Dictionary bluffing</p>
             <h1 className="text-2xl font-black">たほい屋</h1>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <PaidLlmAccessButton />
             <Link href="/games" className={subtleButtonClass}>
               ゲームロビー
             </Link>

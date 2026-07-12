@@ -26,6 +26,7 @@ import {
   type TopicPairDistance,
   type WordWolfTopic,
 } from "@/lib/wordwolf";
+import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
 import type {
   ClueLogVisibility,
   ClueMode,
@@ -515,6 +516,7 @@ function createEmptyRoom(
     wolfWord: "",
     topicReason: "",
     topicSource: "pending",
+    topicFallbackExhausted: false,
     topicDictionarySource: defaults.topicDictionarySource,
     topicPairDistance: defaults.topicPairDistance,
     topicHint: defaults.topicHint,
@@ -611,8 +613,7 @@ async function fetchTopicWithFallback(
   pairDistance: TopicPairDistance,
   topicHint: string,
 ): Promise<WordWolfTopic> {
-  const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), 1500);
+  const requiresLlm = dictionarySource === "llm" || dictionarySource === "proper-noun";
   const history = loadTopicHistory();
   const requestHistory = history.slice(0, topicRequestHistoryLimit);
   const dailyWords = loadDailyTopicWords();
@@ -628,33 +629,46 @@ async function fetchTopicWithFallback(
     params.set("excludeWords", dailyWords.join(","));
   }
 
-  try {
-    const response = await fetch(`/api/wordwolf/topic?${params.toString()}`, {
-      signal: controller.signal,
-    });
+  const maxAttempts = requiresLlm ? 4 : 1;
 
-    if (!response.ok) {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const controller = new AbortController();
+    const topicTimeoutMs = requiresLlm ? 60000 : 1500;
+    const timer = window.setTimeout(() => controller.abort(), topicTimeoutMs);
+
+    try {
+      const response = await fetch(`/api/wordwolf/topic?${params.toString()}`, {
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        if (requiresLlm) continue;
+        const topic = pickFallbackTopic(history, dictionarySource, pairDistance, dailyWords, normalizedTopicHint);
+        rememberTopic(topic);
+        return topic;
+      }
+
+      const topic = (await response.json()) as WordWolfTopic;
+      if (!isValidWordWolfTopic(topic) || !isTopicUnusedToday(topic, history, dailyWords)) {
+        if (requiresLlm) continue;
+        const fallbackTopic = pickFallbackTopic(history, dictionarySource, pairDistance, dailyWords, normalizedTopicHint);
+        rememberTopic(fallbackTopic);
+        return fallbackTopic;
+      }
+
+      rememberTopic(topic);
+      return topic;
+    } catch {
+      if (requiresLlm) continue;
       const topic = pickFallbackTopic(history, dictionarySource, pairDistance, dailyWords, normalizedTopicHint);
       rememberTopic(topic);
       return topic;
+    } finally {
+      window.clearTimeout(timer);
     }
-
-    const topic = (await response.json()) as WordWolfTopic;
-    if (!isValidWordWolfTopic(topic) || !isTopicUnusedToday(topic, history, dailyWords)) {
-      const fallbackTopic = pickFallbackTopic(history, dictionarySource, pairDistance, dailyWords, normalizedTopicHint);
-      rememberTopic(fallbackTopic);
-      return fallbackTopic;
-    }
-
-    rememberTopic(topic);
-    return topic;
-  } catch {
-    const topic = pickFallbackTopic(history, dictionarySource, pairDistance, dailyWords, normalizedTopicHint);
-    rememberTopic(topic);
-    return topic;
-  } finally {
-    window.clearTimeout(timer);
   }
+
+  throw new Error("LLM topic generation did not complete.");
 }
 
 export function WordWolfGame() {
@@ -838,7 +852,9 @@ export function WordWolfGame() {
         ? "固有名詞"
         : "一般単語"
       : room?.topicSource === "fallback"
-        ? "代替辞書"
+        ? room.topicFallbackExhausted
+          ? "代替辞書（候補枯渇）"
+          : "代替辞書"
         : "未取得";
   const voteVoters = room ? getVoteVoters(room) : [];
   const votedCount = room ? voteVoters.filter((player) => room.votes[player.id]).length : 0;
@@ -1320,6 +1336,7 @@ export function WordWolfGame() {
         wolfWord: wolves.length > 0 ? topic.wolfWord : topic.villageWord,
         topicReason: topic.reason,
         topicSource: topic.source,
+        topicFallbackExhausted: Boolean(topic.fallbackExhausted),
         clues: [],
         votes: {},
         voteHistory: [],
@@ -1676,6 +1693,7 @@ export function WordWolfGame() {
     wolfWord: "",
     topicReason: "",
     topicSource: "pending",
+    topicFallbackExhausted: false,
     clues: [],
     votes: {},
     voteHistory: [],
@@ -1816,6 +1834,7 @@ export function WordWolfGame() {
                 </div>
               )}
             </div>
+            <PaidLlmAccessButton />
             {room && isHost && (
               <button
                 type="button"
@@ -2354,7 +2373,7 @@ export function WordWolfGame() {
                             : "border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100"
                         }`}
                       >
-                        近め
+                        近い
                       </button>
                       <button
                         type="button"
@@ -2366,7 +2385,7 @@ export function WordWolfGame() {
                             : "border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100"
                         }`}
                       >
-                        標準
+                        普通
                       </button>
                       <button
                         type="button"
@@ -2378,7 +2397,7 @@ export function WordWolfGame() {
                             : "border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100"
                         }`}
                       >
-                        広め
+                        遠い
                       </button>
                     </div>
                   </div>
