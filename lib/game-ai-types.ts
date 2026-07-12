@@ -1,7 +1,7 @@
 export type GameGenerationMeta = {
   provider: "openai" | "gemini" | "groq" | "local";
   model: string;
-  mode: "paid" | "free" | "local";
+  mode: "paid" | "personal" | "free" | "local";
   billingSource?: "personal" | "game-fields";
   promptVersion: string;
   latencyMs: number;
@@ -37,7 +37,9 @@ export function normalizeGameGenerationMeta(value: unknown): GameGenerationMeta 
     parsed.provider === "openai" || parsed.provider === "gemini" || parsed.provider === "groq" || parsed.provider === "local"
       ? parsed.provider
       : "local";
-  const mode = parsed.mode === "paid" || parsed.mode === "free" || parsed.mode === "local" ? parsed.mode : "local";
+  const mode = parsed.mode === "paid" || parsed.mode === "personal" || parsed.mode === "free" || parsed.mode === "local"
+    ? parsed.mode
+    : "local";
 
   return {
     provider,

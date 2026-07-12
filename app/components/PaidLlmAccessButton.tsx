@@ -4,12 +4,14 @@ import { useEffect, useState } from "react";
 import { freeGroqLlmModel, freeLlmModel, paidLlmModel } from "@/lib/llm-model";
 
 type AccessSource = "personal" | "game-fields" | null;
+type PersonalProvider = "openai" | "gemini" | "groq";
 
 type LlmAccessStatus = {
   enabled: boolean;
   source: AccessSource;
   personalEnabled: boolean;
   personalConfigured: boolean;
+  personalProvider: PersonalProvider | null;
   gameFieldsEnabled: boolean;
   gameFieldsConfigured: boolean;
   model: string;
@@ -24,6 +26,7 @@ const defaultStatus: LlmAccessStatus = {
   source: null,
   personalEnabled: false,
   personalConfigured: false,
+  personalProvider: null,
   gameFieldsEnabled: false,
   gameFieldsConfigured: false,
   model: paidLlmModel,
@@ -40,6 +43,10 @@ function normalizeStatus(data: Partial<LlmAccessStatus>): LlmAccessStatus {
     source,
     personalEnabled: source === "personal",
     personalConfigured: Boolean(data.personalConfigured),
+    personalProvider:
+      data.personalProvider === "openai" || data.personalProvider === "gemini" || data.personalProvider === "groq"
+        ? data.personalProvider
+        : null,
     gameFieldsEnabled: source === "game-fields",
     gameFieldsConfigured: Boolean(data.gameFieldsConfigured),
     model: typeof data.model === "string" ? data.model : defaultStatus.model,
@@ -60,6 +67,7 @@ export function PaidLlmAccessButton() {
   const [status, setStatus] = useState<LlmAccessStatus>(defaultStatus);
   const [isOpen, setIsOpen] = useState(false);
   const [personalApiKey, setPersonalApiKey] = useState("");
+  const [personalProvider, setPersonalProvider] = useState<PersonalProvider>("openai");
   const [gameFieldsPassword, setGameFieldsPassword] = useState("");
   const [message, setMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -87,6 +95,7 @@ export function PaidLlmAccessButton() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode,
+          provider: mode === "personal" ? personalProvider : undefined,
           apiKey: mode === "personal" ? personalApiKey : undefined,
           password: mode === "game-fields" ? gameFieldsPassword : undefined,
         }),
@@ -95,8 +104,8 @@ export function PaidLlmAccessButton() {
       if (!response.ok) {
         const errorMessages: Record<string, string> = {
           "LLM_SESSION_SECRET is not configured.": "個人APIキーを安全に保持するためのサーバー設定が未完了です。",
-          "Invalid OpenAI API key.": "OpenAI APIキーが無効です。専用のProject APIキーを確認してください。",
-          "Could not validate OpenAI API key.": "OpenAI APIキーを確認できませんでした。時間をおいて再度お試しください。",
+          "Invalid personal API key.": "APIキーが無効か、選択したAIサービスと一致しません。",
+          "Could not validate personal API key.": "APIキーを確認できませんでした。時間をおいて再度お試しください。",
           "OPENAI_API_KEY is not configured.": "Game Fields側のOpenAI APIが未設定です。",
           "LLM_ACCESS_PASSWORD is not configured.": "Game Fields有料枠はまだ利用できません。",
           "Invalid password.": "招待・テスト用パスワードが違います。",
@@ -107,7 +116,8 @@ export function PaidLlmAccessButton() {
       setStatus(normalizeStatus(data));
       setPersonalApiKey("");
       setGameFieldsPassword("");
-      setMessage(mode === "personal" ? "自分のOpenAI APIへ接続しました。" : "Game Fieldsの有料APIへ接続しました。");
+      const providerNames = { openai: "OpenAI", gemini: "Gemini", groq: "Groq" };
+      setMessage(mode === "personal" ? `自分の${providerNames[personalProvider]} APIへ接続しました。` : "Game Fieldsの有料APIへ接続しました。");
     } catch {
       setMessage("通信に失敗しました。もう一度試してください。");
     } finally {
@@ -132,7 +142,7 @@ export function PaidLlmAccessButton() {
   };
 
   const sourceLabel = status.source === "personal"
-    ? "自分のAPI"
+    ? `自分の${status.personalProvider === "gemini" ? "Gemini" : status.personalProvider === "groq" ? "Groq" : "OpenAI"}`
     : status.source === "game-fields"
       ? "Game Fields"
       : "無料";
@@ -165,7 +175,7 @@ export function PaidLlmAccessButton() {
             <p className="text-xs font-semibold uppercase text-emerald-700">AI API access</p>
             <h2 id="llm-access-title" className="mt-1 text-xl font-bold">利用するAI API</h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              無料API、自分で契約したOpenAI API、Game Fieldsが提供する有料APIから選べます。
+              通常は無料のまま遊べます。開発者向けAPIキーを持っている方は自分のAI APIを、将来はGame Fieldsが提供する有料APIも選べます。
             </p>
 
             <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
@@ -176,22 +186,47 @@ export function PaidLlmAccessButton() {
             <section className="mt-4 rounded-lg border border-cyan-200 bg-cyan-50 p-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h3 className="font-bold text-slate-950">自分のOpenAI APIキー</h3>
-                  <p className="mt-1 text-xs leading-5 text-slate-600">OpenAIから利用者本人へ料金が請求されます。</p>
+                  <h3 className="font-bold text-slate-950">自分で取得したAI APIキーを使う</h3>
+                  <p className="mt-1 text-xs leading-5 text-slate-600">開発者向けの設定が分かる方向けです。ChatGPT Plus／ProやGeminiの月額プランとは別の仕組みです。</p>
                 </div>
                 {status.personalEnabled && <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold text-emerald-700">接続中</span>}
               </div>
+              <label className="mt-3 block text-xs font-bold text-slate-700">
+                AIサービス
+                <select
+                  value={personalProvider}
+                  onChange={(event) => {
+                    setPersonalProvider(event.target.value as PersonalProvider);
+                    setPersonalApiKey("");
+                    setMessage("");
+                  }}
+                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
+                >
+                  <option value="openai">OpenAI</option>
+                  <option value="gemini">Google Gemini</option>
+                  <option value="groq">Groq</option>
+                </select>
+              </label>
               <input
                 type="password"
                 value={personalApiKey}
                 onChange={(event) => setPersonalApiKey(event.target.value)}
                 className="mt-3 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-100"
-                placeholder="sk-..."
+                placeholder={personalProvider === "openai" ? "sk-..." : "選択したサービスのAPIキー"}
                 autoComplete="off"
                 name="openai-api-key"
               />
+              <p className="mt-2 text-xs text-cyan-800">
+                APIキーの取得先: {personalProvider === "openai" ? (
+                  <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer" className="font-bold underline">OpenAI Platform</a>
+                ) : personalProvider === "gemini" ? (
+                  <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="font-bold underline">Google AI Studio</a>
+                ) : (
+                  <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" className="font-bold underline">Groq Console</a>
+                )}
+              </p>
               <p className="mt-2 text-[11px] leading-5 text-slate-600">
-                専用Project APIキーと利用上限の設定を推奨します。キーは暗号化されたHttpOnly Cookieに8時間だけ保持し、Redis・アカウント・ログには保存しません。Game FieldsのサーバーはAPI呼び出し時にキーを一時的に処理します。
+                このゲーム専用のAPIキーと利用上限の設定を推奨します。料金・無料枠は選択したAIサービス側の契約に従います。キーは暗号化されたHttpOnly Cookieに8時間だけ保持し、Redis・アカウント・ログには保存しません。Game FieldsのサーバーはAPI呼び出し時にキーを一時的に処理します。
               </p>
               <button
                 type="button"

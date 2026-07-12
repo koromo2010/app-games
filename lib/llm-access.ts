@@ -1,14 +1,17 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
-import { paidLlmModel } from "@/lib/llm-model";
+import { freeGroqLlmModel, freeLlmModel, paidLlmModel } from "@/lib/llm-model";
 
 export { paidLlmModel };
 
 const paidLlmCookieName = "app_games_paid_llm";
-const personalOpenAiCookieName = "app_games_personal_openai";
+const personalLlmCookieName = "app_games_personal_llm";
+const legacyPersonalOpenAiCookieName = "app_games_personal_openai";
 const paidLlmCookieMaxAge = 60 * 60 * 8;
 
 export type PaidLlmAccessSource = "personal" | "game-fields";
+export type PersonalLlmProvider = "openai" | "gemini" | "groq";
+export type PersonalLlmAccess = { provider: PersonalLlmProvider; apiKey: string };
 
 function getAccessPassword() {
   return process.env.LLM_ACCESS_PASSWORD?.trim() ?? "";
@@ -32,16 +35,16 @@ function sessionEncryptionKey() {
   return createHash("sha256").update(`app-games-personal-openai:${secret}`).digest();
 }
 
-function encryptPersonalApiKey(apiKey: string) {
+function encryptPersonalAccess(access: PersonalLlmAccess) {
   const key = sessionEncryptionKey();
   if (!key) throw new Error("LLM_SESSION_SECRET_NOT_CONFIGURED");
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", key, iv);
-  const encrypted = Buffer.concat([cipher.update(apiKey, "utf8"), cipher.final()]);
+  const encrypted = Buffer.concat([cipher.update(JSON.stringify(access), "utf8"), cipher.final()]);
   return [iv, cipher.getAuthTag(), encrypted].map((part) => part.toString("base64url")).join(".");
 }
 
-function decryptPersonalApiKey(token: string) {
+function decryptPersonalAccess(token: string): PersonalLlmAccess | null {
   const key = sessionEncryptionKey();
   if (!key || !token) return null;
   try {
@@ -49,10 +52,23 @@ function decryptPersonalApiKey(token: string) {
     if (!ivPart || !tagPart || !encryptedPart) return null;
     const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(ivPart, "base64url"));
     decipher.setAuthTag(Buffer.from(tagPart, "base64url"));
-    return Buffer.concat([
+    const decrypted = Buffer.concat([
       decipher.update(Buffer.from(encryptedPart, "base64url")),
       decipher.final(),
     ]).toString("utf8");
+    try {
+      const parsed = JSON.parse(decrypted) as Partial<PersonalLlmAccess>;
+      if (
+        (parsed.provider === "openai" || parsed.provider === "gemini" || parsed.provider === "groq") &&
+        typeof parsed.apiKey === "string" && parsed.apiKey
+      ) {
+        return { provider: parsed.provider, apiKey: parsed.apiKey };
+      }
+    } catch {
+      // The legacy cookie encrypted only the raw OpenAI key.
+      if (decrypted) return { provider: "openai", apiKey: decrypted };
+    }
+    return null;
   } catch {
     return null;
   }
@@ -79,7 +95,7 @@ export function hasOpenAiApiKey() {
   return Boolean(process.env.OPENAI_API_KEY);
 }
 
-export function hasPersonalOpenAiConfiguration() {
+export function hasPersonalLlmConfiguration() {
   return Boolean(sessionEncryptionKey());
 }
 
@@ -97,28 +113,17 @@ async function hasGameFieldsPaidLlmAccess() {
   return Boolean(token) && safeEqual(token, makeAccessToken());
 }
 
-export async function getPersonalOpenAiApiKey() {
+export async function getPersonalLlmAccess() {
   const cookieStore = await cookies();
-  return decryptPersonalApiKey(cookieStore.get(personalOpenAiCookieName)?.value ?? "");
+  const current = decryptPersonalAccess(cookieStore.get(personalLlmCookieName)?.value ?? "");
+  if (current) return current;
+  return decryptPersonalAccess(cookieStore.get(legacyPersonalOpenAiCookieName)?.value ?? "");
 }
 
 export async function getPaidLlmAccessSource(): Promise<PaidLlmAccessSource | null> {
-  if (await getPersonalOpenAiApiKey()) return "personal";
+  if (await getPersonalLlmAccess()) return "personal";
   if (await hasGameFieldsPaidLlmAccess()) return "game-fields";
   return null;
-}
-
-export async function getActiveOpenAiApiKey() {
-  const personalApiKey = await getPersonalOpenAiApiKey();
-  if (personalApiKey) return { apiKey: personalApiKey, source: "personal" as const };
-  if (await hasGameFieldsPaidLlmAccess()) {
-    return { apiKey: process.env.OPENAI_API_KEY!, source: "game-fields" as const };
-  }
-  return null;
-}
-
-export async function hasPaidLlmAccess() {
-  return Boolean(await getActiveOpenAiApiKey());
 }
 
 export async function enablePaidLlmAccess() {
@@ -139,32 +144,50 @@ export async function disablePaidLlmAccess() {
   cookieStore.delete(paidLlmCookieName);
 }
 
-export async function enablePersonalOpenAiAccess(apiKey: string) {
+export async function enablePersonalLlmAccess(provider: PersonalLlmProvider, apiKey: string) {
   const cookieStore = await cookies();
   cookieStore.set({
-    name: personalOpenAiCookieName,
-    value: encryptPersonalApiKey(apiKey.trim()),
+    name: personalLlmCookieName,
+    value: encryptPersonalAccess({ provider, apiKey: apiKey.trim() }),
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
     maxAge: paidLlmCookieMaxAge,
   });
+  cookieStore.delete(legacyPersonalOpenAiCookieName);
 }
 
-export async function disablePersonalOpenAiAccess() {
+export async function disablePersonalLlmAccess() {
   const cookieStore = await cookies();
-  cookieStore.delete(personalOpenAiCookieName);
+  cookieStore.delete(personalLlmCookieName);
+  cookieStore.delete(legacyPersonalOpenAiCookieName);
 }
 
-export async function verifyPersonalOpenAiApiKey(apiKey: string) {
+export async function verifyPersonalLlmApiKey(provider: PersonalLlmProvider, apiKey: string) {
   const normalized = apiKey.trim();
   if (normalized.length < 20 || normalized.length > 512 || /\s/.test(normalized)) return false;
 
-  const { default: OpenAI } = await import("openai");
-  const client = new OpenAI({ apiKey: normalized, maxRetries: 0, timeout: 10000 });
   try {
-    await client.models.retrieve(paidLlmModel);
+    if (provider === "gemini") {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${freeLlmModel}`, {
+        headers: { "x-goog-api-key": normalized },
+        cache: "no-store",
+        signal: AbortSignal.timeout(10000),
+      });
+      if ([400, 401, 403, 404].includes(response.status)) return false;
+      if (!response.ok) throw new Error(`GEMINI_KEY_VALIDATION_FAILED_${response.status}`);
+      return true;
+    }
+
+    const { default: OpenAI } = await import("openai");
+    const client = new OpenAI({
+      apiKey: normalized,
+      ...(provider === "groq" ? { baseURL: "https://api.groq.com/openai/v1" } : {}),
+      maxRetries: 0,
+      timeout: 10000,
+    });
+    await client.models.retrieve(provider === "groq" ? freeGroqLlmModel : paidLlmModel);
     return true;
   } catch (error) {
     const status = typeof error === "object" && error && "status" in error ? Number(error.status) : 0;

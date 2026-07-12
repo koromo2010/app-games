@@ -56,23 +56,23 @@
 
 ゲーム固有APIは事業者SDKを直接呼ばず、`generateGameLlmText` を使用する。
 
-1. 有料モードではOpenAI。利用者持込キーが接続中ならそのキー、そうでなければGame Fields提供枠のキー
-2. 失敗または出力不採用ならGemini
-3. 次にGroq
+1. personalモードでは利用者が選んだOpenAI・Gemini・Groqと持込キー
+2. paidモードではGame Fields提供枠のOpenAI
+3. 失敗または出力不採用ならGame Fields側のGemini、次にGroq
 4. 最後にユーザーへnoticeを表示してローカル候補
 
-プロバイダー間のフォールバックは共通ゲートウェイだけで行う。ゲームAPI側で同じ連鎖を重ねて、APIリトライ回数を増やさない。品質重視処理は `quality: "high"` を指定できる。生成元、モデル、paid/free/local、prompt version、校閲元、RAG参照IDを `GameGenerationMeta` に保存する。
+プロバイダー間のフォールバックは共通ゲートウェイだけで行う。ゲームAPI側で同じ連鎖を重ねて、APIリトライ回数を増やさない。品質重視処理は `quality: "high"` を指定できる。生成元、モデル、personal/paid/free/local、prompt version、校閲元、RAG参照IDを `GameGenerationMeta` に保存する。
 
 ### 有料APIと将来の課金
 
-有料OpenAIは次の2経路を分離する。
+利用者持込APIとGame Fields提供の有料OpenAIを次の2経路に分離する。
 
-1. `personal`: 利用者が自分のOpenAI Project APIキーを入力し、OpenAIから利用者本人へ課金される。
+1. `personal`: 利用者がOpenAI・Google Gemini・Groqから事業者を選び、その事業者で取得したAPIキーを入力する。料金と無料枠は選択した事業者側の契約に従う。
 2. `game-fields`: Game Fieldsの `OPENAI_API_KEY` を使う。現在は `LLM_ACCESS_PASSWORD` による招待・動作確認用で、将来は購入済み権限やクレジット残高による認可へ置き換える。
 
-ゲーム側はどちらも `lib/game-llm.ts` のpaidモードとして扱う。`GameGenerationMeta.billingSource` に `personal` または `game-fields` を記録するため、将来の原価・利用量分析で区別できる。決済実装時は `lib/llm-access.ts` のGame Fields提供枠の認可を差し替え、ゲーム固有ルートは変更しない。
+利用者持込は `lib/game-llm.ts` のpersonalモード、Game Fields提供枠はpaidモードとして扱う。`GameGenerationMeta.provider` と `billingSource` に事業者と `personal` / `game-fields` を記録するため、将来の原価・利用量分析で区別できる。決済実装時は `lib/llm-access.ts` のGame Fields提供枠の認可を差し替え、ゲーム固有ルートは変更しない。
 
-利用者持込キーは入力時にOpenAIのモデル取得APIで、現在の有料モデルを利用できるか検証する。平文をRedis、プレイヤーアカウント、ログ、localStorageへ保存しない。AES-256-GCMで暗号化したHttpOnly・SameSite=Lax Cookieへ最大8時間だけ保持し、切断時に削除する。暗号化には32文字以上の `LLM_SESSION_SECRET` を推奨し、未設定時は既存の `LLM_ACCESS_PASSWORD` と `OPENAI_API_KEY` からサーバー内で秘密値を導出する。入力画面では専用Project APIキー、権限制限、利用上限設定を案内する。
+利用者持込キーは入力時に各事業者のモデル取得APIで現在のモデルを利用できるか検証する。平文をRedis、プレイヤーアカウント、ログ、localStorageへ保存しない。事業者名とキーをAES-256-GCMで暗号化したHttpOnly・SameSite=Lax Cookieへ最大8時間だけ保持し、切断時に削除する。旧OpenAI専用Cookieは読み取り互換を保ち、次回接続時に共通Cookieへ移行する。暗号化には32文字以上の `LLM_SESSION_SECRET` を推奨し、未設定時は既存の `LLM_ACCESS_PASSWORD` と `OPENAI_API_KEY` からサーバー内で秘密値を導出する。入力画面ではAPIと一般向け月額プランが別であること、取得先、専用キー、権限制限、利用上限設定を案内する。
 
 ## 5. マルチプレイ共通ルール
 

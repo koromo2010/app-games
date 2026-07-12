@@ -1,13 +1,13 @@
 import { hasGeminiApiKey, generateGeminiText } from "@/lib/gemini";
 import { hasGroqApiKey, generateGroqText } from "@/lib/groq";
-import { getActiveOpenAiApiKey, hasPaidLlmAccess } from "@/lib/llm-access";
+import { getPaidLlmAccessSource, getPersonalLlmAccess } from "@/lib/llm-access";
 import { freeGroqLlmModel, freeLlmModel, paidLlmModel } from "@/lib/llm-model";
 
 /**
  * Shared LLM gateway for every game in app-games.
  * Provider failover belongs here so individual games never repeat the chain.
  */
-export type GameLlmMode = "paid" | "free" | "local";
+export type GameLlmMode = "paid" | "personal" | "free" | "local";
 export type GameLlmProvider = "openai" | "gemini" | "groq";
 
 export type GameLlmGenerationOptions = {
@@ -20,16 +20,20 @@ export const gameLlmFallbackNotice =
   "無料AI（Gemini・Groq）を利用できなかったため、ローカル候補を使用しています。";
 
 export async function resolveGameLlmMode(): Promise<GameLlmMode> {
-  if (await hasPaidLlmAccess()) return "paid";
+  const source = await getPaidLlmAccessSource();
+  if (source === "personal") return "personal";
+  if (source === "game-fields") return "paid";
   if (hasGeminiApiKey() || hasGroqApiKey()) return "free";
   return "local";
 }
 
-function providerOrder(mode: Exclude<GameLlmMode, "local">, options: GameLlmGenerationOptions) {
+async function providerOrder(mode: Exclude<GameLlmMode, "local">, options: GameLlmGenerationOptions) {
+  const personal = mode === "personal" ? await getPersonalLlmAccess() : null;
   const available: GameLlmProvider[] = [
     ...(mode === "paid" ? ["openai" as const] : []),
-    ...(hasGeminiApiKey() ? ["gemini" as const] : []),
-    ...(hasGroqApiKey() ? ["groq" as const] : []),
+    ...(personal ? [personal.provider] : []),
+    ...(hasGeminiApiKey() && personal?.provider !== "gemini" ? ["gemini" as const] : []),
+    ...(hasGroqApiKey() && personal?.provider !== "groq" ? ["groq" as const] : []),
   ];
   const excluded = new Set(options.excludedProviders ?? []);
   const ordered = options.preferredProvider && available.includes(options.preferredProvider)
@@ -38,12 +42,10 @@ function providerOrder(mode: Exclude<GameLlmMode, "local">, options: GameLlmGene
   return [...new Set(ordered)].filter((provider) => !excluded.has(provider));
 }
 
-async function generateOpenAiText(prompt: string, quality: "standard" | "high") {
-  const access = await getActiveOpenAiApiKey();
-  if (!access) throw new Error("OpenAI API access is not available.");
+async function generateOpenAiText(prompt: string, quality: "standard" | "high", apiKey: string) {
   const { default: OpenAI } = await import("openai");
   const client = new OpenAI({
-    apiKey: access.apiKey,
+    apiKey,
     maxRetries: 0,
     timeout: quality === "high" ? 30000 : 6000,
   });
@@ -54,18 +56,41 @@ async function generateOpenAiText(prompt: string, quality: "standard" | "high") 
   });
   const text = response.output_text.trim();
   if (!text) throw new Error("OpenAI API returned no text.");
-  return { text, billingSource: access.source };
+  return text;
 }
 
-async function callProvider(provider: GameLlmProvider, prompt: string, quality: "standard" | "high") {
+async function callProvider(
+  provider: GameLlmProvider,
+  prompt: string,
+  quality: "standard" | "high",
+  requestedMode: Exclude<GameLlmMode, "local">,
+) {
+  const personal = requestedMode === "personal" ? await getPersonalLlmAccess() : null;
+  const personalApiKey = personal?.provider === provider ? personal.apiKey : undefined;
   if (provider === "openai") {
-    const generated = await generateOpenAiText(prompt, quality);
-    return { ...generated, model: paidLlmModel, mode: "paid" as const };
+    const apiKey = personalApiKey || (requestedMode === "paid" ? process.env.OPENAI_API_KEY?.trim() : "");
+    if (!apiKey) throw new Error("OpenAI API access is not available.");
+    return {
+      text: await generateOpenAiText(prompt, quality, apiKey),
+      model: paidLlmModel,
+      mode: personalApiKey ? "personal" as const : "paid" as const,
+      billingSource: personalApiKey ? "personal" as const : "game-fields" as const,
+    };
   }
   if (provider === "gemini") {
-    return { text: await generateGeminiText(prompt, { quality }), model: freeLlmModel, mode: "free" as const, billingSource: undefined };
+    return {
+      text: await generateGeminiText(prompt, { quality, apiKey: personalApiKey }),
+      model: freeLlmModel,
+      mode: personalApiKey ? "personal" as const : "free" as const,
+      billingSource: personalApiKey ? "personal" as const : undefined,
+    };
   }
-  return { text: await generateGroqText(prompt, quality), model: freeGroqLlmModel, mode: "free" as const, billingSource: undefined };
+  return {
+    text: await generateGroqText(prompt, quality, personalApiKey),
+    model: freeGroqLlmModel,
+    mode: personalApiKey ? "personal" as const : "free" as const,
+    billingSource: personalApiKey ? "personal" as const : undefined,
+  };
 }
 
 export async function generateGameLlmText(
@@ -78,10 +103,10 @@ export async function generateGameLlmText(
   const attemptedProviders: GameLlmProvider[] = [];
   const errors: unknown[] = [];
 
-  for (const provider of providerOrder(mode, options)) {
+  for (const provider of await providerOrder(mode, options)) {
     attemptedProviders.push(provider);
     try {
-      const generated = await callProvider(provider, prompt, quality);
+      const generated = await callProvider(provider, prompt, quality, mode);
       return {
         ...generated,
         provider,

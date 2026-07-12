@@ -4,8 +4,12 @@ export function hasGroqApiKey() {
   return Boolean(process.env.GROQ_API_KEY?.trim());
 }
 
-export async function generateGroqText(prompt: string, quality: "standard" | "high" = "standard") {
-  const apiKey = process.env.GROQ_API_KEY?.trim();
+export async function generateGroqText(
+  prompt: string,
+  quality: "standard" | "high" = "standard",
+  apiKeyOverride?: string,
+) {
+  const apiKey = apiKeyOverride?.trim() || process.env.GROQ_API_KEY?.trim();
   if (!apiKey) throw new Error("GROQ_API_KEY is not configured.");
 
   const { default: OpenAI } = await import("openai");

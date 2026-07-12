@@ -22,9 +22,9 @@ export function hasGeminiApiKey() {
 
 export async function generateGeminiText(
   prompt: string,
-  options: { quality?: "standard" | "high"; timeoutMs?: number } = {},
+  options: { quality?: "standard" | "high"; timeoutMs?: number; apiKey?: string } = {},
 ) {
-  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  const apiKey = options.apiKey?.trim() || process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) throw new Error("GEMINI_API_KEY is not configured.");
   const quality = options.quality ?? "standard";
 

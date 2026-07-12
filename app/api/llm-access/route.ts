@@ -1,15 +1,17 @@
 import {
   disablePaidLlmAccess,
-  disablePersonalOpenAiAccess,
+  disablePersonalLlmAccess,
   enablePaidLlmAccess,
-  enablePersonalOpenAiAccess,
+  enablePersonalLlmAccess,
   getPaidLlmAccessSource,
+  getPersonalLlmAccess,
   hasOpenAiApiKey,
   hasPaidLlmPassword,
-  hasPersonalOpenAiConfiguration,
+  hasPersonalLlmConfiguration,
   paidLlmModel,
   verifyPaidLlmPassword,
-  verifyPersonalOpenAiApiKey,
+  verifyPersonalLlmApiKey,
+  type PersonalLlmProvider,
 } from "@/lib/llm-access";
 import { hasGeminiApiKey } from "@/lib/gemini";
 import { hasGroqApiKey } from "@/lib/groq";
@@ -17,16 +19,23 @@ import { freeGroqLlmModel, freeLlmModel } from "@/lib/llm-model";
 
 async function accessStatus() {
   const source = await getPaidLlmAccessSource();
+  const personal = source === "personal" ? await getPersonalLlmAccess() : null;
+  const personalModel = personal?.provider === "gemini"
+    ? freeLlmModel
+    : personal?.provider === "groq"
+      ? freeGroqLlmModel
+      : paidLlmModel;
   return {
     enabled: Boolean(source),
     source,
     personalEnabled: source === "personal",
-    personalConfigured: hasPersonalOpenAiConfiguration(),
+    personalConfigured: hasPersonalLlmConfiguration(),
+    personalProvider: personal?.provider ?? null,
     gameFieldsEnabled: source === "game-fields",
     gameFieldsConfigured: hasPaidLlmPassword() && hasOpenAiApiKey(),
     configured: hasPaidLlmPassword(),
     hasApiKey: hasOpenAiApiKey(),
-    model: paidLlmModel,
+    model: personal ? personalModel : paidLlmModel,
     hasFreeApiKey: hasGeminiApiKey(),
     freeModel: freeLlmModel,
     hasGroqApiKey: hasGroqApiKey(),
@@ -41,7 +50,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  let body: { mode?: unknown; password?: unknown; apiKey?: unknown };
+  let body: { mode?: unknown; provider?: unknown; password?: unknown; apiKey?: unknown };
   try {
     body = (await request.json()) as typeof body;
   } catch {
@@ -49,19 +58,24 @@ export async function POST(request: Request) {
   }
 
   if (body.mode === "personal") {
-    if (!hasPersonalOpenAiConfiguration()) {
+    if (!hasPersonalLlmConfiguration()) {
       return Response.json({ error: "LLM_SESSION_SECRET is not configured." }, { status: 503 });
     }
+    const provider: PersonalLlmProvider | null =
+      body.provider === "openai" || body.provider === "gemini" || body.provider === "groq"
+        ? body.provider
+        : null;
+    if (!provider) return Response.json({ error: "Invalid AI provider." }, { status: 400 });
     const apiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
     try {
-      if (!await verifyPersonalOpenAiApiKey(apiKey)) {
-        return Response.json({ error: "Invalid OpenAI API key." }, { status: 401 });
+      if (!await verifyPersonalLlmApiKey(provider, apiKey)) {
+        return Response.json({ error: "Invalid personal API key." }, { status: 401 });
       }
     } catch {
-      return Response.json({ error: "Could not validate OpenAI API key." }, { status: 503 });
+      return Response.json({ error: "Could not validate personal API key." }, { status: 503 });
     }
     await disablePaidLlmAccess();
-    await enablePersonalOpenAiAccess(apiKey);
+    await enablePersonalLlmAccess(provider, apiKey);
     return Response.json(await accessStatus());
   }
 
@@ -85,12 +99,12 @@ export async function POST(request: Request) {
     return Response.json({ error: "Invalid password." }, { status: 401 });
   }
 
-  await disablePersonalOpenAiAccess();
+  await disablePersonalLlmAccess();
   await enablePaidLlmAccess();
   return Response.json(await accessStatus());
 }
 
 export async function DELETE() {
-  await Promise.all([disablePaidLlmAccess(), disablePersonalOpenAiAccess()]);
+  await Promise.all([disablePaidLlmAccess(), disablePersonalLlmAccess()]);
   return Response.json(await accessStatus());
 }

@@ -21,9 +21,9 @@ All games must access AI providers through `lib/game-llm.ts`. New games should n
 
 The shared provider order is:
 
-1. Paid mode first attempt: OpenAI (the user's temporary personal key, or Game Fields `OPENAI_API_KEY` access)
-2. If OpenAI fails or its structured output is rejected: Gemini (`GEMINI_API_KEY`)
-3. Free fallback: Groq (`GROQ_API_KEY`)
+1. Personal mode first attempt: the provider selected by the player (OpenAI, Gemini, or Groq)
+2. Game Fields paid mode: OpenAI using the app's `OPENAI_API_KEY`
+3. Provider fallback: Gemini (`GEMINI_API_KEY`) and Groq (`GROQ_API_KEY`)
 4. Final fallback: local game data with a user-visible notice
 
 Provider model IDs are centralized in `lib/llm-model.ts`.
@@ -34,19 +34,19 @@ Quality-critical tasks may pass `quality: "high"` to the shared gateway. Tahoiya
 
 ## Paid API access
 
-The shared access panel separates two paid OpenAI billing sources:
+The shared access panel separates personal provider access from Game Fields-provided paid access:
 
-- Personal API: the player supplies a dedicated OpenAI Project API key and is billed directly by OpenAI.
+- Personal API: the player selects OpenAI, Google Gemini, or Groq and supplies a key issued by that provider. Billing and free-tier limits belong to the selected provider.
 - Game Fields API: the app uses its own `OPENAI_API_KEY`. It currently uses an invite/test password and is designed so that authorization can later be replaced by a purchase or credit entitlement.
 
-Personal keys are validated server-side against the active paid model, never stored in Redis, player accounts, logs, or localStorage, and are retained for at most eight hours in an AES-256-GCM encrypted HttpOnly cookie. A server-only `LLM_SESSION_SECRET` of at least 32 characters is recommended; until it is configured, the existing server-only access password and shared OpenAI key are combined to derive the encryption secret. Players should use a dedicated restricted Project API key with spend controls rather than their primary key.
+Personal keys are validated server-side against the active provider model, never stored in Redis, player accounts, logs, or localStorage, and are retained for at most eight hours in an AES-256-GCM encrypted HttpOnly cookie. A server-only `LLM_SESSION_SECRET` of at least 32 characters is recommended; until it is configured, the existing server-only access password and shared OpenAI key are combined to derive the encryption secret. Players should create a game-specific key with permissions and spend controls where the provider supports them.
 
 ## Shared feedback and RAG
 
 AI output feedback is shared infrastructure for every game:
 
 - Store and retrieve feedback through `app/api/game-feedback/route.ts` and `lib/game-feedback-store.ts`.
-- Attach `GameGenerationMeta` from `lib/game-ai-types.ts` to generated game data. It records the provider, model, paid/free/local mode, prompt version, latency, and feedback examples used for that generation.
+- Attach `GameGenerationMeta` from `lib/game-ai-types.ts` to generated game data. It records the provider, model, personal/paid/free/local mode, prompt version, latency, and feedback examples used for that generation.
 - Render per-player Good/Bad feedback with `app/components/GameFeedbackPanel.tsx`. A player can update their feedback for the same generated artifact.
 - Before calling `generateGameLlmText`, retrieve relevant examples and add the result of `formatGameFeedbackContext` to the prompt.
 
