@@ -228,7 +228,7 @@ async function generateLlmTopic(
     : null;
 }
 
-async function generateTopicResponse(request: Request) {
+async function generateTopicResponse(request: Request, previewOnly = false) {
   const { excludeKeys, excludeWords, dictionarySource, pairDistance, topicHint } = getTopicRequestOptions(request);
   const storedUsage = await loadStoredTopicUsage();
   const allExcludeKeys = normalizeList([...excludeKeys, ...storedUsage.usedPairs]);
@@ -252,7 +252,7 @@ async function generateTopicResponse(request: Request) {
       ? { ...fallbackTopic(), notice: gameLlmFallbackNotice }
       : fallbackTopic();
     const topic = { ...baseTopic, generation: localGenerationMeta(retrievedFeedbackIds) };
-    await rememberStoredTopicUsage(topic);
+    if (!previewOnly) await rememberStoredTopicUsage(topic);
     return Response.json(topic);
   }
 
@@ -268,7 +268,7 @@ async function generateTopicResponse(request: Request) {
       retrievedFeedbackIds,
     );
     if (topic && isTopicAllowed(topic, allExcludeKeys, allExcludeWords)) {
-      await rememberStoredTopicUsage(topic);
+      if (!previewOnly) await rememberStoredTopicUsage(topic);
       return Response.json(topic);
     }
   } catch (error) {
@@ -280,16 +280,17 @@ async function generateTopicResponse(request: Request) {
     notice: gameLlmFallbackNotice,
     generation: localGenerationMeta(retrievedFeedbackIds),
   };
-  await rememberStoredTopicUsage(topic);
+  if (!previewOnly) await rememberStoredTopicUsage(topic);
   return Response.json(topic);
 }
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
+  const previewOnly = url.searchParams.get("test") === "1";
   const roomCode = url.searchParams.get("roomCode")?.trim().toUpperCase() ?? "";
   const gameNumber = url.searchParams.get("gameNumber")?.trim() ?? "";
   const requestKey = roomCode && gameNumber ? `${roomCode}:${gameNumber}` : "";
-  if (!requestKey) return generateTopicResponse(request);
+  if (!requestKey || previewOnly) return generateTopicResponse(request, previewOnly);
 
   try {
     const cached = await withGameGenerationCache(wordwolfTopicPromptVersion, requestKey, async () => {
