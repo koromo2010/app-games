@@ -31,7 +31,7 @@ export async function withGameGenerationCache<T>(scope: string, requestKey: stri
   try {
     const cached = await loadCached<T>(resultKey);
     if (cached) return cached;
-    const lockResult = await redisCommand<"OK" | null>(["SET", lockKey, token, "NX", "EX", "45"]);
+    const lockResult = await redisCommand<"OK" | null>(["SET", lockKey, token, "NX", "EX", "180"]);
     if (lockResult !== "OK") {
       for (let attempt = 0; attempt < 40; attempt += 1) {
         await wait(500);

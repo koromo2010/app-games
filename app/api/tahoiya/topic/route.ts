@@ -3,6 +3,7 @@ import {
   generateGameLlmText,
   resolveGameLlmMode,
   type GameLlmMode,
+  type GameLlmProvider,
 } from "@/lib/game-llm";
 import type { GameGenerationMeta } from "@/lib/game-ai-types";
 import { formatGameFeedbackContext, retrieveGameFeedback } from "@/lib/game-feedback-store";
@@ -10,7 +11,8 @@ import { redisCommand } from "@/lib/redis-store";
 import { withGameGenerationCache } from "@/lib/game-generation-cache";
 import type { TahoiyaTopic } from "@/lib/tahoiya-types";
 
-const tahoiyaTopicPromptVersion = "tahoiya-topic-v6";
+const tahoiyaTopicPromptVersion = "tahoiya-topic-v7";
+export const maxDuration = 180;
 const usedTopicWordsKey = "tahoiya:topic:used-words";
 type DefinitionStyle = "brief" | "standard" | "detailed";
 
@@ -216,6 +218,25 @@ function parseVerifiedTopic(text: string): TahoiyaTopic | null {
   }
 }
 
+function parseTopicCandidates(text: string) {
+  try {
+    const parsed = JSON.parse(text) as { candidates?: unknown } & Partial<TahoiyaTopic>;
+    const rawCandidates = Array.isArray(parsed.candidates) ? parsed.candidates : [parsed];
+    const candidates = rawCandidates
+      .map((candidate) => parseTopic(JSON.stringify(candidate)))
+      .filter((candidate): candidate is TahoiyaTopic => Boolean(candidate));
+    return [...new Map(candidates.map((candidate) => [normalizeTopicWord(candidate.word), candidate])).values()].slice(0, 3);
+  } catch {
+    return [];
+  }
+}
+
+function independentReviewerProvider(provider: GameLlmProvider): GameLlmProvider {
+  if (provider === "openai") return "gemini";
+  if (provider === "gemini") return "groq";
+  return "openai";
+}
+
 async function generateTopic(
   mode: Exclude<GameLlmMode, "local">,
   feedbackContext: string,
@@ -225,7 +246,7 @@ async function generateTopic(
   const definitionStyle = pickDefinitionStyle();
   const definitionRule = definitionStyleRules[definitionStyle];
   const instructions = [
-    "国語辞典を使ったパーティーゲーム『たほい屋』用のお題を1つ作ってください。",
+    "国語辞典を使ったパーティーゲーム『たほい屋』用のお題候補を3つ作ってください。",
     "日本語として実在し、一般的な日本人の大人がまず意味を知らない難語を選んでください。",
     "よく知られた物を難しい漢字で書いただけの語ではなく、言葉や意味そのものが広く知られていないものを優先してください。",
     "参加者がもっともらしい偽説明を複数考えられる語を選んでください。造語や実在が確認できない語は禁止です。",
@@ -235,40 +256,49 @@ async function generateTopic(
     `今回は${definitionRule.instruction}を目安にしてください。意味を自然に説明できることを優先し、文字数を合わせるための不要な言い換えや情報追加はしないでください。`,
     "readingは専用フィールドにだけ入れてください。noteは選定理由を短く書いてください。",
     "sourceDetailには、その語と語義を確認できる辞書名・辞典の種類・典拠など、確実な確認情報を短く書いてください。不確かな辞書名を創作しないでください。",
+    "3候補は互いに異なる分野・字面・意味にし、最終校閲者が比較して最良の1つを選べるようにしてください。",
     usedWords.length > 0 ? `過去出題済みまたはBad評価のため、絶対に使わない見出し語NGリスト: ${usedWords.slice(0, 500).join("、")}` : "",
-    "JSONのみで返してください: {\"word\":\"...\",\"reading\":\"...\",\"realDefinition\":\"...\",\"note\":\"...\",\"sourceDetail\":\"...\"}",
+    "JSONのみで返してください: {\"candidates\":[{\"word\":\"...\",\"reading\":\"...\",\"realDefinition\":\"...\",\"note\":\"...\",\"sourceDetail\":\"...\"},{...},{...}]}",
   ].filter(Boolean).join("\n");
   const prompt = [instructions, feedbackContext].filter(Boolean).join("\n\n");
 
-  const generated = await generateGameLlmText(prompt, mode);
-  const topic = parseTopic(generated.text);
-  if (!topic) return null;
+  const generated = await generateGameLlmText(prompt, mode, { quality: "high" });
+  const blocked = new Set(usedWords.map(normalizeTopicWord));
+  const topics = parseTopicCandidates(generated.text).filter((candidate) => !blocked.has(normalizeTopicWord(candidate.word)));
+  if (topics.length === 0) return null;
 
   const verificationPrompt = [
-    "あなたは日本語辞書の校閲者です。次のたほい屋用候補を厳格に検証してください。",
+    "あなたは日本語辞書の厳格な校閲者です。次のたほい屋用候補を比較し、事実性・難しさ・偽説明の作りやすさが最も優れた1候補だけを選んでください。",
     "見出し語が実在する日本語の語であり、readingがその見出し語の正しい読みであり、realDefinitionがその意味に正確に対応する場合だけvalidをtrueにしてください。",
     "単なる当て字、読みと意味の取り違え、存在が不確かな語、一般人が意味を知っている語、説明が不正確な候補はvalidをfalseにしてください。",
     "少しでも確信がなければvalidをfalseにしてください。推測で修正や補完をしないでください。",
+    "実在・読み・語義・典拠に疑いがある候補は除外してください。複数が有効なら、一般的な大人が意味を知らず、字面だけでは意味を推測しにくく、偽説明を作りやすい候補を優先してください。",
     `validがtrueの場合も、realDefinitionは意味だけの一文とし、${definitionRule.instruction}を目安にしてください。自然な説明を無理に引き延ばさず、読み方、語源、用例、別名、漢字の説明、括弧を含めないでください。`,
     "sourceDetailの辞書名や確認情報が不確か、または創作の可能性がある場合もvalidをfalseにしてください。",
     "JSONのみで返してください: {\"valid\":trueまたはfalse,\"word\":\"...\",\"reading\":\"...\",\"realDefinition\":\"...\",\"note\":\"...\",\"sourceDetail\":\"...\"}",
-    `検証候補: ${JSON.stringify(topic)}`,
+    `検証候補一覧: ${JSON.stringify(topics)}`,
   ].join("\n");
   const verified = await generateGameLlmText(verificationPrompt, mode, {
-    preferredProvider: generated.provider,
+    quality: "high",
+    preferredProvider: independentReviewerProvider(generated.provider),
     excludedProviders: generated.attemptedProviders.filter((provider) => provider !== generated.provider),
   });
   const verifiedTopic = parseVerifiedTopic(verified.text);
-  return verifiedTopic
+  const selectedTopic = verifiedTopic
+    ? topics.find((candidate) => normalizeTopicWord(candidate.word) === normalizeTopicWord(verifiedTopic.word))
+    : null;
+  return verifiedTopic && selectedTopic
     ? {
         ...verifiedTopic,
         generation: {
-          provider: verified.provider,
-          model: verified.model,
-          mode: verified.mode,
+          provider: generated.provider,
+          model: generated.model,
+          mode: generated.mode,
           promptVersion: tahoiyaTopicPromptVersion,
           latencyMs: generated.latencyMs + verified.latencyMs,
           retrievedFeedbackIds,
+          reviewProvider: verified.provider,
+          reviewModel: verified.model,
         },
       }
     : null;
@@ -326,7 +356,7 @@ export async function GET(request: Request) {
   if (!requestKey) return generateTopicResponse();
 
   try {
-    const cached = await withGameGenerationCache("tahoiya-topic", requestKey, async () => {
+    const cached = await withGameGenerationCache(tahoiyaTopicPromptVersion, requestKey, async () => {
       const response = await generateTopicResponse();
       return { status: response.status, body: await response.json() };
     });

@@ -20,9 +20,13 @@ export function hasGeminiApiKey() {
   return Boolean(process.env.GEMINI_API_KEY?.trim());
 }
 
-export async function generateGeminiText(prompt: string, timeoutMs = 6000) {
+export async function generateGeminiText(
+  prompt: string,
+  options: { quality?: "standard" | "high"; timeoutMs?: number } = {},
+) {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) throw new Error("GEMINI_API_KEY is not configured.");
+  const quality = options.quality ?? "standard";
 
   const response = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${freeLlmModel}:generateContent`,
@@ -36,10 +40,10 @@ export async function generateGeminiText(prompt: string, timeoutMs = 6000) {
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         generationConfig: {
           responseMimeType: "application/json",
-          thinkingConfig: { thinkingLevel: "minimal" },
+          thinkingConfig: { thinkingLevel: quality === "high" ? "high" : "minimal" },
         },
       }),
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: AbortSignal.timeout(options.timeoutMs ?? (quality === "high" ? 20000 : 6000)),
       cache: "no-store",
     },
   );

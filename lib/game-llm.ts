@@ -13,6 +13,7 @@ export type GameLlmProvider = "openai" | "gemini" | "groq";
 export type GameLlmGenerationOptions = {
   preferredProvider?: GameLlmProvider;
   excludedProviders?: GameLlmProvider[];
+  quality?: "standard" | "high";
 };
 
 export const gameLlmFallbackNotice =
@@ -37,16 +38,18 @@ function providerOrder(mode: Exclude<GameLlmMode, "local">, options: GameLlmGene
   return [...new Set(ordered)].filter((provider) => !excluded.has(provider));
 }
 
-async function generateOpenAiText(prompt: string) {
+async function generateOpenAiText(prompt: string, quality: "standard" | "high") {
   const { default: OpenAI } = await import("openai");
   const client = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
     maxRetries: 0,
-    timeout: 6000,
+    timeout: quality === "high" ? 30000 : 6000,
   });
   const response = await client.responses.create({
     model: paidLlmModel,
-    reasoning: { effort: "none" },
+    reasoning: quality === "high"
+      ? { mode: "pro", effort: "high" }
+      : { effort: "none" },
     input: prompt,
   });
   const text = response.output_text.trim();
@@ -54,14 +57,14 @@ async function generateOpenAiText(prompt: string) {
   return text;
 }
 
-async function callProvider(provider: GameLlmProvider, prompt: string) {
+async function callProvider(provider: GameLlmProvider, prompt: string, quality: "standard" | "high") {
   if (provider === "openai") {
-    return { text: await generateOpenAiText(prompt), model: paidLlmModel, mode: "paid" as const };
+    return { text: await generateOpenAiText(prompt, quality), model: paidLlmModel, mode: "paid" as const };
   }
   if (provider === "gemini") {
-    return { text: await generateGeminiText(prompt), model: freeLlmModel, mode: "free" as const };
+    return { text: await generateGeminiText(prompt, { quality }), model: freeLlmModel, mode: "free" as const };
   }
-  return { text: await generateGroqText(prompt), model: freeGroqLlmModel, mode: "free" as const };
+  return { text: await generateGroqText(prompt, quality), model: freeGroqLlmModel, mode: "free" as const };
 }
 
 export async function generateGameLlmText(
@@ -70,13 +73,14 @@ export async function generateGameLlmText(
   options: GameLlmGenerationOptions = {},
 ) {
   const startedAt = Date.now();
+  const quality = options.quality ?? "standard";
   const attemptedProviders: GameLlmProvider[] = [];
   const errors: unknown[] = [];
 
   for (const provider of providerOrder(mode, options)) {
     attemptedProviders.push(provider);
     try {
-      const generated = await callProvider(provider, prompt);
+      const generated = await callProvider(provider, prompt, quality);
       return {
         ...generated,
         provider,

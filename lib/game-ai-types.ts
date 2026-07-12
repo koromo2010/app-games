@@ -5,6 +5,8 @@ export type GameGenerationMeta = {
   promptVersion: string;
   latencyMs: number;
   retrievedFeedbackIds: string[];
+  reviewProvider?: "openai" | "gemini" | "groq" | "local";
+  reviewModel?: string;
 };
 
 export type GameFeedbackRating = "good" | "bad";
@@ -44,5 +46,10 @@ export function normalizeGameGenerationMeta(value: unknown): GameGenerationMeta 
     retrievedFeedbackIds: Array.isArray(parsed.retrievedFeedbackIds)
       ? parsed.retrievedFeedbackIds.filter((id): id is string => typeof id === "string").slice(0, 20)
       : [],
+    reviewProvider:
+      parsed.reviewProvider === "openai" || parsed.reviewProvider === "gemini" || parsed.reviewProvider === "groq" || parsed.reviewProvider === "local"
+        ? parsed.reviewProvider
+        : undefined,
+    reviewModel: typeof parsed.reviewModel === "string" ? parsed.reviewModel.slice(0, 100) : undefined,
   };
 }

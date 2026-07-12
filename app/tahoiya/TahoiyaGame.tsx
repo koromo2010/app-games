@@ -1237,9 +1237,11 @@ export function TahoiyaGame() {
                           未投稿をテスト入力
                         </button>
                       )}
-                      <button onClick={forceAdvanceToVoting} className={primaryButtonClass}>
-                        投票へ進む（手動）
-                      </button>
+                      {writingDone && (
+                        <button onClick={forceAdvanceToVoting} className={primaryButtonClass}>
+                          投票へ進む（手動）
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>

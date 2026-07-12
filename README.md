@@ -23,6 +23,8 @@ Provider model IDs are centralized in `lib/llm-model.ts`.
 
 Provider failover runs only inside the shared gateway. Game routes must not repeat the provider chain. Topic generation is cached per room and round so duplicate clicks or tabs reuse the same result instead of spending another LLM request.
 
+Quality-critical tasks may pass `quality: "high"` to the shared gateway. Tahoiya topic generation uses high reasoning to create three candidates, then prefers a different provider for independent review and records both the generating and reviewing providers in `GameGenerationMeta`.
+
 ## Shared feedback and RAG
 
 AI output feedback is shared infrastructure for every game:
