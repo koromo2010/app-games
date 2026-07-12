@@ -12,6 +12,7 @@ import { loadStoredTahoiyaRoom } from "@/lib/tahoiya-room-store";
 import {
   findReusableTahoiyaTopic,
   loadExperiencedTahoiyaWords,
+  rememberTahoiyaTopicCandidate,
   rememberTahoiyaTopicExperience,
 } from "@/lib/tahoiya-topic-catalog";
 import type { TahoiyaDifficulty, TahoiyaTopic } from "@/lib/tahoiya-types";
@@ -451,9 +452,16 @@ async function generateTopicResponse(difficulty: TahoiyaDifficulty, playerIds: s
   const blockedWordSet = new Set(blockedWords);
   const feedbackContext = formatGameFeedbackContext(feedbackRecords);
   const retrievedFeedbackIds = feedbackRecords.map((record) => record.id);
+  const remember = async (topic: TahoiyaTopic) => {
+    if (previewOnly) {
+      await rememberTahoiyaTopicCandidate(topic, difficulty).catch(() => undefined);
+    } else {
+      await rememberTahoiyaTopicExperience(topic, difficulty, playerIds).catch(() => undefined);
+    }
+  };
   const reusableTopic = await findReusableTahoiyaTopic(difficulty, playerIds, feedbackBlockedWords).catch(() => null);
   if (reusableTopic) {
-    if (!previewOnly) await rememberTahoiyaTopicExperience(reusableTopic, difficulty, playerIds).catch(() => undefined);
+    await remember(reusableTopic);
     return Response.json(reusableTopic);
   }
 
@@ -463,7 +471,7 @@ async function generateTopicResponse(difficulty: TahoiyaDifficulty, playerIds: s
       ...localTopic,
       generation: localGenerationMeta(retrievedFeedbackIds),
     };
-    if (!previewOnly) await rememberTahoiyaTopicExperience(responseTopic, difficulty, playerIds).catch(() => undefined);
+    await remember(responseTopic);
     return Response.json(responseTopic);
   }
 
@@ -478,16 +486,14 @@ async function generateTopicResponse(difficulty: TahoiyaDifficulty, playerIds: s
       notice: gameLlmFallbackNotice,
       generation: localGenerationMeta(retrievedFeedbackIds),
     };
-    if (!previewOnly) await rememberTahoiyaTopicExperience(responseTopic, difficulty, playerIds).catch(() => undefined);
+    await remember(responseTopic);
     return Response.json(responseTopic);
   }
 
   try {
     const topic = await generateTopic(mode, difficulty, feedbackContext, retrievedFeedbackIds, blockedWords);
     if (topic && !blockedWordSet.has(normalizeTopicWord(topic.word))) {
-      if (!previewOnly) {
-        await rememberTahoiyaTopicExperience(topic, difficulty, playerIds).catch(() => undefined);
-      }
+      await remember(topic);
       return Response.json(topic);
     }
   } catch (error) {
@@ -502,7 +508,7 @@ async function generateTopicResponse(difficulty: TahoiyaDifficulty, playerIds: s
     notice: gameLlmFallbackNotice,
     generation: localGenerationMeta(retrievedFeedbackIds),
   };
-  if (!previewOnly) await rememberTahoiyaTopicExperience(responseTopic, difficulty, playerIds).catch(() => undefined);
+  await remember(responseTopic);
   return Response.json(responseTopic);
 }
 

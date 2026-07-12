@@ -23,6 +23,7 @@ import { loadStoredWordWolfRoom } from "@/lib/wordwolf-room-store";
 import {
   findReusableWordWolfTopic,
   loadExperiencedWordWolfWords,
+  rememberWordWolfTopicCandidate,
   rememberWordWolfTopicExperience,
 } from "@/lib/wordwolf-topic-catalog";
 
@@ -210,7 +211,11 @@ async function generateTopicResponse(request: Request, playerIds: string[], prev
   const feedbackContext = formatGameFeedbackContext(feedbackRecords);
   const retrievedFeedbackIds = feedbackRecords.map((record) => record.id);
   const remember = async (topic: WordWolfTopic) => {
-    if (!previewOnly) await rememberWordWolfTopicExperience(topic, playerIds).catch(() => undefined);
+    if (previewOnly) {
+      await rememberWordWolfTopicCandidate(topic).catch(() => undefined);
+    } else {
+      await rememberWordWolfTopicExperience(topic, playerIds).catch(() => undefined);
+    }
   };
 
   const reusableTopic = await findReusableWordWolfTopic({

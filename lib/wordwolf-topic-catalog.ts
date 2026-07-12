@@ -152,3 +152,21 @@ export async function rememberWordWolfTopicExperience(topic: WordWolfTopic, play
     ...playerIds,
   ]);
 }
+
+export async function rememberWordWolfTopicCandidate(topic: WordWolfTopic) {
+  const words = getTopicWords(topic);
+  if (words.length !== 2) return;
+  const now = Date.now();
+  const seed: WordWolfTopicCatalogRecord = {
+    topic,
+    createdAt: now,
+    lastUsedAt: 0,
+    useCount: 0,
+  };
+  await redisCommand<number>([
+    "HSETNX",
+    catalogKey,
+    getTopicKey(topic),
+    JSON.stringify(seed),
+  ]);
+}

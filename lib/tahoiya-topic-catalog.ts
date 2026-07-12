@@ -136,3 +136,22 @@ export async function rememberTahoiyaTopicExperience(
     ...playerIds,
   ]);
 }
+
+export async function rememberTahoiyaTopicCandidate(topic: TahoiyaTopic, difficulty: TahoiyaDifficulty) {
+  if (!topic.word) return;
+  const now = Date.now();
+  const seed: TahoiyaTopicCatalogRecord = {
+    topic,
+    difficulty,
+    experiencedPlayerIds: [],
+    createdAt: now,
+    lastUsedAt: 0,
+    useCount: 0,
+  };
+  await redisCommand<number>([
+    "HSETNX",
+    catalogKey,
+    normalizeWord(topic.word),
+    JSON.stringify(seed),
+  ]);
+}
