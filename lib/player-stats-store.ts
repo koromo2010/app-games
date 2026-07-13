@@ -4,6 +4,7 @@ import type { KotobaSenpukuRoom } from "@/lib/kotoba-senpuku";
 import type { NorthernRoom } from "@/lib/northern-branch-types";
 import type { TahoiyaRoom } from "@/lib/tahoiya-types";
 import type { WordWolfRoom } from "@/lib/wordwolf-room-store";
+import { calculateWordWolfRatingChanges, initialWordWolfRating } from "@/lib/wordwolf-rating";
 
 export type PlayerStatsGameType = "wordwolf" | "tahoiya" | "northern-branch" | "hodoai" | "kotoba-senpuku";
 
@@ -22,14 +23,19 @@ export type PlayerGameResult = {
   playerCount: number;
   role?: "village" | "wolf" | "no-wolf" | "answerer" | "writer" | "merchant" | "cooperator" | "infiltrator";
   details?: Record<string, string | number | boolean | null>;
+  ratingBefore?: number;
+  ratingAfter?: number;
+  ratingChange?: number;
 };
 
 export type PlayerStatsSummary = { played: number; wins: number; losses: number; winRate: number };
-export type PlayerStatsResponse = { today: PlayerStatsSummary; month: PlayerStatsSummary; total: PlayerStatsSummary; recent: PlayerGameResult[] };
+export type PlayerStatsResponse = { today: PlayerStatsSummary; month: PlayerStatsSummary; total: PlayerStatsSummary; recent: PlayerGameResult[]; ratings: Partial<Record<PlayerStatsGameType, number>> };
 export type PlayerStatsGameFilter = "all" | PlayerStatsGameType;
 
 const playerResultsKeyPrefix = "player-results:";
 const resultEventKeyPrefix = "game-result-event:";
+const playerRatingKey = (gameType: PlayerStatsGameType) => `player-rating:v1:${gameType}`;
+const ratingEventKey = (eventId: string) => `rating-event:v1:${eventId}`;
 const playerResultsKey = (playerId: string) => `${playerResultsKeyPrefix}${playerId}`;
 const resultEventKey = (resultId: string) => `${resultEventKeyPrefix}${resultId}`;
 
@@ -75,11 +81,34 @@ function didWordWolfPlayerWin(room: WordWolfRoom, playerId: string) {
 }
 
 export async function recordWordWolfGameResults(room: WordWolfRoom) {
-  if (room.phase !== "result" || !room.winner) return 0;
+  if (room.phase !== "result" || !room.winner || room.debugMode) return 0;
+  const ids = room.players.map((player) => player.id);
+  const storedRatings = await redisCommand<Array<string | null>>(["HMGET", playerRatingKey("wordwolf"), ...ids]);
+  const changes = calculateWordWolfRatingChanges(room.players.map((player, index) => ({
+    playerId: player.id,
+    rating: Number(storedRatings[index]) || initialWordWolfRating,
+    won: didWordWolfPlayerWin(room, player.id),
+  })));
+  const eventId = `wordwolf:${room.code}:${room.createdAt}:${room.gameNumber}`;
+  const applied = await redisCommand<number[]>([
+    "EVAL",
+    "if redis.call('EXISTS',KEYS[1])==1 then return {} end; local out={}; for i=2,#ARGV,2 do if redis.call('HEXISTS',KEYS[2],ARGV[i])==0 then redis.call('HSET',KEYS[2],ARGV[i],1000) end; table.insert(out,redis.call('HINCRBY',KEYS[2],ARGV[i],ARGV[i+1])); end; redis.call('SET',KEYS[1],'1'); return out",
+    "2", ratingEventKey(eventId), playerRatingKey("wordwolf"), eventId,
+    ...changes.flatMap((change) => [change.playerId, String(change.change)]),
+  ]);
+  const finalRatings = applied.length === changes.length
+    ? applied
+    : await redisCommand<Array<string | null>>(["HMGET", playerRatingKey("wordwolf"), ...ids]).then((values) => values.map((value) => Number(value) || initialWordWolfRating));
+  const ratingByPlayer = new Map(changes.map((change, index) => [change.playerId, {
+    before: finalRatings[index] - change.change,
+    after: finalRatings[index],
+    change: change.change,
+  }]));
   return recordPlayerResults(room.players.map((player) => {
     const role = wolfIds(room).length === 0 ? "no-wolf" : wolfIds(room).includes(player.id) ? "wolf" : "village";
     const won = didWordWolfPlayerWin(room, player.id);
-    return { schemaVersion: 1, id: `wordwolf:${room.code}:${room.createdAt}:${room.gameNumber}:${player.id}`, gameType: "wordwolf", roomCode: room.code, roomCreatedAt: room.createdAt, gameNumber: room.gameNumber, finishedAt: room.updatedAt || Date.now(), playerId: player.id, playerName: player.name, role, won, resultLabel: won ? "勝利" : "敗北", playerCount: room.players.length, details: { gameMode: room.gameMode, winner: room.winner } } satisfies PlayerGameResult;
+    const rating = ratingByPlayer.get(player.id);
+    return { schemaVersion: 1, id: `wordwolf:${room.code}:${room.createdAt}:${room.gameNumber}:${player.id}`, gameType: "wordwolf", roomCode: room.code, roomCreatedAt: room.createdAt, gameNumber: room.gameNumber, finishedAt: room.updatedAt || Date.now(), playerId: player.id, playerName: player.name, role, won, resultLabel: won ? "勝利" : "敗北", playerCount: room.players.length, details: { gameMode: room.gameMode, winner: room.winner }, ratingBefore: rating?.before, ratingAfter: rating?.after, ratingChange: rating?.change } satisfies PlayerGameResult;
   }));
 }
 
@@ -132,9 +161,12 @@ export async function recordKotobaSenpukuGameResults(room: KotobaSenpukuRoom) {
 }
 
 export async function getPlayerStats(playerId: string, gameFilter: PlayerStatsGameFilter = "all"): Promise<PlayerStatsResponse> {
-  const rawResults = await redisCommand<string[]>(["ZREVRANGE", playerResultsKey(playerId), 0, 199]);
+  const [rawResults, wordWolfRating] = await Promise.all([
+    redisCommand<string[]>(["ZREVRANGE", playerResultsKey(playerId), 0, 199]),
+    redisCommand<string | null>(["HGET", playerRatingKey("wordwolf"), playerId]),
+  ]);
   const results = rawResults.map(parseResult).filter((result): result is PlayerGameResult => Boolean(result));
   const filteredResults = gameFilter === "all" ? results : results.filter((result) => result.gameType === gameFilter);
   const todayStart = startOfToday(); const monthStart = startOfMonth();
-  return { today: summarize(filteredResults.filter((result) => result.finishedAt >= todayStart)), month: summarize(filteredResults.filter((result) => result.finishedAt >= monthStart)), total: filteredResults.length > 0 ? summarize(filteredResults) : emptySummary(), recent: filteredResults.slice(0, 10) };
+  return { today: summarize(filteredResults.filter((result) => result.finishedAt >= todayStart)), month: summarize(filteredResults.filter((result) => result.finishedAt >= monthStart)), total: filteredResults.length > 0 ? summarize(filteredResults) : emptySummary(), recent: filteredResults.slice(0, 10), ratings: { wordwolf: Number(wordWolfRating) || initialWordWolfRating } };
 }
