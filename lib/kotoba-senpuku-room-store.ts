@@ -68,7 +68,7 @@ function normalizeStringRecord(value: unknown, playerIds: Set<string>, wordsOnly
   if (!value || typeof value !== "object") return {};
   return Object.fromEntries(Object.entries(value as Record<string, unknown>).flatMap(([id, item]) => {
     if (!playerIds.has(id) || typeof item !== "string") return [];
-    const text = wordsOnly ? normalizeKotobaSenpukuWord(item) : item.slice(0, 20);
+    const text = wordsOnly ? normalizeKotobaSenpukuWord(item) : item;
     if (wordsOnly && !isValidKotobaSenpukuWord(text)) return [];
     return [[id, text]];
   }));

@@ -119,6 +119,38 @@ export const kotobaSenpukuThemes: KotobaSenpukuTheme[] = [
   { id: "town", title: "町で見かけるもの", guide: "建物、乗り物、人の役割など" },
   { id: "hobby", title: "趣味や遊びに関係するもの", guide: "活動、道具、場所など" },
   { id: "gift", title: "もらったら少しうれしいもの", guide: "高価でなくてもOK" },
+  { id: "school", title: "学校にありそうなもの", guide: "教室、校庭、授業、行事など" },
+  { id: "office", title: "仕事場にありそうなもの", guide: "道具、設備、人の役割など" },
+  { id: "kitchen", title: "台所にありそうなもの", guide: "食材、調理器具、家電など" },
+  { id: "bath", title: "お風呂や洗面所にあるもの", guide: "道具、日用品、設備など" },
+  { id: "travel", title: "旅行へ持っていきたいもの", guide: "荷物、道具、服など" },
+  { id: "station", title: "駅で見かけるもの", guide: "設備、乗り物、人など" },
+  { id: "festival", title: "お祭りから連想するもの", guide: "食べ物、道具、催しなど" },
+  { id: "sports", title: "スポーツに関係するもの", guide: "競技、道具、場所、人など" },
+  { id: "music", title: "音楽に関係するもの", guide: "楽器、演奏、音など" },
+  { id: "movie", title: "映画館で連想するもの", guide: "作品、設備、食べ物など" },
+  { id: "book", title: "本や読書から連想するもの", guide: "種類、場所、道具など" },
+  { id: "game", title: "ゲームや遊びに使うもの", guide: "道具、役割、場所など" },
+  { id: "sea", title: "海から連想するもの", guide: "生き物、景色、乗り物など" },
+  { id: "mountain", title: "山から連想するもの", guide: "自然、生き物、道具など" },
+  { id: "space", title: "宇宙から連想するもの", guide: "天体、乗り物、現象など" },
+  { id: "night", title: "夜に見かけるもの", guide: "空、町、家の中など" },
+  { id: "summer", title: "夏から連想するもの", guide: "天気、食べ物、行事など" },
+  { id: "winter", title: "冬から連想するもの", guide: "天気、服、食べ物など" },
+  { id: "spring", title: "春から連想するもの", guide: "植物、行事、景色など" },
+  { id: "autumn", title: "秋から連想するもの", guide: "食べ物、行事、景色など" },
+  { id: "red", title: "赤いもの", guide: "自然、食べ物、道具など何でも" },
+  { id: "round", title: "丸いもの", guide: "完全な円でなくてもOK" },
+  { id: "soft", title: "やわらかいもの", guide: "触感や印象がやわらかいもの" },
+  { id: "fast", title: "速いもの", guide: "生き物、乗り物、現象など" },
+  { id: "small", title: "小さいもの", guide: "身近なものから想像上のものまで" },
+  { id: "sound", title: "音が出るもの", guide: "道具、生き物、自然現象など" },
+  { id: "smell", title: "においが印象的なもの", guide: "食べ物、植物、場所など" },
+  { id: "cold", title: "冷たいもの", guide: "食べ物、場所、自然など" },
+  { id: "warm", title: "あたたかいもの", guide: "食べ物、道具、場所など" },
+  { id: "rain", title: "雨の日に関係するもの", guide: "道具、景色、過ごし方など" },
+  { id: "celebration", title: "お祝いに関係するもの", guide: "食べ物、飾り、贈り物など" },
+  { id: "future", title: "未来から連想するもの", guide: "技術、暮らし、乗り物など" },
 ];
 
 export const kotobaSenpukuDebugWords: Record<string, string[]> = {
@@ -150,8 +182,7 @@ export function normalizeKotobaSenpukuWord(value: unknown) {
 export function isValidKotobaSenpukuWord(value: unknown) {
   const word = normalizeKotobaSenpukuWord(value);
   return (
-    word.length >= 2 &&
-    word.length <= 8 &&
+    word.length > 0 &&
     /^[ぁ-んー]+$/.test(word) &&
     /[ぁ-ん]/.test(word)
   );
