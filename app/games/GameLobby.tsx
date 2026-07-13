@@ -404,6 +404,18 @@ export function GameLobby() {
               </p>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
+              {isLoggedIn && (
+                <button
+                  type="button"
+                  aria-expanded={isMobileInfoOpen}
+                  aria-controls="lobby-account-panel"
+                  onClick={() => setIsMobileInfoOpen(true)}
+                  className="flex items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-sm font-bold text-white transition hover:border-cyan-200/60 hover:bg-white/20 lg:hidden"
+                >
+                  <span aria-hidden="true">☰</span>
+                  情報
+                </button>
+              )}
               <PaidLlmAccessButton />
               {isLoggedIn ? (
                 <details className="group relative">
@@ -512,10 +524,10 @@ export function GameLobby() {
             className="fixed inset-0 z-40 bg-slate-950/70 backdrop-blur-sm lg:hidden"
           />
         )}
-        <aside className={`space-y-4 lg:order-2 lg:static lg:col-start-2 lg:row-start-1 lg:block lg:overflow-visible lg:bg-transparent lg:p-0 lg:shadow-none ${
+        <aside id="lobby-account-panel" className={`space-y-4 lg:order-2 lg:static lg:col-start-2 lg:row-start-1 lg:block lg:w-auto lg:overflow-visible lg:bg-transparent lg:p-0 lg:shadow-none ${
           isLoggedIn
             ? isMobileInfoOpen
-              ? "fixed inset-3 z-50 overflow-y-auto rounded-xl bg-slate-950 p-3 shadow-2xl"
+              ? "fixed inset-y-0 left-0 z-50 w-[min(380px,calc(100vw-2rem))] overflow-y-auto rounded-r-xl bg-slate-950 p-3 shadow-2xl"
               : "hidden"
             : "order-1"
         }`}>
