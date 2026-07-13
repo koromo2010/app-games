@@ -10,7 +10,7 @@ import {
 } from "@/lib/wordwolf-room-store";
 import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
-import { requirePlayerDebugAccess } from "@/lib/debug-access";
+import { requirePlayerDebugAccess, roomRequestsDebugMode } from "@/lib/debug-access";
 
 function isStoreNotConfigured(error: unknown) {
   return error instanceof Error && error.message === "REDIS_STORE_NOT_CONFIGURED";
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
     const player = await requireAuthenticatedPlayer();
     const body = (await request.json()) as { room?: unknown; action?: unknown; code?: unknown; passphrase?: unknown };
     const requestedRoom = body.room && typeof body.room === "object" ? body.room as { code?: unknown } : null;
-    if (requestedRoom && "debugMode" in requestedRoom && (requestedRoom as { debugMode?: unknown }).debugMode === true) await requirePlayerDebugAccess(player.id);
+    if (roomRequestsDebugMode(requestedRoom)) await requirePlayerDebugAccess(player.id);
     logFields = {
       action: body.action === "join" ? "join-room" : "save-room",
       roomRef: telemetry.roomRef(body.action === "join" ? body.code : requestedRoom?.code),

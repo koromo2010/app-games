@@ -13,7 +13,7 @@ import type { NorthernRoomAction } from "@/lib/northern-branch-types";
 import { privateGameCookieMatches, privateGameCookieName } from "@/lib/private-game-access";
 import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
-import { requirePlayerDebugAccess } from "@/lib/debug-access";
+import { actionRequiresDebugAccess, requirePlayerDebugAccess } from "@/lib/debug-access";
 
 async function hasPrivateAccess() {
   const store = await cookies();
@@ -104,7 +104,7 @@ export async function PATCH(request: Request) {
       return Response.json({ error: "code and action are required" }, { status: 400 });
     }
     let action = { ...body.action, actorId: session.id! } as NorthernRoomAction;
-    if ((action.type === "set-debug" && action.enabled) || action.type === "abort-game" || action.type.startsWith("debug-")) await requirePlayerDebugAccess(session.id!);
+    if (actionRequiresDebugAccess(action)) await requirePlayerDebugAccess(session.id!);
     logFields = { action: action.type, roomRef: telemetry.roomRef(code), actorRef: telemetry.actorRef(session.id) };
     if (action.type === "join-room") {
       action = {

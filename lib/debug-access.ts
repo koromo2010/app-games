@@ -1,4 +1,5 @@
 import { redisCommand } from "@/lib/redis-store";
+export { actionRequiresDebugAccess, roomRequestsDebugMode } from "@/lib/debug-access-policy";
 
 const debugAccessKeyPrefix = "player-debug-access:";
 

@@ -17,7 +17,7 @@ import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/li
 import { generateTahoiyaTopicResponse } from "@/app/api/tahoiya/topic/route";
 import { withGameGenerationCache } from "@/lib/game-generation-cache";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
-import { requirePlayerDebugAccess } from "@/lib/debug-access";
+import { actionRequiresDebugAccess, requirePlayerDebugAccess, roomRequestsDebugMode } from "@/lib/debug-access";
 
 function isStoreNotConfigured(error: unknown) {
   return error instanceof Error && error.message === "REDIS_STORE_NOT_CONFIGURED";
@@ -79,7 +79,7 @@ export async function POST(request: Request) {
     const player = await requireAuthenticatedPlayer();
     const body = (await request.json()) as { room?: unknown; actorId?: unknown };
     const requestedRoom = body.room && typeof body.room === "object" ? body.room as { code?: unknown } : null;
-    if (requestedRoom && "debugMode" in requestedRoom && (requestedRoom as { debugMode?: unknown }).debugMode === true) await requirePlayerDebugAccess(player.id);
+    if (roomRequestsDebugMode(requestedRoom)) await requirePlayerDebugAccess(player.id);
     logFields = { ...logFields, roomRef: telemetry.roomRef(requestedRoom?.code), actorRef: telemetry.actorRef(player.id) };
     const room = await saveStoredTahoiyaRoom(body.room, player.id);
     telemetry.success("room.mutation", { ...logFields, phase: room.phase, revision: room.revision, playerCount: room.players.length });
@@ -120,7 +120,7 @@ export async function PATCH(request: Request) {
       return Response.json({ error: "code and action are required" }, { status: 400 });
     }
     const requestedAction = body.action as Record<string, unknown>;
-    if (requestedAction.type === "abort-game" || (typeof requestedAction.type === "string" && requestedAction.type.startsWith("debug-"))) await requirePlayerDebugAccess(player.id);
+    if (actionRequiresDebugAccess(requestedAction)) await requirePlayerDebugAccess(player.id);
     logFields = {
       action: typeof requestedAction.type === "string" ? requestedAction.type : "unknown",
       roomRef: telemetry.roomRef(code),

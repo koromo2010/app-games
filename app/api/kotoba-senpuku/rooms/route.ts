@@ -13,7 +13,7 @@ import type { KotobaSenpukuRoomAction } from "@/lib/kotoba-senpuku";
 import { privateGameCookieMatches, privateGameCookieName } from "@/lib/private-game-access";
 import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
-import { requirePlayerDebugAccess } from "@/lib/debug-access";
+import { actionRequiresDebugAccess, requirePlayerDebugAccess } from "@/lib/debug-access";
 
 async function hasPrivateAccess() {
   const store = await cookies();
@@ -106,7 +106,7 @@ export async function PATCH(request: Request) {
     }
     const actorId = session.id!;
     let action = { ...body.action, actorId } as KotobaSenpukuRoomAction;
-    if ((action.type === "set-debug" && action.enabled) || action.type === "abort-game" || action.type.startsWith("debug-")) await requirePlayerDebugAccess(actorId);
+    if (actionRequiresDebugAccess(action)) await requirePlayerDebugAccess(actorId);
     logFields = { action: action.type, roomRef: telemetry.roomRef(code), actorRef: telemetry.actorRef(actorId) };
     if (action.type === "join-room") {
       action = { ...action, player: { id: session.id!, name: session.name, joinedAt: Date.now(), avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined } };
