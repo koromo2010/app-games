@@ -46,3 +46,16 @@ export async function expireWordWolfPhase(code: string, commandId: string) {
   const response = await fetch("/api/wordwolf/commands", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code, commandId, type: "expire-phase" }) });
   return readJson<{ room: Room | null; applied: boolean; retryAfterMs?: number }>(response, "ROOM_COMMAND_FAILED");
 }
+
+async function sendWordWolfCommand(input: Record<string, string>) {
+  const response = await fetch("/api/wordwolf/commands", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+  return readJson<{ room: Room; applied: boolean }>(response, "ROOM_COMMAND_FAILED");
+}
+
+export function submitWordWolfClue(code: string, playerId: string, text: string, commandId: string) {
+  return sendWordWolfCommand({ code, playerId, text, commandId, type: "submit-clue" });
+}
+
+export function castWordWolfVote(code: string, playerId: string, targetId: string, commandId: string) {
+  return sendWordWolfCommand({ code, playerId, targetId, commandId, type: "cast-vote" });
+}

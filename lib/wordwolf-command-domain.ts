@@ -55,6 +55,34 @@ function timeoutVote(room: Room, now: number): Room {
   return { ...room, phase: "result", votes, voteHistory, runoffCandidateIds: null, accusedId, currentTurnStartedAt: null, winner: "wolf", resultText: accusedId ? "投票で狼を当てられませんでした。狼の勝利です。" : "投票が割れました。狼の勝利です。" };
 }
 
+export function applyWordWolfClueCommand(room: Room, playerId: string, rawText: string, now = Date.now()) {
+  if (room.phase !== "clue") return null;
+  const text = rawText.trim().slice(0, 500);
+  if (!text) return null;
+  const participants = cluePlayers(room);
+  const actor = participants.find((player) => player.id === playerId);
+  if (!actor || room.clues.some((clue) => clue.round === room.currentRound && clue.playerId === playerId)) return null;
+  if (room.clueMode === "turn" && room.players[room.currentTurnIndex]?.id !== playerId) return null;
+  const clues = [...room.clues, { playerId, round: room.currentRound, text, at: now }];
+  const complete = participants.every((player) => clues.some((clue) => clue.round === room.currentRound && clue.playerId === player.id));
+  if (!complete) {
+    if (room.clueMode === "simultaneous") return { ...room, clues };
+    const index = participants.findIndex((player) => player.id === playerId);
+    const next = participants[(index + 1) % participants.length];
+    return { ...room, clues, currentTurnIndex: Math.max(0, room.players.findIndex((player) => player.id === next?.id)), currentTurnStartedAt: now };
+  }
+  const runoff = Boolean(room.runoffCandidateIds?.length); const lastRound = room.currentRound >= room.roundsTotal;
+  return { ...room, clues, currentTurnIndex: 0, currentRound: !runoff && !lastRound ? room.currentRound + 1 : room.currentRound, phase: runoff || lastRound ? "vote" as const : "clue" as const, currentTurnStartedAt: now };
+}
+
+export function applyWordWolfVoteCommand(room: Room, playerId: string, targetId: string, now = Date.now()) {
+  if (room.phase !== "vote" || room.votes[playerId]) return null;
+  if (!voteVoters(room).some((player) => player.id === playerId) || !runoffCandidates(room).some((player) => player.id === targetId)) return null;
+  const withVote = { ...room, votes: { ...room.votes, [playerId]: targetId } };
+  if (!voteVoters(withVote).every((player) => withVote.votes[player.id])) return withVote;
+  return timeoutVote(withVote, now);
+}
+
 export function applyWordWolfTimeout(room: Room, now = Date.now()) {
   const deadline = wordWolfDeadlineAt(room);
   if (!deadline || now < deadline + wordWolfTimeoutGraceMs()) return null;

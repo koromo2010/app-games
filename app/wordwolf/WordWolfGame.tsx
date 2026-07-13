@@ -64,7 +64,9 @@ import { WordWolfActionPanels } from "./WordWolfActionPanels";
 import {
   fetchWordWolfRoom,
   expireWordWolfPhase,
+  castWordWolfVote,
   persistWordWolfRoom,
+  submitWordWolfClue,
 } from "./wordwolf-room-api-client";
 import { useWordWolfPhaseClock } from "./use-wordwolf-phase-clock";
 import {
@@ -1282,6 +1284,18 @@ export function WordWolfGame() {
     if (!room || room.phase !== "clue") return;
     // 0秒表示後の手動投稿と自動時間切れ処理が同時に部屋を更新するのを防ぐ。
     if (!isTimeout && turnSecondsLeft === 0 && room.turnTimeLimitSeconds > 0) return;
+    if (!isTimeout) {
+      const text = clueInput.trim();
+      if (!clueActorId || !text) return;
+      try {
+        const result = await submitWordWolfClue(room.code, clueActorId, text, crypto.randomUUID());
+        setClueInput(""); saveRoom(result.room); setRoom(result.room);
+      } catch {
+        const latest = await loadRoomFromStore(room.code); if (latest) setRoom(latest);
+        setError("発言を反映できませんでした。最新の状態を読み込みました。");
+      }
+      return;
+    }
 
     const timeoutText = "\u6642\u9593\u5207\u308c";
     if (room.clueMode === "simultaneous") {
@@ -1405,6 +1419,18 @@ export function WordWolfGame() {
   const castVote = useCallback(async (targetId: string, isTimeout = false) => {
     if (!room || room.phase !== "vote") return;
     if (!isTimeout && turnSecondsLeft === 0 && room.turnTimeLimitSeconds > 0) return;
+    if (!isTimeout) {
+      const actorId = voteActor?.id ?? "";
+      if (!actorId || !targetId) return;
+      try {
+        const result = await castWordWolfVote(room.code, actorId, targetId, crypto.randomUUID());
+        saveRoom(result.room); setRoom(result.room);
+      } catch {
+        const latest = await loadRoomFromStore(room.code); if (latest) setRoom(latest);
+        setError("投票を反映できませんでした。最新の状態を読み込みました。");
+      }
+      return;
+    }
 
     const latestRoom = await loadRoomFromStore(room.code);
     if (latestRoom && latestRoom.phase !== "vote") {
