@@ -390,7 +390,7 @@ export function KotobaSenpukuGame() {
   };
 
   const rulesDialog = <GameRulesDialog open={rulesOpen} title="ことばソナーのルール" onClose={() => setRulesOpen(false)}>
-    <p>2人以上で遊びます。各自がお題に沿った秘密語を「ひらがな」と長音符「ー」だけで入力し、最後まで脱落せずに残ることを目指します。文字数と参加人数に上限はありません。</p>
+    <p>2人以上で遊びます。各自がお題に沿った秘密語を「ひらがな」と長音符「ー」だけで入力し、最後まで脱落せずに残ることを目指します。文字数と参加人数に上限はありません。最初の手番は全員の秘密語がそろった後にランダムで決まります。</p>
     <h3 className="mt-4 font-black text-white">開始前の設定</h3>
     <ul className="mt-2 list-disc space-y-2 pl-5">
       <li>連続探知「あり」では、文字探知が1人以上に命中すると、自分が生存している限り続けて行動できます。「なし」では命中しても手番終了です。</li>

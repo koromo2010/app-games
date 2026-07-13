@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import {
   isValidKotobaSenpukuWord,
   isFullyRevealedKotobaSenpukuWord,
@@ -174,16 +174,18 @@ function allSecretsSubmitted(room: KotobaSenpukuRoom) {
 
 function beginBattle(room: KotobaSenpukuRoom) {
   const masks = Object.fromEntries(room.players.map((player) => [player.id, maskKotobaSenpukuWord(room.secrets[player.id] ?? "", [])]));
+  const activePlayerIndex = room.players.length > 0 ? randomInt(room.players.length) : 0;
+  const activePlayer = room.players[activePlayerIndex];
   return addLog({
     ...room,
     phase: "battle",
     masks,
     calledKana: [],
     exposedIds: [],
-    activePlayerIndex: 0,
+    activePlayerIndex,
     turnNumber: 1,
     phaseStartedAt: Date.now(),
-  }, `${room.players[0]?.name ?? "最初のプレイヤー"}の手番です。`);
+  }, `抽選の結果、${activePlayer?.name ?? "最初のプレイヤー"}から開始します。`);
 }
 
 function beginRound(room: KotobaSenpukuRoom, round: number) {
