@@ -4,7 +4,7 @@ const abstainVoteId = "__abstain__";
 const timeoutText = "時間切れ";
 export function wordWolfTimeoutGraceMs() {
   const configured = Number(process.env.WORDWOLF_TIMEOUT_GRACE_MS);
-  return Number.isFinite(configured) && configured >= 0 && configured <= 10000 ? Math.floor(configured) : 2000;
+  return Number.isFinite(configured) && configured >= 0 && configured <= 10000 ? Math.floor(configured) : 5000;
 }
 const wolfIds = (room: Room) => room.wolfIds.length ? room.wolfIds : room.wolfId ? [room.wolfId] : [];
 const runoffCandidates = (room: Room) => room.runoffCandidateIds?.length ? room.players.filter((player) => room.runoffCandidateIds?.includes(player.id)) : room.players;
