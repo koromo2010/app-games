@@ -98,6 +98,45 @@ function PlayerRow({ player, isHost, isMe, eliminated = false }: { player: Kotob
   );
 }
 
+function BinaryRuleControl({
+  label,
+  description,
+  value,
+  onChange,
+}: {
+  label: string;
+  description: string;
+  value: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <fieldset>
+      <legend className="text-sm font-medium text-slate-200">{label}</legend>
+      <div className="mt-1 grid grid-cols-2 gap-2">
+        {[
+          { label: "なし", value: false },
+          { label: "あり", value: true },
+        ].map((option) => (
+          <button
+            key={option.label}
+            type="button"
+            onClick={() => onChange(option.value)}
+            aria-pressed={value === option.value}
+            className={`rounded-lg border px-3 py-2 text-left text-sm font-semibold transition ${
+              value === option.value
+                ? "border-fuchsia-300 bg-fuchsia-300 text-fuchsia-950 shadow-sm"
+                : "border-white/15 bg-white/[0.05] text-slate-200 hover:bg-white/10"
+            }`}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+      <p className="mt-1 text-xs leading-5 text-slate-400">{description}</p>
+    </fieldset>
+  );
+}
+
 export function KotobaSenpukuGame() {
   const [session, setSession] = useState<PlayerSession | null>(null);
   const [room, setRoom] = useState<KotobaSenpukuRoom | null>(null);
@@ -341,14 +380,19 @@ export function KotobaSenpukuGame() {
   };
 
   const rulesDialog = <GameRulesDialog open={rulesOpen} title="ことばソナーのルール" onClose={() => setRulesOpen(false)}>
-    <p>各自がテーマに沿った秘密語を決め、最後まで秘密語が残ることを目指します。</p>
+    <p>2人以上で遊びます。各自がお題に沿った秘密語を「ひらがな」と長音符「ー」だけで入力し、最後まで脱落せずに残ることを目指します。文字数と参加人数に上限はありません。</p>
+    <h3 className="mt-4 font-black text-white">開始前の設定</h3>
+    <ul className="mt-2 list-disc space-y-2 pl-5">
+      <li>連続探知「あり」では、文字探知が1人以上に命中すると、自分が生存している限り続けて行動できます。「なし」では命中しても手番終了です。</li>
+      <li>秘密語回答「あり」では、文字探知の代わりに相手の秘密語を直接回答できます。「なし」では文字探知だけで遊びます。</li>
+    </ul>
     <h3 className="mt-4 font-black text-white">手番の行動</h3>
-    <ol className="mt-2 list-decimal space-y-2 pl-5"><li>まだ選ばれていない文字を1つ探知します。連続探知ONなら、命中後も自分が生存している限りもう一度行動できます。OFFなら1回で手番終了です。</li><li>秘密語回答ONなら、生存者1人の秘密語を回答できます。正解なら相手は即脱落し、不正解なら何も起こりません。どちらでも手番は終了します。</li></ol>
-    <p className="mt-4">濁点・半濁点と小さいかなは元の清音と同じ文字群です。長音符「ー」は独立した文字としてスキャンします。</p>
-    <p className="mt-2">公開文字は秘密語内の順番を保って左詰めで表示し、未公開文字・空き枠・総文字数は表示しません。</p>
+    <ol className="mt-2 list-decimal space-y-2 pl-5"><li>全員共通の文字盤から、まだ選ばれていない文字を1つ探知します。生存者の秘密語に含まれていれば、該当する文字をすべて公開します。誰にも命中しなければ手番終了です。</li><li>秘密語回答「あり」なら、生存者1人を指名して秘密語を回答できます。正解なら相手は即脱落し、不正解なら何も起こりません。正誤にかかわらず回答した時点で手番終了です。</li></ol>
+    <p className="mt-4">濁点・半濁点、小さいかなは元の清音と同じ文字群として判定します。長音符「ー」は独立した探知文字です。</p>
+    <p className="mt-2">公開された文字は、当てた順ではなく秘密語内の順番に並べ、隙間なく左詰めで表示します。同じ文字が複数あればすべて公開します。未公開文字・空き枠・残り文字数・総文字数は表示しません。</p>
     <h3 className="mt-4 font-black text-white">脱落と勝利</h3>
-    <p className="mt-2">文字スキャンの積み重ね、または直接推理によって秘密語が全部公開された人は脱落し、以後の手番を失います。最後まで秘密語が残った1人が勝利です。</p>
-    <p className="mt-2">最後の複数人が同じ探知で同時脱落した場合は、秘密語が最も短い人が勝利。同じ最短文字数なら同率勝利です。</p>
+    <p className="mt-2">探知によって全文字が公開された人、または秘密語を直接当てられた人は脱落し、秘密語全体を公開します。脱落後は自分の手番がなくなります。最後まで残った1人が勝利です。</p>
+    <p className="mt-2">最後の複数人が同じ文字探知で同時に脱落した場合は、その中で秘密語が最も短い人が勝利します。最短文字数も同じなら同率勝利です。</p>
   </GameRulesDialog>;
 
   if (!ready) return <main className="min-h-screen bg-slate-950 p-8 text-white">ログイン情報と部屋を確認中...</main>;
@@ -384,7 +428,25 @@ export function KotobaSenpukuGame() {
         <aside className="space-y-4"><section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4"><div className="flex items-center justify-between"><h2 className="font-black">参加者</h2><span className="text-sm text-slate-400">{room.players.length}人</span></div><ul className="mt-3 space-y-2">{room.players.map((player) => <PlayerRow key={player.id} player={player} isHost={player.id === room.hostId} isMe={player.id === playerId} eliminated={room.exposedIds.includes(player.id)} />)}</ul></section><RoomConfigSummary items={configItems} /></aside>
         <div className="space-y-4">
           {error && <p className="rounded-xl border border-rose-300/30 bg-rose-300/10 p-3 text-sm font-bold text-rose-100">{error}</p>}
-          {room.phase === "lobby" && isHost && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-5"><h2 className="font-black">ルール設定</h2><div className="mt-3 grid gap-3 sm:grid-cols-2"><label className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-4"><input type="checkbox" checked={room.continuousScan} onChange={(event) => void updateConfig({ continuousScan: event.target.checked })} className="mt-1 h-4 w-4" /><span><span className="block font-bold">連続探知</span><span className="mt-1 block text-xs leading-5 text-slate-400">命中したら続けて行動。OFFなら探知1回で手番終了。</span></span></label><label className="flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-4"><input type="checkbox" checked={room.allowWordGuess} onChange={(event) => void updateConfig({ allowWordGuess: event.target.checked })} className="mt-1 h-4 w-4" /><span><span className="block font-bold">秘密語回答</span><span className="mt-1 block text-xs leading-5 text-slate-400">相手の秘密語を直接回答する行動を使えます。</span></span></label></div></section>}
+          {room.phase === "lobby" && isHost && (
+            <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-5">
+              <h2 className="font-black">ルール設定</h2>
+              <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                <BinaryRuleControl
+                  label="連続探知"
+                  description="あり：命中したら続けて行動。なし：探知1回で手番終了。"
+                  value={room.continuousScan}
+                  onChange={(value) => void updateConfig({ continuousScan: value })}
+                />
+                <BinaryRuleControl
+                  label="秘密語回答"
+                  description="あり：相手の秘密語を直接回答する行動を使えます。"
+                  value={room.allowWordGuess}
+                  onChange={(value) => void updateConfig({ allowWordGuess: value })}
+                />
+              </div>
+            </section>
+          )}
           {room.phase === "lobby" && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><h2 className="text-2xl font-black">ゲーム開始前</h2>{isHost ? <div className="mt-5 grid gap-4 sm:grid-cols-2"><div className="sm:row-span-2 rounded-xl border border-fuchsia-300/20 bg-fuchsia-300/10 p-4 text-sm leading-6 text-fuchsia-50">秘密語が全部公開されると脱落し、以後の手番はありません。最後まで秘密語が残った1人が勝利です。</div><RoomTimeLimitControl label="秘密語の入力時間" value={room.secretTimeLimitSeconds} onChange={(seconds) => void updateConfig({ secretTimeLimitSeconds: seconds })} /><RoomTimeLimitControl label="1手番の時間" value={room.turnTimeLimitSeconds} onChange={(seconds) => void updateConfig({ turnTimeLimitSeconds: seconds })} /></div> : <p className="mt-4 rounded-xl bg-white/[0.05] p-4 text-slate-300">ホストが設定してゲームを開始するまでお待ちください。</p>}{isHost && room.debugMode && <div className="mt-5 rounded-xl border border-cyan-300/25 bg-cyan-300/10 p-4"><p className="text-sm font-bold text-cyan-50">ダミーを追加すると、ホスト1人で複数人の流れを確認できます。</p><button type="button" disabled={isSaving} onClick={() => void runAction({ type: "debug-add-player", actorId: playerId })} className="mt-3 w-full rounded-lg bg-cyan-200 px-4 py-2 font-black text-cyan-950 disabled:opacity-40">ダミーユーザーを追加</button></div>}{isHost && <button type="button" disabled={isSaving || room.players.length < 2} onClick={() => void runAction({ type: "start-game", actorId: playerId })} className="mt-6 w-full rounded-xl bg-amber-300 px-4 py-4 text-lg font-black text-slate-950 disabled:opacity-40">{room.players.length < 2 ? "2人以上で開始できます" : "このメンバーで開始"}</button>}</section>}
 
           {room.phase !== "lobby" && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.22em] text-amber-300">Survival match</p><h2 className="mt-2 text-2xl font-black sm:text-4xl">{room.theme?.title}</h2><p className="mt-2 text-sm text-slate-400">{room.theme?.guide}</p></div><span className="rounded-xl bg-fuchsia-400 px-4 py-2 font-black text-fuchsia-950">生存 {room.players.length - room.exposedIds.length}人</span></div></section>}

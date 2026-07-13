@@ -12,7 +12,7 @@ Party game prototypes built with Next.js.
 - `/tahoiya` - Tahoiya prototype
 - `/northern-branch` - Private-use online Northern Branch room game for logged-in players (requires `PRIVATE_GAME_ACCESS_KEY`)
 - `/kotoba-de-kazu-narabe` - Private-use online room game for logged-in players (requires `PRIVATE_GAME_ACCESS_KEY`)
-- `/kotoba-senpuku` - Private-use original online word deduction room game (requires `PRIVATE_GAME_ACCESS_KEY`)
+- `/word-sonar` - Private-use original online word deduction room game (requires `PRIVATE_GAME_ACCESS_KEY`; legacy `/kotoba-senpuku` redirects here)
 - `/hodoai-talk` - Redirect to `/kotoba-de-kazu-narabe`
 
 ## Private game access
