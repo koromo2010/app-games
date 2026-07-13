@@ -1,6 +1,6 @@
 # app-games 開発資料ナビ
 
-このページを、別スレッドや別担当者が開発へ入るときの資料入口とする。会話ログではなく、ここから辿れるリポジトリ内資料を正本として使う。
+このページを、別スレッドや別担当者が開発へ入るときの資料入口とする。`DEVELOPMENT_THREAD_LOG.md` は判断経緯を残す参考ログであり、ここから辿れる現行資料とコードを正本として使う。
 
 ## 最初の読み順
 
@@ -31,6 +31,7 @@
 | LLM・利用者APIキー・課金元 | `DEVELOPMENT_HANDOFF.md` 3〜4章 | `lib/game-llm.ts`、`lib/llm-access.ts`、`lib/llm-model.ts` |
 | 戦績・レーティング | `DEVELOPMENT_HANDOFF.md` 5章 | `lib/player-stats-store.ts`、`lib/game-rating.ts` |
 | マイページ・対戦プレイバック・お気に入り・共有 | `GAME_REPLAYS.md` | `lib/game-replay-store.ts`、`app/api/player-replays/route.ts`、`app/users/me` |
+| 過去スレッドの要望・判断経緯 | `DEVELOPMENT_THREAD_LOG.md`（参考ログ） | 現在仕様は必ず該当資料とコードで再確認する |
 | 公開・引き継ぎ更新 | `DEVELOPMENT_HANDOFF.md` 9〜10章 | `git diff`、Vercelの対象デプロイ |
 
 ## バグ調査で見る順番
@@ -54,4 +55,5 @@
 - 登録ゲーム一覧と自動監査対象は `config/game-registry.json` を優先する。
 - 実装済みのモジュール境界は `MODULAR_GAME_ARCHITECTURE.md` と `moduleBoundaryFiles` を使う。
 - `CONTAINER_ARCHITECTURE.md` は将来構成であり、実装済みとはみなさない。
+- `DEVELOPMENT_THREAD_LOG.md` は過去の経緯を調べるときだけ参照し、現在仕様の根拠にはしない。
 - 資料とコードが食い違う場合は、片方だけを黙って合わせず、差分をバグまたは仕様判断として明示する。
