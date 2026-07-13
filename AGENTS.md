@@ -25,7 +25,7 @@
 - お題候補へ経験済みプレイヤー配列を増やし続けない。長期設計では、候補と品質統計は候補DB、経験済み候補IDはゲーム別・プレイヤー別Redis Setへ分離する。
 - 既存のユーザー変更を消さない。秘密情報や `.env.local` をコミットしない。
 - 全ゲームを `config/game-registry.json` に登録する。ロビー表示、公開範囲、プレイ方式、LLM、戦績、必須共通UIを別々のファイルへ重複定義しない。
-- `docs/MODULAR_GAME_ARCHITECTURE.md` のモジュール境界を守る。UIコンポーネントからRedisを呼ばず、HTTP通信、時計、純粋なゲーム進行、永続化を分離する。分離済みファイルは登録簿の `moduleBoundaryFiles` に列挙し、自動検査から脱落させない。
+- `docs/MODULAR_GAME_ARCHITECTURE.md` のモジュール境界と `docs/CONTAINER_ARCHITECTURE.md` の将来構成を守る。UIコンポーネントからRedisを呼ばず、HTTP通信、時計、純粋なゲーム進行、永続化を分離する。分離済みファイルは登録簿の `moduleBoundaryFiles` に列挙し、自動検査から脱落させない。
 - アカウント参加型ゲームは共通戦績へ結果を保存し、ロビーの全ゲーム・ゲーム別フィルターで確認可能にする。ローカル回しゲームは、アカウントへ安全に紐づけられるまで戦績対象外と明記する。
 
 ## Verification and publishing
