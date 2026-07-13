@@ -15,6 +15,7 @@ for (const game of games) {
   if (!game.href || hrefs.has(game.href)) fail(`${game.id}: hrefが空または重複しています。`);
   ids.add(game.id); hrefs.add(game.href);
   for (const field of ["entryFile", "pageFile"]) if (!game[field] || !existsSync(join(root, game[field]))) fail(`${game.id}: ${field} が存在しません。`);
+  for (const file of game.moduleBoundaryFiles || []) if (!existsSync(join(root, file))) fail(`${game.id}: モジュール境界ファイル ${file} が存在しません。`);
   if (!game.entryFile || !existsSync(join(root, game.entryFile))) continue;
   const entry = read(game.entryFile);
   for (const token of game.requiredTokens || []) if (!entry.includes(token)) fail(`${game.id}: 共通要件「${token}」が ${game.entryFile} にありません。`);

@@ -62,6 +62,11 @@ import {
 import { ClueLogPanel, VoteHistoryPanel } from "./WordWolfPanels";
 import { WordWolfActionPanels } from "./WordWolfActionPanels";
 import {
+  fetchWordWolfRoom,
+  persistWordWolfRoom,
+} from "./wordwolf-room-api-client";
+import { useWordWolfPhaseClock } from "./use-wordwolf-phase-clock";
+import {
   cyanButtonClass,
   dangerButtonClass,
   inputClass,
@@ -351,11 +356,7 @@ async function saveRoomToStore(room: Room) {
   saveRoom(room);
 
   try {
-    await fetch("/api/wordwolf/rooms", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ room }),
-    });
+    await persistWordWolfRoom(room);
   } catch {
     // Local storage keeps solo/browser-tab testing usable when the remote store is unavailable.
   }
@@ -363,35 +364,29 @@ async function saveRoomToStore(room: Room) {
 
 async function loadRoomFromStore(code: string) {
   try {
-    const response = await fetch(`/api/wordwolf/rooms?code=${encodeURIComponent(code)}`, {
-      cache: "no-store",
-    });
-    if (response.status === 404) return null;
-    if (!response.ok) throw new Error("ROOM_FETCH_FAILED");
-
-    const data = (await response.json()) as { room?: Room };
-    if (!data.room) return null;
+    const remoteRoom = await fetchWordWolfRoom(code);
+    if (!remoteRoom) return null;
 
     const normalizedRoom = {
-      ...data.room,
-      passphrase: data.room.passphrase ?? "",
-      gameMode: normalizeGameMode(data.room.gameMode),
-      clueLogVisibility: data.room.clueLogVisibility ?? "result",
-      clueMode: normalizeClueMode(data.room.clueMode),
-      randomizeTurnOrder: data.room.randomizeTurnOrder ?? true,
-      roundsTotal: normalizeRoundsTotal(data.room.roundsTotal),
-      turnTimeLimitSeconds: data.room.turnTimeLimitSeconds ?? 0,
-      currentTurnStartedAt: data.room.currentTurnStartedAt ?? null,
-      wolfIds: normalizeWolfIds(data.room),
-      wolfCount: normalizeWolfCount(data.room.wolfCount, data.room.players.length),
-      voteHistory: normalizeVoteHistory(data.room.voteHistory),
-      runoffCandidateIds: normalizeRunoffCandidateIds(data.room.runoffCandidateIds),
-      topicDictionarySource: normalizeTopicDictionarySource(data.room.topicDictionarySource ?? data.room.topicSourceMode),
-      topicPairDistance: normalizeTopicPairDistance(data.room.topicPairDistance ?? data.room.topicSourceMode),
-      topicHint: typeof data.room.topicHint === "string" ? data.room.topicHint : "",
-      scores: normalizeRoomScores(data.room.scores),
-      gamesPlayed: data.room.gamesPlayed ?? 0,
-      gameNumber: data.room.gameNumber ?? Math.max(1, (data.room.gamesPlayed ?? 0) + 1),
+      ...remoteRoom,
+      passphrase: remoteRoom.passphrase ?? "",
+      gameMode: normalizeGameMode(remoteRoom.gameMode),
+      clueLogVisibility: remoteRoom.clueLogVisibility ?? "result",
+      clueMode: normalizeClueMode(remoteRoom.clueMode),
+      randomizeTurnOrder: remoteRoom.randomizeTurnOrder ?? true,
+      roundsTotal: normalizeRoundsTotal(remoteRoom.roundsTotal),
+      turnTimeLimitSeconds: remoteRoom.turnTimeLimitSeconds ?? 0,
+      currentTurnStartedAt: remoteRoom.currentTurnStartedAt ?? null,
+      wolfIds: normalizeWolfIds(remoteRoom),
+      wolfCount: normalizeWolfCount(remoteRoom.wolfCount, remoteRoom.players.length),
+      voteHistory: normalizeVoteHistory(remoteRoom.voteHistory),
+      runoffCandidateIds: normalizeRunoffCandidateIds(remoteRoom.runoffCandidateIds),
+      topicDictionarySource: normalizeTopicDictionarySource(remoteRoom.topicDictionarySource ?? remoteRoom.topicSourceMode),
+      topicPairDistance: normalizeTopicPairDistance(remoteRoom.topicPairDistance ?? remoteRoom.topicSourceMode),
+      topicHint: typeof remoteRoom.topicHint === "string" ? remoteRoom.topicHint : "",
+      scores: normalizeRoomScores(remoteRoom.scores),
+      gamesPlayed: remoteRoom.gamesPlayed ?? 0,
+      gameNumber: remoteRoom.gameNumber ?? Math.max(1, (remoteRoom.gamesPlayed ?? 0) + 1),
     };
     saveRoom(normalizedRoom);
     return normalizedRoom;
@@ -630,7 +625,6 @@ export function WordWolfGame() {
   const [isAvatarPickerOpen, setIsAvatarPickerOpen] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [isRulesOpen, setIsRulesOpen] = useState(false);
-  const [now, setNow] = useState(() => Date.now());
   const timeoutActionKeyRef = useRef("");
   const roomCode = room?.code;
   const roomPhase = room?.phase;
@@ -739,11 +733,6 @@ export function WordWolfGame() {
     };
   }, [roomCode, roomPhase]);
 
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
-
   const activePlayer = useMemo(
     () => room?.players.find((player) => player.id === activePlayerId) ?? null,
     [activePlayerId, room],
@@ -830,24 +819,16 @@ export function WordWolfGame() {
     : room
       ? `${room.currentRound}/${room.roundsTotal}`
       : "";
-  const phaseTimeLimitSeconds = room?.turnTimeLimitSeconds && room.currentTurnStartedAt
-    ? room.phase === "clue"
-      ? room.turnTimeLimitSeconds
-      : room.phase === "vote" || room.phase === "wolfGuess"
-        ? room.turnTimeLimitSeconds * 2
-        : 0
-    : 0;
+  const { secondsLeft: turnSecondsLeft } = useWordWolfPhaseClock({
+    phase: room?.phase,
+    configuredSeconds: room?.turnTimeLimitSeconds ?? 0,
+    startedAt: room?.currentTurnStartedAt,
+  });
   const shouldShowClueLog = Boolean(
     room &&
       room.phase !== "lobby" &&
       (room.clueLogVisibility === "always" || room.clueMode === "simultaneous" || room.phase === "result"),
   );
-  const turnSecondsLeft = room?.currentTurnStartedAt && phaseTimeLimitSeconds > 0
-    ? Math.max(
-        0,
-        phaseTimeLimitSeconds - Math.floor((now - room.currentTurnStartedAt) / 1000),
-      )
-    : null;
   const roomScoreRows = room
     ? room.players
         .map((player) => ({
