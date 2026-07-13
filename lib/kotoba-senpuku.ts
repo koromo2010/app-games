@@ -82,7 +82,8 @@ export type KotobaSenpukuRoomAction =
   | { type: "debug-fill-secrets"; actorId: string; round: number }
   | { type: "debug-auto-turn"; actorId: string; round: number }
   | { type: "next-round"; actorId: string; round: number }
-  | { type: "reset-game"; actorId: string };
+  | { type: "reset-game"; actorId: string }
+  | { type: "abort-game"; actorId: string };
 
 export const defaultKotobaSenpukuConfig: KotobaSenpukuConfig = {
   roundsTotal: 3,

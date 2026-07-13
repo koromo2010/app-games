@@ -473,12 +473,17 @@ export async function startStoredTahoiyaRound(code: string, actorId: string, top
 
 export async function applyStoredTahoiyaRoomAction(code: string, action: TahoiyaRoomAction) {
   return mutateStoredTahoiyaRoom(code, (current) => {
-    const reconciled = reconcileProgress(current);
-    if (reconciled !== current) return reconciled;
-    if (action.round !== current.round) return current;
     const actorIsHost = action.actorId === current.hostId;
     const actorIsMember = current.players.some((player) => player.id === action.actorId);
     if (!actorIsMember) throw new Error("TAHOIYA_ROOM_FORBIDDEN");
+    if (action.type === "abort-game") {
+      if (!actorIsHost || !current.debugMode || current.phase === "lobby") throw new Error("TAHOIYA_ROOM_FORBIDDEN");
+      const answererId = current.playMode === "single-answerer" && current.answererMode === "manual" ? current.answererId : "";
+      return { ...current, phase: "lobby", phaseStartedAt: null, answererId, word: "", reading: "", realDefinition: "", topicNote: "", topicSourceDetail: "", topicSource: "pending", topicGeneration: undefined, fakeDefinitions: {}, options: [], votes: {}, resultText: "" };
+    }
+    const reconciled = reconcileProgress(current);
+    if (reconciled !== current) return reconciled;
+    if (action.round !== current.round) return current;
 
     if (action.type === "submit-definition") {
       const canActForPlayer = action.actorId === action.playerId || (current.debugMode && actorIsHost);

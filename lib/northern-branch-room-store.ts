@@ -265,6 +265,10 @@ export async function applyStoredNorthernAction(code: string, action: NorthernRo
       if (!actorIsHost || current.phase !== "finished") throw new Error("NORTHERN_ROOM_FORBIDDEN");
       return { ...current, gameNumber: current.gameNumber + 1, phase: "lobby", game: null, notice: "同じ部屋で次のゲームを準備できます。" };
     }
+    if (action.type === "abort-game") {
+      if (!actorIsHost || !current.debugMode || current.phase === "lobby") throw new Error("NORTHERN_ROOM_FORBIDDEN");
+      return { ...current, phase: "lobby", game: null, notice: "ゲームを中断し、ゲーム開始前へ戻りました。" };
+    }
     if (action.type === "game-action") {
       if (!current.game || current.phase !== "playing") throw new Error("NORTHERN_ROOM_FORBIDDEN");
       if (!isGameAction(action.action)) throw new Error("NORTHERN_ACTION_INVALID:操作内容が不正です。");

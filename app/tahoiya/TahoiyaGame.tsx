@@ -930,6 +930,16 @@ export function TahoiyaGame() {
     setSelectedOptionId("");
   };
 
+  const abortGame = async () => {
+    if (!room || room.phase === "lobby" || !room.debugMode) return;
+    const saved = await runRoomAction({ type: "abort-game", actorId: playerId });
+    if (saved) {
+      setDefinitionInput("");
+      setSelectedOptionId("");
+      setPolishMessage("");
+    }
+  };
+
   const dissolveRoom = async () => {
     if (!room) return;
     const code = room.code;
@@ -951,6 +961,7 @@ export function TahoiyaGame() {
               <DebugModeButton
                 enabled={Boolean(room.debugMode)}
                 disabled={room.phase !== "lobby"}
+                onAbort={room.debugMode && room.phase !== "lobby" ? abortGame : undefined}
                 onChange={setDebugMode}
               />
             )}

@@ -35,6 +35,10 @@ export function UserDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [requiresLogin, setRequiresLogin] = useState(false);
   const [message, setMessage] = useState("");
+  const [debugAccess, setDebugAccess] = useState(false);
+  const [debugPassword, setDebugPassword] = useState("");
+  const [debugMessage, setDebugMessage] = useState("");
+  const [debugSaving, setDebugSaving] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -48,6 +52,11 @@ export function UserDashboard() {
         const sessionBody = (await sessionResponse.json()) as { session?: PlayerSession };
         if (!sessionResponse.ok || !sessionBody.session?.id) throw new Error("SESSION_LOAD_FAILED");
         setSession(sessionBody.session);
+        const debugResponse = await fetch("/api/debug-auth", { cache: "no-store", signal: controller.signal });
+        if (debugResponse.ok) {
+          const debugBody = (await debugResponse.json()) as { enabled?: boolean };
+          setDebugAccess(debugBody.enabled === true);
+        }
 
         const params = new URLSearchParams({ playerId: sessionBody.session.id, gameType: "all" });
         const statsResponse = await fetch(`/api/player-stats?${params.toString()}`, { cache: "no-store", signal: controller.signal });
@@ -63,6 +72,30 @@ export function UserDashboard() {
     })();
     return () => controller.abort();
   }, []);
+
+  const updateDebugAccess = async (enabled: boolean) => {
+    if (debugSaving) return;
+    setDebugSaving(true);
+    setDebugMessage("");
+    try {
+      const response = await fetch("/api/debug-auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled, password: enabled ? debugPassword : "" }),
+      });
+      if (!response.ok) {
+        setDebugMessage(response.status === 401 ? "デバッグ用パスワードが違います。" : "デバッグ利用設定を変更できませんでした。");
+        return;
+      }
+      setDebugAccess(enabled);
+      setDebugPassword("");
+      setDebugMessage(enabled ? "デバッグ機能を利用できるようにしました。" : "デバッグ機能を非表示にしました。");
+    } catch {
+      setDebugMessage("デバッグ利用設定を変更できませんでした。");
+    } finally {
+      setDebugSaving(false);
+    }
+  };
 
   if (isLoading) {
     return <main className="min-h-screen bg-slate-950 px-4 py-12 text-center text-sm text-slate-300">マイページを読み込み中...</main>;
@@ -145,7 +178,16 @@ export function UserDashboard() {
           {message && <p className="mt-4 rounded-md bg-cyan-50 px-3 py-2 text-xs font-semibold text-cyan-800" role="status">{message}</p>}
         </section>
 
-        <GameReplayPanel />
+        <div className="space-y-5">
+          <section className="rounded-lg bg-white p-4 shadow-[0_18px_50px_rgba(15,23,42,0.22)]" aria-labelledby="debug-access-heading">
+            <p className="text-xs font-semibold uppercase text-violet-700">Developer</p>
+            <h2 id="debug-access-heading" className="text-xl font-black text-slate-950">デバッグ機能</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">管理パスワードで有効にすると、各ゲームのトップバナーにデバッグ操作が表示されます。この設定はアカウントに保存されます。</p>
+            {debugAccess ? <div className="mt-4 rounded-lg border border-cyan-200 bg-cyan-50 p-3"><p className="text-sm font-black text-cyan-900">デバッグ機能：利用中</p><button type="button" disabled={debugSaving} onClick={() => void updateDebugAccess(false)} className="mt-3 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 disabled:opacity-50">利用を解除</button></div> : <div className="mt-4"><input type="password" value={debugPassword} onChange={(event) => setDebugPassword(event.target.value)} placeholder="デバッグ用パスワード" autoComplete="off" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-violet-500" /><button type="button" disabled={debugSaving || !debugPassword} onClick={() => void updateDebugAccess(true)} className="mt-2 w-full rounded-lg bg-violet-600 px-3 py-2 text-sm font-black text-white disabled:opacity-40">認証して利用する</button></div>}
+            {debugMessage && <p className="mt-3 text-xs font-semibold text-slate-600" role="status">{debugMessage}</p>}
+          </section>
+          <GameReplayPanel />
+        </div>
       </div>
     </main>
   );

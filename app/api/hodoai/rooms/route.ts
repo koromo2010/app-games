@@ -13,6 +13,7 @@ import { privateGameCookieMatches, privateGameCookieName } from "@/lib/private-g
 import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
 import type { HodoaiRoomAction } from "@/lib/hodoai-talk";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
+import { requirePlayerDebugAccess } from "@/lib/debug-access";
 
 async function hasPrivateAccess() {
   const store = await cookies();
@@ -21,6 +22,7 @@ async function hasPrivateAccess() {
 
 function errorResponse(error: unknown) {
   if (error instanceof Error && error.message === "PLAYER_AUTH_REQUIRED") return Response.json({ error: "Login required" }, { status: 401 });
+  if (error instanceof Error && error.message === "DEBUG_ACCESS_REQUIRED") return Response.json({ error: "Debug access required" }, { status: 403 });
   if (isPlayerAuthConfigurationError(error)) return Response.json({ error: "Player auth is not configured" }, { status: 503 });
   if (error instanceof Error && error.message === "REDIS_STORE_NOT_CONFIGURED") return Response.json({ error: "Room storage is not configured" }, { status: 503 });
   if (error instanceof Error && error.message === "HODOAI_ROOM_NOT_FOUND") return Response.json({ error: "Room not found" }, { status: 404 });
@@ -101,6 +103,7 @@ export async function PATCH(request: Request) {
       return Response.json({ error: "code and action are required" }, { status: 400 });
     }
     let action = { ...body.action, actorId: session.id! } as HodoaiRoomAction;
+    if ((action.type === "set-debug" && action.enabled) || action.type === "abort-game" || action.type.startsWith("debug-")) await requirePlayerDebugAccess(session.id!);
     logFields = { action: action.type, roomRef: telemetry.roomRef(code), actorRef: telemetry.actorRef(session.id) };
     if (action.type === "join-room") {
       action = {

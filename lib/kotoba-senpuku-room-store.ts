@@ -417,12 +417,16 @@ export async function applyStoredKotobaSenpukuAction(code: string, action: Kotob
       return addLog({ ...current, players: [...current.players, action.player] }, `${action.player.name}さんが参加しました。`);
     }
 
-    const reconciled = reconcileProgress(current);
-    if (reconciled !== current) return reconciled;
-
     const actorIsHost = action.actorId === current.hostId;
     const actorIsMember = current.players.some((player) => player.id === action.actorId && !player.isDummy);
     if (!actorIsMember) throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
+    if (action.type === "abort-game") {
+      if (!actorIsHost || !current.debugMode || current.phase === "lobby") throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
+      return { ...current, phase: "lobby", round: 1, theme: null, secrets: {}, submittedIds: [], masks: {}, calledKana: [], exposedIds: [], roundSignals: {}, totalScores: {}, activePlayerIndex: 0, turnNumber: 1, history: [], log: ["ゲームを中断し、ゲーム開始前へ戻りました。"], phaseStartedAt: null };
+    }
+
+    const reconciled = reconcileProgress(current);
+    if (reconciled !== current) return reconciled;
 
     if (action.type === "leave-room") {
       if (actorIsHost || current.phase !== "lobby") throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");

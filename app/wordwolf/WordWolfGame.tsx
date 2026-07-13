@@ -1489,6 +1489,7 @@ export function WordWolfGame() {
               <DebugModeButton
                 enabled={Boolean(room.debugMode)}
                 disabled={room.phase !== "lobby"}
+                onAbort={room.debugMode && room.phase !== "lobby" ? abortGame : undefined}
                 onChange={(enabled) => {
                   setAndSaveRoom({ ...room, debugMode: enabled });
                   setError("");
@@ -2036,14 +2037,6 @@ export function WordWolfGame() {
                     )}
                     {room.phase === "wolfGuess" && finalAnswerPlayer && (
                       <p className="mt-1">狼「{finalAnswerPlayer.name}」として逆転回答します。</p>
-                    )}
-                    {room.phase !== "lobby" && (
-                      <button
-                        onClick={abortGame}
-                        className={`mt-3 ${dangerButtonClass}`}
-                      >
-                        ゲームを中断
-                      </button>
                     )}
                   </div>
                 )}

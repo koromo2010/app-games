@@ -13,6 +13,7 @@ import type { KotobaSenpukuRoomAction } from "@/lib/kotoba-senpuku";
 import { privateGameCookieMatches, privateGameCookieName } from "@/lib/private-game-access";
 import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
+import { requirePlayerDebugAccess } from "@/lib/debug-access";
 
 async function hasPrivateAccess() {
   const store = await cookies();
@@ -22,6 +23,7 @@ async function hasPrivateAccess() {
 function errorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : "";
   if (message === "PLAYER_AUTH_REQUIRED") return Response.json({ error: "Login required" }, { status: 401 });
+  if (message === "DEBUG_ACCESS_REQUIRED") return Response.json({ error: "Debug access required" }, { status: 403 });
   if (isPlayerAuthConfigurationError(error)) return Response.json({ error: "Player auth is not configured" }, { status: 503 });
   if (message === "REDIS_STORE_NOT_CONFIGURED") return Response.json({ error: "Room storage is not configured" }, { status: 503 });
   if (message === "KOTOBA_SENPUKU_ROOM_NOT_FOUND") return Response.json({ error: "Room not found" }, { status: 404 });
@@ -104,6 +106,7 @@ export async function PATCH(request: Request) {
     }
     const actorId = session.id!;
     let action = { ...body.action, actorId } as KotobaSenpukuRoomAction;
+    if ((action.type === "set-debug" && action.enabled) || action.type === "abort-game" || action.type.startsWith("debug-")) await requirePlayerDebugAccess(actorId);
     logFields = { action: action.type, roomRef: telemetry.roomRef(code), actorRef: telemetry.actorRef(actorId) };
     if (action.type === "join-room") {
       action = { ...action, player: { id: session.id!, name: session.name, joinedAt: Date.now(), avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined } };

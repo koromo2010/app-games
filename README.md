@@ -62,7 +62,7 @@ The first retrieval implementation uses Redis indexes plus game/task/settings ta
 
 Every multiplayer game must expose the current room configuration to all participants, while only the host can change it. New games should render configuration values with `app/components/RoomConfigSummary.tsx` so clients can verify the rules before play starts and while the room is active.
 
-Every game with a debug mode must place `app/components/DebugModeButton.tsx` in its top bar for the host. The shared component verifies `DEBUG_MODE_PASSWORD` through `app/api/debug-auth/route.ts`; do not implement a game-specific password dialog or expose the password to the browser bundle.
+Every game with a debug mode must place `app/components/DebugModeButton.tsx` in its top bar for the host. A player first verifies `DEBUG_MODE_PASSWORD` on `/users/me`; the resulting account flag controls whether debug controls are rendered and is rechecked by mutation APIs. Games do not implement password dialogs. While a debug game is active, the shared control can abort it back to the same room's pre-game state without removing participants.
 
 Room configuration defaults are stored per game and per player in Redis, with local storage as an offline fallback. New games should use `lib/game-room-defaults-client.ts` for loading and saving, and add their server-side normalizer to `lib/room-defaults-store.ts`.
 

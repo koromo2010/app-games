@@ -5,7 +5,7 @@ import { privateGameCookieMatches, privateGameCookieName } from "@/lib/private-g
 import { KotobaSenpukuGame } from "./KotobaSenpukuGame";
 
 export const metadata: Metadata = {
-  title: "ことば潜伏戦 | Game Fields",
+  title: "ことばソナー | Game Fields",
   description: "秘密のことばへ文字スキャンをかけ、信号点を集める個人利用オンラインゲーム。",
 };
 

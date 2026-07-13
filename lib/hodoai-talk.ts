@@ -74,6 +74,7 @@ export type HodoaiRoomAction =
   | { type: "score-round"; actorId: string; round: number; force?: boolean }
   | { type: "next-round"; actorId: string; round: number }
   | { type: "reset-game"; actorId: string }
+  | { type: "abort-game"; actorId: string }
   | { type: "debug-fill-clues"; actorId: string; round: number }
   | { type: "debug-sort"; actorId: string; round: number }
   | { type: "debug-add-player"; actorId: string };

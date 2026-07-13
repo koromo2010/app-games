@@ -324,12 +324,16 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
       return { ...current, players: [...current.players, action.player] };
     }
 
-    const reconciled = reconcileProgress(current);
-    if (reconciled !== current) return reconciled;
-
     const actorIsHost = action.actorId === current.hostId;
     const actorIsMember = current.players.some((player) => player.id === action.actorId);
     if (!actorIsMember) throw new Error("HODOAI_ROOM_FORBIDDEN");
+    if (action.type === "abort-game") {
+      if (!actorIsHost || !current.debugMode || current.phase === "lobby") throw new Error("HODOAI_ROOM_FORBIDDEN");
+      return { ...current, phase: "lobby", round: 1, theme: null, values: {}, clues: {}, order: [], totalPoints: 0, history: [], phaseStartedAt: null };
+    }
+
+    const reconciled = reconcileProgress(current);
+    if (reconciled !== current) return reconciled;
 
     if (action.type === "leave-room") {
       if (actorIsHost || current.phase !== "lobby") throw new Error("HODOAI_ROOM_FORBIDDEN");

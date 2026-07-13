@@ -64,6 +64,7 @@ export type TahoiyaRoom = {
 };
 
 export type TahoiyaRoomAction =
+  | { type: "abort-game"; actorId: string }
   | { type: "submit-definition"; actorId: string; playerId: string; round: number; text: string }
   | { type: "cast-vote"; actorId: string; playerId: string; round: number; optionId: string }
   | { type: "advance-phase"; actorId: string; round: number; target: "voting" | "result"; force?: boolean }

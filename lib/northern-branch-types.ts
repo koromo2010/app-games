@@ -134,4 +134,5 @@ export type NorthernRoomAction =
   | { type: "debug-add-player"; actorId: string }
   | { type: "start-game"; actorId: string }
   | { type: "game-action"; actorId: string; action: NorthernGameAction }
-  | { type: "reset-game"; actorId: string };
+  | { type: "reset-game"; actorId: string }
+  | { type: "abort-game"; actorId: string };
