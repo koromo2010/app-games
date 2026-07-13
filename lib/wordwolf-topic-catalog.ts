@@ -10,9 +10,13 @@ import {
   type WordWolfTopic,
 } from "@/lib/wordwolf";
 import { redisCommand } from "@/lib/redis-store";
+import {
+  filterEligibleWordWolfTopics,
+  loadTodaysExperiencedWords,
+  rememberWordWolfTopicHistory,
+} from "@/lib/wordwolf-topic-history-store";
 
 const catalogKey = "wordwolf:topic:catalog:v1";
-const wordExperienceKey = "wordwolf:topic:word-experience:v1";
 
 type WordWolfTopicCatalogRecord = {
   topic: WordWolfTopic;
@@ -20,18 +24,6 @@ type WordWolfTopicCatalogRecord = {
   lastUsedAt: number;
   useCount: number;
 };
-
-function parsePlayerIds(value: string | undefined) {
-  if (!value) return [];
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return Array.isArray(parsed)
-      ? parsed.filter((id): id is string => typeof id === "string" && Boolean(id))
-      : [];
-  } catch {
-    return [];
-  }
-}
 
 function parseRecord(value: string): WordWolfTopicCatalogRecord | null {
   try {
@@ -68,18 +60,7 @@ async function loadTopicRatingScores() {
 }
 
 export async function loadExperiencedWordWolfWords(playerIds: string[]) {
-  if (playerIds.length === 0) return [];
-  const raw = await redisCommand<string[]>(["HGETALL", wordExperienceKey]);
-  const experiencedWords: string[] = [];
-  for (let index = 0; index < (Array.isArray(raw) ? raw.length : 0); index += 2) {
-    const word = raw[index];
-    const experiencedPlayerIds = parsePlayerIds(raw[index + 1]);
-    // 参加者の誰か一人でも使用済みなら、この部屋では候補から除外する。
-    if (word && playerIds.some((playerId) => experiencedPlayerIds.includes(playerId))) {
-      experiencedWords.push(word);
-    }
-  }
-  return experiencedWords;
+  return loadTodaysExperiencedWords(playerIds);
 }
 
 export async function loadWordWolfCatalogWords() {
@@ -128,7 +109,13 @@ export async function findReusableWordWolfTopic(input: {
         left.useCount - right.useCount ||
         left.lastUsedAt - right.lastUsedAt;
     });
-  const record = candidates[0];
+  // 高評価順の候補だけをmembership checkし、巨大な履歴全体は取得しない。
+  const eligible = await filterEligibleWordWolfTopics(
+    candidates.slice(0, 200).map((candidate) => candidate.topic),
+    input.playerIds,
+  );
+  const selectedKey = eligible[0] ? getTopicKey(eligible[0]) : "";
+  const record = candidates.find((candidate) => getTopicKey(candidate.topic) === selectedKey);
   if (!record) return null;
   return {
     ...record.topic,
@@ -150,17 +137,14 @@ export async function rememberWordWolfTopicExperience(topic: WordWolfTopic, play
   };
   await redisCommand<number>([
     "EVAL",
-    "local raw=redis.call('HGET',KEYS[1],ARGV[1]); local item=raw and cjson.decode(raw) or cjson.decode(ARGV[2]); item.lastUsedAt=tonumber(ARGV[3]); item.useCount=tonumber(item.useCount or 0)+1; redis.call('HSET',KEYS[1],ARGV[1],cjson.encode(item)); for w=4,5 do local idsRaw=redis.call('HGET',KEYS[2],ARGV[w]); local ids=idsRaw and cjson.decode(idsRaw) or {}; local seen={}; for _,id in ipairs(ids) do seen[id]=true end; for i=6,#ARGV do if ARGV[i]~='' and not seen[ARGV[i]] then table.insert(ids,ARGV[i]); seen[ARGV[i]]=true end end; redis.call('HSET',KEYS[2],ARGV[w],cjson.encode(ids)); end; return 1",
-    "2",
+    "local raw=redis.call('HGET',KEYS[1],ARGV[1]); local item=raw and cjson.decode(raw) or cjson.decode(ARGV[2]); item.lastUsedAt=tonumber(ARGV[3]); item.useCount=tonumber(item.useCount or 0)+1; redis.call('HSET',KEYS[1],ARGV[1],cjson.encode(item)); return 1",
+    "1",
     catalogKey,
-    wordExperienceKey,
     getTopicKey(topic),
     JSON.stringify(seed),
     String(now),
-    words[0],
-    words[1],
-    ...playerIds,
   ]);
+  await rememberWordWolfTopicHistory(topic, playerIds, now);
 }
 
 export async function rememberWordWolfTopicCandidate(topic: WordWolfTopic) {
