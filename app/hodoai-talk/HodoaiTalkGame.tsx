@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
 import { GamePhaseTimer } from "@/app/components/GamePhaseTimer";
+import { GameRulesDialog } from "@/app/components/GameRulesDialog";
 import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
 import { loadPlayerRoomDefaults, savePlayerRoomDefaults } from "@/lib/game-room-defaults-client";
@@ -95,6 +96,7 @@ export function HodoaiTalkGame() {
   const [showChoices, setShowChoices] = useState(false);
   const [clue, setClue] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -330,7 +332,7 @@ export function HodoaiTalkGame() {
     return (
       <main className="min-h-screen bg-[radial-gradient(circle_at_top,#164e63_0%,#1e293b_42%,#020617_82%)] px-4 py-8 text-white">
         <div className="mx-auto max-w-4xl">
-          <div className="flex items-center justify-between"><Link href="/games" className="text-sm font-bold text-cyan-200">← ゲームロビー</Link><span className="text-sm font-bold">{session.name}</span></div>
+          <div className="flex items-center justify-between gap-3"><Link href="/games" className="text-sm font-bold text-cyan-200">← ゲームロビー</Link><div className="flex items-center gap-2"><button type="button" onClick={() => setRulesOpen(true)} className="rounded-lg border border-white/20 px-3 py-2 text-sm font-bold">ルール</button><span className="text-sm font-bold">{session.name}</span></div></div>
           <section className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-slate-950/80 shadow-2xl">
             <div className="bg-gradient-to-r from-sky-400 via-amber-300 to-fuchsia-400 px-6 py-8 text-slate-950"><p className="text-xs font-black uppercase tracking-[0.28em]">Online room game</p><h1 className="mt-2 text-4xl font-black sm:text-6xl">ことばで数ならべ</h1><p className="mt-3 font-bold">各自の端末で秘密の数字を言葉に変え、みんなで小さい順に並べる協力ゲーム。</p></div>
             <div className="grid gap-6 p-6 md:grid-cols-2">
@@ -341,13 +343,20 @@ export function HodoaiTalkGame() {
             {error && <p className="mx-6 mb-6 rounded-xl border border-rose-300/30 bg-rose-300/10 p-3 text-sm font-bold text-rose-100">{error}</p>}
           </section>
         </div>
+        <GameRulesDialog open={rulesOpen} title="ことばで数ならべのルール" onClose={() => setRulesOpen(false)}>
+          <p>各自に配られた0〜120の秘密の目盛りを、数字を使わない言葉のヒントへ変え、全員で低い順に並べる協力ゲームです。</p>
+          <ol className="mt-3 list-decimal space-y-2 pl-5"><li>共通のものさしを確認し、自分の目盛りに合うヒントを1つ提出します。</li><li>全員のヒントが公開されたら相談し、ホストが低いと思う順へ並べます。</li><li>答え合わせで実際の目盛りを公開し、並び違いの組数から得点します。</li></ol>
+          <p className="mt-4">0組=3点、1組=2点、2〜3組=1点、4組以上=0点。設定ラウンドの合計点で協力成績が決まります。</p>
+          <p className="mt-3 text-amber-200">ヒント時間切れの未提出者はパス扱い。並べ替え時間切れでは現在の順番を自動採点します。</p>
+        </GameRulesDialog>
       </main>
     );
   }
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,#0e7490_0%,#172033_35%,#020617_75%)] text-white">
-      <header className="border-b border-white/10 bg-slate-950/70"><div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4"><div><Link href="/games" className="text-xs font-bold text-cyan-200">← ゲームロビー</Link><h1 className="mt-1 text-2xl font-black">ことばで数ならべ <span className="font-mono text-base text-amber-300">#{room.code}</span></h1></div><div className="flex flex-wrap items-center gap-2">{isHost && room.phase === "lobby" && <DebugModeButton enabled={room.debugMode} disabled={isSaving} onChange={(enabled) => runAction({ type: "set-debug", actorId: playerId, enabled }).then(() => undefined)} />}<span className="rounded-lg bg-white/10 px-3 py-2 text-sm font-bold">{session.name}</span>{isHost ? <button type="button" onClick={() => void dissolveRoom()} className="rounded-lg border border-rose-300/30 px-3 py-2 text-sm font-bold text-rose-100">部屋を解散</button> : room.phase === "lobby" && <button type="button" onClick={() => void leaveRoom()} className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold">退出</button>}</div></div></header>
+      <header className="border-b border-white/10 bg-slate-950/70"><div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-4 py-4"><div><Link href="/games" className="text-xs font-bold text-cyan-200">← ゲームロビー</Link><h1 className="mt-1 text-2xl font-black">ことばで数ならべ <span className="font-mono text-base text-amber-300">#{room.code}</span></h1></div><div className="flex flex-wrap items-center gap-2">{isHost && room.phase === "lobby" && <DebugModeButton enabled={room.debugMode} disabled={isSaving} onChange={(enabled) => runAction({ type: "set-debug", actorId: playerId, enabled }).then(() => undefined)} />}<button type="button" onClick={() => setRulesOpen(true)} className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold">ルール</button><span className="rounded-lg bg-white/10 px-3 py-2 text-sm font-bold">{session.name}</span>{isHost ? <button type="button" onClick={() => void dissolveRoom()} className="rounded-lg border border-rose-300/30 px-3 py-2 text-sm font-bold text-rose-100">部屋を解散</button> : room.phase === "lobby" && <button type="button" onClick={() => void leaveRoom()} className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold">退出</button>}</div></div></header>
+      <GameRulesDialog open={rulesOpen} title="ことばで数ならべのルール" onClose={() => setRulesOpen(false)}><p>各自に配られた0〜120の秘密の目盛りを、数字を使わない言葉のヒントへ変え、全員で低い順に並べる協力ゲームです。</p><ol className="mt-3 list-decimal space-y-2 pl-5"><li>全員がヒントを1つ提出します。</li><li>相談してホストが低い順へ並べます。</li><li>0組=3点、1組=2点、2〜3組=1点、4組以上=0点です。</li></ol><p className="mt-3 text-amber-200">未提出は時間切れでパス、並べ替え時間切れでは現在順を自動採点します。</p></GameRulesDialog>
       <div className="mx-auto grid max-w-6xl gap-4 px-4 py-5 lg:grid-cols-[280px_minmax(0,1fr)]">
         <aside className="space-y-4"><section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4"><div className="flex items-center justify-between"><h2 className="font-black">参加者</h2><span className="text-sm text-slate-400">{room.players.length}人</span></div><ul className="mt-3 max-h-[70vh] space-y-2 overflow-y-auto pr-1">{room.players.map((player) => <PlayerRow key={player.id} player={player} isHost={player.id === room.hostId} isMe={player.id === playerId} />)}</ul></section><RoomConfigSummary items={configItems} /></aside>
         <div className="space-y-4">

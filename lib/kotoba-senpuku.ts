@@ -1,4 +1,4 @@
-import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
+import { normalizeCommonTimeLimit } from "./game-room-config.ts";
 
 export type KotobaSenpukuTheme = {
   id: string;
@@ -104,7 +104,7 @@ export const kotobaSenpukuKana = [
   "ま", "み", "む", "め", "も",
   "や", "ゆ", "よ",
   "ら", "り", "る", "れ", "ろ",
-  "わ", "を", "ん",
+  "わ", "を", "ん", "ー",
 ] as const;
 
 export const kotobaSenpukuThemes: KotobaSenpukuTheme[] = [
@@ -168,7 +168,7 @@ export function kotobaSenpukuKanaKey(character: string) {
 
 export function maskKotobaSenpukuWord(word: string, calledKana: string[], exposed = false) {
   const called = new Set(calledKana);
-  return [...word].map((character) => exposed || character === "ー" || called.has(kotobaSenpukuKanaKey(character)) ? character : "●").join("");
+  return [...word].map((character) => exposed || called.has(kotobaSenpukuKanaKey(character)) ? character : "●").join("");
 }
 
 export function pickKotobaSenpukuTheme(history: KotobaSenpukuRoundResult[]) {

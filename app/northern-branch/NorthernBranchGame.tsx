@@ -293,8 +293,12 @@ export function NorthernBranchGame() {
 
   const marketCards = game?.offers ?? [];
   const rulesDialog = <GameRulesDialog open={rulesOpen} title="ノーザンブランチのルール" onClose={() => setRulesOpen(false)}>
-    <p>資源カードを商品へ生産し、商品を支払って建物を建てます。建物の得点と効果を使い、最初に10点へ到達した商会が勝利です。</p>
-    <ol className="mt-3 list-decimal space-y-2 pl-5"><li>手番では、市場を確認して通常アクションを1回行います。</li><li>自分の未使用の建物は、それぞれ1回まで使えます。</li><li>手番終了後は次の人の手番へ進みます。手札内容は本人の端末だけに表示されます。</li></ol>
+    <p>資源を集めて商品を生産・購入し、建物の得点と能力を使って最初に10点を目指す商会ゲームです。</p>
+    <h3 className="mt-4 font-black text-white">手番の流れ</h3>
+    <ol className="mt-2 list-decimal space-y-2 pl-5"><li>通常アクションを1回行います。資源を1枚得る、市場の商品を生産する、商品・建物を購入する、のいずれかです。</li><li>所有する未使用建物は、通常アクションとは別に各1回使えます。</li><li>通常アクション後に手番を終了します。家畜がいて手札に空きがあればダングを1枚得ます。</li></ol>
+    <h3 className="mt-4 font-black text-white">売買と勝利</h3>
+    <p className="mt-2">支払いはカード価値の合計で行い、お釣りは出ません。手札上限は7枚。同じ建物は2軒建てられません。10点へ到達した時点で勝利です。</p>
+    <p className="mt-3">手札は本人だけに表示され、市場・建物・得点・手番・行動履歴は全員で共有します。</p>
     <p className="mt-3 text-amber-200">カード構成と数値は検証用の仮設定です。</p>
   </GameRulesDialog>;
 

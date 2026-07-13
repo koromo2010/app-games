@@ -16,6 +16,7 @@ import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
 import { DebugModeButton } from "../components/DebugModeButton";
 import { DebugWordGenerationTest, type DebugWordGenerationResult } from "../components/DebugWordGenerationTest";
 import { GameFeedbackPanel } from "../components/GameFeedbackPanel";
+import { GameRulesDialog } from "../components/GameRulesDialog";
 import { RoomConfigSummary } from "../components/RoomConfigSummary";
 import { RoomTimeLimitControl } from "../components/RoomTimeLimitControl";
 import { cyanButtonClass, dangerButtonClass, inputClass, panelClass, primaryButtonClass, subtleButtonClass } from "../wordwolf/styles";
@@ -396,6 +397,7 @@ export function TahoiyaGame() {
   const [skipComment, setSkipComment] = useState("");
   const [isSkippingTopic, setIsSkippingTopic] = useState(false);
   const [message, setMessage] = useState("");
+  const [rulesOpen, setRulesOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const roomCode = room?.code;
 
@@ -955,12 +957,22 @@ export function TahoiyaGame() {
             <Link href="/games" className={subtleButtonClass}>
               ゲームロビー
             </Link>
+            <button type="button" onClick={() => setRulesOpen(true)} className={subtleButtonClass}>ルール</button>
             <span className="rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-sm font-semibold text-white">
               {playerName || "未ログイン"}
             </span>
           </div>
         </div>
       </header>
+
+      <GameRulesDialog open={rulesOpen} title="たほい屋のルール" onClose={() => setRulesOpen(false)}>
+        <p>知らない難語の本物の説明を、参加者が作った偽説明の中から見抜くゲームです。</p>
+        <h3 className="mt-4 font-black text-white">回答者1人</h3>
+        <ol className="mt-2 list-decimal space-y-2 pl-5"><li>回答者以外が1人1つ、辞書らしい偽説明を書きます。</li><li>本物と偽物を混ぜた候補から、回答者が本物だと思う説明へ投票します。</li><li>本物を当てた回答者は+2点。偽説明に票を入れられた作者は1票につき+1点です。</li></ol>
+        <h3 className="mt-4 font-black text-white">全員作成・全員投票</h3>
+        <p className="mt-2">全員が偽説明を1つ書き、自分の偽説明以外へ1票投じます。本物を選べば投票者が+2点、偽説明が選ばれれば作者が1票につき+1点です。</p>
+        <p className="mt-4">全員の提出・投票がそろうと自動進行します。時間切れでは、その時点までの提出・投票で次へ進みます。結果で読み・出典情報と作者・投票先を公開します。</p>
+      </GameRulesDialog>
 
       <section className="mx-auto grid max-w-6xl gap-4 px-4 py-5 lg:grid-cols-[340px_1fr]">
         <aside className="space-y-4">

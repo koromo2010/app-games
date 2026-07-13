@@ -29,6 +29,7 @@ import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
 import { DebugModeButton } from "../components/DebugModeButton";
 import { DebugWordGenerationTest, type DebugWordGenerationResult } from "../components/DebugWordGenerationTest";
 import { GameFeedbackPanel } from "../components/GameFeedbackPanel";
+import { GameRulesDialog } from "../components/GameRulesDialog";
 import { RoomTimeLimitControl } from "../components/RoomTimeLimitControl";
 import type {
   ClueLogVisibility,
@@ -1505,73 +1506,16 @@ export function WordWolfGame() {
         </div>
       </section>
 
-      {isRulesOpen && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/70 px-4 py-6 backdrop-blur-sm">
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="wordwolf-rules-title"
-            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-white/20 bg-white p-5 shadow-2xl"
-          >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-semibold uppercase text-cyan-700">Rules</p>
-                <h2 id="wordwolf-rules-title" className="mt-1 text-2xl font-bold text-slate-950">
-                  現在のルール
-                </h2>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsRulesOpen(false)}
-                className={subtleButtonClass}
-              >
-                閉じる
-              </button>
-            </div>
-
-            <div className="mt-5 space-y-5 text-sm leading-6 text-slate-700">
-              <section>
-                <h3 className="text-base font-bold text-slate-950">基本の流れ</h3>
-                <ol className="mt-2 list-decimal space-y-1 pl-5">
-                  <li>ホストが部屋を作り、参加者が部屋に入ります。</li>
-                  <li>ホストがゲームモード、周回数、持ち時間、お題ソースなどを設定します。</li>
-                  <li>ゲーム開始後、各プレイヤーに自分のお題が表示されます。</li>
-                  <li>順番に、お題そのものを言わず関連する発言を書き込みます。</li>
-                  <li>設定した周回が終わったら投票します。</li>
-                </ol>
-              </section>
-
-              <section>
-                <h3 className="text-base font-bold text-slate-950">ワードウルフ</h3>
-                <p className="mt-2">
-                  設定した人数だけ違うお題を持つ狼になります。投票で狼以外が選ばれたら狼の勝利です。狼が選ばれた場合、その狼は村側のお題を当てると逆転勝利できます。
-                </p>
-              </section>
-
-              <section>
-                <h3 className="text-base font-bold text-slate-950">狼不在設定</h3>
-                <p className="mt-2">
-                  通常は狼がいますが、10%の確率で狼がいない回になります。狼がいない回では全員が同じお題を持ち、投票で選ばれた人が負けです。同票の場合は決選投票になり、全員同票なら発言をもう1周して再投票します。
-                </p>
-              </section>
-
-              <section>
-                <h3 className="text-base font-bold text-slate-950">デバッグモード</h3>
-                <p className="mt-2">
-                  デバッグモードでは1人でもテストできます。足りないプレイヤーはテスト用に補完され、発言や投票の操作対象を画面上で切り替えながら確認できます。
-                </p>
-              </section>
-
-              <section>
-                <h3 className="text-base font-bold text-slate-950">お題とログ</h3>
-                <p className="mt-2">
-                  お題は一般単語または固有名詞から選べます。どちらも型が近い言葉同士になるように生成します。発言ログは部屋設定で、常に表示するかゲーム終了後だけ表示するかを選べます。
-                </p>
-              </section>
-            </div>
-          </div>
-        </div>
-      )}
+      <GameRulesDialog open={isRulesOpen} title="ワードウルフのルール" onClose={() => setIsRulesOpen(false)}>
+        <p>自分だけ少数派かもしれない状態で会話し、投票で違うお題を持つ狼を探します。自分の役割も仲間も表示されません。</p>
+        <h3 className="mt-4 font-black text-white">基本の流れ</h3>
+        <ol className="mt-2 list-decimal space-y-2 pl-5"><li>各自のお題を確認し、お題そのものを言わずに設定回数ぶん発言します。</li><li>全員が狼だと思う1人へ投票します。</li><li>最多得票が同数なら候補者が追加発言し、候補者だけを対象に決選投票します。</li><li>候補が2人の決選では候補者本人を除き、3人以上なら候補者も投票します。</li></ol>
+        <h3 className="mt-4 font-black text-white">勝敗と逆転</h3>
+        <p className="mt-2">最多得票者が市民なら狼側の勝利。狼なら市民側の暫定勝利ですが、捕まった狼が市民のお題を完全一致で当てると狼側の逆転勝利です。</p>
+        <h3 className="mt-4 font-black text-white">狼不在モード</h3>
+        <p className="mt-2">「狼なしの可能性あり」では10%の確率で全員が同じお題になります。その回は投票で選ばれた人が負けです。全員同票なら追加発言を1周して再投票します。</p>
+        <p className="mt-4 text-amber-200">時間切れ時はサーバーが現在の提出状況から進行します。発言ログの公開時期は部屋設定に従います。</p>
+      </GameRulesDialog>
 
       <section className={wordwolfLayoutClass}>
         <aside className="space-y-4">
