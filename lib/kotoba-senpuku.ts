@@ -20,6 +20,8 @@ export type KotobaSenpukuConfig = {
   secretTimeLimitSeconds: number;
   turnTimeLimitSeconds: number;
   debugMode: boolean;
+  continuousScan: boolean;
+  allowWordGuess: boolean;
 };
 
 export type KotobaSenpukuRoundResult = {
@@ -93,9 +95,10 @@ export const defaultKotobaSenpukuConfig: KotobaSenpukuConfig = {
   secretTimeLimitSeconds: 0,
   turnTimeLimitSeconds: 0,
   debugMode: false,
+  continuousScan: true,
+  allowWordGuess: true,
 };
 
-export const kotobaSenpukuMaximumPlayers = 8;
 
 export const kotobaSenpukuKana = [
   "あ", "い", "う", "え", "お",
@@ -171,12 +174,14 @@ export function normalizeKotobaSenpukuConfig(value: unknown): KotobaSenpukuConfi
     secretTimeLimitSeconds: normalizeCommonTimeLimit(parsed.secretTimeLimitSeconds),
     turnTimeLimitSeconds: normalizeCommonTimeLimit(parsed.turnTimeLimitSeconds),
     debugMode: parsed.debugMode === true,
+    continuousScan: parsed.continuousScan !== false,
+    allowWordGuess: parsed.allowWordGuess !== false,
   };
 }
 
 export function normalizeKotobaSenpukuWord(value: unknown) {
   if (typeof value !== "string") return "";
-  return value.trim().replace(/[ァ-ヶ]/g, (character) => String.fromCharCode(character.charCodeAt(0) - 0x60));
+  return value.trim();
 }
 
 export function isValidKotobaSenpukuWord(value: unknown) {

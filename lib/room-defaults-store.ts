@@ -43,6 +43,8 @@ export type StoredKotobaSenpukuRoomDefaults = {
   roundsTotal: number;
   secretTimeLimitSeconds: number;
   turnTimeLimitSeconds: number;
+  continuousScan: boolean;
+  allowWordGuess: boolean;
 };
 
 export type StoredRoomDefaults = StoredWordWolfRoomDefaults | StoredTahoiyaRoomDefaults | StoredHodoaiRoomDefaults | StoredKotobaSenpukuRoomDefaults;
@@ -119,6 +121,8 @@ function normalizeKotobaSenpukuDefaults(value: unknown): StoredKotobaSenpukuRoom
     roundsTotal: config.roundsTotal,
     secretTimeLimitSeconds: config.secretTimeLimitSeconds,
     turnTimeLimitSeconds: config.turnTimeLimitSeconds,
+    continuousScan: config.continuousScan,
+    allowWordGuess: config.allowWordGuess,
   };
 }
 

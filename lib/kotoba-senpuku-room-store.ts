@@ -5,7 +5,6 @@ import {
   kotobaSenpukuDebugWords,
   kotobaSenpukuKana,
   kotobaSenpukuKanaKey,
-  kotobaSenpukuMaximumPlayers,
   maskKotobaSenpukuWord,
   normalizeKotobaSenpukuConfig,
   normalizeKotobaSenpukuWord,
@@ -46,7 +45,6 @@ function normalizePlayers(value: unknown): KotobaSenpukuPlayer[] {
   if (!Array.isArray(value)) return [];
   return value
     .filter((player): player is KotobaSenpukuPlayer => Boolean(player?.id && player?.name))
-    .slice(0, kotobaSenpukuMaximumPlayers)
     .map((player) => ({
       id: String(player.id),
       name: String(player.name).trim().slice(0, 20),
@@ -275,7 +273,7 @@ function performScan(room: KotobaSenpukuRoom, kana: string) {
     : `${actor.name}の「${kana}」スキャンは反応なしでした。`;
   const changed = addLog({ ...room, calledKana, masks, exposedIds }, message);
   if (shouldFinishRound(changed)) return finishRound(changed, newlyExposed.map((player) => player.id));
-  if (hitTargets.length > 0 && !exposedIds.includes(actor.id)) return addLog({ ...changed, phaseStartedAt: Date.now() }, `${actor.name}は続けて行動できます。`);
+  if (hitTargets.length > 0 && room.continuousScan && !exposedIds.includes(actor.id)) return addLog({ ...changed, phaseStartedAt: Date.now() }, `${actor.name}は続けて行動できます。`);
   return advanceTurn(changed, hitTargets.length > 0 ? `${actor.name}は脱落したため手番を終了します。` : "探知失敗で手番終了。");
 }
 
@@ -422,7 +420,6 @@ export async function applyStoredKotobaSenpukuAction(code: string, action: Kotob
       if (current.phase !== "lobby" || action.actorId !== action.player.id) throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
       if (current.passphrase && current.passphrase !== action.passphrase.trim()) throw new Error("KOTOBA_SENPUKU_BAD_PASSPHRASE");
       if (current.players.some((player) => player.id === action.actorId)) return current;
-      if (current.players.length >= kotobaSenpukuMaximumPlayers) throw new Error("KOTOBA_SENPUKU_ROOM_FULL");
       return addLog({ ...current, players: [...current.players, action.player] }, `${action.player.name}さんが参加しました。`);
     }
 
@@ -451,7 +448,6 @@ export async function applyStoredKotobaSenpukuAction(code: string, action: Kotob
     }
     if (action.type === "debug-add-player") {
       if (!actorIsHost || !current.debugMode || current.phase !== "lobby") throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
-      if (current.players.length >= kotobaSenpukuMaximumPlayers) throw new Error("KOTOBA_SENPUKU_ROOM_FULL");
       const dummyNumber = current.players.filter((player) => player.isDummy).length + 1;
       const colors = ["#38bdf8", "#a78bfa", "#f472b6", "#f59e0b", "#84cc16", "#14b8a6", "#fb7185"];
       return { ...current, players: [...current.players, { id: `dummy-${randomUUID()}`, name: `ダミー${dummyNumber}`, joinedAt: Date.now(), avatarColor: colors[(dummyNumber - 1) % colors.length], isDummy: true }] };
@@ -488,6 +484,7 @@ export async function applyStoredKotobaSenpukuAction(code: string, action: Kotob
       return performScan(current, action.kana);
     }
     if (action.type === "challenge-word") {
+      if (!current.allowWordGuess) throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
       if (!isValidKotobaSenpukuWord(action.guess)) throw new Error("KOTOBA_SENPUKU_INVALID_WORD");
       const target = current.players.find((player) => player.id === action.targetId);
       if (!target || target.id === activePlayer.id || current.exposedIds.includes(target.id)) throw new Error("KOTOBA_SENPUKU_INVALID_TARGET");
@@ -515,7 +512,7 @@ export async function listJoinableKotobaSenpukuRooms() {
   const rooms = await Promise.all(codes.map((code) => loadStoredKotobaSenpukuRoom(code)));
   const missingCodes = codes.filter((_, index) => !rooms[index]);
   if (missingCodes.length > 0) await redisCommand<number>(["SREM", roomIndexKey, ...missingCodes]);
-  return rooms.filter((room): room is KotobaSenpukuRoom => Boolean(room && room.phase === "lobby" && room.players.length < kotobaSenpukuMaximumPlayers)).map(makeChoice).sort((left, right) => right.updatedAt - left.updatedAt);
+  return rooms.filter((room): room is KotobaSenpukuRoom => Boolean(room && room.phase === "lobby")).map(makeChoice).sort((left, right) => right.updatedAt - left.updatedAt);
 }
 
 export async function deleteStoredKotobaSenpukuRoom(code: string, actorId: string) {
