@@ -38,10 +38,10 @@ export function DebugModeButton({ enabled, disabled = false, onChange, onAbort }
     try { await onAbort(); } finally { setIsSubmitting(false); }
   };
 
-  return <div className="flex items-center gap-2">
-    <button type="button" onClick={() => void toggle()} disabled={disabled || isSubmitting} className={`rounded-lg border px-3 py-1.5 text-sm font-semibold shadow-sm transition disabled:cursor-not-allowed disabled:opacity-50 ${enabled ? "border-cyan-200 bg-cyan-200 text-slate-950" : "border-white/15 bg-white/10 text-cyan-50"}`}>
-      {isSubmitting ? "処理中..." : enabled ? "デバッグ ON" : "デバッグ OFF"}
+  return <div className="flex items-center gap-1.5" aria-label="開発者向け操作">
+    <button type="button" title="デバッグモードを切り替える" onClick={() => void toggle()} disabled={disabled || isSubmitting} className={`rounded-md border px-2 py-1 font-mono text-[11px] font-medium tracking-wide transition disabled:cursor-not-allowed disabled:opacity-40 ${enabled ? "border-cyan-300/35 bg-cyan-300/10 text-cyan-100" : "border-white/10 bg-white/[0.03] text-white/45 hover:border-white/20 hover:text-white/70"}`}>
+      {isSubmitting ? "WAIT" : enabled ? "DEBUG · ON" : "DEBUG"}
     </button>
-    {enabled && onAbort && <button type="button" onClick={() => void abort()} disabled={isSubmitting} className="rounded-lg border border-rose-300/40 bg-rose-300/10 px-3 py-1.5 text-sm font-semibold text-rose-100 disabled:opacity-50">ゲームを中断</button>}
+    {enabled && onAbort && <button type="button" title="進行中のゲームを中断してゲーム開始前へ戻す" onClick={() => void abort()} disabled={isSubmitting} className="rounded-md border border-rose-300/20 bg-transparent px-2 py-1 text-[11px] font-medium text-rose-200/70 transition hover:border-rose-300/40 hover:bg-rose-300/10 hover:text-rose-100 disabled:opacity-40">中断</button>}
   </div>;
 }
