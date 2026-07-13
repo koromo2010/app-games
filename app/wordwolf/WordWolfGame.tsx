@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import {
   avatarColorOptions,
   clearPlayerSession,
@@ -631,6 +631,7 @@ export function WordWolfGame() {
   const [isStarting, setIsStarting] = useState(false);
   const [isRulesOpen, setIsRulesOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const timeoutActionKeyRef = useRef("");
   const roomCode = room?.code;
   const roomPhase = room?.phase;
 
@@ -1295,6 +1296,8 @@ export function WordWolfGame() {
   // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const submitClue = useCallback(async (isTimeout = false) => {
     if (!room || room.phase !== "clue") return;
+    // 0秒表示後の手動投稿と自動時間切れ処理が同時に部屋を更新するのを防ぐ。
+    if (!isTimeout && turnSecondsLeft === 0 && room.turnTimeLimitSeconds > 0) return;
 
     const timeoutText = "\u6642\u9593\u5207\u308c";
     if (room.clueMode === "simultaneous") {
@@ -1362,21 +1365,25 @@ export function WordWolfGame() {
 
     setClueInput("");
     setAndSaveRoom(nextRoom);
-  }, [clueActorId, clueInput, currentPlayerId, room, setAndSaveRoom]); // eslint-disable-line react-hooks/preserve-manual-memoization
+  }, [clueActorId, clueInput, currentPlayerId, room, setAndSaveRoom, turnSecondsLeft]); // eslint-disable-line react-hooks/preserve-manual-memoization
   useEffect(() => {
     if (
       !room ||
       room.phase !== "clue" ||
       room.turnTimeLimitSeconds <= 0 ||
       turnSecondsLeft !== 0 ||
-      (room.clueMode === "turn" && clueActorId !== currentPlayerId)
+      (room.clueMode === "turn" && clueActorId !== currentPlayerId) ||
+      (room.clueMode === "simultaneous" && activePlayerId !== room.hostId)
     ) {
       return;
     }
 
+    const actionKey = `clue:${room.currentTurnStartedAt}:${room.currentRound}`;
+    if (timeoutActionKeyRef.current === actionKey) return;
+    timeoutActionKeyRef.current = actionKey;
     const timer = window.setTimeout(() => void submitClue(true), 0);
     return () => window.clearTimeout(timer);
-  }, [clueActorId, currentPlayerId, room, submitClue, turnSecondsLeft]);
+  }, [activePlayerId, clueActorId, currentPlayerId, room, submitClue, turnSecondsLeft]);
 
   const isComposingEnter = (event: KeyboardEvent<HTMLElement>) =>
     event.nativeEvent.isComposing || event.keyCode === 229;
@@ -1395,6 +1402,7 @@ export function WordWolfGame() {
 
   const castVote = useCallback(async (targetId: string, isTimeout = false) => {
     if (!room || room.phase !== "vote") return;
+    if (!isTimeout && turnSecondsLeft === 0 && room.turnTimeLimitSeconds > 0) return;
 
     const latestRoom = await loadRoomFromStore(room.code);
     if (latestRoom && latestRoom.phase !== "vote") {
@@ -1514,11 +1522,12 @@ export function WordWolfGame() {
     }
 
     setAndSaveRoom({ ...nextRoom, currentTurnStartedAt: baseRoom.currentTurnStartedAt });
-  }, [room, setAndSaveRoom, voteActor?.id]);
+  }, [room, setAndSaveRoom, turnSecondsLeft, voteActor?.id]);
 
   // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const submitWolfGuess = useCallback(async (isTimeout = false) => {
     if (!room || !guessActorId || !room.accusedId || guessActorId !== room.accusedId || !normalizeWolfIds(room).includes(guessActorId) || isGuessJudging) return;
+    if (!isTimeout && turnSecondsLeft === 0 && room.turnTimeLimitSeconds > 0) return;
 
     const guess = isTimeout ? "\u6642\u9593\u5207\u308c" : guessInput.trim();
     if (!guess) return;
@@ -1565,7 +1574,7 @@ export function WordWolfGame() {
         ? "\u9006\u8ee2\u56de\u7b54\u3092\u6b63\u89e3\u6271\u3044\u306b\u3057\u307e\u3057\u305f\u3002\u72fc\u306e\u52dd\u5229\u3067\u3059\u3002"
         : "\u9006\u8ee2\u56de\u7b54\u306f\u4e0d\u6b63\u89e3\u6271\u3044\u3067\u3059\u3002\u6751\u5074\u306e\u52dd\u5229\u3067\u3059\u3002",
     });
-  }, [guessActorId, guessInput, isGuessJudging, room, setAndSaveRoom]); // eslint-disable-line react-hooks/preserve-manual-memoization
+  }, [guessActorId, guessInput, isGuessJudging, room, setAndSaveRoom, turnSecondsLeft]); // eslint-disable-line react-hooks/preserve-manual-memoization
 
   useEffect(() => {
     if (
@@ -1573,16 +1582,20 @@ export function WordWolfGame() {
       room.phase !== "vote" ||
       room.turnTimeLimitSeconds <= 0 ||
       turnSecondsLeft !== 0 ||
+      activePlayerId !== room.hostId ||
       getVoteVoters(room).every((player) => room.votes[player.id])
     ) {
       return;
     }
 
+    const actionKey = `vote:${room.currentTurnStartedAt}:${room.voteHistory.length}`;
+    if (timeoutActionKeyRef.current === actionKey) return;
+    timeoutActionKeyRef.current = actionKey;
     const timer = window.setTimeout(() => {
       void castVote("", true);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [castVote, room, turnSecondsLeft]);
+  }, [activePlayerId, castVote, room, turnSecondsLeft]);
 
   useEffect(() => {
     if (
@@ -1597,6 +1610,9 @@ export function WordWolfGame() {
       return;
     }
 
+    const actionKey = `guess:${room.currentTurnStartedAt}:${room.accusedId}`;
+    if (timeoutActionKeyRef.current === actionKey) return;
+    timeoutActionKeyRef.current = actionKey;
     const timer = window.setTimeout(() => void submitWolfGuess(true), 0);
     return () => window.clearTimeout(timer);
   }, [guessActorId, room, submitWolfGuess, turnSecondsLeft]);

@@ -4,7 +4,7 @@ import {
 } from "@/lib/wordwolf";
 import type { Clue, ClueMode, GameMode, Phase, Player, Room, RoomChoice, VoteRound } from "@/lib/wordwolf-game-types";
 import type { WordWolfGuessJudgement } from "@/lib/wordwolf-guess-judgement";
-import { redisCommand } from "@/lib/redis-store";
+import { redisCommand, redisPipeline } from "@/lib/redis-store";
 import { recordWordWolfGameResults } from "@/lib/player-stats-store";
 import { normalizeGameGenerationMeta } from "@/lib/game-ai-types";
 import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
@@ -232,14 +232,6 @@ export async function loadStoredWordWolfRoom(code: string) {
   }
 }
 
-async function savePlayerActiveRooms(room: WordWolfRoom) {
-  await Promise.all(
-    room.players.map((player) =>
-      redisCommand<"OK">(["SET", playerActiveRoomKey(player.id), room.code, ...multiplayerRoomExpiryArgs()]),
-    ),
-  );
-}
-
 async function deletePlayerActiveRoom(playerId: string, roomCode: string) {
   const savedCode = await redisCommand<string | null>(["GET", playerActiveRoomKey(playerId)]);
   if (savedCode?.trim().toUpperCase() === roomCode.trim().toUpperCase()) {
@@ -278,9 +270,14 @@ export async function saveStoredWordWolfRoom(room: unknown) {
     };
   }
 
-  await redisCommand<"OK">(["SET", roomKey(normalizedRoom.code), JSON.stringify(normalizedRoom), ...multiplayerRoomExpiryArgs()]);
-  await redisCommand<number>(["SADD", roomIndexKey, normalizedRoom.code]);
-  await savePlayerActiveRooms(normalizedRoom);
+  // 1回のHTTP pipelineにまとめ、人数分のRedis往復で操作が重くならないようにする。
+  await redisPipeline<unknown[]>([
+    ["SET", roomKey(normalizedRoom.code), JSON.stringify(normalizedRoom), ...multiplayerRoomExpiryArgs()],
+    ["SADD", roomIndexKey, normalizedRoom.code],
+    ...normalizedRoom.players.map((player) =>
+      ["SET", playerActiveRoomKey(player.id), normalizedRoom.code, ...multiplayerRoomExpiryArgs()],
+    ),
+  ]);
 
   return normalizedRoom;
 }
