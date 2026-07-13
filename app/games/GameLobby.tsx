@@ -529,22 +529,24 @@ export function GameLobby() {
             <span className="sr-only">情報メニュー</span>
           </button>
         )}
-        {isLoggedIn && isMobileInfoOpen && (
+        {isLoggedIn && (
           <button
             type="button"
             aria-label="アカウント・戦績メニューを閉じる"
             onClick={() => setIsMobileInfoOpen(false)}
-            className="fixed inset-0 z-40 bg-slate-950/70 backdrop-blur-sm lg:hidden"
+            className={`fixed inset-0 z-40 bg-slate-950/70 backdrop-blur-sm transition-opacity duration-300 motion-reduce:transition-none lg:hidden ${
+              isMobileInfoOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
+            }`}
           />
         )}
         <aside
           id="lobby-account-panel"
           onMouseLeave={() => setIsMobileInfoOpen(false)}
-          className={`space-y-4 lg:order-1 lg:static lg:col-start-1 lg:row-start-1 lg:block lg:w-auto lg:overflow-visible lg:bg-transparent lg:p-0 lg:shadow-none ${
+          className={`space-y-4 lg:order-1 lg:static lg:col-start-1 lg:row-start-1 lg:block lg:w-auto lg:translate-x-0 lg:overflow-visible lg:bg-transparent lg:p-0 lg:shadow-none lg:pointer-events-auto ${
           isLoggedIn
-            ? isMobileInfoOpen
-              ? "fixed inset-y-0 left-0 z-50 w-[min(380px,calc(100vw-2rem))] overflow-y-auto rounded-r-xl bg-slate-950 p-3 shadow-2xl"
-              : "hidden"
+            ? `fixed inset-y-0 left-0 z-50 w-[min(380px,calc(100vw-2rem))] overflow-y-auto rounded-r-xl bg-slate-950 p-3 shadow-2xl will-change-transform transition-transform duration-300 ease-out motion-reduce:transition-none ${
+              isMobileInfoOpen ? "translate-x-0 pointer-events-auto" : "-translate-x-full pointer-events-none"
+            }`
             : "order-1"
         }`}>
           {isLoggedIn && (
