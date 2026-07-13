@@ -22,6 +22,7 @@ export type KotobaSenpukuConfig = {
   debugMode: boolean;
   continuousScan: boolean;
   allowWordGuess: boolean;
+  randomFirstTurn: boolean;
 };
 
 export type KotobaSenpukuRoundResult = {
@@ -97,6 +98,7 @@ export const defaultKotobaSenpukuConfig: KotobaSenpukuConfig = {
   debugMode: false,
   continuousScan: true,
   allowWordGuess: true,
+  randomFirstTurn: true,
 };
 
 
@@ -176,6 +178,7 @@ export function normalizeKotobaSenpukuConfig(value: unknown): KotobaSenpukuConfi
     debugMode: parsed.debugMode === true,
     continuousScan: parsed.continuousScan !== false,
     allowWordGuess: parsed.allowWordGuess !== false,
+    randomFirstTurn: parsed.randomFirstTurn !== false,
   };
 }
 

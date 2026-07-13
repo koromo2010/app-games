@@ -175,7 +175,7 @@ function allSecretsSubmitted(room: KotobaSenpukuRoom) {
 
 function beginBattle(room: KotobaSenpukuRoom) {
   const masks = Object.fromEntries(room.players.map((player) => [player.id, maskKotobaSenpukuWord(room.secrets[player.id] ?? "", [])]));
-  const activePlayerIndex = room.players.length > 0 ? randomInt(room.players.length) : 0;
+  const activePlayerIndex = room.randomFirstTurn && room.players.length > 0 ? randomInt(room.players.length) : 0;
   const activePlayer = room.players[activePlayerIndex];
   return addLog({
     ...room,
@@ -186,7 +186,9 @@ function beginBattle(room: KotobaSenpukuRoom) {
     activePlayerIndex,
     turnNumber: 1,
     phaseStartedAt: Date.now(),
-  }, `抽選の結果、${activePlayer?.name ?? "最初のプレイヤー"}から開始します。`);
+  }, room.randomFirstTurn
+    ? `抽選の結果、${activePlayer?.name ?? "最初のプレイヤー"}から開始します。`
+    : `${activePlayer?.name ?? "最初のプレイヤー"}から参加順で開始します。`);
 }
 
 function beginRound(room: KotobaSenpukuRoom, round: number) {

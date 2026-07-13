@@ -61,6 +61,7 @@ function normalizeDefaults(value: unknown) {
     turnTimeLimitSeconds: config.turnTimeLimitSeconds,
     continuousScan: config.continuousScan,
     allowWordGuess: config.allowWordGuess,
+    randomFirstTurn: config.randomFirstTurn,
   };
 }
 
@@ -113,19 +114,23 @@ function BinaryRuleControl({
   description,
   value,
   onChange,
+  falseLabel = "なし",
+  trueLabel = "あり",
 }: {
   label: string;
   description: string;
   value: boolean;
   onChange: (value: boolean) => void;
+  falseLabel?: string;
+  trueLabel?: string;
 }) {
   return (
     <fieldset>
       <legend className="text-sm font-medium text-slate-200">{label}</legend>
       <div className="mt-1 grid grid-cols-2 gap-2">
         {[
-          { label: "なし", value: false },
-          { label: "あり", value: true },
+          { label: falseLabel, value: false },
+          { label: trueLabel, value: true },
         ].map((option) => (
           <button
             key={option.label}
@@ -241,6 +246,7 @@ export function KotobaSenpukuGame() {
     { label: "手番時間", value: formatTime(room.turnTimeLimitSeconds) },
     { label: "連続探知", value: room.continuousScan ? "あり" : "なし" },
     { label: "秘密語回答", value: room.allowWordGuess ? "あり" : "なし" },
+    { label: "最初の手番", value: room.randomFirstTurn ? "ランダム" : "参加順" },
     { label: "デバッグ", value: room.debugMode ? "ON" : "OFF" },
   ] : [];
 
@@ -396,7 +402,7 @@ export function KotobaSenpukuGame() {
   };
 
   const rulesDialog = <GameRulesDialog open={rulesOpen} title="ことばソナーのルール" onClose={() => setRulesOpen(false)}>
-    <p>2人以上で遊びます。各自がお題に沿った秘密語を「ひらがな」と長音符「ー」だけで入力し、最後まで脱落せずに残ることを目指します。文字数と参加人数に上限はありません。最初の手番は全員の秘密語がそろった後にランダムで決まります。</p>
+    <p>2人以上で遊びます。各自がお題に沿った秘密語を「ひらがな」と長音符「ー」だけで入力し、最後まで脱落せずに残ることを目指します。文字数と参加人数に上限はありません。最初の手番は開始前設定に従い、ランダムまたは参加順で決まります。</p>
     <h3 className="mt-4 font-black text-white">開始前の設定</h3>
     <ul className="mt-2 list-disc space-y-2 pl-5">
       <li>連続探知「あり」では、文字探知が1人以上に命中すると、自分が生存している限り続けて行動できます。「なし」では命中しても手番終了です。</li>
@@ -459,6 +465,14 @@ export function KotobaSenpukuGame() {
                   description="あり：相手の秘密語を直接回答する行動を使えます。"
                   value={room.allowWordGuess}
                   onChange={(value) => void updateConfig({ allowWordGuess: value })}
+                />
+                <BinaryRuleControl
+                  label="最初の手番"
+                  description="ランダム：対戦開始時に抽選。参加順：参加者一覧の先頭から開始。"
+                  value={room.randomFirstTurn}
+                  falseLabel="参加順"
+                  trueLabel="ランダム"
+                  onChange={(value) => void updateConfig({ randomFirstTurn: value })}
                 />
               </div>
             </section>

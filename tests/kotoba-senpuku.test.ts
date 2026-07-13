@@ -56,10 +56,10 @@ test("2人対戦だけ秘密語を2文字以上にする", () => {
   assert.equal(minimumKotobaSenpukuWordLength(10), 1);
 });
 
-test("連続探知と秘密語回答を部屋ごとに設定できる", () => {
+test("連続探知・秘密語回答・最初の手番を部屋ごとに設定できる", () => {
   assert.deepEqual(
-    normalizeKotobaSenpukuConfig({ continuousScan: false, allowWordGuess: false }),
-    { roundsTotal: 1, secretTimeLimitSeconds: 0, turnTimeLimitSeconds: 0, debugMode: false, continuousScan: false, allowWordGuess: false },
+    normalizeKotobaSenpukuConfig({ continuousScan: false, allowWordGuess: false, randomFirstTurn: false }),
+    { roundsTotal: 1, secretTimeLimitSeconds: 0, turnTimeLimitSeconds: 0, debugMode: false, continuousScan: false, allowWordGuess: false, randomFirstTurn: false },
   );
 });
 
