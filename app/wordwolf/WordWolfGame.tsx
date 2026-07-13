@@ -27,6 +27,7 @@ import {
 } from "@/lib/wordwolf";
 import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
 import { DebugModeButton } from "../components/DebugModeButton";
+import { GameTopBanner, gameTopBannerOffsetClass } from "../components/GameTopBanner";
 import { DebugWordGenerationTest, type DebugWordGenerationResult } from "../components/DebugWordGenerationTest";
 import { GameFeedbackPanel } from "../components/GameFeedbackPanel";
 import { GameRulesDialog } from "../components/GameRulesDialog";
@@ -1372,14 +1373,8 @@ export function WordWolfGame() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-950 pt-[104px] text-slate-950 sm:pt-[82px]">
-      <section className="fixed inset-x-0 top-0 z-40 border-b border-white/10 bg-[radial-gradient(circle_at_20%_0%,rgba(34,211,238,0.22),transparent_34%),linear-gradient(135deg,#020617_0%,#111827_55%,#3f2b12_100%)] text-white shadow-2xl shadow-slate-950/30">
-        <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase text-cyan-200">Room based social deduction</p>
-            <h1 className="mt-0.5 text-2xl font-black tracking-normal sm:text-3xl">ワードウルフ・ラウンジ</h1>
-          </div>
-          <div className="flex flex-wrap items-center gap-2 text-sm">
+    <main className={`min-h-screen bg-slate-950 text-slate-950 ${gameTopBannerOffsetClass}`}>
+      <GameTopBanner eyebrow="Room based social deduction" title="ワードウルフ・ラウンジ">
             <Link
               href="/games"
               className="rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 font-semibold text-cyan-50 transition hover:bg-white/15"
@@ -1503,9 +1498,7 @@ export function WordWolfGame() {
             >
               ルール
             </button>
-          </div>
-        </div>
-      </section>
+      </GameTopBanner>
 
       <GameRulesDialog open={isRulesOpen} title="ワードウルフのルール" onClose={() => setIsRulesOpen(false)}>
         <p>自分だけ少数派かもしれない状態で会話し、投票で違うお題を持つ狼を探します。自分の役割も仲間も表示されません。</p>

@@ -17,6 +17,7 @@ import { DebugModeButton } from "../components/DebugModeButton";
 import { DebugWordGenerationTest, type DebugWordGenerationResult } from "../components/DebugWordGenerationTest";
 import { GameFeedbackPanel } from "../components/GameFeedbackPanel";
 import { GameRulesDialog } from "../components/GameRulesDialog";
+import { GameTopBanner, gameTopBannerOffsetClass } from "../components/GameTopBanner";
 import { RoomConfigSummary } from "../components/RoomConfigSummary";
 import { RoomTimeLimitControl } from "../components/RoomTimeLimitControl";
 import { cyanButtonClass, dangerButtonClass, inputClass, panelClass, primaryButtonClass, subtleButtonClass } from "../wordwolf/styles";
@@ -948,14 +949,8 @@ export function TahoiyaGame() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-950">
-      <header className="sticky top-0 z-20 border-b border-white/10 bg-slate-950/95 text-white backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
-          <div>
-            <p className="text-xs font-semibold uppercase text-amber-200">Dictionary bluffing</p>
-            <h1 className="text-2xl font-black">たほい屋</h1>
-          </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
+    <main className={`min-h-screen bg-slate-950 text-slate-950 ${gameTopBannerOffsetClass}`}>
+      <GameTopBanner eyebrow="Dictionary bluffing" title="たほい屋">
             <PaidLlmAccessButton />
             {room && isHost && (
               <DebugModeButton
@@ -972,9 +967,7 @@ export function TahoiyaGame() {
             <span className="rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-sm font-semibold text-white">
               {playerName || "未ログイン"}
             </span>
-          </div>
-        </div>
-      </header>
+      </GameTopBanner>
 
       <GameRulesDialog open={rulesOpen} title="たほい屋のルール" onClose={() => setRulesOpen(false)}>
         <p>知らない難語の本物の説明を、参加者が作った偽説明の中から見抜くゲームです。</p>
