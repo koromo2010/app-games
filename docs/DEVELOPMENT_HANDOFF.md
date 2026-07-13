@@ -99,7 +99,7 @@
 
 ### 共通戦績
 
-- ワードウルフはプレイヤー別Eloレーティングを持つ。初期値1000、K=32を基準に両陣営の平均レートから期待勝率を計算し、人数差があっても両陣営の合計変動がゼロになるよう配分する。結果イベントIDで二重加算を防ぎ、デバッグ対戦は対象外とする。実装は `lib/wordwolf-rating.ts` と `lib/player-stats-store.ts`。
+- 全ゲームはゲーム別のEloレーティングを持つ。標準は初期値1000、最初の30戦を暫定K=48として実力帯へ早く収束し、31戦目以降はK=20で穏やかに動く。`GAME_RATING_INITIAL`、`GAME_RATING_PROVISIONAL_GAMES`、`GAME_RATING_PROVISIONAL_K`、`GAME_RATING_ESTABLISHED_K` をハイパーパラメータとして環境変数で調整できる。協力ゲームは初期レートの仮想対戦相手に対する成功・失敗として扱う。結果イベントIDで二重加算を防ぎ、ダミーとデバッグ対戦は対象外。UIでは戦績の補助情報として控えめに表示し、増減を強調しない。実装は `lib/game-rating.ts` と `lib/player-stats-store.ts`。
 
 - ロビーの戦績フィルターは `config/game-registry.json` の `stats: "account"` から自動生成する。
 - ワードウルフは1ゲーム、たほい屋は1ラウンド、ことばで数ならべは全ラウンド終了を1戦として記録する。

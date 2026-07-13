@@ -633,15 +633,11 @@ export function GameLobby() {
                 </button>
               </div>
 
-              {(selectedStatsGame === "all" || selectedStatsGame === "wordwolf") && (
-                <div className="mt-4 flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase text-amber-700">Word Wolf Rating</p>
-                    <p className="text-xs text-amber-800">初期1000・対戦相手とのレート差で変動</p>
-                  </div>
-                  <p className="text-2xl font-black text-amber-950">{stats?.ratings.wordwolf ?? 1000}</p>
-                </div>
-              )}
+              <p className="mt-3 text-xs text-slate-500">
+                {selectedStatsGame === "all"
+                  ? `レーティング　${statsGameOptions.filter((option) => option.value !== "all").map((option) => `${option.label} ${stats?.ratings[option.value as Exclude<PlayerStatsGameFilter, "all">] ?? 1000}`).join(" / ")}`
+                  : `レーティング ${stats?.ratings[selectedStatsGame] ?? 1000}`}
+              </p>
 
               <div className="mt-4 grid grid-cols-3 gap-2">
                 {statItems(stats).map(([label, summary]) => (
@@ -672,9 +668,7 @@ export function GameLobby() {
                         <span className={`rounded-md px-2 py-1 text-xs font-bold ${
                           result.won ? "bg-cyan-100 text-cyan-700" : "bg-rose-100 text-rose-700"
                         }`}>
-                          {result.ratingChange !== undefined
-                            ? `${result.won ? "WIN" : "LOSE"} ${result.ratingChange >= 0 ? "+" : ""}${result.ratingChange}`
-                            : result.won ? "WIN" : "LOSE"}
+                          {result.won ? "WIN" : "LOSE"}
                         </span>
                       </div>
                     ))}
