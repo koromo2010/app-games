@@ -20,6 +20,7 @@ import {
 } from "@/lib/kotoba-senpuku";
 import { isMultiplayerRoomExpired, multiplayerRoomExpiryArgs, multiplayerRoomTtlSeconds } from "@/lib/multiplayer-room-lifecycle";
 import { recordKotobaSenpukuGameResults } from "@/lib/player-stats-store";
+import { recordKotobaSenpukuReplay } from "@/lib/game-replay-store";
 import { redisCommand } from "@/lib/redis-store";
 import { commonGameTimeoutGraceMs } from "@/lib/game-timer/policy";
 
@@ -316,7 +317,7 @@ async function mutateStoredRoom(code: string, mutate: (room: KotobaSenpukuRoom) 
     if (!next) throw new Error("INVALID_KOTOBA_SENPUKU_ROOM");
     const saved = await compareAndSetRoom(current.revision, next);
     if (saved === 1) {
-      await recordKotobaSenpukuGameResults(next);
+      await Promise.all([recordKotobaSenpukuGameResults(next), recordKotobaSenpukuReplay(next)]);
       return next;
     }
     if (saved === -1) throw new Error("KOTOBA_SENPUKU_ROOM_NOT_FOUND");
@@ -376,7 +377,7 @@ export async function loadAndReconcileKotobaSenpukuRoom(code: string) {
   const room = await loadStoredKotobaSenpukuRoom(code);
   if (!room) return null;
   if (reconcileProgress(room) === room) {
-    await recordKotobaSenpukuGameResults(room);
+    await Promise.all([recordKotobaSenpukuGameResults(room), recordKotobaSenpukuReplay(room)]);
     return room;
   }
   return mutateStoredRoom(code, reconcileProgress);

@@ -7,6 +7,11 @@ import type { GameReplayGameType } from "@/lib/game-replay-types";
 import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
 import { createRequestTelemetry } from "@/lib/observability";
 
+function normalizeReplayGameType(value: string | null): GameReplayGameType | "all" {
+  if (value === "wordwolf" || value === "tahoiya" || value === "northern-branch" || value === "hodoai" || value === "kotoba-senpuku") return value;
+  return "all";
+}
+
 function isStoreNotConfigured(error: unknown) {
   return error instanceof Error && error.message === "REDIS_STORE_NOT_CONFIGURED";
 }
@@ -24,8 +29,7 @@ export async function GET(request: Request) {
   const telemetry = createRequestTelemetry(request, "/api/player-replays", { operation: "replay-read" });
   const url = new URL(request.url);
   const id = url.searchParams.get("id")?.trim() ?? "";
-  const requestedGame = url.searchParams.get("gameType");
-  const gameType: GameReplayGameType | "all" = requestedGame === "tahoiya" ? "tahoiya" : "all";
+  const gameType = normalizeReplayGameType(url.searchParams.get("gameType"));
 
   try {
     const player = await requireAuthenticatedPlayer();

@@ -14,9 +14,15 @@ test("リプレイ設定値は安全な範囲へ制限する", () => {
   }), { retentionDays: 1, favoriteLimit: 100 });
 });
 
-test("共有文には結果を含め、説明本文を要求しない", () => {
-  const text = gameReplayShareText({ gameType: "tahoiya", title: "未知語", resultLabel: "3点" });
+test("共有文にはプレイバックの見どころを含め、説明本文を要求しない", () => {
+  const text = gameReplayShareText({
+    gameType: "tahoiya",
+    title: "未知語",
+    resultLabel: "3点",
+    shareHighlights: ["本物を見抜いたのは2人", "偽説明に集まった票は3票"],
+  });
   assert.match(text, /たほい屋/);
   assert.match(text, /3点/);
+  assert.match(text, /本物を見抜いたのは2人/);
   assert.equal(text.includes("本当の説明"), false);
 });

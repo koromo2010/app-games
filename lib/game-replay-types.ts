@@ -1,4 +1,4 @@
-export type GameReplayGameType = "tahoiya";
+export type GameReplayGameType = "wordwolf" | "tahoiya" | "northern-branch" | "hodoai" | "kotoba-senpuku";
 
 export type GameReplayPolicy = {
   retentionDays: number;
@@ -15,6 +15,20 @@ export type GameReplaySummary = {
   resultLabel: string;
   playerCount: number;
   round: number;
+  shareHighlights: string[];
+};
+
+export type GameReplayScore = {
+  playerName: string;
+  scoreLabel: string;
+  isViewer: boolean;
+};
+
+export type GenericGameReplayDetail = GameReplaySummary & {
+  gameType: Exclude<GameReplayGameType, "tahoiya">;
+  overview: string;
+  highlights: string[];
+  scores: GameReplayScore[];
 };
 
 export type TahoiyaReplayDefinition = {
@@ -43,13 +57,32 @@ export type TahoiyaReplayDetail = GameReplaySummary & {
   viewerVoteDefinitionId?: string;
 };
 
+export type GameReplayDetail = GenericGameReplayDetail | TahoiyaReplayDetail;
+
 export type GameReplayListResponse = {
   replays: GameReplaySummary[];
   policy: GameReplayPolicy;
   favoriteCount: number;
 };
 
-export function gameReplayShareText(replay: Pick<GameReplaySummary, "gameType" | "title" | "resultLabel">) {
-  const gameTitle = replay.gameType === "tahoiya" ? "たほい屋" : replay.gameType;
-  return `${gameTitle}「${replay.title}」をプレイ！ ${replay.resultLabel}\n#GameFields`;
+export const gameReplayMetadata: Record<GameReplayGameType, { title: string; href: string }> = {
+  wordwolf: { title: "ワードウルフ", href: "/wordwolf" },
+  tahoiya: { title: "たほい屋", href: "/tahoiya" },
+  "northern-branch": { title: "ノーザンブランチ", href: "/northern-branch" },
+  hodoai: { title: "ことばで数ならべ", href: "/kotoba-de-kazu-narabe" },
+  "kotoba-senpuku": { title: "ことば潜伏戦", href: "/kotoba-senpuku" },
+};
+
+export function gameReplayShareText(
+  replay: Pick<GameReplaySummary, "gameType" | "title" | "resultLabel" | "shareHighlights">,
+) {
+  const gameTitle = gameReplayMetadata[replay.gameType].title;
+  const highlights = replay.shareHighlights.slice(0, 3).map((highlight) => `・${highlight}`);
+  return [
+    `${gameTitle}のプレイバック`,
+    replay.title,
+    replay.resultLabel,
+    ...highlights,
+    "#GameFields",
+  ].filter(Boolean).join("\n");
 }

@@ -6,6 +6,7 @@ import type { Clue, ClueMode, GameMode, Phase, Player, Room, RoomChoice, VoteRou
 import type { WordWolfGuessJudgement } from "@/lib/wordwolf-guess-judgement";
 import { redisCommand, redisPipeline } from "@/lib/redis-store";
 import { recordWordWolfGameResults } from "@/lib/player-stats-store";
+import { recordWordWolfReplay } from "@/lib/game-replay-store";
 import { normalizeGameGenerationMeta } from "@/lib/game-ai-types";
 import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
 import { isMultiplayerRoomExpired, multiplayerRoomExpiryArgs } from "@/lib/multiplayer-room-lifecycle";
@@ -309,7 +310,7 @@ export async function saveStoredWordWolfRoom(room: unknown) {
   ]);
   if (saved !== 1) throw new Error("WORDWOLF_ROOM_CONFLICT");
 
-  if (shouldRecordResults) await recordWordWolfGameResults(normalizedRoom);
+  if (shouldRecordResults) await Promise.all([recordWordWolfGameResults(normalizedRoom), recordWordWolfReplay(normalizedRoom)]);
 
   // 残る索引更新は1回のHTTP pipelineにまとめる。
   await redisPipeline<unknown[]>([

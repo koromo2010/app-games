@@ -1,5 +1,6 @@
 import { redisCommand } from "@/lib/redis-store";
 import { recordHodoaiGameResults } from "@/lib/player-stats-store";
+import { recordHodoaiReplay } from "@/lib/game-replay-store";
 import { isMultiplayerRoomExpired, multiplayerRoomExpiryArgs, multiplayerRoomTtlSeconds } from "@/lib/multiplayer-room-lifecycle";
 import { randomUUID } from "node:crypto";
 import { commonGameTimeoutGraceMs } from "@/lib/game-timer/policy";
@@ -217,7 +218,7 @@ async function mutateStoredRoom(code: string, mutate: (room: HodoaiRoom) => Hodo
     if (!next) throw new Error("INVALID_HODOAI_ROOM");
     const saved = await compareAndSetRoom(current.revision, next);
     if (saved === 1) {
-      await recordHodoaiGameResults(next);
+      await Promise.all([recordHodoaiGameResults(next), recordHodoaiReplay(next)]);
       return next;
     }
     if (saved === -1) throw new Error("HODOAI_ROOM_NOT_FOUND");
@@ -283,7 +284,7 @@ export async function loadAndReconcileHodoaiRoom(code: string) {
   const room = await loadStoredHodoaiRoom(code);
   if (!room) return null;
   if (reconcileProgress(room) === room) {
-    await recordHodoaiGameResults(room);
+    await Promise.all([recordHodoaiGameResults(room), recordHodoaiReplay(room)]);
     return room;
   }
   return mutateStoredRoom(code, reconcileProgress);
@@ -407,7 +408,7 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
   });
   await redisCommand<number>(["SADD", roomIndexKey, room.code]);
   await saveActiveRooms(room);
-  await recordHodoaiGameResults(room);
+  await Promise.all([recordHodoaiGameResults(room), recordHodoaiReplay(room)]);
   if (action.type === "leave-room") await clearActiveRoom(action.actorId, room.code);
   return room;
 }

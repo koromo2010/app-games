@@ -6,7 +6,6 @@ import type { PlayerSession } from "@/lib/player-session";
 import type { PlayerGameResult, PlayerStatsResponse } from "@/lib/player-stats-store";
 import { GameReplayPanel } from "@/app/components/GameReplayPanel";
 import { games } from "@/app/games/game-catalog";
-import { shareGameResult } from "@/lib/game-share-client";
 
 function formatDate(timestamp: number) {
   return new Intl.DateTimeFormat("ja-JP", {
@@ -64,20 +63,6 @@ export function UserDashboard() {
     })();
     return () => controller.abort();
   }, []);
-
-  const shareResult = async (result: PlayerGameResult) => {
-    const game = gameEntry(result.gameType);
-    const gameTitle = game?.title ?? result.gameType;
-    const text = `${gameTitle}で${result.resultLabel}！\n#GameFields`;
-    const url = new URL(game?.href || "/games", window.location.origin).toString();
-    try {
-      const outcome = await shareGameResult({ title: `Game Fields ${gameTitle}`, text, url });
-      if (outcome === "shared") setMessage("共有メニューを開きました。");
-      if (outcome === "copied") setMessage("共有文をコピーしました。");
-    } catch {
-      setMessage("共有できませんでした。");
-    }
-  };
 
   if (isLoading) {
     return <main className="min-h-screen bg-slate-950 px-4 py-12 text-center text-sm text-slate-300">マイページを読み込み中...</main>;
@@ -144,16 +129,14 @@ export function UserDashboard() {
             {stats?.recent.length ? (
               <div className="mt-2 space-y-2">
                 {stats.recent.map((result) => (
-                  <article key={result.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-slate-50 px-3 py-2">
+                  <article key={result.id} className="rounded-lg bg-slate-50 px-3 py-2">
                     <div>
                       <p className="text-sm font-bold text-slate-800">{gameEntry(result.gameType)?.title ?? result.gameType}・{result.resultLabel}</p>
                       <p className="text-xs text-slate-500">{formatDate(result.finishedAt)}</p>
                     </div>
-                    <button type="button" onClick={() => void shareResult(result)} className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100">
-                      結果を共有
-                    </button>
                   </article>
                 ))}
+                <p className="px-1 text-xs leading-5 text-slate-500">共有は、右側のプレイバックに見どころを添えて行えます。</p>
               </div>
             ) : (
               <p className="mt-2 text-sm text-slate-500">まだ戦績はありません。</p>

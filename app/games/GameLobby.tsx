@@ -3,14 +3,17 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import {
+  avatarColorOptions,
   clearPlayerSession,
   defaultAvatarImage,
+  defaultAvatarImages,
   fallbackAvatarColor,
   isPlayerAuthenticated,
   makeRandomAvatarColor,
   markPlayerAuthenticated,
   pickRandomDefaultAvatarImage,
   loadPersistentPlayerSession,
+  savePersistentPlayerSession,
   savePlayerSession,
   type PlayerSession,
 } from "@/lib/player-session";
@@ -91,6 +94,7 @@ export function GameLobby() {
   const [isSaving, setIsSaving] = useState(false);
   const [isRequestingReset, setIsRequestingReset] = useState(false);
   const [isUpdatingEmail, setIsUpdatingEmail] = useState(false);
+  const [isAvatarSaving, setIsAvatarSaving] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [hasRecoveryEmail, setHasRecoveryEmail] = useState(false);
   const [stats, setStats] = useState<PlayerStatsResponse | null>(null);
@@ -317,6 +321,43 @@ export function GameLobby() {
     }
   };
 
+  const updateAvatar = async (nextColor: string, nextImage: string | null) => {
+    if (!name.trim() || isAvatarSaving) return;
+    setAvatarColor(nextColor);
+    setAvatarImage(nextImage || defaultAvatarImage);
+    setIsAvatarSaving(true);
+    try {
+      const result = await savePersistentPlayerSession({
+        id: playerId || undefined,
+        name: name.trim(),
+        avatarColor: nextColor,
+        avatarImage: nextImage || defaultAvatarImage,
+        hasRecoveryEmail,
+      });
+      setAvatarColor(result.session.avatarColor);
+      setAvatarImage(result.session.avatarImage || defaultAvatarImage);
+      if (!result.persistent) setMessage("アイコンを端末には保存しましたが、サーバーへ保存できませんでした。");
+    } catch {
+      setMessage("アイコンを保存できませんでした。");
+    } finally {
+      setIsAvatarSaving(false);
+    }
+  };
+
+  const uploadAvatar = (file: File | undefined) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/") || file.size > 150 * 1024) {
+      setMessage("アイコン画像は150KB以下の画像を選んでください。");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") void updateAvatar(avatarColor, reader.result);
+    };
+    reader.onerror = () => setMessage("アイコン画像を読み込めませんでした。");
+    reader.readAsDataURL(file);
+  };
+
   const logout = async () => {
     try {
       const response = await fetch("/api/player-account", {
@@ -379,11 +420,49 @@ export function GameLobby() {
                     <span className="max-w-[160px] truncate text-sm font-semibold text-cyan-50">{name}</span>
                     <span className="text-xs text-slate-300 transition group-open:rotate-180" aria-hidden="true">▼</span>
                   </summary>
-                  <div className="absolute right-0 z-30 mt-2 w-48 rounded-lg border border-slate-200 bg-white p-2 text-slate-900 shadow-xl">
+                  <div className="absolute right-0 z-30 mt-2 w-72 rounded-lg border border-slate-200 bg-white p-3 text-slate-900 shadow-xl">
                     <p className="truncate px-2 py-1 text-xs font-semibold text-slate-500">{name}でログイン中</p>
+                    <div className="mt-2 border-t border-slate-200 pt-3">
+                      <p className="text-xs font-bold text-slate-700">アイコンの色</p>
+                      <div className="mt-2 grid grid-cols-8 gap-1.5">
+                        {avatarColorOptions.map((color) => (
+                          <button
+                            key={color}
+                            type="button"
+                            aria-label={`アイコン色 ${color}`}
+                            aria-pressed={avatarColor === color}
+                            disabled={isAvatarSaving}
+                            onClick={() => void updateAvatar(color, avatarImage)}
+                            className={`h-7 w-7 rounded-full border-2 transition disabled:opacity-50 ${avatarColor === color ? "border-slate-900 ring-2 ring-cyan-300" : "border-white"}`}
+                            style={{ backgroundColor: color }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                    <div className="mt-3">
+                      <p className="text-xs font-bold text-slate-700">アイコン画像</p>
+                      <div className="mt-2 grid grid-cols-5 gap-2">
+                        {defaultAvatarImages.map((image, index) => (
+                          <button
+                            key={image}
+                            type="button"
+                            aria-label={`標準アイコン ${index + 1}`}
+                            aria-pressed={avatarImage === image}
+                            disabled={isAvatarSaving}
+                            onClick={() => void updateAvatar(avatarColor, image)}
+                            className={`h-10 w-10 rounded-full border-2 bg-cover bg-center transition disabled:opacity-50 ${avatarImage === image ? "border-cyan-500 ring-2 ring-cyan-200" : "border-slate-200"}`}
+                            style={{ backgroundColor: avatarColor, backgroundImage: `url(${image})` }}
+                          />
+                        ))}
+                      </div>
+                      <label className="mt-2 flex cursor-pointer items-center justify-center rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">
+                        画像を選ぶ（150KB以下）
+                        <input type="file" accept="image/*" disabled={isAvatarSaving} onChange={(event) => uploadAvatar(event.target.files?.[0])} className="sr-only" />
+                      </label>
+                    </div>
                     <Link
                       href="/users/me"
-                      className="mt-1 flex w-full items-center justify-center rounded-md bg-cyan-600 px-3 py-2 text-sm font-bold text-white transition hover:bg-cyan-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/40"
+                      className="mt-3 flex w-full items-center justify-center rounded-md bg-cyan-600 px-3 py-2 text-sm font-bold text-white transition hover:bg-cyan-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/40"
                     >
                       マイページを開く
                     </Link>

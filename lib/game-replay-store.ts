@@ -1,37 +1,59 @@
-import { redisCommand, redisPipeline } from "@/lib/redis-store";
 import { createHmac } from "node:crypto";
+import type { HodoaiRoom } from "@/lib/hodoai-talk";
+import type { KotobaSenpukuRoom } from "@/lib/kotoba-senpuku";
+import type { NorthernRoom } from "@/lib/northern-branch-types";
 import type { TahoiyaRoom } from "@/lib/tahoiya-types";
+import type { WordWolfRoom } from "@/lib/wordwolf-room-store";
+import { redisCommand, redisPipeline } from "@/lib/redis-store";
 import {
   emitObservabilityEvent,
   observabilityErrorCode,
   observabilityRef,
 } from "@/lib/observability";
 import type {
+  GameReplayDetail,
   GameReplayGameType,
   GameReplayListResponse,
   GameReplaySummary,
+  GenericGameReplayDetail,
   TahoiyaReplayDetail,
 } from "@/lib/game-replay-types";
 import { resolveGameReplayPolicy } from "@/lib/game-replay-policy";
 
-type StoredTahoiyaReplay = {
+type StoredReplayPlayer = { id: string; name: string };
+
+type StoredReplayBase = {
   schemaVersion: 1;
   id: string;
-  gameType: "tahoiya";
+  gameType: GameReplayGameType;
   finishedAt: number;
   expiresAt: number;
   round: number;
+  title: string;
+  players: StoredReplayPlayer[];
+  resultLabels: Record<string, string>;
+  shareHighlights: string[];
+};
+
+type StoredGenericReplay = StoredReplayBase & {
+  gameType: Exclude<GameReplayGameType, "tahoiya">;
+  overview: string;
+  highlights: string[];
+  scoreLabels: Record<string, string>;
+};
+
+type StoredTahoiyaReplay = StoredReplayBase & {
+  gameType: "tahoiya";
   word: string;
   reading?: string;
   realDefinition: string;
   resultText: string;
-  players: { id: string; name: string }[];
   definitions: { id: string; text: string; authorId: string | null; isReal: boolean }[];
   votes: Record<string, string>;
   scores: Record<string, number>;
 };
 
-type StoredGameReplay = StoredTahoiyaReplay;
+type StoredGameReplay = StoredGenericReplay | StoredTahoiyaReplay;
 
 const replayKeyPrefix = "game-replay:v1:";
 const playerIndexKeyPrefix = "player-replays:v1:";
@@ -39,24 +61,14 @@ const playerFavoritesKeyPrefix = "player-replay-favorites:v1:";
 const replayFavoritersKeyPrefix = "game-replay-favoriters:v1:";
 const maximumPlayerIndexSize = 500;
 
-function replayKey(id: string) {
-  return `${replayKeyPrefix}${id}`;
-}
-
-function playerIndexKey(playerId: string) {
-  return `${playerIndexKeyPrefix}${playerId}`;
-}
-
-function playerFavoritesKey(playerId: string) {
-  return `${playerFavoritesKeyPrefix}${playerId}`;
-}
-
-function replayFavoritersKey(id: string) {
-  return `${replayFavoritersKeyPrefix}${id}`;
-}
+function replayKey(id: string) { return `${replayKeyPrefix}${id}`; }
+function playerIndexKey(playerId: string) { return `${playerIndexKeyPrefix}${playerId}`; }
+function playerFavoritesKey(playerId: string) { return `${playerFavoritesKeyPrefix}${playerId}`; }
+function replayFavoritersKey(id: string) { return `${replayFavoritersKeyPrefix}${id}`; }
 
 function replayId(eventId: string) {
-  const secret = process.env.PLAYER_SESSION_SECRET || process.env.LLM_SESSION_SECRET || "game-fields-local-replay-v1";
+  const secret = process.env.PLAYER_SESSION_SECRET || process.env.LLM_SESSION_SECRET;
+  if (!secret) return "";
   const digest = createHmac("sha256", secret).update(`replay:${eventId}`).digest("base64url").slice(0, 24);
   return `replay_${digest}`;
 }
@@ -65,20 +77,59 @@ function cleanText(value: unknown, maximumLength: number) {
   return typeof value === "string" ? value.trim().slice(0, maximumLength) : "";
 }
 
+function cleanLines(lines: unknown[], maximumLines = 100) {
+  return lines.map((line) => cleanText(line, 300)).filter(Boolean).slice(0, maximumLines);
+}
+
+function isReplayGameType(value: unknown): value is GameReplayGameType {
+  return value === "wordwolf" || value === "tahoiya" || value === "northern-branch" || value === "hodoai" || value === "kotoba-senpuku";
+}
+
 function parseStoredReplay(value: unknown): StoredGameReplay | null {
   if (typeof value !== "string" || !value) return null;
   try {
-    const parsed = JSON.parse(value) as Partial<StoredTahoiyaReplay>;
+    const parsed = JSON.parse(value) as Partial<StoredReplayBase> & {
+      word?: unknown;
+      reading?: unknown;
+      realDefinition?: unknown;
+      resultText?: unknown;
+      definitions?: unknown[];
+      votes?: Record<string, string>;
+      scores?: Record<string, number>;
+      overview?: unknown;
+      highlights?: unknown[];
+      scoreLabels?: Record<string, string>;
+    };
     if (
       parsed.schemaVersion !== 1
-      || parsed.gameType !== "tahoiya"
+      || !isReplayGameType(parsed.gameType)
       || typeof parsed.id !== "string"
       || typeof parsed.finishedAt !== "number"
       || typeof parsed.expiresAt !== "number"
       || !Array.isArray(parsed.players)
-      || !Array.isArray(parsed.definitions)
     ) return null;
-    return parsed as StoredTahoiyaReplay;
+
+    // 旧たほい屋プレイバックにも読み取り互換を残す。
+    if (parsed.gameType === "tahoiya") {
+      if (!Array.isArray(parsed.definitions) || !parsed.scores || typeof parsed.scores !== "object") return null;
+      const scores = parsed.scores;
+      return {
+        ...(parsed as StoredTahoiyaReplay),
+        title: cleanText(parsed.title, 120) || cleanText(parsed.word, 120),
+        resultLabels: parsed.resultLabels && typeof parsed.resultLabels === "object"
+          ? parsed.resultLabels
+          : Object.fromEntries(parsed.players.map((player) => [player.id, `${scores[player.id] ?? 0}点`])),
+        shareHighlights: Array.isArray(parsed.shareHighlights) ? cleanLines(parsed.shareHighlights, 3) : [],
+      };
+    }
+
+    if (!Array.isArray(parsed.highlights) || !parsed.scoreLabels || typeof parsed.scoreLabels !== "object") return null;
+    return {
+      ...(parsed as StoredGenericReplay),
+      title: cleanText(parsed.title, 120) || "プレイバック",
+      resultLabels: parsed.resultLabels && typeof parsed.resultLabels === "object" ? parsed.resultLabels : {},
+      shareHighlights: Array.isArray(parsed.shareHighlights) ? cleanLines(parsed.shareHighlights, 3) : [],
+    };
   } catch {
     return null;
   }
@@ -89,18 +140,130 @@ function isParticipant(replay: StoredGameReplay, playerId: string) {
 }
 
 function replaySummary(replay: StoredGameReplay, playerId: string, favorite: boolean): GameReplaySummary {
-  const score = replay.scores[playerId] ?? 0;
   return {
     id: replay.id,
     gameType: replay.gameType,
     finishedAt: replay.finishedAt,
     expiresAt: replay.expiresAt,
     favorite,
-    title: replay.word,
-    resultLabel: `${score}点`,
+    title: replay.title,
+    resultLabel: cleanText(replay.resultLabels[playerId], 80) || "プレイ完了",
     playerCount: replay.players.length,
     round: replay.round,
+    shareHighlights: cleanLines(replay.shareHighlights, 3),
   };
+}
+
+function makeReplayBase(
+  eventId: string,
+  gameType: GameReplayGameType,
+  finishedAt: number,
+  round: number,
+  title: string,
+  players: StoredReplayPlayer[],
+  resultLabels: Record<string, string>,
+  shareHighlights: string[],
+): StoredReplayBase {
+  const policy = resolveGameReplayPolicy();
+  return {
+    schemaVersion: 1,
+    id: replayId(eventId),
+    gameType,
+    finishedAt,
+    expiresAt: finishedAt + policy.retentionDays * 24 * 60 * 60 * 1000,
+    round,
+    title: cleanText(title, 120) || "プレイバック",
+    players: players.map((player) => ({ id: cleanText(player.id, 160), name: cleanText(player.name, 40) || "Unknown" })),
+    resultLabels: Object.fromEntries(Object.entries(resultLabels).map(([id, label]) => [id, cleanText(label, 80)])),
+    shareHighlights: cleanLines(shareHighlights, 3),
+  };
+}
+
+async function storeReplay(replay: StoredGameReplay, roomCode: string) {
+  if (!replay.id) return false;
+  const remainingSeconds = Math.max(1, Math.ceil((replay.expiresAt - Date.now()) / 1000));
+  try {
+    const created = await redisCommand<"OK" | null>(["SET", replayKey(replay.id), JSON.stringify(replay), "NX", "EX", String(remainingSeconds)]);
+    await redisPipeline(replay.players.flatMap((player) => [
+      ["ZADD", playerIndexKey(player.id), String(replay.finishedAt), replay.id],
+      ["ZREMRANGEBYRANK", playerIndexKey(player.id), "0", String(-(maximumPlayerIndexSize + 1))],
+    ]));
+    if (created === "OK") {
+      emitObservabilityEvent("info", "replay.record", {
+        game: replay.gameType,
+        operation: "record-replay",
+        roomRef: observabilityRef("room", roomCode),
+        eventRef: observabilityRef("event", replay.id),
+        round: replay.round,
+        playerCount: replay.players.length,
+        affectedCount: 1,
+        outcome: "success",
+      });
+    }
+    return created === "OK";
+  } catch (error) {
+    emitObservabilityEvent("error", "replay.record", {
+      game: replay.gameType,
+      operation: "record-replay",
+      roomRef: observabilityRef("room", roomCode),
+      eventRef: observabilityRef("event", replay.id),
+      round: replay.round,
+      outcome: "failed",
+      errorCode: observabilityErrorCode(error),
+    });
+    return false;
+  }
+}
+
+function wordWolfIds(room: WordWolfRoom) {
+  return room.wolfIds.length > 0 ? room.wolfIds : room.wolfId ? [room.wolfId] : [];
+}
+
+function wordWolfWon(room: WordWolfRoom, playerId: string) {
+  if (room.winner === "players") return room.accusedId ? playerId !== room.accusedId : true;
+  if (room.winner === "village") return !wordWolfIds(room).includes(playerId);
+  return wordWolfIds(room).includes(playerId);
+}
+
+export async function recordWordWolfReplay(room: WordWolfRoom) {
+  if (room.phase !== "result" || !room.winner || room.debugMode) return false;
+  const wolves = new Set(wordWolfIds(room));
+  const names = new Map(room.players.map((player) => [player.id, player.name]));
+  const roleLabel = (id: string) => wolves.size === 0 ? "人狼なし" : wolves.has(id) ? "人狼" : "村人";
+  const resultLabels = Object.fromEntries(room.players.map((player) => [
+    player.id,
+    `${wordWolfWon(room, player.id) ? "勝利" : "敗北"}・${roleLabel(player.id)}`,
+  ]));
+  const winnerLabel = room.winner === "village" ? "村人陣営の勝利" : room.winner === "wolf" ? "人狼陣営の勝利" : "人狼なしを見抜いた人の勝利";
+  const details = [
+    cleanText(room.resultText, 300),
+    `村人のお題: ${cleanText(room.villageWord, 100)}`,
+    wolves.size > 0 ? `人狼のお題: ${cleanText(room.wolfWord, 100)}` : "今回は人狼なし",
+    `配役: ${room.players.map((player) => `${player.name}=${roleLabel(player.id)}`).join("、")}`,
+    ...room.clues.map((clue) => `発言 ${clue.round}: ${names.get(clue.playerId) ?? "Unknown"}「${clue.text}」`),
+    ...room.voteHistory.map((vote) => `投票 ${vote.round}: ${Object.entries(vote.votes).map(([from, to]) => `${names.get(from) ?? "Unknown"}→${names.get(to) ?? "Unknown"}`).join("、")}`),
+  ];
+  const base = makeReplayBase(
+    `wordwolf:${room.code}:${room.createdAt}:${room.gameNumber}`,
+    "wordwolf",
+    room.updatedAt || Date.now(),
+    room.gameNumber,
+    `第${room.gameNumber}ゲーム`,
+    room.players,
+    resultLabels,
+    [
+      `${room.currentRound}ラウンドの会話`,
+      room.voteHistory.length > 1 ? "投票は決選投票へ" : "投票1回で決着",
+      winnerLabel,
+    ],
+  );
+  return storeReplay({
+    ...base,
+    gameType: "wordwolf",
+    overview: winnerLabel,
+    highlights: cleanLines(details),
+    scoreLabels: resultLabels,
+  }, room.code);
 }
 
 function tahoiyaRoundScores(room: TahoiyaRoom) {
@@ -111,6 +274,123 @@ function tahoiyaRoundScores(room: TahoiyaRoom) {
     else if (option?.authorId) scores[option.authorId] = (scores[option.authorId] ?? 0) + 1;
   }
   return scores;
+}
+
+export async function recordTahoiyaReplay(room: TahoiyaRoom) {
+  if (room.phase !== "result" || room.debugMode || !room.word || room.options.length === 0) return false;
+  const scores = tahoiyaRoundScores(room);
+  const realOption = room.options.find((option) => option.isReal);
+  const realVotes = realOption ? Object.values(room.votes).filter((id) => id === realOption.id).length : 0;
+  const fooledVotes = Object.keys(room.votes).length - realVotes;
+  const base = makeReplayBase(
+    `tahoiya:${room.code}:${room.createdAt}:${room.round}`,
+    "tahoiya",
+    room.updatedAt || Date.now(),
+    room.round,
+    cleanText(room.word, 120),
+    room.players,
+    Object.fromEntries(room.players.map((player) => [player.id, `${scores[player.id] ?? 0}点`])),
+    [`本物を見抜いたのは${realVotes}人`, `偽説明に集まった票は${fooledVotes}票`, `全${room.options.length}個の説明から選択`],
+  );
+  return storeReplay({
+    ...base,
+    gameType: "tahoiya",
+    word: cleanText(room.word, 120),
+    reading: cleanText(room.reading, 160) || undefined,
+    realDefinition: cleanText(room.realDefinition, 1200),
+    resultText: cleanText(room.resultText, 2000),
+    definitions: room.options.map((option) => ({
+      id: cleanText(option.id, 100),
+      text: cleanText(option.text, 1200),
+      authorId: option.authorId,
+      isReal: option.isReal,
+    })),
+    votes: Object.fromEntries(Object.entries(room.votes).filter(([playerId, optionId]) => playerId && optionId)),
+    scores: Object.fromEntries(room.players.map((player) => [player.id, Math.max(0, Math.floor(scores[player.id] ?? 0))])),
+  }, room.code);
+}
+
+export async function recordHodoaiReplay(room: HodoaiRoom) {
+  if (room.phase !== "result" || room.round < room.roundsTotal || room.debugMode) return false;
+  const players = room.players.filter((player) => !player.isDummy);
+  const maxPoints = room.roundsTotal * 3;
+  const perfectRounds = room.history.filter((round) => round.inversions === 0).length;
+  const resultLabel = `${room.totalPoints}/${maxPoints}点`;
+  const names = new Map(room.players.map((player) => [player.id, player.name]));
+  const details = room.history.flatMap((round) => [
+    `ROUND ${round.round}「${round.theme.title}」: ${round.points}/3点・並べ違い${round.inversions}組`,
+    ...round.order.map((id, index) => `${index + 1}. ${names.get(id) ?? "Unknown"}「${round.clues[id] ?? ""}」→目盛り${round.values[id] ?? 0}`),
+  ]);
+  const base = makeReplayBase(
+    `hodoai:${room.code}:${room.createdAt}:${room.gameNumber ?? 1}`,
+    "hodoai",
+    room.updatedAt || Date.now(),
+    room.gameNumber ?? 1,
+    `全${room.roundsTotal}ラウンド`,
+    players,
+    Object.fromEntries(players.map((player) => [player.id, resultLabel])),
+    [`チーム得点 ${resultLabel}`, `完全一致は${perfectRounds}ラウンド`, `全${room.roundsTotal}テーマに挑戦`],
+  );
+  return storeReplay({ ...base, gameType: "hodoai", overview: `協力して${resultLabel}を獲得`, highlights: cleanLines(details), scoreLabels: Object.fromEntries(players.map((player) => [player.id, resultLabel])) }, room.code);
+}
+
+export async function recordNorthernBranchReplay(room: NorthernRoom) {
+  if (room.phase !== "finished" || !room.game?.winnerId || room.debugMode) return false;
+  const players = room.players.filter((player) => !player.isDummy);
+  const gamePlayers = new Map(room.game.players.map((player) => [player.id, player]));
+  const winner = gamePlayers.get(room.game.winnerId);
+  const resultLabels = Object.fromEntries(players.map((player) => [player.id, player.id === room.game?.winnerId ? "勝利" : `${gamePlayers.get(player.id)?.points ?? 0}点`]));
+  const base = makeReplayBase(
+    `northern-branch:${room.code}:${room.createdAt}:${room.gameNumber}`,
+    "northern-branch",
+    room.updatedAt || Date.now(),
+    room.gameNumber,
+    `第${room.gameNumber}ゲーム`,
+    players,
+    resultLabels,
+    [`${room.game.turn}ターンで決着`, `勝者は${winner?.points ?? 0}勝利点`, `建物は合計${room.game.players.reduce((sum, player) => sum + player.buildings.length, 0)}棟`],
+  );
+  const scoreLabels = Object.fromEntries(players.map((player) => {
+    const gamePlayer = gamePlayers.get(player.id);
+    return [player.id, `${gamePlayer?.points ?? 0}点・建物${gamePlayer?.buildings.length ?? 0}棟`];
+  }));
+  return storeReplay({ ...base, gameType: "northern-branch", overview: `${winner?.name ?? "商会"}が勝利`, highlights: cleanLines(room.game.log.slice(-80)), scoreLabels }, room.code);
+}
+
+export async function recordKotobaSenpukuReplay(room: KotobaSenpukuRoom) {
+  if (room.phase !== "result" || room.round < room.roundsTotal || room.debugMode) return false;
+  const players = room.players.filter((player) => !player.isDummy);
+  const best = Math.max(0, ...players.map((player) => room.totalScores[player.id] ?? 0));
+  const resultLabels = Object.fromEntries(players.map((player) => [player.id, (room.totalScores[player.id] ?? 0) === best ? "総合1位" : `${room.totalScores[player.id] ?? 0}点`]));
+  const names = new Map(room.players.map((player) => [player.id, player.name]));
+  const totalScans = room.history.reduce((sum, round) => sum + round.calledKana.length, 0);
+  const totalExposed = room.history.reduce((sum, round) => sum + Object.values(round.survivalBonus).filter((bonus) => bonus === 0).length, 0);
+  const details = room.history.flatMap((round) => [
+    `ROUND ${round.round}「${round.theme.title}」: スキャン ${round.calledKana.join("・") || "なし"}`,
+    ...Object.entries(round.secrets).map(([id, secret]) => `${names.get(id) ?? "Unknown"}: ${secret}・信号${round.signals[id] ?? 0}点・生存${round.survivalBonus[id] ?? 0}点`),
+  ]);
+  const base = makeReplayBase(
+    `kotoba-senpuku:${room.code}:${room.createdAt}:${room.gameNumber}`,
+    "kotoba-senpuku",
+    room.updatedAt || Date.now(),
+    room.gameNumber,
+    `全${room.roundsTotal}ラウンド`,
+    players,
+    resultLabels,
+    [`最高得点 ${best}点`, `文字スキャンは合計${totalScans}回`, `見破られた秘密語は${totalExposed}個`],
+  );
+  const scoreLabels = Object.fromEntries(players.map((player) => [player.id, `${room.totalScores[player.id] ?? 0}点`]));
+  return storeReplay({ ...base, gameType: "kotoba-senpuku", overview: `${room.roundsTotal}ラウンドの潜伏戦`, highlights: cleanLines(details), scoreLabels }, room.code);
+}
+
+function genericDetail(replay: StoredGenericReplay, playerId: string, favorite: boolean): GenericGameReplayDetail {
+  return {
+    ...replaySummary(replay, playerId, favorite),
+    gameType: replay.gameType,
+    overview: replay.overview,
+    highlights: replay.highlights,
+    scores: replay.players.map((player) => ({ playerName: player.name, scoreLabel: replay.scoreLabels[player.id] || replay.resultLabels[player.id] || "プレイ完了", isViewer: player.id === playerId })),
+  };
 }
 
 function tahoiyaDetail(replay: StoredTahoiyaReplay, playerId: string, favorite: boolean): TahoiyaReplayDetail {
@@ -129,86 +409,11 @@ function tahoiyaDetail(replay: StoredTahoiyaReplay, playerId: string, favorite: 
     resultText: replay.resultText,
     definitions: replay.definitions.map((definition) => {
       const voterNames = votesByDefinition.get(definition.id) ?? [];
-      return {
-        id: definition.id,
-        text: definition.text,
-        isReal: definition.isReal,
-        authorName: definition.authorId ? playerNames.get(definition.authorId) ?? "Unknown" : null,
-        isMine: definition.authorId === playerId,
-        voteCount: voterNames.length,
-        voterNames,
-      };
+      return { id: definition.id, text: definition.text, isReal: definition.isReal, authorName: definition.authorId ? playerNames.get(definition.authorId) ?? "Unknown" : null, isMine: definition.authorId === playerId, voteCount: voterNames.length, voterNames };
     }),
-    scores: replay.players
-      .map((player) => ({ playerName: player.name, points: replay.scores[player.id] ?? 0, isViewer: player.id === playerId }))
-      .sort((left, right) => right.points - left.points),
+    scores: replay.players.map((player) => ({ playerName: player.name, points: replay.scores[player.id] ?? 0, isViewer: player.id === playerId })).sort((left, right) => right.points - left.points),
     viewerVoteDefinitionId: replay.votes[playerId],
   };
-}
-
-export async function recordTahoiyaReplay(room: TahoiyaRoom) {
-  if (room.phase !== "result" || room.debugMode || !room.word || room.options.length === 0) return false;
-  const eventId = `tahoiya:${room.code}:${room.createdAt}:${room.round}`;
-  const id = replayId(eventId);
-  if (!id) return false;
-  const policy = resolveGameReplayPolicy();
-  const finishedAt = room.updatedAt || Date.now();
-  const expiresAt = finishedAt + policy.retentionDays * 24 * 60 * 60 * 1000;
-  const remainingSeconds = Math.max(1, Math.ceil((expiresAt - Date.now()) / 1000));
-  const roundScores = tahoiyaRoundScores(room);
-  const replay: StoredTahoiyaReplay = {
-    schemaVersion: 1,
-    id,
-    gameType: "tahoiya",
-    finishedAt,
-    expiresAt,
-    round: room.round,
-    word: cleanText(room.word, 120),
-    reading: cleanText(room.reading, 160) || undefined,
-    realDefinition: cleanText(room.realDefinition, 1200),
-    resultText: cleanText(room.resultText, 2000),
-    players: room.players.map((player) => ({ id: player.id, name: cleanText(player.name, 40) || "Unknown" })),
-    definitions: room.options.map((option) => ({
-      id: cleanText(option.id, 100),
-      text: cleanText(option.text, 1200),
-      authorId: option.authorId,
-      isReal: option.isReal,
-    })),
-    votes: Object.fromEntries(Object.entries(room.votes).filter(([playerId, optionId]) => playerId && optionId)),
-    scores: Object.fromEntries(room.players.map((player) => [player.id, Math.max(0, Math.floor(roundScores[player.id] ?? 0))])),
-  };
-
-  try {
-    const created = await redisCommand<"OK" | null>(["SET", replayKey(id), JSON.stringify(replay), "NX", "EX", String(remainingSeconds)]);
-    await redisPipeline(room.players.flatMap((player) => [
-      ["ZADD", playerIndexKey(player.id), String(finishedAt), id],
-      ["ZREMRANGEBYRANK", playerIndexKey(player.id), "0", String(-(maximumPlayerIndexSize + 1))],
-    ]));
-    if (created === "OK") {
-      emitObservabilityEvent("info", "replay.record", {
-        game: "tahoiya",
-        operation: "record-replay",
-        roomRef: observabilityRef("room", room.code),
-        eventRef: observabilityRef("event", id),
-        round: room.round,
-        playerCount: room.players.length,
-        affectedCount: 1,
-        outcome: "success",
-      });
-    }
-    return created === "OK";
-  } catch (error) {
-    emitObservabilityEvent("error", "replay.record", {
-      game: "tahoiya",
-      operation: "record-replay",
-      roomRef: observabilityRef("room", room.code),
-      eventRef: observabilityRef("event", id),
-      round: room.round,
-      outcome: "failed",
-      errorCode: observabilityErrorCode(error),
-    });
-    return false;
-  }
 }
 
 async function loadPlayerFavoriteIds(playerId: string) {
@@ -216,11 +421,7 @@ async function loadPlayerFavoriteIds(playerId: string) {
   return new Set(Array.isArray(ids) ? ids : []);
 }
 
-export async function listPlayerGameReplays(
-  playerId: string,
-  gameType: GameReplayGameType | "all" = "all",
-  limit = 30,
-): Promise<GameReplayListResponse> {
+export async function listPlayerGameReplays(playerId: string, gameType: GameReplayGameType | "all" = "all", limit = 30): Promise<GameReplayListResponse> {
   const policy = resolveGameReplayPolicy();
   const [recentIds, favoriteIds] = await Promise.all([
     redisCommand<string[]>(["ZREVRANGE", playerIndexKey(playerId), "0", "199"]),
@@ -233,29 +434,19 @@ export async function listPlayerGameReplays(
   const now = Date.now();
   const replays = ids.flatMap((id, index) => {
     const replay = parseStoredReplay(raw[index]);
-    if (!replay || !isParticipant(replay, playerId)) {
-      staleIds.push(id);
-      return [];
-    }
+    if (!replay || !isParticipant(replay, playerId)) { staleIds.push(id); return []; }
     const favorite = favoriteIds.has(id);
-    if (!favorite && replay.expiresAt <= now) {
-      staleIds.push(id);
-      return [];
-    }
+    if (!favorite && replay.expiresAt <= now) { staleIds.push(id); return []; }
     if (gameType !== "all" && replay.gameType !== gameType) return [];
     return [replaySummary(replay, playerId, favorite)];
   }).sort((left, right) => right.finishedAt - left.finishedAt).slice(0, Math.max(1, Math.min(100, limit)));
-
   if (staleIds.length > 0) {
-    await redisPipeline([
-      ["ZREM", playerIndexKey(playerId), ...staleIds],
-      ["SREM", playerFavoritesKey(playerId), ...staleIds],
-    ]).catch(() => undefined);
+    await redisPipeline([["ZREM", playerIndexKey(playerId), ...staleIds], ["SREM", playerFavoritesKey(playerId), ...staleIds]]).catch(() => undefined);
   }
   return { replays, policy, favoriteCount: favoriteIds.size - staleIds.filter((id) => favoriteIds.has(id)).length };
 }
 
-export async function getPlayerGameReplay(playerId: string, id: string): Promise<TahoiyaReplayDetail | null> {
+export async function getPlayerGameReplay(playerId: string, id: string): Promise<GameReplayDetail | null> {
   const [raw, favorite] = await Promise.all([
     redisCommand<string | null>(["GET", replayKey(id)]),
     redisCommand<number>(["SISMEMBER", playerFavoritesKey(playerId), id]),
@@ -264,7 +455,7 @@ export async function getPlayerGameReplay(playerId: string, id: string): Promise
   if (!replay || !isParticipant(replay, playerId)) return null;
   const isFavorite = favorite === 1;
   if (!isFavorite && replay.expiresAt <= Date.now()) return null;
-  return tahoiyaDetail(replay, playerId, isFavorite);
+  return replay.gameType === "tahoiya" ? tahoiyaDetail(replay, playerId, isFavorite) : genericDetail(replay, playerId, isFavorite);
 }
 
 export async function setPlayerGameReplayFavorite(playerId: string, id: string, favorite: boolean) {
@@ -276,7 +467,6 @@ export async function setPlayerGameReplayFavorite(playerId: string, id: string, 
   if (!replay || !isParticipant(replay, playerId)) throw new Error("GAME_REPLAY_NOT_FOUND");
   if (replay.expiresAt <= Date.now() && currentFavorite !== 1) throw new Error("GAME_REPLAY_NOT_FOUND");
   const policy = resolveGameReplayPolicy();
-
   if (favorite) {
     const result = await redisCommand<number>([
       "EVAL",
@@ -293,6 +483,5 @@ export async function setPlayerGameReplayFavorite(playerId: string, id: string, 
       "3", playerFavoritesKey(playerId), replayFavoritersKey(id), replayKey(id), id, playerId, String(remainingSeconds),
     ]);
   }
-
   return getPlayerGameReplay(playerId, id);
 }

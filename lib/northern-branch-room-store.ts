@@ -3,6 +3,7 @@ import { applyNorthernAction, createNorthernGame } from "@/lib/northern-branch-g
 import { isMultiplayerRoomExpired, multiplayerRoomExpiryArgs, multiplayerRoomTtlSeconds } from "@/lib/multiplayer-room-lifecycle";
 import { redisCommand } from "@/lib/redis-store";
 import { recordNorthernBranchGameResults } from "@/lib/player-stats-store";
+import { recordNorthernBranchReplay } from "@/lib/game-replay-store";
 import type {
   NorthernGameState,
   NorthernGameAction,
@@ -114,7 +115,7 @@ async function mutateStoredRoom(code: string, mutate: (room: NorthernRoom) => No
     if (!next) throw new Error("INVALID_NORTHERN_ROOM");
     const saved = await compareAndSetRoom(current.revision, next);
     if (saved === 1) {
-      await recordNorthernBranchGameResults(next);
+      await Promise.all([recordNorthernBranchGameResults(next), recordNorthernBranchReplay(next)]);
       return next;
     }
     if (saved === -1) throw new Error("NORTHERN_ROOM_NOT_FOUND");
@@ -172,7 +173,7 @@ export async function loadStoredNorthernRoom(code: string) {
       await Promise.all(room.players.map((player) => clearActiveRoom(player.id, room.code)));
       return null;
     }
-    await recordNorthernBranchGameResults(room);
+    await Promise.all([recordNorthernBranchGameResults(room), recordNorthernBranchReplay(room)]);
     return room;
   } catch {
     return null;
