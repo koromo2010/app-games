@@ -133,8 +133,9 @@ export function UserDashboard() {
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-5xl gap-5 px-4 py-6 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.8fr)]">
-        <section className="rounded-lg bg-white p-4 shadow-[0_18px_50px_rgba(15,23,42,0.22)]" aria-labelledby="user-stats-heading">
+      <div className="mx-auto max-w-5xl px-4 py-6">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.8fr)]">
+          <section className="rounded-lg bg-white p-4 shadow-[0_18px_50px_rgba(15,23,42,0.22)]" aria-labelledby="user-stats-heading">
           <p className="text-xs font-semibold uppercase text-cyan-700">Stats</p>
           <h2 id="user-stats-heading" className="text-xl font-black text-slate-950">戦績</h2>
 
@@ -176,18 +177,20 @@ export function UserDashboard() {
             )}
           </div>
           {message && <p className="mt-4 rounded-md bg-cyan-50 px-3 py-2 text-xs font-semibold text-cyan-800" role="status">{message}</p>}
-        </section>
-
-        <div className="space-y-5">
-          <section className="rounded-lg bg-white p-4 shadow-[0_18px_50px_rgba(15,23,42,0.22)]" aria-labelledby="debug-access-heading">
-            <p className="text-xs font-semibold uppercase text-violet-700">Developer</p>
-            <h2 id="debug-access-heading" className="text-xl font-black text-slate-950">デバッグ機能</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">管理パスワードで有効にすると、各ゲームのトップバナーにデバッグ操作が表示されます。この設定はアカウントに保存されます。</p>
-            {debugAccess ? <div className="mt-4 rounded-lg border border-cyan-200 bg-cyan-50 p-3"><p className="text-sm font-black text-cyan-900">デバッグ機能：利用中</p><button type="button" disabled={debugSaving} onClick={() => void updateDebugAccess(false)} className="mt-3 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 disabled:opacity-50">利用を解除</button></div> : <div className="mt-4"><input type="password" value={debugPassword} onChange={(event) => setDebugPassword(event.target.value)} placeholder="デバッグ用パスワード" autoComplete="off" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none focus:border-violet-500" /><button type="button" disabled={debugSaving || !debugPassword} onClick={() => void updateDebugAccess(true)} className="mt-2 w-full rounded-lg bg-violet-600 px-3 py-2 text-sm font-black text-white disabled:opacity-40">認証して利用する</button></div>}
-            {debugMessage && <p className="mt-3 text-xs font-semibold text-slate-600" role="status">{debugMessage}</p>}
           </section>
           <GameReplayPanel />
         </div>
+
+        <section className="mt-8 border-t border-white/10 pt-4 text-slate-400" aria-labelledby="debug-access-heading">
+          <details className="group text-xs">
+            <summary id="debug-access-heading" className="w-fit cursor-pointer select-none rounded px-1 py-1 text-[11px] font-medium text-slate-500 transition hover:text-slate-300">開発者向け設定{debugAccess ? " · 有効" : ""}</summary>
+            <div className="mt-2 max-w-md rounded-md border border-white/10 bg-white/[0.03] p-3">
+              <p className="leading-5 text-slate-500">管理パスワードで有効にすると、各ゲームにデバッグ操作が表示されます。設定はアカウントに保存されます。</p>
+              {debugAccess ? <div className="mt-3 flex items-center gap-3"><span className="text-xs text-cyan-200/70">デバッグ機能は有効です</span><button type="button" disabled={debugSaving} onClick={() => void updateDebugAccess(false)} className="rounded border border-white/15 px-2 py-1 text-[11px] text-slate-400 transition hover:text-slate-200 disabled:opacity-40">利用を解除</button></div> : <div className="mt-3 flex flex-col gap-2 sm:flex-row"><input type="password" value={debugPassword} onChange={(event) => setDebugPassword(event.target.value)} placeholder="デバッグ用パスワード" autoComplete="off" className="min-w-0 flex-1 rounded border border-white/15 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-slate-500" /><button type="button" disabled={debugSaving || !debugPassword} onClick={() => void updateDebugAccess(true)} className="rounded border border-white/15 px-3 py-1.5 text-xs text-slate-300 transition hover:bg-white/5 disabled:opacity-40">認証</button></div>}
+              {debugMessage && <p className="mt-2 text-[11px] text-slate-500" role="status">{debugMessage}</p>}
+            </div>
+          </details>
+        </section>
       </div>
     </main>
   );

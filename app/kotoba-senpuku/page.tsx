@@ -6,7 +6,7 @@ import { KotobaSenpukuGame } from "./KotobaSenpukuGame";
 
 export const metadata: Metadata = {
   title: "ことばソナー | Game Fields",
-  description: "秘密のことばへ文字スキャンをかけ、信号点を集める個人利用オンラインゲーム。",
+  description: "秘密のことばを探知し、全文公開による脱落を避けて最後の1人を目指すオンラインゲーム。",
 };
 
 export default async function KotobaSenpukuPage() {

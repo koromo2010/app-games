@@ -360,8 +360,10 @@ export async function recordNorthernBranchReplay(room: NorthernRoom) {
 export async function recordKotobaSenpukuReplay(room: KotobaSenpukuRoom) {
   if (room.phase !== "result" || room.round < room.roundsTotal || room.debugMode) return false;
   const players = room.players.filter((player) => !player.isDummy);
-  const best = Math.max(0, ...players.map((player) => room.totalScores[player.id] ?? 0));
-  const resultLabels = Object.fromEntries(players.map((player) => [player.id, (room.totalScores[player.id] ?? 0) === best ? "総合1位" : `${room.totalScores[player.id] ?? 0}点`]));
+  const winnerIds = room.history.at(-1)?.winnerIds ?? (room.history.at(-1)?.winnerId ? [room.history.at(-1)!.winnerId!] : []);
+  const winners = players.filter((player) => winnerIds.includes(player.id));
+  const winnerLabel = winners.map((player) => player.name).join("・") || "勝者なし";
+  const resultLabels = Object.fromEntries(players.map((player) => [player.id, winnerIds.includes(player.id) ? "勝利" : "脱落"]));
   const names = new Map(room.players.map((player) => [player.id, player.name]));
   const totalScans = room.history.reduce((sum, round) => sum + round.calledKana.length, 0);
   const totalExposed = room.history.reduce((sum, round) => sum + Object.values(round.survivalBonus).filter((bonus) => bonus === 0).length, 0);
@@ -374,13 +376,13 @@ export async function recordKotobaSenpukuReplay(room: KotobaSenpukuRoom) {
     "kotoba-senpuku",
     room.updatedAt || Date.now(),
     room.gameNumber,
-    `全${room.roundsTotal}ラウンド`,
+    "最後の1人になるまで",
     players,
     resultLabels,
-    [`最高得点 ${best}点`, `文字スキャンは合計${totalScans}回`, `見破られた秘密語は${totalExposed}個`],
+    [`${winnerLabel}が勝利`, `文字スキャンは合計${totalScans}回`, `脱落した秘密語は${totalExposed}個`],
   );
   const scoreLabels = Object.fromEntries(players.map((player) => [player.id, `${room.totalScores[player.id] ?? 0}点`]));
-  return storeReplay({ ...base, gameType: "kotoba-senpuku", overview: `${room.roundsTotal}ラウンドの潜伏戦`, highlights: cleanLines(details), scoreLabels }, room.code);
+  return storeReplay({ ...base, gameType: "kotoba-senpuku", overview: `${winnerLabel}で決着したサバイバル戦`, highlights: cleanLines(details), scoreLabels }, room.code);
 }
 
 function genericDetail(replay: StoredGenericReplay, playerId: string, favorite: boolean): GenericGameReplayDetail {

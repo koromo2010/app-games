@@ -29,6 +29,9 @@ export type KotobaSenpukuRoundResult = {
   signals: Record<string, number>;
   survivalBonus: Record<string, number>;
   calledKana: string[];
+  eliminatedIds: string[];
+  winnerId: string | null;
+  winnerIds: string[];
 };
 
 export type KotobaSenpukuPhase = "lobby" | "secret" | "battle" | "result";
@@ -86,14 +89,13 @@ export type KotobaSenpukuRoomAction =
   | { type: "abort-game"; actorId: string };
 
 export const defaultKotobaSenpukuConfig: KotobaSenpukuConfig = {
-  roundsTotal: 3,
+  roundsTotal: 1,
   secretTimeLimitSeconds: 0,
   turnTimeLimitSeconds: 0,
   debugMode: false,
 };
 
 export const kotobaSenpukuMaximumPlayers = 8;
-export const kotobaSenpukuMaximumCalls = 18;
 
 export const kotobaSenpukuKana = [
   "あ", "い", "う", "え", "お",
@@ -132,11 +134,8 @@ export const kotobaSenpukuDebugWords: Record<string, string[]> = {
 
 export function normalizeKotobaSenpukuConfig(value: unknown): KotobaSenpukuConfig {
   const parsed = value && typeof value === "object" ? value as Partial<KotobaSenpukuConfig> : {};
-  const rounds = typeof parsed.roundsTotal === "number" && Number.isFinite(parsed.roundsTotal)
-    ? Math.floor(parsed.roundsTotal)
-    : defaultKotobaSenpukuConfig.roundsTotal;
   return {
-    roundsTotal: Math.max(1, Math.min(5, rounds)),
+    roundsTotal: 1,
     secretTimeLimitSeconds: normalizeCommonTimeLimit(parsed.secretTimeLimitSeconds),
     turnTimeLimitSeconds: normalizeCommonTimeLimit(parsed.turnTimeLimitSeconds),
     debugMode: parsed.debugMode === true,
@@ -169,7 +168,33 @@ export function kotobaSenpukuKanaKey(character: string) {
 
 export function maskKotobaSenpukuWord(word: string, calledKana: string[], exposed = false) {
   const called = new Set(calledKana);
-  return [...word].map((character) => exposed || called.has(kotobaSenpukuKanaKey(character)) ? character : "●").join("");
+  return [...word].filter((character) => exposed || called.has(kotobaSenpukuKanaKey(character))).join("");
+}
+
+export function isFullyRevealedKotobaSenpukuWord(word: string, calledKana: string[]) {
+  const called = new Set(calledKana);
+  return Boolean(word) && [...word].every((character) => called.has(kotobaSenpukuKanaKey(character)));
+}
+
+export function nextKotobaSenpukuSurvivorIndex(playerIds: string[], eliminatedIds: string[], currentIndex: number) {
+  for (let offset = 1; offset <= playerIds.length; offset += 1) {
+    const candidateIndex = (currentIndex + offset) % playerIds.length;
+    if (!eliminatedIds.includes(playerIds[candidateIndex] ?? "")) return candidateIndex;
+  }
+  return currentIndex;
+}
+
+export function resolveKotobaSenpukuWinnerIds(
+  playerIds: string[],
+  eliminatedIds: string[],
+  simultaneousEliminatedIds: string[],
+  secrets: Record<string, string>,
+) {
+  const survivors = playerIds.filter((id) => !eliminatedIds.includes(id));
+  if (survivors.length === 1) return survivors;
+  if (survivors.length > 1 || simultaneousEliminatedIds.length === 0) return [];
+  const shortestLength = Math.min(...simultaneousEliminatedIds.map((id) => [...(secrets[id] ?? "")].length));
+  return simultaneousEliminatedIds.filter((id) => [...(secrets[id] ?? "")].length === shortestLength);
 }
 
 export function pickKotobaSenpukuTheme(history: KotobaSenpukuRoundResult[]) {

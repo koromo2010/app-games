@@ -189,15 +189,15 @@ export async function recordNorthernBranchGameResults(room: NorthernRoom) {
 export async function recordKotobaSenpukuGameResults(room: KotobaSenpukuRoom) {
   if (room.phase !== "result" || room.round < room.roundsTotal || room.debugMode) return 0;
   const realPlayers = room.players.filter((player) => !player.isDummy);
-  const best = Math.max(0, ...realPlayers.map((player) => room.totalScores[player.id] ?? 0));
+  const winnerIds = room.history.at(-1)?.winnerIds ?? (room.history.at(-1)?.winnerId ? [room.history.at(-1)!.winnerId!] : []);
   const eventId = `kotoba-senpuku:${room.code}:${room.createdAt}:${room.gameNumber}`;
   return observeStatsRecord({ game: "kotoba-senpuku", operation: "record-results", roomRef: observabilityRef("room", room.code), eventRef: observabilityRef("event", eventId), gameNumber: room.gameNumber, playerCount: realPlayers.length }, async () => {
-    const ratings = await recordGameRatings("kotoba-senpuku", eventId, realPlayers.map((player) => ({ playerId: player.id, won: (room.totalScores[player.id] ?? 0) === best })));
+    const ratings = await recordGameRatings("kotoba-senpuku", eventId, realPlayers.map((player) => ({ playerId: player.id, won: winnerIds.includes(player.id) })));
     return recordPlayerResults(realPlayers.map((player) => {
     const points = room.totalScores[player.id] ?? 0;
-    const won = points === best;
+    const won = winnerIds.includes(player.id);
     const rating = ratings.get(player.id);
-    return { schemaVersion: 1, id: `${eventId}:${player.id}`, gameType: "kotoba-senpuku", roomCode: room.code, roomCreatedAt: room.createdAt, gameNumber: room.gameNumber, finishedAt: room.updatedAt || Date.now(), playerId: player.id, playerName: player.name, role: "infiltrator", won, resultLabel: won ? "総合1位" : `${points}点`, playerCount: realPlayers.length, details: { points }, ratingBefore: rating?.before, ratingAfter: rating?.after, ratingChange: rating?.change } satisfies PlayerGameResult;
+    return { schemaVersion: 1, id: `${eventId}:${player.id}`, gameType: "kotoba-senpuku", roomCode: room.code, roomCreatedAt: room.createdAt, gameNumber: room.gameNumber, finishedAt: room.updatedAt || Date.now(), playerId: player.id, playerName: player.name, role: "infiltrator", won, resultLabel: won ? "最後まで生存" : "脱落", playerCount: realPlayers.length, details: { points }, ratingBefore: rating?.before, ratingAfter: rating?.after, ratingChange: rating?.change } satisfies PlayerGameResult;
     }));
   });
 }
