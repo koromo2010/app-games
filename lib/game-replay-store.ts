@@ -366,23 +366,42 @@ export async function recordKotobaSenpukuReplay(room: KotobaSenpukuRoom) {
   const resultLabels = Object.fromEntries(players.map((player) => [player.id, winnerIds.includes(player.id) ? "勝利" : "脱落"]));
   const names = new Map(room.players.map((player) => [player.id, player.name]));
   const totalScans = room.history.reduce((sum, round) => sum + round.calledKana.length, 0);
-  const totalExposed = room.history.reduce((sum, round) => sum + Object.values(round.survivalBonus).filter((bonus) => bonus === 0).length, 0);
-  const details = room.history.flatMap((round) => [
-    `ROUND ${round.round}「${round.theme.title}」: スキャン ${round.calledKana.join("・") || "なし"}`,
-    ...Object.entries(round.secrets).map(([id, secret]) => `${names.get(id) ?? "Unknown"}: ${secret}・信号${round.signals[id] ?? 0}点・生存${round.survivalBonus[id] ?? 0}点`),
-  ]);
+  const details = room.history.flatMap((round) => {
+    const roundWinners = new Set(round.winnerIds ?? (round.winnerId ? [round.winnerId] : []));
+    return [
+      `お題「${round.theme.title}」`,
+      `探知された文字（順番）: ${round.calledKana.join("・") || "なし"}`,
+      ...Object.entries(round.secrets).map(([id, secret]) => `${names.get(id) ?? "Unknown"} — 秘密語「${secret}」／${roundWinners.has(id) ? "勝利" : "脱落"}`),
+    ];
+  });
+  const latestRound = room.history.at(-1);
+  const winnerSecrets = winners.map((player) => `${player.name}「${latestRound?.secrets[player.id] ?? ""}」`).join("、");
   const base = makeReplayBase(
     `kotoba-senpuku:${room.code}:${room.createdAt}:${room.gameNumber}`,
     "kotoba-senpuku",
     room.updatedAt || Date.now(),
     room.gameNumber,
-    "最後の1人になるまで",
+    latestRound ? `「${latestRound.theme.title}」` : `第${room.gameNumber}ゲーム`,
     players,
     resultLabels,
-    [`${winnerLabel}が勝利`, `文字スキャンは合計${totalScans}回`, `脱落した秘密語は${totalExposed}個`],
+    [`${winnerSecrets || winnerLabel}が勝利`, `探知した文字は合計${totalScans}個`, `${players.length}人で最後の1人まで対戦`],
   );
-  const scoreLabels = Object.fromEntries(players.map((player) => [player.id, `${room.totalScores[player.id] ?? 0}点`]));
-  return storeReplay({ ...base, gameType: "kotoba-senpuku", overview: `${winnerLabel}で決着したサバイバル戦`, highlights: cleanLines(details), scoreLabels }, room.code);
+  const scoreLabels = Object.fromEntries(players.map((player) => [player.id, winnerIds.includes(player.id) ? "勝利" : "脱落"]));
+  return storeReplay({ ...base, gameType: "kotoba-senpuku", overview: `${winnerSecrets || winnerLabel}が最後まで残って勝利`, highlights: cleanLines(details), scoreLabels }, room.code);
+}
+
+function readableKotobaHighlights(replay: StoredGenericReplay) {
+  return replay.highlights.map((line) => {
+    const round = line.match(/^ROUND\s+\d+「(.+?)」:\s*スキャン\s*(.*)$/);
+    if (round) return `お題「${round[1]}」／探知された文字（順番）: ${round[2] || "なし"}`;
+    const player = line.match(/^(.+?):\s*(.*?)・信号\d+点・生存\d+点$/);
+    if (player) {
+      const storedPlayer = replay.players.find((item) => item.name === player[1]);
+      const result = storedPlayer ? replay.resultLabels[storedPlayer.id] || replay.scoreLabels[storedPlayer.id] : "参加";
+      return `${player[1]} — 秘密語「${player[2]}」／${result.startsWith("勝利") ? "勝利" : "脱落"}`;
+    }
+    return line;
+  });
 }
 
 function genericDetail(replay: StoredGenericReplay, playerId: string, favorite: boolean): GenericGameReplayDetail {
@@ -390,8 +409,8 @@ function genericDetail(replay: StoredGenericReplay, playerId: string, favorite: 
     ...replaySummary(replay, playerId, favorite),
     gameType: replay.gameType,
     overview: replay.overview,
-    highlights: replay.highlights,
-    scores: replay.players.map((player) => ({ playerName: player.name, scoreLabel: replay.scoreLabels[player.id] || replay.resultLabels[player.id] || "プレイ完了", isViewer: player.id === playerId })),
+    highlights: replay.gameType === "kotoba-senpuku" ? readableKotobaHighlights(replay) : replay.highlights,
+    scores: replay.players.map((player) => ({ playerName: player.name, scoreLabel: replay.resultLabels[player.id] || replay.scoreLabels[player.id] || "プレイ完了", isViewer: player.id === playerId })),
   };
 }
 

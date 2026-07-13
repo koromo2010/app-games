@@ -187,8 +187,8 @@ function beginBattle(room: KotobaSenpukuRoom) {
     turnNumber: 1,
     phaseStartedAt: Date.now(),
   }, room.randomFirstTurn
-    ? `抽選の結果、${activePlayer?.name ?? "最初のプレイヤー"}から開始します。`
-    : `${activePlayer?.name ?? "最初のプレイヤー"}から参加順で開始します。`);
+    ? `最初の手番は、抽選で${activePlayer?.name ?? "最初のプレイヤー"}に決まりました。`
+    : `最初の手番は${activePlayer?.name ?? "最初のプレイヤー"}です。参加順に進行します。`);
 }
 
 function beginRound(room: KotobaSenpukuRoom, round: number) {
@@ -205,7 +205,7 @@ function beginRound(room: KotobaSenpukuRoom, round: number) {
     roundSignals: Object.fromEntries(room.players.map((player) => [player.id, 0])),
     activePlayerIndex: 0,
     turnNumber: 1,
-    log: [`第${round}ラウンドの秘密語を入力します。`, ...room.log].slice(0, 30),
+    log: [`第${round}ラウンドを開始します。秘密語を入力してください。`, ...room.log].slice(0, 30),
     phaseStartedAt: Date.now(),
   };
 }
@@ -218,7 +218,7 @@ function advanceTurn(room: KotobaSenpukuRoom, message: string) {
     activePlayerIndex,
     turnNumber: room.turnNumber + 1,
     phaseStartedAt: Date.now(),
-  }, `${message} 次は${next?.name ?? "次のプレイヤー"}です。`);
+  }, `${message} 次の手番は${next?.name ?? "次のプレイヤー"}です。`);
 }
 
 function finishRound(room: KotobaSenpukuRoom, simultaneousEliminatedIds: string[] = []) {
@@ -274,12 +274,17 @@ function performScan(room: KotobaSenpukuRoom, kana: string) {
   const exposedIds = [...new Set([...room.exposedIds, ...newlyExposed.map((player) => player.id)])];
   const eliminatedNames = newlyExposed.map((player) => player.name).join("、");
   const message = hitTargets.length
-    ? `${actor.name}の「${kana}」スキャンは${hitTargets.length}人に反応しました。${eliminatedNames ? ` ${eliminatedNames}が脱落しました。` : ""}`
-    : `${actor.name}の「${kana}」スキャンは反応なしでした。`;
+    ? `${actor.name}が「${kana}」を探知。${hitTargets.length}人に命中しました。${eliminatedNames ? `${eliminatedNames}が脱落しました。` : ""}`
+    : `${actor.name}が「${kana}」を探知。誰にも命中しませんでした。`;
   const changed = addLog({ ...room, calledKana, masks, exposedIds }, message);
   if (shouldFinishRound(changed)) return finishRound(changed, newlyExposed.map((player) => player.id));
-  if (hitTargets.length > 0 && room.continuousScan && !exposedIds.includes(actor.id)) return addLog({ ...changed, phaseStartedAt: Date.now() }, `${actor.name}は続けて行動できます。`);
-  return advanceTurn(changed, hitTargets.length > 0 ? `${actor.name}は脱落したため手番を終了します。` : "探知失敗で手番終了。");
+  if (hitTargets.length > 0 && room.continuousScan && !exposedIds.includes(actor.id)) return addLog({ ...changed, phaseStartedAt: Date.now() }, `命中したため、${actor.name}は続けて行動します。`);
+  const turnEndMessage = exposedIds.includes(actor.id)
+    ? `${actor.name}が脱落したため、手番を終了します。`
+    : hitTargets.length > 0
+      ? "連続探知なしの設定のため、手番を終了します。"
+      : "誰にも命中しなかったため、手番を終了します。";
+  return advanceTurn(changed, turnEndMessage);
 }
 
 function performChallenge(room: KotobaSenpukuRoom, targetId: string, guessInput: string) {
@@ -291,9 +296,9 @@ function performChallenge(room: KotobaSenpukuRoom, targetId: string, guessInput:
   const exposedIds = correct ? [...new Set([...room.exposedIds, target.id])] : room.exposedIds;
   const masks = correct ? { ...room.masks, [target.id]: room.secrets[target.id] } : room.masks;
   const changed = addLog({ ...room, exposedIds, masks }, correct
-    ? `${actor.name}が${target.name}の秘密語を言い当て、${target.name}が脱落しました。`
-    : `${actor.name}の直接推理は外れました。`);
-  return shouldFinishRound(changed) ? finishRound(changed) : advanceTurn(changed, "直接推理が完了しました。");
+    ? `${actor.name}が${target.name}の秘密語を「${guess}」と回答。正解したため、${target.name}が脱落しました。`
+    : `${actor.name}が${target.name}の秘密語を「${guess}」と回答しましたが、不正解でした。`);
+  return shouldFinishRound(changed) ? finishRound(changed) : advanceTurn(changed, "秘密語を回答したため、手番を終了します。");
 }
 
 function reconcileProgress(room: KotobaSenpukuRoom) {
@@ -302,7 +307,7 @@ function reconcileProgress(room: KotobaSenpukuRoom) {
   }
   if (room.phase === "battle" && timedOut(room, room.turnTimeLimitSeconds)) {
     const player = room.players[room.activePlayerIndex];
-    return advanceTurn(room, `${player?.name ?? "手番プレイヤー"}は時間切れでパスしました。`);
+    return advanceTurn(room, `${player?.name ?? "手番プレイヤー"}は時間切れのため、手番を終了します。`);
   }
   return room;
 }

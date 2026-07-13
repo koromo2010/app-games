@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { UserReportButton } from "@/app/components/UserReportButton";
 
 type GameTopBannerProps = {
   eyebrow: string;
@@ -16,7 +17,10 @@ export function GameTopBanner({ eyebrow, title, children }: GameTopBannerProps) 
           <p className="text-xs font-semibold uppercase text-cyan-200">{eyebrow}</p>
           <h1 className="mt-0.5 truncate text-2xl font-black tracking-normal sm:text-3xl">{title}</h1>
         </div>
-        <div className="flex max-w-full flex-nowrap items-center gap-2 overflow-x-auto pb-1 text-sm sm:justify-end sm:pb-0 [&>*]:shrink-0">{children}</div>
+        <div className="flex max-w-full flex-nowrap items-center gap-2 overflow-x-auto pb-1 text-sm sm:justify-end sm:pb-0 [&>*]:shrink-0">
+          {children}
+          <UserReportButton />
+        </div>
       </div>
     </header>
   );

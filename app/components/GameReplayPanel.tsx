@@ -200,11 +200,21 @@ export function GameReplayPanel() {
       )}
 
       {selectedReplay && (
-        <div className="mt-4 rounded-lg border border-violet-200 bg-violet-50/70 p-4">
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/70 p-3 pt-10 backdrop-blur-sm sm:p-6 sm:pt-16"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="replay-detail-heading"
+          onClick={() => setSelectedReplay(null)}
+        >
+        <div
+          className="w-full max-w-3xl rounded-xl border border-violet-200 bg-violet-50 p-4 shadow-2xl sm:p-6"
+          onClick={(event) => event.stopPropagation()}
+        >
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-xs font-semibold text-violet-700">{gameReplayMetadata[selectedReplay.gameType].title} / PLAYBACK {selectedReplay.round}</p>
-              <h3 className="text-lg font-black text-slate-950">{selectedReplay.title}</h3>
+              <h3 id="replay-detail-heading" className="text-lg font-black text-slate-950">{selectedReplay.title}</h3>
               {selectedReplay.gameType === "tahoiya" && selectedReplay.reading && <p className="text-xs text-slate-500">{selectedReplay.reading}</p>}
             </div>
             <button
@@ -252,14 +262,21 @@ export function GameReplayPanel() {
             </>
           ) : (
             <>
-              <p className="mt-4 rounded-lg bg-white p-3 text-sm font-bold text-slate-800">{selectedReplay.overview}</p>
-              <div className="mt-4 space-y-2">
+              <div className="mt-4 rounded-lg bg-white p-3">
+                <p className="text-xs font-bold text-violet-700">試合の結果</p>
+                <p className="mt-1 text-sm font-bold leading-6 text-slate-800">{selectedReplay.overview}</p>
+              </div>
+              <div className="mt-4">
+                <p className="text-xs font-bold text-slate-600">プレイ記録</p>
+                <div className="mt-2 space-y-2">
                 {selectedReplay.highlights.map((highlight, index) => (
                   <p key={`${index}-${highlight}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-700">{highlight}</p>
                 ))}
+                {selectedReplay.highlights.length === 0 && <p className="rounded-lg bg-white px-3 py-2 text-sm text-slate-500">この試合には詳しい記録がありません。</p>}
+                </div>
               </div>
               <div className="mt-4">
-                <p className="text-xs font-bold text-slate-600">プレイヤー</p>
+                <p className="text-xs font-bold text-slate-600">各プレイヤーの結果</p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {selectedReplay.scores.map((score) => (
                     <span key={score.playerName} className={`rounded-md px-2 py-1 text-xs font-semibold ${score.isViewer ? "bg-cyan-100 text-cyan-800" : "bg-white text-slate-700"}`}>
@@ -270,6 +287,7 @@ export function GameReplayPanel() {
               </div>
             </>
           )}
+        </div>
         </div>
       )}
     </section>
