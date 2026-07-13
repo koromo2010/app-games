@@ -193,6 +193,10 @@ export function isValidKotobaSenpukuWord(value: unknown) {
   );
 }
 
+export function minimumKotobaSenpukuWordLength(playerCount: number) {
+  return playerCount === 2 ? 2 : 1;
+}
+
 export function kotobaSenpukuKanaKey(character: string) {
   const base = character.normalize("NFD").replace(/[\u3099\u309A]/g, "");
   const smallKana: Record<string, string> = {

@@ -6,6 +6,7 @@ import {
   kotobaSenpukuKana,
   kotobaSenpukuKanaKey,
   maskKotobaSenpukuWord,
+  minimumKotobaSenpukuWordLength,
   normalizeKotobaSenpukuConfig,
   normalizeKotobaSenpukuWord,
   nextKotobaSenpukuSurvivorIndex,
@@ -463,6 +464,7 @@ export async function applyStoredKotobaSenpukuAction(code: string, action: Kotob
       if (current.phase !== "secret" || action.round !== current.round || current.secrets[action.actorId]) return current;
       const word = normalizeKotobaSenpukuWord(action.word);
       if (!isValidKotobaSenpukuWord(word)) throw new Error("KOTOBA_SENPUKU_INVALID_WORD");
+      if ([...word].length < minimumKotobaSenpukuWordLength(current.players.length)) throw new Error("KOTOBA_SENPUKU_WORD_TOO_SHORT");
       return reconcileProgress({ ...current, secrets: { ...current.secrets, [action.actorId]: word }, submittedIds: [...new Set([...current.submittedIds, action.actorId])] });
     }
     if (action.type === "debug-fill-secrets") {
