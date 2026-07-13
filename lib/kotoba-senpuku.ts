@@ -41,6 +41,7 @@ export type KotobaSenpukuRoom = KotobaSenpukuConfig & {
   passphrase: string;
   phase: KotobaSenpukuPhase;
   players: KotobaSenpukuPlayer[];
+  gameNumber: number;
   round: number;
   theme: KotobaSenpukuTheme | null;
   secrets: Record<string, string>;

@@ -1,4 +1,5 @@
 import { redisCommand } from "@/lib/redis-store";
+import { recordHodoaiGameResults } from "@/lib/player-stats-store";
 import { isMultiplayerRoomExpired, multiplayerRoomExpiryArgs, multiplayerRoomTtlSeconds } from "@/lib/multiplayer-room-lifecycle";
 import { randomUUID } from "node:crypto";
 import {
@@ -116,6 +117,7 @@ function normalizeRoom(value: unknown): HodoaiRoom | null {
     passphrase: typeof parsed.passphrase === "string" ? parsed.passphrase.slice(0, 40) : "",
     phase: isPhase(parsed.phase) ? parsed.phase : "lobby",
     players,
+    gameNumber: typeof parsed.gameNumber === "number" ? Math.max(1, Math.floor(parsed.gameNumber)) : 1,
     ...config,
     round: typeof parsed.round === "number" ? Math.max(1, Math.floor(parsed.round)) : 1,
     theme: normalizeTheme(parsed.theme),
@@ -213,7 +215,10 @@ async function mutateStoredRoom(code: string, mutate: (room: HodoaiRoom) => Hodo
     const next = normalizeRoom({ ...changed, revision: current.revision + 1, updatedAt: Date.now() });
     if (!next) throw new Error("INVALID_HODOAI_ROOM");
     const saved = await compareAndSetRoom(current.revision, next);
-    if (saved === 1) return next;
+    if (saved === 1) {
+      await recordHodoaiGameResults(next);
+      return next;
+    }
     if (saved === -1) throw new Error("HODOAI_ROOM_NOT_FOUND");
   }
   throw new Error("HODOAI_ROOM_CONFLICT");
@@ -276,7 +281,10 @@ export async function loadStoredHodoaiRoom(code: string) {
 export async function loadAndReconcileHodoaiRoom(code: string) {
   const room = await loadStoredHodoaiRoom(code);
   if (!room) return null;
-  if (reconcileProgress(room) === room) return room;
+  if (reconcileProgress(room) === room) {
+    await recordHodoaiGameResults(room);
+    return room;
+  }
   return mutateStoredRoom(code, reconcileProgress);
 }
 
@@ -296,7 +304,7 @@ export async function loadHodoaiPlayerActiveRoom(playerId: string) {
 export async function createStoredHodoaiRoom(value: unknown, actorId: string) {
   const room = normalizeRoom(value);
   if (!room || actorId !== room.hostId) throw new Error("INVALID_HODOAI_ROOM");
-  const created = { ...room, revision: 0, phase: "lobby" as const, values: {}, clues: {}, order: [], history: [], totalPoints: 0, updatedAt: Date.now() };
+  const created = { ...room, revision: 0, gameNumber: 1, phase: "lobby" as const, values: {}, clues: {}, order: [], history: [], totalPoints: 0, updatedAt: Date.now() };
   const saved = await redisCommand<"OK" | null>(["SET", roomKey(created.code), JSON.stringify(created), "NX", ...multiplayerRoomExpiryArgs()]);
   if (saved !== "OK") throw new Error("HODOAI_ROOM_CONFLICT");
   await redisCommand<number>(["SADD", roomIndexKey, created.code]);
@@ -379,7 +387,7 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
     }
     if (action.type === "reset-game") {
       if (!actorIsHost || current.phase !== "result") throw new Error("HODOAI_ROOM_FORBIDDEN");
-      return { ...current, phase: "lobby", round: 1, theme: null, values: {}, clues: {}, order: [], totalPoints: 0, history: [], phaseStartedAt: null };
+      return { ...current, gameNumber: current.gameNumber + 1, phase: "lobby", round: 1, theme: null, values: {}, clues: {}, order: [], totalPoints: 0, history: [], phaseStartedAt: null };
     }
     if (!actorIsHost || !current.debugMode || action.round !== current.round) throw new Error("HODOAI_ROOM_FORBIDDEN");
     if (action.type === "debug-fill-clues" && current.phase === "clue") {
@@ -395,6 +403,7 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
   });
   await redisCommand<number>(["SADD", roomIndexKey, room.code]);
   await saveActiveRooms(room);
+  await recordHodoaiGameResults(room);
   if (action.type === "leave-room") await clearActiveRoom(action.actorId, room.code);
   return room;
 }

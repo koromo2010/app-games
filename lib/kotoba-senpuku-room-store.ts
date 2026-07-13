@@ -19,6 +19,7 @@ import {
   type KotobaSenpukuTheme,
 } from "@/lib/kotoba-senpuku";
 import { isMultiplayerRoomExpired, multiplayerRoomExpiryArgs, multiplayerRoomTtlSeconds } from "@/lib/multiplayer-room-lifecycle";
+import { recordKotobaSenpukuGameResults } from "@/lib/player-stats-store";
 import { redisCommand } from "@/lib/redis-store";
 
 const roomKeyPrefix = "kotoba-senpuku:room:";
@@ -116,6 +117,7 @@ function normalizeRoom(value: unknown): KotobaSenpukuRoom | null {
     passphrase: typeof parsed.passphrase === "string" ? parsed.passphrase.slice(0, 40) : "",
     phase: isPhase(parsed.phase) ? parsed.phase : "lobby",
     players,
+    gameNumber: typeof parsed.gameNumber === "number" ? Math.max(1, Math.floor(parsed.gameNumber)) : 1,
     ...config,
     round: typeof parsed.round === "number" ? Math.max(1, Math.floor(parsed.round)) : 1,
     theme: normalizeTheme(parsed.theme),
@@ -312,7 +314,10 @@ async function mutateStoredRoom(code: string, mutate: (room: KotobaSenpukuRoom) 
     const next = normalizeRoom({ ...changed, revision: current.revision + 1, updatedAt: Date.now() });
     if (!next) throw new Error("INVALID_KOTOBA_SENPUKU_ROOM");
     const saved = await compareAndSetRoom(current.revision, next);
-    if (saved === 1) return next;
+    if (saved === 1) {
+      await recordKotobaSenpukuGameResults(next);
+      return next;
+    }
     if (saved === -1) throw new Error("KOTOBA_SENPUKU_ROOM_NOT_FOUND");
   }
   throw new Error("KOTOBA_SENPUKU_ROOM_CONFLICT");
@@ -369,7 +374,10 @@ export async function loadStoredKotobaSenpukuRoom(code: string) {
 export async function loadAndReconcileKotobaSenpukuRoom(code: string) {
   const room = await loadStoredKotobaSenpukuRoom(code);
   if (!room) return null;
-  if (reconcileProgress(room) === room) return room;
+  if (reconcileProgress(room) === room) {
+    await recordKotobaSenpukuGameResults(room);
+    return room;
+  }
   return mutateStoredRoom(code, reconcileProgress);
 }
 
@@ -389,7 +397,7 @@ export async function loadKotobaSenpukuPlayerActiveRoom(playerId: string) {
 export async function createStoredKotobaSenpukuRoom(value: unknown, actorId: string) {
   const room = normalizeRoom(value);
   if (!room || actorId !== room.hostId) throw new Error("INVALID_KOTOBA_SENPUKU_ROOM");
-  const created = { ...room, revision: 0, phase: "lobby" as const, debugMode: false, theme: null, secrets: {}, submittedIds: [], masks: {}, calledKana: [], exposedIds: [], history: [], log: ["参加者を待っています。"], phaseStartedAt: null, updatedAt: Date.now() };
+  const created = { ...room, revision: 0, gameNumber: 1, phase: "lobby" as const, debugMode: false, theme: null, secrets: {}, submittedIds: [], masks: {}, calledKana: [], exposedIds: [], history: [], log: ["参加者を待っています。"], phaseStartedAt: null, updatedAt: Date.now() };
   const saved = await redisCommand<"OK" | null>(["SET", roomKey(created.code), JSON.stringify(created), "NX", ...multiplayerRoomExpiryArgs()]);
   if (saved !== "OK") throw new Error("KOTOBA_SENPUKU_ROOM_CONFLICT");
   await redisCommand<number>(["SADD", roomIndexKey, created.code]);
@@ -451,7 +459,7 @@ export async function applyStoredKotobaSenpukuAction(code: string, action: Kotob
     }
     if (action.type === "reset-game") {
       if (!actorIsHost || current.phase !== "result" || current.round < current.roundsTotal) throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
-      return { ...current, phase: "lobby", round: 1, theme: null, secrets: {}, submittedIds: [], masks: {}, calledKana: [], exposedIds: [], roundSignals: {}, totalScores: {}, activePlayerIndex: 0, turnNumber: 1, history: [], log: ["同じ部屋で次のゲームを準備できます。"], phaseStartedAt: null };
+      return { ...current, gameNumber: current.gameNumber + 1, phase: "lobby", round: 1, theme: null, secrets: {}, submittedIds: [], masks: {}, calledKana: [], exposedIds: [], roundSignals: {}, totalScores: {}, activePlayerIndex: 0, turnNumber: 1, history: [], log: ["同じ部屋で次のゲームを準備できます。"], phaseStartedAt: null };
     }
 
     const activePlayer = current.players[current.activePlayerIndex];

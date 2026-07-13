@@ -2,6 +2,7 @@ import { redisCommand } from "@/lib/redis-store";
 import { randomUUID } from "node:crypto";
 import type { TahoiyaAnswererMode, TahoiyaDefinitionOption, TahoiyaPhase, TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomAction, TahoiyaRoomChoice } from "@/lib/tahoiya-types";
 import { normalizeGameGenerationMeta } from "@/lib/game-ai-types";
+import { recordTahoiyaRoundResults } from "@/lib/player-stats-store";
 import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
 import { isMultiplayerRoomExpired, multiplayerRoomTtlSeconds } from "@/lib/multiplayer-room-lifecycle";
 
@@ -254,7 +255,10 @@ async function mutateStoredTahoiyaRoom(code: string, mutate: (room: TahoiyaRoom)
     });
     if (!next) throw new Error("INVALID_TAHOIYA_ROOM");
     const saved = await compareAndSetRoom(current.revision, next);
-    if (saved === 1) return next;
+    if (saved === 1) {
+      await recordTahoiyaRoundResults(next);
+      return next;
+    }
     if (saved === -1) throw new Error("TAHOIYA_ROOM_NOT_FOUND");
   }
   throw new Error("TAHOIYA_ROOM_CONFLICT");
@@ -306,7 +310,10 @@ export async function loadStoredTahoiyaRoom(code: string) {
 export async function loadAndReconcileStoredTahoiyaRoom(code: string) {
   const room = await loadStoredTahoiyaRoom(code);
   if (!room) return null;
-  if (reconcileProgress(room) === room) return room;
+  if (reconcileProgress(room) === room) {
+    await recordTahoiyaRoundResults(room);
+    return room;
+  }
   return mutateStoredTahoiyaRoom(code, reconcileProgress);
 }
 

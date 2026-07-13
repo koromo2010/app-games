@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
+import { GameRulesDialog } from "@/app/components/GameRulesDialog";
 import { GamePhaseTimer } from "@/app/components/GamePhaseTimer";
 import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
@@ -108,6 +109,7 @@ export function KotobaSenpukuGame() {
   const [challengeTarget, setChallengeTarget] = useState("");
   const [challengeGuess, setChallengeGuess] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -224,7 +226,7 @@ export function KotobaSenpukuGame() {
       const now = Date.now();
       const host: KotobaSenpukuPlayer = { id: session.id, name: session.name, joinedAt: now, avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined };
       const nextRoom: KotobaSenpukuRoom = {
-        code: makeRoomCode(), revision: 0, hostId: session.id, ownerId, passphrase: passphrase.trim(), phase: "lobby", players: [host],
+        code: makeRoomCode(), revision: 0, hostId: session.id, ownerId, passphrase: passphrase.trim(), phase: "lobby", players: [host], gameNumber: 1,
         ...defaults, debugMode: false, round: 1, theme: null, secrets: {}, submittedIds: [], masks: {}, calledKana: [], exposedIds: [],
         roundSignals: { [session.id]: 0 }, totalScores: { [session.id]: 0 }, activePlayerIndex: 0, turnNumber: 1,
         history: [], log: ["参加者を待っています。"], phaseStartedAt: null, createdAt: now, updatedAt: now,
@@ -326,6 +328,11 @@ export function KotobaSenpukuGame() {
     });
   };
 
+  const rulesDialog = <GameRulesDialog open={rulesOpen} title="ことば潜伏戦のルール" onClose={() => setRulesOpen(false)}>
+    <p>各自がテーマに沿った秘密語を決め、文字スキャンか直接推理で信号点を集めます。</p>
+    <ol className="mt-3 list-decimal space-y-2 pl-5"><li>秘密語は2〜8文字のひらがなで入力します。</li><li>文字スキャンが他人の秘密語に含まれれば得点、外すと1点減ります。</li><li>直接推理で相手の秘密語を完全一致させると4点です。</li><li>設定ラウンド終了時の合計点が最も高い人が勝利です。</li></ol>
+  </GameRulesDialog>;
+
   if (!ready) return <main className="min-h-screen bg-slate-950 p-8 text-white">ログイン情報と部屋を確認中...</main>;
 
   if (!session?.id) {
@@ -336,7 +343,7 @@ export function KotobaSenpukuGame() {
     return (
       <main className="min-h-screen bg-[radial-gradient(circle_at_top,#701a75_0%,#172033_42%,#020617_82%)] px-4 py-8 text-white">
         <div className="mx-auto max-w-4xl">
-          <div className="flex items-center justify-between"><Link href="/games" className="text-sm font-bold text-fuchsia-200">← ゲームロビー</Link><span className="text-sm font-bold">{session.name}</span></div>
+          <div className="flex items-center justify-between gap-2"><Link href="/games" className="text-sm font-bold text-fuchsia-200">← ゲームロビー</Link><div className="flex items-center gap-2"><button type="button" onClick={() => setRulesOpen(true)} className="rounded-lg border border-white/20 px-3 py-2 text-sm font-bold">ルール</button><span className="text-sm font-bold">{session.name}</span></div></div>
           <section className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-slate-950/80 shadow-2xl">
             <div className="bg-gradient-to-r from-fuchsia-400 via-cyan-300 to-amber-300 px-6 py-8 text-slate-950"><p className="text-xs font-black uppercase tracking-[0.28em]">Original online word game</p><h1 className="mt-2 text-4xl font-black sm:text-6xl">ことば潜伏戦</h1><p className="mt-3 font-bold">秘密のことばへ文字スキャンをかけ、反応と直接推理で信号点を集める。</p></div>
             <div className="grid gap-6 p-6 md:grid-cols-2">
@@ -347,13 +354,14 @@ export function KotobaSenpukuGame() {
             {error && <p className="mx-6 mb-6 rounded-xl border border-rose-300/30 bg-rose-300/10 p-3 text-sm font-bold text-rose-100">{error}</p>}
           </section>
         </div>
+        {rulesDialog}
       </main>
     );
   }
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,#701a75_0%,#172033_35%,#020617_75%)] text-white">
-      <header className="border-b border-white/10 bg-slate-950/70"><div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-4"><div><Link href="/games" className="text-xs font-bold text-fuchsia-200">← ゲームロビー</Link><h1 className="mt-1 text-2xl font-black">ことば潜伏戦 <span className="font-mono text-base text-amber-300">#{room.code}</span></h1></div><div className="flex flex-wrap items-center gap-2">{isHost && room.phase === "lobby" && <DebugModeButton enabled={room.debugMode} disabled={isSaving} onChange={(enabled) => runAction({ type: "set-debug", actorId: playerId, enabled }).then(() => undefined)} />}<span className="rounded-lg bg-white/10 px-3 py-2 text-sm font-bold">{session.name}</span>{isHost ? <button type="button" onClick={() => void dissolveRoom()} className="rounded-lg border border-rose-300/30 px-3 py-2 text-sm font-bold text-rose-100">部屋を解散</button> : room.phase === "lobby" && <button type="button" onClick={() => void leaveRoom()} className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold">退出</button>}</div></div></header>
+      <header className="border-b border-white/10 bg-slate-950/70"><div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-4"><div><Link href="/games" className="text-xs font-bold text-fuchsia-200">← ゲームロビー</Link><h1 className="mt-1 text-2xl font-black">ことば潜伏戦 <span className="font-mono text-base text-amber-300">#{room.code}</span></h1></div><div className="flex flex-wrap items-center gap-2">{isHost && room.phase === "lobby" && <DebugModeButton enabled={room.debugMode} disabled={isSaving} onChange={(enabled) => runAction({ type: "set-debug", actorId: playerId, enabled }).then(() => undefined)} />}<button type="button" onClick={() => setRulesOpen(true)} className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold">ルール</button><span className="rounded-lg bg-white/10 px-3 py-2 text-sm font-bold">{session.name}</span>{isHost ? <button type="button" onClick={() => void dissolveRoom()} className="rounded-lg border border-rose-300/30 px-3 py-2 text-sm font-bold text-rose-100">部屋を解散</button> : room.phase === "lobby" && <button type="button" onClick={() => void leaveRoom()} className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold">退出</button>}</div></div></header>
       <div className="mx-auto grid max-w-7xl gap-4 px-4 py-5 xl:grid-cols-[270px_minmax(0,1fr)_280px]">
         <aside className="space-y-4"><section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4"><div className="flex items-center justify-between"><h2 className="font-black">参加者</h2><span className="text-sm text-slate-400">{room.players.length}/{kotobaSenpukuMaximumPlayers}人</span></div><ul className="mt-3 space-y-2">{room.players.map((player) => <PlayerRow key={player.id} player={player} isHost={player.id === room.hostId} isMe={player.id === playerId} />)}</ul></section><RoomConfigSummary items={configItems} /></aside>
         <div className="space-y-4">
@@ -373,6 +381,7 @@ export function KotobaSenpukuGame() {
         </div>
         <aside className="space-y-3">{room.phase !== "lobby" && <><section className="rounded-xl border border-white/10 bg-slate-950/75 p-4"><p className="text-xs font-bold uppercase text-fuchsia-300">Signals</p><div className="mt-3 space-y-2">{ranking.map((player, index) => <div key={player.id} className={`rounded-lg border p-3 ${player.id === activePlayer?.id && room.phase === "battle" ? "border-fuchsia-300 bg-fuchsia-300/10" : "border-white/10 bg-black/10"}`}><div className="flex items-center justify-between gap-2"><p className="truncate font-bold">{index + 1}. {player.name}</p><p className="font-black text-amber-300">{room.totalScores[player.id] ?? 0}点</p></div>{room.phase === "battle" && <p className="mt-1 text-xs text-slate-400">このラウンド {room.roundSignals[player.id] ?? 0}点</p>}</div>)}</div></section>{room.phase === "battle" && <section className="rounded-xl border border-white/10 bg-slate-950/75 p-4"><p className="font-black">潜伏中のことば</p><div className="mt-3 space-y-2">{room.players.map((player) => <div key={player.id} className={`rounded-lg border p-3 ${room.exposedIds.includes(player.id) ? "border-rose-300/30 bg-rose-300/10" : "border-cyan-300/20 bg-cyan-300/5"}`}><div className="flex items-center justify-between gap-2"><p className="truncate text-xs font-bold text-slate-300">{player.name}</p><span className="text-[10px] font-black">{room.exposedIds.includes(player.id) ? "公開" : "潜伏"}</span></div><p className="mt-2 font-mono text-xl font-black tracking-widest">{room.masks[player.id]}</p>{room.secrets[player.id] && <p className="mt-1 text-xs text-amber-200">秘密語：{room.secrets[player.id]}</p>}</div>)}</div></section>}<section className="rounded-xl border border-white/10 bg-slate-950/75 p-4"><p className="font-black">行動履歴</p><ul className="mt-3 space-y-2">{room.log.slice(0, 12).map((entry, index) => <li key={`${entry}-${index}`} className="border-b border-white/5 pb-2 text-xs leading-5 text-slate-300">{entry}</li>)}</ul></section></>}</aside>
       </div>
+      {rulesDialog}
     </main>
   );
 }

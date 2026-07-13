@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { applyNorthernAction, createNorthernGame } from "@/lib/northern-branch-game";
 import { isMultiplayerRoomExpired, multiplayerRoomExpiryArgs, multiplayerRoomTtlSeconds } from "@/lib/multiplayer-room-lifecycle";
 import { redisCommand } from "@/lib/redis-store";
+import { recordNorthernBranchGameResults } from "@/lib/player-stats-store";
 import type {
   NorthernGameState,
   NorthernGameAction,
@@ -82,6 +83,7 @@ function normalizeRoom(value: unknown): NorthernRoom | null {
     passphrase: typeof parsed.passphrase === "string" ? parsed.passphrase.slice(0, 40) : "",
     phase,
     players,
+    gameNumber: typeof parsed.gameNumber === "number" ? Math.max(1, Math.floor(parsed.gameNumber)) : 1,
     debugMode: parsed.debugMode === true,
     game,
     notice: typeof parsed.notice === "string" ? parsed.notice.slice(0, 160) : "",
@@ -111,7 +113,10 @@ async function mutateStoredRoom(code: string, mutate: (room: NorthernRoom) => No
     const next = normalizeRoom({ ...changed, revision: current.revision + 1, updatedAt: Date.now() });
     if (!next) throw new Error("INVALID_NORTHERN_ROOM");
     const saved = await compareAndSetRoom(current.revision, next);
-    if (saved === 1) return next;
+    if (saved === 1) {
+      await recordNorthernBranchGameResults(next);
+      return next;
+    }
     if (saved === -1) throw new Error("NORTHERN_ROOM_NOT_FOUND");
   }
   throw new Error("NORTHERN_ROOM_CONFLICT");
@@ -167,6 +172,7 @@ export async function loadStoredNorthernRoom(code: string) {
       await Promise.all(room.players.map((player) => clearActiveRoom(player.id, room.code)));
       return null;
     }
+    await recordNorthernBranchGameResults(room);
     return room;
   } catch {
     return null;
@@ -192,6 +198,7 @@ export async function createStoredNorthernRoom(value: unknown, actorId: string) 
   const created: NorthernRoom = {
     ...room,
     revision: 0,
+    gameNumber: 1,
     phase: "lobby",
     debugMode: false,
     game: null,
@@ -255,7 +262,7 @@ export async function applyStoredNorthernAction(code: string, action: NorthernRo
     }
     if (action.type === "reset-game") {
       if (!actorIsHost || current.phase !== "finished") throw new Error("NORTHERN_ROOM_FORBIDDEN");
-      return { ...current, phase: "lobby", game: null, notice: "同じ部屋で次のゲームを準備できます。" };
+      return { ...current, gameNumber: current.gameNumber + 1, phase: "lobby", game: null, notice: "同じ部屋で次のゲームを準備できます。" };
     }
     if (action.type === "game-action") {
       if (!current.game || current.phase !== "playing") throw new Error("NORTHERN_ROOM_FORBIDDEN");

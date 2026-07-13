@@ -6,7 +6,8 @@
                     "dev":  "next dev -p 3000",
                     "build":  "next build",
                     "start":  "next start -p 3000",
-                    "lint":  "eslint",
+                    "lint":  "npm run check:games && eslint",
+                    "check:games":  "node scripts/check-game-standards.mjs",
                     "tahoiya:generate":  "node --experimental-strip-types scripts/generate-tahoiya-candidates.ts"
                 },
     "dependencies":  {

@@ -41,6 +41,7 @@ export type HodoaiRoom = HodoaiConfig & {
   passphrase: string;
   phase: HodoaiPhase;
   players: HodoaiPlayer[];
+  gameNumber: number;
   round: number;
   theme: HodoaiTheme | null;
   values: Record<string, number>;

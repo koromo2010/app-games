@@ -1,5 +1,7 @@
 # app-games 開発引き継ぎ
 
+> 新規ゲームは `config/game-registry.json` を正本として登録し、`docs/NEW_GAME_CHECKLIST.md` に従う。`npm run lint` はゲーム共通要件の自動監査も実行する。
+
 最終更新: 2026-07-12
 
 ## 1. プロジェクト
@@ -21,6 +23,8 @@
 | 共通部屋設定 | `lib/room-defaults-store.ts`, `lib/game-room-defaults-client.ts`, `app/components/RoomConfigSummary.tsx` |
 | 共通時間制限 | `lib/game-room-config.ts`, `app/components/RoomTimeLimitControl.tsx` |
 | 共通デバッグ認証 | `app/components/DebugModeButton.tsx`, `app/api/debug-auth/route.ts` |
+| ゲーム登録・自動監査 | `config/game-registry.json`, `scripts/check-game-standards.mjs`, `docs/NEW_GAME_CHECKLIST.md` |
+| 共通戦績 | `lib/player-stats-store.ts`, `app/api/player-stats/route.ts`, `app/games/GameLobby.tsx` |
 | アカウント・メール復旧 | `lib/player-account-store.ts`, `lib/player-password-reset.ts`, `lib/email.ts`, `app/api/player-account/route.ts`, `app/api/player-password-reset/route.ts`, `app/reset-password` |
 | ワードウルフ | `app/wordwolf`, `app/api/wordwolf`, `lib/wordwolf-room-store.ts` |
 | たほい屋 | `app/tahoiya/TahoiyaGame.tsx`, `app/api/tahoiya`, `lib/tahoiya-room-store.ts`, `lib/tahoiya-types.ts` |
@@ -92,6 +96,15 @@
 - ワード候補DBと使用履歴はゲーム別に分離する。通常出題では参加者の誰か一人でも使用済みの単語を除外し、参加者全員が未使用のローカル／再利用候補を優先する。該当候補が尽きた場合だけLLM APIで新規生成し、そのゲーム専用候補DBへ追加する。デバッグ生成の結果もゲーム専用候補DBへ追加するが、使用済みプレイヤーは登録せず、全員未使用の候補として扱う。
 - 参加者全員が未使用という条件を満たす再利用候補が複数ある場合は、ゲーム別フィードバックの `Good - Bad` が高い候補を優先する。同点ではGood数、Badの少なさ、全体使用回数の少なさ、最終使用時刻の古さの順で選ぶ。
 - 現行のお題候補レコードは経験済みプレイヤーID配列を持つが、これは移行前の実装である。長期設計では候補レコードとプレイヤー経験履歴を分離し、ゲーム別・プレイヤー別Redis Setを正とする。たほい屋は見出し語単位、ワードウルフは順序非依存のワードペア単位で経験済みを判定する。移行手順とキー方針は `docs/TOPIC_HISTORY_DATABASE.md` を参照する。
+
+### 共通戦績
+
+- ロビーの戦績フィルターは `config/game-registry.json` の `stats: "account"` から自動生成する。
+- ワードウルフは1ゲーム、たほい屋は1ラウンド、ことばで数ならべは全ラウンド終了を1戦として記録する。
+- 結果IDをRedisのLua処理で戦績追加と同時に冪等化し、再読込や複数クライアントによる二重記録を防ぐ。
+- ことばで数ならべは最大点の50%以上を協力成功とし、デバッグ用ダミーは戦績へ含めない。
+- ノーザンブランチもログイン必須のオンライン部屋制で、ゲーム終了時に勝敗を共通戦績へ記録する。デバッグ部屋とダミー参加者は戦績へ含めない。
+- ことば潜伏戦は全ラウンド終了時の総合順位を1戦として記録する。デバッグ部屋とダミー参加者は戦績へ含めない。
 
 ## 6. ワードウルフ現行仕様の要点
 

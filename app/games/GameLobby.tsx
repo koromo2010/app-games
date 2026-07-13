@@ -29,7 +29,9 @@ type ActiveWordWolfRoom = {
 
 const statsGameOptions = [
   { value: "all", label: "全ゲーム" },
-  { value: "wordwolf", label: "ワードウルフ" },
+  ...games
+    .filter((game) => game.stats === "account")
+    .map((game) => ({ value: game.id as PlayerStatsGameFilter, label: game.title })),
 ] as const satisfies readonly { value: PlayerStatsGameFilter; label: string }[];
 
 const errorMessages: Record<string, string> = {
@@ -92,7 +94,7 @@ export function GameLobby() {
   const [hasRecoveryEmail, setHasRecoveryEmail] = useState(false);
   const [stats, setStats] = useState<PlayerStatsResponse | null>(null);
   const [isStatsLoading, setIsStatsLoading] = useState(false);
-  const [selectedStatsGame, setSelectedStatsGame] = useState<PlayerStatsGameFilter>("wordwolf");
+  const [selectedStatsGame, setSelectedStatsGame] = useState<PlayerStatsGameFilter>("all");
   const [activeRoom, setActiveRoom] = useState<ActiveWordWolfRoom | null>(null);
   const [isActiveRoomLoading, setIsActiveRoomLoading] = useState(false);
   const [privateAccessKey, setPrivateAccessKey] = useState("");
@@ -170,7 +172,7 @@ export function GameLobby() {
         const authenticated = isPlayerAuthenticated();
         setIsLoggedIn(authenticated);
         if (authenticated && session.id) {
-          void loadStats(session.id, "wordwolf");
+          void loadStats(session.id, "all");
           void loadActiveRoom(session.id);
         }
       })
@@ -652,9 +654,9 @@ export function GameLobby() {
                     {stats.recent.slice(0, 5).map((result) => (
                       <div key={result.id} className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 text-sm">
                         <div>
-                          <p className="font-semibold text-slate-800">{result.won ? "勝利" : "敗北"}</p>
+                          <p className="font-semibold text-slate-800">{result.resultLabel}</p>
                           <p className="text-xs text-slate-500">
-                            {formatDate(result.finishedAt)} / {result.role === "wolf" ? "狼" : result.role === "no-wolf" ? "狼なし" : "村"}
+                            {formatDate(result.finishedAt)} / {statsGameOptions.find((option) => option.value === result.gameType)?.label ?? result.gameType}
                           </p>
                         </div>
                         <span className={`rounded-md px-2 py-1 text-xs font-bold ${

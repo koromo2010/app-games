@@ -1,52 +1,7 @@
-export const games = [
-  {
-    title: "ワードウルフ",
-    status: "Playable",
-    href: "/wordwolf",
-    players: "3-6人",
-    time: "5-15分",
-    summary: "似ているけど違うお題を持つ狼を、会話と投票で探すゲーム。",
-    accent: "from-cyan-300 to-amber-200",
-    private: false,
-  },
-  {
-    title: "たほい屋",
-    status: "Prototype",
-    href: "/tahoiya",
-    players: "3-8人",
-    time: "10-20分",
-    summary: "知らない言葉の本物の語釈を、みんなの創作語釈に紛れ込ませて当てるゲーム。",
-    accent: "from-amber-300 to-lime-200",
-    private: false,
-  },
-  {
-    title: "ノーザンブランチ",
-    status: "Private prototype",
-    href: "/northern-branch",
-    players: "2-4人",
-    time: "20-40分",
-    summary: "資源を商品へ育て、建物とブラウニーの力で10勝利点を目指す商会ゲーム。",
-    accent: "from-violet-300 to-rose-200",
-    private: true,
-  },
-  {
-    title: "ことばで数ならべ",
-    status: "Private online prototype",
-    href: "/kotoba-de-kazu-narabe",
-    players: "2人以上",
-    time: "10-20分",
-    summary: "各自の端末で秘密の目盛りを言葉にし、全員のヒントを低い順に並べる協力ゲーム。",
-    accent: "from-sky-300 via-amber-200 to-fuchsia-300",
-    private: true,
-  },
-  {
-    title: "ことば潜伏戦",
-    status: "Private online prototype",
-    href: "/kotoba-senpuku",
-    players: "2-8人",
-    time: "10-25分",
-    summary: "秘密のことばへ文字スキャンをかけ、反応と直接推理で信号点を集めるゲーム。",
-    accent: "from-fuchsia-300 via-cyan-200 to-amber-200",
-    private: true,
-  },
-];
+import registry from "@/config/game-registry.json";
+
+export type GameCatalogEntry = { id: string; title: string; status: string; href: string; players: string; time: string; summary: string; accent: string; private: boolean; stats: "account" | "local-disabled" };
+
+export const games: GameCatalogEntry[] = registry.map((game) => ({
+  id: game.id, title: game.title, status: game.status, href: game.href, players: game.players, time: game.time, summary: game.summary, accent: game.accent, private: game.private, stats: game.stats as GameCatalogEntry["stats"],
+}));

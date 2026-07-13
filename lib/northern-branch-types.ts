@@ -111,6 +111,7 @@ export type NorthernRoom = {
   passphrase: string;
   phase: NorthernRoomPhase;
   players: NorthernRoomPlayer[];
+  gameNumber: number;
   debugMode: boolean;
   game: NorthernGameState | null;
   notice: string;

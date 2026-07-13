@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
+import { GameRulesDialog } from "@/app/components/GameRulesDialog";
 import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { northernBaseResources, northernBuildings, northernCards } from "@/lib/northern-branch-data";
 import { northernRules } from "@/lib/northern-branch-game";
@@ -86,6 +87,7 @@ export function NorthernBranchGame() {
   const [showChoices, setShowChoices] = useState(false);
   const [paymentSelection, setPaymentSelection] = useState<{ playerId: string; indexes: number[] }>({ playerId: "", indexes: [] });
   const [isSaving, setIsSaving] = useState(false);
+  const [rulesOpen, setRulesOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -212,7 +214,7 @@ export function NorthernBranchGame() {
       const host: NorthernRoomPlayer = { id: session.id, name: session.name, joinedAt: now, avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined };
       const nextRoom: NorthernRoom = {
         code: makeRoomCode(), revision: 0, hostId: session.id, ownerId, passphrase: passphrase.trim(), phase: "lobby",
-        players: [host], debugMode: false, game: null, notice: "参加者を待っています。", createdAt: now, updatedAt: now,
+        players: [host], gameNumber: 1, debugMode: false, game: null, notice: "参加者を待っています。", createdAt: now, updatedAt: now,
       };
       const response = await fetch("/api/northern-branch/rooms", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ room: nextRoom, actorId: session.id }) });
       if (!response.ok) {
@@ -290,6 +292,11 @@ export function NorthernBranchGame() {
   };
 
   const marketCards = game?.offers ?? [];
+  const rulesDialog = <GameRulesDialog open={rulesOpen} title="ノーザンブランチのルール" onClose={() => setRulesOpen(false)}>
+    <p>資源カードを商品へ生産し、商品を支払って建物を建てます。建物の得点と効果を使い、最初に10点へ到達した商会が勝利です。</p>
+    <ol className="mt-3 list-decimal space-y-2 pl-5"><li>手番では、市場を確認して通常アクションを1回行います。</li><li>自分の未使用の建物は、それぞれ1回まで使えます。</li><li>手番終了後は次の人の手番へ進みます。手札内容は本人の端末だけに表示されます。</li></ol>
+    <p className="mt-3 text-amber-200">カード構成と数値は検証用の仮設定です。</p>
+  </GameRulesDialog>;
 
   if (!ready) return <main className="min-h-screen bg-slate-950 p-8 text-white">ログイン情報と部屋を確認中...</main>;
 
@@ -301,7 +308,7 @@ export function NorthernBranchGame() {
     return (
       <main className="min-h-screen bg-[radial-gradient(circle_at_top,#365314_0%,#172033_42%,#020617_82%)] px-4 py-8 text-white">
         <div className="mx-auto max-w-4xl">
-          <div className="flex items-center justify-between"><Link href="/games" className="text-sm font-bold text-lime-200">← ゲームロビー</Link><span className="text-sm font-bold">{session.name}</span></div>
+          <div className="flex items-center justify-between gap-2"><Link href="/games" className="text-sm font-bold text-lime-200">← ゲームロビー</Link><div className="flex items-center gap-2"><button type="button" onClick={() => setRulesOpen(true)} className="rounded-lg border border-white/20 px-3 py-2 text-sm font-bold">ルール</button><span className="text-sm font-bold">{session.name}</span></div></div>
           <section className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-slate-950/80 shadow-2xl">
             <div className="bg-gradient-to-r from-lime-400 via-amber-300 to-orange-400 px-6 py-8 text-slate-950"><p className="text-xs font-black uppercase tracking-[0.28em]">Online room game</p><h1 className="mt-2 text-4xl font-black sm:text-6xl">ノーザンブランチ</h1><p className="mt-3 font-bold">資源を商品へ育て、建物を増やし、最初に10点を目指す手番制ゲーム。</p></div>
             <div className="grid gap-6 p-6 md:grid-cols-2">
@@ -312,13 +319,14 @@ export function NorthernBranchGame() {
             {error && <p className="mx-6 mb-6 rounded-xl border border-rose-300/30 bg-rose-300/10 p-3 text-sm font-bold text-rose-100">{error}</p>}
           </section>
         </div>
+        {rulesDialog}
       </main>
     );
   }
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,#365314_0%,#172033_35%,#020617_75%)] text-white">
-      <header className="border-b border-white/10 bg-slate-950/70"><div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-4"><div><Link href="/games" className="text-xs font-bold text-lime-200">← ゲームロビー</Link><h1 className="mt-1 text-2xl font-black">ノーザンブランチ <span className="font-mono text-base text-amber-300">#{room.code}</span></h1></div><div className="flex flex-wrap items-center gap-2">{isHost && room.phase === "lobby" && <DebugModeButton enabled={room.debugMode} disabled={isSaving} onChange={(enabled) => runAction({ type: "set-debug", actorId: playerId, enabled }).then(() => undefined)} />}<span className="rounded-lg bg-white/10 px-3 py-2 text-sm font-bold">{session.name}</span>{isHost ? <button type="button" onClick={() => void dissolveRoom()} className="rounded-lg border border-rose-300/30 px-3 py-2 text-sm font-bold text-rose-100">部屋を解散</button> : room.phase === "lobby" && <button type="button" onClick={() => void leaveRoom()} className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold">退出</button>}</div></div></header>
+      <header className="border-b border-white/10 bg-slate-950/70"><div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-4"><div><Link href="/games" className="text-xs font-bold text-lime-200">← ゲームロビー</Link><h1 className="mt-1 text-2xl font-black">ノーザンブランチ <span className="font-mono text-base text-amber-300">#{room.code}</span></h1></div><div className="flex flex-wrap items-center gap-2">{isHost && room.phase === "lobby" && <DebugModeButton enabled={room.debugMode} disabled={isSaving} onChange={(enabled) => runAction({ type: "set-debug", actorId: playerId, enabled }).then(() => undefined)} />}<button type="button" onClick={() => setRulesOpen(true)} className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold">ルール</button><span className="rounded-lg bg-white/10 px-3 py-2 text-sm font-bold">{session.name}</span>{isHost ? <button type="button" onClick={() => void dissolveRoom()} className="rounded-lg border border-rose-300/30 px-3 py-2 text-sm font-bold text-rose-100">部屋を解散</button> : room.phase === "lobby" && <button type="button" onClick={() => void leaveRoom()} className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold">退出</button>}</div></div></header>
       <div className="mx-auto grid max-w-7xl gap-4 px-4 py-5 xl:grid-cols-[260px_minmax(0,1fr)_280px]">
         <aside className="space-y-4"><section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4"><div className="flex items-center justify-between"><h2 className="font-black">参加者</h2><span className="text-sm text-slate-400">{room.players.length}/4人</span></div><ul className="mt-3 space-y-2">{room.players.map((player) => <PlayerRow key={player.id} player={player} isHost={player.id === room.hostId} isMe={player.id === playerId} />)}</ul></section><RoomConfigSummary items={configItems} /></aside>
         <div className="space-y-4">
@@ -338,6 +346,7 @@ export function NorthernBranchGame() {
         </div>
         <aside className="space-y-3">{game && <><section className="rounded-xl border border-white/10 bg-slate-950/75 p-4"><p className="text-xs font-bold uppercase text-amber-300">Scores</p><div className="mt-3 space-y-2">{game.players.map((player, index) => <div key={player.id} className={`rounded-lg border p-3 ${index === game.activePlayerIndex ? "border-lime-300 bg-lime-300/10" : "border-white/10 bg-black/10"}`}><div className="flex items-center justify-between gap-2"><p className="truncate font-bold">{player.name}</p><p className="font-black text-amber-300">{player.points}点</p></div><p className="mt-1 text-xs text-slate-400">手札 {player.handCount ?? player.hand.length}/{northernRules.handLimit}・建物 {player.buildings.length}</p></div>)}</div></section><section className="rounded-xl border border-white/10 bg-slate-950/75 p-4"><p className="font-black">行動履歴</p><ul className="mt-3 space-y-2">{game.log.slice(0, 12).map((entry, index) => <li key={`${entry}-${index}`} className="border-b border-white/5 pb-2 text-xs leading-5 text-slate-300">{entry}</li>)}</ul></section></>}</aside>
       </div>
+      {rulesDialog}
     </main>
   );
 }
