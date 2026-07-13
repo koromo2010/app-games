@@ -104,6 +104,7 @@ export function GameLobby() {
   const [isActiveRoomLoading, setIsActiveRoomLoading] = useState(false);
   const [privateAccessKey, setPrivateAccessKey] = useState("");
   const [privateUnlocked, setPrivateUnlocked] = useState(false);
+  const [isMobileInfoOpen, setIsMobileInfoOpen] = useState(false);
 
   const loadStats = useCallback(async (targetPlayerId: string, gameFilter: PlayerStatsGameFilter) => {
     if (!targetPlayerId) return;
@@ -384,6 +385,7 @@ export function GameLobby() {
     setAvatarColor(makeRandomAvatarColor());
     setAvatarImage(pickRandomDefaultAvatarImage());
     setIsLoggedIn(false);
+    setIsMobileInfoOpen(false);
     setStats(null);
     setActiveRoom(null);
     setMessage("ログアウトしました。");
@@ -466,6 +468,13 @@ export function GameLobby() {
                     >
                       マイページを開く
                     </Link>
+                    <button
+                      type="button"
+                      onClick={() => setIsMobileInfoOpen(true)}
+                      className="mt-2 flex w-full items-center justify-center rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50 lg:hidden"
+                    >
+                      アカウント・戦績を開く
+                    </button>
                   </div>
                 </details>
               ) : (
@@ -494,8 +503,34 @@ export function GameLobby() {
         </div>
       </section>
 
-      <section className="mx-auto grid max-w-6xl gap-4 px-4 py-6 lg:grid-cols-[340px_1fr]">
-        <aside className="space-y-4">
+      <section className="mx-auto grid max-w-6xl gap-4 px-4 py-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+        {isLoggedIn && isMobileInfoOpen && (
+          <button
+            type="button"
+            aria-label="アカウント・戦績メニューを閉じる"
+            onClick={() => setIsMobileInfoOpen(false)}
+            className="fixed inset-0 z-40 bg-slate-950/70 backdrop-blur-sm lg:hidden"
+          />
+        )}
+        <aside className={`space-y-4 lg:order-2 lg:static lg:col-start-2 lg:row-start-1 lg:block lg:overflow-visible lg:bg-transparent lg:p-0 lg:shadow-none ${
+          isLoggedIn
+            ? isMobileInfoOpen
+              ? "fixed inset-3 z-50 overflow-y-auto rounded-xl bg-slate-950 p-3 shadow-2xl"
+              : "hidden"
+            : "order-1"
+        }`}>
+          {isLoggedIn && (
+            <div className="sticky top-0 z-10 flex items-center justify-between rounded-lg border border-white/10 bg-slate-900 px-3 py-2 text-white shadow-lg lg:hidden">
+              <p className="text-sm font-black">アカウント・戦績</p>
+              <button
+                type="button"
+                onClick={() => setIsMobileInfoOpen(false)}
+                className="rounded-md border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-bold"
+              >
+                閉じる
+              </button>
+            </div>
+          )}
           <div className="rounded-lg border border-white/10 bg-white/[0.96] p-4 shadow-[0_18px_50px_rgba(15,23,42,0.18)]">
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -799,8 +834,13 @@ export function GameLobby() {
           )}
         </aside>
 
-        <div className="grid gap-4 md:grid-cols-3">
-          {games.filter((game) => !game.private || privateUnlocked).map((game) => {
+        <div className={`${isLoggedIn ? "order-1" : "order-2"} min-w-0 lg:order-1 lg:col-start-1 lg:row-start-1`}>
+          <div className="mb-4 rounded-lg border border-white/10 bg-white/[0.08] px-4 py-3 text-white">
+            <p className="text-xs font-semibold uppercase text-cyan-200">Games</p>
+            <h2 className="text-xl font-black">遊ぶゲームを選ぶ</h2>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {games.filter((game) => !game.private || privateUnlocked).map((game) => {
             const card = (
               <article className="h-full rounded-lg border border-white/10 bg-white/[0.96] p-4 shadow-[0_18px_50px_rgba(15,23,42,0.18)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_60px_rgba(15,23,42,0.24)]">
                 <div className={`h-24 rounded-lg bg-gradient-to-br ${game.accent}`} />
@@ -859,7 +899,8 @@ export function GameLobby() {
                 {card}
               </button>
             );
-          })}
+            })}
+          </div>
         </div>
       </section>
     </main>
