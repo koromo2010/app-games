@@ -1,0 +1,510 @@
+import { randomUUID } from "node:crypto";
+import {
+  isValidKotobaSenpukuWord,
+  kotobaSenpukuDebugWords,
+  kotobaSenpukuKana,
+  kotobaSenpukuKanaKey,
+  kotobaSenpukuMaximumCalls,
+  kotobaSenpukuMaximumPlayers,
+  maskKotobaSenpukuWord,
+  normalizeKotobaSenpukuConfig,
+  normalizeKotobaSenpukuWord,
+  pickKotobaSenpukuTheme,
+  type KotobaSenpukuPhase,
+  type KotobaSenpukuPlayer,
+  type KotobaSenpukuRoom,
+  type KotobaSenpukuRoomAction,
+  type KotobaSenpukuRoomChoice,
+  type KotobaSenpukuRoundResult,
+  type KotobaSenpukuTheme,
+} from "@/lib/kotoba-senpuku";
+import { isMultiplayerRoomExpired, multiplayerRoomExpiryArgs, multiplayerRoomTtlSeconds } from "@/lib/multiplayer-room-lifecycle";
+import { redisCommand } from "@/lib/redis-store";
+
+const roomKeyPrefix = "kotoba-senpuku:room:";
+const roomIndexKey = "kotoba-senpuku:rooms";
+const playerActiveRoomKeyPrefix = "kotoba-senpuku:player-active-room:";
+
+function roomKey(code: string) {
+  return `${roomKeyPrefix}${code.trim().toUpperCase()}`;
+}
+
+function playerActiveRoomKey(playerId: string) {
+  return `${playerActiveRoomKeyPrefix}${playerId}`;
+}
+
+function isPhase(value: unknown): value is KotobaSenpukuPhase {
+  return value === "lobby" || value === "secret" || value === "battle" || value === "result";
+}
+
+function normalizePlayers(value: unknown): KotobaSenpukuPlayer[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((player): player is KotobaSenpukuPlayer => Boolean(player?.id && player?.name))
+    .slice(0, kotobaSenpukuMaximumPlayers)
+    .map((player) => ({
+      id: String(player.id),
+      name: String(player.name).trim().slice(0, 20),
+      joinedAt: typeof player.joinedAt === "number" ? player.joinedAt : Date.now(),
+      avatarColor: typeof player.avatarColor === "string" ? player.avatarColor : undefined,
+      avatarImage: typeof player.avatarImage === "string" ? player.avatarImage : undefined,
+      isDummy: player.isDummy === true,
+    }));
+}
+
+function normalizeTheme(value: unknown): KotobaSenpukuTheme | null {
+  if (!value || typeof value !== "object") return null;
+  const theme = value as Partial<KotobaSenpukuTheme>;
+  if (!theme.id || !theme.title || !theme.guide) return null;
+  return { id: String(theme.id), title: String(theme.title), guide: String(theme.guide) };
+}
+
+function normalizeStringRecord(value: unknown, playerIds: Set<string>, wordsOnly = false) {
+  if (!value || typeof value !== "object") return {};
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>).flatMap(([id, item]) => {
+    if (!playerIds.has(id) || typeof item !== "string") return [];
+    const text = wordsOnly ? normalizeKotobaSenpukuWord(item) : item.slice(0, 20);
+    if (wordsOnly && !isValidKotobaSenpukuWord(text)) return [];
+    return [[id, text]];
+  }));
+}
+
+function normalizeNumberRecord(value: unknown, playerIds: Set<string>) {
+  const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  return Object.fromEntries([...playerIds].map((id) => {
+    const number = source[id];
+    return [id, typeof number === "number" && Number.isFinite(number) ? Math.max(0, Math.floor(number)) : 0];
+  }));
+}
+
+function normalizeHistory(value: unknown): KotobaSenpukuRoundResult[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const result = item as Partial<KotobaSenpukuRoundResult>;
+    const theme = normalizeTheme(result.theme);
+    if (!theme || !result.secrets || typeof result.secrets !== "object") return [];
+    const ids = new Set(Object.keys(result.secrets));
+    return [{
+      round: typeof result.round === "number" ? Math.max(1, Math.floor(result.round)) : 1,
+      theme,
+      secrets: normalizeStringRecord(result.secrets, ids, true),
+      signals: normalizeNumberRecord(result.signals, ids),
+      survivalBonus: normalizeNumberRecord(result.survivalBonus, ids),
+      calledKana: Array.isArray(result.calledKana) ? result.calledKana.filter((kana): kana is string => kotobaSenpukuKana.includes(kana as (typeof kotobaSenpukuKana)[number])) : [],
+    }];
+  });
+}
+
+function normalizeRoom(value: unknown): KotobaSenpukuRoom | null {
+  if (!value || typeof value !== "object") return null;
+  const parsed = value as Partial<KotobaSenpukuRoom>;
+  const code = typeof parsed.code === "string" ? parsed.code.trim().toUpperCase() : "";
+  const hostId = typeof parsed.hostId === "string" ? parsed.hostId : "";
+  const players = normalizePlayers(parsed.players);
+  if (!code || !hostId || players.length === 0 || !players.some((player) => player.id === hostId)) return null;
+  const playerIds = new Set(players.map((player) => player.id));
+  const config = normalizeKotobaSenpukuConfig(parsed);
+  const calledKana = Array.isArray(parsed.calledKana)
+    ? [...new Set(parsed.calledKana.filter((kana): kana is string => kotobaSenpukuKana.includes(kana as (typeof kotobaSenpukuKana)[number])))]
+    : [];
+  return {
+    code,
+    revision: typeof parsed.revision === "number" ? Math.max(0, Math.floor(parsed.revision)) : 0,
+    hostId,
+    ownerId: typeof parsed.ownerId === "string" ? parsed.ownerId : undefined,
+    passphrase: typeof parsed.passphrase === "string" ? parsed.passphrase.slice(0, 40) : "",
+    phase: isPhase(parsed.phase) ? parsed.phase : "lobby",
+    players,
+    ...config,
+    round: typeof parsed.round === "number" ? Math.max(1, Math.floor(parsed.round)) : 1,
+    theme: normalizeTheme(parsed.theme),
+    secrets: normalizeStringRecord(parsed.secrets, playerIds, true),
+    submittedIds: Array.isArray(parsed.submittedIds) ? parsed.submittedIds.filter((id): id is string => typeof id === "string" && playerIds.has(id)) : [],
+    masks: normalizeStringRecord(parsed.masks, playerIds),
+    calledKana,
+    exposedIds: Array.isArray(parsed.exposedIds) ? parsed.exposedIds.filter((id): id is string => typeof id === "string" && playerIds.has(id)) : [],
+    roundSignals: normalizeNumberRecord(parsed.roundSignals, playerIds),
+    totalScores: normalizeNumberRecord(parsed.totalScores, playerIds),
+    activePlayerIndex: typeof parsed.activePlayerIndex === "number" ? Math.max(0, Math.min(players.length - 1, Math.floor(parsed.activePlayerIndex))) : 0,
+    turnNumber: typeof parsed.turnNumber === "number" ? Math.max(1, Math.floor(parsed.turnNumber)) : 1,
+    history: normalizeHistory(parsed.history),
+    log: Array.isArray(parsed.log) ? parsed.log.filter((entry): entry is string => typeof entry === "string").slice(0, 30) : [],
+    phaseStartedAt: typeof parsed.phaseStartedAt === "number" ? parsed.phaseStartedAt : null,
+    createdAt: typeof parsed.createdAt === "number" ? parsed.createdAt : Date.now(),
+    updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : Date.now(),
+  };
+}
+
+function timedOut(room: KotobaSenpukuRoom, seconds: number, now = Date.now()) {
+  return Boolean(room.phaseStartedAt && seconds > 0 && now >= room.phaseStartedAt + seconds * 1000);
+}
+
+function addLog(room: KotobaSenpukuRoom, message: string) {
+  return { ...room, log: [message, ...room.log].slice(0, 30) };
+}
+
+function fillMissingSecrets(room: KotobaSenpukuRoom) {
+  const themeId = room.theme?.id ?? "meal";
+  const candidates = kotobaSenpukuDebugWords[themeId] ?? kotobaSenpukuDebugWords.meal;
+  const used = new Set(Object.values(room.secrets));
+  const secrets = { ...room.secrets };
+  let cursor = 0;
+  for (const player of room.players) {
+    if (secrets[player.id]) continue;
+    while (cursor < candidates.length && used.has(candidates[cursor])) cursor += 1;
+    const word = candidates[cursor] ?? `ことば${cursor + 1}`;
+    secrets[player.id] = word;
+    used.add(word);
+    cursor += 1;
+  }
+  return { ...room, secrets, submittedIds: room.players.map((player) => player.id) };
+}
+
+function allSecretsSubmitted(room: KotobaSenpukuRoom) {
+  return room.players.every((player) => Boolean(room.secrets[player.id]));
+}
+
+function beginBattle(room: KotobaSenpukuRoom) {
+  const masks = Object.fromEntries(room.players.map((player) => [player.id, maskKotobaSenpukuWord(room.secrets[player.id] ?? "", [])]));
+  return addLog({
+    ...room,
+    phase: "battle",
+    masks,
+    calledKana: [],
+    exposedIds: [],
+    activePlayerIndex: 0,
+    turnNumber: 1,
+    phaseStartedAt: Date.now(),
+  }, `${room.players[0]?.name ?? "最初のプレイヤー"}の手番です。`);
+}
+
+function beginRound(room: KotobaSenpukuRoom, round: number) {
+  return {
+    ...room,
+    phase: "secret" as const,
+    round,
+    theme: pickKotobaSenpukuTheme(room.history),
+    secrets: {},
+    submittedIds: [],
+    masks: {},
+    calledKana: [],
+    exposedIds: [],
+    roundSignals: Object.fromEntries(room.players.map((player) => [player.id, 0])),
+    activePlayerIndex: 0,
+    turnNumber: 1,
+    log: [`第${round}ラウンドの秘密語を入力します。`, ...room.log].slice(0, 30),
+    phaseStartedAt: Date.now(),
+  };
+}
+
+function advanceTurn(room: KotobaSenpukuRoom, message: string) {
+  const activePlayerIndex = (room.activePlayerIndex + 1) % room.players.length;
+  const next = room.players[activePlayerIndex];
+  return addLog({
+    ...room,
+    activePlayerIndex,
+    turnNumber: room.turnNumber + 1,
+    phaseStartedAt: Date.now(),
+  }, `${message} 次は${next?.name ?? "次のプレイヤー"}です。`);
+}
+
+function finishRound(room: KotobaSenpukuRoom) {
+  const hiddenIds = room.players.map((player) => player.id).filter((id) => !room.exposedIds.includes(id));
+  const bonusValue = hiddenIds.length === 1 ? 3 : 2;
+  const survivalBonus = Object.fromEntries(room.players.map((player) => [player.id, hiddenIds.includes(player.id) ? bonusValue : 0]));
+  const signals = Object.fromEntries(room.players.map((player) => [player.id, (room.roundSignals[player.id] ?? 0) + survivalBonus[player.id]]));
+  const totalScores = Object.fromEntries(room.players.map((player) => [player.id, (room.totalScores[player.id] ?? 0) + signals[player.id]]));
+  const result: KotobaSenpukuRoundResult = {
+    round: room.round,
+    theme: room.theme ?? pickKotobaSenpukuTheme(room.history),
+    secrets: { ...room.secrets },
+    signals,
+    survivalBonus,
+    calledKana: [...room.calledKana],
+  };
+  return addLog({
+    ...room,
+    phase: "result",
+    roundSignals: signals,
+    totalScores,
+    history: [...room.history.filter((item) => item.round !== room.round), result],
+    masks: Object.fromEntries(room.players.map((player) => [player.id, room.secrets[player.id] ?? ""])),
+    phaseStartedAt: null,
+  }, "ラウンド終了。全員の秘密語を公開しました。");
+}
+
+function shouldFinishRound(room: KotobaSenpukuRoom) {
+  const hiddenCount = room.players.filter((player) => !room.exposedIds.includes(player.id)).length;
+  return hiddenCount <= 1 || room.calledKana.length >= kotobaSenpukuMaximumCalls;
+}
+
+function performScan(room: KotobaSenpukuRoom, kana: string) {
+  const actor = room.players[room.activePlayerIndex];
+  if (!actor || room.calledKana.includes(kana)) return room;
+  const calledKana = [...room.calledKana, kana];
+  const hitTargets = room.players.filter((player) => (
+    player.id !== actor.id
+    && !room.exposedIds.includes(player.id)
+    && [...(room.secrets[player.id] ?? "")].some((character) => kotobaSenpukuKanaKey(character) === kana)
+  ));
+  const masks = Object.fromEntries(room.players.map((player) => [
+    player.id,
+    maskKotobaSenpukuWord(room.secrets[player.id] ?? "", calledKana, room.exposedIds.includes(player.id)),
+  ]));
+  const newlyExposed = room.players.filter((player) => !room.exposedIds.includes(player.id) && !masks[player.id].includes("●"));
+  const exposedIds = [...new Set([...room.exposedIds, ...newlyExposed.map((player) => player.id)])];
+  const currentSignal = room.roundSignals[actor.id] ?? 0;
+  const gained = hitTargets.length + newlyExposed.filter((player) => player.id !== actor.id).length * 2;
+  const roundSignals = { ...room.roundSignals, [actor.id]: hitTargets.length ? currentSignal + gained : Math.max(0, currentSignal - 1) };
+  const message = hitTargets.length
+    ? `${actor.name}の「${kana}」スキャンは${hitTargets.length}人に反応しました。`
+    : `${actor.name}の「${kana}」スキャンは反応なし。信号点が1下がりました。`;
+  const changed = addLog({ ...room, calledKana, masks, exposedIds, roundSignals }, message);
+  return shouldFinishRound(changed) ? finishRound(changed) : advanceTurn(changed, "スキャン完了。");
+}
+
+function performChallenge(room: KotobaSenpukuRoom, targetId: string, guessInput: string) {
+  const actor = room.players[room.activePlayerIndex];
+  const target = room.players.find((player) => player.id === targetId);
+  if (!actor || !target || target.id === actor.id || room.exposedIds.includes(target.id)) return room;
+  const guess = normalizeKotobaSenpukuWord(guessInput);
+  const correct = guess === room.secrets[target.id];
+  const currentSignal = room.roundSignals[actor.id] ?? 0;
+  const roundSignals = { ...room.roundSignals, [actor.id]: correct ? currentSignal + 4 : Math.max(0, currentSignal - 1) };
+  const exposedIds = correct ? [...new Set([...room.exposedIds, target.id])] : room.exposedIds;
+  const masks = correct ? { ...room.masks, [target.id]: room.secrets[target.id] } : room.masks;
+  const changed = addLog({ ...room, roundSignals, exposedIds, masks }, correct
+    ? `${actor.name}が${target.name}の秘密語を言い当て、4信号点を獲得しました。`
+    : `${actor.name}の直接推理は外れ、信号点が1下がりました。`);
+  return shouldFinishRound(changed) ? finishRound(changed) : advanceTurn(changed, "直接推理が完了しました。");
+}
+
+function reconcileProgress(room: KotobaSenpukuRoom) {
+  if (room.phase === "secret" && (allSecretsSubmitted(room) || timedOut(room, room.secretTimeLimitSeconds))) {
+    return beginBattle(allSecretsSubmitted(room) ? room : fillMissingSecrets(room));
+  }
+  if (room.phase === "battle" && timedOut(room, room.turnTimeLimitSeconds)) {
+    const player = room.players[room.activePlayerIndex];
+    return advanceTurn(room, `${player?.name ?? "手番プレイヤー"}は時間切れでパスしました。`);
+  }
+  return room;
+}
+
+async function compareAndSetRoom(expectedRevision: number, room: KotobaSenpukuRoom) {
+  return redisCommand<number>([
+    "EVAL",
+    "local raw=redis.call('GET',KEYS[1]); if not raw then return -1 end; local current=cjson.decode(raw); if tonumber(current.revision or 0)~=tonumber(ARGV[1]) then return 0 end; redis.call('SET',KEYS[1],ARGV[2],'EX',ARGV[3]); return 1",
+    "1",
+    roomKey(room.code),
+    String(expectedRevision),
+    JSON.stringify(room),
+    String(multiplayerRoomTtlSeconds),
+  ]);
+}
+
+async function mutateStoredRoom(code: string, mutate: (room: KotobaSenpukuRoom) => KotobaSenpukuRoom) {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const current = await loadStoredKotobaSenpukuRoom(code);
+    if (!current) throw new Error("KOTOBA_SENPUKU_ROOM_NOT_FOUND");
+    const changed = mutate(current);
+    if (changed === current) return current;
+    const next = normalizeRoom({ ...changed, revision: current.revision + 1, updatedAt: Date.now() });
+    if (!next) throw new Error("INVALID_KOTOBA_SENPUKU_ROOM");
+    const saved = await compareAndSetRoom(current.revision, next);
+    if (saved === 1) return next;
+    if (saved === -1) throw new Error("KOTOBA_SENPUKU_ROOM_NOT_FOUND");
+  }
+  throw new Error("KOTOBA_SENPUKU_ROOM_CONFLICT");
+}
+
+function makeChoice(room: KotobaSenpukuRoom): KotobaSenpukuRoomChoice {
+  return {
+    code: room.code,
+    hostName: room.players.find((player) => player.id === room.hostId)?.name ?? "不明",
+    playerCount: room.players.length,
+    roundsTotal: room.roundsTotal,
+    hasPassphrase: Boolean(room.passphrase),
+    updatedAt: room.updatedAt,
+  };
+}
+
+async function saveActiveRooms(room: KotobaSenpukuRoom) {
+  await Promise.all(room.players.filter((player) => !player.isDummy).map((player) => (
+    redisCommand<"OK">(["SET", playerActiveRoomKey(player.id), room.code, ...multiplayerRoomExpiryArgs()])
+  )));
+}
+
+async function clearActiveRoom(playerId: string, code: string) {
+  const saved = await redisCommand<string | null>(["GET", playerActiveRoomKey(playerId)]);
+  if (saved?.trim().toUpperCase() === code.trim().toUpperCase()) await redisCommand<number>(["DEL", playerActiveRoomKey(playerId)]);
+}
+
+export function sanitizeKotobaSenpukuRoom(room: KotobaSenpukuRoom, playerId: string) {
+  const revealAll = room.phase === "result" || (room.debugMode && playerId === room.hostId);
+  const secrets = revealAll
+    ? room.secrets
+    : room.secrets[playerId] ? { [playerId]: room.secrets[playerId] } : {};
+  return { ...room, passphrase: room.passphrase ? "設定済み" : "", secrets };
+}
+
+export async function loadStoredKotobaSenpukuRoom(code: string) {
+  const raw = await redisCommand<string | null>(["GET", roomKey(code)]);
+  if (!raw) return null;
+  try {
+    const room = normalizeRoom(JSON.parse(raw));
+    if (!room) return null;
+    if (isMultiplayerRoomExpired(room.updatedAt)) {
+      await redisCommand<number>(["DEL", roomKey(room.code)]);
+      await redisCommand<number>(["SREM", roomIndexKey, room.code]);
+      await Promise.all(room.players.map((player) => clearActiveRoom(player.id, room.code)));
+      return null;
+    }
+    return room;
+  } catch {
+    return null;
+  }
+}
+
+export async function loadAndReconcileKotobaSenpukuRoom(code: string) {
+  const room = await loadStoredKotobaSenpukuRoom(code);
+  if (!room) return null;
+  if (reconcileProgress(room) === room) return room;
+  return mutateStoredRoom(code, reconcileProgress);
+}
+
+export async function loadKotobaSenpukuPlayerActiveRoom(playerId: string) {
+  const normalizedId = playerId.trim();
+  if (!normalizedId) return null;
+  const code = await redisCommand<string | null>(["GET", playerActiveRoomKey(normalizedId)]);
+  if (!code) return null;
+  const room = await loadAndReconcileKotobaSenpukuRoom(code);
+  if (!room || !room.players.some((player) => player.id === normalizedId)) {
+    await redisCommand<number>(["DEL", playerActiveRoomKey(normalizedId)]);
+    return null;
+  }
+  return room;
+}
+
+export async function createStoredKotobaSenpukuRoom(value: unknown, actorId: string) {
+  const room = normalizeRoom(value);
+  if (!room || actorId !== room.hostId) throw new Error("INVALID_KOTOBA_SENPUKU_ROOM");
+  const created = { ...room, revision: 0, phase: "lobby" as const, debugMode: false, theme: null, secrets: {}, submittedIds: [], masks: {}, calledKana: [], exposedIds: [], history: [], log: ["参加者を待っています。"], phaseStartedAt: null, updatedAt: Date.now() };
+  const saved = await redisCommand<"OK" | null>(["SET", roomKey(created.code), JSON.stringify(created), "NX", ...multiplayerRoomExpiryArgs()]);
+  if (saved !== "OK") throw new Error("KOTOBA_SENPUKU_ROOM_CONFLICT");
+  await redisCommand<number>(["SADD", roomIndexKey, created.code]);
+  await saveActiveRooms(created);
+  return created;
+}
+
+export async function applyStoredKotobaSenpukuAction(code: string, action: KotobaSenpukuRoomAction) {
+  const room = await mutateStoredRoom(code, (current) => {
+    if (action.type === "join-room") {
+      if (current.phase !== "lobby" || action.actorId !== action.player.id) throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
+      if (current.passphrase && current.passphrase !== action.passphrase.trim()) throw new Error("KOTOBA_SENPUKU_BAD_PASSPHRASE");
+      if (current.players.some((player) => player.id === action.actorId)) return current;
+      if (current.players.length >= kotobaSenpukuMaximumPlayers) throw new Error("KOTOBA_SENPUKU_ROOM_FULL");
+      return addLog({ ...current, players: [...current.players, action.player] }, `${action.player.name}さんが参加しました。`);
+    }
+
+    const actorIsHost = action.actorId === current.hostId;
+    const actorIsMember = current.players.some((player) => player.id === action.actorId && !player.isDummy);
+    if (!actorIsMember) throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
+
+    if (action.type === "leave-room") {
+      if (actorIsHost || current.phase !== "lobby") throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
+      return { ...current, players: current.players.filter((player) => player.id !== action.actorId) };
+    }
+    if (action.type === "update-config") {
+      if (!actorIsHost || current.phase !== "lobby") throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
+      return { ...current, ...normalizeKotobaSenpukuConfig({ ...action.config, debugMode: current.debugMode }) };
+    }
+    if (action.type === "set-debug") {
+      if (!actorIsHost || current.phase !== "lobby") throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
+      return { ...current, debugMode: action.enabled, players: action.enabled ? current.players : current.players.filter((player) => !player.isDummy) };
+    }
+    if (action.type === "debug-add-player") {
+      if (!actorIsHost || !current.debugMode || current.phase !== "lobby") throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
+      if (current.players.length >= kotobaSenpukuMaximumPlayers) throw new Error("KOTOBA_SENPUKU_ROOM_FULL");
+      const dummyNumber = current.players.filter((player) => player.isDummy).length + 1;
+      const colors = ["#38bdf8", "#a78bfa", "#f472b6", "#f59e0b", "#84cc16", "#14b8a6", "#fb7185"];
+      return { ...current, players: [...current.players, { id: `dummy-${randomUUID()}`, name: `ダミー${dummyNumber}`, joinedAt: Date.now(), avatarColor: colors[(dummyNumber - 1) % colors.length], isDummy: true }] };
+    }
+    if (action.type === "start-game") {
+      if (!actorIsHost || current.phase !== "lobby") throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
+      if (current.players.length < 2) throw new Error("KOTOBA_SENPUKU_NOT_ENOUGH_PLAYERS");
+      return beginRound({ ...current, round: 1, history: [], totalScores: Object.fromEntries(current.players.map((player) => [player.id, 0])) }, 1);
+    }
+    if (action.type === "submit-secret") {
+      if (current.phase !== "secret" || action.round !== current.round || current.secrets[action.actorId]) return current;
+      const word = normalizeKotobaSenpukuWord(action.word);
+      if (!isValidKotobaSenpukuWord(word)) throw new Error("KOTOBA_SENPUKU_INVALID_WORD");
+      return reconcileProgress({ ...current, secrets: { ...current.secrets, [action.actorId]: word }, submittedIds: [...new Set([...current.submittedIds, action.actorId])] });
+    }
+    if (action.type === "debug-fill-secrets") {
+      if (!actorIsHost || !current.debugMode || current.phase !== "secret" || action.round !== current.round) throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
+      return beginBattle(fillMissingSecrets(current));
+    }
+    if (action.type === "next-round") {
+      if (!actorIsHost || current.phase !== "result" || action.round !== current.round || current.round >= current.roundsTotal) throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
+      return beginRound(current, current.round + 1);
+    }
+    if (action.type === "reset-game") {
+      if (!actorIsHost || current.phase !== "result" || current.round < current.roundsTotal) throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
+      return { ...current, phase: "lobby", round: 1, theme: null, secrets: {}, submittedIds: [], masks: {}, calledKana: [], exposedIds: [], roundSignals: {}, totalScores: {}, activePlayerIndex: 0, turnNumber: 1, history: [], log: ["同じ部屋で次のゲームを準備できます。"], phaseStartedAt: null };
+    }
+
+    const activePlayer = current.players[current.activePlayerIndex];
+    const canControlTurn = activePlayer?.id === action.actorId || (current.debugMode && actorIsHost);
+    if (current.phase !== "battle" || action.round !== current.round || !canControlTurn) throw new Error("KOTOBA_SENPUKU_NOT_YOUR_TURN");
+    if (action.type === "scan-kana") {
+      if (!kotobaSenpukuKana.includes(action.kana as (typeof kotobaSenpukuKana)[number]) || current.calledKana.includes(action.kana)) throw new Error("KOTOBA_SENPUKU_INVALID_KANA");
+      return performScan(current, action.kana);
+    }
+    if (action.type === "challenge-word") {
+      if (!isValidKotobaSenpukuWord(action.guess)) throw new Error("KOTOBA_SENPUKU_INVALID_WORD");
+      const target = current.players.find((player) => player.id === action.targetId);
+      if (!target || target.id === activePlayer.id || current.exposedIds.includes(target.id)) throw new Error("KOTOBA_SENPUKU_INVALID_TARGET");
+      return performChallenge(current, target.id, action.guess);
+    }
+    if (action.type === "debug-auto-turn") {
+      if (!actorIsHost || !current.debugMode) throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
+      const candidate = current.players
+        .filter((player) => player.id !== activePlayer.id && !current.exposedIds.includes(player.id))
+        .flatMap((player) => [...(current.secrets[player.id] ?? "")].map(kotobaSenpukuKanaKey))
+        .find((kana) => kotobaSenpukuKana.includes(kana as (typeof kotobaSenpukuKana)[number]) && !current.calledKana.includes(kana));
+      const kana = candidate ?? kotobaSenpukuKana.find((item) => !current.calledKana.includes(item));
+      return kana ? performScan(current, kana) : finishRound(current);
+    }
+    return current;
+  });
+  await redisCommand<number>(["SADD", roomIndexKey, room.code]);
+  await saveActiveRooms(room);
+  if (action.type === "leave-room") await clearActiveRoom(action.actorId, room.code);
+  return room;
+}
+
+export async function listJoinableKotobaSenpukuRooms() {
+  const codes = await redisCommand<string[]>(["SMEMBERS", roomIndexKey]);
+  const rooms = await Promise.all(codes.map((code) => loadStoredKotobaSenpukuRoom(code)));
+  const missingCodes = codes.filter((_, index) => !rooms[index]);
+  if (missingCodes.length > 0) await redisCommand<number>(["SREM", roomIndexKey, ...missingCodes]);
+  return rooms.filter((room): room is KotobaSenpukuRoom => Boolean(room && room.phase === "lobby" && room.players.length < kotobaSenpukuMaximumPlayers)).map(makeChoice).sort((left, right) => right.updatedAt - left.updatedAt);
+}
+
+export async function deleteStoredKotobaSenpukuRoom(code: string, actorId: string) {
+  const room = await loadStoredKotobaSenpukuRoom(code);
+  if (!room) return;
+  if (room.hostId !== actorId) throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
+  await redisCommand<number>(["DEL", roomKey(code)]);
+  await redisCommand<number>(["SREM", roomIndexKey, room.code]);
+  await Promise.all(room.players.map((player) => clearActiveRoom(player.id, room.code)));
+}
+
+export async function deleteHostedKotobaSenpukuRooms(ownerId: string, fallbackHostId: string) {
+  const codes = await redisCommand<string[]>(["SMEMBERS", roomIndexKey]);
+  const rooms = await Promise.all(codes.map((code) => loadStoredKotobaSenpukuRoom(code)));
+  const targets = rooms.filter((room): room is KotobaSenpukuRoom => Boolean(room && (room.ownerId === ownerId || (!room.ownerId && room.hostId === fallbackHostId))));
+  await Promise.all(targets.map((room) => deleteStoredKotobaSenpukuRoom(room.code, room.hostId)));
+  return targets.length;
+}

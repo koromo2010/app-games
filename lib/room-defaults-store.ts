@@ -7,9 +7,10 @@ import {
 import type { ClueLogVisibility, ClueMode, GameMode } from "@/lib/wordwolf-game-types";
 import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
 import { normalizeHodoaiConfig } from "@/lib/hodoai-talk";
+import { normalizeKotobaSenpukuConfig } from "@/lib/kotoba-senpuku";
 import { redisCommand } from "@/lib/redis-store";
 
-export type RoomDefaultsGame = "wordwolf" | "tahoiya" | "hodoai-talk";
+export type RoomDefaultsGame = "wordwolf" | "tahoiya" | "hodoai-talk" | "kotoba-senpuku";
 
 export type StoredWordWolfRoomDefaults = {
   gameMode: GameMode;
@@ -38,7 +39,13 @@ export type StoredHodoaiRoomDefaults = {
   arrangeTimeLimitSeconds: number;
 };
 
-export type StoredRoomDefaults = StoredWordWolfRoomDefaults | StoredTahoiyaRoomDefaults | StoredHodoaiRoomDefaults;
+export type StoredKotobaSenpukuRoomDefaults = {
+  roundsTotal: number;
+  secretTimeLimitSeconds: number;
+  turnTimeLimitSeconds: number;
+};
+
+export type StoredRoomDefaults = StoredWordWolfRoomDefaults | StoredTahoiyaRoomDefaults | StoredHodoaiRoomDefaults | StoredKotobaSenpukuRoomDefaults;
 
 const roomDefaultsKeyPrefix = "room-defaults:";
 const lobbyRounds = [1, 2, 3, 4];
@@ -48,7 +55,7 @@ function roomDefaultsKey(game: RoomDefaultsGame, playerId: string) {
 }
 
 function normalizeGame(value: unknown): RoomDefaultsGame | null {
-  return value === "wordwolf" || value === "tahoiya" || value === "hodoai-talk" ? value : null;
+  return value === "wordwolf" || value === "tahoiya" || value === "hodoai-talk" || value === "kotoba-senpuku" ? value : null;
 }
 
 function normalizeGameMode(value: unknown): GameMode {
@@ -106,10 +113,20 @@ function normalizeHodoaiDefaults(value: unknown): StoredHodoaiRoomDefaults {
   };
 }
 
+function normalizeKotobaSenpukuDefaults(value: unknown): StoredKotobaSenpukuRoomDefaults {
+  const config = normalizeKotobaSenpukuConfig(value);
+  return {
+    roundsTotal: config.roundsTotal,
+    secretTimeLimitSeconds: config.secretTimeLimitSeconds,
+    turnTimeLimitSeconds: config.turnTimeLimitSeconds,
+  };
+}
+
 export function normalizeStoredRoomDefaults(game: RoomDefaultsGame, value: unknown): StoredRoomDefaults {
   if (game === "wordwolf") return normalizeWordWolfDefaults(value);
   if (game === "tahoiya") return normalizeTahoiyaDefaults(value);
-  return normalizeHodoaiDefaults(value);
+  if (game === "hodoai-talk") return normalizeHodoaiDefaults(value);
+  return normalizeKotobaSenpukuDefaults(value);
 }
 
 export async function loadStoredRoomDefaults(gameInput: unknown, playerIdInput: unknown) {

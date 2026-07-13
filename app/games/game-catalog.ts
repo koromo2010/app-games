@@ -39,4 +39,14 @@ export const games = [
     accent: "from-sky-300 via-amber-200 to-fuchsia-300",
     private: true,
   },
+  {
+    title: "ことば潜伏戦",
+    status: "Private online prototype",
+    href: "/kotoba-senpuku",
+    players: "2-8人",
+    time: "10-25分",
+    summary: "秘密のことばへ文字スキャンをかけ、反応と直接推理で信号点を集めるゲーム。",
+    accent: "from-fuchsia-300 via-cyan-200 to-amber-200",
+    private: true,
+  },
 ];
