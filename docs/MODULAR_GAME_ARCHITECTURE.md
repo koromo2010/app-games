@@ -24,6 +24,6 @@ UI / hooks -> API client -> HTTP route -> application/domain -> storage
 - phase clock: `app/wordwolf/use-wordwolf-phase-clock.ts`
 - storage: `lib/wordwolf-room-store.ts`
 
-第一段階では部屋API通信と時計を巨大な画面コンポーネントから分離した。次段階で投稿・投票・時間切れの更新処理をサーバー側application serviceへ移し、クライアントはcommandだけを送る。これが完了すればgame-serverを独立コンテナへ移せる。
+第一段階では部屋API通信と時計を巨大な画面コンポーネントから分離した。部屋には単調増加する `revision` を持たせ、Redis内CASで古い保存を409拒否する。時間切れは `/api/wordwolf/commands` の `expire-phase` Commandへ移行済みで、サーバーが締切確認と遷移を担当する。次段階で通常の投稿・投票も同じCommandへ移し、クライアントから部屋全体を保存する経路を廃止する。これが完了すればgame-serverを独立コンテナへ移せる。
 
 `config/game-registry.json` の `moduleBoundaryFiles` は分離済み境界の正本であり、`npm run lint` が存在を検査する。新しいスレッドや新ゲームでファイルを1つへ戻さない。

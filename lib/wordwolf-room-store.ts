@@ -156,6 +156,7 @@ function normalizeRoom(value: unknown): WordWolfRoom | null {
   if (!code || !hostId || players.length === 0) return null;
 
   return {
+    revision: typeof parsed.revision === "number" ? Math.max(0, Math.floor(parsed.revision)) : 0,
     code,
     hostId,
     ownerId: typeof parsed.ownerId === "string" ? parsed.ownerId : undefined,
@@ -270,9 +271,16 @@ export async function saveStoredWordWolfRoom(room: unknown) {
     };
   }
 
-  // 1回のHTTP pipelineにまとめ、人数分のRedis往復で操作が重くならないようにする。
+  // revisionをRedis内で比較し、遅れて届いた画面から部屋全体が巻き戻るのを防ぐ。
+  const saved = await redisCommand<number>([
+    "EVAL",
+    "local raw=redis.call('GET',KEYS[1]); if raw then local current=cjson.decode(raw); local rev=tonumber(current.revision or 0); if tonumber(ARGV[1])<=rev then return 0 end end; redis.call('SET',KEYS[1],ARGV[2],'EX',ARGV[3]); return 1",
+    "1", roomKey(normalizedRoom.code), String(normalizedRoom.revision), JSON.stringify(normalizedRoom), multiplayerRoomExpiryArgs()[1],
+  ]);
+  if (saved !== 1) throw new Error("WORDWOLF_ROOM_CONFLICT");
+
+  // 残る索引更新は1回のHTTP pipelineにまとめる。
   await redisPipeline<unknown[]>([
-    ["SET", roomKey(normalizedRoom.code), JSON.stringify(normalizedRoom), ...multiplayerRoomExpiryArgs()],
     ["SADD", roomIndexKey, normalizedRoom.code],
     ...normalizedRoom.players.map((player) =>
       ["SET", playerActiveRoomKey(player.id), normalizedRoom.code, ...multiplayerRoomExpiryArgs()],

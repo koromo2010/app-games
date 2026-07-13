@@ -112,6 +112,9 @@
 
 モジュール分離と将来のコンテナ境界は `docs/MODULAR_GAME_ARCHITECTURE.md` を正本とする。ワードウルフでは部屋HTTPクライアントとフェーズ時計をUIから分離済みで、登録簿の `moduleBoundaryFiles` をlint時に検査する。
 
+部屋状態には `revision` を持たせ、Redis内CASで古い保存による巻き戻しを防ぐ。時間切れ遷移は `app/api/wordwolf/commands/route.ts` と `lib/wordwolf-timeout-command.ts` がサーバー側で処理し、複数端末から同時に要求されても一件だけ反映する。
+締切には標準2秒のサーバー受付猶予を設け、締切直前に端末から送った投稿・投票が通信遅延で時間切れ処理に負けないようにする。`WORDWOLF_TIMEOUT_GRACE_MS`（0〜10000ms）で調整可能。
+
 - `/wordwolf`
 - 部屋制、ログイン制、復帰対応、デバッグ時は1人テスト可
 - 順番投稿・全員同時投稿、順番ランダム、同時投票、同率・決選投票、狼の逆転回答に対応

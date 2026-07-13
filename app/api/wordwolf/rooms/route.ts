@@ -55,6 +55,9 @@ export async function POST(request: Request) {
     if (error instanceof Error && error.message === "INVALID_WORDWOLF_ROOM") {
       return Response.json({ error: "Invalid room" }, { status: 400 });
     }
+    if (error instanceof Error && error.message === "WORDWOLF_ROOM_CONFLICT") {
+      return Response.json({ error: "Room was updated by another player" }, { status: 409 });
+    }
 
     return Response.json({ error: "Failed to save room" }, { status: 500 });
   }

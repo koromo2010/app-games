@@ -30,6 +30,7 @@ export type VoteRound = {
 };
 
 export type Room = {
+  revision: number;
   code: string;
   hostId: string;
   ownerId?: string;

@@ -63,6 +63,7 @@ import { ClueLogPanel, VoteHistoryPanel } from "./WordWolfPanels";
 import { WordWolfActionPanels } from "./WordWolfActionPanels";
 import {
   fetchWordWolfRoom,
+  expireWordWolfPhase,
   persistWordWolfRoom,
 } from "./wordwolf-room-api-client";
 import { useWordWolfPhaseClock } from "./use-wordwolf-phase-clock";
@@ -279,7 +280,7 @@ async function saveRoomDefaultsToStore(room: Room) {
 }
 
 function saveRoom(room: Room) {
-  localStorage.setItem(getRoomKey(room.code), JSON.stringify(stampRoom(room)));
+  localStorage.setItem(getRoomKey(room.code), JSON.stringify(room));
 }
 
 function deleteRoom(code: string) {
@@ -294,6 +295,7 @@ function loadRoom(code: string): Room | null {
     const room = JSON.parse(raw) as Room;
     return {
       ...room,
+      revision: room.revision ?? 0,
       passphrase: room.passphrase ?? "",
       gameMode: normalizeGameMode(room.gameMode),
       clueLogVisibility: room.clueLogVisibility ?? "result",
@@ -482,6 +484,7 @@ function createEmptyRoom(
   const player = createPlayer(hostName, avatarColor, avatarImage, hostId);
   const defaults = savedDefaults ?? loadRoomDefaults(player.id, ownerId);
   const room: Room = {
+    revision: 0,
     code: makeRoomCode(),
     hostId: player.id,
     ownerId,
@@ -528,7 +531,7 @@ function createEmptyRoom(
 }
 
 function stampRoom(room: Room) {
-  return { ...room, updatedAt: Date.now() };
+  return { ...room, revision: (room.revision ?? 0) + 1, updatedAt: Date.now() };
 }
 
 function createPlayer(
@@ -1347,14 +1350,32 @@ export function WordWolfGame() {
     setClueInput("");
     setAndSaveRoom(nextRoom);
   }, [clueActorId, clueInput, currentPlayerId, room, setAndSaveRoom, turnSecondsLeft]); // eslint-disable-line react-hooks/preserve-manual-memoization
+  const expireCurrentPhase = useCallback(async (commandId: string) => {
+    if (!room) return;
+    const attempt = async (): Promise<void> => {
+      try {
+        const result = await expireWordWolfPhase(room.code, commandId);
+        if (result.room) {
+          saveRoom(result.room);
+          setRoom(result.room);
+        }
+        if (!result.applied && result.retryAfterMs && result.retryAfterMs > 0) {
+          window.setTimeout(() => void attempt(), result.retryAfterMs + 50);
+        }
+      } catch {
+        const latest = await loadRoomFromStore(room.code);
+        if (latest) setRoom(latest);
+      }
+    };
+    await attempt();
+  }, [room]);
   useEffect(() => {
     if (
       !room ||
       room.phase !== "clue" ||
       room.turnTimeLimitSeconds <= 0 ||
       turnSecondsLeft !== 0 ||
-      (room.clueMode === "turn" && clueActorId !== currentPlayerId) ||
-      (room.clueMode === "simultaneous" && activePlayerId !== room.hostId)
+      (room.clueMode === "turn" && clueActorId !== currentPlayerId)
     ) {
       return;
     }
@@ -1362,9 +1383,9 @@ export function WordWolfGame() {
     const actionKey = `clue:${room.currentTurnStartedAt}:${room.currentRound}`;
     if (timeoutActionKeyRef.current === actionKey) return;
     timeoutActionKeyRef.current = actionKey;
-    const timer = window.setTimeout(() => void submitClue(true), 0);
+    const timer = window.setTimeout(() => void expireCurrentPhase(actionKey), 0);
     return () => window.clearTimeout(timer);
-  }, [activePlayerId, clueActorId, currentPlayerId, room, submitClue, turnSecondsLeft]);
+  }, [clueActorId, currentPlayerId, expireCurrentPhase, room, turnSecondsLeft]);
 
   const isComposingEnter = (event: KeyboardEvent<HTMLElement>) =>
     event.nativeEvent.isComposing || event.keyCode === 229;
@@ -1563,7 +1584,6 @@ export function WordWolfGame() {
       room.phase !== "vote" ||
       room.turnTimeLimitSeconds <= 0 ||
       turnSecondsLeft !== 0 ||
-      activePlayerId !== room.hostId ||
       getVoteVoters(room).every((player) => room.votes[player.id])
     ) {
       return;
@@ -1573,10 +1593,10 @@ export function WordWolfGame() {
     if (timeoutActionKeyRef.current === actionKey) return;
     timeoutActionKeyRef.current = actionKey;
     const timer = window.setTimeout(() => {
-      void castVote("", true);
+      void expireCurrentPhase(actionKey);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [activePlayerId, castVote, room, turnSecondsLeft]);
+  }, [expireCurrentPhase, room, turnSecondsLeft]);
 
   useEffect(() => {
     if (
@@ -1594,9 +1614,9 @@ export function WordWolfGame() {
     const actionKey = `guess:${room.currentTurnStartedAt}:${room.accusedId}`;
     if (timeoutActionKeyRef.current === actionKey) return;
     timeoutActionKeyRef.current = actionKey;
-    const timer = window.setTimeout(() => void submitWolfGuess(true), 0);
+    const timer = window.setTimeout(() => void expireCurrentPhase(actionKey), 0);
     return () => window.clearTimeout(timer);
-  }, [guessActorId, room, submitWolfGuess, turnSecondsLeft]);
+  }, [expireCurrentPhase, guessActorId, room, turnSecondsLeft]);
   const submitGuessFeedback = async (accepted: boolean) => {
     if (!room || !room.wolfGuess || !room.villageWord) return;
 
