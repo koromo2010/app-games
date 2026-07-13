@@ -5,6 +5,7 @@ import type { NorthernRoom } from "@/lib/northern-branch-types";
 import type { TahoiyaRoom } from "@/lib/tahoiya-types";
 import type { WordWolfRoom } from "@/lib/wordwolf-room-store";
 import { calculateGameRatingChanges, initialGameRating } from "@/lib/game-rating";
+import { emitObservabilityEvent, observabilityErrorCode, observabilityRef, type ObservabilityFields } from "@/lib/observability";
 
 export type PlayerStatsGameType = "wordwolf" | "tahoiya" | "northern-branch" | "hodoai" | "kotoba-senpuku";
 
@@ -99,6 +100,19 @@ async function recordPlayerResults(results: PlayerGameResult[]) {
   return recorded;
 }
 
+async function observeStatsRecord(fields: ObservabilityFields, record: () => Promise<number>) {
+  try {
+    const recorded = await record();
+    if (recorded > 0) {
+      emitObservabilityEvent("info", "stats.record", { ...fields, affectedCount: recorded, outcome: "success" });
+    }
+    return recorded;
+  } catch (error) {
+    emitObservabilityEvent("error", "stats.record", { ...fields, outcome: "failed", errorCode: observabilityErrorCode(error) });
+    throw error;
+  }
+}
+
 function wolfIds(room: WordWolfRoom) { return Array.isArray(room.wolfIds) && room.wolfIds.length > 0 ? room.wolfIds : room.wolfId ? [room.wolfId] : []; }
 function didWordWolfPlayerWin(room: WordWolfRoom, playerId: string) {
   if (room.winner === "players") return room.accusedId ? playerId !== room.accusedId : true;
@@ -109,13 +123,15 @@ function didWordWolfPlayerWin(room: WordWolfRoom, playerId: string) {
 export async function recordWordWolfGameResults(room: WordWolfRoom) {
   if (room.phase !== "result" || !room.winner || room.debugMode) return 0;
   const eventId = `wordwolf:${room.code}:${room.createdAt}:${room.gameNumber}`;
-  const ratingByPlayer = await recordGameRatings("wordwolf", eventId, room.players.map((player) => ({ playerId: player.id, won: didWordWolfPlayerWin(room, player.id) })));
-  return recordPlayerResults(room.players.map((player) => {
-    const role = wolfIds(room).length === 0 ? "no-wolf" : wolfIds(room).includes(player.id) ? "wolf" : "village";
-    const won = didWordWolfPlayerWin(room, player.id);
-    const rating = ratingByPlayer.get(player.id);
-    return { schemaVersion: 1, id: `wordwolf:${room.code}:${room.createdAt}:${room.gameNumber}:${player.id}`, gameType: "wordwolf", roomCode: room.code, roomCreatedAt: room.createdAt, gameNumber: room.gameNumber, finishedAt: room.updatedAt || Date.now(), playerId: player.id, playerName: player.name, role, won, resultLabel: won ? "勝利" : "敗北", playerCount: room.players.length, details: { gameMode: room.gameMode, winner: room.winner }, ratingBefore: rating?.before, ratingAfter: rating?.after, ratingChange: rating?.change } satisfies PlayerGameResult;
-  }));
+  return observeStatsRecord({ game: "wordwolf", operation: "record-results", roomRef: observabilityRef("room", room.code), eventRef: observabilityRef("event", eventId), gameNumber: room.gameNumber, playerCount: room.players.length }, async () => {
+    const ratingByPlayer = await recordGameRatings("wordwolf", eventId, room.players.map((player) => ({ playerId: player.id, won: didWordWolfPlayerWin(room, player.id) })));
+    return recordPlayerResults(room.players.map((player) => {
+      const role = wolfIds(room).length === 0 ? "no-wolf" : wolfIds(room).includes(player.id) ? "wolf" : "village";
+      const won = didWordWolfPlayerWin(room, player.id);
+      const rating = ratingByPlayer.get(player.id);
+      return { schemaVersion: 1, id: `wordwolf:${room.code}:${room.createdAt}:${room.gameNumber}:${player.id}`, gameType: "wordwolf", roomCode: room.code, roomCreatedAt: room.createdAt, gameNumber: room.gameNumber, finishedAt: room.updatedAt || Date.now(), playerId: player.id, playerName: player.name, role, won, resultLabel: won ? "勝利" : "敗北", playerCount: room.players.length, details: { gameMode: room.gameMode, winner: room.winner }, ratingBefore: rating?.before, ratingAfter: rating?.after, ratingChange: rating?.change } satisfies PlayerGameResult;
+    }));
+  });
 }
 
 function tahoiyaRoundPoints(room: TahoiyaRoom) {
@@ -133,12 +149,14 @@ export async function recordTahoiyaRoundResults(room: TahoiyaRoom) {
   const points = tahoiyaRoundPoints(room);
   const best = Math.max(0, ...Object.values(points));
   const eventId = `tahoiya:${room.code}:${room.createdAt}:${room.round}`;
-  const ratings = await recordGameRatings("tahoiya", eventId, room.players.map((player) => ({ playerId: player.id, won: (points[player.id] ?? 0) === best })));
-  return recordPlayerResults(room.players.map((player) => {
-    const won = (points[player.id] ?? 0) === best;
-    const rating = ratings.get(player.id);
-    return { schemaVersion: 1, id: `tahoiya:${room.code}:${room.createdAt}:${room.round}:${player.id}`, gameType: "tahoiya", roomCode: room.code, roomCreatedAt: room.createdAt, gameNumber: room.round, finishedAt: room.updatedAt || Date.now(), playerId: player.id, playerName: player.name, role: player.id === room.answererId ? "answerer" : "writer", won, resultLabel: won ? "ラウンド1位" : `${points[player.id] ?? 0}点`, playerCount: room.players.length, details: { roundPoints: points[player.id] ?? 0, word: room.word }, ratingBefore: rating?.before, ratingAfter: rating?.after, ratingChange: rating?.change } satisfies PlayerGameResult;
-  }));
+  return observeStatsRecord({ game: "tahoiya", operation: "record-results", roomRef: observabilityRef("room", room.code), eventRef: observabilityRef("event", eventId), round: room.round, playerCount: room.players.length }, async () => {
+    const ratings = await recordGameRatings("tahoiya", eventId, room.players.map((player) => ({ playerId: player.id, won: (points[player.id] ?? 0) === best })));
+    return recordPlayerResults(room.players.map((player) => {
+      const won = (points[player.id] ?? 0) === best;
+      const rating = ratings.get(player.id);
+      return { schemaVersion: 1, id: `tahoiya:${room.code}:${room.createdAt}:${room.round}:${player.id}`, gameType: "tahoiya", roomCode: room.code, roomCreatedAt: room.createdAt, gameNumber: room.round, finishedAt: room.updatedAt || Date.now(), playerId: player.id, playerName: player.name, role: player.id === room.answererId ? "answerer" : "writer", won, resultLabel: won ? "ラウンド1位" : `${points[player.id] ?? 0}点`, playerCount: room.players.length, details: { roundPoints: points[player.id] ?? 0, word: room.word }, ratingBefore: rating?.before, ratingAfter: rating?.after, ratingChange: rating?.change } satisfies PlayerGameResult;
+    }));
+  });
 }
 
 export async function recordHodoaiGameResults(room: HodoaiRoom) {
@@ -147,21 +165,25 @@ export async function recordHodoaiGameResults(room: HodoaiRoom) {
   const won = maxPoints > 0 && room.totalPoints / maxPoints >= 0.5;
   const realPlayers = room.players.filter((player) => !player.isDummy);
   const eventId = `hodoai:${room.code}:${room.createdAt}:${room.gameNumber ?? 1}`;
-  const ratings = await recordGameRatings("hodoai", eventId, realPlayers.map((player) => ({ playerId: player.id, won })), true);
-  return recordPlayerResults(realPlayers.map((player) => { const rating = ratings.get(player.id); return { schemaVersion: 1, id: `${eventId}:${player.id}`, gameType: "hodoai", roomCode: room.code, roomCreatedAt: room.createdAt, gameNumber: room.gameNumber ?? 1, finishedAt: room.updatedAt || Date.now(), playerId: player.id, playerName: player.name, role: "cooperator", won, resultLabel: `${room.totalPoints}/${maxPoints}点`, playerCount: realPlayers.length, details: { points: room.totalPoints, maxPoints }, ratingBefore: rating?.before, ratingAfter: rating?.after, ratingChange: rating?.change } satisfies PlayerGameResult; }));
+  return observeStatsRecord({ game: "hodoai", operation: "record-results", roomRef: observabilityRef("room", room.code), eventRef: observabilityRef("event", eventId), gameNumber: room.gameNumber ?? 1, playerCount: realPlayers.length }, async () => {
+    const ratings = await recordGameRatings("hodoai", eventId, realPlayers.map((player) => ({ playerId: player.id, won })), true);
+    return recordPlayerResults(realPlayers.map((player) => { const rating = ratings.get(player.id); return { schemaVersion: 1, id: `${eventId}:${player.id}`, gameType: "hodoai", roomCode: room.code, roomCreatedAt: room.createdAt, gameNumber: room.gameNumber ?? 1, finishedAt: room.updatedAt || Date.now(), playerId: player.id, playerName: player.name, role: "cooperator", won, resultLabel: `${room.totalPoints}/${maxPoints}点`, playerCount: realPlayers.length, details: { points: room.totalPoints, maxPoints }, ratingBefore: rating?.before, ratingAfter: rating?.after, ratingChange: rating?.change } satisfies PlayerGameResult; }));
+  });
 }
 
 export async function recordNorthernBranchGameResults(room: NorthernRoom) {
   if (room.phase !== "finished" || !room.game?.winnerId || room.debugMode) return 0;
   const realPlayers = room.players.filter((player) => !player.isDummy);
   const eventId = `northern-branch:${room.code}:${room.createdAt}:${room.gameNumber}`;
-  const ratings = await recordGameRatings("northern-branch", eventId, realPlayers.map((player) => ({ playerId: player.id, won: player.id === room.game?.winnerId })));
-  return recordPlayerResults(realPlayers.map((player) => {
+  return observeStatsRecord({ game: "northern-branch", operation: "record-results", roomRef: observabilityRef("room", room.code), eventRef: observabilityRef("event", eventId), gameNumber: room.gameNumber, playerCount: realPlayers.length }, async () => {
+    const ratings = await recordGameRatings("northern-branch", eventId, realPlayers.map((player) => ({ playerId: player.id, won: player.id === room.game?.winnerId })));
+    return recordPlayerResults(realPlayers.map((player) => {
     const gamePlayer = room.game?.players.find((item) => item.id === player.id);
     const won = player.id === room.game?.winnerId;
     const rating = ratings.get(player.id);
     return { schemaVersion: 1, id: `${eventId}:${player.id}`, gameType: "northern-branch", roomCode: room.code, roomCreatedAt: room.createdAt, gameNumber: room.gameNumber, finishedAt: room.updatedAt || Date.now(), playerId: player.id, playerName: player.name, role: "merchant", won, resultLabel: won ? "勝利" : `${gamePlayer?.points ?? 0}点`, playerCount: realPlayers.length, details: { points: gamePlayer?.points ?? 0 }, ratingBefore: rating?.before, ratingAfter: rating?.after, ratingChange: rating?.change } satisfies PlayerGameResult;
-  }));
+    }));
+  });
 }
 
 export async function recordKotobaSenpukuGameResults(room: KotobaSenpukuRoom) {
@@ -169,13 +191,15 @@ export async function recordKotobaSenpukuGameResults(room: KotobaSenpukuRoom) {
   const realPlayers = room.players.filter((player) => !player.isDummy);
   const best = Math.max(0, ...realPlayers.map((player) => room.totalScores[player.id] ?? 0));
   const eventId = `kotoba-senpuku:${room.code}:${room.createdAt}:${room.gameNumber}`;
-  const ratings = await recordGameRatings("kotoba-senpuku", eventId, realPlayers.map((player) => ({ playerId: player.id, won: (room.totalScores[player.id] ?? 0) === best })));
-  return recordPlayerResults(realPlayers.map((player) => {
+  return observeStatsRecord({ game: "kotoba-senpuku", operation: "record-results", roomRef: observabilityRef("room", room.code), eventRef: observabilityRef("event", eventId), gameNumber: room.gameNumber, playerCount: realPlayers.length }, async () => {
+    const ratings = await recordGameRatings("kotoba-senpuku", eventId, realPlayers.map((player) => ({ playerId: player.id, won: (room.totalScores[player.id] ?? 0) === best })));
+    return recordPlayerResults(realPlayers.map((player) => {
     const points = room.totalScores[player.id] ?? 0;
     const won = points === best;
     const rating = ratings.get(player.id);
     return { schemaVersion: 1, id: `${eventId}:${player.id}`, gameType: "kotoba-senpuku", roomCode: room.code, roomCreatedAt: room.createdAt, gameNumber: room.gameNumber, finishedAt: room.updatedAt || Date.now(), playerId: player.id, playerName: player.name, role: "infiltrator", won, resultLabel: won ? "総合1位" : `${points}点`, playerCount: realPlayers.length, details: { points }, ratingBefore: rating?.before, ratingAfter: rating?.after, ratingChange: rating?.change } satisfies PlayerGameResult;
-  }));
+    }));
+  });
 }
 
 export async function getPlayerStats(playerId: string, gameFilter: PlayerStatsGameFilter = "all"): Promise<PlayerStatsResponse> {

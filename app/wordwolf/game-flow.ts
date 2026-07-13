@@ -74,6 +74,10 @@ export function getVoteCandidates(room: Room) {
 export function getVoteVoters(room: Room) {
   if (!room.runoffCandidateIds?.length) return room.players;
 
+  // 2人決選では候補外が投票し、3人以上の同率では候補を含む全員で再投票する。
+  // 後者まで候補を除外すると、全員同率などで投票者が0人になり進行不能になる。
+  if (room.runoffCandidateIds.length >= 3) return room.players;
+
   const candidateIds = new Set(room.runoffCandidateIds);
   return room.players.filter((player) => !candidateIds.has(player.id));
 }

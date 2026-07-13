@@ -31,6 +31,11 @@ export async function persistWordWolfRoom(room: Room) {
   return readJson<{ room: Room }>(response, "ROOM_SAVE_FAILED");
 }
 
+export async function joinWordWolfRoom(code: string, passphrase: string) {
+  const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "join", code, passphrase }) });
+  return readJson<{ room: Room }>(response, "ROOM_JOIN_FAILED");
+}
+
 export async function removeWordWolfRoom(code: string) {
   const response = await fetch(`${endpoint}?code=${encodeURIComponent(code)}`, { method: "DELETE" });
   return readJson<{ ok: boolean }>(response, "ROOM_DELETE_FAILED");
@@ -58,4 +63,12 @@ export function submitWordWolfClue(code: string, playerId: string, text: string,
 
 export function castWordWolfVote(code: string, playerId: string, targetId: string, commandId: string) {
   return sendWordWolfCommand({ code, playerId, targetId, commandId, type: "cast-vote" });
+}
+
+export function startWordWolfGame(code: string, commandId: string) {
+  return sendWordWolfCommand({ code, commandId, type: "start-game" });
+}
+
+export function submitWordWolfGuessCommand(code: string, guess: string, commandId: string) {
+  return sendWordWolfCommand({ code, guess, commandId, type: "submit-wolf-guess" });
 }

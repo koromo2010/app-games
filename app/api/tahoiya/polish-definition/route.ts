@@ -3,6 +3,9 @@ import {
   resolveGameLlmMode,
 } from "@/lib/game-llm";
 import { parseLlmJson } from "@/lib/llm-json";
+import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
+import { loadStoredTahoiyaRoom } from "@/lib/tahoiya-room-store";
+import { emitObservabilityEvent, observabilityErrorCode } from "@/lib/observability";
 
 function parsePolishedText(value: string) {
   const parsed = parseLlmJson<{ text?: unknown }>(value);
@@ -13,8 +16,15 @@ function parsePolishedText(value: string) {
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as { word?: unknown; text?: unknown };
-    const word = typeof body.word === "string" ? body.word.trim().slice(0, 80) : "";
+    const player = await requireAuthenticatedPlayer();
+    const body = (await request.json()) as { roomCode?: unknown; text?: unknown };
+    const roomCode = typeof body.roomCode === "string" ? body.roomCode.trim().toUpperCase() : "";
+    const room = roomCode ? await loadStoredTahoiyaRoom(roomCode) : null;
+    if (!room) return Response.json({ error: "部屋が見つかりません。" }, { status: 404 });
+    if (room.phase !== "writing" || !room.players.some((item) => item.id === player.id)) {
+      return Response.json({ error: "この操作は許可されていません。" }, { status: 403 });
+    }
+    const word = room.word.trim().slice(0, 80);
     const text = typeof body.text === "string" ? body.text.trim().slice(0, 240) : "";
     if (!word || !text) {
       return Response.json({ error: "お題と偽説明が必要です。" }, { status: 400 });
@@ -48,11 +58,13 @@ export async function POST(request: Request) {
         });
       }
     } catch (error) {
-      console.warn("[tahoiya/polish-definition] provider chain failed", error);
+      emitObservabilityEvent("warn", "ai.generation", { game: "tahoiya", operation: "polish-definition", outcome: "failed", errorCode: observabilityErrorCode(error) });
     }
 
     return Response.json({ error: "偽説明を整えられませんでした。" }, { status: 503 });
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.message === "PLAYER_AUTH_REQUIRED") return Response.json({ error: "ログインが必要です。" }, { status: 401 });
+    if (isPlayerAuthConfigurationError(error)) return Response.json({ error: "プレイヤー認証が設定されていません。" }, { status: 503 });
     return Response.json({ error: "リクエストを処理できませんでした。" }, { status: 400 });
   }
 }

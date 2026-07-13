@@ -21,6 +21,7 @@ import {
 import { isMultiplayerRoomExpired, multiplayerRoomExpiryArgs, multiplayerRoomTtlSeconds } from "@/lib/multiplayer-room-lifecycle";
 import { recordKotobaSenpukuGameResults } from "@/lib/player-stats-store";
 import { redisCommand } from "@/lib/redis-store";
+import { commonGameTimeoutGraceMs } from "@/lib/game-timer/policy";
 
 const roomKeyPrefix = "kotoba-senpuku:room:";
 const roomIndexKey = "kotoba-senpuku:rooms";
@@ -139,7 +140,7 @@ function normalizeRoom(value: unknown): KotobaSenpukuRoom | null {
 }
 
 function timedOut(room: KotobaSenpukuRoom, seconds: number, now = Date.now()) {
-  return Boolean(room.phaseStartedAt && seconds > 0 && now >= room.phaseStartedAt + seconds * 1000);
+  return Boolean(room.phaseStartedAt && seconds > 0 && now >= room.phaseStartedAt + seconds * 1000 + commonGameTimeoutGraceMs());
 }
 
 function addLog(room: KotobaSenpukuRoom, message: string) {
@@ -415,6 +416,9 @@ export async function applyStoredKotobaSenpukuAction(code: string, action: Kotob
       return addLog({ ...current, players: [...current.players, action.player] }, `${action.player.name}さんが参加しました。`);
     }
 
+    const reconciled = reconcileProgress(current);
+    if (reconciled !== current) return reconciled;
+
     const actorIsHost = action.actorId === current.hostId;
     const actorIsMember = current.players.some((player) => player.id === action.actorId && !player.isDummy);
     if (!actorIsMember) throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
@@ -509,10 +513,10 @@ export async function deleteStoredKotobaSenpukuRoom(code: string, actorId: strin
   await Promise.all(room.players.map((player) => clearActiveRoom(player.id, room.code)));
 }
 
-export async function deleteHostedKotobaSenpukuRooms(ownerId: string, fallbackHostId: string) {
+export async function deleteHostedKotobaSenpukuRooms(_ownerId: string, authenticatedHostId: string) {
   const codes = await redisCommand<string[]>(["SMEMBERS", roomIndexKey]);
   const rooms = await Promise.all(codes.map((code) => loadStoredKotobaSenpukuRoom(code)));
-  const targets = rooms.filter((room): room is KotobaSenpukuRoom => Boolean(room && (room.ownerId === ownerId || (!room.ownerId && room.hostId === fallbackHostId))));
+  const targets = rooms.filter((room): room is KotobaSenpukuRoom => Boolean(room && room.hostId === authenticatedHostId));
   await Promise.all(targets.map((room) => deleteStoredKotobaSenpukuRoom(room.code, room.hostId)));
   return targets.length;
 }

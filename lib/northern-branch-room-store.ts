@@ -308,10 +308,10 @@ export async function deleteStoredNorthernRoom(code: string, actorId: string) {
   await Promise.all(room.players.map((player) => clearActiveRoom(player.id, room.code)));
 }
 
-export async function deleteHostedNorthernRooms(ownerId: string, fallbackHostId: string) {
+export async function deleteHostedNorthernRooms(_ownerId: string, authenticatedHostId: string) {
   const codes = await redisCommand<string[]>(["SMEMBERS", roomIndexKey]);
   const rooms = await Promise.all(codes.map((code) => loadStoredNorthernRoom(code)));
-  const targets = rooms.filter((room): room is NorthernRoom => Boolean(room && (room.ownerId === ownerId || (!room.ownerId && room.hostId === fallbackHostId))));
+  const targets = rooms.filter((room): room is NorthernRoom => Boolean(room && room.hostId === authenticatedHostId));
   await Promise.all(targets.map((room) => deleteStoredNorthernRoom(room.code, room.hostId)));
   return targets.length;
 }

@@ -1,4 +1,5 @@
 import { redisCommand } from "./redis-store.ts";
+import { emitObservabilityEvent, observabilityErrorCode } from "./observability/index.ts";
 
 export type TahoiyaSourceEntry = {
   id: string;
@@ -440,12 +441,34 @@ async function collectFromSource(source: TahoiyaSourceRegistryRecord) {
       const entries = await collectors[source.strategy]();
       await redisCommand<number>(["HSET", cursorKey, source.id, String(cursor + 1)]);
       if (entries.length > 0) {
-        console.info(`[tahoiya/source] ${source.id} fetched ${entries.length} entries on attempt ${attempt + 1}`);
+        emitObservabilityEvent("info", "source.fetch", {
+          game: "tahoiya",
+          operation: "source-refresh",
+          action: source.id,
+          attempt: attempt + 1,
+          affectedCount: entries.length,
+          outcome: "success",
+        });
         return entries;
       }
-      console.warn(`[tahoiya/source] ${source.id} returned no entries on attempt ${attempt + 1}`);
+      emitObservabilityEvent("warn", "source.fetch", {
+        game: "tahoiya",
+        operation: "source-refresh",
+        action: source.id,
+        attempt: attempt + 1,
+        affectedCount: 0,
+        outcome: "ignored",
+        errorCode: "EMPTY_SOURCE_RESPONSE",
+      });
     } catch (error) {
-      console.warn(`[tahoiya/source] ${source.id} failed on attempt ${attempt + 1}`, error);
+      emitObservabilityEvent("warn", "source.fetch", {
+        game: "tahoiya",
+        operation: "source-refresh",
+        action: source.id,
+        attempt: attempt + 1,
+        outcome: "failed",
+        errorCode: observabilityErrorCode(error),
+      });
     }
   }
   await redisCommand<number>(["HSET", cursorKey, source.id, String(initialCursor + 3)]);
@@ -480,7 +503,14 @@ export async function collectTahoiyaSourceBatchFromApis(input: {
         );
         if (entries.length > 0) return entries[Math.floor(Math.random() * entries.length)];
       } catch (error) {
-        console.warn(`[tahoiya/generator] ${source.id} attempt ${attempt + 1} failed`, error);
+        emitObservabilityEvent("warn", "source.fetch", {
+          game: "tahoiya",
+          operation: "topic-generation",
+          action: source.id,
+          attempt: attempt + 1,
+          outcome: "failed",
+          errorCode: observabilityErrorCode(error),
+        });
       }
     }
     return null;
@@ -504,7 +534,13 @@ export async function refreshTahoiyaSourceShelf(sourceIds?: string[]) {
   const settled = await Promise.allSettled(selected.map(collectFromSource));
   const entries = settled.flatMap((result) => result.status === "fulfilled" ? result.value : []);
   const successfulSources = new Set(entries.map((entry) => entry.sourceRegistryId));
-  console.info(`[tahoiya/source] refreshed ${successfulSources.size}/${selected.length} sources: ${[...successfulSources].join(",")}`);
+  emitObservabilityEvent("info", "source.refresh", {
+    game: "tahoiya",
+    operation: "source-refresh",
+    sourceCount: successfulSources.size,
+    affectedCount: entries.length,
+    outcome: "success",
+  });
   await storeStagedEntries(entries);
   return entries;
 }

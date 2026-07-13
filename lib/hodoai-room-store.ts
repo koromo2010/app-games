@@ -2,6 +2,7 @@ import { redisCommand } from "@/lib/redis-store";
 import { recordHodoaiGameResults } from "@/lib/player-stats-store";
 import { isMultiplayerRoomExpired, multiplayerRoomExpiryArgs, multiplayerRoomTtlSeconds } from "@/lib/multiplayer-room-lifecycle";
 import { randomUUID } from "node:crypto";
+import { commonGameTimeoutGraceMs } from "@/lib/game-timer/policy";
 import {
   clueHasNumber,
   countHodoaiInversions,
@@ -137,7 +138,7 @@ function clueComplete(room: HodoaiRoom) {
 }
 
 function timedOut(room: HodoaiRoom, seconds: number, now = Date.now()) {
-  return Boolean(room.phaseStartedAt && seconds > 0 && now >= room.phaseStartedAt + seconds * 1000);
+  return Boolean(room.phaseStartedAt && seconds > 0 && now >= room.phaseStartedAt + seconds * 1000 + commonGameTimeoutGraceMs());
 }
 
 function advanceToArrange(room: HodoaiRoom) {
@@ -322,6 +323,9 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
       return { ...current, players: [...current.players, action.player] };
     }
 
+    const reconciled = reconcileProgress(current);
+    if (reconciled !== current) return reconciled;
+
     const actorIsHost = action.actorId === current.hostId;
     const actorIsMember = current.players.some((player) => player.id === action.actorId);
     if (!actorIsMember) throw new Error("HODOAI_ROOM_FORBIDDEN");
@@ -425,10 +429,10 @@ export async function deleteStoredHodoaiRoom(code: string, actorId: string) {
   await Promise.all(room.players.map((player) => clearActiveRoom(player.id, room.code)));
 }
 
-export async function deleteHostedHodoaiRooms(ownerId: string, fallbackHostId: string) {
+export async function deleteHostedHodoaiRooms(_ownerId: string, authenticatedHostId: string) {
   const codes = await redisCommand<string[]>(["SMEMBERS", roomIndexKey]);
   const rooms = await Promise.all(codes.map((code) => loadStoredHodoaiRoom(code)));
-  const targets = rooms.filter((room): room is HodoaiRoom => Boolean(room && (room.ownerId === ownerId || (!room.ownerId && room.hostId === fallbackHostId))));
+  const targets = rooms.filter((room): room is HodoaiRoom => Boolean(room && room.hostId === authenticatedHostId));
   await Promise.all(targets.map((room) => deleteStoredHodoaiRoom(room.code, room.hostId)));
   return targets.length;
 }

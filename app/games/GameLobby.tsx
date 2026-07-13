@@ -44,6 +44,7 @@ const errorMessages: Record<string, string> = {
   EMAIL_ALREADY_EXISTS: "そのメールアドレスは別のアカウントで使われています。",
   INVALID_CREDENTIALS: "プレイヤー名またはパスワードが違います。",
   UNKNOWN: "アカウント処理に失敗しました。",
+  AUTH_NOT_CONFIGURED: "ログイン認証用のサーバー設定が未完了です。",
 };
 
 function authMessage(code: unknown) {
@@ -169,7 +170,7 @@ export function GameLobby() {
         setAvatarColor(session.avatarColor);
         setAvatarImage(session.avatarImage || defaultAvatarImage);
         setHasRecoveryEmail(session.hasRecoveryEmail === true);
-        const authenticated = isPlayerAuthenticated();
+        const authenticated = Boolean(session.id) && isPlayerAuthenticated();
         setIsLoggedIn(authenticated);
         if (authenticated && session.id) {
           void loadStats(session.id, "all");
@@ -316,7 +317,18 @@ export function GameLobby() {
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      const response = await fetch("/api/player-account", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "logout" }),
+      });
+      if (!response.ok) throw new Error("LOGOUT_FAILED");
+    } catch {
+      setMessage("ログアウト通信に失敗しました。通信を確認してもう一度お試しください。");
+      return;
+    }
     clearPlayerSession();
     localStorage.removeItem("wordwolf-last-room");
     localStorage.removeItem("wordwolf-last-player");
@@ -350,19 +362,46 @@ export function GameLobby() {
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
               <PaidLlmAccessButton />
-              <div className="flex items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-3 py-2">
-                <span
-                  className="h-8 w-8 rounded-full border border-white/60 bg-cover bg-center"
-                  style={{
-                    backgroundColor: avatarColor,
-                    backgroundImage: `url(${avatarImage || defaultAvatarImage})`,
-                  }}
-                  aria-hidden="true"
-                />
-                <span className="max-w-[160px] truncate text-sm font-semibold text-cyan-50">
-                  {isLoggedIn ? name : "未ログイン"}
-                </span>
-              </div>
+              {isLoggedIn ? (
+                <details className="group relative">
+                  <summary
+                    aria-label={`${name}のアカウントメニューを開く`}
+                    className="flex cursor-pointer list-none items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-3 py-2 transition hover:border-cyan-200/60 hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 [&::-webkit-details-marker]:hidden"
+                  >
+                    <span
+                      className="h-8 w-8 rounded-full border border-white/60 bg-cover bg-center"
+                      style={{
+                        backgroundColor: avatarColor,
+                        backgroundImage: `url(${avatarImage || defaultAvatarImage})`,
+                      }}
+                      aria-hidden="true"
+                    />
+                    <span className="max-w-[160px] truncate text-sm font-semibold text-cyan-50">{name}</span>
+                    <span className="text-xs text-slate-300 transition group-open:rotate-180" aria-hidden="true">▼</span>
+                  </summary>
+                  <div className="absolute right-0 z-30 mt-2 w-48 rounded-lg border border-slate-200 bg-white p-2 text-slate-900 shadow-xl">
+                    <p className="truncate px-2 py-1 text-xs font-semibold text-slate-500">{name}でログイン中</p>
+                    <Link
+                      href="/users/me"
+                      className="mt-1 flex w-full items-center justify-center rounded-md bg-cyan-600 px-3 py-2 text-sm font-bold text-white transition hover:bg-cyan-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/40"
+                    >
+                      マイページを開く
+                    </Link>
+                  </div>
+                </details>
+              ) : (
+                <div className="flex items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-3 py-2">
+                  <span
+                    className="h-8 w-8 rounded-full border border-white/60 bg-cover bg-center"
+                    style={{
+                      backgroundColor: avatarColor,
+                      backgroundImage: `url(${avatarImage || defaultAvatarImage})`,
+                    }}
+                    aria-hidden="true"
+                  />
+                  <span className="max-w-[160px] truncate text-sm font-semibold text-cyan-50">未ログイン</span>
+                </div>
+              )}
             </div>
           </div>
           <input
@@ -387,7 +426,7 @@ export function GameLobby() {
               {isLoggedIn && (
                 <button
                   type="button"
-                  onClick={logout}
+                  onClick={() => void logout()}
                   className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
                 >
                   ログアウト

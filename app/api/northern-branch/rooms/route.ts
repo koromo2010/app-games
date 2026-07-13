@@ -11,7 +11,8 @@ import {
 } from "@/lib/northern-branch-room-store";
 import type { NorthernRoomAction } from "@/lib/northern-branch-types";
 import { privateGameCookieMatches, privateGameCookieName } from "@/lib/private-game-access";
-import { loadStoredPlayerSession } from "@/lib/player-store";
+import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
+import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
 
 async function hasPrivateAccess() {
   const store = await cookies();
@@ -19,6 +20,8 @@ async function hasPrivateAccess() {
 }
 
 function errorResponse(error: unknown) {
+  if (error instanceof Error && error.message === "PLAYER_AUTH_REQUIRED") return Response.json({ error: "Login required" }, { status: 401 });
+  if (isPlayerAuthConfigurationError(error)) return Response.json({ error: "Player auth is not configured" }, { status: 503 });
   if (error instanceof Error && error.message === "REDIS_STORE_NOT_CONFIGURED") return Response.json({ error: "Room storage is not configured" }, { status: 503 });
   if (error instanceof Error && error.message === "NORTHERN_ROOM_NOT_FOUND") return Response.json({ error: "Room not found" }, { status: 404 });
   if (error instanceof Error && error.message === "NORTHERN_BAD_PASSPHRASE") return Response.json({ error: "Bad passphrase" }, { status: 401 });
@@ -33,62 +36,78 @@ function errorResponse(error: unknown) {
 }
 
 export async function GET(request: Request) {
+  const telemetry = createRequestTelemetry(request, "/api/northern-branch/rooms", { game: "northern-branch", operation: "room-read" });
   if (!(await hasPrivateAccess())) return Response.json({ error: "Private access required" }, { status: 403 });
   const url = new URL(request.url);
   const code = url.searchParams.get("code")?.trim().toUpperCase() ?? "";
   const playerId = url.searchParams.get("playerId")?.trim() ?? "";
   try {
+    const session = await requireAuthenticatedPlayer();
+    const authenticatedPlayerId = session.id!;
+    if (playerId && playerId !== authenticatedPlayerId) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
     if (code) {
-      if (!playerId) return Response.json({ error: "playerId is required" }, { status: 400 });
-      if (!(await loadStoredPlayerSession(playerId))) return Response.json({ error: "Login required" }, { status: 401 });
       const room = await loadStoredNorthernRoom(code);
       if (!room) return Response.json({ error: "Room not found" }, { status: 404 });
-      if (!room.players.some((player) => player.id === playerId)) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
-      return Response.json({ room: sanitizeNorthernRoom(room, playerId) });
+      if (!room.players.some((player) => player.id === authenticatedPlayerId)) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
+      return Response.json({ room: sanitizeNorthernRoom(room, authenticatedPlayerId) });
     }
     if (playerId) {
-      if (!(await loadStoredPlayerSession(playerId))) return Response.json({ error: "Login required" }, { status: 401 });
-      const room = await loadNorthernPlayerActiveRoom(playerId);
-      return Response.json({ room: room ? sanitizeNorthernRoom(room, playerId) : null });
+      const room = await loadNorthernPlayerActiveRoom(authenticatedPlayerId);
+      return Response.json({ room: room ? sanitizeNorthernRoom(room, authenticatedPlayerId) : null });
     }
     return Response.json({ rooms: await listJoinableNorthernRooms() });
   } catch (error) {
-    return errorResponse(error);
+    const response = errorResponse(error);
+    if (response.status >= 500) telemetry.responseError("room.read", error, response.status, { roomRef: telemetry.roomRef(code) });
+    return response;
   }
 }
 
 export async function POST(request: Request) {
-  if (!(await hasPrivateAccess())) return Response.json({ error: "Private access required" }, { status: 403 });
+  const telemetry = createRequestTelemetry(request, "/api/northern-branch/rooms", { game: "northern-branch", operation: "room-create" });
+  let logFields: ObservabilityFields = { action: "create-room" };
+  if (!(await hasPrivateAccess())) {
+    telemetry.reject("room.mutation", 403, logFields);
+    return Response.json({ error: "Private access required" }, { status: 403 });
+  }
   try {
+    const session = await requireAuthenticatedPlayer();
     const body = (await request.json()) as { room?: unknown; actorId?: unknown };
-    const actorId = typeof body.actorId === "string" ? body.actorId : "";
-    if (!actorId) return Response.json({ error: "actorId is required" }, { status: 400 });
-    if (!(await loadStoredPlayerSession(actorId))) return Response.json({ error: "Login required" }, { status: 401 });
+    const actorId = session.id!;
+    const requestedRoom = body.room && typeof body.room === "object" ? body.room as { code?: unknown } : null;
+    logFields = { ...logFields, roomRef: telemetry.roomRef(requestedRoom?.code), actorRef: telemetry.actorRef(actorId) };
     const room = await createStoredNorthernRoom(body.room, actorId);
+    telemetry.success("room.mutation", { ...logFields, phase: room.phase, revision: room.revision, playerCount: room.players.length });
     return Response.json({ room: sanitizeNorthernRoom(room, actorId) });
   } catch (error) {
-    return errorResponse(error);
+    const response = errorResponse(error);
+    telemetry.responseError("room.mutation", error, response.status, logFields);
+    return response;
   }
 }
 
 export async function PATCH(request: Request) {
-  if (!(await hasPrivateAccess())) return Response.json({ error: "Private access required" }, { status: 403 });
+  const telemetry = createRequestTelemetry(request, "/api/northern-branch/rooms", { game: "northern-branch", operation: "room-command" });
+  let logFields: ObservabilityFields = {};
+  if (!(await hasPrivateAccess())) {
+    telemetry.reject("room.command", 403);
+    return Response.json({ error: "Private access required" }, { status: 403 });
+  }
   try {
+    const session = await requireAuthenticatedPlayer();
     const body = (await request.json()) as { code?: unknown; action?: unknown };
     const code = typeof body.code === "string" ? body.code.trim().toUpperCase() : "";
-    if (!code || !body.action || typeof body.action !== "object") return Response.json({ error: "code and action are required" }, { status: 400 });
-    const actorId = typeof (body.action as { actorId?: unknown }).actorId === "string"
-      ? (body.action as { actorId: string }).actorId
-      : "";
-    if (!actorId) return Response.json({ error: "actorId is required" }, { status: 400 });
-    let action = { ...body.action, actorId } as NorthernRoomAction;
-    const session = await loadStoredPlayerSession(actorId);
-    if (!session?.id) return Response.json({ error: "Login required" }, { status: 401 });
+    if (!code || !body.action || typeof body.action !== "object") {
+      telemetry.reject("room.command", 400);
+      return Response.json({ error: "code and action are required" }, { status: 400 });
+    }
+    let action = { ...body.action, actorId: session.id! } as NorthernRoomAction;
+    logFields = { action: action.type, roomRef: telemetry.roomRef(code), actorRef: telemetry.actorRef(session.id) };
     if (action.type === "join-room") {
       action = {
         ...action,
         player: {
-          id: session.id,
+          id: session.id!,
           name: session.name,
           joinedAt: Date.now(),
           avatarColor: session.avatarColor,
@@ -97,32 +116,48 @@ export async function PATCH(request: Request) {
       };
     }
     const room = await applyStoredNorthernAction(code, action);
+    telemetry.success("room.command", { ...logFields, phase: room.phase, revision: room.revision, gameNumber: room.gameNumber, playerCount: room.players.length, debugMode: room.debugMode });
     return Response.json({ room: sanitizeNorthernRoom(room, action.actorId) });
   } catch (error) {
-    return errorResponse(error);
+    const response = errorResponse(error);
+    telemetry.responseError("room.command", error, response.status, logFields);
+    return response;
   }
 }
 
 export async function DELETE(request: Request) {
-  if (!(await hasPrivateAccess())) return Response.json({ error: "Private access required" }, { status: 403 });
+  const telemetry = createRequestTelemetry(request, "/api/northern-branch/rooms", { game: "northern-branch", operation: "room-delete" });
+  if (!(await hasPrivateAccess())) {
+    telemetry.reject("room.delete", 403);
+    return Response.json({ error: "Private access required" }, { status: 403 });
+  }
   const url = new URL(request.url);
   const code = url.searchParams.get("code")?.trim().toUpperCase() ?? "";
   const actorId = url.searchParams.get("actorId")?.trim() ?? "";
   const ownerId = url.searchParams.get("ownerId")?.trim() ?? "";
-  const fallbackHostId = url.searchParams.get("fallbackHostId")?.trim() ?? "";
   try {
+    const session = await requireAuthenticatedPlayer();
+    const authenticatedPlayerId = session.id!;
+    const logFields: ObservabilityFields = { action: code ? "delete-room" : "delete-hosted-rooms", roomRef: telemetry.roomRef(code), actorRef: telemetry.actorRef(authenticatedPlayerId) };
     if (code) {
-      if (!actorId) return Response.json({ error: "actorId is required" }, { status: 400 });
-      if (!(await loadStoredPlayerSession(actorId))) return Response.json({ error: "Login required" }, { status: 401 });
-      await deleteStoredNorthernRoom(code, actorId);
+      if (actorId && actorId !== authenticatedPlayerId) {
+        telemetry.reject("room.delete", 403, logFields);
+        return Response.json({ error: "Room action is not allowed" }, { status: 403 });
+      }
+      await deleteStoredNorthernRoom(code, authenticatedPlayerId);
+      telemetry.success("room.delete", logFields);
       return Response.json({ ok: true });
     }
     if (ownerId) {
-      if (!fallbackHostId || !(await loadStoredPlayerSession(fallbackHostId))) return Response.json({ error: "Login required" }, { status: 401 });
-      return Response.json({ ok: true, deleted: await deleteHostedNorthernRooms(ownerId, fallbackHostId) });
+      const deleted = await deleteHostedNorthernRooms(ownerId, authenticatedPlayerId);
+      telemetry.success("room.delete", { ...logFields, affectedCount: deleted });
+      return Response.json({ ok: true, deleted });
     }
+    telemetry.reject("room.delete", 400, logFields);
     return Response.json({ error: "code or ownerId is required" }, { status: 400 });
   } catch (error) {
-    return errorResponse(error);
+    const response = errorResponse(error);
+    telemetry.responseError("room.delete", error, response.status, { roomRef: telemetry.roomRef(code) });
+    return response;
   }
 }

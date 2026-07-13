@@ -55,7 +55,7 @@ export function makeRandomPlayerName() {
 }
 
 export function normalizePlayerName(name: string) {
-  const trimmedName = name.trim();
+  const trimmedName = name.trim().slice(0, 40);
   return trimmedName && trimmedName !== "名無し" ? trimmedName : makeRandomPlayerName();
 }
 
@@ -64,6 +64,7 @@ export function isAvatarColor(value: string | null): value is string {
 }
 
 export function isAvatarImage(value: string | null): value is string {
+  if (!value || value.length > 200_000) return false;
   return Boolean(
     value?.startsWith("data:image/") ||
       value === "/wordwolf-default-avatar.png" ||
@@ -150,21 +151,20 @@ export function clearPlayerSession() {
 export async function loadPersistentPlayerSession() {
   if (typeof window === "undefined") return null;
 
-  const id = localStorage.getItem(playerSessionIdKey);
-  if (!id) return readPlayerSession();
-
-  const response = await fetch(`/api/player-session?id=${encodeURIComponent(id)}`, {
+  const response = await fetch("/api/player-session", {
     cache: "no-store",
   });
 
   if (!response.ok) {
-    return readPlayerSession();
+    if (response.status === 401) clearPlayerSession();
+    return null;
   }
 
   const data = (await response.json()) as { session?: PlayerSession };
   if (!data.session) return readPlayerSession();
 
   savePlayerSession(data.session);
+  markPlayerAuthenticated();
   return data.session;
 }
 

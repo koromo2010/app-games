@@ -141,7 +141,12 @@ export function WordWolfActionPanels(props: WordWolfActionPanelsProps) {
         {isRunoffVote && (
           <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm leading-6 text-violet-950">
             <p className="font-black">同率投票のため決選投票です。</p>
-            <p className="mt-1 font-semibold">対象: {runoffCandidateNames || "同率の候補"}。候補以外のプレイヤーだけが投票します。</p>
+            <p className="mt-1 font-semibold">
+              対象: {runoffCandidateNames || "同率の候補"}。
+              {room.runoffCandidateIds && room.runoffCandidateIds.length >= 3
+                ? "3人以上の同率なので、候補を含む全員が投票します。"
+                : "候補以外のプレイヤーだけが投票します。"}
+            </p>
           </div>
         )}
         {turnSecondsLeft !== null && (

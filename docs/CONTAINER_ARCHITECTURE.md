@@ -17,6 +17,9 @@ web / BFF ---------------> game-server
    +----> timer-service -------> game-server Command
    |
    +----> batch-worker --------> source catalog / candidate DB
+
+web / game-server / timer-service / ai-worker / batch-worker
+   +----> observability-gateway / collector ----> logs / traces / alerts
 ```
 
 ブラウザは`web`以外のサービスへ直接接続しない。認証Cookieや利用者持込APIキーを内部サービスへ無制限に転送せず、BFFで検証した内部トークンと必要最小限の情報だけを渡す。
@@ -62,6 +65,14 @@ web / BFF ---------------> game-server
 ### rating/stats
 
 初期段階ではgame-server内のモジュールとする。集計量が増えた場合だけイベント購読型の`stats-worker`へ分離する。勝敗確定Commandが発行する一意な結果イベントを入力とし、ゲーム進行を戦績更新待ちにしない。
+
+### observability-gateway / collector
+
+- 全サービスの構造化イベント、trace、metricsを同じschemaで受け取る。
+- ゲーム本文や秘密情報を受け取らず、不透明なroom/actor/event参照で相関する。
+- collector停止でゲームCommandを失敗させない。送信は非同期とし、warn/error、競合、戦績、タイマーを優先する。
+- 現段階では独立コンテナを作らず、`lib/observability` のconsole sinkとVercel Runtime Logsを使用する。長期保存・横断trace・アラートが必要になった時点でsinkをOTLP/内部HTTP adapterへ差し替える。
+- イベントschemaと運用手順は `docs/OBSERVABILITY.md` を正本とする。
 
 ## 3. 共有データ
 
@@ -125,6 +136,7 @@ web / BFF ---------------> game-server
 - actorIdだけを信用せず、webで検証したプレイヤーセッションと部屋参加情報を照合する。
 - クライアント送信時刻は締切判定に使用しない。
 - APIキー、Cookie、パスワードをログやジョブpayloadへ入れない。
+- 正解、秘密語、手札、投稿本文、メールアドレス、外部SDK例外本文もログへ入れない。識別子はHMACによる不透明参照へ変換する。
 - サービスごとにRedis/DB権限を限定する。
 
 ## 7. 切り出し順
@@ -135,13 +147,14 @@ web / BFF ---------------> game-server
 4. timer-serviceを独立させ、期限の永続化と再試行を追加する。
 5. AI生成をジョブ化してai-workerへ移す。
 6. 大量単語生成・外部ソース収集をbatch-workerへ移す。
-7. 負荷が確認された場合だけstats-workerを分離する。
+7. 長期保存・横断trace・アラートが必要になったらobservability sinkをcollectorへ接続する。
+8. 負荷が確認された場合だけstats-workerを分離する。
 
 ## 8. 現在地
 
-- ワードウルフは発言・投票・時間切れをCommand化済み。
+- ワードウルフは参加・開始・発言・投票・逆転回答・時間切れをCommand化済み。
 - 部屋に`revision`を持ち、Redis内CASで巻き戻りを防止済み。
 - `lib/game-timer`と`/api/game-timer/expire`を共通時間管理境界として導入済み。
-- ゲーム開始、ロビー設定、通常の最終回答はまだ部屋全体保存経路が残る。
+- ロビー設定にはホスト専用の部屋全体保存互換経路が残る。
+- `lib/observability` で構造化イベントschema、request/trace相関、不透明参照、差し替え可能なsinkを導入済み。現在の出力先はVercel Runtime Logs。
 - 物理コンテナ分割は未実施。現在はモジュラーモノリス段階。
-

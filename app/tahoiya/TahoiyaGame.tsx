@@ -189,26 +189,11 @@ function listRoomsLocally() {
   return rooms;
 }
 
-function listJoinableRoomsLocally(): TahoiyaRoomChoice[] {
-  return listRoomsLocally()
-    .filter((room) => room.phase === "lobby" && room.players.length < 8)
-    .map((room) => ({
-      code: room.code,
-      hostName: room.players.find((player) => player.id === room.hostId)?.name ?? "Unknown",
-      playerCount: room.players.length,
-      phase: room.phase,
-      hasPassphrase: Boolean(room.passphrase),
-      updatedAt: room.updatedAt,
-    }))
-    .sort((left, right) => right.updatedAt - left.updatedAt);
-}
-
 function deleteRoomLocally(code: string) {
   localStorage.removeItem(getRoomKey(code));
 }
 
 async function saveRoomToStore(room: TahoiyaRoom, actorId: string) {
-  saveRoomLocally(room);
   try {
     const response = await fetch("/api/tahoiya/rooms", {
       method: "POST",
@@ -222,7 +207,6 @@ async function saveRoomToStore(room: TahoiyaRoom, actorId: string) {
     saveRoomLocally(saved);
     return saved;
   } catch {
-    // Local storage keeps prototype testing usable when Redis is unavailable.
     return null;
   }
 }
@@ -245,6 +229,23 @@ async function applyRoomActionToStore(code: string, action: TahoiyaRoomAction) {
   }
 }
 
+async function applyTahoiyaSpecialAction(code: string, action: { type: "join-room"; passphrase: string } | { type: "start-round" }) {
+  try {
+    const response = await fetch("/api/tahoiya/rooms", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code, action }),
+    });
+    const data = await response.json() as { room?: TahoiyaRoom; error?: string };
+    if (!response.ok || !data.room) throw new Error(data.error || "ROOM_ACTION_FAILED");
+    const saved = normalizeRoom(data.room);
+    saveRoomLocally(saved);
+    return saved;
+  } catch (error) {
+    throw error instanceof Error ? error : new Error("ROOM_ACTION_FAILED");
+  }
+}
+
 async function loadRoomFromStore(code: string) {
   try {
     const response = await fetch(`/api/tahoiya/rooms?code=${encodeURIComponent(code)}`, { cache: "no-store" });
@@ -256,7 +257,7 @@ async function loadRoomFromStore(code: string) {
     saveRoomLocally(normalized);
     return normalized;
   } catch {
-    return loadRoomLocally(code);
+    return null;
   }
 }
 
@@ -281,7 +282,7 @@ async function listJoinableRoomsFromStore() {
     const data = (await response.json()) as { rooms?: TahoiyaRoomChoice[] };
     return Array.isArray(data.rooms) ? data.rooms : [];
   } catch {
-    return listJoinableRoomsLocally();
+    return [];
   }
 }
 
@@ -578,30 +579,15 @@ export function TahoiyaGame() {
       setMessage(`すでに部屋 ${activeRoom.code} に参加しています。1人が保持できる部屋は1つです。`);
       return;
     }
-    const target = await loadRoomFromStore(code);
-    if (!target) {
-      setMessage("部屋が見つかりません。");
-      return;
+    try {
+      const joined = await applyTahoiyaSpecialAction(code, { type: "join-room", passphrase });
+      setRoom(joined);
+      setActivePlayerId(playerId);
+      setMessage("");
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "";
+      setMessage(code === "Bad passphrase" ? "合言葉が違います。" : "部屋に参加できませんでした。開始済み・満員でないか確認してください。");
     }
-    if (target.phase !== "lobby") {
-      setMessage("開始済みの部屋には参加できません。");
-      return;
-    }
-    if (target.passphrase && target.passphrase !== passphrase) {
-      setMessage("合言葉が違います。");
-      return;
-    }
-
-    const existing = target.players.find((player) => player.id === playerId);
-    const nextRoom = existing
-      ? target
-      : {
-          ...target,
-          players: [...target.players, createPlayer(playerName, avatarColor, avatarImage, playerId)].slice(0, 8),
-        };
-    setAndSaveRoom(nextRoom);
-    setActivePlayerId(playerId);
-    setMessage("");
   };
 
   const addTestPlayer = () => {
@@ -620,16 +606,6 @@ export function TahoiyaGame() {
     if (!debugMode) {
       setActivePlayerId(playerId);
     }
-  };
-
-  const withMinimumDebugPlayers = (baseRoom: TahoiyaRoom) => {
-    if (!baseRoom.debugMode || baseRoom.players.length >= 2) return baseRoom;
-
-    const players = [...baseRoom.players];
-    while (players.length < 2) {
-      players.push(createPlayer(`テスト${players.length + 1}`));
-    }
-    return { ...baseRoom, players };
   };
 
   const setAnswererMode = (answererMode: TahoiyaAnswererMode) => {
@@ -733,62 +709,26 @@ export function TahoiyaGame() {
 
   const startRound = async () => {
     if (!room || !isHost || isStarting) return;
-    const startingRoom = withMinimumDebugPlayers(room);
-    if (startingRoom.players.length < 2) {
+    if (!room.debugMode && room.players.length < 2) {
       setMessage("ゲーム開始には2人以上が必要です。");
       return;
     }
-    const candidates = getAnswererCandidates(startingRoom);
-    const selectedAnswererId = startingRoom.playMode === "all-vote"
-      ? ""
-      : startingRoom.answererMode === "random"
-        ? shuffle(candidates)[0]?.id ?? ""
-        : candidates.some((player) => player.id === startingRoom.answererId)
-          ? startingRoom.answererId
-          : "";
-
-    if (startingRoom.playMode === "single-answerer" && !selectedAnswererId) {
+    if (room.playMode === "single-answerer" && room.answererMode === "manual" && !room.players.some((player) => player.id === room.answererId)) {
       setMessage("回答者を指定するか、ランダムで選ぶ設定にしてください。");
       return;
     }
-
-    const playableRoom = { ...startingRoom, answererId: selectedAnswererId };
     setIsStarting(true);
     setMessage("");
     try {
-      const topicParams = new URLSearchParams({
-        roomCode: playableRoom.code,
-        round: String(playableRoom.round),
-        difficulty: playableRoom.topicDifficulty,
-      });
-      const response = await fetch(`/api/tahoiya/topic?${topicParams.toString()}`, { cache: "no-store" });
-      const topic = (await response.json()) as TahoiyaTopic & { error?: string };
-      if (!response.ok || !topic.word || !topic.realDefinition) {
-        setMessage(topic.notice || topic.error || "お題を生成できませんでした。");
-        return;
-      }
-      setMessage(topic.notice ?? "");
-      setAndSaveRoom({
-        ...playableRoom,
-        phase: "writing",
-        phaseStartedAt: Date.now(),
-        word: topic.word,
-        reading: topic.reading,
-        realDefinition: topic.realDefinition,
-        topicNote: topic.note,
-        topicSourceDetail: topic.sourceDetail,
-        topicSource: topic.source,
-        topicGeneration: topic.generation,
-        fakeDefinitions: {},
-        options: [],
-        votes: {},
-        resultText: "",
-      });
-      const firstWriter = getDefinitionWriters(playableRoom)[0];
+      const started = await applyTahoiyaSpecialAction(room.code, { type: "start-round" });
+      setRoom(started);
+      const firstWriter = getDefinitionWriters(started)[0];
       if (firstWriter) setActivePlayerId(firstWriter.id);
       setDefinitionInput("");
       setPolishMessage("");
       setSelectedOptionId("");
+    } catch {
+      setMessage("お題を生成してゲームを開始できませんでした。もう一度試してください。");
     } finally {
       setIsStarting(false);
     }
@@ -823,7 +763,7 @@ export function TahoiyaGame() {
       const response = await fetch("/api/tahoiya/polish-definition", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ word: room.word, text: definitionInput.trim() }),
+        body: JSON.stringify({ roomCode: room.code, text: definitionInput.trim() }),
       });
       const data = (await response.json()) as { text?: string; provider?: string; model?: string; error?: string };
       if (!response.ok || !data.text) {

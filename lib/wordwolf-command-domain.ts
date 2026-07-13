@@ -1,4 +1,6 @@
 import type { Room } from "@/lib/wordwolf-game-types";
+import type { WordWolfTopic } from "@/lib/wordwolf";
+import { randomUUID } from "node:crypto";
 import { getGameTimerDeadlineAt, isGameTimerExpired, timerHyperparameter, type GameTimerPolicy } from "@/lib/game-timer/policy";
 
 const abstainVoteId = "__abstain__";
@@ -9,7 +11,63 @@ export function wordWolfTimeoutGraceMs() {
 const wolfIds = (room: Room) => room.wolfIds.length ? room.wolfIds : room.wolfId ? [room.wolfId] : [];
 const runoffCandidates = (room: Room) => room.runoffCandidateIds?.length ? room.players.filter((player) => room.runoffCandidateIds?.includes(player.id)) : room.players;
 const cluePlayers = (room: Room) => room.runoffCandidateIds?.length ? runoffCandidates(room) : room.players;
-const voteVoters = (room: Room) => room.runoffCandidateIds?.length ? room.players.filter((player) => !room.runoffCandidateIds?.includes(player.id)) : room.players;
+const voteVoters = (room: Room) => !room.runoffCandidateIds?.length || room.runoffCandidateIds.length >= 3
+  ? room.players
+  : room.players.filter((player) => !room.runoffCandidateIds?.includes(player.id));
+
+function shuffled<T>(items: T[]) {
+  const result = [...items];
+  for (let index = result.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [result[index], result[swapIndex]] = [result[swapIndex], result[index]];
+  }
+  return result;
+}
+
+function maximumWolfCount(playerCount: number) {
+  return Math.max(1, Math.floor((Math.max(3, playerCount) - 1) / 2));
+}
+
+export function applyWordWolfStartCommand(room: Room, actorId: string, topic: WordWolfTopic, now = Date.now()) {
+  if (room.phase !== "lobby" || room.hostId !== actorId) return null;
+  const players = [...room.players];
+  while (room.debugMode && players.length < 3) {
+    const number = players.length + 1;
+    players.push({ id: `dummy-${randomUUID()}`, name: `Test Player ${number}`, joinedAt: now + number });
+  }
+  if (!room.debugMode && players.length < 3) return null;
+  const orderedPlayers = room.randomizeTurnOrder ? shuffled(players) : players;
+  const shouldHaveWolf = room.gameMode === "wordwolf" || Math.random() >= 0.1;
+  const wolfCount = shouldHaveWolf ? Math.max(1, Math.min(maximumWolfCount(orderedPlayers.length), room.wolfCount)) : 0;
+  const selectedWolves = shouldHaveWolf ? shuffled(orderedPlayers).slice(0, wolfCount) : [];
+  const selectedWolfIds = selectedWolves.map((player) => player.id);
+  return {
+    ...room,
+    players: orderedPlayers,
+    phase: "clue" as const,
+    currentRound: 1,
+    currentTurnIndex: 0,
+    currentTurnStartedAt: now,
+    wolfId: selectedWolfIds[0] ?? null,
+    wolfIds: selectedWolfIds,
+    wolfCount: Math.max(1, wolfCount),
+    villageWord: topic.villageWord,
+    wolfWord: selectedWolfIds.length ? topic.wolfWord : topic.villageWord,
+    topicReason: topic.reason,
+    topicSource: topic.source,
+    topicFallbackExhausted: Boolean(topic.fallbackExhausted),
+    topicGeneration: topic.generation,
+    clues: [],
+    votes: {},
+    voteHistory: [],
+    runoffCandidateIds: null,
+    accusedId: null,
+    wolfGuess: "",
+    wolfGuessJudgement: null,
+    winner: null,
+    resultText: "",
+  };
+}
 
 export function wordWolfTimerPolicy(room: Room): GameTimerPolicy {
   const multiplier = room.phase === "vote" || room.phase === "wolfGuess" ? 2 : room.phase === "clue" ? 1 : 0;
@@ -46,7 +104,7 @@ function timeoutVote(room: Room, now: number): Room {
   const voteHistory = [...room.voteHistory, { round: room.voteHistory.length + 1, votes, candidateIds: candidates.map((player) => player.id), at: now }];
   if (top.length > 1) {
     const extraRound = room.currentRound + 1;
-    const hasRunoffVoters = room.players.some((player) => !top.includes(player.id));
+    const hasRunoffVoters = top.length >= 3 || room.players.some((player) => !top.includes(player.id));
     return { ...room, phase: "clue", votes: {}, voteHistory, runoffCandidateIds: hasRunoffVoters ? top : null, currentRound: extraRound, currentTurnIndex: 0, currentTurnStartedAt: now };
   }
   const accusedId = top[0] ?? null;

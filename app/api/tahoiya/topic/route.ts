@@ -6,7 +6,8 @@ import {
 } from "@/lib/game-llm";
 import type { GameGenerationMeta } from "@/lib/game-ai-types";
 import { formatGameFeedbackContext, retrieveGameFeedback } from "@/lib/game-feedback-store";
-import { withGameGenerationCache } from "@/lib/game-generation-cache";
+import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
+import { emitObservabilityEvent, observabilityErrorCode } from "@/lib/observability";
 import { loadStoredTahoiyaRoom } from "@/lib/tahoiya-room-store";
 import {
   findReusableTahoiyaTopic,
@@ -499,7 +500,7 @@ async function reviewSourceBatch(
     `素材: ${JSON.stringify(compactSources)}`,
     feedbackContext.slice(0, 1_500),
   ].filter(Boolean).join("\n\n");
-  console.info(`[tahoiya/topic] reviewing ${sources.length} sources with ${prompt.length} prompt chars`);
+  emitObservabilityEvent("info", "ai.generation", { game: "tahoiya", operation: "source-review", sourceCount: sources.length, outcome: "started" });
   const generated = await generateGameLlmText(prompt, mode, { quality: "standard", timeoutMs: 25_000 });
   const reviewed = parseBatchReview(generated.text, sources);
   if (reviewed.length !== sources.length) throw new Error(`Batch review returned ${reviewed.length}/${sources.length} items`);
@@ -530,7 +531,7 @@ async function reviewSourceBatch(
   return { reviewed, candidates, generation };
 }
 
-async function generateTopicResponse(
+export async function generateTahoiyaTopicResponse(
   difficulty: TahoiyaDifficulty,
   playerIds: string[],
   previewOnly = false,
@@ -553,7 +554,7 @@ async function generateTopicResponse(
   };
   if (!forceNew) {
     await ensureTahoiyaGitCandidates().catch((error) => {
-      console.error("[tahoiya/topic] Git candidate sync failed", error);
+      emitObservabilityEvent("error", "ai.catalog-sync", { game: "tahoiya", operation: "git-candidates", outcome: "failed", errorCode: observabilityErrorCode(error) });
     });
     const reusableTopic = await findReusableTahoiyaTopic(difficulty, playerIds, feedbackBlockedWords).catch(() => null);
     if (reusableTopic) {
@@ -598,36 +599,27 @@ async function generateTopicResponse(
       generation: batch.generation,
     });
   } catch (error) {
-    console.error("[tahoiya/topic] source batch review failed", error);
+    emitObservabilityEvent("error", "ai.generation", { game: "tahoiya", operation: "source-review", outcome: "failed", errorCode: observabilityErrorCode(error) });
     return Response.json({ error: "素材候補10件のAI審査に失敗しました。もう一度お試しください。" }, { status: 503 });
   }
 
 }
 
 export async function GET(request: Request) {
-  const url = new URL(request.url);
-  const previewOnly = url.searchParams.get("test") === "1";
-  const roomCode = url.searchParams.get("roomCode")?.trim().toUpperCase() ?? "";
-  const round = url.searchParams.get("round")?.trim() ?? "";
-  const room = roomCode ? await loadStoredTahoiyaRoom(roomCode).catch(() => null) : null;
-  const forceNew = previewOnly && room?.debugMode === true && url.searchParams.get("forceNew") === "1";
-  const difficulty: TahoiyaDifficulty = room?.topicDifficulty === "extreme" || url.searchParams.get("difficulty") === "extreme"
-    ? "extreme"
-    : "standard";
-  const playerIds = room?.players.map((player) => player.id) ?? [];
-  const requestKey = roomCode && round ? `${roomCode}:${round}:${difficulty}` : "";
-  if (!requestKey || previewOnly) return generateTopicResponse(difficulty, playerIds, previewOnly, forceNew);
-
   try {
-    const cached = await withGameGenerationCache(tahoiyaTopicPromptVersion, requestKey, async () => {
-      const response = await generateTopicResponse(difficulty, playerIds);
-      return { status: response.status, body: await response.json() };
-    });
-    return Response.json(cached.body, { status: cached.status });
-  } catch (error) {
-    if (error instanceof Error && error.message === "GAME_GENERATION_IN_PROGRESS") {
-      return Response.json({ error: "お題を生成中です。少し待ってからもう一度お試しください。" }, { status: 409 });
+    const player = await requireAuthenticatedPlayer();
+    const url = new URL(request.url);
+    const roomCode = url.searchParams.get("roomCode")?.trim().toUpperCase() ?? "";
+    const room = roomCode ? await loadStoredTahoiyaRoom(roomCode).catch(() => null) : null;
+    if (!room) return Response.json({ error: "Room not found" }, { status: 404 });
+    if (!room.debugMode || room.hostId !== player.id) {
+      return Response.json({ error: "Topics are generated through the authenticated room action" }, { status: 403 });
     }
-    throw error;
+    const forceNew = url.searchParams.get("forceNew") === "1";
+    return generateTahoiyaTopicResponse(room.topicDifficulty, room.players.map((item) => item.id), true, forceNew);
+  } catch (error) {
+    if (error instanceof Error && error.message === "PLAYER_AUTH_REQUIRED") return Response.json({ error: "Login required" }, { status: 401 });
+    if (isPlayerAuthConfigurationError(error)) return Response.json({ error: "Player auth is not configured" }, { status: 503 });
+    return Response.json({ error: "Failed to generate topic preview" }, { status: 500 });
   }
 }

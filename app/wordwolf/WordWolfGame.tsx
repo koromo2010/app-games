@@ -19,10 +19,8 @@ import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
 import { createGameTimerEventId } from "@/lib/game-timer/event";
 import {
   isValidWordWolfTopic,
-  normalizeGuess,
   normalizeTopicDictionarySource,
   normalizeTopicPairDistance,
-  pickFallbackTopic,
   type TopicDictionarySource,
   type TopicPairDistance,
   type WordWolfTopic,
@@ -41,24 +39,14 @@ import type {
   RoomChoice,
   VoteRound,
 } from "@/lib/wordwolf-game-types";
-import type { WordWolfGuessJudgement } from "@/lib/wordwolf-guess-judgement";
 import {
-  abstainVoteId,
-  createClue,
-  createVoteRound,
   getClueParticipants,
   getClueSubmittedCount,
-  getFirstClueTurnIndex,
-  getNextClueTurn,
   getNextSimultaneousCluePlayer,
   getNextVotePlayer,
-  getTopVoteTargetIds,
   getVoteCandidates,
-  getVoteTarget,
   getVoteVoters,
   hasPostedClueThisRound,
-  pickWolves,
-  shufflePlayers,
 } from "./game-flow";
 import { ClueLogPanel, VoteHistoryPanel } from "./WordWolfPanels";
 import { WordWolfActionPanels } from "./WordWolfActionPanels";
@@ -66,8 +54,11 @@ import {
   fetchWordWolfRoom,
   expireWordWolfPhase,
   castWordWolfVote,
+  joinWordWolfRoom,
   persistWordWolfRoom,
+  startWordWolfGame,
   submitWordWolfClue,
+  submitWordWolfGuessCommand,
 } from "./wordwolf-room-api-client";
 import { useWordWolfPhaseClock } from "./use-wordwolf-phase-clock";
 import {
@@ -164,7 +155,6 @@ function normalizeRoundsTotal(value: unknown) {
   return lobbyRounds.includes(round) ? round : 3;
 }
 
-const noWolfChance = 0.1;
 const roomStoragePrefix = "wordwolf-room-";
 const roomDefaultsStoragePrefix = "wordwolf-room-defaults-";
 
@@ -358,12 +348,12 @@ function deleteHostedRooms(ownerId: string, fallbackHostId: string) {
 }
 
 async function saveRoomToStore(room: Room) {
-  saveRoom(room);
-
   try {
-    await persistWordWolfRoom(room);
+    const saved = await persistWordWolfRoom(room);
+    saveRoom(saved.room);
+    return saved.room;
   } catch {
-    // Local storage keeps solo/browser-tab testing usable when the remote store is unavailable.
+    return null;
   }
 }
 
@@ -550,66 +540,6 @@ function createPlayer(
     avatarImage: avatarImage || undefined,
     joinedAt: Date.now(),
   };
-}
-
-function fillSoloTestPlayers(players: Player[]) {
-  const nextPlayers = [...players];
-
-  while (nextPlayers.length < 3) {
-    nextPlayers.push(createPlayer(`Test Player ${nextPlayers.length + 1}`));
-  }
-
-  return nextPlayers;
-}
-
-async function fetchTopicWithFallback(
-  dictionarySource: TopicDictionarySource,
-  pairDistance: TopicPairDistance,
-  topicHint: string,
-  roomCode: string,
-  gameNumber: number,
-): Promise<WordWolfTopic> {
-  const requiresLlm = dictionarySource === "llm" || dictionarySource === "proper-noun";
-  const params = new URLSearchParams({ source: dictionarySource, distance: pairDistance });
-  params.set("roomCode", roomCode);
-  params.set("gameNumber", String(gameNumber));
-  const normalizedTopicHint = topicHint.trim().slice(0, 80);
-  if (normalizedTopicHint) {
-    params.set("hint", normalizedTopicHint);
-  }
-  const maxAttempts = 1;
-
-  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    const controller = new AbortController();
-    const topicTimeoutMs = requiresLlm ? 60000 : 1500;
-    const timer = window.setTimeout(() => controller.abort(), topicTimeoutMs);
-
-    try {
-      const response = await fetch(`/api/wordwolf/topic?${params.toString()}`, {
-        signal: controller.signal,
-      });
-
-      if (!response.ok) {
-        if (requiresLlm) continue;
-        return pickFallbackTopic([], dictionarySource, pairDistance, [], normalizedTopicHint);
-      }
-
-      const topic = (await response.json()) as WordWolfTopic;
-      if (!isValidWordWolfTopic(topic)) {
-        if (requiresLlm) continue;
-        return pickFallbackTopic([], dictionarySource, pairDistance, [], normalizedTopicHint);
-      }
-
-      return topic;
-    } catch {
-      if (requiresLlm) continue;
-      return pickFallbackTopic([], dictionarySource, pairDistance, [], normalizedTopicHint);
-    } finally {
-      window.clearTimeout(timer);
-    }
-  }
-
-  throw new Error("LLM topic generation did not complete.");
 }
 
 export function WordWolfGame() {
@@ -906,7 +836,9 @@ export function WordWolfGame() {
   const setAndSaveRoom = useCallback((nextRoom: Room) => {
     const stampedRoom = stampRoom(nextRoom);
     setRoom(stampedRoom);
-    void saveRoomToStore(stampedRoom);
+    void saveRoomToStore(stampedRoom).then((saved) => {
+      if (saved) setRoom(saved);
+    });
     void saveRoomDefaultsToStore(stampedRoom);
     localStorage.setItem("wordwolf-last-room", stampedRoom.code);
   }, []);
@@ -953,32 +885,20 @@ export function WordWolfGame() {
       return;
     }
 
-    const targetRoom = await loadRoomFromStore(code);
-    if (!targetRoom) {
-      setError("その部屋が見つかりません。同じブラウザ内で作った部屋コードを使ってください。");
-      return;
+    try {
+      const { room: joinedRoom } = await joinWordWolfRoom(code, passphrase);
+      setJoinCode(code);
+      setIsJoinListOpen(false);
+      setJoinableRooms([]);
+      setActivePlayerId(playerAccountId);
+      saveRoom(joinedRoom);
+      setRoom(joinedRoom);
+      localStorage.setItem("wordwolf-last-player", playerAccountId);
+      localStorage.setItem("wordwolf-last-room", joinedRoom.code);
+      setError("");
+    } catch {
+      setError("部屋が見つからないか、合言葉が違います。");
     }
-    if (targetRoom.phase !== "lobby") {
-      setError("開始済みの部屋には参加できません。");
-      return;
-    }
-    if (targetRoom.passphrase && targetRoom.passphrase !== passphrase) {
-      setError("合言葉が違います。");
-      return;
-    }
-    const existingPlayer = targetRoom.players.find((player) => player.id === playerAccountId);
-
-    const player = existingPlayer ?? createPlayer(name, avatarColor, avatarImage, playerAccountId);
-    const nextRoom = existingPlayer
-      ? targetRoom
-      : { ...targetRoom, players: [...targetRoom.players, player] };
-    setJoinCode(code);
-    setIsJoinListOpen(false);
-    setJoinableRooms([]);
-    setActivePlayerId(player.id);
-    setAndSaveRoom(nextRoom);
-    localStorage.setItem("wordwolf-last-player", player.id);
-    setError("");
   };
 
   const dissolveRoom = async () => {
@@ -1090,6 +1010,10 @@ export function WordWolfGame() {
       setError("画像ファイルを選んでください。");
       return;
     }
+    if (file.size > 150_000) {
+      setError("画像は150KB以下にしてください。");
+      return;
+    }
 
     const reader = new FileReader();
     reader.onload = () => {
@@ -1136,7 +1060,7 @@ export function WordWolfGame() {
 
   const copyRoomInvite = () => {
     if (!room) return;
-    const passphraseText = room.passphrase ? room.passphrase : "なし";
+    const passphraseText = roomPassphrase.trim() || (room.passphrase ? "設定済み（再表示不可）" : "なし");
     void copyText(`ROOM: ${room.code}\n合言葉: ${passphraseText}`, "ROOMと合言葉をコピーしました。");
   };
 
@@ -1230,141 +1154,34 @@ export function WordWolfGame() {
         return;
       }
 
-      const topic = await fetchTopicWithFallback(
-        room.topicDictionarySource,
-        room.topicPairDistance,
-        room.topicHint,
-        room.code,
-        room.gameNumber,
-      );
-      setError(topic.notice ?? "");
-      const basePlayers = room.debugMode ? fillSoloTestPlayers(room.players) : room.players;
-      const players = room.randomizeTurnOrder ? shufflePlayers(basePlayers) : basePlayers;
-      const roundsTotal = normalizeRoundsTotal(room.roundsTotal);
-      const shouldHaveWolf = room.gameMode === "wordwolf" || Math.random() >= noWolfChance;
-      const wolfCount = shouldHaveWolf ? normalizeWolfCount(room.wolfCount, players.length) : 0;
-      const wolves = shouldHaveWolf ? pickWolves(players, wolfCount) : [];
-      const wolfIds = wolves.map((wolf) => wolf.id);
-      setAndSaveRoom({
-        ...room,
-        players,
-        debugMode: room.debugMode,
-        phase: "clue",
-        currentRound: 1,
-        roundsTotal,
-        currentTurnIndex: 0,
-        currentTurnStartedAt: Date.now(),
-        wolfId: wolfIds[0] ?? null,
-        wolfIds,
-        wolfCount: Math.max(1, wolfCount),
-        villageWord: topic.villageWord,
-        wolfWord: wolves.length > 0 ? topic.wolfWord : topic.villageWord,
-        topicReason: topic.reason,
-        topicSource: topic.source,
-        topicFallbackExhausted: Boolean(topic.fallbackExhausted),
-        topicGeneration: topic.generation,
-        clues: [],
-        votes: {},
-        voteHistory: [],
-        runoffCandidateIds: null,
-        accusedId: null,
-        wolfGuess: "",
-        wolfGuessJudgement: null,
-        winner: null,
-        resultText: "",
-      });
+      const result = await startWordWolfGame(room.code, crypto.randomUUID());
+      setRoom(result.room);
+      setError("");
     } catch {
-      setError("お題を取得できませんでした。もう一度試してください。");
+      setError("ゲームを開始できませんでした。もう一度試してください。");
     } finally {
       setIsStarting(false);
     }
   };
 
   // eslint-disable-next-line react-hooks/preserve-manual-memoization
-  const submitClue = useCallback(async (isTimeout = false) => {
+  const submitClue = useCallback(async () => {
     if (!room || room.phase !== "clue") return;
     // 0秒表示後の手動投稿と自動時間切れ処理が同時に部屋を更新するのを防ぐ。
-    if (!isTimeout && turnSecondsLeft === 0 && room.turnTimeLimitSeconds > 0) return;
-    if (!isTimeout) {
-      const text = clueInput.trim();
-      if (!clueActorId || !text) return;
-      try {
-        const result = await submitWordWolfClue(room.code, clueActorId, text, crypto.randomUUID());
-        setClueInput(""); saveRoom(result.room); setRoom(result.room);
-      } catch {
-        const latest = await loadRoomFromStore(room.code); if (latest) setRoom(latest);
-        setError("発言を反映できませんでした。最新の状態を読み込みました。");
-      }
-      return;
-    }
-
-    const timeoutText = "\u6642\u9593\u5207\u308c";
-    if (room.clueMode === "simultaneous") {
-      const latestRoom = await loadRoomFromStore(room.code);
-      if (latestRoom && (latestRoom.phase !== "clue" || latestRoom.currentRound !== room.currentRound)) {
-        setRoom(latestRoom);
-        return;
-      }
-
-      const baseRoom =
-        latestRoom?.phase === "clue" &&
-        latestRoom.clueMode === "simultaneous" &&
-        latestRoom.currentRound === room.currentRound
-          ? latestRoom
-          : room;
-      const actorId = clueActorId;
-      const actorInBaseRoom = baseRoom.players.find((player) => player.id === actorId);
-      const clueTargets = getClueParticipants(baseRoom);
-      const targetPlayers = isTimeout
-        ? clueTargets.filter((player) => !hasPostedClueThisRound(baseRoom, player.id))
-        : actorInBaseRoom && clueTargets.some((player) => player.id === actorInBaseRoom.id) && !hasPostedClueThisRound(baseRoom, actorInBaseRoom.id)
-          ? [actorInBaseRoom]
-          : [];
-      const clueText = isTimeout ? timeoutText : clueInput.trim();
-      if (!targetPlayers.length || !clueText) return;
-
-      const nextClues = [
-        ...baseRoom.clues,
-        ...targetPlayers.map((player) => createClue(player.id, baseRoom.currentRound, clueText)),
-      ];
-      const submittedIds = new Set(
-        nextClues.filter((clue) => clue.round === baseRoom.currentRound).map((clue) => clue.playerId),
-      );
-      const isRoundComplete = clueTargets.every((player) => submittedIds.has(player.id));
-      const isRunoffClue = Boolean(baseRoom.runoffCandidateIds?.length);
-      const isLastRound = baseRoom.currentRound >= baseRoom.roundsTotal;
-
+    if (turnSecondsLeft === 0 && room.turnTimeLimitSeconds > 0) return;
+    const text = clueInput.trim();
+    if (!clueActorId || !text) return;
+    try {
+      const result = await submitWordWolfClue(room.code, clueActorId, text, crypto.randomUUID());
       setClueInput("");
-      setAndSaveRoom({
-        ...baseRoom,
-        clues: nextClues,
-        currentTurnIndex: 0,
-        currentRound: isRoundComplete && !isRunoffClue && !isLastRound ? baseRoom.currentRound + 1 : baseRoom.currentRound,
-        phase: isRoundComplete && (isRunoffClue || isLastRound) ? "vote" : "clue",
-        currentTurnStartedAt: isRoundComplete ? Date.now() : baseRoom.currentTurnStartedAt,
-      });
-      return;
+      saveRoom(result.room);
+      setRoom(result.room);
+    } catch {
+      const latest = await loadRoomFromStore(room.code);
+      if (latest) setRoom(latest);
+      setError("発言を反映できませんでした。最新の状態を読み込みました。");
     }
-
-    if (!clueActorId || !currentPlayerId) return;
-    const text = isTimeout ? timeoutText : clueInput.trim();
-    if (!text || clueActorId !== currentPlayerId) return;
-
-    const { isLastPlayer, nextTurnIndex } = getNextClueTurn(room);
-    const isRunoffClue = Boolean(room.runoffCandidateIds?.length);
-    const isLastRound = room.currentRound >= room.roundsTotal;
-    const nextRoom: Room = {
-      ...room,
-      clues: [...room.clues, createClue(clueActorId, room.currentRound, text)],
-      currentTurnIndex: isLastPlayer ? getFirstClueTurnIndex(room) : nextTurnIndex,
-      currentRound: isLastPlayer && !isRunoffClue && !isLastRound ? room.currentRound + 1 : room.currentRound,
-      phase: isLastPlayer && (isRunoffClue || isLastRound) ? "vote" : "clue",
-      currentTurnStartedAt: Date.now(),
-    };
-
-    setClueInput("");
-    setAndSaveRoom(nextRoom);
-  }, [clueActorId, clueInput, currentPlayerId, room, setAndSaveRoom, turnSecondsLeft]); // eslint-disable-line react-hooks/preserve-manual-memoization
+  }, [clueActorId, clueInput, room, turnSecondsLeft]); // eslint-disable-line react-hooks/preserve-manual-memoization
   const expireCurrentPhase = useCallback(async (commandId: string) => {
     if (!room) return;
     const attempt = async (): Promise<void> => {
@@ -1417,141 +1234,21 @@ export function WordWolfGame() {
     void submitWolfGuess();
   };
 
-  const castVote = useCallback(async (targetId: string, isTimeout = false) => {
+  const castVote = useCallback(async (targetId: string) => {
     if (!room || room.phase !== "vote") return;
-    if (!isTimeout && turnSecondsLeft === 0 && room.turnTimeLimitSeconds > 0) return;
-    if (!isTimeout) {
-      const actorId = voteActor?.id ?? "";
-      if (!actorId || !targetId) return;
-      try {
-        const result = await castWordWolfVote(room.code, actorId, targetId, crypto.randomUUID());
-        saveRoom(result.room); setRoom(result.room);
-      } catch {
-        const latest = await loadRoomFromStore(room.code); if (latest) setRoom(latest);
-        setError("投票を反映できませんでした。最新の状態を読み込みました。");
-      }
-      return;
+    if (turnSecondsLeft === 0 && room.turnTimeLimitSeconds > 0) return;
+    const actorId = voteActor?.id ?? "";
+    if (!actorId || !targetId) return;
+    try {
+      const result = await castWordWolfVote(room.code, actorId, targetId, crypto.randomUUID());
+      saveRoom(result.room);
+      setRoom(result.room);
+    } catch {
+      const latest = await loadRoomFromStore(room.code);
+      if (latest) setRoom(latest);
+      setError("投票を反映できませんでした。最新の状態を読み込みました。");
     }
-
-    const latestRoom = await loadRoomFromStore(room.code);
-    if (latestRoom && latestRoom.phase !== "vote") {
-      setRoom(latestRoom);
-      return;
-    }
-
-    const baseRoom =
-      latestRoom?.phase === "vote" &&
-      latestRoom.voteHistory.length === room.voteHistory.length &&
-      latestRoom.runoffCandidateIds?.join(",") === room.runoffCandidateIds?.join(",")
-        ? latestRoom
-        : room;
-    const candidates = getVoteCandidates(baseRoom);
-    if (!candidates.length) return;
-
-    const votes = { ...baseRoom.votes };
-    if (isTimeout) {
-      getVoteVoters(baseRoom)
-        .filter((player) => !votes[player.id])
-        .forEach((player) => {
-          votes[player.id] = abstainVoteId;
-        });
-    } else {
-      const actorId = voteActor?.id ?? "";
-      const actorInBaseRoom = getVoteVoters(baseRoom).find((player) => player.id === actorId);
-      if (!actorInBaseRoom || votes[actorInBaseRoom.id]) return;
-      if (!candidates.some((player) => player.id === targetId)) return;
-      votes[actorInBaseRoom.id] = targetId;
-    }
-
-    const nextRoom = { ...baseRoom, votes };
-
-    const requiredVoters = getVoteVoters(baseRoom);
-    if (requiredVoters.every((player) => votes[player.id])) {
-      const voteRound = createVoteRound(baseRoom, votes);
-      const voteHistory = [...baseRoom.voteHistory, voteRound];
-      const topTargetIds = getTopVoteTargetIds(nextRoom, votes);
-
-      if (topTargetIds.length > 1) {
-        const runoffRoom = {
-          ...nextRoom,
-          votes: {},
-          voteHistory,
-          runoffCandidateIds: topTargetIds,
-          currentTurnStartedAt: Date.now(),
-        };
-
-        const extraRound = baseRoom.currentRound + 1;
-        if (getVoteVoters(runoffRoom).length === 0) {
-          setAndSaveRoom({
-            ...runoffRoom,
-            phase: "clue",
-            votes: {},
-            runoffCandidateIds: null,
-            currentRound: extraRound,
-            currentTurnIndex: 0,
-            currentTurnStartedAt: Date.now(),
-          });
-          return;
-        }
-
-        setAndSaveRoom({
-          ...runoffRoom,
-          phase: "clue",
-          currentRound: extraRound,
-          currentTurnIndex: getFirstClueTurnIndex({ ...runoffRoom, phase: "clue", currentRound: extraRound }),
-          currentTurnStartedAt: Date.now(),
-        });
-        return;
-      }
-
-      const accusedId = topTargetIds[0] ?? getVoteTarget(nextRoom, votes);
-      if (baseRoom.gameMode === "may-no-wolf" && normalizeWolfIds(baseRoom).length === 0) {
-        const loserName = nextRoom.players.find((player) => player.id === accusedId)?.name;
-        setAndSaveRoom({
-          ...nextRoom,
-          phase: "result",
-          currentTurnStartedAt: null,
-          accusedId,
-          voteHistory,
-          runoffCandidateIds: null,
-          winner: "players",
-          resultText: accusedId
-            ? "\u72fc\u306f\u3044\u307e\u305b\u3093\u3067\u3057\u305f\u3002\u6295\u7968\u3067\u9078\u3070\u308c\u305f" + (loserName ?? "\u30d7\u30ec\u30a4\u30e4\u30fc") + "\u306e\u8ca0\u3051\u3067\u3059\u3002"
-            : "\u72fc\u306f\u3044\u307e\u305b\u3093\u3067\u3057\u305f\u3002\u6295\u7968\u304c\u5272\u308c\u305f\u305f\u3081\u6c7a\u7740\u306f\u3064\u304d\u307e\u305b\u3093\u3002",
-        });
-        return;
-      }
-
-      const baseWolfIds = normalizeWolfIds(baseRoom);
-      if (accusedId && baseWolfIds.includes(accusedId)) {
-        setAndSaveRoom({
-          ...nextRoom,
-          phase: "wolfGuess",
-          accusedId,
-          voteHistory,
-          runoffCandidateIds: null,
-          currentTurnStartedAt: Date.now(),
-        });
-        return;
-      }
-
-      setAndSaveRoom({
-        ...nextRoom,
-        phase: "result",
-        currentTurnStartedAt: null,
-        accusedId,
-        voteHistory,
-        runoffCandidateIds: null,
-        winner: "wolf",
-        resultText: accusedId
-          ? "\u6295\u7968\u3067\u72fc\u3092\u5f53\u3066\u3089\u308c\u307e\u305b\u3093\u3067\u3057\u305f\u3002\u72fc\u306e\u52dd\u5229\u3067\u3059\u3002"
-          : "\u6295\u7968\u304c\u5272\u308c\u307e\u3057\u305f\u3002\u72fc\u306e\u52dd\u5229\u3067\u3059\u3002",
-      });
-      return;
-    }
-
-    setAndSaveRoom({ ...nextRoom, currentTurnStartedAt: baseRoom.currentTurnStartedAt });
-  }, [room, setAndSaveRoom, turnSecondsLeft, voteActor?.id]);
+  }, [room, turnSecondsLeft, voteActor?.id]);
 
   // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const submitWolfGuess = useCallback(async (isTimeout = false) => {
@@ -1564,46 +1261,15 @@ export function WordWolfGame() {
     setIsGuessJudging(true);
     setGuessFeedbackMessage("");
 
-    let judgement: WordWolfGuessJudgement;
     try {
-      const response = await fetch("/api/wordwolf/guess", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ guess, correct: room.villageWord }),
-      });
-      const payload = (await response.json()) as { judgement?: WordWolfGuessJudgement };
-      if (!response.ok || !payload.judgement) {
-        throw new Error("GUESS_JUDGEMENT_FAILED");
-      }
-      judgement = payload.judgement;
+      const result = await submitWordWolfGuessCommand(room.code, guess, crypto.randomUUID());
+      setRoom(result.room);
     } catch {
-      const accepted = normalizeGuess(guess) === normalizeGuess(room.villageWord);
-      judgement = {
-        accepted,
-        source: accepted ? "exact" : "fuzzy",
-        reason: accepted
-          ? "\u5b8c\u5168\u4e00\u81f4\u3057\u307e\u3057\u305f\u3002"
-          : "\u5224\u5b9a\u306b\u5931\u6557\u3057\u305f\u305f\u3081\u5b8c\u5168\u4e00\u81f4\u306e\u307f\u3067\u5224\u5b9a\u3057\u307e\u3057\u305f\u3002",
-        confidence: accepted ? 1 : 0,
-        feedbackAccepted: 0,
-        feedbackRejected: 0,
-      };
+      setError("逆転回答を判定できませんでした。もう一度試してください。");
     } finally {
       setIsGuessJudging(false);
     }
-
-    setAndSaveRoom({
-      ...room,
-      phase: "result",
-      currentTurnStartedAt: null,
-      wolfGuess: guess,
-      wolfGuessJudgement: judgement,
-      winner: judgement.accepted ? "wolf" : "village",
-      resultText: judgement.accepted
-        ? "\u9006\u8ee2\u56de\u7b54\u3092\u6b63\u89e3\u6271\u3044\u306b\u3057\u307e\u3057\u305f\u3002\u72fc\u306e\u52dd\u5229\u3067\u3059\u3002"
-        : "\u9006\u8ee2\u56de\u7b54\u306f\u4e0d\u6b63\u89e3\u6271\u3044\u3067\u3059\u3002\u6751\u5074\u306e\u52dd\u5229\u3067\u3059\u3002",
-    });
-  }, [guessActorId, guessInput, isGuessJudging, room, setAndSaveRoom, turnSecondsLeft]); // eslint-disable-line react-hooks/preserve-manual-memoization
+  }, [guessActorId, guessInput, isGuessJudging, room, turnSecondsLeft]); // eslint-disable-line react-hooks/preserve-manual-memoization
 
   useEffect(() => {
     if (
@@ -1652,7 +1318,7 @@ export function WordWolfGame() {
       const response = await fetch("/api/wordwolf/guess-feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ guess: room.wolfGuess, correct: room.villageWord, accepted }),
+        body: JSON.stringify({ roomCode: room.code, guess: room.wolfGuess, accepted }),
       });
       if (!response.ok) throw new Error("GUESS_FEEDBACK_FAILED");
       setGuessFeedbackMessage(

@@ -1,0 +1,22 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { resolveGameReplayPolicy } from "../lib/game-replay-policy.ts";
+import { gameReplayShareText } from "../lib/game-replay-types.ts";
+
+test("リプレイ設定の初期値は30日・お気に入り10件", () => {
+  assert.deepEqual(resolveGameReplayPolicy({}), { retentionDays: 30, favoriteLimit: 10 });
+});
+
+test("リプレイ設定値は安全な範囲へ制限する", () => {
+  assert.deepEqual(resolveGameReplayPolicy({
+    GAME_REPLAY_RETENTION_DAYS: "0",
+    GAME_REPLAY_FAVORITE_LIMIT: "999",
+  }), { retentionDays: 1, favoriteLimit: 100 });
+});
+
+test("共有文には結果を含め、説明本文を要求しない", () => {
+  const text = gameReplayShareText({ gameType: "tahoiya", title: "未知語", resultLabel: "3点" });
+  assert.match(text, /たほい屋/);
+  assert.match(text, /3点/);
+  assert.equal(text.includes("本当の説明"), false);
+});

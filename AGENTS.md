@@ -1,6 +1,6 @@
 # App Games agent guide
 
-このリポジトリを編集するAI・開発者は、作業開始時に `README.md` と `docs/DEVELOPMENT_HANDOFF.md` を読むこと。新規ゲームの追加・ゲーム仕様の変更時は、さらに `config/game-registry.json` と `docs/NEW_GAME_CHECKLIST.md` を必ず確認すること。会話スレッド内の記憶だけを正本にしない。お題DB、既出判定、問題再利用を変更する場合は `docs/TOPIC_HISTORY_DATABASE.md` も先に読むこと。
+このリポジトリを編集するAI・開発者は、作業開始時に `docs/README.md` の読書順に従い、`README.md` と `docs/DEVELOPMENT_HANDOFF.md` を読むこと。バグ修正・認証・マルチプレイ進行を変更する場合は `docs/KNOWN_ISSUES.md` も確認すること。新規ゲームの追加・ゲーム仕様の変更時は、さらに `config/game-registry.json` と `docs/NEW_GAME_CHECKLIST.md` を必ず確認すること。会話スレッド内の記憶だけを正本にしない。お題DB、既出判定、問題再利用を変更する場合は `docs/TOPIC_HISTORY_DATABASE.md` も先に読むこと。
 
 ## Project identity
 
@@ -26,7 +26,9 @@
 - 既存のユーザー変更を消さない。秘密情報や `.env.local` をコミットしない。
 - 全ゲームを `config/game-registry.json` に登録する。ロビー表示、公開範囲、プレイ方式、LLM、戦績、必須共通UIを別々のファイルへ重複定義しない。
 - `docs/MODULAR_GAME_ARCHITECTURE.md` のモジュール境界と `docs/CONTAINER_ARCHITECTURE.md` の将来構成を守る。UIコンポーネントからRedisを呼ばず、HTTP通信、時計、純粋なゲーム進行、永続化を分離する。分離済みファイルは登録簿の `moduleBoundaryFiles` に列挙し、自動検査から脱落させない。
+- サーバーログは `lib/observability` の閉じたイベントschemaを使う。リクエストbody、部屋JSON、合言葉、正解、秘密語、手札、投稿本文、Cookie、APIキー、氏名、メール、外部SDK例外本文をconsoleへ直接出さない。詳細は `docs/OBSERVABILITY.md`。
 - アカウント参加型ゲームは共通戦績へ結果を保存し、ロビーの全ゲーム・ゲーム別フィルターで確認可能にする。ローカル回しゲームは、アカウントへ安全に紐づけられるまで戦績対象外と明記する。
+- 詳細プレイバックは観測ログではなく `lib/game-replay-store.ts` へ保存し、参加者本人だけに返す。内部プレイヤーIDをユーザーURLへ使わず、共有文へ説明本文・参加者名・投票内容・認証付きURLを含めない。
 
 ## Verification and publishing
 
@@ -34,6 +36,7 @@
 
 ```bash
 npm run lint
+npm test
 npm run build
 ```
 

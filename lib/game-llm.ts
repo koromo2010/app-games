@@ -2,6 +2,7 @@ import { hasGeminiApiKey, generateGeminiText } from "@/lib/gemini";
 import { hasGroqApiKey, generateGroqText } from "@/lib/groq";
 import { getPaidLlmAccessSource, getPersonalLlmAccess } from "@/lib/llm-access";
 import { freeGroqLlmModel, freeLlmModel, paidLlmModel } from "@/lib/llm-model";
+import { emitObservabilityEvent, observabilityErrorCode } from "@/lib/observability";
 
 /**
  * Shared LLM gateway for every game in app-games.
@@ -109,6 +110,14 @@ export async function generateGameLlmText(
     attemptedProviders.push(provider);
     try {
       const generated = await callProvider(provider, prompt, quality, mode, options.timeoutMs);
+      emitObservabilityEvent("info", "ai.provider", {
+        operation: "llm-gateway",
+        provider,
+        model: generated.model,
+        durationMs: Date.now() - startedAt,
+        attempt: attemptedProviders.length,
+        outcome: "success",
+      });
       return {
         ...generated,
         provider,
@@ -117,8 +126,15 @@ export async function generateGameLlmText(
       };
     } catch (error) {
       errors.push(error);
-      const status = typeof error === "object" && error && "status" in error ? String(error.status) : "unknown";
-      console.warn(`[game-llm] ${provider} unavailable (status: ${status}); trying the next provider`);
+      const rawStatus = typeof error === "object" && error && "status" in error ? Number(error.status) : NaN;
+      emitObservabilityEvent("warn", "ai.provider", {
+        operation: "llm-gateway",
+        provider,
+        statusCode: Number.isFinite(rawStatus) ? rawStatus : undefined,
+        attempt: attemptedProviders.length,
+        outcome: "rejected",
+        errorCode: observabilityErrorCode(error),
+      });
     }
   }
 

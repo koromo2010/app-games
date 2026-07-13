@@ -203,6 +203,36 @@ function normalizeRoom(value: unknown): WordWolfRoom | null {
   };
 }
 
+export function sanitizeWordWolfRoom(room: WordWolfRoom, playerId: string) {
+  const revealAll = room.phase === "result" || (room.debugMode && room.hostId === playerId);
+  const playerIsWolf = normalizeWolfIds(room).includes(playerId);
+  const ownWord = playerIsWolf ? room.wolfWord : room.villageWord;
+  const votes = revealAll
+    ? room.votes
+    : room.votes[playerId]
+      ? { [playerId]: room.votes[playerId] }
+      : {};
+  return {
+    ...room,
+    passphrase: room.passphrase ? "設定済み" : "",
+    wolfId: revealAll ? room.wolfId : playerIsWolf ? playerId : null,
+    wolfIds: revealAll ? room.wolfIds : playerIsWolf ? [playerId] : [],
+    villageWord: revealAll ? room.villageWord : ownWord,
+    wolfWord: revealAll ? room.wolfWord : ownWord,
+    topicReason: revealAll ? room.topicReason : "",
+    clues: revealAll || room.clueLogVisibility === "always"
+      ? room.clues
+      : room.clues.map((clue) => clue.playerId === playerId ? clue : { ...clue, text: "投稿済み" }),
+    votes,
+    voteHistory: revealAll
+      ? room.voteHistory
+      : room.voteHistory.map((round) => ({
+          ...round,
+          votes: round.votes[playerId] ? { [playerId]: round.votes[playerId] } : {},
+        })),
+  };
+}
+
 function makeChoice(room: WordWolfRoom): WordWolfRoomChoice {
   return {
     code: room.code,
@@ -262,9 +292,9 @@ export async function saveStoredWordWolfRoom(room: unknown) {
     throw new Error("INVALID_WORDWOLF_ROOM");
   }
 
-  if (normalizedRoom.phase === "result" && normalizedRoom.winner && !normalizedRoom.statsRecordedAt) {
+  const shouldRecordResults = normalizedRoom.phase === "result" && Boolean(normalizedRoom.winner) && !normalizedRoom.statsRecordedAt;
+  if (shouldRecordResults) {
     normalizedRoom = addRoomScore(normalizedRoom);
-    await recordWordWolfGameResults(normalizedRoom);
     normalizedRoom = {
       ...normalizedRoom,
       statsRecordedAt: Date.now(),
@@ -279,6 +309,8 @@ export async function saveStoredWordWolfRoom(room: unknown) {
   ]);
   if (saved !== 1) throw new Error("WORDWOLF_ROOM_CONFLICT");
 
+  if (shouldRecordResults) await recordWordWolfGameResults(normalizedRoom);
+
   // 残る索引更新は1回のHTTP pipelineにまとめる。
   await redisPipeline<unknown[]>([
     ["SADD", roomIndexKey, normalizedRoom.code],
@@ -288,6 +320,40 @@ export async function saveStoredWordWolfRoom(room: unknown) {
   ]);
 
   return normalizedRoom;
+}
+
+export async function saveStoredWordWolfRoomAsHost(room: unknown, actorId: string) {
+  let normalizedRoom = normalizeRoom(room);
+  if (!normalizedRoom) throw new Error("INVALID_WORDWOLF_ROOM");
+  const current = await loadStoredWordWolfRoom(normalizedRoom.code);
+  if (current) {
+    if (current.hostId !== actorId || normalizedRoom.hostId !== current.hostId) throw new Error("WORDWOLF_ROOM_FORBIDDEN");
+    normalizedRoom = { ...normalizedRoom, passphrase: current.passphrase };
+  } else if (normalizedRoom.hostId !== actorId || !normalizedRoom.players.some((player) => player.id === actorId)) {
+    throw new Error("WORDWOLF_ROOM_FORBIDDEN");
+  }
+  return saveStoredWordWolfRoom(normalizedRoom);
+}
+
+export async function joinStoredWordWolfRoom(code: string, player: Player, passphrase: string) {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const room = await loadStoredWordWolfRoom(code);
+    if (!room) throw new Error("WORDWOLF_ROOM_NOT_FOUND");
+    if (room.phase !== "lobby") throw new Error("WORDWOLF_ROOM_STARTED");
+    if (room.passphrase && room.passphrase !== passphrase.trim()) throw new Error("WORDWOLF_BAD_PASSPHRASE");
+    if (room.players.some((item) => item.id === player.id)) return room;
+    try {
+      return await saveStoredWordWolfRoom({
+        ...room,
+        players: [...room.players, player],
+        revision: room.revision + 1,
+        updatedAt: Date.now(),
+      });
+    } catch (error) {
+      if (!(error instanceof Error) || error.message !== "WORDWOLF_ROOM_CONFLICT") throw error;
+    }
+  }
+  throw new Error("WORDWOLF_ROOM_CONFLICT");
 }
 
 export async function deleteStoredWordWolfRoom(code: string) {
@@ -317,10 +383,10 @@ export async function listStoredJoinableWordWolfRooms() {
     .sort((left, right) => right.updatedAt - left.updatedAt);
 }
 
-export async function deleteStoredHostedWordWolfRooms(ownerId: string, fallbackHostId: string) {
+export async function deleteStoredHostedWordWolfRooms(hostId: string) {
   const rooms = await listStoredWordWolfRooms();
   const deletions = rooms
-    .filter((room) => room.ownerId === ownerId || (!room.ownerId && room.hostId === fallbackHostId))
+    .filter((room) => room.hostId === hostId)
     .map((room) => deleteStoredWordWolfRoom(room.code));
 
   await Promise.all(deletions);

@@ -29,6 +29,6 @@ UI / hooks -> API client -> HTTP route -> application/domain -> storage
 - timer policy/event: `lib/game-timer/policy.ts`, `lib/game-timer/event.ts`
 - timer ingress: `app/api/game-timer/expire/route.ts`
 
-第一段階では部屋API通信と時計を巨大な画面コンポーネントから分離した。部屋には単調増加する `revision` を持たせ、Redis内CASで古い保存を409拒否する。通常の発言・投票・時間切れは `/api/wordwolf/commands` へ移行済みで、`lib/wordwolf-command-domain.ts` が検証と状態遷移を担当する。次段階でゲーム開始・最終回答・ロビー設定もCommandへ移し、クライアントから部屋全体を保存する経路を廃止する。これが完了すればgame-serverを独立コンテナへ移せる。
+第一段階では部屋API通信と時計を巨大な画面コンポーネントから分離した。部屋には単調増加する `revision` を持たせ、Redis内CASで古い保存を409拒否する。参加・ゲーム開始・通常の発言・投票・最終回答・時間切れは `/api/wordwolf/commands` または専用部屋Commandへ移行済みで、`lib/wordwolf-command-domain.ts` が検証と状態遷移を担当する。次段階でロビー設定も個別Commandへ移し、クライアントから部屋全体を保存する互換経路を廃止する。これが完了すればgame-serverを独立コンテナへ移せる。
 
 `config/game-registry.json` の `moduleBoundaryFiles` は分離済み境界の正本であり、`npm run lint` が存在を検査する。新しいスレッドや新ゲームでファイルを1つへ戻さない。

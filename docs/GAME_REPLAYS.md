@@ -1,0 +1,48 @@
+# 対戦プレイバック
+
+## 現在の範囲
+
+本人専用の `/users/me` で、戦績、最近の結果、共有、たほい屋の詳細プレイバックを確認する。URLへ内部プレイヤーIDを含めない。将来公開プロフィールを追加する場合は、内部IDではなく専用の公開ハンドルを使う。
+
+たほい屋の通常ラウンドが結果になった時点で、次を保存する。デバッグラウンドは保存しない。
+
+- お題、読み、本当の説明
+- 各プレイヤーが書いた偽説明
+- 誰がどの説明へ投票したか
+- ラウンド得点と結果文
+
+プレイバックは参加者だけがCookie認証後に閲覧できる。合言葉、Cookie、APIキー、メール、アバター画像、部屋JSON全体は保存しない。
+
+## 保存期間とお気に入り
+
+- 通常保存期間: `GAME_REPLAY_RETENTION_DAYS`、初期値30日
+- 1人のお気に入り上限: `GAME_REPLAY_FAVORITE_LIMIT`、初期値10件
+- お気に入り中は期限なし
+- 最後のお気に入りが解除された時点で、本来の期限を過ぎていれば本体を削除する
+- 誰かがお気に入りにして本体が残っていても、期限切れかつお気に入りでない別参加者には返さない
+
+リプレイ本体は試合ごとに1件だけ保存し、プレイヤーごとはID索引とお気に入りSetだけを持つ。本文を参加人数分複製しない。
+
+## Redisキー
+
+| キー | 内容 |
+| --- | --- |
+| `game-replay:v1:<replayId>` | 共有リプレイ本体。通常TTLあり |
+| `player-replays:v1:<playerId>` | プレイヤー別の時系列索引 |
+| `player-replay-favorites:v1:<playerId>` | プレイヤー別お気に入り |
+| `game-replay-favoriters:v1:<replayId>` | 本体を永続化している参加者 |
+
+一覧取得時に期限切れ・欠損索引を遅延削除する。プレイヤー索引は新しい500件に制限し、古いお気に入りはお気に入りSetから別に取得する。
+
+## 共有
+
+共有ボタンはWeb Share APIを優先し、非対応端末ではクリップボードへコピーする。共有するのはゲーム名、お題、得点などの短い結果とゲームURLだけ。偽説明、本当の説明、参加者名、投票先、プレイバック閲覧URLは自動共有しない。
+
+## 主要ファイル
+
+- 型・共有文: `lib/game-replay-types.ts`
+- 端末共有・コピーfallback: `lib/game-share-client.ts`
+- ハイパーパラメータ: `lib/game-replay-policy.ts`
+- Redis保存・閲覧権限: `lib/game-replay-store.ts`
+- API: `app/api/player-replays/route.ts`
+- UI: `app/components/GameReplayPanel.tsx`, `app/users/me/UserDashboard.tsx`

@@ -19,7 +19,6 @@ import {
 } from "@/lib/game-llm";
 import type { GameGenerationMeta } from "@/lib/game-ai-types";
 import { formatGameFeedbackContext, retrieveGameFeedback } from "@/lib/game-feedback-store";
-import { withGameGenerationCache } from "@/lib/game-generation-cache";
 import { loadStoredWordWolfRoom } from "@/lib/wordwolf-room-store";
 import {
   findReusableWordWolfTopic,
@@ -29,6 +28,8 @@ import {
   rememberWordWolfTopicExperience,
 } from "@/lib/wordwolf-topic-catalog";
 import { parseLlmJson } from "@/lib/llm-json";
+import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
+import { emitObservabilityEvent, observabilityErrorCode } from "@/lib/observability";
 
 const baseTopicPrompt =
   "ワードウルフ用のお題ペアを1組作ってください。3-6人で3周ほど話す前提です。日本語で、共通点を話せるが同じ言葉の言い換えではない組み合わせにしてください。JSONのみで返してください: {\"villageWord\":\"...\",\"wolfWord\":\"...\",\"reason\":\"...\"}";
@@ -195,7 +196,7 @@ async function generateLlmTopic(
     : null;
 }
 
-async function generateTopicResponse(request: Request, playerIds: string[], previewOnly = false, forceNew = false) {
+export async function generateWordWolfTopicResponse(request: Request, playerIds: string[], previewOnly = false, forceNew = false) {
   const { excludeKeys, excludeWords, dictionarySource, pairDistance, topicHint } = getTopicRequestOptions(request);
   const [experiencedWords, catalogWords] = await Promise.all([
     loadExperiencedWordWolfWords(playerIds).catch(() => []),
@@ -269,7 +270,7 @@ async function generateTopicResponse(request: Request, playerIds: string[], prev
       return Response.json(topic);
     }
   } catch (error) {
-    console.error("[wordwolf/topic] provider chain did not complete", error);
+    emitObservabilityEvent("error", "ai.generation", { game: "wordwolf", operation: "topic", outcome: "failed", errorCode: observabilityErrorCode(error) });
   }
 
   if (forceNew) {
@@ -286,26 +287,22 @@ async function generateTopicResponse(request: Request, playerIds: string[], prev
 }
 
 export async function GET(request: Request) {
-  const url = new URL(request.url);
-  const previewOnly = url.searchParams.get("test") === "1";
-  const roomCode = url.searchParams.get("roomCode")?.trim().toUpperCase() ?? "";
-  const gameNumber = url.searchParams.get("gameNumber")?.trim() ?? "";
-  const room = roomCode ? await loadStoredWordWolfRoom(roomCode).catch(() => null) : null;
-  const forceNew = previewOnly && room?.debugMode === true && url.searchParams.get("forceNew") === "1";
-  const playerIds = room?.players.map((player) => player.id) ?? [];
-  const requestKey = roomCode && gameNumber ? `${roomCode}:${gameNumber}` : "";
-  if (!requestKey || previewOnly) return generateTopicResponse(request, playerIds, previewOnly, forceNew);
-
   try {
-    const cached = await withGameGenerationCache(wordwolfTopicPromptVersion, requestKey, async () => {
-      const response = await generateTopicResponse(request, playerIds);
-      return { status: response.status, body: await response.json() };
-    });
-    return Response.json(cached.body, { status: cached.status });
-  } catch (error) {
-    if (error instanceof Error && error.message === "GAME_GENERATION_IN_PROGRESS") {
-      return Response.json({ error: "お題を生成中です。少し待ってからもう一度お試しください。" }, { status: 409 });
+    const player = await requireAuthenticatedPlayer();
+    const url = new URL(request.url);
+    const previewOnly = url.searchParams.get("test") === "1";
+    const roomCode = url.searchParams.get("roomCode")?.trim().toUpperCase() ?? "";
+    const room = roomCode ? await loadStoredWordWolfRoom(roomCode).catch(() => null) : null;
+    if (!room) return Response.json({ error: "Room not found" }, { status: 404 });
+    if (!room.players.some((item) => item.id === player.id)) return Response.json({ error: "Room action is not allowed" }, { status: 403 });
+    if (!previewOnly || !room.debugMode || room.hostId !== player.id) {
+      return Response.json({ error: "Topics are generated through the authenticated room command" }, { status: 403 });
     }
-    throw error;
+    const forceNew = url.searchParams.get("forceNew") === "1";
+    return generateWordWolfTopicResponse(request, room.players.map((item) => item.id), true, forceNew);
+  } catch (error) {
+    if (error instanceof Error && error.message === "PLAYER_AUTH_REQUIRED") return Response.json({ error: "Login required" }, { status: 401 });
+    if (isPlayerAuthConfigurationError(error)) return Response.json({ error: "Player auth is not configured" }, { status: 503 });
+    return Response.json({ error: "Failed to generate topic preview" }, { status: 500 });
   }
 }

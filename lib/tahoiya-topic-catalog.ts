@@ -3,6 +3,7 @@ import gitCandidateData from "@/data/tahoiya-candidates.json";
 import { normalizeGameGenerationMeta } from "@/lib/game-ai-types";
 import { retrieveGameFeedback } from "@/lib/game-feedback-store";
 import { redisCommand } from "@/lib/redis-store";
+import { emitObservabilityEvent } from "@/lib/observability";
 import {
   hasVeryCommonSpokenHomophone,
   loadTahoiyaSourceRegistry,
@@ -140,7 +141,13 @@ export async function ensureTahoiyaGitCandidates() {
     ]);
   }
   await redisCommand<string>(["SET", gitCatalogVersionKey, version]);
-  console.info(`[tahoiya/catalog] synced ${added}/${candidates.length} Git candidates for ${version}`);
+  emitObservabilityEvent("info", "catalog.sync", {
+    game: "tahoiya",
+    operation: "git-catalog-sync",
+    affectedCount: added,
+    sourceCount: candidates.length,
+    outcome: "success",
+  });
   return added;
 }
 

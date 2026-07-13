@@ -1,8 +1,10 @@
 # app-games 開発引き継ぎ
 
 > 新規ゲームは `config/game-registry.json` を正本として登録し、`docs/NEW_GAME_CHECKLIST.md` に従う。`npm run lint` はゲーム共通要件の自動監査も実行する。
+>
+> 資料を読む順番や作業別の参照先は `docs/README.md` を入口にする。この文書は「現在の開発状態と共通仕様」、`docs/CONTAINER_ARCHITECTURE.md` は「将来案」である。
 
-最終更新: 2026-07-12
+最終更新: 2026-07-13
 
 ## 1. プロジェクト
 
@@ -24,7 +26,8 @@
 | 共通時間制限 | `lib/game-room-config.ts`, `app/components/RoomTimeLimitControl.tsx` |
 | 共通デバッグ認証 | `app/components/DebugModeButton.tsx`, `app/api/debug-auth/route.ts` |
 | ゲーム登録・自動監査 | `config/game-registry.json`, `scripts/check-game-standards.mjs`, `docs/NEW_GAME_CHECKLIST.md` |
-| 共通戦績 | `lib/player-stats-store.ts`, `app/api/player-stats/route.ts`, `app/games/GameLobby.tsx` |
+| 共通戦績・マイページ | `lib/player-stats-store.ts`, `app/api/player-stats/route.ts`, `app/users/me/UserDashboard.tsx` |
+| 対戦プレイバック | `lib/game-replay-store.ts`, `app/api/player-replays/route.ts`, `app/components/GameReplayPanel.tsx`, `docs/GAME_REPLAYS.md` |
 | アカウント・メール復旧 | `lib/player-account-store.ts`, `lib/player-password-reset.ts`, `lib/email.ts`, `app/api/player-account/route.ts`, `app/api/player-password-reset/route.ts`, `app/reset-password` |
 | ワードウルフ | `app/wordwolf`, `app/api/wordwolf`, `lib/wordwolf-room-store.ts` |
 | たほい屋 | `app/tahoiya/TahoiyaGame.tsx`, `app/api/tahoiya`, `lib/tahoiya-room-store.ts`, `lib/tahoiya-types.ts` |
@@ -40,6 +43,12 @@
 - `OPENAI_API_KEY`
 - `LLM_ACCESS_PASSWORD`
 - `LLM_SESSION_SECRET`（32文字以上を推奨。利用者持込APIキーのCookie暗号化専用。未設定時は既存のサーバー秘密値から導出）
+- `PLAYER_SESSION_SECRET`（32文字以上必須。ログインCookieの署名用。未設定時は32文字以上の `LLM_SESSION_SECRET` を使用）
+- `OBSERVABILITY_HASH_SECRET`（任意、32文字以上推奨。ログ上のroom/actor/event不透明参照用。未設定時はプレイヤー署名鍵を利用）
+- `OBSERVABILITY_LOG_LEVEL`（任意。`debug | info | warn | error`、既定 `info`）
+- `OBSERVABILITY_SERVICE_NAME`（任意。既定 `app-games-web`。将来のサービス分割時に指定）
+- `GAME_REPLAY_RETENTION_DAYS`（任意。通常プレイバックの保存日数。既定30、1〜3650）
+- `GAME_REPLAY_FAVORITE_LIMIT`（任意。1人のお気に入り上限。既定10、1〜100）
 - `GEMINI_API_KEY`
 - `GROQ_API_KEY`
 - `DEBUG_MODE_PASSWORD`
@@ -90,6 +99,8 @@
 - 投稿・投票がそろったらサーバー側で自動遷移する。
 - 自動遷移しなかった場合の手動ボタンはホスト向けに残すが、必要条件を満たすまで表示しない。
 - 時間制限は共通プリセットと秒数手入力に対応し、`0` は制限なし。
+- 共通のサーバー受付猶予は標準5秒。`GAME_TIMEOUT_GRACE_MS`（0〜10000ms）でTahoiya・ことばで数ならべ・ことば潜伏戦を調整し、WordWolfは互換用 `WORDWOLF_TIMEOUT_GRACE_MS` を使う。
+- ログイン成功時は署名・期限付き・HttpOnly・SameSite=LaxのプレイヤーCookieを発行する。オンラインAPIはリクエスト本文のactor IDではなくCookieから本人を確定する。
 - デバッグモードは各ゲームのトップバーにあるホスト専用 `DebugModeButton` から切り替える。ONにするときは `DEBUG_MODE_PASSWORD` を共有APIで検証し、ゲームごとのパスワードUIは作らない。
 - ワード・お題生成があるゲームは、デバッグONのロビーに `DebugWordGenerationTest` を表示する。生成テストはゲームを開始せず、部屋・ラウンド・出題済み履歴を変更しないプレビューAPIとして実行する。
 - デバッグのワード生成テストには画面上の「新規ワード生成」フラグを表示する。ONでは `forceNew=1` を送り、既存の候補DB・ローカル候補を返さずLLMで新しい候補を生成する。候補DB内の全単語を生成NGリストに含め、成功結果だけを全員未使用の候補として保存する。AIを利用できない場合や全プロバイダー失敗時は既存候補へフォールバックせずエラーを返す。OFFでは通常のローカル／再利用候補選択をテストする。サーバー側でも対象部屋の `debugMode` がONの場合だけ `forceNew` を認め、デバッグOFF時や部屋なしの直接リクエストでは無効化する。
@@ -108,18 +119,26 @@
 - ノーザンブランチもログイン必須のオンライン部屋制で、ゲーム終了時に勝敗を共通戦績へ記録する。デバッグ部屋とダミー参加者は戦績へ含めない。
 - ことば潜伏戦は全ラウンド終了時の総合順位を1戦として記録する。デバッグ部屋とダミー参加者は戦績へ含めない。
 
+### マイページと対戦プレイバック
+
+- 本人用URLは `/users/me`。内部プレイヤーIDをURLへ出す `/users/<playerId>` は作らない。将来公開プロフィールが必要な場合は別の公開ハンドルを設計する。
+- 通常プレイバックは既定30日、お気に入りは期限なし、上限は既定10件。値は上記環境変数で調整する。
+- 現在の詳細プレイバックはたほい屋から開始し、お題、本当の説明、偽説明、投票、ラウンド得点を参加者だけへ返す。
+- SNS共有は結果サマリーとゲームURLだけをWeb Share APIへ渡す。説明本文、参加者名、投票内容、認証付き閲覧URLは共有しない。
+- 保存schema、Redisキー、期限判定の正本は `docs/GAME_REPLAYS.md`。
+
 ## 6. ワードウルフ現行仕様の要点
 
 現在のモジュール分離は `docs/MODULAR_GAME_ARCHITECTURE.md`、将来のweb・game-server・timer-service・ai-worker・batch-worker構成は `docs/CONTAINER_ARCHITECTURE.md` を正本とする。ワードウルフでは部屋HTTPクライアントとフェーズ時計をUIから分離済みで、登録簿の `moduleBoundaryFiles` をlint時に検査する。
 
-部屋状態には `revision` を持たせ、Redis内CASで古い保存による巻き戻しを防ぐ。通常の発言・投票・時間切れ遷移は `app/api/wordwolf/commands/route.ts` と `lib/wordwolf-command-domain.ts` がサーバー側で処理し、複数端末から同時に要求されても一件だけ反映する。
+部屋状態には `revision` を持たせ、Redis内CASで古い保存による巻き戻しを防ぐ。参加・開始・通常の発言・投票・逆転回答・時間切れ遷移はサーバー側Commandで処理し、複数端末から同時に要求されても一件だけ反映する。レスポンスは認証済み閲覧者向けに整形し、結果前は狼ID・相手ワード・他人の投票を返さない。
 締切には標準5秒のサーバー受付猶予を設け、締切直前に端末から送った投稿・投票が通信遅延で時間切れ処理に負けないようにする。`WORDWOLF_TIMEOUT_GRACE_MS`（0〜10000ms）で調整可能。クライアント申告の送信時刻は信用せず、サーバー到着が締切＋猶予以内か、現在のフェーズとrevisionが一致するかで上限を掛ける。
 締切計算・受付猶予・再試行時刻・イベントIDは `lib/game-timer` の共通時間管理境界へ集約し、入口は `/api/game-timer/expire` とする。ゲーム固有domainは「期限後に未投稿や未投票をどう扱うか」だけを実装する。将来はこの境界をtimer-serviceコンテナへ移せる。
 
 - `/wordwolf`
 - 部屋制、ログイン制、復帰対応、デバッグ時は1人テスト可
 - 順番投稿・全員同時投稿、順番ランダム、同時投票、同率・決選投票、狼の逆転回答に対応
-- お題は同日同語禁止、全期間同組合せ禁止。固有名詞は語だけで類推できない距離へ調整済み
+- お題はJST同日同語禁止、順序非依存ペアは標準30日間禁止。固有名詞は語だけで類推できない距離へ調整済み
 - OpenAI OFF時はGemini、Groq、ローカルの順。逆転判定は無料APIまたはfuzzy/feedbackを使用
 
 詳細な挙動を変える前に、`lib/wordwolf-room-store.ts` のサーバー遷移を確認する。
@@ -133,6 +152,7 @@
 - 投稿完了で自動的に投票へ進む。手動の投票遷移ボタンは全員投稿後だけ表示
 - 投票済み候補は本人の画面でシアン表示し、変更候補はアンバー表示
 - 結果時に読み、正解説明、辞書・典拠情報を表示
+- 参加とラウンド開始はサーバー側Command。結果前は合言葉、本物の説明、他人の偽説明、選択肢の正解フラグ、他人の投票を閲覧者別に隠す
 - 正解説明は約10字、20字、30字を中心に、40字、50字、最大60字も低確率で混在させる。長い段階ほど出現率を下げ、無理に引き延ばさない
 - 回答者1人モードだけ、偽説明担当へ正解情報を見せる設定が使える。全員投票では絶対に見せない
 - 「通常」と「高難易度」のお題難易度がある
@@ -165,14 +185,17 @@
 
 ## 9. 開発・検証・公開
 
+更新系API、タイマー、認証、戦績、LLMは `lib/observability` から1行JSONの構造化イベントを出力する。Vercel Runtime Logsでは `event`、`roomRef`、`requestId`、`outcome`、`errorCode` で追跡する。GETポーリング成功は記録しない。ログ禁止情報、調査順、将来collector構成は `docs/OBSERVABILITY.md` を正本とする。
+
 ```bash
 npm install
 npm run dev
 npm run lint
+npm test
 npm run build
 ```
 
-変更後はlintとproduction buildを通す。UI状態を変えた場合は、ホストと非ホスト、通常モードとデバッグモード、フェーズ遷移前後を確認する。
+変更後はlint、回帰テスト、production buildを通す。UI状態を変えた場合は、ホストと非ホスト、通常モードとデバッグモード、フェーズ遷移前後を確認する。
 
 `main` へのpushでVercelが自動デプロイする。公開作業の完了条件は以下。
 

@@ -1,6 +1,7 @@
 import { generateGameLlmText, resolveGameLlmMode, type GameLlmMode } from "@/lib/game-llm";
 import { parseLlmJson } from "@/lib/llm-json";
 import { redisCommand } from "@/lib/redis-store";
+import { emitObservabilityEvent, observabilityErrorCode } from "@/lib/observability";
 import { normalizeGuess } from "@/lib/wordwolf";
 
 export type WordWolfGuessJudgementSource = "exact" | "feedback" | "llm" | "fuzzy";
@@ -321,7 +322,13 @@ export async function judgeWordWolfGuess(guessWord: string, correctWord: string)
     try {
       return (await judgeWithLlm(mode, guessWord, correctWord, feedback, conceptFeedback)) ?? simple;
     } catch (error) {
-      console.error("[wordwolf/guess] falling back to fuzzy judgement", error);
+      emitObservabilityEvent("warn", "ai.generation", {
+        game: "wordwolf",
+        operation: "guess-judgement",
+        action: "fuzzy-fallback",
+        outcome: "failed",
+        errorCode: observabilityErrorCode(error),
+      });
       if (mode === "free") {
         return {
           ...simple,

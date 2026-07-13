@@ -9,6 +9,10 @@ export function timerHyperparameter(name: string, fallback: number, min = 0, max
   return Number.isFinite(configured) && configured >= min && configured <= max ? Math.floor(configured) : fallback;
 }
 
+export function commonGameTimeoutGraceMs() {
+  return timerHyperparameter("GAME_TIMEOUT_GRACE_MS", 5000, 0, 10000);
+}
+
 export function getGameTimerDeadlineAt(policy: GameTimerPolicy) {
   return policy.startedAt && policy.durationMs > 0 ? policy.startedAt + policy.durationMs : null;
 }

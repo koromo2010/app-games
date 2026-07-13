@@ -2,11 +2,12 @@
 
 Party game prototypes built with Next.js.
 
-> AI・別スレッドで開発を再開する場合は、最初に [`AGENTS.md`](./AGENTS.md) と [`docs/DEVELOPMENT_HANDOFF.md`](./docs/DEVELOPMENT_HANDOFF.md) を読んでください。現在の仕様、共通設計、主要ファイル、検証・デプロイ手順をまとめています。
+> AI・別スレッドで開発を再開する場合は、最初に [`docs/README.md`](./docs/README.md) の資料ナビを開いてください。必読資料、作業別の参照先、バグ調査の確認順をまとめています。
 
 ## Routes
 
 - `/games` - game lobby
+- `/users/me` - signed-in player's private stats, replay, favorites, and sharing page
 - `/wordwolf` - Wordwolf prototype
 - `/tahoiya` - Tahoiya prototype
 - `/northern-branch` - Private-use online Northern Branch room game for logged-in players (requires `PRIVATE_GAME_ACCESS_KEY`)
@@ -43,6 +44,8 @@ The shared access panel separates personal provider access from Game Fields-prov
 - Game Fields API: the app uses its own `OPENAI_API_KEY`. It currently uses an invite/test password and is designed so that authorization can later be replaced by a purchase or credit entitlement.
 
 Personal keys are validated server-side against the active provider model, never stored in Redis, player accounts, logs, or localStorage, and are retained for at most eight hours in an AES-256-GCM encrypted HttpOnly cookie. A server-only `LLM_SESSION_SECRET` of at least 32 characters is recommended; until it is configured, the existing server-only access password and shared OpenAI key are combined to derive the encryption secret. Players should create a game-specific key with permissions and spend controls where the provider supports them.
+
+Player login is also backed by a signed, 30-day HttpOnly cookie. Configure a server-only `PLAYER_SESSION_SECRET` of at least 32 characters; a sufficiently long `LLM_SESSION_SECRET` is used only as a compatibility fallback. Multiplayer APIs derive the acting player from this cookie instead of trusting IDs in request bodies.
 
 ## Shared feedback and RAG
 
@@ -96,6 +99,9 @@ take several hours. Gameplay itself does not call these external vocabulary sour
 ```bash
 npm install
 npm run dev
+npm run lint
+npm test
+npm run build
 ```
 
 ## Password recovery email
