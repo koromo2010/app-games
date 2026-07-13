@@ -16,6 +16,7 @@ import {
 } from "@/lib/player-session";
 import { loadPlayerRoomDefaults, savePlayerRoomDefaults } from "@/lib/game-room-defaults-client";
 import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
+import { createGameTimerEventId } from "@/lib/game-timer/event";
 import {
   isValidWordWolfTopic,
   normalizeGuess,
@@ -1394,7 +1395,7 @@ export function WordWolfGame() {
       return;
     }
 
-    const actionKey = `clue:${room.currentTurnStartedAt}:${room.currentRound}`;
+    const actionKey = createGameTimerEventId({ game: "wordwolf", roomCode: room.code, phase: room.phase, revision: room.revision, startedAt: room.currentTurnStartedAt });
     if (timeoutActionKeyRef.current === actionKey) return;
     timeoutActionKeyRef.current = actionKey;
     const timer = window.setTimeout(() => void expireCurrentPhase(actionKey), 0);
@@ -1615,7 +1616,7 @@ export function WordWolfGame() {
       return;
     }
 
-    const actionKey = `vote:${room.currentTurnStartedAt}:${room.voteHistory.length}`;
+    const actionKey = createGameTimerEventId({ game: "wordwolf", roomCode: room.code, phase: room.phase, revision: room.revision, startedAt: room.currentTurnStartedAt });
     if (timeoutActionKeyRef.current === actionKey) return;
     timeoutActionKeyRef.current = actionKey;
     const timer = window.setTimeout(() => {
@@ -1637,7 +1638,7 @@ export function WordWolfGame() {
       return;
     }
 
-    const actionKey = `guess:${room.currentTurnStartedAt}:${room.accusedId}`;
+    const actionKey = createGameTimerEventId({ game: "wordwolf", roomCode: room.code, phase: room.phase, revision: room.revision, startedAt: room.currentTurnStartedAt });
     if (timeoutActionKeyRef.current === actionKey) return;
     timeoutActionKeyRef.current = actionKey;
     const timer = window.setTimeout(() => void expireCurrentPhase(actionKey), 0);

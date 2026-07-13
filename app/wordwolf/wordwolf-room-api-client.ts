@@ -43,7 +43,7 @@ export async function removeHostedWordWolfRooms(ownerId: string, fallbackHostId:
 }
 
 export async function expireWordWolfPhase(code: string, commandId: string) {
-  const response = await fetch("/api/wordwolf/commands", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code, commandId, type: "expire-phase" }) });
+  const response = await fetch("/api/game-timer/expire", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ game: "wordwolf", roomCode: code, eventId: commandId }) });
   return readJson<{ room: Room | null; applied: boolean; retryAfterMs?: number }>(response, "ROOM_COMMAND_FAILED");
 }
 

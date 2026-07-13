@@ -1,20 +1,23 @@
 import type { Room } from "@/lib/wordwolf-game-types";
+import { getGameTimerDeadlineAt, isGameTimerExpired, timerHyperparameter, type GameTimerPolicy } from "@/lib/game-timer/policy";
 
 const abstainVoteId = "__abstain__";
 const timeoutText = "時間切れ";
 export function wordWolfTimeoutGraceMs() {
-  const configured = Number(process.env.WORDWOLF_TIMEOUT_GRACE_MS);
-  return Number.isFinite(configured) && configured >= 0 && configured <= 10000 ? Math.floor(configured) : 5000;
+  return timerHyperparameter("WORDWOLF_TIMEOUT_GRACE_MS", 5000, 0, 10000);
 }
 const wolfIds = (room: Room) => room.wolfIds.length ? room.wolfIds : room.wolfId ? [room.wolfId] : [];
 const runoffCandidates = (room: Room) => room.runoffCandidateIds?.length ? room.players.filter((player) => room.runoffCandidateIds?.includes(player.id)) : room.players;
 const cluePlayers = (room: Room) => room.runoffCandidateIds?.length ? runoffCandidates(room) : room.players;
 const voteVoters = (room: Room) => room.runoffCandidateIds?.length ? room.players.filter((player) => !room.runoffCandidateIds?.includes(player.id)) : room.players;
 
-export function wordWolfDeadlineAt(room: Room) {
-  if (!room.currentTurnStartedAt || room.turnTimeLimitSeconds <= 0) return null;
+export function wordWolfTimerPolicy(room: Room): GameTimerPolicy {
   const multiplier = room.phase === "vote" || room.phase === "wolfGuess" ? 2 : room.phase === "clue" ? 1 : 0;
-  return multiplier ? room.currentTurnStartedAt + room.turnTimeLimitSeconds * multiplier * 1000 : null;
+  return { startedAt: room.currentTurnStartedAt, durationMs: room.turnTimeLimitSeconds * multiplier * 1000, graceMs: wordWolfTimeoutGraceMs() };
+}
+
+export function wordWolfDeadlineAt(room: Room) {
+  return getGameTimerDeadlineAt(wordWolfTimerPolicy(room));
 }
 
 function timeoutClue(room: Room, now: number): Room {
@@ -84,8 +87,7 @@ export function applyWordWolfVoteCommand(room: Room, playerId: string, targetId:
 }
 
 export function applyWordWolfTimeout(room: Room, now = Date.now()) {
-  const deadline = wordWolfDeadlineAt(room);
-  if (!deadline || now < deadline + wordWolfTimeoutGraceMs()) return null;
+  if (!isGameTimerExpired(wordWolfTimerPolicy(room), now)) return null;
   if (room.phase === "clue") return timeoutClue(room, now);
   if (room.phase === "vote") return timeoutVote(room, now);
   if (room.phase === "wolfGuess") return { ...room, phase: "result" as const, currentTurnStartedAt: null, wolfGuess: timeoutText, winner: "village" as const, resultText: "逆転回答は時間切れです。村側の勝利です。" };
