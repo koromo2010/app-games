@@ -521,12 +521,13 @@ export function GameLobby() {
             type="button"
             aria-label="アカウント・戦績を開く"
             aria-controls="lobby-account-panel"
-            onMouseEnter={() => setIsMobileInfoOpen(true)}
+            onPointerEnter={() => setIsMobileInfoOpen(true)}
             onFocus={() => setIsMobileInfoOpen(true)}
             onClick={() => setIsMobileInfoOpen(true)}
-            className="fixed inset-y-1/4 left-0 z-30 hidden w-3 rounded-r-lg border-y border-r border-cyan-300/50 bg-cyan-400/35 shadow-[0_0_18px_rgba(34,211,238,0.35)] transition hover:w-5 hover:bg-cyan-300/70 md:block lg:hidden"
+            className="group fixed inset-y-0 left-0 z-30 hidden w-6 bg-transparent md:block lg:hidden"
           >
             <span className="sr-only">情報メニュー</span>
+            <span className="absolute left-0 top-1/2 h-28 w-1.5 -translate-y-1/2 rounded-r-full border-y border-r border-cyan-300/60 bg-cyan-300/55 shadow-[0_0_18px_rgba(34,211,238,0.45)] transition-all duration-150 group-hover:w-2.5 group-hover:bg-cyan-200" aria-hidden="true" />
           </button>
         )}
         {isLoggedIn && (
@@ -534,7 +535,7 @@ export function GameLobby() {
             type="button"
             aria-label="アカウント・戦績メニューを閉じる"
             onClick={() => setIsMobileInfoOpen(false)}
-            className={`fixed inset-0 z-40 bg-slate-950/70 backdrop-blur-sm transition-opacity duration-300 motion-reduce:transition-none lg:hidden ${
+            className={`fixed inset-0 z-40 bg-slate-950/70 backdrop-blur-sm transition-opacity duration-200 motion-reduce:transition-none lg:hidden ${
               isMobileInfoOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
             }`}
           />
@@ -544,7 +545,7 @@ export function GameLobby() {
           onMouseLeave={() => setIsMobileInfoOpen(false)}
           className={`space-y-4 lg:order-1 lg:static lg:col-start-1 lg:row-start-1 lg:block lg:w-auto lg:translate-x-0 lg:overflow-visible lg:bg-transparent lg:p-0 lg:shadow-none lg:pointer-events-auto ${
           isLoggedIn
-            ? `fixed inset-y-0 left-0 z-50 w-[min(380px,calc(100vw-2rem))] overflow-y-auto rounded-r-xl bg-slate-950 p-3 shadow-2xl will-change-transform transition-transform duration-300 ease-out motion-reduce:transition-none ${
+              ? `fixed inset-y-0 left-0 z-50 w-[min(380px,calc(100vw-2rem))] overflow-y-auto rounded-r-xl bg-slate-950 p-3 shadow-2xl will-change-transform transition-transform duration-200 ease-out motion-reduce:transition-none ${
               isMobileInfoOpen ? "translate-x-0 pointer-events-auto" : "-translate-x-full pointer-events-none"
             }`
             : "order-1"
