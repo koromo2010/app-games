@@ -515,7 +515,20 @@ export function GameLobby() {
         </div>
       </section>
 
-      <section className="mx-auto grid max-w-6xl gap-4 px-4 py-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <section className="mx-auto grid max-w-6xl gap-4 px-4 py-6 lg:grid-cols-[340px_minmax(0,1fr)]">
+        {isLoggedIn && !isMobileInfoOpen && (
+          <button
+            type="button"
+            aria-label="アカウント・戦績を開く"
+            aria-controls="lobby-account-panel"
+            onMouseEnter={() => setIsMobileInfoOpen(true)}
+            onFocus={() => setIsMobileInfoOpen(true)}
+            onClick={() => setIsMobileInfoOpen(true)}
+            className="fixed inset-y-1/4 left-0 z-30 hidden w-3 rounded-r-lg border-y border-r border-cyan-300/50 bg-cyan-400/35 shadow-[0_0_18px_rgba(34,211,238,0.35)] transition hover:w-5 hover:bg-cyan-300/70 md:block lg:hidden"
+          >
+            <span className="sr-only">情報メニュー</span>
+          </button>
+        )}
         {isLoggedIn && isMobileInfoOpen && (
           <button
             type="button"
@@ -524,7 +537,10 @@ export function GameLobby() {
             className="fixed inset-0 z-40 bg-slate-950/70 backdrop-blur-sm lg:hidden"
           />
         )}
-        <aside id="lobby-account-panel" className={`space-y-4 lg:order-2 lg:static lg:col-start-2 lg:row-start-1 lg:block lg:w-auto lg:overflow-visible lg:bg-transparent lg:p-0 lg:shadow-none ${
+        <aside
+          id="lobby-account-panel"
+          onMouseLeave={() => setIsMobileInfoOpen(false)}
+          className={`space-y-4 lg:order-1 lg:static lg:col-start-1 lg:row-start-1 lg:block lg:w-auto lg:overflow-visible lg:bg-transparent lg:p-0 lg:shadow-none ${
           isLoggedIn
             ? isMobileInfoOpen
               ? "fixed inset-y-0 left-0 z-50 w-[min(380px,calc(100vw-2rem))] overflow-y-auto rounded-r-xl bg-slate-950 p-3 shadow-2xl"
@@ -846,7 +862,7 @@ export function GameLobby() {
           )}
         </aside>
 
-        <div className={`${isLoggedIn ? "order-1" : "order-2"} min-w-0 lg:order-1 lg:col-start-1 lg:row-start-1`}>
+        <div className={`${isLoggedIn ? "order-1" : "order-2"} min-w-0 lg:order-2 lg:col-start-2 lg:row-start-1`}>
           <div className="mb-4 rounded-lg border border-white/10 bg-white/[0.08] px-4 py-3 text-white">
             <p className="text-xs font-semibold uppercase text-cyan-200">Games</p>
             <h2 className="text-xl font-black">遊ぶゲームを選ぶ</h2>
