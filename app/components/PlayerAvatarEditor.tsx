@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { type DragEvent, useRef, useState } from "react";
 import { compressAvatarImage, uploadAvatarImage } from "@/lib/avatar-image-client";
 import {
   avatarColorOptions,
@@ -18,6 +18,7 @@ type Props = {
 export function PlayerAvatarEditor({ session, onSaved }: Props) {
   const [isSaving, setIsSaving] = useState(false);
   const [isCompressing, setIsCompressing] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const [message, setMessage] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -43,6 +44,8 @@ export function PlayerAvatarEditor({ session, onSaved }: Props) {
     }
   };
 
+  const disabled = isSaving || isCompressing;
+
   const uploadAvatar = async (file: File | undefined) => {
     if (!file || isSaving || isCompressing) return;
     setIsCompressing(true);
@@ -63,7 +66,18 @@ export function PlayerAvatarEditor({ session, onSaved }: Props) {
     }
   };
 
-  const disabled = isSaving || isCompressing;
+  const dropAvatar = (event: DragEvent<HTMLElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDragging(false);
+    if (disabled) return;
+    const file = Array.from(event.dataTransfer.files).find((candidate) => candidate.type.startsWith("image/"));
+    if (!file) {
+      setMessage("画像ファイルをドロップしてください。");
+      return;
+    }
+    void uploadAvatar(file);
+  };
 
   return (
     <div className="rounded-xl border border-white/15 bg-slate-950/35 p-4 text-white shadow-xl">
@@ -89,11 +103,30 @@ export function PlayerAvatarEditor({ session, onSaved }: Props) {
         ))}
       </div>
 
-      <button type="button" disabled={disabled} onClick={() => fileInputRef.current?.click()} className="mt-4 w-full rounded-lg bg-cyan-500 px-3 py-2 text-sm font-black text-slate-950 transition hover:bg-cyan-400 disabled:opacity-40">
-        {isCompressing ? "画像を圧縮中..." : "画像をアップロード"}
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => fileInputRef.current?.click()}
+        onDragEnter={(event) => {
+          event.preventDefault();
+          if (!disabled && event.dataTransfer.types.includes("Files")) setIsDragging(true);
+        }}
+        onDragOver={(event) => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "copy";
+          if (!disabled && event.dataTransfer.types.includes("Files")) setIsDragging(true);
+        }}
+        onDragLeave={(event) => {
+          event.preventDefault();
+          setIsDragging(false);
+        }}
+        onDrop={dropAvatar}
+        className={`mt-4 w-full rounded-lg px-3 py-2 text-sm font-black text-slate-950 transition disabled:opacity-40 ${isDragging ? "bg-cyan-200 ring-2 ring-white" : "bg-cyan-500 hover:bg-cyan-400"}`}
+      >
+        {isCompressing ? "画像を圧縮中..." : isDragging ? "ここに画像をドロップ" : "画像を選ぶ・ドロップ"}
       </button>
       <input ref={fileInputRef} type="file" accept="image/*" className="sr-only" onChange={(event) => { void uploadAvatar(event.target.files?.[0]); event.currentTarget.value = ""; }} />
-      <p className="mt-2 text-[11px] leading-5 text-slate-400">中央を正方形に切り抜き、最大128×128pxに圧縮して保存します。元画像は10MBまでです。</p>
+      <p className="mt-2 text-[11px] leading-5 text-slate-400">ボタンへ画像をドラッグ＆ドロップすることもできます。中央を正方形に切り抜き、最大128×128pxに圧縮して保存します。元画像は10MBまでです。</p>
       {message && <p className="mt-2 text-xs font-semibold text-cyan-100" role="status">{message}</p>}
     </div>
   );
