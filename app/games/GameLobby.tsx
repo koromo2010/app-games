@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { type DragEvent, useCallback, useEffect, useState } from "react";
 import { compressAvatarImage, uploadAvatarImage } from "@/lib/avatar-image-client";
 import {
   avatarColorOptions,
@@ -131,6 +131,7 @@ export function GameLobby() {
   const [isRequestingReset, setIsRequestingReset] = useState(false);
   const [isUpdatingEmail, setIsUpdatingEmail] = useState(false);
   const [isAvatarSaving, setIsAvatarSaving] = useState(false);
+  const [isAvatarDragging, setIsAvatarDragging] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [hasRecoveryEmail, setHasRecoveryEmail] = useState(false);
   const [stats, setStats] = useState<PlayerStatsResponse | null>(null);
@@ -434,6 +435,19 @@ export function GameLobby() {
     }
   };
 
+  const dropAvatar = (event: DragEvent<HTMLElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsAvatarDragging(false);
+    if (isAvatarSaving) return;
+    const file = Array.from(event.dataTransfer.files).find((candidate) => candidate.type.startsWith("image/"));
+    if (!file) {
+      setMessage("画像ファイルをドロップしてください。");
+      return;
+    }
+    void uploadAvatar(file);
+  };
+
   const logout = async () => {
     try {
       const response = await fetch("/api/player-account", {
@@ -550,8 +564,24 @@ export function GameLobby() {
                           />
                         ))}
                       </div>
-                      <label className="mt-2 flex cursor-pointer items-center justify-center rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">
-                        画像を選ぶ（元画像10MBまで）
+                      <label
+                        onDragEnter={(event) => {
+                          event.preventDefault();
+                          if (!isAvatarSaving && event.dataTransfer.types.includes("Files")) setIsAvatarDragging(true);
+                        }}
+                        onDragOver={(event) => {
+                          event.preventDefault();
+                          event.dataTransfer.dropEffect = "copy";
+                          if (!isAvatarSaving && event.dataTransfer.types.includes("Files")) setIsAvatarDragging(true);
+                        }}
+                        onDragLeave={(event) => {
+                          event.preventDefault();
+                          setIsAvatarDragging(false);
+                        }}
+                        onDrop={dropAvatar}
+                        className={`mt-2 flex cursor-pointer items-center justify-center rounded-md border px-3 py-2 text-center text-xs font-bold transition ${isAvatarDragging ? "border-cyan-500 bg-cyan-100 text-cyan-900 ring-2 ring-cyan-200" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"}`}
+                      >
+                        {isAvatarDragging ? "ここに画像をドロップ" : "画像を選ぶ・ドロップ（元画像10MBまで）"}
                         <input type="file" accept="image/*" disabled={isAvatarSaving} onChange={(event) => { void uploadAvatar(event.target.files?.[0]); event.currentTarget.value = ""; }} className="sr-only" />
                       </label>
                     </div>
