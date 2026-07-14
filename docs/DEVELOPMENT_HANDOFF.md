@@ -61,6 +61,7 @@
 - `APP_BASE_URL`（推奨。本番は `https://game-fields.com`）
 - `UPSTASH_REDIS_REST_URL` または `KV_REST_API_URL`
 - `UPSTASH_REDIS_REST_TOKEN` または `KV_REST_API_TOKEN`
+- `REDIS_REQUEST_TIMEOUT_MS`（任意。既定4000ms、1000〜10000msに制限）
 - 既存の `KV_*`, `REDIS_URL` も環境に設定されている場合がある
 
 ゲームの公開／非公開は `config/game-registry.json` の `private` を正本とする。ページは `gamePageAccessAllowed`、部屋APIは `gameApiAccessDeniedResponse` を通し、非公開ゲームだけ共通Cookieを要求する。ことばソナーは公開ゲームのためアクセスキー不要だが、ログインと部屋内の操作権限は引き続き必要。
