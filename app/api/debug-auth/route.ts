@@ -1,6 +1,7 @@
 import { createRequestTelemetry } from "@/lib/observability";
 import { playerHasDebugAccess, setPlayerDebugAccess } from "@/lib/debug-access";
 import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
+import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 
 export async function GET() {
   try {
@@ -15,6 +16,8 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const telemetry = createRequestTelemetry(request, "/api/debug-auth", { operation: "debug-access" });
+  const limited = await rateLimitResponseFor(request, rateLimitPolicies.accessAuth);
+  if (limited) return limited;
   const configuredPassword = process.env.DEBUG_MODE_PASSWORD?.trim();
 
   let password = "";

@@ -6,6 +6,7 @@ import {
 } from "@/lib/player-account-store";
 import { clearPlayerAuthCookie, getAuthenticatedPlayer, isPlayerAuthConfigurationError, setPlayerAuthCookie } from "@/lib/player-auth";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
+import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 
 type PlayerAccountRequest = PlayerAccountAuthInput & {
   mode?: "login" | "register" | "update-email" | "logout";
@@ -68,6 +69,10 @@ export async function POST(request: Request) {
       telemetry.success("auth.session", { ...logFields, actorRef: telemetry.actorRef(previous?.id) });
       return Response.json({ ok: true });
     }
+    const limited = await rateLimitResponseFor(request, rateLimitPolicies.auth, {
+      identity: typeof body.name === "string" ? body.name : null,
+    });
+    if (limited) return limited;
     const session = body.mode === "register"
       ? await registerPlayerAccount(body)
       : body.mode === "update-email"

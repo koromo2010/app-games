@@ -14,6 +14,7 @@ import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observab
 import { actionRequiresDebugAccess, requirePlayerDebugAccess } from "@/lib/debug-access";
 import { gameApiAccessDeniedResponse } from "@/lib/game-access";
 import { authenticatedRoomDraft } from "@/lib/online-room-input";
+import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 
 function errorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : "";
@@ -72,6 +73,8 @@ export async function POST(request: Request) {
   if (accessDenied) return accessDenied;
   try {
     const session = await requireAuthenticatedPlayer();
+    const limited = await rateLimitResponseFor(request, rateLimitPolicies.roomMutation, { playerId: session.id });
+    if (limited) return limited;
     const body = (await request.json()) as { room?: unknown; actorId?: unknown };
     const actorId = session.id!;
     const requestedRoom = body.room && typeof body.room === "object" ? body.room as { code?: unknown } : null;
@@ -93,6 +96,8 @@ export async function PATCH(request: Request) {
   if (accessDenied) return accessDenied;
   try {
     const session = await requireAuthenticatedPlayer();
+    const limited = await rateLimitResponseFor(request, rateLimitPolicies.roomMutation, { playerId: session.id });
+    if (limited) return limited;
     const body = (await request.json()) as { code?: unknown; action?: unknown };
     const code = typeof body.code === "string" ? body.code.trim().toUpperCase() : "";
     if (!code || !body.action || typeof body.action !== "object") {
@@ -126,6 +131,8 @@ export async function DELETE(request: Request) {
   const ownerId = url.searchParams.get("ownerId")?.trim() ?? "";
   try {
     const session = await requireAuthenticatedPlayer();
+    const limited = await rateLimitResponseFor(request, rateLimitPolicies.roomMutation, { playerId: session.id });
+    if (limited) return limited;
     const authenticatedPlayerId = session.id!;
     const logFields: ObservabilityFields = { action: code ? "delete-room" : "delete-hosted-rooms", roomRef: telemetry.roomRef(code), actorRef: telemetry.actorRef(authenticatedPlayerId) };
     if (code) {

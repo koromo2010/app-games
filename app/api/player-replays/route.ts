@@ -6,6 +6,7 @@ import {
 import type { GameReplayGameType } from "@/lib/game-replay-types";
 import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
 import { createRequestTelemetry } from "@/lib/observability";
+import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 
 function normalizeReplayGameType(value: string | null): GameReplayGameType | "all" {
   if (value === "wordwolf" || value === "tahoiya" || value === "northern-branch" || value === "hodoai" || value === "kotoba-senpuku") return value;
@@ -63,6 +64,8 @@ export async function PATCH(request: Request) {
 
   try {
     const player = await requireAuthenticatedPlayer();
+    const limited = await rateLimitResponseFor(request, rateLimitPolicies.profileMutation, { playerId: player.id });
+    if (limited) return limited;
     const replay = await setPlayerGameReplayFavorite(player.id, id, body.favorite);
     telemetry.success("replay.favorite", {
       action: body.favorite ? "add" : "remove",

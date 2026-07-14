@@ -3,6 +3,7 @@ import { put } from "@vercel/blob";
 import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
 import { isWebpImage, maxAvatarUploadBytes, resolveAvatarBlobStoreId, resolveAvatarBlobToken } from "@/lib/avatar-image-server";
 import { createRequestTelemetry } from "@/lib/observability";
+import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -10,6 +11,8 @@ export async function POST(request: Request) {
   const telemetry = createRequestTelemetry(request, "/api/player-avatar", { operation: "avatar-upload" });
   try {
     const player = await requireAuthenticatedPlayer();
+    const limited = await rateLimitResponseFor(request, rateLimitPolicies.avatarUpload, { playerId: player.id });
+    if (limited) return limited;
     const blobToken = resolveAvatarBlobToken(process.env);
     const blobStore = resolveAvatarBlobStoreId(process.env);
     if (!blobToken.token && !blobStore.token) {

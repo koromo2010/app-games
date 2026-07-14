@@ -7,12 +7,15 @@ import { isValidWordWolfTopic, type WordWolfTopic } from "@/lib/wordwolf";
 import { judgeWordWolfGuess } from "@/lib/wordwolf-guess-judgement";
 import { withGameGenerationCache } from "@/lib/game-generation-cache";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
+import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
   const telemetry = createRequestTelemetry(request, "/api/wordwolf/commands", { game: "wordwolf", operation: "room-command" });
   let logFields: ObservabilityFields = {};
   try {
     const player = await requireAuthenticatedPlayer();
+    const limited = await rateLimitResponseFor(request, rateLimitPolicies.roomMutation, { playerId: player.id });
+    if (limited) return limited;
     const body = await request.json() as { code?: string; type?: string; commandId?: string; playerId?: string; text?: string; targetId?: string; guess?: string };
     logFields = {
       action: body.type,
@@ -59,6 +62,8 @@ export async function POST(request: Request) {
         telemetry.reject("game.command", 409, { ...logFields, playerCount: room.players.length });
         return Response.json({ error: "At least 3 players are required" }, { status: 409 });
       }
+      const aiLimited = await rateLimitResponseFor(request, rateLimitPolicies.aiGeneration, { playerId: player.id });
+      if (aiLimited) return aiLimited;
       const topicUrl = new URL(request.url);
       topicUrl.pathname = "/api/wordwolf/topic";
       topicUrl.search = new URLSearchParams({
@@ -86,6 +91,8 @@ export async function POST(request: Request) {
         telemetry.reject("game.command", 403, logFields);
         return Response.json({ error: "Room action is not allowed" }, { status: 403 });
       }
+      const aiLimited = await rateLimitResponseFor(request, rateLimitPolicies.aiGeneration, { playerId: player.id });
+      if (aiLimited) return aiLimited;
       const judgement = await judgeWordWolfGuess(guess, room.villageWord);
       next = {
         ...room,

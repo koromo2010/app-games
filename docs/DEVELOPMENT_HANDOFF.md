@@ -46,6 +46,7 @@
 - `LLM_ACCESS_PASSWORD`
 - `LLM_SESSION_SECRET`（32文字以上を推奨。利用者持込APIキーのCookie暗号化専用。未設定時は既存のサーバー秘密値から導出）
 - `PLAYER_SESSION_SECRET`（32文字以上必須。ログインCookieの署名用。未設定時は32文字以上の `LLM_SESSION_SECRET` を使用）
+- `RATE_LIMIT_HASH_SECRET`（任意、32文字以上推奨。レート制限キーのIP・プレイヤー・入力名をHMACで不透明化。未設定時はプレイヤー署名鍵を利用）
 - `OBSERVABILITY_HASH_SECRET`（任意、32文字以上推奨。ログ上のroom/actor/event不透明参照用。未設定時はプレイヤー署名鍵を利用）
 - `OBSERVABILITY_LOG_LEVEL`（任意。`debug | info | warn | error`、既定 `info`）
 - `OBSERVABILITY_SERVICE_NAME`（任意。既定 `app-games-web`。将来のサービス分割時に指定）
@@ -107,6 +108,7 @@
 - 時間制限は共通プリセットと秒数手入力に対応し、`0` は制限なし。
 - 共通のサーバー受付猶予は標準5秒。`GAME_TIMEOUT_GRACE_MS`（0〜10000ms）でTahoiya・ワードスケール・ことばソナーを調整し、WordWolfは互換用 `WORDWOLF_TIMEOUT_GRACE_MS` を使う。
 - ログイン成功時は署名・期限付き・HttpOnly・SameSite=LaxのプレイヤーCookieを発行する。オンラインAPIはリクエスト本文のactor IDではなくCookieから本人を確定する。
+- 書き込みAPIは `lib/rate-limit.ts` の共通Redisレート制限を通す。ログイン名・IP・プレイヤーIDはHMAC化したキーだけを保存し、生値をRedisへ残さない。共有回線を考慮してIP枠は広く、プレイヤー／入力名枠を厳しくする。ログイン、パスワード再設定、アクセス認証、画像アップロード、部屋操作、AI生成、プロフィール更新、フィードバックを別枠にし、超過時は `429 RATE_LIMITED` と `Retry-After` を返す。制限用Redisだけが失敗した場合は操作を止めず、`rate-limit.store` 警告を出してfail-openする。
 - デバッグ利用資格はマイページで `DEBUG_MODE_PASSWORD` を共有APIへ送って認証し、プレイヤー別Redisフラグへ保存する。資格のあるホストだけ各ゲームのトップバーに `DebugModeButton` が表示され、ゲームAPIもデバッグON・デバッグ専用操作・中断時に資格を再確認する。ゲーム個別のパスワードUIは作らない。
 - デバッグのON/OFF・プレイバック記録・進行中断は、トップバーへ個別配置せず `DebugModeButton` のプルダウンへまとめる。中断はゲーム一覧へ移動せず、同じ部屋・参加者・部屋設定を維持し、進行中の秘密情報と提出状態を破棄してゲーム開始前へ戻す。
 - オンラインゲームのトップバーは `GameTopBanner` と `GamePlayerMenu` を使う。ログアウトはプレイヤーメニュー内だけに置き、トップバーへ単独配置しない。

@@ -1,6 +1,7 @@
 import { cookies } from "next/headers";
 import { privateGameCookieMatches, privateGameCookieName, privateGameCookieValue, privateGameKeyMatches } from "@/lib/private-game-access";
 import { createRequestTelemetry } from "@/lib/observability";
+import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 
 export async function GET() {
   const store = await cookies();
@@ -9,6 +10,8 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const telemetry = createRequestTelemetry(request, "/api/private-game-access", { operation: "private-game-access" });
+  const limited = await rateLimitResponseFor(request, rateLimitPolicies.accessAuth);
+  if (limited) return limited;
   const body = (await request.json().catch(() => null)) as { key?: unknown } | null;
   if (!privateGameKeyMatches(body?.key)) {
     telemetry.reject("auth.access", 403, { action: "unlock-private-games", errorCode: "INVALID_CREDENTIAL" });

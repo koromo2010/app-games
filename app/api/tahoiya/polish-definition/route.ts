@@ -6,6 +6,7 @@ import { parseLlmJson } from "@/lib/llm-json";
 import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
 import { loadStoredTahoiyaRoom } from "@/lib/tahoiya-room-store";
 import { emitObservabilityEvent, observabilityErrorCode } from "@/lib/observability";
+import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 
 function parsePolishedText(value: string) {
   const parsed = parseLlmJson<{ text?: unknown }>(value);
@@ -17,6 +18,8 @@ function parsePolishedText(value: string) {
 export async function POST(request: Request) {
   try {
     const player = await requireAuthenticatedPlayer();
+    const limited = await rateLimitResponseFor(request, rateLimitPolicies.aiGeneration, { playerId: player.id });
+    if (limited) return limited;
     const body = (await request.json()) as { roomCode?: unknown; text?: unknown };
     const roomCode = typeof body.roomCode === "string" ? body.roomCode.trim().toUpperCase() : "";
     const room = roomCode ? await loadStoredTahoiyaRoom(roomCode) : null;

@@ -5,12 +5,15 @@ import { loadStoredWordWolfRoom, saveStoredWordWolfRoom } from "@/lib/wordwolf-r
 import { sanitizeWordWolfRoom } from "@/lib/wordwolf-room-store";
 import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
+import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 
 export async function POST(request: Request) {
   const telemetry = createRequestTelemetry(request, "/api/game-timer/expire", { operation: "timer-expire" });
   let logFields: ObservabilityFields = {};
   try {
     const player = await requireAuthenticatedPlayer();
+    const limited = await rateLimitResponseFor(request, rateLimitPolicies.roomMutation, { playerId: player.id });
+    if (limited) return limited;
     const body = await request.json() as { game?: string; roomCode?: string; eventId?: string };
     logFields = {
       game: body.game,

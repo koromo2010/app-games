@@ -4,6 +4,7 @@ import {
 } from "@/lib/room-defaults-store";
 import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
 import { createRequestTelemetry } from "@/lib/observability";
+import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 
 function isStoreNotConfigured(error: unknown) {
   return error instanceof Error && error.message === "REDIS_STORE_NOT_CONFIGURED";
@@ -42,6 +43,8 @@ export async function POST(request: Request) {
   const telemetry = createRequestTelemetry(request, "/api/room-defaults", { operation: "room-defaults-save" });
   try {
     const player = await requireAuthenticatedPlayer();
+    const limited = await rateLimitResponseFor(request, rateLimitPolicies.profileMutation, { playerId: player.id });
+    if (limited) return limited;
     const body = (await request.json()) as {
       game?: unknown;
       playerId?: unknown;

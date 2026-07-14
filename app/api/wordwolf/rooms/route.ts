@@ -12,6 +12,7 @@ import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/li
 import { authenticatedRoomDraft } from "@/lib/online-room-input";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
 import { requirePlayerDebugAccess, roomRequestsDebugMode } from "@/lib/debug-access";
+import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 
 function isStoreNotConfigured(error: unknown) {
   return error instanceof Error && error.message === "REDIS_STORE_NOT_CONFIGURED";
@@ -64,6 +65,8 @@ export async function POST(request: Request) {
   let logFields: ObservabilityFields = {};
   try {
     const player = await requireAuthenticatedPlayer();
+    const limited = await rateLimitResponseFor(request, rateLimitPolicies.roomMutation, { playerId: player.id });
+    if (limited) return limited;
     const body = (await request.json()) as { room?: unknown; action?: unknown; code?: unknown; passphrase?: unknown };
     const requestedRoom = body.room && typeof body.room === "object" ? body.room as { code?: unknown } : null;
     if (roomRequestsDebugMode(requestedRoom)) await requirePlayerDebugAccess(player.id);
@@ -144,6 +147,8 @@ export async function DELETE(request: Request) {
 
   try {
     const player = await requireAuthenticatedPlayer();
+    const limited = await rateLimitResponseFor(request, rateLimitPolicies.roomMutation, { playerId: player.id });
+    if (limited) return limited;
     const logFields: ObservabilityFields = { action: code ? "delete-room" : "delete-hosted-rooms", roomRef: telemetry.roomRef(code), actorRef: telemetry.actorRef(player.id) };
     if (code) {
       const room = await loadStoredWordWolfRoom(code);

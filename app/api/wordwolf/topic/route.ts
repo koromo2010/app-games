@@ -29,6 +29,7 @@ import {
 } from "@/lib/wordwolf-topic-catalog";
 import { parseLlmJson } from "@/lib/llm-json";
 import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
+import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 import { emitObservabilityEvent, observabilityErrorCode } from "@/lib/observability";
 
 const baseTopicPrompt =
@@ -289,6 +290,8 @@ export async function generateWordWolfTopicResponse(request: Request, playerIds:
 export async function GET(request: Request) {
   try {
     const player = await requireAuthenticatedPlayer();
+    const limited = await rateLimitResponseFor(request, rateLimitPolicies.aiGeneration, { playerId: player.id });
+    if (limited) return limited;
     const url = new URL(request.url);
     const previewOnly = url.searchParams.get("test") === "1";
     const roomCode = url.searchParams.get("roomCode")?.trim().toUpperCase() ?? "";

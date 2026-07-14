@@ -17,6 +17,7 @@ import { hasGeminiApiKey } from "@/lib/gemini";
 import { hasGroqApiKey } from "@/lib/groq";
 import { freeGroqLlmModel, freeLlmModel } from "@/lib/llm-model";
 import { createRequestTelemetry } from "@/lib/observability";
+import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 
 async function accessStatus() {
   const source = await getPaidLlmAccessSource();
@@ -52,6 +53,8 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const telemetry = createRequestTelemetry(request, "/api/llm-access", { operation: "llm-access" });
+  const limited = await rateLimitResponseFor(request, rateLimitPolicies.accessAuth);
+  if (limited) return limited;
   let body: { mode?: unknown; provider?: unknown; password?: unknown; apiKey?: unknown };
   try {
     body = (await request.json()) as typeof body;

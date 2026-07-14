@@ -47,6 +47,8 @@ Personal keys are validated server-side against the active provider model, never
 
 Player login is also backed by a signed, 30-day HttpOnly cookie. Configure a server-only `PLAYER_SESSION_SECRET` of at least 32 characters; a sufficiently long `LLM_SESSION_SECRET` is used only as a compatibility fallback. Multiplayer APIs derive the acting player from this cookie instead of trusting IDs in request bodies.
 
+State-changing APIs use shared Redis-backed rate limits for IP, player, and normalized identity buckets. Bucket subjects are HMAC-obscured; set an optional server-only `RATE_LIMIT_HASH_SECRET` (32+ characters recommended), or the player session secret is reused.
+
 ## Shared feedback and RAG
 
 AI output feedback is shared infrastructure for every game:

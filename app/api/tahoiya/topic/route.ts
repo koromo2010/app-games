@@ -7,6 +7,7 @@ import {
 import type { GameGenerationMeta } from "@/lib/game-ai-types";
 import { formatGameFeedbackContext, retrieveGameFeedback } from "@/lib/game-feedback-store";
 import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
+import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 import { emitObservabilityEvent, observabilityErrorCode } from "@/lib/observability";
 import { loadStoredTahoiyaRoom } from "@/lib/tahoiya-room-store";
 import {
@@ -608,6 +609,8 @@ export async function generateTahoiyaTopicResponse(
 export async function GET(request: Request) {
   try {
     const player = await requireAuthenticatedPlayer();
+    const limited = await rateLimitResponseFor(request, rateLimitPolicies.aiGeneration, { playerId: player.id });
+    if (limited) return limited;
     const url = new URL(request.url);
     const roomCode = url.searchParams.get("roomCode")?.trim().toUpperCase() ?? "";
     const room = roomCode ? await loadStoredTahoiyaRoom(roomCode).catch(() => null) : null;

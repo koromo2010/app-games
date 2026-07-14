@@ -2,6 +2,7 @@ import { normalizeGameGenerationMeta } from "@/lib/game-ai-types";
 import { loadGameFeedback, saveGameFeedback } from "@/lib/game-feedback-store";
 import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
+import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 
 function cleanString(value: unknown, maxLength: number) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
@@ -49,6 +50,8 @@ export async function POST(request: Request) {
 
   try {
     const player = await requireAuthenticatedPlayer();
+    const limited = await rateLimitResponseFor(request, rateLimitPolicies.feedback, { playerId: player.id });
+    if (limited) return limited;
     logFields = { ...logFields, actorRef: telemetry.actorRef(player.id) };
     if (requestedPlayerId && requestedPlayerId !== player.id) {
       telemetry.reject("feedback.save", 403, logFields);

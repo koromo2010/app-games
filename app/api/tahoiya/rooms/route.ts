@@ -19,6 +19,7 @@ import { generateTahoiyaTopicResponse } from "@/app/api/tahoiya/topic/route";
 import { withGameGenerationCache } from "@/lib/game-generation-cache";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
 import { actionRequiresDebugAccess, requirePlayerDebugAccess, roomRequestsDebugMode } from "@/lib/debug-access";
+import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 
 function isStoreNotConfigured(error: unknown) {
   return error instanceof Error && error.message === "REDIS_STORE_NOT_CONFIGURED";
@@ -78,6 +79,8 @@ export async function POST(request: Request) {
   let logFields: ObservabilityFields = { action: "create-room" };
   try {
     const player = await requireAuthenticatedPlayer();
+    const limited = await rateLimitResponseFor(request, rateLimitPolicies.roomMutation, { playerId: player.id });
+    if (limited) return limited;
     const body = (await request.json()) as { room?: unknown; actorId?: unknown };
     const requestedRoom = body.room && typeof body.room === "object" ? body.room as { code?: unknown } : null;
     if (roomRequestsDebugMode(requestedRoom)) await requirePlayerDebugAccess(player.id);
@@ -119,6 +122,8 @@ export async function PATCH(request: Request) {
   let logFields: ObservabilityFields = {};
   try {
     const player = await requireAuthenticatedPlayer();
+    const limited = await rateLimitResponseFor(request, rateLimitPolicies.roomMutation, { playerId: player.id });
+    if (limited) return limited;
     const body = (await request.json()) as { code?: unknown; action?: unknown };
     const code = typeof body.code === "string" ? body.code.trim().toUpperCase() : "";
     if (!code || !body.action || typeof body.action !== "object") {
@@ -158,6 +163,8 @@ export async function PATCH(request: Request) {
         telemetry.reject("room.command", 409, logFields);
         return Response.json({ error: "Not enough players" }, { status: 409 });
       }
+      const aiLimited = await rateLimitResponseFor(request, rateLimitPolicies.aiGeneration, { playerId: player.id });
+      if (aiLimited) return aiLimited;
       const generated = await withGameGenerationCache("tahoiya-topic-v10", `${current.code}:${current.round}:${current.topicDifficulty}`, async () => {
         const response = await generateTahoiyaTopicResponse(current.topicDifficulty, current.players.map((item) => item.id));
         return { status: response.status, body: await response.json() as TahoiyaTopic & { error?: string } };
@@ -227,6 +234,8 @@ export async function DELETE(request: Request) {
 
   try {
     const player = await requireAuthenticatedPlayer();
+    const limited = await rateLimitResponseFor(request, rateLimitPolicies.roomMutation, { playerId: player.id });
+    if (limited) return limited;
     const logFields: ObservabilityFields = { action: code ? "delete-room" : "delete-hosted-rooms", roomRef: telemetry.roomRef(code), actorRef: telemetry.actorRef(player.id) };
     if (code) {
       if (actorId && actorId !== player.id) {

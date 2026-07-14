@@ -2,6 +2,7 @@ import { recordWordWolfGuessFeedback } from "@/lib/wordwolf-guess-judgement";
 import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
 import { loadStoredWordWolfRoom } from "@/lib/wordwolf-room-store";
 import { createRequestTelemetry } from "@/lib/observability";
+import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 
 function isStoreNotConfigured(error: unknown) {
   return error instanceof Error && error.message === "REDIS_STORE_NOT_CONFIGURED";
@@ -11,6 +12,8 @@ export async function POST(request: Request) {
   const telemetry = createRequestTelemetry(request, "/api/wordwolf/guess-feedback", { game: "wordwolf", operation: "guess-feedback" });
   try {
     const player = await requireAuthenticatedPlayer();
+    const limited = await rateLimitResponseFor(request, rateLimitPolicies.feedback, { playerId: player.id });
+    if (limited) return limited;
     const body = (await request.json()) as { roomCode?: unknown; guess?: unknown; accepted?: unknown };
     const roomCode = typeof body.roomCode === "string" ? body.roomCode.trim().toUpperCase() : "";
     const guess = typeof body.guess === "string" ? body.guess.trim() : "";

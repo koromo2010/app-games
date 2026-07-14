@@ -3,6 +3,7 @@ import {
   requestPlayerPasswordReset,
 } from "@/lib/player-password-reset";
 import { createRequestTelemetry } from "@/lib/observability";
+import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 
 type ResetRequest = {
   action?: "request" | "complete";
@@ -27,6 +28,12 @@ export async function POST(request: Request) {
 
   const action = body.action === "complete" ? "complete" : "request";
   try {
+    const limited = await rateLimitResponseFor(request, rateLimitPolicies.passwordReset, {
+      identity: body.action === "complete"
+        ? (typeof body.token === "string" ? body.token : null)
+        : (typeof body.email === "string" ? body.email : null),
+    });
+    if (limited) return limited;
     if (body.action === "complete") {
       await completePlayerPasswordReset(
         typeof body.token === "string" ? body.token : "",

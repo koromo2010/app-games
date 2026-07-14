@@ -2,6 +2,7 @@ import { saveStoredPlayerSession } from "@/lib/player-store";
 import { normalizePlayerName } from "@/lib/player-session";
 import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
 import { createRequestTelemetry } from "@/lib/observability";
+import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 
 function isStoreNotConfigured(error: unknown) {
   return error instanceof Error && (
@@ -50,6 +51,8 @@ export async function POST(request: Request) {
 
   try {
     const authenticated = await requireAuthenticatedPlayer();
+    const limited = await rateLimitResponseFor(request, rateLimitPolicies.profileMutation, { playerId: authenticated.id });
+    if (limited) return limited;
     const logFields = { action: "update", actorRef: telemetry.actorRef(authenticated.id) };
     const session = await saveStoredPlayerSession({
       id: authenticated.id,
