@@ -56,6 +56,7 @@ export type HodoaiRoom = HodoaiConfig & {
   debugReplayEnabled: boolean;
   revision: number;
   hostId: string;
+  sorterId: string;
   ownerId?: string;
   passphrase: string;
   phase: HodoaiPhase;
@@ -90,6 +91,7 @@ export type HodoaiRoomAction =
   | { type: "join-room"; actorId: string; player: HodoaiPlayer; passphrase: string }
   | { type: "leave-room"; actorId: string }
   | { type: "update-config"; actorId: string; config: Omit<HodoaiConfig, "debugMode"> }
+  | { type: "set-sorter"; actorId: string; sorterId: string }
   | { type: "set-debug"; actorId: string; enabled: boolean }
   | { type: "set-debug-replay"; actorId: string; enabled: boolean }
   | { type: "start-game"; actorId: string }
@@ -197,6 +199,20 @@ export function pointsForInversions(inversions: number) {
 
 export function hodoaiClueRoundDestination(round: number, roundsTotal: number): "clue" | "arrange" {
   return round < roundsTotal ? "clue" : "arrange";
+}
+
+export function canReorderHodoaiCards(room: Pick<HodoaiRoom, "phase" | "sorterId">, actorId: string) {
+  return room.phase === "arrange" && room.sorterId === actorId;
+}
+
+export function canAssignHodoaiSorter(
+  room: Pick<HodoaiRoom, "phase" | "hostId" | "players">,
+  actorId: string,
+  sorterId: string,
+) {
+  return actorId === room.hostId
+    && (room.phase === "lobby" || room.phase === "arrange")
+    && room.players.some((player) => player.id === sorterId);
 }
 
 export function hodoaiFinalMessage(points: number, maxPoints: number) {

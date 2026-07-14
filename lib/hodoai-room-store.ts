@@ -12,6 +12,8 @@ import { appendGameDebugLog, normalizeGameDebugLog } from "@/lib/game-debug-log"
 import { loadOnlineRoomValues, scanOnlineRoomCodes } from "@/lib/online-room-list";
 import {
   clueHasNumber,
+  canAssignHodoaiSorter,
+  canReorderHodoaiCards,
   countHodoaiInversions,
   dealHodoaiCards,
   hodoaiThemes,
@@ -40,6 +42,7 @@ const hodoaiDebugActionLabels: Record<HodoaiRoomAction["type"], string> = {
   "join-room": "部屋に参加",
   "leave-room": "部屋から退出",
   "update-config": "部屋設定を変更",
+  "set-sorter": "並べ替え役を変更",
   "set-debug": "デバッグモードを変更",
   "set-debug-replay": "プレイバック記録設定を変更",
   "start-game": "ゲームを開始",
@@ -176,6 +179,9 @@ function normalizeRoom(value: unknown): HodoaiRoom | null {
   const hostId = typeof parsed.hostId === "string" ? parsed.hostId : "";
   const players = normalizePlayers(parsed.players);
   if (!code || !hostId || players.length === 0 || !players.some((player) => player.id === hostId)) return null;
+  const sorterId = typeof parsed.sorterId === "string" && players.some((player) => player.id === parsed.sorterId)
+    ? parsed.sorterId
+    : hostId;
   const config = normalizeHodoaiConfig(parsed);
   const history = normalizeHistory(parsed.history, players);
   const theme = normalizeTheme(parsed.theme);
@@ -197,6 +203,7 @@ function normalizeRoom(value: unknown): HodoaiRoom | null {
     code,
     revision: typeof parsed.revision === "number" ? Math.max(0, Math.floor(parsed.revision)) : 0,
     hostId,
+    sorterId,
     ownerId: typeof parsed.ownerId === "string" ? parsed.ownerId : undefined,
     passphrase: typeof parsed.passphrase === "string" ? parsed.passphrase.slice(0, 40) : "",
     phase: isPhase(parsed.phase) ? parsed.phase : "lobby",
@@ -495,13 +502,21 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
 
     if (action.type === "leave-room") {
       if (actorIsHost || current.phase !== "lobby") throw new Error("HODOAI_ROOM_FORBIDDEN");
-      return { ...current, players: current.players.filter((player) => player.id !== action.actorId) };
+      return {
+        ...current,
+        players: current.players.filter((player) => player.id !== action.actorId),
+        sorterId: current.sorterId === action.actorId ? current.hostId : current.sorterId,
+      };
     }
     if (action.type === "update-config") {
       if (!actorIsHost || current.phase !== "lobby") throw new Error("HODOAI_ROOM_FORBIDDEN");
       const config = normalizeHodoaiConfig({ ...action.config, debugMode: current.debugMode });
       if (current.players.length * config.cardsPerPlayer > 121) throw new Error("HODOAI_TOO_MANY_CARDS");
       return { ...current, ...config };
+    }
+    if (action.type === "set-sorter") {
+      if (!canAssignHodoaiSorter(current, action.actorId, action.sorterId)) throw new Error("HODOAI_ROOM_FORBIDDEN");
+      return { ...current, sorterId: action.sorterId };
     }
     if (action.type === "set-debug") {
       if (!actorIsHost || current.phase !== "lobby") throw new Error("HODOAI_ROOM_FORBIDDEN");
@@ -511,6 +526,9 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
         debugReplayEnabled: action.enabled ? current.debugReplayEnabled : false,
         debugLog: [],
         players: action.enabled ? current.players : current.players.filter((player) => !player.isDummy),
+        sorterId: !action.enabled && current.players.find((player) => player.id === current.sorterId)?.isDummy
+          ? current.hostId
+          : current.sorterId,
       };
     }
     if (action.type === "set-debug-replay") {
@@ -546,7 +564,7 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
       return reconcileProgress({ ...current, clues: { ...current.clues, [action.cardId]: text } });
     }
     if (action.type === "reorder") {
-      if (!actorIsHost || current.phase !== "arrange" || action.round !== current.round) throw new Error("HODOAI_ROOM_FORBIDDEN");
+      if (!canReorderHodoaiCards(current, action.actorId) || action.round !== current.round) throw new Error("HODOAI_ROOM_FORBIDDEN");
       const expected = [...current.cards.map((card) => card.id)].sort();
       const proposed = [...new Set(action.order)].sort();
       if (expected.length !== proposed.length || expected.some((id, index) => id !== proposed[index])) return current;
