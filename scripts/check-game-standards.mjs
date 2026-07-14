@@ -24,6 +24,9 @@ for (const game of games) {
   for (const token of game.requiredTokens || []) if (!entry.includes(token)) fail(`${game.id}: 共通要件「${token}」が ${game.entryFile} にありません。`);
   if (game.private && !read(game.pageFile).includes("gamePageAccessAllowed")) fail(`${game.id}: 非公開ゲームの共通サーバーアクセス検証がありません。`);
   if (game.playMode === "online-room") {
+    if (!read("lib/online-room-policy.ts").includes(`"${game.id}"`)) fail(`${game.id}: 共通人数上限マップにゲームIDがありません。`);
+    if (!read("lib/room-dissolve-policy.ts").includes(`"${game.id}"`)) fail(`${game.id}: 共通解散ポリシーにゲームIDがありません。`);
+    if (!read("app/games/GameLobby.tsx").includes(`/api/${game.id}/rooms`)) fail(`${game.id}: ロビーのアクティブ部屋取得マップにAPIがありません。`);
     if (!entry.includes("GameAdSlot")) fail(`${game.id}: 非プレイ面の共通広告スロットがありません。`);
     if (!game.roomStoreFile || !existsSync(join(root, game.roomStoreFile))) fail(`${game.id}: roomStoreFile がありません。`);
     else { const store = read(game.roomStoreFile); const modules = [entry, store, ...(game.moduleBoundaryFiles || []).map(read)].join("\n"); if (!store.includes("multiplayerRoomTtlSeconds") && !store.includes("multiplayerRoomExpiryArgs")) fail(`${game.id}: 共通の部屋TTLを使用していません。`); if (!store.includes("revision") && !store.includes("saveStoredWordWolfRoom")) fail(`${game.id}: サーバー側の部屋保存処理が見つかりません。`); if (!modules.includes("abort-game") && !modules.includes("abortGame")) fail(`${game.id}: ゲーム開始前へ戻すデバッグ中断処理がありません。`); if (!store.includes("canDissolveOnlineRoom")) fail(`${game.id}: 進行中の部屋解散を防ぐ共通ポリシーがありません。`); }

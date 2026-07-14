@@ -2,6 +2,7 @@ import { redisCommand } from "@/lib/redis-store";
 import type { HodoaiRoom } from "@/lib/hodoai-talk";
 import type { KotobaSenpukuRoom } from "@/lib/kotoba-senpuku";
 import type { NorthernRoom } from "@/lib/northern-branch-types";
+import type { NigoichiRoom } from "@/lib/nigoichi";
 import type { TahoiyaRoom } from "@/lib/tahoiya-types";
 import type { WordWolfRoom } from "@/lib/wordwolf-room-store";
 import { calculateGameRatingChanges, initialGameRating } from "@/lib/game-rating";
@@ -14,7 +15,7 @@ import {
 } from "@/lib/player-stats-postgres-store";
 import { mergePlayerGameResults } from "@/lib/player-stats-history";
 
-export type PlayerStatsGameType = "wordwolf" | "tahoiya" | "northern-branch" | "hodoai" | "kotoba-senpuku";
+export type PlayerStatsGameType = "wordwolf" | "tahoiya" | "northern-branch" | "hodoai" | "kotoba-senpuku" | "nigoichi";
 
 export type PlayerGameResult = {
   schemaVersion: 1;
@@ -92,7 +93,7 @@ function summarize(results: PlayerGameResult[]): PlayerStatsSummary {
 }
 function startOfToday() { const now = new Date(); return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime(); }
 function startOfMonth() { const now = new Date(); return new Date(now.getFullYear(), now.getMonth(), 1).getTime(); }
-function isPlayerStatsGameType(value: unknown): value is PlayerStatsGameType { return value === "wordwolf" || value === "tahoiya" || value === "northern-branch" || value === "hodoai" || value === "kotoba-senpuku"; }
+function isPlayerStatsGameType(value: unknown): value is PlayerStatsGameType { return value === "wordwolf" || value === "tahoiya" || value === "northern-branch" || value === "hodoai" || value === "kotoba-senpuku" || value === "nigoichi"; }
 
 function parseResult(value: unknown): PlayerGameResult | null {
   if (!value || typeof value !== "string") return null;
@@ -224,8 +225,23 @@ export async function recordKotobaSenpukuGameResults(room: KotobaSenpukuRoom) {
   });
 }
 
+export async function recordNigoichiGameResults(room: NigoichiRoom) {
+  if (room.phase !== "result" || room.missingNumber === null || room.debugMode) return 0;
+  const players = room.players.filter((player) => !player.isDummy);
+  const eventId = `nigoichi:${room.code}:${room.createdAt}:${room.gameNumber}`;
+  return observeStatsRecord({ game: "nigoichi", operation: "record-results", roomRef: observabilityRef("room", room.code), eventRef: observabilityRef("event", eventId), gameNumber: room.gameNumber, playerCount: players.length }, async () => {
+    const outcomes = players.map((player) => ({ playerId: player.id, won: room.guesses[player.id] === room.missingNumber }));
+    const ratings = await recordGameRatings("nigoichi", eventId, outcomes, true);
+    return recordPlayerResults(players.map((player) => {
+      const won = room.guesses[player.id] === room.missingNumber;
+      const rating = ratings.get(player.id);
+      return { schemaVersion: 1, id: `${eventId}:${player.id}`, gameType: "nigoichi", roomCode: room.code, roomCreatedAt: room.createdAt, gameNumber: room.gameNumber, finishedAt: room.updatedAt || Date.now(), playerId: player.id, playerName: player.name, won, resultLabel: won ? "余り番号を正解" : "不正解", playerCount: players.length, details: { guess: room.guesses[player.id] ?? -1, missingNumber: room.missingNumber }, ratingBefore: rating?.before, ratingAfter: rating?.after, ratingChange: rating?.change } satisfies PlayerGameResult;
+    }));
+  });
+}
+
 export async function getPlayerStats(playerId: string, gameFilter: PlayerStatsGameFilter = "all"): Promise<PlayerStatsResponse> {
-  const gameTypes: PlayerStatsGameType[] = ["wordwolf", "tahoiya", "northern-branch", "hodoai", "kotoba-senpuku"];
+  const gameTypes: PlayerStatsGameType[] = ["wordwolf", "tahoiya", "northern-branch", "hodoai", "kotoba-senpuku", "nigoichi"];
   const postgresEnabled = isPostgresConfigured();
   const [postgresResults, rawResults, ...storedRatings] = await Promise.all([
     postgresEnabled ? loadPostgresPlayerResults(playerId, 200).catch(() => []) : Promise.resolve([]),

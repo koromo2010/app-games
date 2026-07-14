@@ -25,5 +25,6 @@ test("全オンラインゲームに参加人数の安全上限を持たせる",
     northernBranch: 4,
     hodoai: 50,
     kotobaSenpuku: 20,
+    nigoichi: 6,
   });
 });

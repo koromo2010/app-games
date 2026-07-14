@@ -2,6 +2,7 @@ import { createHmac } from "node:crypto";
 import { hodoaiResultPresentation, type HodoaiRoom } from "@/lib/hodoai-talk";
 import type { KotobaSenpukuRoom } from "@/lib/kotoba-senpuku";
 import type { NorthernRoom } from "@/lib/northern-branch-types";
+import type { NigoichiRoom } from "@/lib/nigoichi";
 import type { TahoiyaRoom } from "@/lib/tahoiya-types";
 import type { WordWolfRoom } from "@/lib/wordwolf-room-store";
 import { redisCommand, redisPipeline } from "@/lib/redis-store";
@@ -83,7 +84,7 @@ function cleanLines(lines: unknown[], maximumLines = 100) {
 }
 
 function isReplayGameType(value: unknown): value is GameReplayGameType {
-  return value === "wordwolf" || value === "tahoiya" || value === "northern-branch" || value === "hodoai" || value === "kotoba-senpuku";
+  return value === "wordwolf" || value === "tahoiya" || value === "northern-branch" || value === "hodoai" || value === "kotoba-senpuku" || value === "nigoichi";
 }
 
 function parseStoredReplay(value: unknown): StoredGameReplay | null {
@@ -403,6 +404,32 @@ export async function recordKotobaSenpukuReplay(room: KotobaSenpukuRoom) {
   );
   const scoreLabels = Object.fromEntries(players.map((player) => [player.id, winnerIds.includes(player.id) ? "勝利" : "脱落"]));
   return storeReplay({ ...base, gameType: "kotoba-senpuku", overview: `${winnerSecrets || winnerLabel}が最後まで残って勝利`, highlights: cleanLines(details), scoreLabels }, room.code);
+}
+
+export async function recordNigoichiReplay(room: NigoichiRoom) {
+  if (room.phase !== "result" || room.missingNumber === null || !shouldRecordGameReplay(room)) return false;
+  const players = room.players.filter((player) => !player.isDummy);
+  const correct = players.filter((player) => room.guesses[player.id] === room.missingNumber);
+  const resultLabels = Object.fromEntries(players.map((player) => [player.id, room.guesses[player.id] === room.missingNumber ? "余り番号を正解" : "不正解"]));
+  const base = makeReplayBase(
+    `nigoichi:${room.code}:${room.createdAt}:${room.gameNumber}`,
+    "nigoichi",
+    room.updatedAt || Date.now(),
+    room.gameNumber,
+    `第${room.gameNumber}ゲーム`,
+    players,
+    resultLabels,
+    [`${players.length}人中${correct.length}人が正解`, `余りは${room.missingNumber + 1}番`, `${room.words.length}個の単語で推理`],
+  );
+  const names = new Map(room.players.map((player) => [player.id, player.name]));
+  const highlights = [
+    `場の単語: ${room.words.map((word, index) => `${index + 1}.${word}`).join("、")}`,
+    ...room.players.map((player) => {
+      const hand = room.hands[player.id] ?? [];
+      return `${names.get(player.id) ?? "Unknown"}: ${hand.map((number) => `${number + 1}.${room.words[number] ?? ""}`).join(" / ")} → 連想語「${room.clues[player.id] ?? ""}」→ 予想${(room.guesses[player.id] ?? -1) + 1}番`;
+    }),
+  ];
+  return storeReplay({ ...base, gameType: "nigoichi", overview: `${players.length}人中${correct.length}人が余り番号を正解`, highlights: cleanLines(highlights), scoreLabels: resultLabels }, room.code);
 }
 
 function readableKotobaHighlights(replay: StoredGenericReplay) {

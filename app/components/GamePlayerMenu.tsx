@@ -74,6 +74,7 @@ export function GamePlayerMenu(props: Props) {
       clearPlayerSession();
       localStorage.removeItem("wordwolf-last-room");
       localStorage.removeItem("wordwolf-last-player");
+      localStorage.removeItem("nigoichi-last-room");
       window.location.assign("/games");
     } catch {
       setMessage("ログアウトできませんでした。通信を確認してもう一度お試しください。");

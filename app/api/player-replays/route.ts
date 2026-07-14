@@ -9,7 +9,7 @@ import { createRequestTelemetry } from "@/lib/observability";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 
 function normalizeReplayGameType(value: string | null): GameReplayGameType | "all" {
-  if (value === "wordwolf" || value === "tahoiya" || value === "northern-branch" || value === "hodoai" || value === "kotoba-senpuku") return value;
+  if (value === "wordwolf" || value === "tahoiya" || value === "northern-branch" || value === "hodoai" || value === "kotoba-senpuku" || value === "nigoichi") return value;
   return "all";
 }
 

@@ -46,6 +46,7 @@ const roomApiByGameId: Partial<Record<string, string>> = {
   "northern-branch": "/api/northern-branch/rooms",
   hodoai: "/api/hodoai/rooms",
   "kotoba-senpuku": "/api/kotoba-senpuku/rooms",
+  nigoichi: "/api/nigoichi/rooms",
 };
 
 async function fetchActiveGameRooms(targetPlayerId: string, includePrivateGames: boolean) {

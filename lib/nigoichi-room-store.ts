@@ -1,0 +1,442 @@
+import { randomUUID } from "node:crypto";
+import { appendGameDebugLog, normalizeGameDebugLog } from "@/lib/game-debug-log";
+import { recordNigoichiReplay } from "@/lib/game-replay-store";
+import { isMultiplayerRoomExpired, multiplayerRoomExpiryArgs, multiplayerRoomTtlSeconds } from "@/lib/multiplayer-room-lifecycle";
+import {
+  allNigoichiCluesSubmitted,
+  allNigoichiGuessesSubmitted,
+  dealNigoichiRound,
+  nigoichiMinimumPlayers,
+  nigoichiPlayerLimit,
+  sanitizeNigoichiRoomForPlayer,
+  type NigoichiHand,
+  type NigoichiPhase,
+  type NigoichiPlayer,
+  type NigoichiRoom,
+  type NigoichiRoomAction,
+  type NigoichiRoomChoice,
+} from "@/lib/nigoichi";
+import { claimPlayerActiveRoom, releasePlayerActiveRoom, type ActiveRoomClaim } from "@/lib/player-active-room";
+import { recordNigoichiGameResults } from "@/lib/player-stats-store";
+import { loadOnlineRoomValues, scanOnlineRoomCodes } from "@/lib/online-room-list";
+import { normalizeOnlineRoomCode } from "@/lib/online-room-input";
+import { canDissolveOnlineRoom, canMoveFromOnlineRoom } from "@/lib/room-dissolve-policy";
+import { redisCommand } from "@/lib/redis-store";
+import { isAvatarColor, isAvatarImage } from "@/lib/player-session";
+import { listLocalWordWolfWords } from "@/lib/wordwolf";
+
+const roomKeyPrefix = "nigoichi:room:";
+const roomIndexKey = "nigoichi:rooms";
+const playerActiveRoomKeyPrefix = "nigoichi:player-active-room:";
+
+const debugActionLabels: Record<NigoichiRoomAction["type"], string> = {
+  "join-room": "部屋に参加",
+  "leave-room": "部屋から退出",
+  "set-debug": "デバッグモードを変更",
+  "set-debug-replay": "プレイバック記録設定を変更",
+  "start-game": "ゲームを開始",
+  "submit-clue": "連想語を提出",
+  "submit-guess": "余り番号を予想",
+  "reset-game": "同じ部屋で再戦準備",
+  "abort-game": "ゲームを中断",
+  "debug-add-player": "ダミープレイヤーを追加",
+  "debug-fill-clues": "未提出の連想語を自動入力",
+  "debug-fill-guesses": "未提出の予想を自動入力",
+};
+
+function roomKey(code: string) {
+  return `${roomKeyPrefix}${code.trim().toUpperCase()}`;
+}
+
+function playerActiveRoomKey(playerId: string) {
+  return `${playerActiveRoomKeyPrefix}${playerId}`;
+}
+
+function isPhase(value: unknown): value is NigoichiPhase {
+  return value === "lobby" || value === "clue" || value === "guess" || value === "result";
+}
+
+function normalizePlayers(value: unknown): NigoichiPlayer[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const player = item as Partial<NigoichiPlayer>;
+    if (typeof player.id !== "string" || typeof player.name !== "string") return [];
+    const id = player.id.trim().slice(0, 120);
+    const name = player.name.trim().slice(0, 20);
+    if (!id || !name) return [];
+    return [{
+      id,
+      name,
+      joinedAt: typeof player.joinedAt === "number" ? player.joinedAt : Date.now(),
+      avatarColor: isAvatarColor(player.avatarColor ?? null) ? player.avatarColor : undefined,
+      avatarImage: isAvatarImage(player.avatarImage ?? null) ? player.avatarImage : undefined,
+      isDummy: player.isDummy === true,
+    }];
+  }).slice(0, nigoichiPlayerLimit);
+}
+
+function normalizeStringRecord(value: unknown, maximumLength: number) {
+  if (!value || typeof value !== "object") return {};
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>).flatMap(([key, item]) => {
+    if (!key || typeof item !== "string") return [];
+    const text = item.trim().replace(/\s+/g, " ").slice(0, maximumLength);
+    return text ? [[key.slice(0, 120), text]] : [];
+  }));
+}
+
+function normalizeNumberRecord(value: unknown, wordCount: number) {
+  if (!value || typeof value !== "object") return {};
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>).flatMap(([key, item]) => {
+    if (!key || typeof item !== "number" || !Number.isInteger(item) || item < 0 || item >= wordCount) return [];
+    return [[key.slice(0, 120), item]];
+  }));
+}
+
+function normalizeHands(value: unknown, playerIds: Set<string>, wordCount: number): Record<string, NigoichiHand> {
+  if (!value || typeof value !== "object") return {};
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>).flatMap(([playerId, item]) => {
+    if (!playerIds.has(playerId) || !Array.isArray(item) || item.length !== 2) return [];
+    const [left, right] = item;
+    if (!Number.isInteger(left) || !Number.isInteger(right) || left === right) return [];
+    if ((left as number) < 0 || (right as number) < 0 || (left as number) >= wordCount || (right as number) >= wordCount) return [];
+    return [[playerId, [left as number, right as number] as NigoichiHand]];
+  }));
+}
+
+function normalizeRoom(value: unknown): NigoichiRoom | null {
+  if (!value || typeof value !== "object") return null;
+  const parsed = value as Partial<NigoichiRoom>;
+  const code = normalizeOnlineRoomCode(parsed.code);
+  const players = normalizePlayers(parsed.players);
+  const hostId = typeof parsed.hostId === "string" ? parsed.hostId : "";
+  if (!code || !hostId || players.length === 0 || !players.some((player) => player.id === hostId)) return null;
+  const words = Array.isArray(parsed.words)
+    ? parsed.words.filter((word): word is string => typeof word === "string").map((word) => word.trim().slice(0, 80)).filter(Boolean).slice(0, nigoichiPlayerLimit * 2 + 1)
+    : [];
+  const playerIds = new Set(players.map((player) => player.id));
+  const missingNumber = typeof parsed.missingNumber === "number" && Number.isInteger(parsed.missingNumber) && parsed.missingNumber >= 0 && parsed.missingNumber < words.length
+    ? parsed.missingNumber
+    : null;
+  return {
+    code,
+    revision: typeof parsed.revision === "number" ? Math.max(0, Math.floor(parsed.revision)) : 0,
+    hostId,
+    ownerId: typeof parsed.ownerId === "string" ? parsed.ownerId.slice(0, 120) : undefined,
+    passphrase: typeof parsed.passphrase === "string" ? parsed.passphrase.slice(0, 40) : "",
+    phase: isPhase(parsed.phase) ? parsed.phase : "lobby",
+    players,
+    gameNumber: typeof parsed.gameNumber === "number" ? Math.max(1, Math.floor(parsed.gameNumber)) : 1,
+    debugMode: parsed.debugMode === true,
+    debugReplayEnabled: parsed.debugReplayEnabled === true && parsed.debugMode === true,
+    words,
+    hands: normalizeHands(parsed.hands, playerIds, words.length),
+    clues: normalizeStringRecord(parsed.clues, 30),
+    guesses: normalizeNumberRecord(parsed.guesses, words.length),
+    missingNumber,
+    debugLog: normalizeGameDebugLog(parsed.debugLog),
+    createdAt: typeof parsed.createdAt === "number" ? parsed.createdAt : Date.now(),
+    updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : Date.now(),
+  };
+}
+
+function beginGame(room: NigoichiRoom) {
+  const dealt = dealNigoichiRound(room.players, listLocalWordWolfWords());
+  return {
+    ...room,
+    phase: "clue" as const,
+    words: dealt.words,
+    hands: dealt.hands,
+    clues: {},
+    guesses: {},
+    missingNumber: dealt.missingNumber,
+  };
+}
+
+function resetGame(room: NigoichiRoom) {
+  return {
+    ...room,
+    gameNumber: room.gameNumber + 1,
+    phase: "lobby" as const,
+    debugReplayEnabled: false,
+    words: [],
+    hands: {},
+    clues: {},
+    guesses: {},
+    missingNumber: null,
+  };
+}
+
+async function compareAndSetRoom(expectedRevision: number, room: NigoichiRoom) {
+  return redisCommand<number>([
+    "EVAL",
+    "local raw=redis.call('GET',KEYS[1]); if not raw then return -1 end; local current=cjson.decode(raw); if tonumber(current.revision or 0)~=tonumber(ARGV[1]) then return 0 end; redis.call('SET',KEYS[1],ARGV[2],'EX',ARGV[3]); return 1",
+    "1",
+    roomKey(room.code),
+    String(expectedRevision),
+    JSON.stringify(room),
+    String(multiplayerRoomTtlSeconds),
+  ]);
+}
+
+type DebugEvent = { actorId?: string; action: string };
+
+async function mutateStoredRoom(code: string, mutate: (room: NigoichiRoom) => NigoichiRoom, debugEvent?: DebugEvent) {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const current = await loadStoredNigoichiRoom(code);
+    if (!current) throw new Error("NIGOICHI_ROOM_NOT_FOUND");
+    const changed = mutate(current);
+    if (changed === current) return current;
+    const revision = current.revision + 1;
+    const timestamp = Date.now();
+    const actorName = debugEvent?.actorId
+      ? changed.players.find((player) => player.id === debugEvent.actorId)?.name ?? "不明なプレイヤー"
+      : "システム";
+    const withLog = changed.debugMode && debugEvent
+      ? { ...changed, debugLog: appendGameDebugLog(changed.debugLog, { timestamp, actorName, action: debugEvent.action, phaseBefore: current.phase, phaseAfter: changed.phase, revision }) }
+      : changed;
+    const next = normalizeRoom({ ...withLog, revision, updatedAt: timestamp });
+    if (!next) throw new Error("INVALID_NIGOICHI_ROOM");
+    const saved = await compareAndSetRoom(current.revision, next);
+    if (saved === 1) {
+      await Promise.all([recordNigoichiGameResults(next), recordNigoichiReplay(next)]);
+      return next;
+    }
+    if (saved === -1) throw new Error("NIGOICHI_ROOM_NOT_FOUND");
+  }
+  throw new Error("NIGOICHI_ROOM_CONFLICT");
+}
+
+function makeChoice(room: NigoichiRoom): NigoichiRoomChoice {
+  return {
+    code: room.code,
+    hostName: room.players.find((player) => player.id === room.hostId)?.name ?? "Unknown",
+    playerCount: room.players.length,
+    hasPassphrase: Boolean(room.passphrase),
+    updatedAt: room.updatedAt,
+  };
+}
+
+async function saveActiveRooms(room: NigoichiRoom) {
+  await Promise.all(room.players.filter((player) => !player.isDummy).map((player) => redisCommand<"OK">([
+    "SET", playerActiveRoomKey(player.id), room.code, ...multiplayerRoomExpiryArgs(),
+  ])));
+}
+
+async function clearActiveRoom(playerId: string, code: string) {
+  await releasePlayerActiveRoom(playerActiveRoomKey(playerId), code);
+}
+
+export function sanitizeNigoichiRoom(room: NigoichiRoom, playerId: string) {
+  return sanitizeNigoichiRoomForPlayer(room, playerId);
+}
+
+export async function loadStoredNigoichiRoom(code: string) {
+  const raw = await redisCommand<string | null>(["GET", roomKey(code)]);
+  if (!raw) return null;
+  try {
+    const room = normalizeRoom(JSON.parse(raw));
+    if (!room) return null;
+    if (isMultiplayerRoomExpired(room.updatedAt)) {
+      await redisCommand<number>(["DEL", roomKey(room.code)]);
+      await redisCommand<number>(["SREM", roomIndexKey, room.code]);
+      await Promise.all(room.players.map((player) => clearActiveRoom(player.id, room.code)));
+      return null;
+    }
+    return room;
+  } catch {
+    return null;
+  }
+}
+
+function parseStoredRoom(raw: string | null) {
+  if (!raw) return null;
+  try { return normalizeRoom(JSON.parse(raw)); } catch { return null; }
+}
+
+export async function loadNigoichiPlayerActiveRoom(playerId: string) {
+  const normalizedId = playerId.trim();
+  if (!normalizedId) return null;
+  const code = await redisCommand<string | null>(["GET", playerActiveRoomKey(normalizedId)]);
+  if (!code) return null;
+  const room = await loadStoredNigoichiRoom(code);
+  if (!room || !room.players.some((player) => player.id === normalizedId)) {
+    await redisCommand<number>(["DEL", playerActiveRoomKey(normalizedId)]);
+    return null;
+  }
+  return room;
+}
+
+export async function createStoredNigoichiRoom(value: unknown, actorId: string) {
+  const room = normalizeRoom(value);
+  if (!room || room.hostId !== actorId) throw new Error("INVALID_NIGOICHI_ROOM");
+  const created: NigoichiRoom = {
+    ...room,
+    revision: 0,
+    phase: "lobby",
+    gameNumber: 1,
+    debugMode: false,
+    debugReplayEnabled: false,
+    words: [],
+    hands: {},
+    clues: {},
+    guesses: {},
+    missingNumber: null,
+    debugLog: [],
+    updatedAt: Date.now(),
+  };
+  const activeRoom = await loadNigoichiPlayerActiveRoom(actorId);
+  if (activeRoom && activeRoom.code !== created.code) {
+    if (!canMoveFromOnlineRoom("nigoichi", activeRoom)) throw new Error("NIGOICHI_PLAYER_ALREADY_ACTIVE");
+    await clearActiveRoom(actorId, activeRoom.code);
+  }
+  const claim = await claimPlayerActiveRoom(playerActiveRoomKey(actorId), created.code);
+  if (!claim) throw new Error("NIGOICHI_PLAYER_ALREADY_ACTIVE");
+  try {
+    const saved = await redisCommand<"OK" | null>(["SET", roomKey(created.code), JSON.stringify(created), "NX", ...multiplayerRoomExpiryArgs()]);
+    if (saved !== "OK") throw new Error("NIGOICHI_ROOM_CONFLICT");
+    await redisCommand<number>(["SADD", roomIndexKey, created.code]);
+    await saveActiveRooms(created);
+    return created;
+  } catch (error) {
+    if (claim === "claimed") await clearActiveRoom(actorId, created.code);
+    throw error;
+  }
+}
+
+export async function applyStoredNigoichiAction(code: string, action: NigoichiRoomAction) {
+  let claim: ActiveRoomClaim | null = null;
+  const normalizedCode = code.trim().toUpperCase();
+  if (action.type === "join-room") {
+    const activeRoom = await loadNigoichiPlayerActiveRoom(action.actorId);
+    if (activeRoom && activeRoom.code !== normalizedCode) {
+      if (!canMoveFromOnlineRoom("nigoichi", activeRoom)) throw new Error("NIGOICHI_PLAYER_ALREADY_ACTIVE");
+      await clearActiveRoom(action.actorId, activeRoom.code);
+    }
+    claim = await claimPlayerActiveRoom(playerActiveRoomKey(action.actorId), normalizedCode);
+    if (!claim) throw new Error("NIGOICHI_PLAYER_ALREADY_ACTIVE");
+  }
+  const room = await mutateStoredRoom(normalizedCode, (current) => {
+    if (action.type === "join-room") {
+      if (current.phase !== "lobby" || action.actorId !== action.player.id) throw new Error("NIGOICHI_ROOM_FORBIDDEN");
+      if (current.passphrase && current.passphrase !== action.passphrase.trim()) throw new Error("NIGOICHI_BAD_PASSPHRASE");
+      if (current.players.some((player) => player.id === action.actorId)) return current;
+      if (current.players.length >= nigoichiPlayerLimit) throw new Error("NIGOICHI_ROOM_FULL");
+      return { ...current, players: [...current.players, action.player] };
+    }
+
+    const isHost = action.actorId === current.hostId;
+    const isMember = current.players.some((player) => player.id === action.actorId);
+    if (!isMember) throw new Error("NIGOICHI_ROOM_FORBIDDEN");
+
+    if (action.type === "abort-game") {
+      if (!isHost || !current.debugMode || current.phase === "lobby") throw new Error("NIGOICHI_ROOM_FORBIDDEN");
+      return { ...current, phase: "lobby", debugReplayEnabled: false, words: [], hands: {}, clues: {}, guesses: {}, missingNumber: null };
+    }
+    if (action.type === "leave-room") {
+      if (isHost || current.phase !== "lobby") throw new Error("NIGOICHI_ROOM_FORBIDDEN");
+      return { ...current, players: current.players.filter((player) => player.id !== action.actorId) };
+    }
+    if (action.type === "set-debug") {
+      if (!isHost || current.phase !== "lobby") throw new Error("NIGOICHI_ROOM_FORBIDDEN");
+      return {
+        ...current,
+        debugMode: action.enabled,
+        debugReplayEnabled: action.enabled ? current.debugReplayEnabled : false,
+        debugLog: [],
+        players: action.enabled ? current.players : current.players.filter((player) => !player.isDummy),
+      };
+    }
+    if (action.type === "set-debug-replay") {
+      if (!isHost || !current.debugMode) throw new Error("NIGOICHI_ROOM_FORBIDDEN");
+      return { ...current, debugReplayEnabled: action.enabled };
+    }
+    if (action.type === "debug-add-player") {
+      if (!isHost || !current.debugMode || current.phase !== "lobby") throw new Error("NIGOICHI_ROOM_FORBIDDEN");
+      if (current.players.length >= nigoichiPlayerLimit) throw new Error("NIGOICHI_ROOM_FULL");
+      const number = current.players.filter((player) => player.isDummy).length + 1;
+      const colors = ["#38bdf8", "#a78bfa", "#f472b6", "#f59e0b", "#84cc16"];
+      return { ...current, players: [...current.players, { id: `dummy-${randomUUID()}`, name: `ダミー${number}`, joinedAt: Date.now(), avatarColor: colors[(number - 1) % colors.length], isDummy: true }] };
+    }
+    if (action.type === "start-game") {
+      if (!isHost || current.phase !== "lobby") throw new Error("NIGOICHI_ROOM_FORBIDDEN");
+      if (!current.debugMode && current.players.length < nigoichiMinimumPlayers) throw new Error("NIGOICHI_NOT_ENOUGH_PLAYERS");
+      return beginGame(current);
+    }
+    if (action.type === "reset-game") {
+      if (!isHost || current.phase !== "result") throw new Error("NIGOICHI_ROOM_FORBIDDEN");
+      return resetGame(current);
+    }
+
+    const targetId = "playerId" in action && action.playerId ? action.playerId : action.actorId;
+    const target = current.players.find((player) => player.id === targetId);
+    const canControlTarget = targetId === action.actorId || (isHost && current.debugMode && target?.isDummy);
+    if (!target || !canControlTarget) throw new Error("NIGOICHI_ROOM_FORBIDDEN");
+    if (action.type === "submit-clue") {
+      if (current.phase !== "clue" || current.clues[targetId]) throw new Error("NIGOICHI_ROOM_FORBIDDEN");
+      const text = action.text.trim().replace(/\s+/g, " ").slice(0, 30);
+      if (!text) throw new Error("NIGOICHI_INVALID_CLUE");
+      const next = { ...current, clues: { ...current.clues, [targetId]: text } };
+      return allNigoichiCluesSubmitted(next) ? { ...next, phase: "guess" as const } : next;
+    }
+    if (action.type === "submit-guess") {
+      if (current.phase !== "guess" || current.guesses[targetId] !== undefined) throw new Error("NIGOICHI_ROOM_FORBIDDEN");
+      if (!Number.isInteger(action.number) || action.number < 0 || action.number >= current.words.length) throw new Error("NIGOICHI_INVALID_GUESS");
+      const next = { ...current, guesses: { ...current.guesses, [targetId]: action.number } };
+      return allNigoichiGuessesSubmitted(next) ? { ...next, phase: "result" as const } : next;
+    }
+    if (!isHost || !current.debugMode) throw new Error("NIGOICHI_ROOM_FORBIDDEN");
+    if (action.type === "debug-fill-clues" && current.phase === "clue") {
+      const clues = { ...current.clues };
+      current.players.forEach((player, index) => { clues[player.id] ||= `テスト連想${index + 1}`; });
+      return { ...current, phase: "guess", clues };
+    }
+    if (action.type === "debug-fill-guesses" && current.phase === "guess" && current.missingNumber !== null) {
+      const guesses = { ...current.guesses };
+      current.players.forEach((player) => { guesses[player.id] ??= current.missingNumber!; });
+      return { ...current, phase: "result", guesses };
+    }
+    return current;
+  }, { actorId: action.actorId, action: debugActionLabels[action.type] }).catch(async (error) => {
+    if (action.type === "join-room" && claim === "claimed") await clearActiveRoom(action.actorId, normalizedCode);
+    throw error;
+  });
+  await redisCommand<number>(["SADD", roomIndexKey, room.code]);
+  await saveActiveRooms(room);
+  if (action.type === "leave-room") await clearActiveRoom(action.actorId, room.code);
+  return room;
+}
+
+export async function listJoinableNigoichiRooms(cursor?: unknown) {
+  const page = await scanOnlineRoomCodes(roomIndexKey, cursor);
+  const values = await loadOnlineRoomValues(page.codes, roomKey);
+  const parsedRooms = values.map(parseStoredRoom);
+  const expiredCodes = page.codes.filter((_, index) => parsedRooms[index] && isMultiplayerRoomExpired(parsedRooms[index]!.updatedAt));
+  const missingCodes = page.codes.filter((_, index) => !parsedRooms[index]);
+  if (expiredCodes.length > 0) await Promise.all(expiredCodes.map(loadStoredNigoichiRoom));
+  if (missingCodes.length > 0) await redisCommand<number>(["SREM", roomIndexKey, ...missingCodes]);
+  const rooms = parsedRooms
+    .filter((room): room is NigoichiRoom => Boolean(room && !isMultiplayerRoomExpired(room.updatedAt) && room.phase === "lobby" && room.players.length < nigoichiPlayerLimit))
+    .map(makeChoice)
+    .sort((left, right) => right.updatedAt - left.updatedAt);
+  return { rooms, nextCursor: page.nextCursor };
+}
+
+export async function deleteStoredNigoichiRoom(code: string, actorId: string) {
+  const room = await loadStoredNigoichiRoom(code);
+  if (!room) return;
+  if (room.hostId !== actorId) throw new Error("NIGOICHI_ROOM_FORBIDDEN");
+  if (!canDissolveOnlineRoom("nigoichi", room)) throw new Error("NIGOICHI_ROOM_IN_PROGRESS");
+  await redisCommand<number>(["DEL", roomKey(room.code)]);
+  await redisCommand<number>(["SREM", roomIndexKey, room.code]);
+  await Promise.all(room.players.map((player) => clearActiveRoom(player.id, room.code)));
+}
+
+export async function deleteHostedNigoichiRooms(_ownerId: string, authenticatedHostId: string) {
+  const codes = await redisCommand<string[]>(["SMEMBERS", roomIndexKey]);
+  const rooms = await Promise.all(codes.map(loadStoredNigoichiRoom));
+  const targets = rooms.filter((room): room is NigoichiRoom => Boolean(room && room.hostId === authenticatedHostId));
+  if (targets.some((room) => !canDissolveOnlineRoom("nigoichi", room))) throw new Error("NIGOICHI_ROOM_IN_PROGRESS");
+  await Promise.all(targets.map((room) => deleteStoredNigoichiRoom(room.code, authenticatedHostId)));
+  return targets.length;
+}
