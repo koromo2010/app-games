@@ -8,6 +8,7 @@ import { canDissolveOnlineRoom, canMoveFromOnlineRoom } from "@/lib/room-dissolv
 import { claimPlayerActiveRoom, releasePlayerActiveRoom, type ActiveRoomClaim } from "@/lib/player-active-room";
 import { normalizeOnlineRoomCode } from "@/lib/online-room-input";
 import { isAvatarColor, isAvatarImage } from "@/lib/player-session";
+import { onlineRoomPlayerLimits } from "@/lib/online-room-policy";
 import type {
   NorthernGameState,
   NorthernGameAction,
@@ -21,7 +22,7 @@ import type {
 const roomKeyPrefix = "northern-branch:room:";
 const roomIndexKey = "northern-branch:rooms";
 const playerActiveRoomKeyPrefix = "northern-branch:player-active-room:";
-const maximumPlayers = 4;
+const maximumPlayers = onlineRoomPlayerLimits.northernBranch;
 
 function isGameAction(value: unknown): value is NorthernGameAction {
   if (!value || typeof value !== "object") return false;

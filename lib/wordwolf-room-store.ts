@@ -14,6 +14,7 @@ import { canDissolveOnlineRoom, canMoveFromOnlineRoom } from "@/lib/room-dissolv
 import { claimPlayerActiveRoom, releasePlayerActiveRoom } from "@/lib/player-active-room";
 import { normalizeOnlineRoomCode, onlineRoomPassphraseMaximumLength } from "@/lib/online-room-input";
 import { isAvatarColor, isAvatarImage } from "@/lib/player-session";
+import { onlineRoomPlayerLimits } from "@/lib/online-room-policy";
 
 export type WordWolfRoom = Room;
 export type WordWolfRoomChoice = RoomChoice;
@@ -173,7 +174,7 @@ function normalizeRoom(value: unknown): WordWolfRoom | null {
     clueLogVisibility: parsed.clueLogVisibility === "always" ? "always" : "result",
     clueMode: normalizeClueMode(parsed.clueMode),
     randomizeTurnOrder: parsed.randomizeTurnOrder ?? true,
-    players: players.slice(0, 20).map((player) => ({
+    players: players.slice(0, onlineRoomPlayerLimits.wordwolf).map((player) => ({
       ...player,
       id: String(player.id).slice(0, 80),
       name: String(player.name).trim().slice(0, 40),
@@ -376,6 +377,7 @@ export async function joinStoredWordWolfRoom(code: string, player: Player, passp
       if (room.phase !== "lobby") throw new Error("WORDWOLF_ROOM_STARTED");
       if (room.passphrase && room.passphrase !== passphrase.trim()) throw new Error("WORDWOLF_BAD_PASSPHRASE");
       if (room.players.some((item) => item.id === player.id)) return room;
+      if (room.players.length >= onlineRoomPlayerLimits.wordwolf) throw new Error("WORDWOLF_ROOM_FULL");
       try {
         return await saveStoredWordWolfRoom({
           ...room,
@@ -417,7 +419,7 @@ export async function listStoredWordWolfRooms() {
 export async function listStoredJoinableWordWolfRooms() {
   const rooms = await listStoredWordWolfRooms();
   return rooms
-    .filter((room) => room.phase === "lobby")
+    .filter((room) => room.phase === "lobby" && room.players.length < onlineRoomPlayerLimits.wordwolf)
     .map(makeChoice)
     .sort((left, right) => right.updatedAt - left.updatedAt);
 }

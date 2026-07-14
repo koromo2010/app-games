@@ -28,6 +28,7 @@ import { redisCommand } from "@/lib/redis-store";
 import { commonGameTimeoutGraceMs } from "@/lib/game-timer/policy";
 import { canDissolveOnlineRoom, canMoveFromOnlineRoom } from "@/lib/room-dissolve-policy";
 import { claimPlayerActiveRoom, releasePlayerActiveRoom, type ActiveRoomClaim } from "@/lib/player-active-room";
+import { onlineRoomPlayerLimits } from "@/lib/online-room-policy";
 import { normalizeOnlineRoomCode } from "@/lib/online-room-input";
 import { isAvatarColor, isAvatarImage } from "@/lib/player-session";
 
@@ -51,6 +52,7 @@ function normalizePlayers(value: unknown): KotobaSenpukuPlayer[] {
   if (!Array.isArray(value)) return [];
   return value
     .filter((player): player is KotobaSenpukuPlayer => Boolean(player?.id && player?.name))
+    .slice(0, onlineRoomPlayerLimits.kotobaSenpuku)
     .map((player) => ({
       id: String(player.id).slice(0, 80),
       name: String(player.name).trim().slice(0, 20),
@@ -490,6 +492,7 @@ export async function applyStoredKotobaSenpukuAction(code: string, action: Kotob
       if (current.phase !== "lobby" || action.actorId !== action.player.id) throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
       if (current.passphrase && current.passphrase !== action.passphrase.trim()) throw new Error("KOTOBA_SENPUKU_BAD_PASSPHRASE");
       if (current.players.some((player) => player.id === action.actorId)) return current;
+      if (current.players.length >= onlineRoomPlayerLimits.kotobaSenpuku) throw new Error("KOTOBA_SENPUKU_ROOM_FULL");
       return addLog({ ...current, players: [...current.players, action.player] }, `${action.player.name}さんが参加しました。`);
     }
 
@@ -522,6 +525,7 @@ export async function applyStoredKotobaSenpukuAction(code: string, action: Kotob
     }
     if (action.type === "debug-add-player") {
       if (!actorIsHost || !current.debugMode || current.phase !== "lobby") throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
+      if (current.players.length >= onlineRoomPlayerLimits.kotobaSenpuku) throw new Error("KOTOBA_SENPUKU_ROOM_FULL");
       const dummyNumber = current.players.filter((player) => player.isDummy).length + 1;
       const colors = ["#38bdf8", "#a78bfa", "#f472b6", "#f59e0b", "#84cc16", "#14b8a6", "#fb7185"];
       return { ...current, players: [...current.players, { id: `dummy-${randomUUID()}`, name: `ダミー${dummyNumber}`, joinedAt: Date.now(), avatarColor: colors[(dummyNumber - 1) % colors.length], isDummy: true }] };
@@ -590,7 +594,7 @@ export async function listJoinableKotobaSenpukuRooms() {
   const rooms = await Promise.all(codes.map((code) => loadStoredKotobaSenpukuRoom(code)));
   const missingCodes = codes.filter((_, index) => !rooms[index]);
   if (missingCodes.length > 0) await redisCommand<number>(["SREM", roomIndexKey, ...missingCodes]);
-  return rooms.filter((room): room is KotobaSenpukuRoom => Boolean(room && room.phase === "lobby")).map(makeChoice).sort((left, right) => right.updatedAt - left.updatedAt);
+  return rooms.filter((room): room is KotobaSenpukuRoom => Boolean(room && room.phase === "lobby" && room.players.length < onlineRoomPlayerLimits.kotobaSenpuku)).map(makeChoice).sort((left, right) => right.updatedAt - left.updatedAt);
 }
 
 export async function deleteStoredKotobaSenpukuRoom(code: string, actorId: string) {

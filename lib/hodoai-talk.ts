@@ -1,4 +1,5 @@
 import type { GameDebugLogEntry } from "@/lib/game-debug-log";
+import { onlineRoomPlayerLimits } from "./online-room-policy.ts";
 
 export type HodoaiTheme = {
   id: string;
@@ -110,7 +111,7 @@ export const defaultHodoaiConfig: HodoaiConfig = {
 };
 
 // 0～120のカードは合計121枚。同期量と画面操作を守る参加者の安全上限は別途50人とする。
-export const hodoaiTechnicalPlayerLimit = 50;
+export const hodoaiTechnicalPlayerLimit = onlineRoomPlayerLimits.hodoai;
 
 export function normalizeHodoaiConfig(value: unknown): HodoaiConfig {
   const parsed = value && typeof value === "object" ? value as Partial<HodoaiConfig> : {};

@@ -130,6 +130,10 @@ export async function POST(request: Request) {
       telemetry.responseError("room.mutation", error, 409, logFields);
       return Response.json({ error: "Room already started" }, { status: 409 });
     }
+    if (error instanceof Error && error.message === "WORDWOLF_ROOM_FULL") {
+      telemetry.responseError("room.mutation", error, 409, logFields);
+      return Response.json({ error: "Room is full" }, { status: 409 });
+    }
     if (error instanceof Error && error.message === "WORDWOLF_BAD_PASSPHRASE") {
       telemetry.responseError("room.mutation", error, 401, logFields);
       return Response.json({ error: "Bad passphrase" }, { status: 401 });

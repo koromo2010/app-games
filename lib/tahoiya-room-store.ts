@@ -11,6 +11,7 @@ import { canDissolveOnlineRoom, canMoveFromOnlineRoom } from "@/lib/room-dissolv
 import { claimPlayerActiveRoom, releasePlayerActiveRoom } from "@/lib/player-active-room";
 import { normalizeOnlineRoomCode, onlineRoomPassphraseMaximumLength } from "@/lib/online-room-input";
 import { isAvatarColor, isAvatarImage } from "@/lib/player-session";
+import { onlineRoomPlayerLimits } from "@/lib/online-room-policy";
 
 const roomKeyPrefix = "tahoiya:room:";
 const roomIndexKey = "tahoiya:rooms";
@@ -49,6 +50,7 @@ function normalizePlayers(value: unknown): TahoiyaPlayer[] {
 
   return value
     .filter((player): player is TahoiyaPlayer => Boolean(player?.id && player?.name))
+    .slice(0, onlineRoomPlayerLimits.tahoiya)
     .map((player) => ({
       id: String(player.id).slice(0, 80),
       name: String(player.name).trim().slice(0, 40),
@@ -456,7 +458,7 @@ export async function joinStoredTahoiyaRoom(code: string, player: TahoiyaPlayer,
       if (current.phase !== "lobby") throw new Error("TAHOIYA_ROOM_STARTED");
       if (current.passphrase && current.passphrase !== passphrase.trim()) throw new Error("TAHOIYA_BAD_PASSPHRASE");
       if (current.players.some((item) => item.id === player.id)) return current;
-      if (current.players.length >= 8) throw new Error("TAHOIYA_ROOM_FULL");
+      if (current.players.length >= onlineRoomPlayerLimits.tahoiya) throw new Error("TAHOIYA_ROOM_FULL");
       return { ...current, players: [...current.players, player] };
     });
     await savePlayerActiveRooms(joined);
@@ -595,7 +597,7 @@ export async function listStoredTahoiyaRooms() {
 export async function listStoredJoinableTahoiyaRooms() {
   const rooms = await listStoredTahoiyaRooms();
   return rooms
-    .filter((room) => room.phase === "lobby" && room.players.length < 8)
+    .filter((room) => room.phase === "lobby" && room.players.length < onlineRoomPlayerLimits.tahoiya)
     .map(makeChoice)
     .sort((left, right) => right.updatedAt - left.updatedAt);
 }
