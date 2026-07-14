@@ -64,7 +64,7 @@ export function GamePlayerMenu(props: Props) {
           {defaultAvatarImages.map((option, index) => <button key={option} type="button" disabled={isSaving} aria-label={`標準アイコン ${index + 1}`} aria-pressed={image === option} onClick={() => void updateAvatar(color, option)} className={`h-10 w-10 rounded-full border-2 bg-cover bg-center ${image === option ? "border-cyan-500 ring-2 ring-cyan-200" : "border-slate-200"}`} style={{ backgroundColor: color, backgroundImage: `url(${option})` }} />)}
         </div>
         {message && <p className="mt-2 text-xs text-slate-600" role="status">{message}</p>}
-        <Link href="/users/me" target="_blank" rel="noreferrer" onClick={() => setIsOpen(false)} className="mt-3 flex w-full items-center justify-center rounded-md bg-cyan-600 px-3 py-2 text-sm font-bold text-white hover:bg-cyan-500">マイページを新しいタブで開く</Link>
+        <Link href="/users/me?popup=1" target="_blank" rel="noreferrer" onClick={() => setIsOpen(false)} className="mt-3 flex w-full items-center justify-center rounded-md bg-cyan-600 px-3 py-2 text-sm font-bold text-white hover:bg-cyan-500">マイページを新しいタブで開く</Link>
       </div></div>, document.body)}
     </>
   );
