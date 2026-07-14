@@ -5,6 +5,7 @@ import {
   loadPlayerAccountByEmail,
   normalizeEmail,
   resetPlayerAccountPassword,
+  saveResetPlayerAccountPassword,
 } from "@/lib/player-account-store";
 import { redisCommand } from "@/lib/redis-store";
 
@@ -77,18 +78,16 @@ export async function completePlayerPasswordReset(token: string, password: strin
   const prepared = await resetPlayerAccountPassword(loginName, password);
   const applyResetScript = `
     if redis.call("GET", KEYS[1]) ~= ARGV[1] then return 0 end
-    redis.call("SET", KEYS[2], ARGV[2])
     redis.call("DEL", KEYS[1])
     return 1
   `;
   const updated = await redisCommand<number>([
     "EVAL",
     applyResetScript,
-    "2",
+    "1",
     tokenKey,
-    prepared.accountKey,
     loginName,
-    JSON.stringify(prepared.updatedAccount),
   ]);
   if (updated !== 1) throw new Error("PLAYER_ACCOUNT_RESET_INVALID");
+  await saveResetPlayerAccountPassword(prepared.updatedAccount);
 }

@@ -3,6 +3,7 @@ import { normalizePlayerName } from "@/lib/player-session";
 import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
 import { createRequestTelemetry } from "@/lib/observability";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
+import { savePlayerAccountProfile } from "@/lib/player-account-store";
 
 function isStoreNotConfigured(error: unknown) {
   return error instanceof Error && (
@@ -61,6 +62,7 @@ export async function POST(request: Request) {
       avatarImage: typeof body.avatarImage === "string" ? body.avatarImage : null,
       createdAt: typeof body.createdAt === "number" ? body.createdAt : undefined,
     });
+    await savePlayerAccountProfile(authenticated.id, session);
 
     telemetry.success("auth.profile", logFields);
     return Response.json({ session });

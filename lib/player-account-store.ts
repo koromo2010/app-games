@@ -7,8 +7,16 @@ import {
 } from "@/lib/player-session";
 import { loadStoredPlayerSession, saveStoredPlayerSession } from "@/lib/player-store";
 import { redisCommand } from "@/lib/redis-store";
+import { isPostgresConfigured } from "@/lib/postgres-store";
+import {
+  createPostgresPlayerAccount,
+  loadPostgresPlayerAccountByEmail,
+  loadPostgresPlayerAccountByLogin,
+  savePostgresPlayerAccount,
+  updatePostgresPlayerAccountProfile,
+} from "@/lib/player-account-postgres-store";
 
-type PlayerAccount = {
+export type PlayerAccount = {
   version: 2;
   playerId: string;
   loginName: string;
@@ -102,7 +110,7 @@ function normalizeAccount(value: unknown): PlayerAccount | null {
   };
 }
 
-async function loadAccount(name: string) {
+async function loadRedisAccount(name: string) {
   const raw = await redisCommand<string | null>(["GET", accountKey(name)]);
   if (!raw) return null;
 
@@ -113,9 +121,56 @@ async function loadAccount(name: string) {
   }
 }
 
+async function loadRedisAccountByEmail(email: string) {
+  const loginName = await redisCommand<string | null>(["GET", playerAccountEmailKey(email)]);
+  return loginName ? loadRedisAccount(loginName) : null;
+}
+
+async function mirrorAccountToRedis(account: PlayerAccount) {
+  if (account.email) {
+    await redisCommand<number>([
+      "EVAL",
+      "redis.call('SET',KEYS[1],ARGV[1]); redis.call('SET',KEYS[2],ARGV[2]); return 1",
+      "2",
+      accountKey(account.loginName),
+      playerAccountEmailKey(account.email),
+      JSON.stringify(account),
+      account.loginName,
+    ]);
+    return;
+  }
+  await redisCommand<"OK">(["SET", accountKey(account.loginName), JSON.stringify(account)]);
+}
+
+async function loadAccount(name: string) {
+  const loginName = normalizeAccountName(name);
+  if (isPostgresConfigured()) {
+    try {
+      const stored = await loadPostgresPlayerAccountByLogin(loginName);
+      if (stored) return normalizeAccount(stored);
+    } catch {
+      // Redis remains the read fallback while the existing accounts are migrated.
+    }
+  }
+
+  const legacy = await loadRedisAccount(loginName);
+  if (legacy && isPostgresConfigured()) {
+    await savePostgresPlayerAccount(legacy).catch(() => undefined);
+  }
+  return legacy;
+}
+
 async function accountSession(account: PlayerAccount): Promise<PlayerSession> {
   const savedSession = await loadStoredPlayerSession(account.playerId).catch(() => null);
   if (savedSession) {
+    if (isPostgresConfigured()) {
+      await updatePostgresPlayerAccountProfile(account.playerId, {
+        name: savedSession.name,
+        avatarColor: savedSession.avatarColor,
+        avatarImage: savedSession.avatarImage,
+        updatedAt: savedSession.updatedAt,
+      }).catch(() => undefined);
+    }
     return saveStoredPlayerSession({
       ...savedSession,
       hasRecoveryEmail: Boolean(account.email),
@@ -168,7 +223,19 @@ export async function registerPlayerAccount(input: PlayerAccountAuthInput) {
     updatedAt: now,
   };
 
-  if (email) {
+  if (isPostgresConfigured()) {
+    const [legacyLogin, legacyEmail] = await Promise.all([
+      loadRedisAccount(loginName),
+      email ? loadRedisAccountByEmail(email) : Promise.resolve(null),
+    ]);
+    if (legacyLogin) throw new Error("PLAYER_ACCOUNT_ALREADY_EXISTS");
+    if (legacyEmail) throw new Error("PLAYER_ACCOUNT_EMAIL_ALREADY_EXISTS");
+
+    const created = await createPostgresPlayerAccount(account);
+    if (created === "login-exists") throw new Error("PLAYER_ACCOUNT_ALREADY_EXISTS");
+    if (created === "email-exists") throw new Error("PLAYER_ACCOUNT_EMAIL_ALREADY_EXISTS");
+    await mirrorAccountToRedis(account).catch(() => undefined);
+  } else if (email) {
     const createAccountScript = `
       if redis.call("EXISTS", KEYS[1]) == 1 then return 1 end
       if redis.call("EXISTS", KEYS[2]) == 1 then return 2 end
@@ -231,6 +298,19 @@ export async function updatePlayerAccountEmail(input: PlayerAccountAuthInput) {
       email,
       updatedAt: Date.now(),
     };
+    if (isPostgresConfigured()) {
+      const existing = await loadPostgresPlayerAccountByEmail(email);
+      if (existing && existing.loginName !== account.loginName) throw new Error("PLAYER_ACCOUNT_EMAIL_ALREADY_EXISTS");
+      try {
+        await savePostgresPlayerAccount(updatedAccount);
+      } catch (error) {
+        if (error instanceof Error && "code" in error && error.code === "23505") {
+          throw new Error("PLAYER_ACCOUNT_EMAIL_ALREADY_EXISTS");
+        }
+        throw error;
+      }
+    }
+
     const updateEmailScript = `
       local owner = redis.call("GET", KEYS[2])
       if owner and owner ~= ARGV[1] then return 1 end
@@ -239,7 +319,7 @@ export async function updatePlayerAccountEmail(input: PlayerAccountAuthInput) {
       if ARGV[3] == "1" and KEYS[3] ~= KEYS[2] then redis.call("DEL", KEYS[3]) end
       return 0
     `;
-    const result = await redisCommand<number>([
+    const updateRedis = () => redisCommand<number>([
       "EVAL",
       updateEmailScript,
       "3",
@@ -250,6 +330,7 @@ export async function updatePlayerAccountEmail(input: PlayerAccountAuthInput) {
       JSON.stringify(updatedAccount),
       previousEmail ? "1" : "0",
     ]);
+    const result = isPostgresConfigured() ? await updateRedis().catch(() => 0) : await updateRedis();
     if (result === 1) throw new Error("PLAYER_ACCOUNT_EMAIL_ALREADY_EXISTS");
     return accountSession(updatedAccount);
   }
@@ -259,8 +340,18 @@ export async function updatePlayerAccountEmail(input: PlayerAccountAuthInput) {
 
 export async function loadPlayerAccountByEmail(email: string) {
   if (!isValidEmail(email)) return null;
-  const loginName = await redisCommand<string | null>(["GET", playerAccountEmailKey(email)]);
-  return loginName ? loadAccount(loginName) : null;
+  const normalizedEmail = normalizeEmail(email);
+  if (isPostgresConfigured()) {
+    try {
+      const stored = await loadPostgresPlayerAccountByEmail(normalizedEmail);
+      if (stored) return normalizeAccount(stored);
+    } catch {
+      // Password reset remains available through the legacy index during migration.
+    }
+  }
+  const legacy = await loadRedisAccountByEmail(normalizedEmail);
+  if (legacy && isPostgresConfigured()) await savePostgresPlayerAccount(legacy).catch(() => undefined);
+  return legacy;
 }
 
 export async function resetPlayerAccountPassword(loginName: string, password: string) {
@@ -278,5 +369,22 @@ export async function resetPlayerAccountPassword(loginName: string, password: st
     passwordSalt,
     updatedAt: Date.now(),
   };
-  return { account, updatedAccount, accountKey: accountKey(account.loginName) };
+  return { account, updatedAccount };
+}
+
+export async function saveResetPlayerAccountPassword(account: PlayerAccount) {
+  if (isPostgresConfigured()) {
+    await savePostgresPlayerAccount(account);
+    await mirrorAccountToRedis(account).catch(() => undefined);
+    return;
+  }
+  await mirrorAccountToRedis(account);
+}
+
+export async function savePlayerAccountProfile(
+  playerId: string,
+  profile: Pick<PlayerSession, "name" | "avatarColor" | "avatarImage" | "updatedAt">,
+) {
+  if (!isPostgresConfigured()) return;
+  await updatePostgresPlayerAccountProfile(playerId, profile);
 }
