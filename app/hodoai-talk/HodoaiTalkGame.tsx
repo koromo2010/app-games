@@ -6,7 +6,7 @@ import { DebugModeButton } from "@/app/components/DebugModeButton";
 import { GamePhaseTimer } from "@/app/components/GamePhaseTimer";
 import { GameRulesDialog } from "@/app/components/GameRulesDialog";
 import { GameTopBanner, gameTopBannerOffsetClass } from "@/app/components/GameTopBanner";
-import { GameTopMenu, gameTopMenuDangerItemClass, gameTopMenuItemClass } from "@/app/components/GameTopMenu";
+import { GameTopMenu, gameTopBannerActionClass, gameTopBannerDangerActionClass, gameTopMenuItemClass } from "@/app/components/GameTopMenu";
 import { GamePlayerMenu } from "@/app/components/GamePlayerMenu";
 import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomResultActions } from "@/app/components/RoomResultActions";
@@ -364,7 +364,18 @@ export function HodoaiTalkGame() {
 
   return (
     <main className={`min-h-screen bg-[radial-gradient(circle_at_top,#0e7490_0%,#172033_35%,#020617_75%)] text-white ${gameTopBannerOffsetClass}`}>
-      <GameTopBanner eyebrow="Cooperative scale reading" title={<>ことばで数ならべ <span className="font-mono text-base text-amber-300">#{room.code}</span></>}><GameTopMenu><Link href="/games" data-menu-close="true" className={gameTopMenuItemClass}>ゲームロビーへ戻る</Link><button type="button" data-menu-close="true" onClick={() => setRulesOpen(true)} className={gameTopMenuItemClass}>ルール</button>{isHost && <DebugModeButton enabled={room.debugMode} disabled={isSaving || room.phase !== "lobby"} onAbort={room.debugMode && room.phase !== "lobby" ? () => runAction({ type: "abort-game", actorId: playerId }).then(() => undefined) : undefined} replayEnabled={room.debugReplayEnabled} replayDisabled={isSaving} onReplayChange={(enabled) => runAction({ type: "set-debug-replay", actorId: playerId, enabled }).then(() => undefined)} onChange={(enabled) => runAction({ type: "set-debug", actorId: playerId, enabled }).then(() => undefined)} />}{room.phase === "lobby" && (isHost ? <button type="button" data-menu-close="true" onClick={() => void dissolveRoom()} className={gameTopMenuDangerItemClass}>部屋を解散</button> : <button type="button" data-menu-close="true" onClick={() => void leaveRoom()} className={gameTopMenuItemClass}>退出</button>)}</GameTopMenu><GamePlayerMenu id={session.id} name={session.name} avatarColor={session.avatarColor} avatarImage={session.avatarImage} hasRecoveryEmail={session.hasRecoveryEmail} /></GameTopBanner>
+      <GameTopBanner eyebrow="Cooperative scale reading" title={<>ことばで数ならべ <span className="font-mono text-base text-amber-300">#{room.code}</span></>}>
+        {room.phase === "lobby" && (isHost
+          ? <button type="button" onClick={() => void dissolveRoom()} className={gameTopBannerDangerActionClass}>部屋を解散</button>
+          : <Link href="/games" className={gameTopBannerActionClass}>ゲームロビーへ戻る</Link>)}
+        <GameTopMenu>
+          {room.phase !== "lobby" && <Link href="/games" data-menu-close="true" className={gameTopMenuItemClass}>ゲームロビーへ戻る</Link>}
+          <button type="button" data-menu-close="true" onClick={() => setRulesOpen(true)} className={gameTopMenuItemClass}>ルール</button>
+          {isHost && <DebugModeButton enabled={room.debugMode} disabled={isSaving || room.phase !== "lobby"} onAbort={room.debugMode && room.phase !== "lobby" ? () => runAction({ type: "abort-game", actorId: playerId }).then(() => undefined) : undefined} replayEnabled={room.debugReplayEnabled} replayDisabled={isSaving} onReplayChange={(enabled) => runAction({ type: "set-debug-replay", actorId: playerId, enabled }).then(() => undefined)} onChange={(enabled) => runAction({ type: "set-debug", actorId: playerId, enabled }).then(() => undefined)} />}
+          {room.phase === "lobby" && !isHost && <button type="button" data-menu-close="true" onClick={() => void leaveRoom()} className={gameTopMenuItemClass}>退出</button>}
+        </GameTopMenu>
+        <GamePlayerMenu id={session.id} name={session.name} avatarColor={session.avatarColor} avatarImage={session.avatarImage} hasRecoveryEmail={session.hasRecoveryEmail} />
+      </GameTopBanner>
       <GameRulesDialog open={rulesOpen} title="ことばで数ならべのルール" onClose={() => setRulesOpen(false)}><p>各自に配られた0〜120の秘密の目盛りを、数字を使わない言葉のヒントへ変え、全員で低い順に並べる協力ゲームです。</p><ol className="mt-3 list-decimal space-y-2 pl-5"><li>全員がヒントを1つ提出します。</li><li>相談してホストが低い順へ並べます。</li><li>0組=3点、1組=2点、2〜3組=1点、4組以上=0点です。</li></ol><p className="mt-3 text-amber-200">未提出は時間切れでパス、並べ替え時間切れでは現在順を自動採点します。</p></GameRulesDialog>
       <div className="mx-auto grid max-w-6xl gap-4 px-4 py-5 lg:grid-cols-[280px_minmax(0,1fr)]">
         <aside className="space-y-4"><section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4"><div className="flex items-center justify-between"><h2 className="font-black">参加者</h2><span className="text-sm text-slate-400">{room.players.length}人</span></div><ul className="mt-3 max-h-[70vh] space-y-2 overflow-y-auto pr-1">{room.players.map((player) => <PlayerRow key={player.id} player={player} isHost={player.id === room.hostId} isMe={player.id === playerId} />)}</ul></section><RoomConfigSummary items={configItems} /></aside>

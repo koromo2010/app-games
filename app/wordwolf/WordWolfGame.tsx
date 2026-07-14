@@ -29,7 +29,7 @@ import { DebugModeButton } from "../components/DebugModeButton";
 import { GamePlayerMenu } from "../components/GamePlayerMenu";
 import { FullScreenPageOverlay } from "../components/FullScreenPageOverlay";
 import { GameTopBanner, gameTopBannerOffsetClass } from "../components/GameTopBanner";
-import { GameTopMenu, gameTopMenuItemClass } from "../components/GameTopMenu";
+import { GameTopMenu, gameTopBannerActionClass, gameTopBannerDangerActionClass, gameTopMenuItemClass } from "../components/GameTopMenu";
 import { DebugWordGenerationTest, type DebugWordGenerationResult } from "../components/DebugWordGenerationTest";
 import { GameFeedbackPanel } from "../components/GameFeedbackPanel";
 import { GameRulesDialog } from "../components/GameRulesDialog";
@@ -1368,8 +1368,11 @@ export function WordWolfGame() {
   return (
     <main className={`min-h-screen bg-slate-950 text-slate-950 ${gameTopBannerOffsetClass}`}>
       <GameTopBanner eyebrow="Room based social deduction" title="ワードウルフ・ラウンジ">
+        {(!room || room.phase === "lobby") && (room && isHost
+          ? <button type="button" onClick={() => void dissolveRoom()} className={gameTopBannerDangerActionClass}>部屋を解散</button>
+          : <Link href="/games" className={gameTopBannerActionClass}>ゲームロビーへ戻る</Link>)}
         <GameTopMenu>
-            <Link href="/games" data-menu-close="true" className={gameTopMenuItemClass}>ゲームロビーへ戻る</Link>
+            {room && room.phase !== "lobby" && <Link href="/games" data-menu-close="true" className={gameTopMenuItemClass}>ゲームロビーへ戻る</Link>}
             <button
               type="button"
               data-menu-close="true"

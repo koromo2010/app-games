@@ -18,7 +18,7 @@ import { DebugWordGenerationTest, type DebugWordGenerationResult } from "../comp
 import { GameFeedbackPanel } from "../components/GameFeedbackPanel";
 import { GameRulesDialog } from "../components/GameRulesDialog";
 import { GameTopBanner, gameTopBannerOffsetClass } from "../components/GameTopBanner";
-import { GameTopMenu, gameTopMenuItemClass } from "../components/GameTopMenu";
+import { GameTopMenu, gameTopBannerActionClass, gameTopBannerDangerActionClass, gameTopMenuItemClass } from "../components/GameTopMenu";
 import { GamePlayerMenu } from "../components/GamePlayerMenu";
 import { RoomConfigSummary } from "../components/RoomConfigSummary";
 import { RoomResultActions } from "../components/RoomResultActions";
@@ -963,8 +963,11 @@ export function TahoiyaGame() {
   return (
     <main className={`min-h-screen bg-slate-950 text-slate-950 ${gameTopBannerOffsetClass}`}>
       <GameTopBanner eyebrow="Dictionary bluffing" title="たほい屋">
+        {(!room || room.phase === "lobby") && (room && isHost
+          ? <button type="button" onClick={() => void dissolveRoom()} className={gameTopBannerDangerActionClass}>部屋を解散</button>
+          : <Link href="/games" className={gameTopBannerActionClass}>ゲームロビーへ戻る</Link>)}
         <GameTopMenu>
-            <Link href="/games" data-menu-close="true" className={gameTopMenuItemClass}>ゲームロビーへ戻る</Link>
+            {room && room.phase !== "lobby" && <Link href="/games" data-menu-close="true" className={gameTopMenuItemClass}>ゲームロビーへ戻る</Link>}
             <button type="button" data-menu-close="true" onClick={() => setRulesOpen(true)} className={gameTopMenuItemClass}>ルール</button>
             <PaidLlmAccessButton variant="menu" />
             {room && isHost && (

@@ -8,6 +8,8 @@ type Props = { children: ReactNode };
 
 export const gameTopMenuItemClass = "flex w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50";
 export const gameTopMenuDangerItemClass = "flex w-full items-center justify-center rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-bold text-rose-700 transition hover:bg-rose-100";
+export const gameTopBannerActionClass = "rounded-lg border border-white/20 bg-white/10 px-3 py-1.5 text-sm font-bold text-white transition hover:bg-white/20";
+export const gameTopBannerDangerActionClass = "rounded-lg border border-rose-300/50 bg-rose-500/15 px-3 py-1.5 text-sm font-bold text-rose-100 transition hover:bg-rose-500/25";
 
 export function GameTopMenu({ children }: Props) {
   const [isOpen, setIsOpen] = useState(false);
