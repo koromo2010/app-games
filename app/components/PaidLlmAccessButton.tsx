@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import Link from "next/link";
 import { freeGroqLlmModel, freeLlmModel, paidLlmModel } from "@/lib/llm-model";
+import { FullScreenPageOverlay } from "@/app/components/FullScreenPageOverlay";
 
 type AccessSource = "personal" | "game-fields" | null;
 type PersonalProvider = "openai" | "gemini" | "groq";
@@ -73,6 +73,7 @@ export function PaidLlmAccessButton() {
   const [gameFieldsPassword, setGameFieldsPassword] = useState("");
   const [message, setMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [isGuideOpen, setIsGuideOpen] = useState(false);
 
   const refreshStatus = async () => {
     try {
@@ -188,7 +189,7 @@ export function PaidLlmAccessButton() {
             <p className="mt-2 text-sm leading-6 text-slate-600">
               通常は無料のまま遊べますが、共有の無料APIは利用が重なると上限に達します。自分の無料枠や契約中のAI APIを設定すると、より安定して快適に遊べます。
             </p>
-            <Link href="/api-guide" target="_blank" rel="noreferrer" className="mt-3 flex items-center justify-between rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm font-bold text-cyan-900 transition hover:bg-cyan-100"><span>APIキーの取得・設定方法を新しいタブで見る</span><span aria-hidden="true">↗</span></Link>
+            <button type="button" onClick={() => setIsGuideOpen(true)} className="mt-3 flex w-full items-center justify-between rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm font-bold text-cyan-900 transition hover:bg-cyan-100"><span>APIキーの取得・設定方法を見る</span><span aria-hidden="true">→</span></button>
 
             <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
               <p>現在: {sourceLabel}</p>
@@ -305,6 +306,7 @@ export function PaidLlmAccessButton() {
         </div>,
         document.body,
       )}
+      <FullScreenPageOverlay open={isGuideOpen} href="/api-guide" title="APIキーの取得・設定方法" onClose={() => setIsGuideOpen(false)} />
     </>
   );
 }

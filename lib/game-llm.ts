@@ -104,7 +104,6 @@ export async function generateGameLlmText(
   const startedAt = Date.now();
   const quality = options.quality ?? "standard";
   const attemptedProviders: GameLlmProvider[] = [];
-  const errors: unknown[] = [];
 
   for (const provider of await providerOrder(mode, options)) {
     attemptedProviders.push(provider);
@@ -125,7 +124,6 @@ export async function generateGameLlmText(
         latencyMs: Date.now() - startedAt,
       };
     } catch (error) {
-      errors.push(error);
       const rawStatus = typeof error === "object" && error && "status" in error ? Number(error.status) : NaN;
       emitObservabilityEvent("warn", "ai.provider", {
         operation: "llm-gateway",
@@ -138,5 +136,5 @@ export async function generateGameLlmText(
     }
   }
 
-  throw new AggregateError(errors, "No paid or free LLM API completed the request.");
+  throw new Error("GAME_LLM_UNAVAILABLE");
 }

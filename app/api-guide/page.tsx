@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { EmbeddedPageBackLink } from "@/app/components/EmbeddedPageBackLink";
 
 export const metadata: Metadata = {
   title: "自分のAI APIを使う方法 | Game Fields",
@@ -55,7 +55,7 @@ export default function ApiGuidePage() {
             <ul className="mt-3 list-disc space-y-2 pl-5 text-sm leading-6 text-amber-950"><li>「無料枠」の条件や上限は各サービス側で変わります。作成前に公式の料金・制限を確認してください。</li><li>ゲーム専用のAPIキーを作り、サービス側で利用上限を設定することを推奨します。</li><li>APIキーをチャット、SNS、画面共有へ載せないでください。漏れた場合は提供元ですぐ無効化してください。</li><li>Game Fieldsではキーを暗号化したHttpOnly Cookieに8時間だけ保持し、アカウント、Redis、プレイバック、ログには保存しません。</li></ul>
           </section>
 
-          <div className="flex flex-wrap gap-3"><Link href="/games" className="rounded-lg bg-slate-950 px-5 py-3 font-bold text-white">ゲームロビーへ戻る</Link><span className="self-center text-sm text-slate-500">接続設定は各ゲーム上部の「API」から行えます。</span></div>
+          <div className="flex flex-wrap gap-3"><EmbeddedPageBackLink href="/games" className="rounded-lg bg-slate-950 px-5 py-3 font-bold text-white">戻る</EmbeddedPageBackLink><span className="self-center text-sm text-slate-500">接続設定は各ゲーム上部の「API」から行えます。</span></div>
         </div>
       </article>
     </main>

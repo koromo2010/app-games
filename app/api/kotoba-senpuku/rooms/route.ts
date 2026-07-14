@@ -13,6 +13,7 @@ import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/li
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
 import { actionRequiresDebugAccess, requirePlayerDebugAccess } from "@/lib/debug-access";
 import { gameApiAccessDeniedResponse } from "@/lib/game-access";
+import { authenticatedRoomDraft } from "@/lib/online-room-input";
 
 function errorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : "";
@@ -25,6 +26,7 @@ function errorResponse(error: unknown) {
   if (message === "KOTOBA_SENPUKU_ROOM_FULL") return Response.json({ error: "Room is full" }, { status: 409 });
   if (message === "KOTOBA_SENPUKU_NOT_ENOUGH_PLAYERS") return Response.json({ error: "Not enough players" }, { status: 409 });
   if (message === "KOTOBA_SENPUKU_ROOM_IN_PROGRESS") return Response.json({ error: "An active game cannot be dissolved" }, { status: 409 });
+  if (message === "KOTOBA_SENPUKU_PLAYER_ALREADY_ACTIVE") return Response.json({ error: "Finish or leave the current room before entering another room" }, { status: 409 });
   if (message === "KOTOBA_SENPUKU_NOT_YOUR_TURN" || message === "KOTOBA_SENPUKU_ROOM_FORBIDDEN") return Response.json({ error: "Room action is not allowed" }, { status: 403 });
   if (message === "KOTOBA_SENPUKU_INVALID_WORD") return Response.json({ error: "Invalid secret word" }, { status: 400 });
   if (message === "KOTOBA_SENPUKU_WORD_TOO_SHORT") return Response.json({ error: "Secret word is too short" }, { status: 400 });
@@ -74,7 +76,7 @@ export async function POST(request: Request) {
     const actorId = session.id!;
     const requestedRoom = body.room && typeof body.room === "object" ? body.room as { code?: unknown } : null;
     logFields = { ...logFields, roomRef: telemetry.roomRef(requestedRoom?.code), actorRef: telemetry.actorRef(actorId) };
-    const room = await createStoredKotobaSenpukuRoom(body.room, actorId);
+    const room = await createStoredKotobaSenpukuRoom(authenticatedRoomDraft(body.room, session), actorId);
     telemetry.success("room.mutation", { ...logFields, phase: room.phase, revision: room.revision, playerCount: room.players.length });
     return Response.json({ room: sanitizeKotobaSenpukuRoom(room, actorId) });
   } catch (error) {

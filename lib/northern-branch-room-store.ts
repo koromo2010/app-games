@@ -4,7 +4,10 @@ import { isMultiplayerRoomExpired, multiplayerRoomExpiryArgs, multiplayerRoomTtl
 import { redisCommand } from "@/lib/redis-store";
 import { recordNorthernBranchGameResults } from "@/lib/player-stats-store";
 import { recordNorthernBranchReplay } from "@/lib/game-replay-store";
-import { canDissolveOnlineRoom } from "@/lib/room-dissolve-policy";
+import { canDissolveOnlineRoom, canMoveFromOnlineRoom } from "@/lib/room-dissolve-policy";
+import { claimPlayerActiveRoom, releasePlayerActiveRoom, type ActiveRoomClaim } from "@/lib/player-active-room";
+import { normalizeOnlineRoomCode } from "@/lib/online-room-input";
+import { isAvatarColor, isAvatarImage } from "@/lib/player-session";
 import type {
   NorthernGameState,
   NorthernGameAction,
@@ -49,11 +52,11 @@ function normalizePlayers(value: unknown): NorthernRoomPlayer[] {
     .filter((player): player is NorthernRoomPlayer => Boolean(player?.id && player?.name))
     .slice(0, maximumPlayers)
     .map((player) => ({
-      id: String(player.id),
+      id: String(player.id).slice(0, 80),
       name: String(player.name).trim().slice(0, 20),
       joinedAt: typeof player.joinedAt === "number" ? player.joinedAt : Date.now(),
-      avatarColor: typeof player.avatarColor === "string" ? player.avatarColor : undefined,
-      avatarImage: typeof player.avatarImage === "string" ? player.avatarImage : undefined,
+      avatarColor: isAvatarColor(player.avatarColor ?? null) ? player.avatarColor : undefined,
+      avatarImage: isAvatarImage(player.avatarImage ?? null) ? player.avatarImage : undefined,
       isDummy: player.isDummy === true,
     }));
 }
@@ -70,7 +73,7 @@ function normalizeGame(value: unknown, playerIds: Set<string>): NorthernGameStat
 function normalizeRoom(value: unknown): NorthernRoom | null {
   if (!value || typeof value !== "object") return null;
   const parsed = value as Partial<NorthernRoom>;
-  const code = typeof parsed.code === "string" ? parsed.code.trim().toUpperCase() : "";
+  const code = normalizeOnlineRoomCode(parsed.code);
   const hostId = typeof parsed.hostId === "string" ? parsed.hostId : "";
   const players = normalizePlayers(parsed.players);
   if (!code || !hostId || players.length === 0 || !players.some((player) => player.id === hostId)) return null;
@@ -209,14 +212,36 @@ export async function createStoredNorthernRoom(value: unknown, actorId: string) 
     notice: "参加者を待っています。",
     updatedAt: Date.now(),
   };
-  const saved = await redisCommand<"OK" | null>(["SET", roomKey(created.code), JSON.stringify(created), "NX", ...multiplayerRoomExpiryArgs()]);
-  if (saved !== "OK") throw new Error("NORTHERN_ROOM_CONFLICT");
-  await redisCommand<number>(["SADD", roomIndexKey, created.code]);
-  await saveActiveRooms(created);
-  return created;
+  const activeRoom = await loadNorthernPlayerActiveRoom(actorId);
+  if (activeRoom && activeRoom.code !== created.code) {
+    if (!canMoveFromOnlineRoom("northern-branch", activeRoom)) throw new Error("NORTHERN_PLAYER_ALREADY_ACTIVE");
+    await releasePlayerActiveRoom(playerActiveRoomKey(actorId), activeRoom.code);
+  }
+  const claim = await claimPlayerActiveRoom(playerActiveRoomKey(actorId), created.code);
+  if (!claim) throw new Error("NORTHERN_PLAYER_ALREADY_ACTIVE");
+  try {
+    const saved = await redisCommand<"OK" | null>(["SET", roomKey(created.code), JSON.stringify(created), "NX", ...multiplayerRoomExpiryArgs()]);
+    if (saved !== "OK") throw new Error("NORTHERN_ROOM_CONFLICT");
+    await redisCommand<number>(["SADD", roomIndexKey, created.code]);
+    await saveActiveRooms(created);
+    return created;
+  } catch (error) {
+    if (claim === "claimed") await releasePlayerActiveRoom(playerActiveRoomKey(actorId), created.code);
+    throw error;
+  }
 }
 
 export async function applyStoredNorthernAction(code: string, action: NorthernRoomAction) {
+  let claim: ActiveRoomClaim | null = null;
+  if (action.type === "join-room") {
+    const activeRoom = await loadNorthernPlayerActiveRoom(action.actorId);
+    if (activeRoom && activeRoom.code !== code.trim().toUpperCase()) {
+      if (!canMoveFromOnlineRoom("northern-branch", activeRoom)) throw new Error("NORTHERN_PLAYER_ALREADY_ACTIVE");
+      await releasePlayerActiveRoom(playerActiveRoomKey(action.actorId), activeRoom.code);
+    }
+    claim = await claimPlayerActiveRoom(playerActiveRoomKey(action.actorId), code.trim().toUpperCase());
+    if (!claim) throw new Error("NORTHERN_PLAYER_ALREADY_ACTIVE");
+  }
   const room = await mutateStoredRoom(code, (current) => {
     if (action.type === "join-room") {
       if (current.phase !== "lobby" || action.actorId !== action.player.id) throw new Error("NORTHERN_ROOM_FORBIDDEN");
@@ -294,6 +319,9 @@ export async function applyStoredNorthernAction(code: string, action: NorthernRo
       };
     }
     return current;
+  }).catch(async (error) => {
+    if (action.type === "join-room" && claim === "claimed") await releasePlayerActiveRoom(playerActiveRoomKey(action.actorId), code);
+    throw error;
   });
   await redisCommand<number>(["SADD", roomIndexKey, room.code]);
   await saveActiveRooms(room);

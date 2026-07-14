@@ -19,6 +19,7 @@ import {
 } from "@/lib/player-session";
 import type { PlayerStatsGameFilter, PlayerStatsResponse } from "@/lib/player-stats-store";
 import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
+import { FullScreenPageOverlay } from "../components/FullScreenPageOverlay";
 import { games } from "./game-catalog";
 
 type AuthMode = "login" | "register";
@@ -140,6 +141,7 @@ export function GameLobby() {
   const [privateAccessKey, setPrivateAccessKey] = useState("");
   const [privateUnlocked, setPrivateUnlocked] = useState(false);
   const [isMobileInfoOpen, setIsMobileInfoOpen] = useState(false);
+  const [isMyPageOpen, setIsMyPageOpen] = useState(false);
 
   const loadStats = useCallback(async (targetPlayerId: string, gameFilter: PlayerStatsGameFilter) => {
     if (!targetPlayerId) return;
@@ -526,12 +528,13 @@ export function GameLobby() {
                         <input type="file" accept="image/*" disabled={isAvatarSaving} onChange={(event) => uploadAvatar(event.target.files?.[0])} className="sr-only" />
                       </label>
                     </div>
-                    <Link
-                      href="/users/me"
+                    <button
+                      type="button"
+                      onClick={() => setIsMyPageOpen(true)}
                       className="mt-3 flex w-full items-center justify-center rounded-md bg-cyan-600 px-3 py-2 text-sm font-bold text-white transition hover:bg-cyan-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/40"
                     >
                       マイページを開く
-                    </Link>
+                    </button>
                     <button
                       type="button"
                       onClick={() => setIsMobileInfoOpen(true)}
@@ -1000,6 +1003,7 @@ export function GameLobby() {
           </div>
         </div>
       </section>
+      <FullScreenPageOverlay open={isMyPageOpen} href="/users/me" title="マイページ" onClose={() => setIsMyPageOpen(false)} />
     </main>
   );
 }

@@ -302,16 +302,18 @@ async function deleteRoomFromStore(code: string, actorId: string) {
 }
 
 async function deleteHostedRoomsFromStore(ownerId: string, fallbackHostId: string) {
-  for (const localRoom of listRoomsLocally()) {
-    if (localRoom.ownerId === ownerId || (!localRoom.ownerId && localRoom.hostId === fallbackHostId)) {
-      deleteRoomLocally(localRoom.code);
-    }
-  }
   try {
     const params = new URLSearchParams({ ownerId, fallbackHostId });
-    await fetch(`/api/tahoiya/rooms?${params.toString()}`, { method: "DELETE" });
+    const response = await fetch(`/api/tahoiya/rooms?${params.toString()}`, { method: "DELETE" });
+    if (!response.ok) return false;
+    for (const localRoom of listRoomsLocally()) {
+      if (localRoom.ownerId === ownerId || (!localRoom.ownerId && localRoom.hostId === fallbackHostId)) {
+        deleteRoomLocally(localRoom.code);
+      }
+    }
+    return true;
   } catch {
-    // Local cleanup keeps room creation usable when Redis is unavailable.
+    return false;
   }
 }
 
@@ -563,7 +565,10 @@ export function TahoiyaGame() {
     }
 
     const ownerId = getOwnerId();
-    await deleteHostedRoomsFromStore(ownerId, playerId);
+    if (!await deleteHostedRoomsFromStore(ownerId, playerId)) {
+      setMessage("プレイ中の部屋があるため、新しい部屋は作れません。その部屋へ戻ってください。");
+      return;
+    }
     const host = createPlayer(playerName, avatarColor, avatarImage, playerId);
     const defaults = await loadRoomDefaultsFromStore(playerId, ownerId);
     const nextRoom = createEmptyRoom(host, passphrase, ownerId, defaults);

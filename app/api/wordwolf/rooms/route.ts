@@ -9,6 +9,7 @@ import {
   saveStoredWordWolfRoomAsHost,
 } from "@/lib/wordwolf-room-store";
 import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
+import { authenticatedRoomDraft } from "@/lib/online-room-input";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
 import { requirePlayerDebugAccess, roomRequestsDebugMode } from "@/lib/debug-access";
 
@@ -71,13 +72,16 @@ export async function POST(request: Request) {
       roomRef: telemetry.roomRef(body.action === "join" ? body.code : requestedRoom?.code),
       actorRef: telemetry.actorRef(player.id),
     };
+    const existingRoom = body.action === "join" || !requestedRoom?.code
+      ? null
+      : await loadStoredWordWolfRoom(String(requestedRoom.code));
     const room = body.action === "join"
       ? await joinStoredWordWolfRoom(
           typeof body.code === "string" ? body.code : "",
           { id: player.id, name: player.name, joinedAt: Date.now(), avatarColor: player.avatarColor, avatarImage: player.avatarImage ?? undefined },
           typeof body.passphrase === "string" ? body.passphrase : "",
         )
-      : await saveStoredWordWolfRoomAsHost(body.room, player.id);
+      : await saveStoredWordWolfRoomAsHost(existingRoom ? body.room : authenticatedRoomDraft(body.room, player), player.id);
     telemetry.success("room.mutation", { ...logFields, phase: room.phase, revision: room.revision, playerCount: room.players.length, debugMode: room.debugMode });
     return Response.json({ room: sanitizeWordWolfRoom(room, player.id) });
   } catch (error) {
@@ -105,6 +109,10 @@ export async function POST(request: Request) {
     if (error instanceof Error && error.message === "WORDWOLF_ROOM_CONFLICT") {
       telemetry.responseError("room.mutation", error, 409, logFields);
       return Response.json({ error: "Room was updated by another player" }, { status: 409 });
+    }
+    if (error instanceof Error && error.message === "WORDWOLF_PLAYER_ALREADY_ACTIVE") {
+      telemetry.responseError("room.mutation", error, 409, logFields);
+      return Response.json({ error: "Finish or leave the current room before entering another room" }, { status: 409 });
     }
     if (error instanceof Error && error.message === "WORDWOLF_ROOM_FORBIDDEN") {
       telemetry.responseError("room.mutation", error, 403, logFields);

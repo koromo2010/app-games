@@ -119,7 +119,8 @@ export function HodoaiTalkGame() {
       }
       setSession(savedSession);
       const lastCode = localStorage.getItem(lastRoomKey);
-      const savedRoom = lastCode ? await loadRoom(lastCode, savedSession.id) : await loadActiveRoom(savedSession.id);
+      const activeRoom = await loadActiveRoom(savedSession.id);
+      const savedRoom = activeRoom ?? (lastCode ? await loadRoom(lastCode, savedSession.id) : null);
       if (!active) return;
       timer = window.setTimeout(() => {
         if (savedRoom) {
@@ -213,7 +214,11 @@ export function HodoaiTalkGame() {
     setIsSaving(true);
     const ownerId = getOwnerId();
     try {
-      await fetch(`/api/hodoai/rooms?ownerId=${encodeURIComponent(ownerId)}&fallbackHostId=${encodeURIComponent(session.id)}`, { method: "DELETE" });
+      const deleteResponse = await fetch(`/api/hodoai/rooms?ownerId=${encodeURIComponent(ownerId)}&fallbackHostId=${encodeURIComponent(session.id)}`, { method: "DELETE" });
+      if (!deleteResponse.ok) {
+        setError(deleteResponse.status === 409 ? "プレイ中の部屋があります。先にその部屋へ戻ってください。" : "以前の部屋を整理できませんでした。");
+        return;
+      }
       const defaults = await loadPlayerRoomDefaults({ game: "hodoai-talk", playerId: session.id, localStorageKey: defaultsStorageKey, normalize: normalizeDefaults });
       const now = Date.now();
       const host: HodoaiPlayer = { id: session.id, name: session.name, joinedAt: now, avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined };

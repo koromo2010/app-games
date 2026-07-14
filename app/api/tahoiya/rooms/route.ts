@@ -14,6 +14,7 @@ import {
 import type { TahoiyaRoomAction } from "@/lib/tahoiya-types";
 import type { TahoiyaTopic } from "@/lib/tahoiya-types";
 import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
+import { authenticatedRoomDraft } from "@/lib/online-room-input";
 import { generateTahoiyaTopicResponse } from "@/app/api/tahoiya/topic/route";
 import { withGameGenerationCache } from "@/lib/game-generation-cache";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
@@ -81,7 +82,8 @@ export async function POST(request: Request) {
     const requestedRoom = body.room && typeof body.room === "object" ? body.room as { code?: unknown } : null;
     if (roomRequestsDebugMode(requestedRoom)) await requirePlayerDebugAccess(player.id);
     logFields = { ...logFields, roomRef: telemetry.roomRef(requestedRoom?.code), actorRef: telemetry.actorRef(player.id) };
-    const room = await saveStoredTahoiyaRoom(body.room, player.id);
+    const existingRoom = requestedRoom?.code ? await loadStoredTahoiyaRoom(String(requestedRoom.code)) : null;
+    const room = await saveStoredTahoiyaRoom(existingRoom ? body.room : authenticatedRoomDraft(body.room, player), player.id);
     telemetry.success("room.mutation", { ...logFields, phase: room.phase, revision: room.revision, playerCount: room.players.length });
     return Response.json({ room: sanitizeTahoiyaRoom(room, player.id) });
   } catch (error) {
@@ -102,6 +104,10 @@ export async function POST(request: Request) {
     if (error instanceof Error && error.message === "TAHOIYA_ROOM_FORBIDDEN") {
       telemetry.responseError("room.mutation", error, 403, logFields);
       return Response.json({ error: "Room update is not allowed" }, { status: 403 });
+    }
+    if (error instanceof Error && error.message === "TAHOIYA_PLAYER_ALREADY_ACTIVE") {
+      telemetry.responseError("room.mutation", error, 409, logFields);
+      return Response.json({ error: "Finish or leave the current room before entering another room" }, { status: 409 });
     }
     telemetry.failure("room.mutation", error, 500, logFields);
     return Response.json({ error: "Failed to save room" }, { status: 500 });
@@ -190,6 +196,10 @@ export async function PATCH(request: Request) {
     if (error instanceof Error && error.message === "TAHOIYA_ROOM_CONFLICT") {
       telemetry.responseError("room.command", error, 409, logFields);
       return Response.json({ error: "Room update conflicted; retry the action" }, { status: 409 });
+    }
+    if (error instanceof Error && error.message === "TAHOIYA_PLAYER_ALREADY_ACTIVE") {
+      telemetry.responseError("room.command", error, 409, logFields);
+      return Response.json({ error: "Finish or leave the current room before entering another room" }, { status: 409 });
     }
     if (error instanceof Error && error.message === "GAME_GENERATION_IN_PROGRESS") {
       telemetry.responseError("room.command", error, 409, logFields);

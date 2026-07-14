@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { createPortal } from "react-dom";
 import { useRef, useState } from "react";
 import { avatarColorOptions, clearPlayerSession, defaultAvatarImage, defaultAvatarImages, savePersistentPlayerSession } from "@/lib/player-session";
+import { FullScreenPageOverlay } from "@/app/components/FullScreenPageOverlay";
 
 type Props = { id?: string; name: string; avatarColor: string; avatarImage?: string | null; hasRecoveryEmail?: boolean };
 
@@ -14,6 +14,7 @@ export function GamePlayerMenu(props: Props) {
   const [message, setMessage] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isMyPageOpen, setIsMyPageOpen] = useState(false);
   const [position, setPosition] = useState({ top: 80, left: 12 });
   const buttonRef = useRef<HTMLButtonElement>(null);
 
@@ -82,9 +83,10 @@ export function GamePlayerMenu(props: Props) {
           {defaultAvatarImages.map((option, index) => <button key={option} type="button" disabled={isSaving} aria-label={`標準アイコン ${index + 1}`} aria-pressed={image === option} onClick={() => void updateAvatar(color, option)} className={`h-10 w-10 rounded-full border-2 bg-cover bg-center ${image === option ? "border-cyan-500 ring-2 ring-cyan-200" : "border-slate-200"}`} style={{ backgroundColor: color, backgroundImage: `url(${option})` }} />)}
         </div>
         {message && <p className="mt-2 text-xs text-slate-600" role="status">{message}</p>}
-        <Link href="/users/me?popup=1" target="_blank" rel="noreferrer" onClick={() => setIsOpen(false)} className="mt-3 flex w-full items-center justify-center rounded-md bg-cyan-600 px-3 py-2 text-sm font-bold text-white hover:bg-cyan-500">マイページを新しいタブで開く</Link>
+        <button type="button" onClick={() => { setIsOpen(false); setIsMyPageOpen(true); }} className="mt-3 flex w-full items-center justify-center rounded-md bg-cyan-600 px-3 py-2 text-sm font-bold text-white hover:bg-cyan-500">マイページを開く</button>
         {props.id && <button type="button" disabled={isLoggingOut} onClick={() => void logout()} className="mt-2 w-full rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-40">{isLoggingOut ? "ログアウト中..." : "ログアウト"}</button>}
       </div></div>, document.body)}
+      <FullScreenPageOverlay open={isMyPageOpen} href="/users/me" title="マイページ" onClose={() => setIsMyPageOpen(false)} />
     </>
   );
 }

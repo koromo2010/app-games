@@ -7,7 +7,10 @@ import { recordTahoiyaReplay } from "@/lib/game-replay-store";
 import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
 import { isMultiplayerRoomExpired, multiplayerRoomTtlSeconds } from "@/lib/multiplayer-room-lifecycle";
 import { commonGameTimeoutGraceMs } from "@/lib/game-timer/policy";
-import { canDissolveOnlineRoom } from "@/lib/room-dissolve-policy";
+import { canDissolveOnlineRoom, canMoveFromOnlineRoom } from "@/lib/room-dissolve-policy";
+import { claimPlayerActiveRoom, releasePlayerActiveRoom } from "@/lib/player-active-room";
+import { normalizeOnlineRoomCode, onlineRoomPassphraseMaximumLength } from "@/lib/online-room-input";
+import { isAvatarColor, isAvatarImage } from "@/lib/player-session";
 
 const roomKeyPrefix = "tahoiya:room:";
 const roomIndexKey = "tahoiya:rooms";
@@ -47,11 +50,11 @@ function normalizePlayers(value: unknown): TahoiyaPlayer[] {
   return value
     .filter((player): player is TahoiyaPlayer => Boolean(player?.id && player?.name))
     .map((player) => ({
-      id: String(player.id),
-      name: String(player.name),
+      id: String(player.id).slice(0, 80),
+      name: String(player.name).trim().slice(0, 40),
       joinedAt: typeof player.joinedAt === "number" ? player.joinedAt : Date.now(),
-      avatarColor: typeof player.avatarColor === "string" ? player.avatarColor : undefined,
-      avatarImage: typeof player.avatarImage === "string" ? player.avatarImage : undefined,
+      avatarColor: isAvatarColor(player.avatarColor ?? null) ? player.avatarColor : undefined,
+      avatarImage: isAvatarImage(player.avatarImage ?? null) ? player.avatarImage : undefined,
     }));
 }
 
@@ -82,7 +85,7 @@ function normalizeRoom(value: unknown): TahoiyaRoom | null {
   if (!value || typeof value !== "object") return null;
 
   const parsed = value as Partial<TahoiyaRoom>;
-  const code = typeof parsed.code === "string" ? parsed.code.trim().toUpperCase() : "";
+  const code = normalizeOnlineRoomCode(parsed.code);
   const hostId = typeof parsed.hostId === "string" ? parsed.hostId : "";
   const players = normalizePlayers(parsed.players);
   const parentId = typeof parsed.parentId === "string" ? parsed.parentId : hostId;
@@ -95,7 +98,7 @@ function normalizeRoom(value: unknown): TahoiyaRoom | null {
     revision: typeof parsed.revision === "number" ? Math.max(0, Math.floor(parsed.revision)) : 0,
     hostId,
     ownerId: typeof parsed.ownerId === "string" ? parsed.ownerId : undefined,
-    passphrase: typeof parsed.passphrase === "string" ? parsed.passphrase : "",
+    passphrase: typeof parsed.passphrase === "string" ? parsed.passphrase.slice(0, onlineRoomPassphraseMaximumLength) : "",
     phase: isPhase(parsed.phase) ? parsed.phase : "lobby",
     debugMode: Boolean(parsed.debugMode),
     debugReplayEnabled: Boolean(parsed.debugMode && parsed.debugReplayEnabled),
@@ -374,14 +377,27 @@ export async function saveStoredTahoiyaRoom(room: unknown, actorId = "") {
   if (!existingRoom) {
     if (actorId && actorId !== normalizedRoom.hostId) throw new Error("TAHOIYA_ROOM_FORBIDDEN");
     const createdRoom = { ...normalizedRoom, revision: 0, updatedAt: Date.now() };
-    const created = await redisCommand<"OK" | null>([
-      "SET", roomKey(createdRoom.code), JSON.stringify(createdRoom), "NX", "EX", String(multiplayerRoomTtlSeconds),
-    ]);
-    if (created === "OK") {
-      await redisCommand<number>(["SADD", roomIndexKey, createdRoom.code]);
-      await savePlayerActiveRooms(createdRoom);
-      return createdRoom;
+    const activeRoom = actorId ? await loadStoredTahoiyaPlayerActiveRoom(actorId) : null;
+    if (activeRoom && activeRoom.code !== createdRoom.code) {
+      if (!canMoveFromOnlineRoom("tahoiya", activeRoom)) throw new Error("TAHOIYA_PLAYER_ALREADY_ACTIVE");
+      await releasePlayerActiveRoom(playerActiveRoomKey(actorId), activeRoom.code);
     }
+    const claim = actorId ? await claimPlayerActiveRoom(playerActiveRoomKey(actorId), createdRoom.code) : "already-claimed";
+    if (!claim) throw new Error("TAHOIYA_PLAYER_ALREADY_ACTIVE");
+    try {
+      const created = await redisCommand<"OK" | null>([
+        "SET", roomKey(createdRoom.code), JSON.stringify(createdRoom), "NX", "EX", String(multiplayerRoomTtlSeconds),
+      ]);
+      if (created === "OK") {
+        await redisCommand<number>(["SADD", roomIndexKey, createdRoom.code]);
+        await savePlayerActiveRooms(createdRoom);
+        return createdRoom;
+      }
+    } catch (error) {
+      if (actorId && claim === "claimed") await releasePlayerActiveRoom(playerActiveRoomKey(actorId), createdRoom.code);
+      throw error;
+    }
+    if (actorId && claim === "claimed") await releasePlayerActiveRoom(playerActiveRoomKey(actorId), createdRoom.code);
   }
 
   const savedRoom = await mutateStoredTahoiyaRoom(normalizedRoom.code, (current) => {
@@ -427,15 +443,28 @@ export async function saveStoredTahoiyaRoom(room: unknown, actorId = "") {
 }
 
 export async function joinStoredTahoiyaRoom(code: string, player: TahoiyaPlayer, passphrase: string) {
-  const joined = await mutateStoredTahoiyaRoom(code, (current) => {
-    if (current.phase !== "lobby") throw new Error("TAHOIYA_ROOM_STARTED");
-    if (current.passphrase && current.passphrase !== passphrase.trim()) throw new Error("TAHOIYA_BAD_PASSPHRASE");
-    if (current.players.some((item) => item.id === player.id)) return current;
-    if (current.players.length >= 8) throw new Error("TAHOIYA_ROOM_FULL");
-    return { ...current, players: [...current.players, player] };
-  });
-  await savePlayerActiveRooms(joined);
-  return joined;
+  const normalizedCode = code.trim().toUpperCase();
+  const activeRoom = await loadStoredTahoiyaPlayerActiveRoom(player.id);
+  if (activeRoom && activeRoom.code !== normalizedCode) {
+    if (!canMoveFromOnlineRoom("tahoiya", activeRoom)) throw new Error("TAHOIYA_PLAYER_ALREADY_ACTIVE");
+    await releasePlayerActiveRoom(playerActiveRoomKey(player.id), activeRoom.code);
+  }
+  const claim = await claimPlayerActiveRoom(playerActiveRoomKey(player.id), normalizedCode);
+  if (!claim) throw new Error("TAHOIYA_PLAYER_ALREADY_ACTIVE");
+  try {
+    const joined = await mutateStoredTahoiyaRoom(normalizedCode, (current) => {
+      if (current.phase !== "lobby") throw new Error("TAHOIYA_ROOM_STARTED");
+      if (current.passphrase && current.passphrase !== passphrase.trim()) throw new Error("TAHOIYA_BAD_PASSPHRASE");
+      if (current.players.some((item) => item.id === player.id)) return current;
+      if (current.players.length >= 8) throw new Error("TAHOIYA_ROOM_FULL");
+      return { ...current, players: [...current.players, player] };
+    });
+    await savePlayerActiveRooms(joined);
+    return joined;
+  } catch (error) {
+    if (claim === "claimed") await releasePlayerActiveRoom(playerActiveRoomKey(player.id), normalizedCode);
+    throw error;
+  }
 }
 
 export async function startStoredTahoiyaRound(code: string, actorId: string, topic: TahoiyaTopic) {

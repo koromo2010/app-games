@@ -13,6 +13,7 @@ import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/li
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
 import { actionRequiresDebugAccess, requirePlayerDebugAccess } from "@/lib/debug-access";
 import { gameApiAccessDeniedResponse } from "@/lib/game-access";
+import { authenticatedRoomDraft } from "@/lib/online-room-input";
 
 function errorResponse(error: unknown) {
   if (error instanceof Error && error.message === "PLAYER_AUTH_REQUIRED") return Response.json({ error: "Login required" }, { status: 401 });
@@ -24,6 +25,7 @@ function errorResponse(error: unknown) {
   if (error instanceof Error && error.message === "NORTHERN_ROOM_FULL") return Response.json({ error: "Room is full" }, { status: 409 });
   if (error instanceof Error && error.message === "NORTHERN_NOT_ENOUGH_PLAYERS") return Response.json({ error: "Not enough players" }, { status: 409 });
   if (error instanceof Error && error.message === "NORTHERN_ROOM_IN_PROGRESS") return Response.json({ error: "An active game cannot be dissolved" }, { status: 409 });
+  if (error instanceof Error && error.message === "NORTHERN_PLAYER_ALREADY_ACTIVE") return Response.json({ error: "Finish or leave the current room before entering another room" }, { status: 409 });
   if (error instanceof Error && error.message === "NORTHERN_NOT_YOUR_TURN") return Response.json({ error: "Not your turn" }, { status: 403 });
   if (error instanceof Error && error.message.startsWith("NORTHERN_ACTION_INVALID:")) return Response.json({ error: error.message.slice("NORTHERN_ACTION_INVALID:".length) }, { status: 400 });
   if (error instanceof Error && error.message === "NORTHERN_ROOM_FORBIDDEN") return Response.json({ error: "Room action is not allowed" }, { status: 403 });
@@ -72,7 +74,7 @@ export async function POST(request: Request) {
     const actorId = session.id!;
     const requestedRoom = body.room && typeof body.room === "object" ? body.room as { code?: unknown } : null;
     logFields = { ...logFields, roomRef: telemetry.roomRef(requestedRoom?.code), actorRef: telemetry.actorRef(actorId) };
-    const room = await createStoredNorthernRoom(body.room, actorId);
+    const room = await createStoredNorthernRoom(authenticatedRoomDraft(body.room, session), actorId);
     telemetry.success("room.mutation", { ...logFields, phase: room.phase, revision: room.revision, playerCount: room.players.length });
     return Response.json({ room: sanitizeNorthernRoom(room, actorId) });
   } catch (error) {

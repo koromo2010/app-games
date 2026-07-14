@@ -27,6 +27,7 @@ import {
 import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
 import { DebugModeButton } from "../components/DebugModeButton";
 import { GamePlayerMenu } from "../components/GamePlayerMenu";
+import { FullScreenPageOverlay } from "../components/FullScreenPageOverlay";
 import { GameTopBanner, gameTopBannerOffsetClass } from "../components/GameTopBanner";
 import { DebugWordGenerationTest, type DebugWordGenerationResult } from "../components/DebugWordGenerationTest";
 import { GameFeedbackPanel } from "../components/GameFeedbackPanel";
@@ -456,15 +457,16 @@ async function deleteRoomFromStore(code: string) {
 }
 
 async function deleteHostedRoomsFromStore(ownerId: string, fallbackHostId: string) {
-  deleteHostedRooms(ownerId, fallbackHostId);
-
   try {
     const params = new URLSearchParams({ ownerId, fallbackHostId });
-    await fetch(`/api/wordwolf/rooms?${params.toString()}`, {
+    const response = await fetch(`/api/wordwolf/rooms?${params.toString()}`, {
       method: "DELETE",
     });
+    if (!response.ok) return false;
+    deleteHostedRooms(ownerId, fallbackHostId);
+    return true;
   } catch {
-    // Keep local fallback behavior.
+    return false;
   }
 }
 
@@ -565,6 +567,7 @@ export function WordWolfGame() {
   const [isAvatarPickerOpen, setIsAvatarPickerOpen] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [isRulesOpen, setIsRulesOpen] = useState(false);
+  const [isMyPageOpen, setIsMyPageOpen] = useState(false);
   const timeoutActionKeyRef = useRef("");
   const roomCode = room?.code;
   const roomPhase = room?.phase;
@@ -590,10 +593,8 @@ export function WordWolfGame() {
 
         const lastCode = localStorage.getItem("wordwolf-last-room");
         const lastPlayer = localStorage.getItem("wordwolf-last-player");
-        let savedRoom = lastCode ? await loadRoomFromStore(lastCode) : null;
-        if (!savedRoom && accountId) {
-          savedRoom = await loadActiveRoomFromStore(accountId);
-        }
+        let savedRoom = accountId ? await loadActiveRoomFromStore(accountId) : null;
+        if (!savedRoom && lastCode) savedRoom = await loadRoomFromStore(lastCode);
 
         if (!isMounted || !savedRoom) return;
 
@@ -857,7 +858,10 @@ export function WordWolfGame() {
 
     const ownerId = getOwnerId();
     const fallbackHostId = activePlayerId || localStorage.getItem("wordwolf-last-player") || "";
-    await deleteHostedRoomsFromStore(ownerId, fallbackHostId);
+    if (!await deleteHostedRoomsFromStore(ownerId, fallbackHostId)) {
+      setError("プレイ中の部屋があるため、新しい部屋は作れません。その部屋へ戻ってください。");
+      return;
+    }
 
     const defaults = await loadRoomDefaultsFromStore(playerAccountId, ownerId);
     const created = createEmptyRoom(name, passphrase, ownerId, avatarColor, avatarImage, playerAccountId, defaults);
@@ -1464,9 +1468,9 @@ export function WordWolfGame() {
                       デフォルト画像に戻す
                     </button>
                   )}
-                  <Link href="/users/me?popup=1" target="_blank" rel="noreferrer" className="mt-3 flex w-full items-center justify-center rounded-md bg-cyan-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-cyan-500">
-                    マイページを新しいタブで開く
-                  </Link>
+                  <button type="button" onClick={() => setIsMyPageOpen(true)} className="mt-3 flex w-full items-center justify-center rounded-md bg-cyan-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-cyan-500">
+                    マイページを開く
+                  </button>
                 </div>
               )}
             </div>
@@ -1486,6 +1490,8 @@ export function WordWolfGame() {
             )}
             <GamePlayerMenu id={playerAccountId || undefined} name={headerName} avatarColor={headerAvatarColor} avatarImage={headerAvatarImage} />
       </GameTopBanner>
+
+      <FullScreenPageOverlay open={isMyPageOpen} href="/users/me" title="マイページ" onClose={() => setIsMyPageOpen(false)} />
 
       <GameRulesDialog open={isRulesOpen} title="ワードウルフのルール" onClose={() => setIsRulesOpen(false)}>
         <p>自分だけ少数派かもしれない状態で会話し、投票で違うお題を持つ狼を探します。自分の役割も仲間も表示されません。</p>

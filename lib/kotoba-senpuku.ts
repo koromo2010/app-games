@@ -200,6 +200,7 @@ export function isValidKotobaSenpukuWord(value: unknown) {
   const word = normalizeKotobaSenpukuWord(value);
   return (
     word.length > 0 &&
+    [...word].length <= 100 &&
     /^[ぁ-んー]+$/.test(word) &&
     /[ぁ-ん]/.test(word)
   );

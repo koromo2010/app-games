@@ -8,3 +8,7 @@ export function canDissolveOnlineRoom(gameId: DissolvableGameId, room: RoomState
   if (gameId === "hodoai") return room.phase === "result" && room.round === room.roundsTotal;
   return room.phase === "result";
 }
+
+export function canMoveFromOnlineRoom(gameId: DissolvableGameId, room: RoomState) {
+  return room.phase !== "lobby" && canDissolveOnlineRoom(gameId, room);
+}
