@@ -933,9 +933,9 @@ export function GameLobby() {
                   : "border-white/10 bg-white/[0.96]"
               }`}>
                 <div className={`h-14 rounded-md bg-gradient-to-br ${game.accent} ${isActiveGame ? "ring-2 ring-white/50" : ""}`} />
-                <div className="mt-3 flex items-start justify-between gap-2">
+                <div className="mt-3">
                   <h2 className={`text-lg font-black leading-tight ${isActiveGame ? "text-white" : "text-slate-950"}`}>{game.title}</h2>
-                  <span className={`shrink-0 rounded-md border px-2 py-1 text-[11px] font-black ${
+                  <span className={`mt-2 inline-flex max-w-full rounded-md border px-2 py-1 text-[11px] font-black leading-tight ${
                     isActiveGame
                       ? "border-amber-200 bg-amber-300 text-amber-950 shadow-[0_0_18px_rgba(252,211,77,0.45)]"
                       : "border-slate-200 bg-slate-50 text-slate-600"
