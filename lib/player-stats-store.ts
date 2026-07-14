@@ -161,7 +161,7 @@ export async function recordTahoiyaRoundResults(room: TahoiyaRoom) {
 
 export async function recordHodoaiGameResults(room: HodoaiRoom) {
   if (room.phase !== "result" || room.round < room.roundsTotal || room.debugMode) return 0;
-  const maxPoints = room.roundsTotal * 3;
+  const maxPoints = 3;
   const won = maxPoints > 0 && room.totalPoints / maxPoints >= 0.5;
   const realPlayers = room.players.filter((player) => !player.isDummy);
   const eventId = `hodoai:${room.code}:${room.createdAt}:${room.gameNumber ?? 1}`;

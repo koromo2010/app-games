@@ -314,26 +314,28 @@ export async function recordTahoiyaReplay(room: TahoiyaRoom) {
 export async function recordHodoaiReplay(room: HodoaiRoom) {
   if (room.phase !== "result" || room.round < room.roundsTotal || !shouldRecordGameReplay(room)) return false;
   const players = room.players.filter((player) => !player.isDummy);
-  const maxPoints = room.roundsTotal * 3;
-  const perfectRounds = room.history.filter((round) => round.inversions === 0).length;
+  const maxPoints = 3;
+  const result = room.history.at(-1);
   const resultLabel = `${room.totalPoints}/${maxPoints}点`;
   const names = new Map(room.players.map((player) => [player.id, player.name]));
-  const details = room.history.flatMap((round) => [
-    `ROUND ${round.round}「${round.theme.title}」: ${round.points}/3点・並べ違い${round.inversions}組`,
-    ...round.order.map((id, index) => {
-      const card = round.cards.find((item) => item.id === id);
-      return `${index + 1}. ${names.get(card?.ownerId ?? "") ?? "Unknown"}（カード${card?.cardNumber ?? 1}）「${round.clues[id] ?? ""}」→数字${round.values[id] ?? 0}`;
+  const details = result ? [
+    ...result.clueRounds.map((clueRound) => `ことば${clueRound.round}「${clueRound.theme.title}」`),
+    `最終並び: ${result.points}/3点・並べ違い${result.inversions}組`,
+    ...result.order.map((id, index) => {
+      const card = result.cards.find((item) => item.id === id);
+      const clues = result.clueRounds.map((clueRound) => clueRound.clues[id]).filter(Boolean).join(" / ");
+      return `${index + 1}. ${names.get(card?.ownerId ?? "") ?? "Unknown"}（カード${card?.cardNumber ?? 1}）「${clues}」→数字${result.values[id] ?? 0}`;
     }),
-  ]);
+  ] : [];
   const base = makeReplayBase(
     `hodoai:${room.code}:${room.createdAt}:${room.gameNumber ?? 1}`,
     "hodoai",
     room.updatedAt || Date.now(),
     room.gameNumber ?? 1,
-    `全${room.roundsTotal}ラウンド`,
+    `同じカードでことば${room.roundsTotal}回`,
     players,
     Object.fromEntries(players.map((player) => [player.id, resultLabel])),
-    [`チーム得点 ${resultLabel}`, `完全一致は${perfectRounds}ラウンド`, `全${room.roundsTotal}テーマに挑戦`],
+    [`チーム得点 ${resultLabel}`, result?.inversions === 0 ? "全カードの並びが完全一致" : `並び違い${result?.inversions ?? 0}組`, `全${room.roundsTotal}テーマに挑戦`],
   );
   return storeReplay({ ...base, gameType: "hodoai", overview: `協力して${resultLabel}を獲得`, highlights: cleanLines(details), scoreLabels: Object.fromEntries(players.map((player) => [player.id, resultLabel])) }, room.code);
 }

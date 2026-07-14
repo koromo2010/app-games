@@ -32,12 +32,19 @@ export type HodoaiConfig = {
   debugMode: boolean;
 };
 
+export type HodoaiClueRound = {
+  round: number;
+  theme: HodoaiTheme;
+  clues: Record<string, string>;
+};
+
 export type HodoaiRoundResult = {
   round: number;
   theme: HodoaiTheme;
   inversions: number;
   points: number;
   cards: HodoaiCard[];
+  clueRounds: HodoaiClueRound[];
   order: string[];
   values: Record<string, number>;
   clues: Record<string, string>;
@@ -58,6 +65,7 @@ export type HodoaiRoom = HodoaiConfig & {
   cards: HodoaiCard[];
   values: Record<string, number>;
   clues: Record<string, string>;
+  clueHistory: HodoaiClueRound[];
   order: string[];
   totalPoints: number;
   history: HodoaiRoundResult[];
@@ -87,7 +95,6 @@ export type HodoaiRoomAction =
   | { type: "submit-clue"; actorId: string; round: number; cardId: string; text: string }
   | { type: "reorder"; actorId: string; round: number; order: string[] }
   | { type: "score-round"; actorId: string; round: number; force?: boolean }
-  | { type: "next-round"; actorId: string; round: number }
   | { type: "reset-game"; actorId: string }
   | { type: "abort-game"; actorId: string }
   | { type: "debug-fill-clues"; actorId: string; round: number }
@@ -152,7 +159,7 @@ export function shuffleHodoai<T>(items: T[]) {
   return result;
 }
 
-export function pickHodoaiTheme(history: HodoaiRoundResult[]) {
+export function pickHodoaiTheme(history: Array<{ theme: HodoaiTheme }>) {
   const used = new Set(history.map((result) => result.theme.id));
   const unused = hodoaiThemes.filter((theme) => !used.has(theme.id));
   const candidates = unused.length > 0 ? unused : hodoaiThemes;
@@ -187,6 +194,10 @@ export function pointsForInversions(inversions: number) {
   return 0;
 }
 
+export function hodoaiClueRoundDestination(round: number, roundsTotal: number): "clue" | "arrange" {
+  return round < roundsTotal ? "clue" : "arrange";
+}
+
 export function hodoaiFinalMessage(points: number, maxPoints: number) {
   const ratio = maxPoints > 0 ? points / maxPoints : 0;
   if (ratio >= 0.85) return "息ぴったり！ 言葉の距離感がよくそろいました。";
@@ -195,15 +206,16 @@ export function hodoaiFinalMessage(points: number, maxPoints: number) {
   return "大発見の連続！ みんなの違いがよく見えました。";
 }
 
-export function hodoaiGameShareText(room: Pick<HodoaiRoom, "totalPoints" | "roundsTotal" | "history">) {
-  const maxPoints = room.roundsTotal * 3;
-  const rounds = room.history.map((result) => `第${result.round}R「${result.theme.title}」 ${result.points}/3点（全${result.cards.length}枚・並び違い${result.inversions}組）`);
+export function hodoaiGameShareText(room: Pick<HodoaiRoom, "totalPoints" | "history">) {
+  const result = room.history.at(-1);
+  const rounds = result?.clueRounds.map((clueRound) => `ことば${clueRound.round}「${clueRound.theme.title}」`) ?? [];
   return [
     "ことばで数ならべ プレイログ",
-    `チーム得点 ${room.totalPoints}/${maxPoints}点`,
+    `チーム得点 ${room.totalPoints}/3点`,
     ...rounds,
+    result ? `最終並び：全${result.cards.length}枚・並び違い${result.inversions}組` : "",
     "#GameFields",
-  ].join("\n");
+  ].filter(Boolean).join("\n");
 }
 
 export const clueHasNumber = (clue: string) => /[0-9０-９〇零一二三四五六七八九十百]/.test(clue);

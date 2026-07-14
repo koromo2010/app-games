@@ -14,6 +14,7 @@ import {
   countHodoaiInversions,
   dealHodoaiCards,
   hodoaiThemes,
+  hodoaiClueRoundDestination,
   hodoaiTechnicalPlayerLimit,
   normalizeHodoaiConfig,
   pickHodoaiTheme,
@@ -21,6 +22,7 @@ import {
   shuffleHodoai,
   type HodoaiPhase,
   type HodoaiCard,
+  type HodoaiClueRound,
   type HodoaiPlayer,
   type HodoaiRoom,
   type HodoaiRoomAction,
@@ -42,8 +44,7 @@ const hodoaiDebugActionLabels: Record<HodoaiRoomAction["type"], string> = {
   "start-game": "ゲームを開始",
   "submit-clue": "ヒントを提出",
   reorder: "ヒントの順番を変更",
-  "score-round": "ラウンドを採点",
-  "next-round": "次のラウンドを開始",
+  "score-round": "最終並びを採点",
   "reset-game": "同じ部屋で再戦準備",
   "abort-game": "ゲームを中断",
   "debug-fill-clues": "未提出ヒントを自動入力",
@@ -103,6 +104,21 @@ function normalizeTheme(value: unknown): HodoaiTheme | null {
   return { id: theme.id, title: theme.title, lowLabel: theme.lowLabel, highLabel: theme.highLabel };
 }
 
+function normalizeClueRounds(value: unknown): HodoaiClueRound[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object") return [];
+    const clueRound = item as Partial<HodoaiClueRound>;
+    const theme = normalizeTheme(clueRound.theme);
+    if (!theme) return [];
+    return [{
+      round: typeof clueRound.round === "number" ? Math.max(1, Math.floor(clueRound.round)) : 1,
+      theme,
+      clues: normalizeStringRecord(clueRound.clues),
+    }];
+  }).slice(0, 4);
+}
+
 function cardOwnerFromId(id: string, players: HodoaiPlayer[]) {
   return players.find((player) => id === player.id || id.startsWith(`${player.id}:card-`))?.id ?? "";
 }
@@ -135,12 +151,16 @@ function normalizeHistory(value: unknown, players: HodoaiPlayer[]): HodoaiRoundR
     const theme = normalizeTheme(result.theme);
     if (!theme) return [];
     const order = Array.isArray(result.order) ? result.order.filter((id): id is string => typeof id === "string") : [];
+    const normalizedClueRounds = normalizeClueRounds(result.clueRounds);
     return [{
       round: typeof result.round === "number" ? Math.max(1, Math.floor(result.round)) : 1,
       theme,
       inversions: typeof result.inversions === "number" ? Math.max(0, Math.floor(result.inversions)) : 0,
       points: typeof result.points === "number" ? Math.max(0, Math.min(3, Math.floor(result.points))) : 0,
       cards: normalizeCards(result.cards, players, order),
+      clueRounds: normalizedClueRounds.length > 0
+        ? normalizedClueRounds
+        : [{ round: typeof result.round === "number" ? Math.max(1, Math.floor(result.round)) : 1, theme, clues: normalizeStringRecord(result.clues) }],
       order,
       values: normalizeNumberRecord(result.values),
       clues: normalizeStringRecord(result.clues),
@@ -157,6 +177,16 @@ function normalizeRoom(value: unknown): HodoaiRoom | null {
   if (!code || !hostId || players.length === 0 || !players.some((player) => player.id === hostId)) return null;
   const config = normalizeHodoaiConfig(parsed);
   const history = normalizeHistory(parsed.history, players);
+  const theme = normalizeTheme(parsed.theme);
+  const clues = normalizeStringRecord(parsed.clues);
+  const storedClueHistory = normalizeClueRounds(parsed.clueHistory);
+  const clueHistory = storedClueHistory.length > 0
+    ? storedClueHistory
+    : history.at(-1)?.clueRounds.length
+      ? history.at(-1)!.clueRounds
+      : theme && Object.keys(clues).length > 0
+        ? [{ round: typeof parsed.round === "number" ? Math.max(1, Math.floor(parsed.round)) : 1, theme, clues }]
+        : [];
   const cards = normalizeCards(parsed.cards, players, Object.keys(normalizeNumberRecord(parsed.values)));
   const cardIds = new Set(cards.map((card) => card.id));
   const order = Array.isArray(parsed.order)
@@ -174,10 +204,11 @@ function normalizeRoom(value: unknown): HodoaiRoom | null {
     ...config,
     debugReplayEnabled: parsed.debugReplayEnabled === true && config.debugMode,
     round: typeof parsed.round === "number" ? Math.max(1, Math.floor(parsed.round)) : 1,
-    theme: normalizeTheme(parsed.theme),
+    theme,
     cards,
     values: normalizeNumberRecord(parsed.values),
-    clues: normalizeStringRecord(parsed.clues),
+    clues,
+    clueHistory,
     order,
     totalPoints: typeof parsed.totalPoints === "number" ? Math.max(0, Math.floor(parsed.totalPoints)) : 0,
     history,
@@ -196,13 +227,27 @@ function timedOut(room: HodoaiRoom, seconds: number, now = Date.now()) {
   return Boolean(room.phaseStartedAt && seconds > 0 && now >= room.phaseStartedAt + seconds * 1000 + commonGameTimeoutGraceMs());
 }
 
-function advanceToArrange(room: HodoaiRoom) {
+function completeClueRound(room: HodoaiRoom) {
   const clues = { ...room.clues };
   for (const card of room.cards) clues[card.id] ||= "時間切れのためパス";
+  const clueRound: HodoaiClueRound = { round: room.round, theme: room.theme ?? hodoaiThemes[0], clues };
+  const clueHistory = [...room.clueHistory.filter((item) => item.round !== room.round), clueRound].sort((left, right) => left.round - right.round);
+  if (hodoaiClueRoundDestination(room.round, room.roundsTotal) === "clue") {
+    return {
+      ...room,
+      phase: "clue" as const,
+      round: room.round + 1,
+      theme: pickHodoaiTheme(clueHistory),
+      clues: {},
+      clueHistory,
+      phaseStartedAt: Date.now(),
+    };
+  }
   return {
     ...room,
     phase: "arrange" as const,
     clues,
+    clueHistory,
     order: shuffleHodoai(room.cards.map((card) => card.id)),
     phaseStartedAt: Date.now(),
   };
@@ -217,6 +262,7 @@ function scoreRound(room: HodoaiRoom) {
     inversions,
     points,
     cards: [...room.cards],
+    clueRounds: [...room.clueHistory],
     order: [...room.order],
     values: { ...room.values },
     clues: { ...room.clues },
@@ -224,22 +270,23 @@ function scoreRound(room: HodoaiRoom) {
   return {
     ...room,
     phase: "result" as const,
-    totalPoints: room.totalPoints + points,
-    history: [...room.history.filter((item) => item.round !== room.round), result],
+    totalPoints: points,
+    history: [result],
     phaseStartedAt: null,
   };
 }
 
-function beginRound(room: HodoaiRoom, round: number) {
+function beginGame(room: HodoaiRoom) {
   const dealt = dealHodoaiCards(room.players, room.cardsPerPlayer);
   return {
     ...room,
     phase: "clue" as const,
-    round,
-    theme: pickHodoaiTheme(room.history),
+    round: 1,
+    theme: pickHodoaiTheme([]),
     cards: dealt.cards,
     values: dealt.values,
     clues: {},
+    clueHistory: [],
     order: [],
     phaseStartedAt: Date.now(),
   };
@@ -247,7 +294,7 @@ function beginRound(room: HodoaiRoom, round: number) {
 
 function reconcileProgress(room: HodoaiRoom) {
   if (room.phase === "clue" && (clueComplete(room) || timedOut(room, room.clueTimeLimitSeconds))) {
-    return advanceToArrange(room);
+    return completeClueRound(room);
   }
   if (room.phase === "arrange" && timedOut(room, room.arrangeTimeLimitSeconds)) return scoreRound(room);
   return room;
@@ -334,7 +381,10 @@ export function sanitizeHodoaiRoom(room: HodoaiRoom, playerId: string) {
   const clues = room.phase === "clue" && !isDebugHost
     ? Object.fromEntries(Object.entries(room.clues).filter(([cardId]) => ownCardIds.has(cardId)))
     : room.clues;
-  return { ...room, passphrase: room.passphrase ? "設定済み" : "", values, clues, debugLog: isDebugHost ? room.debugLog : [] };
+  const clueHistory = room.phase === "clue" && !isDebugHost
+    ? room.clueHistory.map((clueRound) => ({ ...clueRound, clues: Object.fromEntries(Object.entries(clueRound.clues).filter(([cardId]) => ownCardIds.has(cardId))) }))
+    : room.clueHistory;
+  return { ...room, passphrase: room.passphrase ? "設定済み" : "", values, clues, clueHistory, debugLog: isDebugHost ? room.debugLog : [] };
 }
 
 export async function loadStoredHodoaiRoom(code: string) {
@@ -381,7 +431,7 @@ export async function loadHodoaiPlayerActiveRoom(playerId: string) {
 export async function createStoredHodoaiRoom(value: unknown, actorId: string) {
   const room = normalizeRoom(value);
   if (!room || actorId !== room.hostId) throw new Error("INVALID_HODOAI_ROOM");
-  const created = { ...room, revision: 0, gameNumber: 1, phase: "lobby" as const, cards: [], values: {}, clues: {}, order: [], history: [], debugLog: [], totalPoints: 0, updatedAt: Date.now() };
+  const created = { ...room, revision: 0, gameNumber: 1, phase: "lobby" as const, cards: [], values: {}, clues: {}, clueHistory: [], order: [], history: [], debugLog: [], totalPoints: 0, updatedAt: Date.now() };
   const activeRoom = await loadHodoaiPlayerActiveRoom(actorId);
   if (activeRoom && activeRoom.code !== created.code) {
     if (!canMoveFromOnlineRoom("hodoai", activeRoom)) throw new Error("HODOAI_PLAYER_ALREADY_ACTIVE");
@@ -427,7 +477,7 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
     if (!actorIsMember) throw new Error("HODOAI_ROOM_FORBIDDEN");
     if (action.type === "abort-game") {
       if (!actorIsHost || !current.debugMode || current.phase === "lobby") throw new Error("HODOAI_ROOM_FORBIDDEN");
-      return { ...current, phase: "lobby", debugReplayEnabled: false, round: 1, theme: null, cards: [], values: {}, clues: {}, order: [], totalPoints: 0, history: [], phaseStartedAt: null };
+      return { ...current, phase: "lobby", debugReplayEnabled: false, round: 1, theme: null, cards: [], values: {}, clues: {}, clueHistory: [], order: [], totalPoints: 0, history: [], phaseStartedAt: null };
     }
 
     const reconciled = reconcileProgress(current);
@@ -461,7 +511,7 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
       if (!actorIsHost || current.phase !== "lobby") throw new Error("HODOAI_ROOM_FORBIDDEN");
       if (current.players.length < 2 && !current.debugMode) throw new Error("HODOAI_NOT_ENOUGH_PLAYERS");
       if (current.players.length * current.cardsPerPlayer > 121) throw new Error("HODOAI_TOO_MANY_CARDS");
-      return beginRound({ ...current, round: 1, history: [], totalPoints: 0 }, 1);
+      return beginGame({ ...current, round: 1, history: [], clueHistory: [], totalPoints: 0 });
     }
     if (action.type === "debug-add-player") {
       if (!actorIsHost || !current.debugMode || current.phase !== "lobby") throw new Error("HODOAI_ROOM_FORBIDDEN");
@@ -496,22 +546,16 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
       if (!actorIsHost || current.phase !== "arrange" || action.round !== current.round) throw new Error("HODOAI_ROOM_FORBIDDEN");
       return scoreRound(current);
     }
-    if (action.type === "next-round") {
-      if (!actorIsHost || current.phase !== "result" || action.round !== current.round || current.round >= current.roundsTotal) {
-        throw new Error("HODOAI_ROOM_FORBIDDEN");
-      }
-      return beginRound(current, current.round + 1);
-    }
     if (action.type === "reset-game") {
       if (!actorIsHost || current.phase !== "result") throw new Error("HODOAI_ROOM_FORBIDDEN");
-      return { ...current, gameNumber: current.gameNumber + 1, phase: "lobby", debugReplayEnabled: false, round: 1, theme: null, cards: [], values: {}, clues: {}, order: [], totalPoints: 0, history: [], phaseStartedAt: null };
+      return { ...current, gameNumber: current.gameNumber + 1, phase: "lobby", debugReplayEnabled: false, round: 1, theme: null, cards: [], values: {}, clues: {}, clueHistory: [], order: [], totalPoints: 0, history: [], phaseStartedAt: null };
     }
     if (!actorIsHost || !current.debugMode || action.round !== current.round) throw new Error("HODOAI_ROOM_FORBIDDEN");
     if (action.type === "debug-fill-clues" && current.phase === "clue") {
       const labels = ["ほとんど当てはまらない", "ほんの少し", "やや控えめ", "ほどほど", "なかなか", "かなり", "とても", "最高クラス"];
       const clues = { ...current.clues };
       for (const card of current.cards) clues[card.id] ||= labels[Math.min(7, Math.floor((current.values[card.id] ?? 0) / 16))];
-      return advanceToArrange({ ...current, clues });
+      return completeClueRound({ ...current, clues });
     }
     if (action.type === "debug-sort" && current.phase === "arrange") {
       return { ...current, order: [...current.cards].sort((left, right) => current.values[left.id] - current.values[right.id]).map((card) => card.id) };

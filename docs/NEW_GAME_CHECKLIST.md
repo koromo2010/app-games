@@ -10,7 +10,7 @@
 6. LLMは `lib/game-llm.ts`、デバッグ表示はトップバーの `DebugModeButton`、資格判定は `lib/debug-access.ts`、時間制限は `RoomTimeLimitControl` を使う。デバッグのON/OFF・プレイバック・進行中断は独立表示せず `DebugModeButton` のプルダウンへまとめ、中断後は同じ部屋のゲーム開始前へ戻す。
 7. オンライン部屋の結果画面は共通 `RoomResultActions` を使い、ホストへ「同じ部屋でもう一度」と「部屋を解散」を必ず並べる。通常の解散はロビーまたはゲーム終了後だけ許可し、サーバー側でも共通 `canDissolveOnlineRoom` とホスト権限を検証する。進行中のデバッグ終了は解散ではなく、中断でロビーへ戻してから行う。
 8. アカウント参加型ゲームは `lib/player-stats-store.ts` に冪等な結果記録、`lib/game-replay-store.ts` に本人用プレイバックと匿名化した共有用見どころを追加し、登録簿の `statsRecorder` と `replayRecorder` に記録する。
-   - 最終結果画面では全プレイヤーに共通 `GameResultShareButton` を表示し、得点や安全な見どころをその場で共有できるようにする。参加者名、秘密情報、投稿本文、認証付きURLは共有文へ含めない。
+   - 最終結果画面では全プレイヤーに共通 `GameResultShareButton` を表示し、実際に送る文章をプレビューしてから共有先を選べるようにする。参加者名、秘密情報、投稿本文、認証付きURLは共有文へ含めない。
    - オンラインゲームは登録簿の `resultShare: true` を宣言し、自動監査の対象にする。
 9. デバッグモードではサーバー正本の安全な行動ログを記録し、`DebugModeButton` のプルダウンから表示・コピーできるようにする。操作名、時刻、操作者表示名、遷移前後フェーズ、revisionだけを記録し、秘密情報、投稿本文、合言葉、Cookie、APIキーを入れない。登録簿の `debugActionLog: true` を宣言する。
 10. 公開範囲は `config/game-registry.json` の `private` を正本とし、ページは `gamePageAccessAllowed`、APIは `gameApiAccessDeniedResponse` で共通判定する。ゲームごとにCookie判定を複製しない。

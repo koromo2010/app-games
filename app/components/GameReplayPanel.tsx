@@ -26,6 +26,7 @@ export function GameReplayPanel() {
   const [isLoading, setIsLoading] = useState(true);
   const [busyReplayId, setBusyReplayId] = useState("");
   const [message, setMessage] = useState("");
+  const [sharePreview, setSharePreview] = useState<{ title: string; text: string; url: string } | null>(null);
 
   const loadReplays = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -104,14 +105,25 @@ export function GameReplayPanel() {
     }
   };
 
-  const shareReplay = async (replay: GameReplaySummary) => {
+  const openSharePreview = (replay: GameReplaySummary) => {
     const text = gameReplayShareText(replay);
     const game = gameReplayMetadata[replay.gameType];
     const url = new URL(game.href, window.location.origin).toString();
+    setMessage("");
+    setSharePreview({ title: `Game Fields ${game.title} プレイバック`, text, url });
+  };
+
+  const shareReplay = async () => {
+    if (!sharePreview) return;
     try {
-      const outcome = await shareGameResult({ title: `Game Fields ${game.title} プレイバック`, text, url });
+      const outcome = await shareGameResult(sharePreview);
       if (outcome === "shared") setMessage("共有メニューを開きました。");
       if (outcome === "copied") setMessage("共有文をコピーしました。");
+      if (outcome === "cancelled") {
+        setMessage("共有をキャンセルしました。文章はまだ送信されていません。");
+        return;
+      }
+      setSharePreview(null);
     } catch {
       setMessage("共有できませんでした。もう一度お試しください。");
     }
@@ -186,7 +198,7 @@ export function GameReplayPanel() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => void shareReplay(replay)}
+                  onClick={() => openSharePreview(replay)}
                   className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
                 >
                   プレイバックを共有
@@ -288,6 +300,17 @@ export function GameReplayPanel() {
             </>
           )}
         </div>
+        </div>
+      )}
+
+      {sharePreview && (
+        <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-slate-950/70 p-3 pt-10 backdrop-blur-sm sm:p-6 sm:pt-16" role="dialog" aria-modal="true" aria-labelledby="replay-share-heading" onClick={() => setSharePreview(null)}>
+          <div className="w-full max-w-xl rounded-xl border border-violet-200 bg-violet-50 p-4 shadow-2xl sm:p-6" onClick={(event) => event.stopPropagation()}>
+            <h3 id="replay-share-heading" className="text-lg font-black text-slate-950">共有される文章</h3>
+            <p className="mt-1 text-xs text-slate-500">内容を確認してから共有先を選びます。</p>
+            <pre className="mt-4 max-h-[60vh] overflow-auto whitespace-pre-wrap break-words rounded-lg border border-slate-200 bg-white p-3 font-sans text-sm leading-6 text-slate-800">{sharePreview.text}{"\n"}{sharePreview.url}</pre>
+            <div className="mt-4 grid grid-cols-2 gap-2"><button type="button" onClick={() => setSharePreview(null)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-black text-slate-700">戻る</button><button type="button" onClick={() => void shareReplay()} className="rounded-lg bg-violet-600 px-3 py-2 text-sm font-black text-white">この内容で共有</button></div>
+          </div>
         </div>
       )}
     </section>
