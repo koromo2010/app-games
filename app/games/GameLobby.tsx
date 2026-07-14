@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { compressAvatarImage, uploadAvatarImage } from "@/lib/avatar-image-client";
 import {
   avatarColorOptions,
   clearPlayerSession,
@@ -388,7 +389,7 @@ export function GameLobby() {
   };
 
   const updateAvatar = async (nextColor: string, nextImage: string | null) => {
-    if (!name.trim() || isAvatarSaving) return;
+    if (!name.trim() || isAvatarSaving) return false;
     setAvatarColor(nextColor);
     setAvatarImage(nextImage || defaultAvatarImage);
     setIsAvatarSaving(true);
@@ -403,25 +404,34 @@ export function GameLobby() {
       setAvatarColor(result.session.avatarColor);
       setAvatarImage(result.session.avatarImage || defaultAvatarImage);
       if (!result.persistent) setMessage("アイコンを端末には保存しましたが、サーバーへ保存できませんでした。");
+      return result.persistent;
     } catch {
       setMessage("アイコンを保存できませんでした。");
+      return false;
     } finally {
       setIsAvatarSaving(false);
     }
   };
 
-  const uploadAvatar = (file: File | undefined) => {
-    if (!file) return;
-    if (!file.type.startsWith("image/") || file.size > 150 * 1024) {
-      setMessage("アイコン画像は150KB以下の画像を選んでください。");
-      return;
+  const uploadAvatar = async (file: File | undefined) => {
+    if (!file || isAvatarSaving) return;
+    setIsAvatarSaving(true);
+    setMessage("画像を小さくしています...");
+    try {
+      const image = await compressAvatarImage(file);
+      setMessage("画像を保存しています...");
+      const url = await uploadAvatarImage(image);
+      setIsAvatarSaving(false);
+      if (await updateAvatar(avatarColor, url)) setMessage("アイコンを保存しました。");
+    } catch (error) {
+      setMessage(error instanceof Error && error.message === "AVATAR_FILE_TOO_LARGE"
+        ? "元画像は10MB以下のものを選んでください。"
+        : error instanceof Error && error.message === "AVATAR_BLOB_NOT_CONFIGURED"
+          ? "画像保存の設定がまだ反映されていません。少し待ってからお試しください。"
+          : "アイコン画像を保存できませんでした。");
+    } finally {
+      setIsAvatarSaving(false);
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") void updateAvatar(avatarColor, reader.result);
-    };
-    reader.onerror = () => setMessage("アイコン画像を読み込めませんでした。");
-    reader.readAsDataURL(file);
   };
 
   const logout = async () => {
@@ -541,8 +551,8 @@ export function GameLobby() {
                         ))}
                       </div>
                       <label className="mt-2 flex cursor-pointer items-center justify-center rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50">
-                        画像を選ぶ（150KB以下）
-                        <input type="file" accept="image/*" disabled={isAvatarSaving} onChange={(event) => uploadAvatar(event.target.files?.[0])} className="sr-only" />
+                        画像を選ぶ（元画像10MBまで）
+                        <input type="file" accept="image/*" disabled={isAvatarSaving} onChange={(event) => { void uploadAvatar(event.target.files?.[0]); event.currentTarget.value = ""; }} className="sr-only" />
                       </label>
                     </div>
                     <button

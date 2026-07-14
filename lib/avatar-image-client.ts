@@ -6,15 +6,6 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number) 
   return new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, quality));
 }
 
-function blobToDataUrl(blob: Blob) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("AVATAR_ENCODE_FAILED"));
-    reader.onerror = () => reject(new Error("AVATAR_ENCODE_FAILED"));
-    reader.readAsDataURL(blob);
-  });
-}
-
 export async function compressAvatarImage(file: File) {
   if (!file.type.startsWith("image/")) throw new Error("AVATAR_FILE_TYPE");
   if (file.size > maxUploadBytes) throw new Error("AVATAR_FILE_TOO_LARGE");
@@ -40,13 +31,27 @@ export async function compressAvatarImage(file: File) {
         const blob = await canvasToBlob(canvas, "image/webp", quality);
         if (!blob) continue;
         if (!smallestBlob || blob.size < smallestBlob.size) smallestBlob = blob;
-        if (blob.size <= 48 * 1024) return blobToDataUrl(blob);
+        if (blob.size <= 48 * 1024) return blob;
       }
     }
 
     if (!smallestBlob) throw new Error("AVATAR_ENCODE_FAILED");
-    return blobToDataUrl(smallestBlob);
+    return smallestBlob;
   } finally {
     bitmap.close();
   }
+}
+
+export async function uploadAvatarImage(blob: Blob) {
+  const formData = new FormData();
+  formData.set("file", blob, "avatar.webp");
+  const response = await fetch("/api/player-avatar", {
+    method: "POST",
+    body: formData,
+  });
+  const data = (await response.json().catch(() => null)) as { url?: unknown; error?: unknown } | null;
+  if (!response.ok || typeof data?.url !== "string") {
+    throw new Error(typeof data?.error === "string" ? data.error : "AVATAR_UPLOAD_FAILED");
+  }
+  return data.url;
 }

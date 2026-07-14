@@ -65,11 +65,22 @@ export function isAvatarColor(value: string | null): value is string {
 
 export function isAvatarImage(value: string | null): value is string {
   if (!value || value.length > 200_000) return false;
-  return Boolean(
-    value?.startsWith("data:image/") ||
-      value === "/wordwolf-default-avatar.png" ||
-      defaultAvatarImages.includes(value ?? ""),
-  );
+  if (
+    value.startsWith("data:image/") ||
+    value === "/wordwolf-default-avatar.png" ||
+    defaultAvatarImages.includes(value)
+  ) return true;
+
+  if (value.length > 2_048) return false;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" &&
+      url.hostname.endsWith(".public.blob.vercel-storage.com") &&
+      url.pathname.startsWith("/avatars/") &&
+      url.pathname.endsWith(".webp");
+  } catch {
+    return false;
+  }
 }
 
 export function readPlayerSession(): PlayerSession | null {

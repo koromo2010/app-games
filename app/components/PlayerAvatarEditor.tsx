@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { compressAvatarImage } from "@/lib/avatar-image-client";
+import { compressAvatarImage, uploadAvatarImage } from "@/lib/avatar-image-client";
 import {
   avatarColorOptions,
   defaultAvatarImage,
@@ -49,11 +49,15 @@ export function PlayerAvatarEditor({ session, onSaved }: Props) {
     setMessage("画像を小さくしています...");
     try {
       const image = await compressAvatarImage(file);
-      await saveAvatar(session.avatarColor, image);
+      setMessage("画像を保存しています...");
+      const url = await uploadAvatarImage(image);
+      await saveAvatar(session.avatarColor, url);
     } catch (error) {
       setMessage(error instanceof Error && error.message === "AVATAR_FILE_TOO_LARGE"
         ? "元画像は10MB以下のものを選んでください。"
-        : "この画像をアイコンに変換できませんでした。別の画像をお試しください。");
+        : error instanceof Error && error.message === "AVATAR_BLOB_NOT_CONFIGURED"
+          ? "画像保存の設定がまだ反映されていません。少し待ってからお試しください。"
+          : "この画像を保存できませんでした。別の画像をお試しください。");
     } finally {
       setIsCompressing(false);
     }
