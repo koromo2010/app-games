@@ -1,8 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { GameRulesDialog } from "@/app/components/GameRulesDialog";
+import { GameTopBanner, gameTopBannerOffsetClass } from "@/app/components/GameTopBanner";
+import { GameTopMenu, gameTopBannerActionClass, gameTopMenuItemClass } from "@/app/components/GameTopMenu";
+import { GamePlayerMenu } from "@/app/components/GamePlayerMenu";
+import {
+  loadPersistentPlayerSession,
+  type PlayerSession,
+} from "@/lib/player-session";
 import { listLocalWordWolfWords } from "@/lib/wordwolf";
 
 type Phase = "setup" | "pass" | "write" | "reveal" | "deduce" | "result";
@@ -32,6 +39,7 @@ function createRound(count: number) {
 }
 
 export function NigoichiGame() {
+  const [session, setSession] = useState<PlayerSession | null>(null);
   const [playerCount, setPlayerCount] = useState(4);
   const [names, setNames] = useState(() => playerLabels(4));
   const [round, setRound] = useState(() => createRound(4));
@@ -48,6 +56,16 @@ export function NigoichiGame() {
   const activeHand = round.hands[activePlayer] ?? [];
   const finishedClues = clues.filter(Boolean).length;
   const correctGuessCount = guesses.filter((guess) => guess === missingNumber).length;
+
+  useEffect(() => {
+    let active = true;
+    void loadPersistentPlayerSession()
+      .then((savedSession) => {
+        if (active) setSession(savedSession);
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, []);
 
   const resetForCount = (count: number) => {
     setPlayerCount(count);
@@ -83,20 +101,20 @@ export function NigoichiGame() {
   };
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#fde68a_0,_#f8fafc_34%,_#dbeafe_100%)] px-4 pb-16 pt-6 text-slate-900">
+    <main className={`min-h-screen bg-[radial-gradient(circle_at_top,_#fde68a_0,_#f8fafc_34%,_#dbeafe_100%)] px-4 pb-16 text-slate-900 ${gameTopBannerOffsetClass}`}>
+      <GameTopBanner eyebrow="Private local mock" title="ニゴイチ">
+        <Link href="/games" className={gameTopBannerActionClass}>ゲームロビーへ戻る</Link>
+        <GameTopMenu>
+          <button type="button" data-menu-close="true" onClick={() => setRulesOpen(true)} className={gameTopMenuItemClass}>ルール</button>
+        </GameTopMenu>
+        {session ? (
+          <GamePlayerMenu id={session.id} name={session.name} avatarColor={session.avatarColor} avatarImage={session.avatarImage} hasRecoveryEmail={session.hasRecoveryEmail} />
+        ) : (
+          <Link href="/games" className={gameTopBannerActionClass}>ログイン</Link>
+        )}
+      </GameTopBanner>
       <div className="mx-auto max-w-5xl">
-        <header className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-900/10 bg-white/85 px-4 py-3 shadow-sm backdrop-blur">
-          <div>
-            <p className="text-xs font-black tracking-[0.18em] text-slate-500">PRIVATE LOCAL MOCK</p>
-            <h1 className="text-2xl font-black tracking-tight">ニゴイチ</h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={() => setRulesOpen(true)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold hover:bg-slate-100">ルール</button>
-            <Link href="/games" className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-bold text-white hover:bg-slate-700">ロビーへ</Link>
-          </div>
-        </header>
-
-        <section className="mt-5 rounded-2xl border border-amber-300/70 bg-amber-50/90 p-4 text-sm leading-6 shadow-sm">
+        <section className="rounded-2xl border border-amber-300/70 bg-amber-50/90 p-4 text-sm leading-6 shadow-sm">
           <p className="font-black">調整用モック</p>
           <p>同じ端末を順番に渡して試す版です。部屋作成・ログイン・戦績・正式な得点処理はまだ持たせていません。</p>
         </section>

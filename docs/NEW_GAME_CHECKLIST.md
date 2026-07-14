@@ -14,7 +14,7 @@
    - オンラインゲームは登録簿の `resultShare: true` を宣言し、自動監査の対象にする。
 9. デバッグモードではサーバー正本の安全な行動ログを記録し、`DebugModeButton` のプルダウンから表示・コピーできるようにする。操作名、時刻、操作者表示名、遷移前後フェーズ、revisionだけを記録し、秘密情報、投稿本文、合言葉、Cookie、APIキーを入れない。登録簿の `debugActionLog: true` を宣言する。
 10. 公開範囲は `config/game-registry.json` の `private` を正本とし、ページは `gamePageAccessAllowed`、APIは `gameApiAccessDeniedResponse` で共通判定する。ゲームごとにCookie判定を複製しない。
-11. トップバーは共通 `GameTopBanner` を使い、ロビー・ルール・デバッグ・プレイヤーの順を基本とする。プレイヤー表示はログアウトを内包する `GamePlayerMenu` を使い、ログアウトをトップバーへ単独配置しない。
+11. **ローカルモックを含む全ゲーム**のトップバーは共通 `GameTopBanner` を使い、ロビー・MENU内のルール・デバッグ（実装する場合）・プレイヤーの順を基本とする。プレイヤー表示はログアウトを内包する `GamePlayerMenu` を使い、未ログインで遊べるモックではログイン導線を表示する。登録簿の `requiredTokens` に `GameTopBanner`、`GameTopMenu`、`GamePlayerMenu`、`GameRulesDialog`、`ルール` を入れて監査対象にする。
 12. 共通 `GameRulesDialog` を使った最新ルール、ロビーへの戻り口、デバッグ時の確認手段を用意する。ルールには基本進行だけでなく、得点・終了条件・時間切れも記載する。
 13. `npm run lint` と `npm run build` を通し、公開時はVercelの `READY` を確認する。
 14. オンラインゲームは共通 `GameAdSlot` を入室前・ロビー・結果の非プレイ面へ置く。進行中とデバッグ部屋には表示せず、ゲーム固有画面から広告事業者SDKを直接呼ばない。
