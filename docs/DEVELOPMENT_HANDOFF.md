@@ -23,6 +23,7 @@
 | 有料API切替 | `lib/llm-access.ts`, `app/api/llm-access/route.ts`, `app/components/PaidLlmAccessButton.tsx` |
 | 共通フィードバック/RAG | `lib/game-feedback-store.ts`, `lib/game-ai-types.ts`, `app/api/game-feedback/route.ts`, `app/components/GameFeedbackPanel.tsx` |
 | 共通部屋設定 | `lib/room-defaults-store.ts`, `lib/game-room-defaults-client.ts`, `app/components/RoomConfigSummary.tsx` |
+| 共通結果操作 | `app/components/RoomResultActions.tsx` |
 | 共通時間制限 | `lib/game-room-config.ts`, `app/components/RoomTimeLimitControl.tsx` |
 | 共通デバッグ認証 | `lib/debug-access.ts`, `app/components/DebugModeButton.tsx`, `app/api/debug-auth/route.ts`, `app/users/me/UserDashboard.tsx` |
 | ゲーム公開範囲 | `config/game-registry.json` の `private`, `lib/game-access.ts`, `lib/private-game-access.ts`, `app/api/private-game-access/route.ts` |
@@ -101,6 +102,7 @@
 - 1プレイヤー1アクティブ部屋。新しい部屋作成時は古いホスト部屋を解散する。
 - 投稿・投票がそろったらサーバー側で自動遷移する。
 - 自動遷移しなかった場合の手動ボタンはホスト向けに残すが、必要条件を満たすまで表示しない。
+- オンライン部屋の結果画面では共通 `RoomResultActions` を使い、ホストへ「同じ部屋でもう一度」と「部屋を解散」を並べる。解散は確認後にサーバー側のホスト権限検証を通す。
 - 時間制限は共通プリセットと秒数手入力に対応し、`0` は制限なし。
 - 共通のサーバー受付猶予は標準5秒。`GAME_TIMEOUT_GRACE_MS`（0〜10000ms）でTahoiya・ことばで数ならべ・ことばソナーを調整し、WordWolfは互換用 `WORDWOLF_TIMEOUT_GRACE_MS` を使う。
 - ログイン成功時は署名・期限付き・HttpOnly・SameSite=LaxのプレイヤーCookieを発行する。オンラインAPIはリクエスト本文のactor IDではなくCookieから本人を確定する。

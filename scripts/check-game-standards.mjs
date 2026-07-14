@@ -24,6 +24,7 @@ for (const game of games) {
     if (!game.roomStoreFile || !existsSync(join(root, game.roomStoreFile))) fail(`${game.id}: roomStoreFile がありません。`);
     else { const store = read(game.roomStoreFile); const modules = [entry, store, ...(game.moduleBoundaryFiles || []).map(read)].join("\n"); if (!store.includes("multiplayerRoomTtlSeconds") && !store.includes("multiplayerRoomExpiryArgs")) fail(`${game.id}: 共通の部屋TTLを使用していません。`); if (!store.includes("revision") && !store.includes("saveStoredWordWolfRoom")) fail(`${game.id}: サーバー側の部屋保存処理が見つかりません。`); if (!modules.includes("abort-game") && !modules.includes("abortGame")) fail(`${game.id}: ゲーム開始前へ戻すデバッグ中断処理がありません。`); }
     if (!entry.includes("DebugModeButton") || !entry.includes("onAbort=")) fail(`${game.id}: トップバナーの共通デバッグ操作がありません。`);
+    if (!entry.includes("RoomResultActions")) fail(`${game.id}: 結果画面の「同じ部屋でもう一度／部屋を解散」共通操作がありません。`);
     const routeFile = `app/api/${game.id}/rooms/route.ts`;
     if (!existsSync(join(root, routeFile)) || !read(routeFile).includes("requirePlayerDebugAccess")) fail(`${game.id}: デバッグ操作のサーバー側アカウント認証がありません。`);
   }

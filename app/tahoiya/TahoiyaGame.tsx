@@ -21,6 +21,7 @@ import { GameRulesDialog } from "../components/GameRulesDialog";
 import { GameTopBanner, gameTopBannerOffsetClass } from "../components/GameTopBanner";
 import { GamePlayerMenu } from "../components/GamePlayerMenu";
 import { RoomConfigSummary } from "../components/RoomConfigSummary";
+import { RoomResultActions } from "../components/RoomResultActions";
 import { RoomTimeLimitControl } from "../components/RoomTimeLimitControl";
 import { cyanButtonClass, dangerButtonClass, inputClass, panelClass, primaryButtonClass, subtleButtonClass } from "../wordwolf/styles";
 
@@ -948,6 +949,7 @@ export function TahoiyaGame() {
 
   const dissolveRoom = async () => {
     if (!room) return;
+    if (!window.confirm("部屋を解散しますか？参加者はこの部屋に戻れなくなります。")) return;
     const code = room.code;
     setRoom(null);
     await deleteRoomFromStore(code, playerId);
@@ -1607,9 +1609,7 @@ export function TahoiyaGame() {
                     />
                   )}
                   {isHost && (
-                    <button onClick={nextRound} className={`mt-4 ${primaryButtonClass}`}>
-                      次のラウンドへ
-                    </button>
+                    <RoomResultActions onPlayAgain={nextRound} onDissolve={() => void dissolveRoom()} />
                   )}
                 </div>
               )}

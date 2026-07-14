@@ -33,6 +33,7 @@ import { GameTopBanner, gameTopBannerOffsetClass } from "../components/GameTopBa
 import { DebugWordGenerationTest, type DebugWordGenerationResult } from "../components/DebugWordGenerationTest";
 import { GameFeedbackPanel } from "../components/GameFeedbackPanel";
 import { GameRulesDialog } from "../components/GameRulesDialog";
+import { RoomResultActions } from "../components/RoomResultActions";
 import { RoomTimeLimitControl } from "../components/RoomTimeLimitControl";
 import type {
   ClueLogVisibility,
@@ -2201,12 +2202,7 @@ export function WordWolfGame() {
                       <p className="text-sm leading-6 text-slate-600">
                         同じ卓のままロビーに戻り、周数やログ表示を設定し直して続行できます。
                       </p>
-                      <button
-                        onClick={resetRoom}
-                        className={`mt-3 ${primaryButtonClass}`}
-                      >
-                        ルール設定に戻って卓を続行
-                      </button>
+                      <RoomResultActions onPlayAgain={resetRoom} onDissolve={() => void dissolveRoom()} />
                     </div>
                   )}
                 </div>
