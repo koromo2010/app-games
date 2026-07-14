@@ -1004,13 +1004,29 @@ export function GameLobby() {
                 <div className={`h-14 rounded-md bg-gradient-to-br ${game.accent} ${isActiveGame ? "ring-2 ring-white/50" : ""}`} />
                 <div className="mt-3">
                   <h2 className={`text-lg font-black leading-tight ${isActiveGame ? "text-white" : "text-slate-950"}`}>{game.title}</h2>
-                  <span className={`mt-2 inline-flex max-w-full rounded-md border px-2 py-1 text-[11px] font-black leading-tight ${
-                    isActiveGame
-                      ? "border-amber-200 bg-amber-300 text-amber-950 shadow-[0_0_18px_rgba(252,211,77,0.45)]"
-                      : "border-slate-200 bg-slate-50 text-slate-600"
-                  }`}>
-                    {isActiveGame ? "プレイ中" : game.status}
-                  </span>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    <span className={`inline-flex max-w-full rounded-md border px-2 py-1 text-[11px] font-black leading-tight ${
+                      isActiveGame
+                        ? "border-amber-200 bg-amber-300 text-amber-950 shadow-[0_0_18px_rgba(252,211,77,0.45)]"
+                        : "border-slate-200 bg-slate-50 text-slate-600"
+                    }`}>
+                      {isActiveGame ? "プレイ中" : game.status}
+                    </span>
+                    {game.tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className={`inline-flex rounded-md border px-2 py-1 text-[11px] font-black leading-tight ${
+                          isActiveGame
+                            ? "border-white/20 bg-white/10 text-white"
+                            : tag === "協力"
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700"
+                        }`}
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
                 </div>
                 {activeGameRoom && (
                   <p className="mt-2 text-xs font-bold text-cyan-100">部屋 {activeGameRoom.code} に参加中</p>

@@ -9,11 +9,14 @@ const fail = (message) => failures.push(message);
 if (!existsSync(registryPath)) { console.error("[game-standards] config/game-registry.json がありません。"); process.exit(1); }
 const games = JSON.parse(readFileSync(registryPath, "utf8"));
 const ids = new Set(); const hrefs = new Set();
+const allowedGameTags = new Set(["対戦", "協力"]);
 
 for (const game of games) {
   if (!game.id || ids.has(game.id)) fail(`ゲームIDが空または重複しています: ${game.id || "(empty)"}`);
   if (!game.href || hrefs.has(game.href)) fail(`${game.id}: hrefが空または重複しています。`);
   ids.add(game.id); hrefs.add(game.href);
+  if (!Array.isArray(game.tags) || game.tags.length === 0) fail(`${game.id}: tags を1件以上設定してください。`);
+  else for (const tag of game.tags) if (!allowedGameTags.has(tag)) fail(`${game.id}: 未対応のタグ「${tag}」があります。`);
   for (const field of ["entryFile", "pageFile"]) if (!game[field] || !existsSync(join(root, game[field]))) fail(`${game.id}: ${field} が存在しません。`);
   for (const file of game.moduleBoundaryFiles || []) if (!existsSync(join(root, file))) fail(`${game.id}: モジュール境界ファイル ${file} が存在しません。`);
   if (!game.entryFile || !existsSync(join(root, game.entryFile))) continue;

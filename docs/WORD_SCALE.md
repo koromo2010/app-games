@@ -63,7 +63,7 @@
 
 ## 主なファイル
 
-- `app/word-scale/page.tsx`: 正式ページと個人利用アクセス確認
+- `app/word-scale/page.tsx`: 公開中の正式ページ
 - `app/kotoba-de-kazu-narabe/page.tsx`、`app/hodoai-talk/page.tsx`: 旧URLからの転送
 - `app/hodoai-talk/HodoaiTalkGame.tsx`: 画面と進行
 - `app/hodoai-talk/WordScaleRoomPanel.tsx`: 参加者・部屋設定のレスポンシブ左パネル
