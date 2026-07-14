@@ -48,6 +48,34 @@ export function resolveAvatarBlobToken(env: AvatarBlobEnvironment): AvatarBlobTo
   return { key: null, token: null, candidateKeys };
 }
 
+export function resolveAvatarBlobStoreId(env: AvatarBlobEnvironment): AvatarBlobTokenResolution {
+  const entries = Object.entries(env)
+    .map(([key, value]) => [key, value?.trim()] as const)
+    .filter((entry): entry is readonly [string, string] => Boolean(entry[1]));
+
+  const candidates = entries.filter(([key]) => {
+    const normalized = normalizedEnvironmentKey(key);
+    return normalized.includes("BLOB") && normalized.endsWith("STORE_ID");
+  });
+  const candidateKeys = candidates.map(([key]) => key);
+
+  for (const key of ["AVATAR_BLOB_STORE_ID", "BLOB_avatars_STORE_ID"]) {
+    const match = entries.find(([entryKey]) => entryKey === key);
+    if (match) return { key: match[0], token: match[1], candidateKeys };
+  }
+
+  const avatarCandidates = candidates.filter(([key]) => normalizedEnvironmentKey(key).includes("AVATAR"));
+  if (avatarCandidates.length === 1) {
+    return { key: avatarCandidates[0][0], token: avatarCandidates[0][1], candidateKeys };
+  }
+
+  if (candidates.length === 1) {
+    return { key: candidates[0][0], token: candidates[0][1], candidateKeys };
+  }
+
+  return { key: null, token: null, candidateKeys };
+}
+
 export function isWebpImage(bytes: Uint8Array) {
   if (bytes.length < 12 || bytes.length > maxAvatarUploadBytes) return false;
   return String.fromCharCode(...bytes.subarray(0, 4)) === "RIFF" &&
