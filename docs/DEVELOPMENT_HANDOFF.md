@@ -190,6 +190,7 @@ Neon Postgres、Upstash Redis、Vercel Blobの容量は `vercel.json` の日次C
 - Redisを正本とし、revision付きCAS、共通TTL、1人1アクティブ部屋、閲覧者別sanitizerを使う。純粋ルールは `lib/nigoichi.ts`、保存とCommandは `lib/nigoichi-room-store.ts`、APIは `app/api/nigoichi/rooms/route.ts`、クライアント境界は `app/nigoichi/nigoichi-room-api-client.ts`、画面は `app/nigoichi/NigoichiGame.tsx`。
 - デバッグONのホストはダミーを最大6人まで追加し、ダミーの連想語・予想を代行できる。未提出の一括補完、中断、行動ログ、任意のデバッグプレイバック記録に対応する。デバッグ部屋とダミーは通常戦績へ含めない。
 - 現在は余り番号の正解・不正解を1ゲームの結果として戦績へ記録する。追加の得点・ペナルティは未確定。時間制限はない。
+- 結果共有のプレイログには、番号順の言葉一覧（各語の持ち主または余り）と、各プレイヤーの「手札2語 → 連想語」を含める。参加者名は入室時に保存した共有同意がONのときだけ表示し、それ以外は `PLAYER1` 形式で匿名化する。共有前に実際の文章をプレビューする。
 - 単語は `listLocalWordWolfWords()` を通じてワードウルフの固定ローカル語彙を共有する。RedisのLLM生成候補はまだ含めない。
 
 ## 7. たほい屋現行仕様の要点

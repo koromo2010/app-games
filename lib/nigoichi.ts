@@ -8,6 +8,7 @@ export type NigoichiPlayer = {
   avatarColor?: string;
   avatarImage?: string;
   isDummy?: boolean;
+  shareNameAllowed?: boolean;
 };
 
 export type NigoichiPhase = "lobby" | "clue" | "guess" | "result";
@@ -118,11 +119,44 @@ export function sanitizeNigoichiRoomForPlayer(room: NigoichiRoom, playerId: stri
   };
 }
 
-export function nigoichiShareText(room: Pick<NigoichiRoom, "players" | "guesses" | "missingNumber">) {
+export function nigoichiSharePlayerLabel(
+  players: Pick<NigoichiPlayer, "id" | "name" | "isDummy" | "shareNameAllowed">[],
+  playerId: string,
+) {
+  const index = players.findIndex((player) => player.id === playerId);
+  if (index < 0) return "PLAYER?";
+  const player = players[index];
+  if (player.isDummy) return player.name;
+  return player.shareNameAllowed === true ? player.name : `PLAYER${index + 1}`;
+}
+
+export function nigoichiShareText(room: Pick<NigoichiRoom, "players" | "words" | "hands" | "clues" | "guesses" | "missingNumber">) {
   const correct = room.players.filter((player) => nigoichiGuessIsCorrect(room, player.id)).length;
+  const ownerByNumber = new Map<number, string>();
+  for (const player of room.players) {
+    const label = nigoichiSharePlayerLabel(room.players, player.id);
+    for (const number of room.hands[player.id] ?? []) ownerByNumber.set(number, label);
+  }
+  const wordLines = room.words.map((word, index) => {
+    const owner = index === room.missingNumber ? "余り" : ownerByNumber.get(index) ?? "不明";
+    return `${index + 1}. ${word} — ${owner}`;
+  });
+  const clueLines = room.players.map((player) => {
+    const label = nigoichiSharePlayerLabel(room.players, player.id);
+    const hand = room.hands[player.id] ?? [];
+    const pair = hand.map((number) => `${number + 1}.${room.words[number] ?? "不明"}`).join(" ＋ ");
+    return `${label}：${pair} → ${room.clues[player.id] ?? "未入力"}`;
+  });
   return [
     "ニゴイチで遊びました",
     `${room.players.length}人中${correct}人が余り番号を正解`,
+    "",
+    "言葉一覧",
+    ...wordLines,
+    "",
+    "連想語",
+    ...clueLines,
+    "",
     "#GameFields",
   ].join("\n");
 }

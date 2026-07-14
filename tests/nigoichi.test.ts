@@ -5,6 +5,7 @@ import {
   allNigoichiGuessesSubmitted,
   dealNigoichiRound,
   nigoichiGuessIsCorrect,
+  nigoichiShareText,
   sanitizeNigoichiRoomForPlayer,
   type NigoichiRoom,
 } from "../lib/nigoichi.ts";
@@ -33,6 +34,29 @@ test("余り番号と同じ予想だけを正解にする", () => {
   const room = { missingNumber: 4, guesses: { a: 4, b: 3 } };
   assert.equal(nigoichiGuessIsCorrect(room, "a"), true);
   assert.equal(nigoichiGuessIsCorrect(room, "b"), false);
+});
+
+test("共有プレイログへ言葉の持ち主と各人の連想語を匿名化して記載する", () => {
+  const text = nigoichiShareText({
+    players: [
+      { id: "a", name: "非公開名", joinedAt: 1, shareNameAllowed: false },
+      { id: "b", name: "公開名", joinedAt: 2, shareNameAllowed: true },
+      { id: "c", name: "ダミー1", joinedAt: 3, isDummy: true },
+    ],
+    words: ["猫", "犬", "鳥", "魚", "花", "月", "星"],
+    hands: { a: [0, 1], b: [2, 3], c: [4, 5] },
+    clues: { a: "ペット", b: "生き物", c: "夜空" },
+    guesses: { a: 6, b: 5, c: 6 },
+    missingNumber: 6,
+  });
+  assert.match(text, /2人が余り番号を正解/);
+  assert.match(text, /1\. 猫 — PLAYER1/);
+  assert.match(text, /3\. 鳥 — 公開名/);
+  assert.match(text, /5\. 花 — ダミー1/);
+  assert.match(text, /7\. 星 — 余り/);
+  assert.match(text, /PLAYER1：1\.猫 ＋ 2\.犬 → ペット/);
+  assert.match(text, /公開名：3\.鳥 ＋ 4\.魚 → 生き物/);
+  assert.doesNotMatch(text, /非公開名/);
 });
 
 test("結果前は本人の手札と入力だけを返し、余り番号を隠す", () => {

@@ -112,6 +112,7 @@ export async function PATCH(request: Request) {
           joinedAt: Date.now(),
           avatarColor: session.avatarColor,
           avatarImage: session.avatarImage ?? undefined,
+          shareNameAllowed: session.shareNameAllowed === true,
         },
       };
     }

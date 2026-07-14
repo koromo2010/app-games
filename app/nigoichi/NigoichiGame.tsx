@@ -156,7 +156,7 @@ export function NigoichiGame() {
     setIsSaving(true);
     setError("");
     const now = Date.now();
-    const host: NigoichiPlayer = { id: session.id, name: session.name, joinedAt: now, avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined };
+    const host: NigoichiPlayer = { id: session.id, name: session.name, joinedAt: now, avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined, shareNameAllowed: session.shareNameAllowed === true };
     const draft: NigoichiRoom = {
       code: makeRoomCode(), revision: 0, hostId: session.id, ownerId: getOwnerId(), passphrase: passphrase.trim(), phase: "lobby", players: [host], gameNumber: 1,
       debugMode: false, debugReplayEnabled: false, words: [], hands: {}, clues: {}, guesses: {}, missingNumber: null, debugLog: [], createdAt: now, updatedAt: now,
@@ -178,7 +178,7 @@ export function NigoichiGame() {
     if (code.length !== 4) { setError("4文字の部屋コードを入力してください。"); return; }
     setIsSaving(true);
     setError("");
-    const player: NigoichiPlayer = { id: session.id, name: session.name, joinedAt: Date.now(), avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined };
+    const player: NigoichiPlayer = { id: session.id, name: session.name, joinedAt: Date.now(), avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined, shareNameAllowed: session.shareNameAllowed === true };
     try {
       const saved = await applyNigoichiRoomAction(code, { type: "join-room", actorId: session.id, player, passphrase });
       setRoom(saved);

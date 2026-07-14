@@ -72,6 +72,7 @@ function normalizePlayers(value: unknown): NigoichiPlayer[] {
       avatarColor: isAvatarColor(player.avatarColor ?? null) ? player.avatarColor : undefined,
       avatarImage: isAvatarImage(player.avatarImage ?? null) ? player.avatarImage : undefined,
       isDummy: player.isDummy === true,
+      shareNameAllowed: player.shareNameAllowed === true,
     }];
   }).slice(0, nigoichiPlayerLimit);
 }
