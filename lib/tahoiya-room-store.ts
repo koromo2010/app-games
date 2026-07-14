@@ -97,6 +97,7 @@ function normalizeRoom(value: unknown): TahoiyaRoom | null {
     passphrase: typeof parsed.passphrase === "string" ? parsed.passphrase : "",
     phase: isPhase(parsed.phase) ? parsed.phase : "lobby",
     debugMode: Boolean(parsed.debugMode),
+    debugReplayEnabled: Boolean(parsed.debugMode && parsed.debugReplayEnabled),
     players,
     parentId,
     playMode,
@@ -479,7 +480,7 @@ export async function applyStoredTahoiyaRoomAction(code: string, action: Tahoiya
     if (action.type === "abort-game") {
       if (!actorIsHost || !current.debugMode || current.phase === "lobby") throw new Error("TAHOIYA_ROOM_FORBIDDEN");
       const answererId = current.playMode === "single-answerer" && current.answererMode === "manual" ? current.answererId : "";
-      return { ...current, phase: "lobby", phaseStartedAt: null, answererId, word: "", reading: "", realDefinition: "", topicNote: "", topicSourceDetail: "", topicSource: "pending", topicGeneration: undefined, fakeDefinitions: {}, options: [], votes: {}, resultText: "" };
+      return { ...current, phase: "lobby", debugReplayEnabled: false, phaseStartedAt: null, answererId, word: "", reading: "", realDefinition: "", topicNote: "", topicSourceDetail: "", topicSource: "pending", topicGeneration: undefined, fakeDefinitions: {}, options: [], votes: {}, resultText: "" };
     }
     const reconciled = reconcileProgress(current);
     if (reconciled !== current) return reconciled;

@@ -37,6 +37,7 @@ export type TahoiyaRoom = {
   passphrase: string;
   phase: TahoiyaPhase;
   debugMode?: boolean;
+  debugReplayEnabled?: boolean;
   players: TahoiyaPlayer[];
   parentId: string;
   playMode: TahoiyaPlayMode;

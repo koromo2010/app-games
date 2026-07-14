@@ -19,6 +19,7 @@ import type {
   TahoiyaReplayDetail,
 } from "@/lib/game-replay-types";
 import { resolveGameReplayPolicy } from "@/lib/game-replay-policy";
+import { shouldRecordGameReplay } from "@/lib/debug-replay";
 
 type StoredReplayPlayer = { id: string; name: string };
 
@@ -226,7 +227,7 @@ function wordWolfWon(room: WordWolfRoom, playerId: string) {
 }
 
 export async function recordWordWolfReplay(room: WordWolfRoom) {
-  if (room.phase !== "result" || !room.winner || room.debugMode) return false;
+  if (room.phase !== "result" || !room.winner || !shouldRecordGameReplay(room)) return false;
   const wolves = new Set(wordWolfIds(room));
   const names = new Map(room.players.map((player) => [player.id, player.name]));
   const roleLabel = (id: string) => wolves.size === 0 ? "人狼なし" : wolves.has(id) ? "人狼" : "村人";
@@ -277,7 +278,7 @@ function tahoiyaRoundScores(room: TahoiyaRoom) {
 }
 
 export async function recordTahoiyaReplay(room: TahoiyaRoom) {
-  if (room.phase !== "result" || room.debugMode || !room.word || room.options.length === 0) return false;
+  if (room.phase !== "result" || !shouldRecordGameReplay(room) || !room.word || room.options.length === 0) return false;
   const scores = tahoiyaRoundScores(room);
   const realOption = room.options.find((option) => option.isReal);
   const realVotes = realOption ? Object.values(room.votes).filter((id) => id === realOption.id).length : 0;
@@ -311,7 +312,7 @@ export async function recordTahoiyaReplay(room: TahoiyaRoom) {
 }
 
 export async function recordHodoaiReplay(room: HodoaiRoom) {
-  if (room.phase !== "result" || room.round < room.roundsTotal || room.debugMode) return false;
+  if (room.phase !== "result" || room.round < room.roundsTotal || !shouldRecordGameReplay(room)) return false;
   const players = room.players.filter((player) => !player.isDummy);
   const maxPoints = room.roundsTotal * 3;
   const perfectRounds = room.history.filter((round) => round.inversions === 0).length;
@@ -335,7 +336,7 @@ export async function recordHodoaiReplay(room: HodoaiRoom) {
 }
 
 export async function recordNorthernBranchReplay(room: NorthernRoom) {
-  if (room.phase !== "finished" || !room.game?.winnerId || room.debugMode) return false;
+  if (room.phase !== "finished" || !room.game?.winnerId || !shouldRecordGameReplay(room)) return false;
   const players = room.players.filter((player) => !player.isDummy);
   const gamePlayers = new Map(room.game.players.map((player) => [player.id, player]));
   const winner = gamePlayers.get(room.game.winnerId);
@@ -358,7 +359,7 @@ export async function recordNorthernBranchReplay(room: NorthernRoom) {
 }
 
 export async function recordKotobaSenpukuReplay(room: KotobaSenpukuRoom) {
-  if (room.phase !== "result" || room.round < room.roundsTotal || (room.debugMode && !room.debugReplayEnabled)) return false;
+  if (room.phase !== "result" || room.round < room.roundsTotal || !shouldRecordGameReplay(room)) return false;
   const players = room.players.filter((player) => !player.isDummy);
   const winnerIds = room.history.at(-1)?.winnerIds ?? (room.history.at(-1)?.winnerId ? [room.history.at(-1)!.winnerId!] : []);
   const winners = players.filter((player) => winnerIds.includes(player.id));

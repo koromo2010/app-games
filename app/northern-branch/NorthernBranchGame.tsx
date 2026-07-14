@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
+import { DebugReplayButton } from "@/app/components/DebugReplayButton";
 import { GameRulesDialog } from "@/app/components/GameRulesDialog";
 import { GameTopBanner, gameTopBannerOffsetClass } from "@/app/components/GameTopBanner";
 import { GamePlayerMenu } from "@/app/components/GamePlayerMenu";
@@ -216,7 +217,7 @@ export function NorthernBranchGame() {
       const host: NorthernRoomPlayer = { id: session.id, name: session.name, joinedAt: now, avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined };
       const nextRoom: NorthernRoom = {
         code: makeRoomCode(), revision: 0, hostId: session.id, ownerId, passphrase: passphrase.trim(), phase: "lobby",
-        players: [host], gameNumber: 1, debugMode: false, game: null, notice: "参加者を待っています。", createdAt: now, updatedAt: now,
+        players: [host], gameNumber: 1, debugMode: false, debugReplayEnabled: false, game: null, notice: "参加者を待っています。", createdAt: now, updatedAt: now,
       };
       const response = await fetch("/api/northern-branch/rooms", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ room: nextRoom, actorId: session.id }) });
       if (!response.ok) {
@@ -334,6 +335,7 @@ export function NorthernBranchGame() {
     <main className={`min-h-screen bg-[radial-gradient(circle_at_top,#365314_0%,#172033_35%,#020617_75%)] text-white ${gameTopBannerOffsetClass}`}>
       <GameTopBanner eyebrow="Trading company strategy" title={<>ノーザンブランチ <span className="font-mono text-base text-amber-300">#{room.code}</span></>}><Link href="/games" target="_blank" rel="noreferrer" className="rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 font-semibold text-cyan-50 transition hover:bg-white/15">ゲームロビー ↗</Link>{isHost && <DebugModeButton enabled={room.debugMode} disabled={isSaving || room.phase !== "lobby"} onAbort={room.debugMode && room.phase !== "lobby" ? () => runAction({ type: "abort-game", actorId: playerId }).then(() => undefined) : undefined} onChange={(enabled) => runAction({ type: "set-debug", actorId: playerId, enabled }).then(() => undefined)} />}<button type="button" onClick={() => setRulesOpen(true)} className="rounded-lg border border-amber-200 bg-amber-200 px-3 py-1.5 font-semibold text-slate-950">ルール</button><GamePlayerMenu id={session.id} name={session.name} avatarColor={session.avatarColor} avatarImage={session.avatarImage} hasRecoveryEmail={session.hasRecoveryEmail} />{isHost ? <button type="button" onClick={() => void dissolveRoom()} className="rounded-lg border border-rose-300/30 px-3 py-1.5 font-semibold text-rose-100">部屋を解散</button> : room.phase === "lobby" && <button type="button" onClick={() => void leaveRoom()} className="rounded-lg border border-white/15 px-3 py-1.5 font-semibold">退出</button>}</GameTopBanner>
       <div className="mx-auto grid max-w-7xl gap-4 px-4 py-5 xl:grid-cols-[260px_minmax(0,1fr)_280px]">
+        {isHost && room.debugMode && <DebugReplayButton enabled={room.debugReplayEnabled} disabled={isSaving} onChange={(enabled) => runAction({ type: "set-debug-replay", actorId: playerId, enabled }).then(() => undefined)} />}
         <aside className="space-y-4"><section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4"><div className="flex items-center justify-between"><h2 className="font-black">参加者</h2><span className="text-sm text-slate-400">{room.players.length}/4人</span></div><ul className="mt-3 space-y-2">{room.players.map((player) => <PlayerRow key={player.id} player={player} isHost={player.id === room.hostId} isMe={player.id === playerId} />)}</ul></section><RoomConfigSummary items={configItems} /></aside>
         <div className="space-y-4">
           {error && <p className="rounded-xl border border-rose-300/30 bg-rose-300/10 p-3 text-sm font-bold text-rose-100">{error}</p>}

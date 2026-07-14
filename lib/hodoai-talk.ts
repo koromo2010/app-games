@@ -35,6 +35,7 @@ export type HodoaiRoundResult = {
 
 export type HodoaiRoom = HodoaiConfig & {
   code: string;
+  debugReplayEnabled: boolean;
   revision: number;
   hostId: string;
   ownerId?: string;
@@ -68,6 +69,7 @@ export type HodoaiRoomAction =
   | { type: "leave-room"; actorId: string }
   | { type: "update-config"; actorId: string; config: Omit<HodoaiConfig, "debugMode"> }
   | { type: "set-debug"; actorId: string; enabled: boolean }
+  | { type: "set-debug-replay"; actorId: string; enabled: boolean }
   | { type: "start-game"; actorId: string }
   | { type: "submit-clue"; actorId: string; round: number; text: string }
   | { type: "reorder"; actorId: string; round: number; order: string[] }

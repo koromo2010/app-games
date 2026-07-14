@@ -165,6 +165,7 @@ function normalizeRoom(value: unknown): WordWolfRoom | null {
     phase: isPhase(parsed.phase) ? parsed.phase : "lobby",
     gameMode: normalizeGameMode(parsed.gameMode),
     debugMode: Boolean(parsed.debugMode),
+    debugReplayEnabled: Boolean(parsed.debugMode && parsed.debugReplayEnabled),
     clueLogVisibility: parsed.clueLogVisibility === "always" ? "always" : "result",
     clueMode: normalizeClueMode(parsed.clueMode),
     randomizeTurnOrder: parsed.randomizeTurnOrder ?? true,

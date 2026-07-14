@@ -38,6 +38,7 @@ export type Room = {
   phase: Phase;
   gameMode: GameMode;
   debugMode?: boolean;
+  debugReplayEnabled?: boolean;
   clueLogVisibility: ClueLogVisibility;
   clueMode: ClueMode;
   randomizeTurnOrder: boolean;

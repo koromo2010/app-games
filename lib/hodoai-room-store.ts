@@ -121,6 +121,7 @@ function normalizeRoom(value: unknown): HodoaiRoom | null {
     players,
     gameNumber: typeof parsed.gameNumber === "number" ? Math.max(1, Math.floor(parsed.gameNumber)) : 1,
     ...config,
+    debugReplayEnabled: parsed.debugReplayEnabled === true && config.debugMode,
     round: typeof parsed.round === "number" ? Math.max(1, Math.floor(parsed.round)) : 1,
     theme: normalizeTheme(parsed.theme),
     values: normalizeNumberRecord(parsed.values),
@@ -329,7 +330,7 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
     if (!actorIsMember) throw new Error("HODOAI_ROOM_FORBIDDEN");
     if (action.type === "abort-game") {
       if (!actorIsHost || !current.debugMode || current.phase === "lobby") throw new Error("HODOAI_ROOM_FORBIDDEN");
-      return { ...current, phase: "lobby", round: 1, theme: null, values: {}, clues: {}, order: [], totalPoints: 0, history: [], phaseStartedAt: null };
+      return { ...current, phase: "lobby", debugReplayEnabled: false, round: 1, theme: null, values: {}, clues: {}, order: [], totalPoints: 0, history: [], phaseStartedAt: null };
     }
 
     const reconciled = reconcileProgress(current);
@@ -349,8 +350,13 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
       return {
         ...current,
         debugMode: action.enabled,
+        debugReplayEnabled: action.enabled ? current.debugReplayEnabled : false,
         players: action.enabled ? current.players : current.players.filter((player) => !player.isDummy),
       };
+    }
+    if (action.type === "set-debug-replay") {
+      if (!actorIsHost || !current.debugMode) throw new Error("HODOAI_ROOM_FORBIDDEN");
+      return { ...current, debugReplayEnabled: action.enabled };
     }
     if (action.type === "start-game") {
       if (!actorIsHost || current.phase !== "lobby") throw new Error("HODOAI_ROOM_FORBIDDEN");
@@ -396,7 +402,7 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
     }
     if (action.type === "reset-game") {
       if (!actorIsHost || current.phase !== "result") throw new Error("HODOAI_ROOM_FORBIDDEN");
-      return { ...current, gameNumber: current.gameNumber + 1, phase: "lobby", round: 1, theme: null, values: {}, clues: {}, order: [], totalPoints: 0, history: [], phaseStartedAt: null };
+      return { ...current, gameNumber: current.gameNumber + 1, phase: "lobby", debugReplayEnabled: false, round: 1, theme: null, values: {}, clues: {}, order: [], totalPoints: 0, history: [], phaseStartedAt: null };
     }
     if (!actorIsHost || !current.debugMode || action.round !== current.round) throw new Error("HODOAI_ROOM_FORBIDDEN");
     if (action.type === "debug-fill-clues" && current.phase === "clue") {

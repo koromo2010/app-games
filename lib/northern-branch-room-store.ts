@@ -86,6 +86,7 @@ function normalizeRoom(value: unknown): NorthernRoom | null {
     players,
     gameNumber: typeof parsed.gameNumber === "number" ? Math.max(1, Math.floor(parsed.gameNumber)) : 1,
     debugMode: parsed.debugMode === true,
+    debugReplayEnabled: parsed.debugReplayEnabled === true && parsed.debugMode === true,
     game,
     notice: typeof parsed.notice === "string" ? parsed.notice.slice(0, 160) : "",
     createdAt: typeof parsed.createdAt === "number" ? parsed.createdAt : Date.now(),
@@ -202,6 +203,7 @@ export async function createStoredNorthernRoom(value: unknown, actorId: string) 
     gameNumber: 1,
     phase: "lobby",
     debugMode: false,
+    debugReplayEnabled: false,
     game: null,
     notice: "参加者を待っています。",
     updatedAt: Date.now(),
@@ -236,8 +238,13 @@ export async function applyStoredNorthernAction(code: string, action: NorthernRo
       return {
         ...current,
         debugMode: action.enabled,
+        debugReplayEnabled: action.enabled ? current.debugReplayEnabled : false,
         players: action.enabled ? current.players : current.players.filter((player) => !player.isDummy),
       };
+    }
+    if (action.type === "set-debug-replay") {
+      if (!actorIsHost || !current.debugMode) throw new Error("NORTHERN_ROOM_FORBIDDEN");
+      return { ...current, debugReplayEnabled: action.enabled };
     }
     if (action.type === "debug-add-player") {
       if (!actorIsHost || !current.debugMode || current.phase !== "lobby") throw new Error("NORTHERN_ROOM_FORBIDDEN");
@@ -263,11 +270,11 @@ export async function applyStoredNorthernAction(code: string, action: NorthernRo
     }
     if (action.type === "reset-game") {
       if (!actorIsHost || current.phase !== "finished") throw new Error("NORTHERN_ROOM_FORBIDDEN");
-      return { ...current, gameNumber: current.gameNumber + 1, phase: "lobby", game: null, notice: "同じ部屋で次のゲームを準備できます。" };
+      return { ...current, gameNumber: current.gameNumber + 1, phase: "lobby", debugReplayEnabled: false, game: null, notice: "同じ部屋で次のゲームを準備できます。" };
     }
     if (action.type === "abort-game") {
       if (!actorIsHost || !current.debugMode || current.phase === "lobby") throw new Error("NORTHERN_ROOM_FORBIDDEN");
-      return { ...current, phase: "lobby", game: null, notice: "ゲームを中断し、ゲーム開始前へ戻りました。" };
+      return { ...current, phase: "lobby", debugReplayEnabled: false, game: null, notice: "ゲームを中断し、ゲーム開始前へ戻りました。" };
     }
     if (action.type === "game-action") {
       if (!current.game || current.phase !== "playing") throw new Error("NORTHERN_ROOM_FORBIDDEN");

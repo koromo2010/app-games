@@ -2,6 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { resolveGameReplayPolicy } from "../lib/game-replay-policy.ts";
 import { gameReplayShareText } from "../lib/game-replay-types.ts";
+import { shouldRecordGameReplay } from "../lib/debug-replay.ts";
+
+test("通常試合は記録し、デバッグ試合は明示的にONにした場合だけ記録する", () => {
+  assert.equal(shouldRecordGameReplay({ debugMode: false, debugReplayEnabled: false }), true);
+  assert.equal(shouldRecordGameReplay({ debugMode: true, debugReplayEnabled: false }), false);
+  assert.equal(shouldRecordGameReplay({ debugMode: true, debugReplayEnabled: true }), true);
+});
 
 test("リプレイ設定の初期値は30日・お気に入り10件", () => {
   assert.deepEqual(resolveGameReplayPolicy({}), { retentionDays: 30, favoriteLimit: 10 });

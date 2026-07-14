@@ -14,6 +14,7 @@ import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
 import type { TahoiyaAnswererMode, TahoiyaDifficulty, TahoiyaPlayMode, TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomAction, TahoiyaRoomChoice, TahoiyaTopic } from "@/lib/tahoiya-types";
 import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
 import { DebugModeButton } from "../components/DebugModeButton";
+import { DebugReplayButton } from "../components/DebugReplayButton";
 import { DebugWordGenerationTest, type DebugWordGenerationResult } from "../components/DebugWordGenerationTest";
 import { GameFeedbackPanel } from "../components/GameFeedbackPanel";
 import { GameRulesDialog } from "../components/GameRulesDialog";
@@ -146,6 +147,7 @@ function normalizeRoom(room: TahoiyaRoom): TahoiyaRoom {
     revision: typeof room.revision === "number" ? room.revision : 0,
     passphrase: room.passphrase ?? "",
     debugMode: Boolean(room.debugMode),
+    debugReplayEnabled: Boolean(room.debugMode && room.debugReplayEnabled),
     players: Array.isArray(room.players) ? room.players : [],
     parentId: room.parentId || room.hostId,
     playMode,
@@ -328,6 +330,7 @@ function createEmptyRoom(
     passphrase,
     phase: "lobby",
     debugMode: false,
+    debugReplayEnabled: false,
     players: [host],
     parentId: host.id,
     playMode: defaults.playMode,
@@ -605,7 +608,7 @@ export function TahoiyaGame() {
 
   const setDebugMode = (debugMode: boolean) => {
     if (!room || room.phase !== "lobby") return;
-    const nextRoom = { ...room, debugMode };
+    const nextRoom = { ...room, debugMode, debugReplayEnabled: debugMode ? room.debugReplayEnabled : false };
     setAndSaveRoom(nextRoom);
     if (!debugMode) {
       setActivePlayerId(playerId);
@@ -912,6 +915,7 @@ export function TahoiyaGame() {
     setAndSaveRoom({
       ...room,
       phase: "lobby",
+      debugReplayEnabled: false,
       answererId: nextAnswererId,
       round: room.round + 1,
       word: "",
@@ -968,6 +972,7 @@ export function TahoiyaGame() {
             <GamePlayerMenu id={playerId || undefined} name={playerName || "未ログイン"} avatarColor={avatarColor} avatarImage={avatarImage} />
       </GameTopBanner>
 
+      {room?.debugMode && room.hostId === playerId && <DebugReplayButton enabled={Boolean(room.debugReplayEnabled)} onChange={(enabled) => setAndSaveRoom({ ...room, debugReplayEnabled: enabled })} />}
       <GameRulesDialog open={rulesOpen} title="たほい屋のルール" onClose={() => setRulesOpen(false)}>
         <p>知らない難語の本物の説明を、参加者が作った偽説明の中から見抜くゲームです。</p>
         <h3 className="mt-4 font-black text-white">回答者1人</h3>

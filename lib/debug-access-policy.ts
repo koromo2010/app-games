@@ -8,5 +8,6 @@ export function actionRequiresDebugAccess(action: unknown) {
   if (typeof candidate.type !== "string") return false;
   return candidate.type === "abort-game"
     || candidate.type.startsWith("debug-")
+    || candidate.type === "set-debug-replay"
     || (candidate.type === "set-debug" && candidate.enabled === true);
 }

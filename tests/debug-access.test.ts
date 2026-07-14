@@ -7,6 +7,7 @@ test("デバッグ専用操作だけをアカウント認証対象にする", ()
   assert.equal(actionRequiresDebugAccess({ type: "set-debug", enabled: false }), false);
   assert.equal(actionRequiresDebugAccess({ type: "abort-game" }), true);
   assert.equal(actionRequiresDebugAccess({ type: "debug-fill-secrets" }), true);
+  assert.equal(actionRequiresDebugAccess({ type: "set-debug-replay", enabled: true }), true);
   assert.equal(actionRequiresDebugAccess({ type: "start-game" }), false);
 });
 

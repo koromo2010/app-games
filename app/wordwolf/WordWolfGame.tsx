@@ -27,6 +27,7 @@ import {
 } from "@/lib/wordwolf";
 import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
 import { DebugModeButton } from "../components/DebugModeButton";
+import { DebugReplayButton } from "../components/DebugReplayButton";
 import { GameTopBanner, gameTopBannerOffsetClass } from "../components/GameTopBanner";
 import { DebugWordGenerationTest, type DebugWordGenerationResult } from "../components/DebugWordGenerationTest";
 import { GameFeedbackPanel } from "../components/GameFeedbackPanel";
@@ -485,6 +486,7 @@ function createEmptyRoom(
     ownerId,
     passphrase,
     phase: "lobby",
+    debugReplayEnabled: false,
     gameMode: defaults.gameMode,
     clueLogVisibility: defaults.clueLogVisibility,
     clueMode: defaults.clueMode,
@@ -1356,6 +1358,7 @@ export function WordWolfGame() {
     resultText: "",
     gameNumber: advanceGame ? (targetRoom.gameNumber ?? 1) + 1 : targetRoom.gameNumber,
     statsRecordedAt: undefined,
+    debugReplayEnabled: false,
   });
 
   const resetRoom = () => {
@@ -1491,7 +1494,7 @@ export function WordWolfGame() {
                 disabled={room.phase !== "lobby"}
                 onAbort={room.debugMode && room.phase !== "lobby" ? abortGame : undefined}
                 onChange={(enabled) => {
-                  setAndSaveRoom({ ...room, debugMode: enabled });
+                  setAndSaveRoom({ ...room, debugMode: enabled, debugReplayEnabled: enabled ? room.debugReplayEnabled : false });
                   setError("");
                 }}
               />
@@ -1505,6 +1508,7 @@ export function WordWolfGame() {
             </button>
       </GameTopBanner>
 
+      {room?.debugMode && room.hostId === playerAccountId && <DebugReplayButton enabled={Boolean(room.debugReplayEnabled)} onChange={(enabled) => setAndSaveRoom({ ...room, debugReplayEnabled: enabled })} />}
       <GameRulesDialog open={isRulesOpen} title="ワードウルフのルール" onClose={() => setIsRulesOpen(false)}>
         <p>自分だけ少数派かもしれない状態で会話し、投票で違うお題を持つ狼を探します。自分の役割も仲間も表示されません。</p>
         <h3 className="mt-4 font-black text-white">基本の流れ</h3>

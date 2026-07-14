@@ -113,6 +113,7 @@ export type NorthernRoom = {
   players: NorthernRoomPlayer[];
   gameNumber: number;
   debugMode: boolean;
+  debugReplayEnabled: boolean;
   game: NorthernGameState | null;
   notice: string;
   createdAt: number;
@@ -131,6 +132,7 @@ export type NorthernRoomAction =
   | { type: "join-room"; actorId: string; player: NorthernRoomPlayer; passphrase: string }
   | { type: "leave-room"; actorId: string }
   | { type: "set-debug"; actorId: string; enabled: boolean }
+  | { type: "set-debug-replay"; actorId: string; enabled: boolean }
   | { type: "debug-add-player"; actorId: string }
   | { type: "start-game"; actorId: string }
   | { type: "game-action"; actorId: string; action: NorthernGameAction }
