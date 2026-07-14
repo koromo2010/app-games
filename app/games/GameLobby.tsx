@@ -922,7 +922,7 @@ export function GameLobby() {
             <p className="text-xs font-semibold uppercase text-cyan-200">Games</p>
             <h2 className="text-xl font-black">遊ぶゲームを選ぶ</h2>
           </div>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(210px,230px))] sm:justify-start">
             {orderedGames.map((game) => {
             const activeGameRoom = activeGameRooms[game.id];
             const isActiveGame = Boolean(activeGameRoom);
