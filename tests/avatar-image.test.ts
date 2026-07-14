@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isWebpImage, maxAvatarUploadBytes, resolveAvatarBlobToken } from "../lib/avatar-image-server.ts";
+import { isWebpImage, maxAvatarUploadBytes, resolveAvatarBlobStoreId, resolveAvatarBlobToken } from "../lib/avatar-image-server.ts";
 import { isAvatarImage } from "../lib/player-session.ts";
 
 test("accepts only avatar URLs from public Vercel Blob storage", () => {
@@ -47,4 +47,13 @@ test("does not guess when multiple unrelated Blob tokens are configured", () => 
     "FIRST_BLOB_READ_WRITE_TOKEN",
     "SECOND_BLOB_READ_WRITE_TOKEN",
   ]);
+});
+
+test("prefers the connected avatar Blob store ID for OIDC uploads", () => {
+  const result = resolveAvatarBlobStoreId({
+    BLOB_STORE_ID: "generic-store",
+    BLOB_avatars_STORE_ID: "avatar-store",
+  });
+  assert.equal(result.key, "BLOB_avatars_STORE_ID");
+  assert.equal(result.token, "avatar-store");
 });
