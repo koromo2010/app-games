@@ -535,7 +535,7 @@ export function GameLobby() {
             type="button"
             aria-label="アカウント・戦績メニューを閉じる"
             onClick={() => setIsMobileInfoOpen(false)}
-            className={`fixed inset-0 z-40 bg-slate-950/70 backdrop-blur-sm transition-opacity duration-200 motion-reduce:transition-none lg:hidden ${
+            className={`fixed inset-0 z-40 bg-transparent transition-opacity duration-200 motion-reduce:transition-none lg:hidden ${
               isMobileInfoOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
             }`}
           />

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { createPortal } from "react-dom";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { avatarColorOptions, defaultAvatarImage, defaultAvatarImages, savePersistentPlayerSession } from "@/lib/player-session";
 
 type Props = { id?: string; name: string; avatarColor: string; avatarImage?: string | null; hasRecoveryEmail?: boolean };
@@ -13,6 +13,20 @@ export function GamePlayerMenu(props: Props) {
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [isOpen, setIsOpen] = useState(false);
+  const [position, setPosition] = useState({ top: 80, left: 12 });
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  const openMenu = () => {
+    const rect = buttonRef.current?.getBoundingClientRect();
+    if (rect) {
+      const width = Math.min(288, window.innerWidth - 24);
+      setPosition({
+        top: rect.bottom + 8,
+        left: Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12)),
+      });
+    }
+    setIsOpen(true);
+  };
 
   const updateAvatar = async (nextColor: string, nextImage: string) => {
     if (isSaving) return;
@@ -34,12 +48,12 @@ export function GamePlayerMenu(props: Props) {
 
   return (
     <>
-      <button type="button" onClick={() => setIsOpen(true)} className="flex items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-2.5 py-1.5 font-semibold text-white transition hover:bg-white/15" aria-haspopup="dialog" aria-expanded={isOpen} aria-label={`${props.name}のプレイヤーメニューを開く`}>
+      <button ref={buttonRef} type="button" onClick={openMenu} className="flex items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-2.5 py-1.5 font-semibold text-white transition hover:bg-white/15" aria-haspopup="dialog" aria-expanded={isOpen} aria-label={`${props.name}のプレイヤーメニューを開く`}>
         <span className="h-7 w-7 rounded-full border border-white/50 bg-cover bg-center" style={{ backgroundColor: color, backgroundImage: `url(${image})` }} aria-hidden="true" />
         <span className="max-w-[120px] truncate">{props.name}</span>
         <span className="text-[10px] text-slate-300" aria-hidden="true">▼</span>
       </button>
-      {isOpen && createPortal(<div className="fixed inset-0 z-[9999] bg-slate-950/35" onClick={() => setIsOpen(false)}><div role="dialog" aria-modal="true" aria-label={`${props.name}のプレイヤーメニュー`} className="absolute right-3 top-20 w-[min(18rem,calc(100vw-1.5rem))] rounded-lg border border-slate-200 bg-white p-3 text-slate-900 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+      {isOpen && createPortal(<div className="fixed inset-0 z-[9999]" onClick={() => setIsOpen(false)}><div role="dialog" aria-label={`${props.name}のプレイヤーメニュー`} className="fixed w-[min(18rem,calc(100vw-1.5rem))] rounded-lg border border-slate-200 bg-white p-3 text-slate-900 shadow-2xl" style={position} onClick={(event) => event.stopPropagation()}>
         <div className="flex items-center justify-between gap-2"><p className="truncate px-1 text-xs font-semibold text-slate-500">{props.name}でプレイ中</p><button type="button" onClick={() => setIsOpen(false)} className="rounded border border-slate-200 px-2 py-1 text-xs font-bold text-slate-500">閉じる</button></div>
         <p className="mt-3 text-xs font-bold">アイコンの色</p>
         <div className="mt-2 grid grid-cols-8 gap-1.5">
