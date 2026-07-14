@@ -16,10 +16,17 @@ export type HodoaiPlayer = {
   isDummy?: boolean;
 };
 
+export type HodoaiCard = {
+  id: string;
+  ownerId: string;
+  cardNumber: number;
+};
+
 export type HodoaiPhase = "lobby" | "clue" | "arrange" | "result";
 
 export type HodoaiConfig = {
   roundsTotal: number;
+  cardsPerPlayer: number;
   clueTimeLimitSeconds: number;
   arrangeTimeLimitSeconds: number;
   debugMode: boolean;
@@ -30,6 +37,7 @@ export type HodoaiRoundResult = {
   theme: HodoaiTheme;
   inversions: number;
   points: number;
+  cards: HodoaiCard[];
   order: string[];
   values: Record<string, number>;
   clues: Record<string, string>;
@@ -47,6 +55,7 @@ export type HodoaiRoom = HodoaiConfig & {
   gameNumber: number;
   round: number;
   theme: HodoaiTheme | null;
+  cards: HodoaiCard[];
   values: Record<string, number>;
   clues: Record<string, string>;
   order: string[];
@@ -63,6 +72,7 @@ export type HodoaiRoomChoice = {
   hostName: string;
   playerCount: number;
   roundsTotal: number;
+  cardsPerPlayer: number;
   hasPassphrase: boolean;
   updatedAt: number;
 };
@@ -74,7 +84,7 @@ export type HodoaiRoomAction =
   | { type: "set-debug"; actorId: string; enabled: boolean }
   | { type: "set-debug-replay"; actorId: string; enabled: boolean }
   | { type: "start-game"; actorId: string }
-  | { type: "submit-clue"; actorId: string; round: number; text: string }
+  | { type: "submit-clue"; actorId: string; round: number; cardId: string; text: string }
   | { type: "reorder"; actorId: string; round: number; order: string[] }
   | { type: "score-round"; actorId: string; round: number; force?: boolean }
   | { type: "next-round"; actorId: string; round: number }
@@ -86,23 +96,26 @@ export type HodoaiRoomAction =
 
 export const defaultHodoaiConfig: HodoaiConfig = {
   roundsTotal: 3,
+  cardsPerPlayer: 1,
   clueTimeLimitSeconds: 0,
   arrangeTimeLimitSeconds: 0,
   debugMode: false,
 };
 
-// 0～120の重複しない目盛りは最大121人分あるが、同期量と画面操作を守る安全上限は50人とする。
+// 0～120のカードは合計121枚。同期量と画面操作を守る参加者の安全上限は別途50人とする。
 export const hodoaiTechnicalPlayerLimit = 50;
 
 export function normalizeHodoaiConfig(value: unknown): HodoaiConfig {
   const parsed = value && typeof value === "object" ? value as Partial<HodoaiConfig> : {};
   const rounds = typeof parsed.roundsTotal === "number" ? Math.floor(parsed.roundsTotal) : 3;
+  const cards = typeof parsed.cardsPerPlayer === "number" ? Math.floor(parsed.cardsPerPlayer) : 1;
   const normalizeTime = (seconds: unknown) => {
     const number = typeof seconds === "number" && Number.isFinite(seconds) ? Math.floor(seconds) : 0;
     return Math.max(0, Math.min(3600, number));
   };
   return {
     roundsTotal: Math.max(1, Math.min(4, rounds)),
+    cardsPerPlayer: Math.max(1, Math.min(5, cards)),
     clueTimeLimitSeconds: normalizeTime(parsed.clueTimeLimitSeconds),
     arrangeTimeLimitSeconds: normalizeTime(parsed.arrangeTimeLimitSeconds),
     debugMode: parsed.debugMode === true,
@@ -146,9 +159,15 @@ export function pickHodoaiTheme(history: HodoaiRoundResult[]) {
   return candidates[Math.floor(Math.random() * candidates.length)] ?? hodoaiThemes[0];
 }
 
-export function dealHodoaiValues(players: HodoaiPlayer[]) {
-  const values = shuffleHodoai(Array.from({ length: 121 }, (_, index) => index)).slice(0, players.length);
-  return Object.fromEntries(players.map((player, index) => [player.id, values[index]]));
+export function dealHodoaiCards(players: HodoaiPlayer[], cardsPerPlayer: number) {
+  const cards = players.flatMap((player) => Array.from({ length: cardsPerPlayer }, (_, index) => ({
+    id: `${player.id}:card-${index + 1}`,
+    ownerId: player.id,
+    cardNumber: index + 1,
+  })));
+  if (cards.length > 121) throw new Error("HODOAI_TOO_MANY_CARDS");
+  const dealtValues = shuffleHodoai(Array.from({ length: 121 }, (_, index) => index)).slice(0, cards.length);
+  return { cards, values: Object.fromEntries(cards.map((card, index) => [card.id, dealtValues[index]])) };
 }
 
 export function countHodoaiInversions(order: string[], values: Record<string, number>) {
@@ -178,7 +197,7 @@ export function hodoaiFinalMessage(points: number, maxPoints: number) {
 
 export function hodoaiGameShareText(room: Pick<HodoaiRoom, "totalPoints" | "roundsTotal" | "history">) {
   const maxPoints = room.roundsTotal * 3;
-  const rounds = room.history.map((result) => `第${result.round}R「${result.theme.title}」 ${result.points}/3点（並び違い${result.inversions}組）`);
+  const rounds = room.history.map((result) => `第${result.round}R「${result.theme.title}」 ${result.points}/3点（全${result.cards.length}枚・並び違い${result.inversions}組）`);
   return [
     "ことばで数ならべ プレイログ",
     `チーム得点 ${room.totalPoints}/${maxPoints}点`,
@@ -187,4 +206,4 @@ export function hodoaiGameShareText(room: Pick<HodoaiRoom, "totalPoints" | "roun
   ].join("\n");
 }
 
-export const clueHasNumber = (clue: string) => /[0-9０-９]/.test(clue);
+export const clueHasNumber = (clue: string) => /[0-9０-９〇零一二三四五六七八九十百]/.test(clue);

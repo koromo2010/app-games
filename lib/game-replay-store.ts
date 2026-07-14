@@ -320,7 +320,10 @@ export async function recordHodoaiReplay(room: HodoaiRoom) {
   const names = new Map(room.players.map((player) => [player.id, player.name]));
   const details = room.history.flatMap((round) => [
     `ROUND ${round.round}「${round.theme.title}」: ${round.points}/3点・並べ違い${round.inversions}組`,
-    ...round.order.map((id, index) => `${index + 1}. ${names.get(id) ?? "Unknown"}「${round.clues[id] ?? ""}」→目盛り${round.values[id] ?? 0}`),
+    ...round.order.map((id, index) => {
+      const card = round.cards.find((item) => item.id === id);
+      return `${index + 1}. ${names.get(card?.ownerId ?? "") ?? "Unknown"}（カード${card?.cardNumber ?? 1}）「${round.clues[id] ?? ""}」→数字${round.values[id] ?? 0}`;
+    }),
   ]);
   const base = makeReplayBase(
     `hodoai:${room.code}:${room.createdAt}:${room.gameNumber ?? 1}`,

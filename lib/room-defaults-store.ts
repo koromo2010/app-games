@@ -35,6 +35,7 @@ export type StoredTahoiyaRoomDefaults = {
 
 export type StoredHodoaiRoomDefaults = {
   roundsTotal: number;
+  cardsPerPlayer: number;
   clueTimeLimitSeconds: number;
   arrangeTimeLimitSeconds: number;
 };
@@ -111,6 +112,7 @@ function normalizeHodoaiDefaults(value: unknown): StoredHodoaiRoomDefaults {
   const config = normalizeHodoaiConfig(value);
   return {
     roundsTotal: config.roundsTotal,
+    cardsPerPlayer: config.cardsPerPlayer,
     clueTimeLimitSeconds: config.clueTimeLimitSeconds,
     arrangeTimeLimitSeconds: config.arrangeTimeLimitSeconds,
   };

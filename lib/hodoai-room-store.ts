@@ -12,7 +12,7 @@ import { appendGameDebugLog, normalizeGameDebugLog } from "@/lib/game-debug-log"
 import {
   clueHasNumber,
   countHodoaiInversions,
-  dealHodoaiValues,
+  dealHodoaiCards,
   hodoaiThemes,
   hodoaiTechnicalPlayerLimit,
   normalizeHodoaiConfig,
@@ -20,6 +20,7 @@ import {
   pointsForInversions,
   shuffleHodoai,
   type HodoaiPhase,
+  type HodoaiCard,
   type HodoaiPlayer,
   type HodoaiRoom,
   type HodoaiRoomAction,
@@ -102,19 +103,45 @@ function normalizeTheme(value: unknown): HodoaiTheme | null {
   return { id: theme.id, title: theme.title, lowLabel: theme.lowLabel, highLabel: theme.highLabel };
 }
 
-function normalizeHistory(value: unknown): HodoaiRoundResult[] {
+function cardOwnerFromId(id: string, players: HodoaiPlayer[]) {
+  return players.find((player) => id === player.id || id.startsWith(`${player.id}:card-`))?.id ?? "";
+}
+
+function normalizeCards(value: unknown, players: HodoaiPlayer[], fallbackIds: string[] = []): HodoaiCard[] {
+  const playerIds = new Set(players.map((player) => player.id));
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => {
+      if (!item || typeof item !== "object") return [];
+      const card = item as Partial<HodoaiCard>;
+      if (typeof card.id !== "string" || typeof card.ownerId !== "string" || !playerIds.has(card.ownerId)) return [];
+      return [{ id: card.id.slice(0, 120), ownerId: card.ownerId, cardNumber: typeof card.cardNumber === "number" ? Math.max(1, Math.floor(card.cardNumber)) : 1 }];
+    }).slice(0, 121);
+  }
+  const ownerCounts = new Map<string, number>();
+  return fallbackIds.flatMap((id) => {
+    const ownerId = cardOwnerFromId(id, players);
+    if (!ownerId) return [];
+    const cardNumber = (ownerCounts.get(ownerId) ?? 0) + 1;
+    ownerCounts.set(ownerId, cardNumber);
+    return [{ id, ownerId, cardNumber }];
+  });
+}
+
+function normalizeHistory(value: unknown, players: HodoaiPlayer[]): HodoaiRoundResult[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((item) => {
     if (!item || typeof item !== "object") return [];
     const result = item as Partial<HodoaiRoundResult>;
     const theme = normalizeTheme(result.theme);
     if (!theme) return [];
+    const order = Array.isArray(result.order) ? result.order.filter((id): id is string => typeof id === "string") : [];
     return [{
       round: typeof result.round === "number" ? Math.max(1, Math.floor(result.round)) : 1,
       theme,
       inversions: typeof result.inversions === "number" ? Math.max(0, Math.floor(result.inversions)) : 0,
       points: typeof result.points === "number" ? Math.max(0, Math.min(3, Math.floor(result.points))) : 0,
-      order: Array.isArray(result.order) ? result.order.filter((id): id is string => typeof id === "string") : [],
+      cards: normalizeCards(result.cards, players, order),
+      order,
       values: normalizeNumberRecord(result.values),
       clues: normalizeStringRecord(result.clues),
     }];
@@ -129,10 +156,11 @@ function normalizeRoom(value: unknown): HodoaiRoom | null {
   const players = normalizePlayers(parsed.players);
   if (!code || !hostId || players.length === 0 || !players.some((player) => player.id === hostId)) return null;
   const config = normalizeHodoaiConfig(parsed);
-  const history = normalizeHistory(parsed.history);
-  const playerIds = new Set(players.map((player) => player.id));
+  const history = normalizeHistory(parsed.history, players);
+  const cards = normalizeCards(parsed.cards, players, Object.keys(normalizeNumberRecord(parsed.values)));
+  const cardIds = new Set(cards.map((card) => card.id));
   const order = Array.isArray(parsed.order)
-    ? parsed.order.filter((id): id is string => typeof id === "string" && playerIds.has(id))
+    ? parsed.order.filter((id): id is string => typeof id === "string" && cardIds.has(id))
     : [];
   return {
     code,
@@ -147,6 +175,7 @@ function normalizeRoom(value: unknown): HodoaiRoom | null {
     debugReplayEnabled: parsed.debugReplayEnabled === true && config.debugMode,
     round: typeof parsed.round === "number" ? Math.max(1, Math.floor(parsed.round)) : 1,
     theme: normalizeTheme(parsed.theme),
+    cards,
     values: normalizeNumberRecord(parsed.values),
     clues: normalizeStringRecord(parsed.clues),
     order,
@@ -160,7 +189,7 @@ function normalizeRoom(value: unknown): HodoaiRoom | null {
 }
 
 function clueComplete(room: HodoaiRoom) {
-  return room.players.every((player) => Boolean(room.clues[player.id]));
+  return room.cards.every((card) => Boolean(room.clues[card.id]));
 }
 
 function timedOut(room: HodoaiRoom, seconds: number, now = Date.now()) {
@@ -169,12 +198,12 @@ function timedOut(room: HodoaiRoom, seconds: number, now = Date.now()) {
 
 function advanceToArrange(room: HodoaiRoom) {
   const clues = { ...room.clues };
-  for (const player of room.players) clues[player.id] ||= "時間切れのためパス";
+  for (const card of room.cards) clues[card.id] ||= "時間切れのためパス";
   return {
     ...room,
     phase: "arrange" as const,
     clues,
-    order: shuffleHodoai(room.players.map((player) => player.id)),
+    order: shuffleHodoai(room.cards.map((card) => card.id)),
     phaseStartedAt: Date.now(),
   };
 }
@@ -187,6 +216,7 @@ function scoreRound(room: HodoaiRoom) {
     theme: room.theme ?? hodoaiThemes[0],
     inversions,
     points,
+    cards: [...room.cards],
     order: [...room.order],
     values: { ...room.values },
     clues: { ...room.clues },
@@ -201,12 +231,14 @@ function scoreRound(room: HodoaiRoom) {
 }
 
 function beginRound(room: HodoaiRoom, round: number) {
+  const dealt = dealHodoaiCards(room.players, room.cardsPerPlayer);
   return {
     ...room,
     phase: "clue" as const,
     round,
     theme: pickHodoaiTheme(room.history),
-    values: dealHodoaiValues(room.players),
+    cards: dealt.cards,
+    values: dealt.values,
     clues: {},
     order: [],
     phaseStartedAt: Date.now(),
@@ -277,6 +309,7 @@ function makeChoice(room: HodoaiRoom): HodoaiRoomChoice {
     hostName: room.players.find((player) => player.id === room.hostId)?.name ?? "Unknown",
     playerCount: room.players.length,
     roundsTotal: room.roundsTotal,
+    cardsPerPlayer: room.cardsPerPlayer,
     hasPassphrase: Boolean(room.passphrase),
     updatedAt: room.updatedAt,
   };
@@ -296,13 +329,10 @@ async function clearActiveRoom(playerId: string, code: string) {
 export function sanitizeHodoaiRoom(room: HodoaiRoom, playerId: string) {
   const isDebugHost = room.debugMode && playerId === room.hostId;
   const revealAll = room.phase === "result" || isDebugHost;
-  const values = revealAll
-    ? room.values
-    : typeof room.values[playerId] === "number"
-      ? { [playerId]: room.values[playerId] }
-      : {};
+  const ownCardIds = new Set(room.cards.filter((card) => card.ownerId === playerId).map((card) => card.id));
+  const values = revealAll ? room.values : Object.fromEntries(Object.entries(room.values).filter(([cardId]) => ownCardIds.has(cardId)));
   const clues = room.phase === "clue" && !isDebugHost
-    ? room.clues[playerId] ? { [playerId]: room.clues[playerId] } : {}
+    ? Object.fromEntries(Object.entries(room.clues).filter(([cardId]) => ownCardIds.has(cardId)))
     : room.clues;
   return { ...room, passphrase: room.passphrase ? "設定済み" : "", values, clues, debugLog: isDebugHost ? room.debugLog : [] };
 }
@@ -351,7 +381,7 @@ export async function loadHodoaiPlayerActiveRoom(playerId: string) {
 export async function createStoredHodoaiRoom(value: unknown, actorId: string) {
   const room = normalizeRoom(value);
   if (!room || actorId !== room.hostId) throw new Error("INVALID_HODOAI_ROOM");
-  const created = { ...room, revision: 0, gameNumber: 1, phase: "lobby" as const, values: {}, clues: {}, order: [], history: [], debugLog: [], totalPoints: 0, updatedAt: Date.now() };
+  const created = { ...room, revision: 0, gameNumber: 1, phase: "lobby" as const, cards: [], values: {}, clues: {}, order: [], history: [], debugLog: [], totalPoints: 0, updatedAt: Date.now() };
   const activeRoom = await loadHodoaiPlayerActiveRoom(actorId);
   if (activeRoom && activeRoom.code !== created.code) {
     if (!canMoveFromOnlineRoom("hodoai", activeRoom)) throw new Error("HODOAI_PLAYER_ALREADY_ACTIVE");
@@ -388,6 +418,7 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
       if (current.passphrase && current.passphrase !== action.passphrase.trim()) throw new Error("HODOAI_BAD_PASSPHRASE");
       if (current.players.some((player) => player.id === action.actorId)) return current;
       if (current.players.length >= hodoaiTechnicalPlayerLimit) throw new Error("HODOAI_ROOM_FULL");
+      if ((current.players.length + 1) * current.cardsPerPlayer > 121) throw new Error("HODOAI_TOO_MANY_CARDS");
       return { ...current, players: [...current.players, action.player] };
     }
 
@@ -396,7 +427,7 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
     if (!actorIsMember) throw new Error("HODOAI_ROOM_FORBIDDEN");
     if (action.type === "abort-game") {
       if (!actorIsHost || !current.debugMode || current.phase === "lobby") throw new Error("HODOAI_ROOM_FORBIDDEN");
-      return { ...current, phase: "lobby", debugReplayEnabled: false, round: 1, theme: null, values: {}, clues: {}, order: [], totalPoints: 0, history: [], phaseStartedAt: null };
+      return { ...current, phase: "lobby", debugReplayEnabled: false, round: 1, theme: null, cards: [], values: {}, clues: {}, order: [], totalPoints: 0, history: [], phaseStartedAt: null };
     }
 
     const reconciled = reconcileProgress(current);
@@ -409,6 +440,7 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
     if (action.type === "update-config") {
       if (!actorIsHost || current.phase !== "lobby") throw new Error("HODOAI_ROOM_FORBIDDEN");
       const config = normalizeHodoaiConfig({ ...action.config, debugMode: current.debugMode });
+      if (current.players.length * config.cardsPerPlayer > 121) throw new Error("HODOAI_TOO_MANY_CARDS");
       return { ...current, ...config };
     }
     if (action.type === "set-debug") {
@@ -428,11 +460,13 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
     if (action.type === "start-game") {
       if (!actorIsHost || current.phase !== "lobby") throw new Error("HODOAI_ROOM_FORBIDDEN");
       if (current.players.length < 2 && !current.debugMode) throw new Error("HODOAI_NOT_ENOUGH_PLAYERS");
+      if (current.players.length * current.cardsPerPlayer > 121) throw new Error("HODOAI_TOO_MANY_CARDS");
       return beginRound({ ...current, round: 1, history: [], totalPoints: 0 }, 1);
     }
     if (action.type === "debug-add-player") {
       if (!actorIsHost || !current.debugMode || current.phase !== "lobby") throw new Error("HODOAI_ROOM_FORBIDDEN");
       if (current.players.length >= hodoaiTechnicalPlayerLimit) throw new Error("HODOAI_ROOM_FULL");
+      if ((current.players.length + 1) * current.cardsPerPlayer > 121) throw new Error("HODOAI_TOO_MANY_CARDS");
       const dummyNumber = current.players.filter((player) => player.isDummy).length + 1;
       const colors = ["#38bdf8", "#a78bfa", "#f472b6", "#f59e0b", "#84cc16", "#14b8a6"];
       const player: HodoaiPlayer = {
@@ -445,14 +479,15 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
       return { ...current, players: [...current.players, player] };
     }
     if (action.type === "submit-clue") {
-      if (current.phase !== "clue" || action.round !== current.round || current.clues[action.actorId]) return current;
+      const card = current.cards.find((item) => item.id === action.cardId);
+      if (current.phase !== "clue" || action.round !== current.round || card?.ownerId !== action.actorId || current.clues[action.cardId]) return current;
       const text = action.text.trim().replace(/\s+/g, " ").slice(0, 40);
       if (text.length < 2 || clueHasNumber(text)) throw new Error("HODOAI_INVALID_CLUE");
-      return reconcileProgress({ ...current, clues: { ...current.clues, [action.actorId]: text } });
+      return reconcileProgress({ ...current, clues: { ...current.clues, [action.cardId]: text } });
     }
     if (action.type === "reorder") {
       if (!actorIsHost || current.phase !== "arrange" || action.round !== current.round) throw new Error("HODOAI_ROOM_FORBIDDEN");
-      const expected = [...current.players.map((player) => player.id)].sort();
+      const expected = [...current.cards.map((card) => card.id)].sort();
       const proposed = [...new Set(action.order)].sort();
       if (expected.length !== proposed.length || expected.some((id, index) => id !== proposed[index])) return current;
       return { ...current, order: action.order };
@@ -469,17 +504,17 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
     }
     if (action.type === "reset-game") {
       if (!actorIsHost || current.phase !== "result") throw new Error("HODOAI_ROOM_FORBIDDEN");
-      return { ...current, gameNumber: current.gameNumber + 1, phase: "lobby", debugReplayEnabled: false, round: 1, theme: null, values: {}, clues: {}, order: [], totalPoints: 0, history: [], phaseStartedAt: null };
+      return { ...current, gameNumber: current.gameNumber + 1, phase: "lobby", debugReplayEnabled: false, round: 1, theme: null, cards: [], values: {}, clues: {}, order: [], totalPoints: 0, history: [], phaseStartedAt: null };
     }
     if (!actorIsHost || !current.debugMode || action.round !== current.round) throw new Error("HODOAI_ROOM_FORBIDDEN");
     if (action.type === "debug-fill-clues" && current.phase === "clue") {
       const labels = ["ほとんど当てはまらない", "ほんの少し", "やや控えめ", "ほどほど", "なかなか", "かなり", "とても", "最高クラス"];
       const clues = { ...current.clues };
-      for (const player of current.players) clues[player.id] ||= labels[Math.min(7, Math.floor((current.values[player.id] ?? 0) / 16))];
+      for (const card of current.cards) clues[card.id] ||= labels[Math.min(7, Math.floor((current.values[card.id] ?? 0) / 16))];
       return advanceToArrange({ ...current, clues });
     }
     if (action.type === "debug-sort" && current.phase === "arrange") {
-      return { ...current, order: [...current.players].sort((left, right) => current.values[left.id] - current.values[right.id]).map((player) => player.id) };
+      return { ...current, order: [...current.cards].sort((left, right) => current.values[left.id] - current.values[right.id]).map((card) => card.id) };
     }
     return current;
   }, { actorId: action.actorId, action: hodoaiDebugActionLabels[action.type] }).catch(async (error) => {

@@ -23,6 +23,7 @@ function errorResponse(error: unknown) {
   if (error instanceof Error && error.message === "HODOAI_ROOM_NOT_FOUND") return Response.json({ error: "Room not found" }, { status: 404 });
   if (error instanceof Error && error.message === "HODOAI_BAD_PASSPHRASE") return Response.json({ error: "Bad passphrase" }, { status: 401 });
   if (error instanceof Error && error.message === "HODOAI_ROOM_FULL") return Response.json({ error: "Room is full" }, { status: 409 });
+  if (error instanceof Error && error.message === "HODOAI_TOO_MANY_CARDS") return Response.json({ error: "Too many cards for this room" }, { status: 409 });
   if (error instanceof Error && error.message === "HODOAI_NOT_ENOUGH_PLAYERS") return Response.json({ error: "Not enough players" }, { status: 409 });
   if (error instanceof Error && error.message === "HODOAI_ROOM_IN_PROGRESS") return Response.json({ error: "An active game cannot be dissolved" }, { status: 409 });
   if (error instanceof Error && error.message === "HODOAI_PLAYER_ALREADY_ACTIVE") return Response.json({ error: "Finish or leave the current room before entering another room" }, { status: 409 });
