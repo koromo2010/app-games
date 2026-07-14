@@ -10,7 +10,10 @@ export async function POST(request: Request) {
   const telemetry = createRequestTelemetry(request, "/api/player-avatar", { operation: "avatar-upload" });
   try {
     const player = await requireAuthenticatedPlayer();
-    const token = process.env.AVATAR_BLOB_READ_WRITE_TOKEN?.trim();
+    const token = (
+      process.env.AVATAR_BLOB_READ_WRITE_TOKEN ??
+      process.env.BLOB_READ_WRITE_TOKEN
+    )?.trim();
     if (!token) {
       telemetry.reject("auth.avatar", 503, { actorRef: telemetry.actorRef(player.id), errorCode: "AVATAR_BLOB_NOT_CONFIGURED" });
       return Response.json({ error: "AVATAR_BLOB_NOT_CONFIGURED" }, { status: 503 });
