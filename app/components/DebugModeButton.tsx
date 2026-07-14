@@ -2,6 +2,8 @@
 
 import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
+import { DebugActionLog } from "@/app/components/DebugActionLog";
+import type { GameDebugLogEntry } from "@/lib/game-debug-log";
 
 type DebugModeButtonProps = {
   enabled: boolean;
@@ -11,10 +13,11 @@ type DebugModeButtonProps = {
   replayEnabled?: boolean;
   replayDisabled?: boolean;
   onReplayChange?: (enabled: boolean) => void | Promise<void>;
+  debugLogEntries?: GameDebugLogEntry[];
   variant?: "banner" | "menu";
 };
 
-export function DebugModeButton({ enabled, disabled = false, onChange, onAbort, replayEnabled = false, replayDisabled = false, onReplayChange, variant = "menu" }: DebugModeButtonProps) {
+export function DebugModeButton({ enabled, disabled = false, onChange, onAbort, replayEnabled = false, replayDisabled = false, onReplayChange, debugLogEntries = [], variant = "menu" }: DebugModeButtonProps) {
   const [hasAccess, setHasAccess] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -64,6 +67,7 @@ export function DebugModeButton({ enabled, disabled = false, onChange, onAbort, 
       <button type="button" disabled={disabled || isSubmitting} aria-pressed={enabled} onClick={() => void run(() => onChange(!enabled))} className={`mt-3 flex w-full items-center justify-between rounded-lg border px-3 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-40 ${enabled ? "border-cyan-300 bg-cyan-50 text-cyan-950" : "border-slate-300 bg-slate-50 text-slate-700"}`}><span>デバッグモード</span><span>{enabled ? "ON" : "OFF"}</span></button>
       {enabled && onReplayChange && <button type="button" disabled={replayDisabled || isSubmitting} aria-pressed={replayEnabled} onClick={() => void run(() => onReplayChange(!replayEnabled))} className="mt-2 flex w-full items-center justify-between rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold text-slate-700 disabled:opacity-40"><span>プレイバック記録</span><span>{replayEnabled ? "ON" : "OFF"}</span></button>}
       {enabled && onAbort && <button type="button" disabled={isSubmitting} onClick={() => void abort()} className="mt-2 w-full rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm font-bold text-rose-700 disabled:opacity-40">ゲームを中断</button>}
+      {enabled && <DebugActionLog entries={debugLogEntries} />}
       {disabled && <p className="mt-2 text-xs text-slate-500">ゲーム進行中はモードの切り替えができません。</p>}
     </div></div>, document.body)}
   </>;

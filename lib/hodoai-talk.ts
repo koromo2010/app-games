@@ -1,3 +1,5 @@
+import type { GameDebugLogEntry } from "@/lib/game-debug-log";
+
 export type HodoaiTheme = {
   id: string;
   title: string;
@@ -50,6 +52,7 @@ export type HodoaiRoom = HodoaiConfig & {
   order: string[];
   totalPoints: number;
   history: HodoaiRoundResult[];
+  debugLog: GameDebugLogEntry[];
   phaseStartedAt: number | null;
   createdAt: number;
   updatedAt: number;
@@ -171,6 +174,17 @@ export function hodoaiFinalMessage(points: number, maxPoints: number) {
   if (ratio >= 0.5) return "いい塩梅！ 次は満点が狙えそうです。";
   if (ratio >= 0.2) return "伸びしろ十分。意外な感じ方も楽しめました。";
   return "大発見の連続！ みんなの違いがよく見えました。";
+}
+
+export function hodoaiGameShareText(room: Pick<HodoaiRoom, "totalPoints" | "roundsTotal" | "history">) {
+  const maxPoints = room.roundsTotal * 3;
+  const rounds = room.history.map((result) => `第${result.round}R「${result.theme.title}」 ${result.points}/3点（並び違い${result.inversions}組）`);
+  return [
+    "ことばで数ならべ プレイログ",
+    `チーム得点 ${room.totalPoints}/${maxPoints}点`,
+    ...rounds,
+    "#GameFields",
+  ].join("\n");
 }
 
 export const clueHasNumber = (clue: string) => /[0-9０-９]/.test(clue);

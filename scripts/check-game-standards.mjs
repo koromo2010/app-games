@@ -31,6 +31,8 @@ for (const game of games) {
     if (!existsSync(join(root, routeFile)) || !read(routeFile).includes("requirePlayerDebugAccess")) fail(`${game.id}: デバッグ操作のサーバー側アカウント認証がありません。`);
   }
   if (game.usesLlm) { if (!game.llmRouteFile || !existsSync(join(root, game.llmRouteFile))) fail(`${game.id}: llmRouteFile がありません。`); else if (!read(game.llmRouteFile).includes("generateGameLlmText")) fail(`${game.id}: 共通LLMゲートウェイを使用していません。`); }
+  if (game.debugActionLog) { if (!entry.includes("debugLogEntries")) fail(`${game.id}: デバッグプルダウンの行動ログ表示がありません。`); if (!read(game.roomStoreFile).includes("appendGameDebugLog")) fail(`${game.id}: サーバー正本のデバッグ行動ログ記録がありません。`); }
+  if (game.resultShare && !entry.includes("GameResultShareButton")) fail(`${game.id}: 最終結果の共通プレイログ共有がありません。`);
   if (game.stats === "account") { if (!game.statsRecorder || !read("lib/player-stats-store.ts").includes(game.statsRecorder)) fail(`${game.id}: アカウント戦績の記録処理がありません。`); if (!game.replayRecorder || !read("lib/game-replay-store.ts").includes(game.replayRecorder) || !read(game.roomStoreFile).includes(game.replayRecorder)) fail(`${game.id}: 全ゲーム共通のプレイバック記録処理がありません。`); if (!read("app/games/GameLobby.tsx").includes('game.stats === "account"')) fail(`${game.id}: 登録簿連動の戦績フィルターがありません。`); }
 }
 

@@ -8,6 +8,7 @@ import { canDissolveOnlineRoom, canMoveFromOnlineRoom } from "@/lib/room-dissolv
 import { claimPlayerActiveRoom, releasePlayerActiveRoom, type ActiveRoomClaim } from "@/lib/player-active-room";
 import { normalizeOnlineRoomCode } from "@/lib/online-room-input";
 import { isAvatarColor, isAvatarImage } from "@/lib/player-session";
+import { appendGameDebugLog, normalizeGameDebugLog } from "@/lib/game-debug-log";
 import {
   clueHasNumber,
   countHodoaiInversions,
@@ -30,6 +31,24 @@ import {
 const roomKeyPrefix = "hodoai:room:";
 const roomIndexKey = "hodoai:rooms";
 const playerActiveRoomKeyPrefix = "hodoai:player-active-room:";
+
+const hodoaiDebugActionLabels: Record<HodoaiRoomAction["type"], string> = {
+  "join-room": "部屋に参加",
+  "leave-room": "部屋から退出",
+  "update-config": "部屋設定を変更",
+  "set-debug": "デバッグモードを変更",
+  "set-debug-replay": "プレイバック記録設定を変更",
+  "start-game": "ゲームを開始",
+  "submit-clue": "ヒントを提出",
+  reorder: "ヒントの順番を変更",
+  "score-round": "ラウンドを採点",
+  "next-round": "次のラウンドを開始",
+  "reset-game": "同じ部屋で再戦準備",
+  "abort-game": "ゲームを中断",
+  "debug-fill-clues": "未提出ヒントを自動入力",
+  "debug-sort": "正解順に並べ替え",
+  "debug-add-player": "ダミープレイヤーを追加",
+};
 
 function roomKey(code: string) {
   return `${roomKeyPrefix}${code.trim().toUpperCase()}`;
@@ -133,6 +152,7 @@ function normalizeRoom(value: unknown): HodoaiRoom | null {
     order,
     totalPoints: typeof parsed.totalPoints === "number" ? Math.max(0, Math.floor(parsed.totalPoints)) : 0,
     history,
+    debugLog: normalizeGameDebugLog(parsed.debugLog),
     phaseStartedAt: typeof parsed.phaseStartedAt === "number" ? parsed.phaseStartedAt : null,
     createdAt: typeof parsed.createdAt === "number" ? parsed.createdAt : Date.now(),
     updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : Date.now(),
@@ -213,13 +233,33 @@ async function compareAndSetRoom(expectedRevision: number, room: HodoaiRoom) {
   ]);
 }
 
-async function mutateStoredRoom(code: string, mutate: (room: HodoaiRoom) => HodoaiRoom) {
+type HodoaiDebugEvent = { actorId?: string; action: string };
+
+async function mutateStoredRoom(code: string, mutate: (room: HodoaiRoom) => HodoaiRoom, debugEvent?: HodoaiDebugEvent) {
   for (let attempt = 0; attempt < 6; attempt += 1) {
     const current = await loadStoredHodoaiRoom(code);
     if (!current) throw new Error("HODOAI_ROOM_NOT_FOUND");
     const changed = mutate(current);
     if (changed === current) return current;
-    const next = normalizeRoom({ ...changed, revision: current.revision + 1, updatedAt: Date.now() });
+    const nextRevision = current.revision + 1;
+    const timestamp = Date.now();
+    const actorName = debugEvent?.actorId
+      ? changed.players.find((player) => player.id === debugEvent.actorId)?.name ?? "不明なプレイヤー"
+      : "システム";
+    const changedWithLog = changed.debugMode && debugEvent
+      ? {
+          ...changed,
+          debugLog: appendGameDebugLog(changed.debugLog, {
+            timestamp,
+            actorName,
+            action: debugEvent.action,
+            phaseBefore: current.phase,
+            phaseAfter: changed.phase,
+            revision: nextRevision,
+          }),
+        }
+      : changed;
+    const next = normalizeRoom({ ...changedWithLog, revision: nextRevision, updatedAt: timestamp });
     if (!next) throw new Error("INVALID_HODOAI_ROOM");
     const saved = await compareAndSetRoom(current.revision, next);
     if (saved === 1) {
@@ -264,7 +304,7 @@ export function sanitizeHodoaiRoom(room: HodoaiRoom, playerId: string) {
   const clues = room.phase === "clue" && !isDebugHost
     ? room.clues[playerId] ? { [playerId]: room.clues[playerId] } : {}
     : room.clues;
-  return { ...room, passphrase: room.passphrase ? "設定済み" : "", values, clues };
+  return { ...room, passphrase: room.passphrase ? "設定済み" : "", values, clues, debugLog: isDebugHost ? room.debugLog : [] };
 }
 
 export async function loadStoredHodoaiRoom(code: string) {
@@ -292,7 +332,7 @@ export async function loadAndReconcileHodoaiRoom(code: string) {
     await Promise.all([recordHodoaiGameResults(room), recordHodoaiReplay(room)]);
     return room;
   }
-  return mutateStoredRoom(code, reconcileProgress);
+  return mutateStoredRoom(code, reconcileProgress, { action: "時間切れ処理" });
 }
 
 export async function loadHodoaiPlayerActiveRoom(playerId: string) {
@@ -311,7 +351,7 @@ export async function loadHodoaiPlayerActiveRoom(playerId: string) {
 export async function createStoredHodoaiRoom(value: unknown, actorId: string) {
   const room = normalizeRoom(value);
   if (!room || actorId !== room.hostId) throw new Error("INVALID_HODOAI_ROOM");
-  const created = { ...room, revision: 0, gameNumber: 1, phase: "lobby" as const, values: {}, clues: {}, order: [], history: [], totalPoints: 0, updatedAt: Date.now() };
+  const created = { ...room, revision: 0, gameNumber: 1, phase: "lobby" as const, values: {}, clues: {}, order: [], history: [], debugLog: [], totalPoints: 0, updatedAt: Date.now() };
   const activeRoom = await loadHodoaiPlayerActiveRoom(actorId);
   if (activeRoom && activeRoom.code !== created.code) {
     if (!canMoveFromOnlineRoom("hodoai", activeRoom)) throw new Error("HODOAI_PLAYER_ALREADY_ACTIVE");
@@ -377,6 +417,7 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
         ...current,
         debugMode: action.enabled,
         debugReplayEnabled: action.enabled ? current.debugReplayEnabled : false,
+        debugLog: [],
         players: action.enabled ? current.players : current.players.filter((player) => !player.isDummy),
       };
     }
@@ -441,7 +482,7 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
       return { ...current, order: [...current.players].sort((left, right) => current.values[left.id] - current.values[right.id]).map((player) => player.id) };
     }
     return current;
-  }).catch(async (error) => {
+  }, { actorId: action.actorId, action: hodoaiDebugActionLabels[action.type] }).catch(async (error) => {
     if (action.type === "join-room" && claim === "claimed") await releasePlayerActiveRoom(playerActiveRoomKey(action.actorId), code);
     throw error;
   });

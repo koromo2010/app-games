@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
 import { GamePhaseTimer } from "@/app/components/GamePhaseTimer";
+import { GameResultShareButton } from "@/app/components/GameResultShareButton";
 import { GameRulesDialog } from "@/app/components/GameRulesDialog";
 import { GameTopBanner, gameTopBannerOffsetClass } from "@/app/components/GameTopBanner";
 import { GameTopMenu, gameTopBannerActionClass, gameTopBannerDangerActionClass, gameTopMenuItemClass } from "@/app/components/GameTopMenu";
@@ -21,6 +22,7 @@ import {
 } from "@/lib/player-session";
 import {
   clueHasNumber,
+  hodoaiGameShareText,
   hodoaiFinalMessage,
   normalizeHodoaiConfig,
   type HodoaiConfig,
@@ -225,7 +227,7 @@ export function HodoaiTalkGame() {
       const host: HodoaiPlayer = { id: session.id, name: session.name, joinedAt: now, avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined };
       const nextRoom: HodoaiRoom = {
         code: makeRoomCode(), revision: 0, hostId: session.id, ownerId, passphrase: passphrase.trim(), phase: "lobby", players: [host],
-        ...defaults, debugMode: false, debugReplayEnabled: false, gameNumber: 1, round: 1, theme: null, values: {}, clues: {}, order: [], totalPoints: 0, history: [], phaseStartedAt: null, createdAt: now, updatedAt: now,
+        ...defaults, debugMode: false, debugReplayEnabled: false, debugLog: [], gameNumber: 1, round: 1, theme: null, values: {}, clues: {}, order: [], totalPoints: 0, history: [], phaseStartedAt: null, createdAt: now, updatedAt: now,
       };
       const response = await fetch("/api/hodoai/rooms", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ room: nextRoom, actorId: session.id }) });
       if (!response.ok) {
@@ -377,7 +379,7 @@ export function HodoaiTalkGame() {
         <GameTopMenu>
           {room.phase !== "lobby" && <Link href="/games" data-menu-close="true" className={gameTopMenuItemClass}>ゲームロビーへ戻る</Link>}
           <button type="button" data-menu-close="true" onClick={() => setRulesOpen(true)} className={gameTopMenuItemClass}>ルール</button>
-          {isHost && <DebugModeButton enabled={room.debugMode} disabled={isSaving || room.phase !== "lobby"} onAbort={room.debugMode && room.phase !== "lobby" ? () => runAction({ type: "abort-game", actorId: playerId }).then(() => undefined) : undefined} replayEnabled={room.debugReplayEnabled} replayDisabled={isSaving} onReplayChange={(enabled) => runAction({ type: "set-debug-replay", actorId: playerId, enabled }).then(() => undefined)} onChange={(enabled) => runAction({ type: "set-debug", actorId: playerId, enabled }).then(() => undefined)} />}
+          {isHost && <DebugModeButton enabled={room.debugMode} disabled={isSaving || room.phase !== "lobby"} onAbort={room.debugMode && room.phase !== "lobby" ? () => runAction({ type: "abort-game", actorId: playerId }).then(() => undefined) : undefined} replayEnabled={room.debugReplayEnabled} replayDisabled={isSaving} onReplayChange={(enabled) => runAction({ type: "set-debug-replay", actorId: playerId, enabled }).then(() => undefined)} debugLogEntries={room.debugLog} onChange={(enabled) => runAction({ type: "set-debug", actorId: playerId, enabled }).then(() => undefined)} />}
           {room.phase === "lobby" && !isHost && <button type="button" data-menu-close="true" onClick={() => void leaveRoom()} className={gameTopMenuItemClass}>退出</button>}
         </GameTopMenu>
         <GamePlayerMenu id={session.id} name={session.name} avatarColor={session.avatarColor} avatarImage={session.avatarImage} hasRecoveryEmail={session.hasRecoveryEmail} />
@@ -396,6 +398,7 @@ export function HodoaiTalkGame() {
           {room.phase === "arrange" && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-black">低いと思う順に並べる</h2><p className="mt-1 text-sm text-slate-400">相談しながらホストが順番を操作します。</p></div>{room.phaseStartedAt && <GamePhaseTimer key={room.phaseStartedAt} durationSeconds={room.arrangeTimeLimitSeconds} startedAt={room.phaseStartedAt} label="相談時間" />}</div>{isHost && room.debugMode && <button type="button" onClick={() => void runAction({ type: "debug-sort", actorId: playerId, round: room.round })} className="mt-4 w-full rounded-xl border border-cyan-300/30 bg-cyan-300/10 px-4 py-3 text-sm font-black text-cyan-100">デバッグ：正解順に並べる</button>}<ol className="mt-4 space-y-2">{orderedPlayers.map((player, index) => <li key={player.id} className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3"><span className="w-7 text-center font-black text-cyan-300">{index + 1}</span><div className="min-w-0 flex-1"><p className="font-black">{room.clues[player.id]}</p><p className="text-xs text-slate-400">{player.name}{room.debugMode && isHost && typeof room.values[player.id] === "number" ? `・${room.values[player.id]}` : ""}</p></div>{isHost && <div className="flex gap-1"><button type="button" disabled={index === 0 || isSaving} onClick={() => moveClue(index, -1)} aria-label={`${player.name}のヒントを上へ`} className="rounded-lg border border-white/15 px-3 py-2 disabled:opacity-30">↑</button><button type="button" disabled={index === orderedPlayers.length - 1 || isSaving} onClick={() => moveClue(index, 1)} aria-label={`${player.name}のヒントを下へ`} className="rounded-lg border border-white/15 px-3 py-2 disabled:opacity-30">↓</button></div>}</li>)}</ol>{isHost ? <button type="button" disabled={isSaving} onClick={() => void runAction({ type: "score-round", actorId: playerId, round: room.round })} className="mt-5 w-full rounded-xl bg-fuchsia-400 px-4 py-3 font-black text-fuchsia-950 disabled:opacity-50">この順番で答えを見る</button> : <p className="mt-4 rounded-xl bg-white/[0.05] p-3 text-center text-sm font-bold text-slate-300">ホストが順番を確定するまでお待ちください。</p>}</section>}
 
           {room.phase === "result" && latestResult && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><h2 className="text-2xl font-black">答え合わせ</h2><div className="mt-4 space-y-2">{latestResult.order.map((id, index) => { const player = room.players.find((item) => item.id === id); return <div key={id} className="grid grid-cols-[2rem_1fr_auto] items-center gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3"><span className="text-center font-black text-cyan-300">{index + 1}</span><div><p className="font-black">{latestResult.clues[id]}</p><p className="text-xs text-slate-400">{player?.name}</p></div><span className="text-2xl font-black text-amber-300">{latestResult.values[id]}</span></div>; })}</div><div className="mt-5 rounded-2xl bg-gradient-to-r from-cyan-400 to-amber-300 p-5 text-center text-slate-950"><p className="font-black">このラウンド +{latestResult.points}点</p><p className="mt-1 text-sm font-bold">並び違い {latestResult.inversions}組・合計 {room.totalPoints}点</p></div>{room.round >= room.roundsTotal && <p className="mt-5 text-center text-lg font-black">{hodoaiFinalMessage(room.totalPoints, room.roundsTotal * 3)}</p>}{isHost ? room.round >= room.roundsTotal ? <RoomResultActions disabled={isSaving} onPlayAgain={() => void runAction({ type: "reset-game", actorId: playerId })} onDissolve={() => void dissolveRoom()} /> : <button type="button" disabled={isSaving} onClick={() => void runAction({ type: "next-round", actorId: playerId, round: room.round })} className="mt-5 w-full rounded-xl bg-amber-300 px-4 py-3 font-black text-slate-950 disabled:opacity-50">次のラウンドへ</button> : <p className="mt-4 text-center text-sm font-bold text-slate-300">ホストの操作を待っています。</p>}</section>}
+          {room.phase === "result" && room.round >= room.roundsTotal && <GameResultShareButton title="ことばで数ならべ プレイログ" text={hodoaiGameShareText(room)} url="/kotoba-de-kazu-narabe" />}
         </div>
       </div>
     </main>
