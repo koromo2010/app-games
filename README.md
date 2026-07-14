@@ -72,6 +72,8 @@ Multiplayer games should use the shared time-limit presets, manual seconds input
 
 Tahoiya gameplay mutations are revisioned server actions. The server rejects stale phase rollback, reapplies concurrent submissions with compare-and-set, and decides completion or timeout transitions without depending on the host browser.
 
+All five online games route room queries and mutations through `lib/online-room-api-client.ts` and a game-specific typed adapter. Visible-tab polling and cross-tab refresh use `app/hooks/use-online-room-polling.ts`; game screens must not duplicate room URLs, HTTP methods, or interval/listener setup. Result ordering shared by UI, external share text, and replay storage should be projected once through `lib/game-result-presentation.ts`.
+
 ## Vocabulary sources
 
 The curated Tahoiya seed catalog uses or references terminology from the following open vocabulary sources. Definitions stored by Game Fields are short game-oriented paraphrases, not reproduced dictionary entries.

@@ -35,6 +35,7 @@ import { GameFeedbackPanel } from "../components/GameFeedbackPanel";
 import { GameRulesDialog } from "../components/GameRulesDialog";
 import { RoomResultActions } from "../components/RoomResultActions";
 import { RoomTimeLimitControl } from "../components/RoomTimeLimitControl";
+import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "../hooks/use-online-room-polling";
 import type {
   ClueLogVisibility,
   ClueMode,
@@ -57,10 +58,14 @@ import { ClueLogPanel, VoteHistoryPanel } from "./WordWolfPanels";
 import { WordWolfActionPanels } from "./WordWolfActionPanels";
 import {
   fetchWordWolfRoom,
+  fetchActiveWordWolfRoom,
+  fetchJoinableWordWolfRooms,
   expireWordWolfPhase,
   castWordWolfVote,
   joinWordWolfRoom,
   persistWordWolfRoom,
+  removeHostedWordWolfRooms,
+  removeWordWolfRoom,
   startWordWolfGame,
   submitWordWolfClue,
   submitWordWolfGuessCommand,
@@ -397,34 +402,29 @@ async function loadRoomFromStore(code: string) {
 
 async function loadActiveRoomFromStore(playerId: string) {
   try {
-    const response = await fetch(`/api/wordwolf/rooms?playerId=${encodeURIComponent(playerId)}`, {
-      cache: "no-store",
-    });
-    if (!response.ok) throw new Error("ACTIVE_ROOM_FETCH_FAILED");
-
-    const data = (await response.json()) as { room?: Room | null };
-    if (!data.room) return null;
+    const activeRoom = await fetchActiveWordWolfRoom(playerId);
+    if (!activeRoom) return null;
 
     const normalizedRoom = {
-      ...data.room,
-      passphrase: data.room.passphrase ?? "",
-      gameMode: normalizeGameMode(data.room.gameMode),
-      clueLogVisibility: data.room.clueLogVisibility ?? "result",
-      clueMode: normalizeClueMode(data.room.clueMode),
-      randomizeTurnOrder: data.room.randomizeTurnOrder ?? true,
-      roundsTotal: normalizeRoundsTotal(data.room.roundsTotal),
-      turnTimeLimitSeconds: data.room.turnTimeLimitSeconds ?? 0,
-      currentTurnStartedAt: data.room.currentTurnStartedAt ?? null,
-      wolfIds: normalizeWolfIds(data.room),
-      wolfCount: normalizeWolfCount(data.room.wolfCount, data.room.players.length),
-      voteHistory: normalizeVoteHistory(data.room.voteHistory),
-      runoffCandidateIds: normalizeRunoffCandidateIds(data.room.runoffCandidateIds),
-      topicDictionarySource: normalizeTopicDictionarySource(data.room.topicDictionarySource ?? data.room.topicSourceMode),
-      topicPairDistance: normalizeTopicPairDistance(data.room.topicPairDistance ?? data.room.topicSourceMode),
-      topicHint: typeof data.room.topicHint === "string" ? data.room.topicHint : "",
-      scores: normalizeRoomScores(data.room.scores),
-      gamesPlayed: data.room.gamesPlayed ?? 0,
-      gameNumber: data.room.gameNumber ?? Math.max(1, (data.room.gamesPlayed ?? 0) + 1),
+      ...activeRoom,
+      passphrase: activeRoom.passphrase ?? "",
+      gameMode: normalizeGameMode(activeRoom.gameMode),
+      clueLogVisibility: activeRoom.clueLogVisibility ?? "result",
+      clueMode: normalizeClueMode(activeRoom.clueMode),
+      randomizeTurnOrder: activeRoom.randomizeTurnOrder ?? true,
+      roundsTotal: normalizeRoundsTotal(activeRoom.roundsTotal),
+      turnTimeLimitSeconds: activeRoom.turnTimeLimitSeconds ?? 0,
+      currentTurnStartedAt: activeRoom.currentTurnStartedAt ?? null,
+      wolfIds: normalizeWolfIds(activeRoom),
+      wolfCount: normalizeWolfCount(activeRoom.wolfCount, activeRoom.players.length),
+      voteHistory: normalizeVoteHistory(activeRoom.voteHistory),
+      runoffCandidateIds: normalizeRunoffCandidateIds(activeRoom.runoffCandidateIds),
+      topicDictionarySource: normalizeTopicDictionarySource(activeRoom.topicDictionarySource ?? activeRoom.topicSourceMode),
+      topicPairDistance: normalizeTopicPairDistance(activeRoom.topicPairDistance ?? activeRoom.topicSourceMode),
+      topicHint: typeof activeRoom.topicHint === "string" ? activeRoom.topicHint : "",
+      scores: normalizeRoomScores(activeRoom.scores),
+      gamesPlayed: activeRoom.gamesPlayed ?? 0,
+      gameNumber: activeRoom.gameNumber ?? Math.max(1, (activeRoom.gamesPlayed ?? 0) + 1),
     };
     saveRoom(normalizedRoom);
     return normalizedRoom;
@@ -435,11 +435,7 @@ async function loadActiveRoomFromStore(playerId: string) {
 
 async function listJoinableRoomsFromStore() {
   try {
-    const response = await fetch("/api/wordwolf/rooms", { cache: "no-store" });
-    if (!response.ok) throw new Error("ROOM_LIST_FAILED");
-
-    const data = (await response.json()) as { rooms?: RoomChoice[] };
-    return Array.isArray(data.rooms) ? data.rooms : [];
+    return await fetchJoinableWordWolfRooms();
   } catch {
     return listJoinableRooms();
   }
@@ -449,9 +445,7 @@ async function deleteRoomFromStore(code: string) {
   deleteRoom(code);
 
   try {
-    await fetch(`/api/wordwolf/rooms?code=${encodeURIComponent(code)}`, {
-      method: "DELETE",
-    });
+    await removeWordWolfRoom(code);
   } catch {
     // Already removed locally; remote cleanup can be retried by host actions later.
   }
@@ -459,11 +453,7 @@ async function deleteRoomFromStore(code: string) {
 
 async function deleteHostedRoomsFromStore(ownerId: string, fallbackHostId: string) {
   try {
-    const params = new URLSearchParams({ ownerId, fallbackHostId });
-    const response = await fetch(`/api/wordwolf/rooms?${params.toString()}`, {
-      method: "DELETE",
-    });
-    if (!response.ok) return false;
+    await removeHostedWordWolfRooms(ownerId, fallbackHostId);
     deleteHostedRooms(ownerId, fallbackHostId);
     return true;
   } catch {
@@ -623,57 +613,25 @@ export function WordWolfGame() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!roomCode || !roomPhase) return;
-    const code = roomCode;
-
-    const refreshRoom = () => {
-      if (document.visibilityState !== "visible") return;
-      void loadRoomFromStore(code).then((latest) => {
-        if (latest) {
-          setRoom((current) => {
-            if (!current || current.code !== code) return current;
-            return latest.updatedAt !== current.updatedAt ||
-              latest.statsRecordedAt !== current.statsRecordedAt ||
-              latest.gamesPlayed !== current.gamesPlayed
-              ? latest
-              : current;
-          });
-        } else {
-          setRoom(null);
-          setActivePlayerId("");
-          setError("部屋が解散されました。");
-        }
-      });
-    };
-    const intervalMs = roomPhase === "lobby" || roomPhase === "result" ? 5000 : 2000;
-    const timer = window.setInterval(refreshRoom, intervalMs);
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") refreshRoom();
-    };
-
-    const onStorage = (event: StorageEvent) => {
-      if (event.key !== getRoomKey(code)) return;
-      if (!event.newValue) {
-        setRoom(null);
-        setActivePlayerId("");
-        setError("部屋が解散されました。");
-        return;
-      }
-
-      void loadRoomFromStore(code).then((latest) => {
-        if (latest) setRoom(latest);
-      });
-    };
-
-    window.addEventListener("storage", onStorage);
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => {
-      window.clearInterval(timer);
-      window.removeEventListener("storage", onStorage);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
-  }, [roomCode, roomPhase]);
+  useOnlineRoomPolling({
+    roomCode,
+    intervalMs: roomPhase === "lobby" || roomPhase === "result" ? onlineRoomPollingIntervals.idle : onlineRoomPollingIntervals.active,
+    fetchRoom: loadRoomFromStore,
+    onRoom: (latest) => setRoom((current) => {
+      if (!current || current.code !== latest.code) return current;
+      return latest.updatedAt !== current.updatedAt ||
+        latest.statsRecordedAt !== current.statsRecordedAt ||
+        latest.gamesPlayed !== current.gamesPlayed
+        ? latest
+        : current;
+    }),
+    onMissing: () => {
+      setRoom(null);
+      setActivePlayerId("");
+      setError("部屋が解散されました。");
+    },
+    storageKey: getRoomKey,
+  });
 
   const activePlayer = useMemo(
     () => room?.players.find((player) => player.id === activePlayerId) ?? null,

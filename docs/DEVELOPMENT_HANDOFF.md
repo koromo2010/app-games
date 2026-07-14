@@ -4,7 +4,7 @@
 >
 > 資料を読む順番や作業別の参照先は `docs/README.md` を入口にする。この文書は「現在の開発状態と共通仕様」、`docs/CONTAINER_ARCHITECTURE.md` は「将来案」である。
 
-最終更新: 2026-07-13
+最終更新: 2026-07-14
 
 ## 1. プロジェクト
 
@@ -105,6 +105,10 @@
 
 ## 5. マルチプレイ共通ルール
 
+全5ゲームの部屋取得・active room復帰・一覧・POST/PATCH/DELETEは `lib/online-room-api-client.ts` を土台に、各ゲームの `*-room-api-client.ts` へ型付きで集約する。画面から部屋APIを直接 `fetch` しない。表示中だけの定期取得、タブ復帰時の即時更新、必要なゲームのlocalStorage cross-tab更新は `app/hooks/use-online-room-polling.ts` を使う。通常は進行中2秒、ロビー・結果5秒を標準とし、ゲーム固有の理由がある場合だけ変更する。
+
+結果の表示順、外部共有文、プレイバック保存で同じ並べ替えを複製しない。共通契約は `lib/game-result-presentation.ts`、ワードスケールの基準実装は `hodoaiResultPresentation`。結果の向きを変える場合はプロジェクターと契約テストを変更し、3つの出力先は同じ結果行を参照させる。
+
 - 部屋設定は全クライアントへ表示する。
 - 設定操作はロビーにいるホストだけ。
 - 設定デフォルトはプレイヤーごとにRedisへ保存し、localStorageをフォールバックにする。
@@ -152,7 +156,7 @@
 
 ## 6. ワードウルフ現行仕様の要点
 
-現在のモジュール分離は `docs/MODULAR_GAME_ARCHITECTURE.md`、将来のweb・game-server・timer-service・ai-worker・batch-worker構成は `docs/CONTAINER_ARCHITECTURE.md` を正本とする。ワードウルフでは部屋HTTPクライアントとフェーズ時計をUIから分離済みで、登録簿の `moduleBoundaryFiles` をlint時に検査する。
+現在のモジュール分離は `docs/MODULAR_GAME_ARCHITECTURE.md`、将来のweb・game-server・timer-service・ai-worker・batch-worker構成は `docs/CONTAINER_ARCHITECTURE.md` を正本とする。全5ゲームで部屋HTTPクライアントと同期hookをUIから分離済み。ワードウルフはフェーズ時計も分離済みで、登録簿の `moduleBoundaryFiles` をlint時に検査する。
 
 部屋状態には `revision` を持たせ、Redis内CASで古い保存による巻き戻しを防ぐ。参加・開始・通常の発言・投票・逆転回答・時間切れ遷移はサーバー側Commandで処理し、複数端末から同時に要求されても一件だけ反映する。レスポンスは認証済み閲覧者向けに整形し、結果前は狼ID・相手ワード・他人の投票を返さない。
 締切には標準5秒のサーバー受付猶予を設け、締切直前に端末から送った投稿・投票が通信遅延で時間切れ処理に負けないようにする。`WORDWOLF_TIMEOUT_GRACE_MS`（0〜10000ms）で調整可能。クライアント申告の送信時刻は信用せず、サーバー到着が締切＋猶予以内か、現在のフェーズとrevisionが一致するかで上限を掛ける。

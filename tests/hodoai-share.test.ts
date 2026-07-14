@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { canAssignHodoaiSorter, canReorderHodoaiCards, clueHasNumber, dealHodoaiCards, hodoaiClueRoundDestination, hodoaiGameShareText, hodoaiSharePlayerLabel, normalizeHodoaiConfig } from "../lib/hodoai-talk.ts";
+import { canAssignHodoaiSorter, canReorderHodoaiCards, clueHasNumber, dealHodoaiCards, hodoaiClueRoundDestination, hodoaiGameShareText, hodoaiResultPresentation, hodoaiSharePlayerLabel, normalizeHodoaiConfig } from "../lib/hodoai-talk.ts";
 
 test("設定枚数ぶんの重複しない数字カードを各プレイヤーへ配る", () => {
   const players = [
@@ -81,4 +81,27 @@ test("共有名の同意がない参加者は入室順のPLAYER表記になる",
   const players = [{ id: "first", name: "名前を出さない", shareNameAllowed: false }, { id: "second", name: "名前を出す", shareNameAllowed: true }];
   assert.equal(hodoaiSharePlayerLabel(players, "first"), "PLAYER1");
   assert.equal(hodoaiSharePlayerLabel(players, "second"), "名前を出す");
+});
+
+test("答え合わせ・共有・プレイバック用の結果行は同じ120から0の順序を使う", () => {
+  const result = {
+    round: 1,
+    theme: { id: "scale", title: "尺度", lowLabel: "低", highLabel: "高" },
+    inversions: 0,
+    points: 3,
+    cards: [
+      { id: "low", ownerId: "p1", cardNumber: 1 },
+      { id: "high", ownerId: "p2", cardNumber: 1 },
+    ],
+    clueRounds: [{ round: 1, theme: { id: "scale", title: "尺度", lowLabel: "低", highLabel: "高" }, clues: { low: "小", high: "大" } }],
+    order: ["low", "high"],
+    values: { low: 10, high: 110 },
+    clues: { low: "小", high: "大" },
+  };
+  const presentation = hodoaiResultPresentation(result, [
+    { id: "p1", name: "A" },
+    { id: "p2", name: "B" },
+  ]);
+  assert.equal(presentation.order, "descending");
+  assert.deepEqual(presentation.rows.map((row) => row.value), [110, 10]);
 });

@@ -11,8 +11,10 @@ import {
 } from "@/lib/player-session";
 import { loadPlayerRoomDefaults, savePlayerRoomDefaults } from "@/lib/game-room-defaults-client";
 import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
-import { fetchConditionalJson } from "@/lib/conditional-json-client";
+import { OnlineRoomApiError } from "@/lib/online-room-api-client";
 import type { TahoiyaAnswererMode, TahoiyaDifficulty, TahoiyaPlayMode, TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomAction, TahoiyaRoomChoice, TahoiyaTopic } from "@/lib/tahoiya-types";
+import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "../hooks/use-online-room-polling";
+import { applyTahoiyaRoomAction, saveTahoiyaRoom, tahoiyaRoomApi } from "./tahoiya-room-api-client";
 import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
 import { DebugModeButton } from "../components/DebugModeButton";
 import { DebugWordGenerationTest, type DebugWordGenerationResult } from "../components/DebugWordGenerationTest";
@@ -202,13 +204,7 @@ function deleteRoomLocally(code: string) {
 
 async function saveRoomToStore(room: TahoiyaRoom, actorId: string) {
   try {
-    const response = await fetch("/api/tahoiya/rooms", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ room, actorId }),
-    });
-    if (!response.ok) return null;
-    const data = (await response.json()) as { room?: TahoiyaRoom };
+    const data = await saveTahoiyaRoom(room, actorId);
     if (!data.room) return null;
     const saved = normalizeRoom(data.room);
     saveRoomLocally(saved);
@@ -220,15 +216,7 @@ async function saveRoomToStore(room: TahoiyaRoom, actorId: string) {
 
 async function applyRoomActionToStore(code: string, action: TahoiyaRoomAction) {
   try {
-    const response = await fetch("/api/tahoiya/rooms", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code, action }),
-    });
-    if (!response.ok) return null;
-    const data = (await response.json()) as { room?: TahoiyaRoom };
-    if (!data.room) return null;
-    const saved = normalizeRoom(data.room);
+    const saved = normalizeRoom(await applyTahoiyaRoomAction(code, action));
     saveRoomLocally(saved);
     return saved;
   } catch {
@@ -238,28 +226,22 @@ async function applyRoomActionToStore(code: string, action: TahoiyaRoomAction) {
 
 async function applyTahoiyaSpecialAction(code: string, action: { type: "join-room"; passphrase: string } | { type: "start-round" }) {
   try {
-    const response = await fetch("/api/tahoiya/rooms", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code, action }),
-    });
-    const data = await response.json() as { room?: TahoiyaRoom; error?: string };
-    if (!response.ok || !data.room) throw new Error(data.error || "ROOM_ACTION_FAILED");
-    const saved = normalizeRoom(data.room);
+    const saved = normalizeRoom(await applyTahoiyaRoomAction(code, action));
     saveRoomLocally(saved);
     return saved;
   } catch (error) {
+    if (error instanceof OnlineRoomApiError && error.payload && typeof error.payload === "object") {
+      throw new Error((error.payload as { error?: string }).error || "ROOM_ACTION_FAILED");
+    }
     throw error instanceof Error ? error : new Error("ROOM_ACTION_FAILED");
   }
 }
 
 async function loadRoomFromStore(code: string) {
   try {
-    const result = await fetchConditionalJson<{ room?: TahoiyaRoom }>(`/api/tahoiya/rooms?code=${encodeURIComponent(code)}`);
-    if (result.status === 404) return null;
-    if (!result.ok) throw new Error("ROOM_FETCH_FAILED");
-    if (!result.data?.room) return null;
-    const normalized = normalizeRoom(result.data.room);
+    const room = await tahoiyaRoomApi.fetchRoom(code);
+    if (!room) return null;
+    const normalized = normalizeRoom(room);
     saveRoomLocally(normalized);
     return normalized;
   } catch {
@@ -269,10 +251,9 @@ async function loadRoomFromStore(code: string) {
 
 async function loadActiveRoomFromStore(playerId: string) {
   try {
-    const result = await fetchConditionalJson<{ room?: TahoiyaRoom | null }>(`/api/tahoiya/rooms?playerId=${encodeURIComponent(playerId)}`);
-    if (!result.ok) throw new Error("ACTIVE_ROOM_FETCH_FAILED");
-    if (!result.data?.room) return null;
-    const normalized = normalizeRoom(result.data.room);
+    const room = await tahoiyaRoomApi.fetchActiveRoom(playerId);
+    if (!room) return null;
+    const normalized = normalizeRoom(room);
     saveRoomLocally(normalized);
     return normalized;
   } catch {
@@ -282,9 +263,7 @@ async function loadActiveRoomFromStore(playerId: string) {
 
 async function listJoinableRoomsFromStore() {
   try {
-    const result = await fetchConditionalJson<{ rooms?: TahoiyaRoomChoice[] }>("/api/tahoiya/rooms");
-    if (!result.ok) throw new Error("ROOM_LIST_FAILED");
-    return Array.isArray(result.data?.rooms) ? result.data.rooms : [];
+    return await tahoiyaRoomApi.fetchJoinableRooms();
   } catch {
     return [];
   }
@@ -293,8 +272,7 @@ async function listJoinableRoomsFromStore() {
 async function deleteRoomFromStore(code: string, actorId: string) {
   deleteRoomLocally(code);
   try {
-    const params = new URLSearchParams({ code, actorId });
-    await fetch(`/api/tahoiya/rooms?${params.toString()}`, { method: "DELETE" });
+    await tahoiyaRoomApi.remove({ code, actorId });
   } catch {
     // Local delete already happened.
   }
@@ -302,9 +280,7 @@ async function deleteRoomFromStore(code: string, actorId: string) {
 
 async function deleteHostedRoomsFromStore(ownerId: string, fallbackHostId: string) {
   try {
-    const params = new URLSearchParams({ ownerId, fallbackHostId });
-    const response = await fetch(`/api/tahoiya/rooms?${params.toString()}`, { method: "DELETE" });
-    if (!response.ok) return false;
+    await tahoiyaRoomApi.remove({ ownerId, fallbackHostId });
     for (const localRoom of listRoomsLocally()) {
       if (localRoom.ownerId === ownerId || (!localRoom.ownerId && localRoom.hostId === fallbackHostId)) {
         deleteRoomLocally(localRoom.code);
@@ -430,30 +406,16 @@ export function TahoiyaGame() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!roomCode) return undefined;
-    const refreshRoom = () => {
-      if (document.visibilityState !== "visible") return;
-      void loadRoomFromStore(roomCode).then((latest) => {
-        if (latest) {
-          setRoom(latest);
-        } else {
-          setRoom(null);
-          setMessage("部屋が解散されました。");
-        }
-      });
-    };
-    const intervalMs = room?.phase === "lobby" || room?.phase === "result" ? 5000 : 2500;
-    const timer = window.setInterval(refreshRoom, intervalMs);
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") refreshRoom();
-    };
-    document.addEventListener("visibilitychange", onVisibilityChange);
-    return () => {
-      window.clearInterval(timer);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
-  }, [room?.phase, roomCode]);
+  useOnlineRoomPolling({
+    roomCode,
+    intervalMs: room?.phase === "lobby" || room?.phase === "result" ? onlineRoomPollingIntervals.idle : 2500,
+    fetchRoom: loadRoomFromStore,
+    onRoom: setRoom,
+    onMissing: () => {
+      setRoom(null);
+      setMessage("部屋が解散されました。");
+    },
+  });
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);

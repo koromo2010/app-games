@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import type { HodoaiRoom } from "@/lib/hodoai-talk";
+import { hodoaiResultPresentation, type HodoaiRoom } from "@/lib/hodoai-talk";
 import type { KotobaSenpukuRoom } from "@/lib/kotoba-senpuku";
 import type { NorthernRoom } from "@/lib/northern-branch-types";
 import type { TahoiyaRoom } from "@/lib/tahoiya-types";
@@ -317,15 +317,11 @@ export async function recordHodoaiReplay(room: HodoaiRoom) {
   const maxPoints = 3;
   const result = room.history.at(-1);
   const resultLabel = `${room.totalPoints}/${maxPoints}点`;
-  const names = new Map(room.players.map((player) => [player.id, player.name]));
+  const presentation = result ? hodoaiResultPresentation(result, room.players) : null;
   const details = result ? [
     ...result.clueRounds.map((clueRound) => `ことば${clueRound.round}「${clueRound.theme.title}」`),
     `最終並び: ${result.points}/3点・並べ違い${result.inversions}組`,
-    ...result.order.map((id, index) => {
-      const card = result.cards.find((item) => item.id === id);
-      const clues = result.clueRounds.map((clueRound) => clueRound.clues[id]).filter(Boolean).join(" / ");
-      return `${index + 1}. ${names.get(card?.ownerId ?? "") ?? "Unknown"}（カード${card?.cardNumber ?? 1}）「${clues}」→数字${result.values[id] ?? 0}`;
-    }),
+    ...(presentation?.rows.map((row) => `${row.rank}. ${row.playerName}（カード${row.cardNumber}）「${row.expressions.join(" / ")}」→数字${row.value}`) ?? []),
   ] : [];
   const base = makeReplayBase(
     `hodoai:${room.code}:${room.createdAt}:${room.gameNumber ?? 1}`,

@@ -11,8 +11,10 @@ import { GamePhaseTimer } from "@/app/components/GamePhaseTimer";
 import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomResultActions } from "@/app/components/RoomResultActions";
 import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
+import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "@/app/hooks/use-online-room-polling";
+import { applyKotobaSenpukuRoomAction, kotobaSenpukuRoomApi, saveKotobaSenpukuRoom } from "@/app/kotoba-senpuku/kotoba-senpuku-room-api-client";
 import { loadPlayerRoomDefaults, savePlayerRoomDefaults } from "@/lib/game-room-defaults-client";
-import { fetchConditionalJson } from "@/lib/conditional-json-client";
+import { OnlineRoomApiError, restoreOnlineRoom } from "@/lib/online-room-api-client";
 import {
   kotobaSenpukuKanaKey,
   isValidKotobaSenpukuWord,
@@ -80,17 +82,6 @@ function apiMessage(status: number, fallback: string) {
   if (status === 409) return "部屋が満員か、状態が更新されています。もう一度お試しください。";
   if (status === 503) return "部屋サーバーを利用できません。少し待ってお試しください。";
   return fallback;
-}
-
-async function loadRoom(code: string, playerId: string) {
-  const params = new URLSearchParams({ code, playerId });
-  const result = await fetchConditionalJson<{ room?: KotobaSenpukuRoom }>(`/api/kotoba-senpuku/rooms?${params.toString()}`);
-  return result.ok ? result.data?.room ?? null : null;
-}
-
-async function loadActiveRoom(playerId: string) {
-  const result = await fetchConditionalJson<{ room?: KotobaSenpukuRoom | null }>(`/api/kotoba-senpuku/rooms?playerId=${encodeURIComponent(playerId)}`);
-  return result.ok ? result.data?.room ?? null : null;
 }
 
 function PlayerRow({ player, isHost, isMe, eliminated = false }: { player: KotobaSenpukuPlayer; isHost: boolean; isMe: boolean; eliminated?: boolean }) {
@@ -185,8 +176,12 @@ export function KotobaSenpukuGame() {
       }
       setSession(savedSession);
       const lastCode = localStorage.getItem(lastRoomKey);
-      const activeRoom = await loadActiveRoom(savedSession.id);
-      const savedRoom = activeRoom ?? (lastCode ? await loadRoom(lastCode, savedSession.id) : null);
+      const savedRoom = await restoreOnlineRoom({
+        playerId: savedSession.id,
+        lastCode,
+        fetchActiveRoom: kotobaSenpukuRoomApi.fetchActiveRoom,
+        fetchRoom: kotobaSenpukuRoomApi.fetchRoom,
+      });
       if (!active) return;
       timer = window.setTimeout(() => {
         if (savedRoom) {
@@ -208,28 +203,17 @@ export function KotobaSenpukuGame() {
   const roomPhase = room?.phase;
   const playerId = session?.id ?? "";
 
-  useEffect(() => {
-    if (!roomCode || !roomPhase || !playerId) return;
-    const refresh = () => {
-      if (document.visibilityState !== "visible") return;
-      void loadRoom(roomCode, playerId).then((latest) => {
-        if (!latest) {
-          setRoom(null);
-          localStorage.removeItem(lastRoomKey);
-          setError("部屋が解散されたか、参加情報がなくなりました。");
-          return;
-        }
-        setRoom((current) => current?.revision === latest.revision ? current : latest);
-      });
-    };
-    const interval = window.setInterval(refresh, roomPhase === "lobby" || roomPhase === "result" ? 5000 : 2000);
-    const onVisible = () => { if (document.visibilityState === "visible") refresh(); };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      window.clearInterval(interval);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, [playerId, roomCode, roomPhase]);
+  useOnlineRoomPolling({
+    roomCode: playerId ? roomCode : null,
+    intervalMs: roomPhase === "lobby" || roomPhase === "result" ? onlineRoomPollingIntervals.idle : onlineRoomPollingIntervals.active,
+    fetchRoom: (code) => kotobaSenpukuRoomApi.fetchRoom(code, playerId),
+    onRoom: (latest) => setRoom((current) => current?.revision === latest.revision ? current : latest),
+    onMissing: () => {
+      setRoom(null);
+      localStorage.removeItem(lastRoomKey);
+      setError("部屋が解散されたか、参加情報がなくなりました。");
+    },
+  });
 
   const isHost = Boolean(room && playerId === room.hostId);
   const activePlayer = room?.players[room.activePlayerIndex];
@@ -255,23 +239,19 @@ export function KotobaSenpukuGame() {
     if (!room) return null;
     setIsSaving(true);
     try {
-      const response = await fetch("/api/kotoba-senpuku/rooms", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: room.code, action }),
-      });
-      const data = (await response.json()) as { room?: KotobaSenpukuRoom; error?: string };
-      if (!response.ok || !data.room) {
-        const invalidWord = data.error === "Invalid secret word" ? "秘密語はひらがなと長音符で入力してください。" : "";
-        const tooShort = data.error === "Secret word is too short" ? "2人対戦では、秘密語を2文字以上で入力してください。" : "";
-        setError(invalidWord || tooShort || apiMessage(response.status, data.error || "操作を保存できませんでした。"));
-        return null;
-      }
-      setRoom(data.room);
+      const savedRoom = await applyKotobaSenpukuRoomAction(room.code, action);
+      setRoom(savedRoom);
       setError("");
-      return data.room;
-    } catch {
-      setError("通信できませんでした。接続を確認してください。");
+      return savedRoom;
+    } catch (caught) {
+      const payload = caught instanceof OnlineRoomApiError && caught.payload && typeof caught.payload === "object"
+        ? caught.payload as { error?: string }
+        : null;
+      const invalidWord = payload?.error === "Invalid secret word" ? "秘密語はひらがなと長音符で入力してください。" : "";
+      const tooShort = payload?.error === "Secret word is too short" ? "2人対戦では、秘密語を2文字以上で入力してください。" : "";
+      setError(invalidWord || tooShort || (caught instanceof OnlineRoomApiError
+        ? apiMessage(caught.status, payload?.error || "操作を保存できませんでした。")
+        : "通信できませんでした。接続を確認してください。"));
       return null;
     } finally {
       setIsSaving(false);
@@ -283,11 +263,7 @@ export function KotobaSenpukuGame() {
     setIsSaving(true);
     const ownerId = getOwnerId();
     try {
-      const deleteResponse = await fetch(`/api/kotoba-senpuku/rooms?ownerId=${encodeURIComponent(ownerId)}&fallbackHostId=${encodeURIComponent(session.id)}`, { method: "DELETE" });
-      if (!deleteResponse.ok) {
-        setError(deleteResponse.status === 409 ? "プレイ中の部屋があります。先にその部屋へ戻ってください。" : "以前の部屋を整理できませんでした。");
-        return;
-      }
+      await kotobaSenpukuRoomApi.remove({ ownerId, fallbackHostId: session.id });
       const defaults = await loadPlayerRoomDefaults({ game: "kotoba-senpuku", playerId: session.id, localStorageKey: defaultsStorageKey, normalize: normalizeDefaults });
       const now = Date.now();
       const host: KotobaSenpukuPlayer = { id: session.id, name: session.name, joinedAt: now, avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined };
@@ -297,32 +273,27 @@ export function KotobaSenpukuGame() {
         roundSignals: { [session.id]: 0 }, totalScores: { [session.id]: 0 }, activePlayerIndex: 0, turnNumber: 1, roundEvents: [],
         history: [], log: ["参加者を待っています。"], phaseStartedAt: null, createdAt: now, updatedAt: now,
       };
-      const response = await fetch("/api/kotoba-senpuku/rooms", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ room: nextRoom, actorId: session.id }) });
-      if (!response.ok) {
-        setError(apiMessage(response.status, "部屋を作成できませんでした。"));
-        return;
-      }
-      const data = (await response.json()) as { room: KotobaSenpukuRoom };
+      const data = await saveKotobaSenpukuRoom(nextRoom, session.id);
       setRoom(data.room);
       localStorage.setItem(lastRoomKey, data.room.code);
       setError("");
-    } catch {
-      setError("部屋を作成できませんでした。");
+    } catch (caught) {
+      const status = caught instanceof OnlineRoomApiError ? caught.status : 0;
+      setError(status === 409 ? "プレイ中の部屋があります。先にその部屋へ戻ってください。" : apiMessage(status, "部屋を作成できませんでした。"));
     } finally {
       setIsSaving(false);
     }
   };
 
   const listRooms = async () => {
-    const response = await fetch("/api/kotoba-senpuku/rooms", { cache: "no-store" });
-    if (!response.ok) {
-      setError(apiMessage(response.status, "部屋一覧を取得できませんでした。"));
-      return;
+    try {
+      const rooms = await kotobaSenpukuRoomApi.fetchJoinableRooms();
+      setChoices(rooms);
+      setShowChoices(true);
+      setError(rooms.length ? "" : "参加できる未開始の部屋がありません。");
+    } catch (caught) {
+      setError(apiMessage(caught instanceof OnlineRoomApiError ? caught.status : 0, "部屋一覧を取得できませんでした。"));
     }
-    const data = (await response.json()) as { rooms?: KotobaSenpukuRoomChoice[] };
-    setChoices(data.rooms ?? []);
-    setShowChoices(true);
-    setError(data.rooms?.length ? "" : "参加できる未開始の部屋がありません。");
   };
 
   const joinRoom = async (selectedCode = joinCode) => {
@@ -335,19 +306,13 @@ export function KotobaSenpukuGame() {
     const player: KotobaSenpukuPlayer = { id: session.id, name: session.name, joinedAt: Date.now(), avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined };
     setIsSaving(true);
     try {
-      const action = { type: "join-room", actorId: session.id, player, passphrase } satisfies KotobaSenpukuRoomAction;
-      const response = await fetch("/api/kotoba-senpuku/rooms", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code, action }) });
-      if (!response.ok) {
-        setError(apiMessage(response.status, "部屋へ参加できませんでした。"));
-        return;
-      }
-      const data = (await response.json()) as { room: KotobaSenpukuRoom };
-      setRoom(data.room);
+      const joinedRoom = await applyKotobaSenpukuRoomAction(code, { type: "join-room", actorId: session.id, player, passphrase });
+      setRoom(joinedRoom);
       setShowChoices(false);
-      localStorage.setItem(lastRoomKey, data.room.code);
+      localStorage.setItem(lastRoomKey, joinedRoom.code);
       setError("");
-    } catch {
-      setError("部屋へ参加できませんでした。");
+    } catch (caught) {
+      setError(apiMessage(caught instanceof OnlineRoomApiError ? caught.status : 0, "部屋へ参加できませんでした。"));
     } finally {
       setIsSaving(false);
     }
@@ -355,8 +320,9 @@ export function KotobaSenpukuGame() {
 
   const dissolveRoom = async () => {
     if (!room || !session?.id || !isHost || !window.confirm("部屋を解散しますか？")) return;
-    const response = await fetch(`/api/kotoba-senpuku/rooms?code=${encodeURIComponent(room.code)}&actorId=${encodeURIComponent(session.id)}`, { method: "DELETE" });
-    if (!response.ok) {
+    try {
+      await kotobaSenpukuRoomApi.remove({ code: room.code, actorId: session.id });
+    } catch {
       setError("部屋を解散できませんでした。");
       return;
     }

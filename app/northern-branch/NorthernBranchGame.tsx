@@ -9,9 +9,11 @@ import { GameTopMenu, gameTopBannerActionClass, gameTopBannerDangerActionClass, 
 import { GamePlayerMenu } from "@/app/components/GamePlayerMenu";
 import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomResultActions } from "@/app/components/RoomResultActions";
+import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "@/app/hooks/use-online-room-polling";
+import { applyNorthernBranchRoomAction, northernBranchRoomApi, saveNorthernBranchRoom } from "@/app/northern-branch/northern-branch-room-api-client";
 import { northernBaseResources, northernBuildings, northernCards } from "@/lib/northern-branch-data";
 import { northernRules } from "@/lib/northern-branch-game";
-import { fetchConditionalJson } from "@/lib/conditional-json-client";
+import { OnlineRoomApiError, restoreOnlineRoom } from "@/lib/online-room-api-client";
 import type {
   NorthernGameAction,
   NorthernRoom,
@@ -49,17 +51,6 @@ function apiMessage(status: number, fallback: string) {
   if (status === 409) return "部屋が満員か、状態が更新されています。もう一度お試しください。";
   if (status === 503) return "部屋サーバーを利用できません。少し待ってお試しください。";
   return fallback;
-}
-
-async function loadRoom(code: string, playerId: string) {
-  const params = new URLSearchParams({ code, playerId });
-  const result = await fetchConditionalJson<{ room?: NorthernRoom }>(`/api/northern-branch/rooms?${params.toString()}`);
-  return result.ok ? result.data?.room ?? null : null;
-}
-
-async function loadActiveRoom(playerId: string) {
-  const result = await fetchConditionalJson<{ room?: NorthernRoom | null }>(`/api/northern-branch/rooms?playerId=${encodeURIComponent(playerId)}`);
-  return result.ok ? result.data?.room ?? null : null;
 }
 
 function PlayerRow({ player, isHost, isMe }: { player: NorthernRoomPlayer; isHost: boolean; isMe: boolean }) {
@@ -108,8 +99,12 @@ export function NorthernBranchGame() {
       }
       setSession(savedSession);
       const lastCode = localStorage.getItem(lastRoomKey);
-      const activeRoom = await loadActiveRoom(savedSession.id);
-      const savedRoom = activeRoom ?? (lastCode ? await loadRoom(lastCode, savedSession.id) : null);
+      const savedRoom = await restoreOnlineRoom({
+        playerId: savedSession.id,
+        lastCode,
+        fetchActiveRoom: northernBranchRoomApi.fetchActiveRoom,
+        fetchRoom: northernBranchRoomApi.fetchRoom,
+      });
       if (!active) return;
       timer = window.setTimeout(() => {
         if (savedRoom) {
@@ -131,28 +126,17 @@ export function NorthernBranchGame() {
   const roomPhase = room?.phase;
   const playerId = session?.id ?? "";
 
-  useEffect(() => {
-    if (!roomCode || !roomPhase || !playerId) return;
-    const refresh = () => {
-      if (document.visibilityState !== "visible") return;
-      void loadRoom(roomCode, playerId).then((latest) => {
-        if (!latest) {
-          setRoom(null);
-          localStorage.removeItem(lastRoomKey);
-          setError("部屋が解散されたか、参加情報がなくなりました。");
-          return;
-        }
-        setRoom((current) => current?.revision === latest.revision ? current : latest);
-      });
-    };
-    const interval = window.setInterval(refresh, roomPhase === "lobby" || roomPhase === "finished" ? 5000 : 2000);
-    const onVisible = () => { if (document.visibilityState === "visible") refresh(); };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      window.clearInterval(interval);
-      document.removeEventListener("visibilitychange", onVisible);
-    };
-  }, [playerId, roomCode, roomPhase]);
+  useOnlineRoomPolling({
+    roomCode: playerId ? roomCode : null,
+    intervalMs: roomPhase === "lobby" || roomPhase === "finished" ? onlineRoomPollingIntervals.idle : onlineRoomPollingIntervals.active,
+    fetchRoom: (code) => northernBranchRoomApi.fetchRoom(code, playerId),
+    onRoom: (latest) => setRoom((current) => current?.revision === latest.revision ? current : latest),
+    onMissing: () => {
+      setRoom(null);
+      localStorage.removeItem(lastRoomKey);
+      setError("部屋が解散されたか、参加情報がなくなりました。");
+    },
+  });
 
   const game = room?.game ?? null;
   const activePlayer = game?.players[game.activePlayerIndex];
@@ -178,21 +162,13 @@ export function NorthernBranchGame() {
     if (!room) return null;
     setIsSaving(true);
     try {
-      const response = await fetch("/api/northern-branch/rooms", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: room.code, action }),
-      });
-      const data = (await response.json()) as { room?: NorthernRoom; error?: string };
-      if (!response.ok || !data.room) {
-        setError(apiMessage(response.status, data.error || "操作を保存できませんでした。"));
-        return null;
-      }
-      setRoom(data.room);
+      const savedRoom = await applyNorthernBranchRoomAction(room.code, action);
+      setRoom(savedRoom);
       setError("");
-      return data.room;
-    } catch {
-      setError("通信できませんでした。接続を確認してください。");
+      return savedRoom;
+    } catch (caught) {
+      const payload = caught instanceof OnlineRoomApiError && caught.payload && typeof caught.payload === "object" ? caught.payload as { error?: string } : null;
+      setError(caught instanceof OnlineRoomApiError ? apiMessage(caught.status, payload?.error || "操作を保存できませんでした。") : "通信できませんでした。接続を確認してください。");
       return null;
     } finally {
       setIsSaving(false);
@@ -211,43 +187,34 @@ export function NorthernBranchGame() {
     setIsSaving(true);
     const ownerId = getOwnerId();
     try {
-      const deleteResponse = await fetch(`/api/northern-branch/rooms?ownerId=${encodeURIComponent(ownerId)}&fallbackHostId=${encodeURIComponent(session.id)}`, { method: "DELETE" });
-      if (!deleteResponse.ok) {
-        setError(deleteResponse.status === 409 ? "プレイ中の部屋があります。先にその部屋へ戻ってください。" : "以前の部屋を整理できませんでした。");
-        return;
-      }
+      await northernBranchRoomApi.remove({ ownerId, fallbackHostId: session.id });
       const now = Date.now();
       const host: NorthernRoomPlayer = { id: session.id, name: session.name, joinedAt: now, avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined };
       const nextRoom: NorthernRoom = {
         code: makeRoomCode(), revision: 0, hostId: session.id, ownerId, passphrase: passphrase.trim(), phase: "lobby",
         players: [host], gameNumber: 1, debugMode: false, debugReplayEnabled: false, game: null, notice: "参加者を待っています。", createdAt: now, updatedAt: now,
       };
-      const response = await fetch("/api/northern-branch/rooms", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ room: nextRoom, actorId: session.id }) });
-      if (!response.ok) {
-        setError(apiMessage(response.status, "部屋を作成できませんでした。"));
-        return;
-      }
-      const data = (await response.json()) as { room: NorthernRoom };
+      const data = await saveNorthernBranchRoom(nextRoom, session.id);
       setRoom(data.room);
       localStorage.setItem(lastRoomKey, data.room.code);
       setError("");
-    } catch {
-      setError("部屋を作成できませんでした。");
+    } catch (caught) {
+      const status = caught instanceof OnlineRoomApiError ? caught.status : 0;
+      setError(status === 409 ? "プレイ中の部屋があります。先にその部屋へ戻ってください。" : apiMessage(status, "部屋を作成できませんでした。"));
     } finally {
       setIsSaving(false);
     }
   };
 
   const listRooms = async () => {
-    const response = await fetch("/api/northern-branch/rooms", { cache: "no-store" });
-    if (!response.ok) {
-      setError(apiMessage(response.status, "部屋一覧を取得できませんでした。"));
-      return;
+    try {
+      const rooms = await northernBranchRoomApi.fetchJoinableRooms();
+      setChoices(rooms);
+      setShowChoices(true);
+      setError(rooms.length ? "" : "参加できる未開始の部屋がありません。");
+    } catch (caught) {
+      setError(apiMessage(caught instanceof OnlineRoomApiError ? caught.status : 0, "部屋一覧を取得できませんでした。"));
     }
-    const data = (await response.json()) as { rooms?: NorthernRoomChoice[] };
-    setChoices(data.rooms ?? []);
-    setShowChoices(true);
-    setError(data.rooms?.length ? "" : "参加できる未開始の部屋がありません。");
   };
 
   const joinRoom = async (selectedCode = joinCode) => {
@@ -260,19 +227,13 @@ export function NorthernBranchGame() {
     const player: NorthernRoomPlayer = { id: session.id, name: session.name, joinedAt: Date.now(), avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined };
     setIsSaving(true);
     try {
-      const action = { type: "join-room", actorId: session.id, player, passphrase } satisfies NorthernRoomAction;
-      const response = await fetch("/api/northern-branch/rooms", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code, action }) });
-      if (!response.ok) {
-        setError(apiMessage(response.status, "部屋へ参加できませんでした。"));
-        return;
-      }
-      const data = (await response.json()) as { room: NorthernRoom };
-      setRoom(data.room);
+      const joinedRoom = await applyNorthernBranchRoomAction(code, { type: "join-room", actorId: session.id, player, passphrase });
+      setRoom(joinedRoom);
       setShowChoices(false);
-      localStorage.setItem(lastRoomKey, data.room.code);
+      localStorage.setItem(lastRoomKey, joinedRoom.code);
       setError("");
-    } catch {
-      setError("部屋へ参加できませんでした。");
+    } catch (caught) {
+      setError(apiMessage(caught instanceof OnlineRoomApiError ? caught.status : 0, "部屋へ参加できませんでした。"));
     } finally {
       setIsSaving(false);
     }
@@ -280,8 +241,9 @@ export function NorthernBranchGame() {
 
   const dissolveRoom = async () => {
     if (!room || !session?.id || !isHost || !window.confirm("部屋を解散しますか？")) return;
-    const response = await fetch(`/api/northern-branch/rooms?code=${encodeURIComponent(room.code)}&actorId=${encodeURIComponent(session.id)}`, { method: "DELETE" });
-    if (!response.ok) {
+    try {
+      await northernBranchRoomApi.remove({ code: room.code, actorId: session.id });
+    } catch {
       setError("部屋を解散できませんでした。");
       return;
     }

@@ -1,7 +1,8 @@
 import type { Room, RoomChoice } from "@/lib/wordwolf-game-types";
-import { fetchConditionalJson } from "@/lib/conditional-json-client";
+import { createOnlineRoomApiClient } from "@/lib/online-room-api-client";
 
 const endpoint = "/api/wordwolf/rooms";
+const roomApi = createOnlineRoomApiClient<Room, RoomChoice>({ endpoint });
 
 async function readJson<T>(response: Response, errorCode: string) {
   if (!response.ok) throw new Error(errorCode);
@@ -9,43 +10,31 @@ async function readJson<T>(response: Response, errorCode: string) {
 }
 
 export async function fetchWordWolfRoom(code: string) {
-  const result = await fetchConditionalJson<{ room?: Room }>(`${endpoint}?code=${encodeURIComponent(code)}`);
-  if (result.status === 404) return null;
-  if (!result.ok) throw new Error("ROOM_FETCH_FAILED");
-  return result.data?.room ?? null;
+  return roomApi.fetchRoom(code);
 }
 
 export async function fetchActiveWordWolfRoom(playerId: string) {
-  const result = await fetchConditionalJson<{ room?: Room | null }>(`${endpoint}?playerId=${encodeURIComponent(playerId)}`);
-  if (!result.ok) throw new Error("ACTIVE_ROOM_FETCH_FAILED");
-  return result.data?.room ?? null;
+  return roomApi.fetchActiveRoom(playerId);
 }
 
 export async function fetchJoinableWordWolfRooms() {
-  const result = await fetchConditionalJson<{ rooms?: RoomChoice[] }>(endpoint);
-  if (!result.ok) throw new Error("ROOM_LIST_FAILED");
-  return Array.isArray(result.data?.rooms) ? result.data.rooms : [];
+  return roomApi.fetchJoinableRooms();
 }
 
 export async function persistWordWolfRoom(room: Room) {
-  const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ room }) });
-  return readJson<{ room: Room }>(response, "ROOM_SAVE_FAILED");
+  return roomApi.post<{ room: Room }, { room: Room }>({ room });
 }
 
 export async function joinWordWolfRoom(code: string, passphrase: string) {
-  const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "join", code, passphrase }) });
-  return readJson<{ room: Room }>(response, "ROOM_JOIN_FAILED");
+  return roomApi.post<{ action: "join"; code: string; passphrase: string }, { room: Room }>({ action: "join", code, passphrase }, "ROOM_JOIN_FAILED");
 }
 
 export async function removeWordWolfRoom(code: string) {
-  const response = await fetch(`${endpoint}?code=${encodeURIComponent(code)}`, { method: "DELETE" });
-  return readJson<{ ok: boolean }>(response, "ROOM_DELETE_FAILED");
+  return roomApi.remove({ code });
 }
 
 export async function removeHostedWordWolfRooms(ownerId: string, fallbackHostId: string) {
-  const params = new URLSearchParams({ ownerId, fallbackHostId });
-  const response = await fetch(`${endpoint}?${params.toString()}`, { method: "DELETE" });
-  return readJson<{ ok: boolean; deleted: number }>(response, "HOSTED_ROOMS_DELETE_FAILED");
+  return roomApi.remove<{ ok: boolean; deleted: number }>({ ownerId, fallbackHostId }, "HOSTED_ROOMS_DELETE_FAILED");
 }
 
 export async function expireWordWolfPhase(code: string, commandId: string) {
