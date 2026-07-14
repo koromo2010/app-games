@@ -1,4 +1,9 @@
-import { additionalProperNounNearPairTopics, additionalProperNounWidePairTopics, createHintTopicGroups } from "@/lib/wordwolf-topic-data";
+import {
+  additionalProperNounBalancedPairTopics,
+  additionalProperNounNearPairTopics,
+  additionalProperNounWidePairTopics,
+  createHintTopicGroups,
+} from "@/lib/wordwolf-topic-data";
 import type { TopicCandidate, TopicDictionarySource, TopicPairDistance, TopicSourceMode, WordWolfTopic } from "@/lib/wordwolf-topic-types";
 
 export type { TopicDictionarySource, TopicPairDistance, TopicSourceMode, WordWolfTopic } from "@/lib/wordwolf-topic-types";
@@ -479,6 +484,32 @@ const localTopicDecks: Record<TopicDictionarySource, Record<TopicPairDistance, T
     wide: [...properNounWidePairTopics, ...additionalProperNounWidePairTopics],
   },
 };
+
+/** ワードウルフの固定ローカル候補に含まれる、重複を除いた単語一覧。 */
+export function listLocalWordWolfWords() {
+  const pairs = [
+    ...curatedPairTopics,
+    ...curatedNearPairTopics,
+    ...curatedWidePairTopics,
+    ...properNounNearPairTopics,
+    ...properNounBalancedPairTopics,
+    ...properNounWidePairTopics,
+    ...additionalProperNounNearPairTopics,
+    ...additionalProperNounBalancedPairTopics,
+    ...additionalProperNounWidePairTopics,
+  ];
+  const sourceWords = [
+    ...jaDailySets.flatMap((set) => set.words),
+    ...enCommonSets.flatMap((set) => set.words),
+    ...pairs.flatMap((topic) => [topic.villageWord, topic.wolfWord]),
+  ];
+  const words = new Map<string, string>();
+  for (const word of sourceWords) {
+    const normalized = normalizeTopicWord(word);
+    if (normalized && !words.has(normalized)) words.set(normalized, word.trim());
+  }
+  return [...words.values()];
+}
 
 export function pickFallbackTopic(
   excludeKeys: string[] = [],
