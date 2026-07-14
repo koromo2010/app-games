@@ -1,9 +1,7 @@
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { privateGameCookieMatches, privateGameCookieName } from "@/lib/private-game-access";
+import { gamePageAccessAllowed } from "@/lib/game-access";
 
 export default async function HodoaiTalkPage() {
-  const store = await cookies();
-  if (!privateGameCookieMatches(store.get(privateGameCookieName)?.value)) redirect("/games");
+  if (!(await gamePageAccessAllowed("hodoai"))) redirect("/games");
   redirect("/kotoba-de-kazu-narabe");
 }

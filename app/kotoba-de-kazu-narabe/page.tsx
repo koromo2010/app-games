@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { HodoaiTalkGame } from "@/app/hodoai-talk/HodoaiTalkGame";
-import { privateGameCookieMatches, privateGameCookieName } from "@/lib/private-game-access";
+import { gamePageAccessAllowed } from "@/lib/game-access";
 
 export const metadata: Metadata = {
   title: "ことばで数ならべ | Game Fields",
@@ -10,7 +9,6 @@ export const metadata: Metadata = {
 };
 
 export default async function KotobaDeKazuNarabePage() {
-  const store = await cookies();
-  if (!privateGameCookieMatches(store.get(privateGameCookieName)?.value)) redirect("/games");
+  if (!(await gamePageAccessAllowed("hodoai"))) redirect("/games");
   return <HodoaiTalkGame />;
 }

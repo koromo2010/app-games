@@ -19,7 +19,7 @@ for (const game of games) {
   if (!game.entryFile || !existsSync(join(root, game.entryFile))) continue;
   const entry = read(game.entryFile);
   for (const token of game.requiredTokens || []) if (!entry.includes(token)) fail(`${game.id}: 共通要件「${token}」が ${game.entryFile} にありません。`);
-  if (game.private && !read(game.pageFile).includes("privateGameCookieMatches")) fail(`${game.id}: 非公開ゲームのサーバー側Cookie検証がありません。`);
+  if (game.private && !read(game.pageFile).includes("gamePageAccessAllowed")) fail(`${game.id}: 非公開ゲームの共通サーバーアクセス検証がありません。`);
   if (game.playMode === "online-room") {
     if (!game.roomStoreFile || !existsSync(join(root, game.roomStoreFile))) fail(`${game.id}: roomStoreFile がありません。`);
     else { const store = read(game.roomStoreFile); const modules = [entry, store, ...(game.moduleBoundaryFiles || []).map(read)].join("\n"); if (!store.includes("multiplayerRoomTtlSeconds") && !store.includes("multiplayerRoomExpiryArgs")) fail(`${game.id}: 共通の部屋TTLを使用していません。`); if (!store.includes("revision") && !store.includes("saveStoredWordWolfRoom")) fail(`${game.id}: サーバー側の部屋保存処理が見つかりません。`); if (!modules.includes("abort-game") && !modules.includes("abortGame")) fail(`${game.id}: ゲーム開始前へ戻すデバッグ中断処理がありません。`); }

@@ -30,6 +30,40 @@ type ActiveWordWolfRoom = {
   updatedAt: number;
 };
 
+type ActiveGameRoom = {
+  code: string;
+  phase: string;
+  players: { id: string; name: string }[];
+  updatedAt: number;
+};
+
+const roomApiByGameId: Partial<Record<string, string>> = {
+  wordwolf: "/api/wordwolf/rooms",
+  tahoiya: "/api/tahoiya/rooms",
+  "northern-branch": "/api/northern-branch/rooms",
+  hodoai: "/api/hodoai/rooms",
+  "kotoba-senpuku": "/api/kotoba-senpuku/rooms",
+};
+
+async function fetchActiveGameRooms(targetPlayerId: string, includePrivateGames: boolean) {
+  const accessibleGames = games.filter((game) => !game.private || includePrivateGames);
+  const entries = await Promise.all(accessibleGames.map(async (game) => {
+    const endpoint = roomApiByGameId[game.id];
+    if (!endpoint) return null;
+    try {
+      const response = await fetch(`${endpoint}?playerId=${encodeURIComponent(targetPlayerId)}`, {
+        cache: "no-store",
+      });
+      const data = (await response.json()) as { room?: ActiveGameRoom | null };
+      return response.ok && data.room ? [game.id, data.room] as const : null;
+    } catch {
+      return null;
+    }
+  }));
+
+  return Object.fromEntries(entries.filter((entry): entry is readonly [string, ActiveGameRoom] => entry !== null));
+}
+
 const statsGameOptions = [
   { value: "all", label: "全ゲーム" },
   ...games
@@ -101,6 +135,7 @@ export function GameLobby() {
   const [isStatsLoading, setIsStatsLoading] = useState(false);
   const [selectedStatsGame, setSelectedStatsGame] = useState<PlayerStatsGameFilter>("all");
   const [activeRoom, setActiveRoom] = useState<ActiveWordWolfRoom | null>(null);
+  const [activeGameRooms, setActiveGameRooms] = useState<Record<string, ActiveGameRoom>>({});
   const [isActiveRoomLoading, setIsActiveRoomLoading] = useState(false);
   const [privateAccessKey, setPrivateAccessKey] = useState("");
   const [privateUnlocked, setPrivateUnlocked] = useState(false);
@@ -215,6 +250,17 @@ export function GameLobby() {
     }, 450);
     return () => window.clearTimeout(timer);
   }, [privateAccessKey, privateUnlocked]);
+
+  useEffect(() => {
+    if (!isLoggedIn || !playerId) return;
+    let ignore = false;
+    void fetchActiveGameRooms(playerId, privateUnlocked).then((rooms) => {
+      if (!ignore) setActiveGameRooms(rooms);
+    });
+    return () => {
+      ignore = true;
+    };
+  }, [isLoggedIn, playerId, privateUnlocked]);
 
   const applySession = (session: PlayerSession) => {
     savePlayerSession(session);
@@ -388,8 +434,14 @@ export function GameLobby() {
     setIsMobileInfoOpen(false);
     setStats(null);
     setActiveRoom(null);
+    setActiveGameRooms({});
     setMessage("ログアウトしました。");
   };
+
+  const visibleGames = games.filter((game) => !game.private || privateUnlocked);
+  const orderedGames = [...visibleGames].sort((left, right) =>
+    Number(Boolean(activeGameRooms[right.id])) - Number(Boolean(activeGameRooms[left.id])),
+  );
 
   return (
     <main className="min-h-screen bg-slate-950 text-slate-950">
@@ -870,37 +922,46 @@ export function GameLobby() {
             <p className="text-xs font-semibold uppercase text-cyan-200">Games</p>
             <h2 className="text-xl font-black">遊ぶゲームを選ぶ</h2>
           </div>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {games.filter((game) => !game.private || privateUnlocked).map((game) => {
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {orderedGames.map((game) => {
+            const activeGameRoom = activeGameRooms[game.id];
+            const isActiveGame = Boolean(activeGameRoom);
             const card = (
-              <article className="h-full rounded-lg border border-white/10 bg-white/[0.96] p-4 shadow-[0_18px_50px_rgba(15,23,42,0.18)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_60px_rgba(15,23,42,0.24)]">
-                <div className={`h-24 rounded-lg bg-gradient-to-br ${game.accent}`} />
-                <div className="mt-4 flex items-center justify-between gap-3">
-                  <h2 className="text-xl font-black text-slate-950">{game.title}</h2>
-                  <span className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600">
-                    {game.status}
+              <article className={`h-full rounded-lg border p-3 shadow-[0_14px_38px_rgba(15,23,42,0.18)] transition hover:-translate-y-0.5 hover:shadow-[0_20px_48px_rgba(15,23,42,0.28)] ${
+                isActiveGame
+                  ? "border-cyan-300 bg-gradient-to-br from-cyan-950 via-slate-900 to-fuchsia-950 ring-2 ring-cyan-300/60"
+                  : "border-white/10 bg-white/[0.96]"
+              }`}>
+                <div className={`h-14 rounded-md bg-gradient-to-br ${game.accent} ${isActiveGame ? "ring-2 ring-white/50" : ""}`} />
+                <div className="mt-3 flex items-start justify-between gap-2">
+                  <h2 className={`text-lg font-black leading-tight ${isActiveGame ? "text-white" : "text-slate-950"}`}>{game.title}</h2>
+                  <span className={`shrink-0 rounded-md border px-2 py-1 text-[11px] font-black ${
+                    isActiveGame
+                      ? "border-amber-200 bg-amber-300 text-amber-950 shadow-[0_0_18px_rgba(252,211,77,0.45)]"
+                      : "border-slate-200 bg-slate-50 text-slate-600"
+                  }`}>
+                    {isActiveGame ? "プレイ中" : game.status}
                   </span>
                 </div>
-                <p className="mt-3 min-h-12 text-sm leading-6 text-slate-600">{game.summary}</p>
-                <div className="mt-4 grid grid-cols-2 gap-2 text-sm">
-                  <div className="rounded-lg bg-slate-100 px-3 py-2">
-                    <p className="text-xs text-slate-500">人数</p>
-                    <p className="font-bold text-slate-950">{game.players}</p>
-                  </div>
-                  <div className="rounded-lg bg-slate-100 px-3 py-2">
-                    <p className="text-xs text-slate-500">目安</p>
-                    <p className="font-bold text-slate-950">{game.time}</p>
-                  </div>
+                {activeGameRoom && (
+                  <p className="mt-2 text-xs font-bold text-cyan-100">部屋 {activeGameRoom.code} に参加中</p>
+                )}
+                <p className={`mt-2 min-h-10 text-xs leading-5 ${isActiveGame ? "text-slate-200" : "text-slate-600"}`}>{game.summary}</p>
+                <div className={`mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t pt-2 text-xs ${isActiveGame ? "border-white/15 text-slate-200" : "border-slate-200 text-slate-600"}`}>
+                  <p><span className={isActiveGame ? "text-cyan-200" : "text-slate-400"}>人数</span> <strong>{game.players}</strong></p>
+                  <p><span className={isActiveGame ? "text-cyan-200" : "text-slate-400"}>目安</span> <strong>{game.time}</strong></p>
                 </div>
-                <div className="mt-4">
+                <div className="mt-3">
                   {game.href ? (
-                    <span className={`inline-flex rounded-lg px-3 py-2 text-sm font-semibold shadow-sm ${
-                      isLoggedIn ? "bg-cyan-600 text-white" : "bg-slate-200 text-slate-500"
+                    <span className={`inline-flex rounded-md px-3 py-1.5 text-xs font-bold shadow-sm ${
+                      isActiveGame
+                        ? "bg-amber-300 text-amber-950"
+                        : isLoggedIn ? "bg-cyan-600 text-white" : "bg-slate-200 text-slate-500"
                     }`}>
-                      {isLoggedIn ? "遊ぶ" : "ログインしてから遊ぶ"}
+                      {isActiveGame ? "ゲームに戻る" : isLoggedIn ? "遊ぶ" : "ログインしてから遊ぶ"}
                     </span>
                   ) : (
-                    <span className="inline-flex rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-400">
+                    <span className="inline-flex rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-400">
                       準備中
                     </span>
                   )}
@@ -917,7 +978,12 @@ export function GameLobby() {
             }
 
             return isLoggedIn ? (
-              <Link key={game.title} href={game.href} className="block">
+              <Link
+                key={game.title}
+                href={game.href}
+                onClick={game.id === "wordwolf" && isActiveGame ? rememberActiveRoom : undefined}
+                className="block"
+              >
                 {card}
               </Link>
             ) : (

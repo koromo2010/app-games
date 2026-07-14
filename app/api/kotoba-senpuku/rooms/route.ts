@@ -1,4 +1,3 @@
-import { cookies } from "next/headers";
 import {
   applyStoredKotobaSenpukuAction,
   createStoredKotobaSenpukuRoom,
@@ -10,15 +9,10 @@ import {
   sanitizeKotobaSenpukuRoom,
 } from "@/lib/kotoba-senpuku-room-store";
 import type { KotobaSenpukuRoomAction } from "@/lib/kotoba-senpuku";
-import { privateGameCookieMatches, privateGameCookieName } from "@/lib/private-game-access";
 import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
 import { actionRequiresDebugAccess, requirePlayerDebugAccess } from "@/lib/debug-access";
-
-async function hasPrivateAccess() {
-  const store = await cookies();
-  return privateGameCookieMatches(store.get(privateGameCookieName)?.value);
-}
+import { gameApiAccessDeniedResponse } from "@/lib/game-access";
 
 function errorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : "";
@@ -41,7 +35,8 @@ function errorResponse(error: unknown) {
 
 export async function GET(request: Request) {
   const telemetry = createRequestTelemetry(request, "/api/kotoba-senpuku/rooms", { game: "kotoba-senpuku", operation: "room-read" });
-  if (!(await hasPrivateAccess())) return Response.json({ error: "Private access required" }, { status: 403 });
+  const accessDenied = await gameApiAccessDeniedResponse("kotoba-senpuku");
+  if (accessDenied) return accessDenied;
   const url = new URL(request.url);
   const code = url.searchParams.get("code")?.trim().toUpperCase() ?? "";
   const playerId = url.searchParams.get("playerId")?.trim() ?? "";
@@ -70,10 +65,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const telemetry = createRequestTelemetry(request, "/api/kotoba-senpuku/rooms", { game: "kotoba-senpuku", operation: "room-create" });
   let logFields: ObservabilityFields = { action: "create-room" };
-  if (!(await hasPrivateAccess())) {
-    telemetry.reject("room.mutation", 403, logFields);
-    return Response.json({ error: "Private access required" }, { status: 403 });
-  }
+  const accessDenied = await gameApiAccessDeniedResponse("kotoba-senpuku");
+  if (accessDenied) return accessDenied;
   try {
     const session = await requireAuthenticatedPlayer();
     const body = (await request.json()) as { room?: unknown; actorId?: unknown };
@@ -93,10 +86,8 @@ export async function POST(request: Request) {
 export async function PATCH(request: Request) {
   const telemetry = createRequestTelemetry(request, "/api/kotoba-senpuku/rooms", { game: "kotoba-senpuku", operation: "room-command" });
   let logFields: ObservabilityFields = {};
-  if (!(await hasPrivateAccess())) {
-    telemetry.reject("room.command", 403);
-    return Response.json({ error: "Private access required" }, { status: 403 });
-  }
+  const accessDenied = await gameApiAccessDeniedResponse("kotoba-senpuku");
+  if (accessDenied) return accessDenied;
   try {
     const session = await requireAuthenticatedPlayer();
     const body = (await request.json()) as { code?: unknown; action?: unknown };
@@ -124,10 +115,8 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   const telemetry = createRequestTelemetry(request, "/api/kotoba-senpuku/rooms", { game: "kotoba-senpuku", operation: "room-delete" });
-  if (!(await hasPrivateAccess())) {
-    telemetry.reject("room.delete", 403);
-    return Response.json({ error: "Private access required" }, { status: 403 });
-  }
+  const accessDenied = await gameApiAccessDeniedResponse("kotoba-senpuku");
+  if (accessDenied) return accessDenied;
   const url = new URL(request.url);
   const code = url.searchParams.get("code")?.trim().toUpperCase() ?? "";
   const actorId = url.searchParams.get("actorId")?.trim() ?? "";

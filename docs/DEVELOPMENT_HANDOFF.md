@@ -25,6 +25,7 @@
 | 共通部屋設定 | `lib/room-defaults-store.ts`, `lib/game-room-defaults-client.ts`, `app/components/RoomConfigSummary.tsx` |
 | 共通時間制限 | `lib/game-room-config.ts`, `app/components/RoomTimeLimitControl.tsx` |
 | 共通デバッグ認証 | `lib/debug-access.ts`, `app/components/DebugModeButton.tsx`, `app/api/debug-auth/route.ts`, `app/users/me/UserDashboard.tsx` |
+| ゲーム公開範囲 | `config/game-registry.json` の `private`, `lib/game-access.ts`, `lib/private-game-access.ts`, `app/api/private-game-access/route.ts` |
 | ゲーム登録・自動監査 | `config/game-registry.json`, `scripts/check-game-standards.mjs`, `docs/NEW_GAME_CHECKLIST.md` |
 | 共通戦績・マイページ | `lib/player-stats-store.ts`, `app/api/player-stats/route.ts`, `app/users/me/UserDashboard.tsx` |
 | 全ゲーム対戦プレイバック | `lib/game-replay-store.ts`, `app/api/player-replays/route.ts`, `app/components/GameReplayPanel.tsx`, `docs/GAME_REPLAYS.md` |
@@ -32,7 +33,7 @@
 | ワードウルフ | `app/wordwolf`, `app/api/wordwolf`, `lib/wordwolf-room-store.ts` |
 | たほい屋 | `app/tahoiya/TahoiyaGame.tsx`, `app/api/tahoiya`, `lib/tahoiya-room-store.ts`, `lib/tahoiya-types.ts` |
 | ことばで数ならべ | `app/kotoba-de-kazu-narabe`, `app/hodoai-talk/HodoaiTalkGame.tsx`, `app/api/hodoai/rooms`, `lib/hodoai-room-store.ts` |
-| ことばソナー | `app/kotoba-senpuku`, `app/api/kotoba-senpuku/rooms`, `lib/kotoba-senpuku-room-store.ts`, `lib/kotoba-senpuku.ts` |
+| ことばソナー | `app/kotoba-senpuku`, `app/api/kotoba-senpuku/rooms`, `lib/kotoba-senpuku-room-store.ts`, `lib/kotoba-senpuku.ts`（公開ゲーム。ログイン必須、非公開アクセスキー不要） |
 | たほい屋の問題再利用 | `lib/tahoiya-topic-catalog.ts`, `app/api/tahoiya/topic/route.ts` |
 | お題候補DB・経験履歴の目標設計 | `docs/TOPIC_HISTORY_DATABASE.md` |
 
@@ -59,6 +60,8 @@
 - `UPSTASH_REDIS_REST_URL` または `KV_REST_API_URL`
 - `UPSTASH_REDIS_REST_TOKEN` または `KV_REST_API_TOKEN`
 - 既存の `KV_*`, `REDIS_URL` も環境に設定されている場合がある
+
+ゲームの公開／非公開は `config/game-registry.json` の `private` を正本とする。ページは `gamePageAccessAllowed`、部屋APIは `gameApiAccessDeniedResponse` を通し、非公開ゲームだけ共通Cookieを要求する。ことばソナーは公開ゲームのためアクセスキー不要だが、ログインと部屋内の操作権限は引き続き必要。
 
 ### メール送信の初期設定
 

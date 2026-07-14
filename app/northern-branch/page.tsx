@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
-import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { privateGameCookieMatches, privateGameCookieName } from "@/lib/private-game-access";
+import { gamePageAccessAllowed } from "@/lib/game-access";
 import { NorthernBranchGame } from "./NorthernBranchGame";
 
 export const metadata: Metadata = {
@@ -10,7 +9,6 @@ export const metadata: Metadata = {
 };
 
 export default async function NorthernBranchPage() {
-  const store = await cookies();
-  if (!privateGameCookieMatches(store.get(privateGameCookieName)?.value)) redirect("/games");
+  if (!(await gamePageAccessAllowed("northern-branch"))) redirect("/games");
   return <NorthernBranchGame />;
 }
