@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { put } from "@vercel/blob";
 import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
-import { isWebpImage, maxAvatarUploadBytes, resolveAvatarBlobToken } from "@/lib/avatar-image-server";
+import { isWebpImage, maxAvatarUploadBytes, resolveAvatarBlobStoreId, resolveAvatarBlobToken } from "@/lib/avatar-image-server";
 import { createRequestTelemetry } from "@/lib/observability";
 
 export const runtime = "nodejs";
@@ -11,10 +11,12 @@ export async function POST(request: Request) {
   try {
     const player = await requireAuthenticatedPlayer();
     const blobToken = resolveAvatarBlobToken(process.env);
-    if (!blobToken.token) {
+    const blobStore = resolveAvatarBlobStoreId(process.env);
+    if (!blobToken.token && !blobStore.token) {
       telemetry.reject("auth.avatar", 503, {
         actorRef: telemetry.actorRef(player.id),
         errorCode: "AVATAR_BLOB_NOT_CONFIGURED",
+        sourceCount: blobStore.candidateKeys.length,
       });
       return Response.json({ error: "AVATAR_BLOB_NOT_CONFIGURED" }, { status: 503 });
     }
@@ -46,7 +48,12 @@ export async function POST(request: Request) {
 
     const blob = await put(`avatars/${randomUUID()}.webp`, file, {
       access: "public",
-      token: blobToken.token,
+      ...(blobToken.token
+        ? { token: blobToken.token }
+        : {
+            storeId: blobStore.token!,
+            ...(process.env.VERCEL_OIDC_TOKEN ? { oidcToken: process.env.VERCEL_OIDC_TOKEN } : {}),
+          }),
       addRandomSuffix: false,
       contentType: "image/webp",
       cacheControlMaxAge: 31_536_000,
