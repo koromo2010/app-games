@@ -140,6 +140,7 @@ export function GameLobby() {
   const [isActiveRoomLoading, setIsActiveRoomLoading] = useState(false);
   const [privateAccessKey, setPrivateAccessKey] = useState("");
   const [privateUnlocked, setPrivateUnlocked] = useState(false);
+  const [isPrivateAccessUpdating, setIsPrivateAccessUpdating] = useState(false);
   const [isMobileInfoOpen, setIsMobileInfoOpen] = useState(false);
   const [isMyPageOpen, setIsMyPageOpen] = useState(false);
 
@@ -252,6 +253,22 @@ export function GameLobby() {
     }, 450);
     return () => window.clearTimeout(timer);
   }, [privateAccessKey, privateUnlocked]);
+
+  const clearPrivateAccess = async () => {
+    if (isPrivateAccessUpdating) return;
+    setIsPrivateAccessUpdating(true);
+    try {
+      const response = await fetch("/api/private-game-access", { method: "DELETE" });
+      if (!response.ok) throw new Error("PRIVATE_ACCESS_CLEAR_FAILED");
+      setPrivateUnlocked(false);
+      setPrivateAccessKey("");
+      setMessage("Privateゲームの表示を解除しました。");
+    } catch {
+      setMessage("Privateゲームの表示を解除できませんでした。");
+    } finally {
+      setIsPrivateAccessUpdating(false);
+    }
+  };
 
   useEffect(() => {
     if (!isLoggedIn || !playerId) return;
@@ -559,14 +576,20 @@ export function GameLobby() {
               )}
             </div>
           </div>
-          <input
-            type="password"
-            value={privateAccessKey}
-            onChange={(event) => setPrivateAccessKey(event.target.value)}
-            aria-label="access key"
-            autoComplete="off"
-            className="mt-4 h-7 w-28 rounded-md border border-white/10 bg-white/[0.04] px-2 text-xs text-white opacity-30 outline-none transition focus:border-white/30 focus:opacity-100"
-          />
+          {privateUnlocked ? (
+            <button type="button" disabled={isPrivateAccessUpdating} onClick={() => void clearPrivateAccess()} className="mt-4 rounded-md border border-violet-200/20 bg-violet-200/[0.06] px-2 py-1 text-[11px] font-semibold text-violet-100/60 transition hover:bg-violet-200/10 hover:text-violet-100 disabled:opacity-40">
+              {isPrivateAccessUpdating ? "Private解除中..." : "Private表示を解除"}
+            </button>
+          ) : (
+            <input
+              type="password"
+              value={privateAccessKey}
+              onChange={(event) => setPrivateAccessKey(event.target.value)}
+              aria-label="access key"
+              autoComplete="off"
+              className="mt-4 h-7 w-28 rounded-md border border-white/10 bg-white/[0.04] px-2 text-xs text-white opacity-30 outline-none transition focus:border-white/30 focus:opacity-100"
+            />
+          )}
         </div>
       </section>
 

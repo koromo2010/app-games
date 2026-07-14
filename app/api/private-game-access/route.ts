@@ -21,3 +21,13 @@ export async function POST(request: Request) {
   telemetry.success("auth.access", { action: "unlock-private-games" });
   return Response.json({ unlocked: true });
 }
+
+export async function DELETE(request: Request) {
+  const telemetry = createRequestTelemetry(request, "/api/private-game-access", { operation: "private-game-access" });
+  const store = await cookies();
+  store.set(privateGameCookieName, "", {
+    httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 0,
+  });
+  telemetry.success("auth.access", { action: "lock-private-games" });
+  return Response.json({ unlocked: false });
+}
