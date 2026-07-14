@@ -14,6 +14,7 @@ import { RoomResultActions } from "@/app/components/RoomResultActions";
 import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
 import { WordScaleArrangeBoard } from "@/app/hodoai-talk/WordScaleArrangeBoard";
 import { WordScaleRoomPanel } from "@/app/hodoai-talk/WordScaleRoomPanel";
+import { WordScaleVerticalScale } from "@/app/hodoai-talk/WordScaleVerticalScale";
 import { loadPlayerRoomDefaults, savePlayerRoomDefaults } from "@/lib/game-room-defaults-client";
 import { fetchConditionalJson } from "@/lib/conditional-json-client";
 import {
@@ -432,7 +433,29 @@ export function HodoaiTalkGame() {
             </section>
           )}
 
-          {room.phase !== "lobby" && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.22em] text-amber-300">{room.phase === "clue" ? `ことば ${room.round}/${room.roundsTotal}回目` : room.phase === "arrange" ? "最終並べ替え" : "最終結果"}</p><h2 className="mt-2 text-2xl font-black sm:text-4xl">{room.phase === "clue" ? room.theme?.title : room.phase === "arrange" ? "すべてのことばを手がかりに並べる" : `${room.totalPoints}/3点`}</h2></div><span className="rounded-xl bg-amber-300 px-4 py-2 font-black text-slate-950">全 {room.cards.length}枚</span></div>{room.phase === "clue" && room.theme && <div className="mt-5"><div className="h-2 rounded-full bg-gradient-to-r from-sky-400 via-amber-300 to-fuchsia-400" /><div className="mt-2 flex justify-between gap-4 text-xs font-bold text-slate-300"><span>0｜{room.theme.lowLabel}</span><span className="text-right">{room.theme.highLabel}｜120</span></div></div>}</section>}
+          {room.phase !== "lobby" && (
+            <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.22em] text-amber-300">{room.phase === "clue" ? `ことば ${room.round}/${room.roundsTotal}回目` : room.phase === "arrange" ? "最終並べ替え" : "最終結果"}</p>
+                  <h2 className="mt-2 text-2xl font-black sm:text-4xl">{room.phase === "clue" ? room.theme?.title : room.phase === "arrange" ? "すべてのことばを手がかりに並べる" : `${room.totalPoints}/3点`}</h2>
+                </div>
+                <span className="rounded-xl bg-amber-300 px-4 py-2 font-black text-slate-950">全 {room.cards.length}枚</span>
+              </div>
+              {room.phase === "clue" && room.theme && (
+                <div className="mt-5 grid gap-4 md:grid-cols-[minmax(15rem,20rem)_minmax(0,1fr)]">
+                  <WordScaleVerticalScale
+                    lowLabel={room.theme.lowLabel}
+                    highLabel={room.theme.highLabel}
+                    markers={ownCards.flatMap((card) => typeof room.values[card.id] === "number" ? [{ id: card.id, label: `あなたのカード${card.cardNumber}`, value: room.values[card.id] }] : [])}
+                  />
+                  <div className="flex items-center rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4 text-sm font-bold leading-7 text-amber-100">
+                    0から120へ縦に伸びる同じスケールを、ことば提出から最後の並べ替えまで使います。自分の数字がどの位置かを意識しながら、お題に合うことばを考えてください。
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
 
           {room.phase === "clue" && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-black">同じ数字カードへ新しいことばを出す</h2><p className="mt-1 text-sm text-slate-400">{room.round}回目の提出 {submittedCount}/{room.cards.length}枚</p></div>{room.phaseStartedAt && <GamePhaseTimer key={room.phaseStartedAt} durationSeconds={room.clueTimeLimitSeconds} startedAt={room.phaseStartedAt} label="提出時間" />}</div><p className="mt-4 rounded-xl border border-amber-300/25 bg-amber-300/10 p-3 text-sm font-bold text-amber-100">今回のお題「{room.theme?.title}」に沿った短いことばだけで伝えてください。カードの数字は前回から変わりません。</p><div className="mt-4 grid gap-4 sm:grid-cols-2">{ownCards.map((card) => <div key={card.id} className="rounded-2xl border border-white/10 bg-white/[0.05] p-4"><div className="rounded-xl border border-amber-300/40 bg-amber-300/10 p-4 text-center"><p className="text-xs font-bold text-amber-100">あなたのカード {card.cardNumber}</p><p className="mt-1 text-6xl font-black text-amber-300">{room.values[card.id]}</p></div>{room.clueHistory.length > 0 && <div className="mt-3 space-y-1">{room.clueHistory.map((clueRound) => <p key={clueRound.round} className="text-xs text-slate-300"><span className="font-bold text-cyan-200">{clueRound.round}回目：</span>{clueRound.clues[card.id]}</p>)}</div>}{room.clues[card.id] ? <div className="mt-3 rounded-xl border border-emerald-300/30 bg-emerald-300/10 p-3"><p className="font-black text-emerald-100">提出済み：{room.clues[card.id]}</p></div> : <div className="mt-3"><label className="block text-sm font-bold">今回、このカードを表すことば<input value={clueDrafts[card.id] ?? ""} maxLength={40} onChange={(event) => setClueDrafts((current) => ({ ...current, [card.id]: event.target.value }))} onKeyDown={(event) => { if (event.key === "Enter") submitClue(card.id); }} className="mt-2 w-full rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-lg text-white outline-none focus:border-amber-300" /></label><button type="button" disabled={isSaving} onClick={() => submitClue(card.id)} className="mt-3 w-full rounded-xl bg-amber-300 px-4 py-3 font-black text-slate-950 disabled:opacity-50">今回のことばを提出</button></div>}</div>)}</div><p className="mt-4 text-center text-sm text-slate-300">全カードがそろうと次のお題へ進み、最後の回だけ並べ替えへ進みます。</p>{isHost && room.debugMode && <button type="button" onClick={() => void runAction({ type: "debug-fill-clues", actorId: playerId, round: room.round })} className="mt-4 w-full rounded-xl border border-cyan-300/30 bg-cyan-300/10 px-4 py-3 text-sm font-black text-cyan-100">デバッグ：今回の未提出ことばを自動入力</button>}</section>}
 

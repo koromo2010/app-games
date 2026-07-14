@@ -1,3 +1,9 @@
+export const hodoaiCompactCardThreshold = 9;
+
+export function usesCompactHodoaiCards(cardCount: number) {
+  return cardCount >= hodoaiCompactCardThreshold;
+}
+
 export function moveHodoaiCard(order: string[], cardId: string, targetId: string) {
   const fromIndex = order.indexOf(cardId);
   const targetIndex = order.indexOf(targetId);

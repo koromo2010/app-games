@@ -1,6 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { moveHodoaiCard, sameHodoaiOrder, shiftHodoaiCard } from "../lib/hodoai-arrange.ts";
+import { moveHodoaiCard, sameHodoaiOrder, shiftHodoaiCard, usesCompactHodoaiCards } from "../lib/hodoai-arrange.ts";
+
+test("9枚以上で詳細プレビュー付きの小型カードへ切り替える", () => {
+  assert.equal(usesCompactHodoaiCards(8), false);
+  assert.equal(usesCompactHodoaiCards(9), true);
+  assert.equal(usesCompactHodoaiCards(121), true);
+});
 
 test("ドラッグ対象を指定カードの位置へ移動する", () => {
   assert.deepEqual(moveHodoaiCard(["a", "b", "c", "d"], "d", "b"), ["a", "d", "b", "c"]);
