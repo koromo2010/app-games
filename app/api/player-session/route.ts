@@ -41,6 +41,7 @@ export async function POST(request: Request) {
     avatarColor?: unknown;
     avatarImage?: unknown;
     createdAt?: unknown;
+    shareNameAllowed?: unknown;
   };
 
   try {
@@ -61,6 +62,9 @@ export async function POST(request: Request) {
       avatarColor: typeof body.avatarColor === "string" ? body.avatarColor : "",
       avatarImage: typeof body.avatarImage === "string" ? body.avatarImage : null,
       createdAt: typeof body.createdAt === "number" ? body.createdAt : undefined,
+      shareNameAllowed: typeof body.shareNameAllowed === "boolean"
+        ? body.shareNameAllowed
+        : authenticated.shareNameAllowed === true,
     });
     await savePlayerAccountProfile(authenticated.id, session);
 

@@ -15,6 +15,8 @@ export type HodoaiPlayer = {
   avatarColor?: string;
   avatarImage?: string;
   isDummy?: boolean;
+  /** 外部共有文へ表示名を載せることを、入室時点で本人が許可していたか。 */
+  shareNameAllowed?: boolean;
 };
 
 export type HodoaiCard = {
@@ -223,14 +225,37 @@ export function hodoaiFinalMessage(points: number, maxPoints: number) {
   return "大発見の連続！ みんなの違いがよく見えました。";
 }
 
-export function hodoaiGameShareText(room: Pick<HodoaiRoom, "totalPoints" | "history">) {
+export function hodoaiSharePlayerLabel(
+  players: Pick<HodoaiPlayer, "id" | "name" | "shareNameAllowed">[],
+  ownerId: string,
+) {
+  const index = players.findIndex((player) => player.id === ownerId);
+  if (index < 0) return "PLAYER?";
+  const player = players[index];
+  return player.shareNameAllowed === true ? player.name : `PLAYER${index + 1}`;
+}
+
+export function hodoaiGameShareText(room: Pick<HodoaiRoom, "totalPoints" | "history" | "players">) {
   const result = room.history.at(-1);
   const rounds = result?.clueRounds.map((clueRound) => `ことば${clueRound.round}「${clueRound.theme.title}」`) ?? [];
+  const finalOrder = result?.order.slice(0, 20).flatMap((id, index) => {
+    const card = result.cards.find((item) => item.id === id);
+    const value = result.values[id];
+    if (!card || typeof value !== "number") return [];
+    const expressions = result.clueRounds
+      .map((clueRound) => clueRound.clues[card.id])
+      .filter((clue): clue is string => Boolean(clue))
+      .join(" / ");
+    const owner = hodoaiSharePlayerLabel(room.players, card.ownerId);
+    return [`${index + 1}. ${value}｜${expressions || "ことばなし"}｜${owner}・カード${card.cardNumber}`];
+  }) ?? [];
+  if (result && result.order.length > finalOrder.length) finalOrder.push(`…ほか${result.order.length - finalOrder.length}枚`);
   return [
     "ワードスケール プレイログ",
     `チーム得点 ${room.totalPoints}/3点`,
     ...rounds,
     result ? `最終並び：全${result.cards.length}枚・並び違い${result.inversions}組` : "",
+    ...finalOrder,
     "#GameFields",
   ].filter(Boolean).join("\n");
 }

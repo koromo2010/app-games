@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState, type MouseEvent } from "react";
-import type { PlayerSession } from "@/lib/player-session";
+import { savePersistentPlayerSession, type PlayerSession } from "@/lib/player-session";
 import type { PlayerGameResult, PlayerStatsResponse } from "@/lib/player-stats-store";
 import { GameReplayPanel } from "@/app/components/GameReplayPanel";
 import { PlayerAvatarEditor } from "@/app/components/PlayerAvatarEditor";
@@ -42,12 +42,37 @@ export function UserDashboard() {
   const [debugMessage, setDebugMessage] = useState("");
   const [debugSaving, setDebugSaving] = useState(false);
   const [isAvatarEditorOpen, setIsAvatarEditorOpen] = useState(false);
+  const [isShareNameSaving, setIsShareNameSaving] = useState(false);
+  const [shareNameMessage, setShareNameMessage] = useState("");
 
-  const applyAvatarSession = (nextSession: PlayerSession) => {
+  const applyPlayerSession = (nextSession: PlayerSession) => {
     setSession(nextSession);
     const message = { type: "game-fields:player-session-updated", session: nextSession };
     window.parent.postMessage(message, window.location.origin);
     if (window.opener && !window.opener.closed) window.opener.postMessage(message, window.location.origin);
+  };
+
+  const updateShareNameAllowed = async (shareNameAllowed: boolean) => {
+    if (!session || isShareNameSaving) return;
+    setIsShareNameSaving(true);
+    setShareNameMessage("");
+    try {
+      const result = await savePersistentPlayerSession({
+        id: session.id,
+        name: session.name,
+        avatarColor: session.avatarColor,
+        avatarImage: session.avatarImage,
+        hasRecoveryEmail: session.hasRecoveryEmail,
+        shareNameAllowed,
+        createdAt: session.createdAt,
+      });
+      applyPlayerSession(result.session);
+      setShareNameMessage(result.persistent ? "共有時の名前表示設定を保存しました。" : "この端末にだけ設定を保存しました。ログインし直してからお試しください。");
+    } catch {
+      setShareNameMessage("共有時の名前表示設定を保存できませんでした。");
+    } finally {
+      setIsShareNameSaving(false);
+    }
   };
 
   const leaveDashboard = (event: MouseEvent<HTMLAnchorElement>) => {
@@ -152,11 +177,20 @@ export function UserDashboard() {
             </div>
             <Link href="/games" onClick={leaveDashboard} className="rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/20">戻る</Link>
           </div>
-          {session && isAvatarEditorOpen && <div className="mt-5 max-w-xl"><PlayerAvatarEditor session={session} onSaved={applyAvatarSession} /></div>}
+          {session && isAvatarEditorOpen && <div className="mt-5 max-w-xl"><PlayerAvatarEditor session={session} onSaved={applyPlayerSession} /></div>}
         </div>
       </header>
 
       <div className="mx-auto max-w-5xl px-4 py-6">
+        <section className="mb-5 rounded-lg border border-cyan-100 bg-cyan-50 p-4" aria-labelledby="share-privacy-heading">
+          <p className="text-xs font-semibold uppercase text-cyan-700">Privacy</p>
+          <h2 id="share-privacy-heading" className="text-lg font-black text-slate-950">共有ログの表示名</h2>
+          <label className="mt-3 flex cursor-pointer items-start gap-3 rounded-md bg-white px-3 py-3 text-sm text-slate-800 shadow-sm">
+            <input type="checkbox" checked={session?.shareNameAllowed === true} disabled={!session || isShareNameSaving} onChange={(event) => void updateShareNameAllowed(event.target.checked)} className="mt-0.5 h-4 w-4 accent-cyan-600 disabled:opacity-50" />
+            <span><span className="font-bold">ほかの参加者が共有するワードスケールのプレイログに、自分の表示名を載せてもよい</span><span className="mt-1 block text-xs leading-5 text-slate-600">ゲーム画面の参加者名はこの設定に関係なく表示されます。OFFのとき外部共有では入室順の PLAYER1 などに置き換わります。設定は次に入室する部屋から反映されます。</span></span>
+          </label>
+          {shareNameMessage && <p className="mt-2 text-xs font-semibold text-cyan-800" role="status">{shareNameMessage}</p>}
+        </section>
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.8fr)]">
           <section className="rounded-lg bg-white p-4 shadow-[0_18px_50px_rgba(15,23,42,0.22)]" aria-labelledby="user-stats-heading">
           <p className="text-xs font-semibold uppercase text-cyan-700">Stats</p>

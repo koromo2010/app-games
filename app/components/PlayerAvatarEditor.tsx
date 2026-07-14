@@ -33,6 +33,7 @@ export function PlayerAvatarEditor({ session, onSaved }: Props) {
         avatarColor,
         avatarImage,
         hasRecoveryEmail: session.hasRecoveryEmail,
+        shareNameAllowed: session.shareNameAllowed,
         createdAt: session.createdAt,
       });
       onSaved(result.session);

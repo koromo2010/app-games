@@ -28,7 +28,7 @@
 - `docs/MODULAR_GAME_ARCHITECTURE.md` のモジュール境界と `docs/CONTAINER_ARCHITECTURE.md` の将来構成を守る。UIコンポーネントからRedisを呼ばず、HTTP通信、時計、純粋なゲーム進行、永続化を分離する。分離済みファイルは登録簿の `moduleBoundaryFiles` に列挙し、自動検査から脱落させない。
 - サーバーログは `lib/observability` の閉じたイベントschemaを使う。リクエストbody、部屋JSON、合言葉、正解、秘密語、手札、投稿本文、Cookie、APIキー、氏名、メール、外部SDK例外本文をconsoleへ直接出さない。詳細は `docs/OBSERVABILITY.md`。
 - アカウント参加型ゲームは共通戦績へ結果を保存し、ロビーの全ゲーム・ゲーム別フィルターで確認可能にする。ローカル回しゲームは、アカウントへ安全に紐づけられるまで戦績対象外と明記する。
-- 詳細プレイバックは観測ログではなく `lib/game-replay-store.ts` へ保存し、参加者本人だけに返す。内部プレイヤーIDをユーザーURLへ使わず、共有文へ説明本文・参加者名・投票内容・認証付きURLを含めない。
+- 詳細プレイバックは観測ログではなく `lib/game-replay-store.ts` へ保存し、参加者本人だけに返す。内部プレイヤーIDをユーザーURLへ使わず、共有文へ認証付きURLを含めない。ゲーム仕様として投稿本文や参加者名を共有する場合は送信前プレビューを必須にし、参加者名は本人のデフォルトOFFの同意を入室時に固定保存し、未同意なら匿名ラベルへ置き換える。
 
 ## Verification and publishing
 

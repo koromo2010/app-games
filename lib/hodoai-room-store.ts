@@ -80,6 +80,7 @@ function normalizePlayers(value: unknown): HodoaiPlayer[] {
       avatarColor: isAvatarColor(player.avatarColor ?? null) ? player.avatarColor : undefined,
       avatarImage: isAvatarImage(player.avatarImage ?? null) ? player.avatarImage : undefined,
       isDummy: player.isDummy === true,
+      shareNameAllowed: player.shareNameAllowed === true,
     }));
 }
 

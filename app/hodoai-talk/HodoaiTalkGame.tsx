@@ -222,7 +222,7 @@ export function HodoaiTalkGame() {
       }
       const defaults = await loadPlayerRoomDefaults({ game: "hodoai-talk", playerId: session.id, localStorageKey: defaultsStorageKey, normalize: normalizeDefaults });
       const now = Date.now();
-      const host: HodoaiPlayer = { id: session.id, name: session.name, joinedAt: now, avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined };
+      const host: HodoaiPlayer = { id: session.id, name: session.name, joinedAt: now, avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined, shareNameAllowed: session.shareNameAllowed === true };
       const nextRoom: HodoaiRoom = {
         code: makeRoomCode(), revision: 0, hostId: session.id, sorterId: session.id, ownerId, passphrase: passphrase.trim(), phase: "lobby", players: [host],
         ...defaults, debugMode: false, debugReplayEnabled: false, debugLog: [], gameNumber: 1, round: 1, theme: null, cards: [], values: {}, clues: {}, clueHistory: [], order: [], totalPoints: 0, history: [], phaseStartedAt: null, createdAt: now, updatedAt: now,
@@ -262,7 +262,7 @@ export function HodoaiTalkGame() {
       setError("部屋コードを入力してください。");
       return;
     }
-    const player: HodoaiPlayer = { id: session.id, name: session.name, joinedAt: Date.now(), avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined };
+    const player: HodoaiPlayer = { id: session.id, name: session.name, joinedAt: Date.now(), avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined, shareNameAllowed: session.shareNameAllowed === true };
     setIsSaving(true);
     try {
       const response = await fetch("/api/hodoai/rooms", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code, action: { type: "join-room", actorId: session.id, player, passphrase } satisfies HodoaiRoomAction }) });

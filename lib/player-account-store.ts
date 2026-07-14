@@ -27,6 +27,7 @@ export type PlayerAccount = {
   email: string | null;
   avatarColor: string;
   avatarImage: string | null;
+  shareNameAllowed: boolean;
   createdAt: number;
   updatedAt: number;
 };
@@ -106,6 +107,7 @@ function normalizeAccount(value: unknown): PlayerAccount | null {
     email,
     avatarColor: isAvatarColor(parsedAvatarColor) ? parsedAvatarColor : fallbackAvatarColor,
     avatarImage: isAvatarImage(parsedAvatarImage) ? parsedAvatarImage : null,
+    shareNameAllowed: parsed.shareNameAllowed === true,
     createdAt: typeof parsed.createdAt === "number" ? parsed.createdAt : Date.now(),
     updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : Date.now(),
   };
@@ -173,6 +175,7 @@ async function accountSession(account: PlayerAccount): Promise<PlayerSession> {
         name: savedSession.name,
         avatarColor: savedSession.avatarColor,
         avatarImage: savedSession.avatarImage,
+        shareNameAllowed: savedSession.shareNameAllowed === true,
         updatedAt: savedSession.updatedAt,
       }).catch(() => undefined);
     }
@@ -187,6 +190,7 @@ async function accountSession(account: PlayerAccount): Promise<PlayerSession> {
     name: account.name,
     avatarColor: account.avatarColor,
     avatarImage: account.avatarImage,
+    shareNameAllowed: account.shareNameAllowed,
     hasRecoveryEmail: Boolean(account.email),
     createdAt: account.createdAt,
     updatedAt: account.updatedAt,
@@ -224,6 +228,7 @@ export async function registerPlayerAccount(input: PlayerAccountAuthInput) {
     email,
     avatarColor: isAvatarColor(input.avatarColor ?? null) ? input.avatarColor! : fallbackAvatarColor,
     avatarImage: isAvatarImage(input.avatarImage ?? null) ? input.avatarImage! : null,
+    shareNameAllowed: false,
     createdAt: now,
     updatedAt: now,
   };
@@ -271,6 +276,7 @@ export async function registerPlayerAccount(input: PlayerAccountAuthInput) {
     name: account.name,
     avatarColor: account.avatarColor,
     avatarImage: account.avatarImage,
+    shareNameAllowed: account.shareNameAllowed,
     hasRecoveryEmail: Boolean(account.email),
     createdAt: now,
   });
@@ -396,8 +402,11 @@ export async function saveResetPlayerAccountPassword(account: PlayerAccount) {
 
 export async function savePlayerAccountProfile(
   playerId: string,
-  profile: Pick<PlayerSession, "name" | "avatarColor" | "avatarImage" | "updatedAt">,
+  profile: Pick<PlayerSession, "name" | "avatarColor" | "avatarImage" | "shareNameAllowed" | "updatedAt">,
 ) {
   if (!isPostgresConfigured()) return;
-  await updatePostgresPlayerAccountProfile(playerId, profile);
+  await updatePostgresPlayerAccountProfile(playerId, {
+    ...profile,
+    shareNameAllowed: profile.shareNameAllowed === true,
+  });
 }

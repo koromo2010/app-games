@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type DragEvent, type PointerEvent } from "react";
-import { moveHodoaiCard, sameHodoaiOrder, shiftHodoaiCard, usesCompactHodoaiCards } from "@/lib/hodoai-arrange";
+import { canStartHodoaiPointerDrag, moveHodoaiCard, sameHodoaiOrder, shiftHodoaiCard, usesCompactHodoaiCards } from "@/lib/hodoai-arrange";
 import { defaultAvatarImage, fallbackAvatarColor } from "@/lib/player-session";
 import type { HodoaiCard, HodoaiClueRound, HodoaiPlayer } from "@/lib/hodoai-talk";
 
@@ -91,14 +91,15 @@ export function WordScaleArrangeBoard({
   };
 
   const handlePointerDown = (event: PointerEvent<HTMLButtonElement>, cardId: string) => {
-    if (event.pointerType === "mouse") return;
+    if (!canStartHodoaiPointerDrag(event.pointerType, event.button)) return;
+    event.preventDefault();
     beginDrag(cardId);
     event.currentTarget.setPointerCapture(event.pointerId);
   };
 
   const handlePointerMove = (event: PointerEvent<HTMLButtonElement>) => {
     const cardId = draggingCardIdRef.current;
-    if (!cardId || event.pointerType === "mouse") return;
+    if (!cardId) return;
     const target = document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-arrange-card-id]");
     const targetId = target?.dataset.arrangeCardId;
     if (targetId) moveDraft(cardId, targetId);
@@ -173,8 +174,14 @@ export function WordScaleArrangeBoard({
                     <button
                       type="button"
                       onClick={() => compact && setSelectedCardId(id)}
-                      className="min-w-0 text-left outline-none focus-visible:rounded-lg focus-visible:ring-2 focus-visible:ring-cyan-300"
-                      aria-label={`${player.name}のカード${card.cardNumber}の詳細を表示`}
+                      onPointerDown={(event) => {
+                        if (event.pointerType === "mouse") handlePointerDown(event, id);
+                      }}
+                      onPointerMove={handlePointerMove}
+                      onPointerUp={finishDrag}
+                      onPointerCancel={cancelDrag}
+                      className={`min-w-0 text-left outline-none focus-visible:rounded-lg focus-visible:ring-2 focus-visible:ring-cyan-300 ${canArrange ? "cursor-grab active:cursor-grabbing" : ""}`}
+                      aria-label={`${player.name}のカード${card.cardNumber}の詳細を表示${canArrange ? "、またはドラッグして移動" : ""}`}
                     >
                       {compact ? (
                         <>
@@ -208,9 +215,7 @@ export function WordScaleArrangeBoard({
                           disabled={disabled}
                           onPointerDown={(event) => handlePointerDown(event, id)}
                           onPointerMove={handlePointerMove}
-                          onPointerUp={(event) => {
-                            if (event.pointerType !== "mouse") finishDrag();
-                          }}
+                          onPointerUp={finishDrag}
                           onPointerCancel={cancelDrag}
                           className="touch-none cursor-grab rounded-lg border border-white/15 bg-white/10 px-2 py-1.5 text-sm font-black text-slate-200 active:cursor-grabbing disabled:opacity-40"
                           aria-label={`${player.name}のカード${card.cardNumber}をドラッグして移動`}

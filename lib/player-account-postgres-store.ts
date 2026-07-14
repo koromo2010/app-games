@@ -11,6 +11,7 @@ type PlayerAccountRow = {
   email: string | null;
   avatar_color: string;
   avatar_image: string | null;
+  share_name_allowed: boolean;
   created_at: string | number;
   updated_at: string | number;
 };
@@ -26,6 +27,7 @@ function rowToAccount(row: PlayerAccountRow): PlayerAccount {
     email: row.email,
     avatarColor: row.avatar_color,
     avatarImage: row.avatar_image,
+    shareNameAllowed: row.share_name_allowed === true,
     createdAt: Number(row.created_at),
     updatedAt: Number(row.updated_at),
   };
@@ -40,7 +42,7 @@ export async function loadPostgresPlayerAccountByLogin(loginName: string) {
   const sql = getPostgresClient();
   const rows = await sql`
     SELECT player_id, login_name, display_name, password_hash, password_salt, email,
-           avatar_color, avatar_image, created_at, updated_at
+           avatar_color, avatar_image, share_name_allowed, created_at, updated_at
     FROM player_accounts
     WHERE login_name = ${loginName}
     LIMIT 1
@@ -53,7 +55,7 @@ export async function loadPostgresPlayerAccountByEmail(email: string) {
   const sql = getPostgresClient();
   const rows = await sql`
     SELECT player_id, login_name, display_name, password_hash, password_salt, email,
-           avatar_color, avatar_image, created_at, updated_at
+           avatar_color, avatar_image, share_name_allowed, created_at, updated_at
     FROM player_accounts
     WHERE email = ${email}
     LIMIT 1
@@ -67,10 +69,10 @@ export async function createPostgresPlayerAccount(account: PlayerAccount) {
   const inserted = await sql`
     INSERT INTO player_accounts (
       login_name, player_id, display_name, password_hash, password_salt, email,
-      avatar_color, avatar_image, created_at, updated_at
+      avatar_color, avatar_image, share_name_allowed, created_at, updated_at
     ) VALUES (
       ${account.loginName}, ${account.playerId}, ${account.name}, ${account.passwordHash},
-      ${account.passwordSalt}, ${account.email}, ${account.avatarColor}, ${account.avatarImage},
+      ${account.passwordSalt}, ${account.email}, ${account.avatarColor}, ${account.avatarImage}, ${account.shareNameAllowed},
       ${account.createdAt}, ${account.updatedAt}
     )
     ON CONFLICT DO NOTHING
@@ -93,10 +95,10 @@ export async function savePostgresPlayerAccount(account: PlayerAccount) {
   await sql`
     INSERT INTO player_accounts (
       login_name, player_id, display_name, password_hash, password_salt, email,
-      avatar_color, avatar_image, created_at, updated_at
+      avatar_color, avatar_image, share_name_allowed, created_at, updated_at
     ) VALUES (
       ${account.loginName}, ${account.playerId}, ${account.name}, ${account.passwordHash},
-      ${account.passwordSalt}, ${account.email}, ${account.avatarColor}, ${account.avatarImage},
+      ${account.passwordSalt}, ${account.email}, ${account.avatarColor}, ${account.avatarImage}, ${account.shareNameAllowed},
       ${account.createdAt}, ${account.updatedAt}
     )
     ON CONFLICT (login_name) DO UPDATE SET
@@ -107,13 +109,14 @@ export async function savePostgresPlayerAccount(account: PlayerAccount) {
       email = EXCLUDED.email,
       avatar_color = EXCLUDED.avatar_color,
       avatar_image = EXCLUDED.avatar_image,
+      share_name_allowed = EXCLUDED.share_name_allowed,
       updated_at = EXCLUDED.updated_at
   `;
 }
 
 export async function updatePostgresPlayerAccountProfile(
   playerId: string,
-  profile: Pick<PlayerAccount, "name" | "avatarColor" | "avatarImage" | "updatedAt">,
+  profile: Pick<PlayerAccount, "name" | "avatarColor" | "avatarImage" | "shareNameAllowed" | "updatedAt">,
 ) {
   await ensurePlayerAccountSchema();
   const sql = getPostgresClient();
@@ -122,6 +125,7 @@ export async function updatePostgresPlayerAccountProfile(
     SET display_name = ${profile.name},
         avatar_color = ${profile.avatarColor},
         avatar_image = ${profile.avatarImage},
+        share_name_allowed = ${profile.shareNameAllowed},
         updated_at = ${profile.updatedAt}
     WHERE player_id = ${playerId}
   `;

@@ -1,11 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { moveHodoaiCard, sameHodoaiOrder, shiftHodoaiCard, usesCompactHodoaiCards } from "../lib/hodoai-arrange.ts";
+import { canStartHodoaiPointerDrag, moveHodoaiCard, sameHodoaiOrder, shiftHodoaiCard, usesCompactHodoaiCards } from "../lib/hodoai-arrange.ts";
 
 test("9枚以上で詳細プレビュー付きの小型カードへ切り替える", () => {
   assert.equal(usesCompactHodoaiCards(8), false);
   assert.equal(usesCompactHodoaiCards(9), true);
   assert.equal(usesCompactHodoaiCards(121), true);
+});
+
+test("マウス左ボタンとタッチ操作でドラッグを開始する", () => {
+  assert.equal(canStartHodoaiPointerDrag("mouse", 0), true);
+  assert.equal(canStartHodoaiPointerDrag("mouse", 1), false);
+  assert.equal(canStartHodoaiPointerDrag("touch", 0), true);
+  assert.equal(canStartHodoaiPointerDrag("pen", 0), true);
 });
 
 test("ドラッグ対象を指定カードの位置へ移動する", () => {

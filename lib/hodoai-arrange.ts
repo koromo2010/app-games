@@ -4,6 +4,10 @@ export function usesCompactHodoaiCards(cardCount: number) {
   return cardCount >= hodoaiCompactCardThreshold;
 }
 
+export function canStartHodoaiPointerDrag(pointerType: string, button: number) {
+  return pointerType !== "mouse" || button === 0;
+}
+
 export function moveHodoaiCard(order: string[], cardId: string, targetId: string) {
   const fromIndex = order.indexOf(cardId);
   const targetIndex = order.indexOf(targetId);

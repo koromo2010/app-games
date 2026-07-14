@@ -14,6 +14,7 @@ export function authenticatedRoomDraft(value: unknown, session: PlayerSession & 
       joinedAt: Date.now(),
       avatarColor: isAvatarColor(session.avatarColor) ? session.avatarColor : undefined,
       avatarImage: isAvatarImage(session.avatarImage) ? session.avatarImage : undefined,
+      shareNameAllowed: session.shareNameAllowed === true,
     }],
     passphrase: typeof draft.passphrase === "string"
       ? draft.passphrase.trim().slice(0, onlineRoomPassphraseMaximumLength)
