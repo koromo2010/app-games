@@ -25,6 +25,11 @@ export type KotobaSenpukuConfig = {
   randomFirstTurn: boolean;
 };
 
+export type KotobaSenpukuEvent =
+  | { type: "scan"; turn: number; actorId: string; kana: string; hitIds: string[]; eliminatedIds: string[]; createdAt: number }
+  | { type: "challenge"; turn: number; actorId: string; targetId: string; guess: string; correct: boolean; eliminatedIds: string[]; createdAt: number }
+  | { type: "timeout"; turn: number; actorId: string; createdAt: number };
+
 export type KotobaSenpukuRoundResult = {
   round: number;
   theme: KotobaSenpukuTheme;
@@ -32,6 +37,7 @@ export type KotobaSenpukuRoundResult = {
   signals: Record<string, number>;
   survivalBonus: Record<string, number>;
   calledKana: string[];
+  events: KotobaSenpukuEvent[];
   eliminatedIds: string[];
   winnerId: string | null;
   winnerIds: string[];
@@ -59,6 +65,7 @@ export type KotobaSenpukuRoom = KotobaSenpukuConfig & {
   totalScores: Record<string, number>;
   activePlayerIndex: number;
   turnNumber: number;
+  roundEvents: KotobaSenpukuEvent[];
   history: KotobaSenpukuRoundResult[];
   log: string[];
   phaseStartedAt: number | null;

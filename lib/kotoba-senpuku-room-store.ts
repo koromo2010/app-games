@@ -13,6 +13,7 @@ import {
   pickKotobaSenpukuTheme,
   resolveKotobaSenpukuWinnerIds,
   type KotobaSenpukuPhase,
+  type KotobaSenpukuEvent,
   type KotobaSenpukuPlayer,
   type KotobaSenpukuRoom,
   type KotobaSenpukuRoomAction,
@@ -96,11 +97,37 @@ function normalizeHistory(value: unknown): KotobaSenpukuRoundResult[] {
       signals: normalizeNumberRecord(result.signals, ids),
       survivalBonus: normalizeNumberRecord(result.survivalBonus, ids),
       calledKana: Array.isArray(result.calledKana) ? result.calledKana.filter((kana): kana is string => kotobaSenpukuKana.includes(kana as (typeof kotobaSenpukuKana)[number])) : [],
+      events: normalizeEvents(result.events, ids),
       eliminatedIds: Array.isArray(result.eliminatedIds) ? result.eliminatedIds.filter((id): id is string => typeof id === "string" && ids.has(id)) : [],
       winnerId: typeof result.winnerId === "string" && ids.has(result.winnerId) ? result.winnerId : null,
       winnerIds: Array.isArray(result.winnerIds) ? result.winnerIds.filter((id): id is string => typeof id === "string" && ids.has(id)) : typeof result.winnerId === "string" && ids.has(result.winnerId) ? [result.winnerId] : [],
     }];
   });
+}
+
+function normalizeEvents(value: unknown, playerIds: Set<string>): KotobaSenpukuEvent[] {
+  if (!Array.isArray(value)) return [];
+  const events: KotobaSenpukuEvent[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const event = item as Partial<KotobaSenpukuEvent> & { type?: unknown };
+    if (!playerIds.has(String(event.actorId))) continue;
+    const base = {
+      turn: typeof event.turn === "number" ? Math.max(1, Math.floor(event.turn)) : 1,
+      actorId: String(event.actorId),
+      createdAt: typeof event.createdAt === "number" ? event.createdAt : Date.now(),
+    };
+    if (event.type === "scan" && typeof event.kana === "string" && kotobaSenpukuKana.includes(event.kana as (typeof kotobaSenpukuKana)[number])) {
+      events.push({ ...base, type: "scan", kana: event.kana, hitIds: Array.isArray(event.hitIds) ? event.hitIds.filter((id): id is string => typeof id === "string" && playerIds.has(id)) : [], eliminatedIds: Array.isArray(event.eliminatedIds) ? event.eliminatedIds.filter((id): id is string => typeof id === "string" && playerIds.has(id)) : [] });
+      continue;
+    }
+    if (event.type === "challenge" && typeof event.targetId === "string" && playerIds.has(event.targetId) && typeof event.guess === "string") {
+      events.push({ ...base, type: "challenge", targetId: event.targetId, guess: normalizeKotobaSenpukuWord(event.guess), correct: event.correct === true, eliminatedIds: Array.isArray(event.eliminatedIds) ? event.eliminatedIds.filter((id): id is string => typeof id === "string" && playerIds.has(id)) : [] });
+      continue;
+    }
+    if (event.type === "timeout") events.push({ ...base, type: "timeout" });
+  }
+  return events.slice(-300);
 }
 
 function normalizeRoom(value: unknown): KotobaSenpukuRoom | null {
@@ -136,6 +163,7 @@ function normalizeRoom(value: unknown): KotobaSenpukuRoom | null {
     totalScores: normalizeNumberRecord(parsed.totalScores, playerIds),
     activePlayerIndex: typeof parsed.activePlayerIndex === "number" ? Math.max(0, Math.min(players.length - 1, Math.floor(parsed.activePlayerIndex))) : 0,
     turnNumber: typeof parsed.turnNumber === "number" ? Math.max(1, Math.floor(parsed.turnNumber)) : 1,
+    roundEvents: normalizeEvents(parsed.roundEvents, playerIds),
     history: normalizeHistory(parsed.history),
     log: Array.isArray(parsed.log) ? parsed.log.filter((entry): entry is string => typeof entry === "string").slice(0, 30) : [],
     phaseStartedAt: typeof parsed.phaseStartedAt === "number" ? parsed.phaseStartedAt : null,
@@ -185,6 +213,7 @@ function beginBattle(room: KotobaSenpukuRoom) {
     exposedIds: [],
     activePlayerIndex,
     turnNumber: 1,
+    roundEvents: [],
     phaseStartedAt: Date.now(),
   }, room.randomFirstTurn
     ? `最初の手番は、抽選で${activePlayer?.name ?? "最初のプレイヤー"}に決まりました。`
@@ -234,6 +263,7 @@ function finishRound(room: KotobaSenpukuRoom, simultaneousEliminatedIds: string[
     signals,
     survivalBonus,
     calledKana: [...room.calledKana],
+    events: [...room.roundEvents],
     eliminatedIds: [...room.exposedIds],
     winnerId,
     winnerIds,
@@ -276,7 +306,8 @@ function performScan(room: KotobaSenpukuRoom, kana: string) {
   const message = hitTargets.length
     ? `${actor.name}が「${kana}」を探知。${hitTargets.length}人に命中しました。${eliminatedNames ? `${eliminatedNames}が脱落しました。` : ""}`
     : `${actor.name}が「${kana}」を探知。誰にも命中しませんでした。`;
-  const changed = addLog({ ...room, calledKana, masks, exposedIds }, message);
+  const event: KotobaSenpukuEvent = { type: "scan", turn: room.turnNumber, actorId: actor.id, kana, hitIds: hitTargets.map((player) => player.id), eliminatedIds: newlyExposed.map((player) => player.id), createdAt: Date.now() };
+  const changed = addLog({ ...room, calledKana, masks, exposedIds, roundEvents: [...room.roundEvents, event].slice(-300) }, message);
   if (shouldFinishRound(changed)) return finishRound(changed, newlyExposed.map((player) => player.id));
   if (hitTargets.length > 0 && room.continuousScan && !exposedIds.includes(actor.id)) return addLog({ ...changed, phaseStartedAt: Date.now() }, `命中したため、${actor.name}は続けて行動します。`);
   const turnEndMessage = exposedIds.includes(actor.id)
@@ -295,7 +326,8 @@ function performChallenge(room: KotobaSenpukuRoom, targetId: string, guessInput:
   const correct = guess === room.secrets[target.id];
   const exposedIds = correct ? [...new Set([...room.exposedIds, target.id])] : room.exposedIds;
   const masks = correct ? { ...room.masks, [target.id]: room.secrets[target.id] } : room.masks;
-  const changed = addLog({ ...room, exposedIds, masks }, correct
+  const event: KotobaSenpukuEvent = { type: "challenge", turn: room.turnNumber, actorId: actor.id, targetId: target.id, guess, correct, eliminatedIds: correct ? [target.id] : [], createdAt: Date.now() };
+  const changed = addLog({ ...room, exposedIds, masks, roundEvents: [...room.roundEvents, event].slice(-300) }, correct
     ? `${actor.name}が${target.name}の秘密語を「${guess}」と回答。正解したため、${target.name}が脱落しました。`
     : `${actor.name}が${target.name}の秘密語を「${guess}」と回答しましたが、不正解でした。`);
   return shouldFinishRound(changed) ? finishRound(changed) : advanceTurn(changed, "秘密語を回答したため、手番を終了します。");
@@ -307,7 +339,8 @@ function reconcileProgress(room: KotobaSenpukuRoom) {
   }
   if (room.phase === "battle" && timedOut(room, room.turnTimeLimitSeconds)) {
     const player = room.players[room.activePlayerIndex];
-    return advanceTurn(room, `${player?.name ?? "手番プレイヤー"}は時間切れのため、手番を終了します。`);
+    const changed = player ? { ...room, roundEvents: [...room.roundEvents, { type: "timeout" as const, turn: room.turnNumber, actorId: player.id, createdAt: Date.now() }].slice(-300) } : room;
+    return advanceTurn(changed, `${player?.name ?? "手番プレイヤー"}は時間切れのため、手番を終了します。`);
   }
   return room;
 }
@@ -416,7 +449,7 @@ export async function loadKotobaSenpukuPlayerActiveRoom(playerId: string) {
 export async function createStoredKotobaSenpukuRoom(value: unknown, actorId: string) {
   const room = normalizeRoom(value);
   if (!room || actorId !== room.hostId) throw new Error("INVALID_KOTOBA_SENPUKU_ROOM");
-  const created = { ...room, revision: 0, gameNumber: 1, phase: "lobby" as const, debugMode: false, theme: null, secrets: {}, submittedIds: [], masks: {}, calledKana: [], exposedIds: [], history: [], log: ["参加者を待っています。"], phaseStartedAt: null, updatedAt: Date.now() };
+  const created = { ...room, revision: 0, gameNumber: 1, phase: "lobby" as const, debugMode: false, theme: null, secrets: {}, submittedIds: [], masks: {}, calledKana: [], exposedIds: [], roundEvents: [], history: [], log: ["参加者を待っています。"], phaseStartedAt: null, updatedAt: Date.now() };
   const saved = await redisCommand<"OK" | null>(["SET", roomKey(created.code), JSON.stringify(created), "NX", ...multiplayerRoomExpiryArgs()]);
   if (saved !== "OK") throw new Error("KOTOBA_SENPUKU_ROOM_CONFLICT");
   await redisCommand<number>(["SADD", roomIndexKey, created.code]);
@@ -438,7 +471,7 @@ export async function applyStoredKotobaSenpukuAction(code: string, action: Kotob
     if (!actorIsMember) throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
     if (action.type === "abort-game") {
       if (!actorIsHost || !current.debugMode || current.phase === "lobby") throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
-      return { ...current, phase: "lobby", round: 1, theme: null, secrets: {}, submittedIds: [], masks: {}, calledKana: [], exposedIds: [], roundSignals: {}, totalScores: {}, activePlayerIndex: 0, turnNumber: 1, history: [], log: ["ゲームを中断し、ゲーム開始前へ戻りました。"], phaseStartedAt: null };
+      return { ...current, phase: "lobby", round: 1, theme: null, secrets: {}, submittedIds: [], masks: {}, calledKana: [], exposedIds: [], roundEvents: [], roundSignals: {}, totalScores: {}, activePlayerIndex: 0, turnNumber: 1, history: [], log: ["ゲームを中断し、ゲーム開始前へ戻りました。"], phaseStartedAt: null };
     }
 
     const reconciled = reconcileProgress(current);
@@ -484,7 +517,7 @@ export async function applyStoredKotobaSenpukuAction(code: string, action: Kotob
     }
     if (action.type === "reset-game") {
       if (!actorIsHost || current.phase !== "result" || current.round < current.roundsTotal) throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
-      return { ...current, gameNumber: current.gameNumber + 1, phase: "lobby", round: 1, theme: null, secrets: {}, submittedIds: [], masks: {}, calledKana: [], exposedIds: [], roundSignals: {}, totalScores: {}, activePlayerIndex: 0, turnNumber: 1, history: [], log: ["同じ部屋で次のゲームを準備できます。"], phaseStartedAt: null };
+      return { ...current, gameNumber: current.gameNumber + 1, phase: "lobby", round: 1, theme: null, secrets: {}, submittedIds: [], masks: {}, calledKana: [], exposedIds: [], roundEvents: [], roundSignals: {}, totalScores: {}, activePlayerIndex: 0, turnNumber: 1, history: [], log: ["同じ部屋で次のゲームを準備できます。"], phaseStartedAt: null };
     }
 
     const activePlayer = current.players[current.activePlayerIndex];

@@ -368,9 +368,22 @@ export async function recordKotobaSenpukuReplay(room: KotobaSenpukuRoom) {
   const totalScans = room.history.reduce((sum, round) => sum + round.calledKana.length, 0);
   const details = room.history.flatMap((round) => {
     const roundWinners = new Set(round.winnerIds ?? (round.winnerId ? [round.winnerId] : []));
+    const eventLines = round.events.map((event) => {
+      const actorName = names.get(event.actorId) ?? "Unknown";
+      if (event.type === "scan") {
+        const hitNames = event.hitIds.map((id) => names.get(id) ?? "Unknown").join("、");
+        const eliminatedNames = event.eliminatedIds.map((id) => names.get(id) ?? "Unknown").join("、");
+        return `第${event.turn}手: ${actorName}が「${event.kana}」を探知 → ${hitNames ? `${hitNames}に命中` : "命中なし"}${eliminatedNames ? `／${eliminatedNames}の秘密語が全公開となり脱落` : ""}`;
+      }
+      if (event.type === "challenge") {
+        const targetName = names.get(event.targetId) ?? "Unknown";
+        return `第${event.turn}手: ${actorName}が${targetName}の秘密語を「${event.guess}」と回答 → ${event.correct ? `正解、${targetName}が脱落` : "不正解"}`;
+      }
+      return `第${event.turn}手: ${actorName}が時間切れ`;
+    });
     return [
       `お題「${round.theme.title}」`,
-      `探知された文字（順番）: ${round.calledKana.join("・") || "なし"}`,
+      ...(eventLines.length > 0 ? eventLines : [`探知された文字（順番）: ${round.calledKana.join("・") || "なし"}`]),
       ...Object.entries(round.secrets).map(([id, secret]) => `${names.get(id) ?? "Unknown"} — 秘密語「${secret}」／${roundWinners.has(id) ? "勝利" : "脱落"}`),
     ];
   });
