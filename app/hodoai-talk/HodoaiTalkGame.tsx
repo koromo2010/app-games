@@ -17,6 +17,7 @@ import { WordScaleRoomPanel } from "@/app/hodoai-talk/WordScaleRoomPanel";
 import { WordScaleVerticalScale } from "@/app/hodoai-talk/WordScaleVerticalScale";
 import { loadPlayerRoomDefaults, savePlayerRoomDefaults } from "@/lib/game-room-defaults-client";
 import { fetchConditionalJson } from "@/lib/conditional-json-client";
+import { hodoaiVerticalDisplayOrder } from "@/lib/hodoai-arrange";
 import {
   defaultAvatarImage,
   fallbackAvatarColor,
@@ -173,6 +174,7 @@ export function HodoaiTalkGame() {
   const sorter = room?.players.find((player) => player.id === room.sorterId) ?? null;
   const canArrange = Boolean(room?.phase === "arrange" && room.sorterId === playerId);
   const latestResult = room?.history.at(-1);
+  const latestResultDisplayOrder = latestResult ? hodoaiVerticalDisplayOrder(latestResult.order) : [];
   const ownCards = room?.cards.filter((card) => card.ownerId === playerId) ?? [];
   const configItems = room ? [
     { label: "参加人数", value: `${room.players.length}人` },
@@ -499,7 +501,7 @@ export function HodoaiTalkGame() {
             </section>
           )}
 
-          {room.phase === "result" && latestResult && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><h2 className="text-2xl font-black">最後の答え合わせ</h2><div className="mt-4 space-y-2">{latestResult.order.map((id, index) => { const card = latestResult.cards.find((item) => item.id === id); const player = room.players.find((item) => item.id === card?.ownerId); return <div key={id} className="grid grid-cols-[2rem_1fr_auto] items-center gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3"><span className="text-center font-black text-cyan-300">{index + 1}</span><div><div className="flex flex-wrap gap-2">{latestResult.clueRounds.map((clueRound) => <span key={clueRound.round} className="rounded-lg bg-cyan-300/10 px-2 py-1 text-sm font-bold text-cyan-50">{clueRound.clues[id]}</span>)}</div><p className="mt-1 text-xs text-slate-400">{player?.name}・カード{card?.cardNumber}</p></div><span className="text-2xl font-black text-amber-300">{latestResult.values[id]}</span></div>; })}</div><div className="mt-5 rounded-2xl bg-gradient-to-r from-cyan-400 to-amber-300 p-5 text-center text-slate-950"><p className="font-black">最終得点 {latestResult.points}/3点</p><p className="mt-1 text-sm font-bold">並び違い {latestResult.inversions}組</p></div><p className="mt-5 text-center text-lg font-black">{hodoaiFinalMessage(room.totalPoints, 3)}</p>{isHost ? <RoomResultActions disabled={isSaving} onPlayAgain={() => void runAction({ type: "reset-game", actorId: playerId })} onDissolve={() => void dissolveRoom()} /> : <p className="mt-4 text-center text-sm font-bold text-slate-300">ホストの操作を待っています。</p>}</section>}
+          {room.phase === "result" && latestResult && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><h2 className="text-2xl font-black">最後の答え合わせ</h2><p className="mt-1 text-sm font-bold text-slate-400">上が120側、下が0側です。</p><div className="mt-4 space-y-2">{latestResultDisplayOrder.map((id, index) => { const card = latestResult.cards.find((item) => item.id === id); const player = room.players.find((item) => item.id === card?.ownerId); return <div key={id} className="grid grid-cols-[2rem_1fr_auto] items-center gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3"><span className="text-center font-black text-cyan-300">{latestResultDisplayOrder.length - index}</span><div><div className="flex flex-wrap gap-2">{latestResult.clueRounds.map((clueRound) => <span key={clueRound.round} className="rounded-lg bg-cyan-300/10 px-2 py-1 text-sm font-bold text-cyan-50">{clueRound.clues[id]}</span>)}</div><p className="mt-1 text-xs text-slate-400">{player?.name}・カード{card?.cardNumber}</p></div><span className="text-2xl font-black text-amber-300">{latestResult.values[id]}</span></div>; })}</div><div className="mt-5 rounded-2xl bg-gradient-to-r from-cyan-400 to-amber-300 p-5 text-center text-slate-950"><p className="font-black">最終得点 {latestResult.points}/3点</p><p className="mt-1 text-sm font-bold">並び違い {latestResult.inversions}組</p></div><p className="mt-5 text-center text-lg font-black">{hodoaiFinalMessage(room.totalPoints, 3)}</p>{isHost ? <RoomResultActions disabled={isSaving} onPlayAgain={() => void runAction({ type: "reset-game", actorId: playerId })} onDissolve={() => void dissolveRoom()} /> : <p className="mt-4 text-center text-sm font-bold text-slate-300">ホストの操作を待っています。</p>}</section>}
           {room.phase === "result" && <GameResultShareButton title="ワードスケール プレイログ" text={hodoaiGameShareText(room)} url="/word-scale" />}
         </div>
       </div>

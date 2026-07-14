@@ -1,4 +1,5 @@
 import type { GameDebugLogEntry } from "@/lib/game-debug-log";
+import { hodoaiVerticalDisplayOrder } from "./hodoai-arrange.ts";
 import { onlineRoomPlayerLimits } from "./online-room-policy.ts";
 
 export type HodoaiTheme = {
@@ -238,7 +239,8 @@ export function hodoaiSharePlayerLabel(
 export function hodoaiGameShareText(room: Pick<HodoaiRoom, "totalPoints" | "history" | "players">) {
   const result = room.history.at(-1);
   const rounds = result?.clueRounds.map((clueRound) => `ことば${clueRound.round}「${clueRound.theme.title}」`) ?? [];
-  const finalOrder = result?.order.slice(0, 20).flatMap((id, index) => {
+  const sharedOrder = result ? hodoaiVerticalDisplayOrder(result.order) : [];
+  const finalOrder = result ? sharedOrder.slice(0, 20).flatMap((id, index) => {
     const card = result.cards.find((item) => item.id === id);
     const value = result.values[id];
     if (!card || typeof value !== "number") return [];
@@ -248,8 +250,8 @@ export function hodoaiGameShareText(room: Pick<HodoaiRoom, "totalPoints" | "hist
       .join(" / ");
     const owner = hodoaiSharePlayerLabel(room.players, card.ownerId);
     return [`${index + 1}. ${value}｜${expressions || "ことばなし"}｜${owner}・カード${card.cardNumber}`];
-  }) ?? [];
-  if (result && result.order.length > finalOrder.length) finalOrder.push(`…ほか${result.order.length - finalOrder.length}枚`);
+  }) : [];
+  if (sharedOrder.length > finalOrder.length) finalOrder.push(`…ほか${sharedOrder.length - finalOrder.length}枚`);
   return [
     "ワードスケール プレイログ",
     `チーム得点 ${room.totalPoints}/3点`,
