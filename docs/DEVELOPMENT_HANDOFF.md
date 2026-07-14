@@ -208,6 +208,8 @@
 
 更新系API、タイマー、認証、戦績、LLMは `lib/observability` から1行JSONの構造化イベントを出力する。Vercel Runtime Logsでは `event`、`roomRef`、`requestId`、`outcome`、`errorCode` で追跡する。GETポーリング成功は記録しない。ログ禁止情報、調査順、将来collector構成は `docs/OBSERVABILITY.md` を正本とする。
 
+本番ロビーはGitHub Actionsの `production-smoke.yml` で30分ごとに監視する。軽量負荷試験は `npm run load:smoke` を使い、localhost以外は `LOAD_TEST_ALLOW_REMOTE=1` を必須とする。本番への誤負荷を避けるためリモート実行は最大100リクエスト・同時数5、GETだけに制限する。詳細な閾値とVercel Alertsの初期値は `docs/OBSERVABILITY.md` を正本とする。
+
 ```bash
 npm install
 npm run dev

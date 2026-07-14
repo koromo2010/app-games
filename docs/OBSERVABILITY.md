@@ -83,6 +83,37 @@ GETポーリングの成功と通常の401/403/404は量とノイズが多いた
 
 利用者から報告を受ける場合は、合言葉やお題を聞かず「発生日時・ゲーム・部屋操作・表示されたエラー」だけを確認する。
 
+## 定期監視と負荷試験
+
+`.github/workflows/production-smoke.yml` は30分ごとに本番ロビーを1回確認する。HTTP 200、HTML応答、6秒以内を合格条件とし、一時的なネットワーク揺らぎは最大3回まで再試行する。失敗はGitHub Actionsの失敗通知として扱う。Actions通知を受け取る担当者はGitHubの通知設定でActionsを有効にする。公開画面だけを対象とし、NeonやRedisを定期的に起こさない。
+
+手元または明示実行の軽量負荷試験は `npm run load:smoke` を使う。既定はローカルの `/games` へ30リクエスト・同時数3で、p50 / p95 / p99、RPS、HTTP状態、エラー率をJSON出力する。本番などlocalhost以外は誤実行防止のため `LOAD_TEST_ALLOW_REMOTE=1` が必須で、最大100リクエスト・同時数5に固定する。p95合格値はローカル2秒、リモート6秒で、必要な場合だけ `LOAD_TEST_MAX_P95_MS` で厳しくする。
+
+```bash
+# ローカル
+npm run load:smoke
+
+# 本番の軽量ベースライン（明示許可が必要）
+LOAD_TEST_BASE_URL=https://www.game-fields.com \
+LOAD_TEST_ALLOW_REMOTE=1 \
+LOAD_TEST_REQUESTS=30 \
+LOAD_TEST_CONCURRENCY=3 \
+npm run load:smoke
+```
+
+認証済みGET APIを測る場合だけ、ブラウザから手作業で値をコピーせず専用テストアカウントの短命Cookieを `LOAD_TEST_COOKIE` 環境変数で渡し、`LOAD_TEST_PATHS` に同一originのパスを列挙する。Cookieは出力・ファイル・GitHub Actionsへ保存しない。POST / DELETEなど状態変更APIはこのスクリプトの対象外とし、専用の隔離環境なしに負荷を掛けない。
+
+Vercel Alertsを利用できるプランでは、ProjectのObservabilityから次を初期値として設定する。
+
+- 5xx: 5分で5件以上を警告、20件以上を重大
+- Function p95 duration: 10分継続で2秒超を警告
+- 429: 全リクエストの5%超を容量・不正アクセス調査の合図にする
+- 通知先: 最低2名のメール、運用チャネルがある場合は同じルールを連携
+
+閾値は負荷試験と実トラフィックのベースライン取得後に調整する。Vercel CLIで確認する場合は `vercel alerts rules ls --format json` を使えるが、通知先を含むルール作成は担当者と送信先を確認してから行う。
+
+2026-07-14の本番ロビーベースライン（30リクエスト、同時数3）は、成功30、失敗0、p50 96ms、p95 4670ms、p99 4693ms、5.1 req/s。最初の同時リクエストに約4.7秒の接続待ちがあり、その後は大半が100ms前後だった。アプリのFunction処理時間とは分けて、Vercel Observability上の値も確認する。
+
 ## 将来のcollectorコンテナ
 
 現在は各runtimeのstdoutへ同期せず書き出す。ゲーム処理の成功をログ保存待ちにしない。物理分割時は `ObservabilitySink` のadapterを追加し、各サービスから共通collectorへOTLPまたは内部HTTPで送る。
