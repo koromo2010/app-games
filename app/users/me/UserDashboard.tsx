@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import type { PlayerSession } from "@/lib/player-session";
 import type { PlayerGameResult, PlayerStatsResponse } from "@/lib/player-stats-store";
 import { GameReplayPanel } from "@/app/components/GameReplayPanel";
@@ -39,6 +39,15 @@ export function UserDashboard() {
   const [debugPassword, setDebugPassword] = useState("");
   const [debugMessage, setDebugMessage] = useState("");
   const [debugSaving, setDebugSaving] = useState(false);
+
+  const leaveDashboard = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (new URLSearchParams(window.location.search).get("popup") !== "1") return;
+    event.preventDefault();
+    window.close();
+    window.setTimeout(() => {
+      if (!window.closed) window.location.assign("/games");
+    }, 100);
+  };
 
   useEffect(() => {
     const controller = new AbortController();
@@ -107,7 +116,7 @@ export function UserDashboard() {
         <div className="mx-auto max-w-lg rounded-xl border border-white/10 bg-white/10 p-6 text-center">
           <h1 className="text-2xl font-black">ログインが必要です</h1>
           <p className="mt-2 text-sm text-slate-300">マイページは本人だけが閲覧できます。</p>
-          <Link href="/games" className="mt-5 inline-flex rounded-lg bg-cyan-500 px-4 py-2 text-sm font-bold text-slate-950">ゲームロビーへ</Link>
+          <Link href="/games" onClick={leaveDashboard} className="mt-5 inline-flex rounded-lg bg-cyan-500 px-4 py-2 text-sm font-bold text-slate-950">戻る</Link>
         </div>
       </main>
     );
@@ -128,7 +137,7 @@ export function UserDashboard() {
                 <p className="mt-1 text-sm text-slate-300">戦績・プレイバック・お気に入り</p>
               </div>
             </div>
-            <Link href="/games" className="rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/20">ゲームロビーへ</Link>
+            <Link href="/games" onClick={leaveDashboard} className="rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/20">戻る</Link>
           </div>
         </div>
       </header>
