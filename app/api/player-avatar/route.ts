@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { put } from "@vercel/blob";
 import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
-import { isWebpImage, maxAvatarUploadBytes } from "@/lib/avatar-image-server";
+import { isWebpImage, maxAvatarUploadBytes, resolveAvatarBlobToken } from "@/lib/avatar-image-server";
 import { createRequestTelemetry } from "@/lib/observability";
 
 export const runtime = "nodejs";
@@ -10,12 +10,13 @@ export async function POST(request: Request) {
   const telemetry = createRequestTelemetry(request, "/api/player-avatar", { operation: "avatar-upload" });
   try {
     const player = await requireAuthenticatedPlayer();
-    const token = (
-      process.env.AVATAR_BLOB_READ_WRITE_TOKEN ??
-      process.env.BLOB_READ_WRITE_TOKEN
-    )?.trim();
-    if (!token) {
-      telemetry.reject("auth.avatar", 503, { actorRef: telemetry.actorRef(player.id), errorCode: "AVATAR_BLOB_NOT_CONFIGURED" });
+    const blobToken = resolveAvatarBlobToken(process.env);
+    if (!blobToken.token) {
+      telemetry.reject("auth.avatar", 503, {
+        actorRef: telemetry.actorRef(player.id),
+        errorCode: "AVATAR_BLOB_NOT_CONFIGURED",
+        blobTokenKeys: blobToken.candidateKeys.join(",") || "none",
+      });
       return Response.json({ error: "AVATAR_BLOB_NOT_CONFIGURED" }, { status: 503 });
     }
 
@@ -46,13 +47,13 @@ export async function POST(request: Request) {
 
     const blob = await put(`avatars/${randomUUID()}.webp`, file, {
       access: "public",
-      token,
+      token: blobToken.token,
       addRandomSuffix: false,
       contentType: "image/webp",
       cacheControlMaxAge: 31_536_000,
       abortSignal: AbortSignal.timeout(10_000),
     });
-    telemetry.success("auth.avatar", { actorRef: telemetry.actorRef(player.id) });
+    telemetry.success("auth.avatar", { actorRef: telemetry.actorRef(player.id), blobTokenKey: blobToken.key });
     return Response.json({ url: blob.url });
   } catch (error) {
     if (error instanceof Error && error.message === "PLAYER_AUTH_REQUIRED") {
