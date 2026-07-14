@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isWebpImage, maxAvatarUploadBytes } from "../lib/avatar-image-server.ts";
+import { isWebpImage, maxAvatarUploadBytes, resolveAvatarBlobToken } from "../lib/avatar-image-server.ts";
 import { isAvatarImage } from "../lib/player-session.ts";
 
 test("accepts only avatar URLs from public Vercel Blob storage", () => {
@@ -17,4 +17,34 @@ test("checks WebP signatures and upload size", () => {
   assert.equal(isWebpImage(valid), true);
   assert.equal(isWebpImage(new TextEncoder().encode("not-an-image")), false);
   assert.equal(isWebpImage(new Uint8Array(maxAvatarUploadBytes + 1)), false);
+});
+
+test("resolves standard and custom Vercel Blob token names", () => {
+  assert.equal(resolveAvatarBlobToken({ BLOB_READ_WRITE_TOKEN: "standard-token" }).token, "standard-token");
+  assert.equal(
+    resolveAvatarBlobToken({ APP_GAMES_BLOB_READ_WRITE_TOKEN: "custom-token" }).token,
+    "custom-token",
+  );
+});
+
+test("prefers an avatar Blob token when more than one Blob is configured", () => {
+  const result = resolveAvatarBlobToken({
+    REPORTS_BLOB_READ_WRITE_TOKEN: "reports-token",
+    PLAYER_AVATAR_BLOB_READ_WRITE_TOKEN: "avatar-token",
+  });
+  assert.equal(result.key, "PLAYER_AVATAR_BLOB_READ_WRITE_TOKEN");
+  assert.equal(result.token, "avatar-token");
+});
+
+test("does not guess when multiple unrelated Blob tokens are configured", () => {
+  const result = resolveAvatarBlobToken({
+    FIRST_BLOB_READ_WRITE_TOKEN: "first-token",
+    SECOND_BLOB_READ_WRITE_TOKEN: "second-token",
+  });
+  assert.equal(result.key, null);
+  assert.equal(result.token, null);
+  assert.deepEqual(result.candidateKeys, [
+    "FIRST_BLOB_READ_WRITE_TOKEN",
+    "SECOND_BLOB_READ_WRITE_TOKEN",
+  ]);
 });
