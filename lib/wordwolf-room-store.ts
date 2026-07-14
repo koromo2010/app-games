@@ -10,6 +10,7 @@ import { recordWordWolfReplay } from "@/lib/game-replay-store";
 import { normalizeGameGenerationMeta } from "@/lib/game-ai-types";
 import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
 import { isMultiplayerRoomExpired, multiplayerRoomExpiryArgs } from "@/lib/multiplayer-room-lifecycle";
+import { canDissolveOnlineRoom } from "@/lib/room-dissolve-policy";
 
 export type WordWolfRoom = Room;
 export type WordWolfRoomChoice = RoomChoice;
@@ -361,6 +362,7 @@ export async function joinStoredWordWolfRoom(code: string, player: Player, passp
 export async function deleteStoredWordWolfRoom(code: string) {
   const normalizedCode = code.trim().toUpperCase();
   const room = await loadStoredWordWolfRoom(normalizedCode);
+  if (room && !canDissolveOnlineRoom("wordwolf", room)) throw new Error("WORDWOLF_ROOM_IN_PROGRESS");
   await redisCommand<number>(["DEL", roomKey(normalizedCode)]);
   await redisCommand<number>(["SREM", roomIndexKey, normalizedCode]);
 
@@ -387,6 +389,8 @@ export async function listStoredJoinableWordWolfRooms() {
 
 export async function deleteStoredHostedWordWolfRooms(hostId: string) {
   const rooms = await listStoredWordWolfRooms();
+  const hostedRooms = rooms.filter((room) => room.hostId === hostId);
+  if (hostedRooms.some((room) => !canDissolveOnlineRoom("wordwolf", room))) throw new Error("WORDWOLF_ROOM_IN_PROGRESS");
   const deletions = rooms
     .filter((room) => room.hostId === hostId)
     .map((room) => deleteStoredWordWolfRoom(room.code));

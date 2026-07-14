@@ -7,6 +7,7 @@ import { recordTahoiyaReplay } from "@/lib/game-replay-store";
 import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
 import { isMultiplayerRoomExpired, multiplayerRoomTtlSeconds } from "@/lib/multiplayer-room-lifecycle";
 import { commonGameTimeoutGraceMs } from "@/lib/game-timer/policy";
+import { canDissolveOnlineRoom } from "@/lib/room-dissolve-policy";
 
 const roomKeyPrefix = "tahoiya:room:";
 const roomIndexKey = "tahoiya:rooms";
@@ -545,6 +546,7 @@ export async function deleteStoredTahoiyaRoom(code: string, actorId = "") {
   const normalizedCode = code.trim().toUpperCase();
   const room = await loadStoredTahoiyaRoom(normalizedCode);
   if (room && actorId && actorId !== room.hostId) throw new Error("TAHOIYA_ROOM_FORBIDDEN");
+  if (room && !canDissolveOnlineRoom("tahoiya", room)) throw new Error("TAHOIYA_ROOM_IN_PROGRESS");
   await redisCommand<number>(["DEL", roomKey(normalizedCode)]);
   await redisCommand<number>(["SREM", roomIndexKey, normalizedCode]);
 
@@ -571,6 +573,8 @@ export async function listStoredJoinableTahoiyaRooms() {
 
 export async function deleteStoredHostedTahoiyaRooms(authenticatedHostId: string) {
   const rooms = await listStoredTahoiyaRooms();
+  const hostedRooms = rooms.filter((room) => room.hostId === authenticatedHostId);
+  if (hostedRooms.some((room) => !canDissolveOnlineRoom("tahoiya", room))) throw new Error("TAHOIYA_ROOM_IN_PROGRESS");
   const deletions = rooms
     .filter((room) => room.hostId === authenticatedHostId)
     .map((room) => deleteStoredTahoiyaRoom(room.code));

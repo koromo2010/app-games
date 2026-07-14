@@ -157,6 +157,10 @@ export async function DELETE(request: Request) {
     telemetry.reject("room.delete", 400, logFields);
     return Response.json({ error: "code or ownerId is required" }, { status: 400 });
   } catch (error) {
+    if (error instanceof Error && error.message === "WORDWOLF_ROOM_IN_PROGRESS") {
+      telemetry.reject("room.delete", 409, { roomRef: telemetry.roomRef(code) });
+      return Response.json({ error: "An active game cannot be dissolved" }, { status: 409 });
+    }
     if (error instanceof Error && error.message === "PLAYER_AUTH_REQUIRED") {
       telemetry.responseError("room.delete", error, 401);
       return Response.json({ error: "Login required" }, { status: 401 });

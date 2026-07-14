@@ -26,6 +26,7 @@ import { recordKotobaSenpukuGameResults } from "@/lib/player-stats-store";
 import { recordKotobaSenpukuReplay } from "@/lib/game-replay-store";
 import { redisCommand } from "@/lib/redis-store";
 import { commonGameTimeoutGraceMs } from "@/lib/game-timer/policy";
+import { canDissolveOnlineRoom } from "@/lib/room-dissolve-policy";
 
 const roomKeyPrefix = "kotoba-senpuku:room:";
 const roomIndexKey = "kotoba-senpuku:rooms";
@@ -568,6 +569,7 @@ export async function deleteStoredKotobaSenpukuRoom(code: string, actorId: strin
   const room = await loadStoredKotobaSenpukuRoom(code);
   if (!room) return;
   if (room.hostId !== actorId) throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
+  if (!canDissolveOnlineRoom("kotoba-senpuku", room)) throw new Error("KOTOBA_SENPUKU_ROOM_IN_PROGRESS");
   await redisCommand<number>(["DEL", roomKey(code)]);
   await redisCommand<number>(["SREM", roomIndexKey, room.code]);
   await Promise.all(room.players.map((player) => clearActiveRoom(player.id, room.code)));
@@ -577,6 +579,7 @@ export async function deleteHostedKotobaSenpukuRooms(_ownerId: string, authentic
   const codes = await redisCommand<string[]>(["SMEMBERS", roomIndexKey]);
   const rooms = await Promise.all(codes.map((code) => loadStoredKotobaSenpukuRoom(code)));
   const targets = rooms.filter((room): room is KotobaSenpukuRoom => Boolean(room && room.hostId === authenticatedHostId));
+  if (targets.some((room) => !canDissolveOnlineRoom("kotoba-senpuku", room))) throw new Error("KOTOBA_SENPUKU_ROOM_IN_PROGRESS");
   await Promise.all(targets.map((room) => deleteStoredKotobaSenpukuRoom(room.code, room.hostId)));
   return targets.length;
 }

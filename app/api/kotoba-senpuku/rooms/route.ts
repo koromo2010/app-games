@@ -24,6 +24,7 @@ function errorResponse(error: unknown) {
   if (message === "KOTOBA_SENPUKU_BAD_PASSPHRASE") return Response.json({ error: "Bad passphrase" }, { status: 401 });
   if (message === "KOTOBA_SENPUKU_ROOM_FULL") return Response.json({ error: "Room is full" }, { status: 409 });
   if (message === "KOTOBA_SENPUKU_NOT_ENOUGH_PLAYERS") return Response.json({ error: "Not enough players" }, { status: 409 });
+  if (message === "KOTOBA_SENPUKU_ROOM_IN_PROGRESS") return Response.json({ error: "An active game cannot be dissolved" }, { status: 409 });
   if (message === "KOTOBA_SENPUKU_NOT_YOUR_TURN" || message === "KOTOBA_SENPUKU_ROOM_FORBIDDEN") return Response.json({ error: "Room action is not allowed" }, { status: 403 });
   if (message === "KOTOBA_SENPUKU_INVALID_WORD") return Response.json({ error: "Invalid secret word" }, { status: 400 });
   if (message === "KOTOBA_SENPUKU_WORD_TOO_SHORT") return Response.json({ error: "Secret word is too short" }, { status: 400 });

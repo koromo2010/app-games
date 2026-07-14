@@ -8,7 +8,7 @@
 4. `requiredTokens` に、そのゲームで必須となる共通UIを列挙する。
 5. オンライン部屋は共通TTL、サーバー正本、ホスト権限、1人1部屋を実装する。
 6. LLMは `lib/game-llm.ts`、デバッグ表示はトップバーの `DebugModeButton`、資格判定は `lib/debug-access.ts`、時間制限は `RoomTimeLimitControl` を使う。デバッグのON/OFF・プレイバック・進行中断は独立表示せず `DebugModeButton` のプルダウンへまとめ、中断後は同じ部屋のゲーム開始前へ戻す。
-7. オンライン部屋の結果画面は共通 `RoomResultActions` を使い、ホストへ「同じ部屋でもう一度」と「部屋を解散」を必ず並べる。解散は確認後にサーバー側のホスト権限検証を通す。
+7. オンライン部屋の結果画面は共通 `RoomResultActions` を使い、ホストへ「同じ部屋でもう一度」と「部屋を解散」を必ず並べる。通常の解散はロビーまたはゲーム終了後だけ許可し、サーバー側でも共通 `canDissolveOnlineRoom` とホスト権限を検証する。進行中のデバッグ終了は解散ではなく、中断でロビーへ戻してから行う。
 8. アカウント参加型ゲームは `lib/player-stats-store.ts` に冪等な結果記録、`lib/game-replay-store.ts` に本人用プレイバックと匿名化した共有用見どころを追加し、登録簿の `statsRecorder` と `replayRecorder` に記録する。
 9. 公開範囲は `config/game-registry.json` の `private` を正本とし、ページは `gamePageAccessAllowed`、APIは `gameApiAccessDeniedResponse` で共通判定する。ゲームごとにCookie判定を複製しない。
 10. トップバーは共通 `GameTopBanner` を使い、ロビー・ルール・デバッグ・プレイヤーの順を基本とする。プレイヤー表示はログアウトを内包する `GamePlayerMenu` を使い、ログアウトをトップバーへ単独配置しない。

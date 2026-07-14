@@ -4,6 +4,7 @@ import { recordHodoaiReplay } from "@/lib/game-replay-store";
 import { isMultiplayerRoomExpired, multiplayerRoomExpiryArgs, multiplayerRoomTtlSeconds } from "@/lib/multiplayer-room-lifecycle";
 import { randomUUID } from "node:crypto";
 import { commonGameTimeoutGraceMs } from "@/lib/game-timer/policy";
+import { canDissolveOnlineRoom } from "@/lib/room-dissolve-policy";
 import {
   clueHasNumber,
   countHodoaiInversions,
@@ -435,6 +436,7 @@ export async function deleteStoredHodoaiRoom(code: string, actorId: string) {
   const room = await loadStoredHodoaiRoom(code);
   if (!room) return;
   if (room.hostId !== actorId) throw new Error("HODOAI_ROOM_FORBIDDEN");
+  if (!canDissolveOnlineRoom("hodoai", room)) throw new Error("HODOAI_ROOM_IN_PROGRESS");
   await redisCommand<number>(["DEL", roomKey(code)]);
   await redisCommand<number>(["SREM", roomIndexKey, room.code]);
   await Promise.all(room.players.map((player) => clearActiveRoom(player.id, room.code)));
@@ -444,6 +446,7 @@ export async function deleteHostedHodoaiRooms(_ownerId: string, authenticatedHos
   const codes = await redisCommand<string[]>(["SMEMBERS", roomIndexKey]);
   const rooms = await Promise.all(codes.map((code) => loadStoredHodoaiRoom(code)));
   const targets = rooms.filter((room): room is HodoaiRoom => Boolean(room && room.hostId === authenticatedHostId));
+  if (targets.some((room) => !canDissolveOnlineRoom("hodoai", room))) throw new Error("HODOAI_ROOM_IN_PROGRESS");
   await Promise.all(targets.map((room) => deleteStoredHodoaiRoom(room.code, room.hostId)));
   return targets.length;
 }

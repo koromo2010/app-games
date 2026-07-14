@@ -23,6 +23,7 @@ function errorResponse(error: unknown) {
   if (error instanceof Error && error.message === "NORTHERN_BAD_PASSPHRASE") return Response.json({ error: "Bad passphrase" }, { status: 401 });
   if (error instanceof Error && error.message === "NORTHERN_ROOM_FULL") return Response.json({ error: "Room is full" }, { status: 409 });
   if (error instanceof Error && error.message === "NORTHERN_NOT_ENOUGH_PLAYERS") return Response.json({ error: "Not enough players" }, { status: 409 });
+  if (error instanceof Error && error.message === "NORTHERN_ROOM_IN_PROGRESS") return Response.json({ error: "An active game cannot be dissolved" }, { status: 409 });
   if (error instanceof Error && error.message === "NORTHERN_NOT_YOUR_TURN") return Response.json({ error: "Not your turn" }, { status: 403 });
   if (error instanceof Error && error.message.startsWith("NORTHERN_ACTION_INVALID:")) return Response.json({ error: error.message.slice("NORTHERN_ACTION_INVALID:".length) }, { status: 400 });
   if (error instanceof Error && error.message === "NORTHERN_ROOM_FORBIDDEN") return Response.json({ error: "Room action is not allowed" }, { status: 403 });

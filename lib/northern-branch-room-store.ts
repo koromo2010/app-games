@@ -4,6 +4,7 @@ import { isMultiplayerRoomExpired, multiplayerRoomExpiryArgs, multiplayerRoomTtl
 import { redisCommand } from "@/lib/redis-store";
 import { recordNorthernBranchGameResults } from "@/lib/player-stats-store";
 import { recordNorthernBranchReplay } from "@/lib/game-replay-store";
+import { canDissolveOnlineRoom } from "@/lib/room-dissolve-policy";
 import type {
   NorthernGameState,
   NorthernGameAction,
@@ -315,6 +316,7 @@ export async function deleteStoredNorthernRoom(code: string, actorId: string) {
   const room = await loadStoredNorthernRoom(code);
   if (!room) return;
   if (room.hostId !== actorId) throw new Error("NORTHERN_ROOM_FORBIDDEN");
+  if (!canDissolveOnlineRoom("northern-branch", room)) throw new Error("NORTHERN_ROOM_IN_PROGRESS");
   await redisCommand<number>(["DEL", roomKey(code)]);
   await redisCommand<number>(["SREM", roomIndexKey, room.code]);
   await Promise.all(room.players.map((player) => clearActiveRoom(player.id, room.code)));
@@ -324,6 +326,7 @@ export async function deleteHostedNorthernRooms(_ownerId: string, authenticatedH
   const codes = await redisCommand<string[]>(["SMEMBERS", roomIndexKey]);
   const rooms = await Promise.all(codes.map((code) => loadStoredNorthernRoom(code)));
   const targets = rooms.filter((room): room is NorthernRoom => Boolean(room && room.hostId === authenticatedHostId));
+  if (targets.some((room) => !canDissolveOnlineRoom("northern-branch", room))) throw new Error("NORTHERN_ROOM_IN_PROGRESS");
   await Promise.all(targets.map((room) => deleteStoredNorthernRoom(room.code, room.hostId)));
   return targets.length;
 }
