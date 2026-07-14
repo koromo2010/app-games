@@ -5,7 +5,7 @@ export const kotobaSenpukuRoomApi = createOnlineRoomApiClient<KotobaSenpukuRoom,
   endpoint: "/api/kotoba-senpuku/rooms",
 });
 
-export function saveKotobaSenpukuRoom(room: KotobaSenpukuRoom, actorId: string) {
+export function createKotobaSenpukuRoom(room: KotobaSenpukuRoom, actorId: string) {
   return kotobaSenpukuRoomApi.post<{ room: KotobaSenpukuRoom; actorId: string }, { room: KotobaSenpukuRoom }>({ room, actorId });
 }
 

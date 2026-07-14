@@ -86,3 +86,26 @@ export type RoomChoice = {
   hasPassphrase: boolean;
   updatedAt: number;
 };
+
+export type WordWolfLobbyConfig = Pick<Room,
+  | "clueLogVisibility"
+  | "gameMode"
+  | "wolfCount"
+  | "clueMode"
+  | "randomizeTurnOrder"
+  | "roundsTotal"
+  | "turnTimeLimitSeconds"
+  | "topicDictionarySource"
+  | "topicPairDistance"
+  | "topicHint"
+>;
+
+export type WordWolfRoomAction =
+  | { type: "join-room"; passphrase: string }
+  | { type: "update-player"; name: string; avatarColor?: string; avatarImage?: string | null }
+  | { type: "update-config"; config: Partial<WordWolfLobbyConfig> }
+  | { type: "set-debug"; enabled: boolean }
+  | { type: "set-debug-replay"; enabled: boolean }
+  | { type: "debug-add-player" }
+  | { type: "reset-game" }
+  | { type: "abort-game" };

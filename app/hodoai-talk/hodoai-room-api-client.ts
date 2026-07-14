@@ -5,7 +5,7 @@ export const hodoaiRoomApi = createOnlineRoomApiClient<HodoaiRoom, HodoaiRoomCho
   endpoint: "/api/hodoai/rooms",
 });
 
-export function saveHodoaiRoom(room: HodoaiRoom, actorId: string) {
+export function createHodoaiRoom(room: HodoaiRoom, actorId: string) {
   return hodoaiRoomApi.post<{ room: HodoaiRoom; actorId: string }, { room: HodoaiRoom }>({ room, actorId });
 }
 

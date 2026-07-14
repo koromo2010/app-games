@@ -5,7 +5,7 @@ export const northernBranchRoomApi = createOnlineRoomApiClient<NorthernRoom, Nor
   endpoint: "/api/northern-branch/rooms",
 });
 
-export function saveNorthernBranchRoom(room: NorthernRoom, actorId: string) {
+export function createNorthernBranchRoom(room: NorthernRoom, actorId: string) {
   return northernBranchRoomApi.post<{ room: NorthernRoom; actorId: string }, { room: NorthernRoom }>({ room, actorId });
 }
 

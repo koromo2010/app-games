@@ -34,8 +34,6 @@ function isAnswererMode(value: unknown): value is TahoiyaAnswererMode {
   return value === "manual" || value === "random";
 }
 
-const phaseOrder: Record<TahoiyaPhase, number> = { lobby: 0, writing: 1, voting: 2, result: 3 };
-
 function normalizeScores(value: unknown) {
   if (!value || typeof value !== "object") return {};
 
@@ -379,79 +377,35 @@ export async function loadStoredTahoiyaPlayerActiveRoom(playerId: string) {
   return room;
 }
 
-export async function saveStoredTahoiyaRoom(room: unknown, actorId = "") {
+export async function createStoredTahoiyaRoom(room: unknown, actorId = "") {
   const normalizedRoom = normalizeRoom(room);
   if (!normalizedRoom) {
     throw new Error("INVALID_TAHOIYA_ROOM");
   }
 
   const existingRoom = await loadStoredTahoiyaRoom(normalizedRoom.code).catch(() => null);
-  if (!existingRoom) {
-    if (actorId && actorId !== normalizedRoom.hostId) throw new Error("TAHOIYA_ROOM_FORBIDDEN");
-    const createdRoom = { ...normalizedRoom, revision: 0, updatedAt: Date.now() };
-    const activeRoom = actorId ? await loadStoredTahoiyaPlayerActiveRoom(actorId) : null;
-    if (activeRoom && activeRoom.code !== createdRoom.code) {
-      if (!canMoveFromOnlineRoom("tahoiya", activeRoom)) throw new Error("TAHOIYA_PLAYER_ALREADY_ACTIVE");
-      await releasePlayerActiveRoom(playerActiveRoomKey(actorId), activeRoom.code);
-    }
-    const claim = actorId ? await claimPlayerActiveRoom(playerActiveRoomKey(actorId), createdRoom.code) : "already-claimed";
-    if (!claim) throw new Error("TAHOIYA_PLAYER_ALREADY_ACTIVE");
-    try {
-      const created = await redisCommand<"OK" | null>([
-        "SET", roomKey(createdRoom.code), JSON.stringify(createdRoom), "NX", "EX", String(multiplayerRoomTtlSeconds),
-      ]);
-      if (created === "OK") {
-        await redisCommand<number>(["SADD", roomIndexKey, createdRoom.code]);
-        await savePlayerActiveRooms(createdRoom);
-        return createdRoom;
-      }
-    } catch (error) {
-      if (actorId && claim === "claimed") await releasePlayerActiveRoom(playerActiveRoomKey(actorId), createdRoom.code);
-      throw error;
-    }
-    if (actorId && claim === "claimed") await releasePlayerActiveRoom(playerActiveRoomKey(actorId), createdRoom.code);
+  if (existingRoom) throw new Error("TAHOIYA_ROOM_CONFLICT");
+  if (actorId && actorId !== normalizedRoom.hostId) throw new Error("TAHOIYA_ROOM_FORBIDDEN");
+  const createdRoom = { ...normalizedRoom, revision: 0, updatedAt: Date.now() };
+  const activeRoom = actorId ? await loadStoredTahoiyaPlayerActiveRoom(actorId) : null;
+  if (activeRoom && activeRoom.code !== createdRoom.code) {
+    if (!canMoveFromOnlineRoom("tahoiya", activeRoom)) throw new Error("TAHOIYA_PLAYER_ALREADY_ACTIVE");
+    await releasePlayerActiveRoom(playerActiveRoomKey(actorId), activeRoom.code);
   }
-
-  const savedRoom = await mutateStoredTahoiyaRoom(normalizedRoom.code, (current) => {
-    if (actorId && !normalizedRoom.players.some((player) => player.id === actorId)) {
-      throw new Error("TAHOIYA_ROOM_FORBIDDEN");
-    }
-    const actorIsHost = !actorId || actorId === current.hostId;
-    const isLobbyJoin = current.phase === "lobby" && normalizedRoom.phase === "lobby";
-    if (!actorIsHost && !isLobbyJoin) throw new Error("TAHOIYA_ROOM_FORBIDDEN");
-    if (normalizedRoom.round < current.round) return current;
-    if (normalizedRoom.round === current.round && phaseOrder[normalizedRoom.phase] < phaseOrder[current.phase]) return current;
-
-    const players = isLobbyJoin
-      ? [...new Map([...current.players, ...normalizedRoom.players].map((player) => [player.id, player])).values()]
-      : normalizedRoom.players;
-    if (!actorIsHost && isLobbyJoin) {
-      const joiningPlayer = normalizedRoom.players.find((player) => player.id === actorId);
-      if (!joiningPlayer) throw new Error("TAHOIYA_ROOM_FORBIDDEN");
-      return {
-        ...current,
-        players: [...new Map([...current.players, joiningPlayer].map((player) => [player.id, player])).values()],
-      };
-    }
-    const sameRound = current.round === normalizedRoom.round;
-    return {
-      ...normalizedRoom,
-      passphrase: current.passphrase,
-      players,
-      fakeDefinitions: sameRound
-        ? { ...current.fakeDefinitions, ...normalizedRoom.fakeDefinitions }
-        : normalizedRoom.fakeDefinitions,
-      votes: sameRound ? { ...current.votes, ...normalizedRoom.votes } : normalizedRoom.votes,
-      options:
-        sameRound && phaseOrder[current.phase] >= phaseOrder.voting && current.options.length > 0
-          ? current.options
-          : normalizedRoom.options,
-    };
-  });
-
-  await redisCommand<number>(["SADD", roomIndexKey, savedRoom.code]);
-  await savePlayerActiveRooms(savedRoom);
-  return savedRoom;
+  const claim = actorId ? await claimPlayerActiveRoom(playerActiveRoomKey(actorId), createdRoom.code) : "already-claimed";
+  if (!claim) throw new Error("TAHOIYA_PLAYER_ALREADY_ACTIVE");
+  try {
+    const created = await redisCommand<"OK" | null>([
+      "SET", roomKey(createdRoom.code), JSON.stringify(createdRoom), "NX", "EX", String(multiplayerRoomTtlSeconds),
+    ]);
+    if (created !== "OK") throw new Error("TAHOIYA_ROOM_CONFLICT");
+    await redisCommand<number>(["SADD", roomIndexKey, createdRoom.code]);
+    await savePlayerActiveRooms(createdRoom);
+    return createdRoom;
+  } catch (error) {
+    if (actorId && claim === "claimed") await releasePlayerActiveRoom(playerActiveRoomKey(actorId), createdRoom.code);
+    throw error;
+  }
 }
 
 export async function joinStoredTahoiyaRoom(code: string, player: TahoiyaPlayer, passphrase: string) {
@@ -524,8 +478,51 @@ export async function applyStoredTahoiyaRoomAction(code: string, action: Tahoiya
       const answererId = current.playMode === "single-answerer" && current.answererMode === "manual" ? current.answererId : "";
       return { ...current, phase: "lobby", debugReplayEnabled: false, phaseStartedAt: null, answererId, word: "", reading: "", realDefinition: "", topicNote: "", topicSourceDetail: "", topicSource: "pending", topicGeneration: undefined, fakeDefinitions: {}, options: [], votes: {}, resultText: "" };
     }
+    if (action.type === "update-config") {
+      if (!actorIsHost || current.phase !== "lobby") throw new Error("TAHOIYA_ROOM_FORBIDDEN");
+      const playMode = action.config.playMode === "all-vote" ? "all-vote" : action.config.playMode === "single-answerer" ? "single-answerer" : current.playMode;
+      const answererMode = action.config.answererMode === "manual" || action.config.answererMode === "random" ? action.config.answererMode : current.answererMode;
+      const requestedAnswererId = typeof action.config.answererId === "string" ? action.config.answererId : current.answererId;
+      return {
+        ...current,
+        playMode,
+        topicDifficulty: action.config.topicDifficulty === "extreme" ? "extreme" : action.config.topicDifficulty === "standard" ? "standard" : current.topicDifficulty,
+        answererMode,
+        answererId: playMode === "all-vote" || answererMode === "random" ? "" : current.players.some((player) => player.id === requestedAnswererId) ? requestedAnswererId : "",
+        showRealDefinitionToWriters: playMode === "single-answerer" && (typeof action.config.showRealDefinitionToWriters === "boolean" ? action.config.showRealDefinitionToWriters : current.showRealDefinitionToWriters),
+        actionTimeLimitSeconds: action.config.actionTimeLimitSeconds === undefined ? current.actionTimeLimitSeconds : normalizeCommonTimeLimit(action.config.actionTimeLimitSeconds),
+      };
+    }
+    if (action.type === "set-debug") {
+      if (!actorIsHost || current.phase !== "lobby") throw new Error("TAHOIYA_ROOM_FORBIDDEN");
+      return { ...current, debugMode: action.enabled, debugReplayEnabled: action.enabled ? current.debugReplayEnabled : false };
+    }
+    if (action.type === "set-debug-replay") {
+      if (!actorIsHost || !current.debugMode) throw new Error("TAHOIYA_ROOM_FORBIDDEN");
+      return { ...current, debugReplayEnabled: action.enabled };
+    }
+    if (action.type === "debug-add-player") {
+      if (!actorIsHost || !current.debugMode || current.phase !== "lobby" || current.players.length >= onlineRoomPlayerLimits.tahoiya) throw new Error("TAHOIYA_ROOM_FORBIDDEN");
+      const number = current.players.length + 1;
+      return { ...current, players: [...current.players, { id: `dummy-${randomUUID()}`, name: `テスト${number}`, joinedAt: Date.now() }] };
+    }
+    if (action.type === "next-round") {
+      if (!actorIsHost || current.phase !== "result") throw new Error("TAHOIYA_ROOM_FORBIDDEN");
+      const answererId = current.playMode === "single-answerer" && current.answererMode === "manual" ? current.answererId : "";
+      return { ...current, phase: "lobby", debugReplayEnabled: false, answererId, round: current.round + 1, word: "", reading: "", realDefinition: "", topicNote: "", topicSourceDetail: "", topicSource: "pending", topicGeneration: undefined, phaseStartedAt: null, fakeDefinitions: {}, options: [], votes: {}, resultText: "" };
+    }
+    if (action.type === "debug-replace-topic") {
+      if (!actorIsHost || !current.debugMode || current.phase === "lobby" || action.round !== current.round + 1 || !action.topic.word.trim() || !action.topic.realDefinition.trim()) throw new Error("TAHOIYA_ROOM_FORBIDDEN");
+      const answererId = current.playMode === "all-vote"
+        ? ""
+        : current.answererMode === "random"
+          ? current.players[Math.floor(Math.random() * current.players.length)]?.id ?? ""
+          : current.answererId;
+      return { ...current, phase: "writing", phaseStartedAt: Date.now(), answererId, round: action.round, word: action.topic.word, reading: action.topic.reading, realDefinition: action.topic.realDefinition, topicNote: action.topic.note, topicSourceDetail: action.topic.sourceDetail, topicSource: action.topic.source, topicGeneration: action.topic.generation, fakeDefinitions: {}, options: [], votes: {}, resultText: "" };
+    }
     const reconciled = reconcileProgress(current);
     if (reconciled !== current) return reconciled;
+    if (!("round" in action)) throw new Error("TAHOIYA_ROOM_FORBIDDEN");
     if (action.round !== current.round) return current;
 
     if (action.type === "submit-definition") {

@@ -64,8 +64,23 @@ export type TahoiyaRoom = {
   updatedAt: number;
 };
 
+export type TahoiyaLobbyConfig = Pick<TahoiyaRoom,
+  | "playMode"
+  | "topicDifficulty"
+  | "answererMode"
+  | "showRealDefinitionToWriters"
+  | "actionTimeLimitSeconds"
+  | "answererId"
+>;
+
 export type TahoiyaRoomAction =
   | { type: "abort-game"; actorId: string }
+  | { type: "update-config"; actorId: string; config: Partial<TahoiyaLobbyConfig> }
+  | { type: "set-debug"; actorId: string; enabled: boolean }
+  | { type: "set-debug-replay"; actorId: string; enabled: boolean }
+  | { type: "debug-add-player"; actorId: string }
+  | { type: "next-round"; actorId: string }
+  | { type: "debug-replace-topic"; actorId: string; round: number; topic: TahoiyaTopic }
   | { type: "submit-definition"; actorId: string; playerId: string; round: number; text: string }
   | { type: "cast-vote"; actorId: string; playerId: string; round: number; optionId: string }
   | { type: "advance-phase"; actorId: string; round: number; target: "voting" | "result"; force?: boolean }

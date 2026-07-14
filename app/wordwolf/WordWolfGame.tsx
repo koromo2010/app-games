@@ -44,6 +44,7 @@ import type {
   Room,
   RoomChoice,
   VoteRound,
+  WordWolfRoomAction,
 } from "@/lib/wordwolf-game-types";
 import {
   getClueParticipants,
@@ -63,7 +64,8 @@ import {
   expireWordWolfPhase,
   castWordWolfVote,
   joinWordWolfRoom,
-  persistWordWolfRoom,
+  createWordWolfRoom,
+  applyWordWolfRoomAction,
   removeHostedWordWolfRooms,
   removeWordWolfRoom,
   startWordWolfGame,
@@ -357,16 +359,6 @@ function deleteHostedRooms(ownerId: string, fallbackHostId: string) {
     .forEach((room) => deleteRoom(room.code));
 }
 
-async function saveRoomToStore(room: Room) {
-  try {
-    const saved = await persistWordWolfRoom(room);
-    saveRoom(saved.room);
-    return saved.room;
-  } catch {
-    return null;
-  }
-}
-
 async function loadRoomFromStore(code: string) {
   try {
     const remoteRoom = await fetchWordWolfRoom(code);
@@ -518,10 +510,6 @@ function createEmptyRoom(
   };
 
   return { room, player };
-}
-
-function stampRoom(room: Room) {
-  return { ...room, revision: (room.revision ?? 0) + 1, updatedAt: Date.now() };
 }
 
 function createPlayer(
@@ -797,15 +785,21 @@ export function WordWolfGame() {
     isMyActionTurn ? "border-cyan-300 bg-cyan-50/95 shadow-[0_0_0_3px_rgba(34,211,238,0.18),0_18px_50px_rgba(8,145,178,0.18)] animate-pulse" : ""
   }`;
 
-  const setAndSaveRoom = useCallback((nextRoom: Room) => {
-    const stampedRoom = stampRoom(nextRoom);
-    setRoom(stampedRoom);
-    void saveRoomToStore(stampedRoom).then((saved) => {
-      if (saved) setRoom(saved);
-    });
-    void saveRoomDefaultsToStore(stampedRoom);
-    localStorage.setItem("wordwolf-last-room", stampedRoom.code);
-  }, []);
+  const runRoomAction = useCallback(async (action: WordWolfRoomAction, persistDefaults = false) => {
+    if (!room) return null;
+    try {
+      const saved = await applyWordWolfRoomAction(room.code, action);
+      saveRoom(saved);
+      setRoom(saved);
+      if (persistDefaults) void saveRoomDefaultsToStore(saved);
+      localStorage.setItem("wordwolf-last-room", saved.code);
+      setError("");
+      return saved;
+    } catch {
+      setError("部屋の更新に失敗しました。最新状態を確認してもう一度お試しください。");
+      return null;
+    }
+  }, [room]);
 
   const createRoom = async () => {
     const name = playerName.trim();
@@ -827,7 +821,16 @@ export function WordWolfGame() {
     setIsJoinListOpen(false);
     setJoinableRooms([]);
     setActivePlayerId(created.player.id);
-    setAndSaveRoom(created.room);
+    try {
+      const saved = await createWordWolfRoom(created.room);
+      saveRoom(saved.room);
+      setRoom(saved.room);
+      void saveRoomDefaultsToStore(saved.room);
+      localStorage.setItem("wordwolf-last-room", saved.room.code);
+    } catch {
+      setError("部屋を作成できませんでした。");
+      return;
+    }
     localStorage.setItem("wordwolf-last-player", created.player.id);
     setError("");
   };
@@ -896,10 +899,7 @@ export function WordWolfGame() {
 
     if (!room || !activePlayerId) return;
 
-    const players = room.players.map((player) =>
-      player.id === activePlayerId ? { ...player, name: normalizedName } : player,
-    );
-    setAndSaveRoom({ ...room, players });
+    void runRoomAction({ type: "update-player", name: normalizedName, avatarColor, avatarImage: avatarImage ?? undefined });
   };
 
   const commitPlayerName = () => {
@@ -913,10 +913,7 @@ export function WordWolfGame() {
 
     if (!room || !activePlayerId) return;
 
-    const players = room.players.map((player) =>
-      player.id === activePlayerId ? { ...player, name: normalizedName } : player,
-    );
-    setAndSaveRoom({ ...room, players });
+    void runRoomAction({ type: "update-player", name: normalizedName, avatarColor, avatarImage: avatarImage ?? undefined });
   };
 
   const updateAvatarColor = (nextColor: string) => {
@@ -932,10 +929,7 @@ export function WordWolfGame() {
 
     if (!room || !activePlayerId) return;
 
-    const players = room.players.map((player) =>
-      player.id === activePlayerId ? { ...player, avatarColor: nextColor } : player,
-    );
-    setAndSaveRoom({ ...room, players });
+    void runRoomAction({ type: "update-player", name: playerName.trim(), avatarColor: nextColor, avatarImage: avatarImage ?? undefined });
   };
 
   const updateAvatarImage = (nextImage: string | null) => {
@@ -950,10 +944,7 @@ export function WordWolfGame() {
 
     if (!room || !activePlayerId) return;
 
-    const players = room.players.map((player) =>
-      player.id === activePlayerId ? { ...player, avatarImage: nextImage || undefined } : player,
-    );
-    setAndSaveRoom({ ...room, players });
+    void runRoomAction({ type: "update-player", name: playerName.trim(), avatarColor, avatarImage: nextImage });
   };
 
   const uploadAvatarImage = (file: File | undefined) => {
@@ -1018,54 +1009,52 @@ export function WordWolfGame() {
 
   const addSeat = () => {
     if (!room) return;
-    const playerNumber = room.players.length + 1;
-    const player = createPlayer(`Player ${playerNumber}`);
-    setAndSaveRoom({ ...room, players: [...room.players, player] });
+    void runRoomAction({ type: "debug-add-player" });
   };
 
   const setClueLogVisibility = (clueLogVisibility: ClueLogVisibility) => {
     if (!room || room.phase !== "lobby") return;
-    setAndSaveRoom({ ...room, clueLogVisibility });
+    void runRoomAction({ type: "update-config", config: { clueLogVisibility } }, true);
   };
 
   const setGameMode = (gameMode: GameMode) => {
     if (!room || room.phase !== "lobby") return;
-    setAndSaveRoom({ ...room, gameMode });
+    void runRoomAction({ type: "update-config", config: { gameMode } }, true);
   };
 
   const setWolfCount = (wolfCount: number) => {
     if (!room || room.phase !== "lobby") return;
-    setAndSaveRoom({ ...room, wolfCount: normalizeWolfCount(wolfCount, room.players.length) });
+    void runRoomAction({ type: "update-config", config: { wolfCount: normalizeWolfCount(wolfCount, room.players.length) } }, true);
   };
 
   const setClueMode = (clueMode: ClueMode) => {
     if (!room || room.phase !== "lobby") return;
-    setAndSaveRoom({ ...room, clueMode });
+    void runRoomAction({ type: "update-config", config: { clueMode } }, true);
   };
 
   const setRandomizeTurnOrder = (randomizeTurnOrder: boolean) => {
     if (!room || room.phase !== "lobby") return;
-    setAndSaveRoom({ ...room, randomizeTurnOrder });
+    void runRoomAction({ type: "update-config", config: { randomizeTurnOrder } }, true);
   };
 
   const setTurnTimeLimit = (turnTimeLimitSeconds: number) => {
     if (!room || room.phase !== "lobby") return;
-    setAndSaveRoom({ ...room, turnTimeLimitSeconds: normalizeCommonTimeLimit(turnTimeLimitSeconds) });
+    void runRoomAction({ type: "update-config", config: { turnTimeLimitSeconds: normalizeCommonTimeLimit(turnTimeLimitSeconds) } }, true);
   };
 
   const setTopicDictionarySource = (topicDictionarySource: TopicDictionarySource) => {
     if (!room || room.phase !== "lobby") return;
-    setAndSaveRoom({ ...room, topicDictionarySource });
+    void runRoomAction({ type: "update-config", config: { topicDictionarySource } }, true);
   };
 
   const setTopicPairDistance = (topicPairDistance: TopicPairDistance) => {
     if (!room || room.phase !== "lobby") return;
-    setAndSaveRoom({ ...room, topicPairDistance });
+    void runRoomAction({ type: "update-config", config: { topicPairDistance } }, true);
   };
 
   const setTopicHint = (topicHint: string) => {
     if (!room || room.phase !== "lobby") return;
-    setAndSaveRoom({ ...room, topicHint: topicHint.slice(0, 80) });
+    void runRoomAction({ type: "update-config", config: { topicHint: topicHint.slice(0, 80) } }, true);
   };
 
   const testWordGeneration = async (forceNew: boolean): Promise<DebugWordGenerationResult> => {
@@ -1281,44 +1270,16 @@ export function WordWolfGame() {
     }
   };
 
-  const resetToLobby = (targetRoom: Room, advanceGame = false): Room => ({
-    ...targetRoom,
-    phase: "lobby",
-    currentRound: 1,
-    currentTurnIndex: 0,
-    currentTurnStartedAt: null,
-    wolfId: null,
-    wolfIds: [],
-    villageWord: "",
-    wolfWord: "",
-    topicReason: "",
-    topicSource: "pending",
-    topicFallbackExhausted: false,
-    topicGeneration: undefined,
-    clues: [],
-    votes: {},
-    voteHistory: [],
-    runoffCandidateIds: null,
-    accusedId: null,
-    wolfGuess: "",
-    wolfGuessJudgement: null,
-    winner: null,
-    resultText: "",
-    gameNumber: advanceGame ? (targetRoom.gameNumber ?? 1) + 1 : targetRoom.gameNumber,
-    statsRecordedAt: undefined,
-    debugReplayEnabled: false,
-  });
-
   const resetRoom = () => {
     if (!room) return;
-    setAndSaveRoom(resetToLobby(room, true));
+    void runRoomAction({ type: "reset-game" });
     setGuessInput("");
     setClueInput("");
   };
 
   const abortGame = () => {
     if (!room || room.phase === "lobby") return;
-    setAndSaveRoom(resetToLobby(room));
+    void runRoomAction({ type: "abort-game" });
     setGuessInput("");
     setClueInput("");
   };
@@ -1347,9 +1308,9 @@ export function WordWolfGame() {
                 disabled={room.phase !== "lobby"}
                 onAbort={room.debugMode && room.phase !== "lobby" ? abortGame : undefined}
                 replayEnabled={Boolean(room.debugReplayEnabled)}
-                onReplayChange={(enabled) => setAndSaveRoom({ ...room, debugReplayEnabled: enabled })}
+                onReplayChange={(enabled) => void runRoomAction({ type: "set-debug-replay", enabled })}
                 onChange={(enabled) => {
-                  setAndSaveRoom({ ...room, debugMode: enabled, debugReplayEnabled: enabled ? room.debugReplayEnabled : false });
+                  void runRoomAction({ type: "set-debug", enabled });
                   setError("");
                 }}
               />
@@ -1748,7 +1709,7 @@ export function WordWolfGame() {
                     周回数
                     <select
                       value={room.roundsTotal}
-                      onChange={(event) => setAndSaveRoom({ ...room, roundsTotal: normalizeRoundsTotal(Number(event.target.value)) })}
+                      onChange={(event) => void runRoomAction({ type: "update-config", config: { roundsTotal: normalizeRoundsTotal(Number(event.target.value)) } }, true)}
                       className={`mt-1 ${inputClass}`}
                     >
                       {lobbyRounds.map((round) => (

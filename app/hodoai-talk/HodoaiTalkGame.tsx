@@ -13,7 +13,7 @@ import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomResultActions } from "@/app/components/RoomResultActions";
 import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
 import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "@/app/hooks/use-online-room-polling";
-import { applyHodoaiRoomAction, hodoaiRoomApi, saveHodoaiRoom } from "@/app/hodoai-talk/hodoai-room-api-client";
+import { applyHodoaiRoomAction, createHodoaiRoom, hodoaiRoomApi } from "@/app/hodoai-talk/hodoai-room-api-client";
 import { WordScaleArrangeBoard } from "@/app/hodoai-talk/WordScaleArrangeBoard";
 import { WordScaleRoomPanel } from "@/app/hodoai-talk/WordScaleRoomPanel";
 import { WordScaleVerticalScale } from "@/app/hodoai-talk/WordScaleVerticalScale";
@@ -202,7 +202,7 @@ export function HodoaiTalkGame() {
         code: makeRoomCode(), revision: 0, hostId: session.id, sorterId: session.id, ownerId, passphrase: passphrase.trim(), phase: "lobby", players: [host],
         ...defaults, debugMode: false, debugReplayEnabled: false, debugLog: [], gameNumber: 1, round: 1, theme: null, cards: [], values: {}, clues: {}, clueHistory: [], order: [], totalPoints: 0, history: [], phaseStartedAt: null, createdAt: now, updatedAt: now,
       };
-      const data = await saveHodoaiRoom(nextRoom, session.id);
+      const data = await createHodoaiRoom(nextRoom, session.id);
       setRoom(data.room);
       localStorage.setItem(lastRoomKey, data.room.code);
       setError("");

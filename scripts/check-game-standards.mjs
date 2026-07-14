@@ -28,7 +28,21 @@ for (const game of games) {
     if (entry.includes("DebugReplayButton")) fail(`${game.id}: プレイバック操作は独立表示せずDebugModeButtonへ入れてください。`);
     if (!entry.includes("RoomResultActions")) fail(`${game.id}: 結果画面の「同じ部屋でもう一度／部屋を解散」共通操作がありません。`);
     const routeFile = `app/api/${game.id}/rooms/route.ts`;
-    if (!existsSync(join(root, routeFile)) || !read(routeFile).includes("requirePlayerDebugAccess")) fail(`${game.id}: デバッグ操作のサーバー側アカウント認証がありません。`);
+    const roomClientFile = (game.moduleBoundaryFiles || []).find((file) => file.endsWith("room-api-client.ts"));
+    if (!roomClientFile) fail(`${game.id}: 型付きroom API clientがmoduleBoundaryFilesにありません。`);
+    else {
+      const roomClient = read(roomClientFile);
+      if (!roomClient.includes("createOnlineRoomApiClient")) fail(`${game.id}: 共通room API clientを使用していません。`);
+      if (!roomClient.includes("create") || !roomClient.includes("apply")) fail(`${game.id}: 部屋作成とCommand送信の型付きadapterがありません。`);
+    }
+    if (entry.includes(`/api/${game.id}/rooms`)) fail(`${game.id}: UIから部屋APIを直接呼ばず、型付きadapterを使用してください。`);
+    if (entry.includes("setAndSaveRoom")) fail(`${game.id}: クライアントから部屋全体を保存する互換処理が残っています。`);
+    if (!existsSync(join(root, routeFile))) fail(`${game.id}: room routeがありません。`);
+    else {
+      const route = read(routeFile);
+      if (!route.includes("requirePlayerDebugAccess")) fail(`${game.id}: デバッグ操作のサーバー側アカウント認証がありません。`);
+      if (!route.includes('operation: "room-create"') || !route.includes("export async function PATCH")) fail(`${game.id}: POST作成／PATCH Commandの共通契約になっていません。`);
+    }
   }
   if (game.usesLlm) { if (!game.llmRouteFile || !existsSync(join(root, game.llmRouteFile))) fail(`${game.id}: llmRouteFile がありません。`); else if (!read(game.llmRouteFile).includes("generateGameLlmText")) fail(`${game.id}: 共通LLMゲートウェイを使用していません。`); }
   if (game.debugActionLog) { if (!entry.includes("debugLogEntries")) fail(`${game.id}: デバッグプルダウンの行動ログ表示がありません。`); if (!read(game.roomStoreFile).includes("appendGameDebugLog")) fail(`${game.id}: サーバー正本のデバッグ行動ログ記録がありません。`); }

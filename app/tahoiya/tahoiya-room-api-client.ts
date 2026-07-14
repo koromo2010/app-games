@@ -5,7 +5,7 @@ export const tahoiyaRoomApi = createOnlineRoomApiClient<TahoiyaRoom, TahoiyaRoom
   endpoint: "/api/tahoiya/rooms",
 });
 
-export function saveTahoiyaRoom(room: TahoiyaRoom, actorId: string) {
+export function createTahoiyaRoom(room: TahoiyaRoom, actorId: string) {
   return tahoiyaRoomApi.post<{ room: TahoiyaRoom; actorId: string }, { room?: TahoiyaRoom }>({ room, actorId });
 }
 

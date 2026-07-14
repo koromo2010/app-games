@@ -5,13 +5,15 @@ import {
   joinStoredWordWolfRoom,
   loadStoredPlayerActiveRoom,
   loadStoredWordWolfRoom,
+  applyStoredWordWolfRoomAction,
   sanitizeWordWolfRoom,
-  saveStoredWordWolfRoomAsHost,
+  createStoredWordWolfRoom,
 } from "@/lib/wordwolf-room-store";
+import type { WordWolfRoomAction } from "@/lib/wordwolf-game-types";
 import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
 import { authenticatedRoomDraft } from "@/lib/online-room-input";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
-import { requirePlayerDebugAccess, roomRequestsDebugMode } from "@/lib/debug-access";
+import { actionRequiresDebugAccess, requirePlayerDebugAccess, roomRequestsDebugMode } from "@/lib/debug-access";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 import { conditionalJsonResponse } from "@/lib/conditional-json";
 
@@ -62,30 +64,21 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const telemetry = createRequestTelemetry(request, "/api/wordwolf/rooms", { game: "wordwolf", operation: "room-mutation" });
+  const telemetry = createRequestTelemetry(request, "/api/wordwolf/rooms", { game: "wordwolf", operation: "room-create" });
   let logFields: ObservabilityFields = {};
   try {
     const player = await requireAuthenticatedPlayer();
     const limited = await rateLimitResponseFor(request, rateLimitPolicies.roomMutation, { playerId: player.id });
     if (limited) return limited;
-    const body = (await request.json()) as { room?: unknown; action?: unknown; code?: unknown; passphrase?: unknown };
+    const body = (await request.json()) as { room?: unknown };
     const requestedRoom = body.room && typeof body.room === "object" ? body.room as { code?: unknown } : null;
     if (roomRequestsDebugMode(requestedRoom)) await requirePlayerDebugAccess(player.id);
     logFields = {
-      action: body.action === "join" ? "join-room" : "save-room",
-      roomRef: telemetry.roomRef(body.action === "join" ? body.code : requestedRoom?.code),
+      action: "create-room",
+      roomRef: telemetry.roomRef(requestedRoom?.code),
       actorRef: telemetry.actorRef(player.id),
     };
-    const existingRoom = body.action === "join" || !requestedRoom?.code
-      ? null
-      : await loadStoredWordWolfRoom(String(requestedRoom.code));
-    const room = body.action === "join"
-      ? await joinStoredWordWolfRoom(
-          typeof body.code === "string" ? body.code : "",
-          { id: player.id, name: player.name, joinedAt: Date.now(), avatarColor: player.avatarColor, avatarImage: player.avatarImage ?? undefined },
-          typeof body.passphrase === "string" ? body.passphrase : "",
-        )
-      : await saveStoredWordWolfRoomAsHost(existingRoom ? body.room : authenticatedRoomDraft(body.room, player), player.id);
+    const room = await createStoredWordWolfRoom(authenticatedRoomDraft(body.room, player), player.id);
     telemetry.success("room.mutation", { ...logFields, phase: room.phase, revision: room.revision, playerCount: room.players.length, debugMode: room.debugMode });
     return Response.json({ room: sanitizeWordWolfRoom(room, player.id) });
   } catch (error) {
@@ -141,6 +134,39 @@ export async function POST(request: Request) {
 
     telemetry.failure("room.mutation", error, 500, logFields);
     return Response.json({ error: "Failed to save room" }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: Request) {
+  const telemetry = createRequestTelemetry(request, "/api/wordwolf/rooms", { game: "wordwolf", operation: "room-command" });
+  let logFields: ObservabilityFields = {};
+  try {
+    const player = await requireAuthenticatedPlayer();
+    const limited = await rateLimitResponseFor(request, rateLimitPolicies.roomMutation, { playerId: player.id });
+    if (limited) return limited;
+    const body = (await request.json()) as { code?: unknown; action?: unknown };
+    const code = typeof body.code === "string" ? body.code.trim().toUpperCase() : "";
+    if (!code || !body.action || typeof body.action !== "object") return Response.json({ error: "code and action are required" }, { status: 400 });
+    const action = body.action as WordWolfRoomAction;
+    if (actionRequiresDebugAccess(action)) await requirePlayerDebugAccess(player.id);
+    logFields = { action: action.type, roomRef: telemetry.roomRef(code), actorRef: telemetry.actorRef(player.id) };
+    const room = action.type === "join-room"
+      ? await joinStoredWordWolfRoom(code, { id: player.id, name: player.name, joinedAt: Date.now(), avatarColor: player.avatarColor, avatarImage: player.avatarImage ?? undefined }, action.passphrase)
+      : await applyStoredWordWolfRoomAction(code, player.id, action);
+    telemetry.success("room.command", { ...logFields, phase: room.phase, revision: room.revision, playerCount: room.players.length, debugMode: room.debugMode });
+    return Response.json({ room: sanitizeWordWolfRoom(room, player.id) });
+  } catch (error) {
+    if (error instanceof Error && error.message === "DEBUG_ACCESS_REQUIRED") return Response.json({ error: "Debug access required" }, { status: 403 });
+    if (error instanceof Error && error.message === "PLAYER_AUTH_REQUIRED") return Response.json({ error: "Login required" }, { status: 401 });
+    if (isPlayerAuthConfigurationError(error)) return Response.json({ error: "Player auth is not configured" }, { status: 503 });
+    if (isStoreNotConfigured(error)) return Response.json({ error: "Room storage is not configured" }, { status: 503 });
+    const status = error instanceof Error && error.message === "WORDWOLF_BAD_PASSPHRASE" ? 401
+      : error instanceof Error && error.message === "WORDWOLF_ROOM_NOT_FOUND" ? 404
+        : error instanceof Error && error.message === "WORDWOLF_ROOM_FORBIDDEN" ? 403
+          : error instanceof Error && ["WORDWOLF_ROOM_CONFLICT", "WORDWOLF_PLAYER_ALREADY_ACTIVE", "WORDWOLF_ROOM_STARTED", "WORDWOLF_ROOM_FULL"].includes(error.message) ? 409
+            : 500;
+    telemetry.responseError("room.command", error, status, logFields);
+    return Response.json({ error: status === 500 ? "Failed to update room" : error instanceof Error ? error.message : "Room command failed" }, { status });
   }
 }
 

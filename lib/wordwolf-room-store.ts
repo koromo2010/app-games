@@ -2,7 +2,8 @@ import {
   normalizeTopicDictionarySource,
   normalizeTopicPairDistance,
 } from "@/lib/wordwolf";
-import type { Clue, ClueMode, GameMode, Phase, Player, Room, RoomChoice, VoteRound } from "@/lib/wordwolf-game-types";
+import type { Clue, ClueMode, GameMode, Phase, Player, Room, RoomChoice, VoteRound, WordWolfRoomAction } from "@/lib/wordwolf-game-types";
+import { randomUUID } from "node:crypto";
 import type { WordWolfGuessJudgement } from "@/lib/wordwolf-guess-judgement";
 import { redisCommand, redisPipeline } from "@/lib/redis-store";
 import { recordWordWolfGameResults } from "@/lib/player-stats-store";
@@ -345,17 +346,14 @@ export async function saveStoredWordWolfRoom(room: unknown) {
   return normalizedRoom;
 }
 
-export async function saveStoredWordWolfRoomAsHost(room: unknown, actorId: string) {
-  let normalizedRoom = normalizeRoom(room);
+export async function createStoredWordWolfRoom(room: unknown, actorId: string) {
+  const normalizedRoom = normalizeRoom(room);
   if (!normalizedRoom) throw new Error("INVALID_WORDWOLF_ROOM");
   const current = await loadStoredWordWolfRoom(normalizedRoom.code);
-  if (current) {
-    if (current.hostId !== actorId || normalizedRoom.hostId !== current.hostId) throw new Error("WORDWOLF_ROOM_FORBIDDEN");
-    normalizedRoom = { ...normalizedRoom, passphrase: current.passphrase };
-  } else if (normalizedRoom.hostId !== actorId || !normalizedRoom.players.some((player) => player.id === actorId)) {
+  if (current) throw new Error("WORDWOLF_ROOM_CONFLICT");
+  if (normalizedRoom.hostId !== actorId || !normalizedRoom.players.some((player) => player.id === actorId)) {
     throw new Error("WORDWOLF_ROOM_FORBIDDEN");
   }
-  if (current) return saveStoredWordWolfRoom(normalizedRoom);
   const activeRoom = await loadStoredPlayerActiveRoom(actorId);
   if (activeRoom && activeRoom.code !== normalizedRoom.code) {
     if (!canMoveFromOnlineRoom("wordwolf", activeRoom)) throw new Error("WORDWOLF_PLAYER_ALREADY_ACTIVE");
@@ -369,6 +367,108 @@ export async function saveStoredWordWolfRoomAsHost(room: unknown, actorId: strin
     if (claim === "claimed") await releasePlayerActiveRoom(playerActiveRoomKey(actorId), normalizedRoom.code);
     throw error;
   }
+}
+
+function resetWordWolfRoomToLobby(room: WordWolfRoom, advanceGame: boolean) {
+  return {
+    ...room,
+    phase: "lobby" as const,
+    currentRound: 1,
+    currentTurnIndex: 0,
+    currentTurnStartedAt: null,
+    wolfId: null,
+    wolfIds: [],
+    villageWord: "",
+    wolfWord: "",
+    topicReason: "",
+    topicSource: "pending" as const,
+    topicFallbackExhausted: false,
+    topicGeneration: undefined,
+    clues: [],
+    votes: {},
+    voteHistory: [],
+    runoffCandidateIds: null,
+    accusedId: null,
+    wolfGuess: "",
+    wolfGuessJudgement: null,
+    winner: null,
+    resultText: "",
+    gameNumber: advanceGame ? (room.gameNumber ?? 1) + 1 : room.gameNumber,
+    statsRecordedAt: undefined,
+    debugReplayEnabled: false,
+  };
+}
+
+export async function applyStoredWordWolfRoomAction(code: string, actorId: string, action: WordWolfRoomAction) {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const current = await loadStoredWordWolfRoom(code);
+    if (!current) throw new Error("WORDWOLF_ROOM_NOT_FOUND");
+    const actorIsHost = current.hostId === actorId;
+    const actorIsMember = current.players.some((player) => player.id === actorId);
+    if (!actorIsMember) throw new Error("WORDWOLF_ROOM_FORBIDDEN");
+
+    let next: WordWolfRoom = current;
+    if (action.type === "update-player") {
+      next = {
+        ...current,
+        players: current.players.map((player) => player.id === actorId ? {
+          ...player,
+          name: action.name.trim().slice(0, 40) || player.name,
+          avatarColor: isAvatarColor(action.avatarColor ?? null) ? action.avatarColor : player.avatarColor,
+          avatarImage: action.avatarImage === undefined
+            ? player.avatarImage
+            : action.avatarImage === null
+              ? undefined
+              : isAvatarImage(action.avatarImage) ? action.avatarImage : player.avatarImage,
+        } : player),
+      };
+    } else {
+      if (!actorIsHost) throw new Error("WORDWOLF_ROOM_FORBIDDEN");
+      if (action.type === "update-config") {
+        if (current.phase !== "lobby") throw new Error("WORDWOLF_ROOM_FORBIDDEN");
+        const config = action.config;
+        next = {
+          ...current,
+          clueLogVisibility: config.clueLogVisibility === "always" ? "always" : config.clueLogVisibility === "result" ? "result" : current.clueLogVisibility,
+          gameMode: config.gameMode === undefined ? current.gameMode : normalizeGameMode(config.gameMode),
+          wolfCount: config.wolfCount === undefined ? current.wolfCount : normalizeWolfCount(config.wolfCount, current.players.length),
+          clueMode: config.clueMode === undefined ? current.clueMode : normalizeClueMode(config.clueMode),
+          randomizeTurnOrder: typeof config.randomizeTurnOrder === "boolean" ? config.randomizeTurnOrder : current.randomizeTurnOrder,
+          roundsTotal: config.roundsTotal === undefined ? current.roundsTotal : normalizeRoundsTotal(config.roundsTotal),
+          turnTimeLimitSeconds: config.turnTimeLimitSeconds === undefined ? current.turnTimeLimitSeconds : normalizeCommonTimeLimit(config.turnTimeLimitSeconds),
+          topicDictionarySource: config.topicDictionarySource === undefined ? current.topicDictionarySource : normalizeTopicDictionarySource(config.topicDictionarySource),
+          topicPairDistance: config.topicPairDistance === undefined ? current.topicPairDistance : normalizeTopicPairDistance(config.topicPairDistance),
+          topicHint: typeof config.topicHint === "string" ? config.topicHint.trim().slice(0, 80) : current.topicHint,
+        };
+      } else if (action.type === "set-debug") {
+        if (current.phase !== "lobby") throw new Error("WORDWOLF_ROOM_FORBIDDEN");
+        next = { ...current, debugMode: action.enabled, debugReplayEnabled: action.enabled ? current.debugReplayEnabled : false };
+      } else if (action.type === "set-debug-replay") {
+        if (!current.debugMode) throw new Error("WORDWOLF_ROOM_FORBIDDEN");
+        next = { ...current, debugReplayEnabled: action.enabled };
+      } else if (action.type === "debug-add-player") {
+        if (!current.debugMode || current.phase !== "lobby" || current.players.length >= onlineRoomPlayerLimits.wordwolf) throw new Error("WORDWOLF_ROOM_FORBIDDEN");
+        const number = current.players.length + 1;
+        next = { ...current, players: [...current.players, { id: `dummy-${randomUUID()}`, name: `Player ${number}`, joinedAt: Date.now() }] };
+      } else if (action.type === "reset-game") {
+        if (current.phase !== "result") throw new Error("WORDWOLF_ROOM_FORBIDDEN");
+        next = resetWordWolfRoomToLobby(current, true);
+      } else if (action.type === "abort-game") {
+        if (!current.debugMode || current.phase === "lobby") throw new Error("WORDWOLF_ROOM_FORBIDDEN");
+        next = resetWordWolfRoomToLobby(current, false);
+      } else {
+        throw new Error("WORDWOLF_ROOM_FORBIDDEN");
+      }
+    }
+
+    if (next === current) return current;
+    try {
+      return await saveStoredWordWolfRoom({ ...next, revision: current.revision + 1, updatedAt: Date.now() });
+    } catch (error) {
+      if (!(error instanceof Error) || error.message !== "WORDWOLF_ROOM_CONFLICT") throw error;
+    }
+  }
+  throw new Error("WORDWOLF_ROOM_CONFLICT");
 }
 
 export async function joinStoredWordWolfRoom(code: string, player: Player, passphrase: string) {

@@ -8,7 +8,7 @@ import {
   loadStoredTahoiyaPlayerActiveRoom,
   joinStoredTahoiyaRoom,
   sanitizeTahoiyaRoom,
-  saveStoredTahoiyaRoom,
+  createStoredTahoiyaRoom,
   startStoredTahoiyaRound,
 } from "@/lib/tahoiya-room-store";
 import type { TahoiyaRoomAction } from "@/lib/tahoiya-types";
@@ -86,8 +86,7 @@ export async function POST(request: Request) {
     const requestedRoom = body.room && typeof body.room === "object" ? body.room as { code?: unknown } : null;
     if (roomRequestsDebugMode(requestedRoom)) await requirePlayerDebugAccess(player.id);
     logFields = { ...logFields, roomRef: telemetry.roomRef(requestedRoom?.code), actorRef: telemetry.actorRef(player.id) };
-    const existingRoom = requestedRoom?.code ? await loadStoredTahoiyaRoom(String(requestedRoom.code)) : null;
-    const room = await saveStoredTahoiyaRoom(existingRoom ? body.room : authenticatedRoomDraft(body.room, player), player.id);
+    const room = await createStoredTahoiyaRoom(authenticatedRoomDraft(body.room, player), player.id);
     telemetry.success("room.mutation", { ...logFields, phase: room.phase, revision: room.revision, playerCount: room.players.length });
     return Response.json({ room: sanitizeTahoiyaRoom(room, player.id) });
   } catch (error) {
@@ -112,6 +111,10 @@ export async function POST(request: Request) {
     if (error instanceof Error && error.message === "TAHOIYA_PLAYER_ALREADY_ACTIVE") {
       telemetry.responseError("room.mutation", error, 409, logFields);
       return Response.json({ error: "Finish or leave the current room before entering another room" }, { status: 409 });
+    }
+    if (error instanceof Error && error.message === "TAHOIYA_ROOM_CONFLICT") {
+      telemetry.responseError("room.mutation", error, 409, logFields);
+      return Response.json({ error: "Room already exists" }, { status: 409 });
     }
     telemetry.failure("room.mutation", error, 500, logFields);
     return Response.json({ error: "Failed to save room" }, { status: 500 });

@@ -14,7 +14,7 @@ import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
 import { OnlineRoomApiError } from "@/lib/online-room-api-client";
 import type { TahoiyaAnswererMode, TahoiyaDifficulty, TahoiyaPlayMode, TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomAction, TahoiyaRoomChoice, TahoiyaTopic } from "@/lib/tahoiya-types";
 import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "../hooks/use-online-room-polling";
-import { applyTahoiyaRoomAction, saveTahoiyaRoom, tahoiyaRoomApi } from "./tahoiya-room-api-client";
+import { applyTahoiyaRoomAction, createTahoiyaRoom, tahoiyaRoomApi } from "./tahoiya-room-api-client";
 import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
 import { DebugModeButton } from "../components/DebugModeButton";
 import { DebugWordGenerationTest, type DebugWordGenerationResult } from "../components/DebugWordGenerationTest";
@@ -125,15 +125,6 @@ function stampRoom(room: TahoiyaRoom) {
   return { ...room, updatedAt: Date.now() };
 }
 
-function shuffle<T>(items: T[]) {
-  const next = [...items];
-  for (let index = next.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
-    [next[index], next[swapIndex]] = [next[swapIndex], next[index]];
-  }
-  return next;
-}
-
 function createPlayer(name: string, avatarColor = makeRandomAvatarColor(), avatarImage?: string | null, id?: string): TahoiyaPlayer {
   return {
     id: id ?? makeId("player"),
@@ -202,9 +193,9 @@ function deleteRoomLocally(code: string) {
   localStorage.removeItem(getRoomKey(code));
 }
 
-async function saveRoomToStore(room: TahoiyaRoom, actorId: string) {
+async function createRoomInStore(room: TahoiyaRoom, actorId: string) {
   try {
-    const data = await saveTahoiyaRoom(room, actorId);
+    const data = await createTahoiyaRoom(room, actorId);
     if (!data.room) return null;
     const saved = normalizeRoom(data.room);
     saveRoomLocally(saved);
@@ -483,16 +474,7 @@ export function TahoiyaGame() {
       ]
     : [];
 
-  const setAndSaveRoom = (nextRoom: TahoiyaRoom, persistDefaults = false) => {
-    const stamped = stampRoom(nextRoom);
-    setRoom(stamped);
-    void saveRoomToStore(stamped, playerId).then((saved) => {
-      if (saved) setRoom(saved);
-    });
-    if (persistDefaults && playerId === stamped.hostId) void saveRoomDefaultsToStore(stamped);
-  };
-
-  const runRoomAction = async (action: TahoiyaRoomAction) => {
+  const runRoomAction = async (action: TahoiyaRoomAction, persistDefaults = false) => {
     if (!room) return null;
     const saved = await applyRoomActionToStore(room.code, action);
     if (!saved) {
@@ -500,6 +482,7 @@ export function TahoiyaGame() {
       return null;
     }
     setRoom(saved);
+    if (persistDefaults && playerId === saved.hostId) void saveRoomDefaultsToStore(saved);
     setMessage("");
     return saved;
   };
@@ -533,7 +516,13 @@ export function TahoiyaGame() {
     const host = createPlayer(playerName, avatarColor, avatarImage, playerId);
     const defaults = await loadRoomDefaultsFromStore(playerId, ownerId);
     const nextRoom = createEmptyRoom(host, passphrase, ownerId, defaults);
-    setAndSaveRoom(nextRoom, true);
+    const saved = await createRoomInStore(nextRoom, playerId);
+    if (!saved) {
+      setMessage("部屋を作成できませんでした。");
+      return;
+    }
+    setRoom(saved);
+    void saveRoomDefaultsToStore(saved);
     setActivePlayerId(host.id);
     setMessage("");
   };
@@ -565,17 +554,12 @@ export function TahoiyaGame() {
 
   const addTestPlayer = () => {
     if (!room || room.phase !== "lobby" || !room.debugMode) return;
-    const count = room.players.length + 1;
-    setAndSaveRoom({
-      ...room,
-      players: [...room.players, createPlayer(`テスト${count}`)].slice(0, 8),
-    });
+    void runRoomAction({ type: "debug-add-player", actorId: playerId });
   };
 
   const setDebugMode = (debugMode: boolean) => {
     if (!room || room.phase !== "lobby") return;
-    const nextRoom = { ...room, debugMode, debugReplayEnabled: debugMode ? room.debugReplayEnabled : false };
-    setAndSaveRoom(nextRoom);
+    void runRoomAction({ type: "set-debug", actorId: playerId, enabled: debugMode });
     if (!debugMode) {
       setActivePlayerId(playerId);
     }
@@ -583,41 +567,32 @@ export function TahoiyaGame() {
 
   const setAnswererMode = (answererMode: TahoiyaAnswererMode) => {
     if (!room || room.phase !== "lobby") return;
-    setAndSaveRoom({
-      ...room,
-      answererMode,
-      answererId: answererMode === "random" ? "" : room.answererId,
-    }, true);
+    void runRoomAction({ type: "update-config", actorId: playerId, config: { answererMode } }, true);
   };
 
   const setPlayMode = (playMode: TahoiyaPlayMode) => {
     if (!room || room.phase !== "lobby") return;
-    setAndSaveRoom({
-      ...room,
-      playMode,
-      answererId: playMode === "all-vote" ? "" : room.answererId,
-      showRealDefinitionToWriters: playMode === "all-vote" ? false : room.showRealDefinitionToWriters,
-    }, true);
+    void runRoomAction({ type: "update-config", actorId: playerId, config: { playMode } }, true);
   };
 
   const setTopicDifficulty = (topicDifficulty: TahoiyaDifficulty) => {
     if (!room || room.phase !== "lobby") return;
-    setAndSaveRoom({ ...room, topicDifficulty }, true);
+    void runRoomAction({ type: "update-config", actorId: playerId, config: { topicDifficulty } }, true);
   };
 
   const setManualAnswerer = (answererId: string) => {
     if (!room || room.phase !== "lobby") return;
-    setAndSaveRoom({ ...room, answererId }, true);
+    void runRoomAction({ type: "update-config", actorId: playerId, config: { answererId } }, true);
   };
 
   const setShowRealDefinitionToWriters = (showRealDefinitionToWriters: boolean) => {
     if (!room || room.phase !== "lobby") return;
-    setAndSaveRoom({ ...room, showRealDefinitionToWriters }, true);
+    void runRoomAction({ type: "update-config", actorId: playerId, config: { showRealDefinitionToWriters } }, true);
   };
 
   const setActionTimeLimit = (actionTimeLimitSeconds: number) => {
     if (!room || room.phase !== "lobby") return;
-    setAndSaveRoom({ ...room, actionTimeLimitSeconds: normalizeCommonTimeLimit(actionTimeLimitSeconds) }, true);
+    void runRoomAction({ type: "update-config", actorId: playerId, config: { actionTimeLimitSeconds: normalizeCommonTimeLimit(actionTimeLimitSeconds) } }, true);
   };
 
   const testWordGeneration = async (forceNew: boolean): Promise<DebugWordGenerationResult> => {
@@ -823,12 +798,6 @@ export function TahoiyaGame() {
       }
 
       const nextRoundNumber = currentRoom.round + 1;
-      const candidates = getAnswererCandidates(currentRoom);
-      const nextAnswererId = currentRoom.playMode === "all-vote"
-        ? ""
-        : currentRoom.answererMode === "random"
-          ? shuffle(candidates)[0]?.id ?? ""
-          : currentRoom.answererId;
       const topicParams = new URLSearchParams({
         roomCode: currentRoom.code,
         round: String(nextRoundNumber),
@@ -839,25 +808,7 @@ export function TahoiyaGame() {
       if (!topicResponse.ok || !topic.word || !topic.realDefinition) {
         throw new Error(topic.notice || topic.error || "次のお題を生成できませんでした。");
       }
-      const nextRoom: TahoiyaRoom = {
-        ...currentRoom,
-        phase: "writing",
-        phaseStartedAt: Date.now(),
-        answererId: nextAnswererId,
-        round: nextRoundNumber,
-        word: topic.word,
-        reading: topic.reading,
-        realDefinition: topic.realDefinition,
-        topicNote: topic.note,
-        topicSourceDetail: topic.sourceDetail,
-        topicSource: topic.source,
-        topicGeneration: topic.generation,
-        fakeDefinitions: {},
-        options: [],
-        votes: {},
-        resultText: "",
-      };
-      const saved = await saveRoomToStore(nextRoom, playerId);
+      const saved = await runRoomAction({ type: "debug-replace-topic", actorId: playerId, round: nextRoundNumber, topic });
       if (!saved) throw new Error("次のお題を部屋へ保存できませんでした。");
       setRoom(saved);
       setSkipReason("");
@@ -877,25 +828,8 @@ export function TahoiyaGame() {
 
   const nextRound = () => {
     if (!room) return;
-    const nextAnswererId = room.playMode === "single-answerer" && room.answererMode === "manual" ? room.answererId : "";
-    setAndSaveRoom({
-      ...room,
-      phase: "lobby",
-      debugReplayEnabled: false,
-      answererId: nextAnswererId,
-      round: room.round + 1,
-      word: "",
-      reading: "",
-      realDefinition: "",
-      topicNote: "",
-      topicSourceDetail: "",
-      topicSource: "pending",
-      topicGeneration: undefined,
-      phaseStartedAt: null,
-      fakeDefinitions: {},
-      options: [],
-      votes: {},
-      resultText: "",
+    void runRoomAction({ type: "next-round", actorId: playerId }).then((saved) => {
+      if (saved) setActivePlayerId(playerId);
     });
     setDefinitionInput("");
     setPolishMessage("");
@@ -937,7 +871,7 @@ export function TahoiyaGame() {
                 disabled={room.phase !== "lobby"}
                 onAbort={room.debugMode && room.phase !== "lobby" ? abortGame : undefined}
                 replayEnabled={Boolean(room.debugReplayEnabled)}
-                onReplayChange={(enabled) => setAndSaveRoom({ ...room, debugReplayEnabled: enabled })}
+                onReplayChange={(enabled) => void runRoomAction({ type: "set-debug-replay", actorId: playerId, enabled })}
                 onChange={setDebugMode}
               />
             )}

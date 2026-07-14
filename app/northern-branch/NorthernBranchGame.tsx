@@ -10,7 +10,7 @@ import { GamePlayerMenu } from "@/app/components/GamePlayerMenu";
 import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomResultActions } from "@/app/components/RoomResultActions";
 import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "@/app/hooks/use-online-room-polling";
-import { applyNorthernBranchRoomAction, northernBranchRoomApi, saveNorthernBranchRoom } from "@/app/northern-branch/northern-branch-room-api-client";
+import { applyNorthernBranchRoomAction, createNorthernBranchRoom, northernBranchRoomApi } from "@/app/northern-branch/northern-branch-room-api-client";
 import { northernBaseResources, northernBuildings, northernCards } from "@/lib/northern-branch-data";
 import { northernRules } from "@/lib/northern-branch-game";
 import { OnlineRoomApiError, restoreOnlineRoom } from "@/lib/online-room-api-client";
@@ -194,7 +194,7 @@ export function NorthernBranchGame() {
         code: makeRoomCode(), revision: 0, hostId: session.id, ownerId, passphrase: passphrase.trim(), phase: "lobby",
         players: [host], gameNumber: 1, debugMode: false, debugReplayEnabled: false, game: null, notice: "参加者を待っています。", createdAt: now, updatedAt: now,
       };
-      const data = await saveNorthernBranchRoom(nextRoom, session.id);
+      const data = await createNorthernBranchRoom(nextRoom, session.id);
       setRoom(data.room);
       localStorage.setItem(lastRoomKey, data.room.code);
       setError("");

@@ -12,7 +12,7 @@ import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomResultActions } from "@/app/components/RoomResultActions";
 import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
 import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "@/app/hooks/use-online-room-polling";
-import { applyKotobaSenpukuRoomAction, kotobaSenpukuRoomApi, saveKotobaSenpukuRoom } from "@/app/kotoba-senpuku/kotoba-senpuku-room-api-client";
+import { applyKotobaSenpukuRoomAction, createKotobaSenpukuRoom, kotobaSenpukuRoomApi } from "@/app/kotoba-senpuku/kotoba-senpuku-room-api-client";
 import { loadPlayerRoomDefaults, savePlayerRoomDefaults } from "@/lib/game-room-defaults-client";
 import { OnlineRoomApiError, restoreOnlineRoom } from "@/lib/online-room-api-client";
 import {
@@ -273,7 +273,7 @@ export function KotobaSenpukuGame() {
         roundSignals: { [session.id]: 0 }, totalScores: { [session.id]: 0 }, activePlayerIndex: 0, turnNumber: 1, roundEvents: [],
         history: [], log: ["参加者を待っています。"], phaseStartedAt: null, createdAt: now, updatedAt: now,
       };
-      const data = await saveKotobaSenpukuRoom(nextRoom, session.id);
+      const data = await createKotobaSenpukuRoom(nextRoom, session.id);
       setRoom(data.room);
       localStorage.setItem(lastRoomKey, data.room.code);
       setError("");

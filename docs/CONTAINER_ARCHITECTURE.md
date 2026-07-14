@@ -141,8 +141,8 @@ web / game-server / timer-service / ai-worker / batch-worker
 
 ## 7. 切り出し順
 
-1. モジュラーモノリス内で全ゲームをCommand API化する。
-2. 部屋全体保存を廃止し、game-server境界を固定する。
+1. モジュラーモノリス内で全ゲームをCommand API化する。（完了）
+2. 部屋全体保存を廃止し、game-server境界を固定する。（完了）
 3. 全ゲームの時間管理を`lib/game-timer`へ接続する。
 4. timer-serviceを独立させ、期限の永続化と再試行を追加する。
 5. AI生成をジョブ化してai-workerへ移す。
@@ -152,9 +152,10 @@ web / game-server / timer-service / ai-worker / batch-worker
 
 ## 8. 現在地
 
-- ワードウルフは参加・開始・発言・投票・逆転回答・時間切れをCommand化済み。
+- 全5ゲームでPOSTを新規作成専用、PATCHを既存部屋Command、DELETEを解散に統一済み。
+- ワードウルフは参加・ロビー設定・開始・発言・投票・逆転回答・時間切れをCommand化済み。
 - 部屋に`revision`を持ち、Redis内CASで巻き戻りを防止済み。
 - `lib/game-timer`と`/api/game-timer/expire`を共通時間管理境界として導入済み。
-- ロビー設定にはホスト専用の部屋全体保存互換経路が残る。
+- クライアントから既存部屋全体を保存する互換経路は廃止済み。
 - `lib/observability` で構造化イベントschema、request/trace相関、不透明参照、差し替え可能なsinkを導入済み。現在の出力先はVercel Runtime Logs。
 - 物理コンテナ分割は未実施。現在はモジュラーモノリス段階。

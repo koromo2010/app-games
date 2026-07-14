@@ -1,4 +1,4 @@
-import type { Room, RoomChoice } from "@/lib/wordwolf-game-types";
+import type { Room, RoomChoice, WordWolfRoomAction } from "@/lib/wordwolf-game-types";
 import { createOnlineRoomApiClient } from "@/lib/online-room-api-client";
 
 const endpoint = "/api/wordwolf/rooms";
@@ -21,12 +21,16 @@ export async function fetchJoinableWordWolfRooms() {
   return roomApi.fetchJoinableRooms();
 }
 
-export async function persistWordWolfRoom(room: Room) {
+export async function createWordWolfRoom(room: Room) {
   return roomApi.post<{ room: Room }, { room: Room }>({ room });
 }
 
 export async function joinWordWolfRoom(code: string, passphrase: string) {
-  return roomApi.post<{ action: "join"; code: string; passphrase: string }, { room: Room }>({ action: "join", code, passphrase }, "ROOM_JOIN_FAILED");
+  return { room: await roomApi.patch(code, { type: "join-room", passphrase } satisfies WordWolfRoomAction) };
+}
+
+export function applyWordWolfRoomAction(code: string, action: WordWolfRoomAction) {
+  return roomApi.patch(code, action);
 }
 
 export async function removeWordWolfRoom(code: string) {
