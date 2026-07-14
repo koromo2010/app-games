@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type DragEvent, type PointerEvent } from "react";
-import { canStartHodoaiPointerDrag, moveHodoaiCard, sameHodoaiOrder, shiftHodoaiCard, usesCompactHodoaiCards } from "@/lib/hodoai-arrange";
+import { canStartHodoaiPointerDrag, hodoaiVerticalDisplayOrder, moveHodoaiCard, sameHodoaiOrder, shiftHodoaiCardOnVerticalScale, usesCompactHodoaiCards } from "@/lib/hodoai-arrange";
 import { defaultAvatarImage, fallbackAvatarColor } from "@/lib/player-session";
 import type { HodoaiCard, HodoaiClueRound, HodoaiPlayer } from "@/lib/hodoai-talk";
 
@@ -30,7 +30,7 @@ export function WordScaleArrangeBoard({
 }: WordScaleArrangeBoardProps) {
   const [draftOrder, setDraftOrder] = useState(order);
   const [draggingCardId, setDraggingCardId] = useState<string | null>(null);
-  const [selectedCardId, setSelectedCardId] = useState<string | null>(order[0] ?? null);
+  const [selectedCardId, setSelectedCardId] = useState<string | null>(order.at(-1) ?? null);
   const [hoveredCardId, setHoveredCardId] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
   const draftOrderRef = useRef(order);
@@ -40,7 +40,7 @@ export function WordScaleArrangeBoard({
     if (draggingCardIdRef.current) return;
     draftOrderRef.current = order;
     setDraftOrder(order);
-    setSelectedCardId((current) => current && order.includes(current) ? current : order[0] ?? null);
+    setSelectedCardId((current) => current && order.includes(current) ? current : order.at(-1) ?? null);
   }, [order]);
 
   const beginDrag = (cardId: string) => {
@@ -105,38 +105,38 @@ export function WordScaleArrangeBoard({
     if (targetId) moveDraft(cardId, targetId);
   };
 
-  const shiftCard = (cardId: string, direction: -1 | 1) => {
-    const next = shiftHodoaiCard(draftOrderRef.current, cardId, direction);
+  const shiftCard = (cardId: string, visualDirection: -1 | 1) => {
+    const next = shiftHodoaiCardOnVerticalScale(draftOrderRef.current, cardId, visualDirection);
     if (next === draftOrderRef.current) return;
     draftOrderRef.current = next;
     setDraftOrder(next);
     setSelectedCardId(cardId);
-    const position = next.indexOf(cardId) + 1;
-    void saveOrder(next, `カードを${position}番目へ移動しました。`);
+    void saveOrder(next, `カードを${visualDirection === -1 ? "上" : "下"}へ移動しました。`);
   };
 
   const compact = usesCompactHodoaiCards(draftOrder.length);
+  const visualOrder = hodoaiVerticalDisplayOrder(draftOrder);
   const cardById = new Map(cards.map((card) => [card.id, card]));
   const playerById = new Map(players.map((player) => [player.id, player]));
-  const previewCardId = hoveredCardId ?? selectedCardId ?? draftOrder[0] ?? null;
+  const previewCardId = hoveredCardId ?? selectedCardId ?? visualOrder[0] ?? null;
   const previewCard = previewCardId ? cardById.get(previewCardId) : null;
   const previewPlayer = previewCard ? playerById.get(previewCard.ownerId) : null;
 
   return (
     <div className="mt-5">
       <p className="text-sm font-bold text-slate-300">
-        {canArrange ? "カードを上下にドラッグして、小さいと思う順に並べてください。" : "並べ替え役の操作が全員の画面へ反映されます。"}
+        {canArrange ? "120を上、0を下として、カードを上下にドラッグしてください。" : "並べ替え役の操作が全員の画面へ反映されます。"}
       </p>
       {compact && <p className="mt-1 text-xs text-cyan-200/80">カードへマウスを重ねるか、フォーカス・タップすると詳細を確認できます。</p>}
 
       <div className={`mt-4 grid min-w-0 gap-4 ${compact ? "lg:grid-cols-[minmax(0,1fr)_18rem]" : ""}`}>
         <div className="relative min-w-0 pl-12">
-          <span className="absolute left-0 top-0 font-mono text-xs font-black text-sky-200">0</span>
-          <span className="absolute bottom-0 left-0 font-mono text-xs font-black text-fuchsia-200">120</span>
-          <div className="absolute bottom-5 left-6 top-5 w-2 rounded-full bg-gradient-to-b from-sky-400 via-amber-300 to-fuchsia-400 shadow-[0_0_22px_rgba(34,211,238,0.25)]" aria-hidden="true" />
+          <span className="absolute left-0 top-0 font-mono text-xs font-black text-fuchsia-200">120</span>
+          <span className="absolute bottom-0 left-0 font-mono text-xs font-black text-sky-200">0</span>
+          <div className="absolute bottom-5 left-6 top-5 w-2 rounded-full bg-gradient-to-b from-fuchsia-400 via-amber-300 to-sky-400 shadow-[0_0_22px_rgba(34,211,238,0.25)]" aria-hidden="true" />
 
-          <ol className="space-y-2" aria-label="0から120へ小さい順の候補カード">
-            {draftOrder.map((id, index) => {
+          <ol className="space-y-2" aria-label="120から0へ大きい順の候補カード">
+            {visualOrder.map((id, visualIndex) => {
               const card = cardById.get(id);
               const player = card ? playerById.get(card.ownerId) : null;
               if (!card || !player) return null;
@@ -169,7 +169,7 @@ export function WordScaleArrangeBoard({
                   }`}
                 >
                   <div className={`grid min-w-0 items-center gap-2 ${compact ? "grid-cols-[2rem_minmax(0,1fr)_auto] p-2" : "grid-cols-[2rem_minmax(0,1fr)_auto] p-3"}`}>
-                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-cyan-300 font-black text-slate-950">{index + 1}</span>
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-cyan-300 font-black text-slate-950">{draftOrder.length - visualIndex}</span>
 
                     <button
                       type="button"
@@ -209,7 +209,7 @@ export function WordScaleArrangeBoard({
 
                     {canArrange && (
                       <div className="flex items-center gap-1">
-                        <button type="button" disabled={disabled || index === 0} onClick={() => shiftCard(id, -1)} className="rounded-lg border border-white/10 px-2 py-1.5 text-sm font-black text-slate-200 disabled:opacity-25" aria-label={`${player.name}のカード${card.cardNumber}を上へ`}>↑</button>
+                        <button type="button" disabled={disabled || visualIndex === 0} onClick={() => shiftCard(id, -1)} className="rounded-lg border border-white/10 px-2 py-1.5 text-sm font-black text-slate-200 disabled:opacity-25" aria-label={`${player.name}のカード${card.cardNumber}を上へ`}>↑</button>
                         <button
                           type="button"
                           disabled={disabled}
@@ -220,7 +220,7 @@ export function WordScaleArrangeBoard({
                           className="touch-none cursor-grab rounded-lg border border-white/15 bg-white/10 px-2 py-1.5 text-sm font-black text-slate-200 active:cursor-grabbing disabled:opacity-40"
                           aria-label={`${player.name}のカード${card.cardNumber}をドラッグして移動`}
                         >⠿</button>
-                        <button type="button" disabled={disabled || index === draftOrder.length - 1} onClick={() => shiftCard(id, 1)} className="rounded-lg border border-white/10 px-2 py-1.5 text-sm font-black text-slate-200 disabled:opacity-25" aria-label={`${player.name}のカード${card.cardNumber}を下へ`}>↓</button>
+                        <button type="button" disabled={disabled || visualIndex === visualOrder.length - 1} onClick={() => shiftCard(id, 1)} className="rounded-lg border border-white/10 px-2 py-1.5 text-sm font-black text-slate-200 disabled:opacity-25" aria-label={`${player.name}のカード${card.cardNumber}を下へ`}>↓</button>
                       </div>
                     )}
                   </div>
