@@ -6,6 +6,13 @@ import type { TahoiyaRoom } from "@/lib/tahoiya-types";
 import type { WordWolfRoom } from "@/lib/wordwolf-room-store";
 import { calculateGameRatingChanges, initialGameRating } from "@/lib/game-rating";
 import { emitObservabilityEvent, observabilityErrorCode, observabilityRef, type ObservabilityFields } from "@/lib/observability";
+import { isPostgresConfigured } from "@/lib/postgres-store";
+import {
+  loadPostgresPlayerResults,
+  loadPostgresRatingStates,
+  savePostgresPlayerResults,
+} from "@/lib/player-stats-postgres-store";
+import { mergePlayerGameResults } from "@/lib/player-stats-history";
 
 export type PlayerStatsGameType = "wordwolf" | "tahoiya" | "northern-branch" | "hodoai" | "kotoba-senpuku";
 
@@ -48,7 +55,15 @@ async function recordGameRatings(gameType: PlayerStatsGameType, eventId: string,
     redisCommand<Array<string | null>>(["HMGET", playerRatingKey(gameType), ...ids]),
     redisCommand<Array<string | null>>(["HMGET", playerRatingGamesKey(gameType), ...ids]),
   ]);
-  const realPlayers = outcomes.map((item, index) => ({ ...item, rating: Number(stored[index]) || initialGameRating, gamesPlayed: Number(storedGames[index]) || 0 }));
+  const needsPostgresFallback = isPostgresConfigured() && stored.some((value) => !Number(value));
+  const postgresStates = needsPostgresFallback
+    ? await loadPostgresRatingStates(gameType, ids).catch(() => new Map())
+    : new Map();
+  const realPlayers = outcomes.map((item, index) => ({
+    ...item,
+    rating: Number(stored[index]) || postgresStates.get(item.playerId)?.rating || initialGameRating,
+    gamesPlayed: Number(storedGames[index]) || postgresStates.get(item.playerId)?.gamesPlayed || 0,
+  }));
   const hasWinner = realPlayers.some((item) => item.won); const hasLoser = realPlayers.some((item) => !item.won);
   const calculationPlayers = cooperative && (!hasWinner || !hasLoser)
     ? [...realPlayers, { playerId: "__system__", rating: initialGameRating, won: !hasWinner }]
@@ -56,9 +71,12 @@ async function recordGameRatings(gameType: PlayerStatsGameType, eventId: string,
   const changes = calculateGameRatingChanges(calculationPlayers).filter((item) => item.playerId !== "__system__");
   const applied = await redisCommand<number[]>([
     "EVAL",
-    "if redis.call('EXISTS',KEYS[1])==1 then return {} end; local out={}; for i=3,#ARGV,2 do if redis.call('HEXISTS',KEYS[2],ARGV[i])==0 then redis.call('HSET',KEYS[2],ARGV[i],ARGV[2]) end; table.insert(out,redis.call('HINCRBY',KEYS[2],ARGV[i],ARGV[i+1])); redis.call('HINCRBY',KEYS[3],ARGV[i],1); end; redis.call('SET',KEYS[1],'1'); return out",
-    "3", ratingEventKey(eventId), playerRatingKey(gameType), playerRatingGamesKey(gameType), eventId, String(initialGameRating),
-    ...changes.flatMap((change) => [change.playerId, String(change.change)]),
+    "if redis.call('EXISTS',KEYS[1])==1 then return {} end; local out={}; for i=2,#ARGV,4 do if redis.call('HEXISTS',KEYS[2],ARGV[i])==0 then redis.call('HSET',KEYS[2],ARGV[i],ARGV[i+1]) end; if redis.call('HEXISTS',KEYS[3],ARGV[i])==0 then redis.call('HSET',KEYS[3],ARGV[i],ARGV[i+2]) end; table.insert(out,redis.call('HINCRBY',KEYS[2],ARGV[i],ARGV[i+3])); redis.call('HINCRBY',KEYS[3],ARGV[i],1); end; redis.call('SET',KEYS[1],'1'); return out",
+    "3", ratingEventKey(eventId), playerRatingKey(gameType), playerRatingGamesKey(gameType), eventId,
+    ...changes.flatMap((change) => {
+      const player = realPlayers.find((item) => item.playerId === change.playerId)!;
+      return [change.playerId, String(player.rating), String(player.gamesPlayed), String(change.change)];
+    }),
   ]);
   const finalRatings = applied.length === changes.length ? applied : await redisCommand<Array<string | null>>(["HMGET", playerRatingKey(gameType), ...ids]).then((values) => values.map((value) => Number(value) || initialGameRating));
   return new Map(changes.map((change, index) => [change.playerId, { before: finalRatings[index] - change.change, after: finalRatings[index], change: change.change } satisfies RecordedRating]));
@@ -96,6 +114,10 @@ async function recordPlayerResults(results: PlayerGameResult[]) {
       "2", resultEventKey(result.id), playerResultsKey(result.playerId), String(result.finishedAt), JSON.stringify(result),
     ]);
     recorded += created === 1 ? 1 : 0;
+  }
+  if (isPostgresConfigured()) {
+    const postgresRecorded = await savePostgresPlayerResults(results);
+    return Math.max(recorded, postgresRecorded);
   }
   return recorded;
 }
@@ -204,12 +226,30 @@ export async function recordKotobaSenpukuGameResults(room: KotobaSenpukuRoom) {
 
 export async function getPlayerStats(playerId: string, gameFilter: PlayerStatsGameFilter = "all"): Promise<PlayerStatsResponse> {
   const gameTypes: PlayerStatsGameType[] = ["wordwolf", "tahoiya", "northern-branch", "hodoai", "kotoba-senpuku"];
-  const [rawResults, ...storedRatings] = await Promise.all([
-    redisCommand<string[]>(["ZREVRANGE", playerResultsKey(playerId), 0, 199]),
-    ...gameTypes.map((gameType) => redisCommand<string | null>(["HGET", playerRatingKey(gameType), playerId])),
+  const postgresEnabled = isPostgresConfigured();
+  const [postgresResults, rawResults, ...storedRatings] = await Promise.all([
+    postgresEnabled ? loadPostgresPlayerResults(playerId, 200).catch(() => []) : Promise.resolve([]),
+    redisCommand<string[]>(["ZREVRANGE", playerResultsKey(playerId), 0, 199]).catch((error) => {
+      if (postgresEnabled) return [];
+      throw error;
+    }),
+    ...gameTypes.map((gameType) => redisCommand<string | null>(["HGET", playerRatingKey(gameType), playerId]).catch((error) => {
+      if (postgresEnabled) return null;
+      throw error;
+    })),
   ]);
-  const results = rawResults.map(parseResult).filter((result): result is PlayerGameResult => Boolean(result));
+  const redisResults = rawResults.map(parseResult).filter((result): result is PlayerGameResult => Boolean(result));
+  const results = mergePlayerGameResults(postgresResults, redisResults);
+  if (postgresEnabled) {
+    const postgresIds = new Set(postgresResults.map((result) => result.id));
+    const legacyResults = redisResults.filter((result) => !postgresIds.has(result.id));
+    if (legacyResults.length > 0) await savePostgresPlayerResults(legacyResults).catch(() => undefined);
+  }
   const filteredResults = gameFilter === "all" ? results : results.filter((result) => result.gameType === gameFilter);
   const todayStart = startOfToday(); const monthStart = startOfMonth();
-  return { today: summarize(filteredResults.filter((result) => result.finishedAt >= todayStart)), month: summarize(filteredResults.filter((result) => result.finishedAt >= monthStart)), total: filteredResults.length > 0 ? summarize(filteredResults) : emptySummary(), recent: filteredResults.slice(0, 10), ratings: Object.fromEntries(gameTypes.map((gameType, index) => [gameType, Number(storedRatings[index]) || initialGameRating])) };
+  const ratings = Object.fromEntries(gameTypes.map((gameType, index) => {
+    const persisted = results.find((result) => result.gameType === gameType && typeof result.ratingAfter === "number")?.ratingAfter;
+    return [gameType, persisted || Number(storedRatings[index]) || initialGameRating];
+  }));
+  return { today: summarize(filteredResults.filter((result) => result.finishedAt >= todayStart)), month: summarize(filteredResults.filter((result) => result.finishedAt >= monthStart)), total: filteredResults.length > 0 ? summarize(filteredResults) : emptySummary(), recent: filteredResults.slice(0, 10), ratings };
 }

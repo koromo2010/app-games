@@ -69,6 +69,8 @@
 
 プレイヤーアカウントの永続正本はNeon Postgresの `player_accounts`。テーブルは初回利用時に冪等作成する。移行中はRedisを読み取りフォールバックおよびセッション保存先として残し、Redisにだけ存在する既存アカウントはログインまたはメール検索時にPostgresへ自動コピーする。新規登録・メール変更・パスワード再設定はPostgresを先に更新し、Redisへ互換ミラーする。進行中の部屋・セッション・リセットトークン・レート制限は引き続きRedisを使う。
 
+戦績の永続正本はNeon Postgresの `player_game_results`。結果JSONと検索用のプレイヤー・ゲーム種別・終了時刻を保存し、結果IDの主キーで重複記録を防ぐ。読み取り時はPostgresを優先してRedis履歴をIDで統合し、Redisにだけ残る既存戦績をPostgresへ自動コピーする。レーティングは各結果の `ratingAfter` に永続化し、Redisの現在値が失われた場合はPostgresの最新結果と試合数から再開する。
+
 ### メール送信の初期設定
 
 パスワード復旧メールはResendから送る。Resendで `game-fields.com` を追加し、案内されたSPF/DKIM等のDNSレコードを設定してドメイン認証を完了する。その後、Vercelへ `RESEND_API_KEY` を登録する。送信元を変える場合だけ `EMAIL_FROM` を設定する。

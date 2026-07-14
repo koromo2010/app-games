@@ -1,0 +1,42 @@
+import { getPostgresClient } from "@/lib/postgres-store";
+
+let schemaPromise: Promise<void> | null = null;
+
+export async function ensurePostgresSchema() {
+  if (!schemaPromise) {
+    schemaPromise = (async () => {
+      const sql = getPostgresClient();
+      await sql`
+        CREATE TABLE IF NOT EXISTS player_accounts (
+          login_name TEXT PRIMARY KEY,
+          player_id TEXT NOT NULL UNIQUE,
+          display_name TEXT NOT NULL,
+          password_hash TEXT NOT NULL,
+          password_salt TEXT NOT NULL,
+          email TEXT UNIQUE,
+          avatar_color TEXT NOT NULL,
+          avatar_image TEXT,
+          created_at BIGINT NOT NULL,
+          updated_at BIGINT NOT NULL
+        )
+      `;
+      await sql`CREATE INDEX IF NOT EXISTS player_accounts_updated_at_idx ON player_accounts (updated_at DESC)`;
+      await sql`
+        CREATE TABLE IF NOT EXISTS player_game_results (
+          id TEXT PRIMARY KEY,
+          player_id TEXT NOT NULL,
+          game_type TEXT NOT NULL,
+          finished_at BIGINT NOT NULL,
+          result JSONB NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `;
+      await sql`CREATE INDEX IF NOT EXISTS player_game_results_player_finished_idx ON player_game_results (player_id, finished_at DESC)`;
+      await sql`CREATE INDEX IF NOT EXISTS player_game_results_player_game_finished_idx ON player_game_results (player_id, game_type, finished_at DESC)`;
+    })().catch((error) => {
+      schemaPromise = null;
+      throw error;
+    });
+  }
+  return schemaPromise;
+}

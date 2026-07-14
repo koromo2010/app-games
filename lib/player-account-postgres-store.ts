@@ -1,4 +1,5 @@
 import { getPostgresClient } from "@/lib/postgres-store";
+import { ensurePostgresSchema } from "@/lib/postgres-schema";
 import type { PlayerAccount } from "@/lib/player-account-store";
 
 type PlayerAccountRow = {
@@ -13,8 +14,6 @@ type PlayerAccountRow = {
   created_at: string | number;
   updated_at: string | number;
 };
-
-let schemaPromise: Promise<void> | null = null;
 
 function rowToAccount(row: PlayerAccountRow): PlayerAccount {
   return {
@@ -33,30 +32,7 @@ function rowToAccount(row: PlayerAccountRow): PlayerAccount {
 }
 
 export async function ensurePlayerAccountSchema() {
-  if (!schemaPromise) {
-    schemaPromise = (async () => {
-      const sql = getPostgresClient();
-      await sql`
-        CREATE TABLE IF NOT EXISTS player_accounts (
-          login_name TEXT PRIMARY KEY,
-          player_id TEXT NOT NULL UNIQUE,
-          display_name TEXT NOT NULL,
-          password_hash TEXT NOT NULL,
-          password_salt TEXT NOT NULL,
-          email TEXT UNIQUE,
-          avatar_color TEXT NOT NULL,
-          avatar_image TEXT,
-          created_at BIGINT NOT NULL,
-          updated_at BIGINT NOT NULL
-        )
-      `;
-      await sql`CREATE INDEX IF NOT EXISTS player_accounts_updated_at_idx ON player_accounts (updated_at DESC)`;
-    })().catch((error) => {
-      schemaPromise = null;
-      throw error;
-    });
-  }
-  return schemaPromise;
+  return ensurePostgresSchema();
 }
 
 export async function loadPostgresPlayerAccountByLogin(loginName: string) {
