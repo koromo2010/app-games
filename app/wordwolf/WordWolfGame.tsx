@@ -1484,7 +1484,7 @@ export function WordWolfGame() {
                       デフォルト画像に戻す
                     </button>
                   )}
-                  <Link href="/users/me" target="_blank" rel="noreferrer" className="mt-3 flex w-full items-center justify-center rounded-md bg-cyan-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-cyan-500">
+                  <Link href="/users/me?popup=1" target="_blank" rel="noreferrer" className="mt-3 flex w-full items-center justify-center rounded-md bg-cyan-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-cyan-500">
                     マイページを新しいタブで開く
                   </Link>
                 </div>
