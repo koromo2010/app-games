@@ -339,9 +339,15 @@ export function HodoaiTalkGame() {
 
   if (!room) {
     return (
-      <main className="min-h-screen bg-[radial-gradient(circle_at_top,#164e63_0%,#1e293b_42%,#020617_82%)] px-4 py-8 text-white">
+      <main className={`min-h-screen bg-[radial-gradient(circle_at_top,#164e63_0%,#1e293b_42%,#020617_82%)] px-4 pb-8 text-white ${gameTopBannerOffsetClass}`}>
+        <GameTopBanner eyebrow="Cooperative scale reading" title="ことばで数ならべ">
+          <Link href="/games" className={gameTopBannerActionClass}>ゲームロビーへ戻る</Link>
+          <GameTopMenu>
+            <button type="button" data-menu-close="true" onClick={() => setRulesOpen(true)} className={gameTopMenuItemClass}>ルール</button>
+          </GameTopMenu>
+          <GamePlayerMenu id={session.id} name={session.name} avatarColor={session.avatarColor} avatarImage={session.avatarImage} hasRecoveryEmail={session.hasRecoveryEmail} />
+        </GameTopBanner>
         <div className="mx-auto max-w-4xl">
-          <div className="flex items-center justify-between gap-3"><Link href="/games" className="text-sm font-bold text-cyan-200">← ゲームロビー</Link><div className="flex items-center gap-2"><button type="button" onClick={() => setRulesOpen(true)} className="rounded-lg border border-white/20 px-3 py-2 text-sm font-bold">ルール</button><span className="text-sm font-bold">{session.name}</span></div></div>
           <section className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-slate-950/80 shadow-2xl">
             <div className="bg-gradient-to-r from-sky-400 via-amber-300 to-fuchsia-400 px-6 py-8 text-slate-950"><p className="text-xs font-black uppercase tracking-[0.28em]">Online room game</p><h1 className="mt-2 text-4xl font-black sm:text-6xl">ことばで数ならべ</h1><p className="mt-3 font-bold">各自の端末で秘密の数字を言葉に変え、みんなで小さい順に並べる協力ゲーム。</p></div>
             <div className="grid gap-6 p-6 md:grid-cols-2">
