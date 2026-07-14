@@ -59,7 +59,7 @@ export async function GET(request: Request) {
       const room = await loadKotobaSenpukuPlayerActiveRoom(authenticatedPlayerId);
       return conditionalJsonResponse(request, { room: room ? sanitizeKotobaSenpukuRoom(room, authenticatedPlayerId) : null });
     }
-    return conditionalJsonResponse(request, { rooms: await listJoinableKotobaSenpukuRooms() });
+    return conditionalJsonResponse(request, await listJoinableKotobaSenpukuRooms(url.searchParams.get("cursor")));
   } catch (error) {
     const response = errorResponse(error);
     if (response.status >= 500) telemetry.responseError("room.read", error, response.status, { roomRef: telemetry.roomRef(code) });

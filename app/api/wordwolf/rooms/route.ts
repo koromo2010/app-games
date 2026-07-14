@@ -43,8 +43,8 @@ export async function GET(request: Request) {
       return conditionalJsonResponse(request, { room: room ? sanitizeWordWolfRoom(room, player.id) : null });
     }
 
-    const rooms = await listStoredJoinableWordWolfRooms();
-    return conditionalJsonResponse(request, { rooms });
+    const page = await listStoredJoinableWordWolfRooms(url.searchParams.get("cursor"));
+    return conditionalJsonResponse(request, page);
   } catch (error) {
     if (error instanceof Error && error.message === "PLAYER_AUTH_REQUIRED") return Response.json({ error: "Login required" }, { status: 401 });
     if (isPlayerAuthConfigurationError(error)) {

@@ -9,6 +9,7 @@ import { claimPlayerActiveRoom, releasePlayerActiveRoom, type ActiveRoomClaim } 
 import { normalizeOnlineRoomCode } from "@/lib/online-room-input";
 import { isAvatarColor, isAvatarImage } from "@/lib/player-session";
 import { appendGameDebugLog, normalizeGameDebugLog } from "@/lib/game-debug-log";
+import { loadOnlineRoomValues, scanOnlineRoomCodes } from "@/lib/online-room-list";
 import {
   clueHasNumber,
   countHodoaiInversions,
@@ -405,6 +406,15 @@ export async function loadStoredHodoaiRoom(code: string) {
   }
 }
 
+function parseStoredHodoaiRoom(raw: string | null) {
+  if (!raw) return null;
+  try {
+    return normalizeRoom(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
 export async function loadAndReconcileHodoaiRoom(code: string) {
   const room = await loadStoredHodoaiRoom(code);
   if (!room) return null;
@@ -572,12 +582,25 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
   return room;
 }
 
-export async function listJoinableHodoaiRooms() {
-  const codes = await redisCommand<string[]>(["SMEMBERS", roomIndexKey]);
-  const rooms = await Promise.all(codes.map((code) => loadStoredHodoaiRoom(code)));
-  const missingCodes = codes.filter((_, index) => !rooms[index]);
+export async function listJoinableHodoaiRooms(cursor?: unknown) {
+  const page = await scanOnlineRoomCodes(roomIndexKey, cursor);
+  const values = await loadOnlineRoomValues(page.codes, roomKey);
+  const parsedRooms = values.map(parseStoredHodoaiRoom);
+  const expiredCodes = page.codes.filter((_, index) => parsedRooms[index] && isMultiplayerRoomExpired(parsedRooms[index]!.updatedAt));
+  const missingCodes = page.codes.filter((_, index) => !parsedRooms[index]);
+  if (expiredCodes.length > 0) await Promise.all(expiredCodes.map(loadStoredHodoaiRoom));
   if (missingCodes.length > 0) await redisCommand<number>(["SREM", roomIndexKey, ...missingCodes]);
-  return rooms.filter((room): room is HodoaiRoom => Boolean(room && room.phase === "lobby")).map(makeChoice).sort((a, b) => b.updatedAt - a.updatedAt);
+  const rooms = parsedRooms
+    .filter((room): room is HodoaiRoom => Boolean(
+      room
+      && !isMultiplayerRoomExpired(room.updatedAt)
+      && room.phase === "lobby"
+      && room.players.length < hodoaiTechnicalPlayerLimit
+      && (room.players.length + 1) * room.cardsPerPlayer <= 121
+    ))
+    .map(makeChoice)
+    .sort((left, right) => right.updatedAt - left.updatedAt);
+  return { rooms, nextCursor: page.nextCursor };
 }
 
 export async function deleteStoredHodoaiRoom(code: string, actorId: string) {

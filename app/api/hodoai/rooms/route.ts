@@ -57,7 +57,7 @@ export async function GET(request: Request) {
       const room = await loadHodoaiPlayerActiveRoom(authenticatedPlayerId);
       return conditionalJsonResponse(request, { room: room ? sanitizeHodoaiRoom(room, authenticatedPlayerId) : null });
     }
-    return conditionalJsonResponse(request, { rooms: await listJoinableHodoaiRooms() });
+    return conditionalJsonResponse(request, await listJoinableHodoaiRooms(url.searchParams.get("cursor")));
   } catch (error) {
     const response = errorResponse(error);
     if (response.status >= 500) telemetry.responseError("room.read", error, response.status, { roomRef: telemetry.roomRef(code) });

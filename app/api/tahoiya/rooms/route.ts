@@ -57,8 +57,8 @@ export async function GET(request: Request) {
       return conditionalJsonResponse(request, { room: room ? sanitizeTahoiyaRoom(room, player.id) : null });
     }
 
-    const rooms = await listStoredJoinableTahoiyaRooms();
-    return conditionalJsonResponse(request, { rooms });
+    const page = await listStoredJoinableTahoiyaRooms(url.searchParams.get("cursor"));
+    return conditionalJsonResponse(request, page);
   } catch (error) {
     const authError = authErrorResponse(error);
     if (authError) {

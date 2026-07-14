@@ -29,6 +29,7 @@ import { commonGameTimeoutGraceMs } from "@/lib/game-timer/policy";
 import { canDissolveOnlineRoom, canMoveFromOnlineRoom } from "@/lib/room-dissolve-policy";
 import { claimPlayerActiveRoom, releasePlayerActiveRoom, type ActiveRoomClaim } from "@/lib/player-active-room";
 import { onlineRoomPlayerLimits } from "@/lib/online-room-policy";
+import { loadOnlineRoomValues, scanOnlineRoomCodes } from "@/lib/online-room-list";
 import { normalizeOnlineRoomCode } from "@/lib/online-room-input";
 import { isAvatarColor, isAvatarImage } from "@/lib/player-session";
 
@@ -430,6 +431,15 @@ export async function loadStoredKotobaSenpukuRoom(code: string) {
   }
 }
 
+function parseStoredKotobaSenpukuRoom(raw: string | null) {
+  if (!raw) return null;
+  try {
+    return normalizeRoom(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
 export async function loadAndReconcileKotobaSenpukuRoom(code: string) {
   const room = await loadStoredKotobaSenpukuRoom(code);
   if (!room) return null;
@@ -589,12 +599,19 @@ export async function applyStoredKotobaSenpukuAction(code: string, action: Kotob
   return room;
 }
 
-export async function listJoinableKotobaSenpukuRooms() {
-  const codes = await redisCommand<string[]>(["SMEMBERS", roomIndexKey]);
-  const rooms = await Promise.all(codes.map((code) => loadStoredKotobaSenpukuRoom(code)));
-  const missingCodes = codes.filter((_, index) => !rooms[index]);
+export async function listJoinableKotobaSenpukuRooms(cursor?: unknown) {
+  const page = await scanOnlineRoomCodes(roomIndexKey, cursor);
+  const values = await loadOnlineRoomValues(page.codes, roomKey);
+  const parsedRooms = values.map(parseStoredKotobaSenpukuRoom);
+  const expiredCodes = page.codes.filter((_, index) => parsedRooms[index] && isMultiplayerRoomExpired(parsedRooms[index]!.updatedAt));
+  const missingCodes = page.codes.filter((_, index) => !parsedRooms[index]);
+  if (expiredCodes.length > 0) await Promise.all(expiredCodes.map(loadStoredKotobaSenpukuRoom));
   if (missingCodes.length > 0) await redisCommand<number>(["SREM", roomIndexKey, ...missingCodes]);
-  return rooms.filter((room): room is KotobaSenpukuRoom => Boolean(room && room.phase === "lobby" && room.players.length < onlineRoomPlayerLimits.kotobaSenpuku)).map(makeChoice).sort((left, right) => right.updatedAt - left.updatedAt);
+  const rooms = parsedRooms
+    .filter((room): room is KotobaSenpukuRoom => Boolean(room && !isMultiplayerRoomExpired(room.updatedAt) && room.phase === "lobby" && room.players.length < onlineRoomPlayerLimits.kotobaSenpuku))
+    .map(makeChoice)
+    .sort((left, right) => right.updatedAt - left.updatedAt);
+  return { rooms, nextCursor: page.nextCursor };
 }
 
 export async function deleteStoredKotobaSenpukuRoom(code: string, actorId: string) {

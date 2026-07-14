@@ -15,6 +15,7 @@ import { claimPlayerActiveRoom, releasePlayerActiveRoom } from "@/lib/player-act
 import { normalizeOnlineRoomCode, onlineRoomPassphraseMaximumLength } from "@/lib/online-room-input";
 import { isAvatarColor, isAvatarImage } from "@/lib/player-session";
 import { onlineRoomPlayerLimits } from "@/lib/online-room-policy";
+import { loadOnlineRoomValues, scanOnlineRoomCodes } from "@/lib/online-room-list";
 
 export type WordWolfRoom = Room;
 export type WordWolfRoomChoice = RoomChoice;
@@ -276,6 +277,15 @@ export async function loadStoredWordWolfRoom(code: string) {
   }
 }
 
+function parseStoredWordWolfRoom(raw: string | null) {
+  if (!raw) return null;
+  try {
+    return normalizeRoom(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
 async function deletePlayerActiveRoom(playerId: string, roomCode: string) {
   const savedCode = await redisCommand<string | null>(["GET", playerActiveRoomKey(playerId)]);
   if (savedCode?.trim().toUpperCase() === roomCode.trim().toUpperCase()) {
@@ -416,12 +426,20 @@ export async function listStoredWordWolfRooms() {
   return rooms.filter((room): room is WordWolfRoom => Boolean(room));
 }
 
-export async function listStoredJoinableWordWolfRooms() {
-  const rooms = await listStoredWordWolfRooms();
-  return rooms
+export async function listStoredJoinableWordWolfRooms(cursor?: unknown) {
+  const page = await scanOnlineRoomCodes(roomIndexKey, cursor);
+  const values = await loadOnlineRoomValues(page.codes, roomKey);
+  const parsedRooms = values.map(parseStoredWordWolfRoom);
+  const expiredCodes = page.codes.filter((_, index) => parsedRooms[index] && isMultiplayerRoomExpired(parsedRooms[index]!.updatedAt));
+  const missingCodes = page.codes.filter((_, index) => !parsedRooms[index]);
+  if (expiredCodes.length > 0) await Promise.all(expiredCodes.map(loadStoredWordWolfRoom));
+  if (missingCodes.length > 0) await redisCommand<number>(["SREM", roomIndexKey, ...missingCodes]);
+  const rooms = parsedRooms
+    .filter((room): room is WordWolfRoom => Boolean(room && !isMultiplayerRoomExpired(room.updatedAt)))
     .filter((room) => room.phase === "lobby" && room.players.length < onlineRoomPlayerLimits.wordwolf)
     .map(makeChoice)
     .sort((left, right) => right.updatedAt - left.updatedAt);
+  return { rooms, nextCursor: page.nextCursor };
 }
 
 export async function deleteStoredHostedWordWolfRooms(hostId: string) {

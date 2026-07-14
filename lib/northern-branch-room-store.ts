@@ -9,6 +9,7 @@ import { claimPlayerActiveRoom, releasePlayerActiveRoom, type ActiveRoomClaim } 
 import { normalizeOnlineRoomCode } from "@/lib/online-room-input";
 import { isAvatarColor, isAvatarImage } from "@/lib/player-session";
 import { onlineRoomPlayerLimits } from "@/lib/online-room-policy";
+import { loadOnlineRoomValues, scanOnlineRoomCodes } from "@/lib/online-room-list";
 import type {
   NorthernGameState,
   NorthernGameAction,
@@ -186,6 +187,15 @@ export async function loadStoredNorthernRoom(code: string) {
   }
 }
 
+function parseStoredNorthernRoom(raw: string | null) {
+  if (!raw) return null;
+  try {
+    return normalizeRoom(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
 export async function loadNorthernPlayerActiveRoom(playerId: string) {
   const normalizedId = playerId.trim();
   if (!normalizedId) return null;
@@ -330,15 +340,19 @@ export async function applyStoredNorthernAction(code: string, action: NorthernRo
   return room;
 }
 
-export async function listJoinableNorthernRooms() {
-  const codes = await redisCommand<string[]>(["SMEMBERS", roomIndexKey]);
-  const rooms = await Promise.all(codes.map((code) => loadStoredNorthernRoom(code)));
-  const missingCodes = codes.filter((_, index) => !rooms[index]);
+export async function listJoinableNorthernRooms(cursor?: unknown) {
+  const page = await scanOnlineRoomCodes(roomIndexKey, cursor);
+  const values = await loadOnlineRoomValues(page.codes, roomKey);
+  const parsedRooms = values.map(parseStoredNorthernRoom);
+  const expiredCodes = page.codes.filter((_, index) => parsedRooms[index] && isMultiplayerRoomExpired(parsedRooms[index]!.updatedAt));
+  const missingCodes = page.codes.filter((_, index) => !parsedRooms[index]);
+  if (expiredCodes.length > 0) await Promise.all(expiredCodes.map(loadStoredNorthernRoom));
   if (missingCodes.length > 0) await redisCommand<number>(["SREM", roomIndexKey, ...missingCodes]);
-  return rooms
-    .filter((room): room is NorthernRoom => Boolean(room && room.phase === "lobby" && room.players.length < maximumPlayers))
+  const rooms = parsedRooms
+    .filter((room): room is NorthernRoom => Boolean(room && !isMultiplayerRoomExpired(room.updatedAt) && room.phase === "lobby" && room.players.length < maximumPlayers))
     .map(makeChoice)
     .sort((left, right) => right.updatedAt - left.updatedAt);
+  return { rooms, nextCursor: page.nextCursor };
 }
 
 export async function deleteStoredNorthernRoom(code: string, actorId: string) {

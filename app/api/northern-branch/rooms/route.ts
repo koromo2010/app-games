@@ -57,7 +57,7 @@ export async function GET(request: Request) {
       const room = await loadNorthernPlayerActiveRoom(authenticatedPlayerId);
       return conditionalJsonResponse(request, { room: room ? sanitizeNorthernRoom(room, authenticatedPlayerId) : null });
     }
-    return conditionalJsonResponse(request, { rooms: await listJoinableNorthernRooms() });
+    return conditionalJsonResponse(request, await listJoinableNorthernRooms(url.searchParams.get("cursor")));
   } catch (error) {
     const response = errorResponse(error);
     if (response.status >= 500) telemetry.responseError("room.read", error, response.status, { roomRef: telemetry.roomRef(code) });

@@ -12,6 +12,7 @@ import { claimPlayerActiveRoom, releasePlayerActiveRoom } from "@/lib/player-act
 import { normalizeOnlineRoomCode, onlineRoomPassphraseMaximumLength } from "@/lib/online-room-input";
 import { isAvatarColor, isAvatarImage } from "@/lib/player-session";
 import { onlineRoomPlayerLimits } from "@/lib/online-room-policy";
+import { loadOnlineRoomValues, scanOnlineRoomCodes } from "@/lib/online-room-list";
 
 const roomKeyPrefix = "tahoiya:room:";
 const roomIndexKey = "tahoiya:rooms";
@@ -343,6 +344,15 @@ export async function loadStoredTahoiyaRoom(code: string) {
   }
 }
 
+function parseStoredTahoiyaRoom(raw: string | null) {
+  if (!raw) return null;
+  try {
+    return normalizeRoom(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
 export async function loadAndReconcileStoredTahoiyaRoom(code: string) {
   const room = await loadStoredTahoiyaRoom(code);
   if (!room) return null;
@@ -594,12 +604,20 @@ export async function listStoredTahoiyaRooms() {
   return rooms.filter((room): room is TahoiyaRoom => Boolean(room));
 }
 
-export async function listStoredJoinableTahoiyaRooms() {
-  const rooms = await listStoredTahoiyaRooms();
-  return rooms
+export async function listStoredJoinableTahoiyaRooms(cursor?: unknown) {
+  const page = await scanOnlineRoomCodes(roomIndexKey, cursor);
+  const values = await loadOnlineRoomValues(page.codes, roomKey);
+  const parsedRooms = values.map(parseStoredTahoiyaRoom);
+  const expiredCodes = page.codes.filter((_, index) => parsedRooms[index] && isMultiplayerRoomExpired(parsedRooms[index]!.updatedAt));
+  const missingCodes = page.codes.filter((_, index) => !parsedRooms[index]);
+  if (expiredCodes.length > 0) await Promise.all(expiredCodes.map(loadStoredTahoiyaRoom));
+  if (missingCodes.length > 0) await redisCommand<number>(["SREM", roomIndexKey, ...missingCodes]);
+  const rooms = parsedRooms
+    .filter((room): room is TahoiyaRoom => Boolean(room && !isMultiplayerRoomExpired(room.updatedAt)))
     .filter((room) => room.phase === "lobby" && room.players.length < onlineRoomPlayerLimits.tahoiya)
     .map(makeChoice)
     .sort((left, right) => right.updatedAt - left.updatedAt);
+  return { rooms, nextCursor: page.nextCursor };
 }
 
 export async function deleteStoredHostedTahoiyaRooms(authenticatedHostId: string) {

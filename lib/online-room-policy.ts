@@ -1,5 +1,6 @@
 export const onlineRoomCodePattern = /^[A-Z0-9]{4}$/;
 export const onlineRoomPassphraseMaximumLength = 40;
+export const onlineRoomListPageSize = 24;
 export const onlineRoomPlayerLimits = {
   wordwolf: 20,
   tahoiya: 8,
