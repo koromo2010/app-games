@@ -20,7 +20,7 @@
 | バグ調査・全体監査 | `DEVELOPMENT_HANDOFF.md` の共通ルールと現行仕様 | `config/game-registry.json`、対象ゲームの画面・API route・room store、`package.json` |
 | ワードウルフのルール・進行 | `DEVELOPMENT_HANDOFF.md` 6章、`game-concept.md` 2章 | `lib/wordwolf-command-domain.ts`、`lib/wordwolf-room-store.ts`、`app/wordwolf/game-flow.ts` |
 | たほい屋のルール・進行 | `DEVELOPMENT_HANDOFF.md` 7章 | `lib/tahoiya-room-store.ts`、`lib/tahoiya-types.ts`、`app/tahoiya/TahoiyaGame.tsx` |
-| ことばで数ならべ | `KOTOBA_DE_KAZU_NARABE.md` | `lib/hodoai-room-store.ts`、`app/api/hodoai/rooms/route.ts` |
+| ワードスケール | `WORD_SCALE.md` | `lib/hodoai-room-store.ts`、`app/api/hodoai/rooms/route.ts` |
 | ことばソナー | `KOTOBA_SENPUKU.md` | `lib/kotoba-senpuku-room-store.ts`、`app/api/kotoba-senpuku/rooms/route.ts` |
 | ノーザンブランチ | `NORTHERN_BRANCH_PROTOTYPE.md` | `lib/northern-branch-game.ts`、`lib/northern-branch-room-store.ts` |
 | 新規ゲーム追加 | `NEW_GAME_CHECKLIST.md` | `config/game-registry.json`、`scripts/check-game-standards.mjs` |

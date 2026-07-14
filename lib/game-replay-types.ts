@@ -69,7 +69,7 @@ export const gameReplayMetadata: Record<GameReplayGameType, { title: string; hre
   wordwolf: { title: "ワードウルフ", href: "/wordwolf" },
   tahoiya: { title: "たほい屋", href: "/tahoiya" },
   "northern-branch": { title: "ノーザンブランチ", href: "/northern-branch" },
-  hodoai: { title: "ことばで数ならべ", href: "/kotoba-de-kazu-narabe" },
+  hodoai: { title: "ワードスケール", href: "/word-scale" },
   "kotoba-senpuku": { title: "ことばソナー", href: "/word-sonar" },
 };
 

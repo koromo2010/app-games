@@ -210,7 +210,7 @@ export function hodoaiGameShareText(room: Pick<HodoaiRoom, "totalPoints" | "hist
   const result = room.history.at(-1);
   const rounds = result?.clueRounds.map((clueRound) => `ことば${clueRound.round}「${clueRound.theme.title}」`) ?? [];
   return [
-    "ことばで数ならべ プレイログ",
+    "ワードスケール プレイログ",
     `チーム得点 ${room.totalPoints}/3点`,
     ...rounds,
     result ? `最終並び：全${result.cards.length}枚・並び違い${result.inversions}組` : "",

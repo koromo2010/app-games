@@ -11,9 +11,9 @@ Party game prototypes built with Next.js.
 - `/wordwolf` - Wordwolf prototype
 - `/tahoiya` - Tahoiya prototype
 - `/northern-branch` - Private-use online Northern Branch room game for logged-in players (requires `PRIVATE_GAME_ACCESS_KEY`)
-- `/kotoba-de-kazu-narabe` - Private-use online room game for logged-in players (requires `PRIVATE_GAME_ACCESS_KEY`)
+- `/word-scale` - Private-use online room game for logged-in players (requires `PRIVATE_GAME_ACCESS_KEY`)
 - `/word-sonar` - Online word deduction room game for logged-in players (legacy `/kotoba-senpuku` redirects here)
-- `/hodoai-talk` - Redirect to `/kotoba-de-kazu-narabe`
+- `/kotoba-de-kazu-narabe` and `/hodoai-talk` - Redirect to `/word-scale`
 
 ## Private game access
 

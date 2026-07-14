@@ -3,5 +3,5 @@ import { gamePageAccessAllowed } from "@/lib/game-access";
 
 export default async function HodoaiTalkPage() {
   if (!(await gamePageAccessAllowed("hodoai"))) redirect("/games");
-  redirect("/kotoba-de-kazu-narabe");
+  redirect("/word-scale");
 }

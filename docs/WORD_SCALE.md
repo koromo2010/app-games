@@ -1,8 +1,8 @@
-# ことばで数ならべ（個人利用向け試作）
+# ワードスケール（WORD SCALE・個人利用向け試作）
 
 ## 方針
 
-「ことばで数ならべ」は、数値を直接言わずに言葉の手がかりを出す抽象的な遊び方から着想した、独自名称・独自お題・独自採点の試作です。市販ゲームのロゴ、画像、カード面、ルール文章、お題一覧、固有モード名は使用しません。
+「ワードスケール」（将来の英語表示名: `WORD SCALE`）は、数値を直接言わずに言葉の手がかりを出す抽象的な遊び方から着想した、独自名称・独自お題・独自採点の試作です。市販ゲームのロゴ、画像、カード面、ルール文章、お題一覧、固有モード名は使用しません。
 
 これは権利侵害が絶対にないことを保証する法的判断ではありません。公開・販売へ進む場合は、名称や見た目も含めて専門家へ確認してください。
 
@@ -48,14 +48,14 @@
 
 ## URLと内部互換
 
-- 正式URLは `/kotoba-de-kazu-narabe`。
-- 旧URL `/hodoai-talk` は正式URLへ転送する。
+- 正式URLは `/word-scale`。
+- 旧URL `/kotoba-de-kazu-narabe` と `/hodoai-talk` は正式URLへ転送する。
 - 既存の部屋・設定を継続できるよう、APIパス、Redisキー、TypeScript内部名の `hodoai` は互換識別子として維持する。
 
 ## 主なファイル
 
-- `app/kotoba-de-kazu-narabe/page.tsx`: 正式ページと個人利用アクセス確認
-- `app/hodoai-talk/page.tsx`: 旧URLからの転送
+- `app/word-scale/page.tsx`: 正式ページと個人利用アクセス確認
+- `app/kotoba-de-kazu-narabe/page.tsx`、`app/hodoai-talk/page.tsx`: 旧URLからの転送
 - `app/hodoai-talk/HodoaiTalkGame.tsx`: 画面と進行
 - `lib/hodoai-talk.ts`: 独自お題、状態型、採点処理
 - `lib/hodoai-room-store.ts`: Redis部屋、秘密情報の応答制御、サーバー進行
