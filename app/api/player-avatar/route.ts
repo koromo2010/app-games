@@ -15,7 +15,6 @@ export async function POST(request: Request) {
       telemetry.reject("auth.avatar", 503, {
         actorRef: telemetry.actorRef(player.id),
         errorCode: "AVATAR_BLOB_NOT_CONFIGURED",
-        blobTokenKeys: blobToken.candidateKeys.join(",") || "none",
       });
       return Response.json({ error: "AVATAR_BLOB_NOT_CONFIGURED" }, { status: 503 });
     }
@@ -53,7 +52,7 @@ export async function POST(request: Request) {
       cacheControlMaxAge: 31_536_000,
       abortSignal: AbortSignal.timeout(10_000),
     });
-    telemetry.success("auth.avatar", { actorRef: telemetry.actorRef(player.id), blobTokenKey: blobToken.key });
+    telemetry.success("auth.avatar", { actorRef: telemetry.actorRef(player.id) });
     return Response.json({ url: blob.url });
   } catch (error) {
     if (error instanceof Error && error.message === "PLAYER_AUTH_REQUIRED") {
