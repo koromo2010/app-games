@@ -11,7 +11,8 @@
                     "check:games":  "node scripts/check-game-standards.mjs",
                     "load:smoke":  "node scripts/load-test.mjs",
                     "monitor:production":  "node scripts/production-smoke.mjs",
-                    "tahoiya:generate":  "node --experimental-strip-types scripts/generate-tahoiya-candidates.ts"
+                    "tahoiya:generate":  "node --experimental-strip-types scripts/generate-tahoiya-candidates.ts",
+                    "word-db:init":  "node --experimental-strip-types scripts/init-word-master-db.ts"
                 },
     "dependencies":  {
                          "@neondatabase/serverless":  "^1.1.0",
