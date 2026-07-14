@@ -28,6 +28,7 @@ import {
 import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
 import { DebugModeButton } from "../components/DebugModeButton";
 import { DebugReplayButton } from "../components/DebugReplayButton";
+import { GamePlayerMenu } from "../components/GamePlayerMenu";
 import { GameTopBanner, gameTopBannerOffsetClass } from "../components/GameTopBanner";
 import { DebugWordGenerationTest, type DebugWordGenerationResult } from "../components/DebugWordGenerationTest";
 import { GameFeedbackPanel } from "../components/GameFeedbackPanel";
@@ -1386,7 +1387,9 @@ export function WordWolfGame() {
             >
               ゲームロビー ↗
             </Link>
-            <div className="relative flex min-w-0 items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-3 py-1.5">
+            <GamePlayerMenu id={playerAccountId || undefined} name={headerName} avatarColor={headerAvatarColor} avatarImage={headerAvatarImage} />
+            {(activePlayerId || playerName.trim()) && <button type="button" onClick={logout} className="rounded-md border border-white/10 px-2 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10 hover:text-white">ログアウト</button>}
+            <div className="relative hidden min-w-0 items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-3 py-1.5">
               <button
                 type="button"
                 onClick={() => setIsAvatarPickerOpen((isOpen) => !isOpen)}

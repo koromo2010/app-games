@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { createPortal } from "react-dom";
 import { useState } from "react";
 import { avatarColorOptions, defaultAvatarImage, defaultAvatarImages, savePersistentPlayerSession } from "@/lib/player-session";
 
@@ -11,6 +12,7 @@ export function GamePlayerMenu(props: Props) {
   const [image, setImage] = useState(props.avatarImage || defaultAvatarImage);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [isOpen, setIsOpen] = useState(false);
 
   const updateAvatar = async (nextColor: string, nextImage: string) => {
     if (isSaving) return;
@@ -31,14 +33,14 @@ export function GamePlayerMenu(props: Props) {
   };
 
   return (
-    <details className="group relative">
-      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-2.5 py-1.5 font-semibold text-white transition hover:bg-white/15 [&::-webkit-details-marker]:hidden" aria-label={`${props.name}のプレイヤーメニューを開く`}>
+    <>
+      <button type="button" onClick={() => setIsOpen(true)} className="flex items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-2.5 py-1.5 font-semibold text-white transition hover:bg-white/15" aria-haspopup="dialog" aria-expanded={isOpen} aria-label={`${props.name}のプレイヤーメニューを開く`}>
         <span className="h-7 w-7 rounded-full border border-white/50 bg-cover bg-center" style={{ backgroundColor: color, backgroundImage: `url(${image})` }} aria-hidden="true" />
         <span className="max-w-[120px] truncate">{props.name}</span>
-        <span className="text-[10px] text-slate-300 transition group-open:rotate-180" aria-hidden="true">▼</span>
-      </summary>
-      <div className="absolute right-0 top-full z-50 mt-2 w-72 rounded-lg border border-slate-200 bg-white p-3 text-slate-900 shadow-2xl">
-        <p className="truncate px-1 text-xs font-semibold text-slate-500">{props.name}でプレイ中</p>
+        <span className="text-[10px] text-slate-300" aria-hidden="true">▼</span>
+      </button>
+      {isOpen && createPortal(<div className="fixed inset-0 z-[9999] bg-slate-950/35" onClick={() => setIsOpen(false)}><div role="dialog" aria-modal="true" aria-label={`${props.name}のプレイヤーメニュー`} className="absolute right-3 top-20 w-[min(18rem,calc(100vw-1.5rem))] rounded-lg border border-slate-200 bg-white p-3 text-slate-900 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        <div className="flex items-center justify-between gap-2"><p className="truncate px-1 text-xs font-semibold text-slate-500">{props.name}でプレイ中</p><button type="button" onClick={() => setIsOpen(false)} className="rounded border border-slate-200 px-2 py-1 text-xs font-bold text-slate-500">閉じる</button></div>
         <p className="mt-3 text-xs font-bold">アイコンの色</p>
         <div className="mt-2 grid grid-cols-8 gap-1.5">
           {avatarColorOptions.map((option) => <button key={option} type="button" disabled={isSaving} aria-label={`アイコン色 ${option}`} aria-pressed={color === option} onClick={() => void updateAvatar(option, image)} className={`h-7 w-7 rounded-full border-2 ${color === option ? "border-slate-900 ring-2 ring-cyan-300" : "border-white"}`} style={{ backgroundColor: option }} />)}
@@ -48,8 +50,8 @@ export function GamePlayerMenu(props: Props) {
           {defaultAvatarImages.map((option, index) => <button key={option} type="button" disabled={isSaving} aria-label={`標準アイコン ${index + 1}`} aria-pressed={image === option} onClick={() => void updateAvatar(color, option)} className={`h-10 w-10 rounded-full border-2 bg-cover bg-center ${image === option ? "border-cyan-500 ring-2 ring-cyan-200" : "border-slate-200"}`} style={{ backgroundColor: color, backgroundImage: `url(${option})` }} />)}
         </div>
         {message && <p className="mt-2 text-xs text-slate-600" role="status">{message}</p>}
-        <Link href="/users/me" target="_blank" rel="noreferrer" className="mt-3 flex w-full items-center justify-center rounded-md bg-cyan-600 px-3 py-2 text-sm font-bold text-white hover:bg-cyan-500">マイページを新しいタブで開く</Link>
-      </div>
-    </details>
+        <Link href="/users/me" target="_blank" rel="noreferrer" onClick={() => setIsOpen(false)} className="mt-3 flex w-full items-center justify-center rounded-md bg-cyan-600 px-3 py-2 text-sm font-bold text-white hover:bg-cyan-500">マイページを新しいタブで開く</Link>
+      </div></div>, document.body)}
+    </>
   );
 }
