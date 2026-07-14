@@ -15,6 +15,7 @@ import {
   savePostgresPlayerAccount,
   updatePostgresPlayerAccountProfile,
 } from "@/lib/player-account-postgres-store";
+import { hasPlayerAccountEmailOwnerConflict } from "@/lib/player-account-migration";
 
 export type PlayerAccount = {
   version: 2;
@@ -121,8 +122,12 @@ async function loadRedisAccount(name: string) {
   }
 }
 
+async function loadRedisEmailOwner(email: string) {
+  return redisCommand<string | null>(["GET", playerAccountEmailKey(email)]);
+}
+
 async function loadRedisAccountByEmail(email: string) {
-  const loginName = await redisCommand<string | null>(["GET", playerAccountEmailKey(email)]);
+  const loginName = await loadRedisEmailOwner(email);
   return loginName ? loadRedisAccount(loginName) : null;
 }
 
@@ -299,8 +304,16 @@ export async function updatePlayerAccountEmail(input: PlayerAccountAuthInput) {
       updatedAt: Date.now(),
     };
     if (isPostgresConfigured()) {
-      const existing = await loadPostgresPlayerAccountByEmail(email);
-      if (existing && existing.loginName !== account.loginName) throw new Error("PLAYER_ACCOUNT_EMAIL_ALREADY_EXISTS");
+      const [existing, legacyOwner] = await Promise.all([
+        loadPostgresPlayerAccountByEmail(email),
+        loadRedisEmailOwner(email),
+      ]);
+      if (hasPlayerAccountEmailOwnerConflict(account.loginName, {
+        postgresLoginName: existing?.loginName ?? null,
+        redisLoginName: legacyOwner,
+      })) {
+        throw new Error("PLAYER_ACCOUNT_EMAIL_ALREADY_EXISTS");
+      }
       try {
         await savePostgresPlayerAccount(updatedAccount);
       } catch (error) {
