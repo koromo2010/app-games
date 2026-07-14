@@ -1,18 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+import { useEffect, useRef, useState } from "react";
 
 type DebugModeButtonProps = {
   enabled: boolean;
   disabled?: boolean;
   onChange: (enabled: boolean) => void | Promise<void>;
   onAbort?: () => void | Promise<void>;
+  replayEnabled?: boolean;
+  replayDisabled?: boolean;
+  onReplayChange?: (enabled: boolean) => void | Promise<void>;
 };
 
-export function DebugModeButton({ enabled, disabled = false, onChange, onAbort }: DebugModeButtonProps) {
+export function DebugModeButton({ enabled, disabled = false, onChange, onAbort, replayEnabled = false, replayDisabled = false, onReplayChange }: DebugModeButtonProps) {
   const [hasAccess, setHasAccess] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
+  const [position, setPosition] = useState({ top: 80, left: 12 });
+  const buttonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -26,22 +33,37 @@ export function DebugModeButton({ enabled, disabled = false, onChange, onAbort }
 
   if (isLoading || !hasAccess) return null;
 
-  const toggle = async () => {
-    if (disabled || isSubmitting) return;
+  const openMenu = () => {
+    const rect = buttonRef.current?.getBoundingClientRect();
+    if (rect) {
+      const width = Math.min(288, window.innerWidth - 24);
+      setPosition({ top: rect.bottom + 8, left: Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12)) });
+    }
+    setIsOpen(true);
+  };
+
+  const run = async (action: () => void | Promise<void>) => {
+    if (isSubmitting) return;
     setIsSubmitting(true);
-    try { await onChange(!enabled); } finally { setIsSubmitting(false); }
+    try { await action(); } finally { setIsSubmitting(false); }
   };
 
   const abort = async () => {
-    if (!onAbort || isSubmitting || !window.confirm("進行中のゲームを中断し、同じ部屋のゲーム開始前へ戻しますか？")) return;
-    setIsSubmitting(true);
-    try { await onAbort(); } finally { setIsSubmitting(false); }
+    if (!onAbort || !window.confirm("進行中のゲームを中断し、同じ部屋のゲーム開始前へ戻しますか？")) return;
+    await run(onAbort);
+    setIsOpen(false);
   };
 
-  return <div className="flex items-center gap-1.5" aria-label="開発者向け操作">
-    <button type="button" title="デバッグモードを切り替える" onClick={() => void toggle()} disabled={disabled || isSubmitting} className={`rounded-md border px-2 py-1 font-mono text-[11px] font-medium tracking-wide transition disabled:cursor-not-allowed disabled:opacity-40 ${enabled ? "border-cyan-300/35 bg-cyan-300/10 text-cyan-100" : "border-white/10 bg-white/[0.03] text-white/45 hover:border-white/20 hover:text-white/70"}`}>
-      {isSubmitting ? "WAIT" : enabled ? "DEBUG · ON" : "DEBUG"}
+  return <>
+    <button ref={buttonRef} type="button" title="開発者向け操作を開く" onClick={openMenu} className={`rounded-md border px-2 py-1 font-mono text-[11px] font-medium tracking-wide transition ${enabled ? "border-cyan-300/35 bg-cyan-300/10 text-cyan-100" : "border-white/10 bg-white/[0.03] text-white/60 hover:border-white/20 hover:text-white/80"}`} aria-haspopup="dialog" aria-expanded={isOpen}>
+      {enabled ? "DEBUG · ON" : "DEBUG"} <span aria-hidden="true">▼</span>
     </button>
-    {enabled && onAbort && <button type="button" title="進行中のゲームを中断してゲーム開始前へ戻す" onClick={() => void abort()} disabled={isSubmitting} className="rounded-md border border-rose-300/20 bg-transparent px-2 py-1 text-[11px] font-medium text-rose-200/70 transition hover:border-rose-300/40 hover:bg-rose-300/10 hover:text-rose-100 disabled:opacity-40">中断</button>}
-  </div>;
+    {isOpen && createPortal(<div className="fixed inset-0 z-[9999]" onClick={() => setIsOpen(false)}><div role="dialog" aria-label="開発者向け操作" className="fixed w-[min(18rem,calc(100vw-1.5rem))] rounded-lg border border-slate-200 bg-white p-3 text-slate-900 shadow-2xl" style={position} onClick={(event) => event.stopPropagation()}>
+      <div className="flex items-center justify-between gap-2"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Debug tools</p><button type="button" onClick={() => setIsOpen(false)} className="rounded border border-slate-200 px-2 py-1 text-xs font-bold text-slate-500">閉じる</button></div>
+      <button type="button" disabled={disabled || isSubmitting} aria-pressed={enabled} onClick={() => void run(() => onChange(!enabled))} className={`mt-3 flex w-full items-center justify-between rounded-lg border px-3 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-40 ${enabled ? "border-cyan-300 bg-cyan-50 text-cyan-950" : "border-slate-300 bg-slate-50 text-slate-700"}`}><span>デバッグモード</span><span>{enabled ? "ON" : "OFF"}</span></button>
+      {enabled && onReplayChange && <button type="button" disabled={replayDisabled || isSubmitting} aria-pressed={replayEnabled} onClick={() => void run(() => onReplayChange(!replayEnabled))} className="mt-2 flex w-full items-center justify-between rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold text-slate-700 disabled:opacity-40"><span>プレイバック記録</span><span>{replayEnabled ? "ON" : "OFF"}</span></button>}
+      {enabled && onAbort && <button type="button" disabled={isSubmitting} onClick={() => void abort()} className="mt-2 w-full rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm font-bold text-rose-700 disabled:opacity-40">ゲームを中断</button>}
+      {disabled && <p className="mt-2 text-xs text-slate-500">ゲーム進行中はモードの切り替えができません。</p>}
+    </div></div>, document.body)}
+  </>;
 }

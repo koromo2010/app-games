@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import {
   avatarColorOptions,
-  clearPlayerSession,
   defaultAvatarImage,
   defaultAvatarImages,
   fallbackAvatarColor,
@@ -27,7 +26,6 @@ import {
 } from "@/lib/wordwolf";
 import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
 import { DebugModeButton } from "../components/DebugModeButton";
-import { DebugReplayButton } from "../components/DebugReplayButton";
 import { GamePlayerMenu } from "../components/GamePlayerMenu";
 import { GameTopBanner, gameTopBannerOffsetClass } from "../components/GameTopBanner";
 import { DebugWordGenerationTest, type DebugWordGenerationResult } from "../components/DebugWordGenerationTest";
@@ -921,21 +919,6 @@ export function WordWolfGame() {
     setError("部屋を解散しました。");
   };
 
-  const logout = () => {
-    clearPlayerSession();
-    localStorage.removeItem("wordwolf-last-room");
-    localStorage.removeItem("wordwolf-last-player");
-    setRoom(null);
-    setActivePlayerId("");
-    setPlayerAccountId("");
-    setPlayerName("");
-    setRoomPassphrase("");
-    setJoinCode("");
-    setJoinableRooms([]);
-    setIsAvatarPickerOpen(false);
-    setError("入力情報をリセットしました。");
-  };
-
   const updatePlayerName = (nextName: string) => {
     setPlayerName(nextName);
     const normalizedName = normalizePlayerName(nextName);
@@ -1388,8 +1371,13 @@ export function WordWolfGame() {
             >
               ゲームロビー ↗
             </Link>
-            <GamePlayerMenu id={playerAccountId || undefined} name={headerName} avatarColor={headerAvatarColor} avatarImage={headerAvatarImage} />
-            {(activePlayerId || playerName.trim()) && <button type="button" onClick={logout} className="rounded-md border border-white/10 px-2 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10 hover:text-white">ログアウト</button>}
+            <button
+              type="button"
+              onClick={() => setIsRulesOpen(true)}
+              className="rounded-lg border border-amber-200 bg-amber-200 px-3 py-1.5 font-semibold text-slate-950 shadow-sm transition hover:bg-amber-100"
+            >
+              ルール
+            </button>
             <div className="relative hidden min-w-0 items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-3 py-1.5">
               <button
                 type="button"
@@ -1405,15 +1393,6 @@ export function WordWolfGame() {
                 />
               </button>
               <span className="max-w-[140px] truncate font-semibold text-cyan-50">{headerName}</span>
-              {(activePlayerId || playerName.trim()) && (
-                <button
-                  type="button"
-                  onClick={logout}
-                  className="rounded-md border border-white/10 px-2 py-1 text-xs font-semibold text-slate-200 transition hover:bg-white/10 hover:text-white"
-                >
-                  ログアウト
-                </button>
-              )}
               {isAvatarPickerOpen && (
                 <div className="absolute right-0 top-11 z-50 w-64 rounded-lg border border-white/15 bg-slate-950/95 p-3 shadow-2xl">
                   <label className="block text-xs font-semibold text-cyan-100">
@@ -1497,22 +1476,17 @@ export function WordWolfGame() {
                 enabled={Boolean(room.debugMode)}
                 disabled={room.phase !== "lobby"}
                 onAbort={room.debugMode && room.phase !== "lobby" ? abortGame : undefined}
+                replayEnabled={Boolean(room.debugReplayEnabled)}
+                onReplayChange={(enabled) => setAndSaveRoom({ ...room, debugReplayEnabled: enabled })}
                 onChange={(enabled) => {
                   setAndSaveRoom({ ...room, debugMode: enabled, debugReplayEnabled: enabled ? room.debugReplayEnabled : false });
                   setError("");
                 }}
               />
             )}
-            <button
-              type="button"
-              onClick={() => setIsRulesOpen(true)}
-              className="rounded-lg border border-amber-200 bg-amber-200 px-3 py-1.5 font-semibold text-slate-950 shadow-sm transition hover:bg-amber-100"
-            >
-              ルール
-            </button>
+            <GamePlayerMenu id={playerAccountId || undefined} name={headerName} avatarColor={headerAvatarColor} avatarImage={headerAvatarImage} />
       </GameTopBanner>
 
-      {room?.debugMode && room.hostId === playerAccountId && <DebugReplayButton enabled={Boolean(room.debugReplayEnabled)} onChange={(enabled) => setAndSaveRoom({ ...room, debugReplayEnabled: enabled })} />}
       <GameRulesDialog open={isRulesOpen} title="ワードウルフのルール" onClose={() => setIsRulesOpen(false)}>
         <p>自分だけ少数派かもしれない状態で会話し、投票で違うお題を持つ狼を探します。自分の役割も仲間も表示されません。</p>
         <h3 className="mt-4 font-black text-white">基本の流れ</h3>

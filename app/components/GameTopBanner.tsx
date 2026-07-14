@@ -17,7 +17,7 @@ export function GameTopBanner({ eyebrow, title, children }: GameTopBannerProps) 
           <p className="text-xs font-semibold uppercase text-cyan-200">{eyebrow}</p>
           <h1 className="mt-0.5 truncate text-2xl font-black tracking-normal sm:text-3xl">{title}</h1>
         </div>
-        <div className="flex max-w-full flex-nowrap items-center gap-2 overflow-x-auto pb-1 text-sm sm:justify-end sm:pb-0 [&>*]:shrink-0">
+        <div className="flex min-h-10 max-w-full flex-nowrap items-center gap-2 overflow-x-auto pb-1 text-sm sm:justify-end sm:pb-0 [&>*]:shrink-0 [&>a]:flex [&>a]:h-10 [&>a]:items-center [&>button]:h-10">
           {children}
           <UserReportButton />
         </div>

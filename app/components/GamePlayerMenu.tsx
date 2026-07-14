@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { createPortal } from "react-dom";
 import { useRef, useState } from "react";
-import { avatarColorOptions, defaultAvatarImage, defaultAvatarImages, savePersistentPlayerSession } from "@/lib/player-session";
+import { avatarColorOptions, clearPlayerSession, defaultAvatarImage, defaultAvatarImages, savePersistentPlayerSession } from "@/lib/player-session";
 
 type Props = { id?: string; name: string; avatarColor: string; avatarImage?: string | null; hasRecoveryEmail?: boolean };
 
@@ -13,6 +13,7 @@ export function GamePlayerMenu(props: Props) {
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [isOpen, setIsOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [position, setPosition] = useState({ top: 80, left: 12 });
   const buttonRef = useRef<HTMLButtonElement>(null);
 
@@ -46,6 +47,23 @@ export function GamePlayerMenu(props: Props) {
     }
   };
 
+  const logout = async () => {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/player-account", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "logout" }) });
+      if (!response.ok) throw new Error("LOGOUT_FAILED");
+      clearPlayerSession();
+      localStorage.removeItem("wordwolf-last-room");
+      localStorage.removeItem("wordwolf-last-player");
+      window.location.assign("/games");
+    } catch {
+      setMessage("ログアウトできませんでした。通信を確認してもう一度お試しください。");
+      setIsLoggingOut(false);
+    }
+  };
+
   return (
     <>
       <button ref={buttonRef} type="button" onClick={openMenu} className="flex items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-2.5 py-1.5 font-semibold text-white transition hover:bg-white/15" aria-haspopup="dialog" aria-expanded={isOpen} aria-label={`${props.name}のプレイヤーメニューを開く`}>
@@ -65,6 +83,7 @@ export function GamePlayerMenu(props: Props) {
         </div>
         {message && <p className="mt-2 text-xs text-slate-600" role="status">{message}</p>}
         <Link href="/users/me?popup=1" target="_blank" rel="noreferrer" onClick={() => setIsOpen(false)} className="mt-3 flex w-full items-center justify-center rounded-md bg-cyan-600 px-3 py-2 text-sm font-bold text-white hover:bg-cyan-500">マイページを新しいタブで開く</Link>
+        {props.id && <button type="button" disabled={isLoggingOut} onClick={() => void logout()} className="mt-2 w-full rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-40">{isLoggingOut ? "ログアウト中..." : "ログアウト"}</button>}
       </div></div>, document.body)}
     </>
   );
