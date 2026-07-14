@@ -20,6 +20,7 @@ import { withGameGenerationCache } from "@/lib/game-generation-cache";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
 import { actionRequiresDebugAccess, requirePlayerDebugAccess, roomRequestsDebugMode } from "@/lib/debug-access";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
+import { conditionalJsonResponse } from "@/lib/conditional-json";
 
 function isStoreNotConfigured(error: unknown) {
   return error instanceof Error && error.message === "REDIS_STORE_NOT_CONFIGURED";
@@ -48,16 +49,16 @@ export async function GET(request: Request) {
       }
 
       if (!room.players.some((item) => item.id === player.id)) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
-      return Response.json({ room: sanitizeTahoiyaRoom(room, player.id) });
+      return conditionalJsonResponse(request, { room: sanitizeTahoiyaRoom(room, player.id) });
     }
 
     if (playerId) {
       const room = await loadStoredTahoiyaPlayerActiveRoom(player.id);
-      return Response.json({ room: room ? sanitizeTahoiyaRoom(room, player.id) : null });
+      return conditionalJsonResponse(request, { room: room ? sanitizeTahoiyaRoom(room, player.id) : null });
     }
 
     const rooms = await listStoredJoinableTahoiyaRooms();
-    return Response.json({ rooms });
+    return conditionalJsonResponse(request, { rooms });
   } catch (error) {
     const authError = authErrorResponse(error);
     if (authError) {

@@ -12,6 +12,7 @@ import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomResultActions } from "@/app/components/RoomResultActions";
 import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
 import { loadPlayerRoomDefaults, savePlayerRoomDefaults } from "@/lib/game-room-defaults-client";
+import { fetchConditionalJson } from "@/lib/conditional-json-client";
 import {
   kotobaSenpukuKanaKey,
   isValidKotobaSenpukuWord,
@@ -83,17 +84,13 @@ function apiMessage(status: number, fallback: string) {
 
 async function loadRoom(code: string, playerId: string) {
   const params = new URLSearchParams({ code, playerId });
-  const response = await fetch(`/api/kotoba-senpuku/rooms?${params.toString()}`, { cache: "no-store" });
-  if (!response.ok) return null;
-  const data = (await response.json()) as { room?: KotobaSenpukuRoom };
-  return data.room ?? null;
+  const result = await fetchConditionalJson<{ room?: KotobaSenpukuRoom }>(`/api/kotoba-senpuku/rooms?${params.toString()}`);
+  return result.ok ? result.data?.room ?? null : null;
 }
 
 async function loadActiveRoom(playerId: string) {
-  const response = await fetch(`/api/kotoba-senpuku/rooms?playerId=${encodeURIComponent(playerId)}`, { cache: "no-store" });
-  if (!response.ok) return null;
-  const data = (await response.json()) as { room?: KotobaSenpukuRoom | null };
-  return data.room ?? null;
+  const result = await fetchConditionalJson<{ room?: KotobaSenpukuRoom | null }>(`/api/kotoba-senpuku/rooms?playerId=${encodeURIComponent(playerId)}`);
+  return result.ok ? result.data?.room ?? null : null;
 }
 
 function PlayerRow({ player, isHost, isMe, eliminated = false }: { player: KotobaSenpukuPlayer; isHost: boolean; isMe: boolean; eliminated?: boolean }) {

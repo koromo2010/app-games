@@ -1,4 +1,5 @@
 import type { Room, RoomChoice } from "@/lib/wordwolf-game-types";
+import { fetchConditionalJson } from "@/lib/conditional-json-client";
 
 const endpoint = "/api/wordwolf/rooms";
 
@@ -8,22 +9,22 @@ async function readJson<T>(response: Response, errorCode: string) {
 }
 
 export async function fetchWordWolfRoom(code: string) {
-  const response = await fetch(`${endpoint}?code=${encodeURIComponent(code)}`, { cache: "no-store" });
-  if (response.status === 404) return null;
-  const data = await readJson<{ room?: Room }>(response, "ROOM_FETCH_FAILED");
-  return data.room ?? null;
+  const result = await fetchConditionalJson<{ room?: Room }>(`${endpoint}?code=${encodeURIComponent(code)}`);
+  if (result.status === 404) return null;
+  if (!result.ok) throw new Error("ROOM_FETCH_FAILED");
+  return result.data?.room ?? null;
 }
 
 export async function fetchActiveWordWolfRoom(playerId: string) {
-  const response = await fetch(`${endpoint}?playerId=${encodeURIComponent(playerId)}`, { cache: "no-store" });
-  const data = await readJson<{ room?: Room | null }>(response, "ACTIVE_ROOM_FETCH_FAILED");
-  return data.room ?? null;
+  const result = await fetchConditionalJson<{ room?: Room | null }>(`${endpoint}?playerId=${encodeURIComponent(playerId)}`);
+  if (!result.ok) throw new Error("ACTIVE_ROOM_FETCH_FAILED");
+  return result.data?.room ?? null;
 }
 
 export async function fetchJoinableWordWolfRooms() {
-  const response = await fetch(endpoint, { cache: "no-store" });
-  const data = await readJson<{ rooms?: RoomChoice[] }>(response, "ROOM_LIST_FAILED");
-  return Array.isArray(data.rooms) ? data.rooms : [];
+  const result = await fetchConditionalJson<{ rooms?: RoomChoice[] }>(endpoint);
+  if (!result.ok) throw new Error("ROOM_LIST_FAILED");
+  return Array.isArray(result.data?.rooms) ? result.data.rooms : [];
 }
 
 export async function persistWordWolfRoom(room: Room) {

@@ -13,6 +13,7 @@ import { authenticatedRoomDraft } from "@/lib/online-room-input";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
 import { requirePlayerDebugAccess, roomRequestsDebugMode } from "@/lib/debug-access";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
+import { conditionalJsonResponse } from "@/lib/conditional-json";
 
 function isStoreNotConfigured(error: unknown) {
   return error instanceof Error && error.message === "REDIS_STORE_NOT_CONFIGURED";
@@ -34,16 +35,16 @@ export async function GET(request: Request) {
       }
 
       if (!room.players.some((item) => item.id === player.id)) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
-      return Response.json({ room: sanitizeWordWolfRoom(room, player.id) });
+      return conditionalJsonResponse(request, { room: sanitizeWordWolfRoom(room, player.id) });
     }
 
     if (playerId) {
       const room = await loadStoredPlayerActiveRoom(player.id);
-      return Response.json({ room: room ? sanitizeWordWolfRoom(room, player.id) : null });
+      return conditionalJsonResponse(request, { room: room ? sanitizeWordWolfRoom(room, player.id) : null });
     }
 
     const rooms = await listStoredJoinableWordWolfRooms();
-    return Response.json({ rooms });
+    return conditionalJsonResponse(request, { rooms });
   } catch (error) {
     if (error instanceof Error && error.message === "PLAYER_AUTH_REQUIRED") return Response.json({ error: "Login required" }, { status: 401 });
     if (isPlayerAuthConfigurationError(error)) {

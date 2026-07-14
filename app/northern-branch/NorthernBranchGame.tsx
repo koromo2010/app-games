@@ -11,6 +11,7 @@ import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomResultActions } from "@/app/components/RoomResultActions";
 import { northernBaseResources, northernBuildings, northernCards } from "@/lib/northern-branch-data";
 import { northernRules } from "@/lib/northern-branch-game";
+import { fetchConditionalJson } from "@/lib/conditional-json-client";
 import type {
   NorthernGameAction,
   NorthernRoom,
@@ -52,17 +53,13 @@ function apiMessage(status: number, fallback: string) {
 
 async function loadRoom(code: string, playerId: string) {
   const params = new URLSearchParams({ code, playerId });
-  const response = await fetch(`/api/northern-branch/rooms?${params.toString()}`, { cache: "no-store" });
-  if (!response.ok) return null;
-  const data = (await response.json()) as { room?: NorthernRoom };
-  return data.room ?? null;
+  const result = await fetchConditionalJson<{ room?: NorthernRoom }>(`/api/northern-branch/rooms?${params.toString()}`);
+  return result.ok ? result.data?.room ?? null : null;
 }
 
 async function loadActiveRoom(playerId: string) {
-  const response = await fetch(`/api/northern-branch/rooms?playerId=${encodeURIComponent(playerId)}`, { cache: "no-store" });
-  if (!response.ok) return null;
-  const data = (await response.json()) as { room?: NorthernRoom | null };
-  return data.room ?? null;
+  const result = await fetchConditionalJson<{ room?: NorthernRoom | null }>(`/api/northern-branch/rooms?playerId=${encodeURIComponent(playerId)}`);
+  return result.ok ? result.data?.room ?? null : null;
 }
 
 function PlayerRow({ player, isHost, isMe }: { player: NorthernRoomPlayer; isHost: boolean; isMe: boolean }) {

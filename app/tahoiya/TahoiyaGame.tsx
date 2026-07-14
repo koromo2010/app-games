@@ -11,6 +11,7 @@ import {
 } from "@/lib/player-session";
 import { loadPlayerRoomDefaults, savePlayerRoomDefaults } from "@/lib/game-room-defaults-client";
 import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
+import { fetchConditionalJson } from "@/lib/conditional-json-client";
 import type { TahoiyaAnswererMode, TahoiyaDifficulty, TahoiyaPlayMode, TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomAction, TahoiyaRoomChoice, TahoiyaTopic } from "@/lib/tahoiya-types";
 import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
 import { DebugModeButton } from "../components/DebugModeButton";
@@ -254,12 +255,11 @@ async function applyTahoiyaSpecialAction(code: string, action: { type: "join-roo
 
 async function loadRoomFromStore(code: string) {
   try {
-    const response = await fetch(`/api/tahoiya/rooms?code=${encodeURIComponent(code)}`, { cache: "no-store" });
-    if (response.status === 404) return null;
-    if (!response.ok) throw new Error("ROOM_FETCH_FAILED");
-    const data = (await response.json()) as { room?: TahoiyaRoom };
-    if (!data.room) return null;
-    const normalized = normalizeRoom(data.room);
+    const result = await fetchConditionalJson<{ room?: TahoiyaRoom }>(`/api/tahoiya/rooms?code=${encodeURIComponent(code)}`);
+    if (result.status === 404) return null;
+    if (!result.ok) throw new Error("ROOM_FETCH_FAILED");
+    if (!result.data?.room) return null;
+    const normalized = normalizeRoom(result.data.room);
     saveRoomLocally(normalized);
     return normalized;
   } catch {
@@ -269,11 +269,10 @@ async function loadRoomFromStore(code: string) {
 
 async function loadActiveRoomFromStore(playerId: string) {
   try {
-    const response = await fetch(`/api/tahoiya/rooms?playerId=${encodeURIComponent(playerId)}`, { cache: "no-store" });
-    if (!response.ok) throw new Error("ACTIVE_ROOM_FETCH_FAILED");
-    const data = (await response.json()) as { room?: TahoiyaRoom | null };
-    if (!data.room) return null;
-    const normalized = normalizeRoom(data.room);
+    const result = await fetchConditionalJson<{ room?: TahoiyaRoom | null }>(`/api/tahoiya/rooms?playerId=${encodeURIComponent(playerId)}`);
+    if (!result.ok) throw new Error("ACTIVE_ROOM_FETCH_FAILED");
+    if (!result.data?.room) return null;
+    const normalized = normalizeRoom(result.data.room);
     saveRoomLocally(normalized);
     return normalized;
   } catch {
@@ -283,10 +282,9 @@ async function loadActiveRoomFromStore(playerId: string) {
 
 async function listJoinableRoomsFromStore() {
   try {
-    const response = await fetch("/api/tahoiya/rooms", { cache: "no-store" });
-    if (!response.ok) throw new Error("ROOM_LIST_FAILED");
-    const data = (await response.json()) as { rooms?: TahoiyaRoomChoice[] };
-    return Array.isArray(data.rooms) ? data.rooms : [];
+    const result = await fetchConditionalJson<{ rooms?: TahoiyaRoomChoice[] }>("/api/tahoiya/rooms");
+    if (!result.ok) throw new Error("ROOM_LIST_FAILED");
+    return Array.isArray(result.data?.rooms) ? result.data.rooms : [];
   } catch {
     return [];
   }

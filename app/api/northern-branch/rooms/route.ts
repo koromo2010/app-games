@@ -15,6 +15,7 @@ import { actionRequiresDebugAccess, requirePlayerDebugAccess } from "@/lib/debug
 import { gameApiAccessDeniedResponse } from "@/lib/game-access";
 import { authenticatedRoomDraft } from "@/lib/online-room-input";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
+import { conditionalJsonResponse } from "@/lib/conditional-json";
 
 function errorResponse(error: unknown) {
   if (error instanceof Error && error.message === "PLAYER_AUTH_REQUIRED") return Response.json({ error: "Login required" }, { status: 401 });
@@ -50,13 +51,13 @@ export async function GET(request: Request) {
       const room = await loadStoredNorthernRoom(code);
       if (!room) return Response.json({ error: "Room not found" }, { status: 404 });
       if (!room.players.some((player) => player.id === authenticatedPlayerId)) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
-      return Response.json({ room: sanitizeNorthernRoom(room, authenticatedPlayerId) });
+      return conditionalJsonResponse(request, { room: sanitizeNorthernRoom(room, authenticatedPlayerId) });
     }
     if (playerId) {
       const room = await loadNorthernPlayerActiveRoom(authenticatedPlayerId);
-      return Response.json({ room: room ? sanitizeNorthernRoom(room, authenticatedPlayerId) : null });
+      return conditionalJsonResponse(request, { room: room ? sanitizeNorthernRoom(room, authenticatedPlayerId) : null });
     }
-    return Response.json({ rooms: await listJoinableNorthernRooms() });
+    return conditionalJsonResponse(request, { rooms: await listJoinableNorthernRooms() });
   } catch (error) {
     const response = errorResponse(error);
     if (response.status >= 500) telemetry.responseError("room.read", error, response.status, { roomRef: telemetry.roomRef(code) });

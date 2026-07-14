@@ -13,6 +13,7 @@ import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomResultActions } from "@/app/components/RoomResultActions";
 import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
 import { loadPlayerRoomDefaults, savePlayerRoomDefaults } from "@/lib/game-room-defaults-client";
+import { fetchConditionalJson } from "@/lib/conditional-json-client";
 import {
   defaultAvatarImage,
   fallbackAvatarColor,
@@ -67,17 +68,13 @@ function apiMessage(status: number, fallback: string) {
 
 async function loadRoom(code: string, playerId: string) {
   const params = new URLSearchParams({ code, playerId });
-  const response = await fetch(`/api/hodoai/rooms?${params.toString()}`, { cache: "no-store" });
-  if (!response.ok) return null;
-  const data = (await response.json()) as { room?: HodoaiRoom };
-  return data.room ?? null;
+  const result = await fetchConditionalJson<{ room?: HodoaiRoom }>(`/api/hodoai/rooms?${params.toString()}`);
+  return result.ok ? result.data?.room ?? null : null;
 }
 
 async function loadActiveRoom(playerId: string) {
-  const response = await fetch(`/api/hodoai/rooms?playerId=${encodeURIComponent(playerId)}`, { cache: "no-store" });
-  if (!response.ok) return null;
-  const data = (await response.json()) as { room?: HodoaiRoom | null };
-  return data.room ?? null;
+  const result = await fetchConditionalJson<{ room?: HodoaiRoom | null }>(`/api/hodoai/rooms?playerId=${encodeURIComponent(playerId)}`);
+  return result.ok ? result.data?.room ?? null : null;
 }
 
 function PlayerRow({ player, isHost, isMe }: { player: HodoaiPlayer; isHost: boolean; isMe: boolean }) {
