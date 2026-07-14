@@ -358,7 +358,7 @@ export async function recordNorthernBranchReplay(room: NorthernRoom) {
 }
 
 export async function recordKotobaSenpukuReplay(room: KotobaSenpukuRoom) {
-  if (room.phase !== "result" || room.round < room.roundsTotal || room.debugMode) return false;
+  if (room.phase !== "result" || room.round < room.roundsTotal || (room.debugMode && !room.debugReplayEnabled)) return false;
   const players = room.players.filter((player) => !player.isDummy);
   const winnerIds = room.history.at(-1)?.winnerIds ?? (room.history.at(-1)?.winnerId ? [room.history.at(-1)!.winnerId!] : []);
   const winners = players.filter((player) => winnerIds.includes(player.id));

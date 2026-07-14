@@ -188,7 +188,7 @@ export function PaidLlmAccessButton() {
             <p className="mt-2 text-sm leading-6 text-slate-600">
               通常は無料のまま遊べますが、共有の無料APIは利用が重なると上限に達します。自分の無料枠や契約中のAI APIを設定すると、より安定して快適に遊べます。
             </p>
-            <Link href="/api-guide" onClick={() => setIsOpen(false)} className="mt-3 flex items-center justify-between rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm font-bold text-cyan-900 transition hover:bg-cyan-100"><span>APIキーの取得・設定方法を見る</span><span aria-hidden="true">→</span></Link>
+            <Link href="/api-guide" target="_blank" rel="noreferrer" className="mt-3 flex items-center justify-between rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm font-bold text-cyan-900 transition hover:bg-cyan-100"><span>APIキーの取得・設定方法を新しいタブで見る</span><span aria-hidden="true">↗</span></Link>
 
             <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">
               <p>現在: {sourceLabel}</p>

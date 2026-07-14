@@ -18,6 +18,7 @@ import { DebugWordGenerationTest, type DebugWordGenerationResult } from "../comp
 import { GameFeedbackPanel } from "../components/GameFeedbackPanel";
 import { GameRulesDialog } from "../components/GameRulesDialog";
 import { GameTopBanner, gameTopBannerOffsetClass } from "../components/GameTopBanner";
+import { GamePlayerMenu } from "../components/GamePlayerMenu";
 import { RoomConfigSummary } from "../components/RoomConfigSummary";
 import { RoomTimeLimitControl } from "../components/RoomTimeLimitControl";
 import { cyanButtonClass, dangerButtonClass, inputClass, panelClass, primaryButtonClass, subtleButtonClass } from "../wordwolf/styles";
@@ -960,13 +961,11 @@ export function TahoiyaGame() {
                 onChange={setDebugMode}
               />
             )}
-            <Link href="/games" className={subtleButtonClass}>
-              ゲームロビー
+            <Link href="/games" target="_blank" rel="noreferrer" className={subtleButtonClass}>
+              ゲームロビー ↗
             </Link>
             <button type="button" onClick={() => setRulesOpen(true)} className={subtleButtonClass}>ルール</button>
-            <span className="rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-sm font-semibold text-white">
-              {playerName || "未ログイン"}
-            </span>
+            <GamePlayerMenu id={playerId || undefined} name={playerName || "未ログイン"} avatarColor={avatarColor} avatarImage={avatarImage} />
       </GameTopBanner>
 
       <GameRulesDialog open={rulesOpen} title="たほい屋のルール" onClose={() => setRulesOpen(false)}>

@@ -1377,9 +1377,11 @@ export function WordWolfGame() {
       <GameTopBanner eyebrow="Room based social deduction" title="ワードウルフ・ラウンジ">
             <Link
               href="/games"
+              target="_blank"
+              rel="noreferrer"
               className="rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 font-semibold text-cyan-50 transition hover:bg-white/15"
             >
-              ゲームロビー
+              ゲームロビー ↗
             </Link>
             <div className="relative flex min-w-0 items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-3 py-1.5">
               <button
@@ -1476,6 +1478,9 @@ export function WordWolfGame() {
                       デフォルト画像に戻す
                     </button>
                   )}
+                  <Link href="/users/me" target="_blank" rel="noreferrer" className="mt-3 flex w-full items-center justify-center rounded-md bg-cyan-600 px-3 py-2 text-xs font-bold text-white transition hover:bg-cyan-500">
+                    マイページを新しいタブで開く
+                  </Link>
                 </div>
               )}
             </div>

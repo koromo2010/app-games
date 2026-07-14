@@ -47,6 +47,7 @@ export type KotobaSenpukuPhase = "lobby" | "secret" | "battle" | "result";
 
 export type KotobaSenpukuRoom = KotobaSenpukuConfig & {
   code: string;
+  debugReplayEnabled: boolean;
   revision: number;
   hostId: string;
   ownerId?: string;
@@ -87,6 +88,7 @@ export type KotobaSenpukuRoomAction =
   | { type: "leave-room"; actorId: string }
   | { type: "update-config"; actorId: string; config: Omit<KotobaSenpukuConfig, "debugMode"> }
   | { type: "set-debug"; actorId: string; enabled: boolean }
+  | { type: "set-debug-replay"; actorId: string; enabled: boolean }
   | { type: "debug-add-player"; actorId: string }
   | { type: "start-game"; actorId: string }
   | { type: "submit-secret"; actorId: string; round: number; word: string }

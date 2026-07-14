@@ -152,6 +152,7 @@ function normalizeRoom(value: unknown): KotobaSenpukuRoom | null {
     players,
     gameNumber: typeof parsed.gameNumber === "number" ? Math.max(1, Math.floor(parsed.gameNumber)) : 1,
     ...config,
+    debugReplayEnabled: parsed.debugReplayEnabled === true && config.debugMode,
     round: typeof parsed.round === "number" ? Math.max(1, Math.floor(parsed.round)) : 1,
     theme: normalizeTheme(parsed.theme),
     secrets: normalizeStringRecord(parsed.secrets, playerIds, true),
@@ -449,7 +450,7 @@ export async function loadKotobaSenpukuPlayerActiveRoom(playerId: string) {
 export async function createStoredKotobaSenpukuRoom(value: unknown, actorId: string) {
   const room = normalizeRoom(value);
   if (!room || actorId !== room.hostId) throw new Error("INVALID_KOTOBA_SENPUKU_ROOM");
-  const created = { ...room, revision: 0, gameNumber: 1, phase: "lobby" as const, debugMode: false, theme: null, secrets: {}, submittedIds: [], masks: {}, calledKana: [], exposedIds: [], roundEvents: [], history: [], log: ["参加者を待っています。"], phaseStartedAt: null, updatedAt: Date.now() };
+  const created = { ...room, revision: 0, gameNumber: 1, phase: "lobby" as const, debugMode: false, debugReplayEnabled: false, theme: null, secrets: {}, submittedIds: [], masks: {}, calledKana: [], exposedIds: [], roundEvents: [], history: [], log: ["参加者を待っています。"], phaseStartedAt: null, updatedAt: Date.now() };
   const saved = await redisCommand<"OK" | null>(["SET", roomKey(created.code), JSON.stringify(created), "NX", ...multiplayerRoomExpiryArgs()]);
   if (saved !== "OK") throw new Error("KOTOBA_SENPUKU_ROOM_CONFLICT");
   await redisCommand<number>(["SADD", roomIndexKey, created.code]);
@@ -471,7 +472,7 @@ export async function applyStoredKotobaSenpukuAction(code: string, action: Kotob
     if (!actorIsMember) throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
     if (action.type === "abort-game") {
       if (!actorIsHost || !current.debugMode || current.phase === "lobby") throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
-      return { ...current, phase: "lobby", round: 1, theme: null, secrets: {}, submittedIds: [], masks: {}, calledKana: [], exposedIds: [], roundEvents: [], roundSignals: {}, totalScores: {}, activePlayerIndex: 0, turnNumber: 1, history: [], log: ["ゲームを中断し、ゲーム開始前へ戻りました。"], phaseStartedAt: null };
+      return { ...current, phase: "lobby", round: 1, debugReplayEnabled: false, theme: null, secrets: {}, submittedIds: [], masks: {}, calledKana: [], exposedIds: [], roundEvents: [], roundSignals: {}, totalScores: {}, activePlayerIndex: 0, turnNumber: 1, history: [], log: ["ゲームを中断し、ゲーム開始前へ戻りました。"], phaseStartedAt: null };
     }
 
     const reconciled = reconcileProgress(current);
@@ -487,7 +488,11 @@ export async function applyStoredKotobaSenpukuAction(code: string, action: Kotob
     }
     if (action.type === "set-debug") {
       if (!actorIsHost || current.phase !== "lobby") throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
-      return { ...current, debugMode: action.enabled, players: action.enabled ? current.players : current.players.filter((player) => !player.isDummy) };
+      return { ...current, debugMode: action.enabled, debugReplayEnabled: action.enabled ? current.debugReplayEnabled : false, players: action.enabled ? current.players : current.players.filter((player) => !player.isDummy) };
+    }
+    if (action.type === "set-debug-replay") {
+      if (!actorIsHost || !current.debugMode) throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
+      return { ...current, debugReplayEnabled: action.enabled };
     }
     if (action.type === "debug-add-player") {
       if (!actorIsHost || !current.debugMode || current.phase !== "lobby") throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
@@ -517,7 +522,7 @@ export async function applyStoredKotobaSenpukuAction(code: string, action: Kotob
     }
     if (action.type === "reset-game") {
       if (!actorIsHost || current.phase !== "result" || current.round < current.roundsTotal) throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
-      return { ...current, gameNumber: current.gameNumber + 1, phase: "lobby", round: 1, theme: null, secrets: {}, submittedIds: [], masks: {}, calledKana: [], exposedIds: [], roundEvents: [], roundSignals: {}, totalScores: {}, activePlayerIndex: 0, turnNumber: 1, history: [], log: ["同じ部屋で次のゲームを準備できます。"], phaseStartedAt: null };
+      return { ...current, gameNumber: current.gameNumber + 1, phase: "lobby", round: 1, debugReplayEnabled: false, theme: null, secrets: {}, submittedIds: [], masks: {}, calledKana: [], exposedIds: [], roundEvents: [], roundSignals: {}, totalScores: {}, activePlayerIndex: 0, turnNumber: 1, history: [], log: ["同じ部屋で次のゲームを準備できます。"], phaseStartedAt: null };
     }
 
     const activePlayer = current.players[current.activePlayerIndex];
