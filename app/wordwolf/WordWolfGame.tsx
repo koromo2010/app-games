@@ -15,6 +15,7 @@ import {
 } from "@/lib/player-session";
 import { loadPlayerRoomDefaults, savePlayerRoomDefaults } from "@/lib/game-room-defaults-client";
 import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
+import { reducedPlayerTimeLimitSeconds } from "@/lib/player-timeout-policy";
 import { createGameTimerEventId } from "@/lib/game-timer/event";
 import {
   isValidWordWolfTopic,
@@ -32,6 +33,8 @@ import { GameTopBanner, gameTopBannerOffsetClass } from "../components/GameTopBa
 import { GameTopMenu, gameTopBannerActionClass, gameTopBannerDangerActionClass, gameTopMenuItemClass } from "../components/GameTopMenu";
 import { DebugWordGenerationTest, type DebugWordGenerationResult } from "../components/DebugWordGenerationTest";
 import { GameFeedbackPanel } from "../components/GameFeedbackPanel";
+import { GameAdSlot } from "../components/GameAdSlot";
+import { PlayerTimeoutNotice } from "../components/PlayerTimeoutNotice";
 import { GameRulesDialog } from "../components/GameRulesDialog";
 import { RoomResultActions } from "../components/RoomResultActions";
 import { RoomTimeLimitControl } from "../components/RoomTimeLimitControl";
@@ -465,6 +468,8 @@ function createEmptyRoom(
   const player = createPlayer(hostName, avatarColor, avatarImage, hostId);
   const defaults = savedDefaults ?? loadRoomDefaults(player.id, ownerId);
   const room: Room = {
+    playerTimeouts: { [player.id]: { consecutiveTimeouts: 0, reducedTime: false } },
+    playerTimeoutNotice: null,
     revision: 0,
     code: makeRoomCode(),
     hostId: player.id,
@@ -711,6 +716,9 @@ export function WordWolfGame() {
     phase: room?.phase,
     configuredSeconds: room?.turnTimeLimitSeconds ?? 0,
     startedAt: room?.currentTurnStartedAt,
+    limitSecondsOverride: room && currentPlayer?.id && room.playerTimeouts[currentPlayer.id]?.reducedTime && room.phase !== "lobby" && room.phase !== "result"
+      ? reducedPlayerTimeLimitSeconds
+      : undefined,
   });
   const shouldShowClueLog = Boolean(
     room &&
@@ -1410,6 +1418,7 @@ export function WordWolfGame() {
             </div>
             <GamePlayerMenu id={playerAccountId || undefined} name={headerName} avatarColor={headerAvatarColor} avatarImage={headerAvatarImage} />
       </GameTopBanner>
+      {room && <div className="mx-auto max-w-6xl px-4 pt-4"><PlayerTimeoutNotice playerTimeouts={room.playerTimeouts} playerTimeoutNotice={room.playerTimeoutNotice} currentPlayerId={currentPlayerId} onRecover={() => runRoomAction({ type: "recover-player" }).then(() => undefined)} /></div>}
 
       <FullScreenPageOverlay open={isMyPageOpen} href="/users/me" title="マイページ" onClose={() => setIsMyPageOpen(false)} />
 
@@ -1434,6 +1443,12 @@ export function WordWolfGame() {
         </details>
         <p className="mt-4 text-amber-200">制限時間が来ると、その時点で提出されている発言や投票を使って自動で進みます。発言内容が全員に公開される時期は、部屋の設定で変わります。</p>
       </GameRulesDialog>
+
+      <GameAdSlot
+        gameId="wordwolf"
+        surface={!room ? "game-entry" : room.phase === "lobby" ? "room-lobby" : room.phase === "result" ? "result" : null}
+        disabled={Boolean(room?.debugMode)}
+      />
 
       <section className={wordwolfLayoutClass}>
         <aside className="space-y-4">

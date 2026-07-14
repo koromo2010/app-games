@@ -11,6 +11,8 @@ const retryableRedisStatuses = new Set([429, 500, 502, 503, 504]);
 const redisReadCommands = new Set([
   "EXISTS",
   "GET",
+  "DBSIZE",
+  "INFO",
   "HGET",
   "HGETALL",
   "HMGET",

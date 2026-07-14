@@ -19,6 +19,8 @@ import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
 import { DebugModeButton } from "../components/DebugModeButton";
 import { DebugWordGenerationTest, type DebugWordGenerationResult } from "../components/DebugWordGenerationTest";
 import { GameFeedbackPanel } from "../components/GameFeedbackPanel";
+import { GameAdSlot } from "../components/GameAdSlot";
+import { PlayerTimeoutNotice } from "../components/PlayerTimeoutNotice";
 import { GameRulesDialog } from "../components/GameRulesDialog";
 import { GameTopBanner, gameTopBannerOffsetClass } from "../components/GameTopBanner";
 import { GameTopMenu, gameTopBannerActionClass, gameTopBannerDangerActionClass, gameTopMenuItemClass } from "../components/GameTopMenu";
@@ -291,6 +293,8 @@ function createEmptyRoom(
 ): TahoiyaRoom {
   const defaults = savedDefaults ?? loadRoomDefaults(host.id, ownerId);
   return {
+    playerTimeouts: { [host.id]: { consecutiveTimeouts: 0, reducedTime: false } },
+    playerTimeoutNotice: null,
     code: makeRoomCode(),
     revision: 0,
     hostId: host.id,
@@ -878,6 +882,7 @@ export function TahoiyaGame() {
         </GameTopMenu>
         <GamePlayerMenu id={playerId || undefined} name={playerName || "未ログイン"} avatarColor={avatarColor} avatarImage={avatarImage} />
       </GameTopBanner>
+      {room && <div className="mx-auto max-w-6xl px-4 pt-4"><PlayerTimeoutNotice playerTimeouts={room.playerTimeouts} playerTimeoutNotice={room.playerTimeoutNotice} currentPlayerId={playerId} onRecover={() => runRoomAction({ type: "recover-player", actorId: playerId }).then(() => undefined)} /></div>}
 
       <GameRulesDialog open={rulesOpen} title="たほい屋のルール" onClose={() => setRulesOpen(false)}>
         <p>見慣れないことばに対して、本物の辞書説明と、プレイヤーが考えた偽の説明を混ぜます。本物を見抜くことと、自分の偽説明でほかの人をだますことの両方で得点するゲームです。</p>
@@ -896,6 +901,12 @@ export function TahoiyaGame() {
         <p className="mt-2"><span className="font-bold text-white">全員作成・全員投票：</span>全員が偽説明を書き、全員が投票します。ただし、自分で書いた偽説明には投票できません。</p>
         <p className="mt-4 text-amber-200">全員の提出や投票がそろうと自動で次へ進みます。制限時間が来た場合は、その時点で提出・投票できている内容だけで進みます。</p>
       </GameRulesDialog>
+
+      <GameAdSlot
+        gameId="tahoiya"
+        surface={!room ? "game-entry" : room.phase === "lobby" ? "room-lobby" : room.phase === "result" ? "result" : null}
+        disabled={Boolean(room?.debugMode)}
+      />
 
       <section className="mx-auto grid max-w-6xl gap-4 px-4 py-5 lg:grid-cols-[340px_1fr]">
         <aside className="space-y-4">

@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
+import { GameAdSlot } from "@/app/components/GameAdSlot";
 import { GamePhaseTimer } from "@/app/components/GamePhaseTimer";
+import { PlayerTimeoutNotice } from "@/app/components/PlayerTimeoutNotice";
 import { GameResultShareButton } from "@/app/components/GameResultShareButton";
 import { GameRulesDialog } from "@/app/components/GameRulesDialog";
 import { GameTopBanner, gameTopBannerOffsetClass } from "@/app/components/GameTopBanner";
@@ -200,7 +202,7 @@ export function HodoaiTalkGame() {
       const host: HodoaiPlayer = { id: session.id, name: session.name, joinedAt: now, avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined, shareNameAllowed: session.shareNameAllowed === true };
       const nextRoom: HodoaiRoom = {
         code: makeRoomCode(), revision: 0, hostId: session.id, sorterId: session.id, ownerId, passphrase: passphrase.trim(), phase: "lobby", players: [host],
-        ...defaults, debugMode: false, debugReplayEnabled: false, debugLog: [], gameNumber: 1, round: 1, theme: null, cards: [], values: {}, clues: {}, clueHistory: [], order: [], totalPoints: 0, history: [], phaseStartedAt: null, createdAt: now, updatedAt: now,
+        ...defaults, playerTimeouts: { [session.id]: { consecutiveTimeouts: 0, reducedTime: false } }, playerTimeoutNotice: null, debugMode: false, debugReplayEnabled: false, debugLog: [], gameNumber: 1, round: 1, theme: null, cards: [], values: {}, clues: {}, clueHistory: [], order: [], totalPoints: 0, history: [], phaseStartedAt: null, createdAt: now, updatedAt: now,
       };
       const data = await createHodoaiRoom(nextRoom, session.id);
       setRoom(data.room);
@@ -337,6 +339,7 @@ export function HodoaiTalkGame() {
             {error && <p className="mx-6 mb-6 rounded-xl border border-rose-300/30 bg-rose-300/10 p-3 text-sm font-bold text-rose-100">{error}</p>}
           </section>
         </div>
+        <GameAdSlot gameId="hodoai" surface="game-entry" />
         {rulesDialog}
       </main>
     );
@@ -357,6 +360,12 @@ export function HodoaiTalkGame() {
         <GamePlayerMenu id={session.id} name={session.name} avatarColor={session.avatarColor} avatarImage={session.avatarImage} hasRecoveryEmail={session.hasRecoveryEmail} />
       </GameTopBanner>
       {rulesDialog}
+      <div className="mx-auto max-w-5xl px-4 pt-4"><PlayerTimeoutNotice playerTimeouts={room.playerTimeouts} playerTimeoutNotice={room.playerTimeoutNotice} currentPlayerId={playerId} disabled={isSaving} onRecover={() => runAction({ type: "recover-player", actorId: playerId }).then(() => undefined)} /></div>
+      <GameAdSlot
+        gameId="hodoai"
+        surface={room.phase === "lobby" ? "room-lobby" : room.phase === "result" ? "result" : null}
+        disabled={room.debugMode}
+      />
       <div className="mx-auto grid max-w-6xl gap-4 px-4 py-5 lg:grid-cols-[280px_minmax(0,1fr)]">
         <WordScaleRoomPanel playerCount={room.players.length}>
           <section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4">

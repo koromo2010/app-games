@@ -17,6 +17,7 @@ import { normalizeOnlineRoomCode, onlineRoomPassphraseMaximumLength } from "@/li
 import { isAvatarColor, isAvatarImage } from "@/lib/player-session";
 import { onlineRoomPlayerLimits } from "@/lib/online-room-policy";
 import { loadOnlineRoomValues, scanOnlineRoomCodes } from "@/lib/online-room-list";
+import { normalizePlayerTimeoutFields, recoverPlayerTimeout } from "@/lib/player-timeout-policy";
 
 export type WordWolfRoom = Room;
 export type WordWolfRoomChoice = RoomChoice;
@@ -163,6 +164,14 @@ function normalizeRoom(value: unknown): WordWolfRoom | null {
 
   if (!code || !hostId || players.length === 0) return null;
 
+  const normalizedPlayers = players.slice(0, onlineRoomPlayerLimits.wordwolf).map((player) => ({
+    ...player,
+    id: String(player.id).slice(0, 80),
+    name: String(player.name).trim().slice(0, 40),
+    avatarColor: isAvatarColor(player.avatarColor ?? null) ? player.avatarColor : undefined,
+    avatarImage: isAvatarImage(player.avatarImage ?? null) ? player.avatarImage : undefined,
+  })) as Player[];
+
   return {
     revision: typeof parsed.revision === "number" ? Math.max(0, Math.floor(parsed.revision)) : 0,
     code,
@@ -176,13 +185,8 @@ function normalizeRoom(value: unknown): WordWolfRoom | null {
     clueLogVisibility: parsed.clueLogVisibility === "always" ? "always" : "result",
     clueMode: normalizeClueMode(parsed.clueMode),
     randomizeTurnOrder: parsed.randomizeTurnOrder ?? true,
-    players: players.slice(0, onlineRoomPlayerLimits.wordwolf).map((player) => ({
-      ...player,
-      id: String(player.id).slice(0, 80),
-      name: String(player.name).trim().slice(0, 40),
-      avatarColor: isAvatarColor(player.avatarColor ?? null) ? player.avatarColor : undefined,
-      avatarImage: isAvatarImage(player.avatarImage ?? null) ? player.avatarImage : undefined,
-    })) as Player[],
+    players: normalizedPlayers,
+    ...normalizePlayerTimeoutFields(parsed, normalizedPlayers.map((player) => player.id)),
     roundsTotal: normalizeRoundsTotal(parsed.roundsTotal),
     turnTimeLimitSeconds: normalizeCommonTimeLimit(parsed.turnTimeLimitSeconds),
     currentRound: typeof parsed.currentRound === "number" ? parsed.currentRound : 1,
@@ -408,7 +412,9 @@ export async function applyStoredWordWolfRoomAction(code: string, actorId: strin
     if (!actorIsMember) throw new Error("WORDWOLF_ROOM_FORBIDDEN");
 
     let next: WordWolfRoom = current;
-    if (action.type === "update-player") {
+    if (action.type === "recover-player") {
+      next = recoverPlayerTimeout(current, actorId, current.players.find((player) => player.id === actorId)?.name ?? "プレイヤー") ?? current;
+    } else if (action.type === "update-player") {
       next = {
         ...current,
         players: current.players.map((player) => player.id === actorId ? {

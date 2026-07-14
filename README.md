@@ -74,6 +74,8 @@ Tahoiya gameplay mutations are revisioned server actions. The server rejects sta
 
 All five online games route room queries and mutations through `lib/online-room-api-client.ts` and a game-specific typed adapter. Visible-tab polling and cross-tab refresh use `app/hooks/use-online-room-polling.ts`; game screens must not duplicate room URLs, HTTP methods, or interval/listener setup. Result ordering shared by UI, external share text, and replay storage should be projected once through `lib/game-result-presentation.ts`.
 
+Future advertising uses the provider-neutral `app/components/GameAdSlot.tsx`. Slots exist only on the game catalog, pre-entry, room lobby, and result surfaces; active play and debug rooms do not show ads. Advertising is off by default. Set `NEXT_PUBLIC_GAME_ADS_MODE=preview` only to inspect reserved layout space. Do not use `live` until a consent flow, provider adapter, CSP rules, and production policy review are complete.
+
 ## Vocabulary sources
 
 The curated Tahoiya seed catalog uses or references terminology from the following open vocabulary sources. Definitions stored by Game Fields are short game-oriented paraphrases, not reproduced dictionary entries.

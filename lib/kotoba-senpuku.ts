@@ -1,4 +1,5 @@
 import { normalizeCommonTimeLimit } from "./game-room-config.ts";
+import type { PlayerTimeoutFields } from "./player-timeout-policy.ts";
 
 export type KotobaSenpukuTheme = {
   id: string;
@@ -45,7 +46,7 @@ export type KotobaSenpukuRoundResult = {
 
 export type KotobaSenpukuPhase = "lobby" | "secret" | "battle" | "result";
 
-export type KotobaSenpukuRoom = KotobaSenpukuConfig & {
+export type KotobaSenpukuRoom = KotobaSenpukuConfig & PlayerTimeoutFields & {
   code: string;
   debugReplayEnabled: boolean;
   revision: number;
@@ -86,6 +87,7 @@ export type KotobaSenpukuRoomChoice = {
 export type KotobaSenpukuRoomAction =
   | { type: "join-room"; actorId: string; player: KotobaSenpukuPlayer; passphrase: string }
   | { type: "leave-room"; actorId: string }
+  | { type: "recover-player"; actorId: string }
   | { type: "update-config"; actorId: string; config: Omit<KotobaSenpukuConfig, "debugMode"> }
   | { type: "set-debug"; actorId: string; enabled: boolean }
   | { type: "set-debug-replay"; actorId: string; enabled: boolean }

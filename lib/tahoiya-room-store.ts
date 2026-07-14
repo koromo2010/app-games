@@ -13,6 +13,9 @@ import { normalizeOnlineRoomCode, onlineRoomPassphraseMaximumLength } from "@/li
 import { isAvatarColor, isAvatarImage } from "@/lib/player-session";
 import { onlineRoomPlayerLimits } from "@/lib/online-room-policy";
 import { loadOnlineRoomValues, scanOnlineRoomCodes } from "@/lib/online-room-list";
+import { normalizePlayerTimeoutFields, playerTimeLimitSeconds, recordPlayerActivity, recordPlayerTimeout, recoverPlayerTimeout } from "@/lib/player-timeout-policy";
+
+const timeoutSubmission = "__timeout__";
 
 const roomKeyPrefix = "tahoiya:room:";
 const roomIndexKey = "tahoiya:rooms";
@@ -104,6 +107,7 @@ function normalizeRoom(value: unknown): TahoiyaRoom | null {
     debugMode: Boolean(parsed.debugMode),
     debugReplayEnabled: Boolean(parsed.debugMode && parsed.debugReplayEnabled),
     players,
+    ...normalizePlayerTimeoutFields(parsed, players.map((player) => player.id)),
     parentId,
     playMode,
     topicDifficulty: parsed.topicDifficulty === "extreme" ? "extreme" : "standard",
@@ -183,7 +187,7 @@ function shuffle<T>(items: T[]) {
 function createDefinitionOptions(room: TahoiyaRoom): TahoiyaDefinitionOption[] {
   return shuffle([
     { id: `real-${randomUUID()}`, text: room.realDefinition, authorId: null, isReal: true },
-    ...Object.entries(room.fakeDefinitions).map(([playerId, text]) => ({
+    ...Object.entries(room.fakeDefinitions).filter(([, text]) => text !== timeoutSubmission).map(([playerId, text]) => ({
       id: `fake-${randomUUID()}`,
       text,
       authorId: playerId,
@@ -241,11 +245,11 @@ function votingComplete(room: TahoiyaRoom) {
   return voters.length > 0 && voters.every((playerId) => Boolean(room.votes[playerId]));
 }
 
-function timedOut(room: TahoiyaRoom, now = Date.now()) {
+function timedOut(room: TahoiyaRoom, seconds = room.actionTimeLimitSeconds, now = Date.now()) {
   return Boolean(
     room.phaseStartedAt &&
-    room.actionTimeLimitSeconds > 0 &&
-    now >= room.phaseStartedAt + room.actionTimeLimitSeconds * 1000 + commonGameTimeoutGraceMs()
+    seconds > 0 &&
+    now >= room.phaseStartedAt + seconds * 1000 + commonGameTimeoutGraceMs()
   );
 }
 
@@ -260,8 +264,30 @@ function advanceToVoting(room: TahoiyaRoom) {
 }
 
 function reconcileProgress(room: TahoiyaRoom) {
-  if (room.phase === "writing" && (writingComplete(room) || timedOut(room))) return advanceToVoting(room);
-  if (room.phase === "voting" && (votingComplete(room) || timedOut(room))) return scoreRoom(room);
+  if (room.phase === "writing") {
+    let next = room;
+    for (const playerId of definitionWriterIds(room).filter((id) => !room.fakeDefinitions[id])) {
+      if (timedOut(room, playerTimeLimitSeconds(room.actionTimeLimitSeconds, room.playerTimeouts, playerId))) {
+        const player = room.players.find((item) => item.id === playerId);
+        next = recordPlayerTimeout(next, playerId, player?.name ?? "プレイヤー");
+        next = { ...next, fakeDefinitions: { ...next.fakeDefinitions, [playerId]: timeoutSubmission } };
+      }
+    }
+    if (writingComplete(next) || timedOut(room)) return advanceToVoting(next);
+    return next;
+  }
+  if (room.phase === "voting") {
+    let next = room;
+    for (const playerId of voterIds(room).filter((id) => !room.votes[id])) {
+      if (timedOut(room, playerTimeLimitSeconds(room.actionTimeLimitSeconds, room.playerTimeouts, playerId))) {
+        const player = room.players.find((item) => item.id === playerId);
+        next = recordPlayerTimeout(next, playerId, player?.name ?? "プレイヤー");
+        next = { ...next, votes: { ...next.votes, [playerId]: timeoutSubmission } };
+      }
+    }
+    if (votingComplete(next) || timedOut(room)) return scoreRoom(next);
+    return next;
+  }
   return room;
 }
 
@@ -473,6 +499,9 @@ export async function applyStoredTahoiyaRoomAction(code: string, action: Tahoiya
     const actorIsHost = action.actorId === current.hostId;
     const actorIsMember = current.players.some((player) => player.id === action.actorId);
     if (!actorIsMember) throw new Error("TAHOIYA_ROOM_FORBIDDEN");
+    if (action.type === "recover-player") {
+      return recoverPlayerTimeout(current, action.actorId, current.players.find((player) => player.id === action.actorId)?.name ?? "プレイヤー") ?? current;
+    }
     if (action.type === "abort-game") {
       if (!actorIsHost || !current.debugMode || current.phase === "lobby") throw new Error("TAHOIYA_ROOM_FORBIDDEN");
       const answererId = current.playMode === "single-answerer" && current.answererMode === "manual" ? current.answererId : "";
@@ -532,10 +561,10 @@ export async function applyStoredTahoiyaRoomAction(code: string, action: Tahoiya
       }
       const text = action.text.trim().replace(/\s+/g, " ").slice(0, 240);
       if (!text) return current;
-      return reconcileProgress({
+      return reconcileProgress(recordPlayerActivity({
         ...current,
         fakeDefinitions: { ...current.fakeDefinitions, [action.playerId]: text },
-      });
+      }, action.playerId));
     }
 
     if (action.type === "cast-vote") {
@@ -543,10 +572,10 @@ export async function applyStoredTahoiyaRoomAction(code: string, action: Tahoiya
       if (!canActForPlayer || current.phase !== "voting" || !voterIds(current).includes(action.playerId)) return current;
       const option = current.options.find((item) => item.id === action.optionId);
       if (!option || option.authorId === action.playerId) return current;
-      return reconcileProgress({
+      return reconcileProgress(recordPlayerActivity({
         ...current,
         votes: { ...current.votes, [action.playerId]: option.id },
-      });
+      }, action.playerId));
     }
 
     if (action.type === "advance-phase") {

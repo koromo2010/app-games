@@ -8,6 +8,7 @@ import { judgeWordWolfGuess } from "@/lib/wordwolf-guess-judgement";
 import { withGameGenerationCache } from "@/lib/game-generation-cache";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
+import { recordPlayerActivity } from "@/lib/player-timeout-policy";
 
 export async function POST(request: Request) {
   const telemetry = createRequestTelemetry(request, "/api/wordwolf/commands", { game: "wordwolf", operation: "room-command" });
@@ -94,17 +95,17 @@ export async function POST(request: Request) {
       const aiLimited = await rateLimitResponseFor(request, rateLimitPolicies.aiGeneration, { playerId: player.id });
       if (aiLimited) return aiLimited;
       const judgement = await judgeWordWolfGuess(guess, room.villageWord);
-      next = {
+      next = recordPlayerActivity({
         ...room,
-        phase: "result",
+        phase: "result" as const,
         currentTurnStartedAt: null,
         wolfGuess: guess,
         wolfGuessJudgement: judgement,
-        winner: judgement.accepted ? "wolf" : "village",
+        winner: judgement.accepted ? "wolf" as const : "village" as const,
         resultText: judgement.accepted
           ? "逆転回答を正解扱いにしました。狼の勝利です。"
           : "逆転回答は不正解扱いです。村側の勝利です。",
-      };
+      }, room.accusedId!);
     }
     if (!next) {
       if (body.type !== "expire-phase") {

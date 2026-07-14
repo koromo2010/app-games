@@ -1,6 +1,7 @@
 import type { TopicDictionarySource, TopicPairDistance, TopicSourceMode, WordWolfTopic } from "@/lib/wordwolf";
 import type { WordWolfGuessJudgement } from "@/lib/wordwolf-guess-judgement";
 import type { GameGenerationMeta } from "@/lib/game-ai-types";
+import type { PlayerTimeoutFields } from "@/lib/player-timeout-policy";
 
 export type Phase = "lobby" | "clue" | "vote" | "wolfGuess" | "result";
 export type ClueLogVisibility = "always" | "result";
@@ -29,7 +30,7 @@ export type VoteRound = {
   at: number;
 };
 
-export type Room = {
+export type Room = PlayerTimeoutFields & {
   revision: number;
   code: string;
   hostId: string;
@@ -103,6 +104,7 @@ export type WordWolfLobbyConfig = Pick<Room,
 export type WordWolfRoomAction =
   | { type: "join-room"; passphrase: string }
   | { type: "update-player"; name: string; avatarColor?: string; avatarImage?: string | null }
+  | { type: "recover-player" }
   | { type: "update-config"; config: Partial<WordWolfLobbyConfig> }
   | { type: "set-debug"; enabled: boolean }
   | { type: "set-debug-replay"; enabled: boolean }

@@ -26,6 +26,7 @@ import { recordKotobaSenpukuGameResults } from "@/lib/player-stats-store";
 import { recordKotobaSenpukuReplay } from "@/lib/game-replay-store";
 import { redisCommand } from "@/lib/redis-store";
 import { commonGameTimeoutGraceMs } from "@/lib/game-timer/policy";
+import { normalizePlayerTimeoutFields, playerTimeLimitSeconds, recordPlayerActivity, recordPlayerTimeout, recoverPlayerTimeout } from "@/lib/player-timeout-policy";
 import { canDissolveOnlineRoom, canMoveFromOnlineRoom } from "@/lib/room-dissolve-policy";
 import { claimPlayerActiveRoom, releasePlayerActiveRoom, type ActiveRoomClaim } from "@/lib/player-active-room";
 import { onlineRoomPlayerLimits } from "@/lib/online-room-policy";
@@ -157,6 +158,7 @@ function normalizeRoom(value: unknown): KotobaSenpukuRoom | null {
     passphrase: typeof parsed.passphrase === "string" ? parsed.passphrase.slice(0, 40) : "",
     phase: isPhase(parsed.phase) ? parsed.phase : "lobby",
     players,
+    ...normalizePlayerTimeoutFields(parsed, players.map((player) => player.id)),
     gameNumber: typeof parsed.gameNumber === "number" ? Math.max(1, Math.floor(parsed.gameNumber)) : 1,
     ...config,
     debugReplayEnabled: parsed.debugReplayEnabled === true && config.debugMode,
@@ -188,13 +190,14 @@ function addLog(room: KotobaSenpukuRoom, message: string) {
   return { ...room, log: [message, ...room.log].slice(0, 30) };
 }
 
-function fillMissingSecrets(room: KotobaSenpukuRoom) {
+function fillMissingSecrets(room: KotobaSenpukuRoom, targetIds = room.players.map((player) => player.id)) {
   const themeId = room.theme?.id ?? "meal";
   const candidates = kotobaSenpukuDebugWords[themeId] ?? kotobaSenpukuDebugWords.meal;
   const used = new Set(Object.values(room.secrets));
   const secrets = { ...room.secrets };
   let cursor = 0;
   for (const player of room.players) {
+    if (!targetIds.includes(player.id)) continue;
     if (secrets[player.id]) continue;
     while (cursor < candidates.length && used.has(candidates[cursor])) cursor += 1;
     const word = candidates[cursor] ?? `ことば${cursor + 1}`;
@@ -202,7 +205,7 @@ function fillMissingSecrets(room: KotobaSenpukuRoom) {
     used.add(word);
     cursor += 1;
   }
-  return { ...room, secrets, submittedIds: room.players.map((player) => player.id) };
+  return { ...room, secrets, submittedIds: [...new Set([...room.submittedIds, ...targetIds])] };
 }
 
 function allSecretsSubmitted(room: KotobaSenpukuRoom) {
@@ -342,12 +345,27 @@ function performChallenge(room: KotobaSenpukuRoom, targetId: string, guessInput:
 }
 
 function reconcileProgress(room: KotobaSenpukuRoom) {
-  if (room.phase === "secret" && (allSecretsSubmitted(room) || timedOut(room, room.secretTimeLimitSeconds))) {
-    return beginBattle(allSecretsSubmitted(room) ? room : fillMissingSecrets(room));
+  if (room.phase === "secret") {
+    let next = room;
+    for (const player of room.players.filter((item) => !room.secrets[item.id])) {
+      if (timedOut(room, playerTimeLimitSeconds(room.secretTimeLimitSeconds, room.playerTimeouts, player.id))) {
+        next = recordPlayerTimeout(next, player.id, player.name);
+        next = fillMissingSecrets(next, [player.id]);
+      }
+    }
+    if (allSecretsSubmitted(next) || timedOut(room, room.secretTimeLimitSeconds)) {
+      if (!allSecretsSubmitted(next)) {
+        for (const player of room.players.filter((item) => !next.secrets[item.id])) next = recordPlayerTimeout(next, player.id, player.name);
+        next = fillMissingSecrets(next);
+      }
+      return beginBattle(next);
+    }
+    return next;
   }
-  if (room.phase === "battle" && timedOut(room, room.turnTimeLimitSeconds)) {
+  const active = room.players[room.activePlayerIndex];
+  if (room.phase === "battle" && timedOut(room, active ? playerTimeLimitSeconds(room.turnTimeLimitSeconds, room.playerTimeouts, active.id) : room.turnTimeLimitSeconds)) {
     const player = room.players[room.activePlayerIndex];
-    const changed = player ? { ...room, roundEvents: [...room.roundEvents, { type: "timeout" as const, turn: room.turnNumber, actorId: player.id, createdAt: Date.now() }].slice(-300) } : room;
+    const changed = player ? recordPlayerTimeout({ ...room, roundEvents: [...room.roundEvents, { type: "timeout" as const, turn: room.turnNumber, actorId: player.id, createdAt: Date.now() }].slice(-300) }, player.id, player.name) : room;
     return advanceTurn(changed, `${player?.name ?? "手番プレイヤー"}は時間切れのため、手番を終了します。`);
   }
   return room;
@@ -509,6 +527,9 @@ export async function applyStoredKotobaSenpukuAction(code: string, action: Kotob
     const actorIsHost = action.actorId === current.hostId;
     const actorIsMember = current.players.some((player) => player.id === action.actorId && !player.isDummy);
     if (!actorIsMember) throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
+    if (action.type === "recover-player") {
+      return recoverPlayerTimeout(current, action.actorId, current.players.find((player) => player.id === action.actorId)?.name ?? "プレイヤー") ?? current;
+    }
     if (action.type === "abort-game") {
       if (!actorIsHost || !current.debugMode || current.phase === "lobby") throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
       return { ...current, phase: "lobby", round: 1, debugReplayEnabled: false, theme: null, secrets: {}, submittedIds: [], masks: {}, calledKana: [], exposedIds: [], roundEvents: [], roundSignals: {}, totalScores: {}, activePlayerIndex: 0, turnNumber: 1, history: [], log: ["ゲームを中断し、ゲーム開始前へ戻りました。"], phaseStartedAt: null };
@@ -550,7 +571,7 @@ export async function applyStoredKotobaSenpukuAction(code: string, action: Kotob
       const word = normalizeKotobaSenpukuWord(action.word);
       if (!isValidKotobaSenpukuWord(word)) throw new Error("KOTOBA_SENPUKU_INVALID_WORD");
       if ([...word].length < minimumKotobaSenpukuWordLength(current.players.length)) throw new Error("KOTOBA_SENPUKU_WORD_TOO_SHORT");
-      return reconcileProgress({ ...current, secrets: { ...current.secrets, [action.actorId]: word }, submittedIds: [...new Set([...current.submittedIds, action.actorId])] });
+      return reconcileProgress(recordPlayerActivity({ ...current, secrets: { ...current.secrets, [action.actorId]: word }, submittedIds: [...new Set([...current.submittedIds, action.actorId])] }, action.actorId));
     }
     if (action.type === "debug-fill-secrets") {
       if (!actorIsHost || !current.debugMode || current.phase !== "secret" || action.round !== current.round) throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
@@ -570,14 +591,14 @@ export async function applyStoredKotobaSenpukuAction(code: string, action: Kotob
     if (current.phase !== "battle" || action.round !== current.round || !canControlTurn) throw new Error("KOTOBA_SENPUKU_NOT_YOUR_TURN");
     if (action.type === "scan-kana") {
       if (!kotobaSenpukuKana.includes(action.kana as (typeof kotobaSenpukuKana)[number]) || current.calledKana.includes(action.kana)) throw new Error("KOTOBA_SENPUKU_INVALID_KANA");
-      return performScan(current, action.kana);
+      return performScan(recordPlayerActivity(current, activePlayer.id), action.kana);
     }
     if (action.type === "challenge-word") {
       if (!current.allowWordGuess) throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
       if (!isValidKotobaSenpukuWord(action.guess)) throw new Error("KOTOBA_SENPUKU_INVALID_WORD");
       const target = current.players.find((player) => player.id === action.targetId);
       if (!target || target.id === activePlayer.id || current.exposedIds.includes(target.id)) throw new Error("KOTOBA_SENPUKU_INVALID_TARGET");
-      return performChallenge(current, target.id, action.guess);
+      return performChallenge(recordPlayerActivity(current, activePlayer.id), target.id, action.guess);
     }
     if (action.type === "debug-auto-turn") {
       if (!actorIsHost || !current.debugMode) throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");

@@ -48,3 +48,5 @@ UI / hooks -> API client -> HTTP route -> application/domain -> storage
 第一段階では部屋API通信と時計を巨大な画面コンポーネントから分離した。その後、部屋APIと表示中ポーリングの共通土台を全5ゲームへ適用した。部屋には単調増加する `revision` を持たせ、Redis内CASで古い保存を409拒否する。参加・ロビー設定・ゲーム開始・通常の発言・投票・最終回答・時間切れは `/api/wordwolf/commands` または専用部屋Commandへ移行済みで、`lib/wordwolf-command-domain.ts` と各Room Storeが検証と状態遷移を担当する。WordWolf/Tahoiyaに残っていた部屋全体POST互換経路も廃止済みで、全5ゲームのgame-server境界は同じHTTP契約になった。
 
 `config/game-registry.json` の `moduleBoundaryFiles` は分離済み境界の正本であり、`npm run lint` が存在を検査する。新しいスレッドや新ゲームでファイルを1つへ戻さない。
+
+プレイヤー別の連続時間切れ、5秒制限、復帰通知は `lib/player-timeout-policy.ts` を正本とする。タイマーのあるゲームはRoomへ共通フィールドを合成し、ゲーム固有Storeは「誰が時間切れになったか」と「有効な操作があったか」だけを渡す。制限解除は通常操作ではなく本人の明示的な復帰操作だけで行う。

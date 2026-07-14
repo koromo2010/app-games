@@ -10,6 +10,7 @@ import { normalizeOnlineRoomCode } from "@/lib/online-room-input";
 import { isAvatarColor, isAvatarImage } from "@/lib/player-session";
 import { appendGameDebugLog, normalizeGameDebugLog } from "@/lib/game-debug-log";
 import { loadOnlineRoomValues, scanOnlineRoomCodes } from "@/lib/online-room-list";
+import { normalizePlayerTimeoutFields, playerTimeLimitSeconds, recordPlayerActivity, recordPlayerTimeout, recoverPlayerTimeout } from "@/lib/player-timeout-policy";
 import {
   clueHasNumber,
   canAssignHodoaiSorter,
@@ -41,6 +42,7 @@ const playerActiveRoomKeyPrefix = "hodoai:player-active-room:";
 const hodoaiDebugActionLabels: Record<HodoaiRoomAction["type"], string> = {
   "join-room": "部屋に参加",
   "leave-room": "部屋から退出",
+  "recover-player": "通常の持ち時間に復帰",
   "update-config": "部屋設定を変更",
   "set-sorter": "並べ替え役を変更",
   "set-debug": "デバッグモードを変更",
@@ -200,6 +202,7 @@ function normalizeRoom(value: unknown): HodoaiRoom | null {
   const order = Array.isArray(parsed.order)
     ? parsed.order.filter((id): id is string => typeof id === "string" && cardIds.has(id))
     : [];
+  const timeoutFields = normalizePlayerTimeoutFields(parsed, players.map((player) => player.id));
   return {
     code,
     revision: typeof parsed.revision === "number" ? Math.max(0, Math.floor(parsed.revision)) : 0,
@@ -209,6 +212,7 @@ function normalizeRoom(value: unknown): HodoaiRoom | null {
     passphrase: typeof parsed.passphrase === "string" ? parsed.passphrase.slice(0, 40) : "",
     phase: isPhase(parsed.phase) ? parsed.phase : "lobby",
     players,
+    ...timeoutFields,
     gameNumber: typeof parsed.gameNumber === "number" ? Math.max(1, Math.floor(parsed.gameNumber)) : 1,
     ...config,
     debugReplayEnabled: parsed.debugReplayEnabled === true && config.debugMode,
@@ -302,10 +306,25 @@ function beginGame(room: HodoaiRoom) {
 }
 
 function reconcileProgress(room: HodoaiRoom) {
-  if (room.phase === "clue" && (clueComplete(room) || timedOut(room, room.clueTimeLimitSeconds))) {
-    return completeClueRound(room);
+  if (room.phase === "clue") {
+    let next = room;
+    for (const player of room.players) {
+      const missing = room.cards.filter((card) => card.ownerId === player.id && !next.clues[card.id]);
+      if (missing.length > 0 && timedOut(room, playerTimeLimitSeconds(room.clueTimeLimitSeconds, room.playerTimeouts, player.id))) {
+        next = recordPlayerTimeout(next, player.id, player.name);
+        next = { ...next, clues: { ...next.clues, ...Object.fromEntries(missing.map((card) => [card.id, "時間切れのためパス"])) } };
+      }
+    }
+    if (clueComplete(next) || timedOut(room, room.clueTimeLimitSeconds)) return completeClueRound(next);
+    return next;
   }
-  if (room.phase === "arrange" && timedOut(room, room.arrangeTimeLimitSeconds)) return scoreRound(room);
+  if (room.phase === "arrange") {
+    const seconds = playerTimeLimitSeconds(room.arrangeTimeLimitSeconds, room.playerTimeouts, room.sorterId);
+    if (timedOut(room, seconds)) {
+      const sorter = room.players.find((player) => player.id === room.sorterId);
+      return scoreRound(sorter ? recordPlayerTimeout(room, sorter.id, sorter.name) : room);
+    }
+  }
   return room;
 }
 
@@ -493,6 +512,9 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
     const actorIsHost = action.actorId === current.hostId;
     const actorIsMember = current.players.some((player) => player.id === action.actorId);
     if (!actorIsMember) throw new Error("HODOAI_ROOM_FORBIDDEN");
+    if (action.type === "recover-player") {
+      return recoverPlayerTimeout(current, action.actorId, current.players.find((player) => player.id === action.actorId)?.name ?? "プレイヤー") ?? current;
+    }
     if (action.type === "abort-game") {
       if (!actorIsHost || !current.debugMode || current.phase === "lobby") throw new Error("HODOAI_ROOM_FORBIDDEN");
       return { ...current, phase: "lobby", debugReplayEnabled: false, round: 1, theme: null, cards: [], values: {}, clues: {}, clueHistory: [], order: [], totalPoints: 0, history: [], phaseStartedAt: null };
@@ -562,14 +584,14 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
       if (current.phase !== "clue" || action.round !== current.round || card?.ownerId !== action.actorId || current.clues[action.cardId]) return current;
       const text = action.text.trim().replace(/\s+/g, " ").slice(0, 40);
       if (text.length < 2 || clueHasNumber(text)) throw new Error("HODOAI_INVALID_CLUE");
-      return reconcileProgress({ ...current, clues: { ...current.clues, [action.cardId]: text } });
+      return reconcileProgress(recordPlayerActivity({ ...current, clues: { ...current.clues, [action.cardId]: text } }, action.actorId));
     }
     if (action.type === "reorder") {
       if (!canReorderHodoaiCards(current, action.actorId) || action.round !== current.round) throw new Error("HODOAI_ROOM_FORBIDDEN");
       const expected = [...current.cards.map((card) => card.id)].sort();
       const proposed = [...new Set(action.order)].sort();
       if (expected.length !== proposed.length || expected.some((id, index) => id !== proposed[index])) return current;
-      return { ...current, order: action.order };
+      return recordPlayerActivity({ ...current, order: action.order }, action.actorId);
     }
     if (action.type === "score-round") {
       if (!actorIsHost || current.phase !== "arrange" || action.round !== current.round) throw new Error("HODOAI_ROOM_FORBIDDEN");

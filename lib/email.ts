@@ -43,3 +43,20 @@ export async function sendPasswordResetEmail(input: {
 
   if (error) throw new Error("EMAIL_SEND_FAILED");
 }
+
+export async function sendOperationsAlertEmail(input: { subject: string; lines: string[] }) {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  const email = process.env.OPERATIONS_ALERT_EMAIL?.trim();
+  if (!apiKey || !email) throw new Error("OPERATIONS_EMAIL_NOT_CONFIGURED");
+  const resend = new Resend(apiKey);
+  const from = process.env.EMAIL_FROM?.trim() || "Game Fields <noreply@game-fields.com>";
+  const text = input.lines.join("\n");
+  const { error } = await resend.emails.send({
+    from,
+    to: email,
+    subject: input.subject,
+    text,
+    html: `<div style="font-family:sans-serif;line-height:1.7"><h1>${escapeHtml(input.subject)}</h1>${input.lines.map((line) => `<p>${escapeHtml(line)}</p>`).join("")}</div>`,
+  });
+  if (error) throw new Error("EMAIL_SEND_FAILED");
+}

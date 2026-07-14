@@ -3,11 +3,13 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
+import { GameAdSlot } from "@/app/components/GameAdSlot";
 import { GameRulesDialog } from "@/app/components/GameRulesDialog";
 import { GameTopBanner, gameTopBannerOffsetClass } from "@/app/components/GameTopBanner";
 import { GameTopMenu, gameTopBannerActionClass, gameTopBannerDangerActionClass, gameTopMenuItemClass } from "@/app/components/GameTopMenu";
 import { GamePlayerMenu } from "@/app/components/GamePlayerMenu";
 import { GamePhaseTimer } from "@/app/components/GamePhaseTimer";
+import { PlayerTimeoutNotice } from "@/app/components/PlayerTimeoutNotice";
 import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomResultActions } from "@/app/components/RoomResultActions";
 import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
@@ -269,7 +271,7 @@ export function KotobaSenpukuGame() {
       const host: KotobaSenpukuPlayer = { id: session.id, name: session.name, joinedAt: now, avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined };
       const nextRoom: KotobaSenpukuRoom = {
         code: makeRoomCode(), revision: 0, hostId: session.id, ownerId, passphrase: passphrase.trim(), phase: "lobby", players: [host], gameNumber: 1,
-        ...defaults, debugMode: false, debugReplayEnabled: false, round: 1, theme: null, secrets: {}, submittedIds: [], masks: {}, calledKana: [], exposedIds: [],
+        ...defaults, playerTimeouts: { [session.id]: { consecutiveTimeouts: 0, reducedTime: false } }, playerTimeoutNotice: null, debugMode: false, debugReplayEnabled: false, round: 1, theme: null, secrets: {}, submittedIds: [], masks: {}, calledKana: [], exposedIds: [],
         roundSignals: { [session.id]: 0 }, totalScores: { [session.id]: 0 }, activePlayerIndex: 0, turnNumber: 1, roundEvents: [],
         history: [], log: ["参加者を待っています。"], phaseStartedAt: null, createdAt: now, updatedAt: now,
       };
@@ -415,6 +417,7 @@ export function KotobaSenpukuGame() {
             {error && <p className="mx-6 mb-6 rounded-xl border border-rose-300/30 bg-rose-300/10 p-3 text-sm font-bold text-rose-100">{error}</p>}
           </section>
         </div>
+        <GameAdSlot gameId="kotoba-senpuku" surface="game-entry" />
         {rulesDialog}
       </main>
     );
@@ -434,6 +437,12 @@ export function KotobaSenpukuGame() {
         </GameTopMenu>
         <GamePlayerMenu id={session.id} name={session.name} avatarColor={session.avatarColor} avatarImage={session.avatarImage} hasRecoveryEmail={session.hasRecoveryEmail} />
       </GameTopBanner>
+      <div className="mx-auto max-w-7xl px-4 pt-4"><PlayerTimeoutNotice playerTimeouts={room.playerTimeouts} playerTimeoutNotice={room.playerTimeoutNotice} currentPlayerId={playerId} disabled={isSaving} onRecover={() => runAction({ type: "recover-player", actorId: playerId }).then(() => undefined)} /></div>
+      <GameAdSlot
+        gameId="kotoba-senpuku"
+        surface={room.phase === "lobby" ? "room-lobby" : room.phase === "result" ? "result" : null}
+        disabled={room.debugMode}
+      />
       <div className="mx-auto grid max-w-7xl gap-4 px-4 py-5 md:grid-cols-[minmax(0,1fr)_240px] xl:grid-cols-[270px_minmax(0,1fr)_280px]">
         <aside className="space-y-4 md:col-span-2 md:grid md:grid-cols-2 md:gap-4 md:space-y-0 xl:col-span-1 xl:block xl:space-y-4"><section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4"><div className="flex items-center justify-between"><h2 className="font-black">参加者</h2><span className="text-sm text-slate-400">{room.players.length}人</span></div><ul className="mt-3 space-y-2">{room.players.map((player) => <PlayerRow key={player.id} player={player} isHost={player.id === room.hostId} isMe={player.id === playerId} eliminated={room.exposedIds.includes(player.id)} />)}</ul></section><RoomConfigSummary items={configItems} /></aside>
         <div className="space-y-4">

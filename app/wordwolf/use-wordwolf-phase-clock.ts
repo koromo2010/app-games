@@ -10,9 +10,9 @@ export function getWordWolfPhaseLimitSeconds(phase: Phase, configuredSeconds: nu
   return 0;
 }
 
-export function useWordWolfPhaseClock(input: { phase?: Phase; configuredSeconds: number; startedAt?: number | null }) {
+export function useWordWolfPhaseClock(input: { phase?: Phase; configuredSeconds: number; startedAt?: number | null; limitSecondsOverride?: number }) {
   const [now, setNow] = useState(() => Date.now());
-  const limitSeconds = input.phase ? getWordWolfPhaseLimitSeconds(input.phase, input.configuredSeconds) : 0;
+  const limitSeconds = input.limitSecondsOverride ?? (input.phase ? getWordWolfPhaseLimitSeconds(input.phase, input.configuredSeconds) : 0);
   useEffect(() => {
     if (!input.startedAt || limitSeconds <= 0) return;
     const timer = window.setInterval(() => setNow(Date.now()), 1000);

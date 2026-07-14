@@ -19,6 +19,7 @@ import {
   type PlayerSession,
 } from "@/lib/player-session";
 import type { PlayerStatsGameFilter, PlayerStatsResponse } from "@/lib/player-stats-store";
+import { GameAdSlot } from "../components/GameAdSlot";
 import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
 import { FullScreenPageOverlay } from "../components/FullScreenPageOverlay";
 import { games } from "./game-catalog";
@@ -632,6 +633,8 @@ export function GameLobby() {
           )}
         </div>
       </section>
+
+      <GameAdSlot gameId="game-fields" surface="catalog" />
 
       <section className="mx-auto grid max-w-6xl gap-4 px-4 py-6 lg:grid-cols-[340px_minmax(0,1fr)]">
         {isLoggedIn && !isMobileInfoOpen && (

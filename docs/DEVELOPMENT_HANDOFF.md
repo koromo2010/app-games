@@ -57,17 +57,24 @@
 - `DEBUG_MODE_PASSWORD`
 - `PRIVATE_GAME_ACCESS_KEY`（個人利用ゲーム枠の解除キー）
 - `RESEND_API_KEY`
+- `OPERATIONS_ALERT_EMAIL`（容量警告の送信先）
+- `CRON_SECRET`（Vercel Cronの認証。十分長いランダム値）
+- `POSTGRES_CAPACITY_BYTES`、`REDIS_CAPACITY_BYTES`、`BLOB_CAPACITY_BYTES`（契約プランの上限byte）
+- `STORAGE_ALERT_THRESHOLD_PERCENT`（省略時80）
 - `EMAIL_FROM`（任意。既定値 `Game Fields <noreply@game-fields.com>`）
 - `APP_BASE_URL`（推奨。本番は `https://game-fields.com`）
 - `UPSTASH_REDIS_REST_URL` または `KV_REST_API_URL`
 - `UPSTASH_REDIS_REST_TOKEN` または `KV_REST_API_TOKEN`
 - `REDIS_REQUEST_TIMEOUT_MS`（任意。既定4000ms、1000〜10000msに制限）
 - `database_DATABASE_URL`（Vercel管理Neon。標準の `DATABASE_URL` も優先的に認識）
+- `NEXT_PUBLIC_GAME_ADS_MODE`（任意。既定`off`。`preview`は広告予定位置のレイアウト確認専用。`live`は同意管理・配信adapter・CSP・ポリシー審査完了後だけ使用）
 - 既存の `KV_*`, `REDIS_URL` も環境に設定されている場合がある
 
 ゲームの公開／非公開は `config/game-registry.json` の `private` を正本とする。ページは `gamePageAccessAllowed`、部屋APIは `gameApiAccessDeniedResponse` を通し、非公開ゲームだけ共通Cookieを要求する。ことばソナーは公開ゲームのためアクセスキー不要だが、ログインと部屋内の操作権限は引き続き必要。
 
 プレイヤーアカウントの永続正本はNeon Postgresの `player_accounts`。テーブルは初回利用時に冪等作成する。移行中はRedisを読み取りフォールバックおよびセッション保存先として残し、Redisにだけ存在する既存アカウントはログインまたはメール検索時にPostgresへ自動コピーする。新規登録・メール変更・パスワード再設定はPostgresを先に更新し、Redisへ互換ミラーする。進行中の部屋・セッション・リセットトークン・レート制限は引き続きRedisを使う。
+
+Neon Postgres、Upstash Redis、Vercel Blobの容量は `vercel.json` の日次Cronから `/api/cron/storage-capacity` を確認する。各サービスの上限は契約変更で変わるため環境変数で明示し、既定80%を超えると `OPERATIONS_ALERT_EMAIL` へResendで1日1回まで通知する。上限未設定のサービスは誤報防止のため監視対象外になる。
 
 メール変更時はPostgresへ書き込む前に、PostgresとRedis双方のメール所有者を確認する。Redisだけに残る旧アカウントと重複する場合も先に拒否し、Postgresだけが変更済みになる状態を作らない。
 
@@ -110,6 +117,8 @@
 書き込み契約は `POST = 新規作成`、`PATCH = 既存部屋へのCommand`、`DELETE = 解散`。既存部屋をRoom全体POSTで更新しない。UIは変更後Roomを組み立てず、変更意図だけのActionをadapterへ渡す。権限・フェーズ・入力正規化・revision競合は保存済みRoomを読むサーバー側で処理する。`npm run lint` は全オンラインゲームの型付きadapter、PATCH route、UI直fetch、旧`setAndSaveRoom`の再混入を検査する。
 
 結果の表示順、外部共有文、プレイバック保存で同じ並べ替えを複製しない。共通契約は `lib/game-result-presentation.ts`、ワードスケールの基準実装は `hodoaiResultPresentation`。結果の向きを変える場合はプロジェクターと契約テストを変更し、3つの出力先は同じ結果行を参照させる。
+
+将来の広告位置は `app/components/GameAdSlot.tsx` を共通入口とする。配置対象はゲーム一覧、入室前、部屋ロビー、結果だけで、進行中とデバッグ部屋には表示しない。既定は完全非表示で、`NEXT_PUBLIC_GAME_ADS_MODE=preview` のときだけ予約寸法を表示する。`live`へ進む前に、同意管理、配信事業者adapter、CSP、年齢・地域・コンテンツに応じた広告ポリシー、広告ブロック時のレイアウトを共通コンポーネント内で実装し、ゲーム画面から事業者SDKを直接呼ばない。
 
 - 部屋設定は全クライアントへ表示する。
 - 設定操作はロビーにいるホストだけ。

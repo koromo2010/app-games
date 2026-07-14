@@ -21,6 +21,7 @@ for (const game of games) {
   for (const token of game.requiredTokens || []) if (!entry.includes(token)) fail(`${game.id}: 共通要件「${token}」が ${game.entryFile} にありません。`);
   if (game.private && !read(game.pageFile).includes("gamePageAccessAllowed")) fail(`${game.id}: 非公開ゲームの共通サーバーアクセス検証がありません。`);
   if (game.playMode === "online-room") {
+    if (!entry.includes("GameAdSlot")) fail(`${game.id}: 非プレイ面の共通広告スロットがありません。`);
     if (!game.roomStoreFile || !existsSync(join(root, game.roomStoreFile))) fail(`${game.id}: roomStoreFile がありません。`);
     else { const store = read(game.roomStoreFile); const modules = [entry, store, ...(game.moduleBoundaryFiles || []).map(read)].join("\n"); if (!store.includes("multiplayerRoomTtlSeconds") && !store.includes("multiplayerRoomExpiryArgs")) fail(`${game.id}: 共通の部屋TTLを使用していません。`); if (!store.includes("revision") && !store.includes("saveStoredWordWolfRoom")) fail(`${game.id}: サーバー側の部屋保存処理が見つかりません。`); if (!modules.includes("abort-game") && !modules.includes("abortGame")) fail(`${game.id}: ゲーム開始前へ戻すデバッグ中断処理がありません。`); if (!store.includes("canDissolveOnlineRoom")) fail(`${game.id}: 進行中の部屋解散を防ぐ共通ポリシーがありません。`); }
     if (!entry.includes("DebugModeButton") || !entry.includes("onAbort=") || !entry.includes("onReplayChange=")) fail(`${game.id}: トップバナーの共通デバッグメニュー（中断・プレイバック）がありません。`);
@@ -49,6 +50,7 @@ for (const game of games) {
   if (game.resultShare && !entry.includes("GameResultShareButton")) fail(`${game.id}: 最終結果の共通プレイログ共有がありません。`);
   if (game.stats === "account") { if (!game.statsRecorder || !read("lib/player-stats-store.ts").includes(game.statsRecorder)) fail(`${game.id}: アカウント戦績の記録処理がありません。`); if (!game.replayRecorder || !read("lib/game-replay-store.ts").includes(game.replayRecorder) || !read(game.roomStoreFile).includes(game.replayRecorder)) fail(`${game.id}: 全ゲーム共通のプレイバック記録処理がありません。`); if (!read("app/games/GameLobby.tsx").includes('game.stats === "account"')) fail(`${game.id}: 登録簿連動の戦績フィルターがありません。`); }
 }
+if (!read("app/games/GameLobby.tsx").includes("GameAdSlot")) fail("ゲームロビーに共通広告スロットがありません。");
 
 const registeredEntries = new Set(games.map((game) => game.entryFile));
 for (const directory of readdirSync(join(root, "app"), { withFileTypes: true }).filter((item) => item.isDirectory())) {

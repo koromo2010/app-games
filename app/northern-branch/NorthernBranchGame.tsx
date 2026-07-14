@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
+import { GameAdSlot } from "@/app/components/GameAdSlot";
 import { GameRulesDialog } from "@/app/components/GameRulesDialog";
 import { GameTopBanner, gameTopBannerOffsetClass } from "@/app/components/GameTopBanner";
 import { GameTopMenu, gameTopBannerActionClass, gameTopBannerDangerActionClass, gameTopMenuItemClass } from "@/app/components/GameTopMenu";
@@ -300,6 +301,7 @@ export function NorthernBranchGame() {
             {error && <p className="mx-6 mb-6 rounded-xl border border-rose-300/30 bg-rose-300/10 p-3 text-sm font-bold text-rose-100">{error}</p>}
           </section>
         </div>
+        <GameAdSlot gameId="northern-branch" surface="game-entry" />
         {rulesDialog}
       </main>
     );
@@ -319,6 +321,11 @@ export function NorthernBranchGame() {
         </GameTopMenu>
         <GamePlayerMenu id={session.id} name={session.name} avatarColor={session.avatarColor} avatarImage={session.avatarImage} hasRecoveryEmail={session.hasRecoveryEmail} />
       </GameTopBanner>
+      <GameAdSlot
+        gameId="northern-branch"
+        surface={room.phase === "lobby" ? "room-lobby" : room.phase === "finished" ? "result" : null}
+        disabled={room.debugMode}
+      />
       <div className="mx-auto grid max-w-7xl gap-4 px-4 py-5 xl:grid-cols-[260px_minmax(0,1fr)_280px]">
         <aside className="space-y-4"><section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4"><div className="flex items-center justify-between"><h2 className="font-black">参加者</h2><span className="text-sm text-slate-400">{room.players.length}/4人</span></div><ul className="mt-3 space-y-2">{room.players.map((player) => <PlayerRow key={player.id} player={player} isHost={player.id === room.hostId} isMe={player.id === playerId} />)}</ul></section><RoomConfigSummary items={configItems} /></aside>
         <div className="space-y-4">

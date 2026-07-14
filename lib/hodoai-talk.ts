@@ -1,6 +1,7 @@
 import type { GameDebugLogEntry } from "@/lib/game-debug-log";
 import { projectOrderedGameResult } from "./game-result-presentation.ts";
 import { onlineRoomPlayerLimits } from "./online-room-policy.ts";
+import type { PlayerTimeoutFields } from "./player-timeout-policy.ts";
 
 export type HodoaiTheme = {
   id: string;
@@ -54,7 +55,7 @@ export type HodoaiRoundResult = {
   clues: Record<string, string>;
 };
 
-export type HodoaiRoom = HodoaiConfig & {
+export type HodoaiRoom = HodoaiConfig & PlayerTimeoutFields & {
   code: string;
   debugReplayEnabled: boolean;
   revision: number;
@@ -93,6 +94,7 @@ export type HodoaiRoomChoice = {
 export type HodoaiRoomAction =
   | { type: "join-room"; actorId: string; player: HodoaiPlayer; passphrase: string }
   | { type: "leave-room"; actorId: string }
+  | { type: "recover-player"; actorId: string }
   | { type: "update-config"; actorId: string; config: Omit<HodoaiConfig, "debugMode"> }
   | { type: "set-sorter"; actorId: string; sorterId: string }
   | { type: "set-debug"; actorId: string; enabled: boolean }

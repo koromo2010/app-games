@@ -1,4 +1,5 @@
 export type TahoiyaPhase = "lobby" | "writing" | "voting" | "result";
+import type { PlayerTimeoutFields } from "./player-timeout-policy.ts";
 export type TahoiyaAnswererMode = "manual" | "random";
 export type TahoiyaPlayMode = "single-answerer" | "all-vote";
 export type TahoiyaDifficulty = "standard" | "extreme";
@@ -29,7 +30,7 @@ export type TahoiyaDefinitionOption = {
   isReal: boolean;
 };
 
-export type TahoiyaRoom = {
+export type TahoiyaRoom = PlayerTimeoutFields & {
   code: string;
   revision: number;
   hostId: string;
@@ -75,6 +76,7 @@ export type TahoiyaLobbyConfig = Pick<TahoiyaRoom,
 
 export type TahoiyaRoomAction =
   | { type: "abort-game"; actorId: string }
+  | { type: "recover-player"; actorId: string }
   | { type: "update-config"; actorId: string; config: Partial<TahoiyaLobbyConfig> }
   | { type: "set-debug"; actorId: string; enabled: boolean }
   | { type: "set-debug-replay"; actorId: string; enabled: boolean }
