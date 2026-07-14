@@ -1495,14 +1495,25 @@ export function WordWolfGame() {
       <FullScreenPageOverlay open={isMyPageOpen} href="/users/me" title="マイページ" onClose={() => setIsMyPageOpen(false)} />
 
       <GameRulesDialog open={isRulesOpen} title="ワードウルフのルール" onClose={() => setIsRulesOpen(false)}>
-        <p>自分だけ少数派かもしれない状態で会話し、投票で違うお題を持つ狼を探します。自分の役割も仲間も表示されません。</p>
-        <h3 className="mt-4 font-black text-white">基本の流れ</h3>
-        <ol className="mt-2 list-decimal space-y-2 pl-5"><li>各自のお題を確認し、お題そのものを言わずに設定回数ぶん発言します。</li><li>全員が狼だと思う1人へ投票します。</li><li>最多得票が同数なら候補者が追加発言し、候補者だけを対象に決選投票します。</li><li>候補が2人の決選では候補者本人を除き、3人以上なら候補者も投票します。</li></ol>
-        <h3 className="mt-4 font-black text-white">勝敗と逆転</h3>
-        <p className="mt-2">最多得票者が市民なら狼側の勝利。狼なら市民側の暫定勝利ですが、捕まった狼が市民のお題を完全一致で当てると狼側の逆転勝利です。</p>
-        <h3 className="mt-4 font-black text-white">狼不在モード</h3>
-        <p className="mt-2">「狼なしの可能性あり」では10%の確率で全員が同じお題になります。その回は投票で選ばれた人が負けです。全員同票なら追加発言を1周して再投票します。</p>
-        <p className="mt-4 text-amber-200">時間切れ時はサーバーが現在の提出状況から進行します。発言ログの公開時期は部屋設定に従います。</p>
+        <p>ほとんどの人には同じお題が配られ、少数の「狼」だけには少し違うお題が配られます。会話から違うお題を持つ人を見つける、正体隠匿ゲームです。</p>
+        <p className="mt-2">自分が市民か狼かは表示されません。自分だけ違うお題かもしれない、と考えながら遊びます。</p>
+        <h3 className="mt-4 font-black text-white">ゲームの流れ</h3>
+        <ol className="mt-2 list-decimal space-y-2 pl-5">
+          <li>自分だけに表示されるお題を確認します。</li>
+          <li>順番に、お題について短く話します。お題そのものを言うのは禁止です。自分のお題が周りと同じか、会話を聞いて見極めます。</li>
+          <li>設定された回数の会話が終わったら、狼だと思う人へ1票を入れます。</li>
+          <li>最も多く票を集めた人が選ばれます。同数なら、その人たちが追加で話してから決選投票をします。</li>
+        </ol>
+        <h3 className="mt-4 font-black text-white">勝ち方</h3>
+        <ul className="mt-2 list-disc space-y-2 pl-5">
+          <li>市民が投票で狼を選べなかった場合は、狼の勝ちです。</li>
+          <li>市民が狼を選んだ場合、狼には最後の逆転チャンスがあります。市民のお題を完全に当てれば狼の逆転勝ち、外せば市民の勝ちです。</li>
+        </ul>
+        <details className="mt-4 rounded-xl border border-white/10 bg-white/[0.04] p-3">
+          <summary className="cursor-pointer font-bold text-slate-200">「狼なしの可能性あり」の部屋</summary>
+          <p className="mt-3 text-slate-300">10%の確率で狼がおらず、全員に同じお題が配られます。この場合は投票で選ばれた人だけが負けです。全員が同じ票数なら、もう1周話してから再投票します。</p>
+        </details>
+        <p className="mt-4 text-amber-200">制限時間が来ると、その時点で提出されている発言や投票を使って自動で進みます。発言内容が全員に公開される時期は、部屋の設定で変わります。</p>
       </GameRulesDialog>
 
       <section className={wordwolfLayoutClass}>

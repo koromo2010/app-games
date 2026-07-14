@@ -338,6 +338,26 @@ export function HodoaiTalkGame() {
     });
   };
 
+  const rulesDialog = <GameRulesDialog open={rulesOpen} title="ワードスケールのルール" onClose={() => setRulesOpen(false)}>
+    <p>全員に秘密の数字カードが配られます。数字を直接言わず、お題に合うことばだけを手がかりにして、全員のカードを小さい順に並べる協力ゲームです。</p>
+    <h3 className="mt-4 font-black text-white">ゲームの準備</h3>
+    <ul className="mt-2 list-disc space-y-2 pl-5">
+      <li>1人に配るカードの枚数と、同じカードについてことばを出す回数を、部屋を作った人が設定します。</li>
+      <li>ゲーム開始時に、設定枚数の数字カードが1人ずつに配られます。自分の数字は本人だけが確認できます。</li>
+    </ul>
+    <h3 className="mt-4 font-black text-white">ゲームの流れ</h3>
+    <ol className="mt-2 list-decimal space-y-2 pl-5">
+      <li>全員共通のお題が表示されます。自分の数字が小さいほど小さく、大きいほど大きく感じられる、お題に合ったことばを考えます。</li>
+      <li>自分のカードごとに、手がかりとなることばを1つ提出します。数字そのものや、数を直接説明する表現は使えません。</li>
+      <li>設定回数が2回以上なら、数字カードはそのままでお題だけが変わります。同じ数字について別のお題でもう一度ことばを出します。</li>
+      <li>すべてのことばがそろったら、全員で相談します。ホストがカードを動かし、数字が小さいと思うカードから順に並べます。</li>
+      <li>並び順を決定すると、最後に数字を1度だけ公開して採点します。</li>
+    </ol>
+    <h3 className="mt-4 font-black text-white">得点</h3>
+    <p className="mt-2">正しい順番と比べ、前後が逆になっているカードの組み合わせを数えます。逆の組み合わせが0組なら3点、1組なら2点、2〜3組なら1点、4組以上なら0点です。この1回の採点がゲームの最終成績になります。</p>
+    <p className="mt-4 text-amber-200">ことばの提出が時間切れになった人は、その回だけパスになります。並べ替えが時間切れになると、その時点の並び順で自動採点します。</p>
+  </GameRulesDialog>;
+
   if (!ready) return <main className="min-h-screen bg-slate-950 p-8 text-white">ログイン情報と部屋を確認中...</main>;
 
   if (!session?.id) {
@@ -365,12 +385,7 @@ export function HodoaiTalkGame() {
             {error && <p className="mx-6 mb-6 rounded-xl border border-rose-300/30 bg-rose-300/10 p-3 text-sm font-bold text-rose-100">{error}</p>}
           </section>
         </div>
-        <GameRulesDialog open={rulesOpen} title="ワードスケールのルール" onClose={() => setRulesOpen(false)}>
-          <p>各自に配られた数字カードを、数字を直接説明せず、指定テーマに沿ったことばだけで伝え、全カードを小さい順に並べる協力ゲームです。</p>
-          <ol className="mt-3 list-decimal space-y-2 pl-5"><li>各自に設定枚数の秘密の数字カードが1度だけ配られます。</li><li>同じカードについて、お題を変えながら設定回数ぶんことばを出します。数字や数の直接説明は禁止です。</li><li>すべてのことばが公開されたら相談し、ホストが全カードを小さい順へ並べます。</li><li>最後に1度だけ数字を公開し、並び違いの数から得点します。</li></ol>
-          <p className="mt-4">0組=3点、1組=2点、2〜3組=1点、4組以上=0点。設定ラウンドの合計点で協力成績が決まります。</p>
-          <p className="mt-3 text-amber-200">ヒント時間切れの未提出者はパス扱い。並べ替え時間切れでは現在の順番を自動採点します。</p>
-        </GameRulesDialog>
+        {rulesDialog}
       </main>
     );
   }
@@ -389,7 +404,7 @@ export function HodoaiTalkGame() {
         </GameTopMenu>
         <GamePlayerMenu id={session.id} name={session.name} avatarColor={session.avatarColor} avatarImage={session.avatarImage} hasRecoveryEmail={session.hasRecoveryEmail} />
       </GameTopBanner>
-      <GameRulesDialog open={rulesOpen} title="ワードスケールのルール" onClose={() => setRulesOpen(false)}><p>各自に配られた数字カードを、数字を直接説明せず、指定テーマに沿ったことばだけで伝え、全カードを小さい順に並べる協力ゲームです。</p><ol className="mt-3 list-decimal space-y-2 pl-5"><li>各自に設定枚数のカードが1度だけ配られます。</li><li>同じカードへ、お題を変えながら設定回数ぶんことばを出します。</li><li>すべてのことばを手がかりに全カードを小さい順へ並べ、最後に1度だけ採点します。</li></ol><p className="mt-3 text-amber-200">数字や数の直接説明は禁止です。未提出は時間切れでパス、並べ替え時間切れでは現在順を自動採点します。</p></GameRulesDialog>
+      {rulesDialog}
       <div className="mx-auto grid max-w-6xl gap-4 px-4 py-5 lg:grid-cols-[280px_minmax(0,1fr)]">
         <aside className="space-y-4"><section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4"><div className="flex items-center justify-between"><h2 className="font-black">参加者</h2><span className="text-sm text-slate-400">{room.players.length}人</span></div><ul className="mt-3 max-h-[70vh] space-y-2 overflow-y-auto pr-1">{room.players.map((player) => <PlayerRow key={player.id} player={player} isHost={player.id === room.hostId} isMe={player.id === playerId} />)}</ul></section><RoomConfigSummary items={configItems} /></aside>
         <div className="space-y-4">

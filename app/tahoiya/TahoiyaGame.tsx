@@ -986,12 +986,21 @@ export function TahoiyaGame() {
       </GameTopBanner>
 
       <GameRulesDialog open={rulesOpen} title="たほい屋のルール" onClose={() => setRulesOpen(false)}>
-        <p>知らない難語の本物の説明を、参加者が作った偽説明の中から見抜くゲームです。</p>
-        <h3 className="mt-4 font-black text-white">回答者1人</h3>
-        <ol className="mt-2 list-decimal space-y-2 pl-5"><li>回答者以外が1人1つ、辞書らしい偽説明を書きます。</li><li>本物と偽物を混ぜた候補から、回答者が本物だと思う説明へ投票します。</li><li>本物を当てた回答者は+2点。偽説明に票を入れられた作者は1票につき+1点です。</li></ol>
-        <h3 className="mt-4 font-black text-white">全員作成・全員投票</h3>
-        <p className="mt-2">全員が偽説明を1つ書き、自分の偽説明以外へ1票投じます。本物を選べば投票者が+2点、偽説明が選ばれれば作者が1票につき+1点です。</p>
-        <p className="mt-4">全員の提出・投票がそろうと自動進行します。時間切れでは、その時点までの提出・投票で次へ進みます。結果で読み・出典情報と作者・投票先を公開します。</p>
+        <p>見慣れないことばに対して、本物の辞書説明と、プレイヤーが考えた偽の説明を混ぜます。本物を見抜くことと、自分の偽説明でほかの人をだますことの両方で得点するゲームです。</p>
+        <h3 className="mt-4 font-black text-white">1ラウンドの流れ</h3>
+        <ol className="mt-2 list-decimal space-y-2 pl-5">
+          <li>お題のことばが1つ表示されます。</li>
+          <li>説明を書く人は、本物らしく見える偽の説明を1人1つ作ります。</li>
+          <li>本物の説明と全員の偽説明が、作者を隠して並びます。</li>
+          <li>投票する人は、本物だと思う説明を1つ選びます。</li>
+          <li>投票後に本物、偽説明の作者、全員の投票先を公開し、得点を加えます。</li>
+        </ol>
+        <h3 className="mt-4 font-black text-white">得点</h3>
+        <ul className="mt-2 list-disc space-y-2 pl-5"><li>本物の説明を選んだ人は2点です。</li><li>自分が書いた偽説明を選ばせると、だませた相手1人につき1点です。</li></ul>
+        <h3 className="mt-4 font-black text-white">2つの遊び方</h3>
+        <p className="mt-2"><span className="font-bold text-white">回答者1人：</span>1人だけが投票し、それ以外の人が偽説明を書きます。回答者はラウンドごとに選びます。</p>
+        <p className="mt-2"><span className="font-bold text-white">全員作成・全員投票：</span>全員が偽説明を書き、全員が投票します。ただし、自分で書いた偽説明には投票できません。</p>
+        <p className="mt-4 text-amber-200">全員の提出や投票がそろうと自動で次へ進みます。制限時間が来た場合は、その時点で提出・投票できている内容だけで進みます。</p>
       </GameRulesDialog>
 
       <section className="mx-auto grid max-w-6xl gap-4 px-4 py-5 lg:grid-cols-[340px_1fr]">

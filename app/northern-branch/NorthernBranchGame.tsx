@@ -302,13 +302,22 @@ export function NorthernBranchGame() {
 
   const marketCards = game?.offers ?? [];
   const rulesDialog = <GameRulesDialog open={rulesOpen} title="ノーザンブランチのルール" onClose={() => setRulesOpen(false)}>
-    <p>資源を集めて商品を生産・購入し、建物の得点と能力を使って最初に10点を目指す商会ゲームです。</p>
-    <h3 className="mt-4 font-black text-white">手番の流れ</h3>
-    <ol className="mt-2 list-decimal space-y-2 pl-5"><li>通常アクションを1回行います。資源を1枚得る、市場の商品を生産する、商品・建物を購入する、のいずれかです。</li><li>所有する未使用建物は、通常アクションとは別に各1回使えます。</li><li>通常アクション後に手番を終了します。家畜がいて手札に空きがあればダングを1枚得ます。</li></ol>
-    <h3 className="mt-4 font-black text-white">売買と勝利</h3>
-    <p className="mt-2">支払いはカード価値の合計で行い、お釣りは出ません。手札上限は7枚。同じ建物は2軒建てられません。10点へ到達した時点で勝利です。</p>
-    <p className="mt-3">手札は本人だけに表示され、市場・建物・得点・手番・行動履歴は全員で共有します。</p>
-    <p className="mt-3 text-amber-200">カード構成と数値は検証用の仮設定です。</p>
+    <p>資源から価値の高い商品を作り、建物を増やして商会を成長させるゲームです。最初に10勝利点へ到達した人が勝ちます。</p>
+    <h3 className="mt-4 font-black text-white">自分の番にすること</h3>
+    <ol className="mt-2 list-decimal space-y-2 pl-5">
+      <li>次の4つから、メインの行動を1つ選びます。「資源を1枚もらう」「手札の材料で市場の商品を作る」「手札を支払って商品を買う」「手札を支払って建物を建てる」のどれかです。</li>
+      <li>自分の建物は、メインの行動とは別に使えます。使えるのは建物1軒につき自分の番に1回です。</li>
+      <li>メインの行動を終えたら「手番終了」を押し、次の人へ交代します。</li>
+    </ol>
+    <h3 className="mt-4 font-black text-white">商品・建物・得点</h3>
+    <ul className="mt-2 list-disc space-y-2 pl-5">
+      <li>商品には必要な材料があります。手札に材料がそろっていると生産できます。</li>
+      <li>商品や建物を買うときは、手札のカードに書かれた価値の合計で支払います。多く払いすぎてもお釣りはありません。</li>
+      <li>建物を建てると勝利点を得て、それぞれの特別な能力も使えるようになります。同じ建物を2軒持つことはできません。</li>
+    </ul>
+    <h3 className="mt-4 font-black text-white">覚えておくこと</h3>
+    <p className="mt-2">手札は最大7枚で、内容は本人にだけ見えます。豚か鶏を持って手番を終えると、空きがある場合はダングが1枚増えます。市場、建物、得点、現在の手番、行動履歴は全員に見えます。</p>
+    <p className="mt-3 text-amber-200">現在は試作版のため、カードの種類や数値は今後変わることがあります。</p>
   </GameRulesDialog>;
 
   if (!ready) return <main className="min-h-screen bg-slate-950 p-8 text-white">ログイン情報と部屋を確認中...</main>;
