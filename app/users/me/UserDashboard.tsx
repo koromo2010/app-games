@@ -5,7 +5,9 @@ import { useEffect, useState, type MouseEvent } from "react";
 import type { PlayerSession } from "@/lib/player-session";
 import type { PlayerGameResult, PlayerStatsResponse } from "@/lib/player-stats-store";
 import { GameReplayPanel } from "@/app/components/GameReplayPanel";
+import { PlayerAvatarEditor } from "@/app/components/PlayerAvatarEditor";
 import { games } from "@/app/games/game-catalog";
+import { defaultAvatarImage } from "@/lib/player-session";
 
 function formatDate(timestamp: number) {
   return new Intl.DateTimeFormat("ja-JP", {
@@ -39,6 +41,14 @@ export function UserDashboard() {
   const [debugPassword, setDebugPassword] = useState("");
   const [debugMessage, setDebugMessage] = useState("");
   const [debugSaving, setDebugSaving] = useState(false);
+  const [isAvatarEditorOpen, setIsAvatarEditorOpen] = useState(false);
+
+  const applyAvatarSession = (nextSession: PlayerSession) => {
+    setSession(nextSession);
+    const message = { type: "game-fields:player-session-updated", session: nextSession };
+    window.parent.postMessage(message, window.location.origin);
+    if (window.opener && !window.opener.closed) window.opener.postMessage(message, window.location.origin);
+  };
 
   const leaveDashboard = (event: MouseEvent<HTMLAnchorElement>) => {
     if (new URLSearchParams(window.location.search).get("embedded") === "1") {
@@ -133,9 +143,7 @@ export function UserDashboard() {
         <div className="mx-auto max-w-5xl px-4 py-8">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex items-center gap-3">
-              <span className="grid h-12 w-12 place-items-center rounded-full border border-white/30 text-xl font-black" style={{ backgroundColor: session?.avatarColor || "#0891b2" }} aria-hidden="true">
-                {session?.name.slice(0, 1) || "?"}
-              </span>
+              <button type="button" onClick={() => setIsAvatarEditorOpen((open) => !open)} aria-expanded={isAvatarEditorOpen} aria-label="アイコンの模様替えを開く" className="h-12 w-12 shrink-0 rounded-full border border-white/30 bg-cover bg-center shadow-lg ring-offset-2 ring-offset-slate-950 transition hover:scale-105 focus:outline-none focus:ring-2 focus:ring-cyan-300" style={{ backgroundColor: session?.avatarColor || "#0891b2", backgroundImage: `url(${session?.avatarImage || defaultAvatarImage})` }} />
               <div>
                 <p className="text-xs font-semibold uppercase text-violet-200">My page</p>
                 <h1 className="text-3xl font-black">{session?.name || "プレイヤー"}</h1>
@@ -144,6 +152,7 @@ export function UserDashboard() {
             </div>
             <Link href="/games" onClick={leaveDashboard} className="rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm font-semibold text-white transition hover:bg-white/20">戻る</Link>
           </div>
+          {session && isAvatarEditorOpen && <div className="mt-5 max-w-xl"><PlayerAvatarEditor session={session} onSaved={applyAvatarSession} /></div>}
         </div>
       </header>
 

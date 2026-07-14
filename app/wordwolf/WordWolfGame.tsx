@@ -29,6 +29,7 @@ import { DebugModeButton } from "../components/DebugModeButton";
 import { GamePlayerMenu } from "../components/GamePlayerMenu";
 import { FullScreenPageOverlay } from "../components/FullScreenPageOverlay";
 import { GameTopBanner, gameTopBannerOffsetClass } from "../components/GameTopBanner";
+import { GameTopMenu, gameTopMenuItemClass } from "../components/GameTopMenu";
 import { DebugWordGenerationTest, type DebugWordGenerationResult } from "../components/DebugWordGenerationTest";
 import { GameFeedbackPanel } from "../components/GameFeedbackPanel";
 import { GameRulesDialog } from "../components/GameRulesDialog";
@@ -1367,21 +1368,32 @@ export function WordWolfGame() {
   return (
     <main className={`min-h-screen bg-slate-950 text-slate-950 ${gameTopBannerOffsetClass}`}>
       <GameTopBanner eyebrow="Room based social deduction" title="ワードウルフ・ラウンジ">
-            <Link
-              href="/games"
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 font-semibold text-cyan-50 transition hover:bg-white/15"
-            >
-              ゲームロビー ↗
-            </Link>
+        <GameTopMenu>
+            <Link href="/games" data-menu-close="true" className={gameTopMenuItemClass}>ゲームロビーへ戻る</Link>
             <button
               type="button"
+              data-menu-close="true"
               onClick={() => setIsRulesOpen(true)}
-              className="rounded-lg border border-amber-200 bg-amber-200 px-3 py-1.5 font-semibold text-slate-950 shadow-sm transition hover:bg-amber-100"
+              className={gameTopMenuItemClass}
             >
               ルール
             </button>
+            <PaidLlmAccessButton variant="menu" />
+            {room && isHost && (
+              <DebugModeButton
+                variant="menu"
+                enabled={Boolean(room.debugMode)}
+                disabled={room.phase !== "lobby"}
+                onAbort={room.debugMode && room.phase !== "lobby" ? abortGame : undefined}
+                replayEnabled={Boolean(room.debugReplayEnabled)}
+                onReplayChange={(enabled) => setAndSaveRoom({ ...room, debugReplayEnabled: enabled })}
+                onChange={(enabled) => {
+                  setAndSaveRoom({ ...room, debugMode: enabled, debugReplayEnabled: enabled ? room.debugReplayEnabled : false });
+                  setError("");
+                }}
+              />
+            )}
+        </GameTopMenu>
             <div className="relative hidden min-w-0 items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-3 py-1.5">
               <button
                 type="button"
@@ -1474,20 +1486,6 @@ export function WordWolfGame() {
                 </div>
               )}
             </div>
-            <PaidLlmAccessButton />
-            {room && isHost && (
-              <DebugModeButton
-                enabled={Boolean(room.debugMode)}
-                disabled={room.phase !== "lobby"}
-                onAbort={room.debugMode && room.phase !== "lobby" ? abortGame : undefined}
-                replayEnabled={Boolean(room.debugReplayEnabled)}
-                onReplayChange={(enabled) => setAndSaveRoom({ ...room, debugReplayEnabled: enabled })}
-                onChange={(enabled) => {
-                  setAndSaveRoom({ ...room, debugMode: enabled, debugReplayEnabled: enabled ? room.debugReplayEnabled : false });
-                  setError("");
-                }}
-              />
-            )}
             <GamePlayerMenu id={playerAccountId || undefined} name={headerName} avatarColor={headerAvatarColor} avatarImage={headerAvatarImage} />
       </GameTopBanner>
 

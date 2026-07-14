@@ -1,15 +1,15 @@
 "use client";
 
 import { createPortal } from "react-dom";
-import { useRef, useState } from "react";
-import { avatarColorOptions, clearPlayerSession, defaultAvatarImage, defaultAvatarImages, savePersistentPlayerSession } from "@/lib/player-session";
+import { useEffect, useRef, useState } from "react";
+import { avatarColorOptions, clearPlayerSession, defaultAvatarImage, defaultAvatarImages, isAvatarColor, isAvatarImage, savePersistentPlayerSession, type PlayerSession } from "@/lib/player-session";
 import { FullScreenPageOverlay } from "@/app/components/FullScreenPageOverlay";
 
 type Props = { id?: string; name: string; avatarColor: string; avatarImage?: string | null; hasRecoveryEmail?: boolean };
 
 export function GamePlayerMenu(props: Props) {
-  const [color, setColor] = useState(props.avatarColor);
-  const [image, setImage] = useState(props.avatarImage || defaultAvatarImage);
+  const [colorOverride, setColorOverride] = useState<string | null>(null);
+  const [imageOverride, setImageOverride] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [isOpen, setIsOpen] = useState(false);
@@ -17,6 +17,22 @@ export function GamePlayerMenu(props: Props) {
   const [isMyPageOpen, setIsMyPageOpen] = useState(false);
   const [position, setPosition] = useState({ top: 80, left: 12 });
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const color = colorOverride ?? props.avatarColor;
+  const image = imageOverride ?? props.avatarImage ?? defaultAvatarImage;
+
+  useEffect(() => {
+    const receiveSessionUpdate = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin || event.data?.type !== "game-fields:player-session-updated") return;
+      const nextSession = event.data.session as Partial<PlayerSession> | undefined;
+      const nextColor = typeof nextSession?.avatarColor === "string" ? nextSession.avatarColor : null;
+      if (!isAvatarColor(nextColor)) return;
+      const nextImage = typeof nextSession?.avatarImage === "string" ? nextSession.avatarImage : null;
+      setColorOverride(nextColor);
+      setImageOverride(isAvatarImage(nextImage) ? nextImage : defaultAvatarImage);
+    };
+    window.addEventListener("message", receiveSessionUpdate);
+    return () => window.removeEventListener("message", receiveSessionUpdate);
+  }, []);
 
   const openMenu = () => {
     const rect = buttonRef.current?.getBoundingClientRect();
@@ -32,14 +48,14 @@ export function GamePlayerMenu(props: Props) {
 
   const updateAvatar = async (nextColor: string, nextImage: string) => {
     if (isSaving) return;
-    setColor(nextColor);
-    setImage(nextImage);
+    setColorOverride(nextColor);
+    setImageOverride(nextImage);
     setIsSaving(true);
     setMessage("");
     try {
       const result = await savePersistentPlayerSession({ id: props.id, name: props.name, avatarColor: nextColor, avatarImage: nextImage, hasRecoveryEmail: props.hasRecoveryEmail });
-      setColor(result.session.avatarColor);
-      setImage(result.session.avatarImage || defaultAvatarImage);
+      setColorOverride(result.session.avatarColor);
+      setImageOverride(result.session.avatarImage || defaultAvatarImage);
       if (!result.persistent) setMessage("この端末に保存しました。");
     } catch {
       setMessage("アイコンを保存できませんでした。");

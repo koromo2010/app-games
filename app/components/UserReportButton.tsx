@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 type ReportType = "bug" | "request";
 
-export function UserReportButton() {
+export function UserReportButton({ variant = "banner" }: { variant?: "banner" | "menu" }) {
   const [open, setOpen] = useState(false);
   const [type, setType] = useState<ReportType>("bug");
   const [summary, setSummary] = useState("");
@@ -47,12 +47,12 @@ export function UserReportButton() {
       <button
         type="button"
         onClick={() => { setOpen(true); setMessage(""); }}
-        className="rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10"
+        className={variant === "menu" ? "rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50" : "rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10"}
       >
         改善・バグ報告
       </button>
       {open && (
-        <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-slate-950/70 p-4 pt-16 text-slate-950 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="user-report-heading" onClick={() => setOpen(false)}>
+        <div className="fixed inset-0 z-[10000] flex items-start justify-center overflow-y-auto bg-slate-950/70 p-4 pt-16 text-slate-950 backdrop-blur-sm" role="dialog" aria-modal="true" aria-labelledby="user-report-heading" onClick={() => setOpen(false)}>
           <div className="w-full max-w-lg rounded-xl bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
             <div className="flex items-start justify-between gap-3">
               <div><p className="text-xs font-bold uppercase text-cyan-700">Feedback</p><h2 id="user-report-heading" className="text-xl font-black">改善要望・バグ報告</h2></div>

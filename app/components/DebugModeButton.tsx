@@ -11,9 +11,10 @@ type DebugModeButtonProps = {
   replayEnabled?: boolean;
   replayDisabled?: boolean;
   onReplayChange?: (enabled: boolean) => void | Promise<void>;
+  variant?: "banner" | "menu";
 };
 
-export function DebugModeButton({ enabled, disabled = false, onChange, onAbort, replayEnabled = false, replayDisabled = false, onReplayChange }: DebugModeButtonProps) {
+export function DebugModeButton({ enabled, disabled = false, onChange, onAbort, replayEnabled = false, replayDisabled = false, onReplayChange, variant = "menu" }: DebugModeButtonProps) {
   const [hasAccess, setHasAccess] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -55,7 +56,7 @@ export function DebugModeButton({ enabled, disabled = false, onChange, onAbort, 
   };
 
   return <>
-    <button ref={buttonRef} type="button" title="開発者向け操作を開く" onClick={openMenu} className={`rounded-md border px-2 py-1 font-mono text-[11px] font-medium tracking-wide transition ${enabled ? "border-cyan-300/35 bg-cyan-300/10 text-cyan-100" : "border-white/10 bg-white/[0.03] text-white/60 hover:border-white/20 hover:text-white/80"}`} aria-haspopup="dialog" aria-expanded={isOpen}>
+    <button ref={buttonRef} type="button" title="開発者向け操作を開く" onClick={openMenu} className={variant === "menu" ? `rounded-lg border px-3 py-2 text-sm font-bold transition ${enabled ? "border-cyan-300 bg-cyan-50 text-cyan-900" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}` : `rounded-md border px-2 py-1 font-mono text-[11px] font-medium tracking-wide transition ${enabled ? "border-cyan-300/35 bg-cyan-300/10 text-cyan-100" : "border-white/10 bg-white/[0.03] text-white/60 hover:border-white/20 hover:text-white/80"}`} aria-haspopup="dialog" aria-expanded={isOpen}>
       {enabled ? "DEBUG · ON" : "DEBUG"} <span aria-hidden="true">▼</span>
     </button>
     {isOpen && createPortal(<div className="fixed inset-0 z-[9999]" onClick={() => setIsOpen(false)}><div role="dialog" aria-label="開発者向け操作" className="fixed w-[min(18rem,calc(100vw-1.5rem))] rounded-lg border border-slate-200 bg-white p-3 text-slate-900 shadow-2xl" style={position} onClick={(event) => event.stopPropagation()}>

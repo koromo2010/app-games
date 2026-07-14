@@ -18,6 +18,7 @@ import { DebugWordGenerationTest, type DebugWordGenerationResult } from "../comp
 import { GameFeedbackPanel } from "../components/GameFeedbackPanel";
 import { GameRulesDialog } from "../components/GameRulesDialog";
 import { GameTopBanner, gameTopBannerOffsetClass } from "../components/GameTopBanner";
+import { GameTopMenu, gameTopMenuItemClass } from "../components/GameTopMenu";
 import { GamePlayerMenu } from "../components/GamePlayerMenu";
 import { RoomConfigSummary } from "../components/RoomConfigSummary";
 import { RoomResultActions } from "../components/RoomResultActions";
@@ -962,12 +963,13 @@ export function TahoiyaGame() {
   return (
     <main className={`min-h-screen bg-slate-950 text-slate-950 ${gameTopBannerOffsetClass}`}>
       <GameTopBanner eyebrow="Dictionary bluffing" title="たほい屋">
-            <Link href="/games" target="_blank" rel="noreferrer" className={subtleButtonClass}>
-              ゲームロビー ↗
-            </Link>
-            <button type="button" onClick={() => setRulesOpen(true)} className={subtleButtonClass}>ルール</button>
+        <GameTopMenu>
+            <Link href="/games" data-menu-close="true" className={gameTopMenuItemClass}>ゲームロビーへ戻る</Link>
+            <button type="button" data-menu-close="true" onClick={() => setRulesOpen(true)} className={gameTopMenuItemClass}>ルール</button>
+            <PaidLlmAccessButton variant="menu" />
             {room && isHost && (
               <DebugModeButton
+                variant="menu"
                 enabled={Boolean(room.debugMode)}
                 disabled={room.phase !== "lobby"}
                 onAbort={room.debugMode && room.phase !== "lobby" ? abortGame : undefined}
@@ -976,8 +978,8 @@ export function TahoiyaGame() {
                 onChange={setDebugMode}
               />
             )}
-            <PaidLlmAccessButton />
-            <GamePlayerMenu id={playerId || undefined} name={playerName || "未ログイン"} avatarColor={avatarColor} avatarImage={avatarImage} />
+        </GameTopMenu>
+        <GamePlayerMenu id={playerId || undefined} name={playerName || "未ログイン"} avatarColor={avatarColor} avatarImage={avatarImage} />
       </GameTopBanner>
 
       <GameRulesDialog open={rulesOpen} title="たほい屋のルール" onClose={() => setRulesOpen(false)}>

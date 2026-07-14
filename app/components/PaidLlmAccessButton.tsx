@@ -65,7 +65,7 @@ function freeApiLabel(status: LlmAccessStatus) {
   return "ローカル（API不使用）";
 }
 
-export function PaidLlmAccessButton() {
+export function PaidLlmAccessButton({ variant = "banner" }: { variant?: "banner" | "menu" }) {
   const [status, setStatus] = useState<LlmAccessStatus>(defaultStatus);
   const [isOpen, setIsOpen] = useState(false);
   const [personalApiKey, setPersonalApiKey] = useState("");
@@ -167,7 +167,9 @@ export function PaidLlmAccessButton() {
           setMessage("");
           setIsOpen(true);
         }}
-        className={`rounded-lg border px-3 py-1.5 text-sm font-bold shadow-sm transition ${
+        className={`rounded-lg border px-3 py-1.5 text-sm font-bold shadow-sm transition ${variant === "menu"
+          ? status.enabled ? "border-emerald-300 bg-emerald-50 text-emerald-900 hover:bg-emerald-100" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+          :
           status.enabled
             ? "border-emerald-300 bg-emerald-300 text-slate-950 hover:bg-emerald-200"
             : "border-white/15 bg-white/10 text-slate-100 hover:bg-white/15"
