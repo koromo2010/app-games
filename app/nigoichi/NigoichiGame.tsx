@@ -262,18 +262,6 @@ export function NigoichiGame() {
     });
   };
 
-  const applyRoomPreset = (cardsPerPlayer: number, associationWordCount: number) => {
-    if (!room) return;
-    const corrected = correctNigoichiConfig(roomConfigPlayerCount, cardsPerPlayer, associationWordCount);
-    void runAction({
-      type: "set-config",
-      actorId: playerId,
-      cardsPerPlayer: corrected.cardsPerPlayer,
-      associationWordCount: corrected.associationWordCount,
-      wordDifficulty: room.wordDifficulty,
-    });
-  };
-
   const rulesDialog = <GameRulesDialog open={rulesOpen} title="ワードアウトのルール" onClose={() => setRulesOpen(false)}>
     <p>自分に配られたカードをグループに分け、それぞれの連想語を書きます。全員の連想から、誰にも配られていない1枚を探します。</p>
     <ol className="mt-4 list-decimal space-y-2 pl-5">
@@ -353,11 +341,6 @@ export function NigoichiGame() {
             <p className="mt-3 rounded-xl bg-white/[0.05] p-4 text-sm leading-6 text-slate-300">最大募集人数は{room.playerCapacity}人です。2人以上集まれば開始できます。開始後、各自に配られた{room.cardsPerPlayer}枚は本人の端末だけに表示されます。</p>
             {isHost && <div className="mt-5 rounded-xl border border-indigo-300/25 bg-indigo-300/10 p-4">
               <h3 className="font-black text-indigo-100">ゲーム設定</h3>
-              <div className="mt-3 grid grid-cols-3 gap-2" aria-label="ゲーム設定プリセット">
-                <button type="button" disabled={isSaving} onClick={() => applyRoomPreset(2, 1)} className="rounded-lg border border-white/15 bg-white/[0.05] px-2 py-2 text-xs font-black disabled:opacity-40">標準</button>
-                <button type="button" disabled={isSaving} onClick={() => applyRoomPreset(3, 1)} className="rounded-lg border border-white/15 bg-white/[0.05] px-2 py-2 text-xs font-black disabled:opacity-40">3枚連想</button>
-                <button type="button" disabled={isSaving} onClick={() => applyRoomPreset(4, 2)} className="rounded-lg border border-white/15 bg-white/[0.05] px-2 py-2 text-xs font-black disabled:opacity-40">複数連想</button>
-              </div>
               <div className="mt-3 grid gap-3 sm:grid-cols-3">
                 <label className="text-sm font-bold">1人に配るカード A
                   <select value={room.cardsPerPlayer} disabled={isSaving || !roomBounds} onChange={(event) => void runAction({ type: "set-config", actorId: playerId, cardsPerPlayer: Number(event.target.value), associationWordCount: room.associationWordCount, wordDifficulty: room.wordDifficulty })} className="mt-1 w-full rounded-lg border border-white/15 bg-slate-800 px-3 py-2 text-white">
