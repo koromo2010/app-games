@@ -426,11 +426,8 @@ export async function recordNigoichiReplay(room: NigoichiRoom) {
     `場の単語: ${room.words.map((word, index) => `${index + 1}.${word}`).join("、")}`,
     ...room.players.map((player) => {
       const hand = room.hands[player.id] ?? [];
-      const associations = (room.associations[player.id] ?? []).map((group, index) => {
-        const cards = group.cardIds.map((number) => `${number + 1}.${room.words[number] ?? ""}`).join(" + ");
-        return `組${index + 1}[${cards}]「${group.clue}」`;
-      }).join(" / ");
-      return `${names.get(player.id) ?? "Unknown"}: ${hand.map((number) => `${number + 1}.${room.words[number] ?? ""}`).join(" / ")} → ${associations} → 予想${(room.guesses[player.id] ?? -1) + 1}番`;
+      const associations = (room.associations[player.id] ?? []).map((clue) => `「${clue}」`).join(" / ");
+      return `${names.get(player.id) ?? "Unknown"}: ${hand.map((number) => `${number + 1}.${room.words[number] ?? ""}`).join(" / ")} → 連想語${associations} → 予想${(room.guesses[player.id] ?? -1) + 1}番`;
     }),
   ];
   return storeReplay({ ...base, gameType: "nigoichi", overview: `${players.length}人中${correct.length}人が余り番号を正解`, highlights: cleanLines(highlights), scoreLabels: resultLabels }, room.code);

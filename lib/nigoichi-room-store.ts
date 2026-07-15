@@ -5,7 +5,7 @@ import { isMultiplayerRoomExpired, multiplayerRoomExpiryArgs, multiplayerRoomTtl
 import {
   allNigoichiAssociationsSubmitted,
   allNigoichiGuessesSubmitted,
-  areValidNigoichiAssociationGroups,
+  areValidNigoichiAssociations,
   correctNigoichiConfig,
   dealNigoichiRound,
   isValidNigoichiConfig,
@@ -15,7 +15,6 @@ import {
   nigoichiRoomHasSpace,
   normalizeNigoichiPlayerCapacity,
   sanitizeNigoichiRoomForPlayer,
-  type NigoichiAssociationGroup,
   type NigoichiHand,
   type NigoichiPhase,
   type NigoichiPlayer,
@@ -44,12 +43,12 @@ const debugActionLabels: Record<NigoichiRoomAction["type"], string> = {
   "set-debug-replay": "プレイバック記録設定を変更",
   "set-config": "ゲーム設定を変更",
   "start-game": "ゲームを開始",
-  "submit-associations": "連想グループを提出",
+  "submit-associations": "連想語を提出",
   "submit-guess": "余り番号を予想",
   "reset-game": "同じ部屋で再戦準備",
   "abort-game": "ゲームを中断",
   "debug-add-player": "ダミープレイヤーを追加",
-  "debug-fill-associations": "未提出の連想グループを自動入力",
+  "debug-fill-associations": "未提出の連想語を自動入力",
   "debug-fill-guesses": "未提出の予想を自動入力",
 };
 
@@ -108,18 +107,18 @@ function normalizeHands(value: unknown, playerIds: Set<string>, wordCount: numbe
   }));
 }
 
-function normalizeAssociationGroups(value: unknown, hand: readonly number[], associationWordCount: number) {
+function normalizeAssociationWords(value: unknown, associationWordCount: number) {
   if (!Array.isArray(value)) return null;
-  const groups = value.flatMap((item, index): NigoichiAssociationGroup[] => {
-    if (!item || typeof item !== "object") return [];
-    const parsed = item as Partial<NigoichiAssociationGroup>;
-    const clue = typeof parsed.clue === "string" ? parsed.clue.trim().replace(/\s+/g, " ").slice(0, 30) : "";
-    const cardIds = Array.isArray(parsed.cardIds)
-      ? parsed.cardIds.filter((cardId): cardId is number => Number.isInteger(cardId))
-      : [];
-    return [{ id: typeof parsed.id === "string" && parsed.id.trim() ? parsed.id.trim().slice(0, 80) : `group-${index + 1}`, clue, cardIds }];
+  const clues = value.flatMap((item): string[] => {
+    const raw = typeof item === "string"
+      ? item
+      : item && typeof item === "object" && typeof (item as { clue?: unknown }).clue === "string"
+        ? (item as { clue: string }).clue
+        : "";
+    const clue = raw.trim().replace(/\s+/g, " ").slice(0, 30);
+    return clue ? [clue] : [];
   });
-  return areValidNigoichiAssociationGroups(hand, groups, associationWordCount) ? groups : null;
+  return areValidNigoichiAssociations(clues, associationWordCount) ? clues : null;
 }
 
 function normalizeAssociations(
@@ -130,15 +129,12 @@ function normalizeAssociations(
 ) {
   const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
   const legacy = legacyClues && typeof legacyClues === "object" ? legacyClues as Record<string, unknown> : {};
-  return Object.fromEntries(Object.entries(hands).flatMap(([playerId, hand]) => {
-    const groups = normalizeAssociationGroups(source[playerId], hand, associationWordCount);
-    if (groups) return [[playerId, groups]];
+  return Object.fromEntries(Object.entries(hands).flatMap(([playerId]) => {
+    const clues = normalizeAssociationWords(source[playerId], associationWordCount);
+    if (clues) return [[playerId, clues]];
     const legacyValue = legacy[playerId];
-    const legacyClue = typeof legacyValue === "string"
-      ? legacyValue
-      : Array.isArray(legacyValue) && typeof legacyValue[0] === "string" ? legacyValue[0] : "";
-    const migrated = [{ id: "group-1", clue: legacyClue.trim().slice(0, 30), cardIds: [...hand] }];
-    return legacyClue && associationWordCount === 1 && areValidNigoichiAssociationGroups(hand, migrated, 1)
+    const migrated = normalizeAssociationWords(typeof legacyValue === "string" ? [legacyValue] : legacyValue, associationWordCount);
+    return migrated
       ? [[playerId, migrated]]
       : [];
   }));
@@ -453,9 +449,9 @@ export async function applyStoredNigoichiAction(code: string, action: NigoichiRo
     if (!target || !canControlTarget) throw new Error("NIGOICHI_ROOM_FORBIDDEN");
     if (action.type === "submit-associations") {
       if (current.phase !== "clue" || current.associations[targetId]) throw new Error("NIGOICHI_ROOM_FORBIDDEN");
-      const groups = normalizeAssociationGroups(action.groups, current.hands[targetId] ?? [], current.associationWordCount);
-      if (!groups) throw new Error("NIGOICHI_INVALID_CLUE");
-      const next = { ...current, associations: { ...current.associations, [targetId]: groups } };
+      const clues = normalizeAssociationWords(action.clues, current.associationWordCount);
+      if (!clues) throw new Error("NIGOICHI_INVALID_CLUE");
+      const next = { ...current, associations: { ...current.associations, [targetId]: clues } };
       return allNigoichiAssociationsSubmitted(next) ? { ...next, phase: "guess" as const } : next;
     }
     if (action.type === "submit-guess") {
@@ -469,12 +465,7 @@ export async function applyStoredNigoichiAction(code: string, action: NigoichiRo
       const associations = { ...current.associations };
       current.players.forEach((player, playerIndex) => {
         if (associations[player.id]) return;
-        const hand = current.hands[player.id] ?? [];
-        associations[player.id] = Array.from({ length: current.associationWordCount }, (_, groupIndex) => ({
-          id: `group-${groupIndex + 1}`,
-          clue: `テスト連想${playerIndex + 1}-${groupIndex + 1}`,
-          cardIds: hand.filter((_, cardIndex) => cardIndex % current.associationWordCount === groupIndex),
-        }));
+        associations[player.id] = Array.from({ length: current.associationWordCount }, (_, clueIndex) => `テスト連想${playerIndex + 1}-${clueIndex + 1}`);
       });
       return { ...current, phase: "guess", associations };
     }

@@ -15,12 +15,6 @@ export type NigoichiPhase = "lobby" | "clue" | "guess" | "result";
 export type NigoichiWordDifficulty = "easy" | "normal" | "hard";
 export type NigoichiHand = readonly number[];
 
-export type NigoichiAssociationGroup = {
-  id: string;
-  clue: string;
-  cardIds: number[];
-};
-
 export const nigoichiMinimumPlayers = 2;
 export const nigoichiMaximumAssociationWords = 5;
 export const nigoichiMaximumTotalCards = 21;
@@ -98,7 +92,7 @@ export type NigoichiRoom = {
   debugReplayEnabled: boolean;
   words: string[];
   hands: Record<string, NigoichiHand>;
-  associations: Record<string, NigoichiAssociationGroup[]>;
+  associations: Record<string, string[]>;
   guesses: Record<string, number>;
   missingNumber: number | null;
   debugLog: GameDebugLogEntry[];
@@ -125,7 +119,7 @@ export type NigoichiRoomAction =
   | { type: "set-debug-replay"; actorId: string; enabled: boolean }
   | { type: "set-config"; actorId: string; cardsPerPlayer: number; associationWordCount: number; wordDifficulty: NigoichiWordDifficulty }
   | { type: "start-game"; actorId: string }
-  | { type: "submit-associations"; actorId: string; playerId?: string; groups: NigoichiAssociationGroup[] }
+  | { type: "submit-associations"; actorId: string; playerId?: string; clues: string[] }
   | { type: "submit-guess"; actorId: string; playerId?: string; number: number }
   | { type: "reset-game"; actorId: string }
   | { type: "abort-game"; actorId: string }
@@ -163,22 +157,8 @@ export function dealNigoichiRound(
   return { words, hands, missingNumber };
 }
 
-export function areValidNigoichiAssociationGroups(
-  hand: readonly number[],
-  groups: readonly NigoichiAssociationGroup[],
-  associationWordCount: number,
-) {
-  if (groups.length !== associationWordCount) return false;
-  const handSet = new Set(hand);
-  const used = new Set<number>();
-  for (const group of groups) {
-    if (!group.id || !group.clue.trim() || group.cardIds.length < 2 || new Set(group.cardIds).size !== group.cardIds.length) return false;
-    for (const cardId of group.cardIds) {
-      if (!Number.isInteger(cardId) || !handSet.has(cardId) || used.has(cardId)) return false;
-      used.add(cardId);
-    }
-  }
-  return used.size === hand.length;
+export function areValidNigoichiAssociations(clues: readonly string[], associationWordCount: number) {
+  return clues.length === associationWordCount && clues.every((clue) => clue.trim().length > 0);
 }
 
 export function allNigoichiAssociationsSubmitted(room: Pick<NigoichiRoom, "players" | "associations">) {
@@ -197,11 +177,9 @@ export function sanitizeNigoichiRoomForPlayer(room: NigoichiRoom, playerId: stri
   const isDebugHost = room.debugMode && playerId === room.hostId;
   const revealAll = room.phase === "result" || isDebugHost;
   const hands = revealAll ? room.hands : room.hands[playerId] ? { [playerId]: room.hands[playerId] } : {};
-  const associations = revealAll
+  const associations = revealAll || room.phase !== "clue"
     ? room.associations
-    : room.phase === "clue"
-      ? room.associations[playerId] ? { [playerId]: room.associations[playerId] } : {}
-      : Object.fromEntries(Object.entries(room.associations).map(([ownerId, groups]) => [ownerId, groups.map((group) => ({ ...group, cardIds: [] }))]));
+    : room.associations[playerId] ? { [playerId]: room.associations[playerId] } : {};
   const guesses = room.phase !== "result" && !isDebugHost
     ? Number.isInteger(room.guesses[playerId]) ? { [playerId]: room.guesses[playerId] } : {}
     : room.guesses;
@@ -238,12 +216,10 @@ export function nigoichiShareText(room: Pick<NigoichiRoom, "players" | "cardsPer
     const owner = index === room.missingNumber ? "余り" : ownerByNumber.get(index) ?? "不明";
     return `${index + 1}. ${word} — ${owner}`;
   });
-  const associationLines = room.players.flatMap((player) => {
+  const associationLines = room.players.map((player) => {
     const label = nigoichiSharePlayerLabel(room.players, player.id);
-    return (room.associations[player.id] ?? []).map((group, index) => {
-      const cards = group.cardIds.map((number) => `${number + 1}.${room.words[number] ?? "不明"}`).join(" ＋ ");
-      return `${label} ${index + 1}：${cards} → ${group.clue}`;
-    });
+    const cards = (room.hands[player.id] ?? []).map((number) => `${number + 1}.${room.words[number] ?? "不明"}`).join(" ＋ ");
+    return `${label}：${cards} → ${(room.associations[player.id] ?? []).join(" / ")}`;
   });
   return [
     "ワードアウトで遊びました",
@@ -253,7 +229,7 @@ export function nigoichiShareText(room: Pick<NigoichiRoom, "players" | "cardsPer
     "言葉一覧",
     ...wordLines,
     "",
-    "連想グループ",
+    "連想語",
     ...associationLines,
     "",
     "#GameFields",

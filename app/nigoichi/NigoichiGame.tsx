@@ -14,7 +14,7 @@ import { RoomResultActions } from "@/app/components/RoomResultActions";
 import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "@/app/hooks/use-online-room-polling";
 import { applyNigoichiRoomAction, createNigoichiRoom, nigoichiRoomApi } from "@/app/nigoichi/nigoichi-room-api-client";
 import {
-  areValidNigoichiAssociationGroups,
+  areValidNigoichiAssociations,
   correctNigoichiConfig,
   nigoichiConfigBounds,
   nigoichiGuessIsCorrect,
@@ -24,7 +24,6 @@ import {
   nigoichiPlayerLimit,
   nigoichiShareText,
   nigoichiWordDifficultyLabels,
-  type NigoichiAssociationGroup,
   type NigoichiPlayer,
   type NigoichiRoom,
   type NigoichiRoomAction,
@@ -42,11 +41,6 @@ import {
 
 const lastRoomKey = "nigoichi-last-room";
 const ownerIdKey = "nigoichi-owner-id";
-
-type AssociationDraft = {
-  clues: string[];
-  groupByCard: Record<number, number>;
-};
 
 function makeRoomCode() {
   return Math.random().toString(36).slice(2, 6).toUpperCase();
@@ -91,7 +85,7 @@ export function NigoichiGame() {
   const [choices, setChoices] = useState<NigoichiRoomChoice[]>([]);
   const [showChoices, setShowChoices] = useState(false);
   const [newPlayerCapacity, setNewPlayerCapacity] = useState(3);
-  const [associationDrafts, setAssociationDrafts] = useState<Record<string, AssociationDraft>>({});
+  const [associationDrafts, setAssociationDrafts] = useState<Record<string, string[]>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
 
@@ -246,28 +240,23 @@ export function NigoichiGame() {
 
   const submitAssociations = (targetId: string) => {
     if (!room) return;
-    const hand = room.hands[targetId] ?? [];
-    const draft = associationDrafts[targetId] ?? { clues: [], groupByCard: {} };
-    const groups: NigoichiAssociationGroup[] = Array.from({ length: room.associationWordCount }, (_, groupIndex) => ({
-      id: `group-${groupIndex + 1}`,
-      clue: (draft.clues[groupIndex] ?? "").trim(),
-      cardIds: hand.filter((cardId, handIndex) => (draft.groupByCard[cardId] ?? handIndex % room.associationWordCount) === groupIndex),
-    }));
-    if (!areValidNigoichiAssociationGroups(hand, groups, room.associationWordCount)) {
-      setError("すべてのカードを使い、各グループを2枚以上にして、連想語を入力してください。");
+    const clues = Array.from({ length: room.associationWordCount }, (_, index) => (associationDrafts[targetId]?.[index] ?? "").trim());
+    if (!areValidNigoichiAssociations(clues, room.associationWordCount)) {
+      setError(`${room.associationWordCount}個すべての連想語を入力してください。`);
       return;
     }
-    void runAction({ type: "submit-associations", actorId: playerId, playerId: targetId, groups }).then((saved) => {
+    void runAction({ type: "submit-associations", actorId: playerId, playerId: targetId, clues }).then((saved) => {
       if (saved) setAssociationDrafts((current) => { const next = { ...current }; delete next[targetId]; return next; });
     });
   };
 
   const rulesDialog = <GameRulesDialog open={rulesOpen} title="ワードアウトのルール" onClose={() => setRulesOpen(false)}>
-    <p>自分に配られたカードをグループに分け、それぞれの連想語を書きます。全員の連想から、誰にも配られていない1枚を探します。</p>
+    <p>自分に配られたカードを見て連想語を書きます。全員の連想から、誰にも配られていない1枚を探します。</p>
     <ol className="mt-4 list-decimal space-y-2 pl-5">
-      <li>1人に配るカードAと、書く連想語Mを設定します。場には参加人数P×A+1枚を並べます。</li>
-      <li>自分のA枚をMグループへ分けます。各グループは2枚以上で、すべてのカードを一度ずつ使います。</li>
-      <li>各グループを表す連想語を1つずつ書きます。全員が提出するまでは他人の連想語を見られません。</li>
+      <li>初期設定は1人2枚・連想語1個です。1人に配るカードAを増やすと、より多くの言葉を連想語で伝えることになり、難易度を上げられます。</li>
+      <li>書く連想語Mも設定できます。場には参加人数P×A+1枚を並べ、場のカード総数は最大21枚です。</li>
+      <li>自分のA枚を見て、M個の連想語を自由に書きます。カードと連想語の分類や対応付けは必要ありません。</li>
+      <li>全員が提出するまでは他人の連想語を見られません。</li>
       <li>連想語を一斉公開し、各自が誰にも配られていない番号を1つ選びます。予想も全員が選ぶまで非公開です。</li>
       <li>全員の予想がそろうと、余り番号、全員の手札、正解・不正解を公開します。</li>
     </ol>
@@ -290,7 +279,7 @@ export function NigoichiGame() {
         </GameTopBanner>
         <div className="mx-auto max-w-4xl">
           <section className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-slate-950/80 shadow-2xl">
-            <div className="bg-gradient-to-r from-indigo-300 via-amber-200 to-rose-300 px-6 py-8 text-slate-950"><p className="text-xs font-black uppercase tracking-[0.28em]">WORD OUT</p><h1 className="mt-2 text-4xl font-black sm:text-6xl">ワードアウト</h1><p className="mt-3 font-bold">みんなの連想を読み解き、誰にも配られていない言葉を見つけよう。</p></div>
+            <div className="bg-gradient-to-r from-indigo-300 via-amber-200 to-rose-300 px-6 py-8 text-slate-950"><p className="text-xs font-black uppercase tracking-[0.28em]">WORD OUT</p><h1 className="mt-2 text-4xl font-black sm:text-6xl">ワードアウト</h1><p className="mt-3 font-bold">みんなの連想を読み解き、誰にも配られていない言葉を見つけよう。</p><p className="mt-2 text-sm font-semibold">1人2枚が基本。1人に配る枚数を増やして難易度を上げられます。</p></div>
             <div className="grid gap-6 p-6 md:grid-cols-2">
               <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-5">
                 <h2 className="text-xl font-black">部屋を作る</h2>
@@ -338,7 +327,7 @@ export function NigoichiGame() {
           {error && <p className="rounded-xl border border-rose-300/30 bg-rose-300/10 p-3 text-sm font-bold text-rose-100">{error}</p>}
           {room.phase === "lobby" && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6">
             <h2 className="text-2xl font-black">ゲーム開始前</h2>
-            <p className="mt-3 rounded-xl bg-white/[0.05] p-4 text-sm leading-6 text-slate-300">最大募集人数は{room.playerCapacity}人です。2人以上集まれば開始できます。開始後、各自に配られた{room.cardsPerPlayer}枚は本人の端末だけに表示されます。</p>
+            <p className="mt-3 rounded-xl bg-white/[0.05] p-4 text-sm leading-6 text-slate-300">最大募集人数は{room.playerCapacity}人です。2人以上集まれば開始できます。初期設定は1人2枚・連想語1個で、1人に配る枚数を増やすと難易度を上げられます。開始後、各自の手札は本人の端末だけに表示されます。</p>
             {isHost && <div className="mt-5 rounded-xl border border-indigo-300/25 bg-indigo-300/10 p-4">
               <h3 className="font-black text-indigo-100">ゲーム設定</h3>
               <div className="mt-3 grid gap-3 sm:grid-cols-3">
@@ -358,7 +347,7 @@ export function NigoichiGame() {
                   </select>
                 </label>
               </div>
-              <p className="mt-2 text-xs text-indigo-100">B = {roomConfigPlayerCount} × {room.cardsPerPlayer} + 1 = {roomTotalCards}枚。各連想語へ最低2枚を割り当てます。難易度分類は暫定版です。</p>
+              <p className="mt-2 rounded-lg bg-indigo-950/40 px-3 py-2 text-xs font-bold text-indigo-100">B = {roomConfigPlayerCount} × {room.cardsPerPlayer} + 1 = {roomTotalCards}枚。場に並ぶカード総数は最大21枚です。難易度分類は暫定版です。</p>
             </div>}
             {isHost && room.debugMode && <div className="mt-5 rounded-xl border border-cyan-300/25 bg-cyan-300/10 p-4"><p className="text-sm font-bold text-cyan-50">ダミーを最大募集人数まで追加し、ホスト1人で提出・予想・結果表示まで確認できます。</p><button type="button" disabled={isSaving || room.players.length >= room.playerCapacity} onClick={() => void runAction({ type: "debug-add-player", actorId: playerId })} className="mt-3 w-full rounded-lg bg-cyan-200 px-4 py-2 font-black text-cyan-950 disabled:opacity-40">ダミーユーザーを追加</button></div>}
             {isHost ? <button type="button" disabled={isSaving || (!room.debugMode && room.players.length < nigoichiMinimumPlayers)} onClick={() => void runAction({ type: "start-game", actorId: playerId })} className="mt-6 w-full rounded-xl bg-amber-300 px-4 py-4 text-lg font-black text-slate-950 disabled:opacity-40">{!room.debugMode && room.players.length < nigoichiMinimumPlayers ? "2人以上で開始できます" : "このメンバーで開始"}</button> : <p className="mt-5 text-center font-bold text-slate-300">ホストがゲームを開始するまでお待ちください。</p>}
@@ -367,38 +356,31 @@ export function NigoichiGame() {
           {room.phase !== "lobby" && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.22em] text-amber-300">{room.phase === "clue" ? "連想語を入力" : room.phase === "guess" ? "余り番号を推理" : "答え合わせ"}</p><h2 className="mt-1 text-2xl font-black">場の言葉 {room.words.length}枚</h2></div><span className="rounded-xl bg-indigo-200 px-3 py-2 text-sm font-black text-indigo-950">{room.players.length}人 × {room.cardsPerPlayer} + 1</span></div><ol className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{room.words.map((word, index) => <li key={`${index}:${word}`} className={`flex items-center gap-3 rounded-xl border p-3 ${room.phase === "result" && index === room.missingNumber ? "border-rose-300 bg-rose-300/15" : "border-white/10 bg-white/[0.05]"}`}><span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-white font-black text-slate-950">{index + 1}</span><span className="font-bold">{word}</span>{room.phase === "result" && index === room.missingNumber && <span className="ml-auto text-xs font-black text-rose-200">余り</span>}</li>)}</ol></section>}
 
           {room.phase === "clue" && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6">
-            <div className="flex items-center justify-between gap-3"><div><h2 className="text-xl font-black">{room.cardsPerPlayer}枚を{room.associationWordCount}組に分ける</h2><p className="mt-1 text-sm text-slate-400">各組2枚以上・連想語を各1語・提出済み {submittedAssociations}/{room.players.length}人</p></div></div>
+            <div className="flex items-center justify-between gap-3"><div><h2 className="text-xl font-black">{room.cardsPerPlayer}枚から連想語を{room.associationWordCount}個書く</h2><p className="mt-1 text-sm text-slate-400">カードとの分類・対応付けは不要です・提出済み {submittedAssociations}/{room.players.length}人</p></div></div>
             <div className="mt-5 space-y-4">{controllablePlayers.map((player) => {
               const hand = room.hands[player.id];
               if (!hand) return null;
               const submitted = room.associations[player.id];
-              const draft = associationDrafts[player.id] ?? { clues: [], groupByCard: {} };
-              const draftGroups: NigoichiAssociationGroup[] = Array.from({ length: room.associationWordCount }, (_, groupIndex) => ({
-                id: `group-${groupIndex + 1}`,
-                clue: (draft.clues[groupIndex] ?? "").trim(),
-                cardIds: hand.filter((cardId, handIndex) => (draft.groupByCard[cardId] ?? handIndex % room.associationWordCount) === groupIndex),
-              }));
-              const draftIsValid = areValidNigoichiAssociationGroups(hand, draftGroups, room.associationWordCount);
+              const draft = associationDrafts[player.id] ?? [];
+              const draftClues = Array.from({ length: room.associationWordCount }, (_, index) => (draft[index] ?? "").trim());
+              const draftIsValid = areValidNigoichiAssociations(draftClues, room.associationWordCount);
               return <article key={player.id} className="rounded-2xl border border-white/10 bg-white/[0.05] p-4">
                 <p className="text-sm font-black text-indigo-200">{player.id === playerId ? "あなた" : `${player.name}（デバッグ操作）`}</p>
-                {submitted ? <div className="mt-4 rounded-xl border border-emerald-300/30 bg-emerald-300/10 p-3 text-emerald-100"><p className="font-black">提出済み</p>{submitted.map((group, index) => <p key={group.id} className="mt-1 text-sm">グループ{index + 1}：{group.cardIds.map((number) => `${number + 1}.${room.words[number]}`).join(" / ")} → <strong>{group.clue}</strong></p>)}</div> : <div className="mt-4">
-                  <p className="text-sm font-bold">各カードのグループを選んでください</p>
-                  <div className="mt-2 grid gap-3 sm:grid-cols-2">{hand.map((number, handIndex) => {
-                    const selectedGroup = draft.groupByCard[number] ?? handIndex % room.associationWordCount;
-                    return <label key={number} className="rounded-xl border border-indigo-300/40 bg-indigo-300/10 p-4 text-sm font-bold"><span className="block text-xs text-indigo-200">番号 {number + 1}</span><span className="mt-1 block text-xl font-black">{room.words[number]}</span><span className="mt-3 block text-xs text-slate-300">所属グループ</span><select value={selectedGroup} onChange={(event) => setAssociationDrafts((current) => { const existing = current[player.id] ?? { clues: [], groupByCard: {} }; return { ...current, [player.id]: { ...existing, groupByCard: { ...existing.groupByCard, [number]: Number(event.target.value) } } }; })} className="mt-1 w-full rounded-lg border border-white/15 bg-slate-800 px-3 py-2 text-white">{Array.from({ length: room.associationWordCount }, (_, index) => <option key={index} value={index}>グループ {index + 1}</option>)}</select></label>;
-                  })}</div>
-                  <div className="mt-4 grid gap-3 sm:grid-cols-2">{draftGroups.map((group, index) => <label key={group.id} className="rounded-xl border border-white/10 bg-slate-950/50 p-3 text-xs font-bold text-slate-300">グループ {index + 1}（{group.cardIds.length}枚）<span className="mt-1 block font-normal">{group.cardIds.map((number) => room.words[number]).join("、") || "カード未選択"}</span><span className="mt-3 block">連想語</span><input value={draft.clues[index] ?? ""} maxLength={30} onChange={(event) => setAssociationDrafts((current) => { const existing = current[player.id] ?? { clues: [], groupByCard: {} }; const clues = [...existing.clues]; clues[index] = event.target.value; return { ...current, [player.id]: { ...existing, clues } }; })} onKeyDown={(event) => { if (event.key === "Enter" && draftIsValid) submitAssociations(player.id); }} className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-lg text-white outline-none focus:border-indigo-300" /></label>)}</div>
-                  <button type="button" disabled={isSaving || !draftIsValid} onClick={() => submitAssociations(player.id)} className="mt-3 w-full rounded-xl bg-indigo-300 px-4 py-3 font-black text-indigo-950 disabled:opacity-40">グループと連想語を提出</button>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">{hand.map((number) => <div key={number} className="rounded-xl border border-indigo-300/40 bg-indigo-300/10 p-4"><p className="text-xs font-black text-indigo-200">番号 {number + 1}</p><p className="mt-1 text-xl font-black">{room.words[number]}</p></div>)}</div>
+                {submitted ? <div className="mt-4 rounded-xl border border-emerald-300/30 bg-emerald-300/10 p-3 text-emerald-100"><p className="font-black">提出済み</p><p className="mt-1 text-sm">連想語：<strong>{submitted.join(" / ")}</strong></p></div> : <div className="mt-4">
+                  <p className="text-sm font-bold">この手札全体から、連想語を自由に書いてください</p>
+                  <div className="mt-2 grid gap-3 sm:grid-cols-2">{Array.from({ length: room.associationWordCount }, (_, index) => <label key={index} className="rounded-xl border border-white/10 bg-slate-950/50 p-3 text-xs font-bold text-slate-300">連想語 {index + 1}<input value={draft[index] ?? ""} maxLength={30} onChange={(event) => setAssociationDrafts((current) => { const clues = [...(current[player.id] ?? [])]; clues[index] = event.target.value; return { ...current, [player.id]: clues }; })} onKeyDown={(event) => { if (event.key === "Enter" && draftIsValid) submitAssociations(player.id); }} className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-lg text-white outline-none focus:border-indigo-300" /></label>)}</div>
+                  <button type="button" disabled={isSaving || !draftIsValid} onClick={() => submitAssociations(player.id)} className="mt-3 w-full rounded-xl bg-indigo-300 px-4 py-3 font-black text-indigo-950 disabled:opacity-40">連想語を提出</button>
                 </div>}
               </article>;
             })}</div>
             <p className="mt-4 text-center text-sm text-slate-300">全員が提出すると連想語を一斉公開します。</p>
-            {isHost && room.debugMode && <button type="button" onClick={() => void runAction({ type: "debug-fill-associations", actorId: playerId })} className="mt-4 w-full rounded-xl border border-cyan-300/30 bg-cyan-300/10 px-4 py-3 text-sm font-black text-cyan-100">デバッグ：未提出のグループと連想語を自動入力</button>}
+            {isHost && room.debugMode && <button type="button" onClick={() => void runAction({ type: "debug-fill-associations", actorId: playerId })} className="mt-4 w-full rounded-xl border border-cyan-300/30 bg-cyan-300/10 px-4 py-3 text-sm font-black text-cyan-100">デバッグ：未提出の連想語を自動入力</button>}
           </section>}
 
-          {room.phase === "guess" && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><h2 className="text-xl font-black">連想語から余り番号を探す</h2><p className="mt-1 text-sm text-slate-400">予想済み {submittedGuesses}/{room.players.length}人</p><div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{room.players.map((player) => <div key={player.id} className="rounded-xl border border-white/10 bg-white/[0.05] p-4"><p className="text-xs font-bold text-slate-400">{player.name}</p><ol className="mt-2 space-y-1">{room.associations[player.id]?.map((group, index) => <li key={group.id} className="font-black">{index + 1}. {group.clue}</li>)}</ol></div>)}</div><div className="mt-5 space-y-4">{controllablePlayers.map((player) => { const guessed = room.guesses[player.id]; return <fieldset key={player.id} className="rounded-xl border border-white/10 bg-white/[0.05] p-4"><legend className="px-2 font-black">{player.id === playerId ? "あなたの予想" : `${player.name}の予想（デバッグ操作）`}</legend>{guessed !== undefined ? <p className="mt-2 font-black text-emerald-200">{guessed + 1}番を選択済み</p> : <div className="mt-2 flex flex-wrap gap-2">{room.words.map((_, number) => <button key={number} type="button" disabled={isSaving} onClick={() => void runAction({ type: "submit-guess", actorId: playerId, playerId: player.id, number })} className="grid h-11 w-11 place-items-center rounded-full border border-white/20 bg-white/10 font-black transition hover:bg-indigo-300 hover:text-indigo-950 disabled:opacity-40">{number + 1}</button>)}</div>}</fieldset>; })}</div><p className="mt-4 text-center text-sm text-slate-300">全員が選ぶまで他人の予想は表示されません。</p>{isHost && room.debugMode && <button type="button" onClick={() => void runAction({ type: "debug-fill-guesses", actorId: playerId })} className="mt-4 w-full rounded-xl border border-cyan-300/30 bg-cyan-300/10 px-4 py-3 text-sm font-black text-cyan-100">デバッグ：未提出の予想を正解で自動入力</button>}</section>}
+          {room.phase === "guess" && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><h2 className="text-xl font-black">連想語から余り番号を探す</h2><p className="mt-1 text-sm text-slate-400">予想済み {submittedGuesses}/{room.players.length}人</p><div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{room.players.map((player) => <div key={player.id} className="rounded-xl border border-white/10 bg-white/[0.05] p-4"><p className="text-xs font-bold text-slate-400">{player.name}</p><ol className="mt-2 space-y-1">{room.associations[player.id]?.map((clue, index) => <li key={index} className="font-black">{index + 1}. {clue}</li>)}</ol></div>)}</div><div className="mt-5 space-y-4">{controllablePlayers.map((player) => { const guessed = room.guesses[player.id]; return <fieldset key={player.id} className="rounded-xl border border-white/10 bg-white/[0.05] p-4"><legend className="px-2 font-black">{player.id === playerId ? "あなたの予想" : `${player.name}の予想（デバッグ操作）`}</legend>{guessed !== undefined ? <p className="mt-2 font-black text-emerald-200">{guessed + 1}番を選択済み</p> : <div className="mt-2 flex flex-wrap gap-2">{room.words.map((_, number) => <button key={number} type="button" disabled={isSaving} onClick={() => void runAction({ type: "submit-guess", actorId: playerId, playerId: player.id, number })} className="grid h-11 w-11 place-items-center rounded-full border border-white/20 bg-white/10 font-black transition hover:bg-indigo-300 hover:text-indigo-950 disabled:opacity-40">{number + 1}</button>)}</div>}</fieldset>; })}</div><p className="mt-4 text-center text-sm text-slate-300">全員が選ぶまで他人の予想は表示されません。</p>{isHost && room.debugMode && <button type="button" onClick={() => void runAction({ type: "debug-fill-guesses", actorId: playerId })} className="mt-4 w-full rounded-xl border border-cyan-300/30 bg-cyan-300/10 px-4 py-3 text-sm font-black text-cyan-100">デバッグ：未提出の予想を正解で自動入力</button>}</section>}
 
-          {room.phase === "result" && room.missingNumber !== null && <section className="rounded-2xl border border-rose-300/30 bg-slate-950/80 p-6"><div className="text-center"><p className="text-sm font-black text-rose-200">答え合わせ</p><h2 className="mt-2 text-3xl font-black">余りは {room.missingNumber + 1}番「{room.words[room.missingNumber]}」</h2><p className="mt-3 text-slate-300">{room.players.length}人中{correctCount}人が正解しました。</p></div><div className="mt-6 grid gap-3 sm:grid-cols-2">{room.players.map((player) => { const hand = room.hands[player.id] ?? []; const correct = nigoichiGuessIsCorrect(room, player.id); return <article key={player.id} className={`rounded-xl border p-4 ${correct ? "border-emerald-300 bg-emerald-300/10" : "border-white/10 bg-white/[0.05]"}`}><div className="flex items-center justify-between gap-3"><h3 className="font-black">{player.name}</h3><span className={`rounded-md px-2 py-1 text-xs font-black ${correct ? "bg-emerald-300 text-emerald-950" : "bg-slate-700 text-slate-200"}`}>{correct ? "正解" : "不正解"}</span></div><p className="mt-3 text-sm text-slate-300">手札：{hand.map((number) => `${number + 1}.${room.words[number]}`).join(" / ")}</p><div className="mt-3 space-y-2">{room.associations[player.id]?.map((group, index) => <p key={group.id} className="rounded-lg bg-slate-950/50 p-2 text-sm text-slate-300">グループ{index + 1}：{group.cardIds.map((number) => `${number + 1}.${room.words[number]}`).join(" / ")} → <strong className="text-white">{group.clue}</strong></p>)}</div><p className="mt-3 text-sm text-slate-300">予想：{(room.guesses[player.id] ?? -1) + 1}番</p></article>; })}</div>{isHost ? <RoomResultActions disabled={isSaving} onPlayAgain={() => void runAction({ type: "reset-game", actorId: playerId })} onDissolve={() => void dissolveRoom()} /> : <p className="mt-5 text-center text-sm font-bold text-slate-300">ホストの操作を待っています。</p>}</section>}
+          {room.phase === "result" && room.missingNumber !== null && <section className="rounded-2xl border border-rose-300/30 bg-slate-950/80 p-6"><div className="text-center"><p className="text-sm font-black text-rose-200">答え合わせ</p><h2 className="mt-2 text-3xl font-black">余りは {room.missingNumber + 1}番「{room.words[room.missingNumber]}」</h2><p className="mt-3 text-slate-300">{room.players.length}人中{correctCount}人が正解しました。</p></div><div className="mt-6 grid gap-3 sm:grid-cols-2">{room.players.map((player) => { const hand = room.hands[player.id] ?? []; const correct = nigoichiGuessIsCorrect(room, player.id); return <article key={player.id} className={`rounded-xl border p-4 ${correct ? "border-emerald-300 bg-emerald-300/10" : "border-white/10 bg-white/[0.05]"}`}><div className="flex items-center justify-between gap-3"><h3 className="font-black">{player.name}</h3><span className={`rounded-md px-2 py-1 text-xs font-black ${correct ? "bg-emerald-300 text-emerald-950" : "bg-slate-700 text-slate-200"}`}>{correct ? "正解" : "不正解"}</span></div><p className="mt-3 text-sm text-slate-300">手札：{hand.map((number) => `${number + 1}.${room.words[number]}`).join(" / ")}</p><p className="mt-3 rounded-lg bg-slate-950/50 p-2 text-sm text-slate-300">連想語：<strong className="text-white">{room.associations[player.id]?.join(" / ")}</strong></p><p className="mt-3 text-sm text-slate-300">予想：{(room.guesses[player.id] ?? -1) + 1}番</p></article>; })}</div>{isHost ? <RoomResultActions disabled={isSaving} onPlayAgain={() => void runAction({ type: "reset-game", actorId: playerId })} onDissolve={() => void dissolveRoom()} /> : <p className="mt-5 text-center text-sm font-bold text-slate-300">ホストの操作を待っています。</p>}</section>}
           {room.phase === "result" && <GameResultShareButton title="ワードアウト プレイログ" text={nigoichiShareText(room)} url="/word-out" />}
           {room.phase === "clue" && !myHand && <p className="rounded-xl border border-rose-300/30 bg-rose-300/10 p-3 text-sm font-bold">あなたの手札を取得できませんでした。画面を再読み込みしてください。</p>}
         </div>
