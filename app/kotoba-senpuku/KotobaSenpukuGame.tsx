@@ -69,6 +69,7 @@ function normalizeDefaults(value: unknown) {
     turnTimeLimitSeconds: config.turnTimeLimitSeconds,
     continuousScan: config.continuousScan,
     allowWordGuess: config.allowWordGuess,
+    showWordGuessInLog: config.showWordGuessInLog,
     randomFirstTurn: config.randomFirstTurn,
   };
 }
@@ -233,6 +234,7 @@ export function KotobaSenpukuGame() {
     { label: "手番時間", value: formatTime(room.turnTimeLimitSeconds) },
     { label: "連続探知", value: room.continuousScan ? "あり" : "なし" },
     { label: "秘密語回答", value: room.allowWordGuess ? "あり" : "なし" },
+    { label: "直接回答ログ", value: room.showWordGuessInLog ? "表示" : "非表示" },
     { label: "最初の手番", value: room.randomFirstTurn ? "ランダム" : "参加順" },
     { label: "デバッグ", value: room.debugMode ? "ON" : "OFF" },
   ] : [];
@@ -374,7 +376,7 @@ export function KotobaSenpukuGame() {
     });
   };
 
-  const rulesDialog = <GameRulesDialog open={rulesOpen} title="ことばソナーのルール" onClose={() => setRulesOpen(false)}>
+  const rulesDialog = <GameRulesDialog open={rulesOpen} title="ワードソナーのルール" onClose={() => setRulesOpen(false)}>
     <p>ほかの人の秘密のことばを少しずつ明らかにしながら、自分のことばを最後まで隠し通すゲームです。</p>
     <h3 className="mt-4 font-black text-white">ゲームの準備</h3>
     <ol className="mt-2 list-decimal space-y-2 pl-5">
@@ -387,6 +389,7 @@ export function KotobaSenpukuGame() {
       <li>選んだ文字が誰かの秘密のことばに入っていれば、その人の該当する文字がすべて公開されます。誰にも入っていなければ、次の人の番です。</li>
       <li>部屋の設定で「連続探知」がありなら、1人以上に当たったときは続けてもう1文字選べます。なしなら、当たっても次の人へ交代します。</li>
       <li>「秘密語回答」がありなら、文字を選ぶ代わりに、相手のことば全体を答えることもできます。正解なら相手が脱落し、不正解でも自分の番は終わります。</li>
+      <li>「直接回答ログ」で、直接回答した言葉を行動履歴とプレイバックへ表示するか選べます。非表示でも、対象者と正誤は公開されます。</li>
     </ol>
     <h3 className="mt-4 font-black text-white">脱落と勝ち方</h3>
     <p className="mt-2">文字をすべて公開された人、またはことば全体を当てられた人は脱落します。最後まで秘密のことばが残った人の勝ちです。</p>
@@ -399,7 +402,7 @@ export function KotobaSenpukuGame() {
   if (!ready) return <main className="min-h-screen bg-slate-950 p-8 text-white">ログイン情報と部屋を確認中...</main>;
 
   if (!session?.id) {
-    return <main className="min-h-screen bg-slate-950 px-4 py-12 text-white"><div className="mx-auto max-w-lg rounded-2xl border border-white/10 bg-white/[0.06] p-6 text-center"><h1 className="text-3xl font-black">ことばソナー</h1><p className="mt-4 leading-7 text-slate-300">このゲームはログインしたプレイヤー同士で遊びます。ゲームロビーでログインしてください。</p><Link href="/games" className="mt-6 inline-flex rounded-xl bg-fuchsia-400 px-5 py-3 font-black text-fuchsia-950">ゲームロビーへ</Link></div></main>;
+    return <main className="min-h-screen bg-slate-950 px-4 py-12 text-white"><div className="mx-auto max-w-lg rounded-2xl border border-white/10 bg-white/[0.06] p-6 text-center"><h1 className="text-3xl font-black">ワードソナー</h1><p className="mt-4 leading-7 text-slate-300">このゲームはログインしたプレイヤー同士で遊びます。ゲームロビーでログインしてください。</p><Link href="/games" className="mt-6 inline-flex rounded-xl bg-fuchsia-400 px-5 py-3 font-black text-fuchsia-950">ゲームロビーへ</Link></div></main>;
   }
 
   if (!room) {
@@ -408,7 +411,7 @@ export function KotobaSenpukuGame() {
         <div className="mx-auto max-w-4xl">
           <div className="flex items-center justify-between gap-2"><Link href="/games" className="text-sm font-bold text-fuchsia-200">← ゲームロビー</Link><div className="flex items-center gap-2"><button type="button" onClick={() => setRulesOpen(true)} className="rounded-lg border border-white/20 px-3 py-2 text-sm font-bold">ルール</button><span className="text-sm font-bold">{session.name}</span></div></div>
           <section className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-slate-950/80 shadow-2xl">
-            <div className="bg-gradient-to-r from-fuchsia-400 via-cyan-300 to-amber-300 px-6 py-8 text-slate-950"><p className="text-xs font-black uppercase tracking-[0.28em]">Original online word game</p><h1 className="mt-2 text-4xl font-black sm:text-6xl">ことばソナー</h1><p className="mt-3 font-bold">秘密のことばを探り合い、全文公開による脱落を避けて最後の1人を目指す。</p></div>
+            <div className="bg-gradient-to-r from-fuchsia-400 via-cyan-300 to-amber-300 px-6 py-8 text-slate-950"><p className="text-xs font-black uppercase tracking-[0.28em]">Original online word game</p><h1 className="mt-2 text-4xl font-black sm:text-6xl">ワードソナー</h1><p className="mt-3 font-bold">秘密のことばを探り合い、全文公開による脱落を避けて最後の1人を目指す。</p></div>
             <div className="grid gap-6 p-6 md:grid-cols-2">
               <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-5"><h2 className="text-xl font-black">部屋を作る</h2><p className="mt-2 text-sm leading-6 text-slate-400">あなたがホストになり、設定と進行を管理します。</p><label className="mt-4 block text-sm font-bold">合言葉（任意）<input type="password" value={passphrase} maxLength={40} onChange={(event) => setPassphrase(event.target.value)} className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-white outline-none" /></label><button type="button" disabled={isSaving} onClick={createRoom} className="mt-4 w-full rounded-xl bg-amber-300 px-4 py-3 font-black text-slate-950 disabled:opacity-50">新しい部屋を作る</button></div>
               <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-5"><h2 className="text-xl font-black">部屋に参加</h2><label className="mt-4 block text-sm font-bold">部屋コード<input value={joinCode} maxLength={4} onChange={(event) => setJoinCode(event.target.value.toUpperCase())} className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 font-mono text-lg uppercase text-white outline-none" /></label><label className="mt-3 block text-sm font-bold">合言葉<input type="password" value={passphrase} maxLength={40} onChange={(event) => setPassphrase(event.target.value)} className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-white outline-none" /></label><div className="mt-4 grid grid-cols-2 gap-2"><button type="button" disabled={isSaving} onClick={() => void joinRoom()} className="rounded-xl bg-fuchsia-400 px-3 py-3 font-black text-fuchsia-950 disabled:opacity-50">コードで参加</button><button type="button" onClick={() => void listRooms()} className="rounded-xl border border-white/20 px-3 py-3 font-black">部屋一覧</button></div></div>
@@ -425,7 +428,7 @@ export function KotobaSenpukuGame() {
 
   return (
     <main className={`min-h-screen bg-[radial-gradient(circle_at_top,#701a75_0%,#172033_35%,#020617_75%)] text-white ${gameTopBannerOffsetClass}`}>
-      <GameTopBanner eyebrow="Hidden word survival" title={<>ことばソナー <span className="font-mono text-base text-amber-300">#{room.code}</span></>}>
+      <GameTopBanner eyebrow="Hidden word survival" title={<>ワードソナー <span className="font-mono text-base text-amber-300">#{room.code}</span></>}>
         {room.phase === "lobby" && (isHost
           ? <button type="button" onClick={() => void dissolveRoom()} className={gameTopBannerDangerActionClass}>部屋を解散</button>
           : <Link href="/games" className={gameTopBannerActionClass}>ゲームロビーへ戻る</Link>)}
@@ -462,6 +465,14 @@ export function KotobaSenpukuGame() {
                   description="あり：相手の秘密語を直接回答する行動を使えます。"
                   value={room.allowWordGuess}
                   onChange={(value) => void updateConfig({ allowWordGuess: value })}
+                />
+                <BinaryRuleControl
+                  label="直接回答ログ"
+                  description="表示：回答した言葉も履歴へ表示。非表示：対象者と正誤だけ表示。"
+                  value={room.showWordGuessInLog}
+                  falseLabel="非表示"
+                  trueLabel="表示"
+                  onChange={(value) => void updateConfig({ showWordGuessInLog: value })}
                 />
                 <BinaryRuleControl
                   label="最初の手番"

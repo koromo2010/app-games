@@ -381,7 +381,8 @@ export async function recordKotobaSenpukuReplay(room: KotobaSenpukuRoom) {
       }
       if (event.type === "challenge") {
         const targetName = names.get(event.targetId) ?? "Unknown";
-        return `第${event.turn}手: ${actorName}が${targetName}の秘密語を「${event.guess}」と回答 → ${event.correct ? `正解、${targetName}が脱落` : "不正解"}`;
+        const answer = event.guess ? `秘密語を「${event.guess}」と回答` : "秘密語を直接回答";
+        return `第${event.turn}手: ${actorName}が${targetName}の${answer} → ${event.correct ? `正解、${targetName}が脱落` : "不正解"}`;
       }
       return `第${event.turn}手: ${actorName}が時間切れ`;
     });

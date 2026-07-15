@@ -21,7 +21,7 @@
 | ワードウルフのルール・進行 | `DEVELOPMENT_HANDOFF.md` 6章、`game-concept.md` 2章 | `lib/wordwolf-command-domain.ts`、`lib/wordwolf-room-store.ts`、`app/wordwolf/game-flow.ts` |
 | たほい屋のルール・進行 | `DEVELOPMENT_HANDOFF.md` 7章 | `lib/tahoiya-room-store.ts`、`lib/tahoiya-types.ts`、`app/tahoiya/TahoiyaGame.tsx` |
 | ワードスケール | `WORD_SCALE.md` | `lib/hodoai-room-store.ts`、`app/api/hodoai/rooms/route.ts` |
-| ことばソナー | `KOTOBA_SENPUKU.md` | `lib/kotoba-senpuku-room-store.ts`、`app/api/kotoba-senpuku/rooms/route.ts` |
+| ワードソナー | `KOTOBA_SENPUKU.md` | `lib/kotoba-senpuku-room-store.ts`、`app/api/kotoba-senpuku/rooms/route.ts` |
 | ノーザンブランチ | `NORTHERN_BRANCH_PROTOTYPE.md` | `lib/northern-branch-game.ts`、`lib/northern-branch-room-store.ts` |
 | 暗号傍受（仮） | `CODE_INTERCEPT.md` | `lib/code-intercept.ts`、`lib/code-intercept-room-store.ts` |
 | 新規ゲーム追加 | `NEW_GAME_CHECKLIST.md` | `config/game-registry.json`、`scripts/check-game-standards.mjs` |

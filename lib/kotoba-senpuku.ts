@@ -23,6 +23,7 @@ export type KotobaSenpukuConfig = {
   debugMode: boolean;
   continuousScan: boolean;
   allowWordGuess: boolean;
+  showWordGuessInLog: boolean;
   randomFirstTurn: boolean;
 };
 
@@ -109,6 +110,7 @@ export const defaultKotobaSenpukuConfig: KotobaSenpukuConfig = {
   debugMode: false,
   continuousScan: true,
   allowWordGuess: true,
+  showWordGuessInLog: true,
   randomFirstTurn: true,
 };
 
@@ -189,8 +191,28 @@ export function normalizeKotobaSenpukuConfig(value: unknown): KotobaSenpukuConfi
     debugMode: parsed.debugMode === true,
     continuousScan: parsed.continuousScan !== false,
     allowWordGuess: parsed.allowWordGuess !== false,
+    showWordGuessInLog: parsed.showWordGuessInLog !== false,
     randomFirstTurn: parsed.randomFirstTurn !== false,
   };
+}
+
+export function kotobaSenpukuChallengeLogMessage({
+  actorName,
+  targetName,
+  guess,
+  correct,
+  showGuess,
+}: {
+  actorName: string;
+  targetName: string;
+  guess: string;
+  correct: boolean;
+  showGuess: boolean;
+}) {
+  const answer = showGuess ? `秘密語を「${guess}」と回答` : "秘密語を直接回答";
+  return correct
+    ? `${actorName}が${targetName}の${answer}。正解したため、${targetName}が脱落しました。`
+    : `${actorName}が${targetName}の${answer}しましたが、不正解でした。`;
 }
 
 export function normalizeKotobaSenpukuWord(value: unknown) {

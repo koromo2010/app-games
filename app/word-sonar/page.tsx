@@ -4,7 +4,7 @@ import { KotobaSenpukuGame } from "@/app/kotoba-senpuku/KotobaSenpukuGame";
 import { gamePageAccessAllowed } from "@/lib/game-access";
 
 export const metadata: Metadata = {
-  title: "ことばソナー | Game Fields",
+  title: "ワードソナー | Game Fields",
   description: "秘密のことばを探知し、全文公開による脱落を避けて最後の1人を目指すオンラインゲーム。",
 };
 

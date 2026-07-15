@@ -1,6 +1,7 @@
 import { randomInt, randomUUID } from "node:crypto";
 import {
   isValidKotobaSenpukuWord,
+  kotobaSenpukuChallengeLogMessage,
   isFullyRevealedKotobaSenpukuWord,
   kotobaSenpukuDebugWords,
   kotobaSenpukuKana,
@@ -337,10 +338,11 @@ function performChallenge(room: KotobaSenpukuRoom, targetId: string, guessInput:
   const correct = guess === room.secrets[target.id];
   const exposedIds = correct ? [...new Set([...room.exposedIds, target.id])] : room.exposedIds;
   const masks = correct ? { ...room.masks, [target.id]: room.secrets[target.id] } : room.masks;
-  const event: KotobaSenpukuEvent = { type: "challenge", turn: room.turnNumber, actorId: actor.id, targetId: target.id, guess, correct, eliminatedIds: correct ? [target.id] : [], createdAt: Date.now() };
-  const changed = addLog({ ...room, exposedIds, masks, roundEvents: [...room.roundEvents, event].slice(-300) }, correct
-    ? `${actor.name}が${target.name}の秘密語を「${guess}」と回答。正解したため、${target.name}が脱落しました。`
-    : `${actor.name}が${target.name}の秘密語を「${guess}」と回答しましたが、不正解でした。`);
+  const event: KotobaSenpukuEvent = { type: "challenge", turn: room.turnNumber, actorId: actor.id, targetId: target.id, guess: room.showWordGuessInLog ? guess : "", correct, eliminatedIds: correct ? [target.id] : [], createdAt: Date.now() };
+  const changed = addLog(
+    { ...room, exposedIds, masks, roundEvents: [...room.roundEvents, event].slice(-300) },
+    kotobaSenpukuChallengeLogMessage({ actorName: actor.name, targetName: target.name, guess, correct, showGuess: room.showWordGuessInLog }),
+  );
   return shouldFinishRound(changed) ? finishRound(changed) : advanceTurn(changed, "秘密語を回答したため、手番を終了します。");
 }
 
