@@ -21,6 +21,12 @@ test("不正な描画値を安全に正規化する", () => {
   assert.equal(normalizeDrawingStroke({ id: "", points: [] }), null);
 });
 
+test("共同描画のレイヤーと作者を保持する", () => {
+  const stroke = normalizeDrawingStroke({ id: "layered", layerId: "line-art", authorId: "player-1", color: "#000000", width: 2, tool: "pen", points: [{ x: 0.2, y: 0.3 }] });
+  assert.equal(stroke?.layerId, "line-art");
+  assert.equal(stroke?.authorId, "player-1");
+});
+
 test("保存できるストローク数に上限を設ける", () => {
   const source = Array.from({ length: 510 }, (_, index) => ({ id: String(index), color: "#000000", width: 2, tool: "pen", points: [{ x: 0, y: 0 }] }));
   const result = normalizeDrawingStrokes(source);

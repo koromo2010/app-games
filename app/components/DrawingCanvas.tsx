@@ -11,6 +11,8 @@ type Props = {
   tool: "pen" | "eraser" | "eyedropper" | "fill";
   disabled?: boolean;
   keyboardCursor?: DrawingPoint;
+  layerIds?: string[];
+  activeLayerId?: string;
   onColorPick?: (color: string) => void;
   onPointerInteraction?: () => void;
   onStrokeComplete: (stroke: DrawingStroke) => void;
@@ -47,7 +49,7 @@ function drawStroke(context: CanvasRenderingContext2D, stroke: DrawingStroke, ca
   context.restore();
 }
 
-export function DrawingCanvas({ strokes, color, width, opacity, tool, disabled = false, keyboardCursor, onColorPick, onPointerInteraction, onStrokeComplete }: Props) {
+export function DrawingCanvas({ strokes, color, width, opacity, tool, disabled = false, keyboardCursor, layerIds = ["base"], activeLayerId = "base", onColorPick, onPointerInteraction, onStrokeComplete }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const activeStrokeRef = useRef<DrawingStroke | null>(null);
   const redrawRef = useRef<() => void>(() => undefined);
@@ -58,9 +60,16 @@ export function DrawingCanvas({ strokes, color, width, opacity, tool, disabled =
     const context = canvas.getContext("2d");
     if (!context) return;
     context.clearRect(0, 0, canvas.width, canvas.height);
-    for (const stroke of strokes) drawStroke(context, stroke, canvas.width, canvas.height);
-    if (activeStrokeRef.current) drawStroke(context, activeStrokeRef.current, canvas.width, canvas.height);
-  }, [strokes]);
+    for (const layerId of layerIds) {
+      const layerCanvas = document.createElement("canvas");
+      layerCanvas.width = canvas.width; layerCanvas.height = canvas.height;
+      const layerContext = layerCanvas.getContext("2d");
+      if (!layerContext) continue;
+      for (const stroke of strokes) if ((stroke.layerId || "base") === layerId) drawStroke(layerContext, stroke, canvas.width, canvas.height);
+      if (activeStrokeRef.current && (activeStrokeRef.current.layerId || "base") === layerId) drawStroke(layerContext, activeStrokeRef.current, canvas.width, canvas.height);
+      context.drawImage(layerCanvas, 0, 0);
+    }
+  }, [layerIds, strokes]);
 
   useEffect(() => {
     redrawRef.current = redraw;
@@ -106,7 +115,7 @@ export function DrawingCanvas({ strokes, color, width, opacity, tool, disabled =
       return;
     }
     event.currentTarget.setPointerCapture(event.pointerId);
-    activeStrokeRef.current = { id: crypto.randomUUID(), color, width, opacity, tool, points: [point] };
+    activeStrokeRef.current = { id: crypto.randomUUID(), layerId: activeLayerId, color, width, opacity, tool, points: [point] };
     redraw();
   };
   const move = (event: PointerEvent<HTMLCanvasElement>) => {

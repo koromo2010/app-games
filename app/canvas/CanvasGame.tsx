@@ -9,7 +9,7 @@ import { GameTopBanner, gameTopBannerOffsetClass } from "@/app/components/GameTo
 import { GameTopMenu, gameTopBannerActionClass, gameTopMenuItemClass } from "@/app/components/GameTopMenu";
 import { clampDrawingPoint, normalizeDrawingStrokes, type DrawingPoint, type DrawingStroke } from "@/lib/drawing-canvas";
 import { fallbackAvatarColor, readPlayerSession, type PlayerSession } from "@/lib/player-session";
-import type { CanvasRoom } from "@/lib/canvas-room";
+import type { CanvasLayer, CanvasLayerMode, CanvasRoom } from "@/lib/canvas-room";
 
 const storageKey = "canvas-prototype-board";
 const channelName = "game-fields-canvas-prototype";
@@ -32,10 +32,16 @@ export function CanvasGame() {
   const [roomCode, setRoomCode] = useState("");
   const [roomPassphrase, setRoomPassphrase] = useState("");
   const [roomBusy, setRoomBusy] = useState(false);
+  const [layerMode, setLayerMode] = useState<CanvasLayerMode>("shared");
+  const [localLayers, setLocalLayers] = useState<CanvasLayer[]>([{ id: "base", name: "レイヤー1", createdAt: 0 }]);
+  const [activeLayerId, setActiveLayerId] = useState("base");
+  const [hiddenLayerIds, setHiddenLayerIds] = useState<Set<string>>(() => new Set());
+  const [pendingStrokes, setPendingStrokes] = useState<DrawingStroke[]>([]);
   const channelRef = useRef<BroadcastChannel | null>(null);
   const spacePressedRef = useRef(false);
   const keyboardStrokeIdRef = useRef<string | null>(null);
   const pressedArrowKeysRef = useRef(new Set<string>());
+  const roomRevisionRef = useRef(0);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -63,10 +69,16 @@ export function CanvasGame() {
       const response = await fetch("/api/canvas/rooms", { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
       const data = await response.json() as { room?: typeof room; error?: string };
       if (!response.ok || !data.room) throw new Error(data.error || "ルーム操作に失敗しました");
-      setRoom(data.room); setStrokes(data.room.strokes); setRedoStrokes([]); return data.room;
+      if (data.room.revision < roomRevisionRef.current) return data.room;
+      roomRevisionRef.current = data.room.revision;
+      setRoom(data.room); setStrokes(data.room.strokes);
+      setPendingStrokes((pending) => pending.filter((stroke) => !data.room!.strokes.some((saved) => saved.id === stroke.id)));
+      const ownLayer = data.room.layerMode === "per-player" ? data.room.players.find((player) => player.id === session?.id)?.layerId : undefined;
+      setActiveLayerId((current) => ownLayer || (data.room!.layers.some((layer) => layer.id === current) ? current : data.room!.layers[0]?.id || "base"));
+      setRedoStrokes([]); return data.room;
     } catch (error) { window.alert(error instanceof Error ? error.message : "ルーム操作に失敗しました"); return null; }
     finally { setRoomBusy(false); }
-  }, []);
+  }, [session?.id]);
 
   const activeRoomCode = room?.code;
   useEffect(() => {
@@ -75,18 +87,30 @@ export function CanvasGame() {
       const response = await fetch(`/api/canvas/rooms?code=${encodeURIComponent(activeRoomCode)}`, { cache: "no-store" });
       if (!response.ok) return;
       const data = await response.json() as { room: NonNullable<typeof room> };
+      if (data.room.revision < roomRevisionRef.current) return;
+      roomRevisionRef.current = data.room.revision;
       setRoom(data.room); setStrokes(data.room.strokes);
+      setPendingStrokes((pending) => pending.filter((stroke) => !data.room.strokes.some((saved) => saved.id === stroke.id)));
     }, 750);
     return () => window.clearInterval(timer);
   }, [activeRoomCode]);
 
   const submitStroke = useCallback((stroke: DrawingStroke) => {
-    if (!room) { updateStrokes([...strokes, stroke]); setRedoStrokes([]); return; }
-    void roomRequest("PATCH", { code: room.code, action: { type: "stroke", stroke } });
-  }, [room, roomRequest, strokes, updateStrokes]);
+    const layeredStroke = { ...stroke, layerId: activeLayerId, authorId: session?.id };
+    if (!room) { updateStrokes([...strokes, layeredStroke]); setRedoStrokes([]); return; }
+    setPendingStrokes((pending) => [...pending, layeredStroke]);
+    void roomRequest("PATCH", { code: room.code, action: { type: "stroke", stroke: layeredStroke } }).then((result) => {
+      if (!result) setPendingStrokes((pending) => pending.filter((item) => item.id !== layeredStroke.id));
+    });
+  }, [activeLayerId, room, roomRequest, session?.id, strokes, updateStrokes]);
+
+  const layers = room?.layers || localLayers;
+  const visibleStrokes = [...strokes, ...pendingStrokes.filter((pending) => !strokes.some((saved) => saved.id === pending.id))]
+    .filter((stroke) => !hiddenLayerIds.has(stroke.layerId || "base"))
+    .sort((left, right) => layers.findIndex((layer) => layer.id === (left.layerId || "base")) - layers.findIndex((layer) => layer.id === (right.layerId || "base")));
 
   const undo = useCallback(() => {
-    if (room) { void roomRequest("PATCH", { code: room.code, action: { type: "undo" } }); return; }
+    if (room) { void roomRequest("PATCH", { code: room.code, action: { type: "undo", layerId: activeLayerId } }); return; }
     setStrokes((current) => {
       const removed = current.at(-1);
       if (!removed) return current;
@@ -97,7 +121,7 @@ export function CanvasGame() {
       setSyncNotice("一手戻しました");
       return next;
     });
-  }, [room, roomRequest]);
+  }, [activeLayerId, room, roomRequest]);
 
   const redo = useCallback(() => {
     if (room) return;
@@ -127,7 +151,7 @@ export function CanvasGame() {
           keyboardStrokeIdRef.current = id;
           setStrokes((current) => {
             const drawingTool = tool === "eraser" ? "eraser" : "pen";
-            const next = normalizeDrawingStrokes([...current, { id, color, width, opacity, tool: drawingTool, points: [keyboardCursor] }]);
+            const next = normalizeDrawingStrokes([...current, { id, layerId: activeLayerId, authorId: session?.id, color, width, opacity, tool: drawingTool, points: [keyboardCursor] }]);
             localStorage.setItem(storageKey, JSON.stringify(next));
             channelRef.current?.postMessage(next);
             return next;
@@ -177,7 +201,7 @@ export function CanvasGame() {
     };
     const releaseSpace = () => {
       const activeId = keyboardStrokeIdRef.current;
-      if (room && activeId) setStrokes((current) => { const stroke = current.find((item) => item.id === activeId); if (stroke) void roomRequest("PATCH", { code: room.code, action: { type: "stroke", stroke } }); return current; });
+      if (room && activeId) setStrokes((current) => { const stroke = current.find((item) => item.id === activeId); if (stroke) { setPendingStrokes((pending) => [...pending, stroke]); void roomRequest("PATCH", { code: room.code, action: { type: "stroke", stroke } }); } return current; });
       spacePressedRef.current = false; keyboardStrokeIdRef.current = null;
     };
     const releaseAllKeys = () => { releaseSpace(); pressedArrowKeysRef.current.clear(); };
@@ -189,7 +213,7 @@ export function CanvasGame() {
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("blur", releaseAllKeys);
     return () => { window.removeEventListener("keydown", onKeyDown); window.removeEventListener("keyup", onKeyUp); window.removeEventListener("blur", releaseAllKeys); };
-  }, [color, keyboardCursor, opacity, redo, room, roomRequest, tool, undo, width]);
+  }, [activeLayerId, color, keyboardCursor, opacity, redo, room, roomRequest, session?.id, tool, undo, width]);
 
   return <main className={`min-h-screen bg-[radial-gradient(circle_at_top,#e0f2fe_0%,#f8fafc_42%,#fef3c7_100%)] text-slate-900 ${gameTopBannerOffsetClass}`}>
     <GameTopBanner eyebrow="PRIVATE UI PROTOTYPE" title="キャンバス">
@@ -208,13 +232,29 @@ export function CanvasGame() {
           <input value={roomCode} onChange={(event) => setRoomCode(event.target.value.toUpperCase().slice(0, 4))} placeholder="ルームコード" aria-label="ルームコード" className="w-32 rounded-lg border px-3 py-2 text-sm uppercase" />
           <input value={roomPassphrase} onChange={(event) => setRoomPassphrase(event.target.value)} placeholder="合言葉（任意）" aria-label="合言葉" className="w-36 rounded-lg border px-3 py-2 text-sm" />
           <button disabled={roomBusy || !session?.id || roomCode.length !== 4} onClick={() => void roomRequest("PATCH", { code: roomCode, action: { type: "join", passphrase: roomPassphrase } })} className="rounded-lg bg-cyan-700 px-3 py-2 text-sm font-bold text-white disabled:opacity-40">参加</button>
-          <button disabled={roomBusy || !session?.id} onClick={() => void roomRequest("POST", { passphrase: roomPassphrase })} className="rounded-lg border border-cyan-700 px-3 py-2 text-sm font-bold text-cyan-800 disabled:opacity-40">部屋を作る</button>
+          <select value={layerMode} onChange={(event) => setLayerMode(event.target.value as CanvasLayerMode)} aria-label="レイヤーモード" className="rounded-lg border px-2 py-2 text-sm"><option value="shared">自由レイヤー</option><option value="per-player">プレイヤー別レイヤー</option></select>
+          <button disabled={roomBusy || !session?.id} onClick={() => void roomRequest("POST", { passphrase: roomPassphrase, layerMode })} className="rounded-lg border border-cyan-700 px-3 py-2 text-sm font-bold text-cyan-800 disabled:opacity-40">部屋を作る</button>
           {!session?.id && <span className="text-xs text-amber-700">ログインすると利用できます</span>}
         </> : <>
           <span className="rounded bg-slate-900 px-3 py-1 font-mono font-black tracking-widest text-white">{room.code}</span>
           <span className="text-sm font-bold">{room.players.length}人：{room.players.map((player) => player.name).join("、")}</span>
           <button disabled={roomBusy} onClick={async () => { if (room.ownerId === session?.id) { await fetch(`/api/canvas/rooms?code=${room.code}`, { method: "DELETE" }); } else { await roomRequest("PATCH", { code: room.code, action: { type: "leave" } }); } setRoom(null); }} className="ml-auto rounded-lg border px-3 py-2 text-sm font-bold">{room.ownerId === session?.id ? "部屋を閉じる" : "退出"}</button>
         </>}
+      </div>
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-fuchsia-200 bg-white/90 p-3 shadow-lg" aria-label="レイヤー">
+        <strong className="mr-1 text-sm">レイヤー</strong>
+        {layers.map((layer) => {
+          const fixed = room?.layerMode === "per-player";
+          const canSelect = !fixed || layer.ownerId === session?.id;
+          const hidden = hiddenLayerIds.has(layer.id);
+          return <div key={layer.id} className={`flex items-center rounded-lg border ${activeLayerId === layer.id ? "border-fuchsia-500 bg-fuchsia-50" : "border-slate-200"}`}>
+            <button type="button" aria-pressed={!hidden} aria-label={`${layer.name}を${hidden ? "表示" : "非表示"}`} onClick={() => setHiddenLayerIds((current) => { const next = new Set(current); if (next.has(layer.id)) next.delete(layer.id); else next.add(layer.id); return next; })} className="px-2 py-1.5 text-xs">{hidden ? "○" : "●"}</button>
+            <button type="button" disabled={!canSelect} aria-pressed={activeLayerId === layer.id} onClick={() => setActiveLayerId(layer.id)} className="px-2 py-1.5 text-sm font-bold disabled:opacity-40">{layer.name}</button>
+            {room?.layerMode !== "per-player" && (room?.ownerId === session?.id || !room) && layers.length > 1 && <button type="button" aria-label={`${layer.name}を削除`} onClick={() => { if (room) void roomRequest("PATCH", { code: room.code, action: { type: "remove-layer", layerId: layer.id } }); else { setLocalLayers((current) => current.filter((item) => item.id !== layer.id)); setStrokes((current) => current.filter((stroke) => stroke.layerId !== layer.id)); if (activeLayerId === layer.id) setActiveLayerId(layers[0].id); } }} className="px-2 text-xs text-rose-600">×</button>}
+          </div>;
+        })}
+        {room?.layerMode !== "per-player" && <button type="button" onClick={() => { if (room) void roomRequest("PATCH", { code: room.code, action: { type: "add-layer" } }); else { const layer = { id: crypto.randomUUID(), name: `レイヤー${localLayers.length + 1}`, createdAt: Date.now() }; setLocalLayers((current) => [...current, layer]); setActiveLayerId(layer.id); } }} className="rounded-lg border border-fuchsia-300 px-3 py-1.5 text-sm font-bold text-fuchsia-800">＋追加</button>}
+        {room && <span className="ml-auto text-xs text-slate-500">{room.layerMode === "per-player" ? "各プレイヤー専用" : "自由に切替"}</span>}
       </div>
       <div className="rounded-2xl border border-slate-200 bg-white/90 p-3 shadow-xl shadow-slate-300/40 backdrop-blur sm:p-4">
         <div className="flex flex-wrap items-center gap-3">
@@ -243,7 +283,7 @@ export function CanvasGame() {
       </div>
 
       <div className="overflow-hidden rounded-2xl border-4 border-white bg-white shadow-2xl shadow-slate-400/40">
-        <div className="aspect-[4/3] min-h-[320px] max-h-[72vh] w-full"><DrawingCanvas strokes={strokes} color={color} width={width} opacity={opacity} tool={tool} keyboardCursor={keyboardCursorVisible ? keyboardCursor : undefined} onPointerInteraction={() => setKeyboardCursorVisible(false)} onColorPick={(picked) => { setColor(picked); setTool("pen"); }} onStrokeComplete={submitStroke} /></div>
+        <div className="aspect-[4/3] min-h-[320px] max-h-[72vh] w-full"><DrawingCanvas strokes={visibleStrokes} layerIds={layers.filter((layer) => !hiddenLayerIds.has(layer.id)).map((layer) => layer.id)} activeLayerId={activeLayerId} color={color} width={width} opacity={opacity} tool={tool} keyboardCursor={keyboardCursorVisible ? keyboardCursor : undefined} onPointerInteraction={() => setKeyboardCursorVisible(false)} onColorPick={(picked) => { setColor(picked); setTool("pen"); }} onStrokeComplete={submitStroke} /></div>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs font-semibold text-slate-500"><span>{syncNotice}</span><span>A ペン・S 消しゴム・C 細く・V 太く・Z 戻す・Y やり直す</span><span>矢印 移動・Space＋矢印 描画・Shift 高速</span><span>{strokes.length}ストローク</span></div>
     </section>
@@ -260,7 +300,9 @@ export function CanvasGame() {
       <h3 className="mt-4 font-black text-white">キーボードで描く</h3>
       <p className="mt-2">水色の丸がキーボードカーソルです。矢印キーで移動し、Spaceを押しながら矢印キーを押すと線を描けます。Shiftも一緒に押すと速く動きます。くわしいキーは「キーボードショートカット」で確認できます。</p>
       <h3 className="mt-4 font-black text-white">保存と同期</h3>
-      <p className="mt-2">描いた内容は、この端末のブラウザに自動保存されます。同じブラウザでこのページを2つ開くと、別のタブにも変更が反映されます。別の人や別の端末とのオンライン共有には、まだ対応していません。</p>
+      <p className="mt-2">通常の描画はこの端末へ自動保存されます。「みんなで描く」ではルームコードを共有して別端末から同じ絵を編集できます。作成時に、全員が自由に切り替えるレイヤーか、参加者ごとの専用レイヤーを選べます。</p>
+      <h3 className="mt-4 font-black text-white">レイヤー</h3>
+      <p className="mt-2">●で表示・非表示を切り替え、名前のボタンで描画先を選びます。レイヤーごとに描画面を分けているため、消しゴムは選択中のレイヤーだけに作用します。</p>
       <h3 className="mt-4 font-black text-white">得点・終了・時間制限</h3>
       <p className="mt-2 rounded-lg bg-sky-300/10 p-3">現在はゲームではなく描画機能のテスト版なので、得点、勝ち負け、終了条件、時間制限はありません。描いた結果が戦績に記録されることもありません。</p>
     </GameRulesDialog>
