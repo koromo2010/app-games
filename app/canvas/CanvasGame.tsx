@@ -16,8 +16,10 @@ const colors = ["#0f172a", "#ef4444", "#f97316", "#eab308", "#22c55e", "#06b6d4"
 
 export function CanvasGame() {
   const [strokes, setStrokes] = useState<DrawingStroke[]>([]);
+  const [redoStrokes, setRedoStrokes] = useState<DrawingStroke[]>([]);
   const [color, setColor] = useState(colors[0]);
   const [width, setWidth] = useState(6);
+  const [opacity, setOpacity] = useState(1);
   const [tool, setTool] = useState<"pen" | "eraser">("pen");
   const [rulesOpen, setRulesOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -47,6 +49,34 @@ export function CanvasGame() {
     setSyncNotice("保存済み・別タブへ同期済み");
   }, []);
 
+  const undo = useCallback(() => {
+    setStrokes((current) => {
+      const removed = current.at(-1);
+      if (!removed) return current;
+      const next = current.slice(0, -1);
+      setRedoStrokes((redo) => [...redo, removed]);
+      localStorage.setItem(storageKey, JSON.stringify(next));
+      channelRef.current?.postMessage(next);
+      setSyncNotice("一手戻しました");
+      return next;
+    });
+  }, []);
+
+  const redo = useCallback(() => {
+    setRedoStrokes((currentRedo) => {
+      const restored = currentRedo.at(-1);
+      if (!restored) return currentRedo;
+      setStrokes((current) => {
+        const next = normalizeDrawingStrokes([...current, restored]);
+        localStorage.setItem(storageKey, JSON.stringify(next));
+        channelRef.current?.postMessage(next);
+        return next;
+      });
+      setSyncNotice("戻した操作をやり直しました");
+      return currentRedo.slice(0, -1);
+    });
+  }, []);
+
   useEffect(() => {
     const editableTarget = (event: KeyboardEvent) => (event.target as HTMLElement | null)?.closest("input, textarea, select, [contenteditable='true']");
     const onKeyDown = (event: KeyboardEvent) => {
@@ -61,6 +91,8 @@ export function CanvasGame() {
       else if (!event.repeat && key === "s") setTool("eraser");
       else if (key === "c") setWidth((current) => Math.max(1, current - 1));
       else if (key === "v") setWidth((current) => Math.min(40, current + 1));
+      else if (!event.repeat && key === "z") undo();
+      else if (!event.repeat && key === "y") redo();
       else if (event.key.startsWith("Arrow")) {
         const distance = event.shiftKey ? 0.04 : 0.012;
         setKeyboardCursor((current) => {
@@ -70,12 +102,13 @@ export function CanvasGame() {
           });
           if (spacePressedRef.current && (next.x !== current.x || next.y !== current.y)) {
             setStrokes((currentStrokes) => {
-              const nextStrokes = [...currentStrokes, { id: crypto.randomUUID(), color, width, tool, points: [current, next] }];
+              const nextStrokes = [...currentStrokes, { id: crypto.randomUUID(), color, width, opacity, tool, points: [current, next] }];
               const normalized = normalizeDrawingStrokes(nextStrokes);
               localStorage.setItem(storageKey, JSON.stringify(normalized));
               channelRef.current?.postMessage(normalized);
               return normalized;
             });
+            setRedoStrokes([]);
             setSyncNotice("キーボード描画を保存しました");
           }
           return next;
@@ -89,14 +122,14 @@ export function CanvasGame() {
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("blur", releaseSpace);
     return () => { window.removeEventListener("keydown", onKeyDown); window.removeEventListener("keyup", onKeyUp); window.removeEventListener("blur", releaseSpace); };
-  }, [color, tool, width]);
+  }, [color, opacity, redo, tool, undo, width]);
 
   return <main className={`min-h-screen bg-[radial-gradient(circle_at_top,#e0f2fe_0%,#f8fafc_42%,#fef3c7_100%)] text-slate-900 ${gameTopBannerOffsetClass}`}>
     <GameTopBanner eyebrow="PRIVATE UI PROTOTYPE" title="キャンバス">
       <Link href="/games" className={gameTopBannerActionClass}>ゲームロビー</Link>
       <GameTopMenu>
         <button type="button" data-menu-close="true" className={gameTopMenuItemClass} onClick={() => setRulesOpen(true)}>ルール・使い方 <span>›</span></button>
-        <button type="button" data-menu-close="true" className={gameTopMenuItemClass} onClick={() => updateStrokes([])}>新しいキャンバス <span>↻</span></button>
+        <button type="button" data-menu-close="true" className={gameTopMenuItemClass} onClick={() => { updateStrokes([]); setRedoStrokes([]); }}>新しいキャンバス <span>↻</span></button>
       </GameTopMenu>
       <GamePlayerMenu id={session?.id} name={session?.name || "ゲスト"} avatarColor={session?.avatarColor || fallbackAvatarColor} avatarImage={session?.avatarImage} />
     </GameTopBanner>
@@ -116,23 +149,26 @@ export function CanvasGame() {
             </label>
           </div>
           <label className="flex items-center gap-2 text-sm font-bold text-slate-600">太さ <kbd className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">C</kbd><input type="range" min="1" max="40" value={width} onChange={(event) => setWidth(Number(event.target.value))} className="w-28 accent-slate-900" /><kbd className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">V</kbd><span className="w-8 text-right tabular-nums">{width}</span></label>
+          <label className="flex items-center gap-2 text-sm font-bold text-slate-600">透明度 <input type="range" min="10" max="100" step="5" value={Math.round(opacity * 100)} onChange={(event) => setOpacity(Number(event.target.value) / 100)} className="w-24 accent-cyan-600" /><span className="w-10 text-right tabular-nums">{Math.round(opacity * 100)}%</span></label>
           <div className="ml-auto flex gap-2">
             <button type="button" onClick={() => setShortcutsOpen(true)} className="rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm font-bold text-cyan-800">⌨ ショートカット</button>
-            <button type="button" disabled={strokes.length === 0} onClick={() => updateStrokes(strokes.slice(0, -1))} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold disabled:opacity-40">一手戻す</button>
-            <button type="button" disabled={strokes.length === 0} onClick={() => { if (window.confirm("キャンバスをすべて消しますか？")) updateStrokes([]); }} className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-bold text-rose-700 disabled:opacity-40">全消去</button>
+            <button type="button" disabled={strokes.length === 0} onClick={undo} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold disabled:opacity-40">一手戻す <kbd className="opacity-50">Z</kbd></button>
+            <button type="button" disabled={redoStrokes.length === 0} onClick={redo} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold disabled:opacity-40">やり直す <kbd className="opacity-50">Y</kbd></button>
+            <button type="button" disabled={strokes.length === 0} onClick={() => { if (window.confirm("キャンバスをすべて消しますか？")) { updateStrokes([]); setRedoStrokes([]); } }} className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-bold text-rose-700 disabled:opacity-40">全消去</button>
           </div>
         </div>
       </div>
 
       <div className="overflow-hidden rounded-2xl border-4 border-white bg-white shadow-2xl shadow-slate-400/40">
-        <div className="aspect-[4/3] min-h-[320px] max-h-[72vh] w-full"><DrawingCanvas strokes={strokes} color={color} width={width} tool={tool} keyboardCursor={keyboardCursor} onStrokeComplete={(stroke) => updateStrokes([...strokes, stroke])} /></div>
+        <div className="aspect-[4/3] min-h-[320px] max-h-[72vh] w-full"><DrawingCanvas strokes={strokes} color={color} width={width} opacity={opacity} tool={tool} keyboardCursor={keyboardCursor} onStrokeComplete={(stroke) => { updateStrokes([...strokes, stroke]); setRedoStrokes([]); }} /></div>
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs font-semibold text-slate-500"><span>{syncNotice}</span><span>A ペン・S 消しゴム・C 細く・V 太く</span><span>矢印 移動・Space＋矢印 描画・Shift 高速</span><span>{strokes.length}ストローク</span></div>
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs font-semibold text-slate-500"><span>{syncNotice}</span><span>A ペン・S 消しゴム・C 細く・V 太く・Z 戻す・Y やり直す</span><span>矢印 移動・Space＋矢印 描画・Shift 高速</span><span>{strokes.length}ストローク</span></div>
     </section>
 
     <GameRulesDialog open={rulesOpen} title="キャンバスの使い方" onClose={() => setRulesOpen(false)}>
       <p>ペンまたは消しゴムを選び、マウス・指・ペンで自由に描きます。色と線の太さはいつでも変更できます。</p>
       <p className="mt-3">「一手戻す」は最後の線を取り消し、「全消去」は白紙に戻します。描画は端末内へ自動保存されます。</p>
+      <p className="mt-3">透明度を下げると、下の線や色が透ける半透明のペンとして重ね塗りできます。</p>
       <p className="mt-3">キーボードではAでペン、Sで消しゴム、Cで線を細く、Vで太くできます。虹色の丸から好きな色も選べます。</p>
       <p className="mt-3">水色の丸がキーボードカーソルです。矢印キーで移動し、スペースを押しながら矢印キーを押すと描画します。Shiftを併用すると速く移動します。</p>
       <p className="mt-3">現段階は描画UIのテスト版です。同じブラウザでこのページを2つ開くと、別タブへの同期を確認できます。得点・終了条件・時間切れはまだありません。</p>
@@ -143,6 +179,8 @@ export function CanvasGame() {
         <dt><kbd className="rounded border border-slate-600 bg-slate-800 px-2 py-1 font-mono text-white">S</kbd></dt><dd>消しゴムへ切り替え</dd>
         <dt><kbd className="rounded border border-slate-600 bg-slate-800 px-2 py-1 font-mono text-white">C</kbd></dt><dd>線を1段階細くする</dd>
         <dt><kbd className="rounded border border-slate-600 bg-slate-800 px-2 py-1 font-mono text-white">V</kbd></dt><dd>線を1段階太くする</dd>
+        <dt><kbd className="rounded border border-slate-600 bg-slate-800 px-2 py-1 font-mono text-white">Z</kbd></dt><dd>一手戻す</dd>
+        <dt><kbd className="rounded border border-slate-600 bg-slate-800 px-2 py-1 font-mono text-white">Y</kbd></dt><dd>戻した操作をやり直す</dd>
         <dt><kbd className="rounded border border-slate-600 bg-slate-800 px-2 py-1 font-mono text-white">矢印</kbd></dt><dd>水色のキーボードカーソルを移動</dd>
         <dt><span className="flex items-center gap-1"><kbd className="rounded border border-slate-600 bg-slate-800 px-2 py-1 font-mono text-white">Space</kbd><span>＋</span><kbd className="rounded border border-slate-600 bg-slate-800 px-2 py-1 font-mono text-white">矢印</kbd></span></dt><dd>カーソルを動かしながら描画</dd>
         <dt><span className="flex items-center gap-1"><kbd className="rounded border border-slate-600 bg-slate-800 px-2 py-1 font-mono text-white">Shift</kbd><span>＋</span><kbd className="rounded border border-slate-600 bg-slate-800 px-2 py-1 font-mono text-white">矢印</kbd></span></dt><dd>カーソルを速く移動</dd>

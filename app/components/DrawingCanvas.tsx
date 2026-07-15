@@ -7,6 +7,7 @@ type Props = {
   strokes: DrawingStroke[];
   color: string;
   width: number;
+  opacity: number;
   tool: "pen" | "eraser";
   disabled?: boolean;
   keyboardCursor?: DrawingPoint;
@@ -17,6 +18,7 @@ function drawStroke(context: CanvasRenderingContext2D, stroke: DrawingStroke, ca
   if (stroke.points.length === 0) return;
   context.save();
   context.globalCompositeOperation = stroke.tool === "eraser" ? "destination-out" : "source-over";
+  context.globalAlpha = stroke.tool === "eraser" ? 1 : stroke.opacity;
   context.strokeStyle = stroke.color;
   context.fillStyle = stroke.color;
   context.lineWidth = stroke.width;
@@ -36,7 +38,7 @@ function drawStroke(context: CanvasRenderingContext2D, stroke: DrawingStroke, ca
   context.restore();
 }
 
-export function DrawingCanvas({ strokes, color, width, tool, disabled = false, keyboardCursor, onStrokeComplete }: Props) {
+export function DrawingCanvas({ strokes, color, width, opacity, tool, disabled = false, keyboardCursor, onStrokeComplete }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const activeStrokeRef = useRef<DrawingStroke | null>(null);
   const redrawRef = useRef<() => void>(() => undefined);
@@ -81,7 +83,7 @@ export function DrawingCanvas({ strokes, color, width, tool, disabled = false, k
   const start = (event: PointerEvent<HTMLCanvasElement>) => {
     if (disabled || event.button > 0) return;
     event.currentTarget.setPointerCapture(event.pointerId);
-    activeStrokeRef.current = { id: crypto.randomUUID(), color, width, tool, points: [pointFromEvent(event)] };
+    activeStrokeRef.current = { id: crypto.randomUUID(), color, width, opacity, tool, points: [pointFromEvent(event)] };
     redraw();
   };
   const move = (event: PointerEvent<HTMLCanvasElement>) => {

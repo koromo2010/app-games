@@ -3,6 +3,7 @@ export type DrawingStroke = {
   id: string;
   color: string;
   width: number;
+  opacity: number;
   tool: "pen" | "eraser";
   points: DrawingPoint[];
 };
@@ -27,11 +28,12 @@ export function normalizeDrawingStroke(value: unknown): DrawingStroke | null {
   const id = typeof stroke.id === "string" ? stroke.id.trim().slice(0, 100) : "";
   const color = typeof stroke.color === "string" && /^#[0-9a-f]{6}$/i.test(stroke.color) ? stroke.color : "#0f172a";
   const width = Math.min(drawingCanvasLimits.maxWidth, Math.max(drawingCanvasLimits.minWidth, Number(stroke.width) || 4));
+  const opacity = Math.min(1, Math.max(0.1, Number(stroke.opacity) || 1));
   const tool = stroke.tool === "eraser" ? "eraser" : "pen";
   const points = Array.isArray(stroke.points)
     ? stroke.points.flatMap((point) => point && typeof point === "object" ? [clampDrawingPoint(point as DrawingPoint)] : []).slice(0, drawingCanvasLimits.maxPointsPerStroke)
     : [];
-  return id && points.length > 0 ? { id, color, width, tool, points } : null;
+  return id && points.length > 0 ? { id, color, width, opacity, tool, points } : null;
 }
 
 export function normalizeDrawingStrokes(value: unknown): DrawingStroke[] {

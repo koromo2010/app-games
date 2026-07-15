@@ -8,7 +8,7 @@ test("描画座標をキャンバス内へ収める", () => {
 
 test("不正な描画値を安全に正規化する", () => {
   assert.deepEqual(normalizeDrawingStroke({ id: "a", color: "bad", width: 100, tool: "eraser", points: [{ x: 0.5, y: 0.25 }] }), {
-    id: "a", color: "#0f172a", width: 40, tool: "eraser", points: [{ x: 0.5, y: 0.25 }],
+    id: "a", color: "#0f172a", width: 40, opacity: 1, tool: "eraser", points: [{ x: 0.5, y: 0.25 }],
   });
   assert.equal(normalizeDrawingStroke({ id: "", points: [] }), null);
 });
