@@ -38,6 +38,7 @@
 | コードインターセプト | `app/games/code-intercept`, `app/code-intercept`, `app/api/code-intercept/rooms`, `lib/code-intercept-room-store.ts`, `lib/code-intercept.ts`（非公開チーム対抗試作） |
 | キャンバス | `app/canvas/CanvasGame.tsx`, `app/components/DrawingCanvas.tsx`, `lib/drawing-canvas.ts`（非公開のローカル描画UI試作。同一ブラウザの別タブ同期に対応） |
 | たほい屋の問題再利用 | `lib/tahoiya-topic-catalog.ts`, `app/api/tahoiya/topic/route.ts` |
+| 共通ワードマスター・Zipf・移行 | `docs/WORD_MASTER_DATABASE.md`, `docs/LOCAL_WORD_DATABASE.md`, `compose.yaml`, `lib/word-master-schema.ts`, `scripts/import-word-master.py`, `scripts/word_surface_quality_classifier.py`, `scripts/enrich-wikidata-person-names.py` |
 | お題候補DB・経験履歴の目標設計 | `docs/TOPIC_HISTORY_DATABASE.md` |
 
 ## 3. 環境変数

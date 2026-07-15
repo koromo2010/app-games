@@ -26,6 +26,7 @@
 | コードインターセプト | `CODE_INTERCEPT.md` | `lib/code-intercept.ts`、`lib/code-intercept-room-store.ts` |
 | 新規ゲーム追加 | `NEW_GAME_CHECKLIST.md` | `config/game-registry.json`、`scripts/check-game-standards.mjs` |
 | お題DB・既出判定・再利用 | `TOPIC_HISTORY_DATABASE.md` | ゲーム別topic catalog・history store・topic API |
+| 共通ワードマスター・Zipf・移行 | `WORD_MASTER_DATABASE.md`、`LOCAL_WORD_DATABASE.md` | `compose.yaml`、`lib/word-master-schema.ts`、`scripts/import-word-master.py` |
 | モジュール分割・時間管理 | `MODULAR_GAME_ARCHITECTURE.md` | `moduleBoundaryFiles`、`lib/game-timer`、対象Command API |
 | ログ確認・障害調査・観測基盤 | `OBSERVABILITY.md` | `lib/observability`、`instrumentation.ts`、Vercel Runtime Logs |
 | 将来の物理コンテナ分割 | `CONTAINER_ARCHITECTURE.md` | 現在は将来案。先にモジュラーモノリスの境界を守る |

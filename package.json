@@ -11,13 +11,24 @@
                     "check:games":  "node scripts/check-game-standards.mjs",
                     "load:smoke":  "node scripts/load-test.mjs",
                     "monitor:production":  "node scripts/production-smoke.mjs",
-                    "tahoiya:generate":  "node --experimental-strip-types scripts/generate-tahoiya-candidates.ts"
+                    "tahoiya:generate":  "node --experimental-strip-types scripts/generate-tahoiya-candidates.ts",
+                    "word-db:init":  "node --experimental-strip-types scripts/init-word-master-db.ts",
+                    "word-db:local:up":  "docker compose --env-file .env.word-db.local up -d --wait",
+                    "word-db:local:down":  "docker compose --env-file .env.word-db.local down",
+                    "word-db:local:status":  "docker compose --env-file .env.word-db.local ps",
+                    "word-db:local:logs":  "docker compose --env-file .env.word-db.local logs postgres",
+                    "word-db:init:local":  "node --env-file=.env.word-db.local --experimental-strip-types scripts/init-word-master-db.ts",
+                    "word-db:source:prepare":  "python scripts/prepare-sudachidict-core.py",
+                    "word-db:test-adapter":  "python -m unittest discover -s tests -p \"test_word_master_adapter.py\"",
+                    "word-db:test-python":  "python -m unittest discover -s tests -p \"test_word_*.py\"",
+                    "word-db:person-enrich":  "python scripts/enrich-wikidata-person-names.py"
                 },
     "dependencies":  {
                          "@neondatabase/serverless":  "^1.1.0",
                          "@vercel/blob":  "^2.6.1",
                          "next":  "16.2.4",
                          "openai":  "^6.34.0",
+                         "pg":  "^8.22.0",
                          "react":  "19.2.4",
                          "react-dom":  "19.2.4",
                          "resend":  "^6.17.2"
@@ -25,6 +36,7 @@
     "devDependencies":  {
                             "@tailwindcss/postcss":  "^4",
                             "@types/node":  "^20",
+                            "@types/pg":  "^8.20.0",
                             "@types/react":  "^19",
                             "@types/react-dom":  "^19",
                             "eslint":  "^9",
