@@ -14,7 +14,7 @@ Party game prototypes built with Next.js.
 - `/word-scale` - Private-use online room game for logged-in players (requires `PRIVATE_GAME_ACCESS_KEY`)
 - `/word-sonar` - Online word deduction room game for logged-in players (legacy `/kotoba-senpuku` redirects here)
 - `/kotoba-de-kazu-narabe` and `/hodoai-talk` - Redirect to `/word-scale`
-- `/nigoichi` - Word Out: private online 2-6 player room game with configurable cards and association groups, plus one undealt word
+- `/word-out` - Word Out: private online 2-6 player room game with configurable cards and association groups, plus one undealt word (`/nigoichi` redirects here)
 
 ## Private game access
 

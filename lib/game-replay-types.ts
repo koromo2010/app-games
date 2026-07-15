@@ -71,7 +71,7 @@ export const gameReplayMetadata: Record<GameReplayGameType, { title: string; hre
   "northern-branch": { title: "ノーザンブランチ", href: "/northern-branch" },
   hodoai: { title: "ワードスケール", href: "/word-scale" },
   "kotoba-senpuku": { title: "ことばソナー", href: "/word-sonar" },
-  nigoichi: { title: "ワードアウト", href: "/nigoichi" },
+  nigoichi: { title: "ワードアウト", href: "/word-out" },
 };
 
 export function gameReplayShareText(

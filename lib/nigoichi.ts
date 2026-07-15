@@ -31,6 +31,15 @@ export const nigoichiWordDifficultyLabels: Record<NigoichiWordDifficulty, string
   hard: "難しい",
 };
 
+export function normalizeNigoichiPlayerCapacity(value: unknown, currentPlayerCount = 1) {
+  const requested = typeof value === "number" && Number.isInteger(value) ? value : nigoichiPlayerLimit;
+  return Math.min(nigoichiPlayerLimit, Math.max(nigoichiMinimumPlayers, currentPlayerCount, requested));
+}
+
+export function nigoichiRoomHasSpace(room: Pick<NigoichiRoom, "players" | "playerCapacity">) {
+  return room.players.length < room.playerCapacity;
+}
+
 export function nigoichiConfigBounds(playerCount: number, associationWordCount: number) {
   const effectivePlayerCount = Math.max(nigoichiMinimumPlayers, Math.floor(playerCount));
   const minCardsPerPlayer = Math.max(1, Math.floor(associationWordCount)) * 2;
@@ -80,6 +89,7 @@ export type NigoichiRoom = {
   passphrase: string;
   phase: NigoichiPhase;
   players: NigoichiPlayer[];
+  playerCapacity: number;
   gameNumber: number;
   cardsPerPlayer: number;
   associationWordCount: number;
@@ -100,6 +110,7 @@ export type NigoichiRoomChoice = {
   code: string;
   hostName: string;
   playerCount: number;
+  playerCapacity: number;
   hasPassphrase: boolean;
   cardsPerPlayer: number;
   associationWordCount: number;

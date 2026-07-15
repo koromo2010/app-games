@@ -12,6 +12,8 @@ import {
   nigoichiMaximumAssociationWordsForPlayers,
   nigoichiMinimumPlayers,
   nigoichiPlayerLimit,
+  nigoichiRoomHasSpace,
+  normalizeNigoichiPlayerCapacity,
   sanitizeNigoichiRoomForPlayer,
   type NigoichiAssociationGroup,
   type NigoichiHand,
@@ -149,6 +151,7 @@ function normalizeRoom(value: unknown): NigoichiRoom | null {
   const players = normalizePlayers(parsed.players);
   const hostId = typeof parsed.hostId === "string" ? parsed.hostId : "";
   if (!code || !hostId || players.length === 0 || !players.some((player) => player.id === hostId)) return null;
+  const playerCapacity = normalizeNigoichiPlayerCapacity(parsed.playerCapacity, players.length);
   const legacy = parsed as Partial<NigoichiRoom> & { clues?: unknown };
   const requestedAssociationWordCount = typeof parsed.associationWordCount === "number" ? parsed.associationWordCount : 1;
   const requestedCardsPerPlayer = typeof parsed.cardsPerPlayer === "number" ? parsed.cardsPerPlayer : 2;
@@ -170,6 +173,7 @@ function normalizeRoom(value: unknown): NigoichiRoom | null {
     passphrase: typeof parsed.passphrase === "string" ? parsed.passphrase.slice(0, 40) : "",
     phase: isPhase(parsed.phase) ? parsed.phase : "lobby",
     players,
+    playerCapacity,
     gameNumber: typeof parsed.gameNumber === "number" ? Math.max(1, Math.floor(parsed.gameNumber)) : 1,
     cardsPerPlayer: config.cardsPerPlayer,
     associationWordCount: config.associationWordCount,
@@ -267,6 +271,7 @@ function makeChoice(room: NigoichiRoom): NigoichiRoomChoice {
     code: room.code,
     hostName: room.players.find((player) => player.id === room.hostId)?.name ?? "Unknown",
     playerCount: room.players.length,
+    playerCapacity: room.playerCapacity,
     hasPassphrase: Boolean(room.passphrase),
     cardsPerPlayer: room.cardsPerPlayer,
     associationWordCount: room.associationWordCount,
@@ -379,7 +384,7 @@ export async function applyStoredNigoichiAction(code: string, action: NigoichiRo
       if (current.phase !== "lobby" || action.actorId !== action.player.id) throw new Error("NIGOICHI_ROOM_FORBIDDEN");
       if (current.passphrase && current.passphrase !== action.passphrase.trim()) throw new Error("NIGOICHI_BAD_PASSPHRASE");
       if (current.players.some((player) => player.id === action.actorId)) return current;
-      if (current.players.length >= nigoichiPlayerLimit) throw new Error("NIGOICHI_ROOM_FULL");
+      if (!nigoichiRoomHasSpace(current)) throw new Error("NIGOICHI_ROOM_FULL");
       return withPlayersAndCorrectedConfig(current, [...current.players, action.player]);
     }
 
@@ -425,7 +430,7 @@ export async function applyStoredNigoichiAction(code: string, action: NigoichiRo
     }
     if (action.type === "debug-add-player") {
       if (!isHost || !current.debugMode || current.phase !== "lobby") throw new Error("NIGOICHI_ROOM_FORBIDDEN");
-      if (current.players.length >= nigoichiPlayerLimit) throw new Error("NIGOICHI_ROOM_FULL");
+      if (!nigoichiRoomHasSpace(current)) throw new Error("NIGOICHI_ROOM_FULL");
       const number = current.players.filter((player) => player.isDummy).length + 1;
       const colors = ["#38bdf8", "#a78bfa", "#f472b6", "#f59e0b", "#84cc16"];
       return withPlayersAndCorrectedConfig(current, [...current.players, { id: `dummy-${randomUUID()}`, name: `ダミー${number}`, joinedAt: Date.now(), avatarColor: colors[(number - 1) % colors.length], isDummy: true }]);
@@ -498,7 +503,7 @@ export async function listJoinableNigoichiRooms(cursor?: unknown) {
   if (expiredCodes.length > 0) await Promise.all(expiredCodes.map(loadStoredNigoichiRoom));
   if (missingCodes.length > 0) await redisCommand<number>(["SREM", roomIndexKey, ...missingCodes]);
   const rooms = parsedRooms
-    .filter((room): room is NigoichiRoom => Boolean(room && !isMultiplayerRoomExpired(room.updatedAt) && room.phase === "lobby" && room.players.length < nigoichiPlayerLimit))
+    .filter((room): room is NigoichiRoom => Boolean(room && !isMultiplayerRoomExpired(room.updatedAt) && room.phase === "lobby" && nigoichiRoomHasSpace(room)))
     .map(makeChoice)
     .sort((left, right) => right.updatedAt - left.updatedAt);
   return { rooms, nextCursor: page.nextCursor };
