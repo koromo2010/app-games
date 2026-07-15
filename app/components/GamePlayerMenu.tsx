@@ -75,6 +75,7 @@ export function GamePlayerMenu(props: Props) {
       localStorage.removeItem("wordwolf-last-room");
       localStorage.removeItem("wordwolf-last-player");
       localStorage.removeItem("nigoichi-last-room");
+      localStorage.removeItem("code-intercept-last-room");
       window.location.assign("/games");
     } catch {
       setMessage("ログアウトできませんでした。通信を確認してもう一度お試しください。");

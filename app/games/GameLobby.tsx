@@ -47,6 +47,7 @@ const roomApiByGameId: Partial<Record<string, string>> = {
   hodoai: "/api/hodoai/rooms",
   "kotoba-senpuku": "/api/kotoba-senpuku/rooms",
   nigoichi: "/api/nigoichi/rooms",
+  "code-intercept": "/api/code-intercept/rooms",
 };
 
 async function fetchActiveGameRooms(targetPlayerId: string, includePrivateGames: boolean) {
@@ -972,9 +973,9 @@ export function GameLobby() {
                           </p>
                         </div>
                         <span className={`rounded-md px-2 py-1 text-xs font-bold ${
-                          result.won ? "bg-cyan-100 text-cyan-700" : "bg-rose-100 text-rose-700"
+                          result.draw ? "bg-amber-100 text-amber-700" : result.won ? "bg-cyan-100 text-cyan-700" : "bg-rose-100 text-rose-700"
                         }`}>
-                          {result.won ? "WIN" : "LOSE"}
+                          {result.draw ? "DRAW" : result.won ? "WIN" : "LOSE"}
                         </span>
                       </div>
                     ))}

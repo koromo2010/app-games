@@ -23,6 +23,7 @@
 | ワードスケール | `WORD_SCALE.md` | `lib/hodoai-room-store.ts`、`app/api/hodoai/rooms/route.ts` |
 | ことばソナー | `KOTOBA_SENPUKU.md` | `lib/kotoba-senpuku-room-store.ts`、`app/api/kotoba-senpuku/rooms/route.ts` |
 | ノーザンブランチ | `NORTHERN_BRANCH_PROTOTYPE.md` | `lib/northern-branch-game.ts`、`lib/northern-branch-room-store.ts` |
+| 暗号傍受（仮） | `CODE_INTERCEPT.md` | `lib/code-intercept.ts`、`lib/code-intercept-room-store.ts` |
 | 新規ゲーム追加 | `NEW_GAME_CHECKLIST.md` | `config/game-registry.json`、`scripts/check-game-standards.mjs` |
 | お題DB・既出判定・再利用 | `TOPIC_HISTORY_DATABASE.md` | ゲーム別topic catalog・history store・topic API |
 | モジュール分割・時間管理 | `MODULAR_GAME_ARCHITECTURE.md` | `moduleBoundaryFiles`、`lib/game-timer`、対象Command API |

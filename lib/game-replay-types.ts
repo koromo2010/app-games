@@ -1,4 +1,4 @@
-export type GameReplayGameType = "wordwolf" | "tahoiya" | "northern-branch" | "hodoai" | "kotoba-senpuku" | "nigoichi";
+export type GameReplayGameType = "wordwolf" | "tahoiya" | "northern-branch" | "hodoai" | "kotoba-senpuku" | "nigoichi" | "code-intercept";
 
 export type GameReplayPolicy = {
   retentionDays: number;
@@ -72,6 +72,7 @@ export const gameReplayMetadata: Record<GameReplayGameType, { title: string; hre
   hodoai: { title: "ワードスケール", href: "/word-scale" },
   "kotoba-senpuku": { title: "ことばソナー", href: "/word-sonar" },
   nigoichi: { title: "ワードアウト", href: "/word-out" },
+  "code-intercept": { title: "暗号傍受（仮）", href: "/code-intercept" },
 };
 
 export function gameReplayShareText(

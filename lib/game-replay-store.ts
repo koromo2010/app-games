@@ -3,6 +3,7 @@ import { hodoaiResultPresentation, type HodoaiRoom } from "@/lib/hodoai-talk";
 import type { KotobaSenpukuRoom } from "@/lib/kotoba-senpuku";
 import type { NorthernRoom } from "@/lib/northern-branch-types";
 import type { NigoichiRoom } from "@/lib/nigoichi";
+import type { CodeInterceptRoom } from "@/lib/code-intercept";
 import type { TahoiyaRoom } from "@/lib/tahoiya-types";
 import type { WordWolfRoom } from "@/lib/wordwolf-room-store";
 import { redisCommand, redisPipeline } from "@/lib/redis-store";
@@ -84,7 +85,7 @@ function cleanLines(lines: unknown[], maximumLines = 100) {
 }
 
 function isReplayGameType(value: unknown): value is GameReplayGameType {
-  return value === "wordwolf" || value === "tahoiya" || value === "northern-branch" || value === "hodoai" || value === "kotoba-senpuku" || value === "nigoichi";
+  return value === "wordwolf" || value === "tahoiya" || value === "northern-branch" || value === "hodoai" || value === "kotoba-senpuku" || value === "nigoichi" || value === "code-intercept";
 }
 
 function parseStoredReplay(value: unknown): StoredGameReplay | null {
@@ -438,6 +439,32 @@ export async function recordNigoichiReplay(room: NigoichiRoom) {
     }),
   ];
   return storeReplay({ ...base, gameType: "nigoichi", overview: `${players.length}人中${correct.length}人が正解・得点を累計`, highlights: cleanLines(highlights), scoreLabels: resultLabels }, room.code);
+}
+
+export async function recordCodeInterceptReplay(room: CodeInterceptRoom) {
+  if (room.phase !== "game-result" || !room.winner || !shouldRecordGameReplay(room)) return false;
+  const players = room.players.filter((player) => !player.isDummy);
+  const winnerLabel = room.winner === "draw" ? "同時決着で引き分け" : `${room.winner === "red" ? "赤" : "青"}チームの勝利`;
+  const resultLabels = Object.fromEntries(players.map((player) => {
+    const team = room.teams.find((item) => item.id === player.teamId);
+    const result = room.winner === "draw" ? "引き分け" : room.winner === player.teamId ? "勝利" : "敗北";
+    return [player.id, `${result}・${team?.name ?? "チーム"}残り${team?.points ?? 0}点`];
+  }));
+  const base = makeReplayBase(
+    `code-intercept:${room.code}:${room.createdAt}:${room.gameNumber}`,
+    "code-intercept",
+    room.updatedAt || Date.now(),
+    room.gameNumber,
+    `全${room.roundNumber}ラウンド`,
+    players,
+    resultLabels,
+    [winnerLabel, `決着まで${room.roundNumber}ラウンド`, `初期${room.initialPoints}点・伝達失敗-${room.miscommunicationDamage}・傍受成功-${room.interceptionDamage}`],
+  );
+  const highlights = room.roundHistory.flatMap((round) => round.teams.map((team) => {
+    const label = team.teamId === "red" ? "赤" : "青";
+    return `第${round.roundNumber}ラウンド ${label}: ヒント「${team.clues.join(" / ")}」・暗号${team.secretCode.join("-")}・伝達${team.allyCorrect ? "成功" : "失敗"}・傍受${team.enemyIntercepted ? "された" : "回避"}・${team.pointsBefore}→${team.pointsAfter}点`;
+  }));
+  return storeReplay({ ...base, gameType: "code-intercept", overview: winnerLabel, highlights: cleanLines(highlights), scoreLabels: resultLabels }, room.code);
 }
 
 function readableKotobaHighlights(replay: StoredGenericReplay) {
