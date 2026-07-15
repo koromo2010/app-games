@@ -4,7 +4,7 @@ export type DrawingStroke = {
   color: string;
   width: number;
   opacity: number;
-  tool: "pen" | "eraser";
+  tool: "pen" | "eraser" | "fill";
   points: DrawingPoint[];
 };
 
@@ -29,11 +29,46 @@ export function normalizeDrawingStroke(value: unknown): DrawingStroke | null {
   const color = typeof stroke.color === "string" && /^#[0-9a-f]{6}$/i.test(stroke.color) ? stroke.color : "#0f172a";
   const width = Math.min(drawingCanvasLimits.maxWidth, Math.max(drawingCanvasLimits.minWidth, Number(stroke.width) || 4));
   const opacity = Math.min(1, Math.max(0.1, Number(stroke.opacity) || 1));
-  const tool = stroke.tool === "eraser" ? "eraser" : "pen";
+  const tool = stroke.tool === "eraser" || stroke.tool === "fill" ? stroke.tool : "pen";
   const points = Array.isArray(stroke.points)
     ? stroke.points.flatMap((point) => point && typeof point === "object" ? [clampDrawingPoint(point as DrawingPoint)] : []).slice(0, drawingCanvasLimits.maxPointsPerStroke)
     : [];
   return id && points.length > 0 ? { id, color, width, opacity, tool, points } : null;
+}
+
+export function hexToRgba(hex: string, opacity = 1) {
+  const value = Number.parseInt(hex.slice(1), 16);
+  return [value >> 16, (value >> 8) & 255, value & 255, Math.round(opacity * 255)] as const;
+}
+
+export function floodFillPixels(data: Uint8ClampedArray, canvasWidth: number, canvasHeight: number, x: number, y: number, color: readonly [number, number, number, number]) {
+  const startX = Math.max(0, Math.min(canvasWidth - 1, Math.floor(x)));
+  const startY = Math.max(0, Math.min(canvasHeight - 1, Math.floor(y)));
+  const start = (startY * canvasWidth + startX) * 4;
+  const target = [data[start], data[start + 1], data[start + 2], data[start + 3]];
+  if (target.every((value, index) => value === color[index])) return false;
+  const matches = (px: number, py: number) => {
+    const i = (py * canvasWidth + px) * 4;
+    return data[i] === target[0] && data[i + 1] === target[1] && data[i + 2] === target[2] && data[i + 3] === target[3];
+  };
+  const paint = (px: number, py: number) => {
+    const i = (py * canvasWidth + px) * 4;
+    data[i] = color[0]; data[i + 1] = color[1]; data[i + 2] = color[2]; data[i + 3] = color[3];
+  };
+  const stack: Array<[number, number]> = [[startX, startY]];
+  while (stack.length) {
+    const [seedX, seedY] = stack.pop()!;
+    if (!matches(seedX, seedY)) continue;
+    let left = seedX;
+    while (left > 0 && matches(left - 1, seedY)) left--;
+    let above = false; let below = false;
+    for (let px = left; px < canvasWidth && matches(px, seedY); px++) {
+      paint(px, seedY);
+      if (seedY > 0) { const match = matches(px, seedY - 1); if (match && !above) stack.push([px, seedY - 1]); above = match; }
+      if (seedY + 1 < canvasHeight) { const match = matches(px, seedY + 1); if (match && !below) stack.push([px, seedY + 1]); below = match; }
+    }
+  }
+  return true;
 }
 
 export function normalizeDrawingStrokes(value: unknown): DrawingStroke[] {

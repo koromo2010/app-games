@@ -1,9 +1,17 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { clampDrawingPoint, normalizeDrawingStroke, normalizeDrawingStrokes } from "../lib/drawing-canvas.ts";
+import { clampDrawingPoint, floodFillPixels, normalizeDrawingStroke, normalizeDrawingStrokes } from "../lib/drawing-canvas.ts";
 
 test("描画座標をキャンバス内へ収める", () => {
   assert.deepEqual(clampDrawingPoint({ x: -2, y: 3 }), { x: 0, y: 1 });
+});
+
+test("塗りつぶしは境界線を越えない", () => {
+  const pixels = new Uint8ClampedArray(5 * 3 * 4);
+  for (let y = 0; y < 3; y++) { const index = (y * 5 + 2) * 4; pixels[index + 3] = 255; }
+  floodFillPixels(pixels, 5, 3, 0, 0, [255, 0, 0, 255]);
+  assert.deepEqual(Array.from(pixels.slice(0, 4)), [255, 0, 0, 255]);
+  assert.deepEqual(Array.from(pixels.slice((3 * 4), (4 * 4))), [0, 0, 0, 0]);
 });
 
 test("不正な描画値を安全に正規化する", () => {
