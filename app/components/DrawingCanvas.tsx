@@ -8,7 +8,7 @@ type Props = {
   color: string;
   width: number;
   opacity: number;
-  tool: "pen" | "eraser" | "eyedropper" | "fill";
+  tool: "pen" | "eraser" | "eyedropper" | "fill" | "pan";
   disabled?: boolean;
   keyboardCursor?: DrawingPoint;
   layerIds?: string[];
@@ -16,6 +16,7 @@ type Props = {
   onColorPick?: (color: string) => void;
   onPointerInteraction?: () => void;
   onStrokeProgress?: (stroke: DrawingStroke) => void;
+  onPan?: (deltaX: number, deltaY: number) => void;
   onStrokeComplete: (stroke: DrawingStroke) => void;
 };
 
@@ -50,11 +51,12 @@ function drawStroke(context: CanvasRenderingContext2D, stroke: DrawingStroke, ca
   context.restore();
 }
 
-export function DrawingCanvas({ strokes, color, width, opacity, tool, disabled = false, keyboardCursor, layerIds = ["base"], activeLayerId = "base", onColorPick, onPointerInteraction, onStrokeProgress, onStrokeComplete }: Props) {
+export function DrawingCanvas({ strokes, color, width, opacity, tool, disabled = false, keyboardCursor, layerIds = ["base"], activeLayerId = "base", onColorPick, onPointerInteraction, onStrokeProgress, onPan, onStrokeComplete }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const activeStrokeRef = useRef<DrawingStroke | null>(null);
   const redrawRef = useRef<() => void>(() => undefined);
   const lastProgressAtRef = useRef(0);
+  const panPointRef = useRef<{ x: number; y: number } | null>(null);
 
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -104,6 +106,7 @@ export function DrawingCanvas({ strokes, color, width, opacity, tool, disabled =
     if (disabled || event.button > 0) return;
     onPointerInteraction?.();
     const point = pointFromEvent(event);
+    if (tool === "pan") { event.currentTarget.setPointerCapture(event.pointerId); panPointRef.current = { x: event.clientX, y: event.clientY }; return; }
     if (tool === "eyedropper") {
       const context = canvasRef.current?.getContext("2d");
       if (context) {
@@ -122,6 +125,7 @@ export function DrawingCanvas({ strokes, color, width, opacity, tool, disabled =
     redraw();
   };
   const move = (event: PointerEvent<HTMLCanvasElement>) => {
+    if (panPointRef.current && event.currentTarget.hasPointerCapture(event.pointerId)) { const previous = panPointRef.current; onPan?.(previous.x - event.clientX, previous.y - event.clientY); panPointRef.current = { x: event.clientX, y: event.clientY }; return; }
     const stroke = activeStrokeRef.current;
     if (!stroke || !event.currentTarget.hasPointerCapture(event.pointerId)) return;
     stroke.points.push(pointFromEvent(event));
@@ -130,6 +134,7 @@ export function DrawingCanvas({ strokes, color, width, opacity, tool, disabled =
     redraw();
   };
   const finish = (event: PointerEvent<HTMLCanvasElement>) => {
+    if (panPointRef.current) { panPointRef.current = null; if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); return; }
     const stroke = activeStrokeRef.current;
     if (!stroke) return;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
@@ -138,7 +143,7 @@ export function DrawingCanvas({ strokes, color, width, opacity, tool, disabled =
   };
 
   return <div className="relative h-full w-full overflow-hidden">
-    <canvas ref={canvasRef} className={`h-full w-full touch-none bg-white ${disabled ? "cursor-not-allowed opacity-70" : tool === "eraser" || tool === "eyedropper" ? "cursor-cell" : "cursor-crosshair"}`} aria-label="お絵描きキャンバス" onPointerDown={start} onPointerMove={move} onPointerUp={finish} onPointerCancel={finish} />
+    <canvas ref={canvasRef} className={`h-full w-full touch-none bg-white ${disabled ? "cursor-not-allowed opacity-70" : tool === "pan" ? "cursor-grab active:cursor-grabbing" : tool === "eraser" || tool === "eyedropper" ? "cursor-cell" : "cursor-crosshair"}`} aria-label="お絵描きキャンバス" onPointerDown={start} onPointerMove={move} onPointerUp={finish} onPointerCancel={finish} />
     {keyboardCursor && <span className="pointer-events-none absolute z-10 block -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-cyan-500 bg-white/40 shadow-[0_0_0_1px_white]" style={{ left: `${keyboardCursor.x * 100}%`, top: `${keyboardCursor.y * 100}%`, width: Math.max(10, width), height: Math.max(10, width) }} aria-hidden="true" />}
   </div>;
 }

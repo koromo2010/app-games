@@ -50,7 +50,7 @@ export function RoomResultActions({
         onClick={goToGameLobby}
         className="rounded-xl bg-amber-300 px-4 py-3 text-center font-black text-slate-950 transition hover:bg-amber-200"
       >
-        {pendingAction === "lobby" ? pendingLabel("ゲームロビーへ移動中…") : "ゲームロビーへ戻る"}
+        {pendingAction === "lobby" ? pendingLabel("広場へ移動中…") : "広場へ戻る"}
       </button>
       <button
         type="button"

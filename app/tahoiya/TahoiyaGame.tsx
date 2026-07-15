@@ -515,7 +515,7 @@ export function TahoiyaGame() {
 
   const createRoom = async () => {
     if (!isPlayerAuthenticated() || !playerId || !playerName) {
-      setMessage("先にゲームロビーでログインしてください。");
+      setMessage("先に広場でログインしてください。");
       return;
     }
 
@@ -540,7 +540,7 @@ export function TahoiyaGame() {
 
   const joinRoom = async (targetCode = joinCode) => {
     if (!isPlayerAuthenticated() || !playerId || !playerName) {
-      setMessage("先にゲームロビーでログインしてください。");
+      setMessage("先に広場でログインしてください。");
       return;
     }
 
@@ -873,9 +873,9 @@ export function TahoiyaGame() {
       <GameTopBanner eyebrow="Dictionary bluffing" title="たほい屋">
         {(!room || room.phase === "lobby") && (room && isHost
           ? <button type="button" onClick={() => void dissolveRoom()} className={gameTopBannerDangerActionClass}>部屋を解散</button>
-          : <Link href="/games" className={gameTopBannerActionClass}>ゲームロビーへ戻る</Link>)}
+          : <Link href="/games" className={gameTopBannerActionClass}>広場へ戻る</Link>)}
         <GameTopMenu>
-            {room && room.phase !== "lobby" && <Link href="/games" data-menu-close="true" className={gameTopMenuItemClass}>ゲームロビーへ戻る</Link>}
+            {room && room.phase !== "lobby" && <Link href="/games" data-menu-close="true" className={gameTopMenuItemClass}>広場へ戻る</Link>}
             <button type="button" data-menu-close="true" onClick={() => setRulesOpen(true)} className={gameTopMenuItemClass}>ルール</button>
             <PaidLlmAccessButton variant="menu" />
             {room && isHost && (

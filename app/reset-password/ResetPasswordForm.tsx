@@ -64,7 +64,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
           <p className="mt-5 text-sm text-rose-700">再設定リンクが正しくありません。ロビーからもう一度メールを送信してください。</p>
         ) : null}
         {message && <p className="mt-4 rounded-lg border border-cyan-100 bg-cyan-50 px-3 py-2 text-sm font-semibold text-cyan-800">{message}</p>}
-        <Link href="/games" className="mt-5 inline-flex text-sm font-semibold text-cyan-700 hover:underline">ゲームロビーへ戻る</Link>
+        <Link href="/games" className="mt-5 inline-flex text-sm font-semibold text-cyan-700 hover:underline">広場へ戻る</Link>
       </section>
     </main>
   );

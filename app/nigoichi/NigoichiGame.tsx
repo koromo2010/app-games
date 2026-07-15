@@ -310,14 +310,14 @@ export function NigoichiGame() {
   if (!ready) return <main className="min-h-screen bg-slate-950 p-8 text-white">ログイン情報と部屋を確認中...</main>;
 
   if (!session?.id) {
-    return <main className="min-h-screen bg-slate-950 px-4 py-12 text-white"><div className="mx-auto max-w-lg rounded-2xl border border-white/10 bg-white/[0.06] p-6 text-center"><h1 className="text-3xl font-black">ワードアウト</h1><p className="mt-4 leading-7 text-slate-300">このゲームはログインしたプレイヤー同士で遊びます。ゲームロビーでログインしてください。</p><Link href="/games" className="mt-6 inline-flex rounded-xl bg-indigo-300 px-5 py-3 font-black text-indigo-950">ゲームロビーへ</Link></div><GameAdSlot gameId="nigoichi" surface="game-entry" /></main>;
+    return <main className="min-h-screen bg-slate-950 px-4 py-12 text-white"><div className="mx-auto max-w-lg rounded-2xl border border-white/10 bg-white/[0.06] p-6 text-center"><h1 className="text-3xl font-black">ワードアウト</h1><p className="mt-4 leading-7 text-slate-300">このゲームはログインしたプレイヤー同士で遊びます。広場でログインしてください。</p><Link href="/games" className="mt-6 inline-flex rounded-xl bg-indigo-300 px-5 py-3 font-black text-indigo-950">広場へ</Link></div><GameAdSlot gameId="nigoichi" surface="game-entry" /></main>;
   }
 
   if (!room) {
     return (
       <main className={`min-h-screen bg-[radial-gradient(circle_at_top,#4338ca_0%,#1e293b_42%,#020617_82%)] px-4 pb-8 text-white ${gameTopBannerOffsetClass}`}>
         <GameTopBanner eyebrow="WORD OUT" title="ワードアウト">
-          <Link href="/games" className={gameTopBannerActionClass}>ゲームロビーへ戻る</Link>
+          <Link href="/games" className={gameTopBannerActionClass}>広場へ戻る</Link>
           <GameTopMenu><button type="button" data-menu-close="true" onClick={() => setRulesOpen(true)} className={gameTopMenuItemClass}>ルール</button></GameTopMenu>
           <GamePlayerMenu id={session.id} name={session.name} avatarColor={session.avatarColor} avatarImage={session.avatarImage} hasRecoveryEmail={session.hasRecoveryEmail} />
         </GameTopBanner>
@@ -351,9 +351,9 @@ export function NigoichiGame() {
   return (
     <main className={`min-h-screen bg-[radial-gradient(circle_at_top,#4338ca_0%,#172033_38%,#020617_78%)] text-white ${gameTopBannerOffsetClass}`}>
       <GameTopBanner eyebrow="WORD OUT" title={<>ワードアウト <span className="font-mono text-base text-amber-300">#{room.code}</span></>}>
-        {room.phase === "lobby" && (isHost ? <button type="button" onClick={() => void dissolveRoom()} className={gameTopBannerDangerActionClass}>部屋を解散</button> : <Link href="/games" className={gameTopBannerActionClass}>ゲームロビーへ戻る</Link>)}
+        {room.phase === "lobby" && (isHost ? <button type="button" onClick={() => void dissolveRoom()} className={gameTopBannerDangerActionClass}>部屋を解散</button> : <Link href="/games" className={gameTopBannerActionClass}>広場へ戻る</Link>)}
         <GameTopMenu>
-          {room.phase !== "lobby" && <Link href="/games" data-menu-close="true" className={gameTopMenuItemClass}>ゲームロビーへ戻る</Link>}
+          {room.phase !== "lobby" && <Link href="/games" data-menu-close="true" className={gameTopMenuItemClass}>広場へ戻る</Link>}
           <button type="button" data-menu-close="true" onClick={() => setRulesOpen(true)} className={gameTopMenuItemClass}>ルール</button>
           {room.phase === "lobby" && !isHost && <button type="button" data-menu-close="true" onClick={() => void leaveRoom()} className={gameTopMenuItemClass}>退出</button>}
         </GameTopMenu>

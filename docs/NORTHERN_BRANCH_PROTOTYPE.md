@@ -34,4 +34,4 @@
 
 ## 個人利用枠の解除
 
-Vercelにサーバー側環境変数 `PRIVATE_GAME_ACCESS_KEY` を設定し、ゲームロビー上部の無注釈フィールドへ同じ文字列を入力します。照合後、30日間有効なHttpOnly Cookieが発行されます。
+Vercelにサーバー側環境変数 `PRIVATE_GAME_ACCESS_KEY` を設定し、広場上部の無注釈フィールドへ同じ文字列を入力します。照合後、30日間有効なHttpOnly Cookieが発行されます。
