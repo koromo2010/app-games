@@ -29,6 +29,7 @@ export function CanvasGame() {
   const channelRef = useRef<BroadcastChannel | null>(null);
   const spacePressedRef = useRef(false);
   const keyboardStrokeIdRef = useRef<string | null>(null);
+  const pressedArrowKeysRef = useRef(new Set<string>());
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -106,11 +107,15 @@ export function CanvasGame() {
       else if (!event.repeat && key === "z") undo();
       else if (!event.repeat && key === "y") redo();
       else if (event.key.startsWith("Arrow")) {
+        pressedArrowKeysRef.current.add(event.key);
         const distance = event.shiftKey ? 0.04 : 0.012;
+        const horizontal = Number(pressedArrowKeysRef.current.has("ArrowRight")) - Number(pressedArrowKeysRef.current.has("ArrowLeft"));
+        const vertical = Number(pressedArrowKeysRef.current.has("ArrowDown")) - Number(pressedArrowKeysRef.current.has("ArrowUp"));
+        const diagonalCorrection = horizontal !== 0 && vertical !== 0 ? Math.SQRT1_2 : 1;
         setKeyboardCursor((current) => {
           const next = clampDrawingPoint({
-            x: current.x + (event.key === "ArrowLeft" ? -distance : event.key === "ArrowRight" ? distance : 0),
-            y: current.y + (event.key === "ArrowUp" ? -distance : event.key === "ArrowDown" ? distance : 0),
+            x: current.x + horizontal * distance * diagonalCorrection,
+            y: current.y + vertical * distance * diagonalCorrection,
           });
           if (spacePressedRef.current && (next.x !== current.x || next.y !== current.y)) {
             setStrokes((currentStrokes) => {
@@ -132,11 +137,15 @@ export function CanvasGame() {
       event.preventDefault();
     };
     const releaseSpace = () => { spacePressedRef.current = false; keyboardStrokeIdRef.current = null; };
-    const onKeyUp = (event: KeyboardEvent) => { if (event.code === "Space") releaseSpace(); };
+    const releaseAllKeys = () => { releaseSpace(); pressedArrowKeysRef.current.clear(); };
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.code === "Space") releaseSpace();
+      if (event.key.startsWith("Arrow")) pressedArrowKeysRef.current.delete(event.key);
+    };
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
-    window.addEventListener("blur", releaseSpace);
-    return () => { window.removeEventListener("keydown", onKeyDown); window.removeEventListener("keyup", onKeyUp); window.removeEventListener("blur", releaseSpace); };
+    window.addEventListener("blur", releaseAllKeys);
+    return () => { window.removeEventListener("keydown", onKeyDown); window.removeEventListener("keyup", onKeyUp); window.removeEventListener("blur", releaseAllKeys); };
   }, [color, keyboardCursor, opacity, redo, tool, undo, width]);
 
   return <main className={`min-h-screen bg-[radial-gradient(circle_at_top,#e0f2fe_0%,#f8fafc_42%,#fef3c7_100%)] text-slate-900 ${gameTopBannerOffsetClass}`}>
@@ -196,7 +205,7 @@ export function CanvasGame() {
         <dt><kbd className="rounded border border-slate-600 bg-slate-800 px-2 py-1 font-mono text-white">V</kbd></dt><dd>線を1段階太くする</dd>
         <dt><kbd className="rounded border border-slate-600 bg-slate-800 px-2 py-1 font-mono text-white">Z</kbd></dt><dd>一手戻す</dd>
         <dt><kbd className="rounded border border-slate-600 bg-slate-800 px-2 py-1 font-mono text-white">Y</kbd></dt><dd>戻した操作をやり直す</dd>
-        <dt><kbd className="rounded border border-slate-600 bg-slate-800 px-2 py-1 font-mono text-white">矢印</kbd></dt><dd>水色のキーボードカーソルを移動</dd>
+        <dt><kbd className="rounded border border-slate-600 bg-slate-800 px-2 py-1 font-mono text-white">矢印</kbd></dt><dd>水色のキーボードカーソルを移動。上下と左右の同時押しで斜め移動</dd>
         <dt><span className="flex items-center gap-1"><kbd className="rounded border border-slate-600 bg-slate-800 px-2 py-1 font-mono text-white">Space</kbd><span>＋</span><kbd className="rounded border border-slate-600 bg-slate-800 px-2 py-1 font-mono text-white">矢印</kbd></span></dt><dd>カーソルを動かしながら描画</dd>
         <dt><span className="flex items-center gap-1"><kbd className="rounded border border-slate-600 bg-slate-800 px-2 py-1 font-mono text-white">Shift</kbd><span>＋</span><kbd className="rounded border border-slate-600 bg-slate-800 px-2 py-1 font-mono text-white">矢印</kbd></span></dt><dd>カーソルを速く移動</dd>
       </dl>
