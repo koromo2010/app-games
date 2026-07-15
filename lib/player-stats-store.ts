@@ -47,7 +47,7 @@ const playerRatingKey = (gameType: PlayerStatsGameType) => `player-rating:v1:${g
 const playerRatingGamesKey = (gameType: PlayerStatsGameType) => `player-rating-games:v1:${gameType}`;
 const ratingEventKey = (eventId: string) => `rating-event:v1:${eventId}`;
 
-type RatingOutcome = { playerId: string; won: boolean };
+type RatingOutcome = { playerId: string; won: boolean; performanceScore?: number };
 type RecordedRating = { before: number; after: number; change: number };
 
 async function recordGameRatings(gameType: PlayerStatsGameType, eventId: string, outcomes: RatingOutcome[], cooperative = false) {
@@ -65,11 +65,17 @@ async function recordGameRatings(gameType: PlayerStatsGameType, eventId: string,
     rating: Number(stored[index]) || postgresStates.get(item.playerId)?.rating || initialGameRating,
     gamesPlayed: Number(storedGames[index]) || postgresStates.get(item.playerId)?.gamesPlayed || 0,
   }));
-  const hasWinner = realPlayers.some((item) => item.won); const hasLoser = realPlayers.some((item) => !item.won);
-  const calculationPlayers = cooperative && (!hasWinner || !hasLoser)
-    ? [...realPlayers, { playerId: "__system__", rating: initialGameRating, won: !hasWinner }]
-    : realPlayers;
-  const changes = calculateGameRatingChanges(calculationPlayers).filter((item) => item.playerId !== "__system__");
+  const changes = cooperative
+    ? realPlayers.map((player) => calculateGameRatingChanges([
+      { playerId: player.playerId, rating: player.rating, gamesPlayed: player.gamesPlayed, performanceScore: player.won ? 1 : 0 },
+      { playerId: "__system__", rating: initialGameRating, performanceScore: player.won ? 0 : 1 },
+    ])[0])
+    : calculateGameRatingChanges(realPlayers.map((player) => ({
+      playerId: player.playerId,
+      rating: player.rating,
+      gamesPlayed: player.gamesPlayed,
+      performanceScore: player.performanceScore ?? (player.won ? 1 : 0),
+    })));
   const applied = await redisCommand<number[]>([
     "EVAL",
     "if redis.call('EXISTS',KEYS[1])==1 then return {} end; local out={}; for i=2,#ARGV,4 do if redis.call('HEXISTS',KEYS[2],ARGV[i])==0 then redis.call('HSET',KEYS[2],ARGV[i],ARGV[i+1]) end; if redis.call('HEXISTS',KEYS[3],ARGV[i])==0 then redis.call('HSET',KEYS[3],ARGV[i],ARGV[i+2]) end; table.insert(out,redis.call('HINCRBY',KEYS[2],ARGV[i],ARGV[i+3])); redis.call('HINCRBY',KEYS[3],ARGV[i],1); end; redis.call('SET',KEYS[1],'1'); return out",
@@ -173,7 +179,7 @@ export async function recordTahoiyaRoundResults(room: TahoiyaRoom) {
   const best = Math.max(0, ...Object.values(points));
   const eventId = `tahoiya:${room.code}:${room.createdAt}:${room.round}`;
   return observeStatsRecord({ game: "tahoiya", operation: "record-results", roomRef: observabilityRef("room", room.code), eventRef: observabilityRef("event", eventId), round: room.round, playerCount: room.players.length }, async () => {
-    const ratings = await recordGameRatings("tahoiya", eventId, room.players.map((player) => ({ playerId: player.id, won: (points[player.id] ?? 0) === best })));
+    const ratings = await recordGameRatings("tahoiya", eventId, room.players.map((player) => ({ playerId: player.id, won: (points[player.id] ?? 0) === best, performanceScore: points[player.id] ?? 0 })));
     return recordPlayerResults(room.players.map((player) => {
       const won = (points[player.id] ?? 0) === best;
       const rating = ratings.get(player.id);
@@ -199,7 +205,7 @@ export async function recordNorthernBranchGameResults(room: NorthernRoom) {
   const realPlayers = room.players.filter((player) => !player.isDummy);
   const eventId = `northern-branch:${room.code}:${room.createdAt}:${room.gameNumber}`;
   return observeStatsRecord({ game: "northern-branch", operation: "record-results", roomRef: observabilityRef("room", room.code), eventRef: observabilityRef("event", eventId), gameNumber: room.gameNumber, playerCount: realPlayers.length }, async () => {
-    const ratings = await recordGameRatings("northern-branch", eventId, realPlayers.map((player) => ({ playerId: player.id, won: player.id === room.game?.winnerId })));
+    const ratings = await recordGameRatings("northern-branch", eventId, realPlayers.map((player) => ({ playerId: player.id, won: player.id === room.game?.winnerId, performanceScore: room.game?.players.find((item) => item.id === player.id)?.points ?? 0 })));
     return recordPlayerResults(realPlayers.map((player) => {
     const gamePlayer = room.game?.players.find((item) => item.id === player.id);
     const won = player.id === room.game?.winnerId;
@@ -215,7 +221,7 @@ export async function recordKotobaSenpukuGameResults(room: KotobaSenpukuRoom) {
   const winnerIds = room.history.at(-1)?.winnerIds ?? (room.history.at(-1)?.winnerId ? [room.history.at(-1)!.winnerId!] : []);
   const eventId = `kotoba-senpuku:${room.code}:${room.createdAt}:${room.gameNumber}`;
   return observeStatsRecord({ game: "kotoba-senpuku", operation: "record-results", roomRef: observabilityRef("room", room.code), eventRef: observabilityRef("event", eventId), gameNumber: room.gameNumber, playerCount: realPlayers.length }, async () => {
-    const ratings = await recordGameRatings("kotoba-senpuku", eventId, realPlayers.map((player) => ({ playerId: player.id, won: winnerIds.includes(player.id) })));
+    const ratings = await recordGameRatings("kotoba-senpuku", eventId, realPlayers.map((player) => ({ playerId: player.id, won: winnerIds.includes(player.id), performanceScore: room.totalScores[player.id] ?? 0 })));
     return recordPlayerResults(realPlayers.map((player) => {
     const points = room.totalScores[player.id] ?? 0;
     const won = winnerIds.includes(player.id);
@@ -230,8 +236,8 @@ export async function recordNigoichiGameResults(room: NigoichiRoom) {
   const players = room.players.filter((player) => !player.isDummy);
   const eventId = `nigoichi:${room.code}:${room.createdAt}:${room.gameNumber}`;
   return observeStatsRecord({ game: "nigoichi", operation: "record-results", roomRef: observabilityRef("room", room.code), eventRef: observabilityRef("event", eventId), gameNumber: room.gameNumber, playerCount: players.length }, async () => {
-    const outcomes = players.map((player) => ({ playerId: player.id, won: room.guesses[player.id] === room.missingNumber }));
-    const ratings = await recordGameRatings("nigoichi", eventId, outcomes, true);
+    const outcomes = players.map((player) => ({ playerId: player.id, won: room.guesses[player.id] === room.missingNumber, performanceScore: room.roundScores[player.id]?.roundScore ?? 0 }));
+    const ratings = await recordGameRatings("nigoichi", eventId, outcomes);
     return recordPlayerResults(players.map((player) => {
       const won = room.guesses[player.id] === room.missingNumber;
       const score = room.roundScores[player.id];

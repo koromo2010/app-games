@@ -11,23 +11,28 @@ export const gameRatingConfig = {
 } as const;
 export const initialGameRating = gameRatingConfig.initial;
 
-export type GameRatingPlayer = { playerId: string; rating: number; won: boolean; gamesPlayed?: number };
+export type GameRatingPlayer = { playerId: string; rating: number; performanceScore: number; gamesPlayed?: number };
 export type GameRatingChange = GameRatingPlayer & { change: number; ratingAfter: number };
 
 function average(values: number[]) { return values.reduce((sum, value) => sum + value, 0) / Math.max(1, values.length); }
 
-/** 暫定期間は速く収束し、確定後は穏やかに動くチーム戦Elo。 */
+function actualScore(playerScore: number, opponentScore: number) {
+  if (playerScore === opponentScore) return 0.5;
+  return playerScore > opponentScore ? 1 : 0;
+}
+
+/** 各対戦相手とのElo変動を平均し、暫定期間だけ大きなK値を使う多人数Elo。 */
 export function calculateGameRatingChanges(players: GameRatingPlayer[]): GameRatingChange[] {
-  const winners = players.filter((player) => player.won);
-  const losers = players.filter((player) => !player.won);
-  if (!winners.length || !losers.length) return players.map((player) => ({ ...player, change: 0, ratingAfter: player.rating }));
-  const winnerAverage = average(winners.map((player) => player.rating));
-  const loserAverage = average(losers.map((player) => player.rating));
   return players.map((player) => {
-    const opponentRating = player.won ? loserAverage : winnerAverage;
-    const expected = 1 / (1 + 10 ** ((opponentRating - player.rating) / 400));
+    const opponents = players.filter((opponent) => opponent.playerId !== player.playerId);
+    if (opponents.length === 0) return { ...player, change: 0, ratingAfter: player.rating };
     const kFactor = (player.gamesPlayed ?? 0) < gameRatingConfig.provisionalGames ? gameRatingConfig.provisionalK : gameRatingConfig.establishedK;
-    const change = Math.round(kFactor * ((player.won ? 1 : 0) - expected));
-    return { ...player, change, ratingAfter: Math.max(100, player.rating + change) };
+    const pairwiseChanges = opponents.map((opponent) => {
+      const expected = 1 / (1 + 10 ** ((opponent.rating - player.rating) / 400));
+      return kFactor * (actualScore(player.performanceScore, opponent.performanceScore) - expected);
+    });
+    const requestedChange = Math.round(average(pairwiseChanges));
+    const ratingAfter = Math.max(100, player.rating + requestedChange);
+    return { ...player, change: ratingAfter - player.rating, ratingAfter };
   });
 }
