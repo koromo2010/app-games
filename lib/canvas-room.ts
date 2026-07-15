@@ -8,6 +8,7 @@ export type CanvasRoomAction =
   | { type: "join"; passphrase?: string }
   | { type: "leave" }
   | { type: "stroke"; stroke: DrawingStroke }
+  | { type: "stroke-progress"; stroke: DrawingStroke }
   | { type: "add-layer"; name?: string }
   | { type: "remove-layer"; layerId: string }
   | { type: "undo"; layerId?: string }

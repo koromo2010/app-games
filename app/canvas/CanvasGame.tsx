@@ -72,7 +72,7 @@ export function CanvasGame() {
       if (data.room.revision < roomRevisionRef.current) return data.room;
       roomRevisionRef.current = data.room.revision;
       setRoom(data.room); setStrokes(data.room.strokes);
-      setPendingStrokes((pending) => pending.filter((stroke) => !data.room!.strokes.some((saved) => saved.id === stroke.id)));
+      setPendingStrokes((pending) => pending.filter((stroke) => !data.room!.strokes.some((saved) => saved.id === stroke.id && !saved.inProgress)));
       const ownLayer = data.room.layerMode === "per-player" ? data.room.players.find((player) => player.id === session?.id)?.layerId : undefined;
       setActiveLayerId((current) => ownLayer || (data.room!.layers.some((layer) => layer.id === current) ? current : data.room!.layers[0]?.id || "base"));
       setRedoStrokes([]); return data.room;
@@ -90,8 +90,8 @@ export function CanvasGame() {
       if (data.room.revision < roomRevisionRef.current) return;
       roomRevisionRef.current = data.room.revision;
       setRoom(data.room); setStrokes(data.room.strokes);
-      setPendingStrokes((pending) => pending.filter((stroke) => !data.room.strokes.some((saved) => saved.id === stroke.id)));
-    }, 750);
+      setPendingStrokes((pending) => pending.filter((stroke) => !data.room.strokes.some((saved) => saved.id === stroke.id && !saved.inProgress)));
+    }, 150);
     return () => window.clearInterval(timer);
   }, [activeRoomCode]);
 
@@ -104,8 +104,15 @@ export function CanvasGame() {
     });
   }, [activeLayerId, room, roomRequest, session?.id, strokes, updateStrokes]);
 
+  const submitStrokeProgress = useCallback((stroke: DrawingStroke) => {
+    if (!room) return;
+    const layeredStroke = { ...stroke, layerId: activeLayerId, authorId: session?.id, inProgress: true };
+    void fetch("/api/canvas/rooms", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: room.code, action: { type: "stroke-progress", stroke: layeredStroke } }) });
+  }, [activeLayerId, room, session?.id]);
+
   const layers = room?.layers || localLayers;
-  const visibleStrokes = [...strokes, ...pendingStrokes.filter((pending) => !strokes.some((saved) => saved.id === pending.id))]
+  const pendingIds = new Set(pendingStrokes.map((stroke) => stroke.id));
+  const visibleStrokes = [...strokes.filter((stroke) => !pendingIds.has(stroke.id)), ...pendingStrokes]
     .filter((stroke) => !hiddenLayerIds.has(stroke.layerId || "base"))
     .sort((left, right) => layers.findIndex((layer) => layer.id === (left.layerId || "base")) - layers.findIndex((layer) => layer.id === (right.layerId || "base")));
 
@@ -283,7 +290,7 @@ export function CanvasGame() {
       </div>
 
       <div className="overflow-hidden rounded-2xl border-4 border-white bg-white shadow-2xl shadow-slate-400/40">
-        <div className="aspect-[4/3] min-h-[320px] max-h-[72vh] w-full"><DrawingCanvas strokes={visibleStrokes} layerIds={layers.filter((layer) => !hiddenLayerIds.has(layer.id)).map((layer) => layer.id)} activeLayerId={activeLayerId} color={color} width={width} opacity={opacity} tool={tool} keyboardCursor={keyboardCursorVisible ? keyboardCursor : undefined} onPointerInteraction={() => setKeyboardCursorVisible(false)} onColorPick={(picked) => { setColor(picked); setTool("pen"); }} onStrokeComplete={submitStroke} /></div>
+        <div className="aspect-[4/3] min-h-[320px] max-h-[72vh] w-full"><DrawingCanvas strokes={visibleStrokes} layerIds={layers.filter((layer) => !hiddenLayerIds.has(layer.id)).map((layer) => layer.id)} activeLayerId={activeLayerId} color={color} width={width} opacity={opacity} tool={tool} keyboardCursor={keyboardCursorVisible ? keyboardCursor : undefined} onPointerInteraction={() => setKeyboardCursorVisible(false)} onColorPick={(picked) => { setColor(picked); setTool("pen"); }} onStrokeProgress={submitStrokeProgress} onStrokeComplete={submitStroke} /></div>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs font-semibold text-slate-500"><span>{syncNotice}</span><span>A ペン・S 消しゴム・C 細く・V 太く・Z 戻す・Y やり直す</span><span>矢印 移動・Space＋矢印 描画・Shift 高速</span><span>{strokes.length}ストローク</span></div>
     </section>

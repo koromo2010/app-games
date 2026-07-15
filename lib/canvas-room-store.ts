@@ -12,6 +12,7 @@ function parse(raw: string | null): CanvasRoom | null {
   room.layerMode = room.layerMode === "per-player" ? "per-player" : "shared";
   room.layers = Array.isArray(room.layers) && room.layers.length ? room.layers : [{ id: "base", name: "レイヤー1", createdAt: room.updatedAt || Date.now() }];
   room.strokes = normalizeDrawingStrokes(room.strokes);
+  room.strokes = room.strokes.filter((stroke) => !stroke.inProgress || (stroke.updatedAt || 0) > Date.now() - 15_000);
   return room;
 }
 
@@ -44,12 +45,17 @@ export async function updateCanvasRoom(codeInput: string, actor: CanvasRoomPlaye
     } else {
       if (!member) throw new Error("CANVAS_ROOM_FORBIDDEN");
       if (action.type === "leave") room.players = room.players.filter((player) => player.id !== actor.id);
-      if (action.type === "stroke") {
+      if (action.type === "stroke" || action.type === "stroke-progress") {
         const stroke = normalizeDrawingStroke(action.stroke);
         const actorLayerId = room.players.find((player) => player.id === actor.id)?.layerId;
         const requestedLayerId = room.layerMode === "per-player" ? actorLayerId : stroke?.layerId;
         const layerId = room.layers.some((layer) => layer.id === requestedLayerId) ? requestedLayerId : room.layers[0]?.id;
-        if (stroke && layerId) room.strokes = normalizeDrawingStrokes([...room.strokes, { ...stroke, layerId, authorId: actor.id }]);
+        if (stroke && layerId) {
+          const nextStroke = { ...stroke, layerId, authorId: actor.id, ...(action.type === "stroke-progress" ? { inProgress: true, updatedAt: Date.now() } : { inProgress: undefined, updatedAt: undefined }) };
+          const existingIndex = room.strokes.findIndex((item) => item.id === stroke.id && item.authorId === actor.id);
+          if (existingIndex >= 0) room.strokes[existingIndex] = nextStroke;
+          else room.strokes = normalizeDrawingStrokes([...room.strokes, nextStroke]);
+        }
       }
       if (action.type === "add-layer") { if (room.layerMode !== "shared") throw new Error("CANVAS_ROOM_FORBIDDEN"); room.layers.push({ id: crypto.randomUUID(), name: action.name?.trim().slice(0, 30) || `レイヤー${room.layers.length + 1}`, createdAt: Date.now() }); }
       if (action.type === "remove-layer") { if (room.ownerId !== actor.id || room.layers.length <= 1) throw new Error("CANVAS_ROOM_FORBIDDEN"); room.layers = room.layers.filter((layer) => layer.id !== action.layerId); room.strokes = room.strokes.filter((stroke) => stroke.layerId !== action.layerId); }

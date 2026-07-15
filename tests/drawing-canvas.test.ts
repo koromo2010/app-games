@@ -22,9 +22,11 @@ test("不正な描画値を安全に正規化する", () => {
 });
 
 test("共同描画のレイヤーと作者を保持する", () => {
-  const stroke = normalizeDrawingStroke({ id: "layered", layerId: "line-art", authorId: "player-1", color: "#000000", width: 2, tool: "pen", points: [{ x: 0.2, y: 0.3 }] });
+  const stroke = normalizeDrawingStroke({ id: "layered", layerId: "line-art", authorId: "player-1", inProgress: true, updatedAt: 1234, color: "#000000", width: 2, tool: "pen", points: [{ x: 0.2, y: 0.3 }] });
   assert.equal(stroke?.layerId, "line-art");
   assert.equal(stroke?.authorId, "player-1");
+  assert.equal(stroke?.inProgress, true);
+  assert.equal(stroke?.updatedAt, 1234);
 });
 
 test("保存できるストローク数に上限を設ける", () => {

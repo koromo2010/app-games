@@ -15,6 +15,7 @@ type Props = {
   activeLayerId?: string;
   onColorPick?: (color: string) => void;
   onPointerInteraction?: () => void;
+  onStrokeProgress?: (stroke: DrawingStroke) => void;
   onStrokeComplete: (stroke: DrawingStroke) => void;
 };
 
@@ -49,10 +50,11 @@ function drawStroke(context: CanvasRenderingContext2D, stroke: DrawingStroke, ca
   context.restore();
 }
 
-export function DrawingCanvas({ strokes, color, width, opacity, tool, disabled = false, keyboardCursor, layerIds = ["base"], activeLayerId = "base", onColorPick, onPointerInteraction, onStrokeComplete }: Props) {
+export function DrawingCanvas({ strokes, color, width, opacity, tool, disabled = false, keyboardCursor, layerIds = ["base"], activeLayerId = "base", onColorPick, onPointerInteraction, onStrokeProgress, onStrokeComplete }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const activeStrokeRef = useRef<DrawingStroke | null>(null);
   const redrawRef = useRef<() => void>(() => undefined);
+  const lastProgressAtRef = useRef(0);
 
   const redraw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -116,12 +118,15 @@ export function DrawingCanvas({ strokes, color, width, opacity, tool, disabled =
     }
     event.currentTarget.setPointerCapture(event.pointerId);
     activeStrokeRef.current = { id: crypto.randomUUID(), layerId: activeLayerId, color, width, opacity, tool, points: [point] };
+    lastProgressAtRef.current = 0;
     redraw();
   };
   const move = (event: PointerEvent<HTMLCanvasElement>) => {
     const stroke = activeStrokeRef.current;
     if (!stroke || !event.currentTarget.hasPointerCapture(event.pointerId)) return;
     stroke.points.push(pointFromEvent(event));
+    const now = performance.now();
+    if (onStrokeProgress && now - lastProgressAtRef.current >= 400) { lastProgressAtRef.current = now; onStrokeProgress({ ...stroke, points: [...stroke.points] }); }
     redraw();
   };
   const finish = (event: PointerEvent<HTMLCanvasElement>) => {

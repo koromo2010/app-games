@@ -3,6 +3,8 @@ export type DrawingStroke = {
   id: string;
   layerId?: string;
   authorId?: string;
+  inProgress?: boolean;
+  updatedAt?: number;
   color: string;
   width: number;
   opacity: number;
@@ -30,6 +32,8 @@ export function normalizeDrawingStroke(value: unknown): DrawingStroke | null {
   const id = typeof stroke.id === "string" ? stroke.id.trim().slice(0, 100) : "";
   const layerId = typeof stroke.layerId === "string" ? stroke.layerId.trim().slice(0, 100) || undefined : undefined;
   const authorId = typeof stroke.authorId === "string" ? stroke.authorId.trim().slice(0, 100) || undefined : undefined;
+  const inProgress = stroke.inProgress === true;
+  const updatedAt = Number.isFinite(stroke.updatedAt) ? Number(stroke.updatedAt) : undefined;
   const color = typeof stroke.color === "string" && /^#[0-9a-f]{6}$/i.test(stroke.color) ? stroke.color : "#0f172a";
   const width = Math.min(drawingCanvasLimits.maxWidth, Math.max(drawingCanvasLimits.minWidth, Number(stroke.width) || 4));
   const opacity = Math.min(1, Math.max(0.1, Number(stroke.opacity) || 1));
@@ -37,7 +41,7 @@ export function normalizeDrawingStroke(value: unknown): DrawingStroke | null {
   const points = Array.isArray(stroke.points)
     ? stroke.points.flatMap((point) => point && typeof point === "object" ? [clampDrawingPoint(point as DrawingPoint)] : []).slice(0, drawingCanvasLimits.maxPointsPerStroke)
     : [];
-  return id && points.length > 0 ? { id, ...(layerId ? { layerId } : {}), ...(authorId ? { authorId } : {}), color, width, opacity, tool, points } : null;
+  return id && points.length > 0 ? { id, ...(layerId ? { layerId } : {}), ...(authorId ? { authorId } : {}), ...(inProgress ? { inProgress: true } : {}), ...(updatedAt ? { updatedAt } : {}), color, width, opacity, tool, points } : null;
 }
 
 export function hexToRgba(hex: string, opacity = 1) {
