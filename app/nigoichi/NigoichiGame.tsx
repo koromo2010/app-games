@@ -280,17 +280,31 @@ export function NigoichiGame() {
   };
 
   const rulesDialog = <GameRulesDialog open={rulesOpen} title="ワードアウトのルール" onClose={() => setRulesOpen(false)}>
-    <p>自分に配られたカードを見て連想語を書きます。全員の連想から、誰にも配られていない1枚を探します。</p>
-    <ol className="mt-4 list-decimal space-y-2 pl-5">
-      <li>初期設定は1人2枚・連想語1個です。1人に配るカードAを増やすと、より多くの言葉を連想語で伝えることになり、難易度を上げられます。</li>
-      <li>書く連想語Mも設定できます。場には参加人数P×A+1枚を並べ、場のカード総数は最大21枚です。</li>
-      <li>自分のA枚を見て、M個の連想語を自由に書きます。カードと連想語の分類や対応付けは必要ありません。</li>
-      <li>全員が提出するまでは他人の連想語を見られません。</li>
-      <li>連想語を一斉公開し、言葉一覧から自分のカード以外を押して、誰にも配られていない番号を1つ選びます。予想は全員が選ぶまで非公開です。</li>
-      <li>正解すると参加人数−1点です。自分のカードをほかの人に選ばれると、1票につき1点減点されます。</li>
-      <li>全員の予想がそろうと得点内訳を公開し、同じ部屋で続けると累計得点を引き継ぎます。</li>
+    <p>全員の連想語を手がかりにして、「誰にも配られていない1枚」を見つけるゲームです。自分のカードをうまく伝えながら、余ったことばを探します。</p>
+    <h3 className="mt-4 font-black text-white">ゲームの準備</h3>
+    <div className="mt-2 space-y-2 text-slate-300">
+      <p>初期設定では、1人に2枚のことばカードを配り、1人1個の連想語を書きます。カードの枚数と連想語の数は、部屋で変えられます。</p>
+      <p>場に出るカードは「参加人数×1人のカード枚数＋1枚」です。最後の1枚は誰にも配られません。この1枚が、全員で探す「余り」です。</p>
+      <p className="rounded-lg bg-indigo-300/10 p-3"><strong className="text-indigo-100">例：</strong>3人で1人2枚なら、場には7枚あります。6枚を配り、残った1枚が正解です。</p>
+    </div>
+    <h3 className="mt-4 font-black text-white">ラウンドの流れ</h3>
+    <ol className="mt-2 list-decimal space-y-2 pl-5">
+      <li>自分に配られたカードを確認します。ほかの人のカードと余りは分かりません。</li>
+      <li>自分のカード全体から思いつく連想語を書きます。どの連想語がどのカードを表すのか、分けて書く必要はありません。</li>
+      <li>全員が書き終わると、全員の連想語を一斉に公開します。</li>
+      <li>連想語を読み、言葉一覧から余りだと思う番号を1つ選びます。自分のカードは選べません。</li>
+      <li>全員が選び終わるまで、ほかの人の予想は見えません。最後に正解と得点をまとめて発表します。</li>
     </ol>
-    <p className="mt-4 rounded-lg bg-amber-50 p-3 font-bold text-amber-950">自分のカードは回答に選べません。正解点から自分のカードへの被投票数を引くため、正解しても減点分だけラウンド得点が下がります。時間制限はありません。</p>
+    <h3 className="mt-4 font-black text-white">得点</h3>
+    <div className="mt-2 space-y-2 text-slate-300">
+      <p>余りを当てると、<strong className="text-white">参加人数−1点</strong>をもらいます。</p>
+      <p>ほかの人があなたのカードを余りだと間違えて選ぶと、<strong className="text-white">1票につき1点マイナス</strong>です。正解点とマイナス点は同じラウンドで両方計算します。</p>
+      <p><strong className="text-white">ラウンド得点 ＝ 正解でもらう点 − 自分のカードに集まった間違い票</strong>です。0点より下になることもあります。</p>
+      <p className="rounded-lg bg-amber-50 p-3 font-bold text-amber-950">4人で余りを正解すると＋3点です。さらに自分のカードへ2票入っていた場合は−2点なので、そのラウンドは合計＋1点です。不正解で2票入った場合は−2点です。</p>
+      <p>同じ部屋でもう一度遊ぶと、得点は累計へ足されます。決まった目標点や最終ラウンドはないので、遊ぶ回数を決めて、最後に累計得点が高い人を勝ちとする遊び方がおすすめです。</p>
+    </div>
+    <h3 className="mt-4 font-black text-white">時間制限</h3>
+    <p className="mt-2">現在は時間制限がありません。全員が提出・回答すると自動で次へ進みます。</p>
   </GameRulesDialog>;
 
   if (!ready) return <main className="min-h-screen bg-slate-950 p-8 text-white">ログイン情報と部屋を確認中...</main>;

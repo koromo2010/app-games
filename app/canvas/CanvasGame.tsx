@@ -190,12 +190,20 @@ export function CanvasGame() {
     </section>
 
     <GameRulesDialog open={rulesOpen} title="キャンバスの使い方" onClose={() => setRulesOpen(false)}>
-      <p>ペンまたは消しゴムを選び、マウス・指・ペンで自由に描きます。色と線の太さはいつでも変更できます。</p>
-      <p className="mt-3">「一手戻す」は最後の線を取り消し、「全消去」は白紙に戻します。描画は端末内へ自動保存されます。</p>
-      <p className="mt-3">透明度を下げると、下の線や色が透ける半透明のペンとして重ね塗りできます。</p>
-      <p className="mt-3">キーボードではAでペン、Sで消しゴム、Cで線を細く、Vで太くできます。虹色の丸から好きな色も選べます。</p>
-      <p className="mt-3">水色の丸がキーボードカーソルです。矢印キーで移動し、スペースを押しながら矢印キーを押すと描画します。Shiftを併用すると速く移動します。</p>
-      <p className="mt-3">現段階は描画UIのテスト版です。同じブラウザでこのページを2つ開くと、別タブへの同期を確認できます。得点・終了条件・時間切れはまだありません。</p>
+      <p>マウス、指、ペン、キーボードで自由に絵を描けるキャンバスです。今は描き心地や操作方法を試すためのテスト版です。</p>
+      <h3 className="mt-4 font-black text-white">基本の描き方</h3>
+      <ol className="mt-2 list-decimal space-y-2 pl-5">
+        <li>「ペン」を選び、キャンバスの上をドラッグすると線を描けます。</li>
+        <li>色、線の太さ、透明度はいつでも変更できます。透明度を下げると、下の線が透ける半透明の色になります。</li>
+        <li>「消しゴム」で線を消せます。「一手戻す」は最後に描いた線を取り消し、「やり直す」で戻した線を元に戻せます。</li>
+        <li>「全消去」はすべての線を消して白紙にします。確認画面が出るので、まちがえて押してもすぐには消えません。</li>
+      </ol>
+      <h3 className="mt-4 font-black text-white">キーボードで描く</h3>
+      <p className="mt-2">水色の丸がキーボードカーソルです。矢印キーで移動し、Spaceを押しながら矢印キーを押すと線を描けます。Shiftも一緒に押すと速く動きます。くわしいキーは「キーボードショートカット」で確認できます。</p>
+      <h3 className="mt-4 font-black text-white">保存と同期</h3>
+      <p className="mt-2">描いた内容は、この端末のブラウザに自動保存されます。同じブラウザでこのページを2つ開くと、別のタブにも変更が反映されます。別の人や別の端末とのオンライン共有には、まだ対応していません。</p>
+      <h3 className="mt-4 font-black text-white">得点・終了・時間制限</h3>
+      <p className="mt-2 rounded-lg bg-sky-300/10 p-3">現在はゲームではなく描画機能のテスト版なので、得点、勝ち負け、終了条件、時間制限はありません。描いた結果が戦績に記録されることもありません。</p>
     </GameRulesDialog>
     <GameRulesDialog open={shortcutsOpen} title="キーボードショートカット" onClose={() => setShortcutsOpen(false)}>
       <dl className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-3">

@@ -216,16 +216,32 @@ export function CodeInterceptGame() {
   };
 
   const rulesDialog = <GameRulesDialog open={rulesOpen} title="暗号傍受（仮）のルール" onClose={() => setRulesOpen(false)}>
-    <p>4人以上で赤・青の2チームに分かれ、秘密の単語と番号の対応を味方へ伝えながら敵の対応を推理します。</p>
-    <ol className="mt-4 list-decimal space-y-2 pl-5">
-      <li>各チームは1〜4番の秘密単語を持ちます。敵チームには見えません。</li>
-      <li>出題者には重複しない3桁の暗号が表示されます。暗号順に3つの連想ヒントを書きます。</li>
-      <li>両チームのヒントを同時公開し、出題者以外が味方の暗号をチーム回答します。</li>
-      <li>第2ラウンドからは、敵のヒントと過去ログを基に敵暗号もチーム回答します。</li>
-      <li>味方回答が不正解または未回答なら自チームに1ダメージ、敵に傍受されたら2ダメージです。同じラウンドでは合算します。</li>
-      <li>両チームのダメージを同時反映し、0点になったチームが敗北します。両方0点なら引き分けです。</li>
-      <li>出題者はチーム内でラウンドごとに交代します。時間制限は初期版ではありません。</li>
+    <p>4人以上で赤と青の2チームに分かれて遊びます。味方には暗号を正しく伝えつつ、敵チームがどの番号を伝えているのかも当てるゲームです。</p>
+    <h3 className="mt-4 font-black text-white">秘密の単語と暗号</h3>
+    <div className="mt-2 space-y-2 text-slate-300">
+      <p>各チームは「1：猫、2：宇宙、3：寿司、4：雨」のような、番号つきの秘密単語を持ちます。この組み合わせは同じチームの人にだけ見えます。</p>
+      <p>各ラウンドの出題者には、「3・1・4」のような3桁の暗号が表示されます。出題者は、数字を直接書かず、対応する単語のヒントを暗号の順番に3つ書きます。</p>
+      <p className="rounded-lg bg-amber-300/10 p-3"><strong className="text-amber-100">例：</strong>上の秘密単語で暗号が「3・1・4」なら、「しょうゆ・肉球・かさ」と伝えられます。</p>
+    </div>
+    <h3 className="mt-4 font-black text-white">ラウンドの流れ</h3>
+    <ol className="mt-2 list-decimal space-y-2 pl-5">
+      <li>赤・青それぞれの出題者が、表示された暗号に合わせて3つのヒントを書きます。</li>
+      <li>両チームが書き終わると、ヒントを同時に公開します。</li>
+      <li>出題者以外の味方が相談して、自分たちの暗号を1つ回答します。</li>
+      <li>第2ラウンドからは、敵のヒントと過去ログを見て、敵の暗号もチームで1つ回答します。第1ラウンドは敵の情報が少ないため、傍受回答はありません。</li>
+      <li>全回答が決まったら正解とダメージを同時に発表します。出題者はラウンドごとにチーム内で交代します。</li>
     </ol>
+    <h3 className="mt-4 font-black text-white">ポイントとダメージ</h3>
+    <div className="mt-2 space-y-2 text-slate-300">
+      <p>各チームは<strong className="text-white">5ポイント</strong>から始めます。このポイントは得点というより、チームの残り体力です。</p>
+      <p>味方が自分たちの暗号を間違えるか、回答しなかった場合は<strong className="text-white">自チームに1ダメージ</strong>です。</p>
+      <p>敵に自分たちの暗号を当てられた場合は、<strong className="text-white">自チームに2ダメージ</strong>です。</p>
+      <p>両方が同じラウンドで起きると合計3ダメージです。たとえば残り5ポイントなら、5−1−2で残り2ポイントになります。</p>
+    </div>
+    <h3 className="mt-4 font-black text-white">勝ち負け</h3>
+    <p className="mt-2">両チームのダメージを同時に反映します。片方だけ0ポイントになったら、残ったチームの勝ちです。両チームが同じラウンドで0ポイントになった場合は引き分けです。</p>
+    <h3 className="mt-4 font-black text-white">過去ログと時間制限</h3>
+    <p className="mt-2">終了したラウンドのヒントと正解暗号は過去ログで確認できます。敵の秘密単語そのものは、ゲームが終わるまで見えません。現在の試作版には時間制限がありません。</p>
   </GameRulesDialog>;
 
   if (!ready) return <main className="min-h-screen bg-slate-950 p-8 text-white">ログイン情報と部屋を確認中...</main>;
