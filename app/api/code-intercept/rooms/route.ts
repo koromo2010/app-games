@@ -30,7 +30,7 @@ function errorResponse(error: unknown) {
   if (message === "CODE_INTERCEPT_WORDS_UNAVAILABLE") return Response.json({ error: "Word pool is unavailable" }, { status: 503 });
   if (message === "CODE_INTERCEPT_ROOM_IN_PROGRESS") return Response.json({ error: "An active game cannot be dissolved" }, { status: 409 });
   if (message === "CODE_INTERCEPT_PLAYER_ALREADY_ACTIVE") return Response.json({ error: "Finish or leave the current room before entering another room" }, { status: 409 });
-  if (message === "CODE_INTERCEPT_INVALID_CLUE" || message === "CODE_INTERCEPT_INVALID_ANSWER") return Response.json({ error: "Invalid game input" }, { status: 400 });
+  if (message === "CODE_INTERCEPT_INVALID_CLUE" || message === "CODE_INTERCEPT_INVALID_ANSWER" || message === "CODE_INTERCEPT_INVALID_CONFIG" || message === "CODE_INTERCEPT_INVALID_CODE_LENGTH") return Response.json({ error: "Invalid game input" }, { status: 400 });
   if (message === "CODE_INTERCEPT_ROOM_FORBIDDEN") return Response.json({ error: "Room action is not allowed" }, { status: 403 });
   if (message === "CODE_INTERCEPT_ROOM_CONFLICT") return Response.json({ error: "Room update conflicted; retry" }, { status: 409 });
   if (message === "INVALID_CODE_INTERCEPT_ROOM") return Response.json({ error: "Invalid room" }, { status: 400 });

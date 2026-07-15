@@ -101,7 +101,7 @@ export const gameReplayMetadata: Record<GameReplayGameType, { title: string; hre
   hodoai: { title: "ワードスケール", href: "/word-scale" },
   "kotoba-senpuku": { title: "ワードソナー", href: "/word-sonar" },
   nigoichi: { title: "ワードアウト", href: "/word-out" },
-  "code-intercept": { title: "暗号傍受（仮）", href: "/code-intercept" },
+  "code-intercept": { title: "コードインターセプト", href: "/games/code-intercept" },
 };
 
 export function gameReplayShareText(

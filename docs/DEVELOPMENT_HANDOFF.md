@@ -35,7 +35,7 @@
 | たほい屋 | `app/tahoiya/TahoiyaGame.tsx`, `app/api/tahoiya`, `lib/tahoiya-room-store.ts`, `lib/tahoiya-types.ts` |
 | ワードスケール | `app/word-scale`, `app/hodoai-talk/HodoaiTalkGame.tsx`, `app/api/hodoai/rooms`, `lib/hodoai-room-store.ts` |
 | ワードソナー | `app/kotoba-senpuku`, `app/api/kotoba-senpuku/rooms`, `lib/kotoba-senpuku-room-store.ts`, `lib/kotoba-senpuku.ts`（公開ゲーム。ログイン必須、非公開アクセスキー不要） |
-| 暗号傍受（仮） | `app/code-intercept`, `app/api/code-intercept/rooms`, `lib/code-intercept-room-store.ts`, `lib/code-intercept.ts`（非公開チーム対抗試作） |
+| コードインターセプト | `app/games/code-intercept`, `app/code-intercept`, `app/api/code-intercept/rooms`, `lib/code-intercept-room-store.ts`, `lib/code-intercept.ts`（非公開チーム対抗試作） |
 | キャンバス | `app/canvas/CanvasGame.tsx`, `app/components/DrawingCanvas.tsx`, `lib/drawing-canvas.ts`（非公開のローカル描画UI試作。同一ブラウザの別タブ同期に対応） |
 | たほい屋の問題再利用 | `lib/tahoiya-topic-catalog.ts`, `app/api/tahoiya/topic/route.ts` |
 | お題候補DB・経験履歴の目標設計 | `docs/TOPIC_HISTORY_DATABASE.md` |
@@ -129,7 +129,7 @@ Neon Postgres、Upstash Redis、Vercel Blobの容量は `vercel.json` の日次C
 - 設定操作はロビーにいるホストだけ。
 - 設定デフォルトはプレイヤーごとにRedisへ保存し、localStorageをフォールバックにする。
 - 1プレイヤー1アクティブ部屋。新しい部屋作成時は古いホスト部屋を解散する。
-- 参加人数のサーバー安全上限は `onlineRoomPlayerLimits` を正本とし、ワードウルフ20人、たほい屋8人、ノーザンブランチ4人、ワードスケール50人、ワードソナー20人、ワードアウト6人、暗号傍受（仮）12人。満室は一覧から除外し、直接参加も409で拒否する。復元時も上限を超えた配列を切り詰め、デバッグ用ダミー追加にも同じ上限を適用する。
+- 参加人数のサーバー安全上限は `onlineRoomPlayerLimits` を正本とし、ワードウルフ20人、たほい屋8人、ノーザンブランチ4人、ワードスケール50人、ワードソナー20人、ワードアウト6人、コードインターセプト12人。満室は一覧から除外し、直接参加も409で拒否する。復元時も上限を超えた配列を切り詰め、デバッグ用ダミー追加にも同じ上限を適用する。
 - 投稿・投票がそろったらサーバー側で自動遷移する。
 - ルームGETは認証済み閲覧者向けJSONからETagを作り、クライアントは `If-None-Match` を送る。未変更時は304で本文転送とJSON再解析を省き、同じURLへの重複ポーリングはクライアント内で1本へまとめる。実装は `lib/conditional-json.ts` と `lib/conditional-json-client.ts`。現行の進行中・最終結果2秒／ロビー5秒間隔は維持し、SSE等への移行前の負荷軽減層とする。
 - 参加可能な部屋一覧は全件 `SMEMBERS` + 個別GETを行わず、`SSCAN` で1ページ24件ずつ取得し、部屋本体は1回の `MGET` にまとめる。レスポンスの `nextCursor` を次の `cursor` クエリへ渡せる。部屋コードを指定した直接参加はページ外でも利用できる。
@@ -197,12 +197,13 @@ Neon Postgres、Upstash Redis、Vercel Blobの容量は `vercel.json` の日次C
 - 結果共有のプレイログには、番号順の言葉一覧（各語の持ち主または余り）と、各プレイヤーの「手札A枚 → 連想語M個」を含める。参加者名は入室時に保存した共有同意がONのときだけ表示し、それ以外は `PLAYER1` 形式で匿名化する。共有前に実際の文章をプレビューする。
 - 単語はワードウルフの固定ローカル語彙を共有する。難易度は `listLocalWordWolfWordsByDifficulty()` を境界に、かんたん（日本語日常語）、普通（一般英語・調整済み語）、難しい（固有名詞・歴史・科学系）へ暫定分類する。将来は共通ワードDBの難易度メタデータへ差し替える。RedisのLLM生成候補はまだ含めない。
 
-### 暗号傍受（仮・非公開オンライン試作・内部ID `code-intercept`）
+### コードインターセプト（非公開オンライン試作・内部ID `code-intercept`）
 
-- `/code-intercept` は非公開アクセスキーかつログイン済みの利用者向け。4〜12人を赤・青へ分け、各チーム2人以上・人数差1人以内で開始する。
-- C=4枚の秘密単語、Y=3桁の重複なし暗号、X=5点を初期値とする。伝達失敗は1ダメージ、敵の傍受成功は2ダメージ。第1ラウンドは傍受なし、第2ラウンドから敵暗号も回答する。
+- `/games/code-intercept` は非公開アクセスキーかつログイン済みの利用者向け。旧 `/code-intercept` は正式URLへ転送する。4〜12人を赤・青へ分け、各チーム2人以上・人数差1人以内で開始する。
+- 秘密カード数Cは2〜8枚で初期4枚、暗号桁数Yは2〜Cで初期3桁、初期ポイントXは5点。伝達失敗は1ダメージ、敵の傍受成功は2ダメージ。第1ラウンドは傍受なし、第2ラウンドから敵暗号も回答する。
+- 桁数は、両チームが全ラウンドで同じYを使う固定モードと、各ラウンドの出題者が自チームのYを選ぶ毎ラウンド選択モードを持つ。毎ラウンド選択では赤・青が異なる桁数を使用でき、両チーム確定前は敵の選択を隠す。両チーム確定後に桁数を同時公開してから暗号を生成する。
 - 両チームのヒントを揃えてから同時公開し、味方回答と傍受回答が揃ってからサーバーが両チームのダメージを同時反映する。片方だけ0点なら相手の勝利、両方0点なら引き分け。出題者はチーム内の参加順で交代する。
-- 秘密単語は同じチームだけ、現在暗号はそのチームの出題者だけに返す。敵ヒント、相手の確定回答、秘密単語は公開可能フェーズまで閲覧者別sanitizerで除外する。ラウンド終了後の暗号・ヒント・傍受結果は過去ログとして常時表示する。
+- 秘密単語は同じチームだけ、現在暗号はそのチームの出題者だけに返す。敵の桁数選択、敵ヒント、相手の確定回答、秘密単語は公開可能フェーズまで閲覧者別sanitizerで除外する。ラウンド終了後の桁数・暗号・ヒント・傍受結果は過去ログとして常時表示する。
 - Redisを正本とし、revision付きCAS、共通TTL、1人1アクティブ部屋、Cookie由来のactor、サーバー側Command検証を使う。初期検証では時間制限なし。詳細は `docs/CODE_INTERCEPT.md`。
 
 ## 7. たほい屋現行仕様の要点

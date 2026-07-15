@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import {
   areValidCodeInterceptClues,
   clueGiverForRound,
+  codeLengthForTeam,
   codeInterceptDefaults,
   codeInterceptMinimumPlayers,
   codeInterceptPlayerLimit,
@@ -9,9 +10,12 @@ import {
   codeInterceptTeamIds,
   codeInterceptTeamsAreStartable,
   finishCodeInterceptRound,
+  isCodeLengthMode,
   isCodeInterceptTeamId,
   isValidCodeInterceptAnswer,
   nextBalancedTeam,
+  normalizeCodeInterceptCardCount,
+  normalizeCodeInterceptCodeLength,
   normalizeCodeInterceptPlayerCapacity,
   otherCodeInterceptTeam,
   sanitizeCodeInterceptRoomForPlayer,
@@ -25,6 +29,8 @@ import {
   type CodeInterceptRoundLog,
   type CodeInterceptTeam,
   type CodeInterceptTeamId,
+  type CodeLengthMode,
+  type TeamCodeLengthChoice,
 } from "@/lib/code-intercept";
 import { appendGameDebugLog, normalizeGameDebugLog } from "@/lib/game-debug-log";
 import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
@@ -51,6 +57,7 @@ const debugActionLabels: Record<CodeInterceptRoomAction["type"], string> = {
   "set-debug-replay": "プレイバック記録設定を変更",
   "set-config": "ゲーム設定を変更",
   "start-game": "ゲームを開始",
+  "select-code-length": "暗号桁数を確定",
   "submit-clues": "暗号ヒントを提出",
   "submit-ally-answer": "味方暗号を回答",
   "submit-intercept-answer": "敵暗号の傍受回答を提出",
@@ -58,6 +65,7 @@ const debugActionLabels: Record<CodeInterceptRoomAction["type"], string> = {
   "reset-game": "同じ部屋で再戦準備",
   "abort-game": "ゲームを中断",
   "debug-add-player": "ダミープレイヤーを追加",
+  "debug-fill-code-lengths": "未選択の暗号桁数を自動入力",
   "debug-fill-clues": "未提出ヒントを自動入力",
   "debug-fill-answers": "未提出回答を自動入力",
 };
@@ -66,7 +74,7 @@ function roomKey(code: string) { return `${roomKeyPrefix}${code.trim().toUpperCa
 function playerActiveRoomKey(playerId: string) { return `${playerActiveRoomKeyPrefix}${playerId}`; }
 
 function isPhase(value: unknown): value is CodeInterceptPhase {
-  return value === "lobby" || value === "clue" || value === "answer" || value === "round-result" || value === "game-result";
+  return value === "lobby" || value === "code-length" || value === "clue" || value === "answer" || value === "round-result" || value === "game-result";
 }
 
 function normalizePlayers(value: unknown): CodeInterceptPlayer[] {
@@ -90,37 +98,62 @@ function normalizePlayers(value: unknown): CodeInterceptPlayer[] {
   }).slice(0, codeInterceptPlayerLimit);
 }
 
-function normalizeTeams(value: unknown): CodeInterceptTeam[] {
+function normalizeTeams(value: unknown, cardCount: number, initialPoints: number): CodeInterceptTeam[] {
   const source = Array.isArray(value) ? value as Partial<CodeInterceptTeam>[] : [];
   return codeInterceptTeamIds.map((id) => {
     const stored = source.find((team) => team?.id === id);
     return {
       id,
       name: id === "red" ? "赤チーム" : "青チーム",
-      points: typeof stored?.points === "number" && Number.isInteger(stored.points) ? Math.max(0, stored.points) : codeInterceptDefaults.initialPoints,
+      points: typeof stored?.points === "number" && Number.isInteger(stored.points) ? Math.max(0, stored.points) : initialPoints,
       secretWords: Array.isArray(stored?.secretWords)
-        ? stored.secretWords.filter((word): word is string => typeof word === "string").map((word) => word.trim().slice(0, 80)).filter(Boolean).slice(0, codeInterceptDefaults.cardCount)
+        ? stored.secretWords.filter((word): word is string => typeof word === "string").map((word) => word.trim().slice(0, 80)).filter(Boolean).slice(0, cardCount)
         : [],
     };
   });
 }
 
-function normalizeNumberArrayRecord(value: unknown, cardCount: number, codeLength: number) {
+function normalizeCodeLengthRecord(value: unknown, cardCount: number, fallbackLength: number, includeFallback = true) {
+  const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  return Object.fromEntries(codeInterceptTeamIds.flatMap((teamId) => source[teamId] !== undefined || includeFallback
+    ? [[teamId, normalizeCodeInterceptCodeLength(source[teamId] ?? fallbackLength, cardCount)]]
+    : [])) as Partial<Record<CodeInterceptTeamId, number>>;
+}
+
+function normalizeNumberArrayRecord(value: unknown, cardCount: number, codeLengths: Partial<Record<CodeInterceptTeamId, number>>) {
   const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
   return Object.fromEntries(codeInterceptTeamIds.flatMap((teamId) => {
     const answer = source[teamId];
-    return isValidCodeInterceptAnswer(answer, cardCount, codeLength) ? [[teamId, [...answer]]] : [];
+    const codeLength = codeLengths[teamId];
+    return codeLength && isValidCodeInterceptAnswer(answer, cardCount, codeLength) ? [[teamId, [...answer]]] : [];
   })) as Partial<Record<CodeInterceptTeamId, number[]>>;
 }
 
-function normalizeClueRecord(value: unknown, codeLength: number) {
+function normalizeClueRecord(value: unknown, codeLengths: Partial<Record<CodeInterceptTeamId, number>>) {
   const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
   return Object.fromEntries(codeInterceptTeamIds.flatMap((teamId) => {
     const clues = source[teamId];
-    return areValidCodeInterceptClues(clues, codeLength)
+    const codeLength = codeLengths[teamId];
+    return codeLength && areValidCodeInterceptClues(clues, codeLength)
       ? [[teamId, clues.map((clue) => clue.trim().slice(0, 40))]]
       : [];
   })) as Partial<Record<CodeInterceptTeamId, string[]>>;
+}
+
+function normalizeCodeLengthChoices(value: unknown, cardCount: number): Partial<Record<CodeInterceptTeamId, TeamCodeLengthChoice>> {
+  const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  return Object.fromEntries(codeInterceptTeamIds.flatMap((teamId) => {
+    const item = source[teamId];
+    if (!item || typeof item !== "object") return [];
+    const choice = item as Partial<TeamCodeLengthChoice>;
+    if (typeof choice.selectedByPlayerId !== "string" || !choice.selectedByPlayerId) return [];
+    return [[teamId, {
+      teamId,
+      selectedByPlayerId: choice.selectedByPlayerId.slice(0, 120),
+      codeLength: normalizeCodeInterceptCodeLength(choice.codeLength, cardCount),
+      lockedAt: typeof choice.lockedAt === "number" ? choice.lockedAt : Date.now(),
+    }]];
+  })) as Partial<Record<CodeInterceptTeamId, TeamCodeLengthChoice>>;
 }
 
 function normalizeStringRecord(value: unknown) {
@@ -130,11 +163,19 @@ function normalizeStringRecord(value: unknown) {
     : [])) as Partial<Record<CodeInterceptTeamId, string>>;
 }
 
-function normalizeRoundHistory(value: unknown): CodeInterceptRoundLog[] {
+function normalizeRoundHistory(value: unknown, cardCount: number, fallbackMode: CodeLengthMode, fallbackLength: number): CodeInterceptRoundLog[] {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is CodeInterceptRoundLog => Boolean(
     item && typeof item === "object" && Number.isInteger((item as CodeInterceptRoundLog).roundNumber) && Array.isArray((item as CodeInterceptRoundLog).teams),
-  )).slice(-100);
+  )).map((item) => ({
+    ...item,
+    codeLengthMode: isCodeLengthMode(item.codeLengthMode) ? item.codeLengthMode : fallbackMode,
+    teams: item.teams.map((team) => ({
+      ...team,
+      codeLength: normalizeCodeInterceptCodeLength(team.codeLength ?? team.secretCode?.length ?? fallbackLength, cardCount),
+      codeLengthSelectedByPlayerId: typeof team.codeLengthSelectedByPlayerId === "string" ? team.codeLengthSelectedByPlayerId : null,
+    })),
+  })).slice(-100);
 }
 
 function normalizeRoom(value: unknown): CodeInterceptRoom | null {
@@ -144,8 +185,17 @@ function normalizeRoom(value: unknown): CodeInterceptRoom | null {
   const players = normalizePlayers(parsed.players);
   const hostId = typeof parsed.hostId === "string" ? parsed.hostId : "";
   if (!code || !hostId || players.length === 0 || !players.some((player) => player.id === hostId)) return null;
-  const cardCount = codeInterceptDefaults.cardCount;
-  const codeLength = codeInterceptDefaults.codeLength;
+  const legacy = value as { codeLength?: unknown };
+  const cardCount = normalizeCodeInterceptCardCount(parsed.cardCount);
+  const codeLengthMode: CodeLengthMode = isCodeLengthMode(parsed.codeLengthMode) ? parsed.codeLengthMode : codeInterceptDefaults.codeLengthMode;
+  const fixedCodeLength = normalizeCodeInterceptCodeLength(parsed.fixedCodeLength ?? legacy.codeLength, cardCount);
+  const phase = isPhase(parsed.phase) ? parsed.phase : "lobby";
+  const roundCodeLengths = phase === "lobby"
+    ? {}
+    : codeLengthMode === "fixed"
+      ? normalizeCodeLengthRecord(parsed.roundCodeLengths, cardCount, fixedCodeLength)
+      : normalizeCodeLengthRecord(parsed.roundCodeLengths, cardCount, fixedCodeLength, false);
+  const initialPoints = codeInterceptDefaults.initialPoints;
   const winner = parsed.winner === "red" || parsed.winner === "blue" || parsed.winner === "draw" ? parsed.winner : null;
   return {
     code,
@@ -153,27 +203,30 @@ function normalizeRoom(value: unknown): CodeInterceptRoom | null {
     hostId,
     ownerId: typeof parsed.ownerId === "string" ? parsed.ownerId.slice(0, 120) : undefined,
     passphrase: typeof parsed.passphrase === "string" ? parsed.passphrase.slice(0, 40) : "",
-    phase: isPhase(parsed.phase) ? parsed.phase : "lobby",
+    phase,
     players,
     playerCapacity: normalizeCodeInterceptPlayerCapacity(parsed.playerCapacity, players.length),
     gameNumber: typeof parsed.gameNumber === "number" ? Math.max(1, Math.floor(parsed.gameNumber)) : 1,
     roundNumber: typeof parsed.roundNumber === "number" ? Math.max(1, Math.floor(parsed.roundNumber)) : 1,
     cardCount,
-    codeLength,
-    initialPoints: codeInterceptDefaults.initialPoints,
+    codeLengthMode,
+    fixedCodeLength,
+    initialPoints,
     miscommunicationDamage: codeInterceptDefaults.miscommunicationDamage,
     interceptionDamage: codeInterceptDefaults.interceptionDamage,
     actionTimeLimitSeconds: normalizeCommonTimeLimit(parsed.actionTimeLimitSeconds),
     phaseStartedAt: typeof parsed.phaseStartedAt === "number" ? parsed.phaseStartedAt : null,
     debugMode: parsed.debugMode === true,
     debugReplayEnabled: parsed.debugReplayEnabled === true && parsed.debugMode === true,
-    teams: normalizeTeams(parsed.teams),
+    teams: normalizeTeams(parsed.teams, cardCount, initialPoints),
     clueGiverIds: normalizeStringRecord(parsed.clueGiverIds),
-    secretCodes: normalizeNumberArrayRecord(parsed.secretCodes, cardCount, codeLength),
-    clues: normalizeClueRecord(parsed.clues, codeLength),
-    allyAnswers: normalizeNumberArrayRecord(parsed.allyAnswers, cardCount, codeLength),
-    interceptAnswers: normalizeNumberArrayRecord(parsed.interceptAnswers, cardCount, codeLength),
-    roundHistory: normalizeRoundHistory(parsed.roundHistory),
+    codeLengthChoices: normalizeCodeLengthChoices(parsed.codeLengthChoices, cardCount),
+    roundCodeLengths,
+    secretCodes: normalizeNumberArrayRecord(parsed.secretCodes, cardCount, roundCodeLengths),
+    clues: normalizeClueRecord(parsed.clues, roundCodeLengths),
+    allyAnswers: normalizeNumberArrayRecord(parsed.allyAnswers, cardCount, roundCodeLengths),
+    interceptAnswers: normalizeNumberArrayRecord(parsed.interceptAnswers, cardCount, Object.fromEntries(codeInterceptTeamIds.map((teamId) => [teamId, roundCodeLengths[otherCodeInterceptTeam(teamId)]]))),
+    roundHistory: normalizeRoundHistory(parsed.roundHistory, cardCount, codeLengthMode, fixedCodeLength),
     winner,
     debugLog: normalizeGameDebugLog(parsed.debugLog),
     createdAt: typeof parsed.createdAt === "number" ? parsed.createdAt : Date.now(),
@@ -181,35 +234,50 @@ function normalizeRoom(value: unknown): CodeInterceptRoom | null {
   };
 }
 
-function dealSecretWords() {
+function dealSecretWords(cardCount: number) {
   const pool = [...new Set(listLocalWordWolfWords().map((word) => word.trim()).filter(Boolean))];
   for (let index = pool.length - 1; index > 0; index -= 1) {
     const target = Math.floor(Math.random() * (index + 1));
     [pool[index], pool[target]] = [pool[target], pool[index]];
   }
-  const needed = codeInterceptDefaults.cardCount * 2;
+  const needed = cardCount * 2;
   if (pool.length < needed) throw new Error("CODE_INTERCEPT_WORDS_UNAVAILABLE");
-  return { red: pool.slice(0, codeInterceptDefaults.cardCount), blue: pool.slice(codeInterceptDefaults.cardCount, needed) };
+  return { red: pool.slice(0, cardCount), blue: pool.slice(cardCount, needed) };
 }
 
-function beginRound(room: CodeInterceptRoom, roundNumber: number) {
+function beginCluePhase(room: CodeInterceptRoom, roundCodeLengths: Partial<Record<CodeInterceptTeamId, number>>) {
   const now = Date.now();
   return {
     ...room,
     phase: "clue" as const,
-    roundNumber,
-    clueGiverIds: Object.fromEntries(codeInterceptTeamIds.map((teamId) => [teamId, clueGiverForRound(room.players, teamId, roundNumber)])),
-    secretCodes: Object.fromEntries(codeInterceptTeamIds.map((teamId) => [teamId, shuffledCode(room.cardCount, room.codeLength)])),
-    clues: {},
-    allyAnswers: {},
-    interceptAnswers: {},
-    winner: null,
+    roundCodeLengths,
+    secretCodes: Object.fromEntries(codeInterceptTeamIds.map((teamId) => [teamId, shuffledCode(room.cardCount, roundCodeLengths[teamId] ?? room.fixedCodeLength)])),
     phaseStartedAt: now,
   };
 }
 
+function beginRound(room: CodeInterceptRoom, roundNumber: number) {
+  const prepared = {
+    ...room,
+    phase: room.codeLengthMode === "per-round" ? "code-length" as const : "clue" as const,
+    roundNumber,
+    clueGiverIds: Object.fromEntries(codeInterceptTeamIds.map((teamId) => [teamId, clueGiverForRound(room.players, teamId, roundNumber)])),
+    codeLengthChoices: {},
+    roundCodeLengths: {},
+    secretCodes: {},
+    clues: {},
+    allyAnswers: {},
+    interceptAnswers: {},
+    winner: null,
+    phaseStartedAt: Date.now(),
+  };
+  return room.codeLengthMode === "fixed"
+    ? beginCluePhase(prepared, Object.fromEntries(codeInterceptTeamIds.map((teamId) => [teamId, room.fixedCodeLength])))
+    : prepared;
+}
+
 function beginGame(room: CodeInterceptRoom) {
-  const words = dealSecretWords();
+  const words = dealSecretWords(room.cardCount);
   const teams = codeInterceptTeamIds.map((id) => ({ id, name: id === "red" ? "赤チーム" : "青チーム", points: room.initialPoints, secretWords: words[id] }));
   return beginRound({ ...room, teams, roundHistory: [], winner: null }, 1);
 }
@@ -224,6 +292,8 @@ function resetGame(room: CodeInterceptRoom) {
     debugReplayEnabled: false,
     teams: codeInterceptTeamIds.map((id) => ({ id, name: id === "red" ? "赤チーム" : "青チーム", points: room.initialPoints, secretWords: [] })),
     clueGiverIds: {},
+    codeLengthChoices: {},
+    roundCodeLengths: {},
     secretCodes: {},
     clues: {},
     allyAnswers: {},
@@ -231,6 +301,10 @@ function resetGame(room: CodeInterceptRoom) {
     roundHistory: [],
     winner: null,
   };
+}
+
+function allCodeLengthsChosen(room: CodeInterceptRoom) {
+  return codeInterceptTeamIds.every((teamId) => Boolean(room.codeLengthChoices[teamId]));
 }
 
 function allCluesSubmitted(room: CodeInterceptRoom) {
@@ -389,7 +463,18 @@ export async function applyStoredCodeInterceptAction(code: string, action: CodeI
     }
     if (action.type === "set-config") {
       if (!isHost || current.phase !== "lobby") throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
-      return { ...current, actionTimeLimitSeconds: normalizeCommonTimeLimit(action.actionTimeLimitSeconds) };
+      const cardCount = normalizeCodeInterceptCardCount(action.cardCount);
+      if (cardCount !== action.cardCount || !isCodeLengthMode(action.codeLengthMode)) throw new Error("CODE_INTERCEPT_INVALID_CONFIG");
+      if (action.codeLengthMode === "fixed" && (action.fixedCodeLength === undefined || normalizeCodeInterceptCodeLength(action.fixedCodeLength, cardCount) !== action.fixedCodeLength)) throw new Error("CODE_INTERCEPT_INVALID_CONFIG");
+      return {
+        ...current,
+        cardCount,
+        codeLengthMode: action.codeLengthMode,
+        fixedCodeLength: action.codeLengthMode === "fixed"
+          ? action.fixedCodeLength!
+          : normalizeCodeInterceptCodeLength(current.fixedCodeLength, cardCount),
+        actionTimeLimitSeconds: normalizeCommonTimeLimit(action.actionTimeLimitSeconds),
+      };
     }
     if (action.type === "debug-add-player") {
       if (!isHost || !current.debugMode || current.phase !== "lobby" || !codeInterceptRoomHasSpace(current)) throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
@@ -413,31 +498,55 @@ export async function applyStoredCodeInterceptAction(code: string, action: CodeI
       if (!isHost || current.phase !== "round-result") throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
       return beginRound(current, current.roundNumber + 1);
     }
+    if (action.type === "select-code-length") {
+      const player = targetPlayer(current, action.actorId, action.playerId);
+      if (current.codeLengthMode !== "per-round" || current.phase !== "code-length" || current.clueGiverIds[player.teamId] !== player.id || current.codeLengthChoices[player.teamId]) throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
+      const codeLength = normalizeCodeInterceptCodeLength(action.codeLength, current.cardCount);
+      if (codeLength !== action.codeLength) throw new Error("CODE_INTERCEPT_INVALID_CODE_LENGTH");
+      const next = {
+        ...current,
+        codeLengthChoices: {
+          ...current.codeLengthChoices,
+          [player.teamId]: { teamId: player.teamId, selectedByPlayerId: player.id, codeLength, lockedAt: Date.now() },
+        },
+      };
+      if (!allCodeLengthsChosen(next)) return next;
+      return beginCluePhase(next, Object.fromEntries(codeInterceptTeamIds.map((teamId) => [teamId, next.codeLengthChoices[teamId]!.codeLength])));
+    }
     if (action.type === "submit-clues") {
       const player = targetPlayer(current, action.actorId, action.playerId);
       if (current.phase !== "clue" || current.clueGiverIds[player.teamId] !== player.id || current.clues[player.teamId]) throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
-      if (!areValidCodeInterceptClues(action.clues, current.codeLength)) throw new Error("CODE_INTERCEPT_INVALID_CLUE");
+      if (!areValidCodeInterceptClues(action.clues, codeLengthForTeam(current, player.teamId))) throw new Error("CODE_INTERCEPT_INVALID_CLUE");
       const next = { ...current, clues: { ...current.clues, [player.teamId]: action.clues.map((clue) => clue.trim()) } };
       return allCluesSubmitted(next) ? { ...next, phase: "answer" as const, phaseStartedAt: Date.now() } : next;
     }
     if (action.type === "submit-ally-answer") {
       const player = targetPlayer(current, action.actorId, action.playerId);
       if (current.phase !== "answer" || current.clueGiverIds[player.teamId] === player.id || current.allyAnswers[player.teamId]) throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
-      if (!isValidCodeInterceptAnswer(action.answer, current.cardCount, current.codeLength)) throw new Error("CODE_INTERCEPT_INVALID_ANSWER");
+      if (!isValidCodeInterceptAnswer(action.answer, current.cardCount, codeLengthForTeam(current, player.teamId))) throw new Error("CODE_INTERCEPT_INVALID_ANSWER");
       const next = { ...current, allyAnswers: { ...current.allyAnswers, [player.teamId]: [...action.answer] } };
       return allAnswersSubmitted(next) ? finishCodeInterceptRound(next) : next;
     }
     if (action.type === "submit-intercept-answer") {
       const player = targetPlayer(current, action.actorId, action.playerId);
       if (current.phase !== "answer" || current.roundNumber < codeInterceptDefaults.interceptionStartsAtRound || current.interceptAnswers[player.teamId]) throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
-      if (!isValidCodeInterceptAnswer(action.answer, current.cardCount, current.codeLength)) throw new Error("CODE_INTERCEPT_INVALID_ANSWER");
+      if (!isValidCodeInterceptAnswer(action.answer, current.cardCount, codeLengthForTeam(current, otherCodeInterceptTeam(player.teamId)))) throw new Error("CODE_INTERCEPT_INVALID_ANSWER");
       const next = { ...current, interceptAnswers: { ...current.interceptAnswers, [player.teamId]: [...action.answer] } };
       return allAnswersSubmitted(next) ? finishCodeInterceptRound(next) : next;
     }
     if (!isHost || !current.debugMode) throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
+    if (action.type === "debug-fill-code-lengths" && current.phase === "code-length" && current.codeLengthMode === "per-round") {
+      const choices = { ...current.codeLengthChoices };
+      codeInterceptTeamIds.forEach((teamId) => {
+        if (choices[teamId]) return;
+        const clueGiverId = current.clueGiverIds[teamId] ?? current.hostId;
+        choices[teamId] = { teamId, selectedByPlayerId: clueGiverId, codeLength: current.fixedCodeLength, lockedAt: Date.now() };
+      });
+      return beginCluePhase({ ...current, codeLengthChoices: choices }, Object.fromEntries(codeInterceptTeamIds.map((teamId) => [teamId, choices[teamId]!.codeLength])));
+    }
     if (action.type === "debug-fill-clues" && current.phase === "clue") {
       const clues = { ...current.clues };
-      codeInterceptTeamIds.forEach((teamId) => { clues[teamId] ??= Array.from({ length: current.codeLength }, (_, index) => `テスト${teamId === "red" ? "赤" : "青"}${index + 1}`); });
+      codeInterceptTeamIds.forEach((teamId) => { clues[teamId] ??= Array.from({ length: codeLengthForTeam(current, teamId) }, (_, index) => `テスト${teamId === "red" ? "赤" : "青"}${index + 1}`); });
       return { ...current, clues, phase: "answer", phaseStartedAt: Date.now() };
     }
     if (action.type === "debug-fill-answers" && current.phase === "answer") {

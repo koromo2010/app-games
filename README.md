@@ -15,7 +15,7 @@ Party game prototypes built with Next.js.
 - `/word-sonar` - Online word deduction room game for logged-in players (legacy `/kotoba-senpuku` redirects here)
 - `/kotoba-de-kazu-narabe` and `/hodoai-talk` - Redirect to `/word-scale`
 - `/word-out` - Word Out: private online 2-6 player room game with configurable cards and association groups, plus one undealt word (`/nigoichi` redirects here)
-- `/code-intercept` - Private 4-12 player team prototype using secret word cards, clue codes, and enemy interception
+- `/games/code-intercept` - Private 4-12 player team prototype with fixed or per-round team-selected code lengths
 - `/canvas` - Private drawing-canvas UI prototype with mouse, touch, pen, undo, erase, local save, and same-browser tab sync
 
 ## Private game access

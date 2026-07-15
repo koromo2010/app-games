@@ -6,10 +6,15 @@ export const codeInterceptMinimumPlayers = 4;
 export const codeInterceptPlayerLimit = onlineRoomPlayerLimits.codeIntercept;
 export const codeInterceptTeamIds = ["red", "blue"] as const;
 export type CodeInterceptTeamId = (typeof codeInterceptTeamIds)[number];
+export type CodeLengthMode = "fixed" | "per-round";
+
+export const codeInterceptMinimumCardCount = 2;
+export const codeInterceptMaximumCardCount = 8;
 
 export const codeInterceptDefaults = {
   cardCount: 4,
-  codeLength: 3,
+  codeLengthMode: "fixed" as CodeLengthMode,
+  fixedCodeLength: 3,
   initialPoints: 5,
   miscommunicationDamage: 1,
   interceptionDamage: 2,
@@ -17,7 +22,7 @@ export const codeInterceptDefaults = {
   actionTimeLimitSeconds: 0,
 } as const;
 
-export type CodeInterceptPhase = "lobby" | "clue" | "answer" | "round-result" | "game-result";
+export type CodeInterceptPhase = "lobby" | "code-length" | "clue" | "answer" | "round-result" | "game-result";
 
 export type CodeInterceptPlayer = {
   id: string;
@@ -40,6 +45,8 @@ export type CodeInterceptTeam = {
 export type CodeInterceptTeamRoundResult = {
   teamId: CodeInterceptTeamId;
   clueGiverId: string;
+  codeLength: number;
+  codeLengthSelectedByPlayerId: string | null;
   secretCode: number[];
   clues: string[];
   allyAnswer: number[] | null;
@@ -55,7 +62,15 @@ export type CodeInterceptTeamRoundResult = {
 
 export type CodeInterceptRoundLog = {
   roundNumber: number;
+  codeLengthMode: CodeLengthMode;
   teams: CodeInterceptTeamRoundResult[];
+};
+
+export type TeamCodeLengthChoice = {
+  teamId: CodeInterceptTeamId;
+  selectedByPlayerId: string;
+  codeLength: number;
+  lockedAt: number;
 };
 
 export type CodeInterceptWinner = CodeInterceptTeamId | "draw" | null;
@@ -72,7 +87,8 @@ export type CodeInterceptRoom = {
   gameNumber: number;
   roundNumber: number;
   cardCount: number;
-  codeLength: number;
+  codeLengthMode: CodeLengthMode;
+  fixedCodeLength: number;
   initialPoints: number;
   miscommunicationDamage: number;
   interceptionDamage: number;
@@ -82,6 +98,8 @@ export type CodeInterceptRoom = {
   debugReplayEnabled: boolean;
   teams: CodeInterceptTeam[];
   clueGiverIds: Partial<Record<CodeInterceptTeamId, string>>;
+  codeLengthChoices: Partial<Record<CodeInterceptTeamId, TeamCodeLengthChoice>>;
+  roundCodeLengths: Partial<Record<CodeInterceptTeamId, number>>;
   secretCodes: Partial<Record<CodeInterceptTeamId, number[]>>;
   clues: Partial<Record<CodeInterceptTeamId, string[]>>;
   allyAnswers: Partial<Record<CodeInterceptTeamId, number[]>>;
@@ -110,8 +128,9 @@ export type CodeInterceptRoomAction =
   | { type: "set-team"; actorId: string; teamId: CodeInterceptTeamId }
   | { type: "set-debug"; actorId: string; enabled: boolean }
   | { type: "set-debug-replay"; actorId: string; enabled: boolean }
-  | { type: "set-config"; actorId: string; actionTimeLimitSeconds: number }
+  | { type: "set-config"; actorId: string; cardCount: number; codeLengthMode: CodeLengthMode; fixedCodeLength?: number; actionTimeLimitSeconds: number }
   | { type: "start-game"; actorId: string }
+  | { type: "select-code-length"; actorId: string; playerId?: string; codeLength: number }
   | { type: "submit-clues"; actorId: string; playerId?: string; clues: string[] }
   | { type: "submit-ally-answer"; actorId: string; playerId?: string; answer: number[] }
   | { type: "submit-intercept-answer"; actorId: string; playerId?: string; answer: number[] }
@@ -119,6 +138,7 @@ export type CodeInterceptRoomAction =
   | { type: "reset-game"; actorId: string }
   | { type: "abort-game"; actorId: string }
   | { type: "debug-add-player"; actorId: string }
+  | { type: "debug-fill-code-lengths"; actorId: string }
   | { type: "debug-fill-clues"; actorId: string }
   | { type: "debug-fill-answers"; actorId: string };
 
@@ -137,6 +157,24 @@ export function codeInterceptRoomHasSpace(room: Pick<CodeInterceptRoom, "players
 
 export function isCodeInterceptTeamId(value: unknown): value is CodeInterceptTeamId {
   return value === "red" || value === "blue";
+}
+
+export function isCodeLengthMode(value: unknown): value is CodeLengthMode {
+  return value === "fixed" || value === "per-round";
+}
+
+export function normalizeCodeInterceptCardCount(value: unknown) {
+  const count = typeof value === "number" && Number.isInteger(value) ? value : codeInterceptDefaults.cardCount;
+  return Math.min(codeInterceptMaximumCardCount, Math.max(codeInterceptMinimumCardCount, count));
+}
+
+export function normalizeCodeInterceptCodeLength(value: unknown, cardCount: number) {
+  const length = typeof value === "number" && Number.isInteger(value) ? value : Math.min(codeInterceptDefaults.fixedCodeLength, cardCount);
+  return Math.min(cardCount, Math.max(2, length));
+}
+
+export function codeLengthForTeam(room: Pick<CodeInterceptRoom, "roundCodeLengths" | "fixedCodeLength">, teamId: CodeInterceptTeamId) {
+  return room.roundCodeLengths[teamId] ?? room.fixedCodeLength;
 }
 
 export function teamPlayers(room: Pick<CodeInterceptRoom, "players">, teamId: CodeInterceptTeamId) {
@@ -204,6 +242,8 @@ export function finishCodeInterceptRound(room: CodeInterceptRoom): CodeIntercept
     return {
       teamId,
       clueGiverId: room.clueGiverIds[teamId] ?? "",
+      codeLength: codeLengthForTeam(room, teamId),
+      codeLengthSelectedByPlayerId: room.codeLengthMode === "per-round" ? room.codeLengthChoices[teamId]?.selectedByPlayerId ?? null : null,
       secretCode: [...secretCode],
       clues: [...(room.clues[teamId] ?? [])],
       allyAnswer: allyAnswer ? [...allyAnswer] : null,
@@ -228,7 +268,7 @@ export function finishCodeInterceptRound(room: CodeInterceptRoom): CodeIntercept
     ...room,
     teams,
     phase: winner ? "game-result" : "round-result",
-    roundHistory: [...room.roundHistory, { roundNumber: room.roundNumber, teams: results }],
+    roundHistory: [...room.roundHistory, { roundNumber: room.roundNumber, codeLengthMode: room.codeLengthMode, teams: results }],
     winner,
     phaseStartedAt: Date.now(),
   };
@@ -237,7 +277,7 @@ export function finishCodeInterceptRound(room: CodeInterceptRoom): CodeIntercept
 export function codeInterceptShareText(room: Pick<CodeInterceptRoom, "winner" | "roundNumber" | "teams">) {
   const winner = room.winner === "draw" ? "同時決着で引き分け" : room.winner === "red" ? "赤チームの勝利" : room.winner === "blue" ? "青チームの勝利" : "対戦中";
   const points = codeInterceptTeamIds.map((id) => `${id === "red" ? "赤" : "青"}${room.teams.find((team) => team.id === id)?.points ?? 0}`).join("・");
-  return [`暗号傍受（仮）`, `${room.roundNumber}ラウンドで${winner}`, `残りポイント ${points}`, "#GameFields"].join("\n");
+  return [`コードインターセプト`, `${room.roundNumber}ラウンドで${winner}`, `残りポイント ${points}`, "#GameFields"].join("\n");
 }
 
 export function sanitizeCodeInterceptRoomForPlayer(room: CodeInterceptRoom, playerId: string): CodeInterceptRoom {
@@ -262,5 +302,9 @@ export function sanitizeCodeInterceptRoomForPlayer(room: CodeInterceptRoom, play
   const interceptAnswers = revealCurrentCodes
     ? room.interceptAnswers
     : viewerTeam && room.interceptAnswers[viewerTeam] ? { [viewerTeam]: [...room.interceptAnswers[viewerTeam]!] } : {};
-  return { ...room, passphrase: "", teams, secretCodes, clues, allyAnswers, interceptAnswers };
+  const codeLengthChoices = room.phase === "code-length" && viewerTeam
+    ? (room.codeLengthChoices[viewerTeam] ? { [viewerTeam]: { ...room.codeLengthChoices[viewerTeam]! } } : {})
+    : Object.fromEntries(codeInterceptTeamIds.flatMap((teamId) => room.codeLengthChoices[teamId] ? [[teamId, { ...room.codeLengthChoices[teamId]! }]] : []));
+  const roundCodeLengths = room.phase === "code-length" ? {} : { ...room.roundCodeLengths };
+  return { ...room, passphrase: "", teams, codeLengthChoices, roundCodeLengths, secretCodes, clues, allyAnswers, interceptAnswers };
 }
