@@ -9,6 +9,7 @@ type Props = {
   width: number;
   tool: "pen" | "eraser";
   disabled?: boolean;
+  keyboardCursor?: DrawingPoint;
   onStrokeComplete: (stroke: DrawingStroke) => void;
 };
 
@@ -35,7 +36,7 @@ function drawStroke(context: CanvasRenderingContext2D, stroke: DrawingStroke, ca
   context.restore();
 }
 
-export function DrawingCanvas({ strokes, color, width, tool, disabled = false, onStrokeComplete }: Props) {
+export function DrawingCanvas({ strokes, color, width, tool, disabled = false, keyboardCursor, onStrokeComplete }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const activeStrokeRef = useRef<DrawingStroke | null>(null);
   const redrawRef = useRef<() => void>(() => undefined);
@@ -97,5 +98,8 @@ export function DrawingCanvas({ strokes, color, width, tool, disabled = false, o
     onStrokeComplete(stroke);
   };
 
-  return <canvas ref={canvasRef} className={`h-full w-full touch-none bg-white ${disabled ? "cursor-not-allowed opacity-70" : tool === "eraser" ? "cursor-cell" : "cursor-crosshair"}`} aria-label="お絵描きキャンバス" onPointerDown={start} onPointerMove={move} onPointerUp={finish} onPointerCancel={finish} />;
+  return <div className="relative h-full w-full overflow-hidden">
+    <canvas ref={canvasRef} className={`h-full w-full touch-none bg-white ${disabled ? "cursor-not-allowed opacity-70" : tool === "eraser" ? "cursor-cell" : "cursor-crosshair"}`} aria-label="お絵描きキャンバス" onPointerDown={start} onPointerMove={move} onPointerUp={finish} onPointerCancel={finish} />
+    {keyboardCursor && <span className="pointer-events-none absolute z-10 block -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-cyan-500 bg-white/40 shadow-[0_0_0_1px_white]" style={{ left: `${keyboardCursor.x * 100}%`, top: `${keyboardCursor.y * 100}%`, width: Math.max(10, width), height: Math.max(10, width) }} aria-hidden="true" />}
+  </div>;
 }
