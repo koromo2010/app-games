@@ -82,17 +82,14 @@ export function tahoiyaReplaySummaryHighlights({
   votes,
 }: TahoiyaReplayHighlightSource) {
   const selectedDefinitionId = votes[playerId];
-  const selectedDefinition = definitions.find((definition) => definition.id === selectedDefinitionId);
-  const selectedVoteCount = selectedDefinition
-    ? Object.values(votes).filter((definitionId) => definitionId === selectedDefinition.id).length
-    : 0;
-  const voteHighlight = selectedDefinition
-    ? `あなたの投票「${selectedDefinition.text}」（${selectedDefinition.isReal ? "本物" : "偽説明"}・${selectedVoteCount}票）`
-    : `全${definitions.length}個の説明と投票結果`;
+  const definitionHighlights = definitions.map((definition) => {
+    const voteCount = Object.values(votes).filter((definitionId) => definitionId === definition.id).length;
+    const selectedLabel = definition.id === selectedDefinitionId ? "・あなたが選択" : "";
+    return `${definition.isReal ? "本物の説明" : "偽説明"}「${definition.text}」（${voteCount}票${selectedLabel}）`;
+  });
 
   return [
-    `本物の説明「${realDefinition}」`,
-    voteHighlight,
+    ...(definitionHighlights.length > 0 ? definitionHighlights : [`本物の説明「${realDefinition}」`]),
     `あなたの得点 ${Math.max(0, Math.floor(scores[playerId] ?? 0))}点`,
   ];
 }

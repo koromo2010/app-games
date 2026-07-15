@@ -172,7 +172,7 @@ export function GameReplayPanel() {
                   </p>
                   {replay.shareHighlights.length > 0 && (
                     <ul className="mt-2 space-y-0.5 text-xs leading-5 text-slate-600">
-                      {replay.shareHighlights.slice(0, 3).map((highlight) => <li key={highlight}>・{highlight}</li>)}
+                      {(replay.gameType === "tahoiya" ? replay.shareHighlights : replay.shareHighlights.slice(0, 3)).map((highlight) => <li key={highlight}>・{highlight}</li>)}
                     </ul>
                   )}
                 </div>
