@@ -1,5 +1,5 @@
 import { normalizeDrawingStroke, normalizeDrawingStrokes } from "@/lib/drawing-canvas";
-import type { CanvasLayerMode, CanvasRoom, CanvasRoomAction, CanvasRoomPlayer } from "@/lib/canvas-room";
+import { findCanvasUndoStrokeIndex, type CanvasLayerMode, type CanvasRoom, type CanvasRoomAction, type CanvasRoomPlayer } from "@/lib/canvas-room";
 import { redisCommand } from "@/lib/redis-store";
 
 const key = (code: string) => `canvas:room:${code}`;
@@ -62,7 +62,7 @@ export async function updateCanvasRoom(codeInput: string, actor: CanvasRoomPlaye
       if (action.type === "undo") {
         const actorLayerId = room.players.find((player) => player.id === actor.id)?.layerId;
         const layerId = room.layerMode === "per-player" ? actorLayerId : action.layerId;
-        const index = room.strokes.findLastIndex((stroke) => !layerId || stroke.layerId === layerId);
+        const index = findCanvasUndoStrokeIndex(room.strokes, actor.id, layerId);
         if (index >= 0) room.strokes.splice(index, 1);
       }
       if (action.type === "clear") { if (room.ownerId !== actor.id) throw new Error("CANVAS_ROOM_FORBIDDEN"); room.strokes = []; }

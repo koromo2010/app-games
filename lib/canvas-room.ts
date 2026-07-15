@@ -13,3 +13,7 @@ export type CanvasRoomAction =
   | { type: "remove-layer"; layerId: string }
   | { type: "undo"; layerId?: string }
   | { type: "clear" };
+
+export function findCanvasUndoStrokeIndex(strokes: DrawingStroke[], actorId: string, layerId?: string) {
+  return strokes.findLastIndex((stroke) => stroke.authorId === actorId && !stroke.inProgress && (!layerId || stroke.layerId === layerId));
+}

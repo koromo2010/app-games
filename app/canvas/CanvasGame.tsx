@@ -115,13 +115,15 @@ export function CanvasGame() {
   const visibleStrokes = [...strokes.filter((stroke) => !pendingIds.has(stroke.id)), ...pendingStrokes]
     .filter((stroke) => !hiddenLayerIds.has(stroke.layerId || "base"))
     .sort((left, right) => layers.findIndex((layer) => layer.id === (left.layerId || "base")) - layers.findIndex((layer) => layer.id === (right.layerId || "base")));
+  const canUndo = strokes.some((stroke) => (stroke.layerId || "base") === activeLayerId && !stroke.inProgress && (!room || stroke.authorId === session?.id));
 
   const undo = useCallback(() => {
     if (room) { void roomRequest("PATCH", { code: room.code, action: { type: "undo", layerId: activeLayerId } }); return; }
     setStrokes((current) => {
-      const removed = current.at(-1);
-      if (!removed) return current;
-      const next = current.slice(0, -1);
+      const index = current.findLastIndex((stroke) => (stroke.layerId || "base") === activeLayerId);
+      const removed = current[index];
+      if (!removed || index < 0) return current;
+      const next = current.filter((_, strokeIndex) => strokeIndex !== index);
       setRedoStrokes((redo) => [...redo, removed]);
       localStorage.setItem(storageKey, JSON.stringify(next));
       channelRef.current?.postMessage(next);
@@ -282,7 +284,7 @@ export function CanvasGame() {
           <label className="flex items-center gap-2 text-sm font-bold text-slate-600">透明度 <input type="range" min="10" max="100" step="5" value={Math.round(opacity * 100)} onChange={(event) => setOpacity(Number(event.target.value) / 100)} className="w-24 accent-cyan-600" /><span className="w-10 text-right tabular-nums">{Math.round(opacity * 100)}%</span></label>
           <div className="ml-auto flex gap-2">
             <button type="button" onClick={() => setShortcutsOpen(true)} className="rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm font-bold text-cyan-800">⌨ ショートカット</button>
-            <button type="button" disabled={strokes.length === 0} onClick={undo} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold disabled:opacity-40">一手戻す <kbd className="opacity-50">Z</kbd></button>
+            <button type="button" disabled={!canUndo} onClick={undo} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold disabled:opacity-40">自分の一手戻す <kbd className="opacity-50">Z</kbd></button>
             <button type="button" disabled={room !== null || redoStrokes.length === 0} onClick={redo} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold disabled:opacity-40">やり直す <kbd className="opacity-50">Y</kbd></button>
             <button type="button" disabled={strokes.length === 0 || (room !== null && room.ownerId !== session?.id)} onClick={() => { if (window.confirm("キャンバスをすべて消しますか？")) { if (room) void roomRequest("PATCH", { code: room.code, action: { type: "clear" } }); else { updateStrokes([]); setRedoStrokes([]); } } }} className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-bold text-rose-700 disabled:opacity-40">全消去</button>
           </div>
@@ -301,7 +303,7 @@ export function CanvasGame() {
       <ol className="mt-2 list-decimal space-y-2 pl-5">
         <li>「ペン」を選び、キャンバスの上をドラッグすると線を描けます。</li>
         <li>色、線の太さ、透明度はいつでも変更できます。透明度を下げると、下の線が透ける半透明の色になります。</li>
-        <li>「消しゴム」で線を消せます。「一手戻す」は最後に描いた線を取り消し、「やり直す」で戻した線を元に戻せます。</li>
+        <li>「消しゴム」で線を消せます。「自分の一手戻す」は選択中のレイヤーで自分が最後に描いた線だけを取り消します。「やり直す」で戻した線を元に戻せます。</li>
         <li>「全消去」はすべての線を消して白紙にします。確認画面が出るので、まちがえて押してもすぐには消えません。</li>
       </ol>
       <h3 className="mt-4 font-black text-white">キーボードで描く</h3>
