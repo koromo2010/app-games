@@ -4,8 +4,8 @@ import { gamePageAccessAllowed } from "@/lib/game-access";
 import { NigoichiGame } from "./NigoichiGame";
 
 export const metadata: Metadata = {
-  title: "ニゴイチ | Game Fields",
-  description: "2つの単語から連想した言葉で、配られていない番号を推理するオンラインゲーム。",
+  title: "ワードアウト | Game Fields",
+  description: "みんなの連想を読み解き、誰にも配られていない言葉を見つけるオンラインゲーム。",
 };
 
 export default async function NigoichiPage() {

@@ -235,7 +235,7 @@ export async function recordNigoichiGameResults(room: NigoichiRoom) {
     return recordPlayerResults(players.map((player) => {
       const won = room.guesses[player.id] === room.missingNumber;
       const rating = ratings.get(player.id);
-      return { schemaVersion: 1, id: `${eventId}:${player.id}`, gameType: "nigoichi", roomCode: room.code, roomCreatedAt: room.createdAt, gameNumber: room.gameNumber, finishedAt: room.updatedAt || Date.now(), playerId: player.id, playerName: player.name, won, resultLabel: won ? "余り番号を正解" : "不正解", playerCount: players.length, details: { guess: room.guesses[player.id] ?? -1, missingNumber: room.missingNumber }, ratingBefore: rating?.before, ratingAfter: rating?.after, ratingChange: rating?.change } satisfies PlayerGameResult;
+      return { schemaVersion: 1, id: `${eventId}:${player.id}`, gameType: "nigoichi", roomCode: room.code, roomCreatedAt: room.createdAt, gameNumber: room.gameNumber, finishedAt: room.updatedAt || Date.now(), playerId: player.id, playerName: player.name, won, resultLabel: won ? "余り番号を正解" : "不正解", playerCount: players.length, details: { guess: room.guesses[player.id] ?? -1, missingNumber: room.missingNumber, cardsPerPlayer: room.cardsPerPlayer, associationWordCount: room.associationWordCount, totalCards: room.words.length, wordDifficulty: room.wordDifficulty }, ratingBefore: rating?.before, ratingAfter: rating?.after, ratingChange: rating?.change } satisfies PlayerGameResult;
     }));
   });
 }

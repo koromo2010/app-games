@@ -30,6 +30,7 @@ function errorResponse(error: unknown) {
   if (error instanceof Error && error.message === "NIGOICHI_ROOM_IN_PROGRESS") return Response.json({ error: "An active game cannot be dissolved" }, { status: 409 });
   if (error instanceof Error && error.message === "NIGOICHI_PLAYER_ALREADY_ACTIVE") return Response.json({ error: "Finish or leave the current room before entering another room" }, { status: 409 });
   if (error instanceof Error && error.message === "NIGOICHI_INVALID_CLUE") return Response.json({ error: "Invalid clue" }, { status: 400 });
+  if (error instanceof Error && error.message === "NIGOICHI_INVALID_CONFIG") return Response.json({ error: "Invalid game configuration" }, { status: 400 });
   if (error instanceof Error && error.message === "NIGOICHI_INVALID_GUESS") return Response.json({ error: "Invalid guess" }, { status: 400 });
   if (error instanceof Error && error.message === "NIGOICHI_ROOM_FORBIDDEN") return Response.json({ error: "Room action is not allowed" }, { status: 403 });
   if (error instanceof Error && error.message === "NIGOICHI_ROOM_CONFLICT") return Response.json({ error: "Room update conflicted; retry" }, { status: 409 });

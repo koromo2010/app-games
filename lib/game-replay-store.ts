@@ -419,14 +419,18 @@ export async function recordNigoichiReplay(room: NigoichiRoom) {
     `第${room.gameNumber}ゲーム`,
     players,
     resultLabels,
-    [`${players.length}人中${correct.length}人が正解`, `余りは${room.missingNumber + 1}番`, `${room.words.length}個の単語で推理`],
+    [`${players.length}人中${correct.length}人が正解`, `余りは${room.missingNumber + 1}番`, `A=${room.cardsPerPlayer}枚・M=${room.associationWordCount}語・B=${room.words.length}枚`],
   );
   const names = new Map(room.players.map((player) => [player.id, player.name]));
   const highlights = [
     `場の単語: ${room.words.map((word, index) => `${index + 1}.${word}`).join("、")}`,
     ...room.players.map((player) => {
       const hand = room.hands[player.id] ?? [];
-      return `${names.get(player.id) ?? "Unknown"}: ${hand.map((number) => `${number + 1}.${room.words[number] ?? ""}`).join(" / ")} → 連想語「${room.clues[player.id] ?? ""}」→ 予想${(room.guesses[player.id] ?? -1) + 1}番`;
+      const associations = (room.associations[player.id] ?? []).map((group, index) => {
+        const cards = group.cardIds.map((number) => `${number + 1}.${room.words[number] ?? ""}`).join(" + ");
+        return `組${index + 1}[${cards}]「${group.clue}」`;
+      }).join(" / ");
+      return `${names.get(player.id) ?? "Unknown"}: ${hand.map((number) => `${number + 1}.${room.words[number] ?? ""}`).join(" / ")} → ${associations} → 予想${(room.guesses[player.id] ?? -1) + 1}番`;
     }),
   ];
   return storeReplay({ ...base, gameType: "nigoichi", overview: `${players.length}人中${correct.length}人が余り番号を正解`, highlights: cleanLines(highlights), scoreLabels: resultLabels }, room.code);

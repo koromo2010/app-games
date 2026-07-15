@@ -29,7 +29,7 @@ UI / hooks -> API client -> HTTP route -> application/domain -> storage
 - ノーザンブランチadapter: `app/northern-branch/northern-branch-room-api-client.ts`
 - ワードスケールadapter: `app/hodoai-talk/hodoai-room-api-client.ts`
 - ことばソナーadapter: `app/kotoba-senpuku/kotoba-senpuku-room-api-client.ts`
-- ニゴイチadapter: `app/nigoichi/nigoichi-room-api-client.ts`
+- ワードアウトadapter（内部IDはnigoichi）: `app/nigoichi/nigoichi-room-api-client.ts`
 
 共通クライアントはURL、method、条件付きGET、JSON応答、HTTP status/payload付きエラーまでを担当する。各adapterはゲーム固有のRoom・Action型を付ける。フェーズ遷移、権限、勝敗、レスポンスの秘密情報除去は従来どおりサーバーdomain/storeの責務で、クライアント共通化へ移さない。
 

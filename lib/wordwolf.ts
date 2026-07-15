@@ -485,12 +485,25 @@ const localTopicDecks: Record<TopicDictionarySource, Record<TopicPairDistance, T
   },
 };
 
-/** ワードウルフの固定ローカル候補に含まれる、重複を除いた単語一覧。 */
-export function listLocalWordWolfWords() {
-  const pairs = [
+export type LocalWordWolfWordDifficulty = "easy" | "normal" | "hard";
+
+function uniqueLocalTopicWords(sourceWords: readonly string[], excludedKeys = new Set<string>()) {
+  const words = new Map<string, string>();
+  for (const word of sourceWords) {
+    const normalized = normalizeTopicWord(word);
+    if (normalized && !excludedKeys.has(normalized) && !words.has(normalized)) words.set(normalized, word.trim());
+  }
+  return words;
+}
+
+/** 共通ワードDBへ難易度列を追加するまで使う、固定ローカル語彙の暫定分類。 */
+export function listLocalWordWolfWordsByDifficulty(difficulty: LocalWordWolfWordDifficulty) {
+  const generalPairs = [
     ...curatedPairTopics,
     ...curatedNearPairTopics,
     ...curatedWidePairTopics,
+  ];
+  const properNounPairs = [
     ...properNounNearPairTopics,
     ...properNounBalancedPairTopics,
     ...properNounWidePairTopics,
@@ -498,17 +511,21 @@ export function listLocalWordWolfWords() {
     ...additionalProperNounBalancedPairTopics,
     ...additionalProperNounWidePairTopics,
   ];
-  const sourceWords = [
-    ...jaDailySets.flatMap((set) => set.words),
+  const easy = uniqueLocalTopicWords(jaDailySets.flatMap((set) => set.words));
+  const normal = uniqueLocalTopicWords([
     ...enCommonSets.flatMap((set) => set.words),
-    ...pairs.flatMap((topic) => [topic.villageWord, topic.wolfWord]),
-  ];
-  const words = new Map<string, string>();
-  for (const word of sourceWords) {
-    const normalized = normalizeTopicWord(word);
-    if (normalized && !words.has(normalized)) words.set(normalized, word.trim());
-  }
-  return [...words.values()];
+    ...generalPairs.flatMap((topic) => [topic.villageWord, topic.wolfWord]),
+  ], new Set(easy.keys()));
+  const hard = uniqueLocalTopicWords(
+    properNounPairs.flatMap((topic) => [topic.villageWord, topic.wolfWord]),
+    new Set([...easy.keys(), ...normal.keys()]),
+  );
+  return [...(difficulty === "easy" ? easy : difficulty === "hard" ? hard : normal).values()];
+}
+
+/** ワードウルフの固定ローカル候補に含まれる、重複を除いた単語一覧。 */
+export function listLocalWordWolfWords() {
+  return (["easy", "normal", "hard"] as const).flatMap(listLocalWordWolfWordsByDifficulty);
 }
 
 export function pickFallbackTopic(
