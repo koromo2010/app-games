@@ -28,6 +28,7 @@ export function CanvasGame() {
   const [keyboardCursor, setKeyboardCursor] = useState<DrawingPoint>({ x: 0.5, y: 0.5 });
   const channelRef = useRef<BroadcastChannel | null>(null);
   const spacePressedRef = useRef(false);
+  const keyboardStrokeIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -83,6 +84,17 @@ export function CanvasGame() {
       if (event.ctrlKey || event.metaKey || event.altKey || editableTarget(event)) return;
       const key = event.key.toLowerCase();
       if (event.code === "Space") {
+        if (!spacePressedRef.current) {
+          const id = crypto.randomUUID();
+          keyboardStrokeIdRef.current = id;
+          setStrokes((current) => {
+            const next = normalizeDrawingStrokes([...current, { id, color, width, opacity, tool, points: [keyboardCursor] }]);
+            localStorage.setItem(storageKey, JSON.stringify(next));
+            channelRef.current?.postMessage(next);
+            return next;
+          });
+          setRedoStrokes([]);
+        }
         spacePressedRef.current = true;
         event.preventDefault();
         return;
@@ -102,7 +114,10 @@ export function CanvasGame() {
           });
           if (spacePressedRef.current && (next.x !== current.x || next.y !== current.y)) {
             setStrokes((currentStrokes) => {
-              const nextStrokes = [...currentStrokes, { id: crypto.randomUUID(), color, width, opacity, tool, points: [current, next] }];
+              const activeId = keyboardStrokeIdRef.current;
+              const nextStrokes = activeId
+                ? currentStrokes.map((stroke) => stroke.id === activeId ? { ...stroke, points: [...stroke.points, next] } : stroke)
+                : currentStrokes;
               const normalized = normalizeDrawingStrokes(nextStrokes);
               localStorage.setItem(storageKey, JSON.stringify(normalized));
               channelRef.current?.postMessage(normalized);
@@ -116,13 +131,13 @@ export function CanvasGame() {
       } else return;
       event.preventDefault();
     };
-    const onKeyUp = (event: KeyboardEvent) => { if (event.code === "Space") spacePressedRef.current = false; };
-    const releaseSpace = () => { spacePressedRef.current = false; };
+    const releaseSpace = () => { spacePressedRef.current = false; keyboardStrokeIdRef.current = null; };
+    const onKeyUp = (event: KeyboardEvent) => { if (event.code === "Space") releaseSpace(); };
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("blur", releaseSpace);
     return () => { window.removeEventListener("keydown", onKeyDown); window.removeEventListener("keyup", onKeyUp); window.removeEventListener("blur", releaseSpace); };
-  }, [color, opacity, redo, tool, undo, width]);
+  }, [color, keyboardCursor, opacity, redo, tool, undo, width]);
 
   return <main className={`min-h-screen bg-[radial-gradient(circle_at_top,#e0f2fe_0%,#f8fafc_42%,#fef3c7_100%)] text-slate-900 ${gameTopBannerOffsetClass}`}>
     <GameTopBanner eyebrow="PRIVATE UI PROTOTYPE" title="キャンバス">
