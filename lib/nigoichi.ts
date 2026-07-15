@@ -15,6 +15,24 @@ export type NigoichiPhase = "lobby" | "clue" | "guess" | "result";
 export type NigoichiWordDifficulty = "easy" | "normal" | "hard";
 export type NigoichiHand = readonly number[];
 
+export type NigoichiRoundScoreResult = {
+  playerId: string;
+  isCorrect: boolean;
+  correctBonus: number;
+  receivedWrongVotes: number;
+  roundScore: number;
+  totalScoreAfterRound: number;
+};
+
+export type NigoichiRoundLog = {
+  roundId: string;
+  gameNumber: number;
+  playerCount: number;
+  unassignedCardNumber: number;
+  votes: Array<{ playerId: string; selectedCardNumber: number | null }>;
+  scores: NigoichiRoundScoreResult[];
+};
+
 export const nigoichiMinimumPlayers = 2;
 export const nigoichiMaximumAssociationWords = 5;
 export const nigoichiMaximumTotalCards = 21;
@@ -95,6 +113,9 @@ export type NigoichiRoom = {
   associations: Record<string, string[]>;
   guesses: Record<string, number>;
   missingNumber: number | null;
+  totalScores: Record<string, number>;
+  roundScores: Record<string, NigoichiRoundScoreResult>;
+  roundHistory: NigoichiRoundLog[];
   debugLog: GameDebugLogEntry[];
   createdAt: number;
   updatedAt: number;
@@ -173,6 +194,76 @@ export function nigoichiGuessIsCorrect(room: Pick<NigoichiRoom, "guesses" | "mis
   return room.missingNumber !== null && room.guesses[playerId] === room.missingNumber;
 }
 
+export function nigoichiPlayerOwnsCard(
+  room: Pick<NigoichiRoom, "hands">,
+  playerId: string,
+  cardNumber: number,
+) {
+  return (room.hands[playerId] ?? []).includes(cardNumber);
+}
+
+export function isValidNigoichiGuess(
+  room: Pick<NigoichiRoom, "words" | "hands">,
+  playerId: string,
+  cardNumber: number,
+) {
+  return Number.isInteger(cardNumber)
+    && cardNumber >= 0
+    && cardNumber < room.words.length
+    && !nigoichiPlayerOwnsCard(room, playerId, cardNumber);
+}
+
+export function calculateNigoichiRoundScores(room: Pick<
+  NigoichiRoom,
+  "players" | "hands" | "guesses" | "missingNumber" | "totalScores"
+>) {
+  const playerCount = room.players.length;
+  return room.players.map((player): NigoichiRoundScoreResult => {
+    const isCorrect = room.missingNumber !== null && room.guesses[player.id] === room.missingNumber;
+    const correctBonus = isCorrect ? playerCount + 1 : 0;
+    const ownedCardNumbers = new Set(room.hands[player.id] ?? []);
+    const receivedWrongVotes = room.players.filter((voter) => {
+      if (voter.id === player.id) return false;
+      const selectedCardNumber = room.guesses[voter.id];
+      return Number.isInteger(selectedCardNumber) && ownedCardNumbers.has(selectedCardNumber);
+    }).length;
+    const roundScore = correctBonus - receivedWrongVotes;
+    return {
+      playerId: player.id,
+      isCorrect,
+      correctBonus,
+      receivedWrongVotes,
+      roundScore,
+      totalScoreAfterRound: (room.totalScores[player.id] ?? 0) + roundScore,
+    };
+  });
+}
+
+export function finishNigoichiRound(room: NigoichiRoom): NigoichiRoom {
+  if (room.missingNumber === null) throw new Error("NIGOICHI_INVALID_ROUND");
+  const scores = calculateNigoichiRoundScores(room);
+  const roundScores = Object.fromEntries(scores.map((score) => [score.playerId, score]));
+  const totalScores = Object.fromEntries(scores.map((score) => [score.playerId, score.totalScoreAfterRound]));
+  const roundLog: NigoichiRoundLog = {
+    roundId: `${room.createdAt}:${room.gameNumber}`,
+    gameNumber: room.gameNumber,
+    playerCount: room.players.length,
+    unassignedCardNumber: room.missingNumber,
+    votes: room.players.map((player) => ({
+      playerId: player.id,
+      selectedCardNumber: Number.isInteger(room.guesses[player.id]) ? room.guesses[player.id] : null,
+    })),
+    scores,
+  };
+  return {
+    ...room,
+    phase: "result",
+    totalScores,
+    roundScores,
+    roundHistory: [...room.roundHistory, roundLog],
+  };
+}
+
 export function sanitizeNigoichiRoomForPlayer(room: NigoichiRoom, playerId: string) {
   const isDebugHost = room.debugMode && playerId === room.hostId;
   const revealAll = room.phase === "result" || isDebugHost;
@@ -190,6 +281,7 @@ export function sanitizeNigoichiRoomForPlayer(room: NigoichiRoom, playerId: stri
     associations,
     guesses,
     missingNumber: revealAll ? room.missingNumber : null,
+    roundScores: revealAll ? room.roundScores : {},
     debugLog: isDebugHost ? room.debugLog : [],
   };
 }
@@ -205,7 +297,7 @@ export function nigoichiSharePlayerLabel(
   return player.shareNameAllowed === true ? player.name : `PLAYER${index + 1}`;
 }
 
-export function nigoichiShareText(room: Pick<NigoichiRoom, "players" | "cardsPerPlayer" | "associationWordCount" | "wordDifficulty" | "words" | "hands" | "associations" | "guesses" | "missingNumber">) {
+export function nigoichiShareText(room: Pick<NigoichiRoom, "players" | "cardsPerPlayer" | "associationWordCount" | "wordDifficulty" | "words" | "hands" | "associations" | "guesses" | "missingNumber" | "roundScores" | "totalScores">) {
   const correct = room.players.filter((player) => nigoichiGuessIsCorrect(room, player.id)).length;
   const ownerByNumber = new Map<number, string>();
   for (const player of room.players) {
@@ -219,7 +311,11 @@ export function nigoichiShareText(room: Pick<NigoichiRoom, "players" | "cardsPer
   const associationLines = room.players.map((player) => {
     const label = nigoichiSharePlayerLabel(room.players, player.id);
     const cards = (room.hands[player.id] ?? []).map((number) => `${number + 1}.${room.words[number] ?? "不明"}`).join(" ＋ ");
-    return `${label}：${cards} → ${(room.associations[player.id] ?? []).join(" / ")}`;
+    const score = room.roundScores[player.id];
+    const scoreText = score
+      ? `正解点+${score.correctBonus}・被投票-${score.receivedWrongVotes}・ラウンド${score.roundScore >= 0 ? "+" : ""}${score.roundScore}・累計${score.totalScoreAfterRound}`
+      : `累計${room.totalScores[player.id] ?? 0}`;
+    return `${label}：${cards} → ${(room.associations[player.id] ?? []).join(" / ")} → 予想${(room.guesses[player.id] ?? -1) + 1}番 → ${scoreText}`;
   });
   return [
     "ワードアウトで遊びました",

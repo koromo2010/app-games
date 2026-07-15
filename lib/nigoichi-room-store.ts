@@ -8,6 +8,8 @@ import {
   areValidNigoichiAssociations,
   correctNigoichiConfig,
   dealNigoichiRound,
+  finishNigoichiRound,
+  isValidNigoichiGuess,
   isValidNigoichiConfig,
   nigoichiMaximumAssociationWordsForPlayers,
   nigoichiMinimumPlayers,
@@ -21,6 +23,8 @@ import {
   type NigoichiRoom,
   type NigoichiRoomAction,
   type NigoichiRoomChoice,
+  type NigoichiRoundLog,
+  type NigoichiRoundScoreResult,
   type NigoichiWordDifficulty,
 } from "@/lib/nigoichi";
 import { claimPlayerActiveRoom, releasePlayerActiveRoom, type ActiveRoomClaim } from "@/lib/player-active-room";
@@ -97,6 +101,78 @@ function normalizeNumberRecord(value: unknown, wordCount: number) {
   }));
 }
 
+function normalizeTotalScores(value: unknown, players: NigoichiPlayer[]) {
+  const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  return Object.fromEntries(players.map((player) => {
+    const score = source[player.id];
+    return [player.id, typeof score === "number" && Number.isInteger(score) ? score : 0];
+  }));
+}
+
+function normalizeRoundScore(value: unknown, playerId: string): NigoichiRoundScoreResult | null {
+  if (!value || typeof value !== "object") return null;
+  const score = value as Partial<NigoichiRoundScoreResult>;
+  if (score.playerId !== playerId
+    || typeof score.isCorrect !== "boolean"
+    || !Number.isInteger(score.correctBonus)
+    || !Number.isInteger(score.receivedWrongVotes)
+    || !Number.isInteger(score.roundScore)
+    || !Number.isInteger(score.totalScoreAfterRound)) return null;
+  return {
+    playerId,
+    isCorrect: score.isCorrect,
+    correctBonus: score.correctBonus as number,
+    receivedWrongVotes: score.receivedWrongVotes as number,
+    roundScore: score.roundScore as number,
+    totalScoreAfterRound: score.totalScoreAfterRound as number,
+  };
+}
+
+function normalizeRoundScores(value: unknown, players: NigoichiPlayer[]) {
+  const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  return Object.fromEntries(players.flatMap((player) => {
+    const score = normalizeRoundScore(source[player.id], player.id);
+    return score ? [[player.id, score]] : [];
+  }));
+}
+
+function normalizeRoundHistory(value: unknown): NigoichiRoundLog[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item): NigoichiRoundLog[] => {
+    if (!item || typeof item !== "object") return [];
+    const round = item as Partial<NigoichiRoundLog>;
+    if (typeof round.roundId !== "string"
+      || !Number.isInteger(round.gameNumber)
+      || !Number.isInteger(round.playerCount)
+      || !Number.isInteger(round.unassignedCardNumber)
+      || !Array.isArray(round.votes)
+      || !Array.isArray(round.scores)) return [];
+    const votes = round.votes.flatMap((vote) => {
+      if (!vote || typeof vote !== "object") return [];
+      const parsedVote = vote as { playerId?: unknown; selectedCardNumber?: unknown };
+      if (typeof parsedVote.playerId !== "string") return [];
+      const selectedCardNumber = parsedVote.selectedCardNumber;
+      if (selectedCardNumber !== null && !Number.isInteger(selectedCardNumber)) return [];
+      return [{ playerId: parsedVote.playerId.slice(0, 120), selectedCardNumber: selectedCardNumber as number | null }];
+    });
+    const scores = round.scores.flatMap((score) => {
+      if (!score || typeof score !== "object" || typeof (score as { playerId?: unknown }).playerId !== "string") return [];
+      const playerId = (score as { playerId: string }).playerId.slice(0, 120);
+      const normalized = normalizeRoundScore(score, playerId);
+      return normalized ? [normalized] : [];
+    });
+    if (votes.length !== round.votes.length || scores.length !== round.scores.length) return [];
+    return [{
+      roundId: round.roundId.slice(0, 160),
+      gameNumber: round.gameNumber as number,
+      playerCount: round.playerCount as number,
+      unassignedCardNumber: round.unassignedCardNumber as number,
+      votes,
+      scores,
+    }];
+  });
+}
+
 function normalizeHands(value: unknown, playerIds: Set<string>, wordCount: number, cardsPerPlayer: number): Record<string, NigoichiHand> {
   if (!value || typeof value !== "object") return {};
   return Object.fromEntries(Object.entries(value as Record<string, unknown>).flatMap(([playerId, item]) => {
@@ -161,7 +237,7 @@ function normalizeRoom(value: unknown): NigoichiRoom | null {
   const missingNumber = typeof parsed.missingNumber === "number" && Number.isInteger(parsed.missingNumber) && parsed.missingNumber >= 0 && parsed.missingNumber < words.length
     ? parsed.missingNumber
     : null;
-  return {
+  const normalizedRoom: NigoichiRoom = {
     code,
     revision: typeof parsed.revision === "number" ? Math.max(0, Math.floor(parsed.revision)) : 0,
     hostId,
@@ -181,10 +257,19 @@ function normalizeRoom(value: unknown): NigoichiRoom | null {
     associations: normalizeAssociations(parsed.associations, legacy.clues, hands, config.associationWordCount),
     guesses: normalizeNumberRecord(parsed.guesses, words.length),
     missingNumber,
+    totalScores: normalizeTotalScores(parsed.totalScores, players),
+    roundScores: normalizeRoundScores(parsed.roundScores, players),
+    roundHistory: normalizeRoundHistory(parsed.roundHistory),
     debugLog: normalizeGameDebugLog(parsed.debugLog),
     createdAt: typeof parsed.createdAt === "number" ? parsed.createdAt : Date.now(),
     updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : Date.now(),
   };
+  const needsLegacyScoreMigration = normalizedRoom.phase === "result"
+    && normalizedRoom.missingNumber !== null
+    && Object.keys(normalizedRoom.roundScores).length !== players.length
+    && parsed.totalScores === undefined
+    && parsed.roundScores === undefined;
+  return needsLegacyScoreMigration ? finishNigoichiRound(normalizedRoom) : normalizedRoom;
 }
 
 function beginGame(room: NigoichiRoom) {
@@ -200,12 +285,14 @@ function beginGame(room: NigoichiRoom) {
     associations: {},
     guesses: {},
     missingNumber: dealt.missingNumber,
+    roundScores: {},
   };
 }
 
 function withPlayersAndCorrectedConfig(room: NigoichiRoom, players: NigoichiPlayer[]) {
   const config = correctNigoichiConfig(players.length, room.cardsPerPlayer, room.associationWordCount);
-  return { ...room, players, cardsPerPlayer: config.cardsPerPlayer, associationWordCount: config.associationWordCount };
+  const totalScores = Object.fromEntries(players.map((player) => [player.id, room.totalScores[player.id] ?? 0]));
+  return { ...room, players, totalScores, cardsPerPlayer: config.cardsPerPlayer, associationWordCount: config.associationWordCount };
 }
 
 function resetGame(room: NigoichiRoom) {
@@ -219,6 +306,7 @@ function resetGame(room: NigoichiRoom) {
     associations: {},
     guesses: {},
     missingNumber: null,
+    roundScores: {},
   };
 }
 
@@ -341,6 +429,9 @@ export async function createStoredNigoichiRoom(value: unknown, actorId: string) 
     associations: {},
     guesses: {},
     missingNumber: null,
+    totalScores: Object.fromEntries(room.players.map((player) => [player.id, 0])),
+    roundScores: {},
+    roundHistory: [],
     debugLog: [],
     updatedAt: Date.now(),
   };
@@ -390,7 +481,7 @@ export async function applyStoredNigoichiAction(code: string, action: NigoichiRo
 
     if (action.type === "abort-game") {
       if (!isHost || !current.debugMode || current.phase === "lobby") throw new Error("NIGOICHI_ROOM_FORBIDDEN");
-      return { ...current, phase: "lobby", debugReplayEnabled: false, words: [], hands: {}, associations: {}, guesses: {}, missingNumber: null };
+      return { ...current, phase: "lobby", debugReplayEnabled: false, words: [], hands: {}, associations: {}, guesses: {}, missingNumber: null, roundScores: {} };
     }
     if (action.type === "leave-room") {
       if (isHost || current.phase !== "lobby") throw new Error("NIGOICHI_ROOM_FORBIDDEN");
@@ -456,9 +547,9 @@ export async function applyStoredNigoichiAction(code: string, action: NigoichiRo
     }
     if (action.type === "submit-guess") {
       if (current.phase !== "guess" || current.guesses[targetId] !== undefined) throw new Error("NIGOICHI_ROOM_FORBIDDEN");
-      if (!Number.isInteger(action.number) || action.number < 0 || action.number >= current.words.length) throw new Error("NIGOICHI_INVALID_GUESS");
+      if (!isValidNigoichiGuess(current, targetId, action.number)) throw new Error("NIGOICHI_INVALID_GUESS");
       const next = { ...current, guesses: { ...current.guesses, [targetId]: action.number } };
-      return allNigoichiGuessesSubmitted(next) ? { ...next, phase: "result" as const } : next;
+      return allNigoichiGuessesSubmitted(next) ? finishNigoichiRound(next) : next;
     }
     if (!isHost || !current.debugMode) throw new Error("NIGOICHI_ROOM_FORBIDDEN");
     if (action.type === "debug-fill-associations" && current.phase === "clue") {
@@ -472,7 +563,7 @@ export async function applyStoredNigoichiAction(code: string, action: NigoichiRo
     if (action.type === "debug-fill-guesses" && current.phase === "guess" && current.missingNumber !== null) {
       const guesses = { ...current.guesses };
       current.players.forEach((player) => { guesses[player.id] ??= current.missingNumber!; });
-      return { ...current, phase: "result", guesses };
+      return finishNigoichiRound({ ...current, guesses });
     }
     return current;
   }, { actorId: action.actorId, action: debugActionLabels[action.type] }).catch(async (error) => {

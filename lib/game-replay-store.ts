@@ -410,7 +410,10 @@ export async function recordNigoichiReplay(room: NigoichiRoom) {
   if (room.phase !== "result" || room.missingNumber === null || !shouldRecordGameReplay(room)) return false;
   const players = room.players.filter((player) => !player.isDummy);
   const correct = players.filter((player) => room.guesses[player.id] === room.missingNumber);
-  const resultLabels = Object.fromEntries(players.map((player) => [player.id, room.guesses[player.id] === room.missingNumber ? "余り番号を正解" : "不正解"]));
+  const resultLabels = Object.fromEntries(players.map((player) => {
+    const score = room.roundScores[player.id];
+    return [player.id, score ? `ラウンド${score.roundScore >= 0 ? "+" : ""}${score.roundScore}点・累計${score.totalScoreAfterRound}点` : "得点なし"];
+  }));
   const base = makeReplayBase(
     `nigoichi:${room.code}:${room.createdAt}:${room.gameNumber}`,
     "nigoichi",
@@ -427,10 +430,14 @@ export async function recordNigoichiReplay(room: NigoichiRoom) {
     ...room.players.map((player) => {
       const hand = room.hands[player.id] ?? [];
       const associations = (room.associations[player.id] ?? []).map((clue) => `「${clue}」`).join(" / ");
-      return `${names.get(player.id) ?? "Unknown"}: ${hand.map((number) => `${number + 1}.${room.words[number] ?? ""}`).join(" / ")} → 連想語${associations} → 予想${(room.guesses[player.id] ?? -1) + 1}番`;
+      const score = room.roundScores[player.id];
+      const scoreDetails = score
+        ? `正解点+${score.correctBonus}・被投票-${score.receivedWrongVotes}・ラウンド${score.roundScore >= 0 ? "+" : ""}${score.roundScore}・累計${score.totalScoreAfterRound}`
+        : "得点なし";
+      return `${names.get(player.id) ?? "Unknown"}: ${hand.map((number) => `${number + 1}.${room.words[number] ?? ""}`).join(" / ")} → 連想語${associations} → 予想${(room.guesses[player.id] ?? -1) + 1}番 → ${scoreDetails}`;
     }),
   ];
-  return storeReplay({ ...base, gameType: "nigoichi", overview: `${players.length}人中${correct.length}人が余り番号を正解`, highlights: cleanLines(highlights), scoreLabels: resultLabels }, room.code);
+  return storeReplay({ ...base, gameType: "nigoichi", overview: `${players.length}人中${correct.length}人が正解・得点を累計`, highlights: cleanLines(highlights), scoreLabels: resultLabels }, room.code);
 }
 
 function readableKotobaHighlights(replay: StoredGenericReplay) {
