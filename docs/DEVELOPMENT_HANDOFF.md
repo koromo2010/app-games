@@ -36,7 +36,7 @@
 | ワードスケール | `app/word-scale`, `app/hodoai-talk/HodoaiTalkGame.tsx`, `app/api/hodoai/rooms`, `lib/hodoai-room-store.ts` |
 | ことばソナー | `app/kotoba-senpuku`, `app/api/kotoba-senpuku/rooms`, `lib/kotoba-senpuku-room-store.ts`, `lib/kotoba-senpuku.ts`（公開ゲーム。ログイン必須、非公開アクセスキー不要） |
 | たほい屋の問題再利用 | `lib/tahoiya-topic-catalog.ts`, `app/api/tahoiya/topic/route.ts` |
-| 共通ワードマスター・Zipf・移行 | `docs/WORD_MASTER_DATABASE.md`, `lib/word-master-schema.ts`, `scripts/import-word-master.py` |
+| 共通ワードマスター・Zipf・移行 | `docs/WORD_MASTER_DATABASE.md`, `docs/LOCAL_WORD_DATABASE.md`, `compose.yaml`, `lib/word-master-schema.ts`, `scripts/import-word-master.py`, `scripts/word_surface_quality_classifier.py`, `scripts/enrich-wikidata-person-names.py` |
 | お題候補DB・経験履歴の目標設計 | `docs/TOPIC_HISTORY_DATABASE.md` |
 
 ## 3. 環境変数

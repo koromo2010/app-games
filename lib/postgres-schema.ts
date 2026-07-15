@@ -1,4 +1,4 @@
-import { getPostgresClient } from "@/lib/postgres-store";
+import { getPostgresClient } from "./postgres-store.ts";
 
 let schemaPromise: Promise<void> | null = null;
 

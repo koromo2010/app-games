@@ -42,10 +42,22 @@ export async function ensureWordMasterSchema() {
           reading TEXT NOT NULL DEFAULT '',
           primary_part_of_speech TEXT NOT NULL,
           part_of_speech_details TEXT[] NOT NULL DEFAULT '{}',
+          form_status TEXT NOT NULL DEFAULT 'unknown'
+            CHECK (form_status IN ('dictionary', 'inflected', 'non_inflecting', 'unknown')),
+          form_classification_reason TEXT NOT NULL DEFAULT '',
+          form_policy_version TEXT NOT NULL DEFAULT '',
           proper_noun_status TEXT NOT NULL DEFAULT 'ambiguous'
             CHECK (proper_noun_status IN ('common', 'proper', 'ambiguous')),
           proper_noun_type TEXT
             CHECK (proper_noun_type IS NULL OR proper_noun_type IN ('person', 'place', 'organization', 'other')),
+          person_name_status TEXT NOT NULL DEFAULT 'not_person'
+            CHECK (person_name_status IN ('not_person', 'surname_only', 'given_name_only', 'name_only', 'general_person', 'unknown')),
+          is_name_fragment BOOLEAN NOT NULL DEFAULT FALSE,
+          person_name_policy_version TEXT NOT NULL DEFAULT '',
+          surface_quality_status TEXT NOT NULL DEFAULT 'unknown'
+            CHECK (surface_quality_status IN ('clean', 'review', 'exclude', 'unknown')),
+          surface_quality_flags TEXT[] NOT NULL DEFAULT '{}',
+          surface_quality_policy_version TEXT NOT NULL DEFAULT '',
           zipf_frequency REAL,
           embedding VECTOR,
           embedding_model TEXT,
@@ -60,6 +72,99 @@ export async function ensureWordMasterSchema() {
           UNIQUE (source_id, source_entry_id),
           UNIQUE (normalized_form, reading, primary_part_of_speech, source_id)
         )
+      `;
+
+      // Existing databases predate lexical-form classification. Additive
+      // migration keeps source rows intact; the importer backfills the values.
+      await sql`
+        ALTER TABLE words
+        ADD COLUMN IF NOT EXISTS form_status TEXT NOT NULL DEFAULT 'unknown'
+      `;
+      await sql`
+        ALTER TABLE words
+        ADD COLUMN IF NOT EXISTS form_classification_reason TEXT NOT NULL DEFAULT ''
+      `;
+      await sql`
+        ALTER TABLE words
+        ADD COLUMN IF NOT EXISTS form_policy_version TEXT NOT NULL DEFAULT ''
+      `;
+      await sql`
+        DO $word_form_constraint$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint WHERE conname = 'words_form_status_check'
+          ) THEN
+            ALTER TABLE words
+            ADD CONSTRAINT words_form_status_check
+            CHECK (form_status IN ('dictionary', 'inflected', 'non_inflecting', 'unknown'));
+          END IF;
+        END
+        $word_form_constraint$
+      `;
+
+      // Sudachi's person-name subtype distinguishes standalone person entries
+      // from surname/given-name fragments. Existing rows are backfilled by the
+      // importer, while uncertain metadata remains available for review.
+      await sql`
+        ALTER TABLE words
+        ADD COLUMN IF NOT EXISTS person_name_status TEXT NOT NULL DEFAULT 'not_person'
+      `;
+      await sql`
+        ALTER TABLE words
+        ADD COLUMN IF NOT EXISTS is_name_fragment BOOLEAN NOT NULL DEFAULT FALSE
+      `;
+      await sql`
+        ALTER TABLE words
+        ADD COLUMN IF NOT EXISTS person_name_policy_version TEXT NOT NULL DEFAULT ''
+      `;
+      await sql`
+        DO $person_name_constraint$
+        BEGIN
+          IF EXISTS (
+            SELECT 1
+            FROM pg_constraint
+            WHERE conname = 'words_person_name_status_check'
+              AND pg_get_constraintdef(oid) NOT LIKE '%''name_only''::text%'
+          ) THEN
+            ALTER TABLE words DROP CONSTRAINT words_person_name_status_check;
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint WHERE conname = 'words_person_name_status_check'
+          ) THEN
+            ALTER TABLE words
+            ADD CONSTRAINT words_person_name_status_check
+            CHECK (person_name_status IN ('not_person', 'surname_only', 'given_name_only', 'name_only', 'general_person', 'unknown'));
+          END IF;
+        END
+        $person_name_constraint$
+      `;
+
+      // Surface-level quality flags retain difficult and archaic dictionary
+      // words while separating facilities, enumerations, and obvious noise.
+      await sql`
+        ALTER TABLE words
+        ADD COLUMN IF NOT EXISTS surface_quality_status TEXT NOT NULL DEFAULT 'unknown'
+      `;
+      await sql`
+        ALTER TABLE words
+        ADD COLUMN IF NOT EXISTS surface_quality_flags TEXT[] NOT NULL DEFAULT '{}'
+      `;
+      await sql`
+        ALTER TABLE words
+        ADD COLUMN IF NOT EXISTS surface_quality_policy_version TEXT NOT NULL DEFAULT ''
+      `;
+      await sql`
+        DO $surface_quality_constraint$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint WHERE conname = 'words_surface_quality_status_check'
+          ) THEN
+            ALTER TABLE words
+            ADD CONSTRAINT words_surface_quality_status_check
+            CHECK (surface_quality_status IN ('clean', 'review', 'exclude', 'unknown'));
+          END IF;
+        END
+        $surface_quality_constraint$
       `;
 
       await sql`
@@ -98,6 +203,38 @@ export async function ensureWordMasterSchema() {
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           UNIQUE (word_id, source_name, source_entry_id)
+        )
+      `;
+
+      await sql`
+        CREATE TABLE IF NOT EXISTS person_entities (
+          id BIGSERIAL PRIMARY KEY,
+          wikidata_entity_id TEXT NOT NULL UNIQUE
+            CHECK (wikidata_entity_id ~ '^Q[1-9][0-9]*$'),
+          canonical_name TEXT NOT NULL,
+          description TEXT NOT NULL DEFAULT '',
+          wikipedia_url TEXT NOT NULL DEFAULT '',
+          sitelink_count INTEGER NOT NULL DEFAULT 0 CHECK (sitelink_count >= 0),
+          source_version TEXT NOT NULL,
+          active BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `;
+
+      await sql`
+        CREATE TABLE IF NOT EXISTS word_person_entity_links (
+          word_id BIGINT NOT NULL REFERENCES words(id) ON DELETE CASCADE,
+          person_entity_id BIGINT NOT NULL REFERENCES person_entities(id) ON DELETE CASCADE,
+          name_role TEXT NOT NULL
+            CHECK (name_role IN ('full_name', 'surname', 'given_name', 'name_fragment', 'alias')),
+          confidence REAL NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
+          match_method TEXT NOT NULL,
+          source_version TEXT NOT NULL,
+          active BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (word_id, person_entity_id, name_role)
         )
       `;
 
@@ -194,12 +331,16 @@ export async function ensureWordMasterSchema() {
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
       `;
+      await sql`CREATE INDEX IF NOT EXISTS words_form_status_idx ON words (form_status, id)`;
+      await sql`CREATE INDEX IF NOT EXISTS words_person_name_status_idx ON words (person_name_status, id)`;
+      await sql`CREATE INDEX IF NOT EXISTS words_surface_quality_status_idx ON words (surface_quality_status, id)`;
 
       await sql`CREATE INDEX IF NOT EXISTS words_random_key_idx ON words (random_key)`;
       await sql`CREATE INDEX IF NOT EXISTS words_active_source_idx ON words (source_id, active, id)`;
       await sql`CREATE INDEX IF NOT EXISTS words_normalized_form_idx ON words (normalized_form)`;
       await sql`CREATE INDEX IF NOT EXISTS game_word_settings_select_idx ON game_word_settings (game_type, difficulty, word_id) WHERE usable`;
       await sql`CREATE INDEX IF NOT EXISTS word_definitions_verified_idx ON word_definitions (word_id) WHERE verified AND active`;
+      await sql`CREATE INDEX IF NOT EXISTS word_person_entity_links_entity_idx ON word_person_entity_links (person_entity_id, name_role, word_id) WHERE active`;
       await sql`CREATE INDEX IF NOT EXISTS tahoiya_seen_word_user_date_idx ON user_seen_tahoiya_words (word_id, user_id, last_seen_at DESC)`;
       await sql`CREATE INDEX IF NOT EXISTS word_feedback_word_game_idx ON word_feedback (word_id, game_type, created_at DESC)`;
       await sql`CREATE INDEX IF NOT EXISTS wordwolf_pairs_status_difficulty_idx ON wordwolf_pairs (status, difficulty, id) WHERE status = 'approved'`;

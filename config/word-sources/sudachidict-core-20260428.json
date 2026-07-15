@@ -1,0 +1,24 @@
+{
+  "source_key": "sudachidict-core",
+  "display_name": "SudachiDict Core",
+  "version": "20260428",
+  "release_url": "https://github.com/WorksApplications/SudachiDict/releases/tag/v20260428",
+  "license": "Apache-2.0 with bundled third-party notices",
+  "license_url": "https://github.com/WorksApplications/SudachiDict/blob/v20260428/LICENSE-2.0.txt",
+  "legal_url": "https://github.com/WorksApplications/SudachiDict/blob/v20260428/LEGAL",
+  "attribution": "Works Applications Co., Ltd.; UniDic Consortium; NEologd contributors and data sources listed in SudachiDict LEGAL",
+  "assets": [
+    {
+      "name": "small",
+      "url": "https://d2ej7fkh96fzlu.cloudfront.net/sudachidict-raw/20260428/small_lex.zip",
+      "sha256": "0c8cc6febab6beac3bb3d7374d74e0123fc16bd93024759808358f63d74b3c09",
+      "csv_name": "small_lex.csv"
+    },
+    {
+      "name": "core",
+      "url": "https://d2ej7fkh96fzlu.cloudfront.net/sudachidict-raw/20260428/core_lex.zip",
+      "sha256": "e826394f06b19a699811058f3096629193cf90c8a9b37e2edeaf1e30c76a71d1",
+      "csv_name": "core_lex.csv"
+    }
+  ]
+}
