@@ -11,6 +11,7 @@ import { GamePlayerMenu } from "@/app/components/GamePlayerMenu";
 import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomResultActions } from "@/app/components/RoomResultActions";
 import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "@/app/hooks/use-online-room-polling";
+import { useRoomResultReturnGate } from "@/app/hooks/use-room-result-return-gate";
 import { applyNorthernBranchRoomAction, createNorthernBranchRoom, northernBranchRoomApi } from "@/app/northern-branch/northern-branch-room-api-client";
 import { northernBaseResources, northernBuildings, northernCards } from "@/lib/northern-branch-data";
 import { northernRules } from "@/lib/northern-branch-game";
@@ -81,6 +82,7 @@ export function NorthernBranchGame() {
   const [paymentSelection, setPaymentSelection] = useState<{ playerId: string; indexes: number[] }>({ playerId: "", indexes: [] });
   const [isSaving, setIsSaving] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
+  const resultReturnGate = useRoomResultReturnGate({ room, setRoom, playerId: session?.id ?? "", resultPhase: "finished", onReturnUnavailable: () => setError("部屋に戻れません。解散されたか、参加情報が変更されています。") });
 
   useEffect(() => {
     let active = true;
@@ -128,13 +130,17 @@ export function NorthernBranchGame() {
   const playerId = session?.id ?? "";
 
   useOnlineRoomPolling({
-    roomCode: playerId ? roomCode : null,
-    intervalMs: roomPhase === "lobby" || roomPhase === "finished" ? onlineRoomPollingIntervals.idle : onlineRoomPollingIntervals.active,
+    roomCode: playerId && !resultReturnGate.isRoomDissolved ? roomCode : null,
+    intervalMs: roomPhase === "lobby" ? onlineRoomPollingIntervals.idle : onlineRoomPollingIntervals.active,
     fetchRoom: (code) => northernBranchRoomApi.fetchRoom(code, playerId),
-    onRoom: (latest) => setRoom((current) => current?.revision === latest.revision ? current : latest),
+    onRoom: resultReturnGate.acceptIncomingRoom,
     onMissing: () => {
-      setRoom(null);
       localStorage.removeItem(lastRoomKey);
+      if (resultReturnGate.markRoomDissolved()) {
+        setError("部屋が解散されました。結果画面はこのまま確認できます。");
+        return;
+      }
+      setRoom(null);
       setError("部屋が解散されたか、参加情報がなくなりました。");
     },
   });
@@ -248,8 +254,12 @@ export function NorthernBranchGame() {
       setError("部屋を解散できませんでした。");
       return;
     }
-    setRoom(null);
     localStorage.removeItem(lastRoomKey);
+    if (resultReturnGate.markRoomDissolved()) {
+      setError("部屋を解散しました。結果画面はこのまま確認できます。");
+      return;
+    }
+    setRoom(null);
   };
 
   const leaveRoom = async () => {
@@ -335,7 +345,7 @@ export function NorthernBranchGame() {
 
           {game && <>
             <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.2em] text-lime-300">第{game.turn}巡目</p><h2 className="mt-1 text-2xl font-black">{activePlayer?.name}の手番</h2></div><span className={`rounded-xl px-4 py-2 text-sm font-black ${canControlTurn ? "bg-lime-400 text-lime-950" : "bg-white/10 text-slate-300"}`}>{canControlTurn ? "操作できます" : "手番を待っています"}</span></div>{room.debugMode && isHost && activePlayer?.id !== playerId && <p className="mt-3 rounded-lg border border-cyan-300/20 bg-cyan-300/10 p-3 text-sm font-bold text-cyan-50">デバッグ中：ホストが{activePlayer?.name}の手番を操作しています。</p>}</section>
-            {winner && <section className="rounded-2xl border border-amber-300 bg-amber-300/15 p-6 text-center"><p className="text-sm font-bold text-amber-200">GAME FINISHED</p><p className="mt-2 text-3xl font-black">{winner.name}の勝利！</p>{isHost ? <RoomResultActions disabled={isSaving} onPlayAgain={() => void runAction({ type: "reset-game", actorId: playerId })} onDissolve={() => void dissolveRoom()} /> : <p className="mt-4 text-sm text-slate-300">ホストの操作を待っています。</p>}</section>}
+            {winner && <section className="rounded-2xl border border-amber-300 bg-amber-300/15 p-6 text-center"><p className="text-sm font-bold text-amber-200">GAME FINISHED</p><p className="mt-2 text-3xl font-black">{winner.name}の勝利！</p><RoomResultActions canReturnToRoom={isHost || resultReturnGate.canReturnToRoom} disabled={isSaving} isHost={isHost} isRoomDissolved={resultReturnGate.isRoomDissolved} onReturnToRoom={isHost ? () => runAction({ type: "reset-game", actorId: playerId }) : () => resultReturnGate.returnToRoom((code) => northernBranchRoomApi.fetchRoom(code, playerId), () => setError("部屋に戻れません。解散されたか、参加情報が変更されています。"))} onDissolve={isHost ? dissolveRoom : undefined} /></section>}
             <section className="rounded-xl border border-white/10 bg-slate-950/75 p-4"><div><p className="text-xs font-bold uppercase text-cyan-300">Market</p><h2 className="text-xl font-black">市場の商品と建物</h2></div><div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{marketCards.map((offer) => { const item = offer.kind === "product" ? northernCards[offer.cardId] : northernBuildings[offer.buildingId]; const cost = offer.kind === "product" ? northernCards[offer.cardId].value : northernBuildings[offer.buildingId].cost; const recipe = offer.kind === "product" ? Object.entries(northernCards[offer.cardId].recipe ?? {}).map(([id, count]) => `${northernCards[id as keyof typeof northernCards].name}×${count}`).join("・") : ""; return <article key={offer.id} className="rounded-xl border border-white/10 bg-slate-900 p-3"><div className="flex items-start justify-between gap-2"><div><p className="text-xs font-bold text-slate-400">{offer.kind === "product" ? "商品" : "建物"}</p><h3 className="font-black">{item.name}</h3></div><span className="rounded-md bg-amber-300 px-2 py-1 text-xs font-black text-amber-950">価値 {cost}</span></div>{offer.kind === "product" ? <p className="mt-2 min-h-10 text-xs text-slate-300">生産：{recipe}</p> : <p className="mt-2 min-h-10 text-xs text-slate-300">{northernBuildings[offer.buildingId].description} / {northernBuildings[offer.buildingId].points}点</p>}<div className="mt-3 flex gap-2">{offer.kind === "product" && <button type="button" disabled={!canControlTurn || game.mainActionUsed || room.phase === "finished" || isSaving} onClick={() => perform({ type: "produce", offerId: offer.id })} className="flex-1 rounded-lg bg-cyan-600 px-2 py-2 text-xs font-bold disabled:opacity-30">生産</button>}<button type="button" disabled={!canControlTurn || game.mainActionUsed || room.phase === "finished" || isSaving} onClick={() => perform({ type: "buy", offerId: offer.id, paymentIndexes })} className="flex-1 rounded-lg bg-amber-500 px-2 py-2 text-xs font-bold text-amber-950 disabled:opacity-30">売買</button></div></article>; })}</div></section>
             <section className="rounded-xl border border-white/10 bg-slate-950/75 p-4"><div className="flex items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase text-lime-300">Main action</p><h2 className="text-xl font-black">資源を1枚得る</h2></div><span className={`rounded-lg px-3 py-2 text-xs font-bold ${game.mainActionUsed ? "bg-slate-700 text-slate-300" : "bg-lime-300 text-lime-950"}`}>{game.mainActionUsed ? "使用済み" : "選択可能"}</span></div><div className="mt-4 flex flex-wrap gap-2">{northernBaseResources.map((cardId) => <button key={cardId} type="button" disabled={!canControlTurn || game.mainActionUsed || room.phase === "finished" || isSaving} onClick={() => perform({ type: "take-resource", cardId })} className={`rounded-lg px-3 py-2 text-sm font-black disabled:opacity-30 ${northernCards[cardId].color}`}>{northernCards[cardId].name}</button>)}</div></section>
             <section className="rounded-xl border border-white/10 bg-slate-950/75 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase text-amber-300">Private hand</p><h2 className="text-xl font-black">{handPlayer?.name}の手札</h2></div><p className="text-sm font-bold text-amber-200">選択価値 {selectedValue}</p></div><p className="mt-2 text-xs text-slate-400">売買に使うカードを選びます。他のプレイヤーには内容が送信されません。</p><div className="mt-3 flex flex-wrap gap-2">{handPlayer?.hand.map((cardId, index) => { const card = northernCards[cardId]; const selected = paymentIndexes.includes(index); return <button key={`${cardId}-${index}`} type="button" disabled={!canControlTurn || isSaving} aria-pressed={selected} onClick={() => setPaymentSelection((current) => { const indexes = current.playerId === handPlayer.id ? current.indexes : []; return { playerId: handPlayer.id, indexes: selected ? indexes.filter((item) => item !== index) : [...indexes, index] }; })} className={`min-w-24 rounded-xl border p-3 text-left transition disabled:opacity-50 ${selected ? "border-cyan-300 ring-2 ring-cyan-300/40" : "border-white/10"} ${card.color}`}><span className="block text-xs font-bold opacity-70">{card.kind}</span><span className="block font-black">{card.name}</span><span className="block text-xs font-bold">価値 {card.value}</span></button>; })}</div>{!canControlTurn && <p className="mt-4 rounded-lg bg-white/[0.05] p-3 text-sm text-slate-300">自分の手札はいつでも確認できます。手番が来るとカードを選んで行動できます。</p>}</section>

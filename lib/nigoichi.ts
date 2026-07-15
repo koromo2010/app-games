@@ -220,7 +220,7 @@ export function calculateNigoichiRoundScores(room: Pick<
   const playerCount = room.players.length;
   return room.players.map((player): NigoichiRoundScoreResult => {
     const isCorrect = room.missingNumber !== null && room.guesses[player.id] === room.missingNumber;
-    const correctBonus = isCorrect ? playerCount + 1 : 0;
+    const correctBonus = isCorrect ? Math.max(0, playerCount - 1) : 0;
     const ownedCardNumbers = new Set(room.hands[player.id] ?? []);
     const receivedWrongVotes = room.players.filter((voter) => {
       if (voter.id === player.id) return false;

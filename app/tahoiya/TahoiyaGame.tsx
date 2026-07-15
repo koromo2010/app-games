@@ -14,6 +14,7 @@ import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
 import { OnlineRoomApiError } from "@/lib/online-room-api-client";
 import type { TahoiyaAnswererMode, TahoiyaDifficulty, TahoiyaPlayMode, TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomAction, TahoiyaRoomChoice, TahoiyaTopic } from "@/lib/tahoiya-types";
 import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "../hooks/use-online-room-polling";
+import { useRoomResultReturnGate } from "../hooks/use-room-result-return-gate";
 import { applyTahoiyaRoomAction, createTahoiyaRoom, tahoiyaRoomApi } from "./tahoiya-room-api-client";
 import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
 import { DebugModeButton } from "../components/DebugModeButton";
@@ -376,6 +377,7 @@ export function TahoiyaGame() {
   const [message, setMessage] = useState("");
   const [rulesOpen, setRulesOpen] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  const resultReturnGate = useRoomResultReturnGate({ room, setRoom, playerId, resultPhase: "result", onReturnUnavailable: () => setMessage("部屋に戻れません。解散されたか、参加情報が変更されています。") });
   const roomCode = room?.code;
 
   useEffect(() => {
@@ -402,11 +404,16 @@ export function TahoiyaGame() {
   }, []);
 
   useOnlineRoomPolling({
-    roomCode,
-    intervalMs: room?.phase === "lobby" || room?.phase === "result" ? onlineRoomPollingIntervals.idle : 2500,
+    roomCode: resultReturnGate.isRoomDissolved ? null : roomCode,
+    intervalMs: room?.phase === "lobby" ? onlineRoomPollingIntervals.idle : onlineRoomPollingIntervals.active,
     fetchRoom: loadRoomFromStore,
-    onRoom: setRoom,
+    onRoom: resultReturnGate.acceptIncomingRoom,
     onMissing: () => {
+      if (roomCode) deleteRoomLocally(roomCode);
+      if (resultReturnGate.markRoomDissolved()) {
+        setMessage("部屋が解散されました。結果画面はこのまま確認できます。");
+        return;
+      }
       setRoom(null);
       setMessage("部屋が解散されました。");
     },
@@ -830,16 +837,6 @@ export function TahoiyaGame() {
     }
   };
 
-  const nextRound = () => {
-    if (!room) return;
-    void runRoomAction({ type: "next-round", actorId: playerId }).then((saved) => {
-      if (saved) setActivePlayerId(playerId);
-    });
-    setDefinitionInput("");
-    setPolishMessage("");
-    setSelectedOptionId("");
-  };
-
   const abortGame = async () => {
     if (!room || room.phase === "lobby" || !room.debugMode) return;
     const saved = await runRoomAction({ type: "abort-game", actorId: playerId });
@@ -850,12 +847,25 @@ export function TahoiyaGame() {
     }
   };
 
+  const nextRound = async () => {
+    if (!room) return;
+    const saved = await runRoomAction({ type: "next-round", actorId: playerId });
+    if (saved) setActivePlayerId(playerId);
+    setDefinitionInput("");
+    setPolishMessage("");
+    setSelectedOptionId("");
+  };
+
   const dissolveRoom = async () => {
     if (!room) return;
     if (!window.confirm("部屋を解散しますか？参加者はこの部屋に戻れなくなります。")) return;
     const code = room.code;
-    setRoom(null);
     await deleteRoomFromStore(code, playerId);
+    if (resultReturnGate.markRoomDissolved()) {
+      setMessage("部屋を解散しました。結果画面はこのまま確認できます。");
+      return;
+    }
+    setRoom(null);
   };
 
   return (
@@ -895,7 +905,7 @@ export function TahoiyaGame() {
           <li>投票後に本物、偽説明の作者、全員の投票先を公開し、得点を加えます。</li>
         </ol>
         <h3 className="mt-4 font-black text-white">得点</h3>
-        <ul className="mt-2 list-disc space-y-2 pl-5"><li>本物の説明を選んだ人は2点です。</li><li>自分が書いた偽説明を選ばせると、だませた相手1人につき1点です。</li></ul>
+        <ul className="mt-2 list-disc space-y-2 pl-5"><li>本物の説明を選んだ人は1点です。</li><li>自分が書いた偽説明を選ばせると、だませた相手1人につき1点です。</li></ul>
         <h3 className="mt-4 font-black text-white">2つの遊び方</h3>
         <p className="mt-2"><span className="font-bold text-white">回答者1人：</span>1人だけが投票し、それ以外の人が偽説明を書きます。回答者はラウンドごとに選びます。</p>
         <p className="mt-2"><span className="font-bold text-white">全員作成・全員投票：</span>全員が偽説明を書き、全員が投票します。ただし、自分で書いた偽説明には投票できません。</p>
@@ -1532,9 +1542,7 @@ export function TahoiyaGame() {
                       }}
                     />
                   )}
-                  {isHost && (
-                    <RoomResultActions onPlayAgain={nextRound} onDissolve={() => void dissolveRoom()} />
-                  )}
+                  <RoomResultActions canReturnToRoom={isHost || resultReturnGate.canReturnToRoom} isHost={isHost} isRoomDissolved={resultReturnGate.isRoomDissolved} onReturnToRoom={isHost ? nextRound : () => resultReturnGate.returnToRoom(loadRoomFromStore, () => setMessage("部屋に戻れません。解散されたか、参加情報が変更されています。"))} onDissolve={isHost ? dissolveRoom : undefined} />
                 </div>
               )}
             </>

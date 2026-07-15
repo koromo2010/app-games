@@ -12,6 +12,7 @@ import { GameTopMenu, gameTopBannerActionClass, gameTopBannerDangerActionClass, 
 import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomResultActions } from "@/app/components/RoomResultActions";
 import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "@/app/hooks/use-online-room-polling";
+import { useRoomResultReturnGate } from "@/app/hooks/use-room-result-return-gate";
 import { applyCodeInterceptRoomAction, codeInterceptRoomApi, createCodeInterceptRoom } from "@/app/code-intercept/code-intercept-room-api-client";
 import {
   codeInterceptDefaults,
@@ -111,6 +112,7 @@ export function CodeInterceptGame() {
   const [interceptDraftsByRound, setInterceptDraftsByRound] = useState<Record<number, number[]>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
+  const resultReturnGate = useRoomResultReturnGate({ room, setRoom, playerId: session?.id ?? "", resultPhase: "game-result", onReturnUnavailable: () => setError("部屋に戻れません。解散されたか、参加情報が変更されています。") });
 
   useEffect(() => {
     let active = true;
@@ -131,11 +133,19 @@ export function CodeInterceptGame() {
 
   const playerId = session?.id ?? "";
   useOnlineRoomPolling({
-    roomCode: playerId ? room?.code : null,
-    intervalMs: room?.phase === "lobby" || room?.phase === "round-result" || room?.phase === "game-result" ? onlineRoomPollingIntervals.idle : onlineRoomPollingIntervals.active,
+    roomCode: playerId && !resultReturnGate.isRoomDissolved ? room?.code : null,
+    intervalMs: room?.phase === "lobby" ? onlineRoomPollingIntervals.idle : onlineRoomPollingIntervals.active,
     fetchRoom: (code) => codeInterceptRoomApi.fetchRoom(code, playerId),
-    onRoom: (latest) => setRoom((current) => current?.revision === latest.revision ? current : latest),
-    onMissing: () => { setRoom(null); localStorage.removeItem(lastRoomKey); setError("部屋が解散されたか、参加情報がなくなりました。"); },
+    onRoom: resultReturnGate.acceptIncomingRoom,
+    onMissing: () => {
+      localStorage.removeItem(lastRoomKey);
+      if (resultReturnGate.markRoomDissolved()) {
+        setError("部屋が解散されました。結果画面はこのまま確認できます。");
+        return;
+      }
+      setRoom(null);
+      setError("部屋が解散されたか、参加情報がなくなりました。");
+    },
   });
 
   const isHost = Boolean(room && room.hostId === playerId);
@@ -195,7 +205,12 @@ export function CodeInterceptGame() {
   const dissolveRoom = async () => {
     if (!room || !window.confirm("この部屋を解散しますか？")) return;
     setIsSaving(true); setError("");
-    try { await codeInterceptRoomApi.remove({ code: room.code, actorId: playerId }); setRoom(null); localStorage.removeItem(lastRoomKey); }
+    try {
+      await codeInterceptRoomApi.remove({ code: room.code, actorId: playerId });
+      localStorage.removeItem(lastRoomKey);
+      if (resultReturnGate.markRoomDissolved()) setError("部屋を解散しました。結果画面はこのまま確認できます。");
+      else setRoom(null);
+    }
     catch (caught) { setError(apiMessage(caught, "部屋を解散できませんでした。")); }
     finally { setIsSaving(false); }
   };
@@ -256,7 +271,7 @@ export function CodeInterceptGame() {
 
         {(room.phase === "round-result" || room.phase === "game-result") && latestRound && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><p className="text-sm font-black text-amber-300">第{latestRound.roundNumber}ラウンド結果</p><div className="mt-4 grid gap-4 lg:grid-cols-2">{latestRound.teams.map((result) => <ResultCard key={result.teamId} result={result} room={room} />)}</div>{room.phase === "round-result" && (isHost ? <button type="button" disabled={isSaving} onClick={() => void runAction({ type: "next-round", actorId: playerId })} className="mt-5 w-full rounded-xl bg-amber-300 px-4 py-4 text-lg font-black text-slate-950">次のラウンドへ</button> : <p className="mt-5 text-center font-bold text-slate-300">ホストが次のラウンドへ進めます。</p>)}</section>}
 
-        {room.phase === "game-result" && <section className="rounded-2xl border border-amber-300/30 bg-slate-950/85 p-6 text-center"><p className="text-sm font-black text-amber-300">GAME OVER</p><h2 className="mt-2 text-4xl font-black">{room.winner === "draw" ? "同時決着・引き分け" : `${teamLabel(room.winner!)}の勝利`}</h2><p className="mt-3 text-slate-300">全{room.roundNumber}ラウンドで決着しました。</p>{isHost ? <RoomResultActions disabled={isSaving} onPlayAgain={() => void runAction({ type: "reset-game", actorId: playerId })} onDissolve={() => void dissolveRoom()} /> : <p className="mt-5 text-sm font-bold text-slate-300">ホストの操作を待っています。</p>}<GameResultShareButton title="暗号傍受（仮） プレイログ" text={codeInterceptShareText(room)} url="/code-intercept" /></section>}
+        {room.phase === "game-result" && <section className="rounded-2xl border border-amber-300/30 bg-slate-950/85 p-6 text-center"><p className="text-sm font-black text-amber-300">GAME OVER</p><h2 className="mt-2 text-4xl font-black">{room.winner === "draw" ? "同時決着・引き分け" : `${teamLabel(room.winner!)}の勝利`}</h2><p className="mt-3 text-slate-300">全{room.roundNumber}ラウンドで決着しました。</p><RoomResultActions canReturnToRoom={isHost || resultReturnGate.canReturnToRoom} disabled={isSaving} isHost={isHost} isRoomDissolved={resultReturnGate.isRoomDissolved} onReturnToRoom={isHost ? () => runAction({ type: "reset-game", actorId: playerId }) : () => resultReturnGate.returnToRoom((code) => codeInterceptRoomApi.fetchRoom(code, playerId), () => setError("部屋に戻れません。解散されたか、参加情報が変更されています。"))} onDissolve={isHost ? dissolveRoom : undefined} /><GameResultShareButton title="暗号傍受（仮） プレイログ" text={codeInterceptShareText(room)} url="/code-intercept" /></section>}
 
         {room.roundHistory.length > 0 && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><h2 className="text-xl font-black">公開済みの過去ログ</h2><p className="mt-1 text-sm text-slate-400">敵の番号と秘密単語の対応を推理するため、全ラウンドの公開情報を確認できます。</p><div className="mt-4 overflow-x-auto"><table className="min-w-full text-left text-sm"><thead><tr className="border-b border-white/15 text-slate-400"><th className="px-2 py-2">R</th><th className="px-2 py-2">チーム</th><th className="px-2 py-2">ヒント</th><th className="px-2 py-2">正解暗号</th><th className="px-2 py-2">傍受回答</th><th className="px-2 py-2">結果</th></tr></thead><tbody>{room.roundHistory.flatMap((round) => round.teams.map((result) => <tr key={`${round.roundNumber}:${result.teamId}`} className="border-b border-white/[0.07]"><td className="px-2 py-3 font-mono">{round.roundNumber}</td><td className="px-2 py-3 font-black">{teamLabel(result.teamId)}</td><td className="px-2 py-3">{result.clues.join("・")}</td><td className="px-2 py-3 font-mono font-black">{result.secretCode.join("・")}</td><td className="px-2 py-3 font-mono">{result.enemyInterceptAnswer?.join("・") ?? "―"}</td><td className="px-2 py-3">{round.roundNumber === 1 ? "傍受なし" : result.enemyIntercepted ? "傍受成功" : "傍受失敗"}</td></tr>))}</tbody></table></div></section>}
       </div>

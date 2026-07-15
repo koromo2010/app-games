@@ -22,6 +22,7 @@ import {
   hodoaiTechnicalPlayerLimit,
   normalizeHodoaiConfig,
   pickHodoaiTheme,
+  pickRandomHodoaiSorter,
   pointsForInversions,
   shuffleHodoai,
   type HodoaiPhase,
@@ -49,6 +50,7 @@ const hodoaiDebugActionLabels: Record<HodoaiRoomAction["type"], string> = {
   "set-debug-replay": "プレイバック記録設定を変更",
   "start-game": "ゲームを開始",
   "submit-clue": "ヒントを提出",
+  "submit-clues": "ヒントをまとめて提出",
   reorder: "ヒントの順番を変更",
   "score-round": "最終並びを採点",
   "reset-game": "同じ部屋で再戦準備",
@@ -293,6 +295,7 @@ function beginGame(room: HodoaiRoom) {
   const dealt = dealHodoaiCards(room.players, room.cardsPerPlayer);
   return {
     ...room,
+    sorterId: pickRandomHodoaiSorter(room.players),
     phase: "clue" as const,
     round: 1,
     theme: pickHodoaiTheme([]),
@@ -586,6 +589,22 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
       if (text.length < 2 || clueHasNumber(text)) throw new Error("HODOAI_INVALID_CLUE");
       return reconcileProgress(recordPlayerActivity({ ...current, clues: { ...current.clues, [action.cardId]: text } }, action.actorId));
     }
+    if (action.type === "submit-clues") {
+      if (current.phase !== "clue" || action.round !== current.round) return current;
+      const missingCards = current.cards.filter((card) => card.ownerId === action.actorId && !current.clues[card.id]);
+      const submittedIds = Object.keys(action.clues).sort();
+      const expectedIds = missingCards.map((card) => card.id).sort();
+      if (submittedIds.length !== expectedIds.length || expectedIds.some((id, index) => id !== submittedIds[index])) {
+        throw new Error("HODOAI_INVALID_CLUE");
+      }
+      const clues = { ...current.clues };
+      for (const card of missingCards) {
+        const text = action.clues[card.id]?.trim().replace(/\s+/g, " ").slice(0, 40) ?? "";
+        if (text.length < 2 || clueHasNumber(text)) throw new Error("HODOAI_INVALID_CLUE");
+        clues[card.id] = text;
+      }
+      return reconcileProgress(recordPlayerActivity({ ...current, clues }, action.actorId));
+    }
     if (action.type === "reorder") {
       if (!canReorderHodoaiCards(current, action.actorId) || action.round !== current.round) throw new Error("HODOAI_ROOM_FORBIDDEN");
       const expected = [...current.cards.map((card) => card.id)].sort();
@@ -594,7 +613,7 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
       return recordPlayerActivity({ ...current, order: action.order }, action.actorId);
     }
     if (action.type === "score-round") {
-      if (!actorIsHost || current.phase !== "arrange" || action.round !== current.round) throw new Error("HODOAI_ROOM_FORBIDDEN");
+      if (action.actorId !== current.sorterId || current.phase !== "arrange" || action.round !== current.round) throw new Error("HODOAI_ROOM_FORBIDDEN");
       return scoreRound(current);
     }
     if (action.type === "reset-game") {

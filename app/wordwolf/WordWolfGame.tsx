@@ -39,6 +39,7 @@ import { GameRulesDialog } from "../components/GameRulesDialog";
 import { RoomResultActions } from "../components/RoomResultActions";
 import { RoomTimeLimitControl } from "../components/RoomTimeLimitControl";
 import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "../hooks/use-online-room-polling";
+import { useRoomResultReturnGate } from "../hooks/use-room-result-return-gate";
 import type {
   ClueLogVisibility,
   ClueMode,
@@ -553,6 +554,7 @@ export function WordWolfGame() {
   const [isRulesOpen, setIsRulesOpen] = useState(false);
   const [isMyPageOpen, setIsMyPageOpen] = useState(false);
   const timeoutActionKeyRef = useRef("");
+  const resultReturnGate = useRoomResultReturnGate({ room, setRoom, playerId: playerAccountId, resultPhase: "result", onReturnUnavailable: () => setError("部屋に戻れません。解散されたか、参加情報が変更されています。") });
   const roomCode = room?.code;
   const roomPhase = room?.phase;
 
@@ -607,18 +609,20 @@ export function WordWolfGame() {
   }, []);
 
   useOnlineRoomPolling({
-    roomCode,
-    intervalMs: roomPhase === "lobby" || roomPhase === "result" ? onlineRoomPollingIntervals.idle : onlineRoomPollingIntervals.active,
+    roomCode: resultReturnGate.isRoomDissolved ? null : roomCode,
+    intervalMs: roomPhase === "lobby" ? onlineRoomPollingIntervals.idle : onlineRoomPollingIntervals.active,
     fetchRoom: loadRoomFromStore,
-    onRoom: (latest) => setRoom((current) => {
-      if (!current || current.code !== latest.code) return current;
-      return latest.updatedAt !== current.updatedAt ||
-        latest.statsRecordedAt !== current.statsRecordedAt ||
-        latest.gamesPlayed !== current.gamesPlayed
-        ? latest
-        : current;
-    }),
+    onRoom: resultReturnGate.acceptIncomingRoom,
     onMissing: () => {
+      if (roomCode) deleteRoom(roomCode);
+      if (localStorage.getItem("wordwolf-last-room") === roomCode) {
+        localStorage.removeItem("wordwolf-last-room");
+        localStorage.removeItem("wordwolf-last-player");
+      }
+      if (resultReturnGate.markRoomDissolved()) {
+        setError("部屋が解散されました。結果画面はこのまま確認できます。");
+        return;
+      }
       setRoom(null);
       setActivePlayerId("");
       setError("部屋が解散されました。");
@@ -887,6 +891,10 @@ export function WordWolfGame() {
     if (localStorage.getItem("wordwolf-last-room") === room.code) {
       localStorage.removeItem("wordwolf-last-room");
       localStorage.removeItem("wordwolf-last-player");
+    }
+    if (resultReturnGate.markRoomDissolved()) {
+      setError("部屋を解散しました。結果画面はこのまま確認できます。");
+      return;
     }
     setRoom(null);
     setActivePlayerId("");
@@ -1278,9 +1286,9 @@ export function WordWolfGame() {
     }
   };
 
-  const resetRoom = () => {
+  const resetRoom = async () => {
     if (!room) return;
-    void runRoomAction({ type: "reset-game" });
+    await runRoomAction({ type: "reset-game" });
     setGuessInput("");
     setClueInput("");
   };
@@ -2123,14 +2131,7 @@ export function WordWolfGame() {
                       }}
                     />
                   )}
-                  {isHost && (
-                    <div className="mt-4">
-                      <p className="text-sm leading-6 text-slate-600">
-                        同じ卓のままロビーに戻り、周数やログ表示を設定し直して続行できます。
-                      </p>
-                      <RoomResultActions onPlayAgain={resetRoom} onDissolve={() => void dissolveRoom()} />
-                    </div>
-                  )}
+                  <RoomResultActions canReturnToRoom={isHost || resultReturnGate.canReturnToRoom} isHost={isHost} isRoomDissolved={resultReturnGate.isRoomDissolved} onReturnToRoom={isHost ? resetRoom : () => resultReturnGate.returnToRoom(loadRoomFromStore, () => setError("部屋に戻れません。解散されたか、参加情報が変更されています。"))} onDissolve={isHost ? dissolveRoom : undefined} />
                 </div>
               )}
             </>

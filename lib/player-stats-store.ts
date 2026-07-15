@@ -5,6 +5,7 @@ import type { NorthernRoom } from "@/lib/northern-branch-types";
 import type { NigoichiRoom } from "@/lib/nigoichi";
 import type { CodeInterceptRoom } from "@/lib/code-intercept";
 import type { TahoiyaRoom } from "@/lib/tahoiya-types";
+import { calculateTahoiyaRoundScores } from "@/lib/tahoiya-scoring";
 import type { WordWolfRoom } from "@/lib/wordwolf-room-store";
 import { calculateGameRatingChanges, initialGameRating } from "@/lib/game-rating";
 import { emitObservabilityEvent, observabilityErrorCode, observabilityRef, type ObservabilityFields } from "@/lib/observability";
@@ -167,13 +168,7 @@ export async function recordWordWolfGameResults(room: WordWolfRoom) {
 }
 
 function tahoiyaRoundPoints(room: TahoiyaRoom) {
-  const points = Object.fromEntries(room.players.map((player) => [player.id, 0]));
-  for (const [voterId, optionId] of Object.entries(room.votes)) {
-    const option = room.options.find((item) => item.id === optionId);
-    if (option?.isReal) points[voterId] = (points[voterId] ?? 0) + 2;
-    else if (option?.authorId) points[option.authorId] = (points[option.authorId] ?? 0) + 1;
-  }
-  return points;
+  return calculateTahoiyaRoundScores(room);
 }
 
 export async function recordTahoiyaRoundResults(room: TahoiyaRoom) {

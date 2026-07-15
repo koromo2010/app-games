@@ -1,6 +1,7 @@
 import { redisCommand } from "@/lib/redis-store";
 import { randomUUID } from "node:crypto";
 import type { TahoiyaAnswererMode, TahoiyaDefinitionOption, TahoiyaPhase, TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomAction, TahoiyaRoomChoice, TahoiyaTopic } from "@/lib/tahoiya-types";
+import { calculateTahoiyaRoundScores, TAHOIYA_CORRECT_VOTE_POINTS, TAHOIYA_FOOLED_VOTE_POINTS } from "@/lib/tahoiya-scoring";
 import { normalizeGameGenerationMeta } from "@/lib/game-ai-types";
 import { recordTahoiyaRoundResults } from "@/lib/player-stats-store";
 import { recordTahoiyaReplay } from "@/lib/game-replay-store";
@@ -198,6 +199,7 @@ function createDefinitionOptions(room: TahoiyaRoom): TahoiyaDefinitionOption[] {
 
 function scoreRoom(room: TahoiyaRoom) {
   const scores = { ...room.scores };
+  const roundScores = calculateTahoiyaRoundScores(room);
   const scoreLines: string[] = [];
   const voteCounts = Object.values(room.votes).reduce<Record<string, number>>((counts, optionId) => {
     counts[optionId] = (counts[optionId] ?? 0) + 1;
@@ -217,14 +219,13 @@ function scoreRoom(room: TahoiyaRoom) {
     const voter = room.players.find((player) => player.id === voterId);
     if (!option || !voter) continue;
     if (option.isReal) {
-      scores[voterId] = (scores[voterId] ?? 0) + 2;
-      scoreLines.push(`${voter.name} が本物を当てて +2`);
+      scoreLines.push(`${voter.name} が本物を当てて +${TAHOIYA_CORRECT_VOTE_POINTS}`);
     } else if (option.authorId) {
       const author = room.players.find((player) => player.id === option.authorId);
-      scores[option.authorId] = (scores[option.authorId] ?? 0) + 1;
-      scoreLines.push(`${author?.name ?? "Unknown"} の偽説明に票が入り +1`);
+      scoreLines.push(`${author?.name ?? "Unknown"} の偽説明に票が入り +${TAHOIYA_FOOLED_VOTE_POINTS}`);
     }
   }
+  for (const player of room.players) scores[player.id] = (scores[player.id] ?? 0) + (roundScores[player.id] ?? 0);
 
   return {
     ...room,

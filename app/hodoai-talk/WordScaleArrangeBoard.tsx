@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type DragEvent, type PointerEvent } from "react";
 import { canStartHodoaiPointerDrag, hodoaiVerticalDisplayOrder, moveHodoaiCard, sameHodoaiOrder, shiftHodoaiCardOnVerticalScale, usesCompactHodoaiCards } from "@/lib/hodoai-arrange";
 import { defaultAvatarImage, fallbackAvatarColor } from "@/lib/player-session";
-import type { HodoaiCard, HodoaiClueRound, HodoaiPlayer } from "@/lib/hodoai-talk";
+import { canViewHodoaiCardValue, type HodoaiCard, type HodoaiClueRound, type HodoaiPlayer } from "@/lib/hodoai-talk";
 
 type WordScaleArrangeBoardProps = {
   order: string[];
@@ -11,7 +11,8 @@ type WordScaleArrangeBoardProps = {
   players: HodoaiPlayer[];
   clueRounds: HodoaiClueRound[];
   values: Record<string, number>;
-  revealValues: boolean;
+  viewerId: string;
+  revealAllValues: boolean;
   canArrange: boolean;
   disabled: boolean;
   onReorder: (order: string[]) => Promise<boolean>;
@@ -23,7 +24,8 @@ export function WordScaleArrangeBoard({
   players,
   clueRounds,
   values,
-  revealValues,
+  viewerId,
+  revealAllValues,
   canArrange,
   disabled,
   onReorder,
@@ -142,6 +144,7 @@ export function WordScaleArrangeBoard({
               if (!card || !player) return null;
               const isDragging = draggingCardId === id;
               const isPreviewed = previewCardId === id;
+              const showValue = canViewHodoaiCardValue(card, viewerId, revealAllValues);
               return (
                 <li
                   key={id}
@@ -188,7 +191,7 @@ export function WordScaleArrangeBoard({
                           <div className="flex min-w-0 items-center gap-1.5 overflow-hidden">
                             {clueRounds.map((clueRound) => <span key={clueRound.round} className="max-w-36 truncate rounded-md bg-cyan-300/10 px-2 py-1 text-sm font-black text-cyan-50">{clueRound.clues[id]}</span>)}
                           </div>
-                          <p className="mt-1 truncate text-[11px] font-bold text-slate-400">{player.name}・カード{card.cardNumber}{revealValues && typeof values[id] === "number" ? `・${values[id]}` : ""}</p>
+                          <p className="mt-1 truncate text-[11px] font-bold text-slate-400">{player.name}・カード{card.cardNumber}{showValue && typeof values[id] === "number" ? `・秘密の数字 ${values[id]}` : ""}</p>
                         </>
                       ) : (
                         <div className="space-y-2">
@@ -201,7 +204,7 @@ export function WordScaleArrangeBoard({
                           <div className="flex items-center gap-2">
                             <span className="h-7 w-7 shrink-0 rounded-full border border-white/25 bg-cover bg-center" style={{ backgroundColor: player.avatarColor || fallbackAvatarColor, backgroundImage: `url(${player.avatarImage || defaultAvatarImage})` }} aria-hidden="true" />
                             <p className="min-w-0 flex-1 truncate text-xs font-bold text-slate-300">{player.name}・カード{card.cardNumber}</p>
-                            {revealValues && typeof values[id] === "number" && <span className="font-mono text-lg font-black text-amber-300">{values[id]}</span>}
+                            {showValue && typeof values[id] === "number" && <span className="rounded-lg bg-amber-300/10 px-2 py-1 font-mono text-lg font-black text-amber-300" title="あなたの秘密の数字">{values[id]}</span>}
                           </div>
                         </div>
                       )}
@@ -237,7 +240,7 @@ export function WordScaleArrangeBoard({
                 <p className="text-xs font-black uppercase tracking-wider text-cyan-300">Card detail</p>
                 <p className="mt-1 font-black text-white">{previewPlayer.name}・カード{previewCard.cardNumber}</p>
               </div>
-              {revealValues && typeof values[previewCard.id] === "number" && <span className="font-mono text-2xl font-black text-amber-300">{values[previewCard.id]}</span>}
+              {canViewHodoaiCardValue(previewCard, viewerId, revealAllValues) && typeof values[previewCard.id] === "number" && <span className="rounded-lg bg-amber-300/10 px-2 py-1 font-mono text-2xl font-black text-amber-300" title="あなたの秘密の数字">{values[previewCard.id]}</span>}
             </div>
             <div className="mt-4 space-y-3">
               {clueRounds.map((clueRound) => (

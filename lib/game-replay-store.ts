@@ -5,6 +5,7 @@ import type { NorthernRoom } from "@/lib/northern-branch-types";
 import type { NigoichiRoom } from "@/lib/nigoichi";
 import type { CodeInterceptRoom } from "@/lib/code-intercept";
 import type { TahoiyaRoom } from "@/lib/tahoiya-types";
+import { calculateTahoiyaRoundScores } from "@/lib/tahoiya-scoring";
 import type { WordWolfRoom } from "@/lib/wordwolf-room-store";
 import { redisCommand, redisPipeline } from "@/lib/redis-store";
 import {
@@ -12,13 +13,14 @@ import {
   observabilityErrorCode,
   observabilityRef,
 } from "@/lib/observability";
-import type {
-  GameReplayDetail,
-  GameReplayGameType,
-  GameReplayListResponse,
-  GameReplaySummary,
-  GenericGameReplayDetail,
-  TahoiyaReplayDetail,
+import {
+  tahoiyaReplaySummaryHighlights,
+  type GameReplayDetail,
+  type GameReplayGameType,
+  type GameReplayListResponse,
+  type GameReplaySummary,
+  type GenericGameReplayDetail,
+  type TahoiyaReplayDetail,
 } from "@/lib/game-replay-types";
 import { resolveGameReplayPolicy } from "@/lib/game-replay-policy";
 import { shouldRecordGameReplay } from "@/lib/debug-replay";
@@ -119,6 +121,9 @@ function parseStoredReplay(value: unknown): StoredGameReplay | null {
       return {
         ...(parsed as StoredTahoiyaReplay),
         title: cleanText(parsed.title, 120) || cleanText(parsed.word, 120),
+        realDefinition: cleanText(parsed.realDefinition, 1200),
+        resultText: cleanText(parsed.resultText, 2000),
+        votes: parsed.votes && typeof parsed.votes === "object" ? parsed.votes : {},
         resultLabels: parsed.resultLabels && typeof parsed.resultLabels === "object"
           ? parsed.resultLabels
           : Object.fromEntries(parsed.players.map((player) => [player.id, `${scores[player.id] ?? 0}点`])),
@@ -143,6 +148,15 @@ function isParticipant(replay: StoredGameReplay, playerId: string) {
 }
 
 function replaySummary(replay: StoredGameReplay, playerId: string, favorite: boolean): GameReplaySummary {
+  const shareHighlights = replay.gameType === "tahoiya"
+    ? tahoiyaReplaySummaryHighlights({
+      definitions: replay.definitions,
+      playerId,
+      realDefinition: replay.realDefinition,
+      scores: replay.scores,
+      votes: replay.votes,
+    })
+    : replay.shareHighlights;
   return {
     id: replay.id,
     gameType: replay.gameType,
@@ -153,7 +167,7 @@ function replaySummary(replay: StoredGameReplay, playerId: string, favorite: boo
     resultLabel: cleanText(replay.resultLabels[playerId], 80) || "プレイ完了",
     playerCount: replay.players.length,
     round: replay.round,
-    shareHighlights: cleanLines(replay.shareHighlights, 3),
+    shareHighlights: cleanLines(shareHighlights, 3),
   };
 }
 
@@ -270,13 +284,7 @@ export async function recordWordWolfReplay(room: WordWolfRoom) {
 }
 
 function tahoiyaRoundScores(room: TahoiyaRoom) {
-  const scores = Object.fromEntries(room.players.map((player) => [player.id, 0]));
-  for (const [voterId, optionId] of Object.entries(room.votes)) {
-    const option = room.options.find((item) => item.id === optionId);
-    if (option?.isReal) scores[voterId] = (scores[voterId] ?? 0) + 2;
-    else if (option?.authorId) scores[option.authorId] = (scores[option.authorId] ?? 0) + 1;
-  }
-  return scores;
+  return calculateTahoiyaRoundScores(room);
 }
 
 export async function recordTahoiyaReplay(room: TahoiyaRoom) {

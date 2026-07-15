@@ -101,6 +101,7 @@ export type HodoaiRoomAction =
   | { type: "set-debug-replay"; actorId: string; enabled: boolean }
   | { type: "start-game"; actorId: string }
   | { type: "submit-clue"; actorId: string; round: number; cardId: string; text: string }
+  | { type: "submit-clues"; actorId: string; round: number; clues: Record<string, string> }
   | { type: "reorder"; actorId: string; round: number; order: string[] }
   | { type: "score-round"; actorId: string; round: number; force?: boolean }
   | { type: "reset-game"; actorId: string }
@@ -156,6 +157,26 @@ export const hodoaiThemes: HodoaiTheme[] = [
   { id: "cafe", title: "カフェにあるとうれしいもの", lowLabel: "なくてもよい", highLabel: "通いたくなる" },
   { id: "memory", title: "写真に残したい瞬間", lowLabel: "目で覚えておく", highLabel: "必ず撮りたい" },
   { id: "challenge", title: "みんなで挑戦したいこと", lowLabel: "見守りたい", highLabel: "参加したい" },
+  { id: "movie", title: "映画館で観たい物語", lowLabel: "配信を待つ", highLabel: "初日に観たい" },
+  { id: "dessert", title: "食後に食べたい甘いもの", lowLabel: "ひと口で十分", highLabel: "別腹で食べたい" },
+  { id: "museum", title: "博物館でじっくり見たい展示", lowLabel: "通り過ぎる", highLabel: "時間を忘れて見る" },
+  { id: "party", title: "パーティーにあると盛り上がるもの", lowLabel: "なくても平気", highLabel: "主役になる" },
+  { id: "pet", title: "一緒に暮らしてみたい生き物", lowLabel: "眺めるだけでよい", highLabel: "家族に迎えたい" },
+  { id: "season", title: "その季節に楽しみなこと", lowLabel: "少し感じたい", highLabel: "毎年待ち遠しい" },
+  { id: "school", title: "学校にあったら楽しい授業", lowLabel: "見学でよい", highLabel: "毎週受けたい" },
+  { id: "office", title: "仕事場にあるとうれしい設備", lowLabel: "たまに使う", highLabel: "毎日欠かせない" },
+  { id: "adventure", title: "冒険に持っていきたいもの", lowLabel: "置いていく", highLabel: "最優先で持つ" },
+  { id: "relax", title: "疲れた日にしたいこと", lowLabel: "余裕があれば", highLabel: "真っ先にしたい" },
+  { id: "town", title: "住む町の近くにほしい場所", lowLabel: "遠くてもよい", highLabel: "徒歩圏内にほしい" },
+  { id: "souvenir", title: "旅先から持ち帰りたいお土産", lowLabel: "写真だけでよい", highLabel: "必ず買いたい" },
+  { id: "game", title: "みんなで遊びたいゲーム", lowLabel: "一度で満足", highLabel: "何度も遊びたい" },
+  { id: "garden", title: "庭やベランダで育てたいもの", lowLabel: "見るだけでよい", highLabel: "毎日世話したい" },
+  { id: "concert", title: "生で聴いてみたい音", lowLabel: "録音で十分", highLabel: "会場で浴びたい" },
+  { id: "night", title: "眠る前にしたいこと", lowLabel: "しなくてもよい", highLabel: "習慣にしたい" },
+  { id: "discovery", title: "発見したらわくわくするもの", lowLabel: "少し気になる", highLabel: "大ニュースになる" },
+  { id: "future", title: "未来に実現してほしいもの", lowLabel: "あれば便利", highLabel: "ぜひ実現してほしい" },
+  { id: "collection", title: "集めてみたいもの", lowLabel: "ひとつで満足", highLabel: "ずっと集めたい" },
+  { id: "celebration", title: "お祝いの日にしたいこと", lowLabel: "普段どおりでよい", highLabel: "盛大に楽しみたい" },
 ];
 
 export function shuffleHodoai<T>(items: T[]) {
@@ -183,6 +204,15 @@ export function dealHodoaiCards(players: HodoaiPlayer[], cardsPerPlayer: number)
   if (cards.length > 121) throw new Error("HODOAI_TOO_MANY_CARDS");
   const dealtValues = shuffleHodoai(Array.from({ length: 121 }, (_, index) => index)).slice(0, cards.length);
   return { cards, values: Object.fromEntries(cards.map((card, index) => [card.id, dealtValues[index]])) };
+}
+
+export function pickRandomHodoaiSorter(players: HodoaiPlayer[], random = Math.random) {
+  if (players.length === 0) throw new Error("HODOAI_NOT_ENOUGH_PLAYERS");
+  return players[Math.min(players.length - 1, Math.floor(random() * players.length))]?.id ?? players[0].id;
+}
+
+export function canViewHodoaiCardValue(card: Pick<HodoaiCard, "ownerId">, viewerId: string, revealAll = false) {
+  return revealAll || card.ownerId === viewerId;
 }
 
 export function countHodoaiInversions(order: string[], values: Record<string, number>) {

@@ -65,6 +65,38 @@ export type GameReplayListResponse = {
   favoriteCount: number;
 };
 
+type TahoiyaReplayHighlightSource = {
+  definitions: Array<{ id: string; text: string; isReal: boolean }>;
+  playerId: string;
+  realDefinition: string;
+  scores: Record<string, number>;
+  votes: Record<string, string>;
+};
+
+/** Uses the same stored definitions, votes, and scores as the Tahoiya detail view. */
+export function tahoiyaReplaySummaryHighlights({
+  definitions,
+  playerId,
+  realDefinition,
+  scores,
+  votes,
+}: TahoiyaReplayHighlightSource) {
+  const selectedDefinitionId = votes[playerId];
+  const selectedDefinition = definitions.find((definition) => definition.id === selectedDefinitionId);
+  const selectedVoteCount = selectedDefinition
+    ? Object.values(votes).filter((definitionId) => definitionId === selectedDefinition.id).length
+    : 0;
+  const voteHighlight = selectedDefinition
+    ? `あなたの投票「${selectedDefinition.text}」（${selectedDefinition.isReal ? "本物" : "偽説明"}・${selectedVoteCount}票）`
+    : `全${definitions.length}個の説明と投票結果`;
+
+  return [
+    `本物の説明「${realDefinition}」`,
+    voteHighlight,
+    `あなたの得点 ${Math.max(0, Math.floor(scores[playerId] ?? 0))}点`,
+  ];
+}
+
 export const gameReplayMetadata: Record<GameReplayGameType, { title: string; href: string }> = {
   wordwolf: { title: "ワードウルフ", href: "/wordwolf" },
   tahoiya: { title: "たほい屋", href: "/tahoiya" },
