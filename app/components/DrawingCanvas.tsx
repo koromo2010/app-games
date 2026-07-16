@@ -15,6 +15,7 @@ type Props = {
   activeLayerId?: string;
   onColorPick?: (color: string) => void;
   onPointerInteraction?: () => void;
+  onPointerPosition?: (point: DrawingPoint) => void;
   onStrokeProgress?: (stroke: DrawingStroke) => void;
   onPan?: (deltaX: number, deltaY: number) => void;
   onStrokeComplete: (stroke: DrawingStroke) => void;
@@ -51,7 +52,7 @@ function drawStroke(context: CanvasRenderingContext2D, stroke: DrawingStroke, ca
   context.restore();
 }
 
-export function DrawingCanvas({ strokes, color, width, opacity, tool, disabled = false, keyboardCursor, layerIds = ["base"], activeLayerId = "base", onColorPick, onPointerInteraction, onStrokeProgress, onPan, onStrokeComplete }: Props) {
+export function DrawingCanvas({ strokes, color, width, opacity, tool, disabled = false, keyboardCursor, layerIds = ["base"], activeLayerId = "base", onColorPick, onPointerInteraction, onPointerPosition, onStrokeProgress, onPan, onStrokeComplete }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const activeStrokeRef = useRef<DrawingStroke | null>(null);
   const redrawRef = useRef<() => void>(() => undefined);
@@ -108,6 +109,7 @@ export function DrawingCanvas({ strokes, color, width, opacity, tool, disabled =
     if (disabled || event.button > 0) return;
     onPointerInteraction?.();
     const point = pointFromEvent(event);
+    onPointerPosition?.(point);
     if (tool === "pan") { event.currentTarget.setPointerCapture(event.pointerId); panPointRef.current = { x: event.clientX, y: event.clientY }; return; }
     if (tool === "eyedropper") {
       const context = canvasRef.current?.getContext("2d");
@@ -127,6 +129,7 @@ export function DrawingCanvas({ strokes, color, width, opacity, tool, disabled =
     redraw();
   };
   const move = (event: PointerEvent<HTMLCanvasElement>) => {
+    onPointerPosition?.(pointFromEvent(event));
     if (panPointRef.current && event.currentTarget.hasPointerCapture(event.pointerId)) { const previous = panPointRef.current; onPan?.(previous.x - event.clientX, previous.y - event.clientY); panPointRef.current = { x: event.clientX, y: event.clientY }; return; }
     const stroke = activeStrokeRef.current;
     if (!stroke || !event.currentTarget.hasPointerCapture(event.pointerId)) return;

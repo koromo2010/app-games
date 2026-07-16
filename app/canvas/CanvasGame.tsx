@@ -49,6 +49,7 @@ export function CanvasGame() {
   const channelRef = useRef<BroadcastChannel | null>(null);
   const spacePressedRef = useRef(false);
   const keyboardStrokeIdRef = useRef<string | null>(null);
+  const keyboardStrokeRef = useRef<DrawingStroke | null>(null);
   const pressedArrowKeysRef = useRef(new Set<string>());
   const roomRevisionRef = useRef(0);
   const lobbyRevisionRef = useRef(0);
@@ -111,7 +112,7 @@ export function CanvasGame() {
       if (!response.ok || !data.room) throw new Error(data.error || "ルーム操作に失敗しました");
       if (data.room.revision < roomRevisionRef.current) return data.room;
       roomRevisionRef.current = data.room.revision;
-      setRoom(data.room); setStrokes(data.room.strokes);
+      setRoom(data.room); setStrokes(() => { const active = keyboardStrokeRef.current; return active ? [...data.room!.strokes.filter((stroke) => stroke.id !== active.id), active] : data.room!.strokes; });
       setTool((current) => current === "pan" ? "pen" : current);
       setPendingStrokes((pending) => pending.filter((stroke) => !data.room!.strokes.some((saved) => saved.id === stroke.id && !saved.inProgress)));
       const ownLayer = data.room.layerMode === "per-player" ? data.room.players.find((player) => player.id === session?.id)?.layerId : undefined;
@@ -130,7 +131,7 @@ export function CanvasGame() {
       const data = await response.json() as { room: NonNullable<typeof room> };
       if (data.room.revision < roomRevisionRef.current) return;
       roomRevisionRef.current = data.room.revision;
-      setRoom(data.room); setStrokes(data.room.strokes);
+      setRoom(data.room); setStrokes(() => { const active = keyboardStrokeRef.current; return active ? [...data.room.strokes.filter((stroke) => stroke.id !== active.id), active] : data.room.strokes; });
       setPendingStrokes((pending) => pending.filter((stroke) => !data.room.strokes.some((saved) => saved.id === stroke.id && !saved.inProgress)));
     }, 150);
     return () => window.clearInterval(timer);
@@ -146,7 +147,7 @@ export function CanvasGame() {
       if (data.board.revision < lobbyRevisionRef.current) return;
       lobbyRevisionRef.current = data.board.revision;
       setActiveLayerId("base");
-      setStrokes(data.board.strokes);
+      setStrokes(() => { const active = keyboardStrokeRef.current; return active ? [...data.board.strokes.filter((stroke) => stroke.id !== active.id), active] : data.board.strokes; });
       setPendingStrokes((pending) => pending.filter((stroke) => !data.board.strokes.some((saved) => saved.id === stroke.id)));
       setSyncNotice("広場の落書きボード・描画は3日後に消えます");
     };
@@ -228,9 +229,10 @@ export function CanvasGame() {
         if (!spacePressedRef.current) {
           const id = crypto.randomUUID();
           keyboardStrokeIdRef.current = id;
+          const keyboardStroke: DrawingStroke = { id, layerId: activeLayerId, authorId: session?.id, color, width, opacity, tool: tool === "eraser" ? "eraser" : "pen", points: [keyboardCursor] };
+          keyboardStrokeRef.current = keyboardStroke;
           setStrokes((current) => {
-            const drawingTool = tool === "eraser" ? "eraser" : "pen";
-            const next = normalizeDrawingStrokes([...current, { id, layerId: activeLayerId, authorId: session?.id, color, width, opacity, tool: drawingTool, points: [keyboardCursor] }]);
+            const next = normalizeDrawingStrokes([...current.filter((stroke) => stroke.id !== id), keyboardStroke]);
             localStorage.setItem(storageKey, JSON.stringify(next));
             channelRef.current?.postMessage(next);
             return next;
@@ -263,10 +265,16 @@ export function CanvasGame() {
             y: current.y + vertical * distance * diagonalCorrection,
           });
           if (spacePressedRef.current && (next.x !== current.x || next.y !== current.y)) {
+            const activeStroke = keyboardStrokeRef.current;
+            if (activeStroke) keyboardStrokeRef.current = { ...activeStroke, points: [...activeStroke.points, next] };
             setStrokes((currentStrokes) => {
               const activeId = keyboardStrokeIdRef.current;
-              const nextStrokes = activeId
-                ? currentStrokes.map((stroke) => stroke.id === activeId ? { ...stroke, points: [...stroke.points, next] } : stroke)
+              const currentKeyboardStroke = keyboardStrokeRef.current;
+              const found = activeId ? currentStrokes.some((stroke) => stroke.id === activeId) : false;
+              const nextStrokes = activeId && currentKeyboardStroke
+                ? found
+                  ? currentStrokes.map((stroke) => stroke.id === activeId ? currentKeyboardStroke : stroke)
+                  : [...currentStrokes, currentKeyboardStroke]
                 : currentStrokes;
               const normalized = normalizeDrawingStrokes(nextStrokes);
               localStorage.setItem(storageKey, JSON.stringify(normalized));
@@ -282,9 +290,23 @@ export function CanvasGame() {
       event.preventDefault();
     };
     const releaseSpace = () => {
-      const activeId = keyboardStrokeIdRef.current;
-      if (room && activeId) setStrokes((current) => { const stroke = current.find((item) => item.id === activeId); if (stroke) { setPendingStrokes((pending) => [...pending, stroke]); void roomRequest("PATCH", { code: room.code, action: { type: "stroke", stroke } }); } return current; });
-      spacePressedRef.current = false; keyboardStrokeIdRef.current = null;
+      const stroke = keyboardStrokeRef.current;
+      if (stroke && room) {
+        setPendingStrokes((pending) => [...pending.filter((item) => item.id !== stroke.id), stroke]);
+        void roomRequest("PATCH", { code: room.code, action: { type: "stroke", stroke } });
+      } else if (stroke && session?.id) {
+        const completed = { ...stroke, authorId: session.id, updatedAt: Date.now() };
+        setPendingStrokes((pending) => [...pending.filter((item) => item.id !== completed.id), completed]);
+        setStrokes((current) => current.filter((item) => item.id !== completed.id));
+        void fetch("/api/canvas/lobby-board", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "stroke", stroke: completed }) }).then(async (response) => {
+          if (!response.ok) throw new Error("落書きの保存に失敗しました");
+          const data = await response.json() as { board: { strokes: DrawingStroke[]; revision: number } };
+          lobbyRevisionRef.current = Math.max(lobbyRevisionRef.current, data.board.revision);
+          setStrokes(data.board.strokes);
+          setPendingStrokes((pending) => pending.filter((item) => item.id !== completed.id));
+        }).catch(() => setPendingStrokes((pending) => pending.filter((item) => item.id !== completed.id)));
+      }
+      spacePressedRef.current = false; keyboardStrokeIdRef.current = null; keyboardStrokeRef.current = null;
     };
     const releaseAllKeys = () => { releaseSpace(); pressedArrowKeysRef.current.clear(); };
     const onKeyUp = (event: KeyboardEvent) => {
@@ -372,7 +394,7 @@ export function CanvasGame() {
 
       {!room && <div className="flex items-center justify-between gap-2 px-1"><div><h2 className="font-black text-slate-800">みんなの落書きボード</h2><p className="text-xs font-semibold text-slate-500">通常の4倍の広さ・スクロール対応・描画は3日後に自動で消えます{!session?.id && "（ログインすると全員に共有）"}</p></div><span className="rounded-full bg-white/80 px-3 py-1 text-xs font-bold text-slate-600">↔ ↕ スクロール</span></div>}
       <div ref={boardViewportRef} className="max-h-[72vh] overflow-auto rounded-2xl border-4 border-white bg-white shadow-2xl shadow-slate-400/40">
-        <div className={room ? "aspect-[4/3] min-h-[320px] w-full" : "h-[1200px] w-[1600px]"} style={{ zoom }}><DrawingCanvas strokes={visibleStrokes} layerIds={layers.filter((layer) => !hiddenLayerIds.has(layer.id)).map((layer) => layer.id)} activeLayerId={activeLayerId} color={color} width={width} opacity={opacity} tool={tool} keyboardCursor={keyboardCursorVisible ? keyboardCursor : undefined} onPointerInteraction={() => setKeyboardCursorVisible(false)} onColorPick={(picked) => { setColor(picked); setTool("pen"); }} onStrokeProgress={submitStrokeProgress} onPan={(deltaX, deltaY) => boardViewportRef.current?.scrollBy(deltaX, deltaY)} onStrokeComplete={submitStroke} /></div>
+        <div className={room ? "aspect-[4/3] min-h-[320px] w-full" : "h-[1200px] w-[1600px]"} style={{ zoom }}><DrawingCanvas strokes={visibleStrokes} layerIds={layers.filter((layer) => !hiddenLayerIds.has(layer.id)).map((layer) => layer.id)} activeLayerId={activeLayerId} color={color} width={width} opacity={opacity} tool={tool} keyboardCursor={keyboardCursorVisible ? keyboardCursor : undefined} onPointerInteraction={() => setKeyboardCursorVisible(false)} onPointerPosition={setKeyboardCursor} onColorPick={(picked) => { setColor(picked); setTool("pen"); }} onStrokeProgress={submitStrokeProgress} onPan={(deltaX, deltaY) => boardViewportRef.current?.scrollBy(deltaX, deltaY)} onStrokeComplete={submitStroke} /></div>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs font-semibold text-slate-500"><span>{syncNotice}</span><span>A ペン・S 消しゴム・C 細く・V 太く・Z 戻す・Y やり直す</span><span>＋/− 拡大縮小・0 等倍・Ctrl＋ホイール</span><span>矢印 移動・Space＋矢印 描画・Shift 高速</span><span>{strokes.length}ストローク</span></div>
     </section>
