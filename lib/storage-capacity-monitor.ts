@@ -1,5 +1,5 @@
 import { list } from "@vercel/blob";
-import { resolveAvatarBlobToken } from "@/lib/avatar-image-server";
+import { resolveAvatarBlobStoreId, resolveAvatarBlobToken } from "@/lib/avatar-image-server";
 import { sendOperationsAlertEmail } from "@/lib/email";
 import { getPostgresClient, isPostgresConfigured } from "@/lib/postgres-store";
 import { getRedisConfig, redisCommand } from "@/lib/redis-store";
@@ -44,11 +44,18 @@ async function redisUsage() {
 async function blobUsage() {
   const capacityBytes = capacity("BLOB_CAPACITY_BYTES");
   const token = resolveAvatarBlobToken(process.env).token;
-  if (!token) return null;
+  const storeId = resolveAvatarBlobStoreId(process.env).token;
+  if (!token && !storeId) return null;
+  const credentials = token
+    ? { token }
+    : {
+        storeId: storeId!,
+        ...(process.env.VERCEL_OIDC_TOKEN ? { oidcToken: process.env.VERCEL_OIDC_TOKEN } : {}),
+      };
   let cursor: string | undefined;
   let usedBytes = 0;
   do {
-    const page = await list({ token, cursor, limit: 1000 });
+    const page = await list({ ...credentials, cursor, limit: 1000 });
     usedBytes += page.blobs.reduce((sum, blob) => sum + blob.size, 0);
     cursor = page.hasMore ? page.cursor : undefined;
   } while (cursor);
