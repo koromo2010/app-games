@@ -5,10 +5,11 @@ import { type ChangeEvent, type FormEvent, useCallback, useEffect, useState } fr
 import { uploadSiteIcon } from "@/lib/site-icon-image-client";
 import { defaultSiteSettings, siteSettingsLimits, type SiteSettings } from "@/lib/site-settings";
 import { AdminDashboard } from "./AdminDashboard";
+import { AdminHyperparametersPanel } from "./AdminHyperparametersPanel";
 import { GameOperationsPanel } from "./GameOperationsPanel";
 
 type ScreenState = "checking" | "login" | "settings";
-type AdminSection = "dashboard" | "site-settings" | "games";
+type AdminSection = "dashboard" | "site-settings" | "games" | "hyperparameters";
 const messages: Record<string, string> = {
   INVALID_ADMIN_PASSWORD: "管理パスワードが違います。",
   SITE_ADMIN_PASSWORD_NOT_CONFIGURED: "サーバーにSITE_ADMIN_PASSWORDが設定されていません。",
@@ -112,9 +113,10 @@ export function SiteAdminPanel() {
   return (
     <main className="min-h-screen bg-slate-950 text-white">
       <header className="border-b border-white/10 bg-slate-900/90"><div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4"><div><p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-300">Game Fields Admin</p><h1 className="text-2xl font-black">サイト管理</h1></div><div className="flex gap-2"><Link href="/games" className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold hover:bg-white/10">サイトを見る</Link><button type="button" onClick={() => void logout()} className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold text-slate-300 hover:bg-white/10">ログアウト</button></div></div></header>
-      <nav className="border-b border-white/10 bg-slate-900/60" aria-label="管理画面メニュー"><div className="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-4 py-2">{([['dashboard', 'ダッシュボード'], ['site-settings', 'サイト設定'], ['games', 'ゲーム公開管理']] as const).map(([value, label]) => <button key={value} type="button" aria-current={section === value ? "page" : undefined} onClick={() => setSection(value)} className={`whitespace-nowrap rounded-lg px-4 py-2 text-sm font-bold transition ${section === value ? "bg-cyan-300 text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>{label}</button>)}</div></nav>
+      <nav className="border-b border-white/10 bg-slate-900/60" aria-label="管理画面メニュー"><div className="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-4 py-2">{([['dashboard', 'ダッシュボード'], ['site-settings', 'サイト設定'], ['games', 'ゲーム公開管理'], ['hyperparameters', 'ハイパラ棚卸し']] as const).map(([value, label]) => <button key={value} type="button" aria-current={section === value ? "page" : undefined} onClick={() => setSection(value)} className={`whitespace-nowrap rounded-lg px-4 py-2 text-sm font-bold transition ${section === value ? "bg-cyan-300 text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>{label}</button>)}</div></nav>
       {section === "dashboard" && <AdminDashboard onAuthExpired={authExpired} />}
       {section === "games" && <GameOperationsPanel onAuthExpired={authExpired} />}
+      {section === "hyperparameters" && <AdminHyperparametersPanel onAuthExpired={authExpired} />}
       {section === "site-settings" &&
       <form onSubmit={save} className="mx-auto grid max-w-6xl gap-6 px-4 py-8 lg:grid-cols-[minmax(0,1fr)_380px]">
         <section className="space-y-5 rounded-2xl border border-white/10 bg-white/[0.05] p-5 sm:p-7">
