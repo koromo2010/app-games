@@ -30,6 +30,7 @@ export function CanvasGame() {
   const [width, setWidth] = useState(1);
   const [opacity, setOpacity] = useState(1);
   const [zoom, setZoom] = useState(1);
+  const [boardFullscreen, setBoardFullscreen] = useState(false);
   const [tool, setTool] = useState<"pen" | "eraser" | "eyedropper" | "fill" | "pan">("pen");
   const [rulesOpen, setRulesOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -54,10 +55,31 @@ export function CanvasGame() {
   const roomRevisionRef = useRef(0);
   const lobbyRevisionRef = useRef(0);
   const boardViewportRef = useRef<HTMLDivElement>(null);
+  const boardShellRef = useRef<HTMLDivElement>(null);
 
   const changeZoom = useCallback((delta: number) => {
     setZoom((current) => clampZoom(current + delta));
   }, []);
+
+  const openBoardFullscreen = async () => {
+    const shell = boardShellRef.current;
+    if (!shell) return;
+    try { await shell.requestFullscreen?.(); } catch { /* Fixed-position fallback remains available. */ }
+    setBoardFullscreen(true);
+  };
+
+  const closeBoardFullscreen = useCallback(async () => {
+    if (document.fullscreenElement) await document.exitFullscreen().catch(() => undefined);
+    setBoardFullscreen(false);
+  }, []);
+
+  useEffect(() => {
+    const onFullscreenChange = () => { if (!document.fullscreenElement) setBoardFullscreen(false); };
+    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape" && boardFullscreen) void closeBoardFullscreen(); };
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    window.addEventListener("keydown", onKeyDown);
+    return () => { document.removeEventListener("fullscreenchange", onFullscreenChange); window.removeEventListener("keydown", onKeyDown); };
+  }, [boardFullscreen, closeBoardFullscreen]);
 
   useEffect(() => {
     const viewport = boardViewportRef.current;
@@ -393,9 +415,17 @@ export function CanvasGame() {
         </div>
       </div>
 
-      {!room && <div className="flex items-center justify-between gap-2 px-1"><div><h2 className="font-black text-slate-800">みんなの落書きボード</h2><p className="text-xs font-semibold text-slate-500">通常の4倍の広さ・スクロール対応・描画は3日後に自動で消えます{!session?.id && "（ログインすると全員に共有）"}</p></div><span className="rounded-full bg-white/80 px-3 py-1 text-xs font-bold text-slate-600">↔ ↕ スクロール</span></div>}
-      <div ref={boardViewportRef} className="max-h-[72vh] overflow-auto rounded-2xl border-4 border-white bg-white shadow-2xl shadow-slate-400/40">
+      {!room && <div className="flex items-center justify-between gap-2 px-1"><div><h2 className="font-black text-slate-800">みんなの落書きボード</h2><p className="text-xs font-semibold text-slate-500">通常の4倍の広さ・スクロール対応・描画は3日後に自動で消えます{!session?.id && "（ログインすると全員に共有）"}</p></div><div className="flex items-center gap-2"><span className="rounded-full bg-white/80 px-3 py-1 text-xs font-bold text-slate-600">↔ ↕ スクロール</span><button type="button" onClick={() => void openBoardFullscreen()} className="rounded-lg border border-cyan-200 bg-white px-3 py-2 text-xs font-black text-cyan-800 shadow-sm">⛶ 全画面表示</button></div></div>}
+      <div ref={boardShellRef} className={boardFullscreen ? "fixed inset-0 z-[100] bg-slate-950" : "relative"}>
+        {boardFullscreen && <div className="absolute right-3 top-3 z-30 flex items-center gap-2 rounded-xl border border-white/15 bg-slate-950/85 p-2 text-white shadow-xl backdrop-blur">
+          <button type="button" disabled={zoom <= minimumZoom} onClick={() => changeZoom(-zoomStep)} className="rounded px-2 py-1 font-black disabled:opacity-30">−</button>
+          <button type="button" onClick={() => setZoom(1)} className="min-w-14 text-xs font-black tabular-nums">{Math.round(zoom * 100)}%</button>
+          <button type="button" disabled={zoom >= maximumZoom} onClick={() => changeZoom(zoomStep)} className="rounded px-2 py-1 font-black disabled:opacity-30">＋</button>
+          <button type="button" onClick={() => void closeBoardFullscreen()} className="ml-1 rounded-lg bg-white px-3 py-1.5 text-xs font-black text-slate-900">閉じる</button>
+        </div>}
+      <div ref={boardViewportRef} className={`${boardFullscreen ? "h-full max-h-none rounded-none border-0" : "max-h-[72vh] rounded-2xl border-4 border-white"} overflow-auto bg-white shadow-2xl shadow-slate-400/40`}>
         <div className={room ? "aspect-[4/3] min-h-[320px] w-full" : "h-[1200px] w-[1600px]"} style={{ zoom }}><DrawingCanvas strokes={visibleStrokes} layerIds={layers.filter((layer) => !hiddenLayerIds.has(layer.id)).map((layer) => layer.id)} activeLayerId={activeLayerId} color={color} width={width} opacity={opacity} tool={tool} keyboardCursor={keyboardCursorVisible ? keyboardCursor : undefined} onPointerInteraction={() => setKeyboardCursorVisible(false)} onPointerPosition={setKeyboardCursor} onColorPick={(picked) => { setColor(picked); setTool("pen"); }} onStrokeProgress={submitStrokeProgress} onPan={(deltaX, deltaY) => boardViewportRef.current?.scrollBy(deltaX, deltaY)} onStrokeComplete={submitStroke} /></div>
+      </div>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs font-semibold text-slate-500"><span>{syncNotice}</span><span>A ペン・S 消しゴム・C 細く・V 太く・Z 戻す・Y やり直す</span><span>＋/− 拡大縮小・0 等倍・Ctrl＋ホイール</span><span>矢印 移動・Space＋矢印 描画・Shift 高速</span><span>{strokes.length}ストローク</span></div>
       </div>
