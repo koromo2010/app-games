@@ -1,80 +1,34 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
 import { GameAdSlot } from "@/app/components/GameAdSlot";
-import { GamePhaseTimer } from "@/app/components/GamePhaseTimer";
 import { PlayerTimeoutNotice } from "@/app/components/PlayerTimeoutNotice";
 import { GameResultShareButton } from "@/app/components/GameResultShareButton";
-import { GameRulesDialog } from "@/app/components/GameRulesDialog";
 import { GameTopBanner, gameTopBannerOffsetClass } from "@/app/components/GameTopBanner";
 import { GameTopMenu, gameTopBannerActionClass, gameTopBannerDangerActionClass, gameTopMenuItemClass } from "@/app/components/GameTopMenu";
 import { GamePlayerMenu } from "@/app/components/GamePlayerMenu";
 import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomResultActions } from "@/app/components/RoomResultActions";
-import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
-import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "@/app/hooks/use-online-room-polling";
-import { useRoomResultReturnGate } from "@/app/hooks/use-room-result-return-gate";
-import { applyHodoaiRoomAction, createHodoaiRoom, hodoaiRoomApi } from "@/app/hodoai-talk/hodoai-room-api-client";
-import { WordScaleArrangeBoard } from "@/app/hodoai-talk/WordScaleArrangeBoard";
+import { hodoaiRoomApi } from "@/app/hodoai-talk/hodoai-room-api-client";
+import { HodoaiPlayPanels } from "@/app/hodoai-talk/HodoaiPlayPanels";
+import { HodoaiRulesDialog } from "@/app/hodoai-talk/HodoaiRulesDialog";
+import { useHodoaiRoomActions } from "@/app/hodoai-talk/use-hodoai-room-actions";
+import { useHodoaiRoomSession } from "@/app/hodoai-talk/use-hodoai-room-session";
+import { useHodoaiViewModel } from "@/app/hodoai-talk/use-hodoai-view-model";
 import { WordScaleRoomPanel } from "@/app/hodoai-talk/WordScaleRoomPanel";
-import { WordScaleVerticalScale } from "@/app/hodoai-talk/WordScaleVerticalScale";
-import { loadPlayerRoomDefaults, savePlayerRoomDefaults } from "@/lib/game-room-defaults-client";
-import { OnlineRoomApiError, restoreOnlineRoom } from "@/lib/online-room-api-client";
 import {
   defaultAvatarImage,
   fallbackAvatarColor,
-  isPlayerAuthenticated,
-  loadPersistentPlayerSession,
-  type PlayerSession,
 } from "@/lib/player-session";
 import {
-  clueHasNumber,
-  defaultHodoaiScoring,
   hodoaiGameShareText,
   hodoaiFinalMessage,
-  hodoaiResultPresentation,
-  normalizeHodoaiConfig,
-  type HodoaiConfig,
   type HodoaiPlayer,
   type HodoaiRoom,
-  type HodoaiRoomAction,
   type HodoaiRoomChoice,
 } from "@/lib/hodoai-talk";
-
-const lastRoomKey = "hodoai-last-room";
-const defaultsStorageKey = "hodoai-room-defaults-v2";
-const ownerIdKey = "hodoai-owner-id";
-
-function makeRoomCode() {
-  return Math.random().toString(36).slice(2, 6).toUpperCase();
-}
-
-function getOwnerId() {
-  const saved = localStorage.getItem(ownerIdKey);
-  if (saved) return saved;
-  const created = crypto.randomUUID();
-  localStorage.setItem(ownerIdKey, created);
-  return created;
-}
-
-function normalizeDefaults(value: unknown) {
-  return { ...normalizeHodoaiConfig(value), debugMode: false };
-}
-
-function formatTime(seconds: number) {
-  return seconds === 0 ? "なし" : `${seconds}秒`;
-}
-
-function apiMessage(status: number, fallback: string) {
-  if (status === 401) return "合言葉が違います。";
-  if (status === 403) return "この操作を行う権限がありません。";
-  if (status === 404) return "部屋が見つかりません。";
-  if (status === 409) return "部屋の状態が更新されました。もう一度お試しください。";
-  if (status === 503) return "部屋サーバーを利用できません。少し待ってお試しください。";
-  return fallback;
-}
 
 function PlayerRow({ player, isHost, isMe }: { player: HodoaiPlayer; isHost: boolean; isMe: boolean }) {
   return (
@@ -88,259 +42,21 @@ function PlayerRow({ player, isHost, isMe }: { player: HodoaiPlayer; isHost: boo
 }
 
 export function HodoaiTalkGame() {
-  const [session, setSession] = useState<PlayerSession | null>(null);
   const [room, setRoom] = useState<HodoaiRoom | null>(null);
-  const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
   const [passphrase, setPassphrase] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [choices, setChoices] = useState<HodoaiRoomChoice[]>([]);
   const [showChoices, setShowChoices] = useState(false);
-  const [clueDrafts, setClueDrafts] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
-  const resultReturnGate = useRoomResultReturnGate({ room, setRoom, playerId: session?.id ?? "", resultPhase: "result", onReturnUnavailable: () => setError("部屋に戻れません。解散されたか、参加情報が変更されています。") });
+  const { session, ready, playerId, resultReturnGate } = useHodoaiRoomSession({ room, setRoom, setError });
+  const viewModel = useHodoaiViewModel(room, playerId);
+  const { isHost, latestResult, latestResultRows, configItems } = viewModel;
 
-  useEffect(() => {
-    let active = true;
-    let timer: number | undefined;
-    if (!isPlayerAuthenticated()) {
-      timer = window.setTimeout(() => setReady(true), 0);
-      return () => {
-        active = false;
-        if (timer) window.clearTimeout(timer);
-      };
-    }
-    loadPersistentPlayerSession().then(async (savedSession) => {
-      if (!active) return;
-      if (!savedSession?.id) {
-        setReady(true);
-        return;
-      }
-      setSession(savedSession);
-      const lastCode = localStorage.getItem(lastRoomKey);
-      const savedRoom = await restoreOnlineRoom({
-        playerId: savedSession.id,
-        lastCode,
-        fetchActiveRoom: hodoaiRoomApi.fetchActiveRoom,
-        fetchRoom: hodoaiRoomApi.fetchRoom,
-      });
-      if (!active) return;
-      timer = window.setTimeout(() => {
-        if (savedRoom) {
-          setRoom(savedRoom);
-          localStorage.setItem(lastRoomKey, savedRoom.code);
-        }
-        setReady(true);
-      }, 0);
-    }).catch(() => {
-      if (active) setReady(true);
-    });
-    return () => {
-      active = false;
-      if (timer) window.clearTimeout(timer);
-    };
-  }, []);
+  const { runAction, createRoom, listRooms, joinRoom, dissolveRoom, leaveRoom, updateConfig } = useHodoaiRoomActions({ room, session, passphrase, joinCode, isHost, markRoomDissolved: resultReturnGate.markRoomDissolved, setRoom, setError, setIsSaving, setChoices, setShowChoices });
 
-  const roomCode = room?.code;
-  const roomPhase = room?.phase;
-  const playerId = session?.id ?? "";
-
-  useOnlineRoomPolling({
-    roomCode: playerId && !resultReturnGate.isRoomDissolved ? roomCode : null,
-    intervalMs: roomPhase === "arrange" ? onlineRoomPollingIntervals.realtime : roomPhase === "lobby" ? onlineRoomPollingIntervals.idle : onlineRoomPollingIntervals.active,
-    fetchRoom: (code) => hodoaiRoomApi.fetchRoom(code, playerId),
-    onRoom: resultReturnGate.acceptIncomingRoom,
-    onMissing: () => {
-      localStorage.removeItem(lastRoomKey);
-      if (resultReturnGate.markRoomDissolved()) {
-        setError("部屋が解散されました。結果画面はこのまま確認できます。");
-        return;
-      }
-      setRoom(null);
-      setError("部屋が解散されたか、参加情報がなくなりました。");
-    },
-  });
-
-  const isHost = Boolean(room && playerId === room.hostId);
-  const submittedCount = room ? room.cards.filter((card) => Boolean(room.clues[card.id])).length : 0;
-  const sorter = room?.players.find((player) => player.id === room.sorterId) ?? null;
-  const canArrange = Boolean(room?.phase === "arrange" && room.sorterId === playerId);
-  const latestResult = room?.history.at(-1);
-  const latestResultRows = latestResult ? hodoaiResultPresentation(latestResult, room?.players ?? []).rows : [];
-  const ownCards = room?.cards.filter((card) => card.ownerId === playerId) ?? [];
-  const configItems = room ? [
-    { label: "参加人数", value: `${room.players.length}人` },
-    { label: "配るカード", value: `1人${room.cardsPerPlayer}枚` },
-    { label: "ことば", value: `同じカードで${room.roundsTotal}回` },
-    { label: "ヒント時間", value: formatTime(room.clueTimeLimitSeconds) },
-    { label: "相談時間", value: formatTime(room.arrangeTimeLimitSeconds) },
-    { label: "並べ替え役", value: room.phase === "lobby" ? "開始時にランダム" : sorter?.name ?? "未定" },
-    { label: "合言葉", value: room.passphrase ? "あり" : "なし" },
-    { label: "デバッグ", value: room.debugMode ? "ON" : "OFF" },
-  ] : [];
-
-  const runAction = useCallback(async (action: HodoaiRoomAction) => {
-    if (!room) return null;
-    setIsSaving(true);
-    try {
-      const savedRoom = await applyHodoaiRoomAction(room.code, action);
-      setRoom(savedRoom);
-      setError("");
-      return savedRoom;
-    } catch (caught) {
-      setError(caught instanceof OnlineRoomApiError
-        ? apiMessage(caught.status, "操作を保存できませんでした。")
-        : "通信できませんでした。接続を確認してください。");
-      return null;
-    } finally {
-      setIsSaving(false);
-    }
-  }, [room]);
-
-  const createRoom = async () => {
-    if (!session?.id) return;
-    setIsSaving(true);
-    const ownerId = getOwnerId();
-    try {
-      await hodoaiRoomApi.remove({ ownerId, fallbackHostId: session.id });
-      const defaults = await loadPlayerRoomDefaults({ game: "hodoai-talk", playerId: session.id, localStorageKey: defaultsStorageKey, normalize: normalizeDefaults });
-      const now = Date.now();
-      const host: HodoaiPlayer = { id: session.id, name: session.name, joinedAt: now, avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined, shareNameAllowed: session.shareNameAllowed === true };
-      const nextRoom: HodoaiRoom = {
-        code: makeRoomCode(), revision: 0, hostId: session.id, sorterId: session.id, ownerId, passphrase: passphrase.trim(), phase: "lobby", players: [host],
-        ...defaults, ...defaultHodoaiScoring, playerTimeouts: { [session.id]: { consecutiveTimeouts: 0, reducedTime: false } }, playerTimeoutNotice: null, debugMode: false, debugReplayEnabled: false, debugLog: [], gameNumber: 1, round: 1, theme: null, cards: [], values: {}, clues: {}, clueHistory: [], order: [], totalPoints: 0, history: [], phaseStartedAt: null, createdAt: now, updatedAt: now,
-      };
-      const data = await createHodoaiRoom(nextRoom, session.id);
-      setRoom(data.room);
-      localStorage.setItem(lastRoomKey, data.room.code);
-      setError("");
-    } catch (caught) {
-      const status = caught instanceof OnlineRoomApiError ? caught.status : 0;
-      setError(status === 409 ? "プレイ中の部屋があります。先にその部屋へ戻ってください。" : apiMessage(status, "部屋を作成できませんでした。"));
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const listRooms = async () => {
-    try {
-      const rooms = await hodoaiRoomApi.fetchJoinableRooms();
-      setChoices(rooms);
-      setShowChoices(true);
-      setError(rooms.length ? "" : "参加できる未開始の部屋がありません。");
-    } catch (caught) {
-      setError(apiMessage(caught instanceof OnlineRoomApiError ? caught.status : 0, "部屋一覧を取得できませんでした。"));
-    }
-  };
-
-  const joinRoom = async (selectedCode = joinCode) => {
-    if (!session?.id) return;
-    const code = selectedCode.trim().toUpperCase();
-    if (!code) {
-      setError("部屋コードを入力してください。");
-      return;
-    }
-    const player: HodoaiPlayer = { id: session.id, name: session.name, joinedAt: Date.now(), avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined, shareNameAllowed: session.shareNameAllowed === true };
-    setIsSaving(true);
-    try {
-      const joinedRoom = await applyHodoaiRoomAction(code, { type: "join-room", actorId: session.id, player, passphrase });
-      setRoom(joinedRoom);
-      setShowChoices(false);
-      localStorage.setItem(lastRoomKey, joinedRoom.code);
-      setError("");
-    } catch (caught) {
-      setError(apiMessage(caught instanceof OnlineRoomApiError ? caught.status : 0, "部屋へ参加できませんでした。"));
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const dissolveRoom = async () => {
-    if (!room || !session?.id || !isHost || !window.confirm("部屋を解散しますか？")) return;
-    try {
-      await hodoaiRoomApi.remove({ code: room.code, actorId: session.id });
-    } catch {
-      setError("部屋を解散できませんでした。");
-      return;
-    }
-    localStorage.removeItem(lastRoomKey);
-    if (resultReturnGate.markRoomDissolved()) {
-      setError("部屋を解散しました。結果画面はこのまま確認できます。");
-      return;
-    }
-    setRoom(null);
-  };
-
-  const leaveRoom = async () => {
-    if (!room || !session?.id || isHost) return;
-    const saved = await runAction({ type: "leave-room", actorId: session.id });
-    if (!saved) return;
-    setRoom(null);
-    localStorage.removeItem(lastRoomKey);
-  };
-
-  const updateConfig = async (updates: Partial<Omit<HodoaiConfig, "debugMode">>) => {
-    if (!room || !session?.id || !isHost) return;
-    const config = normalizeHodoaiConfig({ ...room, ...updates, debugMode: room.debugMode });
-    const saved = await runAction({ type: "update-config", actorId: session.id, config: { roundsTotal: config.roundsTotal, cardsPerPlayer: config.cardsPerPlayer, clueTimeLimitSeconds: config.clueTimeLimitSeconds, arrangeTimeLimitSeconds: config.arrangeTimeLimitSeconds } });
-    if (saved) void savePlayerRoomDefaults({ game: "hodoai-talk", playerId: session.id, localStorageKey: defaultsStorageKey, defaults: normalizeDefaults(saved) });
-  };
-
-  const submitClues = () => {
-    if (!room || !session?.id) return;
-    const missingCards = ownCards.filter((card) => !room.clues[card.id]);
-    const clues = Object.fromEntries(missingCards.map((card) => [card.id, (clueDrafts[card.id] ?? "").trim()]));
-    for (const card of missingCards) {
-      if (clues[card.id].length < 2) {
-        setError(`カード${card.cardNumber}のことばを2文字以上で入力してください。`);
-        return;
-      }
-      if (clueHasNumber(clues[card.id])) {
-        setError(`カード${card.cardNumber}のことばに数字は使えません。`);
-        return;
-      }
-    }
-    if (missingCards.length === 0) return;
-    void runAction({ type: "submit-clues", actorId: session.id, round: room.round, clues }).then((saved) => {
-      if (saved) setClueDrafts((current) => Object.fromEntries(Object.entries(current).filter(([cardId]) => !clues[cardId])));
-    });
-  };
-
-  const rulesDialog = <GameRulesDialog open={rulesOpen} title="ワードスケールのルール" onClose={() => setRulesOpen(false)}>
-    <p>みんなで力を合わせる協力ゲームです。全員に0〜120の秘密の数字が配られます。その数字を直接言わず、お題に合うことばで伝え、最後に全員のカードを数字の小さい順へ並べます。</p>
-    <h3 className="mt-4 font-black text-white">ゲームの準備</h3>
-    <ul className="mt-2 list-disc space-y-2 pl-5">
-      <li>ホストが、1人に配るカードの枚数と、同じ数字についてことばを出す回数を決めます。</li>
-      <li>ゲーム開始時に、全員へ0〜120の異なる数字を配ります。自分の数字だけを見ることができ、ほかの人の数字は最後まで見えません。</li>
-      <li>最後にカードを動かす「並べ替え役」は、ゲーム開始時に参加者からランダムで1人選ばれます。</li>
-    </ul>
-    <h3 className="mt-4 font-black text-white">ことばを出す</h3>
-    <ol className="mt-2 list-decimal space-y-2 pl-5">
-      <li>全員に同じお題が表示されます。お題には「0側」と「120側」の意味も書かれています。</li>
-      <li>自分の数字がそのお題なら何に近いかを考え、カード1枚につき短いことばを1つ入力します。カードが複数ある場合は、全部をまとめて提出します。</li>
-      <li>数字そのもの、「真ん中くらい」「100に近い」のような数の直接説明は禁止です。</li>
-      <li>設定回数が2回以上なら、同じ数字のままお題だけを変えます。別のお題で出したことばも、最後の並べ替えの手がかりになります。</li>
-    </ol>
-    <div className="mt-3 rounded-xl border border-cyan-300/20 bg-cyan-300/10 p-3 text-cyan-100"><span className="font-bold">例：</span>お題が「休憩中にうれしい食べ物」で、自分の数字が120に近いなら「大好物のケーキ」、0に近いなら「あまり好きではない野菜」のように表します。</div>
-    <h3 className="mt-4 font-black text-white">最後の並べ替え</h3>
-    <ol className="mt-2 list-decimal space-y-2 pl-5">
-      <li>全員のことばがそろうと、すべてのカードを公開します。秘密の数字はまだ見えません。</li>
-      <li>全員で相談し、数字が小さいと思うカードから大きいと思うカードの順に並べます。実際にカードを動かせるのは並べ替え役だけです。</li>
-      <li>並べ替え役は自分の秘密の数字を確認しながら操作できます。順番を確定すると全数字を公開し、採点します。</li>
-    </ol>
-    <h3 className="mt-4 font-black text-white">得点</h3>
-    <p className="mt-2">個人の得点ではなく、チーム全員で1つの得点を取ります。正解の順番と比べて、前後が反対になったカードの組み合わせを数えます。</p>
-    <ul className="mt-2 list-disc space-y-2 pl-5">
-      <li>反対の組み合わせが0組：3点</li>
-      <li>1組：2点</li>
-      <li>2〜3組：1点</li>
-      <li>4組以上：0点</li>
-    </ul>
-    <p className="mt-2">たとえば正解が「10・50・90」なのに「10・90・50」と並べた場合、90と50の1組だけが反対なので2点です。ことばを何回出す設定でも、最後の採点は1回だけで、1ゲームの最高点は3点です。</p>
-    <h3 className="mt-4 font-black text-white">時間切れ</h3>
-    <p className="mt-2 text-amber-200">ことばを出す時間が切れると、そのカードはその回だけ「パス」になります。並べ替え時間が切れると、その時点で保存されている順番を自動で採点します。</p>
-  </GameRulesDialog>;
+  const rulesDialog = <HodoaiRulesDialog open={rulesOpen} onClose={() => setRulesOpen(false)} />;
 
   if (!ready) return <main className="min-h-screen bg-slate-950 p-8 text-white">ログイン情報と部屋を確認中...</main>;
 
@@ -406,124 +122,7 @@ export function HodoaiTalkGame() {
         </WordScaleRoomPanel>
         <div className="space-y-4">
           {error && <p className="rounded-xl border border-rose-300/30 bg-rose-300/10 p-3 text-sm font-bold text-rose-100">{error}</p>}
-          {room.phase === "lobby" && (
-            <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6">
-              <h2 className="text-2xl font-black">ゲーム開始前</h2>
-              {isHost ? (
-                <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                  <label className="text-sm font-bold">同じカードでことばを出す回数
-                    <select value={room.roundsTotal} onChange={(event) => void updateConfig({ roundsTotal: Number(event.target.value) })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-950">
-                      {[1, 2, 3, 4].map((value) => <option key={value} value={value}>{value}回</option>)}
-                    </select>
-                  </label>
-                  <label className="text-sm font-bold">1人に配るカード
-                    <select value={room.cardsPerPlayer} onChange={(event) => void updateConfig({ cardsPerPlayer: Number(event.target.value) })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-950">
-                      {[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{value}枚</option>)}
-                    </select>
-                  </label>
-                  <div className="rounded-xl border border-cyan-300/20 bg-cyan-300/10 p-4 text-sm leading-6 text-cyan-50"><span className="block font-black">並べ替え役はランダム</span>ゲーム開始時に参加者から1人を選びます。最後のカード操作と順番の確定は、その人だけが行います。</div>
-                  <RoomTimeLimitControl label="1回ごとのことば提出時間" value={room.clueTimeLimitSeconds} onChange={(seconds) => void updateConfig({ clueTimeLimitSeconds: seconds })} />
-                  <RoomTimeLimitControl label="並べ替え相談時間" value={room.arrangeTimeLimitSeconds} onChange={(seconds) => void updateConfig({ arrangeTimeLimitSeconds: seconds })} />
-                </div>
-              ) : (
-                <p className="mt-4 rounded-xl bg-white/[0.05] p-4 text-slate-300">ホストが設定してゲームを開始するまでお待ちください。並べ替え役はゲーム開始時にランダムで決まります。</p>
-              )}
-              {isHost && room.debugMode && <div className="mt-5 rounded-xl border border-cyan-300/25 bg-cyan-300/10 p-4"><p className="text-sm font-bold text-cyan-50">デバッグ用の参加者を追加し、1人でも複数人プレイを確認できます。</p><button type="button" disabled={isSaving} onClick={() => void runAction({ type: "debug-add-player", actorId: playerId })} className="mt-3 w-full rounded-lg border border-cyan-200/40 bg-cyan-200 px-4 py-2 font-black text-cyan-950 disabled:opacity-50">ダミーユーザーを追加</button></div>}
-              {isHost && <button type="button" disabled={isSaving || (room.players.length < 2 && !room.debugMode)} onClick={() => void runAction({ type: "start-game", actorId: playerId })} className="mt-6 w-full rounded-xl bg-amber-300 px-4 py-4 text-lg font-black text-slate-950 disabled:opacity-40">{room.players.length < 2 && !room.debugMode ? "2人以上で開始できます" : "このメンバーで開始"}</button>}
-            </section>
-          )}
-
-          {room.phase !== "lobby" && (
-            <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-black uppercase tracking-[0.22em] text-amber-300">{room.phase === "clue" ? `ことば ${room.round}/${room.roundsTotal}回目` : room.phase === "arrange" ? "最終並べ替え" : "最終結果"}</p>
-                  <h2 className="mt-2 text-2xl font-black sm:text-4xl">{room.phase === "clue" ? room.theme?.title : room.phase === "arrange" ? "すべてのことばを手がかりに並べる" : `${room.totalPoints}/3点`}</h2>
-                </div>
-                <span className="rounded-xl bg-amber-300 px-4 py-2 font-black text-slate-950">全 {room.cards.length}枚</span>
-              </div>
-              {room.phase === "clue" && room.theme && (
-                <div className="mt-5 grid gap-4 md:grid-cols-[minmax(15rem,20rem)_minmax(0,1fr)]">
-                  <WordScaleVerticalScale
-                    lowLabel={room.theme.lowLabel}
-                    highLabel={room.theme.highLabel}
-                    markers={ownCards.flatMap((card) => typeof room.values[card.id] === "number" ? [{ id: card.id, label: `あなたのカード${card.cardNumber}`, value: room.values[card.id] }] : [])}
-                  />
-                  <div className="flex items-center rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4 text-sm font-bold leading-7 text-amber-100">
-                    0から120へ縦に伸びる同じスケールを、ことば提出から最後の並べ替えまで使います。自分の数字がどの位置かを意識しながら、お題に合うことばを考えてください。
-                  </div>
-                </div>
-              )}
-            </section>
-          )}
-
-          {room.phase === "clue" && (
-            <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div><h2 className="text-xl font-black">同じ数字カードへ新しいことばを出す</h2><p className="mt-1 text-sm text-slate-400">{room.round}回目の提出 {submittedCount}/{room.cards.length}枚</p></div>
-                {room.phaseStartedAt && <GamePhaseTimer key={room.phaseStartedAt} durationSeconds={room.clueTimeLimitSeconds} startedAt={room.phaseStartedAt} label="提出時間" />}
-              </div>
-              <p className="mt-4 rounded-xl border border-amber-300/25 bg-amber-300/10 p-3 text-sm font-bold text-amber-100">今回のお題「{room.theme?.title}」に沿った短いことばだけで伝えてください。カードの数字は前回から変わりません。</p>
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                {ownCards.map((card) => (
-                  <div key={card.id} className="rounded-2xl border border-white/10 bg-white/[0.05] p-4">
-                    <div className="rounded-xl border border-amber-300/40 bg-amber-300/10 p-4 text-center"><p className="text-xs font-bold text-amber-100">あなたのカード {card.cardNumber}</p><p className="mt-1 text-6xl font-black text-amber-300">{room.values[card.id]}</p></div>
-                    {room.clueHistory.length > 0 && <div className="mt-3 space-y-1">{room.clueHistory.map((clueRound) => <p key={clueRound.round} className="text-xs text-slate-300"><span className="font-bold text-cyan-200">{clueRound.round}回目：</span>{clueRound.clues[card.id]}</p>)}</div>}
-                    {room.clues[card.id]
-                      ? <div className="mt-3 rounded-xl border border-emerald-300/30 bg-emerald-300/10 p-3"><p className="font-black text-emerald-100">提出済み：{room.clues[card.id]}</p></div>
-                      : <label className="mt-3 block text-sm font-bold">今回、このカードを表すことば<input value={clueDrafts[card.id] ?? ""} maxLength={40} onChange={(event) => setClueDrafts((current) => ({ ...current, [card.id]: event.target.value }))} className="mt-2 w-full rounded-xl border border-white/15 bg-white/10 px-4 py-3 text-lg text-white outline-none focus:border-amber-300" /></label>}
-                  </div>
-                ))}
-              </div>
-              {ownCards.some((card) => !room.clues[card.id]) && <button type="button" disabled={isSaving} onClick={submitClues} className="mt-4 w-full rounded-xl bg-amber-300 px-4 py-3 font-black text-slate-950 disabled:opacity-50">{ownCards.filter((card) => !room.clues[card.id]).length}枚のことばをまとめて提出</button>}
-              <p className="mt-4 text-center text-sm text-slate-300">自分の全カードを一度に提出します。全員分がそろうと次のお題へ進み、最後の回だけ並べ替えへ進みます。</p>
-              {isHost && room.debugMode && <button type="button" onClick={() => void runAction({ type: "debug-fill-clues", actorId: playerId, round: room.round })} className="mt-4 w-full rounded-xl border border-cyan-300/30 bg-cyan-300/10 px-4 py-3 text-sm font-black text-cyan-100">デバッグ：今回の未提出ことばを自動入力</button>}
-            </section>
-          )}
-
-          {room.phase === "arrange" && (
-            <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-4 sm:p-6">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-xl font-black">全カードを小さい順に並べる</h2>
-                  <p className="mt-1 text-sm text-slate-400">並べ替え役：<span className="font-black text-cyan-200">{sorter?.name ?? "未定"}</span>{canArrange ? "（あなた）" : ""}</p>
-                </div>
-                {room.phaseStartedAt && <GamePhaseTimer key={room.phaseStartedAt} durationSeconds={room.arrangeTimeLimitSeconds} startedAt={room.phaseStartedAt} label="相談時間" />}
-              </div>
-
-              <div className="mt-4 grid gap-2 sm:grid-cols-2" aria-label="今回使ったお題">
-                {room.clueHistory.map((clueRound) => (
-                  <div key={clueRound.round} className="rounded-xl border border-white/10 bg-white/[0.05] p-3">
-                    <p className="text-xs font-black text-amber-300">{clueRound.round}回目のお題</p>
-                    <p className="mt-1 font-black text-white">{clueRound.theme.title}</p>
-                    <p className="mt-1 text-xs text-slate-400">0側：{clueRound.theme.lowLabel} ／ 120側：{clueRound.theme.highLabel}</p>
-                  </div>
-                ))}
-              </div>
-
-              {isHost && room.debugMode && <button type="button" onClick={() => void runAction({ type: "debug-sort", actorId: playerId, round: room.round })} className="mt-4 w-full rounded-xl border border-cyan-300/30 bg-cyan-300/10 px-4 py-3 text-sm font-black text-cyan-100">デバッグ：正解順に並べる</button>}
-
-              <WordScaleArrangeBoard
-                order={room.order}
-                cards={room.cards}
-                players={room.players}
-                clueRounds={room.clueHistory}
-                values={room.values}
-                viewerId={playerId}
-                revealAllValues={room.debugMode && isHost}
-                canArrange={canArrange}
-                disabled={isSaving}
-                onReorder={(order) => runAction({ type: "reorder", actorId: playerId, round: room.round, order }).then(Boolean)}
-              />
-
-              {canArrange ? (
-                <button type="button" disabled={isSaving} onClick={() => void runAction({ type: "score-round", actorId: playerId, round: room.round })} className="mt-3 w-full rounded-xl bg-fuchsia-400 px-4 py-3 font-black text-fuchsia-950 disabled:opacity-50">この順番で確定して数字を公開する</button>
-              ) : (
-                <p className="mt-3 rounded-xl bg-white/[0.05] p-3 text-center text-sm font-bold text-slate-300">{sorter?.name ?? "並べ替え役"}が順番を確定すると数字が公開されます。</p>
-              )}
-            </section>
-          )}
-
+          <HodoaiPlayPanels room={room} playerId={playerId} isHost={isHost} isSaving={isSaving} runAction={runAction} updateConfig={updateConfig} setError={setError} />
           {room.phase === "result" && latestResult && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><h2 className="text-2xl font-black">最後の答え合わせ</h2><p className="mt-1 text-sm font-bold text-slate-400">上が120側、下が0側です。</p><div className="mt-4 space-y-2">{latestResultRows.map((row) => <div key={row.id} className="grid grid-cols-[2rem_1fr_auto] items-center gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3"><span className="text-center font-black text-cyan-300">{row.rank}</span><div><div className="flex flex-wrap gap-2">{row.expressions.map((expression, index) => <span key={`${row.id}:${index}`} className="rounded-lg bg-cyan-300/10 px-2 py-1 text-sm font-bold text-cyan-50">{expression}</span>)}</div><p className="mt-1 text-xs text-slate-400">{row.playerName}・カード{row.cardNumber}</p></div><span className="text-2xl font-black text-amber-300">{row.value}</span></div>)}</div><div className="mt-5 rounded-2xl bg-gradient-to-r from-cyan-400 to-amber-300 p-5 text-center text-slate-950"><p className="font-black">最終得点 {latestResult.points}/3点</p><p className="mt-1 text-sm font-bold">並び違い {latestResult.inversions}組</p></div><p className="mt-5 text-center text-lg font-black">{hodoaiFinalMessage(room.totalPoints, 3)}</p><RoomResultActions canReturnToRoom={isHost || resultReturnGate.canReturnToRoom} disabled={isSaving} isHost={isHost} isRoomDissolved={resultReturnGate.isRoomDissolved} onReturnToRoom={isHost ? () => runAction({ type: "reset-game", actorId: playerId }) : () => resultReturnGate.returnToRoom((code) => hodoaiRoomApi.fetchRoom(code, playerId), () => setError("部屋に戻れません。解散されたか、参加情報が変更されています。"))} onDissolve={isHost ? dissolveRoom : undefined} /></section>}
           {room.phase === "result" && <GameResultShareButton title="ワードスケール プレイログ" text={hodoaiGameShareText(room)} url="/word-scale" />}
         </div>

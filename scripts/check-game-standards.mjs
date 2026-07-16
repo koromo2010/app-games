@@ -12,6 +12,7 @@ const ids = new Set(); const hrefs = new Set();
 const allowedGameTags = new Set(["対戦", "協力"]);
 const sharedDissolutionModule = read("lib/online-room-dissolution.ts");
 const sharedPersistenceModule = read("lib/online-room-persistence.ts");
+const lobbyRoomSources = ["app/games/GameLobby.tsx", "app/games/use-lobby-room-data.ts"].filter((file) => existsSync(join(root, file))).map(read).join("\n");
 
 for (const game of games) {
   if (!game.id || ids.has(game.id)) fail(`ゲームIDが空または重複しています: ${game.id || "(empty)"}`);
@@ -23,19 +24,23 @@ for (const game of games) {
   for (const file of game.moduleBoundaryFiles || []) if (!existsSync(join(root, file))) fail(`${game.id}: モジュール境界ファイル ${file} が存在しません。`);
   if (!game.entryFile || !existsSync(join(root, game.entryFile))) continue;
   const entry = read(game.entryFile);
-  for (const token of game.requiredTokens || []) if (!entry.includes(token)) fail(`${game.id}: 共通要件「${token}」が ${game.entryFile} にありません。`);
+  const registeredModuleSources = [game.entryFile, ...(game.moduleBoundaryFiles || [])]
+    .filter((file, index, files) => file && files.indexOf(file) === index && existsSync(join(root, file)))
+    .map(read)
+    .join("\n");
+  for (const token of game.requiredTokens || []) if (!registeredModuleSources.includes(token)) fail(`${game.id}: 共通要件「${token}」が登録済みモジュール境界にありません。`);
   if (game.private && !read(game.pageFile).includes("gamePageAccessAllowed")) fail(`${game.id}: 非公開ゲームの共通サーバーアクセス検証がありません。`);
   if (game.playMode === "online-room") {
     if (!read("lib/online-room-policy.ts").includes(`"${game.id}"`)) fail(`${game.id}: 共通人数上限マップにゲームIDがありません。`);
     if (!read("lib/room-dissolve-policy.ts").includes(`"${game.id}"`)) fail(`${game.id}: 共通解散ポリシーにゲームIDがありません。`);
-    if (!read("app/games/GameLobby.tsx").includes(`/api/${game.id}/rooms`)) fail(`${game.id}: ロビーのアクティブ部屋取得マップにAPIがありません。`);
+    if (!lobbyRoomSources.includes(`/api/${game.id}/rooms`)) fail(`${game.id}: ロビーのアクティブ部屋取得マップにAPIがありません。`);
     if (!entry.includes("GameAdSlot")) fail(`${game.id}: 非プレイ面の共通広告スロットがありません。`);
     if (!game.roomStoreFile || !existsSync(join(root, game.roomStoreFile))) fail(`${game.id}: roomStoreFile がありません。`);
     else { const store = read(game.roomStoreFile); const modules = [entry, store, ...(game.moduleBoundaryFiles || []).map(read)].join("\n"); const usesRoomTtl = store.includes("multiplayerRoomTtlSeconds") || store.includes("multiplayerRoomExpiryArgs") || (store.includes("online-room-persistence") && sharedPersistenceModule.includes("multiplayerRoomExpiryArgs")); if (!usesRoomTtl) fail(`${game.id}: 共通の部屋TTLを使用していません。`); if (!store.includes("revision") && !store.includes("saveStoredWordWolfRoom")) fail(`${game.id}: サーバー側の部屋保存処理が見つかりません。`); if (!modules.includes("abort-game") && !modules.includes("abortGame")) fail(`${game.id}: ゲーム開始前へ戻すデバッグ中断処理がありません。`); const usesDissolutionPolicy = store.includes("canDissolveOnlineRoom") || (store.includes("online-room-dissolution") && sharedDissolutionModule.includes("canDissolveOnlineRoom")); if (!usesDissolutionPolicy) fail(`${game.id}: 進行中の部屋解散を防ぐ共通ポリシーがありません。`); }
-    if (!entry.includes("DebugModeButton") || !entry.includes("onAbort=") || !entry.includes("onReplayChange=")) fail(`${game.id}: トップバナーの共通デバッグメニュー（中断・プレイバック）がありません。`);
-    if (!entry.includes("GamePlayerMenu")) fail(`${game.id}: ログアウトを内包する共通プレイヤーメニューがありません。`);
+    if (!registeredModuleSources.includes("DebugModeButton") || !registeredModuleSources.includes("onAbort=") || !registeredModuleSources.includes("onReplayChange=")) fail(`${game.id}: トップバナーの共通デバッグメニュー（中断・プレイバック）がありません。`);
+    if (!registeredModuleSources.includes("GamePlayerMenu")) fail(`${game.id}: ログアウトを内包する共通プレイヤーメニューがありません。`);
     if (entry.includes("DebugReplayButton")) fail(`${game.id}: プレイバック操作は独立表示せずDebugModeButtonへ入れてください。`);
-    if (!entry.includes("RoomResultActions")) fail(`${game.id}: 結果画面の「同じ部屋でもう一度／部屋を解散」共通操作がありません。`);
+    if (!registeredModuleSources.includes("RoomResultActions")) fail(`${game.id}: 結果画面の「同じ部屋でもう一度／部屋を解散」共通操作がありません。`);
     const routeFile = `app/api/${game.id}/rooms/route.ts`;
     const roomClientFile = (game.moduleBoundaryFiles || []).find((file) => file.endsWith("room-api-client.ts"));
     if (!roomClientFile) fail(`${game.id}: 型付きroom API clientがmoduleBoundaryFilesにありません。`);
