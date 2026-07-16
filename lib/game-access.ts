@@ -7,20 +7,24 @@ function registeredGame(gameId: string) {
   return registry.find((game) => game.id === gameId);
 }
 
-export function gameRequiresPrivateAccess(gameId: string) {
-  return registeredGame(gameId)?.private === true;
+async function gameAccessState(gameId: string) {
+  if (!registeredGame(gameId)) return "missing" as const;
+  const store = await cookies();
+  const operation = await loadGameOperation(gameId);
+  if (operation.publication === "hidden") return "hidden" as const;
+  if (operation.maintenance) return "maintenance" as const;
+  if (operation.publication === "private" && !privateGameCookieMatches(store.get(privateGameCookieName)?.value)) return "private-locked" as const;
+  return "allowed" as const;
 }
 
 export async function gamePageAccessAllowed(gameId: string) {
-  if (!registeredGame(gameId)) return false;
-  const store = await cookies();
-  if ((await loadGameOperation(gameId)).mode !== "open") return false;
-  if (!gameRequiresPrivateAccess(gameId)) return true;
-  return privateGameCookieMatches(store.get(privateGameCookieName)?.value);
+  return (await gameAccessState(gameId)) === "allowed";
 }
 
 export async function gameApiAccessDeniedResponse(gameId: string) {
-  return (await gamePageAccessAllowed(gameId))
-    ? null
-    : Response.json({ error: "Private access required" }, { status: 403 });
+  const state = await gameAccessState(gameId);
+  if (state === "allowed") return null;
+  if (state === "maintenance") return Response.json({ error: "Game is under maintenance" }, { status: 503, headers: { "Retry-After": "60" } });
+  if (state === "private-locked") return Response.json({ error: "Private access required" }, { status: 403 });
+  return Response.json({ error: "Game is not available" }, { status: 404 });
 }

@@ -53,9 +53,12 @@ const roomApiByGameId: Partial<Record<string, string>> = {
 };
 
 async function fetchActiveGameRooms(targetPlayerId: string, includePrivateGames: boolean, gameOperations: GameOperation[]) {
-  const accessibleGames = games.filter((game) =>
-    gameOperationFor(gameOperations, game.id).mode === "open" && (!game.private || includePrivateGames)
-  );
+  const accessibleGames = games.filter((game) => {
+    const operation = gameOperationFor(gameOperations, game.id);
+    return operation.publication !== "hidden"
+      && !operation.maintenance
+      && (operation.publication === "public" || includePrivateGames);
+  });
   const entries = await Promise.all(accessibleGames.map(async (game) => {
     const endpoint = roomApiByGameId[game.id];
     if (!endpoint) return null;
@@ -493,7 +496,10 @@ export function GameLobby({ siteName = "GAME FIELDS", gameOperations }: { siteNa
     setMessage("ログアウトしました。");
   };
 
-  const visibleGames = games.filter((game) => gameOperationFor(gameOperations, game.id).mode !== "hidden" && (!game.private || privateUnlocked));
+  const visibleGames = games.filter((game) => {
+    const operation = gameOperationFor(gameOperations, game.id);
+    return operation.publication !== "hidden" && (operation.publication === "public" || privateUnlocked);
+  });
   const orderedGames = [...visibleGames].sort((left, right) =>
     Number(Boolean(activeGameRooms[right.id])) - Number(Boolean(activeGameRooms[left.id])),
   );
@@ -997,7 +1003,8 @@ export function GameLobby({ siteName = "GAME FIELDS", gameOperations }: { siteNa
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(210px,230px))] sm:justify-start">
             {orderedGames.map((game) => {
             const operation = gameOperationFor(gameOperations, game.id);
-            const isMaintenance = operation.mode === "maintenance";
+            const isMaintenance = operation.maintenance;
+            const isPrivateGame = operation.publication === "private";
             const activeGameRoom = activeGameRooms[game.id];
             const isActiveGame = Boolean(activeGameRoom);
             const card = (
@@ -1017,6 +1024,7 @@ export function GameLobby({ siteName = "GAME FIELDS", gameOperations }: { siteNa
                     }`}>
                       {isActiveGame ? "プレイ中" : isMaintenance ? "メンテナンス中" : game.status}
                     </span>
+                    {isPrivateGame && <span className={`inline-flex rounded-md border px-2 py-1 text-[11px] font-black leading-tight ${isActiveGame ? "border-violet-200/30 bg-violet-300/20 text-violet-100" : "border-violet-200 bg-violet-50 text-violet-700"}`}>プライベート</span>}
                     {game.tags.map((tag) => (
                       <span
                         key={tag}

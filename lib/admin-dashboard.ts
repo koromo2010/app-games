@@ -1,6 +1,7 @@
 import type { AdminIssue } from "@/lib/admin-observability-store";
 import type { GameOperation } from "@/lib/game-operations";
 import type { WebVitalSummary } from "@/lib/web-vitals";
+import type { StorageUsageSnapshot } from "@/lib/storage-capacity-monitor";
 
 export type AdminGameActivity = {
   gameId: string;
@@ -40,5 +41,6 @@ export type AdminDashboardSnapshot = {
     sampleCount24h: number;
     summaries: WebVitalSummary[];
   };
+  storage: StorageUsageSnapshot;
   gameOperations: GameOperation[];
 };

@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import type { AdminDashboardSnapshot } from "@/lib/admin-dashboard";
 import { webVitalThresholds, type WebVitalName } from "@/lib/web-vitals";
+import type { StorageService } from "@/lib/storage-capacity-monitor";
+
+const storageServices = ["Neon Postgres", "Upstash Redis", "Vercel Blob"] as const satisfies readonly StorageService[];
 
 function formatTime(timestamp: number) {
   return new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date(timestamp));
@@ -23,6 +26,18 @@ function vitalColor(name: WebVitalName, value: number | null) {
   if (value <= threshold.good) return "text-emerald-300";
   if (value <= threshold.poor) return "text-amber-300";
   return "text-rose-300";
+}
+
+function formatBytes(bytes: number) {
+  if (bytes < 1_024) return `${bytes} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let value = bytes / 1_024;
+  let unit = units[0]!;
+  for (let index = 1; index < units.length && value >= 1_024; index += 1) {
+    value /= 1_024;
+    unit = units[index]!;
+  }
+  return `${value >= 10 ? value.toFixed(1) : value.toFixed(2)} ${unit}`;
 }
 
 export function AdminDashboard({ onAuthExpired }: { onAuthExpired: () => void }) {
@@ -81,6 +96,17 @@ export function AdminDashboard({ onAuthExpired }: { onAuthExpired: () => void })
             <div className="px-5 pt-5"><h3 className="text-lg font-black">ゲーム別の稼働状況</h3></div>
             <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[560px] text-left text-sm"><thead className="bg-white/[0.05] text-xs text-slate-400"><tr><th className="px-5 py-3">ゲーム</th><th className="px-3 py-3">人数</th><th className="px-3 py-3">待機</th><th className="px-3 py-3">プレイ中</th><th className="px-3 py-3">結果</th></tr></thead><tbody>{dashboard.games.map((game) => <tr key={game.gameId} className="border-t border-white/10"><td className="px-5 py-3 font-bold">{game.title}</td><td className="px-3 py-3">{game.playerCount}</td><td className="px-3 py-3">{game.waitingRooms}</td><td className="px-3 py-3 text-cyan-200">{game.playingRooms}</td><td className="px-3 py-3">{game.finishedRooms}</td></tr>)}</tbody></table></div>
           </div>
+        </section>
+
+        <section className="rounded-2xl border border-white/10 bg-white/[0.05] p-5">
+          <div className="flex flex-wrap items-end justify-between gap-2"><div><h3 className="text-lg font-black">ストレージ利用状況</h3><p className="mt-1 text-sm text-slate-400">5分間キャッシュして取得負荷を抑えます。上限は環境変数で設定します。</p></div><p className="text-xs text-slate-500">確認 {formatTime(dashboard.storage.checkedAt)} / 警告 {dashboard.storage.threshold}%</p></div>
+          <div className="mt-4 grid gap-3 md:grid-cols-3">{storageServices.map((service) => {
+            const item = dashboard.storage.results.find((result) => result.service === service);
+            const unavailable = dashboard.storage.unavailable.includes(service);
+            const meterPercent = Math.max(0, Math.min(100, item?.percent ?? 0));
+            const danger = item?.percent !== null && item?.percent !== undefined && item.percent >= dashboard.storage.threshold;
+            return <article key={service} className={`rounded-xl border p-4 ${danger ? "border-rose-300/30 bg-rose-300/10" : "border-white/10 bg-black/20"}`}><div className="flex items-start justify-between gap-3"><h4 className="font-bold">{service}</h4><span className={`text-sm font-black ${danger ? "text-rose-300" : item?.percent !== null && item?.percent !== undefined ? "text-cyan-200" : "text-slate-400"}`}>{item?.percent !== null && item?.percent !== undefined ? `${item.percent}%` : "―"}</span></div>{item ? <><p className="mt-3 text-xl font-black">{formatBytes(item.usedBytes)}</p><p className="mt-1 text-xs text-slate-500">{item.capacityBytes ? `上限 ${formatBytes(item.capacityBytes)}` : "上限未設定（使用量のみ表示）"}</p><div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-800" role="progressbar" aria-label={`${service}の利用率`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={item.percent ?? undefined}><span className={`block h-full ${danger ? "bg-rose-400" : "bg-cyan-400"}`} style={{ width: `${meterPercent}%` }} /></div></> : <p className="mt-3 text-sm leading-6 text-slate-400">{unavailable ? "接続設定がないか、使用量を取得できません。" : "利用データがありません。"}</p>}</article>;
+          })}</div>
         </section>
 
         <section className="rounded-2xl border border-white/10 bg-white/[0.05] p-5">

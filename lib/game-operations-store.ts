@@ -1,7 +1,8 @@
 import { getRedisConfig, redisCommand } from "@/lib/redis-store";
-import { defaultGameOperations, gameOperationFor, normalizeGameOperations, type GameOperation } from "@/lib/game-operations";
+import { defaultGameOperations, gameOperationFor, migrateLegacyGameOperations, normalizeGameOperations, type GameOperation } from "@/lib/game-operations";
 
-const gameOperationsKey = "site-game-operations:v1";
+const gameOperationsKey = "site-game-operations:v2";
+const legacyGameOperationsKey = "site-game-operations:v1";
 const cacheDurationMs = 15_000;
 let cache: { operations: GameOperation[]; expiresAt: number } | null = null;
 
@@ -10,7 +11,10 @@ export async function loadGameOperations(options: { fresh?: boolean } = {}) {
   if (!getRedisConfig()) return defaultGameOperations();
   try {
     const stored = await redisCommand<string | null>(["GET", gameOperationsKey]);
-    const operations = normalizeGameOperations(stored ? JSON.parse(stored) : []);
+    const legacyStored = stored ? null : await redisCommand<string | null>(["GET", legacyGameOperationsKey]);
+    const operations = stored
+      ? normalizeGameOperations(JSON.parse(stored))
+      : legacyStored ? migrateLegacyGameOperations(JSON.parse(legacyStored)) : defaultGameOperations();
     cache = { operations, expiresAt: Date.now() + cacheDurationMs };
     return operations;
   } catch {
