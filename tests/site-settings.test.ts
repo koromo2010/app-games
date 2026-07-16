@@ -5,6 +5,7 @@ import { hashSiteAdminAccountPassword, isValidSiteAdminAccountPassword, isValidS
 import { defaultSiteSettings, isSiteIconUrl, normalizeSiteSettings, validateSiteSettingsInput } from "../lib/site-settings.ts";
 import { isPngImage, isSiteIconImage, maxSiteIconUploadBytes } from "../lib/site-icon-image.ts";
 import { mergeOperationsEmailRecipients } from "../lib/operations-email-recipients.ts";
+import { siteAdminWebAuthnConfiguration } from "../lib/site-admin-passkey-core.ts";
 
 test("site settings normalize missing and malformed saved values", () => {
   assert.deepEqual(normalizeSiteSettings(null), defaultSiteSettings);
@@ -37,6 +38,17 @@ test("site admin tokens are signed and expire", () => {
   const challenge = createSiteAdminChallengeToken("test-secret", { email: "admin@example.com", purpose: "login", challenge: "random" }, now);
   assert.equal(parseSiteAdminChallengeToken(challenge, "test-secret", now)?.challenge, "random");
   assert.equal(parseSiteAdminChallengeToken(challenge, "test-secret", now + 6 * 60_000), null);
+});
+
+test("site admin passkeys accept both production origins", () => {
+  assert.deepEqual(siteAdminWebAuthnConfiguration({ NODE_ENV: "production" }), {
+    rpID: "game-fields.com",
+    origin: ["https://game-fields.com", "https://www.game-fields.com"],
+  });
+  assert.deepEqual(siteAdminWebAuthnConfiguration({ NODE_ENV: "production", SITE_ADMIN_WEBAUTHN_ORIGIN: "https://admin.example.com, https://backup.example.com" }).origin, [
+    "https://admin.example.com",
+    "https://backup.example.com",
+  ]);
 });
 
 test("site admin accounts normalize identities and verify scrypt password hashes", () => {

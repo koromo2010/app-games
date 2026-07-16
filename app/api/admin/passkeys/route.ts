@@ -23,7 +23,8 @@ function errorResponse(error: unknown) {
   const code = error instanceof Error ? error.message : "SITE_ADMIN_PASSKEY_FAILED";
   if (code === "SITE_ADMIN_ACCOUNTS_STORE_NOT_CONFIGURED") return Response.json({ error: code }, { status: 503 });
   if (code === "SITE_ADMIN_PASSKEY_LIMIT_REACHED") return Response.json({ error: code }, { status: 409 });
-  if (code === "SITE_ADMIN_PASSKEY_NOT_FOUND" || code === "SITE_ADMIN_CHALLENGE_INVALID") return Response.json({ error: "SITE_ADMIN_PASSKEY_VERIFICATION_FAILED" }, { status: 400 });
+  if (code === "SITE_ADMIN_CHALLENGE_INVALID") return Response.json({ error: "SITE_ADMIN_CHALLENGE_EXPIRED" }, { status: 400 });
+  if (code === "SITE_ADMIN_PASSKEY_NOT_FOUND") return Response.json({ error: "SITE_ADMIN_PASSKEY_VERIFICATION_FAILED" }, { status: 400 });
   return Response.json({ error: "SITE_ADMIN_PASSKEY_VERIFICATION_FAILED" }, { status: 400 });
 }
 

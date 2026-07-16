@@ -24,6 +24,7 @@ const messages: Record<string, string> = {
   SITE_ADMIN_ACCOUNTS_STORE_NOT_CONFIGURED: "管理者メールの保存先が設定されていません。マスターパスワードでログインしてください。",
   MASTER_LOGIN_DISABLED: "マスターパスワードは通常時無効です。復旧が必要な場合だけVercelで復旧モードを有効にしてください。",
   INVALID_RECOVERY_CODE: "復旧コードが違うか、すでに使用されています。",
+  SITE_ADMIN_CHALLENGE_EXPIRED: "本人確認の有効期限が切れました。パスワードからもう一度ログインしてください。",
   SITE_ADMIN_PASSKEY_VERIFICATION_FAILED: "パスキーを確認できませんでした。もう一度お試しください。",
   SITE_SETTINGS_STORE_NOT_CONFIGURED: "サイト設定の保存先が設定されていません。",
   INVALID_TEXT: "未入力の項目、または文字数を超えている項目があります。",
@@ -109,7 +110,10 @@ export function SiteAdminPanel() {
         : await startAuthentication({ optionsJSON: mfaOptions as PublicKeyCredentialRequestOptionsJSON });
       const response = await fetch("/api/admin/passkeys", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: mfaMode === "enroll" ? "verify-registration" : "verify-authentication", response: credential }) });
       const data = await response.json().catch(() => null) as { verified?: boolean; recoveryCodes?: string[]; error?: string } | null;
-      if (!response.ok || !data?.verified) throw new Error(data?.error || "SITE_ADMIN_PASSKEY_VERIFICATION_FAILED");
+      if (!response.ok || !data?.verified) {
+        if (data?.error === "SITE_ADMIN_CHALLENGE_EXPIRED") { setMfaOptions(null); setScreen("login"); }
+        throw new Error(data?.error || "SITE_ADMIN_PASSKEY_VERIFICATION_FAILED");
+      }
       if (data.recoveryCodes?.length) { setIssuedRecoveryCodes(data.recoveryCodes); setScreen("recovery-codes"); return; }
       await loadAuthenticatedSettings();
     } catch (error) { setMessage(errorMessage(error, "パスキーを確認できませんでした。")); }

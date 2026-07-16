@@ -7,17 +7,11 @@ import {
   type AuthenticationResponseJSON,
   type RegistrationResponseJSON,
 } from "@simplewebauthn/server";
+import { siteAdminWebAuthnConfiguration } from "@/lib/site-admin-passkey-core";
 import { listSiteAdminPasskeys, findSiteAdminPasskey } from "@/lib/site-admin-passkey-store";
 
-export function siteAdminWebAuthnConfiguration() {
-  const production = process.env.NODE_ENV === "production";
-  const rpID = process.env.SITE_ADMIN_WEBAUTHN_RP_ID?.trim() || (production ? "game-fields.com" : "localhost");
-  const origin = process.env.SITE_ADMIN_WEBAUTHN_ORIGIN?.trim() || (production ? "https://www.game-fields.com" : "http://localhost:3000");
-  return { rpID, origin };
-}
-
 export async function siteAdminRegistrationOptions(email: string) {
-  const { rpID } = siteAdminWebAuthnConfiguration();
+  const { rpID } = siteAdminWebAuthnConfiguration(process.env);
   const existing = await listSiteAdminPasskeys(email);
   return generateRegistrationOptions({
     rpName: "GAME FIELDS Admin",
@@ -33,7 +27,7 @@ export async function siteAdminRegistrationOptions(email: string) {
 }
 
 export async function siteAdminAuthenticationOptions(email: string) {
-  const { rpID } = siteAdminWebAuthnConfiguration();
+  const { rpID } = siteAdminWebAuthnConfiguration(process.env);
   const passkeys = await listSiteAdminPasskeys(email);
   if (!passkeys.length) return null;
   return generateAuthenticationOptions({
@@ -45,12 +39,12 @@ export async function siteAdminAuthenticationOptions(email: string) {
 }
 
 export async function verifySiteAdminRegistration(response: RegistrationResponseJSON, expectedChallenge: string) {
-  const { rpID, origin } = siteAdminWebAuthnConfiguration();
+  const { rpID, origin } = siteAdminWebAuthnConfiguration(process.env);
   return verifyRegistrationResponse({ response, expectedChallenge, expectedOrigin: origin, expectedRPID: rpID, requireUserVerification: true });
 }
 
 export async function verifySiteAdminAuthentication(response: AuthenticationResponseJSON, expectedChallenge: string, email: string) {
-  const { rpID, origin } = siteAdminWebAuthnConfiguration();
+  const { rpID, origin } = siteAdminWebAuthnConfiguration(process.env);
   const passkey = await findSiteAdminPasskey(response.id);
   if (!passkey || passkey.email !== email) throw new Error("SITE_ADMIN_PASSKEY_NOT_FOUND");
   const verification = await verifyAuthenticationResponse({
