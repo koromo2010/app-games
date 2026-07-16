@@ -3,13 +3,17 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { DrawingCanvas } from "@/app/components/DrawingCanvas";
+import { mutateCanvasLobbyBoard } from "@/app/canvas/canvas-lobby-board-api-client";
+import { canvasPlayerLayerId, deleteCanvasRoomView, mutateCanvasRoom, type PublicCanvasRoom } from "@/app/canvas/canvas-room-api-client";
+import { useCanvasStrokeQueue } from "@/app/canvas/use-canvas-stroke-queue";
+import { useCanvasLobbyBoardSync, useCanvasRoomSync } from "@/app/canvas/use-canvas-sync";
 import { GamePlayerMenu } from "@/app/components/GamePlayerMenu";
 import { GameRulesDialog } from "@/app/components/GameRulesDialog";
 import { GameTopBanner, gameTopBannerOffsetClass } from "@/app/components/GameTopBanner";
 import { GameTopMenu, gameTopBannerActionClass, gameTopMenuItemClass } from "@/app/components/GameTopMenu";
 import { clampDrawingPoint, normalizeDrawingStrokes, type DrawingPoint, type DrawingStroke } from "@/lib/drawing-canvas";
 import { fallbackAvatarColor, readPlayerSession, type PlayerSession } from "@/lib/player-session";
-import type { CanvasLayer, CanvasLayerMode, CanvasRoom } from "@/lib/canvas-room";
+import type { CanvasLayer, CanvasLayerMode } from "@/lib/canvas-room";
 import { activeCanvasLobbyStrokes } from "@/lib/canvas-lobby-board";
 import { canvasFeatures } from "@/lib/canvas-features";
 
@@ -40,7 +44,7 @@ export function CanvasGame() {
   const [syncNotice, setSyncNotice] = useState("この端末に自動保存します");
   const [keyboardCursor, setKeyboardCursor] = useState<DrawingPoint>({ x: 0.5, y: 0.5 });
   const [keyboardCursorVisible, setKeyboardCursorVisible] = useState(false);
-  const [room, setRoom] = useState<(Omit<CanvasRoom, "passphrase"> & { passphraseProtected: boolean }) | null>(null);
+  const [room, setRoom] = useState<PublicCanvasRoom | null>(null);
   const [roomCode, setRoomCode] = useState("");
   const [roomPassphrase, setRoomPassphrase] = useState("");
   const [roomBusy, setRoomBusy] = useState(false);
@@ -133,78 +137,24 @@ export function CanvasGame() {
   const roomRequest = useCallback(async (method: string, body?: unknown) => {
     setRoomBusy(true);
     try {
-      const response = await fetch("/api/canvas/rooms", { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
-      const data = await response.json() as { room?: typeof room; error?: string };
-      if (!response.ok || !data.room) throw new Error(data.error || "ルーム操作に失敗しました");
-      if (data.room.revision < roomRevisionRef.current) return data.room;
-      roomRevisionRef.current = data.room.revision;
-      setRoom(data.room); setStrokes(() => { const active = keyboardStrokeRef.current; return active ? [...data.room!.strokes.filter((stroke) => stroke.id !== active.id), active] : data.room!.strokes; });
+      const nextRoom = await mutateCanvasRoom(method as "POST" | "PATCH", body);
+      if (nextRoom.revision < roomRevisionRef.current) return nextRoom;
+      roomRevisionRef.current = nextRoom.revision;
+      setRoom(nextRoom); setStrokes(() => { const active = keyboardStrokeRef.current; return active ? [...nextRoom.strokes.filter((stroke) => stroke.id !== active.id), active] : nextRoom.strokes; });
       setTool((current) => current === "pan" ? "pen" : current);
-      setPendingStrokes((pending) => pending.filter((stroke) => !data.room!.strokes.some((saved) => saved.id === stroke.id && !saved.inProgress)));
-      const ownLayer = data.room.layerMode === "per-player" ? data.room.players.find((player) => player.id === session?.id)?.layerId : undefined;
-      setActiveLayerId((current) => ownLayer || (data.room!.layers.some((layer) => layer.id === current) ? current : data.room!.layers[0]?.id || "base"));
-      setRedoStrokes([]); return data.room;
+      setPendingStrokes((pending) => pending.filter((stroke) => !nextRoom.strokes.some((saved) => saved.id === stroke.id && !saved.inProgress)));
+      const ownLayer = canvasPlayerLayerId(nextRoom, session?.id);
+      setActiveLayerId((current) => ownLayer || (nextRoom.layers.some((layer) => layer.id === current) ? current : nextRoom.layers[0]?.id || "base"));
+      setRedoStrokes([]); return nextRoom;
     } catch (error) { window.alert(error instanceof Error ? error.message : "ルーム操作に失敗しました"); return null; }
     finally { setRoomBusy(false); }
-  }, [session?.id]);
+  }, [session]);
 
   const activeRoomCode = room?.code;
-  useEffect(() => {
-    if (!activeRoomCode) return;
-    const timer = window.setInterval(async () => {
-      const response = await fetch(`/api/canvas/rooms?code=${encodeURIComponent(activeRoomCode)}`, { cache: "no-store" });
-      if (!response.ok) return;
-      const data = await response.json() as { room: NonNullable<typeof room> };
-      if (data.room.revision < roomRevisionRef.current) return;
-      roomRevisionRef.current = data.room.revision;
-      setRoom(data.room); setStrokes(() => { const active = keyboardStrokeRef.current; return active ? [...data.room.strokes.filter((stroke) => stroke.id !== active.id), active] : data.room.strokes; });
-      setPendingStrokes((pending) => pending.filter((stroke) => !data.room.strokes.some((saved) => saved.id === stroke.id && !saved.inProgress)));
-    }, 150);
-    return () => window.clearInterval(timer);
-  }, [activeRoomCode]);
+  useCanvasRoomSync({ activeRoomCode, roomRevisionRef, keyboardStrokeRef, setRoom, setStrokes, setPendingStrokes });
+  const activateLobbySync = useCanvasLobbyBoardSync({ activeRoomCode, playerId: session?.id, lobbyRevisionRef, keyboardStrokeRef, setActiveLayerId, setStrokes, setPendingStrokes, setSyncNotice });
 
-  useEffect(() => {
-    if (!session?.id || activeRoomCode) return;
-    let active = true;
-    const load = async () => {
-      const response = await fetch("/api/canvas/lobby-board", { cache: "no-store" });
-      if (!response.ok || !active) return;
-      const data = await response.json() as { board: { strokes: DrawingStroke[]; revision: number } };
-      if (data.board.revision < lobbyRevisionRef.current) return;
-      lobbyRevisionRef.current = data.board.revision;
-      setActiveLayerId("base");
-      setStrokes(() => { const active = keyboardStrokeRef.current; return active ? [...data.board.strokes.filter((stroke) => stroke.id !== active.id), active] : data.board.strokes; });
-      setPendingStrokes((pending) => pending.filter((stroke) => !data.board.strokes.some((saved) => saved.id === stroke.id)));
-      setSyncNotice("広場の落書きボード・描画は3日後に消えます");
-    };
-    void load();
-    const timer = window.setInterval(() => void load(), 500);
-    return () => { active = false; window.clearInterval(timer); };
-  }, [activeRoomCode, session?.id]);
-
-  const submitStroke = useCallback((stroke: DrawingStroke) => {
-    const layeredStroke = { ...stroke, layerId: activeLayerId, authorId: session?.id, updatedAt: Date.now() };
-    if (!room) {
-      if (!session?.id) { updateStrokes([...strokes, layeredStroke]); setRedoStrokes([]); return; }
-      setPendingStrokes((pending) => [...pending, layeredStroke]);
-      void fetch("/api/canvas/lobby-board", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "stroke", stroke: layeredStroke }) }).then(async (response) => {
-        if (!response.ok) throw new Error("落書きの保存に失敗しました");
-        const data = await response.json() as { board: { strokes: DrawingStroke[]; revision: number } };
-        lobbyRevisionRef.current = Math.max(lobbyRevisionRef.current, data.board.revision); setStrokes(data.board.strokes); setPendingStrokes((pending) => pending.filter((item) => item.id !== layeredStroke.id));
-      }).catch(() => setPendingStrokes((pending) => pending.filter((item) => item.id !== layeredStroke.id)));
-      return;
-    }
-    setPendingStrokes((pending) => [...pending, layeredStroke]);
-    void roomRequest("PATCH", { code: room.code, action: { type: "stroke", stroke: layeredStroke } }).then((result) => {
-      if (!result) setPendingStrokes((pending) => pending.filter((item) => item.id !== layeredStroke.id));
-    });
-  }, [activeLayerId, room, roomRequest, session?.id, strokes, updateStrokes]);
-
-  const submitStrokeProgress = useCallback((stroke: DrawingStroke) => {
-    if (!room) return;
-    const layeredStroke = { ...stroke, layerId: activeLayerId, authorId: session?.id, inProgress: true };
-    void fetch("/api/canvas/rooms", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: room.code, action: { type: "stroke-progress", stroke: layeredStroke } }) });
-  }, [activeLayerId, room, session?.id]);
+  const { submitStroke, submitStrokeProgress } = useCanvasStrokeQueue({ activeLayerId, room, playerId: session?.id, strokes, lobbyRevisionRef, roomRequest, updateLocalStrokes: updateStrokes, setStrokes, setPendingStrokes, setRedoStrokes });
 
   const layers = room?.layers || (session?.id ? [{ id: "base", name: "落書き", createdAt: 0 }] : localLayers);
   const pendingIds = new Set(pendingStrokes.map((stroke) => stroke.id));
@@ -217,7 +167,7 @@ export function CanvasGame() {
 
   const undo = useCallback(() => {
     if (room) { void roomRequest("PATCH", { code: room.code, action: { type: "undo", layerId: activeLayerId } }); return; }
-    if (session?.id) { void fetch("/api/canvas/lobby-board", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "undo" }) }).then(async (response) => { if (response.ok) { const data = await response.json() as { board: { strokes: DrawingStroke[]; revision: number } }; lobbyRevisionRef.current = Math.max(lobbyRevisionRef.current, data.board.revision); setStrokes(data.board.strokes); } }); return; }
+    if (session?.id) { void mutateCanvasLobbyBoard({ action: "undo" }).then((board) => { lobbyRevisionRef.current = Math.max(lobbyRevisionRef.current, board.revision); setStrokes(board.strokes); }).catch(() => undefined); return; }
     setStrokes((current) => {
       const index = current.findLastIndex((stroke) => (stroke.layerId || "base") === activeLayerId);
       const removed = current[index];
@@ -253,6 +203,7 @@ export function CanvasGame() {
       if (event.ctrlKey || event.metaKey || event.altKey || editableTarget(event)) return;
       const key = event.key.toLowerCase();
       if (event.code === "Space") {
+        if (!room) activateLobbySync();
         setKeyboardCursorVisible(true);
         if (!spacePressedRef.current) {
           const id = crypto.randomUUID();
@@ -326,11 +277,9 @@ export function CanvasGame() {
         const completed = { ...stroke, authorId: session.id, updatedAt: Date.now() };
         setPendingStrokes((pending) => [...pending.filter((item) => item.id !== completed.id), completed]);
         setStrokes((current) => current.filter((item) => item.id !== completed.id));
-        void fetch("/api/canvas/lobby-board", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "stroke", stroke: completed }) }).then(async (response) => {
-          if (!response.ok) throw new Error("落書きの保存に失敗しました");
-          const data = await response.json() as { board: { strokes: DrawingStroke[]; revision: number } };
-          lobbyRevisionRef.current = Math.max(lobbyRevisionRef.current, data.board.revision);
-          setStrokes(data.board.strokes);
+        void mutateCanvasLobbyBoard({ action: "stroke", stroke: completed }).then((board) => {
+          lobbyRevisionRef.current = Math.max(lobbyRevisionRef.current, board.revision);
+          setStrokes(board.strokes);
           setPendingStrokes((pending) => pending.filter((item) => item.id !== completed.id));
         }).catch(() => setPendingStrokes((pending) => pending.filter((item) => item.id !== completed.id)));
       }
@@ -345,7 +294,7 @@ export function CanvasGame() {
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("blur", releaseAllKeys);
     return () => { window.removeEventListener("keydown", onKeyDown); window.removeEventListener("keyup", onKeyUp); window.removeEventListener("blur", releaseAllKeys); };
-  }, [activeLayerId, changeZoom, color, keyboardCursor, opacity, redo, room, roomRequest, session?.id, tool, undo, width]);
+  }, [activeLayerId, activateLobbySync, changeZoom, color, keyboardCursor, opacity, redo, room, roomRequest, session?.id, tool, undo, width]);
 
   return <main className={`min-h-screen bg-[radial-gradient(circle_at_top,#e0f2fe_0%,#f8fafc_42%,#fef3c7_100%)] text-slate-900 ${gameTopBannerOffsetClass}`}>
     <GameTopBanner eyebrow="PRIVATE UI PROTOTYPE" title="キャンバス">
@@ -370,7 +319,7 @@ export function CanvasGame() {
         </> : <>
           <span className="rounded bg-slate-900 px-3 py-1 font-mono font-black tracking-widest text-white">{room.code}</span>
           <span className="text-sm font-bold">{room.players.length}人：{room.players.map((player) => player.name).join("、")}</span>
-          <button disabled={roomBusy} onClick={async () => { if (room.ownerId === session?.id) { await fetch(`/api/canvas/rooms?code=${room.code}`, { method: "DELETE" }); } else { await roomRequest("PATCH", { code: room.code, action: { type: "leave" } }); } setRoom(null); setActiveLayerId("base"); setHiddenLayerIds(new Set()); }} className="ml-auto rounded-lg border px-3 py-2 text-sm font-bold xl:ml-0">{room.ownerId === session?.id ? "部屋を閉じる" : "退出"}</button>
+          <button disabled={roomBusy} onClick={async () => { try { if (room.ownerId === session?.id) await deleteCanvasRoomView(room.code); else await roomRequest("PATCH", { code: room.code, action: { type: "leave" } }); setRoom(null); setActiveLayerId("base"); setHiddenLayerIds(new Set()); } catch (error) { window.alert(error instanceof Error ? error.message : "部屋から退出できませんでした"); } }} className="ml-auto rounded-lg border px-3 py-2 text-sm font-bold xl:ml-0">{room.ownerId === session?.id ? "部屋を閉じる" : "退出"}</button>
         </>}
       </aside>
       <div className="min-w-0 space-y-4">
@@ -416,7 +365,7 @@ export function CanvasGame() {
             <button type="button" onClick={() => setShortcutsOpen(true)} className="rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm font-bold text-cyan-800">⌨ ショートカット</button>
             <button type="button" disabled={!canUndo} onClick={undo} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold disabled:opacity-40">自分の一手戻す <kbd className="opacity-50">Z</kbd></button>
             <button type="button" disabled={room !== null || redoStrokes.length === 0} onClick={redo} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold disabled:opacity-40">やり直す <kbd className="opacity-50">Y</kbd></button>
-            <button type="button" disabled={!canClear} onClick={() => { const ownOnly = !room; if (!window.confirm(ownOnly ? "自分が描いた線をすべて消しますか？" : "キャンバスをすべて消しますか？")) return; if (room) { void roomRequest("PATCH", { code: room.code, action: { type: "clear" } }); } else if (session?.id) { void fetch("/api/canvas/lobby-board", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "clear-own" }) }).then(async (response) => { if (!response.ok) return; const data = await response.json() as { board: { strokes: DrawingStroke[]; revision: number } }; lobbyRevisionRef.current = Math.max(lobbyRevisionRef.current, data.board.revision); setStrokes(data.board.strokes); setRedoStrokes([]); }); } else { updateStrokes([]); setRedoStrokes([]); } }} className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-bold text-rose-700 disabled:opacity-40">{room ? "全消去" : "自分の線を全消去"}</button>
+            <button type="button" disabled={!canClear} onClick={() => { const ownOnly = !room; if (!window.confirm(ownOnly ? "自分が描いた線をすべて消しますか？" : "キャンバスをすべて消しますか？")) return; if (room) { void roomRequest("PATCH", { code: room.code, action: { type: "clear" } }); } else if (session?.id) { void mutateCanvasLobbyBoard({ action: "clear-own" }).then((board) => { lobbyRevisionRef.current = Math.max(lobbyRevisionRef.current, board.revision); setStrokes(board.strokes); setRedoStrokes([]); }).catch(() => undefined); } else { updateStrokes([]); setRedoStrokes([]); } }} className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-bold text-rose-700 disabled:opacity-40">{room ? "全消去" : "自分の線を全消去"}</button>
           </div>
         </div>
       </div>
@@ -442,7 +391,7 @@ export function CanvasGame() {
           <label className="mt-2 flex items-center gap-2 text-xs font-bold">透明度 <input type="range" min="10" max="100" step="5" value={Math.round(opacity * 100)} onChange={(event) => setOpacity(Number(event.target.value) / 100)} className="min-w-0 flex-1 accent-cyan-600" /><span className="w-10 text-right tabular-nums">{Math.round(opacity * 100)}%</span></label>
         </div>}</>}
       <div ref={boardViewportRef} className={`${boardFullscreen ? "h-full max-h-none rounded-none border-0" : "max-h-[72vh] rounded-2xl border-4 border-white"} overflow-auto bg-white shadow-2xl shadow-slate-400/40`}>
-        <div className={room ? "aspect-[4/3] min-h-[320px] w-full" : "h-[1200px] w-[1600px]"} style={{ zoom }}><DrawingCanvas strokes={visibleStrokes} layerIds={layers.filter((layer) => !hiddenLayerIds.has(layer.id)).map((layer) => layer.id)} activeLayerId={activeLayerId} color={color} width={width} opacity={opacity} tool={tool} keyboardCursor={keyboardCursorVisible ? keyboardCursor : undefined} onPointerInteraction={() => setKeyboardCursorVisible(false)} onPointerPosition={setKeyboardCursor} onColorPick={(picked) => { setColor(picked); setTool("pen"); }} onStrokeProgress={submitStrokeProgress} onPan={(deltaX, deltaY) => boardViewportRef.current?.scrollBy(deltaX, deltaY)} onStrokeComplete={submitStroke} /></div>
+        <div className={room ? "aspect-[4/3] min-h-[320px] w-full" : "h-[1200px] w-[1600px]"} style={{ zoom }}><DrawingCanvas strokes={visibleStrokes} layerIds={layers.filter((layer) => !hiddenLayerIds.has(layer.id)).map((layer) => layer.id)} activeLayerId={activeLayerId} color={color} width={width} opacity={opacity} tool={tool} keyboardCursor={keyboardCursorVisible ? keyboardCursor : undefined} onPointerInteraction={() => { setKeyboardCursorVisible(false); if (!room) activateLobbySync(); }} onPointerPosition={setKeyboardCursor} onColorPick={(picked) => { setColor(picked); setTool("pen"); }} onStrokeProgress={submitStrokeProgress} onPan={(deltaX, deltaY) => boardViewportRef.current?.scrollBy(deltaX, deltaY)} onStrokeComplete={submitStroke} /></div>
       </div>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs font-semibold text-slate-500"><span>{syncNotice}</span><span>A ペン・S 消しゴム・C 細く・V 太く・Z 戻す・Y やり直す</span><span>＋/− 拡大縮小・0 等倍・Ctrl＋ホイール</span><span>矢印 移動・Space＋矢印 描画・Shift 高速</span><span>{strokes.length}ストローク</span></div>

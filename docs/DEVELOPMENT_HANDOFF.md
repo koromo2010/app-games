@@ -43,7 +43,7 @@
 | ワードスケール | `app/word-scale`, `app/hodoai-talk/HodoaiTalkGame.tsx`, `app/api/hodoai/rooms`, `lib/hodoai-room-store.ts` |
 | ワードソナー | `app/kotoba-senpuku`, `app/api/kotoba-senpuku/rooms`, `lib/kotoba-senpuku-room-store.ts`, `lib/kotoba-senpuku.ts`（公開ゲーム。ログイン必須、非公開アクセスキー不要） |
 | コードインターセプト | `app/games/code-intercept`, `app/code-intercept`, `app/api/code-intercept/rooms`, `lib/code-intercept-room-store.ts`, `lib/code-intercept.ts`（非公開チーム対抗試作） |
-| キャンバス | `app/canvas/CanvasGame.tsx`, `app/components/DrawingCanvas.tsx`, `lib/drawing-canvas.ts`（非公開のローカル描画UI試作。同一ブラウザの別タブ同期に対応） |
+| キャンバス | `app/canvas/CanvasGame.tsx`, `app/canvas/canvas-room-api-client.ts`, `app/canvas/canvas-lobby-board-api-client.ts`, `app/canvas/use-canvas-sync.ts`, `app/canvas/use-canvas-stroke-queue.ts`, `lib/canvas-sync-policy.ts`, `app/components/DrawingCanvas.tsx`, `lib/drawing-canvas.ts`（非公開の描画UI試作。共同部屋・広場のHTTP通信、同期時計、ポインター描画送信は画面から分離。GETはETag、途中線は間引き。広場は初回取得後、キャンバス操作から30秒だけ同期し、共同部屋は継続同期） |
 | たほい屋の問題再利用 | `lib/tahoiya-topic-catalog.ts`, `app/api/tahoiya/topic/route.ts` |
 | お題候補DB・経験履歴の目標設計 | `docs/TOPIC_HISTORY_DATABASE.md` |
 

@@ -17,3 +17,7 @@ export type CanvasRoomAction =
 export function findCanvasUndoStrokeIndex(strokes: DrawingStroke[], actorId: string, layerId?: string) {
   return strokes.findLastIndex((stroke) => stroke.authorId === actorId && !stroke.inProgress && (!layerId || stroke.layerId === layerId));
 }
+
+export function nextCanvasOwnerId(players: CanvasRoomPlayer[]) {
+  return [...players].sort((left, right) => left.joinedAt - right.joinedAt)[0]?.id ?? null;
+}
