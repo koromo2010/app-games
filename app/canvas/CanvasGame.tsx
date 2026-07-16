@@ -329,22 +329,23 @@ export function CanvasGame() {
       <GamePlayerMenu id={session?.id} name={session?.name || "ゲスト"} avatarColor={session?.avatarColor || fallbackAvatarColor} avatarImage={session?.avatarImage} />
     </GameTopBanner>
 
-    <section className="mx-auto flex max-w-6xl flex-col gap-4 px-3 py-5 sm:px-6">
-      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-cyan-200 bg-white/90 p-3 shadow-lg">
-        <strong className="mr-2 text-sm">キャンバスロビー</strong>
+    <section className="mx-auto grid max-w-[1500px] gap-4 px-3 py-5 sm:px-6 xl:grid-cols-[260px_minmax(0,1fr)] xl:items-start">
+      <aside className="flex flex-wrap items-center gap-2 rounded-2xl border border-cyan-200 bg-white/90 p-3 shadow-lg xl:sticky xl:top-20 xl:flex-col xl:items-stretch">
+        <strong className="mr-2 text-sm xl:mb-1 xl:text-base">キャンバスロビー</strong>
         {!room ? <>
-          <input value={roomCode} onChange={(event) => setRoomCode(event.target.value.toUpperCase().slice(0, 4))} placeholder="ルームコード" aria-label="ルームコード" className="w-32 rounded-lg border px-3 py-2 text-sm uppercase" />
-          <input value={roomPassphrase} onChange={(event) => setRoomPassphrase(event.target.value)} placeholder="合言葉（任意）" aria-label="合言葉" className="w-36 rounded-lg border px-3 py-2 text-sm" />
+          <input value={roomCode} onChange={(event) => setRoomCode(event.target.value.toUpperCase().slice(0, 4))} placeholder="ルームコード" aria-label="ルームコード" className="w-32 rounded-lg border px-3 py-2 text-sm uppercase xl:w-full" />
+          <input value={roomPassphrase} onChange={(event) => setRoomPassphrase(event.target.value)} placeholder="合言葉（任意）" aria-label="合言葉" className="w-36 rounded-lg border px-3 py-2 text-sm xl:w-full" />
           <button disabled={roomBusy || !session?.id || roomCode.length !== 4} onClick={() => void roomRequest("PATCH", { code: roomCode, action: { type: "join", passphrase: roomPassphrase } })} className="rounded-lg bg-cyan-700 px-3 py-2 text-sm font-bold text-white disabled:opacity-40">参加</button>
-          <select value={layerMode} onChange={(event) => setLayerMode(event.target.value as CanvasLayerMode)} aria-label="レイヤーモード" className="rounded-lg border px-2 py-2 text-sm"><option value="shared">自由レイヤー</option><option value="per-player">プレイヤー別レイヤー</option></select>
+          <select value={layerMode} onChange={(event) => setLayerMode(event.target.value as CanvasLayerMode)} aria-label="レイヤーモード" className="rounded-lg border px-2 py-2 text-sm xl:w-full"><option value="shared">自由レイヤー</option><option value="per-player">プレイヤー別レイヤー</option></select>
           <button disabled={roomBusy || !session?.id} onClick={() => void roomRequest("POST", { passphrase: roomPassphrase, layerMode })} className="rounded-lg border border-cyan-700 px-3 py-2 text-sm font-bold text-cyan-800 disabled:opacity-40">部屋を作る</button>
           {!session?.id && <span className="text-xs text-amber-700">ログインすると利用できます</span>}
         </> : <>
           <span className="rounded bg-slate-900 px-3 py-1 font-mono font-black tracking-widest text-white">{room.code}</span>
           <span className="text-sm font-bold">{room.players.length}人：{room.players.map((player) => player.name).join("、")}</span>
-          <button disabled={roomBusy} onClick={async () => { if (room.ownerId === session?.id) { await fetch(`/api/canvas/rooms?code=${room.code}`, { method: "DELETE" }); } else { await roomRequest("PATCH", { code: room.code, action: { type: "leave" } }); } setRoom(null); }} className="ml-auto rounded-lg border px-3 py-2 text-sm font-bold">{room.ownerId === session?.id ? "部屋を閉じる" : "退出"}</button>
+          <button disabled={roomBusy} onClick={async () => { if (room.ownerId === session?.id) { await fetch(`/api/canvas/rooms?code=${room.code}`, { method: "DELETE" }); } else { await roomRequest("PATCH", { code: room.code, action: { type: "leave" } }); } setRoom(null); }} className="ml-auto rounded-lg border px-3 py-2 text-sm font-bold xl:ml-0">{room.ownerId === session?.id ? "部屋を閉じる" : "退出"}</button>
         </>}
-      </div>
+      </aside>
+      <div className="min-w-0 space-y-4">
       <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-fuchsia-200 bg-white/90 p-3 shadow-lg" aria-label="レイヤー">
         <strong className="mr-1 text-sm">レイヤー</strong>
         {layers.map((layer) => {
@@ -397,6 +398,7 @@ export function CanvasGame() {
         <div className={room ? "aspect-[4/3] min-h-[320px] w-full" : "h-[1200px] w-[1600px]"} style={{ zoom }}><DrawingCanvas strokes={visibleStrokes} layerIds={layers.filter((layer) => !hiddenLayerIds.has(layer.id)).map((layer) => layer.id)} activeLayerId={activeLayerId} color={color} width={width} opacity={opacity} tool={tool} keyboardCursor={keyboardCursorVisible ? keyboardCursor : undefined} onPointerInteraction={() => setKeyboardCursorVisible(false)} onPointerPosition={setKeyboardCursor} onColorPick={(picked) => { setColor(picked); setTool("pen"); }} onStrokeProgress={submitStrokeProgress} onPan={(deltaX, deltaY) => boardViewportRef.current?.scrollBy(deltaX, deltaY)} onStrokeComplete={submitStroke} /></div>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs font-semibold text-slate-500"><span>{syncNotice}</span><span>A ペン・S 消しゴム・C 細く・V 太く・Z 戻す・Y やり直す</span><span>＋/− 拡大縮小・0 等倍・Ctrl＋ホイール</span><span>矢印 移動・Space＋矢印 描画・Shift 高速</span><span>{strokes.length}ストローク</span></div>
+      </div>
     </section>
 
     <GameRulesDialog open={rulesOpen} title="キャンバスの使い方" onClose={() => setRulesOpen(false)}>
