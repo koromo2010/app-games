@@ -1,6 +1,6 @@
 import { normalizeDrawingStroke, normalizeDrawingStrokes, type DrawingStroke } from "@/lib/drawing-canvas";
 import { redisCommand } from "@/lib/redis-store";
-import { activeCanvasLobbyStrokes, canvasLobbyRetentionMs } from "@/lib/canvas-lobby-board";
+import { activeCanvasLobbyStrokes, canvasLobbyRetentionMs, removeCanvasLobbyAuthorStrokes } from "@/lib/canvas-lobby-board";
 
 const boardKey = "canvas:lobby-board:v1";
 const retentionSeconds = Math.ceil(canvasLobbyRetentionMs / 1000);
@@ -43,6 +43,20 @@ export async function undoCanvasLobbyStroke(actorId: string) {
     const index = board.strokes.findLastIndex((stroke) => stroke.authorId === actorId);
     if (index < 0) return board;
     board.strokes.splice(index, 1); board.revision++; board.updatedAt = Date.now();
+    const updated = await redisCommand<number>(["EVAL", "if redis.call('GET',KEYS[1])==ARGV[1] then redis.call('SET',KEYS[1],ARGV[2],'EX',ARGV[3]); return 1 end return 0", "1", boardKey, raw, JSON.stringify(board), String(retentionSeconds)]);
+    if (updated) return board;
+  }
+  throw new Error("CANVAS_BOARD_CONFLICT");
+}
+
+export async function clearCanvasLobbyAuthorStrokes(actorId: string) {
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const raw = await redisCommand<string | null>(["GET", boardKey]);
+    if (!raw) return parse(null);
+    const board = parse(raw);
+    const nextStrokes = removeCanvasLobbyAuthorStrokes(board.strokes, actorId);
+    if (nextStrokes.length === board.strokes.length) return board;
+    board.strokes = nextStrokes; board.revision++; board.updatedAt = Date.now();
     const updated = await redisCommand<number>(["EVAL", "if redis.call('GET',KEYS[1])==ARGV[1] then redis.call('SET',KEYS[1],ARGV[2],'EX',ARGV[3]); return 1 end return 0", "1", boardKey, raw, JSON.stringify(board), String(retentionSeconds)]);
     if (updated) return board;
   }

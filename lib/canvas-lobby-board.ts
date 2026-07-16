@@ -5,3 +5,7 @@ export function activeCanvasLobbyStrokes(strokes: DrawingStroke[], now: number, 
   const cutoff = now - canvasLobbyRetentionMs;
   return strokes.filter((stroke) => (stroke.updatedAt || fallbackUpdatedAt) > cutoff);
 }
+
+export function removeCanvasLobbyAuthorStrokes(strokes: DrawingStroke[], authorId: string) {
+  return strokes.filter((stroke) => stroke.authorId !== authorId);
+}

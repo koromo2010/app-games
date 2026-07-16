@@ -212,6 +212,7 @@ export function CanvasGame() {
     .filter((stroke) => !hiddenLayerIds.has(stroke.layerId || "base"))
     .sort((left, right) => layers.findIndex((layer) => layer.id === (left.layerId || "base")) - layers.findIndex((layer) => layer.id === (right.layerId || "base")));
   const canUndo = strokes.some((stroke) => (stroke.layerId || "base") === activeLayerId && !stroke.inProgress && (session?.id ? stroke.authorId === session.id : !room));
+  const canClear = room ? room.ownerId === session?.id && strokes.length > 0 : session?.id ? strokes.some((stroke) => stroke.authorId === session.id) : strokes.length > 0;
   const features = canvasFeatures(room ? "collaborativeRoom" : "lobbyBoard");
 
   const undo = useCallback(() => {
@@ -415,7 +416,7 @@ export function CanvasGame() {
             <button type="button" onClick={() => setShortcutsOpen(true)} className="rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm font-bold text-cyan-800">⌨ ショートカット</button>
             <button type="button" disabled={!canUndo} onClick={undo} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold disabled:opacity-40">自分の一手戻す <kbd className="opacity-50">Z</kbd></button>
             <button type="button" disabled={room !== null || redoStrokes.length === 0} onClick={redo} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold disabled:opacity-40">やり直す <kbd className="opacity-50">Y</kbd></button>
-            <button type="button" disabled={strokes.length === 0 || (room !== null && room.ownerId !== session?.id)} onClick={() => { if (window.confirm("キャンバスをすべて消しますか？")) { if (room) void roomRequest("PATCH", { code: room.code, action: { type: "clear" } }); else { updateStrokes([]); setRedoStrokes([]); } } }} className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-bold text-rose-700 disabled:opacity-40">全消去</button>
+            <button type="button" disabled={!canClear} onClick={() => { const ownOnly = !room; if (!window.confirm(ownOnly ? "自分が描いた線をすべて消しますか？" : "キャンバスをすべて消しますか？")) return; if (room) { void roomRequest("PATCH", { code: room.code, action: { type: "clear" } }); } else if (session?.id) { void fetch("/api/canvas/lobby-board", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "clear-own" }) }).then(async (response) => { if (!response.ok) return; const data = await response.json() as { board: { strokes: DrawingStroke[]; revision: number } }; lobbyRevisionRef.current = Math.max(lobbyRevisionRef.current, data.board.revision); setStrokes(data.board.strokes); setRedoStrokes([]); }); } else { updateStrokes([]); setRedoStrokes([]); } }} className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-bold text-rose-700 disabled:opacity-40">{room ? "全消去" : "自分の線を全消去"}</button>
           </div>
         </div>
       </div>
@@ -455,7 +456,7 @@ export function CanvasGame() {
         <li>「ペン」を選び、キャンバスの上をドラッグすると線を描けます。</li>
         <li>色、線の太さ、透明度はいつでも変更できます。透明度を下げると、下の線が透ける半透明の色になります。</li>
         <li>「消しゴム」で線を消せます。「自分の一手戻す」は選択中のレイヤーで自分が最後に描いた線だけを取り消します。「やり直す」で戻した線を元に戻せます。</li>
-        <li>「全消去」はすべての線を消して白紙にします。確認画面が出るので、まちがえて押してもすぐには消えません。</li>
+        <li>落書きボードの「自分の線を全消去」は自分が描いた線だけを消します。共同ルームの「全消去」はホストがキャンバス全体を白紙にします。どちらも実行前に確認画面が表示されます。</li>
       </ol>
       <h3 className="mt-4 font-black text-white">キーボードで描く</h3>
       <p className="mt-2">水色の丸がキーボードカーソルです。矢印キーで移動し、Spaceを押しながら矢印キーを押すと線を描けます。Shiftも一緒に押すと速く動きます。くわしいキーは「キーボードショートカット」で確認できます。</p>
