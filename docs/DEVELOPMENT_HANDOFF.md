@@ -75,7 +75,10 @@
 - `UPSTASH_REDIS_REST_URL` または `KV_REST_API_URL`
 - `UPSTASH_REDIS_REST_TOKEN` または `KV_REST_API_TOKEN`
 - `REDIS_REQUEST_TIMEOUT_MS`（任意。既定4000ms、1000〜10000msに制限）
-- `database_DATABASE_URL`（Vercel管理Neon。標準の `DATABASE_URL` も優先的に認識）
+- `APP_ENV`、`APP_DATABASE_URL`、`APP_DATABASE_ENV`（環境分離後のアプリDB正本と誤接続防止。旧URLは移行期間のみ）
+- `VOCABULARY_DATABASE_URL`（本番・開発共通の単語カタログ。サーバー限定）
+- `REDIS_ENV`（`production | development`。Redis誤接続防止）
+- `database_DATABASE_URL`（Vercel管理Neon。移行互換として標準の`DATABASE_URL`等も認識）
 - `NEXT_PUBLIC_GAME_ADS_MODE`（任意。既定`off`。`preview`は広告予定位置のレイアウト確認専用。`live`は同意管理・配信adapter・CSP・ポリシー審査完了後だけ使用）
 - 既存の `KV_*`, `REDIS_URL` も環境に設定されている場合がある
 

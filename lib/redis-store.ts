@@ -1,3 +1,5 @@
+import { assertRedisEnvironment } from "./storage-environment-guard.ts";
+
 type RedisResponse<T> = {
   result: T;
   error?: string;
@@ -78,6 +80,7 @@ export function getRedisConfig() {
   const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
 
   if (!url || !token) return null;
+  assertRedisEnvironment();
 
   return {
     url: url.replace(/\/$/, ""),

@@ -1,6 +1,8 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { assertAppDatabaseEnvironment } from "./storage-environment-guard.ts";
 
 const postgresUrlEnvironmentNames = [
+  "APP_DATABASE_URL",
   "DATABASE_URL",
   "database_DATABASE_URL",
   "database_POSTGRES_URL",
@@ -25,6 +27,7 @@ export function isPostgresConfigured() {
 export function getPostgresClient() {
   const config = getPostgresConfig();
   if (!config) throw new Error("POSTGRES_STORE_NOT_CONFIGURED");
+  assertAppDatabaseEnvironment(config.name);
   if (!client || clientUrl !== config.url) {
     client = neon(config.url);
     clientUrl = config.url;
