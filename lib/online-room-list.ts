@@ -1,4 +1,5 @@
 import { onlineRoomListPageSize } from "./online-room-policy.ts";
+import { isMultiplayerRoomExpired } from "./multiplayer-room-lifecycle.ts";
 import { redisCommand } from "./redis-store.ts";
 
 export function normalizeOnlineRoomListCursor(value: unknown) {
@@ -23,4 +24,25 @@ export async function scanOnlineRoomCodes(indexKey: string, cursorValue: unknown
 export async function loadOnlineRoomValues(codes: string[], roomKey: (code: string) => string) {
   if (codes.length === 0) return [];
   return redisCommand<(string | null)[]>(["MGET", ...codes.map(roomKey)]);
+}
+
+type IndexedOnlineRoomListOptions<Room extends { updatedAt: number }> = {
+  indexKey: string;
+  roomKey: (code: string) => string;
+  parseRoom: (raw: string | null) => Room | null;
+  loadRoom: (code: string) => Promise<Room | null>;
+};
+
+export async function loadIndexedOnlineRoomPage<Room extends { updatedAt: number }>(
+  cursor: unknown,
+  options: IndexedOnlineRoomListOptions<Room>,
+) {
+  const page = await scanOnlineRoomCodes(options.indexKey, cursor);
+  const values = await loadOnlineRoomValues(page.codes, options.roomKey);
+  const rooms = values.map(options.parseRoom);
+  const expiredCodes = page.codes.filter((_, index) => rooms[index] && isMultiplayerRoomExpired(rooms[index]!.updatedAt));
+  const missingCodes = page.codes.filter((_, index) => !rooms[index]);
+  if (expiredCodes.length > 0) await Promise.all(expiredCodes.map(options.loadRoom));
+  if (missingCodes.length > 0) await redisCommand<number>(["SREM", options.indexKey, ...missingCodes]);
+  return { rooms, nextCursor: page.nextCursor };
 }

@@ -9,7 +9,8 @@ import {
   sanitizeKotobaSenpukuRoom,
 } from "@/lib/kotoba-senpuku-room-store";
 import type { KotobaSenpukuRoomAction } from "@/lib/kotoba-senpuku";
-import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
+import { requireAuthenticatedPlayer } from "@/lib/player-auth";
+import { commonOnlineRoomErrorResponse } from "@/lib/online-room-route-errors";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
 import { actionRequiresDebugAccess, requirePlayerDebugAccess } from "@/lib/debug-access";
 import { gameApiAccessDeniedResponse } from "@/lib/game-access";
@@ -19,10 +20,8 @@ import { conditionalJsonResponse } from "@/lib/conditional-json";
 
 function errorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : "";
-  if (message === "PLAYER_AUTH_REQUIRED") return Response.json({ error: "Login required" }, { status: 401 });
-  if (message === "DEBUG_ACCESS_REQUIRED") return Response.json({ error: "Debug access required" }, { status: 403 });
-  if (isPlayerAuthConfigurationError(error)) return Response.json({ error: "Player auth is not configured" }, { status: 503 });
-  if (message === "REDIS_STORE_NOT_CONFIGURED") return Response.json({ error: "Room storage is not configured" }, { status: 503 });
+  const common = commonOnlineRoomErrorResponse(error);
+  if (common) return common;
   if (message === "KOTOBA_SENPUKU_ROOM_NOT_FOUND") return Response.json({ error: "Room not found" }, { status: 404 });
   if (message === "KOTOBA_SENPUKU_BAD_PASSPHRASE") return Response.json({ error: "Bad passphrase" }, { status: 401 });
   if (message === "KOTOBA_SENPUKU_ROOM_FULL") return Response.json({ error: "Room is full" }, { status: 409 });

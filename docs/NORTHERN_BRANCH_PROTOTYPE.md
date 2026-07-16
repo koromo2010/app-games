@@ -18,7 +18,7 @@
 
 ## サーバー側の扱い
 
-- 行動と手番の判定は `lib/northern-branch-room-store.ts` で行う
+- 行動ルールは `lib/northern-branch-game.ts`、actorと手番の権限検証は `lib/northern-branch-room-store.ts` で行う
 - Redis更新はrevision付きcompare-and-setで競合を検知する
 - APIは個人利用Cookieとログインセッションを毎回確認する
 - 1部屋の上限は現在のカード初期値に合わせて4人とする
@@ -29,6 +29,8 @@
 - ルール処理: `lib/northern-branch-game.ts`
 - カード・建物データ: `lib/northern-branch-data.ts`
 - 部屋保存と権限: `lib/northern-branch-room-store.ts`
+- 保存データ復元: `lib/northern-branch-room-normalizer.ts`
+- 手札秘匿・ロビー表示整形: `lib/northern-branch-room-presentation.ts`
 - API: `app/api/northern-branch/rooms/route.ts`
 - 画面: `app/northern-branch/NorthernBranchGame.tsx`
 

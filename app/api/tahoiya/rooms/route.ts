@@ -13,7 +13,8 @@ import {
 } from "@/lib/tahoiya-room-store";
 import type { TahoiyaRoomAction } from "@/lib/tahoiya-types";
 import type { TahoiyaTopic } from "@/lib/tahoiya-types";
-import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
+import { requireAuthenticatedPlayer } from "@/lib/player-auth";
+import { commonOnlineRoomErrorResponse } from "@/lib/online-room-route-errors";
 import { authenticatedRoomDraft } from "@/lib/online-room-input";
 import { generateTahoiyaTopicResponse } from "@/app/api/tahoiya/topic/route";
 import { withGameGenerationCache } from "@/lib/game-generation-cache";
@@ -28,10 +29,7 @@ function isStoreNotConfigured(error: unknown) {
 }
 
 function authErrorResponse(error: unknown) {
-  if (error instanceof Error && error.message === "PLAYER_AUTH_REQUIRED") return Response.json({ error: "Login required" }, { status: 401 });
-  if (error instanceof Error && error.message === "DEBUG_ACCESS_REQUIRED") return Response.json({ error: "Debug access required" }, { status: 403 });
-  if (isPlayerAuthConfigurationError(error)) return Response.json({ error: "Player auth is not configured" }, { status: 503 });
-  return null;
+  return commonOnlineRoomErrorResponse(error);
 }
 
 export async function GET(request: Request) {

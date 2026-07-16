@@ -4,7 +4,7 @@
 >
 > 資料を読む順番や作業別の参照先は `docs/README.md` を入口にする。この文書は「現在の開発状態と共通仕様」、`docs/CONTAINER_ARCHITECTURE.md` は「将来案」である。
 
-最終更新: 2026-07-15
+最終更新: 2026-07-16
 
 ## ブランド・法務ページ
 
@@ -179,7 +179,9 @@ Neon Postgres、Upstash Redis、Vercel Blobの容量は `vercel.json` の日次C
 
 ## 6. ワードウルフ現行仕様の要点
 
-現在のモジュール分離は `docs/MODULAR_GAME_ARCHITECTURE.md`、将来のweb・game-server・timer-service・ai-worker・batch-worker構成は `docs/CONTAINER_ARCHITECTURE.md` を正本とする。全5ゲームで部屋HTTPクライアントと同期hookをUIから分離済み。ワードウルフはフェーズ時計も分離済みで、登録簿の `moduleBoundaryFiles` をlint時に検査する。
+現在のモジュール分離は `docs/MODULAR_GAME_ARCHITECTURE.md`、将来のweb・game-server・timer-service・ai-worker・batch-worker構成は `docs/CONTAINER_ARCHITECTURE.md` を正本とする。オンラインゲームでは部屋HTTPクライアントと同期hookをUIから分離済み。ワードウルフはフェーズ時計も分離済み。部屋一覧は `lib/online-room-list.ts`、active-roomの移動・復帰は `lib/player-active-room.ts`、revision CASと新規作成は `lib/online-room-persistence.ts`、共通権限は `lib/online-room-access.ts`、API共通エラーは `lib/online-room-route-errors.ts`、主要5ゲームの解散は `lib/online-room-dissolution.ts` に集約した。登録簿の `moduleBoundaryFiles` をlint時に検査する。
+
+オンラインゲームのroom moduleは、ゲーム別の `*-room-normalizer.ts`（復元・入力正規化）、必要に応じた `*-room-domain.ts`（ラウンド進行・タイムアウト）、`*-room-presentation.ts`（sanitizer・ロビー表示）、`*-room-store.ts`（Redis/application）へ物理分割済み。ワードウルフの特殊な戦績記録付きCASはstoreに維持する。
 
 部屋状態には `revision` を持たせ、Redis内CASで古い保存による巻き戻しを防ぐ。参加・プロフィール・ロビー設定・デバッグ操作・開始・通常の発言・投票・逆転回答・時間切れ遷移はサーバー側Commandで処理し、複数端末から同時に要求されても整合する。レスポンスは認証済み閲覧者向けに整形し、結果前は狼ID・相手ワード・他人の投票を返さない。
 締切には標準5秒のサーバー受付猶予を設け、締切直前に端末から送った投稿・投票が通信遅延で時間切れ処理に負けないようにする。`WORDWOLF_TIMEOUT_GRACE_MS`（0〜10000ms）で調整可能。クライアント申告の送信時刻は信用せず、サーバー到着が締切＋猶予以内か、現在のフェーズとrevisionが一致するかで上限を掛ける。
@@ -191,14 +193,14 @@ Neon Postgres、Upstash Redis、Vercel Blobの容量は `vercel.json` の日次C
 - お題はJST同日同語禁止、順序非依存ペアは標準30日間禁止。固有名詞は語だけで類推できない距離へ調整済み
 - OpenAI OFF時はGemini、Groq、ローカルの順。逆転判定は無料APIまたはfuzzy/feedbackを使用
 
-詳細な挙動を変える前に、`lib/wordwolf-room-store.ts` のサーバー遷移を確認する。
+詳細な挙動を変える前に、`lib/wordwolf-command-domain.ts`、`lib/wordwolf-room-normalizer.ts`、`lib/wordwolf-room-presentation.ts`、`lib/wordwolf-room-store.ts` の境界を確認する。
 
 ### ワードアウト（非公開オンライン試作・内部ID `nigoichi`）
 
 - `/word-out` は非公開アクセスキーかつログイン済みの利用者向け。表示名は「ワードアウト / WORD OUT」。内部IDは旧データ互換のため `nigoichi` を維持し、旧URL `/nigoichi` は `/word-out` へリダイレクトする。部屋作成前は2〜6人の最大募集人数だけを指定し、A・M・難易度は作成後のロビーで設定する。最大募集人数に達すると新規参加を締め切り、2人以上なら上限未満でも開始できる。部屋一覧、4文字コード、任意の合言葉、アクティブ部屋復帰に対応する。
 - 設定はプレイヤー人数P、1人に配るカードA、書く連想語M、場のカードBとし、`P>=2`、`1<=M<=5`、`A>=2M`、`B=P×A+1<=21` をクライアントとサーバーの両方で検証する。場に並ぶカード総数は最大21枚。PまたはM変更時はAの範囲を再計算し、範囲外のAを自動補正する。初期値と旧ルームの補完値はA=2、M=1。Aを増やすことで、より多くの言葉を連想語で伝える高難度設定にできる。
 - 各人は自分のA枚を見てM個の連想語を自由に提出する。カードをグループへ分類したり、各連想語と特定カードを対応付けたりする必要はない。全員の提出後に連想語を一斉公開し、余り番号を全員が予想した後、言葉一覧、所有者、手札、連想語、予想、正誤を公開する。
-- Redisを正本とし、revision付きCAS、共通TTL、1人1アクティブ部屋、閲覧者別sanitizerを使う。純粋ルールは `lib/nigoichi.ts`、保存とCommandは `lib/nigoichi-room-store.ts`、APIは `app/api/nigoichi/rooms/route.ts`、クライアント境界は `app/nigoichi/nigoichi-room-api-client.ts`、画面は `app/nigoichi/NigoichiGame.tsx`。
+- Redisを正本とし、revision付きCAS、共通TTL、1人1アクティブ部屋、閲覧者別sanitizerを使う。純粋ルールは `lib/nigoichi.ts`、保存データ復元は `lib/nigoichi-room-normalizer.ts`、進行準備は `lib/nigoichi-room-domain.ts`、表示整形は `lib/nigoichi-room-presentation.ts`、保存とCommandは `lib/nigoichi-room-store.ts`、APIは `app/api/nigoichi/rooms/route.ts`、クライアント境界は `app/nigoichi/nigoichi-room-api-client.ts`、画面は `app/nigoichi/NigoichiGame.tsx`。
 - デバッグONのホストはダミーを最大6人まで追加し、ダミーの連想語・予想を代行できる。未提出の一括補完、中断、行動ログ、任意のデバッグプレイバック記録に対応する。デバッグ部屋とダミーは通常戦績へ含めない。
 - 余り番号を正解したプレイヤーは参加人数P−1点を得る。自分のカードがほかのプレイヤーの誤答に選ばれるたび1点を失い、`ラウンド得点 = 正解ボーナス − 被誤答票数` とするため負の得点もあり得る。同じ部屋での再戦は累計得点を引き継ぐ。固定の目標点・終了ラウンド・時間制限はない。余り番号の正解・不正解は1ゲームの結果として戦績へ記録する。
 - 結果共有のプレイログには、番号順の言葉一覧（各語の持ち主または余り）と、各プレイヤーの「手札A枚 → 連想語M個」を含める。参加者名は入室時に保存した共有同意がONのときだけ表示し、それ以外は `PLAYER1` 形式で匿名化する。共有前に実際の文章をプレビューする。

@@ -24,6 +24,12 @@ UI / hooks -> API client -> HTTP route -> application/domain -> storage
 
 - HTTP共通処理: `lib/online-room-api-client.ts`
 - 表示中の部屋同期: `app/hooks/use-online-room-polling.ts`
+- Redis部屋一覧・期限切れ索引整理: `lib/online-room-list.ts`
+- 1プレイヤー1部屋の確保・移動: `lib/player-active-room.ts`
+- revision CAS・新規部屋永続化: `lib/online-room-persistence.ts`
+- 共通actor権限・ロビー退出判定: `lib/online-room-access.ts`
+- Room API共通エラー変換: `lib/online-room-route-errors.ts`
+- 部屋解散application/storage境界: `lib/online-room-dissolution.ts`
 - ワードウルフadapter: `app/wordwolf/wordwolf-room-api-client.ts`
 - たほい屋adapter: `app/tahoiya/tahoiya-room-api-client.ts`
 - ノーザンブランチadapter: `app/northern-branch/northern-branch-room-api-client.ts`
@@ -32,6 +38,26 @@ UI / hooks -> API client -> HTTP route -> application/domain -> storage
 - ワードアウトadapter（内部IDはnigoichi）: `app/nigoichi/nigoichi-room-api-client.ts`
 
 共通クライアントはURL、method、条件付きGET、JSON応答、HTTP status/payload付きエラーまでを担当する。各adapterはゲーム固有のRoom・Action型を付ける。フェーズ遷移、権限、勝敗、レスポンスの秘密情報除去は従来どおりサーバーdomain/storeの責務で、クライアント共通化へ移さない。
+
+オンライン部屋の解散は、ゲーム別storeがエラーコードとRedisキーをadapterとして渡し、`lib/online-room-dissolution.ts` がホスト本人確認、`room-dissolve-policy` によるフェーズ検証、部屋本体と索引の削除、参加者全員のactive room解除を担当する。進行中の退出可否や終了フェーズの作り方はゲーム固有storeに残す。
+
+公開ロビーの部屋一覧は `lib/online-room-list.ts` がSSCAN/MGET、期限切れ部屋の整理、実体がない索引の削除までを担当する。参加可能判定、公開用Choiceへの変換、表示順はゲーム固有storeに残す。
+
+部屋作成・参加前のactive room確保は `lib/player-active-room.ts` が担当する。現在の別室から移動可能かを共通解散ポリシーで判定し、終了済みの索引解除と新しい部屋コードのCAS確保を一続きのapplication境界として扱う。参加人数、合言葉、フェーズなどの入室条件はゲーム固有storeで検証する。
+
+Redisのrevision CAS、競合時の最大6回再適用、保存後hook、`SET NX`による新規作成・索引登録は `lib/online-room-persistence.ts`、参加者全員のactive-room索引更新は `lib/player-active-room.ts` に置く。ホスト／参加者とロビー退出の純粋判定は `lib/online-room-access.ts` が担当する。Room APIで共通の認証・保存設定エラーは `lib/online-room-route-errors.ts` でHTTP応答へ変換し、ゲーム固有エラーだけを各Routeに残す。
+
+ワードスケールは物理分割の基準実装として、保存データ復元を `lib/hodoai-room-normalizer.ts`、純粋なラウンド進行とタイムアウト遷移を `lib/hodoai-room-domain.ts`、閲覧者別sanitizerとロビーChoiceを `lib/hodoai-room-presentation.ts` に分離する。`lib/hodoai-room-store.ts` はRedis/application処理とCommand orchestrationを担当する。
+
+たほい屋も同じ境界で、`lib/tahoiya-room-normalizer.ts`、`lib/tahoiya-room-domain.ts`、`lib/tahoiya-room-presentation.ts`、`lib/tahoiya-room-store.ts` に分離する。得点、投票完了、時間切れ遷移はdomainに置き、AIお題生成を含むCommand orchestrationとRedis操作はstoreに残す。
+
+ワードソナーも、保存データ復元を `lib/kotoba-senpuku-room-normalizer.ts`、対戦・得点・タイムアウト遷移を `lib/kotoba-senpuku-room-domain.ts`、閲覧者別sanitizerとロビーChoiceを `lib/kotoba-senpuku-room-presentation.ts` に分離する。storeはRedis/application処理とCommand orchestrationを担当する。
+
+コードインターセプトも、保存データ復元を `lib/code-intercept-room-normalizer.ts`、ラウンド準備と進行判定を `lib/code-intercept-room-domain.ts`、閲覧者別sanitizerとロビーChoiceを `lib/code-intercept-room-presentation.ts` に分離する。storeは権限を含むCommand orchestration、CAS、戦績・リプレイ記録を担当する。
+
+ワードアウト（内部ID `nigoichi`）も、保存データ復元と旧形式移行を `lib/nigoichi-room-normalizer.ts`、配札・再戦準備・参加人数に応じた設定補正を `lib/nigoichi-room-domain.ts`、閲覧者別sanitizerとロビーChoiceを `lib/nigoichi-room-presentation.ts` に分離する。storeはCommand orchestrationと永続化を担当する。
+
+ノーザンブランチはゲーム進行を既存の `lib/northern-branch-game.ts` に維持し、保存データ復元を `lib/northern-branch-room-normalizer.ts`、手札秘匿とロビーChoiceを `lib/northern-branch-room-presentation.ts` に分離する。storeはactor権限、Command orchestration、永続化を担当する。
 
 部屋APIの書き込み契約は全ゲームで、`POST = 新規部屋作成`、`PATCH = 既存部屋へのCommand`、`DELETE = 解散` に固定する。既存コードへのPOSTは409で拒否し、UIは作成後のRoom全体を送信しない。参加、プロフィール、ロビー設定、デバッグ操作、次ラウンド、ゲーム進行は、変更意図だけを表すゲーム固有ActionとしてPATCHする。サーバーは認証Cookieからactorを確定し、保存済みRoomへ権限・フェーズ・対象・revisionを検証して適用する。
 
@@ -43,10 +69,14 @@ UI / hooks -> API client -> HTTP route -> application/domain -> storage
 - API client: `app/wordwolf/wordwolf-room-api-client.ts`
 - phase clock: `app/wordwolf/use-wordwolf-phase-clock.ts`
 - storage: `lib/wordwolf-room-store.ts`
+- saved room normalizer: `lib/wordwolf-room-normalizer.ts`
+- viewer presentation: `lib/wordwolf-room-presentation.ts`
 - timer policy/event: `lib/game-timer/policy.ts`, `lib/game-timer/event.ts`
 - timer ingress: `app/api/game-timer/expire/route.ts`
 
 第一段階では部屋API通信と時計を巨大な画面コンポーネントから分離した。その後、部屋APIと表示中ポーリングの共通土台を全5ゲームへ適用した。部屋には単調増加する `revision` を持たせ、Redis内CASで古い保存を409拒否する。参加・ロビー設定・ゲーム開始・通常の発言・投票・最終回答・時間切れは `/api/wordwolf/commands` または専用部屋Commandへ移行済みで、`lib/wordwolf-command-domain.ts` と各Room Storeが検証と状態遷移を担当する。WordWolf/Tahoiyaに残っていた部屋全体POST互換経路も廃止済みで、全5ゲームのgame-server境界は同じHTTP契約になった。
+
+保存済み部屋の正規化・旧フィールド互換・試合得点確定は `lib/wordwolf-room-normalizer.ts`、狼ID・お題・投票・発言の閲覧者別秘匿とロビーChoiceは `lib/wordwolf-room-presentation.ts` に分離した。特殊な戦績記録付きCASとactive-room索引更新は `lib/wordwolf-room-store.ts` に維持する。
 
 `config/game-registry.json` の `moduleBoundaryFiles` は分離済み境界の正本であり、`npm run lint` が存在を検査する。新しいスレッドや新ゲームでファイルを1つへ戻さない。
 

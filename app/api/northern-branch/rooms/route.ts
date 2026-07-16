@@ -9,7 +9,8 @@ import {
   sanitizeNorthernRoom,
 } from "@/lib/northern-branch-room-store";
 import type { NorthernRoomAction } from "@/lib/northern-branch-types";
-import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
+import { requireAuthenticatedPlayer } from "@/lib/player-auth";
+import { commonOnlineRoomErrorResponse } from "@/lib/online-room-route-errors";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
 import { actionRequiresDebugAccess, requirePlayerDebugAccess } from "@/lib/debug-access";
 import { gameApiAccessDeniedResponse } from "@/lib/game-access";
@@ -18,10 +19,8 @@ import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 import { conditionalJsonResponse } from "@/lib/conditional-json";
 
 function errorResponse(error: unknown) {
-  if (error instanceof Error && error.message === "PLAYER_AUTH_REQUIRED") return Response.json({ error: "Login required" }, { status: 401 });
-  if (error instanceof Error && error.message === "DEBUG_ACCESS_REQUIRED") return Response.json({ error: "Debug access required" }, { status: 403 });
-  if (isPlayerAuthConfigurationError(error)) return Response.json({ error: "Player auth is not configured" }, { status: 503 });
-  if (error instanceof Error && error.message === "REDIS_STORE_NOT_CONFIGURED") return Response.json({ error: "Room storage is not configured" }, { status: 503 });
+  const common = commonOnlineRoomErrorResponse(error);
+  if (common) return common;
   if (error instanceof Error && error.message === "NORTHERN_ROOM_NOT_FOUND") return Response.json({ error: "Room not found" }, { status: 404 });
   if (error instanceof Error && error.message === "NORTHERN_BAD_PASSPHRASE") return Response.json({ error: "Bad passphrase" }, { status: 401 });
   if (error instanceof Error && error.message === "NORTHERN_ROOM_FULL") return Response.json({ error: "Room is full" }, { status: 409 });

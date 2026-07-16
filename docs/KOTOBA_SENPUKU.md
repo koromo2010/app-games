@@ -45,7 +45,10 @@
 ## 主なファイル
 
 - 型・独自お題・正規化: `lib/kotoba-senpuku.ts`
-- Redis部屋・ゲーム進行: `lib/kotoba-senpuku-room-store.ts`
+- Redis・Command処理: `lib/kotoba-senpuku-room-store.ts`
+- 保存データ復元: `lib/kotoba-senpuku-room-normalizer.ts`
+- ゲーム進行: `lib/kotoba-senpuku-room-domain.ts`
+- 閲覧者別表示整形: `lib/kotoba-senpuku-room-presentation.ts`
 - API: `app/api/kotoba-senpuku/rooms/route.ts`
 - 公開URL・ページ: `/word-sonar`、`app/word-sonar/page.tsx`（旧 `/kotoba-senpuku` は転送）
 - 画面本体: `app/kotoba-senpuku/KotobaSenpukuGame.tsx`

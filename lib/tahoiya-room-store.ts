@@ -1,26 +1,26 @@
 import { redisCommand } from "@/lib/redis-store";
 import { randomUUID } from "node:crypto";
-import type { TahoiyaAnswererMode, TahoiyaDefinitionOption, TahoiyaPhase, TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomAction, TahoiyaRoomChoice, TahoiyaTopic } from "@/lib/tahoiya-types";
-import { calculateTahoiyaRoundScores, tahoiyaRuntimeScoring, TAHOIYA_CORRECT_VOTE_POINTS, TAHOIYA_FOOLED_VOTE_POINTS } from "@/lib/tahoiya-scoring";
-import { normalizeGameGenerationMeta } from "@/lib/game-ai-types";
+import type { TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomAction, TahoiyaTopic } from "@/lib/tahoiya-types";
+import { tahoiyaRuntimeScoring } from "@/lib/tahoiya-scoring";
 import { recordTahoiyaRoundResults } from "@/lib/player-stats-store";
 import { recordTahoiyaReplay } from "@/lib/game-replay-store";
 import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
-import { isMultiplayerRoomExpired, multiplayerRoomTtlSeconds } from "@/lib/multiplayer-room-lifecycle";
-import { commonGameTimeoutGraceMs } from "@/lib/game-timer/policy";
-import { canDissolveOnlineRoom, canMoveFromOnlineRoom } from "@/lib/room-dissolve-policy";
-import { claimPlayerActiveRoom, releasePlayerActiveRoom } from "@/lib/player-active-room";
-import { normalizeOnlineRoomCode, onlineRoomPassphraseMaximumLength } from "@/lib/online-room-input";
-import { isAvatarColor, isAvatarImage } from "@/lib/player-session";
+import { isMultiplayerRoomExpired } from "@/lib/multiplayer-room-lifecycle";
+import { canDissolveOnlineRoom } from "@/lib/room-dissolve-policy";
+import { claimOnlineRoomForPlayer, loadPlayerActiveOnlineRoom, releasePlayerActiveRoom, saveOnlineRoomPlayerIndexes } from "@/lib/player-active-room";
 import { onlineRoomPlayerLimits } from "@/lib/online-room-policy";
-import { loadOnlineRoomValues, scanOnlineRoomCodes } from "@/lib/online-room-list";
-import { normalizePlayerTimeoutFields, playerTimeLimitSeconds, recordPlayerActivity, recordPlayerTimeout, recoverPlayerTimeout } from "@/lib/player-timeout-policy";
-
-const timeoutSubmission = "__timeout__";
+import { loadIndexedOnlineRoomPage } from "@/lib/online-room-list";
+import { createIndexedOnlineRoom, mutateOnlineRoomWithRetry } from "@/lib/online-room-persistence";
+import { normalizeTahoiyaRoom } from "@/lib/tahoiya-room-normalizer";
+import { sanitizeTahoiyaRoom, tahoiyaRoomChoice } from "@/lib/tahoiya-room-presentation";
+import { advanceToVoting, definitionWriterIds, reconcileProgress, scoreRoom, timedOut, voterIds, votingComplete, writingComplete } from "@/lib/tahoiya-room-domain";
+import { recordPlayerActivity, recoverPlayerTimeout } from "@/lib/player-timeout-policy";
 
 const roomKeyPrefix = "tahoiya:room:";
 const roomIndexKey = "tahoiya:rooms";
 const playerActiveRoomKeyPrefix = "tahoiya:player-active-room:";
+
+export { sanitizeTahoiyaRoom };
 
 function roomKey(code: string) {
   return `${roomKeyPrefix}${code.trim().toUpperCase()}`;
@@ -30,319 +30,14 @@ function playerActiveRoomKey(playerId: string) {
   return `${playerActiveRoomKeyPrefix}${playerId}`;
 }
 
-function isPhase(value: unknown): value is TahoiyaPhase {
-  return value === "lobby" || value === "writing" || value === "voting" || value === "result";
-}
 
-function isAnswererMode(value: unknown): value is TahoiyaAnswererMode {
-  return value === "manual" || value === "random";
-}
-
-function normalizeScores(value: unknown) {
-  if (!value || typeof value !== "object") return {};
-
-  return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>)
-      .filter(([playerId, score]) => playerId && typeof score === "number" && Number.isFinite(score))
-      .map(([playerId, score]) => [playerId, Math.max(0, Math.floor(score as number))]),
-  );
-}
-
-function normalizePlayers(value: unknown): TahoiyaPlayer[] {
-  if (!Array.isArray(value)) return [];
-
-  return value
-    .filter((player): player is TahoiyaPlayer => Boolean(player?.id && player?.name))
-    .slice(0, onlineRoomPlayerLimits.tahoiya)
-    .map((player) => ({
-      id: String(player.id).slice(0, 80),
-      name: String(player.name).trim().slice(0, 40),
-      joinedAt: typeof player.joinedAt === "number" ? player.joinedAt : Date.now(),
-      avatarColor: isAvatarColor(player.avatarColor ?? null) ? player.avatarColor : undefined,
-      avatarImage: isAvatarImage(player.avatarImage ?? null) ? player.avatarImage : undefined,
-    }));
-}
-
-function normalizeOptions(value: unknown): TahoiyaDefinitionOption[] {
-  if (!Array.isArray(value)) return [];
-
-  return value
-    .filter((option): option is TahoiyaDefinitionOption => Boolean(option?.id && option?.text))
-    .map((option) => ({
-      id: String(option.id),
-      text: String(option.text),
-      authorId: typeof option.authorId === "string" ? option.authorId : null,
-      isReal: Boolean(option.isReal),
-    }));
-}
-
-function normalizeStringRecord(value: unknown) {
-  if (!value || typeof value !== "object") return {};
-
-  return Object.fromEntries(
-    Object.entries(value as Record<string, unknown>)
-      .filter(([key, item]) => key && typeof item === "string")
-      .map(([key, item]) => [key, item as string]),
-  );
-}
-
-function normalizeRoom(value: unknown): TahoiyaRoom | null {
-  if (!value || typeof value !== "object") return null;
-
-  const parsed = value as Partial<TahoiyaRoom>;
-  const code = normalizeOnlineRoomCode(parsed.code);
-  const hostId = typeof parsed.hostId === "string" ? parsed.hostId : "";
-  const players = normalizePlayers(parsed.players);
-  const parentId = typeof parsed.parentId === "string" ? parsed.parentId : hostId;
-  const playMode = parsed.playMode === "all-vote" ? "all-vote" : "single-answerer";
-
-  if (!code || !hostId || players.length === 0) return null;
-
-  return {
-    code,
-    revision: typeof parsed.revision === "number" ? Math.max(0, Math.floor(parsed.revision)) : 0,
-    hostId,
-    ownerId: typeof parsed.ownerId === "string" ? parsed.ownerId : undefined,
-    passphrase: typeof parsed.passphrase === "string" ? parsed.passphrase.slice(0, onlineRoomPassphraseMaximumLength) : "",
-    phase: isPhase(parsed.phase) ? parsed.phase : "lobby",
-    debugMode: Boolean(parsed.debugMode),
-    debugReplayEnabled: Boolean(parsed.debugMode && parsed.debugReplayEnabled),
-    players,
-    ...normalizePlayerTimeoutFields(parsed, players.map((player) => player.id)),
-    parentId,
-    playMode,
-    topicDifficulty: parsed.topicDifficulty === "extreme" ? "extreme" : "standard",
-    answererMode: isAnswererMode(parsed.answererMode) ? parsed.answererMode : "random",
-    showRealDefinitionToWriters: playMode === "single-answerer" && parsed.showRealDefinitionToWriters !== false,
-    actionTimeLimitSeconds: normalizeCommonTimeLimit(parsed.actionTimeLimitSeconds),
-    correctVotePoints: typeof parsed.correctVotePoints === "number" && Number.isInteger(parsed.correctVotePoints) ? Math.max(0, Math.min(10, parsed.correctVotePoints)) : TAHOIYA_CORRECT_VOTE_POINTS,
-    fooledVotePoints: typeof parsed.fooledVotePoints === "number" && Number.isInteger(parsed.fooledVotePoints) ? Math.max(0, Math.min(10, parsed.fooledVotePoints)) : TAHOIYA_FOOLED_VOTE_POINTS,
-    phaseStartedAt: typeof parsed.phaseStartedAt === "number" ? parsed.phaseStartedAt : null,
-    answererId: typeof parsed.answererId === "string" ? parsed.answererId : "",
-    round: typeof parsed.round === "number" ? Math.max(1, Math.floor(parsed.round)) : 1,
-    word: typeof parsed.word === "string" ? parsed.word : "",
-    reading: typeof parsed.reading === "string" ? parsed.reading : undefined,
-    realDefinition: typeof parsed.realDefinition === "string" ? parsed.realDefinition : "",
-    topicNote: typeof parsed.topicNote === "string" ? parsed.topicNote : "",
-    topicSourceDetail: typeof parsed.topicSourceDetail === "string" ? parsed.topicSourceDetail : "",
-    topicSource: parsed.topicSource === "llm" || parsed.topicSource === "fallback" ? parsed.topicSource : "pending",
-    topicGeneration: normalizeGameGenerationMeta(parsed.topicGeneration),
-    fakeDefinitions: normalizeStringRecord(parsed.fakeDefinitions),
-    options: normalizeOptions(parsed.options),
-    votes: normalizeStringRecord(parsed.votes),
-    scores: normalizeScores(parsed.scores),
-    resultText: typeof parsed.resultText === "string" ? parsed.resultText : "",
-    createdAt: typeof parsed.createdAt === "number" ? parsed.createdAt : Date.now(),
-    updatedAt: typeof parsed.updatedAt === "number"
-      ? parsed.updatedAt
-      : typeof parsed.createdAt === "number" ? parsed.createdAt : Date.now(),
-  };
-}
-
-export function sanitizeTahoiyaRoom(room: TahoiyaRoom, playerId: string): TahoiyaRoom {
-  const revealAll = room.phase === "result" || (room.debugMode === true && room.hostId === playerId);
-  const canSeeRealDefinition = revealAll || (
-    room.phase === "writing" &&
-    room.playMode === "single-answerer" &&
-    room.showRealDefinitionToWriters &&
-    room.answererId !== playerId
-  );
-  const submittedMarker = "__submitted__";
-  return {
-    ...room,
-    passphrase: room.passphrase ? "••••••••" : "",
-    realDefinition: canSeeRealDefinition ? room.realDefinition : "",
-    topicNote: canSeeRealDefinition ? room.topicNote : "",
-    topicSourceDetail: canSeeRealDefinition ? room.topicSourceDetail : "",
-    fakeDefinitions: revealAll
-      ? room.fakeDefinitions
-      : Object.fromEntries(Object.entries(room.fakeDefinitions).map(([authorId, text]) => [authorId, authorId === playerId ? text : submittedMarker])),
-    options: revealAll
-      ? room.options
-      : room.options.map((option) => ({ ...option, authorId: option.authorId === playerId ? playerId : null, isReal: false })),
-    votes: revealAll
-      ? room.votes
-      : Object.fromEntries(Object.entries(room.votes).map(([voterId, optionId]) => [voterId, voterId === playerId ? optionId : submittedMarker])),
-  };
-}
-
-function definitionWriterIds(room: TahoiyaRoom) {
-  return room.playMode === "all-vote"
-    ? room.players.map((player) => player.id)
-    : room.players.filter((player) => player.id !== room.answererId).map((player) => player.id);
-}
-
-function voterIds(room: TahoiyaRoom) {
-  return room.playMode === "all-vote"
-    ? room.players.map((player) => player.id)
-    : room.answererId ? [room.answererId] : [];
-}
-
-function shuffle<T>(items: T[]) {
-  const result = [...items];
-  for (let index = result.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
-    [result[index], result[swapIndex]] = [result[swapIndex], result[index]];
-  }
-  return result;
-}
-
-function createDefinitionOptions(room: TahoiyaRoom): TahoiyaDefinitionOption[] {
-  return shuffle([
-    { id: `real-${randomUUID()}`, text: room.realDefinition, authorId: null, isReal: true },
-    ...Object.entries(room.fakeDefinitions).filter(([, text]) => text !== timeoutSubmission).map(([playerId, text]) => ({
-      id: `fake-${randomUUID()}`,
-      text,
-      authorId: playerId,
-      isReal: false,
-    })),
-  ]);
-}
-
-function scoreRoom(room: TahoiyaRoom) {
-  const scores = { ...room.scores };
-  const roundScores = calculateTahoiyaRoundScores(room);
-  const scoreLines: string[] = [];
-  const voteCounts = Object.values(room.votes).reduce<Record<string, number>>((counts, optionId) => {
-    counts[optionId] = (counts[optionId] ?? 0) + 1;
-    return counts;
-  }, {});
-  const maxVotes = Math.max(0, ...Object.values(voteCounts));
-  const leaders = room.options.filter((option) => maxVotes > 0 && (voteCounts[option.id] ?? 0) === maxVotes);
-  const leaderNames = leaders.map((option) => option.isReal
-    ? "本物の説明"
-    : `${room.players.find((player) => player.id === option.authorId)?.name ?? "Unknown"}の偽説明`);
-  const leadResult = leaderNames.length > 0
-    ? `最多得票: ${leaderNames.join("・")}（${maxVotes}票）${leaderNames.length > 1 ? " 同率" : ""}`
-    : "投票はありませんでした。";
-
-  for (const [voterId, optionId] of Object.entries(room.votes)) {
-    const option = room.options.find((item) => item.id === optionId);
-    const voter = room.players.find((player) => player.id === voterId);
-    if (!option || !voter) continue;
-    if (option.isReal) {
-      scoreLines.push(`${voter.name} が本物を当てて +${room.correctVotePoints}`);
-    } else if (option.authorId) {
-      const author = room.players.find((player) => player.id === option.authorId);
-      scoreLines.push(`${author?.name ?? "Unknown"} の偽説明に票が入り +${room.fooledVotePoints}`);
-    }
-  }
-  for (const player of room.players) scores[player.id] = (scores[player.id] ?? 0) + (roundScores[player.id] ?? 0);
-
-  return {
-    ...room,
-    phase: "result" as const,
-    phaseStartedAt: null,
-    scores,
-    resultText: `${leadResult} / ${scoreLines.length > 0 ? scoreLines.join(" / ") : "得点は入りませんでした。"}`,
-  };
-}
-
-function writingComplete(room: TahoiyaRoom) {
-  const writers = definitionWriterIds(room);
-  return writers.length > 0 && writers.every((playerId) => Boolean(room.fakeDefinitions[playerId]));
-}
-
-function votingComplete(room: TahoiyaRoom) {
-  const voters = voterIds(room);
-  return voters.length > 0 && voters.every((playerId) => Boolean(room.votes[playerId]));
-}
-
-function timedOut(room: TahoiyaRoom, seconds = room.actionTimeLimitSeconds, now = Date.now()) {
-  return Boolean(
-    room.phaseStartedAt &&
-    seconds > 0 &&
-    now >= room.phaseStartedAt + seconds * 1000 + commonGameTimeoutGraceMs()
-  );
-}
-
-function advanceToVoting(room: TahoiyaRoom) {
-  return {
-    ...room,
-    phase: "voting" as const,
-    options: createDefinitionOptions(room),
-    votes: {},
-    phaseStartedAt: Date.now(),
-  };
-}
-
-function reconcileProgress(room: TahoiyaRoom) {
-  if (room.phase === "writing") {
-    let next = room;
-    for (const playerId of definitionWriterIds(room).filter((id) => !room.fakeDefinitions[id])) {
-      if (timedOut(room, playerTimeLimitSeconds(room.actionTimeLimitSeconds, room.playerTimeouts, playerId))) {
-        const player = room.players.find((item) => item.id === playerId);
-        next = recordPlayerTimeout(next, playerId, player?.name ?? "プレイヤー");
-        next = { ...next, fakeDefinitions: { ...next.fakeDefinitions, [playerId]: timeoutSubmission } };
-      }
-    }
-    if (writingComplete(next) || timedOut(room)) return advanceToVoting(next);
-    return next;
-  }
-  if (room.phase === "voting") {
-    let next = room;
-    for (const playerId of voterIds(room).filter((id) => !room.votes[id])) {
-      if (timedOut(room, playerTimeLimitSeconds(room.actionTimeLimitSeconds, room.playerTimeouts, playerId))) {
-        const player = room.players.find((item) => item.id === playerId);
-        next = recordPlayerTimeout(next, playerId, player?.name ?? "プレイヤー");
-        next = { ...next, votes: { ...next.votes, [playerId]: timeoutSubmission } };
-      }
-    }
-    if (votingComplete(next) || timedOut(room)) return scoreRoom(next);
-    return next;
-  }
-  return room;
-}
-
-async function compareAndSetRoom(expectedRevision: number, room: TahoiyaRoom) {
-  return redisCommand<number>([
-    "EVAL",
-    "local raw=redis.call('GET',KEYS[1]); if not raw then return -1 end; local current=cjson.decode(raw); if tonumber(current.revision or 0)~=tonumber(ARGV[1]) then return 0 end; redis.call('SET',KEYS[1],ARGV[2],'EX',ARGV[3]); return 1",
-    "1",
-    roomKey(room.code),
-    String(expectedRevision),
-    JSON.stringify(room),
-    String(multiplayerRoomTtlSeconds),
-  ]);
-}
 
 async function mutateStoredTahoiyaRoom(code: string, mutate: (room: TahoiyaRoom) => TahoiyaRoom) {
-  for (let attempt = 0; attempt < 6; attempt += 1) {
-    const current = await loadStoredTahoiyaRoom(code);
-    if (!current) throw new Error("TAHOIYA_ROOM_NOT_FOUND");
-    const changed = mutate(current);
-    if (changed === current) return current;
-    const next = normalizeRoom({
-      ...changed,
-      revision: current.revision + 1,
-      updatedAt: Date.now(),
-    });
-    if (!next) throw new Error("INVALID_TAHOIYA_ROOM");
-    const saved = await compareAndSetRoom(current.revision, next);
-    if (saved === 1) {
-      await Promise.all([recordTahoiyaRoundResults(next), recordTahoiyaReplay(next)]);
-      return next;
-    }
-    if (saved === -1) throw new Error("TAHOIYA_ROOM_NOT_FOUND");
-  }
-  throw new Error("TAHOIYA_ROOM_CONFLICT");
-}
-
-function makeChoice(room: TahoiyaRoom): TahoiyaRoomChoice {
-  return {
-    code: room.code,
-    hostName: room.players.find((player) => player.id === room.hostId)?.name ?? "Unknown",
-    playerCount: room.players.length,
-    phase: room.phase,
-    hasPassphrase: Boolean(room.passphrase),
-    updatedAt: room.updatedAt,
-  };
+  return mutateOnlineRoomWithRetry({ code, roomKey, loadRoom: loadStoredTahoiyaRoom, mutate, normalize: normalizeTahoiyaRoom, errors: { notFound: "TAHOIYA_ROOM_NOT_FOUND", invalid: "INVALID_TAHOIYA_ROOM", conflict: "TAHOIYA_ROOM_CONFLICT" }, afterSave: (room) => Promise.all([recordTahoiyaRoundResults(room), recordTahoiyaReplay(room)]) });
 }
 
 async function savePlayerActiveRooms(room: TahoiyaRoom) {
-  await Promise.all(room.players.map((player) => redisCommand<"OK">([
-    "SET", playerActiveRoomKey(player.id), room.code, "EX", String(multiplayerRoomTtlSeconds),
-  ])));
+  await saveOnlineRoomPlayerIndexes(room.code, room.players.map((player) => player.id), playerActiveRoomKey);
 }
 
 async function deletePlayerActiveRoom(playerId: string, roomCode: string) {
@@ -357,7 +52,7 @@ export async function loadStoredTahoiyaRoom(code: string) {
   if (!raw) return null;
 
   try {
-    const room = normalizeRoom(JSON.parse(raw));
+    const room = normalizeTahoiyaRoom(JSON.parse(raw));
     if (!room) return null;
     if (isMultiplayerRoomExpired(room.updatedAt)) {
       await redisCommand<number>(["DEL", roomKey(room.code)]);
@@ -374,7 +69,7 @@ export async function loadStoredTahoiyaRoom(code: string) {
 function parseStoredTahoiyaRoom(raw: string | null) {
   if (!raw) return null;
   try {
-    return normalizeRoom(JSON.parse(raw));
+    return normalizeTahoiyaRoom(JSON.parse(raw));
   } catch {
     return null;
   }
@@ -391,23 +86,11 @@ export async function loadAndReconcileStoredTahoiyaRoom(code: string) {
 }
 
 export async function loadStoredTahoiyaPlayerActiveRoom(playerId: string) {
-  const normalizedPlayerId = playerId.trim();
-  if (!normalizedPlayerId) return null;
-
-  const code = await redisCommand<string | null>(["GET", playerActiveRoomKey(normalizedPlayerId)]);
-  if (!code) return null;
-
-  const room = await loadAndReconcileStoredTahoiyaRoom(code);
-  if (!room || !room.players.some((player) => player.id === normalizedPlayerId)) {
-    await redisCommand<number>(["DEL", playerActiveRoomKey(normalizedPlayerId)]);
-    return null;
-  }
-
-  return room;
+  return loadPlayerActiveOnlineRoom(playerId, { key: playerActiveRoomKey, loadRoom: loadAndReconcileStoredTahoiyaRoom, isMember: (room, id) => room.players.some((player) => player.id === id) });
 }
 
 export async function createStoredTahoiyaRoom(room: unknown, actorId = "") {
-  const normalizedRoom = normalizeRoom(room);
+  const normalizedRoom = normalizeTahoiyaRoom(room);
   if (!normalizedRoom) {
     throw new Error("INVALID_TAHOIYA_ROOM");
   }
@@ -417,18 +100,11 @@ export async function createStoredTahoiyaRoom(room: unknown, actorId = "") {
   if (actorId && actorId !== normalizedRoom.hostId) throw new Error("TAHOIYA_ROOM_FORBIDDEN");
   const createdRoom = { ...normalizedRoom, ...tahoiyaRuntimeScoring(), revision: 0, updatedAt: Date.now() };
   const activeRoom = actorId ? await loadStoredTahoiyaPlayerActiveRoom(actorId) : null;
-  if (activeRoom && activeRoom.code !== createdRoom.code) {
-    if (!canMoveFromOnlineRoom("tahoiya", activeRoom)) throw new Error("TAHOIYA_PLAYER_ALREADY_ACTIVE");
-    await releasePlayerActiveRoom(playerActiveRoomKey(actorId), activeRoom.code);
-  }
-  const claim = actorId ? await claimPlayerActiveRoom(playerActiveRoomKey(actorId), createdRoom.code) : "already-claimed";
-  if (!claim) throw new Error("TAHOIYA_PLAYER_ALREADY_ACTIVE");
+  const claim = actorId
+    ? await claimOnlineRoomForPlayer({ key: playerActiveRoomKey(actorId), targetCode: createdRoom.code, currentRoom: activeRoom, gameId: "tahoiya", conflictError: "TAHOIYA_PLAYER_ALREADY_ACTIVE" })
+    : "already-claimed";
   try {
-    const created = await redisCommand<"OK" | null>([
-      "SET", roomKey(createdRoom.code), JSON.stringify(createdRoom), "NX", "EX", String(multiplayerRoomTtlSeconds),
-    ]);
-    if (created !== "OK") throw new Error("TAHOIYA_ROOM_CONFLICT");
-    await redisCommand<number>(["SADD", roomIndexKey, createdRoom.code]);
+    await createIndexedOnlineRoom(createdRoom, { roomKey, roomIndexKey, conflictError: "TAHOIYA_ROOM_CONFLICT" });
     await savePlayerActiveRooms(createdRoom);
     return createdRoom;
   } catch (error) {
@@ -440,12 +116,7 @@ export async function createStoredTahoiyaRoom(room: unknown, actorId = "") {
 export async function joinStoredTahoiyaRoom(code: string, player: TahoiyaPlayer, passphrase: string) {
   const normalizedCode = code.trim().toUpperCase();
   const activeRoom = await loadStoredTahoiyaPlayerActiveRoom(player.id);
-  if (activeRoom && activeRoom.code !== normalizedCode) {
-    if (!canMoveFromOnlineRoom("tahoiya", activeRoom)) throw new Error("TAHOIYA_PLAYER_ALREADY_ACTIVE");
-    await releasePlayerActiveRoom(playerActiveRoomKey(player.id), activeRoom.code);
-  }
-  const claim = await claimPlayerActiveRoom(playerActiveRoomKey(player.id), normalizedCode);
-  if (!claim) throw new Error("TAHOIYA_PLAYER_ALREADY_ACTIVE");
+  const claim = await claimOnlineRoomForPlayer({ key: playerActiveRoomKey(player.id), targetCode: normalizedCode, currentRoom: activeRoom, gameId: "tahoiya", conflictError: "TAHOIYA_PLAYER_ALREADY_ACTIVE" });
   try {
     const joined = await mutateStoredTahoiyaRoom(normalizedCode, (current) => {
       if (current.phase !== "lobby") throw new Error("TAHOIYA_ROOM_STARTED");
@@ -634,17 +305,11 @@ export async function listStoredTahoiyaRooms() {
 }
 
 export async function listStoredJoinableTahoiyaRooms(cursor?: unknown) {
-  const page = await scanOnlineRoomCodes(roomIndexKey, cursor);
-  const values = await loadOnlineRoomValues(page.codes, roomKey);
-  const parsedRooms = values.map(parseStoredTahoiyaRoom);
-  const expiredCodes = page.codes.filter((_, index) => parsedRooms[index] && isMultiplayerRoomExpired(parsedRooms[index]!.updatedAt));
-  const missingCodes = page.codes.filter((_, index) => !parsedRooms[index]);
-  if (expiredCodes.length > 0) await Promise.all(expiredCodes.map(loadStoredTahoiyaRoom));
-  if (missingCodes.length > 0) await redisCommand<number>(["SREM", roomIndexKey, ...missingCodes]);
-  const rooms = parsedRooms
+  const page = await loadIndexedOnlineRoomPage(cursor, { indexKey: roomIndexKey, roomKey, parseRoom: parseStoredTahoiyaRoom, loadRoom: loadStoredTahoiyaRoom });
+  const rooms = page.rooms
     .filter((room): room is TahoiyaRoom => Boolean(room && !isMultiplayerRoomExpired(room.updatedAt)))
     .filter((room) => room.phase === "lobby" && room.players.length < onlineRoomPlayerLimits.tahoiya)
-    .map(makeChoice)
+    .map(tahoiyaRoomChoice)
     .sort((left, right) => right.updatedAt - left.updatedAt);
   return { rooms, nextCursor: page.nextCursor };
 }

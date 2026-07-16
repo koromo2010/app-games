@@ -79,7 +79,10 @@
 ## 主な実装
 
 - 純粋な型・採点・閲覧者別サニタイズ: `lib/code-intercept.ts`
-- Redis/CAS・Command検証・チーム分け: `lib/code-intercept-room-store.ts`
+- Redis/CAS・Command検証: `lib/code-intercept-room-store.ts`
+- 保存データ復元: `lib/code-intercept-room-normalizer.ts`
+- ラウンド準備・進行判定: `lib/code-intercept-room-domain.ts`
+- 閲覧者別表示整形: `lib/code-intercept-room-presentation.ts`
 - API: `app/api/code-intercept/rooms/route.ts`
 - 型付きHTTP adapter: `app/code-intercept/code-intercept-room-api-client.ts`
 - UI: `app/code-intercept/CodeInterceptGame.tsx`
