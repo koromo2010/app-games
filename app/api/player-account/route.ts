@@ -44,6 +44,8 @@ function statusForError(error: unknown) {
       return { code: "EMAIL_ALREADY_EXISTS", status: 409 };
     case "PLAYER_ACCOUNT_INVALID_CREDENTIALS":
       return { code: "INVALID_CREDENTIALS", status: 401 };
+    case "PLAYER_ACCOUNT_TERMS_REQUIRED":
+      return { code: "TERMS_REQUIRED", status: 400 };
     default:
       return { code: "UNKNOWN", status: 500 };
   }

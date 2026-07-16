@@ -14,8 +14,11 @@ import {
   loadPostgresPlayerAccountByLogin,
   savePostgresPlayerAccount,
   updatePostgresPlayerAccountProfile,
+  deleteExpiredPostgresPlayerAccounts,
 } from "@/lib/player-account-postgres-store";
 import { hasPlayerAccountEmailOwnerConflict } from "@/lib/player-account-migration";
+import { legalConsentIsCurrent } from "@/lib/legal";
+import { unverifiedAccountIsExpired, unverifiedPlayerAccountRetentionMs } from "@/lib/player-account-retention";
 
 export type PlayerAccount = {
   version: 2;
@@ -28,6 +31,9 @@ export type PlayerAccount = {
   avatarColor: string;
   avatarImage: string | null;
   shareNameAllowed: boolean;
+  termsVersion: string | null;
+  termsAcceptedAt: number | null;
+  privacyVersion: string | null;
   createdAt: number;
   updatedAt: number;
 };
@@ -38,6 +44,9 @@ export type PlayerAccountAuthInput = {
   email?: string;
   avatarColor?: string;
   avatarImage?: string | null;
+  acceptedTerms?: boolean;
+  termsVersion?: string;
+  privacyVersion?: string;
 };
 
 const accountKeyPrefix = "player-account:";
@@ -108,6 +117,9 @@ function normalizeAccount(value: unknown): PlayerAccount | null {
     avatarColor: isAvatarColor(parsedAvatarColor) ? parsedAvatarColor : fallbackAvatarColor,
     avatarImage: isAvatarImage(parsedAvatarImage) ? parsedAvatarImage : null,
     shareNameAllowed: parsed.shareNameAllowed === true,
+    termsVersion: typeof parsed.termsVersion === "string" ? parsed.termsVersion : null,
+    termsAcceptedAt: typeof parsed.termsAcceptedAt === "number" ? parsed.termsAcceptedAt : null,
+    privacyVersion: typeof parsed.privacyVersion === "string" ? parsed.privacyVersion : null,
     createdAt: typeof parsed.createdAt === "number" ? parsed.createdAt : Date.now(),
     updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : Date.now(),
   };
@@ -202,6 +214,7 @@ export async function registerPlayerAccount(input: PlayerAccountAuthInput) {
   const loginName = normalizeAccountName(name);
   const password = input.password;
   const email = input.email?.trim() ? normalizeEmail(input.email) : null;
+  if (!legalConsentIsCurrent(input)) throw new Error("PLAYER_ACCOUNT_TERMS_REQUIRED");
 
   if (!name || !loginName) {
     throw new Error("PLAYER_ACCOUNT_NAME_REQUIRED");
@@ -229,6 +242,9 @@ export async function registerPlayerAccount(input: PlayerAccountAuthInput) {
     avatarColor: isAvatarColor(input.avatarColor ?? null) ? input.avatarColor! : fallbackAvatarColor,
     avatarImage: isAvatarImage(input.avatarImage ?? null) ? input.avatarImage! : null,
     shareNameAllowed: false,
+    termsVersion: input.termsVersion!,
+    termsAcceptedAt: now,
+    privacyVersion: input.privacyVersion!,
     createdAt: now,
     updatedAt: now,
   };
@@ -288,7 +304,37 @@ export async function loginPlayerAccount(input: PlayerAccountAuthInput) {
     throw new Error("PLAYER_ACCOUNT_INVALID_CREDENTIALS");
   }
 
-  return accountSession(account);
+  const activeAccount = { ...account, updatedAt: Date.now() };
+  if (isPostgresConfigured()) await savePostgresPlayerAccount(activeAccount);
+  await mirrorAccountToRedis(activeAccount).catch(() => undefined);
+  return accountSession(activeAccount);
+}
+
+export async function deleteExpiredUnverifiedPlayerAccounts(now = Date.now()) {
+  const cutoff = now - unverifiedPlayerAccountRetentionMs;
+  let postgresDeleted = 0;
+  if (isPostgresConfigured()) postgresDeleted = await deleteExpiredPostgresPlayerAccounts(cutoff);
+
+  let cursor = "0";
+  let redisDeleted = 0;
+  do {
+    const page = await redisCommand<[string, string[]]>(["SCAN", cursor, "MATCH", `${accountKeyPrefix}*`, "COUNT", "100"]);
+    cursor = page[0];
+    for (const key of page[1]) {
+      const raw = await redisCommand<string | null>(["GET", key]);
+      if (!raw) continue;
+      try {
+        const account = normalizeAccount(JSON.parse(raw));
+        if (!account || !unverifiedAccountIsExpired(account, now)) continue;
+        await redisCommand<number>(["DEL", key, `player:${account.playerId}`]);
+        redisDeleted += 1;
+      } catch {
+        // Malformed legacy records are left in place for manual inspection.
+      }
+    }
+  } while (cursor !== "0");
+
+  return { cutoff, postgresDeleted, redisDeleted };
 }
 
 export async function updatePlayerAccountEmail(input: PlayerAccountAuthInput) {

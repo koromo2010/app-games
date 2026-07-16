@@ -17,11 +17,17 @@ export async function ensurePostgresSchema() {
           avatar_color TEXT NOT NULL,
           avatar_image TEXT,
           share_name_allowed BOOLEAN NOT NULL DEFAULT FALSE,
+          terms_version TEXT,
+          privacy_version TEXT,
+          terms_accepted_at BIGINT,
           created_at BIGINT NOT NULL,
           updated_at BIGINT NOT NULL
         )
       `;
       await sql`ALTER TABLE player_accounts ADD COLUMN IF NOT EXISTS share_name_allowed BOOLEAN NOT NULL DEFAULT FALSE`;
+      await sql`ALTER TABLE player_accounts ADD COLUMN IF NOT EXISTS terms_version TEXT`;
+      await sql`ALTER TABLE player_accounts ADD COLUMN IF NOT EXISTS privacy_version TEXT`;
+      await sql`ALTER TABLE player_accounts ADD COLUMN IF NOT EXISTS terms_accepted_at BIGINT`;
       await sql`CREATE INDEX IF NOT EXISTS player_accounts_updated_at_idx ON player_accounts (updated_at DESC)`;
       await sql`
         CREATE TABLE IF NOT EXISTS player_game_results (

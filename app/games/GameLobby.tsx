@@ -23,6 +23,7 @@ import { GameAdSlot } from "../components/GameAdSlot";
 import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
 import { FullScreenPageOverlay } from "../components/FullScreenPageOverlay";
 import { games } from "./game-catalog";
+import { currentPrivacyVersion, currentTermsVersion } from "@/lib/legal";
 
 type AuthMode = "login" | "register";
 
@@ -78,6 +79,7 @@ const statsGameOptions = [
 
 const errorMessages: Record<string, string> = {
   INVALID_JSON: "入力内容を読み取れませんでした。",
+  TERMS_REQUIRED: "利用規約とプライバシーポリシーへの同意が必要です。",
   STORE_NOT_CONFIGURED: "プレイヤー保存用ストレージが未設定です。",
   NAME_REQUIRED: "プレイヤー名を入力してください。",
   PASSWORD_INVALID: "パスワードは4文字以上128文字以内で入力してください。",
@@ -130,6 +132,7 @@ export function GameLobby() {
   const [avatarImage, setAvatarImage] = useState<string | null>(defaultAvatarImage);
   const [message, setMessage] = useState("");
   const [authMode, setAuthMode] = useState<AuthMode>("login");
+  const [legalAccepted, setLegalAccepted] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isRequestingReset, setIsRequestingReset] = useState(false);
   const [isUpdatingEmail, setIsUpdatingEmail] = useState(false);
@@ -320,6 +323,9 @@ export function GameLobby() {
           email: authMode === "register" ? email : undefined,
           avatarColor,
           avatarImage,
+          acceptedTerms: authMode === "register" ? legalAccepted : undefined,
+          termsVersion: authMode === "register" ? currentTermsVersion : undefined,
+          privacyVersion: authMode === "register" ? currentPrivacyVersion : undefined,
         }),
       });
       const data = (await response.json()) as { session?: PlayerSession; error?: string };
@@ -493,12 +499,13 @@ export function GameLobby() {
     <main className="min-h-screen bg-slate-950 text-slate-950">
       <section className="border-b border-white/10 bg-[radial-gradient(circle_at_20%_0%,rgba(34,211,238,0.22),transparent_34%),linear-gradient(135deg,#020617_0%,#111827_55%,#3f2b12_100%)] text-white">
         <div className="mx-auto max-w-6xl px-4 py-8">
-          <p className="text-xs font-semibold uppercase text-cyan-200">Game shelf</p>
+          <p className="text-xs font-black tracking-[0.2em] text-cyan-200">GAME FIELDS</p>
           <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h1 className="text-3xl font-black tracking-normal sm:text-4xl">広場</h1>
+              <h1 className="text-3xl font-black tracking-normal sm:text-4xl">GAME FIELDS</h1>
+              <p className="mt-1 text-xs font-bold tracking-[0.14em] text-cyan-200">ゲームフィールド</p>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-200">
-                プレイヤーアカウントでログインして、遊ぶゲームを選びます。
+                友達と遊べるオンラインパーティーゲームの広場。ログインして、遊ぶゲームを選びます。
               </p>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-2">
@@ -756,7 +763,7 @@ export function GameLobby() {
             )}
 
             {!isLoggedIn && authMode === "register" && (
-              <label className="mt-3 block text-sm font-medium text-slate-700">
+              <><label className="mt-3 block text-sm font-medium text-slate-700">
                 メールアドレス <span className="font-normal text-slate-400">（任意）</span>
                 <input
                   value={email}
@@ -770,13 +777,17 @@ export function GameLobby() {
                   登録しておくと、パスワードを忘れた場合にメールから再設定できます。
                 </span>
               </label>
+              <label className="mt-3 flex cursor-pointer items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs leading-5 text-slate-700">
+                <input type="checkbox" checked={legalAccepted} onChange={(event) => setLegalAccepted(event.target.checked)} className="mt-1 h-4 w-4 shrink-0 accent-cyan-600" />
+                <span><Link href="/terms" target="_blank" className="font-bold text-cyan-700 underline">利用規約</Link>と<Link href="/privacy" target="_blank" className="font-bold text-cyan-700 underline">プライバシーポリシー</Link>を確認し、同意します。</span>
+              </label></>
             )}
 
             {!isLoggedIn && (
               <button
                 type="button"
                 onClick={() => void submitAccount()}
-                disabled={isSaving}
+                disabled={isSaving || (authMode === "register" && !legalAccepted)}
                 className="mt-4 w-full rounded-lg bg-cyan-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-500 disabled:bg-slate-300"
               >
                 {isSaving ? "確認中..." : authMode === "register" ? "アカウント作成" : "ログイン"}

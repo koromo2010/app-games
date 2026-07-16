@@ -1,5 +1,11 @@
 @import "tailwindcss";
 
+.policy-content h2 { font-size: 1.125rem; font-weight: 900; color: #0f172a; }
+.policy-content h2 + * { margin-top: 0.5rem; }
+.policy-content ul { list-style: disc; padding-left: 1.25rem; }
+.policy-content li + li { margin-top: 0.25rem; }
+.policy-content p + p { margin-top: 0.5rem; }
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
