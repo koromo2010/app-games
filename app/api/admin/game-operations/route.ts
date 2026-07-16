@@ -3,14 +3,13 @@ import { validateGameOperationsInput } from "@/lib/game-operations";
 import { loadGameOperations, saveGameOperations } from "@/lib/game-operations-store";
 import { createRequestTelemetry } from "@/lib/observability";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
-import { isSiteAdminConfigurationError, requireSiteAdminSession } from "@/lib/site-admin-auth";
+import { requireRecentSiteAdminMfa, requireSiteAdminSession, siteAdminAuthorizationError } from "@/lib/site-admin-auth";
+import { appendSiteAdminAuditLog } from "@/lib/site-admin-passkey-store";
 
 export const dynamic = "force-dynamic";
 
 function authError(error: unknown) {
-  if (error instanceof Error && error.message === "SITE_ADMIN_AUTH_REQUIRED") return Response.json({ error: "ADMIN_AUTH_REQUIRED" }, { status: 401 });
-  if (isSiteAdminConfigurationError(error)) return Response.json({ error: "SITE_ADMIN_PASSWORD_NOT_CONFIGURED" }, { status: 503 });
-  return null;
+  return siteAdminAuthorizationError(error);
 }
 
 export async function GET() {
@@ -27,13 +26,15 @@ export async function PATCH(request: Request) {
   const limited = await rateLimitResponseFor(request, rateLimitPolicies.profileMutation);
   if (limited) return limited;
   try {
-    await requireSiteAdminSession();
+    const session = await requireRecentSiteAdminMfa();
     const body = await request.json() as { operations?: unknown };
     const validationError = validateGameOperationsInput(body.operations);
     if (validationError) return Response.json({ error: validationError }, { status: 400 });
+    const before = await loadGameOperations({ fresh: true });
     const operations = await saveGameOperations(body.operations as Parameters<typeof saveGameOperations>[0]);
     revalidatePath("/");
     revalidatePath("/games");
+    await appendSiteAdminAuditLog(request, session, "game-operations.update", "game-operations", before, operations);
     telemetry.success("site.game-operations", { action: "update", affectedCount: operations.length });
     return Response.json({ operations });
   } catch (error) {

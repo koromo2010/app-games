@@ -3,6 +3,7 @@
 import registry from "@/config/game-registry.json";
 import { useCallback, useEffect, useState } from "react";
 import { defaultGameOperations, gameOperationFor, gameOperationMessageMaxLength, type GameOperation, type GamePublication } from "@/lib/game-operations";
+import { ensureSiteAdminStepUp } from "@/lib/site-admin-passkey-client";
 
 const publicationLabels: Record<GamePublication, string> = { public: "一般公開", private: "プライベート公開", hidden: "非表示" };
 
@@ -48,6 +49,7 @@ export function GameOperationsPanel({ onAuthExpired }: { onAuthExpired: () => vo
     setIsSaving(true);
     setMessage("");
     try {
+      await ensureSiteAdminStepUp();
       const response = await fetch("/api/admin/game-operations", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ operations }) });
       const data = await response.json().catch(() => null) as { operations?: GameOperation[]; error?: string } | null;
       if (response.status === 401) { onAuthExpired(); return; }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createSiteAdminToken, parseSiteAdminToken, resolveSiteAdminPassword, verifySiteAdminPassword } from "../lib/site-admin-auth-core.ts";
+import { createSiteAdminChallengeToken, createSiteAdminToken, isRecentSiteAdminMfa, parseSiteAdminChallengeToken, parseSiteAdminToken, resolveSiteAdminPassword, verifySiteAdminPassword } from "../lib/site-admin-auth-core.ts";
 import { hashSiteAdminAccountPassword, isValidSiteAdminAccountPassword, isValidSiteAdminEmail, normalizeSiteAdminEmail, verifySiteAdminAccountPassword } from "../lib/site-admin-account-core.ts";
 import { defaultSiteSettings, isSiteIconUrl, normalizeSiteSettings, validateSiteSettingsInput } from "../lib/site-settings.ts";
 import { isPngImage, isSiteIconImage, maxSiteIconUploadBytes } from "../lib/site-icon-image.ts";
@@ -21,8 +21,12 @@ test("site settings reject blank, oversized, and untrusted icon values", () => {
 
 test("site admin tokens are signed and expire", () => {
   const now = 1_000_000;
-  const token = createSiteAdminToken("test-secret", now);
-  assert.ok(parseSiteAdminToken(token, "test-secret", now));
+  const token = createSiteAdminToken("test-secret", { scope: "full", method: "passkey", email: "admin@example.com" }, now);
+  const parsed = parseSiteAdminToken(token, "test-secret", now);
+  assert.ok(parsed);
+  assert.equal(parsed.email, "admin@example.com");
+  assert.equal(isRecentSiteAdminMfa(parsed, now + 4 * 60_000), true);
+  assert.equal(isRecentSiteAdminMfa(parsed, now + 6 * 60_000), false);
   assert.equal(parseSiteAdminToken(`${token}x`, "test-secret", now), null);
   assert.equal(parseSiteAdminToken(token, "wrong-secret", now), null);
   assert.equal(parseSiteAdminToken(token, "test-secret", now + 13 * 60 * 60 * 1_000), null);
@@ -30,6 +34,9 @@ test("site admin tokens are signed and expire", () => {
   assert.equal(verifySiteAdminPassword("wrong", "password"), false);
   assert.equal(resolveSiteAdminPassword({ SITE_ADMIN_PASSWORD: "site", DEBUG_MODE_PASSWORD: "debug" }), "site");
   assert.equal(resolveSiteAdminPassword({ DEBUG_MODE_PASSWORD: "debug" }), "debug");
+  const challenge = createSiteAdminChallengeToken("test-secret", { email: "admin@example.com", purpose: "login", challenge: "random" }, now);
+  assert.equal(parseSiteAdminChallengeToken(challenge, "test-secret", now)?.challenge, "random");
+  assert.equal(parseSiteAdminChallengeToken(challenge, "test-secret", now + 6 * 60_000), null);
 });
 
 test("site admin accounts normalize identities and verify scrypt password hashes", () => {

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { put } from "@vercel/blob";
 import { resolveAvatarBlobStoreId, resolveAvatarBlobToken } from "@/lib/avatar-image-server";
-import { isSiteAdminConfigurationError, requireSiteAdminSession } from "@/lib/site-admin-auth";
+import { requireRecentSiteAdminMfa, siteAdminAuthorizationError } from "@/lib/site-admin-auth";
 import { isSiteIconImage, maxSiteIconUploadBytes } from "@/lib/site-icon-image";
 import { createRequestTelemetry } from "@/lib/observability";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
@@ -11,7 +11,7 @@ export const runtime = "nodejs";
 export async function POST(request: Request) {
   const telemetry = createRequestTelemetry(request, "/api/admin/site-icon", { operation: "site-icon-upload" });
   try {
-    await requireSiteAdminSession();
+    await requireRecentSiteAdminMfa();
     const limited = await rateLimitResponseFor(request, rateLimitPolicies.avatarUpload);
     if (limited) return limited;
     const blobToken = resolveAvatarBlobToken(process.env);
@@ -36,8 +36,8 @@ export async function POST(request: Request) {
     telemetry.success("site.settings", { action: "icon-upload" });
     return Response.json({ url: blob.url });
   } catch (error) {
-    if (error instanceof Error && error.message === "SITE_ADMIN_AUTH_REQUIRED") return Response.json({ error: "ADMIN_AUTH_REQUIRED" }, { status: 401 });
-    if (isSiteAdminConfigurationError(error)) return Response.json({ error: "SITE_ADMIN_PASSWORD_NOT_CONFIGURED" }, { status: 503 });
+    const auth = siteAdminAuthorizationError(error);
+    if (auth) return auth;
     telemetry.failure("site.settings", error, 500, { action: "icon-upload" });
     return Response.json({ error: "SITE_ICON_UPLOAD_FAILED" }, { status: 500 });
   }

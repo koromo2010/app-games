@@ -55,6 +55,43 @@ export async function ensurePostgresSchema() {
       await sql`ALTER TABLE site_admin_accounts ADD COLUMN IF NOT EXISTS receive_alerts BOOLEAN NOT NULL DEFAULT FALSE`;
       await sql`ALTER TABLE site_admin_accounts ADD COLUMN IF NOT EXISTS receive_contacts BOOLEAN NOT NULL DEFAULT FALSE`;
       await sql`CREATE INDEX IF NOT EXISTS site_admin_accounts_updated_at_idx ON site_admin_accounts (updated_at DESC)`;
+      await sql`
+        CREATE TABLE IF NOT EXISTS site_admin_passkeys (
+          credential_id TEXT PRIMARY KEY,
+          admin_email TEXT NOT NULL REFERENCES site_admin_accounts(email) ON DELETE CASCADE,
+          public_key TEXT NOT NULL,
+          counter BIGINT NOT NULL DEFAULT 0,
+          transports JSONB NOT NULL DEFAULT '[]'::jsonb,
+          device_type TEXT NOT NULL,
+          backed_up BOOLEAN NOT NULL DEFAULT FALSE,
+          created_at BIGINT NOT NULL,
+          last_used_at BIGINT
+        )
+      `;
+      await sql`CREATE INDEX IF NOT EXISTS site_admin_passkeys_email_idx ON site_admin_passkeys (admin_email, created_at ASC)`;
+      await sql`
+        CREATE TABLE IF NOT EXISTS site_admin_recovery_codes (
+          code_hash TEXT PRIMARY KEY,
+          admin_email TEXT NOT NULL REFERENCES site_admin_accounts(email) ON DELETE CASCADE,
+          created_at BIGINT NOT NULL,
+          used_at BIGINT
+        )
+      `;
+      await sql`CREATE INDEX IF NOT EXISTS site_admin_recovery_codes_email_idx ON site_admin_recovery_codes (admin_email, used_at)`;
+      await sql`
+        CREATE TABLE IF NOT EXISTS site_admin_audit_logs (
+          id TEXT PRIMARY KEY,
+          actor_email TEXT,
+          auth_method TEXT NOT NULL,
+          action TEXT NOT NULL,
+          target TEXT NOT NULL,
+          before_value JSONB,
+          after_value JSONB,
+          request_fingerprint TEXT,
+          created_at BIGINT NOT NULL
+        )
+      `;
+      await sql`CREATE INDEX IF NOT EXISTS site_admin_audit_logs_created_idx ON site_admin_audit_logs (created_at DESC)`;
     })().catch((error) => {
       schemaPromise = null;
       throw error;

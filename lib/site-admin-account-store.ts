@@ -16,6 +16,8 @@ export type SiteAdminAccountSummary = {
   receiveContacts: boolean;
   createdAt: number;
   updatedAt: number;
+  passkeyCount: number;
+  unusedRecoveryCodeCount: number;
 };
 
 export type SiteAdminNotificationKind = "alerts" | "contacts";
@@ -37,13 +39,20 @@ function requireStore() {
   if (!isPostgresConfigured()) throw new Error("SITE_ADMIN_ACCOUNTS_STORE_NOT_CONFIGURED");
 }
 
-function summary(row: Pick<SiteAdminAccountRow, "email" | "receive_alerts" | "receive_contacts" | "created_at" | "updated_at">): SiteAdminAccountSummary {
+type SiteAdminAccountSummaryRow = Pick<SiteAdminAccountRow, "email" | "receive_alerts" | "receive_contacts" | "created_at" | "updated_at"> & {
+  passkey_count?: string | number;
+  recovery_code_count?: string | number;
+};
+
+function summary(row: SiteAdminAccountSummaryRow): SiteAdminAccountSummary {
   return {
     email: row.email,
     receiveAlerts: Boolean(row.receive_alerts),
     receiveContacts: Boolean(row.receive_contacts),
     createdAt: Number(row.created_at),
     updatedAt: Number(row.updated_at),
+    passkeyCount: Number(row.passkey_count ?? 0),
+    unusedRecoveryCodeCount: Number(row.recovery_code_count ?? 0),
   };
 }
 
@@ -51,14 +60,23 @@ export async function listSiteAdminAccounts() {
   requireStore();
   await ensurePostgresSchema();
   const rows = await getPostgresClient()`
-    SELECT email, receive_alerts, receive_contacts, created_at, updated_at
-    FROM site_admin_accounts
-    ORDER BY created_at ASC
-  ` as Array<Pick<SiteAdminAccountRow, "email" | "receive_alerts" | "receive_contacts" | "created_at" | "updated_at">>;
+    SELECT a.email, a.receive_alerts, a.receive_contacts, a.created_at, a.updated_at,
+      (SELECT COUNT(*)::int FROM site_admin_passkeys p WHERE p.admin_email = a.email) AS passkey_count,
+      (SELECT COUNT(*)::int FROM site_admin_recovery_codes r WHERE r.admin_email = a.email AND r.used_at IS NULL) AS recovery_code_count
+    FROM site_admin_accounts a
+    ORDER BY a.created_at ASC
+  ` as SiteAdminAccountSummaryRow[];
   return rows.map(summary);
 }
 
-export async function saveSiteAdminAccount(emailInput: string, password: string, subscriptions: { receiveAlerts: boolean; receiveContacts: boolean }) {
+export async function countSiteAdminAccounts() {
+  requireStore();
+  await ensurePostgresSchema();
+  const rows = await getPostgresClient()`SELECT COUNT(*)::int AS count FROM site_admin_accounts` as Array<{ count: number }>;
+  return Number(rows[0]?.count ?? 0);
+}
+
+export async function saveSiteAdminAccount(emailInput: string, password: string, subscriptions: { receiveAlerts: boolean; receiveContacts: boolean } = { receiveAlerts: false, receiveContacts: false }) {
   requireStore();
   const email = normalizeSiteAdminEmail(emailInput);
   if (!isValidSiteAdminEmail(email)) throw new Error("SITE_ADMIN_EMAIL_INVALID");
@@ -85,7 +103,7 @@ export async function saveSiteAdminAccount(emailInput: string, password: string,
       receive_contacts = EXCLUDED.receive_contacts,
       updated_at = EXCLUDED.updated_at
     RETURNING email, receive_alerts, receive_contacts, created_at, updated_at
-  ` as Array<Pick<SiteAdminAccountRow, "email" | "receive_alerts" | "receive_contacts" | "created_at" | "updated_at">>;
+  ` as SiteAdminAccountSummaryRow[];
   return summary(rows[0]!);
 }
 
@@ -99,14 +117,13 @@ export async function updateSiteAdminAccountSubscriptions(emailInput: string, su
     SET receive_alerts = ${subscriptions.receiveAlerts}, receive_contacts = ${subscriptions.receiveContacts}, updated_at = ${Date.now()}
     WHERE email = ${email}
     RETURNING email, receive_alerts, receive_contacts, created_at, updated_at
-  ` as Array<Pick<SiteAdminAccountRow, "email" | "receive_alerts" | "receive_contacts" | "created_at" | "updated_at">>;
+  ` as SiteAdminAccountSummaryRow[];
   if (!rows[0]) throw new Error("SITE_ADMIN_ACCOUNT_NOT_FOUND");
   return summary(rows[0]);
 }
 
 export async function listSiteAdminNotificationEmails(kind: SiteAdminNotificationKind) {
-  requireStore();
-  await ensurePostgresSchema();
+  requireStore(); await ensurePostgresSchema();
   const sql = getPostgresClient();
   const rows = kind === "contacts"
     ? await sql`SELECT email FROM site_admin_accounts WHERE receive_contacts = TRUE ORDER BY created_at ASC`
@@ -127,12 +144,13 @@ export async function verifySiteAdminAccount(emailInput: string, password: strin
       ` as SiteAdminAccountRow[]
     : [];
   const account = rows[0];
+  const passwordIsValid = isValidSiteAdminAccountPassword(password);
   const matches = verifySiteAdminAccountPassword(
-    password,
+    passwordIsValid ? password : "invalid-site-admin-password",
     account?.password_salt ?? dummySalt,
     account?.password_hash ?? dummyHash,
   );
-  return Boolean(account && matches);
+  return Boolean(account && passwordIsValid && matches);
 }
 
 export async function deleteSiteAdminAccount(emailInput: string) {
