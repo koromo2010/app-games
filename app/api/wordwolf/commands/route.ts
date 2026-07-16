@@ -9,8 +9,11 @@ import { withGameGenerationCache } from "@/lib/game-generation-cache";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 import { recordPlayerActivity } from "@/lib/player-timeout-policy";
+import { gameApiAccessDeniedResponse } from "@/lib/game-access";
 
 export async function POST(request: Request) {
+  const accessDenied = await gameApiAccessDeniedResponse("wordwolf");
+  if (accessDenied) return accessDenied;
   const telemetry = createRequestTelemetry(request, "/api/wordwolf/commands", { game: "wordwolf", operation: "room-command" });
   let logFields: ObservabilityFields = {};
   try {

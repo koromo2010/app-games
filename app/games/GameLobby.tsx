@@ -24,6 +24,7 @@ import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
 import { FullScreenPageOverlay } from "../components/FullScreenPageOverlay";
 import { games } from "./game-catalog";
 import { currentPrivacyVersion, currentTermsVersion } from "@/lib/legal";
+import { gameOperationFor, type GameOperation } from "@/lib/game-operations";
 
 type AuthMode = "login" | "register";
 
@@ -51,8 +52,10 @@ const roomApiByGameId: Partial<Record<string, string>> = {
   "code-intercept": "/api/code-intercept/rooms",
 };
 
-async function fetchActiveGameRooms(targetPlayerId: string, includePrivateGames: boolean) {
-  const accessibleGames = games.filter((game) => !game.private || includePrivateGames);
+async function fetchActiveGameRooms(targetPlayerId: string, includePrivateGames: boolean, gameOperations: GameOperation[]) {
+  const accessibleGames = games.filter((game) =>
+    gameOperationFor(gameOperations, game.id).mode === "open" && (!game.private || includePrivateGames)
+  );
   const entries = await Promise.all(accessibleGames.map(async (game) => {
     const endpoint = roomApiByGameId[game.id];
     if (!endpoint) return null;
@@ -120,7 +123,7 @@ function activeRoomPhaseLabel(phase: ActiveWordWolfRoom["phase"]) {
   return "結果表示";
 }
 
-export function GameLobby({ siteName = "GAME FIELDS" }: { siteName?: string }) {
+export function GameLobby({ siteName = "GAME FIELDS", gameOperations }: { siteName?: string; gameOperations: GameOperation[] }) {
   const [name, setName] = useState("");
   const [playerId, setPlayerId] = useState("");
   const [password, setPassword] = useState("");
@@ -281,13 +284,13 @@ export function GameLobby({ siteName = "GAME FIELDS" }: { siteName?: string }) {
   useEffect(() => {
     if (!isLoggedIn || !playerId) return;
     let ignore = false;
-    void fetchActiveGameRooms(playerId, privateUnlocked).then((rooms) => {
+    void fetchActiveGameRooms(playerId, privateUnlocked, gameOperations).then((rooms) => {
       if (!ignore) setActiveGameRooms(rooms);
     });
     return () => {
       ignore = true;
     };
-  }, [isLoggedIn, playerId, privateUnlocked]);
+  }, [gameOperations, isLoggedIn, playerId, privateUnlocked]);
 
   const applySession = (session: PlayerSession) => {
     savePlayerSession(session);
@@ -490,7 +493,7 @@ export function GameLobby({ siteName = "GAME FIELDS" }: { siteName?: string }) {
     setMessage("ログアウトしました。");
   };
 
-  const visibleGames = games.filter((game) => !game.private || privateUnlocked);
+  const visibleGames = games.filter((game) => gameOperationFor(gameOperations, game.id).mode !== "hidden" && (!game.private || privateUnlocked));
   const orderedGames = [...visibleGames].sort((left, right) =>
     Number(Boolean(activeGameRooms[right.id])) - Number(Boolean(activeGameRooms[left.id])),
   );
@@ -993,6 +996,8 @@ export function GameLobby({ siteName = "GAME FIELDS" }: { siteName?: string }) {
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(210px,230px))] sm:justify-start">
             {orderedGames.map((game) => {
+            const operation = gameOperationFor(gameOperations, game.id);
+            const isMaintenance = operation.mode === "maintenance";
             const activeGameRoom = activeGameRooms[game.id];
             const isActiveGame = Boolean(activeGameRoom);
             const card = (
@@ -1010,7 +1015,7 @@ export function GameLobby({ siteName = "GAME FIELDS" }: { siteName?: string }) {
                         ? "border-amber-200 bg-amber-300 text-amber-950 shadow-[0_0_18px_rgba(252,211,77,0.45)]"
                         : "border-slate-200 bg-slate-50 text-slate-600"
                     }`}>
-                      {isActiveGame ? "プレイ中" : game.status}
+                      {isActiveGame ? "プレイ中" : isMaintenance ? "メンテナンス中" : game.status}
                     </span>
                     {game.tags.map((tag) => (
                       <span
@@ -1032,12 +1037,15 @@ export function GameLobby({ siteName = "GAME FIELDS" }: { siteName?: string }) {
                   <p className="mt-2 text-xs font-bold text-cyan-100">部屋 {activeGameRoom.code} に参加中</p>
                 )}
                 <p className={`mt-2 min-h-10 text-xs leading-5 ${isActiveGame ? "text-slate-200" : "text-slate-600"}`}>{game.summary}</p>
+                {isMaintenance && <p className="mt-2 rounded-md bg-amber-100 px-2 py-1.5 text-xs font-bold leading-5 text-amber-900">{operation.message || "現在メンテナンス中です。しばらくお待ちください。"}</p>}
                 <div className={`mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t pt-2 text-xs ${isActiveGame ? "border-white/15 text-slate-200" : "border-slate-200 text-slate-600"}`}>
                   <p><span className={isActiveGame ? "text-cyan-200" : "text-slate-400"}>人数</span> <strong>{game.players}</strong></p>
                   <p><span className={isActiveGame ? "text-cyan-200" : "text-slate-400"}>目安</span> <strong>{game.time}</strong></p>
                 </div>
                 <div className="mt-3">
-                  {game.href ? (
+                  {isMaintenance ? (
+                    <span className="inline-flex rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800">現在は遊べません</span>
+                  ) : game.href ? (
                     <span className={`inline-flex rounded-md px-3 py-1.5 text-xs font-bold shadow-sm ${
                       isActiveGame
                         ? "bg-amber-300 text-amber-950"
@@ -1054,7 +1062,7 @@ export function GameLobby({ siteName = "GAME FIELDS" }: { siteName?: string }) {
               </article>
             );
 
-            if (!game.href) {
+            if (!game.href || isMaintenance) {
               return (
                 <div key={`${game.title}-${game.status}`} className="block opacity-80">
                   {card}

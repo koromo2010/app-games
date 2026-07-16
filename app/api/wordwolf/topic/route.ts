@@ -31,6 +31,7 @@ import { parseLlmJson } from "@/lib/llm-json";
 import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 import { emitObservabilityEvent, observabilityErrorCode } from "@/lib/observability";
+import { gameApiAccessDeniedResponse } from "@/lib/game-access";
 
 const baseTopicPrompt =
   "ワードウルフ用のお題ペアを1組作ってください。3-6人で3周ほど話す前提です。日本語で、共通点を話せるが同じ言葉の言い換えではない組み合わせにしてください。JSONのみで返してください: {\"villageWord\":\"...\",\"wolfWord\":\"...\",\"reason\":\"...\"}";
@@ -288,6 +289,8 @@ export async function generateWordWolfTopicResponse(request: Request, playerIds:
 }
 
 export async function GET(request: Request) {
+  const accessDenied = await gameApiAccessDeniedResponse("wordwolf");
+  if (accessDenied) return accessDenied;
   try {
     const player = await requireAuthenticatedPlayer();
     const limited = await rateLimitResponseFor(request, rateLimitPolicies.aiGeneration, { playerId: player.id });

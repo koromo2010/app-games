@@ -7,6 +7,7 @@ import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/li
 import { loadStoredTahoiyaRoom } from "@/lib/tahoiya-room-store";
 import { emitObservabilityEvent, observabilityErrorCode } from "@/lib/observability";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
+import { gameApiAccessDeniedResponse } from "@/lib/game-access";
 
 function parsePolishedText(value: string) {
   const parsed = parseLlmJson<{ text?: unknown }>(value);
@@ -16,6 +17,8 @@ function parsePolishedText(value: string) {
 }
 
 export async function POST(request: Request) {
+  const accessDenied = await gameApiAccessDeniedResponse("tahoiya");
+  if (accessDenied) return accessDenied;
   try {
     const player = await requireAuthenticatedPlayer();
     const limited = await rateLimitResponseFor(request, rateLimitPolicies.aiGeneration, { playerId: player.id });

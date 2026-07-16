@@ -3,12 +3,15 @@ import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/li
 import { loadStoredWordWolfRoom } from "@/lib/wordwolf-room-store";
 import { createRequestTelemetry } from "@/lib/observability";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
+import { gameApiAccessDeniedResponse } from "@/lib/game-access";
 
 function isStoreNotConfigured(error: unknown) {
   return error instanceof Error && error.message === "REDIS_STORE_NOT_CONFIGURED";
 }
 
 export async function POST(request: Request) {
+  const accessDenied = await gameApiAccessDeniedResponse("wordwolf");
+  if (accessDenied) return accessDenied;
   const telemetry = createRequestTelemetry(request, "/api/wordwolf/guess-feedback", { game: "wordwolf", operation: "guess-feedback" });
   try {
     const player = await requireAuthenticatedPlayer();

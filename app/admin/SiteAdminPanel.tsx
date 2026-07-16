@@ -1,11 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { type ChangeEvent, type FormEvent, useEffect, useState } from "react";
+import { type ChangeEvent, type FormEvent, useCallback, useEffect, useState } from "react";
 import { uploadSiteIcon } from "@/lib/site-icon-image-client";
 import { defaultSiteSettings, siteSettingsLimits, type SiteSettings } from "@/lib/site-settings";
+import { AdminDashboard } from "./AdminDashboard";
+import { GameOperationsPanel } from "./GameOperationsPanel";
 
 type ScreenState = "checking" | "login" | "settings";
+type AdminSection = "dashboard" | "site-settings" | "games";
 const messages: Record<string, string> = {
   INVALID_ADMIN_PASSWORD: "管理パスワードが違います。",
   SITE_ADMIN_PASSWORD_NOT_CONFIGURED: "サーバーにSITE_ADMIN_PASSWORDが設定されていません。",
@@ -30,6 +33,8 @@ export function SiteAdminPanel() {
   const [message, setMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [section, setSection] = useState<AdminSection>("dashboard");
+  const authExpired = useCallback(() => { setScreen("login"); setMessage("管理画面のログイン期限が切れました。もう一度ログインしてください。"); }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -53,7 +58,7 @@ export function SiteAdminPanel() {
       const response = await fetch("/api/admin/site-settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password }) });
       const data = await response.json().catch(() => null) as { settings?: SiteSettings; error?: string } | null;
       if (!response.ok || !data?.settings) throw new Error(data?.error || "ADMIN_LOGIN_FAILED");
-      setSettings(data.settings); setPassword(""); setScreen("settings");
+      setSettings(data.settings); setPassword(""); setScreen("settings"); setSection("dashboard");
     } catch (error) { setMessage(errorMessage(error, "管理画面へログインできませんでした。")); }
     finally { setIsSaving(false); }
   };
@@ -106,7 +111,11 @@ export function SiteAdminPanel() {
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
-      <header className="border-b border-white/10 bg-slate-900/90"><div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4"><div><p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-300">Game Fields Admin</p><h1 className="text-2xl font-black">サイト設定</h1></div><div className="flex gap-2"><Link href="/games" className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold hover:bg-white/10">サイトを見る</Link><button type="button" onClick={() => void logout()} className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold text-slate-300 hover:bg-white/10">ログアウト</button></div></div></header>
+      <header className="border-b border-white/10 bg-slate-900/90"><div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4"><div><p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-300">Game Fields Admin</p><h1 className="text-2xl font-black">サイト管理</h1></div><div className="flex gap-2"><Link href="/games" className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold hover:bg-white/10">サイトを見る</Link><button type="button" onClick={() => void logout()} className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold text-slate-300 hover:bg-white/10">ログアウト</button></div></div></header>
+      <nav className="border-b border-white/10 bg-slate-900/60" aria-label="管理画面メニュー"><div className="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-4 py-2">{([['dashboard', 'ダッシュボード'], ['site-settings', 'サイト設定'], ['games', 'ゲーム公開管理']] as const).map(([value, label]) => <button key={value} type="button" aria-current={section === value ? "page" : undefined} onClick={() => setSection(value)} className={`whitespace-nowrap rounded-lg px-4 py-2 text-sm font-bold transition ${section === value ? "bg-cyan-300 text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>{label}</button>)}</div></nav>
+      {section === "dashboard" && <AdminDashboard onAuthExpired={authExpired} />}
+      {section === "games" && <GameOperationsPanel onAuthExpired={authExpired} />}
+      {section === "site-settings" &&
       <form onSubmit={save} className="mx-auto grid max-w-6xl gap-6 px-4 py-8 lg:grid-cols-[minmax(0,1fr)_380px]">
         <section className="space-y-5 rounded-2xl border border-white/10 bg-white/[0.05] p-5 sm:p-7">
           <div><h2 className="text-xl font-black">基本情報</h2><p className="mt-1 text-sm leading-6 text-slate-400">ブラウザのタブや検索結果で使うサイト情報です。</p></div>
@@ -122,6 +131,7 @@ export function SiteAdminPanel() {
           {settings.updatedAt && <p className="text-center text-xs text-slate-500">最終保存：{new Intl.DateTimeFormat("ja-JP", { dateStyle: "medium", timeStyle: "short" }).format(new Date(settings.updatedAt))}</p>}
         </aside>
       </form>
+      }
     </main>
   );
 }

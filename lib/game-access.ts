@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import registry from "@/config/game-registry.json";
+import { loadGameOperation } from "@/lib/game-operations-store";
 import { privateGameCookieMatches, privateGameCookieName } from "@/lib/private-game-access";
 
 function registeredGame(gameId: string) {
@@ -12,9 +13,9 @@ export function gameRequiresPrivateAccess(gameId: string) {
 
 export async function gamePageAccessAllowed(gameId: string) {
   if (!registeredGame(gameId)) return false;
-  if (!gameRequiresPrivateAccess(gameId)) return true;
-
   const store = await cookies();
+  if ((await loadGameOperation(gameId)).mode !== "open") return false;
+  if (!gameRequiresPrivateAccess(gameId)) return true;
   return privateGameCookieMatches(store.get(privateGameCookieName)?.value);
 }
 

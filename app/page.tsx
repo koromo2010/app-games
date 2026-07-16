@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { loadSiteSettings } from "@/lib/site-settings-store";
+import { loadGameOperations } from "@/lib/game-operations-store";
 import { GameLobby } from "./games/GameLobby";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -14,6 +15,6 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function HomePage() {
-  const settings = await loadSiteSettings();
-  return <GameLobby siteName={settings.siteName} />;
+  const [settings, gameOperations] = await Promise.all([loadSiteSettings(), loadGameOperations()]);
+  return <GameLobby siteName={settings.siteName} gameOperations={gameOperations} />;
 }

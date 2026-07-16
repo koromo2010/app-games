@@ -16,12 +16,15 @@ import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observab
 import { actionRequiresDebugAccess, requirePlayerDebugAccess, roomRequestsDebugMode } from "@/lib/debug-access";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 import { conditionalJsonResponse } from "@/lib/conditional-json";
+import { gameApiAccessDeniedResponse } from "@/lib/game-access";
 
 function isStoreNotConfigured(error: unknown) {
   return error instanceof Error && error.message === "REDIS_STORE_NOT_CONFIGURED";
 }
 
 export async function GET(request: Request) {
+  const accessDenied = await gameApiAccessDeniedResponse("wordwolf");
+  if (accessDenied) return accessDenied;
   const telemetry = createRequestTelemetry(request, "/api/wordwolf/rooms", { game: "wordwolf", operation: "room-read" });
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
@@ -64,6 +67,8 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const accessDenied = await gameApiAccessDeniedResponse("wordwolf");
+  if (accessDenied) return accessDenied;
   const telemetry = createRequestTelemetry(request, "/api/wordwolf/rooms", { game: "wordwolf", operation: "room-create" });
   let logFields: ObservabilityFields = {};
   try {
@@ -138,6 +143,8 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  const accessDenied = await gameApiAccessDeniedResponse("wordwolf");
+  if (accessDenied) return accessDenied;
   const telemetry = createRequestTelemetry(request, "/api/wordwolf/rooms", { game: "wordwolf", operation: "room-command" });
   let logFields: ObservabilityFields = {};
   try {
@@ -171,6 +178,8 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const accessDenied = await gameApiAccessDeniedResponse("wordwolf");
+  if (accessDenied) return accessDenied;
   const telemetry = createRequestTelemetry(request, "/api/wordwolf/rooms", { game: "wordwolf", operation: "room-delete" });
   const url = new URL(request.url);
   const code = url.searchParams.get("code");

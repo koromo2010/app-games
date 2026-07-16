@@ -22,6 +22,7 @@ import {
 import { hasVeryCommonSpokenHomophone, type TahoiyaSourceEntry } from "@/lib/tahoiya-source-library";
 import type { TahoiyaDifficulty, TahoiyaTopic } from "@/lib/tahoiya-types";
 import { parseLlmJson } from "@/lib/llm-json";
+import { gameApiAccessDeniedResponse } from "@/lib/game-access";
 
 const tahoiyaTopicPromptVersion = "tahoiya-topic-v10";
 const tahoiyaBatchPromptVersion = "tahoiya-source-batch-v1";
@@ -607,6 +608,8 @@ export async function generateTahoiyaTopicResponse(
 }
 
 export async function GET(request: Request) {
+  const accessDenied = await gameApiAccessDeniedResponse("tahoiya");
+  if (accessDenied) return accessDenied;
   try {
     const player = await requireAuthenticatedPlayer();
     const limited = await rateLimitResponseFor(request, rateLimitPolicies.aiGeneration, { playerId: player.id });
