@@ -20,7 +20,7 @@ type Props = {
   onStrokeComplete: (stroke: DrawingStroke) => void;
 };
 
-function drawStroke(context: CanvasRenderingContext2D, stroke: DrawingStroke, canvasWidth: number, canvasHeight: number) {
+function drawStroke(context: CanvasRenderingContext2D, stroke: DrawingStroke, canvasWidth: number, canvasHeight: number, pixelRatio: number) {
   if (stroke.points.length === 0) return;
   if (stroke.tool === "fill") {
     const point = stroke.points[0];
@@ -34,13 +34,13 @@ function drawStroke(context: CanvasRenderingContext2D, stroke: DrawingStroke, ca
   context.globalAlpha = stroke.tool === "eraser" ? 1 : stroke.opacity;
   context.strokeStyle = stroke.color;
   context.fillStyle = stroke.color;
-  context.lineWidth = stroke.width;
+  context.lineWidth = stroke.width * pixelRatio;
   context.lineCap = "round";
   context.lineJoin = "round";
   const first = stroke.points[0];
   if (stroke.points.length === 1) {
     context.beginPath();
-    context.arc(first.x * canvasWidth, first.y * canvasHeight, stroke.width / 2, 0, Math.PI * 2);
+    context.arc(first.x * canvasWidth, first.y * canvasHeight, stroke.width * pixelRatio / 2, 0, Math.PI * 2);
     context.fill();
   } else {
     context.beginPath();
@@ -63,14 +63,16 @@ export function DrawingCanvas({ strokes, color, width, opacity, tool, disabled =
     if (!canvas) return;
     const context = canvas.getContext("2d");
     if (!context) return;
+    const rect = canvas.getBoundingClientRect();
+    const pixelRatio = rect.width > 0 ? canvas.width / rect.width : 1;
     context.clearRect(0, 0, canvas.width, canvas.height);
     for (const layerId of layerIds) {
       const layerCanvas = document.createElement("canvas");
       layerCanvas.width = canvas.width; layerCanvas.height = canvas.height;
       const layerContext = layerCanvas.getContext("2d");
       if (!layerContext) continue;
-      for (const stroke of strokes) if ((stroke.layerId || "base") === layerId) drawStroke(layerContext, stroke, canvas.width, canvas.height);
-      if (activeStrokeRef.current && (activeStrokeRef.current.layerId || "base") === layerId) drawStroke(layerContext, activeStrokeRef.current, canvas.width, canvas.height);
+      for (const stroke of strokes) if ((stroke.layerId || "base") === layerId) drawStroke(layerContext, stroke, canvas.width, canvas.height, pixelRatio);
+      if (activeStrokeRef.current && (activeStrokeRef.current.layerId || "base") === layerId) drawStroke(layerContext, activeStrokeRef.current, canvas.width, canvas.height, pixelRatio);
       context.drawImage(layerCanvas, 0, 0);
     }
   }, [layerIds, strokes]);
