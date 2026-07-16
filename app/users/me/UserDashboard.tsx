@@ -44,6 +44,10 @@ export function UserDashboard() {
   const [isAvatarEditorOpen, setIsAvatarEditorOpen] = useState(false);
   const [isShareNameSaving, setIsShareNameSaving] = useState(false);
   const [shareNameMessage, setShareNameMessage] = useState("");
+  const [showAccountDeletion, setShowAccountDeletion] = useState(false);
+  const [deleteAccountPassword, setDeleteAccountPassword] = useState("");
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const [deleteAccountMessage, setDeleteAccountMessage] = useState("");
 
   const applyPlayerSession = (nextSession: PlayerSession) => {
     setSession(nextSession);
@@ -143,6 +147,33 @@ export function UserDashboard() {
       setDebugMessage("デバッグ利用設定を変更できませんでした。");
     } finally {
       setDebugSaving(false);
+    }
+  };
+
+  const deleteAccount = async () => {
+    if (!session || !window.confirm("アカウント、戦績、設定を削除します。この操作は取り消せません。削除しますか？")) return;
+    setIsDeletingAccount(true);
+    setDeleteAccountMessage("");
+    try {
+      const response = await fetch("/api/player-account", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "delete", name: session.name, password: deleteAccountPassword }),
+      });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        setDeleteAccountMessage(data.error === "INVALID_CREDENTIALS" ? "パスワードが正しくありません。" : "アカウントを削除できませんでした。");
+        return;
+      }
+      localStorage.removeItem("game-fields-player");
+      localStorage.removeItem("wordwolf-last-room");
+      localStorage.removeItem("wordwolf-last-player");
+      window.parent.postMessage({ type: "game-fields:account-deleted" }, window.location.origin);
+      window.location.assign("/games");
+    } catch {
+      setDeleteAccountMessage("通信に失敗しました。もう一度試してください。");
+    } finally {
+      setIsDeletingAccount(false);
     }
   };
 
@@ -247,6 +278,19 @@ export function UserDashboard() {
               {debugMessage && <p className="mt-2 text-[11px] text-slate-500" role="status">{debugMessage}</p>}
             </div>
           </details>
+        </section>
+        <section className="mt-6 border-t border-rose-300/15 pt-4" aria-labelledby="delete-account-heading">
+          <button type="button" id="delete-account-heading" onClick={() => { setShowAccountDeletion((value) => !value); setDeleteAccountPassword(""); setDeleteAccountMessage(""); }} className="text-xs font-bold text-rose-300/70 transition hover:text-rose-200">
+            アカウントを削除
+          </button>
+          {showAccountDeletion && <div className="mt-3 max-w-md rounded-lg border border-rose-300/20 bg-rose-950/20 p-4">
+            <p className="text-xs leading-5 text-rose-100/80">アカウント、戦績、設定を削除します。この操作は取り消せません。本人確認のため現在のパスワードを入力してください。</p>
+            <input value={deleteAccountPassword} onChange={(event) => setDeleteAccountPassword(event.target.value)} type="password" autoComplete="current-password" className="mt-3 w-full rounded-lg border border-rose-300/30 bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:ring-2 focus:ring-rose-400/20" placeholder="現在のパスワード" />
+            <button type="button" onClick={() => void deleteAccount()} disabled={isDeletingAccount || !deleteAccountPassword} className="mt-2 w-full rounded-lg bg-rose-600 px-3 py-2 text-sm font-bold text-white transition hover:bg-rose-500 disabled:bg-slate-700 disabled:text-slate-400">
+              {isDeletingAccount ? "削除中..." : "完全に削除する"}
+            </button>
+            {deleteAccountMessage && <p className="mt-2 text-xs font-semibold text-rose-200" role="status">{deleteAccountMessage}</p>}
+          </div>}
         </section>
       </div>
     </main>

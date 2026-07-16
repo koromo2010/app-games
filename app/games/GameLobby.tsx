@@ -136,9 +136,6 @@ export function GameLobby() {
   const [isSaving, setIsSaving] = useState(false);
   const [isRequestingReset, setIsRequestingReset] = useState(false);
   const [isUpdatingEmail, setIsUpdatingEmail] = useState(false);
-  const [showAccountDeletion, setShowAccountDeletion] = useState(false);
-  const [deleteAccountPassword, setDeleteAccountPassword] = useState("");
-  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [isAvatarSaving, setIsAvatarSaving] = useState(false);
   const [isAvatarDragging, setIsAvatarDragging] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -493,35 +490,6 @@ export function GameLobby() {
     setMessage("ログアウトしました。");
   };
 
-  const deleteAccount = async () => {
-    if (!window.confirm("アカウント、戦績、設定を削除します。この操作は取り消せません。削除しますか？")) return;
-    setIsDeletingAccount(true);
-    setMessage("");
-    try {
-      const response = await fetch("/api/player-account", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mode: "delete", name, password: deleteAccountPassword }),
-      });
-      const data = (await response.json()) as { error?: string };
-      if (!response.ok) {
-        setMessage(data.error === "INVALID_CREDENTIALS" ? "パスワードが正しくありません。" : "アカウントを削除できませんでした。");
-        return;
-      }
-      clearPlayerSession();
-      localStorage.removeItem("wordwolf-last-room");
-      localStorage.removeItem("wordwolf-last-player");
-      setName(""); setPlayerId(""); setPassword(""); setEmail(""); setDeleteAccountPassword("");
-      setHasRecoveryEmail(false); setIsLoggedIn(false); setShowAccountDeletion(false);
-      setStats(null); setActiveRoom(null); setActiveGameRooms({});
-      setMessage("アカウントを削除しました。");
-    } catch {
-      setMessage("通信に失敗しました。もう一度試してください。");
-    } finally {
-      setIsDeletingAccount(false);
-    }
-  };
-
   const visibleGames = games.filter((game) => !game.private || privateUnlocked);
   const orderedGames = [...visibleGames].sort((left, right) =>
     Number(Boolean(activeGameRooms[right.id])) - Number(Boolean(activeGameRooms[left.id])),
@@ -530,13 +498,14 @@ export function GameLobby() {
   return (
     <main className="min-h-screen bg-slate-950 text-slate-950">
       <section className="border-b border-white/10 bg-[radial-gradient(circle_at_20%_0%,rgba(34,211,238,0.22),transparent_34%),linear-gradient(135deg,#020617_0%,#111827_55%,#3f2b12_100%)] text-white">
-        <div className="mx-auto max-w-6xl px-4 py-8">
-          <p className="text-xs font-black tracking-[0.2em] text-cyan-200">GAME FIELDS</p>
-          <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="mx-auto max-w-6xl px-4 py-4 sm:py-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h1 className="text-3xl font-black tracking-normal sm:text-4xl">GAME FIELDS</h1>
-              <p className="mt-1 text-xs font-bold tracking-[0.14em] text-cyan-200">ゲームフィールド</p>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-200">
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                <h1 className="text-3xl font-black tracking-normal sm:text-4xl">GAME FIELDS</h1>
+                <p className="text-[11px] font-bold tracking-[0.14em] text-cyan-200">ゲームフィールド</p>
+              </div>
+              <p className="mt-1 max-w-2xl text-sm leading-5 text-slate-200">
                 友達と遊べるオンラインパーティーゲームの広場。ログインして、遊ぶゲームを選びます。
               </p>
             </div>
@@ -658,20 +627,6 @@ export function GameLobby() {
               )}
             </div>
           </div>
-          {privateUnlocked ? (
-            <button type="button" disabled={isPrivateAccessUpdating} onClick={() => void clearPrivateAccess()} className="mt-4 rounded-md border border-violet-200/20 bg-violet-200/[0.06] px-2 py-1 text-[11px] font-semibold text-violet-100/60 transition hover:bg-violet-200/10 hover:text-violet-100 disabled:opacity-40">
-              {isPrivateAccessUpdating ? "Private解除中..." : "Private表示を解除"}
-            </button>
-          ) : (
-            <input
-              type="password"
-              value={privateAccessKey}
-              onChange={(event) => setPrivateAccessKey(event.target.value)}
-              aria-label="access key"
-              autoComplete="off"
-              className="mt-4 h-7 w-28 rounded-md border border-white/10 bg-white/[0.04] px-2 text-xs text-white opacity-30 outline-none transition focus:border-white/30 focus:opacity-100"
-            />
-          )}
         </div>
       </section>
 
@@ -912,21 +867,6 @@ export function GameLobby() {
               </div>
             )}
 
-            {isLoggedIn && (
-              <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3">
-                <button type="button" onClick={() => { setShowAccountDeletion((value) => !value); setDeleteAccountPassword(""); }} className="text-sm font-bold text-rose-700">
-                  アカウントを削除
-                </button>
-                {showAccountDeletion && <div className="mt-3">
-                  <p className="text-xs leading-5 text-rose-700">アカウント、戦績、設定を削除します。この操作は取り消せません。本人確認のため現在のパスワードを入力してください。</p>
-                  <input value={deleteAccountPassword} onChange={(event) => setDeleteAccountPassword(event.target.value)} type="password" autoComplete="current-password" className="mt-2 w-full rounded-lg border border-rose-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:ring-2 focus:ring-rose-500/20" placeholder="現在のパスワード" />
-                  <button type="button" onClick={() => void deleteAccount()} disabled={isDeletingAccount || !deleteAccountPassword} className="mt-2 w-full rounded-lg bg-rose-600 px-3 py-2 text-sm font-bold text-white hover:bg-rose-500 disabled:bg-slate-300">
-                    {isDeletingAccount ? "削除中..." : "完全に削除する"}
-                  </button>
-                </div>}
-              </div>
-            )}
-
             {message && (
               <p className="mt-3 rounded-lg border border-cyan-100 bg-cyan-50 px-3 py-2 text-sm font-semibold text-cyan-800">
                 {message}
@@ -1145,6 +1085,15 @@ export function GameLobby() {
           </div>
         </div>
       </section>
+      <div className="mx-auto flex max-w-6xl justify-end px-4 pb-3">
+        {privateUnlocked ? (
+          <button type="button" disabled={isPrivateAccessUpdating} onClick={() => void clearPrivateAccess()} className="rounded-md border border-violet-300/20 bg-violet-300/[0.05] px-2 py-1 text-[10px] font-semibold text-violet-200/50 transition hover:text-violet-100 disabled:opacity-40">
+            {isPrivateAccessUpdating ? "解除中..." : "PRIVATE OFF"}
+          </button>
+        ) : (
+          <input type="password" value={privateAccessKey} onChange={(event) => setPrivateAccessKey(event.target.value)} aria-label="Private access key" autoComplete="off" title="Private access" className="h-7 w-7 rounded-md border border-white/10 bg-white/[0.03] px-2 text-center text-xs text-white opacity-20 outline-none transition focus:w-28 focus:border-white/30 focus:opacity-100" />
+        )}
+      </div>
       <FullScreenPageOverlay open={isMyPageOpen} href="/users/me" title="マイページ" onClose={() => setIsMyPageOpen(false)} />
     </main>
   );
