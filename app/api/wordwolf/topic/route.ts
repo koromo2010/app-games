@@ -36,6 +36,7 @@ import {
   wordSelectionWeight,
   type WordDifficulty,
 } from "@/lib/word-selection-protocol";
+import type { WordWolfDebugCandidateTrace, WordWolfDebugTrace } from "@/lib/wordwolf-topic-types";
 import { loadStoredWordWolfRoom } from "@/lib/wordwolf-room-store";
 import {
   findReusableWordWolfTopic,
@@ -181,7 +182,8 @@ async function generateCatalogAnchoredTopics(input: {
     latencyMs: generated.latencyMs,
     retrievedFeedbackIds: input.retrievedFeedbackIds,
   };
-  const accepted: Array<{ topic: WordWolfTopic; weight: number }> = [];
+  const accepted: Array<{ topic: WordWolfTopic; weight: number; traceIndex: number }> = [];
+  const candidateTraces: WordWolfDebugCandidateTrace[] = [];
 
   for (const result of decision.results) {
     const candidate = candidateById.get(result.inputId);
@@ -190,24 +192,66 @@ async function generateCatalogAnchoredTopics(input: {
     const partnerWordMasterId = result.partner
       ? await findSharedWordId(result.partner).catch(() => null)
       : null;
-    await saveSharedWordwolfEvaluation({
-      candidate,
-      result,
-      partnerWordMasterId,
-      promptVersion: wordwolfTopicPromptVersion,
-      model: generated.model,
-      feedbackAdjustment,
-    }).catch(() => undefined);
-    if (result.decision !== "accept" || !result.partner) continue;
-    if (normalizeTopicWord(result.partner) === normalizeTopicWord(candidate.surface)) continue;
-    if (excludedWords.has(normalizeTopicWord(result.partner))) continue;
-
     const effectiveZipf = gameEffectiveZipf({
       zipfFrequency: candidate.zipfFrequency,
       usagePenalty: result.usagePenalty,
       gamePenalty: result.wordwolfPenalty,
       feedbackAdjustment,
     });
+    const selectionWeight = wordSelectionWeight(effectiveZipf, input.difficulty);
+    let evaluationPersisted = true;
+    try {
+      await saveSharedWordwolfEvaluation({
+        candidate,
+        result,
+        partnerWordMasterId,
+        promptVersion: wordwolfTopicPromptVersion,
+        model: generated.model,
+        feedbackAdjustment,
+      });
+    } catch {
+      evaluationPersisted = false;
+    }
+    const trace: WordWolfDebugCandidateTrace = {
+      wordMasterId: candidate.wordMasterId,
+      surface: candidate.surface,
+      reading: candidate.reading,
+      zipfFrequency: candidate.zipfFrequency,
+      storedUsagePenalty: candidate.usagePenalty,
+      storedWordwolfPenalty: candidate.wordwolfPenalty,
+      storedFeedbackAdjustment: candidate.feedbackAdjustment,
+      storedEffectiveZipf: candidate.effectiveZipf,
+      currentFeedbackAdjustment: feedbackAdjustment,
+      decision: result.decision,
+      usagePenalty: result.usagePenalty,
+      wordwolfPenalty: result.wordwolfPenalty,
+      safetyFlags: result.safetyFlags,
+      partner: result.partner,
+      partnerWordMasterId,
+      pairReason: result.pairReason,
+      reasonCode: result.reasonCode,
+      commonEffectiveZipf: candidate.zipfFrequency - result.usagePenalty + feedbackAdjustment,
+      wordwolfEffectiveZipf: effectiveZipf,
+      selectionWeight,
+      outcome: result.decision === "accept" ? "eligible" : "rejected",
+      outcomeReason: result.decision === "accept" ? "weighted_selection_candidate" : result.reasonCode,
+      evaluationPersisted,
+    };
+    candidateTraces.push(trace);
+    const traceIndex = candidateTraces.length - 1;
+
+    if (result.decision !== "accept" || !result.partner) continue;
+    if (normalizeTopicWord(result.partner) === normalizeTopicWord(candidate.surface)) {
+      trace.outcome = "filtered";
+      trace.outcomeReason = "partner_same_as_anchor";
+      continue;
+    }
+    if (excludedWords.has(normalizeTopicWord(result.partner))) {
+      trace.outcome = "filtered";
+      trace.outcomeReason = "partner_already_experienced_or_excluded";
+      continue;
+    }
+
     const anchorFirst = Math.random() >= 0.5;
     const topic = {
       villageWord: anchorFirst ? candidate.surface : result.partner,
@@ -226,12 +270,17 @@ async function generateCatalogAnchoredTopics(input: {
       wordwolfEffectiveZipf: effectiveZipf,
       generation,
     } satisfies WordWolfTopic;
-    accepted.push({ topic, weight: wordSelectionWeight(effectiveZipf, input.difficulty) });
+    accepted.push({ topic, weight: selectionWeight, traceIndex });
   }
 
   await Promise.all(accepted.map(({ topic }) => rememberWordWolfTopicCandidate(topic).catch(() => undefined)));
-  if (accepted.length === 0) return null;
-  return accepted[weightedTopicIndex(accepted.map((item) => item.weight))].topic;
+  if (accepted.length === 0) {
+    return { topic: null, attemptedProviders: generated.attemptedProviders, candidateTraces };
+  }
+  const selected = accepted[weightedTopicIndex(accepted.map((item) => item.weight))];
+  candidateTraces[selected.traceIndex].outcome = "selected";
+  candidateTraces[selected.traceIndex].outcomeReason = "weighted_selection_winner";
+  return { topic: selected.topic, attemptedProviders: generated.attemptedProviders, candidateTraces };
 }
 
 async function generateLlmTopic(
@@ -305,8 +354,9 @@ async function generateLlmTopic(
 
   const generated = await generateGameLlmText(promptWithExclusions, mode);
   const topic = parseTopic(generated.text, pairDistance, dictionarySource);
-  return topic
-    ? {
+  return {
+    topic: topic
+      ? {
         ...topic,
         generation: {
           provider: generated.provider,
@@ -318,7 +368,9 @@ async function generateLlmTopic(
           retrievedFeedbackIds,
         },
       }
-    : null;
+      : null,
+    attemptedProviders: generated.attemptedProviders,
+  };
 }
 
 export async function generateWordWolfTopicResponse(request: Request, playerIds: string[], previewOnly = false, forceNew = false) {
@@ -354,6 +406,23 @@ export async function generateWordWolfTopicResponse(request: Request, playerIds:
     : [];
   const feedbackContext = formatGameFeedbackContext(feedbackRecords);
   const retrievedFeedbackIds = feedbackRecords.map((record) => record.id);
+  const difficultyParameters = defaultWordSelectionHyperparameters.difficulties[difficulty];
+  const debugTraceBase = {
+    forceNew,
+    difficulty,
+    targetZipf: difficultyParameters.targetZipf,
+    width: difficultyParameters.width,
+    batchSize: defaultWordSelectionHyperparameters.batchSize,
+    requestExcludedCount: excludeWords.length,
+    experiencedExcludedCount: experiencedWords.length,
+    catalogExcludedCount: catalogWords.length,
+    totalExcludedCount: allExcludeWords.length,
+    retrievedFeedbackCount: feedbackRecords.length,
+    candidateCount: catalogCandidates.length,
+  };
+  const withDebugTrace = (topic: WordWolfTopic, trace: Omit<WordWolfDebugTrace, keyof typeof debugTraceBase>) => (
+    previewOnly ? { ...topic, debugTrace: { ...debugTraceBase, ...trace } } : topic
+  );
   const remember = async (topic: WordWolfTopic) => {
     if (previewOnly) {
       await rememberWordWolfTopicCandidate(topic).catch(() => undefined);
@@ -373,14 +442,22 @@ export async function generateWordWolfTopicResponse(request: Request, playerIds:
     }).catch(() => null);
     if (reusableTopic) {
       await remember(reusableTopic);
-      return Response.json(reusableTopic);
+      return Response.json(withDebugTrace(reusableTopic, {
+        pipeline: "catalog-reuse",
+        attemptedProviders: [],
+        candidates: [],
+      }));
     }
 
     const localTopic = pickFallbackTopic(allExcludeKeys, dictionarySource, pairDistance, allExcludeWords, topicHint);
     if (!requiresLlm && !localTopic.fallbackExhausted) {
       const topic = { ...localTopic, generation: localGenerationMeta(retrievedFeedbackIds) };
       await remember(topic);
-      return Response.json(topic);
+      return Response.json(withDebugTrace(topic, {
+        pipeline: "local-candidate",
+        attemptedProviders: [],
+        candidates: [],
+      }));
     }
   }
 
@@ -392,11 +469,16 @@ export async function generateWordWolfTopicResponse(request: Request, playerIds:
   if (!requiresLlm || mode === "local") {
     const topic = { ...localTopic, notice: gameLlmFallbackNotice, generation: localGenerationMeta(retrievedFeedbackIds) };
     await remember(topic);
-    return Response.json(topic);
+    return Response.json(withDebugTrace(topic, {
+      pipeline: "local-fallback",
+      attemptedProviders: [],
+      candidates: [],
+    }));
   }
 
   try {
-    const topic = dictionarySource === "llm" && !topicHint && catalogCandidates.length > 0
+    const catalogRag = dictionarySource === "llm" && !topicHint && catalogCandidates.length > 0;
+    const generatedResult = catalogRag
       ? await generateCatalogAnchoredTopics({
           candidates: catalogCandidates,
           difficulty,
@@ -417,9 +499,15 @@ export async function generateWordWolfTopicResponse(request: Request, playerIds:
           feedbackContext,
           retrievedFeedbackIds,
         );
+    const topic = generatedResult.topic;
     if (topic && isTopicAllowed(topic, allExcludeKeys, allExcludeWords)) {
       await remember(topic);
-      return Response.json(topic);
+      return Response.json(withDebugTrace(topic, {
+        pipeline: catalogRag ? "catalog-rag" : "direct-llm",
+        attemptedProviders: generatedResult.attemptedProviders,
+        selectedWordMasterId: topic.anchorWordMasterId,
+        candidates: "candidateTraces" in generatedResult ? generatedResult.candidateTraces : [],
+      }));
     }
   } catch (error) {
     emitObservabilityEvent("error", "ai.generation", { game: "wordwolf", operation: "topic", outcome: "failed", errorCode: observabilityErrorCode(error) });
@@ -435,7 +523,11 @@ export async function generateWordWolfTopicResponse(request: Request, playerIds:
     generation: localGenerationMeta(retrievedFeedbackIds),
   };
   await remember(topic);
-  return Response.json(topic);
+  return Response.json(withDebugTrace(topic, {
+    pipeline: "local-fallback",
+    attemptedProviders: [],
+    candidates: [],
+  }));
 }
 
 export async function GET(request: Request) {

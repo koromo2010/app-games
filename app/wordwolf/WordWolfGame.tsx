@@ -24,8 +24,8 @@ import {
   normalizeTopicPairDistance,
   type TopicDictionarySource,
   type TopicPairDistance,
-  type WordWolfTopic,
 } from "@/lib/wordwolf";
+import type { WordWolfDebugTopicResponse, WordWolfDebugTrace } from "@/lib/wordwolf-topic-types";
 import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
 import { DebugModeButton } from "../components/DebugModeButton";
 import { GamePlayerMenu } from "../components/GamePlayerMenu";
@@ -165,6 +165,38 @@ function normalizeStoredWolfCount(value: unknown) {
 }
 
 const lobbyRounds = [1, 2, 3, 4];
+
+const wordWolfDebugPipelineLabels: Record<WordWolfDebugTrace["pipeline"], string> = {
+  "catalog-reuse": "保存済みペアを再利用",
+  "local-candidate": "ローカル候補から選択",
+  "catalog-rag": "共通ワードDBから3候補 → LLM一括審査 → 重み付き選択",
+  "direct-llm": "LLMがペアを直接生成",
+  "local-fallback": "AIを使わず代替候補へフォールバック",
+};
+
+function formatDebugNumber(value: number, signed = false) {
+  const prefix = signed && value > 0 ? "+" : "";
+  return `${prefix}${value.toFixed(2)}`;
+}
+
+function formatDebugPenalty(value: number) {
+  return value > 0 ? `-${value.toFixed(2)}` : "0.00";
+}
+
+function wordWolfDebugOutcomeLabel(outcome: WordWolfDebugTrace["candidates"][number]["outcome"]) {
+  if (outcome === "selected") return "★ 最終採用";
+  if (outcome === "eligible") return "採用可能・抽選外";
+  if (outcome === "filtered") return "後段フィルターで除外";
+  return "LLMが却下";
+}
+
+function wordWolfDebugOutcomeReason(reason: string) {
+  if (reason === "weighted_selection_winner") return "採用可能候補の重み付き抽選で選択";
+  if (reason === "weighted_selection_candidate") return "採用可能だが今回の抽選では未選択";
+  if (reason === "partner_same_as_anchor") return "相方が元の単語と同一のため除外";
+  if (reason === "partner_already_experienced_or_excluded") return "相方が経験済み・除外対象のため除外";
+  return reason;
+}
 
 function normalizeRoundsTotal(value: unknown) {
   const round = typeof value === "number" && Number.isFinite(value) ? Math.floor(value) : 3;
@@ -1091,16 +1123,65 @@ export function WordWolfGame() {
     if (forceNew) params.set("forceNew", "1");
     if (room.topicHint.trim()) params.set("hint", room.topicHint.trim().slice(0, 80));
     const response = await fetch(`/api/wordwolf/topic?${params.toString()}`, { cache: "no-store" });
-    const topic = (await response.json()) as WordWolfTopic & { error?: string };
+    const topic = (await response.json()) as WordWolfDebugTopicResponse;
     if (!response.ok || !isValidWordWolfTopic(topic)) {
       throw new Error(topic.notice || topic.error || "ワードを生成できませんでした。");
     }
+    const trace = topic.debugTrace;
     return {
       fields: [
         { label: "市民ワード", value: topic.villageWord },
         { label: "ウルフワード", value: topic.wolfWord },
         { label: "組み合わせの意図", value: topic.reason },
+        ...(trace ? [
+          { label: "処理経路", value: `${wordWolfDebugPipelineLabels[trace.pipeline]}（DB候補 ${trace.candidateCount}語）` },
+          {
+            label: "難易度の狙い",
+            value: `${trace.difficulty} / 中心Zipf ${trace.targetZipf.toFixed(1)} / 幅 ${trace.width.toFixed(1)} / 一括 ${trace.batchSize}語`,
+          },
+          {
+            label: "除外した語",
+            value: `合計 ${trace.totalExcludedCount}語（今回指定 ${trace.requestExcludedCount}・経験済み ${trace.experiencedExcludedCount}・保存済み候補 ${trace.catalogExcludedCount}）`,
+          },
+          { label: "RAG参考評価", value: `${trace.retrievedFeedbackCount}件` },
+          {
+            label: "AI呼び出し順",
+            value: trace.attemptedProviders.length > 0 ? trace.attemptedProviders.join(" → ") : "AI呼び出しなし",
+          },
+        ] : []),
       ],
+      items: trace?.candidates.map((candidate) => ({
+        title: `ID ${candidate.wordMasterId}　${candidate.surface}`,
+        status: wordWolfDebugOutcomeLabel(candidate.outcome),
+        fields: [
+          { label: "読み", value: candidate.reading || "—" },
+          {
+            label: "DB抽出時の値",
+            value: `元Zipf ${formatDebugNumber(candidate.zipfFrequency)} / 保存済み利用減点 ${formatDebugPenalty(candidate.storedUsagePenalty)} / 保存済みWW減点 ${formatDebugPenalty(candidate.storedWordwolfPenalty)} / 保存済みFB補正 ${formatDebugNumber(candidate.storedFeedbackAdjustment, true)} / 抽出実質 ${formatDebugNumber(candidate.storedEffectiveZipf)}`,
+          },
+          {
+            label: "今回のLLM判定",
+            value: `${candidate.decision === "accept" ? "採用可能" : "却下"} / 利用減点 ${formatDebugPenalty(candidate.usagePenalty)} / WW減点 ${formatDebugPenalty(candidate.wordwolfPenalty)} / RAG補正 ${formatDebugNumber(candidate.currentFeedbackAdjustment, true)}`,
+          },
+          {
+            label: "今回の実質Zipf",
+            value: `共通 ${formatDebugNumber(candidate.commonEffectiveZipf)} / ワードウルフ ${formatDebugNumber(candidate.wordwolfEffectiveZipf)} / 抽選重み ${formatDebugNumber(candidate.selectionWeight)}`,
+          },
+          {
+            label: "生成した相方",
+            value: candidate.partner ? `${candidate.partner}${candidate.partnerWordMasterId ? `（DB ID ${candidate.partnerWordMasterId}）` : "（DB未登録）"}` : "生成なし",
+          },
+          {
+            label: "判定理由",
+            value: `${candidate.pairReason} / ${candidate.reasonCode}${candidate.safetyFlags.length > 0 ? ` / safety: ${candidate.safetyFlags.join(", ")}` : ""}`,
+          },
+          { label: "最終採否の理由", value: wordWolfDebugOutcomeReason(candidate.outcomeReason) },
+          {
+            label: "保存",
+            value: candidate.evaluationPersisted ? "今回の判定を共通DBへ保存済み" : "共通DBへの保存に失敗",
+          },
+        ],
+      })),
       notice: topic.notice,
       generation: topic.generation,
     };

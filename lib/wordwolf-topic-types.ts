@@ -35,4 +35,53 @@ export type WordWolfTopic = {
   wordwolfEffectiveZipf?: number;
 };
 
+export type WordWolfDebugCandidateTrace = {
+  wordMasterId: number;
+  surface: string;
+  reading: string;
+  zipfFrequency: number;
+  storedUsagePenalty: number;
+  storedWordwolfPenalty: number;
+  storedFeedbackAdjustment: number;
+  storedEffectiveZipf: number;
+  currentFeedbackAdjustment: number;
+  decision: "accept" | "reject";
+  usagePenalty: number;
+  wordwolfPenalty: number;
+  safetyFlags: string[];
+  partner: string | null;
+  partnerWordMasterId: number | null;
+  pairReason: string;
+  reasonCode: string;
+  commonEffectiveZipf: number;
+  wordwolfEffectiveZipf: number;
+  selectionWeight: number;
+  outcome: "selected" | "eligible" | "rejected" | "filtered";
+  outcomeReason: string;
+  evaluationPersisted: boolean;
+};
+
+export type WordWolfDebugTrace = {
+  pipeline: "catalog-reuse" | "local-candidate" | "catalog-rag" | "direct-llm" | "local-fallback";
+  forceNew: boolean;
+  difficulty: WordDifficulty;
+  targetZipf: number;
+  width: number;
+  batchSize: number;
+  requestExcludedCount: number;
+  experiencedExcludedCount: number;
+  catalogExcludedCount: number;
+  totalExcludedCount: number;
+  retrievedFeedbackCount: number;
+  candidateCount: number;
+  attemptedProviders: Array<"openai" | "gemini" | "groq">;
+  selectedWordMasterId?: number;
+  candidates: WordWolfDebugCandidateTrace[];
+};
+
+export type WordWolfDebugTopicResponse = WordWolfTopic & {
+  debugTrace?: WordWolfDebugTrace;
+  error?: string;
+};
+
 export type TopicCandidate = Omit<WordWolfTopic, "source">;
