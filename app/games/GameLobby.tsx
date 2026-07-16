@@ -136,6 +136,9 @@ export function GameLobby() {
   const [isSaving, setIsSaving] = useState(false);
   const [isRequestingReset, setIsRequestingReset] = useState(false);
   const [isUpdatingEmail, setIsUpdatingEmail] = useState(false);
+  const [showAccountDeletion, setShowAccountDeletion] = useState(false);
+  const [deleteAccountPassword, setDeleteAccountPassword] = useState("");
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [isAvatarSaving, setIsAvatarSaving] = useState(false);
   const [isAvatarDragging, setIsAvatarDragging] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -488,6 +491,35 @@ export function GameLobby() {
     setActiveRoom(null);
     setActiveGameRooms({});
     setMessage("ログアウトしました。");
+  };
+
+  const deleteAccount = async () => {
+    if (!window.confirm("アカウント、戦績、設定を削除します。この操作は取り消せません。削除しますか？")) return;
+    setIsDeletingAccount(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/player-account", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "delete", name, password: deleteAccountPassword }),
+      });
+      const data = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        setMessage(data.error === "INVALID_CREDENTIALS" ? "パスワードが正しくありません。" : "アカウントを削除できませんでした。");
+        return;
+      }
+      clearPlayerSession();
+      localStorage.removeItem("wordwolf-last-room");
+      localStorage.removeItem("wordwolf-last-player");
+      setName(""); setPlayerId(""); setPassword(""); setEmail(""); setDeleteAccountPassword("");
+      setHasRecoveryEmail(false); setIsLoggedIn(false); setShowAccountDeletion(false);
+      setStats(null); setActiveRoom(null); setActiveGameRooms({});
+      setMessage("アカウントを削除しました。");
+    } catch {
+      setMessage("通信に失敗しました。もう一度試してください。");
+    } finally {
+      setIsDeletingAccount(false);
+    }
   };
 
   const visibleGames = games.filter((game) => !game.private || privateUnlocked);
@@ -877,6 +909,21 @@ export function GameLobby() {
                 >
                   {isUpdatingEmail ? "登録中..." : "メールアドレスを登録・変更"}
                 </button>
+              </div>
+            )}
+
+            {isLoggedIn && (
+              <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 p-3">
+                <button type="button" onClick={() => { setShowAccountDeletion((value) => !value); setDeleteAccountPassword(""); }} className="text-sm font-bold text-rose-700">
+                  アカウントを削除
+                </button>
+                {showAccountDeletion && <div className="mt-3">
+                  <p className="text-xs leading-5 text-rose-700">アカウント、戦績、設定を削除します。この操作は取り消せません。本人確認のため現在のパスワードを入力してください。</p>
+                  <input value={deleteAccountPassword} onChange={(event) => setDeleteAccountPassword(event.target.value)} type="password" autoComplete="current-password" className="mt-2 w-full rounded-lg border border-rose-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none focus:ring-2 focus:ring-rose-500/20" placeholder="現在のパスワード" />
+                  <button type="button" onClick={() => void deleteAccount()} disabled={isDeletingAccount || !deleteAccountPassword} className="mt-2 w-full rounded-lg bg-rose-600 px-3 py-2 text-sm font-bold text-white hover:bg-rose-500 disabled:bg-slate-300">
+                    {isDeletingAccount ? "削除中..." : "完全に削除する"}
+                  </button>
+                </div>}
               </div>
             )}
 

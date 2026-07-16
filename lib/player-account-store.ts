@@ -15,6 +15,7 @@ import {
   savePostgresPlayerAccount,
   updatePostgresPlayerAccountProfile,
   deleteExpiredPostgresPlayerAccounts,
+  deletePostgresPlayerAccount,
 } from "@/lib/player-account-postgres-store";
 import { hasPlayerAccountEmailOwnerConflict } from "@/lib/player-account-migration";
 import { legalConsentIsCurrent } from "@/lib/legal";
@@ -401,6 +402,19 @@ export async function updatePlayerAccountEmail(input: PlayerAccountAuthInput) {
   }
 
   return accountSession(account);
+}
+
+export async function deletePlayerAccount(input: PlayerAccountAuthInput, authenticatedPlayerId: string) {
+  const account = await loadAccount(input.name);
+  if (!account || account.playerId !== authenticatedPlayerId || !verifyPassword(input.password, account.passwordSalt, account.passwordHash)) {
+    throw new Error("PLAYER_ACCOUNT_INVALID_CREDENTIALS");
+  }
+
+  if (isPostgresConfigured()) await deletePostgresPlayerAccount(account.playerId);
+  const keys = [accountKey(account.loginName), `player:${account.playerId}`];
+  if (account.email) keys.push(playerAccountEmailKey(account.email));
+  await redisCommand<number>(["DEL", ...keys]);
+  return { playerId: account.playerId };
 }
 
 export async function loadPlayerAccountByEmail(email: string) {

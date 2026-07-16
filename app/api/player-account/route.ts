@@ -2,6 +2,7 @@ import {
   loginPlayerAccount,
   registerPlayerAccount,
   updatePlayerAccountEmail,
+  deletePlayerAccount,
   type PlayerAccountAuthInput,
 } from "@/lib/player-account-store";
 import { clearPlayerAuthCookie, getAuthenticatedPlayer, isPlayerAuthConfigurationError, setPlayerAuthCookie } from "@/lib/player-auth";
@@ -9,7 +10,7 @@ import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observab
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 
 type PlayerAccountRequest = PlayerAccountAuthInput & {
-  mode?: "login" | "register" | "update-email" | "logout";
+  mode?: "login" | "register" | "update-email" | "delete" | "logout";
 };
 
 function isStoreNotConfigured(error: unknown) {
@@ -69,6 +70,16 @@ export async function POST(request: Request) {
       const previous = await getAuthenticatedPlayer().catch(() => null);
       await clearPlayerAuthCookie();
       telemetry.success("auth.session", { ...logFields, actorRef: telemetry.actorRef(previous?.id) });
+      return Response.json({ ok: true });
+    }
+    if (body.mode === "delete") {
+      const authenticated = await getAuthenticatedPlayer();
+      if (!authenticated?.id) return Response.json({ error: "AUTH_REQUIRED" }, { status: 401 });
+      const limited = await rateLimitResponseFor(request, rateLimitPolicies.auth, { identity: authenticated.id });
+      if (limited) return limited;
+      await deletePlayerAccount(body, authenticated.id);
+      await clearPlayerAuthCookie();
+      telemetry.success("auth.session", { ...logFields, actorRef: telemetry.actorRef(authenticated.id) });
       return Response.json({ ok: true });
     }
     const limited = await rateLimitResponseFor(request, rateLimitPolicies.auth, {
