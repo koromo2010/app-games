@@ -1,0 +1,18 @@
+# Local word-master assets must never be included in a Vercel deployment.
+.word-master-local/
+.venv-word-master/
+.env.word-db.local
+.env.word-db.example
+
+# Build and dependency caches are recreated by Vercel.
+.git/
+.next/
+node_modules/
+
+# Dictionary sources, adapters, and database exports stay local.
+*.csv
+*.tsv
+*.zip
+*.gz
+*.sql
+*.dump

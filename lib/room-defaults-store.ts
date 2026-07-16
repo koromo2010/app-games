@@ -9,6 +9,7 @@ import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
 import { normalizeHodoaiConfig } from "@/lib/hodoai-talk";
 import { normalizeKotobaSenpukuConfig } from "@/lib/kotoba-senpuku";
 import { redisCommand } from "@/lib/redis-store";
+import { normalizeWordDifficulty, type WordDifficulty } from "@/lib/word-selection-protocol";
 
 export type RoomDefaultsGame = "wordwolf" | "tahoiya" | "hodoai-talk" | "kotoba-senpuku";
 
@@ -22,6 +23,7 @@ export type StoredWordWolfRoomDefaults = {
   wolfCount: number;
   topicDictionarySource: TopicDictionarySource;
   topicPairDistance: TopicPairDistance;
+  topicDifficulty: WordDifficulty;
   topicHint: string;
 };
 
@@ -92,6 +94,7 @@ function normalizeWordWolfDefaults(value: unknown): StoredWordWolfRoomDefaults {
     wolfCount: normalizeWolfCount(parsed.wolfCount),
     topicDictionarySource: normalizeTopicDictionarySource(parsed.topicDictionarySource),
     topicPairDistance: normalizeTopicPairDistance(parsed.topicPairDistance),
+    topicDifficulty: normalizeWordDifficulty(parsed.topicDifficulty),
     topicHint: typeof parsed.topicHint === "string" ? parsed.topicHint.slice(0, 80) : "",
   };
 }

@@ -1,4 +1,5 @@
-# Local-only dependencies for scripts/import-word-master.py
+# Local-only dependencies for word-master preparation and analysis scripts.
 # The production Next.js runtime does not install or use these packages.
 psycopg[binary]==3.3.4
 wordfreq[cjk]==3.1.1
+gensim==4.3.3

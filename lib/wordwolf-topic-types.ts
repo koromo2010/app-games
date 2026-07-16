@@ -1,3 +1,6 @@
+import type { GameGenerationMeta } from "@/lib/game-ai-types";
+import type { WordDifficulty } from "@/lib/word-selection-protocol";
+
 export type TopicDictionarySource = "ja-daily" | "en-common" | "curated-pairs" | "llm" | "proper-noun";
 
 export type TopicPairDistance = "near" | "balanced" | "wide";
@@ -24,7 +27,12 @@ export type WordWolfTopic = {
   dictionarySource?: TopicDictionarySource;
   pairDistance?: TopicPairDistance;
   sourceMode?: TopicSourceMode;
+  difficulty?: WordDifficulty;
+  anchorWordMasterId?: number;
+  partnerWordMasterId?: number;
+  anchorWord?: string;
+  commonEffectiveZipf?: number;
+  wordwolfEffectiveZipf?: number;
 };
 
 export type TopicCandidate = Omit<WordWolfTopic, "source">;
-import type { GameGenerationMeta } from "@/lib/game-ai-types";

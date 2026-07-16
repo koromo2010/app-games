@@ -1,0 +1,18 @@
+{
+  "source_key": "sudachi-synonym",
+  "display_name": "Sudachi Synonym Dictionary",
+  "version": "20260428",
+  "release_url": "https://github.com/WorksApplications/SudachiDict/releases/tag/v20260428",
+  "commit": "3ae9201",
+  "license": "Apache-2.0 with bundled third-party notices",
+  "license_url": "https://github.com/WorksApplications/SudachiDict/blob/v20260428/LICENSE-2.0.txt",
+  "legal_url": "https://github.com/WorksApplications/SudachiDict/blob/v20260428/LEGAL",
+  "attribution": "Works Applications Co., Ltd.; contributors and data sources listed in SudachiDict LEGAL",
+  "asset": {
+    "url": "https://raw.githubusercontent.com/WorksApplications/SudachiDict/v20260428/src/main/text/synonyms.txt",
+    "file_name": "synonyms.txt",
+    "sha256": "cb42b81e58f31cb155d80920e9e1a49523b22bee158b37b7878b3a5acab6b297",
+    "bytes": 3068108,
+    "columns": 11
+  }
+}

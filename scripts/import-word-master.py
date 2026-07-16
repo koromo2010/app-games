@@ -37,7 +37,9 @@ from typing import Any
 
 import psycopg
 from wordfreq import zipf_frequency
+from wordfreq.tokens import lossy_tokenize
 from word_form_classifier import classify_word_form
+from word_content_safety_classifier import classify_content_safety
 from word_person_classifier import classify_person_name
 from word_surface_quality_classifier import classify_surface_quality
 
@@ -113,7 +115,16 @@ def parse_row(row: dict[str, str], line_number: int) -> dict[str, Any] | None:
         classify_person_name(status, proper_type, details)
     )
     surface_quality_status, surface_quality_flags, surface_quality_policy_version = (
-        classify_surface_quality(surface, pos, status, proper_type)
+        classify_surface_quality(
+            surface,
+            pos,
+            status,
+            proper_type,
+            len(lossy_tokenize(surface, "ja")),
+        )
+    )
+    content_safety_status, content_safety_flags, content_safety_policy_version = (
+        classify_content_safety(surface, normalized_form)
     )
 
     return {
@@ -134,6 +145,9 @@ def parse_row(row: dict[str, str], line_number: int) -> dict[str, Any] | None:
         "surface_quality_status": surface_quality_status,
         "surface_quality_flags": surface_quality_flags,
         "surface_quality_policy_version": surface_quality_policy_version,
+        "content_safety_status": content_safety_status,
+        "content_safety_flags": content_safety_flags,
+        "content_safety_policy_version": content_safety_policy_version,
         "zipf_frequency": float(zipf_frequency(surface, "ja")),
         "random_key": random.random(),
         "line_number": line_number,
@@ -194,6 +208,9 @@ def import_rows(connection: psycopg.Connection[Any], args: argparse.Namespace) -
               surface_quality_status TEXT NOT NULL,
               surface_quality_flags TEXT[] NOT NULL,
               surface_quality_policy_version TEXT NOT NULL,
+              content_safety_status TEXT NOT NULL,
+              content_safety_flags TEXT[] NOT NULL,
+              content_safety_policy_version TEXT NOT NULL,
               zipf_frequency REAL NOT NULL,
               random_key DOUBLE PRECISION NOT NULL
             ) ON COMMIT DROP
@@ -214,6 +231,7 @@ def import_rows(connection: psycopg.Connection[Any], args: argparse.Namespace) -
                   proper_noun_status, proper_noun_type,
                   person_name_status, is_name_fragment, person_name_policy_version,
                   surface_quality_status, surface_quality_flags, surface_quality_policy_version,
+                  content_safety_status, content_safety_flags, content_safety_policy_version,
                   zipf_frequency, random_key
                 ) FROM STDIN
             """
@@ -246,6 +264,9 @@ def import_rows(connection: psycopg.Connection[Any], args: argparse.Namespace) -
                             parsed["surface_quality_status"],
                             parsed["surface_quality_flags"],
                             parsed["surface_quality_policy_version"],
+                            parsed["content_safety_status"],
+                            parsed["content_safety_flags"],
+                            parsed["content_safety_policy_version"],
                             parsed["zipf_frequency"],
                             parsed["random_key"],
                         )
@@ -294,6 +315,7 @@ def import_rows(connection: psycopg.Connection[Any], args: argparse.Namespace) -
               form_status, form_classification_reason, form_policy_version,
               person_name_status, is_name_fragment, person_name_policy_version,
               surface_quality_status, surface_quality_flags, surface_quality_policy_version,
+              content_safety_status, content_safety_flags, content_safety_policy_version,
               zipf_frequency, random_key, source_id, source_entry_id, source_version
             )
             SELECT
@@ -302,6 +324,7 @@ def import_rows(connection: psycopg.Connection[Any], args: argparse.Namespace) -
               form_status, form_classification_reason, form_policy_version,
               person_name_status, is_name_fragment, person_name_policy_version,
               surface_quality_status, surface_quality_flags, surface_quality_policy_version,
+              content_safety_status, content_safety_flags, content_safety_policy_version,
               zipf_frequency, random_key, %s, source_entry_id, %s
             FROM word_import_stage
             ON CONFLICT (source_id, source_entry_id) DO UPDATE SET
@@ -333,6 +356,27 @@ def import_rows(connection: psycopg.Connection[Any], args: argparse.Namespace) -
               surface_quality_status = EXCLUDED.surface_quality_status,
               surface_quality_flags = EXCLUDED.surface_quality_flags,
               surface_quality_policy_version = EXCLUDED.surface_quality_policy_version,
+              content_safety_status = CASE
+                WHEN EXCLUDED.content_safety_status = 'exclude'
+                  THEN EXCLUDED.content_safety_status
+                WHEN words.content_safety_policy_version LIKE 'llm-%%'
+                  THEN words.content_safety_status
+                ELSE EXCLUDED.content_safety_status
+              END,
+              content_safety_flags = CASE
+                WHEN EXCLUDED.content_safety_status = 'exclude'
+                  THEN EXCLUDED.content_safety_flags
+                WHEN words.content_safety_policy_version LIKE 'llm-%%'
+                  THEN words.content_safety_flags
+                ELSE EXCLUDED.content_safety_flags
+              END,
+              content_safety_policy_version = CASE
+                WHEN EXCLUDED.content_safety_status = 'exclude'
+                  THEN EXCLUDED.content_safety_policy_version
+                WHEN words.content_safety_policy_version LIKE 'llm-%%'
+                  THEN words.content_safety_policy_version
+                ELSE EXCLUDED.content_safety_policy_version
+              END,
               zipf_frequency = EXCLUDED.zipf_frequency,
               source_version = EXCLUDED.source_version,
               active = TRUE,
@@ -347,6 +391,7 @@ def import_rows(connection: psycopg.Connection[Any], args: argparse.Namespace) -
               words.id,
               game.game_type,
               CASE
+                WHEN stage.content_safety_status = 'exclude' THEN FALSE
                 WHEN game.game_type IN ('wordwolf', 'nigoichi') THEN stage.zipf_frequency >= 2.5
                 ELSE stage.zipf_frequency >= 1.0 AND stage.zipf_frequency < 3.5
               END,
@@ -367,6 +412,7 @@ def import_rows(connection: psycopg.Connection[Any], args: argparse.Namespace) -
                   END
               END,
               CASE
+                WHEN stage.content_safety_status = 'exclude' THEN 'disabled'
                 WHEN game.game_type = 'tahoiya' AND stage.zipf_frequency >= 1.0 THEN 'auto'
                 WHEN game.game_type IN ('wordwolf', 'nigoichi') AND stage.zipf_frequency >= 2.5 THEN 'auto'
                 ELSE 'unreviewed'
@@ -376,7 +422,11 @@ def import_rows(connection: psycopg.Connection[Any], args: argparse.Namespace) -
               ON words.source_id = %s
              AND words.source_entry_id = stage.source_entry_id
             CROSS JOIN (VALUES ('wordwolf'), ('nigoichi'), ('tahoiya')) AS game(game_type)
-            ON CONFLICT (word_id, game_type) DO NOTHING
+            ON CONFLICT (word_id, game_type) DO UPDATE SET
+              usable = FALSE,
+              review_status = 'disabled',
+              updated_at = NOW()
+            WHERE EXCLUDED.review_status = 'disabled'
         """, (source_id,))
         counts["game_settings_inserted"] = cur.rowcount
 

@@ -2,6 +2,7 @@ import type { TopicDictionarySource, TopicPairDistance, TopicSourceMode, WordWol
 import type { WordWolfGuessJudgement } from "@/lib/wordwolf-guess-judgement";
 import type { GameGenerationMeta } from "@/lib/game-ai-types";
 import type { PlayerTimeoutFields } from "@/lib/player-timeout-policy";
+import type { WordDifficulty } from "@/lib/word-selection-protocol";
 
 export type Phase = "lobby" | "clue" | "vote" | "wolfGuess" | "result";
 export type ClueLogVisibility = "always" | "result";
@@ -60,7 +61,13 @@ export type Room = PlayerTimeoutFields & {
   topicGeneration?: GameGenerationMeta;
   topicDictionarySource: TopicDictionarySource;
   topicPairDistance: TopicPairDistance;
+  topicDifficulty: WordDifficulty;
   topicHint: string;
+  topicAnchorWordMasterId?: number;
+  topicPartnerWordMasterId?: number;
+  topicAnchorWord?: string;
+  topicCommonEffectiveZipf?: number;
+  topicWordwolfEffectiveZipf?: number;
   topicSourceMode?: TopicSourceMode;
   clues: Clue[];
   votes: Record<string, string>;
@@ -98,6 +105,7 @@ export type WordWolfLobbyConfig = Pick<Room,
   | "turnTimeLimitSeconds"
   | "topicDictionarySource"
   | "topicPairDistance"
+  | "topicDifficulty"
   | "topicHint"
 >;
 

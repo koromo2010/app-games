@@ -18,6 +18,7 @@ import { isAvatarColor, isAvatarImage } from "@/lib/player-session";
 import { onlineRoomPlayerLimits } from "@/lib/online-room-policy";
 import { loadOnlineRoomValues, scanOnlineRoomCodes } from "@/lib/online-room-list";
 import { normalizePlayerTimeoutFields, recoverPlayerTimeout } from "@/lib/player-timeout-policy";
+import { normalizeWordDifficulty } from "@/lib/word-selection-protocol";
 
 export type WordWolfRoom = Room;
 export type WordWolfRoomChoice = RoomChoice;
@@ -203,7 +204,13 @@ function normalizeRoom(value: unknown): WordWolfRoom | null {
     topicGeneration: normalizeGameGenerationMeta(parsed.topicGeneration),
     topicDictionarySource: normalizeTopicDictionarySource(parsed.topicDictionarySource ?? parsed.topicSourceMode),
     topicPairDistance: normalizeTopicPairDistance(parsed.topicPairDistance ?? parsed.topicSourceMode),
+    topicDifficulty: normalizeWordDifficulty(parsed.topicDifficulty),
     topicHint: typeof parsed.topicHint === "string" ? parsed.topicHint.slice(0, 80) : "",
+    topicAnchorWordMasterId: typeof parsed.topicAnchorWordMasterId === "number" ? parsed.topicAnchorWordMasterId : undefined,
+    topicPartnerWordMasterId: typeof parsed.topicPartnerWordMasterId === "number" ? parsed.topicPartnerWordMasterId : undefined,
+    topicAnchorWord: typeof parsed.topicAnchorWord === "string" ? parsed.topicAnchorWord.slice(0, 40) : undefined,
+    topicCommonEffectiveZipf: typeof parsed.topicCommonEffectiveZipf === "number" ? parsed.topicCommonEffectiveZipf : undefined,
+    topicWordwolfEffectiveZipf: typeof parsed.topicWordwolfEffectiveZipf === "number" ? parsed.topicWordwolfEffectiveZipf : undefined,
     clues: Array.isArray(parsed.clues) ? (parsed.clues as Clue[]) : [],
     votes: parsed.votes && typeof parsed.votes === "object" ? (parsed.votes as Record<string, string>) : {},
     voteHistory: normalizeVoteHistory(parsed.voteHistory),
@@ -388,6 +395,11 @@ function resetWordWolfRoomToLobby(room: WordWolfRoom, advanceGame: boolean) {
     topicSource: "pending" as const,
     topicFallbackExhausted: false,
     topicGeneration: undefined,
+    topicAnchorWordMasterId: undefined,
+    topicPartnerWordMasterId: undefined,
+    topicAnchorWord: undefined,
+    topicCommonEffectiveZipf: undefined,
+    topicWordwolfEffectiveZipf: undefined,
     clues: [],
     votes: {},
     voteHistory: [],
@@ -444,6 +456,7 @@ export async function applyStoredWordWolfRoomAction(code: string, actorId: strin
           turnTimeLimitSeconds: config.turnTimeLimitSeconds === undefined ? current.turnTimeLimitSeconds : normalizeCommonTimeLimit(config.turnTimeLimitSeconds),
           topicDictionarySource: config.topicDictionarySource === undefined ? current.topicDictionarySource : normalizeTopicDictionarySource(config.topicDictionarySource),
           topicPairDistance: config.topicPairDistance === undefined ? current.topicPairDistance : normalizeTopicPairDistance(config.topicPairDistance),
+          topicDifficulty: config.topicDifficulty === undefined ? current.topicDifficulty : normalizeWordDifficulty(config.topicDifficulty),
           topicHint: typeof config.topicHint === "string" ? config.topicHint.trim().slice(0, 80) : current.topicHint,
         };
       } else if (action.type === "set-debug") {

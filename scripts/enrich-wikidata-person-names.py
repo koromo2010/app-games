@@ -371,7 +371,7 @@ def ensure_full_name_word(
           %s, %s, %s, '名詞', ARRAY['固有名詞', '人名', '一般'],
           'non_inflecting', 'non-inflecting-pos:名詞', 'jp-conjugation-form-v1',
           'proper', 'person', 'general_person', FALSE, %s,
-          'clean', ARRAY[]::TEXT[], 'surface-quality-v1',
+          'clean', ARRAY[]::TEXT[], 'surface-quality-v2',
           %s, %s, %s, %s
         )
         ON CONFLICT (source_id, source_entry_id) DO UPDATE SET
@@ -529,7 +529,7 @@ def deactivate_orphan_entities(cur: psycopg.Cursor[Any], source_id: int) -> Coun
         UPDATE words
         SET surface_quality_status = 'clean',
             surface_quality_flags = '{}',
-            surface_quality_policy_version = 'surface-quality-v1',
+            surface_quality_policy_version = 'surface-quality-v2',
             updated_at = NOW()
         WHERE source_id = %s
           AND active

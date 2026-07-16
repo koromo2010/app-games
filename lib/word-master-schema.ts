@@ -58,6 +58,10 @@ export async function ensureWordMasterSchema() {
             CHECK (surface_quality_status IN ('clean', 'review', 'exclude', 'unknown')),
           surface_quality_flags TEXT[] NOT NULL DEFAULT '{}',
           surface_quality_policy_version TEXT NOT NULL DEFAULT '',
+          content_safety_status TEXT NOT NULL DEFAULT 'unreviewed'
+            CHECK (content_safety_status IN ('unreviewed', 'clean', 'review', 'exclude')),
+          content_safety_flags TEXT[] NOT NULL DEFAULT '{}',
+          content_safety_policy_version TEXT NOT NULL DEFAULT '',
           zipf_frequency REAL,
           embedding VECTOR,
           embedding_model TEXT,
@@ -165,6 +169,35 @@ export async function ensureWordMasterSchema() {
           END IF;
         END
         $surface_quality_constraint$
+      `;
+
+      // Deterministic exact matches reject obvious standalone sensitive words.
+      // Everything else remains unreviewed until the same LLM request that
+      // generates a Wordwolf partner also makes the safety decision.
+      await sql`
+        ALTER TABLE words
+        ADD COLUMN IF NOT EXISTS content_safety_status TEXT NOT NULL DEFAULT 'unreviewed'
+      `;
+      await sql`
+        ALTER TABLE words
+        ADD COLUMN IF NOT EXISTS content_safety_flags TEXT[] NOT NULL DEFAULT '{}'
+      `;
+      await sql`
+        ALTER TABLE words
+        ADD COLUMN IF NOT EXISTS content_safety_policy_version TEXT NOT NULL DEFAULT ''
+      `;
+      await sql`
+        DO $content_safety_constraint$
+        BEGIN
+          IF NOT EXISTS (
+            SELECT 1 FROM pg_constraint WHERE conname = 'words_content_safety_status_check'
+          ) THEN
+            ALTER TABLE words
+            ADD CONSTRAINT words_content_safety_status_check
+            CHECK (content_safety_status IN ('unreviewed', 'clean', 'review', 'exclude'));
+          END IF;
+        END
+        $content_safety_constraint$
       `;
 
       await sql`
@@ -334,6 +367,7 @@ export async function ensureWordMasterSchema() {
       await sql`CREATE INDEX IF NOT EXISTS words_form_status_idx ON words (form_status, id)`;
       await sql`CREATE INDEX IF NOT EXISTS words_person_name_status_idx ON words (person_name_status, id)`;
       await sql`CREATE INDEX IF NOT EXISTS words_surface_quality_status_idx ON words (surface_quality_status, id)`;
+      await sql`CREATE INDEX IF NOT EXISTS words_content_safety_status_idx ON words (content_safety_status, id)`;
 
       await sql`CREATE INDEX IF NOT EXISTS words_random_key_idx ON words (random_key)`;
       await sql`CREATE INDEX IF NOT EXISTS words_active_source_idx ON words (source_id, active, id)`;

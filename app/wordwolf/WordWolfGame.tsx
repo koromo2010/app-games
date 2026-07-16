@@ -16,6 +16,7 @@ import {
 import { loadPlayerRoomDefaults, savePlayerRoomDefaults } from "@/lib/game-room-defaults-client";
 import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
 import { reducedPlayerTimeLimitSeconds } from "@/lib/player-timeout-policy";
+import { normalizeWordDifficulty, type WordDifficulty } from "@/lib/word-selection-protocol";
 import { createGameTimerEventId } from "@/lib/game-timer/event";
 import {
   isValidWordWolfTopic,
@@ -184,6 +185,7 @@ type WordWolfRoomDefaults = Pick<
   | "wolfCount"
   | "topicDictionarySource"
   | "topicPairDistance"
+  | "topicDifficulty"
   | "topicHint"
 >;
 
@@ -223,6 +225,7 @@ function getDefaultRoomSettings(): WordWolfRoomDefaults {
     wolfCount: 1,
     topicDictionarySource: "llm",
     topicPairDistance: "balanced",
+    topicDifficulty: "normal",
     topicHint: "",
   };
 }
@@ -242,6 +245,7 @@ function normalizeRoomDefaults(value: unknown): WordWolfRoomDefaults {
     wolfCount: normalizeStoredWolfCount(parsed.wolfCount),
     topicDictionarySource: normalizeTopicDictionarySource(parsed.topicDictionarySource),
     topicPairDistance: normalizeTopicPairDistance(parsed.topicPairDistance),
+    topicDifficulty: normalizeWordDifficulty(parsed.topicDifficulty),
     topicHint: typeof parsed.topicHint === "string" ? parsed.topicHint.slice(0, 80) : defaults.topicHint,
   };
 }
@@ -277,6 +281,7 @@ async function saveRoomDefaultsToStore(room: Room) {
     wolfCount: room.wolfCount,
     topicDictionarySource: room.topicDictionarySource,
     topicPairDistance: room.topicPairDistance,
+    topicDifficulty: room.topicDifficulty,
     topicHint: room.topicHint,
   });
   await savePlayerRoomDefaults({
@@ -318,6 +323,7 @@ function loadRoom(code: string): Room | null {
       runoffCandidateIds: normalizeRunoffCandidateIds(room.runoffCandidateIds),
       topicDictionarySource: normalizeTopicDictionarySource(room.topicDictionarySource ?? room.topicSourceMode),
       topicPairDistance: normalizeTopicPairDistance(room.topicPairDistance ?? room.topicSourceMode),
+      topicDifficulty: normalizeWordDifficulty(room.topicDifficulty),
       topicHint: typeof room.topicHint === "string" ? room.topicHint : "",
       scores: normalizeRoomScores(room.scores),
       gamesPlayed: room.gamesPlayed ?? 0,
@@ -383,6 +389,7 @@ async function loadRoomFromStore(code: string) {
       runoffCandidateIds: normalizeRunoffCandidateIds(remoteRoom.runoffCandidateIds),
       topicDictionarySource: normalizeTopicDictionarySource(remoteRoom.topicDictionarySource ?? remoteRoom.topicSourceMode),
       topicPairDistance: normalizeTopicPairDistance(remoteRoom.topicPairDistance ?? remoteRoom.topicSourceMode),
+      topicDifficulty: normalizeWordDifficulty(remoteRoom.topicDifficulty),
       topicHint: typeof remoteRoom.topicHint === "string" ? remoteRoom.topicHint : "",
       scores: normalizeRoomScores(remoteRoom.scores),
       gamesPlayed: remoteRoom.gamesPlayed ?? 0,
@@ -416,6 +423,7 @@ async function loadActiveRoomFromStore(playerId: string) {
       runoffCandidateIds: normalizeRunoffCandidateIds(activeRoom.runoffCandidateIds),
       topicDictionarySource: normalizeTopicDictionarySource(activeRoom.topicDictionarySource ?? activeRoom.topicSourceMode),
       topicPairDistance: normalizeTopicPairDistance(activeRoom.topicPairDistance ?? activeRoom.topicSourceMode),
+      topicDifficulty: normalizeWordDifficulty(activeRoom.topicDifficulty),
       topicHint: typeof activeRoom.topicHint === "string" ? activeRoom.topicHint : "",
       scores: normalizeRoomScores(activeRoom.scores),
       gamesPlayed: activeRoom.gamesPlayed ?? 0,
@@ -497,6 +505,7 @@ function createEmptyRoom(
     topicFallbackExhausted: false,
     topicDictionarySource: defaults.topicDictionarySource,
     topicPairDistance: defaults.topicPairDistance,
+    topicDifficulty: defaults.topicDifficulty,
     topicHint: defaults.topicHint,
     clues: [],
     votes: {},
@@ -1060,6 +1069,11 @@ export function WordWolfGame() {
     void runRoomAction({ type: "update-config", config: { topicPairDistance } }, true);
   };
 
+  const setTopicDifficulty = (topicDifficulty: WordDifficulty) => {
+    if (!room || !isHost) return;
+    void runRoomAction({ type: "update-config", config: { topicDifficulty } }, true);
+  };
+
   const setTopicHint = (topicHint: string) => {
     if (!room || room.phase !== "lobby") return;
     void runRoomAction({ type: "update-config", config: { topicHint: topicHint.slice(0, 80) } }, true);
@@ -1072,6 +1086,7 @@ export function WordWolfGame() {
       roomCode: room.code,
       source: room.topicDictionarySource,
       distance: room.topicPairDistance,
+      difficulty: room.topicDifficulty,
     });
     if (forceNew) params.set("forceNew", "1");
     if (room.topicHint.trim()) params.set("hint", room.topicHint.trim().slice(0, 80));
@@ -1817,6 +1832,30 @@ export function WordWolfGame() {
                     />
                   </label>
                   <div>
+                    <p className="text-sm font-medium text-slate-700">お題の難しさ</p>
+                    <div className="mt-1 grid grid-cols-3 gap-2">
+                      {([
+                        ["easy", "かんたん"],
+                        ["normal", "普通"],
+                        ["hard", "難しい"],
+                      ] as const).map(([difficulty, label]) => (
+                        <button
+                          key={difficulty}
+                          type="button"
+                          onClick={() => setTopicDifficulty(difficulty)}
+                          aria-pressed={room.topicDifficulty === difficulty}
+                          className={`rounded-lg border px-3 py-2 text-left text-sm font-semibold ${
+                            room.topicDifficulty === difficulty
+                              ? "border-violet-500 bg-violet-50 text-violet-950 shadow-sm"
+                              : "border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
                     <p className="text-sm font-medium text-slate-700">ペアの距離</p>
                     <div className="mt-1 grid grid-cols-3 gap-2">
                       <button
@@ -2112,7 +2151,10 @@ export function WordWolfGame() {
                       settings={{
                         dictionarySource: room.topicDictionarySource,
                         pairDistance: room.topicPairDistance,
+                        difficulty: room.topicDifficulty,
                         topicHint: room.topicHint,
+                        anchorWordMasterId: room.topicAnchorWordMasterId ?? 0,
+                        anchorWord: room.topicAnchorWord ?? "",
                         playerCount: room.players.length,
                         wolfCount: wolfIds.length,
                       }}

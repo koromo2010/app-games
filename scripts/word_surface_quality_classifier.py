@@ -6,7 +6,7 @@ from __future__ import annotations
 import re
 import unicodedata
 
-SURFACE_QUALITY_POLICY_VERSION = "surface-quality-v1"
+SURFACE_QUALITY_POLICY_VERSION = "surface-quality-v2"
 
 FACILITY_SUFFIXES = (
     "高等学校",
@@ -49,6 +49,7 @@ LATIN_SCRIPT = re.compile(r"[A-Za-zＡ-Ｚａ-ｚ]")
 EMOTICON_SYMBOL = re.compile(
     r"[\(\)（）\[\]［］<>＜＞\\:：;；=＝^＾_＿@＠#＃♪☆★♡♥ωДд∀▽△▼→←↑↓]"
 )
+KANJI_ONLY = re.compile(r"[一-龯々〆ヵヶ]+")
 
 
 def normalize_surface(surface: str) -> str:
@@ -76,6 +77,7 @@ def classify_surface_quality(
     primary_part_of_speech: str,
     proper_noun_status: str,
     proper_noun_type: str | None,
+    token_count: int = 1,
 ) -> tuple[str, list[str], str]:
     """Return status, stable reason flags, and the policy version."""
     normalized = normalize_surface(surface)
@@ -97,6 +99,12 @@ def classify_surface_quality(
         flags.append("latin_script")
     if EMOTICON_SYMBOL.search(normalized):
         flags.append("emoticon_symbols")
+    if (
+        proper_noun_status != "proper"
+        and token_count >= 2
+        and not KANJI_ONLY.fullmatch(normalized)
+    ):
+        flags.append("non_kanji_compound")
 
     return (
         "exclude" if flags else "clean",

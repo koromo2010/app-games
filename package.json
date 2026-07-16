@@ -21,7 +21,18 @@
                     "word-db:source:prepare":  "python scripts/prepare-sudachidict-core.py",
                     "word-db:test-adapter":  "python -m unittest discover -s tests -p \"test_word_master_adapter.py\"",
                     "word-db:test-python":  "python -m unittest discover -s tests -p \"test_word_*.py\"",
-                    "word-db:person-enrich":  "python scripts/enrich-wikidata-person-names.py"
+                    "word-db:person-enrich":  "python scripts/enrich-wikidata-person-names.py",
+                    "word-db:safety:apply":  "python scripts/apply-word-content-safety.py",
+                    "word-db:publish":  "python scripts/upload-shared-word-catalog.py",
+                    "word-db:chive:prepare":  "python scripts/prepare-chive.py",
+                    "word-db:chive:coverage":  "python scripts/prepare-chive.py --coverage",
+                    "word-db:chive:pairs":  "python scripts/generate-chive-wordwolf-pairs.py",
+                    "word-db:synonym:prepare":  "python scripts/prepare-sudachi-synonyms.py",
+                    "word-db:synonym:coverage":  "python scripts/prepare-sudachi-synonyms.py --coverage",
+                    "word-db:synonym:filter-pairs":  "python scripts/filter-wordwolf-pairs-sudachi-synonyms.py",
+                    "word-db:wordnet:prepare":  "python scripts/prepare-japanese-wordnet.py",
+                    "word-db:wordnet:coverage":  "python scripts/prepare-japanese-wordnet.py --coverage",
+                    "word-db:wordnet:analyze-pairs":  "python scripts/analyze-wordwolf-pairs-japanese-wordnet.py"
                 },
     "dependencies":  {
                          "@neondatabase/serverless":  "^1.1.0",

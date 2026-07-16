@@ -10,6 +10,7 @@ import {
   type WordWolfTopic,
 } from "@/lib/wordwolf";
 import { redisCommand } from "@/lib/redis-store";
+import { normalizeWordDifficulty, type WordDifficulty } from "@/lib/word-selection-protocol";
 import {
   filterEligibleWordWolfTopics,
   loadTodaysExperiencedWords,
@@ -74,6 +75,7 @@ export async function loadWordWolfCatalogWords() {
 export async function findReusableWordWolfTopic(input: {
   dictionarySource: TopicDictionarySource;
   pairDistance: TopicPairDistance;
+  difficulty?: WordDifficulty;
   topicHint: string;
   playerIds: string[];
   blockedWords: string[];
@@ -93,6 +95,7 @@ export async function findReusableWordWolfTopic(input: {
       record.topic.dictionarySource === input.dictionarySource &&
       (input.dictionarySource !== "proper-noun" || isStrictProperNounTopic(record.topic)) &&
       record.topic.pairDistance === input.pairDistance &&
+      (input.dictionarySource !== "llm" || normalizeWordDifficulty(record.topic.difficulty) === normalizeWordDifficulty(input.difficulty)) &&
       getTopicWords(record.topic).every((word) => !blocked.has(word)) &&
       (!normalizedHint || normalizeTopicWord(
         `${record.topic.villageWord} ${record.topic.wolfWord} ${record.topic.reason}`,

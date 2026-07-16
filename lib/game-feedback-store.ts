@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
-import type { GameFeedbackRating, GameFeedbackRecord, GameGenerationMeta } from "@/lib/game-ai-types";
-import { normalizeGameGenerationMeta } from "@/lib/game-ai-types";
-import { redisCommand } from "@/lib/redis-store";
+import type { GameFeedbackRating, GameFeedbackRecord, GameGenerationMeta } from "./game-ai-types.ts";
+import { normalizeGameGenerationMeta } from "./game-ai-types.ts";
+import { redisCommand } from "./redis-store.ts";
+import { feedbackAdjustmentFromCounts } from "./word-selection-protocol.ts";
 
 const feedbackItemPrefix = "game-feedback:item:";
 const feedbackTaskPrefix = "game-feedback:task:";
@@ -163,4 +164,21 @@ export function formatGameFeedbackContext(records: GameFeedbackRecord[]) {
     "Prefer patterns from good examples and avoid patterns from bad examples.",
     ...rows,
   ].join("\n");
+}
+
+export function wordFamiliarityFeedbackAdjustment(
+  records: GameFeedbackRecord[],
+  word: { wordMasterId: number; surface: string },
+) {
+  const normalizedSurface = word.surface.trim().toLowerCase();
+  let familiar = 0;
+  let obscure = 0;
+  for (const record of records) {
+    const storedId = Number(record.settings.anchorWordMasterId ?? 0);
+    const storedSurface = String(record.settings.anchorWord ?? "").trim().toLowerCase();
+    if (storedId !== word.wordMasterId && storedSurface !== normalizedSurface) continue;
+    if (record.rating === "good" && record.reasonTags.includes("familiar")) familiar += 1;
+    if (record.rating === "bad" && record.reasonTags.includes("too-obscure")) obscure += 1;
+  }
+  return feedbackAdjustmentFromCounts(familiar, obscure);
 }
