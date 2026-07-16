@@ -11,6 +11,7 @@ import { clampDrawingPoint, normalizeDrawingStrokes, type DrawingPoint, type Dra
 import { fallbackAvatarColor, readPlayerSession, type PlayerSession } from "@/lib/player-session";
 import type { CanvasLayer, CanvasLayerMode, CanvasRoom } from "@/lib/canvas-room";
 import { activeCanvasLobbyStrokes } from "@/lib/canvas-lobby-board";
+import { canvasFeatures } from "@/lib/canvas-features";
 
 const storageKey = "canvas-prototype-board";
 const channelName = "game-fields-canvas-prototype";
@@ -31,6 +32,7 @@ export function CanvasGame() {
   const [opacity, setOpacity] = useState(1);
   const [zoom, setZoom] = useState(1);
   const [boardFullscreen, setBoardFullscreen] = useState(false);
+  const [fullscreenToolsOpen, setFullscreenToolsOpen] = useState(false);
   const [tool, setTool] = useState<"pen" | "eraser" | "eyedropper" | "fill" | "pan">("pen");
   const [rulesOpen, setRulesOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -66,11 +68,13 @@ export function CanvasGame() {
     if (!shell) return;
     try { await shell.requestFullscreen?.(); } catch { /* Fixed-position fallback remains available. */ }
     setBoardFullscreen(true);
+    setFullscreenToolsOpen(false);
   };
 
   const closeBoardFullscreen = useCallback(async () => {
     if (document.fullscreenElement) await document.exitFullscreen().catch(() => undefined);
     setBoardFullscreen(false);
+    setFullscreenToolsOpen(false);
   }, []);
 
   useEffect(() => {
@@ -208,6 +212,7 @@ export function CanvasGame() {
     .filter((stroke) => !hiddenLayerIds.has(stroke.layerId || "base"))
     .sort((left, right) => layers.findIndex((layer) => layer.id === (left.layerId || "base")) - layers.findIndex((layer) => layer.id === (right.layerId || "base")));
   const canUndo = strokes.some((stroke) => (stroke.layerId || "base") === activeLayerId && !stroke.inProgress && (session?.id ? stroke.authorId === session.id : !room));
+  const features = canvasFeatures(room ? "collaborativeRoom" : "lobbyBoard");
 
   const undo = useCallback(() => {
     if (room) { void roomRequest("PATCH", { code: room.code, action: { type: "undo", layerId: activeLayerId } }); return; }
@@ -364,11 +369,11 @@ export function CanvasGame() {
         </> : <>
           <span className="rounded bg-slate-900 px-3 py-1 font-mono font-black tracking-widest text-white">{room.code}</span>
           <span className="text-sm font-bold">{room.players.length}人：{room.players.map((player) => player.name).join("、")}</span>
-          <button disabled={roomBusy} onClick={async () => { if (room.ownerId === session?.id) { await fetch(`/api/canvas/rooms?code=${room.code}`, { method: "DELETE" }); } else { await roomRequest("PATCH", { code: room.code, action: { type: "leave" } }); } setRoom(null); }} className="ml-auto rounded-lg border px-3 py-2 text-sm font-bold xl:ml-0">{room.ownerId === session?.id ? "部屋を閉じる" : "退出"}</button>
+          <button disabled={roomBusy} onClick={async () => { if (room.ownerId === session?.id) { await fetch(`/api/canvas/rooms?code=${room.code}`, { method: "DELETE" }); } else { await roomRequest("PATCH", { code: room.code, action: { type: "leave" } }); } setRoom(null); setActiveLayerId("base"); setHiddenLayerIds(new Set()); }} className="ml-auto rounded-lg border px-3 py-2 text-sm font-bold xl:ml-0">{room.ownerId === session?.id ? "部屋を閉じる" : "退出"}</button>
         </>}
       </aside>
       <div className="min-w-0 space-y-4">
-      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-fuchsia-200 bg-white/90 p-3 shadow-lg" aria-label="レイヤー">
+      {features.layers && <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-fuchsia-200 bg-white/90 p-3 shadow-lg" aria-label="レイヤー">
         <strong className="mr-1 text-sm">レイヤー</strong>
         {layers.map((layer) => {
           const fixed = room?.layerMode === "per-player";
@@ -382,14 +387,14 @@ export function CanvasGame() {
         })}
         {(room?.layerMode !== "per-player" && (room || !session?.id)) && <button type="button" onClick={() => { if (room) void roomRequest("PATCH", { code: room.code, action: { type: "add-layer" } }); else { const layer = { id: crypto.randomUUID(), name: `レイヤー${localLayers.length + 1}`, createdAt: Date.now() }; setLocalLayers((current) => [...current, layer]); setActiveLayerId(layer.id); } }} className="rounded-lg border border-fuchsia-300 px-3 py-1.5 text-sm font-bold text-fuchsia-800">＋追加</button>}
         {room && <span className="ml-auto text-xs text-slate-500">{room.layerMode === "per-player" ? "各プレイヤー専用" : "自由に切替"}</span>}
-      </div>
+      </div>}
       <div className="rounded-2xl border border-slate-200 bg-white/90 p-3 shadow-xl shadow-slate-300/40 backdrop-blur sm:p-4">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex rounded-xl bg-slate-100 p-1" aria-label="描画ツール">
             <button type="button" aria-pressed={tool === "pen"} onClick={() => setTool("pen")} className={`rounded-lg px-4 py-2 text-sm font-black ${tool === "pen" ? "bg-slate-900 text-white" : "text-slate-600"}`}>ペン <kbd className="ml-1 opacity-60">A</kbd></button>
             <button type="button" aria-pressed={tool === "eraser"} onClick={() => setTool("eraser")} className={`rounded-lg px-4 py-2 text-sm font-black ${tool === "eraser" ? "bg-slate-900 text-white" : "text-slate-600"}`}>消しゴム <kbd className="ml-1 opacity-60">S</kbd></button>
-            <button type="button" aria-pressed={tool === "eyedropper"} onClick={() => setTool("eyedropper")} className={`rounded-lg px-3 py-2 text-sm font-black ${tool === "eyedropper" ? "bg-slate-900 text-white" : "text-slate-600"}`}>スポイト</button>
-            <button type="button" aria-pressed={tool === "fill"} onClick={() => setTool("fill")} className={`rounded-lg px-3 py-2 text-sm font-black ${tool === "fill" ? "bg-slate-900 text-white" : "text-slate-600"}`}>塗りつぶし</button>
+            {features.eyedropper && <button type="button" aria-pressed={tool === "eyedropper"} onClick={() => setTool("eyedropper")} className={`rounded-lg px-3 py-2 text-sm font-black ${tool === "eyedropper" ? "bg-slate-900 text-white" : "text-slate-600"}`}>スポイト</button>}
+            {features.fill && <button type="button" aria-pressed={tool === "fill"} onClick={() => setTool("fill")} className={`rounded-lg px-3 py-2 text-sm font-black ${tool === "fill" ? "bg-slate-900 text-white" : "text-slate-600"}`}>塗りつぶし</button>}
             {!room && <button type="button" aria-pressed={tool === "pan"} onClick={() => setTool("pan")} className={`rounded-lg px-3 py-2 text-sm font-black ${tool === "pan" ? "bg-slate-900 text-white" : "text-slate-600"}`}>✋ 移動</button>}
           </div>
           <div className="flex flex-wrap gap-1.5" aria-label="ペンの色">
@@ -401,11 +406,11 @@ export function CanvasGame() {
           </div>
           <label className="flex items-center gap-2 text-sm font-bold text-slate-600">太さ <kbd className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">C</kbd><input type="range" min="1" max="40" value={width} onChange={(event) => setWidth(Number(event.target.value))} className="w-28 accent-slate-900" /><kbd className="rounded bg-slate-100 px-1.5 py-0.5 text-xs">V</kbd><span className="w-8 text-right tabular-nums">{width}</span></label>
           <label className="flex items-center gap-2 text-sm font-bold text-slate-600">透明度 <input type="range" min="10" max="100" step="5" value={Math.round(opacity * 100)} onChange={(event) => setOpacity(Number(event.target.value) / 100)} className="w-24 accent-cyan-600" /><span className="w-10 text-right tabular-nums">{Math.round(opacity * 100)}%</span></label>
-          <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50" aria-label="表示倍率">
+          {features.zoom && <div className="flex items-center rounded-lg border border-slate-200 bg-slate-50" aria-label="表示倍率">
             <button type="button" disabled={zoom <= minimumZoom} onClick={() => changeZoom(-zoomStep)} aria-label="縮小" className="px-2.5 py-2 text-sm font-black disabled:opacity-30">−</button>
             <button type="button" onClick={() => setZoom(1)} title="100%に戻す" className="min-w-14 border-x border-slate-200 px-2 py-2 text-xs font-black tabular-nums">{Math.round(zoom * 100)}%</button>
             <button type="button" disabled={zoom >= maximumZoom} onClick={() => changeZoom(zoomStep)} aria-label="拡大" className="px-2.5 py-2 text-sm font-black disabled:opacity-30">＋</button>
-          </div>
+          </div>}
           <div className="ml-auto flex gap-2">
             <button type="button" onClick={() => setShortcutsOpen(true)} className="rounded-lg border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm font-bold text-cyan-800">⌨ ショートカット</button>
             <button type="button" disabled={!canUndo} onClick={undo} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold disabled:opacity-40">自分の一手戻す <kbd className="opacity-50">Z</kbd></button>
@@ -415,14 +420,26 @@ export function CanvasGame() {
         </div>
       </div>
 
-      {!room && <div className="flex items-center justify-between gap-2 px-1"><div><h2 className="font-black text-slate-800">みんなの落書きボード</h2><p className="text-xs font-semibold text-slate-500">通常の4倍の広さ・スクロール対応・描画は3日後に自動で消えます{!session?.id && "（ログインすると全員に共有）"}</p></div><div className="flex items-center gap-2"><span className="rounded-full bg-white/80 px-3 py-1 text-xs font-bold text-slate-600">↔ ↕ スクロール</span><button type="button" onClick={() => void openBoardFullscreen()} className="rounded-lg border border-cyan-200 bg-white px-3 py-2 text-xs font-black text-cyan-800 shadow-sm">⛶ 全画面表示</button></div></div>}
+      {!room && <div className="flex items-center justify-between gap-2 px-1"><div><h2 className="font-black text-slate-800">みんなの落書きボード</h2><p className="text-xs font-semibold text-slate-500">通常の4倍の広さ・スクロール対応・描画は3日後に自動で消えます{!session?.id && "（ログインすると全員に共有）"}</p></div><div className="flex items-center gap-2"><span className="rounded-full bg-white/80 px-3 py-1 text-xs font-bold text-slate-600">↔ ↕ スクロール</span>{features.fullscreen && <button type="button" onClick={() => void openBoardFullscreen()} className="rounded-lg border border-cyan-200 bg-white px-3 py-2 text-xs font-black text-cyan-800 shadow-sm">⛶ 全画面表示</button>}</div></div>}
       <div ref={boardShellRef} className={boardFullscreen ? "fixed inset-0 z-[100] bg-slate-950" : "relative"}>
-        {boardFullscreen && <div className="absolute right-3 top-3 z-30 flex items-center gap-2 rounded-xl border border-white/15 bg-slate-950/85 p-2 text-white shadow-xl backdrop-blur">
+        {boardFullscreen && <><div className="absolute right-3 top-3 z-30 flex items-center gap-2 rounded-xl border border-white/15 bg-slate-950/85 p-2 text-white shadow-xl backdrop-blur">
+          <button type="button" aria-expanded={fullscreenToolsOpen} onClick={() => setFullscreenToolsOpen((open) => !open)} className="rounded-lg bg-cyan-500 px-3 py-1.5 text-xs font-black text-slate-950">🎨 ツール</button>
           <button type="button" disabled={zoom <= minimumZoom} onClick={() => changeZoom(-zoomStep)} className="rounded px-2 py-1 font-black disabled:opacity-30">−</button>
           <button type="button" onClick={() => setZoom(1)} className="min-w-14 text-xs font-black tabular-nums">{Math.round(zoom * 100)}%</button>
           <button type="button" disabled={zoom >= maximumZoom} onClick={() => changeZoom(zoomStep)} className="rounded px-2 py-1 font-black disabled:opacity-30">＋</button>
           <button type="button" onClick={() => void closeBoardFullscreen()} className="ml-1 rounded-lg bg-white px-3 py-1.5 text-xs font-black text-slate-900">閉じる</button>
-        </div>}
+        </div>
+        {fullscreenToolsOpen && <div className="absolute right-3 top-16 z-30 w-[min(420px,calc(100vw-1.5rem))] rounded-2xl border border-white/20 bg-white/95 p-3 text-slate-900 shadow-2xl backdrop-blur">
+          <div className="flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1">
+            <button type="button" onClick={() => setTool("pen")} className={`rounded-lg px-3 py-2 text-xs font-black ${tool === "pen" ? "bg-slate-900 text-white" : "text-slate-600"}`}>ペン A</button>
+            <button type="button" onClick={() => setTool("eraser")} className={`rounded-lg px-3 py-2 text-xs font-black ${tool === "eraser" ? "bg-slate-900 text-white" : "text-slate-600"}`}>消しゴム S</button>
+            {features.eyedropper && <button type="button" onClick={() => setTool("eyedropper")} className={`rounded-lg px-3 py-2 text-xs font-black ${tool === "eyedropper" ? "bg-slate-900 text-white" : "text-slate-600"}`}>スポイト</button>}
+            {features.fill && <button type="button" onClick={() => setTool("fill")} className={`rounded-lg px-3 py-2 text-xs font-black ${tool === "fill" ? "bg-slate-900 text-white" : "text-slate-600"}`}>塗りつぶし</button>}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-1.5">{colors.map((option) => <button key={option} type="button" aria-label={`色 ${option}`} onClick={() => { setColor(option); setTool("pen"); }} className={`h-8 w-8 rounded-full border-2 ${color === option && tool === "pen" ? "border-slate-900 ring-2 ring-cyan-300" : "border-white"}`} style={{ backgroundColor: option }} />)}<label className="relative grid h-8 w-8 cursor-pointer place-items-center overflow-hidden rounded-full border-2 border-white bg-[conic-gradient(red,yellow,lime,aqua,blue,magenta,red)]"><input type="color" value={color} aria-label="好きな色" onChange={(event) => { setColor(event.target.value); setTool("pen"); }} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" /></label></div>
+          <label className="mt-3 flex items-center gap-2 text-xs font-bold">太さ <input type="range" min="1" max="40" value={width} onChange={(event) => setWidth(Number(event.target.value))} className="min-w-0 flex-1 accent-slate-900" /><span className="w-7 text-right tabular-nums">{width}</span></label>
+          <label className="mt-2 flex items-center gap-2 text-xs font-bold">透明度 <input type="range" min="10" max="100" step="5" value={Math.round(opacity * 100)} onChange={(event) => setOpacity(Number(event.target.value) / 100)} className="min-w-0 flex-1 accent-cyan-600" /><span className="w-10 text-right tabular-nums">{Math.round(opacity * 100)}%</span></label>
+        </div>}</>}
       <div ref={boardViewportRef} className={`${boardFullscreen ? "h-full max-h-none rounded-none border-0" : "max-h-[72vh] rounded-2xl border-4 border-white"} overflow-auto bg-white shadow-2xl shadow-slate-400/40`}>
         <div className={room ? "aspect-[4/3] min-h-[320px] w-full" : "h-[1200px] w-[1600px]"} style={{ zoom }}><DrawingCanvas strokes={visibleStrokes} layerIds={layers.filter((layer) => !hiddenLayerIds.has(layer.id)).map((layer) => layer.id)} activeLayerId={activeLayerId} color={color} width={width} opacity={opacity} tool={tool} keyboardCursor={keyboardCursorVisible ? keyboardCursor : undefined} onPointerInteraction={() => setKeyboardCursorVisible(false)} onPointerPosition={setKeyboardCursor} onColorPick={(picked) => { setColor(picked); setTool("pen"); }} onStrokeProgress={submitStrokeProgress} onPan={(deltaX, deltaY) => boardViewportRef.current?.scrollBy(deltaX, deltaY)} onStrokeComplete={submitStroke} /></div>
       </div>
