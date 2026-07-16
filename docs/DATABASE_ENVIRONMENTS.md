@@ -21,12 +21,13 @@ APP_DATABASE_URL=...
 APP_DATABASE_ENV=production|development
 VOCABULARY_DATABASE_URL=...
 REDIS_ENV=production|development
+BLOB_ENV=production|development
 UPSTASH_REDIS_REST_URL=...
 UPSTASH_REDIS_REST_TOKEN=...
 BLOB_READ_WRITE_TOKEN=...
 ```
 
-`APP_DATABASE_URL`を正本とする。既存`DATABASE_URL`等は移行中の互換読取に限る。新しい正本を使う場合、`VERCEL_ENV`、`APP_ENV`、`APP_DATABASE_ENV`が一致しなければ接続を拒否する。Redisは`REDIS_ENV`を設定した時点から同じ検査を有効にする。
+`APP_DATABASE_URL`を正本とする。既存`DATABASE_URL`等は移行中の互換読取に限る。新しい正本を使う場合、`VERCEL_ENV`、`APP_ENV`、`APP_DATABASE_ENV`が一致しなければ接続を拒否する。RedisとBlobはそれぞれ`REDIS_ENV`、`BLOB_ENV`を設定した時点から同じ検査を有効にする。
 
 ## 共通DBの安全境界
 
@@ -50,3 +51,5 @@ BLOB_READ_WRITE_TOKEN=...
 6. 抽出結果を照合後、旧候補への書込みを停止する。
 
 本番ゲームの停止を伴う一括切替は行わない。
+
+開発Redisの既存ワードウルフ・たほい屋候補は、接続変数をローカルの一時環境へ設定してから`npm run vocabulary:migrate`でdraft受付箱へ移せる。deduplication keyを使うため再実行しても重複しない。本番Redisからの移行は、開発接続を本番へ向けず、管理・batchロールを使う専用ジョブとして別途実行する。

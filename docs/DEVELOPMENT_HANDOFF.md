@@ -78,6 +78,7 @@
 - `APP_ENV`、`APP_DATABASE_URL`、`APP_DATABASE_ENV`（環境分離後のアプリDB正本と誤接続防止。旧URLは移行期間のみ）
 - `VOCABULARY_DATABASE_URL`（本番・開発共通の単語カタログ。サーバー限定）
 - `REDIS_ENV`（`production | development`。Redis誤接続防止）
+- `BLOB_ENV`（`production | development`。Blob誤接続防止）
 - `database_DATABASE_URL`（Vercel管理Neon。移行互換として標準の`DATABASE_URL`等も認識）
 - `NEXT_PUBLIC_GAME_ADS_MODE`（任意。既定`off`。`preview`は広告予定位置のレイアウト確認専用。`live`は同意管理・配信adapter・CSP・ポリシー審査完了後だけ使用）
 - 既存の `KV_*`, `REDIS_URL` も環境に設定されている場合がある

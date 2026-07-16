@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   assertAppDatabaseEnvironment,
+  assertBlobEnvironment,
   assertRuntimeEnvironmentAgreement,
   expectedAppEnvironment,
 } from "../lib/storage-environment-guard.ts";
@@ -36,6 +37,12 @@ test("PreviewでAPP_ENV=productionなら停止する", () => {
 test("Productionから開発アプリDBへの接続を停止する", () => {
   withEnvironment({ VERCEL_ENV: "production", APP_ENV: "production", APP_DATABASE_ENV: "development" }, () => {
     assert.throws(() => assertAppDatabaseEnvironment("APP_DATABASE_URL"), /APP_DATABASE_ENV_MISMATCH/);
+  });
+});
+
+test("Previewから本番Blobへの接続を停止する", () => {
+  withEnvironment({ VERCEL_ENV: "preview", APP_ENV: "development", BLOB_ENV: "production" }, () => {
+    assert.throws(() => assertBlobEnvironment(), /BLOB_ENV_MISMATCH/);
   });
 });
 

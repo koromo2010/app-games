@@ -11,6 +11,7 @@ import {
   refreshTahoiyaSourceShelf,
   type TahoiyaSourceEntry,
 } from "@/lib/tahoiya-source-library";
+import { submitDevelopmentVocabularyDraft } from "@/lib/vocabulary-draft-bridge";
 
 const catalogKey = "tahoiya:topic:catalog:v1";
 const reviewedSourceKey = "tahoiya:source-library:reviewed:v1";
@@ -351,4 +352,18 @@ export async function rememberTahoiyaTopicCandidate(topic: TahoiyaTopic, difficu
     normalizeWord(topic.word),
     JSON.stringify(seed),
   ]);
+  await submitDevelopmentVocabularyDraft({
+    kind: "definition",
+    payload: {
+      gameId: "tahoiya",
+      word: topic.word,
+      reading: topic.reading,
+      shortDefinition: topic.realDefinition,
+      note: topic.note,
+      sourceDetail: topic.sourceDetail,
+      difficulty,
+    },
+    generation: topic.generation,
+    sourceReference: normalizeWord(topic.word),
+  });
 }

@@ -24,7 +24,7 @@ export function assertRuntimeEnvironmentAgreement() {
   return configured;
 }
 
-function assertResourceEnvironment(resource: "APP_DATABASE" | "REDIS", configured: string | undefined) {
+function assertResourceEnvironment(resource: "APP_DATABASE" | "REDIS" | "BLOB", configured: string | undefined) {
   const appEnvironment = assertRuntimeEnvironmentAgreement();
   if (appEnvironment === "test") return;
   const resourceEnvironment = normalizeAppEnvironment(configured);
@@ -43,6 +43,10 @@ export function assertAppDatabaseEnvironment(configName: string) {
 
 export function assertRedisEnvironment() {
   if (process.env.REDIS_ENV) assertResourceEnvironment("REDIS", process.env.REDIS_ENV);
+}
+
+export function assertBlobEnvironment() {
+  if (process.env.BLOB_ENV) assertResourceEnvironment("BLOB", process.env.BLOB_ENV);
 }
 
 export function canWriteVocabularyDrafts() {

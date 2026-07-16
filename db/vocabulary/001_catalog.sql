@@ -94,10 +94,28 @@ CREATE TABLE vocabulary_quality_stats (
   PRIMARY KEY (subject_type, subject_id)
 );
 
+CREATE TABLE vocabulary_draft_submissions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  deduplication_key TEXT NOT NULL UNIQUE,
+  kind TEXT NOT NULL CHECK (kind IN ('word', 'definition', 'pair', 'group')),
+  payload JSONB NOT NULL CHECK (jsonb_typeof(payload) = 'object'),
+  status vocabulary_status NOT NULL DEFAULT 'draft' CHECK (status = 'draft'),
+  source_type vocabulary_source_type NOT NULL,
+  source_environment vocabulary_source_environment NOT NULL,
+  source_reference TEXT,
+  provider TEXT,
+  model TEXT,
+  prompt_version TEXT,
+  generation_batch_id UUID,
+  created_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE INDEX words_status_idx ON words(status);
 CREATE INDEX eligibility_game_enabled_idx ON word_game_eligibility(game_id, enabled) WHERE NOT manually_suspended;
 CREATE INDEX definitions_word_status_idx ON word_definitions(word_id, status);
 CREATE INDEX pairs_status_idx ON word_pairs(status);
+CREATE INDEX vocabulary_drafts_created_idx ON vocabulary_draft_submissions(created_at DESC);
 
 CREATE VIEW active_words AS SELECT * FROM words WHERE status = 'active';
 CREATE VIEW active_word_definitions AS SELECT * FROM word_definitions WHERE status = 'active';
