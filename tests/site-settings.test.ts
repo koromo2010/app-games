@@ -4,6 +4,7 @@ import { createSiteAdminToken, parseSiteAdminToken, resolveSiteAdminPassword, ve
 import { hashSiteAdminAccountPassword, isValidSiteAdminAccountPassword, isValidSiteAdminEmail, normalizeSiteAdminEmail, verifySiteAdminAccountPassword } from "../lib/site-admin-account-core.ts";
 import { defaultSiteSettings, isSiteIconUrl, normalizeSiteSettings, validateSiteSettingsInput } from "../lib/site-settings.ts";
 import { isPngImage, isSiteIconImage, maxSiteIconUploadBytes } from "../lib/site-icon-image.ts";
+import { mergeOperationsEmailRecipients } from "../lib/operations-email-recipients.ts";
 
 test("site settings normalize missing and malformed saved values", () => {
   assert.deepEqual(normalizeSiteSettings(null), defaultSiteSettings);
@@ -40,6 +41,13 @@ test("site admin accounts normalize identities and verify scrypt password hashes
   const hash = hashSiteAdminAccountPassword("long-password", "test-salt");
   assert.equal(verifySiteAdminAccountPassword("long-password", "test-salt", hash), true);
   assert.equal(verifySiteAdminAccountPassword("wrong-password", "test-salt", hash), false);
+});
+
+test("operations email recipients merge environment and selected administrators without duplicates", () => {
+  assert.deepEqual(
+    mergeOperationsEmailRecipients("Ops@example.com, backup@example.com", ["ops@example.com", "admin@example.com", "invalid"]),
+    ["ops@example.com", "backup@example.com", "admin@example.com"],
+  );
 });
 
 test("site icon validation checks content signatures and limits", () => {

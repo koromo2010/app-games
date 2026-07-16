@@ -46,10 +46,14 @@ export async function ensurePostgresSchema() {
           email TEXT PRIMARY KEY,
           password_hash TEXT NOT NULL,
           password_salt TEXT NOT NULL,
+          receive_alerts BOOLEAN NOT NULL DEFAULT FALSE,
+          receive_contacts BOOLEAN NOT NULL DEFAULT FALSE,
           created_at BIGINT NOT NULL,
           updated_at BIGINT NOT NULL
         )
       `;
+      await sql`ALTER TABLE site_admin_accounts ADD COLUMN IF NOT EXISTS receive_alerts BOOLEAN NOT NULL DEFAULT FALSE`;
+      await sql`ALTER TABLE site_admin_accounts ADD COLUMN IF NOT EXISTS receive_contacts BOOLEAN NOT NULL DEFAULT FALSE`;
       await sql`CREATE INDEX IF NOT EXISTS site_admin_accounts_updated_at_idx ON site_admin_accounts (updated_at DESC)`;
     })().catch((error) => {
       schemaPromise = null;

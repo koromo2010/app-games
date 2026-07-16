@@ -13,7 +13,12 @@ export async function POST(request: Request) {
   if (!category || !email || !message || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return Response.json({ error: "Required fields are missing" }, { status: 400 });
   try {
     const contact = await saveContactMessage({ category, name, email: email.toLocaleLowerCase("en-US"), message });
-    await sendOperationsAlertEmail({ subject: `【GAME FIELDS】お問い合わせ ${category}`, lines: [`ID: ${contact.id}`, `Name: ${name || "未入力"}`, `Email: ${email}`, "", message] }).catch(() => undefined);
+    await sendOperationsAlertEmail({
+      audience: "contacts",
+      replyTo: email,
+      subject: `【GAME FIELDS】お問い合わせ ${category}`,
+      lines: [`ID: ${contact.id}`, `Name: ${name || "未入力"}`, `Email: ${email}`, "", message],
+    }).catch(() => undefined);
     return Response.json({ contact }, { status: 201 });
   } catch { return Response.json({ error: "Contact could not be saved" }, { status: 503 }); }
 }

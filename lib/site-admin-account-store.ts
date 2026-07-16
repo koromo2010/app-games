@@ -12,14 +12,20 @@ import {
 
 export type SiteAdminAccountSummary = {
   email: string;
+  receiveAlerts: boolean;
+  receiveContacts: boolean;
   createdAt: number;
   updatedAt: number;
 };
+
+export type SiteAdminNotificationKind = "alerts" | "contacts";
 
 type SiteAdminAccountRow = {
   email: string;
   password_hash: string;
   password_salt: string;
+  receive_alerts: boolean;
+  receive_contacts: boolean;
   created_at: string | number;
   updated_at: string | number;
 };
@@ -31,22 +37,28 @@ function requireStore() {
   if (!isPostgresConfigured()) throw new Error("SITE_ADMIN_ACCOUNTS_STORE_NOT_CONFIGURED");
 }
 
-function summary(row: Pick<SiteAdminAccountRow, "email" | "created_at" | "updated_at">): SiteAdminAccountSummary {
-  return { email: row.email, createdAt: Number(row.created_at), updatedAt: Number(row.updated_at) };
+function summary(row: Pick<SiteAdminAccountRow, "email" | "receive_alerts" | "receive_contacts" | "created_at" | "updated_at">): SiteAdminAccountSummary {
+  return {
+    email: row.email,
+    receiveAlerts: Boolean(row.receive_alerts),
+    receiveContacts: Boolean(row.receive_contacts),
+    createdAt: Number(row.created_at),
+    updatedAt: Number(row.updated_at),
+  };
 }
 
 export async function listSiteAdminAccounts() {
   requireStore();
   await ensurePostgresSchema();
   const rows = await getPostgresClient()`
-    SELECT email, created_at, updated_at
+    SELECT email, receive_alerts, receive_contacts, created_at, updated_at
     FROM site_admin_accounts
     ORDER BY created_at ASC
-  ` as Array<Pick<SiteAdminAccountRow, "email" | "created_at" | "updated_at">>;
+  ` as Array<Pick<SiteAdminAccountRow, "email" | "receive_alerts" | "receive_contacts" | "created_at" | "updated_at">>;
   return rows.map(summary);
 }
 
-export async function saveSiteAdminAccount(emailInput: string, password: string) {
+export async function saveSiteAdminAccount(emailInput: string, password: string, subscriptions: { receiveAlerts: boolean; receiveContacts: boolean }) {
   requireStore();
   const email = normalizeSiteAdminEmail(emailInput);
   if (!isValidSiteAdminEmail(email)) throw new Error("SITE_ADMIN_EMAIL_INVALID");
@@ -64,15 +76,42 @@ export async function saveSiteAdminAccount(emailInput: string, password: string)
   const salt = randomBytes(16).toString("hex");
   const passwordHash = hashSiteAdminAccountPassword(password, salt);
   const rows = await sql`
-    INSERT INTO site_admin_accounts (email, password_hash, password_salt, created_at, updated_at)
-    VALUES (${email}, ${passwordHash}, ${salt}, ${now}, ${now})
+    INSERT INTO site_admin_accounts (email, password_hash, password_salt, receive_alerts, receive_contacts, created_at, updated_at)
+    VALUES (${email}, ${passwordHash}, ${salt}, ${subscriptions.receiveAlerts}, ${subscriptions.receiveContacts}, ${now}, ${now})
     ON CONFLICT (email) DO UPDATE SET
       password_hash = EXCLUDED.password_hash,
       password_salt = EXCLUDED.password_salt,
+      receive_alerts = EXCLUDED.receive_alerts,
+      receive_contacts = EXCLUDED.receive_contacts,
       updated_at = EXCLUDED.updated_at
-    RETURNING email, created_at, updated_at
-  ` as Array<Pick<SiteAdminAccountRow, "email" | "created_at" | "updated_at">>;
+    RETURNING email, receive_alerts, receive_contacts, created_at, updated_at
+  ` as Array<Pick<SiteAdminAccountRow, "email" | "receive_alerts" | "receive_contacts" | "created_at" | "updated_at">>;
   return summary(rows[0]!);
+}
+
+export async function updateSiteAdminAccountSubscriptions(emailInput: string, subscriptions: { receiveAlerts: boolean; receiveContacts: boolean }) {
+  requireStore();
+  const email = normalizeSiteAdminEmail(emailInput);
+  if (!isValidSiteAdminEmail(email)) throw new Error("SITE_ADMIN_EMAIL_INVALID");
+  await ensurePostgresSchema();
+  const rows = await getPostgresClient()`
+    UPDATE site_admin_accounts
+    SET receive_alerts = ${subscriptions.receiveAlerts}, receive_contacts = ${subscriptions.receiveContacts}, updated_at = ${Date.now()}
+    WHERE email = ${email}
+    RETURNING email, receive_alerts, receive_contacts, created_at, updated_at
+  ` as Array<Pick<SiteAdminAccountRow, "email" | "receive_alerts" | "receive_contacts" | "created_at" | "updated_at">>;
+  if (!rows[0]) throw new Error("SITE_ADMIN_ACCOUNT_NOT_FOUND");
+  return summary(rows[0]);
+}
+
+export async function listSiteAdminNotificationEmails(kind: SiteAdminNotificationKind) {
+  requireStore();
+  await ensurePostgresSchema();
+  const sql = getPostgresClient();
+  const rows = kind === "contacts"
+    ? await sql`SELECT email FROM site_admin_accounts WHERE receive_contacts = TRUE ORDER BY created_at ASC`
+    : await sql`SELECT email FROM site_admin_accounts WHERE receive_alerts = TRUE ORDER BY created_at ASC`;
+  return (rows as Array<{ email: string }>).map((row) => row.email);
 }
 
 export async function verifySiteAdminAccount(emailInput: string, password: string) {
