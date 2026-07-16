@@ -50,6 +50,11 @@ export const rateLimitPolicies = {
     ip: { limit: 40, windowMs: tenMinutes },
     player: { limit: 12, windowMs: tenMinutes },
   },
+  adminAuth: {
+    id: "admin-auth",
+    ip: { limit: 30, windowMs: tenMinutes },
+    identity: { limit: 12, windowMs: tenMinutes },
+  },
   avatarUpload: {
     id: "avatar-upload",
     ip: { limit: 150, windowMs: tenMinutes },

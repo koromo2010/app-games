@@ -3,10 +3,12 @@ import { clearSiteAdminCookie, isSiteAdminConfigurationError, requireSiteAdminSe
 import { resolveSiteAdminPassword, verifySiteAdminPassword } from "@/lib/site-admin-auth-core";
 import { createRequestTelemetry } from "@/lib/observability";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
+import { verifySiteAdminAccount } from "@/lib/site-admin-account-store";
 import { validateSiteSettingsInput } from "@/lib/site-settings";
 import { loadSiteSettings, saveSiteSettings } from "@/lib/site-settings-store";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 function authError(error: unknown) {
   if (error instanceof Error && error.message === "SITE_ADMIN_AUTH_REQUIRED") return Response.json({ error: "ADMIN_AUTH_REQUIRED" }, { status: 401 });
@@ -25,24 +27,32 @@ export async function GET() {
 
 export async function POST(request: Request) {
   const telemetry = createRequestTelemetry(request, "/api/admin/site-settings", { operation: "site-admin-login" });
-  const limited = await rateLimitResponseFor(request, rateLimitPolicies.accessAuth);
-  if (limited) return limited;
   try {
-    const body = await request.json() as { password?: unknown };
+    const body = await request.json() as { email?: unknown; password?: unknown };
+    const email = typeof body.email === "string" ? body.email.trim() : "";
     const password = typeof body.password === "string" ? body.password : "";
+    const limited = await rateLimitResponseFor(request, rateLimitPolicies.adminAuth, { identity: email || "master" });
+    if (limited) return limited;
     const configuredPassword = resolveSiteAdminPassword(process.env);
     if (!configuredPassword) {
       telemetry.reject("auth.access", 503, { action: "site-admin-login", errorCode: "ADMIN_AUTH_NOT_CONFIGURED" });
       return Response.json({ error: "SITE_ADMIN_PASSWORD_NOT_CONFIGURED" }, { status: 503 });
     }
-    if (!verifySiteAdminPassword(password, configuredPassword)) {
+    const authenticated = email
+      ? await verifySiteAdminAccount(email, password)
+      : verifySiteAdminPassword(password, configuredPassword);
+    if (!authenticated) {
       telemetry.reject("auth.access", 401, { action: "site-admin-login", errorCode: "INVALID_CREDENTIAL" });
-      return Response.json({ error: "INVALID_ADMIN_PASSWORD" }, { status: 401 });
+      return Response.json({ error: "INVALID_ADMIN_CREDENTIALS" }, { status: 401 });
     }
     await setSiteAdminCookie();
     telemetry.success("auth.access", { action: "site-admin-login" });
     return Response.json({ settings: await loadSiteSettings() });
   } catch (error) {
+    if (error instanceof Error && error.message === "SITE_ADMIN_ACCOUNTS_STORE_NOT_CONFIGURED") {
+      telemetry.reject("auth.access", 503, { action: "site-admin-login", errorCode: error.message });
+      return Response.json({ error: error.message }, { status: 503 });
+    }
     telemetry.responseError("auth.access", error, 400, { action: "site-admin-login" });
     return Response.json({ error: "INVALID_REQUEST" }, { status: 400 });
   }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createSiteAdminToken, parseSiteAdminToken, resolveSiteAdminPassword, verifySiteAdminPassword } from "../lib/site-admin-auth-core.ts";
+import { hashSiteAdminAccountPassword, isValidSiteAdminAccountPassword, isValidSiteAdminEmail, normalizeSiteAdminEmail, verifySiteAdminAccountPassword } from "../lib/site-admin-account-core.ts";
 import { defaultSiteSettings, isSiteIconUrl, normalizeSiteSettings, validateSiteSettingsInput } from "../lib/site-settings.ts";
 import { isPngImage, isSiteIconImage, maxSiteIconUploadBytes } from "../lib/site-icon-image.ts";
 
@@ -28,6 +29,17 @@ test("site admin tokens are signed and expire", () => {
   assert.equal(verifySiteAdminPassword("wrong", "password"), false);
   assert.equal(resolveSiteAdminPassword({ SITE_ADMIN_PASSWORD: "site", DEBUG_MODE_PASSWORD: "debug" }), "site");
   assert.equal(resolveSiteAdminPassword({ DEBUG_MODE_PASSWORD: "debug" }), "debug");
+});
+
+test("site admin accounts normalize identities and verify scrypt password hashes", () => {
+  assert.equal(normalizeSiteAdminEmail("  Admin@Example.COM "), "admin@example.com");
+  assert.equal(isValidSiteAdminEmail("admin@example.com"), true);
+  assert.equal(isValidSiteAdminEmail("not-an-email"), false);
+  assert.equal(isValidSiteAdminAccountPassword("short"), false);
+  assert.equal(isValidSiteAdminAccountPassword("long-password"), true);
+  const hash = hashSiteAdminAccountPassword("long-password", "test-salt");
+  assert.equal(verifySiteAdminAccountPassword("long-password", "test-salt", hash), true);
+  assert.equal(verifySiteAdminAccountPassword("wrong-password", "test-salt", hash), false);
 });
 
 test("site icon validation checks content signatures and limits", () => {

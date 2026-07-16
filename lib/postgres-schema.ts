@@ -41,6 +41,16 @@ export async function ensurePostgresSchema() {
       `;
       await sql`CREATE INDEX IF NOT EXISTS player_game_results_player_finished_idx ON player_game_results (player_id, finished_at DESC)`;
       await sql`CREATE INDEX IF NOT EXISTS player_game_results_player_game_finished_idx ON player_game_results (player_id, game_type, finished_at DESC)`;
+      await sql`
+        CREATE TABLE IF NOT EXISTS site_admin_accounts (
+          email TEXT PRIMARY KEY,
+          password_hash TEXT NOT NULL,
+          password_salt TEXT NOT NULL,
+          created_at BIGINT NOT NULL,
+          updated_at BIGINT NOT NULL
+        )
+      `;
+      await sql`CREATE INDEX IF NOT EXISTS site_admin_accounts_updated_at_idx ON site_admin_accounts (updated_at DESC)`;
     })().catch((error) => {
       schemaPromise = null;
       throw error;
