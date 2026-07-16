@@ -6,6 +6,7 @@ import { defaultSiteSettings, isSiteIconUrl, normalizeSiteSettings, validateSite
 import { isPngImage, isSiteIconImage, maxSiteIconUploadBytes } from "../lib/site-icon-image.ts";
 import { mergeOperationsEmailRecipients } from "../lib/operations-email-recipients.ts";
 import { siteAdminWebAuthnConfiguration } from "../lib/site-admin-passkey-core.ts";
+import { installRuntimeHyperparameterOverrides, runtimeHyperparameterNumber, validateRuntimeHyperparameterPatch } from "../lib/runtime-hyperparameters-core.ts";
 
 test("site settings normalize missing and malformed saved values", () => {
   assert.deepEqual(normalizeSiteSettings(null), defaultSiteSettings);
@@ -49,6 +50,17 @@ test("site admin passkeys accept both production origins", () => {
     "https://admin.example.com",
     "https://backup.example.com",
   ]);
+});
+
+test("runtime hyperparameters validate ranges and can return to defaults", () => {
+  const accepted = validateRuntimeHyperparameterPatch({ "code-points": 8, "common-storage-alert": null });
+  assert.equal(accepted.ok, true);
+  assert.deepEqual(validateRuntimeHyperparameterPatch({ "code-points": 31 }), { ok: false, error: "INVALID_HYPERPARAMETER_VALUE" });
+  assert.deepEqual(validateRuntimeHyperparameterPatch({ unknown: 1 }), { ok: false, error: "UNKNOWN_HYPERPARAMETER" });
+  installRuntimeHyperparameterOverrides({ "code-points": 8 });
+  assert.equal(runtimeHyperparameterNumber("code-points"), 8);
+  installRuntimeHyperparameterOverrides({});
+  assert.equal(runtimeHyperparameterNumber("code-points"), 5);
 });
 
 test("site admin accounts normalize identities and verify scrypt password hashes", () => {

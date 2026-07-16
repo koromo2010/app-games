@@ -6,11 +6,13 @@ import { sanitizeWordWolfRoom } from "@/lib/wordwolf-room-store";
 import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
+import { loadRuntimeHyperparameterOverrides } from "@/lib/runtime-hyperparameters-store";
 
 export async function POST(request: Request) {
   const telemetry = createRequestTelemetry(request, "/api/game-timer/expire", { operation: "timer-expire" });
   let logFields: ObservabilityFields = {};
   try {
+    await loadRuntimeHyperparameterOverrides();
     const player = await requireAuthenticatedPlayer();
     const limited = await rateLimitResponseFor(request, rateLimitPolicies.roomMutation, { playerId: player.id });
     if (limited) return limited;

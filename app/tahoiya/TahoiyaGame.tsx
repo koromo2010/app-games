@@ -13,6 +13,7 @@ import { loadPlayerRoomDefaults, savePlayerRoomDefaults } from "@/lib/game-room-
 import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
 import { OnlineRoomApiError } from "@/lib/online-room-api-client";
 import type { TahoiyaAnswererMode, TahoiyaDifficulty, TahoiyaPlayMode, TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomAction, TahoiyaRoomChoice, TahoiyaTopic } from "@/lib/tahoiya-types";
+import { TAHOIYA_CORRECT_VOTE_POINTS, TAHOIYA_FOOLED_VOTE_POINTS } from "@/lib/tahoiya-scoring";
 import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "../hooks/use-online-room-polling";
 import { useRoomResultReturnGate } from "../hooks/use-room-result-return-gate";
 import { applyTahoiyaRoomAction, createTahoiyaRoom, tahoiyaRoomApi } from "./tahoiya-room-api-client";
@@ -311,6 +312,8 @@ function createEmptyRoom(
     answererMode: defaults.answererMode,
     showRealDefinitionToWriters: defaults.showRealDefinitionToWriters,
     actionTimeLimitSeconds: defaults.actionTimeLimitSeconds,
+    correctVotePoints: TAHOIYA_CORRECT_VOTE_POINTS,
+    fooledVotePoints: TAHOIYA_FOOLED_VOTE_POINTS,
     phaseStartedAt: null,
     answererId: "",
     round: 1,

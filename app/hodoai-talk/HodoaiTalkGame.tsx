@@ -31,6 +31,7 @@ import {
 } from "@/lib/player-session";
 import {
   clueHasNumber,
+  defaultHodoaiScoring,
   hodoaiGameShareText,
   hodoaiFinalMessage,
   hodoaiResultPresentation,
@@ -208,7 +209,7 @@ export function HodoaiTalkGame() {
       const host: HodoaiPlayer = { id: session.id, name: session.name, joinedAt: now, avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined, shareNameAllowed: session.shareNameAllowed === true };
       const nextRoom: HodoaiRoom = {
         code: makeRoomCode(), revision: 0, hostId: session.id, sorterId: session.id, ownerId, passphrase: passphrase.trim(), phase: "lobby", players: [host],
-        ...defaults, playerTimeouts: { [session.id]: { consecutiveTimeouts: 0, reducedTime: false } }, playerTimeoutNotice: null, debugMode: false, debugReplayEnabled: false, debugLog: [], gameNumber: 1, round: 1, theme: null, cards: [], values: {}, clues: {}, clueHistory: [], order: [], totalPoints: 0, history: [], phaseStartedAt: null, createdAt: now, updatedAt: now,
+        ...defaults, ...defaultHodoaiScoring, playerTimeouts: { [session.id]: { consecutiveTimeouts: 0, reducedTime: false } }, playerTimeoutNotice: null, debugMode: false, debugReplayEnabled: false, debugLog: [], gameNumber: 1, round: 1, theme: null, cards: [], values: {}, clues: {}, clueHistory: [], order: [], totalPoints: 0, history: [], phaseStartedAt: null, createdAt: now, updatedAt: now,
       };
       const data = await createHodoaiRoom(nextRoom, session.id);
       setRoom(data.room);

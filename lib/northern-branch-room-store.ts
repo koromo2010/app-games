@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { applyNorthernAction, createNorthernGame } from "@/lib/northern-branch-game";
+import { applyNorthernAction, createNorthernGame, northernRules } from "@/lib/northern-branch-game";
 import { isMultiplayerRoomExpired, multiplayerRoomExpiryArgs, multiplayerRoomTtlSeconds } from "@/lib/multiplayer-room-lifecycle";
 import { redisCommand } from "@/lib/redis-store";
 import { recordNorthernBranchGameResults } from "@/lib/player-stats-store";
@@ -69,7 +69,15 @@ function normalizeGame(value: unknown, playerIds: Set<string>): NorthernGameStat
   if (!Array.isArray(game.players) || game.players.length < 2) return null;
   if (game.players.some((player) => !playerIds.has(player.id))) return null;
   if (!Array.isArray(game.offers) || !Array.isArray(game.offerDeck) || !Array.isArray(game.discard) || !Array.isArray(game.log)) return null;
-  return game;
+  const storedRules = game.rules && typeof game.rules === "object" ? game.rules : northernRules;
+  return {
+    ...game,
+    rules: {
+      handLimit: Number.isInteger(storedRules.handLimit) ? Math.max(3, Math.min(12, storedRules.handLimit)) : northernRules.handLimit,
+      victoryPoints: Number.isInteger(storedRules.victoryPoints) ? Math.max(5, Math.min(30, storedRules.victoryPoints)) : northernRules.victoryPoints,
+      marketSize: Number.isInteger(storedRules.marketSize) ? Math.max(3, Math.min(10, storedRules.marketSize)) : northernRules.marketSize,
+    },
+  };
 }
 
 function normalizeRoom(value: unknown): NorthernRoom | null {

@@ -46,6 +46,8 @@ export type TahoiyaRoom = PlayerTimeoutFields & {
   answererMode: TahoiyaAnswererMode;
   showRealDefinitionToWriters: boolean;
   actionTimeLimitSeconds: number;
+  correctVotePoints: number;
+  fooledVotePoints: number;
   phaseStartedAt: number | null;
   answererId: string;
   round: number;

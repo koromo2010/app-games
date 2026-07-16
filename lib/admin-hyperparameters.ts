@@ -17,6 +17,13 @@ import { unverifiedPlayerAccountRetentionMs } from "./player-account-retention.t
 import { consecutiveTimeoutLimit, reducedPlayerTimeLimitSeconds } from "./player-timeout-policy.ts";
 import { rateLimitPolicies } from "./rate-limit-core.ts";
 import { TAHOIYA_CORRECT_VOTE_POINTS, TAHOIYA_FOOLED_VOTE_POINTS } from "./tahoiya-scoring.ts";
+import {
+  runtimeHyperparameterBaseValue,
+  runtimeHyperparameterDefinition,
+  runtimeHyperparameterEffectiveValue,
+  runtimeHyperparameterOverride,
+  type RuntimeHyperparameterId,
+} from "./runtime-hyperparameters-core.ts";
 
 export type HyperparameterOrigin = "過去指定" | "コード抽出" | "追加候補";
 export type HyperparameterControl = "環境変数" | "部屋設定" | "固定値" | "未実装" | "派生値";
@@ -30,6 +37,16 @@ export type AdminHyperparameter = {
   control: HyperparameterControl;
   note: string;
   source: string;
+  editor?: {
+    value: number;
+    overrideValue: number | null;
+    defaultValue: number;
+    minimum: number;
+    maximum: number;
+    step: number;
+    unit: string;
+    applyMode: "immediate" | "next-game";
+  };
 };
 
 export type AdminHyperparameterGroup = {
@@ -55,7 +72,28 @@ function item(
   source: string,
   recommendedValue?: string,
 ): AdminHyperparameter {
-  return { id, label, currentValue, origin, control, note, source, ...(recommendedValue ? { recommendedValue } : {}) };
+  const definition = runtimeHyperparameterDefinition(id);
+  const editor = definition ? {
+    value: runtimeHyperparameterEffectiveValue(id as RuntimeHyperparameterId),
+    overrideValue: runtimeHyperparameterOverride(id),
+    defaultValue: runtimeHyperparameterBaseValue(definition),
+    minimum: definition.minimum,
+    maximum: definition.maximum,
+    step: definition.step,
+    unit: definition.unit,
+    applyMode: definition.applyMode,
+  } : undefined;
+  return {
+    id,
+    label,
+    currentValue: editor ? `${editor.value}${editor.unit}` : currentValue,
+    origin,
+    control,
+    note,
+    source,
+    ...(recommendedValue ? { recommendedValue } : {}),
+    ...(editor ? { editor } : {}),
+  };
 }
 
 function gameTitle(id: string, fallback: string) {
@@ -148,7 +186,10 @@ export function loadAdminHyperparameterCatalog(): AdminHyperparameterCatalog {
         item("scale-cards", "1人のカード枚数", `初期${defaultHodoaiConfig.cardsPerPlayer}枚・1〜5枚`, "過去指定", "部屋設定", "人数×枚数ぶんの重複しない数字を配ります。", "lib/hodoai-talk.ts"),
         item("scale-number-range", "秘密の数字範囲", "0〜120", "コード抽出", "固定値", "表示は120を上、0を下にします。", "lib/hodoai-talk.ts"),
         item("scale-sorter", "並べ替え担当", "毎ゲームランダム1人", "過去指定", "派生値", "担当者だけが並べ替えと確定を行います。", "lib/hodoai-talk.ts"),
-        item("scale-score", "逆転数による得点", "0個=3点・1個=2点・2〜3個=1点・4個以上=0点", "コード抽出", "固定値", "最終順序に残った前後逆転の数から協力得点を決めます。", "lib/hodoai-talk.ts", "プレイ結果を見て段階を再検討"),
+        item("scale-score-perfect", "完全一致の得点", "3点", "コード抽出", "固定値", "前後逆転が0組だったときの協力得点です。", "lib/hodoai-talk.ts"),
+        item("scale-score-one", "逆転1組の得点", "2点", "コード抽出", "固定値", "前後逆転が1組だったときの協力得点です。", "lib/hodoai-talk.ts"),
+        item("scale-score-few", "少数逆転の得点", "1点", "コード抽出", "固定値", "少数の前後逆転に与える協力得点です。", "lib/hodoai-talk.ts"),
+        item("scale-score-few-max", "少数逆転とみなす上限", "3組", "コード抽出", "固定値", "この組数以下を少数逆転として扱い、超えると0点です。", "lib/hodoai-talk.ts", "プレイ結果を見て段階を再検討"),
         item("scale-compact", "小型カードへ切替", `${hodoaiCompactCardThreshold}枚以上`, "追加候補", "固定値", "カードが多いときに詳細プレビュー付きの小型表示へ切り替えます。", "lib/hodoai-arrange.ts"),
         item("scale-clue-time", "ことば提出の持ち時間", "初期なし", "コード抽出", "部屋設定", "同時入力フェーズの制限時間です。", "lib/hodoai-talk.ts"),
         item("scale-arrange-time", "並べ替えの持ち時間", "初期なし", "コード抽出", "部屋設定", "並べ替え担当だけに適用する制限時間です。", "lib/hodoai-talk.ts"),

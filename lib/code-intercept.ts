@@ -1,5 +1,6 @@
 import type { GameDebugLogEntry } from "./game-debug-log.ts";
 import { onlineRoomPlayerLimits } from "./online-room-policy.ts";
+import { runtimeHyperparameterNumber } from "./runtime-hyperparameters-core.ts";
 
 export const codeInterceptGameId = "code-intercept" as const;
 export const codeInterceptMinimumPlayers = 4;
@@ -92,6 +93,7 @@ export type CodeInterceptRoom = {
   initialPoints: number;
   miscommunicationDamage: number;
   interceptionDamage: number;
+  interceptionStartsAtRound: number;
   actionTimeLimitSeconds: number;
   phaseStartedAt: number | null;
   debugMode: boolean;
@@ -225,16 +227,17 @@ export function clueGiverForRound(players: readonly CodeInterceptPlayer[], teamI
 }
 
 export function finishCodeInterceptRound(room: CodeInterceptRoom): CodeInterceptRoom {
+  const interceptionStartsAtRound = room.interceptionStartsAtRound ?? codeInterceptDefaults.interceptionStartsAtRound;
   const results = codeInterceptTeamIds.map((teamId): CodeInterceptTeamRoundResult => {
     const enemyId = otherCodeInterceptTeam(teamId);
     const team = room.teams.find((item) => item.id === teamId)!;
     const secretCode = room.secretCodes[teamId] ?? [];
     const allyAnswer = room.allyAnswers[teamId] ?? null;
-    const enemyInterceptAnswer = room.roundNumber >= codeInterceptDefaults.interceptionStartsAtRound
+    const enemyInterceptAnswer = room.roundNumber >= interceptionStartsAtRound
       ? room.interceptAnswers[enemyId] ?? null
       : null;
     const allyCorrect = codesEqual(allyAnswer, secretCode);
-    const enemyIntercepted = room.roundNumber >= codeInterceptDefaults.interceptionStartsAtRound
+    const enemyIntercepted = room.roundNumber >= interceptionStartsAtRound
       && codesEqual(enemyInterceptAnswer, secretCode);
     const miscommunicationDamage = allyCorrect ? 0 : room.miscommunicationDamage;
     const interceptionDamage = enemyIntercepted ? room.interceptionDamage : 0;
@@ -271,6 +274,15 @@ export function finishCodeInterceptRound(room: CodeInterceptRoom): CodeIntercept
     roundHistory: [...room.roundHistory, { roundNumber: room.roundNumber, codeLengthMode: room.codeLengthMode, teams: results }],
     winner,
     phaseStartedAt: Date.now(),
+  };
+}
+
+export function codeInterceptRuntimeBalance() {
+  return {
+    initialPoints: runtimeHyperparameterNumber("code-points", codeInterceptDefaults.initialPoints),
+    miscommunicationDamage: runtimeHyperparameterNumber("code-miss", codeInterceptDefaults.miscommunicationDamage),
+    interceptionDamage: runtimeHyperparameterNumber("code-intercept", codeInterceptDefaults.interceptionDamage),
+    interceptionStartsAtRound: runtimeHyperparameterNumber("code-start", codeInterceptDefaults.interceptionStartsAtRound),
   };
 }
 

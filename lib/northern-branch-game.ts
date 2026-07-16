@@ -1,8 +1,20 @@
 import { createNorthernOfferDeck, northernBuildings, northernCards, northernCardLabel, shuffle } from "@/lib/northern-branch-data";
 import type { NorthernActionResult, NorthernBuildingId, NorthernCardId, NorthernGameAction, NorthernGameState, NorthernOffer, NorthernPlayer, NorthernPlayerSeed } from "@/lib/northern-branch-types";
+import { runtimeHyperparameterNumber } from "@/lib/runtime-hyperparameters-core";
 
 const handLimit = 7;
 const victoryPoints = 10;
+const marketSize = 5;
+
+export const northernRules = { handLimit, victoryPoints, marketSize };
+
+export function northernRuntimeRules() {
+  return {
+    handLimit: runtimeHyperparameterNumber("northern-hand", northernRules.handLimit),
+    victoryPoints: runtimeHyperparameterNumber("northern-victory", northernRules.victoryPoints),
+    marketSize: runtimeHyperparameterNumber("northern-market", northernRules.marketSize),
+  };
+}
 
 function makePlayer(seed: NorthernPlayerSeed, index: number): NorthernPlayer {
   return {
@@ -17,7 +29,7 @@ function drawOffers(state: NorthernGameState): NorthernGameState {
   let deck = [...state.offerDeck];
   let discard = [...state.discard];
   const offers = [...state.offers];
-  while (offers.length < 5) {
+  while (offers.length < state.rules.marketSize) {
     if (!deck.length) {
       if (!discard.length) break;
       deck = shuffle(discard); discard = [];
@@ -28,9 +40,9 @@ function drawOffers(state: NorthernGameState): NorthernGameState {
   return { ...state, offers, offerDeck: deck, discard };
 }
 
-export function createNorthernGame(playerSeeds: NorthernPlayerSeed[]): NorthernGameState {
+export function createNorthernGame(playerSeeds: NorthernPlayerSeed[], rules = northernRuntimeRules()): NorthernGameState {
   return drawOffers({
-    status: "playing", players: playerSeeds.slice(0, 4).map(makePlayer), activePlayerIndex: 0,
+    rules, status: "playing", players: playerSeeds.slice(0, 4).map(makePlayer), activePlayerIndex: 0,
     turn: 1, mainActionUsed: false, offerDeck: createNorthernOfferDeck(), offers: [], discard: [],
     winnerId: null, log: ["北の都で商会経営を始めました。"],
   });
@@ -38,9 +50,9 @@ export function createNorthernGame(playerSeeds: NorthernPlayerSeed[]): NorthernG
 
 function result(state: NorthernGameState, ok: boolean, notice: string): NorthernActionResult {
   if (!ok) return { ok: false, state, notice };
-  const winner = state.players.find((player) => player.points >= victoryPoints);
+  const winner = state.players.find((player) => player.points >= state.rules.victoryPoints);
   if (!winner) return { ok: true, state, notice };
-  const finished = { ...state, status: "finished" as const, winnerId: winner.id, log: [`${winner.name}が10点に到達しました。`, ...state.log].slice(0, 30) };
+  const finished = { ...state, status: "finished" as const, winnerId: winner.id, log: [`${winner.name}が${state.rules.victoryPoints}点に到達しました。`, ...state.log].slice(0, 30) };
   return { ok: true, state: finished, notice: `${winner.name}の勝利です！` };
 }
 
@@ -81,11 +93,11 @@ function runBuilding(state: NorthernGameState, buildingId: NorthernBuildingId): 
   if (player.usedBuildings.includes(buildingId)) return result(state, false, "この建物は今のターンに使用済みです。");
   let hand = [...player.hand];
   let points = player.points;
-  const add = (cardId: NorthernCardId) => hand.length < handLimit ? Boolean(hand.push(cardId)) : false;
-  if (buildingId === "mine" && !add("ore")) return result(state, false, "手札が7枚です。");
-  if (buildingId === "malt-house" && !add("barley")) return result(state, false, "手札が7枚です。");
-  if (buildingId === "sawmill" && !add("wood")) return result(state, false, "手札が7枚です。");
-  if (buildingId === "stable" && !add("pig")) return result(state, false, "手札が7枚です。");
+  const add = (cardId: NorthernCardId) => hand.length < state.rules.handLimit ? Boolean(hand.push(cardId)) : false;
+  if (buildingId === "mine" && !add("ore")) return result(state, false, `手札が${state.rules.handLimit}枚です。`);
+  if (buildingId === "malt-house" && !add("barley")) return result(state, false, `手札が${state.rules.handLimit}枚です。`);
+  if (buildingId === "sawmill" && !add("wood")) return result(state, false, `手札が${state.rules.handLimit}枚です。`);
+  if (buildingId === "stable" && !add("pig")) return result(state, false, `手札が${state.rules.handLimit}枚です。`);
   if (buildingId === "recycler") {
     const next = consume(hand, { dung: 1, wood: 1 });
     if (!next) return result(state, false, "ダング1枚と木材1枚が必要です。");
@@ -121,7 +133,7 @@ export function applyNorthernAction(state: NorthernGameState, action: NorthernGa
     if (state.mainActionUsed) return result(state, false, "通常アクションは使用済みです。");
     const resources: NorthernCardId[] = ["ore", "barley", "wood", "wool", "herb", "pig", "chicken"];
     if (!resources.includes(action.cardId)) return result(state, false, "選べない資源です。");
-    if (player.hand.length >= handLimit) return result(state, false, "手札が7枚です。");
+    if (player.hand.length >= state.rules.handLimit) return result(state, false, `手札が${state.rules.handLimit}枚です。`);
     const next = log(replacePlayer({ ...state, mainActionUsed: true }, { ...player, hand: [...player.hand, action.cardId] }), `${player.name}：${northernCardLabel(action.cardId)}を入手`);
     return result(next, true, `${northernCardLabel(action.cardId)}を得ました。`);
   }
@@ -147,7 +159,7 @@ export function applyNorthernAction(state: NorthernGameState, action: NorthernGa
     const payment = indexes.reduce((sum, index) => sum + northernCards[player.hand[index]].value, 0);
     const cost = offer.kind === "product" ? northernCards[offer.cardId].value : northernBuildings[offer.buildingId].cost;
     if (payment < cost) return result(state, false, `支払価値が不足しています（必要${cost}）。`);
-    if (offer.kind === "product" && player.hand.length - indexes.length + 1 > handLimit) return result(state, false, "購入後の手札が7枚を超えます。");
+    if (offer.kind === "product" && player.hand.length - indexes.length + 1 > state.rules.handLimit) return result(state, false, `購入後の手札が${state.rules.handLimit}枚を超えます。`);
     if (offer.kind === "building" && player.buildings.includes(offer.buildingId)) return result(state, false, "同じ建物は2軒建てられません。");
     const hand = removeIndexes(player.hand, indexes);
     const nextPlayer: NorthernPlayer = offer.kind === "product"
@@ -162,7 +174,7 @@ export function applyNorthernAction(state: NorthernGameState, action: NorthernGa
   if (!state.mainActionUsed) return result(state, false, "通常アクションを1回行ってください。");
   const hand = [...player.hand];
   const hasLivestock = hand.some((id) => id === "pig" || id === "chicken");
-  const gainedDung = hasLivestock && hand.length < handLimit;
+  const gainedDung = hasLivestock && hand.length < state.rules.handLimit;
   if (gainedDung) hand.push("dung");
   const players = [...state.players];
   players[state.activePlayerIndex] = { ...player, hand, usedBuildings: [] };
@@ -171,5 +183,3 @@ export function applyNorthernAction(state: NorthernGameState, action: NorthernGa
   const next = log({ ...state, players, activePlayerIndex, turn, mainActionUsed: false }, gainedDung ? `${player.name}：家畜からダングが発生` : `${player.name}：手番終了`);
   return result(next, true, gainedDung ? "ダングを受け取り、次の人へ交代しました。" : "次の人へ交代しました。");
 }
-
-export const northernRules = { handLimit, victoryPoints };

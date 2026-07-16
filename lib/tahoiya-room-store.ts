@@ -1,7 +1,7 @@
 import { redisCommand } from "@/lib/redis-store";
 import { randomUUID } from "node:crypto";
 import type { TahoiyaAnswererMode, TahoiyaDefinitionOption, TahoiyaPhase, TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomAction, TahoiyaRoomChoice, TahoiyaTopic } from "@/lib/tahoiya-types";
-import { calculateTahoiyaRoundScores, TAHOIYA_CORRECT_VOTE_POINTS, TAHOIYA_FOOLED_VOTE_POINTS } from "@/lib/tahoiya-scoring";
+import { calculateTahoiyaRoundScores, tahoiyaRuntimeScoring, TAHOIYA_CORRECT_VOTE_POINTS, TAHOIYA_FOOLED_VOTE_POINTS } from "@/lib/tahoiya-scoring";
 import { normalizeGameGenerationMeta } from "@/lib/game-ai-types";
 import { recordTahoiyaRoundResults } from "@/lib/player-stats-store";
 import { recordTahoiyaReplay } from "@/lib/game-replay-store";
@@ -115,6 +115,8 @@ function normalizeRoom(value: unknown): TahoiyaRoom | null {
     answererMode: isAnswererMode(parsed.answererMode) ? parsed.answererMode : "random",
     showRealDefinitionToWriters: playMode === "single-answerer" && parsed.showRealDefinitionToWriters !== false,
     actionTimeLimitSeconds: normalizeCommonTimeLimit(parsed.actionTimeLimitSeconds),
+    correctVotePoints: typeof parsed.correctVotePoints === "number" && Number.isInteger(parsed.correctVotePoints) ? Math.max(0, Math.min(10, parsed.correctVotePoints)) : TAHOIYA_CORRECT_VOTE_POINTS,
+    fooledVotePoints: typeof parsed.fooledVotePoints === "number" && Number.isInteger(parsed.fooledVotePoints) ? Math.max(0, Math.min(10, parsed.fooledVotePoints)) : TAHOIYA_FOOLED_VOTE_POINTS,
     phaseStartedAt: typeof parsed.phaseStartedAt === "number" ? parsed.phaseStartedAt : null,
     answererId: typeof parsed.answererId === "string" ? parsed.answererId : "",
     round: typeof parsed.round === "number" ? Math.max(1, Math.floor(parsed.round)) : 1,
@@ -219,10 +221,10 @@ function scoreRoom(room: TahoiyaRoom) {
     const voter = room.players.find((player) => player.id === voterId);
     if (!option || !voter) continue;
     if (option.isReal) {
-      scoreLines.push(`${voter.name} が本物を当てて +${TAHOIYA_CORRECT_VOTE_POINTS}`);
+      scoreLines.push(`${voter.name} が本物を当てて +${room.correctVotePoints}`);
     } else if (option.authorId) {
       const author = room.players.find((player) => player.id === option.authorId);
-      scoreLines.push(`${author?.name ?? "Unknown"} の偽説明に票が入り +${TAHOIYA_FOOLED_VOTE_POINTS}`);
+      scoreLines.push(`${author?.name ?? "Unknown"} の偽説明に票が入り +${room.fooledVotePoints}`);
     }
   }
   for (const player of room.players) scores[player.id] = (scores[player.id] ?? 0) + (roundScores[player.id] ?? 0);
@@ -413,7 +415,7 @@ export async function createStoredTahoiyaRoom(room: unknown, actorId = "") {
   const existingRoom = await loadStoredTahoiyaRoom(normalizedRoom.code).catch(() => null);
   if (existingRoom) throw new Error("TAHOIYA_ROOM_CONFLICT");
   if (actorId && actorId !== normalizedRoom.hostId) throw new Error("TAHOIYA_ROOM_FORBIDDEN");
-  const createdRoom = { ...normalizedRoom, revision: 0, updatedAt: Date.now() };
+  const createdRoom = { ...normalizedRoom, ...tahoiyaRuntimeScoring(), revision: 0, updatedAt: Date.now() };
   const activeRoom = actorId ? await loadStoredTahoiyaPlayerActiveRoom(actorId) : null;
   if (activeRoom && activeRoom.code !== createdRoom.code) {
     if (!canMoveFromOnlineRoom("tahoiya", activeRoom)) throw new Error("TAHOIYA_PLAYER_ALREADY_ACTIVE");

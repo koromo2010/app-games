@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import registry from "@/config/game-registry.json";
 import { loadGameOperation } from "@/lib/game-operations-store";
 import { privateGameCookieMatches, privateGameCookieName } from "@/lib/private-game-access";
+import { loadRuntimeHyperparameterOverrides } from "@/lib/runtime-hyperparameters-store";
 
 function registeredGame(gameId: string) {
   return registry.find((game) => game.id === gameId);
@@ -9,6 +10,7 @@ function registeredGame(gameId: string) {
 
 async function gameAccessState(gameId: string) {
   if (!registeredGame(gameId)) return "missing" as const;
+  await loadRuntimeHyperparameterOverrides();
   const store = await cookies();
   const operation = await loadGameOperation(gameId);
   if (operation.publication === "hidden") return "hidden" as const;

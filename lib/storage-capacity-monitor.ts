@@ -3,6 +3,7 @@ import { resolveAvatarBlobStoreId, resolveAvatarBlobToken } from "@/lib/avatar-i
 import { sendOperationsAlertEmail } from "@/lib/email";
 import { getPostgresClient, isPostgresConfigured } from "@/lib/postgres-store";
 import { getRedisConfig, redisCommand } from "@/lib/redis-store";
+import { runtimeHyperparameterNumber } from "@/lib/runtime-hyperparameters-core";
 
 export type StorageService = "Neon Postgres" | "Upstash Redis" | "Vercel Blob";
 export type StorageUsageResult = { service: StorageService; usedBytes: number; capacityBytes: number | null; percent: number | null };
@@ -72,7 +73,8 @@ export type StorageUsageSnapshot = {
 export async function collectStorageUsage(): Promise<StorageUsageSnapshot> {
   const settled = await Promise.allSettled([postgresUsage(), redisUsage(), blobUsage()]);
   const results = settled.flatMap((item) => item.status === "fulfilled" && item.value ? [item.value] : []) as StorageUsageResult[];
-  const threshold = Math.max(1, Math.min(100, Number(process.env.STORAGE_ALERT_THRESHOLD_PERCENT) || 80));
+  const environmentThreshold = Math.max(1, Math.min(100, Number(process.env.STORAGE_ALERT_THRESHOLD_PERCENT) || 80));
+  const threshold = runtimeHyperparameterNumber("common-storage-alert", environmentThreshold);
   const available = new Set(results.map((item) => item.service));
   return { checkedAt: Date.now(), threshold, results, unavailable: storageServices.filter((service) => !available.has(service)) };
 }

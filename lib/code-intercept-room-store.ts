@@ -4,6 +4,7 @@ import {
   clueGiverForRound,
   codeLengthForTeam,
   codeInterceptDefaults,
+  codeInterceptRuntimeBalance,
   codeInterceptMinimumPlayers,
   codeInterceptPlayerLimit,
   codeInterceptRoomHasSpace,
@@ -195,7 +196,9 @@ function normalizeRoom(value: unknown): CodeInterceptRoom | null {
     : codeLengthMode === "fixed"
       ? normalizeCodeLengthRecord(parsed.roundCodeLengths, cardCount, fixedCodeLength)
       : normalizeCodeLengthRecord(parsed.roundCodeLengths, cardCount, fixedCodeLength, false);
-  const initialPoints = codeInterceptDefaults.initialPoints;
+  const initialPoints = typeof parsed.initialPoints === "number" && Number.isInteger(parsed.initialPoints)
+    ? Math.max(1, Math.min(30, parsed.initialPoints))
+    : codeInterceptDefaults.initialPoints;
   const winner = parsed.winner === "red" || parsed.winner === "blue" || parsed.winner === "draw" ? parsed.winner : null;
   return {
     code,
@@ -212,8 +215,9 @@ function normalizeRoom(value: unknown): CodeInterceptRoom | null {
     codeLengthMode,
     fixedCodeLength,
     initialPoints,
-    miscommunicationDamage: codeInterceptDefaults.miscommunicationDamage,
-    interceptionDamage: codeInterceptDefaults.interceptionDamage,
+    miscommunicationDamage: typeof parsed.miscommunicationDamage === "number" && Number.isInteger(parsed.miscommunicationDamage) ? Math.max(0, Math.min(10, parsed.miscommunicationDamage)) : codeInterceptDefaults.miscommunicationDamage,
+    interceptionDamage: typeof parsed.interceptionDamage === "number" && Number.isInteger(parsed.interceptionDamage) ? Math.max(0, Math.min(10, parsed.interceptionDamage)) : codeInterceptDefaults.interceptionDamage,
+    interceptionStartsAtRound: typeof parsed.interceptionStartsAtRound === "number" && Number.isInteger(parsed.interceptionStartsAtRound) ? Math.max(1, Math.min(10, parsed.interceptionStartsAtRound)) : codeInterceptDefaults.interceptionStartsAtRound,
     actionTimeLimitSeconds: normalizeCommonTimeLimit(parsed.actionTimeLimitSeconds),
     phaseStartedAt: typeof parsed.phaseStartedAt === "number" ? parsed.phaseStartedAt : null,
     debugMode: parsed.debugMode === true,
@@ -313,7 +317,7 @@ function allCluesSubmitted(room: CodeInterceptRoom) {
 
 function allAnswersSubmitted(room: CodeInterceptRoom) {
   const alliesReady = codeInterceptTeamIds.every((teamId) => Boolean(room.allyAnswers[teamId]));
-  const interceptionReady = room.roundNumber < codeInterceptDefaults.interceptionStartsAtRound
+  const interceptionReady = room.roundNumber < room.interceptionStartsAtRound
     || codeInterceptTeamIds.every((teamId) => Boolean(room.interceptAnswers[teamId]));
   return alliesReady && interceptionReady;
 }
@@ -402,7 +406,7 @@ export async function loadCodeInterceptPlayerActiveRoom(playerId: string) {
 export async function createStoredCodeInterceptRoom(value: unknown, actorId: string) {
   const room = normalizeRoom(value);
   if (!room || room.hostId !== actorId) throw new Error("INVALID_CODE_INTERCEPT_ROOM");
-  const created = resetGame({ ...room, revision: 0, gameNumber: 0, debugMode: false, debugLog: [], createdAt: Date.now(), updatedAt: Date.now() });
+  const created = resetGame({ ...room, ...codeInterceptRuntimeBalance(), revision: 0, gameNumber: 0, debugMode: false, debugLog: [], createdAt: Date.now(), updatedAt: Date.now() });
   const activeRoom = await loadCodeInterceptPlayerActiveRoom(actorId);
   if (activeRoom && activeRoom.code !== created.code) {
     if (!canMoveFromOnlineRoom("code-intercept", activeRoom)) throw new Error("CODE_INTERCEPT_PLAYER_ALREADY_ACTIVE");
@@ -529,7 +533,7 @@ export async function applyStoredCodeInterceptAction(code: string, action: CodeI
     }
     if (action.type === "submit-intercept-answer") {
       const player = targetPlayer(current, action.actorId, action.playerId);
-      if (current.phase !== "answer" || current.roundNumber < codeInterceptDefaults.interceptionStartsAtRound || current.interceptAnswers[player.teamId]) throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
+      if (current.phase !== "answer" || current.roundNumber < current.interceptionStartsAtRound || current.interceptAnswers[player.teamId]) throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
       if (!isValidCodeInterceptAnswer(action.answer, current.cardCount, codeLengthForTeam(current, otherCodeInterceptTeam(player.teamId)))) throw new Error("CODE_INTERCEPT_INVALID_ANSWER");
       const next = { ...current, interceptAnswers: { ...current.interceptAnswers, [player.teamId]: [...action.answer] } };
       return allAnswersSubmitted(next) ? finishCodeInterceptRound(next) : next;
@@ -554,7 +558,7 @@ export async function applyStoredCodeInterceptAction(code: string, action: CodeI
       const interceptAnswers = { ...current.interceptAnswers };
       codeInterceptTeamIds.forEach((teamId) => {
         allyAnswers[teamId] ??= [...(current.secretCodes[teamId] ?? [])];
-        if (current.roundNumber >= codeInterceptDefaults.interceptionStartsAtRound) interceptAnswers[teamId] ??= [...(current.secretCodes[otherCodeInterceptTeam(teamId)] ?? [])];
+        if (current.roundNumber >= current.interceptionStartsAtRound) interceptAnswers[teamId] ??= [...(current.secretCodes[otherCodeInterceptTeam(teamId)] ?? [])];
       });
       return finishCodeInterceptRound({ ...current, allyAnswers, interceptAnswers });
     }

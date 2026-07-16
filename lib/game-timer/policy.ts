@@ -10,7 +10,7 @@ export function timerHyperparameter(name: string, fallback: number, min = 0, max
 }
 
 export function commonGameTimeoutGraceMs() {
-  return timerHyperparameter("GAME_TIMEOUT_GRACE_MS", 5000, 0, 10000);
+  return runtimeHyperparameterNumber("common-timeout-grace", timerHyperparameter("GAME_TIMEOUT_GRACE_MS", 5000, 0, 10000));
 }
 
 export function getGameTimerDeadlineAt(policy: GameTimerPolicy) {
@@ -31,3 +31,4 @@ export function getGameTimerRetryAfterMs(policy: GameTimerPolicy, now = Date.now
   const expiresAt = getGameTimerExpiresAt(policy);
   return expiresAt ? Math.max(0, expiresAt - now) : 0;
 }
+import { runtimeHyperparameterNumber } from "../runtime-hyperparameters-core.ts";

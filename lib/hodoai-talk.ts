@@ -2,6 +2,7 @@ import type { GameDebugLogEntry } from "@/lib/game-debug-log";
 import { projectOrderedGameResult } from "./game-result-presentation.ts";
 import { onlineRoomPlayerLimits } from "./online-room-policy.ts";
 import type { PlayerTimeoutFields } from "./player-timeout-policy.ts";
+import { runtimeHyperparameterNumber } from "./runtime-hyperparameters-core.ts";
 
 export type HodoaiTheme = {
   id: string;
@@ -74,6 +75,10 @@ export type HodoaiRoom = HodoaiConfig & PlayerTimeoutFields & {
   clueHistory: HodoaiClueRound[];
   order: string[];
   totalPoints: number;
+  scorePerfect: number;
+  scoreOne: number;
+  scoreFew: number;
+  scoreFewMax: number;
   history: HodoaiRoundResult[];
   debugLog: GameDebugLogEntry[];
   phaseStartedAt: number | null;
@@ -225,10 +230,22 @@ export function countHodoaiInversions(order: string[], values: Record<string, nu
   return inversions;
 }
 
-export function pointsForInversions(inversions: number) {
-  if (inversions === 0) return 3;
-  if (inversions === 1) return 2;
-  if (inversions <= 3) return 1;
+export type HodoaiScoring = { scorePerfect: number; scoreOne: number; scoreFew: number; scoreFewMax: number };
+export const defaultHodoaiScoring = { scorePerfect: 3, scoreOne: 2, scoreFew: 1, scoreFewMax: 3 } as const satisfies HodoaiScoring;
+
+export function hodoaiRuntimeScoring() {
+  return {
+    scorePerfect: runtimeHyperparameterNumber("scale-score-perfect", defaultHodoaiScoring.scorePerfect),
+    scoreOne: runtimeHyperparameterNumber("scale-score-one", defaultHodoaiScoring.scoreOne),
+    scoreFew: runtimeHyperparameterNumber("scale-score-few", defaultHodoaiScoring.scoreFew),
+    scoreFewMax: runtimeHyperparameterNumber("scale-score-few-max", defaultHodoaiScoring.scoreFewMax),
+  };
+}
+
+export function pointsForInversions(inversions: number, scoring: Partial<HodoaiScoring> = defaultHodoaiScoring) {
+  if (inversions === 0) return scoring.scorePerfect ?? defaultHodoaiScoring.scorePerfect;
+  if (inversions === 1) return scoring.scoreOne ?? defaultHodoaiScoring.scoreOne;
+  if (inversions <= (scoring.scoreFewMax ?? defaultHodoaiScoring.scoreFewMax)) return scoring.scoreFew ?? defaultHodoaiScoring.scoreFew;
   return 0;
 }
 

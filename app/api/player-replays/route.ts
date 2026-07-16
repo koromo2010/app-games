@@ -7,6 +7,7 @@ import type { GameReplayGameType } from "@/lib/game-replay-types";
 import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
 import { createRequestTelemetry } from "@/lib/observability";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
+import { loadRuntimeHyperparameterOverrides } from "@/lib/runtime-hyperparameters-store";
 
 function normalizeReplayGameType(value: string | null): GameReplayGameType | "all" {
   if (value === "wordwolf" || value === "tahoiya" || value === "northern-branch" || value === "hodoai" || value === "kotoba-senpuku" || value === "nigoichi") return value;
@@ -33,6 +34,7 @@ export async function GET(request: Request) {
   const gameType = normalizeReplayGameType(url.searchParams.get("gameType"));
 
   try {
+    await loadRuntimeHyperparameterOverrides();
     const player = await requireAuthenticatedPlayer();
     if (id) {
       const replay = await getPlayerGameReplay(player.id, id);
@@ -63,6 +65,7 @@ export async function PATCH(request: Request) {
   }
 
   try {
+    await loadRuntimeHyperparameterOverrides();
     const player = await requireAuthenticatedPlayer();
     const limited = await rateLimitResponseFor(request, rateLimitPolicies.profileMutation, { playerId: player.id });
     if (limited) return limited;

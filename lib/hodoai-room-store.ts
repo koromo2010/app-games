@@ -23,6 +23,8 @@ import {
   normalizeHodoaiConfig,
   pickHodoaiTheme,
   pickRandomHodoaiSorter,
+  defaultHodoaiScoring,
+  hodoaiRuntimeScoring,
   pointsForInversions,
   shuffleHodoai,
   type HodoaiPhase,
@@ -226,6 +228,10 @@ function normalizeRoom(value: unknown): HodoaiRoom | null {
     clueHistory,
     order,
     totalPoints: typeof parsed.totalPoints === "number" ? Math.max(0, Math.floor(parsed.totalPoints)) : 0,
+    scorePerfect: typeof parsed.scorePerfect === "number" && Number.isInteger(parsed.scorePerfect) ? Math.max(0, Math.min(10, parsed.scorePerfect)) : defaultHodoaiScoring.scorePerfect,
+    scoreOne: typeof parsed.scoreOne === "number" && Number.isInteger(parsed.scoreOne) ? Math.max(0, Math.min(10, parsed.scoreOne)) : defaultHodoaiScoring.scoreOne,
+    scoreFew: typeof parsed.scoreFew === "number" && Number.isInteger(parsed.scoreFew) ? Math.max(0, Math.min(10, parsed.scoreFew)) : defaultHodoaiScoring.scoreFew,
+    scoreFewMax: typeof parsed.scoreFewMax === "number" && Number.isInteger(parsed.scoreFewMax) ? Math.max(2, Math.min(20, parsed.scoreFewMax)) : defaultHodoaiScoring.scoreFewMax,
     history,
     debugLog: normalizeGameDebugLog(parsed.debugLog),
     phaseStartedAt: typeof parsed.phaseStartedAt === "number" ? parsed.phaseStartedAt : null,
@@ -270,7 +276,7 @@ function completeClueRound(room: HodoaiRoom) {
 
 function scoreRound(room: HodoaiRoom) {
   const inversions = countHodoaiInversions(room.order, room.values);
-  const points = pointsForInversions(inversions);
+  const points = pointsForInversions(inversions, room);
   const result: HodoaiRoundResult = {
     round: room.round,
     theme: room.theme ?? hodoaiThemes[0],
@@ -471,7 +477,7 @@ export async function loadHodoaiPlayerActiveRoom(playerId: string) {
 export async function createStoredHodoaiRoom(value: unknown, actorId: string) {
   const room = normalizeRoom(value);
   if (!room || actorId !== room.hostId) throw new Error("INVALID_HODOAI_ROOM");
-  const created = { ...room, revision: 0, gameNumber: 1, phase: "lobby" as const, cards: [], values: {}, clues: {}, clueHistory: [], order: [], history: [], debugLog: [], totalPoints: 0, updatedAt: Date.now() };
+  const created = { ...room, ...hodoaiRuntimeScoring(), revision: 0, gameNumber: 1, phase: "lobby" as const, cards: [], values: {}, clues: {}, clueHistory: [], order: [], history: [], debugLog: [], totalPoints: 0, updatedAt: Date.now() };
   const activeRoom = await loadHodoaiPlayerActiveRoom(actorId);
   if (activeRoom && activeRoom.code !== created.code) {
     if (!canMoveFromOnlineRoom("hodoai", activeRoom)) throw new Error("HODOAI_PLAYER_ALREADY_ACTIVE");

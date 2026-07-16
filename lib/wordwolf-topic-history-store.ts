@@ -1,5 +1,6 @@
 import { redisCommand, redisPipeline } from "@/lib/redis-store";
 import { getTopicKey, getTopicWords, type WordWolfTopic } from "@/lib/wordwolf";
+import { runtimeHyperparameterNumber } from "@/lib/runtime-hyperparameters-core";
 
 const keyPrefix = "game-history:v3:wordwolf";
 const dayKeyTtlSeconds = 3 * 24 * 60 * 60;
@@ -23,9 +24,10 @@ function pairKey(playerId: string) {
 
 export function getWordWolfPairCooldownDays() {
   const configured = Number(process.env.WORDWOLF_PAIR_COOLDOWN_DAYS);
-  return Number.isFinite(configured) && configured >= 1 && configured <= 3650
+  const fallback = Number.isFinite(configured) && configured >= 1 && configured <= 3650
     ? Math.floor(configured)
     : defaultPairCooldownDays;
+  return runtimeHyperparameterNumber("wordwolf-pair-cooldown", fallback);
 }
 
 export async function loadTodaysExperiencedWords(playerIds: string[], now = Date.now()) {

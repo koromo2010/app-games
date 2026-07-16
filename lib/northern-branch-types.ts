@@ -69,6 +69,7 @@ export type NorthernPlayerSeed = {
 };
 
 export type NorthernGameState = {
+  rules: { handLimit: number; victoryPoints: number; marketSize: number };
   status: "setup" | "playing" | "finished";
   players: NorthernPlayer[];
   activePlayerIndex: number;

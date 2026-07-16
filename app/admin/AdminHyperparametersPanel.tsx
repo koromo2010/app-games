@@ -6,6 +6,7 @@ import type {
   HyperparameterControl,
   HyperparameterOrigin,
 } from "@/lib/admin-hyperparameters";
+import { ensureSiteAdminStepUp } from "@/lib/site-admin-passkey-client";
 
 const originStyles: Record<HyperparameterOrigin, string> = {
   "過去指定": "border-fuchsia-300/30 bg-fuchsia-300/10 text-fuchsia-100",
@@ -26,6 +27,8 @@ export function AdminHyperparametersPanel({ onAuthExpired }: { onAuthExpired: ()
   const [query, setQuery] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [savingId, setSavingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -34,13 +37,39 @@ export function AdminHyperparametersPanel({ onAuthExpired }: { onAuthExpired: ()
       const data = await response.json().catch(() => null) as { catalog?: AdminHyperparameterCatalog; error?: string } | null;
       if (response.status === 401) { onAuthExpired(); return; }
       if (!response.ok || !data?.catalog) throw new Error(data?.error || "LOAD_FAILED");
-      setCatalog(data.catalog); setMessage("");
+      setCatalog(data.catalog);
+      setDrafts(Object.fromEntries(data.catalog.groups.flatMap((group) => group.items).flatMap((item) => item.editor ? [[item.id, String(item.editor.value)]] : [])));
+      setMessage("");
     } catch {
       setMessage("ハイパラ一覧を読み込めませんでした。");
     } finally {
       setIsLoading(false);
     }
   }, [onAuthExpired]);
+
+  const saveEntry = async (id: string, value: number | null) => {
+    if (savingId) return;
+    setSavingId(id); setMessage("");
+    try {
+      await ensureSiteAdminStepUp();
+      const response = await fetch("/api/admin/hyperparameters", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ changes: { [id]: value } }),
+      });
+      const data = await response.json().catch(() => null) as { catalog?: AdminHyperparameterCatalog; error?: string } | null;
+      if (response.status === 401) { onAuthExpired(); return; }
+      if (!response.ok || !data?.catalog) throw new Error(data?.error || "SAVE_FAILED");
+      setCatalog(data.catalog);
+      setDrafts(Object.fromEntries(data.catalog.groups.flatMap((group) => group.items).flatMap((item) => item.editor ? [[item.id, String(item.editor.value)]] : [])));
+      setMessage(value === null ? "コードまたは環境変数の既定値へ戻しました。" : "ハイパラを保存しました。");
+    } catch (error) {
+      if (error instanceof Error && error.message === "ADMIN_AUTH_REQUIRED") onAuthExpired();
+      setMessage("ハイパラを保存できませんでした。入力範囲と本人確認を確かめてください。");
+    } finally {
+      setSavingId(null);
+    }
+  };
 
   useEffect(() => {
     const initial = window.setTimeout(() => void load(), 0);
@@ -71,6 +100,7 @@ export function AdminHyperparametersPanel({ onAuthExpired }: { onAuthExpired: ()
       specified: items.filter((item) => item.origin === "過去指定").length,
       candidates: items.filter((item) => item.origin === "追加候補").length,
       planned: items.filter((item) => item.control === "未実装").length,
+      editable: items.filter((item) => item.editor).length,
     };
   }, [catalog]);
 
@@ -78,8 +108,8 @@ export function AdminHyperparametersPanel({ onAuthExpired }: { onAuthExpired: ()
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-black">ハイパラ棚卸し</h2>
-          <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-400">過去に指定された値と、コードから拾った調整候補の一覧です。現在は確認用で、ここから直接値は変更しません。</p>
+          <h2 className="text-2xl font-black">ハイパラ管理</h2>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-400">安全範囲が決まっている値はここから変更できます。技術上限、部屋ごとの設定、未実装項目は引き続き閲覧専用です。</p>
         </div>
         <button type="button" onClick={() => void load()} disabled={isLoading} className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold hover:bg-white/10 disabled:opacity-40">{isLoading ? "更新中…" : "値を再取得"}</button>
       </div>
@@ -90,7 +120,7 @@ export function AdminHyperparametersPanel({ onAuthExpired }: { onAuthExpired: ()
         <SummaryCard label="掲載項目" value={totals.all} note="全体＋ゲーム別" />
         <SummaryCard label="過去に明示" value={totals.specified} note="会話・仕様で指定済み" />
         <SummaryCard label="追加候補" value={totals.candidates} note="コードから新たに抽出" />
-        <SummaryCard label="未実装" value={totals.planned} note="今後の設定化候補" />
+        <SummaryCard label="編集可能" value={totals.editable} note="再認証・監査ログ付き" />
       </section>
 
       <section className="rounded-2xl border border-white/10 bg-white/[0.05] p-4">
@@ -118,6 +148,14 @@ export function AdminHyperparametersPanel({ onAuthExpired }: { onAuthExpired: ()
                   <div className="flex flex-wrap justify-end gap-1.5"><span className={`rounded-full border px-2 py-1 text-[11px] font-bold ${originStyles[entry.origin]}`}>{entry.origin}</span><span className={`rounded-full bg-white/[0.07] px-2 py-1 text-[11px] font-bold ${controlStyles[entry.control]}`}>{entry.control}</span></div>
                 </div>
                 <p className="mt-3 text-sm leading-6 text-slate-300">{entry.note}</p>
+                {entry.editor && <div className="mt-4 rounded-xl border border-cyan-300/20 bg-cyan-300/[0.06] p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs font-black text-cyan-100">管理画面で変更可能</p><span className="rounded-full bg-black/25 px-2 py-1 text-[11px] font-bold text-slate-300">{entry.editor.applyMode === "next-game" ? "次のゲームから" : "最大5秒で反映"}</span></div>
+                  <label className="mt-3 block text-xs font-bold text-slate-300">設定値（{entry.editor.minimum}〜{entry.editor.maximum}{entry.editor.unit}）
+                    <div className="mt-1 flex items-center gap-2"><input type="number" min={entry.editor.minimum} max={entry.editor.maximum} step={entry.editor.step} value={drafts[entry.id] ?? String(entry.editor.value)} onChange={(event) => setDrafts((current) => ({ ...current, [entry.id]: event.target.value }))} className="min-w-0 flex-1 rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-base font-black text-white outline-none focus:border-cyan-300" /><span className="shrink-0 text-xs text-slate-400">{entry.editor.unit}</span></div>
+                  </label>
+                  <div className="mt-3 flex flex-wrap gap-2"><button type="button" disabled={Boolean(savingId) || !drafts[entry.id] || Number(drafts[entry.id]) < entry.editor.minimum || Number(drafts[entry.id]) > entry.editor.maximum} onClick={() => void saveEntry(entry.id, Number(drafts[entry.id]))} className="rounded-lg bg-cyan-300 px-3 py-2 text-xs font-black text-slate-950 disabled:opacity-40">{savingId === entry.id ? "保存中…" : "この値を保存"}</button><button type="button" disabled={Boolean(savingId) || entry.editor.overrideValue === null} onClick={() => void saveEntry(entry.id, null)} className="rounded-lg border border-white/15 px-3 py-2 text-xs font-bold text-slate-300 disabled:opacity-40">既定へ戻す</button></div>
+                  <p className="mt-2 text-[11px] text-slate-400">既定値：{entry.editor.defaultValue}{entry.editor.unit}{entry.editor.overrideValue !== null ? "／現在は運営上書き中" : ""}</p>
+                </div>}
                 {entry.recommendedValue && <p className="mt-3 rounded-lg border border-amber-300/20 bg-amber-300/[0.07] px-3 py-2 text-xs leading-5 text-amber-100"><span className="font-black">検討値：</span>{entry.recommendedValue}</p>}
                 <p className="mt-3 break-all font-mono text-[11px] leading-5 text-slate-500">{entry.source}</p>
               </article>
