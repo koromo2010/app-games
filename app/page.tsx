@@ -1,12 +1,19 @@
 import type { Metadata } from "next";
+import { loadSiteSettings } from "@/lib/site-settings-store";
 import { GameLobby } from "./games/GameLobby";
 
-export const metadata: Metadata = {
-  title: "オンラインゲーム広場",
-  description: "友達と遊べるワードゲームや協力ゲームを選べるGAME FIELDSの広場です。",
-  alternates: { canonical: "/" },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const settings = await loadSiteSettings();
+  return {
+    title: { absolute: settings.searchTitle },
+    description: settings.searchDescription,
+    alternates: { canonical: "/" },
+    openGraph: { title: settings.searchTitle, description: settings.searchDescription, url: "/" },
+    twitter: { title: settings.searchTitle, description: settings.searchDescription },
+  };
+}
 
-export default function HomePage() {
-  return <GameLobby />;
+export default async function HomePage() {
+  const settings = await loadSiteSettings();
+  return <GameLobby siteName={settings.siteName} />;
 }

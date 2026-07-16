@@ -7,6 +7,7 @@ Party game prototypes built with Next.js.
 ## Routes
 
 - `/games` - game lobby
+- `/admin` - password-protected site settings for the site name, search title/description, and favicon
 - `/users/me` - signed-in player's private stats, replay, favorites, and sharing page
 - `/wordwolf` - Wordwolf prototype
 - `/tahoiya` - Tahoiya prototype
@@ -21,6 +22,10 @@ Party game prototypes built with Next.js.
 ## Private game access
 
 Set the server-side environment variable `PRIVATE_GAME_ACCESS_KEY`. Entering the same value in the unlabeled access field on the game lobby reveals private-use game cards and issues a 30-day HttpOnly access cookie.
+
+## Site administration
+
+Set the server-only `SITE_ADMIN_PASSWORD`, then open `/admin`. When it is not configured, the existing `DEBUG_MODE_PASSWORD` is accepted as a compatibility fallback. The management screen stores the site name, homepage search title, search-description candidate, and uploaded favicon in Redis/Vercel Blob. The admin session uses a separate signed HttpOnly cookie and expires after 12 hours. Search engines may rewrite the displayed snippet for a particular query.
 
 ## Shared game LLM gateway
 

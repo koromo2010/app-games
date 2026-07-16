@@ -120,7 +120,7 @@ function activeRoomPhaseLabel(phase: ActiveWordWolfRoom["phase"]) {
   return "結果表示";
 }
 
-export function GameLobby() {
+export function GameLobby({ siteName = "GAME FIELDS" }: { siteName?: string }) {
   const [name, setName] = useState("");
   const [playerId, setPlayerId] = useState("");
   const [password, setPassword] = useState("");
@@ -502,7 +502,7 @@ export function GameLobby() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                <h1 className="text-3xl font-black tracking-normal sm:text-4xl">GAME FIELDS</h1>
+                <h1 className="text-3xl font-black tracking-normal sm:text-4xl">{siteName}</h1>
                 <p className="text-[11px] font-bold tracking-[0.14em] text-cyan-200">ゲームフィールド</p>
               </div>
               <p className="mt-1 max-w-2xl text-sm leading-5 text-slate-200">

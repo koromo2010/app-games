@@ -32,6 +32,7 @@
 | LLM・利用者APIキー・課金元 | `DEVELOPMENT_HANDOFF.md` 3〜4章 | `lib/game-llm.ts`、`lib/llm-access.ts`、`lib/llm-model.ts` |
 | 戦績・レーティング | `DEVELOPMENT_HANDOFF.md` 5章 | `lib/player-stats-store.ts`、`lib/game-rating.ts` |
 | マイページ・対戦プレイバック・お気に入り・共有 | `GAME_REPLAYS.md` | `lib/game-replay-store.ts`、`app/api/player-replays/route.ts`、`app/users/me` |
+| サイト名・favicon・検索用メタ情報の管理 | `SITE_ADMIN.md` | `app/admin`、`app/api/admin`、`lib/site-settings-store.ts` |
 | 過去スレッドの要望・判断経緯 | `DEVELOPMENT_THREAD_LOG.md`（参考ログ） | 現在仕様は必ず該当資料とコードで再確認する |
 | 公開・引き継ぎ更新 | `DEVELOPMENT_HANDOFF.md` 9〜10章 | `git diff`、Vercelの対象デプロイ |
 
