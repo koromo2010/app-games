@@ -56,6 +56,15 @@ export async function ensurePostgresSchema() {
       await sql`ALTER TABLE site_admin_accounts ADD COLUMN IF NOT EXISTS receive_contacts BOOLEAN NOT NULL DEFAULT FALSE`;
       await sql`CREATE INDEX IF NOT EXISTS site_admin_accounts_updated_at_idx ON site_admin_accounts (updated_at DESC)`;
       await sql`
+        CREATE TABLE IF NOT EXISTS player_debug_access_grants (
+          player_id TEXT PRIMARY KEY REFERENCES player_accounts(player_id) ON DELETE CASCADE,
+          granted_by_email TEXT,
+          created_at BIGINT NOT NULL,
+          updated_at BIGINT NOT NULL
+        )
+      `;
+      await sql`CREATE INDEX IF NOT EXISTS player_debug_access_grants_updated_at_idx ON player_debug_access_grants (updated_at DESC)`;
+      await sql`
         CREATE TABLE IF NOT EXISTS site_admin_passkeys (
           credential_id TEXT PRIMARY KEY,
           admin_email TEXT NOT NULL REFERENCES site_admin_accounts(email) ON DELETE CASCADE,

@@ -3,6 +3,7 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { siteAdminAccountMaximumCount, siteAdminPasswordMaximumLength, siteAdminPasswordMinimumLength } from "@/lib/site-admin-account-constants";
 import { addSiteAdminPasskey, ensureSiteAdminStepUp } from "@/lib/site-admin-passkey-client";
+import { PlayerDebugAccessPanel } from "./PlayerDebugAccessPanel";
 
 type SiteAdminAccount = {
   email: string;
@@ -181,6 +182,7 @@ export function AdminAccountsPanel({ onAuthExpired, recoveryMode, currentEmail }
             ))}
           </ul>
         )}
+        <PlayerDebugAccessPanel onAuthExpired={onAuthExpired} recoveryMode={recoveryMode} />
       </section>
 
       <aside className="space-y-5 lg:sticky lg:top-6 lg:self-start">

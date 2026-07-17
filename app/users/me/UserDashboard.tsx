@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type MouseEvent } from "react";
+import { useEffect, useState, type FormEvent, type MouseEvent } from "react";
 import { savePersistentPlayerSession, type PlayerSession } from "@/lib/player-session";
 import type { PlayerGameResult, PlayerStatsResponse } from "@/lib/player-stats-store";
 import { GameReplayPanel } from "@/app/components/GameReplayPanel";
@@ -31,6 +31,13 @@ function gameEntry(gameType: PlayerGameResult["gameType"]) {
   return games.find((game) => game.id === gameType);
 }
 
+function recoveryEmailErrorMessage(code: string | undefined) {
+  if (code === "EMAIL_INVALID") return "メールアドレスの形式を確認してください。";
+  if (code === "EMAIL_ALREADY_EXISTS") return "そのメールアドレスは別のプレイヤーアカウントで使われています。";
+  if (code === "INVALID_CREDENTIALS") return "現在のパスワードが正しくありません。";
+  return "復旧用メールアドレスを保存できませんでした。";
+}
+
 export function UserDashboard() {
   const [session, setSession] = useState<PlayerSession | null>(null);
   const [stats, setStats] = useState<PlayerStatsResponse | null>(null);
@@ -40,6 +47,10 @@ export function UserDashboard() {
   const [isAvatarEditorOpen, setIsAvatarEditorOpen] = useState(false);
   const [isShareNameSaving, setIsShareNameSaving] = useState(false);
   const [shareNameMessage, setShareNameMessage] = useState("");
+  const [recoveryEmail, setRecoveryEmail] = useState("");
+  const [recoveryEmailPassword, setRecoveryEmailPassword] = useState("");
+  const [isRecoveryEmailSaving, setIsRecoveryEmailSaving] = useState(false);
+  const [recoveryEmailMessage, setRecoveryEmailMessage] = useState("");
   const [showAccountDeletion, setShowAccountDeletion] = useState(false);
   const [deleteAccountPassword, setDeleteAccountPassword] = useState("");
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
@@ -116,6 +127,33 @@ export function UserDashboard() {
     return () => controller.abort();
   }, []);
 
+  const updateRecoveryEmail = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!session || isRecoveryEmailSaving) return;
+    setIsRecoveryEmailSaving(true);
+    setRecoveryEmailMessage("");
+    try {
+      const response = await fetch("/api/player-account", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "update-email", name: session.name, password: recoveryEmailPassword, email: recoveryEmail }),
+      });
+      const data = await response.json().catch(() => null) as { session?: PlayerSession; error?: string } | null;
+      if (!response.ok || !data?.session) {
+        setRecoveryEmailMessage(recoveryEmailErrorMessage(data?.error));
+        return;
+      }
+      applyPlayerSession(data.session);
+      setRecoveryEmail("");
+      setRecoveryEmailPassword("");
+      setRecoveryEmailMessage("復旧用メールアドレスを保存しました。");
+    } catch {
+      setRecoveryEmailMessage("通信に失敗しました。もう一度試してください。");
+    } finally {
+      setIsRecoveryEmailSaving(false);
+    }
+  };
+
   const deleteAccount = async () => {
     if (!session || !window.confirm("アカウント、戦績、設定を削除します。この操作は取り消せません。削除しますか？")) return;
     setIsDeletingAccount(true);
@@ -179,6 +217,19 @@ export function UserDashboard() {
       </header>
 
       <div className="mx-auto max-w-5xl px-4 py-6">
+        <section className="mb-5 rounded-lg border border-violet-100 bg-violet-50 p-4" aria-labelledby="recovery-email-heading">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div><p className="text-xs font-semibold uppercase text-violet-700">Account</p><h2 id="recovery-email-heading" className="text-lg font-black text-slate-950">復旧用メール</h2></div>
+            <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${session?.hasRecoveryEmail ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`}>{session?.hasRecoveryEmail ? "登録済み" : "未登録"}</span>
+          </div>
+          <p className="mt-2 text-xs leading-5 text-slate-600">パスワードを忘れた場合の再設定に使用します。管理者と同じメールの場合はデバッグ権限も自動付与されます。変更には現在のパスワードが必要です。</p>
+          <form onSubmit={updateRecoveryEmail} className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
+            <label className="text-sm font-bold text-slate-700">メールアドレス<input value={recoveryEmail} onChange={(event) => setRecoveryEmail(event.target.value)} type="email" autoComplete="email" required className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-950 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20" placeholder="you@example.com" /></label>
+            <label className="text-sm font-bold text-slate-700">現在のパスワード<input value={recoveryEmailPassword} onChange={(event) => setRecoveryEmailPassword(event.target.value)} type="password" autoComplete="current-password" required className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-950 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20" /></label>
+            <button type="submit" disabled={isRecoveryEmailSaving || !recoveryEmail.trim() || !recoveryEmailPassword} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-violet-500 disabled:bg-slate-300">{isRecoveryEmailSaving ? "保存中…" : "登録・変更"}</button>
+          </form>
+          {recoveryEmailMessage && <p className="mt-2 text-xs font-semibold text-violet-800" role="status">{recoveryEmailMessage}</p>}
+        </section>
         <section className="mb-5 rounded-lg border border-cyan-100 bg-cyan-50 p-4" aria-labelledby="share-privacy-heading">
           <p className="text-xs font-semibold uppercase text-cyan-700">Privacy</p>
           <h2 id="share-privacy-heading" className="text-lg font-black text-slate-950">共有ログの表示名</h2>

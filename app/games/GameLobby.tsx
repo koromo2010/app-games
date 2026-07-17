@@ -32,7 +32,6 @@ export function GameLobby({ siteName = "GAME FIELDS", gameOperations }: { siteNa
   const [password, setPassword] = useState("");
   const [email, setEmail] = useState("");
   const [resetEmail, setResetEmail] = useState("");
-  const [updateEmailPassword, setUpdateEmailPassword] = useState("");
   const [showPasswordReset, setShowPasswordReset] = useState(false);
   const [message, setMessage] = useState("");
   const [authMode, setAuthMode] = useState<LobbyAuthMode>("login");
@@ -51,9 +50,9 @@ export function GameLobby({ siteName = "GAME FIELDS", gameOperations }: { siteNa
     void loadActiveRoom(playerId);
   }, [isLoggedIn, loadActiveRoom, loadStats, playerId]);
 
-  const { isSaving, isRequestingReset, isUpdatingEmail, submitAccount, requestPasswordReset, updateRecoveryEmail } = useLobbyAuthActions({
-    name, password, email, resetEmail, updateEmailPassword, authMode, legalAccepted, avatarColor, avatarImage,
-    applySession, setMessage, setPassword, setEmail, setResetEmail, setUpdateEmailPassword, setShowPasswordReset,
+  const { isSaving, isRequestingReset, submitAccount, requestPasswordReset } = useLobbyAuthActions({
+    name, password, email, resetEmail, authMode, legalAccepted, avatarColor, avatarImage,
+    applySession, setMessage, setPassword, setEmail, setResetEmail, setShowPasswordReset,
   });
   const { isAvatarSaving, isAvatarDragging, setIsAvatarDragging, updateAvatar, uploadAvatar, dropAvatar } = useLobbyAvatarActions({
     name, playerId, avatarColor, hasRecoveryEmail, setAvatarColor, setAvatarImage, setMessage,
@@ -79,14 +78,14 @@ export function GameLobby({ siteName = "GAME FIELDS", gameOperations }: { siteNa
 
       <section className="mx-auto grid max-w-6xl gap-4 px-4 py-6 lg:grid-cols-[340px_minmax(0,1fr)]">
         <LobbyInfoDrawer isLoggedIn={isLoggedIn} isOpen={isMobileInfoOpen} onOpen={() => setIsMobileInfoOpen(true)} onClose={() => setIsMobileInfoOpen(false)}>
-          <LobbyAccountPanel name={name} password={password} email={email} resetEmail={resetEmail} updateEmailPassword={updateEmailPassword}
-            authMode={authMode} isLoggedIn={isLoggedIn} legalAccepted={legalAccepted} showPasswordReset={showPasswordReset} hasRecoveryEmail={hasRecoveryEmail}
-            isSaving={isSaving} isRequestingReset={isRequestingReset} isUpdatingEmail={isUpdatingEmail} message={message}
+          <LobbyAccountPanel name={name} password={password} email={email} resetEmail={resetEmail}
+            authMode={authMode} isLoggedIn={isLoggedIn} legalAccepted={legalAccepted} showPasswordReset={showPasswordReset}
+            isSaving={isSaving} isRequestingReset={isRequestingReset} message={message}
             onNameChange={setName} onPasswordChange={setPassword} onEmailChange={setEmail} onResetEmailChange={setResetEmail}
-            onUpdateEmailPasswordChange={setUpdateEmailPassword} onAuthModeChange={setAuthMode} onLegalAcceptedChange={setLegalAccepted}
+            onAuthModeChange={setAuthMode} onLegalAcceptedChange={setLegalAccepted}
             onPasswordResetVisibilityChange={setShowPasswordReset} onClearMessage={() => setMessage("")}
-            onSubmit={() => void submitAccount()} onRequestReset={() => void requestPasswordReset()} onUpdateEmail={() => void updateRecoveryEmail()} onLogout={() => void logout(() => {
-              setPassword(""); setEmail(""); setResetEmail(""); setUpdateEmailPassword(""); setShowPasswordReset(false);
+            onSubmit={() => void submitAccount()} onRequestReset={() => void requestPasswordReset()} onLogout={() => void logout(() => {
+              setPassword(""); setEmail(""); setResetEmail(""); setShowPasswordReset(false);
               setIsMobileInfoOpen(false); clearRoomData();
             })}
           />

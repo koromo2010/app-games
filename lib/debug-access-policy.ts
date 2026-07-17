@@ -23,3 +23,11 @@ export function playerEmailHasAdminDebugAccess(playerEmail: string | null | unde
   if (!normalizedPlayerEmail) return false;
   return adminEmails.some((email) => normalizeDebugAccessEmail(email) === normalizedPlayerEmail);
 }
+
+export function playerHasResolvedDebugAccess(
+  playerEmail: string | null | undefined,
+  adminEmails: readonly string[],
+  manuallyGranted: boolean,
+) {
+  return manuallyGranted || playerEmailHasAdminDebugAccess(playerEmail, adminEmails);
+}
