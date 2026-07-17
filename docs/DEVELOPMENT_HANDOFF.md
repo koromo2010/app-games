@@ -74,6 +74,7 @@
 - `APP_BASE_URL`（推奨。本番は `https://game-fields.com`）
 - `UPSTASH_REDIS_REST_URL` または `KV_REST_API_URL`
 - `UPSTASH_REDIS_REST_TOKEN` または `KV_REST_API_TOKEN`
+- `APP_REDIS_URL`（Redis Cloud等のURL。環境分離後の正本）
 - `REDIS_REQUEST_TIMEOUT_MS`（任意。既定4000ms、1000〜10000msに制限）
 - `APP_ENV`、`APP_DATABASE_URL`、`APP_DATABASE_ENV`（環境分離後のアプリDB正本と誤接続防止。旧URLは移行期間のみ）
 - `VOCABULARY_DATABASE_URL`（本番・開発共通の単語カタログ。サーバー限定）

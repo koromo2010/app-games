@@ -1,9 +1,20 @@
 import { assertRedisEnvironment } from "./storage-environment-guard.ts";
+import { createClient, type RedisClientType } from "redis";
 
 type RedisResponse<T> = {
   result: T;
   error?: string;
 };
+
+type RedisConfig =
+  | { transport: "rest"; url: string; token: string }
+  | { transport: "socket"; url: string };
+
+let socketClient: RedisClientType | null = null;
+let socketClientUrl = "";
+let socketConnectPromise: Promise<RedisClientType> | null = null;
+
+type RedisEnvironment = Record<string, string | undefined>;
 
 const defaultRedisRequestTimeoutMs = 4_000;
 const minimumRedisRequestTimeoutMs = 1_000;
@@ -75,23 +86,75 @@ async function fetchRedis(url: string, token: string, body: string, retrySafe: b
   throw new Error("REDIS_STORE_REQUEST_FAILED");
 }
 
+export function resolveSocketRedisUrl(env: RedisEnvironment = process.env) {
+  for (const key of ["APP_REDIS_URL", "REDIS_URL"]) {
+    const value = env[key]?.trim();
+    if (value) return { key, url: value };
+  }
+
+  const integrationUrls = Object.entries(env)
+    .filter(([key, value]) => key.endsWith("_REDIS_URL") && Boolean(value?.trim()))
+    .map(([key, value]) => ({ key, url: value!.trim() }));
+  if (integrationUrls.length > 1) throw new Error("REDIS_STORE_URL_AMBIGUOUS");
+  return integrationUrls[0] ?? null;
+}
+
 export function getRedisConfig() {
   const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
 
-  if (!url || !token) return null;
+  if (url && token) {
+    assertRedisEnvironment();
+    return {
+      transport: "rest",
+      url: url.replace(/\/$/, ""),
+      token,
+    } satisfies RedisConfig;
+  }
+
+  const socketConfig = resolveSocketRedisUrl();
+  if (!socketConfig) return null;
   assertRedisEnvironment();
 
   return {
-    url: url.replace(/\/$/, ""),
-    token,
-  };
+    transport: "socket",
+    url: socketConfig.url,
+  } satisfies RedisConfig;
+}
+
+async function getSocketRedisClient(url: string) {
+  if (socketClient && socketClientUrl === url && socketClient.isReady) return socketClient;
+  if (!socketClient || socketClientUrl !== url) {
+    if (socketClient?.isOpen) await socketClient.close().catch(() => undefined);
+    socketClient = createClient({ url });
+    socketClientUrl = url;
+    socketConnectPromise = null;
+  }
+  if (!socketConnectPromise) {
+    const currentClient = socketClient;
+    socketConnectPromise = currentClient.connect()
+      .then(() => currentClient)
+      .catch((error) => {
+        socketConnectPromise = null;
+        throw error;
+      });
+  }
+  return socketConnectPromise;
+}
+
+function stringifyRedisCommand(command: unknown[]) {
+  return command.map((part) => typeof part === "string" ? part : String(part));
 }
 
 export async function redisCommand<T>(command: unknown[]) {
   const config = getRedisConfig();
   if (!config) {
     throw new Error("REDIS_STORE_NOT_CONFIGURED");
+  }
+
+  if (config.transport === "socket") {
+    const client = await getSocketRedisClient(config.url);
+    return await client.sendCommand(stringifyRedisCommand(command)) as T;
   }
 
   const response = await fetchRedis(config.url, config.token, JSON.stringify(command), redisReadCommands.has(commandName(command)));
@@ -112,6 +175,13 @@ export async function redisPipeline<T extends unknown[]>(commands: unknown[][]) 
   if (commands.length === 0) return [] as unknown as T;
   const config = getRedisConfig();
   if (!config) throw new Error("REDIS_STORE_NOT_CONFIGURED");
+
+  if (config.transport === "socket") {
+    const client = await getSocketRedisClient(config.url);
+    const transaction = client.multi();
+    for (const command of commands) transaction.addCommand(stringifyRedisCommand(command));
+    return await transaction.exec() as T;
+  }
 
   const response = await fetchRedis(`${config.url}/pipeline`, config.token, JSON.stringify(commands), commandsAreSafeToRetry(commands));
   if (!response.ok) throw new Error(`REDIS_STORE_REQUEST_FAILED_${response.status}`);

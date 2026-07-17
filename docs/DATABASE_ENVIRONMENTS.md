@@ -22,12 +22,13 @@ APP_DATABASE_ENV=production|development
 VOCABULARY_DATABASE_URL=...
 REDIS_ENV=production|development
 BLOB_ENV=production|development
+APP_REDIS_URL=... # Redis Cloud等のredis:// / rediss://接続
 UPSTASH_REDIS_REST_URL=...
 UPSTASH_REDIS_REST_TOKEN=...
 BLOB_READ_WRITE_TOKEN=...
 ```
 
-`APP_DATABASE_URL`を正本とする。既存`DATABASE_URL`等は移行中の互換読取に限る。新しい正本を使う場合、`VERCEL_ENV`、`APP_ENV`、`APP_DATABASE_ENV`が一致しなければ接続を拒否する。RedisとBlobはそれぞれ`REDIS_ENV`、`BLOB_ENV`を設定した時点から同じ検査を有効にする。
+`APP_DATABASE_URL`をアプリDBの正本とする。Redis Cloud等は`APP_REDIS_URL`、Upstash RESTは`UPSTASH_REDIS_REST_URL`と`UPSTASH_REDIS_REST_TOKEN`を使う。既存`DATABASE_URL`、`REDIS_URL`等は移行中の互換読取に限る。新しい正本を使う場合、`VERCEL_ENV`、`APP_ENV`、`APP_DATABASE_ENV`が一致しなければ接続を拒否する。RedisとBlobはそれぞれ`REDIS_ENV`、`BLOB_ENV`を設定した時点から同じ検査を有効にする。
 
 ## 共通DBの安全境界
 
