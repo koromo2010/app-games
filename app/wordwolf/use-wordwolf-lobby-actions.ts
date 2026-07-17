@@ -4,6 +4,8 @@ import type { ClueLogVisibility, ClueMode, GameMode, Room, WordWolfRoomAction } 
 import type { DebugWordGenerationResult } from "../components/DebugWordGenerationTest";
 import { normalizeWolfCount } from "./wordwolf-room-adapter";
 import { normalizeWordDifficulty, type WordDifficulty } from "@/lib/word-selection-protocol";
+import type { GameGenerationMeta } from "@/lib/game-ai-types";
+import type { WordWolfDebugTrace } from "@/lib/wordwolf-topic-types";
 
 type RunRoomAction = (action: WordWolfRoomAction, persistDefaults?: boolean) => Promise<Room | null>;
 
@@ -31,27 +33,49 @@ export function useWordWolfLobbyActions(room: Room | null, runRoomAction: RunRoo
     if (forceNew) params.set("forceNew", "1");
     if (room.topicHint.trim()) params.set("hint", room.topicHint.trim().slice(0, 80));
     const response = await fetch(`/api/wordwolf/topic?${params.toString()}`, { cache: "no-store" });
-    const topic = (await response.json()) as WordWolfTopic & { error?: string };
-    if (!response.ok || !isValidWordWolfTopic(topic)) throw new Error(topic.notice || topic.error || "ワードを生成できませんでした。");
+    const topic = (await response.json()) as Partial<WordWolfTopic> & {
+      error?: string;
+      diagnosticCode?: string;
+      debugPreview?: boolean;
+      debugTrace?: WordWolfDebugTrace;
+      generation?: GameGenerationMeta;
+    };
+    if (!response.ok) throw new Error(`${topic.error || "ワードを生成できませんでした。"}${topic.diagnosticCode ? `（${topic.diagnosticCode}）` : ""}`);
+    const candidateItems = topic.debugTrace?.candidates?.map((candidate) => ({
+      title: `${candidate.surface}${candidate.partner ? ` / ${candidate.partner}` : ""}`,
+      status: candidate.outcome,
+      fields: [
+        { label: "判定", value: `${candidate.decision} / ${candidate.reasonCode}` },
+        { label: "実質Zipf・重み", value: `${candidate.wordwolfEffectiveZipf.toFixed(2)} / ${candidate.selectionWeight.toFixed(3)}` },
+        { label: "理由", value: candidate.pairReason },
+        { label: "保存", value: `評価=${candidate.evaluationPersisted ? "済" : "失敗"} / draft=${candidate.draftPersisted ? "済" : "未保存"}` },
+      ],
+    }));
+    if (topic.debugPreview && topic.debugTrace) {
+      return {
+        fields: [
+          { label: "生成経路", value: topic.debugTrace.pipeline },
+          { label: "結果", value: "採用可能なペアなし" },
+        ],
+        items: candidateItems,
+        notice: topic.notice,
+        generation: topic.generation,
+      };
+    }
+    if (typeof topic.villageWord !== "string" || typeof topic.wolfWord !== "string" || !isValidWordWolfTopic({ villageWord: topic.villageWord, wolfWord: topic.wolfWord })) {
+      throw new Error(topic.notice || topic.error || "ワードを生成できませんでした。");
+    }
+    const validTopic = topic as WordWolfTopic;
     return {
       fields: [
-        { label: "生成経路", value: topic.debugTrace?.pipeline ?? "direct-llm" },
-        { label: "市民ワード", value: topic.villageWord },
-        { label: "ウルフワード", value: topic.wolfWord },
-        { label: "組み合わせの意図", value: topic.reason },
+        { label: "生成経路", value: validTopic.debugTrace?.pipeline ?? "direct-llm" },
+        { label: "市民ワード", value: validTopic.villageWord },
+        { label: "ウルフワード", value: validTopic.wolfWord },
+        { label: "組み合わせの意図", value: validTopic.reason },
       ],
-      items: topic.debugTrace?.candidates?.map((candidate) => ({
-        title: `${candidate.surface}${candidate.partner ? ` / ${candidate.partner}` : ""}`,
-        status: candidate.outcome,
-        fields: [
-          { label: "判定", value: `${candidate.decision} / ${candidate.reasonCode}` },
-          { label: "実質Zipf・重み", value: `${candidate.wordwolfEffectiveZipf.toFixed(2)} / ${candidate.selectionWeight.toFixed(3)}` },
-          { label: "理由", value: candidate.pairReason },
-          { label: "保存", value: `評価=${candidate.evaluationPersisted ? "済" : "失敗"} / draft=${candidate.draftPersisted ? "済" : "未保存"}` },
-        ],
-      })),
-      notice: topic.notice,
-      generation: topic.generation,
+      items: candidateItems,
+      notice: validTopic.notice,
+      generation: validTopic.generation,
     };
   };
 

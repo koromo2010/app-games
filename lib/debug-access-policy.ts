@@ -12,3 +12,14 @@ export function actionRequiresDebugAccess(action: unknown) {
     || (typeof candidate.actorId === "string" && typeof candidate.playerId === "string" && candidate.actorId !== candidate.playerId)
     || (candidate.type === "set-debug" && candidate.enabled === true);
 }
+
+function normalizeDebugAccessEmail(value: string) {
+  return value.trim().normalize("NFKC").toLocaleLowerCase("en-US");
+}
+
+export function playerEmailHasAdminDebugAccess(playerEmail: string | null | undefined, adminEmails: readonly string[]) {
+  if (!playerEmail) return false;
+  const normalizedPlayerEmail = normalizeDebugAccessEmail(playerEmail);
+  if (!normalizedPlayerEmail) return false;
+  return adminEmails.some((email) => normalizeDebugAccessEmail(email) === normalizedPlayerEmail);
+}

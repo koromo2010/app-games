@@ -37,10 +37,6 @@ export function UserDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [requiresLogin, setRequiresLogin] = useState(false);
   const [message, setMessage] = useState("");
-  const [debugAccess, setDebugAccess] = useState(false);
-  const [debugPassword, setDebugPassword] = useState("");
-  const [debugMessage, setDebugMessage] = useState("");
-  const [debugSaving, setDebugSaving] = useState(false);
   const [isAvatarEditorOpen, setIsAvatarEditorOpen] = useState(false);
   const [isShareNameSaving, setIsShareNameSaving] = useState(false);
   const [shareNameMessage, setShareNameMessage] = useState("");
@@ -105,12 +101,6 @@ export function UserDashboard() {
         const sessionBody = (await sessionResponse.json()) as { session?: PlayerSession };
         if (!sessionResponse.ok || !sessionBody.session?.id) throw new Error("SESSION_LOAD_FAILED");
         setSession(sessionBody.session);
-        const debugResponse = await fetch("/api/debug-auth", { cache: "no-store", signal: controller.signal });
-        if (debugResponse.ok) {
-          const debugBody = (await debugResponse.json()) as { enabled?: boolean };
-          setDebugAccess(debugBody.enabled === true);
-        }
-
         const params = new URLSearchParams({ playerId: sessionBody.session.id, gameType: "all" });
         const statsResponse = await fetch(`/api/player-stats?${params.toString()}`, { cache: "no-store", signal: controller.signal });
         const statsBody = (await statsResponse.json()) as { stats?: PlayerStatsResponse };
@@ -125,30 +115,6 @@ export function UserDashboard() {
     })();
     return () => controller.abort();
   }, []);
-
-  const updateDebugAccess = async (enabled: boolean) => {
-    if (debugSaving) return;
-    setDebugSaving(true);
-    setDebugMessage("");
-    try {
-      const response = await fetch("/api/debug-auth", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled, password: enabled ? debugPassword : "" }),
-      });
-      if (!response.ok) {
-        setDebugMessage(response.status === 401 ? "デバッグ用パスワードが違います。" : "デバッグ利用設定を変更できませんでした。");
-        return;
-      }
-      setDebugAccess(enabled);
-      setDebugPassword("");
-      setDebugMessage(enabled ? "デバッグ機能を利用できるようにしました。" : "デバッグ機能を非表示にしました。");
-    } catch {
-      setDebugMessage("デバッグ利用設定を変更できませんでした。");
-    } finally {
-      setDebugSaving(false);
-    }
-  };
 
   const deleteAccount = async () => {
     if (!session || !window.confirm("アカウント、戦績、設定を削除します。この操作は取り消せません。削除しますか？")) return;
@@ -269,16 +235,6 @@ export function UserDashboard() {
           <GameReplayPanel />
         </div>
 
-        <section className="mt-8 border-t border-white/10 pt-4 text-slate-400" aria-labelledby="debug-access-heading">
-          <details className="group text-xs">
-            <summary id="debug-access-heading" className="w-fit cursor-pointer select-none rounded px-1 py-1 text-[11px] font-medium text-slate-500 transition hover:text-slate-300">開発者向け設定{debugAccess ? " · 有効" : ""}</summary>
-            <div className="mt-2 max-w-md rounded-md border border-white/10 bg-white/[0.03] p-3">
-              <p className="leading-5 text-slate-500">管理パスワードで有効にすると、各ゲームにデバッグ操作が表示されます。設定はアカウントに保存されます。</p>
-              {debugAccess ? <div className="mt-3 flex items-center gap-3"><span className="text-xs text-cyan-200/70">デバッグ機能は有効です</span><button type="button" disabled={debugSaving} onClick={() => void updateDebugAccess(false)} className="rounded border border-white/15 px-2 py-1 text-[11px] text-slate-400 transition hover:text-slate-200 disabled:opacity-40">利用を解除</button></div> : <div className="mt-3 flex flex-col gap-2 sm:flex-row"><input type="password" value={debugPassword} onChange={(event) => setDebugPassword(event.target.value)} placeholder="デバッグ用パスワード" autoComplete="off" className="min-w-0 flex-1 rounded border border-white/15 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-slate-500" /><button type="button" disabled={debugSaving || !debugPassword} onClick={() => void updateDebugAccess(true)} className="rounded border border-white/15 px-3 py-1.5 text-xs text-slate-300 transition hover:bg-white/5 disabled:opacity-40">認証</button></div>}
-              {debugMessage && <p className="mt-2 text-[11px] text-slate-500" role="status">{debugMessage}</p>}
-            </div>
-          </details>
-        </section>
         <section className="mt-6 border-t border-rose-300/15 pt-4" aria-labelledby="delete-account-heading">
           <button type="button" id="delete-account-heading" onClick={() => { setShowAccountDeletion((value) => !value); setDeleteAccountPassword(""); setDeleteAccountMessage(""); }} className="text-xs font-bold text-rose-300/70 transition hover:text-rose-200">
             アカウントを削除

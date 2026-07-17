@@ -33,6 +33,7 @@ import {
   rememberWordWolfTopicExperience,
 } from "@/lib/wordwolf-topic-catalog";
 import { parseLlmJson } from "@/lib/llm-json";
+import { requirePlayerDebugAccess } from "@/lib/debug-access";
 import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 import { emitObservabilityEvent, observabilityErrorCode } from "@/lib/observability";
@@ -321,7 +322,7 @@ async function generateCatalogAnchoredTopic(input: {
   trace.attemptedProviders = generated.attemptedProviders;
   trace.candidates = traces;
   trace.selectedWordId = selected?.topic.anchorWordId;
-  return { topic: selected?.topic ?? null, trace };
+  return { topic: selected?.topic ?? null, trace, generation };
 }
 
 async function generateLlmTopic(
@@ -555,13 +556,28 @@ export async function generateWordWolfTopicResponse(request: Request, playerIds:
         if (!previewOnly) await rememberWordWolfTopicExperience(generated.topic, playerIds).catch(() => undefined);
         return Response.json(withDebugTrace(generated.topic, generated.trace, previewOnly));
       }
+      if (previewOnly) {
+        return Response.json({
+          debugPreview: true,
+          notice: "3候補を評価しましたが、今回は採用可能なペアがありませんでした。各候補の判定理由を確認できます。",
+          debugTrace: generated.trace,
+          generation: generated.generation,
+        });
+      }
     } catch (error) {
+      const errorCode = observabilityErrorCode(error);
       emitObservabilityEvent("warn", "ai.generation", {
         game: "wordwolf",
         operation: "catalog-rag",
         outcome: "failed",
-        errorCode: observabilityErrorCode(error),
+        errorCode,
       });
+      if (previewOnly) {
+        return Response.json({
+          error: "3候補のAI回答を解析できませんでした。もう一度お試しください。",
+          diagnosticCode: errorCode,
+        }, { status: 422 });
+      }
     }
   }
 
@@ -626,10 +642,12 @@ export async function GET(request: Request) {
     if (!previewOnly || !room.debugMode || room.hostId !== player.id) {
       return Response.json({ error: "Topics are generated through the authenticated room command" }, { status: 403 });
     }
+    await requirePlayerDebugAccess(player.id);
     const forceNew = url.searchParams.get("forceNew") === "1";
     return generateWordWolfTopicResponse(request, room.players.map((item) => item.id), true, forceNew);
   } catch (error) {
     if (error instanceof Error && error.message === "PLAYER_AUTH_REQUIRED") return Response.json({ error: "Login required" }, { status: 401 });
+    if (error instanceof Error && error.message === "DEBUG_ACCESS_REQUIRED") return Response.json({ error: "Debug access required" }, { status: 403 });
     if (isPlayerAuthConfigurationError(error)) return Response.json({ error: "Player auth is not configured" }, { status: 503 });
     return Response.json({ error: "Failed to generate topic preview" }, { status: 500 });
   }
