@@ -22,8 +22,10 @@ export type NormalizedLegacyCatalogRow = {
 
 export type LegacyVocabularyImportStatus = {
   sourceActiveCount: number;
+  sourceUniqueCount: number;
   targetActiveWordCount: number;
   targetWordwolfEligibleCount: number;
+  targetImportedWordwolfCount: number;
   complete: boolean;
 };
 
@@ -79,13 +81,33 @@ export function normalizeLegacyCatalogRows(rows: LegacyCatalogRow[]) {
   return [...normalized.values()];
 }
 
-async function sourceActiveCount(sql: NeonQueryFunction<boolean, boolean>) {
+export function isLegacyVocabularyImportComplete(sourceUniqueCount: number, targetImportedWordwolfCount: number) {
+  return sourceUniqueCount > 0 && targetImportedWordwolfCount >= sourceUniqueCount;
+}
+
+async function sourceCounts(sql: NeonQueryFunction<boolean, boolean>) {
   const tableRows = await sql`
     SELECT to_regclass(${`public.${legacyCatalogTable}`})::text AS table_name
   ` as Array<{ table_name: string | null }>;
   if (!tableRows[0]?.table_name) throw new Error("LEGACY_VOCABULARY_CATALOG_NOT_FOUND");
-  const rows = await sql`SELECT COUNT(*)::bigint AS count FROM shared_word_catalog WHERE active` as Array<{ count: string }>;
-  return Number(rows[0]?.count ?? 0);
+  const rows = await sql`
+    SELECT
+      COUNT(*)::bigint AS active_count,
+      COUNT(DISTINCT ROW(
+        LOWER(BTRIM(normalize(surface, NFKC))),
+        BTRIM(normalize(COALESCE(reading, ''), NFKC))
+      )) FILTER (
+        WHERE word_master_id > 0
+          AND BTRIM(normalize(surface, NFKC)) <> ''
+          AND zipf_frequency BETWEEN 0 AND 10
+      )::bigint AS unique_count
+    FROM shared_word_catalog
+    WHERE active
+  ` as Array<{ active_count: string; unique_count: string }>;
+  return {
+    sourceActiveCount: Number(rows[0]?.active_count ?? 0),
+    sourceUniqueCount: Number(rows[0]?.unique_count ?? 0),
+  };
 }
 
 async function targetCounts(sql: NeonQueryFunction<boolean, boolean>) {
@@ -93,21 +115,26 @@ async function targetCounts(sql: NeonQueryFunction<boolean, boolean>) {
     SELECT
       (SELECT COUNT(*)::bigint FROM active_words) AS active_words,
       (SELECT COUNT(*)::bigint FROM active_word_game_eligibility
-        WHERE subject_type = 'word' AND game_id = 'wordwolf') AS wordwolf_eligible
-  ` as Array<{ active_words: string; wordwolf_eligible: string }>;
+        WHERE subject_type = 'word' AND game_id = 'wordwolf') AS wordwolf_eligible,
+      (SELECT COUNT(*)::bigint FROM active_word_game_eligibility
+        WHERE subject_type = 'word'
+          AND game_id = 'wordwolf'
+          AND reason = 'legacy shared catalog import') AS imported_wordwolf
+  ` as Array<{ active_words: string; wordwolf_eligible: string; imported_wordwolf: string }>;
   return {
     targetActiveWordCount: Number(rows[0]?.active_words ?? 0),
     targetWordwolfEligibleCount: Number(rows[0]?.wordwolf_eligible ?? 0),
+    targetImportedWordwolfCount: Number(rows[0]?.imported_wordwolf ?? 0),
   };
 }
 
 export async function inspectLegacyVocabularyImport(): Promise<LegacyVocabularyImportStatus> {
   const { source, target } = importClients();
-  const [sourceCount, counts] = await Promise.all([sourceActiveCount(source), targetCounts(target)]);
+  const [sourceSummary, counts] = await Promise.all([sourceCounts(source), targetCounts(target)]);
   return {
-    sourceActiveCount: sourceCount,
+    ...sourceSummary,
     ...counts,
-    complete: sourceCount > 0 && counts.targetWordwolfEligibleCount >= sourceCount,
+    complete: isLegacyVocabularyImportComplete(sourceSummary.sourceUniqueCount, counts.targetImportedWordwolfCount),
   };
 }
 

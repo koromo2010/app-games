@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeLegacyCatalogRows, resolveLegacyVocabularySourceUrl } from "../lib/vocabulary-legacy-import.ts";
+import {
+  isLegacyVocabularyImportComplete,
+  normalizeLegacyCatalogRows,
+  resolveLegacyVocabularySourceUrl,
+} from "../lib/vocabulary-legacy-import.ts";
 
 test("legacy vocabulary import prefers its temporary read-only source", () => {
   assert.equal(resolveLegacyVocabularySourceUrl({
@@ -33,4 +37,10 @@ test("legacy vocabulary normalization rejects invalid ids, words, and Zipf value
   assert.deepEqual(rows, [
     { wordMasterId: 3, surface: "正常", reading: "", normalizedSurface: "正常", zipf: 0, characterCount: 2 },
   ]);
+});
+
+test("legacy vocabulary completion compares normalized imports instead of source rows", () => {
+  assert.equal(isLegacyVocabularyImportComplete(194_882, 194_881), false);
+  assert.equal(isLegacyVocabularyImportComplete(194_882, 194_882), true);
+  assert.equal(isLegacyVocabularyImportComplete(0, 0), false);
 });

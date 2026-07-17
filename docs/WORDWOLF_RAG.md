@@ -49,7 +49,7 @@ npm run vocabulary:import-legacy-words -- --apply
 
 1回目はDB名と件数だけを表示するdry-runである。`LEGACY_WORD_DATABASE_URL` は旧 `shared_word_catalog` の読取元、`VOCABULARY_ADMIN_DATABASE_URL` は `word-master-neon` の管理ロールを指定する。取込は単語をactiveにし、ワードウルフ用eligibilityを作る。原本辞書やローカルDBダンプは移さない。
 
-初回移行中のdevelop Previewでは、管理画面の「単語候補」に一時取込パネルを表示できる。これは `VERCEL_ENV=preview`、`APP_ENV=development` の両方を満たす場合だけ動作し、`LEGACY_WORD_DATABASE_URL`（未設定時だけ `APP_DATABASE_URL`）の `shared_word_catalog` を読んで `VOCABULARY_ADMIN_DATABASE_URL` へ1,000件ずつ冪等にupsertする。`LEGACY_WORD_DATABASE_URL` は旧カタログへSELECTだけ可能な専用ロールを推奨し、develop branch限定のPreview Sensitive変数として一時設定する。管理者のフルセッションと直近5分以内のパスキー確認を必須とし、完了時だけ監査ログを残す。旧DB、本番アプリDBおよびProductionデプロイでは書込・実行を拒否する。移行完了・件数照合後は一時API、パネル、環境変数、専用ロールを削除する。
+初回移行中のdevelop Previewでは、管理画面の「単語候補」に一時取込パネルを表示できる。これは `VERCEL_ENV=preview`、`APP_ENV=development` の両方を満たす場合だけ動作し、`LEGACY_WORD_DATABASE_URL`（未設定時だけ `APP_DATABASE_URL`）の `shared_word_catalog` を読んで `VOCABULARY_ADMIN_DATABASE_URL` へ1,000件ずつ冪等にupsertする。NFKC正規化後に表記と読みが一致する旧レコードは1語へ統合し、完了判定も旧DBの行数ではなく正規化後の一意語数と取込由来のeligibility件数を照合する。`LEGACY_WORD_DATABASE_URL` は旧カタログへSELECTだけ可能な専用ロールを推奨し、develop branch限定のPreview Sensitive変数として一時設定する。管理者のフルセッションと直近5分以内のパスキー確認を必須とし、完了時だけ監査ログを残す。旧DB、本番アプリDBおよびProductionデプロイでは書込・実行を拒否する。移行完了・件数照合後は一時API、パネル、環境変数、専用ロールを削除する。
 
 ## Preview確認
 

@@ -47,7 +47,9 @@ export async function POST(request: Request) {
       await appendSiteAdminAuditLog(request, session, "vocabulary.legacy-import", "shared_word_catalog", null, {
         processed: result.processed,
         sourceActiveCount: result.status?.sourceActiveCount ?? null,
+        sourceUniqueCount: result.status?.sourceUniqueCount ?? null,
         targetWordwolfEligibleCount: result.status?.targetWordwolfEligibleCount ?? null,
+        targetImportedWordwolfCount: result.status?.targetImportedWordwolfCount ?? null,
       });
       telemetry.success("vocabulary.legacy-import", {
         action: "complete",
