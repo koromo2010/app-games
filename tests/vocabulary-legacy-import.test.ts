@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeLegacyCatalogRows } from "../lib/vocabulary-legacy-import.ts";
+import { normalizeLegacyCatalogRows, resolveLegacyVocabularySourceUrl } from "../lib/vocabulary-legacy-import.ts";
+
+test("legacy vocabulary import prefers its temporary read-only source", () => {
+  assert.equal(resolveLegacyVocabularySourceUrl({
+    LEGACY_WORD_DATABASE_URL: " postgres://legacy ",
+    APP_DATABASE_URL: "postgres://development",
+  }), "postgres://legacy");
+  assert.equal(resolveLegacyVocabularySourceUrl({ APP_DATABASE_URL: " postgres://development " }), "postgres://development");
+  assert.equal(resolveLegacyVocabularySourceUrl({}), null);
+});
 
 test("legacy vocabulary rows are normalized and duplicate readings collapse", () => {
   const rows = normalizeLegacyCatalogRows([

@@ -21,6 +21,7 @@ APP_DATABASE_URL=...
 APP_DATABASE_ENV=production|development
 VOCABULARY_DATABASE_URL=...
 VOCABULARY_ADMIN_DATABASE_URL=... # 管理画面だけ。vocabulary_adminロールを使用
+LEGACY_WORD_DATABASE_URL=...      # 初回移行だけ。旧カタログの読取専用ロールをdevelop Previewへ一時設定
 REDIS_ENV=production|development
 BLOB_ENV=production|development
 APP_REDIS_URL=... # Redis Cloud等のredis:// / rediss://接続

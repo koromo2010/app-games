@@ -32,11 +32,15 @@ let sourceClientUrl = "";
 let targetClient: NeonQueryFunction<boolean, boolean> | null = null;
 let targetClientUrl = "";
 
+export function resolveLegacyVocabularySourceUrl(env: Record<string, string | undefined>) {
+  return env.LEGACY_WORD_DATABASE_URL?.trim() || env.APP_DATABASE_URL?.trim() || null;
+}
+
 function importClients() {
   if (process.env.VERCEL_ENV !== "preview" || assertRuntimeEnvironmentAgreement() !== "development") {
     throw new Error("LEGACY_VOCABULARY_IMPORT_PREVIEW_ONLY");
   }
-  const sourceUrl = process.env.APP_DATABASE_URL?.trim();
+  const sourceUrl = resolveLegacyVocabularySourceUrl(process.env);
   const targetUrl = process.env.VOCABULARY_ADMIN_DATABASE_URL?.trim();
   if (!sourceUrl) throw new Error("LEGACY_VOCABULARY_SOURCE_NOT_CONFIGURED");
   if (!targetUrl) throw new Error("VOCABULARY_ADMIN_STORE_NOT_CONFIGURED");

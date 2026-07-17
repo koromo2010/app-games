@@ -198,7 +198,7 @@ Neon Postgres、Upstash Redis、Vercel Blobの容量は `vercel.json` の日次C
 - お題はJST同日同語禁止、順序非依存ペアは標準30日間禁止。固有名詞は語だけで類推できない距離へ調整済み
 - OpenAI OFF時はGemini、Groq、ローカルの順。逆転判定は無料APIまたはfuzzy/feedbackを使用
 - 一般単語の新RAGは共通DBから難易度別に起点語3件を抽出し、1回のLLMで3件を独立審査・相方生成する。生成時の距離とフィードバック集計後の距離を別カラムで保持する。DB migration、旧197,040語の取込、Preview確認は `docs/WORDWOLF_RAG.md` を正本とする
-- 旧197,040語の初回移行中だけ、develop Previewの管理画面に再開可能な取込パネルを置く。`APP_DATABASE_URL`（開発DB）の `shared_word_catalog` だけを読み、`VOCABULARY_ADMIN_DATABASE_URL`（共通DB）へ1,000件ずつupsertする。Productionでは実行不能で、完了・件数照合後に一時APIとパネルを撤去する
+- 旧197,040語の初回移行中だけ、develop Previewの管理画面に再開可能な取込パネルを置く。`LEGACY_WORD_DATABASE_URL`（未設定時は開発用 `APP_DATABASE_URL`）の `shared_word_catalog` だけを読み、`VOCABULARY_ADMIN_DATABASE_URL`（共通DB）へ1,000件ずつupsertする。旧カタログが開発DBにない場合は読取専用URLをdevelop Previewだけへ一時設定する。Productionでは実行不能で、完了・件数照合後に一時API、パネル、環境変数、読取ロールを撤去する
 
 詳細な挙動を変える前に、`lib/wordwolf-command-domain.ts`、`lib/wordwolf-room-normalizer.ts`、`lib/wordwolf-room-presentation.ts`、`lib/wordwolf-room-store.ts` の境界を確認する。
 
