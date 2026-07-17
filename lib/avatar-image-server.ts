@@ -1,3 +1,5 @@
+import { assertBlobEnvironment } from "./storage-environment-guard.ts";
+
 export const maxAvatarUploadBytes = 64 * 1024;
 
 type AvatarBlobEnvironment = Record<string, string | undefined>;
@@ -13,6 +15,7 @@ function normalizedEnvironmentKey(key: string) {
 }
 
 export function resolveAvatarBlobToken(env: AvatarBlobEnvironment): AvatarBlobTokenResolution {
+  if (env === process.env) assertBlobEnvironment();
   const entries = Object.entries(env)
     .map(([key, value]) => [key, value?.trim()] as const)
     .filter((entry): entry is readonly [string, string] => Boolean(entry[1]));

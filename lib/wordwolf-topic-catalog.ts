@@ -15,6 +15,7 @@ import {
   loadTodaysExperiencedWords,
   rememberWordWolfTopicHistory,
 } from "@/lib/wordwolf-topic-history-store";
+import { submitDevelopmentVocabularyDraft } from "@/lib/vocabulary-draft-bridge";
 
 const catalogKey = "wordwolf:topic:catalog:v1";
 
@@ -163,4 +164,18 @@ export async function rememberWordWolfTopicCandidate(topic: WordWolfTopic) {
     getTopicKey(topic),
     JSON.stringify(seed),
   ]);
+  await submitDevelopmentVocabularyDraft({
+    kind: "pair",
+    payload: {
+      gameId: "wordwolf",
+      villageWord: topic.villageWord,
+      wolfWord: topic.wolfWord,
+      reason: topic.reason,
+      dictionarySource: topic.dictionarySource,
+      pairDistance: topic.pairDistance,
+      sourceMode: topic.sourceMode,
+    },
+    generation: topic.generation,
+    sourceReference: getTopicKey(topic),
+  });
 }

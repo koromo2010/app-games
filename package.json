@@ -11,7 +11,8 @@
         "check:games": "node scripts/check-game-standards.mjs",
         "load:smoke": "node scripts/load-test.mjs",
         "monitor:production": "node scripts/production-smoke.mjs",
-        "tahoiya:generate": "node --experimental-strip-types scripts/generate-tahoiya-candidates.ts"
+        "tahoiya:generate": "node --experimental-strip-types scripts/generate-tahoiya-candidates.ts",
+        "vocabulary:migrate": "node --experimental-strip-types scripts/migrate-vocabulary-to-master.ts"
     },
     "dependencies": {
         "@neondatabase/serverless": "^1.1.0",
@@ -22,6 +23,7 @@
         "openai": "^6.34.0",
         "react": "19.2.4",
         "react-dom": "19.2.4",
+        "redis": "^5.12.1",
         "resend": "^6.17.2"
     },
     "devDependencies": {
