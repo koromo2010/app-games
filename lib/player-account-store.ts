@@ -17,6 +17,7 @@ import {
   deleteExpiredPostgresPlayerAccounts,
   deletePostgresPlayerAccount,
 } from "@/lib/player-account-postgres-store";
+import { usesStrictAppDatabase } from "@/lib/player-account-environment";
 import { hasPlayerAccountEmailOwnerConflict } from "@/lib/player-account-migration";
 import { legalConsentIsCurrent } from "@/lib/legal";
 import { unverifiedAccountIsExpired, unverifiedPlayerAccountRetentionMs } from "@/lib/player-account-retention";
@@ -53,10 +54,6 @@ export type PlayerAccountAuthInput = {
 const accountKeyPrefix = "player-account:";
 const emailKeyPrefix = "player-account-email:";
 const passwordKeyLength = 64;
-
-function usesStrictAppDatabase() {
-  return Boolean(process.env.APP_DATABASE_URL?.trim());
-}
 
 export function normalizeAccountName(name: string) {
   return name.trim().normalize("NFKC").toLocaleLowerCase("ja-JP");
