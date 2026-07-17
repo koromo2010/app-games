@@ -20,6 +20,7 @@ APP_ENV=production|development
 APP_DATABASE_URL=...
 APP_DATABASE_ENV=production|development
 VOCABULARY_DATABASE_URL=...
+VOCABULARY_ADMIN_DATABASE_URL=... # 管理画面だけ。vocabulary_adminロールを使用
 REDIS_ENV=production|development
 BLOB_ENV=production|development
 APP_REDIS_URL=... # Redis Cloud等のredis:// / rediss://接続
@@ -40,7 +41,7 @@ BLOB_READ_WRITE_TOKEN=...
 - API認証に加えてDBロールとtriggerでも制約する。
 - draft作成APIには管理・デバッグ認証、レート制限、入力長・件数制限、監査ログを必須とする。
 
-初期schemaは`db/vocabulary/001_catalog.sql`、ロール権限は`db/vocabulary/002_roles.sql`に置く。ロールSQLの仮パスワードは実行前に安全な値へ置換し、ファイルへ実値を保存しない。
+初期schemaは`db/vocabulary/001_catalog.sql`、ロール権限は`db/vocabulary/002_roles.sql`、レビュー機能の追加schemaは`db/vocabulary/003_review_workflow.sql`に置く。接続パスワードはNeon/Vercelだけで管理し、ファイルへ実値を保存しない。`VOCABULARY_DATABASE_URL`はゲーム実行用、`VOCABULARY_ADMIN_DATABASE_URL`は管理画面の候補確認・採否専用とし、ブラウザへ公開しない。
 
 ## 移行順
 
