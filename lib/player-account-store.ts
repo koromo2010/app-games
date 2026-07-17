@@ -54,6 +54,10 @@ const accountKeyPrefix = "player-account:";
 const emailKeyPrefix = "player-account-email:";
 const passwordKeyLength = 64;
 
+function usesStrictAppDatabase() {
+  return Boolean(process.env.APP_DATABASE_URL?.trim());
+}
+
 export function normalizeAccountName(name: string) {
   return name.trim().normalize("NFKC").toLocaleLowerCase("ja-JP");
 }
@@ -168,7 +172,9 @@ async function loadAccount(name: string) {
     try {
       const stored = await loadPostgresPlayerAccountByLogin(loginName);
       if (stored) return normalizeAccount(stored);
-    } catch {
+      if (usesStrictAppDatabase()) return null;
+    } catch (error) {
+      if (usesStrictAppDatabase()) throw error;
       // Redis remains the read fallback while the existing accounts are migrated.
     }
   }
@@ -251,17 +257,19 @@ export async function registerPlayerAccount(input: PlayerAccountAuthInput) {
   };
 
   if (isPostgresConfigured()) {
-    const [legacyLogin, legacyEmail] = await Promise.all([
-      loadRedisAccount(loginName),
-      email ? loadRedisAccountByEmail(email) : Promise.resolve(null),
-    ]);
-    if (legacyLogin) throw new Error("PLAYER_ACCOUNT_ALREADY_EXISTS");
-    if (legacyEmail) throw new Error("PLAYER_ACCOUNT_EMAIL_ALREADY_EXISTS");
+    if (!usesStrictAppDatabase()) {
+      const [legacyLogin, legacyEmail] = await Promise.all([
+        loadRedisAccount(loginName),
+        email ? loadRedisAccountByEmail(email) : Promise.resolve(null),
+      ]);
+      if (legacyLogin) throw new Error("PLAYER_ACCOUNT_ALREADY_EXISTS");
+      if (legacyEmail) throw new Error("PLAYER_ACCOUNT_EMAIL_ALREADY_EXISTS");
+    }
 
     const created = await createPostgresPlayerAccount(account);
     if (created === "login-exists") throw new Error("PLAYER_ACCOUNT_ALREADY_EXISTS");
     if (created === "email-exists") throw new Error("PLAYER_ACCOUNT_EMAIL_ALREADY_EXISTS");
-    await mirrorAccountToRedis(account).catch(() => undefined);
+    if (!usesStrictAppDatabase()) await mirrorAccountToRedis(account).catch(() => undefined);
   } else if (email) {
     const createAccountScript = `
       if redis.call("EXISTS", KEYS[1]) == 1 then return 1 end
@@ -307,7 +315,7 @@ export async function loginPlayerAccount(input: PlayerAccountAuthInput) {
 
   const activeAccount = { ...account, updatedAt: Date.now() };
   if (isPostgresConfigured()) await savePostgresPlayerAccount(activeAccount);
-  await mirrorAccountToRedis(activeAccount).catch(() => undefined);
+  if (!usesStrictAppDatabase()) await mirrorAccountToRedis(activeAccount).catch(() => undefined);
   return accountSession(activeAccount);
 }
 
@@ -359,7 +367,7 @@ export async function updatePlayerAccountEmail(input: PlayerAccountAuthInput) {
     if (isPostgresConfigured()) {
       const [existing, legacyOwner] = await Promise.all([
         loadPostgresPlayerAccountByEmail(email),
-        loadRedisEmailOwner(email),
+        usesStrictAppDatabase() ? Promise.resolve(null) : loadRedisEmailOwner(email),
       ]);
       if (hasPlayerAccountEmailOwnerConflict(account.loginName, {
         postgresLoginName: existing?.loginName ?? null,
@@ -375,6 +383,7 @@ export async function updatePlayerAccountEmail(input: PlayerAccountAuthInput) {
         }
         throw error;
       }
+      if (usesStrictAppDatabase()) return accountSession(updatedAccount);
     }
 
     const updateEmailScript = `
@@ -424,7 +433,9 @@ export async function loadPlayerAccountByEmail(email: string) {
     try {
       const stored = await loadPostgresPlayerAccountByEmail(normalizedEmail);
       if (stored) return normalizeAccount(stored);
-    } catch {
+      if (usesStrictAppDatabase()) return null;
+    } catch (error) {
+      if (usesStrictAppDatabase()) throw error;
       // Password reset remains available through the legacy index during migration.
     }
   }
@@ -454,7 +465,7 @@ export async function resetPlayerAccountPassword(loginName: string, password: st
 export async function saveResetPlayerAccountPassword(account: PlayerAccount) {
   if (isPostgresConfigured()) {
     await savePostgresPlayerAccount(account);
-    await mirrorAccountToRedis(account).catch(() => undefined);
+    if (!usesStrictAppDatabase()) await mirrorAccountToRedis(account).catch(() => undefined);
     return;
   }
   await mirrorAccountToRedis(account);
