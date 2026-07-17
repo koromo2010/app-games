@@ -1,5 +1,6 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import type { VocabularySourceEnvironment, VocabularySourceType } from "./vocabulary-catalog-types.ts";
+import { resolveVocabularyEvaluationDecision, type VocabularyEvaluationDecision } from "./vocabulary-review.ts";
 
 export type VocabularyDraftSubmission = {
   id: string;
@@ -20,6 +21,45 @@ type DraftRow = {
   source_type: VocabularySourceType; source_environment: VocabularySourceEnvironment;
   source_reference: string | null; provider: string | null; model: string | null;
   prompt_version: string | null; created_by: string | null; created_at: string;
+};
+
+export type VocabularyWordGameEvaluation = {
+  id: string;
+  wordId: string;
+  word: string;
+  reading: string | null;
+  zipf: number | null;
+  gameId: string;
+  pairDistance: string | null;
+  llmDecision: VocabularyEvaluationDecision;
+  resolvedDecision: VocabularyEvaluationDecision;
+  usagePenalty: number;
+  gamePenalty: number;
+  feedbackAdjustment: number;
+  safetyFlags: string[];
+  reasonCode: string;
+  pairReason: string;
+  partnerText: string | null;
+  provider: string | null;
+  model: string | null;
+  promptVersion: string | null;
+  generationBatchId: string | null;
+  createdAt: string;
+  humanAcceptCount: number;
+  humanRejectCount: number;
+  myVote: VocabularyEvaluationDecision | null;
+  myComment: string | null;
+};
+
+type EvaluationRow = {
+  id: string; word_id: string; word: string; reading: string | null; zipf: number | string | null;
+  game_id: string; requested_pair_distance: string | null; decision: VocabularyEvaluationDecision;
+  usage_penalty: number | string; game_penalty: number | string; feedback_adjustment: number | string;
+  safety_flags: string[]; reason_code: string; pair_reason: string; partner_text: string | null;
+  provider: string | null; model: string | null; prompt_version: string | null;
+  generation_batch_id: string | null; created_at: string;
+  human_accept_count: number | string; human_reject_count: number | string;
+  my_vote: VocabularyEvaluationDecision | null; my_comment: string | null;
 };
 
 let client: NeonQueryFunction<boolean, boolean> | null = null;
@@ -47,6 +87,48 @@ function uuid(value: unknown) {
   return typeof value === "string" && /^[0-9a-f-]{36}$/i.test(value) ? value : null;
 }
 
+function number(value: unknown, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function evaluationFromRow(row: EvaluationRow): VocabularyWordGameEvaluation {
+  const humanAcceptCount = number(row.human_accept_count);
+  const humanRejectCount = number(row.human_reject_count);
+  return {
+    id: row.id,
+    wordId: row.word_id,
+    word: row.word,
+    reading: row.reading,
+    zipf: row.zipf === null ? null : number(row.zipf),
+    gameId: row.game_id,
+    pairDistance: row.requested_pair_distance,
+    llmDecision: row.decision,
+    resolvedDecision: resolveVocabularyEvaluationDecision(row.decision, humanAcceptCount, humanRejectCount),
+    usagePenalty: number(row.usage_penalty),
+    gamePenalty: number(row.game_penalty),
+    feedbackAdjustment: number(row.feedback_adjustment),
+    safetyFlags: Array.isArray(row.safety_flags) ? row.safety_flags : [],
+    reasonCode: row.reason_code,
+    pairReason: row.pair_reason,
+    partnerText: row.partner_text,
+    provider: row.provider,
+    model: row.model,
+    promptVersion: row.prompt_version,
+    generationBatchId: row.generation_batch_id,
+    createdAt: row.created_at,
+    humanAcceptCount,
+    humanRejectCount,
+    myVote: row.my_vote,
+    myComment: row.my_comment,
+  };
+}
+
+async function hasHumanVoteTable() {
+  const rows = await adminClient()`SELECT to_regclass('public.word_game_human_votes')::text AS table_name` as Array<{ table_name: string | null }>;
+  return Boolean(rows[0]?.table_name);
+}
+
 function fromRow(row: DraftRow): VocabularyDraftSubmission {
   return { id: row.id, kind: row.kind, payload: row.payload, sourceType: row.source_type,
     sourceEnvironment: row.source_environment, sourceReference: row.source_reference,
@@ -62,6 +144,104 @@ export async function listVocabularyDrafts(limit = 100) {
     ORDER BY created_at DESC LIMIT ${Math.max(1, Math.min(200, Math.floor(limit)))}
   ` as DraftRow[];
   return rows.map(fromRow);
+}
+
+export async function listVocabularyWordGameEvaluations(voter: string, limit = 100) {
+  const sql = adminClient();
+  const safeLimit = Math.max(1, Math.min(200, Math.floor(limit)));
+  const votingEnabled = await hasHumanVoteTable();
+  const rows = votingEnabled
+    ? await sql`
+      SELECT evaluation.id, evaluation.word_id, word.surface AS word, word.reading, word.zipf,
+        evaluation.game_id, evaluation.requested_pair_distance, evaluation.decision,
+        evaluation.usage_penalty, evaluation.game_penalty, evaluation.feedback_adjustment,
+        evaluation.safety_flags, evaluation.reason_code, evaluation.pair_reason,
+        evaluation.partner_text, evaluation.provider, evaluation.model, evaluation.prompt_version,
+        evaluation.generation_batch_id, evaluation.created_at,
+        COALESCE(summary.accept_count, 0)::bigint AS human_accept_count,
+        COALESCE(summary.reject_count, 0)::bigint AS human_reject_count,
+        mine.decision AS my_vote, mine.comment AS my_comment
+      FROM word_game_evaluations evaluation
+      JOIN words word ON word.id = evaluation.word_id
+      LEFT JOIN word_game_human_vote_summary summary ON summary.evaluation_id = evaluation.id
+      LEFT JOIN word_game_human_votes mine
+        ON mine.evaluation_id = evaluation.id AND mine.voter = ${voter}
+      WHERE evaluation.game_id = 'wordwolf'
+      ORDER BY evaluation.created_at DESC, evaluation.id DESC
+      LIMIT ${safeLimit}
+    ` as EvaluationRow[]
+    : await sql`
+      SELECT evaluation.id, evaluation.word_id, word.surface AS word, word.reading, word.zipf,
+        evaluation.game_id, evaluation.requested_pair_distance, evaluation.decision,
+        evaluation.usage_penalty, evaluation.game_penalty, evaluation.feedback_adjustment,
+        evaluation.safety_flags, evaluation.reason_code, evaluation.pair_reason,
+        evaluation.partner_text, evaluation.provider, evaluation.model, evaluation.prompt_version,
+        evaluation.generation_batch_id, evaluation.created_at,
+        0::bigint AS human_accept_count, 0::bigint AS human_reject_count,
+        NULL::text AS my_vote, NULL::text AS my_comment
+      FROM word_game_evaluations evaluation
+      JOIN words word ON word.id = evaluation.word_id
+      WHERE evaluation.game_id = 'wordwolf'
+      ORDER BY evaluation.created_at DESC, evaluation.id DESC
+      LIMIT ${safeLimit}
+    ` as EvaluationRow[];
+  return { evaluations: rows.map(evaluationFromRow), votingEnabled };
+}
+
+export async function castVocabularyWordGameVote(
+  evaluationId: string,
+  decision: VocabularyEvaluationDecision,
+  voter: string,
+  comment: string | null,
+) {
+  if (!uuid(evaluationId) || (decision !== "accept" && decision !== "reject")) {
+    throw new Error("VOCABULARY_EVALUATION_VOTE_INVALID");
+  }
+  const normalizedVoter = text(voter, 320);
+  const normalizedComment = comment === null ? null : text(comment, 500);
+  if (comment !== null && comment.trim() && !normalizedComment) {
+    throw new Error("VOCABULARY_EVALUATION_VOTE_INVALID");
+  }
+  if (!normalizedVoter) throw new Error("VOCABULARY_EVALUATION_VOTE_INVALID");
+  if (!await hasHumanVoteTable()) throw new Error("VOCABULARY_HUMAN_VOTES_NOT_CONFIGURED");
+  const sql = adminClient();
+  const previousRows = await sql`
+    SELECT decision, comment FROM word_game_human_votes
+    WHERE evaluation_id = ${evaluationId}::uuid AND voter = ${normalizedVoter}
+    LIMIT 1
+  ` as Array<{ decision: VocabularyEvaluationDecision; comment: string | null }>;
+  const saved = await sql`
+    INSERT INTO word_game_human_votes (evaluation_id, voter, decision, comment)
+    SELECT id, ${normalizedVoter}, ${decision}, ${normalizedComment}
+    FROM word_game_evaluations
+    WHERE id = ${evaluationId}::uuid AND game_id = 'wordwolf'
+    ON CONFLICT (evaluation_id, voter) DO UPDATE SET
+      decision = EXCLUDED.decision,
+      comment = EXCLUDED.comment
+    RETURNING evaluation_id
+  ` as Array<{ evaluation_id: string }>;
+  if (!saved[0]) throw new Error("VOCABULARY_EVALUATION_NOT_FOUND");
+  const rows = await sql`
+    SELECT evaluation_id,
+      COUNT(*) FILTER (WHERE decision = 'accept')::bigint AS accept_count,
+      COUNT(*) FILTER (WHERE decision = 'reject')::bigint AS reject_count
+    FROM word_game_human_votes
+    WHERE evaluation_id = ${evaluationId}::uuid
+    GROUP BY evaluation_id
+  ` as Array<{ evaluation_id: string; accept_count: number | string; reject_count: number | string }>;
+  const row = rows[0];
+  if (!row) throw new Error("VOCABULARY_EVALUATION_NOT_FOUND");
+  const humanAcceptCount = number(row.accept_count);
+  const humanRejectCount = number(row.reject_count);
+  return {
+    evaluationId: row.evaluation_id,
+    decision,
+    previousDecision: previousRows[0]?.decision ?? null,
+    comment: normalizedComment,
+    previousComment: previousRows[0]?.comment ?? null,
+    humanAcceptCount,
+    humanRejectCount,
+  };
 }
 
 async function activatePair(draft: VocabularyDraftSubmission, reviewedBy: string) {
