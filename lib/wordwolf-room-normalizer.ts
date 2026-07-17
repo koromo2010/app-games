@@ -8,6 +8,7 @@ import {
   normalizeTopicDictionarySource,
   normalizeTopicPairDistance,
 } from "@/lib/wordwolf";
+import { normalizeWordDifficulty } from "@/lib/word-selection-protocol";
 import type {
   Clue,
   ClueMode,
@@ -190,7 +191,11 @@ export function normalizeWordWolfRoom(value: unknown): WordWolfRoom | null {
     topicGeneration: normalizeGameGenerationMeta(parsed.topicGeneration),
     topicDictionarySource: normalizeTopicDictionarySource(parsed.topicDictionarySource ?? parsed.topicSourceMode),
     topicPairDistance: normalizeTopicPairDistance(parsed.topicPairDistance ?? parsed.topicSourceMode),
+    topicDifficulty: normalizeWordDifficulty(parsed.topicDifficulty),
     topicHint: typeof parsed.topicHint === "string" ? parsed.topicHint.slice(0, 80) : "",
+    topicAnchorWordId: typeof parsed.topicAnchorWordId === "string" ? parsed.topicAnchorWordId : undefined,
+    topicPartnerWordId: typeof parsed.topicPartnerWordId === "string" ? parsed.topicPartnerWordId : undefined,
+    topicAnchorWord: typeof parsed.topicAnchorWord === "string" ? parsed.topicAnchorWord : undefined,
     clues: Array.isArray(parsed.clues) ? (parsed.clues as Clue[]) : [],
     votes: parsed.votes && typeof parsed.votes === "object" ? (parsed.votes as Record<string, string>) : {},
     voteHistory: normalizeVoteHistory(parsed.voteHistory),

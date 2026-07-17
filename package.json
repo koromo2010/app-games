@@ -12,7 +12,8 @@
         "load:smoke": "node scripts/load-test.mjs",
         "monitor:production": "node scripts/production-smoke.mjs",
         "tahoiya:generate": "node --experimental-strip-types scripts/generate-tahoiya-candidates.ts",
-        "vocabulary:migrate": "node --experimental-strip-types scripts/migrate-vocabulary-to-master.ts"
+        "vocabulary:migrate": "node --experimental-strip-types scripts/migrate-vocabulary-to-master.ts",
+        "vocabulary:import-legacy-words": "node --experimental-strip-types scripts/import-legacy-word-catalog.ts"
     },
     "dependencies": {
         "@neondatabase/serverless": "^1.1.0",

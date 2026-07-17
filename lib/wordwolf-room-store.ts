@@ -8,6 +8,7 @@ import { redisCommand, redisPipeline } from "@/lib/redis-store";
 import { recordWordWolfGameResults } from "@/lib/player-stats-store";
 import { recordWordWolfReplay } from "@/lib/game-replay-store";
 import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
+import { normalizeWordDifficulty } from "@/lib/word-selection-protocol";
 import { isMultiplayerRoomExpired, multiplayerRoomExpiryArgs } from "@/lib/multiplayer-room-lifecycle";
 import { canDissolveOnlineRoom } from "@/lib/room-dissolve-policy";
 import { claimOnlineRoomForPlayer, loadPlayerActiveOnlineRoom, releasePlayerActiveRoom } from "@/lib/player-active-room";
@@ -152,6 +153,9 @@ function resetWordWolfRoomToLobby(room: WordWolfRoom, advanceGame: boolean) {
     topicSource: "pending" as const,
     topicFallbackExhausted: false,
     topicGeneration: undefined,
+    topicAnchorWordId: undefined,
+    topicPartnerWordId: undefined,
+    topicAnchorWord: undefined,
     clues: [],
     votes: {},
     voteHistory: [],
@@ -208,6 +212,7 @@ export async function applyStoredWordWolfRoomAction(code: string, actorId: strin
           turnTimeLimitSeconds: config.turnTimeLimitSeconds === undefined ? current.turnTimeLimitSeconds : normalizeCommonTimeLimit(config.turnTimeLimitSeconds),
           topicDictionarySource: config.topicDictionarySource === undefined ? current.topicDictionarySource : normalizeTopicDictionarySource(config.topicDictionarySource),
           topicPairDistance: config.topicPairDistance === undefined ? current.topicPairDistance : normalizeTopicPairDistance(config.topicPairDistance),
+          topicDifficulty: config.topicDifficulty === undefined ? current.topicDifficulty : normalizeWordDifficulty(config.topicDifficulty),
           topicHint: typeof config.topicHint === "string" ? config.topicHint.trim().slice(0, 80) : current.topicHint,
         };
       } else if (action.type === "set-debug") {

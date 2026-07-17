@@ -43,6 +43,10 @@ function normalizedWord(value: unknown) {
   return surface ? { surface, normalized: surface.toLocaleLowerCase("ja"), length: Array.from(surface).length } : null;
 }
 
+function uuid(value: unknown) {
+  return typeof value === "string" && /^[0-9a-f-]{36}$/i.test(value) ? value : null;
+}
+
 function fromRow(row: DraftRow): VocabularyDraftSubmission {
   return { id: row.id, kind: row.kind, payload: row.payload, sourceType: row.source_type,
     sourceEnvironment: row.source_environment, sourceReference: row.source_reference,
@@ -65,33 +69,77 @@ async function activatePair(draft: VocabularyDraftSubmission, reviewedBy: string
   const wolf = normalizedWord(draft.payload.wolfWord);
   const gameId = text(draft.payload.gameId, 80);
   if (!village || !wolf || !gameId || village.normalized === wolf.normalized) throw new Error("VOCABULARY_DRAFT_INVALID");
-  const words = [village, wolf].sort((a, b) => a.normalized.localeCompare(b.normalized, "ja"));
+  const preferredBySurface = new Map<string, string | null>([
+    [village.normalized, null],
+    [wolf.normalized, null],
+  ]);
+  const anchorSurface = text(draft.payload.anchorWord, 100)?.toLocaleLowerCase("ja");
+  const anchorId = uuid(draft.payload.anchorWordId);
+  const partnerId = uuid(draft.payload.partnerWordId);
+  if (anchorSurface === village.normalized) {
+    preferredBySurface.set(village.normalized, anchorId);
+    preferredBySurface.set(wolf.normalized, partnerId);
+  } else if (anchorSurface === wolf.normalized) {
+    preferredBySurface.set(wolf.normalized, anchorId);
+    preferredBySurface.set(village.normalized, partnerId);
+  }
+  const words = [village, wolf]
+    .sort((a, b) => a.normalized.localeCompare(b.normalized, "ja"))
+    .map((word) => ({ ...word, preferredId: preferredBySurface.get(word.normalized) ?? null }));
   const sql = adminClient();
   const rows = await sql`
-    WITH first_word AS (
+    WITH first_existing AS (
+      SELECT id FROM words
+      WHERE (${words[0].preferredId}::uuid IS NOT NULL AND id = ${words[0].preferredId}::uuid)
+        OR normalized_surface = ${words[0].normalized}
+      ORDER BY CASE WHEN id = ${words[0].preferredId}::uuid THEN 0 ELSE 1 END,
+        CASE WHEN status = 'active' THEN 0 ELSE 1 END, updated_at DESC
+      LIMIT 1
+    ), first_inserted AS (
       INSERT INTO words (surface, normalized_surface, character_count, status, source_type, source_environment,
         source_reference, provider, model, prompt_version, created_by, reviewed_at, reviewed_by)
-      VALUES (${words[0].surface}, ${words[0].normalized}, ${words[0].length}, 'active', ${draft.sourceType},
+      SELECT ${words[0].surface}, ${words[0].normalized}, ${words[0].length}, 'active', ${draft.sourceType},
         ${draft.sourceEnvironment}, ${draft.sourceReference}, ${draft.provider}, ${draft.model}, ${draft.promptVersion},
-        ${draft.createdBy}, NOW(), ${reviewedBy})
+        ${draft.createdBy}, NOW(), ${reviewedBy}
+      WHERE NOT EXISTS (SELECT 1 FROM first_existing)
+      ON CONFLICT (normalized_surface, (COALESCE(reading, ''))) DO UPDATE SET updated_at = NOW()
+      RETURNING id
+    ), first_word AS (
+      SELECT id FROM first_existing UNION ALL SELECT id FROM first_inserted LIMIT 1
+    ), second_existing AS (
+      SELECT id FROM words
+      WHERE (${words[1].preferredId}::uuid IS NOT NULL AND id = ${words[1].preferredId}::uuid)
+        OR normalized_surface = ${words[1].normalized}
+      ORDER BY CASE WHEN id = ${words[1].preferredId}::uuid THEN 0 ELSE 1 END,
+        CASE WHEN status = 'active' THEN 0 ELSE 1 END, updated_at DESC
+      LIMIT 1
+    ), second_inserted AS (
+      INSERT INTO words (surface, normalized_surface, character_count, status, source_type, source_environment,
+        source_reference, provider, model, prompt_version, created_by, reviewed_at, reviewed_by)
+      SELECT ${words[1].surface}, ${words[1].normalized}, ${words[1].length}, 'active', ${draft.sourceType},
+        ${draft.sourceEnvironment}, ${draft.sourceReference}, ${draft.provider}, ${draft.model}, ${draft.promptVersion},
+        ${draft.createdBy}, NOW(), ${reviewedBy}
+      WHERE NOT EXISTS (SELECT 1 FROM second_existing)
       ON CONFLICT (normalized_surface, (COALESCE(reading, ''))) DO UPDATE SET updated_at = NOW()
       RETURNING id
     ), second_word AS (
-      INSERT INTO words (surface, normalized_surface, character_count, status, source_type, source_environment,
-        source_reference, provider, model, prompt_version, created_by, reviewed_at, reviewed_by)
-      VALUES (${words[1].surface}, ${words[1].normalized}, ${words[1].length}, 'active', ${draft.sourceType},
-        ${draft.sourceEnvironment}, ${draft.sourceReference}, ${draft.provider}, ${draft.model}, ${draft.promptVersion},
-        ${draft.createdBy}, NOW(), ${reviewedBy})
-      ON CONFLICT (normalized_surface, (COALESCE(reading, ''))) DO UPDATE SET updated_at = NOW()
-      RETURNING id
+      SELECT id FROM second_existing UNION ALL SELECT id FROM second_inserted LIMIT 1
     ), pair AS (
-      INSERT INTO word_pairs (word_a_id, word_b_id, relation, difficulty, status, source_type, source_environment,
+      INSERT INTO word_pairs (word_a_id, word_b_id, relation, category, difficulty, pair_distance,
+        requested_pair_distance, status, source_type, source_environment,
         source_reference, provider, model, prompt_version, created_by, reviewed_at, reviewed_by)
       SELECT LEAST(first_word.id, second_word.id), GREATEST(first_word.id, second_word.id),
-        ${text(draft.payload.reason)}, ${text(draft.payload.pairDistance, 80)}, 'active', ${draft.sourceType},
+        ${text(draft.payload.reason)}, ${text(draft.payload.difficulty, 80)}, ${text(draft.payload.pairDistance, 80)},
+        ${text(draft.payload.pairDistance, 80)}, ${text(draft.payload.pairDistance, 80)}, 'active', ${draft.sourceType},
         ${draft.sourceEnvironment}, ${draft.sourceReference}, ${draft.provider}, ${draft.model}, ${draft.promptVersion},
         ${draft.createdBy}, NOW(), ${reviewedBy} FROM first_word, second_word
-      ON CONFLICT (word_a_id, word_b_id) DO UPDATE SET status = 'active', reviewed_at = NOW(), reviewed_by = ${reviewedBy}, updated_at = NOW()
+      ON CONFLICT (word_a_id, word_b_id) DO UPDATE SET
+        relation = EXCLUDED.relation,
+        category = EXCLUDED.category,
+        difficulty = EXCLUDED.difficulty,
+        pair_distance = EXCLUDED.pair_distance,
+        requested_pair_distance = EXCLUDED.requested_pair_distance,
+        status = 'active', reviewed_at = NOW(), reviewed_by = ${reviewedBy}, updated_at = NOW()
       RETURNING id
     ), eligibility AS (
       INSERT INTO word_game_eligibility (subject_type, subject_id, game_id, enabled)

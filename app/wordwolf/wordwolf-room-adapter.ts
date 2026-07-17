@@ -5,6 +5,7 @@ import {
   normalizeTopicDictionarySource,
   normalizeTopicPairDistance,
 } from "@/lib/wordwolf";
+import { normalizeWordDifficulty } from "@/lib/word-selection-protocol";
 import type {
   ClueMode,
   GameMode,
@@ -105,6 +106,7 @@ type WordWolfRoomDefaults = Pick<
   | "wolfCount"
   | "topicDictionarySource"
   | "topicPairDistance"
+  | "topicDifficulty"
   | "topicHint"
 >;
 
@@ -144,6 +146,7 @@ export function getDefaultRoomSettings(): WordWolfRoomDefaults {
     wolfCount: 1,
     topicDictionarySource: "llm",
     topicPairDistance: "balanced",
+    topicDifficulty: "normal",
     topicHint: "",
   };
 }
@@ -163,6 +166,7 @@ export function normalizeRoomDefaults(value: unknown): WordWolfRoomDefaults {
     wolfCount: normalizeStoredWolfCount(parsed.wolfCount),
     topicDictionarySource: normalizeTopicDictionarySource(parsed.topicDictionarySource),
     topicPairDistance: normalizeTopicPairDistance(parsed.topicPairDistance),
+    topicDifficulty: normalizeWordDifficulty(parsed.topicDifficulty),
     topicHint: typeof parsed.topicHint === "string" ? parsed.topicHint.slice(0, 80) : defaults.topicHint,
   };
 }
@@ -198,6 +202,7 @@ export async function saveRoomDefaultsToStore(room: Room) {
     wolfCount: room.wolfCount,
     topicDictionarySource: room.topicDictionarySource,
     topicPairDistance: room.topicPairDistance,
+    topicDifficulty: room.topicDifficulty,
     topicHint: room.topicHint,
   });
   await savePlayerRoomDefaults({
@@ -239,6 +244,7 @@ export function loadRoom(code: string): Room | null {
       runoffCandidateIds: normalizeRunoffCandidateIds(room.runoffCandidateIds),
       topicDictionarySource: normalizeTopicDictionarySource(room.topicDictionarySource ?? room.topicSourceMode),
       topicPairDistance: normalizeTopicPairDistance(room.topicPairDistance ?? room.topicSourceMode),
+      topicDifficulty: normalizeWordDifficulty(room.topicDifficulty),
       topicHint: typeof room.topicHint === "string" ? room.topicHint : "",
       scores: normalizeRoomScores(room.scores),
       gamesPlayed: room.gamesPlayed ?? 0,
@@ -304,6 +310,7 @@ export async function loadRoomFromStore(code: string) {
       runoffCandidateIds: normalizeRunoffCandidateIds(remoteRoom.runoffCandidateIds),
       topicDictionarySource: normalizeTopicDictionarySource(remoteRoom.topicDictionarySource ?? remoteRoom.topicSourceMode),
       topicPairDistance: normalizeTopicPairDistance(remoteRoom.topicPairDistance ?? remoteRoom.topicSourceMode),
+      topicDifficulty: normalizeWordDifficulty(remoteRoom.topicDifficulty),
       topicHint: typeof remoteRoom.topicHint === "string" ? remoteRoom.topicHint : "",
       scores: normalizeRoomScores(remoteRoom.scores),
       gamesPlayed: remoteRoom.gamesPlayed ?? 0,
@@ -337,6 +344,7 @@ export async function loadActiveRoomFromStore(playerId: string) {
       runoffCandidateIds: normalizeRunoffCandidateIds(activeRoom.runoffCandidateIds),
       topicDictionarySource: normalizeTopicDictionarySource(activeRoom.topicDictionarySource ?? activeRoom.topicSourceMode),
       topicPairDistance: normalizeTopicPairDistance(activeRoom.topicPairDistance ?? activeRoom.topicSourceMode),
+      topicDifficulty: normalizeWordDifficulty(activeRoom.topicDifficulty),
       topicHint: typeof activeRoom.topicHint === "string" ? activeRoom.topicHint : "",
       scores: normalizeRoomScores(activeRoom.scores),
       gamesPlayed: activeRoom.gamesPlayed ?? 0,
@@ -418,6 +426,7 @@ export function createEmptyRoom(
     topicFallbackExhausted: false,
     topicDictionarySource: defaults.topicDictionarySource,
     topicPairDistance: defaults.topicPairDistance,
+    topicDifficulty: defaults.topicDifficulty,
     topicHint: defaults.topicHint,
     clues: [],
     votes: {},

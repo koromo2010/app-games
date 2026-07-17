@@ -31,6 +31,8 @@ export type WordPair = {
   wordBId: string;
   relation: string | null;
   difficulty: string | null;
+  pairDistance: string | null;
+  requestedPairDistance: string | null;
   status: VocabularyStatus;
 };
 

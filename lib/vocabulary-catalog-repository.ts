@@ -21,7 +21,8 @@ type WordRow = {
 };
 type PairRow = {
   id: string; word_a_id: string; word_b_id: string; relation: string | null;
-  difficulty: string | null; status: VocabularyStatus;
+  difficulty: string | null; pair_distance: string | null;
+  requested_pair_distance: string | null; status: VocabularyStatus;
 };
 type DefinitionRow = {
   id: string; word_id: string; short_definition: string; status: VocabularyStatus;
@@ -70,7 +71,8 @@ export class PostgresVocabularyCatalogRepository implements VocabularyCatalogRep
     const statuses = statusesForRead(query.statuses);
     const limit = Math.min(500, Math.max(1, Math.floor(query.limit)));
     const rows = process.env.APP_ENV === "production" ? await sql`
-      SELECT p.id, p.word_a_id, p.word_b_id, p.relation, p.difficulty, p.status
+      SELECT p.id, p.word_a_id, p.word_b_id, p.relation, p.difficulty,
+             p.pair_distance, p.requested_pair_distance, p.status
       FROM active_word_pairs p
       JOIN active_word_game_eligibility e ON e.subject_type = 'pair' AND e.subject_id = p.id
       WHERE e.game_id = ${query.gameId}
@@ -78,7 +80,8 @@ export class PostgresVocabularyCatalogRepository implements VocabularyCatalogRep
         AND (e.valid_until IS NULL OR e.valid_until > NOW())
       ORDER BY p.updated_at DESC LIMIT ${limit}
     ` as PairRow[] : await sql`
-      SELECT p.id, p.word_a_id, p.word_b_id, p.relation, p.difficulty, p.status
+      SELECT p.id, p.word_a_id, p.word_b_id, p.relation, p.difficulty,
+             p.pair_distance, p.requested_pair_distance, p.status
       FROM word_pairs p
       JOIN word_game_eligibility e ON e.subject_type = 'pair' AND e.subject_id = p.id
       WHERE e.game_id = ${query.gameId} AND e.enabled AND NOT e.manually_suspended
@@ -89,7 +92,9 @@ export class PostgresVocabularyCatalogRepository implements VocabularyCatalogRep
     ` as PairRow[];
     return rows.map((row) => ({
       id: row.id, wordAId: row.word_a_id, wordBId: row.word_b_id,
-      relation: row.relation, difficulty: row.difficulty, status: row.status,
+      relation: row.relation, difficulty: row.difficulty,
+      pairDistance: row.pair_distance, requestedPairDistance: row.requested_pair_distance,
+      status: row.status,
     }));
   }
 

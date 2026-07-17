@@ -1,6 +1,6 @@
 # 開発・本番DB分離と共通単語DB
 
-最終更新: 2026-07-16
+最終更新: 2026-07-17
 
 ## 正本となる境界
 
@@ -41,7 +41,9 @@ BLOB_READ_WRITE_TOKEN=...
 - API認証に加えてDBロールとtriggerでも制約する。
 - draft作成APIには管理・デバッグ認証、レート制限、入力長・件数制限、監査ログを必須とする。
 
-初期schemaは`db/vocabulary/001_catalog.sql`、ロール権限は`db/vocabulary/002_roles.sql`、レビュー機能の追加schemaは`db/vocabulary/003_review_workflow.sql`に置く。接続パスワードはNeon/Vercelだけで管理し、ファイルへ実値を保存しない。`VOCABULARY_DATABASE_URL`はゲーム実行用、`VOCABULARY_ADMIN_DATABASE_URL`は管理画面の候補確認・採否専用とし、ブラウザへ公開しない。
+初期schemaは`db/vocabulary/001_catalog.sql`、ロール権限は`db/vocabulary/002_roles.sql`、レビュー機能は`db/vocabulary/003_review_workflow.sql`、ワードウルフRAGと距離集計は`db/vocabulary/004_wordwolf_rag.sql`に置く。接続パスワードはNeon/Vercelだけで管理し、ファイルへ実値を保存しない。`VOCABULARY_DATABASE_URL`はゲーム実行用、`VOCABULARY_ADMIN_DATABASE_URL`は管理画面の候補確認・採否専用とし、ブラウザへ公開しない。
+
+ワードウルフの距離は、生成時指定の`requested_pair_distance`と、プレイヤーフィードバック集計後の現在値`pair_distance`を分ける。個別フィードバックで即時更新せず、5件以上の集計をbatch/admin処理で反映する。生成・取込・Preview確認の詳細は`docs/WORDWOLF_RAG.md`を参照する。
 
 ## 移行順
 

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { GameFeedbackRating, GameFeedbackRecord, GameGenerationMeta } from "@/lib/game-ai-types";
 import { normalizeGameGenerationMeta } from "@/lib/game-ai-types";
 import { redisCommand } from "@/lib/redis-store";
+import { feedbackAdjustmentFromCounts } from "@/lib/word-selection-protocol";
 
 const feedbackItemPrefix = "game-feedback:item:";
 const feedbackTaskPrefix = "game-feedback:task:";
@@ -163,4 +164,18 @@ export function formatGameFeedbackContext(records: GameFeedbackRecord[]) {
     "Prefer patterns from good examples and avoid patterns from bad examples.",
     ...rows,
   ].join("\n");
+}
+
+export function wordFamiliarityFeedbackAdjustment(
+  records: GameFeedbackRecord[],
+  candidate: { wordId: string; surface: string },
+) {
+  const surface = candidate.surface.normalize("NFKC").trim().toLocaleLowerCase("ja");
+  const related = records.filter((record) =>
+    record.settings.anchorWordId === candidate.wordId ||
+    String(record.settings.anchorWord ?? "").normalize("NFKC").trim().toLocaleLowerCase("ja") === surface,
+  );
+  const goodCount = related.filter((record) => record.rating === "good" && record.reasonTags.includes("familiar")).length;
+  const badCount = related.filter((record) => record.rating === "bad" && record.reasonTags.includes("too-obscure")).length;
+  return feedbackAdjustmentFromCounts(goodCount, badCount);
 }
