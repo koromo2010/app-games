@@ -1,8 +1,6 @@
--- Run as the Neon administrative role after replacing the placeholder passwords.
-CREATE ROLE vocabulary_production LOGIN PASSWORD 'REPLACE_ME';
-CREATE ROLE vocabulary_development LOGIN PASSWORD 'REPLACE_ME';
-CREATE ROLE vocabulary_batch LOGIN PASSWORD 'REPLACE_ME';
-CREATE ROLE vocabulary_admin LOGIN PASSWORD 'REPLACE_ME';
+-- Create these LOGIN roles in the Neon Console before running this file:
+-- vocabulary_production, vocabulary_development, vocabulary_batch, vocabulary_admin.
+-- Passwords belong in Neon/Vercel only and must never be committed here.
 
 REVOKE ALL ON SCHEMA public FROM PUBLIC;
 REVOKE ALL ON ALL TABLES IN SCHEMA public FROM PUBLIC;
