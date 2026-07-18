@@ -100,21 +100,21 @@ export function TahoiyaGame() {
         {(!room || room.phase === "lobby") && (room && isHost
           ? <button type="button" onClick={() => void dissolveRoom()} className={gameTopBannerDangerActionClass}>部屋を解散</button>
           : <Link href="/games" className={gameTopBannerActionClass}>広場へ戻る</Link>)}
+        {room && isHost && (
+          <DebugModeButton
+            variant="banner"
+            enabled={Boolean(room.debugMode)}
+            disabled={room.phase !== "lobby"}
+            onAbort={room.debugMode && room.phase !== "lobby" ? abortGame : undefined}
+            replayEnabled={Boolean(room.debugReplayEnabled)}
+            onReplayChange={(enabled) => void runRoomAction({ type: "set-debug-replay", actorId: playerId, enabled })}
+            onChange={setDebugMode}
+          />
+        )}
         <GameTopMenu>
             {room && room.phase !== "lobby" && <Link href="/games" data-menu-close="true" className={gameTopMenuItemClass}>広場へ戻る</Link>}
             <button type="button" data-menu-close="true" onClick={() => setRulesOpen(true)} className={gameTopMenuItemClass}>ルール</button>
             <PaidLlmAccessButton variant="menu" />
-            {room && isHost && (
-              <DebugModeButton
-                variant="menu"
-                enabled={Boolean(room.debugMode)}
-                disabled={room.phase !== "lobby"}
-                onAbort={room.debugMode && room.phase !== "lobby" ? abortGame : undefined}
-                replayEnabled={Boolean(room.debugReplayEnabled)}
-                onReplayChange={(enabled) => void runRoomAction({ type: "set-debug-replay", actorId: playerId, enabled })}
-                onChange={setDebugMode}
-              />
-            )}
         </GameTopMenu>
         <GamePlayerMenu id={playerId || undefined} name={playerName || "未ログイン"} avatarColor={avatarColor} avatarImage={avatarImage} />
       </GameTopBanner>
