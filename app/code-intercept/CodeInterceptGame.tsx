@@ -17,6 +17,7 @@ import { useRoomResultReturnGate } from "@/app/hooks/use-room-result-return-gate
 import { applyCodeInterceptRoomAction, codeInterceptRoomApi, createCodeInterceptRoom } from "@/app/code-intercept/code-intercept-room-api-client";
 import {
   codeInterceptAnswererIds,
+  codeInterceptClueHistory,
   codeLengthForTeam,
   codeInterceptDefaults,
   codeInterceptMaximumCardCount,
@@ -152,23 +153,14 @@ function ResultCard({ result, room }: { result: CodeInterceptTeamRoundResult; ro
 }
 
 function NumberedClueHistory({ room, teamId }: { room: CodeInterceptRoom; teamId: CodeInterceptTeamId }) {
-  const cluesByNumber = Array.from({ length: room.cardCount }, (_, index) => {
-    const cardNumber = index + 1;
-    const clues = room.roundHistory.flatMap((round) => {
-      const result = round.teams.find((team) => team.teamId === teamId);
-      if (!result || result.secretCode.length === 0) return [];
-      return result.secretCode.flatMap((number, clueIndex) => number === cardNumber && result.clues[clueIndex]
-        ? [{ roundNumber: round.roundNumber, clue: result.clues[clueIndex] }]
-        : []);
-    });
-    return { cardNumber, clues };
-  });
-  const canMapClues = cluesByNumber.some((column) => column.clues.length > 0);
-  if (!canMapClues) return <p className="mt-4 rounded-xl border border-white/10 bg-slate-950/35 p-3 text-sm text-slate-300">正解暗号が非公開のため、相手チームのヒントは番号別に並べません。</p>;
+  const { numbered, unknown } = codeInterceptClueHistory(room, teamId);
+  const canShowHistory = unknown.length > 0 || numbered.some((column) => column.clues.length > 0);
+  if (!canShowHistory) return <p className="mt-4 rounded-xl border border-white/10 bg-slate-950/35 p-3 text-sm text-slate-300">正解暗号が非公開のため、相手チームのヒントは番号別に並べません。</p>;
+  const columns = [...numbered.map((column) => ({ ...column, label: String(column.cardNumber) })), { cardNumber: "unknown", label: "不明", clues: unknown }];
   return <div className="mt-4 overflow-x-auto">
-    <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${room.cardCount}, minmax(8rem, 1fr))`, minWidth: `${Math.max(room.cardCount, 4) * 8.5}rem` }}>{cluesByNumber.map((column) => <section key={column.cardNumber} className="overflow-hidden rounded-xl border border-white/15 bg-slate-950/45">
-      <h4 className="border-b border-white/15 bg-white/10 py-2 text-center font-mono text-2xl font-black">{column.cardNumber}</h4>
-      <ul className="space-y-2 p-2">{column.clues.length > 0 ? column.clues.map((entry) => <li key={`${entry.roundNumber}:${entry.clue}`} className="rounded-lg bg-white/[0.06] px-2 py-2"><span className="mr-2 font-mono text-xs text-slate-400">R{entry.roundNumber}</span><strong>{entry.clue}</strong></li>) : <li className="py-2 text-center text-sm text-slate-400">まだなし</li>}</ul>
+    <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${room.cardCount + 1}, minmax(8rem, 1fr))`, minWidth: `${Math.max(room.cardCount + 1, 4) * 8.5}rem` }}>{columns.map((column) => <section key={column.cardNumber} className={`overflow-hidden rounded-xl border ${column.cardNumber === "unknown" ? "border-amber-300/30 bg-amber-300/[0.06]" : "border-white/15 bg-slate-950/45"}`}>
+      <h4 className="border-b border-white/15 bg-white/10 py-2 text-center font-mono text-2xl font-black">{column.label}</h4>
+      <ul className="space-y-2 p-2">{column.clues.length > 0 ? column.clues.map((entry, index) => <li key={`${entry.roundNumber}:${index}:${entry.clue}`} className="rounded-lg bg-white/[0.06] px-2 py-2"><span className="mr-2 font-mono text-xs text-slate-400">R{entry.roundNumber}</span><strong>{entry.clue}</strong></li>) : <li className="py-2 text-center text-sm text-slate-400">まだなし</li>}</ul>
     </section>)}</div>
   </div>;
 }
@@ -176,7 +168,7 @@ function NumberedClueHistory({ room, teamId }: { room: CodeInterceptRoom; teamId
 function TeamRoundHistoryTable({ room, teamId }: { room: CodeInterceptRoom; teamId: CodeInterceptTeamId }) {
   return <section className={`rounded-2xl border p-4 ${teamStyle(teamId)}`}>
     <h3 className="text-lg font-black">{teamLabel(teamId)}の過去ログ</h3>
-    <p className="mt-1 text-sm text-slate-300">番号ごとに、これまで対応したヒントをまとめています。</p>
+    <p className="mt-1 text-sm text-slate-300">伝達成功したヒントだけ番号別にまとめ、伝達失敗したヒントは「不明」へ残します。</p>
     <NumberedClueHistory room={room} teamId={teamId} />
     <h4 className="mt-5 font-black">ラウンド結果</h4>
     <div className="mt-2 overflow-x-auto"><table className="min-w-full text-left text-sm"><thead><tr className="border-b border-white/15 text-slate-300"><th className="px-2 py-2">R</th><th className="px-2 py-2">桁数</th><th className="px-2 py-2">ヒント</th><th className="px-2 py-2">味方回答</th><th className="px-2 py-2">傍受回答</th><th className="px-2 py-2">傍受結果</th></tr></thead><tbody>{room.roundHistory.map((round) => {
