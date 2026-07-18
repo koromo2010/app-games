@@ -225,6 +225,10 @@ export async function PATCH(request: Request) {
       telemetry.responseError("room.command", error, 401, logFields);
       return Response.json({ error: "Bad passphrase" }, { status: 401 });
     }
+    if (error instanceof Error && error.message === "TAHOIYA_PLAYERS_NOT_RETURNED") {
+      telemetry.responseError("room.command", error, 409, logFields);
+      return Response.json({ error: "復帰待ちの参加者がいます。全員が戻ってから開始してください。" }, { status: 409 });
+    }
     if (error instanceof Error && (error.message === "TAHOIYA_ROOM_FULL" || error.message === "TAHOIYA_ROOM_STARTED" || error.message === "TAHOIYA_NOT_ENOUGH_PLAYERS" || error.message === "TAHOIYA_ANSWERER_REQUIRED")) {
       telemetry.responseError("room.command", error, 409, logFields);
       return Response.json({ error: error.message }, { status: 409 });

@@ -7,7 +7,7 @@ import { recordTahoiyaReplay } from "@/lib/game-replay-store";
 import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
 import { isMultiplayerRoomExpired } from "@/lib/multiplayer-room-lifecycle";
 import { canDissolveOnlineRoom } from "@/lib/room-dissolve-policy";
-import { beginRoomLobbyReturn, confirmRoomLobbyReturn } from "@/lib/room-lobby-return";
+import { allRoomPlayersReturned, beginRoomLobbyReturn, confirmRoomLobbyReturn } from "@/lib/room-lobby-return";
 import { claimOnlineRoomForPlayer, loadPlayerActiveOnlineRoom, releasePlayerActiveRoom, saveOnlineRoomPlayerIndexes } from "@/lib/player-active-room";
 import { onlineRoomPlayerLimits } from "@/lib/online-room-policy";
 import { loadIndexedOnlineRoomPage } from "@/lib/online-room-list";
@@ -140,6 +140,7 @@ export async function joinStoredTahoiyaRoom(code: string, player: TahoiyaPlayer,
 export async function startStoredTahoiyaRound(code: string, actorId: string, topic: TahoiyaTopic) {
   return mutateStoredTahoiyaRoom(code, (current) => {
     if (current.hostId !== actorId || current.phase !== "lobby") throw new Error("TAHOIYA_ROOM_FORBIDDEN");
+    if (!allRoomPlayersReturned(current.lobbyReturn, current.players)) throw new Error("TAHOIYA_PLAYERS_NOT_RETURNED");
     const players = [...current.players];
     while (current.debugMode && players.length < 2) {
       players.push({ id: `dummy-${randomUUID()}`, name: `テスト${players.length + 1}`, joinedAt: Date.now() });

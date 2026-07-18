@@ -45,6 +45,15 @@ export function confirmRoomLobbyReturn(
   return { ...state, returnedPlayerIds: [...state.returnedPlayerIds, playerId] };
 }
 
+export function allRoomPlayersReturned(
+  state: RoomLobbyReturnState | undefined,
+  players: readonly RoomPlayer[],
+) {
+  if (!state) return true;
+  const returnedPlayerIds = new Set(state.returnedPlayerIds);
+  return players.every((player) => returnedPlayerIds.has(player.id));
+}
+
 export function normalizeRoomLobbyReturnState(
   value: unknown,
   players: readonly RoomPlayer[],

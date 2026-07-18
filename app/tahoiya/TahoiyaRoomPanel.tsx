@@ -1,5 +1,6 @@
 import type { TahoiyaAnswererMode, TahoiyaDifficulty, TahoiyaPlayMode, TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomChoice } from "@/lib/tahoiya-types";
 import { tahoiyaDifficultyLabel, tahoiyaEffectiveZipfDescription } from "@/lib/tahoiya-difficulty";
+import { allRoomPlayersReturned } from "@/lib/room-lobby-return";
 import { DebugWordGenerationTest, type DebugWordGenerationResult } from "../components/DebugWordGenerationTest";
 import { RoomConfigSummary } from "../components/RoomConfigSummary";
 import { RoomTimeLimitControl } from "../components/RoomTimeLimitControl";
@@ -140,5 +141,7 @@ function Setting({ title, description, children }: { title: string; description?
 
 function HostActions(props: Props & { room: TahoiyaRoom }) {
   const difficulty = `${tahoiyaDifficultyLabel(props.room.topicDifficulty)}（${tahoiyaEffectiveZipfDescription(props.room.topicDifficulty)}）`;
-  return <>{props.isDebugMode && <><DebugWordGenerationTest onGenerate={props.onTestWordGeneration} heading={`${difficulty}抽出・正解文確認`} description={`通常ゲームと同じく、共通DBから${difficulty}の単語を選び、AIはセンシティブ判定と読み・正解文の作成だけを行います。補充ONでは同じ条件の10語を一括審査して候補DBへ保存します。`} forceNewTitle={`${tahoiyaDifficultyLabel(props.room.topicDifficulty)}候補DBを10件補充`} forceNewDescription={`ON: ${difficulty}の10語を一括審査　OFF: 1語を抽出して正解文生成まで確認`} forceNewButtonLabel="10件を審査して候補DBへ補充" forceNewRepeatLabel="さらに10件を補充" /><button onClick={props.onAddTestPlayer} disabled={props.room.players.length >= 8} className={`w-full ${subtleButtonClass}`}>テストプレイヤー追加</button></>}<button onClick={props.onStartRound} disabled={props.isStarting} className={`w-full ${primaryButtonClass}`}>{props.isStarting ? "お題生成中..." : "ラウンド開始"}</button></>;
+  const allPlayersReturned = allRoomPlayersReturned(props.room.lobbyReturn, props.room.players);
+  const waitingPlayerCount = props.room.players.length - (props.room.lobbyReturn?.returnedPlayerIds.length ?? 0);
+  return <>{props.isDebugMode && <><DebugWordGenerationTest onGenerate={props.onTestWordGeneration} heading={`${difficulty}抽出・正解文確認`} description={`通常ゲームと同じく、共通DBから${difficulty}の単語を選び、AIはセンシティブ判定と読み・正解文の作成だけを行います。補充ONでは同じ条件の10語を一括審査して候補DBへ保存します。`} forceNewTitle={`${tahoiyaDifficultyLabel(props.room.topicDifficulty)}候補DBを10件補充`} forceNewDescription={`ON: ${difficulty}の10語を一括審査　OFF: 1語を抽出して正解文生成まで確認`} forceNewButtonLabel="10件を審査して候補DBへ補充" forceNewRepeatLabel="さらに10件を補充" /><button onClick={props.onAddTestPlayer} disabled={props.room.players.length >= 8} className={`w-full ${subtleButtonClass}`}>テストプレイヤー追加</button></>}<button onClick={props.onStartRound} disabled={props.isStarting || !allPlayersReturned} className={`w-full ${primaryButtonClass}`}>{props.isStarting ? "お題生成中..." : allPlayersReturned ? "ラウンド開始" : `復帰待ち（あと${waitingPlayerCount}人）`}</button></>;
 }
