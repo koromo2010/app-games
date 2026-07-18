@@ -18,6 +18,18 @@ export type TahoiyaCatalogMigrationStatus = {
   complete: boolean;
 };
 
+export function isTahoiyaCatalogMigrationComplete(input: {
+  sourceRecordCount: number;
+  sourceValidCount: number;
+  targetTopicCount: number;
+  completedSourceCount: string | null;
+}) {
+  if (input.sourceRecordCount === 0) return true;
+  return input.sourceValidCount > 0 &&
+    Number(input.completedSourceCount) === input.sourceValidCount &&
+    input.targetTopicCount >= input.sourceValidCount;
+}
+
 type MigrationInput = {
   surface: string;
   reading: string | null;
@@ -135,8 +147,11 @@ export async function inspectTahoiyaCatalogMigration(): Promise<TahoiyaCatalogMi
   return {
     ...source,
     targetTopicCount,
-    complete: Number(completedSourceCount) === source.sourceValidCount &&
-      targetTopicCount >= source.sourceValidCount && source.sourceValidCount > 0,
+    complete: isTahoiyaCatalogMigrationComplete({
+      ...source,
+      targetTopicCount,
+      completedSourceCount,
+    }),
   };
 }
 

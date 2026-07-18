@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { legacyTahoiyaRecordToMigrationInput } from "../lib/tahoiya-catalog-migration.ts";
+import {
+  isTahoiyaCatalogMigrationComplete,
+  legacyTahoiyaRecordToMigrationInput,
+} from "../lib/tahoiya-catalog-migration.ts";
 
 test("旧たほい屋候補を共通DB向けの安全な形へ正規化する", () => {
   const input = legacyTahoiyaRecordToMigrationInput({
@@ -35,4 +38,22 @@ test("旧たほい屋候補を共通DB向けの安全な形へ正規化する", 
   assert.equal(input.difficulty, "extreme");
   assert.equal(input.useCount, 3);
   assert.deepEqual(input.feedbackAnchorTags, ["rare"]);
+});
+
+test("旧Redisにレコードがなければ移行対象なしで完了扱いにする", () => {
+  assert.equal(isTahoiyaCatalogMigrationComplete({
+    sourceRecordCount: 0,
+    sourceValidCount: 0,
+    targetTopicCount: 0,
+    completedSourceCount: null,
+  }), true);
+});
+
+test("旧Redisに無効レコードだけがあれば未完了のままにする", () => {
+  assert.equal(isTahoiyaCatalogMigrationComplete({
+    sourceRecordCount: 1,
+    sourceValidCount: 0,
+    targetTopicCount: 0,
+    completedSourceCount: null,
+  }), false);
 });
