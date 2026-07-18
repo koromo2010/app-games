@@ -12,6 +12,8 @@ test("デバッグ専用操作だけをアカウント認証対象にする", ()
   assert.equal(actionRequiresDebugAccess({ type: "advance-phase", force: false }), false);
   assert.equal(actionRequiresDebugAccess({ type: "submit-clue", actorId: "host", playerId: "dummy" }), true);
   assert.equal(actionRequiresDebugAccess({ type: "submit-clue", actorId: "self", playerId: "self" }), false);
+  assert.equal(actionRequiresDebugAccess({ type: "submit-definition", playerId: "dummy" }, "host"), true);
+  assert.equal(actionRequiresDebugAccess({ type: "submit-definition", playerId: "host" }, "host"), false);
   assert.equal(actionRequiresDebugAccess({ type: "start-game" }), false);
 });
 
