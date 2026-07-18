@@ -43,5 +43,6 @@ export function useTahoiyaGameActions(params: Params) {
     if (params.isDebugMode && saved.phase === "voting" && room.playMode === "all-vote") { const next = room.players.find((candidate) => !saved.votes[candidate.id]); if (next) params.setActivePlayerId(next.id); } params.setSelectedOptionId("");
   };
   const nextRound = async () => { if (!params.room) return; const saved = await params.runRoomAction({ type: "next-round", actorId: params.playerId }); if (saved) params.setActivePlayerId(params.playerId); clearRoundInput(); };
-  return { forceAdvanceToVoting, forceAdvanceToResult, startRound, submitDefinition, polishDefinition, castVote, nextRound };
+  const returnToLobby = async () => { if (!params.room) return; const saved = await params.runRoomAction({ type: "confirm-lobby-return", actorId: params.playerId }); if (saved) params.setActivePlayerId(params.playerId); clearRoundInput(); };
+  return { forceAdvanceToVoting, forceAdvanceToResult, startRound, submitDefinition, polishDefinition, castVote, nextRound, returnToLobby };
 }

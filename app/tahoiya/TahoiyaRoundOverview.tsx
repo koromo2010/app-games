@@ -11,6 +11,8 @@ type Props = {
 
 export function TahoiyaRoundOverview(props: Props) {
   const { room } = props;
+  const returnedPlayerIds = new Set(room.lobbyReturn?.returnedPlayerIds ?? []);
+  const returnStatusLabel = room.lobbyReturn?.reason === "debug-abort" ? "ゲーム中断後の復帰状況" : "前の結果画面からの復帰状況";
   const debugStatus = room.phase === "writing" && props.nextWriter
     ? `次の未投稿: ${props.nextWriter.name}`
     : room.phase === "voting" && props.nextVoter
@@ -32,6 +34,10 @@ export function TahoiyaRoundOverview(props: Props) {
         </div>}
       </div>}
     </div>
-    {room.phase === "lobby" && <div className={panelClass}><p className="text-xs font-semibold uppercase text-amber-700">Players</p><h2 className="text-2xl font-black text-slate-950">参加者</h2><div className="mt-3 grid gap-2 sm:grid-cols-2">{room.players.map((player) => <div key={player.id} className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-800">{player.name}{room.playMode === "all-vote" ? <span className="ml-2 text-cyan-700">偽説明・投票</span> : player.id === room.answererId ? <span className="ml-2 text-cyan-700">回答者</span> : <span className="ml-2 text-slate-500">{room.answererMode === "random" ? "回答者候補・偽説明" : "偽説明"}</span>}</div>)}</div></div>}
+    {room.phase === "lobby" && <div className={panelClass}>
+      <div className="flex flex-wrap items-end justify-between gap-2"><div><p className="text-xs font-semibold uppercase text-amber-700">Players</p><h2 className="text-2xl font-black text-slate-950">参加者</h2></div>{room.lobbyReturn && <span className="rounded-full bg-cyan-100 px-3 py-1 text-sm font-black text-cyan-900">復帰 {returnedPlayerIds.size}/{room.players.length}人</span>}</div>
+      {room.lobbyReturn && <p className="mt-2 text-sm font-semibold text-slate-600">{returnStatusLabel}です。全員が「戻りました」になると、同じメンバーがロビーを開けています。</p>}
+      <div className="mt-3 grid gap-2 sm:grid-cols-2">{room.players.map((player) => <div key={player.id} className="flex items-center justify-between gap-3 rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-800"><span>{player.name}<span className={`ml-2 ${room.playMode === "all-vote" || player.id === room.answererId ? "text-cyan-700" : "text-slate-500"}`}>{room.playMode === "all-vote" ? "偽説明・投票" : player.id === room.answererId ? "回答者" : room.answererMode === "random" ? "回答者候補・偽説明" : "偽説明"}</span></span>{room.lobbyReturn && <span className={`shrink-0 rounded-full px-2 py-1 text-xs font-black ${returnedPlayerIds.has(player.id) ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`}>{returnedPlayerIds.has(player.id) ? "戻りました" : "復帰待ち"}</span>}</div>)}</div>
+    </div>}
   </>;
 }

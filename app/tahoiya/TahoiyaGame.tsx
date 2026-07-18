@@ -7,7 +7,6 @@ import {
   fallbackAvatarColor,
 } from "@/lib/player-session";
 import type { TahoiyaRoom, TahoiyaRoomChoice } from "@/lib/tahoiya-types";
-import { loadRoomFromStore } from "./tahoiya-room-adapter";
 import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
 import { DebugModeButton } from "../components/DebugModeButton";
 import { GameAdSlot } from "../components/GameAdSlot";
@@ -83,7 +82,7 @@ export function TahoiyaGame() {
     room, playerId, playerName, avatarColor, avatarImage, passphrase, joinCode, runRoomAction,
     setRoom, setActivePlayerId, setJoinableRooms, setMessage,
   });
-  const { forceAdvanceToVoting, forceAdvanceToResult, startRound, submitDefinition, polishDefinition, castVote, nextRound } = useTahoiyaGameActions({
+  const { forceAdvanceToVoting, forceAdvanceToResult, startRound, submitDefinition, polishDefinition, castVote, nextRound, returnToLobby } = useTahoiyaGameActions({
     room, activePlayer, playerId, isHost, isDebugMode, isAnswerer, isAllVoteMode, writingDone, votingDone,
     definitionInput, selectedOptionId, isStarting, isPolishing: isPolishingDefinition, runRoomAction,
     setRoom, setActivePlayerId, setDefinitionInput, setSelectedOptionId, setPolishMessage, setMessage,
@@ -170,7 +169,7 @@ export function TahoiyaGame() {
               />}
               {room.phase === "result" && <TahoiyaResultPanel room={room} playerId={operationPlayerId} reasons={tahoiyaFeedbackReasons}
                 isHost={isHost} canReturn={isHost || resultReturnGate.canReturnToRoom} isDissolved={resultReturnGate.isRoomDissolved}
-                onReturn={isHost ? nextRound : () => { void resultReturnGate.returnToRoom(loadRoomFromStore, () => setMessage("部屋に戻れません。解散されたか、参加情報が変更されています。")); }}
+                onReturn={isHost ? nextRound : returnToLobby}
                 onDissolve={isHost ? dissolveRoom : undefined}
               />}
             </>
