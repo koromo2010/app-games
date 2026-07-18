@@ -37,13 +37,12 @@ export function useTahoiyaLobbyActions(params: Params) {
     if (!window.confirm(`${targetPlayerName}さんを復帰待ちから退出させますか？`)) return;
     await runRoomAction({ type: "remove-waiting-player", actorId: playerId, targetPlayerId });
   };
-  const testWordGeneration = async (forceNew: boolean): Promise<DebugWordGenerationResult> => {
+  const testWordGeneration = async (): Promise<DebugWordGenerationResult> => {
     if (!room) throw new Error("部屋の設定を読み込めませんでした。");
-    const query = new URLSearchParams({ test: "1", roomCode: room.code, difficulty: room.topicDifficulty }); if (forceNew) query.set("forceNew", "1");
+    const query = new URLSearchParams({ test: "1", roomCode: room.code, difficulty: room.topicDifficulty });
     const response = await fetch(`/api/tahoiya/topic?${query}`, { cache: "no-store" });
-    const topic = await response.json() as TahoiyaTopic & { error?: string; registeredCount?: number; batch?: Array<{ accepted: boolean; word: string; reading: string; realDefinition: string; note: string; difficulty: "easy" | "standard" | "extreme"; difficultyReason: string; genre: string; sourceLibrary: string }> };
+    const topic = await response.json() as TahoiyaTopic & { error?: string };
     if (!response.ok) throw new Error(topic.notice || topic.error || "ワードを生成できませんでした。");
-    if (forceNew && topic.batch) { const labels = { easy: "対象外（簡単）", standard: "秘境", extreme: "魔境" } as const; return { fields: [{ label: "一括審査", value: `${topic.batch.length}件` }, { label: "候補DBへ登録", value: `${topic.registeredCount ?? 0}件（全プレイヤー未使用）` }], items: topic.batch.map((item) => ({ title: item.word, status: item.accepted ? `採用・${labels[item.difficulty]}` : "除外", fields: [{ label: "読み", value: item.reading }, { label: "説明", value: item.realDefinition }, { label: "絶対評価の理由", value: item.difficultyReason }, { label: "分野・素材元", value: `${item.genre} / ${item.sourceLibrary}` }, { label: "注記", value: item.note }] })), notice: "10件を相対比較せず、RAGフィードバック基準で個別に絶対評価しました。採用語は履歴を付けず候補DBへ登録済みです。", generation: topic.generation }; }
     if (!topic.word || !topic.realDefinition) throw new Error(topic.notice || topic.error || "ワードを生成できませんでした。");
     return { fields: [{ label: "ワード", value: topic.word }, { label: "読み", value: topic.reading ?? "" }, { label: "本物の説明", value: topic.realDefinition }, { label: "注記", value: topic.note }], notice: topic.notice, generation: topic.generation };
   };

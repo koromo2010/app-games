@@ -181,11 +181,10 @@ export async function PATCH(request: Request) {
       let roundStarted = false;
       try {
         const generationRoom = generation.room;
-        const generated = await withGameGenerationCache("tahoiya-topic-v13", `${generationRoom.code}:${generationRoom.round}:${generationRoom.topicDifficulty}`, async () => {
+        const generated = await withGameGenerationCache("tahoiya-screening-first-v1", `${generationRoom.code}:${generationRoom.round}:${generationRoom.topicDifficulty}`, async () => {
           const response = await generateTahoiyaTopicResponse(
             generationRoom.topicDifficulty,
             generationRoom.players.map((item) => item.id),
-            false,
             false,
             false,
             async (progress) => {
