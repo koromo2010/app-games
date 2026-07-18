@@ -1,5 +1,6 @@
 import {
   clueGiverForRound,
+  codeInterceptTeamHasSubmittedAnswers,
   codeInterceptTeamIds,
   shuffledCode,
   type CodeInterceptRoom,
@@ -89,10 +90,7 @@ export function allCluesSubmitted(room: CodeInterceptRoom) {
 }
 
 export function allAnswersSubmitted(room: CodeInterceptRoom) {
-  const alliesReady = codeInterceptTeamIds.every((teamId) => Boolean(room.allyAnswers[teamId]));
-  const interceptionReady = room.roundNumber < room.interceptionStartsAtRound
-    || codeInterceptTeamIds.every((teamId) => Boolean(room.interceptAnswers[teamId]));
-  return alliesReady && interceptionReady;
+  return codeInterceptTeamIds.every((teamId) => codeInterceptTeamHasSubmittedAnswers(room, teamId));
 }
 
 export function targetPlayer(room: CodeInterceptRoom, actorId: string, playerId?: string) {

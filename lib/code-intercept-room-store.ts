@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   areValidCodeInterceptClues,
+  canReviseCodeInterceptAnswers,
   codeInterceptAnswererIds,
   codeLengthForTeam,
   consensusCodeInterceptAnswer,
@@ -18,6 +19,7 @@ import {
   normalizeCodeInterceptCardCount,
   normalizeCodeInterceptCodeLength,
   otherCodeInterceptTeam,
+  withCodeInterceptConsensusAnswer,
   type CodeInterceptRoom,
   type CodeInterceptRoomAction,
 } from "@/lib/code-intercept";
@@ -213,27 +215,29 @@ export async function applyStoredCodeInterceptAction(code: string, action: CodeI
     }
     if (action.type === "submit-ally-answer") {
       const player = targetPlayer(current, action.actorId, action.playerId);
-      if (current.phase !== "answer" || current.clueGiverIds[player.teamId] === player.id || current.allyAnswers[player.teamId]) throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
+      const revisingFinalAnswer = Boolean(current.allyAnswers[player.teamId]);
+      if (current.phase !== "answer" || current.clueGiverIds[player.teamId] === player.id || (revisingFinalAnswer && !canReviseCodeInterceptAnswers(current, player.teamId))) throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
       if (!isValidCodeInterceptAnswer(action.answer, current.cardCount, codeLengthForTeam(current, player.teamId))) throw new Error("CODE_INTERCEPT_INVALID_ANSWER");
       const allyAnswerProposals = { ...current.allyAnswerProposals, [player.id]: [...action.answer] };
       const consensus = consensusCodeInterceptAnswer(allyAnswerProposals, codeInterceptAnswererIds(current, player.teamId));
       const next = {
         ...current,
         allyAnswerProposals,
-        allyAnswers: consensus ? { ...current.allyAnswers, [player.teamId]: consensus } : current.allyAnswers,
+        allyAnswers: withCodeInterceptConsensusAnswer(current.allyAnswers, player.teamId, consensus),
       };
       return allAnswersSubmitted(next) ? finishCodeInterceptRound(next) : next;
     }
     if (action.type === "submit-intercept-answer") {
       const player = targetPlayer(current, action.actorId, action.playerId);
-      if (current.phase !== "answer" || current.clueGiverIds[player.teamId] === player.id || current.roundNumber < current.interceptionStartsAtRound || current.interceptAnswers[player.teamId]) throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
+      const revisingFinalAnswer = Boolean(current.interceptAnswers[player.teamId]);
+      if (current.phase !== "answer" || current.clueGiverIds[player.teamId] === player.id || current.roundNumber < current.interceptionStartsAtRound || (revisingFinalAnswer && !canReviseCodeInterceptAnswers(current, player.teamId))) throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
       if (!isValidCodeInterceptAnswer(action.answer, current.cardCount, codeLengthForTeam(current, otherCodeInterceptTeam(player.teamId)))) throw new Error("CODE_INTERCEPT_INVALID_ANSWER");
       const interceptAnswerProposals = { ...current.interceptAnswerProposals, [player.id]: [...action.answer] };
       const consensus = consensusCodeInterceptAnswer(interceptAnswerProposals, codeInterceptAnswererIds(current, player.teamId));
       const next = {
         ...current,
         interceptAnswerProposals,
-        interceptAnswers: consensus ? { ...current.interceptAnswers, [player.teamId]: consensus } : current.interceptAnswers,
+        interceptAnswers: withCodeInterceptConsensusAnswer(current.interceptAnswers, player.teamId, consensus),
       };
       return allAnswersSubmitted(next) ? finishCodeInterceptRound(next) : next;
     }
