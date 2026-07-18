@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   canReviseCodeInterceptAnswers,
+  codeInterceptClueHistory,
   codeInterceptDefaults,
   codeInterceptTeamHasSubmittedAnswers,
   consensusCodeInterceptAnswer,
@@ -146,6 +147,19 @@ test("first round does not apply interception damage", () => {
   current.roundNumber = codeInterceptDefaults.interceptionStartsAtRound - 1;
   const finished = finishCodeInterceptRound(current);
   assert.equal(finished.roundHistory[0].teams.every((team) => team.interceptionDamage === 0), true);
+});
+
+test("failed transmission clues stay unknown instead of revealing their card numbers", () => {
+  const failed = finishCodeInterceptRound(room());
+  const history = codeInterceptClueHistory(failed, "red");
+  assert.equal(history.numbered.every((column) => column.clues.length === 0), true);
+  assert.deepEqual(history.unknown.map((entry) => entry.clue), ["醤油", "肉球", "傘"]);
+
+  const successfulRoom = room();
+  successfulRoom.allyAnswers.red = [3, 1, 4];
+  const successful = codeInterceptClueHistory(finishCodeInterceptRound(successfulRoom), "red");
+  assert.deepEqual(successful.numbered.map((column) => column.clues.map((entry) => entry.clue)), [["肉球"], [], ["醤油"], ["傘"]]);
+  assert.deepEqual(successful.unknown, []);
 });
 
 test("sanitization hides enemy secrets and unresolved answers", () => {

@@ -70,6 +70,11 @@ export type CodeInterceptRoundLog = {
   teams: CodeInterceptTeamRoundResult[];
 };
 
+export type CodeInterceptClueHistoryEntry = {
+  roundNumber: number;
+  clue: string;
+};
+
 export type TeamCodeLengthChoice = {
   teamId: CodeInterceptTeamId;
   selectedByPlayerId: string;
@@ -231,6 +236,31 @@ export function areValidCodeInterceptClues(clues: unknown, codeLength: number): 
 
 export function codesEqual(left: readonly number[] | null | undefined, right: readonly number[] | null | undefined) {
   return Boolean(left && right && left.length === right.length && left.every((value, index) => value === right[index]));
+}
+
+export function codeInterceptClueHistory(
+  room: Pick<CodeInterceptRoom, "cardCount" | "roundHistory">,
+  teamId: CodeInterceptTeamId,
+) {
+  const numbered = Array.from({ length: room.cardCount }, (_, index) => ({
+    cardNumber: index + 1,
+    clues: [] as CodeInterceptClueHistoryEntry[],
+  }));
+  const unknown: CodeInterceptClueHistoryEntry[] = [];
+  room.roundHistory.forEach((round) => {
+    const result = round.teams.find((team) => team.teamId === teamId);
+    if (!result) return;
+    if (!result.allyCorrect) {
+      result.clues.forEach((clue) => unknown.push({ roundNumber: round.roundNumber, clue }));
+      return;
+    }
+    if (result.secretCode.length === 0) return;
+    result.secretCode.forEach((cardNumber, clueIndex) => {
+      const clue = result.clues[clueIndex];
+      if (clue && numbered[cardNumber - 1]) numbered[cardNumber - 1].clues.push({ roundNumber: round.roundNumber, clue });
+    });
+  });
+  return { numbered, unknown };
 }
 
 export function codeInterceptAnswererIds(room: Pick<CodeInterceptRoom, "players" | "clueGiverIds">, teamId: CodeInterceptTeamId) {
