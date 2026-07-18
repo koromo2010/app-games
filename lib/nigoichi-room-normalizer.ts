@@ -4,6 +4,7 @@ import {
   correctNigoichiConfig,
   finishNigoichiRound,
   nigoichiPlayerLimit,
+  normalizeNigoichiTimeLimit,
   normalizeNigoichiPlayerCapacity,
   type NigoichiHand,
   type NigoichiPhase,
@@ -189,19 +190,23 @@ export function normalizeNigoichiRoom(value: unknown): NigoichiRoom | null {
   const missingNumber = typeof parsed.missingNumber === "number" && Number.isInteger(parsed.missingNumber) && parsed.missingNumber >= 0 && parsed.missingNumber < words.length
     ? parsed.missingNumber
     : null;
+  const phase = isPhase(parsed.phase) ? parsed.phase : "lobby";
   const normalizedRoom: NigoichiRoom = {
     code,
     revision: typeof parsed.revision === "number" ? Math.max(0, Math.floor(parsed.revision)) : 0,
     hostId,
     ownerId: typeof parsed.ownerId === "string" ? parsed.ownerId.slice(0, 120) : undefined,
     passphrase: typeof parsed.passphrase === "string" ? parsed.passphrase.slice(0, 40) : "",
-    phase: isPhase(parsed.phase) ? parsed.phase : "lobby",
+    phase,
     players,
     playerCapacity,
     gameNumber: typeof parsed.gameNumber === "number" ? Math.max(1, Math.floor(parsed.gameNumber)) : 1,
     cardsPerPlayer: config.cardsPerPlayer,
     associationWordCount: config.associationWordCount,
     wordDifficulty,
+    clueTimeLimitSeconds: normalizeNigoichiTimeLimit(parsed.clueTimeLimitSeconds),
+    guessTimeLimitSeconds: normalizeNigoichiTimeLimit(parsed.guessTimeLimitSeconds),
+    phaseStartedAt: (phase === "clue" || phase === "guess") && typeof parsed.phaseStartedAt === "number" && Number.isFinite(parsed.phaseStartedAt) ? parsed.phaseStartedAt : null,
     debugMode: parsed.debugMode === true,
     debugReplayEnabled: parsed.debugReplayEnabled === true && parsed.debugMode === true,
     words,

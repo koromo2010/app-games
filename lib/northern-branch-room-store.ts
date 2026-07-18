@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { applyNorthernAction, createNorthernGame } from "@/lib/northern-branch-game";
+import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
 import { isMultiplayerRoomExpired } from "@/lib/multiplayer-room-lifecycle";
 import { redisCommand } from "@/lib/redis-store";
 import { recordNorthernBranchGameResults } from "@/lib/player-stats-store";
@@ -17,6 +18,7 @@ import type {
 } from "@/lib/northern-branch-types";
 import { normalizeNorthernRoom } from "@/lib/northern-branch-room-normalizer";
 import { northernRoomChoice, sanitizeNorthernRoom } from "@/lib/northern-branch-room-presentation";
+import { expireNorthernRoomTurn, isNorthernTurnExpired } from "@/lib/northern-branch-room-domain";
 
 export { sanitizeNorthernRoom };
 
@@ -102,6 +104,7 @@ export async function createStoredNorthernRoom(value: unknown, actorId: string) 
     phase: "lobby",
     debugMode: false,
     debugReplayEnabled: false,
+    turnStartedAt: null,
     game: null,
     notice: "参加者を待っています。",
     updatedAt: Date.now(),
@@ -140,6 +143,11 @@ export async function applyStoredNorthernAction(code: string, action: NorthernRo
       if (!canLeaveOnlineRoomLobby({ isHost: actorIsHost, isMember: actorIsMember }, current.phase)) throw new Error("NORTHERN_ROOM_FORBIDDEN");
       return { ...current, players: current.players.filter((player) => player.id !== action.actorId), notice: "参加者が退出しました。" };
     }
+    if (action.type === "expire-turn") {
+      if (current.turnStartedAt !== action.turnStartedAt || !isNorthernTurnExpired(current)) throw new Error("NORTHERN_ROOM_CONFLICT");
+      return expireNorthernRoomTurn(current);
+    }
+    if (isNorthernTurnExpired(current)) return expireNorthernRoomTurn(current);
     if (action.type === "set-debug") {
       if (!actorIsHost || current.phase !== "lobby") throw new Error("NORTHERN_ROOM_FORBIDDEN");
       return {
@@ -152,6 +160,10 @@ export async function applyStoredNorthernAction(code: string, action: NorthernRo
     if (action.type === "set-debug-replay") {
       if (!actorIsHost || !current.debugMode) throw new Error("NORTHERN_ROOM_FORBIDDEN");
       return { ...current, debugReplayEnabled: action.enabled };
+    }
+    if (action.type === "set-config") {
+      if (!actorIsHost || current.phase !== "lobby") throw new Error("NORTHERN_ROOM_FORBIDDEN");
+      return { ...current, turnTimeLimitSeconds: normalizeCommonTimeLimit(action.turnTimeLimitSeconds) };
     }
     if (action.type === "debug-add-player") {
       if (!actorIsHost || !current.debugMode || current.phase !== "lobby") throw new Error("NORTHERN_ROOM_FORBIDDEN");
@@ -173,15 +185,15 @@ export async function applyStoredNorthernAction(code: string, action: NorthernRo
       if (!actorIsHost || current.phase !== "lobby") throw new Error("NORTHERN_ROOM_FORBIDDEN");
       if (current.players.length < 2) throw new Error("NORTHERN_NOT_ENOUGH_PLAYERS");
       const game = createNorthernGame(current.players.map((player) => ({ id: player.id, name: player.name })));
-      return { ...current, phase: "playing", game, notice: "ゲームを開始しました。最初の手番です。" };
+      return { ...current, phase: "playing", game, turnStartedAt: Date.now(), notice: "ゲームを開始しました。最初の手番です。" };
     }
     if (action.type === "reset-game") {
       if (!actorIsHost || current.phase !== "finished") throw new Error("NORTHERN_ROOM_FORBIDDEN");
-      return { ...current, gameNumber: current.gameNumber + 1, phase: "lobby", debugReplayEnabled: false, game: null, notice: "同じ部屋で次のゲームを準備できます。" };
+      return { ...current, gameNumber: current.gameNumber + 1, phase: "lobby", debugReplayEnabled: false, game: null, turnStartedAt: null, notice: "同じ部屋で次のゲームを準備できます。" };
     }
     if (action.type === "abort-game") {
       if (!actorIsHost || !current.debugMode || current.phase === "lobby") throw new Error("NORTHERN_ROOM_FORBIDDEN");
-      return { ...current, phase: "lobby", debugReplayEnabled: false, game: null, notice: "ゲームを中断し、ゲーム開始前へ戻りました。" };
+      return { ...current, phase: "lobby", debugReplayEnabled: false, game: null, turnStartedAt: null, notice: "ゲームを中断し、ゲーム開始前へ戻りました。" };
     }
     if (action.type === "game-action") {
       if (!current.game || current.phase !== "playing") throw new Error("NORTHERN_ROOM_FORBIDDEN");
@@ -192,10 +204,12 @@ export async function applyStoredNorthernAction(code: string, action: NorthernRo
       if (action.actorId !== activePlayer.id && !debugHostControl) throw new Error("NORTHERN_NOT_YOUR_TURN");
       const outcome = applyNorthernAction(current.game, action.action);
       if (!outcome.ok) throw new Error(`NORTHERN_ACTION_INVALID:${outcome.notice}`);
+      const turnChanged = outcome.state.activePlayerIndex !== current.game.activePlayerIndex || outcome.state.turn !== current.game.turn;
       return {
         ...current,
         game: outcome.state,
         phase: outcome.state.status === "finished" ? "finished" : "playing",
+        turnStartedAt: outcome.state.status === "finished" ? null : turnChanged ? Date.now() : current.turnStartedAt,
         notice: outcome.notice,
       };
     }

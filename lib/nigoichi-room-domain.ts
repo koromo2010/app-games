@@ -6,7 +6,7 @@ import {
 } from "@/lib/nigoichi";
 import { listLocalWordWolfWords, listLocalWordWolfWordsByDifficulty } from "@/lib/wordwolf";
 
-export function beginGame(room: NigoichiRoom) {
+export function beginGame(room: NigoichiRoom, now = Date.now()) {
   const preferredWords = listLocalWordWolfWordsByDifficulty(room.wordDifficulty);
   const preferredKeys = new Set(preferredWords.map((word) => word.trim().toLocaleLowerCase("ja-JP")));
   const wordPool = [...preferredWords, ...listLocalWordWolfWords().filter((word) => !preferredKeys.has(word.trim().toLocaleLowerCase("ja-JP")))];
@@ -14,6 +14,7 @@ export function beginGame(room: NigoichiRoom) {
   return {
     ...room,
     phase: "clue" as const,
+    phaseStartedAt: now,
     words: dealt.words,
     hands: dealt.hands,
     associations: {},
@@ -34,6 +35,7 @@ export function resetGame(room: NigoichiRoom) {
     ...room,
     gameNumber: room.gameNumber + 1,
     phase: "lobby" as const,
+    phaseStartedAt: null,
     debugReplayEnabled: false,
     words: [],
     hands: {},
@@ -43,4 +45,3 @@ export function resetGame(room: NigoichiRoom) {
     roundScores: {},
   };
 }
-

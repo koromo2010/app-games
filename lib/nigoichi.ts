@@ -1,4 +1,5 @@
 import type { GameDebugLogEntry } from "./game-debug-log.ts";
+import { normalizeCommonTimeLimit } from "./game-room-config.ts";
 import { onlineRoomPlayerLimits } from "./online-room-policy.ts";
 
 export type NigoichiPlayer = {
@@ -106,6 +107,9 @@ export type NigoichiRoom = {
   cardsPerPlayer: number;
   associationWordCount: number;
   wordDifficulty: NigoichiWordDifficulty;
+  clueTimeLimitSeconds: number;
+  guessTimeLimitSeconds: number;
+  phaseStartedAt: number | null;
   debugMode: boolean;
   debugReplayEnabled: boolean;
   words: string[];
@@ -138,8 +142,9 @@ export type NigoichiRoomAction =
   | { type: "leave-room"; actorId: string }
   | { type: "set-debug"; actorId: string; enabled: boolean }
   | { type: "set-debug-replay"; actorId: string; enabled: boolean }
-  | { type: "set-config"; actorId: string; cardsPerPlayer: number; associationWordCount: number; wordDifficulty: NigoichiWordDifficulty }
+  | { type: "set-config"; actorId: string; cardsPerPlayer: number; associationWordCount: number; wordDifficulty: NigoichiWordDifficulty; clueTimeLimitSeconds: number; guessTimeLimitSeconds: number }
   | { type: "start-game"; actorId: string }
+  | { type: "expire-phase"; actorId: string; phaseStartedAt: number }
   | { type: "submit-associations"; actorId: string; playerId?: string; clues: string[] }
   | { type: "submit-guess"; actorId: string; playerId?: string; number: number }
   | { type: "reset-game"; actorId: string }
@@ -258,10 +263,38 @@ export function finishNigoichiRound(room: NigoichiRoom): NigoichiRoom {
   return {
     ...room,
     phase: "result",
+    phaseStartedAt: null,
     totalScores,
     roundScores,
     roundHistory: [...room.roundHistory, roundLog],
   };
+}
+
+export function normalizeNigoichiTimeLimit(value: unknown) {
+  return normalizeCommonTimeLimit(value);
+}
+
+export function isNigoichiPhaseExpired(room: NigoichiRoom, now = Date.now()) {
+  const durationSeconds = room.phase === "clue"
+    ? room.clueTimeLimitSeconds
+    : room.phase === "guess"
+      ? room.guessTimeLimitSeconds
+      : 0;
+  return durationSeconds > 0
+    && room.phaseStartedAt !== null
+    && now >= room.phaseStartedAt + durationSeconds * 1000;
+}
+
+export function expireNigoichiPhase(room: NigoichiRoom, now = Date.now()) {
+  if (room.phase === "clue") {
+    const associations = { ...room.associations };
+    room.players.forEach((player) => {
+      associations[player.id] ??= Array.from({ length: room.associationWordCount }, () => "未提出");
+    });
+    return { ...room, phase: "guess" as const, phaseStartedAt: now, associations };
+  }
+  if (room.phase === "guess") return finishNigoichiRound(room);
+  return room;
 }
 
 export function sanitizeNigoichiRoomForPlayer(room: NigoichiRoom, playerId: string) {

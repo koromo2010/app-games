@@ -115,6 +115,8 @@ export type NorthernRoom = {
   gameNumber: number;
   debugMode: boolean;
   debugReplayEnabled: boolean;
+  turnTimeLimitSeconds: number;
+  turnStartedAt: number | null;
   game: NorthernGameState | null;
   notice: string;
   createdAt: number;
@@ -134,8 +136,10 @@ export type NorthernRoomAction =
   | { type: "leave-room"; actorId: string }
   | { type: "set-debug"; actorId: string; enabled: boolean }
   | { type: "set-debug-replay"; actorId: string; enabled: boolean }
+  | { type: "set-config"; actorId: string; turnTimeLimitSeconds: number }
   | { type: "debug-add-player"; actorId: string }
   | { type: "start-game"; actorId: string }
+  | { type: "expire-turn"; actorId: string; turnStartedAt: number }
   | { type: "game-action"; actorId: string; action: NorthernGameAction }
   | { type: "reset-game"; actorId: string }
   | { type: "abort-game"; actorId: string };

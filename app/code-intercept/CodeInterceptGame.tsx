@@ -12,6 +12,7 @@ import { GameTopBanner, gameTopBannerOffsetClass } from "@/app/components/GameTo
 import { GameTopMenu, gameTopBannerActionClass, gameTopBannerDangerActionClass, gameTopMenuItemClass } from "@/app/components/GameTopMenu";
 import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomResultActions } from "@/app/components/RoomResultActions";
+import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
 import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "@/app/hooks/use-online-room-polling";
 import { useRoomResultReturnGate } from "@/app/hooks/use-room-result-return-gate";
 import { applyCodeInterceptRoomAction, codeInterceptRoomApi, createCodeInterceptRoom } from "@/app/code-intercept/code-intercept-room-api-client";
@@ -40,7 +41,6 @@ import {
 } from "@/lib/code-intercept";
 import { OnlineRoomApiError, restoreOnlineRoom } from "@/lib/online-room-api-client";
 import { defaultAvatarImage, fallbackAvatarColor, isPlayerAuthenticated, loadPersistentPlayerSession, type PlayerSession } from "@/lib/player-session";
-import { commonTimeLimitOptions } from "@/lib/game-room-config";
 
 const lastRoomKey = "code-intercept-last-room";
 const ownerIdKey = "code-intercept-owner-id";
@@ -425,12 +425,10 @@ export function CodeInterceptGame() {
               {room.codeLengthMode === "fixed" && <label className="mt-3 block text-sm font-bold">固定桁数<select value={room.fixedCodeLength} onChange={(event) => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, codeLengthMode: "fixed", codeRevealMode: room.codeRevealMode, fixedCodeLength: Number(event.target.value), actionTimeLimitSeconds: room.actionTimeLimitSeconds })} className="mt-1 w-full rounded-xl border border-white/15 bg-slate-800 px-3 py-3 text-white">{Array.from({ length: room.cardCount - 1 }, (_, index) => index + 2).map((length) => <option key={length} value={length}>{length}桁</option>)}</select></label>}
               <label className={`mt-3 block cursor-pointer rounded-xl border p-4 ${room.codeLengthMode === "per-round" ? "border-cyan-300 bg-cyan-300/10" : "border-white/10 bg-slate-950/40"}`}><span className="flex items-center gap-2 font-black"><input type="radio" name="code-length-mode" checked={room.codeLengthMode === "per-round"} onChange={() => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, codeLengthMode: "per-round", codeRevealMode: room.codeRevealMode, actionTimeLimitSeconds: room.actionTimeLimitSeconds })} />毎ラウンド選択</span><span className="mt-1 block text-sm text-slate-300">各チームの出題者が、そのラウンドに使う桁数を決めます。</span></label>
             </fieldset>
-            <label className="mt-5 block text-sm font-black">各入力の制限時間
-              <select value={room.actionTimeLimitSeconds} disabled={!isHost || isSaving} onChange={(event) => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, codeLengthMode: room.codeLengthMode, codeRevealMode: room.codeRevealMode, fixedCodeLength: room.fixedCodeLength, actionTimeLimitSeconds: Number(event.target.value) })} className="mt-2 w-full rounded-xl border border-white/15 bg-slate-800 px-3 py-3 text-white disabled:opacity-60">
-                {commonTimeLimitOptions.map((seconds) => <option key={seconds} value={seconds}>{timeLimitLabel(seconds)}</option>)}
-              </select>
-              <span className="mt-2 block text-xs font-normal leading-5 text-slate-300">桁数選択・ヒント入力・回答ごとにカウントします。時間切れでも自動で次へ進みます。</span>
-            </label>
+            <fieldset className="mt-5 rounded-xl bg-white p-4 text-slate-950" disabled={!isHost || isSaving}>
+              <RoomTimeLimitControl label="各入力の制限時間" value={room.actionTimeLimitSeconds} onChange={(seconds) => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, codeLengthMode: room.codeLengthMode, codeRevealMode: room.codeRevealMode, fixedCodeLength: room.fixedCodeLength, actionTimeLimitSeconds: seconds })} />
+              <p className="mt-2 text-xs leading-5 text-slate-600">桁数選択・ヒント入力・回答ごとにカウントします。時間切れでも自動で次へ進みます。</p>
+            </fieldset>
             {room.codeLengthMode === "per-round" && <p className="mt-4 rounded-xl bg-cyan-300/10 p-3 text-sm leading-6 text-cyan-100">短い暗号は味方に伝えやすい一方、敵にも当てられやすくなります。長い暗号は傍受されにくい一方、多くのヒントが敵に残ります。</p>}
             <fieldset className="mt-5" disabled={!isHost || isSaving}>
               <legend className="text-sm font-black">ラウンド後の正解暗号</legend>

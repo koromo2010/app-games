@@ -28,7 +28,18 @@ for (const game of games) {
     .filter((file, index, files) => file && files.indexOf(file) === index && existsSync(join(root, file)))
     .map(read)
     .join("\n");
+  const timeLimitSources = [registeredModuleSources, game.roomStoreFile && existsSync(join(root, game.roomStoreFile)) ? read(game.roomStoreFile) : ""].join("\n");
   for (const token of game.requiredTokens || []) if (!registeredModuleSources.includes(token)) fail(`${game.id}: 共通要件「${token}」が登録済みモジュール境界にありません。`);
+  if (!game.timeLimit || !["configurable", "not-applicable"].includes(game.timeLimit.mode)) {
+    fail(`${game.id}: timeLimit.mode を configurable または not-applicable で宣言してください。`);
+  } else if (game.timeLimit.mode === "configurable") {
+    if (!registeredModuleSources.includes("RoomTimeLimitControl")) fail(`${game.id}: 共通の時間制限設定 RoomTimeLimitControl がありません。`);
+    if (!Array.isArray(game.timeLimit.fields) || game.timeLimit.fields.length === 0) fail(`${game.id}: timeLimit.fields に保存する時間設定を列挙してください。`);
+    else for (const field of game.timeLimit.fields) if (typeof field !== "string" || !timeLimitSources.includes(field)) fail(`${game.id}: 時間設定フィールド「${field}」の実装が登録済みモジュールにありません。`);
+    if (typeof game.timeLimit.expiryToken !== "string" || !timeLimitSources.includes(game.timeLimit.expiryToken)) fail(`${game.id}: サーバー正本の時間切れ処理が登録済みモジュールにありません。`);
+  } else if (typeof game.timeLimit.reason !== "string" || game.timeLimit.reason.trim().length < 10) {
+    fail(`${game.id}: 時間制限の対象外理由を timeLimit.reason に具体的に記載してください。`);
+  }
   if (game.private && !read(game.pageFile).includes("gamePageAccessAllowed")) fail(`${game.id}: 非公開ゲームの共通サーバーアクセス検証がありません。`);
   if (game.playMode === "online-room") {
     if (!read("lib/online-room-policy.ts").includes(`"${game.id}"`)) fail(`${game.id}: 共通人数上限マップにゲームIDがありません。`);

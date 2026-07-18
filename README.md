@@ -76,7 +76,7 @@ Every game with a debug mode must place `app/components/DebugModeButton.tsx` in 
 
 Room configuration defaults are stored per game and per player in Redis, with local storage as an offline fallback. New games should use `lib/game-room-defaults-client.ts` for loading and saving, and add their server-side normalizer to `lib/room-defaults-store.ts`.
 
-Multiplayer games should use the shared time-limit presets, manual seconds input, and normalizer in `lib/game-room-config.ts` and `app/components/RoomTimeLimitControl.tsx`. A time limit of `0` always means no limit; game-specific phase behavior may decide how partial submissions are handled when time expires.
+Every game must declare its time-limit policy in `config/game-registry.json`. Multiplayer games use the shared presets, manual seconds input, and normalizer in `lib/game-room-config.ts` and `app/components/RoomTimeLimitControl.tsx`; `0` always means no limit. Each game keeps its timeout transition on the server and declares its saved fields and expiry handler so `npm run lint` rejects a new game with missing timer support. A non-game utility may opt out only with an explicit reason.
 
 Tahoiya gameplay mutations are revisioned server actions. The server rejects stale phase rollback, reapplies concurrent submissions with compare-and-set, and decides completion or timeout transitions without depending on the host browser.
 
