@@ -113,10 +113,35 @@ function ResultCard({ result, room }: { result: CodeInterceptTeamRoundResult; ro
   </article>;
 }
 
+function NumberedClueHistory({ room, teamId }: { room: CodeInterceptRoom; teamId: CodeInterceptTeamId }) {
+  const cluesByNumber = Array.from({ length: room.cardCount }, (_, index) => {
+    const cardNumber = index + 1;
+    const clues = room.roundHistory.flatMap((round) => {
+      const result = round.teams.find((team) => team.teamId === teamId);
+      if (!result || result.secretCode.length === 0) return [];
+      return result.secretCode.flatMap((number, clueIndex) => number === cardNumber && result.clues[clueIndex]
+        ? [{ roundNumber: round.roundNumber, clue: result.clues[clueIndex] }]
+        : []);
+    });
+    return { cardNumber, clues };
+  });
+  const canMapClues = cluesByNumber.some((column) => column.clues.length > 0);
+  if (!canMapClues) return <p className="mt-4 rounded-xl border border-white/10 bg-slate-950/35 p-3 text-sm text-slate-300">正解暗号が非公開のため、相手チームのヒントは番号別に並べません。</p>;
+  return <div className="mt-4 overflow-x-auto">
+    <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${room.cardCount}, minmax(8rem, 1fr))`, minWidth: `${Math.max(room.cardCount, 4) * 8.5}rem` }}>{cluesByNumber.map((column) => <section key={column.cardNumber} className="overflow-hidden rounded-xl border border-white/15 bg-slate-950/45">
+      <h4 className="border-b border-white/15 bg-white/10 py-2 text-center font-mono text-2xl font-black">{column.cardNumber}</h4>
+      <ul className="space-y-2 p-2">{column.clues.length > 0 ? column.clues.map((entry) => <li key={`${entry.roundNumber}:${entry.clue}`} className="rounded-lg bg-white/[0.06] px-2 py-2"><span className="mr-2 font-mono text-xs text-slate-400">R{entry.roundNumber}</span><strong>{entry.clue}</strong></li>) : <li className="py-2 text-center text-sm text-slate-400">まだなし</li>}</ul>
+    </section>)}</div>
+  </div>;
+}
+
 function TeamRoundHistoryTable({ room, teamId }: { room: CodeInterceptRoom; teamId: CodeInterceptTeamId }) {
   return <section className={`rounded-2xl border p-4 ${teamStyle(teamId)}`}>
     <h3 className="text-lg font-black">{teamLabel(teamId)}の過去ログ</h3>
-    <div className="mt-3 overflow-x-auto"><table className="min-w-full text-left text-sm"><thead><tr className="border-b border-white/15 text-slate-300"><th className="px-2 py-2">R</th><th className="px-2 py-2">桁数</th><th className="px-2 py-2">ヒント</th><th className="px-2 py-2">味方回答</th><th className="px-2 py-2">傍受回答</th><th className="px-2 py-2">傍受結果</th></tr></thead><tbody>{room.roundHistory.map((round) => {
+    <p className="mt-1 text-sm text-slate-300">番号ごとに、これまで対応したヒントをまとめています。</p>
+    <NumberedClueHistory room={room} teamId={teamId} />
+    <h4 className="mt-5 font-black">ラウンド結果</h4>
+    <div className="mt-2 overflow-x-auto"><table className="min-w-full text-left text-sm"><thead><tr className="border-b border-white/15 text-slate-300"><th className="px-2 py-2">R</th><th className="px-2 py-2">桁数</th><th className="px-2 py-2">ヒント</th><th className="px-2 py-2">味方回答</th><th className="px-2 py-2">傍受回答</th><th className="px-2 py-2">傍受結果</th></tr></thead><tbody>{room.roundHistory.map((round) => {
       const result = round.teams.find((team) => team.teamId === teamId);
       if (!result) return null;
       return <tr key={`${round.roundNumber}:${teamId}`} className="border-b border-white/[0.07]"><td className="px-2 py-3 font-mono">{round.roundNumber}</td><td className="px-2 py-3 font-black">{result.codeLength}</td><td className="px-2 py-3">{result.clues.join("・")}</td><td className="px-2 py-3 font-mono font-black">{result.allyAnswer?.join("・") ?? (result.secretCode.length === 0 ? "非公開" : "―")}</td><td className="px-2 py-3 font-mono">{result.enemyInterceptAnswer?.join("・") ?? "―"}</td><td className="px-2 py-3">{round.roundNumber < room.interceptionStartsAtRound ? "傍受なし" : result.enemyIntercepted ? "傍受成功" : "傍受失敗"}</td></tr>;
