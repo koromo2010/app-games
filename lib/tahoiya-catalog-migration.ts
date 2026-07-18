@@ -172,16 +172,21 @@ async function upsertTopics(sql: NeonQueryFunction<boolean, boolean>, inputs: Mi
       INSERT INTO words (
         surface, reading, normalized_surface, proper_noun, character_count,
         status, source_type, source_environment, source_name, source_reference,
-        created_by, reviewed_at, reviewed_by
+        created_by, reviewed_at, reviewed_by, selection_zipf_override
       )
       SELECT surface, reading, "normalizedSurface", FALSE, "characterCount",
         'active', 'import', 'admin', COALESCE("sourceLibrary", 'legacy-tahoiya-redis'),
         'legacy-tahoiya-catalog:' || "normalizedSurface", 'tahoiya-catalog-migration',
-        NOW(), 'tahoiya-catalog-migration'
+        NOW(), 'tahoiya-catalog-migration', CASE WHEN difficulty = 'extreme' THEN 0 ELSE 2.9 END
       FROM incoming
       ON CONFLICT (normalized_surface, (COALESCE(reading, ''))) DO UPDATE SET
         surface = EXCLUDED.surface,
         status = 'active',
+        selection_zipf_override = CASE
+          WHEN EXCLUDED.selection_zipf_override = 0 THEN 0
+          WHEN words.zipf > 0 AND words.zipf < 3 THEN NULL
+          ELSE 2.9
+        END,
         updated_at = NOW()
       RETURNING id, normalized_surface, reading
     ), selected_words AS (

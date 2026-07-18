@@ -10,6 +10,7 @@ import {
   importTahoiyaCatalogBatch,
   inspectTahoiyaCatalogMigration,
 } from "@/lib/tahoiya-catalog-migration";
+import { ensureTahoiyaGitCandidates } from "@/lib/tahoiya-topic-catalog";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -30,6 +31,7 @@ function safeError(error: unknown, fallback: string) {
 export async function GET() {
   try {
     await requireFullSiteAdminSession();
+    await ensureTahoiyaGitCandidates();
     return Response.json({ status: await inspectTahoiyaCatalogMigration() });
   } catch (error) {
     return siteAdminAuthorizationError(error)
@@ -49,6 +51,7 @@ export async function POST(request: Request) {
     if (!body || typeof body.cursor !== "string") {
       return Response.json({ error: "TAHOIYA_CATALOG_CURSOR_INVALID" }, { status: 400 });
     }
+    await ensureTahoiyaGitCandidates();
     const result = await importTahoiyaCatalogBatch(body.cursor);
     if (result.done) {
       await appendSiteAdminAuditLog(request, session, "vocabulary.tahoiya-catalog-migration", "tahoiya_topics", null, {

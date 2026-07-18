@@ -6,11 +6,13 @@ import { redisCommand } from "@/lib/redis-store";
 import { emitObservabilityEvent } from "@/lib/observability";
 import {
   hasVeryCommonSpokenHomophone,
-  loadTahoiyaSourceRegistry,
-  loadTahoiyaSourceShelf,
-  refreshTahoiyaSourceShelf,
   type TahoiyaSourceEntry,
 } from "@/lib/tahoiya-source-library";
+import {
+  matchesTahoiyaEffectiveZipf,
+  tahoiyaDifficultyLabel,
+  tahoiyaEffectiveZipfQuery,
+} from "@/lib/tahoiya-difficulty";
 import { submitDevelopmentVocabularyDraft } from "@/lib/vocabulary-draft-bridge";
 import { PostgresVocabularyCatalogRepository } from "@/lib/vocabulary-catalog-repository";
 import {
@@ -34,6 +36,13 @@ const gitCatalogVersionKey = "tahoiya:topic:git-catalog-version:v1";
 const sharedVocabularyRepository = new PostgresVocabularyCatalogRepository();
 
 export type TahoiyaCatalogDifficulty = "easy" | "standard" | "extreme";
+
+export type TahoiyaWordCandidate = {
+  id: string;
+  word: string;
+  reading?: string;
+  effectiveZipf: number;
+};
 
 type GitCandidate = {
   word: string;
@@ -60,8 +69,13 @@ export async function ensureTahoiyaGitCandidates() {
   const version = data.updatedAt?.trim() || "";
   const candidates = Array.isArray(data.candidates) ? data.candidates : [];
   if (!version || candidates.length === 0) return 0;
-  const currentVersion = await redisCommand<string | null>(["GET", gitCatalogVersionKey]);
-  if (currentVersion === version) return 0;
+  const [currentVersion, currentCount] = await Promise.all([
+    redisCommand<string | null>(["GET", gitCatalogVersionKey]),
+    redisCommand<number>(["HLEN", legacyTahoiyaCatalogKey]),
+  ]);
+  // The version marker can survive a catalog reset. Re-seed when the hash is
+  // unexpectedly empty or incomplete even if the marker itself is current.
+  if (currentVersion === version && Number(currentCount) >= candidates.length) return 0;
 
   let added = 0;
   for (let offset = 0; offset < candidates.length; offset += 100) {
@@ -113,54 +127,67 @@ export async function ensureTahoiyaGitCandidates() {
   return added;
 }
 
-export async function loadUnreviewedTahoiyaSources(limit = 10): Promise<TahoiyaSourceEntry[]> {
-  const [catalogWords, reviewedIds, registry, sharedWords] = await Promise.all([
+export async function loadUnreviewedTahoiyaSources(
+  difficulty: TahoiyaDifficulty,
+  limit = 10,
+): Promise<TahoiyaSourceEntry[]> {
+  const [catalogWords, reviewedIds, sharedWords] = await Promise.all([
     loadTahoiyaCatalogWords(),
     redisCommand<string[]>(["SMEMBERS", reviewedSourceKey]).catch(() => []),
-    loadTahoiyaSourceRegistry(),
-    sharedVocabularyRepository.findWords({ gameId: "tahoiya", limit: 100 }).catch(() => []),
+    sharedVocabularyRepository.findWords({
+      gameId: "tahoiya",
+      limit: 500,
+      ...tahoiyaEffectiveZipfQuery(difficulty),
+    }).catch(() => []),
   ]);
   const blockedWords = new Set(catalogWords);
   const reviewed = new Set(Array.isArray(reviewedIds) ? reviewedIds : []);
-  const sharedSources = sharedWords
-    .filter((word) => word.zipf !== null && word.zipf < 3)
+  return sharedWords
+    .filter((word) => matchesTahoiyaEffectiveZipf(word.zipf, difficulty))
     .map((word): TahoiyaSourceEntry => ({
       id: `word-master:${word.id}`,
       sourceRegistryId: `word-master:${word.id}`,
       word: word.surface,
       reading: word.reading ?? undefined,
-      hint: `共通単語DBで選定された実効Zipf ${word.zipf?.toFixed(2)}`,
-      genre: "共通単語DB",
+      hint: `${tahoiyaDifficultyLabel(difficulty)}・実質Zipf ${word.zipf?.toFixed(2)}`,
+      genre: tahoiyaDifficultyLabel(difficulty),
       sourceLibrary: "GAME FIELDS 共通単語DB",
       sourceUrl: "https://github.com/koromo2010/app-games",
     }))
     .filter((entry) => !reviewed.has(entry.id) && !blockedWords.has(normalizeWord(entry.word)))
-    .slice(0, Math.min(3, Math.max(1, limit)));
-  const externalLimit = Math.max(0, limit - sharedSources.length);
-  const shuffledSourceIds = registry
-    .map((source) => ({ id: source.id, sort: Math.random() }))
-    .sort((left, right) => left.sort - right.sort)
-    .map(({ id }) => id);
+    .map((entry) => ({ entry, order: Math.random() }))
+    .sort((left, right) => left.order - right.order)
+    .slice(0, Math.max(1, Math.min(50, Math.floor(limit))))
+    .map(({ entry }) => entry);
+}
 
-  const availableForSource = (shelf: TahoiyaSourceEntry[], sourceId: string) => shelf.filter((entry) =>
-    entry.sourceRegistryId === sourceId &&
-    !reviewed.has(entry.id) &&
-    !blockedWords.has(normalizeWord(entry.word))
-  );
-  const selectOnePerSource = (shelf: TahoiyaSourceEntry[]) => shuffledSourceIds.flatMap((sourceId) => {
-    const candidates = availableForSource(shelf, sourceId);
-    return candidates.length > 0 ? [candidates[Math.floor(Math.random() * candidates.length)]] : [];
-  }).slice(0, externalLimit);
-
-  let shelf = await loadTahoiyaSourceShelf();
-  let selected = selectOnePerSource(shelf);
-  if (selected.length < externalLimit) {
-    const missingSourceIds = shuffledSourceIds.filter((sourceId) => availableForSource(shelf, sourceId).length === 0);
-    await refreshTahoiyaSourceShelf(missingSourceIds);
-    shelf = await loadTahoiyaSourceShelf();
-    selected = selectOnePerSource(shelf);
-  }
-  return [...sharedSources, ...selected].slice(0, Math.max(1, limit));
+export async function findUnexperiencedTahoiyaWordCandidates(
+  difficulty: TahoiyaDifficulty,
+  playerIds: string[],
+  blockedWords: string[],
+  limit = 20,
+): Promise<TahoiyaWordCandidate[]> {
+  if (playerIds.length === 0) return [];
+  const blocked = new Set(blockedWords.map(normalizeWord));
+  const words = await sharedVocabularyRepository.findWords({
+    gameId: "tahoiya",
+    limit: 500,
+    ...tahoiyaEffectiveZipfQuery(difficulty),
+  });
+  const candidates = words
+    .filter((word) => matchesTahoiyaEffectiveZipf(word.zipf, difficulty) && !blocked.has(word.normalizedSurface))
+    .map((word) => ({
+      id: word.id,
+      word: word.surface,
+      reading: word.reading ?? undefined,
+      effectiveZipf: word.zipf as number,
+    }));
+  const unexperienced = await filterUnexperiencedTahoiyaWords(candidates, playerIds);
+  return unexperienced
+    .map((candidate) => ({ candidate, order: Math.random() }))
+    .sort((left, right) => left.order - right.order)
+    .slice(0, Math.max(1, Math.min(50, Math.floor(limit))))
+    .map(({ candidate }) => candidate);
 }
 
 export type TahoiyaReviewedCandidate = {
@@ -191,8 +218,8 @@ export async function rememberTahoiyaReviewedBatch(
       sourceLibrary: candidate.source.sourceLibrary,
       sourceUrl: candidate.source.sourceUrl,
       difficultyReason: candidate.difficultyReason,
-      difficultyJudgedBy: "llm-rag-batch",
-      difficultyRubricVersion: "tahoiya-rag-absolute-v1",
+      difficultyJudgedBy: "effective-zipf",
+      difficultyRubricVersion: "tahoiya-effective-zipf-v1",
       feedbackAnchorTags: candidate.feedbackAnchorTags,
       difficultyFeedbackIds: difficultyFeedbackIds.slice(0, 20),
       generation: candidate.topic.generation,

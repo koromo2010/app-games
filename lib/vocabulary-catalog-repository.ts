@@ -38,15 +38,41 @@ export class PostgresVocabularyCatalogRepository implements VocabularyCatalogRep
     const sql = getVocabularyPostgresClient();
     const statuses = statusesForRead(query.statuses);
     const limit = Math.min(500, Math.max(1, Math.floor(query.limit)));
-    const rows = process.env.APP_ENV === "production" ? await sql`
+    const effectiveZipfEquals = query.effectiveZipfEquals ?? null;
+    const effectiveZipfMinExclusive = query.effectiveZipfMinExclusive ?? null;
+    const effectiveZipfMaxExclusive = query.effectiveZipfMaxExclusive ?? null;
+    const rows = process.env.APP_ENV === "production"
+      ? query.gameId === "tahoiya" ? await sql`
+      SELECT w.id, w.surface, w.reading, w.normalized_surface, w.part_of_speech,
+             w.proper_noun, w.character_count, w.effective_zipf AS zipf, w.status
+      FROM active_words w
+      WHERE w.effective_zipf >= 0 AND w.effective_zipf < 3
+        AND (${effectiveZipfEquals}::double precision IS NULL OR w.effective_zipf = ${effectiveZipfEquals})
+        AND (${effectiveZipfMinExclusive}::double precision IS NULL OR w.effective_zipf > ${effectiveZipfMinExclusive})
+        AND (${effectiveZipfMaxExclusive}::double precision IS NULL OR w.effective_zipf < ${effectiveZipfMaxExclusive})
+      ORDER BY w.updated_at DESC LIMIT ${limit}
+    ` as WordRow[] : await sql`
       SELECT w.id, w.surface, w.reading, w.normalized_surface, w.part_of_speech,
              w.proper_noun, w.character_count, w.effective_zipf AS zipf, w.status
       FROM active_words w
       JOIN active_word_game_eligibility e ON e.subject_type = 'word' AND e.subject_id = w.id
       WHERE e.game_id = ${query.gameId}
-        AND (${query.gameId} = 'tahoiya' OR w.effective_zipf >= 3)
+        AND w.effective_zipf >= 3
         AND (e.valid_from IS NULL OR e.valid_from <= NOW())
         AND (e.valid_until IS NULL OR e.valid_until > NOW())
+      ORDER BY w.updated_at DESC LIMIT ${limit}
+    ` as WordRow[]
+      : query.gameId === "tahoiya" ? await sql`
+      SELECT w.id, w.surface, w.reading, w.normalized_surface, w.part_of_speech,
+             w.proper_noun, w.character_count,
+             COALESCE(w.selection_zipf_override, w.zipf) AS zipf, w.status
+      FROM words w
+      WHERE COALESCE(w.selection_zipf_override, w.zipf) >= 0
+        AND COALESCE(w.selection_zipf_override, w.zipf) < 3
+        AND (${effectiveZipfEquals}::double precision IS NULL OR COALESCE(w.selection_zipf_override, w.zipf) = ${effectiveZipfEquals})
+        AND (${effectiveZipfMinExclusive}::double precision IS NULL OR COALESCE(w.selection_zipf_override, w.zipf) > ${effectiveZipfMinExclusive})
+        AND (${effectiveZipfMaxExclusive}::double precision IS NULL OR COALESCE(w.selection_zipf_override, w.zipf) < ${effectiveZipfMaxExclusive})
+        AND w.status = ANY(${statuses}::vocabulary_status[])
       ORDER BY w.updated_at DESC LIMIT ${limit}
     ` as WordRow[] : await sql`
       SELECT w.id, w.surface, w.reading, w.normalized_surface, w.part_of_speech,
@@ -55,7 +81,7 @@ export class PostgresVocabularyCatalogRepository implements VocabularyCatalogRep
       FROM words w
       JOIN word_game_eligibility e ON e.subject_type = 'word' AND e.subject_id = w.id
       WHERE e.game_id = ${query.gameId} AND e.enabled AND NOT e.manually_suspended
-        AND (${query.gameId} = 'tahoiya' OR COALESCE(w.selection_zipf_override, w.zipf) >= 3)
+        AND COALESCE(w.selection_zipf_override, w.zipf) >= 3
         AND w.status = ANY(${statuses}::vocabulary_status[])
         AND (e.valid_from IS NULL OR e.valid_from <= NOW())
         AND (e.valid_until IS NULL OR e.valid_until > NOW())

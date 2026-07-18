@@ -124,7 +124,7 @@ Bad評価語の除外は、日次単語履歴・30日ペア履歴とは別の品
 
 2026-07-18時点でワードウルフはv3履歴へ移行済み。旧 `wordwolf:topic:word-experience:v1` は破壊せずアーカイブとして残すが、新規の判定・記録には使わない。旧形式は単語別プレイヤー配列で、過去の正確なペアと出題日時を復元できないため、30日ペア履歴は切替日から蓄積する。
 
-たほい屋は `tahoiya_topics` / `active_tahoiya_topics` を共通DBの完成済みお題カタログとし、新規の既出履歴を `game-history:v2:tahoiya:<playerId>` へ保存する実装へ移行した。履歴memberはNFKC正規化した見出し語のSHA-256から作る `word-v1:` IDで、候補へプレイヤー配列を追記しない。移行中は旧Redis Hash `tahoiya:topic:catalog:v1` も読み取り、旧 `experiencedPlayerIds` と新Setのどちらかで経験済みなら除外する。
+たほい屋は共通DBから、秘境では `0 < 実質Zipf < 3`、魔境では `実質Zipf = 0` の語を通常出題の素材として選ぶ。抽出後に既存の共通LLM経路で読みと正解文を生成・独立校閲し、LLMは難易度を再判定しない。完成済み `tahoiya_topics` / `active_tahoiya_topics` は移行・管理用カタログとして維持する。新規の既出履歴は `game-history:v2:tahoiya:<playerId>` へ保存する。履歴memberはNFKC正規化した見出し語のSHA-256から作る `word-v1:` IDで、候補へプレイヤー配列を追記しない。移行中は旧Redis Hash `tahoiya:topic:catalog:v1` も読み取り、旧 `experiencedPlayerIds` と新Setのどちらかで経験済みなら除外する。
 
 旧Redisのお題本体と経験配列は、develop Preview管理画面の「たほい屋DB移行」から冪等に共通DB／プレイヤー別Setへ移す。元Hashは削除しない。新しいLLM審査済み候補は `definition` draftとして共通DBへ送り、管理者が採用した時だけ `tahoiya_topics` とたほい屋用eligibilityへ昇格する。
 

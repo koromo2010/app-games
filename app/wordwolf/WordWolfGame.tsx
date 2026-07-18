@@ -61,7 +61,8 @@ export function WordWolfGame() {
     setPlayerName, setAvatarColor, setAvatarImage, setError,
   });
 
-  const { activePlayer, currentPlayer, wolfIds, wolfPlayers, accusedPlayer, accusedIsWolf, finalAnswerPlayer, nextVotePlayer, isDebugMode, voteActor, voteDisplayPlayer, isHost, headerName, headerAvatarColor, headerAvatarImage, ownWord, resultTitle, topicSourceLabel, voteVoters, votedCount, selectedVoteTargetId, clueParticipants, clueSubmittedCount, canSubmitClue, voteCandidates, allowedWolfCount, wolfCountOptions, isRunoffVote, runoffCandidateNames, roundProgressLabel, turnSecondsLeft, shouldShowClueLog, hasWolfInCurrentGame, isMyClueTurn, isMyVoteTurn, isMyFinalAnswerTurn, clueActorId, currentPlayerId, guessActorId } = useWordWolfViewModel(room, activePlayerId, playerName, avatarColor, avatarImage);
+  const { activePlayer, currentPlayer, wolfIds, wolfPlayers, accusedPlayer, accusedIsWolf, finalAnswerPlayer, nextVotePlayer, isDebugMode, voteActor, voteDisplayPlayer, headerName, headerAvatarColor, headerAvatarImage, ownWord, resultTitle, topicSourceLabel, voteVoters, votedCount, selectedVoteTargetId, clueParticipants, clueSubmittedCount, canSubmitClue, voteCandidates, allowedWolfCount, wolfCountOptions, isRunoffVote, runoffCandidateNames, roundProgressLabel, turnSecondsLeft, shouldShowClueLog, hasWolfInCurrentGame, isMyClueTurn, isMyVoteTurn, isMyFinalAnswerTurn, clueActorId, currentPlayerId, guessActorId } = useWordWolfViewModel(room, activePlayerId, playerName, avatarColor, avatarImage);
+  const isHost = Boolean(room && playerAccountId === room.hostId);
   const wordwolfLayoutClass = room && shouldShowClueLog ? "mx-auto grid max-w-[1500px] gap-4 px-4 py-5 lg:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)_360px]" : "mx-auto grid max-w-6xl gap-4 px-4 py-5 lg:grid-cols-[340px_1fr]";
   const runRoomAction = useCallback(async (action: WordWolfRoomAction, persistDefaults = false) => {
     if (!room) return null;
