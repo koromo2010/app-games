@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseTahoiyaDifficultyScreening, tahoiyaDifficultyVerdictAccepted } from "../lib/tahoiya-difficulty-screening.ts";
+import { classifyTahoiyaDifficultyScreening, parseTahoiyaDifficultyScreening, tahoiyaDifficultyVerdictAccepted } from "../lib/tahoiya-difficulty-screening.ts";
 
 const sources = [
   { id: "word:1", wordId: "id-1", word: "既知語" },
@@ -20,6 +20,7 @@ test("秘境は一般には分からない語だけを合格にする", () => {
   const items = parseTahoiyaDifficultyScreening(response, sources, "standard");
   assert.equal(items.length, 3);
   assert.deepEqual(items.map((item) => item.accepted), [false, true, false]);
+  assert.deepEqual(items.map((item) => item.difficulty), ["rejected", "standard", "extreme"]);
   assert.equal(items[1].word, "秘境語");
   assert.equal(items[1].wordId, "id-2");
 });
@@ -36,6 +37,10 @@ test("センシティブ・大学名・企業名・地名は同じ除外フラ�
   assert.equal(tahoiyaDifficultyVerdictAccepted("ordinary-unknown", ["university"], 8, "standard"), false);
   assert.equal(tahoiyaDifficultyVerdictAccepted("ordinary-unknown", ["company", "place"], 8, "standard"), false);
   assert.equal(tahoiyaDifficultyVerdictAccepted("ordinary-unknown", ["sensitive"], 8, "standard"), false);
+  assert.equal(classifyTahoiyaDifficultyScreening([], 9), "standard");
+  assert.equal(classifyTahoiyaDifficultyScreening([], 1), "extreme");
+  assert.equal(classifyTahoiyaDifficultyScreening([], 15), "rejected");
+  assert.equal(classifyTahoiyaDifficultyScreening(["place"], 0), "rejected");
 });
 
 test("欠落・重複・範囲外を含むLLM応答は一括で棄却する", () => {

@@ -3,6 +3,7 @@ import type { TahoiyaDifficulty } from "./tahoiya-types.ts";
 
 export type TahoiyaDifficultyVerdict = "known" | "borderline" | "ordinary-unknown" | "almost-nobody-knows";
 export type TahoiyaDifficultyExclusionFlag = "sensitive" | "university" | "company" | "place";
+export type TahoiyaDifficultyScreeningClassification = TahoiyaDifficulty | "rejected";
 
 export type TahoiyaDifficultyScreeningSource = {
   id: string;
@@ -19,6 +20,7 @@ export type TahoiyaDifficultyScreeningItem = {
   estimatedRecognitionPercent: number;
   confidence: number;
   reason: string;
+  difficulty: TahoiyaDifficultyScreeningClassification;
   accepted: boolean;
 };
 
@@ -30,15 +32,23 @@ const verdicts = new Set<TahoiyaDifficultyVerdict>([
 ]);
 const exclusionFlags = new Set<TahoiyaDifficultyExclusionFlag>(["sensitive", "university", "company", "place"]);
 
+export function classifyTahoiyaDifficultyScreening(
+  flags: TahoiyaDifficultyExclusionFlag[],
+  estimatedRecognitionPercent: number,
+): TahoiyaDifficultyScreeningClassification {
+  if (flags.length > 0 || estimatedRecognitionPercent >= 15) return "rejected";
+  return estimatedRecognitionPercent <= 1 ? "extreme" : "standard";
+}
+
 export function tahoiyaDifficultyVerdictAccepted(
   verdict: TahoiyaDifficultyVerdict,
   flags: TahoiyaDifficultyExclusionFlag[],
   estimatedRecognitionPercent: number,
   difficulty: TahoiyaDifficulty,
 ) {
-  if (flags.length > 0) return false;
-  if (difficulty === "extreme") return verdict === "almost-nobody-knows" && estimatedRecognitionPercent <= 1;
-  return verdict === "ordinary-unknown" && estimatedRecognitionPercent > 1 && estimatedRecognitionPercent < 15;
+  const classification = classifyTahoiyaDifficultyScreening(flags, estimatedRecognitionPercent);
+  if (classification !== difficulty) return false;
+  return difficulty === "extreme" ? verdict === "almost-nobody-knows" : verdict === "ordinary-unknown";
 }
 
 function recognitionMatchesVerdict(verdict: TahoiyaDifficultyVerdict, percent: number) {
@@ -86,6 +96,7 @@ export function parseTahoiyaDifficultyScreening(
       estimatedRecognitionPercent,
       confidence,
       reason,
+      difficulty: classifyTahoiyaDifficultyScreening(itemExclusionFlags, estimatedRecognitionPercent),
       accepted: tahoiyaDifficultyVerdictAccepted(verdict, itemExclusionFlags, estimatedRecognitionPercent, difficulty),
     });
   }
