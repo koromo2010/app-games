@@ -174,10 +174,10 @@ export async function PATCH(request: Request) {
       }
       const aiLimited = await rateLimitResponseFor(request, rateLimitPolicies.aiGeneration, { playerId: player.id });
       if (aiLimited) return aiLimited;
-      const generated = await withGameGenerationCache("tahoiya-topic-v10", `${current.code}:${current.round}:${current.topicDifficulty}`, async () => {
+      const generated = await withGameGenerationCache("tahoiya-topic-v11", `${current.code}:${current.round}:${current.topicDifficulty}`, async () => {
         const response = await generateTahoiyaTopicResponse(current.topicDifficulty, current.players.map((item) => item.id));
         return { status: response.status, body: await response.json() as TahoiyaTopic & { error?: string } };
-      });
+      }, { shouldCache: (result) => result.status < 400 });
       const topic = generated.body;
       if (generated.status >= 400 || !topic.word || !topic.realDefinition) {
         telemetry.reject("room.command", generated.status, logFields);

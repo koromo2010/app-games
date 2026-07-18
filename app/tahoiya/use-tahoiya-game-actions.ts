@@ -17,7 +17,11 @@ export function useTahoiyaGameActions(params: Params) {
     if (room.playMode === "single-answerer" && room.answererMode === "manual" && !room.players.some((player) => player.id === room.answererId)) return params.setMessage("回答者を指定するか、ランダムで選ぶ設定にしてください。");
     params.setIsStarting(true); params.setMessage("");
     try { const started = await applyTahoiyaSpecialAction(room.code, { type: "start-round" }); params.setRoom(started); const writer = getDefinitionWriters(started)[0]; if (writer) params.setActivePlayerId(writer.id); clearRoundInput(); }
-    catch { params.setMessage("お題を生成してゲームを開始できませんでした。もう一度試してください。"); }
+    catch (error) {
+      params.setMessage(error instanceof Error && error.message && error.message !== "ROOM_ACTION_FAILED"
+        ? error.message
+        : "お題を生成してゲームを開始できませんでした。もう一度試してください。");
+    }
     finally { params.setIsStarting(false); }
   };
   const submitDefinition = async () => {

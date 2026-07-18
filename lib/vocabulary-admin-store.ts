@@ -469,11 +469,7 @@ export async function adoptVocabularyEvaluationWordForTahoiya(
       LIMIT 1
     ), adjusted AS (
       UPDATE words word SET
-        selection_zipf_override = CASE
-          WHEN COALESCE(word.selection_zipf_override, word.zipf) < 3
-            THEN word.selection_zipf_override
-          ELSE 2.9
-        END,
+        selection_zipf_override = 0,
         updated_at = NOW()
       FROM target
       WHERE word.id = target.id
@@ -646,11 +642,18 @@ async function activateDefinition(draft: VocabularyDraftSubmission, reviewedBy: 
   const rows = await sql`
     WITH selected_word AS (
       INSERT INTO words (surface, reading, normalized_surface, character_count, status, source_type, source_environment,
-        source_reference, provider, model, prompt_version, created_by, reviewed_at, reviewed_by)
+        source_reference, provider, model, prompt_version, created_by, reviewed_at, reviewed_by,
+        selection_zipf_override)
       VALUES (${word.surface}, ${reading}, ${word.normalized}, ${word.length}, 'active', ${draft.sourceType},
         ${draft.sourceEnvironment}, ${draft.sourceReference}, ${draft.provider}, ${draft.model}, ${draft.promptVersion},
-        ${draft.createdBy}, NOW(), ${reviewedBy})
-      ON CONFLICT (normalized_surface, (COALESCE(reading, ''))) DO UPDATE SET status = 'active', updated_at = NOW()
+        ${draft.createdBy}, NOW(), ${reviewedBy}, CASE WHEN ${gameId} = 'tahoiya' THEN 0 ELSE NULL END)
+      ON CONFLICT (normalized_surface, (COALESCE(reading, ''))) DO UPDATE SET
+        status = 'active',
+        selection_zipf_override = CASE
+          WHEN ${gameId} = 'tahoiya' THEN 0
+          ELSE words.selection_zipf_override
+        END,
+        updated_at = NOW()
       RETURNING id
     ), definition AS (
       INSERT INTO word_definitions (word_id, short_definition, display_game_id, status, source_type, source_environment,

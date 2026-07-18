@@ -11,8 +11,7 @@ import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 import { emitObservabilityEvent, observabilityErrorCode } from "@/lib/observability";
 import { loadStoredTahoiyaRoom } from "@/lib/tahoiya-room-store";
 import {
-  findReusableTahoiyaTopic,
-  ensureTahoiyaGitCandidates,
+  findUnexperiencedTahoiyaWordCandidates,
   loadUnreviewedTahoiyaSources,
   rememberTahoiyaReviewedBatch,
   rememberTahoiyaTopicCandidate,
@@ -24,7 +23,7 @@ import type { TahoiyaDifficulty, TahoiyaTopic } from "@/lib/tahoiya-types";
 import { parseLlmJson } from "@/lib/llm-json";
 import { gameApiAccessDeniedResponse } from "@/lib/game-access";
 
-const tahoiyaTopicPromptVersion = "tahoiya-topic-v10";
+const tahoiyaTopicPromptVersion = "tahoiya-topic-v11";
 const tahoiyaBatchPromptVersion = "tahoiya-source-batch-v1";
 export const maxDuration = 180;
 type DefinitionStyle = "brief" | "standard" | "detailed" | "long" | "extended" | "maximum";
@@ -345,6 +344,77 @@ function independentReviewerProvider(provider: GameLlmProvider): GameLlmProvider
   return "openai";
 }
 
+async function generateTopicFromCatalogWords(
+  mode: Exclude<GameLlmMode, "local">,
+  difficulty: TahoiyaDifficulty,
+  candidates: Array<{ id: string; word: string; reading?: string }>,
+  feedbackContext: string,
+  retrievedFeedbackIds: string[],
+) {
+  if (candidates.length === 0) return null;
+  const definitionStyle = pickDefinitionStyle();
+  const definitionRule = definitionStyleRules[definitionStyle];
+  const difficultyRule = difficulty === "extreme"
+    ? "魔境: 難語好きでも意味を知らず、字面からも推測しにくい語を選んでください。"
+    : "秘境: 一般的な大人が意味を知らないが、偽説明を考えやすい語を選んでください。";
+  const compactCandidates = candidates.map((candidate) => ({
+    id: candidate.id,
+    word: candidate.word,
+    readingHint: candidate.reading ?? null,
+  }));
+  const prompt = [
+    "共通単語DBから抽出した実効Zipf=0の候補一覧から、たほい屋のお題を1語だけ選んでください。新しい見出し語を作ったり、候補の表記を変更したりしてはいけません。",
+    difficultyRule,
+    "候補のreadingHintは参考情報です。誤っている場合は辞書上の正しい読みへ直してください。",
+    "選んだ語の実在・読み・意味に確信が持てる場合だけvalidをtrueにしてください。造語、意味を確認できない語、差別的・性的・残虐な語は選ばないでください。",
+    "realDefinitionはゲームの正解文です。意味だけを自然な日本語一文で書き、読み、語源、用例、括弧、複数の語義を含めないでください。",
+    `${definitionRule.instruction}を目安とし、${definitionRule.max}文字以内にしてください。`,
+    "noteには選定理由、sourceDetailには確認に使った辞書・辞典の種類を短く書いてください。不確かな辞書名を創作してはいけません。",
+    "JSONのみで返してください: {\"valid\":trueまたはfalse,\"candidateId\":\"...\",\"word\":\"候補と完全一致\",\"reading\":\"...\",\"realDefinition\":\"...\",\"note\":\"...\",\"sourceDetail\":\"...\"}",
+    `候補一覧: ${JSON.stringify(compactCandidates)}`,
+    feedbackContext,
+  ].filter(Boolean).join("\n\n");
+  const generated = await generateGameLlmText(prompt, mode, { quality: "high" });
+  const parsed = parseLlmJson<Partial<TahoiyaTopic> & { valid?: boolean; candidateId?: string }>(generated.text);
+  const selected = parsed?.valid === true
+    ? candidates.find((candidate) => candidate.id === parsed.candidateId && candidate.word === parsed.word)
+    : null;
+  if (!selected) return null;
+  const topic = parseTopic(JSON.stringify(parsed));
+  if (!topic) return null;
+
+  const verificationPrompt = [
+    "あなたは日本語辞書の厳格な校閲者です。共通単語DBから選ばれた次のお題について、見出し語の実在、読み、正解文の意味を検証してください。",
+    "見出し語は変更禁止です。読みまたは意味が不正確、実在が不確か、難易度に不適切ならvalidをfalseにしてください。推測で修正してはいけません。",
+    difficultyRule,
+    `validがtrueの場合もrealDefinitionは意味だけの一文とし、${definitionRule.max}文字以内、括弧なしにしてください。`,
+    "JSONのみで返してください: {\"valid\":trueまたはfalse,\"word\":\"...\",\"reading\":\"...\",\"realDefinition\":\"...\",\"note\":\"...\",\"sourceDetail\":\"...\"}",
+    `校閲対象: ${JSON.stringify(topic)}`,
+  ].join("\n");
+  const verified = await generateGameLlmText(verificationPrompt, mode, {
+    quality: "high",
+    preferredProvider: independentReviewerProvider(generated.provider),
+    excludedProviders: generated.attemptedProviders.filter((provider) => provider !== generated.provider),
+  });
+  const verifiedTopic = parseVerifiedTopic(verified.text);
+  if (!verifiedTopic || verifiedTopic.word !== selected.word) return null;
+  return {
+    ...verifiedTopic,
+    source: "llm" as const,
+    generation: {
+      provider: generated.provider,
+      model: generated.model,
+      mode: generated.mode,
+      billingSource: generated.billingSource,
+      promptVersion: tahoiyaTopicPromptVersion,
+      latencyMs: generated.latencyMs + verified.latencyMs,
+      retrievedFeedbackIds,
+      reviewProvider: verified.provider,
+      reviewModel: verified.model,
+    },
+  } satisfies TahoiyaTopic;
+}
+
 export async function generateTopic(
   mode: Exclude<GameLlmMode, "local">,
   difficulty: TahoiyaDifficulty,
@@ -356,11 +426,11 @@ export async function generateTopic(
   const definitionRule = definitionStyleRules[definitionStyle];
   const difficultyRules = difficulty === "extreme"
     ? [
-        "今回は高難易度モードです。難語好きや読書家でも意味を知らない可能性が高い、使用頻度が極端に低い見出し語だけを選んでください。",
+        "今回は魔境モードです。難語好きや読書家でも意味を知らない可能性が高い、使用頻度が極端に低い見出し語だけを選んでください。",
         "古語辞典、漢語辞典、専門辞典、信頼できる百科事典に載る語を対象にし、短い語義を正確に示せるものに限ります。",
         "難しい漢字で書いた身近な物の名前、一般語の異表記、有名な難読語、漢字から意味を容易に推測できる語は除外してください。",
       ]
-    : ["今回は通常モードです。一般的な日本人の大人がまず意味を知らない難語を選んでください。"];
+    : ["今回は秘境モードです。一般的な日本人の大人がまず意味を知らない難語を選んでください。"];
   const instructions = [
     "国語辞典を使ったパーティーゲーム『たほい屋』用のお題候補を3つ作ってください。",
     ...difficultyRules,
@@ -389,8 +459,8 @@ export async function generateTopic(
   const verificationPrompt = [
     "あなたは日本語辞書の厳格な校閲者です。次のたほい屋用候補を比較し、事実性・難しさ・偽説明の作りやすさが最も優れた1候補だけを選んでください。",
     difficulty === "extreme"
-      ? "高難易度モードなので、難語に詳しい人でも意味を知る可能性が低い語だけを有効とし、有名な難読語や身近な物の難しい表記は無効にしてください。"
-      : "通常モードとして、一般的な大人が意味を知らない十分な難しさがあるか確認してください。",
+      ? "魔境モードなので、難語に詳しい人でも意味を知る可能性が低い語だけを有効とし、有名な難読語や身近な物の難しい表記は無効にしてください。"
+      : "秘境モードとして、一般的な大人が意味を知らない十分な難しさがあるか確認してください。",
     "見出し語が日本語の辞書・専門辞典・信頼できる百科事典で確認できる一般語、固有名詞、カタカナ語であり、readingが正しく、realDefinitionがその意味に正確に対応する場合だけvalidをtrueにしてください。",
     "単なる当て字、読みと意味の取り違え、存在が不確かな語、一般人が意味を知っている語、説明が不正確な候補はvalidをfalseにしてください。",
     "少しでも確信がなければvalidをfalseにしてください。推測で修正や補完をしないでください。",
@@ -555,17 +625,31 @@ export async function generateTahoiyaTopicResponse(
     }
   };
   if (!forceNew) {
-    await ensureTahoiyaGitCandidates().catch((error) => {
-      emitObservabilityEvent("error", "ai.catalog-sync", { game: "tahoiya", operation: "git-candidates", outcome: "failed", errorCode: observabilityErrorCode(error) });
-    });
-    const reusableTopic = await findReusableTahoiyaTopic(difficulty, playerIds, feedbackBlockedWords).catch(() => null);
-    if (reusableTopic) {
-      await remember(reusableTopic);
-      return Response.json(reusableTopic);
+    try {
+      const candidates = await findUnexperiencedTahoiyaWordCandidates(playerIds, feedbackBlockedWords, 20);
+      if (candidates.length === 0) {
+        return Response.json({ error: "参加者全員が未使用のZipf=0候補がありません。" }, { status: 503 });
+      }
+      const mode = await resolveGameLlmMode();
+      if (mode === "local") {
+        return Response.json({ error: "正解文を生成できるAI APIがありません。" }, { status: 503 });
+      }
+      const topic = await generateTopicFromCatalogWords(
+        mode,
+        difficulty,
+        candidates,
+        feedbackContext,
+        retrievedFeedbackIds,
+      );
+      if (!topic) {
+        return Response.json({ error: "Zipf=0候補の読み・正解文を検証できませんでした。もう一度お試しください。" }, { status: 503 });
+      }
+      await remember(topic);
+      return Response.json(topic);
+    } catch (error) {
+      emitObservabilityEvent("error", "ai.generation", { game: "tahoiya", operation: "catalog-definition", outcome: "failed", errorCode: observabilityErrorCode(error) });
+      return Response.json({ error: "Zipf=0候補から正解文を生成できませんでした。もう一度お試しください。" }, { status: 503 });
     }
-    return Response.json({
-      error: "参加者全員が未使用の候補がありません。デバッグ画面から候補DBを補充してください。",
-    }, { status: 503 });
   }
 
   const mode = await resolveGameLlmMode();

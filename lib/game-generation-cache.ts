@@ -21,7 +21,12 @@ async function loadCached<T>(key: string) {
 }
 
 /** Prevents duplicate clicks/tabs from spending multiple LLM calls for one room round. */
-export async function withGameGenerationCache<T>(scope: string, requestKey: string, generate: () => Promise<T>) {
+export async function withGameGenerationCache<T>(
+  scope: string,
+  requestKey: string,
+  generate: () => Promise<T>,
+  options: { shouldCache?: (value: T) => boolean } = {},
+) {
   if (!requestKey) return generate();
   const resultKey = cacheKey(scope, requestKey);
   const lockKey = `${resultKey}:lock`;
@@ -48,7 +53,9 @@ export async function withGameGenerationCache<T>(scope: string, requestKey: stri
 
   try {
     const generated = await generate();
-    await redisCommand<"OK">(["SET", resultKey, JSON.stringify(generated), "EX", "86400"]);
+    if (options.shouldCache?.(generated) !== false) {
+      await redisCommand<"OK">(["SET", resultKey, JSON.stringify(generated), "EX", "86400"]);
+    }
     return generated;
   } finally {
     if (acquired) {

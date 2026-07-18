@@ -43,12 +43,13 @@ db/vocabulary/006_global_selection_zipf.sql
 db/vocabulary/007_evaluation_final_reviews.sql
 db/vocabulary/008_tahoiya_implies_wordwolf_rejection.sql
 db/vocabulary/009_tahoiya_catalog.sql
+db/vocabulary/010_tahoiya_zipf_zero.sql
 ```
 
 `words.zipf`は辞書・集計由来の原値として維持する。全ゲーム共通の選定補正は
 `selection_zipf_override`へ保存し、実効Zipfを`COALESCE(selection_zipf_override, zipf)`で求める。
-管理画面から一つ目の単語をたほい屋候補へ送ると、実効Zipfが3以上または未計測の場合だけ
-2.9へ設定し、`word_game_eligibility(game_id = 'tahoiya')`を有効にする。同時に、その評価を
+管理画面から一つ目の単語をたほい屋候補へ送ると、実効Zipfを厳密に0へ設定し、
+`word_game_eligibility(game_id = 'tahoiya')`を有効にする。同時に、その評価を
 ワードウルフ候補として`rejected`へ最終確定し、紐づく未審査のpair draftも不採用にする。
 これはワードウルフでの選考結果であり、単語自体や他ゲームの適格性は無効化しない。
 

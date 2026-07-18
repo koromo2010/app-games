@@ -116,8 +116,8 @@ function HostSettings(props: Props & { room: TahoiyaRoom }) {
       <Setting title="遊び方" description={room.playMode === "all-vote" ? "全員が偽説明を書き、全員で投票して最多得票を競います。" : "1人だけが回答し、それ以外の参加者が偽説明を書きます。"}>
         <ChoiceButtons value={room.playMode} onChange={props.onPlayModeChange} choices={[{ label: "回答者1人", value: "single-answerer", activeClass: amberChoice }, { label: "全員投票", value: "all-vote", activeClass: cyanChoice }]} />
       </Setting>
-      <Setting title="お題の難易度" description={room.topicDifficulty === "extreme" ? "難語好きでも知らないほど使用頻度の低い語を優先します。" : "一般的な大人が意味を知らない難語を選びます。"}>
-        <ChoiceButtons value={room.topicDifficulty} onChange={props.onDifficultyChange} choices={[{ label: "通常", value: "standard", activeClass: cyanChoice }, { label: "高難易度", value: "extreme", activeClass: roseChoice }]} />
+      <Setting title="お題の難易度" description={room.topicDifficulty === "extreme" ? "難語好きでも知らないほど深い魔境の語を選びます。" : "一般的な大人が意味を知らない秘境の語を選びます。"}>
+        <ChoiceButtons value={room.topicDifficulty} onChange={props.onDifficultyChange} choices={[{ label: "秘境", value: "standard", activeClass: cyanChoice }, { label: "魔境", value: "extreme", activeClass: roseChoice }]} />
       </Setting>
       {room.playMode === "single-answerer" && <>
         <Setting title="回答者の決め方">
@@ -138,5 +138,5 @@ function Setting({ title, description, children }: { title: string; description?
 }
 
 function HostActions(props: Props & { room: TahoiyaRoom }) {
-  return <>{props.isDebugMode && <><DebugWordGenerationTest onGenerate={props.onTestWordGeneration} heading="候補DBの補充・確認" description="通常ゲームではAIを呼びません。ここで10件を一括審査し、採用語を候補DBへ未使用状態で保存します。" forceNewTitle="候補DBを10件補充" forceNewDescription="ON: 異なる10取得元から収集してAI審査　OFF: 保存済み候補を確認" forceNewButtonLabel="10件を審査して候補DBへ補充" forceNewRepeatLabel="さらに10件を補充" /><button onClick={props.onAddTestPlayer} disabled={props.room.players.length >= 8} className={`w-full ${subtleButtonClass}`}>テストプレイヤー追加</button></>}<button onClick={props.onStartRound} disabled={props.isStarting} className={`w-full ${primaryButtonClass}`}>{props.isStarting ? "お題生成中..." : "ラウンド開始"}</button></>;
+  return <>{props.isDebugMode && <><DebugWordGenerationTest onGenerate={props.onTestWordGeneration} heading="Zipf=0抽出・正解文確認" description="通常ゲームと同じく、共通DBからZipf=0の単語を抽出し、AI生成した読み・正解文を別モデルで校閲します。補充ONでは素材10件を一括審査して候補DBへ保存します。" forceNewTitle="素材候補DBを10件補充" forceNewDescription="ON: 異なる10取得元から収集してAI審査　OFF: Zipf=0抽出から正解文生成までを確認" forceNewButtonLabel="10件を審査して候補DBへ補充" forceNewRepeatLabel="さらに10件を補充" /><button onClick={props.onAddTestPlayer} disabled={props.room.players.length >= 8} className={`w-full ${subtleButtonClass}`}>テストプレイヤー追加</button></>}<button onClick={props.onStartRound} disabled={props.isStarting} className={`w-full ${primaryButtonClass}`}>{props.isStarting ? "お題生成中..." : "ラウンド開始"}</button></>;
 }

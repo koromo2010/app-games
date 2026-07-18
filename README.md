@@ -106,7 +106,9 @@ JSON records into Redis with `HSETNX`, so existing per-player usage history is p
 Before running the workflow, add `OPENAI_API_KEY` under GitHub repository Settings → Secrets and
 variables → Actions. An optional Actions variable `TAHOIYA_GENERATOR_MODEL` selects the review model;
 when omitted, the script uses `gpt-5.6-sol`. The generation job uses the configured paid API and may
-take several hours. Gameplay itself does not call these external vocabulary sources or the review LLM.
+take several hours. Gameplay does not call these external vocabulary sources. It extracts effective
+Zipf=0 words from the shared database, then uses the shared LLM gateway to generate and independently
+verify the reading and correct-definition sentence for the selected word.
 
 ## Development
 

@@ -35,6 +35,12 @@ const sharedVocabularyRepository = new PostgresVocabularyCatalogRepository();
 
 export type TahoiyaCatalogDifficulty = "easy" | "standard" | "extreme";
 
+export type TahoiyaWordCandidate = {
+  id: string;
+  word: string;
+  reading?: string;
+};
+
 type GitCandidate = {
   word: string;
   reading: string;
@@ -60,8 +66,13 @@ export async function ensureTahoiyaGitCandidates() {
   const version = data.updatedAt?.trim() || "";
   const candidates = Array.isArray(data.candidates) ? data.candidates : [];
   if (!version || candidates.length === 0) return 0;
-  const currentVersion = await redisCommand<string | null>(["GET", gitCatalogVersionKey]);
-  if (currentVersion === version) return 0;
+  const [currentVersion, currentCount] = await Promise.all([
+    redisCommand<string | null>(["GET", gitCatalogVersionKey]),
+    redisCommand<number>(["HLEN", legacyTahoiyaCatalogKey]),
+  ]);
+  // The version marker can survive a catalog reset. Re-seed when the hash is
+  // unexpectedly empty or incomplete even if the marker itself is current.
+  if (currentVersion === version && Number(currentCount) >= candidates.length) return 0;
 
   let added = 0;
   for (let offset = 0; offset < candidates.length; offset += 100) {
@@ -123,7 +134,7 @@ export async function loadUnreviewedTahoiyaSources(limit = 10): Promise<TahoiyaS
   const blockedWords = new Set(catalogWords);
   const reviewed = new Set(Array.isArray(reviewedIds) ? reviewedIds : []);
   const sharedSources = sharedWords
-    .filter((word) => word.zipf !== null && word.zipf < 3)
+    .filter((word) => word.zipf === 0)
     .map((word): TahoiyaSourceEntry => ({
       id: `word-master:${word.id}`,
       sourceRegistryId: `word-master:${word.id}`,
@@ -161,6 +172,29 @@ export async function loadUnreviewedTahoiyaSources(limit = 10): Promise<TahoiyaS
     selected = selectOnePerSource(shelf);
   }
   return [...sharedSources, ...selected].slice(0, Math.max(1, limit));
+}
+
+export async function findUnexperiencedTahoiyaWordCandidates(
+  playerIds: string[],
+  blockedWords: string[],
+  limit = 20,
+): Promise<TahoiyaWordCandidate[]> {
+  if (playerIds.length === 0) return [];
+  const blocked = new Set(blockedWords.map(normalizeWord));
+  const words = await sharedVocabularyRepository.findWords({ gameId: "tahoiya", limit: 500 });
+  const candidates = words
+    .filter((word) => word.zipf === 0 && !blocked.has(word.normalizedSurface))
+    .map((word) => ({
+      id: word.id,
+      word: word.surface,
+      reading: word.reading ?? undefined,
+    }));
+  const unexperienced = await filterUnexperiencedTahoiyaWords(candidates, playerIds);
+  return unexperienced
+    .map((candidate) => ({ candidate, order: Math.random() }))
+    .sort((left, right) => left.order - right.order)
+    .slice(0, Math.max(1, Math.min(50, Math.floor(limit))))
+    .map(({ candidate }) => candidate);
 }
 
 export type TahoiyaReviewedCandidate = {
