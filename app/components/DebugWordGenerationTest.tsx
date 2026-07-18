@@ -22,6 +22,9 @@ type DebugWordGenerationTestProps = {
   forceNewDescription?: string;
   forceNewButtonLabel?: string;
   forceNewRepeatLabel?: string;
+  showModeToggle?: boolean;
+  fixedButtonLabel?: string;
+  fixedRepeatLabel?: string;
 };
 
 export function DebugWordGenerationTest({
@@ -32,6 +35,9 @@ export function DebugWordGenerationTest({
   forceNewDescription = "ON: AIで新規生成　OFF: ローカル候補の選択をテスト",
   forceNewButtonLabel = "新規ワード生成をテスト",
   forceNewRepeatLabel = "別の新規ワードを生成",
+  showModeToggle = true,
+  fixedButtonLabel = "テストを実行",
+  fixedRepeatLabel = "もう一度テスト",
 }: DebugWordGenerationTestProps) {
   const [result, setResult] = useState<DebugWordGenerationResult | null>(null);
   const [error, setError] = useState("");
@@ -58,7 +64,7 @@ export function DebugWordGenerationTest({
       <p className="mt-1 text-xs leading-5 text-amber-800">
         {description}
       </p>
-      <label className="mt-3 flex cursor-pointer items-start gap-2 rounded-lg border border-amber-200 bg-white p-3">
+      {showModeToggle && <label className="mt-3 flex cursor-pointer items-start gap-2 rounded-lg border border-amber-200 bg-white p-3">
         <input
           type="checkbox"
           checked={forceNew}
@@ -72,7 +78,7 @@ export function DebugWordGenerationTest({
             {forceNewDescription}
           </span>
         </span>
-      </label>
+      </label>}
       <button
         type="button"
         onClick={() => void generate()}
@@ -81,7 +87,9 @@ export function DebugWordGenerationTest({
       >
         {isGenerating
           ? "ワード生成中..."
-          : forceNew
+          : !showModeToggle
+            ? result ? fixedRepeatLabel : fixedButtonLabel
+            : forceNew
             ? result ? forceNewRepeatLabel : forceNewButtonLabel
             : result ? "別のローカル候補を確認" : "ローカル候補をテスト"}
       </button>
