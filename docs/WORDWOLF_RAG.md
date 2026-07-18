@@ -40,12 +40,20 @@ db/vocabulary/003_review_workflow.sql
 db/vocabulary/004_wordwolf_rag.sql
 db/vocabulary/005_human_review_votes.sql
 db/vocabulary/006_global_selection_zipf.sql
+db/vocabulary/007_evaluation_final_reviews.sql
 ```
 
 `words.zipf`は辞書・集計由来の原値として維持する。全ゲーム共通の選定補正は
 `selection_zipf_override`へ保存し、実効Zipfを`COALESCE(selection_zipf_override, zipf)`で求める。
 管理画面から一つ目の単語をたほい屋候補へ送ると、実効Zipfが3以上または未計測の場合だけ
 2.9へ設定し、`word_game_eligibility(game_id = 'tahoiya')`を有効にする。
+
+管理画面の最終採否は、ペアdraftの有無にかかわらず
+`word_game_evaluation_reviews`へ追記する。相方未生成のrejectもAI評価結果として
+正式採用または不採用を確定でき、どちらも選考済みとして一覧から除外する。
+不採用の範囲はワードウルフのペア候補だけであり、`words`の状態、共通Zipf、
+たほい屋や他ゲームの適格性は変更しない。紐づくpair draftが未審査の場合のみ、
+正式採用で`active`、不採用で`rejected`へ連動する。
 
 旧 `shared_word_catalog` の197,040語を共通DBへ移す場合は、接続URLを画面・ログ・チャットへ貼らず、一時環境変数で指定する。
 

@@ -2,6 +2,8 @@ import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import type { VocabularySourceEnvironment, VocabularySourceType } from "./vocabulary-catalog-types.ts";
 import { resolveVocabularyEvaluationDecision, type VocabularyEvaluationDecision } from "./vocabulary-review.ts";
 
+export type VocabularyEvaluationFinalDecision = "adopted" | "rejected";
+
 export type VocabularyDraftSubmission = {
   id: string;
   kind: "word" | "definition" | "pair" | "group";
@@ -191,6 +193,8 @@ export async function listVocabularyWordGameEvaluations(voter: string, limit = 1
       LEFT JOIN word_game_human_vote_summary summary ON summary.evaluation_id = evaluation.id
       LEFT JOIN word_game_human_votes mine
         ON mine.evaluation_id = evaluation.id AND mine.voter = ${voter}
+      LEFT JOIN word_game_evaluation_reviews final_review
+        ON final_review.evaluation_id = evaluation.id
       LEFT JOIN LATERAL (
         SELECT draft.id, draft.status, draft.materialized_subject_id
         FROM vocabulary_draft_submissions draft
@@ -207,6 +211,7 @@ export async function listVocabularyWordGameEvaluations(voter: string, limit = 1
         LIMIT 1
       ) linked_draft ON TRUE
       WHERE evaluation.game_id = 'wordwolf'
+        AND final_review.evaluation_id IS NULL
       ORDER BY evaluation.created_at DESC, evaluation.id DESC
       LIMIT ${safeLimit}
     ` as EvaluationRow[]
@@ -230,6 +235,8 @@ export async function listVocabularyWordGameEvaluations(voter: string, limit = 1
         linked_draft.materialized_subject_id AS materialized_pair_id
       FROM word_game_evaluations evaluation
       JOIN words word ON word.id = evaluation.word_id
+      LEFT JOIN word_game_evaluation_reviews final_review
+        ON final_review.evaluation_id = evaluation.id
       LEFT JOIN LATERAL (
         SELECT draft.id, draft.status, draft.materialized_subject_id
         FROM vocabulary_draft_submissions draft
@@ -246,6 +253,7 @@ export async function listVocabularyWordGameEvaluations(voter: string, limit = 1
         LIMIT 1
       ) linked_draft ON TRUE
       WHERE evaluation.game_id = 'wordwolf'
+        AND final_review.evaluation_id IS NULL
       ORDER BY evaluation.created_at DESC, evaluation.id DESC
       LIMIT ${safeLimit}
     ` as EvaluationRow[];
@@ -305,6 +313,113 @@ export async function castVocabularyWordGameVote(
     previousComment: previousRows[0]?.comment ?? null,
     humanAcceptCount,
     humanRejectCount,
+  };
+}
+
+export async function finalizeVocabularyWordGameEvaluation(
+  evaluationId: string,
+  decision: VocabularyEvaluationFinalDecision,
+  reviewedBy: string,
+) {
+  if (!uuid(evaluationId) || (decision !== "adopted" && decision !== "rejected")) {
+    throw new Error("VOCABULARY_EVALUATION_FINAL_REVIEW_INVALID");
+  }
+  const normalizedReviewer = text(reviewedBy, 320);
+  if (!normalizedReviewer) throw new Error("VOCABULARY_EVALUATION_FINAL_REVIEW_INVALID");
+  const sql = adminClient();
+  const targets = await sql`
+    SELECT evaluation.id, evaluation.decision AS llm_decision, evaluation.partner_text,
+      final_review.decision AS existing_decision,
+      linked_draft.id AS linked_draft_id,
+      linked_draft.status::text AS linked_draft_status,
+      linked_draft.materialized_subject_id
+    FROM word_game_evaluations evaluation
+    LEFT JOIN word_game_evaluation_reviews final_review
+      ON final_review.evaluation_id = evaluation.id
+    LEFT JOIN LATERAL (
+      SELECT draft.id, draft.status, draft.materialized_subject_id
+      FROM vocabulary_draft_submissions draft
+      WHERE draft.kind = 'pair'
+        AND draft.payload->>'gameId' = 'wordwolf'
+        AND draft.payload->>'anchorWordId' = evaluation.word_id::text
+        AND draft.payload->>'pairDistance' = evaluation.requested_pair_distance
+        AND (
+          draft.payload->>'villageWord' = evaluation.partner_text
+          OR draft.payload->>'wolfWord' = evaluation.partner_text
+        )
+      ORDER BY CASE draft.status WHEN 'draft' THEN 0 WHEN 'active' THEN 1 ELSE 2 END,
+        draft.created_at DESC, draft.id DESC
+      LIMIT 1
+    ) linked_draft ON TRUE
+    WHERE evaluation.id = ${evaluationId}::uuid AND evaluation.game_id = 'wordwolf'
+    LIMIT 1
+  ` as Array<{
+    id: string;
+    llm_decision: VocabularyEvaluationDecision;
+    partner_text: string | null;
+    existing_decision: VocabularyEvaluationFinalDecision | null;
+    linked_draft_id: string | null;
+    linked_draft_status: "draft" | "active" | "rejected" | null;
+    materialized_subject_id: string | null;
+  }>;
+  const target = targets[0];
+  if (!target) throw new Error("VOCABULARY_EVALUATION_NOT_FOUND");
+  if (target.existing_decision) {
+    if (target.existing_decision !== decision) throw new Error("VOCABULARY_EVALUATION_ALREADY_REVIEWED");
+    return {
+      evaluationId,
+      decision,
+      llmDecision: target.llm_decision,
+      partnerGenerated: Boolean(target.partner_text),
+      linkedDraftId: target.linked_draft_id,
+      previousLinkedDraftStatus: target.linked_draft_status,
+      linkedDraftStatus: target.linked_draft_status,
+      subjectId: target.materialized_subject_id,
+      draftReviewed: false,
+      alreadyReviewed: true,
+    };
+  }
+
+  let linkedDraftStatus = target.linked_draft_status;
+  let subjectId = target.materialized_subject_id;
+  let draftReviewed = false;
+  if (target.linked_draft_id && target.linked_draft_status === "draft") {
+    const draftResult = await reviewVocabularyDraft(
+      target.linked_draft_id,
+      decision === "adopted" ? "active" : "rejected",
+      normalizedReviewer,
+    );
+    linkedDraftStatus = draftResult.status;
+    subjectId = draftResult.subjectId;
+    draftReviewed = true;
+  }
+
+  const saved = await sql`
+    INSERT INTO word_game_evaluation_reviews (evaluation_id, decision, reviewed_by)
+    SELECT id, ${decision}, ${normalizedReviewer}
+    FROM word_game_evaluations
+    WHERE id = ${evaluationId}::uuid AND game_id = 'wordwolf'
+    ON CONFLICT (evaluation_id) DO NOTHING
+    RETURNING evaluation_id
+  ` as Array<{ evaluation_id: string }>;
+  if (!saved[0]) {
+    const existing = await sql`
+      SELECT decision FROM word_game_evaluation_reviews
+      WHERE evaluation_id = ${evaluationId}::uuid
+    ` as Array<{ decision: VocabularyEvaluationFinalDecision }>;
+    if (existing[0]?.decision !== decision) throw new Error("VOCABULARY_EVALUATION_ALREADY_REVIEWED");
+  }
+  return {
+    evaluationId,
+    decision,
+    llmDecision: target.llm_decision,
+    partnerGenerated: Boolean(target.partner_text),
+    linkedDraftId: target.linked_draft_id,
+    previousLinkedDraftStatus: target.linked_draft_status,
+    linkedDraftStatus,
+    subjectId,
+    draftReviewed,
+    alreadyReviewed: false,
   };
 }
 

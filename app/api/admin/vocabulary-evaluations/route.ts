@@ -5,6 +5,7 @@ import { appendSiteAdminAuditLog } from "@/lib/site-admin-passkey-store";
 import {
   adoptVocabularyEvaluationWordForTahoiya,
   castVocabularyWordGameVote,
+  finalizeVocabularyWordGameEvaluation,
   listVocabularyWordGameEvaluations,
 } from "@/lib/vocabulary-admin-store";
 
@@ -12,7 +13,10 @@ export const dynamic = "force-dynamic";
 
 const publicErrors = new Set([
   "VOCABULARY_ADMIN_STORE_NOT_CONFIGURED",
+  "VOCABULARY_EVALUATION_ACTION_INVALID",
   "VOCABULARY_EVALUATION_NOT_FOUND",
+  "VOCABULARY_EVALUATION_ALREADY_REVIEWED",
+  "VOCABULARY_EVALUATION_FINAL_REVIEW_INVALID",
   "VOCABULARY_EVALUATION_TAHOIYA_INVALID",
   "VOCABULARY_EVALUATION_VOTE_INVALID",
   "VOCABULARY_HUMAN_VOTES_NOT_CONFIGURED",
@@ -77,14 +81,37 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   const telemetry = createRequestTelemetry(request, "/api/admin/vocabulary-evaluations", {
-    operation: "vocabulary-evaluation-tahoiya-adoption",
+    operation: "vocabulary-evaluation-review-action",
   });
   const limited = await rateLimitResponseFor(request, rateLimitPolicies.profileMutation);
   if (limited) return limited;
   try {
     const session = await requireRecentSiteAdminMfa();
-    const body = await request.json() as { evaluationId?: unknown; action?: unknown };
-    if (typeof body.evaluationId !== "string" || body.action !== "adopt-tahoiya") {
+    const body = await request.json() as { evaluationId?: unknown; action?: unknown; decision?: unknown };
+    if (typeof body.evaluationId !== "string") {
+      return Response.json({ error: "VOCABULARY_EVALUATION_ACTION_INVALID" }, { status: 400 });
+    }
+    if (body.action === "finalize") {
+      if (body.decision !== "adopted" && body.decision !== "rejected") {
+        return Response.json({ error: "VOCABULARY_EVALUATION_FINAL_REVIEW_INVALID" }, { status: 400 });
+      }
+      const result = await finalizeVocabularyWordGameEvaluation(
+        body.evaluationId,
+        body.decision,
+        voterFor(session.email),
+      );
+      await appendSiteAdminAuditLog(
+        request,
+        session,
+        "vocabulary-evaluation.finalize",
+        body.evaluationId,
+        { finalDecision: null, linkedDraftStatus: result.previousLinkedDraftStatus },
+        { finalDecision: result.decision, linkedDraftStatus: result.linkedDraftStatus },
+      );
+      telemetry.success("vocabulary.final-review", { action: body.decision, affectedCount: 1 });
+      return Response.json({ result });
+    }
+    if (body.action !== "adopt-tahoiya") {
       return Response.json({ error: "VOCABULARY_EVALUATION_TAHOIYA_INVALID" }, { status: 400 });
     }
     const result = await adoptVocabularyEvaluationWordForTahoiya(body.evaluationId);
@@ -109,10 +136,13 @@ export async function PATCH(request: Request) {
   } catch (error) {
     const auth = siteAdminAuthorizationError(error);
     if (auth) return auth;
-    const code = safeError(error, "VOCABULARY_EVALUATION_TAHOIYA_FAILED");
+    const code = safeError(error, "VOCABULARY_EVALUATION_ACTION_FAILED");
     const status = code === "VOCABULARY_EVALUATION_NOT_FOUND" ? 404
-      : code === "VOCABULARY_EVALUATION_TAHOIYA_INVALID" ? 400 : 500;
-    telemetry.failure("vocabulary.tahoiya-adopt", error, status, { action: "adopt-tahoiya" });
+      : code === "VOCABULARY_EVALUATION_ALREADY_REVIEWED" ? 409
+      : code === "VOCABULARY_EVALUATION_ACTION_INVALID"
+        || code === "VOCABULARY_EVALUATION_TAHOIYA_INVALID"
+        || code === "VOCABULARY_EVALUATION_FINAL_REVIEW_INVALID" ? 400 : 500;
+    telemetry.failure("vocabulary.review-action", error, status, { action: "patch" });
     return Response.json({ error: code }, { status });
   }
 }
