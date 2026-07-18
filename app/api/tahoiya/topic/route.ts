@@ -28,10 +28,11 @@ import type { TahoiyaDifficulty, TahoiyaTopic } from "@/lib/tahoiya-types";
 import { parseLlmJson } from "@/lib/llm-json";
 import { gameApiAccessDeniedResponse } from "@/lib/game-access";
 import { vocabularyDatabaseErrorCode } from "@/lib/vocabulary-postgres-store";
+import { parseTahoiyaCatalogTopicGeneration } from "@/lib/tahoiya-catalog-topic-generation";
 
-const tahoiyaTopicPromptVersion = "tahoiya-effective-zipf-topic-v13";
+const tahoiyaTopicPromptVersion = "tahoiya-effective-zipf-topic-v14";
 const tahoiyaBatchPromptVersion = "tahoiya-effective-zipf-batch-v2";
-const tahoiyaGenerationCandidateLimit = 12;
+const tahoiyaGenerationCandidateLimit = 3;
 export const maxDuration = 180;
 type DefinitionStyle = "brief" | "standard" | "detailed" | "long" | "extended" | "maximum";
 
@@ -355,83 +356,51 @@ async function generateTopicFromCatalogWords(
   mode: Exclude<GameLlmMode, "local">,
   difficulty: TahoiyaDifficulty,
   candidates: TahoiyaWordCandidate[],
-  feedbackContext: string,
   retrievedFeedbackIds: string[],
 ) {
   if (candidates.length === 0) return null;
-  const definitionStyle = pickDefinitionStyle();
-  const definitionRule = definitionStyleRules[definitionStyle];
-  const compactCandidates = candidates.map((candidate) => ({
-    id: candidate.id,
-    word: candidate.word,
-    readingHint: candidate.reading ?? null,
-    effectiveZipf: candidate.effectiveZipf,
-  }));
-  const prompt = [
-    `共通単語DBから「${tahoiyaDifficultyLabel(difficulty)}（${tahoiyaEffectiveZipfDescription(difficulty)}）」として抽出済みの候補群から、読みと意味に最も確信を持てる1語を選び、たほい屋の本物の説明を付けてください。新しい見出し語を作ったり、候補の表記を変更したりしてはいけません。`,
-    "難易度は実質Zipfで確定済みです。難易度を再判定せず、実在性・読み・語義・偽説明の作りやすさだけを確認してください。",
-    "候補のreadingHintは参考情報です。誤っている場合は辞書上の正しい読みへ直してください。",
-    "選んだ語の実在・読み・意味に確信が持てる場合だけvalidをtrueにしてください。造語、意味を確認できない語、差別的・性的・残虐な語は選ばないでください。",
-    "realDefinitionはゲームの正解文です。意味だけを自然な日本語一文で書き、読み、語源、用例、括弧、複数の語義を含めないでください。",
-    `${definitionRule.instruction}を目安とし、${definitionRule.max}文字以内にしてください。`,
-    "noteには選定理由、sourceDetailには確認に使った辞書・辞典の種類を短く書いてください。不確かな辞書名を創作してはいけません。",
-    "JSONのみで返してください: {\"valid\":trueまたはfalse,\"candidateId\":\"...\",\"word\":\"候補と完全一致\",\"reading\":\"...\",\"realDefinition\":\"...\",\"note\":\"...\",\"sourceDetail\":\"...\"}",
-    `候補一覧: ${JSON.stringify(compactCandidates)}`,
-    feedbackContext,
-  ].filter(Boolean).join("\n\n");
-  const generated = await generateGameLlmText(prompt, mode, { quality: "high" });
-  const parsed = parseLlmJson<Partial<TahoiyaTopic> & { valid?: boolean; candidateId?: string }>(generated.text);
-  const selected = parsed?.valid === true
-    ? candidates.find((candidate) => candidate.id === parsed.candidateId &&
-        normalizeTopicWord(candidate.word) === normalizeTopicWord(String(parsed.word ?? "")))
-    : null;
-  if (!selected) return null;
-  const topic = parseTopic(JSON.stringify(parsed));
-  if (!topic) return null;
-
-  const verificationPrompt = [
-    "あなたは日本語辞書の校閲者です。共通単語DBから選ばれた次のお題について、読みと正解文の意味を検証してください。",
-    "見出し語は共通単語DBに登録済みの実在語であり変更禁止です。難易度も実質Zipfで確定済みなので、実在性や難易度を再判定してはいけません。",
-    "読みまたは意味に誤りがあっても、正しい内容に確信がある場合は修正してvalidをtrueにしてください。正しい読みまたは意味を確定できない場合だけvalidをfalseにしてください。",
-    `validがtrueの場合もrealDefinitionは意味だけの一文とし、${definitionRule.max}文字以内、括弧なしにしてください。`,
-    "JSONのみで返してください: {\"valid\":trueまたはfalse,\"word\":\"...\",\"reading\":\"...\",\"realDefinition\":\"...\",\"note\":\"...\",\"sourceDetail\":\"...\"}",
-    `校閲対象: ${JSON.stringify(topic)}`,
-  ].join("\n");
-  const verified = await generateGameLlmText(verificationPrompt, mode, {
-    quality: "high",
-    preferredProvider: independentReviewerProvider(generated.provider),
-    excludedProviders: generated.attemptedProviders.filter((provider) => provider !== generated.provider),
-  });
-  const verifiedTopic = parseVerifiedTopic(verified.text);
-  const reviewAccepted = Boolean(
-    verifiedTopic && normalizeTopicWord(verifiedTopic.word) === normalizeTopicWord(selected.word),
-  );
-  if (!reviewAccepted) {
-    emitObservabilityEvent("warn", "ai.generation", {
-      game: "tahoiya",
-      operation: "catalog-definition-review",
-      provider: verified.provider,
-      model: verified.model,
-      outcome: "rejected",
-    });
+  for (const candidate of candidates) {
+    const definitionStyle = pickDefinitionStyle();
+    const definitionRule = definitionStyleRules[definitionStyle];
+    const prompt = [
+      `共通単語DBで選定済みの見出し語「${candidate.word}」に、国語辞典を使ったパーティーゲーム『たほい屋』の本物の説明を付けてください。`,
+      "あなたの役割は、一般向けゲームに不適切なセンシティブ語かの判定と、センシティブでない場合の読み・正解文の作成だけです。",
+      "この見出し語の実在性、難易度、珍しさ、偽説明の作りやすさ、ゲームへの向き不向きはDB側で確定済みです。再判定せず、別の語を選んだり表記を変えたりしないでください。",
+      "差別的、露骨に性的、または残虐な語義で一般向けゲームに不適切な場合だけsensitiveをtrueにしてください。単に難しい、意味に自信がない、暗い内容という理由ではtrueにしないでください。",
+      candidate.reading
+        ? `DBの読みは「${candidate.reading}」です。readingにはこの値をそのまま返してください。`
+        : "readingには見出し語の読みをひらがなで書いてください。",
+      "sensitiveがfalseの場合、realDefinitionには意味だけを自然な日本語一文で書いてください。読み、語源、用例、括弧、複数の語義は含めないでください。",
+      `${definitionRule.instruction}を目安とし、最大60文字以内にしてください。自然な説明を優先してください。`,
+      "選定理由、出典、確信度、解説、候補一覧は不要です。",
+      "JSONのみで返してください: {\"sensitive\":trueまたはfalse,\"reading\":\"...\",\"realDefinition\":\"...\"}",
+    ].join("\n\n");
+    const generated = await generateGameLlmText(prompt, mode, { quality: "high" });
+    const parsed = parseTahoiyaCatalogTopicGeneration(generated.text, candidate, difficulty);
+    if (parsed.status !== "accepted") {
+      emitObservabilityEvent(parsed.status === "unsafe" ? "info" : "warn", "ai.generation", {
+        game: "tahoiya",
+        operation: parsed.status === "unsafe" ? "catalog-sensitive-filter" : "catalog-definition-format",
+        provider: generated.provider,
+        model: generated.model,
+        outcome: "rejected",
+      });
+      continue;
+    }
+    return {
+      ...parsed.topic,
+      generation: {
+        provider: generated.provider,
+        model: generated.model,
+        mode: generated.mode,
+        billingSource: generated.billingSource,
+        promptVersion: tahoiyaTopicPromptVersion,
+        latencyMs: generated.latencyMs,
+        retrievedFeedbackIds,
+      },
+    } satisfies TahoiyaTopic;
   }
-  const finalTopic = reviewAccepted ? verifiedTopic as TahoiyaTopic : topic;
-  return {
-    ...finalTopic,
-    word: selected.word,
-    source: "llm" as const,
-    generation: {
-      provider: generated.provider,
-      model: generated.model,
-      mode: generated.mode,
-      billingSource: generated.billingSource,
-      promptVersion: tahoiyaTopicPromptVersion,
-      latencyMs: generated.latencyMs + verified.latencyMs,
-      retrievedFeedbackIds,
-      reviewProvider: verified.provider,
-      reviewModel: verified.model,
-    },
-  } satisfies TahoiyaTopic;
+  return null;
 }
 
 export async function generateTopic(
@@ -665,7 +634,6 @@ export async function generateTahoiyaTopicResponse(
         mode,
         difficulty,
         candidates,
-        feedbackContext,
         retrievedFeedbackIds,
       );
       if (!topic) {
