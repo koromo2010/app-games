@@ -77,7 +77,7 @@ export function TahoiyaGame() {
     nextWriter, nextVoter, sortedScores, roomConfigItems } = useTahoiyaViewModel(room, activePlayer, selectedOptionId, now);
 
   const { runRoomAction, dissolveRoom } = useTahoiyaRoomActions({ room, playerId, markRoomDissolved: resultReturnGate.markRoomDissolved, setRoom, setMessage });
-  const { refreshJoinableRooms, createRoom, joinRoom, addTestPlayer, setDebugMode, setAnswererMode, setPlayMode,
+  const { refreshJoinableRooms, createRoom, joinRoom, addTestPlayer, removeWaitingPlayer, setDebugMode, setAnswererMode, setPlayMode,
     setTopicDifficulty, setManualAnswerer, setShowRealDefinitionToWriters, setActionTimeLimit, testWordGeneration } = useTahoiyaLobbyActions({
     room, playerId, playerName, avatarColor, avatarImage, passphrase, joinCode, runRoomAction,
     setRoom, setActivePlayerId, setJoinableRooms, setMessage,
@@ -152,6 +152,7 @@ export function TahoiyaGame() {
                 isDebugMode={isDebugMode} isHost={isHost} nextWriter={nextWriter} nextVoter={nextVoter}
                 skipReason={skipReason} skipComment={skipComment} skipReasons={tahoiyaSkipReasons} isSkipping={isSkippingTopic}
                 onReasonChange={setSkipReason} onCommentChange={setSkipComment} onSkip={() => void skipDebugTopic()}
+                onRemoveWaitingPlayer={(targetPlayerId, targetPlayerName) => void removeWaitingPlayer(targetPlayerId, targetPlayerName)}
               />
 
               {room.phase === "writing" && <TahoiyaWritingPanel room={room} activePlayer={activePlayer} isAnswerer={isAnswerer}

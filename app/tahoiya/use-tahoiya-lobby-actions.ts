@@ -32,6 +32,11 @@ export function useTahoiyaLobbyActions(params: Params) {
   const updateConfig = (config: Extract<TahoiyaRoomAction, { type: "update-config" }>["config"]) => { if (room?.phase === "lobby") void runRoomAction({ type: "update-config", actorId: playerId, config }, true); };
   const setDebugMode = (enabled: boolean) => { if (room?.phase !== "lobby") return; void runRoomAction({ type: "set-debug", actorId: playerId, enabled }); if (!enabled) params.setActivePlayerId(playerId); };
   const addTestPlayer = () => { if (room?.phase === "lobby" && room.debugMode) void runRoomAction({ type: "debug-add-player", actorId: playerId }); };
+  const removeWaitingPlayer = async (targetPlayerId: string, targetPlayerName: string) => {
+    if (!room || room.phase !== "lobby" || room.hostId !== playerId) return;
+    if (!window.confirm(`${targetPlayerName}さんを復帰待ちから退出させますか？`)) return;
+    await runRoomAction({ type: "remove-waiting-player", actorId: playerId, targetPlayerId });
+  };
   const testWordGeneration = async (forceNew: boolean): Promise<DebugWordGenerationResult> => {
     if (!room) throw new Error("部屋の設定を読み込めませんでした。");
     const query = new URLSearchParams({ test: "1", roomCode: room.code, difficulty: room.topicDifficulty }); if (forceNew) query.set("forceNew", "1");
@@ -42,5 +47,5 @@ export function useTahoiyaLobbyActions(params: Params) {
     if (!topic.word || !topic.realDefinition) throw new Error(topic.notice || topic.error || "ワードを生成できませんでした。");
     return { fields: [{ label: "ワード", value: topic.word }, { label: "読み", value: topic.reading ?? "" }, { label: "本物の説明", value: topic.realDefinition }, { label: "注記", value: topic.note }], notice: topic.notice, generation: topic.generation };
   };
-  return { refreshJoinableRooms, createRoom, joinRoom, addTestPlayer, setDebugMode, setAnswererMode: (value: TahoiyaAnswererMode) => updateConfig({ answererMode: value }), setPlayMode: (value: TahoiyaPlayMode) => updateConfig({ playMode: value }), setTopicDifficulty: (value: TahoiyaDifficulty) => updateConfig({ topicDifficulty: value }), setManualAnswerer: (value: string) => updateConfig({ answererId: value }), setShowRealDefinitionToWriters: (value: boolean) => updateConfig({ showRealDefinitionToWriters: value }), setActionTimeLimit: (value: number) => updateConfig({ actionTimeLimitSeconds: normalizeCommonTimeLimit(value) }), testWordGeneration };
+  return { refreshJoinableRooms, createRoom, joinRoom, addTestPlayer, removeWaitingPlayer, setDebugMode, setAnswererMode: (value: TahoiyaAnswererMode) => updateConfig({ answererMode: value }), setPlayMode: (value: TahoiyaPlayMode) => updateConfig({ playMode: value }), setTopicDifficulty: (value: TahoiyaDifficulty) => updateConfig({ topicDifficulty: value }), setManualAnswerer: (value: string) => updateConfig({ answererId: value }), setShowRealDefinitionToWriters: (value: boolean) => updateConfig({ showRealDefinitionToWriters: value }), setActionTimeLimit: (value: number) => updateConfig({ actionTimeLimitSeconds: normalizeCommonTimeLimit(value) }), testWordGeneration };
 }

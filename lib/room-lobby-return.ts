@@ -54,6 +54,21 @@ export function allRoomPlayersReturned(
   return players.every((player) => returnedPlayerIds.has(player.id));
 }
 
+export function canRemoveWaitingRoomPlayer(
+  state: RoomLobbyReturnState | undefined,
+  players: readonly RoomPlayer[],
+  hostId: string,
+  targetPlayerId: string,
+) {
+  return Boolean(
+    state
+    && targetPlayerId
+    && targetPlayerId !== hostId
+    && isRoomPlayer(players, targetPlayerId)
+    && !state.returnedPlayerIds.includes(targetPlayerId),
+  );
+}
+
 export function normalizeRoomLobbyReturnState(
   value: unknown,
   players: readonly RoomPlayer[],
