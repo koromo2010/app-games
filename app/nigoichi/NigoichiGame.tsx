@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
 import { GameAdSlot } from "@/app/components/GameAdSlot";
+import { GamePhaseTimer } from "@/app/components/GamePhaseTimer";
 import { GamePlayerMenu } from "@/app/components/GamePlayerMenu";
 import { GameResultShareButton } from "@/app/components/GameResultShareButton";
 import { GameRulesDialog } from "@/app/components/GameRulesDialog";
@@ -11,6 +12,7 @@ import { GameTopBanner, gameTopBannerOffsetClass } from "@/app/components/GameTo
 import { GameTopMenu, gameTopBannerActionClass, gameTopBannerDangerActionClass, gameTopMenuItemClass } from "@/app/components/GameTopMenu";
 import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomResultActions } from "@/app/components/RoomResultActions";
+import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
 import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "@/app/hooks/use-online-room-polling";
 import { useRoomResultReturnGate } from "@/app/hooks/use-room-result-return-gate";
 import { applyNigoichiRoomAction, createNigoichiRoom, nigoichiRoomApi } from "@/app/nigoichi/nigoichi-room-api-client";
@@ -54,6 +56,10 @@ function getOwnerId() {
   const created = crypto.randomUUID();
   localStorage.setItem(ownerIdKey, created);
   return created;
+}
+
+function timeLimitLabel(seconds: number) {
+  return seconds > 0 ? `${seconds}秒` : "なし";
 }
 
 function apiMessage(error: unknown, fallback: string) {
@@ -178,6 +184,23 @@ export function NigoichiGame() {
     }
   }, [isSaving, room]);
 
+  const timerPhaseStartedAt = room?.phaseStartedAt;
+  const timerDurationSeconds = room?.phase === "clue"
+    ? room.clueTimeLimitSeconds
+    : room?.phase === "guess"
+      ? room.guessTimeLimitSeconds
+      : 0;
+
+  useEffect(() => {
+    if (!roomCode || !playerId || !timerPhaseStartedAt || timerDurationSeconds <= 0 || !roomPhase || !["clue", "guess"].includes(roomPhase)) return;
+    const timer = window.setTimeout(() => {
+      void applyNigoichiRoomAction(roomCode, { type: "expire-phase", actorId: playerId, phaseStartedAt: timerPhaseStartedAt })
+        .then((saved) => setRoom((current) => current?.code === saved.code ? saved : current))
+        .catch(() => undefined);
+    }, Math.max(0, timerPhaseStartedAt + timerDurationSeconds * 1000 - Date.now()) + 100);
+    return () => window.clearTimeout(timer);
+  }, [playerId, roomCode, roomPhase, timerDurationSeconds, timerPhaseStartedAt]);
+
   const createRoom = async () => {
     if (!session?.id || isSaving) return;
     setIsSaving(true);
@@ -186,7 +209,7 @@ export function NigoichiGame() {
     const host: NigoichiPlayer = { id: session.id, name: session.name, joinedAt: now, avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined, shareNameAllowed: session.shareNameAllowed === true };
     const draft: NigoichiRoom = {
       code: makeRoomCode(), revision: 0, hostId: session.id, ownerId: getOwnerId(), passphrase: passphrase.trim(), phase: "lobby", players: [host], playerCapacity: newPlayerCapacity, gameNumber: 1,
-      cardsPerPlayer: 2, associationWordCount: 1, wordDifficulty: "normal",
+      cardsPerPlayer: 2, associationWordCount: 1, wordDifficulty: "normal", clueTimeLimitSeconds: 0, guessTimeLimitSeconds: 0, phaseStartedAt: null,
       debugMode: false, debugReplayEnabled: false, words: [], hands: {}, associations: {}, guesses: {}, missingNumber: null,
       totalScores: { [host.id]: 0 }, roundScores: {}, roundHistory: [], debugLog: [], createdAt: now, updatedAt: now,
     };
@@ -304,7 +327,7 @@ export function NigoichiGame() {
       <p>同じ部屋でもう一度遊ぶと、得点は累計へ足されます。決まった目標点や最終ラウンドはないので、遊ぶ回数を決めて、最後に累計得点が高い人を勝ちとする遊び方がおすすめです。</p>
     </div>
     <h3 className="mt-4 font-black text-white">時間制限</h3>
-    <p className="mt-2">現在は時間制限がありません。全員が提出・回答すると自動で次へ進みます。</p>
+    <p className="mt-2">連想語入力と余り番号の予想は、部屋ごとに制限時間を設定できます。0秒なら時間制限はありません。時間切れの連想語は「未提出」として扱い、時間切れの予想は不正解として答え合わせへ進みます。</p>
   </GameRulesDialog>;
 
   if (!ready) return <main className="min-h-screen bg-slate-950 p-8 text-white">ログイン情報と部屋を確認中...</main>;
@@ -365,7 +388,7 @@ export function NigoichiGame() {
       <div className="mx-auto grid max-w-6xl gap-4 px-4 py-5 lg:grid-cols-[280px_minmax(0,1fr)]">
         <aside className="space-y-4">
           <section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4"><div className="flex items-center justify-between"><h2 className="font-black">参加者・累計得点</h2><span className="text-sm text-slate-400">{room.players.length}/{room.playerCapacity}人</span></div><ul className="mt-3 space-y-2">{room.players.map((player) => <PlayerRow key={player.id} player={player} isHost={player.id === room.hostId} isMe={player.id === playerId} score={room.totalScores[player.id] ?? 0} />)}</ul></section>
-          <RoomConfigSummary items={[{ label: "最大募集人数", value: `${room.playerCapacity}人` }, { label: "P：現在の参加人数", value: `${room.players.length}人` }, { label: "A：1人に配るカード", value: `${room.cardsPerPlayer}枚` }, { label: "M：書く連想語", value: `${room.associationWordCount}語` }, { label: "B：場に並ぶカード", value: `${roomTotalCards}枚` }, { label: "難易度", value: nigoichiWordDifficultyLabels[room.wordDifficulty] }, { label: "合言葉", value: room.passphrase ? "あり" : "なし" }, { label: "時間制限", value: "なし" }]} />
+          <RoomConfigSummary items={[{ label: "最大募集人数", value: `${room.playerCapacity}人` }, { label: "P：現在の参加人数", value: `${room.players.length}人` }, { label: "A：1人に配るカード", value: `${room.cardsPerPlayer}枚` }, { label: "M：書く連想語", value: `${room.associationWordCount}語` }, { label: "B：場に並ぶカード", value: `${roomTotalCards}枚` }, { label: "難易度", value: nigoichiWordDifficultyLabels[room.wordDifficulty] }, { label: "合言葉", value: room.passphrase ? "あり" : "なし" }, { label: "連想語時間", value: timeLimitLabel(room.clueTimeLimitSeconds) }, { label: "予想時間", value: timeLimitLabel(room.guessTimeLimitSeconds) }]} />
         </aside>
         <div className="space-y-4">
           {error && <p className="rounded-xl border border-rose-300/30 bg-rose-300/10 p-3 text-sm font-bold text-rose-100">{error}</p>}
@@ -376,20 +399,24 @@ export function NigoichiGame() {
               <h3 className="font-black text-indigo-100">ゲーム設定</h3>
               <div className="mt-3 grid gap-3 sm:grid-cols-3">
                 <label className="text-sm font-bold">1人に配るカード A
-                  <select value={room.cardsPerPlayer} disabled={isSaving || !roomBounds} onChange={(event) => void runAction({ type: "set-config", actorId: playerId, cardsPerPlayer: Number(event.target.value), associationWordCount: room.associationWordCount, wordDifficulty: room.wordDifficulty })} className="mt-1 w-full rounded-lg border border-white/15 bg-slate-800 px-3 py-2 text-white">
+                  <select value={room.cardsPerPlayer} disabled={isSaving || !roomBounds} onChange={(event) => void runAction({ type: "set-config", actorId: playerId, cardsPerPlayer: Number(event.target.value), associationWordCount: room.associationWordCount, wordDifficulty: room.wordDifficulty, clueTimeLimitSeconds: room.clueTimeLimitSeconds, guessTimeLimitSeconds: room.guessTimeLimitSeconds })} className="mt-1 w-full rounded-lg border border-white/15 bg-slate-800 px-3 py-2 text-white">
                     {roomBounds && Array.from({ length: roomBounds.maxCardsPerPlayer - roomBounds.minCardsPerPlayer + 1 }, (_, index) => roomBounds.minCardsPerPlayer + index).map((count) => <option key={count} value={count}>{count}枚</option>)}
                   </select>
                 </label>
                 <label className="text-sm font-bold">書く連想語 M
-                  <select value={room.associationWordCount} disabled={isSaving} onChange={(event) => { const corrected = correctNigoichiConfig(roomConfigPlayerCount, room.cardsPerPlayer, Number(event.target.value)); void runAction({ type: "set-config", actorId: playerId, cardsPerPlayer: corrected.cardsPerPlayer, associationWordCount: corrected.associationWordCount, wordDifficulty: room.wordDifficulty }); }} className="mt-1 w-full rounded-lg border border-white/15 bg-slate-800 px-3 py-2 text-white">
+                  <select value={room.associationWordCount} disabled={isSaving} onChange={(event) => { const corrected = correctNigoichiConfig(roomConfigPlayerCount, room.cardsPerPlayer, Number(event.target.value)); void runAction({ type: "set-config", actorId: playerId, cardsPerPlayer: corrected.cardsPerPlayer, associationWordCount: corrected.associationWordCount, wordDifficulty: room.wordDifficulty, clueTimeLimitSeconds: room.clueTimeLimitSeconds, guessTimeLimitSeconds: room.guessTimeLimitSeconds }); }} className="mt-1 w-full rounded-lg border border-white/15 bg-slate-800 px-3 py-2 text-white">
                     {Array.from({ length: nigoichiMaximumAssociationWords }, (_, index) => index + 1).map((count) => <option key={count} value={count} disabled={count > nigoichiMaximumAssociationWordsForPlayers(roomConfigPlayerCount)}>{count}語</option>)}
                   </select>
                 </label>
                 <label className="text-sm font-bold">言葉の難易度
-                  <select value={room.wordDifficulty} disabled={isSaving} onChange={(event) => void runAction({ type: "set-config", actorId: playerId, cardsPerPlayer: room.cardsPerPlayer, associationWordCount: room.associationWordCount, wordDifficulty: event.target.value as NigoichiWordDifficulty })} className="mt-1 w-full rounded-lg border border-white/15 bg-slate-800 px-3 py-2 text-white">
+                  <select value={room.wordDifficulty} disabled={isSaving} onChange={(event) => void runAction({ type: "set-config", actorId: playerId, cardsPerPlayer: room.cardsPerPlayer, associationWordCount: room.associationWordCount, wordDifficulty: event.target.value as NigoichiWordDifficulty, clueTimeLimitSeconds: room.clueTimeLimitSeconds, guessTimeLimitSeconds: room.guessTimeLimitSeconds })} className="mt-1 w-full rounded-lg border border-white/15 bg-slate-800 px-3 py-2 text-white">
                     {(Object.entries(nigoichiWordDifficultyLabels) as [NigoichiWordDifficulty, string][]).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                   </select>
                 </label>
+              </div>
+              <div className="mt-4 grid gap-4 rounded-xl bg-white p-4 text-slate-950 sm:grid-cols-2">
+                <RoomTimeLimitControl label="連想語の入力時間" value={room.clueTimeLimitSeconds} onChange={(seconds) => void runAction({ type: "set-config", actorId: playerId, cardsPerPlayer: room.cardsPerPlayer, associationWordCount: room.associationWordCount, wordDifficulty: room.wordDifficulty, clueTimeLimitSeconds: seconds, guessTimeLimitSeconds: room.guessTimeLimitSeconds })} />
+                <RoomTimeLimitControl label="余り番号の予想時間" value={room.guessTimeLimitSeconds} onChange={(seconds) => void runAction({ type: "set-config", actorId: playerId, cardsPerPlayer: room.cardsPerPlayer, associationWordCount: room.associationWordCount, wordDifficulty: room.wordDifficulty, clueTimeLimitSeconds: room.clueTimeLimitSeconds, guessTimeLimitSeconds: seconds })} />
               </div>
               <p className="mt-2 rounded-lg bg-indigo-950/40 px-3 py-2 text-xs font-bold text-indigo-100">B = {roomConfigPlayerCount} × {room.cardsPerPlayer} + 1 = {roomTotalCards}枚。場に並ぶカード総数は最大21枚です。難易度分類は暫定版です。</p>
             </div>}
@@ -425,7 +452,7 @@ export function NigoichiGame() {
           </section>}
 
           {room.phase === "clue" && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6">
-            <div className="flex items-center justify-between gap-3"><div><h2 className="text-xl font-black">{room.cardsPerPlayer}枚から連想語を{room.associationWordCount}個書く</h2><p className="mt-1 text-sm text-slate-400">カードとの分類・対応付けは不要です・提出済み {submittedAssociations}/{room.players.length}人</p></div></div>
+            <div className="flex items-center justify-between gap-3"><div><h2 className="text-xl font-black">{room.cardsPerPlayer}枚から連想語を{room.associationWordCount}個書く</h2><p className="mt-1 text-sm text-slate-400">カードとの分類・対応付けは不要です・提出済み {submittedAssociations}/{room.players.length}人</p></div>{room.phaseStartedAt && <GamePhaseTimer key={room.phaseStartedAt} durationSeconds={room.clueTimeLimitSeconds} startedAt={room.phaseStartedAt} label="入力時間" />}</div>
             <div className="mt-5 space-y-4">{controllablePlayers.map((player) => {
               const hand = room.hands[player.id];
               if (!hand) return null;
@@ -448,8 +475,7 @@ export function NigoichiGame() {
           </section>}
 
           {room.phase === "guess" && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6">
-            <h2 className="text-xl font-black">連想語から余り番号を探す</h2>
-            <p className="mt-1 text-sm text-slate-400">自分に配られたカードは選べません・予想済み {submittedGuesses}/{room.players.length}人</p>
+            <div className="flex items-center justify-between gap-3"><div><h2 className="text-xl font-black">連想語から余り番号を探す</h2><p className="mt-1 text-sm text-slate-400">自分に配られたカードは選べません・予想済み {submittedGuesses}/{room.players.length}人</p></div>{room.phaseStartedAt && <GamePhaseTimer key={room.phaseStartedAt} durationSeconds={room.guessTimeLimitSeconds} startedAt={room.phaseStartedAt} label="予想時間" />}</div>
             <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{room.players.map((player) => <div key={player.id} className="rounded-xl border border-white/10 bg-white/[0.05] p-4"><p className="text-xs font-bold text-slate-400">{player.name}</p><ol className="mt-2 space-y-1">{room.associations[player.id]?.map((clue, index) => <li key={index} className="font-black">{index + 1}. {clue}</li>)}</ol></div>)}</div>
             <div className="mt-5 space-y-4">{controllablePlayers.map((player) => {
               const guessed = room.guesses[player.id];
@@ -483,7 +509,7 @@ export function NigoichiGame() {
                 <div className="flex items-center justify-between gap-3"><h3 className="font-black">{player.name}</h3><span className={`rounded-md px-2 py-1 text-xs font-black ${correct ? "bg-emerald-300 text-emerald-950" : "bg-slate-700 text-slate-200"}`}>{correct ? "正解" : "不正解"}</span></div>
                 <p className="mt-3 text-sm text-slate-300">手札：{hand.map((number) => `${number + 1}.${room.words[number]}`).join(" / ")}</p>
                 <p className="mt-3 rounded-lg bg-slate-950/50 p-2 text-sm text-slate-300">連想語：<strong className="text-white">{room.associations[player.id]?.join(" / ")}</strong></p>
-                <p className="mt-3 text-sm text-slate-300">予想：{(room.guesses[player.id] ?? -1) + 1}番</p>
+                <p className="mt-3 text-sm text-slate-300">予想：{Number.isInteger(room.guesses[player.id]) ? `${room.guesses[player.id] + 1}番` : "未提出"}</p>
                 {score && <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2 rounded-xl border border-white/10 bg-slate-950/60 p-3 text-sm">
                   <dt className="text-slate-400">余りを正解</dt><dd className="text-right font-black text-emerald-200">+{score.correctBonus}</dd>
                   <dt className="text-slate-400">自分のカードへの回答</dt><dd className="text-right font-black text-rose-200">−{score.receivedWrongVotes}</dd>

@@ -9,6 +9,7 @@
 - 市場、得点、建物、現在の手番、行動履歴は全員で共有する
 - 手札の内容は本人のAPI応答だけに含め、他の参加者には枚数だけを表示する
 - 手番の本人だけが資源獲得、生産、売買、建物使用、手番終了を操作する
+- ホストは1手番の制限時間を設定でき、0秒なら制限なし。時間切れでは資源やダングを得ず次の人へ交代する
 - 建物などで先に10点へ到達したプレイヤーが勝利する
 - 部屋とゲーム状態はRedisへ保存し、再読み込みや別端末からの復帰に対応する
 
@@ -19,6 +20,7 @@
 ## サーバー側の扱い
 
 - 行動ルールは `lib/northern-branch-game.ts`、actorと手番の権限検証は `lib/northern-branch-room-store.ts` で行う
+- 時間切れ判定と部屋状態の遷移は `lib/northern-branch-room-domain.ts` で行い、複数端末からの同時要求はrevision付き保存で一度だけ反映する
 - Redis更新はrevision付きcompare-and-setで競合を検知する
 - APIは個人利用Cookieとログインセッションを毎回確認する
 - 1部屋の上限は現在のカード初期値に合わせて4人とする
@@ -30,6 +32,7 @@
 - カード・建物データ: `lib/northern-branch-data.ts`
 - 部屋保存と権限: `lib/northern-branch-room-store.ts`
 - 保存データ復元: `lib/northern-branch-room-normalizer.ts`
+- 手番の時間切れ: `lib/northern-branch-room-domain.ts`
 - 手札秘匿・ロビー表示整形: `lib/northern-branch-room-presentation.ts`
 - API: `app/api/northern-branch/rooms/route.ts`
 - 画面: `app/northern-branch/NorthernBranchGame.tsx`

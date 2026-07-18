@@ -4,12 +4,14 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
 import { GameAdSlot } from "@/app/components/GameAdSlot";
+import { GamePhaseTimer } from "@/app/components/GamePhaseTimer";
 import { GameRulesDialog } from "@/app/components/GameRulesDialog";
 import { GameTopBanner, gameTopBannerOffsetClass } from "@/app/components/GameTopBanner";
 import { GameTopMenu, gameTopBannerActionClass, gameTopBannerDangerActionClass, gameTopMenuItemClass } from "@/app/components/GameTopMenu";
 import { GamePlayerMenu } from "@/app/components/GamePlayerMenu";
 import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomResultActions } from "@/app/components/RoomResultActions";
+import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
 import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "@/app/hooks/use-online-room-polling";
 import { useRoomResultReturnGate } from "@/app/hooks/use-room-result-return-gate";
 import { applyNorthernBranchRoomAction, createNorthernBranchRoom, northernBranchRoomApi } from "@/app/northern-branch/northern-branch-room-api-client";
@@ -53,6 +55,10 @@ function apiMessage(status: number, fallback: string) {
   if (status === 409) return "部屋が満員か、状態が更新されています。もう一度お試しください。";
   if (status === 503) return "部屋サーバーを利用できません。少し待ってお試しください。";
   return fallback;
+}
+
+function timeLimitLabel(seconds: number) {
+  return seconds > 0 ? `${seconds}秒` : "なし";
 }
 
 function PlayerRow({ player, isHost, isMe }: { player: NorthernRoomPlayer; isHost: boolean; isMe: boolean }) {
@@ -157,13 +163,26 @@ export function NorthernBranchGame() {
     ? paymentIndexes.reduce((sum, index) => sum + (northernCards[handPlayer.hand[index]]?.value ?? 0), 0)
     : 0;
   const winner = game?.players.find((player) => player.id === game.winnerId);
+  const timerTurnStartedAt = room?.turnStartedAt;
+  const timerDurationSeconds = room?.turnTimeLimitSeconds ?? 0;
   const configItems = room ? [
     { label: "参加人数", value: `${room.players.length}/4人` },
     { label: "勝利条件", value: `${northernRules.victoryPoints}点` },
     { label: "手札上限", value: `${northernRules.handLimit}枚` },
+    { label: "1手番の時間", value: timeLimitLabel(room.turnTimeLimitSeconds) },
     { label: "合言葉", value: room.passphrase ? "あり" : "なし" },
     { label: "デバッグ", value: room.debugMode ? "ON" : "OFF" },
   ] : [];
+
+  useEffect(() => {
+    if (!roomCode || !playerId || roomPhase !== "playing" || !timerTurnStartedAt || timerDurationSeconds <= 0) return;
+    const timer = window.setTimeout(() => {
+      void applyNorthernBranchRoomAction(roomCode, { type: "expire-turn", actorId: playerId, turnStartedAt: timerTurnStartedAt })
+        .then((saved) => setRoom((current) => current?.code === saved.code ? saved : current))
+        .catch(() => undefined);
+    }, Math.max(0, timerTurnStartedAt + timerDurationSeconds * 1000 - Date.now()) + 100);
+    return () => window.clearTimeout(timer);
+  }, [playerId, roomCode, roomPhase, timerDurationSeconds, timerTurnStartedAt]);
 
   const runAction = useCallback(async (action: NorthernRoomAction) => {
     if (!room) return null;
@@ -199,7 +218,7 @@ export function NorthernBranchGame() {
       const host: NorthernRoomPlayer = { id: session.id, name: session.name, joinedAt: now, avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined };
       const nextRoom: NorthernRoom = {
         code: makeRoomCode(), revision: 0, hostId: session.id, ownerId, passphrase: passphrase.trim(), phase: "lobby",
-        players: [host], gameNumber: 1, debugMode: false, debugReplayEnabled: false, game: null, notice: "参加者を待っています。", createdAt: now, updatedAt: now,
+        players: [host], gameNumber: 1, debugMode: false, debugReplayEnabled: false, turnTimeLimitSeconds: 0, turnStartedAt: null, game: null, notice: "参加者を待っています。", createdAt: now, updatedAt: now,
       };
       const data = await createNorthernBranchRoom(nextRoom, session.id);
       setRoom(data.room);
@@ -301,7 +320,9 @@ export function NorthernBranchGame() {
     </ul>
     <div className="mt-3 rounded-xl border border-amber-300/20 bg-amber-300/10 p-3 text-amber-100"><span className="font-bold">例：</span>2点の建物を建てて合計9点になり、その建物を使ってさらに1点を得たら、合計10点になった時点で勝利です。</div>
     <h3 className="mt-4 font-black text-white">公開される情報</h3>
-    <p className="mt-2">市場、全員の建物、勝利点、現在の手番、行動履歴は全員に見えます。手札は枚数だけが公開され、中身は本人にしか見えません。現在の試作版には手番の制限時間はありません。</p>
+    <p className="mt-2">市場、全員の建物、勝利点、現在の手番、行動履歴は全員に見えます。手札は枚数だけが公開され、中身は本人にしか見えません。</p>
+    <h3 className="mt-4 font-black text-white">時間制限</h3>
+    <p className="mt-2">部屋で1手番の制限時間を設定できます。0秒なら時間制限はありません。時間切れになると、その手番では資源やダングを得ずに次の人へ交代します。</p>
     <p className="mt-3 text-amber-200">現在は試作版のため、カードの種類や数値は今後変わることがあります。</p>
   </GameRulesDialog>;
 
@@ -356,10 +377,10 @@ export function NorthernBranchGame() {
         <div className="space-y-4">
           {error && <p className="rounded-xl border border-rose-300/30 bg-rose-300/10 p-3 text-sm font-bold text-rose-100">{error}</p>}
           {room.notice && <p className="rounded-xl border border-cyan-300/30 bg-cyan-300/10 p-3 text-sm font-bold text-cyan-50">{room.notice}</p>}
-          {room.phase === "lobby" && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><h2 className="text-2xl font-black">ゲーム開始前</h2><p className="mt-3 rounded-xl bg-white/[0.05] p-4 text-sm leading-6 text-slate-300">2〜4人で遊びます。開始後は各自の手札が本人の端末だけに表示され、手番のプレイヤーだけが行動できます。</p>{isHost && room.debugMode && <div className="mt-5 rounded-xl border border-cyan-300/25 bg-cyan-300/10 p-4"><p className="text-sm font-bold text-cyan-50">デバッグ用の参加者を追加し、ホスト1人で手番を切り替えながら確認できます。</p><button type="button" disabled={isSaving || room.players.length >= 4} onClick={() => void runAction({ type: "debug-add-player", actorId: playerId })} className="mt-3 w-full rounded-lg border border-cyan-200/40 bg-cyan-200 px-4 py-2 font-black text-cyan-950 disabled:opacity-40">ダミーユーザーを追加</button></div>}{isHost ? <button type="button" disabled={isSaving || room.players.length < 2} onClick={() => void runAction({ type: "start-game", actorId: playerId })} className="mt-6 w-full rounded-xl bg-amber-300 px-4 py-4 text-lg font-black text-slate-950 disabled:opacity-40">{room.players.length < 2 ? "2人以上で開始できます" : "このメンバーで開始"}</button> : <p className="mt-5 text-center font-bold text-slate-300">ホストがゲームを開始するまでお待ちください。</p>}</section>}
+          {room.phase === "lobby" && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><h2 className="text-2xl font-black">ゲーム開始前</h2><p className="mt-3 rounded-xl bg-white/[0.05] p-4 text-sm leading-6 text-slate-300">2〜4人で遊びます。開始後は各自の手札が本人の端末だけに表示され、手番のプレイヤーだけが行動できます。</p>{isHost && <div className="mt-5 rounded-xl bg-white p-4 text-slate-950"><RoomTimeLimitControl label="1手番の時間" value={room.turnTimeLimitSeconds} onChange={(seconds) => void runAction({ type: "set-config", actorId: playerId, turnTimeLimitSeconds: seconds })} /></div>}{isHost && room.debugMode && <div className="mt-5 rounded-xl border border-cyan-300/25 bg-cyan-300/10 p-4"><p className="text-sm font-bold text-cyan-50">デバッグ用の参加者を追加し、ホスト1人で手番を切り替えながら確認できます。</p><button type="button" disabled={isSaving || room.players.length >= 4} onClick={() => void runAction({ type: "debug-add-player", actorId: playerId })} className="mt-3 w-full rounded-lg border border-cyan-200/40 bg-cyan-200 px-4 py-2 font-black text-cyan-950 disabled:opacity-40">ダミーユーザーを追加</button></div>}{isHost ? <button type="button" disabled={isSaving || room.players.length < 2} onClick={() => void runAction({ type: "start-game", actorId: playerId })} className="mt-6 w-full rounded-xl bg-amber-300 px-4 py-4 text-lg font-black text-slate-950 disabled:opacity-40">{room.players.length < 2 ? "2人以上で開始できます" : "このメンバーで開始"}</button> : <p className="mt-5 text-center font-bold text-slate-300">ホストがゲームを開始するまでお待ちください。</p>}</section>}
 
           {game && <>
-            <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.2em] text-lime-300">第{game.turn}巡目</p><h2 className="mt-1 text-2xl font-black">{activePlayer?.name}の手番</h2></div><span className={`rounded-xl px-4 py-2 text-sm font-black ${canControlTurn ? "bg-lime-400 text-lime-950" : "bg-white/10 text-slate-300"}`}>{canControlTurn ? "操作できます" : "手番を待っています"}</span></div>{room.debugMode && isHost && activePlayer?.id !== playerId && <p className="mt-3 rounded-lg border border-cyan-300/20 bg-cyan-300/10 p-3 text-sm font-bold text-cyan-50">デバッグ中：ホストが{activePlayer?.name}の手番を操作しています。</p>}</section>
+            <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.2em] text-lime-300">第{game.turn}巡目</p><h2 className="mt-1 text-2xl font-black">{activePlayer?.name}の手番</h2></div><div className="flex flex-wrap items-center gap-2">{room.turnStartedAt && <GamePhaseTimer key={room.turnStartedAt} durationSeconds={room.turnTimeLimitSeconds} startedAt={room.turnStartedAt} label="手番時間" />}<span className={`rounded-xl px-4 py-2 text-sm font-black ${canControlTurn ? "bg-lime-400 text-lime-950" : "bg-white/10 text-slate-300"}`}>{canControlTurn ? "操作できます" : "手番を待っています"}</span></div></div>{room.debugMode && isHost && activePlayer?.id !== playerId && <p className="mt-3 rounded-lg border border-cyan-300/20 bg-cyan-300/10 p-3 text-sm font-bold text-cyan-50">デバッグ中：ホストが{activePlayer?.name}の手番を操作しています。</p>}</section>
             {winner && <section className="rounded-2xl border border-amber-300 bg-amber-300/15 p-6 text-center"><p className="text-sm font-bold text-amber-200">GAME FINISHED</p><p className="mt-2 text-3xl font-black">{winner.name}の勝利！</p><RoomResultActions canReturnToRoom={isHost || resultReturnGate.canReturnToRoom} disabled={isSaving} isHost={isHost} isRoomDissolved={resultReturnGate.isRoomDissolved} onReturnToRoom={isHost ? () => runAction({ type: "reset-game", actorId: playerId }) : () => resultReturnGate.returnToRoom((code) => northernBranchRoomApi.fetchRoom(code, playerId), () => setError("部屋に戻れません。解散されたか、参加情報が変更されています。"))} onDissolve={isHost ? dissolveRoom : undefined} /></section>}
             <section className="rounded-xl border border-white/10 bg-slate-950/75 p-4"><div><p className="text-xs font-bold uppercase text-cyan-300">Market</p><h2 className="text-xl font-black">市場の商品と建物</h2></div><div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{marketCards.map((offer) => { const item = offer.kind === "product" ? northernCards[offer.cardId] : northernBuildings[offer.buildingId]; const cost = offer.kind === "product" ? northernCards[offer.cardId].value : northernBuildings[offer.buildingId].cost; const recipe = offer.kind === "product" ? Object.entries(northernCards[offer.cardId].recipe ?? {}).map(([id, count]) => `${northernCards[id as keyof typeof northernCards].name}×${count}`).join("・") : ""; return <article key={offer.id} className="rounded-xl border border-white/10 bg-slate-900 p-3"><div className="flex items-start justify-between gap-2"><div><p className="text-xs font-bold text-slate-400">{offer.kind === "product" ? "商品" : "建物"}</p><h3 className="font-black">{item.name}</h3></div><span className="rounded-md bg-amber-300 px-2 py-1 text-xs font-black text-amber-950">価値 {cost}</span></div>{offer.kind === "product" ? <p className="mt-2 min-h-10 text-xs text-slate-300">生産：{recipe}</p> : <p className="mt-2 min-h-10 text-xs text-slate-300">{northernBuildings[offer.buildingId].description} / {northernBuildings[offer.buildingId].points}点</p>}<div className="mt-3 flex gap-2">{offer.kind === "product" && <button type="button" disabled={!canControlTurn || game.mainActionUsed || room.phase === "finished" || isSaving} onClick={() => perform({ type: "produce", offerId: offer.id })} className="flex-1 rounded-lg bg-cyan-600 px-2 py-2 text-xs font-bold disabled:opacity-30">生産</button>}<button type="button" disabled={!canControlTurn || game.mainActionUsed || room.phase === "finished" || isSaving} onClick={() => perform({ type: "buy", offerId: offer.id, paymentIndexes })} className="flex-1 rounded-lg bg-amber-500 px-2 py-2 text-xs font-bold text-amber-950 disabled:opacity-30">売買</button></div></article>; })}</div></section>
             <section className="rounded-xl border border-white/10 bg-slate-950/75 p-4"><div className="flex items-center justify-between gap-3"><div><p className="text-xs font-bold uppercase text-lime-300">Main action</p><h2 className="text-xl font-black">資源を1枚得る</h2></div><span className={`rounded-lg px-3 py-2 text-xs font-bold ${game.mainActionUsed ? "bg-slate-700 text-slate-300" : "bg-lime-300 text-lime-950"}`}>{game.mainActionUsed ? "使用済み" : "選択可能"}</span></div><div className="mt-4 flex flex-wrap gap-2">{northernBaseResources.map((cardId) => <button key={cardId} type="button" disabled={!canControlTurn || game.mainActionUsed || room.phase === "finished" || isSaving} onClick={() => perform({ type: "take-resource", cardId })} className={`rounded-lg px-3 py-2 text-sm font-black disabled:opacity-30 ${northernCards[cardId].color}`}>{northernCards[cardId].name}</button>)}</div></section>

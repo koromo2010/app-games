@@ -4,7 +4,7 @@ import type {
   NorthernCardDefinition,
   NorthernCardId,
   NorthernOffer,
-} from "@/lib/northern-branch-types";
+} from "./northern-branch-types.ts";
 
 export const northernCards: Record<NorthernCardId, NorthernCardDefinition> = {
   "fund-3": { id: "fund-3", name: "開業資金 3", kind: "fund", value: 3, color: "bg-amber-100 text-amber-950" },

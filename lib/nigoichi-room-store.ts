@@ -7,10 +7,13 @@ import {
   allNigoichiGuessesSubmitted,
   correctNigoichiConfig,
   finishNigoichiRound,
+  expireNigoichiPhase,
+  isNigoichiPhaseExpired,
   isValidNigoichiGuess,
   isValidNigoichiConfig,
   nigoichiMaximumAssociationWordsForPlayers,
   nigoichiMinimumPlayers,
+  normalizeNigoichiTimeLimit,
   nigoichiRoomHasSpace,
   type NigoichiRoom,
   type NigoichiRoomAction,
@@ -38,6 +41,7 @@ const debugActionLabels: Record<NigoichiRoomAction["type"], string> = {
   "set-debug": "デバッグモードを変更",
   "set-debug-replay": "プレイバック記録設定を変更",
   "set-config": "ゲーム設定を変更",
+  "expire-phase": "時間切れでフェーズを進行",
   "start-game": "ゲームを開始",
   "submit-associations": "連想語を提出",
   "submit-guess": "余り番号を予想",
@@ -115,6 +119,7 @@ export async function createStoredNigoichiRoom(value: unknown, actorId: string) 
     gameNumber: 1,
     debugMode: false,
     debugReplayEnabled: false,
+    phaseStartedAt: null,
     words: [],
     hands: {},
     associations: {},
@@ -159,8 +164,13 @@ export async function applyStoredNigoichiAction(code: string, action: NigoichiRo
 
     if (action.type === "abort-game") {
       if (!isHost || !current.debugMode || current.phase === "lobby") throw new Error("NIGOICHI_ROOM_FORBIDDEN");
-      return { ...current, phase: "lobby", debugReplayEnabled: false, words: [], hands: {}, associations: {}, guesses: {}, missingNumber: null, roundScores: {} };
+      return { ...current, phase: "lobby", phaseStartedAt: null, debugReplayEnabled: false, words: [], hands: {}, associations: {}, guesses: {}, missingNumber: null, roundScores: {} };
     }
+    if (action.type === "expire-phase") {
+      if (current.phaseStartedAt !== action.phaseStartedAt || !isNigoichiPhaseExpired(current)) throw new Error("NIGOICHI_ROOM_CONFLICT");
+      return expireNigoichiPhase(current);
+    }
+    if (isNigoichiPhaseExpired(current)) return expireNigoichiPhase(current);
     if (action.type === "leave-room") {
       if (!canLeaveOnlineRoomLobby({ isHost, isMember }, current.phase)) throw new Error("NIGOICHI_ROOM_FORBIDDEN");
       return withPlayersAndCorrectedConfig(current, current.players.filter((player) => player.id !== action.actorId));
@@ -191,6 +201,8 @@ export async function applyStoredNigoichiAction(code: string, action: NigoichiRo
         cardsPerPlayer: config.cardsPerPlayer,
         associationWordCount: config.associationWordCount,
         wordDifficulty: normalizeWordDifficulty(action.wordDifficulty),
+        clueTimeLimitSeconds: normalizeNigoichiTimeLimit(action.clueTimeLimitSeconds),
+        guessTimeLimitSeconds: normalizeNigoichiTimeLimit(action.guessTimeLimitSeconds),
       };
     }
     if (action.type === "debug-add-player") {
@@ -221,7 +233,7 @@ export async function applyStoredNigoichiAction(code: string, action: NigoichiRo
       const clues = normalizeAssociationWords(action.clues, current.associationWordCount);
       if (!clues) throw new Error("NIGOICHI_INVALID_CLUE");
       const next = { ...current, associations: { ...current.associations, [targetId]: clues } };
-      return allNigoichiAssociationsSubmitted(next) ? { ...next, phase: "guess" as const } : next;
+      return allNigoichiAssociationsSubmitted(next) ? { ...next, phase: "guess" as const, phaseStartedAt: Date.now() } : next;
     }
     if (action.type === "submit-guess") {
       if (current.phase !== "guess" || current.guesses[targetId] !== undefined) throw new Error("NIGOICHI_ROOM_FORBIDDEN");
@@ -236,7 +248,7 @@ export async function applyStoredNigoichiAction(code: string, action: NigoichiRo
         if (associations[player.id]) return;
         associations[player.id] = Array.from({ length: current.associationWordCount }, (_, clueIndex) => `テスト連想${playerIndex + 1}-${clueIndex + 1}`);
       });
-      return { ...current, phase: "guess", associations };
+      return { ...current, phase: "guess", phaseStartedAt: Date.now(), associations };
     }
     if (action.type === "debug-fill-guesses" && current.phase === "guess" && current.missingNumber !== null) {
       const guesses = { ...current.guesses };

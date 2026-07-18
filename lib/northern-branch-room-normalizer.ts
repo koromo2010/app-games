@@ -1,4 +1,5 @@
 import { northernRules } from "@/lib/northern-branch-game";
+import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
 import type {
   NorthernGameState,
   NorthernRoom,
@@ -68,10 +69,11 @@ export function normalizeNorthernRoom(value: unknown): NorthernRoom | null {
     gameNumber: typeof parsed.gameNumber === "number" ? Math.max(1, Math.floor(parsed.gameNumber)) : 1,
     debugMode: parsed.debugMode === true,
     debugReplayEnabled: parsed.debugReplayEnabled === true && parsed.debugMode === true,
+    turnTimeLimitSeconds: normalizeCommonTimeLimit(parsed.turnTimeLimitSeconds),
+    turnStartedAt: phase === "playing" && typeof parsed.turnStartedAt === "number" && Number.isFinite(parsed.turnStartedAt) ? parsed.turnStartedAt : null,
     game,
     notice: typeof parsed.notice === "string" ? parsed.notice.slice(0, 160) : "",
     createdAt: typeof parsed.createdAt === "number" ? parsed.createdAt : Date.now(),
     updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : Date.now(),
   };
 }
-
