@@ -51,11 +51,11 @@ export function tahoiyaDifficultyVerdictAccepted(
   return difficulty === "extreme" ? verdict === "almost-nobody-knows" : verdict === "ordinary-unknown";
 }
 
-function recognitionMatchesVerdict(verdict: TahoiyaDifficultyVerdict, percent: number) {
-  if (verdict === "known") return percent >= 30;
-  if (verdict === "borderline") return percent >= 15 && percent < 30;
-  if (verdict === "ordinary-unknown") return percent > 1 && percent < 15;
-  return percent <= 1;
+function verdictForRecognition(percent: number): TahoiyaDifficultyVerdict {
+  if (percent >= 30) return "known";
+  if (percent >= 15) return "borderline";
+  if (percent > 1) return "ordinary-unknown";
+  return "almost-nobody-knows";
 }
 
 export function parseTahoiyaDifficultyScreening(
@@ -86,18 +86,19 @@ export function parseTahoiyaDifficultyScreening(
       ? Math.round(input.confidence)
       : -1;
     const reason = typeof input.reason === "string" ? input.reason.replace(/\s+/g, " ").trim().slice(0, 180) : "";
-    if (!source || !verdict || !itemExclusionFlags || items.has(sourceId) || estimatedRecognitionPercent < 0 || estimatedRecognitionPercent > 100 || !recognitionMatchesVerdict(verdict, estimatedRecognitionPercent) || confidence < 0 || confidence > 100 || !reason) return [];
+    if (!source || !verdict || !itemExclusionFlags || items.has(sourceId) || estimatedRecognitionPercent < 0 || estimatedRecognitionPercent > 100 || confidence < 0 || confidence > 100 || !reason) return [];
+    const normalizedVerdict = verdictForRecognition(estimatedRecognitionPercent);
     items.set(sourceId, {
       sourceId,
       wordId: source.wordId,
       word: source.word,
-      verdict,
+      verdict: normalizedVerdict,
       exclusionFlags: itemExclusionFlags,
       estimatedRecognitionPercent,
       confidence,
       reason,
       difficulty: classifyTahoiyaDifficultyScreening(itemExclusionFlags, estimatedRecognitionPercent),
-      accepted: tahoiyaDifficultyVerdictAccepted(verdict, itemExclusionFlags, estimatedRecognitionPercent, difficulty),
+      accepted: tahoiyaDifficultyVerdictAccepted(normalizedVerdict, itemExclusionFlags, estimatedRecognitionPercent, difficulty),
     });
   }
   return sources.map((source) => items.get(source.id)).filter((item): item is TahoiyaDifficultyScreeningItem => Boolean(item));

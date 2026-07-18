@@ -48,3 +48,16 @@ test("欠落・重複・範囲外を含むLLM応答は一括で棄却する", ()
   assert.deepEqual(parseTahoiyaDifficultyScreening({ items: [response.items[0], response.items[0], response.items[2]] }, sources, "standard"), []);
   assert.deepEqual(parseTahoiyaDifficultyScreening({ items: [response.items[0], { ...response.items[1], confidence: 101 }, response.items[2]] }, sources, "standard"), []);
 });
+
+test("LLMのverdict境界がずれても認知率を正本として補正する", () => {
+  const mismatched = {
+    items: response.items.map((item, index) => index === 1
+      ? { ...item, verdict: "almost-nobody-knows", estimatedRecognitionPercent: 9 }
+      : item),
+  };
+  const items = parseTahoiyaDifficultyScreening(mismatched, sources, "extreme");
+  assert.equal(items.length, 3);
+  assert.equal(items[1].verdict, "ordinary-unknown");
+  assert.equal(items[1].difficulty, "standard");
+  assert.equal(items[1].accepted, false);
+});

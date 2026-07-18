@@ -631,16 +631,40 @@ async function screenDifficultyCandidates(
     `候補: ${JSON.stringify(compactCandidates)}`,
   ].join("\n\n");
   emitObservabilityEvent("info", "ai.generation", { game: "tahoiya", operation: "difficulty-screening", sourceCount: candidates.length, outcome: "started" });
-  const generated = await generateGameLlmText(prompt, mode, { quality: "standard", timeoutMs: 25_000 });
-  const screened = parseTahoiyaDifficultyScreening(generated.text, compactCandidates.map((candidate, index) => ({ id: candidate.sourceId, wordId: candidates[index].id, word: candidate.word })), difficulty);
-  if (screened.length !== candidates.length) throw new Error(`Difficulty screening returned ${screened.length}/${candidates.length} items`);
+  const screeningSources = compactCandidates.map((candidate, index) => ({ id: candidate.sourceId, wordId: candidates[index].id, word: candidate.word }));
+  let generated = await generateGameLlmText(prompt, mode, { quality: "standard", timeoutMs: 25_000 });
+  let screened = parseTahoiyaDifficultyScreening(generated.text, screeningSources, difficulty);
+  let totalLatencyMs = generated.latencyMs;
+  if (screened.length !== candidates.length) {
+    emitObservabilityEvent("warn", "ai.generation", {
+      game: "tahoiya",
+      operation: "difficulty-screening-format",
+      provider: generated.provider,
+      model: generated.model,
+      sourceCount: candidates.length,
+      outcome: "rejected",
+    });
+    const retryPrompt = [
+      prompt,
+      "再審査です。必ず入力10件を入力順で1回ずつ返し、sourceIdを完全一致させてください。認知率とverdictの境界、配列名、必須フィールドを再確認し、JSONオブジェクト以外を出力しないでください。",
+    ].join("\n\n");
+    const retried = await generateGameLlmText(retryPrompt, mode, {
+      quality: "standard",
+      timeoutMs: 25_000,
+      preferredProvider: independentReviewerProvider(generated.provider),
+    });
+    totalLatencyMs += retried.latencyMs;
+    generated = retried;
+    screened = parseTahoiyaDifficultyScreening(generated.text, screeningSources, difficulty);
+  }
+  if (screened.length !== candidates.length) throw new Error("TAHOIYA_SCREENING_RESPONSE_INVALID");
   const generation: GameGenerationMeta = {
     provider: generated.provider,
     model: generated.model,
     mode: generated.mode,
     billingSource: generated.billingSource,
     promptVersion: tahoiyaDifficultyScreeningPromptVersion,
-    latencyMs: generated.latencyMs,
+    latencyMs: totalLatencyMs,
     retrievedFeedbackIds: [],
   };
   return { screened, generation };
@@ -688,7 +712,10 @@ export async function generateTahoiyaTopicResponse(
       });
     } catch (error) {
       emitObservabilityEvent("error", "ai.generation", { game: "tahoiya", operation: "difficulty-screening", outcome: "failed", errorCode: observabilityErrorCode(error), databaseCode: vocabularyDatabaseErrorCode(error) });
-      return Response.json({ error: "候補10語の難易度先行審査に失敗しました。もう一度お試しください。" }, { status: 503 });
+      const message = error instanceof Error && error.message === "TAHOIYA_SCREENING_RESPONSE_INVALID"
+        ? "AIの審査結果を10語分読み取れませんでした。自動再審査後も形式が揃わなかったため、もう一度お試しください。"
+        : "候補10語の難易度先行審査に失敗しました。もう一度お試しください。";
+      return Response.json({ error: message }, { status: 503 });
     }
   }
   const rememberExperience = async (topic: TahoiyaTopic) => {
