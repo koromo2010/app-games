@@ -157,12 +157,10 @@ function NumberedClueHistory({ room, teamId }: { room: CodeInterceptRoom; teamId
   const canShowHistory = unknown.length > 0 || numbered.some((column) => column.clues.length > 0);
   if (!canShowHistory) return <p className="mt-4 rounded-xl border border-white/10 bg-slate-950/35 p-3 text-sm text-slate-300">正解暗号が非公開のため、相手チームのヒントは番号別に並べません。</p>;
   const columns = [...numbered.map((column) => ({ ...column, label: String(column.cardNumber) })), { cardNumber: "unknown", label: "不明", clues: unknown }];
-  return <div className="mt-4 overflow-x-auto">
-    <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${room.cardCount + 1}, minmax(8rem, 1fr))`, minWidth: `${Math.max(room.cardCount + 1, 4) * 8.5}rem` }}>{columns.map((column) => <section key={column.cardNumber} className={`overflow-hidden rounded-xl border ${column.cardNumber === "unknown" ? "border-amber-300/30 bg-amber-300/[0.06]" : "border-white/15 bg-slate-950/45"}`}>
+  return <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">{columns.map((column) => <section key={column.cardNumber} className={`min-w-0 overflow-hidden rounded-xl border ${column.cardNumber === "unknown" ? "border-amber-300/30 bg-amber-300/[0.06]" : "border-white/15 bg-slate-950/45"}`}>
       <h4 className="border-b border-white/15 bg-white/10 py-2 text-center font-mono text-2xl font-black">{column.label}</h4>
       <ul className="space-y-2 p-2">{column.clues.length > 0 ? column.clues.map((entry, index) => <li key={`${entry.roundNumber}:${index}:${entry.clue}`} className="rounded-lg bg-white/[0.06] px-2 py-2"><span className="mr-2 font-mono text-xs text-slate-400">R{entry.roundNumber}</span><strong>{entry.clue}</strong></li>) : <li className="py-2 text-center text-sm text-slate-400">まだなし</li>}</ul>
-    </section>)}</div>
-  </div>;
+    </section>)}</div>;
 }
 
 function TeamRoundHistoryTable({ room, teamId }: { room: CodeInterceptRoom; teamId: CodeInterceptTeamId }) {
