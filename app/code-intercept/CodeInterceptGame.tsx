@@ -87,6 +87,35 @@ function AnswerProposalList({ room, answererIds, proposals }: { room: CodeInterc
   </div>;
 }
 
+function AnswerEditor({ title, room, answererIds, proposals, submittedAnswer, draft, codeLength, saving, canRevise, submitLabel, resubmitLabel, buttonClass, onChange, onSubmit }: {
+  title: string;
+  room: CodeInterceptRoom;
+  answererIds: string[];
+  proposals: Record<string, number[]>;
+  submittedAnswer?: number[];
+  draft: number[];
+  codeLength: number;
+  saving: boolean;
+  canRevise: boolean;
+  submitLabel: string;
+  resubmitLabel: string;
+  buttonClass: string;
+  onChange: (value: number[]) => void;
+  onSubmit: () => void;
+}) {
+  const editable = !submittedAnswer || canRevise;
+  return <>
+    <h3 className="font-black">{title}</h3>
+    {submittedAnswer && <p className="mt-3 font-mono text-2xl font-black text-emerald-200">確定済み {submittedAnswer.join("・")}</p>}
+    {editable ? <>
+      {submittedAnswer && <p className="mt-2 text-xs text-slate-300">相手チームが回答を完了するまでは変更できます。</p>}
+      <div className="mt-3"><CodePicker value={draft} cardCount={room.cardCount} codeLength={codeLength} onChange={onChange} /></div>
+      <AnswerProposalList room={room} answererIds={answererIds} proposals={proposals} />
+      <button type="button" disabled={saving || !isValidCodeInterceptAnswer(draft, room.cardCount, codeLength)} onClick={onSubmit} className={`mt-3 w-full rounded-xl px-4 py-3 font-black disabled:opacity-40 ${buttonClass}`}>{submittedAnswer ? resubmitLabel : submitLabel}</button>
+    </> : <p className="mt-2 text-xs text-slate-300">相手チームが回答を完了したため、この回答は確定しました。</p>}
+  </>;
+}
+
 function PlayerCard({ player, room, me, saving, onTeamChange }: { player: CodeInterceptPlayer; room: CodeInterceptRoom; me: string; saving: boolean; onTeamChange: (teamId: CodeInterceptTeamId) => void }) {
   const isMe = player.id === me;
   return <li className={`flex items-center gap-3 rounded-xl border p-3 ${teamStyle(player.teamId)}`}>
@@ -218,14 +247,15 @@ export function CodeInterceptGame() {
   const myCodeLength = room && myTeamId ? codeLengthForTeam(room, myTeamId) : codeInterceptDefaults.fixedCodeLength;
   const enemyTeamId = myTeamId ? otherCodeInterceptTeam(myTeamId) : undefined;
   const enemyCodeLength = room && enemyTeamId ? codeLengthForTeam(room, enemyTeamId) : codeInterceptDefaults.fixedCodeLength;
+  const enemyAnswersSubmitted = Boolean(enemyTeamId && room?.answerReadyTeamIds?.includes(enemyTeamId));
   const isClueGiver = Boolean(room && myTeamId && room.clueGiverIds[myTeamId] === playerId);
   const myAnswererIds = room && myTeamId ? codeInterceptAnswererIds(room, myTeamId) : [];
   const latestRound = room?.roundHistory.at(-1);
   const teamCounts = useMemo(() => room ? Object.fromEntries(codeInterceptTeamIds.map((id) => [id, teamPlayers(room, id).length])) as Record<CodeInterceptTeamId, number> : { red: 0, blue: 0 }, [room]);
   const draftRound = room?.roundNumber ?? 1;
   const clueDrafts = clueDraftsByRound[draftRound] ?? Array.from({ length: myCodeLength }, () => "");
-  const allyDraft = allyDraftsByRound[draftRound] ?? room?.allyAnswerProposals[playerId] ?? [];
-  const interceptDraft = interceptDraftsByRound[draftRound] ?? room?.interceptAnswerProposals[playerId] ?? [];
+  const allyDraft = allyDraftsByRound[draftRound] ?? room?.allyAnswerProposals[playerId] ?? (myTeamId ? room?.allyAnswers[myTeamId] : undefined) ?? [];
+  const interceptDraft = interceptDraftsByRound[draftRound] ?? room?.interceptAnswerProposals[playerId] ?? (myTeamId ? room?.interceptAnswers[myTeamId] : undefined) ?? [];
 
   const runAction = useCallback(async (action: CodeInterceptRoomAction) => {
     if (!room || isSaving) return null;
@@ -398,9 +428,11 @@ export function CodeInterceptGame() {
         </section>}
 
         {room.phase === "answer" && myTeamId && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><p className="text-sm font-black text-amber-300">第{room.roundNumber}ラウンド・同時回答</p><h2 className="mt-2 text-2xl font-black">両チームのヒントが公開されました</h2><div className="mt-5 grid gap-3 sm:grid-cols-2">{codeInterceptTeamIds.map((teamId) => <div key={teamId} className={`rounded-xl border p-4 ${teamStyle(teamId)}`}><p className="font-black">{teamLabel(teamId)}・{codeLengthForTeam(room, teamId)}桁</p><ol className="mt-2 space-y-1">{room.clues[teamId]?.map((clue, index) => <li key={index}><span className="mr-2 font-mono text-slate-400">{index + 1}.</span><strong>{clue}</strong></li>)}</ol></div>)}</div>
-          {isClueGiver ? <p className="mt-5 rounded-xl bg-white/[0.05] p-4 text-sm text-slate-300">あなたは今回の出題者です。味方の回答者全員の案が一致するまで待ってください。</p> : <div className="mt-5 grid gap-5 lg:grid-cols-2"><div className={`rounded-2xl border p-4 ${myTeamId === "red" ? "order-1" : "order-2"} ${teamStyle(myTeamId)}`}><h3 className="font-black">味方の暗号を回答（{myCodeLength}桁）</h3>{room.allyAnswers[myTeamId] ? <p className="mt-3 font-mono text-2xl font-black text-emerald-200">確定済み {room.allyAnswers[myTeamId]?.join("・")}</p> : <><div className="mt-3"><CodePicker value={allyDraft} cardCount={room.cardCount} codeLength={myCodeLength} onChange={(value) => setAllyDraftsByRound((current) => ({ ...current, [draftRound]: value }))} /></div><AnswerProposalList room={room} answererIds={myAnswererIds} proposals={room.allyAnswerProposals} /><button type="button" disabled={isSaving || !isValidCodeInterceptAnswer(allyDraft, room.cardCount, myCodeLength)} onClick={() => void runAction({ type: "submit-ally-answer", actorId: playerId, answer: allyDraft })} className="mt-3 w-full rounded-xl bg-emerald-300 px-4 py-3 font-black text-emerald-950 disabled:opacity-40">{myAnswererIds.length > 1 ? room.allyAnswerProposals[playerId] ? "回答案を更新" : "回答案を共有" : "チーム回答を確定"}</button></>}</div>
-            <div className={`rounded-2xl border p-4 ${otherCodeInterceptTeam(myTeamId) === "red" ? "order-1" : "order-2"} ${teamStyle(otherCodeInterceptTeam(myTeamId))}`}><h3 className="font-black">敵の暗号を傍受（{enemyCodeLength}桁）</h3>{room.roundNumber === 1 ? <p className="mt-3 text-sm text-slate-300">第1ラウンドは傍受回答を行いません。</p> : room.interceptAnswers[myTeamId] ? <p className="mt-3 font-mono text-2xl font-black text-emerald-200">確定済み {room.interceptAnswers[myTeamId]?.join("・")}</p> : <><div className="mt-3"><CodePicker value={interceptDraft} cardCount={room.cardCount} codeLength={enemyCodeLength} onChange={(value) => setInterceptDraftsByRound((current) => ({ ...current, [draftRound]: value }))} /></div><AnswerProposalList room={room} answererIds={myAnswererIds} proposals={room.interceptAnswerProposals} /><button type="button" disabled={isSaving || !isValidCodeInterceptAnswer(interceptDraft, room.cardCount, enemyCodeLength)} onClick={() => void runAction({ type: "submit-intercept-answer", actorId: playerId, answer: interceptDraft })} className="mt-3 w-full rounded-xl bg-sky-300 px-4 py-3 font-black text-sky-950 disabled:opacity-40">{myAnswererIds.length > 1 ? room.interceptAnswerProposals[playerId] ? "回答案を更新" : "回答案を共有" : "傍受回答を確定"}</button></>}</div></div>}
-          {isHost && room.debugMode && <button type="button" onClick={() => void runAction({ type: "debug-fill-answers", actorId: playerId })} className="mt-5 w-full rounded-xl border border-cyan-300/30 bg-cyan-300/10 px-4 py-3 font-black text-cyan-100">デバッグ：未回答を正解で埋める</button>}<p className="mt-4 text-center text-sm text-slate-400">回答者が複数いるチームは全員一致で確定します。相談中の回答案は自チームの回答者だけに表示されます。</p></section>}
+          {isClueGiver ? <p className="mt-5 rounded-xl bg-white/[0.05] p-4 text-sm text-slate-300">あなたは今回の出題者です。味方の回答者全員の案が一致するまで待ってください。</p> : <div className="mt-5 grid gap-5 lg:grid-cols-2">
+            <div className={`rounded-2xl border p-4 ${myTeamId === "red" ? "order-1" : "order-2"} ${teamStyle(myTeamId)}`}><AnswerEditor title={`味方の暗号を回答（${myCodeLength}桁）`} room={room} answererIds={myAnswererIds} proposals={room.allyAnswerProposals} submittedAnswer={room.allyAnswers[myTeamId]} draft={allyDraft} codeLength={myCodeLength} saving={isSaving} canRevise={!enemyAnswersSubmitted} submitLabel={myAnswererIds.length > 1 ? room.allyAnswerProposals[playerId] ? "回答案を更新" : "回答案を共有" : "チーム回答を確定"} resubmitLabel="味方回答を再提出" buttonClass="bg-emerald-300 text-emerald-950" onChange={(value) => setAllyDraftsByRound((current) => ({ ...current, [draftRound]: value }))} onSubmit={() => void runAction({ type: "submit-ally-answer", actorId: playerId, answer: allyDraft })} /></div>
+            <div className={`rounded-2xl border p-4 ${otherCodeInterceptTeam(myTeamId) === "red" ? "order-1" : "order-2"} ${teamStyle(otherCodeInterceptTeam(myTeamId))}`}>{room.roundNumber === 1 ? <><h3 className="font-black">敵の暗号を傍受（{enemyCodeLength}桁）</h3><p className="mt-3 text-sm text-slate-300">第1ラウンドは傍受回答を行いません。</p></> : <AnswerEditor title={`敵の暗号を傍受（${enemyCodeLength}桁）`} room={room} answererIds={myAnswererIds} proposals={room.interceptAnswerProposals} submittedAnswer={room.interceptAnswers[myTeamId]} draft={interceptDraft} codeLength={enemyCodeLength} saving={isSaving} canRevise={!enemyAnswersSubmitted} submitLabel={myAnswererIds.length > 1 ? room.interceptAnswerProposals[playerId] ? "回答案を更新" : "回答案を共有" : "傍受回答を確定"} resubmitLabel="傍受回答を再提出" buttonClass="bg-sky-300 text-sky-950" onChange={(value) => setInterceptDraftsByRound((current) => ({ ...current, [draftRound]: value }))} onSubmit={() => void runAction({ type: "submit-intercept-answer", actorId: playerId, answer: interceptDraft })} />}</div>
+          </div>}
+          {isHost && room.debugMode && <button type="button" onClick={() => void runAction({ type: "debug-fill-answers", actorId: playerId })} className="mt-5 w-full rounded-xl border border-cyan-300/30 bg-cyan-300/10 px-4 py-3 font-black text-cyan-100">デバッグ：未回答を正解で埋める</button>}<p className="mt-4 text-center text-sm text-slate-400">回答者が複数いるチームは全員一致で確定します。相手チームが回答を完了するまでは確定後も再提出できます。</p></section>}
 
         {(room.phase === "round-result" || room.phase === "game-result") && latestRound && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><p className="text-sm font-black text-amber-300">第{latestRound.roundNumber}ラウンド結果</p><div className="mt-4 grid gap-4 lg:grid-cols-2">{latestRound.teams.map((result) => <ResultCard key={result.teamId} result={result} room={room} />)}</div>{room.phase === "round-result" && (isHost ? <button type="button" disabled={isSaving} onClick={() => void runAction({ type: "next-round", actorId: playerId })} className="mt-5 w-full rounded-xl bg-amber-300 px-4 py-4 text-lg font-black text-slate-950">次のラウンドへ</button> : <p className="mt-5 text-center font-bold text-slate-300">ホストが次のラウンドへ進めます。</p>)}</section>}
 

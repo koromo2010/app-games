@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  canReviseCodeInterceptAnswers,
   codeInterceptDefaults,
+  codeInterceptTeamHasSubmittedAnswers,
   consensusCodeInterceptAnswer,
   codeInterceptTeamsAreStartable,
   finishCodeInterceptRound,
@@ -9,6 +11,7 @@ import {
   normalizeCodeInterceptCardCount,
   normalizeCodeInterceptCodeLength,
   sanitizeCodeInterceptRoomForPlayer,
+  withCodeInterceptConsensusAnswer,
   type CodeInterceptRoom,
 } from "../lib/code-intercept.ts";
 
@@ -121,6 +124,21 @@ test("multiple answerers only reach consensus when every proposal matches", () =
   assert.deepEqual(consensusCodeInterceptAnswer({ r2: [3, 1, 4], r3: [3, 1, 4] }, ["r2", "r3"]), [3, 1, 4]);
 });
 
+test("a team can revise its final answer until the opposing team finishes submitting", () => {
+  const current = room();
+  assert.equal(codeInterceptTeamHasSubmittedAnswers(current, "blue"), true);
+  assert.equal(canReviseCodeInterceptAnswers(current, "red"), false);
+  delete current.interceptAnswers.blue;
+  assert.equal(codeInterceptTeamHasSubmittedAnswers(current, "blue"), false);
+  assert.equal(canReviseCodeInterceptAnswers(current, "red"), true);
+});
+
+test("breaking multi-answerer consensus reopens the team answer", () => {
+  const answers = { red: [3, 1, 4], blue: [2, 4, 1] };
+  assert.deepEqual(withCodeInterceptConsensusAnswer(answers, "red", null), { blue: [2, 4, 1] });
+  assert.deepEqual(withCodeInterceptConsensusAnswer(answers, "red", [3, 4, 1]), { red: [3, 4, 1], blue: [2, 4, 1] });
+});
+
 test("answer proposals are only visible to non-clue-giver teammates", () => {
   const current = room();
   current.players.push({ id: "r3", name: "赤3", joinedAt: Date.now(), teamId: "red" });
@@ -128,6 +146,15 @@ test("answer proposals are only visible to non-clue-giver teammates", () => {
   assert.deepEqual(sanitizeCodeInterceptRoomForPlayer(current, "r2").allyAnswerProposals, { r2: [3, 1, 4], r3: [3, 4, 1] });
   assert.deepEqual(sanitizeCodeInterceptRoomForPlayer(current, "r1").allyAnswerProposals, {});
   assert.deepEqual(sanitizeCodeInterceptRoomForPlayer(current, "b2").allyAnswerProposals, { b2: [2, 4, 1] });
+});
+
+test("sanitization exposes team readiness without exposing the enemy answers", () => {
+  const current = room();
+  delete current.interceptAnswers.blue;
+  const redView = sanitizeCodeInterceptRoomForPlayer(current, "r2");
+  assert.deepEqual(redView.answerReadyTeamIds, ["red"]);
+  assert.equal(redView.allyAnswers.blue, undefined);
+  assert.equal(redView.interceptAnswers.blue, undefined);
 });
 
 test("per-round choices stay hidden from the enemy until both teams lock", () => {

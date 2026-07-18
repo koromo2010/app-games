@@ -111,6 +111,7 @@ export type CodeInterceptRoom = {
   interceptAnswerProposals: Record<string, number[]>;
   allyAnswers: Partial<Record<CodeInterceptTeamId, number[]>>;
   interceptAnswers: Partial<Record<CodeInterceptTeamId, number[]>>;
+  answerReadyTeamIds?: CodeInterceptTeamId[];
   roundHistory: CodeInterceptRoundLog[];
   winner: CodeInterceptWinner;
   debugLog: GameDebugLogEntry[];
@@ -242,6 +243,22 @@ export function consensusCodeInterceptAnswer(proposals: Readonly<Record<string, 
   return first && answererIds.every((playerId) => codesEqual(proposals[playerId], first)) ? [...first] : null;
 }
 
+export function codeInterceptTeamHasSubmittedAnswers(room: Pick<CodeInterceptRoom, "allyAnswers" | "interceptAnswers" | "roundNumber" | "interceptionStartsAtRound">, teamId: CodeInterceptTeamId) {
+  return Boolean(room.allyAnswers[teamId])
+    && (room.roundNumber < room.interceptionStartsAtRound || Boolean(room.interceptAnswers[teamId]));
+}
+
+export function canReviseCodeInterceptAnswers(room: Pick<CodeInterceptRoom, "phase" | "allyAnswers" | "interceptAnswers" | "roundNumber" | "interceptionStartsAtRound">, teamId: CodeInterceptTeamId) {
+  return room.phase === "answer" && !codeInterceptTeamHasSubmittedAnswers(room, otherCodeInterceptTeam(teamId));
+}
+
+export function withCodeInterceptConsensusAnswer(answers: Partial<Record<CodeInterceptTeamId, number[]>>, teamId: CodeInterceptTeamId, consensus: number[] | null) {
+  const next = { ...answers };
+  if (consensus) next[teamId] = [...consensus];
+  else delete next[teamId];
+  return next;
+}
+
 export function clueGiverForRound(players: readonly CodeInterceptPlayer[], teamId: CodeInterceptTeamId, roundNumber: number) {
   const members = players.filter((player) => player.teamId === teamId);
   return members[(Math.max(1, roundNumber) - 1) % members.length]?.id ?? "";
@@ -357,5 +374,8 @@ export function sanitizeCodeInterceptRoomForPlayer(room: CodeInterceptRoom, play
       ? { ...result, secretCode: [...result.secretCode], allyAnswer: result.allyAnswer ? [...result.allyAnswer] : null }
       : { ...result, secretCode: [], allyAnswer: null }),
   }));
-  return { ...room, passphrase: "", teams, codeLengthChoices, roundCodeLengths, secretCodes, clues, allyAnswerProposals, interceptAnswerProposals, allyAnswers, interceptAnswers, roundHistory };
+  const answerReadyTeamIds = room.phase === "answer"
+    ? codeInterceptTeamIds.filter((teamId) => codeInterceptTeamHasSubmittedAnswers(room, teamId))
+    : [];
+  return { ...room, passphrase: "", teams, codeLengthChoices, roundCodeLengths, secretCodes, clues, allyAnswerProposals, interceptAnswerProposals, allyAnswers, interceptAnswers, answerReadyTeamIds, roundHistory };
 }
