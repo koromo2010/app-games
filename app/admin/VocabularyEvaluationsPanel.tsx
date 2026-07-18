@@ -14,6 +14,14 @@ type VoteResult = {
   comment: string | null;
 };
 type DraftReviewResult = { id: string; status: "active" | "rejected"; subjectId: string | null };
+type TahoiyaAdoptionResult = {
+  evaluationId: string;
+  wordId: string;
+  zipf: number | null;
+  selectionZipfOverride: number | null;
+  effectiveZipf: number;
+  tahoiyaEligible: true;
+};
 
 const decisionLabels = { accept: "OK", reject: "reject" } as const;
 const distanceLabels: Record<string, string> = { near: "近い", balanced: "普通", wide: "遠い" };
@@ -33,6 +41,7 @@ export function VocabularyEvaluationsPanel({ onAuthExpired, onDraftReviewed }: {
   const [loading, setLoading] = useState(true);
   const [voting, setVoting] = useState<string | null>(null);
   const [reviewingDraft, setReviewingDraft] = useState<string | null>(null);
+  const [adoptingForTahoiya, setAdoptingForTahoiya] = useState<string | null>(null);
   const [comments, setComments] = useState<Record<string, string>>({});
   const [message, setMessage] = useState("");
 
@@ -127,6 +136,39 @@ export function VocabularyEvaluationsPanel({ onAuthExpired, onDraftReviewed }: {
     } finally { setReviewingDraft(null); }
   };
 
+  const adoptForTahoiya = async (evaluation: VocabularyWordGameEvaluation) => {
+    if (adoptingForTahoiya || evaluation.tahoiyaEligible) return;
+    const currentZipf = evaluation.effectiveZipf === null ? "未計測" : evaluation.effectiveZipf.toFixed(2);
+    const confirmed = window.confirm(
+      `一つ目の単語「${evaluation.word}」をたほい屋候補へ追加します。`
+      + `\n共通の実効Zipfは現在 ${currentZipf} で、3以上または未計測なら2.9へ設定します。`
+      + "\nこの実効値は通常ゲームの単語選定にも共通で使われます。よろしいですか？",
+    );
+    if (!confirmed) return;
+    setAdoptingForTahoiya(evaluation.id); setMessage("");
+    try {
+      await ensureSiteAdminStepUp();
+      const response = await fetch("/api/admin/vocabulary-evaluations", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ evaluationId: evaluation.id, action: "adopt-tahoiya" }),
+      });
+      const data = await response.json().catch(() => null) as { result?: TahoiyaAdoptionResult; error?: string } | null;
+      if (response.status === 401) { onAuthExpired(); return; }
+      if (!response.ok || !data?.result) throw new Error(data?.error ?? "VOCABULARY_EVALUATION_TAHOIYA_FAILED");
+      const result = data.result;
+      setEvaluations((current) => current.map((entry) => entry.id === result.evaluationId ? {
+        ...entry,
+        zipf: result.zipf,
+        selectionZipfOverride: result.selectionZipfOverride,
+        effectiveZipf: result.effectiveZipf,
+        tahoiyaEligible: true,
+      } : entry));
+      setMessage(`「${evaluation.word}」をたほい屋の生成候補へ追加しました。共通の実効Zipfは${result.effectiveZipf.toFixed(2)}です。`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "たほい屋候補へ追加できませんでした。");
+    } finally { setAdoptingForTahoiya(null); }
+  };
+
   return <section className="mt-10 border-t border-white/10 pt-8">
     <div className="flex flex-wrap items-end justify-between gap-3">
       <div><h2 className="text-2xl font-black">LLM評価レビュー</h2><p className="mt-1 text-sm leading-6 text-slate-400">直近100件のOK・rejectを表示します。管理者票は本番RAGの「お題評価」に1票として反映します。完全なペア候補は、この一覧から正式採用して本番出題対象へ反映できます。</p></div>
@@ -140,11 +182,11 @@ export function VocabularyEvaluationsPanel({ onAuthExpired, onDraftReviewed }: {
     {loading ? <p className="mt-6 text-sm text-slate-400">読み込み中…</p> : visibleEvaluations.length === 0 ? <p className="mt-6 rounded-xl border border-white/10 bg-white/[0.04] p-5 text-sm text-slate-400">該当するLLM評価はありません。</p> : <div className="mt-6 grid gap-4 lg:grid-cols-2">{visibleEvaluations.map((evaluation) => <article key={evaluation.id} className="rounded-2xl border border-white/10 bg-white/[0.05] p-5">
       <div className="flex items-start justify-between gap-3"><div><p className="text-xs font-bold uppercase text-cyan-300">{distanceLabels[evaluation.pairDistance ?? ""] ?? evaluation.pairDistance ?? "距離未設定"} · {evaluation.provider ?? "LLM"}</p><h3 className="mt-1 text-xl font-black">{evaluation.word} ／ {evaluation.partnerText ?? "相方未生成"}</h3></div><span className={`rounded-md px-2 py-1 text-xs font-bold ${decisionClass(evaluation.llmDecision)}`}>LLM {decisionLabels[evaluation.llmDecision]}</span></div>
       <p className="mt-4 text-sm leading-6 text-slate-300">{evaluation.pairReason || "判定理由なし"}</p>
-      <dl className="mt-4 grid grid-cols-2 gap-3 text-xs text-slate-400"><div><dt>理由コード</dt><dd className="mt-1 break-words text-slate-200">{evaluation.reasonCode}</dd></div><div><dt>モデル</dt><dd className="mt-1 break-words text-slate-200">{evaluation.model ?? "—"}</dd></div><div><dt>実質Zipf補正</dt><dd className="mt-1 text-slate-200">{(evaluation.usagePenalty + evaluation.gamePenalty - evaluation.feedbackAdjustment).toFixed(2)}</dd></div><div><dt>評価日時</dt><dd className="mt-1 text-slate-200">{evaluationDateFormatter.format(new Date(evaluation.createdAt))}</dd></div></dl>
+      <dl className="mt-4 grid grid-cols-2 gap-3 text-xs text-slate-400"><div><dt>理由コード</dt><dd className="mt-1 break-words text-slate-200">{evaluation.reasonCode}</dd></div><div><dt>モデル</dt><dd className="mt-1 break-words text-slate-200">{evaluation.model ?? "—"}</dd></div><div><dt>元Zipf ／ 共通実効Zipf</dt><dd className="mt-1 text-slate-200">{evaluation.zipf?.toFixed(2) ?? "—"} ／ {evaluation.effectiveZipf?.toFixed(2) ?? "—"}</dd></div><div><dt>LLM・FB補正</dt><dd className="mt-1 text-slate-200">{(evaluation.usagePenalty + evaluation.gamePenalty - evaluation.feedbackAdjustment).toFixed(2)}</dd></div><div><dt>評価日時</dt><dd className="mt-1 text-slate-200">{evaluationDateFormatter.format(new Date(evaluation.createdAt))}</dd></div></dl>
       {evaluation.safetyFlags.length > 0 && <p className="mt-3 text-xs text-amber-200">フラグ：{evaluation.safetyFlags.join(" / ")}</p>}
       <div className="mt-5 rounded-xl bg-black/20 p-3"><div className="flex flex-wrap items-center justify-between gap-2 text-sm"><span className="font-bold">管理者票：OK {evaluation.humanAcceptCount} ／ NG {evaluation.humanRejectCount}</span><span className={`rounded-md px-2 py-1 text-xs font-bold ${decisionClass(evaluation.resolvedDecision)}`}>総合 {decisionLabels[evaluation.resolvedDecision]}</span></div><p className="mt-2 text-xs text-slate-400">自分の票：{evaluation.myVote ? decisionLabels[evaluation.myVote] : "未投票"}</p></div>
       <label className="mt-4 block text-xs font-bold text-slate-300">自由記述（任意・500文字まで）<textarea value={comments[evaluation.id] ?? ""} maxLength={500} rows={3} onChange={(event) => setComments((current) => ({ ...current, [evaluation.id]: event.target.value }))} placeholder="このお題をOK／NGと考えた理由。将来の傾向分析用に保存します。" className="mt-2 w-full resize-y rounded-xl border border-white/15 bg-black/20 px-3 py-2 text-sm font-normal leading-6 text-white outline-none focus:border-cyan-300" /><span className="mt-1 block text-right font-normal text-slate-500">{(comments[evaluation.id] ?? "").length}/500</span></label>
-      <div className="mt-4 flex flex-wrap gap-2"><button type="button" disabled={!votingEnabled || Boolean(voting) || Boolean(reviewingDraft)} aria-pressed={evaluation.myVote === "accept"} onClick={() => void vote(evaluation, "accept")} className={`rounded-lg px-4 py-2 text-sm font-black disabled:opacity-30 ${evaluation.myVote === "accept" ? "bg-emerald-200 text-slate-950" : "border border-emerald-300/30 text-emerald-200"}`}>OKに投票</button><button type="button" disabled={!votingEnabled || Boolean(voting) || Boolean(reviewingDraft)} aria-pressed={evaluation.myVote === "reject"} onClick={() => void vote(evaluation, "reject")} className={`rounded-lg px-4 py-2 text-sm font-bold disabled:opacity-30 ${evaluation.myVote === "reject" ? "bg-rose-200 text-slate-950" : "border border-rose-300/30 text-rose-200"}`}>NGに投票</button><button type="button" disabled={!evaluation.linkedDraftId || evaluation.linkedDraftStatus !== "draft" || Boolean(voting) || Boolean(reviewingDraft)} onClick={() => void reviewDraft(evaluation, "active")} className="rounded-lg bg-cyan-300 px-4 py-2 text-sm font-black text-slate-950 disabled:opacity-50">{reviewingDraft === evaluation.id ? "処理中…" : "正式採用"}</button><button type="button" disabled={!evaluation.linkedDraftId || evaluation.linkedDraftStatus !== "draft" || Boolean(voting) || Boolean(reviewingDraft)} onClick={() => void reviewDraft(evaluation, "rejected")} className="rounded-lg border border-rose-300/30 px-4 py-2 text-sm font-bold text-rose-200 disabled:opacity-30">{reviewingDraft === evaluation.id ? "処理中…" : "不採用"}</button></div>
+      <div className="mt-4 flex flex-wrap gap-2"><button type="button" disabled={!votingEnabled || Boolean(voting) || Boolean(reviewingDraft) || Boolean(adoptingForTahoiya)} aria-pressed={evaluation.myVote === "accept"} onClick={() => void vote(evaluation, "accept")} className={`rounded-lg px-4 py-2 text-sm font-black disabled:opacity-30 ${evaluation.myVote === "accept" ? "bg-emerald-200 text-slate-950" : "border border-emerald-300/30 text-emerald-200"}`}>OKに投票</button><button type="button" disabled={!votingEnabled || Boolean(voting) || Boolean(reviewingDraft) || Boolean(adoptingForTahoiya)} aria-pressed={evaluation.myVote === "reject"} onClick={() => void vote(evaluation, "reject")} className={`rounded-lg px-4 py-2 text-sm font-bold disabled:opacity-30 ${evaluation.myVote === "reject" ? "bg-rose-200 text-slate-950" : "border border-rose-300/30 text-rose-200"}`}>NGに投票</button><button type="button" disabled={!evaluation.linkedDraftId || evaluation.linkedDraftStatus !== "draft" || Boolean(voting) || Boolean(reviewingDraft) || Boolean(adoptingForTahoiya)} onClick={() => void reviewDraft(evaluation, "active")} className="rounded-lg bg-cyan-300 px-4 py-2 text-sm font-black text-slate-950 disabled:opacity-50">{reviewingDraft === evaluation.id ? "処理中…" : "正式採用"}</button><button type="button" disabled={!evaluation.linkedDraftId || evaluation.linkedDraftStatus !== "draft" || Boolean(voting) || Boolean(reviewingDraft) || Boolean(adoptingForTahoiya)} onClick={() => void reviewDraft(evaluation, "rejected")} className="rounded-lg border border-rose-300/30 px-4 py-2 text-sm font-bold text-rose-200 disabled:opacity-30">{reviewingDraft === evaluation.id ? "処理中…" : "不採用"}</button><button type="button" disabled={evaluation.tahoiyaEligible || Boolean(voting) || Boolean(reviewingDraft) || Boolean(adoptingForTahoiya)} onClick={() => void adoptForTahoiya(evaluation)} className="rounded-lg border border-amber-300/40 bg-amber-300/10 px-4 py-2 text-sm font-black text-amber-100 disabled:opacity-50">{evaluation.tahoiyaEligible ? "たほい屋候補済み" : adoptingForTahoiya === evaluation.id ? "追加中…" : "一つ目をたほい屋候補へ"}</button></div>
       {!evaluation.linkedDraftId && evaluation.partnerText && <p className="mt-3 text-xs leading-5 text-slate-500">この評価は正式なペア候補として保存されていないため、正式採用できません。</p>}
       {!evaluation.partnerText && <p className="mt-3 text-xs leading-5 text-slate-500">相方未生成のrejectへOK投票した場合、この親単語を次回生成で再試行できるようにします。</p>}
     </article>)}</div>}

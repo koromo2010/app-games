@@ -29,6 +29,9 @@ export type VocabularyWordGameEvaluation = {
   word: string;
   reading: string | null;
   zipf: number | null;
+  selectionZipfOverride: number | null;
+  effectiveZipf: number | null;
+  tahoiyaEligible: boolean;
   gameId: string;
   pairDistance: string | null;
   llmDecision: VocabularyEvaluationDecision;
@@ -56,6 +59,8 @@ export type VocabularyWordGameEvaluation = {
 
 type EvaluationRow = {
   id: string; word_id: string; word: string; reading: string | null; zipf: number | string | null;
+  selection_zipf_override: number | string | null; effective_zipf: number | string | null;
+  tahoiya_eligible: boolean;
   game_id: string; requested_pair_distance: string | null; decision: VocabularyEvaluationDecision;
   usage_penalty: number | string; game_penalty: number | string; feedback_adjustment: number | string;
   safety_flags: string[]; reason_code: string; pair_reason: string; partner_text: string | null;
@@ -106,6 +111,9 @@ function evaluationFromRow(row: EvaluationRow): VocabularyWordGameEvaluation {
     word: row.word,
     reading: row.reading,
     zipf: row.zipf === null ? null : number(row.zipf),
+    selectionZipfOverride: row.selection_zipf_override === null ? null : number(row.selection_zipf_override),
+    effectiveZipf: row.effective_zipf === null ? null : number(row.effective_zipf),
+    tahoiyaEligible: row.tahoiya_eligible,
     gameId: row.game_id,
     pairDistance: row.requested_pair_distance,
     llmDecision: row.decision,
@@ -161,6 +169,13 @@ export async function listVocabularyWordGameEvaluations(voter: string, limit = 1
   const rows = votingEnabled
     ? await sql`
       SELECT evaluation.id, evaluation.word_id, word.surface AS word, word.reading, word.zipf,
+        word.selection_zipf_override,
+        COALESCE(word.selection_zipf_override, word.zipf) AS effective_zipf,
+        EXISTS (
+          SELECT 1 FROM word_game_eligibility tahoiya
+          WHERE tahoiya.subject_type = 'word' AND tahoiya.subject_id = word.id
+            AND tahoiya.game_id = 'tahoiya' AND tahoiya.enabled AND NOT tahoiya.manually_suspended
+        ) AS tahoiya_eligible,
         evaluation.game_id, evaluation.requested_pair_distance, evaluation.decision,
         evaluation.usage_penalty, evaluation.game_penalty, evaluation.feedback_adjustment,
         evaluation.safety_flags, evaluation.reason_code, evaluation.pair_reason,
@@ -197,6 +212,13 @@ export async function listVocabularyWordGameEvaluations(voter: string, limit = 1
     ` as EvaluationRow[]
     : await sql`
       SELECT evaluation.id, evaluation.word_id, word.surface AS word, word.reading, word.zipf,
+        word.selection_zipf_override,
+        COALESCE(word.selection_zipf_override, word.zipf) AS effective_zipf,
+        EXISTS (
+          SELECT 1 FROM word_game_eligibility tahoiya
+          WHERE tahoiya.subject_type = 'word' AND tahoiya.subject_id = word.id
+            AND tahoiya.game_id = 'tahoiya' AND tahoiya.enabled AND NOT tahoiya.manually_suspended
+        ) AS tahoiya_eligible,
         evaluation.game_id, evaluation.requested_pair_distance, evaluation.decision,
         evaluation.usage_penalty, evaluation.game_penalty, evaluation.feedback_adjustment,
         evaluation.safety_flags, evaluation.reason_code, evaluation.pair_reason,
@@ -283,6 +305,83 @@ export async function castVocabularyWordGameVote(
     previousComment: previousRows[0]?.comment ?? null,
     humanAcceptCount,
     humanRejectCount,
+  };
+}
+
+export async function adoptVocabularyEvaluationWordForTahoiya(evaluationId: string) {
+  if (!uuid(evaluationId)) throw new Error("VOCABULARY_EVALUATION_TAHOIYA_INVALID");
+  const rows = await adminClient()`
+    WITH target AS (
+      SELECT word.id, word.zipf,
+        word.selection_zipf_override AS previous_selection_zipf_override,
+        COALESCE(word.selection_zipf_override, word.zipf) AS previous_effective_zipf,
+        EXISTS (
+          SELECT 1
+          FROM word_game_eligibility existing_eligibility
+          WHERE existing_eligibility.subject_type = 'word'
+            AND existing_eligibility.subject_id = word.id
+            AND existing_eligibility.game_id = 'tahoiya'
+            AND existing_eligibility.enabled
+            AND NOT existing_eligibility.manually_suspended
+        ) AS previously_tahoiya_eligible
+      FROM word_game_evaluations evaluation
+      JOIN words word ON word.id = evaluation.word_id
+      WHERE evaluation.id = ${evaluationId}::uuid
+        AND evaluation.game_id = 'wordwolf'
+      LIMIT 1
+    ), adjusted AS (
+      UPDATE words word SET
+        selection_zipf_override = CASE
+          WHEN COALESCE(word.selection_zipf_override, word.zipf) < 3
+            THEN word.selection_zipf_override
+          ELSE 2.9
+        END,
+        updated_at = NOW()
+      FROM target
+      WHERE word.id = target.id
+      RETURNING word.id, word.zipf, word.selection_zipf_override
+    ), eligibility AS (
+      INSERT INTO word_game_eligibility (subject_type, subject_id, game_id, enabled, reason)
+      SELECT 'word', adjusted.id, 'tahoiya', TRUE, 'admin-selected-from-wordwolf-review'
+      FROM adjusted
+      ON CONFLICT (subject_type, subject_id, game_id) DO UPDATE SET
+        enabled = TRUE,
+        manually_suspended = FALSE,
+        reason = EXCLUDED.reason,
+        updated_at = NOW()
+      RETURNING subject_id
+    )
+    SELECT adjusted.id AS word_id, adjusted.zipf,
+      adjusted.selection_zipf_override,
+      COALESCE(adjusted.selection_zipf_override, adjusted.zipf) AS effective_zipf,
+      target.previous_selection_zipf_override,
+      target.previous_effective_zipf,
+      target.previously_tahoiya_eligible
+    FROM adjusted
+    JOIN eligibility ON eligibility.subject_id = adjusted.id
+    JOIN target ON target.id = adjusted.id
+  ` as Array<{
+    word_id: string;
+    zipf: number | string | null;
+    selection_zipf_override: number | string | null;
+    effective_zipf: number | string;
+    previous_selection_zipf_override: number | string | null;
+    previous_effective_zipf: number | string | null;
+    previously_tahoiya_eligible: boolean;
+  }>;
+  const row = rows[0];
+  if (!row) throw new Error("VOCABULARY_EVALUATION_NOT_FOUND");
+  return {
+    evaluationId,
+    wordId: row.word_id,
+    zipf: row.zipf === null ? null : number(row.zipf),
+    previousSelectionZipfOverride: row.previous_selection_zipf_override === null
+      ? null : number(row.previous_selection_zipf_override),
+    previousEffectiveZipf: row.previous_effective_zipf === null ? null : number(row.previous_effective_zipf),
+    previouslyTahoiyaEligible: row.previously_tahoiya_eligible,
+    selectionZipfOverride: row.selection_zipf_override === null ? null : number(row.selection_zipf_override),
+    effectiveZipf: number(row.effective_zipf),
+    tahoiyaEligible: true,
   };
 }
 

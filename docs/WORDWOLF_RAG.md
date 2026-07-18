@@ -38,7 +38,14 @@
 ```text
 db/vocabulary/003_review_workflow.sql
 db/vocabulary/004_wordwolf_rag.sql
+db/vocabulary/005_human_review_votes.sql
+db/vocabulary/006_global_selection_zipf.sql
 ```
+
+`words.zipf`は辞書・集計由来の原値として維持する。全ゲーム共通の選定補正は
+`selection_zipf_override`へ保存し、実効Zipfを`COALESCE(selection_zipf_override, zipf)`で求める。
+管理画面から一つ目の単語をたほい屋候補へ送ると、実効Zipfが3以上または未計測の場合だけ
+2.9へ設定し、`word_game_eligibility(game_id = 'tahoiya')`を有効にする。
 
 旧 `shared_word_catalog` の197,040語を共通DBへ移す場合は、接続URLを画面・ログ・チャットへ貼らず、一時環境変数で指定する。
 

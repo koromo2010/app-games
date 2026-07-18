@@ -77,7 +77,7 @@ export async function loadVocabularyWordCandidates(input: {
     .map((word) => word.normalize("NFKC").trim().toLocaleLowerCase("ja"))
     .filter(Boolean))].slice(0, 1000);
   const rows = await sql`
-    SELECT word.id, word.surface, word.reading, word.zipf,
+    SELECT word.id, word.surface, word.reading, word.effective_zipf AS zipf,
       COALESCE(evaluation.usage_penalty, 0) AS usage_penalty,
       COALESCE(evaluation.game_penalty, 0) AS game_penalty,
       COALESCE(evaluation.feedback_adjustment, 0) AS feedback_adjustment
@@ -90,7 +90,8 @@ export async function loadVocabularyWordCandidates(input: {
       ON evaluation.word_id = word.id
       AND evaluation.game_id = 'wordwolf'
       AND evaluation.requested_pair_distance = ${input.pairDistance}
-    WHERE word.zipf BETWEEN ${targetZipf - 1.5} AND ${targetZipf + 1.5}
+    WHERE word.effective_zipf >= 3
+      AND word.effective_zipf BETWEEN ${targetZipf - 1.5} AND ${targetZipf + 1.5}
       AND NOT word.proper_noun
       AND NOT (word.normalized_surface = ANY(${excluded}::text[]))
       AND COALESCE(evaluation.decision, 'accept') <> 'reject'
@@ -98,7 +99,7 @@ export async function loadVocabularyWordCandidates(input: {
       AND (eligibility.valid_until IS NULL OR eligibility.valid_until > NOW())
     ORDER BY
       (-LN(GREATEST(RANDOM(), 0.000001))) /
-      EXP(-0.5 * POWER(((word.zipf
+      EXP(-0.5 * POWER(((word.effective_zipf
         - COALESCE(evaluation.usage_penalty, 0)
         - COALESCE(evaluation.game_penalty, 0)
         + COALESCE(evaluation.feedback_adjustment, 0)) - ${targetZipf}) / ${width}, 2)),
@@ -141,6 +142,8 @@ export async function findActiveVocabularyWordwolfPair(input: {
       AND eligibility.game_id = 'wordwolf'
     WHERE NOT (word_a.normalized_surface = ANY(${excluded}::text[]))
       AND NOT (word_b.normalized_surface = ANY(${excluded}::text[]))
+      AND word_a.effective_zipf >= 3
+      AND word_b.effective_zipf >= 3
       AND COALESCE(pair.pair_distance,
         CASE WHEN pair.difficulty IN ('near', 'balanced', 'wide') THEN pair.difficulty ELSE 'balanced' END
       ) = ${input.pairDistance}

@@ -12,10 +12,12 @@ import {
   type TahoiyaSourceEntry,
 } from "@/lib/tahoiya-source-library";
 import { submitDevelopmentVocabularyDraft } from "@/lib/vocabulary-draft-bridge";
+import { PostgresVocabularyCatalogRepository } from "@/lib/vocabulary-catalog-repository";
 
 const catalogKey = "tahoiya:topic:catalog:v1";
 const reviewedSourceKey = "tahoiya:source-library:reviewed:v1";
 const gitCatalogVersionKey = "tahoiya:topic:git-catalog-version:v1";
+const sharedVocabularyRepository = new PostgresVocabularyCatalogRepository();
 
 export type TahoiyaCatalogDifficulty = "easy" | "standard" | "extreme";
 
@@ -153,13 +155,29 @@ export async function ensureTahoiyaGitCandidates() {
 }
 
 export async function loadUnreviewedTahoiyaSources(limit = 10): Promise<TahoiyaSourceEntry[]> {
-  const [catalogWords, reviewedIds, registry] = await Promise.all([
+  const [catalogWords, reviewedIds, registry, sharedWords] = await Promise.all([
     loadTahoiyaCatalogWords(),
     redisCommand<string[]>(["SMEMBERS", reviewedSourceKey]).catch(() => []),
     loadTahoiyaSourceRegistry(),
+    sharedVocabularyRepository.findWords({ gameId: "tahoiya", limit: 100 }).catch(() => []),
   ]);
   const blockedWords = new Set(catalogWords);
   const reviewed = new Set(Array.isArray(reviewedIds) ? reviewedIds : []);
+  const sharedSources = sharedWords
+    .filter((word) => word.zipf !== null && word.zipf < 3)
+    .map((word): TahoiyaSourceEntry => ({
+      id: `word-master:${word.id}`,
+      sourceRegistryId: `word-master:${word.id}`,
+      word: word.surface,
+      reading: word.reading ?? undefined,
+      hint: `共通単語DBで選定された実効Zipf ${word.zipf?.toFixed(2)}`,
+      genre: "共通単語DB",
+      sourceLibrary: "GAME FIELDS 共通単語DB",
+      sourceUrl: "https://github.com/koromo2010/app-games",
+    }))
+    .filter((entry) => !reviewed.has(entry.id) && !blockedWords.has(normalizeWord(entry.word)))
+    .slice(0, Math.min(3, Math.max(1, limit)));
+  const externalLimit = Math.max(0, limit - sharedSources.length);
   const shuffledSourceIds = registry
     .map((source) => ({ id: source.id, sort: Math.random() }))
     .sort((left, right) => left.sort - right.sort)
@@ -173,17 +191,17 @@ export async function loadUnreviewedTahoiyaSources(limit = 10): Promise<TahoiyaS
   const selectOnePerSource = (shelf: TahoiyaSourceEntry[]) => shuffledSourceIds.flatMap((sourceId) => {
     const candidates = availableForSource(shelf, sourceId);
     return candidates.length > 0 ? [candidates[Math.floor(Math.random() * candidates.length)]] : [];
-  }).slice(0, Math.max(1, limit));
+  }).slice(0, externalLimit);
 
   let shelf = await loadTahoiyaSourceShelf();
   let selected = selectOnePerSource(shelf);
-  if (selected.length < limit) {
+  if (selected.length < externalLimit) {
     const missingSourceIds = shuffledSourceIds.filter((sourceId) => availableForSource(shelf, sourceId).length === 0);
     await refreshTahoiyaSourceShelf(missingSourceIds);
     shelf = await loadTahoiyaSourceShelf();
     selected = selectOnePerSource(shelf);
   }
-  return selected;
+  return [...sharedSources, ...selected].slice(0, Math.max(1, limit));
 }
 
 export type TahoiyaReviewedCandidate = {
