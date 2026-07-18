@@ -14,7 +14,7 @@ import { loadIndexedOnlineRoomPage } from "@/lib/online-room-list";
 import { createIndexedOnlineRoom, mutateOnlineRoomWithRetry } from "@/lib/online-room-persistence";
 import { normalizeTahoiyaRoom } from "@/lib/tahoiya-room-normalizer";
 import { sanitizeTahoiyaRoom, tahoiyaRoomChoice } from "@/lib/tahoiya-room-presentation";
-import { advanceToVoting, definitionWriterIds, reconcileProgress, scoreRoom, timedOut, voterIds, votingComplete, writingComplete } from "@/lib/tahoiya-room-domain";
+import { advanceToVoting, canAdvanceTahoiyaPhase, definitionWriterIds, reconcileProgress, scoreRoom, voterIds } from "@/lib/tahoiya-room-domain";
 import { recordPlayerActivity, recoverPlayerTimeout } from "@/lib/player-timeout-policy";
 import { isTahoiyaTopicGenerationProgressFresh } from "@/lib/tahoiya-topic-generation-progress";
 
@@ -329,11 +329,11 @@ export async function applyStoredTahoiyaRoomAction(code: string, action: Tahoiya
 
     if (action.type === "advance-phase") {
       if (!actorIsHost) throw new Error("TAHOIYA_ROOM_FORBIDDEN");
-      if (action.target === "voting" && current.phase === "writing") {
-        return action.force || writingComplete(current) || timedOut(current) ? advanceToVoting(current) : current;
+      if (action.target === "voting" && canAdvanceTahoiyaPhase(current, "voting", action.force)) {
+        return advanceToVoting(current);
       }
-      if (action.target === "result" && current.phase === "voting") {
-        return action.force || votingComplete(current) || timedOut(current) ? scoreRoom(current) : current;
+      if (action.target === "result" && canAdvanceTahoiyaPhase(current, "result", action.force)) {
+        return scoreRoom(current);
       }
       return current;
     }
