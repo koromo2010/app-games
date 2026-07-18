@@ -1,5 +1,7 @@
 export type VocabularyEvaluationDecision = "accept" | "reject";
 
+export const tahoiyaWordwolfFinalDecision = "rejected" as const;
+
 export function resolveVocabularyEvaluationDecision(
   llmDecision: VocabularyEvaluationDecision,
   acceptCount: number,

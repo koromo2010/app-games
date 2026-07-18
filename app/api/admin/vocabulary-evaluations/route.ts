@@ -114,7 +114,10 @@ export async function PATCH(request: Request) {
     if (body.action !== "adopt-tahoiya") {
       return Response.json({ error: "VOCABULARY_EVALUATION_TAHOIYA_INVALID" }, { status: 400 });
     }
-    const result = await adoptVocabularyEvaluationWordForTahoiya(body.evaluationId);
+    const result = await adoptVocabularyEvaluationWordForTahoiya(
+      body.evaluationId,
+      voterFor(session.email),
+    );
     await appendSiteAdminAuditLog(
       request,
       session,
@@ -124,11 +127,17 @@ export async function PATCH(request: Request) {
         tahoiyaEligible: result.previouslyTahoiyaEligible,
         selectionZipfOverride: result.previousSelectionZipfOverride,
         effectiveZipf: result.previousEffectiveZipf,
+        wordwolfFinalDecision: result.wordwolfReview.alreadyReviewed
+          ? result.wordwolfReview.decision
+          : null,
+        linkedDraftStatus: result.wordwolfReview.previousLinkedDraftStatus,
       },
       {
         tahoiyaEligible: true,
         selectionZipfOverride: result.selectionZipfOverride,
         effectiveZipf: result.effectiveZipf,
+        wordwolfFinalDecision: result.wordwolfReview.decision,
+        linkedDraftStatus: result.wordwolfReview.linkedDraftStatus,
       },
     );
     telemetry.success("vocabulary.tahoiya-adopt", { action: "adopt-tahoiya", affectedCount: 1 });

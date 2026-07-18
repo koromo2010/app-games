@@ -1,6 +1,10 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import type { VocabularySourceEnvironment, VocabularySourceType } from "./vocabulary-catalog-types.ts";
-import { resolveVocabularyEvaluationDecision, type VocabularyEvaluationDecision } from "./vocabulary-review.ts";
+import {
+  resolveVocabularyEvaluationDecision,
+  tahoiyaWordwolfFinalDecision,
+  type VocabularyEvaluationDecision,
+} from "./vocabulary-review.ts";
 
 export type VocabularyEvaluationFinalDecision = "adopted" | "rejected";
 
@@ -423,8 +427,13 @@ export async function finalizeVocabularyWordGameEvaluation(
   };
 }
 
-export async function adoptVocabularyEvaluationWordForTahoiya(evaluationId: string) {
+export async function adoptVocabularyEvaluationWordForTahoiya(
+  evaluationId: string,
+  reviewedBy: string,
+) {
   if (!uuid(evaluationId)) throw new Error("VOCABULARY_EVALUATION_TAHOIYA_INVALID");
+  const normalizedReviewer = text(reviewedBy, 320);
+  if (!normalizedReviewer) throw new Error("VOCABULARY_EVALUATION_FINAL_REVIEW_INVALID");
   const rows = await adminClient()`
     WITH target AS (
       SELECT word.id, word.zipf,
@@ -486,6 +495,11 @@ export async function adoptVocabularyEvaluationWordForTahoiya(evaluationId: stri
   }>;
   const row = rows[0];
   if (!row) throw new Error("VOCABULARY_EVALUATION_NOT_FOUND");
+  const wordwolfReview = await finalizeVocabularyWordGameEvaluation(
+    evaluationId,
+    tahoiyaWordwolfFinalDecision,
+    normalizedReviewer,
+  );
   return {
     evaluationId,
     wordId: row.word_id,
@@ -497,6 +511,7 @@ export async function adoptVocabularyEvaluationWordForTahoiya(evaluationId: stri
     selectionZipfOverride: row.selection_zipf_override === null ? null : number(row.selection_zipf_override),
     effectiveZipf: number(row.effective_zipf),
     tahoiyaEligible: true,
+    wordwolfReview,
   };
 }
 

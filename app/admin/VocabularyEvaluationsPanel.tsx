@@ -30,6 +30,7 @@ type TahoiyaAdoptionResult = {
   selectionZipfOverride: number | null;
   effectiveZipf: number;
   tahoiyaEligible: true;
+  wordwolfReview: EvaluationFinalReviewResult;
 };
 
 const decisionLabels = { accept: "OK", reject: "reject" } as const;
@@ -157,7 +158,8 @@ export function VocabularyEvaluationsPanel({ onAuthExpired, onDraftReviewed }: {
     const confirmed = window.confirm(
       `一つ目の単語「${evaluation.word}」をたほい屋候補へ追加します。`
       + `\n共通の実効Zipfは現在 ${currentZipf} で、3以上または未計測なら2.9へ設定します。`
-      + "\nこの実効値は通常ゲームの単語選定にも共通で使われます。よろしいですか？",
+      + "\nこの実効値は通常ゲームの単語選定にも共通で使われます。"
+      + "\n同時に、この評価をワードウルフ候補として不採用にして選考を終了します。よろしいですか？",
     );
     if (!confirmed) return;
     setAdoptingForTahoiya(evaluation.id); setMessage("");
@@ -171,14 +173,14 @@ export function VocabularyEvaluationsPanel({ onAuthExpired, onDraftReviewed }: {
       if (response.status === 401) { onAuthExpired(); return; }
       if (!response.ok || !data?.result) throw new Error(data?.error ?? "VOCABULARY_EVALUATION_TAHOIYA_FAILED");
       const result = data.result;
-      setEvaluations((current) => current.map((entry) => entry.id === result.evaluationId ? {
-        ...entry,
-        zipf: result.zipf,
-        selectionZipfOverride: result.selectionZipfOverride,
-        effectiveZipf: result.effectiveZipf,
-        tahoiyaEligible: true,
-      } : entry));
-      setMessage(`「${evaluation.word}」をたほい屋の生成候補へ追加しました。共通の実効Zipfは${result.effectiveZipf.toFixed(2)}です。`);
+      setEvaluations((current) => current.filter((entry) => entry.id !== result.evaluationId));
+      setComments((current) => Object.fromEntries(
+        Object.entries(current).filter(([evaluationId]) => evaluationId !== result.evaluationId),
+      ));
+      if (result.wordwolfReview.draftReviewed && result.wordwolfReview.linkedDraftId) {
+        onDraftReviewed(result.wordwolfReview.linkedDraftId);
+      }
+      setMessage(`「${evaluation.word}」をたほい屋の生成候補へ追加し、ワードウルフ候補として不採用を確定しました。共通の実効Zipfは${result.effectiveZipf.toFixed(2)}です。選考済みとして一覧から除外しました。`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "たほい屋候補へ追加できませんでした。");
     } finally { setAdoptingForTahoiya(null); }
@@ -186,7 +188,7 @@ export function VocabularyEvaluationsPanel({ onAuthExpired, onDraftReviewed }: {
 
   return <section className="mt-10 border-t border-white/10 pt-8">
     <div className="flex flex-wrap items-end justify-between gap-3">
-      <div><h2 className="text-2xl font-black">LLM評価レビュー</h2><p className="mt-1 text-sm leading-6 text-slate-400">直近100件のOK・rejectを表示します。管理者票は本番RAGの「お題評価」に1票として反映します。相方未生成を含むすべてのAI判定を、正式採用またはワードウルフ候補として不採用にして選考完了できます。</p></div>
+      <div><h2 className="text-2xl font-black">LLM評価レビュー</h2><p className="mt-1 text-sm leading-6 text-slate-400">直近100件のOK・rejectを表示します。管理者票は本番RAGの「お題評価」に1票として反映します。相方未生成を含むすべてのAI判定を、正式採用またはワードウルフ候補として不採用にして選考完了できます。たほい屋候補へ送った評価は、同時にワードウルフ不採用として確定します。</p></div>
       <button type="button" onClick={() => void load()} disabled={loading} className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold disabled:opacity-40">再読込</button>
     </div>
     <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="LLM評価の絞り込み">
