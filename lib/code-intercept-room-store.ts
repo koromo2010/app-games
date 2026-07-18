@@ -10,9 +10,11 @@ import {
   codeInterceptRoomHasSpace,
   codeInterceptTeamIds,
   codeInterceptTeamsAreStartable,
+  expireCodeInterceptPhase,
   finishCodeInterceptRound,
   isCodeLengthMode,
   isCodeRevealMode,
+  isCodeInterceptPhaseExpired,
   isCodeInterceptTeamId,
   isValidCodeInterceptAnswer,
   nextBalancedTeam,
@@ -51,6 +53,7 @@ const debugActionLabels: Record<CodeInterceptRoomAction["type"], string> = {
   "set-debug": "デバッグモードを変更",
   "set-debug-replay": "プレイバック記録設定を変更",
   "set-config": "ゲーム設定を変更",
+  "expire-phase": "時間切れでフェーズを進行",
   "start-game": "ゲームを開始",
   "select-code-length": "暗号桁数を確定",
   "submit-clues": "暗号ヒントを提出",
@@ -137,6 +140,11 @@ export async function applyStoredCodeInterceptAction(code: string, action: CodeI
     }
     const { isHost, isMember } = onlineRoomActorAccess(current.hostId, current.players, action.actorId);
     if (!isMember) throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
+    if (action.type === "expire-phase") {
+      if (current.phaseStartedAt !== action.phaseStartedAt || !isCodeInterceptPhaseExpired(current)) throw new Error("CODE_INTERCEPT_ROOM_CONFLICT");
+      return expireCodeInterceptPhase(current);
+    }
+    if (isCodeInterceptPhaseExpired(current)) return expireCodeInterceptPhase(current);
     if (action.type === "leave-room") {
       if (!canLeaveOnlineRoomLobby({ isHost, isMember }, current.phase)) throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
       return { ...current, players: current.players.filter((player) => player.id !== action.actorId) };

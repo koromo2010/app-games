@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
 import { GameAdSlot } from "@/app/components/GameAdSlot";
 import { GamePlayerMenu } from "@/app/components/GamePlayerMenu";
+import { GamePhaseTimer } from "@/app/components/GamePhaseTimer";
 import { GameResultShareButton } from "@/app/components/GameResultShareButton";
 import { GameRulesDialog } from "@/app/components/GameRulesDialog";
 import { GameTopBanner, gameTopBannerOffsetClass } from "@/app/components/GameTopBanner";
@@ -38,6 +39,7 @@ import {
 } from "@/lib/code-intercept";
 import { OnlineRoomApiError, restoreOnlineRoom } from "@/lib/online-room-api-client";
 import { defaultAvatarImage, fallbackAvatarColor, isPlayerAuthenticated, loadPersistentPlayerSession, type PlayerSession } from "@/lib/player-session";
+import { commonTimeLimitOptions } from "@/lib/game-room-config";
 
 const lastRoomKey = "code-intercept-last-room";
 const ownerIdKey = "code-intercept-owner-id";
@@ -53,6 +55,7 @@ function getOwnerId() {
 
 function teamLabel(teamId: CodeInterceptTeamId) { return teamId === "red" ? "赤チーム" : "青チーム"; }
 function codeRevealLabel(room: Pick<CodeInterceptRoom, "codeRevealMode">) { return room.codeRevealMode === "all" ? "全員に公開" : "自チームだけ"; }
+function timeLimitLabel(seconds: number) { return seconds > 0 ? `${seconds}秒` : "なし"; }
 function teamStyle(teamId: CodeInterceptTeamId) {
   return teamId === "red"
     ? "border-rose-300/35 bg-rose-300/10 text-rose-50"
@@ -85,6 +88,12 @@ function AnswerProposalList({ room, answererIds, proposals }: { room: CodeInterc
     <ul className="mt-2 space-y-1 text-sm">{answererIds.map((answererId) => <li key={answererId} className="flex items-center justify-between gap-3"><span>{room.players.find((player) => player.id === answererId)?.name ?? "回答者"}</span><strong className="font-mono">{proposals[answererId]?.join("・") ?? "検討中"}</strong></li>)}</ul>
     <p className="mt-2 text-xs leading-5 text-slate-400">全員の案が一致すると自動で確定します。不一致なら案を更新できます。</p>
   </div>;
+}
+
+function PhaseTimer({ room }: { room: CodeInterceptRoom }) {
+  return room.phaseStartedAt && room.actionTimeLimitSeconds > 0
+    ? <GamePhaseTimer key={room.phaseStartedAt} durationSeconds={room.actionTimeLimitSeconds} startedAt={room.phaseStartedAt} label="制限時間" />
+    : null;
 }
 
 function AnswerEditor({ title, room, answererIds, proposals, submittedAnswer, draft, codeLength, saving, canRevise, submitLabel, resubmitLabel, buttonClass, onChange, onSubmit }: {
@@ -188,6 +197,21 @@ function TeamScoreBoard({ room }: { room: CodeInterceptRoom }) {
   </section>;
 }
 
+function SecretWordGrid({ team }: { team: CodeInterceptRoom["teams"][number] }) {
+  return <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">{team.secretWords.map((word, index) => <div key={`${index}:${word}`} className="rounded-xl border border-white/15 bg-slate-950/50 p-3 text-center"><p className="font-mono text-xs text-slate-300">{index + 1}</p><p className="mt-1 text-lg font-black">{word}</p></div>)}</div>;
+}
+
+function RevealedSecretCards({ room }: { room: CodeInterceptRoom }) {
+  return <section className="rounded-2xl border border-amber-300/30 bg-slate-950/80 p-5">
+    <p className="text-xs font-black tracking-[0.2em] text-amber-300">SECRET CARDS REVEALED</p>
+    <h2 className="mt-1 text-xl font-black">両チームの秘密カード</h2>
+    <div className="mt-4 grid gap-4 lg:grid-cols-2">{codeInterceptTeamIds.map((teamId) => {
+      const team = room.teams.find((candidate) => candidate.id === teamId)!;
+      return <article key={teamId} className={`rounded-2xl border p-4 ${teamStyle(teamId)}`}><h3 className="font-black">{teamLabel(teamId)}</h3><SecretWordGrid team={team} /></article>;
+    })}</div>
+  </section>;
+}
+
 export function CodeInterceptGame() {
   const [session, setSession] = useState<PlayerSession | null>(null);
   const [room, setRoom] = useState<CodeInterceptRoom | null>(null);
@@ -256,6 +280,21 @@ export function CodeInterceptGame() {
   const clueDrafts = clueDraftsByRound[draftRound] ?? Array.from({ length: myCodeLength }, () => "");
   const allyDraft = allyDraftsByRound[draftRound] ?? room?.allyAnswerProposals[playerId] ?? (myTeamId ? room?.allyAnswers[myTeamId] : undefined) ?? [];
   const interceptDraft = interceptDraftsByRound[draftRound] ?? room?.interceptAnswerProposals[playerId] ?? (myTeamId ? room?.interceptAnswers[myTeamId] : undefined) ?? [];
+  const timerRoomCode = room?.code;
+  const timerPhase = room?.phase;
+  const timerPhaseStartedAt = room?.phaseStartedAt;
+  const timerDurationSeconds = room?.actionTimeLimitSeconds ?? 0;
+
+  useEffect(() => {
+    if (!timerRoomCode || !playerId || timerDurationSeconds <= 0 || !timerPhaseStartedAt || !timerPhase || !["code-length", "clue", "answer"].includes(timerPhase)) return;
+    const delay = Math.max(0, timerPhaseStartedAt + timerDurationSeconds * 1000 - Date.now()) + 100;
+    const timer = window.setTimeout(() => {
+      void applyCodeInterceptRoomAction(timerRoomCode, { type: "expire-phase", actorId: playerId, phaseStartedAt: timerPhaseStartedAt })
+        .then((saved) => setRoom((current) => current?.code === saved.code ? saved : current))
+        .catch(() => undefined);
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [playerId, timerDurationSeconds, timerPhase, timerPhaseStartedAt, timerRoomCode]);
 
   const runAction = useCallback(async (action: CodeInterceptRoomAction) => {
     if (!room || isSaving) return null;
@@ -342,9 +381,9 @@ export function CodeInterceptGame() {
       <p>両方が同じラウンドで起きると合計3ダメージです。たとえば残り5ポイントなら、5−1−2で残り2ポイントになります。</p>
     </div>
     <h3 className="mt-4 font-black text-white">勝ち負け</h3>
-    <p className="mt-2">両チームのダメージを同時に反映します。片方だけ0ポイントになったら、残ったチームの勝ちです。両チームが同じラウンドで0ポイントになった場合は引き分けです。</p>
+    <p className="mt-2">両チームのダメージを同時に反映します。片方だけ0ポイント以下になったら、残ったチームの勝ちです。両チームが同時に0ポイント以下になった場合は、マイナス幅が小さいチームの勝ちです。同じポイントなら引き分けです。</p>
     <h3 className="mt-4 font-black text-white">過去ログと時間制限</h3>
-    <p className="mt-2">終了したラウンドのヒントは過去ログで確認できます。正解暗号は部屋設定が「全員に公開」の場合だけ相手にも表示され、「自チームだけ」では相手の正解暗号と味方回答を伏せます。敵の秘密単語そのものは、ゲームが終わるまで見えません。現在の試作版には時間制限がありません。</p>
+    <p className="mt-2">終了したラウンドのヒントは過去ログで確認できます。正解暗号は部屋設定が「全員に公開」の場合だけ相手にも表示され、「自チームだけ」では相手の正解暗号と味方回答を伏せます。敵の秘密単語そのものは、ゲームが終わるまで見えません。時間制限は桁数選択・ヒント入力・回答の各段階に適用されます。</p>
   </GameRulesDialog>;
 
   if (!ready) return <main className="min-h-screen bg-slate-950 p-8 text-white">ログイン情報と部屋を確認中...</main>;
@@ -373,7 +412,7 @@ export function CodeInterceptGame() {
     {rulesDialog}<GameAdSlot gameId="code-intercept" surface={room.phase === "lobby" ? "room-lobby" : room.phase === "game-result" ? "result" : null} disabled={room.debugMode} />
     <div className="mx-auto grid max-w-7xl gap-4 px-4 py-5 lg:grid-cols-[300px_minmax(0,1fr)]">
       <aside className="space-y-4"><section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4"><div className="flex items-center justify-between"><h2 className="font-black">参加者</h2><span className="text-sm text-slate-400">{room.players.length}/{room.playerCapacity}人</span></div><ul className="mt-3 space-y-2">{room.players.map((player) => <PlayerCard key={player.id} player={player} room={room} me={playerId} saving={isSaving} onTeamChange={(teamId) => void runAction({ type: "set-team", actorId: playerId, teamId })} />)}</ul></section>
-        <RoomConfigSummary items={[{ label: "秘密カード C", value: `${room.cardCount}枚` }, { label: "暗号桁数", value: room.codeLengthMode === "fixed" ? `固定・${room.fixedCodeLength}桁` : "毎ラウンド選択" }, { label: "正解暗号", value: codeRevealLabel(room) }, { label: "初期ポイント X", value: `${room.initialPoints}点` }, { label: "伝達失敗", value: `−${room.miscommunicationDamage}` }, { label: "傍受成功", value: `−${room.interceptionDamage}` }, { label: "傍受開始", value: "第2ラウンド" }, { label: "時間制限", value: "なし" }]} />
+        <RoomConfigSummary items={[{ label: "秘密カード C", value: `${room.cardCount}枚` }, { label: "暗号桁数", value: room.codeLengthMode === "fixed" ? `固定・${room.fixedCodeLength}桁` : "毎ラウンド選択" }, { label: "正解暗号", value: codeRevealLabel(room) }, { label: "初期ポイント X", value: `${room.initialPoints}点` }, { label: "伝達失敗", value: `−${room.miscommunicationDamage}` }, { label: "傍受成功", value: `−${room.interceptionDamage}` }, { label: "傍受開始", value: "第2ラウンド" }, { label: "時間制限", value: timeLimitLabel(room.actionTimeLimitSeconds) }]} />
       </aside>
       <div className="space-y-4">
         {error && <p className="rounded-xl border border-rose-300/30 bg-rose-300/10 p-3 text-sm font-bold text-rose-100">{error}</p>}
@@ -394,6 +433,12 @@ export function CodeInterceptGame() {
               {room.codeLengthMode === "fixed" && <label className="mt-3 block text-sm font-bold">固定桁数<select value={room.fixedCodeLength} onChange={(event) => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, codeLengthMode: "fixed", codeRevealMode: room.codeRevealMode, fixedCodeLength: Number(event.target.value), actionTimeLimitSeconds: room.actionTimeLimitSeconds })} className="mt-1 w-full rounded-xl border border-white/15 bg-slate-800 px-3 py-3 text-white">{Array.from({ length: room.cardCount - 1 }, (_, index) => index + 2).map((length) => <option key={length} value={length}>{length}桁</option>)}</select></label>}
               <label className={`mt-3 block cursor-pointer rounded-xl border p-4 ${room.codeLengthMode === "per-round" ? "border-cyan-300 bg-cyan-300/10" : "border-white/10 bg-slate-950/40"}`}><span className="flex items-center gap-2 font-black"><input type="radio" name="code-length-mode" checked={room.codeLengthMode === "per-round"} onChange={() => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, codeLengthMode: "per-round", codeRevealMode: room.codeRevealMode, actionTimeLimitSeconds: room.actionTimeLimitSeconds })} />毎ラウンド選択</span><span className="mt-1 block text-sm text-slate-300">各チームの出題者が、そのラウンドに使う桁数を決めます。</span></label>
             </fieldset>
+            <label className="mt-5 block text-sm font-black">各入力の制限時間
+              <select value={room.actionTimeLimitSeconds} disabled={!isHost || isSaving} onChange={(event) => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, codeLengthMode: room.codeLengthMode, codeRevealMode: room.codeRevealMode, fixedCodeLength: room.fixedCodeLength, actionTimeLimitSeconds: Number(event.target.value) })} className="mt-2 w-full rounded-xl border border-white/15 bg-slate-800 px-3 py-3 text-white disabled:opacity-60">
+                {commonTimeLimitOptions.map((seconds) => <option key={seconds} value={seconds}>{timeLimitLabel(seconds)}</option>)}
+              </select>
+              <span className="mt-2 block text-xs font-normal leading-5 text-slate-300">桁数選択・ヒント入力・回答ごとにカウントします。時間切れでも自動で次へ進みます。</span>
+            </label>
             {room.codeLengthMode === "per-round" && <p className="mt-4 rounded-xl bg-cyan-300/10 p-3 text-sm leading-6 text-cyan-100">短い暗号は味方に伝えやすい一方、敵にも当てられやすくなります。長い暗号は傍受されにくい一方、多くのヒントが敵に残ります。</p>}
             <fieldset className="mt-5" disabled={!isHost || isSaving}>
               <legend className="text-sm font-black">ラウンド後の正解暗号</legend>
@@ -407,10 +452,12 @@ export function CodeInterceptGame() {
 
         {room.phase !== "lobby" && <TeamScoreBoard room={room} />}
 
-        {room.phase !== "lobby" && myTeam && <section className={`rounded-2xl border p-5 ${teamStyle(myTeam.id)}`}><div><p className="text-xs font-black tracking-[0.2em]">YOUR SECRET CARDS</p><h2 className="mt-1 text-xl font-black">{teamLabel(myTeam.id)}の秘密カード</h2></div><div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">{myTeam.secretWords.map((word, index) => <div key={`${index}:${word}`} className="rounded-xl border border-white/15 bg-slate-950/50 p-3 text-center"><p className="font-mono text-xs text-slate-300">{index + 1}</p><p className="mt-1 text-lg font-black">{word}</p></div>)}</div></section>}
+        {room.phase !== "lobby" && room.phase !== "game-result" && myTeam && <section className={`rounded-2xl border p-5 ${teamStyle(myTeam.id)}`}><div><p className="text-xs font-black tracking-[0.2em]">YOUR SECRET CARDS</p><h2 className="mt-1 text-xl font-black">{teamLabel(myTeam.id)}の秘密カード</h2></div><SecretWordGrid team={myTeam} /></section>}
+
+        {room.phase === "game-result" && <RevealedSecretCards room={room} />}
 
         {room.phase === "code-length" && myTeamId && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6">
-          <p className="text-sm font-black text-cyan-300">第{room.roundNumber}ラウンド・桁数選択</p>
+          <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm font-black text-cyan-300">第{room.roundNumber}ラウンド・桁数選択</p><PhaseTimer room={room} /></div>
           {isClueGiver ? <>
             <h2 className="mt-2 text-2xl font-black">今回の暗号は何桁にしますか？</h2>
             {room.codeLengthChoices[myTeamId] ? <p className="mt-5 rounded-xl border border-emerald-300/30 bg-emerald-300/10 p-4 text-center text-xl font-black text-emerald-100">{room.codeLengthChoices[myTeamId]?.codeLength}桁で確定しました</p> : <div className="mt-5 grid gap-3 sm:grid-cols-3">{Array.from({ length: room.cardCount - 1 }, (_, index) => index + 2).map((length) => <button key={length} type="button" disabled={isSaving} onClick={() => void runAction({ type: "select-code-length", actorId: playerId, codeLength: length })} className="rounded-2xl border border-cyan-300/30 bg-cyan-300/10 px-4 py-5 text-2xl font-black text-cyan-100 hover:bg-cyan-300 hover:text-cyan-950 disabled:opacity-40">{length}桁</button>)}</div>}
@@ -421,13 +468,13 @@ export function CodeInterceptGame() {
         </section>}
 
         {room.phase === "clue" && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6">
-          <p className="text-sm font-black text-amber-300">第{room.roundNumber}ラウンド・ヒント入力</p>
+          <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm font-black text-amber-300">第{room.roundNumber}ラウンド・ヒント入力</p><PhaseTimer room={room} /></div>
           <div className="mt-3 grid grid-cols-2 gap-3">{codeInterceptTeamIds.map((teamId) => <div key={teamId} className={`rounded-xl border p-3 text-center ${teamStyle(teamId)}`}><span className="text-sm font-bold">{teamLabel(teamId)}</span><strong className="ml-2 text-xl">{codeLengthForTeam(room, teamId)}桁</strong></div>)}</div>
           {isClueGiver && myCode ? <><h2 className="mt-4 text-2xl font-black">あなたが出題者です</h2><div className="mt-4 rounded-2xl border border-amber-300/30 bg-amber-300/10 p-5 text-center"><p className="text-xs font-black text-amber-200">今回の暗号</p><p className="mt-2 font-mono text-5xl font-black tracking-widest text-amber-200">{myCode.join("・")}</p></div>{room.clues[myTeamId!] ? <p className="mt-4 rounded-xl border border-emerald-300/30 bg-emerald-300/10 p-4 font-black text-emerald-100">提出済み：{room.clues[myTeamId!]?.join("／")}</p> : <div className="mt-4 grid gap-3 sm:grid-cols-4">{Array.from({ length: myCodeLength }, (_, index) => <label key={index} className="text-sm font-bold">{index + 1}つ目のヒント<input value={clueDrafts[index] ?? ""} maxLength={40} onChange={(event) => setClueDraftsByRound((current) => { const next = [...(current[draftRound] ?? Array.from({ length: myCodeLength }, () => ""))]; next[index] = event.target.value; return { ...current, [draftRound]: next }; })} className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-3" /></label>)}</div>}{!room.clues[myTeamId!] && <button type="button" disabled={isSaving || clueDrafts.length < myCodeLength || clueDrafts.slice(0, myCodeLength).some((clue) => !clue.trim())} onClick={() => void runAction({ type: "submit-clues", actorId: playerId, clues: clueDrafts.slice(0, myCodeLength).map((clue) => clue.trim()) })} className="mt-4 w-full rounded-xl bg-amber-300 px-4 py-3 font-black text-slate-950 disabled:opacity-40">ヒントを確定</button>}</> : <><h2 className="mt-4 text-2xl font-black">出題者がヒントを作成中</h2><p className="mt-3 text-slate-300">今回の出題者：{room.players.find((player) => player.id === room.clueGiverIds[myTeamId!])?.name ?? "確認中"}</p></>}
           {isHost && room.debugMode && <button type="button" onClick={() => void runAction({ type: "debug-fill-clues", actorId: playerId })} className="mt-5 w-full rounded-xl border border-cyan-300/30 bg-cyan-300/10 px-4 py-3 font-black text-cyan-100">デバッグ：ヒントを自動入力</button>}<p className="mt-4 text-center text-sm text-slate-400">両チームが提出するまで、敵のヒントは表示されません。</p>
         </section>}
 
-        {room.phase === "answer" && myTeamId && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><p className="text-sm font-black text-amber-300">第{room.roundNumber}ラウンド・同時回答</p><h2 className="mt-2 text-2xl font-black">両チームのヒントが公開されました</h2><div className="mt-5 grid gap-3 sm:grid-cols-2">{codeInterceptTeamIds.map((teamId) => <div key={teamId} className={`rounded-xl border p-4 ${teamStyle(teamId)}`}><p className="font-black">{teamLabel(teamId)}・{codeLengthForTeam(room, teamId)}桁</p><ol className="mt-2 space-y-1">{room.clues[teamId]?.map((clue, index) => <li key={index}><span className="mr-2 font-mono text-slate-400">{index + 1}.</span><strong>{clue}</strong></li>)}</ol></div>)}</div>
+        {room.phase === "answer" && myTeamId && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm font-black text-amber-300">第{room.roundNumber}ラウンド・同時回答</p><PhaseTimer room={room} /></div><h2 className="mt-2 text-2xl font-black">両チームのヒントが公開されました</h2><div className="mt-5 grid gap-3 sm:grid-cols-2">{codeInterceptTeamIds.map((teamId) => <div key={teamId} className={`rounded-xl border p-4 ${teamStyle(teamId)}`}><p className="font-black">{teamLabel(teamId)}・{codeLengthForTeam(room, teamId)}桁</p><ol className="mt-2 space-y-1">{room.clues[teamId]?.map((clue, index) => <li key={index}><span className="mr-2 font-mono text-slate-400">{index + 1}.</span><strong>{clue}</strong></li>)}</ol></div>)}</div>
           {isClueGiver ? <p className="mt-5 rounded-xl bg-white/[0.05] p-4 text-sm text-slate-300">あなたは今回の出題者です。味方の回答者全員の案が一致するまで待ってください。</p> : <div className="mt-5 grid gap-5 lg:grid-cols-2">
             <div className={`rounded-2xl border p-4 ${myTeamId === "red" ? "order-1" : "order-2"} ${teamStyle(myTeamId)}`}><AnswerEditor title={`味方の暗号を回答（${myCodeLength}桁）`} room={room} answererIds={myAnswererIds} proposals={room.allyAnswerProposals} submittedAnswer={room.allyAnswers[myTeamId]} draft={allyDraft} codeLength={myCodeLength} saving={isSaving} canRevise={!enemyAnswersSubmitted} submitLabel={myAnswererIds.length > 1 ? room.allyAnswerProposals[playerId] ? "回答案を更新" : "回答案を共有" : "チーム回答を確定"} resubmitLabel="味方回答を再提出" buttonClass="bg-emerald-300 text-emerald-950" onChange={(value) => setAllyDraftsByRound((current) => ({ ...current, [draftRound]: value }))} onSubmit={() => void runAction({ type: "submit-ally-answer", actorId: playerId, answer: allyDraft })} /></div>
             <div className={`rounded-2xl border p-4 ${otherCodeInterceptTeam(myTeamId) === "red" ? "order-1" : "order-2"} ${teamStyle(otherCodeInterceptTeam(myTeamId))}`}>{room.roundNumber === 1 ? <><h3 className="font-black">敵の暗号を傍受（{enemyCodeLength}桁）</h3><p className="mt-3 text-sm text-slate-300">第1ラウンドは傍受回答を行いません。</p></> : <AnswerEditor title={`敵の暗号を傍受（${enemyCodeLength}桁）`} room={room} answererIds={myAnswererIds} proposals={room.interceptAnswerProposals} submittedAnswer={room.interceptAnswers[myTeamId]} draft={interceptDraft} codeLength={enemyCodeLength} saving={isSaving} canRevise={!enemyAnswersSubmitted} submitLabel={myAnswererIds.length > 1 ? room.interceptAnswerProposals[playerId] ? "回答案を更新" : "回答案を共有" : "傍受回答を確定"} resubmitLabel="傍受回答を再提出" buttonClass="bg-sky-300 text-sky-950" onChange={(value) => setInterceptDraftsByRound((current) => ({ ...current, [draftRound]: value }))} onSubmit={() => void runAction({ type: "submit-intercept-answer", actorId: playerId, answer: interceptDraft })} />}</div>
