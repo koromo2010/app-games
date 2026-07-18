@@ -27,6 +27,7 @@ import {
 import type { TahoiyaDifficulty, TahoiyaTopic } from "@/lib/tahoiya-types";
 import { parseLlmJson } from "@/lib/llm-json";
 import { gameApiAccessDeniedResponse } from "@/lib/game-access";
+import { vocabularyDatabaseErrorCode } from "@/lib/vocabulary-postgres-store";
 
 const tahoiyaTopicPromptVersion = "tahoiya-effective-zipf-topic-v12";
 const tahoiyaBatchPromptVersion = "tahoiya-effective-zipf-batch-v2";
@@ -652,7 +653,13 @@ export async function generateTahoiyaTopicResponse(
       await remember(topic);
       return Response.json(topic);
     } catch (error) {
-      emitObservabilityEvent("error", "ai.generation", { game: "tahoiya", operation: "catalog-definition", outcome: "failed", errorCode: observabilityErrorCode(error) });
+      emitObservabilityEvent("error", "ai.generation", {
+        game: "tahoiya",
+        operation: "catalog-definition",
+        outcome: "failed",
+        errorCode: observabilityErrorCode(error),
+        databaseCode: vocabularyDatabaseErrorCode(error),
+      });
       return Response.json({ error: `${tahoiyaDifficultyLabel(difficulty)}候補から正解文を生成できませんでした。もう一度お試しください。` }, { status: 503 });
     }
   }

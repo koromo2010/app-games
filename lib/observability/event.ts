@@ -13,6 +13,7 @@ const stringFieldNames = [
   "provider",
   "model",
   "errorCode",
+  "databaseCode",
 ] as const;
 const numberFieldNames = [
   "revision",
