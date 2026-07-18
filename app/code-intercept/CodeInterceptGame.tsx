@@ -113,6 +113,17 @@ function ResultCard({ result, room }: { result: CodeInterceptTeamRoundResult; ro
   </article>;
 }
 
+function TeamRoundHistoryTable({ room, teamId }: { room: CodeInterceptRoom; teamId: CodeInterceptTeamId }) {
+  return <section className={`rounded-2xl border p-4 ${teamStyle(teamId)}`}>
+    <h3 className="text-lg font-black">{teamLabel(teamId)}の過去ログ</h3>
+    <div className="mt-3 overflow-x-auto"><table className="min-w-full text-left text-sm"><thead><tr className="border-b border-white/15 text-slate-300"><th className="px-2 py-2">R</th><th className="px-2 py-2">桁数</th><th className="px-2 py-2">ヒント</th><th className="px-2 py-2">味方回答</th><th className="px-2 py-2">傍受回答</th><th className="px-2 py-2">傍受結果</th></tr></thead><tbody>{room.roundHistory.map((round) => {
+      const result = round.teams.find((team) => team.teamId === teamId);
+      if (!result) return null;
+      return <tr key={`${round.roundNumber}:${teamId}`} className="border-b border-white/[0.07]"><td className="px-2 py-3 font-mono">{round.roundNumber}</td><td className="px-2 py-3 font-black">{result.codeLength}</td><td className="px-2 py-3">{result.clues.join("・")}</td><td className="px-2 py-3 font-mono font-black">{result.allyAnswer?.join("・") ?? (result.secretCode.length === 0 ? "非公開" : "―")}</td><td className="px-2 py-3 font-mono">{result.enemyInterceptAnswer?.join("・") ?? "―"}</td><td className="px-2 py-3">{round.roundNumber < room.interceptionStartsAtRound ? "傍受なし" : result.enemyIntercepted ? "傍受成功" : "傍受失敗"}</td></tr>;
+    })}</tbody></table></div>
+  </section>;
+}
+
 export function CodeInterceptGame() {
   const [session, setSession] = useState<PlayerSession | null>(null);
   const [room, setRoom] = useState<CodeInterceptRoom | null>(null);
@@ -358,7 +369,7 @@ export function CodeInterceptGame() {
 
         {room.phase === "game-result" && <section className="rounded-2xl border border-amber-300/30 bg-slate-950/85 p-6 text-center"><p className="text-sm font-black text-amber-300">GAME OVER</p><h2 className="mt-2 text-4xl font-black">{room.winner === "draw" ? "同時決着・引き分け" : `${teamLabel(room.winner!)}の勝利`}</h2><p className="mt-3 text-slate-300">全{room.roundNumber}ラウンドで決着しました。</p><RoomResultActions canReturnToRoom={isHost || resultReturnGate.canReturnToRoom} disabled={isSaving} isHost={isHost} isRoomDissolved={resultReturnGate.isRoomDissolved} onReturnToRoom={isHost ? () => runAction({ type: "reset-game", actorId: playerId }) : () => resultReturnGate.returnToRoom((code) => codeInterceptRoomApi.fetchRoom(code, playerId), () => setError("部屋に戻れません。解散されたか、参加情報が変更されています。"))} onDissolve={isHost ? dissolveRoom : undefined} /><GameResultShareButton title="コードインターセプト プレイログ" text={codeInterceptShareText(room)} url="/games/code-intercept" /></section>}
 
-        {room.roundHistory.length > 0 && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><h2 className="text-xl font-black">公開済みの過去ログ</h2><p className="mt-1 text-sm text-slate-400">部屋の公開設定に従い、全ラウンドで確認できる情報を表示します。</p><div className="mt-4 overflow-x-auto"><table className="min-w-full text-left text-sm"><thead><tr className="border-b border-white/15 text-slate-400"><th className="px-2 py-2">R</th><th className="px-2 py-2">チーム</th><th className="px-2 py-2">桁数</th><th className="px-2 py-2">ヒント</th><th className="px-2 py-2">正解暗号</th><th className="px-2 py-2">傍受回答</th><th className="px-2 py-2">結果</th></tr></thead><tbody>{room.roundHistory.flatMap((round) => round.teams.map((result) => <tr key={`${round.roundNumber}:${result.teamId}`} className="border-b border-white/[0.07]"><td className="px-2 py-3 font-mono">{round.roundNumber}</td><td className="px-2 py-3 font-black">{teamLabel(result.teamId)}</td><td className="px-2 py-3 font-black">{result.codeLength}</td><td className="px-2 py-3">{result.clues.join("・")}</td><td className="px-2 py-3 font-mono font-black">{result.secretCode.length > 0 ? result.secretCode.join("・") : "非公開"}</td><td className="px-2 py-3 font-mono">{result.enemyInterceptAnswer?.join("・") ?? "―"}</td><td className="px-2 py-3">{round.roundNumber === 1 ? "傍受なし" : result.enemyIntercepted ? "傍受成功" : "傍受失敗"}</td></tr>))}</tbody></table></div></section>}
+        {room.roundHistory.length > 0 && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><h2 className="text-xl font-black">公開済みの過去ログ</h2><p className="mt-1 text-sm text-slate-400">チームごとに、ヒント・味方回答・相手からの傍受結果を確認できます。</p><div className="mt-4 grid gap-4 xl:grid-cols-2">{codeInterceptTeamIds.map((teamId) => <TeamRoundHistoryTable key={teamId} room={room} teamId={teamId} />)}</div></section>}
       </div>
     </div>
   </main>;
