@@ -216,7 +216,7 @@ export async function applyStoredCodeInterceptAction(code: string, action: CodeI
     }
     if (action.type === "submit-clues") {
       const player = targetPlayer(current, action.actorId, action.playerId);
-      if (current.phase !== "clue" || current.clueGiverIds[player.teamId] !== player.id || current.clues[player.teamId]) throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
+      if (current.phase !== "clue" || current.clueGiverIds[player.teamId] !== player.id) throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
       if (!areValidCodeInterceptClues(action.clues, codeLengthForTeam(current, player.teamId))) throw new Error("CODE_INTERCEPT_INVALID_CLUE");
       const next = { ...current, clues: { ...current.clues, [player.teamId]: action.clues.map((clue) => clue.trim()) } };
       return allCluesSubmitted(next) ? { ...next, phase: "answer" as const, phaseStartedAt: Date.now() } : next;
