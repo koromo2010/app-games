@@ -8,6 +8,7 @@ export const codeInterceptPlayerLimit = onlineRoomPlayerLimits.codeIntercept;
 export const codeInterceptTeamIds = ["red", "blue"] as const;
 export type CodeInterceptTeamId = (typeof codeInterceptTeamIds)[number];
 export type CodeLengthMode = "fixed" | "per-round";
+export type CodeRevealMode = "all" | "own-team";
 
 export const codeInterceptMinimumCardCount = 2;
 export const codeInterceptMaximumCardCount = 8;
@@ -15,6 +16,7 @@ export const codeInterceptMaximumCardCount = 8;
 export const codeInterceptDefaults = {
   cardCount: 4,
   codeLengthMode: "fixed" as CodeLengthMode,
+  codeRevealMode: "all" as CodeRevealMode,
   fixedCodeLength: 3,
   initialPoints: 5,
   miscommunicationDamage: 1,
@@ -89,6 +91,7 @@ export type CodeInterceptRoom = {
   roundNumber: number;
   cardCount: number;
   codeLengthMode: CodeLengthMode;
+  codeRevealMode: CodeRevealMode;
   fixedCodeLength: number;
   initialPoints: number;
   miscommunicationDamage: number;
@@ -104,6 +107,8 @@ export type CodeInterceptRoom = {
   roundCodeLengths: Partial<Record<CodeInterceptTeamId, number>>;
   secretCodes: Partial<Record<CodeInterceptTeamId, number[]>>;
   clues: Partial<Record<CodeInterceptTeamId, string[]>>;
+  allyAnswerProposals: Record<string, number[]>;
+  interceptAnswerProposals: Record<string, number[]>;
   allyAnswers: Partial<Record<CodeInterceptTeamId, number[]>>;
   interceptAnswers: Partial<Record<CodeInterceptTeamId, number[]>>;
   roundHistory: CodeInterceptRoundLog[];
@@ -130,7 +135,7 @@ export type CodeInterceptRoomAction =
   | { type: "set-team"; actorId: string; teamId: CodeInterceptTeamId }
   | { type: "set-debug"; actorId: string; enabled: boolean }
   | { type: "set-debug-replay"; actorId: string; enabled: boolean }
-  | { type: "set-config"; actorId: string; cardCount: number; codeLengthMode: CodeLengthMode; fixedCodeLength?: number; actionTimeLimitSeconds: number }
+  | { type: "set-config"; actorId: string; cardCount: number; codeLengthMode: CodeLengthMode; codeRevealMode: CodeRevealMode; fixedCodeLength?: number; actionTimeLimitSeconds: number }
   | { type: "start-game"; actorId: string }
   | { type: "select-code-length"; actorId: string; playerId?: string; codeLength: number }
   | { type: "submit-clues"; actorId: string; playerId?: string; clues: string[] }
@@ -163,6 +168,10 @@ export function isCodeInterceptTeamId(value: unknown): value is CodeInterceptTea
 
 export function isCodeLengthMode(value: unknown): value is CodeLengthMode {
   return value === "fixed" || value === "per-round";
+}
+
+export function isCodeRevealMode(value: unknown): value is CodeRevealMode {
+  return value === "all" || value === "own-team";
 }
 
 export function normalizeCodeInterceptCardCount(value: unknown) {
@@ -219,6 +228,18 @@ export function areValidCodeInterceptClues(clues: unknown, codeLength: number): 
 
 export function codesEqual(left: readonly number[] | null | undefined, right: readonly number[] | null | undefined) {
   return Boolean(left && right && left.length === right.length && left.every((value, index) => value === right[index]));
+}
+
+export function codeInterceptAnswererIds(room: Pick<CodeInterceptRoom, "players" | "clueGiverIds">, teamId: CodeInterceptTeamId) {
+  return room.players
+    .filter((player) => player.teamId === teamId && player.id !== room.clueGiverIds[teamId])
+    .map((player) => player.id);
+}
+
+export function consensusCodeInterceptAnswer(proposals: Readonly<Record<string, number[]>>, answererIds: readonly string[]) {
+  if (answererIds.length === 0) return null;
+  const first = proposals[answererIds[0]];
+  return first && answererIds.every((playerId) => codesEqual(proposals[playerId], first)) ? [...first] : null;
 }
 
 export function clueGiverForRound(players: readonly CodeInterceptPlayer[], teamId: CodeInterceptTeamId, roundNumber: number) {
@@ -301,22 +322,40 @@ export function sanitizeCodeInterceptRoomForPlayer(room: CodeInterceptRoom, play
     secretWords: revealAll || team.id === viewerTeam ? [...team.secretWords] : [],
   }));
   const revealCurrentCodes = room.phase === "round-result" || room.phase === "game-result";
+  const canSeeTeamCode = (teamId: CodeInterceptTeamId) => room.codeRevealMode === "all" || teamId === viewerTeam;
+  const canSeeTeamDiscussion = Boolean(viewerTeam && room.phase === "answer" && room.clueGiverIds[viewerTeam] !== playerId);
   const secretCodes = Object.fromEntries(codeInterceptTeamIds.flatMap((teamId) => {
-    const visible = revealCurrentCodes || (room.phase === "clue" && room.clueGiverIds[teamId] === playerId);
+    const visible = (revealCurrentCodes && canSeeTeamCode(teamId)) || (room.phase === "clue" && room.clueGiverIds[teamId] === playerId);
     return visible && room.secretCodes[teamId] ? [[teamId, [...room.secretCodes[teamId]!]]] : [];
   })) as CodeInterceptRoom["secretCodes"];
   const clues = room.phase === "clue" && viewerTeam
     ? (room.clues[viewerTeam] ? { [viewerTeam]: [...room.clues[viewerTeam]!] } : {})
     : Object.fromEntries(codeInterceptTeamIds.flatMap((teamId) => room.clues[teamId] ? [[teamId, [...room.clues[teamId]!]]] : []));
   const allyAnswers = revealCurrentCodes
-    ? room.allyAnswers
-    : viewerTeam && room.allyAnswers[viewerTeam] ? { [viewerTeam]: [...room.allyAnswers[viewerTeam]!] } : {};
+    ? Object.fromEntries(codeInterceptTeamIds.flatMap((teamId) => canSeeTeamCode(teamId) && room.allyAnswers[teamId]
+      ? [[teamId, [...room.allyAnswers[teamId]!]]]
+      : [])) as CodeInterceptRoom["allyAnswers"]
+    : canSeeTeamDiscussion && viewerTeam && room.allyAnswers[viewerTeam] ? { [viewerTeam]: [...room.allyAnswers[viewerTeam]!] } : {};
   const interceptAnswers = revealCurrentCodes
     ? room.interceptAnswers
-    : viewerTeam && room.interceptAnswers[viewerTeam] ? { [viewerTeam]: [...room.interceptAnswers[viewerTeam]!] } : {};
+    : canSeeTeamDiscussion && viewerTeam && room.interceptAnswers[viewerTeam] ? { [viewerTeam]: [...room.interceptAnswers[viewerTeam]!] } : {};
+  const visibleAnswererIds = canSeeTeamDiscussion && viewerTeam ? new Set(codeInterceptAnswererIds(room, viewerTeam)) : new Set<string>();
+  const visibleProposals = (proposals: Readonly<Record<string, number[]>>) => Object.fromEntries(
+    Object.entries(proposals).flatMap(([proposalPlayerId, answer]) => visibleAnswererIds.has(proposalPlayerId)
+      ? [[proposalPlayerId, [...answer]]]
+      : []),
+  );
+  const allyAnswerProposals = visibleProposals(room.allyAnswerProposals);
+  const interceptAnswerProposals = visibleProposals(room.interceptAnswerProposals);
   const codeLengthChoices = room.phase === "code-length" && viewerTeam
     ? (room.codeLengthChoices[viewerTeam] ? { [viewerTeam]: { ...room.codeLengthChoices[viewerTeam]! } } : {})
     : Object.fromEntries(codeInterceptTeamIds.flatMap((teamId) => room.codeLengthChoices[teamId] ? [[teamId, { ...room.codeLengthChoices[teamId]! }]] : []));
   const roundCodeLengths = room.phase === "code-length" ? {} : { ...room.roundCodeLengths };
-  return { ...room, passphrase: "", teams, codeLengthChoices, roundCodeLengths, secretCodes, clues, allyAnswers, interceptAnswers };
+  const roundHistory = room.roundHistory.map((round) => ({
+    ...round,
+    teams: round.teams.map((result) => canSeeTeamCode(result.teamId)
+      ? { ...result, secretCode: [...result.secretCode], allyAnswer: result.allyAnswer ? [...result.allyAnswer] : null }
+      : { ...result, secretCode: [], allyAnswer: null }),
+  }));
+  return { ...room, passphrase: "", teams, codeLengthChoices, roundCodeLengths, secretCodes, clues, allyAnswerProposals, interceptAnswerProposals, allyAnswers, interceptAnswers, roundHistory };
 }

@@ -1,7 +1,9 @@
 import { randomUUID } from "node:crypto";
 import {
   areValidCodeInterceptClues,
+  codeInterceptAnswererIds,
   codeLengthForTeam,
+  consensusCodeInterceptAnswer,
   codeInterceptRuntimeBalance,
   codeInterceptMinimumPlayers,
   codeInterceptRoomHasSpace,
@@ -9,6 +11,7 @@ import {
   codeInterceptTeamsAreStartable,
   finishCodeInterceptRound,
   isCodeLengthMode,
+  isCodeRevealMode,
   isCodeInterceptTeamId,
   isValidCodeInterceptAnswer,
   nextBalancedTeam,
@@ -151,12 +154,13 @@ export async function applyStoredCodeInterceptAction(code: string, action: CodeI
     if (action.type === "set-config") {
       if (!isHost || current.phase !== "lobby") throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
       const cardCount = normalizeCodeInterceptCardCount(action.cardCount);
-      if (cardCount !== action.cardCount || !isCodeLengthMode(action.codeLengthMode)) throw new Error("CODE_INTERCEPT_INVALID_CONFIG");
+      if (cardCount !== action.cardCount || !isCodeLengthMode(action.codeLengthMode) || !isCodeRevealMode(action.codeRevealMode)) throw new Error("CODE_INTERCEPT_INVALID_CONFIG");
       if (action.codeLengthMode === "fixed" && (action.fixedCodeLength === undefined || normalizeCodeInterceptCodeLength(action.fixedCodeLength, cardCount) !== action.fixedCodeLength)) throw new Error("CODE_INTERCEPT_INVALID_CONFIG");
       return {
         ...current,
         cardCount,
         codeLengthMode: action.codeLengthMode,
+        codeRevealMode: action.codeRevealMode,
         fixedCodeLength: action.codeLengthMode === "fixed"
           ? action.fixedCodeLength!
           : normalizeCodeInterceptCodeLength(current.fixedCodeLength, cardCount),
@@ -211,14 +215,26 @@ export async function applyStoredCodeInterceptAction(code: string, action: CodeI
       const player = targetPlayer(current, action.actorId, action.playerId);
       if (current.phase !== "answer" || current.clueGiverIds[player.teamId] === player.id || current.allyAnswers[player.teamId]) throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
       if (!isValidCodeInterceptAnswer(action.answer, current.cardCount, codeLengthForTeam(current, player.teamId))) throw new Error("CODE_INTERCEPT_INVALID_ANSWER");
-      const next = { ...current, allyAnswers: { ...current.allyAnswers, [player.teamId]: [...action.answer] } };
+      const allyAnswerProposals = { ...current.allyAnswerProposals, [player.id]: [...action.answer] };
+      const consensus = consensusCodeInterceptAnswer(allyAnswerProposals, codeInterceptAnswererIds(current, player.teamId));
+      const next = {
+        ...current,
+        allyAnswerProposals,
+        allyAnswers: consensus ? { ...current.allyAnswers, [player.teamId]: consensus } : current.allyAnswers,
+      };
       return allAnswersSubmitted(next) ? finishCodeInterceptRound(next) : next;
     }
     if (action.type === "submit-intercept-answer") {
       const player = targetPlayer(current, action.actorId, action.playerId);
-      if (current.phase !== "answer" || current.roundNumber < current.interceptionStartsAtRound || current.interceptAnswers[player.teamId]) throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
+      if (current.phase !== "answer" || current.clueGiverIds[player.teamId] === player.id || current.roundNumber < current.interceptionStartsAtRound || current.interceptAnswers[player.teamId]) throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
       if (!isValidCodeInterceptAnswer(action.answer, current.cardCount, codeLengthForTeam(current, otherCodeInterceptTeam(player.teamId)))) throw new Error("CODE_INTERCEPT_INVALID_ANSWER");
-      const next = { ...current, interceptAnswers: { ...current.interceptAnswers, [player.teamId]: [...action.answer] } };
+      const interceptAnswerProposals = { ...current.interceptAnswerProposals, [player.id]: [...action.answer] };
+      const consensus = consensusCodeInterceptAnswer(interceptAnswerProposals, codeInterceptAnswererIds(current, player.teamId));
+      const next = {
+        ...current,
+        interceptAnswerProposals,
+        interceptAnswers: consensus ? { ...current.interceptAnswers, [player.teamId]: consensus } : current.interceptAnswers,
+      };
       return allAnswersSubmitted(next) ? finishCodeInterceptRound(next) : next;
     }
     if (!isHost || !current.debugMode) throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");

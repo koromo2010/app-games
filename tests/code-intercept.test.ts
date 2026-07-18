@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   codeInterceptDefaults,
+  consensusCodeInterceptAnswer,
   codeInterceptTeamsAreStartable,
   finishCodeInterceptRound,
   isValidCodeInterceptAnswer,
@@ -22,7 +23,7 @@ function room(): CodeInterceptRoom {
       { id: "b2", name: "青2", joinedAt: now, teamId: "blue" },
     ],
     playerCapacity: 6, gameNumber: 1, roundNumber: 2,
-    cardCount: 4, codeLengthMode: "fixed", fixedCodeLength: 3, initialPoints: 5, miscommunicationDamage: 1, interceptionDamage: 2,
+    cardCount: 4, codeLengthMode: "fixed", codeRevealMode: "all", fixedCodeLength: 3, initialPoints: 5, miscommunicationDamage: 1, interceptionDamage: 2, interceptionStartsAtRound: 2,
     actionTimeLimitSeconds: 0, phaseStartedAt: now, debugMode: false, debugReplayEnabled: false,
     teams: [
       { id: "red", name: "赤チーム", points: 5, secretWords: ["猫", "宇宙", "寿司", "雨"] },
@@ -30,7 +31,7 @@ function room(): CodeInterceptRoom {
     ],
     clueGiverIds: { red: "r1", blue: "b1" }, codeLengthChoices: {}, roundCodeLengths: { red: 3, blue: 3 }, secretCodes: { red: [3, 1, 4], blue: [2, 4, 1] },
     clues: { red: ["醤油", "肉球", "傘"], blue: ["高原", "木陰", "波"] },
-    allyAnswers: { red: [3, 1, 2], blue: [2, 4, 1] }, interceptAnswers: { red: [2, 4, 1], blue: [3, 1, 4] },
+    allyAnswerProposals: {}, interceptAnswerProposals: {}, allyAnswers: { red: [3, 1, 2], blue: [2, 4, 1] }, interceptAnswers: { red: [2, 4, 1], blue: [3, 1, 4] },
     roundHistory: [], winner: null, debugLog: [], createdAt: now, updatedAt: now,
   };
 }
@@ -99,6 +100,34 @@ test("sanitization hides enemy secrets and unresolved answers", () => {
   assert.equal(sanitized.secretCodes.red, undefined);
   assert.equal(sanitized.interceptAnswers.blue, undefined);
   assert.deepEqual(sanitized.interceptAnswers.red, [2, 4, 1]);
+});
+
+test("own-team reveal mode hides the enemy correct code and successful ally answer after the round", () => {
+  const finished = finishCodeInterceptRound({ ...room(), codeRevealMode: "own-team" });
+  const redView = sanitizeCodeInterceptRoomForPlayer(finished, "r2");
+  const redResult = redView.roundHistory[0].teams.find((team) => team.teamId === "red")!;
+  const blueResult = redView.roundHistory[0].teams.find((team) => team.teamId === "blue")!;
+  assert.deepEqual(redResult.secretCode, [3, 1, 4]);
+  assert.deepEqual(redResult.allyAnswer, [3, 1, 2]);
+  assert.deepEqual(blueResult.secretCode, []);
+  assert.equal(blueResult.allyAnswer, null);
+  assert.deepEqual(redView.secretCodes.red, [3, 1, 4]);
+  assert.equal(redView.secretCodes.blue, undefined);
+});
+
+test("multiple answerers only reach consensus when every proposal matches", () => {
+  assert.equal(consensusCodeInterceptAnswer({ r2: [3, 1, 4] }, ["r2", "r3"]), null);
+  assert.equal(consensusCodeInterceptAnswer({ r2: [3, 1, 4], r3: [3, 4, 1] }, ["r2", "r3"]), null);
+  assert.deepEqual(consensusCodeInterceptAnswer({ r2: [3, 1, 4], r3: [3, 1, 4] }, ["r2", "r3"]), [3, 1, 4]);
+});
+
+test("answer proposals are only visible to non-clue-giver teammates", () => {
+  const current = room();
+  current.players.push({ id: "r3", name: "赤3", joinedAt: Date.now(), teamId: "red" });
+  current.allyAnswerProposals = { r2: [3, 1, 4], r3: [3, 4, 1], b2: [2, 4, 1] };
+  assert.deepEqual(sanitizeCodeInterceptRoomForPlayer(current, "r2").allyAnswerProposals, { r2: [3, 1, 4], r3: [3, 4, 1] });
+  assert.deepEqual(sanitizeCodeInterceptRoomForPlayer(current, "r1").allyAnswerProposals, {});
+  assert.deepEqual(sanitizeCodeInterceptRoomForPlayer(current, "b2").allyAnswerProposals, { b2: [2, 4, 1] });
 });
 
 test("per-round choices stay hidden from the enemy until both teams lock", () => {
