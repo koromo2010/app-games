@@ -51,21 +51,22 @@ export function useTahoiyaLobbyActions(params: Params) {
     if (!room) throw new Error("部屋の設定を読み込めませんでした。");
     const query = new URLSearchParams({ roomCode: room.code, difficulty: room.topicDifficulty, screenDifficulty: "1" });
     const response = await fetch(`/api/tahoiya/topic?${query}`, { cache: "no-store" });
-    const data = await response.json() as { error?: string; acceptedCount?: number; persisted?: boolean; generation?: TahoiyaTopic["generation"]; screening?: Array<{ accepted: boolean; word: string; verdict: "known" | "borderline" | "ordinary-unknown" | "almost-nobody-knows"; entityFlag: "none" | "university" | "company"; estimatedRecognitionPercent: number; confidence: number; reason: string }> };
+    const data = await response.json() as { error?: string; acceptedCount?: number; persisted?: boolean; generation?: TahoiyaTopic["generation"]; screening?: Array<{ accepted: boolean; word: string; verdict: "known" | "borderline" | "ordinary-unknown" | "almost-nobody-knows"; entityFlag: "none" | "university" | "company" | "place"; estimatedRecognitionPercent: number; confidence: number; reason: string }> };
     if (!response.ok || !data.screening) throw new Error(data.error || "難易度を審査できませんでした。");
     const labels = { known: "既知寄り", borderline: "境界", "ordinary-unknown": "一般には不明", "almost-nobody-knows": "ほぼ誰も知らない" } as const;
-    const entityLabels = { none: "なし", university: "大学名", company: "企業名" } as const;
+    const entityLabels = { none: "なし", university: "大学名", company: "企業名", place: "地名" } as const;
+    const targetLabel = room.topicDifficulty === "extreme" ? "魔境（認知率0〜1%）" : "秘境（一般には不明）";
     return {
       fields: [
         { label: "先行審査", value: `${data.screening.length}語` },
-        { label: "一般には不明ライン合格", value: `${data.acceptedCount ?? 0}語` },
+        { label: `${targetLabel}ライン合格`, value: `${data.acceptedCount ?? 0}語` },
         { label: "保存", value: data.persisted ? "あり" : "なし（確認用モック）" },
       ],
       items: data.screening.map((item) => ({
         title: item.word,
         status: item.accepted ? `合格・${labels[item.verdict]}` : item.entityFlag === "none" ? `除外・${labels[item.verdict]}` : `除外・${entityLabels[item.entityFlag]}`,
         fields: [
-          { label: "大学・企業フラグ", value: entityLabels[item.entityFlag] },
+          { label: "固有名詞フラグ", value: entityLabels[item.entityFlag] },
           { label: "一般成人の推定認知率", value: `${item.estimatedRecognitionPercent}%` },
           { label: "判定確信度", value: `${item.confidence}%` },
           { label: "理由", value: item.reason },

@@ -599,6 +599,7 @@ async function reviewSourceBatch(
 async function screenDifficultyCandidates(
   mode: Exclude<GameLlmMode, "local">,
   candidates: TahoiyaWordCandidate[],
+  difficulty: TahoiyaDifficulty,
 ) {
   const compactCandidates = candidates.map((candidate) => ({
     sourceId: `word-master:${candidate.id}`,
@@ -606,21 +607,24 @@ async function screenDifficultyCandidates(
     reading: candidate.reading,
     effectiveZipf: candidate.effectiveZipf,
   }));
+  const target = difficulty === "extreme"
+    ? "今回は魔境です。almost-nobody-knowsのうち推定認知率0〜1%だけを合格とし、2%は除外します。"
+    : "今回は秘境です。ordinary-unknownだけを合格とします。";
   const prompt = [
     "あなたは辞書当てゲーム『たほい屋』の難易度審査員です。候補10語について、一般的な日本人の成人が見出し語の意味を知っている割合を推定してください。",
     "辞書・言語・候補語の専門家ではない20〜60代の成人を基準にします。あなた自身が意味を知っているかではなく、一般の参加者の認知を推定してください。読み方を知っていても意味を説明できない場合は『知っている』に数えません。",
     "この先行審査では説明を作らず、難易度だけを見ます。10語を相対順位にせず、各語を同じ絶対基準で独立判定してください。",
     "verdictは推定認知率に合わせ、known=30%以上、borderline=15〜29%、ordinary-unknown=3〜14%、almost-nobody-knows=0〜2%のいずれかにしてください。",
-    "今回の合格対象はordinary-unknownだけです。一般に知られすぎているknownとborderlineだけでなく、偽説明を考える手掛かりも乏しいalmost-nobody-knowsも除外します。",
-    "大学の正式名称または通称ならentityFlag=university、企業・法人・商号ならentityFlag=company、それ以外はentityFlag=noneにしてください。大学名と企業名は認知率にかかわらず除外します。",
+    target,
+    "大学の正式名称または通称ならentityFlag=university、企業・法人・商号ならentityFlag=company、国・地域・自治体・町域・山川・駅などの地名ならentityFlag=place、それ以外はentityFlag=noneにしてください。大学名・企業名・地名は認知率にかかわらず除外します。",
     "confidenceは判定への確信度を0〜100で返します。reasonは一般認知の観点だけを80文字以内で書き、語義そのものは説明しないでください。",
     "入力のsourceIdを維持し、全件を入力順で1回ずつ返してください。JSON以外は返さないでください。",
-    "形式: {\"items\":[{\"sourceId\":\"...\",\"verdict\":\"known|borderline|ordinary-unknown|almost-nobody-knows\",\"entityFlag\":\"none|university|company\",\"estimatedRecognitionPercent\":8,\"confidence\":80,\"reason\":\"...\"}]}",
+    "形式: {\"items\":[{\"sourceId\":\"...\",\"verdict\":\"known|borderline|ordinary-unknown|almost-nobody-knows\",\"entityFlag\":\"none|university|company|place\",\"estimatedRecognitionPercent\":8,\"confidence\":80,\"reason\":\"...\"}]}",
     `候補: ${JSON.stringify(compactCandidates)}`,
   ].join("\n\n");
   emitObservabilityEvent("info", "ai.generation", { game: "tahoiya", operation: "difficulty-screening-mock", sourceCount: candidates.length, outcome: "started" });
   const generated = await generateGameLlmText(prompt, mode, { quality: "standard", timeoutMs: 25_000 });
-  const screened = parseTahoiyaDifficultyScreening(generated.text, compactCandidates.map((candidate) => ({ id: candidate.sourceId, word: candidate.word })));
+  const screened = parseTahoiyaDifficultyScreening(generated.text, compactCandidates.map((candidate) => ({ id: candidate.sourceId, word: candidate.word })), difficulty);
   if (screened.length !== candidates.length) throw new Error(`Difficulty screening returned ${screened.length}/${candidates.length} items`);
   const generation: GameGenerationMeta = {
     provider: generated.provider,
@@ -657,7 +661,7 @@ export async function generateTahoiyaTopicResponse(
       }
       const mode = await resolveGameLlmMode();
       if (mode === "local") return Response.json({ error: "難易度を審査できるAI APIがありません。" }, { status: 503 });
-      const screening = await screenDifficultyCandidates(mode, candidates);
+      const screening = await screenDifficultyCandidates(mode, candidates, difficulty);
       return Response.json({
         screening: screening.screened,
         acceptedCount: screening.screened.filter((item) => item.accepted).length,
