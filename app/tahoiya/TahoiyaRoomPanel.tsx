@@ -48,7 +48,7 @@ type Props = {
   onAnswererChange: (value: string) => void;
   onShowDefinitionChange: (value: boolean) => void;
   onTimeLimitChange: (value: number) => void;
-  onTestWordGeneration: (forceNew: boolean) => Promise<DebugWordGenerationResult>;
+  onTestWordGeneration: () => Promise<DebugWordGenerationResult>;
   onTestDifficultyScreening: () => Promise<DebugWordGenerationResult>;
   onAddTestPlayer: () => void;
   onStartRound: () => void;
@@ -175,5 +175,5 @@ function HostActions(props: Props & { room: TahoiyaRoom }) {
   const allPlayersReturned = allRoomPlayersReturned(props.room.lobbyReturn, props.room.players);
   const waitingPlayerCount = props.room.players.length - (props.room.lobbyReturn?.returnedPlayerIds.length ?? 0);
   const generationInProgress = Boolean(props.room.topicGenerationProgress);
-  return <>{props.isDebugMode && !generationInProgress && <><DebugWordGenerationTest onGenerate={() => props.onTestDifficultyScreening()} heading="未判定10語を難易度審査" description="共通DBの未判定10語をLLMへ渡し、認知率と除外フラグを判定済みDBへ保存します。秘境は1%超〜14%、魔境は0〜1%。センシティブ・大学名・企業名・地名は除外します。説明文と出題履歴はまだ作りません。" showModeToggle={false} fixedButtonLabel="未判定10語を審査して保存" fixedRepeatLabel="次の未判定10語を審査" /><DebugWordGenerationTest onGenerate={() => props.onTestWordGeneration(false)} heading={`${difficulty}通常抽出フロー確認`} description="完成済み候補、判定済みで説明未作成の候補、未判定10語の順に探します。使用する1語だけ説明文を生成して完成済み候補へ保存し、デバッグ確認では出題履歴を付けません。" showModeToggle={false} fixedButtonLabel="通常抽出フローを確認" fixedRepeatLabel="もう一度通常抽出を確認" /><button onClick={props.onAddTestPlayer} disabled={props.room.players.length >= 8} className={`w-full ${subtleButtonClass}`}>テストプレイヤー追加</button></>}<button onClick={props.onStartRound} disabled={props.isStarting || generationInProgress || !allPlayersReturned} className={`w-full ${primaryButtonClass}`}>{props.isStarting || generationInProgress ? "お題を準備中..." : allPlayersReturned ? "ラウンド開始" : `復帰待ち（あと${waitingPlayerCount}人）`}</button></>;
+  return <>{props.isDebugMode && !generationInProgress && <><DebugWordGenerationTest onGenerate={() => props.onTestDifficultyScreening()} heading="未判定10語を難易度審査" description="共通DBの未判定10語をLLMへ渡し、認知率と除外フラグを判定済みDBへ保存します。秘境は1%超〜14%、魔境は0〜1%。センシティブ・大学名・企業名・地名は除外します。説明文と出題履歴はまだ作りません。" showModeToggle={false} fixedButtonLabel="未判定10語を審査して保存" fixedRepeatLabel="次の未判定10語を審査" /><DebugWordGenerationTest onGenerate={() => props.onTestWordGeneration()} heading={`${difficulty}正式採用フロー確認`} description="完成済み候補、判定済みで説明未作成の候補、未判定10語の順に探します。使用する1語だけ説明文を生成して完成済み候補へ保存し、デバッグ確認では出題履歴を付けません。" showModeToggle={false} fixedButtonLabel="正式採用フローを確認" fixedRepeatLabel="もう一度正式フローを確認" /><button onClick={props.onAddTestPlayer} disabled={props.room.players.length >= 8} className={`w-full ${subtleButtonClass}`}>テストプレイヤー追加</button></>}<button onClick={props.onStartRound} disabled={props.isStarting || generationInProgress || !allPlayersReturned} className={`w-full ${primaryButtonClass}`}>{props.isStarting || generationInProgress ? "お題を準備中..." : allPlayersReturned ? "ラウンド開始" : `復帰待ち（あと${waitingPlayerCount}人）`}</button></>;
 }
