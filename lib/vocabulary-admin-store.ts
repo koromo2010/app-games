@@ -108,6 +108,20 @@ function number(value: unknown, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function textArray(value: unknown, maximumItems = 20, maximumItemLength = 200) {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    const normalized = text(item, maximumItemLength);
+    return normalized ? [normalized] : [];
+  }).slice(0, maximumItems);
+}
+
+function jsonObject(value: unknown, maximumLength = 20_000) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const serialized = JSON.stringify(value);
+  return serialized.length <= maximumLength ? serialized : null;
+}
+
 function evaluationFromRow(row: EvaluationRow): VocabularyWordGameEvaluation {
   const humanAcceptCount = number(row.human_accept_count);
   const humanRejectCount = number(row.human_reject_count);
@@ -611,6 +625,23 @@ async function activateDefinition(draft: VocabularyDraftSubmission, reviewedBy: 
   const reading = text(draft.payload.reading, 100);
   const gameId = text(draft.payload.gameId, 80);
   if (!word || !definition || !gameId) throw new Error("VOCABULARY_DRAFT_INVALID");
+  const requestedDifficulty = text(draft.payload.difficulty, 20);
+  const difficulty = requestedDifficulty === "easy" || requestedDifficulty === "extreme"
+    ? requestedDifficulty
+    : "standard";
+  const requestedSource = text(draft.payload.source, 20);
+  const sourceKind = requestedSource === "fallback" ? "fallback" : "llm";
+  const note = text(draft.payload.note, 1_000) ?? "";
+  const sourceDetail = text(draft.payload.sourceDetail, 2_000) ?? "";
+  const genre = text(draft.payload.genre, 200);
+  const sourceLibrary = text(draft.payload.sourceLibrary, 300);
+  const sourceUrl = text(draft.payload.sourceUrl, 2_000);
+  const difficultyReason = text(draft.payload.difficultyReason, 1_000);
+  const difficultyJudgedBy = text(draft.payload.difficultyJudgedBy, 200);
+  const difficultyRubricVersion = text(draft.payload.difficultyRubricVersion, 200);
+  const feedbackAnchorTags = textArray(draft.payload.feedbackAnchorTags);
+  const difficultyFeedbackIds = textArray(draft.payload.difficultyFeedbackIds);
+  const generation = jsonObject(draft.payload.generation);
   const sql = adminClient();
   const rows = await sql`
     WITH selected_word AS (
@@ -627,6 +658,51 @@ async function activateDefinition(draft: VocabularyDraftSubmission, reviewedBy: 
       SELECT id, ${definition}, ${gameId}, 'active', ${draft.sourceType}, ${draft.sourceEnvironment},
         ${draft.sourceReference}, ${draft.provider}, ${draft.model}, ${draft.promptVersion}, ${draft.createdBy}, NOW(), ${reviewedBy}
       FROM selected_word RETURNING id
+    ), eligibility AS (
+      INSERT INTO word_game_eligibility (subject_type, subject_id, game_id, enabled, reason)
+      SELECT 'word', id, ${gameId}, TRUE, 'approved-definition-draft'
+      FROM selected_word
+      ON CONFLICT (subject_type, subject_id, game_id) DO UPDATE SET
+        enabled = TRUE,
+        manually_suspended = FALSE,
+        reason = EXCLUDED.reason,
+        updated_at = NOW()
+      RETURNING subject_id
+    ), tahoiya_topic AS (
+      INSERT INTO tahoiya_topics (
+        word_id, definition_id, difficulty, note, source_detail, source_kind,
+        genre, source_library, source_url, difficulty_reason, difficulty_judged_by,
+        difficulty_rubric_version, feedback_anchor_tags, difficulty_feedback_ids,
+        generation, status, source_type, source_environment, source_reference,
+        created_by, reviewed_at, reviewed_by
+      )
+      SELECT selected_word.id, definition.id, ${difficulty}, ${note}, ${sourceDetail}, ${sourceKind},
+        ${genre}, ${sourceLibrary}, ${sourceUrl}, ${difficultyReason}, ${difficultyJudgedBy},
+        ${difficultyRubricVersion}, ${feedbackAnchorTags}::text[], ${difficultyFeedbackIds}::text[],
+        ${generation}::jsonb, 'active', ${draft.sourceType}, ${draft.sourceEnvironment},
+        ${draft.sourceReference}, ${draft.createdBy}, NOW(), ${reviewedBy}
+      FROM selected_word, definition
+      WHERE ${gameId} = 'tahoiya'
+      ON CONFLICT (word_id) DO UPDATE SET
+        definition_id = EXCLUDED.definition_id,
+        difficulty = EXCLUDED.difficulty,
+        note = EXCLUDED.note,
+        source_detail = EXCLUDED.source_detail,
+        source_kind = EXCLUDED.source_kind,
+        genre = EXCLUDED.genre,
+        source_library = EXCLUDED.source_library,
+        source_url = EXCLUDED.source_url,
+        difficulty_reason = EXCLUDED.difficulty_reason,
+        difficulty_judged_by = EXCLUDED.difficulty_judged_by,
+        difficulty_rubric_version = EXCLUDED.difficulty_rubric_version,
+        feedback_anchor_tags = EXCLUDED.feedback_anchor_tags,
+        difficulty_feedback_ids = EXCLUDED.difficulty_feedback_ids,
+        generation = EXCLUDED.generation,
+        status = 'active',
+        reviewed_at = NOW(),
+        reviewed_by = ${reviewedBy},
+        updated_at = NOW()
+      RETURNING id
     )
     UPDATE vocabulary_draft_submissions SET status = 'active', reviewed_at = NOW(), reviewed_by = ${reviewedBy},
       materialized_subject_type = 'definition', materialized_subject_id = (SELECT id FROM definition)

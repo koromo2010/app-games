@@ -28,11 +28,16 @@ const redisReadCommands = new Set([
   "INFO",
   "HGET",
   "HGETALL",
+  "HKEYS",
+  "HLEN",
+  "HSCAN",
+  "HVALS",
   "HMGET",
   "MGET",
   "SCARD",
   "SCAN",
   "SISMEMBER",
+  "SMISMEMBER",
   "SMEMBERS",
   "SSCAN",
   "TTL",
@@ -40,6 +45,7 @@ const redisReadCommands = new Set([
   "ZRANGE",
   "ZREVRANGE",
   "ZSCORE",
+  "ZMSCORE",
 ]);
 
 export function getRedisRequestTimeoutMs() {

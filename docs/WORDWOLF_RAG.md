@@ -1,6 +1,6 @@
 # ワードウルフ共通単語RAG
 
-最終更新: 2026-07-17
+最終更新: 2026-07-18
 
 ## 目的
 
@@ -42,6 +42,7 @@ db/vocabulary/005_human_review_votes.sql
 db/vocabulary/006_global_selection_zipf.sql
 db/vocabulary/007_evaluation_final_reviews.sql
 db/vocabulary/008_tahoiya_implies_wordwolf_rejection.sql
+db/vocabulary/009_tahoiya_catalog.sql
 ```
 
 `words.zipf`は辞書・集計由来の原値として維持する。全ゲーム共通の選定補正は

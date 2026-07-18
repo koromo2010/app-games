@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ensureSiteAdminStepUp } from "@/lib/site-admin-passkey-client";
 import type { VocabularyDraftSubmission } from "@/lib/vocabulary-admin-store";
 import { LegacyVocabularyImportPanel } from "./LegacyVocabularyImportPanel";
+import { TahoiyaCatalogMigrationPanel } from "./TahoiyaCatalogMigrationPanel";
 import { VocabularyEvaluationsPanel } from "./VocabularyEvaluationsPanel";
 
 function draftTitle(draft: VocabularyDraftSubmission) {
@@ -57,6 +58,7 @@ export function VocabularyDraftsPanel({ onAuthExpired }: { onAuthExpired: () => 
   }, []);
 
   return <section className="mx-auto max-w-6xl px-4 py-8">
+    <TahoiyaCatalogMigrationPanel onAuthExpired={onAuthExpired} />
     <LegacyVocabularyImportPanel onAuthExpired={onAuthExpired} />
     <VocabularyEvaluationsPanel onAuthExpired={onAuthExpired} onDraftReviewed={removeReviewedDraft} />
     <div className="mt-10 border-t border-white/10 pt-8">
