@@ -4,19 +4,8 @@ import { normalizeGameGenerationMeta } from "@/lib/game-ai-types";
 import { retrieveGameFeedback } from "@/lib/game-feedback-store";
 import { redisCommand } from "@/lib/redis-store";
 import { emitObservabilityEvent } from "@/lib/observability";
+import { hasVeryCommonSpokenHomophone } from "@/lib/tahoiya-difficulty";
 import {
-  hasVeryCommonSpokenHomophone,
-  type TahoiyaSourceEntry,
-} from "@/lib/tahoiya-source-library";
-import {
-  matchesTahoiyaEffectiveZipf,
-  tahoiyaDifficultyLabel,
-  tahoiyaEffectiveZipfQuery,
-} from "@/lib/tahoiya-difficulty";
-import { submitDevelopmentVocabularyDraft } from "@/lib/vocabulary-draft-bridge";
-import { PostgresVocabularyCatalogRepository } from "@/lib/vocabulary-catalog-repository";
-import {
-  listActiveTahoiyaCatalogWords,
   listActiveTahoiyaTopics,
   recordTahoiyaTopicUsageByWord,
   type StoredTahoiyaTopic,
@@ -35,11 +24,9 @@ import {
   type LegacyTahoiyaTopicCatalogRecord,
 } from "@/lib/tahoiya-legacy-catalog";
 
-const reviewedSourceKey = "tahoiya:source-library:reviewed:v1";
 const gitCatalogVersionKey = "tahoiya:topic:git-catalog-version:v1";
-const sharedVocabularyRepository = new PostgresVocabularyCatalogRepository();
 
-export type TahoiyaCatalogDifficulty = "easy" | "standard" | "extreme";
+type TahoiyaCatalogDifficulty = "easy" | "standard" | "extreme";
 
 export type TahoiyaWordCandidate = {
   id: string;
@@ -59,7 +46,6 @@ type GitCandidate = {
   genre: string;
   sourceLibrary: string;
   sourceUrl: string;
-  sourceEntryId: string;
   generatedAt: string;
   generation: unknown;
 };
@@ -131,69 +117,6 @@ export async function ensureTahoiyaGitCandidates() {
   return added;
 }
 
-export async function loadUnreviewedTahoiyaSources(
-  difficulty: TahoiyaDifficulty,
-  limit = 10,
-): Promise<TahoiyaSourceEntry[]> {
-  const [catalogWords, reviewedIds, sharedWords] = await Promise.all([
-    loadTahoiyaCatalogWords(),
-    redisCommand<string[]>(["SMEMBERS", reviewedSourceKey]).catch(() => []),
-    sharedVocabularyRepository.findWords({
-      gameId: "tahoiya",
-      limit: 500,
-      ...tahoiyaEffectiveZipfQuery(difficulty),
-    }).catch(() => []),
-  ]);
-  const blockedWords = new Set(catalogWords);
-  const reviewed = new Set(Array.isArray(reviewedIds) ? reviewedIds : []);
-  return sharedWords
-    .filter((word) => matchesTahoiyaEffectiveZipf(word.zipf, difficulty))
-    .map((word): TahoiyaSourceEntry => ({
-      id: `word-master:${word.id}`,
-      sourceRegistryId: `word-master:${word.id}`,
-      word: word.surface,
-      reading: word.reading ?? undefined,
-      hint: `${tahoiyaDifficultyLabel(difficulty)}・実質Zipf ${word.zipf?.toFixed(2)}`,
-      genre: tahoiyaDifficultyLabel(difficulty),
-      sourceLibrary: "GAME FIELDS 共通単語DB",
-      sourceUrl: "https://github.com/koromo2010/app-games",
-    }))
-    .filter((entry) => !reviewed.has(entry.id) && !blockedWords.has(normalizeWord(entry.word)))
-    .map((entry) => ({ entry, order: Math.random() }))
-    .sort((left, right) => left.order - right.order)
-    .slice(0, Math.max(1, Math.min(50, Math.floor(limit))))
-    .map(({ entry }) => entry);
-}
-
-export async function findUnexperiencedTahoiyaWordCandidates(
-  difficulty: TahoiyaDifficulty,
-  playerIds: string[],
-  blockedWords: string[],
-  limit = 20,
-): Promise<TahoiyaWordCandidate[]> {
-  if (playerIds.length === 0) return [];
-  const blocked = new Set(blockedWords.map(normalizeWord));
-  const words = await sharedVocabularyRepository.findWords({
-    gameId: "tahoiya",
-    limit: 500,
-    ...tahoiyaEffectiveZipfQuery(difficulty),
-  });
-  const candidates = words
-    .filter((word) => matchesTahoiyaEffectiveZipf(word.zipf, difficulty) && !blocked.has(word.normalizedSurface))
-    .map((word) => ({
-      id: word.id,
-      word: word.surface,
-      reading: word.reading ?? undefined,
-      effectiveZipf: word.zipf as number,
-    }));
-  const unexperienced = await filterUnexperiencedTahoiyaWords(candidates, playerIds);
-  return unexperienced
-    .map((candidate) => ({ candidate, order: Math.random() }))
-    .sort((left, right) => left.order - right.order)
-    .slice(0, Math.max(1, Math.min(50, Math.floor(limit))))
-    .map(({ candidate }) => candidate);
-}
-
 export async function findUnexperiencedScreenedTahoiyaWordCandidates(
   difficulty: TahoiyaDifficulty,
   playerIds: string[],
@@ -234,48 +157,6 @@ export async function findUnscreenedUnexperiencedTahoiyaWordCandidates(
     .sort((left, right) => left.order - right.order)
     .slice(0, Math.max(1, Math.min(10, Math.floor(limit))))
     .map(({ candidate }) => candidate);
-}
-
-export type TahoiyaReviewedCandidate = {
-  source: TahoiyaSourceEntry;
-  topic: TahoiyaTopic;
-  difficulty: TahoiyaCatalogDifficulty;
-  difficultyReason: string;
-  feedbackAnchorTags: string[];
-};
-
-export async function rememberTahoiyaReviewedBatch(
-  reviewedSourceIds: string[],
-  candidates: TahoiyaReviewedCandidate[],
-  difficultyFeedbackIds: string[],
-) {
-  await Promise.all(candidates.map((candidate) => submitDevelopmentVocabularyDraft({
-    kind: "definition",
-    payload: {
-      gameId: "tahoiya",
-      word: candidate.topic.word,
-      reading: candidate.topic.reading,
-      realDefinition: candidate.topic.realDefinition,
-      note: candidate.topic.note,
-      sourceDetail: candidate.topic.sourceDetail,
-      source: candidate.topic.source,
-      difficulty: candidate.difficulty,
-      genre: candidate.source.genre,
-      sourceLibrary: candidate.source.sourceLibrary,
-      sourceUrl: candidate.source.sourceUrl,
-      difficultyReason: candidate.difficultyReason,
-      difficultyJudgedBy: "effective-zipf",
-      difficultyRubricVersion: "tahoiya-effective-zipf-v1",
-      feedbackAnchorTags: candidate.feedbackAnchorTags,
-      difficultyFeedbackIds: difficultyFeedbackIds.slice(0, 20),
-      generation: candidate.topic.generation,
-    },
-    generation: candidate.topic.generation,
-    sourceReference: normalizeWord(candidate.topic.word),
-  })));
-  if (reviewedSourceIds.length > 0) {
-    await redisCommand<number>(["SADD", reviewedSourceKey, ...reviewedSourceIds]);
-  }
 }
 
 async function loadTopicRatingScores() {
@@ -356,29 +237,8 @@ export async function findReusableTahoiyaTopic(
   } satisfies TahoiyaTopic;
 }
 
-export async function loadExperiencedTahoiyaWords(playerIds: string[]) {
-  if (playerIds.length === 0) return [];
-  const values = await redisCommand<string[]>(["HVALS", legacyTahoiyaCatalogKey]);
-  return (Array.isArray(values) ? values : [])
-    .map(parseLegacyTahoiyaCatalogRecord)
-    .filter((record): record is LegacyTahoiyaTopicCatalogRecord => Boolean(
-      record && playerIds.some((playerId) => record.experiencedPlayerIds.includes(playerId)),
-    ))
-    .map((record) => normalizeWord(record.topic.word));
-}
-
-export async function loadTahoiyaCatalogWords() {
-  const [sharedWords, legacyWords] = await Promise.all([
-    listActiveTahoiyaCatalogWords().catch(() => []),
-    redisCommand<string[]>(["HKEYS", legacyTahoiyaCatalogKey]).catch(() => []),
-  ]);
-  return [...new Set([...sharedWords, ...(Array.isArray(legacyWords) ? legacyWords : [])]
-    .map(normalizeWord).filter(Boolean))];
-}
-
 export async function rememberTahoiyaTopicExperience(
   topic: TahoiyaTopic,
-  difficulty: TahoiyaDifficulty,
   playerIds: string[],
 ) {
   if (!topic.word || playerIds.length === 0) return;
@@ -393,24 +253,4 @@ export async function rememberTahoiyaTopicExperience(
     normalizeWord(topic.word),
     String(now),
   ]).catch(() => 0);
-}
-
-export async function rememberTahoiyaTopicCandidate(topic: TahoiyaTopic, difficulty: TahoiyaDifficulty) {
-  if (!topic.word || topic.generation?.reusedFromCatalog) return;
-  await submitDevelopmentVocabularyDraft({
-    kind: "definition",
-    payload: {
-      gameId: "tahoiya",
-      word: topic.word,
-      reading: topic.reading,
-      realDefinition: topic.realDefinition,
-      note: topic.note,
-      sourceDetail: topic.sourceDetail,
-      source: topic.source,
-      difficulty,
-      generation: topic.generation,
-    },
-    generation: topic.generation,
-    sourceReference: normalizeWord(topic.word),
-  });
 }

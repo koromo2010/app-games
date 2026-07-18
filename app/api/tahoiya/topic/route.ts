@@ -603,7 +603,7 @@ export async function generateTahoiyaTopicResponse(
     }
   }
   const rememberExperience = async (topic: TahoiyaTopic) => {
-    if (!previewOnly) await rememberTahoiyaTopicExperience(topic, difficulty, playerIds).catch(() => undefined);
+    if (!previewOnly) await rememberTahoiyaTopicExperience(topic, playerIds).catch(() => undefined);
   };
   try {
       await reportProgress({ stage: "checking-reusable" });
