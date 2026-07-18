@@ -4,6 +4,7 @@ import { normalizeOnlineRoomCode, onlineRoomPassphraseMaximumLength } from "./on
 import { onlineRoomPlayerLimits } from "./online-room-policy.ts";
 import { normalizePlayerTimeoutFields } from "./player-timeout-policy.ts";
 import { isAvatarColor, isAvatarImage } from "./player-session.ts";
+import { normalizeRoomLobbyReturnState } from "./room-lobby-return.ts";
 import { TAHOIYA_CORRECT_VOTE_POINTS, TAHOIYA_FOOLED_VOTE_POINTS } from "./tahoiya-scoring.ts";
 import type { TahoiyaAnswererMode, TahoiyaDefinitionOption, TahoiyaPhase, TahoiyaPlayer, TahoiyaRoom } from "./tahoiya-types.ts";
 
@@ -84,6 +85,7 @@ export function normalizeTahoiyaRoom(value: unknown): TahoiyaRoom | null {
     phase: isPhase(parsed.phase) ? parsed.phase : "lobby",
     debugMode: Boolean(parsed.debugMode),
     debugReplayEnabled: Boolean(parsed.debugMode && parsed.debugReplayEnabled),
+    lobbyReturn: normalizeRoomLobbyReturnState(parsed.lobbyReturn, players),
     players,
     ...normalizePlayerTimeoutFields(parsed, players.map((player) => player.id)),
     parentId,
@@ -115,4 +117,3 @@ export function normalizeTahoiyaRoom(value: unknown): TahoiyaRoom | null {
       : typeof parsed.createdAt === "number" ? parsed.createdAt : Date.now(),
   };
 }
-

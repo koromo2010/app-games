@@ -261,6 +261,7 @@ export function createEmptyRoom(
     phase: "lobby",
     debugMode: false,
     debugReplayEnabled: false,
+    lobbyReturn: undefined,
     players: [host],
     parentId: host.id,
     playMode: defaults.playMode,
@@ -288,5 +289,4 @@ export function createEmptyRoom(
     updatedAt: Date.now(),
   };
 }
-
 
