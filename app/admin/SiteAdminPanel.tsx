@@ -41,7 +41,9 @@ function errorMessage(error: unknown, fallback: string) {
   return messages[code] ?? fallback;
 }
 
-export function SiteAdminPanel() {
+export function SiteAdminPanel({ showPreviewVocabularyMigrations }: {
+  showPreviewVocabularyMigrations: boolean;
+}) {
   const [screen, setScreen] = useState<ScreenState>("checking");
   const [loginMethod, setLoginMethod] = useState<LoginMethod>("account");
   const [email, setEmail] = useState("");
@@ -218,7 +220,10 @@ export function SiteAdminPanel() {
       <nav className="border-b border-white/10 bg-slate-900/60" aria-label="管理画面メニュー"><div className="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-4 py-2">{([['dashboard', 'ダッシュボード'], ['site-settings', 'サイト設定'], ['games', 'ゲーム公開管理'], ['vocabulary', '単語候補'], ['hyperparameters', 'ハイパラ管理'], ['accounts', '管理者アカウント'], ['audit', '監査ログ']] as const).filter(([value]) => session?.scope === "full" || value === "dashboard" || value === "accounts" || value === "audit").map(([value, label]) => <button key={value} type="button" aria-current={section === value ? "page" : undefined} onClick={() => setSection(value)} className={`whitespace-nowrap rounded-lg px-4 py-2 text-sm font-bold transition ${section === value ? "bg-cyan-300 text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>{label}</button>)}</div></nav>
       {section === "dashboard" && <AdminDashboard onAuthExpired={authExpired} />}
       {section === "games" && <GameOperationsPanel onAuthExpired={authExpired} />}
-      {section === "vocabulary" && <VocabularyDraftsPanel onAuthExpired={authExpired} />}
+      {section === "vocabulary" && <VocabularyDraftsPanel
+        onAuthExpired={authExpired}
+        showPreviewMigrations={showPreviewVocabularyMigrations}
+      />}
       {section === "hyperparameters" && <AdminHyperparametersPanel onAuthExpired={authExpired} />}
       {section === "accounts" && <AdminAccountsPanel onAuthExpired={authExpired} recoveryMode={session?.scope === "recovery"} currentEmail={session?.email ?? null} />}
       {section === "audit" && <AdminAuditPanel onAuthExpired={authExpired} />}

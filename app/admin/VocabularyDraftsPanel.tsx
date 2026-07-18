@@ -14,7 +14,10 @@ function draftTitle(draft: VocabularyDraftSubmission) {
   return String(payload.surface ?? payload.theme ?? draft.kind);
 }
 
-export function VocabularyDraftsPanel({ onAuthExpired }: { onAuthExpired: () => void }) {
+export function VocabularyDraftsPanel({ onAuthExpired, showPreviewMigrations }: {
+  onAuthExpired: () => void;
+  showPreviewMigrations: boolean;
+}) {
   const [drafts, setDrafts] = useState<VocabularyDraftSubmission[]>([]);
   const [loading, setLoading] = useState(true);
   const [reviewing, setReviewing] = useState<string | null>(null);
@@ -58,8 +61,10 @@ export function VocabularyDraftsPanel({ onAuthExpired }: { onAuthExpired: () => 
   }, []);
 
   return <section className="mx-auto max-w-6xl px-4 py-8">
-    <TahoiyaCatalogMigrationPanel onAuthExpired={onAuthExpired} />
-    <LegacyVocabularyImportPanel onAuthExpired={onAuthExpired} />
+    {showPreviewMigrations && <>
+      <TahoiyaCatalogMigrationPanel onAuthExpired={onAuthExpired} />
+      <LegacyVocabularyImportPanel onAuthExpired={onAuthExpired} />
+    </>}
     <VocabularyEvaluationsPanel onAuthExpired={onAuthExpired} onDraftReviewed={removeReviewedDraft} />
     <div className="mt-10 border-t border-white/10 pt-8">
       <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-2xl font-black">単語候補レビュー</h2><p className="mt-1 text-sm text-slate-400">開発・生成バッチから届いたdraftです。現在はペアと語釈の採用に対応しています。</p></div><button type="button" onClick={() => void load()} disabled={loading} className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold disabled:opacity-40">再読込</button></div>
