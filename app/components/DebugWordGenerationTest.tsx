@@ -43,11 +43,13 @@ export function DebugWordGenerationTest({
   const [error, setError] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [forceNew, setForceNew] = useState(true);
+  const [copied, setCopied] = useState(false);
 
   const generate = async () => {
     if (isGenerating) return;
     setIsGenerating(true);
     setError("");
+    setCopied(false);
     try {
       setResult(await onGenerate(forceNew));
     } catch (caught) {
@@ -55,6 +57,25 @@ export function DebugWordGenerationTest({
       setError(caught instanceof Error ? caught.message : "ワード生成のテストに失敗しました。");
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const copyResult = async () => {
+    if (!result) return;
+    const lines = [`【${heading}】`];
+    result.fields.forEach((field) => lines.push(`${field.label}: ${field.value || "—"}`));
+    result.items?.forEach((item, index) => {
+      lines.push("", `${index + 1}. ${item.title}${item.status ? ` [${item.status}]` : ""}`);
+      item.fields.forEach((field) => lines.push(`- ${field.label}: ${field.value || "—"}`));
+    });
+    if (result.notice) lines.push("", `注記: ${result.notice}`);
+    if (result.generation) lines.push(`生成: ${result.generation.provider} / ${result.generation.model} / ${result.generation.latencyMs}ms`);
+    try {
+      await navigator.clipboard.writeText(lines.join("\n"));
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1_500);
+    } catch {
+      setError("結果をコピーできませんでした。ブラウザのクリップボード権限を確認してください。");
     }
   };
 
@@ -100,6 +121,9 @@ export function DebugWordGenerationTest({
       )}
       {result && (
         <div className="mt-3 space-y-2 rounded-lg border border-amber-200 bg-white p-3" aria-live="polite">
+          <div className="flex justify-end">
+            <button type="button" onClick={() => void copyResult()} className="rounded-md border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-[11px] font-bold text-slate-700 hover:bg-slate-100">{copied ? "コピー済み" : "結果をコピー"}</button>
+          </div>
           {result.fields.map((field) => (
             <div key={field.label}>
               <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">{field.label}</p>
