@@ -49,6 +49,9 @@ export type VocabularyWordGameEvaluation = {
   humanRejectCount: number;
   myVote: VocabularyEvaluationDecision | null;
   myComment: string | null;
+  linkedDraftId: string | null;
+  linkedDraftStatus: "draft" | "active" | "rejected" | null;
+  materializedPairId: string | null;
 };
 
 type EvaluationRow = {
@@ -60,6 +63,8 @@ type EvaluationRow = {
   generation_batch_id: string | null; created_at: string;
   human_accept_count: number | string; human_reject_count: number | string;
   my_vote: VocabularyEvaluationDecision | null; my_comment: string | null;
+  linked_draft_id: string | null; linked_draft_status: "draft" | "active" | "rejected" | null;
+  materialized_pair_id: string | null;
 };
 
 let client: NeonQueryFunction<boolean, boolean> | null = null;
@@ -121,6 +126,9 @@ function evaluationFromRow(row: EvaluationRow): VocabularyWordGameEvaluation {
     humanRejectCount,
     myVote: row.my_vote,
     myComment: row.my_comment,
+    linkedDraftId: row.linked_draft_id,
+    linkedDraftStatus: row.linked_draft_status,
+    materializedPairId: row.materialized_pair_id,
   };
 }
 
@@ -160,12 +168,29 @@ export async function listVocabularyWordGameEvaluations(voter: string, limit = 1
         evaluation.generation_batch_id, evaluation.created_at,
         COALESCE(summary.accept_count, 0)::bigint AS human_accept_count,
         COALESCE(summary.reject_count, 0)::bigint AS human_reject_count,
-        mine.decision AS my_vote, mine.comment AS my_comment
+        mine.decision AS my_vote, mine.comment AS my_comment,
+        linked_draft.id AS linked_draft_id, linked_draft.status::text AS linked_draft_status,
+        linked_draft.materialized_subject_id AS materialized_pair_id
       FROM word_game_evaluations evaluation
       JOIN words word ON word.id = evaluation.word_id
       LEFT JOIN word_game_human_vote_summary summary ON summary.evaluation_id = evaluation.id
       LEFT JOIN word_game_human_votes mine
         ON mine.evaluation_id = evaluation.id AND mine.voter = ${voter}
+      LEFT JOIN LATERAL (
+        SELECT draft.id, draft.status, draft.materialized_subject_id
+        FROM vocabulary_draft_submissions draft
+        WHERE draft.kind = 'pair'
+          AND draft.payload->>'gameId' = 'wordwolf'
+          AND draft.payload->>'anchorWordId' = evaluation.word_id::text
+          AND draft.payload->>'pairDistance' = evaluation.requested_pair_distance
+          AND (
+            draft.payload->>'villageWord' = evaluation.partner_text
+            OR draft.payload->>'wolfWord' = evaluation.partner_text
+          )
+        ORDER BY CASE draft.status WHEN 'draft' THEN 0 WHEN 'active' THEN 1 ELSE 2 END,
+          draft.created_at DESC, draft.id DESC
+        LIMIT 1
+      ) linked_draft ON TRUE
       WHERE evaluation.game_id = 'wordwolf'
       ORDER BY evaluation.created_at DESC, evaluation.id DESC
       LIMIT ${safeLimit}
@@ -178,9 +203,26 @@ export async function listVocabularyWordGameEvaluations(voter: string, limit = 1
         evaluation.partner_text, evaluation.provider, evaluation.model, evaluation.prompt_version,
         evaluation.generation_batch_id, evaluation.created_at,
         0::bigint AS human_accept_count, 0::bigint AS human_reject_count,
-        NULL::text AS my_vote, NULL::text AS my_comment
+        NULL::text AS my_vote, NULL::text AS my_comment,
+        linked_draft.id AS linked_draft_id, linked_draft.status::text AS linked_draft_status,
+        linked_draft.materialized_subject_id AS materialized_pair_id
       FROM word_game_evaluations evaluation
       JOIN words word ON word.id = evaluation.word_id
+      LEFT JOIN LATERAL (
+        SELECT draft.id, draft.status, draft.materialized_subject_id
+        FROM vocabulary_draft_submissions draft
+        WHERE draft.kind = 'pair'
+          AND draft.payload->>'gameId' = 'wordwolf'
+          AND draft.payload->>'anchorWordId' = evaluation.word_id::text
+          AND draft.payload->>'pairDistance' = evaluation.requested_pair_distance
+          AND (
+            draft.payload->>'villageWord' = evaluation.partner_text
+            OR draft.payload->>'wolfWord' = evaluation.partner_text
+          )
+        ORDER BY CASE draft.status WHEN 'draft' THEN 0 WHEN 'active' THEN 1 ELSE 2 END,
+          draft.created_at DESC, draft.id DESC
+        LIMIT 1
+      ) linked_draft ON TRUE
       WHERE evaluation.game_id = 'wordwolf'
       ORDER BY evaluation.created_at DESC, evaluation.id DESC
       LIMIT ${safeLimit}
