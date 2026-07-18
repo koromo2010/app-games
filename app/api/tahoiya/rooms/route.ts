@@ -1,5 +1,7 @@
 import {
   applyStoredTahoiyaRoomAction,
+  beginStoredTahoiyaTopicGeneration,
+  clearStoredTahoiyaTopicGeneration,
   deleteStoredHostedTahoiyaRooms,
   deleteStoredTahoiyaRoom,
   listStoredJoinableTahoiyaRooms,
@@ -10,6 +12,7 @@ import {
   sanitizeTahoiyaRoom,
   createStoredTahoiyaRoom,
   startStoredTahoiyaRound,
+  updateStoredTahoiyaTopicGeneration,
 } from "@/lib/tahoiya-room-store";
 import type { TahoiyaRoomAction } from "@/lib/tahoiya-types";
 import type { TahoiyaTopic } from "@/lib/tahoiya-types";
@@ -174,18 +177,36 @@ export async function PATCH(request: Request) {
       }
       const aiLimited = await rateLimitResponseFor(request, rateLimitPolicies.aiGeneration, { playerId: player.id });
       if (aiLimited) return aiLimited;
-      const generated = await withGameGenerationCache("tahoiya-topic-v12", `${current.code}:${current.round}:${current.topicDifficulty}`, async () => {
-        const response = await generateTahoiyaTopicResponse(current.topicDifficulty, current.players.map((item) => item.id));
-        return { status: response.status, body: await response.json() as TahoiyaTopic & { error?: string } };
-      }, { shouldCache: (result) => result.status < 400 });
-      const topic = generated.body;
-      if (generated.status >= 400 || !topic.word || !topic.realDefinition) {
-        telemetry.reject("room.command", generated.status, logFields);
-        return Response.json({ error: topic.error || "Topic generation failed" }, { status: generated.status });
+      const generation = await beginStoredTahoiyaTopicGeneration(code, player.id);
+      let roundStarted = false;
+      try {
+        const generationRoom = generation.room;
+        const generated = await withGameGenerationCache("tahoiya-topic-v13", `${generationRoom.code}:${generationRoom.round}:${generationRoom.topicDifficulty}`, async () => {
+          const response = await generateTahoiyaTopicResponse(
+            generationRoom.topicDifficulty,
+            generationRoom.players.map((item) => item.id),
+            false,
+            false,
+            false,
+            async (progress) => {
+              await updateStoredTahoiyaTopicGeneration(code, generation.generationId, progress);
+            },
+          );
+          return { status: response.status, body: await response.json() as TahoiyaTopic & { error?: string } };
+        }, { shouldCache: (result) => result.status < 400 });
+        const topic = generated.body;
+        if (generated.status >= 400 || !topic.word || !topic.realDefinition) {
+          telemetry.reject("room.command", generated.status, logFields);
+          return Response.json({ error: topic.error || "Topic generation failed" }, { status: generated.status });
+        }
+        await updateStoredTahoiyaTopicGeneration(code, generation.generationId, { stage: "finalizing" });
+        const room = await startStoredTahoiyaRound(code, player.id, topic, generation.generationId);
+        roundStarted = true;
+        telemetry.success("room.command", { ...logFields, phase: room.phase, revision: room.revision, round: room.round });
+        return Response.json({ room: sanitizeTahoiyaRoom(room, player.id) });
+      } finally {
+        if (!roundStarted) await clearStoredTahoiyaTopicGeneration(code, generation.generationId).catch(() => undefined);
       }
-      const room = await startStoredTahoiyaRound(code, player.id, topic);
-      telemetry.success("room.command", { ...logFields, phase: room.phase, revision: room.revision, round: room.round });
-      return Response.json({ room: sanitizeTahoiyaRoom(room, player.id) });
     }
     const action = { ...requestedAction, actorId: player.id } as TahoiyaRoomAction;
     const room = await applyStoredTahoiyaRoomAction(code, action);
@@ -217,7 +238,7 @@ export async function PATCH(request: Request) {
       telemetry.responseError("room.command", error, 409, logFields);
       return Response.json({ error: "Finish or leave the current room before entering another room" }, { status: 409 });
     }
-    if (error instanceof Error && error.message === "GAME_GENERATION_IN_PROGRESS") {
+    if (error instanceof Error && (error.message === "GAME_GENERATION_IN_PROGRESS" || error.message === "TAHOIYA_TOPIC_GENERATION_IN_PROGRESS")) {
       telemetry.responseError("room.command", error, 409, logFields);
       return Response.json({ error: "Topic generation is still in progress" }, { status: 409 });
     }

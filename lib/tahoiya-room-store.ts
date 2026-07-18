@@ -1,6 +1,6 @@
 import { redisCommand } from "@/lib/redis-store";
 import { randomUUID } from "node:crypto";
-import type { TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomAction, TahoiyaTopic } from "@/lib/tahoiya-types";
+import type { TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomAction, TahoiyaTopic, TahoiyaTopicGenerationStage } from "@/lib/tahoiya-types";
 import { tahoiyaRuntimeScoring } from "@/lib/tahoiya-scoring";
 import { recordTahoiyaRoundResults } from "@/lib/player-stats-store";
 import { recordTahoiyaReplay } from "@/lib/game-replay-store";
@@ -16,6 +16,7 @@ import { normalizeTahoiyaRoom } from "@/lib/tahoiya-room-normalizer";
 import { sanitizeTahoiyaRoom, tahoiyaRoomChoice } from "@/lib/tahoiya-room-presentation";
 import { advanceToVoting, definitionWriterIds, reconcileProgress, scoreRoom, timedOut, voterIds, votingComplete, writingComplete } from "@/lib/tahoiya-room-domain";
 import { recordPlayerActivity, recoverPlayerTimeout } from "@/lib/player-timeout-policy";
+import { isTahoiyaTopicGenerationProgressFresh } from "@/lib/tahoiya-topic-generation-progress";
 
 const roomKeyPrefix = "tahoiya:room:";
 const roomIndexKey = "tahoiya:rooms";
@@ -79,11 +80,16 @@ function parseStoredTahoiyaRoom(raw: string | null) {
 export async function loadAndReconcileStoredTahoiyaRoom(code: string) {
   const room = await loadStoredTahoiyaRoom(code);
   if (!room) return null;
-  if (reconcileProgress(room) === room) {
+  const reconcileRoom = (current: TahoiyaRoom) => reconcileProgress(
+    current.topicGenerationProgress && !isTahoiyaTopicGenerationProgressFresh(current.topicGenerationProgress)
+      ? { ...current, topicGenerationProgress: undefined }
+      : current,
+  );
+  if (reconcileRoom(room) === room) {
     await Promise.all([recordTahoiyaRoundResults(room), recordTahoiyaReplay(room)]);
     return room;
   }
-  return mutateStoredTahoiyaRoom(code, reconcileProgress);
+  return mutateStoredTahoiyaRoom(code, reconcileRoom);
 }
 
 export async function loadStoredTahoiyaPlayerActiveRoom(playerId: string) {
@@ -121,6 +127,7 @@ export async function joinStoredTahoiyaRoom(code: string, player: TahoiyaPlayer,
   try {
     const joined = await mutateStoredTahoiyaRoom(normalizedCode, (current) => {
       if (current.phase !== "lobby") throw new Error("TAHOIYA_ROOM_STARTED");
+      if (isTahoiyaTopicGenerationProgressFresh(current.topicGenerationProgress)) throw new Error("TAHOIYA_TOPIC_GENERATION_IN_PROGRESS");
       if (current.passphrase && current.passphrase !== passphrase.trim()) throw new Error("TAHOIYA_BAD_PASSPHRASE");
       if (current.players.some((item) => item.id === player.id)) {
         return { ...current, lobbyReturn: confirmRoomLobbyReturn(current.lobbyReturn, current.players, player.id) };
@@ -137,9 +144,56 @@ export async function joinStoredTahoiyaRoom(code: string, player: TahoiyaPlayer,
   }
 }
 
-export async function startStoredTahoiyaRound(code: string, actorId: string, topic: TahoiyaTopic) {
+export async function beginStoredTahoiyaTopicGeneration(code: string, actorId: string) {
+  const generationId = randomUUID();
+  const room = await mutateStoredTahoiyaRoom(code, (current) => {
+    if (current.hostId !== actorId || current.phase !== "lobby") throw new Error("TAHOIYA_ROOM_FORBIDDEN");
+    if (!allRoomPlayersReturned(current.lobbyReturn, current.players)) throw new Error("TAHOIYA_PLAYERS_NOT_RETURNED");
+    if (isTahoiyaTopicGenerationProgressFresh(current.topicGenerationProgress)) throw new Error("TAHOIYA_TOPIC_GENERATION_IN_PROGRESS");
+    const now = Date.now();
+    return {
+      ...current,
+      topicGenerationProgress: {
+        id: generationId,
+        stage: "checking-reusable",
+        startedAt: now,
+        updatedAt: now,
+      },
+    };
+  });
+  return { room, generationId };
+}
+
+export async function updateStoredTahoiyaTopicGeneration(
+  code: string,
+  generationId: string,
+  progress: { stage: TahoiyaTopicGenerationStage; batchNumber?: number; batchLimit?: number; newCandidateFlow?: boolean },
+) {
+  return mutateStoredTahoiyaRoom(code, (current) => {
+    if (current.phase !== "lobby" || current.topicGenerationProgress?.id !== generationId) return current;
+    return {
+      ...current,
+      topicGenerationProgress: {
+        ...current.topicGenerationProgress,
+        ...progress,
+        updatedAt: Date.now(),
+      },
+    };
+  });
+}
+
+export async function clearStoredTahoiyaTopicGeneration(code: string, generationId: string) {
+  return mutateStoredTahoiyaRoom(code, (current) => (
+    current.topicGenerationProgress?.id === generationId
+      ? { ...current, topicGenerationProgress: undefined }
+      : current
+  ));
+}
+
+export async function startStoredTahoiyaRound(code: string, actorId: string, topic: TahoiyaTopic, generationId?: string) {
   return mutateStoredTahoiyaRoom(code, (current) => {
     if (current.hostId !== actorId || current.phase !== "lobby") throw new Error("TAHOIYA_ROOM_FORBIDDEN");
+    if (generationId && current.topicGenerationProgress?.id !== generationId) throw new Error("TAHOIYA_TOPIC_GENERATION_IN_PROGRESS");
     if (!allRoomPlayersReturned(current.lobbyReturn, current.players)) throw new Error("TAHOIYA_PLAYERS_NOT_RETURNED");
     const players = [...current.players];
     while (current.debugMode && players.length < 2) {
@@ -166,6 +220,7 @@ export async function startStoredTahoiyaRound(code: string, actorId: string, top
       topicSourceDetail: topic.sourceDetail,
       topicSource: topic.source,
       topicGeneration: topic.generation,
+      topicGenerationProgress: undefined,
       fakeDefinitions: {},
       options: [],
       votes: {},
@@ -194,10 +249,11 @@ export async function applyStoredTahoiyaRoomAction(code: string, action: Tahoiya
     if (action.type === "abort-game") {
       if (!actorIsHost || !current.debugMode || current.phase === "lobby") throw new Error("TAHOIYA_ROOM_FORBIDDEN");
       const answererId = current.playMode === "single-answerer" && current.answererMode === "manual" ? current.answererId : "";
-      return { ...current, phase: "lobby", debugReplayEnabled: false, lobbyReturn: beginRoomLobbyReturn(current.players, action.actorId, "debug-abort", current.round), phaseStartedAt: null, answererId, word: "", reading: "", realDefinition: "", topicNote: "", topicSourceDetail: "", topicSource: "pending", topicGeneration: undefined, fakeDefinitions: {}, options: [], votes: {}, resultText: "" };
+      return { ...current, phase: "lobby", debugReplayEnabled: false, lobbyReturn: beginRoomLobbyReturn(current.players, action.actorId, "debug-abort", current.round), phaseStartedAt: null, answererId, word: "", reading: "", realDefinition: "", topicNote: "", topicSourceDetail: "", topicSource: "pending", topicGeneration: undefined, topicGenerationProgress: undefined, fakeDefinitions: {}, options: [], votes: {}, resultText: "" };
     }
     if (action.type === "update-config") {
       if (!actorIsHost || current.phase !== "lobby") throw new Error("TAHOIYA_ROOM_FORBIDDEN");
+      if (isTahoiyaTopicGenerationProgressFresh(current.topicGenerationProgress)) throw new Error("TAHOIYA_TOPIC_GENERATION_IN_PROGRESS");
       const playMode = action.config.playMode === "all-vote" ? "all-vote" : action.config.playMode === "single-answerer" ? "single-answerer" : current.playMode;
       const answererMode = action.config.answererMode === "manual" || action.config.answererMode === "random" ? action.config.answererMode : current.answererMode;
       const requestedAnswererId = typeof action.config.answererId === "string" ? action.config.answererId : current.answererId;
@@ -213,6 +269,7 @@ export async function applyStoredTahoiyaRoomAction(code: string, action: Tahoiya
     }
     if (action.type === "set-debug") {
       if (!actorIsHost || current.phase !== "lobby") throw new Error("TAHOIYA_ROOM_FORBIDDEN");
+      if (isTahoiyaTopicGenerationProgressFresh(current.topicGenerationProgress)) throw new Error("TAHOIYA_TOPIC_GENERATION_IN_PROGRESS");
       return { ...current, debugMode: action.enabled, debugReplayEnabled: action.enabled ? current.debugReplayEnabled : false };
     }
     if (action.type === "set-debug-replay") {
@@ -221,6 +278,7 @@ export async function applyStoredTahoiyaRoomAction(code: string, action: Tahoiya
     }
     if (action.type === "debug-add-player") {
       if (!actorIsHost || !current.debugMode || current.phase !== "lobby" || current.players.length >= onlineRoomPlayerLimits.tahoiya) throw new Error("TAHOIYA_ROOM_FORBIDDEN");
+      if (isTahoiyaTopicGenerationProgressFresh(current.topicGenerationProgress)) throw new Error("TAHOIYA_TOPIC_GENERATION_IN_PROGRESS");
       const number = current.players.length + 1;
       const player = { id: `dummy-${randomUUID()}`, name: `テスト${number}`, joinedAt: Date.now() };
       const players = [...current.players, player];
@@ -229,7 +287,7 @@ export async function applyStoredTahoiyaRoomAction(code: string, action: Tahoiya
     if (action.type === "next-round") {
       if (!actorIsHost || current.phase !== "result") throw new Error("TAHOIYA_ROOM_FORBIDDEN");
       const answererId = current.playMode === "single-answerer" && current.answererMode === "manual" ? current.answererId : "";
-      return { ...current, phase: "lobby", debugReplayEnabled: false, lobbyReturn: beginRoomLobbyReturn(current.players, action.actorId, "round-result", current.round), answererId, round: current.round + 1, word: "", reading: "", realDefinition: "", topicNote: "", topicSourceDetail: "", topicSource: "pending", topicGeneration: undefined, phaseStartedAt: null, fakeDefinitions: {}, options: [], votes: {}, resultText: "" };
+      return { ...current, phase: "lobby", debugReplayEnabled: false, lobbyReturn: beginRoomLobbyReturn(current.players, action.actorId, "round-result", current.round), answererId, round: current.round + 1, word: "", reading: "", realDefinition: "", topicNote: "", topicSourceDetail: "", topicSource: "pending", topicGeneration: undefined, topicGenerationProgress: undefined, phaseStartedAt: null, fakeDefinitions: {}, options: [], votes: {}, resultText: "" };
     }
     if (action.type === "debug-replace-topic") {
       if (!actorIsHost || !current.debugMode || current.phase === "lobby" || action.round !== current.round + 1 || !action.topic.word.trim() || !action.topic.realDefinition.trim()) throw new Error("TAHOIYA_ROOM_FORBIDDEN");
@@ -238,7 +296,7 @@ export async function applyStoredTahoiyaRoomAction(code: string, action: Tahoiya
         : current.answererMode === "random"
           ? current.players[Math.floor(Math.random() * current.players.length)]?.id ?? ""
           : current.answererId;
-      return { ...current, phase: "writing", lobbyReturn: undefined, phaseStartedAt: Date.now(), answererId, round: action.round, word: action.topic.word, reading: action.topic.reading, realDefinition: action.topic.realDefinition, topicNote: action.topic.note, topicSourceDetail: action.topic.sourceDetail, topicSource: action.topic.source, topicGeneration: action.topic.generation, fakeDefinitions: {}, options: [], votes: {}, resultText: "" };
+      return { ...current, phase: "writing", lobbyReturn: undefined, phaseStartedAt: Date.now(), answererId, round: action.round, word: action.topic.word, reading: action.topic.reading, realDefinition: action.topic.realDefinition, topicNote: action.topic.note, topicSourceDetail: action.topic.sourceDetail, topicSource: action.topic.source, topicGeneration: action.topic.generation, topicGenerationProgress: undefined, fakeDefinitions: {}, options: [], votes: {}, resultText: "" };
     }
     const reconciled = reconcileProgress(current);
     if (reconciled !== current) return reconciled;

@@ -6,6 +6,7 @@ import { normalizePlayerTimeoutFields } from "./player-timeout-policy.ts";
 import { isAvatarColor, isAvatarImage } from "./player-session.ts";
 import { normalizeRoomLobbyReturnState } from "./room-lobby-return.ts";
 import { TAHOIYA_CORRECT_VOTE_POINTS, TAHOIYA_FOOLED_VOTE_POINTS } from "./tahoiya-scoring.ts";
+import { normalizeTahoiyaTopicGenerationProgress } from "./tahoiya-topic-generation-progress.ts";
 import type { TahoiyaAnswererMode, TahoiyaDefinitionOption, TahoiyaPhase, TahoiyaPlayer, TahoiyaRoom } from "./tahoiya-types.ts";
 
 function isPhase(value: unknown): value is TahoiyaPhase {
@@ -106,6 +107,9 @@ export function normalizeTahoiyaRoom(value: unknown): TahoiyaRoom | null {
     topicSourceDetail: typeof parsed.topicSourceDetail === "string" ? parsed.topicSourceDetail : "",
     topicSource: parsed.topicSource === "llm" || parsed.topicSource === "fallback" ? parsed.topicSource : "pending",
     topicGeneration: normalizeGameGenerationMeta(parsed.topicGeneration),
+    topicGenerationProgress: isPhase(parsed.phase) && parsed.phase === "lobby"
+      ? normalizeTahoiyaTopicGenerationProgress(parsed.topicGenerationProgress)
+      : undefined,
     fakeDefinitions: normalizeStringRecord(parsed.fakeDefinitions),
     options: normalizeOptions(parsed.options),
     votes: normalizeStringRecord(parsed.votes),

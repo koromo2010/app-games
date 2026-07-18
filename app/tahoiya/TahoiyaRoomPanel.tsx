@@ -99,6 +99,7 @@ function ActiveRoomPanel(props: Props & { room: TahoiyaRoom }) {
       {room.phase === "lobby" && props.isHost && <HostSettings {...props} room={room} />}
       <RoomConfigSummary items={props.roomConfigItems} />
       {room.phase === "lobby" && !props.isHost && <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">部屋設定は参加者全員に表示され、変更できるのはホストだけです。</p>}
+      {room.phase === "lobby" && <TopicGenerationProgress room={room} isStarting={props.isStarting} />}
       {props.isDebugMode ? (
         <label className="block text-sm font-medium text-slate-700">操作プレイヤー
           <select value={props.activePlayer?.id ?? props.activePlayerId} onChange={(event) => props.onActivePlayerChange(event.target.value)} className={`mt-1 ${inputClass}`}>
@@ -106,7 +107,7 @@ function ActiveRoomPanel(props: Props & { room: TahoiyaRoom }) {
           </select>
         </label>
       ) : <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">操作中: <span className="font-bold text-slate-950">{props.activePlayer?.name ?? props.playerName}</span></div>}
-      {room.phase === "lobby" && (props.isHost ? <HostActions {...props} room={room} /> : <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-center text-xs font-semibold text-slate-600">ホストのラウンド開始を待っています。</p>)}
+      {room.phase === "lobby" && (props.isHost ? <HostActions {...props} room={room} /> : !room.topicGenerationProgress && <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-center text-xs font-semibold text-slate-600">ホストのラウンド開始を待っています。</p>)}
       {props.isHost && <button onClick={props.onDissolveRoom} className={`w-full ${dangerButtonClass}`}>部屋を解散</button>}
     </div>
   );
@@ -115,7 +116,7 @@ function ActiveRoomPanel(props: Props & { room: TahoiyaRoom }) {
 function HostSettings(props: Props & { room: TahoiyaRoom }) {
   const { room } = props;
   return (
-    <div className="space-y-3">
+    <fieldset disabled={Boolean(room.topicGenerationProgress)} className="space-y-3 disabled:opacity-60">
       <Setting title="遊び方" description={room.playMode === "all-vote" ? "全員が偽説明を書き、全員で投票して最多得票を競います。" : "1人だけが回答し、それ以外の参加者が偽説明を書きます。"}>
         <ChoiceButtons value={room.playMode} onChange={props.onPlayModeChange} choices={[{ label: "回答者1人", value: "single-answerer", activeClass: amberChoice }, { label: "全員投票", value: "all-vote", activeClass: cyanChoice }]} />
       </Setting>
@@ -132,6 +133,35 @@ function HostSettings(props: Props & { room: TahoiyaRoom }) {
         </Setting>
       </>}
       <RoomTimeLimitControl label="制限時間" value={room.actionTimeLimitSeconds} onChange={props.onTimeLimitChange} />
+    </fieldset>
+  );
+}
+
+function TopicGenerationProgress({ room, isStarting }: { room: TahoiyaRoom; isStarting: boolean }) {
+  const progress = room.topicGenerationProgress;
+  if (!progress && !isStarting) return null;
+  const stage = progress?.stage ?? "checking-reusable";
+  const isNewCandidateFlow = progress?.newCandidateFlow === true || stage === "screening-new";
+  const batch = progress?.batchNumber && progress.batchLimit
+    ? `（${progress.batchNumber}/${progress.batchLimit}）`
+    : "";
+  const copy = stage === "checking-reusable"
+    ? { title: "お題を準備しています", detail: "参加者全員がまだ遊んでいない保存済みのお題を確認しています。" }
+    : stage === "checking-screened"
+      ? { title: "判定済み候補を確認しています", detail: "難易度判定済みで、まだ正解説明を作っていない候補を探しています。" }
+      : stage === "screening-new"
+        ? { title: "新しい候補を審査しています", detail: `保存済み候補がなかったため、新しい候補10語を難易度判定中です${batch}。` }
+        : stage === "generating-definition"
+          ? { title: "正解説明を生成しています", detail: isNewCandidateFlow ? "新しく審査を通過した候補へ、たほい屋用の正解説明を付けています。" : "判定済み候補へ、たほい屋用の正解説明を付けています。" }
+          : { title: "まもなく開始します", detail: isNewCandidateFlow ? "新しく作ったお題を保存し、部屋へ反映しています。" : "選んだお題を部屋へ反映しています。" };
+  return (
+    <div role="status" aria-live="polite" className="rounded-lg border border-cyan-300 bg-cyan-50 px-3 py-3 text-cyan-950">
+      <div className="flex items-center gap-2">
+        <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-cyan-600" aria-hidden="true" />
+        <p className="text-sm font-black">{copy.title}</p>
+      </div>
+      <p className="mt-1 text-xs font-semibold leading-relaxed text-cyan-800">{copy.detail}</p>
+      <p className="mt-1 text-[11px] text-cyan-700">この進捗は部屋の全員に共有されています。そのままお待ちください。</p>
     </div>
   );
 }
@@ -144,5 +174,6 @@ function HostActions(props: Props & { room: TahoiyaRoom }) {
   const difficulty = `${tahoiyaDifficultyLabel(props.room.topicDifficulty)}（${tahoiyaEffectiveZipfDescription(props.room.topicDifficulty)}）`;
   const allPlayersReturned = allRoomPlayersReturned(props.room.lobbyReturn, props.room.players);
   const waitingPlayerCount = props.room.players.length - (props.room.lobbyReturn?.returnedPlayerIds.length ?? 0);
-  return <>{props.isDebugMode && <><DebugWordGenerationTest onGenerate={() => props.onTestDifficultyScreening()} heading="未判定10語を難易度審査" description="共通DBの未判定10語をLLMへ渡し、認知率と除外フラグを判定済みDBへ保存します。秘境は1%超〜14%、魔境は0〜1%。センシティブ・大学名・企業名・地名は除外します。説明文と出題履歴はまだ作りません。" showModeToggle={false} fixedButtonLabel="未判定10語を審査して保存" fixedRepeatLabel="次の未判定10語を審査" /><DebugWordGenerationTest onGenerate={() => props.onTestWordGeneration(false)} heading={`${difficulty}通常抽出フロー確認`} description="完成済み候補、判定済みで説明未作成の候補、未判定10語の順に探します。使用する1語だけ説明文を生成して完成済み候補へ保存し、デバッグ確認では出題履歴を付けません。" showModeToggle={false} fixedButtonLabel="通常抽出フローを確認" fixedRepeatLabel="もう一度通常抽出を確認" /><button onClick={props.onAddTestPlayer} disabled={props.room.players.length >= 8} className={`w-full ${subtleButtonClass}`}>テストプレイヤー追加</button></>}<button onClick={props.onStartRound} disabled={props.isStarting || !allPlayersReturned} className={`w-full ${primaryButtonClass}`}>{props.isStarting ? "お題生成中..." : allPlayersReturned ? "ラウンド開始" : `復帰待ち（あと${waitingPlayerCount}人）`}</button></>;
+  const generationInProgress = Boolean(props.room.topicGenerationProgress);
+  return <>{props.isDebugMode && !generationInProgress && <><DebugWordGenerationTest onGenerate={() => props.onTestDifficultyScreening()} heading="未判定10語を難易度審査" description="共通DBの未判定10語をLLMへ渡し、認知率と除外フラグを判定済みDBへ保存します。秘境は1%超〜14%、魔境は0〜1%。センシティブ・大学名・企業名・地名は除外します。説明文と出題履歴はまだ作りません。" showModeToggle={false} fixedButtonLabel="未判定10語を審査して保存" fixedRepeatLabel="次の未判定10語を審査" /><DebugWordGenerationTest onGenerate={() => props.onTestWordGeneration(false)} heading={`${difficulty}通常抽出フロー確認`} description="完成済み候補、判定済みで説明未作成の候補、未判定10語の順に探します。使用する1語だけ説明文を生成して完成済み候補へ保存し、デバッグ確認では出題履歴を付けません。" showModeToggle={false} fixedButtonLabel="通常抽出フローを確認" fixedRepeatLabel="もう一度通常抽出を確認" /><button onClick={props.onAddTestPlayer} disabled={props.room.players.length >= 8} className={`w-full ${subtleButtonClass}`}>テストプレイヤー追加</button></>}<button onClick={props.onStartRound} disabled={props.isStarting || generationInProgress || !allPlayersReturned} className={`w-full ${primaryButtonClass}`}>{props.isStarting || generationInProgress ? "お題を準備中..." : allPlayersReturned ? "ラウンド開始" : `復帰待ち（あと${waitingPlayerCount}人）`}</button></>;
 }

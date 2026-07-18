@@ -30,7 +30,7 @@ import {
   tahoiyaDifficultyLabel,
   tahoiyaEffectiveZipfDescription,
 } from "@/lib/tahoiya-difficulty";
-import type { TahoiyaDifficulty, TahoiyaTopic } from "@/lib/tahoiya-types";
+import type { TahoiyaDifficulty, TahoiyaTopic, TahoiyaTopicGenerationStage } from "@/lib/tahoiya-types";
 import { parseLlmJson } from "@/lib/llm-json";
 import { gameApiAccessDeniedResponse } from "@/lib/game-access";
 import { vocabularyDatabaseErrorCode } from "@/lib/vocabulary-postgres-store";
@@ -652,7 +652,15 @@ export async function generateTahoiyaTopicResponse(
   previewOnly = false,
   forceNew = false,
   screenDifficultyOnly = false,
+  onProgress?: (progress: { stage: TahoiyaTopicGenerationStage; batchNumber?: number; batchLimit?: number; newCandidateFlow?: boolean }) => Promise<void>,
 ) {
+  const reportProgress = async (progress: { stage: TahoiyaTopicGenerationStage; batchNumber?: number; batchLimit?: number; newCandidateFlow?: boolean }) => {
+    try {
+      await onProgress?.(progress);
+    } catch {
+      // Progress is best effort. A transient room refresh failure must not spend the completed LLM work twice.
+    }
+  };
   const feedbackRecords = await retrieveGameFeedback({
     game: "tahoiya",
     task: "tahoiya.topic",
@@ -688,12 +696,15 @@ export async function generateTahoiyaTopicResponse(
   };
   if (!forceNew) {
     try {
+      await reportProgress({ stage: "checking-reusable" });
       const reusable = await findReusableTahoiyaTopic(difficulty, playerIds, feedbackBlockedWords);
       if (reusable) {
+        await reportProgress({ stage: "finalizing" });
         await rememberExperience(reusable);
         return Response.json(reusable);
       }
 
+      await reportProgress({ stage: "checking-screened" });
       let candidates = await findUnexperiencedScreenedTahoiyaWordCandidates(
         difficulty,
         playerIds,
@@ -704,6 +715,12 @@ export async function generateTahoiyaTopicResponse(
       let lastScreeningGeneration: GameGenerationMeta | undefined;
       let mode: Exclude<GameLlmMode, "local"> | null = null;
       while (candidates.length === 0 && screenedBatchCount < tahoiyaScreeningBatchLimit) {
+        await reportProgress({
+          stage: "screening-new",
+          batchNumber: screenedBatchCount + 1,
+          batchLimit: tahoiyaScreeningBatchLimit,
+          newCandidateFlow: true,
+        });
         const rawCandidates = await findUnscreenedUnexperiencedTahoiyaWordCandidates(
           playerIds,
           feedbackBlockedWords,
@@ -734,6 +751,7 @@ export async function generateTahoiyaTopicResponse(
       if (definitionMode === "local") {
         return Response.json({ error: "正解文を生成できるAI APIがありません。" }, { status: 503 });
       }
+      await reportProgress({ stage: "generating-definition" });
       const generatedTopic = await generateTopicFromCatalogWords(
         definitionMode,
         difficulty,
@@ -745,6 +763,7 @@ export async function generateTahoiyaTopicResponse(
       }
       const topic = generatedTopic.topic;
       if (!topic.generation || !topic.reading) throw new Error("TAHOIYA_GENERATED_TOPIC_METADATA_MISSING");
+      await reportProgress({ stage: "finalizing" });
       await saveTahoiyaScreenedTopic({
         wordId: generatedTopic.candidate.id,
         reading: topic.reading,
