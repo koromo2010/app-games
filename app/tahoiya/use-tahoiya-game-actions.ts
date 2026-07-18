@@ -13,7 +13,7 @@ export function useTahoiyaGameActions(params: Params) {
   const forceAdvanceToVoting = async () => { if (params.room?.phase !== "writing" || !params.isHost) return; await params.runRoomAction({ type: "advance-phase", actorId: params.playerId, round: params.room.round, target: "voting", force: true }); params.setSelectedOptionId(""); };
   const forceAdvanceToResult = async () => { if (params.room?.phase === "voting" && params.isHost) await params.runRoomAction({ type: "advance-phase", actorId: params.playerId, round: params.room.round, target: "result", force: true }); };
   const startRound = async () => {
-    const room = params.room; if (!room || !params.isHost || params.isStarting) return;
+    const room = params.room; if (!room || !params.isHost || params.isStarting || room.topicGenerationProgress) return;
     if (!allRoomPlayersReturned(room.lobbyReturn, room.players)) return params.setMessage("復帰待ちの参加者がいます。全員が戻ってから開始してください。");
     if (!room.debugMode && room.players.length < 2) return params.setMessage("ゲーム開始には2人以上が必要です。");
     if (room.playMode === "single-answerer" && room.answererMode === "manual" && !room.players.some((player) => player.id === room.answererId)) return params.setMessage("回答者を指定するか、ランダムで選ぶ設定にしてください。");

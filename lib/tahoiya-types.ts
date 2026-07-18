@@ -1,9 +1,27 @@
-export type TahoiyaPhase = "lobby" | "writing" | "voting" | "result";
+import type { GameGenerationMeta } from "@/lib/game-ai-types";
 import type { PlayerTimeoutFields } from "./player-timeout-policy.ts";
 import type { RoomLobbyReturnState } from "./room-lobby-return.ts";
+
+export type TahoiyaPhase = "lobby" | "writing" | "voting" | "result";
 export type TahoiyaAnswererMode = "manual" | "random";
 export type TahoiyaPlayMode = "single-answerer" | "all-vote";
 export type TahoiyaDifficulty = "standard" | "extreme";
+export type TahoiyaTopicGenerationStage =
+  | "checking-reusable"
+  | "checking-screened"
+  | "screening-new"
+  | "generating-definition"
+  | "finalizing";
+
+export type TahoiyaTopicGenerationProgress = {
+  id: string;
+  stage: TahoiyaTopicGenerationStage;
+  batchNumber?: number;
+  batchLimit?: number;
+  newCandidateFlow?: boolean;
+  startedAt: number;
+  updatedAt: number;
+};
 
 export type TahoiyaPlayer = {
   id: string;
@@ -60,6 +78,7 @@ export type TahoiyaRoom = PlayerTimeoutFields & {
   topicSourceDetail: string;
   topicSource: TahoiyaTopic["source"] | "pending";
   topicGeneration?: GameGenerationMeta;
+  topicGenerationProgress?: TahoiyaTopicGenerationProgress;
   fakeDefinitions: Record<string, string>;
   options: TahoiyaDefinitionOption[];
   votes: Record<string, string>;
@@ -103,4 +122,3 @@ export type TahoiyaRoomChoice = {
   hasPassphrase: boolean;
   updatedAt: number;
 };
-import type { GameGenerationMeta } from "@/lib/game-ai-types";

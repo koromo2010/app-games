@@ -11,20 +11,26 @@ import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 import { emitObservabilityEvent, observabilityErrorCode } from "@/lib/observability";
 import { loadStoredTahoiyaRoom } from "@/lib/tahoiya-room-store";
 import {
-  findUnexperiencedTahoiyaWordCandidates,
+  findReusableTahoiyaTopic,
+  findUnexperiencedScreenedTahoiyaWordCandidates,
+  findUnscreenedUnexperiencedTahoiyaWordCandidates,
   loadUnreviewedTahoiyaSources,
   rememberTahoiyaReviewedBatch,
-  rememberTahoiyaTopicCandidate,
   rememberTahoiyaTopicExperience,
   type TahoiyaReviewedCandidate,
   type TahoiyaWordCandidate,
 } from "@/lib/tahoiya-topic-catalog";
+import {
+  addTahoiyaScreeningExclusion,
+  saveTahoiyaDifficultyScreenings,
+  saveTahoiyaScreenedTopic,
+} from "@/lib/tahoiya-screening-repository";
 import type { TahoiyaSourceEntry } from "@/lib/tahoiya-source-library";
 import {
   tahoiyaDifficultyLabel,
   tahoiyaEffectiveZipfDescription,
 } from "@/lib/tahoiya-difficulty";
-import type { TahoiyaDifficulty, TahoiyaTopic } from "@/lib/tahoiya-types";
+import type { TahoiyaDifficulty, TahoiyaTopic, TahoiyaTopicGenerationStage } from "@/lib/tahoiya-types";
 import { parseLlmJson } from "@/lib/llm-json";
 import { gameApiAccessDeniedResponse } from "@/lib/game-access";
 import { vocabularyDatabaseErrorCode } from "@/lib/vocabulary-postgres-store";
@@ -33,8 +39,9 @@ import { parseTahoiyaDifficultyScreening } from "@/lib/tahoiya-difficulty-screen
 
 const tahoiyaTopicPromptVersion = "tahoiya-effective-zipf-topic-v14";
 const tahoiyaBatchPromptVersion = "tahoiya-effective-zipf-batch-v2";
-const tahoiyaDifficultyScreeningPromptVersion = "tahoiya-difficulty-screening-mock-v1";
+const tahoiyaDifficultyScreeningPromptVersion = "tahoiya-difficulty-screening-v2";
 const tahoiyaGenerationCandidateLimit = 3;
+const tahoiyaScreeningBatchLimit = 3;
 export const maxDuration = 180;
 type DefinitionStyle = "brief" | "standard" | "detailed" | "long" | "extended" | "maximum";
 
@@ -387,20 +394,26 @@ async function generateTopicFromCatalogWords(
         model: generated.model,
         outcome: "rejected",
       });
+      if (parsed.status === "unsafe") {
+        await addTahoiyaScreeningExclusion(candidate.id, "sensitive").catch(() => false);
+      }
       continue;
     }
     return {
-      ...parsed.topic,
-      generation: {
-        provider: generated.provider,
-        model: generated.model,
-        mode: generated.mode,
-        billingSource: generated.billingSource,
-        promptVersion: tahoiyaTopicPromptVersion,
-        latencyMs: generated.latencyMs,
-        retrievedFeedbackIds,
+      candidate,
+      topic: {
+        ...parsed.topic,
+        generation: {
+          provider: generated.provider,
+          model: generated.model,
+          mode: generated.mode,
+          billingSource: generated.billingSource,
+          promptVersion: tahoiyaTopicPromptVersion,
+          latencyMs: generated.latencyMs,
+          retrievedFeedbackIds,
+        },
       },
-    } satisfies TahoiyaTopic;
+    };
   }
   return null;
 }
@@ -605,26 +618,21 @@ async function screenDifficultyCandidates(
     sourceId: `word-master:${candidate.id}`,
     word: candidate.word,
     reading: candidate.reading,
-    effectiveZipf: candidate.effectiveZipf,
   }));
-  const target = difficulty === "extreme"
-    ? "今回は魔境です。almost-nobody-knowsのうち推定認知率0〜1%だけを合格とし、2%は除外します。"
-    : "今回は秘境です。ordinary-unknownだけを合格とします。";
   const prompt = [
     "あなたは辞書当てゲーム『たほい屋』の難易度審査員です。候補10語について、一般的な日本人の成人が見出し語の意味を知っている割合を推定してください。",
     "辞書・言語・候補語の専門家ではない20〜60代の成人を基準にします。あなた自身が意味を知っているかではなく、一般の参加者の認知を推定してください。読み方を知っていても意味を説明できない場合は『知っている』に数えません。",
     "この先行審査では説明を作らず、難易度だけを見ます。10語を相対順位にせず、各語を同じ絶対基準で独立判定してください。",
-    "verdictは推定認知率に合わせ、known=30%以上、borderline=15〜29%、ordinary-unknown=3〜14%、almost-nobody-knows=0〜2%のいずれかにしてください。",
-    target,
-    "大学の正式名称または通称ならentityFlag=university、企業・法人・商号ならentityFlag=company、国・地域・自治体・町域・山川・駅などの地名ならentityFlag=place、それ以外はentityFlag=noneにしてください。大学名・企業名・地名は認知率にかかわらず除外します。",
+    "verdictは推定認知率に合わせ、known=30%以上、borderline=15%以上30%未満、ordinary-unknown=1%超15%未満、almost-nobody-knows=0〜1%のいずれかにしてください。境界に空白を作らないでください。",
+    "一般向けゲームに不適切な差別的・露骨に性的・残虐な語ならsensitive、大学の正式名称または通称ならuniversity、企業・法人・商号ならcompany、国・地域・自治体・町域・山川・駅などの地名ならplaceをexclusionFlagsへ入れてください。複数該当時はすべて入れ、該当なしは空配列にしてください。",
     "confidenceは判定への確信度を0〜100で返します。reasonは一般認知の観点だけを80文字以内で書き、語義そのものは説明しないでください。",
     "入力のsourceIdを維持し、全件を入力順で1回ずつ返してください。JSON以外は返さないでください。",
-    "形式: {\"items\":[{\"sourceId\":\"...\",\"verdict\":\"known|borderline|ordinary-unknown|almost-nobody-knows\",\"entityFlag\":\"none|university|company|place\",\"estimatedRecognitionPercent\":8,\"confidence\":80,\"reason\":\"...\"}]}",
+    "形式: {\"items\":[{\"sourceId\":\"...\",\"verdict\":\"known|borderline|ordinary-unknown|almost-nobody-knows\",\"exclusionFlags\":[\"sensitive|university|company|place\"],\"estimatedRecognitionPercent\":8,\"confidence\":80,\"reason\":\"...\"}]}",
     `候補: ${JSON.stringify(compactCandidates)}`,
   ].join("\n\n");
-  emitObservabilityEvent("info", "ai.generation", { game: "tahoiya", operation: "difficulty-screening-mock", sourceCount: candidates.length, outcome: "started" });
+  emitObservabilityEvent("info", "ai.generation", { game: "tahoiya", operation: "difficulty-screening", sourceCount: candidates.length, outcome: "started" });
   const generated = await generateGameLlmText(prompt, mode, { quality: "standard", timeoutMs: 25_000 });
-  const screened = parseTahoiyaDifficultyScreening(generated.text, compactCandidates.map((candidate) => ({ id: candidate.sourceId, word: candidate.word })), difficulty);
+  const screened = parseTahoiyaDifficultyScreening(generated.text, compactCandidates.map((candidate, index) => ({ id: candidate.sourceId, wordId: candidates[index].id, word: candidate.word })), difficulty);
   if (screened.length !== candidates.length) throw new Error(`Difficulty screening returned ${screened.length}/${candidates.length} items`);
   const generation: GameGenerationMeta = {
     provider: generated.provider,
@@ -644,7 +652,15 @@ export async function generateTahoiyaTopicResponse(
   previewOnly = false,
   forceNew = false,
   screenDifficultyOnly = false,
+  onProgress?: (progress: { stage: TahoiyaTopicGenerationStage; batchNumber?: number; batchLimit?: number; newCandidateFlow?: boolean }) => Promise<void>,
 ) {
+  const reportProgress = async (progress: { stage: TahoiyaTopicGenerationStage; batchNumber?: number; batchLimit?: number; newCandidateFlow?: boolean }) => {
+    try {
+      await onProgress?.(progress);
+    } catch {
+      // Progress is best effort. A transient room refresh failure must not spend the completed LLM work twice.
+    }
+  };
   const feedbackRecords = await retrieveGameFeedback({
     game: "tahoiya",
     task: "tahoiya.topic",
@@ -655,57 +671,112 @@ export async function generateTahoiyaTopicResponse(
   const retrievedFeedbackIds = feedbackRecords.map((record) => record.id);
   if (screenDifficultyOnly) {
     try {
-      const candidates = await findUnexperiencedTahoiyaWordCandidates(difficulty, playerIds, feedbackBlockedWords, 10);
+      const candidates = await findUnscreenedUnexperiencedTahoiyaWordCandidates(playerIds, feedbackBlockedWords, 10);
       if (candidates.length < 10) {
-        return Response.json({ error: `${tahoiyaDifficultyLabel(difficulty)}の未使用候補を10件揃えられませんでした（${candidates.length}件）。` }, { status: 503 });
+        return Response.json({ error: `参加者全員が未使用の未判定候補を10件揃えられませんでした（${candidates.length}件）。` }, { status: 503 });
       }
       const mode = await resolveGameLlmMode();
       if (mode === "local") return Response.json({ error: "難易度を審査できるAI APIがありません。" }, { status: 503 });
       const screening = await screenDifficultyCandidates(mode, candidates, difficulty);
+      const persistedCount = await saveTahoiyaDifficultyScreenings(screening.screened, screening.generation);
       return Response.json({
         screening: screening.screened,
         acceptedCount: screening.screened.filter((item) => item.accepted).length,
         generation: screening.generation,
-        persisted: false,
+        persisted: persistedCount === screening.screened.length,
+        persistedCount,
       });
     } catch (error) {
-      emitObservabilityEvent("error", "ai.generation", { game: "tahoiya", operation: "difficulty-screening-mock", outcome: "failed", errorCode: observabilityErrorCode(error) });
+      emitObservabilityEvent("error", "ai.generation", { game: "tahoiya", operation: "difficulty-screening", outcome: "failed", errorCode: observabilityErrorCode(error), databaseCode: vocabularyDatabaseErrorCode(error) });
       return Response.json({ error: "候補10語の難易度先行審査に失敗しました。もう一度お試しください。" }, { status: 503 });
     }
   }
-  const remember = async (topic: TahoiyaTopic) => {
-    if (previewOnly) {
-      await rememberTahoiyaTopicCandidate(topic, difficulty).catch(() => undefined);
-    } else {
-      await rememberTahoiyaTopicExperience(topic, difficulty, playerIds).catch(() => undefined);
-    }
+  const rememberExperience = async (topic: TahoiyaTopic) => {
+    if (!previewOnly) await rememberTahoiyaTopicExperience(topic, difficulty, playerIds).catch(() => undefined);
   };
   if (!forceNew) {
     try {
-      const candidates = await findUnexperiencedTahoiyaWordCandidates(
+      await reportProgress({ stage: "checking-reusable" });
+      const reusable = await findReusableTahoiyaTopic(difficulty, playerIds, feedbackBlockedWords);
+      if (reusable) {
+        await reportProgress({ stage: "finalizing" });
+        await rememberExperience(reusable);
+        return Response.json(reusable);
+      }
+
+      await reportProgress({ stage: "checking-screened" });
+      let candidates = await findUnexperiencedScreenedTahoiyaWordCandidates(
         difficulty,
         playerIds,
         feedbackBlockedWords,
         tahoiyaGenerationCandidateLimit,
       );
-      if (candidates.length === 0) {
-        return Response.json({ error: `参加者全員が未使用の${tahoiyaDifficultyLabel(difficulty)}候補（${tahoiyaEffectiveZipfDescription(difficulty)}）がありません。` }, { status: 503 });
+      let screenedBatchCount = 0;
+      let lastScreeningGeneration: GameGenerationMeta | undefined;
+      let mode: Exclude<GameLlmMode, "local"> | null = null;
+      while (candidates.length === 0 && screenedBatchCount < tahoiyaScreeningBatchLimit) {
+        await reportProgress({
+          stage: "screening-new",
+          batchNumber: screenedBatchCount + 1,
+          batchLimit: tahoiyaScreeningBatchLimit,
+          newCandidateFlow: true,
+        });
+        const rawCandidates = await findUnscreenedUnexperiencedTahoiyaWordCandidates(
+          playerIds,
+          feedbackBlockedWords,
+          10,
+        );
+        if (rawCandidates.length < 10) break;
+        if (!mode) {
+          const selectedMode: GameLlmMode = await resolveGameLlmMode();
+          if (selectedMode === "local") {
+            return Response.json({ error: "判定済み候補がなく、難易度を審査できるAI APIもありません。" }, { status: 503 });
+          }
+          mode = selectedMode;
+        }
+        const screening = await screenDifficultyCandidates(mode, rawCandidates, difficulty);
+        await saveTahoiyaDifficultyScreenings(screening.screened, screening.generation);
+        lastScreeningGeneration = screening.generation;
+        screenedBatchCount += 1;
+        candidates = screening.screened
+          .filter((item) => item.accepted)
+          .map((item) => rawCandidates.find((candidate) => candidate.id === item.wordId))
+          .filter((candidate): candidate is TahoiyaWordCandidate => Boolean(candidate))
+          .slice(0, tahoiyaGenerationCandidateLimit);
       }
-      const mode = await resolveGameLlmMode();
-      if (mode === "local") {
+      if (candidates.length === 0) {
+        return Response.json({ error: `未判定語を${screenedBatchCount * 10}語審査しましたが、参加者全員が未使用の${tahoiyaDifficultyLabel(difficulty)}候補が見つかりませんでした。もう一度お試しください。` }, { status: 503 });
+      }
+      const definitionMode = mode ?? await resolveGameLlmMode();
+      if (definitionMode === "local") {
         return Response.json({ error: "正解文を生成できるAI APIがありません。" }, { status: 503 });
       }
-      const topic = await generateTopicFromCatalogWords(
-        mode,
+      await reportProgress({ stage: "generating-definition" });
+      const generatedTopic = await generateTopicFromCatalogWords(
+        definitionMode,
         difficulty,
         candidates,
         retrievedFeedbackIds,
       );
-      if (!topic) {
+      if (!generatedTopic) {
         return Response.json({ error: `${tahoiyaDifficultyLabel(difficulty)}候補の読み・正解文を検証できませんでした。もう一度お試しください。` }, { status: 503 });
       }
-      await remember(topic);
-      return Response.json(topic);
+      const topic = generatedTopic.topic;
+      if (!topic.generation || !topic.reading) throw new Error("TAHOIYA_GENERATED_TOPIC_METADATA_MISSING");
+      await reportProgress({ stage: "finalizing" });
+      await saveTahoiyaScreenedTopic({
+        wordId: generatedTopic.candidate.id,
+        reading: topic.reading,
+        realDefinition: topic.realDefinition,
+        note: topic.note,
+        sourceDetail: topic.sourceDetail,
+        generation: topic.generation,
+      });
+      await rememberExperience(topic);
+      return Response.json({
+        ...topic,
+        screening: lastScreeningGeneration ? { batchCount: screenedBatchCount, generation: lastScreeningGeneration } : undefined,
+      });
     } catch (error) {
       emitObservabilityEvent("error", "ai.generation", {
         game: "tahoiya",

@@ -22,6 +22,10 @@ import {
   type StoredTahoiyaTopic,
 } from "@/lib/tahoiya-topic-repository";
 import {
+  listScreenedTahoiyaWordCandidates,
+  listUnscreenedTahoiyaWordCandidates,
+} from "@/lib/tahoiya-screening-repository";
+import {
   filterUnexperiencedTahoiyaWords,
   rememberTahoiyaTopicHistory,
 } from "@/lib/tahoiya-topic-history-store";
@@ -187,6 +191,48 @@ export async function findUnexperiencedTahoiyaWordCandidates(
     .map((candidate) => ({ candidate, order: Math.random() }))
     .sort((left, right) => left.order - right.order)
     .slice(0, Math.max(1, Math.min(50, Math.floor(limit))))
+    .map(({ candidate }) => candidate);
+}
+
+export async function findUnexperiencedScreenedTahoiyaWordCandidates(
+  difficulty: TahoiyaDifficulty,
+  playerIds: string[],
+  blockedWords: string[],
+  limit = 20,
+): Promise<TahoiyaWordCandidate[]> {
+  if (playerIds.length === 0) return [];
+  const blocked = new Set(blockedWords.map(normalizeWord));
+  const screened = await listScreenedTahoiyaWordCandidates(difficulty, 500);
+  const candidates = screened
+    .filter((word) => !blocked.has(normalizeWord(word.word)))
+    .map((word) => ({
+      id: word.id,
+      word: word.word,
+      reading: word.reading,
+      effectiveZipf: word.effectiveZipf,
+    }));
+  const unexperienced = await filterUnexperiencedTahoiyaWords(candidates, playerIds);
+  return unexperienced
+    .map((candidate) => ({ candidate, order: Math.random() }))
+    .sort((left, right) => left.order - right.order)
+    .slice(0, Math.max(1, Math.min(50, Math.floor(limit))))
+    .map(({ candidate }) => candidate);
+}
+
+export async function findUnscreenedUnexperiencedTahoiyaWordCandidates(
+  playerIds: string[],
+  blockedWords: string[],
+  limit = 10,
+): Promise<TahoiyaWordCandidate[]> {
+  if (playerIds.length === 0) return [];
+  const blocked = new Set(blockedWords.map(normalizeWord));
+  const words = await listUnscreenedTahoiyaWordCandidates(500);
+  const candidates = words.filter((word) => !blocked.has(normalizeWord(word.word)));
+  const unexperienced = await filterUnexperiencedTahoiyaWords(candidates, playerIds);
+  return unexperienced
+    .map((candidate) => ({ candidate, order: Math.random() }))
+    .sort((left, right) => left.order - right.order)
+    .slice(0, Math.max(1, Math.min(10, Math.floor(limit))))
     .map(({ candidate }) => candidate);
 }
 

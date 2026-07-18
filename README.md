@@ -106,9 +106,11 @@ JSON records into Redis with `HSETNX`, so existing per-player usage history is p
 Before running the workflow, add `OPENAI_API_KEY` under GitHub repository Settings → Secrets and
 variables → Actions. An optional Actions variable `TAHOIYA_GENERATOR_MODEL` selects the review model;
 when omitted, the script uses `gpt-5.6-sol`. The generation job uses the configured paid API and may
-take several hours. Gameplay does not call these external vocabulary sources. It extracts words from
-the shared database by effective Zipf (`0 < Zipf < 3` for 秘境 and `Zipf = 0` for 魔境), then uses the
-shared LLM gateway to generate and independently verify the reading and correct-definition sentence.
+take several hours. Gameplay does not call these external vocabulary sources. It screens batches of
+10 previously unjudged words from the shared database, persists the estimated recognition rate and
+exclusion flags, and classifies `0-1%` as 魔境 and `>1%-14%` as 秘境. Only the selected word receives
+a generated and verified reading and correct-definition sentence; the other screening results remain
+available for later rounds.
 
 ## Development
 
