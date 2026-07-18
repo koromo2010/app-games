@@ -7,7 +7,7 @@ import { recordTahoiyaReplay } from "@/lib/game-replay-store";
 import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
 import { isMultiplayerRoomExpired } from "@/lib/multiplayer-room-lifecycle";
 import { canDissolveOnlineRoom } from "@/lib/room-dissolve-policy";
-import { allRoomPlayersReturned, beginRoomLobbyReturn, confirmRoomLobbyReturn } from "@/lib/room-lobby-return";
+import { allRoomPlayersReturned, beginRoomLobbyReturn, canRemoveWaitingRoomPlayer, confirmRoomLobbyReturn } from "@/lib/room-lobby-return";
 import { claimOnlineRoomForPlayer, loadPlayerActiveOnlineRoom, releasePlayerActiveRoom, saveOnlineRoomPlayerIndexes } from "@/lib/player-active-room";
 import { onlineRoomPlayerLimits } from "@/lib/online-room-policy";
 import { loadIndexedOnlineRoomPage } from "@/lib/online-room-list";
@@ -175,7 +175,7 @@ export async function startStoredTahoiyaRound(code: string, actorId: string, top
 }
 
 export async function applyStoredTahoiyaRoomAction(code: string, action: TahoiyaRoomAction) {
-  return mutateStoredTahoiyaRoom(code, (current) => {
+  const room = await mutateStoredTahoiyaRoom(code, (current) => {
     const actorIsHost = action.actorId === current.hostId;
     const actorIsMember = current.players.some((player) => player.id === action.actorId);
     if (!actorIsMember) throw new Error("TAHOIYA_ROOM_FORBIDDEN");
@@ -185,6 +185,11 @@ export async function applyStoredTahoiyaRoomAction(code: string, action: Tahoiya
     if (action.type === "confirm-lobby-return") {
       if (current.phase !== "lobby" || !current.lobbyReturn) return current;
       return { ...current, lobbyReturn: confirmRoomLobbyReturn(current.lobbyReturn, current.players, action.actorId) };
+    }
+    if (action.type === "remove-waiting-player") {
+      if (!actorIsHost || current.phase !== "lobby" || !canRemoveWaitingRoomPlayer(current.lobbyReturn, current.players, current.hostId, action.targetPlayerId)) throw new Error("TAHOIYA_ROOM_FORBIDDEN");
+      const players = current.players.filter((player) => player.id !== action.targetPlayerId);
+      return { ...current, players, answererId: current.answererId === action.targetPlayerId ? "" : current.answererId };
     }
     if (action.type === "abort-game") {
       if (!actorIsHost || !current.debugMode || current.phase === "lobby") throw new Error("TAHOIYA_ROOM_FORBIDDEN");
@@ -293,6 +298,10 @@ export async function applyStoredTahoiyaRoomAction(code: string, action: Tahoiya
     }
     return current;
   });
+  if (action.type === "remove-waiting-player" && !room.players.some((player) => player.id === action.targetPlayerId)) {
+    await deletePlayerActiveRoom(action.targetPlayerId, room.code);
+  }
+  return room;
 }
 
 export async function deleteStoredTahoiyaRoom(code: string, actorId = "") {

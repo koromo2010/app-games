@@ -81,6 +81,7 @@ export type TahoiyaLobbyConfig = Pick<TahoiyaRoom,
 export type TahoiyaRoomAction =
   | { type: "abort-game"; actorId: string }
   | { type: "confirm-lobby-return"; actorId: string }
+  | { type: "remove-waiting-player"; actorId: string; targetPlayerId: string }
   | { type: "recover-player"; actorId: string }
   | { type: "update-config"; actorId: string; config: Partial<TahoiyaLobbyConfig> }
   | { type: "set-debug"; actorId: string; enabled: boolean }
