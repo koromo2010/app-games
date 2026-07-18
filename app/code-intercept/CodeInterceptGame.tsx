@@ -124,6 +124,16 @@ function TeamRoundHistoryTable({ room, teamId }: { room: CodeInterceptRoom; team
   </section>;
 }
 
+function TeamScoreBoard({ room }: { room: CodeInterceptRoom }) {
+  return <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-4">
+    <h2 className="text-sm font-black text-slate-300">現在のポイント</h2>
+    <div className="mt-3 grid grid-cols-2 gap-2 sm:gap-3">{codeInterceptTeamIds.map((teamId) => {
+      const team = room.teams.find((candidate) => candidate.id === teamId);
+      return <div key={teamId} className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-3 sm:px-4 ${teamStyle(teamId)}`}><span className="text-sm font-black sm:text-base">{teamLabel(teamId)}</span><strong className="whitespace-nowrap font-mono text-lg sm:text-xl">残り {team?.points ?? 0}点</strong></div>;
+    })}</div>
+  </section>;
+}
+
 export function CodeInterceptGame() {
   const [session, setSession] = useState<PlayerSession | null>(null);
   const [room, setRoom] = useState<CodeInterceptRoom | null>(null);
@@ -340,7 +350,9 @@ export function CodeInterceptGame() {
           {isHost ? <button type="button" disabled={isSaving || !codeInterceptTeamsAreStartable(room)} onClick={() => void runAction({ type: "start-game", actorId: playerId })} className="mt-5 w-full rounded-xl bg-amber-300 px-4 py-4 text-lg font-black text-slate-950 disabled:opacity-40">{codeInterceptTeamsAreStartable(room) ? "このチームで開始" : "各チーム2人以上・人数差1以内にしてください"}</button> : <p className="mt-5 text-center font-bold text-slate-300">ホストが開始するまでお待ちください。</p>}
         </section>}
 
-        {room.phase !== "lobby" && myTeam && <section className={`rounded-2xl border p-5 ${teamStyle(myTeam.id)}`}><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-black tracking-[0.2em]">YOUR SECRET CARDS</p><h2 className="mt-1 text-xl font-black">{teamLabel(myTeam.id)}の秘密カード</h2></div><span className="rounded-xl bg-slate-950/60 px-3 py-2 font-mono text-lg font-black">残り {myTeam.points}点</span></div><div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">{myTeam.secretWords.map((word, index) => <div key={`${index}:${word}`} className="rounded-xl border border-white/15 bg-slate-950/50 p-3 text-center"><p className="font-mono text-xs text-slate-300">{index + 1}</p><p className="mt-1 text-lg font-black">{word}</p></div>)}</div></section>}
+        {room.phase !== "lobby" && <TeamScoreBoard room={room} />}
+
+        {room.phase !== "lobby" && myTeam && <section className={`rounded-2xl border p-5 ${teamStyle(myTeam.id)}`}><div><p className="text-xs font-black tracking-[0.2em]">YOUR SECRET CARDS</p><h2 className="mt-1 text-xl font-black">{teamLabel(myTeam.id)}の秘密カード</h2></div><div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">{myTeam.secretWords.map((word, index) => <div key={`${index}:${word}`} className="rounded-xl border border-white/15 bg-slate-950/50 p-3 text-center"><p className="font-mono text-xs text-slate-300">{index + 1}</p><p className="mt-1 text-lg font-black">{word}</p></div>)}</div></section>}
 
         {room.phase === "code-length" && myTeamId && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6">
           <p className="text-sm font-black text-cyan-300">第{room.roundNumber}ラウンド・桁数選択</p>
