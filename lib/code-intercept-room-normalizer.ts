@@ -4,6 +4,7 @@ import {
   codeInterceptPlayerLimit,
   codeInterceptTeamIds,
   isCodeLengthMode,
+  isCodeRevealMode,
   isCodeInterceptTeamId,
   isValidCodeInterceptAnswer,
   normalizeCodeInterceptCardCount,
@@ -80,6 +81,23 @@ function normalizeNumberArrayRecord(value: unknown, cardCount: number, codeLengt
   })) as Partial<Record<CodeInterceptTeamId, number[]>>;
 }
 
+function normalizePlayerAnswerRecord(
+  value: unknown,
+  players: readonly CodeInterceptPlayer[],
+  clueGiverIds: Partial<Record<CodeInterceptTeamId, string>>,
+  cardCount: number,
+  codeLengths: Partial<Record<CodeInterceptTeamId, number>>,
+) {
+  const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  return Object.fromEntries(players.flatMap((player) => {
+    const answer = source[player.id];
+    const codeLength = codeLengths[player.teamId];
+    return player.id !== clueGiverIds[player.teamId] && codeLength && isValidCodeInterceptAnswer(answer, cardCount, codeLength)
+      ? [[player.id, [...answer]]]
+      : [];
+  }));
+}
+
 function normalizeClueRecord(value: unknown, codeLengths: Partial<Record<CodeInterceptTeamId, number>>) {
   const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
   return Object.fromEntries(codeInterceptTeamIds.flatMap((teamId) => {
@@ -150,6 +168,8 @@ export function normalizeCodeInterceptRoom(value: unknown): CodeInterceptRoom | 
     ? Math.max(1, Math.min(30, parsed.initialPoints))
     : codeInterceptDefaults.initialPoints;
   const winner = parsed.winner === "red" || parsed.winner === "blue" || parsed.winner === "draw" ? parsed.winner : null;
+  const clueGiverIds = normalizeStringRecord(parsed.clueGiverIds);
+  const enemyCodeLengths = Object.fromEntries(codeInterceptTeamIds.map((teamId) => [teamId, roundCodeLengths[otherCodeInterceptTeam(teamId)]]));
   return {
     code,
     revision: typeof parsed.revision === "number" ? Math.max(0, Math.floor(parsed.revision)) : 0,
@@ -163,6 +183,7 @@ export function normalizeCodeInterceptRoom(value: unknown): CodeInterceptRoom | 
     roundNumber: typeof parsed.roundNumber === "number" ? Math.max(1, Math.floor(parsed.roundNumber)) : 1,
     cardCount,
     codeLengthMode,
+    codeRevealMode: isCodeRevealMode(parsed.codeRevealMode) ? parsed.codeRevealMode : codeInterceptDefaults.codeRevealMode,
     fixedCodeLength,
     initialPoints,
     miscommunicationDamage: typeof parsed.miscommunicationDamage === "number" && Number.isInteger(parsed.miscommunicationDamage) ? Math.max(0, Math.min(10, parsed.miscommunicationDamage)) : codeInterceptDefaults.miscommunicationDamage,
@@ -173,13 +194,15 @@ export function normalizeCodeInterceptRoom(value: unknown): CodeInterceptRoom | 
     debugMode: parsed.debugMode === true,
     debugReplayEnabled: parsed.debugReplayEnabled === true && parsed.debugMode === true,
     teams: normalizeTeams(parsed.teams, cardCount, initialPoints),
-    clueGiverIds: normalizeStringRecord(parsed.clueGiverIds),
+    clueGiverIds,
     codeLengthChoices: normalizeCodeLengthChoices(parsed.codeLengthChoices, cardCount),
     roundCodeLengths,
     secretCodes: normalizeNumberArrayRecord(parsed.secretCodes, cardCount, roundCodeLengths),
     clues: normalizeClueRecord(parsed.clues, roundCodeLengths),
+    allyAnswerProposals: normalizePlayerAnswerRecord(parsed.allyAnswerProposals, players, clueGiverIds, cardCount, roundCodeLengths),
+    interceptAnswerProposals: normalizePlayerAnswerRecord(parsed.interceptAnswerProposals, players, clueGiverIds, cardCount, enemyCodeLengths),
     allyAnswers: normalizeNumberArrayRecord(parsed.allyAnswers, cardCount, roundCodeLengths),
-    interceptAnswers: normalizeNumberArrayRecord(parsed.interceptAnswers, cardCount, Object.fromEntries(codeInterceptTeamIds.map((teamId) => [teamId, roundCodeLengths[otherCodeInterceptTeam(teamId)]]))),
+    interceptAnswers: normalizeNumberArrayRecord(parsed.interceptAnswers, cardCount, enemyCodeLengths),
     roundHistory: normalizeRoundHistory(parsed.roundHistory, cardCount, codeLengthMode, fixedCodeLength),
     winner,
     debugLog: normalizeGameDebugLog(parsed.debugLog),
@@ -187,4 +210,3 @@ export function normalizeCodeInterceptRoom(value: unknown): CodeInterceptRoom | 
     updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : Date.now(),
   };
 }
-

@@ -471,7 +471,8 @@ export async function recordCodeInterceptReplay(room: CodeInterceptRoom) {
   );
   const highlights = room.roundHistory.flatMap((round) => round.teams.map((team) => {
     const label = team.teamId === "red" ? "赤" : "青";
-    return `第${round.roundNumber}ラウンド ${label}: ヒント「${team.clues.join(" / ")}」・暗号${team.secretCode.join("-")}・伝達${team.allyCorrect ? "成功" : "失敗"}・傍受${team.enemyIntercepted ? "された" : "回避"}・${team.pointsBefore}→${team.pointsAfter}点`;
+    const code = room.codeRevealMode === "all" ? `・暗号${team.secretCode.join("-")}` : "";
+    return `第${round.roundNumber}ラウンド ${label}: ヒント「${team.clues.join(" / ")}」${code}・伝達${team.allyCorrect ? "成功" : "失敗"}・傍受${team.enemyIntercepted ? "された" : "回避"}・${team.pointsBefore}→${team.pointsAfter}点`;
   }));
   return storeReplay({ ...base, gameType: "code-intercept", overview: winnerLabel, highlights: cleanLines(highlights), scoreLabels: resultLabels }, room.code);
 }
