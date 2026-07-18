@@ -6,7 +6,9 @@ import {
   codeInterceptTeamHasSubmittedAnswers,
   consensusCodeInterceptAnswer,
   codeInterceptTeamsAreStartable,
+  expireCodeInterceptPhase,
   finishCodeInterceptRound,
+  isCodeInterceptPhaseExpired,
   isValidCodeInterceptAnswer,
   normalizeCodeInterceptCardCount,
   normalizeCodeInterceptCodeLength,
@@ -76,17 +78,67 @@ test("each team can use a different code length in the same round", () => {
   assert.deepEqual(finished.roundHistory[0].teams.map((team) => team.codeLengthSelectedByPlayerId), ["r1", "b1"]);
 });
 
-test("round damage is calculated simultaneously and can end in a draw", () => {
+test("simultaneous elimination is won by the team with the smaller negative balance", () => {
   const current = room();
   current.teams[0].points = 2;
+  current.teams[1].points = 1;
+  current.allyAnswers.blue = [2, 4, 3];
   const finished = finishCodeInterceptRound(current);
   const red = finished.teams.find((team) => team.id === "red")!;
   const blue = finished.teams.find((team) => team.id === "blue")!;
-  assert.equal(red.points, 0);
-  assert.equal(blue.points, 0);
-  assert.equal(finished.winner, "draw");
+  assert.equal(red.points, -1);
+  assert.equal(blue.points, -2);
+  assert.equal(finished.winner, "red");
   assert.equal(finished.phase, "game-result");
   assert.equal(finished.roundHistory[0].teams.find((team) => team.teamId === "red")?.totalDamage, 3);
+});
+
+test("simultaneous elimination only draws when both negative balances are equal", () => {
+  const current = room();
+  current.teams[0].points = 2;
+  current.teams[1].points = 2;
+  current.allyAnswers.blue = [2, 4, 3];
+  const finished = finishCodeInterceptRound(current);
+  assert.deepEqual(finished.teams.map((team) => team.points), [-1, -1]);
+  assert.equal(finished.winner, "draw");
+});
+
+test("configured action timer expires only the interactive phases", () => {
+  const current = room();
+  current.actionTimeLimitSeconds = 60;
+  current.phaseStartedAt = 1_000;
+  assert.equal(isCodeInterceptPhaseExpired(current, 60_999), false);
+  assert.equal(isCodeInterceptPhaseExpired(current, 61_000), true);
+  current.phase = "round-result";
+  assert.equal(isCodeInterceptPhaseExpired(current, 100_000), false);
+});
+
+test("phase timeout fills missing input and keeps the round moving", () => {
+  const current = room();
+  current.actionTimeLimitSeconds = 30;
+  current.phaseStartedAt = 1_000;
+  current.phase = "code-length";
+  current.codeLengthMode = "per-round";
+  current.codeLengthChoices = {};
+  current.roundCodeLengths = {};
+  current.secretCodes = {};
+  current.clues = {};
+  const cluePhase = expireCodeInterceptPhase(current, 31_000);
+  assert.equal(cluePhase.phase, "clue");
+  assert.deepEqual(cluePhase.roundCodeLengths, { red: 3, blue: 3 });
+  assert.equal(cluePhase.secretCodes.red?.length, 3);
+
+  cluePhase.phaseStartedAt = 31_000;
+  const answerPhase = expireCodeInterceptPhase(cluePhase, 61_000);
+  assert.equal(answerPhase.phase, "answer");
+  assert.deepEqual(answerPhase.clues.red, ["時間切れ", "時間切れ", "時間切れ"]);
+
+  answerPhase.phaseStartedAt = 61_000;
+  answerPhase.allyAnswers = {};
+  answerPhase.interceptAnswers = {};
+  const result = expireCodeInterceptPhase(answerPhase, 91_000);
+  assert.equal(result.phase, "round-result");
+  assert.deepEqual(result.teams.map((team) => team.points), [4, 1]);
 });
 
 test("first round does not apply interception damage", () => {
@@ -116,6 +168,7 @@ test("own-team reveal mode hides the enemy correct code and successful ally answ
   assert.equal(blueResult.allyAnswer, null);
   assert.deepEqual(redView.secretCodes.red, [3, 1, 4]);
   assert.equal(redView.secretCodes.blue, undefined);
+  assert.deepEqual(redView.teams.find((team) => team.id === "blue")?.secretWords, ["山", "海", "空", "森"]);
 });
 
 test("multiple answerers only reach consensus when every proposal matches", () => {

@@ -6,6 +6,7 @@ export const codeInterceptGameId = "code-intercept" as const;
 export const codeInterceptMinimumPlayers = 4;
 export const codeInterceptPlayerLimit = onlineRoomPlayerLimits.codeIntercept;
 export const codeInterceptTeamIds = ["red", "blue"] as const;
+export const codeInterceptTimedPhases = ["code-length", "clue", "answer"] as const;
 export type CodeInterceptTeamId = (typeof codeInterceptTeamIds)[number];
 export type CodeLengthMode = "fixed" | "per-round";
 export type CodeRevealMode = "all" | "own-team";
@@ -137,6 +138,7 @@ export type CodeInterceptRoomAction =
   | { type: "set-debug"; actorId: string; enabled: boolean }
   | { type: "set-debug-replay"; actorId: string; enabled: boolean }
   | { type: "set-config"; actorId: string; cardCount: number; codeLengthMode: CodeLengthMode; codeRevealMode: CodeRevealMode; fixedCodeLength?: number; actionTimeLimitSeconds: number }
+  | { type: "expire-phase"; actorId: string; phaseStartedAt: number }
   | { type: "start-game"; actorId: string }
   | { type: "select-code-length"; actorId: string; playerId?: string; codeLength: number }
   | { type: "submit-clues"; actorId: string; playerId?: string; clues: string[] }
@@ -252,6 +254,53 @@ export function canReviseCodeInterceptAnswers(room: Pick<CodeInterceptRoom, "pha
   return room.phase === "answer" && !codeInterceptTeamHasSubmittedAnswers(room, otherCodeInterceptTeam(teamId));
 }
 
+export function isCodeInterceptTimedPhase(phase: CodeInterceptPhase): phase is (typeof codeInterceptTimedPhases)[number] {
+  return codeInterceptTimedPhases.includes(phase as (typeof codeInterceptTimedPhases)[number]);
+}
+
+export function isCodeInterceptPhaseExpired(
+  room: Pick<CodeInterceptRoom, "phase" | "phaseStartedAt" | "actionTimeLimitSeconds">,
+  now = Date.now(),
+) {
+  return isCodeInterceptTimedPhase(room.phase)
+    && room.actionTimeLimitSeconds > 0
+    && typeof room.phaseStartedAt === "number"
+    && now >= room.phaseStartedAt + room.actionTimeLimitSeconds * 1000;
+}
+
+export function expireCodeInterceptPhase(room: CodeInterceptRoom, now = Date.now()): CodeInterceptRoom {
+  if (!isCodeInterceptPhaseExpired(room, now)) return room;
+  if (room.phase === "code-length") {
+    const codeLengthChoices = { ...room.codeLengthChoices };
+    codeInterceptTeamIds.forEach((teamId) => {
+      if (codeLengthChoices[teamId]) return;
+      codeLengthChoices[teamId] = {
+        teamId,
+        selectedByPlayerId: room.clueGiverIds[teamId] ?? room.hostId,
+        codeLength: room.fixedCodeLength,
+        lockedAt: now,
+      };
+    });
+    const roundCodeLengths = Object.fromEntries(codeInterceptTeamIds.map((teamId) => [teamId, codeLengthChoices[teamId]!.codeLength]));
+    return {
+      ...room,
+      phase: "clue",
+      codeLengthChoices,
+      roundCodeLengths,
+      secretCodes: Object.fromEntries(codeInterceptTeamIds.map((teamId) => [teamId, shuffledCode(room.cardCount, roundCodeLengths[teamId]!)])),
+      phaseStartedAt: now,
+    };
+  }
+  if (room.phase === "clue") {
+    const clues = { ...room.clues };
+    codeInterceptTeamIds.forEach((teamId) => {
+      clues[teamId] ??= Array.from({ length: codeLengthForTeam(room, teamId) }, () => "時間切れ");
+    });
+    return { ...room, phase: "answer", clues, phaseStartedAt: now };
+  }
+  return finishCodeInterceptRound(room);
+}
+
 export function withCodeInterceptConsensusAnswer(answers: Partial<Record<CodeInterceptTeamId, number[]>>, teamId: CodeInterceptTeamId, consensus: number[] | null) {
   const next = { ...answers };
   if (consensus) next[teamId] = [...consensus];
@@ -295,16 +344,20 @@ export function finishCodeInterceptRound(room: CodeInterceptRoom): CodeIntercept
       interceptionDamage,
       totalDamage,
       pointsBefore: team.points,
-      pointsAfter: Math.max(0, team.points - totalDamage),
+      pointsAfter: team.points - totalDamage,
     };
   });
   const teams = room.teams.map((team) => ({
     ...team,
     points: results.find((result) => result.teamId === team.id)?.pointsAfter ?? team.points,
   }));
-  const redZero = teams.find((team) => team.id === "red")!.points === 0;
-  const blueZero = teams.find((team) => team.id === "blue")!.points === 0;
-  const winner: CodeInterceptWinner = redZero && blueZero ? "draw" : redZero ? "blue" : blueZero ? "red" : null;
+  const redPoints = teams.find((team) => team.id === "red")!.points;
+  const bluePoints = teams.find((team) => team.id === "blue")!.points;
+  const redEliminated = redPoints <= 0;
+  const blueEliminated = bluePoints <= 0;
+  const winner: CodeInterceptWinner = redEliminated && blueEliminated
+    ? redPoints === bluePoints ? "draw" : redPoints > bluePoints ? "red" : "blue"
+    : redEliminated ? "blue" : blueEliminated ? "red" : null;
   return {
     ...room,
     teams,

@@ -57,7 +57,7 @@ function normalizeTeams(value: unknown, cardCount: number, initialPoints: number
     return {
       id,
       name: id === "red" ? "赤チーム" : "青チーム",
-      points: typeof stored?.points === "number" && Number.isInteger(stored.points) ? Math.max(0, stored.points) : initialPoints,
+      points: typeof stored?.points === "number" && Number.isInteger(stored.points) ? Math.max(-20, Math.min(30, stored.points)) : initialPoints,
       secretWords: Array.isArray(stored?.secretWords)
         ? stored.secretWords.filter((word): word is string => typeof word === "string").map((word) => word.trim().slice(0, 80)).filter(Boolean).slice(0, cardCount)
         : [],
