@@ -47,5 +47,31 @@ export function useTahoiyaLobbyActions(params: Params) {
     if (!topic.word || !topic.realDefinition) throw new Error(topic.notice || topic.error || "ワードを生成できませんでした。");
     return { fields: [{ label: "ワード", value: topic.word }, { label: "読み", value: topic.reading ?? "" }, { label: "本物の説明", value: topic.realDefinition }, { label: "注記", value: topic.note }], notice: topic.notice, generation: topic.generation };
   };
-  return { refreshJoinableRooms, createRoom, joinRoom, addTestPlayer, removeWaitingPlayer, setDebugMode, setAnswererMode: (value: TahoiyaAnswererMode) => updateConfig({ answererMode: value }), setPlayMode: (value: TahoiyaPlayMode) => updateConfig({ playMode: value }), setTopicDifficulty: (value: TahoiyaDifficulty) => updateConfig({ topicDifficulty: value }), setManualAnswerer: (value: string) => updateConfig({ answererId: value }), setShowRealDefinitionToWriters: (value: boolean) => updateConfig({ showRealDefinitionToWriters: value }), setActionTimeLimit: (value: number) => updateConfig({ actionTimeLimitSeconds: normalizeCommonTimeLimit(value) }), testWordGeneration };
+  const testDifficultyScreening = async (): Promise<DebugWordGenerationResult> => {
+    if (!room) throw new Error("部屋の設定を読み込めませんでした。");
+    const query = new URLSearchParams({ roomCode: room.code, difficulty: room.topicDifficulty, screenDifficulty: "1" });
+    const response = await fetch(`/api/tahoiya/topic?${query}`, { cache: "no-store" });
+    const data = await response.json() as { error?: string; acceptedCount?: number; persisted?: boolean; generation?: TahoiyaTopic["generation"]; screening?: Array<{ accepted: boolean; word: string; verdict: "known" | "borderline" | "ordinary-unknown" | "almost-nobody-knows"; estimatedRecognitionPercent: number; confidence: number; reason: string }> };
+    if (!response.ok || !data.screening) throw new Error(data.error || "難易度を審査できませんでした。");
+    const labels = { known: "既知寄り", borderline: "境界", "ordinary-unknown": "一般には不明", "almost-nobody-knows": "ほぼ誰も知らない" } as const;
+    return {
+      fields: [
+        { label: "先行審査", value: `${data.screening.length}語` },
+        { label: `${room.topicDifficulty === "extreme" ? "魔境" : "秘境"}ライン合格`, value: `${data.acceptedCount ?? 0}語` },
+        { label: "保存", value: data.persisted ? "あり" : "なし（確認用モック）" },
+      ],
+      items: data.screening.map((item) => ({
+        title: item.word,
+        status: item.accepted ? `合格・${labels[item.verdict]}` : `除外・${labels[item.verdict]}`,
+        fields: [
+          { label: "一般成人の推定認知率", value: `${item.estimatedRecognitionPercent}%` },
+          { label: "判定確信度", value: `${item.confidence}%` },
+          { label: "理由", value: item.reason },
+        ],
+      })),
+      notice: "DBの未使用候補10語を説明なしでLLMへ渡した難易度先行審査です。候補DB・出題履歴には保存していません。",
+      generation: data.generation,
+    };
+  };
+  return { refreshJoinableRooms, createRoom, joinRoom, addTestPlayer, removeWaitingPlayer, setDebugMode, setAnswererMode: (value: TahoiyaAnswererMode) => updateConfig({ answererMode: value }), setPlayMode: (value: TahoiyaPlayMode) => updateConfig({ playMode: value }), setTopicDifficulty: (value: TahoiyaDifficulty) => updateConfig({ topicDifficulty: value }), setManualAnswerer: (value: string) => updateConfig({ answererId: value }), setShowRealDefinitionToWriters: (value: boolean) => updateConfig({ showRealDefinitionToWriters: value }), setActionTimeLimit: (value: number) => updateConfig({ actionTimeLimitSeconds: normalizeCommonTimeLimit(value) }), testWordGeneration, testDifficultyScreening };
 }

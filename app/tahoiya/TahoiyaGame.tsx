@@ -78,7 +78,7 @@ export function TahoiyaGame() {
 
   const { runRoomAction, dissolveRoom } = useTahoiyaRoomActions({ room, playerId, markRoomDissolved: resultReturnGate.markRoomDissolved, setRoom, setMessage });
   const { refreshJoinableRooms, createRoom, joinRoom, addTestPlayer, removeWaitingPlayer, setDebugMode, setAnswererMode, setPlayMode,
-    setTopicDifficulty, setManualAnswerer, setShowRealDefinitionToWriters, setActionTimeLimit, testWordGeneration } = useTahoiyaLobbyActions({
+    setTopicDifficulty, setManualAnswerer, setShowRealDefinitionToWriters, setActionTimeLimit, testWordGeneration, testDifficultyScreening } = useTahoiyaLobbyActions({
     room, playerId, playerName, avatarColor, avatarImage, passphrase, joinCode, runRoomAction,
     setRoom, setActivePlayerId, setJoinableRooms, setMessage,
   });
@@ -139,7 +139,7 @@ export function TahoiyaGame() {
             onCreateRoom={() => void createRoom()} onRefreshRooms={() => void refreshJoinableRooms()} onJoinRoom={(code) => void joinRoom(code)}
             onPlayModeChange={setPlayMode} onDifficultyChange={setTopicDifficulty} onAnswererModeChange={setAnswererMode}
             onAnswererChange={setManualAnswerer} onShowDefinitionChange={setShowRealDefinitionToWriters} onTimeLimitChange={setActionTimeLimit}
-            onTestWordGeneration={testWordGeneration} onAddTestPlayer={addTestPlayer} onStartRound={() => void startRound()} onDissolveRoom={() => void dissolveRoom()}
+            onTestWordGeneration={testWordGeneration} onTestDifficultyScreening={testDifficultyScreening} onAddTestPlayer={addTestPlayer} onStartRound={() => void startRound()} onDissolveRoom={() => void dissolveRoom()}
           />
 
           {room && <TahoiyaScorePanel room={room} players={sortedScores} />}
