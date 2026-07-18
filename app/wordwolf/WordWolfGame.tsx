@@ -92,7 +92,7 @@ export function WordWolfGame() {
     setError,
     runRoomAction,
   });
-  const { addSeat, setClueLogVisibility, setGameMode, setWolfCount, setClueMode, setRandomizeTurnOrder, setTurnTimeLimit, setTopicDictionarySource, setTopicPairDistance, setTopicHint, testWordGeneration } = useWordWolfLobbyActions(room, runRoomAction);
+  const { addSeat, setClueLogVisibility, setGameMode, setWolfCount, setClueMode, setRandomizeTurnOrder, setTurnTimeLimit, setTopicDictionarySource, setTopicPairDistance, setTopicDifficulty, setTopicHint, testWordGeneration } = useWordWolfLobbyActions(room, runRoomAction);
   const { createRoom, showJoinChoices, joinRoom, dissolveRoom, copyRoomCode, copyRoomInvite } = useWordWolfRoomLifecycle({
     room, isHost, activePlayerId, playerAccountId, playerName, avatarColor, avatarImage, roomPassphrase, joinCode,
     setRoom, setActivePlayerId, setJoinCode, setJoinableRooms, setIsJoinListOpen, setError,
@@ -175,6 +175,7 @@ export function WordWolfGame() {
                   onTopicDictionarySourceChange={setTopicDictionarySource}
                   onTopicHintChange={setTopicHint}
                   onTopicPairDistanceChange={setTopicPairDistance}
+                  onTopicDifficultyChange={setTopicDifficulty}
                   onClueLogVisibilityChange={setClueLogVisibility}
                   onTestWordGeneration={testWordGeneration}
                   onAddSeat={addSeat}

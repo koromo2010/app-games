@@ -3,11 +3,14 @@
 import { type FormEvent, useEffect, useState } from "react";
 import { siteAdminAccountMaximumCount, siteAdminPasswordMaximumLength, siteAdminPasswordMinimumLength } from "@/lib/site-admin-account-constants";
 import { addSiteAdminPasskey, ensureSiteAdminStepUp } from "@/lib/site-admin-passkey-client";
+import { PlayerDebugAccessPanel } from "./PlayerDebugAccessPanel";
 
 type SiteAdminAccount = {
   email: string;
   receiveAlerts: boolean;
   receiveContacts: boolean;
+  matchingPlayerName: string | null;
+  debugAccessEnabled: boolean;
   createdAt: number;
   updatedAt: number;
   passkeyCount: number;
@@ -165,7 +168,7 @@ export function AdminAccountsPanel({ onAuthExpired, recoveryMode, currentEmail }
       <section className="rounded-2xl border border-white/10 bg-white/[0.05] p-5 sm:p-7">
         <div>
           <h2 className="text-xl font-black">登録済みの管理者</h2>
-          <p className="mt-1 text-sm leading-6 text-slate-400">登録したメールアドレスとパスワードで、この管理画面へログインできます。最大{siteAdminAccountMaximumCount}件まで登録できます。</p>
+          <p className="mt-1 text-sm leading-6 text-slate-400">登録したメールアドレスとパスワードで、この管理画面へログインできます。同じメールを登録したプレイヤーにはデバッグ権限が自動付与されます。最大{siteAdminAccountMaximumCount}件まで登録できます。</p>
         </div>
         {loading ? <p className="mt-6 animate-pulse text-sm text-cyan-200">読み込み中…</p> : accounts.length === 0 ? (
           <p className="mt-6 rounded-xl border border-amber-300/25 bg-amber-300/10 px-4 py-3 text-sm leading-6 text-amber-100">まだ管理者メールはありません。右のフォームから最初のアカウントを登録してください。</p>
@@ -173,18 +176,19 @@ export function AdminAccountsPanel({ onAuthExpired, recoveryMode, currentEmail }
           <ul className="mt-6 space-y-3">
             {accounts.map((account) => (
               <li key={account.email} className="rounded-xl border border-white/10 bg-black/20 p-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div className="min-w-0"><p className="truncate font-bold text-white">{account.email}</p><p className="mt-1 text-xs text-slate-400">パスキー {account.passkeyCount}件 ・ 未使用復旧コード {account.unusedRecoveryCodeCount}件</p><p className="mt-1 text-xs text-slate-500">登録 {formatDate(account.createdAt)} ・ 更新 {formatDate(account.updatedAt)}</p></div><div className="flex gap-2">{!recoveryMode && currentEmail === account.email && <button type="button" onClick={() => void addPasskey()} disabled={addingPasskey || Boolean(deletingEmail) || Boolean(updatingEmail)} className="rounded-lg border border-cyan-300/30 px-3 py-2 text-sm font-bold text-cyan-200 hover:bg-cyan-300/10 disabled:opacity-40">{addingPasskey ? "追加中…" : "パスキー追加"}</button>}<button type="button" onClick={() => void remove(account.email)} disabled={Boolean(deletingEmail) || Boolean(updatingEmail)} className="rounded-lg border border-rose-300/30 px-3 py-2 text-sm font-bold text-rose-200 hover:bg-rose-300/10 disabled:opacity-40">{deletingEmail === account.email ? "削除中…" : "削除"}</button></div></div>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div className="min-w-0"><p className="truncate font-bold text-white">{account.email}</p><p className="mt-1 text-xs text-slate-400">パスキー {account.passkeyCount}件 ・ 未使用復旧コード {account.unusedRecoveryCodeCount}件</p><p className="mt-1 text-xs text-slate-500">登録 {formatDate(account.createdAt)} ・ 更新 {formatDate(account.updatedAt)}</p><p className={`mt-2 text-xs font-bold ${account.debugAccessEnabled ? "text-emerald-300" : "text-amber-200"}`}>{account.debugAccessEnabled ? `デバッグ権限：${account.matchingPlayerName} に付与中` : "デバッグ権限：同じメールのプレイヤーは未登録"}</p></div><div className="flex gap-2">{!recoveryMode && currentEmail === account.email && <button type="button" onClick={() => void addPasskey()} disabled={addingPasskey || Boolean(deletingEmail) || Boolean(updatingEmail)} className="rounded-lg border border-cyan-300/30 px-3 py-2 text-sm font-bold text-cyan-200 hover:bg-cyan-300/10 disabled:opacity-40">{addingPasskey ? "追加中…" : "パスキー追加"}</button>}<button type="button" onClick={() => void remove(account.email)} disabled={Boolean(deletingEmail) || Boolean(updatingEmail)} className="rounded-lg border border-rose-300/30 px-3 py-2 text-sm font-bold text-rose-200 hover:bg-rose-300/10 disabled:opacity-40">{deletingEmail === account.email ? "削除中…" : "削除"}</button></div></div>
                 <div className="mt-4 flex flex-col gap-2 border-t border-white/10 pt-4 text-sm sm:flex-row sm:gap-5"><label className="flex cursor-pointer items-center gap-2 text-slate-200"><input type="checkbox" checked={account.receiveAlerts} disabled={recoveryMode || Boolean(updatingEmail)} onChange={(event) => void updateSubscriptions(account, { receiveAlerts: event.target.checked })} className="h-4 w-4 accent-cyan-300" />運用アラートを受け取る</label><label className="flex cursor-pointer items-center gap-2 text-slate-200"><input type="checkbox" checked={account.receiveContacts} disabled={recoveryMode || Boolean(updatingEmail)} onChange={(event) => void updateSubscriptions(account, { receiveContacts: event.target.checked })} className="h-4 w-4 accent-cyan-300" />問い合わせ内容を受け取る</label>{updatingEmail === account.email && <span className="text-xs text-cyan-200">保存中…</span>}</div>
               </li>
             ))}
           </ul>
         )}
+        <PlayerDebugAccessPanel onAuthExpired={onAuthExpired} recoveryMode={recoveryMode} />
       </section>
 
       <aside className="space-y-5 lg:sticky lg:top-6 lg:self-start">
         <form onSubmit={save} className="rounded-2xl border border-white/10 bg-white/[0.05] p-5">
           <h2 className="text-lg font-black">管理者を追加・更新</h2>
-          <p className="mt-1 text-xs leading-5 text-slate-400">登録済みのメールアドレスを入力すると、パスワードを更新します。</p>
+          <p className="mt-1 text-xs leading-5 text-slate-400">登録済みのメールアドレスを入力すると、パスワードを更新します。同じメールのプレイヤーアカウントがあれば、デバッグ操作も許可されます。</p>
           <label className="mt-5 block text-sm font-bold text-slate-200">メールアドレス<input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" className="mt-2 w-full rounded-xl border border-white/15 bg-black/25 px-4 py-3 text-white outline-none focus:border-cyan-300 focus:ring-2 focus:ring-cyan-300/20" /></label>
           <label className="mt-4 block text-sm font-bold text-slate-200">パスワード<input type="password" required minLength={siteAdminPasswordMinimumLength} maxLength={siteAdminPasswordMaximumLength} value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="new-password" className="mt-2 w-full rounded-xl border border-white/15 bg-black/25 px-4 py-3 text-white outline-none focus:border-cyan-300 focus:ring-2 focus:ring-cyan-300/20" /><span className="mt-1 block text-xs font-normal text-slate-400">{siteAdminPasswordMinimumLength}文字以上。登録後にパスワードを画面で確認することはできません。</span></label>
           <label className="mt-4 block text-sm font-bold text-slate-200">パスワード（確認）<input type="password" required minLength={siteAdminPasswordMinimumLength} maxLength={siteAdminPasswordMaximumLength} value={passwordConfirmation} onChange={(event) => setPasswordConfirmation(event.target.value)} autoComplete="new-password" className="mt-2 w-full rounded-xl border border-white/15 bg-black/25 px-4 py-3 text-white outline-none focus:border-cyan-300 focus:ring-2 focus:ring-cyan-300/20" /></label>

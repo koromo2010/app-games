@@ -14,6 +14,9 @@ export function sanitizeWordWolfRoom(room: WordWolfRoom, playerId: string) {
     villageWord: revealAll ? room.villageWord : ownWord,
     wolfWord: revealAll ? room.wolfWord : ownWord,
     topicReason: revealAll ? room.topicReason : "",
+    topicAnchorWordId: revealAll ? room.topicAnchorWordId : undefined,
+    topicPartnerWordId: revealAll ? room.topicPartnerWordId : undefined,
+    topicAnchorWord: revealAll ? room.topicAnchorWord : undefined,
     clues: revealAll || room.clueLogVisibility === "always"
       ? room.clues
       : room.clues.map((clue) => clue.playerId === playerId ? clue : { ...clue, text: "投稿済み" }),

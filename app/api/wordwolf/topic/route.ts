@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   normalizeTopicDictionarySource,
   getTopicKey,
@@ -18,7 +19,11 @@ import {
   type GameLlmMode,
 } from "@/lib/game-llm";
 import type { GameGenerationMeta } from "@/lib/game-ai-types";
-import { formatGameFeedbackContext, retrieveGameFeedback } from "@/lib/game-feedback-store";
+import {
+  formatGameFeedbackContext,
+  retrieveGameFeedback,
+  wordFamiliarityFeedbackAdjustment,
+} from "@/lib/game-feedback-store";
 import { loadStoredWordWolfRoom } from "@/lib/wordwolf-room-store";
 import {
   findReusableWordWolfTopic,
@@ -28,15 +33,38 @@ import {
   rememberWordWolfTopicExperience,
 } from "@/lib/wordwolf-topic-catalog";
 import { parseLlmJson } from "@/lib/llm-json";
+import { requirePlayerDebugAccess } from "@/lib/debug-access";
 import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 import { emitObservabilityEvent, observabilityErrorCode } from "@/lib/observability";
 import { gameApiAccessDeniedResponse } from "@/lib/game-access";
+import {
+  defaultWordSelectionHyperparameters,
+  gameEffectiveZipf,
+  normalizeWordDifficulty,
+  wordSelectionWeight,
+  type WordDifficulty,
+} from "@/lib/word-selection-protocol";
+import {
+  buildWordwolfPartnerBatchPrompt,
+  parseWordwolfPartnerBatchDecision,
+} from "@/lib/wordwolf-partner-generation";
+import {
+  findActiveVocabularyWordId,
+  findActiveVocabularyWordwolfPair,
+  loadVocabularyWordCandidates,
+  saveVocabularyWordwolfEvaluation,
+  type VocabularyWordCandidate,
+} from "@/lib/vocabulary-wordwolf-rag";
+import type {
+  WordWolfDebugCandidateTrace,
+  WordWolfDebugTrace,
+} from "@/lib/wordwolf-topic-types";
 
 const baseTopicPrompt =
   "ワードウルフ用のお題ペアを1組作ってください。3-6人で3周ほど話す前提です。日本語で、共通点を話せるが同じ言葉の言い換えではない組み合わせにしてください。JSONのみで返してください: {\"villageWord\":\"...\",\"wolfWord\":\"...\",\"reason\":\"...\"}";
 
-const wordwolfTopicPromptVersion = "wordwolf-topic-v2";
+const wordwolfTopicPromptVersion = "wordwolf-topic-v3";
 
 function localGenerationMeta(retrievedFeedbackIds: string[]): GameGenerationMeta {
   return {
@@ -68,6 +96,7 @@ function parseTopic(
   text: string,
   pairDistance: TopicPairDistance,
   dictionarySource: Extract<TopicDictionarySource, "llm" | "proper-noun">,
+  difficulty: WordDifficulty,
 ): WordWolfTopic | null {
     const parsed = parseLlmJson<Partial<WordWolfTopic> & {
       alternativeCandidates?: unknown;
@@ -92,6 +121,7 @@ function parseTopic(
       fallbackExhausted: false,
       dictionarySource,
       pairDistance,
+      difficulty,
       sourceMode: dictionarySource === "proper-noun" ? "proper-noun" : "llm",
     } satisfies WordWolfTopic;
 
@@ -107,8 +137,192 @@ function getTopicRequestOptions(request: Request) {
     excludeWords: normalizeList(url.searchParams.get("excludeWords")?.split(",") ?? []).slice(0, 500),
     dictionarySource: normalizeTopicDictionarySource(url.searchParams.get("source") ?? legacyMode),
     pairDistance: normalizeTopicPairDistance(url.searchParams.get("distance") ?? legacyMode),
+    difficulty: normalizeWordDifficulty(url.searchParams.get("difficulty")),
     topicHint: normalizeTopicHint(url.searchParams.get("hint")),
   };
+}
+
+function weightedIndex(weights: number[]) {
+  const safeWeights = weights.map((weight) => Number.isFinite(weight) && weight > 0 ? weight : 0);
+  const total = safeWeights.reduce((sum, weight) => sum + weight, 0);
+  if (total <= 0) return Math.floor(Math.random() * Math.max(1, weights.length));
+  let cursor = Math.random() * total;
+  for (let index = 0; index < safeWeights.length; index += 1) {
+    cursor -= safeWeights[index];
+    if (cursor <= 0) return index;
+  }
+  return safeWeights.length - 1;
+}
+
+function debugTraceBase(
+  difficulty: WordDifficulty,
+  pipeline: WordWolfDebugTrace["pipeline"],
+  candidateCount: number,
+  retrievedFeedbackCount: number,
+): WordWolfDebugTrace {
+  const { targetZipf, width } = defaultWordSelectionHyperparameters.difficulties[difficulty];
+  return {
+    pipeline,
+    difficulty,
+    targetZipf,
+    width,
+    batchSize: defaultWordSelectionHyperparameters.batchSize,
+    candidateCount,
+    retrievedFeedbackCount,
+    attemptedProviders: [],
+  };
+}
+
+function withDebugTrace(topic: WordWolfTopic, trace: WordWolfDebugTrace, previewOnly: boolean) {
+  return previewOnly ? { ...topic, debugTrace: trace } : topic;
+}
+
+async function generateCatalogAnchoredTopic(input: {
+  candidates: VocabularyWordCandidate[];
+  difficulty: WordDifficulty;
+  pairDistance: TopicPairDistance;
+  mode: Exclude<GameLlmMode, "local">;
+  feedbackContext: string;
+  feedbackRecords: Awaited<ReturnType<typeof retrieveGameFeedback>>;
+  retrievedFeedbackIds: string[];
+  excludeKeys: string[];
+  excludeWords: string[];
+}) {
+  const adjustedCandidates = input.candidates.map((candidate) => ({
+    ...candidate,
+    feedbackAdjustment: wordFamiliarityFeedbackAdjustment(input.feedbackRecords, candidate),
+  }));
+  const prompt = buildWordwolfPartnerBatchPrompt({
+    anchors: adjustedCandidates.map((candidate) => ({
+      inputId: candidate.wordId,
+      anchor: candidate.surface,
+      reading: candidate.reading,
+      zipfFrequency: candidate.zipfFrequency,
+      feedbackAdjustment: candidate.feedbackAdjustment,
+    })),
+    difficulty: input.difficulty,
+    pairDistance: input.pairDistance,
+    ragContext: input.feedbackContext,
+  });
+  const generated = await generateGameLlmText(prompt, input.mode, { quality: "standard", timeoutMs: 20000 });
+  const decision = parseWordwolfPartnerBatchDecision(
+    generated.text,
+    adjustedCandidates.map((candidate) => candidate.wordId),
+  );
+  const generationBatchId = randomUUID();
+  const generation: GameGenerationMeta = {
+    provider: generated.provider,
+    model: generated.model,
+    mode: generated.mode,
+    billingSource: generated.billingSource,
+    promptVersion: wordwolfTopicPromptVersion,
+    latencyMs: generated.latencyMs,
+    retrievedFeedbackIds: input.retrievedFeedbackIds,
+  };
+  const traces: WordWolfDebugCandidateTrace[] = [];
+  const eligible: Array<{ topic: WordWolfTopic; weight: number; trace: WordWolfDebugCandidateTrace }> = [];
+
+  for (const result of decision.results) {
+    const candidate = adjustedCandidates.find((item) => item.wordId === result.inputId);
+    if (!candidate) continue;
+    const effectiveZipf = gameEffectiveZipf({
+      zipfFrequency: candidate.zipfFrequency,
+      usagePenalty: result.usagePenalty,
+      gamePenalty: result.wordwolfPenalty,
+      feedbackAdjustment: candidate.feedbackAdjustment,
+    });
+    const weight = wordSelectionWeight(effectiveZipf, input.difficulty);
+    const partnerWordId = result.partner ? await findActiveVocabularyWordId(result.partner).catch(() => null) : null;
+    let evaluationPersisted = false;
+    try {
+      await saveVocabularyWordwolfEvaluation({
+        candidate,
+        result,
+        pairDistance: input.pairDistance,
+        partnerWordId,
+        promptVersion: wordwolfTopicPromptVersion,
+        provider: generated.provider,
+        model: generated.model,
+        feedbackAdjustment: candidate.feedbackAdjustment,
+        generationBatchId,
+      });
+      evaluationPersisted = true;
+    } catch {
+      evaluationPersisted = false;
+    }
+
+    const trace: WordWolfDebugCandidateTrace = {
+      wordId: candidate.wordId,
+      surface: candidate.surface,
+      reading: candidate.reading,
+      zipfFrequency: candidate.zipfFrequency,
+      decision: result.decision,
+      usagePenalty: result.usagePenalty,
+      wordwolfPenalty: result.wordwolfPenalty,
+      safetyFlags: result.safetyFlags,
+      partner: result.partner,
+      pairReason: result.pairReason,
+      reasonCode: result.reasonCode,
+      wordwolfEffectiveZipf: effectiveZipf,
+      selectionWeight: weight,
+      outcome: result.decision === "reject" ? "rejected" : "eligible",
+      outcomeReason: result.decision === "reject" ? result.reasonCode : "weighted_candidate",
+      evaluationPersisted,
+      draftPersisted: false,
+    };
+    traces.push(trace);
+    if (result.decision !== "accept" || !result.partner) continue;
+    if (normalizeTopicWord(result.partner) === normalizeTopicWord(candidate.surface)) {
+      trace.outcome = "filtered";
+      trace.outcomeReason = "partner_same_as_anchor";
+      continue;
+    }
+
+    const villageFirst = Math.random() < 0.5;
+    const topic = {
+      villageWord: villageFirst ? candidate.surface : result.partner,
+      wolfWord: villageFirst ? result.partner : candidate.surface,
+      reason: result.pairReason,
+      source: "llm",
+      fallbackExhausted: false,
+      dictionarySource: "llm",
+      pairDistance: input.pairDistance,
+      difficulty: input.difficulty,
+      sourceMode: "llm",
+      anchorWordId: candidate.wordId,
+      partnerWordId: partnerWordId ?? undefined,
+      anchorWord: candidate.surface,
+      commonEffectiveZipf: candidate.zipfFrequency - result.usagePenalty + candidate.feedbackAdjustment,
+      wordwolfEffectiveZipf: effectiveZipf,
+      generation,
+    } satisfies WordWolfTopic;
+    if (!isTopicAllowed(topic, input.excludeKeys, input.excludeWords)) {
+      trace.outcome = "filtered";
+      trace.outcomeReason = "recent_or_duplicate_word";
+      continue;
+    }
+    eligible.push({ topic, weight, trace });
+  }
+
+  for (const item of eligible) {
+    const draftId = await rememberWordWolfTopicCandidate(item.topic).catch(() => null);
+    item.trace.draftPersisted = Boolean(draftId);
+  }
+  const selected = eligible[weightedIndex(eligible.map((item) => item.weight))];
+  if (selected) {
+    selected.trace.outcome = "selected";
+    selected.trace.outcomeReason = "weighted_selection";
+  }
+  const trace = debugTraceBase(
+    input.difficulty,
+    "catalog-rag",
+    adjustedCandidates.length,
+    input.feedbackRecords.length,
+  );
+  trace.attemptedProviders = generated.attemptedProviders;
+  trace.candidates = traces;
+  trace.selectedWordId = selected?.topic.anchorWordId;
+  return { topic: selected?.topic ?? null, trace, generation };
 }
 
 async function generateLlmTopic(
@@ -116,6 +330,7 @@ async function generateLlmTopic(
   excludeWords: string[],
   pairDistance: TopicPairDistance,
   dictionarySource: Extract<TopicDictionarySource, "llm" | "proper-noun">,
+  difficulty: WordDifficulty,
   topicHint: string,
   mode: Exclude<GameLlmMode, "local">,
   feedbackContext: string,
@@ -181,25 +396,28 @@ async function generateLlmTopic(
   ].filter(Boolean).join("\n\n");
 
   const generated = await generateGameLlmText(promptWithExclusions, mode);
-  const topic = parseTopic(generated.text, pairDistance, dictionarySource);
-  return topic
-    ? {
-        ...topic,
-        generation: {
-          provider: generated.provider,
-          model: generated.model,
-          mode: generated.mode,
-          billingSource: generated.billingSource,
-          promptVersion: wordwolfTopicPromptVersion,
-          latencyMs: generated.latencyMs,
-          retrievedFeedbackIds,
-        },
-      }
-    : null;
+  const topic = parseTopic(generated.text, pairDistance, dictionarySource, difficulty);
+  return {
+    topic: topic
+      ? {
+          ...topic,
+          generation: {
+            provider: generated.provider,
+            model: generated.model,
+            mode: generated.mode,
+            billingSource: generated.billingSource,
+            promptVersion: wordwolfTopicPromptVersion,
+            latencyMs: generated.latencyMs,
+            retrievedFeedbackIds,
+          },
+        }
+      : null,
+    attemptedProviders: generated.attemptedProviders,
+  };
 }
 
 export async function generateWordWolfTopicResponse(request: Request, playerIds: string[], previewOnly = false, forceNew = false) {
-  const { excludeKeys, excludeWords, dictionarySource, pairDistance, topicHint } = getTopicRequestOptions(request);
+  const { excludeKeys, excludeWords, dictionarySource, pairDistance, difficulty, topicHint } = getTopicRequestOptions(request);
   const [experiencedWords, catalogWords] = await Promise.all([
     loadExperiencedWordWolfWords(playerIds).catch(() => []),
     forceNew ? loadWordWolfCatalogWords().catch(() => []) : Promise.resolve([]),
@@ -207,11 +425,27 @@ export async function generateWordWolfTopicResponse(request: Request, playerIds:
   const allExcludeKeys = excludeKeys;
   const allExcludeWords = normalizeList([...excludeWords, ...experiencedWords, ...catalogWords]);
   const requiresLlm = dictionarySource === "llm" || dictionarySource === "proper-noun";
+  const vocabularyCandidates = dictionarySource === "llm" && !topicHint
+    ? await loadVocabularyWordCandidates({
+        difficulty,
+        pairDistance,
+        excludeWords: allExcludeWords,
+        limit: defaultWordSelectionHyperparameters.batchSize,
+      }).catch(() => [])
+    : [];
   const feedbackRecords = requiresLlm
     ? await retrieveGameFeedback({
         game: "wordwolf",
         task: "wordwolf.topic",
-        queryTags: [dictionarySource, pairDistance, topicHint].filter(Boolean),
+        queryTags: [
+          dictionarySource,
+          pairDistance,
+          difficulty,
+          topicHint,
+          ...vocabularyCandidates.flatMap((candidate) => [candidate.wordId, candidate.surface]),
+        ].filter(Boolean),
+        goodLimit: 12,
+        badLimit: 12,
       }).catch(() => [])
     : [];
   const feedbackContext = formatGameFeedbackContext(feedbackRecords);
@@ -225,23 +459,68 @@ export async function generateWordWolfTopicResponse(request: Request, playerIds:
   };
 
   if (!forceNew) {
+    if (dictionarySource === "llm" && !topicHint) {
+      const activePair = await findActiveVocabularyWordwolfPair({
+        pairDistance,
+        difficulty,
+        excludeWords: allExcludeWords,
+      }).catch(() => null);
+      if (activePair) {
+        const villageFirst = Math.random() < 0.5;
+        const topic = {
+          villageWord: villageFirst ? activePair.wordA : activePair.wordB,
+          wolfWord: villageFirst ? activePair.wordB : activePair.wordA,
+          reason: activePair.reason,
+          source: "fallback",
+          fallbackExhausted: false,
+          dictionarySource,
+          pairDistance,
+          difficulty,
+          sourceMode: "llm",
+          anchorWordId: activePair.wordAId,
+          partnerWordId: activePair.wordBId,
+          anchorWord: activePair.wordA,
+          generation: {
+            provider: "local",
+            model: "shared-vocabulary-pair",
+            mode: "local",
+            promptVersion: wordwolfTopicPromptVersion,
+            latencyMs: 0,
+            retrievedFeedbackIds,
+          },
+        } satisfies WordWolfTopic;
+        await remember(topic);
+        return Response.json(withDebugTrace(
+          topic,
+          debugTraceBase(difficulty, "shared-pair", 1, feedbackRecords.length),
+          previewOnly,
+        ));
+      }
+    }
+
     const reusableTopic = await findReusableWordWolfTopic({
       dictionarySource,
       pairDistance,
+      difficulty,
       topicHint,
       playerIds,
       blockedWords: allExcludeWords,
     }).catch(() => null);
     if (reusableTopic) {
-      await remember(reusableTopic);
-      return Response.json(reusableTopic);
+      const topic = { ...reusableTopic, difficulty: reusableTopic.difficulty ?? difficulty };
+      await remember(topic);
+      return Response.json(topic);
     }
 
     const localTopic = pickFallbackTopic(allExcludeKeys, dictionarySource, pairDistance, allExcludeWords, topicHint);
-    if (!localTopic.fallbackExhausted) {
-      const topic = { ...localTopic, generation: localGenerationMeta(retrievedFeedbackIds) };
+    if (!requiresLlm && !localTopic.fallbackExhausted) {
+      const topic = { ...localTopic, difficulty, generation: localGenerationMeta(retrievedFeedbackIds) };
       await remember(topic);
-      return Response.json(topic);
+      return Response.json(withDebugTrace(
+        topic,
+        debugTraceBase(difficulty, "local", 0, feedbackRecords.length),
+        previewOnly,
+      ));
     }
   }
 
@@ -251,25 +530,79 @@ export async function generateWordWolfTopicResponse(request: Request, playerIds:
   }
   const localTopic = pickFallbackTopic(allExcludeKeys, dictionarySource, pairDistance, allExcludeWords, topicHint);
   if (!requiresLlm || mode === "local") {
-    const topic = { ...localTopic, notice: gameLlmFallbackNotice, generation: localGenerationMeta(retrievedFeedbackIds) };
+    const topic = { ...localTopic, difficulty, notice: gameLlmFallbackNotice, generation: localGenerationMeta(retrievedFeedbackIds) };
     await remember(topic);
-    return Response.json(topic);
+    return Response.json(withDebugTrace(
+      topic,
+      debugTraceBase(difficulty, "local", 0, feedbackRecords.length),
+      previewOnly,
+    ));
+  }
+
+  if (dictionarySource === "llm" && !topicHint && vocabularyCandidates.length > 0) {
+    try {
+      const generated = await generateCatalogAnchoredTopic({
+        candidates: vocabularyCandidates,
+        difficulty,
+        pairDistance,
+        mode,
+        feedbackContext,
+        feedbackRecords,
+        retrievedFeedbackIds,
+        excludeKeys: allExcludeKeys,
+        excludeWords: allExcludeWords,
+      });
+      if (generated.topic) {
+        if (!previewOnly) await rememberWordWolfTopicExperience(generated.topic, playerIds).catch(() => undefined);
+        return Response.json(withDebugTrace(generated.topic, generated.trace, previewOnly));
+      }
+      if (previewOnly) {
+        return Response.json({
+          debugPreview: true,
+          notice: "3候補を評価しましたが、今回は採用可能なペアがありませんでした。各候補の判定理由を確認できます。",
+          debugTrace: generated.trace,
+          generation: generated.generation,
+        });
+      }
+    } catch (error) {
+      const errorCode = observabilityErrorCode(error);
+      emitObservabilityEvent("warn", "ai.generation", {
+        game: "wordwolf",
+        operation: "catalog-rag",
+        outcome: "failed",
+        errorCode,
+      });
+      if (previewOnly) {
+        return Response.json({
+          error: "3候補のAI回答を解析できませんでした。もう一度お試しください。",
+          diagnosticCode: errorCode,
+        }, { status: 422 });
+      }
+    }
   }
 
   try {
-    const topic = await generateLlmTopic(
+    const generated = await generateLlmTopic(
       allExcludeKeys,
       allExcludeWords,
       pairDistance,
       dictionarySource === "proper-noun" ? "proper-noun" : "llm",
+      difficulty,
       topicHint,
       mode,
       feedbackContext,
       retrievedFeedbackIds,
     );
+    const topic = generated.topic;
     if (topic && isTopicAllowed(topic, allExcludeKeys, allExcludeWords)) {
       await remember(topic);
-      return Response.json(topic);
+      const trace = debugTraceBase(difficulty, "direct-llm", 0, feedbackRecords.length);
+      trace.attemptedProviders = generated.attemptedProviders;
+      return Response.json(withDebugTrace(
+        topic,
+        trace,
+        previewOnly,
+      ));
     }
   } catch (error) {
     emitObservabilityEvent("error", "ai.generation", { game: "wordwolf", operation: "topic", outcome: "failed", errorCode: observabilityErrorCode(error) });
@@ -281,11 +614,16 @@ export async function generateWordWolfTopicResponse(request: Request, playerIds:
 
   const topic = {
     ...localTopic,
+    difficulty,
     notice: gameLlmFallbackNotice,
     generation: localGenerationMeta(retrievedFeedbackIds),
   };
   await remember(topic);
-  return Response.json(topic);
+  return Response.json(withDebugTrace(
+    topic,
+    debugTraceBase(difficulty, "local", 0, feedbackRecords.length),
+    previewOnly,
+  ));
 }
 
 export async function GET(request: Request) {
@@ -304,10 +642,12 @@ export async function GET(request: Request) {
     if (!previewOnly || !room.debugMode || room.hostId !== player.id) {
       return Response.json({ error: "Topics are generated through the authenticated room command" }, { status: 403 });
     }
+    await requirePlayerDebugAccess(player.id);
     const forceNew = url.searchParams.get("forceNew") === "1";
     return generateWordWolfTopicResponse(request, room.players.map((item) => item.id), true, forceNew);
   } catch (error) {
     if (error instanceof Error && error.message === "PLAYER_AUTH_REQUIRED") return Response.json({ error: "Login required" }, { status: 401 });
+    if (error instanceof Error && error.message === "DEBUG_ACCESS_REQUIRED") return Response.json({ error: "Debug access required" }, { status: 403 });
     if (isPlayerAuthConfigurationError(error)) return Response.json({ error: "Player auth is not configured" }, { status: 503 });
     return Response.json({ error: "Failed to generate topic preview" }, { status: 500 });
   }

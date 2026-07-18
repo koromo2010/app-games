@@ -11,10 +11,11 @@ import { AdminDashboard } from "./AdminDashboard";
 import { AdminHyperparametersPanel } from "./AdminHyperparametersPanel";
 import { AdminAuditPanel } from "./AdminAuditPanel";
 import { GameOperationsPanel } from "./GameOperationsPanel";
+import { VocabularyDraftsPanel } from "./VocabularyDraftsPanel";
 
 type ScreenState = "checking" | "login" | "mfa" | "recovery-codes" | "settings";
 type LoginMethod = "account" | "master";
-type AdminSection = "dashboard" | "site-settings" | "games" | "hyperparameters" | "accounts" | "audit";
+type AdminSection = "dashboard" | "site-settings" | "games" | "vocabulary" | "hyperparameters" | "accounts" | "audit";
 type AdminSession = { scope: "full" | "recovery"; method: "passkey" | "recovery-code" | "master"; email: string | null; expiresAt: number; mfaAt: number | null };
 type MfaMode = "login" | "enroll";
 const messages: Record<string, string> = {
@@ -40,7 +41,9 @@ function errorMessage(error: unknown, fallback: string) {
   return messages[code] ?? fallback;
 }
 
-export function SiteAdminPanel() {
+export function SiteAdminPanel({ showPreviewVocabularyMigrations }: {
+  showPreviewVocabularyMigrations: boolean;
+}) {
   const [screen, setScreen] = useState<ScreenState>("checking");
   const [loginMethod, setLoginMethod] = useState<LoginMethod>("account");
   const [email, setEmail] = useState("");
@@ -214,9 +217,13 @@ export function SiteAdminPanel() {
     <main className="min-h-screen bg-slate-950 text-white">
       <header className="border-b border-white/10 bg-slate-900/90"><div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4"><div><p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-300">Game Fields Admin</p><h1 className="text-2xl font-black">サイト管理</h1></div><div className="flex gap-2"><Link href="/games" className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold hover:bg-white/10">サイトを見る</Link><button type="button" onClick={() => void logout()} className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold text-slate-300 hover:bg-white/10">ログアウト</button></div></div></header>
       {session?.scope === "recovery" && <div className="border-b border-amber-300/20 bg-amber-300/10 px-4 py-3 text-center text-sm font-bold text-amber-100">復旧モード：15分間、管理者アカウントの復旧と診断だけを行えます。設定変更はできません。</div>}
-      <nav className="border-b border-white/10 bg-slate-900/60" aria-label="管理画面メニュー"><div className="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-4 py-2">{([['dashboard', 'ダッシュボード'], ['site-settings', 'サイト設定'], ['games', 'ゲーム公開管理'], ['hyperparameters', 'ハイパラ管理'], ['accounts', '管理者アカウント'], ['audit', '監査ログ']] as const).filter(([value]) => session?.scope === "full" || value === "dashboard" || value === "accounts" || value === "audit").map(([value, label]) => <button key={value} type="button" aria-current={section === value ? "page" : undefined} onClick={() => setSection(value)} className={`whitespace-nowrap rounded-lg px-4 py-2 text-sm font-bold transition ${section === value ? "bg-cyan-300 text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>{label}</button>)}</div></nav>
+      <nav className="border-b border-white/10 bg-slate-900/60" aria-label="管理画面メニュー"><div className="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-4 py-2">{([['dashboard', 'ダッシュボード'], ['site-settings', 'サイト設定'], ['games', 'ゲーム公開管理'], ['vocabulary', '単語候補'], ['hyperparameters', 'ハイパラ管理'], ['accounts', '管理者アカウント'], ['audit', '監査ログ']] as const).filter(([value]) => session?.scope === "full" || value === "dashboard" || value === "accounts" || value === "audit").map(([value, label]) => <button key={value} type="button" aria-current={section === value ? "page" : undefined} onClick={() => setSection(value)} className={`whitespace-nowrap rounded-lg px-4 py-2 text-sm font-bold transition ${section === value ? "bg-cyan-300 text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>{label}</button>)}</div></nav>
       {section === "dashboard" && <AdminDashboard onAuthExpired={authExpired} />}
       {section === "games" && <GameOperationsPanel onAuthExpired={authExpired} />}
+      {section === "vocabulary" && <VocabularyDraftsPanel
+        onAuthExpired={authExpired}
+        showPreviewMigrations={showPreviewVocabularyMigrations}
+      />}
       {section === "hyperparameters" && <AdminHyperparametersPanel onAuthExpired={authExpired} />}
       {section === "accounts" && <AdminAccountsPanel onAuthExpired={authExpired} recoveryMode={session?.scope === "recovery"} currentEmail={session?.email ?? null} />}
       {section === "audit" && <AdminAuditPanel onAuthExpired={authExpired} />}

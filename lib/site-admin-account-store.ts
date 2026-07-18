@@ -14,6 +14,8 @@ export type SiteAdminAccountSummary = {
   email: string;
   receiveAlerts: boolean;
   receiveContacts: boolean;
+  matchingPlayerName: string | null;
+  debugAccessEnabled: boolean;
   createdAt: number;
   updatedAt: number;
   passkeyCount: number;
@@ -42,6 +44,8 @@ function requireStore() {
 type SiteAdminAccountSummaryRow = Pick<SiteAdminAccountRow, "email" | "receive_alerts" | "receive_contacts" | "created_at" | "updated_at"> & {
   passkey_count?: string | number;
   recovery_code_count?: string | number;
+  matching_player_name?: string | null;
+  debug_access_enabled?: boolean;
 };
 
 function summary(row: SiteAdminAccountSummaryRow): SiteAdminAccountSummary {
@@ -49,6 +53,8 @@ function summary(row: SiteAdminAccountSummaryRow): SiteAdminAccountSummary {
     email: row.email,
     receiveAlerts: Boolean(row.receive_alerts),
     receiveContacts: Boolean(row.receive_contacts),
+    matchingPlayerName: row.matching_player_name ?? null,
+    debugAccessEnabled: row.debug_access_enabled === true,
     createdAt: Number(row.created_at),
     updatedAt: Number(row.updated_at),
     passkeyCount: Number(row.passkey_count ?? 0),
@@ -62,8 +68,11 @@ export async function listSiteAdminAccounts() {
   const rows = await getPostgresClient()`
     SELECT a.email, a.receive_alerts, a.receive_contacts, a.created_at, a.updated_at,
       (SELECT COUNT(*)::int FROM site_admin_passkeys p WHERE p.admin_email = a.email) AS passkey_count,
-      (SELECT COUNT(*)::int FROM site_admin_recovery_codes r WHERE r.admin_email = a.email AND r.used_at IS NULL) AS recovery_code_count
+      (SELECT COUNT(*)::int FROM site_admin_recovery_codes r WHERE r.admin_email = a.email AND r.used_at IS NULL) AS recovery_code_count,
+      player.display_name AS matching_player_name,
+      (player.player_id IS NOT NULL) AS debug_access_enabled
     FROM site_admin_accounts a
+    LEFT JOIN player_accounts player ON player.email = a.email
     ORDER BY a.created_at ASC
   ` as SiteAdminAccountSummaryRow[];
   return rows.map(summary);

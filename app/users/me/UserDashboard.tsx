@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, type MouseEvent } from "react";
+import { useEffect, useState, type FormEvent, type MouseEvent } from "react";
 import { savePersistentPlayerSession, type PlayerSession } from "@/lib/player-session";
 import type { PlayerGameResult, PlayerStatsResponse } from "@/lib/player-stats-store";
 import { GameReplayPanel } from "@/app/components/GameReplayPanel";
@@ -31,19 +31,26 @@ function gameEntry(gameType: PlayerGameResult["gameType"]) {
   return games.find((game) => game.id === gameType);
 }
 
+function recoveryEmailErrorMessage(code: string | undefined) {
+  if (code === "EMAIL_INVALID") return "メールアドレスの形式を確認してください。";
+  if (code === "EMAIL_ALREADY_EXISTS") return "そのメールアドレスは別のプレイヤーアカウントで使われています。";
+  if (code === "INVALID_CREDENTIALS") return "現在のパスワードが正しくありません。";
+  return "復旧用メールアドレスを保存できませんでした。";
+}
+
 export function UserDashboard() {
   const [session, setSession] = useState<PlayerSession | null>(null);
   const [stats, setStats] = useState<PlayerStatsResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [requiresLogin, setRequiresLogin] = useState(false);
   const [message, setMessage] = useState("");
-  const [debugAccess, setDebugAccess] = useState(false);
-  const [debugPassword, setDebugPassword] = useState("");
-  const [debugMessage, setDebugMessage] = useState("");
-  const [debugSaving, setDebugSaving] = useState(false);
   const [isAvatarEditorOpen, setIsAvatarEditorOpen] = useState(false);
   const [isShareNameSaving, setIsShareNameSaving] = useState(false);
   const [shareNameMessage, setShareNameMessage] = useState("");
+  const [recoveryEmail, setRecoveryEmail] = useState("");
+  const [recoveryEmailPassword, setRecoveryEmailPassword] = useState("");
+  const [isRecoveryEmailSaving, setIsRecoveryEmailSaving] = useState(false);
+  const [recoveryEmailMessage, setRecoveryEmailMessage] = useState("");
   const [showAccountDeletion, setShowAccountDeletion] = useState(false);
   const [deleteAccountPassword, setDeleteAccountPassword] = useState("");
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
@@ -105,12 +112,6 @@ export function UserDashboard() {
         const sessionBody = (await sessionResponse.json()) as { session?: PlayerSession };
         if (!sessionResponse.ok || !sessionBody.session?.id) throw new Error("SESSION_LOAD_FAILED");
         setSession(sessionBody.session);
-        const debugResponse = await fetch("/api/debug-auth", { cache: "no-store", signal: controller.signal });
-        if (debugResponse.ok) {
-          const debugBody = (await debugResponse.json()) as { enabled?: boolean };
-          setDebugAccess(debugBody.enabled === true);
-        }
-
         const params = new URLSearchParams({ playerId: sessionBody.session.id, gameType: "all" });
         const statsResponse = await fetch(`/api/player-stats?${params.toString()}`, { cache: "no-store", signal: controller.signal });
         const statsBody = (await statsResponse.json()) as { stats?: PlayerStatsResponse };
@@ -126,27 +127,30 @@ export function UserDashboard() {
     return () => controller.abort();
   }, []);
 
-  const updateDebugAccess = async (enabled: boolean) => {
-    if (debugSaving) return;
-    setDebugSaving(true);
-    setDebugMessage("");
+  const updateRecoveryEmail = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!session || isRecoveryEmailSaving) return;
+    setIsRecoveryEmailSaving(true);
+    setRecoveryEmailMessage("");
     try {
-      const response = await fetch("/api/debug-auth", {
+      const response = await fetch("/api/player-account", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled, password: enabled ? debugPassword : "" }),
+        body: JSON.stringify({ mode: "update-email", name: session.name, password: recoveryEmailPassword, email: recoveryEmail }),
       });
-      if (!response.ok) {
-        setDebugMessage(response.status === 401 ? "デバッグ用パスワードが違います。" : "デバッグ利用設定を変更できませんでした。");
+      const data = await response.json().catch(() => null) as { session?: PlayerSession; error?: string } | null;
+      if (!response.ok || !data?.session) {
+        setRecoveryEmailMessage(recoveryEmailErrorMessage(data?.error));
         return;
       }
-      setDebugAccess(enabled);
-      setDebugPassword("");
-      setDebugMessage(enabled ? "デバッグ機能を利用できるようにしました。" : "デバッグ機能を非表示にしました。");
+      applyPlayerSession(data.session);
+      setRecoveryEmail("");
+      setRecoveryEmailPassword("");
+      setRecoveryEmailMessage("復旧用メールアドレスを保存しました。");
     } catch {
-      setDebugMessage("デバッグ利用設定を変更できませんでした。");
+      setRecoveryEmailMessage("通信に失敗しました。もう一度試してください。");
     } finally {
-      setDebugSaving(false);
+      setIsRecoveryEmailSaving(false);
     }
   };
 
@@ -213,6 +217,19 @@ export function UserDashboard() {
       </header>
 
       <div className="mx-auto max-w-5xl px-4 py-6">
+        <section className="mb-5 rounded-lg border border-violet-100 bg-violet-50 p-4" aria-labelledby="recovery-email-heading">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div><p className="text-xs font-semibold uppercase text-violet-700">Account</p><h2 id="recovery-email-heading" className="text-lg font-black text-slate-950">復旧用メール</h2></div>
+            <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${session?.hasRecoveryEmail ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`}>{session?.hasRecoveryEmail ? "登録済み" : "未登録"}</span>
+          </div>
+          <p className="mt-2 text-xs leading-5 text-slate-600">パスワードを忘れた場合の再設定に使用します。管理者と同じメールの場合はデバッグ権限も自動付与されます。変更には現在のパスワードが必要です。</p>
+          <form onSubmit={updateRecoveryEmail} className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
+            <label className="text-sm font-bold text-slate-700">メールアドレス<input value={recoveryEmail} onChange={(event) => setRecoveryEmail(event.target.value)} type="email" autoComplete="email" required className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-950 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20" placeholder="you@example.com" /></label>
+            <label className="text-sm font-bold text-slate-700">現在のパスワード<input value={recoveryEmailPassword} onChange={(event) => setRecoveryEmailPassword(event.target.value)} type="password" autoComplete="current-password" required className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-950 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20" /></label>
+            <button type="submit" disabled={isRecoveryEmailSaving || !recoveryEmail.trim() || !recoveryEmailPassword} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-violet-500 disabled:bg-slate-300">{isRecoveryEmailSaving ? "保存中…" : "登録・変更"}</button>
+          </form>
+          {recoveryEmailMessage && <p className="mt-2 text-xs font-semibold text-violet-800" role="status">{recoveryEmailMessage}</p>}
+        </section>
         <section className="mb-5 rounded-lg border border-cyan-100 bg-cyan-50 p-4" aria-labelledby="share-privacy-heading">
           <p className="text-xs font-semibold uppercase text-cyan-700">Privacy</p>
           <h2 id="share-privacy-heading" className="text-lg font-black text-slate-950">共有ログの表示名</h2>
@@ -269,16 +286,6 @@ export function UserDashboard() {
           <GameReplayPanel />
         </div>
 
-        <section className="mt-8 border-t border-white/10 pt-4 text-slate-400" aria-labelledby="debug-access-heading">
-          <details className="group text-xs">
-            <summary id="debug-access-heading" className="w-fit cursor-pointer select-none rounded px-1 py-1 text-[11px] font-medium text-slate-500 transition hover:text-slate-300">開発者向け設定{debugAccess ? " · 有効" : ""}</summary>
-            <div className="mt-2 max-w-md rounded-md border border-white/10 bg-white/[0.03] p-3">
-              <p className="leading-5 text-slate-500">管理パスワードで有効にすると、各ゲームにデバッグ操作が表示されます。設定はアカウントに保存されます。</p>
-              {debugAccess ? <div className="mt-3 flex items-center gap-3"><span className="text-xs text-cyan-200/70">デバッグ機能は有効です</span><button type="button" disabled={debugSaving} onClick={() => void updateDebugAccess(false)} className="rounded border border-white/15 px-2 py-1 text-[11px] text-slate-400 transition hover:text-slate-200 disabled:opacity-40">利用を解除</button></div> : <div className="mt-3 flex flex-col gap-2 sm:flex-row"><input type="password" value={debugPassword} onChange={(event) => setDebugPassword(event.target.value)} placeholder="デバッグ用パスワード" autoComplete="off" className="min-w-0 flex-1 rounded border border-white/15 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-slate-500" /><button type="button" disabled={debugSaving || !debugPassword} onClick={() => void updateDebugAccess(true)} className="rounded border border-white/15 px-3 py-1.5 text-xs text-slate-300 transition hover:bg-white/5 disabled:opacity-40">認証</button></div>}
-              {debugMessage && <p className="mt-2 text-[11px] text-slate-500" role="status">{debugMessage}</p>}
-            </div>
-          </details>
-        </section>
         <section className="mt-6 border-t border-rose-300/15 pt-4" aria-labelledby="delete-account-heading">
           <button type="button" id="delete-account-heading" onClick={() => { setShowAccountDeletion((value) => !value); setDeleteAccountPassword(""); setDeleteAccountMessage(""); }} className="text-xs font-bold text-rose-300/70 transition hover:text-rose-200">
             アカウントを削除

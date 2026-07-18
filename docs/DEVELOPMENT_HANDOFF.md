@@ -4,7 +4,7 @@
 >
 > 資料を読む順番や作業別の参照先は `docs/README.md` を入口にする。この文書は「現在の開発状態と共通仕様」、`docs/CONTAINER_ARCHITECTURE.md` は「将来案」である。
 
-最終更新: 2026-07-16
+最終更新: 2026-07-18
 
 ## ブランド・法務ページ
 
@@ -161,7 +161,7 @@ Neon Postgres、Upstash Redis、Vercel Blobの容量は `vercel.json` の日次C
 - デバッグのワード生成テストには画面上の「新規ワード生成」フラグを表示する。ONでは `forceNew=1` を送り、既存の候補DB・ローカル候補を返さずLLMで新しい候補を生成する。候補DB内の全単語を生成NGリストに含め、成功結果だけを全員未使用の候補として保存する。AIを利用できない場合や全プロバイダー失敗時は既存候補へフォールバックせずエラーを返す。OFFでは通常のローカル／再利用候補選択をテストする。サーバー側でも対象部屋の `debugMode` がONの場合だけ `forceNew` を認め、デバッグOFF時や部屋なしの直接リクエストでは無効化する。
 - ワード候補DBと使用履歴はゲーム別に分離する。通常出題では参加者の誰か一人でも使用済みの単語を除外し、参加者全員が未使用のローカル／再利用候補を優先する。該当候補が尽きた場合だけLLM APIで新規生成し、そのゲーム専用候補DBへ追加する。デバッグ生成の結果もゲーム専用候補DBへ追加するが、使用済みプレイヤーは登録せず、全員未使用の候補として扱う。
 - 参加者全員が未使用という条件を満たす再利用候補が複数ある場合は、ゲーム別フィードバックの `Good - Bad` が高い候補を優先する。同点ではGood数、Badの少なさ、全体使用回数の少なさ、最終使用時刻の古さの順で選ぶ。
-- たほい屋の現行候補レコードは経験済みプレイヤーID配列を持つため、プレイヤー別Setへの移行対象である。ワードウルフはv3へ移行済みで、JST同日内は単語単位、順序非依存ペアは標準30日（`WORDWOLF_PAIR_COOLDOWN_DAYS`）で禁則にする。候補DBとは別のプレイヤー別Set／Sorted Setを正とする。詳細は `docs/TOPIC_HISTORY_DATABASE.md` を参照する。
+- たほい屋は完成済みお題を共通DBの`tahoiya_topics`、既出IDをプレイヤー別Redis Set `game-history:v2:tahoiya:<playerId>`へ分離する。移行中だけ旧Redis候補と埋込`experiencedPlayerIds`も互換読み取りし、新規履歴はSetだけへ書く。ワードウルフはv3へ移行済みで、JST同日内は単語単位、順序非依存ペアは標準30日（`WORDWOLF_PAIR_COOLDOWN_DAYS`）で禁則にする。詳細は `docs/TOPIC_HISTORY_DATABASE.md` を参照する。
 
 ### 共通戦績
 
@@ -197,6 +197,8 @@ Neon Postgres、Upstash Redis、Vercel Blobの容量は `vercel.json` の日次C
 - 順番投稿・全員同時投稿、順番ランダム、同時投票、同率・決選投票、狼の逆転回答に対応
 - お題はJST同日同語禁止、順序非依存ペアは標準30日間禁止。固有名詞は語だけで類推できない距離へ調整済み
 - OpenAI OFF時はGemini、Groq、ローカルの順。逆転判定は無料APIまたはfuzzy/feedbackを使用
+- 一般単語の新RAGは共通DBから難易度別に起点語3件を抽出し、1回のLLMで3件を独立審査・相方生成する。生成時の距離とフィードバック集計後の距離を別カラムで保持する。DB migration、旧197,040語の取込、Preview確認は `docs/WORDWOLF_RAG.md` を正本とする
+- 旧197,040語の初回移行中だけ、develop Previewの管理画面に再開可能な取込パネルを置く。`LEGACY_WORD_DATABASE_URL`（未設定時は開発用 `APP_DATABASE_URL`）の `shared_word_catalog` だけを読み、`VOCABULARY_ADMIN_DATABASE_URL`（共通DB）へ1,000件ずつupsertする。旧カタログが開発DBにない場合は読取専用URLをdevelop Previewだけへ一時設定する。Productionでは実行不能で、完了・件数照合後に一時API、パネル、環境変数、読取ロールを撤去する
 
 詳細な挙動を変える前に、`lib/wordwolf-command-domain.ts`、`lib/wordwolf-room-normalizer.ts`、`lib/wordwolf-room-presentation.ts`、`lib/wordwolf-room-store.ts` の境界を確認する。
 
@@ -250,12 +252,14 @@ Neon Postgres、Upstash Redis、Vercel Blobの容量は `vercel.json` の日次C
 2. LLMによる新規生成
 3. 難易度別ローカル候補
 
-`lib/tahoiya-topic-catalog.ts` は各単語に経験済みプレイヤーID、利用回数、最終利用日時を保存する。Bad評価で問題視された語は再利用しない。保存問題は利用回数が少ないものから優先する。履歴はこの仕組みの導入後に出題した問題から蓄積される。
+`lib/tahoiya-topic-catalog.ts` は共通DBの `active_tahoiya_topics` を優先して再利用する。お題全体の利用回数と最終利用日時は共通DB、誰が見たかはプレイヤー別Redis Setへ保存する。Bad評価で問題視された語は再利用せず、保存問題は利用回数が少ないものから優先する。旧Redis Hashは移行中の読み取りフォールバックとして残し、管理画面のPreview限定移行からお題と既出履歴を冪等に移す。新しいLLM候補は共通DBのdraftへ入り、管理者採用後だけ完成済みカタログへ昇格する。
 
 ## 8. フィードバック/RAG
 
 - Good/Bad、理由タグ、自由記述をプレイヤー単位で保存
 - 使用APIとモデル、設定、結果も同時に保存
+- 管理画面のLLM評価レビューでは、管理者のOK/NG票とAI判定の最終採用・不採用を別操作として扱う。管理者票はお題品質フィードバックへ1票として反映する。最終採否は相方未生成を含む評価単位で保存し、どちらも選考済みとして一覧から除外する。紐付く未審査のペアdraftがある場合だけ、正式採用は`active`へ昇格し、不採用は`rejected`へ変更する。不採用の範囲はワードウルフ候補のみで、単語自体、共通Zipf、他ゲームの適格性は変更しない。MFA再確認と確認ダイアログを必須とし、LLM判定と投票内容は自動変更しない。
+- 同じレビュー画面から一つ目の単語を既定対象として「たほい屋候補」へ送れる。辞書由来の`words.zipf`は変更せず、全ゲーム共通の`selection_zipf_override`を使う。実効Zipfが3以上または未計測なら2.9へ設定し、通常ゲームの候補から外しつつ、たほい屋の新規LLM審査素材へ優先的に混ぜる。この操作は同じ評価をワードウルフ候補として自動的に不採用へ最終確定し、紐づく未審査のpair draftも`rejected`へ変更して一覧から除外する。単語自体や他ゲームの適格性は無効化しない。
 - 同じartifactへの評価は更新可能
 - たほい屋には「もっと難しい単語」「実在・読み・説明が怪しい」などの理由タグがある
 - Bad語はお題生成のNGリストと保存問題の再利用除外へ反映する

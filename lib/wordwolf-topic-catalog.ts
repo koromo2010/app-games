@@ -16,6 +16,7 @@ import {
   rememberWordWolfTopicHistory,
 } from "@/lib/wordwolf-topic-history-store";
 import { submitDevelopmentVocabularyDraft } from "@/lib/vocabulary-draft-bridge";
+import type { WordDifficulty } from "@/lib/word-selection-protocol";
 
 const catalogKey = "wordwolf:topic:catalog:v1";
 
@@ -75,6 +76,7 @@ export async function loadWordWolfCatalogWords() {
 export async function findReusableWordWolfTopic(input: {
   dictionarySource: TopicDictionarySource;
   pairDistance: TopicPairDistance;
+  difficulty?: WordDifficulty;
   topicHint: string;
   playerIds: string[];
   blockedWords: string[];
@@ -94,6 +96,7 @@ export async function findReusableWordWolfTopic(input: {
       record.topic.dictionarySource === input.dictionarySource &&
       (input.dictionarySource !== "proper-noun" || isStrictProperNounTopic(record.topic)) &&
       record.topic.pairDistance === input.pairDistance &&
+      (!input.difficulty || !record.topic.difficulty || record.topic.difficulty === input.difficulty) &&
       getTopicWords(record.topic).every((word) => !blocked.has(word)) &&
       (!normalizedHint || normalizeTopicWord(
         `${record.topic.villageWord} ${record.topic.wolfWord} ${record.topic.reason}`,
@@ -150,7 +153,7 @@ export async function rememberWordWolfTopicExperience(topic: WordWolfTopic, play
 
 export async function rememberWordWolfTopicCandidate(topic: WordWolfTopic) {
   const words = getTopicWords(topic);
-  if (words.length !== 2 || (topic.dictionarySource === "proper-noun" && !isStrictProperNounTopic(topic))) return;
+  if (words.length !== 2 || (topic.dictionarySource === "proper-noun" && !isStrictProperNounTopic(topic))) return null;
   const now = Date.now();
   const seed: WordWolfTopicCatalogRecord = {
     topic,
@@ -164,7 +167,7 @@ export async function rememberWordWolfTopicCandidate(topic: WordWolfTopic) {
     getTopicKey(topic),
     JSON.stringify(seed),
   ]);
-  await submitDevelopmentVocabularyDraft({
+  return submitDevelopmentVocabularyDraft({
     kind: "pair",
     payload: {
       gameId: "wordwolf",
@@ -173,7 +176,13 @@ export async function rememberWordWolfTopicCandidate(topic: WordWolfTopic) {
       reason: topic.reason,
       dictionarySource: topic.dictionarySource,
       pairDistance: topic.pairDistance,
+      difficulty: topic.difficulty,
       sourceMode: topic.sourceMode,
+      anchorWordId: topic.anchorWordId,
+      partnerWordId: topic.partnerWordId,
+      anchorWord: topic.anchorWord,
+      commonEffectiveZipf: topic.commonEffectiveZipf,
+      wordwolfEffectiveZipf: topic.wordwolfEffectiveZipf,
     },
     generation: topic.generation,
     sourceReference: getTopicKey(topic),

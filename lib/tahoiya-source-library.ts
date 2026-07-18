@@ -1,5 +1,6 @@
 import { redisCommand } from "./redis-store.ts";
 import { emitObservabilityEvent, observabilityErrorCode } from "./observability/index.ts";
+export { hasVeryCommonSpokenHomophone } from "./tahoiya-difficulty.ts";
 
 export type TahoiyaSourceEntry = {
   id: string;
@@ -95,17 +96,6 @@ export const defaultTahoiyaSourceRegistry: TahoiyaSourceRegistryRecord[] = [
   { id: "worldbank", name: "World Bank Indicators", genre: "経済学・人口学・国際開発", endpoint: "https://api.worldbank.org/v2/indicator", sourceUrl: "https://datahelpdesk.worldbank.org/knowledgebase/topics/125589-developer-information", license: "CC BY 4.0", attribution: "World Bank", strategy: "worldbank-indicators", enabled: true },
   { id: "europepmc", name: "Europe PMC MeSH Headings", genre: "医学・生命科学・薬学", endpoint: "https://www.ebi.ac.uk/europepmc/webservices/rest/search", sourceUrl: "https://europepmc.org/RestfulWebService", license: "Europe PMC terms", attribution: "Europe PMC", strategy: "europepmc-mesh", enabled: true, seedQueries: ["neurology", "pathology", "immunology", "anatomy", "hematology", "toxicology", "embryology", "microbiology"] },
 ];
-
-const commonSpokenWords = new Set([
-  "あめ", "いし", "かき", "かめ", "かみ", "かわ", "かえる", "きく", "くも", "さけ",
-  "しろ", "つる", "はし", "はな", "ふく", "まつ", "みみ", "もち", "もも", "ゆき",
-]);
-
-export function hasVeryCommonSpokenHomophone(reading?: string) {
-  if (!reading) return false;
-  const normalized = reading.normalize("NFKC").trim().toLocaleLowerCase("ja");
-  return commonSpokenWords.has(normalized);
-}
 
 function parseRegistryRecord(raw: string): TahoiyaSourceRegistryRecord | null {
   try {

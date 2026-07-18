@@ -75,9 +75,10 @@ export async function POST(request: Request) {
         gameNumber: String(room.gameNumber),
         source: room.topicDictionarySource,
         distance: room.topicPairDistance,
+        difficulty: room.topicDifficulty,
         ...(room.topicHint ? { hint: room.topicHint } : {}),
       }).toString();
-      const generated = await withGameGenerationCache("wordwolf-topic-v2", `${room.code}:${room.gameNumber}`, async () => {
+      const generated = await withGameGenerationCache("wordwolf-topic-v3", `${room.code}:${room.gameNumber}`, async () => {
         const response = await generateWordWolfTopicResponse(new Request(topicUrl), room.players.map((item) => item.id));
         return { status: response.status, body: await response.json() as WordWolfTopic & { error?: string } };
       });

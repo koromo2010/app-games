@@ -4,6 +4,7 @@ import { DebugWordGenerationTest, type DebugWordGenerationResult } from "../comp
 import { RoomTimeLimitControl } from "../components/RoomTimeLimitControl";
 import { inputClass, primaryButtonClass, subtleButtonClass } from "./styles";
 import { lobbyRounds, normalizeRoundsTotal } from "./wordwolf-room-adapter";
+import type { WordDifficulty } from "@/lib/word-selection-protocol";
 
 type Props = {
   room: Room;
@@ -20,6 +21,7 @@ type Props = {
   onTopicDictionarySourceChange: (value: TopicDictionarySource) => void;
   onTopicHintChange: (value: string) => void;
   onTopicPairDistanceChange: (value: TopicPairDistance) => void;
+  onTopicDifficultyChange: (value: WordDifficulty) => void;
   onClueLogVisibilityChange: (value: ClueLogVisibility) => void;
   onTestWordGeneration: (forceNew: boolean) => Promise<DebugWordGenerationResult>;
   onAddSeat: () => void;
@@ -41,6 +43,7 @@ export function WordWolfLobbySettings({
   onTopicDictionarySourceChange: setTopicDictionarySource,
   onTopicHintChange: setTopicHint,
   onTopicPairDistanceChange: setTopicPairDistance,
+  onTopicDifficultyChange: setTopicDifficulty,
   onClueLogVisibilityChange: setClueLogVisibility,
   onTestWordGeneration: testWordGeneration,
   onAddSeat: addSeat,
@@ -195,6 +198,32 @@ export function WordWolfLobbySettings({
                           <option value="proper-noun">固有名詞</option>
                         </select>
                       </label>
+                      {room.topicDictionarySource === "llm" && <div>
+                        <p className="text-sm font-medium text-slate-700">単語の知名度</p>
+                        <div className="mt-1 grid grid-cols-3 gap-2">
+                          {([[
+                            "easy", "簡単",
+                          ], [
+                            "normal", "普通",
+                          ], [
+                            "hard", "難しい",
+                          ]] as const).map(([value, label]) => (
+                            <button
+                              key={value}
+                              type="button"
+                              onClick={() => setTopicDifficulty(value)}
+                              aria-pressed={room.topicDifficulty === value}
+                              className={`rounded-lg border px-3 py-2 text-left text-sm font-semibold ${
+                                room.topicDifficulty === value
+                                  ? "border-cyan-500 bg-cyan-50 text-cyan-950 shadow-sm"
+                                  : "border-slate-300 bg-slate-50 text-slate-700 hover:bg-slate-100"
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>}
                       <label className="block text-sm font-medium text-slate-700">
                         お題の方向性
                         <input
@@ -280,4 +309,3 @@ export function WordWolfLobbySettings({
                     </fieldset>
   );
 }
-
