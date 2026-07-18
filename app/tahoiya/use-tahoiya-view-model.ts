@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { TahoiyaPlayer, TahoiyaRoom } from "@/lib/tahoiya-types";
+import { tahoiyaDifficultyLabel } from "@/lib/tahoiya-difficulty";
 
 export function getAnswerer(room: TahoiyaRoom) { return room.playMode === "all-vote" ? null : room.players.find((player) => player.id === room.answererId) ?? null; }
 export function getDefinitionWriters(room: TahoiyaRoom) { return room.playMode === "all-vote" ? room.players : room.players.filter((player) => player.id !== room.answererId); }
@@ -26,7 +27,7 @@ export function useTahoiyaViewModel(room: TahoiyaRoom | null, activePlayer: Taho
     const sortedScores = room ? [...room.players].sort((left, right) => (room.scores[right.id] ?? 0) - (room.scores[left.id] ?? 0)) : [];
     const roomConfigItems = room ? [
       { label: "遊び方", value: room.playMode === "all-vote" ? "全員作成・全員投票" : "回答者1人" },
-      { label: "お題難易度", value: room.topicDifficulty === "extreme" ? "魔境" : "秘境" },
+      { label: "お題難易度", value: tahoiyaDifficultyLabel(room.topicDifficulty) },
       ...(room.playMode === "single-answerer" ? [{ label: "回答者", value: answerer?.name ?? (room.answererMode === "random" ? "開始時にランダム" : "未指定") }] : []),
       { label: "正解情報", value: room.showRealDefinitionToWriters ? "偽説明担当に見せる" : "結果まで見せない" },
       { label: "偽説明", value: "1人1つ・全員完了まで修正可" }, { label: "投票", value: room.playMode === "all-vote" ? "1人1票・自分には投票不可" : "回答者のみ1票" },

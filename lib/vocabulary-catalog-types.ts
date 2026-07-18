@@ -43,7 +43,14 @@ export type WordDefinition = {
   status: VocabularyStatus;
 };
 
-export type VocabularyWordQuery = { gameId: string; limit: number; statuses?: VocabularyStatus[] };
+export type VocabularyWordQuery = {
+  gameId: string;
+  limit: number;
+  statuses?: VocabularyStatus[];
+  effectiveZipfEquals?: number;
+  effectiveZipfMinExclusive?: number;
+  effectiveZipfMaxExclusive?: number;
+};
 export type VocabularyPairQuery = { gameId: string; limit: number; statuses?: VocabularyStatus[] };
 export type VocabularyDefinitionQuery = { wordId: string; gameId?: string; statuses?: VocabularyStatus[] };
 

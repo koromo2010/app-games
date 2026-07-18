@@ -157,7 +157,7 @@ export function VocabularyEvaluationsPanel({ onAuthExpired, onDraftReviewed }: {
     const currentZipf = evaluation.effectiveZipf === null ? "未計測" : evaluation.effectiveZipf.toFixed(2);
     const confirmed = window.confirm(
       `一つ目の単語「${evaluation.word}」をたほい屋候補へ追加します。`
-      + `\n共通の実効Zipfは現在 ${currentZipf} で、たほい屋専用候補として0へ設定します。`
+      + `\n共通の実効Zipfは現在 ${currentZipf} です。3以上または未計測なら秘境候補として2.9へ設定し、すでに3未満なら現在値を維持します。`
       + "\nこの実効値は通常ゲームの単語選定にも共通で使われます。"
       + "\n同時に、この評価をワードウルフ候補として不採用にして選考を終了します。よろしいですか？",
     );

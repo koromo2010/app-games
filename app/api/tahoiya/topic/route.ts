@@ -17,14 +17,19 @@ import {
   rememberTahoiyaTopicCandidate,
   rememberTahoiyaTopicExperience,
   type TahoiyaReviewedCandidate,
+  type TahoiyaWordCandidate,
 } from "@/lib/tahoiya-topic-catalog";
-import { hasVeryCommonSpokenHomophone, type TahoiyaSourceEntry } from "@/lib/tahoiya-source-library";
+import type { TahoiyaSourceEntry } from "@/lib/tahoiya-source-library";
+import {
+  tahoiyaDifficultyLabel,
+  tahoiyaEffectiveZipfDescription,
+} from "@/lib/tahoiya-difficulty";
 import type { TahoiyaDifficulty, TahoiyaTopic } from "@/lib/tahoiya-types";
 import { parseLlmJson } from "@/lib/llm-json";
 import { gameApiAccessDeniedResponse } from "@/lib/game-access";
 
-const tahoiyaTopicPromptVersion = "tahoiya-topic-v11";
-const tahoiyaBatchPromptVersion = "tahoiya-source-batch-v1";
+const tahoiyaTopicPromptVersion = "tahoiya-effective-zipf-topic-v12";
+const tahoiyaBatchPromptVersion = "tahoiya-effective-zipf-batch-v2";
 export const maxDuration = 180;
 type DefinitionStyle = "brief" | "standard" | "detailed" | "long" | "extended" | "maximum";
 
@@ -347,24 +352,22 @@ function independentReviewerProvider(provider: GameLlmProvider): GameLlmProvider
 async function generateTopicFromCatalogWords(
   mode: Exclude<GameLlmMode, "local">,
   difficulty: TahoiyaDifficulty,
-  candidates: Array<{ id: string; word: string; reading?: string }>,
+  candidates: TahoiyaWordCandidate[],
   feedbackContext: string,
   retrievedFeedbackIds: string[],
 ) {
   if (candidates.length === 0) return null;
   const definitionStyle = pickDefinitionStyle();
   const definitionRule = definitionStyleRules[definitionStyle];
-  const difficultyRule = difficulty === "extreme"
-    ? "魔境: 難語好きでも意味を知らず、字面からも推測しにくい語を選んでください。"
-    : "秘境: 一般的な大人が意味を知らないが、偽説明を考えやすい語を選んでください。";
   const compactCandidates = candidates.map((candidate) => ({
     id: candidate.id,
     word: candidate.word,
     readingHint: candidate.reading ?? null,
+    effectiveZipf: candidate.effectiveZipf,
   }));
   const prompt = [
-    "共通単語DBから抽出した実効Zipf=0の候補一覧から、たほい屋のお題を1語だけ選んでください。新しい見出し語を作ったり、候補の表記を変更したりしてはいけません。",
-    difficultyRule,
+    `共通単語DBから「${tahoiyaDifficultyLabel(difficulty)}（${tahoiyaEffectiveZipfDescription(difficulty)}）」として抽出済みの1語へ、たほい屋の読みと本物の説明を付けてください。新しい見出し語を作ったり、候補の表記を変更したりしてはいけません。`,
+    "難易度は実質Zipfで確定済みです。難易度を再判定せず、実在性・読み・語義・偽説明の作りやすさだけを確認してください。",
     "候補のreadingHintは参考情報です。誤っている場合は辞書上の正しい読みへ直してください。",
     "選んだ語の実在・読み・意味に確信が持てる場合だけvalidをtrueにしてください。造語、意味を確認できない語、差別的・性的・残虐な語は選ばないでください。",
     "realDefinitionはゲームの正解文です。意味だけを自然な日本語一文で書き、読み、語源、用例、括弧、複数の語義を含めないでください。",
@@ -385,8 +388,7 @@ async function generateTopicFromCatalogWords(
 
   const verificationPrompt = [
     "あなたは日本語辞書の厳格な校閲者です。共通単語DBから選ばれた次のお題について、見出し語の実在、読み、正解文の意味を検証してください。",
-    "見出し語は変更禁止です。読みまたは意味が不正確、実在が不確か、難易度に不適切ならvalidをfalseにしてください。推測で修正してはいけません。",
-    difficultyRule,
+    "見出し語は変更禁止です。読みまたは意味が不正確、実在が不確かならvalidをfalseにしてください。難易度は実質Zipfで確定済みなので、再判定や変更をしてはいけません。推測で修正してはいけません。",
     `validがtrueの場合もrealDefinitionは意味だけの一文とし、${definitionRule.max}文字以内、括弧なしにしてください。`,
     "JSONのみで返してください: {\"valid\":trueまたはfalse,\"word\":\"...\",\"reading\":\"...\",\"realDefinition\":\"...\",\"note\":\"...\",\"sourceDetail\":\"...\"}",
     `校閲対象: ${JSON.stringify(topic)}`,
@@ -505,19 +507,24 @@ type BatchReviewItem = {
   reading: string;
   realDefinition: string;
   note: string;
-  difficulty: "easy" | "standard" | "extreme";
+};
+
+type ParsedBatchReviewItem = BatchReviewItem & {
+  source: TahoiyaSourceEntry;
+  difficulty: TahoiyaDifficulty;
   difficultyReason: string;
 };
 
-type ParsedBatchReviewItem = BatchReviewItem & { source: TahoiyaSourceEntry };
-
-function difficultyAnchorTags(difficulty: BatchReviewItem["difficulty"]) {
-  if (difficulty === "easy") return ["want-harder-word"];
+function difficultyAnchorTags(difficulty: TahoiyaDifficulty) {
   if (difficulty === "extreme") return ["too-difficult", "hard-to-fake"];
   return ["difficulty-good", "appropriately-obscure", "easy-to-fake"];
 }
 
-function parseBatchReview(text: string, sources: TahoiyaSourceEntry[]): ParsedBatchReviewItem[] {
+function parseBatchReview(
+  text: string,
+  sources: TahoiyaSourceEntry[],
+  difficulty: TahoiyaDifficulty,
+): ParsedBatchReviewItem[] {
     const parsed = parseLlmJson<{ items?: unknown[] }>(text);
     if (!parsed || !Array.isArray(parsed.items)) return [];
     const byId = new Map(sources.map((source) => [source.id, source]));
@@ -525,24 +532,22 @@ function parseBatchReview(text: string, sources: TahoiyaSourceEntry[]): ParsedBa
       if (!raw || typeof raw !== "object") return [];
       const item = raw as Partial<BatchReviewItem>;
       const source = item.sourceId ? byId.get(item.sourceId) : undefined;
-      const llmDifficulty = item.difficulty === "easy" || item.difficulty === "extreme" ? item.difficulty : "standard";
-      const hasEasyHomophone = hasVeryCommonSpokenHomophone(String(item.reading || source?.reading || ""));
-      const difficulty = hasEasyHomophone ? "easy" : llmDifficulty;
       const realDefinition = simplifyDefinition(item.realDefinition);
       const definitionLength = Array.from(realDefinition.replace(/。$/, "")).length;
-      if (!source || !item.word || !item.reading || !realDefinition || definitionLength < 4 || definitionLength > 60) return [];
+      if (!source) return [];
+      const reading = String(item.reading || "").trim();
+      const wordMatches = normalizeTopicWord(String(item.word || "")) === normalizeTopicWord(source.word);
+      const contentIsValid = Boolean(reading && realDefinition && definitionLength >= 4 && definitionLength <= 60);
       return [{
         source,
         sourceId: source.id,
-        accepted: item.accepted === true,
-        word: String(item.word).trim(),
-        reading: String(item.reading).trim(),
+        accepted: item.accepted === true && wordMatches && contentIsValid,
+        word: source.word,
+        reading,
         realDefinition,
-        note: String(item.note || "素材ライブラリをRAG基準で審査。"),
+        note: String(item.note || "共通単語DBの語をLLMで検証。"),
         difficulty,
-        difficultyReason: hasEasyHomophone
-          ? `読みが日常語と同音で、聞いた瞬間に簡単な意味を連想できるため簡単判定。${String(item.difficultyReason || "")}`.trim()
-          : String(item.difficultyReason || "RAGフィードバック基準による絶対評価。"),
+        difficultyReason: `${source.hint || `${tahoiyaDifficultyLabel(difficulty)}・${tahoiyaEffectiveZipfDescription(difficulty)}`}から選定。`,
       }];
     });
 }
@@ -550,31 +555,31 @@ function parseBatchReview(text: string, sources: TahoiyaSourceEntry[]): ParsedBa
 async function reviewSourceBatch(
   mode: Exclude<GameLlmMode, "local">,
   sources: TahoiyaSourceEntry[],
+  difficulty: TahoiyaDifficulty,
   feedbackContext: string,
   retrievedFeedbackIds: string[],
 ) {
   const compactSources = sources.map((source) => ({
     id: source.id,
     word: source.word.slice(0, 120),
+    reading: source.reading?.slice(0, 120),
+    selection: source.hint?.slice(0, 120),
     sourceLibrary: source.sourceLibrary.slice(0, 120),
   }));
   const prompt = [
-    "たほい屋の素材ライブラリから渡す10語を、各語独立に検証・絶対評価してください。語同士を相対比較して順位を付けてはいけません。",
+    `共通単語DBから「${tahoiyaDifficultyLabel(difficulty)}（${tahoiyaEffectiveZipfDescription(difficulty)}）」として抽出した10語へ、読みと本物の説明を付けて各語独立に検証してください。語同士を相対比較して順位を付けてはいけません。`,
     "acceptedは、実在・読み・意味を典拠と素材の手掛かりから確信でき、たほい屋で偽説明を作れる語だけtrueにします。不確実、一般的すぎる、差別的、性的、残虐ならfalseです。",
-    "素材のwordが外国語の場合、辞書・専門分野で実際に定着した日本語見出し語と読みが確認できるときだけ、その日本語名へ変換してaccepted=trueにしてください。直訳や即席のカタカナ転写は禁止し、定着した日本語名がなければaccepted=falseにしてください。",
-    "difficultyは必ず絶対基準です。easy=RAGの『もっと難しい語がほしい』相当で一般成人が意味を知るか字面から容易に推測できる。standard=『難易度が良い・適度に珍しい・偽説明を作りやすい』相当。extreme=『難しすぎる・偽説明も作りにくい』相当。",
-    "たほい屋では読みを参加者に伝えます。専門的な意味が難しくても、その読みが『亀』『橋』『雨』『雲』など非常に身近な別の語と同音で、参加者が簡単な意味をすぐ作れる場合は必ずeasyにしてください。専門分野での意味だけを見てstandardやextremeにしてはいけません。",
-    "easyもaccepted=trueなら保存対象です。ゲーム設定に合わないという理由で除外しないでください。",
+    "入力のwordは共通単語DBの見出し語なので変更してはいけません。別の語への翻訳・言い換え・表記変更が必要ならaccepted=falseにしてください。",
+    "難易度は実質Zipfからサーバー側ですでに確定しています。難易度の再判定や変更はせず、実在性・読み・語義・偽説明の作りやすさだけを審査してください。",
     "realDefinitionは意味だけを自然な日本語一文、60文字以内で書き、読み・語源・用例・括弧を含めません。",
-    "difficultyReasonには、知名度、字面からの推測可能性、専門性、偽説明の作りやすさを根拠として短く記述してください。",
     "入力のsourceIdを必ず維持し、入力全件を同じ順序で返してください。JSON以外は返さないでください。",
-    "形式: {\"items\":[{\"sourceId\":\"...\",\"accepted\":true,\"word\":\"...\",\"reading\":\"...\",\"realDefinition\":\"...\",\"note\":\"...\",\"difficulty\":\"easy|standard|extreme\",\"difficultyReason\":\"...\"}]}",
+    "形式: {\"items\":[{\"sourceId\":\"...\",\"accepted\":true,\"word\":\"...\",\"reading\":\"...\",\"realDefinition\":\"...\",\"note\":\"...\"}]}",
     `素材: ${JSON.stringify(compactSources)}`,
     feedbackContext.slice(0, 1_500),
   ].filter(Boolean).join("\n\n");
   emitObservabilityEvent("info", "ai.generation", { game: "tahoiya", operation: "source-review", sourceCount: sources.length, outcome: "started" });
   const generated = await generateGameLlmText(prompt, mode, { quality: "standard", timeoutMs: 25_000 });
-  const reviewed = parseBatchReview(generated.text, sources);
+  const reviewed = parseBatchReview(generated.text, sources, difficulty);
   if (reviewed.length !== sources.length) throw new Error(`Batch review returned ${reviewed.length}/${sources.length} items`);
   const generation: GameGenerationMeta = {
     provider: generated.provider,
@@ -626,9 +631,9 @@ export async function generateTahoiyaTopicResponse(
   };
   if (!forceNew) {
     try {
-      const candidates = await findUnexperiencedTahoiyaWordCandidates(playerIds, feedbackBlockedWords, 20);
+      const candidates = await findUnexperiencedTahoiyaWordCandidates(difficulty, playerIds, feedbackBlockedWords, 1);
       if (candidates.length === 0) {
-        return Response.json({ error: "参加者全員が未使用のZipf=0候補がありません。" }, { status: 503 });
+        return Response.json({ error: `参加者全員が未使用の${tahoiyaDifficultyLabel(difficulty)}候補（${tahoiyaEffectiveZipfDescription(difficulty)}）がありません。` }, { status: 503 });
       }
       const mode = await resolveGameLlmMode();
       if (mode === "local") {
@@ -642,13 +647,13 @@ export async function generateTahoiyaTopicResponse(
         retrievedFeedbackIds,
       );
       if (!topic) {
-        return Response.json({ error: "Zipf=0候補の読み・正解文を検証できませんでした。もう一度お試しください。" }, { status: 503 });
+        return Response.json({ error: `${tahoiyaDifficultyLabel(difficulty)}候補の読み・正解文を検証できませんでした。もう一度お試しください。` }, { status: 503 });
       }
       await remember(topic);
       return Response.json(topic);
     } catch (error) {
       emitObservabilityEvent("error", "ai.generation", { game: "tahoiya", operation: "catalog-definition", outcome: "failed", errorCode: observabilityErrorCode(error) });
-      return Response.json({ error: "Zipf=0候補から正解文を生成できませんでした。もう一度お試しください。" }, { status: 503 });
+      return Response.json({ error: `${tahoiyaDifficultyLabel(difficulty)}候補から正解文を生成できませんでした。もう一度お試しください。` }, { status: 503 });
     }
   }
 
@@ -658,11 +663,11 @@ export async function generateTahoiyaTopicResponse(
   }
 
   try {
-    const sources = await loadUnreviewedTahoiyaSources(10);
+    const sources = await loadUnreviewedTahoiyaSources(difficulty, 10);
     if (sources.length < 10) {
-      return Response.json({ error: `異なる取得元から素材を10件揃えられませんでした（${sources.length}件）。` }, { status: 503 });
+      return Response.json({ error: `${tahoiyaDifficultyLabel(difficulty)}に該当する未審査語を共通単語DBから10件揃えられませんでした（${sources.length}件）。` }, { status: 503 });
     }
-    const batch = await reviewSourceBatch(mode, sources, feedbackContext, retrievedFeedbackIds);
+    const batch = await reviewSourceBatch(mode, sources, difficulty, feedbackContext, retrievedFeedbackIds);
     await rememberTahoiyaReviewedBatch(
       sources.map((source) => source.id),
       batch.candidates,

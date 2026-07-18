@@ -469,7 +469,11 @@ export async function adoptVocabularyEvaluationWordForTahoiya(
       LIMIT 1
     ), adjusted AS (
       UPDATE words word SET
-        selection_zipf_override = 0,
+        selection_zipf_override = CASE
+          WHEN target.previous_effective_zipf >= 0 AND target.previous_effective_zipf < 3
+            THEN target.previous_selection_zipf_override
+          ELSE 2.9
+        END,
         updated_at = NOW()
       FROM target
       WHERE word.id = target.id
@@ -646,12 +650,18 @@ async function activateDefinition(draft: VocabularyDraftSubmission, reviewedBy: 
         selection_zipf_override)
       VALUES (${word.surface}, ${reading}, ${word.normalized}, ${word.length}, 'active', ${draft.sourceType},
         ${draft.sourceEnvironment}, ${draft.sourceReference}, ${draft.provider}, ${draft.model}, ${draft.promptVersion},
-        ${draft.createdBy}, NOW(), ${reviewedBy}, CASE WHEN ${gameId} = 'tahoiya' THEN 0 ELSE NULL END)
+        ${draft.createdBy}, NOW(), ${reviewedBy}, CASE
+          WHEN ${gameId} <> 'tahoiya' THEN NULL
+          WHEN ${difficulty} = 'extreme' THEN 0
+          ELSE 2.9
+        END)
       ON CONFLICT (normalized_surface, (COALESCE(reading, ''))) DO UPDATE SET
         status = 'active',
         selection_zipf_override = CASE
-          WHEN ${gameId} = 'tahoiya' THEN 0
-          ELSE words.selection_zipf_override
+          WHEN ${gameId} <> 'tahoiya' THEN words.selection_zipf_override
+          WHEN ${difficulty} = 'extreme' THEN 0
+          WHEN words.zipf > 0 AND words.zipf < 3 THEN NULL
+          ELSE 2.9
         END,
         updated_at = NOW()
       RETURNING id

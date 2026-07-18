@@ -1,4 +1,5 @@
 import type { TahoiyaAnswererMode, TahoiyaDifficulty, TahoiyaPlayMode, TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomChoice } from "@/lib/tahoiya-types";
+import { tahoiyaDifficultyLabel, tahoiyaEffectiveZipfDescription } from "@/lib/tahoiya-difficulty";
 import { DebugWordGenerationTest, type DebugWordGenerationResult } from "../components/DebugWordGenerationTest";
 import { RoomConfigSummary } from "../components/RoomConfigSummary";
 import { RoomTimeLimitControl } from "../components/RoomTimeLimitControl";
@@ -138,5 +139,6 @@ function Setting({ title, description, children }: { title: string; description?
 }
 
 function HostActions(props: Props & { room: TahoiyaRoom }) {
-  return <>{props.isDebugMode && <><DebugWordGenerationTest onGenerate={props.onTestWordGeneration} heading="Zipf=0抽出・正解文確認" description="通常ゲームと同じく、共通DBからZipf=0の単語を抽出し、AI生成した読み・正解文を別モデルで校閲します。補充ONでは素材10件を一括審査して候補DBへ保存します。" forceNewTitle="素材候補DBを10件補充" forceNewDescription="ON: 異なる10取得元から収集してAI審査　OFF: Zipf=0抽出から正解文生成までを確認" forceNewButtonLabel="10件を審査して候補DBへ補充" forceNewRepeatLabel="さらに10件を補充" /><button onClick={props.onAddTestPlayer} disabled={props.room.players.length >= 8} className={`w-full ${subtleButtonClass}`}>テストプレイヤー追加</button></>}<button onClick={props.onStartRound} disabled={props.isStarting} className={`w-full ${primaryButtonClass}`}>{props.isStarting ? "お題生成中..." : "ラウンド開始"}</button></>;
+  const difficulty = `${tahoiyaDifficultyLabel(props.room.topicDifficulty)}（${tahoiyaEffectiveZipfDescription(props.room.topicDifficulty)}）`;
+  return <>{props.isDebugMode && <><DebugWordGenerationTest onGenerate={props.onTestWordGeneration} heading={`${difficulty}抽出・正解文確認`} description={`通常ゲームと同じく、共通DBから${difficulty}の単語を選び、AIが読みと正解文を付けて別モデルが校閲します。補充ONでは同じ条件の10語を一括審査して候補DBへ保存します。`} forceNewTitle={`${tahoiyaDifficultyLabel(props.room.topicDifficulty)}候補DBを10件補充`} forceNewDescription={`ON: ${difficulty}の10語を一括審査　OFF: 1語を抽出して正解文生成まで確認`} forceNewButtonLabel="10件を審査して候補DBへ補充" forceNewRepeatLabel="さらに10件を補充" /><button onClick={props.onAddTestPlayer} disabled={props.room.players.length >= 8} className={`w-full ${subtleButtonClass}`}>テストプレイヤー追加</button></>}<button onClick={props.onStartRound} disabled={props.isStarting} className={`w-full ${primaryButtonClass}`}>{props.isStarting ? "お題生成中..." : "ラウンド開始"}</button></>;
 }
