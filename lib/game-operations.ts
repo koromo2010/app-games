@@ -1,6 +1,7 @@
 import registry from "@/config/game-registry.json";
+import { normalizeGamePublication, type GamePublication } from "@/lib/game-publication";
 
-export type GamePublication = "public" | "private" | "hidden";
+export type { GamePublication } from "@/lib/game-publication";
 
 export type GameOperation = {
   gameId: string;
@@ -28,7 +29,7 @@ export function normalizeGameOperations(value: unknown): GameOperation[] {
   }
   return defaultGameOperations().map((fallback) => {
     const input = byId.get(fallback.gameId);
-    const publication = input?.publication === "private" || input?.publication === "hidden" ? input.publication : fallback.publication;
+    const publication = normalizeGamePublication(input?.publication, fallback.publication);
     const message = typeof input?.message === "string"
       ? input.message.replace(/\s+/g, " ").trim().slice(0, gameOperationMessageMaxLength)
       : "";
