@@ -7,12 +7,13 @@ test("観測イベントは許可済みフィールド以外を捨てる", () =>
     game: "wordwolf",
     operation: "cast-vote",
     revision: 12,
+    databaseCode: "42703",
     passphrase: "secret",
     text: "投稿本文",
     cookie: "session-cookie",
     word: "正解ワード",
   });
-  assert.deepEqual(fields, { game: "wordwolf", operation: "cast-vote", revision: 12 });
+  assert.deepEqual(fields, { game: "wordwolf", operation: "cast-vote", databaseCode: "42703", revision: 12 });
   assert.equal(JSON.stringify(fields).includes("secret"), false);
   assert.equal(JSON.stringify(fields).includes("投稿本文"), false);
 });

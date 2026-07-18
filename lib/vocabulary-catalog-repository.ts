@@ -13,6 +13,7 @@ import {
   assertVocabularyDraftWriteAllowed,
   getVocabularyPostgresClient,
 } from "./vocabulary-postgres-store.ts";
+import { expectedAppEnvironment } from "./storage-environment-guard.ts";
 
 type WordRow = {
   id: string; surface: string; reading: string | null; normalized_surface: string;
@@ -41,7 +42,7 @@ export class PostgresVocabularyCatalogRepository implements VocabularyCatalogRep
     const effectiveZipfEquals = query.effectiveZipfEquals ?? null;
     const effectiveZipfMinExclusive = query.effectiveZipfMinExclusive ?? null;
     const effectiveZipfMaxExclusive = query.effectiveZipfMaxExclusive ?? null;
-    const rows = process.env.APP_ENV === "production"
+    const rows = expectedAppEnvironment() === "production"
       ? query.gameId === "tahoiya" ? await sql`
       SELECT w.id, w.surface, w.reading, w.normalized_surface, w.part_of_speech,
              w.proper_noun, w.character_count, w.effective_zipf AS zipf, w.status
@@ -99,7 +100,7 @@ export class PostgresVocabularyCatalogRepository implements VocabularyCatalogRep
     const sql = getVocabularyPostgresClient();
     const statuses = statusesForRead(query.statuses);
     const limit = Math.min(500, Math.max(1, Math.floor(query.limit)));
-    const rows = process.env.APP_ENV === "production" ? await sql`
+    const rows = expectedAppEnvironment() === "production" ? await sql`
       SELECT p.id, p.word_a_id, p.word_b_id, p.relation, p.difficulty,
              p.pair_distance, p.requested_pair_distance, p.status
       FROM active_word_pairs p
@@ -130,7 +131,7 @@ export class PostgresVocabularyCatalogRepository implements VocabularyCatalogRep
   async findDefinitions(query: VocabularyDefinitionQuery): Promise<WordDefinition[]> {
     const sql = getVocabularyPostgresClient();
     const statuses = statusesForRead(query.statuses);
-    const rows = process.env.APP_ENV === "production" ? await sql`
+    const rows = expectedAppEnvironment() === "production" ? await sql`
       SELECT id, word_id, short_definition, status FROM active_word_definitions
       WHERE word_id = ${query.wordId}
         AND (${query.gameId ?? null}::text IS NULL OR display_game_id IS NULL OR display_game_id = ${query.gameId ?? null})

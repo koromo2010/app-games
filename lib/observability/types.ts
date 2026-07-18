@@ -37,6 +37,7 @@ export type ObservabilityFields = {
   debugMode?: boolean;
   outcome?: ObservabilityOutcome;
   errorCode?: string;
+  databaseCode?: string;
 };
 
 export type ObservabilityEvent = {
