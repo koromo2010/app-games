@@ -13,7 +13,7 @@ export function TahoiyaVotingPanel(props: Props) {
       <button onClick={props.onVote} disabled={!props.selectedOptionId || props.votingDone} className={cyanButtonClass}>{props.hasVoted ? "投票を変更" : "投票する"}</button>
     </div>}
     <p className="mt-4 text-xs font-semibold text-slate-500">必要な投票がそろうと、自動で採点して結果を表示します。</p>
-    {props.isHost && <div className="mt-3 flex flex-wrap gap-2">{props.isDebugMode && <button onClick={props.onAutoFill} className={subtleButtonClass}>未投票をテスト投票</button>}<button onClick={props.onAdvance} className={primaryButtonClass}>結果へ進む（手動）</button></div>}
+    {props.isHost && props.isDebugMode && <div className="mt-3 flex flex-wrap gap-2"><button onClick={props.onAutoFill} className={subtleButtonClass}>未投票をテスト投票</button><button onClick={props.onAdvance} className={primaryButtonClass}>結果へ進む（デバッグ）</button></div>}
   </div>;
 }
 

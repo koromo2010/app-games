@@ -10,8 +10,8 @@ type Params = { room: TahoiyaRoom | null; activePlayer: TahoiyaPlayer | null; pl
 
 export function useTahoiyaGameActions(params: Params) {
   const clearRoundInput = () => { params.setDefinitionInput(""); params.setPolishMessage(""); params.setSelectedOptionId(""); };
-  const forceAdvanceToVoting = async () => { if (params.room?.phase !== "writing" || !params.isHost) return; await params.runRoomAction({ type: "advance-phase", actorId: params.playerId, round: params.room.round, target: "voting", force: true }); params.setSelectedOptionId(""); };
-  const forceAdvanceToResult = async () => { if (params.room?.phase === "voting" && params.isHost) await params.runRoomAction({ type: "advance-phase", actorId: params.playerId, round: params.room.round, target: "result", force: true }); };
+  const forceAdvanceToVoting = async () => { if (params.room?.phase !== "writing" || !params.isHost) return; await params.runRoomAction({ type: "advance-phase", actorId: params.playerId, round: params.room.round, target: "voting", force: params.isDebugMode }); params.setSelectedOptionId(""); };
+  const forceAdvanceToResult = async () => { if (params.room?.phase === "voting" && params.isHost && params.isDebugMode) await params.runRoomAction({ type: "advance-phase", actorId: params.playerId, round: params.room.round, target: "result", force: true }); };
   const startRound = async () => {
     const room = params.room; if (!room || !params.isHost || params.isStarting || room.topicGenerationProgress) return;
     if (!allRoomPlayersReturned(room.lobbyReturn, room.players)) return params.setMessage("復帰待ちの参加者がいます。全員が戻ってから開始してください。");

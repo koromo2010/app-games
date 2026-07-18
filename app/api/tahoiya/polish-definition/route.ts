@@ -8,6 +8,7 @@ import { loadStoredTahoiyaRoom } from "@/lib/tahoiya-room-store";
 import { emitObservabilityEvent, observabilityErrorCode } from "@/lib/observability";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 import { gameApiAccessDeniedResponse } from "@/lib/game-access";
+import { canPolishTahoiyaDefinition } from "@/lib/tahoiya-room-domain";
 
 function parsePolishedText(value: string) {
   const parsed = parseLlmJson<{ text?: unknown }>(value);
@@ -27,7 +28,7 @@ export async function POST(request: Request) {
     const roomCode = typeof body.roomCode === "string" ? body.roomCode.trim().toUpperCase() : "";
     const room = roomCode ? await loadStoredTahoiyaRoom(roomCode) : null;
     if (!room) return Response.json({ error: "部屋が見つかりません。" }, { status: 404 });
-    if (room.phase !== "writing" || !room.players.some((item) => item.id === player.id)) {
+    if (!room.players.some((item) => item.id === player.id) || !canPolishTahoiyaDefinition(room, player.id)) {
       return Response.json({ error: "この操作は許可されていません。" }, { status: 403 });
     }
     const word = room.word.trim().slice(0, 80);

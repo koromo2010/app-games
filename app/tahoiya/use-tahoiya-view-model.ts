@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { TahoiyaPlayer, TahoiyaRoom } from "@/lib/tahoiya-types";
 import { tahoiyaDifficultyLabel } from "@/lib/tahoiya-difficulty";
+import { tahoiyaPhaseTimeLimitSeconds } from "@/lib/tahoiya-room-domain";
 
 export function getAnswerer(room: TahoiyaRoom) { return room.playMode === "all-vote" ? null : room.players.find((player) => player.id === room.answererId) ?? null; }
 export function getDefinitionWriters(room: TahoiyaRoom) { return room.playMode === "all-vote" ? room.players : room.players.filter((player) => player.id !== room.answererId); }
@@ -21,7 +22,8 @@ export function useTahoiyaViewModel(room: TahoiyaRoom | null, activePlayer: Taho
     const writingDone = room ? submittedCount(room) >= definitionWriterCount : false;
     const voterTarget = room?.playMode === "all-vote" ? room.players.length : 1;
     const votingDone = room ? voterCount(room) >= voterTarget : false;
-    const deadline = room?.phaseStartedAt && room.actionTimeLimitSeconds > 0 ? room.phaseStartedAt + room.actionTimeLimitSeconds * 1000 : null;
+    const effectiveTimeLimitSeconds = room ? tahoiyaPhaseTimeLimitSeconds(room, activePlayer?.id ?? "") : 0;
+    const deadline = room?.phaseStartedAt && effectiveTimeLimitSeconds > 0 ? room.phaseStartedAt + effectiveTimeLimitSeconds * 1000 : null;
     const nextWriter = room?.phase === "writing" ? definitionWriters.find((player) => !room.fakeDefinitions[player.id]) : null;
     const nextVoter = room?.phase === "voting" ? room.playMode === "all-vote" ? room.players.find((player) => !room.votes[player.id]) ?? null : answerer && !room.votes[answerer.id] ? answerer : null : null;
     const sortedScores = room ? [...room.players].sort((left, right) => (room.scores[right.id] ?? 0) - (room.scores[left.id] ?? 0)) : [];

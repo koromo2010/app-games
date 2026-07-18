@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { commonGameTimeoutGraceMs } from "./game-timer/policy.ts";
 import { playerTimeLimitSeconds, recordPlayerTimeout } from "./player-timeout-policy.ts";
-import { calculateTahoiyaRoundScores } from "./tahoiya-scoring.ts";
+import { calculateTahoiyaRoundScores, tahoiyaValidVotes } from "./tahoiya-scoring.ts";
 import type { TahoiyaDefinitionOption, TahoiyaRoom } from "./tahoiya-types.ts";
 
 export const tahoiyaTimeoutSubmission = "__timeout__";
@@ -16,6 +16,12 @@ export function voterIds(room: TahoiyaRoom) {
   return room.playMode === "all-vote"
     ? room.players.map((player) => player.id)
     : room.answererId ? [room.answererId] : [];
+}
+
+export function canPolishTahoiyaDefinition(room: TahoiyaRoom, playerId: string) {
+  if (room.phase !== "writing") return false;
+  if (room.debugMode && room.hostId === playerId) return true;
+  return definitionWriterIds(room).includes(playerId);
 }
 
 export function shuffle<T>(items: T[]) {
@@ -41,9 +47,10 @@ export function createDefinitionOptions(room: TahoiyaRoom): TahoiyaDefinitionOpt
 
 export function scoreRoom(room: TahoiyaRoom) {
   const scores = { ...room.scores };
-  const roundScores = calculateTahoiyaRoundScores(room);
+  const votes = tahoiyaValidVotes(room);
+  const roundScores = calculateTahoiyaRoundScores({ ...room, votes });
   const scoreLines: string[] = [];
-  const voteCounts = Object.values(room.votes).reduce<Record<string, number>>((counts, optionId) => {
+  const voteCounts = Object.values(votes).reduce<Record<string, number>>((counts, optionId) => {
     counts[optionId] = (counts[optionId] ?? 0) + 1;
     return counts;
   }, {});
@@ -56,7 +63,7 @@ export function scoreRoom(room: TahoiyaRoom) {
     ? `最多得票: ${leaderNames.join("・")}（${maxVotes}票）${leaderNames.length > 1 ? " 同率" : ""}`
     : "投票はありませんでした。";
 
-  for (const [voterId, optionId] of Object.entries(room.votes)) {
+  for (const [voterId, optionId] of Object.entries(votes)) {
     const option = room.options.find((item) => item.id === optionId);
     const voter = room.players.find((player) => player.id === voterId);
     if (!option || !voter) continue;
@@ -73,6 +80,7 @@ export function scoreRoom(room: TahoiyaRoom) {
     ...room,
     phase: "result" as const,
     phaseStartedAt: null,
+    votes,
     scores,
     resultText: `${leadResult} / ${scoreLines.length > 0 ? scoreLines.join(" / ") : "得点は入りませんでした。"}`,
   };
@@ -94,6 +102,29 @@ export function timedOut(room: TahoiyaRoom, seconds = room.actionTimeLimitSecond
     seconds > 0 &&
     now >= room.phaseStartedAt + seconds * 1000 + commonGameTimeoutGraceMs()
   );
+}
+
+export function tahoiyaPhaseTimeLimitSeconds(room: TahoiyaRoom, playerId: string) {
+  const awaitingPlayer = room.phase === "writing"
+    ? definitionWriterIds(room).includes(playerId) && !room.fakeDefinitions[playerId]
+    : room.phase === "voting"
+      ? voterIds(room).includes(playerId) && !room.votes[playerId]
+      : false;
+  return awaitingPlayer
+    ? playerTimeLimitSeconds(room.actionTimeLimitSeconds, room.playerTimeouts, playerId)
+    : room.actionTimeLimitSeconds;
+}
+
+export function canAdvanceTahoiyaPhase(
+  room: TahoiyaRoom,
+  target: "voting" | "result",
+  force = false,
+) {
+  const debugForce = force && room.debugMode === true;
+  if (target === "voting") {
+    return room.phase === "writing" && (debugForce || writingComplete(room) || timedOut(room));
+  }
+  return room.phase === "voting" && (debugForce || votingComplete(room) || timedOut(room));
 }
 
 export function advanceToVoting(room: TahoiyaRoom) {
@@ -133,4 +164,3 @@ export function reconcileProgress(room: TahoiyaRoom) {
   }
   return room;
 }
-

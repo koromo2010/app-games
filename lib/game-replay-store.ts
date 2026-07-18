@@ -5,7 +5,7 @@ import type { NorthernRoom } from "@/lib/northern-branch-types";
 import type { NigoichiRoom } from "@/lib/nigoichi";
 import type { CodeInterceptRoom } from "@/lib/code-intercept";
 import type { TahoiyaRoom } from "@/lib/tahoiya-types";
-import { calculateTahoiyaRoundScores } from "@/lib/tahoiya-scoring";
+import { calculateTahoiyaRoundScores, tahoiyaValidVotes } from "@/lib/tahoiya-scoring";
 import type { WordWolfRoom } from "@/lib/wordwolf-room-store";
 import { redisCommand, redisPipeline } from "@/lib/redis-store";
 import {
@@ -289,10 +289,11 @@ function tahoiyaRoundScores(room: TahoiyaRoom) {
 
 export async function recordTahoiyaReplay(room: TahoiyaRoom) {
   if (room.phase !== "result" || !shouldRecordGameReplay(room) || !room.word || room.options.length === 0) return false;
-  const scores = tahoiyaRoundScores(room);
+  const votes = tahoiyaValidVotes(room);
+  const scores = tahoiyaRoundScores({ ...room, votes });
   const realOption = room.options.find((option) => option.isReal);
-  const realVotes = realOption ? Object.values(room.votes).filter((id) => id === realOption.id).length : 0;
-  const fooledVotes = Object.keys(room.votes).length - realVotes;
+  const realVotes = realOption ? Object.values(votes).filter((id) => id === realOption.id).length : 0;
+  const fooledVotes = Object.keys(votes).length - realVotes;
   const base = makeReplayBase(
     `tahoiya:${room.code}:${room.createdAt}:${room.round}`,
     "tahoiya",
@@ -316,7 +317,7 @@ export async function recordTahoiyaReplay(room: TahoiyaRoom) {
       authorId: option.authorId,
       isReal: option.isReal,
     })),
-    votes: Object.fromEntries(Object.entries(room.votes).filter(([playerId, optionId]) => playerId && optionId)),
+    votes,
     scores: Object.fromEntries(room.players.map((player) => [player.id, Math.max(0, Math.floor(scores[player.id] ?? 0))])),
   }, room.code);
 }

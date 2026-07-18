@@ -11,6 +11,19 @@ export function tahoiyaRuntimeScoring() {
   };
 }
 
+export function tahoiyaValidVotes(input: {
+  options: TahoiyaDefinitionOption[];
+  players: TahoiyaPlayer[];
+  votes: Record<string, string>;
+}) {
+  const playerIds = new Set(input.players.map((player) => player.id));
+  const options = new Map(input.options.map((option) => [option.id, option]));
+  return Object.fromEntries(Object.entries(input.votes).filter(([voterId, optionId]) => {
+    const option = options.get(optionId);
+    return playerIds.has(voterId) && Boolean(option) && option?.authorId !== voterId;
+  }));
+}
+
 export function calculateTahoiyaRoundScores(input: {
   options: TahoiyaDefinitionOption[];
   players: TahoiyaPlayer[];
@@ -21,7 +34,7 @@ export function calculateTahoiyaRoundScores(input: {
   const correctVotePoints = input.correctVotePoints ?? TAHOIYA_CORRECT_VOTE_POINTS;
   const fooledVotePoints = input.fooledVotePoints ?? TAHOIYA_FOOLED_VOTE_POINTS;
   const scores = Object.fromEntries(input.players.map((player) => [player.id, 0]));
-  for (const [voterId, optionId] of Object.entries(input.votes)) {
+  for (const [voterId, optionId] of Object.entries(tahoiyaValidVotes(input))) {
     const option = input.options.find((item) => item.id === optionId);
     if (option?.isReal) {
       scores[voterId] = (scores[voterId] ?? 0) + correctVotePoints;
