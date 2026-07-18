@@ -143,7 +143,7 @@ export async function PATCH(request: Request) {
       return Response.json({ error: "code and action are required" }, { status: 400 });
     }
     const requestedAction = body.action as Record<string, unknown>;
-    if (actionRequiresDebugAccess(requestedAction)) await requirePlayerDebugAccess(player.id);
+    if (actionRequiresDebugAccess(requestedAction, player.id)) await requirePlayerDebugAccess(player.id);
     logFields = {
       action: typeof requestedAction.type === "string" ? requestedAction.type : "unknown",
       roomRef: telemetry.roomRef(code),

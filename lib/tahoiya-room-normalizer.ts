@@ -7,6 +7,7 @@ import { isAvatarColor, isAvatarImage } from "./player-session.ts";
 import { normalizeRoomLobbyReturnState } from "./room-lobby-return.ts";
 import { TAHOIYA_CORRECT_VOTE_POINTS, TAHOIYA_FOOLED_VOTE_POINTS } from "./tahoiya-scoring.ts";
 import { normalizeTahoiyaTopicGenerationProgress } from "./tahoiya-topic-generation-progress.ts";
+import { normalizeTahoiyaOptionId } from "./tahoiya-option-id.ts";
 import type { TahoiyaAnswererMode, TahoiyaDefinitionOption, TahoiyaPhase, TahoiyaPlayer, TahoiyaRoom } from "./tahoiya-types.ts";
 
 function isPhase(value: unknown): value is TahoiyaPhase {
@@ -48,7 +49,7 @@ function normalizeOptions(value: unknown): TahoiyaDefinitionOption[] {
   return value
     .filter((option): option is TahoiyaDefinitionOption => Boolean(option?.id && option?.text))
     .map((option) => ({
-      id: String(option.id),
+      id: normalizeTahoiyaOptionId(option.id),
       text: String(option.text),
       authorId: typeof option.authorId === "string" ? option.authorId : null,
       isReal: Boolean(option.isReal),
@@ -62,6 +63,12 @@ function normalizeStringRecord(value: unknown) {
     Object.entries(value as Record<string, unknown>)
       .filter(([key, item]) => key && typeof item === "string")
       .map(([key, item]) => [key, item as string]),
+  );
+}
+
+function normalizeVotes(value: unknown) {
+  return Object.fromEntries(
+    Object.entries(normalizeStringRecord(value)).map(([playerId, optionId]) => [playerId, normalizeTahoiyaOptionId(optionId)]),
   );
 }
 
@@ -112,7 +119,7 @@ export function normalizeTahoiyaRoom(value: unknown): TahoiyaRoom | null {
       : undefined,
     fakeDefinitions: normalizeStringRecord(parsed.fakeDefinitions),
     options: normalizeOptions(parsed.options),
-    votes: normalizeStringRecord(parsed.votes),
+    votes: normalizeVotes(parsed.votes),
     scores: normalizeScores(parsed.scores),
     resultText: typeof parsed.resultText === "string" ? parsed.resultText : "",
     createdAt: typeof parsed.createdAt === "number" ? parsed.createdAt : Date.now(),

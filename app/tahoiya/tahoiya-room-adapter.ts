@@ -2,6 +2,7 @@ import { makeRandomAvatarColor } from "@/lib/player-session";
 import { loadPlayerRoomDefaults, savePlayerRoomDefaults } from "@/lib/game-room-defaults-client";
 import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
 import { OnlineRoomApiError } from "@/lib/online-room-api-client";
+import { isTerminalOnlineRoomFetchError } from "@/lib/online-room-fetch-policy";
 import type { TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomAction } from "@/lib/tahoiya-types";
 import { TAHOIYA_CORRECT_VOTE_POINTS, TAHOIYA_FOOLED_VOTE_POINTS } from "@/lib/tahoiya-scoring";
 import { applyTahoiyaRoomAction, createTahoiyaRoom, tahoiyaRoomApi } from "./tahoiya-room-api-client";
@@ -195,8 +196,9 @@ export async function loadRoomFromStore(code: string) {
     const normalized = normalizeRoom(room);
     saveRoomLocally(normalized);
     return normalized;
-  } catch {
-    return null;
+  } catch (error) {
+    if (isTerminalOnlineRoomFetchError(error)) return null;
+    throw error;
   }
 }
 
@@ -289,4 +291,3 @@ export function createEmptyRoom(
     updatedAt: Date.now(),
   };
 }
-

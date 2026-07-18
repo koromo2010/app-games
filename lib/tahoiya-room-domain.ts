@@ -35,9 +35,9 @@ export function shuffle<T>(items: T[]) {
 
 export function createDefinitionOptions(room: TahoiyaRoom): TahoiyaDefinitionOption[] {
   return shuffle([
-    { id: `real-${randomUUID()}`, text: room.realDefinition, authorId: null, isReal: true },
+    { id: randomUUID(), text: room.realDefinition, authorId: null, isReal: true },
     ...Object.entries(room.fakeDefinitions).filter(([, text]) => text !== tahoiyaTimeoutSubmission).map(([playerId, text]) => ({
-      id: `fake-${randomUUID()}`,
+      id: randomUUID(),
       text,
       authorId: playerId,
       isReal: false,
