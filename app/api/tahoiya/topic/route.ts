@@ -29,8 +29,9 @@ import { parseLlmJson } from "@/lib/llm-json";
 import { gameApiAccessDeniedResponse } from "@/lib/game-access";
 import { vocabularyDatabaseErrorCode } from "@/lib/vocabulary-postgres-store";
 
-const tahoiyaTopicPromptVersion = "tahoiya-effective-zipf-topic-v12";
+const tahoiyaTopicPromptVersion = "tahoiya-effective-zipf-topic-v13";
 const tahoiyaBatchPromptVersion = "tahoiya-effective-zipf-batch-v2";
+const tahoiyaGenerationCandidateLimit = 12;
 export const maxDuration = 180;
 type DefinitionStyle = "brief" | "standard" | "detailed" | "long" | "extended" | "maximum";
 
@@ -367,7 +368,7 @@ async function generateTopicFromCatalogWords(
     effectiveZipf: candidate.effectiveZipf,
   }));
   const prompt = [
-    `共通単語DBから「${tahoiyaDifficultyLabel(difficulty)}（${tahoiyaEffectiveZipfDescription(difficulty)}）」として抽出済みの1語へ、たほい屋の読みと本物の説明を付けてください。新しい見出し語を作ったり、候補の表記を変更したりしてはいけません。`,
+    `共通単語DBから「${tahoiyaDifficultyLabel(difficulty)}（${tahoiyaEffectiveZipfDescription(difficulty)}）」として抽出済みの候補群から、読みと意味に最も確信を持てる1語を選び、たほい屋の本物の説明を付けてください。新しい見出し語を作ったり、候補の表記を変更したりしてはいけません。`,
     "難易度は実質Zipfで確定済みです。難易度を再判定せず、実在性・読み・語義・偽説明の作りやすさだけを確認してください。",
     "候補のreadingHintは参考情報です。誤っている場合は辞書上の正しい読みへ直してください。",
     "選んだ語の実在・読み・意味に確信が持てる場合だけvalidをtrueにしてください。造語、意味を確認できない語、差別的・性的・残虐な語は選ばないでください。",
@@ -381,15 +382,17 @@ async function generateTopicFromCatalogWords(
   const generated = await generateGameLlmText(prompt, mode, { quality: "high" });
   const parsed = parseLlmJson<Partial<TahoiyaTopic> & { valid?: boolean; candidateId?: string }>(generated.text);
   const selected = parsed?.valid === true
-    ? candidates.find((candidate) => candidate.id === parsed.candidateId && candidate.word === parsed.word)
+    ? candidates.find((candidate) => candidate.id === parsed.candidateId &&
+        normalizeTopicWord(candidate.word) === normalizeTopicWord(String(parsed.word ?? "")))
     : null;
   if (!selected) return null;
   const topic = parseTopic(JSON.stringify(parsed));
   if (!topic) return null;
 
   const verificationPrompt = [
-    "あなたは日本語辞書の厳格な校閲者です。共通単語DBから選ばれた次のお題について、見出し語の実在、読み、正解文の意味を検証してください。",
-    "見出し語は変更禁止です。読みまたは意味が不正確、実在が不確かならvalidをfalseにしてください。難易度は実質Zipfで確定済みなので、再判定や変更をしてはいけません。推測で修正してはいけません。",
+    "あなたは日本語辞書の校閲者です。共通単語DBから選ばれた次のお題について、読みと正解文の意味を検証してください。",
+    "見出し語は共通単語DBに登録済みの実在語であり変更禁止です。難易度も実質Zipfで確定済みなので、実在性や難易度を再判定してはいけません。",
+    "読みまたは意味に誤りがあっても、正しい内容に確信がある場合は修正してvalidをtrueにしてください。正しい読みまたは意味を確定できない場合だけvalidをfalseにしてください。",
     `validがtrueの場合もrealDefinitionは意味だけの一文とし、${definitionRule.max}文字以内、括弧なしにしてください。`,
     "JSONのみで返してください: {\"valid\":trueまたはfalse,\"word\":\"...\",\"reading\":\"...\",\"realDefinition\":\"...\",\"note\":\"...\",\"sourceDetail\":\"...\"}",
     `校閲対象: ${JSON.stringify(topic)}`,
@@ -400,9 +403,22 @@ async function generateTopicFromCatalogWords(
     excludedProviders: generated.attemptedProviders.filter((provider) => provider !== generated.provider),
   });
   const verifiedTopic = parseVerifiedTopic(verified.text);
-  if (!verifiedTopic || verifiedTopic.word !== selected.word) return null;
+  const reviewAccepted = Boolean(
+    verifiedTopic && normalizeTopicWord(verifiedTopic.word) === normalizeTopicWord(selected.word),
+  );
+  if (!reviewAccepted) {
+    emitObservabilityEvent("warn", "ai.generation", {
+      game: "tahoiya",
+      operation: "catalog-definition-review",
+      provider: verified.provider,
+      model: verified.model,
+      outcome: "rejected",
+    });
+  }
+  const finalTopic = reviewAccepted ? verifiedTopic as TahoiyaTopic : topic;
   return {
-    ...verifiedTopic,
+    ...finalTopic,
+    word: selected.word,
     source: "llm" as const,
     generation: {
       provider: generated.provider,
@@ -632,7 +648,12 @@ export async function generateTahoiyaTopicResponse(
   };
   if (!forceNew) {
     try {
-      const candidates = await findUnexperiencedTahoiyaWordCandidates(difficulty, playerIds, feedbackBlockedWords, 1);
+      const candidates = await findUnexperiencedTahoiyaWordCandidates(
+        difficulty,
+        playerIds,
+        feedbackBlockedWords,
+        tahoiyaGenerationCandidateLimit,
+      );
       if (candidates.length === 0) {
         return Response.json({ error: `参加者全員が未使用の${tahoiyaDifficultyLabel(difficulty)}候補（${tahoiyaEffectiveZipfDescription(difficulty)}）がありません。` }, { status: 503 });
       }
