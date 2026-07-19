@@ -8,6 +8,7 @@ import { normalizeRoomLobbyReturnState } from "./room-lobby-return.ts";
 import { TAHOIYA_CORRECT_VOTE_POINTS, TAHOIYA_FOOLED_VOTE_POINTS } from "./tahoiya-scoring.ts";
 import { normalizeTahoiyaTopicGenerationProgress } from "./tahoiya-topic-generation-progress.ts";
 import { normalizeTahoiyaOptionId } from "./tahoiya-option-id.ts";
+import { normalizeTahoiyaFakeDefinitions, normalizeTahoiyaFakeDefinitionsPerPlayer } from "./tahoiya-definitions.ts";
 import type { TahoiyaAnswererMode, TahoiyaDefinitionOption, TahoiyaPhase, TahoiyaPlayer, TahoiyaRoom } from "./tahoiya-types.ts";
 
 function isPhase(value: unknown): value is TahoiyaPhase {
@@ -101,6 +102,7 @@ export function normalizeTahoiyaRoom(value: unknown): TahoiyaRoom | null {
     topicDifficulty: parsed.topicDifficulty === "extreme" ? "extreme" : "standard",
     answererMode: isAnswererMode(parsed.answererMode) ? parsed.answererMode : "random",
     showRealDefinitionToWriters: playMode === "single-answerer" && parsed.showRealDefinitionToWriters !== false,
+    fakeDefinitionsPerPlayer: normalizeTahoiyaFakeDefinitionsPerPlayer(parsed.fakeDefinitionsPerPlayer),
     actionTimeLimitSeconds: normalizeCommonTimeLimit(parsed.actionTimeLimitSeconds),
     correctVotePoints: typeof parsed.correctVotePoints === "number" && Number.isInteger(parsed.correctVotePoints) ? Math.max(0, Math.min(10, parsed.correctVotePoints)) : TAHOIYA_CORRECT_VOTE_POINTS,
     fooledVotePoints: typeof parsed.fooledVotePoints === "number" && Number.isInteger(parsed.fooledVotePoints) ? Math.max(0, Math.min(10, parsed.fooledVotePoints)) : TAHOIYA_FOOLED_VOTE_POINTS,
@@ -117,7 +119,7 @@ export function normalizeTahoiyaRoom(value: unknown): TahoiyaRoom | null {
     topicGenerationProgress: isPhase(parsed.phase) && parsed.phase === "lobby"
       ? normalizeTahoiyaTopicGenerationProgress(parsed.topicGenerationProgress)
       : undefined,
-    fakeDefinitions: normalizeStringRecord(parsed.fakeDefinitions),
+    fakeDefinitions: normalizeTahoiyaFakeDefinitions(parsed.fakeDefinitions),
     options: normalizeOptions(parsed.options),
     votes: normalizeVotes(parsed.votes),
     scores: normalizeScores(parsed.scores),

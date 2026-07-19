@@ -5,12 +5,13 @@ import { OnlineRoomApiError } from "@/lib/online-room-api-client";
 import { isTerminalOnlineRoomFetchError } from "@/lib/online-room-fetch-policy";
 import type { TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomAction } from "@/lib/tahoiya-types";
 import { TAHOIYA_CORRECT_VOTE_POINTS, TAHOIYA_FOOLED_VOTE_POINTS } from "@/lib/tahoiya-scoring";
+import { normalizeTahoiyaFakeDefinitions, normalizeTahoiyaFakeDefinitionsPerPlayer } from "@/lib/tahoiya-definitions";
 import { applyTahoiyaRoomAction, createTahoiyaRoom, tahoiyaRoomApi } from "./tahoiya-room-api-client";
 
 const roomStoragePrefix = "tahoiya-room-";
 const roomDefaultsStoragePrefix = "tahoiya-room-defaults-";
 
-type TahoiyaRoomDefaults = Pick<TahoiyaRoom, "playMode" | "topicDifficulty" | "answererMode" | "showRealDefinitionToWriters" | "actionTimeLimitSeconds">;
+type TahoiyaRoomDefaults = Pick<TahoiyaRoom, "playMode" | "topicDifficulty" | "answererMode" | "showRealDefinitionToWriters" | "fakeDefinitionsPerPlayer" | "actionTimeLimitSeconds">;
 
 export function makeId(prefix: string) {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
@@ -39,7 +40,7 @@ export function getRoomDefaultsKey(playerId: string, ownerId: string) {
 
 export function normalizeRoomDefaults(value: unknown): TahoiyaRoomDefaults {
   if (!value || typeof value !== "object") {
-    return { playMode: "single-answerer", topicDifficulty: "standard", answererMode: "random", showRealDefinitionToWriters: true, actionTimeLimitSeconds: 0 };
+    return { playMode: "single-answerer", topicDifficulty: "standard", answererMode: "random", showRealDefinitionToWriters: true, fakeDefinitionsPerPlayer: 1, actionTimeLimitSeconds: 0 };
   }
   const parsed = value as Partial<TahoiyaRoomDefaults>;
   const playMode = parsed.playMode === "all-vote" ? "all-vote" : "single-answerer";
@@ -48,6 +49,7 @@ export function normalizeRoomDefaults(value: unknown): TahoiyaRoomDefaults {
     topicDifficulty: parsed.topicDifficulty === "extreme" ? "extreme" : "standard",
     answererMode: parsed.answererMode === "manual" ? "manual" : "random",
     showRealDefinitionToWriters: playMode === "single-answerer" && parsed.showRealDefinitionToWriters !== false,
+    fakeDefinitionsPerPlayer: normalizeTahoiyaFakeDefinitionsPerPlayer(parsed.fakeDefinitionsPerPlayer),
     actionTimeLimitSeconds: normalizeCommonTimeLimit(parsed.actionTimeLimitSeconds),
   };
 }
@@ -110,11 +112,12 @@ export function normalizeRoom(room: TahoiyaRoom): TahoiyaRoom {
     topicDifficulty: room.topicDifficulty === "extreme" ? "extreme" : "standard",
     answererMode: room.answererMode === "manual" ? "manual" : "random",
     showRealDefinitionToWriters: playMode === "single-answerer" && room.showRealDefinitionToWriters !== false,
+    fakeDefinitionsPerPlayer: normalizeTahoiyaFakeDefinitionsPerPlayer(room.fakeDefinitionsPerPlayer),
     actionTimeLimitSeconds: normalizeCommonTimeLimit(room.actionTimeLimitSeconds),
     phaseStartedAt: typeof room.phaseStartedAt === "number" ? room.phaseStartedAt : null,
     answererId: typeof room.answererId === "string" ? room.answererId : "",
     round: room.round ?? 1,
-    fakeDefinitions: room.fakeDefinitions ?? {},
+    fakeDefinitions: normalizeTahoiyaFakeDefinitions(room.fakeDefinitions),
     options: room.options ?? [],
     votes: room.votes ?? {},
     scores: room.scores ?? {},
@@ -270,6 +273,7 @@ export function createEmptyRoom(
     topicDifficulty: defaults.topicDifficulty,
     answererMode: defaults.answererMode,
     showRealDefinitionToWriters: defaults.showRealDefinitionToWriters,
+    fakeDefinitionsPerPlayer: defaults.fakeDefinitionsPerPlayer,
     actionTimeLimitSeconds: defaults.actionTimeLimitSeconds,
     correctVotePoints: TAHOIYA_CORRECT_VOTE_POINTS,
     fooledVotePoints: TAHOIYA_FOOLED_VOTE_POINTS,
