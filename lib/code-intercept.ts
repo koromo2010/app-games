@@ -354,6 +354,12 @@ export function codeInterceptPhaseTimeLimitSeconds(
   return 0;
 }
 
+export function codeInterceptDraftScope(
+  room: Pick<CodeInterceptRoom, "code" | "gameNumber" | "roundNumber" | "phase" | "phaseStartedAt">,
+) {
+  return `${room.code}:${room.gameNumber}:${room.roundNumber}:${room.phase}:${room.phaseStartedAt ?? "none"}`;
+}
+
 export function isCodeInterceptPhaseExpired(
   room: Pick<CodeInterceptRoom, "phase" | "phaseStartedAt" | "clueTimeLimitSeconds" | "answerTimeLimitSeconds">,
   now = Date.now(),
