@@ -26,7 +26,7 @@ export function useTahoiyaRoomSession(params: Params) {
     }).catch(() => undefined);
     return () => { mounted = false; };
   }, [setActivePlayerId, setAvatarColor, setAvatarImage, setPlayerId, setPlayerName, setRoom]);
-  useOnlineRoomPolling({ roomCode: resultReturnGate.isRoomDissolved ? null : roomCode, intervalMs: isWaitingForLobbyReturns || isFollowingLobbyProgress ? onlineRoomPollingIntervals.realtime : onlineRoomPollingIntervals.active, fetchRoom: loadRoomFromStore, onRoom: resultReturnGate.acceptIncomingRoom, onMissing: () => { if (roomCode) deleteRoomLocally(roomCode); if (resultReturnGate.markRoomDissolved()) { params.setMessage("部屋が解散されたか、ホストにより退出扱いになりました。結果画面はこのまま確認できます。"); return; } params.setRoom(null); params.setMessage("部屋が解散されたか、退出扱いになりました。"); } });
+  useOnlineRoomPolling({ game: "tahoiya", roomCode: resultReturnGate.isRoomDissolved ? null : roomCode, intervalMs: isWaitingForLobbyReturns || isFollowingLobbyProgress ? onlineRoomPollingIntervals.realtime : onlineRoomPollingIntervals.active, fetchRoom: loadRoomFromStore, onRoom: resultReturnGate.acceptIncomingRoom, onMissing: () => { if (roomCode) deleteRoomLocally(roomCode); if (resultReturnGate.markRoomDissolved()) { params.setMessage("部屋が解散されたか、ホストにより退出扱いになりました。結果画面はこのまま確認できます。"); return; } params.setRoom(null); params.setMessage("部屋が解散されたか、退出扱いになりました。"); } });
   useEffect(() => {
     const lobbyReturn = room?.lobbyReturn;
     if (!room || room.phase !== "lobby" || !lobbyReturn || !playerId || lobbyReturn.returnedPlayerIds.includes(playerId)) return;

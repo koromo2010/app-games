@@ -49,7 +49,7 @@ function playerActiveRoomKey(playerId: string) {
 
 
 async function mutateStoredRoom(code: string, mutate: (room: NorthernRoom) => NorthernRoom) {
-  return mutateOnlineRoomWithRetry({ code, roomKey, loadRoom: loadStoredNorthernRoom, mutate, normalize: normalizeNorthernRoom, errors: { notFound: "NORTHERN_ROOM_NOT_FOUND", invalid: "INVALID_NORTHERN_ROOM", conflict: "NORTHERN_ROOM_CONFLICT" }, afterSave: (room) => Promise.all([recordNorthernBranchGameResults(room), recordNorthernBranchReplay(room)]) });
+  return mutateOnlineRoomWithRetry({ code, roomKey, loadRoom: loadStoredNorthernRoom, mutate, normalize: normalizeNorthernRoom, errors: { notFound: "NORTHERN_ROOM_NOT_FOUND", invalid: "INVALID_NORTHERN_ROOM", conflict: "NORTHERN_ROOM_CONFLICT" }, realtimeGame: "northern-branch", afterSave: (room) => Promise.all([recordNorthernBranchGameResults(room), recordNorthernBranchReplay(room)]) });
 }
 
 async function saveActiveRooms(room: NorthernRoom) {

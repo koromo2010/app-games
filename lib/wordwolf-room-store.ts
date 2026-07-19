@@ -15,6 +15,7 @@ import { claimOnlineRoomForPlayer, loadPlayerActiveOnlineRoom, releasePlayerActi
 import { isAvatarColor, isAvatarImage } from "@/lib/player-session";
 import { onlineRoomPlayerLimits } from "@/lib/online-room-policy";
 import { loadIndexedOnlineRoomPage } from "@/lib/online-room-list";
+import { publishOnlineRoomRevision } from "@/lib/online-room-realtime-server";
 import { schedulePostResponseWork } from "@/lib/post-response-work";
 import { recoverPlayerTimeout } from "@/lib/player-timeout-policy";
 import {
@@ -107,6 +108,12 @@ export async function saveStoredWordWolfRoom(room: unknown) {
     "1", roomKey(normalizedRoom.code), String(normalizedRoom.revision), JSON.stringify(normalizedRoom), multiplayerRoomExpiryArgs()[1],
   ]);
   if (saved !== 1) throw new Error("WORDWOLF_ROOM_CONFLICT");
+
+  await schedulePostResponseWork(
+    `online-room-realtime:wordwolf:${normalizedRoom.code}`,
+    () => publishOnlineRoomRevision("wordwolf", normalizedRoom),
+    { outsideRequest: "skip" },
+  );
 
   if (shouldRecordResults) {
     await schedulePostResponseWork("wordwolf-result-persistence", () => Promise.all([recordWordWolfGameResults(normalizedRoom), recordWordWolfReplay(normalizedRoom)]));

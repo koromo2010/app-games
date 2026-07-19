@@ -80,7 +80,7 @@ async function mutateStoredRoom(code: string, mutate: (room: HodoaiRoom) => Hodo
           }),
         }
       : changed;
-  }, afterSave: (room) => Promise.all([recordHodoaiGameResults(room), recordHodoaiReplay(room)]) });
+  }, realtimeGame: "hodoai", afterSave: (room) => Promise.all([recordHodoaiGameResults(room), recordHodoaiReplay(room)]) });
 }
 
 async function saveActiveRooms(room: HodoaiRoom) {

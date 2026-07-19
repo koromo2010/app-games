@@ -41,7 +41,7 @@ function playerActiveRoomKey(playerId: string) {
 
 
 async function mutateStoredRoom(code: string, mutate: (room: KotobaSenpukuRoom) => KotobaSenpukuRoom) {
-  return mutateOnlineRoomWithRetry({ code, roomKey, loadRoom: loadStoredKotobaSenpukuRoom, mutate, normalize: normalizeKotobaSenpukuRoom, errors: { notFound: "KOTOBA_SENPUKU_ROOM_NOT_FOUND", invalid: "INVALID_KOTOBA_SENPUKU_ROOM", conflict: "KOTOBA_SENPUKU_ROOM_CONFLICT" }, afterSave: (room) => Promise.all([recordKotobaSenpukuGameResults(room), recordKotobaSenpukuReplay(room)]) });
+  return mutateOnlineRoomWithRetry({ code, roomKey, loadRoom: loadStoredKotobaSenpukuRoom, mutate, normalize: normalizeKotobaSenpukuRoom, errors: { notFound: "KOTOBA_SENPUKU_ROOM_NOT_FOUND", invalid: "INVALID_KOTOBA_SENPUKU_ROOM", conflict: "KOTOBA_SENPUKU_ROOM_CONFLICT" }, realtimeGame: "kotoba-senpuku", afterSave: (room) => Promise.all([recordKotobaSenpukuGameResults(room), recordKotobaSenpukuReplay(room)]) });
 }
 
 async function saveActiveRooms(room: KotobaSenpukuRoom) {

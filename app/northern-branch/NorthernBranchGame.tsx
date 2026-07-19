@@ -136,6 +136,7 @@ export function NorthernBranchGame() {
   const playerId = session?.id ?? "";
 
   useOnlineRoomPolling({
+    game: "northern-branch",
     roomCode: playerId && !resultReturnGate.isRoomDissolved ? roomCode : null,
     intervalMs: roomPhase === "lobby" ? onlineRoomPollingIntervals.idle : onlineRoomPollingIntervals.active,
     fetchRoom: (code) => northernBranchRoomApi.fetchRoom(code, playerId),

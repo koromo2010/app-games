@@ -240,6 +240,7 @@ export function CodeInterceptGame() {
 
   const playerId = session?.id ?? "";
   useOnlineRoomPolling({
+    game: "code-intercept",
     roomCode: playerId && !resultReturnGate.isRoomDissolved ? room?.code : null,
     intervalMs: room?.phase === "lobby" ? onlineRoomPollingIntervals.idle : onlineRoomPollingIntervals.active,
     fetchRoom: (code) => codeInterceptRoomApi.fetchRoom(code, playerId),

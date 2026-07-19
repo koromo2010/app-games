@@ -209,6 +209,7 @@ export function KotobaSenpukuGame() {
   const playerId = session?.id ?? "";
 
   useOnlineRoomPolling({
+    game: "kotoba-senpuku",
     roomCode: playerId && !resultReturnGate.isRoomDissolved ? roomCode : null,
     intervalMs: roomPhase === "lobby" ? onlineRoomPollingIntervals.idle : onlineRoomPollingIntervals.active,
     fetchRoom: (code) => kotobaSenpukuRoomApi.fetchRoom(code, playerId),

@@ -1,4 +1,6 @@
 import { multiplayerRoomExpiryArgs, multiplayerRoomTtlSeconds } from "./multiplayer-room-lifecycle.ts";
+import { publishOnlineRoomRevision } from "./online-room-realtime-server.ts";
+import type { OnlineRoomRealtimeGame } from "./online-room-realtime-protocol.ts";
 import { schedulePostResponseWork } from "./post-response-work.ts";
 import { redisCommand } from "./redis-store.ts";
 
@@ -40,6 +42,7 @@ export async function mutateOnlineRoomWithRetry<Room extends RevisionedOnlineRoo
   normalize: (room: unknown) => Room | null;
   prepare?: (current: Room, changed: Room, context: { revision: number; timestamp: number }) => Room;
   afterSave?: (room: Room) => Promise<unknown>;
+  realtimeGame?: OnlineRoomRealtimeGame;
   errors: { notFound: string; invalid: string; conflict: string };
 }) {
   for (let attempt = 0; attempt < 6; attempt += 1) {
@@ -54,6 +57,13 @@ export async function mutateOnlineRoomWithRetry<Room extends RevisionedOnlineRoo
     if (!next) throw new Error(options.errors.invalid);
     const saved = await compareAndSetOnlineRoom(current.revision, next, options.roomKey);
     if (saved === 1) {
+      if (options.realtimeGame) {
+        await schedulePostResponseWork(
+          `online-room-realtime:${options.realtimeGame}:${next.code}`,
+          () => publishOnlineRoomRevision(options.realtimeGame!, next),
+          { outsideRequest: "skip" },
+        );
+      }
       if (options.afterSave) {
         await schedulePostResponseWork(`online-room:${next.code}`, () => options.afterSave!(next));
       }

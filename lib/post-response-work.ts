@@ -9,7 +9,11 @@ function isMissingRequestScope(error: unknown) {
  * scope exists. Direct store calls (tests and maintenance scripts) retain the
  * previous awaited behavior.
  */
-export async function schedulePostResponseWork(name: string, work: () => Promise<unknown>) {
+export async function schedulePostResponseWork(
+  name: string,
+  work: () => Promise<unknown>,
+  options: { outsideRequest?: "run" | "skip" } = {},
+) {
   try {
     after(async () => {
       try {
@@ -20,6 +24,7 @@ export async function schedulePostResponseWork(name: string, work: () => Promise
     });
   } catch (error) {
     if (!isMissingRequestScope(error)) throw error;
+    if (options.outsideRequest === "skip") return;
     await work();
   }
 }

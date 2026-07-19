@@ -36,7 +36,7 @@ function playerActiveRoomKey(playerId: string) {
 
 
 async function mutateStoredTahoiyaRoom(code: string, mutate: (room: TahoiyaRoom) => TahoiyaRoom) {
-  return mutateOnlineRoomWithRetry({ code, roomKey, loadRoom: loadStoredTahoiyaRoom, mutate, normalize: normalizeTahoiyaRoom, errors: { notFound: "TAHOIYA_ROOM_NOT_FOUND", invalid: "INVALID_TAHOIYA_ROOM", conflict: "TAHOIYA_ROOM_CONFLICT" }, afterSave: (room) => Promise.all([recordTahoiyaRoundResults(room), recordTahoiyaReplay(room)]) });
+  return mutateOnlineRoomWithRetry({ code, roomKey, loadRoom: loadStoredTahoiyaRoom, mutate, normalize: normalizeTahoiyaRoom, errors: { notFound: "TAHOIYA_ROOM_NOT_FOUND", invalid: "INVALID_TAHOIYA_ROOM", conflict: "TAHOIYA_ROOM_CONFLICT" }, realtimeGame: "tahoiya", afterSave: (room) => Promise.all([recordTahoiyaRoundResults(room), recordTahoiyaReplay(room)]) });
 }
 
 async function savePlayerActiveRooms(room: TahoiyaRoom) {

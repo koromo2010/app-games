@@ -71,7 +71,7 @@ async function mutateStoredRoom(code: string, mutate: (room: NigoichiRoom) => Ni
     return changed.debugMode && debugEvent
       ? { ...changed, debugLog: appendGameDebugLog(changed.debugLog, { timestamp, actorName, action: debugEvent.action, phaseBefore: current.phase, phaseAfter: changed.phase, revision }) }
       : changed;
-  }, afterSave: (room) => Promise.all([recordNigoichiGameResults(room), recordNigoichiReplay(room)]) });
+  }, realtimeGame: "nigoichi", afterSave: (room) => Promise.all([recordNigoichiGameResults(room), recordNigoichiReplay(room)]) });
 }
 
 async function saveActiveRooms(room: NigoichiRoom) {

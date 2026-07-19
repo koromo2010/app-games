@@ -42,6 +42,7 @@ export function useWordWolfRoomSession(args: Args) {
 
   const roomCode = args.room?.code;
   useOnlineRoomPolling({
+    game: "wordwolf",
     roomCode: args.isRoomDissolved ? null : roomCode,
     intervalMs: args.room?.phase === "lobby" ? onlineRoomPollingIntervals.idle : onlineRoomPollingIntervals.active,
     fetchRoom: loadRoomFromStore,

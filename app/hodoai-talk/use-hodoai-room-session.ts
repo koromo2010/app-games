@@ -53,6 +53,7 @@ export function useHodoaiRoomSession({ room, setRoom, setError }: Params) {
   }, [setRoom]);
 
   useOnlineRoomPolling({
+    game: "hodoai",
     roomCode: playerId && !resultReturnGate.isRoomDissolved ? room?.code : null,
     intervalMs: room?.phase === "arrange" ? onlineRoomPollingIntervals.realtime : room?.phase === "lobby" ? onlineRoomPollingIntervals.idle : onlineRoomPollingIntervals.active,
     fetchRoom: (code) => hodoaiRoomApi.fetchRoom(code, playerId),

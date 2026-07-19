@@ -78,7 +78,7 @@ async function mutateStoredRoom(code: string, mutate: (room: CodeInterceptRoom) 
     return changed.debugMode
       ? { ...changed, debugLog: appendGameDebugLog(changed.debugLog, { timestamp, actorName, action, phaseBefore: current.phase, phaseAfter: changed.phase, revision }) }
       : changed;
-  }, afterSave: (room) => Promise.all([recordCodeInterceptGameResults(room), recordCodeInterceptReplay(room)]) });
+  }, realtimeGame: "code-intercept", afterSave: (room) => Promise.all([recordCodeInterceptGameResults(room), recordCodeInterceptReplay(room)]) });
 }
 
 async function saveActiveRooms(room: CodeInterceptRoom) {
