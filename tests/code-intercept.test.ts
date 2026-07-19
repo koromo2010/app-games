@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   canReviseCodeInterceptAnswers,
+  canSetCodeInterceptPlayerTeam,
   codeInterceptClueHistory,
   codeInterceptDefaults,
   codeInterceptRoomIsStartable,
@@ -49,6 +50,14 @@ test("team balance requires two players per team and at most one player differen
   const base = room();
   assert.equal(codeInterceptTeamsAreStartable(base), true);
   assert.equal(codeInterceptTeamsAreStartable({ players: base.players.slice(0, 3) }), false);
+});
+
+test("manual team assignment lets the host move anyone and players move only themselves", () => {
+  const current = { ...room(), phase: "lobby" as const, teamAssignmentMode: "manual" as const };
+  assert.equal(canSetCodeInterceptPlayerTeam(current, "r1", "b2"), true);
+  assert.equal(canSetCodeInterceptPlayerTeam(current, "r2", "r2"), true);
+  assert.equal(canSetCodeInterceptPlayerTeam(current, "r2", "b2"), false);
+  assert.equal(canSetCodeInterceptPlayerTeam({ ...current, teamAssignmentMode: "random" }, "r1", "b2"), false);
 });
 
 test("random team assignment can start from an unbalanced lobby and produces balanced shuffled teams", () => {

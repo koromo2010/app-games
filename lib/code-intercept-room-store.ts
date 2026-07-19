@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   areValidCodeInterceptClues,
+  canSetCodeInterceptPlayerTeam,
   canReviseCodeInterceptAnswers,
   codeInterceptAnswererIds,
   codeLengthForTeam,
@@ -151,8 +152,9 @@ export async function applyStoredCodeInterceptAction(code: string, action: CodeI
       return { ...current, players: current.players.filter((player) => player.id !== action.actorId) };
     }
     if (action.type === "set-team") {
-      if (current.phase !== "lobby" || !isCodeInterceptTeamId(action.teamId)) throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
-      return { ...current, players: current.players.map((player) => player.id === action.actorId ? { ...player, teamId: action.teamId } : player) };
+      const targetId = action.playerId ?? action.actorId;
+      if (!isCodeInterceptTeamId(action.teamId) || !canSetCodeInterceptPlayerTeam(current, action.actorId, targetId)) throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
+      return { ...current, players: current.players.map((player) => player.id === targetId ? { ...player, teamId: action.teamId } : player) };
     }
     if (action.type === "set-debug") {
       if (!isHost || current.phase !== "lobby") throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");

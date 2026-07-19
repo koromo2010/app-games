@@ -145,7 +145,7 @@ export type CodeInterceptRoomChoice = {
 export type CodeInterceptRoomAction =
   | { type: "join-room"; actorId: string; player: CodeInterceptPlayer; passphrase: string }
   | { type: "leave-room"; actorId: string }
-  | { type: "set-team"; actorId: string; teamId: CodeInterceptTeamId }
+  | { type: "set-team"; actorId: string; playerId?: string; teamId: CodeInterceptTeamId }
   | { type: "set-debug"; actorId: string; enabled: boolean }
   | { type: "set-debug-replay"; actorId: string; enabled: boolean }
   | { type: "set-config"; actorId: string; cardCount: number; teamAssignmentMode: CodeInterceptTeamAssignmentMode; codeLengthMode: CodeLengthMode; codeRevealMode: CodeRevealMode; fixedCodeLength?: number; clueTimeLimitSeconds: number; answerTimeLimitSeconds: number }
@@ -208,6 +208,17 @@ export function codeLengthForTeam(room: Pick<CodeInterceptRoom, "roundCodeLength
 
 export function teamPlayers(room: Pick<CodeInterceptRoom, "players">, teamId: CodeInterceptTeamId) {
   return room.players.filter((player) => player.teamId === teamId);
+}
+
+export function canSetCodeInterceptPlayerTeam(
+  room: Pick<CodeInterceptRoom, "phase" | "hostId" | "players" | "teamAssignmentMode">,
+  actorId: string,
+  playerId: string,
+) {
+  return room.phase === "lobby"
+    && room.teamAssignmentMode === "manual"
+    && room.players.some((player) => player.id === playerId)
+    && (actorId === playerId || actorId === room.hostId);
 }
 
 export function codeInterceptTeamsAreStartable(room: Pick<CodeInterceptRoom, "players">) {
