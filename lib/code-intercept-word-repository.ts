@@ -8,6 +8,11 @@ type CodeInterceptWordRow = {
   surface: string;
 };
 
+export const codeInterceptWordSelectionBounds = {
+  minimumEffectiveZipf: 4.5,
+  maximumEffectiveZipf: 6.5,
+} as const;
+
 export async function loadCodeInterceptWordPool(requestedLimit: number) {
   if (!isVocabularyPostgresConfigured()) return [];
   const limit = Math.max(1, Math.min(100, Math.floor(requestedLimit)));
@@ -23,8 +28,7 @@ export async function loadCodeInterceptWordPool(requestedLimit: number) {
         ON eligibility.subject_type = 'word'
         AND eligibility.subject_id = word.id
         AND eligibility.game_id = 'wordwolf'
-      WHERE word.effective_zipf >= 3
-        AND word.effective_zipf BETWEEN ${targetZipf - 1.5} AND ${targetZipf + 1.5}
+      WHERE word.effective_zipf BETWEEN ${codeInterceptWordSelectionBounds.minimumEffectiveZipf} AND ${codeInterceptWordSelectionBounds.maximumEffectiveZipf}
         AND NOT word.proper_noun
         AND (eligibility.valid_from IS NULL OR eligibility.valid_from <= NOW())
         AND (eligibility.valid_until IS NULL OR eligibility.valid_until > NOW())

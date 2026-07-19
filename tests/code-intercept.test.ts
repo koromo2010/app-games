@@ -22,6 +22,7 @@ import {
   type CodeInterceptRoom,
 } from "../lib/code-intercept.ts";
 import { beginGame, dealSecretWords, resetGame } from "../lib/code-intercept-room-domain.ts";
+import { codeInterceptWordSelectionBounds } from "../lib/code-intercept-word-repository.ts";
 
 function room(): CodeInterceptRoom {
   const now = Date.now();
@@ -94,6 +95,13 @@ test("secret cards reject a database pool that is too small after normalization"
     () => dealSecretWords(2, [" 猫 ", "猫", "犬", "鳥"]),
     /CODE_INTERCEPT_WORDS_UNAVAILABLE/,
   );
+});
+
+test("secret-card vocabulary excludes words below effective Zipf 4.5", () => {
+  assert.deepEqual(codeInterceptWordSelectionBounds, {
+    minimumEffectiveZipf: 4.5,
+    maximumEffectiveZipf: 6.5,
+  });
 });
 
 test("answers must have the fixed length, range, and no duplicates", () => {
