@@ -31,13 +31,16 @@ import { gameApiAccessDeniedResponse } from "@/lib/game-access";
 import { vocabularyDatabaseErrorCode } from "@/lib/vocabulary-postgres-store";
 import { parseTahoiyaCatalogTopicGeneration } from "@/lib/tahoiya-catalog-topic-generation";
 import { parseTahoiyaDifficultyScreening } from "@/lib/tahoiya-difficulty-screening";
+import {
+  pickTahoiyaDefinitionStyle,
+  tahoiyaDefinitionStyleRules,
+} from "@/lib/tahoiya-definition-length";
 
-const tahoiyaTopicPromptVersion = "tahoiya-effective-zipf-topic-v14";
+const tahoiyaTopicPromptVersion = "tahoiya-effective-zipf-topic-v15";
 const tahoiyaDifficultyScreeningPromptVersion = "tahoiya-difficulty-screening-v2";
 const tahoiyaGenerationCandidateLimit = 3;
 const tahoiyaScreeningBatchLimit = 3;
 export const maxDuration = 180;
-type DefinitionStyle = "brief" | "standard" | "detailed" | "long" | "extended" | "maximum";
 
 function tahoiyaDifficultyScreeningJsonSchema(sourceIds: string[]) {
   return {
@@ -70,32 +73,6 @@ function tahoiyaDifficultyScreeningJsonSchema(sourceIds: string[]) {
       additionalProperties: false,
     },
   };
-}
-
-const definitionStyleRules: Record<DefinitionStyle, { max: number; instruction: string }> = {
-  brief: { max: 14, instruction: "10文字程度の短く端的な説明" },
-  standard: { max: 25, instruction: "20文字程度の標準的な説明" },
-  detailed: { max: 38, instruction: "30文字程度で特徴や用途を少し補った説明" },
-  long: { max: 46, instruction: "40文字程度で特徴を自然に補った説明" },
-  extended: { max: 55, instruction: "50文字程度で意味の理解に必要な情報を含めた説明" },
-  maximum: { max: 60, instruction: "55文字から60文字以内の詳しい説明" },
-};
-
-function pickDefinitionStyle(): DefinitionStyle {
-  const weightedStyles: Array<{ style: DefinitionStyle; weight: number }> = [
-    { style: "brief", weight: 35 },
-    { style: "standard", weight: 28 },
-    { style: "detailed", weight: 20 },
-    { style: "long", weight: 10 },
-    { style: "extended", weight: 5 },
-    { style: "maximum", weight: 2 },
-  ];
-  let roll = Math.random() * 100;
-  for (const choice of weightedStyles) {
-    roll -= choice.weight;
-    if (roll < 0) return choice.style;
-  }
-  return "brief";
 }
 
 const fallbackTopics: TahoiyaTopic[] = [
@@ -396,8 +373,8 @@ async function generateTopicFromCatalogWords(
 ) {
   if (candidates.length === 0) return null;
   for (const candidate of candidates) {
-    const definitionStyle = pickDefinitionStyle();
-    const definitionRule = definitionStyleRules[definitionStyle];
+    const definitionStyle = pickTahoiyaDefinitionStyle();
+    const definitionRule = tahoiyaDefinitionStyleRules[definitionStyle];
     const prompt = [
       `共通単語DBで選定済みの見出し語「${candidate.word}」に、国語辞典を使ったパーティーゲーム『たほい屋』の本物の説明を付けてください。`,
       "あなたの役割は、一般向けゲームに不適切なセンシティブ語かの判定と、センシティブでない場合の読み・正解文の作成だけです。",
@@ -452,8 +429,8 @@ export async function generateTopic(
   retrievedFeedbackIds: string[],
   usedWords: string[],
 ) {
-  const definitionStyle = pickDefinitionStyle();
-  const definitionRule = definitionStyleRules[definitionStyle];
+  const definitionStyle = pickTahoiyaDefinitionStyle();
+  const definitionRule = tahoiyaDefinitionStyleRules[definitionStyle];
   const difficultyRules = difficulty === "extreme"
     ? [
         "今回は魔境モードです。難語好きや読書家でも意味を知らない可能性が高い、使用頻度が極端に低い見出し語だけを選んでください。",
