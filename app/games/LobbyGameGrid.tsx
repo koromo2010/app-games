@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import type { GameOperation } from "@/lib/game-operations";
 import { gameOperationFor } from "@/lib/game-operations";
@@ -32,7 +33,7 @@ export function LobbyGameGrid({ games, operations, activeRooms, isLoggedIn, onLo
 function LobbyGameCard({ game, operation, activeRoom, isLoggedIn, onLoginRequired, onRememberWordWolf }: { game: GameCatalogEntry; operation: GameOperation; activeRoom?: ActiveRoom; isLoggedIn: boolean; onLoginRequired: () => void; onRememberWordWolf: () => void }) {
   const maintenance = operation.maintenance; const active = Boolean(activeRoom); const privateGame = operation.publication === "private";
   const card = <article className={`h-full rounded-lg border p-3 shadow-[0_14px_38px_rgba(15,23,42,0.18)] transition hover:-translate-y-0.5 hover:shadow-[0_20px_48px_rgba(15,23,42,0.28)] ${active ? "border-cyan-300 bg-gradient-to-br from-cyan-950 via-slate-900 to-fuchsia-950 ring-2 ring-cyan-300/60" : "border-white/10 bg-white/[0.96]"}`}>
-    <div className={`h-14 rounded-md bg-gradient-to-br ${game.accent} ${active ? "ring-2 ring-white/50" : ""}`} />
+    <div className={`relative flex h-20 items-center justify-center overflow-hidden rounded-md bg-gradient-to-br ${game.accent} ${active ? "ring-2 ring-white/50" : ""}`}><span aria-hidden="true" className="absolute h-24 w-24 rounded-full bg-white/35 blur-2xl" /><Image src={game.icon} alt="" width={58} height={58} unoptimized className="relative h-[58px] w-[58px] rounded-2xl shadow-lg shadow-slate-950/25" /></div>
     <div className="mt-3"><h2 className={`text-lg font-black leading-tight ${active ? "text-white" : "text-slate-950"}`}>{game.title}</h2><div className="mt-2 flex flex-wrap gap-1.5">{active && <Badge active>プレイ中</Badge>}{maintenance && !active && <Badge active={false} state>メンテナンス中</Badge>}{privateGame && <Badge active={active} state>プライベート</Badge>}{game.tags.map((tag) => <Badge key={tag} active={active} tag={tag}>{tag}</Badge>)}</div></div>
     {activeRoom && <p className="mt-2 text-xs font-bold text-cyan-100">部屋 {activeRoom.code} に参加中</p>}
     <p className={`mt-2 min-h-10 text-xs leading-5 ${active ? "text-slate-200" : "text-slate-600"}`}>{game.summary}</p>

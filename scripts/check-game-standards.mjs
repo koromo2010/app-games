@@ -23,6 +23,7 @@ for (const game of games) {
   if (game.tags.length > 3) fail(`${game.id}: ロビーカードのタグは3件以内にしてください。`);
   if (new Set(game.tags).size !== game.tags.length) fail(`${game.id}: tags に重複があります。`);
   for (const field of ["entryFile", "pageFile"]) if (!game[field] || !existsSync(join(root, game[field]))) fail(`${game.id}: ${field} が存在しません。`);
+  if (!existsSync(join(root, `public/game-icons/${game.id}.svg`))) fail(`${game.id}: ゲームカード用アイコン public/game-icons/${game.id}.svg がありません。`);
   for (const file of game.moduleBoundaryFiles || []) if (!existsSync(join(root, file))) fail(`${game.id}: モジュール境界ファイル ${file} が存在しません。`);
   if (!game.entryFile || !existsSync(join(root, game.entryFile))) continue;
   const entry = read(game.entryFile);
