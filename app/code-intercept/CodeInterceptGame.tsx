@@ -21,13 +21,14 @@ import {
   codeInterceptClueHistory,
   codeLengthForTeam,
   codeInterceptDefaults,
+  codeInterceptPhaseTimeLimitSeconds,
   codeInterceptMaximumCardCount,
   codeInterceptMinimumCardCount,
   codeInterceptMinimumPlayers,
   codeInterceptPlayerLimit,
+  codeInterceptRoomIsStartable,
   codeInterceptShareText,
   codeInterceptTeamIds,
-  codeInterceptTeamsAreStartable,
   isValidCodeInterceptAnswer,
   normalizeCodeInterceptCodeLength,
   otherCodeInterceptTeam,
@@ -92,8 +93,9 @@ function AnswerProposalList({ room, answererIds, proposals }: { room: CodeInterc
 }
 
 function PhaseTimer({ room }: { room: CodeInterceptRoom }) {
-  return room.phaseStartedAt && room.actionTimeLimitSeconds > 0
-    ? <GamePhaseTimer key={room.phaseStartedAt} durationSeconds={room.actionTimeLimitSeconds} startedAt={room.phaseStartedAt} label="制限時間" />
+  const durationSeconds = codeInterceptPhaseTimeLimitSeconds(room);
+  return room.phaseStartedAt && durationSeconds > 0
+    ? <GamePhaseTimer key={room.phaseStartedAt} durationSeconds={durationSeconds} startedAt={room.phaseStartedAt} label="制限時間" />
     : null;
 }
 
@@ -275,7 +277,7 @@ export function CodeInterceptGame() {
   const timerRoomCode = room?.code;
   const timerPhase = room?.phase;
   const timerPhaseStartedAt = room?.phaseStartedAt;
-  const timerDurationSeconds = room?.actionTimeLimitSeconds ?? 0;
+  const timerDurationSeconds = room ? codeInterceptPhaseTimeLimitSeconds(room) : 0;
 
   useEffect(() => {
     if (!timerRoomCode || !playerId || timerDurationSeconds <= 0 || !timerPhaseStartedAt || !timerPhase || !["code-length", "clue", "answer"].includes(timerPhase)) return;
@@ -303,7 +305,7 @@ export function CodeInterceptGame() {
     const host: CodeInterceptPlayer = { id: session.id, name: session.name, joinedAt: now, teamId: "red", avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined, shareNameAllowed: session.shareNameAllowed === true };
     const draft: CodeInterceptRoom = {
       code: makeRoomCode(), revision: 0, hostId: session.id, ownerId: getOwnerId(), passphrase: passphrase.trim(), phase: "lobby", players: [host], playerCapacity: newPlayerCapacity, gameNumber: 1, roundNumber: 1,
-      cardCount: codeInterceptDefaults.cardCount, codeLengthMode: codeInterceptDefaults.codeLengthMode, codeRevealMode: codeInterceptDefaults.codeRevealMode, fixedCodeLength: codeInterceptDefaults.fixedCodeLength, initialPoints: codeInterceptDefaults.initialPoints, miscommunicationDamage: codeInterceptDefaults.miscommunicationDamage, interceptionDamage: codeInterceptDefaults.interceptionDamage, interceptionStartsAtRound: codeInterceptDefaults.interceptionStartsAtRound, actionTimeLimitSeconds: 0, phaseStartedAt: null,
+      cardCount: codeInterceptDefaults.cardCount, teamAssignmentMode: codeInterceptDefaults.teamAssignmentMode, codeLengthMode: codeInterceptDefaults.codeLengthMode, codeRevealMode: codeInterceptDefaults.codeRevealMode, fixedCodeLength: codeInterceptDefaults.fixedCodeLength, initialPoints: codeInterceptDefaults.initialPoints, miscommunicationDamage: codeInterceptDefaults.miscommunicationDamage, interceptionDamage: codeInterceptDefaults.interceptionDamage, interceptionStartsAtRound: codeInterceptDefaults.interceptionStartsAtRound, clueTimeLimitSeconds: codeInterceptDefaults.clueTimeLimitSeconds, answerTimeLimitSeconds: codeInterceptDefaults.answerTimeLimitSeconds, phaseStartedAt: null,
       debugMode: false, debugReplayEnabled: false, teams: codeInterceptTeamIds.map((id) => ({ id, name: teamLabel(id), points: codeInterceptDefaults.initialPoints, secretWords: [] })), clueGiverIds: {}, codeLengthChoices: {}, roundCodeLengths: {}, secretCodes: {}, clues: {}, allyAnswerProposals: {}, interceptAnswerProposals: {}, allyAnswers: {}, interceptAnswers: {}, roundHistory: [], winner: null, debugLog: [], createdAt: now, updatedAt: now,
     };
     try { const data = await createCodeInterceptRoom(draft, session.id); setRoom(data.room); localStorage.setItem(lastRoomKey, data.room.code); }
@@ -350,6 +352,8 @@ export function CodeInterceptGame() {
       <p>各ラウンドの出題者には、「3・1・4」のような暗号が表示されます。出題者は、数字を直接書かず、対応する単語のヒントを暗号と同じ順番に書きます。</p>
       <p className="rounded-lg bg-amber-300/10 p-3"><strong className="text-amber-100">例：</strong>上の秘密単語で暗号が「3・1・4」なら、「しょうゆ・肉球・かさ」と伝えられます。</p>
     </div>
+    <h3 className="mt-4 font-black text-white">チーム編成</h3>
+    <p className="mt-2 text-slate-300">ロビーで決めたチームを使う「手動」と、ゲーム開始時に人数差1人以内で振り分ける「開始時ランダム」から選べます。ランダムではチーム内の出題順もシャッフルされます。</p>
     <h3 className="mt-4 font-black text-white">暗号の桁数</h3>
     <div className="mt-2 space-y-2 text-slate-300">
       <p><strong className="text-white">固定モード</strong>では、両チームが全ラウンドで同じ桁数を使います。</p>
@@ -375,7 +379,7 @@ export function CodeInterceptGame() {
     <h3 className="mt-4 font-black text-white">勝ち負け</h3>
     <p className="mt-2">両チームのダメージを同時に反映します。片方だけ0ポイント以下になったら、残ったチームの勝ちです。両チームが同時に0ポイント以下になった場合は、マイナス幅が小さいチームの勝ちです。同じポイントなら引き分けです。</p>
     <h3 className="mt-4 font-black text-white">過去ログと時間制限</h3>
-    <p className="mt-2">終了したラウンドのヒントは過去ログで確認できます。正解暗号は部屋設定が「全員に公開」の場合だけ相手にも表示され、「自チームだけ」では相手の正解暗号と味方回答を伏せます。敵の秘密単語そのものは、ゲームが終わるまで見えません。時間制限は桁数選択・ヒント入力・回答の各段階に適用されます。</p>
+    <p className="mt-2">終了したラウンドのヒントは過去ログで確認できます。正解暗号は部屋設定が「全員に公開」の場合だけ相手にも表示され、「自チームだけ」では相手の正解暗号と味方回答を伏せます。敵の秘密単語そのものは、ゲームが終わるまで見えません。時間制限は、出題・ヒント作成とソナー選択で別々に設定できます。</p>
   </GameRulesDialog>;
 
   if (!ready) return <main className="min-h-screen bg-slate-950 p-8 text-white">ログイン情報と部屋を確認中...</main>;
@@ -404,40 +408,48 @@ export function CodeInterceptGame() {
     {rulesDialog}<GameAdSlot gameId="code-intercept" surface={room.phase === "lobby" ? "room-lobby" : room.phase === "game-result" ? "result" : null} disabled={room.debugMode} />
     <div className="mx-auto grid max-w-7xl gap-4 px-4 py-5 lg:grid-cols-[300px_minmax(0,1fr)]">
       <aside className="space-y-4"><section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4"><div className="flex items-center justify-between"><h2 className="font-black">参加者</h2><span className="text-sm text-slate-400">{room.players.length}/{room.playerCapacity}人</span></div><ul className="mt-3 space-y-2">{room.players.map((player) => <PlayerCard key={player.id} player={player} room={room} me={playerId} saving={isSaving} onTeamChange={(teamId) => void runAction({ type: "set-team", actorId: playerId, teamId })} />)}</ul></section>
-        <RoomConfigSummary items={[{ label: "秘密カード C", value: `${room.cardCount}枚` }, { label: "暗号桁数", value: room.codeLengthMode === "fixed" ? `固定・${room.fixedCodeLength}桁` : "毎ラウンド選択" }, { label: "正解暗号", value: codeRevealLabel(room) }, { label: "初期ポイント X", value: `${room.initialPoints}点` }, { label: "伝達失敗", value: `−${room.miscommunicationDamage}` }, { label: "傍受成功", value: `−${room.interceptionDamage}` }, { label: "傍受開始", value: "第2ラウンド" }, { label: "時間制限", value: timeLimitLabel(room.actionTimeLimitSeconds) }]} />
+        <RoomConfigSummary items={[{ label: "チーム編成", value: room.teamAssignmentMode === "random" ? "開始時ランダム" : "手動" }, { label: "秘密カード C", value: `${room.cardCount}枚` }, { label: "暗号桁数", value: room.codeLengthMode === "fixed" ? `固定・${room.fixedCodeLength}桁` : "毎ラウンド選択" }, { label: "正解暗号", value: codeRevealLabel(room) }, { label: "初期ポイント X", value: `${room.initialPoints}点` }, { label: "伝達失敗", value: `−${room.miscommunicationDamage}` }, { label: "傍受成功", value: `−${room.interceptionDamage}` }, { label: "傍受開始", value: "第2ラウンド" }, { label: "出題・ヒント", value: timeLimitLabel(room.clueTimeLimitSeconds) }, { label: "ソナー選択", value: timeLimitLabel(room.answerTimeLimitSeconds) }]} />
       </aside>
       <div className="space-y-4">
         {error && <p className="rounded-xl border border-rose-300/30 bg-rose-300/10 p-3 text-sm font-bold text-rose-100">{error}</p>}
         {room.phase === "lobby" && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6">
           <h2 className="text-2xl font-black">チーム分け</h2>
-          <p className="mt-3 text-sm leading-6 text-slate-300">各チーム2人以上、人数差1人以内で開始できます。自分の名前の横からチームを移動できます。</p>
+          <p className="mt-3 text-sm leading-6 text-slate-300">{room.teamAssignmentMode === "random" ? "4人以上で開始できます。現在のチーム表示はゲーム開始時にランダムで組み直されます。" : "各チーム2人以上、人数差1人以内で開始できます。自分の名前の横からチームを移動できます。"}</p>
           <div className="mt-5 grid gap-3 sm:grid-cols-2">{codeInterceptTeamIds.map((teamId) => <div key={teamId} className={`rounded-xl border p-4 ${teamStyle(teamId)}`}><h3 className="text-lg font-black">{teamLabel(teamId)} <span className="font-mono">{teamCounts[teamId]}人</span></h3><p className="mt-2 text-sm">{teamPlayers(room, teamId).map((player) => player.name).join("・") || "未所属"}</p></div>)}</div>
           <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
             <h3 className="text-lg font-black">ゲーム設定</h3>
+            <fieldset className="mt-4" disabled={!isHost || isSaving}>
+              <legend className="text-sm font-black">チーム編成</legend>
+              <label className={`mt-2 block cursor-pointer rounded-xl border p-4 ${room.teamAssignmentMode === "manual" ? "border-amber-300 bg-amber-300/10" : "border-white/10 bg-slate-950/40"}`}><span className="flex items-center gap-2 font-black"><input type="radio" name="team-assignment-mode" checked={room.teamAssignmentMode === "manual"} onChange={() => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, teamAssignmentMode: "manual", codeLengthMode: room.codeLengthMode, codeRevealMode: room.codeRevealMode, fixedCodeLength: room.fixedCodeLength, clueTimeLimitSeconds: room.clueTimeLimitSeconds, answerTimeLimitSeconds: room.answerTimeLimitSeconds })} />手動</span><span className="mt-1 block text-sm text-slate-300">ロビーで決めた赤・青チームのまま開始します。</span></label>
+              <label className={`mt-3 block cursor-pointer rounded-xl border p-4 ${room.teamAssignmentMode === "random" ? "border-cyan-300 bg-cyan-300/10" : "border-white/10 bg-slate-950/40"}`}><span className="flex items-center gap-2 font-black"><input type="radio" name="team-assignment-mode" checked={room.teamAssignmentMode === "random"} onChange={() => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, teamAssignmentMode: "random", codeLengthMode: room.codeLengthMode, codeRevealMode: room.codeRevealMode, fixedCodeLength: room.fixedCodeLength, clueTimeLimitSeconds: room.clueTimeLimitSeconds, answerTimeLimitSeconds: room.answerTimeLimitSeconds })} />開始時にランダム</span><span className="mt-1 block text-sm text-slate-300">人数差1人以内でチームと出題順をシャッフルします。</span></label>
+            </fieldset>
             <label className="mt-4 block text-sm font-bold">秘密カード数
-              <select value={room.cardCount} disabled={!isHost || isSaving} onChange={(event) => { const cardCount = Number(event.target.value); void runAction({ type: "set-config", actorId: playerId, cardCount, codeLengthMode: room.codeLengthMode, codeRevealMode: room.codeRevealMode, fixedCodeLength: normalizeCodeInterceptCodeLength(room.fixedCodeLength, cardCount), actionTimeLimitSeconds: room.actionTimeLimitSeconds }); }} className="mt-1 w-full rounded-xl border border-white/15 bg-slate-800 px-3 py-3 text-white disabled:opacity-60">
+              <select value={room.cardCount} disabled={!isHost || isSaving} onChange={(event) => { const cardCount = Number(event.target.value); void runAction({ type: "set-config", actorId: playerId, cardCount, teamAssignmentMode: room.teamAssignmentMode, codeLengthMode: room.codeLengthMode, codeRevealMode: room.codeRevealMode, fixedCodeLength: normalizeCodeInterceptCodeLength(room.fixedCodeLength, cardCount), clueTimeLimitSeconds: room.clueTimeLimitSeconds, answerTimeLimitSeconds: room.answerTimeLimitSeconds }); }} className="mt-1 w-full rounded-xl border border-white/15 bg-slate-800 px-3 py-3 text-white disabled:opacity-60">
                 {Array.from({ length: codeInterceptMaximumCardCount - codeInterceptMinimumCardCount + 1 }, (_, index) => index + codeInterceptMinimumCardCount).map((count) => <option key={count} value={count}>{count}枚</option>)}
               </select>
             </label>
             <fieldset className="mt-5" disabled={!isHost || isSaving}>
               <legend className="text-sm font-black">暗号の桁数</legend>
-              <label className={`mt-2 block cursor-pointer rounded-xl border p-4 ${room.codeLengthMode === "fixed" ? "border-amber-300 bg-amber-300/10" : "border-white/10 bg-slate-950/40"}`}><span className="flex items-center gap-2 font-black"><input type="radio" name="code-length-mode" checked={room.codeLengthMode === "fixed"} onChange={() => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, codeLengthMode: "fixed", codeRevealMode: room.codeRevealMode, fixedCodeLength: room.fixedCodeLength, actionTimeLimitSeconds: room.actionTimeLimitSeconds })} />固定</span><span className="mt-1 block text-sm text-slate-300">全ラウンドで両チームが同じ桁数を使います。</span></label>
-              {room.codeLengthMode === "fixed" && <label className="mt-3 block text-sm font-bold">固定桁数<select value={room.fixedCodeLength} onChange={(event) => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, codeLengthMode: "fixed", codeRevealMode: room.codeRevealMode, fixedCodeLength: Number(event.target.value), actionTimeLimitSeconds: room.actionTimeLimitSeconds })} className="mt-1 w-full rounded-xl border border-white/15 bg-slate-800 px-3 py-3 text-white">{Array.from({ length: room.cardCount - 1 }, (_, index) => index + 2).map((length) => <option key={length} value={length}>{length}桁</option>)}</select></label>}
-              <label className={`mt-3 block cursor-pointer rounded-xl border p-4 ${room.codeLengthMode === "per-round" ? "border-cyan-300 bg-cyan-300/10" : "border-white/10 bg-slate-950/40"}`}><span className="flex items-center gap-2 font-black"><input type="radio" name="code-length-mode" checked={room.codeLengthMode === "per-round"} onChange={() => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, codeLengthMode: "per-round", codeRevealMode: room.codeRevealMode, actionTimeLimitSeconds: room.actionTimeLimitSeconds })} />毎ラウンド選択</span><span className="mt-1 block text-sm text-slate-300">各チームの出題者が、そのラウンドに使う桁数を決めます。</span></label>
+              <label className={`mt-2 block cursor-pointer rounded-xl border p-4 ${room.codeLengthMode === "fixed" ? "border-amber-300 bg-amber-300/10" : "border-white/10 bg-slate-950/40"}`}><span className="flex items-center gap-2 font-black"><input type="radio" name="code-length-mode" checked={room.codeLengthMode === "fixed"} onChange={() => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, teamAssignmentMode: room.teamAssignmentMode, codeLengthMode: "fixed", codeRevealMode: room.codeRevealMode, fixedCodeLength: room.fixedCodeLength, clueTimeLimitSeconds: room.clueTimeLimitSeconds, answerTimeLimitSeconds: room.answerTimeLimitSeconds })} />固定</span><span className="mt-1 block text-sm text-slate-300">全ラウンドで両チームが同じ桁数を使います。</span></label>
+              {room.codeLengthMode === "fixed" && <label className="mt-3 block text-sm font-bold">固定桁数<select value={room.fixedCodeLength} onChange={(event) => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, teamAssignmentMode: room.teamAssignmentMode, codeLengthMode: "fixed", codeRevealMode: room.codeRevealMode, fixedCodeLength: Number(event.target.value), clueTimeLimitSeconds: room.clueTimeLimitSeconds, answerTimeLimitSeconds: room.answerTimeLimitSeconds })} className="mt-1 w-full rounded-xl border border-white/15 bg-slate-800 px-3 py-3 text-white">{Array.from({ length: room.cardCount - 1 }, (_, index) => index + 2).map((length) => <option key={length} value={length}>{length}桁</option>)}</select></label>}
+              <label className={`mt-3 block cursor-pointer rounded-xl border p-4 ${room.codeLengthMode === "per-round" ? "border-cyan-300 bg-cyan-300/10" : "border-white/10 bg-slate-950/40"}`}><span className="flex items-center gap-2 font-black"><input type="radio" name="code-length-mode" checked={room.codeLengthMode === "per-round"} onChange={() => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, teamAssignmentMode: room.teamAssignmentMode, codeLengthMode: "per-round", codeRevealMode: room.codeRevealMode, clueTimeLimitSeconds: room.clueTimeLimitSeconds, answerTimeLimitSeconds: room.answerTimeLimitSeconds })} />毎ラウンド選択</span><span className="mt-1 block text-sm text-slate-300">各チームの出題者が、そのラウンドに使う桁数を決めます。</span></label>
             </fieldset>
             <fieldset className="mt-5 rounded-xl bg-white p-4 text-slate-950" disabled={!isHost || isSaving}>
-              <RoomTimeLimitControl label="各入力の制限時間" value={room.actionTimeLimitSeconds} onChange={(seconds) => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, codeLengthMode: room.codeLengthMode, codeRevealMode: room.codeRevealMode, fixedCodeLength: room.fixedCodeLength, actionTimeLimitSeconds: seconds })} />
-              <p className="mt-2 text-xs leading-5 text-slate-600">桁数選択・ヒント入力・回答ごとにカウントします。時間切れでも自動で次へ進みます。</p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <RoomTimeLimitControl label="出題・ヒント作成時間" value={room.clueTimeLimitSeconds} onChange={(seconds) => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, teamAssignmentMode: room.teamAssignmentMode, codeLengthMode: room.codeLengthMode, codeRevealMode: room.codeRevealMode, fixedCodeLength: room.fixedCodeLength, clueTimeLimitSeconds: seconds, answerTimeLimitSeconds: room.answerTimeLimitSeconds })} />
+                <RoomTimeLimitControl label="ソナー選択時間" value={room.answerTimeLimitSeconds} onChange={(seconds) => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, teamAssignmentMode: room.teamAssignmentMode, codeLengthMode: room.codeLengthMode, codeRevealMode: room.codeRevealMode, fixedCodeLength: room.fixedCodeLength, clueTimeLimitSeconds: room.clueTimeLimitSeconds, answerTimeLimitSeconds: seconds })} />
+              </div>
+              <p className="mt-3 text-xs leading-5 text-slate-600">出題・ヒント作成時間は、毎ラウンド選択時の桁数決定とヒント作成でそれぞれ最初からカウントします。ソナー選択時間は、味方暗号と敵暗号の回答を選ぶ段階に適用します。時間切れでも自動で次へ進みます。</p>
             </fieldset>
             {room.codeLengthMode === "per-round" && <p className="mt-4 rounded-xl bg-cyan-300/10 p-3 text-sm leading-6 text-cyan-100">短い暗号は味方に伝えやすい一方、敵にも当てられやすくなります。長い暗号は傍受されにくい一方、多くのヒントが敵に残ります。</p>}
             <fieldset className="mt-5" disabled={!isHost || isSaving}>
               <legend className="text-sm font-black">ラウンド後の正解暗号</legend>
-              <label className={`mt-2 block cursor-pointer rounded-xl border p-4 ${room.codeRevealMode === "all" ? "border-amber-300 bg-amber-300/10" : "border-white/10 bg-slate-950/40"}`}><span className="flex items-center gap-2 font-black"><input type="radio" name="code-reveal-mode" checked={room.codeRevealMode === "all"} onChange={() => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, codeLengthMode: room.codeLengthMode, codeRevealMode: "all", fixedCodeLength: room.fixedCodeLength, actionTimeLimitSeconds: room.actionTimeLimitSeconds })} />全員に公開</span><span className="mt-1 block text-sm text-slate-300">ヒントと正解暗号の対応を全員の過去ログへ残します。</span></label>
-              <label className={`mt-3 block cursor-pointer rounded-xl border p-4 ${room.codeRevealMode === "own-team" ? "border-cyan-300 bg-cyan-300/10" : "border-white/10 bg-slate-950/40"}`}><span className="flex items-center gap-2 font-black"><input type="radio" name="code-reveal-mode" checked={room.codeRevealMode === "own-team"} onChange={() => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, codeLengthMode: room.codeLengthMode, codeRevealMode: "own-team", fixedCodeLength: room.fixedCodeLength, actionTimeLimitSeconds: room.actionTimeLimitSeconds })} />自チームだけ</span><span className="mt-1 block text-sm text-slate-300">相手には伝達・傍受の成否だけを見せ、正解暗号と味方回答を伏せます。</span></label>
+              <label className={`mt-2 block cursor-pointer rounded-xl border p-4 ${room.codeRevealMode === "all" ? "border-amber-300 bg-amber-300/10" : "border-white/10 bg-slate-950/40"}`}><span className="flex items-center gap-2 font-black"><input type="radio" name="code-reveal-mode" checked={room.codeRevealMode === "all"} onChange={() => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, teamAssignmentMode: room.teamAssignmentMode, codeLengthMode: room.codeLengthMode, codeRevealMode: "all", fixedCodeLength: room.fixedCodeLength, clueTimeLimitSeconds: room.clueTimeLimitSeconds, answerTimeLimitSeconds: room.answerTimeLimitSeconds })} />全員に公開</span><span className="mt-1 block text-sm text-slate-300">ヒントと正解暗号の対応を全員の過去ログへ残します。</span></label>
+              <label className={`mt-3 block cursor-pointer rounded-xl border p-4 ${room.codeRevealMode === "own-team" ? "border-cyan-300 bg-cyan-300/10" : "border-white/10 bg-slate-950/40"}`}><span className="flex items-center gap-2 font-black"><input type="radio" name="code-reveal-mode" checked={room.codeRevealMode === "own-team"} onChange={() => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, teamAssignmentMode: room.teamAssignmentMode, codeLengthMode: room.codeLengthMode, codeRevealMode: "own-team", fixedCodeLength: room.fixedCodeLength, clueTimeLimitSeconds: room.clueTimeLimitSeconds, answerTimeLimitSeconds: room.answerTimeLimitSeconds })} />自チームだけ</span><span className="mt-1 block text-sm text-slate-300">相手には伝達・傍受の成否だけを見せ、正解暗号と味方回答を伏せます。</span></label>
             </fieldset>
           </div>
           {isHost && room.debugMode && <button type="button" disabled={isSaving || room.players.length >= room.playerCapacity} onClick={() => void runAction({ type: "debug-add-player", actorId: playerId })} className="mt-5 w-full rounded-xl border border-cyan-300/30 bg-cyan-300/10 px-4 py-3 font-black text-cyan-100">デバッグ：ダミーを追加</button>}
-          {isHost ? <button type="button" disabled={isSaving || !codeInterceptTeamsAreStartable(room)} onClick={() => void runAction({ type: "start-game", actorId: playerId })} className="mt-5 w-full rounded-xl bg-amber-300 px-4 py-4 text-lg font-black text-slate-950 disabled:opacity-40">{codeInterceptTeamsAreStartable(room) ? "このチームで開始" : "各チーム2人以上・人数差1以内にしてください"}</button> : <p className="mt-5 text-center font-bold text-slate-300">ホストが開始するまでお待ちください。</p>}
+          {isHost ? <button type="button" disabled={isSaving || !codeInterceptRoomIsStartable(room)} onClick={() => void runAction({ type: "start-game", actorId: playerId })} className="mt-5 w-full rounded-xl bg-amber-300 px-4 py-4 text-lg font-black text-slate-950 disabled:opacity-40">{codeInterceptRoomIsStartable(room) ? room.teamAssignmentMode === "random" ? "ランダム編成して開始" : "このチームで開始" : room.teamAssignmentMode === "random" ? "4人以上必要です" : "各チーム2人以上・人数差1以内にしてください"}</button> : <p className="mt-5 text-center font-bold text-slate-300">ホストが開始するまでお待ちください。</p>}
         </section>}
 
         {room.phase !== "lobby" && <TeamScoreBoard room={room} />}

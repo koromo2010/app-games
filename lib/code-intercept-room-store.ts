@@ -8,25 +8,26 @@ import {
   codeInterceptRuntimeBalance,
   codeInterceptMinimumPlayers,
   codeInterceptRoomHasSpace,
+  codeInterceptRoomIsStartable,
   codeInterceptTeamIds,
-  codeInterceptTeamsAreStartable,
   expireCodeInterceptPhase,
   finishCodeInterceptRound,
   isCodeLengthMode,
   isCodeRevealMode,
   isCodeInterceptPhaseExpired,
+  isCodeInterceptTeamAssignmentMode,
   isCodeInterceptTeamId,
   isValidCodeInterceptAnswer,
   nextBalancedTeam,
   normalizeCodeInterceptCardCount,
   normalizeCodeInterceptCodeLength,
+  normalizeCodeInterceptTimeLimits,
   otherCodeInterceptTeam,
   withCodeInterceptConsensusAnswer,
   type CodeInterceptRoom,
   type CodeInterceptRoomAction,
 } from "@/lib/code-intercept";
 import { appendGameDebugLog } from "@/lib/game-debug-log";
-import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
 import { recordCodeInterceptReplay } from "@/lib/game-replay-store";
 import { isMultiplayerRoomExpired } from "@/lib/multiplayer-room-lifecycle";
 import { loadIndexedOnlineRoomPage } from "@/lib/online-room-list";
@@ -164,17 +165,18 @@ export async function applyStoredCodeInterceptAction(code: string, action: CodeI
     if (action.type === "set-config") {
       if (!isHost || current.phase !== "lobby") throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
       const cardCount = normalizeCodeInterceptCardCount(action.cardCount);
-      if (cardCount !== action.cardCount || !isCodeLengthMode(action.codeLengthMode) || !isCodeRevealMode(action.codeRevealMode)) throw new Error("CODE_INTERCEPT_INVALID_CONFIG");
+      if (cardCount !== action.cardCount || !isCodeInterceptTeamAssignmentMode(action.teamAssignmentMode) || !isCodeLengthMode(action.codeLengthMode) || !isCodeRevealMode(action.codeRevealMode)) throw new Error("CODE_INTERCEPT_INVALID_CONFIG");
       if (action.codeLengthMode === "fixed" && (action.fixedCodeLength === undefined || normalizeCodeInterceptCodeLength(action.fixedCodeLength, cardCount) !== action.fixedCodeLength)) throw new Error("CODE_INTERCEPT_INVALID_CONFIG");
       return {
         ...current,
         cardCount,
+        teamAssignmentMode: action.teamAssignmentMode,
         codeLengthMode: action.codeLengthMode,
         codeRevealMode: action.codeRevealMode,
         fixedCodeLength: action.codeLengthMode === "fixed"
           ? action.fixedCodeLength!
           : normalizeCodeInterceptCodeLength(current.fixedCodeLength, cardCount),
-        actionTimeLimitSeconds: normalizeCommonTimeLimit(action.actionTimeLimitSeconds),
+        ...normalizeCodeInterceptTimeLimits(action),
       };
     }
     if (action.type === "debug-add-player") {
@@ -184,7 +186,7 @@ export async function applyStoredCodeInterceptAction(code: string, action: CodeI
     }
     if (action.type === "start-game") {
       if (!isHost || current.phase !== "lobby") throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
-      if ((!current.debugMode && current.players.length < codeInterceptMinimumPlayers) || !codeInterceptTeamsAreStartable(current)) throw new Error("CODE_INTERCEPT_NOT_ENOUGH_PLAYERS");
+      if ((!current.debugMode && current.players.length < codeInterceptMinimumPlayers) || !codeInterceptRoomIsStartable(current)) throw new Error("CODE_INTERCEPT_NOT_ENOUGH_PLAYERS");
       return beginGame(current);
     }
     if (action.type === "abort-game") {
