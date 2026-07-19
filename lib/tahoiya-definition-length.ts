@@ -22,10 +22,10 @@ export const tahoiyaDefinitionStyleRules: Record<
 > = {
   brief: { max: 14, instruction: "10文字程度の短く端的な説明" },
   standard: { max: 25, instruction: "20文字程度の標準的な説明" },
-  detailed: { max: 38, instruction: "25〜35文字を中心に、特徴や用途を自然に補った30文字程度の説明" },
-  long: { max: 46, instruction: "40文字程度で特徴を自然に補った説明" },
-  extended: { max: 55, instruction: "50文字程度で意味の理解に必要な情報を含めた説明" },
-  maximum: { max: 60, instruction: "55文字から60文字以内の詳しい説明" },
+  detailed: { max: 38, instruction: "30文字程度を目安に、上位概念と固有の性質を含めた辞書語釈" },
+  long: { max: 46, instruction: "40文字程度を上限の目安に、対象・性質・用途など語義に必要な要素だけで書く辞書語釈" },
+  extended: { max: 55, instruction: "50文字程度を上限の目安に、語義を区別するために必要な要素だけで書く辞書語釈" },
+  maximum: { max: 60, instruction: "60文字を上限に、語義に必要な情報だけで書く詳しい辞書語釈" },
 };
 
 export type TahoiyaDefinitionStyleWeight = Readonly<{
