@@ -3,6 +3,7 @@ import type { WordWolfTopic } from "@/lib/wordwolf";
 import { randomUUID } from "node:crypto";
 import { getGameTimerDeadlineAt, isGameTimerExpired, timerHyperparameter, type GameTimerPolicy } from "@/lib/game-timer/policy";
 import { playerTimeLimitSeconds, recordPlayerActivity, recordPlayerTimeout, reducedPlayerTimeLimitSeconds } from "@/lib/player-timeout-policy";
+import { allRoomPlayersReturned } from "@/lib/room-lobby-return";
 
 const abstainVoteId = "__abstain__";
 const timeoutText = "時間切れ";
@@ -31,6 +32,7 @@ function maximumWolfCount(playerCount: number) {
 
 export function applyWordWolfStartCommand(room: Room, actorId: string, topic: WordWolfTopic, now = Date.now()) {
   if (room.phase !== "lobby" || room.hostId !== actorId) return null;
+  if (!allRoomPlayersReturned(room.lobbyReturn, room.players)) return null;
   const players = [...room.players];
   while (room.debugMode && players.length < 3) {
     const number = players.length + 1;
@@ -44,6 +46,7 @@ export function applyWordWolfStartCommand(room: Room, actorId: string, topic: Wo
   const selectedWolfIds = selectedWolves.map((player) => player.id);
   return {
     ...room,
+    lobbyReturn: undefined,
     players: orderedPlayers,
     phase: "clue" as const,
     currentRound: 1,

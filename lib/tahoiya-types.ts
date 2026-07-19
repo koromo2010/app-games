@@ -1,6 +1,6 @@
 import type { GameGenerationMeta } from "@/lib/game-ai-types";
 import type { PlayerTimeoutFields } from "./player-timeout-policy.ts";
-import type { RoomLobbyReturnState } from "./room-lobby-return.ts";
+import type { RoomLobbyReturnAction, RoomLobbyReturnState } from "./room-lobby-return.ts";
 
 export type TahoiyaPhase = "lobby" | "writing" | "voting" | "result";
 export type TahoiyaAnswererMode = "manual" | "random";
@@ -99,10 +99,8 @@ export type TahoiyaLobbyConfig = Pick<TahoiyaRoom,
   | "answererId"
 >;
 
-export type TahoiyaRoomAction =
+export type TahoiyaRoomAction = RoomLobbyReturnAction
   | { type: "abort-game"; actorId: string }
-  | { type: "confirm-lobby-return"; actorId: string }
-  | { type: "remove-waiting-player"; actorId: string; targetPlayerId: string }
   | { type: "recover-player"; actorId: string }
   | { type: "update-config"; actorId: string; config: Partial<TahoiyaLobbyConfig> }
   | { type: "set-debug"; actorId: string; enabled: boolean }

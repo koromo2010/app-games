@@ -1,4 +1,5 @@
 import type { GameDebugLogEntry } from "./game-debug-log.ts";
+import type { RoomLobbyReturnAction, RoomLobbyReturnState } from "./room-lobby-return.ts";
 import { normalizeCommonTimeLimit } from "./game-room-config.ts";
 import { onlineRoomPlayerLimits } from "./online-room-policy.ts";
 
@@ -102,6 +103,7 @@ export type NigoichiRoom = {
   passphrase: string;
   phase: NigoichiPhase;
   players: NigoichiPlayer[];
+  lobbyReturn?: RoomLobbyReturnState;
   playerCapacity: number;
   gameNumber: number;
   cardsPerPlayer: number;
@@ -137,7 +139,7 @@ export type NigoichiRoomChoice = {
   updatedAt: number;
 };
 
-export type NigoichiRoomAction =
+export type NigoichiRoomAction = RoomLobbyReturnAction
   | { type: "join-room"; actorId: string; player: NigoichiPlayer; passphrase: string }
   | { type: "leave-room"; actorId: string }
   | { type: "set-debug"; actorId: string; enabled: boolean }

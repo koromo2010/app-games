@@ -12,10 +12,12 @@ import { GameTopBanner, gameTopBannerOffsetClass } from "@/app/components/GameTo
 import { GameTopMenu, gameTopBannerActionClass, gameTopBannerDangerActionClass, gameTopMenuItemClass } from "@/app/components/GameTopMenu";
 import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomResultActions } from "@/app/components/RoomResultActions";
+import { RoomLobbyReturnStatus } from "@/app/components/RoomLobbyReturnStatus";
 import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
 import { confirmRoomLeave } from "@/app/components/room-navigation-confirmation";
 import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "@/app/hooks/use-online-room-polling";
 import { useRoomResultReturnGate } from "@/app/hooks/use-room-result-return-gate";
+import { useRoomLobbyReturnConfirmation } from "@/app/hooks/use-room-lobby-return-confirmation";
 import { applyNigoichiRoomAction, createNigoichiRoom, nigoichiRoomApi } from "@/app/nigoichi/nigoichi-room-api-client";
 import {
   areValidNigoichiAssociations,
@@ -36,6 +38,8 @@ import {
   type NigoichiWordDifficulty,
 } from "@/lib/nigoichi";
 import { OnlineRoomApiError, restoreOnlineRoom } from "@/lib/online-room-api-client";
+import { synchronizedNow } from "@/lib/server-clock";
+import { allRoomPlayersReturned } from "@/lib/room-lobby-return";
 import {
   defaultAvatarImage,
   fallbackAvatarColor,
@@ -184,6 +188,7 @@ export function NigoichiGame() {
       setIsSaving(false);
     }
   }, [isSaving, room]);
+  useRoomLobbyReturnConfirmation({ room, playerId, confirmReturn: () => runAction({ type: "confirm-lobby-return", actorId: playerId }) });
 
   const timerPhaseStartedAt = room?.phaseStartedAt;
   const timerDurationSeconds = room?.phase === "clue"
@@ -198,7 +203,7 @@ export function NigoichiGame() {
       void applyNigoichiRoomAction(roomCode, { type: "expire-phase", actorId: playerId, phaseStartedAt: timerPhaseStartedAt })
         .then((saved) => setRoom((current) => current?.code === saved.code ? saved : current))
         .catch(() => undefined);
-    }, Math.max(0, timerPhaseStartedAt + timerDurationSeconds * 1000 - Date.now()) + 100);
+    }, Math.max(0, timerPhaseStartedAt + timerDurationSeconds * 1000 - synchronizedNow()) + 100);
     return () => window.clearTimeout(timer);
   }, [playerId, roomCode, roomPhase, timerDurationSeconds, timerPhaseStartedAt]);
 
@@ -389,7 +394,7 @@ export function NigoichiGame() {
       <GameAdSlot gameId="nigoichi" surface={room.phase === "lobby" ? "room-lobby" : room.phase === "result" ? "result" : null} disabled={room.debugMode} />
       <div className="mx-auto grid max-w-6xl gap-4 px-4 py-5 lg:grid-cols-[280px_minmax(0,1fr)]">
         <aside className="space-y-4">
-          <section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4"><div className="flex items-center justify-between"><h2 className="font-black">参加者・累計得点</h2><span className="text-sm text-slate-400">{room.players.length}/{room.playerCapacity}人</span></div><ul className="mt-3 space-y-2">{room.players.map((player) => <PlayerRow key={player.id} player={player} isHost={player.id === room.hostId} isMe={player.id === playerId} score={room.totalScores[player.id] ?? 0} />)}</ul></section>
+          <section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4"><div className="flex items-center justify-between"><h2 className="font-black">参加者・累計得点</h2><span className="text-sm text-slate-400">{room.players.length}/{room.playerCapacity}人</span></div><ul className="mt-3 space-y-2">{room.players.map((player) => <PlayerRow key={player.id} player={player} isHost={player.id === room.hostId} isMe={player.id === playerId} score={room.totalScores[player.id] ?? 0} />)}</ul><RoomLobbyReturnStatus state={room.lobbyReturn} players={room.players} hostId={room.hostId} isHost={isHost} onRemoveWaitingPlayer={(player) => { if (window.confirm(`${player.name}さんを退出扱いにしますか？`)) void runAction({ type: "remove-waiting-player", actorId: playerId, targetPlayerId: player.id }); }} /></section>
           <RoomConfigSummary items={[{ label: "最大募集人数", value: `${room.playerCapacity}人` }, { label: "P：現在の参加人数", value: `${room.players.length}人` }, { label: "A：1人に配るカード", value: `${room.cardsPerPlayer}枚` }, { label: "M：書く連想語", value: `${room.associationWordCount}語` }, { label: "B：場に並ぶカード", value: `${roomTotalCards}枚` }, { label: "難易度", value: nigoichiWordDifficultyLabels[room.wordDifficulty] }, { label: "合言葉", value: room.passphrase ? "あり" : "なし" }, { label: "連想語時間", value: timeLimitLabel(room.clueTimeLimitSeconds) }, { label: "予想時間", value: timeLimitLabel(room.guessTimeLimitSeconds) }]} />
         </aside>
         <div className="space-y-4">
@@ -423,7 +428,7 @@ export function NigoichiGame() {
               <p className="mt-2 rounded-lg bg-indigo-950/40 px-3 py-2 text-xs font-bold text-indigo-100">B = {roomConfigPlayerCount} × {room.cardsPerPlayer} + 1 = {roomTotalCards}枚。場に並ぶカード総数は最大21枚です。難易度分類は暫定版です。</p>
             </div>}
             {isHost && room.debugMode && <div className="mt-5 rounded-xl border border-cyan-300/25 bg-cyan-300/10 p-4"><p className="text-sm font-bold text-cyan-50">ダミーを最大募集人数まで追加し、ホスト1人で提出・予想・結果表示まで確認できます。</p><button type="button" disabled={isSaving || room.players.length >= room.playerCapacity} onClick={() => void runAction({ type: "debug-add-player", actorId: playerId })} className="mt-3 w-full rounded-lg bg-cyan-200 px-4 py-2 font-black text-cyan-950 disabled:opacity-40">ダミーユーザーを追加</button></div>}
-            {isHost ? <button type="button" disabled={isSaving || (!room.debugMode && room.players.length < nigoichiMinimumPlayers)} onClick={() => void runAction({ type: "start-game", actorId: playerId })} className="mt-6 w-full rounded-xl bg-amber-300 px-4 py-4 text-lg font-black text-slate-950 disabled:opacity-40">{!room.debugMode && room.players.length < nigoichiMinimumPlayers ? "2人以上で開始できます" : "このメンバーで開始"}</button> : <p className="mt-5 text-center font-bold text-slate-300">ホストがゲームを開始するまでお待ちください。</p>}
+            {isHost ? <button type="button" disabled={isSaving || (!room.debugMode && room.players.length < nigoichiMinimumPlayers) || !allRoomPlayersReturned(room.lobbyReturn, room.players)} onClick={() => void runAction({ type: "start-game", actorId: playerId })} className="mt-6 w-full rounded-xl bg-amber-300 px-4 py-4 text-lg font-black text-slate-950 disabled:opacity-40">{!allRoomPlayersReturned(room.lobbyReturn, room.players) ? "参加者の復帰待ち" : !room.debugMode && room.players.length < nigoichiMinimumPlayers ? "2人以上で開始できます" : "このメンバーで開始"}</button> : <p className="mt-5 text-center font-bold text-slate-300">ホストがゲームを開始するまでお待ちください。</p>}
           </section>}
 
           {room.phase !== "lobby" && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6">

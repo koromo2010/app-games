@@ -3,6 +3,7 @@ import type { WordWolfGuessJudgement } from "@/lib/wordwolf-guess-judgement";
 import type { GameGenerationMeta } from "@/lib/game-ai-types";
 import type { PlayerTimeoutFields } from "@/lib/player-timeout-policy";
 import type { WordDifficulty } from "@/lib/word-selection-protocol";
+import type { RoomLobbyReturnState } from "@/lib/room-lobby-return";
 
 export type Phase = "lobby" | "clue" | "vote" | "wolfGuess" | "result";
 export type ClueLogVisibility = "always" | "result";
@@ -45,6 +46,7 @@ export type Room = PlayerTimeoutFields & {
   clueMode: ClueMode;
   randomizeTurnOrder: boolean;
   players: Player[];
+  lobbyReturn?: RoomLobbyReturnState;
   roundsTotal: number;
   turnTimeLimitSeconds: number;
   currentRound: number;
@@ -111,6 +113,8 @@ export type WordWolfRoomAction =
   | { type: "join-room"; passphrase: string }
   | { type: "update-player"; name: string; avatarColor?: string; avatarImage?: string | null }
   | { type: "recover-player" }
+  | { type: "confirm-lobby-return" }
+  | { type: "remove-waiting-player"; targetPlayerId: string }
   | { type: "update-config"; config: Partial<WordWolfLobbyConfig> }
   | { type: "set-debug"; enabled: boolean }
   | { type: "set-debug-replay"; enabled: boolean }

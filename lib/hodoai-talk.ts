@@ -1,4 +1,5 @@
 import type { GameDebugLogEntry } from "@/lib/game-debug-log";
+import type { RoomLobbyReturnAction, RoomLobbyReturnState } from "./room-lobby-return.ts";
 import { projectOrderedGameResult } from "./game-result-presentation.ts";
 import { onlineRoomPlayerLimits } from "./online-room-policy.ts";
 import type { PlayerTimeoutFields } from "./player-timeout-policy.ts";
@@ -66,6 +67,7 @@ export type HodoaiRoom = HodoaiConfig & PlayerTimeoutFields & {
   passphrase: string;
   phase: HodoaiPhase;
   players: HodoaiPlayer[];
+  lobbyReturn?: RoomLobbyReturnState;
   gameNumber: number;
   round: number;
   theme: HodoaiTheme | null;
@@ -96,7 +98,7 @@ export type HodoaiRoomChoice = {
   updatedAt: number;
 };
 
-export type HodoaiRoomAction =
+export type HodoaiRoomAction = RoomLobbyReturnAction
   | { type: "join-room"; actorId: string; player: HodoaiPlayer; passphrase: string }
   | { type: "leave-room"; actorId: string }
   | { type: "recover-player"; actorId: string }
