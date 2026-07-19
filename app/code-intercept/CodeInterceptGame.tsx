@@ -128,15 +128,30 @@ function AnswerEditor({ title, room, answererIds, proposals, submittedAnswer, dr
   </>;
 }
 
-function PlayerCard({ player, room, me, saving, onTeamChange }: { player: CodeInterceptPlayer; room: CodeInterceptRoom; me: string; saving: boolean; onTeamChange: (teamId: CodeInterceptTeamId) => void }) {
+function PlayerCard({ player, room, me }: { player: CodeInterceptPlayer; room: CodeInterceptRoom; me: string }) {
   const isMe = player.id === me;
   return <li className={`flex items-center gap-3 rounded-xl border p-3 ${teamStyle(player.teamId)}`}>
     <span className="h-9 w-9 shrink-0 rounded-full border border-white/40 bg-cover bg-center" style={{ backgroundColor: player.avatarColor || fallbackAvatarColor, backgroundImage: `url(${player.avatarImage || defaultAvatarImage})` }} />
     <span className="min-w-0 flex-1 truncate font-bold">{player.name}{isMe ? "（あなた）" : ""}</span>
     {player.isDummy && <span className="rounded bg-cyan-100 px-2 py-1 text-xs font-black text-cyan-950">ダミー</span>}
     {player.id === room.hostId && <span className="rounded bg-amber-300 px-2 py-1 text-xs font-black text-slate-950">ホスト</span>}
-    {isMe && room.phase === "lobby" && <button type="button" disabled={saving} onClick={() => onTeamChange(otherCodeInterceptTeam(player.teamId))} className="rounded-lg border border-white/20 px-2 py-1 text-xs font-black">{player.teamId === "red" ? "青へ" : "赤へ"}</button>}
   </li>;
+}
+
+function ManualTeamEditor({ room, me, saving, onTeamChange }: { room: CodeInterceptRoom; me: string; saving: boolean; onTeamChange: (playerId: string, teamId: CodeInterceptTeamId) => void }) {
+  return <section className="mt-4 rounded-xl border border-white/10 bg-slate-950/40 p-4">
+    <h3 className="font-black">手動チーム編成</h3>
+    <p className="mt-1 text-xs leading-5 text-slate-400">ホストは全員を編成できます。参加者は自分のチームだけ変更できます。</p>
+    <ul className="mt-3 grid gap-2 sm:grid-cols-2">{room.players.map((player) => {
+      const editable = room.hostId === me || player.id === me;
+      return <li key={player.id} className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] p-2">
+        <span className="min-w-0 flex-1 truncate text-sm font-bold">{player.name}{player.id === me ? "（あなた）" : ""}</span>
+        <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-white/15">
+          {codeInterceptTeamIds.map((teamId) => <button key={teamId} type="button" aria-pressed={player.teamId === teamId} disabled={saving || !editable || player.teamId === teamId} onClick={() => onTeamChange(player.id, teamId)} className={`px-3 py-2 text-xs font-black disabled:cursor-default ${player.teamId === teamId ? teamId === "red" ? "bg-rose-300 text-slate-950" : "bg-sky-300 text-slate-950" : "bg-slate-800 text-slate-200 disabled:opacity-40"}`}>{teamId === "red" ? "赤" : "青"}</button>)}
+        </div>
+      </li>;
+    })}</ul>
+  </section>;
 }
 
 function ResultCard({ result, room }: { result: CodeInterceptTeamRoundResult; room: CodeInterceptRoom }) {
@@ -407,15 +422,16 @@ export function CodeInterceptGame() {
     </GameTopBanner>
     {rulesDialog}<GameAdSlot gameId="code-intercept" surface={room.phase === "lobby" ? "room-lobby" : room.phase === "game-result" ? "result" : null} disabled={room.debugMode} />
     <div className="mx-auto grid max-w-7xl gap-4 px-4 py-5 lg:grid-cols-[300px_minmax(0,1fr)]">
-      <aside className="space-y-4"><section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4"><div className="flex items-center justify-between"><h2 className="font-black">参加者</h2><span className="text-sm text-slate-400">{room.players.length}/{room.playerCapacity}人</span></div><ul className="mt-3 space-y-2">{room.players.map((player) => <PlayerCard key={player.id} player={player} room={room} me={playerId} saving={isSaving} onTeamChange={(teamId) => void runAction({ type: "set-team", actorId: playerId, teamId })} />)}</ul></section>
+      <aside className="space-y-4"><section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4"><div className="flex items-center justify-between"><h2 className="font-black">参加者</h2><span className="text-sm text-slate-400">{room.players.length}/{room.playerCapacity}人</span></div><ul className="mt-3 space-y-2">{room.players.map((player) => <PlayerCard key={player.id} player={player} room={room} me={playerId} />)}</ul></section>
         <RoomConfigSummary items={[{ label: "チーム編成", value: room.teamAssignmentMode === "random" ? "開始時ランダム" : "手動" }, { label: "秘密カード C", value: `${room.cardCount}枚` }, { label: "暗号桁数", value: room.codeLengthMode === "fixed" ? `固定・${room.fixedCodeLength}桁` : "毎ラウンド選択" }, { label: "正解暗号", value: codeRevealLabel(room) }, { label: "初期ポイント X", value: `${room.initialPoints}点` }, { label: "伝達失敗", value: `−${room.miscommunicationDamage}` }, { label: "傍受成功", value: `−${room.interceptionDamage}` }, { label: "傍受開始", value: "第2ラウンド" }, { label: "出題・ヒント", value: timeLimitLabel(room.clueTimeLimitSeconds) }, { label: "ソナー選択", value: timeLimitLabel(room.answerTimeLimitSeconds) }]} />
       </aside>
       <div className="space-y-4">
         {error && <p className="rounded-xl border border-rose-300/30 bg-rose-300/10 p-3 text-sm font-bold text-rose-100">{error}</p>}
         {room.phase === "lobby" && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6">
           <h2 className="text-2xl font-black">チーム分け</h2>
-          <p className="mt-3 text-sm leading-6 text-slate-300">{room.teamAssignmentMode === "random" ? "4人以上で開始できます。現在のチーム表示はゲーム開始時にランダムで組み直されます。" : "各チーム2人以上、人数差1人以内で開始できます。自分の名前の横からチームを移動できます。"}</p>
+          <p className="mt-3 text-sm leading-6 text-slate-300">{room.teamAssignmentMode === "random" ? "4人以上で開始できます。現在のチーム表示はゲーム開始時にランダムで組み直されます。" : "各チーム2人以上、人数差1人以内で開始できます。下の赤・青ボタンでチームを編成してください。"}</p>
           <div className="mt-5 grid gap-3 sm:grid-cols-2">{codeInterceptTeamIds.map((teamId) => <div key={teamId} className={`rounded-xl border p-4 ${teamStyle(teamId)}`}><h3 className="text-lg font-black">{teamLabel(teamId)} <span className="font-mono">{teamCounts[teamId]}人</span></h3><p className="mt-2 text-sm">{teamPlayers(room, teamId).map((player) => player.name).join("・") || "未所属"}</p></div>)}</div>
+          {room.teamAssignmentMode === "manual" && <ManualTeamEditor room={room} me={playerId} saving={isSaving} onTeamChange={(targetId, teamId) => void runAction({ type: "set-team", actorId: playerId, playerId: targetId, teamId })} />}
           <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
             <h3 className="text-lg font-black">ゲーム設定</h3>
             <fieldset className="mt-4" disabled={!isHost || isSaving}>
