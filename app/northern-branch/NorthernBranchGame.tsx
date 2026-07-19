@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
 import { GameAdSlot } from "@/app/components/GameAdSlot";
+import { GameLoungeVisual } from "@/app/components/GameLoungeVisual";
 import { GamePhaseTimer } from "@/app/components/GamePhaseTimer";
 import { GameRulesDialog } from "@/app/components/GameRulesDialog";
 import { GameTopBanner, gameTopBannerOffsetClass } from "@/app/components/GameTopBanner";
@@ -298,6 +299,7 @@ export function NorthernBranchGame() {
       <main className="min-h-screen bg-[radial-gradient(circle_at_top,#365314_0%,#172033_42%,#020617_82%)] px-4 py-8 text-white">
         <div className="mx-auto max-w-4xl">
           <div className="flex items-center justify-between gap-2"><Link href="/games" className="text-sm font-bold text-lime-200">← 広場</Link><div className="flex items-center gap-2"><button type="button" onClick={() => setRulesOpen(true)} className="rounded-lg border border-white/20 px-3 py-2 text-sm font-bold">ルール</button><span className="text-sm font-bold">{session.name}</span></div></div>
+          <GameLoungeVisual gameId="northern-branch" className="mt-5" />
           <section className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-slate-950/80 shadow-2xl">
             <div className="bg-gradient-to-r from-lime-400 via-amber-300 to-orange-400 px-6 py-8 text-slate-950"><p className="text-xs font-black uppercase tracking-[0.28em]">Online room game</p><h1 className="mt-2 text-4xl font-black sm:text-6xl">ノーザンブランチ</h1><p className="mt-3 font-bold">資源を商品へ育て、建物を増やし、最初に10点を目指す手番制ゲーム。</p></div>
             {isRestoringRoom && <p className="border-b border-lime-300/20 bg-lime-300/10 px-6 py-3 text-sm font-bold text-lime-100">前回の部屋を確認中です。画面は先に表示しています。</p>}
@@ -334,6 +336,7 @@ export function NorthernBranchGame() {
         surface={room.phase === "lobby" ? "room-lobby" : room.phase === "finished" ? "result" : null}
         disabled={room.debugMode}
       />
+      {room.phase === "lobby" && <div className="mx-auto max-w-7xl px-4 pt-4"><GameLoungeVisual gameId="northern-branch" /></div>}
       <div className="mx-auto grid max-w-7xl gap-4 px-4 py-5 xl:grid-cols-[260px_minmax(0,1fr)_280px]">
         <aside className="space-y-4"><section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4"><div className="flex items-center justify-between"><h2 className="font-black">参加者</h2><span className="text-sm text-slate-400">{room.players.length}/4人</span></div><ul className="mt-3 space-y-2">{room.players.map((player) => <PlayerRow key={player.id} player={player} isHost={player.id === room.hostId} isMe={player.id === playerId} />)}</ul><RoomLobbyReturnStatus state={room.lobbyReturn} players={room.players} hostId={room.hostId} isHost={isHost} onRemoveWaitingPlayer={(player) => { if (window.confirm(`${player.name}さんを退出扱いにしますか？`)) void runAction({ type: "remove-waiting-player", actorId: playerId, targetPlayerId: player.id }); }} /></section><RoomConfigSummary items={configItems} /></aside>
         <div className="space-y-4">

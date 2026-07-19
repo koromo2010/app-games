@@ -6,6 +6,7 @@ import {
 } from "@/lib/player-session";
 import { gameTopBannerOffsetClass } from "../components/GameTopBanner";
 import { GameAdSlot } from "../components/GameAdSlot";
+import { GameLoungeVisual } from "../components/GameLoungeVisual";
 import { useRoomResultReturnGate } from "../hooks/use-room-result-return-gate";
 import { useRoomLobbyReturnConfirmation } from "../hooks/use-room-lobby-return-confirmation";
 import type {
@@ -132,6 +133,8 @@ export function WordWolfGame() {
         surface={!room ? "game-entry" : room.phase === "lobby" ? "room-lobby" : room.phase === "result" ? "result" : null}
         disabled={Boolean(room?.debugMode)}
       />
+
+      {(!room || room.phase === "lobby") && <div className="mx-auto max-w-7xl px-4 pt-4"><GameLoungeVisual gameId="wordwolf" /></div>}
 
       <section className={wordwolfLayoutClass}>
         <aside className="space-y-4">

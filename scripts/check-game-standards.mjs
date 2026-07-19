@@ -27,6 +27,7 @@ for (const game of games) {
   for (const file of game.moduleBoundaryFiles || []) if (!existsSync(join(root, file))) fail(`${game.id}: モジュール境界ファイル ${file} が存在しません。`);
   if (!game.entryFile || !existsSync(join(root, game.entryFile))) continue;
   const entry = read(game.entryFile);
+  if (!entry.includes("GameLoungeVisual")) fail(`${game.id}: キービジュアルをゲーム入口・開始前ラウンジへ表示してください。`);
   const registeredModuleSources = [game.entryFile, ...(game.moduleBoundaryFiles || [])]
     .filter((file, index, files) => file && files.indexOf(file) === index && existsSync(join(root, file)))
     .map(read)

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
 import { GameAdSlot } from "@/app/components/GameAdSlot";
+import { GameLoungeVisual } from "@/app/components/GameLoungeVisual";
 import { PlayerTimeoutNotice } from "@/app/components/PlayerTimeoutNotice";
 import { GameResultShareButton } from "@/app/components/GameResultShareButton";
 import { GameTopBanner, gameTopBannerOffsetClass } from "@/app/components/GameTopBanner";
@@ -78,6 +79,7 @@ export function HodoaiTalkGame() {
           <GamePlayerMenu id={session.id} name={session.name} avatarColor={session.avatarColor} avatarImage={session.avatarImage} hasRecoveryEmail={session.hasRecoveryEmail} />
         </GameTopBanner>
         <div className="mx-auto max-w-4xl">
+          <GameLoungeVisual gameId="hodoai" className="mt-5" />
           <section className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-slate-950/80 shadow-2xl">
             <div className="bg-gradient-to-r from-sky-400 via-amber-300 to-fuchsia-400 px-6 py-8 text-slate-950"><p className="text-xs font-black uppercase tracking-[0.28em]">Online room game</p><h1 className="mt-2 text-4xl font-black sm:text-6xl">ワードスケール</h1><p className="mt-3 font-bold">配られた数字カードを指定テーマのことばで表し、全カードを小さい順に並べる協力ゲーム。</p></div>
             {isRestoringRoom && <p className="border-b border-cyan-300/20 bg-cyan-300/10 px-6 py-3 text-sm font-bold text-cyan-100">前回の部屋を確認中です。画面は先に表示しています。</p>}
@@ -116,6 +118,7 @@ export function HodoaiTalkGame() {
         surface={room.phase === "lobby" ? "room-lobby" : room.phase === "result" ? "result" : null}
         disabled={room.debugMode}
       />
+      {room.phase === "lobby" && <div className="mx-auto max-w-6xl px-4 pt-4"><GameLoungeVisual gameId="hodoai" /></div>}
       <div className="mx-auto grid max-w-6xl gap-4 px-4 py-5 lg:grid-cols-[280px_minmax(0,1fr)]">
         <WordScaleRoomPanel playerCount={room.players.length}>
           <section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4">

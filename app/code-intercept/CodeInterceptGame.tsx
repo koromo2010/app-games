@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
 import { DebugWordGenerationTest, type DebugWordGenerationResult } from "@/app/components/DebugWordGenerationTest";
 import { GameAdSlot } from "@/app/components/GameAdSlot";
+import { GameLoungeVisual } from "@/app/components/GameLoungeVisual";
 import { GamePlayerMenu } from "@/app/components/GamePlayerMenu";
 import { GamePhaseTimer } from "@/app/components/GamePhaseTimer";
 import { GameResultShareButton } from "@/app/components/GameResultShareButton";
@@ -439,6 +440,7 @@ export function CodeInterceptGame() {
 
   if (!room) return <main className={`min-h-screen bg-[radial-gradient(circle_at_top,#7f1d1d_0%,#172033_42%,#020617_82%)] px-4 pb-8 text-white ${gameTopBannerOffsetClass}`}>
     <GameTopBanner eyebrow="PRIVATE TEAM PROTOTYPE" title="コードインターセプト"><Link href="/games" className={gameTopBannerActionClass}>広場へ戻る</Link><GameTopMenu><button type="button" data-menu-close="true" onClick={() => setRulesOpen(true)} className={gameTopMenuItemClass}>ルール</button></GameTopMenu><GamePlayerMenu id={session.id} name={session.name} avatarColor={session.avatarColor} avatarImage={session.avatarImage} hasRecoveryEmail={session.hasRecoveryEmail} /></GameTopBanner>
+    <div className="mx-auto max-w-4xl pt-6"><GameLoungeVisual gameId="code-intercept" /></div>
     <section className="mx-auto mt-6 max-w-4xl overflow-hidden rounded-3xl border border-white/10 bg-slate-950/80 shadow-2xl">
       <div className="bg-gradient-to-r from-rose-300 via-amber-200 to-sky-300 px-6 py-8 text-slate-950"><p className="text-xs font-black tracking-[0.25em]">CODE INTERCEPT</p><h1 className="mt-2 text-4xl font-black sm:text-6xl">コードインターセプト</h1><p className="mt-3 font-bold">味方には伝え、敵の暗号は傍受せよ。</p></div>
       {isRestoringRoom && <p className="border-b border-amber-300/20 bg-amber-300/10 px-6 py-3 text-sm font-bold text-amber-100">前回の部屋を確認中です。画面は先に表示しています。</p>}
@@ -459,6 +461,7 @@ export function CodeInterceptGame() {
       <GamePlayerMenu id={session.id} name={session.name} avatarColor={session.avatarColor} avatarImage={session.avatarImage} hasRecoveryEmail={session.hasRecoveryEmail} />
     </GameTopBanner>
     {rulesDialog}<GameAdSlot gameId="code-intercept" surface={room.phase === "lobby" ? "room-lobby" : room.phase === "game-result" ? "result" : null} disabled={room.debugMode} />
+    {room.phase === "lobby" && <div className="mx-auto max-w-7xl px-4 pt-4"><GameLoungeVisual gameId="code-intercept" /></div>}
     <div className="mx-auto grid max-w-7xl gap-4 px-4 py-5 lg:grid-cols-[300px_minmax(0,1fr)]">
       <aside className="space-y-4"><section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4"><div className="flex items-center justify-between"><h2 className="font-black">参加者</h2><span className="text-sm text-slate-400">{room.players.length}/{room.playerCapacity}人</span></div><ul className="mt-3 space-y-2">{room.players.map((player) => <PlayerCard key={player.id} player={player} room={room} me={playerId} />)}</ul><RoomLobbyReturnStatus state={room.lobbyReturn} players={room.players} hostId={room.hostId} isHost={isHost} onRemoveWaitingPlayer={(player) => { if (window.confirm(`${player.name}さんを退出扱いにしますか？`)) void runAction({ type: "remove-waiting-player", actorId: playerId, targetPlayerId: player.id }); }} /></section>
         <RoomConfigSummary items={[{ label: "チーム編成", value: room.teamAssignmentMode === "random" ? "開始時ランダム" : "手動" }, { label: "秘密カード C", value: `${room.cardCount}枚` }, { label: "暗号桁数", value: room.codeLengthMode === "fixed" ? `固定・${room.fixedCodeLength}桁` : "毎ラウンド選択" }, { label: "正解暗号", value: codeRevealLabel(room) }, { label: "初期ポイント X", value: `${room.initialPoints}点` }, { label: "伝達失敗", value: `−${room.miscommunicationDamage}` }, { label: "傍受成功", value: `−${room.interceptionDamage}` }, { label: "出題欄に空欄", value: "−1" }, { label: "全欄入力済み", value: "自動提出・減点なし" }, { label: "回答未提出", value: "減点なし" }, { label: "傍受開始", value: "第2ラウンド" }, { label: "出題・ヒント", value: timeLimitLabel(room.clueTimeLimitSeconds) }, { label: "ソナー選択", value: timeLimitLabel(room.answerTimeLimitSeconds) }]} />

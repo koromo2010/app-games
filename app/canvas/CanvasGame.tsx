@@ -8,6 +8,7 @@ import { canvasPlayerLayerId, deleteCanvasRoomView, mutateCanvasRoom, type Publi
 import { useCanvasStrokeQueue } from "@/app/canvas/use-canvas-stroke-queue";
 import { useCanvasLobbyBoardSync, useCanvasRoomSync } from "@/app/canvas/use-canvas-sync";
 import { GamePlayerMenu } from "@/app/components/GamePlayerMenu";
+import { GameLoungeVisual } from "@/app/components/GameLoungeVisual";
 import { GameRulesDialog } from "@/app/components/GameRulesDialog";
 import { GameTopBanner, gameTopBannerOffsetClass } from "@/app/components/GameTopBanner";
 import { GameTopMenu, gameTopBannerActionClass, gameTopMenuItemClass } from "@/app/components/GameTopMenu";
@@ -306,6 +307,8 @@ export function CanvasGame() {
       </GameTopMenu>
       <GamePlayerMenu id={session?.id} name={session?.name || "ゲスト"} avatarColor={session?.avatarColor || fallbackAvatarColor} avatarImage={session?.avatarImage} />
     </GameTopBanner>
+
+    {!room && <div className="mx-auto max-w-[1500px] px-3 pt-5 sm:px-6"><GameLoungeVisual gameId="canvas" /></div>}
 
     <section className="mx-auto grid max-w-[1500px] gap-4 px-3 py-5 sm:px-6 xl:grid-cols-[260px_minmax(0,1fr)] xl:items-start">
       <aside className="flex flex-wrap items-center gap-2 rounded-2xl border border-cyan-200 bg-white/90 p-3 shadow-lg xl:sticky xl:top-20 xl:flex-col xl:items-stretch">

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
 import { GameAdSlot } from "@/app/components/GameAdSlot";
+import { GameLoungeVisual } from "@/app/components/GameLoungeVisual";
 import { GamePhaseTimer } from "@/app/components/GamePhaseTimer";
 import { GamePlayerMenu } from "@/app/components/GamePlayerMenu";
 import { GameResultShareButton } from "@/app/components/GameResultShareButton";
@@ -342,6 +343,7 @@ export function NigoichiGame() {
           <GamePlayerMenu id={session.id} name={session.name} avatarColor={session.avatarColor} avatarImage={session.avatarImage} hasRecoveryEmail={session.hasRecoveryEmail} />
         </GameTopBanner>
         <div className="mx-auto max-w-4xl">
+          <GameLoungeVisual gameId="nigoichi" className="mt-5" />
           <section className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-slate-950/80 shadow-2xl">
             <div className="bg-gradient-to-r from-indigo-300 via-amber-200 to-rose-300 px-6 py-8 text-slate-950"><p className="text-xs font-black uppercase tracking-[0.28em]">WORD OUT</p><h1 className="mt-2 text-4xl font-black sm:text-6xl">ワードアウト</h1><p className="mt-3 font-bold">みんなの連想を読み解き、誰にも配られていない言葉を見つけよう。</p><p className="mt-2 text-sm font-semibold">1人2枚が基本。1人に配る枚数を増やして難易度を上げられます。</p></div>
             {isRestoringRoom && <p className="border-b border-indigo-300/20 bg-indigo-300/10 px-6 py-3 text-sm font-bold text-indigo-100">前回の部屋を確認中です。画面は先に表示しています。</p>}
@@ -383,6 +385,7 @@ export function NigoichiGame() {
       </GameTopBanner>
       {rulesDialog}
       <GameAdSlot gameId="nigoichi" surface={room.phase === "lobby" ? "room-lobby" : room.phase === "result" ? "result" : null} disabled={room.debugMode} />
+      {room.phase === "lobby" && <div className="mx-auto max-w-6xl px-4 pt-4"><GameLoungeVisual gameId="nigoichi" /></div>}
       <div className="mx-auto grid max-w-6xl gap-4 px-4 py-5 lg:grid-cols-[280px_minmax(0,1fr)]">
         <aside className="space-y-4">
           <section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4"><div className="flex items-center justify-between"><h2 className="font-black">参加者・累計得点</h2><span className="text-sm text-slate-400">{room.players.length}/{room.playerCapacity}人</span></div><ul className="mt-3 space-y-2">{room.players.map((player) => <PlayerRow key={player.id} player={player} isHost={player.id === room.hostId} isMe={player.id === playerId} score={room.totalScores[player.id] ?? 0} />)}</ul><RoomLobbyReturnStatus state={room.lobbyReturn} players={room.players} hostId={room.hostId} isHost={isHost} onRemoveWaitingPlayer={(player) => { if (window.confirm(`${player.name}さんを退出扱いにしますか？`)) void runAction({ type: "remove-waiting-player", actorId: playerId, targetPlayerId: player.id }); }} /></section>

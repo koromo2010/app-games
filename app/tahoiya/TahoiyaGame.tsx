@@ -10,6 +10,7 @@ import type { TahoiyaRoom, TahoiyaRoomChoice } from "@/lib/tahoiya-types";
 import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
 import { DebugModeButton } from "../components/DebugModeButton";
 import { GameAdSlot } from "../components/GameAdSlot";
+import { GameLoungeVisual } from "../components/GameLoungeVisual";
 import { PlayerTimeoutNotice } from "../components/PlayerTimeoutNotice";
 import { GameTopBanner, gameTopBannerOffsetClass } from "../components/GameTopBanner";
 import { GameTopMenu, gameTopBannerActionClass, gameTopBannerDangerActionClass, gameTopMenuItemClass } from "../components/GameTopMenu";
@@ -146,6 +147,8 @@ export function TahoiyaGame() {
         surface={!room ? "game-entry" : room.phase === "lobby" ? "room-lobby" : room.phase === "result" ? "result" : null}
         disabled={Boolean(room?.debugMode)}
       />
+
+      {(!room || room.phase === "lobby") && <div className="mx-auto max-w-6xl px-4 pt-4"><GameLoungeVisual gameId="tahoiya" /></div>}
 
       <section className="mx-auto grid max-w-6xl gap-4 px-4 py-5 lg:grid-cols-[340px_1fr]">
         <aside className="space-y-4">
