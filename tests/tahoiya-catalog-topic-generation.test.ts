@@ -19,7 +19,8 @@ test("DBの見出し語と読みを維持して正解文だけを採用する", 
   assert.equal(result.topic.reading, "かんし");
   assert.equal(result.topic.realDefinition, "道具を収納するための小さな木箱。余分な二文目。".split("。")[0] + "。");
   assert.match(result.topic.note, /共通単語DB/);
-  assert.match(result.topic.sourceDetail, /0 < 実質Zipf < 3/);
+  assert.match(result.topic.sourceDetail, /0以上3未満の実質Zipf候補を一括審査/);
+  assert.match(result.topic.sourceDetail, /推定認知率 1%超〜14%/);
 });
 
 test("センシティブ判定された候補は採用しない", () => {

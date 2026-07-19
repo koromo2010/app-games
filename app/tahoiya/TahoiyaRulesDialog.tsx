@@ -15,8 +15,9 @@ export function TahoiyaRulesDialog({ open, onClose }: { open: boolean; onClose: 
     <p className="mt-2"><span className="font-bold text-white">全員作成・全員投票：</span>全員が偽説明を書いて投票します。自分の偽説明には投票できません。</p>
     <p className="mt-2">部屋設定で、1人あたりの偽説明を1〜3つから選べます。複数にした場合は、すべてが別々の候補として並びます。</p>
     <h3 className="mt-4 font-black text-white">お題の難易度</h3>
-    <p className="mt-2"><span className="font-bold text-white">秘境：</span>共通単語DBの実質Zipfが0より大きく3未満の語を使います。</p>
-    <p className="mt-2"><span className="font-bold text-white">魔境：</span>実質Zipfが0の、頻度を計測できないほど珍しい語を使います。</p>
+    <p className="mt-2"><span className="font-bold text-white">秘境：</span>AIが一般成人の推定認知率を1%超〜14%と判定した語を使います。</p>
+    <p className="mt-2"><span className="font-bold text-white">魔境：</span>AIが一般成人の推定認知率を0〜1%と判定した、特に珍しい語を使います。</p>
+    <p className="mt-2">どちらも共通単語DBの同じ未判定母集団から10語ずつ審査し、実質Zipfの0と0より大きい値で抽出を分けません。</p>
     <p className="mt-2">単語を選んだあと、AIが読みと本物の説明を付け、別のAIが内容を確認します。</p>
     <h3 className="mt-4 font-black text-white">時間切れ</h3><p className="mt-2 text-amber-200">偽説明を書かないまま時間が切れると候補に入らず、投票時間が切れた人は未投票のまま採点されます。</p>
   </GameRulesDialog>;

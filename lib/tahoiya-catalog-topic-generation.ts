@@ -1,7 +1,7 @@
 import { parseLlmJson } from "./llm-json.ts";
 import {
+  tahoiyaDifficultyCriterionDescription,
   tahoiyaDifficultyLabel,
-  tahoiyaEffectiveZipfDescription,
 } from "./tahoiya-difficulty.ts";
 import type { TahoiyaDifficulty, TahoiyaTopic } from "./tahoiya-types.ts";
 
@@ -49,8 +49,8 @@ export function parseTahoiyaCatalogTopicGeneration(
       word: candidate.word,
       reading,
       realDefinition,
-      note: `${tahoiyaDifficultyLabel(difficulty)}の実質Zipf条件で共通単語DBから抽出。`,
-      sourceDetail: `GAME FIELDS 共通単語DB（${tahoiyaEffectiveZipfDescription(difficulty)}）の見出し語にLLMで正解文を付与。`,
+      note: `${tahoiyaDifficultyLabel(difficulty)}の認知率先行審査を通過した共通単語DB候補。`,
+      sourceDetail: `GAME FIELDS 共通単語DBの0以上3未満の実質Zipf候補を一括審査し、${tahoiyaDifficultyCriterionDescription(difficulty)}と判定された見出し語にLLMで正解文を付与。`,
       source: "llm",
     },
   };

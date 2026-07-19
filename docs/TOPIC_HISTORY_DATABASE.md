@@ -85,7 +85,7 @@ Bad評価語の除外は、日次単語履歴・30日ペア履歴とは別の品
 1. ゲーム・難易度・品質条件から保存候補を少数のshortlistへ絞る。
 2. shortlistの各候補について、参加者全員の経験Setへmembership checkを行う。
 3. 誰のSetにも存在しない候補だけを残す。
-4. `Good - Bad`、Good数、Badの少なさ、全体利用回数、最終利用日時の順で優先する。
+4. たほい屋は全体利用回数が少なく最終利用日時が古い上位50件を候補プールにし、`Good - Bad`を重みにしたランダム抽選を行う。他ゲームはゲーム固有の品質・利用分散規則で優先する。
 5. 対象がなければLLMで新規生成する。
 6. 採用候補を候補DBへ保存し、参加者全員の経験Setへ候補IDを追加する。
 
@@ -124,9 +124,9 @@ Bad評価語の除外は、日次単語履歴・30日ペア履歴とは別の品
 
 2026-07-18時点でワードウルフはv3履歴へ移行済み。旧 `wordwolf:topic:word-experience:v1` は破壊せずアーカイブとして残すが、新規の判定・記録には使わない。旧形式は単語別プレイヤー配列で、過去の正確なペアと出題日時を復元できないため、30日ペア履歴は切替日から蓄積する。
 
-たほい屋は共通DBの `0 <= 実質Zipf < 3` を未判定母集団とする。LLMで10語ずつ一般成人の推定認知率を審査し、除外フラグが空で `0〜1%` なら魔境、`1%超〜14%` なら秘境、15%以上なら対象外として `tahoiya_word_screenings` へ保存する。センシティブ・大学名・企業名・地名は同じ行の `exclusion_flags` へ保存し、難易度にかかわらず除外する。
+たほい屋は共通DBの `0 <= 実質Zipf < 3` を一つの未判定母集団とし、実質Zipfの0と0より大きい値を分けずランダムに10語抽出する。LLMで一般成人の推定認知率を審査し、除外フラグが空で `0〜1%` なら魔境、`1%超〜14%` なら秘境、15%以上なら対象外として `tahoiya_word_screenings` へ保存する。センシティブ・大学名・企業名・地名は同じ行の `exclusion_flags` へ保存し、難易度にかかわらず除外する。
 
-通常出題は、参加者全員が未経験の完成済み `active_tahoiya_topics`、判定済みだが説明未作成の `tahoiya_word_screenings`、未判定10語の新規審査、の順に探す。判定済み候補を使うときだけ読みと正解文を生成し、`word_definitions` と `tahoiya_topics` へ保存する。1組に同難易度候補がなければ最大3組30語まで審査する。新規の既出履歴は `game-history:v2:tahoiya:<playerId>` へ保存する。履歴memberはNFKC正規化した見出し語のSHA-256から作る `word-v1:` IDで、候補へプレイヤー配列を追記しない。移行中は旧Redis Hash `tahoiya:topic:catalog:v1` も読み取り、旧 `experiencedPlayerIds` と新Setのどちらかで経験済みなら除外する。
+通常出題は、参加者全員が未経験の完成済み `active_tahoiya_topics`、判定済みだが説明未作成の `tahoiya_word_screenings`、未判定10語の新規審査、の順に探す。完成済み候補は全体利用回数が少なく最終利用が古い上位50件から、`Good - Bad`を重みにしてランダム抽選する。判定済み候補を使うときだけ読みと正解文を生成し、`word_definitions` と `tahoiya_topics` へ保存する。1組に同難易度候補がなければ最大3組30語まで審査する。新規の既出履歴は `game-history:v2:tahoiya:<playerId>` へ保存する。履歴memberはNFKC正規化した見出し語のSHA-256から作る `word-v1:` IDで、候補へプレイヤー配列を追記しない。同じ端末では直近100件の同じ履歴IDをlocalStorageへ保存し、現在のアカウントへ90日TTLの補助Setとして同期する。補助履歴だけで候補が尽きた場合はこれを緩和し、既存候補を新規AI審査より優先する。移行中は旧Redis Hash `tahoiya:topic:catalog:v1` も読み取り、旧 `experiencedPlayerIds` と新Setのどちらかで経験済みなら除外する。
 
 旧Redisのお題本体と経験配列は、develop Preview管理画面の「たほい屋DB移行」から冪等に共通DB／プレイヤー別Setへ移す。元Hashは削除しない。新しいLLM難易度審査は10語全件を `tahoiya_word_screenings` へ保存する。実際に選ばれて読み・正解文の検証まで成功した1語だけを、安全なDB関数を通して `word_definitions`、`tahoiya_topics`、たほい屋用eligibilityへ昇格する。
 

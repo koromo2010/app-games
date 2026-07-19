@@ -21,6 +21,7 @@ import { usesStrictAppDatabase } from "@/lib/player-account-environment";
 import { hasPlayerAccountEmailOwnerConflict } from "@/lib/player-account-migration";
 import { legalConsentIsCurrent } from "@/lib/legal";
 import { unverifiedAccountIsExpired, unverifiedPlayerAccountRetentionMs } from "@/lib/player-account-retention";
+import { tahoiyaHistoryKeysForPlayer } from "@/lib/tahoiya-topic-history-store";
 
 export type PlayerAccount = {
   version: 2;
@@ -417,7 +418,7 @@ export async function deletePlayerAccount(input: PlayerAccountAuthInput, authent
   }
 
   if (isPostgresConfigured()) await deletePostgresPlayerAccount(account.playerId);
-  const keys = [accountKey(account.loginName), `player:${account.playerId}`];
+  const keys = [accountKey(account.loginName), `player:${account.playerId}`, ...tahoiyaHistoryKeysForPlayer(account.playerId)];
   if (account.email) keys.push(playerAccountEmailKey(account.email));
   await redisCommand<number>(["DEL", ...keys]);
   return { playerId: account.playerId };
