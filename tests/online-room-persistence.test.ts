@@ -62,3 +62,31 @@ test("CAS競合時は最新部屋へCommandを再適用する", async () => {
     else process.env.UPSTASH_REDIS_REST_TOKEN = originalToken;
   }
 });
+
+test("非同期Commandの結果もCASへ保存する", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalUrl = process.env.UPSTASH_REDIS_REST_URL;
+  const originalToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+  process.env.UPSTASH_REDIS_REST_URL = "https://redis.example.test";
+  process.env.UPSTASH_REDIS_REST_TOKEN = "test-token";
+  globalThis.fetch = async () => new Response(JSON.stringify({ result: 1 }), { status: 200 });
+
+  try {
+    const saved = await mutateOnlineRoomWithRetry({
+      code: "AB12",
+      roomKey: (code) => `game:room:${code}`,
+      loadRoom: async () => ({ code: "AB12", revision: 1, updatedAt: 1, count: 1 }),
+      mutate: async (room) => ({ ...room, count: room.count + 1 }),
+      normalize: (room) => room as { code: string; revision: number; updatedAt: number; count: number },
+      errors: { notFound: "NOT_FOUND", invalid: "INVALID", conflict: "CONFLICT" },
+    });
+    assert.equal(saved.revision, 2);
+    assert.equal(saved.count, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalUrl === undefined) delete process.env.UPSTASH_REDIS_REST_URL;
+    else process.env.UPSTASH_REDIS_REST_URL = originalUrl;
+    if (originalToken === undefined) delete process.env.UPSTASH_REDIS_REST_TOKEN;
+    else process.env.UPSTASH_REDIS_REST_TOKEN = originalToken;
+  }
+});

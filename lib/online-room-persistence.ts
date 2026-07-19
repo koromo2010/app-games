@@ -36,7 +36,7 @@ export async function mutateOnlineRoomWithRetry<Room extends RevisionedOnlineRoo
   code: string;
   roomKey: (code: string) => string;
   loadRoom: (code: string) => Promise<Room | null>;
-  mutate: (room: Room) => Room;
+  mutate: (room: Room) => Room | Promise<Room>;
   normalize: (room: unknown) => Room | null;
   prepare?: (current: Room, changed: Room, context: { revision: number; timestamp: number }) => Room;
   afterSave?: (room: Room) => Promise<unknown>;
@@ -45,7 +45,7 @@ export async function mutateOnlineRoomWithRetry<Room extends RevisionedOnlineRoo
   for (let attempt = 0; attempt < 6; attempt += 1) {
     const current = await options.loadRoom(options.code);
     if (!current) throw new Error(options.errors.notFound);
-    const changed = options.mutate(current);
+    const changed = await options.mutate(current);
     if (changed === current) return current;
     const revision = current.revision + 1;
     const timestamp = Date.now();
