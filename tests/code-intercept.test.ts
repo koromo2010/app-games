@@ -4,6 +4,7 @@ import {
   canReviseCodeInterceptAnswers,
   codeInterceptClueHistory,
   codeInterceptDefaults,
+  codeInterceptRoomIsStartable,
   codeInterceptTeamHasSubmittedAnswers,
   consensusCodeInterceptAnswer,
   codeInterceptTeamsAreStartable,
@@ -13,6 +14,8 @@ import {
   isValidCodeInterceptAnswer,
   normalizeCodeInterceptCardCount,
   normalizeCodeInterceptCodeLength,
+  normalizeCodeInterceptTimeLimits,
+  randomizeCodeInterceptPlayers,
   sanitizeCodeInterceptRoomForPlayer,
   withCodeInterceptConsensusAnswer,
   type CodeInterceptRoom,
@@ -29,8 +32,8 @@ function room(): CodeInterceptRoom {
       { id: "b2", name: "青2", joinedAt: now, teamId: "blue" },
     ],
     playerCapacity: 6, gameNumber: 1, roundNumber: 2,
-    cardCount: 4, codeLengthMode: "fixed", codeRevealMode: "all", fixedCodeLength: 3, initialPoints: 5, miscommunicationDamage: 1, interceptionDamage: 2, interceptionStartsAtRound: 2,
-    actionTimeLimitSeconds: 0, phaseStartedAt: now, debugMode: false, debugReplayEnabled: false,
+    cardCount: 4, teamAssignmentMode: "manual", codeLengthMode: "fixed", codeRevealMode: "all", fixedCodeLength: 3, initialPoints: 5, miscommunicationDamage: 1, interceptionDamage: 2, interceptionStartsAtRound: 2,
+    clueTimeLimitSeconds: 0, answerTimeLimitSeconds: 0, phaseStartedAt: now, debugMode: false, debugReplayEnabled: false,
     teams: [
       { id: "red", name: "赤チーム", points: 5, secretWords: ["猫", "宇宙", "寿司", "雨"] },
       { id: "blue", name: "青チーム", points: 2, secretWords: ["山", "海", "空", "森"] },
@@ -46,6 +49,21 @@ test("team balance requires two players per team and at most one player differen
   const base = room();
   assert.equal(codeInterceptTeamsAreStartable(base), true);
   assert.equal(codeInterceptTeamsAreStartable({ players: base.players.slice(0, 3) }), false);
+});
+
+test("random team assignment can start from an unbalanced lobby and produces balanced shuffled teams", () => {
+  const base = room();
+  const players = [
+    ...base.players.map((player) => ({ ...player, teamId: "red" as const })),
+    { id: "p5", name: "5人目", joinedAt: Date.now(), teamId: "red" as const },
+  ];
+  assert.equal(codeInterceptRoomIsStartable({ players, teamAssignmentMode: "manual" }), false);
+  assert.equal(codeInterceptRoomIsStartable({ players, teamAssignmentMode: "random" }), true);
+
+  const randomized = randomizeCodeInterceptPlayers(players, () => 0);
+  assert.deepEqual(randomized.map((player) => player.id), ["r2", "b1", "b2", "p5", "r1"]);
+  assert.deepEqual(randomized.map((player) => player.teamId), ["red", "blue", "red", "blue", "red"]);
+  assert.deepEqual(new Set(randomized.map((player) => player.id)), new Set(players.map((player) => player.id)));
 });
 
 test("answers must have the fixed length, range, and no duplicates", () => {
@@ -104,19 +122,36 @@ test("simultaneous elimination only draws when both negative balances are equal"
   assert.equal(finished.winner, "draw");
 });
 
-test("configured action timer expires only the interactive phases", () => {
+test("clue and answer phases use their separate configured timers", () => {
   const current = room();
-  current.actionTimeLimitSeconds = 60;
+  current.clueTimeLimitSeconds = 30;
+  current.answerTimeLimitSeconds = 60;
   current.phaseStartedAt = 1_000;
+  current.phase = "clue";
+  assert.equal(isCodeInterceptPhaseExpired(current, 30_999), false);
+  assert.equal(isCodeInterceptPhaseExpired(current, 31_000), true);
+  current.phase = "answer";
   assert.equal(isCodeInterceptPhaseExpired(current, 60_999), false);
   assert.equal(isCodeInterceptPhaseExpired(current, 61_000), true);
   current.phase = "round-result";
   assert.equal(isCodeInterceptPhaseExpired(current, 100_000), false);
 });
 
+test("legacy action timer migrates to both separate timers", () => {
+  assert.deepEqual(normalizeCodeInterceptTimeLimits({ actionTimeLimitSeconds: 90 }), {
+    clueTimeLimitSeconds: 90,
+    answerTimeLimitSeconds: 90,
+  });
+  assert.deepEqual(normalizeCodeInterceptTimeLimits({ actionTimeLimitSeconds: 90, clueTimeLimitSeconds: 30, answerTimeLimitSeconds: 60 }), {
+    clueTimeLimitSeconds: 30,
+    answerTimeLimitSeconds: 60,
+  });
+});
+
 test("phase timeout fills missing input and keeps the round moving", () => {
   const current = room();
-  current.actionTimeLimitSeconds = 30;
+  current.clueTimeLimitSeconds = 30;
+  current.answerTimeLimitSeconds = 60;
   current.phaseStartedAt = 1_000;
   current.phase = "code-length";
   current.codeLengthMode = "per-round";
@@ -137,7 +172,8 @@ test("phase timeout fills missing input and keeps the round moving", () => {
   answerPhase.phaseStartedAt = 61_000;
   answerPhase.allyAnswers = {};
   answerPhase.interceptAnswers = {};
-  const result = expireCodeInterceptPhase(answerPhase, 91_000);
+  assert.equal(expireCodeInterceptPhase(answerPhase, 120_999).phase, "answer");
+  const result = expireCodeInterceptPhase(answerPhase, 121_000);
   assert.equal(result.phase, "round-result");
   assert.deepEqual(result.teams.map((team) => team.points), [4, 1]);
 });

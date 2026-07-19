@@ -2,6 +2,7 @@ import {
   clueGiverForRound,
   codeInterceptTeamHasSubmittedAnswers,
   codeInterceptTeamIds,
+  randomizeCodeInterceptPlayers,
   shuffledCode,
   type CodeInterceptRoom,
   type CodeInterceptTeamId,
@@ -55,7 +56,8 @@ export function beginRound(room: CodeInterceptRoom, roundNumber: number) {
 export function beginGame(room: CodeInterceptRoom) {
   const words = dealSecretWords(room.cardCount);
   const teams = codeInterceptTeamIds.map((id) => ({ id, name: id === "red" ? "赤チーム" : "青チーム", points: room.initialPoints, secretWords: words[id] }));
-  return beginRound({ ...room, teams, roundHistory: [], winner: null }, 1);
+  const players = room.teamAssignmentMode === "random" ? randomizeCodeInterceptPlayers(room.players) : room.players;
+  return beginRound({ ...room, players, teams, roundHistory: [], winner: null }, 1);
 }
 
 export function resetGame(room: CodeInterceptRoom) {

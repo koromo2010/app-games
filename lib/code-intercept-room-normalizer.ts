@@ -5,11 +5,13 @@ import {
   codeInterceptTeamIds,
   isCodeLengthMode,
   isCodeRevealMode,
+  isCodeInterceptTeamAssignmentMode,
   isCodeInterceptTeamId,
   isValidCodeInterceptAnswer,
   normalizeCodeInterceptCardCount,
   normalizeCodeInterceptCodeLength,
   normalizeCodeInterceptPlayerCapacity,
+  normalizeCodeInterceptTimeLimits,
   otherCodeInterceptTeam,
   type CodeInterceptPhase,
   type CodeInterceptPlayer,
@@ -21,7 +23,6 @@ import {
   type TeamCodeLengthChoice,
 } from "@/lib/code-intercept";
 import { normalizeGameDebugLog } from "@/lib/game-debug-log";
-import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
 import { normalizeOnlineRoomCode } from "@/lib/online-room-input";
 import { isAvatarColor, isAvatarImage } from "@/lib/player-session";
 
@@ -182,6 +183,7 @@ export function normalizeCodeInterceptRoom(value: unknown): CodeInterceptRoom | 
     gameNumber: typeof parsed.gameNumber === "number" ? Math.max(1, Math.floor(parsed.gameNumber)) : 1,
     roundNumber: typeof parsed.roundNumber === "number" ? Math.max(1, Math.floor(parsed.roundNumber)) : 1,
     cardCount,
+    teamAssignmentMode: isCodeInterceptTeamAssignmentMode(parsed.teamAssignmentMode) ? parsed.teamAssignmentMode : codeInterceptDefaults.teamAssignmentMode,
     codeLengthMode,
     codeRevealMode: isCodeRevealMode(parsed.codeRevealMode) ? parsed.codeRevealMode : codeInterceptDefaults.codeRevealMode,
     fixedCodeLength,
@@ -189,7 +191,7 @@ export function normalizeCodeInterceptRoom(value: unknown): CodeInterceptRoom | 
     miscommunicationDamage: typeof parsed.miscommunicationDamage === "number" && Number.isInteger(parsed.miscommunicationDamage) ? Math.max(0, Math.min(10, parsed.miscommunicationDamage)) : codeInterceptDefaults.miscommunicationDamage,
     interceptionDamage: typeof parsed.interceptionDamage === "number" && Number.isInteger(parsed.interceptionDamage) ? Math.max(0, Math.min(10, parsed.interceptionDamage)) : codeInterceptDefaults.interceptionDamage,
     interceptionStartsAtRound: typeof parsed.interceptionStartsAtRound === "number" && Number.isInteger(parsed.interceptionStartsAtRound) ? Math.max(1, Math.min(10, parsed.interceptionStartsAtRound)) : codeInterceptDefaults.interceptionStartsAtRound,
-    actionTimeLimitSeconds: normalizeCommonTimeLimit(parsed.actionTimeLimitSeconds),
+    ...normalizeCodeInterceptTimeLimits(value),
     phaseStartedAt: typeof parsed.phaseStartedAt === "number" ? parsed.phaseStartedAt : null,
     debugMode: parsed.debugMode === true,
     debugReplayEnabled: parsed.debugReplayEnabled === true && parsed.debugMode === true,

@@ -1,4 +1,5 @@
 import type { GameDebugLogEntry } from "./game-debug-log.ts";
+import { normalizeCommonTimeLimit } from "./game-room-config.ts";
 import { onlineRoomPlayerLimits } from "./online-room-policy.ts";
 import { runtimeHyperparameterNumber } from "./runtime-hyperparameters-core.ts";
 
@@ -10,12 +11,14 @@ export const codeInterceptTimedPhases = ["code-length", "clue", "answer"] as con
 export type CodeInterceptTeamId = (typeof codeInterceptTeamIds)[number];
 export type CodeLengthMode = "fixed" | "per-round";
 export type CodeRevealMode = "all" | "own-team";
+export type CodeInterceptTeamAssignmentMode = "manual" | "random";
 
 export const codeInterceptMinimumCardCount = 2;
 export const codeInterceptMaximumCardCount = 8;
 
 export const codeInterceptDefaults = {
   cardCount: 4,
+  teamAssignmentMode: "manual" as CodeInterceptTeamAssignmentMode,
   codeLengthMode: "fixed" as CodeLengthMode,
   codeRevealMode: "all" as CodeRevealMode,
   fixedCodeLength: 3,
@@ -23,7 +26,8 @@ export const codeInterceptDefaults = {
   miscommunicationDamage: 1,
   interceptionDamage: 2,
   interceptionStartsAtRound: 2,
-  actionTimeLimitSeconds: 0,
+  clueTimeLimitSeconds: 0,
+  answerTimeLimitSeconds: 0,
 } as const;
 
 export type CodeInterceptPhase = "lobby" | "code-length" | "clue" | "answer" | "round-result" | "game-result";
@@ -96,6 +100,7 @@ export type CodeInterceptRoom = {
   gameNumber: number;
   roundNumber: number;
   cardCount: number;
+  teamAssignmentMode: CodeInterceptTeamAssignmentMode;
   codeLengthMode: CodeLengthMode;
   codeRevealMode: CodeRevealMode;
   fixedCodeLength: number;
@@ -103,7 +108,8 @@ export type CodeInterceptRoom = {
   miscommunicationDamage: number;
   interceptionDamage: number;
   interceptionStartsAtRound: number;
-  actionTimeLimitSeconds: number;
+  clueTimeLimitSeconds: number;
+  answerTimeLimitSeconds: number;
   phaseStartedAt: number | null;
   debugMode: boolean;
   debugReplayEnabled: boolean;
@@ -142,7 +148,7 @@ export type CodeInterceptRoomAction =
   | { type: "set-team"; actorId: string; teamId: CodeInterceptTeamId }
   | { type: "set-debug"; actorId: string; enabled: boolean }
   | { type: "set-debug-replay"; actorId: string; enabled: boolean }
-  | { type: "set-config"; actorId: string; cardCount: number; codeLengthMode: CodeLengthMode; codeRevealMode: CodeRevealMode; fixedCodeLength?: number; actionTimeLimitSeconds: number }
+  | { type: "set-config"; actorId: string; cardCount: number; teamAssignmentMode: CodeInterceptTeamAssignmentMode; codeLengthMode: CodeLengthMode; codeRevealMode: CodeRevealMode; fixedCodeLength?: number; clueTimeLimitSeconds: number; answerTimeLimitSeconds: number }
   | { type: "expire-phase"; actorId: string; phaseStartedAt: number }
   | { type: "start-game"; actorId: string }
   | { type: "select-code-length"; actorId: string; playerId?: string; codeLength: number }
@@ -182,6 +188,10 @@ export function isCodeRevealMode(value: unknown): value is CodeRevealMode {
   return value === "all" || value === "own-team";
 }
 
+export function isCodeInterceptTeamAssignmentMode(value: unknown): value is CodeInterceptTeamAssignmentMode {
+  return value === "manual" || value === "random";
+}
+
 export function normalizeCodeInterceptCardCount(value: unknown) {
   const count = typeof value === "number" && Number.isInteger(value) ? value : codeInterceptDefaults.cardCount;
   return Math.min(codeInterceptMaximumCardCount, Math.max(codeInterceptMinimumCardCount, count));
@@ -204,6 +214,25 @@ export function codeInterceptTeamsAreStartable(room: Pick<CodeInterceptRoom, "pl
   const red = teamPlayers(room, "red").length;
   const blue = teamPlayers(room, "blue").length;
   return red >= 2 && blue >= 2 && Math.abs(red - blue) <= 1;
+}
+
+export function codeInterceptRoomIsStartable(room: Pick<CodeInterceptRoom, "players" | "teamAssignmentMode">) {
+  return room.teamAssignmentMode === "random"
+    ? room.players.length >= codeInterceptMinimumPlayers
+    : codeInterceptTeamsAreStartable(room);
+}
+
+export function randomizeCodeInterceptPlayers(players: readonly CodeInterceptPlayer[], random = Math.random) {
+  const shuffled = players.map((player) => ({ ...player }));
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const target = Math.floor(random() * (index + 1));
+    [shuffled[index], shuffled[target]] = [shuffled[target], shuffled[index]];
+  }
+  const firstTeam: CodeInterceptTeamId = random() < 0.5 ? "red" : "blue";
+  return shuffled.map((player, index) => ({
+    ...player,
+    teamId: index % 2 === 0 ? firstTeam : otherCodeInterceptTeam(firstTeam),
+  }));
 }
 
 export function nextBalancedTeam(players: readonly Pick<CodeInterceptPlayer, "teamId">[]): CodeInterceptTeamId {
@@ -288,14 +317,38 @@ export function isCodeInterceptTimedPhase(phase: CodeInterceptPhase): phase is (
   return codeInterceptTimedPhases.includes(phase as (typeof codeInterceptTimedPhases)[number]);
 }
 
+export function normalizeCodeInterceptTimeLimits(value: unknown) {
+  const source = value && typeof value === "object"
+    ? value as { clueTimeLimitSeconds?: unknown; answerTimeLimitSeconds?: unknown; actionTimeLimitSeconds?: unknown }
+    : {};
+  const legacyTimeLimitSeconds = normalizeCommonTimeLimit(source.actionTimeLimitSeconds);
+  return {
+    clueTimeLimitSeconds: source.clueTimeLimitSeconds === undefined
+      ? legacyTimeLimitSeconds
+      : normalizeCommonTimeLimit(source.clueTimeLimitSeconds),
+    answerTimeLimitSeconds: source.answerTimeLimitSeconds === undefined
+      ? legacyTimeLimitSeconds
+      : normalizeCommonTimeLimit(source.answerTimeLimitSeconds),
+  };
+}
+
+export function codeInterceptPhaseTimeLimitSeconds(
+  room: Pick<CodeInterceptRoom, "phase" | "clueTimeLimitSeconds" | "answerTimeLimitSeconds">,
+) {
+  if (room.phase === "code-length" || room.phase === "clue") return room.clueTimeLimitSeconds;
+  if (room.phase === "answer") return room.answerTimeLimitSeconds;
+  return 0;
+}
+
 export function isCodeInterceptPhaseExpired(
-  room: Pick<CodeInterceptRoom, "phase" | "phaseStartedAt" | "actionTimeLimitSeconds">,
+  room: Pick<CodeInterceptRoom, "phase" | "phaseStartedAt" | "clueTimeLimitSeconds" | "answerTimeLimitSeconds">,
   now = Date.now(),
 ) {
+  const timeLimitSeconds = codeInterceptPhaseTimeLimitSeconds(room);
   return isCodeInterceptTimedPhase(room.phase)
-    && room.actionTimeLimitSeconds > 0
+    && timeLimitSeconds > 0
     && typeof room.phaseStartedAt === "number"
-    && now >= room.phaseStartedAt + room.actionTimeLimitSeconds * 1000;
+    && now >= room.phaseStartedAt + timeLimitSeconds * 1000;
 }
 
 export function expireCodeInterceptPhase(room: CodeInterceptRoom, now = Date.now()): CodeInterceptRoom {
