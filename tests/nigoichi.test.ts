@@ -21,6 +21,7 @@ import {
   sanitizeNigoichiRoomForPlayer,
   type NigoichiRoom,
 } from "../lib/nigoichi.ts";
+import { beginGame } from "../lib/nigoichi-room-domain.ts";
 
 const players = ["a", "b", "c"].map((id) => ({ id }));
 const words = Array.from({ length: 30 }, (_, index) => `単語${index + 1}`);
@@ -33,6 +34,23 @@ test("B=P×A+1枚から、重複しない手札と余り1枚を作る", () => {
   assert.equal(new Set(dealt).size, 6);
   assert.ok(!dealt.includes(round.missingNumber));
   assert.deepEqual([...dealt, round.missingNumber].sort((left, right) => left - right), [0, 1, 2, 3, 4, 5, 6]);
+});
+
+test("開始時に渡された共通DB由来の単語だけでラウンドを作る", () => {
+  const room = {
+    code: "AB12", revision: 1, hostId: "a", passphrase: "", phase: "lobby" as const,
+    players: players.map((player, index) => ({ ...player, name: player.id, joinedAt: index })), playerCapacity: 3,
+    gameNumber: 1, cardsPerPlayer: 2, associationWordCount: 1, wordDifficulty: "normal" as const,
+    clueTimeLimitSeconds: 60, guessTimeLimitSeconds: 30, phaseStartedAt: null, debugMode: false, debugReplayEnabled: false,
+    words: [], hands: {}, associations: {}, guesses: {}, missingNumber: null,
+    totalScores: { a: 0, b: 0, c: 0 }, roundScores: {}, roundHistory: [], debugLog: [], createdAt: 1, updatedAt: 1,
+  } satisfies NigoichiRoom;
+  const databaseWords = ["DB語1", "DB語2", "DB語3", "DB語4", "DB語5", "DB語6", "DB語7", "DB語8"];
+  const started = beginGame(room, databaseWords, 10_000);
+  assert.equal(started.phase, "clue");
+  assert.equal(started.phaseStartedAt, 10_000);
+  assert.equal(started.words.length, 7);
+  assert.ok(started.words.every((word) => databaseWords.includes(word)));
 });
 
 test("P・A・M・Bの境界と上限21枚を検証する", () => {

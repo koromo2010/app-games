@@ -15,10 +15,11 @@ import { hodoaiRoomChoice, sanitizeHodoaiRoom } from "@/lib/hodoai-room-presenta
 import { beginGame, completeClueRound, reconcileProgress, scoreRound } from "@/lib/hodoai-room-domain";
 import { recordPlayerActivity, recoverPlayerTimeout } from "@/lib/player-timeout-policy";
 import {
-  clueHasNumber,
   canAssignHodoaiSorter,
   canReorderHodoaiCards,
   hodoaiTechnicalPlayerLimit,
+  isValidHodoaiClue,
+  normalizeHodoaiClue,
   normalizeHodoaiConfig,
   hodoaiRuntimeScoring,
   type HodoaiPlayer,
@@ -241,8 +242,8 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
     if (action.type === "submit-clue") {
       const card = current.cards.find((item) => item.id === action.cardId);
       if (current.phase !== "clue" || action.round !== current.round || card?.ownerId !== action.actorId || current.clues[action.cardId]) return current;
-      const text = action.text.trim().replace(/\s+/g, " ").slice(0, 40);
-      if (text.length < 2 || clueHasNumber(text)) throw new Error("HODOAI_INVALID_CLUE");
+      const text = normalizeHodoaiClue(action.text);
+      if (!isValidHodoaiClue(text)) throw new Error("HODOAI_INVALID_CLUE");
       return reconcileProgress(recordPlayerActivity({ ...current, clues: { ...current.clues, [action.cardId]: text } }, action.actorId));
     }
     if (action.type === "submit-clues") {
@@ -255,8 +256,8 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
       }
       const clues = { ...current.clues };
       for (const card of missingCards) {
-        const text = action.clues[card.id]?.trim().replace(/\s+/g, " ").slice(0, 40) ?? "";
-        if (text.length < 2 || clueHasNumber(text)) throw new Error("HODOAI_INVALID_CLUE");
+        const text = normalizeHodoaiClue(action.clues[card.id] ?? "");
+        if (!isValidHodoaiClue(text)) throw new Error("HODOAI_INVALID_CLUE");
         clues[card.id] = text;
       }
       return reconcileProgress(recordPlayerActivity({ ...current, clues }, action.actorId));

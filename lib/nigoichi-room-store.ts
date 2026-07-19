@@ -12,6 +12,7 @@ import {
   isValidNigoichiGuess,
   isValidNigoichiConfig,
   nigoichiMaximumAssociationWordsForPlayers,
+  nigoichiMaximumTotalCards,
   nigoichiMinimumPlayers,
   normalizeNigoichiTimeLimit,
   nigoichiRoomHasSpace,
@@ -28,6 +29,7 @@ import { redisCommand } from "@/lib/redis-store";
 import { beginGame, resetGame, withPlayersAndCorrectedConfig } from "@/lib/nigoichi-room-domain";
 import { normalizeAssociationWords, normalizeNigoichiRoom, normalizeWordDifficulty } from "@/lib/nigoichi-room-normalizer";
 import { nigoichiRoomChoice, sanitizeNigoichiRoom } from "@/lib/nigoichi-room-presentation";
+import { loadNigoichiWordPool } from "@/lib/nigoichi-word-repository";
 
 export { sanitizeNigoichiRoom };
 
@@ -63,7 +65,7 @@ function playerActiveRoomKey(playerId: string) {
 
 type DebugEvent = { actorId?: string; action: string };
 
-async function mutateStoredRoom(code: string, mutate: (room: NigoichiRoom) => NigoichiRoom, debugEvent?: DebugEvent) {
+async function mutateStoredRoom(code: string, mutate: (room: NigoichiRoom) => NigoichiRoom | Promise<NigoichiRoom>, debugEvent?: DebugEvent) {
   return mutateOnlineRoomWithRetry({ code, roomKey, loadRoom: loadStoredNigoichiRoom, mutate, normalize: normalizeNigoichiRoom, errors: { notFound: "NIGOICHI_ROOM_NOT_FOUND", invalid: "INVALID_NIGOICHI_ROOM", conflict: "NIGOICHI_ROOM_CONFLICT" }, prepare: (current, changed, { revision, timestamp }) => {
     const actorName = debugEvent?.actorId
       ? changed.players.find((player) => player.id === debugEvent.actorId)?.name ?? "不明なプレイヤー"
@@ -150,7 +152,7 @@ export async function applyStoredNigoichiAction(code: string, action: NigoichiRo
     const activeRoom = await loadNigoichiPlayerActiveRoom(action.actorId);
     claim = await claimOnlineRoomForPlayer({ key: playerActiveRoomKey(action.actorId), targetCode: normalizedCode, currentRoom: activeRoom, gameId: "nigoichi", conflictError: "NIGOICHI_PLAYER_ALREADY_ACTIVE" });
   }
-  const room = await mutateStoredRoom(normalizedCode, (current) => {
+  const room = await mutateStoredRoom(normalizedCode, async (current) => {
     if (action.type === "join-room") {
       if (current.phase !== "lobby" || action.actorId !== action.player.id) throw new Error("NIGOICHI_ROOM_FORBIDDEN");
       if (current.passphrase && current.passphrase !== action.passphrase.trim()) throw new Error("NIGOICHI_BAD_PASSPHRASE");
@@ -217,7 +219,8 @@ export async function applyStoredNigoichiAction(code: string, action: NigoichiRo
       if (!current.debugMode && current.players.length < nigoichiMinimumPlayers) throw new Error("NIGOICHI_NOT_ENOUGH_PLAYERS");
       const validationPlayerCount = current.debugMode ? Math.max(nigoichiMinimumPlayers, current.players.length) : current.players.length;
       if (!isValidNigoichiConfig(validationPlayerCount, current.cardsPerPlayer, current.associationWordCount)) throw new Error("NIGOICHI_INVALID_CONFIG");
-      return beginGame(current);
+      const wordPool = await loadNigoichiWordPool(current.wordDifficulty, nigoichiMaximumTotalCards);
+      return beginGame(current, wordPool);
     }
     if (action.type === "reset-game") {
       if (!isHost || current.phase !== "result") throw new Error("NIGOICHI_ROOM_FORBIDDEN");

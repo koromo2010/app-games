@@ -338,3 +338,12 @@ export function hodoaiGameShareText(room: Pick<HodoaiRoom, "totalPoints" | "hist
 }
 
 export const clueHasNumber = (clue: string) => /[0-9０-９〇零一二三四五六七八九十百]/.test(clue);
+
+export function normalizeHodoaiClue(value: string) {
+  return value.trim().replace(/\s+/g, " ").slice(0, 40);
+}
+
+export function isValidHodoaiClue(value: string) {
+  const clue = normalizeHodoaiClue(value);
+  return clue.length > 0 && !clueHasNumber(clue);
+}
