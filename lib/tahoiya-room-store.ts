@@ -12,6 +12,7 @@ import { claimOnlineRoomForPlayer, loadPlayerActiveOnlineRoom, releasePlayerActi
 import { onlineRoomPlayerLimits } from "@/lib/online-room-policy";
 import { loadIndexedOnlineRoomPage } from "@/lib/online-room-list";
 import { createIndexedOnlineRoom, mutateOnlineRoomWithRetry } from "@/lib/online-room-persistence";
+import { schedulePostResponseWork } from "@/lib/post-response-work";
 import { normalizeTahoiyaRoom } from "@/lib/tahoiya-room-normalizer";
 import { sanitizeTahoiyaRoom, tahoiyaRoomChoice } from "@/lib/tahoiya-room-presentation";
 import { advanceToVoting, canAdvanceTahoiyaPhase, definitionWriterIds, reconcileProgress, scoreRoom, voterIds } from "@/lib/tahoiya-room-domain";
@@ -86,7 +87,7 @@ export async function loadAndReconcileStoredTahoiyaRoom(code: string) {
       : current,
   );
   if (reconcileRoom(room) === room) {
-    await Promise.all([recordTahoiyaRoundResults(room), recordTahoiyaReplay(room)]);
+    await schedulePostResponseWork("tahoiya-result-persistence", () => Promise.all([recordTahoiyaRoundResults(room), recordTahoiyaReplay(room)]));
     return room;
   }
   return mutateStoredTahoiyaRoom(code, reconcileRoom);

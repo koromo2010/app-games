@@ -15,6 +15,7 @@ import { claimOnlineRoomForPlayer, loadPlayerActiveOnlineRoom, releasePlayerActi
 import { isAvatarColor, isAvatarImage } from "@/lib/player-session";
 import { onlineRoomPlayerLimits } from "@/lib/online-room-policy";
 import { loadIndexedOnlineRoomPage } from "@/lib/online-room-list";
+import { schedulePostResponseWork } from "@/lib/post-response-work";
 import { recoverPlayerTimeout } from "@/lib/player-timeout-policy";
 import {
   addRoomScore,
@@ -107,7 +108,9 @@ export async function saveStoredWordWolfRoom(room: unknown) {
   ]);
   if (saved !== 1) throw new Error("WORDWOLF_ROOM_CONFLICT");
 
-  if (shouldRecordResults) await Promise.all([recordWordWolfGameResults(normalizedRoom), recordWordWolfReplay(normalizedRoom)]);
+  if (shouldRecordResults) {
+    await schedulePostResponseWork("wordwolf-result-persistence", () => Promise.all([recordWordWolfGameResults(normalizedRoom), recordWordWolfReplay(normalizedRoom)]));
+  }
 
   // 残る索引更新は1回のHTTP pipelineにまとめる。
   await redisPipeline<unknown[]>([
