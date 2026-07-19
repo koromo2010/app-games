@@ -20,6 +20,7 @@ import { onlineRoomPlayerLimits } from "@/lib/online-room-policy";
 import { loadIndexedOnlineRoomPage } from "@/lib/online-room-list";
 import { canLeaveOnlineRoomLobby, onlineRoomActorAccess } from "@/lib/online-room-access";
 import { createIndexedOnlineRoom, mutateOnlineRoomWithRetry } from "@/lib/online-room-persistence";
+import { schedulePostResponseWork } from "@/lib/post-response-work";
 import { addLog, beginBattle, beginRound, fillMissingSecrets, finishRound, performChallenge, performScan, reconcileProgress } from "@/lib/kotoba-senpuku-room-domain";
 import { normalizeKotobaSenpukuRoom } from "@/lib/kotoba-senpuku-room-normalizer";
 import { kotobaSenpukuRoomChoice, sanitizeKotobaSenpukuRoom } from "@/lib/kotoba-senpuku-room-presentation";
@@ -83,7 +84,7 @@ export async function loadAndReconcileKotobaSenpukuRoom(code: string) {
   const room = await loadStoredKotobaSenpukuRoom(code);
   if (!room) return null;
   if (reconcileProgress(room) === room) {
-    await Promise.all([recordKotobaSenpukuGameResults(room), recordKotobaSenpukuReplay(room)]);
+    await schedulePostResponseWork("kotoba-senpuku-result-persistence", () => Promise.all([recordKotobaSenpukuGameResults(room), recordKotobaSenpukuReplay(room)]));
     return room;
   }
   return mutateStoredRoom(code, reconcileProgress);

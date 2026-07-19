@@ -3,9 +3,9 @@
 import { useEffect, useRef } from "react";
 
 export const onlineRoomPollingIntervals = {
-  realtime: 750,
-  active: 2000,
-  idle: 5000,
+  realtime: 500,
+  active: 1000,
+  idle: 2000,
 } as const;
 
 type OnlineRoomPollingOptions<Room> = {

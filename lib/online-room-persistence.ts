@@ -1,4 +1,5 @@
 import { multiplayerRoomExpiryArgs, multiplayerRoomTtlSeconds } from "./multiplayer-room-lifecycle.ts";
+import { schedulePostResponseWork } from "./post-response-work.ts";
 import { redisCommand } from "./redis-store.ts";
 
 export async function compareAndSetOnlineRoom<Room extends { code: string }>(
@@ -53,7 +54,9 @@ export async function mutateOnlineRoomWithRetry<Room extends RevisionedOnlineRoo
     if (!next) throw new Error(options.errors.invalid);
     const saved = await compareAndSetOnlineRoom(current.revision, next, options.roomKey);
     if (saved === 1) {
-      await options.afterSave?.(next);
+      if (options.afterSave) {
+        await schedulePostResponseWork(`online-room:${next.code}`, () => options.afterSave!(next));
+      }
       return next;
     }
     if (saved === -1) throw new Error(options.errors.notFound);

@@ -24,6 +24,19 @@ export function roomUpdateIsOlder<Room extends RevisionedRoom>(
   );
 }
 
+export function roomUpdateIsUnchanged<Room extends RevisionedRoom>(
+  currentRoom: Room | null,
+  incomingRoom: Room,
+) {
+  return Boolean(
+    currentRoom
+    && currentRoom.code === incomingRoom.code
+    && typeof currentRoom.revision === "number"
+    && typeof incomingRoom.revision === "number"
+    && incomingRoom.revision === currentRoom.revision,
+  );
+}
+
 export function shouldHoldRoomResultTransition(
   currentRoom: RoomPhase | null,
   incomingRoom: RoomPhase,

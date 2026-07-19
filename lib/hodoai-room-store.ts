@@ -9,6 +9,7 @@ import { appendGameDebugLog } from "@/lib/game-debug-log";
 import { loadIndexedOnlineRoomPage } from "@/lib/online-room-list";
 import { canLeaveOnlineRoomLobby, onlineRoomActorAccess } from "@/lib/online-room-access";
 import { createIndexedOnlineRoom, mutateOnlineRoomWithRetry } from "@/lib/online-room-persistence";
+import { schedulePostResponseWork } from "@/lib/post-response-work";
 import { normalizeHodoaiRoom } from "@/lib/hodoai-room-normalizer";
 import { hodoaiRoomChoice, sanitizeHodoaiRoom } from "@/lib/hodoai-room-presentation";
 import { beginGame, completeClueRound, reconcileProgress, scoreRound } from "@/lib/hodoai-room-domain";
@@ -126,7 +127,7 @@ export async function loadAndReconcileHodoaiRoom(code: string) {
   const room = await loadStoredHodoaiRoom(code);
   if (!room) return null;
   if (reconcileProgress(room) === room) {
-    await Promise.all([recordHodoaiGameResults(room), recordHodoaiReplay(room)]);
+    await schedulePostResponseWork("hodoai-result-persistence", () => Promise.all([recordHodoaiGameResults(room), recordHodoaiReplay(room)]));
     return room;
   }
   return mutateStoredRoom(code, reconcileProgress, { action: "時間切れ処理" });
@@ -292,7 +293,7 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
   });
   await redisCommand<number>(["SADD", roomIndexKey, room.code]);
   await saveActiveRooms(room);
-  await Promise.all([recordHodoaiGameResults(room), recordHodoaiReplay(room)]);
+  await schedulePostResponseWork("hodoai-result-persistence", () => Promise.all([recordHodoaiGameResults(room), recordHodoaiReplay(room)]));
   if (action.type === "leave-room") await clearActiveRoom(action.actorId, room.code);
   return room;
 }

@@ -11,6 +11,7 @@ import { onlineRoomPlayerLimits } from "@/lib/online-room-policy";
 import { loadIndexedOnlineRoomPage } from "@/lib/online-room-list";
 import { canLeaveOnlineRoomLobby, onlineRoomActorAccess } from "@/lib/online-room-access";
 import { createIndexedOnlineRoom, mutateOnlineRoomWithRetry } from "@/lib/online-room-persistence";
+import { schedulePostResponseWork } from "@/lib/post-response-work";
 import type {
   NorthernGameAction,
   NorthernRoom,
@@ -74,7 +75,7 @@ export async function loadStoredNorthernRoom(code: string) {
       await Promise.all(room.players.map((player) => clearActiveRoom(player.id, room.code)));
       return null;
     }
-    await Promise.all([recordNorthernBranchGameResults(room), recordNorthernBranchReplay(room)]);
+    await schedulePostResponseWork("northern-branch-result-persistence", () => Promise.all([recordNorthernBranchGameResults(room), recordNorthernBranchReplay(room)]));
     return room;
   } catch {
     return null;
