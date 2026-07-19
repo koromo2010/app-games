@@ -24,6 +24,7 @@ import {
   parseLegacyTahoiyaCatalogRecord,
   type LegacyTahoiyaTopicCatalogRecord,
 } from "@/lib/tahoiya-legacy-catalog";
+import { isTahoiyaDictionaryStyleDefinition } from "@/lib/tahoiya-catalog-topic-generation";
 
 const gitCatalogVersionKey = "tahoiya:topic:git-catalog-version:v1";
 
@@ -206,6 +207,7 @@ export async function findReusableTahoiyaTopic(
     const word = normalizeWord(record.topic.word);
     const legacy = legacyByWord.get(word);
     return record.topic.source === "llm" &&
+      isTahoiyaDictionaryStyleDefinition(record.topic.realDefinition) &&
       !blocked.has(word) &&
       !legacy?.experiencedPlayerIds.some((playerId) => playerIds.includes(playerId));
   });
@@ -218,6 +220,7 @@ export async function findReusableTahoiyaTopic(
     : await filterWithDeviceHistoryFallback(
       legacyRecords
         .filter((record) => record.topic.source === "llm" && record.difficulty === difficulty)
+        .filter((record) => isTahoiyaDictionaryStyleDefinition(record.topic.realDefinition))
         .filter((record) => !blocked.has(normalizeWord(record.topic.word)))
         .filter((record) => playerIds.every((playerId) => !record.experiencedPlayerIds.includes(playerId)))
         .map((record) => ({ ...record, word: record.topic.word })),

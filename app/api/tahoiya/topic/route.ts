@@ -29,14 +29,17 @@ import type { TahoiyaDifficulty, TahoiyaTopic, TahoiyaTopicGenerationStage } fro
 import { parseLlmJson } from "@/lib/llm-json";
 import { gameApiAccessDeniedResponse } from "@/lib/game-access";
 import { vocabularyDatabaseErrorCode } from "@/lib/vocabulary-postgres-store";
-import { parseTahoiyaCatalogTopicGeneration } from "@/lib/tahoiya-catalog-topic-generation";
+import {
+  isTahoiyaDictionaryStyleDefinition,
+  parseTahoiyaCatalogTopicGeneration,
+} from "@/lib/tahoiya-catalog-topic-generation";
 import { parseTahoiyaDifficultyScreening } from "@/lib/tahoiya-difficulty-screening";
 import {
   pickTahoiyaDefinitionStyle,
   tahoiyaDefinitionStyleRules,
 } from "@/lib/tahoiya-definition-length";
 
-const tahoiyaTopicPromptVersion = "tahoiya-effective-zipf-topic-v15";
+const tahoiyaTopicPromptVersion = "tahoiya-effective-zipf-topic-v16";
 const tahoiyaDifficultyScreeningPromptVersion = "tahoiya-difficulty-screening-v2";
 const tahoiyaGenerationCandidateLimit = 3;
 const tahoiyaScreeningBatchLimit = 3;
@@ -331,7 +334,7 @@ function parseTopic(text: string): TahoiyaTopic | null {
     if (!parsed) return null;
     const realDefinition = simplifyDefinition(parsed.realDefinition);
     const definitionLength = Array.from(realDefinition.replace(/。$/, "")).length;
-    if (!parsed.word || !realDefinition || definitionLength < 4 || definitionLength > 60) return null;
+    if (!parsed.word || !realDefinition || definitionLength < 4 || definitionLength > 60 || !isTahoiyaDictionaryStyleDefinition(realDefinition)) return null;
 
     return {
       word: String(parsed.word).trim(),
@@ -383,13 +386,15 @@ async function generateTopicFromCatalogWords(
       candidate.reading
         ? `DBの読みは「${candidate.reading}」です。readingにはこの値をそのまま返してください。`
         : "readingには見出し語の読みをひらがなで書いてください。",
-      "sensitiveがfalseの場合、realDefinitionには意味だけを自然な日本語一文で書いてください。読み、語源、用例、括弧、複数の語義は含めないでください。",
-      `${definitionRule.instruction}を目安とし、最大60文字以内にしてください。自然な説明を優先してください。`,
+      "sensitiveがfalseの場合、realDefinitionには、その見出し語が何を指すかという語義だけを、国語辞典の語釈らしい自然な日本語一文で書いてください。読み、語源、用例、括弧、複数の語義は含めないでください。",
+      "文末は名詞止め、または「〜するもの」「〜をいう」などの常体にしてください。「です・ます」調は禁止です。",
+      "知名度、広く使われるという説明、名前としての普及、語の直訳、歴史や文献への登場、評価や感想は語義ではないため、文字数を増やす目的で加えないでください。",
+      `${definitionRule.instruction}を目安とし、${definitionRule.max}文字以内にしてください。必要な語義だけでは目安の長さに届かない場合は、必ず短い方を選んでください。`,
       "選定理由、出典、確信度、解説、候補一覧は不要です。",
       "JSONのみで返してください: {\"sensitive\":trueまたはfalse,\"reading\":\"...\",\"realDefinition\":\"...\"}",
     ].join("\n\n");
     const generated = await generateGameLlmText(prompt, mode, { quality: "high" });
-    const parsed = parseTahoiyaCatalogTopicGeneration(generated.text, candidate, difficulty);
+    const parsed = parseTahoiyaCatalogTopicGeneration(generated.text, candidate, difficulty, definitionRule.max);
     if (parsed.status !== "accepted") {
       emitObservabilityEvent(parsed.status === "unsafe" ? "info" : "warn", "ai.generation", {
         game: "tahoiya",
@@ -449,7 +454,8 @@ export async function generateTopic(
     "3候補をすべて同種にせず、一般語、固有名詞、固有名詞ではないカタカナ語を各1候補ずつ出してください。差別語、性的または残虐な語は避けてください。",
     "realDefinitionには意味だけを書き、読み方、語源、用例、別名、漢字の説明を含めないでください。",
     "realDefinitionは括弧を使わず、一文にしてください。複数の意味を並べないでください。",
-    `今回は${definitionRule.instruction}を目安とし、${definitionRule.max}文字以内にしてください。意味を自然に説明できることを優先し、文字数を合わせるための不要な言い換えや情報追加はしないでください。`,
+    "国語辞典の語釈らしい常体にし、「です・ます」調、知名度、普及、語の直訳、歴史や文献への登場など、語義ではない説明を含めないでください。",
+    `今回は${definitionRule.instruction}を目安とし、${definitionRule.max}文字以内にしてください。必要な語義だけでは目安の長さに届かない場合は短い方を選び、文字数合わせの言い換えや情報追加はしないでください。`,
     "readingは専用フィールドにだけ入れてください。noteは選定理由を短く書いてください。",
     "sourceDetailには、その語と語義を確認できる辞書名・辞典の種類・典拠など、確実な確認情報を短く書いてください。不確かな辞書名を創作しないでください。",
     "3候補は互いに異なる分野・字面・意味にし、最終校閲者が比較して最良の1つを選べるようにしてください。",
@@ -473,7 +479,7 @@ export async function generateTopic(
     "少しでも確信がなければvalidをfalseにしてください。推測で修正や補完をしないでください。",
     "実在・読み・語義・典拠に疑いがある候補は除外してください。複数が有効なら、一般的な大人が意味を知らず、字面だけでは意味を推測しにくく、偽説明を作りやすい候補を優先してください。",
     "固有名詞は現代人物・企業・商品ではないこと、カタカナ語は日本語で実際に用いられる見出し語であることも確認してください。",
-    `validがtrueの場合も、realDefinitionは意味だけの一文とし、${definitionRule.instruction}を目安に${definitionRule.max}文字以内にしてください。自然な説明を無理に引き延ばさず、読み方、語源、用例、別名、漢字の説明、括弧を含めないでください。`,
+    `validがtrueの場合も、realDefinitionは国語辞典の語釈らしい常体で意味だけの一文とし、${definitionRule.instruction}を目安に${definitionRule.max}文字以内にしてください。「です・ます」調、知名度、普及、語の直訳、歴史や文献への登場、読み方、語源、用例、別名、漢字の説明、括弧を含めず、必要な語義だけでは目安に届かない場合は短い方を選んでください。`,
     "sourceDetailの辞書名や確認情報が不確か、または創作の可能性がある場合もvalidをfalseにしてください。",
     "JSONのみで返してください: {\"valid\":trueまたはfalse,\"word\":\"...\",\"reading\":\"...\",\"realDefinition\":\"...\",\"note\":\"...\",\"sourceDetail\":\"...\"}",
     `検証候補一覧: ${JSON.stringify(topics)}`,

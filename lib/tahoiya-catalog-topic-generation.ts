@@ -25,10 +25,23 @@ function simplifyDefinition(value: unknown) {
   return firstSentence ? `${firstSentence}。` : "";
 }
 
+const nondictionaryDefinitionPatterns = [
+  /(?:です|ます|でした|ました|ません)。$/,
+  /(?:広く|一般に|しばしば)(?:用いられ|使われ|知られ)/,
+  /(?:歴史的な?|古い)?文献(?:にも?)?(?:登場|記載|記録)/,
+  /(?:文献|記録)(?:にも?)?登場/,
+];
+
+export function isTahoiyaDictionaryStyleDefinition(value: string) {
+  const definition = simplifyDefinition(value);
+  return Boolean(definition) && !nondictionaryDefinitionPatterns.some((pattern) => pattern.test(definition));
+}
+
 export function parseTahoiyaCatalogTopicGeneration(
   text: string,
   candidate: TahoiyaCatalogWordForGeneration,
   difficulty: TahoiyaDifficulty,
+  maximumLength = 60,
 ): TahoiyaCatalogTopicGenerationResult {
   const parsed = parseLlmJson<{
     sensitive?: unknown;
@@ -41,7 +54,12 @@ export function parseTahoiyaCatalogTopicGeneration(
   const reading = String(candidate.reading || parsed.reading || "").trim();
   const realDefinition = simplifyDefinition(parsed.realDefinition);
   const definitionLength = Array.from(realDefinition.replace(/。$/, "")).length;
-  if (!reading || definitionLength < 4 || definitionLength > 60) return { status: "invalid" };
+  if (
+    !reading
+    || definitionLength < 4
+    || definitionLength > Math.max(4, Math.min(60, maximumLength))
+    || !isTahoiyaDictionaryStyleDefinition(realDefinition)
+  ) return { status: "invalid" };
 
   return {
     status: "accepted",
