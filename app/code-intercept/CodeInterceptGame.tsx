@@ -232,9 +232,9 @@ export function CodeInterceptGame() {
   const [choices, setChoices] = useState<CodeInterceptRoomChoice[]>([]);
   const [showChoices, setShowChoices] = useState(false);
   const [newPlayerCapacity, setNewPlayerCapacity] = useState(6);
-  const [clueDraftsByRound, setClueDraftsByRound] = useState<Record<number, string[]>>({});
-  const [allyDraftsByRound, setAllyDraftsByRound] = useState<Record<number, number[]>>({});
-  const [interceptDraftsByRound, setInterceptDraftsByRound] = useState<Record<number, number[]>>({});
+  const [clueDraftsByRound, setClueDraftsByRound] = useState<Record<string, string[]>>({});
+  const [allyDraftsByRound, setAllyDraftsByRound] = useState<Record<string, number[]>>({});
+  const [interceptDraftsByRound, setInterceptDraftsByRound] = useState<Record<string, number[]>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const resultReturnGate = useRoomResultReturnGate({ room, setRoom, playerId: session?.id ?? "", resultPhase: "game-result", onReturnUnavailable: () => setError("部屋に戻れません。解散されたか、参加情報が変更されています。") });
@@ -286,7 +286,7 @@ export function CodeInterceptGame() {
   const myAnswererIds = room && myTeamId ? codeInterceptAnswererIds(room, myTeamId) : [];
   const latestRound = room?.roundHistory.at(-1);
   const teamCounts = useMemo(() => room ? Object.fromEntries(codeInterceptTeamIds.map((id) => [id, teamPlayers(room, id).length])) as Record<CodeInterceptTeamId, number> : { red: 0, blue: 0 }, [room]);
-  const draftRound = room?.roundNumber ?? 1;
+  const draftRound = room ? `${room.code}:${room.gameNumber}:${room.roundNumber}` : "";
   const clueDrafts = clueDraftsByRound[draftRound] ?? (myTeamId ? room?.clues[myTeamId] : undefined) ?? Array.from({ length: myCodeLength }, () => "");
   const allyDraft = allyDraftsByRound[draftRound] ?? room?.allyAnswerProposals[playerId] ?? (myTeamId ? room?.allyAnswers[myTeamId] : undefined) ?? [];
   const interceptDraft = interceptDraftsByRound[draftRound] ?? room?.interceptAnswerProposals[playerId] ?? (myTeamId ? room?.interceptAnswers[myTeamId] : undefined) ?? [];
@@ -504,7 +504,7 @@ export function CodeInterceptGame() {
 
         {room.phase === "game-result" && <section className="rounded-2xl border border-amber-300/30 bg-slate-950/85 p-6 text-center"><p className="text-sm font-black text-amber-300">GAME OVER</p><h2 className="mt-2 text-4xl font-black">{room.winner === "draw" ? "同時決着・引き分け" : `${teamLabel(room.winner!)}の勝利`}</h2><p className="mt-3 text-slate-300">全{room.roundNumber}ラウンドで決着しました。</p><RoomResultActions canReturnToRoom={isHost || resultReturnGate.canReturnToRoom} disabled={isSaving} isHost={isHost} isRoomDissolved={resultReturnGate.isRoomDissolved} onReturnToRoom={isHost ? () => runAction({ type: "reset-game", actorId: playerId }) : () => resultReturnGate.returnToRoom((code) => codeInterceptRoomApi.fetchRoom(code, playerId), () => setError("部屋に戻れません。解散されたか、参加情報が変更されています。"))} onDissolve={isHost ? dissolveRoom : undefined} /><GameResultShareButton title="コードインターセプト プレイログ" text={codeInterceptShareText(room)} url="/games/code-intercept" /></section>}
 
-        {room.roundHistory.length > 0 && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><h2 className="text-xl font-black">公開済みの過去ログ</h2><p className="mt-1 text-sm text-slate-400">チームごとに、ヒント・味方回答・相手からの傍受結果を確認できます。</p><div className="mt-4 grid gap-4 xl:grid-cols-2">{codeInterceptTeamIds.map((teamId) => <TeamRoundHistoryTable key={teamId} room={room} teamId={teamId} />)}</div></section>}
+        {room.phase !== "lobby" && room.roundHistory.length > 0 && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><h2 className="text-xl font-black">公開済みの過去ログ</h2><p className="mt-1 text-sm text-slate-400">チームごとに、ヒント・味方回答・相手からの傍受結果を確認できます。</p><div className="mt-4 grid gap-4 xl:grid-cols-2">{codeInterceptTeamIds.map((teamId) => <TeamRoundHistoryTable key={teamId} room={room} teamId={teamId} />)}</div></section>}
       </div>
     </div>
   </main>;

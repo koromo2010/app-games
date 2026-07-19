@@ -41,6 +41,7 @@ import { redisCommand } from "@/lib/redis-store";
 import { allAnswersSubmitted, allCluesSubmitted, allCodeLengthsChosen, beginCluePhase, beginGame, beginRound, resetGame, targetPlayer } from "@/lib/code-intercept-room-domain";
 import { normalizeCodeInterceptRoom } from "@/lib/code-intercept-room-normalizer";
 import { codeInterceptRoomChoice, sanitizeCodeInterceptRoom } from "@/lib/code-intercept-room-presentation";
+import { loadCodeInterceptWordPool } from "@/lib/code-intercept-word-repository";
 
 export { sanitizeCodeInterceptRoom };
 
@@ -74,7 +75,7 @@ function roomKey(code: string) { return `${roomKeyPrefix}${code.trim().toUpperCa
 function playerActiveRoomKey(playerId: string) { return `${playerActiveRoomKeyPrefix}${playerId}`; }
 
 
-async function mutateStoredRoom(code: string, mutate: (room: CodeInterceptRoom) => CodeInterceptRoom, actorId: string, action: string) {
+async function mutateStoredRoom(code: string, mutate: (room: CodeInterceptRoom) => CodeInterceptRoom | Promise<CodeInterceptRoom>, actorId: string, action: string) {
   return mutateOnlineRoomWithRetry({ code, roomKey, loadRoom: loadStoredCodeInterceptRoom, mutate, normalize: normalizeCodeInterceptRoom, errors: { notFound: "CODE_INTERCEPT_ROOM_NOT_FOUND", invalid: "INVALID_CODE_INTERCEPT_ROOM", conflict: "CODE_INTERCEPT_ROOM_CONFLICT" }, prepare: (current, changed, { revision, timestamp }) => {
     const actorName = changed.players.find((player) => player.id === actorId)?.name ?? "システム";
     return changed.debugMode
@@ -132,7 +133,7 @@ export async function applyStoredCodeInterceptAction(code: string, action: CodeI
     const activeRoom = await loadCodeInterceptPlayerActiveRoom(action.actorId);
     claim = await claimOnlineRoomForPlayer({ key: playerActiveRoomKey(action.actorId), targetCode: normalizedCode, currentRoom: activeRoom, gameId: "code-intercept", conflictError: "CODE_INTERCEPT_PLAYER_ALREADY_ACTIVE" });
   }
-  const room = await mutateStoredRoom(normalizedCode, (current) => {
+  const room = await mutateStoredRoom(normalizedCode, async (current) => {
     if (action.type === "join-room") {
       if (current.phase !== "lobby" || action.actorId !== action.player.id) throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
       if (current.passphrase && current.passphrase !== action.passphrase.trim()) throw new Error("CODE_INTERCEPT_BAD_PASSPHRASE");
@@ -189,7 +190,8 @@ export async function applyStoredCodeInterceptAction(code: string, action: CodeI
     if (action.type === "start-game") {
       if (!isHost || current.phase !== "lobby") throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
       if ((!current.debugMode && current.players.length < codeInterceptMinimumPlayers) || !codeInterceptRoomIsStartable(current)) throw new Error("CODE_INTERCEPT_NOT_ENOUGH_PLAYERS");
-      return beginGame(current);
+      const wordPool = await loadCodeInterceptWordPool(current.cardCount * 2);
+      return beginGame(current, wordPool);
     }
     if (action.type === "abort-game") {
       if (!isHost || !current.debugMode || current.phase === "lobby") throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
