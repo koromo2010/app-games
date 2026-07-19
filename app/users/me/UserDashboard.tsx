@@ -42,6 +42,7 @@ export function UserDashboard() {
   const [session, setSession] = useState<PlayerSession | null>(null);
   const [stats, setStats] = useState<PlayerStatsResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isStatsLoading, setIsStatsLoading] = useState(true);
   const [requiresLogin, setRequiresLogin] = useState(false);
   const [message, setMessage] = useState("");
   const [isAvatarEditorOpen, setIsAvatarEditorOpen] = useState(false);
@@ -112,11 +113,6 @@ export function UserDashboard() {
         const sessionBody = (await sessionResponse.json()) as { session?: PlayerSession };
         if (!sessionResponse.ok || !sessionBody.session?.id) throw new Error("SESSION_LOAD_FAILED");
         setSession(sessionBody.session);
-        const params = new URLSearchParams({ playerId: sessionBody.session.id, gameType: "all" });
-        const statsResponse = await fetch(`/api/player-stats?${params.toString()}`, { cache: "no-store", signal: controller.signal });
-        const statsBody = (await statsResponse.json()) as { stats?: PlayerStatsResponse };
-        if (!statsResponse.ok || !statsBody.stats) throw new Error("STATS_LOAD_FAILED");
-        setStats(statsBody.stats);
       } catch (error) {
         if (error instanceof Error && error.name === "AbortError") return;
         setMessage("ユーザー情報を読み込めませんでした。");
@@ -126,6 +122,28 @@ export function UserDashboard() {
     })();
     return () => controller.abort();
   }, []);
+
+  useEffect(() => {
+    if (!session?.id) return;
+    const playerId = session.id;
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const params = new URLSearchParams({ playerId, gameType: "all" });
+        const response = await fetch(`/api/player-stats?${params.toString()}`, { cache: "no-store", signal: controller.signal });
+        const body = (await response.json()) as { stats?: PlayerStatsResponse };
+        if (!response.ok || !body.stats) throw new Error("STATS_LOAD_FAILED");
+        setStats(body.stats);
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") return;
+        setStats(null);
+        setMessage("戦績を読み込めませんでした。ほかのアカウント設定はそのまま利用できます。");
+      } finally {
+        if (!controller.signal.aborted) setIsStatsLoading(false);
+      }
+    })();
+    return () => controller.abort();
+  }, [session?.id]);
 
   const updateRecoveryEmail = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -248,8 +266,8 @@ export function UserDashboard() {
             {summaryItems(stats).map(([label, summary]) => (
               <div key={label} className="rounded-lg bg-slate-100 px-3 py-2">
                 <p className="text-xs font-semibold text-slate-500">{label}</p>
-                <p className="mt-1 text-lg font-black text-slate-950">{summary?.winRate ?? 0}%</p>
-                <p className="text-[11px] text-slate-500">{summary?.wins ?? 0}勝 / {summary?.played ?? 0}戦</p>
+                <p className="mt-1 text-lg font-black text-slate-950">{isStatsLoading ? "…" : `${summary?.winRate ?? 0}%`}</p>
+                <p className="text-[11px] text-slate-500">{isStatsLoading ? "読み込み中" : `${summary?.wins ?? 0}勝 / ${summary?.played ?? 0}戦`}</p>
               </div>
             ))}
           </div>
@@ -258,14 +276,16 @@ export function UserDashboard() {
             {games.filter((game) => game.stats === "account").map((game) => (
               <div key={game.id} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm">
                 <span className="font-semibold text-slate-700">{game.title}</span>
-                <span className="font-black text-cyan-700">{stats?.ratings[game.id as PlayerGameResult["gameType"]] ?? 1000}</span>
+                <span className="font-black text-cyan-700">{isStatsLoading ? "…" : stats?.ratings[game.id as PlayerGameResult["gameType"]] ?? 1000}</span>
               </div>
             ))}
           </div>
 
           <div className="mt-6">
             <h3 className="text-sm font-black text-slate-800">最近の結果</h3>
-            {stats?.recent.length ? (
+            {isStatsLoading ? (
+              <p className="mt-2 text-sm text-slate-500">戦績を読み込み中...</p>
+            ) : stats?.recent.length ? (
               <div className="mt-2 space-y-2">
                 {stats.recent.map((result) => (
                   <article key={result.id} className="rounded-lg bg-slate-50 px-3 py-2">
