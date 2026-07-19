@@ -39,6 +39,20 @@ for (const game of games) {
     if (!Array.isArray(game.timeLimit.fields) || game.timeLimit.fields.length === 0) fail(`${game.id}: timeLimit.fields に保存する時間設定を列挙してください。`);
     else for (const field of game.timeLimit.fields) if (typeof field !== "string" || !timeLimitSources.includes(field)) fail(`${game.id}: 時間設定フィールド「${field}」の実装が登録済みモジュールにありません。`);
     if (typeof game.timeLimit.expiryToken !== "string" || !timeLimitSources.includes(game.timeLimit.expiryToken)) fail(`${game.id}: サーバー正本の時間切れ処理が登録済みモジュールにありません。`);
+    const textInputTimeout = game.timeLimit.textInputTimeout;
+    if (!textInputTimeout || !["adopt-entered-text", "not-applicable"].includes(textInputTimeout.mode)) {
+      fail(`${game.id}: timeLimit.textInputTimeout.mode を adopt-entered-text または not-applicable で宣言してください。`);
+    } else if (textInputTimeout.mode === "adopt-entered-text") {
+      if (!Array.isArray(textInputTimeout.implementationTokens) || textInputTimeout.implementationTokens.length === 0) {
+        fail(`${game.id}: 時間切れ時に入力済み文字を採用する実装を implementationTokens に登録してください。`);
+      } else {
+        for (const token of textInputTimeout.implementationTokens) {
+          if (typeof token !== "string" || token.trim().length === 0 || !timeLimitSources.includes(token)) fail(`${game.id}: 入力済み文字の時間切れ採用処理「${token || "(empty)"}」が登録済みモジュールにありません。`);
+        }
+      }
+    } else if (typeof textInputTimeout.reason !== "string" || textInputTimeout.reason.trim().length < 10) {
+      fail(`${game.id}: 時間制限付き文字入力が対象外である理由を timeLimit.textInputTimeout.reason に具体的に記載してください。`);
+    }
   } else if (typeof game.timeLimit.reason !== "string" || game.timeLimit.reason.trim().length < 10) {
     fail(`${game.id}: 時間制限の対象外理由を timeLimit.reason に具体的に記載してください。`);
   }
