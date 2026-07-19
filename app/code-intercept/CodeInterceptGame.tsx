@@ -20,6 +20,7 @@ import { applyCodeInterceptRoomAction, codeInterceptRoomApi, createCodeIntercept
 import {
   codeInterceptAnswererIds,
   codeInterceptClueHistory,
+  codeInterceptDraftScope,
   codeLengthForTeam,
   codeInterceptDefaults,
   codeInterceptPhaseTimeLimitSeconds,
@@ -287,7 +288,7 @@ export function CodeInterceptGame() {
   const myAnswererIds = room && myTeamId ? codeInterceptAnswererIds(room, myTeamId) : [];
   const latestRound = room?.roundHistory.at(-1);
   const teamCounts = useMemo(() => room ? Object.fromEntries(codeInterceptTeamIds.map((id) => [id, teamPlayers(room, id).length])) as Record<CodeInterceptTeamId, number> : { red: 0, blue: 0 }, [room]);
-  const draftRound = room ? `${room.code}:${room.gameNumber}:${room.roundNumber}` : "";
+  const draftRound = room ? codeInterceptDraftScope(room) : "";
   const clueDrafts = clueDraftsByRound[draftRound] ?? (myTeamId ? room?.clues[myTeamId] : undefined) ?? Array.from({ length: myCodeLength }, () => "");
   const allyDraft = allyDraftsByRound[draftRound] ?? room?.allyAnswerProposals[playerId] ?? (myTeamId ? room?.allyAnswers[myTeamId] : undefined) ?? [];
   const interceptDraft = interceptDraftsByRound[draftRound] ?? room?.interceptAnswerProposals[playerId] ?? (myTeamId ? room?.interceptAnswers[myTeamId] : undefined) ?? [];

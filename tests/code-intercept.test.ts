@@ -5,6 +5,7 @@ import {
   canSetCodeInterceptPlayerTeam,
   codeInterceptClueHistory,
   codeInterceptDefaults,
+  codeInterceptDraftScope,
   codeInterceptRoomIsStartable,
   codeInterceptTeamHasSubmittedAnswers,
   consensusCodeInterceptAnswer,
@@ -102,6 +103,12 @@ test("secret-card vocabulary excludes words below effective Zipf 4.5", () => {
     minimumEffectiveZipf: 4.5,
     maximumEffectiveZipf: 6.5,
   });
+});
+
+test("draft input is isolated when a phase restarts in the same game and round", () => {
+  const current = room();
+  const restarted = { ...current, phaseStartedAt: current.phaseStartedAt! + 1 };
+  assert.notEqual(codeInterceptDraftScope(current), codeInterceptDraftScope(restarted));
 });
 
 test("answers must have the fixed length, range, and no duplicates", () => {
