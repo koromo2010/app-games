@@ -39,6 +39,39 @@ const tahoiyaScreeningBatchLimit = 3;
 export const maxDuration = 180;
 type DefinitionStyle = "brief" | "standard" | "detailed" | "long" | "extended" | "maximum";
 
+function tahoiyaDifficultyScreeningJsonSchema(sourceIds: string[]) {
+  return {
+    name: "tahoiya_difficulty_screening",
+    strict: true,
+    schema: {
+      type: "object",
+      properties: {
+        items: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              sourceId: { type: "string", enum: sourceIds },
+              verdict: { type: "string", enum: ["known", "borderline", "ordinary-unknown", "almost-nobody-knows"] },
+              exclusionFlags: {
+                type: "array",
+                items: { type: "string", enum: ["sensitive", "university", "company", "place"] },
+              },
+              estimatedRecognitionPercent: { type: "number", minimum: 0, maximum: 100 },
+              confidence: { type: "number", minimum: 0, maximum: 100 },
+              reason: { type: "string" },
+            },
+            required: ["sourceId", "verdict", "exclusionFlags", "estimatedRecognitionPercent", "confidence", "reason"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["items"],
+      additionalProperties: false,
+    },
+  };
+}
+
 const definitionStyleRules: Record<DefinitionStyle, { max: number; instruction: string }> = {
   brief: { max: 14, instruction: "10文字程度の短く端的な説明" },
   standard: { max: 25, instruction: "20文字程度の標準的な説明" },
@@ -518,7 +551,8 @@ async function screenDifficultyCandidates(
   ].join("\n\n");
   emitObservabilityEvent("info", "ai.generation", { game: "tahoiya", operation: "difficulty-screening", sourceCount: candidates.length, outcome: "started" });
   const screeningSources = compactCandidates.map((candidate, index) => ({ id: candidate.sourceId, wordId: candidates[index].id, word: candidate.word }));
-  let generated = await generateGameLlmText(prompt, mode, { quality: "standard", timeoutMs: 25_000 });
+  const responseJsonSchema = tahoiyaDifficultyScreeningJsonSchema(screeningSources.map((source) => source.id));
+  let generated = await generateGameLlmText(prompt, mode, { quality: "standard", responseJsonSchema, timeoutMs: 25_000 });
   let screened = parseTahoiyaDifficultyScreening(generated.text, screeningSources, difficulty);
   let totalLatencyMs = generated.latencyMs;
   if (screened.length !== candidates.length) {
@@ -536,6 +570,7 @@ async function screenDifficultyCandidates(
     ].join("\n\n");
     const retried = await generateGameLlmText(retryPrompt, mode, {
       quality: "standard",
+      responseJsonSchema,
       timeoutMs: 25_000,
       preferredProvider: independentReviewerProvider(generated.provider),
     });
