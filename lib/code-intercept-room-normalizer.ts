@@ -19,6 +19,7 @@ import {
   type CodeInterceptRoundLog,
   type CodeInterceptTeam,
   type CodeInterceptTeamId,
+  type CodeInterceptTimedPhase,
   type CodeLengthMode,
   type TeamCodeLengthChoice,
 } from "@/lib/code-intercept";
@@ -133,6 +134,16 @@ function normalizeStringRecord(value: unknown) {
     : [])) as Partial<Record<CodeInterceptTeamId, string>>;
 }
 
+function normalizeTimeoutPenaltyPhases(value: unknown) {
+  const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  return Object.fromEntries(codeInterceptTeamIds.flatMap((teamId) => {
+    const phases = Array.isArray(source[teamId])
+      ? [...new Set(source[teamId].filter((phase): phase is CodeInterceptTimedPhase => phase === "code-length" || phase === "clue" || phase === "answer"))]
+      : [];
+    return phases.length > 0 ? [[teamId, phases]] : [];
+  })) as Partial<Record<CodeInterceptTeamId, CodeInterceptTimedPhase[]>>;
+}
+
 function normalizeRoundHistory(value: unknown, cardCount: number, fallbackMode: CodeLengthMode, fallbackLength: number): CodeInterceptRoundLog[] {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is CodeInterceptRoundLog => Boolean(
@@ -144,6 +155,7 @@ function normalizeRoundHistory(value: unknown, cardCount: number, fallbackMode: 
       ...team,
       codeLength: normalizeCodeInterceptCodeLength(team.codeLength ?? team.secretCode?.length ?? fallbackLength, cardCount),
       codeLengthSelectedByPlayerId: typeof team.codeLengthSelectedByPlayerId === "string" ? team.codeLengthSelectedByPlayerId : null,
+      timeoutDamage: typeof team.timeoutDamage === "number" && Number.isInteger(team.timeoutDamage) ? Math.max(0, Math.min(3, team.timeoutDamage)) : 0,
     })),
   })).slice(-100);
 }
@@ -205,6 +217,7 @@ export function normalizeCodeInterceptRoom(value: unknown): CodeInterceptRoom | 
     interceptAnswerProposals: normalizePlayerAnswerRecord(parsed.interceptAnswerProposals, players, clueGiverIds, cardCount, enemyCodeLengths),
     allyAnswers: normalizeNumberArrayRecord(parsed.allyAnswers, cardCount, roundCodeLengths),
     interceptAnswers: normalizeNumberArrayRecord(parsed.interceptAnswers, cardCount, enemyCodeLengths),
+    timeoutPenaltyPhases: normalizeTimeoutPenaltyPhases(parsed.timeoutPenaltyPhases),
     roundHistory: normalizeRoundHistory(parsed.roundHistory, cardCount, codeLengthMode, fixedCodeLength),
     winner,
     debugLog: normalizeGameDebugLog(parsed.debugLog),

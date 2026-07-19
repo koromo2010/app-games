@@ -44,6 +44,7 @@ export function beginRound(room: CodeInterceptRoom, roundNumber: number) {
     interceptAnswerProposals: {},
     allyAnswers: {},
     interceptAnswers: {},
+    timeoutPenaltyPhases: {},
     winner: null,
     phaseStartedAt: Date.now(),
   };
@@ -77,6 +78,7 @@ export function resetGame(room: CodeInterceptRoom) {
     interceptAnswerProposals: {},
     allyAnswers: {},
     interceptAnswers: {},
+    timeoutPenaltyPhases: {},
     roundHistory: [],
     winner: null,
   };

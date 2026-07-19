@@ -42,7 +42,7 @@ function room(): CodeInterceptRoom {
     ],
     clueGiverIds: { red: "r1", blue: "b1" }, codeLengthChoices: {}, roundCodeLengths: { red: 3, blue: 3 }, secretCodes: { red: [3, 1, 4], blue: [2, 4, 1] },
     clues: { red: ["醤油", "肉球", "傘"], blue: ["高原", "木陰", "波"] },
-    allyAnswerProposals: {}, interceptAnswerProposals: {}, allyAnswers: { red: [3, 1, 2], blue: [2, 4, 1] }, interceptAnswers: { red: [2, 4, 1], blue: [3, 1, 4] },
+    allyAnswerProposals: {}, interceptAnswerProposals: {}, allyAnswers: { red: [3, 1, 2], blue: [2, 4, 1] }, interceptAnswers: { red: [2, 4, 1], blue: [3, 1, 4] }, timeoutPenaltyPhases: {},
     roundHistory: [], winner: null, debugLog: [], createdAt: now, updatedAt: now,
   };
 }
@@ -193,19 +193,33 @@ test("phase timeout fills missing input and keeps the round moving", () => {
   assert.equal(cluePhase.phase, "clue");
   assert.deepEqual(cluePhase.roundCodeLengths, { red: 3, blue: 3 });
   assert.equal(cluePhase.secretCodes.red?.length, 3);
+  assert.deepEqual(cluePhase.timeoutPenaltyPhases, { red: ["code-length"], blue: ["code-length"] });
 
   cluePhase.phaseStartedAt = 31_000;
   const answerPhase = expireCodeInterceptPhase(cluePhase, 61_000);
   assert.equal(answerPhase.phase, "answer");
   assert.deepEqual(answerPhase.clues.red, ["時間切れ", "時間切れ", "時間切れ"]);
+  assert.deepEqual(answerPhase.timeoutPenaltyPhases, { red: ["code-length", "clue"], blue: ["code-length", "clue"] });
 
   answerPhase.phaseStartedAt = 61_000;
   answerPhase.allyAnswers = {};
   answerPhase.interceptAnswers = {};
   assert.equal(expireCodeInterceptPhase(answerPhase, 120_999).phase, "answer");
   const result = expireCodeInterceptPhase(answerPhase, 121_000);
-  assert.equal(result.phase, "round-result");
-  assert.deepEqual(result.teams.map((team) => team.points), [4, 1]);
+  assert.equal(result.phase, "game-result");
+  assert.deepEqual(result.teams.map((team) => team.points), [2, -1]);
+  assert.deepEqual(result.roundHistory[0].teams.map((team) => team.timeoutDamage), [3, 3]);
+  assert.deepEqual(result.roundHistory[0].teams.map((team) => team.miscommunicationDamage), [0, 0]);
+});
+
+test("a timeout deducts only the team that did not finish the phase", () => {
+  const current = room();
+  current.phase = "clue";
+  current.clueTimeLimitSeconds = 30;
+  current.phaseStartedAt = 1_000;
+  current.clues = { red: ["猫", "空", "雨"] };
+  const expired = expireCodeInterceptPhase(current, 31_000);
+  assert.deepEqual(expired.timeoutPenaltyPhases, { blue: ["clue"] });
 });
 
 test("first round does not apply interception damage", () => {
