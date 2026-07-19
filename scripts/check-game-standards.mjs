@@ -9,7 +9,7 @@ const fail = (message) => failures.push(message);
 if (!existsSync(registryPath)) { console.error("[game-standards] config/game-registry.json がありません。"); process.exit(1); }
 const games = JSON.parse(readFileSync(registryPath, "utf8"));
 const ids = new Set(); const hrefs = new Set();
-const allowedGameTags = new Set(["対戦", "協力"]);
+const allowedGameTags = new Set(["対戦", "協力", "チーム戦", "正体隠匿", "会話", "ブラフ", "作文", "戦略", "連想", "推理", "お絵描き"]);
 const sharedDissolutionModule = read("lib/online-room-dissolution.ts");
 const sharedPersistenceModule = read("lib/online-room-persistence.ts");
 const lobbyActiveRoomsRoute = existsSync(join(root, "app/api/player-active-rooms/route.ts")) ? read("app/api/player-active-rooms/route.ts") : "";
@@ -20,6 +20,8 @@ for (const game of games) {
   ids.add(game.id); hrefs.add(game.href);
   if (!Array.isArray(game.tags) || game.tags.length === 0) fail(`${game.id}: tags を1件以上設定してください。`);
   else for (const tag of game.tags) if (!allowedGameTags.has(tag)) fail(`${game.id}: 未対応のタグ「${tag}」があります。`);
+  if (game.tags.length > 3) fail(`${game.id}: ロビーカードのタグは3件以内にしてください。`);
+  if (new Set(game.tags).size !== game.tags.length) fail(`${game.id}: tags に重複があります。`);
   for (const field of ["entryFile", "pageFile"]) if (!game[field] || !existsSync(join(root, game[field]))) fail(`${game.id}: ${field} が存在しません。`);
   for (const file of game.moduleBoundaryFiles || []) if (!existsSync(join(root, file))) fail(`${game.id}: モジュール境界ファイル ${file} が存在しません。`);
   if (!game.entryFile || !existsSync(join(root, game.entryFile))) continue;

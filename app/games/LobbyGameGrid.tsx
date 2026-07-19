@@ -17,7 +17,7 @@ function LobbyGameCard({ game, operation, activeRoom, isLoggedIn, onLoginRequire
   const maintenance = operation.maintenance; const active = Boolean(activeRoom); const privateGame = operation.publication === "private";
   const card = <article className={`h-full rounded-lg border p-3 shadow-[0_14px_38px_rgba(15,23,42,0.18)] transition hover:-translate-y-0.5 hover:shadow-[0_20px_48px_rgba(15,23,42,0.28)] ${active ? "border-cyan-300 bg-gradient-to-br from-cyan-950 via-slate-900 to-fuchsia-950 ring-2 ring-cyan-300/60" : "border-white/10 bg-white/[0.96]"}`}>
     <div className={`h-14 rounded-md bg-gradient-to-br ${game.accent} ${active ? "ring-2 ring-white/50" : ""}`} />
-    <div className="mt-3"><h2 className={`text-lg font-black leading-tight ${active ? "text-white" : "text-slate-950"}`}>{game.title}</h2><div className="mt-2 flex flex-wrap gap-1.5"><Badge active={active}>{active ? "プレイ中" : maintenance ? "メンテナンス中" : game.status}</Badge>{privateGame && <Badge active={active}>プライベート</Badge>}{game.tags.map((tag) => <Badge key={tag} active={active} cooperative={tag === "協力"}>{tag}</Badge>)}</div></div>
+    <div className="mt-3"><h2 className={`text-lg font-black leading-tight ${active ? "text-white" : "text-slate-950"}`}>{game.title}</h2><div className="mt-2 flex flex-wrap gap-1.5">{active && <Badge active>プレイ中</Badge>}{maintenance && !active && <Badge active={false} state>メンテナンス中</Badge>}{privateGame && <Badge active={active} state>プライベート</Badge>}{game.tags.map((tag) => <Badge key={tag} active={active} tag={tag}>{tag}</Badge>)}</div></div>
     {activeRoom && <p className="mt-2 text-xs font-bold text-cyan-100">部屋 {activeRoom.code} に参加中</p>}
     <p className={`mt-2 min-h-10 text-xs leading-5 ${active ? "text-slate-200" : "text-slate-600"}`}>{game.summary}</p>
     {maintenance && <p className="mt-2 rounded-md bg-amber-100 px-2 py-1.5 text-xs font-bold leading-5 text-amber-900">{operation.message || "現在メンテナンス中です。しばらくお待ちください。"}</p>}
@@ -28,4 +28,15 @@ function LobbyGameCard({ game, operation, activeRoom, isLoggedIn, onLoginRequire
   return isLoggedIn ? <Link href={game.href} onClick={game.id === "wordwolf" && active ? onRememberWordWolf : undefined} className="block">{card}</Link> : <button type="button" onClick={onLoginRequired} className="block text-left">{card}</button>;
 }
 
-function Badge({ active, cooperative, children }: { active: boolean; cooperative?: boolean; children: React.ReactNode }) { return <span className={`inline-flex max-w-full rounded-md border px-2 py-1 text-[11px] font-black leading-tight ${active ? "border-white/20 bg-white/10 text-white" : cooperative ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-fuchsia-200 bg-fuchsia-50 text-fuchsia-700"}`}>{children}</span>; }
+function Badge({ active, state = false, tag, children }: { active: boolean; state?: boolean; tag?: GameCatalogEntry["tags"][number]; children: React.ReactNode }) {
+  const tone = state
+    ? "border-amber-200 bg-amber-50 text-amber-800"
+    : tag === "協力"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : tag === "チーム戦"
+        ? "border-sky-200 bg-sky-50 text-sky-700"
+        : tag === "対戦"
+          ? "border-rose-200 bg-rose-50 text-rose-700"
+          : "border-violet-200 bg-violet-50 text-violet-700";
+  return <span className={`inline-flex max-w-full rounded-md border px-2 py-1 text-[11px] font-black leading-tight ${active ? "border-white/20 bg-white/10 text-white" : tone}`}>{children}</span>;
+}
