@@ -13,6 +13,7 @@ import { GameTopMenu, gameTopBannerActionClass, gameTopBannerDangerActionClass, 
 import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomResultActions } from "@/app/components/RoomResultActions";
 import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
+import { confirmRoomLeave } from "@/app/components/room-navigation-confirmation";
 import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "@/app/hooks/use-online-room-polling";
 import { useRoomResultReturnGate } from "@/app/hooks/use-room-result-return-gate";
 import { applyCodeInterceptRoomAction, codeInterceptRoomApi, createCodeInterceptRoom } from "@/app/code-intercept/code-intercept-room-api-client";
@@ -345,7 +346,7 @@ export function CodeInterceptGame() {
     catch (caught) { setError(apiMessage(caught, "部屋一覧を取得できませんでした。")); }
   };
 
-  const leaveRoom = async () => { if (await runAction({ type: "leave-room", actorId: playerId })) { setRoom(null); localStorage.removeItem(lastRoomKey); } };
+  const leaveRoom = async () => { if (!confirmRoomLeave()) return; if (await runAction({ type: "leave-room", actorId: playerId })) { setRoom(null); localStorage.removeItem(lastRoomKey); } };
   const dissolveRoom = async () => {
     if (!room || !window.confirm("この部屋を解散しますか？")) return;
     setIsSaving(true); setError("");
