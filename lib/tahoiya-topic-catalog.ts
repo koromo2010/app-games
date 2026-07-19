@@ -18,6 +18,7 @@ import {
   filterUnexperiencedTahoiyaWords,
   rememberTahoiyaTopicHistory,
 } from "@/lib/tahoiya-topic-history-store";
+import { pickRotatingTahoiyaTopic } from "@/lib/tahoiya-topic-selection";
 import {
   legacyTahoiyaCatalogKey,
   parseLegacyTahoiyaCatalogRecord,
@@ -52,6 +53,13 @@ type GitCandidate = {
 
 function normalizeWord(value: string) {
   return value.normalize("NFKC").trim().toLocaleLowerCase("ja");
+}
+
+async function filterWithDeviceHistoryFallback<T extends { word: string }>(candidates: T[], playerIds: string[]) {
+  const withoutAccountOrDeviceHistory = await filterUnexperiencedTahoiyaWords(candidates, playerIds, true);
+  return withoutAccountOrDeviceHistory.length > 0
+    ? withoutAccountOrDeviceHistory
+    : filterUnexperiencedTahoiyaWords(candidates, playerIds);
 }
 
 export async function ensureTahoiyaGitCandidates() {
@@ -134,7 +142,7 @@ export async function findUnexperiencedScreenedTahoiyaWordCandidates(
       reading: word.reading,
       effectiveZipf: word.effectiveZipf,
     }));
-  const unexperienced = await filterUnexperiencedTahoiyaWords(candidates, playerIds);
+  const unexperienced = await filterWithDeviceHistoryFallback(candidates, playerIds);
   return unexperienced
     .map((candidate) => ({ candidate, order: Math.random() }))
     .sort((left, right) => left.order - right.order)
@@ -151,7 +159,7 @@ export async function findUnscreenedUnexperiencedTahoiyaWordCandidates(
   const blocked = new Set(blockedWords.map(normalizeWord));
   const words = await listUnscreenedTahoiyaWordCandidates(500);
   const candidates = words.filter((word) => !blocked.has(normalizeWord(word.word)));
-  const unexperienced = await filterUnexperiencedTahoiyaWords(candidates, playerIds);
+  const unexperienced = await filterWithDeviceHistoryFallback(candidates, playerIds);
   return unexperienced
     .map((candidate) => ({ candidate, order: Math.random() }))
     .sort((left, right) => left.order - right.order)
@@ -201,13 +209,13 @@ export async function findReusableTahoiyaTopic(
       !blocked.has(word) &&
       !legacy?.experiencedPlayerIds.some((playerId) => playerIds.includes(playerId));
   });
-  const unexperiencedShared = await filterUnexperiencedTahoiyaWords(
+  const unexperiencedShared = await filterWithDeviceHistoryFallback(
     sharedCandidates.map((record) => ({ ...record, word: record.topic.word })),
     playerIds,
   );
   const candidates: Array<StoredTahoiyaTopic | LegacyTahoiyaTopicCatalogRecord> = unexperiencedShared.length > 0
     ? unexperiencedShared
-    : await filterUnexperiencedTahoiyaWords(
+    : await filterWithDeviceHistoryFallback(
       legacyRecords
         .filter((record) => record.topic.source === "llm" && record.difficulty === difficulty)
         .filter((record) => !blocked.has(normalizeWord(record.topic.word)))
@@ -215,19 +223,10 @@ export async function findReusableTahoiyaTopic(
         .map((record) => ({ ...record, word: record.topic.word })),
       playerIds,
     );
-  candidates
-    .sort((left, right) => {
-      const leftRating = ratingScores.get(normalizeWord(left.topic.word)) ?? { good: 0, bad: 0 };
-      const rightRating = ratingScores.get(normalizeWord(right.topic.word)) ?? { good: 0, bad: 0 };
-      const leftScore = leftRating.good - leftRating.bad;
-      const rightScore = rightRating.good - rightRating.bad;
-      return rightScore - leftScore ||
-        rightRating.good - leftRating.good ||
-        leftRating.bad - rightRating.bad ||
-        left.useCount - right.useCount ||
-        left.lastUsedAt - right.lastUsedAt;
-    });
-  const record = candidates[0];
+  const record = pickRotatingTahoiyaTopic(candidates, (candidate) => {
+    const rating = ratingScores.get(normalizeWord(candidate.topic.word)) ?? { good: 0, bad: 0 };
+    return rating.good - rating.bad;
+  });
   if (!record) return null;
   return {
     ...record.topic,

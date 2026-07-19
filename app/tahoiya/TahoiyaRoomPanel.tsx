@@ -1,5 +1,5 @@
 import type { TahoiyaAnswererMode, TahoiyaDifficulty, TahoiyaPlayMode, TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomChoice } from "@/lib/tahoiya-types";
-import { tahoiyaDifficultyLabel, tahoiyaEffectiveZipfDescription } from "@/lib/tahoiya-difficulty";
+import { tahoiyaDifficultyCriterionDescription, tahoiyaDifficultyLabel } from "@/lib/tahoiya-difficulty";
 import { allRoomPlayersReturned } from "@/lib/room-lobby-return";
 import { DebugWordGenerationTest, type DebugWordGenerationResult } from "../components/DebugWordGenerationTest";
 import { RoomConfigSummary } from "../components/RoomConfigSummary";
@@ -176,7 +176,7 @@ function Setting({ title, description, children }: { title: string; description?
 }
 
 function HostActions(props: Props & { room: TahoiyaRoom }) {
-  const difficulty = `${tahoiyaDifficultyLabel(props.room.topicDifficulty)}（${tahoiyaEffectiveZipfDescription(props.room.topicDifficulty)}）`;
+  const difficulty = `${tahoiyaDifficultyLabel(props.room.topicDifficulty)}（${tahoiyaDifficultyCriterionDescription(props.room.topicDifficulty)}）`;
   const allPlayersReturned = allRoomPlayersReturned(props.room.lobbyReturn, props.room.players);
   const waitingPlayerCount = props.room.players.length - (props.room.lobbyReturn?.returnedPlayerIds.length ?? 0);
   const generationInProgress = Boolean(props.room.topicGenerationProgress);

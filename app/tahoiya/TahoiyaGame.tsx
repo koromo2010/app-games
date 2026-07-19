@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   defaultAvatarImage,
   fallbackAvatarColor,
@@ -27,6 +27,7 @@ import { useTahoiyaDebugActions } from "./use-tahoiya-debug-actions";
 import { useTahoiyaRoomSession } from "./use-tahoiya-room-session";
 import { useTahoiyaRoomActions } from "./use-tahoiya-room-actions";
 import { TahoiyaEmptyState, TahoiyaScorePanel } from "./TahoiyaScorePanel";
+import { rememberTahoiyaDeviceTopic, syncTahoiyaDeviceTopicHistory } from "./tahoiya-device-topic-history";
 
 const tahoiyaFeedbackReasons = [
   { value: "too-difficult", label: "難しすぎる", rating: "bad" as const },
@@ -68,6 +69,16 @@ export function TahoiyaGame() {
   const [message, setMessage] = useState("");
   const [rulesOpen, setRulesOpen] = useState(false);
   const { now, resultReturnGate } = useTahoiyaRoomSession({ room, playerId, setRoom, setPlayerId, setActivePlayerId, setPlayerName, setAvatarColor, setAvatarImage, setMessage });
+
+  useEffect(() => {
+    if (!playerId) return;
+    void syncTahoiyaDeviceTopicHistory().catch(() => false);
+  }, [playerId]);
+
+  useEffect(() => {
+    if (!room?.word || room.topicSource === "pending") return;
+    void rememberTahoiyaDeviceTopic(room.word).catch(() => []);
+  }, [room?.topicSource, room?.word]);
 
   const isDebugMode = Boolean(room?.debugMode);
   const operationPlayerId = isDebugMode ? activePlayerId : playerId;
