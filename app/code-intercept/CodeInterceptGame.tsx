@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
+import { DebugWordGenerationTest, type DebugWordGenerationResult } from "@/app/components/DebugWordGenerationTest";
 import { GameAdSlot } from "@/app/components/GameAdSlot";
 import { GamePlayerMenu } from "@/app/components/GamePlayerMenu";
 import { GamePhaseTimer } from "@/app/components/GamePhaseTimer";
@@ -79,6 +80,30 @@ function apiMessage(error: unknown, fallback: string) {
   if (error.status === 409) return "チーム人数、部屋の状態、または同時更新を確認してもう一度お試しください。";
   if (error.status === 503) return "部屋サーバーを利用できません。少し待ってお試しください。";
   return fallback;
+}
+
+async function sampleCodeInterceptDebugWords(roomCode: string): Promise<DebugWordGenerationResult> {
+  const response = await fetch(`/api/code-intercept/debug-words?roomCode=${encodeURIComponent(roomCode)}`, { cache: "no-store" });
+  const payload = await response.json().catch(() => null) as {
+    words?: unknown;
+    bounds?: { minimumEffectiveZipf?: unknown; maximumEffectiveZipf?: unknown };
+    error?: unknown;
+  } | null;
+  if (!response.ok) {
+    throw new Error(typeof payload?.error === "string" ? payload.error : "候補語を抽出できませんでした。");
+  }
+  const words = Array.isArray(payload?.words) ? payload.words.filter((word): word is string => typeof word === "string" && Boolean(word.trim())) : [];
+  if (words.length !== 10) throw new Error("候補語を10語揃えられませんでした。");
+  const minimum = typeof payload?.bounds?.minimumEffectiveZipf === "number" ? payload.bounds.minimumEffectiveZipf : 4.5;
+  const maximum = typeof payload?.bounds?.maximumEffectiveZipf === "number" ? payload.bounds.maximumEffectiveZipf : 6.5;
+  return {
+    fields: [
+      { label: "抽出数", value: `${words.length}語` },
+      { label: "現在の抽選範囲", value: `実効Zipf ${minimum}〜${maximum}・固有名詞除外` },
+    ],
+    items: words.map((word) => ({ title: word, fields: [] })),
+    notice: "実際のゲーム開始と同じDB抽選を試しています。部屋、秘密カード、出題履歴は変更しません。",
+  };
 }
 
 function CodePicker({ value, cardCount, codeLength, disabled, onChange }: { value: number[]; cardCount: number; codeLength: number; disabled?: boolean; onChange: (value: number[]) => void }) {
@@ -493,6 +518,7 @@ export function CodeInterceptGame() {
               <label className={`mt-3 block cursor-pointer rounded-xl border p-4 ${room.codeRevealMode === "own-team" ? "border-cyan-300 bg-cyan-300/10" : "border-white/10 bg-slate-950/40"}`}><span className="flex items-center gap-2 font-black"><input type="radio" name="code-reveal-mode" checked={room.codeRevealMode === "own-team"} onChange={() => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, teamAssignmentMode: room.teamAssignmentMode, codeLengthMode: room.codeLengthMode, codeRevealMode: "own-team", fixedCodeLength: room.fixedCodeLength, clueTimeLimitSeconds: room.clueTimeLimitSeconds, answerTimeLimitSeconds: room.answerTimeLimitSeconds })} />自チームだけ</span><span className="mt-1 block text-sm text-slate-300">相手には伝達・傍受の成否だけを見せ、正解暗号と味方回答を伏せます。</span></label>
             </fieldset>
           </div>
+          {isHost && room.debugMode && <div className="mt-5"><DebugWordGenerationTest onGenerate={() => sampleCodeInterceptDebugWords(room.code)} heading="秘密カード候補10語を抽出" description="現在の本番抽選条件で、共通DBから秘密カード候補を10語だけ確認します。ゲーム状態や履歴は変更しません。" showModeToggle={false} fixedButtonLabel="候補10語を抽出" fixedRepeatLabel="別の10語を抽出" /></div>}
           {isHost && room.debugMode && <button type="button" disabled={isSaving || room.players.length >= room.playerCapacity} onClick={() => void runAction({ type: "debug-add-player", actorId: playerId })} className="mt-5 w-full rounded-xl border border-cyan-300/30 bg-cyan-300/10 px-4 py-3 font-black text-cyan-100">デバッグ：ダミーを追加</button>}
           {isHost ? <button type="button" disabled={isSaving || !codeInterceptRoomIsStartable(room) || !allRoomPlayersReturned(room.lobbyReturn, room.players)} onClick={() => void runAction({ type: "start-game", actorId: playerId })} className="mt-5 w-full rounded-xl bg-amber-300 px-4 py-4 text-lg font-black text-slate-950 disabled:opacity-40">{!allRoomPlayersReturned(room.lobbyReturn, room.players) ? "参加者の復帰待ち" : codeInterceptRoomIsStartable(room) ? room.teamAssignmentMode === "random" ? "ランダム編成して開始" : "このチームで開始" : room.teamAssignmentMode === "random" ? "4人以上必要です" : "各チーム2人以上・人数差1以内にしてください"}</button> : <p className="mt-5 text-center font-bold text-slate-300">ホストが開始するまでお待ちください。</p>}
         </section>}

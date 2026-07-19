@@ -13,6 +13,8 @@ export const codeInterceptWordSelectionBounds = {
   maximumEffectiveZipf: 6.5,
 } as const;
 
+export const codeInterceptDebugWordSampleSize = 10;
+
 export async function loadCodeInterceptWordPool(requestedLimit: number) {
   if (!isVocabularyPostgresConfigured()) return [];
   const limit = Math.max(1, Math.min(100, Math.floor(requestedLimit)));
