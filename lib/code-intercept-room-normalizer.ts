@@ -25,6 +25,7 @@ import {
 } from "@/lib/code-intercept";
 import { normalizeGameDebugLog } from "@/lib/game-debug-log";
 import { normalizeOnlineRoomCode } from "@/lib/online-room-input";
+import { normalizeRoomLobbyReturnState } from "@/lib/room-lobby-return";
 import { isAvatarColor, isAvatarImage } from "@/lib/player-session";
 
 function isPhase(value: unknown): value is CodeInterceptPhase {
@@ -191,6 +192,7 @@ export function normalizeCodeInterceptRoom(value: unknown): CodeInterceptRoom | 
     passphrase: typeof parsed.passphrase === "string" ? parsed.passphrase.slice(0, 40) : "",
     phase,
     players,
+    lobbyReturn: normalizeRoomLobbyReturnState(parsed.lobbyReturn, players),
     playerCapacity: normalizeCodeInterceptPlayerCapacity(parsed.playerCapacity, players.length),
     gameNumber: typeof parsed.gameNumber === "number" ? Math.max(1, Math.floor(parsed.gameNumber)) : 1,
     roundNumber: typeof parsed.roundNumber === "number" ? Math.max(1, Math.floor(parsed.roundNumber)) : 1,

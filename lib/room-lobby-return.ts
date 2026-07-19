@@ -7,6 +7,10 @@ export type RoomLobbyReturnState = {
   returnedPlayerIds: string[];
 };
 
+export type RoomLobbyReturnAction =
+  | { type: "confirm-lobby-return"; actorId: string }
+  | { type: "remove-waiting-player"; actorId: string; targetPlayerId: string };
+
 type RoomPlayer = { id: string };
 
 function isRoomPlayer(players: readonly RoomPlayer[], playerId: string) {

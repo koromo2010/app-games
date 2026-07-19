@@ -12,6 +12,7 @@ import { loadIndexedOnlineRoomPage } from "@/lib/online-room-list";
 import { canLeaveOnlineRoomLobby, onlineRoomActorAccess } from "@/lib/online-room-access";
 import { createIndexedOnlineRoom, mutateOnlineRoomWithRetry } from "@/lib/online-room-persistence";
 import { schedulePostResponseWork } from "@/lib/post-response-work";
+import { allRoomPlayersReturned, beginRoomLobbyReturn, canRemoveWaitingRoomPlayer, confirmRoomLobbyReturn } from "@/lib/room-lobby-return";
 import type {
   NorthernGameAction,
   NorthernRoom,
@@ -132,13 +133,23 @@ export async function applyStoredNorthernAction(code: string, action: NorthernRo
     if (action.type === "join-room") {
       if (current.phase !== "lobby" || action.actorId !== action.player.id) throw new Error("NORTHERN_ROOM_FORBIDDEN");
       if (current.passphrase && current.passphrase !== action.passphrase.trim()) throw new Error("NORTHERN_BAD_PASSPHRASE");
-      if (current.players.some((player) => player.id === action.actorId)) return current;
+      if (current.players.some((player) => player.id === action.actorId)) return { ...current, lobbyReturn: confirmRoomLobbyReturn(current.lobbyReturn, current.players, action.actorId) };
       if (current.players.length >= maximumPlayers) throw new Error("NORTHERN_ROOM_FULL");
-      return { ...current, players: [...current.players, action.player], notice: `${action.player.name}さんが参加しました。` };
+      const players = [...current.players, action.player];
+      return { ...current, players, lobbyReturn: confirmRoomLobbyReturn(current.lobbyReturn, players, action.actorId), notice: `${action.player.name}さんが参加しました。` };
     }
 
     const { isHost: actorIsHost, isMember: actorIsMember } = onlineRoomActorAccess(current.hostId, current.players, action.actorId, { excludeDummy: true });
     if (!actorIsMember) throw new Error("NORTHERN_ROOM_FORBIDDEN");
+
+    if (action.type === "confirm-lobby-return") {
+      if (current.phase !== "lobby" || !current.lobbyReturn) return current;
+      return { ...current, lobbyReturn: confirmRoomLobbyReturn(current.lobbyReturn, current.players, action.actorId) };
+    }
+    if (action.type === "remove-waiting-player") {
+      if (!actorIsHost || current.phase !== "lobby" || !canRemoveWaitingRoomPlayer(current.lobbyReturn, current.players, current.hostId, action.targetPlayerId)) throw new Error("NORTHERN_ROOM_FORBIDDEN");
+      return { ...current, players: current.players.filter((player) => player.id !== action.targetPlayerId), notice: "復帰待ちの参加者を退出扱いにしました。" };
+    }
 
     if (action.type === "leave-room") {
       if (!canLeaveOnlineRoomLobby({ isHost: actorIsHost, isMember: actorIsMember }, current.phase)) throw new Error("NORTHERN_ROOM_FORBIDDEN");
@@ -184,17 +195,18 @@ export async function applyStoredNorthernAction(code: string, action: NorthernRo
     }
     if (action.type === "start-game") {
       if (!actorIsHost || current.phase !== "lobby") throw new Error("NORTHERN_ROOM_FORBIDDEN");
+      if (!allRoomPlayersReturned(current.lobbyReturn, current.players)) throw new Error("NORTHERN_PLAYERS_NOT_RETURNED");
       if (current.players.length < 2) throw new Error("NORTHERN_NOT_ENOUGH_PLAYERS");
       const game = createNorthernGame(current.players.map((player) => ({ id: player.id, name: player.name })));
-      return { ...current, phase: "playing", game, turnStartedAt: Date.now(), notice: "ゲームを開始しました。最初の手番です。" };
+      return { ...current, phase: "playing", lobbyReturn: undefined, game, turnStartedAt: Date.now(), notice: "ゲームを開始しました。最初の手番です。" };
     }
     if (action.type === "reset-game") {
       if (!actorIsHost || current.phase !== "finished") throw new Error("NORTHERN_ROOM_FORBIDDEN");
-      return { ...current, gameNumber: current.gameNumber + 1, phase: "lobby", debugReplayEnabled: false, game: null, turnStartedAt: null, notice: "同じ部屋で次のゲームを準備できます。" };
+      return { ...current, gameNumber: current.gameNumber + 1, phase: "lobby", lobbyReturn: beginRoomLobbyReturn(current.players, action.actorId, "round-result", current.gameNumber), debugReplayEnabled: false, game: null, turnStartedAt: null, notice: "同じ部屋で次のゲームを準備できます。" };
     }
     if (action.type === "abort-game") {
       if (!actorIsHost || !current.debugMode || current.phase === "lobby") throw new Error("NORTHERN_ROOM_FORBIDDEN");
-      return { ...current, phase: "lobby", debugReplayEnabled: false, game: null, turnStartedAt: null, notice: "ゲームを中断し、ゲーム開始前へ戻りました。" };
+      return { ...current, phase: "lobby", lobbyReturn: beginRoomLobbyReturn(current.players, action.actorId, "debug-abort", current.gameNumber), debugReplayEnabled: false, game: null, turnStartedAt: null, notice: "ゲームを中断し、ゲーム開始前へ戻りました。" };
     }
     if (action.type === "game-action") {
       if (!current.game || current.phase !== "playing") throw new Error("NORTHERN_ROOM_FORBIDDEN");
@@ -222,6 +234,7 @@ export async function applyStoredNorthernAction(code: string, action: NorthernRo
   await redisCommand<number>(["SADD", roomIndexKey, room.code]);
   await saveActiveRooms(room);
   if (action.type === "leave-room") await clearActiveRoom(action.actorId, room.code);
+  if (action.type === "remove-waiting-player") await clearActiveRoom(action.targetPlayerId, room.code);
   return room;
 }
 

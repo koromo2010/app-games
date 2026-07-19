@@ -4,6 +4,7 @@ import { normalizeOnlineRoomCode, onlineRoomPassphraseMaximumLength } from "@/li
 import { onlineRoomPlayerLimits } from "@/lib/online-room-policy";
 import { normalizePlayerTimeoutFields } from "@/lib/player-timeout-policy";
 import { isAvatarColor, isAvatarImage } from "@/lib/player-session";
+import { normalizeRoomLobbyReturnState } from "@/lib/room-lobby-return";
 import {
   normalizeTopicDictionarySource,
   normalizeTopicPairDistance,
@@ -174,6 +175,7 @@ export function normalizeWordWolfRoom(value: unknown): WordWolfRoom | null {
     clueMode: normalizeClueMode(parsed.clueMode),
     randomizeTurnOrder: parsed.randomizeTurnOrder ?? true,
     players: normalizedPlayers,
+    lobbyReturn: normalizeRoomLobbyReturnState(parsed.lobbyReturn, normalizedPlayers),
     ...normalizePlayerTimeoutFields(parsed, normalizedPlayers.map((player) => player.id)),
     roundsTotal: normalizeRoundsTotal(parsed.roundsTotal),
     turnTimeLimitSeconds: normalizeCommonTimeLimit(parsed.turnTimeLimitSeconds),

@@ -11,12 +11,14 @@ import { GameTopMenu, gameTopBannerActionClass, gameTopBannerDangerActionClass, 
 import { GamePlayerMenu } from "@/app/components/GamePlayerMenu";
 import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomResultActions } from "@/app/components/RoomResultActions";
+import { RoomLobbyReturnStatus } from "@/app/components/RoomLobbyReturnStatus";
 import { hodoaiRoomApi } from "@/app/hodoai-talk/hodoai-room-api-client";
 import { HodoaiPlayPanels } from "@/app/hodoai-talk/HodoaiPlayPanels";
 import { HodoaiRulesDialog } from "@/app/hodoai-talk/HodoaiRulesDialog";
 import { useHodoaiRoomActions } from "@/app/hodoai-talk/use-hodoai-room-actions";
 import { useHodoaiRoomSession } from "@/app/hodoai-talk/use-hodoai-room-session";
 import { useHodoaiViewModel } from "@/app/hodoai-talk/use-hodoai-view-model";
+import { useRoomLobbyReturnConfirmation } from "@/app/hooks/use-room-lobby-return-confirmation";
 import { WordScaleRoomPanel } from "@/app/hodoai-talk/WordScaleRoomPanel";
 import {
   defaultAvatarImage,
@@ -55,6 +57,7 @@ export function HodoaiTalkGame() {
   const { isHost, latestResult, latestResultRows, configItems } = viewModel;
 
   const { runAction, createRoom, listRooms, joinRoom, dissolveRoom, leaveRoom, updateConfig } = useHodoaiRoomActions({ room, session, passphrase, joinCode, isHost, markRoomDissolved: resultReturnGate.markRoomDissolved, setRoom, setError, setIsSaving, setChoices, setShowChoices });
+  useRoomLobbyReturnConfirmation({ room, playerId, confirmReturn: () => runAction({ type: "confirm-lobby-return", actorId: playerId }) });
 
   const rulesDialog = <HodoaiRulesDialog open={rulesOpen} onClose={() => setRulesOpen(false)} />;
 
@@ -116,7 +119,7 @@ export function HodoaiTalkGame() {
         <WordScaleRoomPanel playerCount={room.players.length}>
           <section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4">
             <div className="flex items-center justify-between"><h2 className="font-black">参加者</h2><span className="text-sm text-slate-400">{room.players.length}人</span></div>
-            <ul className="mt-3 max-h-[70vh] space-y-2 overflow-y-auto pr-1">{room.players.map((player) => <PlayerRow key={player.id} player={player} isHost={player.id === room.hostId} isMe={player.id === playerId} />)}</ul>
+            <ul className="mt-3 max-h-[70vh] space-y-2 overflow-y-auto pr-1">{room.players.map((player) => <PlayerRow key={player.id} player={player} isHost={player.id === room.hostId} isMe={player.id === playerId} />)}</ul><RoomLobbyReturnStatus state={room.lobbyReturn} players={room.players} hostId={room.hostId} isHost={isHost} onRemoveWaitingPlayer={(player) => { if (window.confirm(`${player.name}さんを退出扱いにしますか？`)) void runAction({ type: "remove-waiting-player", actorId: playerId, targetPlayerId: player.id }); }} />
           </section>
           <RoomConfigSummary items={configItems} />
         </WordScaleRoomPanel>

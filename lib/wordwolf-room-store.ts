@@ -17,6 +17,7 @@ import { onlineRoomPlayerLimits } from "@/lib/online-room-policy";
 import { loadIndexedOnlineRoomPage } from "@/lib/online-room-list";
 import { schedulePostResponseWork } from "@/lib/post-response-work";
 import { recoverPlayerTimeout } from "@/lib/player-timeout-policy";
+import { beginRoomLobbyReturn, canRemoveWaitingRoomPlayer, confirmRoomLobbyReturn } from "@/lib/room-lobby-return";
 import {
   addRoomScore,
   normalizeClueMode,
@@ -183,7 +184,10 @@ export async function applyStoredWordWolfRoomAction(code: string, actorId: strin
     if (!actorIsMember) throw new Error("WORDWOLF_ROOM_FORBIDDEN");
 
     let next: WordWolfRoom = current;
-    if (action.type === "recover-player") {
+    if (action.type === "confirm-lobby-return") {
+      if (current.phase !== "lobby" || !current.lobbyReturn) return current;
+      next = { ...current, lobbyReturn: confirmRoomLobbyReturn(current.lobbyReturn, current.players, actorId) };
+    } else if (action.type === "recover-player") {
       next = recoverPlayerTimeout(current, actorId, current.players.find((player) => player.id === actorId)?.name ?? "プレイヤー") ?? current;
     } else if (action.type === "update-player") {
       next = {
@@ -201,7 +205,10 @@ export async function applyStoredWordWolfRoomAction(code: string, actorId: strin
       };
     } else {
       if (!actorIsHost) throw new Error("WORDWOLF_ROOM_FORBIDDEN");
-      if (action.type === "update-config") {
+      if (action.type === "remove-waiting-player") {
+        if (current.phase !== "lobby" || !canRemoveWaitingRoomPlayer(current.lobbyReturn, current.players, current.hostId, action.targetPlayerId)) throw new Error("WORDWOLF_ROOM_FORBIDDEN");
+        next = { ...current, players: current.players.filter((player) => player.id !== action.targetPlayerId) };
+      } else if (action.type === "update-config") {
         if (current.phase !== "lobby") throw new Error("WORDWOLF_ROOM_FORBIDDEN");
         const config = action.config;
         next = {
@@ -230,10 +237,10 @@ export async function applyStoredWordWolfRoomAction(code: string, actorId: strin
         next = { ...current, players: [...current.players, { id: `dummy-${randomUUID()}`, name: `Player ${number}`, joinedAt: Date.now() }] };
       } else if (action.type === "reset-game") {
         if (current.phase !== "result") throw new Error("WORDWOLF_ROOM_FORBIDDEN");
-        next = resetWordWolfRoomToLobby(current, true);
+        next = { ...resetWordWolfRoomToLobby(current, true), lobbyReturn: beginRoomLobbyReturn(current.players, actorId, "round-result", current.gameNumber) };
       } else if (action.type === "abort-game") {
         if (!current.debugMode || current.phase === "lobby") throw new Error("WORDWOLF_ROOM_FORBIDDEN");
-        next = resetWordWolfRoomToLobby(current, false);
+        next = { ...resetWordWolfRoomToLobby(current, false), lobbyReturn: beginRoomLobbyReturn(current.players, actorId, "debug-abort", current.gameNumber) };
       } else {
         throw new Error("WORDWOLF_ROOM_FORBIDDEN");
       }
@@ -241,7 +248,9 @@ export async function applyStoredWordWolfRoomAction(code: string, actorId: strin
 
     if (next === current) return current;
     try {
-      return await saveStoredWordWolfRoom({ ...next, revision: current.revision + 1, updatedAt: Date.now() });
+      const saved = await saveStoredWordWolfRoom({ ...next, revision: current.revision + 1, updatedAt: Date.now() });
+      if (action.type === "remove-waiting-player") await deletePlayerActiveRoom(action.targetPlayerId, saved.code);
+      return saved;
     } catch (error) {
       if (!(error instanceof Error) || error.message !== "WORDWOLF_ROOM_CONFLICT") throw error;
     }
@@ -259,12 +268,21 @@ export async function joinStoredWordWolfRoom(code: string, player: Player, passp
       if (!room) throw new Error("WORDWOLF_ROOM_NOT_FOUND");
       if (room.phase !== "lobby") throw new Error("WORDWOLF_ROOM_STARTED");
       if (room.passphrase && room.passphrase !== passphrase.trim()) throw new Error("WORDWOLF_BAD_PASSPHRASE");
-      if (room.players.some((item) => item.id === player.id)) return room;
+      if (room.players.some((item) => item.id === player.id)) {
+        if (!room.lobbyReturn || room.lobbyReturn.returnedPlayerIds.includes(player.id)) return room;
+        try {
+          return await saveStoredWordWolfRoom({ ...room, lobbyReturn: confirmRoomLobbyReturn(room.lobbyReturn, room.players, player.id), revision: room.revision + 1, updatedAt: Date.now() });
+        } catch (error) {
+          if (!(error instanceof Error) || error.message !== "WORDWOLF_ROOM_CONFLICT") throw error;
+          continue;
+        }
+      }
       if (room.players.length >= onlineRoomPlayerLimits.wordwolf) throw new Error("WORDWOLF_ROOM_FULL");
       try {
         return await saveStoredWordWolfRoom({
           ...room,
           players: [...room.players, player],
+          lobbyReturn: confirmRoomLobbyReturn(room.lobbyReturn, [...room.players, player], player.id),
           revision: room.revision + 1,
           updatedAt: Date.now(),
         });

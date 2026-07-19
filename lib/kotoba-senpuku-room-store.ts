@@ -21,6 +21,7 @@ import { loadIndexedOnlineRoomPage } from "@/lib/online-room-list";
 import { canLeaveOnlineRoomLobby, onlineRoomActorAccess } from "@/lib/online-room-access";
 import { createIndexedOnlineRoom, mutateOnlineRoomWithRetry } from "@/lib/online-room-persistence";
 import { schedulePostResponseWork } from "@/lib/post-response-work";
+import { allRoomPlayersReturned, beginRoomLobbyReturn, canRemoveWaitingRoomPlayer, confirmRoomLobbyReturn } from "@/lib/room-lobby-return";
 import { addLog, beginBattle, beginRound, fillMissingSecrets, finishRound, performChallenge, performScan, reconcileProgress } from "@/lib/kotoba-senpuku-room-domain";
 import { normalizeKotobaSenpukuRoom } from "@/lib/kotoba-senpuku-room-normalizer";
 import { kotobaSenpukuRoomChoice, sanitizeKotobaSenpukuRoom } from "@/lib/kotoba-senpuku-room-presentation";
@@ -120,19 +121,28 @@ export async function applyStoredKotobaSenpukuAction(code: string, action: Kotob
     if (action.type === "join-room") {
       if (current.phase !== "lobby" || action.actorId !== action.player.id) throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
       if (current.passphrase && current.passphrase !== action.passphrase.trim()) throw new Error("KOTOBA_SENPUKU_BAD_PASSPHRASE");
-      if (current.players.some((player) => player.id === action.actorId)) return current;
+      if (current.players.some((player) => player.id === action.actorId)) return { ...current, lobbyReturn: confirmRoomLobbyReturn(current.lobbyReturn, current.players, action.actorId) };
       if (current.players.length >= onlineRoomPlayerLimits.kotobaSenpuku) throw new Error("KOTOBA_SENPUKU_ROOM_FULL");
-      return addLog({ ...current, players: [...current.players, action.player] }, `${action.player.name}さんが参加しました。`);
+      const players = [...current.players, action.player];
+      return addLog({ ...current, players, lobbyReturn: confirmRoomLobbyReturn(current.lobbyReturn, players, action.actorId) }, `${action.player.name}さんが参加しました。`);
     }
 
     const { isHost: actorIsHost, isMember: actorIsMember } = onlineRoomActorAccess(current.hostId, current.players, action.actorId, { excludeDummy: true });
     if (!actorIsMember) throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
+    if (action.type === "confirm-lobby-return") {
+      if (current.phase !== "lobby" || !current.lobbyReturn) return current;
+      return { ...current, lobbyReturn: confirmRoomLobbyReturn(current.lobbyReturn, current.players, action.actorId) };
+    }
+    if (action.type === "remove-waiting-player") {
+      if (!actorIsHost || current.phase !== "lobby" || !canRemoveWaitingRoomPlayer(current.lobbyReturn, current.players, current.hostId, action.targetPlayerId)) throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
+      return { ...current, players: current.players.filter((player) => player.id !== action.targetPlayerId) };
+    }
     if (action.type === "recover-player") {
       return recoverPlayerTimeout(current, action.actorId, current.players.find((player) => player.id === action.actorId)?.name ?? "プレイヤー") ?? current;
     }
     if (action.type === "abort-game") {
       if (!actorIsHost || !current.debugMode || current.phase === "lobby") throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
-      return { ...current, phase: "lobby", round: 1, debugReplayEnabled: false, theme: null, secrets: {}, submittedIds: [], masks: {}, calledKana: [], exposedIds: [], roundEvents: [], roundSignals: {}, totalScores: {}, activePlayerIndex: 0, turnNumber: 1, history: [], log: ["ゲームを中断し、ゲーム開始前へ戻りました。"], phaseStartedAt: null };
+      return { ...current, phase: "lobby", lobbyReturn: beginRoomLobbyReturn(current.players, action.actorId, "debug-abort", current.gameNumber), round: 1, debugReplayEnabled: false, theme: null, secrets: {}, submittedIds: [], masks: {}, calledKana: [], exposedIds: [], roundEvents: [], roundSignals: {}, totalScores: {}, activePlayerIndex: 0, turnNumber: 1, history: [], log: ["ゲームを中断し、ゲーム開始前へ戻りました。"], phaseStartedAt: null };
     }
 
     const reconciled = reconcileProgress(current);
@@ -163,8 +173,9 @@ export async function applyStoredKotobaSenpukuAction(code: string, action: Kotob
     }
     if (action.type === "start-game") {
       if (!actorIsHost || current.phase !== "lobby") throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
+      if (!allRoomPlayersReturned(current.lobbyReturn, current.players)) throw new Error("KOTOBA_SENPUKU_PLAYERS_NOT_RETURNED");
       if (current.players.length < 2) throw new Error("KOTOBA_SENPUKU_NOT_ENOUGH_PLAYERS");
-      return beginRound({ ...current, round: 1, history: [], totalScores: Object.fromEntries(current.players.map((player) => [player.id, 0])) }, 1);
+      return beginRound({ ...current, lobbyReturn: undefined, round: 1, history: [], totalScores: Object.fromEntries(current.players.map((player) => [player.id, 0])) }, 1);
     }
     if (action.type === "submit-secret") {
       if (current.phase !== "secret" || action.round !== current.round || current.secrets[action.actorId]) return current;
@@ -183,7 +194,7 @@ export async function applyStoredKotobaSenpukuAction(code: string, action: Kotob
     }
     if (action.type === "reset-game") {
       if (!actorIsHost || current.phase !== "result" || current.round < current.roundsTotal) throw new Error("KOTOBA_SENPUKU_ROOM_FORBIDDEN");
-      return { ...current, gameNumber: current.gameNumber + 1, phase: "lobby", round: 1, debugReplayEnabled: false, theme: null, secrets: {}, submittedIds: [], masks: {}, calledKana: [], exposedIds: [], roundEvents: [], roundSignals: {}, totalScores: {}, activePlayerIndex: 0, turnNumber: 1, history: [], log: ["同じ部屋で次のゲームを準備できます。"], phaseStartedAt: null };
+      return { ...current, gameNumber: current.gameNumber + 1, phase: "lobby", lobbyReturn: beginRoomLobbyReturn(current.players, action.actorId, "round-result", current.gameNumber), round: 1, debugReplayEnabled: false, theme: null, secrets: {}, submittedIds: [], masks: {}, calledKana: [], exposedIds: [], roundEvents: [], roundSignals: {}, totalScores: {}, activePlayerIndex: 0, turnNumber: 1, history: [], log: ["同じ部屋で次のゲームを準備できます。"], phaseStartedAt: null };
     }
 
     const activePlayer = current.players[current.activePlayerIndex];
@@ -217,6 +228,7 @@ export async function applyStoredKotobaSenpukuAction(code: string, action: Kotob
   await redisCommand<number>(["SADD", roomIndexKey, room.code]);
   await saveActiveRooms(room);
   if (action.type === "leave-room") await clearActiveRoom(action.actorId, room.code);
+  if (action.type === "remove-waiting-player") await clearActiveRoom(action.targetPlayerId, room.code);
   return room;
 }
 

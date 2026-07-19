@@ -23,6 +23,7 @@ import {
   normalizeCodeInterceptCardCount,
   normalizeCodeInterceptCodeLength,
   normalizeCodeInterceptTimeLimits,
+  normalizeCodeInterceptTimeoutClues,
   otherCodeInterceptTeam,
   withCodeInterceptConsensusAnswer,
   type CodeInterceptRoom,
@@ -38,6 +39,7 @@ import { dissolveHostedIndexedOnlineRooms, dissolveIndexedOnlineRoom } from "@/l
 import { claimOnlineRoomForPlayer, loadPlayerActiveOnlineRoom, releasePlayerActiveRoom, saveOnlineRoomPlayerIndexes, type ActiveRoomClaim } from "@/lib/player-active-room";
 import { recordCodeInterceptGameResults } from "@/lib/player-stats-store";
 import { redisCommand } from "@/lib/redis-store";
+import { allRoomPlayersReturned, beginRoomLobbyReturn, canRemoveWaitingRoomPlayer, confirmRoomLobbyReturn } from "@/lib/room-lobby-return";
 import { allAnswersSubmitted, allCluesSubmitted, allCodeLengthsChosen, beginCluePhase, beginGame, beginRound, resetGame, targetPlayer } from "@/lib/code-intercept-room-domain";
 import { normalizeCodeInterceptRoom } from "@/lib/code-intercept-room-normalizer";
 import { codeInterceptRoomChoice, sanitizeCodeInterceptRoom } from "@/lib/code-intercept-room-presentation";
@@ -52,6 +54,8 @@ const playerActiveRoomKeyPrefix = "code-intercept:player-active-room:";
 const debugActionLabels: Record<CodeInterceptRoomAction["type"], string> = {
   "join-room": "部屋に参加",
   "leave-room": "部屋から退出",
+  "confirm-lobby-return": "ロビー復帰を確認",
+  "remove-waiting-player": "復帰待ち参加者を退出",
   "set-team": "所属チームを変更",
   "set-debug": "デバッグモードを変更",
   "set-debug-replay": "プレイバック記録設定を変更",
@@ -60,6 +64,7 @@ const debugActionLabels: Record<CodeInterceptRoomAction["type"], string> = {
   "start-game": "ゲームを開始",
   "select-code-length": "暗号桁数を確定",
   "submit-clues": "暗号ヒントを提出",
+  "submit-timeout-clues": "時間切れ時の入力済みヒントを提出",
   "submit-ally-answer": "味方暗号を回答",
   "submit-intercept-answer": "敵暗号の傍受回答を提出",
   "next-round": "次ラウンドへ進行",
@@ -137,12 +142,21 @@ export async function applyStoredCodeInterceptAction(code: string, action: CodeI
     if (action.type === "join-room") {
       if (current.phase !== "lobby" || action.actorId !== action.player.id) throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
       if (current.passphrase && current.passphrase !== action.passphrase.trim()) throw new Error("CODE_INTERCEPT_BAD_PASSPHRASE");
-      if (current.players.some((player) => player.id === action.actorId)) return current;
+      if (current.players.some((player) => player.id === action.actorId)) return { ...current, lobbyReturn: confirmRoomLobbyReturn(current.lobbyReturn, current.players, action.actorId) };
       if (!codeInterceptRoomHasSpace(current)) throw new Error("CODE_INTERCEPT_ROOM_FULL");
-      return { ...current, players: [...current.players, { ...action.player, teamId: nextBalancedTeam(current.players) }] };
+      const players = [...current.players, { ...action.player, teamId: nextBalancedTeam(current.players) }];
+      return { ...current, players, lobbyReturn: confirmRoomLobbyReturn(current.lobbyReturn, players, action.actorId) };
     }
     const { isHost, isMember } = onlineRoomActorAccess(current.hostId, current.players, action.actorId);
     if (!isMember) throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
+    if (action.type === "confirm-lobby-return") {
+      if (current.phase !== "lobby" || !current.lobbyReturn) return current;
+      return { ...current, lobbyReturn: confirmRoomLobbyReturn(current.lobbyReturn, current.players, action.actorId) };
+    }
+    if (action.type === "remove-waiting-player") {
+      if (!isHost || current.phase !== "lobby" || !canRemoveWaitingRoomPlayer(current.lobbyReturn, current.players, current.hostId, action.targetPlayerId)) throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
+      return { ...current, players: current.players.filter((player) => player.id !== action.targetPlayerId) };
+    }
     if (action.type === "expire-phase") {
       if (current.phaseStartedAt !== action.phaseStartedAt || !isCodeInterceptPhaseExpired(current)) throw new Error("CODE_INTERCEPT_ROOM_CONFLICT");
       return expireCodeInterceptPhase(current);
@@ -189,17 +203,18 @@ export async function applyStoredCodeInterceptAction(code: string, action: CodeI
     }
     if (action.type === "start-game") {
       if (!isHost || current.phase !== "lobby") throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
+      if (!allRoomPlayersReturned(current.lobbyReturn, current.players)) throw new Error("CODE_INTERCEPT_PLAYERS_NOT_RETURNED");
       if ((!current.debugMode && current.players.length < codeInterceptMinimumPlayers) || !codeInterceptRoomIsStartable(current)) throw new Error("CODE_INTERCEPT_NOT_ENOUGH_PLAYERS");
       const wordPool = await loadCodeInterceptWordPool(current.cardCount * 2);
-      return beginGame(current, wordPool);
+      return beginGame({ ...current, lobbyReturn: undefined }, wordPool);
     }
     if (action.type === "abort-game") {
       if (!isHost || !current.debugMode || current.phase === "lobby") throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
-      return resetGame({ ...current, gameNumber: current.gameNumber - 1 });
+      return { ...resetGame({ ...current, gameNumber: current.gameNumber - 1 }), lobbyReturn: beginRoomLobbyReturn(current.players, action.actorId, "debug-abort", current.gameNumber) };
     }
     if (action.type === "reset-game") {
       if (!isHost || current.phase !== "game-result") throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
-      return resetGame(current);
+      return { ...resetGame(current), lobbyReturn: beginRoomLobbyReturn(current.players, action.actorId, "round-result", current.gameNumber) };
     }
     if (action.type === "next-round") {
       if (!isHost || current.phase !== "round-result") throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
@@ -225,6 +240,19 @@ export async function applyStoredCodeInterceptAction(code: string, action: CodeI
       if (current.phase !== "clue" || current.clueGiverIds[player.teamId] !== player.id) throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
       if (!areValidCodeInterceptClues(action.clues, codeLengthForTeam(current, player.teamId))) throw new Error("CODE_INTERCEPT_INVALID_CLUE");
       const next = { ...current, clues: { ...current.clues, [player.teamId]: action.clues.map((clue) => clue.trim()) } };
+      return allCluesSubmitted(next) ? { ...next, phase: "answer" as const, phaseStartedAt: Date.now() } : next;
+    }
+    if (action.type === "submit-timeout-clues") {
+      const player = targetPlayer(current, action.actorId);
+      const codeLength = codeLengthForTeam(current, player.teamId);
+      if (current.phase !== "clue" || current.clueGiverIds[player.teamId] !== player.id || current.clues[player.teamId] || action.clues.length !== codeLength) throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
+      const clues = normalizeCodeInterceptTimeoutClues(action.clues, codeLength);
+      if (!clues) throw new Error("CODE_INTERCEPT_INVALID_CLUE");
+      const next = {
+        ...current,
+        clues: { ...current.clues, [player.teamId]: clues },
+        timeoutPenaltyPhases: { ...current.timeoutPenaltyPhases, [player.teamId]: [...new Set([...(current.timeoutPenaltyPhases[player.teamId] ?? []), "clue" as const])] },
+      };
       return allCluesSubmitted(next) ? { ...next, phase: "answer" as const, phaseStartedAt: Date.now() } : next;
     }
     if (action.type === "submit-ally-answer") {
@@ -287,6 +315,7 @@ export async function applyStoredCodeInterceptAction(code: string, action: CodeI
   await redisCommand<number>(["SADD", roomIndexKey, room.code]);
   await saveActiveRooms(room);
   if (action.type === "leave-room") await clearActiveRoom(action.actorId, room.code);
+  if (action.type === "remove-waiting-player") await clearActiveRoom(action.targetPlayerId, room.code);
   return room;
 }
 

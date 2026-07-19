@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
 import { GameAdSlot } from "@/app/components/GameAdSlot";
 import { GamePlayerMenu } from "@/app/components/GamePlayerMenu";
@@ -12,10 +12,12 @@ import { GameTopBanner, gameTopBannerOffsetClass } from "@/app/components/GameTo
 import { GameTopMenu, gameTopBannerActionClass, gameTopBannerDangerActionClass, gameTopMenuItemClass } from "@/app/components/GameTopMenu";
 import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomResultActions } from "@/app/components/RoomResultActions";
+import { RoomLobbyReturnStatus } from "@/app/components/RoomLobbyReturnStatus";
 import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
 import { confirmRoomLeave } from "@/app/components/room-navigation-confirmation";
 import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "@/app/hooks/use-online-room-polling";
 import { useRoomResultReturnGate } from "@/app/hooks/use-room-result-return-gate";
+import { useRoomLobbyReturnConfirmation } from "@/app/hooks/use-room-lobby-return-confirmation";
 import { applyCodeInterceptRoomAction, codeInterceptRoomApi, createCodeInterceptRoom } from "@/app/code-intercept/code-intercept-room-api-client";
 import {
   codeInterceptAnswererIds,
@@ -30,6 +32,7 @@ import {
   codeInterceptPlayerLimit,
   codeInterceptRoomIsStartable,
   codeInterceptShareText,
+  codeInterceptTimeoutGraceMs,
   codeInterceptTeamIds,
   isValidCodeInterceptAnswer,
   normalizeCodeInterceptCodeLength,
@@ -43,6 +46,8 @@ import {
   type CodeInterceptTeamRoundResult,
 } from "@/lib/code-intercept";
 import { OnlineRoomApiError, restoreOnlineRoom } from "@/lib/online-room-api-client";
+import { synchronizedNow } from "@/lib/server-clock";
+import { allRoomPlayersReturned } from "@/lib/room-lobby-return";
 import { defaultAvatarImage, fallbackAvatarColor, isPlayerAuthenticated, loadPersistentPlayerSession, type PlayerSession } from "@/lib/player-session";
 
 const lastRoomKey = "code-intercept-last-room";
@@ -164,7 +169,7 @@ function ResultCard({ result, room }: { result: CodeInterceptTeamRoundResult; ro
       <dt className="text-slate-400">正解暗号</dt><dd className="font-mono font-black">{result.secretCode.length > 0 ? result.secretCode.join("・") : "相手には非公開"}</dd>
       <dt className="text-slate-400">今回の桁数</dt><dd className="font-black">{result.codeLength}桁</dd>
       <dt className="text-slate-400">ヒント</dt><dd className="font-black">{result.clues.join("／")}</dd>
-      <dt className="text-slate-400">味方回答</dt><dd>{result.allyAnswer?.join("・") ?? (result.secretCode.length === 0 ? "相手には非公開" : "未回答")} <strong className={result.allyCorrect ? "text-emerald-200" : "text-rose-200"}>{result.allyCorrect ? "伝達成功" : result.miscommunicationDamage > 0 ? `伝達失敗 −${result.miscommunicationDamage}` : "時間切れ"}</strong></dd>
+      <dt className="text-slate-400">味方回答</dt><dd>{result.allyAnswer?.join("・") ?? (result.secretCode.length === 0 ? "相手には非公開" : "未回答")} <strong className={result.allyCorrect ? "text-emerald-200" : "text-rose-200"}>{result.allyCorrect ? "伝達成功" : result.miscommunicationDamage > 0 ? `伝達失敗 −${result.miscommunicationDamage}` : "未回答・減点なし"}</strong></dd>
       <dt className="text-slate-400">{teamLabel(enemy)}の傍受</dt><dd>{result.enemyInterceptAnswer?.join("・") ?? (room.roundNumber === 1 ? "第1ラウンドはなし" : "未回答")} {room.roundNumber >= 2 && <strong className={result.enemyIntercepted ? "text-rose-200" : "text-emerald-200"}>{result.enemyIntercepted ? `傍受成功 −${result.interceptionDamage}` : "傍受回避"}</strong>}</dd>
       {result.timeoutDamage > 0 && <><dt className="text-slate-400">時間切れ</dt><dd className="font-black text-rose-200">−{result.timeoutDamage}</dd></>}
       <dt className="font-bold">今回のダメージ</dt><dd className="font-black text-rose-200">−{result.totalDamage}</dd>
@@ -239,6 +244,7 @@ export function CodeInterceptGame() {
   const [interceptDraftsByRound, setInterceptDraftsByRound] = useState<Record<string, number[]>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
+  const timeoutClueSubmissionKeyRef = useRef("");
   const resultReturnGate = useRoomResultReturnGate({ room, setRoom, playerId: session?.id ?? "", resultPhase: "game-result", onReturnUnavailable: () => setError("部屋に戻れません。解散されたか、参加情報が変更されています。") });
 
   useEffect(() => {
@@ -299,7 +305,7 @@ export function CodeInterceptGame() {
 
   useEffect(() => {
     if (!timerRoomCode || !playerId || timerDurationSeconds <= 0 || !timerPhaseStartedAt || !timerPhase || !["code-length", "clue", "answer"].includes(timerPhase)) return;
-    const delay = Math.max(0, timerPhaseStartedAt + timerDurationSeconds * 1000 - Date.now()) + 100;
+    const delay = Math.max(0, timerPhaseStartedAt + timerDurationSeconds * 1000 + codeInterceptTimeoutGraceMs() - synchronizedNow()) + 100;
     const timer = window.setTimeout(() => {
       void applyCodeInterceptRoomAction(timerRoomCode, { type: "expire-phase", actorId: playerId, phaseStartedAt: timerPhaseStartedAt })
         .then((saved) => setRoom((current) => current?.code === saved.code ? saved : current))
@@ -315,6 +321,26 @@ export function CodeInterceptGame() {
     catch (caught) { setError(apiMessage(caught, "操作を保存できませんでした。")); return null; }
     finally { setIsSaving(false); }
   }, [isSaving, room]);
+  useRoomLobbyReturnConfirmation({ room, playerId, confirmReturn: () => runAction({ type: "confirm-lobby-return", actorId: playerId }) });
+
+  useEffect(() => {
+    if (!room || room.phase !== "clue" || !room.phaseStartedAt || room.clueTimeLimitSeconds <= 0 || !isClueGiver || !myTeamId || room.clues[myTeamId]) return;
+    const typedClues = clueDrafts.slice(0, myCodeLength);
+    if (!typedClues.some((clue) => clue.trim())) return;
+    const key = `${draftRound}:${playerId}`;
+    const delay = Math.max(0, room.phaseStartedAt + room.clueTimeLimitSeconds * 1000 - synchronizedNow());
+    const timer = window.setTimeout(() => {
+      if (timeoutClueSubmissionKeyRef.current === key) return;
+      timeoutClueSubmissionKeyRef.current = key;
+      const action: CodeInterceptRoomAction = typedClues.every((clue) => clue.trim())
+        ? { type: "submit-clues", actorId: playerId, clues: typedClues.map((clue) => clue.trim()) }
+        : { type: "submit-timeout-clues", actorId: playerId, clues: typedClues };
+      void applyCodeInterceptRoomAction(room.code, action)
+        .then((saved) => setRoom((current) => current?.code === saved.code ? saved : current))
+        .catch(() => undefined);
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [clueDrafts, draftRound, isClueGiver, myCodeLength, myTeamId, playerId, room]);
 
   const createRoom = async () => {
     if (!session?.id || isSaving) return;
@@ -425,8 +451,8 @@ export function CodeInterceptGame() {
     </GameTopBanner>
     {rulesDialog}<GameAdSlot gameId="code-intercept" surface={room.phase === "lobby" ? "room-lobby" : room.phase === "game-result" ? "result" : null} disabled={room.debugMode} />
     <div className="mx-auto grid max-w-7xl gap-4 px-4 py-5 lg:grid-cols-[300px_minmax(0,1fr)]">
-      <aside className="space-y-4"><section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4"><div className="flex items-center justify-between"><h2 className="font-black">参加者</h2><span className="text-sm text-slate-400">{room.players.length}/{room.playerCapacity}人</span></div><ul className="mt-3 space-y-2">{room.players.map((player) => <PlayerCard key={player.id} player={player} room={room} me={playerId} />)}</ul></section>
-        <RoomConfigSummary items={[{ label: "チーム編成", value: room.teamAssignmentMode === "random" ? "開始時ランダム" : "手動" }, { label: "秘密カード C", value: `${room.cardCount}枚` }, { label: "暗号桁数", value: room.codeLengthMode === "fixed" ? `固定・${room.fixedCodeLength}桁` : "毎ラウンド選択" }, { label: "正解暗号", value: codeRevealLabel(room) }, { label: "初期ポイント X", value: `${room.initialPoints}点` }, { label: "伝達失敗", value: `−${room.miscommunicationDamage}` }, { label: "傍受成功", value: `−${room.interceptionDamage}` }, { label: "時間切れ", value: "未完了チーム −1" }, { label: "傍受開始", value: "第2ラウンド" }, { label: "出題・ヒント", value: timeLimitLabel(room.clueTimeLimitSeconds) }, { label: "ソナー選択", value: timeLimitLabel(room.answerTimeLimitSeconds) }]} />
+      <aside className="space-y-4"><section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4"><div className="flex items-center justify-between"><h2 className="font-black">参加者</h2><span className="text-sm text-slate-400">{room.players.length}/{room.playerCapacity}人</span></div><ul className="mt-3 space-y-2">{room.players.map((player) => <PlayerCard key={player.id} player={player} room={room} me={playerId} />)}</ul><RoomLobbyReturnStatus state={room.lobbyReturn} players={room.players} hostId={room.hostId} isHost={isHost} onRemoveWaitingPlayer={(player) => { if (window.confirm(`${player.name}さんを退出扱いにしますか？`)) void runAction({ type: "remove-waiting-player", actorId: playerId, targetPlayerId: player.id }); }} /></section>
+        <RoomConfigSummary items={[{ label: "チーム編成", value: room.teamAssignmentMode === "random" ? "開始時ランダム" : "手動" }, { label: "秘密カード C", value: `${room.cardCount}枚` }, { label: "暗号桁数", value: room.codeLengthMode === "fixed" ? `固定・${room.fixedCodeLength}桁` : "毎ラウンド選択" }, { label: "正解暗号", value: codeRevealLabel(room) }, { label: "初期ポイント X", value: `${room.initialPoints}点` }, { label: "伝達失敗", value: `−${room.miscommunicationDamage}` }, { label: "傍受成功", value: `−${room.interceptionDamage}` }, { label: "出題欄に空欄", value: "−1" }, { label: "全欄入力済み", value: "自動提出・減点なし" }, { label: "回答未提出", value: "減点なし" }, { label: "傍受開始", value: "第2ラウンド" }, { label: "出題・ヒント", value: timeLimitLabel(room.clueTimeLimitSeconds) }, { label: "ソナー選択", value: timeLimitLabel(room.answerTimeLimitSeconds) }]} />
       </aside>
       <div className="space-y-4">
         {error && <p className="rounded-xl border border-rose-300/30 bg-rose-300/10 p-3 text-sm font-bold text-rose-100">{error}</p>}
@@ -458,7 +484,7 @@ export function CodeInterceptGame() {
                 <RoomTimeLimitControl label="出題・ヒント作成時間" value={room.clueTimeLimitSeconds} onChange={(seconds) => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, teamAssignmentMode: room.teamAssignmentMode, codeLengthMode: room.codeLengthMode, codeRevealMode: room.codeRevealMode, fixedCodeLength: room.fixedCodeLength, clueTimeLimitSeconds: seconds, answerTimeLimitSeconds: room.answerTimeLimitSeconds })} />
                 <RoomTimeLimitControl label="ソナー選択時間" value={room.answerTimeLimitSeconds} onChange={(seconds) => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, teamAssignmentMode: room.teamAssignmentMode, codeLengthMode: room.codeLengthMode, codeRevealMode: room.codeRevealMode, fixedCodeLength: room.fixedCodeLength, clueTimeLimitSeconds: room.clueTimeLimitSeconds, answerTimeLimitSeconds: seconds })} />
               </div>
-              <p className="mt-3 text-xs leading-5 text-slate-600">出題・ヒント作成時間は、毎ラウンド選択時の桁数決定とヒント作成でそれぞれ最初からカウントします。ソナー選択時間は、味方暗号と敵暗号の回答を選ぶ段階に適用します。時間切れでも自動で次へ進み、未完了のチームは1点減点されます。</p>
+              <p className="mt-3 text-xs leading-5 text-slate-600">出題・ヒント作成時間は、毎ラウンド選択時の桁数決定とヒント作成でそれぞれ最初からカウントします。0秒時に全ヒント欄が埋まっていれば自動提出して減点なし、空欄があれば書いた内容を残して1点減点します。回答側の未提出は減点なしです。</p>
             </fieldset>
             {room.codeLengthMode === "per-round" && <p className="mt-4 rounded-xl bg-cyan-300/10 p-3 text-sm leading-6 text-cyan-100">短い暗号は味方に伝えやすい一方、敵にも当てられやすくなります。長い暗号は傍受されにくい一方、多くのヒントが敵に残ります。</p>}
             <fieldset className="mt-5" disabled={!isHost || isSaving}>
@@ -468,7 +494,7 @@ export function CodeInterceptGame() {
             </fieldset>
           </div>
           {isHost && room.debugMode && <button type="button" disabled={isSaving || room.players.length >= room.playerCapacity} onClick={() => void runAction({ type: "debug-add-player", actorId: playerId })} className="mt-5 w-full rounded-xl border border-cyan-300/30 bg-cyan-300/10 px-4 py-3 font-black text-cyan-100">デバッグ：ダミーを追加</button>}
-          {isHost ? <button type="button" disabled={isSaving || !codeInterceptRoomIsStartable(room)} onClick={() => void runAction({ type: "start-game", actorId: playerId })} className="mt-5 w-full rounded-xl bg-amber-300 px-4 py-4 text-lg font-black text-slate-950 disabled:opacity-40">{codeInterceptRoomIsStartable(room) ? room.teamAssignmentMode === "random" ? "ランダム編成して開始" : "このチームで開始" : room.teamAssignmentMode === "random" ? "4人以上必要です" : "各チーム2人以上・人数差1以内にしてください"}</button> : <p className="mt-5 text-center font-bold text-slate-300">ホストが開始するまでお待ちください。</p>}
+          {isHost ? <button type="button" disabled={isSaving || !codeInterceptRoomIsStartable(room) || !allRoomPlayersReturned(room.lobbyReturn, room.players)} onClick={() => void runAction({ type: "start-game", actorId: playerId })} className="mt-5 w-full rounded-xl bg-amber-300 px-4 py-4 text-lg font-black text-slate-950 disabled:opacity-40">{!allRoomPlayersReturned(room.lobbyReturn, room.players) ? "参加者の復帰待ち" : codeInterceptRoomIsStartable(room) ? room.teamAssignmentMode === "random" ? "ランダム編成して開始" : "このチームで開始" : room.teamAssignmentMode === "random" ? "4人以上必要です" : "各チーム2人以上・人数差1以内にしてください"}</button> : <p className="mt-5 text-center font-bold text-slate-300">ホストが開始するまでお待ちください。</p>}
         </section>}
 
         {room.phase !== "lobby" && <TeamScoreBoard room={room} />}
