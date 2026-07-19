@@ -11,10 +11,17 @@ import { emitObservabilityEvent, observabilityErrorCode } from "@/lib/observabil
 export type GameLlmMode = "paid" | "personal" | "free" | "local";
 export type GameLlmProvider = "openai" | "gemini" | "groq";
 
+export type GameLlmJsonSchema = {
+  name: string;
+  schema: Record<string, unknown>;
+  strict?: boolean;
+};
+
 export type GameLlmGenerationOptions = {
   preferredProvider?: GameLlmProvider;
   excludedProviders?: GameLlmProvider[];
   quality?: "standard" | "high";
+  responseJsonSchema?: GameLlmJsonSchema;
   timeoutMs?: number;
 };
 
@@ -44,7 +51,13 @@ async function providerOrder(mode: Exclude<GameLlmMode, "local">, options: GameL
   return [...new Set(ordered)].filter((provider) => !excluded.has(provider));
 }
 
-async function generateOpenAiText(prompt: string, quality: "standard" | "high", apiKey: string, timeoutMs?: number) {
+async function generateOpenAiText(
+  prompt: string,
+  quality: "standard" | "high",
+  apiKey: string,
+  timeoutMs?: number,
+  responseJsonSchema?: GameLlmJsonSchema,
+) {
   const { default: OpenAI } = await import("openai");
   const client = new OpenAI({
     apiKey,
@@ -54,6 +67,16 @@ async function generateOpenAiText(prompt: string, quality: "standard" | "high", 
   const response = await client.responses.create({
     model: paidLlmModel,
     reasoning: { effort: quality === "high" ? "high" : "none" },
+    ...(responseJsonSchema ? {
+      text: {
+        format: {
+          type: "json_schema" as const,
+          name: responseJsonSchema.name,
+          schema: responseJsonSchema.schema,
+          strict: responseJsonSchema.strict ?? true,
+        },
+      },
+    } : {}),
     input: prompt,
   });
   const text = response.output_text.trim();
@@ -67,6 +90,7 @@ async function callProvider(
   quality: "standard" | "high",
   requestedMode: Exclude<GameLlmMode, "local">,
   timeoutMs?: number,
+  responseJsonSchema?: GameLlmJsonSchema,
 ) {
   const personal = requestedMode === "personal" ? await getPersonalLlmAccess() : null;
   const personalApiKey = personal?.provider === provider ? personal.apiKey : undefined;
@@ -74,7 +98,7 @@ async function callProvider(
     const apiKey = personalApiKey || (requestedMode === "paid" ? process.env.OPENAI_API_KEY?.trim() : "");
     if (!apiKey) throw new Error("OpenAI API access is not available.");
     return {
-      text: await generateOpenAiText(prompt, quality, apiKey, timeoutMs),
+      text: await generateOpenAiText(prompt, quality, apiKey, timeoutMs, responseJsonSchema),
       model: paidLlmModel,
       mode: personalApiKey ? "personal" as const : "paid" as const,
       billingSource: personalApiKey ? "personal" as const : "game-fields" as const,
@@ -89,7 +113,7 @@ async function callProvider(
     };
   }
   return {
-    text: await generateGroqText(prompt, quality, personalApiKey, timeoutMs),
+    text: await generateGroqText(prompt, quality, personalApiKey, timeoutMs, responseJsonSchema),
     model: freeGroqLlmModel,
     mode: personalApiKey ? "personal" as const : "free" as const,
     billingSource: personalApiKey ? "personal" as const : undefined,
@@ -108,7 +132,7 @@ export async function generateGameLlmText(
   for (const provider of await providerOrder(mode, options)) {
     attemptedProviders.push(provider);
     try {
-      const generated = await callProvider(provider, prompt, quality, mode, options.timeoutMs);
+      const generated = await callProvider(provider, prompt, quality, mode, options.timeoutMs, options.responseJsonSchema);
       emitObservabilityEvent("info", "ai.provider", {
         operation: "llm-gateway",
         provider,

@@ -1,4 +1,5 @@
 import { freeGroqLlmModel } from "@/lib/llm-model";
+import type { GameLlmJsonSchema } from "@/lib/game-llm";
 
 export function hasGroqApiKey() {
   return Boolean(process.env.GROQ_API_KEY?.trim());
@@ -9,6 +10,7 @@ export async function generateGroqText(
   quality: "standard" | "high" = "standard",
   apiKeyOverride?: string,
   timeoutMs?: number,
+  responseJsonSchema?: GameLlmJsonSchema,
 ) {
   const apiKey = apiKeyOverride?.trim() || process.env.GROQ_API_KEY?.trim();
   if (!apiKey) throw new Error("GROQ_API_KEY is not configured.");
@@ -24,6 +26,16 @@ export async function generateGroqText(
     model: freeGroqLlmModel,
     ...(quality === "high" ? { reasoning: { effort: "high" as const } } : {}),
     ...(quality === "high" ? { max_output_tokens: 8192 } : {}),
+    ...(responseJsonSchema ? {
+      text: {
+        format: {
+          type: "json_schema" as const,
+          name: responseJsonSchema.name,
+          schema: responseJsonSchema.schema,
+          strict: responseJsonSchema.strict ?? true,
+        },
+      },
+    } : {}),
     input: prompt,
   });
 
