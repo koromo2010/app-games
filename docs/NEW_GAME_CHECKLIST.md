@@ -4,7 +4,7 @@
 
 1. `config/game-registry.json` に最初にゲームを登録する。
 2. `playMode` を `online-room` または `local-pass-and-play` から選ぶ。
-3. LLM利用、公開範囲、アカウント戦績の有無を実態どおりに宣言する。ゲームの遊びを単純な図形で表した正方形SVGを `public/game-icons/<game-id>.svg` に追加し、既存セットと同じ濃紺背景・太線・少色の意匠にそろえる。ロビーカードではSVGをグラデーション枠より大きく配置し、枠の内側でマスクして表示する。
+3. LLM利用、公開範囲、アカウント戦績の有無を実態どおりに宣言する。ゲームの世界観と遊び方が情景として伝わる、文字なしの横長キービジュアルを `public/game-visuals/<game-id>.webp` に追加する。推奨サイズは1200×500pxとし、ロビーカードでは枠全面へ `object-cover` で表示する。小さい表示でも主題が残る中央構図と十分なコントラストを確保する。
 4. `requiredTokens` に、そのゲームで必須となる共通UIを列挙する。あわせて `timeLimit.mode` を原則 `configurable` とし、保存フィールドを `fields`、サーバー正本の期限処理を `expiryToken` に登録する。時間制限付きの文字入力がある場合は `textInputTimeout.mode: "adopt-entered-text"` とし、締切時に入力済み文字を送る実装の識別子を `implementationTokens` に登録する。文字入力がなければ `textInputTimeout.mode: "not-applicable"` と具体的な `reason` を必須にする。ゲーム進行そのものがない機能だけは `timeLimit` 自体を `not-applicable` にできる。
 5. オンライン部屋は共通TTL、サーバー正本、ホスト権限、1人1部屋を実装する。
 6. LLMは `lib/game-llm.ts`、デバッグ表示はトップバーの `DebugModeButton`、資格判定は `lib/debug-access.ts`、時間制限は `RoomTimeLimitControl` と `normalizeCommonTimeLimit` を使う。0秒を制限なしとする。時間制限付き文字入力は、画面の残り時間が0になった時点で入力ルールを満たすローカルの文字を送信し、サーバー受付猶予内なら採用する。複数欄の部分入力は有効な欄を保持し、空欄・無効欄だけを既存の時間切れ補完またはペナルティ対象にする。全必須欄が有効なら通常提出として扱い、時間切れペナルティを付けない。送信は冪等にし、最終判定とフェーズ遷移はクライアント時刻を信用せずサーバーdomain/storeで行う。この境界を自動テストする。デバッグのON/OFF・プレイバック・進行中断は独立表示せず `DebugModeButton` のプルダウンへまとめ、中断後は同じ部屋のゲーム開始前へ戻す。
