@@ -35,7 +35,7 @@ export function useTahoiyaViewModel(room: TahoiyaRoom | null, activePlayer: Taho
       ...(room.playMode === "single-answerer" ? [{ label: "回答者", value: answerer?.name ?? (room.answererMode === "random" ? "開始時にランダム" : "未指定") }] : []),
       { label: "正解情報", value: room.showRealDefinitionToWriters ? "偽説明担当に見せる" : "結果まで見せない" },
       { label: "偽説明", value: `1人${room.fakeDefinitionsPerPlayer}つ・全員完了まで修正可` }, { label: "投票", value: room.playMode === "all-vote" ? "1人1票・自分には投票不可" : "回答者のみ1票" },
-      { label: "正解文の長さ", value: "10〜30字中心・40〜60字は低確率" }, { label: "制限時間", value: room.actionTimeLimitSeconds > 0 ? `${room.actionTimeLimitSeconds}秒` : "なし" },
+      { label: "制限時間", value: room.actionTimeLimitSeconds > 0 ? `${room.actionTimeLimitSeconds}秒` : "なし" },
     ] : [];
     return { isAllVoteMode, answererCandidates, answerer, isAnswerer, activePlayerDefinitions, hasActivePlayerSubmitted, hasActivePlayerVoted, displayedVoteOptionId: selectedOptionId || savedVoteOptionId, definitionWriterCount, definitionTargetCount, writingDone, voterTarget, votingDone, remainingSeconds: deadline ? Math.max(0, Math.ceil((deadline - now) / 1000)) : null, nextWriter, nextVoter, sortedScores, roomConfigItems };
   }, [activePlayer, definitionIndex, now, room, selectedOptionId]);

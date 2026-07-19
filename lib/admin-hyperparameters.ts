@@ -17,6 +17,7 @@ import { unverifiedPlayerAccountRetentionMs } from "./player-account-retention.t
 import { consecutiveTimeoutLimit, reducedPlayerTimeLimitSeconds } from "./player-timeout-policy.ts";
 import { rateLimitPolicies } from "./rate-limit-core.ts";
 import { TAHOIYA_CORRECT_VOTE_POINTS, TAHOIYA_FOOLED_VOTE_POINTS } from "./tahoiya-scoring.ts";
+import { tahoiyaDefinitionMedianLength } from "./tahoiya-definition-length.ts";
 import {
   runtimeHyperparameterBaseValue,
   runtimeHyperparameterDefinition,
@@ -158,6 +159,7 @@ export function loadAdminHyperparameterCatalog(): AdminHyperparameterCatalog {
       id: "tahoiya", title: gameTitle("tahoiya", "たほい屋"), kind: "game", summary: "単語の再出題、説明、投票、得点の調整値です。", items: [
         item("tahoiya-players", "人数範囲", `3〜${onlineRoomPlayerLimits.tahoiya}人`, "コード抽出", "固定値", "通常プレイの最低人数と技術上限です。", "lib/online-room-policy.ts"),
         item("tahoiya-time", "説明・投票の持ち時間", "初期なし", "コード抽出", "部屋設定", "説明入力と投票に共通で使用します。", "lib/tahoiya-room-store.ts"),
+        item("tahoiya-definition-median", "正解文の長さの中央値", `${tahoiyaDefinitionMedianLength()}文字帯`, "過去指定", "固定値", "全体共通の生成分布です。10文字刻みで変更し、部屋設定には出しません。保存済みのお題は書き換えず、新しく作る正解文から反映します。", "lib/tahoiya-definition-length.ts"),
         item("tahoiya-correct-points", "本物を当てた得点", `${TAHOIYA_CORRECT_VOTE_POINTS}点/票`, "過去指定", "固定値", "本物の説明へ正しく投票した人が得ます。", "lib/tahoiya-scoring.ts"),
         item("tahoiya-fooled-points", "偽説明でだました得点", `${TAHOIYA_FOOLED_VOTE_POINTS}点/票`, "過去指定", "固定値", "自分の偽説明へ入った票ごとに得ます。", "lib/tahoiya-scoring.ts"),
         item("tahoiya-cooldown", "同じ単語の再出題間隔", "未実装", "過去指定", "未実装", "参加者の誰かが期限内に見た単語を除外します。", "共通ワードDB計画", "TAHOIYA_WORD_COOLDOWN_DAYS=90"),
