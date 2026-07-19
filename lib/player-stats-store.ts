@@ -12,10 +12,12 @@ import { emitObservabilityEvent, observabilityErrorCode, observabilityRef, type 
 import { isPostgresConfigured } from "@/lib/postgres-store";
 import {
   loadPostgresPlayerResults,
+  loadPostgresPlayerRatingStates,
   loadPostgresRatingStates,
   savePostgresPlayerResults,
 } from "@/lib/player-stats-postgres-store";
 import { mergePlayerGameResults } from "@/lib/player-stats-history";
+import { buildPlayedGameRatings } from "@/lib/player-rating-visibility";
 
 export type PlayerStatsGameType = "wordwolf" | "tahoiya" | "northern-branch" | "hodoai" | "kotoba-senpuku" | "nigoichi" | "code-intercept";
 
@@ -269,8 +271,9 @@ export async function recordCodeInterceptGameResults(room: CodeInterceptRoom) {
 export async function getPlayerStats(playerId: string, gameFilter: PlayerStatsGameFilter = "all"): Promise<PlayerStatsResponse> {
   const gameTypes: PlayerStatsGameType[] = ["wordwolf", "tahoiya", "northern-branch", "hodoai", "kotoba-senpuku", "nigoichi", "code-intercept"];
   const postgresEnabled = isPostgresConfigured();
-  const [postgresResults, rawResults, ...storedRatings] = await Promise.all([
+  const [postgresResults, postgresRatingStates, rawResults, ...storedRatings] = await Promise.all([
     postgresEnabled ? loadPostgresPlayerResults(playerId, 200).catch(() => []) : Promise.resolve([]),
+    postgresEnabled ? loadPostgresPlayerRatingStates(playerId).catch(() => new Map()) : Promise.resolve(new Map()),
     redisCommand<string[]>(["ZREVRANGE", playerResultsKey(playerId), 0, 199]).catch((error) => {
       if (postgresEnabled) return [];
       throw error;
@@ -289,9 +292,6 @@ export async function getPlayerStats(playerId: string, gameFilter: PlayerStatsGa
   }
   const filteredResults = gameFilter === "all" ? results : results.filter((result) => result.gameType === gameFilter);
   const todayStart = startOfToday(); const monthStart = startOfMonth();
-  const ratings = Object.fromEntries(gameTypes.map((gameType, index) => {
-    const persisted = results.find((result) => result.gameType === gameType && typeof result.ratingAfter === "number")?.ratingAfter;
-    return [gameType, persisted || Number(storedRatings[index]) || initialGameRating];
-  }));
+  const ratings = buildPlayedGameRatings({ gameTypes, results, storedRatings, postgresStates: postgresRatingStates, initialRating: initialGameRating });
   return { today: summarize(filteredResults.filter((result) => result.finishedAt >= todayStart)), month: summarize(filteredResults.filter((result) => result.finishedAt >= monthStart)), total: filteredResults.length > 0 ? summarize(filteredResults) : emptySummary(), recent: filteredResults.slice(0, 10), ratings };
 }

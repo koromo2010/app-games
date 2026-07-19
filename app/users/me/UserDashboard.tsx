@@ -272,14 +272,19 @@ export function UserDashboard() {
             ))}
           </div>
 
-          <div className="mt-4 grid gap-2 sm:grid-cols-2">
-            {games.filter((game) => game.stats === "account").map((game) => (
-              <div key={game.id} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm">
-                <span className="font-semibold text-slate-700">{game.title}</span>
-                <span className="font-black text-cyan-700">{isStatsLoading ? "…" : stats?.ratings[game.id as PlayerGameResult["gameType"]] ?? 1000}</span>
-              </div>
-            ))}
-          </div>
+          {isStatsLoading ? (
+            <p className="mt-4 text-sm text-slate-500">レーティングを読み込み中...</p>
+          ) : (
+            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              {games.filter((game) => game.stats === "account" && typeof stats?.ratings[game.id as PlayerGameResult["gameType"]] === "number").map((game) => (
+                <div key={game.id} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                  <span className="font-semibold text-slate-700">{game.title}</span>
+                  <span className="font-black text-cyan-700">{stats?.ratings[game.id as PlayerGameResult["gameType"]]}</span>
+                </div>
+              ))}
+              {stats && Object.keys(stats.ratings).length === 0 && <p className="text-sm text-slate-500 sm:col-span-2">ゲームを1回以上遊ぶとレーティングが表示されます。</p>}
+            </div>
+          )}
 
           <div className="mt-6">
             <h3 className="text-sm font-black text-slate-800">最近の結果</h3>
