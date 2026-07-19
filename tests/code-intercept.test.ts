@@ -21,6 +21,7 @@ import {
   withCodeInterceptConsensusAnswer,
   type CodeInterceptRoom,
 } from "../lib/code-intercept.ts";
+import { beginGame, dealSecretWords, resetGame } from "../lib/code-intercept-room-domain.ts";
 
 function room(): CodeInterceptRoom {
   const now = Date.now();
@@ -73,6 +74,26 @@ test("random team assignment can start from an unbalanced lobby and produces bal
   assert.deepEqual(randomized.map((player) => player.id), ["r2", "b1", "b2", "p5", "r1"]);
   assert.deepEqual(randomized.map((player) => player.teamId), ["red", "blue", "red", "blue", "red"]);
   assert.deepEqual(new Set(randomized.map((player) => player.id)), new Set(players.map((player) => player.id)));
+});
+
+test("a rematch clears the previous game history and deals only the supplied database words", () => {
+  const previousGame = finishCodeInterceptRound(room());
+  const lobby = resetGame(previousGame);
+  assert.equal(lobby.phase, "lobby");
+  assert.deepEqual(lobby.roundHistory, []);
+
+  const databaseWords = ["時計", "鉛筆", "図書館", "雪", "扉", "砂漠", "飛行機", "朝焼け"];
+  const started = beginGame(lobby, databaseWords);
+  assert.deepEqual(started.roundHistory, []);
+  assert.equal(started.teams.flatMap((team) => team.secretWords).length, lobby.cardCount * 2);
+  assert.deepEqual(new Set(started.teams.flatMap((team) => team.secretWords)), new Set(databaseWords));
+});
+
+test("secret cards reject a database pool that is too small after normalization", () => {
+  assert.throws(
+    () => dealSecretWords(2, [" 猫 ", "猫", "犬", "鳥"]),
+    /CODE_INTERCEPT_WORDS_UNAVAILABLE/,
+  );
 });
 
 test("answers must have the fixed length, range, and no duplicates", () => {

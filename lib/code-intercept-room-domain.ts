@@ -6,11 +6,10 @@ import {
   shuffledCode,
   type CodeInterceptRoom,
   type CodeInterceptTeamId,
-} from "@/lib/code-intercept";
-import { listLocalWordWolfWords } from "@/lib/wordwolf";
+} from "./code-intercept.ts";
 
-export function dealSecretWords(cardCount: number) {
-  const pool = [...new Set(listLocalWordWolfWords().map((word) => word.trim()).filter(Boolean))];
+export function dealSecretWords(cardCount: number, wordPool: readonly string[]) {
+  const pool = [...new Set(wordPool.map((word) => word.trim()).filter(Boolean))];
   for (let index = pool.length - 1; index > 0; index -= 1) {
     const target = Math.floor(Math.random() * (index + 1));
     [pool[index], pool[target]] = [pool[target], pool[index]];
@@ -53,8 +52,8 @@ export function beginRound(room: CodeInterceptRoom, roundNumber: number) {
     : prepared;
 }
 
-export function beginGame(room: CodeInterceptRoom) {
-  const words = dealSecretWords(room.cardCount);
+export function beginGame(room: CodeInterceptRoom, wordPool: readonly string[]) {
+  const words = dealSecretWords(room.cardCount, wordPool);
   const teams = codeInterceptTeamIds.map((id) => ({ id, name: id === "red" ? "赤チーム" : "青チーム", points: room.initialPoints, secretWords: words[id] }));
   const players = room.teamAssignmentMode === "random" ? randomizeCodeInterceptPlayers(room.players) : room.players;
   return beginRound({ ...room, players, teams, roundHistory: [], winner: null }, 1);
