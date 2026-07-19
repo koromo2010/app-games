@@ -109,6 +109,7 @@ export type HodoaiRoomAction = RoomLobbyReturnAction
   | { type: "start-game"; actorId: string }
   | { type: "submit-clue"; actorId: string; round: number; cardId: string; text: string }
   | { type: "submit-clues"; actorId: string; round: number; clues: Record<string, string> }
+  | { type: "submit-timeout-clues"; actorId: string; round: number; clues: Record<string, string> }
   | { type: "reorder"; actorId: string; round: number; order: string[] }
   | { type: "score-round"; actorId: string; round: number; force?: boolean }
   | { type: "reset-game"; actorId: string }

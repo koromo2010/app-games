@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
 import { GameAdSlot } from "@/app/components/GameAdSlot";
 import { GameRulesDialog } from "@/app/components/GameRulesDialog";
@@ -22,6 +22,7 @@ import { useRoomLobbyReturnConfirmation } from "@/app/hooks/use-room-lobby-retur
 import { applyKotobaSenpukuRoomAction, createKotobaSenpukuRoom, kotobaSenpukuRoomApi } from "@/app/kotoba-senpuku/kotoba-senpuku-room-api-client";
 import { loadPlayerRoomDefaults, savePlayerRoomDefaults } from "@/lib/game-room-defaults-client";
 import { OnlineRoomApiError } from "@/lib/online-room-api-client";
+import { synchronizedNow } from "@/lib/server-clock";
 import {
   kotobaSenpukuKanaKey,
   isValidKotobaSenpukuWord,
@@ -159,6 +160,7 @@ export function KotobaSenpukuGame() {
   const [secretWord, setSecretWord] = useState("");
   const [challengeTarget, setChallengeTarget] = useState("");
   const [challengeGuess, setChallengeGuess] = useState("");
+  const timeoutTextSubmissionKeyRef = useRef("");
   const [isSaving, setIsSaving] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const resultReturnGate = useRoomResultReturnGate({ room, setRoom, playerId: session?.id ?? "", resultPhase: "result", onReturnUnavailable: () => setError("部屋に戻れません。解散されたか、参加情報が変更されています。") });
@@ -227,6 +229,42 @@ export function KotobaSenpukuGame() {
     }
   };
   useRoomLobbyReturnConfirmation({ room, playerId, confirmReturn: () => runAction({ type: "confirm-lobby-return", actorId: playerId }) });
+
+  useEffect(() => {
+    if (!room?.phaseStartedAt || !playerId) return;
+    const secret = normalizeKotobaSenpukuWord(secretWord);
+    const canSubmitSecret = room.phase === "secret"
+      && room.secretTimeLimitSeconds > 0
+      && !room.secrets[playerId]
+      && isValidKotobaSenpukuWord(secret)
+      && [...secret].length >= minimumKotobaSenpukuWordLength(room.players.length);
+    const canSubmitChallenge = room.phase === "battle"
+      && room.turnTimeLimitSeconds > 0
+      && room.allowWordGuess
+      && canControlTurn
+      && Boolean(effectiveTarget)
+      && isValidKotobaSenpukuWord(challengeGuess);
+    if (!canSubmitSecret && !canSubmitChallenge) return;
+    const durationSeconds = canSubmitSecret ? room.secretTimeLimitSeconds : room.turnTimeLimitSeconds;
+    const actionType = canSubmitSecret ? "secret" : "challenge";
+    const key = `${room.code}:${room.round}:${room.turnNumber}:${room.phaseStartedAt}:${playerId}:${actionType}`;
+    const delay = Math.max(0, room.phaseStartedAt + durationSeconds * 1000 - synchronizedNow());
+    const timer = window.setTimeout(() => {
+      if (timeoutTextSubmissionKeyRef.current === key) return;
+      timeoutTextSubmissionKeyRef.current = key;
+      const action: KotobaSenpukuRoomAction = canSubmitSecret
+        ? { type: "submit-secret", actorId: playerId, round: room.round, word: secret }
+        : { type: "challenge-word", actorId: playerId, round: room.round, targetId: effectiveTarget, guess: challengeGuess };
+      void applyKotobaSenpukuRoomAction(room.code, action)
+        .then((saved) => {
+          setRoom((current) => current?.code === saved.code ? saved : current);
+          if (canSubmitSecret) setSecretWord("");
+          else setChallengeGuess("");
+        })
+        .catch(() => undefined);
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [canControlTurn, challengeGuess, effectiveTarget, playerId, room, secretWord]);
 
   const createRoom = async () => {
     if (!session?.id) return;

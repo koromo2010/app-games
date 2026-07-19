@@ -25,11 +25,11 @@ export function useWordWolfGameActions(args: Args) {
     } catch { args.setError("ゲームを開始できませんでした。もう一度試してください。"); }
     finally { args.setIsStarting(false); }
   };
-  const submitClue = useCallback(async () => {
-    if (!args.room || args.room.phase !== "clue" || (args.turnSecondsLeft === 0 && args.room.turnTimeLimitSeconds > 0)) return;
-    const text = args.clueInput.trim(); if (!args.clueActorId || !text) return;
-    try { const result = await submitWordWolfClue(args.room.code, args.clueActorId, text, crypto.randomUUID()); args.setClueInput(""); saveRoom(result.room); args.setRoom(result.room); }
-    catch { const latest = await loadRoomFromStore(args.room.code); if (latest) args.setRoom(latest); args.setError("発言を反映できませんでした。最新の状態を読み込みました。"); }
+  const submitClue = useCallback(async (atTimeout = false) => {
+    if (!args.room || args.room.phase !== "clue" || (!atTimeout && args.turnSecondsLeft === 0 && args.room.turnTimeLimitSeconds > 0)) return false;
+    const text = args.clueInput.trim(); if (!args.clueActorId || !text) return false;
+    try { const result = await submitWordWolfClue(args.room.code, args.clueActorId, text, crypto.randomUUID()); args.setClueInput(""); saveRoom(result.room); args.setRoom(result.room); return true; }
+    catch { const latest = await loadRoomFromStore(args.room.code); if (latest) args.setRoom(latest); args.setError("発言を反映できませんでした。最新の状態を読み込みました。"); return false; }
   }, [args]);
   const expireCurrentPhase = useCallback(async (commandId: string) => {
     if (!args.room) return;
@@ -44,10 +44,10 @@ export function useWordWolfGameActions(args: Args) {
   const submitWolfGuess = useCallback(async (isTimeout = false) => {
     if (!args.room || !args.guessActorId || !args.room.accusedId || args.guessActorId !== args.room.accusedId || !normalizeWolfIds(args.room).includes(args.guessActorId) || args.isGuessJudging) return;
     if (!isTimeout && args.turnSecondsLeft === 0 && args.room.turnTimeLimitSeconds > 0) return;
-    const guess = isTimeout ? "時間切れ" : args.guessInput.trim(); if (!guess) return;
+    const guess = args.guessInput.trim() || (isTimeout ? "時間切れ" : ""); if (!guess) return false;
     args.setIsGuessJudging(true); args.setGuessFeedbackMessage("");
-    try { const result = await submitWordWolfGuessCommand(args.room.code, guess, crypto.randomUUID()); args.setRoom(result.room); }
-    catch { args.setError("逆転回答を判定できませんでした。もう一度試してください。"); }
+    try { const result = await submitWordWolfGuessCommand(args.room.code, guess, crypto.randomUUID()); args.setGuessInput(""); args.setRoom(result.room); return true; }
+    catch { args.setError("逆転回答を判定できませんでした。もう一度試してください。"); return false; }
     finally { args.setIsGuessJudging(false); }
   }, [args]);
   useEffect(() => {
@@ -60,8 +60,15 @@ export function useWordWolfGameActions(args: Args) {
     if (!room || !shouldExpire) return;
     const key = createGameTimerEventId({ game: "wordwolf", roomCode: room.code, phase: room.phase, revision: room.revision, startedAt: room.currentTurnStartedAt });
     if (timeoutActionKeyRef.current === key) return; timeoutActionKeyRef.current = key;
-    const timer = window.setTimeout(() => void expireCurrentPhase(key), 0); return () => window.clearTimeout(timer);
-  }, [args, expireCurrentPhase]);
+    const timer = window.setTimeout(() => {
+      const submitDraft = room.phase === "clue" && args.clueInput.trim()
+        ? submitClue(true)
+        : room.phase === "wolfGuess" && args.guessInput.trim()
+          ? submitWolfGuess(true)
+          : Promise.resolve(false);
+      void submitDraft.then((saved) => { if (!saved) void expireCurrentPhase(key); });
+    }, 0); return () => window.clearTimeout(timer);
+  }, [args, expireCurrentPhase, submitClue, submitWolfGuess]);
   const isComposing = (event: KeyboardEvent<HTMLElement>) => event.nativeEvent.isComposing || event.keyCode === 229;
   const submitClueOnEnter = (event: KeyboardEvent<HTMLTextAreaElement>) => { if (event.key !== "Enter" || event.shiftKey || isComposing(event)) return; event.preventDefault(); void submitClue(); };
   const submitGuessOnEnter = (event: KeyboardEvent<HTMLInputElement>) => { if (event.key !== "Enter" || isComposing(event)) return; event.preventDefault(); void submitWolfGuess(); };

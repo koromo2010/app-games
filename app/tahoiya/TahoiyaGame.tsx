@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   defaultAvatarImage,
   fallbackAvatarColor,
@@ -59,6 +59,7 @@ export function TahoiyaGame() {
   const [activePlayerId, setActivePlayerId] = useState("");
   const [definitionIndex, setDefinitionIndex] = useState(0);
   const [definitionInput, setDefinitionInput] = useState("");
+  const timeoutDefinitionKeyRef = useRef("");
   const [selectedOptionId, setSelectedOptionId] = useState("");
   const [isStarting, setIsStarting] = useState(false);
   const [isPolishingDefinition, setIsPolishingDefinition] = useState(false);
@@ -105,6 +106,13 @@ export function TahoiyaGame() {
     setRoom, setActivePlayerId, setDefinitionInput, setSelectedOptionId, setPolishMessage,
     setSkipReason, setSkipComment, setMessage, setIsSkipping: setIsSkippingTopic,
   });
+  useEffect(() => {
+    if (!room || room.phase !== "writing" || remainingSeconds !== 0 || !activePlayer || isAnswerer || writingDone || !definitionInput.trim()) return;
+    const key = `${room.code}:${room.round}:${room.phaseStartedAt}:${activePlayer.id}:${definitionIndex}`;
+    if (timeoutDefinitionKeyRef.current === key) return;
+    timeoutDefinitionKeyRef.current = key;
+    void submitDefinition();
+  }, [activePlayer, definitionIndex, definitionInput, isAnswerer, remainingSeconds, room, submitDefinition, writingDone]);
   return (
     <main className={`min-h-screen bg-slate-950 text-slate-950 ${gameTopBannerOffsetClass}`}>
       <GameTopBanner eyebrow="Dictionary bluffing" title="たほい屋">

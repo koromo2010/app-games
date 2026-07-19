@@ -16,6 +16,7 @@ import {
   nigoichiMinimumPlayers,
   normalizeNigoichiTimeLimit,
   nigoichiRoomHasSpace,
+  normalizeNigoichiTimeoutAssociations,
   type NigoichiRoom,
   type NigoichiRoomAction,
 } from "@/lib/nigoichi";
@@ -49,6 +50,7 @@ const debugActionLabels: Record<NigoichiRoomAction["type"], string> = {
   "expire-phase": "時間切れでフェーズを進行",
   "start-game": "ゲームを開始",
   "submit-associations": "連想語を提出",
+  "submit-timeout-associations": "時間切れ時の入力済み連想語を提出",
   "submit-guess": "余り番号を予想",
   "reset-game": "同じ部屋で再戦準備",
   "abort-game": "ゲームを中断",
@@ -249,6 +251,12 @@ export async function applyStoredNigoichiAction(code: string, action: NigoichiRo
       if (current.phase !== "clue" || current.associations[targetId]) throw new Error("NIGOICHI_ROOM_FORBIDDEN");
       const clues = normalizeAssociationWords(action.clues, current.associationWordCount);
       if (!clues) throw new Error("NIGOICHI_INVALID_CLUE");
+      const next = { ...current, associations: { ...current.associations, [targetId]: clues } };
+      return allNigoichiAssociationsSubmitted(next) ? { ...next, phase: "guess" as const, phaseStartedAt: Date.now() } : next;
+    }
+    if (action.type === "submit-timeout-associations") {
+      if (current.phase !== "clue" || current.associations[targetId]) throw new Error("NIGOICHI_ROOM_FORBIDDEN");
+      const clues = normalizeNigoichiTimeoutAssociations(action.clues, current.associationWordCount);
       const next = { ...current, associations: { ...current.associations, [targetId]: clues } };
       return allNigoichiAssociationsSubmitted(next) ? { ...next, phase: "guess" as const, phaseStartedAt: Date.now() } : next;
     }

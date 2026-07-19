@@ -45,6 +45,7 @@ const hodoaiDebugActionLabels: Record<HodoaiRoomAction["type"], string> = {
   "start-game": "ゲームを開始",
   "submit-clue": "ヒントを提出",
   "submit-clues": "ヒントをまとめて提出",
+  "submit-timeout-clues": "時間切れ時の入力済みヒントを提出",
   reorder: "ヒントの順番を変更",
   "score-round": "最終並びを採点",
   "reset-game": "同じ部屋で再戦準備",
@@ -274,6 +275,18 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
         clues[card.id] = text;
       }
       return reconcileProgress(recordPlayerActivity({ ...current, clues }, action.actorId));
+    }
+    if (action.type === "submit-timeout-clues") {
+      if (current.phase !== "clue" || action.round !== current.round) return current;
+      const missingCards = current.cards.filter((card) => card.ownerId === action.actorId && !current.clues[card.id]);
+      const clues = { ...current.clues };
+      for (const card of missingCards) {
+        const text = normalizeHodoaiClue(action.clues[card.id] ?? "");
+        if (isValidHodoaiClue(text)) clues[card.id] = text;
+      }
+      const stillMissing = missingCards.some((card) => !clues[card.id]);
+      const next = { ...current, clues };
+      return reconcileProgress(stillMissing ? next : recordPlayerActivity(next, action.actorId));
     }
     if (action.type === "reorder") {
       if (!canReorderHodoaiCards(current, action.actorId) || action.round !== current.round) throw new Error("HODOAI_ROOM_FORBIDDEN");

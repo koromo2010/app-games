@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { GamePhaseTimer } from "@/app/components/GamePhaseTimer";
 import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
 import { WordScaleArrangeBoard } from "./WordScaleArrangeBoard";
 import { WordScaleVerticalScale } from "./WordScaleVerticalScale";
 import { clueHasNumber, normalizeHodoaiClue, type HodoaiConfig, type HodoaiRoom, type HodoaiRoomAction } from "@/lib/hodoai-talk";
+import { synchronizedNow } from "@/lib/server-clock";
 
 type RunAction = (action: HodoaiRoomAction) => Promise<HodoaiRoom | null>;
 type Props = { room: HodoaiRoom; playerId: string; isHost: boolean; isSaving: boolean; runAction: RunAction; updateConfig: (updates: Partial<Omit<HodoaiConfig, "debugMode">>) => Promise<void> };
@@ -11,6 +12,7 @@ type Props = { room: HodoaiRoom; playerId: string; isHost: boolean; isSaving: bo
 export function HodoaiPlayPanels({ room, playerId, isHost, isSaving, runAction, updateConfig }: Props) {
   const [clueDrafts, setClueDrafts] = useState<Record<string, string>>({});
   const [clueError, setClueError] = useState("");
+  const timeoutSubmissionKeyRef = useRef("");
   const ownCards = room.cards.filter((card) => card.ownerId === playerId);
   const sorter = room.players.find((player) => player.id === room.sorterId) ?? null;
   const canArrange = room.phase === "arrange" && room.sorterId === playerId;
@@ -29,6 +31,23 @@ export function HodoaiPlayPanels({ room, playerId, isHost, isSaving, runAction, 
       setClueDrafts((current) => Object.fromEntries(Object.entries(current).filter(([cardId]) => !clues[cardId])));
     });
   };
+  useEffect(() => {
+    if (room.phase !== "clue" || !room.phaseStartedAt || room.clueTimeLimitSeconds <= 0) return;
+    const missingCards = ownCards.filter((card) => !room.clues[card.id]);
+    const clues = Object.fromEntries(missingCards.map((card) => [card.id, normalizeHodoaiClue(clueDrafts[card.id] ?? "")]));
+    if (!Object.values(clues).some((clue) => clue && !clueHasNumber(clue))) return;
+    const key = `${room.code}:${room.round}:${room.phaseStartedAt}:${playerId}`;
+    const delay = Math.max(0, room.phaseStartedAt + room.clueTimeLimitSeconds * 1000 - synchronizedNow());
+    const timer = window.setTimeout(() => {
+      if (timeoutSubmissionKeyRef.current === key) return;
+      timeoutSubmissionKeyRef.current = key;
+      void runAction({ type: "submit-timeout-clues", actorId: playerId, round: room.round, clues }).then((saved) => {
+        if (!saved) return;
+        setClueDrafts((current) => Object.fromEntries(Object.entries(current).filter(([cardId]) => !saved.clues[cardId])));
+      });
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [clueDrafts, ownCards, playerId, room, runAction]);
   return <>
     {room.phase === "lobby" && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><h2 className="text-2xl font-black">ゲーム開始前</h2>{isHost ? <div className="mt-5 grid gap-4 sm:grid-cols-2"><label className="text-sm font-bold">同じカードでことばを出す回数<select value={room.roundsTotal} onChange={(event) => void updateConfig({ roundsTotal: Number(event.target.value) })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-950">{[1, 2, 3, 4].map((value) => <option key={value} value={value}>{value}回</option>)}</select></label><label className="text-sm font-bold">1人に配るカード<select value={room.cardsPerPlayer} onChange={(event) => void updateConfig({ cardsPerPlayer: Number(event.target.value) })} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-950">{[1, 2, 3, 4, 5].map((value) => <option key={value} value={value}>{value}枚</option>)}</select></label><div className="rounded-xl border border-cyan-300/20 bg-cyan-300/10 p-4 text-sm leading-6 text-cyan-50"><span className="block font-black">並べ替え役はランダム</span>ゲーム開始時に参加者から1人を選びます。最後のカード操作と順番の確定は、その人だけが行います。</div><RoomTimeLimitControl label="1回ごとのことば提出時間" value={room.clueTimeLimitSeconds} onChange={(seconds) => void updateConfig({ clueTimeLimitSeconds: seconds })} /><RoomTimeLimitControl label="並べ替え相談時間" value={room.arrangeTimeLimitSeconds} onChange={(seconds) => void updateConfig({ arrangeTimeLimitSeconds: seconds })} /></div> : <p className="mt-4 rounded-xl bg-white/[0.05] p-4 text-slate-300">ホストが設定してゲームを開始するまでお待ちください。並べ替え役はゲーム開始時にランダムで決まります。</p>}{isHost && room.debugMode && <div className="mt-5 rounded-xl border border-cyan-300/25 bg-cyan-300/10 p-4"><p className="text-sm font-bold text-cyan-50">デバッグ用の参加者を追加し、1人でも複数人プレイを確認できます。</p><button type="button" disabled={isSaving} onClick={() => void runAction({ type: "debug-add-player", actorId: playerId })} className="mt-3 w-full rounded-lg border border-cyan-200/40 bg-cyan-200 px-4 py-2 font-black text-cyan-950 disabled:opacity-50">ダミーユーザーを追加</button></div>}{isHost && <button type="button" disabled={isSaving || (room.players.length < 2 && !room.debugMode)} onClick={() => void runAction({ type: "start-game", actorId: playerId })} className="mt-6 w-full rounded-xl bg-amber-300 px-4 py-4 text-lg font-black text-slate-950 disabled:opacity-40">{room.players.length < 2 && !room.debugMode ? "2人以上で開始できます" : "このメンバーで開始"}</button>}</section>}
     {room.phase !== "lobby" && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.22em] text-amber-300">{room.phase === "clue" ? `ことば ${room.round}/${room.roundsTotal}回目` : room.phase === "arrange" ? "最終並べ替え" : "最終結果"}</p><h2 className="mt-2 text-2xl font-black sm:text-4xl">{room.phase === "clue" ? room.theme?.title : room.phase === "arrange" ? "すべてのことばを手がかりに並べる" : `${room.totalPoints}/3点`}</h2></div><span className="rounded-xl bg-amber-300 px-4 py-2 font-black text-slate-950">全 {room.cards.length}枚</span></div>{room.phase === "clue" && room.theme && <div className="mt-5 grid gap-4 md:grid-cols-[minmax(15rem,20rem)_minmax(0,1fr)]"><WordScaleVerticalScale lowLabel={room.theme.lowLabel} highLabel={room.theme.highLabel} markers={ownCards.flatMap((card) => typeof room.values[card.id] === "number" ? [{ id: card.id, label: `あなたのカード${card.cardNumber}`, value: room.values[card.id] }] : [])} /><div className="flex items-center rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4 text-sm font-bold leading-7 text-amber-100">0から120へ縦に伸びる同じスケールを、ことば提出から最後の並べ替えまで使います。自分の数字がどの位置かを意識しながら、お題に合うことばを考えてください。</div></div>}</section>}

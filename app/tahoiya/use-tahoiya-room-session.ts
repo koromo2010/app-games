@@ -2,6 +2,7 @@ import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import { defaultAvatarImage, loadPersistentPlayerSession } from "@/lib/player-session";
 import { allRoomPlayersReturned } from "@/lib/room-lobby-return";
 import type { TahoiyaRoom } from "@/lib/tahoiya-types";
+import { synchronizedNow } from "@/lib/server-clock";
 import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "../hooks/use-online-room-polling";
 import { useRoomResultReturnGate } from "../hooks/use-room-result-return-gate";
 import { useRoomLobbyReturnConfirmation } from "../hooks/use-room-lobby-return-confirmation";
@@ -12,7 +13,7 @@ type Params = { room: TahoiyaRoom | null; playerId: string; setRoom: Dispatch<Se
 
 export function useTahoiyaRoomSession(params: Params) {
   const { room, playerId, setRoom, setPlayerId, setActivePlayerId, setPlayerName, setAvatarColor, setAvatarImage } = params;
-  const [now, setNow] = useState(() => Date.now());
+  const [now, setNow] = useState(() => synchronizedNow());
   const resultReturnGate = useRoomResultReturnGate({ room: params.room, setRoom: params.setRoom, playerId: params.playerId, resultPhase: "result", onReturnUnavailable: () => params.setMessage("部屋が解散されたか、ホストにより退出扱いになりました。") });
   const roomCode = params.room?.code;
   const isWaitingForLobbyReturns = Boolean(room?.phase === "lobby" && room.lobbyReturn && !allRoomPlayersReturned(room.lobbyReturn, room.players));
@@ -32,6 +33,6 @@ export function useTahoiyaRoomSession(params: Params) {
     if (saved) setRoom(saved);
     return saved;
   } });
-  useEffect(() => { const timer = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(timer); }, []);
+  useEffect(() => { const timer = window.setInterval(() => setNow(synchronizedNow()), 250); return () => window.clearInterval(timer); }, []);
   return { now, resultReturnGate };
 }
