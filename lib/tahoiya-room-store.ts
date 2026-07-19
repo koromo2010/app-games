@@ -18,6 +18,7 @@ import { sanitizeTahoiyaRoom, tahoiyaRoomChoice } from "@/lib/tahoiya-room-prese
 import { advanceToVoting, canAdvanceTahoiyaPhase, definitionWriterIds, reconcileProgress, scoreRoom, voterIds } from "@/lib/tahoiya-room-domain";
 import { recordPlayerActivity, recoverPlayerTimeout } from "@/lib/player-timeout-policy";
 import { isTahoiyaTopicGenerationProgressFresh } from "@/lib/tahoiya-topic-generation-progress";
+import { normalizeTahoiyaFakeDefinitionsPerPlayer } from "@/lib/tahoiya-definitions";
 
 const roomKeyPrefix = "tahoiya:room:";
 const roomIndexKey = "tahoiya:rooms";
@@ -265,6 +266,9 @@ export async function applyStoredTahoiyaRoomAction(code: string, action: Tahoiya
         answererMode,
         answererId: playMode === "all-vote" || answererMode === "random" ? "" : current.players.some((player) => player.id === requestedAnswererId) ? requestedAnswererId : "",
         showRealDefinitionToWriters: playMode === "single-answerer" && (typeof action.config.showRealDefinitionToWriters === "boolean" ? action.config.showRealDefinitionToWriters : current.showRealDefinitionToWriters),
+        fakeDefinitionsPerPlayer: action.config.fakeDefinitionsPerPlayer === undefined
+          ? current.fakeDefinitionsPerPlayer
+          : normalizeTahoiyaFakeDefinitionsPerPlayer(action.config.fakeDefinitionsPerPlayer),
         actionTimeLimitSeconds: action.config.actionTimeLimitSeconds === undefined ? current.actionTimeLimitSeconds : normalizeCommonTimeLimit(action.config.actionTimeLimitSeconds),
       };
     }
@@ -311,9 +315,18 @@ export async function applyStoredTahoiyaRoomAction(code: string, action: Tahoiya
       }
       const text = action.text.trim().replace(/\s+/g, " ").slice(0, 240);
       if (!text) return current;
+      const definitionIndex = action.definitionIndex === undefined
+        ? 0
+        : Number.isInteger(action.definitionIndex) ? action.definitionIndex : -1;
+      if (definitionIndex < 0 || definitionIndex >= current.fakeDefinitionsPerPlayer) return current;
+      const definitions = Array.from(
+        { length: current.fakeDefinitionsPerPlayer },
+        (_, index) => current.fakeDefinitions[action.playerId]?.[index] ?? "",
+      );
+      definitions[definitionIndex] = text;
       return reconcileProgress(recordPlayerActivity({
         ...current,
-        fakeDefinitions: { ...current.fakeDefinitions, [action.playerId]: text },
+        fakeDefinitions: { ...current.fakeDefinitions, [action.playerId]: definitions },
       }, action.playerId));
     }
 
@@ -343,7 +356,10 @@ export async function applyStoredTahoiyaRoomAction(code: string, action: Tahoiya
     if (action.type === "debug-fill-definitions" && current.phase === "writing") {
       const fakeDefinitions = { ...current.fakeDefinitions };
       for (const playerId of definitionWriterIds(current)) {
-        fakeDefinitions[playerId] ||= "特定の作業に使われる古い道具の一種。";
+        fakeDefinitions[playerId] = Array.from(
+          { length: current.fakeDefinitionsPerPlayer },
+          (_, index) => fakeDefinitions[playerId]?.[index] || `特定の作業に使われる古い道具の一種${current.fakeDefinitionsPerPlayer > 1 ? `（${index + 1}）` : ""}。`,
+        );
       }
       return reconcileProgress({ ...current, fakeDefinitions });
     }

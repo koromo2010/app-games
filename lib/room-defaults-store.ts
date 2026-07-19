@@ -10,6 +10,7 @@ import { normalizeHodoaiConfig } from "@/lib/hodoai-talk";
 import { normalizeKotobaSenpukuConfig } from "@/lib/kotoba-senpuku";
 import { redisCommand } from "@/lib/redis-store";
 import { normalizeWordDifficulty, type WordDifficulty } from "@/lib/word-selection-protocol";
+import { normalizeTahoiyaFakeDefinitionsPerPlayer } from "@/lib/tahoiya-definitions";
 
 export type RoomDefaultsGame = "wordwolf" | "tahoiya" | "hodoai-talk" | "kotoba-senpuku";
 
@@ -32,6 +33,7 @@ export type StoredTahoiyaRoomDefaults = {
   topicDifficulty: "standard" | "extreme";
   answererMode: "manual" | "random";
   showRealDefinitionToWriters: boolean;
+  fakeDefinitionsPerPlayer: number;
   actionTimeLimitSeconds: number;
 };
 
@@ -107,6 +109,7 @@ function normalizeTahoiyaDefaults(value: unknown): StoredTahoiyaRoomDefaults {
     topicDifficulty: parsed.topicDifficulty === "extreme" ? "extreme" : "standard",
     answererMode: parsed.answererMode === "manual" ? "manual" : "random",
     showRealDefinitionToWriters: playMode === "single-answerer" && parsed.showRealDefinitionToWriters !== false,
+    fakeDefinitionsPerPlayer: normalizeTahoiyaFakeDefinitionsPerPlayer(parsed.fakeDefinitionsPerPlayer),
     actionTimeLimitSeconds: normalizeCommonTimeLimit(parsed.actionTimeLimitSeconds),
   };
 }

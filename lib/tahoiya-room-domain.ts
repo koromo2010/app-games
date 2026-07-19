@@ -6,6 +6,28 @@ import type { TahoiyaDefinitionOption, TahoiyaRoom } from "./tahoiya-types.ts";
 
 export const tahoiyaTimeoutSubmission = "__timeout__";
 
+export function playerDefinitionSlots(room: TahoiyaRoom, playerId: string) {
+  return Array.from(
+    { length: room.fakeDefinitionsPerPlayer },
+    (_, index) => room.fakeDefinitions[playerId]?.[index] ?? "",
+  );
+}
+
+export function playerDefinitionsComplete(room: TahoiyaRoom, playerId: string) {
+  return playerDefinitionSlots(room, playerId).every(Boolean);
+}
+
+export function nextMissingDefinitionIndex(room: TahoiyaRoom, playerId: string) {
+  const index = playerDefinitionSlots(room, playerId).findIndex((definition) => !definition);
+  return index >= 0 ? index : null;
+}
+
+export function submittedDefinitionCount(room: TahoiyaRoom) {
+  return definitionWriterIds(room).reduce((count, playerId) => (
+    count + playerDefinitionSlots(room, playerId).filter((definition) => definition && definition !== tahoiyaTimeoutSubmission).length
+  ), 0);
+}
+
 export function definitionWriterIds(room: TahoiyaRoom) {
   return room.playMode === "all-vote"
     ? room.players.map((player) => player.id)
@@ -36,12 +58,14 @@ export function shuffle<T>(items: T[]) {
 export function createDefinitionOptions(room: TahoiyaRoom): TahoiyaDefinitionOption[] {
   return shuffle([
     { id: randomUUID(), text: room.realDefinition, authorId: null, isReal: true },
-    ...Object.entries(room.fakeDefinitions).filter(([, text]) => text !== tahoiyaTimeoutSubmission).map(([playerId, text]) => ({
-      id: randomUUID(),
-      text,
-      authorId: playerId,
-      isReal: false,
-    })),
+    ...Object.entries(room.fakeDefinitions).flatMap(([playerId, definitions]) => definitions
+      .filter((text) => text && text !== tahoiyaTimeoutSubmission)
+      .map((text) => ({
+        id: randomUUID(),
+        text,
+        authorId: playerId,
+        isReal: false,
+      }))),
   ]);
 }
 
@@ -88,7 +112,7 @@ export function scoreRoom(room: TahoiyaRoom) {
 
 export function writingComplete(room: TahoiyaRoom) {
   const writers = definitionWriterIds(room);
-  return writers.length > 0 && writers.every((playerId) => Boolean(room.fakeDefinitions[playerId]));
+  return writers.length > 0 && writers.every((playerId) => playerDefinitionsComplete(room, playerId));
 }
 
 export function votingComplete(room: TahoiyaRoom) {
@@ -106,7 +130,7 @@ export function timedOut(room: TahoiyaRoom, seconds = room.actionTimeLimitSecond
 
 export function tahoiyaPhaseTimeLimitSeconds(room: TahoiyaRoom, playerId: string) {
   const awaitingPlayer = room.phase === "writing"
-    ? definitionWriterIds(room).includes(playerId) && !room.fakeDefinitions[playerId]
+    ? definitionWriterIds(room).includes(playerId) && !playerDefinitionsComplete(room, playerId)
     : room.phase === "voting"
       ? voterIds(room).includes(playerId) && !room.votes[playerId]
       : false;
@@ -140,11 +164,17 @@ export function advanceToVoting(room: TahoiyaRoom) {
 export function reconcileProgress(room: TahoiyaRoom) {
   if (room.phase === "writing") {
     let next = room;
-    for (const playerId of definitionWriterIds(room).filter((id) => !room.fakeDefinitions[id])) {
+    for (const playerId of definitionWriterIds(room).filter((id) => !playerDefinitionsComplete(room, id))) {
       if (timedOut(room, playerTimeLimitSeconds(room.actionTimeLimitSeconds, room.playerTimeouts, playerId))) {
         const player = room.players.find((item) => item.id === playerId);
         next = recordPlayerTimeout(next, playerId, player?.name ?? "プレイヤー");
-        next = { ...next, fakeDefinitions: { ...next.fakeDefinitions, [playerId]: tahoiyaTimeoutSubmission } };
+        next = {
+          ...next,
+          fakeDefinitions: {
+            ...next.fakeDefinitions,
+            [playerId]: playerDefinitionSlots(next, playerId).map((definition) => definition || tahoiyaTimeoutSubmission),
+          },
+        };
       }
     }
     if (writingComplete(next) || timedOut(room)) return advanceToVoting(next);

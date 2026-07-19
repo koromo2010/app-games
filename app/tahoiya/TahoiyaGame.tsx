@@ -56,6 +56,7 @@ export function TahoiyaGame() {
   const [joinCode, setJoinCode] = useState("");
   const [joinableRooms, setJoinableRooms] = useState<TahoiyaRoomChoice[]>([]);
   const [activePlayerId, setActivePlayerId] = useState("");
+  const [definitionIndex, setDefinitionIndex] = useState(0);
   const [definitionInput, setDefinitionInput] = useState("");
   const [selectedOptionId, setSelectedOptionId] = useState("");
   const [isStarting, setIsStarting] = useState(false);
@@ -72,20 +73,20 @@ export function TahoiyaGame() {
   const operationPlayerId = isDebugMode ? activePlayerId : playerId;
   const activePlayer = room?.players.find((player) => player.id === operationPlayerId) ?? null;
   const isHost = Boolean(room && playerId === room.hostId);
-  const { isAllVoteMode, answererCandidates, answerer, isAnswerer, hasActivePlayerSubmitted, hasActivePlayerVoted,
-    displayedVoteOptionId, definitionWriterCount, writingDone, voterTarget, votingDone, remainingSeconds,
-    nextWriter, nextVoter, sortedScores, roomConfigItems } = useTahoiyaViewModel(room, activePlayer, selectedOptionId, now);
+  const { isAllVoteMode, answererCandidates, answerer, isAnswerer, activePlayerDefinitions, hasActivePlayerSubmitted, hasActivePlayerVoted,
+    displayedVoteOptionId, definitionTargetCount, writingDone, voterTarget, votingDone, remainingSeconds,
+    nextWriter, nextVoter, sortedScores, roomConfigItems } = useTahoiyaViewModel(room, activePlayer, selectedOptionId, definitionIndex, now);
 
   const { runRoomAction, dissolveRoom } = useTahoiyaRoomActions({ room, playerId, markRoomDissolved: resultReturnGate.markRoomDissolved, setRoom, setMessage });
   const { refreshJoinableRooms, createRoom, joinRoom, addTestPlayer, removeWaitingPlayer, setDebugMode, setAnswererMode, setPlayMode,
-    setTopicDifficulty, setManualAnswerer, setShowRealDefinitionToWriters, setActionTimeLimit, testWordGeneration, testDifficultyScreening } = useTahoiyaLobbyActions({
+    setTopicDifficulty, setManualAnswerer, setShowRealDefinitionToWriters, setFakeDefinitionsPerPlayer, setActionTimeLimit, testWordGeneration, testDifficultyScreening } = useTahoiyaLobbyActions({
     room, playerId, playerName, avatarColor, avatarImage, passphrase, joinCode, runRoomAction,
     setRoom, setActivePlayerId, setJoinableRooms, setMessage,
   });
   const { forceAdvanceToVoting, forceAdvanceToResult, startRound, submitDefinition, polishDefinition, castVote, nextRound, returnToLobby } = useTahoiyaGameActions({
     room, activePlayer, playerId, isHost, isDebugMode, isAnswerer, isAllVoteMode, writingDone, votingDone,
-    definitionInput, selectedOptionId, isStarting, isPolishing: isPolishingDefinition, runRoomAction,
-    setRoom, setActivePlayerId, setDefinitionInput, setSelectedOptionId, setPolishMessage, setMessage,
+    definitionIndex, definitionInput, selectedOptionId, isStarting, isPolishing: isPolishingDefinition, runRoomAction,
+    setRoom, setActivePlayerId, setDefinitionIndex, setDefinitionInput, setSelectedOptionId, setPolishMessage, setMessage,
     setIsStarting, setIsPolishing: setIsPolishingDefinition,
   });
   const { autoFillTestDefinitions, autoFillTestVotes, skipDebugTopic, abortGame } = useTahoiyaDebugActions({
@@ -135,10 +136,10 @@ export function TahoiyaGame() {
             answerer={answerer} answererCandidates={answererCandidates} roomConfigItems={roomConfigItems}
             activePlayer={activePlayer} activePlayerId={activePlayerId} playerName={playerName}
             isHost={isHost} isDebugMode={isDebugMode} isStarting={isStarting} message={message}
-            onPassphraseChange={setPassphrase} onJoinCodeChange={setJoinCode} onActivePlayerChange={setActivePlayerId}
+            onPassphraseChange={setPassphrase} onJoinCodeChange={setJoinCode} onActivePlayerChange={(value) => { setActivePlayerId(value); setDefinitionIndex(0); setDefinitionInput(room?.fakeDefinitions[value]?.[0] ?? ""); setPolishMessage(""); }}
             onCreateRoom={() => void createRoom()} onRefreshRooms={() => void refreshJoinableRooms()} onJoinRoom={(code) => void joinRoom(code)}
             onPlayModeChange={setPlayMode} onDifficultyChange={setTopicDifficulty} onAnswererModeChange={setAnswererMode}
-            onAnswererChange={setManualAnswerer} onShowDefinitionChange={setShowRealDefinitionToWriters} onTimeLimitChange={setActionTimeLimit}
+            onAnswererChange={setManualAnswerer} onShowDefinitionChange={setShowRealDefinitionToWriters} onFakeDefinitionsPerPlayerChange={setFakeDefinitionsPerPlayer} onTimeLimitChange={setActionTimeLimit}
             onTestWordGeneration={testWordGeneration} onTestDifficultyScreening={testDifficultyScreening} onAddTestPlayer={addTestPlayer} onStartRound={() => void startRound()} onDissolveRoom={() => void dissolveRoom()}
           />
 
@@ -156,10 +157,11 @@ export function TahoiyaGame() {
               />
 
               {room.phase === "writing" && <TahoiyaWritingPanel room={room} activePlayer={activePlayer} isAnswerer={isAnswerer}
-                submittedCount={submittedCount(room)} writerCount={definitionWriterCount} hasSubmitted={hasActivePlayerSubmitted} writingDone={writingDone}
+                submittedCount={submittedCount(room)} definitionTargetCount={definitionTargetCount} activePlayerDefinitions={activePlayerDefinitions} definitionIndex={definitionIndex} hasSubmitted={hasActivePlayerSubmitted} writingDone={writingDone}
                 definitionInput={definitionInput} polishMessage={polishMessage} isPolishing={isPolishingDefinition} isHost={isHost} isDebugMode={isDebugMode}
                 onDefinitionChange={(value) => { setDefinitionInput(value); setPolishMessage(""); }}
-                onEditSubmitted={() => setDefinitionInput(room.fakeDefinitions[activePlayer?.id ?? ""] ?? "")}
+                onDefinitionIndexChange={(index) => { setDefinitionIndex(index); setDefinitionInput(activePlayerDefinitions[index] ?? ""); setPolishMessage(""); }}
+                onEditSubmitted={() => setDefinitionInput(activePlayerDefinitions[definitionIndex] ?? "")}
                 onPolish={() => void polishDefinition()} onSubmit={submitDefinition} onAutoFill={autoFillTestDefinitions} onAdvance={forceAdvanceToVoting}
               />}
 
