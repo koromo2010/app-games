@@ -11,6 +11,7 @@ import { GamePlayerMenu } from "@/app/components/GamePlayerMenu";
 import { GameRulesDialog } from "@/app/components/GameRulesDialog";
 import { GameTopBanner, gameTopBannerOffsetClass } from "@/app/components/GameTopBanner";
 import { GameTopMenu, gameTopBannerActionClass, gameTopMenuItemClass } from "@/app/components/GameTopMenu";
+import { confirmRoomClose, confirmRoomLeave } from "@/app/components/room-navigation-confirmation";
 import { clampDrawingPoint, normalizeDrawingStrokes, type DrawingPoint, type DrawingStroke } from "@/lib/drawing-canvas";
 import { fallbackAvatarColor, readPlayerSession, type PlayerSession } from "@/lib/player-session";
 import type { CanvasLayer, CanvasLayerMode } from "@/lib/canvas-room";
@@ -319,7 +320,7 @@ export function CanvasGame() {
         </> : <>
           <span className="rounded bg-slate-900 px-3 py-1 font-mono font-black tracking-widest text-white">{room.code}</span>
           <span className="text-sm font-bold">{room.players.length}人：{room.players.map((player) => player.name).join("、")}</span>
-          <button disabled={roomBusy} onClick={async () => { try { if (room.ownerId === session?.id) await deleteCanvasRoomView(room.code); else await roomRequest("PATCH", { code: room.code, action: { type: "leave" } }); setRoom(null); setActiveLayerId("base"); setHiddenLayerIds(new Set()); } catch (error) { window.alert(error instanceof Error ? error.message : "部屋から退出できませんでした"); } }} className="ml-auto rounded-lg border px-3 py-2 text-sm font-bold xl:ml-0">{room.ownerId === session?.id ? "部屋を閉じる" : "退出"}</button>
+          <button disabled={roomBusy} onClick={async () => { const isOwner = room.ownerId === session?.id; if (isOwner ? !confirmRoomClose() : !confirmRoomLeave()) return; try { if (isOwner) await deleteCanvasRoomView(room.code); else await roomRequest("PATCH", { code: room.code, action: { type: "leave" } }); setRoom(null); setActiveLayerId("base"); setHiddenLayerIds(new Set()); } catch (error) { window.alert(error instanceof Error ? error.message : "部屋から退出できませんでした"); } }} className="ml-auto rounded-lg border px-3 py-2 text-sm font-bold xl:ml-0">{room.ownerId === session?.id ? "部屋を閉じる" : "退出"}</button>
         </>}
       </aside>
       <div className="min-w-0 space-y-4">

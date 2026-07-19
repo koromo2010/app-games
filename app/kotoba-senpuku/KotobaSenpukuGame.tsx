@@ -13,6 +13,7 @@ import { PlayerTimeoutNotice } from "@/app/components/PlayerTimeoutNotice";
 import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomResultActions } from "@/app/components/RoomResultActions";
 import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
+import { confirmRoomLeave } from "@/app/components/room-navigation-confirmation";
 import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "@/app/hooks/use-online-room-polling";
 import { useRoomResultReturnGate } from "@/app/hooks/use-room-result-return-gate";
 import { applyKotobaSenpukuRoomAction, createKotobaSenpukuRoom, kotobaSenpukuRoomApi } from "@/app/kotoba-senpuku/kotoba-senpuku-room-api-client";
@@ -345,7 +346,7 @@ export function KotobaSenpukuGame() {
   };
 
   const leaveRoom = async () => {
-    if (!room || !session?.id || isHost) return;
+    if (!room || !session?.id || isHost || !confirmRoomLeave()) return;
     const saved = await runAction({ type: "leave-room", actorId: session.id });
     if (!saved) return;
     setRoom(null);

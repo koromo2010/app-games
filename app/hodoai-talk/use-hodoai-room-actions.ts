@@ -4,6 +4,7 @@ import { loadPlayerRoomDefaults, savePlayerRoomDefaults } from "@/lib/game-room-
 import { OnlineRoomApiError } from "@/lib/online-room-api-client";
 import type { PlayerSession } from "@/lib/player-session";
 import { defaultHodoaiScoring, normalizeHodoaiConfig, type HodoaiConfig, type HodoaiPlayer, type HodoaiRoom, type HodoaiRoomAction, type HodoaiRoomChoice } from "@/lib/hodoai-talk";
+import { confirmRoomLeave } from "@/app/components/room-navigation-confirmation";
 import { hodoaiLastRoomKey } from "./use-hodoai-room-session";
 
 const defaultsStorageKey = "hodoai-room-defaults-v2";
@@ -63,7 +64,7 @@ export function useHodoaiRoomActions(params: Params) {
     setIsSaving(true); try { const joined = await applyHodoaiRoomAction(code, { type: "join-room", actorId: session.id, player, passphrase }); setRoom(joined); setShowChoices(false); localStorage.setItem(hodoaiLastRoomKey, joined.code); setError(""); } catch (caught) { setError(apiMessage(caught instanceof OnlineRoomApiError ? caught.status : 0, "部屋へ参加できませんでした。")); } finally { setIsSaving(false); }
   };
   const dissolveRoom = async () => { if (!room || !session?.id || !isHost || !window.confirm("部屋を解散しますか？")) return; try { await hodoaiRoomApi.remove({ code: room.code, actorId: session.id }); } catch { setError("部屋を解散できませんでした。"); return; } localStorage.removeItem(hodoaiLastRoomKey); if (markRoomDissolved()) { setError("部屋を解散しました。結果画面はこのまま確認できます。"); return; } setRoom(null); };
-  const leaveRoom = async () => { if (!room || !session?.id || isHost) return; const saved = await runAction({ type: "leave-room", actorId: session.id }); if (saved) { setRoom(null); localStorage.removeItem(hodoaiLastRoomKey); } };
+  const leaveRoom = async () => { if (!room || !session?.id || isHost || !confirmRoomLeave()) return; const saved = await runAction({ type: "leave-room", actorId: session.id }); if (saved) { setRoom(null); localStorage.removeItem(hodoaiLastRoomKey); } };
   const updateConfig = async (updates: Partial<Omit<HodoaiConfig, "debugMode">>) => { if (!room || !session?.id || !isHost) return; const config = normalizeHodoaiConfig({ ...room, ...updates, debugMode: room.debugMode }); const saved = await runAction({ type: "update-config", actorId: session.id, config: { roundsTotal: config.roundsTotal, cardsPerPlayer: config.cardsPerPlayer, clueTimeLimitSeconds: config.clueTimeLimitSeconds, arrangeTimeLimitSeconds: config.arrangeTimeLimitSeconds } }); if (saved) void savePlayerRoomDefaults({ game: "hodoai-talk", playerId: session.id, localStorageKey: defaultsStorageKey, defaults: normalizeDefaults(saved) }); };
   return { runAction, createRoom, listRooms, joinRoom, dissolveRoom, leaveRoom, updateConfig };
 }

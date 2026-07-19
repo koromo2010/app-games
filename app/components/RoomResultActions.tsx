@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { confirmResultLobbyNavigation } from "./room-navigation-confirmation";
 
 type RoomResultActionsProps = {
   canReturnToRoom: boolean;
@@ -36,6 +37,7 @@ export function RoomResultActions({
   };
 
   const goToGameLobby = () => {
+    if (!confirmResultLobbyNavigation()) return;
     setPendingAction("lobby");
     router.push(returnHref);
   };
@@ -43,22 +45,22 @@ export function RoomResultActions({
   const pendingLabel = (label: string) => <span className="inline-flex items-center justify-center gap-2"><span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-r-transparent" aria-hidden="true" />{label}</span>;
 
   return (
-    <div className={`mt-5 grid gap-3 ${isHost && !isRoomDissolved ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
-      <button
-        type="button"
-        disabled={isPending}
-        onClick={goToGameLobby}
-        className="rounded-xl bg-amber-300 px-4 py-3 text-center font-black text-slate-950 transition hover:bg-amber-200"
-      >
-        {pendingAction === "lobby" ? pendingLabel("広場へ移動中…") : "広場へ戻る"}
-      </button>
+    <div className="mt-5 grid gap-3 sm:grid-cols-2">
       <button
         type="button"
         disabled={disabled || isPending || !canReturnToRoom || isRoomDissolved}
         onClick={() => void runPendingAction("room", onReturnToRoom)}
-        className="rounded-xl border border-cyan-300 bg-cyan-50 px-4 py-3 font-black text-cyan-900 transition hover:bg-cyan-100 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-100 disabled:text-slate-500 disabled:opacity-70"
+        className="rounded-xl border border-cyan-200 bg-cyan-300 px-5 py-4 text-lg font-black text-slate-950 shadow-lg shadow-cyan-950/20 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-200 disabled:text-slate-500 disabled:opacity-70 sm:col-span-2"
       >
         {pendingAction === "room" ? pendingLabel("部屋に戻っています…") : isRoomDissolved ? "部屋に戻れません" : canReturnToRoom ? "部屋に戻る" : "ホストが戻るまで待つ"}
+      </button>
+      <button
+        type="button"
+        disabled={isPending}
+        onClick={goToGameLobby}
+        className={`rounded-xl border border-slate-400/60 bg-slate-100 px-4 py-3 text-center font-bold text-slate-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 ${isHost && !isRoomDissolved && onDissolve ? "" : "sm:col-span-2"}`}
+      >
+        {pendingAction === "lobby" ? pendingLabel("広場へ移動中…") : "広場へ戻る"}
       </button>
       {isHost && !isRoomDissolved && onDissolve && <button
         type="button"
