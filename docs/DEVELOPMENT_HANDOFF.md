@@ -4,7 +4,7 @@
 >
 > 資料を読む順番や作業別の参照先は `docs/README.md` を入口にする。この文書は「現在の開発状態と共通仕様」、`docs/CONTAINER_ARCHITECTURE.md` は「将来案」である。
 
-最終更新: 2026-07-19
+最終更新: 2026-07-20
 
 ## ブランド・法務ページ
 
@@ -36,6 +36,7 @@
 | ゲーム公開範囲 | `config/game-registry.json` の `private`, `lib/game-access.ts`, `lib/private-game-access.ts`, `app/api/private-game-access/route.ts` |
 | ゲーム登録・自動監査 | `config/game-registry.json`, `scripts/check-game-standards.mjs`, `docs/NEW_GAME_CHECKLIST.md` |
 | 共通戦績・マイページ | `lib/player-stats-store.ts`, `app/api/player-stats/route.ts`, `app/users/me/UserDashboard.tsx` |
+| ログイン後の部屋復元・広場の復帰一覧 | `app/hooks/use-online-game-session-restore.ts`, `app/api/player-active-rooms/route.ts`, `lib/player-active-room-summary.ts`, `app/games/use-lobby-room-data.ts` |
 | 全ゲーム対戦プレイバック | `lib/game-replay-store.ts`, `app/api/player-replays/route.ts`, `app/components/GameReplayPanel.tsx`, `docs/GAME_REPLAYS.md` |
 | アカウント・メール復旧 | `lib/player-account-store.ts`, `lib/player-password-reset.ts`, `lib/email.ts`, `app/api/player-account/route.ts`, `app/api/player-password-reset/route.ts`, `app/reset-password` |
 | ワードウルフ | `app/wordwolf`, `app/api/wordwolf`, `lib/wordwolf-room-store.ts` |
@@ -141,6 +142,8 @@ Neon Postgres、Upstash Redis、Vercel Blobの容量は `vercel.json` の日次C
 - 設定操作はロビーにいるホストだけ。
 - 設定デフォルトはプレイヤーごとにRedisへ保存し、localStorageをフォールバックにする。
 - 1プレイヤー1アクティブ部屋。新しい部屋作成時は古いホスト部屋を解散する。
+- 広場の復帰表示はゲーム別Room APIをブラウザから順次呼ばず、認証済みの共通 `/api/player-active-rooms` 1本から部屋コード・phase・参加者概要・更新時刻だけを受け取る。秘密語・手札・投稿・合言葉などRoom本文は返さない。`scripts/check-game-standards.mjs` は全オンラインゲームのloader登録を検査する。
+- コードインターセプト、ワードスケール、ワードソナー、ワードアウト、ノーザンブランチの入室画面は `useOnlineGameSessionRestore` を使う。保存済みのローカルセッションで画面枠を先に表示し、サーバーのアカウント確認とアクティブ部屋復元をバックグラウンドで行う。復元中は新規作成・参加欄を `inert` にして、別部屋操作との競合を防ぐ。アカウントCookieとRoomの正本は引き続きサーバーで検証する。
 - 参加人数のサーバー安全上限は `onlineRoomPlayerLimits` を正本とし、ワードウルフ20人、たほい屋8人、ノーザンブランチ4人、ワードスケール50人、ワードソナー20人、ワードアウト6人、コードインターセプト12人。満室は一覧から除外し、直接参加も409で拒否する。復元時も上限を超えた配列を切り詰め、デバッグ用ダミー追加にも同じ上限を適用する。
 - 投稿・投票がそろったらサーバー側で自動遷移する。
 - ルームGETは認証済み閲覧者向けJSONからETagを作り、クライアントは `If-None-Match` を送る。未変更時は304で本文転送とJSON再解析を省き、同じURLへの重複ポーリングはクライアント内で1本へまとめる。実装は `lib/conditional-json.ts` と `lib/conditional-json-client.ts`。現行の進行中・最終結果2秒／ロビー5秒間隔は維持し、SSE等への移行前の負荷軽減層とする。
@@ -168,6 +171,7 @@ Neon Postgres、Upstash Redis、Vercel Blobの容量は `vercel.json` の日次C
 - 全ゲームはゲーム別のEloレーティングを持つ。標準は初期値1000、最初の30戦を暫定K=48として実力帯へ早く収束し、31戦目以降はK=20で穏やかに動く。`GAME_RATING_INITIAL`、`GAME_RATING_PROVISIONAL_GAMES`、`GAME_RATING_PROVISIONAL_K`、`GAME_RATING_ESTABLISHED_K` をハイパーパラメータとして環境変数で調整できる。協力ゲームは初期レートの仮想対戦相手に対する成功・失敗として扱う。結果イベントIDで二重加算を防ぎ、ダミーとデバッグ対戦は対象外。UIでは戦績の補助情報として控えめに表示し、増減を強調しない。実装は `lib/game-rating.ts` と `lib/player-stats-store.ts`。
 
 - ロビーの戦績フィルターは `config/game-registry.json` の `stats: "account"` から自動生成する。
+- 広場ではゲームカードと復帰情報を先に表示する。戦績はPCで初期描画の250ms後、スマホ・タブレットではアカウント・戦績ドロワーを開いた時点から取得し、初動のアカウント確認と復帰照会へ競合させない。
 - ワードウルフは1ゲーム、たほい屋は1ラウンド、ワードスケールは同じカードへの全ことば提出と最終並べ替えを1戦として記録する。
 - 結果IDをRedisのLua処理で戦績追加と同時に冪等化し、再読込や複数クライアントによる二重記録を防ぐ。
 - ワードスケールは最大点の50%以上を協力成功とし、デバッグ用ダミーは戦績へ含めない。
@@ -181,6 +185,7 @@ Neon Postgres、Upstash Redis、Vercel Blobの容量は `vercel.json` の日次C
 - 現在の詳細プレイバックはたほい屋から開始し、お題、本当の説明、偽説明、投票、ラウンド得点を参加者だけへ返す。
 - SNS共有は結果サマリーとゲームURLだけをWeb Share APIへ渡す。説明本文、参加者名、投票内容、認証付き閲覧URLは共有しない。
 - 保存schema、Redisキー、期限判定の正本は `docs/GAME_REPLAYS.md`。
+- アカウント本体を先に表示し、戦績は別取得する。プレイバック一覧は欄がビューポートの320px手前へ近づくまで取得しない。共通 `FullScreenPageOverlay` のマイページ利用は初回読込後のiframeをページ滞在中だけ保持し、閉じて開き直すたびにセッション・戦績・プレイバックを再取得しない。
 
 ## 6. ワードウルフ現行仕様の要点
 

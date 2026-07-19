@@ -12,7 +12,7 @@ const ids = new Set(); const hrefs = new Set();
 const allowedGameTags = new Set(["対戦", "協力"]);
 const sharedDissolutionModule = read("lib/online-room-dissolution.ts");
 const sharedPersistenceModule = read("lib/online-room-persistence.ts");
-const lobbyRoomSources = ["app/games/GameLobby.tsx", "app/games/use-lobby-room-data.ts"].filter((file) => existsSync(join(root, file))).map(read).join("\n");
+const lobbyActiveRoomsRoute = existsSync(join(root, "app/api/player-active-rooms/route.ts")) ? read("app/api/player-active-rooms/route.ts") : "";
 
 for (const game of games) {
   if (!game.id || ids.has(game.id)) fail(`ゲームIDが空または重複しています: ${game.id || "(empty)"}`);
@@ -44,7 +44,7 @@ for (const game of games) {
   if (game.playMode === "online-room") {
     if (!read("lib/online-room-policy.ts").includes(`"${game.id}"`)) fail(`${game.id}: 共通人数上限マップにゲームIDがありません。`);
     if (!read("lib/room-dissolve-policy.ts").includes(`"${game.id}"`)) fail(`${game.id}: 共通解散ポリシーにゲームIDがありません。`);
-    if (!lobbyRoomSources.includes(`/api/${game.id}/rooms`)) fail(`${game.id}: ロビーのアクティブ部屋取得マップにAPIがありません。`);
+    if (!lobbyActiveRoomsRoute.includes(`${game.id}:`) && !lobbyActiveRoomsRoute.includes(`"${game.id}":`)) fail(`${game.id}: 共通のアクティブ部屋取得APIにloaderがありません。`);
     if (!entry.includes("GameAdSlot")) fail(`${game.id}: 非プレイ面の共通広告スロットがありません。`);
     if (!game.roomStoreFile || !existsSync(join(root, game.roomStoreFile))) fail(`${game.id}: roomStoreFile がありません。`);
     else { const store = read(game.roomStoreFile); const modules = [entry, store, ...(game.moduleBoundaryFiles || []).map(read)].join("\n"); const usesRoomTtl = store.includes("multiplayerRoomTtlSeconds") || store.includes("multiplayerRoomExpiryArgs") || (store.includes("online-room-persistence") && sharedPersistenceModule.includes("multiplayerRoomExpiryArgs")); if (!usesRoomTtl) fail(`${game.id}: 共通の部屋TTLを使用していません。`); if (!store.includes("revision") && !store.includes("saveStoredWordWolfRoom")) fail(`${game.id}: サーバー側の部屋保存処理が見つかりません。`); if (!modules.includes("abort-game") && !modules.includes("abortGame")) fail(`${game.id}: ゲーム開始前へ戻すデバッグ中断処理がありません。`); if (!modules.includes("confirm-lobby-return") || !modules.includes("remove-waiting-player") || !modules.includes("allRoomPlayersReturned")) fail(`${game.id}: 共通のロビー復帰確認・待機者管理を使用していません。`); const usesDissolutionPolicy = store.includes("canDissolveOnlineRoom") || (store.includes("online-room-dissolution") && sharedDissolutionModule.includes("canDissolveOnlineRoom")); if (!usesDissolutionPolicy) fail(`${game.id}: 進行中の部屋解散を防ぐ共通ポリシーがありません。`); }

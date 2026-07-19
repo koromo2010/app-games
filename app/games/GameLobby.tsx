@@ -43,12 +43,13 @@ export function GameLobby({ siteName = "GAME FIELDS", gameOperations }: { siteNa
   const { accessKey: privateAccessKey, setAccessKey: setPrivateAccessKey, isUnlocked: privateUnlocked,
     isUpdating: isPrivateAccessUpdating, clearAccess: clearPrivateAccess } = useLobbyPrivateAccess(setMessage);
   const { stats, isStatsLoading, selectedStatsGame, activeRoom, activeGameRooms, isActiveRoomLoading,
-    loadStats, loadActiveRoom, changeStatsGame, rememberActiveRoom, clearRoomData } = useLobbyRoomData(playerId, isLoggedIn, privateUnlocked, gameOperations);
+    loadStats, changeStatsGame, rememberActiveRoom, clearRoomData } = useLobbyRoomData(playerId, isLoggedIn);
   useEffect(() => {
-    if (!isLoggedIn || !playerId) return;
-    void loadStats(playerId, "all");
-    void loadActiveRoom(playerId);
-  }, [isLoggedIn, loadActiveRoom, loadStats, playerId]);
+    if (!isLoggedIn || !playerId || stats || isStatsLoading) return;
+    if (!isMobileInfoOpen && !window.matchMedia("(min-width: 1024px)").matches) return;
+    const timer = window.setTimeout(() => void loadStats(playerId, "all"), 250);
+    return () => window.clearTimeout(timer);
+  }, [isLoggedIn, isMobileInfoOpen, isStatsLoading, loadStats, playerId, stats]);
 
   const { isSaving, isRequestingReset, submitAccount, requestPasswordReset } = useLobbyAuthActions({
     name, password, email, resetEmail, authMode, legalAccepted, avatarColor, avatarImage,
@@ -104,7 +105,7 @@ export function GameLobby({ siteName = "GAME FIELDS", gameOperations }: { siteNa
       </section>
       <LobbyPrivateAccessControl accessKey={privateAccessKey} isUnlocked={privateUnlocked} isUpdating={isPrivateAccessUpdating}
         onAccessKeyChange={setPrivateAccessKey} onClear={() => void clearPrivateAccess()} />
-      <FullScreenPageOverlay open={isMyPageOpen} href="/users/me" title="マイページ" onClose={() => setIsMyPageOpen(false)} />
+      <FullScreenPageOverlay open={isMyPageOpen} href="/users/me" title="マイページ" keepAlive onClose={() => setIsMyPageOpen(false)} />
     </main>
   );
 }

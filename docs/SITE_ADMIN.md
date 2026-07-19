@@ -19,5 +19,10 @@
 - アイコン元画像はクライアントで中央を正方形に切り抜き、192×192px PNGへ変換する。
 - サーバーは容量、MIME type、ファイルsignatureを再検証してVercel Blob `site-icons/` へ保存する。
 - 保存後はメタ情報、サイト名表示、構造化データ、manifest、faviconへ反映する。
+- 読み取りはプロセス内で30秒キャッシュし、同時に発生するルートレイアウト、ページ本文、各メタデータのRedis GETを1本へまとめる。管理画面から保存した値は同じキャッシュへ即時反映し、Next.jsのlayout・icon・manifestも再検証する。
+
+## 管理ダッシュボードの段階表示
+
+`/api/admin/dashboard` は、オンライン人数、部屋数、ゲーム別稼働、Redis・デプロイ状態を先に返す。画面はこれを受け取り次第表示し、その後 `/api/admin/dashboard?section=details` からストレージ使用量、Core Web Vitals、警告・エラーを取得する。外部ストレージ照会が遅くても基本集計の表示を止めない。両APIとも同じ管理者Cookie認証とランタイムハイパラを通す。
 
 主なファイルは `app/admin`、`app/api/admin`、`app/site-icon/route.ts`、`lib/site-settings*`、`lib/site-admin-auth*`、`lib/site-icon-image*`。

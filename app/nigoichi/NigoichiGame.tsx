@@ -15,6 +15,7 @@ import { RoomResultActions } from "@/app/components/RoomResultActions";
 import { RoomLobbyReturnStatus } from "@/app/components/RoomLobbyReturnStatus";
 import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
 import { confirmRoomLeave } from "@/app/components/room-navigation-confirmation";
+import { useOnlineGameSessionRestore } from "@/app/hooks/use-online-game-session-restore";
 import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "@/app/hooks/use-online-room-polling";
 import { useRoomResultReturnGate } from "@/app/hooks/use-room-result-return-gate";
 import { useRoomLobbyReturnConfirmation } from "@/app/hooks/use-room-lobby-return-confirmation";
@@ -37,15 +38,12 @@ import {
   type NigoichiRoomChoice,
   type NigoichiWordDifficulty,
 } from "@/lib/nigoichi";
-import { OnlineRoomApiError, restoreOnlineRoom } from "@/lib/online-room-api-client";
+import { OnlineRoomApiError } from "@/lib/online-room-api-client";
 import { synchronizedNow } from "@/lib/server-clock";
 import { allRoomPlayersReturned } from "@/lib/room-lobby-return";
 import {
   defaultAvatarImage,
   fallbackAvatarColor,
-  isPlayerAuthenticated,
-  loadPersistentPlayerSession,
-  type PlayerSession,
 } from "@/lib/player-session";
 
 const lastRoomKey = "nigoichi-last-room";
@@ -90,9 +88,8 @@ function PlayerRow({ player, isHost, isMe, score }: { player: NigoichiPlayer; is
 }
 
 export function NigoichiGame() {
-  const [session, setSession] = useState<PlayerSession | null>(null);
   const [room, setRoom] = useState<NigoichiRoom | null>(null);
-  const [ready, setReady] = useState(false);
+  const { session, ready, isRestoringRoom } = useOnlineGameSessionRestore({ lastRoomKey, fetchActiveRoom: nigoichiRoomApi.fetchActiveRoom, fetchRoom: nigoichiRoomApi.fetchRoom, setRoom });
   const [error, setError] = useState("");
   const [passphrase, setPassphrase] = useState("");
   const [joinCode, setJoinCode] = useState("");
@@ -104,34 +101,6 @@ export function NigoichiGame() {
   const [isSaving, setIsSaving] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const resultReturnGate = useRoomResultReturnGate({ room, setRoom, playerId: session?.id ?? "", resultPhase: "result", onReturnUnavailable: () => setError("部屋に戻れません。解散されたか、参加情報が変更されています。") });
-
-  useEffect(() => {
-    let active = true;
-    let timer: number | undefined;
-    if (!isPlayerAuthenticated()) {
-      timer = window.setTimeout(() => setReady(true), 0);
-      return () => { active = false; if (timer) window.clearTimeout(timer); };
-    }
-    void loadPersistentPlayerSession().then(async (savedSession) => {
-      if (!active || !savedSession?.id) { if (active) setReady(true); return; }
-      setSession(savedSession);
-      const savedRoom = await restoreOnlineRoom({
-        playerId: savedSession.id,
-        lastCode: localStorage.getItem(lastRoomKey),
-        fetchActiveRoom: nigoichiRoomApi.fetchActiveRoom,
-        fetchRoom: nigoichiRoomApi.fetchRoom,
-      });
-      if (!active) return;
-      timer = window.setTimeout(() => {
-        if (savedRoom) {
-          setRoom(savedRoom);
-          localStorage.setItem(lastRoomKey, savedRoom.code);
-        }
-        setReady(true);
-      }, 0);
-    }).catch(() => { if (active) setReady(true); });
-    return () => { active = false; if (timer) window.clearTimeout(timer); };
-  }, []);
 
   const roomCode = room?.code;
   const roomPhase = room?.phase;
@@ -354,7 +323,8 @@ export function NigoichiGame() {
         <div className="mx-auto max-w-4xl">
           <section className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-slate-950/80 shadow-2xl">
             <div className="bg-gradient-to-r from-indigo-300 via-amber-200 to-rose-300 px-6 py-8 text-slate-950"><p className="text-xs font-black uppercase tracking-[0.28em]">WORD OUT</p><h1 className="mt-2 text-4xl font-black sm:text-6xl">ワードアウト</h1><p className="mt-3 font-bold">みんなの連想を読み解き、誰にも配られていない言葉を見つけよう。</p><p className="mt-2 text-sm font-semibold">1人2枚が基本。1人に配る枚数を増やして難易度を上げられます。</p></div>
-            <div className="grid gap-6 p-6 md:grid-cols-2">
+            {isRestoringRoom && <p className="border-b border-indigo-300/20 bg-indigo-300/10 px-6 py-3 text-sm font-bold text-indigo-100">前回の部屋を確認中です。画面は先に表示しています。</p>}
+            <div inert={isRestoringRoom} aria-busy={isRestoringRoom} className={`grid gap-6 p-6 md:grid-cols-2 ${isRestoringRoom ? "opacity-60" : ""}`}>
               <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-5">
                 <h2 className="text-xl font-black">部屋を作る</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-400">最大募集人数を決めて部屋を作ります。ゲーム設定は作成後に変更できます。</p>

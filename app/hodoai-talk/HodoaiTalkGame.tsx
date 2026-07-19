@@ -52,7 +52,7 @@ export function HodoaiTalkGame() {
   const [showChoices, setShowChoices] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
-  const { session, ready, playerId, resultReturnGate } = useHodoaiRoomSession({ room, setRoom, setError });
+  const { session, ready, isRestoringRoom, playerId, resultReturnGate } = useHodoaiRoomSession({ room, setRoom, setError });
   const viewModel = useHodoaiViewModel(room, playerId);
   const { isHost, latestResult, latestResultRows, configItems } = viewModel;
 
@@ -80,7 +80,8 @@ export function HodoaiTalkGame() {
         <div className="mx-auto max-w-4xl">
           <section className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-slate-950/80 shadow-2xl">
             <div className="bg-gradient-to-r from-sky-400 via-amber-300 to-fuchsia-400 px-6 py-8 text-slate-950"><p className="text-xs font-black uppercase tracking-[0.28em]">Online room game</p><h1 className="mt-2 text-4xl font-black sm:text-6xl">ワードスケール</h1><p className="mt-3 font-bold">配られた数字カードを指定テーマのことばで表し、全カードを小さい順に並べる協力ゲーム。</p></div>
-            <div className="grid gap-6 p-6 md:grid-cols-2">
+            {isRestoringRoom && <p className="border-b border-cyan-300/20 bg-cyan-300/10 px-6 py-3 text-sm font-bold text-cyan-100">前回の部屋を確認中です。画面は先に表示しています。</p>}
+            <div inert={isRestoringRoom} aria-busy={isRestoringRoom} className={`grid gap-6 p-6 md:grid-cols-2 ${isRestoringRoom ? "opacity-60" : ""}`}>
               <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-5"><h2 className="text-xl font-black">部屋を作る</h2><p className="mt-2 text-sm leading-6 text-slate-400">あなたがホストになり、設定と進行を管理します。</p><label className="mt-4 block text-sm font-bold">合言葉（任意）<input type="password" value={passphrase} maxLength={40} onChange={(event) => setPassphrase(event.target.value)} className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-white outline-none" /></label><button type="button" disabled={isSaving} onClick={createRoom} className="mt-4 w-full rounded-xl bg-amber-300 px-4 py-3 font-black text-slate-950 disabled:opacity-50">新しい部屋を作る</button></div>
               <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-5"><h2 className="text-xl font-black">部屋に参加</h2><label className="mt-4 block text-sm font-bold">部屋コード<input value={joinCode} maxLength={4} onChange={(event) => setJoinCode(event.target.value.toUpperCase())} className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 font-mono text-lg uppercase text-white outline-none" /></label><label className="mt-3 block text-sm font-bold">合言葉<input type="password" value={passphrase} maxLength={40} onChange={(event) => setPassphrase(event.target.value)} className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-white outline-none" /></label><div className="mt-4 grid grid-cols-2 gap-2"><button type="button" disabled={isSaving} onClick={() => void joinRoom()} className="rounded-xl bg-cyan-400 px-3 py-3 font-black text-cyan-950 disabled:opacity-50">コードで参加</button><button type="button" onClick={() => void listRooms()} className="rounded-xl border border-white/20 px-3 py-3 font-black">部屋一覧</button></div></div>
             </div>

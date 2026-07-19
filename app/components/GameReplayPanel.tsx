@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   gameReplayMetadata,
   gameReplayShareText,
@@ -21,6 +21,7 @@ function formatReplayDate(timestamp: number) {
 }
 
 export function GameReplayPanel() {
+  const panelRef = useRef<HTMLElement>(null);
   const [data, setData] = useState<GameReplayListResponse | null>(null);
   const [selectedReplay, setSelectedReplay] = useState<GameReplayDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -45,22 +46,30 @@ export function GameReplayPanel() {
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch("/api/player-replays?gameType=all", { cache: "no-store", signal: controller.signal })
-      .then(async (response) => {
-        const next = (await response.json()) as GameReplayListResponse;
-        if (!response.ok) throw new Error("REPLAY_LIST_FAILED");
-        setData(next);
-      })
-      .catch((error: unknown) => {
-        if (error instanceof Error && error.name === "AbortError") return;
-        setData(null);
-        setMessage("プレイバックを読み込めませんでした。");
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setIsLoading(false);
-      });
-    return () => controller.abort();
-  }, []);
+    const panel = panelRef.current;
+    let started = false;
+    const start = () => {
+      if (started) return;
+      started = true;
+      void loadReplays(controller.signal);
+    };
+
+    if (!panel || typeof IntersectionObserver === "undefined") {
+      start();
+      return () => controller.abort();
+    }
+
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return;
+      observer.disconnect();
+      start();
+    }, { rootMargin: "320px" });
+    observer.observe(panel);
+    return () => {
+      observer.disconnect();
+      controller.abort();
+    };
+  }, [loadReplays]);
 
   const openReplay = async (summary: GameReplaySummary) => {
     setBusyReplayId(summary.id);
@@ -130,7 +139,7 @@ export function GameReplayPanel() {
   };
 
   return (
-    <section className="rounded-lg border border-white/10 bg-white/[0.96] p-4 shadow-[0_18px_50px_rgba(15,23,42,0.18)]" aria-labelledby="replay-heading">
+    <section ref={panelRef} className="rounded-lg border border-white/10 bg-white/[0.96] p-4 shadow-[0_18px_50px_rgba(15,23,42,0.18)]" aria-labelledby="replay-heading">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase text-violet-700">Playback</p>

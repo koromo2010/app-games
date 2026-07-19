@@ -1,9 +1,8 @@
-import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
+import type { Dispatch, SetStateAction } from "react";
 import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "@/app/hooks/use-online-room-polling";
+import { useOnlineGameSessionRestore } from "@/app/hooks/use-online-game-session-restore";
 import { useRoomResultReturnGate } from "@/app/hooks/use-room-result-return-gate";
 import { hodoaiRoomApi } from "@/app/hodoai-talk/hodoai-room-api-client";
-import { restoreOnlineRoom } from "@/lib/online-room-api-client";
-import { isPlayerAuthenticated, loadPersistentPlayerSession, type PlayerSession } from "@/lib/player-session";
 import type { HodoaiRoom } from "@/lib/hodoai-talk";
 
 export const hodoaiLastRoomKey = "hodoai-last-room";
@@ -15,8 +14,12 @@ type Params = {
 };
 
 export function useHodoaiRoomSession({ room, setRoom, setError }: Params) {
-  const [session, setSession] = useState<PlayerSession | null>(null);
-  const [ready, setReady] = useState(false);
+  const { session, ready, isRestoringRoom } = useOnlineGameSessionRestore({
+    lastRoomKey: hodoaiLastRoomKey,
+    fetchActiveRoom: hodoaiRoomApi.fetchActiveRoom,
+    fetchRoom: hodoaiRoomApi.fetchRoom,
+    setRoom,
+  });
   const playerId = session?.id ?? "";
   const resultReturnGate = useRoomResultReturnGate({
     room,
@@ -25,32 +28,6 @@ export function useHodoaiRoomSession({ room, setRoom, setError }: Params) {
     resultPhase: "result",
     onReturnUnavailable: () => setError("部屋に戻れません。解散されたか、参加情報が変更されています。"),
   });
-
-  useEffect(() => {
-    let active = true;
-    let timer: number | undefined;
-    if (!isPlayerAuthenticated()) {
-      timer = window.setTimeout(() => setReady(true), 0);
-      return () => { active = false; if (timer) window.clearTimeout(timer); };
-    }
-    loadPersistentPlayerSession().then(async (savedSession) => {
-      if (!active) return;
-      if (!savedSession?.id) { setReady(true); return; }
-      setSession(savedSession);
-      const savedRoom = await restoreOnlineRoom({
-        playerId: savedSession.id,
-        lastCode: localStorage.getItem(hodoaiLastRoomKey),
-        fetchActiveRoom: hodoaiRoomApi.fetchActiveRoom,
-        fetchRoom: hodoaiRoomApi.fetchRoom,
-      });
-      if (!active) return;
-      timer = window.setTimeout(() => {
-        if (savedRoom) { setRoom(savedRoom); localStorage.setItem(hodoaiLastRoomKey, savedRoom.code); }
-        setReady(true);
-      }, 0);
-    }).catch(() => { if (active) setReady(true); });
-    return () => { active = false; if (timer) window.clearTimeout(timer); };
-  }, [setRoom]);
 
   useOnlineRoomPolling({
     roomCode: playerId && !resultReturnGate.isRoomDissolved ? room?.code : null,
@@ -68,5 +45,5 @@ export function useHodoaiRoomSession({ room, setRoom, setError }: Params) {
     },
   });
 
-  return { session, ready, playerId, resultReturnGate };
+  return { session, ready, isRestoringRoom, playerId, resultReturnGate };
 }

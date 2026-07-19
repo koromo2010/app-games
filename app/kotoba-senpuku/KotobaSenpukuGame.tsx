@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
 import { GameAdSlot } from "@/app/components/GameAdSlot";
 import { GameRulesDialog } from "@/app/components/GameRulesDialog";
@@ -15,12 +15,13 @@ import { RoomResultActions } from "@/app/components/RoomResultActions";
 import { RoomLobbyReturnStatus } from "@/app/components/RoomLobbyReturnStatus";
 import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
 import { confirmRoomLeave } from "@/app/components/room-navigation-confirmation";
+import { useOnlineGameSessionRestore } from "@/app/hooks/use-online-game-session-restore";
 import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "@/app/hooks/use-online-room-polling";
 import { useRoomResultReturnGate } from "@/app/hooks/use-room-result-return-gate";
 import { useRoomLobbyReturnConfirmation } from "@/app/hooks/use-room-lobby-return-confirmation";
 import { applyKotobaSenpukuRoomAction, createKotobaSenpukuRoom, kotobaSenpukuRoomApi } from "@/app/kotoba-senpuku/kotoba-senpuku-room-api-client";
 import { loadPlayerRoomDefaults, savePlayerRoomDefaults } from "@/lib/game-room-defaults-client";
-import { OnlineRoomApiError, restoreOnlineRoom } from "@/lib/online-room-api-client";
+import { OnlineRoomApiError } from "@/lib/online-room-api-client";
 import {
   kotobaSenpukuKanaKey,
   isValidKotobaSenpukuWord,
@@ -36,9 +37,6 @@ import {
 import {
   defaultAvatarImage,
   fallbackAvatarColor,
-  isPlayerAuthenticated,
-  loadPersistentPlayerSession,
-  type PlayerSession,
 } from "@/lib/player-session";
 
 const lastRoomKey = "kotoba-senpuku-last-room";
@@ -151,9 +149,8 @@ function BinaryRuleControl({
 }
 
 export function KotobaSenpukuGame() {
-  const [session, setSession] = useState<PlayerSession | null>(null);
   const [room, setRoom] = useState<KotobaSenpukuRoom | null>(null);
-  const [ready, setReady] = useState(false);
+  const { session, ready, isRestoringRoom } = useOnlineGameSessionRestore({ lastRoomKey, fetchActiveRoom: kotobaSenpukuRoomApi.fetchActiveRoom, fetchRoom: kotobaSenpukuRoomApi.fetchRoom, setRoom });
   const [error, setError] = useState("");
   const [passphrase, setPassphrase] = useState("");
   const [joinCode, setJoinCode] = useState("");
@@ -165,47 +162,6 @@ export function KotobaSenpukuGame() {
   const [isSaving, setIsSaving] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const resultReturnGate = useRoomResultReturnGate({ room, setRoom, playerId: session?.id ?? "", resultPhase: "result", onReturnUnavailable: () => setError("部屋に戻れません。解散されたか、参加情報が変更されています。") });
-
-  useEffect(() => {
-    let active = true;
-    let timer: number | undefined;
-    if (!isPlayerAuthenticated()) {
-      timer = window.setTimeout(() => setReady(true), 0);
-      return () => {
-        active = false;
-        if (timer) window.clearTimeout(timer);
-      };
-    }
-    loadPersistentPlayerSession().then(async (savedSession) => {
-      if (!active) return;
-      if (!savedSession?.id) {
-        setReady(true);
-        return;
-      }
-      setSession(savedSession);
-      const lastCode = localStorage.getItem(lastRoomKey);
-      const savedRoom = await restoreOnlineRoom({
-        playerId: savedSession.id,
-        lastCode,
-        fetchActiveRoom: kotobaSenpukuRoomApi.fetchActiveRoom,
-        fetchRoom: kotobaSenpukuRoomApi.fetchRoom,
-      });
-      if (!active) return;
-      timer = window.setTimeout(() => {
-        if (savedRoom) {
-          setRoom(savedRoom);
-          localStorage.setItem(lastRoomKey, savedRoom.code);
-        }
-        setReady(true);
-      }, 0);
-    }).catch(() => {
-      if (active) setReady(true);
-    });
-    return () => {
-      active = false;
-      if (timer) window.clearTimeout(timer);
-    };
-  }, []);
 
   const roomCode = room?.code;
   const roomPhase = room?.phase;
@@ -436,7 +392,8 @@ export function KotobaSenpukuGame() {
           <div className="flex items-center justify-between gap-2"><Link href="/games" className="text-sm font-bold text-fuchsia-200">← 広場</Link><div className="flex items-center gap-2"><button type="button" onClick={() => setRulesOpen(true)} className="rounded-lg border border-white/20 px-3 py-2 text-sm font-bold">ルール</button><span className="text-sm font-bold">{session.name}</span></div></div>
           <section className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-slate-950/80 shadow-2xl">
             <div className="bg-gradient-to-r from-fuchsia-400 via-cyan-300 to-amber-300 px-6 py-8 text-slate-950"><p className="text-xs font-black uppercase tracking-[0.28em]">Original online word game</p><h1 className="mt-2 text-4xl font-black sm:text-6xl">ワードソナー</h1><p className="mt-3 font-bold">秘密のことばを探り合い、全文公開による脱落を避けて最後の1人を目指す。</p></div>
-            <div className="grid gap-6 p-6 md:grid-cols-2">
+            {isRestoringRoom && <p className="border-b border-fuchsia-300/20 bg-fuchsia-300/10 px-6 py-3 text-sm font-bold text-fuchsia-100">前回の部屋を確認中です。画面は先に表示しています。</p>}
+            <div inert={isRestoringRoom} aria-busy={isRestoringRoom} className={`grid gap-6 p-6 md:grid-cols-2 ${isRestoringRoom ? "opacity-60" : ""}`}>
               <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-5"><h2 className="text-xl font-black">部屋を作る</h2><p className="mt-2 text-sm leading-6 text-slate-400">あなたがホストになり、設定と進行を管理します。</p><label className="mt-4 block text-sm font-bold">合言葉（任意）<input type="password" value={passphrase} maxLength={40} onChange={(event) => setPassphrase(event.target.value)} className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-white outline-none" /></label><button type="button" disabled={isSaving} onClick={createRoom} className="mt-4 w-full rounded-xl bg-amber-300 px-4 py-3 font-black text-slate-950 disabled:opacity-50">新しい部屋を作る</button></div>
               <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-5"><h2 className="text-xl font-black">部屋に参加</h2><label className="mt-4 block text-sm font-bold">部屋コード<input value={joinCode} maxLength={4} onChange={(event) => setJoinCode(event.target.value.toUpperCase())} className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 font-mono text-lg uppercase text-white outline-none" /></label><label className="mt-3 block text-sm font-bold">合言葉<input type="password" value={passphrase} maxLength={40} onChange={(event) => setPassphrase(event.target.value)} className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-white outline-none" /></label><div className="mt-4 grid grid-cols-2 gap-2"><button type="button" disabled={isSaving} onClick={() => void joinRoom()} className="rounded-xl bg-fuchsia-400 px-3 py-3 font-black text-fuchsia-950 disabled:opacity-50">コードで参加</button><button type="button" onClick={() => void listRooms()} className="rounded-xl border border-white/20 px-3 py-3 font-black">部屋一覧</button></div></div>
             </div>

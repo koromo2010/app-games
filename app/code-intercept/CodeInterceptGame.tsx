@@ -16,6 +16,7 @@ import { RoomResultActions } from "@/app/components/RoomResultActions";
 import { RoomLobbyReturnStatus } from "@/app/components/RoomLobbyReturnStatus";
 import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
 import { confirmRoomLeave } from "@/app/components/room-navigation-confirmation";
+import { useOnlineGameSessionRestore } from "@/app/hooks/use-online-game-session-restore";
 import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "@/app/hooks/use-online-room-polling";
 import { useRoomResultReturnGate } from "@/app/hooks/use-room-result-return-gate";
 import { useRoomLobbyReturnConfirmation } from "@/app/hooks/use-room-lobby-return-confirmation";
@@ -46,10 +47,10 @@ import {
   type CodeInterceptTeamId,
   type CodeInterceptTeamRoundResult,
 } from "@/lib/code-intercept";
-import { OnlineRoomApiError, restoreOnlineRoom } from "@/lib/online-room-api-client";
+import { OnlineRoomApiError } from "@/lib/online-room-api-client";
 import { synchronizedNow } from "@/lib/server-clock";
 import { allRoomPlayersReturned } from "@/lib/room-lobby-return";
-import { defaultAvatarImage, fallbackAvatarColor, isPlayerAuthenticated, loadPersistentPlayerSession, type PlayerSession } from "@/lib/player-session";
+import { defaultAvatarImage, fallbackAvatarColor } from "@/lib/player-session";
 
 const lastRoomKey = "code-intercept-last-room";
 const ownerIdKey = "code-intercept-owner-id";
@@ -255,9 +256,8 @@ function RevealedSecretCards({ room }: { room: CodeInterceptRoom }) {
 }
 
 export function CodeInterceptGame() {
-  const [session, setSession] = useState<PlayerSession | null>(null);
   const [room, setRoom] = useState<CodeInterceptRoom | null>(null);
-  const [ready, setReady] = useState(false);
+  const { session, ready, isRestoringRoom } = useOnlineGameSessionRestore({ lastRoomKey, fetchActiveRoom: codeInterceptRoomApi.fetchActiveRoom, fetchRoom: codeInterceptRoomApi.fetchRoom, setRoom });
   const [error, setError] = useState("");
   const [passphrase, setPassphrase] = useState("");
   const [joinCode, setJoinCode] = useState("");
@@ -271,23 +271,6 @@ export function CodeInterceptGame() {
   const [rulesOpen, setRulesOpen] = useState(false);
   const timeoutClueSubmissionKeyRef = useRef("");
   const resultReturnGate = useRoomResultReturnGate({ room, setRoom, playerId: session?.id ?? "", resultPhase: "game-result", onReturnUnavailable: () => setError("部屋に戻れません。解散されたか、参加情報が変更されています。") });
-
-  useEffect(() => {
-    let active = true;
-    if (!isPlayerAuthenticated()) {
-      const timer = window.setTimeout(() => { if (active) setReady(true); }, 0);
-      return () => { active = false; window.clearTimeout(timer); };
-    }
-    void loadPersistentPlayerSession().then(async (saved) => {
-      if (!active || !saved?.id) { if (active) setReady(true); return; }
-      setSession(saved);
-      const restored = await restoreOnlineRoom({ playerId: saved.id, lastCode: localStorage.getItem(lastRoomKey), fetchActiveRoom: codeInterceptRoomApi.fetchActiveRoom, fetchRoom: codeInterceptRoomApi.fetchRoom });
-      if (!active) return;
-      if (restored) { setRoom(restored); localStorage.setItem(lastRoomKey, restored.code); }
-      setReady(true);
-    }).catch(() => { if (active) setReady(true); });
-    return () => { active = false; };
-  }, []);
 
   const playerId = session?.id ?? "";
   useOnlineRoomPolling({
@@ -458,7 +441,8 @@ export function CodeInterceptGame() {
     <GameTopBanner eyebrow="PRIVATE TEAM PROTOTYPE" title="コードインターセプト"><Link href="/games" className={gameTopBannerActionClass}>広場へ戻る</Link><GameTopMenu><button type="button" data-menu-close="true" onClick={() => setRulesOpen(true)} className={gameTopMenuItemClass}>ルール</button></GameTopMenu><GamePlayerMenu id={session.id} name={session.name} avatarColor={session.avatarColor} avatarImage={session.avatarImage} hasRecoveryEmail={session.hasRecoveryEmail} /></GameTopBanner>
     <section className="mx-auto mt-6 max-w-4xl overflow-hidden rounded-3xl border border-white/10 bg-slate-950/80 shadow-2xl">
       <div className="bg-gradient-to-r from-rose-300 via-amber-200 to-sky-300 px-6 py-8 text-slate-950"><p className="text-xs font-black tracking-[0.25em]">CODE INTERCEPT</p><h1 className="mt-2 text-4xl font-black sm:text-6xl">コードインターセプト</h1><p className="mt-3 font-bold">味方には伝え、敵の暗号は傍受せよ。</p></div>
-      <div className="grid gap-6 p-6 md:grid-cols-2">
+      {isRestoringRoom && <p className="border-b border-amber-300/20 bg-amber-300/10 px-6 py-3 text-sm font-bold text-amber-100">前回の部屋を確認中です。画面は先に表示しています。</p>}
+      <div inert={isRestoringRoom} aria-busy={isRestoringRoom} className={`grid gap-6 p-6 md:grid-cols-2 ${isRestoringRoom ? "opacity-60" : ""}`}>
         <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-5"><h2 className="text-xl font-black">部屋を作る</h2><label className="mt-4 block text-sm font-bold">最大募集人数<select value={newPlayerCapacity} onChange={(event) => setNewPlayerCapacity(Number(event.target.value))} className="mt-1 w-full rounded-xl border border-white/15 bg-slate-800 px-3 py-2 text-white">{Array.from({ length: codeInterceptPlayerLimit - codeInterceptMinimumPlayers + 1 }, (_, index) => index + codeInterceptMinimumPlayers).map((count) => <option key={count} value={count}>{count}人</option>)}</select></label><label className="mt-4 block text-sm font-bold">合言葉（任意）<input type="password" value={passphrase} maxLength={40} onChange={(event) => setPassphrase(event.target.value)} className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2" /></label><button type="button" disabled={isSaving} onClick={() => void createRoom()} className="mt-4 w-full rounded-xl bg-amber-300 px-4 py-3 font-black text-slate-950 disabled:opacity-50">新しい部屋を作る</button></div>
         <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-5"><h2 className="text-xl font-black">部屋に参加</h2><label className="mt-4 block text-sm font-bold">部屋コード<input value={joinCode} maxLength={4} onChange={(event) => setJoinCode(event.target.value.toUpperCase())} className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 font-mono text-lg uppercase" /></label><label className="mt-3 block text-sm font-bold">合言葉<input type="password" value={passphrase} maxLength={40} onChange={(event) => setPassphrase(event.target.value)} className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2" /></label><div className="mt-4 grid grid-cols-2 gap-2"><button type="button" disabled={isSaving} onClick={() => void joinRoom()} className="rounded-xl bg-sky-300 px-3 py-3 font-black text-sky-950">コードで参加</button><button type="button" onClick={() => void listRooms()} className="rounded-xl border border-white/20 px-3 py-3 font-black">部屋一覧</button></div></div>
       </div>

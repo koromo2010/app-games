@@ -104,7 +104,7 @@ export function GamePlayerMenu(props: Props) {
         <button type="button" onClick={() => { setIsOpen(false); setIsMyPageOpen(true); }} className="mt-3 flex w-full items-center justify-center rounded-md bg-cyan-600 px-3 py-2 text-sm font-bold text-white hover:bg-cyan-500">マイページを開く</button>
         {props.id && <button type="button" disabled={isLoggingOut} onClick={() => void logout()} className="mt-2 w-full rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-40">{isLoggingOut ? "ログアウト中..." : "ログアウト"}</button>}
       </div></div>, document.body)}
-      <FullScreenPageOverlay open={isMyPageOpen} href="/users/me" title="マイページ" onClose={() => setIsMyPageOpen(false)} />
+      <FullScreenPageOverlay open={isMyPageOpen} href="/users/me" title="マイページ" keepAlive onClose={() => setIsMyPageOpen(false)} />
     </>
   );
 }

@@ -24,6 +24,8 @@ UI / hooks -> API client -> HTTP route -> application/domain -> storage
 
 - HTTP共通処理: `lib/online-room-api-client.ts`
 - 表示中の部屋同期: `app/hooks/use-online-room-polling.ts`
+- ログイン画面先行表示と部屋復元: `app/hooks/use-online-game-session-restore.ts`
+- 広場の全ゲーム復帰概要: `app/api/player-active-rooms/route.ts`
 - Redis部屋一覧・期限切れ索引整理: `lib/online-room-list.ts`
 - 1プレイヤー1部屋の確保・移動: `lib/player-active-room.ts`
 - revision CAS・新規部屋永続化: `lib/online-room-persistence.ts`
@@ -39,6 +41,8 @@ UI / hooks -> API client -> HTTP route -> application/domain -> storage
 - ワードアウトadapter（内部IDはnigoichi）: `app/nigoichi/nigoichi-room-api-client.ts`
 
 共通クライアントはURL、method、条件付きGET、JSON応答、HTTP status/payload付きエラーまでを担当する。各adapterはゲーム固有のRoom・Action型を付ける。フェーズ遷移、権限、勝敗、レスポンスの秘密情報除去は従来どおりサーバーdomain/storeの責務で、クライアント共通化へ移さない。
+
+ゲーム入口は、ローカルに保存された表示用セッションから画面枠を先に描画できる。ただしサーバー認証とアクティブ部屋復元が終わるまでは入口操作を無効にし、Room APIのactor判定はCookieを正本とする。広場はゲーム別Room APIをブラウザから扇状に呼ばず、共通の復帰概要APIで各storeのactive-room loaderを並列実行し、安全な概要だけを返す。
 
 オンライン部屋の解散は、ゲーム別storeがエラーコードとRedisキーをadapterとして渡し、`lib/online-room-dissolution.ts` がホスト本人確認、`room-dissolve-policy` によるフェーズ検証、部屋本体と索引の削除、参加者全員のactive room解除を担当する。進行中の退出可否や終了フェーズの作り方はゲーム固有storeに残す。
 
