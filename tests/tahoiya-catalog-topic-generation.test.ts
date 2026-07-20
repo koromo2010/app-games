@@ -101,7 +101,21 @@ test("選ばれた長さ帯の上限を超えた正解文は保存しない", ()
       JSON.stringify({ sensitive: false, reading: "はこ", realDefinition: "道具を収納するための小さな木製の容器。" }),
       { word: "函" },
       "standard",
+      4,
       14,
+    ),
+    { status: "invalid" },
+  );
+});
+
+test("選ばれた長さ帯より短い正解文は水増しせず候補ごと不採用にする", () => {
+  assert.deepEqual(
+    parseTahoiyaCatalogTopicGeneration(
+      JSON.stringify({ sensitive: false, reading: "はこ", realDefinition: "物を入れる容器。" }),
+      { word: "函" },
+      "standard",
+      24,
+      38,
     ),
     { status: "invalid" },
   );

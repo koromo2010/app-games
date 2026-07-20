@@ -4,6 +4,7 @@ import {
   pickTahoiyaDefinitionStyle,
   tahoiyaDefinitionMedianLength,
   tahoiyaDefinitionMedianLengthChoices,
+  tahoiyaDefinitionStyleRules,
   tahoiyaDefinitionStyleWeightsByMedian,
 } from "../lib/tahoiya-definition-length.ts";
 import { installRuntimeHyperparameterOverrides } from "../lib/runtime-hyperparameters-core.ts";
@@ -24,6 +25,17 @@ test("各ハイパラの重みは合計100%で指定した文字帯が中央値�
     assert.ok(weightBeforeMedian < 50);
     assert.ok(weightThroughMedian >= 50);
     assert.equal(pickTahoiyaDefinitionStyle(() => 0.5, medianLength), weights[medianStyleIndex]?.style);
+  }
+});
+
+test("各文字帯は上限だけでなく自然な目標範囲を持つ", () => {
+  assert.deepEqual(
+    Object.values(tahoiyaDefinitionStyleRules).map(({ min, max }) => [min, max]),
+    [[6, 14], [14, 25], [24, 38], [32, 46], [40, 55], [48, 60]],
+  );
+  for (const rule of Object.values(tahoiyaDefinitionStyleRules)) {
+    assert.ok(rule.min < rule.max);
+    assert.match(rule.contentInstruction, /含める|つなぐ/);
   }
 });
 

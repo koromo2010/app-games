@@ -18,14 +18,44 @@ export function normalizeTahoiyaDefinitionMedianLength(value: unknown): TahoiyaD
 
 export const tahoiyaDefinitionStyleRules: Record<
   TahoiyaDefinitionStyle,
-  { max: number; instruction: string }
+  { min: number; max: number; instruction: string; contentInstruction: string }
 > = {
-  brief: { max: 14, instruction: "10文字程度の短く端的な説明" },
-  standard: { max: 25, instruction: "20文字程度の標準的な説明" },
-  detailed: { max: 38, instruction: "30文字程度を目安に、上位概念と固有の性質を含めた辞書語釈" },
-  long: { max: 46, instruction: "40文字程度を上限の目安に、対象・性質・用途など語義に必要な要素だけで書く辞書語釈" },
-  extended: { max: 55, instruction: "50文字程度を上限の目安に、語義を区別するために必要な要素だけで書く辞書語釈" },
-  maximum: { max: 60, instruction: "60文字を上限に、語義に必要な情報だけで書く詳しい辞書語釈" },
+  brief: {
+    min: 6,
+    max: 14,
+    instruction: "6〜14文字の短く端的な説明",
+    contentInstruction: "上位概念または核心的な性質を一つ含める",
+  },
+  standard: {
+    min: 14,
+    max: 25,
+    instruction: "14〜25文字の標準的な説明",
+    contentInstruction: "上位概念と、その語を区別する特徴を含める",
+  },
+  detailed: {
+    min: 24,
+    max: 38,
+    instruction: "24〜38文字の詳しい辞書語釈",
+    contentInstruction: "上位概念、識別特徴、対象・用途・成立条件のうち語義に必要な要素を含める",
+  },
+  long: {
+    min: 32,
+    max: 46,
+    instruction: "32〜46文字の長めの辞書語釈",
+    contentInstruction: "対象・性質・用途・成立条件から、正確に確認できる複数の識別要素を含める",
+  },
+  extended: {
+    min: 40,
+    max: 55,
+    instruction: "40〜55文字の詳しい辞書語釈",
+    contentInstruction: "上位概念に加え、似た概念と区別できる複数の性質や対象・用途・成立条件を含める",
+  },
+  maximum: {
+    min: 48,
+    max: 60,
+    instruction: "48〜60文字の詳しい辞書語釈",
+    contentInstruction: "語義を正確に限定する複数の性質・対象・用途・成立条件を、辞書語釈として自然につなぐ",
+  },
 };
 
 export type TahoiyaDefinitionStyleWeight = Readonly<{

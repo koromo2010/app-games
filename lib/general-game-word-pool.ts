@@ -31,6 +31,21 @@ type GeneralGameWordPoolDiagnosticRow = {
   tagged_difficulty_count: string | number;
 };
 
+type GeneralGameWordPoolBaseDiagnosticRow = {
+  general_count: string | number;
+  enabled_count: string | number;
+  active_word_count: string | number;
+};
+
+function databaseEndpointIdentity(value: string | undefined) {
+  try {
+    const url = new URL(value?.trim() ?? "");
+    return `${url.hostname.toLowerCase()}${url.pathname}`;
+  } catch {
+    return "";
+  }
+}
+
 function generalGameWordPoolErrorCode(error: unknown) {
   if (!(error instanceof Error)) return "UNEXPECTED_ERROR";
   const candidate = error.message.split(":", 1)[0]?.trim() ?? "";
@@ -221,6 +236,16 @@ export async function loadGeneralGameWordPools(
     });
   }
   if (rows.length === 0) {
+    const readerIdentity = databaseEndpointIdentity(process.env.VOCABULARY_DATABASE_URL);
+    const adminIdentity = databaseEndpointIdentity(process.env.VOCABULARY_ADMIN_DATABASE_URL);
+    logGeneralGameWordPoolDiagnostic("warn", "admin-target-configured", {
+      sourceCount: adminIdentity ? 1 : 0,
+      outcome: "failed",
+    });
+    logGeneralGameWordPoolDiagnostic("warn", "reader-admin-same-target", {
+      sourceCount: readerIdentity && readerIdentity === adminIdentity ? 1 : 0,
+      outcome: "failed",
+    });
     try {
       const diagnosticRows = await sql`
         WITH active_eligibility AS (
@@ -267,6 +292,36 @@ export async function loadGeneralGameWordPools(
       }
     } catch (error) {
       logGeneralGameWordPoolDiagnostic("error", "diagnostic-query", {
+        errorCode: generalGameWordPoolErrorCode(error),
+        databaseCode: vocabularyDatabaseErrorCode(error),
+        outcome: "failed",
+      });
+    }
+    try {
+      const baseRows = await sql`
+        SELECT
+          COUNT(*) FILTER (WHERE eligibility.game_id = ${generalGameWordPoolGameId}) AS general_count,
+          COUNT(*) FILTER (WHERE eligibility.game_id = ${generalGameWordPoolGameId}
+            AND eligibility.enabled AND NOT eligibility.manually_suspended) AS enabled_count,
+          COUNT(*) FILTER (WHERE eligibility.game_id = ${generalGameWordPoolGameId}
+            AND eligibility.enabled AND NOT eligibility.manually_suspended
+            AND word.status = 'active') AS active_word_count
+        FROM word_game_eligibility eligibility
+        JOIN words word ON eligibility.subject_type = 'word' AND eligibility.subject_id = word.id
+      ` as GeneralGameWordPoolBaseDiagnosticRow[];
+      const base = baseRows[0];
+      for (const [operation, value] of [
+        ["base-general", base?.general_count],
+        ["base-enabled", base?.enabled_count],
+        ["base-active-word", base?.active_word_count],
+      ] as const) {
+        logGeneralGameWordPoolDiagnostic("warn", operation, {
+          sourceCount: Number(value ?? 0),
+          outcome: "failed",
+        });
+      }
+    } catch (error) {
+      logGeneralGameWordPoolDiagnostic("error", "base-diagnostic-query", {
         errorCode: generalGameWordPoolErrorCode(error),
         databaseCode: vocabularyDatabaseErrorCode(error),
         outcome: "failed",

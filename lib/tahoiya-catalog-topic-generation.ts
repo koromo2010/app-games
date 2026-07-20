@@ -59,6 +59,7 @@ export function parseTahoiyaCatalogTopicGeneration(
   text: string,
   candidate: TahoiyaCatalogWordForGeneration,
   difficulty: TahoiyaDifficulty,
+  minimumLength = 4,
   maximumLength = 60,
 ): TahoiyaCatalogTopicGenerationResult {
   const parsed = parseLlmJson<{
@@ -74,7 +75,7 @@ export function parseTahoiyaCatalogTopicGeneration(
   const definitionLength = Array.from(realDefinition.replace(/。$/, "")).length;
   if (
     !reading
-    || definitionLength < 4
+    || definitionLength < Math.max(4, Math.min(60, minimumLength))
     || definitionLength > Math.max(4, Math.min(60, maximumLength))
     || !isTahoiyaDictionaryStyleDefinition(realDefinition)
   ) return { status: "invalid" };
