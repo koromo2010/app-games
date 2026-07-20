@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   generalGameWordDifficultyWeights,
+  generalGameWordDifficultyTags,
   generalGameWordPoolGameId,
   pickGeneralGameWordBand,
   selectGeneralGameWordsForBands,
@@ -13,6 +14,11 @@ import {
 
 test("General Game Pool uses the general_word_pool eligibility tag", () => {
   assert.equal(generalGameWordPoolGameId, "general_word_pool");
+  assert.deepEqual(generalGameWordDifficultyTags, {
+    easy: "difficulty_easy",
+    normal: "difficulty_normal",
+    hard: "difficulty_hard",
+  });
 });
 
 test("difficulty mixing follows the shared ratios", () => {
