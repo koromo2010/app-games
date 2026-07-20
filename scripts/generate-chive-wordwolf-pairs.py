@@ -31,7 +31,8 @@ DEFAULT_OUTPUT = (
 )
 PAIR_POLICY_VERSION = "chive-nearest-neighbor-v1"
 CANDIDATE_QUERY = """
-SELECT id, surface, normalized_form, reading, primary_part_of_speech, zipf_frequency
+SELECT id, surface, normalized_form, reading, primary_part_of_speech,
+       COALESCE(zipf_frequency, zipf_fallback) AS effective_zipf
 FROM words
 WHERE active
   AND form_status <> 'inflected'
@@ -39,8 +40,8 @@ WHERE active
   AND surface_quality_status = 'clean'
   AND content_safety_status <> 'exclude'
   AND primary_part_of_speech = '名詞'
-  AND zipf_frequency >= %s
-  AND zipf_frequency < %s
+  AND COALESCE(zipf_frequency, zipf_fallback) >= %s
+  AND COALESCE(zipf_frequency, zipf_fallback) < %s
 ORDER BY id
 """
 

@@ -63,6 +63,7 @@ export async function ensureWordMasterSchema() {
           content_safety_flags TEXT[] NOT NULL DEFAULT '{}',
           content_safety_policy_version TEXT NOT NULL DEFAULT '',
           zipf_frequency REAL,
+          zipf_fallback REAL,
           embedding VECTOR,
           embedding_model TEXT,
           random_key DOUBLE PRECISION NOT NULL DEFAULT random()
@@ -76,6 +77,40 @@ export async function ensureWordMasterSchema() {
           UNIQUE (source_id, source_entry_id),
           UNIQUE (normalized_form, reading, primary_part_of_speech, source_id)
         )
+      `;
+
+      await sql`
+        CREATE TABLE IF NOT EXISTS word_source_entries (
+          id BIGSERIAL PRIMARY KEY,
+          source_id BIGINT NOT NULL REFERENCES word_sources(id) ON DELETE RESTRICT,
+          source_entry_id TEXT NOT NULL,
+          source_version TEXT NOT NULL,
+          entry_payload JSONB NOT NULL
+            CHECK (jsonb_typeof(entry_payload) = 'object'),
+          active BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE (source_id, source_entry_id)
+        )
+      `;
+
+      await sql`
+        CREATE TABLE IF NOT EXISTS word_source_entry_links (
+          word_id BIGINT NOT NULL REFERENCES words(id) ON DELETE RESTRICT,
+          source_entry_row_id BIGINT NOT NULL REFERENCES word_source_entries(id) ON DELETE RESTRICT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (word_id, source_entry_row_id)
+        )
+      `;
+
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_word_source_entries_source_active
+        ON word_source_entries(source_id, active, source_entry_id)
+      `;
+
+      await sql`
+        CREATE INDEX IF NOT EXISTS idx_word_source_entry_links_entry
+        ON word_source_entry_links(source_entry_row_id, word_id)
       `;
 
       // Existing databases predate lexical-form classification. Additive
@@ -187,6 +222,10 @@ export async function ensureWordMasterSchema() {
         ADD COLUMN IF NOT EXISTS content_safety_policy_version TEXT NOT NULL DEFAULT ''
       `;
       await sql`
+        ALTER TABLE words
+        ADD COLUMN IF NOT EXISTS zipf_fallback REAL
+      `;
+      await sql`
         DO $content_safety_constraint$
         BEGIN
           IF NOT EXISTS (
@@ -287,6 +326,16 @@ export async function ensureWordMasterSchema() {
         )
         ON CONFLICT (policy_key) DO NOTHING
       `;
+      await sql`
+        INSERT INTO word_db_policies (policy_key, policy_value)
+        VALUES (
+          'zipf-measurement-v1',
+          '{"version":1,"measured":"wordfreq whole-token score greater than zero","split_or_unseen":"null","effective":"coalesce(zipf_frequency, zipf_fallback)","tahoiya_max_exclusive":3,"jmdict_yoji_fallback":2.9}'::jsonb
+        )
+        ON CONFLICT (policy_key) DO UPDATE SET
+          policy_value = EXCLUDED.policy_value,
+          updated_at = NOW()
+      `;
 
       await sql`
         CREATE TABLE IF NOT EXISTS user_seen_tahoiya_words (
@@ -324,6 +373,22 @@ export async function ensureWordMasterSchema() {
           reason TEXT NOT NULL,
           feedback_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `;
+
+      await sql`
+        CREATE TABLE IF NOT EXISTS word_pool_evaluations (
+          word_id BIGINT NOT NULL REFERENCES words(id) ON DELETE RESTRICT,
+          pool_key TEXT NOT NULL,
+          eligibility_status TEXT NOT NULL
+            CHECK (eligibility_status IN ('eligible', 'review', 'exclude')),
+          eligibility_flags TEXT[] NOT NULL DEFAULT '{}',
+          policy_version TEXT NOT NULL,
+          evidence JSONB NOT NULL DEFAULT '{}'::jsonb,
+          active BOOLEAN NOT NULL DEFAULT TRUE,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          PRIMARY KEY (word_id, pool_key)
         )
       `;
 
@@ -377,6 +442,7 @@ export async function ensureWordMasterSchema() {
       await sql`CREATE INDEX IF NOT EXISTS word_person_entity_links_entity_idx ON word_person_entity_links (person_entity_id, name_role, word_id) WHERE active`;
       await sql`CREATE INDEX IF NOT EXISTS tahoiya_seen_word_user_date_idx ON user_seen_tahoiya_words (word_id, user_id, last_seen_at DESC)`;
       await sql`CREATE INDEX IF NOT EXISTS word_feedback_word_game_idx ON word_feedback (word_id, game_type, created_at DESC)`;
+      await sql`CREATE INDEX IF NOT EXISTS word_pool_evaluations_pool_status_idx ON word_pool_evaluations (pool_key, active, eligibility_status, word_id)`;
       await sql`CREATE INDEX IF NOT EXISTS wordwolf_pairs_status_difficulty_idx ON wordwolf_pairs (status, difficulty, id) WHERE status = 'approved'`;
       await sql`CREATE INDEX IF NOT EXISTS wordwolf_pair_feedback_pair_idx ON wordwolf_pair_feedback (pair_id, created_at DESC)`;
     })().catch((error) => {

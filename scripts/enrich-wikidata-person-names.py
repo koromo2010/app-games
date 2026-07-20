@@ -336,7 +336,7 @@ def upsert_person_entity(
 def ensure_full_name_word(
     cur: psycopg.Cursor[Any], source_id: int, human: HumanMatch, source_version: str
 ) -> tuple[int, bool]:
-    from wordfreq import zipf_frequency
+    from word_zipf import measured_zipf
 
     normalized = normalize(human.canonical_name)
     cur.execute(
@@ -357,7 +357,7 @@ def ensure_full_name_word(
         return int(existing[0]), False
 
     reading = guess_reading(human.canonical_name)
-    zipf = float(zipf_frequency(human.canonical_name, "ja"))
+    zipf = measured_zipf(human.canonical_name)
     cur.execute(
         """
         INSERT INTO words (
@@ -371,7 +371,7 @@ def ensure_full_name_word(
           %s, %s, %s, '名詞', ARRAY['固有名詞', '人名', '一般'],
           'non_inflecting', 'non-inflecting-pos:名詞', 'jp-conjugation-form-v1',
           'proper', 'person', 'general_person', FALSE, %s,
-          'clean', ARRAY[]::TEXT[], 'surface-quality-v2',
+          'clean', ARRAY[]::TEXT[], 'surface-quality-v3',
           %s, %s, %s, %s
         )
         ON CONFLICT (source_id, source_entry_id) DO UPDATE SET
@@ -529,7 +529,7 @@ def deactivate_orphan_entities(cur: psycopg.Cursor[Any], source_id: int) -> Coun
         UPDATE words
         SET surface_quality_status = 'clean',
             surface_quality_flags = '{}',
-            surface_quality_policy_version = 'surface-quality-v2',
+            surface_quality_policy_version = 'surface-quality-v3',
             updated_at = NOW()
         WHERE source_id = %s
           AND active

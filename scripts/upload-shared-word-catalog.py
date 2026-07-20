@@ -16,13 +16,14 @@ from typing import Any, Iterable
 
 import psycopg
 
-CATALOG_POLICY_VERSION = "shared-word-catalog-v1"
+CATALOG_POLICY_VERSION = "shared-word-catalog-v2"
 CATALOG_LOCK_ID = 7_361_128_221_904_771
 
 CANDIDATE_QUERY = """
-SELECT id, surface, reading, zipf_frequency
+SELECT id, surface, reading, COALESCE(zipf_frequency, zipf_fallback) AS effective_zipf
 FROM words
 WHERE active
+  AND COALESCE(zipf_frequency, zipf_fallback) IS NOT NULL
   AND form_status <> 'inflected'
   AND NOT is_name_fragment
   AND surface_quality_status = 'clean'

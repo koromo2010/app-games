@@ -26,6 +26,8 @@ class UploadSharedWordCatalogTest(unittest.TestCase):
         )
 
     def test_candidate_query_applies_local_quality_filters(self) -> None:
+        self.assertIn("COALESCE(zipf_frequency, zipf_fallback)", catalog.CANDIDATE_QUERY)
+        self.assertIn("IS NOT NULL", catalog.CANDIDATE_QUERY)
         self.assertIn("form_status <> 'inflected'", catalog.CANDIDATE_QUERY)
         self.assertIn("NOT is_name_fragment", catalog.CANDIDATE_QUERY)
         self.assertIn("surface_quality_status = 'clean'", catalog.CANDIDATE_QUERY)

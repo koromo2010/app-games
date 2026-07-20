@@ -61,6 +61,19 @@ class WordSurfaceQualityClassifierTest(unittest.TestCase):
     def test_excludes_single_character_repetition(self) -> None:
         self.assertIn("repeated_noise", classify("さささささ", "副詞")[1])
 
+    def test_excludes_numeric_only_surfaces_after_nfkc_normalization(self) -> None:
+        for surface in ("21", "２１", "2026"):
+            with self.subTest(surface=surface):
+                status, flags, version = classify(surface)
+                self.assertEqual(status, "exclude")
+                self.assertIn("numeric_only", flags)
+                self.assertEqual(version, "surface-quality-v3")
+
+    def test_keeps_kanji_numerals_and_mixed_ascii_digits(self) -> None:
+        for surface in ("三角", "八百屋", "3D", "四月1日"):
+            with self.subTest(surface=surface):
+                self.assertNotIn("numeric_only", classify(surface)[1])
+
     def test_does_not_treat_ordinary_reduplicated_mimetic_word_as_noise(self) -> None:
         status, flags, _ = classify("ぽたりぽたり", "副詞", token_count=2)
         self.assertNotIn("repeated_noise", flags)

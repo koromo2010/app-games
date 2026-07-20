@@ -9,7 +9,8 @@ Japanese wordfreq Zipf values locally and creates initial per-game settings.
 Required CSV columns:
   source_entry_id,surface,reading,primary_part_of_speech
 Optional CSV columns:
-  normalized_form,part_of_speech_details,proper_noun_status,proper_noun_type
+  normalized_form,part_of_speech_details,proper_noun_status,proper_noun_type,
+  zipf_fallback
 
 Example:
   python scripts/import-word-master.py \
@@ -36,12 +37,12 @@ from pathlib import Path
 from typing import Any
 
 import psycopg
-from wordfreq import zipf_frequency
 from wordfreq.tokens import lossy_tokenize
 from word_form_classifier import classify_word_form
 from word_content_safety_classifier import classify_content_safety
 from word_person_classifier import classify_person_name
 from word_surface_quality_classifier import classify_surface_quality
+from word_zipf import measured_zipf
 
 GAME_TYPES = ("wordwolf", "nigoichi", "tahoiya")
 VALID_PROPER_STATUS = {"common", "proper", "ambiguous"}
@@ -91,7 +92,21 @@ def get_initial_settings(zipf: float) -> dict[str, tuple[bool, str | None, str]]
     }
 
 
-def parse_row(row: dict[str, str], line_number: int) -> dict[str, Any] | None:
+def parse_fallback_zipf(value: str, default: float | None) -> float | None:
+    text = value.strip()
+    if not text:
+        return default
+    parsed = float(text)
+    if parsed <= 0:
+        raise ValueError("zipf_fallback must be greater than zero")
+    return parsed
+
+
+def parse_row(
+    row: dict[str, str],
+    line_number: int,
+    default_fallback_zipf: float | None = None,
+) -> dict[str, Any] | None:
     source_entry_id = row.get("source_entry_id", "").strip()
     surface = row.get("surface", "").strip()
     pos = row.get("primary_part_of_speech", "").strip()
@@ -126,6 +141,12 @@ def parse_row(row: dict[str, str], line_number: int) -> dict[str, Any] | None:
     content_safety_status, content_safety_flags, content_safety_policy_version = (
         classify_content_safety(surface, normalized_form)
     )
+    measured = measured_zipf(surface)
+    fallback = (
+        parse_fallback_zipf(row.get("zipf_fallback", ""), default_fallback_zipf)
+        if measured is None
+        else None
+    )
 
     return {
         "source_entry_id": source_entry_id,
@@ -148,7 +169,8 @@ def parse_row(row: dict[str, str], line_number: int) -> dict[str, Any] | None:
         "content_safety_status": content_safety_status,
         "content_safety_flags": content_safety_flags,
         "content_safety_policy_version": content_safety_policy_version,
-        "zipf_frequency": float(zipf_frequency(surface, "ja")),
+        "zipf_frequency": measured,
+        "zipf_fallback": fallback,
         "random_key": random.random(),
         "line_number": line_number,
     }
@@ -211,7 +233,8 @@ def import_rows(connection: psycopg.Connection[Any], args: argparse.Namespace) -
               content_safety_status TEXT NOT NULL,
               content_safety_flags TEXT[] NOT NULL,
               content_safety_policy_version TEXT NOT NULL,
-              zipf_frequency REAL NOT NULL,
+              zipf_frequency REAL,
+              zipf_fallback REAL,
               random_key DOUBLE PRECISION NOT NULL
             ) ON COMMIT DROP
         """)
@@ -232,7 +255,7 @@ def import_rows(connection: psycopg.Connection[Any], args: argparse.Namespace) -
                   person_name_status, is_name_fragment, person_name_policy_version,
                   surface_quality_status, surface_quality_flags, surface_quality_policy_version,
                   content_safety_status, content_safety_flags, content_safety_policy_version,
-                  zipf_frequency, random_key
+                  zipf_frequency, zipf_fallback, random_key
                 ) FROM STDIN
             """
             with cur.copy(copy_sql) as copy:
@@ -240,7 +263,7 @@ def import_rows(connection: psycopg.Connection[Any], args: argparse.Namespace) -
                     if args.max_rows is not None and counts["staged"] >= args.max_rows:
                         break
 
-                    parsed = parse_row(row, line_number)
+                    parsed = parse_row(row, line_number, args.fallback_zipf)
                     if parsed is None:
                         counts["skipped_invalid"] += 1
                         continue
@@ -268,10 +291,17 @@ def import_rows(connection: psycopg.Connection[Any], args: argparse.Namespace) -
                             parsed["content_safety_flags"],
                             parsed["content_safety_policy_version"],
                             parsed["zipf_frequency"],
+                            parsed["zipf_fallback"],
                             parsed["random_key"],
                         )
                     )
                     counts["staged"] += 1
+                    if parsed["zipf_frequency"] is not None:
+                        counts["measured_zipf"] += 1
+                    elif parsed["zipf_fallback"] is not None:
+                        counts["fallback_zipf"] += 1
+                    else:
+                        counts["missing_zipf"] += 1
                     if counts["staged"] % 100_000 == 0:
                         print(f"Zipf calculated: {counts['staged']}", file=sys.stderr, flush=True)
 
@@ -316,7 +346,8 @@ def import_rows(connection: psycopg.Connection[Any], args: argparse.Namespace) -
               person_name_status, is_name_fragment, person_name_policy_version,
               surface_quality_status, surface_quality_flags, surface_quality_policy_version,
               content_safety_status, content_safety_flags, content_safety_policy_version,
-              zipf_frequency, random_key, source_id, source_entry_id, source_version
+              zipf_frequency, zipf_fallback, random_key,
+              source_id, source_entry_id, source_version
             )
             SELECT
               surface, normalized_form, reading, primary_part_of_speech,
@@ -325,7 +356,8 @@ def import_rows(connection: psycopg.Connection[Any], args: argparse.Namespace) -
               person_name_status, is_name_fragment, person_name_policy_version,
               surface_quality_status, surface_quality_flags, surface_quality_policy_version,
               content_safety_status, content_safety_flags, content_safety_policy_version,
-              zipf_frequency, random_key, %s, source_entry_id, %s
+              zipf_frequency, zipf_fallback, random_key,
+              %s, source_entry_id, %s
             FROM word_import_stage
             ON CONFLICT (source_id, source_entry_id) DO UPDATE SET
               surface = EXCLUDED.surface,
@@ -378,6 +410,7 @@ def import_rows(connection: psycopg.Connection[Any], args: argparse.Namespace) -
                 ELSE EXCLUDED.content_safety_policy_version
               END,
               zipf_frequency = EXCLUDED.zipf_frequency,
+              zipf_fallback = EXCLUDED.zipf_fallback,
               source_version = EXCLUDED.source_version,
               active = TRUE,
               updated_at = NOW()
@@ -392,29 +425,30 @@ def import_rows(connection: psycopg.Connection[Any], args: argparse.Namespace) -
               game.game_type,
               CASE
                 WHEN stage.content_safety_status = 'exclude' THEN FALSE
-                WHEN game.game_type IN ('wordwolf', 'nigoichi') THEN stage.zipf_frequency >= 2.5
-                ELSE stage.zipf_frequency >= 1.0 AND stage.zipf_frequency < 3.5
+                WHEN game.game_type IN ('wordwolf', 'nigoichi')
+                  THEN COALESCE(stage.zipf_frequency, stage.zipf_fallback) >= 3
+                ELSE COALESCE(stage.zipf_frequency, stage.zipf_fallback) < 3
               END,
               CASE
                 WHEN game.game_type IN ('wordwolf', 'nigoichi') THEN
                   CASE
-                    WHEN stage.zipf_frequency >= 4.5 THEN 'easy'
-                    WHEN stage.zipf_frequency >= 3.5 THEN 'normal'
-                    WHEN stage.zipf_frequency >= 2.5 THEN 'hard'
+                    WHEN COALESCE(stage.zipf_frequency, stage.zipf_fallback) >= 4.5 THEN 'easy'
+                    WHEN COALESCE(stage.zipf_frequency, stage.zipf_fallback) >= 3.5 THEN 'normal'
+                    WHEN COALESCE(stage.zipf_frequency, stage.zipf_fallback) >= 3 THEN 'hard'
                     ELSE NULL
                   END
                 ELSE
                   CASE
-                    WHEN stage.zipf_frequency >= 3.5 THEN NULL
-                    WHEN stage.zipf_frequency >= 2.5 THEN 'easy'
-                    WHEN stage.zipf_frequency >= 1.0 THEN 'normal'
-                    ELSE 'hard'
+                    WHEN COALESCE(stage.zipf_frequency, stage.zipf_fallback) >= 3 THEN NULL
+                    ELSE 'normal'
                   END
               END,
               CASE
                 WHEN stage.content_safety_status = 'exclude' THEN 'disabled'
-                WHEN game.game_type = 'tahoiya' AND stage.zipf_frequency >= 1.0 THEN 'auto'
-                WHEN game.game_type IN ('wordwolf', 'nigoichi') AND stage.zipf_frequency >= 2.5 THEN 'auto'
+                WHEN game.game_type = 'tahoiya'
+                  AND COALESCE(stage.zipf_frequency, stage.zipf_fallback) < 3 THEN 'auto'
+                WHEN game.game_type IN ('wordwolf', 'nigoichi')
+                  AND COALESCE(stage.zipf_frequency, stage.zipf_fallback) >= 3 THEN 'auto'
                 ELSE 'unreviewed'
               END
             FROM word_import_stage AS stage
@@ -422,12 +456,13 @@ def import_rows(connection: psycopg.Connection[Any], args: argparse.Namespace) -
               ON words.source_id = %s
              AND words.source_entry_id = stage.source_entry_id
             CROSS JOIN (VALUES ('wordwolf'), ('nigoichi'), ('tahoiya')) AS game(game_type)
+            WHERE %s
             ON CONFLICT (word_id, game_type) DO UPDATE SET
               usable = FALSE,
               review_status = 'disabled',
               updated_at = NOW()
             WHERE EXCLUDED.review_status = 'disabled'
-        """, (source_id,))
+        """, (source_id, args.create_game_settings))
         counts["game_settings_inserted"] = cur.rowcount
 
         connection.commit()
@@ -447,6 +482,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--license", required=True)
     parser.add_argument("--attribution", required=True)
     parser.add_argument("--import-notes", default="")
+    parser.add_argument(
+        "--fallback-zipf",
+        type=float,
+        help="Use this fallback only when wordfreq does not recognize the whole surface as one token",
+    )
+    parser.add_argument(
+        "--create-game-settings",
+        action="store_true",
+        help="Legacy opt-in: create per-game settings for imported words",
+    )
     parser.add_argument("--max-rows", type=int, help="Process at most this many valid rows (smoke tests)")
     return parser.parse_args()
 
@@ -458,6 +503,9 @@ def main() -> int:
         return 2
     if not args.input.is_file():
         print(f"input not found: {args.input}", file=sys.stderr)
+        return 2
+    if args.fallback_zipf is not None and args.fallback_zipf <= 0:
+        print("--fallback-zipf must be greater than zero", file=sys.stderr)
         return 2
 
     try:

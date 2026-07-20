@@ -6,7 +6,7 @@ from __future__ import annotations
 import re
 import unicodedata
 
-SURFACE_QUALITY_POLICY_VERSION = "surface-quality-v2"
+SURFACE_QUALITY_POLICY_VERSION = "surface-quality-v3"
 
 FACILITY_SUFFIXES = (
     "高等学校",
@@ -50,6 +50,7 @@ EMOTICON_SYMBOL = re.compile(
     r"[\(\)（）\[\]［］<>＜＞\\:：;；=＝^＾_＿@＠#＃♪☆★♡♥ωДд∀▽△▼→←↑↓]"
 )
 KANJI_ONLY = re.compile(r"[一-龯々〆ヵヶ]+")
+NUMERIC_ONLY = re.compile(r"[0-9]+")
 
 
 def normalize_surface(surface: str) -> str:
@@ -93,6 +94,8 @@ def classify_surface_quality(
         flags.append("enumeration")
     if REPEATED_SINGLE_CHARACTER.fullmatch(normalized):
         flags.append("repeated_noise")
+    if NUMERIC_ONLY.fullmatch(normalized):
+        flags.append("numeric_only")
     if len(normalized) >= 4 and normalized.endswith("っ") and primary_part_of_speech != "感動詞":
         flags.append("truncated_ending")
     if LATIN_SCRIPT.search(normalized):
