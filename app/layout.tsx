@@ -3,6 +3,7 @@ import "./globals.css";
 import { SiteFooter } from "@/app/components/SiteFooter";
 import { WebVitalsReporter } from "@/app/components/WebVitalsReporter";
 import { loadSiteSettings } from "@/lib/site-settings-store";
+import { AppLocaleProvider } from "@/app/components/AppLocaleProvider";
 
 export async function generateMetadata(): Promise<Metadata> {
   const settings = await loadSiteSettings();
@@ -25,7 +26,7 @@ export default async function RootLayout({
   const settings = await loadSiteSettings();
   return (
     <html lang="ja" className="h-full antialiased">
-      <body className="min-h-full flex flex-col">{children}<SiteFooter siteName={settings.siteName} /><WebVitalsReporter /><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({ "@context": "https://schema.org", "@type": "WebSite", name: settings.siteName, alternateName: "ゲームフィールド", url: "https://www.game-fields.com/", description: settings.searchDescription }) }} /></body>
+      <body className="min-h-full flex flex-col"><AppLocaleProvider>{children}<SiteFooter siteName={settings.siteName} /></AppLocaleProvider><WebVitalsReporter /><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({ "@context": "https://schema.org", "@type": "WebSite", name: settings.siteName, alternateName: "ゲームフィールド", url: "https://www.game-fields.com/", description: settings.searchDescription }) }} /></body>
     </html>
   );
 }

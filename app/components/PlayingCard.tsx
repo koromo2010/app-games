@@ -1,4 +1,7 @@
+"use client";
+
 import type { MouseEventHandler } from "react";
+import { useAppLocale } from "./AppLocaleProvider";
 import {
   playingCardLabel,
   playingCardSuitSymbol,
@@ -58,8 +61,11 @@ function CardBack() {
 }
 
 export function PlayingCard({ card = null, faceDown = false, selected = false, disabled = false, size = "md", className = "", ariaLabel, onClick }: PlayingCardProps) {
+  const { locale, t } = useAppLocale();
   const hidden = faceDown || !card;
-  const label = ariaLabel ?? (hidden ? "裏向きのカード" : playingCardLabel(card));
+  const englishSuit = card?.kind === "standard" ? { clubs: "Clubs", diamonds: "Diamonds", hearts: "Hearts", spades: "Spades" }[card.suit] : "";
+  const cardLabel = card?.kind === "joker" ? `Joker ${card.jokerIndex}` : card ? `${englishSuit} ${card.rank}` : "";
+  const label = ariaLabel ?? (hidden ? t("card.faceDown") : locale === "en" ? cardLabel : playingCardLabel(card));
   const classes = `relative inline-flex aspect-[5/7] shrink-0 items-center justify-center overflow-hidden border bg-white shadow-md transition ${sizeClasses[size]} ${selected ? "-translate-y-2 border-amber-300 ring-4 ring-amber-300/45" : "border-slate-300"} ${disabled ? "opacity-45" : ""} ${onClick && !disabled ? "cursor-pointer hover:-translate-y-1 hover:shadow-xl focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-300/60" : ""} ${className}`;
   const content = hidden ? <CardBack /> : <CardFace card={card} size={size} />;
   if (onClick) {

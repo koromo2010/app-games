@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { synchronizedNow } from "@/lib/server-clock";
+import { useAppLocale } from "./AppLocaleProvider";
 
 type GamePhaseTimerProps = {
   durationSeconds: number;
@@ -15,6 +16,7 @@ function remainingSeconds(durationSeconds: number, startedAt: number) {
 }
 
 export function GamePhaseTimer({ durationSeconds, startedAt, label }: GamePhaseTimerProps) {
+  const { t } = useAppLocale();
   const [remaining, setRemaining] = useState(() => remainingSeconds(durationSeconds, startedAt));
 
   useEffect(() => {
@@ -29,7 +31,7 @@ export function GamePhaseTimer({ durationSeconds, startedAt, label }: GamePhaseT
 
   return (
     <div className={`rounded-lg border px-3 py-2 text-sm font-black ${remaining === 0 ? "border-rose-300/50 bg-rose-300/15 text-rose-100" : "border-cyan-300/30 bg-cyan-300/10 text-cyan-100"}`} role="timer" aria-live="polite">
-      {remaining === 0 ? `${label}：時間切れ` : `${label}：残り ${remaining}秒`}
+      {remaining === 0 ? t("game.timeExpired", { label }) : t("game.timeRemaining", { label, seconds: remaining })}
     </div>
   );
 }

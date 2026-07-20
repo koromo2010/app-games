@@ -2,6 +2,7 @@
 
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useAppLocale } from "./AppLocaleProvider";
 
 type Props = {
   open: boolean;
@@ -14,6 +15,7 @@ type Props = {
 const overlayHistoryKey = "gameFieldsPageOverlay";
 
 export function FullScreenPageOverlay({ open, href, title, onClose, keepAlive = false }: Props) {
+  const { t } = useAppLocale();
   const [hasOpened, setHasOpened] = useState(open);
   const onCloseRef = useRef(onClose);
   const backButtonRef = useRef<HTMLButtonElement>(null);
@@ -68,9 +70,9 @@ export function FullScreenPageOverlay({ open, href, title, onClose, keepAlive = 
     <div className={open ? "fixed inset-0 z-[10000] bg-slate-950/80 p-2 text-white backdrop-blur-sm sm:p-4" : "hidden"} role="dialog" aria-modal={open ? true : undefined} aria-hidden={!open} aria-label={title}>
       <div className="mx-auto flex h-full w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-white/20 bg-slate-950 shadow-2xl">
         <header className="flex shrink-0 items-center justify-between gap-3 border-b border-white/15 bg-slate-900 px-3 py-2 sm:px-4">
-          <button ref={backButtonRef} type="button" onClick={close} className="rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm font-bold text-white transition hover:bg-white/20">← 戻る</button>
+          <button ref={backButtonRef} type="button" onClick={close} className="rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm font-bold text-white transition hover:bg-white/20">{t("site.back")}</button>
           <h2 className="truncate text-sm font-bold text-slate-100 sm:text-base">{title}</h2>
-          <button type="button" onClick={close} className="grid h-9 w-9 place-items-center rounded-lg border border-white/20 bg-white/10 text-lg font-bold text-white transition hover:bg-white/20" aria-label={`${title}を閉じる`}>×</button>
+          <button type="button" onClick={close} className="grid h-9 w-9 place-items-center rounded-lg border border-white/20 bg-white/10 text-lg font-bold text-white transition hover:bg-white/20" aria-label={`${t("site.close")} ${title}`}>×</button>
         </header>
         <iframe title={title} src={embeddedHref} className="min-h-0 flex-1 bg-slate-950" />
       </div>

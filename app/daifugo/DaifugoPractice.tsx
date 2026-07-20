@@ -19,10 +19,13 @@ import {
 import { fallbackAvatarColor, readPlayerSession, type PlayerSession } from "@/lib/player-session";
 import { DaifugoRulesDialog } from "./DaifugoRulesDialog";
 import { DaifugoTable } from "./DaifugoTable";
-
-const rankNames = ["大富豪", "富豪", "貧民", "大貧民"];
+import { useAppLocale } from "@/app/components/AppLocaleProvider";
+import { daifugoText, localizeDaifugoPlayError } from "./daifugo-i18n";
 
 export function DaifugoPracticeGame() {
+  const { locale } = useAppLocale();
+  const d = daifugoText(locale);
+  const rankNames = [d.rank1, d.rank2, d.rank3, d.rank4];
   const [session, setSession] = useState<PlayerSession | null>(null);
   const [game, setGame] = useState<DaifugoGameState | null>(null);
   const [selectedCardIds, setSelectedCardIds] = useState<string[]>([]);
@@ -84,7 +87,7 @@ export function DaifugoPracticeGame() {
     if (!game) return;
     const error = daifugoPlayError(game, "you", selectedCardIds);
     if (error) {
-      setNotice(error);
+      setNotice(localizeDaifugoPlayError(error, locale));
       return;
     }
     setGame(playDaifugoCards(game, "you", selectedCardIds));
@@ -99,19 +102,19 @@ export function DaifugoPracticeGame() {
     setNotice("");
   };
 
-  if (!game) return <main className="grid min-h-screen place-items-center bg-slate-950 text-white"><p className="font-bold">カードを配っています…</p></main>;
+  if (!game) return <main className="grid min-h-screen place-items-center bg-slate-950 text-white"><p className="font-bold">{d.dealing}</p></main>;
   const humanHand = sortDaifugoHand(game.hands.you);
   const humanTurn = game.currentPlayerId === "you" && game.status === "playing";
   const humanRank = game.finishOrder.indexOf("you");
 
   return <main className={`min-h-screen bg-[radial-gradient(circle_at_top,#164e63_0%,#0f172a_44%,#020617_100%)] text-white ${gameTopBannerOffsetClass}`}>
-    <GameTopBanner eyebrow="CPU PRACTICE" title="大富豪・CPU練習">
-      <button type="button" className={gameTopBannerActionClass} onClick={startNewGame}>新しいゲーム</button>
+    <GameTopBanner eyebrow="CPU PRACTICE" title={d.practiceTitle}>
+      <button type="button" className={gameTopBannerActionClass} onClick={startNewGame}>{d.newGame}</button>
       <GameTopMenu>
-        <Link href="/games" className={gameTopMenuItemClass} data-menu-close="true">広場へ戻る</Link>
-        <button type="button" className={gameTopMenuItemClass} data-menu-close="true" onClick={() => setRulesOpen(true)}>ルール</button>
+        <Link href="/games" className={gameTopMenuItemClass} data-menu-close="true">{d.lobby}</Link>
+        <button type="button" className={gameTopMenuItemClass} data-menu-close="true" onClick={() => setRulesOpen(true)}>{d.rules}</button>
       </GameTopMenu>
-      <GamePlayerMenu id={session?.id} name={session?.name || "ゲスト"} avatarColor={session?.avatarColor || fallbackAvatarColor} avatarImage={session?.avatarImage} />
+      <GamePlayerMenu id={session?.id} name={session?.name || d.guest} avatarColor={session?.avatarColor || fallbackAvatarColor} avatarImage={session?.avatarImage} />
     </GameTopBanner>
 
     <div className="mx-auto max-w-6xl px-3 py-5 sm:px-5">
@@ -119,21 +122,21 @@ export function DaifugoPracticeGame() {
 
       <section className={`mt-4 rounded-3xl border bg-slate-900/90 p-4 shadow-2xl ${humanTurn ? "border-cyan-300 ring-2 ring-cyan-300/30" : "border-white/10"}`}>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div><p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-200">Your hand</p><h2 className="text-xl font-black">あなたの手札 <span className="text-sm text-slate-400">{humanHand.length}枚</span></h2></div>
+          <div><p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-200">Your hand</p><h2 className="text-xl font-black">{d.yourHand} <span className="text-sm text-slate-400">{humanHand.length}{d.cards}</span></h2></div>
           {humanRank >= 0 && <span className="rounded-full bg-amber-300 px-4 py-2 font-black text-slate-950">{rankNames[humanRank]}</span>}
         </div>
-        {humanHand.length > 0 ? <PlayingCardHand cards={humanHand} selectedCardIds={selectedCardIds} disabledCardIds={humanTurn ? undefined : humanHand.map((card) => card.id)} size="sm" label="あなたの手札。出すカードを選択" onCardClick={(card) => toggleCard(card.id)} /> : <p className="my-6 text-center font-bold text-amber-200">手札をすべて出しました</p>}
+        {humanHand.length > 0 ? <PlayingCardHand cards={humanHand} selectedCardIds={selectedCardIds} disabledCardIds={humanTurn ? undefined : humanHand.map((card) => card.id)} size="sm" label={d.yourHandLabel} onCardClick={(card) => toggleCard(card.id)} /> : <p className="my-6 text-center font-bold text-amber-200">{d.handFinished}</p>}
         <div className="flex flex-wrap items-center justify-center gap-3 border-t border-white/10 pt-4">
-          <button type="button" disabled={!humanTurn || selectedCardIds.length === 0} onClick={playSelected} className="rounded-xl bg-cyan-400 px-6 py-3 font-black text-slate-950 shadow-lg transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-35">選んだカードを出す</button>
-          <button type="button" disabled={!canPassDaifugoTurn(game, "you")} onClick={pass} className="rounded-xl border border-white/20 bg-white/10 px-6 py-3 font-black transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-35">パス</button>
+          <button type="button" disabled={!humanTurn || selectedCardIds.length === 0} onClick={playSelected} className="rounded-xl bg-cyan-400 px-6 py-3 font-black text-slate-950 shadow-lg transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-35">{d.playSelected}</button>
+          <button type="button" disabled={!canPassDaifugoTurn(game, "you")} onClick={pass} className="rounded-xl border border-white/20 bg-white/10 px-6 py-3 font-black transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-35">{d.pass}</button>
         </div>
         {notice && <p className="mt-3 text-center text-sm font-bold text-rose-300" role="alert">{notice}</p>}
       </section>
 
       {game.status === "finished" && <section className="mt-4 rounded-3xl border border-amber-300/40 bg-amber-100 p-6 text-slate-950 shadow-2xl">
-        <p className="text-xs font-black uppercase tracking-[0.2em] text-amber-700">Result</p><h2 className="mt-1 text-3xl font-black">ゲーム終了</h2>
-        <ol className="mt-4 grid gap-2 sm:grid-cols-4">{game.finishOrder.map((playerId, index) => <li key={playerId} className="rounded-xl bg-white px-4 py-3 shadow"><span className="text-xs font-bold text-slate-500">{index + 1}位・{rankNames[index]}</span><p className="font-black">{game.players.find((player) => player.id === playerId)?.name}</p></li>)}</ol>
-        <button type="button" onClick={startNewGame} className="mt-5 rounded-xl bg-slate-950 px-6 py-3 font-black text-white">もう一度遊ぶ</button>
+        <p className="text-xs font-black uppercase tracking-[0.2em] text-amber-700">Result</p><h2 className="mt-1 text-3xl font-black">{d.finished}</h2>
+        <ol className="mt-4 grid gap-2 sm:grid-cols-4">{game.finishOrder.map((playerId, index) => <li key={playerId} className="rounded-xl bg-white px-4 py-3 shadow"><span className="text-xs font-bold text-slate-500">#{index + 1} · {rankNames[index]}</span><p className="font-black">{game.players.find((player) => player.id === playerId)?.name}</p></li>)}</ol>
+        <button type="button" onClick={startNewGame} className="mt-5 rounded-xl bg-slate-950 px-6 py-3 font-black text-white">{d.playAgain}</button>
       </section>}
     </div>
     <DaifugoRulesDialog open={rulesOpen} onClose={() => setRulesOpen(false)} />

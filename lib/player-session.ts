@@ -1,4 +1,4 @@
-import { normalizeAppLocale, type AppLocale } from "./app-locale.ts";
+import { defaultAppLocale, normalizeAppLocale, type AppLocale } from "./app-locale.ts";
 
 export type PlayerSession = {
   id?: string;
@@ -146,6 +146,7 @@ export function savePlayerSession(session: Omit<PlayerSession, "updatedAt">) {
   } else {
     localStorage.removeItem(legacyAvatarImageKey);
   }
+  window.dispatchEvent(new CustomEvent("game-fields:player-session-saved", { detail: { locale: nextSession.locale } }));
 }
 
 export function markPlayerAuthenticated() {
@@ -165,6 +166,7 @@ export function clearPlayerSession() {
   localStorage.removeItem(playerAuthenticatedKey);
   localStorage.removeItem(legacyAvatarColorKey);
   localStorage.removeItem(legacyAvatarImageKey);
+  window.dispatchEvent(new CustomEvent("game-fields:player-session-saved", { detail: { locale: defaultAppLocale } }));
 }
 
 export async function loadPersistentPlayerSession() {
@@ -188,9 +190,14 @@ export async function loadPersistentPlayerSession() {
 }
 
 export async function savePersistentPlayerSession(session: Omit<PlayerSession, "updatedAt">) {
+  const currentSession = readPlayerSession();
   const localSession: PlayerSession = {
     ...session,
     id: session.id || (typeof window !== "undefined" ? localStorage.getItem(playerSessionIdKey) || undefined : undefined),
+    hasRecoveryEmail: session.hasRecoveryEmail ?? currentSession?.hasRecoveryEmail,
+    shareNameAllowed: session.shareNameAllowed ?? currentSession?.shareNameAllowed,
+    locale: normalizeAppLocale(session.locale ?? currentSession?.locale),
+    createdAt: session.createdAt ?? currentSession?.createdAt,
     updatedAt: Date.now(),
   };
   savePlayerSession(localSession);

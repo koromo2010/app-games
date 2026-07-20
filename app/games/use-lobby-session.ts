@@ -13,8 +13,10 @@ import {
   savePlayerSession,
   type PlayerSession,
 } from "@/lib/player-session";
+import { useAppLocale } from "@/app/components/AppLocaleProvider";
 
 export function useLobbySession(setMessage: (message: string) => void) {
+  const { t } = useAppLocale();
   const [name, setName] = useState("");
   const [playerId, setPlayerId] = useState("");
   const [avatarColor, setAvatarColor] = useState(fallbackAvatarColor);
@@ -57,7 +59,7 @@ export function useLobbySession(setMessage: (message: string) => void) {
       const response = await fetch("/api/player-account", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "logout" }) });
       if (!response.ok) throw new Error("LOGOUT_FAILED");
     } catch {
-      setMessage("ログアウト通信に失敗しました。通信を確認してもう一度お試しください。");
+      setMessage(t("account.logoutNetworkError"));
       return;
     }
     clearPlayerSession();
@@ -70,7 +72,7 @@ export function useLobbySession(setMessage: (message: string) => void) {
     setAvatarImage(pickRandomDefaultAvatarImage());
     setIsLoggedIn(false);
     onLogout();
-    setMessage("ログアウトしました。");
+    setMessage(t("account.logoutSuccess"));
   };
 
   return { name, setName, playerId, avatarColor, setAvatarColor, avatarImage, setAvatarImage, isLoggedIn, hasRecoveryEmail, applySession, logout };

@@ -9,9 +9,11 @@ import {
   type GameReplaySummary,
 } from "@/lib/game-replay-types";
 import { shareGameResult } from "@/lib/game-share-client";
+import { useAppLocale } from "./AppLocaleProvider";
+import { appIntlLocale } from "@/lib/app-i18n";
 
-function formatReplayDate(timestamp: number) {
-  return new Intl.DateTimeFormat("ja-JP", {
+function formatReplayDate(timestamp: number, locale: "ja" | "en") {
+  return new Intl.DateTimeFormat(appIntlLocale(locale), {
     year: "numeric",
     month: "numeric",
     day: "numeric",
@@ -21,6 +23,8 @@ function formatReplayDate(timestamp: number) {
 }
 
 export function GameReplayPanel() {
+  const { locale, t } = useAppLocale();
+  const en = locale === "en";
   const panelRef = useRef<HTMLElement>(null);
   const [data, setData] = useState<GameReplayListResponse | null>(null);
   const [selectedReplay, setSelectedReplay] = useState<GameReplayDetail | null>(null);
@@ -38,11 +42,11 @@ export function GameReplayPanel() {
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") return;
       setData(null);
-      setMessage("プレイバックを読み込めませんでした。");
+      setMessage(en ? "Could not load replays." : "プレイバックを読み込めませんでした。");
     } finally {
       if (!signal?.aborted) setIsLoading(false);
     }
-  }, []);
+  }, [en]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -80,7 +84,7 @@ export function GameReplayPanel() {
       if (!response.ok || !body.replay) throw new Error("REPLAY_LOAD_FAILED");
       setSelectedReplay(body.replay);
     } catch {
-      setMessage("このプレイバックを開けませんでした。期限切れの可能性があります。");
+      setMessage(en ? "Could not open this replay. It may have expired." : "このプレイバックを開けませんでした。期限切れの可能性があります。");
       await loadReplays();
     } finally {
       setBusyReplayId("");
@@ -99,16 +103,16 @@ export function GameReplayPanel() {
       const body = (await response.json()) as { replay?: GameReplayDetail; error?: string };
       if (!response.ok) {
         if (response.status === 409) {
-          setMessage(`お気に入りは最大${data?.policy.favoriteLimit ?? 10}件です。先に別の試合を外してください。`);
+          setMessage(en ? `You can keep up to ${data?.policy.favoriteLimit ?? 10} favorites. Remove another replay first.` : `お気に入りは最大${data?.policy.favoriteLimit ?? 10}件です。先に別の試合を外してください。`);
           return;
         }
         throw new Error(body.error || "REPLAY_FAVORITE_FAILED");
       }
       if (selectedReplay?.id === replay.id) setSelectedReplay(body.replay ?? null);
       await loadReplays();
-      setMessage(favorite ? "お気に入りに保存しました。" : "お気に入りを解除しました。");
+      setMessage(favorite ? (en ? "Added to favorites." : "お気に入りに保存しました。") : (en ? "Removed from favorites." : "お気に入りを解除しました。"));
     } catch {
-      setMessage("お気に入りを変更できませんでした。");
+      setMessage(en ? "Could not update favorites." : "お気に入りを変更できませんでした。");
     } finally {
       setBusyReplayId("");
     }
@@ -119,22 +123,22 @@ export function GameReplayPanel() {
     const game = gameReplayMetadata[replay.gameType];
     const url = new URL(game.href, window.location.origin).toString();
     setMessage("");
-    setSharePreview({ title: `Game Fields ${game.title} プレイバック`, text, url });
+    setSharePreview({ title: `Game Fields ${game.title} ${en ? "Replay" : "プレイバック"}`, text, url });
   };
 
   const shareReplay = async () => {
     if (!sharePreview) return;
     try {
       const outcome = await shareGameResult(sharePreview);
-      if (outcome === "shared") setMessage("共有メニューを開きました。");
-      if (outcome === "copied") setMessage("共有文をコピーしました。");
+      if (outcome === "shared") setMessage(t("share.opened"));
+      if (outcome === "copied") setMessage(t("share.copied"));
       if (outcome === "cancelled") {
-        setMessage("共有をキャンセルしました。文章はまだ送信されていません。");
+        setMessage(t("share.cancelled"));
         return;
       }
       setSharePreview(null);
     } catch {
-      setMessage("共有できませんでした。もう一度お試しください。");
+      setMessage(t("share.failed"));
     }
   };
 
@@ -143,9 +147,9 @@ export function GameReplayPanel() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase text-violet-700">Playback</p>
-          <h2 id="replay-heading" className="text-lg font-bold text-slate-950">全ゲームのプレイバック</h2>
+          <h2 id="replay-heading" className="text-lg font-bold text-slate-950">{en ? "Replays from all games" : "全ゲームのプレイバック"}</h2>
           <p className="mt-1 text-xs leading-5 text-slate-500">
-            通常{data?.policy.retentionDays ?? 30}日保存。お気に入りは期限なし・最大{data?.policy.favoriteLimit ?? 10}件です。
+            {en ? `Saved for ${data?.policy.retentionDays ?? 30} days. Up to ${data?.policy.favoriteLimit ?? 10} favorites are kept indefinitely.` : `通常${data?.policy.retentionDays ?? 30}日保存。お気に入りは期限なし・最大${data?.policy.favoriteLimit ?? 10}件です。`}
           </p>
         </div>
         <button
@@ -157,14 +161,14 @@ export function GameReplayPanel() {
           disabled={isLoading}
           className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
         >
-          更新
+          {t("stats.refresh")}
         </button>
       </div>
 
       {message && <p className="mt-3 rounded-md bg-slate-100 px-3 py-2 text-xs text-slate-700" role="status">{message}</p>}
 
       {isLoading ? (
-        <p className="mt-4 text-sm text-slate-500">読み込み中...</p>
+        <p className="mt-4 text-sm text-slate-500">{t("stats.loading")}</p>
       ) : data?.replays.length ? (
         <div className="mt-4 space-y-2">
           {data.replays.map((replay) => (
@@ -174,10 +178,10 @@ export function GameReplayPanel() {
                   <p className="text-[11px] font-bold text-violet-700">{gameReplayMetadata[replay.gameType].title}</p>
                   <p className="truncate font-bold text-slate-900">{replay.title}</p>
                   <p className="mt-1 text-xs text-slate-500">
-                    {formatReplayDate(replay.finishedAt)} / {replay.resultLabel} / {replay.playerCount}人
+                    {formatReplayDate(replay.finishedAt, locale)} / {replay.resultLabel} / {replay.playerCount} {en ? "players" : "人"}
                   </p>
                   <p className="mt-1 text-[11px] text-slate-500">
-                    {replay.favorite ? "お気に入り・期限なし" : `${formatReplayDate(replay.expiresAt)}まで`}
+                    {replay.favorite ? (en ? "Favorite · No expiry" : "お気に入り・期限なし") : en ? `Until ${formatReplayDate(replay.expiresAt, locale)}` : `${formatReplayDate(replay.expiresAt, locale)}まで`}
                   </p>
                   {replay.shareHighlights.length > 0 && (
                     <ul className="mt-2 space-y-0.5 text-xs leading-5 text-slate-600">
@@ -203,21 +207,21 @@ export function GameReplayPanel() {
                   onClick={() => void openReplay(replay)}
                   className="rounded-md bg-violet-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-violet-500 disabled:opacity-50"
                 >
-                  詳細を見る
+                  {en ? "View details" : "詳細を見る"}
                 </button>
                 <button
                   type="button"
                   onClick={() => openSharePreview(replay)}
                   className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
                 >
-                  プレイバックを共有
+                  {en ? "Share replay" : "プレイバックを共有"}
                 </button>
               </div>
             </article>
           ))}
         </div>
       ) : (
-        <p className="mt-4 text-sm leading-6 text-slate-500">まだプレイバックはありません。今後完了した、デバッグ以外のゲームから記録されます。</p>
+        <p className="mt-4 text-sm leading-6 text-slate-500">{en ? "No replays yet. Completed non-debug games will appear here." : "まだプレイバックはありません。今後完了した、デバッグ以外のゲームから記録されます。"}</p>
       )}
 
       {selectedReplay && (

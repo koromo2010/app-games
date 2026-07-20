@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { confirmResultLobbyNavigation } from "./room-navigation-confirmation";
+import { useAppLocale } from "./AppLocaleProvider";
 
 type RoomResultActionsProps = {
   canReturnToRoom: boolean;
@@ -23,6 +24,7 @@ export function RoomResultActions({
   onReturnToRoom,
   returnHref = "/games",
 }: RoomResultActionsProps) {
+  const { t } = useAppLocale();
   const router = useRouter();
   const [pendingAction, setPendingAction] = useState<"lobby" | "room" | "dissolve" | null>(null);
   const isPending = pendingAction !== null;
@@ -37,7 +39,7 @@ export function RoomResultActions({
   };
 
   const goToGameLobby = () => {
-    if (!confirmResultLobbyNavigation()) return;
+    if (!confirmResultLobbyNavigation(() => window.confirm(t("game.resultLobbyConfirm")))) return;
     setPendingAction("lobby");
     router.push(returnHref);
   };
@@ -52,7 +54,7 @@ export function RoomResultActions({
         onClick={() => void runPendingAction("room", onReturnToRoom)}
         className="rounded-xl border border-cyan-200 bg-cyan-300 px-5 py-4 text-lg font-black text-slate-950 shadow-lg shadow-cyan-950/20 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-200 disabled:text-slate-500 disabled:opacity-70 sm:col-span-2"
       >
-        {pendingAction === "room" ? pendingLabel("部屋に戻っています…") : isRoomDissolved ? "部屋に戻れません" : canReturnToRoom ? "部屋に戻る" : "ホストが戻るまで待つ"}
+        {pendingAction === "room" ? pendingLabel(t("game.returning")) : isRoomDissolved ? t("game.returnUnavailable") : canReturnToRoom ? t("game.returnRoom") : t("game.waitHostReturn")}
       </button>
       <button
         type="button"
@@ -60,7 +62,7 @@ export function RoomResultActions({
         onClick={goToGameLobby}
         className={`rounded-xl border border-slate-400/60 bg-slate-100 px-4 py-3 text-center font-bold text-slate-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 ${isHost && !isRoomDissolved && onDissolve ? "" : "sm:col-span-2"}`}
       >
-        {pendingAction === "lobby" ? pendingLabel("広場へ移動中…") : "広場へ戻る"}
+        {pendingAction === "lobby" ? pendingLabel(t("game.movingLobby")) : t("game.backLobby")}
       </button>
       {isHost && !isRoomDissolved && onDissolve && <button
         type="button"
@@ -68,7 +70,7 @@ export function RoomResultActions({
         onClick={() => void runPendingAction("dissolve", onDissolve)}
         className="rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 font-black text-rose-800 transition hover:bg-rose-100 disabled:opacity-50"
       >
-        {pendingAction === "dissolve" ? pendingLabel("解散しています…") : "部屋を解散"}
+        {pendingAction === "dissolve" ? pendingLabel(t("game.dissolving")) : t("game.dissolve")}
       </button>}
     </div>
   );

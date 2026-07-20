@@ -21,6 +21,10 @@ export const gameContentLocales: Record<LanguageBoundGameId, readonly AppLocale[
   "code-intercept": ["ja"],
 };
 
+// Content-language compatibility and translated UI availability are separate.
+// Non-language games may share rooms across locales even while their English UI is still rolling out.
+const englishUiGameIds = new Set(["daifugo"]);
+
 export function isLanguageBoundGame(gameId: string): gameId is LanguageBoundGameId {
   return languageBoundGameIds.includes(gameId as LanguageBoundGameId);
 }
@@ -32,6 +36,15 @@ export function normalizeRoomContentLocale(value: unknown): AppLocale {
 export function assertGameLocaleAvailable(gameId: LanguageBoundGameId, value: unknown) {
   const locale = normalizeAppLocale(value);
   if (!gameContentLocales[gameId].includes(locale)) throw new Error("GAME_LANGUAGE_UNAVAILABLE");
+}
+
+export function isGameLocaleAvailable(gameId: string, value: unknown) {
+  return !isLanguageBoundGame(gameId) || gameContentLocales[gameId].includes(normalizeAppLocale(value));
+}
+
+export function isGameUiLocaleAvailable(gameId: string, value: unknown) {
+  const locale = normalizeAppLocale(value);
+  return locale === "ja" || englishUiGameIds.has(gameId);
 }
 
 export function assertRoomLanguageAccess(room: { contentLocale?: unknown }, playerLocale: unknown) {

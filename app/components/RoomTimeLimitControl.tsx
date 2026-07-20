@@ -1,4 +1,7 @@
+"use client";
+
 import { commonTimeLimitMaxSeconds, commonTimeLimitOptions } from "@/lib/game-room-config";
+import { useAppLocale } from "./AppLocaleProvider";
 
 type RoomTimeLimitControlProps = {
   label: string;
@@ -10,6 +13,7 @@ const controlClass =
   "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20";
 
 export function RoomTimeLimitControl({ label, value, onChange }: RoomTimeLimitControlProps) {
+  const { t } = useAppLocale();
   const presetValue = commonTimeLimitOptions.includes(value as (typeof commonTimeLimitOptions)[number])
     ? String(value)
     : "custom";
@@ -23,15 +27,15 @@ export function RoomTimeLimitControl({ label, value, onChange }: RoomTimeLimitCo
           onChange={(event) => {
             if (event.target.value !== "custom") onChange(Number(event.target.value));
           }}
-          aria-label={`${label}のプリセット`}
+          aria-label={t("game.timePreset", { label })}
           className={controlClass}
         >
           {commonTimeLimitOptions.map((seconds) => (
             <option key={seconds} value={seconds}>
-              {seconds === 0 ? "なし" : `${seconds}秒`}
+              {seconds === 0 ? t("game.none") : t("game.seconds", { seconds })}
             </option>
           ))}
-          <option value="custom">カスタム</option>
+          <option value="custom">{t("game.custom")}</option>
         </select>
         <label className="flex items-center gap-2 text-sm text-slate-600">
           <input
@@ -45,13 +49,13 @@ export function RoomTimeLimitControl({ label, value, onChange }: RoomTimeLimitCo
             onKeyDown={(event) => {
               if (event.key === "Enter") event.currentTarget.blur();
             }}
-            aria-label={`${label}を秒数で入力`}
+            aria-label={t("game.timeInput", { label })}
             className={controlClass}
           />
-          秒
+          {t("game.secondsUnit")}
         </label>
       </div>
-      <p className="mt-1 text-xs text-slate-500">0秒は時間制限なし、最大{commonTimeLimitMaxSeconds}秒です。</p>
+      <p className="mt-1 text-xs text-slate-500">{t("game.timeHelp", { max: commonTimeLimitMaxSeconds })}</p>
     </fieldset>
   );
 }

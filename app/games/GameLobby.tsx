@@ -5,7 +5,7 @@ import type { PlayerStatsGameFilter } from "@/lib/player-stats-store";
 import type { GameDurationEstimate, GameDurationGameId } from "@/lib/game-duration-statistics";
 import { GameAdSlot } from "../components/GameAdSlot";
 import { FullScreenPageOverlay } from "../components/FullScreenPageOverlay";
-import { games } from "./game-catalog";
+import { gamesForLocale } from "./game-catalog";
 import { gameOperationFor, type GameOperation } from "@/lib/game-operations";
 import { LobbyGameGrid } from "./LobbyGameGrid";
 import { LobbyStatsPanel } from "./LobbyStatsPanel";
@@ -20,16 +20,11 @@ import { useLobbySession } from "./use-lobby-session";
 import { LobbyHeader } from "./LobbyHeader";
 import { LobbyInfoDrawer } from "./LobbyInfoDrawer";
 import { LobbyPrivateAccessControl } from "./LobbyPrivateAccessControl";
+import { useAppLocale } from "@/app/components/AppLocaleProvider";
 
-
-const statsGameOptions = [
-  { value: "all", label: "全ゲーム" },
-  ...games
-    .filter((game) => game.stats === "account")
-    .map((game) => ({ value: game.id as PlayerStatsGameFilter, label: game.title })),
-] as const satisfies readonly { value: PlayerStatsGameFilter; label: string }[];
 
 export function GameLobby({ siteName = "GAME FIELDS", gameOperations, durationEstimates = {} }: { siteName?: string; gameOperations: GameOperation[]; durationEstimates?: Partial<Record<GameDurationGameId, GameDurationEstimate>> }) {
+  const { locale, t } = useAppLocale();
   const [password, setPassword] = useState("");
   const [email, setEmail] = useState("");
   const [resetEmail, setResetEmail] = useState("");
@@ -59,7 +54,12 @@ export function GameLobby({ siteName = "GAME FIELDS", gameOperations, durationEs
   const { isAvatarSaving, isAvatarDragging, setIsAvatarDragging, updateAvatar, uploadAvatar, dropAvatar } = useLobbyAvatarActions({
     name, playerId, avatarColor, hasRecoveryEmail, setAvatarColor, setAvatarImage, setMessage,
   });
-  const gamesWithDurationEstimates = games.map((game) => {
+  const localizedGames = gamesForLocale(locale);
+  const statsGameOptions = [
+    { value: "all" as const, label: t("stats.allGames") },
+    ...localizedGames.filter((game) => game.stats === "account").map((game) => ({ value: game.id as PlayerStatsGameFilter, label: game.title })),
+  ];
+  const gamesWithDurationEstimates = localizedGames.map((game) => {
     const estimate = durationEstimates[game.id as GameDurationGameId];
     return estimate ? { ...game, time: estimate.label, timeSampleCount: estimate.sampleCount } : game;
   });
@@ -104,13 +104,13 @@ export function GameLobby({ siteName = "GAME FIELDS", gameOperations, durationEs
         </LobbyInfoDrawer>
 
         <LobbyGameGrid games={orderedGames} operations={gameOperations} activeRooms={activeGameRooms} isLoggedIn={isLoggedIn}
-          onLoginRequired={() => setMessage("先にプレイヤーアカウントでログインしてください。")}
+          locale={locale} onLoginRequired={() => setMessage(t("account.loginRequired"))}
           onRememberWordWolf={rememberActiveRoom}
         />
       </section>
       <LobbyPrivateAccessControl accessKey={privateAccessKey} isUnlocked={privateUnlocked} isUpdating={isPrivateAccessUpdating}
         onAccessKeyChange={setPrivateAccessKey} onClear={() => void clearPrivateAccess()} />
-      <FullScreenPageOverlay open={isMyPageOpen} href="/users/me" title="マイページ" keepAlive onClose={() => setIsMyPageOpen(false)} />
+      <FullScreenPageOverlay open={isMyPageOpen} href="/users/me" title={t("site.myPage")} keepAlive onClose={() => setIsMyPageOpen(false)} />
     </main>
   );
 }
