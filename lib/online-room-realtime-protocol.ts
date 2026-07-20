@@ -24,6 +24,17 @@ export type OnlineRoomRevisionEvent = {
   timestamp: number;
 };
 
+export const onlineRoomRealtimeTimings = {
+  reconciliation: 45_000,
+  subscriptionTimeout: 5_000,
+  initialReconnect: 1_000,
+  maximumReconnect: 30_000,
+} as const;
+
+export function nextOnlineRoomRealtimeReconnectDelay(currentDelay: number) {
+  return Math.min(onlineRoomRealtimeTimings.maximumReconnect, currentDelay * 2);
+}
+
 const gameSet = new Set<string>(onlineRoomRealtimeGames);
 
 export function normalizeOnlineRoomCode(value: unknown) {

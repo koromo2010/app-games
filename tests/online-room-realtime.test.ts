@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  nextOnlineRoomRealtimeReconnectDelay,
   onlineRoomRealtimeChannel,
+  onlineRoomRealtimeTimings,
   parseOnlineRoomRevisionEvent,
   parseOnlineRoomSubscription,
 } from "../lib/online-room-realtime-protocol.ts";
@@ -34,4 +36,11 @@ test("WebSocketは既定でPreviewとローカル開発だけ有効にする", (
   assert.equal(onlineRoomRealtimeEnabled({ NODE_ENV: "development" }), true);
   assert.equal(onlineRoomRealtimeEnabled({ VERCEL_ENV: "preview", ONLINE_ROOM_WEBSOCKET_ENABLED: "0" }), false);
   assert.equal(onlineRoomRealtimeEnabled({ VERCEL_ENV: "production", ONLINE_ROOM_WEBSOCKET_ENABLED: "1" }), true);
+});
+
+test("WebSocket再接続は30秒を上限に指数バックオフする", () => {
+  assert.equal(nextOnlineRoomRealtimeReconnectDelay(1_000), 2_000);
+  assert.equal(nextOnlineRoomRealtimeReconnectDelay(16_000), 30_000);
+  assert.equal(nextOnlineRoomRealtimeReconnectDelay(30_000), 30_000);
+  assert.equal(onlineRoomRealtimeTimings.reconciliation, 45_000);
 });

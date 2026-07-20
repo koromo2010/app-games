@@ -13,6 +13,13 @@ import { parseOnlineRoomSubscription } from "@/lib/online-room-realtime-protocol
 
 export const runtime = "nodejs";
 
+export function HEAD() {
+  if (!onlineRoomRealtimeEnabled() || !onlineRoomRealtimeSocketConfigured()) {
+    return new Response(null, { status: 404, headers: { "Cache-Control": "no-store" } });
+  }
+  return new Response(null, { status: 204, headers: { "Cache-Control": "no-store" } });
+}
+
 export function GET() {
   if (!onlineRoomRealtimeEnabled() || !onlineRoomRealtimeSocketConfigured()) {
     return Response.json({ error: "Realtime room updates are not enabled" }, { status: 404 });

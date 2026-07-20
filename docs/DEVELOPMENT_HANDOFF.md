@@ -76,6 +76,7 @@
 - `UPSTASH_REDIS_REST_TOKEN` または `KV_REST_API_TOKEN`
 - `APP_REDIS_URL`（Redis Cloud等のURL。環境分離後の正本）
 - `REDIS_REQUEST_TIMEOUT_MS`（任意。既定4000ms、1000〜10000msに制限）
+- `ONLINE_ROOM_WEBSOCKET_ENABLED`（任意。`1`で明示有効、`0`で明示無効。未設定時はPreview・ローカル開発のみ有効でProductionは無効）
 - `APP_ENV`、`APP_DATABASE_URL`、`APP_DATABASE_ENV`（環境分離後のアプリDB正本と誤接続防止。旧URLは移行期間のみ）
 - `VOCABULARY_DATABASE_URL`（本番・開発共通の単語カタログ。サーバー限定）
 - `REDIS_ENV`（`production | development`。Redis誤接続防止）
@@ -128,7 +129,7 @@ Neon Postgres、Upstash Redis、Vercel Blobの容量は `vercel.json` の日次C
 
 ## 5. マルチプレイ共通ルール
 
-登録済みオンラインゲームの部屋取得・active room復帰・一覧・POST/PATCH/DELETEは `lib/online-room-api-client.ts` を土台に、各ゲームの `*-room-api-client.ts` へ型付きで集約する。画面から部屋APIを直接 `fetch` しない。表示中だけの定期取得、タブ復帰時の即時更新、必要なゲームのlocalStorage cross-tab更新は `app/hooks/use-online-room-polling.ts` を使う。通常は進行中2秒、ロビー・結果5秒を標準とし、ゲーム固有の理由がある場合だけ変更する。
+登録済みオンラインゲームの部屋取得・active room復帰・一覧・POST/PATCH/DELETEは `lib/online-room-api-client.ts` を土台に、各ゲームの `*-room-api-client.ts` へ型付きで集約する。画面から部屋APIを直接 `fetch` しない。表示中の同期、タブ復帰時の即時更新、必要なゲームのlocalStorage cross-tab更新は `app/hooks/use-online-room-polling.ts` を使う。WebSocket購読中は更新通知のたびに部屋GETを1回行い、通常ポーリングを停止して45秒ごとの整合確認だけを残す。切断・エラー時はゲームごとの従来間隔（500ms／1秒／2秒）ポーリングへ即時フォールバックし、1〜30秒の指数バックオフで再接続を続ける。Productionでは明示設定がない限りWebSocketを有効にしない。
 
 書き込み契約は `POST = 新規作成`、`PATCH = 既存部屋へのCommand`、`DELETE = 解散`。既存部屋をRoom全体POSTで更新しない。UIは変更後Roomを組み立てず、変更意図だけのActionをadapterへ渡す。権限・フェーズ・入力正規化・revision競合は保存済みRoomを読むサーバー側で処理する。`npm run lint` は全オンラインゲームの型付きadapter、PATCH route、UI直fetch、旧`setAndSaveRoom`の再混入を検査する。
 
@@ -143,7 +144,7 @@ Neon Postgres、Upstash Redis、Vercel Blobの容量は `vercel.json` の日次C
 - 1プレイヤー1アクティブ部屋。新しい部屋作成時は古いホスト部屋を解散する。
 - 参加人数のサーバー安全上限は `onlineRoomPlayerLimits` を正本とし、ワードウルフ20人、たほい屋8人、ノーザンブランチ4人、ワードスケール50人、ワードソナー20人、ワードアウト6人、コードインターセプト12人。満室は一覧から除外し、直接参加も409で拒否する。復元時も上限を超えた配列を切り詰め、デバッグ用ダミー追加にも同じ上限を適用する。
 - 投稿・投票がそろったらサーバー側で自動遷移する。
-- ルームGETは認証済み閲覧者向けJSONからETagを作り、クライアントは `If-None-Match` を送る。未変更時は304で本文転送とJSON再解析を省き、同じURLへの重複ポーリングはクライアント内で1本へまとめる。実装は `lib/conditional-json.ts` と `lib/conditional-json-client.ts`。現行の進行中・最終結果2秒／ロビー5秒間隔は維持し、SSE等への移行前の負荷軽減層とする。
+- ルームGETは認証済み閲覧者向けJSONからETagを作り、クライアントは `If-None-Match` を送る。未変更時は304で本文転送とJSON再解析を省き、同じURLへの重複取得はクライアント内で1本へまとめる。実装は `lib/conditional-json.ts` と `lib/conditional-json-client.ts`。WebSocketはゲーム名・部屋コード・revision・timestampだけの更新通知を運び、Redisの部屋状態や秘密情報は載せない。DEBUGメニューでWS／ポーリング／再接続の状態、部屋GET回数、通知受信数を確認できる。
 - 参加可能な部屋一覧は全件 `SMEMBERS` + 個別GETを行わず、`SSCAN` で1ページ24件ずつ取得し、部屋本体は1回の `MGET` にまとめる。レスポンスの `nextCursor` を次の `cursor` クエリへ渡せる。部屋コードを指定した直接参加はページ外でも利用できる。
 - 自動遷移しなかった場合の手動ボタンはホスト向けに残すが、必要条件を満たすまで表示しない。
 - オンライン部屋の最終結果画面では共通 `RoomResultActions` と `useRoomResultReturnGate` を使う。「広場へ戻る」は各自が即時に選べる個人遷移とし、「部屋に戻る」はホストがサーバー上の部屋をロビーへ戻した後に各クライアントで有効化する。既存参加者の席は保持されるため満員でも復帰できるが、クリック時に最新の部屋と参加資格を再確認する。部屋が解散されても結果画面は強制遷移せず保持し、復帰ボタンを無効化して監視を止める。ホストにだけ「部屋を解散」も表示し、確認後にサーバー側のホスト権限検証を通す。各アクションの処理中は共通スピナーと進行中ラベルを表示して二重押しを防ぐ。ゲーム内の途中ラウンド進行はこの個人遷移と分けて扱う。
