@@ -10,6 +10,7 @@ import { GamePlayerMenu } from "@/app/components/GamePlayerMenu";
 import { GameResultShareButton } from "@/app/components/GameResultShareButton";
 import { GameTopBanner, gameTopBannerOffsetClass } from "@/app/components/GameTopBanner";
 import { GameTopMenu, gameTopBannerActionClass, gameTopBannerDangerActionClass, gameTopMenuItemClass } from "@/app/components/GameTopMenu";
+import { OnlineRoomSpectatorLink } from "@/app/components/OnlineRoomSpectatorLink";
 import { PlayingCardHand } from "@/app/components/PlayingCardHand";
 import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomLobbyReturnStatus } from "@/app/components/RoomLobbyReturnStatus";
@@ -149,7 +150,7 @@ export function DaifugoGame() {
   return <main className={`min-h-screen bg-[radial-gradient(circle_at_top,#164e63_0%,#0f172a_45%,#020617_100%)] text-white ${gameTopBannerOffsetClass}`}>
     <GameTopBanner eyebrow="ONLINE CARD GAME" title={<>大富豪 <span className="font-mono text-base text-amber-300">#{room.code}</span></>}>
       {room.phase === "lobby" && (isHost ? <button type="button" className={gameTopBannerDangerActionClass} onClick={() => void dissolveRoom()}>部屋を解散</button> : <button type="button" className={gameTopBannerActionClass} onClick={() => void leaveRoom()}>退出</button>)}
-      <GameTopMenu><Link href="/games" className={gameTopMenuItemClass}>広場へ戻る</Link><button type="button" onClick={() => setRulesOpen(true)} className={gameTopMenuItemClass}>ルール</button></GameTopMenu>
+      <GameTopMenu><Link href="/games" className={gameTopMenuItemClass}>広場へ戻る</Link><OnlineRoomSpectatorLink game="daifugo" code={room.code} /><button type="button" onClick={() => setRulesOpen(true)} className={gameTopMenuItemClass}>ルール</button></GameTopMenu>
       {isHost && <DebugModeButton variant="banner" enabled={room.debugMode} disabled={saving || room.phase !== "lobby"} onAbort={room.debugMode && room.phase !== "lobby" ? () => runAction({ type: "abort-game", actorId: playerId }).then(() => undefined) : undefined} replayEnabled={room.debugReplayEnabled} replayDisabled={saving} onReplayChange={(enabled) => runAction({ type: "set-debug-replay", actorId: playerId, enabled }).then(() => undefined)} debugLogEntries={room.debugLog} onChange={(enabled) => runAction({ type: "set-debug", actorId: playerId, enabled }).then(() => undefined)} />}
       <GamePlayerMenu id={session.id} name={session.name} avatarColor={session.avatarColor} avatarImage={session.avatarImage} hasRecoveryEmail={session.hasRecoveryEmail} />
     </GameTopBanner><DaifugoRulesDialog open={rulesOpen} onClose={() => setRulesOpen(false)} /><GameAdSlot gameId="daifugo" surface={room.phase === "lobby" ? "room-lobby" : room.phase === "result" ? "result" : null} disabled={room.debugMode} />

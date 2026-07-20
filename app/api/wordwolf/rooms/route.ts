@@ -154,7 +154,7 @@ export async function PATCH(request: Request) {
     const body = (await request.json()) as { code?: unknown; action?: unknown };
     const code = typeof body.code === "string" ? body.code.trim().toUpperCase() : "";
     if (!code || !body.action || typeof body.action !== "object") return Response.json({ error: "code and action are required" }, { status: 400 });
-    const action = body.action as WordWolfRoomAction;
+    const action = { ...(body.action as Record<string, unknown>), actorId: player.id } as unknown as WordWolfRoomAction;
     if (actionRequiresDebugAccess(action)) await requirePlayerDebugAccess(player.id);
     logFields = { action: action.type, roomRef: telemetry.roomRef(code), actorRef: telemetry.actorRef(player.id) };
     const room = action.type === "join-room"

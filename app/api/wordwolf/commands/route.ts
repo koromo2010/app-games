@@ -42,7 +42,8 @@ export async function POST(request: Request) {
       return Response.json({ error: "Room action is not allowed" }, { status: 403 });
     }
     const requestedActorId = body.playerId ?? "";
-    const actorId = room.debugMode && room.hostId === player.id && requestedActorId
+    const requestedActorIsRoomPlayer = room.players.some((item) => item.id === requestedActorId);
+    const actorId = room.debugMode && room.hostId === player.id && requestedActorIsRoomPlayer
       ? requestedActorId
       : player.id;
     const deadline = wordWolfDeadlineAt(room);

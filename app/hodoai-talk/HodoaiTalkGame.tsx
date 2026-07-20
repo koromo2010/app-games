@@ -9,6 +9,7 @@ import { PlayerTimeoutNotice } from "@/app/components/PlayerTimeoutNotice";
 import { GameResultShareButton } from "@/app/components/GameResultShareButton";
 import { GameTopBanner, gameTopBannerOffsetClass } from "@/app/components/GameTopBanner";
 import { GameTopMenu, gameTopBannerActionClass, gameTopBannerDangerActionClass, gameTopMenuItemClass } from "@/app/components/GameTopMenu";
+import { OnlineRoomSpectatorLink } from "@/app/components/OnlineRoomSpectatorLink";
 import { GamePlayerMenu } from "@/app/components/GamePlayerMenu";
 import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomResultActions } from "@/app/components/RoomResultActions";
@@ -105,6 +106,7 @@ export function HodoaiTalkGame() {
           : <Link href="/games" className={gameTopBannerActionClass}>広場へ戻る</Link>)}
         <GameTopMenu>
           {room.phase !== "lobby" && <Link href="/games" data-menu-close="true" className={gameTopMenuItemClass}>広場へ戻る</Link>}
+          <OnlineRoomSpectatorLink game="hodoai" code={room.code} />
           <button type="button" data-menu-close="true" onClick={() => setRulesOpen(true)} className={gameTopMenuItemClass}>ルール</button>
           {isHost && <DebugModeButton enabled={room.debugMode} disabled={isSaving || room.phase !== "lobby"} onAbort={room.debugMode && room.phase !== "lobby" ? () => runAction({ type: "abort-game", actorId: playerId }).then(() => undefined) : undefined} replayEnabled={room.debugReplayEnabled} replayDisabled={isSaving} onReplayChange={(enabled) => runAction({ type: "set-debug-replay", actorId: playerId, enabled }).then(() => undefined)} debugLogEntries={room.debugLog} onChange={(enabled) => runAction({ type: "set-debug", actorId: playerId, enabled }).then(() => undefined)} />}
           {room.phase === "lobby" && !isHost && <button type="button" data-menu-close="true" onClick={() => void leaveRoom()} className={gameTopMenuItemClass}>退出</button>}

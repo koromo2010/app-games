@@ -39,8 +39,12 @@ UI / hooks -> API client -> HTTP route -> application/domain -> storage
 - ワードスケールclient構成: `use-hodoai-room-session.ts` が復元・同期、`use-hodoai-room-actions.ts` がCommand、`use-hodoai-view-model.ts` が表示計算、`HodoaiPlayPanels.tsx` と `HodoaiRulesDialog.tsx` が表示を担当する。
 - ワードソナーadapter: `app/kotoba-senpuku/kotoba-senpuku-room-api-client.ts`
 - ワードアウトadapter（内部IDはnigoichi）: `app/nigoichi/nigoichi-room-api-client.ts`
+- 観戦用公開スナップショット: `lib/online-room-spectator.ts`
+- 観戦policy・grant・共通API: `lib/online-room-spectator-store.ts`, `lib/online-room-spectator-auth.ts`, `app/api/online-room-spectators/route.ts`
 
 共通クライアントはURL、method、条件付きGET、JSON応答、HTTP status/payload付きエラーまでを担当する。各adapterはゲーム固有のRoom・Action型を付ける。フェーズ遷移、権限、勝敗、レスポンスの秘密情報除去は従来どおりサーバーdomain/storeの責務で、クライアント共通化へ移さない。
+
+観戦は保存Roomや参加者向けsanitizerを流用せず、ゲーム別許可リストから小さな公開スナップショットを組み立てる。観戦者をRoomのplayers、手番、戦績、active room索引へ追加しない。公開可否はRoom外のRedis policyへ部屋作成時刻付きで保存し、コード再利用時の設定継承を防ぐ。新しいオンラインゲームは観戦registryへloaderと公開項目を明示追加し、秘密フィールド非公開テストを通す。
 
 ゲーム入口は、ローカルに保存された表示用セッションから画面枠を先に描画できる。ただしサーバー認証とアクティブ部屋復元が終わるまでは入口操作を無効にし、Room APIのactor判定はCookieを正本とする。広場はゲーム別Room APIをブラウザから扇状に呼ばず、共通の復帰概要APIで各storeのactive-room loaderを並列実行し、安全な概要だけを返す。
 

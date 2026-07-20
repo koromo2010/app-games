@@ -14,6 +14,7 @@ import { GameLoungeVisual } from "../components/GameLoungeVisual";
 import { PlayerTimeoutNotice } from "../components/PlayerTimeoutNotice";
 import { GameTopBanner, gameTopBannerOffsetClass } from "../components/GameTopBanner";
 import { GameTopMenu, gameTopBannerActionClass, gameTopBannerDangerActionClass, gameTopMenuItemClass } from "../components/GameTopMenu";
+import { OnlineRoomSpectatorLink } from "../components/OnlineRoomSpectatorLink";
 import { GamePlayerMenu } from "../components/GamePlayerMenu";
 import { TahoiyaRulesDialog } from "./TahoiyaRulesDialog";
 import { TahoiyaRoomPanel } from "./TahoiyaRoomPanel";
@@ -133,6 +134,7 @@ export function TahoiyaGame() {
         )}
         <GameTopMenu>
             {room && room.phase !== "lobby" && <Link href="/games" data-menu-close="true" className={gameTopMenuItemClass}>広場へ戻る</Link>}
+            {room && <OnlineRoomSpectatorLink game="tahoiya" code={room.code} />}
             <button type="button" data-menu-close="true" onClick={() => setRulesOpen(true)} className={gameTopMenuItemClass}>ルール</button>
             <PaidLlmAccessButton variant="menu" />
         </GameTopMenu>

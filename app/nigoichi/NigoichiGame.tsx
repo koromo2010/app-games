@@ -11,6 +11,7 @@ import { GameResultShareButton } from "@/app/components/GameResultShareButton";
 import { GameRulesDialog } from "@/app/components/GameRulesDialog";
 import { GameTopBanner, gameTopBannerOffsetClass } from "@/app/components/GameTopBanner";
 import { GameTopMenu, gameTopBannerActionClass, gameTopBannerDangerActionClass, gameTopMenuItemClass } from "@/app/components/GameTopMenu";
+import { OnlineRoomSpectatorLink } from "@/app/components/OnlineRoomSpectatorLink";
 import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomResultActions } from "@/app/components/RoomResultActions";
 import { RoomLobbyReturnStatus } from "@/app/components/RoomLobbyReturnStatus";
@@ -384,6 +385,7 @@ export function NigoichiGame() {
         {room.phase === "lobby" && (isHost ? <button type="button" onClick={() => void dissolveRoom()} className={gameTopBannerDangerActionClass}>部屋を解散</button> : <Link href="/games" className={gameTopBannerActionClass}>広場へ戻る</Link>)}
         <GameTopMenu>
           {room.phase !== "lobby" && <Link href="/games" data-menu-close="true" className={gameTopMenuItemClass}>広場へ戻る</Link>}
+          <OnlineRoomSpectatorLink game="nigoichi" code={room.code} />
           <button type="button" data-menu-close="true" onClick={() => setRulesOpen(true)} className={gameTopMenuItemClass}>ルール</button>
           {room.phase === "lobby" && !isHost && <button type="button" data-menu-close="true" onClick={() => void leaveRoom()} className={gameTopMenuItemClass}>退出</button>}
         </GameTopMenu>

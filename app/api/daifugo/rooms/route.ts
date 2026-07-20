@@ -6,7 +6,7 @@ import { gameApiAccessDeniedResponse } from "@/lib/game-access";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
 import { authenticatedRoomDraft } from "@/lib/online-room-input";
 import { commonOnlineRoomErrorResponse } from "@/lib/online-room-route-errors";
-import { requireAuthenticatedPlayer } from "@/lib/player-auth";
+import { requireAuthenticatedPlayer, requireAuthenticatedPlayerId } from "@/lib/player-auth";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 
 function errorResponse(error: unknown) {
@@ -38,17 +38,17 @@ export async function GET(request: Request) {
   const code = url.searchParams.get("code")?.trim().toUpperCase() ?? "";
   const playerId = url.searchParams.get("playerId")?.trim() ?? "";
   try {
-    const session = await requireAuthenticatedPlayer();
-    if (playerId && playerId !== session.id) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
+    const authenticatedPlayerId = await requireAuthenticatedPlayerId();
+    if (playerId && playerId !== authenticatedPlayerId) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
     if (code) {
       const room = await loadStoredDaifugoRoom(code);
       if (!room) return Response.json({ error: "Room not found" }, { status: 404 });
-      if (!room.players.some((player) => player.id === session.id)) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
-      return conditionalJsonResponse(request, { room: sanitizeDaifugoRoom(room, session.id) });
+      if (!room.players.some((player) => player.id === authenticatedPlayerId)) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
+      return conditionalJsonResponse(request, { room: sanitizeDaifugoRoom(room, authenticatedPlayerId) });
     }
     if (playerId) {
-      const room = await loadDaifugoPlayerActiveRoom(session.id);
-      return conditionalJsonResponse(request, { room: room ? sanitizeDaifugoRoom(room, session.id) : null });
+      const room = await loadDaifugoPlayerActiveRoom(authenticatedPlayerId);
+      return conditionalJsonResponse(request, { room: room ? sanitizeDaifugoRoom(room, authenticatedPlayerId) : null });
     }
     return conditionalJsonResponse(request, await listJoinableDaifugoRooms(url.searchParams.get("cursor")));
   } catch (error) {

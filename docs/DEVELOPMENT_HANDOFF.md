@@ -141,6 +141,10 @@ Neon Postgres、Upstash Redis、Vercel Blobの容量は `vercel.json` の日次C
 
 登録済みオンラインゲームの部屋取得・active room復帰・一覧・POST/PATCH/DELETEは `lib/online-room-api-client.ts` を土台に、各ゲームの `*-room-api-client.ts` へ型付きで集約する。画面から部屋APIを直接 `fetch` しない。表示中の同期、タブ復帰時の即時更新、必要なゲームのlocalStorage cross-tab更新は `app/hooks/use-online-room-polling.ts` を使う。WebSocket購読中は更新通知のたびに部屋GETを1回行い、通常ポーリングを停止して45秒ごとの整合確認だけを残す。WebSocketが有効な環境での切断・エラー時は最大2秒間隔のポーリングへ即時フォールバックし、1〜30秒の指数バックオフで再接続を続ける。WebSocketが無効な環境では短い同期フェーズ1秒、進行中3秒、ロビー・結果5秒を標準とし、取得失敗時は最大30秒まで間隔を延ばす。Productionでは明示設定がない限りWebSocketを有効にしない。部屋GETは署名済みCookieから `requireAuthenticatedPlayerId` で本人IDを検証し、保存済み部屋の参加者と照合する。ポーリングのたびにプレイヤープロフィールをRedisから再取得しない。更新系は引き続き `requireAuthenticatedPlayer` を使い、最新プロフィールとアカウント存在確認を維持する。共同キャンバスは操作感を保つため、表示中の部屋500ms・広場2秒とし、通常ゲームと同様に非表示タブでは通信を停止して復帰時に即時同期する。
 
+共通観戦モードは `/spectate/[game]/[code]` と `/api/online-room-spectators` を使う。既存部屋は観戦禁止が初期値で、ホストだけがゲームメニューの「観戦・共有設定」から許可できる。非参加者はログイン済みアカウントと、合言葉設定時は合言葉を使って、ゲーム・部屋・本人・部屋作成時刻へ署名されたHttpOnly grantを取得する。観戦者はRoomの参加者、手番、戦績、active room索引へ入らない。観戦レスポンスは保存Roomをspreadせず `lib/online-room-spectator.ts` のゲーム別許可リストだけから作り、実名・内部ID・秘密語・役職・手札・暗号・投票先・チーム内相談を返さない。ワードソナーは未脱落者の伏字も文字数推測につながるため返さない。設定変更はWebSocketのrevision通知を再利用し、接続時は45秒整合確認、切断時は通常フォールバックで追従する。
+
+API直叩き対策では、全オンラインRoom APIのGETをCookie本人と保存Room参加者で照合し、PATCH actionのactorIdを本文値にかかわらずCookie本人で上書きする。DELETEもCookie本人をhost検証へ渡す。デバッグ代理操作はデバッグ権限に加えて保存済み参加者だけを対象とする。`tests/online-room-route-auth.test.ts` を回帰契約とする。
+
 書き込み契約は `POST = 新規作成`、`PATCH = 既存部屋へのCommand`、`DELETE = 解散`。既存部屋をRoom全体POSTで更新しない。UIは変更後Roomを組み立てず、変更意図だけのActionをadapterへ渡す。権限・フェーズ・入力正規化・revision競合は保存済みRoomを読むサーバー側で処理する。`npm run lint` は全オンラインゲームの型付きadapter、PATCH route、UI直fetch、旧`setAndSaveRoom`の再混入を検査する。
 
 結果の表示順、外部共有文、プレイバック保存で同じ並べ替えを複製しない。共通契約は `lib/game-result-presentation.ts`、ワードスケールの基準実装は `hodoaiResultPresentation`。結果の向きを変える場合はプロジェクターと契約テストを変更し、3つの出力先は同じ結果行を参照させる。

@@ -27,6 +27,7 @@ type OnlineRoomPollingOptions<Room> = {
   fetchRoom: (code: string) => Promise<Room | null>;
   onRoom: (room: Room) => void;
   onMissing: () => void;
+  onError?: (error: unknown) => void;
   storageKey?: (code: string) => string;
 };
 
@@ -38,12 +39,13 @@ export function useOnlineRoomPolling<Room>({
   fetchRoom,
   onRoom,
   onMissing,
+  onError,
   storageKey,
 }: OnlineRoomPollingOptions<Room>) {
-  const callbacks = useRef({ fetchRoom, onRoom, onMissing, intervalMs, storageKey });
+  const callbacks = useRef({ fetchRoom, onRoom, onMissing, onError, intervalMs, storageKey });
   useEffect(() => {
-    callbacks.current = { fetchRoom, onRoom, onMissing, intervalMs, storageKey };
-  }, [fetchRoom, intervalMs, onMissing, onRoom, storageKey]);
+    callbacks.current = { fetchRoom, onRoom, onMissing, onError, intervalMs, storageKey };
+  }, [fetchRoom, intervalMs, onError, onMissing, onRoom, storageKey]);
 
   useEffect(() => {
     if (!roomCode) return;
@@ -89,8 +91,9 @@ export function useOnlineRoomPolling<Room>({
         consecutiveFailures = 0;
         if (latest) callbacks.current.onRoom(latest);
         else callbacks.current.onMissing();
-      } catch {
+      } catch (error) {
         consecutiveFailures += 1;
+        callbacks.current.onError?.(error);
       } finally {
         refreshInFlight = false;
         if (active && refreshQueued) {
