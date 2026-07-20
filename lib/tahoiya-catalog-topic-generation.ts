@@ -15,6 +15,24 @@ export type TahoiyaCatalogTopicGenerationResult =
   | { status: "unsafe" }
   | { status: "invalid" };
 
+export const tahoiyaLlmConnectionErrorCode = "TAHOIYA_LLM_CONNECTION_FAILED" as const;
+
+export function describeTahoiyaCatalogTopicGenerationFailure(
+  error: unknown,
+  difficulty: TahoiyaDifficulty,
+) {
+  if (error instanceof Error && error.message === "GAME_LLM_UNAVAILABLE") {
+    return {
+      errorCode: tahoiyaLlmConnectionErrorCode,
+      message: "LLMとの通信に失敗したため、お題の正解文を生成できませんでした。少し待ってもう一度お試しください。",
+    };
+  }
+  return {
+    errorCode: "TAHOIYA_TOPIC_GENERATION_FAILED" as const,
+    message: `${tahoiyaDifficultyLabel(difficulty)}候補から正解文を生成できませんでした。もう一度お試しください。`,
+  };
+}
+
 function simplifyDefinition(value: unknown) {
   const text = String(value ?? "")
     .replace(/[（(][^）)]*[）)]/g, "")

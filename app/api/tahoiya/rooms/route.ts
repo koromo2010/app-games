@@ -191,12 +191,15 @@ export async function PATCH(request: Request) {
               await updateStoredTahoiyaTopicGeneration(code, generation.generationId, progress);
             },
           );
-          return { status: response.status, body: await response.json() as TahoiyaTopic & { error?: string } };
+          return { status: response.status, body: await response.json() as TahoiyaTopic & { error?: string; errorCode?: string } };
         }, { shouldCache: (result) => result.status < 400 });
         const topic = generated.body;
         if (generated.status >= 400 || !topic.word || !topic.realDefinition) {
           telemetry.reject("room.command", generated.status, logFields);
-          return Response.json({ error: topic.error || "Topic generation failed" }, { status: generated.status });
+          return Response.json({
+            error: topic.error || "Topic generation failed",
+            errorCode: topic.errorCode,
+          }, { status: generated.status });
         }
         await updateStoredTahoiyaTopicGeneration(code, generation.generationId, { stage: "finalizing" });
         const room = await startStoredTahoiyaRound(code, player.id, topic, generation.generationId);

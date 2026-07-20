@@ -30,6 +30,7 @@ import { parseLlmJson } from "@/lib/llm-json";
 import { gameApiAccessDeniedResponse } from "@/lib/game-access";
 import { vocabularyDatabaseErrorCode } from "@/lib/vocabulary-postgres-store";
 import {
+  describeTahoiyaCatalogTopicGenerationFailure,
   isTahoiyaDictionaryStyleDefinition,
   parseTahoiyaCatalogTopicGeneration,
 } from "@/lib/tahoiya-catalog-topic-generation";
@@ -614,10 +615,14 @@ export async function generateTahoiyaTopicResponse(
       });
     } catch (error) {
       emitObservabilityEvent("error", "ai.generation", { game: "tahoiya", operation: "difficulty-screening", outcome: "failed", errorCode: observabilityErrorCode(error), databaseCode: vocabularyDatabaseErrorCode(error) });
-      const message = error instanceof Error && error.message === "TAHOIYA_SCREENING_RESPONSE_INVALID"
-        ? "AIの審査結果を10語分読み取れませんでした。自動再審査後も形式が揃わなかったため、もう一度お試しください。"
-        : "候補10語の難易度先行審査に失敗しました。もう一度お試しください。";
-      return Response.json({ error: message }, { status: 503 });
+      if (error instanceof Error && error.message === "GAME_LLM_UNAVAILABLE") {
+        const failure = describeTahoiyaCatalogTopicGenerationFailure(error, difficulty);
+        return Response.json({ error: failure.message, errorCode: failure.errorCode }, { status: 503 });
+      }
+      const failure = error instanceof Error && error.message === "TAHOIYA_SCREENING_RESPONSE_INVALID"
+        ? { errorCode: "TAHOIYA_SCREENING_RESPONSE_INVALID", message: "LLMには接続できましたが、難易度の審査結果を10語分読み取れませんでした。自動再審査後も形式が揃わなかったため、もう一度お試しください。" }
+        : { errorCode: "TAHOIYA_SCREENING_FAILED", message: "候補10語の難易度先行審査に失敗しました。もう一度お試しください。" };
+      return Response.json({ error: failure.message, errorCode: failure.errorCode }, { status: 503 });
     }
   }
   const rememberExperience = async (topic: TahoiyaTopic) => {
@@ -677,7 +682,10 @@ export async function generateTahoiyaTopicResponse(
       }
       const definitionMode = mode ?? await resolveGameLlmMode();
       if (definitionMode === "local") {
-        return Response.json({ error: "正解文を生成できるAI APIがありません。" }, { status: 503 });
+        return Response.json({
+          error: "正解文を生成するLLM APIが設定されていません。",
+          errorCode: "TAHOIYA_LLM_NOT_CONFIGURED",
+        }, { status: 503 });
       }
       await reportProgress({ stage: "generating-definition" });
       const generatedTopic = await generateTopicFromCatalogWords(
@@ -687,7 +695,10 @@ export async function generateTahoiyaTopicResponse(
         retrievedFeedbackIds,
       );
       if (!generatedTopic) {
-        return Response.json({ error: `${tahoiyaDifficultyLabel(difficulty)}候補の読み・正解文を検証できませんでした。もう一度お試しください。` }, { status: 503 });
+        return Response.json({
+          error: `LLMには接続できましたが、${tahoiyaDifficultyLabel(difficulty)}候補の読み・正解文を検証できませんでした。もう一度お試しください。`,
+          errorCode: "TAHOIYA_LLM_RESPONSE_INVALID",
+        }, { status: 503 });
       }
       const topic = generatedTopic.topic;
       if (!topic.generation || !topic.reading) throw new Error("TAHOIYA_GENERATED_TOPIC_METADATA_MISSING");
@@ -713,7 +724,8 @@ export async function generateTahoiyaTopicResponse(
       errorCode: observabilityErrorCode(error),
       databaseCode: vocabularyDatabaseErrorCode(error),
     });
-    return Response.json({ error: `${tahoiyaDifficultyLabel(difficulty)}候補から正解文を生成できませんでした。もう一度お試しください。` }, { status: 503 });
+    const failure = describeTahoiyaCatalogTopicGenerationFailure(error, difficulty);
+    return Response.json({ error: failure.message, errorCode: failure.errorCode }, { status: 503 });
   }
 }
 

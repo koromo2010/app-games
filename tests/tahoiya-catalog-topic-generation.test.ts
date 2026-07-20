@@ -1,9 +1,28 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  describeTahoiyaCatalogTopicGenerationFailure,
   isTahoiyaDictionaryStyleDefinition,
   parseTahoiyaCatalogTopicGeneration,
+  tahoiyaLlmConnectionErrorCode,
 } from "../lib/tahoiya-catalog-topic-generation.ts";
+
+test("LLM接続失敗を一般的な生成失敗と区別して利用者へ伝える", () => {
+  assert.deepEqual(
+    describeTahoiyaCatalogTopicGenerationFailure(new Error("GAME_LLM_UNAVAILABLE"), "standard"),
+    {
+      errorCode: tahoiyaLlmConnectionErrorCode,
+      message: "LLMとの通信に失敗したため、お題の正解文を生成できませんでした。少し待ってもう一度お試しください。",
+    },
+  );
+  assert.deepEqual(
+    describeTahoiyaCatalogTopicGenerationFailure(new Error("VOCABULARY_STORE_NOT_CONFIGURED"), "extreme"),
+    {
+      errorCode: "TAHOIYA_TOPIC_GENERATION_FAILED",
+      message: "魔境候補から正解文を生成できませんでした。もう一度お試しください。",
+    },
+  );
+});
 
 test("DBの見出し語と読みを維持して正解文だけを採用する", () => {
   const result = parseTahoiyaCatalogTopicGeneration(
