@@ -8,6 +8,13 @@ export const onlineRoomPollingIntervals = {
   idle: 2000,
 } as const;
 
+const maximumOnlineRoomPollingDelayMs = 30_000;
+
+export function onlineRoomPollingDelay(intervalMs: number, consecutiveFailures: number) {
+  const multiplier = 2 ** Math.min(Math.max(0, consecutiveFailures), 5);
+  return Math.min(maximumOnlineRoomPollingDelayMs, Math.max(intervalMs, intervalMs * multiplier));
+}
+
 type OnlineRoomPollingOptions<Room> = {
   roomCode?: string | null;
   intervalMs: number;
@@ -35,30 +42,59 @@ export function useOnlineRoomPolling<Room>({
     if (!roomCode) return;
     const code = roomCode;
     let active = true;
+    let consecutiveFailures = 0;
+    let inFlight = false;
+    let timer: number | undefined;
+
+    const schedule = (delayMs: number) => {
+      if (!active) return;
+      if (timer !== undefined) window.clearTimeout(timer);
+      timer = window.setTimeout(refresh, delayMs);
+    };
 
     const refresh = () => {
-      if (document.visibilityState !== "visible") return;
+      timer = undefined;
+      if (!active || inFlight) return;
+      if (document.visibilityState !== "visible") {
+        schedule(intervalMs);
+        return;
+      }
+      inFlight = true;
       void callbacks.current.fetchRoom(code).then((latest) => {
         if (!active) return;
+        consecutiveFailures = 0;
         if (latest) callbacks.current.onRoom(latest);
         else callbacks.current.onMissing();
-      }).catch(() => undefined);
+      }).catch(() => {
+        consecutiveFailures += 1;
+      }).finally(() => {
+        inFlight = false;
+        schedule(onlineRoomPollingDelay(intervalMs, consecutiveFailures));
+      });
     };
-    const timer = window.setInterval(refresh, intervalMs);
     const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") refresh();
+      if (document.visibilityState !== "visible") return;
+      consecutiveFailures = 0;
+      if (!inFlight) {
+        if (timer !== undefined) window.clearTimeout(timer);
+        refresh();
+      }
     };
     const onStorage = storageKey ? (event: StorageEvent) => {
       if (event.key !== storageKey(code)) return;
       if (!event.newValue) callbacks.current.onMissing();
-      else refresh();
+      else if (!inFlight) {
+        if (timer !== undefined) window.clearTimeout(timer);
+        refresh();
+      }
     } : null;
 
+    schedule(intervalMs);
     document.addEventListener("visibilitychange", onVisibilityChange);
     if (onStorage) window.addEventListener("storage", onStorage);
     return () => {
       active = false;
-      window.clearInterval(timer);
+      if (timer !== undefined) window.clearTimeout(timer);
       document.removeEventListener("visibilitychange", onVisibilityChange);
       if (onStorage) window.removeEventListener("storage", onStorage);
     };

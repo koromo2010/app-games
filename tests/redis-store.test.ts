@@ -66,3 +66,15 @@ test("Redis書き込みは一時エラーでも自動再実行しない", async 
     restoreEnvironment();
   }
 });
+
+test("Redisプロバイダーのリクエスト上限超過を識別する", async () => {
+  const restoreEnvironment = setRedisTestEnvironment();
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => new Response(JSON.stringify({ error: "ERR max daily request limit exceeded" }), { status: 400 });
+  try {
+    await assert.rejects(redisCommand(["GET", "key"]), /REDIS_STORE_REQUEST_LIMIT_EXCEEDED/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnvironment();
+  }
+});
