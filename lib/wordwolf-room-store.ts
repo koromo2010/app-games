@@ -174,6 +174,7 @@ function resetWordWolfRoomToLobby(room: WordWolfRoom, advanceGame: boolean) {
     winner: null,
     resultText: "",
     gameNumber: advanceGame ? (room.gameNumber ?? 1) + 1 : room.gameNumber,
+    gameStartedAt: null,
     statsRecordedAt: undefined,
     debugReplayEnabled: false,
   };

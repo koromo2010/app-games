@@ -188,15 +188,16 @@ export async function applyStoredNorthernAction(code: string, action: NorthernRo
       if (!allRoomPlayersReturned(current.lobbyReturn, current.players)) throw new Error("NORTHERN_PLAYERS_NOT_RETURNED");
       if (current.players.length < 2) throw new Error("NORTHERN_NOT_ENOUGH_PLAYERS");
       const game = createNorthernGame(current.players.map((player) => ({ id: player.id, name: player.name })));
-      return { ...current, phase: "playing", lobbyReturn: undefined, game, turnStartedAt: Date.now(), notice: "ゲームを開始しました。最初の手番です。" };
+      const now = Date.now();
+      return { ...current, phase: "playing", lobbyReturn: undefined, gameStartedAt: now, game, turnStartedAt: now, notice: "ゲームを開始しました。最初の手番です。" };
     }
     if (action.type === "reset-game") {
       if (!actorIsHost || current.phase !== "finished") throw new Error("NORTHERN_ROOM_FORBIDDEN");
-      return { ...current, gameNumber: current.gameNumber + 1, phase: "lobby", lobbyReturn: beginRoomLobbyReturn(current.players, action.actorId, "round-result", current.gameNumber), debugReplayEnabled: false, game: null, turnStartedAt: null, notice: "同じ部屋で次のゲームを準備できます。" };
+      return { ...current, gameNumber: current.gameNumber + 1, phase: "lobby", lobbyReturn: beginRoomLobbyReturn(current.players, action.actorId, "round-result", current.gameNumber), gameStartedAt: null, debugReplayEnabled: false, game: null, turnStartedAt: null, notice: "同じ部屋で次のゲームを準備できます。" };
     }
     if (action.type === "abort-game") {
       if (!actorIsHost || !current.debugMode || current.phase === "lobby") throw new Error("NORTHERN_ROOM_FORBIDDEN");
-      return { ...current, phase: "lobby", lobbyReturn: beginRoomLobbyReturn(current.players, action.actorId, "debug-abort", current.gameNumber), debugReplayEnabled: false, game: null, turnStartedAt: null, notice: "ゲームを中断し、ゲーム開始前へ戻りました。" };
+      return { ...current, phase: "lobby", lobbyReturn: beginRoomLobbyReturn(current.players, action.actorId, "debug-abort", current.gameNumber), gameStartedAt: null, debugReplayEnabled: false, game: null, turnStartedAt: null, notice: "ゲームを中断し、ゲーム開始前へ戻りました。" };
     }
     if (action.type === "game-action") {
       if (!current.game || current.phase !== "playing") throw new Error("NORTHERN_ROOM_FORBIDDEN");

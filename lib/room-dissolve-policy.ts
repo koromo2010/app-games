@@ -1,4 +1,4 @@
-export type DissolvableGameId = "wordwolf" | "tahoiya" | "hodoai" | "kotoba-senpuku" | "northern-branch" | "nigoichi" | "code-intercept";
+export type DissolvableGameId = "wordwolf" | "tahoiya" | "hodoai" | "kotoba-senpuku" | "northern-branch" | "nigoichi" | "code-intercept" | "daifugo";
 
 type RoomState = { phase: string; round?: number; roundsTotal?: number };
 

@@ -183,7 +183,7 @@ export function NorthernBranchGame() {
       const host: NorthernRoomPlayer = { id: session.id, name: session.name, joinedAt: now, avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined };
       const nextRoom: NorthernRoom = {
         code: makeRoomCode(), revision: 0, hostId: session.id, ownerId, passphrase: passphrase.trim(), phase: "lobby",
-        players: [host], gameNumber: 1, debugMode: false, debugReplayEnabled: false, turnTimeLimitSeconds: 0, turnStartedAt: null, game: null, notice: "参加者を待っています。", createdAt: now, updatedAt: now,
+        players: [host], gameNumber: 1, gameStartedAt: null, debugMode: false, debugReplayEnabled: false, turnTimeLimitSeconds: 0, turnStartedAt: null, game: null, notice: "参加者を待っています。", createdAt: now, updatedAt: now,
       };
       const data = await createNorthernBranchRoom(nextRoom, session.id);
       setRoom(data.room);

@@ -9,6 +9,7 @@ export const onlineRoomPlayerLimits = {
   kotobaSenpuku: 20,
   nigoichi: 6,
   codeIntercept: 12,
+  daifugo: 6,
 } as const;
 
 /** Registry IDs mapped to their technical room limits. Keep this exhaustive for online games. */
@@ -20,6 +21,7 @@ export const onlineRoomPlayerLimitsByGameId = {
   "kotoba-senpuku": onlineRoomPlayerLimits.kotobaSenpuku,
   "nigoichi": onlineRoomPlayerLimits.nigoichi,
   "code-intercept": onlineRoomPlayerLimits.codeIntercept,
+  "daifugo": onlineRoomPlayerLimits.daifugo,
 } as const;
 
 export function normalizeOnlineRoomCode(value: unknown) {

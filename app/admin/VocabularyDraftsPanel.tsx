@@ -5,6 +5,7 @@ import { ensureSiteAdminStepUp } from "@/lib/site-admin-passkey-client";
 import type { VocabularyDraftSubmission } from "@/lib/vocabulary-admin-store";
 import { LegacyVocabularyImportPanel } from "./LegacyVocabularyImportPanel";
 import { TahoiyaCatalogMigrationPanel } from "./TahoiyaCatalogMigrationPanel";
+import { TahoiyaDecoySalvagePanel } from "./TahoiyaDecoySalvagePanel";
 import { VocabularyEvaluationsPanel } from "./VocabularyEvaluationsPanel";
 
 function draftTitle(draft: VocabularyDraftSubmission) {
@@ -61,6 +62,7 @@ export function VocabularyDraftsPanel({ onAuthExpired, showPreviewMigrations }: 
   }, []);
 
   return <section className="mx-auto max-w-6xl px-4 py-8">
+    <TahoiyaDecoySalvagePanel onAuthExpired={onAuthExpired} />
     {showPreviewMigrations && <>
       <TahoiyaCatalogMigrationPanel onAuthExpired={onAuthExpired} />
       <LegacyVocabularyImportPanel onAuthExpired={onAuthExpired} />

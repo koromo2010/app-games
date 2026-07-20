@@ -49,6 +49,7 @@ export function applyWordWolfStartCommand(room: Room, actorId: string, topic: Wo
     lobbyReturn: undefined,
     players: orderedPlayers,
     phase: "clue" as const,
+    gameStartedAt: now,
     currentRound: 1,
     currentTurnIndex: 0,
     currentTurnStartedAt: now,

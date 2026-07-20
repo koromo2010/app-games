@@ -42,6 +42,66 @@ export async function ensurePostgresSchema() {
       await sql`CREATE INDEX IF NOT EXISTS player_game_results_player_finished_idx ON player_game_results (player_id, finished_at DESC)`;
       await sql`CREATE INDEX IF NOT EXISTS player_game_results_player_game_finished_idx ON player_game_results (player_id, game_type, finished_at DESC)`;
       await sql`
+        CREATE TABLE IF NOT EXISTS game_duration_samples (
+          id TEXT PRIMARY KEY,
+          game_type TEXT NOT NULL,
+          started_at BIGINT NOT NULL,
+          finished_at BIGINT NOT NULL,
+          duration_seconds INTEGER NOT NULL,
+          player_count INTEGER NOT NULL,
+          variant_key TEXT NOT NULL DEFAULT '',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `;
+      await sql`CREATE INDEX IF NOT EXISTS game_duration_samples_game_finished_idx ON game_duration_samples (game_type, finished_at DESC)`;
+      await sql`CREATE INDEX IF NOT EXISTS game_duration_samples_game_players_finished_idx ON game_duration_samples (game_type, player_count, finished_at DESC)`;
+      await sql`
+        CREATE TABLE IF NOT EXISTS tahoiya_decoy_candidates (
+          id TEXT PRIMARY KEY,
+          word TEXT NOT NULL,
+          normalized_word TEXT NOT NULL,
+          reading TEXT,
+          real_definition TEXT NOT NULL,
+          real_definition_hash TEXT NOT NULL,
+          definition_text TEXT NOT NULL,
+          normalized_definition TEXT NOT NULL,
+          definition_hash TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'unreviewed' CHECK (status IN (
+            'unreviewed', 'eligible', 'excluded_same_as_answer', 'review_uncertain',
+            'archived_zero_votes', 'archived_low_votes', 'rejected_moderation'
+          )),
+          multiplayer_votes BIGINT NOT NULL DEFAULT 0 CHECK (multiplayer_votes >= 0),
+          multiplayer_appearances BIGINT NOT NULL DEFAULT 0 CHECK (multiplayer_appearances >= 0),
+          multiplayer_vote_opportunities BIGINT NOT NULL DEFAULT 0 CHECK (multiplayer_vote_opportunities >= 0),
+          solo_votes BIGINT NOT NULL DEFAULT 0 CHECK (solo_votes >= 0),
+          solo_appearances BIGINT NOT NULL DEFAULT 0 CHECK (solo_appearances >= 0),
+          reviewed_real_definition_hash TEXT,
+          review_label TEXT CHECK (review_label IS NULL OR review_label IN ('different', 'same', 'uncertain')),
+          review_prompt_version TEXT,
+          reviewed_at BIGINT,
+          first_seen_at BIGINT NOT NULL,
+          last_seen_at BIGINT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE (normalized_word, definition_hash)
+        )
+      `;
+      await sql`
+        CREATE TABLE IF NOT EXISTS tahoiya_decoy_candidate_events (
+          id TEXT PRIMARY KEY,
+          candidate_id TEXT NOT NULL REFERENCES tahoiya_decoy_candidates(id) ON DELETE RESTRICT,
+          source_kind TEXT NOT NULL CHECK (source_kind IN ('multiplayer_round', 'legacy_replay', 'solo_choice')),
+          votes_awarded INTEGER NOT NULL DEFAULT 0 CHECK (votes_awarded >= 0),
+          voter_opportunities INTEGER NOT NULL DEFAULT 0 CHECK (voter_opportunities >= 0),
+          appearances INTEGER NOT NULL DEFAULT 1 CHECK (appearances >= 0),
+          occurred_at BIGINT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `;
+      await sql`CREATE INDEX IF NOT EXISTS tahoiya_decoy_candidates_word_status_idx ON tahoiya_decoy_candidates (normalized_word, status)`;
+      await sql`CREATE INDEX IF NOT EXISTS tahoiya_decoy_candidates_votes_idx ON tahoiya_decoy_candidates (normalized_word, (multiplayer_votes + solo_votes) DESC)`;
+      await sql`CREATE INDEX IF NOT EXISTS tahoiya_decoy_candidate_events_candidate_idx ON tahoiya_decoy_candidate_events (candidate_id, occurred_at DESC)`;
+      await sql`
         CREATE TABLE IF NOT EXISTS site_admin_accounts (
           email TEXT PRIMARY KEY,
           password_hash TEXT NOT NULL,

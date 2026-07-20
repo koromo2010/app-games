@@ -196,6 +196,7 @@ export function normalizeCodeInterceptRoom(value: unknown): CodeInterceptRoom | 
     lobbyReturn: normalizeRoomLobbyReturnState(parsed.lobbyReturn, players),
     playerCapacity: normalizeCodeInterceptPlayerCapacity(parsed.playerCapacity, players.length),
     gameNumber: typeof parsed.gameNumber === "number" ? Math.max(1, Math.floor(parsed.gameNumber)) : 1,
+    gameStartedAt: typeof parsed.gameStartedAt === "number" && Number.isFinite(parsed.gameStartedAt) ? parsed.gameStartedAt : null,
     roundNumber: typeof parsed.roundNumber === "number" ? Math.max(1, Math.floor(parsed.roundNumber)) : 1,
     cardCount,
     wordDifficulty: normalizeCodeInterceptWordDifficulty(parsed.wordDifficulty),

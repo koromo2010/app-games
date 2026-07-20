@@ -69,6 +69,7 @@ export type HodoaiRoom = HodoaiConfig & PlayerTimeoutFields & {
   players: HodoaiPlayer[];
   lobbyReturn?: RoomLobbyReturnState;
   gameNumber: number;
+  gameStartedAt?: number | null;
   round: number;
   theme: HodoaiTheme | null;
   cards: HodoaiCard[];

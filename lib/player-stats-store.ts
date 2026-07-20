@@ -4,6 +4,7 @@ import type { KotobaSenpukuRoom } from "@/lib/kotoba-senpuku";
 import type { NorthernRoom } from "@/lib/northern-branch-types";
 import type { NigoichiRoom } from "@/lib/nigoichi";
 import type { CodeInterceptRoom } from "@/lib/code-intercept";
+import type { DaifugoRoom } from "@/lib/daifugo-room";
 import type { TahoiyaRoom } from "@/lib/tahoiya-types";
 import { calculateTahoiyaRoundScores } from "@/lib/tahoiya-scoring";
 import type { WordWolfRoom } from "@/lib/wordwolf-room-store";
@@ -18,8 +19,10 @@ import {
 } from "@/lib/player-stats-postgres-store";
 import { mergePlayerGameResults } from "@/lib/player-stats-history";
 import { buildPlayedGameRatings } from "@/lib/player-rating-visibility";
+import { gameDurationVariantKey, isGameDurationGameId, type GameDurationGameId } from "@/lib/game-duration-statistics";
+import { recordGameDurationSample } from "@/lib/game-duration-store";
 
-export type PlayerStatsGameType = "wordwolf" | "tahoiya" | "northern-branch" | "hodoai" | "kotoba-senpuku" | "nigoichi" | "code-intercept";
+export type PlayerStatsGameType = GameDurationGameId;
 
 export type PlayerGameResult = {
   schemaVersion: 1;
@@ -105,7 +108,7 @@ function summarize(results: PlayerGameResult[]): PlayerStatsSummary {
 }
 function startOfToday() { const now = new Date(); return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime(); }
 function startOfMonth() { const now = new Date(); return new Date(now.getFullYear(), now.getMonth(), 1).getTime(); }
-function isPlayerStatsGameType(value: unknown): value is PlayerStatsGameType { return value === "wordwolf" || value === "tahoiya" || value === "northern-branch" || value === "hodoai" || value === "kotoba-senpuku" || value === "nigoichi" || value === "code-intercept"; }
+function isPlayerStatsGameType(value: unknown): value is PlayerStatsGameType { return isGameDurationGameId(value); }
 
 function parseResult(value: unknown): PlayerGameResult | null {
   if (!value || typeof value !== "string") return null;
@@ -159,12 +162,16 @@ export async function recordWordWolfGameResults(room: WordWolfRoom) {
   if (room.phase !== "result" || !room.winner || room.debugMode) return 0;
   const eventId = `wordwolf:${room.code}:${room.createdAt}:${room.gameNumber}`;
   return observeStatsRecord({ game: "wordwolf", operation: "record-results", roomRef: observabilityRef("room", room.code), eventRef: observabilityRef("event", eventId), gameNumber: room.gameNumber, playerCount: room.players.length }, async () => {
-    const ratingByPlayer = await recordGameRatings("wordwolf", eventId, room.players.map((player) => ({ playerId: player.id, won: didWordWolfPlayerWin(room, player.id) })));
+    const finishedAt = room.updatedAt || Date.now();
+    const [, ratingByPlayer] = await Promise.all([
+      recordGameDurationSample({ id: eventId, gameType: "wordwolf", startedAt: room.gameStartedAt, finishedAt, playerCount: room.players.length, variantKey: gameDurationVariantKey({ gameMode: room.gameMode, rounds: room.roundsTotal, clueMode: room.clueMode, wolves: room.wolfCount }) }),
+      recordGameRatings("wordwolf", eventId, room.players.map((player) => ({ playerId: player.id, won: didWordWolfPlayerWin(room, player.id) }))),
+    ]);
     return recordPlayerResults(room.players.map((player) => {
       const role = wolfIds(room).length === 0 ? "no-wolf" : wolfIds(room).includes(player.id) ? "wolf" : "village";
       const won = didWordWolfPlayerWin(room, player.id);
       const rating = ratingByPlayer.get(player.id);
-      return { schemaVersion: 1, id: `wordwolf:${room.code}:${room.createdAt}:${room.gameNumber}:${player.id}`, gameType: "wordwolf", roomCode: room.code, roomCreatedAt: room.createdAt, gameNumber: room.gameNumber, finishedAt: room.updatedAt || Date.now(), playerId: player.id, playerName: player.name, role, won, resultLabel: won ? "勝利" : "敗北", playerCount: room.players.length, details: { gameMode: room.gameMode, winner: room.winner }, ratingBefore: rating?.before, ratingAfter: rating?.after, ratingChange: rating?.change } satisfies PlayerGameResult;
+      return { schemaVersion: 1, id: `wordwolf:${room.code}:${room.createdAt}:${room.gameNumber}:${player.id}`, gameType: "wordwolf", roomCode: room.code, roomCreatedAt: room.createdAt, gameNumber: room.gameNumber, finishedAt, playerId: player.id, playerName: player.name, role, won, resultLabel: won ? "勝利" : "敗北", playerCount: room.players.length, details: { gameMode: room.gameMode, winner: room.winner }, ratingBefore: rating?.before, ratingAfter: rating?.after, ratingChange: rating?.change } satisfies PlayerGameResult;
     }));
   });
 }
@@ -179,11 +186,15 @@ export async function recordTahoiyaRoundResults(room: TahoiyaRoom) {
   const best = Math.max(0, ...Object.values(points));
   const eventId = `tahoiya:${room.code}:${room.createdAt}:${room.round}`;
   return observeStatsRecord({ game: "tahoiya", operation: "record-results", roomRef: observabilityRef("room", room.code), eventRef: observabilityRef("event", eventId), round: room.round, playerCount: room.players.length }, async () => {
-    const ratings = await recordGameRatings("tahoiya", eventId, room.players.map((player) => ({ playerId: player.id, won: (points[player.id] ?? 0) === best, performanceScore: points[player.id] ?? 0 })));
+    const finishedAt = room.updatedAt || Date.now();
+    const [, ratings] = await Promise.all([
+      recordGameDurationSample({ id: eventId, gameType: "tahoiya", startedAt: room.gameStartedAt, finishedAt, playerCount: room.players.length, variantKey: gameDurationVariantKey({ playMode: room.playMode, difficulty: room.topicDifficulty }) }),
+      recordGameRatings("tahoiya", eventId, room.players.map((player) => ({ playerId: player.id, won: (points[player.id] ?? 0) === best, performanceScore: points[player.id] ?? 0 }))),
+    ]);
     return recordPlayerResults(room.players.map((player) => {
       const won = (points[player.id] ?? 0) === best;
       const rating = ratings.get(player.id);
-      return { schemaVersion: 1, id: `tahoiya:${room.code}:${room.createdAt}:${room.round}:${player.id}`, gameType: "tahoiya", roomCode: room.code, roomCreatedAt: room.createdAt, gameNumber: room.round, finishedAt: room.updatedAt || Date.now(), playerId: player.id, playerName: player.name, role: player.id === room.answererId ? "answerer" : "writer", won, resultLabel: won ? "ラウンド1位" : `${points[player.id] ?? 0}点`, playerCount: room.players.length, details: { roundPoints: points[player.id] ?? 0, word: room.word }, ratingBefore: rating?.before, ratingAfter: rating?.after, ratingChange: rating?.change } satisfies PlayerGameResult;
+      return { schemaVersion: 1, id: `tahoiya:${room.code}:${room.createdAt}:${room.round}:${player.id}`, gameType: "tahoiya", roomCode: room.code, roomCreatedAt: room.createdAt, gameNumber: room.round, finishedAt, playerId: player.id, playerName: player.name, role: player.id === room.answererId ? "answerer" : "writer", won, resultLabel: won ? "ラウンド1位" : `${points[player.id] ?? 0}点`, playerCount: room.players.length, details: { roundPoints: points[player.id] ?? 0, word: room.word }, ratingBefore: rating?.before, ratingAfter: rating?.after, ratingChange: rating?.change } satisfies PlayerGameResult;
     }));
   });
 }
@@ -195,8 +206,12 @@ export async function recordHodoaiGameResults(room: HodoaiRoom) {
   const realPlayers = room.players.filter((player) => !player.isDummy);
   const eventId = `hodoai:${room.code}:${room.createdAt}:${room.gameNumber ?? 1}`;
   return observeStatsRecord({ game: "hodoai", operation: "record-results", roomRef: observabilityRef("room", room.code), eventRef: observabilityRef("event", eventId), gameNumber: room.gameNumber ?? 1, playerCount: realPlayers.length }, async () => {
-    const ratings = await recordGameRatings("hodoai", eventId, realPlayers.map((player) => ({ playerId: player.id, won })), true);
-    return recordPlayerResults(realPlayers.map((player) => { const rating = ratings.get(player.id); return { schemaVersion: 1, id: `${eventId}:${player.id}`, gameType: "hodoai", roomCode: room.code, roomCreatedAt: room.createdAt, gameNumber: room.gameNumber ?? 1, finishedAt: room.updatedAt || Date.now(), playerId: player.id, playerName: player.name, role: "cooperator", won, resultLabel: `${room.totalPoints}/${maxPoints}点`, playerCount: realPlayers.length, details: { points: room.totalPoints, maxPoints }, ratingBefore: rating?.before, ratingAfter: rating?.after, ratingChange: rating?.change } satisfies PlayerGameResult; }));
+    const finishedAt = room.updatedAt || Date.now();
+    const [, ratings] = await Promise.all([
+      recordGameDurationSample({ id: eventId, gameType: "hodoai", startedAt: room.gameStartedAt, finishedAt, playerCount: realPlayers.length, variantKey: gameDurationVariantKey({ rounds: room.roundsTotal, cardsPerPlayer: room.cardsPerPlayer }) }),
+      recordGameRatings("hodoai", eventId, realPlayers.map((player) => ({ playerId: player.id, won })), true),
+    ]);
+    return recordPlayerResults(realPlayers.map((player) => { const rating = ratings.get(player.id); return { schemaVersion: 1, id: `${eventId}:${player.id}`, gameType: "hodoai", roomCode: room.code, roomCreatedAt: room.createdAt, gameNumber: room.gameNumber ?? 1, finishedAt, playerId: player.id, playerName: player.name, role: "cooperator", won, resultLabel: `${room.totalPoints}/${maxPoints}点`, playerCount: realPlayers.length, details: { points: room.totalPoints, maxPoints }, ratingBefore: rating?.before, ratingAfter: rating?.after, ratingChange: rating?.change } satisfies PlayerGameResult; }));
   });
 }
 
@@ -205,12 +220,16 @@ export async function recordNorthernBranchGameResults(room: NorthernRoom) {
   const realPlayers = room.players.filter((player) => !player.isDummy);
   const eventId = `northern-branch:${room.code}:${room.createdAt}:${room.gameNumber}`;
   return observeStatsRecord({ game: "northern-branch", operation: "record-results", roomRef: observabilityRef("room", room.code), eventRef: observabilityRef("event", eventId), gameNumber: room.gameNumber, playerCount: realPlayers.length }, async () => {
-    const ratings = await recordGameRatings("northern-branch", eventId, realPlayers.map((player) => ({ playerId: player.id, won: player.id === room.game?.winnerId, performanceScore: room.game?.players.find((item) => item.id === player.id)?.points ?? 0 })));
+    const finishedAt = room.updatedAt || Date.now();
+    const [, ratings] = await Promise.all([
+      recordGameDurationSample({ id: eventId, gameType: "northern-branch", startedAt: room.gameStartedAt, finishedAt, playerCount: realPlayers.length, variantKey: gameDurationVariantKey({ victoryPoints: room.game!.rules.victoryPoints }) }),
+      recordGameRatings("northern-branch", eventId, realPlayers.map((player) => ({ playerId: player.id, won: player.id === room.game?.winnerId, performanceScore: room.game?.players.find((item) => item.id === player.id)?.points ?? 0 }))),
+    ]);
     return recordPlayerResults(realPlayers.map((player) => {
     const gamePlayer = room.game?.players.find((item) => item.id === player.id);
     const won = player.id === room.game?.winnerId;
     const rating = ratings.get(player.id);
-    return { schemaVersion: 1, id: `${eventId}:${player.id}`, gameType: "northern-branch", roomCode: room.code, roomCreatedAt: room.createdAt, gameNumber: room.gameNumber, finishedAt: room.updatedAt || Date.now(), playerId: player.id, playerName: player.name, role: "merchant", won, resultLabel: won ? "勝利" : `${gamePlayer?.points ?? 0}点`, playerCount: realPlayers.length, details: { points: gamePlayer?.points ?? 0 }, ratingBefore: rating?.before, ratingAfter: rating?.after, ratingChange: rating?.change } satisfies PlayerGameResult;
+    return { schemaVersion: 1, id: `${eventId}:${player.id}`, gameType: "northern-branch", roomCode: room.code, roomCreatedAt: room.createdAt, gameNumber: room.gameNumber, finishedAt, playerId: player.id, playerName: player.name, role: "merchant", won, resultLabel: won ? "勝利" : `${gamePlayer?.points ?? 0}点`, playerCount: realPlayers.length, details: { points: gamePlayer?.points ?? 0 }, ratingBefore: rating?.before, ratingAfter: rating?.after, ratingChange: rating?.change } satisfies PlayerGameResult;
     }));
   });
 }
@@ -221,12 +240,16 @@ export async function recordKotobaSenpukuGameResults(room: KotobaSenpukuRoom) {
   const winnerIds = room.history.at(-1)?.winnerIds ?? (room.history.at(-1)?.winnerId ? [room.history.at(-1)!.winnerId!] : []);
   const eventId = `kotoba-senpuku:${room.code}:${room.createdAt}:${room.gameNumber}`;
   return observeStatsRecord({ game: "kotoba-senpuku", operation: "record-results", roomRef: observabilityRef("room", room.code), eventRef: observabilityRef("event", eventId), gameNumber: room.gameNumber, playerCount: realPlayers.length }, async () => {
-    const ratings = await recordGameRatings("kotoba-senpuku", eventId, realPlayers.map((player) => ({ playerId: player.id, won: winnerIds.includes(player.id), performanceScore: room.totalScores[player.id] ?? 0 })));
+    const finishedAt = room.updatedAt || Date.now();
+    const [, ratings] = await Promise.all([
+      recordGameDurationSample({ id: eventId, gameType: "kotoba-senpuku", startedAt: room.gameStartedAt, finishedAt, playerCount: realPlayers.length, variantKey: gameDurationVariantKey({ rounds: room.roundsTotal, continuousScan: room.continuousScan, wordGuess: room.allowWordGuess }) }),
+      recordGameRatings("kotoba-senpuku", eventId, realPlayers.map((player) => ({ playerId: player.id, won: winnerIds.includes(player.id), performanceScore: room.totalScores[player.id] ?? 0 }))),
+    ]);
     return recordPlayerResults(realPlayers.map((player) => {
     const points = room.totalScores[player.id] ?? 0;
     const won = winnerIds.includes(player.id);
     const rating = ratings.get(player.id);
-    return { schemaVersion: 1, id: `${eventId}:${player.id}`, gameType: "kotoba-senpuku", roomCode: room.code, roomCreatedAt: room.createdAt, gameNumber: room.gameNumber, finishedAt: room.updatedAt || Date.now(), playerId: player.id, playerName: player.name, role: "infiltrator", won, resultLabel: won ? "最後まで生存" : "脱落", playerCount: realPlayers.length, details: { points }, ratingBefore: rating?.before, ratingAfter: rating?.after, ratingChange: rating?.change } satisfies PlayerGameResult;
+    return { schemaVersion: 1, id: `${eventId}:${player.id}`, gameType: "kotoba-senpuku", roomCode: room.code, roomCreatedAt: room.createdAt, gameNumber: room.gameNumber, finishedAt, playerId: player.id, playerName: player.name, role: "infiltrator", won, resultLabel: won ? "最後まで生存" : "脱落", playerCount: realPlayers.length, details: { points }, ratingBefore: rating?.before, ratingAfter: rating?.after, ratingChange: rating?.change } satisfies PlayerGameResult;
     }));
   });
 }
@@ -237,12 +260,37 @@ export async function recordNigoichiGameResults(room: NigoichiRoom) {
   const eventId = `nigoichi:${room.code}:${room.createdAt}:${room.gameNumber}`;
   return observeStatsRecord({ game: "nigoichi", operation: "record-results", roomRef: observabilityRef("room", room.code), eventRef: observabilityRef("event", eventId), gameNumber: room.gameNumber, playerCount: players.length }, async () => {
     const outcomes = players.map((player) => ({ playerId: player.id, won: room.guesses[player.id] === room.missingNumber, performanceScore: room.roundScores[player.id]?.roundScore ?? 0 }));
-    const ratings = await recordGameRatings("nigoichi", eventId, outcomes);
+    const finishedAt = room.updatedAt || Date.now();
+    const [, ratings] = await Promise.all([
+      recordGameDurationSample({ id: eventId, gameType: "nigoichi", startedAt: room.gameStartedAt, finishedAt, playerCount: players.length, variantKey: gameDurationVariantKey({ cardsPerPlayer: room.cardsPerPlayer, associationWords: room.associationWordCount, difficulty: room.wordDifficulty }) }),
+      recordGameRatings("nigoichi", eventId, outcomes),
+    ]);
     return recordPlayerResults(players.map((player) => {
       const won = room.guesses[player.id] === room.missingNumber;
       const score = room.roundScores[player.id];
       const rating = ratings.get(player.id);
-      return { schemaVersion: 1, id: `${eventId}:${player.id}`, gameType: "nigoichi", roomCode: room.code, roomCreatedAt: room.createdAt, gameNumber: room.gameNumber, finishedAt: room.updatedAt || Date.now(), playerId: player.id, playerName: player.name, won, resultLabel: score ? `${score.roundScore >= 0 ? "+" : ""}${score.roundScore}点（累計${score.totalScoreAfterRound}点）` : won ? "余り番号を正解" : "不正解", playerCount: players.length, details: { guess: room.guesses[player.id] ?? -1, missingNumber: room.missingNumber, cardsPerPlayer: room.cardsPerPlayer, associationWordCount: room.associationWordCount, totalCards: room.words.length, wordDifficulty: room.wordDifficulty, correctBonus: score?.correctBonus ?? 0, receivedWrongVotes: score?.receivedWrongVotes ?? 0, roundScore: score?.roundScore ?? 0, totalScoreAfterRound: score?.totalScoreAfterRound ?? room.totalScores[player.id] ?? 0 }, ratingBefore: rating?.before, ratingAfter: rating?.after, ratingChange: rating?.change } satisfies PlayerGameResult;
+      return { schemaVersion: 1, id: `${eventId}:${player.id}`, gameType: "nigoichi", roomCode: room.code, roomCreatedAt: room.createdAt, gameNumber: room.gameNumber, finishedAt, playerId: player.id, playerName: player.name, won, resultLabel: score ? `${score.roundScore >= 0 ? "+" : ""}${score.roundScore}点（累計${score.totalScoreAfterRound}点）` : won ? "余り番号を正解" : "不正解", playerCount: players.length, details: { guess: room.guesses[player.id] ?? -1, missingNumber: room.missingNumber, cardsPerPlayer: room.cardsPerPlayer, associationWordCount: room.associationWordCount, totalCards: room.words.length, wordDifficulty: room.wordDifficulty, correctBonus: score?.correctBonus ?? 0, receivedWrongVotes: score?.receivedWrongVotes ?? 0, roundScore: score?.roundScore ?? 0, totalScoreAfterRound: score?.totalScoreAfterRound ?? room.totalScores[player.id] ?? 0 }, ratingBefore: rating?.before, ratingAfter: rating?.after, ratingChange: rating?.change } satisfies PlayerGameResult;
+    }));
+  });
+}
+
+export async function recordDaifugoGameResults(room: DaifugoRoom) {
+  if (room.phase !== "result" || !room.game || room.debugMode) return 0;
+  const players = room.players.filter((player) => !player.isDummy);
+  const finishOrder = room.game.finishOrder.filter((id) => players.some((player) => player.id === id));
+  if (finishOrder.length !== players.length) return 0;
+  const eventId = `daifugo:${room.code}:${room.createdAt}:${room.gameNumber}`;
+  return observeStatsRecord({ game: "daifugo", operation: "record-results", roomRef: observabilityRef("room", room.code), eventRef: observabilityRef("event", eventId), gameNumber: room.gameNumber, playerCount: players.length }, async () => {
+    const finishedAt = room.updatedAt || Date.now();
+    const ratings = await recordGameRatings("daifugo", eventId, players.map((player) => {
+      const rank = finishOrder.indexOf(player.id);
+      return { playerId: player.id, won: rank === 0, performanceScore: players.length - rank };
+    }));
+    await recordGameDurationSample({ id: eventId, gameType: "daifugo", startedAt: room.gameStartedAt, finishedAt, playerCount: players.length, variantKey: gameDurationVariantKey({ players: players.length }) });
+    return recordPlayerResults(players.map((player) => {
+      const rank = finishOrder.indexOf(player.id);
+      const rating = ratings.get(player.id);
+      return { schemaVersion: 1, id: `${eventId}:${player.id}`, gameType: "daifugo", roomCode: room.code, roomCreatedAt: room.createdAt, gameNumber: room.gameNumber, finishedAt, playerId: player.id, playerName: player.name, won: rank === 0, resultLabel: `${rank + 1}位`, playerCount: players.length, details: { rank: rank + 1, turns: room.game!.turnNumber }, ratingBefore: rating?.before, ratingAfter: rating?.after, ratingChange: rating?.change } satisfies PlayerGameResult;
     }));
   });
 }
@@ -257,19 +305,23 @@ export async function recordCodeInterceptGameResults(room: CodeInterceptRoom) {
       const won = room.winner !== "draw" && room.winner === player.teamId;
       return { playerId: player.id, won, performanceScore: room.winner === "draw" ? 0 : team?.points ?? 0 };
     });
-    const ratings = await recordGameRatings("code-intercept", eventId, outcomes);
+    const finishedAt = room.updatedAt || Date.now();
+    const [, ratings] = await Promise.all([
+      recordGameDurationSample({ id: eventId, gameType: "code-intercept", startedAt: room.gameStartedAt, finishedAt, playerCount: players.length, variantKey: gameDurationVariantKey({ cards: room.cardCount, lengthMode: room.codeLengthMode, revealMode: room.codeRevealMode, initialPoints: room.initialPoints }) }),
+      recordGameRatings("code-intercept", eventId, outcomes),
+    ]);
     return recordPlayerResults(players.map((player) => {
       const team = room.teams.find((item) => item.id === player.teamId);
       const won = room.winner !== "draw" && room.winner === player.teamId;
       const rating = ratings.get(player.id);
       const resultLabel = room.winner === "draw" ? "引き分け" : won ? "チーム勝利" : "チーム敗北";
-      return { schemaVersion: 1, id: `${eventId}:${player.id}`, gameType: "code-intercept", roomCode: room.code, roomCreatedAt: room.createdAt, gameNumber: room.gameNumber, finishedAt: room.updatedAt || Date.now(), playerId: player.id, playerName: player.name, won, draw: room.winner === "draw", resultLabel: `${resultLabel}・残り${team?.points ?? 0}点`, playerCount: players.length, details: { team: player.teamId, remainingPoints: team?.points ?? 0, rounds: room.roundNumber, draw: room.winner === "draw" }, ratingBefore: rating?.before, ratingAfter: rating?.after, ratingChange: rating?.change } satisfies PlayerGameResult;
+      return { schemaVersion: 1, id: `${eventId}:${player.id}`, gameType: "code-intercept", roomCode: room.code, roomCreatedAt: room.createdAt, gameNumber: room.gameNumber, finishedAt, playerId: player.id, playerName: player.name, won, draw: room.winner === "draw", resultLabel: `${resultLabel}・残り${team?.points ?? 0}点`, playerCount: players.length, details: { team: player.teamId, remainingPoints: team?.points ?? 0, rounds: room.roundNumber, draw: room.winner === "draw" }, ratingBefore: rating?.before, ratingAfter: rating?.after, ratingChange: rating?.change } satisfies PlayerGameResult;
     }));
   });
 }
 
 export async function getPlayerStats(playerId: string, gameFilter: PlayerStatsGameFilter = "all"): Promise<PlayerStatsResponse> {
-  const gameTypes: PlayerStatsGameType[] = ["wordwolf", "tahoiya", "northern-branch", "hodoai", "kotoba-senpuku", "nigoichi", "code-intercept"];
+  const gameTypes: PlayerStatsGameType[] = ["wordwolf", "tahoiya", "northern-branch", "hodoai", "kotoba-senpuku", "nigoichi", "code-intercept", "daifugo"];
   const postgresEnabled = isPostgresConfigured();
   const [postgresResults, postgresRatingStates, rawResults, ...storedRatings] = await Promise.all([
     postgresEnabled ? loadPostgresPlayerResults(playerId, 200).catch(() => []) : Promise.resolve([]),

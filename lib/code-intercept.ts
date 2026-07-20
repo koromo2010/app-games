@@ -106,6 +106,7 @@ export type CodeInterceptRoom = {
   lobbyReturn?: RoomLobbyReturnState;
   playerCapacity: number;
   gameNumber: number;
+  gameStartedAt?: number | null;
   roundNumber: number;
   cardCount: number;
   wordDifficulty: CodeInterceptWordDifficulty;
@@ -149,6 +150,7 @@ export type CodeInterceptRoomChoice = {
   hasPassphrase: boolean;
   redCount: number;
   blueCount: number;
+  wordDifficulty: CodeInterceptWordDifficulty;
   updatedAt: number;
 };
 

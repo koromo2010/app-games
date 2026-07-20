@@ -27,5 +27,6 @@ test("全オンラインゲームに参加人数の安全上限を持たせる",
     kotobaSenpuku: 20,
     nigoichi: 6,
     codeIntercept: 12,
+    daifugo: 6,
   });
 });

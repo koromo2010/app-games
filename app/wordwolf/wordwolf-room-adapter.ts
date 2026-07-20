@@ -440,6 +440,7 @@ export function createEmptyRoom(
     scores: {},
     gamesPlayed: 0,
     gameNumber: 1,
+    gameStartedAt: null,
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };

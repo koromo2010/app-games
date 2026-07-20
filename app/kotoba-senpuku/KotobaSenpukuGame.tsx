@@ -278,7 +278,7 @@ export function KotobaSenpukuGame() {
       const now = Date.now();
       const host: KotobaSenpukuPlayer = { id: session.id, name: session.name, joinedAt: now, avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined };
       const nextRoom: KotobaSenpukuRoom = {
-        code: makeRoomCode(), revision: 0, hostId: session.id, ownerId, passphrase: passphrase.trim(), phase: "lobby", players: [host], gameNumber: 1,
+        code: makeRoomCode(), revision: 0, hostId: session.id, ownerId, passphrase: passphrase.trim(), phase: "lobby", players: [host], gameNumber: 1, gameStartedAt: null,
         ...defaults, playerTimeouts: { [session.id]: { consecutiveTimeouts: 0, reducedTime: false } }, playerTimeoutNotice: null, debugMode: false, debugReplayEnabled: false, round: 1, theme: null, secrets: {}, submittedIds: [], masks: {}, calledKana: [], exposedIds: [],
         roundSignals: { [session.id]: 0 }, totalScores: { [session.id]: 0 }, activePlayerIndex: 0, turnNumber: 1, roundEvents: [],
         history: [], log: ["参加者を待っています。"], phaseStartedAt: null, createdAt: now, updatedAt: now,

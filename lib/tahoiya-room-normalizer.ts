@@ -109,6 +109,7 @@ export function normalizeTahoiyaRoom(value: unknown): TahoiyaRoom | null {
     phaseStartedAt: typeof parsed.phaseStartedAt === "number" ? parsed.phaseStartedAt : null,
     answererId: typeof parsed.answererId === "string" ? parsed.answererId : "",
     round: typeof parsed.round === "number" ? Math.max(1, Math.floor(parsed.round)) : 1,
+    gameStartedAt: typeof parsed.gameStartedAt === "number" && Number.isFinite(parsed.gameStartedAt) ? parsed.gameStartedAt : null,
     word: typeof parsed.word === "string" ? parsed.word : "",
     reading: typeof parsed.reading === "string" ? parsed.reading : undefined,
     realDefinition: typeof parsed.realDefinition === "string" ? parsed.realDefinition : "",

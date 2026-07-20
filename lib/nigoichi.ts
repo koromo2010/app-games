@@ -107,6 +107,7 @@ export type NigoichiRoom = {
   lobbyReturn?: RoomLobbyReturnState;
   playerCapacity: number;
   gameNumber: number;
+  gameStartedAt?: number | null;
   cardsPerPlayer: number;
   associationWordCount: number;
   wordDifficulty: NigoichiWordDifficulty;

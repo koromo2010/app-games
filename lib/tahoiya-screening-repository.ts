@@ -2,6 +2,7 @@ import type { GameGenerationMeta } from "./game-ai-types.ts";
 import type { TahoiyaDifficulty } from "./tahoiya-types.ts";
 import type { TahoiyaDifficultyScreeningItem } from "./tahoiya-difficulty-screening.ts";
 import { getVocabularyPostgresClient } from "./vocabulary-postgres-store.ts";
+import { tahoiyaCandidateSurfaceAllowed } from "./tahoiya-difficulty.ts";
 
 export type StoredTahoiyaScreeningCandidate = {
   id: string;
@@ -56,7 +57,7 @@ export async function listScreenedTahoiyaWordCandidates(
     ORDER BY screening.screened_at ASC, word.updated_at DESC
     LIMIT ${safeLimit}
   ` as ScreeningCandidateRow[];
-  return rows.map(fromScreeningRow);
+  return rows.filter((row) => tahoiyaCandidateSurfaceAllowed(row.surface)).map(fromScreeningRow);
 }
 
 export async function listUnscreenedTahoiyaWordCandidates(limit = 500) {
@@ -79,7 +80,7 @@ export async function listUnscreenedTahoiyaWordCandidates(limit = 500) {
     reading: string | null;
     effective_zipf: number | string;
   }>;
-  return rows.map((row) => ({
+  return rows.filter((row) => tahoiyaCandidateSurfaceAllowed(row.surface)).map((row) => ({
     id: row.id,
     word: row.surface,
     reading: row.reading ?? undefined,

@@ -59,6 +59,7 @@ export type KotobaSenpukuRoom = KotobaSenpukuConfig & PlayerTimeoutFields & {
   players: KotobaSenpukuPlayer[];
   lobbyReturn?: RoomLobbyReturnState;
   gameNumber: number;
+  gameStartedAt?: number | null;
   round: number;
   theme: KotobaSenpukuTheme | null;
   secrets: Record<string, string>;

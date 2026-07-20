@@ -210,6 +210,7 @@ export function normalizeWordWolfRoom(value: unknown): WordWolfRoom | null {
     scores: normalizeScores(parsed.scores),
     gamesPlayed,
     gameNumber: typeof parsed.gameNumber === "number" ? Math.max(1, Math.floor(parsed.gameNumber)) : gamesPlayed + 1,
+    gameStartedAt: typeof parsed.gameStartedAt === "number" && Number.isFinite(parsed.gameStartedAt) ? parsed.gameStartedAt : null,
     statsRecordedAt: typeof parsed.statsRecordedAt === "number" ? parsed.statsRecordedAt : undefined,
     createdAt: typeof parsed.createdAt === "number" ? parsed.createdAt : Date.now(),
     updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : Date.now(),

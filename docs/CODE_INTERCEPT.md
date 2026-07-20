@@ -14,6 +14,7 @@
 - 4〜12人で赤・青の2チームに分かれる。各チーム2人以上、人数差は1人以内。
 - チーム編成は「手動」（初期値）または「開始時ランダム」を選べる。手動ではホストが全参加者を赤・青へ割り当てられ、各参加者も自分の所属だけ変更できる。開始時ランダムでは、4人以上の参加者を人数差1人以内で振り分け、チーム内の出題順もゲーム開始時にシャッフルする。
 - 各チームは番号つきの秘密単語を持つ。秘密カード数Cは2〜8枚、初期値は4枚。
+- 秘密単語は共通一般プールから重複なしで取得する。難易度は簡単・普通・難しいで、簡単100%、普通80%＋簡単20%、難しい50%＋普通40%＋簡単10%の共通混合比率を使う。同じ参加者が当日このゲームで見た単語は除外し、必要枚数を揃えられないところまで使い切った場合だけ当日履歴を全解除する。
 - 毎ラウンド、チーム内で順番に交代する出題者へ、1〜Cから重複なしで生成した暗号を表示する。
 - 使用できる暗号桁数Yは `2 <= Y <= C`。
 - 出題者は暗号順にY個のヒントを提出し、両チーム分がそろってから同時公開する。
@@ -67,7 +68,7 @@
 
 ## 保存データ
 
-- Roomは `cardCount`、`teamAssignmentMode`、`codeLengthMode`、`fixedCodeLength`、`clueTimeLimitSeconds`、`answerTimeLimitSeconds`、`phaseStartedAt` を持つ。
+- Roomは `cardCount`、`wordDifficulty`、`teamAssignmentMode`、`codeLengthMode`、`fixedCodeLength`、`clueTimeLimitSeconds`、`answerTimeLimitSeconds`、`phaseStartedAt`、`gameStartedAt` を持つ。
 - 毎ラウンドの選択は `codeLengthChoices[teamId]` に、チーム、選択者、桁数、確定時刻を保存する。
 - 実際に使う桁数は `roundCodeLengths[teamId]` に保存する。
 - ラウンドログは `codeLengthMode` と、チーム別の `codeLength`、`codeLengthSelectedByPlayerId` を保存する。
@@ -104,6 +105,7 @@
 
 - 純粋な型・採点・閲覧者別サニタイズ: `lib/code-intercept.ts`
 - Redis/CAS・Command検証: `lib/code-intercept-room-store.ts`
+- 一般単語の当日履歴・使い切り解除: `lib/general-game-word-history-store.ts`
 - 保存データ復元: `lib/code-intercept-room-normalizer.ts`
 - ラウンド準備・進行判定: `lib/code-intercept-room-domain.ts`
 - 閲覧者別表示整形: `lib/code-intercept-room-presentation.ts`

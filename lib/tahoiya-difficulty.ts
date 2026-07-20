@@ -11,6 +11,11 @@ export function hasVeryCommonSpokenHomophone(reading?: string) {
   return commonSpokenWords.has(normalized);
 }
 
+/** 四字熟語を含め、空でない見出し語は文字数や品詞だけでは除外しない。 */
+export function tahoiyaCandidateSurfaceAllowed(surface: string) {
+  return surface.normalize("NFKC").trim().length > 0;
+}
+
 export function tahoiyaDifficultyLabel(difficulty: TahoiyaDifficulty) {
   return difficulty === "extreme" ? "魔境" : "秘境";
 }

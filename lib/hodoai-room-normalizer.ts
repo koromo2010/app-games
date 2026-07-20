@@ -165,6 +165,7 @@ export function normalizeHodoaiRoom(value: unknown): HodoaiRoom | null {
     lobbyReturn: normalizeRoomLobbyReturnState(parsed.lobbyReturn, players),
     ...timeoutFields,
     gameNumber: typeof parsed.gameNumber === "number" ? Math.max(1, Math.floor(parsed.gameNumber)) : 1,
+    gameStartedAt: typeof parsed.gameStartedAt === "number" && Number.isFinite(parsed.gameStartedAt) ? parsed.gameStartedAt : null,
     ...config,
     debugReplayEnabled: parsed.debugReplayEnabled === true && config.debugMode,
     round: typeof parsed.round === "number" ? Math.max(1, Math.floor(parsed.round)) : 1,

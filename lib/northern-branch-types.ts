@@ -116,6 +116,7 @@ export type NorthernRoom = {
   players: NorthernRoomPlayer[];
   lobbyReturn?: RoomLobbyReturnState;
   gameNumber: number;
+  gameStartedAt?: number | null;
   debugMode: boolean;
   debugReplayEnabled: boolean;
   turnTimeLimitSeconds: number;

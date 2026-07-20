@@ -4,6 +4,8 @@ import type { KotobaSenpukuRoom } from "@/lib/kotoba-senpuku";
 import type { NorthernRoom } from "@/lib/northern-branch-types";
 import type { NigoichiRoom } from "@/lib/nigoichi";
 import type { CodeInterceptRoom } from "@/lib/code-intercept";
+import type { DaifugoRoom } from "@/lib/daifugo-room";
+import { playingCardLabel } from "@/lib/playing-cards";
 import type { TahoiyaRoom } from "@/lib/tahoiya-types";
 import { calculateTahoiyaRoundScores, tahoiyaValidVotes } from "@/lib/tahoiya-scoring";
 import type { WordWolfRoom } from "@/lib/wordwolf-room-store";
@@ -87,7 +89,7 @@ function cleanLines(lines: unknown[], maximumLines = 100) {
 }
 
 function isReplayGameType(value: unknown): value is GameReplayGameType {
-  return value === "wordwolf" || value === "tahoiya" || value === "northern-branch" || value === "hodoai" || value === "kotoba-senpuku" || value === "nigoichi" || value === "code-intercept";
+  return value === "wordwolf" || value === "tahoiya" || value === "northern-branch" || value === "hodoai" || value === "kotoba-senpuku" || value === "nigoichi" || value === "code-intercept" || value === "daifugo";
 }
 
 function parseStoredReplay(value: unknown): StoredGameReplay | null {
@@ -476,6 +478,30 @@ export async function recordCodeInterceptReplay(room: CodeInterceptRoom) {
     return `第${round.roundNumber}ラウンド ${label}: ヒント「${team.clues.join(" / ")}」${code}・伝達${team.allyCorrect ? "成功" : "失敗"}・傍受${team.enemyIntercepted ? "された" : "回避"}・${team.pointsBefore}→${team.pointsAfter}点`;
   }));
   return storeReplay({ ...base, gameType: "code-intercept", overview: winnerLabel, highlights: cleanLines(highlights), scoreLabels: resultLabels }, room.code);
+}
+
+export async function recordDaifugoReplay(room: DaifugoRoom) {
+  if (room.phase !== "result" || !room.game || !shouldRecordGameReplay(room)) return false;
+  const players = room.players.filter((player) => !player.isDummy);
+  const finishOrder = room.game.finishOrder.filter((id) => players.some((player) => player.id === id));
+  if (finishOrder.length !== players.length) return false;
+  const resultLabels = Object.fromEntries(players.map((player) => [player.id, `${finishOrder.indexOf(player.id) + 1}位`]));
+  const winner = players.find((player) => player.id === finishOrder[0]);
+  const base = makeReplayBase(
+    `daifugo:${room.code}:${room.createdAt}:${room.gameNumber}`,
+    "daifugo",
+    room.updatedAt || Date.now(),
+    room.gameNumber,
+    `第${room.gameNumber}ゲーム`,
+    players,
+    resultLabels,
+    ["1位が大富豪", `${players.length}人対戦`, `${room.game.turnNumber}手で決着`],
+  );
+  const highlights = [
+    `順位: ${finishOrder.map((id, index) => `${index + 1}位 ${players.find((player) => player.id === id)?.name ?? "Unknown"}`).join("、")}`,
+    ...players.map((player) => `${player.name}の残り手札: ${(room.game!.hands[player.id] ?? []).map(playingCardLabel).join("、") || "なし"}`),
+  ];
+  return storeReplay({ ...base, gameType: "daifugo", overview: `${winner?.name ?? "Unknown"}が1位`, highlights: cleanLines(highlights), scoreLabels: resultLabels }, room.code);
 }
 
 function readableKotobaHighlights(replay: StoredGenericReplay) {

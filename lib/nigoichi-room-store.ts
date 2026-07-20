@@ -174,7 +174,7 @@ export async function applyStoredNigoichiAction(code: string, action: NigoichiRo
 
     if (action.type === "abort-game") {
       if (!isHost || !current.debugMode || current.phase === "lobby") throw new Error("NIGOICHI_ROOM_FORBIDDEN");
-      return { ...current, phase: "lobby", lobbyReturn: beginRoomLobbyReturn(current.players, action.actorId, "debug-abort", current.gameNumber), phaseStartedAt: null, debugReplayEnabled: false, words: [], hands: {}, associations: {}, guesses: {}, missingNumber: null, roundScores: {} };
+      return { ...current, phase: "lobby", lobbyReturn: beginRoomLobbyReturn(current.players, action.actorId, "debug-abort", current.gameNumber), gameStartedAt: null, phaseStartedAt: null, debugReplayEnabled: false, words: [], hands: {}, associations: {}, guesses: {}, missingNumber: null, roundScores: {} };
     }
     if (action.type === "expire-phase") {
       if (current.phaseStartedAt !== action.phaseStartedAt || !isNigoichiPhaseExpired(current)) throw new Error("NIGOICHI_ROOM_CONFLICT");
@@ -200,7 +200,8 @@ export async function applyStoredNigoichiAction(code: string, action: NigoichiRo
     }
     if (action.type === "set-config") {
       if (!isHost || current.phase !== "lobby") throw new Error("NIGOICHI_ROOM_FORBIDDEN");
-      if (!Number.isInteger(action.associationWordCount)
+      if (normalizeWordDifficulty(action.wordDifficulty) !== action.wordDifficulty
+        || !Number.isInteger(action.associationWordCount)
         || action.associationWordCount < 1
         || action.associationWordCount > nigoichiMaximumAssociationWordsForPlayers(current.players.length)) {
         throw new Error("NIGOICHI_INVALID_CONFIG");

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { PlayerStatsGameFilter } from "@/lib/player-stats-store";
+import type { GameDurationEstimate, GameDurationGameId } from "@/lib/game-duration-statistics";
 import { GameAdSlot } from "../components/GameAdSlot";
 import { FullScreenPageOverlay } from "../components/FullScreenPageOverlay";
 import { games } from "./game-catalog";
@@ -28,7 +29,7 @@ const statsGameOptions = [
     .map((game) => ({ value: game.id as PlayerStatsGameFilter, label: game.title })),
 ] as const satisfies readonly { value: PlayerStatsGameFilter; label: string }[];
 
-export function GameLobby({ siteName = "GAME FIELDS", gameOperations }: { siteName?: string; gameOperations: GameOperation[] }) {
+export function GameLobby({ siteName = "GAME FIELDS", gameOperations, durationEstimates = {} }: { siteName?: string; gameOperations: GameOperation[]; durationEstimates?: Partial<Record<GameDurationGameId, GameDurationEstimate>> }) {
   const [password, setPassword] = useState("");
   const [email, setEmail] = useState("");
   const [resetEmail, setResetEmail] = useState("");
@@ -58,7 +59,11 @@ export function GameLobby({ siteName = "GAME FIELDS", gameOperations }: { siteNa
   const { isAvatarSaving, isAvatarDragging, setIsAvatarDragging, updateAvatar, uploadAvatar, dropAvatar } = useLobbyAvatarActions({
     name, playerId, avatarColor, hasRecoveryEmail, setAvatarColor, setAvatarImage, setMessage,
   });
-  const visibleGames = games.filter((game) => {
+  const gamesWithDurationEstimates = games.map((game) => {
+    const estimate = durationEstimates[game.id as GameDurationGameId];
+    return estimate ? { ...game, time: estimate.label, timeSampleCount: estimate.sampleCount } : game;
+  });
+  const visibleGames = gamesWithDurationEstimates.filter((game) => {
     const operation = gameOperationFor(gameOperations, game.id);
     return operation.publication !== "hidden" && (operation.publication === "public" || privateUnlocked);
   });

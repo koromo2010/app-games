@@ -22,6 +22,7 @@ const roomDefinitions = [
   { gameId: "kotoba-senpuku", indexKey: "kotoba-senpuku:rooms", roomPrefix: "kotoba-senpuku:room:" },
   { gameId: "nigoichi", indexKey: "nigoichi:rooms", roomPrefix: "nigoichi:room:" },
   { gameId: "code-intercept", indexKey: "code-intercept:rooms", roomPrefix: "code-intercept:room:" },
+  { gameId: "daifugo", indexKey: "daifugo:rooms", roomPrefix: "daifugo:room:" },
 ] as const;
 
 function parseRoom(raw: string | null): GenericRoom | null {

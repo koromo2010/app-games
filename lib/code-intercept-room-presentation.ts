@@ -18,6 +18,7 @@ export function codeInterceptRoomChoice(room: CodeInterceptRoom): CodeInterceptR
     hasPassphrase: Boolean(room.passphrase),
     redCount: teamPlayers(room, "red").length,
     blueCount: teamPlayers(room, "blue").length,
+    wordDifficulty: room.wordDifficulty,
     updatedAt: room.updatedAt,
   };
 }

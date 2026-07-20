@@ -203,6 +203,7 @@ export function normalizeNigoichiRoom(value: unknown): NigoichiRoom | null {
     lobbyReturn: normalizeRoomLobbyReturnState(parsed.lobbyReturn, players),
     playerCapacity,
     gameNumber: typeof parsed.gameNumber === "number" ? Math.max(1, Math.floor(parsed.gameNumber)) : 1,
+    gameStartedAt: typeof parsed.gameStartedAt === "number" && Number.isFinite(parsed.gameStartedAt) ? parsed.gameStartedAt : null,
     cardsPerPlayer: config.cardsPerPlayer,
     associationWordCount: config.associationWordCount,
     wordDifficulty,

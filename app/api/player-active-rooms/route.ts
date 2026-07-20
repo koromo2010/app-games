@@ -1,4 +1,5 @@
 import { loadStoredCodeInterceptRoom } from "@/lib/code-intercept-room-store";
+import { loadStoredDaifugoRoom } from "@/lib/daifugo-room-store";
 import { loadAndReconcileHodoaiRoom } from "@/lib/hodoai-room-store";
 import { loadAndReconcileKotobaSenpukuRoom } from "@/lib/kotoba-senpuku-room-store";
 import { loadStoredNigoichiRoom } from "@/lib/nigoichi-room-store";
@@ -24,6 +25,7 @@ const descriptors: ActiveRoomDescriptor[] = [
   { gameId: "kotoba-senpuku", activeKey: (id) => `kotoba-senpuku:player-active-room:${id}`, loadRoom: loadAndReconcileKotobaSenpukuRoom },
   { gameId: "nigoichi", activeKey: (id) => `nigoichi:player-active-room:${id}`, loadRoom: loadStoredNigoichiRoom },
   { gameId: "code-intercept", activeKey: (id) => `code-intercept:player-active-room:${id}`, loadRoom: loadStoredCodeInterceptRoom },
+  { gameId: "daifugo", activeKey: (id) => `daifugo:player-active-room:${id}`, loadRoom: loadStoredDaifugoRoom },
 ];
 
 export async function GET() {

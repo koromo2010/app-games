@@ -30,6 +30,8 @@
 | 有料API切替 | `lib/llm-access.ts`, `app/api/llm-access/route.ts`, `app/components/PaidLlmAccessButton.tsx` |
 | 共通フィードバック/RAG | `lib/game-feedback-store.ts`, `lib/game-ai-types.ts`, `app/api/game-feedback/route.ts`, `app/components/GameFeedbackPanel.tsx` |
 | 共通部屋設定 | `lib/room-defaults-store.ts`, `lib/game-room-defaults-client.ts`, `app/components/RoomConfigSummary.tsx` |
+| 共通トランプ基盤 | `lib/playing-cards.ts`, `lib/playing-card-presentation.ts`, `app/components/PlayingCard.tsx`, `app/components/PlayingCardHand.tsx`, `app/components/PlayingCardBackStack.tsx` |
+| 大富豪 | `lib/daifugo.ts`, `lib/daifugo-room-store.ts`, `app/daifugo/DaifugoGame.tsx`, `app/daifugo/DaifugoPractice.tsx`, `docs/DAIFUGO.md`（3〜6人オンライン＋CPU練習） |
 | 共通結果操作 | `app/components/RoomResultActions.tsx` |
 | 共通時間制限 | `lib/game-room-config.ts`, `app/components/RoomTimeLimitControl.tsx` |
 | 共通デバッグ認証 | `lib/debug-access.ts`, `app/components/DebugModeButton.tsx`, `app/api/debug-auth/route.ts`, `app/users/me/UserDashboard.tsx` |
@@ -37,6 +39,7 @@
 | ゲーム登録・自動監査 | `config/game-registry.json`, `scripts/check-game-standards.mjs`, `docs/NEW_GAME_CHECKLIST.md` |
 | 共通戦績・マイページ | `lib/player-stats-store.ts`, `app/api/player-stats/route.ts`, `app/users/me/UserDashboard.tsx` |
 | ログイン後の部屋復元・広場の復帰一覧 | `app/hooks/use-online-game-session-restore.ts`, `app/api/player-active-rooms/route.ts`, `lib/player-active-room-summary.ts`, `app/games/use-lobby-room-data.ts` |
+| 実プレイ時間統計 | `lib/game-duration-statistics.ts`, `lib/game-duration-store.ts`, `app/api/game-duration/route.ts`, `app/games/page.tsx` |
 | 全ゲーム対戦プレイバック | `lib/game-replay-store.ts`, `app/api/player-replays/route.ts`, `app/components/GameReplayPanel.tsx`, `docs/GAME_REPLAYS.md` |
 | アカウント・メール復旧 | `lib/player-account-store.ts`, `lib/player-password-reset.ts`, `lib/email.ts`, `app/api/player-account/route.ts`, `app/api/player-password-reset/route.ts`, `app/reset-password` |
 | ワードウルフ | `app/wordwolf`, `app/api/wordwolf`, `lib/wordwolf-room-store.ts` |
@@ -97,6 +100,12 @@ Neon Postgres、Upstash Redis、Vercel Blobの容量は `vercel.json` の日次C
 メール変更時はPostgresへ書き込む前に、PostgresとRedis双方のメール所有者を確認する。Redisだけに残る旧アカウントと重複する場合も先に拒否し、Postgresだけが変更済みになる状態を作らない。
 
 戦績の永続正本はNeon Postgresの `player_game_results`。結果JSONと検索用のプレイヤー・ゲーム種別・終了時刻を保存し、結果IDの主キーで重複記録を防ぐ。読み取り時はPostgresを優先してRedis履歴をIDで統合し、Redisにだけ残る既存戦績をPostgresへ自動コピーする。レーティングは各結果の `ratingAfter` に永続化し、Redisの現在値が失われた場合はPostgresの最新結果と試合数から再開する。
+
+通常終了した集計対象ゲームの実プレイ時間は、開始から最終結果確定までを `game_duration_samples` へ結果イベントID付きで冪等保存し、Redisにも直近300件を互換ミラーする。オンラインゲーム（大富豪を含む）はサーバー正本の開始・終了時刻を使う。大富豪のCPU練習は、ログイン済みプレイヤーが正常終了したとき認証・レート制限付き `/api/game-duration` へ開始時刻を送り、サーバー受信時刻を終了時刻とする。中断・デバッグ・30秒未満・4時間超は除外する。広場の時間表示はゲーム別の直近300件を使い、5件未満では `config/game-registry.json` の初期目安、5〜19件では中央値、20件以上では第25〜第75パーセンタイルの範囲を丸めて表示する。サンプルには参加人数と主要ルールのvariant keyも保存し、条件別集計に利用できる。実装は `lib/game-duration-statistics.ts` と `lib/game-duration-store.ts`。
+
+標準トランプを使う新規ゲームは、外部ゲームエンジンへ部屋同期を重複させず、`lib/playing-cards.ts` のカード生成・暗号学的乱数シャッフル・ラウンドロビン配札・保存配列検証・手札からの安全な取り出し・表示用ソートを使う。オンラインゲームのシャッフルと配札はクライアントではなくサーバーdomain/storeで実行し、カードの強さ、役、合法手はゲーム固有domainに置く。閲覧者別レスポンスは `lib/playing-card-presentation.ts` を土台に、本人以外へ実カードIDを返さず枚数だけを公開する。共通の文字主体カード、裏面、選択可能な手札、非公開カード束は `app/components/PlayingCard.tsx`、`PlayingCardHand.tsx`、`PlayingCardBackStack.tsx`。ローカルまたはVercel Previewでは `/dev/playing-cards` で基盤を確認でき、本番環境では404にする。絵札SVGは未導入で、将来共通UI内だけを差し替える。
+
+大富豪は `/daifugo` に公開する3〜6人のオンライン対戦で、`/daifugo/practice` に1人＋CPU3人の練習を残す。サーバーが53枚のシャッフル、全手札、合法手、時間切れを正本管理し、閲覧者以外のカードIDはAPIへ返さない。revision付きCAS、共通TTL、1人1部屋、再接続、解散、結果復帰、デバッグのダミー操作・ログ・リプレイに対応する。通常終了は順位戦績、レーティング、実プレイ時間、本人用プレイバックを冪等保存する。革命、8切り、しばり、スペ3返し、都落ち、カード交換、階段は未実装。詳細は `docs/DAIFUGO.md`。
 
 ### メール送信の初期設定
 
@@ -180,12 +189,14 @@ Neon Postgres、Upstash Redis、Vercel Blobの容量は `vercel.json` の日次C
 - ワードスケールは最大点の50%以上を協力成功とし、デバッグ用ダミーは戦績へ含めない。
 - ノーザンブランチもログイン必須のオンライン部屋制で、ゲーム終了時に勝敗を共通戦績へ記録する。デバッグ部屋とダミー参加者は戦績へ含めない。
 - ワードソナーは全ラウンド終了時の総合順位を1戦として記録する。デバッグ部屋とダミー参加者は戦績へ含めない。
+- 広場のプレイ時間は固定値だけを正本にせず、正常終了した実プレイの中央値を基本にする。サンプル不足時だけ登録簿の固定目安へ戻し、十分な件数では中央50%の範囲を表示する。
 
 ### マイページと対戦プレイバック
 
 - 本人用URLは `/users/me`。内部プレイヤーIDをURLへ出す `/users/<playerId>` は作らない。将来公開プロフィールが必要な場合は別の公開ハンドルを設計する。
 - 通常プレイバックは既定30日、お気に入りは期限なし、上限は既定10件。値は上記環境変数で調整する。
 - 現在の詳細プレイバックはたほい屋から開始し、お題、本当の説明、偽説明、投票、ラウンド得点を参加者だけへ返す。
+- たほい屋の結果済み偽回答は、将来の四択「一人たほい屋（仮）」用として名前・プレイヤーID・部屋コードを除いてアプリ用Postgresへ保存する。通常たほい屋票と一人用票は別集計し、票イベントIDで二重加算を防ぐ。既存Redisプレイバックと期限内の結果部屋は管理画面から冪等にサルベージできる。詳細は `docs/SOLO_TAHOIYA.md`。
 - SNS共有は結果サマリーとゲームURLだけをWeb Share APIへ渡す。説明本文、参加者名、投票内容、認証付き閲覧URLは共有しない。
 - 保存schema、Redisキー、期限判定の正本は `docs/GAME_REPLAYS.md`。
 - アカウント本体を先に表示し、戦績は別取得する。プレイバック一覧は欄がビューポートの320px手前へ近づくまで取得しない。共通 `FullScreenPageOverlay` のマイページ利用は初回読込後のiframeをページ滞在中だけ保持し、閉じて開き直すたびにセッション・戦績・プレイバックを再取得しない。
@@ -225,6 +236,9 @@ Neon Postgres、Upstash Redis、Vercel Blobの容量は `vercel.json` の日次C
 
 - `/games/code-intercept` は非公開アクセスキーかつログイン済みの利用者向け。旧 `/code-intercept` は正式URLへ転送する。4〜12人を赤・青へ分け、各チーム2人以上・人数差1人以内で開始する。チーム編成は手動または開始時ランダムを選べる。手動時はホストが全参加者、各参加者が自分を赤・青へ割り当てられ、ランダム時は人数を均等に振り分けてチーム内の出題順もシャッフルする。
 - 秘密単語はワードアウトと同じ `shared_word_pool_evaluations` の `general_game_pool` 対象から重複なしに抽出する。ロビーで簡単・普通・難しいを選べ、簡単は簡単100%、普通は普通80%＋簡単20%、難しいは難しい50%＋普通40%＋簡単10%を各語ごとに抽選する。旧ルームは普通として復元する。同じ参加者が当日（JST）コードインターセプトで見た単語は除外し、使い切り時だけ当日履歴を全解除する。ワードアウトの履歴とは混ぜない。
+
+### コードインターセプト（非公開オンライン試作・内部ID `code-intercept`）
+
 - 秘密カード数Cは2〜8枚で初期4枚、暗号桁数Yは2〜Cで初期3桁、初期ポイントXは5点。伝達失敗は1ダメージ、敵の傍受成功は2ダメージ。第1ラウンドは傍受なし、第2ラウンドから敵暗号も回答する。
 - 桁数は、両チームが全ラウンドで同じYを使う固定モードと、各ラウンドの出題者が自チームのYを選ぶ毎ラウンド選択モードを持つ。毎ラウンド選択では赤・青が異なる桁数を使用でき、両チーム確定前は敵の選択を隠す。両チーム確定後に桁数を同時公開してから暗号を生成する。
 - ラウンド終了後の正解暗号は、ロビーで `全員に公開`（既定・標準推理ルール）または `自チームだけ` を選ぶ。後者では相手へ伝達・傍受の成否だけを返し、相手チームの正解暗号と、成功時に正解を漏らす味方回答を結果・過去ログから除外する。参加者共通の保存プレイバックからは両チームの暗号番号を省く。旧ルームは `全員に公開` として復元する。
@@ -257,7 +271,7 @@ Neon Postgres、Upstash Redis、Vercel Blobの容量は `vercel.json` の日次C
 
 ### たほい屋のお題生成
 
-- 通常ゲームとデバッグ審査は共通単語DBを素材の正本とする。`0 <= effective_zipf < 3` の未判定語から10語ずつLLM審査する。
+- 通常ゲームとデバッグ審査は共通単語DBを素材の正本とする。`0 <= effective_zipf < 3` の未判定語から10語ずつLLM審査する。文字数・品詞だけでは候補を除外しないため、activeな四字熟語も同じ条件で審査候補へ入る。
 - デバッグロビーの「未判定10語を難易度審査」は、実際の未使用・未判定候補10語を説明なしでLLMへ渡す。一般成人の推定認知率を `既知 / 境界 / 一般には不明 / ほぼ誰も知らない` に分類し、秘境は `1%超〜14%`、魔境は `0〜1%` とする。センシティブ・大学名・企業名・地名は同じ `exclusion_flags` 配列で強制除外する。認知率、確信度、理由、除外フラグ、生成メタデータは `tahoiya_word_screenings` の同じ行へ保存し、結果は共有用にコピーできる。デバッグ審査だけでは説明文とプレイヤー出題履歴を作らない。
 - 難易度審査は、対応プロバイダーでは共通LLMゲートウェイのJSON Schema指定で10件の必須フィールドを固定する。プロバイダー切替時の表記揺れは、入力件数・既知の除外フラグ・認知率範囲・重複IDを再検証したうえで補正し、安全に対応付けられない応答だけを自動再審査する。
 - 旧取得元レジストリとGitHub自動生成ジョブは廃止済み。既存 `data/tahoiya-candidates.json` と移行APIだけは、旧候補を共通DBへ移す互換資産として当面残す。退避内容と復元方法は `docs/archive/TAHOIYA_SOURCE_HARVESTER.md` を参照する。

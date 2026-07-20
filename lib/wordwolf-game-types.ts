@@ -81,6 +81,7 @@ export type Room = PlayerTimeoutFields & {
   scores: Record<string, number>;
   gamesPlayed: number;
   gameNumber: number;
+  gameStartedAt?: number | null;
   statsRecordedAt?: number;
   createdAt: number;
   updatedAt: number;

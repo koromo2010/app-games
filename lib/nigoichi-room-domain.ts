@@ -10,6 +10,7 @@ export function beginGame(room: NigoichiRoom, wordPool: readonly string[], now =
   return {
     ...room,
     phase: "clue" as const,
+    gameStartedAt: now,
     phaseStartedAt: now,
     words: dealt.words,
     hands: dealt.hands,
@@ -31,6 +32,7 @@ export function resetGame(room: NigoichiRoom) {
     ...room,
     gameNumber: room.gameNumber + 1,
     phase: "lobby" as const,
+    gameStartedAt: null,
     phaseStartedAt: null,
     debugReplayEnabled: false,
     words: [],

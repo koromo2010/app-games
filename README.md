@@ -17,6 +17,7 @@ Party game prototypes built with Next.js.
 - `/kotoba-de-kazu-narabe` and `/hodoai-talk` - Redirect to `/word-scale`
 - `/word-out` - Word Out: private online 2-6 player room game with configurable cards and association groups, plus one undealt word (`/nigoichi` redirects here)
 - `/games/code-intercept` - Private 4-12 player team prototype with fixed or per-round team-selected code lengths
+- `/daifugo` - Online Daifugo for 3–6 players, with CPU practice at `/daifugo/practice`
 - `/canvas` - Private drawing-canvas UI prototype with mouse, touch, pen, undo, erase, local save, and same-browser tab sync
 
 ## Private game access

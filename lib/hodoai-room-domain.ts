@@ -72,9 +72,11 @@ export function scoreRound(room: HodoaiRoom) {
 }
 
 export function beginGame(room: HodoaiRoom) {
+  const now = Date.now();
   const dealt = dealHodoaiCards(room.players, room.cardsPerPlayer);
   return {
     ...room,
+    gameStartedAt: now,
     sorterId: pickRandomHodoaiSorter(room.players),
     phase: "clue" as const,
     round: 1,
@@ -84,7 +86,7 @@ export function beginGame(room: HodoaiRoom) {
     clues: {},
     clueHistory: [],
     order: [],
-    phaseStartedAt: Date.now(),
+    phaseStartedAt: now,
   };
 }
 
@@ -110,4 +112,3 @@ export function reconcileProgress(room: HodoaiRoom) {
   }
   return room;
 }
-

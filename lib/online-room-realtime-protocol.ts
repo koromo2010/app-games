@@ -1,5 +1,6 @@
 export const onlineRoomRealtimeGames = [
   "code-intercept",
+  "daifugo",
   "hodoai",
   "kotoba-senpuku",
   "nigoichi",

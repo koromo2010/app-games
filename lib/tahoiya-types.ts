@@ -72,6 +72,7 @@ export type TahoiyaRoom = PlayerTimeoutFields & {
   phaseStartedAt: number | null;
   answererId: string;
   round: number;
+  gameStartedAt?: number | null;
   word: string;
   reading?: string;
   realDefinition: string;
