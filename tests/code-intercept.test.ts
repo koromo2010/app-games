@@ -100,8 +100,8 @@ test("secret cards reject a database pool that is too small after normalization"
   );
 });
 
-test("secret-card vocabulary uses the general_word_pool eligibility tag", () => {
-  assert.equal(codeInterceptWordPoolSource, "general_word_pool");
+test("secret-card vocabulary uses the general_game_pool evaluation flag", () => {
+  assert.equal(codeInterceptWordPoolSource, "general_game_pool");
 });
 
 test("word difficulty defaults to normal and preserves valid selections", () => {

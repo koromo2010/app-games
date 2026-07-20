@@ -118,11 +118,11 @@ async function sampleCodeInterceptDebugWords(roomCode: string): Promise<DebugWor
   return {
     fields: [
       { label: "抽出数", value: `${words.length}語` },
-      { label: "抽選元", value: payload?.source === "general_word_pool" ? "General Game Pool（general_word_poolタグ）" : "不明" },
+      { label: "抽選元", value: payload?.source === "general_game_pool" ? "General Game Pool（general_game_poolフラグ）" : "不明" },
       { label: "難易度", value: difficulty ? `${wordDifficultyLabel(difficulty)}（${wordDifficultyMixLabel(difficulty)}）` : "不明" },
     ],
     items: words.map((word) => ({ title: word, fields: [] })),
-    notice: "実際のゲーム開始と同じGeneral Game Pool（general_word_poolタグ）抽選を試しています。部屋、秘密カード、出題履歴は変更しません。",
+    notice: "実際のゲーム開始と同じGeneral Game Pool（general_game_poolフラグ）抽選を試しています。部屋、秘密カード、出題履歴は変更しません。",
   };
 }
 

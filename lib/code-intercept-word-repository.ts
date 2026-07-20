@@ -1,7 +1,7 @@
-import { generalGameWordPoolGameId, loadGeneralGameWords, type GeneralGameWordDifficulty } from "./general-game-word-pool.ts";
+import { generalGameWordPoolFlag, loadGeneralGameWords, type GeneralGameWordDifficulty } from "./general-game-word-pool.ts";
 
 export const codeInterceptDebugWordSampleSize = 10;
-export const codeInterceptWordPoolSource = generalGameWordPoolGameId;
+export const codeInterceptWordPoolSource = generalGameWordPoolFlag;
 
 export async function loadCodeInterceptWordPool(
   requestedLimit: number,

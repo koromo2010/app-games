@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  generalGameWordDifficultyAliases,
   generalGameWordDifficultyWeights,
   generalGameWordDifficultyTags,
-  generalGameWordPoolGameId,
+  generalGameWordPoolFlag,
+  generalGameWordPoolKey,
   pickGeneralGameWordBand,
   selectGeneralGameWordsForBands,
 } from "../lib/general-game-word-pool.ts";
@@ -13,17 +13,13 @@ import {
   generalGameWordHistoryTokyoDay,
 } from "../lib/general-game-word-history-store.ts";
 
-test("General Game Pool uses the general_word_pool eligibility tag", () => {
-  assert.equal(generalGameWordPoolGameId, "general_word_pool");
+test("General Game Pool uses the published selected-pool contract", () => {
+  assert.equal(generalGameWordPoolKey, "standard-game");
+  assert.equal(generalGameWordPoolFlag, "general_game_pool");
   assert.deepEqual(generalGameWordDifficultyTags, {
     easy: "difficulty_easy",
     normal: "difficulty_normal",
     hard: "difficulty_hard",
-  });
-  assert.deepEqual(generalGameWordDifficultyAliases, {
-    easy: ["easy", "difficulty_easy"],
-    normal: ["normal", "standard", "difficulty_normal"],
-    hard: ["hard", "difficulty_hard"],
   });
 });
 
