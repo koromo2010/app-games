@@ -108,7 +108,9 @@
 - ラウンド準備・進行判定: `lib/code-intercept-room-domain.ts`
 - 閲覧者別表示整形: `lib/code-intercept-room-presentation.ts`
 - API: `app/api/code-intercept/rooms/route.ts`
+- Preview限定Realtime通知: `app/api/code-intercept/realtime/route.ts`, `lib/code-intercept-realtime.ts`, `lib/code-intercept-realtime-schema.ts`
 - 型付きHTTP adapter: `app/code-intercept/code-intercept-room-api-client.ts`
+- Realtime client/fallback: `app/code-intercept/use-code-intercept-realtime.ts`, `app/code-intercept/CodeInterceptRealtimeProvider.tsx`
 - UI: `app/code-intercept/CodeInterceptGame.tsx`
 - 正式ページ: `app/games/code-intercept/page.tsx`
 - 旧URL転送: `app/code-intercept/page.tsx`

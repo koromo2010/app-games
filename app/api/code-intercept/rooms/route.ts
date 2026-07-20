@@ -17,6 +17,8 @@ import { authenticatedRoomDraft } from "@/lib/online-room-input";
 import { requireAuthenticatedPlayer, requireAuthenticatedPlayerId } from "@/lib/player-auth";
 import { commonOnlineRoomErrorResponse } from "@/lib/online-room-route-errors";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
+import { emitCodeInterceptRoomDissolved, emitCodeInterceptRoomUpdated } from "@/lib/code-intercept-realtime";
+import { schedulePostResponseWork } from "@/lib/post-response-work";
 
 function errorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : "";
@@ -111,6 +113,7 @@ export async function PATCH(request: Request) {
     }
     const room = await applyStoredCodeInterceptAction(code, action);
     telemetry.success("room.command", { ...fields, phase: room.phase, revision: room.revision, gameNumber: room.gameNumber, playerCount: room.players.length, debugMode: room.debugMode });
+    await schedulePostResponseWork("code-intercept-realtime-update", () => emitCodeInterceptRoomUpdated(room.code, room.revision));
     return Response.json({ room: sanitizeCodeInterceptRoom(room, session.id) });
   } catch (error) {
     const response = errorResponse(error);
@@ -134,6 +137,7 @@ export async function DELETE(request: Request) {
     if (code) {
       if (actorId && actorId !== session.id) return Response.json({ error: "Room action is not allowed" }, { status: 403 });
       await deleteStoredCodeInterceptRoom(code, session.id);
+      await schedulePostResponseWork("code-intercept-realtime-dissolve", () => emitCodeInterceptRoomDissolved(code));
       return Response.json({ ok: true });
     }
     if (ownerId) return Response.json({ ok: true, deleted: await deleteHostedCodeInterceptRooms(ownerId, session.id) });

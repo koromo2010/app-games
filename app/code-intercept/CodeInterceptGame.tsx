@@ -18,11 +18,12 @@ import { RoomLobbyReturnStatus } from "@/app/components/RoomLobbyReturnStatus";
 import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
 import { confirmRoomLeave } from "@/app/components/room-navigation-confirmation";
 import { useOnlineGameSessionRestore } from "@/app/hooks/use-online-game-session-restore";
-import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "@/app/hooks/use-online-room-polling";
+import { useOnlineRoomPolling } from "@/app/hooks/use-online-room-polling";
 import { clientTimeoutClaimDelayMs } from "@/lib/game-timer/client-policy";
 import { useRoomResultReturnGate } from "@/app/hooks/use-room-result-return-gate";
 import { useRoomLobbyReturnConfirmation } from "@/app/hooks/use-room-lobby-return-confirmation";
 import { applyCodeInterceptRoomAction, codeInterceptRoomApi, createCodeInterceptRoom } from "@/app/code-intercept/code-intercept-room-api-client";
+import { useCodeInterceptRealtimeRoom } from "@/app/code-intercept/use-code-intercept-realtime";
 import {
   codeInterceptAnswererIds,
   codeInterceptClueHistory,
@@ -55,6 +56,7 @@ import { OnlineRoomApiError } from "@/lib/online-room-api-client";
 import { synchronizedNow } from "@/lib/server-clock";
 import { allRoomPlayersReturned } from "@/lib/room-lobby-return";
 import { defaultAvatarImage, fallbackAvatarColor } from "@/lib/player-session";
+import { codeInterceptPollingInterval } from "@/lib/code-intercept-realtime-schema";
 
 const lastRoomKey = "code-intercept-last-room";
 const ownerIdKey = "code-intercept-owner-id";
@@ -275,7 +277,7 @@ function RevealedSecretCards({ room }: { room: CodeInterceptRoom }) {
   </section>;
 }
 
-export function CodeInterceptGame() {
+export function CodeInterceptGame({ realtimeEnabled = false }: { realtimeEnabled?: boolean }) {
   const [room, setRoom] = useState<CodeInterceptRoom | null>(null);
   const { session, ready, isRestoringRoom } = useOnlineGameSessionRestore({ lastRoomKey, fetchActiveRoom: codeInterceptRoomApi.fetchActiveRoom, fetchRoom: codeInterceptRoomApi.fetchRoom, setRoom });
   const [error, setError] = useState("");
@@ -293,20 +295,28 @@ export function CodeInterceptGame() {
   const resultReturnGate = useRoomResultReturnGate({ room, setRoom, playerId: session?.id ?? "", resultPhase: "game-result", onReturnUnavailable: () => setError("部屋に戻れません。解散されたか、参加情報が変更されています。") });
 
   const playerId = session?.id ?? "";
-  useOnlineRoomPolling({
-    roomCode: playerId && !resultReturnGate.isRoomDissolved ? room?.code : null,
-    intervalMs: room?.phase === "lobby" || room?.phase === "game-result" ? onlineRoomPollingIntervals.idle : onlineRoomPollingIntervals.active,
+  const handleRoomMissing = useCallback(() => {
+    localStorage.removeItem(lastRoomKey);
+    if (resultReturnGate.markRoomDissolved()) {
+      setError("部屋が解散されました。結果画面はこのまま確認できます。");
+      return;
+    }
+    setRoom(null);
+    setError("部屋が解散されたか、参加情報がなくなりました。");
+  }, [resultReturnGate]);
+  const realtimeStatus = useCodeInterceptRealtimeRoom({
+    enabled: realtimeEnabled && Boolean(playerId) && !resultReturnGate.isRoomDissolved,
+    room,
     fetchRoom: (code) => codeInterceptRoomApi.fetchRoom(code, playerId),
     onRoom: resultReturnGate.acceptIncomingRoom,
-    onMissing: () => {
-      localStorage.removeItem(lastRoomKey);
-      if (resultReturnGate.markRoomDissolved()) {
-        setError("部屋が解散されました。結果画面はこのまま確認できます。");
-        return;
-      }
-      setRoom(null);
-      setError("部屋が解散されたか、参加情報がなくなりました。");
-    },
+    onMissing: handleRoomMissing,
+  });
+  useOnlineRoomPolling({
+    roomCode: playerId && !resultReturnGate.isRoomDissolved ? room?.code : null,
+    intervalMs: codeInterceptPollingInterval({ realtimeEnabled, realtimeStatus, phase: room?.phase }),
+    fetchRoom: (code) => codeInterceptRoomApi.fetchRoom(code, playerId),
+    onRoom: resultReturnGate.acceptIncomingRoom,
+    onMissing: handleRoomMissing,
   });
 
   const isHost = Boolean(room && room.hostId === playerId);
@@ -486,6 +496,7 @@ export function CodeInterceptGame() {
     {room.phase === "lobby" && <div className="mx-auto max-w-7xl px-4 pt-4"><GameLoungeVisual gameId="code-intercept" /></div>}
     <div className="mx-auto grid max-w-7xl gap-4 px-4 py-5 lg:grid-cols-[300px_minmax(0,1fr)]">
       <aside className="space-y-4"><section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4"><div className="flex items-center justify-between"><h2 className="font-black">参加者</h2><span className="text-sm text-slate-400">{room.players.length}/{room.playerCapacity}人</span></div><ul className="mt-3 space-y-2">{room.players.map((player) => <PlayerCard key={player.id} player={player} room={room} me={playerId} />)}</ul><RoomLobbyReturnStatus state={room.lobbyReturn} players={room.players} hostId={room.hostId} isHost={isHost} onRemoveWaitingPlayer={(player) => { if (window.confirm(`${player.name}さんを退出扱いにしますか？`)) void runAction({ type: "remove-waiting-player", actorId: playerId, targetPlayerId: player.id }); }} /></section>
+        {realtimeEnabled && <p data-realtime-status={realtimeStatus} className={`rounded-xl border px-3 py-2 text-xs font-bold ${realtimeStatus === "connected" ? "border-emerald-300/25 bg-emerald-300/10 text-emerald-100" : "border-amber-300/25 bg-amber-300/10 text-amber-100"}`}>dev同期：{realtimeStatus === "connected" ? "Realtime接続中（安全確認30秒）" : "ポーリングで再接続待ち"}</p>}
         <RoomConfigSummary items={[{ label: "チーム編成", value: room.teamAssignmentMode === "random" ? "開始時ランダム" : "手動" }, { label: "単語難易度", value: `${wordDifficultyLabel(room.wordDifficulty)}（${wordDifficultyMixLabel(room.wordDifficulty)}）` }, { label: "秘密カード C", value: `${room.cardCount}枚` }, { label: "暗号桁数", value: room.codeLengthMode === "fixed" ? `固定・${room.fixedCodeLength}桁` : "毎ラウンド選択" }, { label: "正解暗号", value: codeRevealLabel(room) }, { label: "初期ポイント X", value: `${room.initialPoints}点` }, { label: "伝達失敗", value: `−${room.miscommunicationDamage}` }, { label: "傍受成功", value: `−${room.interceptionDamage}` }, { label: "出題欄に空欄", value: "−1" }, { label: "全欄入力済み", value: "自動提出・減点なし" }, { label: "回答未提出", value: "減点なし" }, { label: "傍受開始", value: "第2ラウンド" }, { label: "出題・ヒント", value: timeLimitLabel(room.clueTimeLimitSeconds) }, { label: "ソナー選択", value: timeLimitLabel(room.answerTimeLimitSeconds) }]} />
       </aside>
       <div className="space-y-4">
