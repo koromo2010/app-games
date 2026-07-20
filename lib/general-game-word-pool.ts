@@ -7,6 +7,11 @@ export const generalGameWordDifficultyTags = {
   normal: "difficulty_normal",
   hard: "difficulty_hard",
 } as const;
+export const generalGameWordDifficultyAliases = {
+  easy: ["easy", generalGameWordDifficultyTags.easy],
+  normal: ["normal", "standard", generalGameWordDifficultyTags.normal],
+  hard: ["hard", generalGameWordDifficultyTags.hard],
+} as const;
 
 export type GeneralGameWordDifficulty = (typeof generalGameWordDifficulties)[number];
 export type GeneralGameWordPools = Record<GeneralGameWordDifficulty, string[]>;
@@ -105,15 +110,28 @@ export async function loadGeneralGameWordPools(
   const rows = await sql`
     WITH classified AS (
       SELECT word.surface, word.normalized_surface, word.updated_at,
-        CASE difficulty_eligibility.game_id
-          WHEN ${generalGameWordDifficultyTags.easy} THEN 'easy'
-          WHEN ${generalGameWordDifficultyTags.normal} THEN 'normal'
-          WHEN ${generalGameWordDifficultyTags.hard} THEN 'hard'
+        CASE
+          WHEN difficulty_eligibility.game_id = ${generalGameWordDifficultyTags.easy}
+            OR LOWER(TRIM(COALESCE(eligibility.difficulty, ''))) IN (
+              ${generalGameWordDifficultyAliases.easy[0]},
+              ${generalGameWordDifficultyAliases.easy[1]}
+            ) THEN 'easy'
+          WHEN difficulty_eligibility.game_id = ${generalGameWordDifficultyTags.normal}
+            OR LOWER(TRIM(COALESCE(eligibility.difficulty, ''))) IN (
+              ${generalGameWordDifficultyAliases.normal[0]},
+              ${generalGameWordDifficultyAliases.normal[1]},
+              ${generalGameWordDifficultyAliases.normal[2]}
+            ) THEN 'normal'
+          WHEN difficulty_eligibility.game_id = ${generalGameWordDifficultyTags.hard}
+            OR LOWER(TRIM(COALESCE(eligibility.difficulty, ''))) IN (
+              ${generalGameWordDifficultyAliases.hard[0]},
+              ${generalGameWordDifficultyAliases.hard[1]}
+            ) THEN 'hard'
         END AS difficulty
       FROM active_words word
       JOIN active_word_game_eligibility eligibility
         ON eligibility.subject_type = 'word' AND eligibility.subject_id = word.id
-      JOIN active_word_game_eligibility difficulty_eligibility
+      LEFT JOIN active_word_game_eligibility difficulty_eligibility
         ON difficulty_eligibility.subject_type = 'word'
         AND difficulty_eligibility.subject_id = word.id
         AND difficulty_eligibility.game_id IN (
@@ -121,12 +139,12 @@ export async function loadGeneralGameWordPools(
           ${generalGameWordDifficultyTags.normal},
           ${generalGameWordDifficultyTags.hard}
         )
+        AND (difficulty_eligibility.valid_from IS NULL OR difficulty_eligibility.valid_from <= NOW())
+        AND (difficulty_eligibility.valid_until IS NULL OR difficulty_eligibility.valid_until > NOW())
       WHERE eligibility.game_id = ${generalGameWordPoolGameId}
         AND NOT (word.normalized_surface = ANY(${excluded}::text[]))
         AND (eligibility.valid_from IS NULL OR eligibility.valid_from <= NOW())
         AND (eligibility.valid_until IS NULL OR eligibility.valid_until > NOW())
-        AND (difficulty_eligibility.valid_from IS NULL OR difficulty_eligibility.valid_from <= NOW())
-        AND (difficulty_eligibility.valid_until IS NULL OR difficulty_eligibility.valid_until > NOW())
     ), deduplicated AS (
       SELECT DISTINCT ON (normalized_surface) surface, difficulty, updated_at
       FROM classified

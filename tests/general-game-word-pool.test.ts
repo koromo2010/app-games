@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  generalGameWordDifficultyAliases,
   generalGameWordDifficultyWeights,
   generalGameWordDifficultyTags,
   generalGameWordPoolGameId,
@@ -18,6 +19,11 @@ test("General Game Pool uses the general_word_pool eligibility tag", () => {
     easy: "difficulty_easy",
     normal: "difficulty_normal",
     hard: "difficulty_hard",
+  });
+  assert.deepEqual(generalGameWordDifficultyAliases, {
+    easy: ["easy", "difficulty_easy"],
+    normal: ["normal", "standard", "difficulty_normal"],
+    hard: ["hard", "difficulty_hard"],
   });
 });
 

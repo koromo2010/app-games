@@ -69,10 +69,14 @@ function timeLimitLabel(seconds: number) {
 
 function apiMessage(error: unknown, fallback: string) {
   if (!(error instanceof OnlineRoomApiError)) return fallback;
+  const payloadErrorCode = error.payload && typeof error.payload === "object" && "errorCode" in error.payload
+    ? String((error.payload as { errorCode?: unknown }).errorCode ?? "")
+    : "";
   if (error.status === 401) return "合言葉が違うか、ログインの有効期限が切れています。";
   if (error.status === 403) return "この操作を行う権限がありません。";
   if (error.status === 404) return "部屋が見つかりません。";
   if (error.status === 409) return "部屋が満員か、ほかの端末で状態が更新されました。もう一度お試しください。";
+  if (payloadErrorCode === "NIGOICHI_WORDS_UNAVAILABLE") return "単語DBのGeneral Game Poolから、設定した難易度の単語を取得できませんでした。";
   if (error.status === 503) return "部屋サーバーを利用できません。少し待ってお試しください。";
   return fallback;
 }

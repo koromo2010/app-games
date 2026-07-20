@@ -26,7 +26,10 @@ function errorResponse(error: unknown) {
   if (message === "CODE_INTERCEPT_BAD_PASSPHRASE") return Response.json({ error: "Bad passphrase" }, { status: 401 });
   if (message === "CODE_INTERCEPT_ROOM_FULL") return Response.json({ error: "Room is full" }, { status: 409 });
   if (message === "CODE_INTERCEPT_NOT_ENOUGH_PLAYERS") return Response.json({ error: "Each team needs at least two players and team sizes may differ by at most one" }, { status: 409 });
-  if (message === "CODE_INTERCEPT_WORDS_UNAVAILABLE") return Response.json({ error: "Word pool is unavailable" }, { status: 503 });
+  if (message === "CODE_INTERCEPT_WORDS_UNAVAILABLE") return Response.json({
+    error: "General Game Poolから設定した難易度の単語を取得できませんでした。",
+    errorCode: "CODE_INTERCEPT_WORDS_UNAVAILABLE",
+  }, { status: 503 });
   if (message === "CODE_INTERCEPT_ROOM_IN_PROGRESS") return Response.json({ error: "An active game cannot be dissolved" }, { status: 409 });
   if (message === "CODE_INTERCEPT_PLAYER_ALREADY_ACTIVE") return Response.json({ error: "Finish or leave the current room before entering another room" }, { status: 409 });
   if (message === "CODE_INTERCEPT_INVALID_CLUE" || message === "CODE_INTERCEPT_INVALID_ANSWER" || message === "CODE_INTERCEPT_INVALID_CONFIG" || message === "CODE_INTERCEPT_INVALID_CODE_LENGTH") return Response.json({ error: "Invalid game input" }, { status: 400 });

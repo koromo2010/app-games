@@ -25,7 +25,10 @@ function errorResponse(error: unknown) {
   if (error instanceof Error && error.message === "NIGOICHI_BAD_PASSPHRASE") return Response.json({ error: "Bad passphrase" }, { status: 401 });
   if (error instanceof Error && error.message === "NIGOICHI_ROOM_FULL") return Response.json({ error: "Room is full" }, { status: 409 });
   if (error instanceof Error && error.message === "NIGOICHI_NOT_ENOUGH_PLAYERS") return Response.json({ error: "Not enough players" }, { status: 409 });
-  if (error instanceof Error && error.message === "NIGOICHI_WORDS_UNAVAILABLE") return Response.json({ error: "Word pool is unavailable" }, { status: 503 });
+  if (error instanceof Error && error.message === "NIGOICHI_WORDS_UNAVAILABLE") return Response.json({
+    error: "General Game Poolから設定した難易度の単語を取得できませんでした。",
+    errorCode: "NIGOICHI_WORDS_UNAVAILABLE",
+  }, { status: 503 });
   if (error instanceof Error && error.message === "NIGOICHI_ROOM_IN_PROGRESS") return Response.json({ error: "An active game cannot be dissolved" }, { status: 409 });
   if (error instanceof Error && error.message === "NIGOICHI_PLAYER_ALREADY_ACTIVE") return Response.json({ error: "Finish or leave the current room before entering another room" }, { status: 409 });
   if (error instanceof Error && error.message === "NIGOICHI_INVALID_CLUE") return Response.json({ error: "Invalid clue" }, { status: 400 });
