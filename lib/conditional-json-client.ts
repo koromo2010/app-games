@@ -11,6 +11,7 @@ type CacheEntry = {
 };
 
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+import { observeServerDate } from "./server-clock.ts";
 
 const maximumEntries = 100;
 const responseCache = new Map<string, CacheEntry>();
@@ -30,7 +31,9 @@ async function requestConditionalJson<T>(url: string, fetcher: Fetcher): Promise
   const cached = responseCache.get(url);
   const headers = new Headers();
   if (cached?.etag) headers.set("If-None-Match", cached.etag);
+  const requestedAt = Date.now();
   const response = await fetcher(url, { cache: "no-store", headers });
+  observeServerDate(response.headers.get("date"), requestedAt, Date.now());
 
   if (response.status === 304 && cached) {
     return { data: cached.data as T, notModified: true, ok: true, status: 304 };

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
 import { GameAdSlot } from "@/app/components/GameAdSlot";
+import { GameLoungeVisual } from "@/app/components/GameLoungeVisual";
 import { PlayerTimeoutNotice } from "@/app/components/PlayerTimeoutNotice";
 import { GameResultShareButton } from "@/app/components/GameResultShareButton";
 import { GameTopBanner, gameTopBannerOffsetClass } from "@/app/components/GameTopBanner";
@@ -11,12 +12,14 @@ import { GameTopMenu, gameTopBannerActionClass, gameTopBannerDangerActionClass, 
 import { GamePlayerMenu } from "@/app/components/GamePlayerMenu";
 import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomResultActions } from "@/app/components/RoomResultActions";
+import { RoomLobbyReturnStatus } from "@/app/components/RoomLobbyReturnStatus";
 import { hodoaiRoomApi } from "@/app/hodoai-talk/hodoai-room-api-client";
 import { HodoaiPlayPanels } from "@/app/hodoai-talk/HodoaiPlayPanels";
 import { HodoaiRulesDialog } from "@/app/hodoai-talk/HodoaiRulesDialog";
 import { useHodoaiRoomActions } from "@/app/hodoai-talk/use-hodoai-room-actions";
 import { useHodoaiRoomSession } from "@/app/hodoai-talk/use-hodoai-room-session";
 import { useHodoaiViewModel } from "@/app/hodoai-talk/use-hodoai-view-model";
+import { useRoomLobbyReturnConfirmation } from "@/app/hooks/use-room-lobby-return-confirmation";
 import { WordScaleRoomPanel } from "@/app/hodoai-talk/WordScaleRoomPanel";
 import {
   defaultAvatarImage,
@@ -50,11 +53,12 @@ export function HodoaiTalkGame() {
   const [showChoices, setShowChoices] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
-  const { session, ready, playerId, resultReturnGate } = useHodoaiRoomSession({ room, setRoom, setError });
+  const { session, ready, isRestoringRoom, playerId, resultReturnGate } = useHodoaiRoomSession({ room, setRoom, setError });
   const viewModel = useHodoaiViewModel(room, playerId);
   const { isHost, latestResult, latestResultRows, configItems } = viewModel;
 
   const { runAction, createRoom, listRooms, joinRoom, dissolveRoom, leaveRoom, updateConfig } = useHodoaiRoomActions({ room, session, passphrase, joinCode, isHost, markRoomDissolved: resultReturnGate.markRoomDissolved, setRoom, setError, setIsSaving, setChoices, setShowChoices });
+  useRoomLobbyReturnConfirmation({ room, playerId, confirmReturn: () => runAction({ type: "confirm-lobby-return", actorId: playerId }) });
 
   const rulesDialog = <HodoaiRulesDialog open={rulesOpen} onClose={() => setRulesOpen(false)} />;
 
@@ -75,9 +79,11 @@ export function HodoaiTalkGame() {
           <GamePlayerMenu id={session.id} name={session.name} avatarColor={session.avatarColor} avatarImage={session.avatarImage} hasRecoveryEmail={session.hasRecoveryEmail} />
         </GameTopBanner>
         <div className="mx-auto max-w-4xl">
+          <GameLoungeVisual gameId="hodoai" className="mt-5" />
           <section className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-slate-950/80 shadow-2xl">
             <div className="bg-gradient-to-r from-sky-400 via-amber-300 to-fuchsia-400 px-6 py-8 text-slate-950"><p className="text-xs font-black uppercase tracking-[0.28em]">Online room game</p><h1 className="mt-2 text-4xl font-black sm:text-6xl">ワードスケール</h1><p className="mt-3 font-bold">配られた数字カードを指定テーマのことばで表し、全カードを小さい順に並べる協力ゲーム。</p></div>
-            <div className="grid gap-6 p-6 md:grid-cols-2">
+            {isRestoringRoom && <p className="border-b border-cyan-300/20 bg-cyan-300/10 px-6 py-3 text-sm font-bold text-cyan-100">前回の部屋を確認中です。画面は先に表示しています。</p>}
+            <div inert={isRestoringRoom} aria-busy={isRestoringRoom} className={`grid gap-6 p-6 md:grid-cols-2 ${isRestoringRoom ? "opacity-60" : ""}`}>
               <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-5"><h2 className="text-xl font-black">部屋を作る</h2><p className="mt-2 text-sm leading-6 text-slate-400">あなたがホストになり、設定と進行を管理します。</p><label className="mt-4 block text-sm font-bold">合言葉（任意）<input type="password" value={passphrase} maxLength={40} onChange={(event) => setPassphrase(event.target.value)} className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-white outline-none" /></label><button type="button" disabled={isSaving} onClick={createRoom} className="mt-4 w-full rounded-xl bg-amber-300 px-4 py-3 font-black text-slate-950 disabled:opacity-50">新しい部屋を作る</button></div>
               <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-5"><h2 className="text-xl font-black">部屋に参加</h2><label className="mt-4 block text-sm font-bold">部屋コード<input value={joinCode} maxLength={4} onChange={(event) => setJoinCode(event.target.value.toUpperCase())} className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 font-mono text-lg uppercase text-white outline-none" /></label><label className="mt-3 block text-sm font-bold">合言葉<input type="password" value={passphrase} maxLength={40} onChange={(event) => setPassphrase(event.target.value)} className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-white outline-none" /></label><div className="mt-4 grid grid-cols-2 gap-2"><button type="button" disabled={isSaving} onClick={() => void joinRoom()} className="rounded-xl bg-cyan-400 px-3 py-3 font-black text-cyan-950 disabled:opacity-50">コードで参加</button><button type="button" onClick={() => void listRooms()} className="rounded-xl border border-white/20 px-3 py-3 font-black">部屋一覧</button></div></div>
             </div>
@@ -112,17 +118,18 @@ export function HodoaiTalkGame() {
         surface={room.phase === "lobby" ? "room-lobby" : room.phase === "result" ? "result" : null}
         disabled={room.debugMode}
       />
+      {room.phase === "lobby" && <div className="mx-auto max-w-6xl px-4 pt-4"><GameLoungeVisual gameId="hodoai" /></div>}
       <div className="mx-auto grid max-w-6xl gap-4 px-4 py-5 lg:grid-cols-[280px_minmax(0,1fr)]">
         <WordScaleRoomPanel playerCount={room.players.length}>
           <section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4">
             <div className="flex items-center justify-between"><h2 className="font-black">参加者</h2><span className="text-sm text-slate-400">{room.players.length}人</span></div>
-            <ul className="mt-3 max-h-[70vh] space-y-2 overflow-y-auto pr-1">{room.players.map((player) => <PlayerRow key={player.id} player={player} isHost={player.id === room.hostId} isMe={player.id === playerId} />)}</ul>
+            <ul className="mt-3 max-h-[70vh] space-y-2 overflow-y-auto pr-1">{room.players.map((player) => <PlayerRow key={player.id} player={player} isHost={player.id === room.hostId} isMe={player.id === playerId} />)}</ul><RoomLobbyReturnStatus state={room.lobbyReturn} players={room.players} hostId={room.hostId} isHost={isHost} onRemoveWaitingPlayer={(player) => { if (window.confirm(`${player.name}さんを退出扱いにしますか？`)) void runAction({ type: "remove-waiting-player", actorId: playerId, targetPlayerId: player.id }); }} />
           </section>
           <RoomConfigSummary items={configItems} />
         </WordScaleRoomPanel>
         <div className="space-y-4">
           {error && <p className="rounded-xl border border-rose-300/30 bg-rose-300/10 p-3 text-sm font-bold text-rose-100">{error}</p>}
-          <HodoaiPlayPanels room={room} playerId={playerId} isHost={isHost} isSaving={isSaving} runAction={runAction} updateConfig={updateConfig} setError={setError} />
+          <HodoaiPlayPanels room={room} playerId={playerId} isHost={isHost} isSaving={isSaving} runAction={runAction} updateConfig={updateConfig} />
           {room.phase === "result" && latestResult && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><h2 className="text-2xl font-black">最後の答え合わせ</h2><p className="mt-1 text-sm font-bold text-slate-400">上が120側、下が0側です。</p><div className="mt-4 space-y-2">{latestResultRows.map((row) => <div key={row.id} className="grid grid-cols-[2rem_1fr_auto] items-center gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3"><span className="text-center font-black text-cyan-300">{row.rank}</span><div><div className="flex flex-wrap gap-2">{row.expressions.map((expression, index) => <span key={`${row.id}:${index}`} className="rounded-lg bg-cyan-300/10 px-2 py-1 text-sm font-bold text-cyan-50">{expression}</span>)}</div><p className="mt-1 text-xs text-slate-400">{row.playerName}・カード{row.cardNumber}</p></div><span className="text-2xl font-black text-amber-300">{row.value}</span></div>)}</div><div className="mt-5 rounded-2xl bg-gradient-to-r from-cyan-400 to-amber-300 p-5 text-center text-slate-950"><p className="font-black">最終得点 {latestResult.points}/3点</p><p className="mt-1 text-sm font-bold">並び違い {latestResult.inversions}組</p></div><p className="mt-5 text-center text-lg font-black">{hodoaiFinalMessage(room.totalPoints, 3)}</p><RoomResultActions canReturnToRoom={isHost || resultReturnGate.canReturnToRoom} disabled={isSaving} isHost={isHost} isRoomDissolved={resultReturnGate.isRoomDissolved} onReturnToRoom={isHost ? () => runAction({ type: "reset-game", actorId: playerId }) : () => resultReturnGate.returnToRoom((code) => hodoaiRoomApi.fetchRoom(code, playerId), () => setError("部屋に戻れません。解散されたか、参加情報が変更されています。"))} onDissolve={isHost ? dissolveRoom : undefined} /></section>}
           {room.phase === "result" && <GameResultShareButton title="ワードスケール プレイログ" text={hodoaiGameShareText(room)} url="/word-scale" />}
         </div>

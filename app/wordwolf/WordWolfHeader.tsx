@@ -30,6 +30,6 @@ export function WordWolfHeader(props: Props) {
       <WordWolfPlayerProfile playerId={props.playerId} playerName={props.playerName} headerName={props.headerName} avatarImage={props.avatarImage} headerAvatarColor={props.headerAvatarColor} headerAvatarImage={props.headerAvatarImage} isOpen={props.isAvatarPickerOpen} onOpenChange={props.onAvatarPickerOpenChange} onPlayerNameChange={props.onPlayerNameChange} onCommitPlayerName={props.onCommitPlayerName} onAvatarColorChange={props.onAvatarColorChange} onAvatarImageChange={props.onAvatarImageChange} onAvatarUpload={props.onAvatarUpload} onOpenMyPage={() => props.onMyPageOpenChange(true)} />
     </GameTopBanner>
     {props.room && <div className="mx-auto max-w-6xl px-4 pt-4"><PlayerTimeoutNotice playerTimeouts={props.room.playerTimeouts} playerTimeoutNotice={props.room.playerTimeoutNotice} currentPlayerId={props.currentPlayerId} onRecover={props.onRecover} /></div>}
-    <FullScreenPageOverlay open={props.isMyPageOpen} href="/users/me" title="マイページ" onClose={() => props.onMyPageOpenChange(false)} />
+    <FullScreenPageOverlay open={props.isMyPageOpen} href="/users/me" title="マイページ" keepAlive onClose={() => props.onMyPageOpenChange(false)} />
   </>;
 }

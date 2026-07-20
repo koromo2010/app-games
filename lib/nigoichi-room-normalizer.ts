@@ -15,6 +15,7 @@ import {
   type NigoichiWordDifficulty,
 } from "@/lib/nigoichi";
 import { normalizeOnlineRoomCode } from "@/lib/online-room-input";
+import { normalizeRoomLobbyReturnState } from "@/lib/room-lobby-return";
 import { isAvatarColor, isAvatarImage } from "@/lib/player-session";
 
 function isPhase(value: unknown): value is NigoichiPhase {
@@ -199,6 +200,7 @@ export function normalizeNigoichiRoom(value: unknown): NigoichiRoom | null {
     passphrase: typeof parsed.passphrase === "string" ? parsed.passphrase.slice(0, 40) : "",
     phase,
     players,
+    lobbyReturn: normalizeRoomLobbyReturnState(parsed.lobbyReturn, players),
     playerCapacity,
     gameNumber: typeof parsed.gameNumber === "number" ? Math.max(1, Math.floor(parsed.gameNumber)) : 1,
     cardsPerPlayer: config.cardsPerPlayer,

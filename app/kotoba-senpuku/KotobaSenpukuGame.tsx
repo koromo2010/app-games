@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
 import { GameAdSlot } from "@/app/components/GameAdSlot";
+import { GameLoungeVisual } from "@/app/components/GameLoungeVisual";
 import { GameRulesDialog } from "@/app/components/GameRulesDialog";
 import { GameTopBanner, gameTopBannerOffsetClass } from "@/app/components/GameTopBanner";
 import { GameTopMenu, gameTopBannerActionClass, gameTopBannerDangerActionClass, gameTopMenuItemClass } from "@/app/components/GameTopMenu";
@@ -12,12 +13,17 @@ import { GamePhaseTimer } from "@/app/components/GamePhaseTimer";
 import { PlayerTimeoutNotice } from "@/app/components/PlayerTimeoutNotice";
 import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomResultActions } from "@/app/components/RoomResultActions";
+import { RoomLobbyReturnStatus } from "@/app/components/RoomLobbyReturnStatus";
 import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
+import { confirmRoomLeave } from "@/app/components/room-navigation-confirmation";
+import { useOnlineGameSessionRestore } from "@/app/hooks/use-online-game-session-restore";
 import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "@/app/hooks/use-online-room-polling";
 import { useRoomResultReturnGate } from "@/app/hooks/use-room-result-return-gate";
+import { useRoomLobbyReturnConfirmation } from "@/app/hooks/use-room-lobby-return-confirmation";
 import { applyKotobaSenpukuRoomAction, createKotobaSenpukuRoom, kotobaSenpukuRoomApi } from "@/app/kotoba-senpuku/kotoba-senpuku-room-api-client";
 import { loadPlayerRoomDefaults, savePlayerRoomDefaults } from "@/lib/game-room-defaults-client";
-import { OnlineRoomApiError, restoreOnlineRoom } from "@/lib/online-room-api-client";
+import { OnlineRoomApiError } from "@/lib/online-room-api-client";
+import { synchronizedNow } from "@/lib/server-clock";
 import {
   kotobaSenpukuKanaKey,
   isValidKotobaSenpukuWord,
@@ -33,9 +39,6 @@ import {
 import {
   defaultAvatarImage,
   fallbackAvatarColor,
-  isPlayerAuthenticated,
-  loadPersistentPlayerSession,
-  type PlayerSession,
 } from "@/lib/player-session";
 
 const lastRoomKey = "kotoba-senpuku-last-room";
@@ -148,9 +151,8 @@ function BinaryRuleControl({
 }
 
 export function KotobaSenpukuGame() {
-  const [session, setSession] = useState<PlayerSession | null>(null);
   const [room, setRoom] = useState<KotobaSenpukuRoom | null>(null);
-  const [ready, setReady] = useState(false);
+  const { session, ready, isRestoringRoom } = useOnlineGameSessionRestore({ lastRoomKey, fetchActiveRoom: kotobaSenpukuRoomApi.fetchActiveRoom, fetchRoom: kotobaSenpukuRoomApi.fetchRoom, setRoom });
   const [error, setError] = useState("");
   const [passphrase, setPassphrase] = useState("");
   const [joinCode, setJoinCode] = useState("");
@@ -159,50 +161,10 @@ export function KotobaSenpukuGame() {
   const [secretWord, setSecretWord] = useState("");
   const [challengeTarget, setChallengeTarget] = useState("");
   const [challengeGuess, setChallengeGuess] = useState("");
+  const timeoutTextSubmissionKeyRef = useRef("");
   const [isSaving, setIsSaving] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const resultReturnGate = useRoomResultReturnGate({ room, setRoom, playerId: session?.id ?? "", resultPhase: "result", onReturnUnavailable: () => setError("部屋に戻れません。解散されたか、参加情報が変更されています。") });
-
-  useEffect(() => {
-    let active = true;
-    let timer: number | undefined;
-    if (!isPlayerAuthenticated()) {
-      timer = window.setTimeout(() => setReady(true), 0);
-      return () => {
-        active = false;
-        if (timer) window.clearTimeout(timer);
-      };
-    }
-    loadPersistentPlayerSession().then(async (savedSession) => {
-      if (!active) return;
-      if (!savedSession?.id) {
-        setReady(true);
-        return;
-      }
-      setSession(savedSession);
-      const lastCode = localStorage.getItem(lastRoomKey);
-      const savedRoom = await restoreOnlineRoom({
-        playerId: savedSession.id,
-        lastCode,
-        fetchActiveRoom: kotobaSenpukuRoomApi.fetchActiveRoom,
-        fetchRoom: kotobaSenpukuRoomApi.fetchRoom,
-      });
-      if (!active) return;
-      timer = window.setTimeout(() => {
-        if (savedRoom) {
-          setRoom(savedRoom);
-          localStorage.setItem(lastRoomKey, savedRoom.code);
-        }
-        setReady(true);
-      }, 0);
-    }).catch(() => {
-      if (active) setReady(true);
-    });
-    return () => {
-      active = false;
-      if (timer) window.clearTimeout(timer);
-    };
-  }, []);
 
   const roomCode = room?.code;
   const roomPhase = room?.phase;
@@ -211,7 +173,7 @@ export function KotobaSenpukuGame() {
   useOnlineRoomPolling({
     game: "kotoba-senpuku",
     roomCode: playerId && !resultReturnGate.isRoomDissolved ? roomCode : null,
-    intervalMs: roomPhase === "lobby" ? onlineRoomPollingIntervals.idle : onlineRoomPollingIntervals.active,
+    intervalMs: roomPhase === "lobby" || roomPhase === "result" ? onlineRoomPollingIntervals.idle : onlineRoomPollingIntervals.active,
     fetchRoom: (code) => kotobaSenpukuRoomApi.fetchRoom(code, playerId),
     onRoom: resultReturnGate.acceptIncomingRoom,
     onMissing: () => {
@@ -268,6 +230,43 @@ export function KotobaSenpukuGame() {
       setIsSaving(false);
     }
   };
+  useRoomLobbyReturnConfirmation({ room, playerId, confirmReturn: () => runAction({ type: "confirm-lobby-return", actorId: playerId }) });
+
+  useEffect(() => {
+    if (!room?.phaseStartedAt || !playerId) return;
+    const secret = normalizeKotobaSenpukuWord(secretWord);
+    const canSubmitSecret = room.phase === "secret"
+      && room.secretTimeLimitSeconds > 0
+      && !room.secrets[playerId]
+      && isValidKotobaSenpukuWord(secret)
+      && [...secret].length >= minimumKotobaSenpukuWordLength(room.players.length);
+    const canSubmitChallenge = room.phase === "battle"
+      && room.turnTimeLimitSeconds > 0
+      && room.allowWordGuess
+      && canControlTurn
+      && Boolean(effectiveTarget)
+      && isValidKotobaSenpukuWord(challengeGuess);
+    if (!canSubmitSecret && !canSubmitChallenge) return;
+    const durationSeconds = canSubmitSecret ? room.secretTimeLimitSeconds : room.turnTimeLimitSeconds;
+    const actionType = canSubmitSecret ? "secret" : "challenge";
+    const key = `${room.code}:${room.round}:${room.turnNumber}:${room.phaseStartedAt}:${playerId}:${actionType}`;
+    const delay = Math.max(0, room.phaseStartedAt + durationSeconds * 1000 - synchronizedNow());
+    const timer = window.setTimeout(() => {
+      if (timeoutTextSubmissionKeyRef.current === key) return;
+      timeoutTextSubmissionKeyRef.current = key;
+      const action: KotobaSenpukuRoomAction = canSubmitSecret
+        ? { type: "submit-secret", actorId: playerId, round: room.round, word: secret }
+        : { type: "challenge-word", actorId: playerId, round: room.round, targetId: effectiveTarget, guess: challengeGuess };
+      void applyKotobaSenpukuRoomAction(room.code, action)
+        .then((saved) => {
+          setRoom((current) => current?.code === saved.code ? saved : current);
+          if (canSubmitSecret) setSecretWord("");
+          else setChallengeGuess("");
+        })
+        .catch(() => undefined);
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [canControlTurn, challengeGuess, effectiveTarget, playerId, room, secretWord]);
 
   const createRoom = async () => {
     if (!session?.id) return;
@@ -346,7 +345,7 @@ export function KotobaSenpukuGame() {
   };
 
   const leaveRoom = async () => {
-    if (!room || !session?.id || isHost) return;
+    if (!room || !session?.id || isHost || !confirmRoomLeave()) return;
     const saved = await runAction({ type: "leave-room", actorId: session.id });
     if (!saved) return;
     setRoom(null);
@@ -431,9 +430,11 @@ export function KotobaSenpukuGame() {
       <main className="min-h-screen bg-[radial-gradient(circle_at_top,#701a75_0%,#172033_42%,#020617_82%)] px-4 py-8 text-white">
         <div className="mx-auto max-w-4xl">
           <div className="flex items-center justify-between gap-2"><Link href="/games" className="text-sm font-bold text-fuchsia-200">← 広場</Link><div className="flex items-center gap-2"><button type="button" onClick={() => setRulesOpen(true)} className="rounded-lg border border-white/20 px-3 py-2 text-sm font-bold">ルール</button><span className="text-sm font-bold">{session.name}</span></div></div>
+          <GameLoungeVisual gameId="kotoba-senpuku" className="mt-5" />
           <section className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-slate-950/80 shadow-2xl">
             <div className="bg-gradient-to-r from-fuchsia-400 via-cyan-300 to-amber-300 px-6 py-8 text-slate-950"><p className="text-xs font-black uppercase tracking-[0.28em]">Original online word game</p><h1 className="mt-2 text-4xl font-black sm:text-6xl">ワードソナー</h1><p className="mt-3 font-bold">秘密のことばを探り合い、全文公開による脱落を避けて最後の1人を目指す。</p></div>
-            <div className="grid gap-6 p-6 md:grid-cols-2">
+            {isRestoringRoom && <p className="border-b border-fuchsia-300/20 bg-fuchsia-300/10 px-6 py-3 text-sm font-bold text-fuchsia-100">前回の部屋を確認中です。画面は先に表示しています。</p>}
+            <div inert={isRestoringRoom} aria-busy={isRestoringRoom} className={`grid gap-6 p-6 md:grid-cols-2 ${isRestoringRoom ? "opacity-60" : ""}`}>
               <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-5"><h2 className="text-xl font-black">部屋を作る</h2><p className="mt-2 text-sm leading-6 text-slate-400">あなたがホストになり、設定と進行を管理します。</p><label className="mt-4 block text-sm font-bold">合言葉（任意）<input type="password" value={passphrase} maxLength={40} onChange={(event) => setPassphrase(event.target.value)} className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-white outline-none" /></label><button type="button" disabled={isSaving} onClick={createRoom} className="mt-4 w-full rounded-xl bg-amber-300 px-4 py-3 font-black text-slate-950 disabled:opacity-50">新しい部屋を作る</button></div>
               <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-5"><h2 className="text-xl font-black">部屋に参加</h2><label className="mt-4 block text-sm font-bold">部屋コード<input value={joinCode} maxLength={4} onChange={(event) => setJoinCode(event.target.value.toUpperCase())} className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 font-mono text-lg uppercase text-white outline-none" /></label><label className="mt-3 block text-sm font-bold">合言葉<input type="password" value={passphrase} maxLength={40} onChange={(event) => setPassphrase(event.target.value)} className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-white outline-none" /></label><div className="mt-4 grid grid-cols-2 gap-2"><button type="button" disabled={isSaving} onClick={() => void joinRoom()} className="rounded-xl bg-fuchsia-400 px-3 py-3 font-black text-fuchsia-950 disabled:opacity-50">コードで参加</button><button type="button" onClick={() => void listRooms()} className="rounded-xl border border-white/20 px-3 py-3 font-black">部屋一覧</button></div></div>
             </div>
@@ -467,8 +468,9 @@ export function KotobaSenpukuGame() {
         surface={room.phase === "lobby" ? "room-lobby" : room.phase === "result" ? "result" : null}
         disabled={room.debugMode}
       />
+      {room.phase === "lobby" && <div className="mx-auto max-w-7xl px-4 pt-4"><GameLoungeVisual gameId="kotoba-senpuku" /></div>}
       <div className="mx-auto grid max-w-7xl gap-4 px-4 py-5 md:grid-cols-[minmax(0,1fr)_240px] xl:grid-cols-[270px_minmax(0,1fr)_280px]">
-        <aside className="space-y-4 md:col-span-2 md:grid md:grid-cols-2 md:gap-4 md:space-y-0 xl:col-span-1 xl:block xl:space-y-4"><section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4"><div className="flex items-center justify-between"><h2 className="font-black">参加者</h2><span className="text-sm text-slate-400">{room.players.length}人</span></div><ul className="mt-3 space-y-2">{room.players.map((player) => <PlayerRow key={player.id} player={player} isHost={player.id === room.hostId} isMe={player.id === playerId} eliminated={room.exposedIds.includes(player.id)} />)}</ul></section><RoomConfigSummary items={configItems} /></aside>
+        <aside className="space-y-4 md:col-span-2 md:grid md:grid-cols-2 md:gap-4 md:space-y-0 xl:col-span-1 xl:block xl:space-y-4"><section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4"><div className="flex items-center justify-between"><h2 className="font-black">参加者</h2><span className="text-sm text-slate-400">{room.players.length}人</span></div><ul className="mt-3 space-y-2">{room.players.map((player) => <PlayerRow key={player.id} player={player} isHost={player.id === room.hostId} isMe={player.id === playerId} eliminated={room.exposedIds.includes(player.id)} />)}</ul><RoomLobbyReturnStatus state={room.lobbyReturn} players={room.players} hostId={room.hostId} isHost={isHost} onRemoveWaitingPlayer={(player) => { if (window.confirm(`${player.name}さんを退出扱いにしますか？`)) void runAction({ type: "remove-waiting-player", actorId: playerId, targetPlayerId: player.id }); }} /></section><RoomConfigSummary items={configItems} /></aside>
         <div className="space-y-4">
           {error && <p className="rounded-xl border border-rose-300/30 bg-rose-300/10 p-3 text-sm font-bold text-rose-100">{error}</p>}
           {room.phase === "lobby" && isHost && (

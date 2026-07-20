@@ -14,6 +14,7 @@ import { normalizeOnlineRoomCode } from "@/lib/online-room-input";
 import { onlineRoomPlayerLimits } from "@/lib/online-room-policy";
 import { normalizePlayerTimeoutFields } from "@/lib/player-timeout-policy";
 import { isAvatarColor, isAvatarImage } from "@/lib/player-session";
+import { normalizeRoomLobbyReturnState } from "@/lib/room-lobby-return";
 
 function isPhase(value: unknown): value is KotobaSenpukuPhase {
   return value === "lobby" || value === "secret" || value === "battle" || value === "result";
@@ -127,6 +128,7 @@ export function normalizeKotobaSenpukuRoom(value: unknown): KotobaSenpukuRoom | 
     passphrase: typeof parsed.passphrase === "string" ? parsed.passphrase.slice(0, 40) : "",
     phase: isPhase(parsed.phase) ? parsed.phase : "lobby",
     players,
+    lobbyReturn: normalizeRoomLobbyReturnState(parsed.lobbyReturn, players),
     ...normalizePlayerTimeoutFields(parsed, players.map((player) => player.id)),
     gameNumber: typeof parsed.gameNumber === "number" ? Math.max(1, Math.floor(parsed.gameNumber)) : 1,
     ...config,
@@ -150,4 +152,3 @@ export function normalizeKotobaSenpukuRoom(value: unknown): KotobaSenpukuRoom | 
     updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : Date.now(),
   };
 }
-

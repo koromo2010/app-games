@@ -1,4 +1,5 @@
 import { fetchConditionalJson } from "./conditional-json-client.ts";
+import { observeServerDate } from "./server-clock.ts";
 
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
@@ -32,7 +33,8 @@ function queryUrl(endpoint: string, values: Record<string, string | undefined>) 
   return query ? `${endpoint}?${query}` : endpoint;
 }
 
-async function responseJson<T>(response: Response, errorCode: string) {
+async function responseJson<T>(response: Response, errorCode: string, requestedAt = Date.now()) {
+  observeServerDate(response.headers.get("date"), requestedAt, Date.now());
   const payload = await response.json().catch(() => null) as T | null;
   if (!response.ok) throw new OnlineRoomApiError(errorCode, response.status, payload);
   if (payload === null) throw new OnlineRoomApiError(errorCode, response.status, null);
@@ -70,28 +72,31 @@ export function createOnlineRoomApiClient<Room, RoomChoice>({
     },
 
     async post<TPayload, TResult>(payload: TPayload, errorCode = "ROOM_SAVE_FAILED") {
+      const requestedAt = Date.now();
       const response = await fetcher(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      return responseJson<TResult>(response, errorCode);
+      return responseJson<TResult>(response, errorCode, requestedAt);
     },
 
     async patch<TAction>(code: string, action: TAction) {
+      const requestedAt = Date.now();
       const response = await fetcher(endpoint, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code, action }),
       });
-      const data = await responseJson<{ room?: Room; error?: string }>(response, "ROOM_ACTION_FAILED");
+      const data = await responseJson<{ room?: Room; error?: string }>(response, "ROOM_ACTION_FAILED", requestedAt);
       if (!data.room) throw new OnlineRoomApiError(data.error || "ROOM_ACTION_FAILED", response.status, data);
       return normalizeRoom(data.room);
     },
 
     async remove<TResult = { ok: boolean }>(values: Record<string, string>, errorCode = "ROOM_DELETE_FAILED") {
+      const requestedAt = Date.now();
       const response = await fetcher(queryUrl(endpoint, values), { method: "DELETE" });
-      return responseJson<TResult>(response, errorCode);
+      return responseJson<TResult>(response, errorCode, requestedAt);
     },
   };
 }

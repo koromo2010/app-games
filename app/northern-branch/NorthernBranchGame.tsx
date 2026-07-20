@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
 import { GameAdSlot } from "@/app/components/GameAdSlot";
+import { GameLoungeVisual } from "@/app/components/GameLoungeVisual";
 import { GamePhaseTimer } from "@/app/components/GamePhaseTimer";
 import { GameRulesDialog } from "@/app/components/GameRulesDialog";
 import { GameTopBanner, gameTopBannerOffsetClass } from "@/app/components/GameTopBanner";
@@ -11,13 +12,19 @@ import { GameTopMenu, gameTopBannerActionClass, gameTopBannerDangerActionClass, 
 import { GamePlayerMenu } from "@/app/components/GamePlayerMenu";
 import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomResultActions } from "@/app/components/RoomResultActions";
+import { RoomLobbyReturnStatus } from "@/app/components/RoomLobbyReturnStatus";
 import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
+import { confirmRoomLeave } from "@/app/components/room-navigation-confirmation";
+import { useOnlineGameSessionRestore } from "@/app/hooks/use-online-game-session-restore";
 import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "@/app/hooks/use-online-room-polling";
+import { clientTimeoutClaimDelayMs } from "@/lib/game-timer/client-policy";
 import { useRoomResultReturnGate } from "@/app/hooks/use-room-result-return-gate";
+import { useRoomLobbyReturnConfirmation } from "@/app/hooks/use-room-lobby-return-confirmation";
 import { applyNorthernBranchRoomAction, createNorthernBranchRoom, northernBranchRoomApi } from "@/app/northern-branch/northern-branch-room-api-client";
 import { northernBaseResources, northernBuildings, northernCards } from "@/lib/northern-branch-data";
 import { northernRules } from "@/lib/northern-branch-game";
-import { OnlineRoomApiError, restoreOnlineRoom } from "@/lib/online-room-api-client";
+import { OnlineRoomApiError } from "@/lib/online-room-api-client";
+import { synchronizedNow } from "@/lib/server-clock";
 import type {
   NorthernGameAction,
   NorthernRoom,
@@ -28,9 +35,6 @@ import type {
 import {
   defaultAvatarImage,
   fallbackAvatarColor,
-  isPlayerAuthenticated,
-  loadPersistentPlayerSession,
-  type PlayerSession,
 } from "@/lib/player-session";
 
 const lastRoomKey = "northern-branch-last-room";
@@ -77,9 +81,8 @@ function PlayerRow({ player, isHost, isMe }: { player: NorthernRoomPlayer; isHos
 }
 
 export function NorthernBranchGame() {
-  const [session, setSession] = useState<PlayerSession | null>(null);
   const [room, setRoom] = useState<NorthernRoom | null>(null);
-  const [ready, setReady] = useState(false);
+  const { session, ready, isRestoringRoom } = useOnlineGameSessionRestore({ lastRoomKey, fetchActiveRoom: northernBranchRoomApi.fetchActiveRoom, fetchRoom: northernBranchRoomApi.fetchRoom, setRoom });
   const [error, setError] = useState("");
   const [passphrase, setPassphrase] = useState("");
   const [joinCode, setJoinCode] = useState("");
@@ -90,47 +93,6 @@ export function NorthernBranchGame() {
   const [rulesOpen, setRulesOpen] = useState(false);
   const resultReturnGate = useRoomResultReturnGate({ room, setRoom, playerId: session?.id ?? "", resultPhase: "finished", onReturnUnavailable: () => setError("部屋に戻れません。解散されたか、参加情報が変更されています。") });
 
-  useEffect(() => {
-    let active = true;
-    let timer: number | undefined;
-    if (!isPlayerAuthenticated()) {
-      timer = window.setTimeout(() => setReady(true), 0);
-      return () => {
-        active = false;
-        if (timer) window.clearTimeout(timer);
-      };
-    }
-    loadPersistentPlayerSession().then(async (savedSession) => {
-      if (!active) return;
-      if (!savedSession?.id) {
-        setReady(true);
-        return;
-      }
-      setSession(savedSession);
-      const lastCode = localStorage.getItem(lastRoomKey);
-      const savedRoom = await restoreOnlineRoom({
-        playerId: savedSession.id,
-        lastCode,
-        fetchActiveRoom: northernBranchRoomApi.fetchActiveRoom,
-        fetchRoom: northernBranchRoomApi.fetchRoom,
-      });
-      if (!active) return;
-      timer = window.setTimeout(() => {
-        if (savedRoom) {
-          setRoom(savedRoom);
-          localStorage.setItem(lastRoomKey, savedRoom.code);
-        }
-        setReady(true);
-      }, 0);
-    }).catch(() => {
-      if (active) setReady(true);
-    });
-    return () => {
-      active = false;
-      if (timer) window.clearTimeout(timer);
-    };
-  }, []);
-
   const roomCode = room?.code;
   const roomPhase = room?.phase;
   const playerId = session?.id ?? "";
@@ -138,7 +100,7 @@ export function NorthernBranchGame() {
   useOnlineRoomPolling({
     game: "northern-branch",
     roomCode: playerId && !resultReturnGate.isRoomDissolved ? roomCode : null,
-    intervalMs: roomPhase === "lobby" ? onlineRoomPollingIntervals.idle : onlineRoomPollingIntervals.active,
+    intervalMs: roomPhase === "lobby" || roomPhase === "finished" ? onlineRoomPollingIntervals.idle : onlineRoomPollingIntervals.active,
     fetchRoom: (code) => northernBranchRoomApi.fetchRoom(code, playerId),
     onRoom: resultReturnGate.acceptIncomingRoom,
     onMissing: () => {
@@ -166,6 +128,7 @@ export function NorthernBranchGame() {
   const winner = game?.players.find((player) => player.id === game.winnerId);
   const timerTurnStartedAt = room?.turnStartedAt;
   const timerDurationSeconds = room?.turnTimeLimitSeconds ?? 0;
+  const timerClaimDelayMs = room ? clientTimeoutClaimDelayMs({ playerId, hostId: room.hostId, playerIds: room.players.map((player) => player.id) }) : 0;
   const configItems = room ? [
     { label: "参加人数", value: `${room.players.length}/4人` },
     { label: "勝利条件", value: `${northernRules.victoryPoints}点` },
@@ -181,9 +144,9 @@ export function NorthernBranchGame() {
       void applyNorthernBranchRoomAction(roomCode, { type: "expire-turn", actorId: playerId, turnStartedAt: timerTurnStartedAt })
         .then((saved) => setRoom((current) => current?.code === saved.code ? saved : current))
         .catch(() => undefined);
-    }, Math.max(0, timerTurnStartedAt + timerDurationSeconds * 1000 - Date.now()) + 100);
+    }, Math.max(0, timerTurnStartedAt + timerDurationSeconds * 1000 - synchronizedNow()) + 100 + timerClaimDelayMs);
     return () => window.clearTimeout(timer);
-  }, [playerId, roomCode, roomPhase, timerDurationSeconds, timerTurnStartedAt]);
+  }, [playerId, roomCode, roomPhase, timerClaimDelayMs, timerDurationSeconds, timerTurnStartedAt]);
 
   const runAction = useCallback(async (action: NorthernRoomAction) => {
     if (!room) return null;
@@ -201,6 +164,7 @@ export function NorthernBranchGame() {
       setIsSaving(false);
     }
   }, [room]);
+  useRoomLobbyReturnConfirmation({ room, playerId, confirmReturn: () => runAction({ type: "confirm-lobby-return", actorId: playerId }) });
 
   const perform = (action: NorthernGameAction) => {
     if (!room || !playerId) return;
@@ -283,7 +247,7 @@ export function NorthernBranchGame() {
   };
 
   const leaveRoom = async () => {
-    if (!room || !session?.id || isHost) return;
+    if (!room || !session?.id || isHost || !confirmRoomLeave()) return;
     const saved = await runAction({ type: "leave-room", actorId: session.id });
     if (!saved) return;
     setRoom(null);
@@ -338,9 +302,11 @@ export function NorthernBranchGame() {
       <main className="min-h-screen bg-[radial-gradient(circle_at_top,#365314_0%,#172033_42%,#020617_82%)] px-4 py-8 text-white">
         <div className="mx-auto max-w-4xl">
           <div className="flex items-center justify-between gap-2"><Link href="/games" className="text-sm font-bold text-lime-200">← 広場</Link><div className="flex items-center gap-2"><button type="button" onClick={() => setRulesOpen(true)} className="rounded-lg border border-white/20 px-3 py-2 text-sm font-bold">ルール</button><span className="text-sm font-bold">{session.name}</span></div></div>
+          <GameLoungeVisual gameId="northern-branch" className="mt-5" />
           <section className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-slate-950/80 shadow-2xl">
             <div className="bg-gradient-to-r from-lime-400 via-amber-300 to-orange-400 px-6 py-8 text-slate-950"><p className="text-xs font-black uppercase tracking-[0.28em]">Online room game</p><h1 className="mt-2 text-4xl font-black sm:text-6xl">ノーザンブランチ</h1><p className="mt-3 font-bold">資源を商品へ育て、建物を増やし、最初に10点を目指す手番制ゲーム。</p></div>
-            <div className="grid gap-6 p-6 md:grid-cols-2">
+            {isRestoringRoom && <p className="border-b border-lime-300/20 bg-lime-300/10 px-6 py-3 text-sm font-bold text-lime-100">前回の部屋を確認中です。画面は先に表示しています。</p>}
+            <div inert={isRestoringRoom} aria-busy={isRestoringRoom} className={`grid gap-6 p-6 md:grid-cols-2 ${isRestoringRoom ? "opacity-60" : ""}`}>
               <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-5"><h2 className="text-xl font-black">部屋を作る</h2><p className="mt-2 text-sm leading-6 text-slate-400">あなたがホストになり、参加者を集めて開始します。</p><label className="mt-4 block text-sm font-bold">合言葉（任意）<input type="password" value={passphrase} maxLength={40} onChange={(event) => setPassphrase(event.target.value)} className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-white outline-none" /></label><button type="button" disabled={isSaving} onClick={createRoom} className="mt-4 w-full rounded-xl bg-amber-300 px-4 py-3 font-black text-slate-950 disabled:opacity-50">新しい部屋を作る</button></div>
               <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-5"><h2 className="text-xl font-black">部屋に参加</h2><label className="mt-4 block text-sm font-bold">部屋コード<input value={joinCode} maxLength={4} onChange={(event) => setJoinCode(event.target.value.toUpperCase())} className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 font-mono text-lg uppercase text-white outline-none" /></label><label className="mt-3 block text-sm font-bold">合言葉<input type="password" value={passphrase} maxLength={40} onChange={(event) => setPassphrase(event.target.value)} className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-white outline-none" /></label><div className="mt-4 grid grid-cols-2 gap-2"><button type="button" disabled={isSaving} onClick={() => void joinRoom()} className="rounded-xl bg-lime-400 px-3 py-3 font-black text-lime-950 disabled:opacity-50">コードで参加</button><button type="button" onClick={() => void listRooms()} className="rounded-xl border border-white/20 px-3 py-3 font-black">部屋一覧</button></div></div>
             </div>
@@ -373,8 +339,9 @@ export function NorthernBranchGame() {
         surface={room.phase === "lobby" ? "room-lobby" : room.phase === "finished" ? "result" : null}
         disabled={room.debugMode}
       />
+      {room.phase === "lobby" && <div className="mx-auto max-w-7xl px-4 pt-4"><GameLoungeVisual gameId="northern-branch" /></div>}
       <div className="mx-auto grid max-w-7xl gap-4 px-4 py-5 xl:grid-cols-[260px_minmax(0,1fr)_280px]">
-        <aside className="space-y-4"><section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4"><div className="flex items-center justify-between"><h2 className="font-black">参加者</h2><span className="text-sm text-slate-400">{room.players.length}/4人</span></div><ul className="mt-3 space-y-2">{room.players.map((player) => <PlayerRow key={player.id} player={player} isHost={player.id === room.hostId} isMe={player.id === playerId} />)}</ul></section><RoomConfigSummary items={configItems} /></aside>
+        <aside className="space-y-4"><section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4"><div className="flex items-center justify-between"><h2 className="font-black">参加者</h2><span className="text-sm text-slate-400">{room.players.length}/4人</span></div><ul className="mt-3 space-y-2">{room.players.map((player) => <PlayerRow key={player.id} player={player} isHost={player.id === room.hostId} isMe={player.id === playerId} />)}</ul><RoomLobbyReturnStatus state={room.lobbyReturn} players={room.players} hostId={room.hostId} isHost={isHost} onRemoveWaitingPlayer={(player) => { if (window.confirm(`${player.name}さんを退出扱いにしますか？`)) void runAction({ type: "remove-waiting-player", actorId: playerId, targetPlayerId: player.id }); }} /></section><RoomConfigSummary items={configItems} /></aside>
         <div className="space-y-4">
           {error && <p className="rounded-xl border border-rose-300/30 bg-rose-300/10 p-3 text-sm font-bold text-rose-100">{error}</p>}
           {room.notice && <p className="rounded-xl border border-cyan-300/30 bg-cyan-300/10 p-3 text-sm font-bold text-cyan-50">{room.notice}</p>}

@@ -1,4 +1,4 @@
-import { conditionalJsonResponse } from "@/lib/conditional-json";
+import { conditionalJsonResponse, conditionalVersionedJsonResponse } from "@/lib/conditional-json";
 import { actionRequiresDebugAccess, requirePlayerDebugAccess } from "@/lib/debug-access";
 import { gameApiAccessDeniedResponse } from "@/lib/game-access";
 import type { NigoichiRoomAction } from "@/lib/nigoichi";
@@ -14,7 +14,7 @@ import {
 } from "@/lib/nigoichi-room-store";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
 import { authenticatedRoomDraft } from "@/lib/online-room-input";
-import { requireAuthenticatedPlayer } from "@/lib/player-auth";
+import { requireAuthenticatedPlayer, requireAuthenticatedPlayerId } from "@/lib/player-auth";
 import { commonOnlineRoomErrorResponse } from "@/lib/online-room-route-errors";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 
@@ -25,7 +25,10 @@ function errorResponse(error: unknown) {
   if (error instanceof Error && error.message === "NIGOICHI_BAD_PASSPHRASE") return Response.json({ error: "Bad passphrase" }, { status: 401 });
   if (error instanceof Error && error.message === "NIGOICHI_ROOM_FULL") return Response.json({ error: "Room is full" }, { status: 409 });
   if (error instanceof Error && error.message === "NIGOICHI_NOT_ENOUGH_PLAYERS") return Response.json({ error: "Not enough players" }, { status: 409 });
-  if (error instanceof Error && error.message === "NIGOICHI_WORDS_UNAVAILABLE") return Response.json({ error: "Word pool is unavailable" }, { status: 503 });
+  if (error instanceof Error && error.message === "NIGOICHI_WORDS_UNAVAILABLE") return Response.json({
+    error: "General Game Poolから設定した難易度の単語を取得できませんでした。",
+    errorCode: "NIGOICHI_WORDS_UNAVAILABLE",
+  }, { status: 503 });
   if (error instanceof Error && error.message === "NIGOICHI_ROOM_IN_PROGRESS") return Response.json({ error: "An active game cannot be dissolved" }, { status: 409 });
   if (error instanceof Error && error.message === "NIGOICHI_PLAYER_ALREADY_ACTIVE") return Response.json({ error: "Finish or leave the current room before entering another room" }, { status: 409 });
   if (error instanceof Error && error.message === "NIGOICHI_INVALID_CLUE") return Response.json({ error: "Invalid clue" }, { status: 400 });
@@ -45,18 +48,17 @@ export async function GET(request: Request) {
   const code = url.searchParams.get("code")?.trim().toUpperCase() ?? "";
   const playerId = url.searchParams.get("playerId")?.trim() ?? "";
   try {
-    const session = await requireAuthenticatedPlayer();
-    const authenticatedPlayerId = session.id;
+    const authenticatedPlayerId = await requireAuthenticatedPlayerId();
     if (playerId && playerId !== authenticatedPlayerId) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
     if (code) {
       const room = await loadStoredNigoichiRoom(code);
       if (!room) return Response.json({ error: "Room not found" }, { status: 404 });
       if (!room.players.some((player) => player.id === authenticatedPlayerId)) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
-      return conditionalJsonResponse(request, { room: sanitizeNigoichiRoom(room, authenticatedPlayerId) });
+      return conditionalVersionedJsonResponse(request, `nigoichi:${room.code}:${room.revision}:${authenticatedPlayerId}`, () => ({ room: sanitizeNigoichiRoom(room, authenticatedPlayerId) }));
     }
     if (playerId) {
       const room = await loadNigoichiPlayerActiveRoom(authenticatedPlayerId);
-      return conditionalJsonResponse(request, { room: room ? sanitizeNigoichiRoom(room, authenticatedPlayerId) : null });
+      return room ? conditionalVersionedJsonResponse(request, `nigoichi:${room.code}:${room.revision}:${authenticatedPlayerId}`, () => ({ room: sanitizeNigoichiRoom(room, authenticatedPlayerId) })) : conditionalJsonResponse(request, { room: null });
     }
     return conditionalJsonResponse(request, await listJoinableNigoichiRooms(url.searchParams.get("cursor")));
   } catch (error) {

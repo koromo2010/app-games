@@ -29,40 +29,69 @@ import type { TahoiyaDifficulty, TahoiyaTopic, TahoiyaTopicGenerationStage } fro
 import { parseLlmJson } from "@/lib/llm-json";
 import { gameApiAccessDeniedResponse } from "@/lib/game-access";
 import { vocabularyDatabaseErrorCode } from "@/lib/vocabulary-postgres-store";
-import { parseTahoiyaCatalogTopicGeneration } from "@/lib/tahoiya-catalog-topic-generation";
+import {
+  describeTahoiyaCatalogTopicGenerationFailure,
+  isTahoiyaDictionaryStyleDefinition,
+  parseTahoiyaCatalogTopicGeneration,
+} from "@/lib/tahoiya-catalog-topic-generation";
 import { parseTahoiyaDifficultyScreening } from "@/lib/tahoiya-difficulty-screening";
+import {
+  pickTahoiyaDefinitionStyle,
+  tahoiyaDefinitionStyleRules,
+} from "@/lib/tahoiya-definition-length";
 
-const tahoiyaTopicPromptVersion = "tahoiya-effective-zipf-topic-v14";
+const tahoiyaTopicPromptVersion = "tahoiya-effective-zipf-topic-v18";
 const tahoiyaDifficultyScreeningPromptVersion = "tahoiya-difficulty-screening-v2";
 const tahoiyaGenerationCandidateLimit = 3;
 const tahoiyaScreeningBatchLimit = 3;
 export const maxDuration = 180;
-type DefinitionStyle = "brief" | "standard" | "detailed" | "long" | "extended" | "maximum";
 
-const definitionStyleRules: Record<DefinitionStyle, { max: number; instruction: string }> = {
-  brief: { max: 14, instruction: "10文字程度の短く端的な説明" },
-  standard: { max: 25, instruction: "20文字程度の標準的な説明" },
-  detailed: { max: 38, instruction: "30文字程度で特徴や用途を少し補った説明" },
-  long: { max: 46, instruction: "40文字程度で特徴を自然に補った説明" },
-  extended: { max: 55, instruction: "50文字程度で意味の理解に必要な情報を含めた説明" },
-  maximum: { max: 60, instruction: "55文字から60文字以内の詳しい説明" },
+const tahoiyaDefinitionJsonSchema = {
+  name: "tahoiya_catalog_definition",
+  strict: true,
+  schema: {
+    type: "object",
+    properties: {
+      sensitive: { type: "boolean" },
+      reading: { type: "string" },
+      realDefinition: { type: "string" },
+    },
+    required: ["sensitive", "reading", "realDefinition"],
+    additionalProperties: false,
+  },
 };
 
-function pickDefinitionStyle(): DefinitionStyle {
-  const weightedStyles: Array<{ style: DefinitionStyle; weight: number }> = [
-    { style: "brief", weight: 35 },
-    { style: "standard", weight: 28 },
-    { style: "detailed", weight: 20 },
-    { style: "long", weight: 10 },
-    { style: "extended", weight: 5 },
-    { style: "maximum", weight: 2 },
-  ];
-  let roll = Math.random() * 100;
-  for (const choice of weightedStyles) {
-    roll -= choice.weight;
-    if (roll < 0) return choice.style;
-  }
-  return "brief";
+function tahoiyaDifficultyScreeningJsonSchema(sourceIds: string[]) {
+  return {
+    name: "tahoiya_difficulty_screening",
+    strict: true,
+    schema: {
+      type: "object",
+      properties: {
+        items: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              sourceId: { type: "string", enum: sourceIds },
+              verdict: { type: "string", enum: ["known", "borderline", "ordinary-unknown", "almost-nobody-knows"] },
+              exclusionFlags: {
+                type: "array",
+                items: { type: "string", enum: ["sensitive", "university", "company", "place"] },
+              },
+              estimatedRecognitionPercent: { type: "number", minimum: 0, maximum: 100 },
+              confidence: { type: "number", minimum: 0, maximum: 100 },
+              reason: { type: "string" },
+            },
+            required: ["sourceId", "verdict", "exclusionFlags", "estimatedRecognitionPercent", "confidence", "reason"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["items"],
+      additionalProperties: false,
+    },
+  };
 }
 
 const fallbackTopics: TahoiyaTopic[] = [
@@ -316,12 +345,12 @@ function simplifyDefinition(value: unknown) {
   return firstSentence ? `${firstSentence}。` : "";
 }
 
-function parseTopic(text: string): TahoiyaTopic | null {
+function parseTopic(text: string, minimumLength = 4, maximumLength = 60): TahoiyaTopic | null {
     const parsed = parseLlmJson<Partial<TahoiyaTopic>>(text);
     if (!parsed) return null;
     const realDefinition = simplifyDefinition(parsed.realDefinition);
     const definitionLength = Array.from(realDefinition.replace(/。$/, "")).length;
-    if (!parsed.word || !realDefinition || definitionLength < 4 || definitionLength > 60) return null;
+    if (!parsed.word || !realDefinition || definitionLength < minimumLength || definitionLength > maximumLength || !isTahoiyaDictionaryStyleDefinition(realDefinition)) return null;
 
     return {
       word: String(parsed.word).trim(),
@@ -333,18 +362,18 @@ function parseTopic(text: string): TahoiyaTopic | null {
     };
 }
 
-function parseVerifiedTopic(text: string): TahoiyaTopic | null {
+function parseVerifiedTopic(text: string, minimumLength = 4, maximumLength = 60): TahoiyaTopic | null {
   const parsed = parseLlmJson<Partial<TahoiyaTopic> & { valid?: boolean }>(text);
   if (!parsed || parsed.valid !== true) return null;
-  return parseTopic(JSON.stringify(parsed));
+  return parseTopic(JSON.stringify(parsed), minimumLength, maximumLength);
 }
 
-function parseTopicCandidates(text: string) {
+function parseTopicCandidates(text: string, minimumLength = 4, maximumLength = 60) {
     const parsed = parseLlmJson<{ candidates?: unknown } & Partial<TahoiyaTopic>>(text);
     if (!parsed) return [];
     const rawCandidates = Array.isArray(parsed.candidates) ? parsed.candidates : [parsed];
     const candidates = rawCandidates
-      .map((candidate) => parseTopic(JSON.stringify(candidate)))
+      .map((candidate) => parseTopic(JSON.stringify(candidate), minimumLength, maximumLength))
       .filter((candidate): candidate is TahoiyaTopic => Boolean(candidate));
     return [...new Map(candidates.map((candidate) => [normalizeTopicWord(candidate.word), candidate])).values()].slice(0, 3);
 }
@@ -363,8 +392,8 @@ async function generateTopicFromCatalogWords(
 ) {
   if (candidates.length === 0) return null;
   for (const candidate of candidates) {
-    const definitionStyle = pickDefinitionStyle();
-    const definitionRule = definitionStyleRules[definitionStyle];
+    const definitionStyle = pickTahoiyaDefinitionStyle();
+    const definitionRule = tahoiyaDefinitionStyleRules[definitionStyle];
     const prompt = [
       `共通単語DBで選定済みの見出し語「${candidate.word}」に、国語辞典を使ったパーティーゲーム『たほい屋』の本物の説明を付けてください。`,
       "あなたの役割は、一般向けゲームに不適切なセンシティブ語かの判定と、センシティブでない場合の読み・正解文の作成だけです。",
@@ -373,13 +402,30 @@ async function generateTopicFromCatalogWords(
       candidate.reading
         ? `DBの読みは「${candidate.reading}」です。readingにはこの値をそのまま返してください。`
         : "readingには見出し語の読みをひらがなで書いてください。",
-      "sensitiveがfalseの場合、realDefinitionには意味だけを自然な日本語一文で書いてください。読み、語源、用例、括弧、複数の語義は含めないでください。",
-      `${definitionRule.instruction}を目安とし、最大60文字以内にしてください。自然な説明を優先してください。`,
+      "sensitiveがfalseの場合、realDefinitionには、その見出し語が何を指すかという語義だけを、国語辞典の語釈らしい自然な日本語一文で書いてください。読み、語源、用例、括弧、複数の語義は含めないでください。",
+      "文末は名詞止め、または「〜するもの」「〜をいう」などの常体にしてください。「です・ます」調は禁止です。",
+      "知名度、広く使われるという説明、名前としての普及、語の直訳、歴史や文献への登場、評価や感想は語義ではないため、文字数を増やす目的で加えないでください。",
+      `realDefinitionの目標は${definitionRule.instruction}です。これは単なる上限指定ではなく、自然に収める目標範囲です。`,
+      `${definitionRule.contentInstruction}ことで、文字数ではなく語義として必要な情報量を確保してください。`,
+      "同義反復、周知度、語源、歴史、用例、感想で文字数を埋めてはいけません。正確な語義だけでは目標範囲に自然に収まらない語なら、realDefinitionを空文字にしてこの候補を不採用にしてください。",
       "選定理由、出典、確信度、解説、候補一覧は不要です。",
       "JSONのみで返してください: {\"sensitive\":trueまたはfalse,\"reading\":\"...\",\"realDefinition\":\"...\"}",
     ].join("\n\n");
-    const generated = await generateGameLlmText(prompt, mode, { quality: "high" });
-    const parsed = parseTahoiyaCatalogTopicGeneration(generated.text, candidate, difficulty);
+    // This is a short, constrained dictionary response. High reasoning asks Groq
+    // for an 8,192-token budget and has produced HTTP 413 responses in production;
+    // it also makes OpenAI vulnerable to the 30-second high-quality timeout.
+    const generated = await generateGameLlmText(prompt, mode, {
+      quality: "standard",
+      responseJsonSchema: tahoiyaDefinitionJsonSchema,
+      timeoutMs: 20_000,
+    });
+    const parsed = parseTahoiyaCatalogTopicGeneration(
+      generated.text,
+      candidate,
+      difficulty,
+      definitionRule.min,
+      definitionRule.max,
+    );
     if (parsed.status !== "accepted") {
       emitObservabilityEvent(parsed.status === "unsafe" ? "info" : "warn", "ai.generation", {
         game: "tahoiya",
@@ -419,8 +465,8 @@ export async function generateTopic(
   retrievedFeedbackIds: string[],
   usedWords: string[],
 ) {
-  const definitionStyle = pickDefinitionStyle();
-  const definitionRule = definitionStyleRules[definitionStyle];
+  const definitionStyle = pickTahoiyaDefinitionStyle();
+  const definitionRule = tahoiyaDefinitionStyleRules[definitionStyle];
   const difficultyRules = difficulty === "extreme"
     ? [
         "今回は魔境モードです。難語好きや読書家でも意味を知らない可能性が高い、使用頻度が極端に低い見出し語だけを選んでください。",
@@ -439,7 +485,9 @@ export async function generateTopic(
     "3候補をすべて同種にせず、一般語、固有名詞、固有名詞ではないカタカナ語を各1候補ずつ出してください。差別語、性的または残虐な語は避けてください。",
     "realDefinitionには意味だけを書き、読み方、語源、用例、別名、漢字の説明を含めないでください。",
     "realDefinitionは括弧を使わず、一文にしてください。複数の意味を並べないでください。",
-    `今回は${definitionRule.instruction}を目安とし、${definitionRule.max}文字以内にしてください。意味を自然に説明できることを優先し、文字数を合わせるための不要な言い換えや情報追加はしないでください。`,
+    "国語辞典の語釈らしい常体にし、「です・ます」調、知名度、普及、語の直訳、歴史や文献への登場など、語義ではない説明を含めないでください。",
+    `realDefinitionの目標は${definitionRule.instruction}です。これは単なる上限指定ではなく、自然に収める目標範囲です。${definitionRule.contentInstruction}ことで、文字数ではなく語義として必要な情報量を確保してください。`,
+    "同義反復や語義ではない情報で文字数を埋めず、正確な語義だけでは目標範囲に自然に収まらない語は候補に含めないでください。",
     "readingは専用フィールドにだけ入れてください。noteは選定理由を短く書いてください。",
     "sourceDetailには、その語と語義を確認できる辞書名・辞典の種類・典拠など、確実な確認情報を短く書いてください。不確かな辞書名を創作しないでください。",
     "3候補は互いに異なる分野・字面・意味にし、最終校閲者が比較して最良の1つを選べるようにしてください。",
@@ -450,7 +498,8 @@ export async function generateTopic(
 
   const generated = await generateGameLlmText(prompt, mode, { quality: "high" });
   const blocked = new Set(usedWords.map(normalizeTopicWord));
-  const topics = parseTopicCandidates(generated.text).filter((candidate) => !blocked.has(normalizeTopicWord(candidate.word)));
+  const topics = parseTopicCandidates(generated.text, definitionRule.min, definitionRule.max)
+    .filter((candidate) => !blocked.has(normalizeTopicWord(candidate.word)));
   if (topics.length === 0) return null;
 
   const verificationPrompt = [
@@ -463,7 +512,7 @@ export async function generateTopic(
     "少しでも確信がなければvalidをfalseにしてください。推測で修正や補完をしないでください。",
     "実在・読み・語義・典拠に疑いがある候補は除外してください。複数が有効なら、一般的な大人が意味を知らず、字面だけでは意味を推測しにくく、偽説明を作りやすい候補を優先してください。",
     "固有名詞は現代人物・企業・商品ではないこと、カタカナ語は日本語で実際に用いられる見出し語であることも確認してください。",
-    `validがtrueの場合も、realDefinitionは意味だけの一文とし、${definitionRule.instruction}を目安に${definitionRule.max}文字以内にしてください。自然な説明を無理に引き延ばさず、読み方、語源、用例、別名、漢字の説明、括弧を含めないでください。`,
+    `validがtrueの場合も、realDefinitionは国語辞典の語釈らしい常体で意味だけの一文とし、${definitionRule.instruction}へ自然に収めてください。${definitionRule.contentInstruction}一方、「です・ます」調、知名度、普及、語の直訳、歴史や文献への登場、読み方、語源、用例、別名、漢字の説明、括弧、同義反復は含めないでください。正確な語義だけでは目標範囲に収まらない候補はvalidをfalseにしてください。`,
     "sourceDetailの辞書名や確認情報が不確か、または創作の可能性がある場合もvalidをfalseにしてください。",
     "JSONのみで返してください: {\"valid\":trueまたはfalse,\"word\":\"...\",\"reading\":\"...\",\"realDefinition\":\"...\",\"note\":\"...\",\"sourceDetail\":\"...\"}",
     `検証候補一覧: ${JSON.stringify(topics)}`,
@@ -473,7 +522,7 @@ export async function generateTopic(
     preferredProvider: independentReviewerProvider(generated.provider),
     excludedProviders: generated.attemptedProviders.filter((provider) => provider !== generated.provider),
   });
-  const verifiedTopic = parseVerifiedTopic(verified.text);
+  const verifiedTopic = parseVerifiedTopic(verified.text, definitionRule.min, definitionRule.max);
   const selectedTopic = verifiedTopic
     ? topics.find((candidate) => normalizeTopicWord(candidate.word) === normalizeTopicWord(verifiedTopic.word))
     : null;
@@ -518,7 +567,8 @@ async function screenDifficultyCandidates(
   ].join("\n\n");
   emitObservabilityEvent("info", "ai.generation", { game: "tahoiya", operation: "difficulty-screening", sourceCount: candidates.length, outcome: "started" });
   const screeningSources = compactCandidates.map((candidate, index) => ({ id: candidate.sourceId, wordId: candidates[index].id, word: candidate.word }));
-  let generated = await generateGameLlmText(prompt, mode, { quality: "standard", timeoutMs: 25_000 });
+  const responseJsonSchema = tahoiyaDifficultyScreeningJsonSchema(screeningSources.map((source) => source.id));
+  let generated = await generateGameLlmText(prompt, mode, { quality: "standard", responseJsonSchema, timeoutMs: 25_000 });
   let screened = parseTahoiyaDifficultyScreening(generated.text, screeningSources, difficulty);
   let totalLatencyMs = generated.latencyMs;
   if (screened.length !== candidates.length) {
@@ -536,6 +586,7 @@ async function screenDifficultyCandidates(
     ].join("\n\n");
     const retried = await generateGameLlmText(retryPrompt, mode, {
       quality: "standard",
+      responseJsonSchema,
       timeoutMs: 25_000,
       preferredProvider: independentReviewerProvider(generated.provider),
     });
@@ -596,10 +647,14 @@ export async function generateTahoiyaTopicResponse(
       });
     } catch (error) {
       emitObservabilityEvent("error", "ai.generation", { game: "tahoiya", operation: "difficulty-screening", outcome: "failed", errorCode: observabilityErrorCode(error), databaseCode: vocabularyDatabaseErrorCode(error) });
-      const message = error instanceof Error && error.message === "TAHOIYA_SCREENING_RESPONSE_INVALID"
-        ? "AIの審査結果を10語分読み取れませんでした。自動再審査後も形式が揃わなかったため、もう一度お試しください。"
-        : "候補10語の難易度先行審査に失敗しました。もう一度お試しください。";
-      return Response.json({ error: message }, { status: 503 });
+      if (error instanceof Error && error.message === "GAME_LLM_UNAVAILABLE") {
+        const failure = describeTahoiyaCatalogTopicGenerationFailure(error, difficulty);
+        return Response.json({ error: failure.message, errorCode: failure.errorCode }, { status: 503 });
+      }
+      const failure = error instanceof Error && error.message === "TAHOIYA_SCREENING_RESPONSE_INVALID"
+        ? { errorCode: "TAHOIYA_SCREENING_RESPONSE_INVALID", message: "LLMには接続できましたが、難易度の審査結果を10語分読み取れませんでした。自動再審査後も形式が揃わなかったため、もう一度お試しください。" }
+        : { errorCode: "TAHOIYA_SCREENING_FAILED", message: "候補10語の難易度先行審査に失敗しました。もう一度お試しください。" };
+      return Response.json({ error: failure.message, errorCode: failure.errorCode }, { status: 503 });
     }
   }
   const rememberExperience = async (topic: TahoiyaTopic) => {
@@ -659,7 +714,10 @@ export async function generateTahoiyaTopicResponse(
       }
       const definitionMode = mode ?? await resolveGameLlmMode();
       if (definitionMode === "local") {
-        return Response.json({ error: "正解文を生成できるAI APIがありません。" }, { status: 503 });
+        return Response.json({
+          error: "正解文を生成するLLM APIが設定されていません。",
+          errorCode: "TAHOIYA_LLM_NOT_CONFIGURED",
+        }, { status: 503 });
       }
       await reportProgress({ stage: "generating-definition" });
       const generatedTopic = await generateTopicFromCatalogWords(
@@ -669,7 +727,10 @@ export async function generateTahoiyaTopicResponse(
         retrievedFeedbackIds,
       );
       if (!generatedTopic) {
-        return Response.json({ error: `${tahoiyaDifficultyLabel(difficulty)}候補の読み・正解文を検証できませんでした。もう一度お試しください。` }, { status: 503 });
+        return Response.json({
+          error: `LLMには接続できましたが、${tahoiyaDifficultyLabel(difficulty)}候補の読み・正解文を検証できませんでした。もう一度お試しください。`,
+          errorCode: "TAHOIYA_LLM_RESPONSE_INVALID",
+        }, { status: 503 });
       }
       const topic = generatedTopic.topic;
       if (!topic.generation || !topic.reading) throw new Error("TAHOIYA_GENERATED_TOPIC_METADATA_MISSING");
@@ -695,7 +756,8 @@ export async function generateTahoiyaTopicResponse(
       errorCode: observabilityErrorCode(error),
       databaseCode: vocabularyDatabaseErrorCode(error),
     });
-    return Response.json({ error: `${tahoiyaDifficultyLabel(difficulty)}候補から正解文を生成できませんでした。もう一度お試しください。` }, { status: 503 });
+    const failure = describeTahoiyaCatalogTopicGenerationFailure(error, difficulty);
+    return Response.json({ error: failure.message, errorCode: failure.errorCode }, { status: 503 });
   }
 }
 

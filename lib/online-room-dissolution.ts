@@ -1,6 +1,5 @@
-import { type DissolvableGameId, canDissolveOnlineRoom } from "@/lib/room-dissolve-policy";
-import { releasePlayerActiveRoom } from "@/lib/player-active-room";
-import { redisCommand } from "@/lib/redis-store";
+import { type DissolvableGameId, canDissolveOnlineRoom } from "./room-dissolve-policy.ts";
+import { redisCommand } from "./redis-store.ts";
 
 type IndexedOnlineRoom = {
   code: string;
@@ -25,16 +24,33 @@ type IndexedRoomDissolutionOptions<Room extends IndexedOnlineRoom> = {
   loadRoom: (code: string) => Promise<Room | null>;
 };
 
+export async function deleteIndexedOnlineRoomStorage(options: {
+  roomCode: string;
+  roomKey: string;
+  roomIndexKey: string;
+  playerActiveRoomKeys: string[];
+}) {
+  const playerActiveRoomKeys = [...new Set(options.playerActiveRoomKeys.filter(Boolean))];
+  const keys = [options.roomKey, options.roomIndexKey, ...playerActiveRoomKeys];
+  await redisCommand<number>([
+    "EVAL",
+    "redis.call('DEL',KEYS[1]); redis.call('SREM',KEYS[2],ARGV[1]); for i=3,#KEYS do local current=redis.call('GET',KEYS[i]); if current and string.upper(current)==string.upper(ARGV[1]) then redis.call('DEL',KEYS[i]) end end; return 1",
+    String(keys.length),
+    ...keys,
+    options.roomCode,
+  ]);
+}
+
 async function releaseIndexedRoom<Room extends IndexedOnlineRoom>(
   room: Room,
   options: IndexedRoomDissolutionOptions<Room>,
 ) {
-  await redisCommand<number>(["DEL", options.roomKey(room.code)]);
-  await redisCommand<number>(["SREM", options.roomIndexKey, room.code]);
-  await Promise.all(room.players.map((player) => releasePlayerActiveRoom(
-    options.playerActiveRoomKey(player.id),
-    room.code,
-  )));
+  await deleteIndexedOnlineRoomStorage({
+    roomCode: room.code,
+    roomKey: options.roomKey(room.code),
+    roomIndexKey: options.roomIndexKey,
+    playerActiveRoomKeys: room.players.map((player) => options.playerActiveRoomKey(player.id)),
+  });
 }
 
 function assertRoomCanBeDissolved<Room extends IndexedOnlineRoom>(
@@ -61,6 +77,17 @@ export async function dissolveHostedIndexedOnlineRooms<Room extends IndexedOnlin
   authenticatedHostId: string,
   options: IndexedRoomDissolutionOptions<Room>,
 ) {
+  const activeCode = await redisCommand<string | null>(["GET", options.playerActiveRoomKey(authenticatedHostId)]);
+  if (activeCode) {
+    const activeRoom = await options.loadRoom(activeCode);
+    if (activeRoom?.hostId === authenticatedHostId) {
+      assertRoomCanBeDissolved(activeRoom, authenticatedHostId, options);
+      await releaseIndexedRoom(activeRoom, options);
+      return 1;
+    }
+  }
+
+  // Legacy rooms created before the active-room index still need a one-time fallback scan.
   const codes = await redisCommand<string[]>(["SMEMBERS", options.roomIndexKey]);
   const rooms = await Promise.all(codes.map(options.loadRoom));
   const targets: Room[] = [];

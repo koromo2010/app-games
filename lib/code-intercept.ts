@@ -1,21 +1,30 @@
 import type { GameDebugLogEntry } from "./game-debug-log.ts";
+import type { RoomLobbyReturnAction, RoomLobbyReturnState } from "./room-lobby-return.ts";
+import { normalizeCommonTimeLimit } from "./game-room-config.ts";
 import { onlineRoomPlayerLimits } from "./online-room-policy.ts";
 import { runtimeHyperparameterNumber } from "./runtime-hyperparameters-core.ts";
+import { commonGameTimeoutGraceMs } from "./game-timer/policy.ts";
 
 export const codeInterceptGameId = "code-intercept" as const;
 export const codeInterceptMinimumPlayers = 4;
 export const codeInterceptPlayerLimit = onlineRoomPlayerLimits.codeIntercept;
 export const codeInterceptTeamIds = ["red", "blue"] as const;
+export const codeInterceptWordDifficulties = ["easy", "normal", "hard"] as const;
 export const codeInterceptTimedPhases = ["code-length", "clue", "answer"] as const;
+export type CodeInterceptTimedPhase = (typeof codeInterceptTimedPhases)[number];
 export type CodeInterceptTeamId = (typeof codeInterceptTeamIds)[number];
+export type CodeInterceptWordDifficulty = (typeof codeInterceptWordDifficulties)[number];
 export type CodeLengthMode = "fixed" | "per-round";
 export type CodeRevealMode = "all" | "own-team";
+export type CodeInterceptTeamAssignmentMode = "manual" | "random";
 
 export const codeInterceptMinimumCardCount = 2;
 export const codeInterceptMaximumCardCount = 8;
 
 export const codeInterceptDefaults = {
   cardCount: 4,
+  wordDifficulty: "normal" as CodeInterceptWordDifficulty,
+  teamAssignmentMode: "manual" as CodeInterceptTeamAssignmentMode,
   codeLengthMode: "fixed" as CodeLengthMode,
   codeRevealMode: "all" as CodeRevealMode,
   fixedCodeLength: 3,
@@ -23,7 +32,8 @@ export const codeInterceptDefaults = {
   miscommunicationDamage: 1,
   interceptionDamage: 2,
   interceptionStartsAtRound: 2,
-  actionTimeLimitSeconds: 0,
+  clueTimeLimitSeconds: 0,
+  answerTimeLimitSeconds: 0,
 } as const;
 
 export type CodeInterceptPhase = "lobby" | "code-length" | "clue" | "answer" | "round-result" | "game-result";
@@ -57,6 +67,7 @@ export type CodeInterceptTeamRoundResult = {
   allyCorrect: boolean;
   enemyInterceptAnswer: number[] | null;
   enemyIntercepted: boolean;
+  timeoutDamage: number;
   miscommunicationDamage: number;
   interceptionDamage: number;
   totalDamage: number;
@@ -92,10 +103,13 @@ export type CodeInterceptRoom = {
   passphrase: string;
   phase: CodeInterceptPhase;
   players: CodeInterceptPlayer[];
+  lobbyReturn?: RoomLobbyReturnState;
   playerCapacity: number;
   gameNumber: number;
   roundNumber: number;
   cardCount: number;
+  wordDifficulty: CodeInterceptWordDifficulty;
+  teamAssignmentMode: CodeInterceptTeamAssignmentMode;
   codeLengthMode: CodeLengthMode;
   codeRevealMode: CodeRevealMode;
   fixedCodeLength: number;
@@ -103,7 +117,8 @@ export type CodeInterceptRoom = {
   miscommunicationDamage: number;
   interceptionDamage: number;
   interceptionStartsAtRound: number;
-  actionTimeLimitSeconds: number;
+  clueTimeLimitSeconds: number;
+  answerTimeLimitSeconds: number;
   phaseStartedAt: number | null;
   debugMode: boolean;
   debugReplayEnabled: boolean;
@@ -117,6 +132,7 @@ export type CodeInterceptRoom = {
   interceptAnswerProposals: Record<string, number[]>;
   allyAnswers: Partial<Record<CodeInterceptTeamId, number[]>>;
   interceptAnswers: Partial<Record<CodeInterceptTeamId, number[]>>;
+  timeoutPenaltyPhases: Partial<Record<CodeInterceptTeamId, CodeInterceptTimedPhase[]>>;
   answerReadyTeamIds?: CodeInterceptTeamId[];
   roundHistory: CodeInterceptRoundLog[];
   winner: CodeInterceptWinner;
@@ -136,17 +152,18 @@ export type CodeInterceptRoomChoice = {
   updatedAt: number;
 };
 
-export type CodeInterceptRoomAction =
+export type CodeInterceptRoomAction = RoomLobbyReturnAction
   | { type: "join-room"; actorId: string; player: CodeInterceptPlayer; passphrase: string }
   | { type: "leave-room"; actorId: string }
-  | { type: "set-team"; actorId: string; teamId: CodeInterceptTeamId }
+  | { type: "set-team"; actorId: string; playerId?: string; teamId: CodeInterceptTeamId }
   | { type: "set-debug"; actorId: string; enabled: boolean }
   | { type: "set-debug-replay"; actorId: string; enabled: boolean }
-  | { type: "set-config"; actorId: string; cardCount: number; codeLengthMode: CodeLengthMode; codeRevealMode: CodeRevealMode; fixedCodeLength?: number; actionTimeLimitSeconds: number }
+  | { type: "set-config"; actorId: string; cardCount: number; wordDifficulty?: CodeInterceptWordDifficulty; teamAssignmentMode: CodeInterceptTeamAssignmentMode; codeLengthMode: CodeLengthMode; codeRevealMode: CodeRevealMode; fixedCodeLength?: number; clueTimeLimitSeconds: number; answerTimeLimitSeconds: number }
   | { type: "expire-phase"; actorId: string; phaseStartedAt: number }
   | { type: "start-game"; actorId: string }
   | { type: "select-code-length"; actorId: string; playerId?: string; codeLength: number }
   | { type: "submit-clues"; actorId: string; playerId?: string; clues: string[] }
+  | { type: "submit-timeout-clues"; actorId: string; clues: string[] }
   | { type: "submit-ally-answer"; actorId: string; playerId?: string; answer: number[] }
   | { type: "submit-intercept-answer"; actorId: string; playerId?: string; answer: number[] }
   | { type: "next-round"; actorId: string }
@@ -182,9 +199,17 @@ export function isCodeRevealMode(value: unknown): value is CodeRevealMode {
   return value === "all" || value === "own-team";
 }
 
+export function isCodeInterceptTeamAssignmentMode(value: unknown): value is CodeInterceptTeamAssignmentMode {
+  return value === "manual" || value === "random";
+}
+
 export function normalizeCodeInterceptCardCount(value: unknown) {
   const count = typeof value === "number" && Number.isInteger(value) ? value : codeInterceptDefaults.cardCount;
   return Math.min(codeInterceptMaximumCardCount, Math.max(codeInterceptMinimumCardCount, count));
+}
+
+export function normalizeCodeInterceptWordDifficulty(value: unknown): CodeInterceptWordDifficulty {
+  return value === "easy" || value === "hard" ? value : "normal";
 }
 
 export function normalizeCodeInterceptCodeLength(value: unknown, cardCount: number) {
@@ -200,10 +225,40 @@ export function teamPlayers(room: Pick<CodeInterceptRoom, "players">, teamId: Co
   return room.players.filter((player) => player.teamId === teamId);
 }
 
+export function canSetCodeInterceptPlayerTeam(
+  room: Pick<CodeInterceptRoom, "phase" | "hostId" | "players" | "teamAssignmentMode">,
+  actorId: string,
+  playerId: string,
+) {
+  return room.phase === "lobby"
+    && room.teamAssignmentMode === "manual"
+    && room.players.some((player) => player.id === playerId)
+    && (actorId === playerId || actorId === room.hostId);
+}
+
 export function codeInterceptTeamsAreStartable(room: Pick<CodeInterceptRoom, "players">) {
   const red = teamPlayers(room, "red").length;
   const blue = teamPlayers(room, "blue").length;
   return red >= 2 && blue >= 2 && Math.abs(red - blue) <= 1;
+}
+
+export function codeInterceptRoomIsStartable(room: Pick<CodeInterceptRoom, "players" | "teamAssignmentMode">) {
+  return room.teamAssignmentMode === "random"
+    ? room.players.length >= codeInterceptMinimumPlayers
+    : codeInterceptTeamsAreStartable(room);
+}
+
+export function randomizeCodeInterceptPlayers(players: readonly CodeInterceptPlayer[], random = Math.random) {
+  const shuffled = players.map((player) => ({ ...player }));
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const target = Math.floor(random() * (index + 1));
+    [shuffled[index], shuffled[target]] = [shuffled[target], shuffled[index]];
+  }
+  const firstTeam: CodeInterceptTeamId = random() < 0.5 ? "red" : "blue";
+  return shuffled.map((player, index) => ({
+    ...player,
+    teamId: index % 2 === 0 ? firstTeam : otherCodeInterceptTeam(firstTeam),
+  }));
 }
 
 export function nextBalancedTeam(players: readonly Pick<CodeInterceptPlayer, "teamId">[]): CodeInterceptTeamId {
@@ -232,6 +287,12 @@ export function areValidCodeInterceptClues(clues: unknown, codeLength: number): 
   return Array.isArray(clues)
     && clues.length === codeLength
     && clues.every((clue) => typeof clue === "string" && clue.trim().length > 0 && clue.trim().length <= 40);
+}
+
+export function normalizeCodeInterceptTimeoutClues(clues: unknown, codeLength: number) {
+  if (!Array.isArray(clues) || clues.length !== codeLength) return null;
+  const normalized = clues.map((clue) => typeof clue === "string" ? clue.trim().slice(0, 40) : "");
+  return normalized.some(Boolean) ? normalized.map((clue) => clue || "時間切れ") : null;
 }
 
 export function codesEqual(left: readonly number[] | null | undefined, right: readonly number[] | null | undefined) {
@@ -288,19 +349,67 @@ export function isCodeInterceptTimedPhase(phase: CodeInterceptPhase): phase is (
   return codeInterceptTimedPhases.includes(phase as (typeof codeInterceptTimedPhases)[number]);
 }
 
-export function isCodeInterceptPhaseExpired(
-  room: Pick<CodeInterceptRoom, "phase" | "phaseStartedAt" | "actionTimeLimitSeconds">,
-  now = Date.now(),
+export function normalizeCodeInterceptTimeLimits(value: unknown) {
+  const source = value && typeof value === "object"
+    ? value as { clueTimeLimitSeconds?: unknown; answerTimeLimitSeconds?: unknown; actionTimeLimitSeconds?: unknown }
+    : {};
+  const legacyTimeLimitSeconds = normalizeCommonTimeLimit(source.actionTimeLimitSeconds);
+  return {
+    clueTimeLimitSeconds: source.clueTimeLimitSeconds === undefined
+      ? legacyTimeLimitSeconds
+      : normalizeCommonTimeLimit(source.clueTimeLimitSeconds),
+    answerTimeLimitSeconds: source.answerTimeLimitSeconds === undefined
+      ? legacyTimeLimitSeconds
+      : normalizeCommonTimeLimit(source.answerTimeLimitSeconds),
+  };
+}
+
+export function codeInterceptPhaseTimeLimitSeconds(
+  room: Pick<CodeInterceptRoom, "phase" | "clueTimeLimitSeconds" | "answerTimeLimitSeconds">,
 ) {
+  if (room.phase === "code-length" || room.phase === "clue") return room.clueTimeLimitSeconds;
+  if (room.phase === "answer") return room.answerTimeLimitSeconds;
+  return 0;
+}
+
+export function codeInterceptTimeoutGraceMs() {
+  return commonGameTimeoutGraceMs();
+}
+
+export function codeInterceptDraftScope(
+  room: Pick<CodeInterceptRoom, "code" | "gameNumber" | "roundNumber" | "phase" | "phaseStartedAt">,
+) {
+  return `${room.code}:${room.gameNumber}:${room.roundNumber}:${room.phase}:${room.phaseStartedAt ?? "none"}`;
+}
+
+export function isCodeInterceptPhaseExpired(
+  room: Pick<CodeInterceptRoom, "phase" | "phaseStartedAt" | "clueTimeLimitSeconds" | "answerTimeLimitSeconds">,
+  now = Date.now(),
+  graceMs = commonGameTimeoutGraceMs(),
+) {
+  const timeLimitSeconds = codeInterceptPhaseTimeLimitSeconds(room);
   return isCodeInterceptTimedPhase(room.phase)
-    && room.actionTimeLimitSeconds > 0
+    && timeLimitSeconds > 0
     && typeof room.phaseStartedAt === "number"
-    && now >= room.phaseStartedAt + room.actionTimeLimitSeconds * 1000;
+    && now >= room.phaseStartedAt + timeLimitSeconds * 1000 + graceMs;
 }
 
 export function expireCodeInterceptPhase(room: CodeInterceptRoom, now = Date.now()): CodeInterceptRoom {
   if (!isCodeInterceptPhaseExpired(room, now)) return room;
-  if (room.phase === "code-length") {
+  const timedPhase = room.phase;
+  if (!isCodeInterceptTimedPhase(timedPhase)) return room;
+  const timedOutTeamIds = codeInterceptTeamIds.filter((teamId) => {
+    if (timedPhase === "code-length") return !room.codeLengthChoices[teamId];
+    if (timedPhase === "clue") return !room.clues[teamId];
+    return !codeInterceptTeamHasSubmittedAnswers(room, teamId);
+  });
+  const timeoutPenaltyPhases = { ...room.timeoutPenaltyPhases };
+  if (timedPhase !== "answer") {
+    timedOutTeamIds.forEach((teamId) => {
+      timeoutPenaltyPhases[teamId] = [...new Set([...(timeoutPenaltyPhases[teamId] ?? []), timedPhase])];
+    });
+  }
+  if (timedPhase === "code-length") {
     const codeLengthChoices = { ...room.codeLengthChoices };
     codeInterceptTeamIds.forEach((teamId) => {
       if (codeLengthChoices[teamId]) return;
@@ -315,20 +424,21 @@ export function expireCodeInterceptPhase(room: CodeInterceptRoom, now = Date.now
     return {
       ...room,
       phase: "clue",
+      timeoutPenaltyPhases,
       codeLengthChoices,
       roundCodeLengths,
       secretCodes: Object.fromEntries(codeInterceptTeamIds.map((teamId) => [teamId, shuffledCode(room.cardCount, roundCodeLengths[teamId]!)])),
       phaseStartedAt: now,
     };
   }
-  if (room.phase === "clue") {
+  if (timedPhase === "clue") {
     const clues = { ...room.clues };
     codeInterceptTeamIds.forEach((teamId) => {
       clues[teamId] ??= Array.from({ length: codeLengthForTeam(room, teamId) }, () => "時間切れ");
     });
-    return { ...room, phase: "answer", clues, phaseStartedAt: now };
+    return { ...room, phase: "answer", clues, timeoutPenaltyPhases, phaseStartedAt: now };
   }
-  return finishCodeInterceptRound(room);
+  return finishCodeInterceptRound({ ...room, timeoutPenaltyPhases });
 }
 
 export function withCodeInterceptConsensusAnswer(answers: Partial<Record<CodeInterceptTeamId, number[]>>, teamId: CodeInterceptTeamId, consensus: number[] | null) {
@@ -356,9 +466,11 @@ export function finishCodeInterceptRound(room: CodeInterceptRoom): CodeIntercept
     const allyCorrect = codesEqual(allyAnswer, secretCode);
     const enemyIntercepted = room.roundNumber >= interceptionStartsAtRound
       && codesEqual(enemyInterceptAnswer, secretCode);
-    const miscommunicationDamage = allyCorrect ? 0 : room.miscommunicationDamage;
+    const timeoutPhases = room.timeoutPenaltyPhases[teamId] ?? [];
+    const timeoutDamage = timeoutPhases.length;
+    const miscommunicationDamage = allyCorrect || !allyAnswer ? 0 : room.miscommunicationDamage;
     const interceptionDamage = enemyIntercepted ? room.interceptionDamage : 0;
-    const totalDamage = miscommunicationDamage + interceptionDamage;
+    const totalDamage = timeoutDamage + miscommunicationDamage + interceptionDamage;
     return {
       teamId,
       clueGiverId: room.clueGiverIds[teamId] ?? "",
@@ -370,6 +482,7 @@ export function finishCodeInterceptRound(room: CodeInterceptRoom): CodeIntercept
       allyCorrect,
       enemyInterceptAnswer: enemyInterceptAnswer ? [...enemyInterceptAnswer] : null,
       enemyIntercepted,
+      timeoutDamage,
       miscommunicationDamage,
       interceptionDamage,
       totalDamage,

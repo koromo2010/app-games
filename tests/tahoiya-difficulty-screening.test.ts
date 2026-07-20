@@ -61,3 +61,45 @@ test("LLMのverdict境界がずれても認知率を正本として補正する"
   assert.equal(items[1].difficulty, "standard");
   assert.equal(items[1].accepted, false);
 });
+
+test("Groq系のJSON表記揺れを入力順と認知率を正本にして補正する", () => {
+  const groqStyleResponse = `審査結果です。\n${JSON.stringify([
+    { source_id: "word:1", exclusion_flags: "なし", estimated_recognition_percent: "70%", confidence_percent: "90" },
+    { source_id: "word:2", exclusion_flags: [], estimated_recognition_percent: "8", confidence: 0.8, rationale: "専門外では知られにくい。" },
+    { source_id: "word:3", exclusion_flags: null, estimated_recognition_percent: 1 },
+  ])}`;
+  const items = parseTahoiyaDifficultyScreening(groqStyleResponse, sources, "standard");
+  assert.equal(items.length, 3);
+  assert.deepEqual(items.map((item) => item.verdict), ["known", "ordinary-unknown", "almost-nobody-knows"]);
+  assert.deepEqual(items.map((item) => item.confidence), [90, 80, 50]);
+  assert.equal(items[2].reason, "一般成人の推定認知率に基づくAI判定。");
+});
+
+test("sourceIdが省略された応答は入力順で補い、有効なIDがある応答はIDで対応する", () => {
+  const withoutIds = { items: response.items.map((item) => {
+    const { sourceId, ...withoutSourceId } = item;
+    void sourceId;
+    return withoutSourceId;
+  }) };
+  assert.deepEqual(
+    parseTahoiyaDifficultyScreening(withoutIds, sources, "standard").map((item) => item.wordId),
+    ["id-1", "id-2", "id-3"],
+  );
+
+  const reordered = { items: [response.items[2], response.items[0], response.items[1]] };
+  assert.deepEqual(
+    parseTahoiyaDifficultyScreening(reordered, sources, "standard").map((item) => item.wordId),
+    ["id-1", "id-2", "id-3"],
+  );
+});
+
+test("未知の除外フラグや有効IDの重複は安全のため一括棄却する", () => {
+  const unknownFlag = {
+    items: response.items.map((item, index) => index === 1 ? { ...item, exclusionFlags: ["product"] } : item),
+  };
+  assert.deepEqual(parseTahoiyaDifficultyScreening(unknownFlag, sources, "standard"), []);
+  assert.deepEqual(
+    parseTahoiyaDifficultyScreening({ items: [response.items[0], response.items[0], response.items[2]] }, sources, "standard"),
+    [],
+  );
+});

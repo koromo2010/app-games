@@ -5,11 +5,14 @@ import {
   codeInterceptTeamIds,
   isCodeLengthMode,
   isCodeRevealMode,
+  isCodeInterceptTeamAssignmentMode,
   isCodeInterceptTeamId,
   isValidCodeInterceptAnswer,
   normalizeCodeInterceptCardCount,
   normalizeCodeInterceptCodeLength,
   normalizeCodeInterceptPlayerCapacity,
+  normalizeCodeInterceptTimeLimits,
+  normalizeCodeInterceptWordDifficulty,
   otherCodeInterceptTeam,
   type CodeInterceptPhase,
   type CodeInterceptPlayer,
@@ -17,12 +20,13 @@ import {
   type CodeInterceptRoundLog,
   type CodeInterceptTeam,
   type CodeInterceptTeamId,
+  type CodeInterceptTimedPhase,
   type CodeLengthMode,
   type TeamCodeLengthChoice,
 } from "@/lib/code-intercept";
 import { normalizeGameDebugLog } from "@/lib/game-debug-log";
-import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
 import { normalizeOnlineRoomCode } from "@/lib/online-room-input";
+import { normalizeRoomLobbyReturnState } from "@/lib/room-lobby-return";
 import { isAvatarColor, isAvatarImage } from "@/lib/player-session";
 
 function isPhase(value: unknown): value is CodeInterceptPhase {
@@ -132,6 +136,16 @@ function normalizeStringRecord(value: unknown) {
     : [])) as Partial<Record<CodeInterceptTeamId, string>>;
 }
 
+function normalizeTimeoutPenaltyPhases(value: unknown) {
+  const source = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  return Object.fromEntries(codeInterceptTeamIds.flatMap((teamId) => {
+    const phases = Array.isArray(source[teamId])
+      ? [...new Set(source[teamId].filter((phase): phase is CodeInterceptTimedPhase => phase === "code-length" || phase === "clue" || phase === "answer"))]
+      : [];
+    return phases.length > 0 ? [[teamId, phases]] : [];
+  })) as Partial<Record<CodeInterceptTeamId, CodeInterceptTimedPhase[]>>;
+}
+
 function normalizeRoundHistory(value: unknown, cardCount: number, fallbackMode: CodeLengthMode, fallbackLength: number): CodeInterceptRoundLog[] {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is CodeInterceptRoundLog => Boolean(
@@ -143,6 +157,7 @@ function normalizeRoundHistory(value: unknown, cardCount: number, fallbackMode: 
       ...team,
       codeLength: normalizeCodeInterceptCodeLength(team.codeLength ?? team.secretCode?.length ?? fallbackLength, cardCount),
       codeLengthSelectedByPlayerId: typeof team.codeLengthSelectedByPlayerId === "string" ? team.codeLengthSelectedByPlayerId : null,
+      timeoutDamage: typeof team.timeoutDamage === "number" && Number.isInteger(team.timeoutDamage) ? Math.max(0, Math.min(3, team.timeoutDamage)) : 0,
     })),
   })).slice(-100);
 }
@@ -178,10 +193,13 @@ export function normalizeCodeInterceptRoom(value: unknown): CodeInterceptRoom | 
     passphrase: typeof parsed.passphrase === "string" ? parsed.passphrase.slice(0, 40) : "",
     phase,
     players,
+    lobbyReturn: normalizeRoomLobbyReturnState(parsed.lobbyReturn, players),
     playerCapacity: normalizeCodeInterceptPlayerCapacity(parsed.playerCapacity, players.length),
     gameNumber: typeof parsed.gameNumber === "number" ? Math.max(1, Math.floor(parsed.gameNumber)) : 1,
     roundNumber: typeof parsed.roundNumber === "number" ? Math.max(1, Math.floor(parsed.roundNumber)) : 1,
     cardCount,
+    wordDifficulty: normalizeCodeInterceptWordDifficulty(parsed.wordDifficulty),
+    teamAssignmentMode: isCodeInterceptTeamAssignmentMode(parsed.teamAssignmentMode) ? parsed.teamAssignmentMode : codeInterceptDefaults.teamAssignmentMode,
     codeLengthMode,
     codeRevealMode: isCodeRevealMode(parsed.codeRevealMode) ? parsed.codeRevealMode : codeInterceptDefaults.codeRevealMode,
     fixedCodeLength,
@@ -189,7 +207,7 @@ export function normalizeCodeInterceptRoom(value: unknown): CodeInterceptRoom | 
     miscommunicationDamage: typeof parsed.miscommunicationDamage === "number" && Number.isInteger(parsed.miscommunicationDamage) ? Math.max(0, Math.min(10, parsed.miscommunicationDamage)) : codeInterceptDefaults.miscommunicationDamage,
     interceptionDamage: typeof parsed.interceptionDamage === "number" && Number.isInteger(parsed.interceptionDamage) ? Math.max(0, Math.min(10, parsed.interceptionDamage)) : codeInterceptDefaults.interceptionDamage,
     interceptionStartsAtRound: typeof parsed.interceptionStartsAtRound === "number" && Number.isInteger(parsed.interceptionStartsAtRound) ? Math.max(1, Math.min(10, parsed.interceptionStartsAtRound)) : codeInterceptDefaults.interceptionStartsAtRound,
-    actionTimeLimitSeconds: normalizeCommonTimeLimit(parsed.actionTimeLimitSeconds),
+    ...normalizeCodeInterceptTimeLimits(value),
     phaseStartedAt: typeof parsed.phaseStartedAt === "number" ? parsed.phaseStartedAt : null,
     debugMode: parsed.debugMode === true,
     debugReplayEnabled: parsed.debugReplayEnabled === true && parsed.debugMode === true,
@@ -203,6 +221,7 @@ export function normalizeCodeInterceptRoom(value: unknown): CodeInterceptRoom | 
     interceptAnswerProposals: normalizePlayerAnswerRecord(parsed.interceptAnswerProposals, players, clueGiverIds, cardCount, enemyCodeLengths),
     allyAnswers: normalizeNumberArrayRecord(parsed.allyAnswers, cardCount, roundCodeLengths),
     interceptAnswers: normalizeNumberArrayRecord(parsed.interceptAnswers, cardCount, enemyCodeLengths),
+    timeoutPenaltyPhases: normalizeTimeoutPenaltyPhases(parsed.timeoutPenaltyPhases),
     roundHistory: normalizeRoundHistory(parsed.roundHistory, cardCount, codeLengthMode, fixedCodeLength),
     winner,
     debugLog: normalizeGameDebugLog(parsed.debugLog),

@@ -12,12 +12,13 @@ import {
   type OnlineRoomSyncDiagnostics,
   type OnlineRoomSyncMode,
 } from "./online-room-sync-diagnostics";
+import {
+  onlineRoomFallbackInterval,
+  onlineRoomPollingDelay,
+  onlineRoomPollingJitter,
+} from "./online-room-polling-policy";
 
-export const onlineRoomPollingIntervals = {
-  realtime: 500,
-  active: 1000,
-  idle: 2000,
-} as const;
+export { onlineRoomPollingIntervals } from "./online-room-polling-policy";
 
 type OnlineRoomPollingOptions<Room> = {
   game: OnlineRoomRealtimeGame;
@@ -29,7 +30,7 @@ type OnlineRoomPollingOptions<Room> = {
   storageKey?: (code: string) => string;
 };
 
-/** Polls only while visible, refreshes on tab return, and optionally follows local cross-tab room events. */
+/** Uses WebSocket update hints when available and visible-only polling as its fallback. */
 export function useOnlineRoomPolling<Room>({
   game,
   roomCode,
@@ -56,7 +57,9 @@ export function useOnlineRoomPolling<Room>({
     let subscriptionTimer: number | undefined;
     let reconnectDelay: number = onlineRoomRealtimeTimings.initialReconnect;
     let realtimeAvailable = false;
+    let realtimeDisabled = false;
     let subscribed = false;
+    let consecutiveFailures = 0;
     let refreshInFlight = false;
     let refreshQueued = false;
     let diagnostics: OnlineRoomSyncDiagnostics = {
@@ -72,50 +75,57 @@ export function useOnlineRoomPolling<Room>({
       publishOnlineRoomSyncDiagnostics(diagnostics);
     };
 
-    const refresh = () => {
-      if (!active) return;
-      if (document.visibilityState !== "visible") return;
+    const refresh = async (): Promise<void> => {
+      if (!active || document.visibilityState !== "visible") return;
       if (refreshInFlight) {
         refreshQueued = true;
         return;
       }
       refreshInFlight = true;
       updateDiagnostics({ roomGetCount: diagnostics.roomGetCount + 1 });
-      void callbacks.current.fetchRoom(code)
-        .then((latest) => {
-          if (!active) return;
-          if (latest) callbacks.current.onRoom(latest);
-          else callbacks.current.onMissing();
-        })
-        .catch(() => undefined)
-        .finally(() => {
-          refreshInFlight = false;
-          if (!active || !refreshQueued) return;
+      try {
+        const latest = await callbacks.current.fetchRoom(code);
+        if (!active) return;
+        consecutiveFailures = 0;
+        if (latest) callbacks.current.onRoom(latest);
+        else callbacks.current.onMissing();
+      } catch {
+        consecutiveFailures += 1;
+      } finally {
+        refreshInFlight = false;
+        if (active && refreshQueued) {
           refreshQueued = false;
-          refresh();
-        });
+          await refresh();
+        }
+      }
     };
 
-    const scheduleFallbackPoll = () => {
-      if (!active || subscribed || fallbackTimer !== undefined) return;
-      fallbackTimer = window.setTimeout(() => {
-        fallbackTimer = undefined;
-        if (!active || subscribed) return;
-        refresh();
-        scheduleFallbackPoll();
-      }, callbacks.current.intervalMs);
-    };
-
-    const startFallbackPolling = (refreshImmediately = false) => {
-      if (subscribed) return;
-      scheduleFallbackPoll();
-      if (refreshImmediately) refresh();
-    };
+    const fallbackInterval = () => onlineRoomFallbackInterval(
+      callbacks.current.intervalMs,
+      realtimeDisabled,
+    );
 
     const stopFallbackPolling = () => {
       if (fallbackTimer === undefined) return;
       window.clearTimeout(fallbackTimer);
       fallbackTimer = undefined;
+    };
+
+    const scheduleFallbackPoll = () => {
+      if (!active || subscribed || fallbackTimer !== undefined || document.visibilityState !== "visible") return;
+      const delay = onlineRoomPollingJitter(onlineRoomPollingDelay(fallbackInterval(), consecutiveFailures));
+      fallbackTimer = window.setTimeout(() => {
+        fallbackTimer = undefined;
+        if (!active || subscribed) return;
+        void refresh().finally(scheduleFallbackPoll);
+      }, delay);
+    };
+
+    const startFallbackPolling = (refreshImmediately = false) => {
+      if (subscribed) return;
+      updateDiagnostics({ mode: realtimeDisabled ? "polling" : "reconnecting" });
+      scheduleFallbackPoll();
+      if (refreshImmediately) void refresh();
     };
 
     const stopReconciliation = () => {
@@ -126,7 +136,7 @@ export function useOnlineRoomPolling<Room>({
 
     const startReconciliation = () => {
       stopReconciliation();
-      reconciliationTimer = window.setInterval(refresh, onlineRoomRealtimeTimings.reconciliation);
+      reconciliationTimer = window.setInterval(() => void refresh(), onlineRoomRealtimeTimings.reconciliation);
     };
 
     const clearSubscriptionTimeout = () => {
@@ -136,14 +146,20 @@ export function useOnlineRoomPolling<Room>({
     };
 
     const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") refresh();
+      if (document.visibilityState !== "visible") {
+        stopFallbackPolling();
+        return;
+      }
+      consecutiveFailures = 0;
+      void refresh();
+      if (!subscribed) scheduleFallbackPoll();
     };
 
     const onStorage = (event: StorageEvent) => {
       const key = callbacks.current.storageKey?.(code);
       if (!key || event.key !== key) return;
       if (!event.newValue) callbacks.current.onMissing();
-      else refresh();
+      else void refresh();
     };
 
     const scheduleReconnect = () => {
@@ -183,18 +199,19 @@ export function useOnlineRoomPolling<Room>({
           if (message && typeof message === "object" && (message as { type?: unknown }).type === "subscribed") {
             if (socket !== candidate) return;
             subscribed = true;
+            consecutiveFailures = 0;
             reconnectDelay = onlineRoomRealtimeTimings.initialReconnect;
             clearSubscriptionTimeout();
             stopFallbackPolling();
             updateDiagnostics({ mode: "websocket" });
             startReconciliation();
-            refresh();
+            void refresh();
             return;
           }
           const update = parseOnlineRoomRevisionEvent(message);
           if (update?.game === game && update.code === code) {
             updateDiagnostics({ notificationCount: diagnostics.notificationCount + 1 });
-            refresh();
+            void refresh();
           }
         } catch {
           // Invalid realtime frames never replace the server-authoritative room state.
@@ -217,6 +234,7 @@ export function useOnlineRoomPolling<Room>({
 
     const checkRealtimeAvailability = async () => {
       if (!active || typeof WebSocket === "undefined") {
+        realtimeDisabled = true;
         updateDiagnostics({ mode: "polling" });
         startFallbackPolling();
         return;
@@ -232,12 +250,15 @@ export function useOnlineRoomPolling<Room>({
         });
         if (!active || controller.signal.aborted) return;
         if (response.status === 404) {
+          realtimeAvailable = false;
+          realtimeDisabled = true;
           updateDiagnostics({ mode: "polling" });
           startFallbackPolling();
           return;
         }
         if (!response.ok) throw new Error("Realtime availability check failed");
         realtimeAvailable = true;
+        realtimeDisabled = false;
         connectRealtime();
       } catch {
         if (!active || controller.signal.aborted) return;

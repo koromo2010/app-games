@@ -2,14 +2,16 @@ import type { Dispatch, SetStateAction } from "react";
 import type { TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomAction } from "@/lib/tahoiya-types";
 import { allRoomPlayersReturned } from "@/lib/room-lobby-return";
 import { applyTahoiyaSpecialAction } from "./tahoiya-room-adapter";
+import { nextMissingDefinitionIndex, playerDefinitionsComplete } from "@/lib/tahoiya-room-domain";
 import { getAnswerer, getDefinitionWriters } from "./use-tahoiya-view-model";
+import { syncTahoiyaDeviceTopicHistory } from "./tahoiya-device-topic-history";
 
 type RunAction = (action: TahoiyaRoomAction, persistDefaults?: boolean) => Promise<TahoiyaRoom | null>;
 type Setter = Dispatch<SetStateAction<string>>;
-type Params = { room: TahoiyaRoom | null; activePlayer: TahoiyaPlayer | null; playerId: string; isHost: boolean; isDebugMode: boolean; isAnswerer: boolean; isAllVoteMode: boolean; writingDone: boolean; votingDone: boolean; definitionInput: string; selectedOptionId: string; isStarting: boolean; isPolishing: boolean; runRoomAction: RunAction; setRoom: Dispatch<SetStateAction<TahoiyaRoom | null>>; setActivePlayerId: Setter; setDefinitionInput: Setter; setSelectedOptionId: Setter; setPolishMessage: Setter; setMessage: Setter; setIsStarting: Dispatch<SetStateAction<boolean>>; setIsPolishing: Dispatch<SetStateAction<boolean>> };
+type Params = { room: TahoiyaRoom | null; activePlayer: TahoiyaPlayer | null; playerId: string; isHost: boolean; isDebugMode: boolean; isAnswerer: boolean; isAllVoteMode: boolean; writingDone: boolean; votingDone: boolean; definitionIndex: number; definitionInput: string; selectedOptionId: string; isStarting: boolean; isPolishing: boolean; runRoomAction: RunAction; setRoom: Dispatch<SetStateAction<TahoiyaRoom | null>>; setActivePlayerId: Setter; setDefinitionIndex: Dispatch<SetStateAction<number>>; setDefinitionInput: Setter; setSelectedOptionId: Setter; setPolishMessage: Setter; setMessage: Setter; setIsStarting: Dispatch<SetStateAction<boolean>>; setIsPolishing: Dispatch<SetStateAction<boolean>> };
 
 export function useTahoiyaGameActions(params: Params) {
-  const clearRoundInput = () => { params.setDefinitionInput(""); params.setPolishMessage(""); params.setSelectedOptionId(""); };
+  const clearRoundInput = () => { params.setDefinitionIndex(0); params.setDefinitionInput(""); params.setPolishMessage(""); params.setSelectedOptionId(""); };
   const forceAdvanceToVoting = async () => { if (params.room?.phase !== "writing" || !params.isHost) return; await params.runRoomAction({ type: "advance-phase", actorId: params.playerId, round: params.room.round, target: "voting", force: params.isDebugMode }); params.setSelectedOptionId(""); };
   const forceAdvanceToResult = async () => { if (params.room?.phase === "voting" && params.isHost && params.isDebugMode) await params.runRoomAction({ type: "advance-phase", actorId: params.playerId, round: params.room.round, target: "result", force: true }); };
   const startRound = async () => {
@@ -18,7 +20,7 @@ export function useTahoiyaGameActions(params: Params) {
     if (!room.debugMode && room.players.length < 2) return params.setMessage("ゲーム開始には2人以上が必要です。");
     if (room.playMode === "single-answerer" && room.answererMode === "manual" && !room.players.some((player) => player.id === room.answererId)) return params.setMessage("回答者を指定するか、ランダムで選ぶ設定にしてください。");
     params.setIsStarting(true); params.setMessage("");
-    try { const started = await applyTahoiyaSpecialAction(room.code, { type: "start-round" }); params.setRoom(started); const writer = getDefinitionWriters(started)[0]; if (writer) params.setActivePlayerId(writer.id); clearRoundInput(); }
+    try { await syncTahoiyaDeviceTopicHistory().catch(() => false); const started = await applyTahoiyaSpecialAction(room.code, { type: "start-round" }); params.setRoom(started); const writer = getDefinitionWriters(started)[0]; if (writer) params.setActivePlayerId(writer.id); clearRoundInput(); }
     catch (error) {
       params.setMessage(error instanceof Error && error.message && error.message !== "ROOM_ACTION_FAILED"
         ? error.message
@@ -28,8 +30,23 @@ export function useTahoiyaGameActions(params: Params) {
   };
   const submitDefinition = async () => {
     const room = params.room; if (!room || !params.activePlayer || params.isAnswerer || params.writingDone || !params.definitionInput.trim()) return;
-    const saved = await params.runRoomAction({ type: "submit-definition", actorId: params.playerId, playerId: params.activePlayer.id, round: room.round, text: params.definitionInput.trim() }); if (!saved) return;
-    if (params.isDebugMode) { const next = saved.phase === "voting" ? saved.playMode === "all-vote" ? saved.players[0] : getAnswerer(saved) : getDefinitionWriters(saved).find((player) => !saved.fakeDefinitions[player.id]); if (next) params.setActivePlayerId(next.id); }
+    const submittedPlayerId = params.activePlayer.id;
+    const saved = await params.runRoomAction({ type: "submit-definition", actorId: params.playerId, playerId: submittedPlayerId, round: room.round, definitionIndex: params.definitionIndex, text: params.definitionInput.trim() }); if (!saved) return;
+    if (saved.phase === "writing") {
+      const nextIndex = nextMissingDefinitionIndex(saved, submittedPlayerId);
+      if (nextIndex !== null) {
+        params.setDefinitionIndex(nextIndex);
+      } else if (params.isDebugMode) {
+        const nextWriter = getDefinitionWriters(saved).find((player) => !playerDefinitionsComplete(saved, player.id));
+        if (nextWriter) {
+          params.setActivePlayerId(nextWriter.id);
+          params.setDefinitionIndex(nextMissingDefinitionIndex(saved, nextWriter.id) ?? 0);
+        }
+      }
+    } else if (params.isDebugMode) {
+      const next = saved.playMode === "all-vote" ? saved.players[0] : getAnswerer(saved);
+      if (next) params.setActivePlayerId(next.id);
+    }
     params.setDefinitionInput(""); params.setPolishMessage(""); if (saved.phase === "voting") params.setSelectedOptionId("");
   };
   const polishDefinition = async () => {

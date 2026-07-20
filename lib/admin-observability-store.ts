@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { getRedisConfig, redisCommand, redisPipeline } from "@/lib/redis-store";
-import type { ObservabilityEvent } from "@/lib/observability/types";
+import { getRedisConfig, redisCommand } from "./redis-store.ts";
+import type { ObservabilityEvent } from "./observability/types.ts";
 
 const issueKey = "admin-observability-issues:v1";
 const retentionMs = 7 * 24 * 60 * 60 * 1_000;
@@ -42,11 +42,16 @@ export async function recordAdminIssue(event: ObservabilityEvent) {
   if (!getRedisConfig() || (event.level !== "warn" && event.level !== "error")) return;
   const issue = storedIssue(event);
   try {
-    await redisPipeline([
-      ["ZADD", issueKey, String(issue.occurredAt), JSON.stringify(issue)],
-      ["ZREMRANGEBYSCORE", issueKey, "-inf", String(Date.now() - retentionMs)],
-      ["ZREMRANGEBYRANK", issueKey, "0", String(-(maximumStoredIssues + 1))],
-      ["EXPIRE", issueKey, String(Math.ceil(retentionMs / 1_000))],
+    await redisCommand<number>([
+      "EVAL",
+      "redis.call('ZADD',KEYS[1],ARGV[1],ARGV[2]); redis.call('ZREMRANGEBYSCORE',KEYS[1],'-inf',ARGV[3]); redis.call('ZREMRANGEBYRANK',KEYS[1],'0',ARGV[4]); redis.call('EXPIRE',KEYS[1],ARGV[5]); return 1",
+      "1",
+      issueKey,
+      String(issue.occurredAt),
+      JSON.stringify(issue),
+      String(issue.occurredAt - retentionMs),
+      String(-(maximumStoredIssues + 1)),
+      String(Math.ceil(retentionMs / 1_000)),
     ]);
   } catch {
     // Monitoring must never make a game request fail.

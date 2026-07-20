@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   defaultAvatarImage,
   fallbackAvatarColor,
@@ -10,6 +10,7 @@ import type { TahoiyaRoom, TahoiyaRoomChoice } from "@/lib/tahoiya-types";
 import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
 import { DebugModeButton } from "../components/DebugModeButton";
 import { GameAdSlot } from "../components/GameAdSlot";
+import { GameLoungeVisual } from "../components/GameLoungeVisual";
 import { PlayerTimeoutNotice } from "../components/PlayerTimeoutNotice";
 import { GameTopBanner, gameTopBannerOffsetClass } from "../components/GameTopBanner";
 import { GameTopMenu, gameTopBannerActionClass, gameTopBannerDangerActionClass, gameTopMenuItemClass } from "../components/GameTopMenu";
@@ -27,6 +28,7 @@ import { useTahoiyaDebugActions } from "./use-tahoiya-debug-actions";
 import { useTahoiyaRoomSession } from "./use-tahoiya-room-session";
 import { useTahoiyaRoomActions } from "./use-tahoiya-room-actions";
 import { TahoiyaEmptyState, TahoiyaScorePanel } from "./TahoiyaScorePanel";
+import { rememberTahoiyaDeviceTopic, syncTahoiyaDeviceTopicHistory } from "./tahoiya-device-topic-history";
 
 const tahoiyaFeedbackReasons = [
   { value: "too-difficult", label: "難しすぎる", rating: "bad" as const },
@@ -56,7 +58,9 @@ export function TahoiyaGame() {
   const [joinCode, setJoinCode] = useState("");
   const [joinableRooms, setJoinableRooms] = useState<TahoiyaRoomChoice[]>([]);
   const [activePlayerId, setActivePlayerId] = useState("");
+  const [definitionIndex, setDefinitionIndex] = useState(0);
   const [definitionInput, setDefinitionInput] = useState("");
+  const timeoutDefinitionKeyRef = useRef("");
   const [selectedOptionId, setSelectedOptionId] = useState("");
   const [isStarting, setIsStarting] = useState(false);
   const [isPolishingDefinition, setIsPolishingDefinition] = useState(false);
@@ -68,24 +72,34 @@ export function TahoiyaGame() {
   const [rulesOpen, setRulesOpen] = useState(false);
   const { now, resultReturnGate } = useTahoiyaRoomSession({ room, playerId, setRoom, setPlayerId, setActivePlayerId, setPlayerName, setAvatarColor, setAvatarImage, setMessage });
 
+  useEffect(() => {
+    if (!playerId) return;
+    void syncTahoiyaDeviceTopicHistory().catch(() => false);
+  }, [playerId]);
+
+  useEffect(() => {
+    if (!room?.word || room.topicSource === "pending") return;
+    void rememberTahoiyaDeviceTopic(room.word).catch(() => []);
+  }, [room?.topicSource, room?.word]);
+
   const isDebugMode = Boolean(room?.debugMode);
   const operationPlayerId = isDebugMode ? activePlayerId : playerId;
   const activePlayer = room?.players.find((player) => player.id === operationPlayerId) ?? null;
   const isHost = Boolean(room && playerId === room.hostId);
-  const { isAllVoteMode, answererCandidates, answerer, isAnswerer, hasActivePlayerSubmitted, hasActivePlayerVoted,
-    displayedVoteOptionId, definitionWriterCount, writingDone, voterTarget, votingDone, remainingSeconds,
-    nextWriter, nextVoter, sortedScores, roomConfigItems } = useTahoiyaViewModel(room, activePlayer, selectedOptionId, now);
+  const { isAllVoteMode, answererCandidates, answerer, isAnswerer, activePlayerDefinitions, hasActivePlayerSubmitted, hasActivePlayerVoted,
+    displayedVoteOptionId, definitionTargetCount, writingDone, voterTarget, votingDone, remainingSeconds,
+    nextWriter, nextVoter, sortedScores, roomConfigItems } = useTahoiyaViewModel(room, activePlayer, selectedOptionId, definitionIndex, now);
 
   const { runRoomAction, dissolveRoom } = useTahoiyaRoomActions({ room, playerId, markRoomDissolved: resultReturnGate.markRoomDissolved, setRoom, setMessage });
   const { refreshJoinableRooms, createRoom, joinRoom, addTestPlayer, removeWaitingPlayer, setDebugMode, setAnswererMode, setPlayMode,
-    setTopicDifficulty, setManualAnswerer, setShowRealDefinitionToWriters, setActionTimeLimit, testWordGeneration, testDifficultyScreening } = useTahoiyaLobbyActions({
+    setTopicDifficulty, setManualAnswerer, setShowRealDefinitionToWriters, setFakeDefinitionsPerPlayer, setActionTimeLimit, testWordGeneration, testDifficultyScreening } = useTahoiyaLobbyActions({
     room, playerId, playerName, avatarColor, avatarImage, passphrase, joinCode, runRoomAction,
     setRoom, setActivePlayerId, setJoinableRooms, setMessage,
   });
   const { forceAdvanceToVoting, forceAdvanceToResult, startRound, submitDefinition, polishDefinition, castVote, nextRound, returnToLobby } = useTahoiyaGameActions({
     room, activePlayer, playerId, isHost, isDebugMode, isAnswerer, isAllVoteMode, writingDone, votingDone,
-    definitionInput, selectedOptionId, isStarting, isPolishing: isPolishingDefinition, runRoomAction,
-    setRoom, setActivePlayerId, setDefinitionInput, setSelectedOptionId, setPolishMessage, setMessage,
+    definitionIndex, definitionInput, selectedOptionId, isStarting, isPolishing: isPolishingDefinition, runRoomAction,
+    setRoom, setActivePlayerId, setDefinitionIndex, setDefinitionInput, setSelectedOptionId, setPolishMessage, setMessage,
     setIsStarting, setIsPolishing: setIsPolishingDefinition,
   });
   const { autoFillTestDefinitions, autoFillTestVotes, skipDebugTopic, abortGame } = useTahoiyaDebugActions({
@@ -93,6 +107,13 @@ export function TahoiyaGame() {
     setRoom, setActivePlayerId, setDefinitionInput, setSelectedOptionId, setPolishMessage,
     setSkipReason, setSkipComment, setMessage, setIsSkipping: setIsSkippingTopic,
   });
+  useEffect(() => {
+    if (!room || room.phase !== "writing" || remainingSeconds !== 0 || !activePlayer || isAnswerer || writingDone || !definitionInput.trim()) return;
+    const key = `${room.code}:${room.round}:${room.phaseStartedAt}:${activePlayer.id}:${definitionIndex}`;
+    if (timeoutDefinitionKeyRef.current === key) return;
+    timeoutDefinitionKeyRef.current = key;
+    void submitDefinition();
+  }, [activePlayer, definitionIndex, definitionInput, isAnswerer, remainingSeconds, room, submitDefinition, writingDone]);
   return (
     <main className={`min-h-screen bg-slate-950 text-slate-950 ${gameTopBannerOffsetClass}`}>
       <GameTopBanner eyebrow="Dictionary bluffing" title="たほい屋">
@@ -127,6 +148,8 @@ export function TahoiyaGame() {
         disabled={Boolean(room?.debugMode)}
       />
 
+      {(!room || room.phase === "lobby") && <div className="mx-auto max-w-6xl px-4 pt-4"><GameLoungeVisual gameId="tahoiya" /></div>}
+
       <section className="mx-auto grid max-w-6xl gap-4 px-4 py-5 lg:grid-cols-[340px_1fr]">
         <aside className="space-y-4">
           <TahoiyaRoomPanel
@@ -135,10 +158,10 @@ export function TahoiyaGame() {
             answerer={answerer} answererCandidates={answererCandidates} roomConfigItems={roomConfigItems}
             activePlayer={activePlayer} activePlayerId={activePlayerId} playerName={playerName}
             isHost={isHost} isDebugMode={isDebugMode} isStarting={isStarting} message={message}
-            onPassphraseChange={setPassphrase} onJoinCodeChange={setJoinCode} onActivePlayerChange={setActivePlayerId}
+            onPassphraseChange={setPassphrase} onJoinCodeChange={setJoinCode} onActivePlayerChange={(value) => { setActivePlayerId(value); setDefinitionIndex(0); setDefinitionInput(room?.fakeDefinitions[value]?.[0] ?? ""); setPolishMessage(""); }}
             onCreateRoom={() => void createRoom()} onRefreshRooms={() => void refreshJoinableRooms()} onJoinRoom={(code) => void joinRoom(code)}
             onPlayModeChange={setPlayMode} onDifficultyChange={setTopicDifficulty} onAnswererModeChange={setAnswererMode}
-            onAnswererChange={setManualAnswerer} onShowDefinitionChange={setShowRealDefinitionToWriters} onTimeLimitChange={setActionTimeLimit}
+            onAnswererChange={setManualAnswerer} onShowDefinitionChange={setShowRealDefinitionToWriters} onFakeDefinitionsPerPlayerChange={setFakeDefinitionsPerPlayer} onTimeLimitChange={setActionTimeLimit}
             onTestWordGeneration={testWordGeneration} onTestDifficultyScreening={testDifficultyScreening} onAddTestPlayer={addTestPlayer} onStartRound={() => void startRound()} onDissolveRoom={() => void dissolveRoom()}
           />
 
@@ -156,10 +179,11 @@ export function TahoiyaGame() {
               />
 
               {room.phase === "writing" && <TahoiyaWritingPanel room={room} activePlayer={activePlayer} isAnswerer={isAnswerer}
-                submittedCount={submittedCount(room)} writerCount={definitionWriterCount} hasSubmitted={hasActivePlayerSubmitted} writingDone={writingDone}
+                submittedCount={submittedCount(room)} definitionTargetCount={definitionTargetCount} activePlayerDefinitions={activePlayerDefinitions} definitionIndex={definitionIndex} hasSubmitted={hasActivePlayerSubmitted} writingDone={writingDone}
                 definitionInput={definitionInput} polishMessage={polishMessage} isPolishing={isPolishingDefinition} isHost={isHost} isDebugMode={isDebugMode}
                 onDefinitionChange={(value) => { setDefinitionInput(value); setPolishMessage(""); }}
-                onEditSubmitted={() => setDefinitionInput(room.fakeDefinitions[activePlayer?.id ?? ""] ?? "")}
+                onDefinitionIndexChange={(index) => { setDefinitionIndex(index); setDefinitionInput(activePlayerDefinitions[index] ?? ""); setPolishMessage(""); }}
+                onEditSubmitted={() => setDefinitionInput(activePlayerDefinitions[definitionIndex] ?? "")}
                 onPolish={() => void polishDefinition()} onSubmit={submitDefinition} onAutoFill={autoFillTestDefinitions} onAdvance={forceAdvanceToVoting}
               />}
 

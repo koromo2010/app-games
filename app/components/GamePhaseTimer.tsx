@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { synchronizedNow } from "@/lib/server-clock";
 
 type GamePhaseTimerProps = {
   durationSeconds: number;
@@ -9,7 +10,7 @@ type GamePhaseTimerProps = {
 };
 
 function remainingSeconds(durationSeconds: number, startedAt: number) {
-  const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+  const elapsed = Math.floor((synchronizedNow() - startedAt) / 1000);
   return Math.max(0, durationSeconds - elapsed);
 }
 

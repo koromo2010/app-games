@@ -12,7 +12,8 @@ export function sanitizeTahoiyaRoom(room: TahoiyaRoom, playerId: string): Tahoiy
   );
   const submittedMarker = "__submitted__";
   const submittedDefinitions = Object.entries(room.fakeDefinitions)
-    .filter(([, text]) => text !== tahoiyaTimeoutSubmission);
+    .map(([authorId, definitions]) => [authorId, definitions.map((text) => text === tahoiyaTimeoutSubmission ? "" : text)] as const)
+    .filter(([, definitions]) => definitions.some(Boolean));
   const submittedVotes = Object.entries(room.votes)
     .filter(([, optionId]) => optionId !== tahoiyaTimeoutSubmission);
   return {
@@ -25,7 +26,10 @@ export function sanitizeTahoiyaRoom(room: TahoiyaRoom, playerId: string): Tahoiy
     topicSourceDetail: canSeeRealDefinition ? room.topicSourceDetail : "",
     fakeDefinitions: revealAll
       ? Object.fromEntries(submittedDefinitions)
-      : Object.fromEntries(submittedDefinitions.map(([authorId, text]) => [authorId, authorId === playerId ? text : submittedMarker])),
+      : Object.fromEntries(submittedDefinitions.map(([authorId, definitions]) => [
+        authorId,
+        authorId === playerId ? definitions : definitions.map((text) => text ? submittedMarker : ""),
+      ])),
     options: revealAll ? room.options : room.options.map((option) => ({ ...option, authorId: option.authorId === playerId ? playerId : null, isReal: false })),
     votes: revealAll
       ? Object.fromEntries(submittedVotes)

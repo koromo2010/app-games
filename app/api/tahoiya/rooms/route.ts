@@ -16,7 +16,7 @@ import {
 } from "@/lib/tahoiya-room-store";
 import type { TahoiyaRoomAction } from "@/lib/tahoiya-types";
 import type { TahoiyaTopic } from "@/lib/tahoiya-types";
-import { requireAuthenticatedPlayer } from "@/lib/player-auth";
+import { requireAuthenticatedPlayer, requireAuthenticatedPlayerId } from "@/lib/player-auth";
 import { commonOnlineRoomErrorResponse } from "@/lib/online-room-route-errors";
 import { authenticatedRoomDraft } from "@/lib/online-room-input";
 import { generateTahoiyaTopicResponse } from "@/app/api/tahoiya/topic/route";
@@ -24,7 +24,7 @@ import { withGameGenerationCache } from "@/lib/game-generation-cache";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
 import { actionRequiresDebugAccess, requirePlayerDebugAccess, roomRequestsDebugMode } from "@/lib/debug-access";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
-import { conditionalJsonResponse } from "@/lib/conditional-json";
+import { conditionalJsonResponse, conditionalVersionedJsonResponse } from "@/lib/conditional-json";
 import { gameApiAccessDeniedResponse } from "@/lib/game-access";
 
 function isStoreNotConfigured(error: unknown) {
@@ -44,21 +44,21 @@ export async function GET(request: Request) {
   const playerId = url.searchParams.get("playerId");
 
   try {
-    const player = await requireAuthenticatedPlayer();
-    if (playerId && playerId !== player.id) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
+    const authenticatedPlayerId = await requireAuthenticatedPlayerId();
+    if (playerId && playerId !== authenticatedPlayerId) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
     if (code) {
       const room = await loadAndReconcileStoredTahoiyaRoom(code);
       if (!room) {
         return Response.json({ error: "Room not found" }, { status: 404 });
       }
 
-      if (!room.players.some((item) => item.id === player.id)) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
-      return conditionalJsonResponse(request, { room: sanitizeTahoiyaRoom(room, player.id) });
+      if (!room.players.some((item) => item.id === authenticatedPlayerId)) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
+      return conditionalVersionedJsonResponse(request, `tahoiya:${room.code}:${room.revision}:${authenticatedPlayerId}`, () => ({ room: sanitizeTahoiyaRoom(room, authenticatedPlayerId) }));
     }
 
     if (playerId) {
-      const room = await loadStoredTahoiyaPlayerActiveRoom(player.id);
-      return conditionalJsonResponse(request, { room: room ? sanitizeTahoiyaRoom(room, player.id) : null });
+      const room = await loadStoredTahoiyaPlayerActiveRoom(authenticatedPlayerId);
+      return room ? conditionalVersionedJsonResponse(request, `tahoiya:${room.code}:${room.revision}:${authenticatedPlayerId}`, () => ({ room: sanitizeTahoiyaRoom(room, authenticatedPlayerId) })) : conditionalJsonResponse(request, { room: null });
     }
 
     const page = await listStoredJoinableTahoiyaRooms(url.searchParams.get("cursor"));
@@ -191,12 +191,15 @@ export async function PATCH(request: Request) {
               await updateStoredTahoiyaTopicGeneration(code, generation.generationId, progress);
             },
           );
-          return { status: response.status, body: await response.json() as TahoiyaTopic & { error?: string } };
+          return { status: response.status, body: await response.json() as TahoiyaTopic & { error?: string; errorCode?: string } };
         }, { shouldCache: (result) => result.status < 400 });
         const topic = generated.body;
         if (generated.status >= 400 || !topic.word || !topic.realDefinition) {
           telemetry.reject("room.command", generated.status, logFields);
-          return Response.json({ error: topic.error || "Topic generation failed" }, { status: generated.status });
+          return Response.json({
+            error: topic.error || "Topic generation failed",
+            errorCode: topic.errorCode,
+          }, { status: generated.status });
         }
         await updateStoredTahoiyaTopicGeneration(code, generation.generationId, { stage: "finalizing" });
         const room = await startStoredTahoiyaRound(code, player.id, topic, generation.generationId);

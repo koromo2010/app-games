@@ -2,6 +2,7 @@ import { normalizeGameDebugLog } from "./game-debug-log.ts";
 import { normalizeOnlineRoomCode } from "./online-room-input.ts";
 import { normalizePlayerTimeoutFields } from "./player-timeout-policy.ts";
 import { isAvatarColor, isAvatarImage } from "./player-session.ts";
+import { normalizeRoomLobbyReturnState } from "./room-lobby-return.ts";
 import {
   defaultHodoaiScoring,
   hodoaiTechnicalPlayerLimit,
@@ -161,6 +162,7 @@ export function normalizeHodoaiRoom(value: unknown): HodoaiRoom | null {
     passphrase: typeof parsed.passphrase === "string" ? parsed.passphrase.slice(0, 40) : "",
     phase: isPhase(parsed.phase) ? parsed.phase : "lobby",
     players,
+    lobbyReturn: normalizeRoomLobbyReturnState(parsed.lobbyReturn, players),
     ...timeoutFields,
     gameNumber: typeof parsed.gameNumber === "number" ? Math.max(1, Math.floor(parsed.gameNumber)) : 1,
     ...config,
@@ -184,4 +186,3 @@ export function normalizeHodoaiRoom(value: unknown): HodoaiRoom | null {
     updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : Date.now(),
   };
 }
-

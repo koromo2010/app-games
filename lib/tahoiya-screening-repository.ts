@@ -71,7 +71,7 @@ export async function listUnscreenedTahoiyaWordCandidates(limit = 500) {
       AND word.effective_zipf < 3
       AND screening.word_id IS NULL
       AND topic.id IS NULL
-    ORDER BY word.updated_at DESC
+    ORDER BY RANDOM()
     LIMIT ${safeLimit}
   ` as Array<{
     id: string;

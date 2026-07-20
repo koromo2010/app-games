@@ -15,6 +15,7 @@ export const runtimeHyperparameterDefinitions = [
   { id: "common-replay-favorites", defaultValue: 10, minimum: 1, maximum: 100, step: 1, unit: "件", applyMode: "immediate", environmentName: "GAME_REPLAY_FAVORITE_LIMIT" },
   { id: "common-storage-alert", defaultValue: 80, minimum: 1, maximum: 100, step: 1, unit: "%", applyMode: "immediate", environmentName: "STORAGE_ALERT_THRESHOLD_PERCENT" },
   { id: "wordwolf-pair-cooldown", defaultValue: 30, minimum: 1, maximum: 3650, step: 1, unit: "日", applyMode: "immediate", environmentName: "WORDWOLF_PAIR_COOLDOWN_DAYS" },
+  { id: "tahoiya-definition-median", defaultValue: 30, minimum: 10, maximum: 50, step: 10, unit: "文字帯", applyMode: "next-game" },
   { id: "tahoiya-correct-points", defaultValue: 1, minimum: 0, maximum: 10, step: 1, unit: "点/票", applyMode: "next-game" },
   { id: "tahoiya-fooled-points", defaultValue: 1, minimum: 0, maximum: 10, step: 1, unit: "点/票", applyMode: "next-game" },
   { id: "northern-hand", defaultValue: 7, minimum: 3, maximum: 12, step: 1, unit: "枚", applyMode: "next-game" },

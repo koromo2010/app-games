@@ -6,6 +6,10 @@ type RedisResponse<T> = {
   error?: string;
 };
 
+type RedisErrorResponse = {
+  error?: unknown;
+};
+
 type RedisConfig =
   | { transport: "rest"; url: string; token: string }
   | { transport: "socket"; url: string };
@@ -152,6 +156,32 @@ function stringifyRedisCommand(command: unknown[]) {
   return command.map((part) => typeof part === "string" ? part : String(part));
 }
 
+async function redisRequestError(response: Response) {
+  let providerMessage = "";
+  try {
+    const payload = await response.json() as RedisErrorResponse;
+    providerMessage = typeof payload.error === "string" ? payload.error.toLowerCase() : "";
+  } catch {
+    // The HTTP status remains useful even when the provider did not return JSON.
+  }
+
+  if (providerMessage.includes("max daily request limit exceeded") || providerMessage.includes("max requests limit exceeded")) {
+    return new Error("REDIS_STORE_REQUEST_LIMIT_EXCEEDED");
+  }
+  if (providerMessage.includes("max request size exceeded")) {
+    return new Error("REDIS_STORE_REQUEST_SIZE_EXCEEDED");
+  }
+  return new Error(`REDIS_STORE_REQUEST_FAILED_${response.status}`);
+}
+
+export function isRedisStoreUnavailableError(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  return error.message === "REDIS_STORE_REQUEST_TIMEOUT"
+    || error.message === "REDIS_STORE_REQUEST_FAILED"
+    || error.message === "REDIS_STORE_REQUEST_LIMIT_EXCEEDED"
+    || error.message.startsWith("REDIS_STORE_REQUEST_FAILED_");
+}
+
 export async function redisCommand<T>(command: unknown[]) {
   const config = getRedisConfig();
   if (!config) {
@@ -166,7 +196,7 @@ export async function redisCommand<T>(command: unknown[]) {
   const response = await fetchRedis(config.url, config.token, JSON.stringify(command), redisReadCommands.has(commandName(command)));
 
   if (!response.ok) {
-    throw new Error(`REDIS_STORE_REQUEST_FAILED_${response.status}`);
+    throw await redisRequestError(response);
   }
 
   const data = (await response.json()) as RedisResponse<T>;
@@ -190,7 +220,7 @@ export async function redisPipeline<T extends unknown[]>(commands: unknown[][]) 
   }
 
   const response = await fetchRedis(`${config.url}/pipeline`, config.token, JSON.stringify(commands), commandsAreSafeToRetry(commands));
-  if (!response.ok) throw new Error(`REDIS_STORE_REQUEST_FAILED_${response.status}`);
+  if (!response.ok) throw await redisRequestError(response);
 
   const data = (await response.json()) as RedisResponse<unknown>[];
   for (const item of data) {

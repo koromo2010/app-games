@@ -1,17 +1,18 @@
 import type { TahoiyaAnswererMode, TahoiyaDifficulty, TahoiyaPlayMode, TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomChoice } from "@/lib/tahoiya-types";
-import { tahoiyaDifficultyLabel, tahoiyaEffectiveZipfDescription } from "@/lib/tahoiya-difficulty";
+import { tahoiyaDifficultyCriterionDescription, tahoiyaDifficultyLabel } from "@/lib/tahoiya-difficulty";
 import { allRoomPlayersReturned } from "@/lib/room-lobby-return";
 import { DebugWordGenerationTest, type DebugWordGenerationResult } from "../components/DebugWordGenerationTest";
 import { RoomConfigSummary } from "../components/RoomConfigSummary";
 import { RoomTimeLimitControl } from "../components/RoomTimeLimitControl";
 import { cyanButtonClass, dangerButtonClass, inputClass, panelClass, primaryButtonClass, subtleButtonClass } from "../wordwolf/styles";
+import { tahoiyaFakeDefinitionsPerPlayerChoices } from "@/lib/tahoiya-definitions";
 
 type ConfigItem = { label: string; value: string };
-type Choice<T extends string | boolean> = { label: string; value: T; activeClass: string };
+type Choice<T extends string | boolean | number> = { label: string; value: T; activeClass: string };
 
-function ChoiceButtons<T extends string | boolean>({ value, choices, onChange }: { value: T; choices: Choice<T>[]; onChange: (value: T) => void }) {
+function ChoiceButtons<T extends string | boolean | number>({ value, choices, onChange }: { value: T; choices: Choice<T>[]; onChange: (value: T) => void }) {
   return (
-    <div className="mt-2 grid grid-cols-2 gap-2">
+    <div className={`mt-2 grid gap-2 ${choices.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
       {choices.map((choice) => (
         <button key={String(choice.value)} type="button" onClick={() => onChange(choice.value)} className={`rounded-lg border px-3 py-2 text-sm font-bold ${value === choice.value ? choice.activeClass : "border-slate-300 bg-white text-slate-700"}`}>
           {choice.label}
@@ -47,6 +48,7 @@ type Props = {
   onAnswererModeChange: (value: TahoiyaAnswererMode) => void;
   onAnswererChange: (value: string) => void;
   onShowDefinitionChange: (value: boolean) => void;
+  onFakeDefinitionsPerPlayerChange: (value: number) => void;
   onTimeLimitChange: (value: number) => void;
   onTestWordGeneration: () => Promise<DebugWordGenerationResult>;
   onTestDifficultyScreening: () => Promise<DebugWordGenerationResult>;
@@ -132,6 +134,9 @@ function HostSettings(props: Props & { room: TahoiyaRoom }) {
           <ChoiceButtons value={room.showRealDefinitionToWriters} onChange={props.onShowDefinitionChange} choices={[{ label: "見せる", value: true, activeClass: amberChoice }, { label: "見せない", value: false, activeClass: cyanChoice }]} />
         </Setting>
       </>}
+      <Setting title="1人あたりの偽説明数" description="各プレイヤーが作る偽説明の数です。複数にすると、すべてが別々の投票候補になります。">
+        <ChoiceButtons value={room.fakeDefinitionsPerPlayer} onChange={props.onFakeDefinitionsPerPlayerChange} choices={tahoiyaFakeDefinitionsPerPlayerChoices.map((count) => ({ label: `${count}つ`, value: count, activeClass: amberChoice }))} />
+      </Setting>
       <RoomTimeLimitControl label="制限時間" value={room.actionTimeLimitSeconds} onChange={props.onTimeLimitChange} />
     </fieldset>
   );
@@ -171,7 +176,7 @@ function Setting({ title, description, children }: { title: string; description?
 }
 
 function HostActions(props: Props & { room: TahoiyaRoom }) {
-  const difficulty = `${tahoiyaDifficultyLabel(props.room.topicDifficulty)}（${tahoiyaEffectiveZipfDescription(props.room.topicDifficulty)}）`;
+  const difficulty = `${tahoiyaDifficultyLabel(props.room.topicDifficulty)}（${tahoiyaDifficultyCriterionDescription(props.room.topicDifficulty)}）`;
   const allPlayersReturned = allRoomPlayersReturned(props.room.lobbyReturn, props.room.players);
   const waitingPlayerCount = props.room.players.length - (props.room.lobbyReturn?.returnedPlayerIds.length ?? 0);
   const generationInProgress = Boolean(props.room.topicGenerationProgress);

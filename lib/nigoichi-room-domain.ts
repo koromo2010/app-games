@@ -3,13 +3,9 @@ import {
   dealNigoichiRound,
   type NigoichiPlayer,
   type NigoichiRoom,
-} from "@/lib/nigoichi";
-import { listLocalWordWolfWords, listLocalWordWolfWordsByDifficulty } from "@/lib/wordwolf";
+} from "./nigoichi.ts";
 
-export function beginGame(room: NigoichiRoom, now = Date.now()) {
-  const preferredWords = listLocalWordWolfWordsByDifficulty(room.wordDifficulty);
-  const preferredKeys = new Set(preferredWords.map((word) => word.trim().toLocaleLowerCase("ja-JP")));
-  const wordPool = [...preferredWords, ...listLocalWordWolfWords().filter((word) => !preferredKeys.has(word.trim().toLocaleLowerCase("ja-JP")))];
+export function beginGame(room: NigoichiRoom, wordPool: readonly string[], now = Date.now()) {
   const dealt = dealNigoichiRound(room.players, wordPool, room.cardsPerPlayer);
   return {
     ...room,

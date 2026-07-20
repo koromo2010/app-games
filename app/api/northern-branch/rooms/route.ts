@@ -9,14 +9,14 @@ import {
   sanitizeNorthernRoom,
 } from "@/lib/northern-branch-room-store";
 import type { NorthernRoomAction } from "@/lib/northern-branch-types";
-import { requireAuthenticatedPlayer } from "@/lib/player-auth";
+import { requireAuthenticatedPlayer, requireAuthenticatedPlayerId } from "@/lib/player-auth";
 import { commonOnlineRoomErrorResponse } from "@/lib/online-room-route-errors";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
 import { actionRequiresDebugAccess, requirePlayerDebugAccess } from "@/lib/debug-access";
 import { gameApiAccessDeniedResponse } from "@/lib/game-access";
 import { authenticatedRoomDraft } from "@/lib/online-room-input";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
-import { conditionalJsonResponse } from "@/lib/conditional-json";
+import { conditionalJsonResponse, conditionalVersionedJsonResponse } from "@/lib/conditional-json";
 
 function errorResponse(error: unknown) {
   const common = commonOnlineRoomErrorResponse(error);
@@ -43,18 +43,17 @@ export async function GET(request: Request) {
   const code = url.searchParams.get("code")?.trim().toUpperCase() ?? "";
   const playerId = url.searchParams.get("playerId")?.trim() ?? "";
   try {
-    const session = await requireAuthenticatedPlayer();
-    const authenticatedPlayerId = session.id!;
+    const authenticatedPlayerId = await requireAuthenticatedPlayerId();
     if (playerId && playerId !== authenticatedPlayerId) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
     if (code) {
       const room = await loadStoredNorthernRoom(code);
       if (!room) return Response.json({ error: "Room not found" }, { status: 404 });
       if (!room.players.some((player) => player.id === authenticatedPlayerId)) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
-      return conditionalJsonResponse(request, { room: sanitizeNorthernRoom(room, authenticatedPlayerId) });
+      return conditionalVersionedJsonResponse(request, `northern-branch:${room.code}:${room.revision}:${authenticatedPlayerId}`, () => ({ room: sanitizeNorthernRoom(room, authenticatedPlayerId) }));
     }
     if (playerId) {
       const room = await loadNorthernPlayerActiveRoom(authenticatedPlayerId);
-      return conditionalJsonResponse(request, { room: room ? sanitizeNorthernRoom(room, authenticatedPlayerId) : null });
+      return room ? conditionalVersionedJsonResponse(request, `northern-branch:${room.code}:${room.revision}:${authenticatedPlayerId}`, () => ({ room: sanitizeNorthernRoom(room, authenticatedPlayerId) })) : conditionalJsonResponse(request, { room: null });
     }
     return conditionalJsonResponse(request, await listJoinableNorthernRooms(url.searchParams.get("cursor")));
   } catch (error) {

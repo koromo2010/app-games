@@ -1,23 +1,30 @@
 "use client";
 
 import { createPortal } from "react-dom";
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type Props = {
   open: boolean;
   href: string;
   title: string;
   onClose: () => void;
+  keepAlive?: boolean;
 };
 
 const overlayHistoryKey = "gameFieldsPageOverlay";
 
-export function FullScreenPageOverlay({ open, href, title, onClose }: Props) {
+export function FullScreenPageOverlay({ open, href, title, onClose, keepAlive = false }: Props) {
+  const [hasOpened, setHasOpened] = useState(open);
   const onCloseRef = useRef(onClose);
   const backButtonRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     onCloseRef.current = onClose;
   }, [onClose]);
+  useEffect(() => {
+    if (!open || hasOpened) return;
+    const timer = window.setTimeout(() => setHasOpened(true), 0);
+    return () => window.clearTimeout(timer);
+  }, [hasOpened, open]);
   const embeddedHref = useMemo(() => {
     const separator = href.includes("?") ? "&" : "?";
     return `${href}${separator}embedded=1`;
@@ -56,9 +63,9 @@ export function FullScreenPageOverlay({ open, href, title, onClose }: Props) {
     };
   }, [close, open]);
 
-  if (!open) return null;
+  if (!open && (!keepAlive || !hasOpened)) return null;
   return createPortal(
-    <div className="fixed inset-0 z-[10000] bg-slate-950/80 p-2 text-white backdrop-blur-sm sm:p-4" role="dialog" aria-modal="true" aria-label={title}>
+    <div className={open ? "fixed inset-0 z-[10000] bg-slate-950/80 p-2 text-white backdrop-blur-sm sm:p-4" : "hidden"} role="dialog" aria-modal={open ? true : undefined} aria-hidden={!open} aria-label={title}>
       <div className="mx-auto flex h-full w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-white/20 bg-slate-950 shadow-2xl">
         <header className="flex shrink-0 items-center justify-between gap-3 border-b border-white/15 bg-slate-900 px-3 py-2 sm:px-4">
           <button ref={backButtonRef} type="button" onClick={close} className="rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-sm font-bold text-white transition hover:bg-white/20">← 戻る</button>

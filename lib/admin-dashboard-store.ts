@@ -1,6 +1,6 @@
 import registry from "@/config/game-registry.json";
 import { loadAdminIssues } from "@/lib/admin-observability-store";
-import type { AdminDashboardSnapshot, AdminGameActivity } from "@/lib/admin-dashboard";
+import type { AdminDashboardCore, AdminDashboardDetails, AdminDashboardSnapshot, AdminGameActivity } from "@/lib/admin-dashboard";
 import { loadGameOperations } from "@/lib/game-operations-store";
 import { isMultiplayerRoomExpired } from "@/lib/multiplayer-room-lifecycle";
 import { getRedisConfig, redisCommand } from "@/lib/redis-store";
@@ -75,7 +75,7 @@ async function loadGameActivity(definition: typeof roomDefinitions[number]) {
   }
 }
 
-export async function loadAdminDashboardSnapshot(): Promise<AdminDashboardSnapshot> {
+export async function loadAdminDashboardCore(): Promise<AdminDashboardCore> {
   const startedAt = Date.now();
   let redisStatus: AdminDashboardSnapshot["services"]["redis"] = getRedisConfig() ? "healthy" : "not-configured";
   if (getRedisConfig()) {
@@ -86,16 +86,10 @@ export async function loadAdminDashboardSnapshot(): Promise<AdminDashboardSnapsh
     }
   }
 
-  const [activityWithIds, issues, samples, gameOperations, storage] = await Promise.all([
+  const [activityWithIds, gameOperations] = await Promise.all([
     redisStatus === "healthy" ? Promise.all(roomDefinitions.map(loadGameActivity)) : Promise.resolve([]),
-    redisStatus === "healthy" ? loadAdminIssues(100).catch(() => []) : Promise.resolve([]),
-    redisStatus === "healthy" ? loadWebVitalSamples(1_000).catch(() => []) : Promise.resolve([]),
-    loadGameOperations({ fresh: true }),
-    loadAdminStorageUsage().catch((): StorageUsageSnapshot => ({ checkedAt: Date.now(), threshold: 80, results: [], unavailable: ["Neon Postgres", "Upstash Redis", "Vercel Blob"] })),
+    loadGameOperations(),
   ]);
-  const cutoff24h = Date.now() - 24 * 60 * 60 * 1_000;
-  const recentIssues = issues.filter((issue) => issue.occurredAt >= cutoff24h);
-  const recentSamples = samples.filter((sample) => sample.occurredAt >= cutoff24h);
   const onlinePlayerIds = new Set(activityWithIds.flatMap((game) => game.playerIds));
   const games = activityWithIds.map((game) => ({
     gameId: game.gameId,
@@ -126,6 +120,21 @@ export async function loadAdminDashboardSnapshot(): Promise<AdminDashboardSnapsh
     onlinePlayers: onlinePlayerIds.size,
     rooms: { ...rooms, total: rooms.waiting + rooms.playing + rooms.finished },
     games,
+    gameOperations,
+  };
+}
+
+export async function loadAdminDashboardDetails(): Promise<AdminDashboardDetails> {
+  const redisAvailable = Boolean(getRedisConfig());
+  const [issues, samples, storage] = await Promise.all([
+    redisAvailable ? loadAdminIssues(100).catch(() => []) : Promise.resolve([]),
+    redisAvailable ? loadWebVitalSamples(1_000).catch(() => []) : Promise.resolve([]),
+    loadAdminStorageUsage().catch((): StorageUsageSnapshot => ({ checkedAt: Date.now(), threshold: 80, results: [], unavailable: ["Neon Postgres", "Upstash Redis", "Vercel Blob"] })),
+  ]);
+  const cutoff24h = Date.now() - 24 * 60 * 60 * 1_000;
+  const recentIssues = issues.filter((issue) => issue.occurredAt >= cutoff24h);
+  const recentSamples = samples.filter((sample) => sample.occurredAt >= cutoff24h);
+  return {
     issues: {
       errors24h: recentIssues.filter((issue) => issue.level === "error").length,
       warnings24h: recentIssues.filter((issue) => issue.level === "warn").length,
@@ -133,6 +142,10 @@ export async function loadAdminDashboardSnapshot(): Promise<AdminDashboardSnapsh
     },
     webVitals: { sampleCount24h: recentSamples.length, summaries: summarizeWebVitals(recentSamples) },
     storage,
-    gameOperations,
   };
+}
+
+export async function loadAdminDashboardSnapshot(): Promise<AdminDashboardSnapshot> {
+  const [core, details] = await Promise.all([loadAdminDashboardCore(), loadAdminDashboardDetails()]);
+  return { ...core, ...details };
 }

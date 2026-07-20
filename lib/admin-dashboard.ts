@@ -44,3 +44,6 @@ export type AdminDashboardSnapshot = {
   storage: StorageUsageSnapshot;
   gameOperations: GameOperation[];
 };
+
+export type AdminDashboardCore = Omit<AdminDashboardSnapshot, "issues" | "webVitals" | "storage">;
+export type AdminDashboardDetails = Pick<AdminDashboardSnapshot, "issues" | "webVitals" | "storage">;

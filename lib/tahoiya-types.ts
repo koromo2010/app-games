@@ -1,6 +1,6 @@
 import type { GameGenerationMeta } from "@/lib/game-ai-types";
 import type { PlayerTimeoutFields } from "./player-timeout-policy.ts";
-import type { RoomLobbyReturnState } from "./room-lobby-return.ts";
+import type { RoomLobbyReturnAction, RoomLobbyReturnState } from "./room-lobby-return.ts";
 
 export type TahoiyaPhase = "lobby" | "writing" | "voting" | "result";
 export type TahoiyaAnswererMode = "manual" | "random";
@@ -65,6 +65,7 @@ export type TahoiyaRoom = PlayerTimeoutFields & {
   topicDifficulty: TahoiyaDifficulty;
   answererMode: TahoiyaAnswererMode;
   showRealDefinitionToWriters: boolean;
+  fakeDefinitionsPerPlayer: number;
   actionTimeLimitSeconds: number;
   correctVotePoints: number;
   fooledVotePoints: number;
@@ -79,7 +80,7 @@ export type TahoiyaRoom = PlayerTimeoutFields & {
   topicSource: TahoiyaTopic["source"] | "pending";
   topicGeneration?: GameGenerationMeta;
   topicGenerationProgress?: TahoiyaTopicGenerationProgress;
-  fakeDefinitions: Record<string, string>;
+  fakeDefinitions: Record<string, string[]>;
   options: TahoiyaDefinitionOption[];
   votes: Record<string, string>;
   scores: Record<string, number>;
@@ -93,14 +94,13 @@ export type TahoiyaLobbyConfig = Pick<TahoiyaRoom,
   | "topicDifficulty"
   | "answererMode"
   | "showRealDefinitionToWriters"
+  | "fakeDefinitionsPerPlayer"
   | "actionTimeLimitSeconds"
   | "answererId"
 >;
 
-export type TahoiyaRoomAction =
+export type TahoiyaRoomAction = RoomLobbyReturnAction
   | { type: "abort-game"; actorId: string }
-  | { type: "confirm-lobby-return"; actorId: string }
-  | { type: "remove-waiting-player"; actorId: string; targetPlayerId: string }
   | { type: "recover-player"; actorId: string }
   | { type: "update-config"; actorId: string; config: Partial<TahoiyaLobbyConfig> }
   | { type: "set-debug"; actorId: string; enabled: boolean }
@@ -108,7 +108,7 @@ export type TahoiyaRoomAction =
   | { type: "debug-add-player"; actorId: string }
   | { type: "next-round"; actorId: string }
   | { type: "debug-replace-topic"; actorId: string; round: number; topic: TahoiyaTopic }
-  | { type: "submit-definition"; actorId: string; playerId: string; round: number; text: string }
+  | { type: "submit-definition"; actorId: string; playerId: string; round: number; definitionIndex: number; text: string }
   | { type: "cast-vote"; actorId: string; playerId: string; round: number; optionId: string }
   | { type: "advance-phase"; actorId: string; round: number; target: "voting" | "result"; force?: boolean }
   | { type: "debug-fill-definitions"; actorId: string; round: number }

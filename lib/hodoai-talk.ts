@@ -1,4 +1,5 @@
 import type { GameDebugLogEntry } from "@/lib/game-debug-log";
+import type { RoomLobbyReturnAction, RoomLobbyReturnState } from "./room-lobby-return.ts";
 import { projectOrderedGameResult } from "./game-result-presentation.ts";
 import { onlineRoomPlayerLimits } from "./online-room-policy.ts";
 import type { PlayerTimeoutFields } from "./player-timeout-policy.ts";
@@ -66,6 +67,7 @@ export type HodoaiRoom = HodoaiConfig & PlayerTimeoutFields & {
   passphrase: string;
   phase: HodoaiPhase;
   players: HodoaiPlayer[];
+  lobbyReturn?: RoomLobbyReturnState;
   gameNumber: number;
   round: number;
   theme: HodoaiTheme | null;
@@ -96,7 +98,7 @@ export type HodoaiRoomChoice = {
   updatedAt: number;
 };
 
-export type HodoaiRoomAction =
+export type HodoaiRoomAction = RoomLobbyReturnAction
   | { type: "join-room"; actorId: string; player: HodoaiPlayer; passphrase: string }
   | { type: "leave-room"; actorId: string }
   | { type: "recover-player"; actorId: string }
@@ -107,6 +109,7 @@ export type HodoaiRoomAction =
   | { type: "start-game"; actorId: string }
   | { type: "submit-clue"; actorId: string; round: number; cardId: string; text: string }
   | { type: "submit-clues"; actorId: string; round: number; clues: Record<string, string> }
+  | { type: "submit-timeout-clues"; actorId: string; round: number; clues: Record<string, string> }
   | { type: "reorder"; actorId: string; round: number; order: string[] }
   | { type: "score-round"; actorId: string; round: number; force?: boolean }
   | { type: "reset-game"; actorId: string }
@@ -338,3 +341,12 @@ export function hodoaiGameShareText(room: Pick<HodoaiRoom, "totalPoints" | "hist
 }
 
 export const clueHasNumber = (clue: string) => /[0-9０-９〇零一二三四五六七八九十百]/.test(clue);
+
+export function normalizeHodoaiClue(value: string) {
+  return value.trim().replace(/\s+/g, " ").slice(0, 40);
+}
+
+export function isValidHodoaiClue(value: string) {
+  const clue = normalizeHodoaiClue(value);
+  return clue.length > 0 && !clueHasNumber(clue);
+}

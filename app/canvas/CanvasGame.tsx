@@ -8,9 +8,11 @@ import { canvasPlayerLayerId, deleteCanvasRoomView, mutateCanvasRoom, type Publi
 import { useCanvasStrokeQueue } from "@/app/canvas/use-canvas-stroke-queue";
 import { useCanvasLobbyBoardSync, useCanvasRoomSync } from "@/app/canvas/use-canvas-sync";
 import { GamePlayerMenu } from "@/app/components/GamePlayerMenu";
+import { GameLoungeVisual } from "@/app/components/GameLoungeVisual";
 import { GameRulesDialog } from "@/app/components/GameRulesDialog";
 import { GameTopBanner, gameTopBannerOffsetClass } from "@/app/components/GameTopBanner";
 import { GameTopMenu, gameTopBannerActionClass, gameTopMenuItemClass } from "@/app/components/GameTopMenu";
+import { confirmRoomClose, confirmRoomLeave } from "@/app/components/room-navigation-confirmation";
 import { clampDrawingPoint, normalizeDrawingStrokes, type DrawingPoint, type DrawingStroke } from "@/lib/drawing-canvas";
 import { fallbackAvatarColor, readPlayerSession, type PlayerSession } from "@/lib/player-session";
 import type { CanvasLayer, CanvasLayerMode } from "@/lib/canvas-room";
@@ -306,6 +308,8 @@ export function CanvasGame() {
       <GamePlayerMenu id={session?.id} name={session?.name || "ゲスト"} avatarColor={session?.avatarColor || fallbackAvatarColor} avatarImage={session?.avatarImage} />
     </GameTopBanner>
 
+    {!room && <div className="mx-auto max-w-[1500px] px-3 pt-5 sm:px-6"><GameLoungeVisual gameId="canvas" /></div>}
+
     <section className="mx-auto grid max-w-[1500px] gap-4 px-3 py-5 sm:px-6 xl:grid-cols-[260px_minmax(0,1fr)] xl:items-start">
       <aside className="flex flex-wrap items-center gap-2 rounded-2xl border border-cyan-200 bg-white/90 p-3 shadow-lg xl:sticky xl:top-20 xl:flex-col xl:items-stretch">
         <strong className="mr-2 text-sm xl:mb-1 xl:text-base">キャンバスロビー</strong>
@@ -319,7 +323,7 @@ export function CanvasGame() {
         </> : <>
           <span className="rounded bg-slate-900 px-3 py-1 font-mono font-black tracking-widest text-white">{room.code}</span>
           <span className="text-sm font-bold">{room.players.length}人：{room.players.map((player) => player.name).join("、")}</span>
-          <button disabled={roomBusy} onClick={async () => { try { if (room.ownerId === session?.id) await deleteCanvasRoomView(room.code); else await roomRequest("PATCH", { code: room.code, action: { type: "leave" } }); setRoom(null); setActiveLayerId("base"); setHiddenLayerIds(new Set()); } catch (error) { window.alert(error instanceof Error ? error.message : "部屋から退出できませんでした"); } }} className="ml-auto rounded-lg border px-3 py-2 text-sm font-bold xl:ml-0">{room.ownerId === session?.id ? "部屋を閉じる" : "退出"}</button>
+          <button disabled={roomBusy} onClick={async () => { const isOwner = room.ownerId === session?.id; if (isOwner ? !confirmRoomClose() : !confirmRoomLeave()) return; try { if (isOwner) await deleteCanvasRoomView(room.code); else await roomRequest("PATCH", { code: room.code, action: { type: "leave" } }); setRoom(null); setActiveLayerId("base"); setHiddenLayerIds(new Set()); } catch (error) { window.alert(error instanceof Error ? error.message : "部屋から退出できませんでした"); } }} className="ml-auto rounded-lg border px-3 py-2 text-sm font-bold xl:ml-0">{room.ownerId === session?.id ? "部屋を閉じる" : "退出"}</button>
         </>}
       </aside>
       <div className="min-w-0 space-y-4">

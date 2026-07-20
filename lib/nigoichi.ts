@@ -1,5 +1,7 @@
 import type { GameDebugLogEntry } from "./game-debug-log.ts";
+import type { RoomLobbyReturnAction, RoomLobbyReturnState } from "./room-lobby-return.ts";
 import { normalizeCommonTimeLimit } from "./game-room-config.ts";
+import { commonGameTimeoutGraceMs } from "./game-timer/policy.ts";
 import { onlineRoomPlayerLimits } from "./online-room-policy.ts";
 
 export type NigoichiPlayer = {
@@ -102,6 +104,7 @@ export type NigoichiRoom = {
   passphrase: string;
   phase: NigoichiPhase;
   players: NigoichiPlayer[];
+  lobbyReturn?: RoomLobbyReturnState;
   playerCapacity: number;
   gameNumber: number;
   cardsPerPlayer: number;
@@ -137,7 +140,7 @@ export type NigoichiRoomChoice = {
   updatedAt: number;
 };
 
-export type NigoichiRoomAction =
+export type NigoichiRoomAction = RoomLobbyReturnAction
   | { type: "join-room"; actorId: string; player: NigoichiPlayer; passphrase: string }
   | { type: "leave-room"; actorId: string }
   | { type: "set-debug"; actorId: string; enabled: boolean }
@@ -146,6 +149,7 @@ export type NigoichiRoomAction =
   | { type: "start-game"; actorId: string }
   | { type: "expire-phase"; actorId: string; phaseStartedAt: number }
   | { type: "submit-associations"; actorId: string; playerId?: string; clues: string[] }
+  | { type: "submit-timeout-associations"; actorId: string; playerId?: string; clues: string[] }
   | { type: "submit-guess"; actorId: string; playerId?: string; number: number }
   | { type: "reset-game"; actorId: string }
   | { type: "abort-game"; actorId: string }
@@ -185,6 +189,13 @@ export function dealNigoichiRound(
 
 export function areValidNigoichiAssociations(clues: readonly string[], associationWordCount: number) {
   return clues.length === associationWordCount && clues.every((clue) => clue.trim().length > 0);
+}
+
+export function normalizeNigoichiTimeoutAssociations(clues: readonly unknown[], associationWordCount: number) {
+  return Array.from({ length: associationWordCount }, (_, index) => {
+    const raw = typeof clues[index] === "string" ? clues[index] : "";
+    return raw.trim().replace(/\s+/g, " ").slice(0, 30) || "未提出";
+  });
 }
 
 export function allNigoichiAssociationsSubmitted(room: Pick<NigoichiRoom, "players" | "associations">) {
@@ -282,7 +293,7 @@ export function isNigoichiPhaseExpired(room: NigoichiRoom, now = Date.now()) {
       : 0;
   return durationSeconds > 0
     && room.phaseStartedAt !== null
-    && now >= room.phaseStartedAt + durationSeconds * 1000;
+    && now >= room.phaseStartedAt + durationSeconds * 1000 + commonGameTimeoutGraceMs();
 }
 
 export function expireNigoichiPhase(room: NigoichiRoom, now = Date.now()) {

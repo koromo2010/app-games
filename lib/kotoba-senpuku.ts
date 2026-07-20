@@ -1,5 +1,6 @@
 import { normalizeCommonTimeLimit } from "./game-room-config.ts";
 import type { PlayerTimeoutFields } from "./player-timeout-policy.ts";
+import type { RoomLobbyReturnAction, RoomLobbyReturnState } from "./room-lobby-return.ts";
 
 export type KotobaSenpukuTheme = {
   id: string;
@@ -56,6 +57,7 @@ export type KotobaSenpukuRoom = KotobaSenpukuConfig & PlayerTimeoutFields & {
   passphrase: string;
   phase: KotobaSenpukuPhase;
   players: KotobaSenpukuPlayer[];
+  lobbyReturn?: RoomLobbyReturnState;
   gameNumber: number;
   round: number;
   theme: KotobaSenpukuTheme | null;
@@ -85,7 +87,7 @@ export type KotobaSenpukuRoomChoice = {
   updatedAt: number;
 };
 
-export type KotobaSenpukuRoomAction =
+export type KotobaSenpukuRoomAction = RoomLobbyReturnAction
   | { type: "join-room"; actorId: string; player: KotobaSenpukuPlayer; passphrase: string }
   | { type: "leave-room"; actorId: string }
   | { type: "recover-player"; actorId: string }

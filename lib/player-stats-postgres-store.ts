@@ -4,6 +4,7 @@ import type { PlayerGameResult, PlayerStatsGameType } from "@/lib/player-stats-s
 
 type StoredResultRow = { result: PlayerGameResult | string };
 type RatingStateRow = { player_id: string; rating: string | number | null; games_played: string | number };
+type PlayerRatingStateRow = RatingStateRow & { game_type: PlayerStatsGameType };
 export type PostgresRatingState = { rating: number; gamesPlayed: number };
 
 function normalizeStoredResult(value: PlayerGameResult | string) {
@@ -58,6 +59,26 @@ export async function loadPostgresRatingStates(gameType: PlayerStatsGameType, pl
     GROUP BY player_id
   `, [gameType, playerIds]) as RatingStateRow[];
   return new Map(rows.map((row) => [row.player_id, {
+    rating: Number(row.rating) || 0,
+    gamesPlayed: Number(row.games_played) || 0,
+  }]));
+}
+
+export async function loadPostgresPlayerRatingStates(playerId: string) {
+  await ensurePostgresSchema();
+  const sql = getPostgresClient();
+  const rows = await sql.query(`
+    SELECT
+      game_type,
+      player_id,
+      COUNT(*)::int AS games_played,
+      (ARRAY_AGG(NULLIF(result->>'ratingAfter', '')::int ORDER BY finished_at DESC)
+        FILTER (WHERE result ? 'ratingAfter'))[1] AS rating
+    FROM player_game_results
+    WHERE player_id = $1
+    GROUP BY game_type, player_id
+  `, [playerId]) as PlayerRatingStateRow[];
+  return new Map(rows.map((row) => [row.game_type, {
     rating: Number(row.rating) || 0,
     gamesPlayed: Number(row.games_played) || 0,
   }]));

@@ -15,17 +15,6 @@ export function tahoiyaDifficultyLabel(difficulty: TahoiyaDifficulty) {
   return difficulty === "extreme" ? "魔境" : "秘境";
 }
 
-export function tahoiyaEffectiveZipfDescription(difficulty: TahoiyaDifficulty) {
-  return difficulty === "extreme" ? "実質Zipf = 0" : "0 < 実質Zipf < 3";
-}
-
-export function matchesTahoiyaEffectiveZipf(zipf: number | null, difficulty: TahoiyaDifficulty) {
-  if (zipf === null || !Number.isFinite(zipf)) return false;
-  return difficulty === "extreme" ? zipf === 0 : zipf > 0 && zipf < 3;
-}
-
-export function tahoiyaEffectiveZipfQuery(difficulty: TahoiyaDifficulty) {
-  return difficulty === "extreme"
-    ? { effectiveZipfEquals: 0 }
-    : { effectiveZipfMinExclusive: 0, effectiveZipfMaxExclusive: 3 };
+export function tahoiyaDifficultyCriterionDescription(difficulty: TahoiyaDifficulty) {
+  return difficulty === "extreme" ? "推定認知率 0〜1%" : "推定認知率 1%超〜14%";
 }

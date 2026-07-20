@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
+import { DebugWordGenerationTest, type DebugWordGenerationResult } from "@/app/components/DebugWordGenerationTest";
 import { GameAdSlot } from "@/app/components/GameAdSlot";
+import { GameLoungeVisual } from "@/app/components/GameLoungeVisual";
 import { GamePlayerMenu } from "@/app/components/GamePlayerMenu";
 import { GamePhaseTimer } from "@/app/components/GamePhaseTimer";
 import { GameResultShareButton } from "@/app/components/GameResultShareButton";
@@ -12,22 +14,31 @@ import { GameTopBanner, gameTopBannerOffsetClass } from "@/app/components/GameTo
 import { GameTopMenu, gameTopBannerActionClass, gameTopBannerDangerActionClass, gameTopMenuItemClass } from "@/app/components/GameTopMenu";
 import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomResultActions } from "@/app/components/RoomResultActions";
+import { RoomLobbyReturnStatus } from "@/app/components/RoomLobbyReturnStatus";
 import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
+import { confirmRoomLeave } from "@/app/components/room-navigation-confirmation";
+import { useOnlineGameSessionRestore } from "@/app/hooks/use-online-game-session-restore";
 import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "@/app/hooks/use-online-room-polling";
+import { clientTimeoutClaimDelayMs } from "@/lib/game-timer/client-policy";
 import { useRoomResultReturnGate } from "@/app/hooks/use-room-result-return-gate";
+import { useRoomLobbyReturnConfirmation } from "@/app/hooks/use-room-lobby-return-confirmation";
 import { applyCodeInterceptRoomAction, codeInterceptRoomApi, createCodeInterceptRoom } from "@/app/code-intercept/code-intercept-room-api-client";
 import {
   codeInterceptAnswererIds,
   codeInterceptClueHistory,
+  codeInterceptDraftScope,
   codeLengthForTeam,
   codeInterceptDefaults,
+  codeInterceptPhaseTimeLimitSeconds,
   codeInterceptMaximumCardCount,
   codeInterceptMinimumCardCount,
   codeInterceptMinimumPlayers,
   codeInterceptPlayerLimit,
+  codeInterceptRoomIsStartable,
   codeInterceptShareText,
+  codeInterceptTimeoutGraceMs,
   codeInterceptTeamIds,
-  codeInterceptTeamsAreStartable,
+  codeInterceptWordDifficulties,
   isValidCodeInterceptAnswer,
   normalizeCodeInterceptCodeLength,
   otherCodeInterceptTeam,
@@ -38,9 +49,12 @@ import {
   type CodeInterceptRoomChoice,
   type CodeInterceptTeamId,
   type CodeInterceptTeamRoundResult,
+  type CodeInterceptWordDifficulty,
 } from "@/lib/code-intercept";
-import { OnlineRoomApiError, restoreOnlineRoom } from "@/lib/online-room-api-client";
-import { defaultAvatarImage, fallbackAvatarColor, isPlayerAuthenticated, loadPersistentPlayerSession, type PlayerSession } from "@/lib/player-session";
+import { OnlineRoomApiError } from "@/lib/online-room-api-client";
+import { synchronizedNow } from "@/lib/server-clock";
+import { allRoomPlayersReturned } from "@/lib/room-lobby-return";
+import { defaultAvatarImage, fallbackAvatarColor } from "@/lib/player-session";
 
 const lastRoomKey = "code-intercept-last-room";
 const ownerIdKey = "code-intercept-owner-id";
@@ -57,6 +71,17 @@ function getOwnerId() {
 function teamLabel(teamId: CodeInterceptTeamId) { return teamId === "red" ? "赤チーム" : "青チーム"; }
 function codeRevealLabel(room: Pick<CodeInterceptRoom, "codeRevealMode">) { return room.codeRevealMode === "all" ? "全員に公開" : "自チームだけ"; }
 function timeLimitLabel(seconds: number) { return seconds > 0 ? `${seconds}秒` : "なし"; }
+function isCodeInterceptWordDifficulty(value: unknown): value is CodeInterceptWordDifficulty {
+  return typeof value === "string" && codeInterceptWordDifficulties.some((difficulty) => difficulty === value);
+}
+function wordDifficultyLabel(difficulty: CodeInterceptWordDifficulty) {
+  return difficulty === "easy" ? "簡単" : difficulty === "hard" ? "難しい" : "普通";
+}
+function wordDifficultyMixLabel(difficulty: CodeInterceptWordDifficulty) {
+  if (difficulty === "easy") return "簡単100%";
+  if (difficulty === "hard") return "難しい50%・普通40%・簡単10%";
+  return "普通80%・簡単20%";
+}
 function teamStyle(teamId: CodeInterceptTeamId) {
   return teamId === "red"
     ? "border-rose-300/35 bg-rose-300/10 text-rose-50"
@@ -65,12 +90,41 @@ function teamStyle(teamId: CodeInterceptTeamId) {
 
 function apiMessage(error: unknown, fallback: string) {
   if (!(error instanceof OnlineRoomApiError)) return fallback;
+  const payloadErrorCode = error.payload && typeof error.payload === "object" && "errorCode" in error.payload
+    ? String((error.payload as { errorCode?: unknown }).errorCode ?? "")
+    : "";
   if (error.status === 401) return "合言葉が違うか、ログインの有効期限が切れています。";
   if (error.status === 403) return "この操作を行う権限がありません。";
   if (error.status === 404) return "部屋が見つかりません。";
   if (error.status === 409) return "チーム人数、部屋の状態、または同時更新を確認してもう一度お試しください。";
+  if (payloadErrorCode === "CODE_INTERCEPT_WORDS_UNAVAILABLE") return "単語DBのGeneral Game Poolから、設定した難易度の単語を取得できませんでした。";
   if (error.status === 503) return "部屋サーバーを利用できません。少し待ってお試しください。";
   return fallback;
+}
+
+async function sampleCodeInterceptDebugWords(roomCode: string): Promise<DebugWordGenerationResult> {
+  const response = await fetch(`/api/code-intercept/debug-words?roomCode=${encodeURIComponent(roomCode)}`, { cache: "no-store" });
+  const payload = await response.json().catch(() => null) as {
+    words?: unknown;
+    source?: unknown;
+    difficulty?: unknown;
+    error?: unknown;
+  } | null;
+  if (!response.ok) {
+    throw new Error(typeof payload?.error === "string" ? payload.error : "候補語を抽出できませんでした。");
+  }
+  const words = Array.isArray(payload?.words) ? payload.words.filter((word): word is string => typeof word === "string" && Boolean(word.trim())) : [];
+  if (words.length !== 10) throw new Error("候補語を10語揃えられませんでした。");
+  const difficulty = isCodeInterceptWordDifficulty(payload?.difficulty) ? payload.difficulty : null;
+  return {
+    fields: [
+      { label: "抽出数", value: `${words.length}語` },
+      { label: "抽選元", value: payload?.source === "general_game_pool" ? "General Game Pool（general_game_poolフラグ）" : "不明" },
+      { label: "難易度", value: difficulty ? `${wordDifficultyLabel(difficulty)}（${wordDifficultyMixLabel(difficulty)}）` : "不明" },
+    ],
+    items: words.map((word) => ({ title: word, fields: [] })),
+    notice: "実際のゲーム開始と同じGeneral Game Pool（general_game_poolフラグ）抽選を試しています。部屋、秘密カード、出題履歴は変更しません。",
+  };
 }
 
 function CodePicker({ value, cardCount, codeLength, disabled, onChange }: { value: number[]; cardCount: number; codeLength: number; disabled?: boolean; onChange: (value: number[]) => void }) {
@@ -92,8 +146,9 @@ function AnswerProposalList({ room, answererIds, proposals }: { room: CodeInterc
 }
 
 function PhaseTimer({ room }: { room: CodeInterceptRoom }) {
-  return room.phaseStartedAt && room.actionTimeLimitSeconds > 0
-    ? <GamePhaseTimer key={room.phaseStartedAt} durationSeconds={room.actionTimeLimitSeconds} startedAt={room.phaseStartedAt} label="制限時間" />
+  const durationSeconds = codeInterceptPhaseTimeLimitSeconds(room);
+  return room.phaseStartedAt && durationSeconds > 0
+    ? <GamePhaseTimer key={room.phaseStartedAt} durationSeconds={durationSeconds} startedAt={room.phaseStartedAt} label="制限時間" />
     : null;
 }
 
@@ -126,15 +181,30 @@ function AnswerEditor({ title, room, answererIds, proposals, submittedAnswer, dr
   </>;
 }
 
-function PlayerCard({ player, room, me, saving, onTeamChange }: { player: CodeInterceptPlayer; room: CodeInterceptRoom; me: string; saving: boolean; onTeamChange: (teamId: CodeInterceptTeamId) => void }) {
+function PlayerCard({ player, room, me }: { player: CodeInterceptPlayer; room: CodeInterceptRoom; me: string }) {
   const isMe = player.id === me;
   return <li className={`flex items-center gap-3 rounded-xl border p-3 ${teamStyle(player.teamId)}`}>
     <span className="h-9 w-9 shrink-0 rounded-full border border-white/40 bg-cover bg-center" style={{ backgroundColor: player.avatarColor || fallbackAvatarColor, backgroundImage: `url(${player.avatarImage || defaultAvatarImage})` }} />
     <span className="min-w-0 flex-1 truncate font-bold">{player.name}{isMe ? "（あなた）" : ""}</span>
     {player.isDummy && <span className="rounded bg-cyan-100 px-2 py-1 text-xs font-black text-cyan-950">ダミー</span>}
     {player.id === room.hostId && <span className="rounded bg-amber-300 px-2 py-1 text-xs font-black text-slate-950">ホスト</span>}
-    {isMe && room.phase === "lobby" && <button type="button" disabled={saving} onClick={() => onTeamChange(otherCodeInterceptTeam(player.teamId))} className="rounded-lg border border-white/20 px-2 py-1 text-xs font-black">{player.teamId === "red" ? "青へ" : "赤へ"}</button>}
   </li>;
+}
+
+function ManualTeamEditor({ room, me, saving, onTeamChange }: { room: CodeInterceptRoom; me: string; saving: boolean; onTeamChange: (playerId: string, teamId: CodeInterceptTeamId) => void }) {
+  return <section className="mt-4 rounded-xl border border-white/10 bg-slate-950/40 p-4">
+    <h3 className="font-black">手動チーム編成</h3>
+    <p className="mt-1 text-xs leading-5 text-slate-400">ホストは全員を編成できます。参加者は自分のチームだけ変更できます。</p>
+    <ul className="mt-3 grid gap-2 sm:grid-cols-2">{room.players.map((player) => {
+      const editable = room.hostId === me || player.id === me;
+      return <li key={player.id} className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] p-2">
+        <span className="min-w-0 flex-1 truncate text-sm font-bold">{player.name}{player.id === me ? "（あなた）" : ""}</span>
+        <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-white/15">
+          {codeInterceptTeamIds.map((teamId) => <button key={teamId} type="button" aria-pressed={player.teamId === teamId} disabled={saving || !editable || player.teamId === teamId} onClick={() => onTeamChange(player.id, teamId)} className={`px-3 py-2 text-xs font-black disabled:cursor-default ${player.teamId === teamId ? teamId === "red" ? "bg-rose-300 text-slate-950" : "bg-sky-300 text-slate-950" : "bg-slate-800 text-slate-200 disabled:opacity-40"}`}>{teamId === "red" ? "赤" : "青"}</button>)}
+        </div>
+      </li>;
+    })}</ul>
+  </section>;
 }
 
 function ResultCard({ result, room }: { result: CodeInterceptTeamRoundResult; room: CodeInterceptRoom }) {
@@ -145,8 +215,9 @@ function ResultCard({ result, room }: { result: CodeInterceptTeamRoundResult; ro
       <dt className="text-slate-400">正解暗号</dt><dd className="font-mono font-black">{result.secretCode.length > 0 ? result.secretCode.join("・") : "相手には非公開"}</dd>
       <dt className="text-slate-400">今回の桁数</dt><dd className="font-black">{result.codeLength}桁</dd>
       <dt className="text-slate-400">ヒント</dt><dd className="font-black">{result.clues.join("／")}</dd>
-      <dt className="text-slate-400">味方回答</dt><dd>{result.allyAnswer?.join("・") ?? (result.secretCode.length === 0 ? "相手には非公開" : "未回答")} <strong className={result.allyCorrect ? "text-emerald-200" : "text-rose-200"}>{result.allyCorrect ? "伝達成功" : `伝達失敗 −${result.miscommunicationDamage}`}</strong></dd>
+      <dt className="text-slate-400">味方回答</dt><dd>{result.allyAnswer?.join("・") ?? (result.secretCode.length === 0 ? "相手には非公開" : "未回答")} <strong className={result.allyCorrect ? "text-emerald-200" : "text-rose-200"}>{result.allyCorrect ? "伝達成功" : result.miscommunicationDamage > 0 ? `伝達失敗 −${result.miscommunicationDamage}` : "未回答・減点なし"}</strong></dd>
       <dt className="text-slate-400">{teamLabel(enemy)}の傍受</dt><dd>{result.enemyInterceptAnswer?.join("・") ?? (room.roundNumber === 1 ? "第1ラウンドはなし" : "未回答")} {room.roundNumber >= 2 && <strong className={result.enemyIntercepted ? "text-rose-200" : "text-emerald-200"}>{result.enemyIntercepted ? `傍受成功 −${result.interceptionDamage}` : "傍受回避"}</strong>}</dd>
+      {result.timeoutDamage > 0 && <><dt className="text-slate-400">時間切れ</dt><dd className="font-black text-rose-200">−{result.timeoutDamage}</dd></>}
       <dt className="font-bold">今回のダメージ</dt><dd className="font-black text-rose-200">−{result.totalDamage}</dd>
     </dl>
   </article>;
@@ -205,44 +276,27 @@ function RevealedSecretCards({ room }: { room: CodeInterceptRoom }) {
 }
 
 export function CodeInterceptGame() {
-  const [session, setSession] = useState<PlayerSession | null>(null);
   const [room, setRoom] = useState<CodeInterceptRoom | null>(null);
-  const [ready, setReady] = useState(false);
+  const { session, ready, isRestoringRoom } = useOnlineGameSessionRestore({ lastRoomKey, fetchActiveRoom: codeInterceptRoomApi.fetchActiveRoom, fetchRoom: codeInterceptRoomApi.fetchRoom, setRoom });
   const [error, setError] = useState("");
   const [passphrase, setPassphrase] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [choices, setChoices] = useState<CodeInterceptRoomChoice[]>([]);
   const [showChoices, setShowChoices] = useState(false);
   const [newPlayerCapacity, setNewPlayerCapacity] = useState(6);
-  const [clueDraftsByRound, setClueDraftsByRound] = useState<Record<number, string[]>>({});
-  const [allyDraftsByRound, setAllyDraftsByRound] = useState<Record<number, number[]>>({});
-  const [interceptDraftsByRound, setInterceptDraftsByRound] = useState<Record<number, number[]>>({});
+  const [clueDraftsByRound, setClueDraftsByRound] = useState<Record<string, string[]>>({});
+  const [allyDraftsByRound, setAllyDraftsByRound] = useState<Record<string, number[]>>({});
+  const [interceptDraftsByRound, setInterceptDraftsByRound] = useState<Record<string, number[]>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
+  const timeoutClueSubmissionKeyRef = useRef("");
   const resultReturnGate = useRoomResultReturnGate({ room, setRoom, playerId: session?.id ?? "", resultPhase: "game-result", onReturnUnavailable: () => setError("部屋に戻れません。解散されたか、参加情報が変更されています。") });
-
-  useEffect(() => {
-    let active = true;
-    if (!isPlayerAuthenticated()) {
-      const timer = window.setTimeout(() => { if (active) setReady(true); }, 0);
-      return () => { active = false; window.clearTimeout(timer); };
-    }
-    void loadPersistentPlayerSession().then(async (saved) => {
-      if (!active || !saved?.id) { if (active) setReady(true); return; }
-      setSession(saved);
-      const restored = await restoreOnlineRoom({ playerId: saved.id, lastCode: localStorage.getItem(lastRoomKey), fetchActiveRoom: codeInterceptRoomApi.fetchActiveRoom, fetchRoom: codeInterceptRoomApi.fetchRoom });
-      if (!active) return;
-      if (restored) { setRoom(restored); localStorage.setItem(lastRoomKey, restored.code); }
-      setReady(true);
-    }).catch(() => { if (active) setReady(true); });
-    return () => { active = false; };
-  }, []);
 
   const playerId = session?.id ?? "";
   useOnlineRoomPolling({
     game: "code-intercept",
     roomCode: playerId && !resultReturnGate.isRoomDissolved ? room?.code : null,
-    intervalMs: room?.phase === "lobby" ? onlineRoomPollingIntervals.idle : onlineRoomPollingIntervals.active,
+    intervalMs: room?.phase === "lobby" || room?.phase === "game-result" ? onlineRoomPollingIntervals.idle : onlineRoomPollingIntervals.active,
     fetchRoom: (code) => codeInterceptRoomApi.fetchRoom(code, playerId),
     onRoom: resultReturnGate.acceptIncomingRoom,
     onMissing: () => {
@@ -269,25 +323,26 @@ export function CodeInterceptGame() {
   const myAnswererIds = room && myTeamId ? codeInterceptAnswererIds(room, myTeamId) : [];
   const latestRound = room?.roundHistory.at(-1);
   const teamCounts = useMemo(() => room ? Object.fromEntries(codeInterceptTeamIds.map((id) => [id, teamPlayers(room, id).length])) as Record<CodeInterceptTeamId, number> : { red: 0, blue: 0 }, [room]);
-  const draftRound = room?.roundNumber ?? 1;
+  const draftRound = room ? codeInterceptDraftScope(room) : "";
   const clueDrafts = clueDraftsByRound[draftRound] ?? (myTeamId ? room?.clues[myTeamId] : undefined) ?? Array.from({ length: myCodeLength }, () => "");
   const allyDraft = allyDraftsByRound[draftRound] ?? room?.allyAnswerProposals[playerId] ?? (myTeamId ? room?.allyAnswers[myTeamId] : undefined) ?? [];
   const interceptDraft = interceptDraftsByRound[draftRound] ?? room?.interceptAnswerProposals[playerId] ?? (myTeamId ? room?.interceptAnswers[myTeamId] : undefined) ?? [];
   const timerRoomCode = room?.code;
   const timerPhase = room?.phase;
   const timerPhaseStartedAt = room?.phaseStartedAt;
-  const timerDurationSeconds = room?.actionTimeLimitSeconds ?? 0;
+  const timerDurationSeconds = room ? codeInterceptPhaseTimeLimitSeconds(room) : 0;
+  const timerClaimDelayMs = room ? clientTimeoutClaimDelayMs({ playerId, hostId: room.hostId, playerIds: room.players.map((player) => player.id) }) : 0;
 
   useEffect(() => {
     if (!timerRoomCode || !playerId || timerDurationSeconds <= 0 || !timerPhaseStartedAt || !timerPhase || !["code-length", "clue", "answer"].includes(timerPhase)) return;
-    const delay = Math.max(0, timerPhaseStartedAt + timerDurationSeconds * 1000 - Date.now()) + 100;
+    const delay = Math.max(0, timerPhaseStartedAt + timerDurationSeconds * 1000 + codeInterceptTimeoutGraceMs() - synchronizedNow()) + 100 + timerClaimDelayMs;
     const timer = window.setTimeout(() => {
       void applyCodeInterceptRoomAction(timerRoomCode, { type: "expire-phase", actorId: playerId, phaseStartedAt: timerPhaseStartedAt })
         .then((saved) => setRoom((current) => current?.code === saved.code ? saved : current))
         .catch(() => undefined);
     }, delay);
     return () => window.clearTimeout(timer);
-  }, [playerId, timerDurationSeconds, timerPhase, timerPhaseStartedAt, timerRoomCode]);
+  }, [playerId, timerClaimDelayMs, timerDurationSeconds, timerPhase, timerPhaseStartedAt, timerRoomCode]);
 
   const runAction = useCallback(async (action: CodeInterceptRoomAction) => {
     if (!room || isSaving) return null;
@@ -296,6 +351,26 @@ export function CodeInterceptGame() {
     catch (caught) { setError(apiMessage(caught, "操作を保存できませんでした。")); return null; }
     finally { setIsSaving(false); }
   }, [isSaving, room]);
+  useRoomLobbyReturnConfirmation({ room, playerId, confirmReturn: () => runAction({ type: "confirm-lobby-return", actorId: playerId }) });
+
+  useEffect(() => {
+    if (!room || room.phase !== "clue" || !room.phaseStartedAt || room.clueTimeLimitSeconds <= 0 || !isClueGiver || !myTeamId || room.clues[myTeamId]) return;
+    const typedClues = clueDrafts.slice(0, myCodeLength);
+    if (!typedClues.some((clue) => clue.trim())) return;
+    const key = `${draftRound}:${playerId}`;
+    const delay = Math.max(0, room.phaseStartedAt + room.clueTimeLimitSeconds * 1000 - synchronizedNow());
+    const timer = window.setTimeout(() => {
+      if (timeoutClueSubmissionKeyRef.current === key) return;
+      timeoutClueSubmissionKeyRef.current = key;
+      const action: CodeInterceptRoomAction = typedClues.every((clue) => clue.trim())
+        ? { type: "submit-clues", actorId: playerId, clues: typedClues.map((clue) => clue.trim()) }
+        : { type: "submit-timeout-clues", actorId: playerId, clues: typedClues };
+      void applyCodeInterceptRoomAction(room.code, action)
+        .then((saved) => setRoom((current) => current?.code === saved.code ? saved : current))
+        .catch(() => undefined);
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [clueDrafts, draftRound, isClueGiver, myCodeLength, myTeamId, playerId, room]);
 
   const createRoom = async () => {
     if (!session?.id || isSaving) return;
@@ -304,8 +379,8 @@ export function CodeInterceptGame() {
     const host: CodeInterceptPlayer = { id: session.id, name: session.name, joinedAt: now, teamId: "red", avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined, shareNameAllowed: session.shareNameAllowed === true };
     const draft: CodeInterceptRoom = {
       code: makeRoomCode(), revision: 0, hostId: session.id, ownerId: getOwnerId(), passphrase: passphrase.trim(), phase: "lobby", players: [host], playerCapacity: newPlayerCapacity, gameNumber: 1, roundNumber: 1,
-      cardCount: codeInterceptDefaults.cardCount, codeLengthMode: codeInterceptDefaults.codeLengthMode, codeRevealMode: codeInterceptDefaults.codeRevealMode, fixedCodeLength: codeInterceptDefaults.fixedCodeLength, initialPoints: codeInterceptDefaults.initialPoints, miscommunicationDamage: codeInterceptDefaults.miscommunicationDamage, interceptionDamage: codeInterceptDefaults.interceptionDamage, interceptionStartsAtRound: codeInterceptDefaults.interceptionStartsAtRound, actionTimeLimitSeconds: 0, phaseStartedAt: null,
-      debugMode: false, debugReplayEnabled: false, teams: codeInterceptTeamIds.map((id) => ({ id, name: teamLabel(id), points: codeInterceptDefaults.initialPoints, secretWords: [] })), clueGiverIds: {}, codeLengthChoices: {}, roundCodeLengths: {}, secretCodes: {}, clues: {}, allyAnswerProposals: {}, interceptAnswerProposals: {}, allyAnswers: {}, interceptAnswers: {}, roundHistory: [], winner: null, debugLog: [], createdAt: now, updatedAt: now,
+      cardCount: codeInterceptDefaults.cardCount, wordDifficulty: codeInterceptDefaults.wordDifficulty, teamAssignmentMode: codeInterceptDefaults.teamAssignmentMode, codeLengthMode: codeInterceptDefaults.codeLengthMode, codeRevealMode: codeInterceptDefaults.codeRevealMode, fixedCodeLength: codeInterceptDefaults.fixedCodeLength, initialPoints: codeInterceptDefaults.initialPoints, miscommunicationDamage: codeInterceptDefaults.miscommunicationDamage, interceptionDamage: codeInterceptDefaults.interceptionDamage, interceptionStartsAtRound: codeInterceptDefaults.interceptionStartsAtRound, clueTimeLimitSeconds: codeInterceptDefaults.clueTimeLimitSeconds, answerTimeLimitSeconds: codeInterceptDefaults.answerTimeLimitSeconds, phaseStartedAt: null,
+      debugMode: false, debugReplayEnabled: false, teams: codeInterceptTeamIds.map((id) => ({ id, name: teamLabel(id), points: codeInterceptDefaults.initialPoints, secretWords: [] })), clueGiverIds: {}, codeLengthChoices: {}, roundCodeLengths: {}, secretCodes: {}, clues: {}, allyAnswerProposals: {}, interceptAnswerProposals: {}, allyAnswers: {}, interceptAnswers: {}, timeoutPenaltyPhases: {}, roundHistory: [], winner: null, debugLog: [], createdAt: now, updatedAt: now,
     };
     try { const data = await createCodeInterceptRoom(draft, session.id); setRoom(data.room); localStorage.setItem(lastRoomKey, data.room.code); }
     catch (caught) { setError(apiMessage(caught, "部屋を作成できませんでした。")); }
@@ -329,7 +404,7 @@ export function CodeInterceptGame() {
     catch (caught) { setError(apiMessage(caught, "部屋一覧を取得できませんでした。")); }
   };
 
-  const leaveRoom = async () => { if (await runAction({ type: "leave-room", actorId: playerId })) { setRoom(null); localStorage.removeItem(lastRoomKey); } };
+  const leaveRoom = async () => { if (!confirmRoomLeave()) return; if (await runAction({ type: "leave-room", actorId: playerId })) { setRoom(null); localStorage.removeItem(lastRoomKey); } };
   const dissolveRoom = async () => {
     if (!room || !window.confirm("この部屋を解散しますか？")) return;
     setIsSaving(true); setError("");
@@ -351,6 +426,10 @@ export function CodeInterceptGame() {
       <p>各ラウンドの出題者には、「3・1・4」のような暗号が表示されます。出題者は、数字を直接書かず、対応する単語のヒントを暗号と同じ順番に書きます。</p>
       <p className="rounded-lg bg-amber-300/10 p-3"><strong className="text-amber-100">例：</strong>上の秘密単語で暗号が「3・1・4」なら、「しょうゆ・肉球・かさ」と伝えられます。</p>
     </div>
+    <h3 className="mt-4 font-black text-white">チーム編成</h3>
+    <p className="mt-2 text-slate-300">ロビーで決めたチームを使う「手動」と、ゲーム開始時に人数差1人以内で振り分ける「開始時ランダム」から選べます。ランダムではチーム内の出題順もシャッフルされます。</p>
+    <h3 className="mt-4 font-black text-white">秘密単語の難易度</h3>
+    <p className="mt-2 text-slate-300">簡単は簡単100%、普通は普通80%＋簡単20%、難しいは難しい50%＋普通40%＋簡単10%でGeneral Word Poolから抽選します。</p>
     <h3 className="mt-4 font-black text-white">暗号の桁数</h3>
     <div className="mt-2 space-y-2 text-slate-300">
       <p><strong className="text-white">固定モード</strong>では、両チームが全ラウンドで同じ桁数を使います。</p>
@@ -376,7 +455,7 @@ export function CodeInterceptGame() {
     <h3 className="mt-4 font-black text-white">勝ち負け</h3>
     <p className="mt-2">両チームのダメージを同時に反映します。片方だけ0ポイント以下になったら、残ったチームの勝ちです。両チームが同時に0ポイント以下になった場合は、マイナス幅が小さいチームの勝ちです。同じポイントなら引き分けです。</p>
     <h3 className="mt-4 font-black text-white">過去ログと時間制限</h3>
-    <p className="mt-2">終了したラウンドのヒントは過去ログで確認できます。正解暗号は部屋設定が「全員に公開」の場合だけ相手にも表示され、「自チームだけ」では相手の正解暗号と味方回答を伏せます。敵の秘密単語そのものは、ゲームが終わるまで見えません。時間制限は桁数選択・ヒント入力・回答の各段階に適用されます。</p>
+    <p className="mt-2">終了したラウンドのヒントは過去ログで確認できます。正解暗号は部屋設定が「全員に公開」の場合だけ相手にも表示され、「自チームだけ」では相手の正解暗号と味方回答を伏せます。敵の秘密単語そのものは、ゲームが終わるまで見えません。時間制限は、出題・ヒント作成とソナー選択で別々に設定できます。</p>
   </GameRulesDialog>;
 
   if (!ready) return <main className="min-h-screen bg-slate-950 p-8 text-white">ログイン情報と部屋を確認中...</main>;
@@ -384,9 +463,11 @@ export function CodeInterceptGame() {
 
   if (!room) return <main className={`min-h-screen bg-[radial-gradient(circle_at_top,#7f1d1d_0%,#172033_42%,#020617_82%)] px-4 pb-8 text-white ${gameTopBannerOffsetClass}`}>
     <GameTopBanner eyebrow="PRIVATE TEAM PROTOTYPE" title="コードインターセプト"><Link href="/games" className={gameTopBannerActionClass}>広場へ戻る</Link><GameTopMenu><button type="button" data-menu-close="true" onClick={() => setRulesOpen(true)} className={gameTopMenuItemClass}>ルール</button></GameTopMenu><GamePlayerMenu id={session.id} name={session.name} avatarColor={session.avatarColor} avatarImage={session.avatarImage} hasRecoveryEmail={session.hasRecoveryEmail} /></GameTopBanner>
+    <div className="mx-auto max-w-4xl pt-6"><GameLoungeVisual gameId="code-intercept" /></div>
     <section className="mx-auto mt-6 max-w-4xl overflow-hidden rounded-3xl border border-white/10 bg-slate-950/80 shadow-2xl">
       <div className="bg-gradient-to-r from-rose-300 via-amber-200 to-sky-300 px-6 py-8 text-slate-950"><p className="text-xs font-black tracking-[0.25em]">CODE INTERCEPT</p><h1 className="mt-2 text-4xl font-black sm:text-6xl">コードインターセプト</h1><p className="mt-3 font-bold">味方には伝え、敵の暗号は傍受せよ。</p></div>
-      <div className="grid gap-6 p-6 md:grid-cols-2">
+      {isRestoringRoom && <p className="border-b border-amber-300/20 bg-amber-300/10 px-6 py-3 text-sm font-bold text-amber-100">前回の部屋を確認中です。画面は先に表示しています。</p>}
+      <div inert={isRestoringRoom} aria-busy={isRestoringRoom} className={`grid gap-6 p-6 md:grid-cols-2 ${isRestoringRoom ? "opacity-60" : ""}`}>
         <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-5"><h2 className="text-xl font-black">部屋を作る</h2><label className="mt-4 block text-sm font-bold">最大募集人数<select value={newPlayerCapacity} onChange={(event) => setNewPlayerCapacity(Number(event.target.value))} className="mt-1 w-full rounded-xl border border-white/15 bg-slate-800 px-3 py-2 text-white">{Array.from({ length: codeInterceptPlayerLimit - codeInterceptMinimumPlayers + 1 }, (_, index) => index + codeInterceptMinimumPlayers).map((count) => <option key={count} value={count}>{count}人</option>)}</select></label><label className="mt-4 block text-sm font-bold">合言葉（任意）<input type="password" value={passphrase} maxLength={40} onChange={(event) => setPassphrase(event.target.value)} className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2" /></label><button type="button" disabled={isSaving} onClick={() => void createRoom()} className="mt-4 w-full rounded-xl bg-amber-300 px-4 py-3 font-black text-slate-950 disabled:opacity-50">新しい部屋を作る</button></div>
         <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-5"><h2 className="text-xl font-black">部屋に参加</h2><label className="mt-4 block text-sm font-bold">部屋コード<input value={joinCode} maxLength={4} onChange={(event) => setJoinCode(event.target.value.toUpperCase())} className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2 font-mono text-lg uppercase" /></label><label className="mt-3 block text-sm font-bold">合言葉<input type="password" value={passphrase} maxLength={40} onChange={(event) => setPassphrase(event.target.value)} className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-2" /></label><div className="mt-4 grid grid-cols-2 gap-2"><button type="button" disabled={isSaving} onClick={() => void joinRoom()} className="rounded-xl bg-sky-300 px-3 py-3 font-black text-sky-950">コードで参加</button><button type="button" onClick={() => void listRooms()} className="rounded-xl border border-white/20 px-3 py-3 font-black">部屋一覧</button></div></div>
       </div>
@@ -403,42 +484,62 @@ export function CodeInterceptGame() {
       <GamePlayerMenu id={session.id} name={session.name} avatarColor={session.avatarColor} avatarImage={session.avatarImage} hasRecoveryEmail={session.hasRecoveryEmail} />
     </GameTopBanner>
     {rulesDialog}<GameAdSlot gameId="code-intercept" surface={room.phase === "lobby" ? "room-lobby" : room.phase === "game-result" ? "result" : null} disabled={room.debugMode} />
+    {room.phase === "lobby" && <div className="mx-auto max-w-7xl px-4 pt-4"><GameLoungeVisual gameId="code-intercept" /></div>}
     <div className="mx-auto grid max-w-7xl gap-4 px-4 py-5 lg:grid-cols-[300px_minmax(0,1fr)]">
-      <aside className="space-y-4"><section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4"><div className="flex items-center justify-between"><h2 className="font-black">参加者</h2><span className="text-sm text-slate-400">{room.players.length}/{room.playerCapacity}人</span></div><ul className="mt-3 space-y-2">{room.players.map((player) => <PlayerCard key={player.id} player={player} room={room} me={playerId} saving={isSaving} onTeamChange={(teamId) => void runAction({ type: "set-team", actorId: playerId, teamId })} />)}</ul></section>
-        <RoomConfigSummary items={[{ label: "秘密カード C", value: `${room.cardCount}枚` }, { label: "暗号桁数", value: room.codeLengthMode === "fixed" ? `固定・${room.fixedCodeLength}桁` : "毎ラウンド選択" }, { label: "正解暗号", value: codeRevealLabel(room) }, { label: "初期ポイント X", value: `${room.initialPoints}点` }, { label: "伝達失敗", value: `−${room.miscommunicationDamage}` }, { label: "傍受成功", value: `−${room.interceptionDamage}` }, { label: "傍受開始", value: "第2ラウンド" }, { label: "時間制限", value: timeLimitLabel(room.actionTimeLimitSeconds) }]} />
+      <aside className="space-y-4"><section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4"><div className="flex items-center justify-between"><h2 className="font-black">参加者</h2><span className="text-sm text-slate-400">{room.players.length}/{room.playerCapacity}人</span></div><ul className="mt-3 space-y-2">{room.players.map((player) => <PlayerCard key={player.id} player={player} room={room} me={playerId} />)}</ul><RoomLobbyReturnStatus state={room.lobbyReturn} players={room.players} hostId={room.hostId} isHost={isHost} onRemoveWaitingPlayer={(player) => { if (window.confirm(`${player.name}さんを退出扱いにしますか？`)) void runAction({ type: "remove-waiting-player", actorId: playerId, targetPlayerId: player.id }); }} /></section>
+        <RoomConfigSummary items={[{ label: "チーム編成", value: room.teamAssignmentMode === "random" ? "開始時ランダム" : "手動" }, { label: "単語難易度", value: `${wordDifficultyLabel(room.wordDifficulty)}（${wordDifficultyMixLabel(room.wordDifficulty)}）` }, { label: "秘密カード C", value: `${room.cardCount}枚` }, { label: "暗号桁数", value: room.codeLengthMode === "fixed" ? `固定・${room.fixedCodeLength}桁` : "毎ラウンド選択" }, { label: "正解暗号", value: codeRevealLabel(room) }, { label: "初期ポイント X", value: `${room.initialPoints}点` }, { label: "伝達失敗", value: `−${room.miscommunicationDamage}` }, { label: "傍受成功", value: `−${room.interceptionDamage}` }, { label: "出題欄に空欄", value: "−1" }, { label: "全欄入力済み", value: "自動提出・減点なし" }, { label: "回答未提出", value: "減点なし" }, { label: "傍受開始", value: "第2ラウンド" }, { label: "出題・ヒント", value: timeLimitLabel(room.clueTimeLimitSeconds) }, { label: "ソナー選択", value: timeLimitLabel(room.answerTimeLimitSeconds) }]} />
       </aside>
       <div className="space-y-4">
         {error && <p className="rounded-xl border border-rose-300/30 bg-rose-300/10 p-3 text-sm font-bold text-rose-100">{error}</p>}
         {room.phase === "lobby" && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6">
           <h2 className="text-2xl font-black">チーム分け</h2>
-          <p className="mt-3 text-sm leading-6 text-slate-300">各チーム2人以上、人数差1人以内で開始できます。自分の名前の横からチームを移動できます。</p>
+          <p className="mt-3 text-sm leading-6 text-slate-300">{room.teamAssignmentMode === "random" ? "4人以上で開始できます。現在のチーム表示はゲーム開始時にランダムで組み直されます。" : "各チーム2人以上、人数差1人以内で開始できます。下の赤・青ボタンでチームを編成してください。"}</p>
           <div className="mt-5 grid gap-3 sm:grid-cols-2">{codeInterceptTeamIds.map((teamId) => <div key={teamId} className={`rounded-xl border p-4 ${teamStyle(teamId)}`}><h3 className="text-lg font-black">{teamLabel(teamId)} <span className="font-mono">{teamCounts[teamId]}人</span></h3><p className="mt-2 text-sm">{teamPlayers(room, teamId).map((player) => player.name).join("・") || "未所属"}</p></div>)}</div>
+          {room.teamAssignmentMode === "manual" && <ManualTeamEditor room={room} me={playerId} saving={isSaving} onTeamChange={(targetId, teamId) => void runAction({ type: "set-team", actorId: playerId, playerId: targetId, teamId })} />}
           <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.04] p-5">
             <h3 className="text-lg font-black">ゲーム設定</h3>
+            <fieldset className="mt-4" disabled={!isHost || isSaving}>
+              <legend className="text-sm font-black">チーム編成</legend>
+              <label className={`mt-2 block cursor-pointer rounded-xl border p-4 ${room.teamAssignmentMode === "manual" ? "border-amber-300 bg-amber-300/10" : "border-white/10 bg-slate-950/40"}`}><span className="flex items-center gap-2 font-black"><input type="radio" name="team-assignment-mode" checked={room.teamAssignmentMode === "manual"} onChange={() => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, teamAssignmentMode: "manual", codeLengthMode: room.codeLengthMode, codeRevealMode: room.codeRevealMode, fixedCodeLength: room.fixedCodeLength, clueTimeLimitSeconds: room.clueTimeLimitSeconds, answerTimeLimitSeconds: room.answerTimeLimitSeconds })} />手動</span><span className="mt-1 block text-sm text-slate-300">ロビーで決めた赤・青チームのまま開始します。</span></label>
+              <label className={`mt-3 block cursor-pointer rounded-xl border p-4 ${room.teamAssignmentMode === "random" ? "border-cyan-300 bg-cyan-300/10" : "border-white/10 bg-slate-950/40"}`}><span className="flex items-center gap-2 font-black"><input type="radio" name="team-assignment-mode" checked={room.teamAssignmentMode === "random"} onChange={() => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, teamAssignmentMode: "random", codeLengthMode: room.codeLengthMode, codeRevealMode: room.codeRevealMode, fixedCodeLength: room.fixedCodeLength, clueTimeLimitSeconds: room.clueTimeLimitSeconds, answerTimeLimitSeconds: room.answerTimeLimitSeconds })} />開始時にランダム</span><span className="mt-1 block text-sm text-slate-300">人数差1人以内でチームと出題順をシャッフルします。</span></label>
+            </fieldset>
+            <fieldset className="mt-5" disabled={!isHost || isSaving}>
+              <legend className="text-sm font-black">秘密単語の難易度</legend>
+              <div className="mt-2 grid gap-3 sm:grid-cols-3">
+                {codeInterceptWordDifficulties.map((difficulty) => <label key={difficulty} className={`cursor-pointer rounded-xl border p-4 ${room.wordDifficulty === difficulty ? "border-amber-300 bg-amber-300/10" : "border-white/10 bg-slate-950/40"}`}>
+                  <span className="flex items-center gap-2 font-black"><input type="radio" name="word-difficulty" checked={room.wordDifficulty === difficulty} onChange={() => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, wordDifficulty: difficulty, teamAssignmentMode: room.teamAssignmentMode, codeLengthMode: room.codeLengthMode, codeRevealMode: room.codeRevealMode, fixedCodeLength: room.fixedCodeLength, clueTimeLimitSeconds: room.clueTimeLimitSeconds, answerTimeLimitSeconds: room.answerTimeLimitSeconds })} />{wordDifficultyLabel(difficulty)}</span>
+                  <span className="mt-1 block text-xs leading-5 text-slate-300">{wordDifficultyMixLabel(difficulty)}</span>
+                </label>)}
+              </div>
+            </fieldset>
             <label className="mt-4 block text-sm font-bold">秘密カード数
-              <select value={room.cardCount} disabled={!isHost || isSaving} onChange={(event) => { const cardCount = Number(event.target.value); void runAction({ type: "set-config", actorId: playerId, cardCount, codeLengthMode: room.codeLengthMode, codeRevealMode: room.codeRevealMode, fixedCodeLength: normalizeCodeInterceptCodeLength(room.fixedCodeLength, cardCount), actionTimeLimitSeconds: room.actionTimeLimitSeconds }); }} className="mt-1 w-full rounded-xl border border-white/15 bg-slate-800 px-3 py-3 text-white disabled:opacity-60">
+              <select value={room.cardCount} disabled={!isHost || isSaving} onChange={(event) => { const cardCount = Number(event.target.value); void runAction({ type: "set-config", actorId: playerId, cardCount, teamAssignmentMode: room.teamAssignmentMode, codeLengthMode: room.codeLengthMode, codeRevealMode: room.codeRevealMode, fixedCodeLength: normalizeCodeInterceptCodeLength(room.fixedCodeLength, cardCount), clueTimeLimitSeconds: room.clueTimeLimitSeconds, answerTimeLimitSeconds: room.answerTimeLimitSeconds }); }} className="mt-1 w-full rounded-xl border border-white/15 bg-slate-800 px-3 py-3 text-white disabled:opacity-60">
                 {Array.from({ length: codeInterceptMaximumCardCount - codeInterceptMinimumCardCount + 1 }, (_, index) => index + codeInterceptMinimumCardCount).map((count) => <option key={count} value={count}>{count}枚</option>)}
               </select>
             </label>
             <fieldset className="mt-5" disabled={!isHost || isSaving}>
               <legend className="text-sm font-black">暗号の桁数</legend>
-              <label className={`mt-2 block cursor-pointer rounded-xl border p-4 ${room.codeLengthMode === "fixed" ? "border-amber-300 bg-amber-300/10" : "border-white/10 bg-slate-950/40"}`}><span className="flex items-center gap-2 font-black"><input type="radio" name="code-length-mode" checked={room.codeLengthMode === "fixed"} onChange={() => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, codeLengthMode: "fixed", codeRevealMode: room.codeRevealMode, fixedCodeLength: room.fixedCodeLength, actionTimeLimitSeconds: room.actionTimeLimitSeconds })} />固定</span><span className="mt-1 block text-sm text-slate-300">全ラウンドで両チームが同じ桁数を使います。</span></label>
-              {room.codeLengthMode === "fixed" && <label className="mt-3 block text-sm font-bold">固定桁数<select value={room.fixedCodeLength} onChange={(event) => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, codeLengthMode: "fixed", codeRevealMode: room.codeRevealMode, fixedCodeLength: Number(event.target.value), actionTimeLimitSeconds: room.actionTimeLimitSeconds })} className="mt-1 w-full rounded-xl border border-white/15 bg-slate-800 px-3 py-3 text-white">{Array.from({ length: room.cardCount - 1 }, (_, index) => index + 2).map((length) => <option key={length} value={length}>{length}桁</option>)}</select></label>}
-              <label className={`mt-3 block cursor-pointer rounded-xl border p-4 ${room.codeLengthMode === "per-round" ? "border-cyan-300 bg-cyan-300/10" : "border-white/10 bg-slate-950/40"}`}><span className="flex items-center gap-2 font-black"><input type="radio" name="code-length-mode" checked={room.codeLengthMode === "per-round"} onChange={() => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, codeLengthMode: "per-round", codeRevealMode: room.codeRevealMode, actionTimeLimitSeconds: room.actionTimeLimitSeconds })} />毎ラウンド選択</span><span className="mt-1 block text-sm text-slate-300">各チームの出題者が、そのラウンドに使う桁数を決めます。</span></label>
+              <label className={`mt-2 block cursor-pointer rounded-xl border p-4 ${room.codeLengthMode === "fixed" ? "border-amber-300 bg-amber-300/10" : "border-white/10 bg-slate-950/40"}`}><span className="flex items-center gap-2 font-black"><input type="radio" name="code-length-mode" checked={room.codeLengthMode === "fixed"} onChange={() => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, teamAssignmentMode: room.teamAssignmentMode, codeLengthMode: "fixed", codeRevealMode: room.codeRevealMode, fixedCodeLength: room.fixedCodeLength, clueTimeLimitSeconds: room.clueTimeLimitSeconds, answerTimeLimitSeconds: room.answerTimeLimitSeconds })} />固定</span><span className="mt-1 block text-sm text-slate-300">全ラウンドで両チームが同じ桁数を使います。</span></label>
+              {room.codeLengthMode === "fixed" && <label className="mt-3 block text-sm font-bold">固定桁数<select value={room.fixedCodeLength} onChange={(event) => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, teamAssignmentMode: room.teamAssignmentMode, codeLengthMode: "fixed", codeRevealMode: room.codeRevealMode, fixedCodeLength: Number(event.target.value), clueTimeLimitSeconds: room.clueTimeLimitSeconds, answerTimeLimitSeconds: room.answerTimeLimitSeconds })} className="mt-1 w-full rounded-xl border border-white/15 bg-slate-800 px-3 py-3 text-white">{Array.from({ length: room.cardCount - 1 }, (_, index) => index + 2).map((length) => <option key={length} value={length}>{length}桁</option>)}</select></label>}
+              <label className={`mt-3 block cursor-pointer rounded-xl border p-4 ${room.codeLengthMode === "per-round" ? "border-cyan-300 bg-cyan-300/10" : "border-white/10 bg-slate-950/40"}`}><span className="flex items-center gap-2 font-black"><input type="radio" name="code-length-mode" checked={room.codeLengthMode === "per-round"} onChange={() => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, teamAssignmentMode: room.teamAssignmentMode, codeLengthMode: "per-round", codeRevealMode: room.codeRevealMode, clueTimeLimitSeconds: room.clueTimeLimitSeconds, answerTimeLimitSeconds: room.answerTimeLimitSeconds })} />毎ラウンド選択</span><span className="mt-1 block text-sm text-slate-300">各チームの出題者が、そのラウンドに使う桁数を決めます。</span></label>
             </fieldset>
             <fieldset className="mt-5 rounded-xl bg-white p-4 text-slate-950" disabled={!isHost || isSaving}>
-              <RoomTimeLimitControl label="各入力の制限時間" value={room.actionTimeLimitSeconds} onChange={(seconds) => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, codeLengthMode: room.codeLengthMode, codeRevealMode: room.codeRevealMode, fixedCodeLength: room.fixedCodeLength, actionTimeLimitSeconds: seconds })} />
-              <p className="mt-2 text-xs leading-5 text-slate-600">桁数選択・ヒント入力・回答ごとにカウントします。時間切れでも自動で次へ進みます。</p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <RoomTimeLimitControl label="出題・ヒント作成時間" value={room.clueTimeLimitSeconds} onChange={(seconds) => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, teamAssignmentMode: room.teamAssignmentMode, codeLengthMode: room.codeLengthMode, codeRevealMode: room.codeRevealMode, fixedCodeLength: room.fixedCodeLength, clueTimeLimitSeconds: seconds, answerTimeLimitSeconds: room.answerTimeLimitSeconds })} />
+                <RoomTimeLimitControl label="ソナー選択時間" value={room.answerTimeLimitSeconds} onChange={(seconds) => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, teamAssignmentMode: room.teamAssignmentMode, codeLengthMode: room.codeLengthMode, codeRevealMode: room.codeRevealMode, fixedCodeLength: room.fixedCodeLength, clueTimeLimitSeconds: room.clueTimeLimitSeconds, answerTimeLimitSeconds: seconds })} />
+              </div>
+              <p className="mt-3 text-xs leading-5 text-slate-600">出題・ヒント作成時間は、毎ラウンド選択時の桁数決定とヒント作成でそれぞれ最初からカウントします。0秒時に全ヒント欄が埋まっていれば自動提出して減点なし、空欄があれば書いた内容を残して1点減点します。回答側の未提出は減点なしです。</p>
             </fieldset>
             {room.codeLengthMode === "per-round" && <p className="mt-4 rounded-xl bg-cyan-300/10 p-3 text-sm leading-6 text-cyan-100">短い暗号は味方に伝えやすい一方、敵にも当てられやすくなります。長い暗号は傍受されにくい一方、多くのヒントが敵に残ります。</p>}
             <fieldset className="mt-5" disabled={!isHost || isSaving}>
               <legend className="text-sm font-black">ラウンド後の正解暗号</legend>
-              <label className={`mt-2 block cursor-pointer rounded-xl border p-4 ${room.codeRevealMode === "all" ? "border-amber-300 bg-amber-300/10" : "border-white/10 bg-slate-950/40"}`}><span className="flex items-center gap-2 font-black"><input type="radio" name="code-reveal-mode" checked={room.codeRevealMode === "all"} onChange={() => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, codeLengthMode: room.codeLengthMode, codeRevealMode: "all", fixedCodeLength: room.fixedCodeLength, actionTimeLimitSeconds: room.actionTimeLimitSeconds })} />全員に公開</span><span className="mt-1 block text-sm text-slate-300">ヒントと正解暗号の対応を全員の過去ログへ残します。</span></label>
-              <label className={`mt-3 block cursor-pointer rounded-xl border p-4 ${room.codeRevealMode === "own-team" ? "border-cyan-300 bg-cyan-300/10" : "border-white/10 bg-slate-950/40"}`}><span className="flex items-center gap-2 font-black"><input type="radio" name="code-reveal-mode" checked={room.codeRevealMode === "own-team"} onChange={() => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, codeLengthMode: room.codeLengthMode, codeRevealMode: "own-team", fixedCodeLength: room.fixedCodeLength, actionTimeLimitSeconds: room.actionTimeLimitSeconds })} />自チームだけ</span><span className="mt-1 block text-sm text-slate-300">相手には伝達・傍受の成否だけを見せ、正解暗号と味方回答を伏せます。</span></label>
+              <label className={`mt-2 block cursor-pointer rounded-xl border p-4 ${room.codeRevealMode === "all" ? "border-amber-300 bg-amber-300/10" : "border-white/10 bg-slate-950/40"}`}><span className="flex items-center gap-2 font-black"><input type="radio" name="code-reveal-mode" checked={room.codeRevealMode === "all"} onChange={() => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, teamAssignmentMode: room.teamAssignmentMode, codeLengthMode: room.codeLengthMode, codeRevealMode: "all", fixedCodeLength: room.fixedCodeLength, clueTimeLimitSeconds: room.clueTimeLimitSeconds, answerTimeLimitSeconds: room.answerTimeLimitSeconds })} />全員に公開</span><span className="mt-1 block text-sm text-slate-300">ヒントと正解暗号の対応を全員の過去ログへ残します。</span></label>
+              <label className={`mt-3 block cursor-pointer rounded-xl border p-4 ${room.codeRevealMode === "own-team" ? "border-cyan-300 bg-cyan-300/10" : "border-white/10 bg-slate-950/40"}`}><span className="flex items-center gap-2 font-black"><input type="radio" name="code-reveal-mode" checked={room.codeRevealMode === "own-team"} onChange={() => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, teamAssignmentMode: room.teamAssignmentMode, codeLengthMode: room.codeLengthMode, codeRevealMode: "own-team", fixedCodeLength: room.fixedCodeLength, clueTimeLimitSeconds: room.clueTimeLimitSeconds, answerTimeLimitSeconds: room.answerTimeLimitSeconds })} />自チームだけ</span><span className="mt-1 block text-sm text-slate-300">相手には伝達・傍受の成否だけを見せ、正解暗号と味方回答を伏せます。</span></label>
             </fieldset>
           </div>
+          {isHost && room.debugMode && <div className="mt-5"><DebugWordGenerationTest onGenerate={() => sampleCodeInterceptDebugWords(room.code)} heading="秘密カード候補10語を抽出" description="現在の本番抽選条件で、共通DBから秘密カード候補を10語だけ確認します。ゲーム状態や履歴は変更しません。" showModeToggle={false} fixedButtonLabel="候補10語を抽出" fixedRepeatLabel="別の10語を抽出" /></div>}
           {isHost && room.debugMode && <button type="button" disabled={isSaving || room.players.length >= room.playerCapacity} onClick={() => void runAction({ type: "debug-add-player", actorId: playerId })} className="mt-5 w-full rounded-xl border border-cyan-300/30 bg-cyan-300/10 px-4 py-3 font-black text-cyan-100">デバッグ：ダミーを追加</button>}
-          {isHost ? <button type="button" disabled={isSaving || !codeInterceptTeamsAreStartable(room)} onClick={() => void runAction({ type: "start-game", actorId: playerId })} className="mt-5 w-full rounded-xl bg-amber-300 px-4 py-4 text-lg font-black text-slate-950 disabled:opacity-40">{codeInterceptTeamsAreStartable(room) ? "このチームで開始" : "各チーム2人以上・人数差1以内にしてください"}</button> : <p className="mt-5 text-center font-bold text-slate-300">ホストが開始するまでお待ちください。</p>}
+          {isHost ? <button type="button" disabled={isSaving || !codeInterceptRoomIsStartable(room) || !allRoomPlayersReturned(room.lobbyReturn, room.players)} onClick={() => void runAction({ type: "start-game", actorId: playerId })} className="mt-5 w-full rounded-xl bg-amber-300 px-4 py-4 text-lg font-black text-slate-950 disabled:opacity-40">{!allRoomPlayersReturned(room.lobbyReturn, room.players) ? "参加者の復帰待ち" : codeInterceptRoomIsStartable(room) ? room.teamAssignmentMode === "random" ? "ランダム編成して開始" : "このチームで開始" : room.teamAssignmentMode === "random" ? "4人以上必要です" : "各チーム2人以上・人数差1以内にしてください"}</button> : <p className="mt-5 text-center font-bold text-slate-300">ホストが開始するまでお待ちください。</p>}
         </section>}
 
         {room.phase !== "lobby" && <TeamScoreBoard room={room} />}
@@ -461,14 +562,14 @@ export function CodeInterceptGame() {
         {room.phase === "clue" && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6">
           <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm font-black text-amber-300">第{room.roundNumber}ラウンド・ヒント入力</p><PhaseTimer room={room} /></div>
           <div className="mt-3 grid grid-cols-2 gap-3">{codeInterceptTeamIds.map((teamId) => <div key={teamId} className={`rounded-xl border p-3 text-center ${teamStyle(teamId)}`}><span className="text-sm font-bold">{teamLabel(teamId)}</span><strong className="ml-2 text-xl">{codeLengthForTeam(room, teamId)}桁</strong></div>)}</div>
-          {isClueGiver && myCode ? <><h2 className="mt-4 text-2xl font-black">あなたが出題者です</h2><div className="mt-4 rounded-2xl border border-amber-300/30 bg-amber-300/10 p-5 text-center"><p className="text-xs font-black text-amber-200">今回の暗号</p><p className="mt-2 font-mono text-5xl font-black tracking-widest text-amber-200">{myCode.join("・")}</p></div>{room.clues[myTeamId!] && <p className="mt-4 rounded-xl border border-emerald-300/30 bg-emerald-300/10 p-3 text-sm font-bold text-emerald-100">提出済みです。相手チームが提出するまでは変更できます。</p>}<div className="mt-4 grid gap-3 sm:grid-cols-4">{Array.from({ length: myCodeLength }, (_, index) => <label key={index} className="text-sm font-bold">{index + 1}つ目のヒント<input value={clueDrafts[index] ?? ""} maxLength={40} onChange={(event) => setClueDraftsByRound((current) => { const next = [...(current[draftRound] ?? room.clues[myTeamId!] ?? Array.from({ length: myCodeLength }, () => ""))]; next[index] = event.target.value; return { ...current, [draftRound]: next }; })} className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-3" /></label>)}</div><button type="button" disabled={isSaving || clueDrafts.length < myCodeLength || clueDrafts.slice(0, myCodeLength).some((clue) => !clue.trim())} onClick={() => void runAction({ type: "submit-clues", actorId: playerId, clues: clueDrafts.slice(0, myCodeLength).map((clue) => clue.trim()) })} className="mt-4 w-full rounded-xl bg-amber-300 px-4 py-3 font-black text-slate-950 disabled:opacity-40">{room.clues[myTeamId!] ? "ヒントを再提出" : "ヒントを確定"}</button></> : <><h2 className="mt-4 text-2xl font-black">出題者がヒントを作成中</h2><p className="mt-3 text-slate-300">今回の出題者：{room.players.find((player) => player.id === room.clueGiverIds[myTeamId!])?.name ?? "確認中"}</p></>}
+          {isClueGiver && myCode ? <><h2 className="mt-4 text-2xl font-black">あなたが出題者です</h2><div className="mt-4 rounded-2xl border border-amber-300/30 bg-amber-300/10 p-5 text-center"><p className="text-xs font-black text-amber-200">今回の暗号</p><p className="mt-2 font-mono text-5xl font-black tracking-widest text-amber-200">{myCode.join("・")}</p></div>{room.clues[myTeamId!] && <p className="mt-4 rounded-xl border border-emerald-300/30 bg-emerald-300/10 p-3 text-sm font-bold text-emerald-100">提出済みです。相手チームが提出するまでは変更できます。</p>}<div className="mt-4 grid gap-3 sm:grid-cols-4">{Array.from({ length: myCodeLength }, (_, index) => <label key={index} className="text-sm font-bold">{index + 1}つ目のヒント<input value={clueDrafts[index] ?? ""} maxLength={40} onChange={(event) => setClueDraftsByRound((current) => { const next = [...(current[draftRound] ?? room.clues[myTeamId!] ?? Array.from({ length: myCodeLength }, () => ""))]; next[index] = event.target.value; return { ...current, [draftRound]: next }; })} className="mt-1 w-full rounded-xl border border-white/15 bg-white/10 px-3 py-3" /></label>)}</div><button type="button" disabled={isSaving || clueDrafts.length < myCodeLength || clueDrafts.slice(0, myCodeLength).some((clue) => !clue.trim())} onClick={() => void runAction({ type: "submit-clues", actorId: playerId, clues: clueDrafts.slice(0, myCodeLength).map((clue) => clue.trim()) }).then((saved) => { if (saved) setClueDraftsByRound((current) => ({ ...current, [draftRound]: Array.from({ length: myCodeLength }, () => "") })); })} className="mt-4 w-full rounded-xl bg-amber-300 px-4 py-3 font-black text-slate-950 disabled:opacity-40">{room.clues[myTeamId!] ? "ヒントを再提出" : "ヒントを確定"}</button></> : <><h2 className="mt-4 text-2xl font-black">出題者がヒントを作成中</h2><p className="mt-3 text-slate-300">今回の出題者：{room.players.find((player) => player.id === room.clueGiverIds[myTeamId!])?.name ?? "確認中"}</p></>}
           {isHost && room.debugMode && <button type="button" onClick={() => void runAction({ type: "debug-fill-clues", actorId: playerId })} className="mt-5 w-full rounded-xl border border-cyan-300/30 bg-cyan-300/10 px-4 py-3 font-black text-cyan-100">デバッグ：ヒントを自動入力</button>}<p className="mt-4 text-center text-sm text-slate-400">両チームが提出するまで、敵のヒントは表示されません。</p>
         </section>}
 
         {room.phase === "answer" && myTeamId && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm font-black text-amber-300">第{room.roundNumber}ラウンド・同時回答</p><PhaseTimer room={room} /></div><h2 className="mt-2 text-2xl font-black">両チームのヒントが公開されました</h2><div className="mt-5 grid gap-3 sm:grid-cols-2">{codeInterceptTeamIds.map((teamId) => <div key={teamId} className={`rounded-xl border p-4 ${teamStyle(teamId)}`}><p className="font-black">{teamLabel(teamId)}・{codeLengthForTeam(room, teamId)}桁</p><ol className="mt-2 space-y-1">{room.clues[teamId]?.map((clue, index) => <li key={index}><span className="mr-2 font-mono text-slate-400">{index + 1}.</span><strong>{clue}</strong></li>)}</ol></div>)}</div>
           {isClueGiver ? <p className="mt-5 rounded-xl bg-white/[0.05] p-4 text-sm text-slate-300">あなたは今回の出題者です。味方の回答者全員の案が一致するまで待ってください。</p> : <div className="mt-5 grid gap-5 lg:grid-cols-2">
-            <div className={`rounded-2xl border p-4 ${myTeamId === "red" ? "order-1" : "order-2"} ${teamStyle(myTeamId)}`}><AnswerEditor title={`味方の暗号を回答（${myCodeLength}桁）`} room={room} answererIds={myAnswererIds} proposals={room.allyAnswerProposals} submittedAnswer={room.allyAnswers[myTeamId]} draft={allyDraft} codeLength={myCodeLength} saving={isSaving} canRevise={!enemyAnswersSubmitted} submitLabel={myAnswererIds.length > 1 ? room.allyAnswerProposals[playerId] ? "回答案を更新" : "回答案を共有" : "チーム回答を確定"} resubmitLabel="味方回答を再提出" buttonClass="bg-emerald-300 text-emerald-950" onChange={(value) => setAllyDraftsByRound((current) => ({ ...current, [draftRound]: value }))} onSubmit={() => void runAction({ type: "submit-ally-answer", actorId: playerId, answer: allyDraft })} /></div>
-            <div className={`rounded-2xl border p-4 ${otherCodeInterceptTeam(myTeamId) === "red" ? "order-1" : "order-2"} ${teamStyle(otherCodeInterceptTeam(myTeamId))}`}>{room.roundNumber === 1 ? <><h3 className="font-black">敵の暗号を傍受（{enemyCodeLength}桁）</h3><p className="mt-3 text-sm text-slate-300">第1ラウンドは傍受回答を行いません。</p></> : <AnswerEditor title={`敵の暗号を傍受（${enemyCodeLength}桁）`} room={room} answererIds={myAnswererIds} proposals={room.interceptAnswerProposals} submittedAnswer={room.interceptAnswers[myTeamId]} draft={interceptDraft} codeLength={enemyCodeLength} saving={isSaving} canRevise={!enemyAnswersSubmitted} submitLabel={myAnswererIds.length > 1 ? room.interceptAnswerProposals[playerId] ? "回答案を更新" : "回答案を共有" : "傍受回答を確定"} resubmitLabel="傍受回答を再提出" buttonClass="bg-sky-300 text-sky-950" onChange={(value) => setInterceptDraftsByRound((current) => ({ ...current, [draftRound]: value }))} onSubmit={() => void runAction({ type: "submit-intercept-answer", actorId: playerId, answer: interceptDraft })} />}</div>
+            <div className={`rounded-2xl border p-4 ${myTeamId === "red" ? "order-1" : "order-2"} ${teamStyle(myTeamId)}`}><AnswerEditor title={`味方の暗号を回答（${myCodeLength}桁）`} room={room} answererIds={myAnswererIds} proposals={room.allyAnswerProposals} submittedAnswer={room.allyAnswers[myTeamId]} draft={allyDraft} codeLength={myCodeLength} saving={isSaving} canRevise={!enemyAnswersSubmitted} submitLabel={myAnswererIds.length > 1 ? room.allyAnswerProposals[playerId] ? "回答案を更新" : "回答案を共有" : "チーム回答を確定"} resubmitLabel="味方回答を再提出" buttonClass="bg-emerald-300 text-emerald-950" onChange={(value) => setAllyDraftsByRound((current) => ({ ...current, [draftRound]: value }))} onSubmit={() => void runAction({ type: "submit-ally-answer", actorId: playerId, answer: allyDraft }).then((saved) => { if (saved) setAllyDraftsByRound((current) => ({ ...current, [draftRound]: [] })); })} /></div>
+            <div className={`rounded-2xl border p-4 ${otherCodeInterceptTeam(myTeamId) === "red" ? "order-1" : "order-2"} ${teamStyle(otherCodeInterceptTeam(myTeamId))}`}>{room.roundNumber === 1 ? <><h3 className="font-black">敵の暗号を傍受（{enemyCodeLength}桁）</h3><p className="mt-3 text-sm text-slate-300">第1ラウンドは傍受回答を行いません。</p></> : <AnswerEditor title={`敵の暗号を傍受（${enemyCodeLength}桁）`} room={room} answererIds={myAnswererIds} proposals={room.interceptAnswerProposals} submittedAnswer={room.interceptAnswers[myTeamId]} draft={interceptDraft} codeLength={enemyCodeLength} saving={isSaving} canRevise={!enemyAnswersSubmitted} submitLabel={myAnswererIds.length > 1 ? room.interceptAnswerProposals[playerId] ? "回答案を更新" : "回答案を共有" : "傍受回答を確定"} resubmitLabel="傍受回答を再提出" buttonClass="bg-sky-300 text-sky-950" onChange={(value) => setInterceptDraftsByRound((current) => ({ ...current, [draftRound]: value }))} onSubmit={() => void runAction({ type: "submit-intercept-answer", actorId: playerId, answer: interceptDraft }).then((saved) => { if (saved) setInterceptDraftsByRound((current) => ({ ...current, [draftRound]: [] })); })} />}</div>
           </div>}
           {isHost && room.debugMode && <button type="button" onClick={() => void runAction({ type: "debug-fill-answers", actorId: playerId })} className="mt-5 w-full rounded-xl border border-cyan-300/30 bg-cyan-300/10 px-4 py-3 font-black text-cyan-100">デバッグ：未回答を正解で埋める</button>}<p className="mt-4 text-center text-sm text-slate-400">回答者が複数いるチームは全員一致で確定します。相手チームが回答を完了するまでは確定後も再提出できます。</p></section>}
 
@@ -476,7 +577,7 @@ export function CodeInterceptGame() {
 
         {room.phase === "game-result" && <section className="rounded-2xl border border-amber-300/30 bg-slate-950/85 p-6 text-center"><p className="text-sm font-black text-amber-300">GAME OVER</p><h2 className="mt-2 text-4xl font-black">{room.winner === "draw" ? "同時決着・引き分け" : `${teamLabel(room.winner!)}の勝利`}</h2><p className="mt-3 text-slate-300">全{room.roundNumber}ラウンドで決着しました。</p><RoomResultActions canReturnToRoom={isHost || resultReturnGate.canReturnToRoom} disabled={isSaving} isHost={isHost} isRoomDissolved={resultReturnGate.isRoomDissolved} onReturnToRoom={isHost ? () => runAction({ type: "reset-game", actorId: playerId }) : () => resultReturnGate.returnToRoom((code) => codeInterceptRoomApi.fetchRoom(code, playerId), () => setError("部屋に戻れません。解散されたか、参加情報が変更されています。"))} onDissolve={isHost ? dissolveRoom : undefined} /><GameResultShareButton title="コードインターセプト プレイログ" text={codeInterceptShareText(room)} url="/games/code-intercept" /></section>}
 
-        {room.roundHistory.length > 0 && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><h2 className="text-xl font-black">公開済みの過去ログ</h2><p className="mt-1 text-sm text-slate-400">チームごとに、ヒント・味方回答・相手からの傍受結果を確認できます。</p><div className="mt-4 grid gap-4 xl:grid-cols-2">{codeInterceptTeamIds.map((teamId) => <TeamRoundHistoryTable key={teamId} room={room} teamId={teamId} />)}</div></section>}
+        {room.phase !== "lobby" && room.roundHistory.length > 0 && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><h2 className="text-xl font-black">公開済みの過去ログ</h2><p className="mt-1 text-sm text-slate-400">チームごとに、ヒント・味方回答・相手からの傍受結果を確認できます。</p><div className="mt-4 grid gap-4 xl:grid-cols-2">{codeInterceptTeamIds.map((teamId) => <TeamRoundHistoryTable key={teamId} room={room} teamId={teamId} />)}</div></section>}
       </div>
     </div>
   </main>;

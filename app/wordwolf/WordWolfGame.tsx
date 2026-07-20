@@ -6,7 +6,9 @@ import {
 } from "@/lib/player-session";
 import { gameTopBannerOffsetClass } from "../components/GameTopBanner";
 import { GameAdSlot } from "../components/GameAdSlot";
+import { GameLoungeVisual } from "../components/GameLoungeVisual";
 import { useRoomResultReturnGate } from "../hooks/use-room-result-return-gate";
+import { useRoomLobbyReturnConfirmation } from "../hooks/use-room-lobby-return-confirmation";
 import type {
   Room,
   RoomChoice,
@@ -79,6 +81,7 @@ export function WordWolfGame() {
       return null;
     }
   }, [room]);
+  useRoomLobbyReturnConfirmation({ room, playerId: playerAccountId, confirmReturn: () => runRoomAction({ type: "confirm-lobby-return" }) });
 
   const { updatePlayerName, commitPlayerName, updateAvatarColor, updateAvatarImage, uploadAvatarImage } = useWordWolfPlayerProfile({
     room,
@@ -131,6 +134,8 @@ export function WordWolfGame() {
         disabled={Boolean(room?.debugMode)}
       />
 
+      {(!room || room.phase === "lobby") && <div className="mx-auto max-w-7xl px-4 pt-4"><GameLoungeVisual gameId="wordwolf" /></div>}
+
       <section className={wordwolfLayoutClass}>
         <aside className="space-y-4">
           {!room && (
@@ -159,6 +164,7 @@ export function WordWolfGame() {
               onCopyRoomCode={() => void copyRoomCode()}
               onCopyRoomInvite={() => void copyRoomInvite()}
               onDissolveRoom={() => void dissolveRoom()}
+              onRemoveWaitingPlayer={(targetPlayerId, playerName) => { if (window.confirm(`${playerName}さんを退出扱いにしますか？`)) void runRoomAction({ type: "remove-waiting-player", targetPlayerId }); }}
             >
               {room.phase === "lobby" && (
                 <WordWolfLobbySettings

@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
 import { GameAdSlot } from "@/app/components/GameAdSlot";
+import { GameLoungeVisual } from "@/app/components/GameLoungeVisual";
 import { GamePhaseTimer } from "@/app/components/GamePhaseTimer";
 import { GamePlayerMenu } from "@/app/components/GamePlayerMenu";
 import { GameResultShareButton } from "@/app/components/GameResultShareButton";
@@ -12,9 +13,14 @@ import { GameTopBanner, gameTopBannerOffsetClass } from "@/app/components/GameTo
 import { GameTopMenu, gameTopBannerActionClass, gameTopBannerDangerActionClass, gameTopMenuItemClass } from "@/app/components/GameTopMenu";
 import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomResultActions } from "@/app/components/RoomResultActions";
+import { RoomLobbyReturnStatus } from "@/app/components/RoomLobbyReturnStatus";
 import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
+import { confirmRoomLeave } from "@/app/components/room-navigation-confirmation";
+import { useOnlineGameSessionRestore } from "@/app/hooks/use-online-game-session-restore";
 import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "@/app/hooks/use-online-room-polling";
+import { clientTimeoutClaimDelayMs } from "@/lib/game-timer/client-policy";
 import { useRoomResultReturnGate } from "@/app/hooks/use-room-result-return-gate";
+import { useRoomLobbyReturnConfirmation } from "@/app/hooks/use-room-lobby-return-confirmation";
 import { applyNigoichiRoomAction, createNigoichiRoom, nigoichiRoomApi } from "@/app/nigoichi/nigoichi-room-api-client";
 import {
   areValidNigoichiAssociations,
@@ -34,13 +40,13 @@ import {
   type NigoichiRoomChoice,
   type NigoichiWordDifficulty,
 } from "@/lib/nigoichi";
-import { OnlineRoomApiError, restoreOnlineRoom } from "@/lib/online-room-api-client";
+import { OnlineRoomApiError } from "@/lib/online-room-api-client";
+import { synchronizedNow } from "@/lib/server-clock";
+import { commonGameTimeoutGraceMs } from "@/lib/game-timer/policy";
+import { allRoomPlayersReturned } from "@/lib/room-lobby-return";
 import {
   defaultAvatarImage,
   fallbackAvatarColor,
-  isPlayerAuthenticated,
-  loadPersistentPlayerSession,
-  type PlayerSession,
 } from "@/lib/player-session";
 
 const lastRoomKey = "nigoichi-last-room";
@@ -64,10 +70,14 @@ function timeLimitLabel(seconds: number) {
 
 function apiMessage(error: unknown, fallback: string) {
   if (!(error instanceof OnlineRoomApiError)) return fallback;
+  const payloadErrorCode = error.payload && typeof error.payload === "object" && "errorCode" in error.payload
+    ? String((error.payload as { errorCode?: unknown }).errorCode ?? "")
+    : "";
   if (error.status === 401) return "合言葉が違うか、ログインの有効期限が切れています。";
   if (error.status === 403) return "この操作を行う権限がありません。";
   if (error.status === 404) return "部屋が見つかりません。";
   if (error.status === 409) return "部屋が満員か、ほかの端末で状態が更新されました。もう一度お試しください。";
+  if (payloadErrorCode === "NIGOICHI_WORDS_UNAVAILABLE") return "単語DBのGeneral Game Poolから、設定した難易度の単語を取得できませんでした。";
   if (error.status === 503) return "部屋サーバーを利用できません。少し待ってお試しください。";
   return fallback;
 }
@@ -85,9 +95,8 @@ function PlayerRow({ player, isHost, isMe, score }: { player: NigoichiPlayer; is
 }
 
 export function NigoichiGame() {
-  const [session, setSession] = useState<PlayerSession | null>(null);
   const [room, setRoom] = useState<NigoichiRoom | null>(null);
-  const [ready, setReady] = useState(false);
+  const { session, ready, isRestoringRoom } = useOnlineGameSessionRestore({ lastRoomKey, fetchActiveRoom: nigoichiRoomApi.fetchActiveRoom, fetchRoom: nigoichiRoomApi.fetchRoom, setRoom });
   const [error, setError] = useState("");
   const [passphrase, setPassphrase] = useState("");
   const [joinCode, setJoinCode] = useState("");
@@ -95,38 +104,11 @@ export function NigoichiGame() {
   const [showChoices, setShowChoices] = useState(false);
   const [newPlayerCapacity, setNewPlayerCapacity] = useState(3);
   const [associationDrafts, setAssociationDrafts] = useState<Record<string, string[]>>({});
+  const timeoutAssociationKeyRef = useRef("");
   const [guessSelection, setGuessSelection] = useState<{ roundKey: string; number: number } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
   const resultReturnGate = useRoomResultReturnGate({ room, setRoom, playerId: session?.id ?? "", resultPhase: "result", onReturnUnavailable: () => setError("部屋に戻れません。解散されたか、参加情報が変更されています。") });
-
-  useEffect(() => {
-    let active = true;
-    let timer: number | undefined;
-    if (!isPlayerAuthenticated()) {
-      timer = window.setTimeout(() => setReady(true), 0);
-      return () => { active = false; if (timer) window.clearTimeout(timer); };
-    }
-    void loadPersistentPlayerSession().then(async (savedSession) => {
-      if (!active || !savedSession?.id) { if (active) setReady(true); return; }
-      setSession(savedSession);
-      const savedRoom = await restoreOnlineRoom({
-        playerId: savedSession.id,
-        lastCode: localStorage.getItem(lastRoomKey),
-        fetchActiveRoom: nigoichiRoomApi.fetchActiveRoom,
-        fetchRoom: nigoichiRoomApi.fetchRoom,
-      });
-      if (!active) return;
-      timer = window.setTimeout(() => {
-        if (savedRoom) {
-          setRoom(savedRoom);
-          localStorage.setItem(lastRoomKey, savedRoom.code);
-        }
-        setReady(true);
-      }, 0);
-    }).catch(() => { if (active) setReady(true); });
-    return () => { active = false; if (timer) window.clearTimeout(timer); };
-  }, []);
 
   const roomCode = room?.code;
   const roomPhase = room?.phase;
@@ -140,7 +122,7 @@ export function NigoichiGame() {
   useOnlineRoomPolling({
     game: "nigoichi",
     roomCode: playerId && !resultReturnGate.isRoomDissolved ? roomCode : null,
-    intervalMs: roomPhase === "lobby" ? onlineRoomPollingIntervals.idle : onlineRoomPollingIntervals.active,
+    intervalMs: roomPhase === "lobby" || roomPhase === "result" ? onlineRoomPollingIntervals.idle : onlineRoomPollingIntervals.active,
     fetchRoom: (code) => nigoichiRoomApi.fetchRoom(code, playerId),
     onRoom: resultReturnGate.acceptIncomingRoom,
     onMissing: () => {
@@ -184,6 +166,7 @@ export function NigoichiGame() {
       setIsSaving(false);
     }
   }, [isSaving, room]);
+  useRoomLobbyReturnConfirmation({ room, playerId, confirmReturn: () => runAction({ type: "confirm-lobby-return", actorId: playerId }) });
 
   const timerPhaseStartedAt = room?.phaseStartedAt;
   const timerDurationSeconds = room?.phase === "clue"
@@ -191,6 +174,7 @@ export function NigoichiGame() {
     : room?.phase === "guess"
       ? room.guessTimeLimitSeconds
       : 0;
+  const timerClaimDelayMs = room ? clientTimeoutClaimDelayMs({ playerId, hostId: room.hostId, playerIds: room.players.map((player) => player.id) }) : 0;
 
   useEffect(() => {
     if (!roomCode || !playerId || !timerPhaseStartedAt || timerDurationSeconds <= 0 || !roomPhase || !["clue", "guess"].includes(roomPhase)) return;
@@ -198,9 +182,28 @@ export function NigoichiGame() {
       void applyNigoichiRoomAction(roomCode, { type: "expire-phase", actorId: playerId, phaseStartedAt: timerPhaseStartedAt })
         .then((saved) => setRoom((current) => current?.code === saved.code ? saved : current))
         .catch(() => undefined);
-    }, Math.max(0, timerPhaseStartedAt + timerDurationSeconds * 1000 - Date.now()) + 100);
+    }, Math.max(0, timerPhaseStartedAt + timerDurationSeconds * 1000 + commonGameTimeoutGraceMs() - synchronizedNow()) + 100 + timerClaimDelayMs);
     return () => window.clearTimeout(timer);
-  }, [playerId, roomCode, roomPhase, timerDurationSeconds, timerPhaseStartedAt]);
+  }, [playerId, roomCode, roomPhase, timerClaimDelayMs, timerDurationSeconds, timerPhaseStartedAt]);
+
+  useEffect(() => {
+    if (!room || room.phase !== "clue" || !room.phaseStartedAt || room.clueTimeLimitSeconds <= 0 || room.associations[playerId]) return;
+    const clues = Array.from({ length: room.associationWordCount }, (_, index) => associationDrafts[playerId]?.[index] ?? "");
+    if (!clues.some((clue) => clue.trim())) return;
+    const key = `${room.code}:${room.gameNumber}:${room.phaseStartedAt}:${playerId}`;
+    const delay = Math.max(0, room.phaseStartedAt + room.clueTimeLimitSeconds * 1000 - synchronizedNow());
+    const timer = window.setTimeout(() => {
+      if (timeoutAssociationKeyRef.current === key) return;
+      timeoutAssociationKeyRef.current = key;
+      void applyNigoichiRoomAction(room.code, { type: "submit-timeout-associations", actorId: playerId, playerId, clues })
+        .then((saved) => {
+          setRoom((current) => current?.code === saved.code ? saved : current);
+          setAssociationDrafts((current) => { const next = { ...current }; delete next[playerId]; return next; });
+        })
+        .catch(() => undefined);
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [associationDrafts, playerId, room]);
 
   const createRoom = async () => {
     if (!session?.id || isSaving) return;
@@ -256,6 +259,7 @@ export function NigoichiGame() {
   };
 
   const leaveRoom = async () => {
+    if (!confirmRoomLeave()) return;
     const saved = await runAction({ type: "leave-room", actorId: playerId });
     if (!saved) return;
     setRoom(null);
@@ -346,9 +350,11 @@ export function NigoichiGame() {
           <GamePlayerMenu id={session.id} name={session.name} avatarColor={session.avatarColor} avatarImage={session.avatarImage} hasRecoveryEmail={session.hasRecoveryEmail} />
         </GameTopBanner>
         <div className="mx-auto max-w-4xl">
+          <GameLoungeVisual gameId="nigoichi" className="mt-5" />
           <section className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-slate-950/80 shadow-2xl">
             <div className="bg-gradient-to-r from-indigo-300 via-amber-200 to-rose-300 px-6 py-8 text-slate-950"><p className="text-xs font-black uppercase tracking-[0.28em]">WORD OUT</p><h1 className="mt-2 text-4xl font-black sm:text-6xl">ワードアウト</h1><p className="mt-3 font-bold">みんなの連想を読み解き、誰にも配られていない言葉を見つけよう。</p><p className="mt-2 text-sm font-semibold">1人2枚が基本。1人に配る枚数を増やして難易度を上げられます。</p></div>
-            <div className="grid gap-6 p-6 md:grid-cols-2">
+            {isRestoringRoom && <p className="border-b border-indigo-300/20 bg-indigo-300/10 px-6 py-3 text-sm font-bold text-indigo-100">前回の部屋を確認中です。画面は先に表示しています。</p>}
+            <div inert={isRestoringRoom} aria-busy={isRestoringRoom} className={`grid gap-6 p-6 md:grid-cols-2 ${isRestoringRoom ? "opacity-60" : ""}`}>
               <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-5">
                 <h2 className="text-xl font-black">部屋を作る</h2>
                 <p className="mt-2 text-sm leading-6 text-slate-400">最大募集人数を決めて部屋を作ります。ゲーム設定は作成後に変更できます。</p>
@@ -386,9 +392,10 @@ export function NigoichiGame() {
       </GameTopBanner>
       {rulesDialog}
       <GameAdSlot gameId="nigoichi" surface={room.phase === "lobby" ? "room-lobby" : room.phase === "result" ? "result" : null} disabled={room.debugMode} />
+      {room.phase === "lobby" && <div className="mx-auto max-w-6xl px-4 pt-4"><GameLoungeVisual gameId="nigoichi" /></div>}
       <div className="mx-auto grid max-w-6xl gap-4 px-4 py-5 lg:grid-cols-[280px_minmax(0,1fr)]">
         <aside className="space-y-4">
-          <section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4"><div className="flex items-center justify-between"><h2 className="font-black">参加者・累計得点</h2><span className="text-sm text-slate-400">{room.players.length}/{room.playerCapacity}人</span></div><ul className="mt-3 space-y-2">{room.players.map((player) => <PlayerRow key={player.id} player={player} isHost={player.id === room.hostId} isMe={player.id === playerId} score={room.totalScores[player.id] ?? 0} />)}</ul></section>
+          <section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4"><div className="flex items-center justify-between"><h2 className="font-black">参加者・累計得点</h2><span className="text-sm text-slate-400">{room.players.length}/{room.playerCapacity}人</span></div><ul className="mt-3 space-y-2">{room.players.map((player) => <PlayerRow key={player.id} player={player} isHost={player.id === room.hostId} isMe={player.id === playerId} score={room.totalScores[player.id] ?? 0} />)}</ul><RoomLobbyReturnStatus state={room.lobbyReturn} players={room.players} hostId={room.hostId} isHost={isHost} onRemoveWaitingPlayer={(player) => { if (window.confirm(`${player.name}さんを退出扱いにしますか？`)) void runAction({ type: "remove-waiting-player", actorId: playerId, targetPlayerId: player.id }); }} /></section>
           <RoomConfigSummary items={[{ label: "最大募集人数", value: `${room.playerCapacity}人` }, { label: "P：現在の参加人数", value: `${room.players.length}人` }, { label: "A：1人に配るカード", value: `${room.cardsPerPlayer}枚` }, { label: "M：書く連想語", value: `${room.associationWordCount}語` }, { label: "B：場に並ぶカード", value: `${roomTotalCards}枚` }, { label: "難易度", value: nigoichiWordDifficultyLabels[room.wordDifficulty] }, { label: "合言葉", value: room.passphrase ? "あり" : "なし" }, { label: "連想語時間", value: timeLimitLabel(room.clueTimeLimitSeconds) }, { label: "予想時間", value: timeLimitLabel(room.guessTimeLimitSeconds) }]} />
         </aside>
         <div className="space-y-4">
@@ -422,7 +429,7 @@ export function NigoichiGame() {
               <p className="mt-2 rounded-lg bg-indigo-950/40 px-3 py-2 text-xs font-bold text-indigo-100">B = {roomConfigPlayerCount} × {room.cardsPerPlayer} + 1 = {roomTotalCards}枚。場に並ぶカード総数は最大21枚です。難易度分類は暫定版です。</p>
             </div>}
             {isHost && room.debugMode && <div className="mt-5 rounded-xl border border-cyan-300/25 bg-cyan-300/10 p-4"><p className="text-sm font-bold text-cyan-50">ダミーを最大募集人数まで追加し、ホスト1人で提出・予想・結果表示まで確認できます。</p><button type="button" disabled={isSaving || room.players.length >= room.playerCapacity} onClick={() => void runAction({ type: "debug-add-player", actorId: playerId })} className="mt-3 w-full rounded-lg bg-cyan-200 px-4 py-2 font-black text-cyan-950 disabled:opacity-40">ダミーユーザーを追加</button></div>}
-            {isHost ? <button type="button" disabled={isSaving || (!room.debugMode && room.players.length < nigoichiMinimumPlayers)} onClick={() => void runAction({ type: "start-game", actorId: playerId })} className="mt-6 w-full rounded-xl bg-amber-300 px-4 py-4 text-lg font-black text-slate-950 disabled:opacity-40">{!room.debugMode && room.players.length < nigoichiMinimumPlayers ? "2人以上で開始できます" : "このメンバーで開始"}</button> : <p className="mt-5 text-center font-bold text-slate-300">ホストがゲームを開始するまでお待ちください。</p>}
+            {isHost ? <button type="button" disabled={isSaving || (!room.debugMode && room.players.length < nigoichiMinimumPlayers) || !allRoomPlayersReturned(room.lobbyReturn, room.players)} onClick={() => void runAction({ type: "start-game", actorId: playerId })} className="mt-6 w-full rounded-xl bg-amber-300 px-4 py-4 text-lg font-black text-slate-950 disabled:opacity-40">{!allRoomPlayersReturned(room.lobbyReturn, room.players) ? "参加者の復帰待ち" : !room.debugMode && room.players.length < nigoichiMinimumPlayers ? "2人以上で開始できます" : "このメンバーで開始"}</button> : <p className="mt-5 text-center font-bold text-slate-300">ホストがゲームを開始するまでお待ちください。</p>}
           </section>}
 
           {room.phase !== "lobby" && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6">

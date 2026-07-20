@@ -44,7 +44,7 @@ export function useWordWolfRoomSession(args: Args) {
   useOnlineRoomPolling({
     game: "wordwolf",
     roomCode: args.isRoomDissolved ? null : roomCode,
-    intervalMs: args.room?.phase === "lobby" ? onlineRoomPollingIntervals.idle : onlineRoomPollingIntervals.active,
+    intervalMs: args.room?.phase === "lobby" || args.room?.phase === "result" ? onlineRoomPollingIntervals.idle : onlineRoomPollingIntervals.active,
     fetchRoom: loadRoomFromStore,
     onRoom: args.acceptIncomingRoom,
     onMissing: () => {

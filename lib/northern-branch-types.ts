@@ -1,3 +1,5 @@
+import type { RoomLobbyReturnAction, RoomLobbyReturnState } from "./room-lobby-return.ts";
+
 export type NorthernCardKind = "fund" | "resource" | "livestock" | "product" | "dung";
 
 export type NorthernCardId =
@@ -112,6 +114,7 @@ export type NorthernRoom = {
   passphrase: string;
   phase: NorthernRoomPhase;
   players: NorthernRoomPlayer[];
+  lobbyReturn?: RoomLobbyReturnState;
   gameNumber: number;
   debugMode: boolean;
   debugReplayEnabled: boolean;
@@ -131,7 +134,7 @@ export type NorthernRoomChoice = {
   updatedAt: number;
 };
 
-export type NorthernRoomAction =
+export type NorthernRoomAction = RoomLobbyReturnAction
   | { type: "join-room"; actorId: string; player: NorthernRoomPlayer; passphrase: string }
   | { type: "leave-room"; actorId: string }
   | { type: "set-debug"; actorId: string; enabled: boolean }

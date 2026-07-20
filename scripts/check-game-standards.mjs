@@ -9,10 +9,10 @@ const fail = (message) => failures.push(message);
 if (!existsSync(registryPath)) { console.error("[game-standards] config/game-registry.json がありません。"); process.exit(1); }
 const games = JSON.parse(readFileSync(registryPath, "utf8"));
 const ids = new Set(); const hrefs = new Set();
-const allowedGameTags = new Set(["対戦", "協力"]);
+const allowedGameTags = new Set(["対戦", "協力", "チーム戦", "正体隠匿", "会話", "ブラフ", "作文", "戦略", "連想", "推理", "お絵描き"]);
 const sharedDissolutionModule = read("lib/online-room-dissolution.ts");
 const sharedPersistenceModule = read("lib/online-room-persistence.ts");
-const lobbyRoomSources = ["app/games/GameLobby.tsx", "app/games/use-lobby-room-data.ts"].filter((file) => existsSync(join(root, file))).map(read).join("\n");
+const lobbyActiveRoomsRoute = existsSync(join(root, "app/api/player-active-rooms/route.ts")) ? read("app/api/player-active-rooms/route.ts") : "";
 
 for (const game of games) {
   if (!game.id || ids.has(game.id)) fail(`ゲームIDが空または重複しています: ${game.id || "(empty)"}`);
@@ -20,10 +20,14 @@ for (const game of games) {
   ids.add(game.id); hrefs.add(game.href);
   if (!Array.isArray(game.tags) || game.tags.length === 0) fail(`${game.id}: tags を1件以上設定してください。`);
   else for (const tag of game.tags) if (!allowedGameTags.has(tag)) fail(`${game.id}: 未対応のタグ「${tag}」があります。`);
+  if (game.tags.length > 3) fail(`${game.id}: ロビーカードのタグは3件以内にしてください。`);
+  if (new Set(game.tags).size !== game.tags.length) fail(`${game.id}: tags に重複があります。`);
   for (const field of ["entryFile", "pageFile"]) if (!game[field] || !existsSync(join(root, game[field]))) fail(`${game.id}: ${field} が存在しません。`);
+  if (!existsSync(join(root, `public/game-visuals/${game.id}.webp`))) fail(`${game.id}: ゲームカード用キービジュアル public/game-visuals/${game.id}.webp がありません。`);
   for (const file of game.moduleBoundaryFiles || []) if (!existsSync(join(root, file))) fail(`${game.id}: モジュール境界ファイル ${file} が存在しません。`);
   if (!game.entryFile || !existsSync(join(root, game.entryFile))) continue;
   const entry = read(game.entryFile);
+  if (!entry.includes("GameLoungeVisual")) fail(`${game.id}: キービジュアルをゲーム入口・開始前ラウンジへ表示してください。`);
   const registeredModuleSources = [game.entryFile, ...(game.moduleBoundaryFiles || [])]
     .filter((file, index, files) => file && files.indexOf(file) === index && existsSync(join(root, file)))
     .map(read)
@@ -37,6 +41,20 @@ for (const game of games) {
     if (!Array.isArray(game.timeLimit.fields) || game.timeLimit.fields.length === 0) fail(`${game.id}: timeLimit.fields に保存する時間設定を列挙してください。`);
     else for (const field of game.timeLimit.fields) if (typeof field !== "string" || !timeLimitSources.includes(field)) fail(`${game.id}: 時間設定フィールド「${field}」の実装が登録済みモジュールにありません。`);
     if (typeof game.timeLimit.expiryToken !== "string" || !timeLimitSources.includes(game.timeLimit.expiryToken)) fail(`${game.id}: サーバー正本の時間切れ処理が登録済みモジュールにありません。`);
+    const textInputTimeout = game.timeLimit.textInputTimeout;
+    if (!textInputTimeout || !["adopt-entered-text", "not-applicable"].includes(textInputTimeout.mode)) {
+      fail(`${game.id}: timeLimit.textInputTimeout.mode を adopt-entered-text または not-applicable で宣言してください。`);
+    } else if (textInputTimeout.mode === "adopt-entered-text") {
+      if (!Array.isArray(textInputTimeout.implementationTokens) || textInputTimeout.implementationTokens.length === 0) {
+        fail(`${game.id}: 時間切れ時に入力済み文字を採用する実装を implementationTokens に登録してください。`);
+      } else {
+        for (const token of textInputTimeout.implementationTokens) {
+          if (typeof token !== "string" || token.trim().length === 0 || !timeLimitSources.includes(token)) fail(`${game.id}: 入力済み文字の時間切れ採用処理「${token || "(empty)"}」が登録済みモジュールにありません。`);
+        }
+      }
+    } else if (typeof textInputTimeout.reason !== "string" || textInputTimeout.reason.trim().length < 10) {
+      fail(`${game.id}: 時間制限付き文字入力が対象外である理由を timeLimit.textInputTimeout.reason に具体的に記載してください。`);
+    }
   } else if (typeof game.timeLimit.reason !== "string" || game.timeLimit.reason.trim().length < 10) {
     fail(`${game.id}: 時間制限の対象外理由を timeLimit.reason に具体的に記載してください。`);
   }
@@ -44,10 +62,10 @@ for (const game of games) {
   if (game.playMode === "online-room") {
     if (!read("lib/online-room-policy.ts").includes(`"${game.id}"`)) fail(`${game.id}: 共通人数上限マップにゲームIDがありません。`);
     if (!read("lib/room-dissolve-policy.ts").includes(`"${game.id}"`)) fail(`${game.id}: 共通解散ポリシーにゲームIDがありません。`);
-    if (!lobbyRoomSources.includes(`/api/${game.id}/rooms`)) fail(`${game.id}: ロビーのアクティブ部屋取得マップにAPIがありません。`);
+    if (!lobbyActiveRoomsRoute.includes(`${game.id}:`) && !lobbyActiveRoomsRoute.includes(`"${game.id}":`)) fail(`${game.id}: 共通のアクティブ部屋取得APIにloaderがありません。`);
     if (!entry.includes("GameAdSlot")) fail(`${game.id}: 非プレイ面の共通広告スロットがありません。`);
     if (!game.roomStoreFile || !existsSync(join(root, game.roomStoreFile))) fail(`${game.id}: roomStoreFile がありません。`);
-    else { const store = read(game.roomStoreFile); const modules = [entry, store, ...(game.moduleBoundaryFiles || []).map(read)].join("\n"); const usesRoomTtl = store.includes("multiplayerRoomTtlSeconds") || store.includes("multiplayerRoomExpiryArgs") || (store.includes("online-room-persistence") && sharedPersistenceModule.includes("multiplayerRoomExpiryArgs")); if (!usesRoomTtl) fail(`${game.id}: 共通の部屋TTLを使用していません。`); if (!store.includes("revision") && !store.includes("saveStoredWordWolfRoom")) fail(`${game.id}: サーバー側の部屋保存処理が見つかりません。`); if (!modules.includes("abort-game") && !modules.includes("abortGame")) fail(`${game.id}: ゲーム開始前へ戻すデバッグ中断処理がありません。`); const usesDissolutionPolicy = store.includes("canDissolveOnlineRoom") || (store.includes("online-room-dissolution") && sharedDissolutionModule.includes("canDissolveOnlineRoom")); if (!usesDissolutionPolicy) fail(`${game.id}: 進行中の部屋解散を防ぐ共通ポリシーがありません。`); }
+    else { const store = read(game.roomStoreFile); const modules = [entry, store, ...(game.moduleBoundaryFiles || []).map(read)].join("\n"); const usesRoomTtl = store.includes("multiplayerRoomTtlSeconds") || store.includes("multiplayerRoomExpiryArgs") || (store.includes("online-room-persistence") && sharedPersistenceModule.includes("multiplayerRoomExpiryArgs")); if (!usesRoomTtl) fail(`${game.id}: 共通の部屋TTLを使用していません。`); if (!store.includes("revision") && !store.includes("saveStoredWordWolfRoom")) fail(`${game.id}: サーバー側の部屋保存処理が見つかりません。`); if (!modules.includes("abort-game") && !modules.includes("abortGame")) fail(`${game.id}: ゲーム開始前へ戻すデバッグ中断処理がありません。`); if (!modules.includes("confirm-lobby-return") || !modules.includes("remove-waiting-player") || !modules.includes("allRoomPlayersReturned")) fail(`${game.id}: 共通のロビー復帰確認・待機者管理を使用していません。`); const usesDissolutionPolicy = store.includes("canDissolveOnlineRoom") || (store.includes("online-room-dissolution") && sharedDissolutionModule.includes("canDissolveOnlineRoom")); if (!usesDissolutionPolicy) fail(`${game.id}: 進行中の部屋解散を防ぐ共通ポリシーがありません。`); }
     if (!registeredModuleSources.includes("DebugModeButton") || !registeredModuleSources.includes("onAbort=") || !registeredModuleSources.includes("onReplayChange=")) fail(`${game.id}: トップバナーの共通デバッグメニュー（中断・プレイバック）がありません。`);
     if (!registeredModuleSources.includes("GamePlayerMenu")) fail(`${game.id}: ログアウトを内包する共通プレイヤーメニューがありません。`);
     if (entry.includes("DebugReplayButton")) fail(`${game.id}: プレイバック操作は独立表示せずDebugModeButtonへ入れてください。`);

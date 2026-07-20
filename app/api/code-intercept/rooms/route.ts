@@ -1,4 +1,4 @@
-import { conditionalJsonResponse } from "@/lib/conditional-json";
+import { conditionalJsonResponse, conditionalVersionedJsonResponse } from "@/lib/conditional-json";
 import { actionRequiresDebugAccess, requirePlayerDebugAccess } from "@/lib/debug-access";
 import { gameApiAccessDeniedResponse } from "@/lib/game-access";
 import type { CodeInterceptRoomAction } from "@/lib/code-intercept";
@@ -14,7 +14,7 @@ import {
 } from "@/lib/code-intercept-room-store";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
 import { authenticatedRoomDraft } from "@/lib/online-room-input";
-import { requireAuthenticatedPlayer } from "@/lib/player-auth";
+import { requireAuthenticatedPlayer, requireAuthenticatedPlayerId } from "@/lib/player-auth";
 import { commonOnlineRoomErrorResponse } from "@/lib/online-room-route-errors";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 
@@ -26,7 +26,10 @@ function errorResponse(error: unknown) {
   if (message === "CODE_INTERCEPT_BAD_PASSPHRASE") return Response.json({ error: "Bad passphrase" }, { status: 401 });
   if (message === "CODE_INTERCEPT_ROOM_FULL") return Response.json({ error: "Room is full" }, { status: 409 });
   if (message === "CODE_INTERCEPT_NOT_ENOUGH_PLAYERS") return Response.json({ error: "Each team needs at least two players and team sizes may differ by at most one" }, { status: 409 });
-  if (message === "CODE_INTERCEPT_WORDS_UNAVAILABLE") return Response.json({ error: "Word pool is unavailable" }, { status: 503 });
+  if (message === "CODE_INTERCEPT_WORDS_UNAVAILABLE") return Response.json({
+    error: "General Game Poolから設定した難易度の単語を取得できませんでした。",
+    errorCode: "CODE_INTERCEPT_WORDS_UNAVAILABLE",
+  }, { status: 503 });
   if (message === "CODE_INTERCEPT_ROOM_IN_PROGRESS") return Response.json({ error: "An active game cannot be dissolved" }, { status: 409 });
   if (message === "CODE_INTERCEPT_PLAYER_ALREADY_ACTIVE") return Response.json({ error: "Finish or leave the current room before entering another room" }, { status: 409 });
   if (message === "CODE_INTERCEPT_INVALID_CLUE" || message === "CODE_INTERCEPT_INVALID_ANSWER" || message === "CODE_INTERCEPT_INVALID_CONFIG" || message === "CODE_INTERCEPT_INVALID_CODE_LENGTH") return Response.json({ error: "Invalid game input" }, { status: 400 });
@@ -44,17 +47,19 @@ export async function GET(request: Request) {
   const code = url.searchParams.get("code")?.trim().toUpperCase() ?? "";
   const playerId = url.searchParams.get("playerId")?.trim() ?? "";
   try {
-    const session = await requireAuthenticatedPlayer();
-    if (playerId && playerId !== session.id) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
+    const authenticatedPlayerId = await requireAuthenticatedPlayerId();
+    if (playerId && playerId !== authenticatedPlayerId) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
     if (code) {
       const room = await loadStoredCodeInterceptRoom(code);
       if (!room) return Response.json({ error: "Room not found" }, { status: 404 });
-      if (!room.players.some((player) => player.id === session.id)) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
-      return conditionalJsonResponse(request, { room: sanitizeCodeInterceptRoom(room, session.id) });
+      if (!room.players.some((player) => player.id === authenticatedPlayerId)) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
+      return conditionalVersionedJsonResponse(request, `code-intercept:${room.code}:${room.revision}:${authenticatedPlayerId}`, () => ({ room: sanitizeCodeInterceptRoom(room, authenticatedPlayerId) }));
     }
     if (playerId) {
-      const room = await loadCodeInterceptPlayerActiveRoom(session.id);
-      return conditionalJsonResponse(request, { room: room ? sanitizeCodeInterceptRoom(room, session.id) : null });
+      const room = await loadCodeInterceptPlayerActiveRoom(authenticatedPlayerId);
+      return room
+        ? conditionalVersionedJsonResponse(request, `code-intercept:${room.code}:${room.revision}:${authenticatedPlayerId}`, () => ({ room: sanitizeCodeInterceptRoom(room, authenticatedPlayerId) }))
+        : conditionalJsonResponse(request, { room: null });
     }
     return conditionalJsonResponse(request, await listJoinableCodeInterceptRooms(url.searchParams.get("cursor")));
   } catch (error) {

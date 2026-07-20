@@ -9,6 +9,7 @@ import type {
 import { normalizeOnlineRoomCode } from "@/lib/online-room-input";
 import { onlineRoomPlayerLimits } from "@/lib/online-room-policy";
 import { isAvatarColor, isAvatarImage } from "@/lib/player-session";
+import { normalizeRoomLobbyReturnState } from "@/lib/room-lobby-return";
 
 const maximumPlayers = onlineRoomPlayerLimits.northernBranch;
 
@@ -66,6 +67,7 @@ export function normalizeNorthernRoom(value: unknown): NorthernRoom | null {
     passphrase: typeof parsed.passphrase === "string" ? parsed.passphrase.slice(0, 40) : "",
     phase,
     players,
+    lobbyReturn: normalizeRoomLobbyReturnState(parsed.lobbyReturn, players),
     gameNumber: typeof parsed.gameNumber === "number" ? Math.max(1, Math.floor(parsed.gameNumber)) : 1,
     debugMode: parsed.debugMode === true,
     debugReplayEnabled: parsed.debugReplayEnabled === true && parsed.debugMode === true,
