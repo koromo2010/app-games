@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { appendGameDebugLog } from "@/lib/game-debug-log";
+import { prepareGeneralGameWordDraw, rememberGeneralGameWordHistory } from "@/lib/general-game-word-history-store";
 import { recordNigoichiReplay } from "@/lib/game-replay-store";
 import { isMultiplayerRoomExpired } from "@/lib/multiplayer-room-lifecycle";
 import {
@@ -12,7 +13,6 @@ import {
   isValidNigoichiGuess,
   isValidNigoichiConfig,
   nigoichiMaximumAssociationWordsForPlayers,
-  nigoichiMaximumTotalCards,
   nigoichiMinimumPlayers,
   normalizeNigoichiTimeLimit,
   nigoichiRoomHasSpace,
@@ -31,7 +31,6 @@ import { allRoomPlayersReturned, beginRoomLobbyReturn, canRemoveWaitingRoomPlaye
 import { beginGame, resetGame, withPlayersAndCorrectedConfig } from "@/lib/nigoichi-room-domain";
 import { normalizeAssociationWords, normalizeNigoichiRoom, normalizeWordDifficulty } from "@/lib/nigoichi-room-normalizer";
 import { nigoichiRoomChoice, sanitizeNigoichiRoom } from "@/lib/nigoichi-room-presentation";
-import { loadNigoichiWordPool } from "@/lib/nigoichi-word-repository";
 
 export { sanitizeNigoichiRoom };
 
@@ -157,6 +156,7 @@ export async function applyStoredNigoichiAction(code: string, action: NigoichiRo
     const activeRoom = await loadNigoichiPlayerActiveRoom(action.actorId);
     claim = await claimOnlineRoomForPlayer({ key: playerActiveRoomKey(action.actorId), targetCode: normalizedCode, currentRoom: activeRoom, gameId: "nigoichi", conflictError: "NIGOICHI_PLAYER_ALREADY_ACTIVE" });
   }
+  const startDrawRef: { value: Awaited<ReturnType<typeof prepareGeneralGameWordDraw>> | null } = { value: null };
   const room = await mutateStoredRoom(normalizedCode, async (current) => {
     if (action.type === "join-room") {
       if (current.phase !== "lobby" || action.actorId !== action.player.id) throw new Error("NIGOICHI_ROOM_FORBIDDEN");
@@ -235,8 +235,17 @@ export async function applyStoredNigoichiAction(code: string, action: NigoichiRo
       if (!current.debugMode && current.players.length < nigoichiMinimumPlayers) throw new Error("NIGOICHI_NOT_ENOUGH_PLAYERS");
       const validationPlayerCount = current.debugMode ? Math.max(nigoichiMinimumPlayers, current.players.length) : current.players.length;
       if (!isValidNigoichiConfig(validationPlayerCount, current.cardsPerPlayer, current.associationWordCount)) throw new Error("NIGOICHI_INVALID_CONFIG");
-      const wordPool = await loadNigoichiWordPool(current.wordDifficulty, nigoichiMaximumTotalCards);
-      return beginGame({ ...current, lobbyReturn: undefined }, wordPool);
+      try {
+        startDrawRef.value = await prepareGeneralGameWordDraw({
+          game: "nigoichi",
+          playerIds: current.players.filter((player) => !player.isDummy).map((player) => player.id),
+          difficulty: current.wordDifficulty,
+          count: current.players.length * current.cardsPerPlayer + 1,
+        });
+      } catch {
+        throw new Error("NIGOICHI_WORDS_UNAVAILABLE");
+      }
+      return beginGame({ ...current, lobbyReturn: undefined }, startDrawRef.value.words, startDrawRef.value.now);
     }
     if (action.type === "reset-game") {
       if (!isHost || current.phase !== "result") throw new Error("NIGOICHI_ROOM_FORBIDDEN");
@@ -287,6 +296,16 @@ export async function applyStoredNigoichiAction(code: string, action: NigoichiRo
   });
   await redisCommand<number>(["SADD", roomIndexKey, room.code]);
   await saveActiveRooms(room);
+  const completedStartDraw = startDrawRef.value;
+  if (action.type === "start-game" && completedStartDraw) {
+    await rememberGeneralGameWordHistory({
+      game: "nigoichi",
+      playerIds: room.players.filter((player) => !player.isDummy).map((player) => player.id),
+      words: room.words,
+      resetHistory: completedStartDraw.resetHistory,
+      now: completedStartDraw.now,
+    }).catch(() => undefined);
+  }
   if (action.type === "leave-room") await clearActiveRoom(action.actorId, room.code);
   if (action.type === "remove-waiting-player") await clearActiveRoom(action.targetPlayerId, room.code);
   return room;

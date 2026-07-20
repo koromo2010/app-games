@@ -30,6 +30,7 @@ import {
   type CodeInterceptRoomAction,
 } from "@/lib/code-intercept";
 import { appendGameDebugLog } from "@/lib/game-debug-log";
+import { prepareGeneralGameWordDraw, rememberGeneralGameWordHistory } from "@/lib/general-game-word-history-store";
 import { recordCodeInterceptReplay } from "@/lib/game-replay-store";
 import { isMultiplayerRoomExpired } from "@/lib/multiplayer-room-lifecycle";
 import { loadIndexedOnlineRoomPage } from "@/lib/online-room-list";
@@ -43,7 +44,6 @@ import { allRoomPlayersReturned, beginRoomLobbyReturn, canRemoveWaitingRoomPlaye
 import { allAnswersSubmitted, allCluesSubmitted, allCodeLengthsChosen, beginCluePhase, beginGame, beginRound, resetGame, targetPlayer } from "@/lib/code-intercept-room-domain";
 import { normalizeCodeInterceptRoom } from "@/lib/code-intercept-room-normalizer";
 import { codeInterceptRoomChoice, sanitizeCodeInterceptRoom } from "@/lib/code-intercept-room-presentation";
-import { loadCodeInterceptWordPool } from "@/lib/code-intercept-word-repository";
 
 export { sanitizeCodeInterceptRoom };
 
@@ -138,6 +138,7 @@ export async function applyStoredCodeInterceptAction(code: string, action: CodeI
     const activeRoom = await loadCodeInterceptPlayerActiveRoom(action.actorId);
     claim = await claimOnlineRoomForPlayer({ key: playerActiveRoomKey(action.actorId), targetCode: normalizedCode, currentRoom: activeRoom, gameId: "code-intercept", conflictError: "CODE_INTERCEPT_PLAYER_ALREADY_ACTIVE" });
   }
+  const startDrawRef: { value: Awaited<ReturnType<typeof prepareGeneralGameWordDraw>> | null } = { value: null };
   const room = await mutateStoredRoom(normalizedCode, async (current) => {
     if (action.type === "join-room") {
       if (current.phase !== "lobby" || action.actorId !== action.player.id) throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
@@ -205,8 +206,17 @@ export async function applyStoredCodeInterceptAction(code: string, action: CodeI
       if (!isHost || current.phase !== "lobby") throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
       if (!allRoomPlayersReturned(current.lobbyReturn, current.players)) throw new Error("CODE_INTERCEPT_PLAYERS_NOT_RETURNED");
       if ((!current.debugMode && current.players.length < codeInterceptMinimumPlayers) || !codeInterceptRoomIsStartable(current)) throw new Error("CODE_INTERCEPT_NOT_ENOUGH_PLAYERS");
-      const wordPool = await loadCodeInterceptWordPool(current.cardCount * 2);
-      return beginGame({ ...current, lobbyReturn: undefined }, wordPool);
+      try {
+        startDrawRef.value = await prepareGeneralGameWordDraw({
+          game: "code-intercept",
+          playerIds: current.players.filter((player) => !player.isDummy).map((player) => player.id),
+          difficulty: "normal",
+          count: current.cardCount * 2,
+        });
+      } catch {
+        throw new Error("CODE_INTERCEPT_WORDS_UNAVAILABLE");
+      }
+      return beginGame({ ...current, lobbyReturn: undefined }, startDrawRef.value.words);
     }
     if (action.type === "abort-game") {
       if (!isHost || !current.debugMode || current.phase === "lobby") throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
@@ -314,6 +324,16 @@ export async function applyStoredCodeInterceptAction(code: string, action: CodeI
   });
   await redisCommand<number>(["SADD", roomIndexKey, room.code]);
   await saveActiveRooms(room);
+  const completedStartDraw = startDrawRef.value;
+  if (action.type === "start-game" && completedStartDraw) {
+    await rememberGeneralGameWordHistory({
+      game: "code-intercept",
+      playerIds: room.players.filter((player) => !player.isDummy).map((player) => player.id),
+      words: room.teams.flatMap((team) => team.secretWords),
+      resetHistory: completedStartDraw.resetHistory,
+      now: completedStartDraw.now,
+    }).catch(() => undefined);
+  }
   if (action.type === "leave-room") await clearActiveRoom(action.actorId, room.code);
   if (action.type === "remove-waiting-player") await clearActiveRoom(action.targetPlayerId, room.code);
   return room;

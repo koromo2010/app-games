@@ -24,7 +24,7 @@ import {
   type CodeInterceptRoom,
 } from "../lib/code-intercept.ts";
 import { beginGame, dealSecretWords, resetGame } from "../lib/code-intercept-room-domain.ts";
-import { codeInterceptWordSelectionBounds } from "../lib/code-intercept-word-repository.ts";
+import { codeInterceptWordPoolSource } from "../lib/code-intercept-word-repository.ts";
 
 function room(): CodeInterceptRoom {
   const now = Date.now();
@@ -99,11 +99,8 @@ test("secret cards reject a database pool that is too small after normalization"
   );
 });
 
-test("secret-card vocabulary excludes words below effective Zipf 4.5", () => {
-  assert.deepEqual(codeInterceptWordSelectionBounds, {
-    minimumEffectiveZipf: 4.5,
-    maximumEffectiveZipf: 6.5,
-  });
+test("secret-card vocabulary uses the general_word_pool eligibility tag", () => {
+  assert.equal(codeInterceptWordPoolSource, "general_word_pool");
 });
 
 test("draft input is isolated when a phase restarts in the same game and round", () => {

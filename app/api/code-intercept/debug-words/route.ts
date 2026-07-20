@@ -6,7 +6,7 @@ import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 import { loadStoredCodeInterceptRoom } from "@/lib/code-intercept-room-store";
 import {
   codeInterceptDebugWordSampleSize,
-  codeInterceptWordSelectionBounds,
+  codeInterceptWordPoolSource,
   loadCodeInterceptWordPool,
 } from "@/lib/code-intercept-word-repository";
 
@@ -34,7 +34,8 @@ export async function GET(request: Request) {
 
     return Response.json({
       words,
-      bounds: codeInterceptWordSelectionBounds,
+      source: codeInterceptWordPoolSource,
+      difficulty: "normal",
     });
   } catch (error) {
     const common = commonOnlineRoomErrorResponse(error);

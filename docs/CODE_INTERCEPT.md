@@ -75,6 +75,7 @@
 - 旧形式の`codeLength`だけを持つ保存済みルームは、固定モードとして復元する。
 - `teamAssignmentMode` のない旧ルームは「手動」として復元する。
 - 旧形式の `actionTimeLimitSeconds` だけを持つ保存済みルームは、その値を出題・ヒント作成時間とソナー選択時間の両方へ引き継いで復元する。
+- 秘密単語は共通単語DBの `active_word_game_eligibility.game_id = 'general_word_pool'`（General Game Pool）だけを使う。普通80%＋簡単20%で抽選し、参加者がJST当日にこのゲームで見た単語は除外する。使い切り時のみ当日履歴を全解除する。
 
 ## サーバー検証と秘密情報
 

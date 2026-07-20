@@ -88,7 +88,8 @@ async function sampleCodeInterceptDebugWords(roomCode: string): Promise<DebugWor
   const response = await fetch(`/api/code-intercept/debug-words?roomCode=${encodeURIComponent(roomCode)}`, { cache: "no-store" });
   const payload = await response.json().catch(() => null) as {
     words?: unknown;
-    bounds?: { minimumEffectiveZipf?: unknown; maximumEffectiveZipf?: unknown };
+    source?: unknown;
+    difficulty?: unknown;
     error?: unknown;
   } | null;
   if (!response.ok) {
@@ -96,15 +97,14 @@ async function sampleCodeInterceptDebugWords(roomCode: string): Promise<DebugWor
   }
   const words = Array.isArray(payload?.words) ? payload.words.filter((word): word is string => typeof word === "string" && Boolean(word.trim())) : [];
   if (words.length !== 10) throw new Error("候補語を10語揃えられませんでした。");
-  const minimum = typeof payload?.bounds?.minimumEffectiveZipf === "number" ? payload.bounds.minimumEffectiveZipf : 4.5;
-  const maximum = typeof payload?.bounds?.maximumEffectiveZipf === "number" ? payload.bounds.maximumEffectiveZipf : 6.5;
   return {
     fields: [
       { label: "抽出数", value: `${words.length}語` },
-      { label: "現在の抽選範囲", value: `実効Zipf ${minimum}〜${maximum}・固有名詞除外` },
+      { label: "抽選元", value: payload?.source === "general_word_pool" ? "General Game Pool（general_word_poolタグ）" : "不明" },
+      { label: "難易度", value: payload?.difficulty === "normal" ? "普通（80%）＋簡単（20%）" : "不明" },
     ],
     items: words.map((word) => ({ title: word, fields: [] })),
-    notice: "実際のゲーム開始と同じDB抽選を試しています。部屋、秘密カード、出題履歴は変更しません。",
+    notice: "実際のゲーム開始と同じGeneral Game Pool（general_word_poolタグ）抽選を試しています。部屋、秘密カード、出題履歴は変更しません。",
   };
 }
 
