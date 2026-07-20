@@ -17,6 +17,7 @@ import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
 import { confirmRoomLeave } from "@/app/components/room-navigation-confirmation";
 import { useOnlineGameSessionRestore } from "@/app/hooks/use-online-game-session-restore";
 import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "@/app/hooks/use-online-room-polling";
+import { clientTimeoutClaimDelayMs } from "@/lib/game-timer/client-policy";
 import { useRoomResultReturnGate } from "@/app/hooks/use-room-result-return-gate";
 import { useRoomLobbyReturnConfirmation } from "@/app/hooks/use-room-lobby-return-confirmation";
 import { applyNorthernBranchRoomAction, createNorthernBranchRoom, northernBranchRoomApi } from "@/app/northern-branch/northern-branch-room-api-client";
@@ -126,6 +127,7 @@ export function NorthernBranchGame() {
   const winner = game?.players.find((player) => player.id === game.winnerId);
   const timerTurnStartedAt = room?.turnStartedAt;
   const timerDurationSeconds = room?.turnTimeLimitSeconds ?? 0;
+  const timerClaimDelayMs = room ? clientTimeoutClaimDelayMs({ playerId, hostId: room.hostId, playerIds: room.players.map((player) => player.id) }) : 0;
   const configItems = room ? [
     { label: "参加人数", value: `${room.players.length}/4人` },
     { label: "勝利条件", value: `${northernRules.victoryPoints}点` },
@@ -141,9 +143,9 @@ export function NorthernBranchGame() {
       void applyNorthernBranchRoomAction(roomCode, { type: "expire-turn", actorId: playerId, turnStartedAt: timerTurnStartedAt })
         .then((saved) => setRoom((current) => current?.code === saved.code ? saved : current))
         .catch(() => undefined);
-    }, Math.max(0, timerTurnStartedAt + timerDurationSeconds * 1000 - synchronizedNow()) + 100);
+    }, Math.max(0, timerTurnStartedAt + timerDurationSeconds * 1000 - synchronizedNow()) + 100 + timerClaimDelayMs);
     return () => window.clearTimeout(timer);
-  }, [playerId, roomCode, roomPhase, timerDurationSeconds, timerTurnStartedAt]);
+  }, [playerId, roomCode, roomPhase, timerClaimDelayMs, timerDurationSeconds, timerTurnStartedAt]);
 
   const runAction = useCallback(async (action: NorthernRoomAction) => {
     if (!room) return null;

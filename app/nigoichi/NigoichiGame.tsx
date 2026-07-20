@@ -18,6 +18,7 @@ import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
 import { confirmRoomLeave } from "@/app/components/room-navigation-confirmation";
 import { useOnlineGameSessionRestore } from "@/app/hooks/use-online-game-session-restore";
 import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "@/app/hooks/use-online-room-polling";
+import { clientTimeoutClaimDelayMs } from "@/lib/game-timer/client-policy";
 import { useRoomResultReturnGate } from "@/app/hooks/use-room-result-return-gate";
 import { useRoomLobbyReturnConfirmation } from "@/app/hooks/use-room-lobby-return-confirmation";
 import { applyNigoichiRoomAction, createNigoichiRoom, nigoichiRoomApi } from "@/app/nigoichi/nigoichi-room-api-client";
@@ -172,6 +173,7 @@ export function NigoichiGame() {
     : room?.phase === "guess"
       ? room.guessTimeLimitSeconds
       : 0;
+  const timerClaimDelayMs = room ? clientTimeoutClaimDelayMs({ playerId, hostId: room.hostId, playerIds: room.players.map((player) => player.id) }) : 0;
 
   useEffect(() => {
     if (!roomCode || !playerId || !timerPhaseStartedAt || timerDurationSeconds <= 0 || !roomPhase || !["clue", "guess"].includes(roomPhase)) return;
@@ -179,9 +181,9 @@ export function NigoichiGame() {
       void applyNigoichiRoomAction(roomCode, { type: "expire-phase", actorId: playerId, phaseStartedAt: timerPhaseStartedAt })
         .then((saved) => setRoom((current) => current?.code === saved.code ? saved : current))
         .catch(() => undefined);
-    }, Math.max(0, timerPhaseStartedAt + timerDurationSeconds * 1000 + commonGameTimeoutGraceMs() - synchronizedNow()) + 100);
+    }, Math.max(0, timerPhaseStartedAt + timerDurationSeconds * 1000 + commonGameTimeoutGraceMs() - synchronizedNow()) + 100 + timerClaimDelayMs);
     return () => window.clearTimeout(timer);
-  }, [playerId, roomCode, roomPhase, timerDurationSeconds, timerPhaseStartedAt]);
+  }, [playerId, roomCode, roomPhase, timerClaimDelayMs, timerDurationSeconds, timerPhaseStartedAt]);
 
   useEffect(() => {
     if (!room || room.phase !== "clue" || !room.phaseStartedAt || room.clueTimeLimitSeconds <= 0 || room.associations[playerId]) return;

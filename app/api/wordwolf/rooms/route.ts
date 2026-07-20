@@ -15,7 +15,7 @@ import { authenticatedRoomDraft } from "@/lib/online-room-input";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
 import { actionRequiresDebugAccess, requirePlayerDebugAccess, roomRequestsDebugMode } from "@/lib/debug-access";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
-import { conditionalJsonResponse } from "@/lib/conditional-json";
+import { conditionalJsonResponse, conditionalVersionedJsonResponse } from "@/lib/conditional-json";
 import { gameApiAccessDeniedResponse } from "@/lib/game-access";
 
 function isStoreNotConfigured(error: unknown) {
@@ -40,12 +40,12 @@ export async function GET(request: Request) {
       }
 
       if (!room.players.some((item) => item.id === authenticatedPlayerId)) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
-      return conditionalJsonResponse(request, { room: sanitizeWordWolfRoom(room, authenticatedPlayerId) });
+      return conditionalVersionedJsonResponse(request, `wordwolf:${room.code}:${room.revision}:${authenticatedPlayerId}`, () => ({ room: sanitizeWordWolfRoom(room, authenticatedPlayerId) }));
     }
 
     if (playerId) {
       const room = await loadStoredPlayerActiveRoom(authenticatedPlayerId);
-      return conditionalJsonResponse(request, { room: room ? sanitizeWordWolfRoom(room, authenticatedPlayerId) : null });
+      return room ? conditionalVersionedJsonResponse(request, `wordwolf:${room.code}:${room.revision}:${authenticatedPlayerId}`, () => ({ room: sanitizeWordWolfRoom(room, authenticatedPlayerId) })) : conditionalJsonResponse(request, { room: null });
     }
 
     const page = await listStoredJoinableWordWolfRooms(url.searchParams.get("cursor"));

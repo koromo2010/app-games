@@ -16,7 +16,7 @@ import { actionRequiresDebugAccess, requirePlayerDebugAccess } from "@/lib/debug
 import { gameApiAccessDeniedResponse } from "@/lib/game-access";
 import { authenticatedRoomDraft } from "@/lib/online-room-input";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
-import { conditionalJsonResponse } from "@/lib/conditional-json";
+import { conditionalJsonResponse, conditionalVersionedJsonResponse } from "@/lib/conditional-json";
 
 function errorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : "";
@@ -51,11 +51,11 @@ export async function GET(request: Request) {
       const room = await loadAndReconcileKotobaSenpukuRoom(code);
       if (!room) return Response.json({ error: "Room not found" }, { status: 404 });
       if (!room.players.some((player) => player.id === authenticatedPlayerId)) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
-      return conditionalJsonResponse(request, { room: sanitizeKotobaSenpukuRoom(room, authenticatedPlayerId) });
+      return conditionalVersionedJsonResponse(request, `kotoba-senpuku:${room.code}:${room.revision}:${authenticatedPlayerId}`, () => ({ room: sanitizeKotobaSenpukuRoom(room, authenticatedPlayerId) }));
     }
     if (playerId) {
       const room = await loadKotobaSenpukuPlayerActiveRoom(authenticatedPlayerId);
-      return conditionalJsonResponse(request, { room: room ? sanitizeKotobaSenpukuRoom(room, authenticatedPlayerId) : null });
+      return room ? conditionalVersionedJsonResponse(request, `kotoba-senpuku:${room.code}:${room.revision}:${authenticatedPlayerId}`, () => ({ room: sanitizeKotobaSenpukuRoom(room, authenticatedPlayerId) })) : conditionalJsonResponse(request, { room: null });
     }
     return conditionalJsonResponse(request, await listJoinableKotobaSenpukuRooms(url.searchParams.get("cursor")));
   } catch (error) {

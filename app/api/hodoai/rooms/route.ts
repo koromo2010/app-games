@@ -16,7 +16,7 @@ import { actionRequiresDebugAccess, requirePlayerDebugAccess } from "@/lib/debug
 import { gameApiAccessDeniedResponse } from "@/lib/game-access";
 import { authenticatedRoomDraft } from "@/lib/online-room-input";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
-import { conditionalJsonResponse } from "@/lib/conditional-json";
+import { conditionalJsonResponse, conditionalVersionedJsonResponse } from "@/lib/conditional-json";
 
 function errorResponse(error: unknown) {
   const common = commonOnlineRoomErrorResponse(error);
@@ -49,11 +49,11 @@ export async function GET(request: Request) {
       const room = await loadAndReconcileHodoaiRoom(code);
       if (!room) return Response.json({ error: "Room not found" }, { status: 404 });
       if (!room.players.some((player) => player.id === authenticatedPlayerId)) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
-      return conditionalJsonResponse(request, { room: sanitizeHodoaiRoom(room, authenticatedPlayerId) });
+      return conditionalVersionedJsonResponse(request, `hodoai:${room.code}:${room.revision}:${authenticatedPlayerId}`, () => ({ room: sanitizeHodoaiRoom(room, authenticatedPlayerId) }));
     }
     if (playerId) {
       const room = await loadHodoaiPlayerActiveRoom(authenticatedPlayerId);
-      return conditionalJsonResponse(request, { room: room ? sanitizeHodoaiRoom(room, authenticatedPlayerId) : null });
+      return room ? conditionalVersionedJsonResponse(request, `hodoai:${room.code}:${room.revision}:${authenticatedPlayerId}`, () => ({ room: sanitizeHodoaiRoom(room, authenticatedPlayerId) })) : conditionalJsonResponse(request, { room: null });
     }
     return conditionalJsonResponse(request, await listJoinableHodoaiRooms(url.searchParams.get("cursor")));
   } catch (error) {

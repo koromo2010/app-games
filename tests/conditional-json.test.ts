@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { conditionalJsonResponse } from "../lib/conditional-json.ts";
+import { conditionalJsonResponse, conditionalVersionedJsonResponse } from "../lib/conditional-json.ts";
 import { clearConditionalJsonClientCache, fetchConditionalJson } from "../lib/conditional-json-client.ts";
 
 test("conditional JSON returns 304 for an unchanged authenticated view", async () => {
@@ -20,6 +20,34 @@ test("conditional JSON returns 304 for an unchanged authenticated view", async (
     headers: { "If-None-Match": etag ?? "" },
   }), { room: { revision: 5 } });
   assert.equal(changed.status, 200);
+});
+
+test("versioned conditional JSON skips presentation and serialization on 304", async () => {
+  let presentations = 0;
+  const first = conditionalVersionedJsonResponse(
+    new Request("https://game-fields.com/api/rooms"),
+    "room:AB12:4:player-1",
+    () => { presentations += 1; return { room: { revision: 4 } }; },
+  );
+  const etag = first.headers.get("ETag") ?? "";
+  assert.equal(first.status, 200);
+  assert.equal(presentations, 1);
+
+  const unchanged = conditionalVersionedJsonResponse(
+    new Request("https://game-fields.com/api/rooms", { headers: { "If-None-Match": etag } }),
+    "room:AB12:4:player-1",
+    () => { presentations += 1; return { room: { revision: 4 } }; },
+  );
+  assert.equal(unchanged.status, 304);
+  assert.equal(presentations, 1);
+
+  const changed = conditionalVersionedJsonResponse(
+    new Request("https://game-fields.com/api/rooms", { headers: { "If-None-Match": etag } }),
+    "room:AB12:5:player-1",
+    () => { presentations += 1; return { room: { revision: 5 } }; },
+  );
+  assert.equal(changed.status, 200);
+  assert.equal(presentations, 2);
 });
 
 test("conditional client reuses 304 data and coalesces overlapping polls", async () => {

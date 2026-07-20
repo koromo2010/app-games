@@ -20,12 +20,12 @@ import {
   type NigoichiRoom,
   type NigoichiRoomAction,
 } from "@/lib/nigoichi";
-import { claimOnlineRoomForPlayer, loadPlayerActiveOnlineRoom, releasePlayerActiveRoom, saveOnlineRoomPlayerIndexes, type ActiveRoomClaim } from "@/lib/player-active-room";
+import { claimOnlineRoomForPlayer, loadPlayerActiveOnlineRoom, releasePlayerActiveRoom, type ActiveRoomClaim } from "@/lib/player-active-room";
 import { recordNigoichiGameResults } from "@/lib/player-stats-store";
 import { loadIndexedOnlineRoomPage } from "@/lib/online-room-list";
 import { canLeaveOnlineRoomLobby, onlineRoomActorAccess } from "@/lib/online-room-access";
 import { createIndexedOnlineRoom, mutateOnlineRoomWithRetry } from "@/lib/online-room-persistence";
-import { dissolveHostedIndexedOnlineRooms, dissolveIndexedOnlineRoom } from "@/lib/online-room-dissolution";
+import { deleteIndexedOnlineRoomStorage, dissolveHostedIndexedOnlineRooms, dissolveIndexedOnlineRoom } from "@/lib/online-room-dissolution";
 import { redisCommand } from "@/lib/redis-store";
 import { allRoomPlayersReturned, beginRoomLobbyReturn, canRemoveWaitingRoomPlayer, confirmRoomLobbyReturn } from "@/lib/room-lobby-return";
 import { beginGame, resetGame, withPlayersAndCorrectedConfig } from "@/lib/nigoichi-room-domain";
@@ -70,7 +70,7 @@ function playerActiveRoomKey(playerId: string) {
 type DebugEvent = { actorId?: string; action: string };
 
 async function mutateStoredRoom(code: string, mutate: (room: NigoichiRoom) => NigoichiRoom | Promise<NigoichiRoom>, debugEvent?: DebugEvent) {
-  return mutateOnlineRoomWithRetry({ code, roomKey, loadRoom: loadStoredNigoichiRoom, mutate, normalize: normalizeNigoichiRoom, errors: { notFound: "NIGOICHI_ROOM_NOT_FOUND", invalid: "INVALID_NIGOICHI_ROOM", conflict: "NIGOICHI_ROOM_CONFLICT" }, prepare: (current, changed, { revision, timestamp }) => {
+  return mutateOnlineRoomWithRetry({ code, roomKey, loadRoom: loadStoredNigoichiRoom, mutate, normalize: normalizeNigoichiRoom, activeRoomKeys: (room) => room.players.filter((player) => !player.isDummy).map((player) => playerActiveRoomKey(player.id)), errors: { notFound: "NIGOICHI_ROOM_NOT_FOUND", invalid: "INVALID_NIGOICHI_ROOM", conflict: "NIGOICHI_ROOM_CONFLICT" }, prepare: (current, changed, { revision, timestamp }) => {
     const actorName = debugEvent?.actorId
       ? changed.players.find((player) => player.id === debugEvent.actorId)?.name ?? "不明なプレイヤー"
       : "システム";
@@ -78,10 +78,6 @@ async function mutateStoredRoom(code: string, mutate: (room: NigoichiRoom) => Ni
       ? { ...changed, debugLog: appendGameDebugLog(changed.debugLog, { timestamp, actorName, action: debugEvent.action, phaseBefore: current.phase, phaseAfter: changed.phase, revision }) }
       : changed;
   }, afterSave: (room) => Promise.all([recordNigoichiGameResults(room), recordNigoichiReplay(room)]) });
-}
-
-async function saveActiveRooms(room: NigoichiRoom) {
-  await saveOnlineRoomPlayerIndexes(room.code, room.players.filter((player) => !player.isDummy).map((player) => player.id), playerActiveRoomKey);
 }
 
 async function clearActiveRoom(playerId: string, code: string) {
@@ -95,9 +91,7 @@ export async function loadStoredNigoichiRoom(code: string) {
     const room = normalizeNigoichiRoom(JSON.parse(raw));
     if (!room) return null;
     if (isMultiplayerRoomExpired(room.updatedAt)) {
-      await redisCommand<number>(["DEL", roomKey(room.code)]);
-      await redisCommand<number>(["SREM", roomIndexKey, room.code]);
-      await Promise.all(room.players.map((player) => clearActiveRoom(player.id, room.code)));
+      await deleteIndexedOnlineRoomStorage({ roomCode: room.code, roomKey: roomKey(room.code), roomIndexKey, playerActiveRoomKeys: room.players.map((player) => playerActiveRoomKey(player.id)) });
       return null;
     }
     return room;
@@ -140,8 +134,7 @@ export async function createStoredNigoichiRoom(value: unknown, actorId: string) 
   const activeRoom = await loadNigoichiPlayerActiveRoom(actorId);
   const claim = await claimOnlineRoomForPlayer({ key: playerActiveRoomKey(actorId), targetCode: created.code, currentRoom: activeRoom, gameId: "nigoichi", conflictError: "NIGOICHI_PLAYER_ALREADY_ACTIVE" });
   try {
-    await createIndexedOnlineRoom(created, { roomKey, roomIndexKey, conflictError: "NIGOICHI_ROOM_CONFLICT" });
-    await saveActiveRooms(created);
+    await createIndexedOnlineRoom(created, { roomKey, roomIndexKey, activeRoomKeys: (room) => room.players.filter((player) => !player.isDummy).map((player) => playerActiveRoomKey(player.id)), conflictError: "NIGOICHI_ROOM_CONFLICT" });
     return created;
   } catch (error) {
     if (claim === "claimed") await clearActiveRoom(actorId, created.code);
@@ -294,7 +287,6 @@ export async function applyStoredNigoichiAction(code: string, action: NigoichiRo
     if (action.type === "join-room" && claim === "claimed") await clearActiveRoom(action.actorId, normalizedCode);
     throw error;
   });
-  await saveActiveRooms(room);
   const completedStartDraw = startDrawRef.value;
   if (action.type === "start-game" && completedStartDraw) {
     await rememberGeneralGameWordHistory({

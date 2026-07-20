@@ -19,6 +19,7 @@ import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
 import { confirmRoomLeave } from "@/app/components/room-navigation-confirmation";
 import { useOnlineGameSessionRestore } from "@/app/hooks/use-online-game-session-restore";
 import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "@/app/hooks/use-online-room-polling";
+import { clientTimeoutClaimDelayMs } from "@/lib/game-timer/client-policy";
 import { useRoomResultReturnGate } from "@/app/hooks/use-room-result-return-gate";
 import { useRoomLobbyReturnConfirmation } from "@/app/hooks/use-room-lobby-return-confirmation";
 import { applyCodeInterceptRoomAction, codeInterceptRoomApi, createCodeInterceptRoom } from "@/app/code-intercept/code-intercept-room-api-client";
@@ -329,17 +330,18 @@ export function CodeInterceptGame() {
   const timerPhase = room?.phase;
   const timerPhaseStartedAt = room?.phaseStartedAt;
   const timerDurationSeconds = room ? codeInterceptPhaseTimeLimitSeconds(room) : 0;
+  const timerClaimDelayMs = room ? clientTimeoutClaimDelayMs({ playerId, hostId: room.hostId, playerIds: room.players.map((player) => player.id) }) : 0;
 
   useEffect(() => {
     if (!timerRoomCode || !playerId || timerDurationSeconds <= 0 || !timerPhaseStartedAt || !timerPhase || !["code-length", "clue", "answer"].includes(timerPhase)) return;
-    const delay = Math.max(0, timerPhaseStartedAt + timerDurationSeconds * 1000 + codeInterceptTimeoutGraceMs() - synchronizedNow()) + 100;
+    const delay = Math.max(0, timerPhaseStartedAt + timerDurationSeconds * 1000 + codeInterceptTimeoutGraceMs() - synchronizedNow()) + 100 + timerClaimDelayMs;
     const timer = window.setTimeout(() => {
       void applyCodeInterceptRoomAction(timerRoomCode, { type: "expire-phase", actorId: playerId, phaseStartedAt: timerPhaseStartedAt })
         .then((saved) => setRoom((current) => current?.code === saved.code ? saved : current))
         .catch(() => undefined);
     }, delay);
     return () => window.clearTimeout(timer);
-  }, [playerId, timerDurationSeconds, timerPhase, timerPhaseStartedAt, timerRoomCode]);
+  }, [playerId, timerClaimDelayMs, timerDurationSeconds, timerPhase, timerPhaseStartedAt, timerRoomCode]);
 
   const runAction = useCallback(async (action: CodeInterceptRoomAction) => {
     if (!room || isSaving) return null;

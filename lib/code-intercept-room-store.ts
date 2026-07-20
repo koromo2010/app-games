@@ -37,8 +37,8 @@ import { isMultiplayerRoomExpired } from "@/lib/multiplayer-room-lifecycle";
 import { loadIndexedOnlineRoomPage } from "@/lib/online-room-list";
 import { canLeaveOnlineRoomLobby, onlineRoomActorAccess } from "@/lib/online-room-access";
 import { createIndexedOnlineRoom, mutateOnlineRoomWithRetry } from "@/lib/online-room-persistence";
-import { dissolveHostedIndexedOnlineRooms, dissolveIndexedOnlineRoom } from "@/lib/online-room-dissolution";
-import { claimOnlineRoomForPlayer, loadPlayerActiveOnlineRoom, releasePlayerActiveRoom, saveOnlineRoomPlayerIndexes, type ActiveRoomClaim } from "@/lib/player-active-room";
+import { deleteIndexedOnlineRoomStorage, dissolveHostedIndexedOnlineRooms, dissolveIndexedOnlineRoom } from "@/lib/online-room-dissolution";
+import { claimOnlineRoomForPlayer, loadPlayerActiveOnlineRoom, releasePlayerActiveRoom, type ActiveRoomClaim } from "@/lib/player-active-room";
 import { recordCodeInterceptGameResults } from "@/lib/player-stats-store";
 import { redisCommand } from "@/lib/redis-store";
 import { allRoomPlayersReturned, beginRoomLobbyReturn, canRemoveWaitingRoomPlayer, confirmRoomLobbyReturn } from "@/lib/room-lobby-return";
@@ -82,16 +82,12 @@ function playerActiveRoomKey(playerId: string) { return `${playerActiveRoomKeyPr
 
 
 async function mutateStoredRoom(code: string, mutate: (room: CodeInterceptRoom) => CodeInterceptRoom | Promise<CodeInterceptRoom>, actorId: string, action: string) {
-  return mutateOnlineRoomWithRetry({ code, roomKey, loadRoom: loadStoredCodeInterceptRoom, mutate, normalize: normalizeCodeInterceptRoom, errors: { notFound: "CODE_INTERCEPT_ROOM_NOT_FOUND", invalid: "INVALID_CODE_INTERCEPT_ROOM", conflict: "CODE_INTERCEPT_ROOM_CONFLICT" }, prepare: (current, changed, { revision, timestamp }) => {
+  return mutateOnlineRoomWithRetry({ code, roomKey, loadRoom: loadStoredCodeInterceptRoom, mutate, normalize: normalizeCodeInterceptRoom, activeRoomKeys: (room) => room.players.filter((player) => !player.isDummy).map((player) => playerActiveRoomKey(player.id)), errors: { notFound: "CODE_INTERCEPT_ROOM_NOT_FOUND", invalid: "INVALID_CODE_INTERCEPT_ROOM", conflict: "CODE_INTERCEPT_ROOM_CONFLICT" }, prepare: (current, changed, { revision, timestamp }) => {
     const actorName = changed.players.find((player) => player.id === actorId)?.name ?? "システム";
     return changed.debugMode
       ? { ...changed, debugLog: appendGameDebugLog(changed.debugLog, { timestamp, actorName, action, phaseBefore: current.phase, phaseAfter: changed.phase, revision }) }
       : changed;
   }, afterSave: (room) => Promise.all([recordCodeInterceptGameResults(room), recordCodeInterceptReplay(room)]) });
-}
-
-async function saveActiveRooms(room: CodeInterceptRoom) {
-  await saveOnlineRoomPlayerIndexes(room.code, room.players.filter((player) => !player.isDummy).map((player) => player.id), playerActiveRoomKey);
 }
 
 async function clearActiveRoom(playerId: string, code: string) { await releasePlayerActiveRoom(playerActiveRoomKey(playerId), code); }
@@ -103,9 +99,7 @@ export async function loadStoredCodeInterceptRoom(code: string) {
     const room = normalizeCodeInterceptRoom(JSON.parse(raw));
     if (!room) return null;
     if (isMultiplayerRoomExpired(room.updatedAt)) {
-      await redisCommand<number>(["DEL", roomKey(room.code)]);
-      await redisCommand<number>(["SREM", roomIndexKey, room.code]);
-      await Promise.all(room.players.map((player) => clearActiveRoom(player.id, room.code)));
+      await deleteIndexedOnlineRoomStorage({ roomCode: room.code, roomKey: roomKey(room.code), roomIndexKey, playerActiveRoomKeys: room.players.map((player) => playerActiveRoomKey(player.id)) });
       return null;
     }
     return room;
@@ -123,8 +117,7 @@ export async function createStoredCodeInterceptRoom(value: unknown, actorId: str
   const activeRoom = await loadCodeInterceptPlayerActiveRoom(actorId);
   const claim = await claimOnlineRoomForPlayer({ key: playerActiveRoomKey(actorId), targetCode: created.code, currentRoom: activeRoom, gameId: "code-intercept", conflictError: "CODE_INTERCEPT_PLAYER_ALREADY_ACTIVE" });
   try {
-    await createIndexedOnlineRoom(created, { roomKey, roomIndexKey, conflictError: "CODE_INTERCEPT_ROOM_CONFLICT" });
-    await saveActiveRooms(created);
+    await createIndexedOnlineRoom(created, { roomKey, roomIndexKey, activeRoomKeys: (room) => room.players.filter((player) => !player.isDummy).map((player) => playerActiveRoomKey(player.id)), conflictError: "CODE_INTERCEPT_ROOM_CONFLICT" });
     return created;
   } catch (error) {
     if (claim === "claimed") await clearActiveRoom(actorId, created.code);
@@ -328,7 +321,6 @@ export async function applyStoredCodeInterceptAction(code: string, action: CodeI
     if (action.type === "join-room" && claim === "claimed") await clearActiveRoom(action.actorId, normalizedCode);
     throw error;
   });
-  await saveActiveRooms(room);
   const completedStartDraw = startDrawRef.value;
   if (action.type === "start-game" && completedStartDraw) {
     await rememberGeneralGameWordHistory({

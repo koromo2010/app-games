@@ -1,4 +1,4 @@
-import { conditionalJsonResponse } from "@/lib/conditional-json";
+import { conditionalJsonResponse, conditionalVersionedJsonResponse } from "@/lib/conditional-json";
 import { actionRequiresDebugAccess, requirePlayerDebugAccess } from "@/lib/debug-access";
 import { gameApiAccessDeniedResponse } from "@/lib/game-access";
 import type { CodeInterceptRoomAction } from "@/lib/code-intercept";
@@ -53,11 +53,13 @@ export async function GET(request: Request) {
       const room = await loadStoredCodeInterceptRoom(code);
       if (!room) return Response.json({ error: "Room not found" }, { status: 404 });
       if (!room.players.some((player) => player.id === authenticatedPlayerId)) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
-      return conditionalJsonResponse(request, { room: sanitizeCodeInterceptRoom(room, authenticatedPlayerId) });
+      return conditionalVersionedJsonResponse(request, `code-intercept:${room.code}:${room.revision}:${authenticatedPlayerId}`, () => ({ room: sanitizeCodeInterceptRoom(room, authenticatedPlayerId) }));
     }
     if (playerId) {
       const room = await loadCodeInterceptPlayerActiveRoom(authenticatedPlayerId);
-      return conditionalJsonResponse(request, { room: room ? sanitizeCodeInterceptRoom(room, authenticatedPlayerId) : null });
+      return room
+        ? conditionalVersionedJsonResponse(request, `code-intercept:${room.code}:${room.revision}:${authenticatedPlayerId}`, () => ({ room: sanitizeCodeInterceptRoom(room, authenticatedPlayerId) }))
+        : conditionalJsonResponse(request, { room: null });
     }
     return conditionalJsonResponse(request, await listJoinableCodeInterceptRooms(url.searchParams.get("cursor")));
   } catch (error) {

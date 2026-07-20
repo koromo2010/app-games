@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 
 export const onlineRoomPollingIntervals = {
   realtime: 1000,
-  active: 2000,
+  active: 3000,
   idle: 5000,
 } as const;
 
@@ -13,6 +13,11 @@ const maximumOnlineRoomPollingDelayMs = 30_000;
 export function onlineRoomPollingDelay(intervalMs: number, consecutiveFailures: number) {
   const multiplier = 2 ** Math.min(Math.max(0, consecutiveFailures), 5);
   return Math.min(maximumOnlineRoomPollingDelayMs, Math.max(intervalMs, intervalMs * multiplier));
+}
+
+export function onlineRoomPollingJitter(delayMs: number, randomValue = Math.random()) {
+  const normalizedRandom = Math.min(1, Math.max(0, randomValue));
+  return Math.round(delayMs * (0.9 + normalizedRandom * 0.2));
 }
 
 type OnlineRoomPollingOptions<Room> = {
@@ -49,7 +54,7 @@ export function useOnlineRoomPolling<Room>({
     const schedule = (delayMs: number) => {
       if (!active || document.visibilityState !== "visible") return;
       if (timer !== undefined) window.clearTimeout(timer);
-      timer = window.setTimeout(refresh, delayMs);
+      timer = window.setTimeout(refresh, onlineRoomPollingJitter(delayMs));
     };
 
     const refresh = () => {

@@ -24,7 +24,7 @@ import { withGameGenerationCache } from "@/lib/game-generation-cache";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
 import { actionRequiresDebugAccess, requirePlayerDebugAccess, roomRequestsDebugMode } from "@/lib/debug-access";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
-import { conditionalJsonResponse } from "@/lib/conditional-json";
+import { conditionalJsonResponse, conditionalVersionedJsonResponse } from "@/lib/conditional-json";
 import { gameApiAccessDeniedResponse } from "@/lib/game-access";
 
 function isStoreNotConfigured(error: unknown) {
@@ -53,12 +53,12 @@ export async function GET(request: Request) {
       }
 
       if (!room.players.some((item) => item.id === authenticatedPlayerId)) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
-      return conditionalJsonResponse(request, { room: sanitizeTahoiyaRoom(room, authenticatedPlayerId) });
+      return conditionalVersionedJsonResponse(request, `tahoiya:${room.code}:${room.revision}:${authenticatedPlayerId}`, () => ({ room: sanitizeTahoiyaRoom(room, authenticatedPlayerId) }));
     }
 
     if (playerId) {
       const room = await loadStoredTahoiyaPlayerActiveRoom(authenticatedPlayerId);
-      return conditionalJsonResponse(request, { room: room ? sanitizeTahoiyaRoom(room, authenticatedPlayerId) : null });
+      return room ? conditionalVersionedJsonResponse(request, `tahoiya:${room.code}:${room.revision}:${authenticatedPlayerId}`, () => ({ room: sanitizeTahoiyaRoom(room, authenticatedPlayerId) })) : conditionalJsonResponse(request, { room: null });
     }
 
     const page = await listStoredJoinableTahoiyaRooms(url.searchParams.get("cursor"));

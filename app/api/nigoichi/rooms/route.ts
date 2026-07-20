@@ -1,4 +1,4 @@
-import { conditionalJsonResponse } from "@/lib/conditional-json";
+import { conditionalJsonResponse, conditionalVersionedJsonResponse } from "@/lib/conditional-json";
 import { actionRequiresDebugAccess, requirePlayerDebugAccess } from "@/lib/debug-access";
 import { gameApiAccessDeniedResponse } from "@/lib/game-access";
 import type { NigoichiRoomAction } from "@/lib/nigoichi";
@@ -54,11 +54,11 @@ export async function GET(request: Request) {
       const room = await loadStoredNigoichiRoom(code);
       if (!room) return Response.json({ error: "Room not found" }, { status: 404 });
       if (!room.players.some((player) => player.id === authenticatedPlayerId)) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
-      return conditionalJsonResponse(request, { room: sanitizeNigoichiRoom(room, authenticatedPlayerId) });
+      return conditionalVersionedJsonResponse(request, `nigoichi:${room.code}:${room.revision}:${authenticatedPlayerId}`, () => ({ room: sanitizeNigoichiRoom(room, authenticatedPlayerId) }));
     }
     if (playerId) {
       const room = await loadNigoichiPlayerActiveRoom(authenticatedPlayerId);
-      return conditionalJsonResponse(request, { room: room ? sanitizeNigoichiRoom(room, authenticatedPlayerId) : null });
+      return room ? conditionalVersionedJsonResponse(request, `nigoichi:${room.code}:${room.revision}:${authenticatedPlayerId}`, () => ({ room: sanitizeNigoichiRoom(room, authenticatedPlayerId) })) : conditionalJsonResponse(request, { room: null });
     }
     return conditionalJsonResponse(request, await listJoinableNigoichiRooms(url.searchParams.get("cursor")));
   } catch (error) {

@@ -1,13 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { onlineRoomPollingDelay, onlineRoomPollingIntervals } from "../app/hooks/use-online-room-polling.ts";
+import { onlineRoomPollingDelay, onlineRoomPollingIntervals, onlineRoomPollingJitter } from "../app/hooks/use-online-room-polling.ts";
 
 test("部屋の状態別にRedis負荷を抑えたポーリング間隔を使う", () => {
   assert.deepEqual(onlineRoomPollingIntervals, {
     realtime: 1_000,
-    active: 2_000,
+    active: 3_000,
     idle: 5_000,
   });
+});
+
+test("同時アクセスの山を避けるためポーリングを小さく分散する", () => {
+  assert.equal(onlineRoomPollingJitter(3_000, 0), 2_700);
+  assert.equal(onlineRoomPollingJitter(3_000, 0.5), 3_000);
+  assert.equal(onlineRoomPollingJitter(3_000, 1), 3_300);
 });
 
 test("部屋読み取り失敗時のポーリング間隔を段階的に延ばす", () => {

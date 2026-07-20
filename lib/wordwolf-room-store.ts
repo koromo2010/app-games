@@ -11,13 +11,14 @@ import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
 import { normalizeWordDifficulty } from "@/lib/word-selection-protocol";
 import { isMultiplayerRoomExpired, multiplayerRoomExpiryArgs } from "@/lib/multiplayer-room-lifecycle";
 import { canDissolveOnlineRoom } from "@/lib/room-dissolve-policy";
-import { claimOnlineRoomForPlayer, loadPlayerActiveOnlineRoom, releasePlayerActiveRoom, saveOnlineRoomPlayerIndexes } from "@/lib/player-active-room";
+import { claimOnlineRoomForPlayer, loadPlayerActiveOnlineRoom, releasePlayerActiveRoom } from "@/lib/player-active-room";
 import { isAvatarColor, isAvatarImage } from "@/lib/player-session";
 import { onlineRoomPlayerLimits } from "@/lib/online-room-policy";
 import { loadIndexedOnlineRoomPage } from "@/lib/online-room-list";
 import { schedulePostResponseWork } from "@/lib/post-response-work";
 import { recoverPlayerTimeout } from "@/lib/player-timeout-policy";
 import { beginRoomLobbyReturn, canRemoveWaitingRoomPlayer, confirmRoomLobbyReturn } from "@/lib/room-lobby-return";
+import { deleteIndexedOnlineRoomStorage } from "@/lib/online-room-dissolution";
 import {
   addRoomScore,
   normalizeClueMode,
@@ -45,7 +46,14 @@ function playerActiveRoomKey(playerId: string) {
   return `${playerActiveRoomKeyPrefix}${playerId}`;
 }
 
-
+async function deleteWordWolfRoomStorage(roomCode: string, playerIds: string[]) {
+  await deleteIndexedOnlineRoomStorage({
+    roomCode,
+    roomKey: roomKey(roomCode),
+    roomIndexKey,
+    playerActiveRoomKeys: playerIds.map(playerActiveRoomKey),
+  });
+}
 
 export async function loadStoredWordWolfRoom(code: string) {
   const raw = await redisCommand<string | null>(["GET", roomKey(code)]);
@@ -55,9 +63,7 @@ export async function loadStoredWordWolfRoom(code: string) {
     const room = normalizeWordWolfRoom(JSON.parse(raw));
     if (!room) return null;
     if (isMultiplayerRoomExpired(room.updatedAt)) {
-      await redisCommand<number>(["DEL", roomKey(room.code)]);
-      await redisCommand<number>(["SREM", roomIndexKey, room.code]);
-      await Promise.all(room.players.map((player) => deletePlayerActiveRoom(player.id, room.code)));
+      await deleteWordWolfRoomStorage(room.code, room.players.map((player) => player.id));
       return null;
     }
     return room;
@@ -76,10 +82,7 @@ function parseStoredWordWolfRoom(raw: string | null) {
 }
 
 async function deletePlayerActiveRoom(playerId: string, roomCode: string) {
-  const savedCode = await redisCommand<string | null>(["GET", playerActiveRoomKey(playerId)]);
-  if (savedCode?.trim().toUpperCase() === roomCode.trim().toUpperCase()) {
-    await redisCommand<number>(["DEL", playerActiveRoomKey(playerId)]);
-  }
+  await releasePlayerActiveRoom(playerActiveRoomKey(playerId), roomCode);
 }
 
 export async function loadStoredPlayerActiveRoom(playerId: string) {
@@ -101,19 +104,19 @@ export async function saveStoredWordWolfRoom(room: unknown) {
     };
   }
 
+  const activeRoomKeys = [...new Set(normalizedRoom.players.map((player) => playerActiveRoomKey(player.id)))];
+  const keys = [roomKey(normalizedRoom.code), roomIndexKey, ...activeRoomKeys];
   // revisionをRedis内で比較し、遅れて届いた画面から部屋全体が巻き戻るのを防ぐ。
   const saved = await redisCommand<number>([
     "EVAL",
-    "local raw=redis.call('GET',KEYS[1]); if raw then local current=cjson.decode(raw); local rev=tonumber(current.revision or 0); if tonumber(ARGV[1])<=rev then return 0 end end; redis.call('SET',KEYS[1],ARGV[2],'EX',ARGV[3]); redis.call('SADD',KEYS[2],ARGV[4]); return 1",
-    "2", roomKey(normalizedRoom.code), roomIndexKey, String(normalizedRoom.revision), JSON.stringify(normalizedRoom), multiplayerRoomExpiryArgs()[1], normalizedRoom.code,
+    "local raw=redis.call('GET',KEYS[1]); if raw then local current=cjson.decode(raw); local rev=tonumber(current.revision or 0); if tonumber(ARGV[1])<=rev then return 0 end end; redis.call('SET',KEYS[1],ARGV[2],'EX',ARGV[3]); redis.call('SADD',KEYS[2],ARGV[4]); for i=3,#KEYS do redis.call('SET',KEYS[i],ARGV[4],'EX',ARGV[3]) end; return 1",
+    String(keys.length), ...keys, String(normalizedRoom.revision), JSON.stringify(normalizedRoom), multiplayerRoomExpiryArgs()[1], normalizedRoom.code,
   ]);
   if (saved !== 1) throw new Error("WORDWOLF_ROOM_CONFLICT");
 
   if (shouldRecordResults) {
     await schedulePostResponseWork("wordwolf-result-persistence", () => Promise.all([recordWordWolfGameResults(normalizedRoom), recordWordWolfReplay(normalizedRoom)]));
   }
-
-  await saveOnlineRoomPlayerIndexes(normalizedRoom.code, normalizedRoom.players.map((player) => player.id), playerActiveRoomKey);
 
   return normalizedRoom;
 }
@@ -295,12 +298,7 @@ export async function deleteStoredWordWolfRoom(code: string) {
   const normalizedCode = code.trim().toUpperCase();
   const room = await loadStoredWordWolfRoom(normalizedCode);
   if (room && !canDissolveOnlineRoom("wordwolf", room)) throw new Error("WORDWOLF_ROOM_IN_PROGRESS");
-  await redisCommand<number>(["DEL", roomKey(normalizedCode)]);
-  await redisCommand<number>(["SREM", roomIndexKey, normalizedCode]);
-
-  if (room) {
-    await Promise.all(room.players.map((player) => deletePlayerActiveRoom(player.id, normalizedCode)));
-  }
+  await deleteWordWolfRoomStorage(normalizedCode, room?.players.map((player) => player.id) ?? []);
 }
 
 export async function listStoredWordWolfRooms() {
@@ -322,6 +320,13 @@ export async function listStoredJoinableWordWolfRooms(cursor?: unknown) {
 }
 
 export async function deleteStoredHostedWordWolfRooms(hostId: string) {
+  const activeRoom = await loadStoredPlayerActiveRoom(hostId);
+  if (activeRoom?.hostId === hostId) {
+    if (!canDissolveOnlineRoom("wordwolf", activeRoom)) throw new Error("WORDWOLF_ROOM_IN_PROGRESS");
+    await deleteWordWolfRoomStorage(activeRoom.code, activeRoom.players.map((player) => player.id));
+    return 1;
+  }
+
   const rooms = await listStoredWordWolfRooms();
   const hostedRooms = rooms.filter((room) => room.hostId === hostId);
   if (hostedRooms.some((room) => !canDissolveOnlineRoom("wordwolf", room))) throw new Error("WORDWOLF_ROOM_IN_PROGRESS");

@@ -17,11 +17,19 @@ test("部屋CASと新規作成は共通Redis契約を使う", async () => {
 
   try {
     const room = { code: "AB12", revision: 3 };
-    assert.equal(await compareAndSetOnlineRoom(2, room, (code) => `game:room:${code}`), 1);
-    await createIndexedOnlineRoom(room, { roomKey: (code) => `game:room:${code}`, roomIndexKey: "game:rooms", conflictError: "ROOM_CONFLICT" });
+    const activeRoomKeys = ["game:active:player-1", "game:active:player-2"];
+    assert.equal(await compareAndSetOnlineRoom(2, room, (code) => `game:room:${code}`, activeRoomKeys), 1);
+    await createIndexedOnlineRoom(room, {
+      roomKey: (code) => `game:room:${code}`,
+      roomIndexKey: "game:rooms",
+      activeRoomKeys: () => activeRoomKeys,
+      conflictError: "ROOM_CONFLICT",
+    });
     assert.equal(commands[0]?.[0], "EVAL");
+    assert.deepEqual(commands[0]?.slice(2, 6), ["3", "game:room:AB12", ...activeRoomKeys]);
+    assert.equal(commands[0]?.at(-1), "AB12");
     assert.equal(commands.length, 2);
-    assert.deepEqual(commands[1]?.slice(0, 5), ["EVAL", commands[1]?.[1], "2", "game:room:AB12", "game:rooms"]);
+    assert.deepEqual(commands[1]?.slice(2, 7), ["4", "game:room:AB12", "game:rooms", ...activeRoomKeys]);
     assert.equal(commands[1]?.at(-3), JSON.stringify(room));
     assert.equal(commands[1]?.at(-1), "AB12");
   } finally {
