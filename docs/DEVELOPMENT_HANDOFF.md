@@ -77,6 +77,7 @@
 - `UPSTASH_REDIS_REST_TOKEN` または `KV_REST_API_TOKEN`
 - `APP_REDIS_URL`（Redis Cloud等のURL。環境分離後の正本）
 - `REDIS_REQUEST_TIMEOUT_MS`（任意。既定4000ms、1000〜10000msに制限）
+- `CODE_INTERCEPT_REALTIME_ENABLED`（任意。ローカルdevelopでコードインターセプトのSSE pilotを試す場合だけ`1`。Vercel Previewは自動ON、Productionは値にかかわらずOFF）
 - `APP_ENV`、`APP_DATABASE_URL`、`APP_DATABASE_ENV`（環境分離後のアプリDB正本と誤接続防止。旧URLは移行期間のみ）
 - `VOCABULARY_DATABASE_URL`（本番・開発共通の単語カタログ。サーバー限定）
 - `REDIS_ENV`（`production | development`。Redis誤接続防止）
@@ -129,7 +130,7 @@ Neon Postgres、Upstash Redis、Vercel Blobの容量は `vercel.json` の日次C
 
 ## 5. マルチプレイ共通ルール
 
-登録済みオンラインゲームの部屋取得・active room復帰・一覧・POST/PATCH/DELETEは `lib/online-room-api-client.ts` を土台に、各ゲームの `*-room-api-client.ts` へ型付きで集約する。画面から部屋APIを直接 `fetch` しない。表示中だけの定期取得、タブ復帰時の即時更新、必要なゲームのlocalStorage cross-tab更新は `app/hooks/use-online-room-polling.ts` を使う。通常は短い同期フェーズ1秒、進行中2秒、ロビー・結果5秒を標準とし、ゲーム固有の理由がある場合だけ変更する。部屋GETは署名済みCookieから `requireAuthenticatedPlayerId` で本人IDを検証し、保存済み部屋の参加者と照合する。ポーリングのたびにプレイヤープロフィールをRedisから再取得しない。更新系は引き続き `requireAuthenticatedPlayer` を使い、最新プロフィールとアカウント存在確認を維持する。共同キャンバスは操作感を保つため、表示中の部屋500ms・広場2秒とし、通常ゲームと同様に非表示タブでは通信を停止して復帰時に即時同期する。
+登録済みオンラインゲームの部屋取得・active room復帰・一覧・POST/PATCH/DELETEは `lib/online-room-api-client.ts` を土台に、各ゲームの `*-room-api-client.ts` へ型付きで集約する。画面から部屋APIを直接 `fetch` しない。表示中だけの定期取得、タブ復帰時の即時更新、必要なゲームのlocalStorage cross-tab更新は `app/hooks/use-online-room-polling.ts` を使う。通常は進行中3秒、ロビー・結果5秒を標準とし、ゲーム固有の理由がある場合だけ変更する。部屋GETは署名済みCookieから `requireAuthenticatedPlayerId` で本人IDを検証し、保存済み部屋の参加者と照合する。ポーリングのたびにプレイヤープロフィールをRedisから再取得しない。更新系は引き続き `requireAuthenticatedPlayer` を使い、最新プロフィールとアカウント存在確認を維持する。共同キャンバスは操作感を保つため、表示中の部屋500ms・広場2秒とし、通常ゲームと同様に非表示タブでは通信を停止して復帰時に即時同期する。
 
 書き込み契約は `POST = 新規作成`、`PATCH = 既存部屋へのCommand`、`DELETE = 解散`。既存部屋をRoom全体POSTで更新しない。UIは変更後Roomを組み立てず、変更意図だけのActionをadapterへ渡す。権限・フェーズ・入力正規化・revision競合は保存済みRoomを読むサーバー側で処理する。`npm run lint` は全オンラインゲームの型付きadapter、PATCH route、UI直fetch、旧`setAndSaveRoom`の再混入を検査する。
 
@@ -146,7 +147,7 @@ Neon Postgres、Upstash Redis、Vercel Blobの容量は `vercel.json` の日次C
 - コードインターセプト、ワードスケール、ワードソナー、ワードアウト、ノーザンブランチの入室画面は `useOnlineGameSessionRestore` を使う。保存済みのローカルセッションで画面枠を先に表示し、サーバーのアカウント確認とアクティブ部屋復元をバックグラウンドで行う。復元中は新規作成・参加欄を `inert` にして、別部屋操作との競合を防ぐ。アカウントCookieとRoomの正本は引き続きサーバーで検証する。
 - 参加人数のサーバー安全上限は `onlineRoomPlayerLimits` を正本とし、ワードウルフ20人、たほい屋8人、ノーザンブランチ4人、ワードスケール50人、ワードソナー20人、ワードアウト6人、コードインターセプト12人。満室は一覧から除外し、直接参加も409で拒否する。復元時も上限を超えた配列を切り詰め、デバッグ用ダミー追加にも同じ上限を適用する。
 - 投稿・投票がそろったらサーバー側で自動遷移する。
-- ルームGETは認証済み閲覧者向けJSONからETagを作り、クライアントは `If-None-Match` を送る。未変更時は304で本文転送とJSON再解析を省き、同じURLへの重複ポーリングはクライアント内で1本へまとめる。実装は `lib/conditional-json.ts` と `lib/conditional-json-client.ts`。現行の進行中2秒／ロビー・最終結果5秒間隔を標準とし、SSE等への移行前の負荷軽減層とする。
+- ルームGETは認証済み閲覧者向けJSONからETagを作り、クライアントは `If-None-Match` を送る。未変更時は304で本文転送とJSON再解析を省き、同じURLへの重複ポーリングはクライアント内で1本へまとめる。実装は `lib/conditional-json.ts` と `lib/conditional-json-client.ts`。現行の進行中3秒／ロビー・最終結果5秒間隔を標準とする。
 - 部屋作成時のRoom本体と一覧索引は1回のLua commandで原子的に保存する。更新時に一覧へ毎回 `SADD` しない。参加者別active room索引のTTL更新も人数分の個別SETではなく `saveOnlineRoomPlayerIndexes` の1 commandへまとめる。
 - 参加可能な部屋一覧は全件 `SMEMBERS` + 個別GETを行わず、`SSCAN` で1ページ24件ずつ取得し、部屋本体は1回の `MGET` にまとめる。レスポンスの `nextCursor` を次の `cursor` クエリへ渡せる。部屋コードを指定した直接参加はページ外でも利用できる。
 - 自動遷移しなかった場合の手動ボタンはホスト向けに残すが、必要条件を満たすまで表示しない。
@@ -236,6 +237,7 @@ Neon Postgres、Upstash Redis、Vercel Blobの容量は `vercel.json` の日次C
 - 閲覧者が正解暗号を確認できるチームは、過去ヒントを秘密カード番号（1〜C）ごとの列に再配置する。`自チームだけ`で相手の暗号が伏せられる場合は番号対応を表示しない。
 - ゲーム中のメイン領域には赤・青両チームの現在ポイントを常時並べて表示する。
 - Redisを正本とし、revision付きCAS、共通TTL、1人1アクティブ部屋、Cookie由来のactor、サーバー側Command検証を使う。出題・ヒント作成とソナー選択は、それぞれなし／30／60／90／120秒から時間制限を選べ、時間切れはサーバーで自動補完・精算して進行する。詳細は `docs/CODE_INTERCEPT.md`。
+- Vercel PreviewではUpstash Realtime（Redis Streams＋SSE）のpilotをこのゲームだけ有効にする。PATCH/DELETE成功後は秘密を含まない`code`と`revision`だけを通知し、受信側は既存の認証済みRoom GETで閲覧者別データを再取得する。SSE接続時も署名CookieとRoom参加者を照合し、接続中は安全確認ポーリングを30秒へ下げる。接続・認証・Redisの失敗時は自動的に従来の3秒／5秒ポーリングへ戻る。Productionは明示的に無効で、Previewの実測後に対象ゲームを広げる。
 
 ## 7. たほい屋現行仕様の要点
 
@@ -286,6 +288,8 @@ Neon Postgres、Upstash Redis、Vercel Blobの容量は `vercel.json` の日次C
 ブラウザのWeb Vitalsはセッション単位で50%を抽出し、1サンプルの追加・期限切れ削除・件数上限・TTL更新を1 Redis commandへまとめる。運営ダッシュボードは表示中だけ60秒間隔で基本集計を更新し、外部容量確認を含む診断詳細は初回・手動または5分経過後のタブ復帰時だけ更新する。
 
 オンライン部屋の通常ポーリングは3秒、ロビー・結果は5秒とし、各端末へ±10%の揺らぎを加えて同時アクセスを分散する。非表示タブでは停止し、通信失敗時は最大30秒まで指数バックオフする。部屋GETはrevisionと閲覧者を材料にしたETagを返し、304では閲覧者別の公開用変換とJSON直列化も省略する。部屋保存と参加者アクティブ索引のTTL更新、新規作成と一覧・参加者索引の登録、解散時の部屋・一覧・参加者索引削除はそれぞれ一つのRedis EVALへまとめる。時間切れ確定はホスト端末を優先し、他端末は順番に待機してホスト不在時だけ代行する。
+
+コードインターセプトのRealtime pilotはVercel Previewだけで動作し、画面左欄の`dev同期`表示で接続状態を確認できる。RealtimeのRedis commandは初回購読、60秒keepalive、更新通知に使うためゼロにはならないが、参加者ごとの3秒Room GETを接続中30秒へ減らす。比較時は同人数・同時間のRedis Commands、Vercel Function Invocations／duration、SSE再接続回数、Room更新遅延を記録する。pilot中もHTTP CommandとETag GETを正本として残し、Realtime停止だけでゲームを停止させない。
 
 本番ロビーはGitHub Actionsの `production-smoke.yml` で30分ごとに監視する。軽量負荷試験は `npm run load:smoke` を使い、localhost以外は `LOAD_TEST_ALLOW_REMOTE=1` を必須とする。本番への誤負荷を避けるためリモート実行は最大100リクエスト・同時数5、GETだけに制限する。詳細な閾値とVercel Alertsの初期値は `docs/OBSERVABILITY.md` を正本とする。
 

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { CodeInterceptGame } from "@/app/code-intercept/CodeInterceptGame";
+import { CodeInterceptRealtimeProvider } from "@/app/code-intercept/CodeInterceptRealtimeProvider";
+import { codeInterceptRealtimePilotEnabled } from "@/lib/code-intercept-realtime-schema";
 import { gamePageAccessAllowed } from "@/lib/game-access";
 
 export const metadata: Metadata = {
@@ -10,5 +12,8 @@ export const metadata: Metadata = {
 
 export default async function CodeInterceptPage() {
   if (!(await gamePageAccessAllowed("code-intercept"))) redirect("/games");
-  return <CodeInterceptGame />;
+  const realtimeEnabled = codeInterceptRealtimePilotEnabled();
+  return <CodeInterceptRealtimeProvider>
+    <CodeInterceptGame realtimeEnabled={realtimeEnabled} />
+  </CodeInterceptRealtimeProvider>;
 }
