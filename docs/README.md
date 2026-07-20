@@ -10,7 +10,7 @@
 4. `git status --short --branch` と直近コミットを確認し、既存変更を上書きしない。
 5. 変更後は最低限 `npm run lint`、`npm test`、`npm run build` を実行する。
 
-`README.md` は利用者向け概要、`DEVELOPMENT_HANDOFF.md` は現在の開発状態、各ゲーム資料は詳細ルール、`CONTAINER_ARCHITECTURE.md` は将来案である。将来案を現在実装済みの仕様と読み違えないこと。
+`README.md` は利用者向け概要、`DEVELOPMENT_HANDOFF.md` は現在の開発状態、各ゲーム資料は詳細ルール、`CONTAINER_ARCHITECTURE.md` と `PLATFORM_VISION.md` は将来案である。将来案を現在実装済みの仕様と読み違えないこと。
 
 ## 作業別の資料索引
 
@@ -31,6 +31,7 @@
 | モジュール分割・時間管理 | `MODULAR_GAME_ARCHITECTURE.md` | `moduleBoundaryFiles`、`lib/game-timer`、対象Command API |
 | ログ確認・障害調査・観測基盤 | `OBSERVABILITY.md` | `lib/observability`、`instrumentation.ts`、Vercel Runtime Logs |
 | 将来の物理コンテナ分割 | `CONTAINER_ARCHITECTURE.md` | 現在は将来案。先にモジュラーモノリスの境界を守る |
+| 長期プラットフォーム・Steam・モバイル・AI持ち込み構想 | `PLATFORM_VISION.md` | 現在は将来案。実装時は各ストア規約と現行アーキテクチャを再確認する |
 | LLM・利用者APIキー・課金元 | `DEVELOPMENT_HANDOFF.md` 3〜4章 | `lib/game-llm.ts`、`lib/llm-access.ts`、`lib/llm-model.ts` |
 | 戦績・レーティング | `DEVELOPMENT_HANDOFF.md` 5章 | `lib/player-stats-store.ts`、`lib/game-rating.ts` |
 | マイページ・対戦プレイバック・お気に入り・共有 | `GAME_REPLAYS.md` | `lib/game-replay-store.ts`、`app/api/player-replays/route.ts`、`app/users/me` |
@@ -58,6 +59,6 @@
 - ゲーム固有の詳細ルールは各ゲーム資料を優先する。
 - 登録ゲーム一覧と自動監査対象は `config/game-registry.json` を優先する。
 - 実装済みのモジュール境界は `MODULAR_GAME_ARCHITECTURE.md` と `moduleBoundaryFiles` を使う。
-- `CONTAINER_ARCHITECTURE.md` は将来構成であり、実装済みとはみなさない。
+- `CONTAINER_ARCHITECTURE.md` と `PLATFORM_VISION.md` は将来構成であり、実装済みとはみなさない。
 - `DEVELOPMENT_THREAD_LOG.md` は過去の経緯を調べるときだけ参照し、現在仕様の根拠にはしない。
 - 資料とコードが食い違う場合は、片方だけを黙って合わせず、差分をバグまたは仕様判断として明示する。
