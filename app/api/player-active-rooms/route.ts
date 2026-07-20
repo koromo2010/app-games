@@ -1,30 +1,51 @@
-import { loadCodeInterceptPlayerActiveRoom } from "@/lib/code-intercept-room-store";
-import { loadHodoaiPlayerActiveRoom } from "@/lib/hodoai-room-store";
-import { loadKotobaSenpukuPlayerActiveRoom } from "@/lib/kotoba-senpuku-room-store";
-import { loadNigoichiPlayerActiveRoom } from "@/lib/nigoichi-room-store";
-import { loadNorthernPlayerActiveRoom } from "@/lib/northern-branch-room-store";
-import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/lib/player-auth";
+import { loadStoredCodeInterceptRoom } from "@/lib/code-intercept-room-store";
+import { loadAndReconcileHodoaiRoom } from "@/lib/hodoai-room-store";
+import { loadAndReconcileKotobaSenpukuRoom } from "@/lib/kotoba-senpuku-room-store";
+import { loadStoredNigoichiRoom } from "@/lib/nigoichi-room-store";
+import { loadStoredNorthernRoom } from "@/lib/northern-branch-room-store";
+import { isPlayerAuthConfigurationError, requireAuthenticatedPlayerId } from "@/lib/player-auth";
+import { releasePlayerActiveRoom } from "@/lib/player-active-room";
 import { summarizePlayerActiveRoom, type PlayerActiveRoomSummarySource } from "@/lib/player-active-room-summary";
-import { loadStoredTahoiyaPlayerActiveRoom } from "@/lib/tahoiya-room-store";
-import { loadStoredPlayerActiveRoom } from "@/lib/wordwolf-room-store";
+import { redisCommand } from "@/lib/redis-store";
+import { loadAndReconcileStoredTahoiyaRoom } from "@/lib/tahoiya-room-store";
+import { loadStoredWordWolfRoom } from "@/lib/wordwolf-room-store";
 
-const loaders = {
-  wordwolf: loadStoredPlayerActiveRoom,
-  tahoiya: loadStoredTahoiyaPlayerActiveRoom,
-  "northern-branch": loadNorthernPlayerActiveRoom,
-  hodoai: loadHodoaiPlayerActiveRoom,
-  "kotoba-senpuku": loadKotobaSenpukuPlayerActiveRoom,
-  nigoichi: loadNigoichiPlayerActiveRoom,
-  "code-intercept": loadCodeInterceptPlayerActiveRoom,
-} satisfies Record<string, (playerId: string) => Promise<PlayerActiveRoomSummarySource | null>>;
+type ActiveRoomDescriptor = {
+  gameId: string;
+  activeKey: (playerId: string) => string;
+  loadRoom: (code: string) => Promise<PlayerActiveRoomSummarySource | null>;
+};
+
+const descriptors: ActiveRoomDescriptor[] = [
+  { gameId: "wordwolf", activeKey: (id) => `wordwolf:player-active-room:${id}`, loadRoom: loadStoredWordWolfRoom },
+  { gameId: "tahoiya", activeKey: (id) => `tahoiya:player-active-room:${id}`, loadRoom: loadAndReconcileStoredTahoiyaRoom },
+  { gameId: "northern-branch", activeKey: (id) => `northern-branch:player-active-room:${id}`, loadRoom: loadStoredNorthernRoom },
+  { gameId: "hodoai", activeKey: (id) => `hodoai:player-active-room:${id}`, loadRoom: loadAndReconcileHodoaiRoom },
+  { gameId: "kotoba-senpuku", activeKey: (id) => `kotoba-senpuku:player-active-room:${id}`, loadRoom: loadAndReconcileKotobaSenpukuRoom },
+  { gameId: "nigoichi", activeKey: (id) => `nigoichi:player-active-room:${id}`, loadRoom: loadStoredNigoichiRoom },
+  { gameId: "code-intercept", activeKey: (id) => `code-intercept:player-active-room:${id}`, loadRoom: loadStoredCodeInterceptRoom },
+];
 
 export async function GET() {
   try {
-    const player = await requireAuthenticatedPlayer();
-    const entries = await Promise.all(Object.entries(loaders).map(async ([gameId, loadRoom]) => {
-      const room = await loadRoom(player.id).catch(() => null);
+    const playerId = await requireAuthenticatedPlayerId();
+    const activeKeys = descriptors.map((descriptor) => descriptor.activeKey(playerId));
+    const codes = await redisCommand<Array<string | null>>(["MGET", ...activeKeys]);
+    const entries = await Promise.all(descriptors.map(async (descriptor, index) => {
+      const code = codes[index];
+      if (!code) return null;
+      let room: PlayerActiveRoomSummarySource | null;
+      try {
+        room = await descriptor.loadRoom(code);
+      } catch {
+        return null;
+      }
+      if (!room || !room.players.some((player) => player.id === playerId)) {
+        await releasePlayerActiveRoom(activeKeys[index]!, code).catch(() => undefined);
+        return null;
+      }
       const summary = summarizePlayerActiveRoom(room);
-      return summary ? [gameId, summary] as const : null;
+      return summary ? [descriptor.gameId, summary] as const : null;
     }));
     return Response.json({
       rooms: Object.fromEntries(entries.filter((entry): entry is NonNullable<typeof entry> => entry !== null)),

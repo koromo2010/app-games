@@ -1,11 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { AdminDashboardCore, AdminDashboardDetails } from "@/lib/admin-dashboard";
 import { webVitalThresholds, type WebVitalName } from "@/lib/web-vitals";
 import type { StorageService } from "@/lib/storage-capacity-monitor";
 
 const storageServices = ["Neon Postgres", "Upstash Redis", "Vercel Blob"] as const satisfies readonly StorageService[];
+const dashboardRefreshIntervalMs = 60_000;
+const dashboardDetailsRefreshIntervalMs = 5 * 60_000;
 
 function formatTime(timestamp: number) {
   return new Intl.DateTimeFormat("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date(timestamp));
@@ -46,6 +48,7 @@ export function AdminDashboard({ onAuthExpired }: { onAuthExpired: () => void })
   const [isLoading, setIsLoading] = useState(true);
   const [isDetailsLoading, setIsDetailsLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const detailsLoadedAtRef = useRef(0);
 
   const loadDetails = useCallback(async () => {
     setIsDetailsLoading(true);
@@ -55,6 +58,7 @@ export function AdminDashboard({ onAuthExpired }: { onAuthExpired: () => void })
       if (response.status === 401) { onAuthExpired(); return; }
       if (!response.ok || !data?.details) throw new Error(data?.error || "LOAD_DETAILS_FAILED");
       setDetails(data.details);
+      detailsLoadedAtRef.current = Date.now();
     } catch {
       setMessage("基本情報は表示できましたが、診断詳細を読み込めませんでした。");
     } finally {
@@ -62,34 +66,48 @@ export function AdminDashboard({ onAuthExpired }: { onAuthExpired: () => void })
     }
   }, [onAuthExpired]);
 
-  const refresh = useCallback(async () => {
+  const refreshCore = useCallback(async () => {
     try {
       const response = await fetch("/api/admin/dashboard", { cache: "no-store" });
       const data = await response.json().catch(() => null) as { dashboard?: AdminDashboardCore; error?: string } | null;
       if (response.status === 401) { onAuthExpired(); return; }
       if (!response.ok || !data?.dashboard) throw new Error(data?.error || "LOAD_FAILED");
       setDashboard(data.dashboard); setMessage("");
-      void loadDetails();
     } catch {
       setMessage("稼働状況を読み込めませんでした。少し待ってから更新してください。");
     } finally {
       setIsLoading(false);
     }
-  }, [loadDetails, onAuthExpired]);
+  }, [onAuthExpired]);
+
+  const refreshAll = useCallback(() => {
+    void refreshCore();
+    void loadDetails();
+  }, [loadDetails, refreshCore]);
 
   useEffect(() => {
-    const initial = window.setTimeout(() => void refresh(), 0);
-    const timer = window.setInterval(() => void refresh(), 15_000);
-    return () => { window.clearTimeout(initial); window.clearInterval(timer); };
-  }, [refresh]);
+    const refreshVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      void refreshCore();
+      if (Date.now() - detailsLoadedAtRef.current >= dashboardDetailsRefreshIntervalMs) void loadDetails();
+    };
+    const initial = window.setTimeout(refreshAll, 0);
+    const timer = window.setInterval(refreshVisible, dashboardRefreshIntervalMs);
+    document.addEventListener("visibilitychange", refreshVisible);
+    return () => {
+      window.clearTimeout(initial);
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refreshVisible);
+    };
+  }, [loadDetails, refreshAll, refreshCore]);
 
   if (isLoading && !dashboard) return <div className="mx-auto max-w-6xl px-4 py-12 text-center text-sm font-bold text-cyan-200 animate-pulse">稼働状況を集計中…</div>;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-8">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div><h2 className="text-2xl font-black">運営ダッシュボード</h2><p className="mt-1 text-sm text-slate-400">個人情報やゲームの秘密内容を含まない集計です。15秒ごとに更新します。</p></div>
-        <button type="button" onClick={() => void refresh()} className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold hover:bg-white/10">今すぐ更新</button>
+        <div><h2 className="text-2xl font-black">運営ダッシュボード</h2><p className="mt-1 text-sm text-slate-400">個人情報やゲームの秘密内容を含まない集計です。表示中のみ60秒ごとに更新します。</p></div>
+        <button type="button" onClick={refreshAll} className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold hover:bg-white/10">今すぐ更新</button>
       </div>
       {message && <p role="alert" className="rounded-xl border border-amber-300/30 bg-amber-300/10 px-4 py-3 text-sm text-amber-100">{message}</p>}
       {dashboard && <>

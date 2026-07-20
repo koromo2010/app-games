@@ -1,4 +1,5 @@
 export const webVitalNames = ["LCP", "INP", "CLS"] as const;
+export const webVitalsSessionSampleRate = 0.5;
 export type WebVitalName = typeof webVitalNames[number];
 export type WebVitalRating = "good" | "needs-improvement" | "poor";
 export type WebVitalDevice = "mobile" | "desktop";
@@ -26,6 +27,10 @@ export const webVitalThresholds: Record<WebVitalName, { good: number; poor: numb
   INP: { good: 200, poor: 500, unit: "ms" },
   CLS: { good: 0.1, poor: 0.25, unit: "score" },
 };
+
+export function selectWebVitalsSession(randomValue: number) {
+  return Number.isFinite(randomValue) && randomValue >= 0 && randomValue < webVitalsSessionSampleRate;
+}
 
 export function normalizeWebVitalInput(value: unknown): Omit<WebVitalSample, "id" | "occurredAt"> | null {
   if (!value || typeof value !== "object") return null;

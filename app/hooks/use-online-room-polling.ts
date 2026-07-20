@@ -47,7 +47,7 @@ export function useOnlineRoomPolling<Room>({
     let timer: number | undefined;
 
     const schedule = (delayMs: number) => {
-      if (!active) return;
+      if (!active || document.visibilityState !== "visible") return;
       if (timer !== undefined) window.clearTimeout(timer);
       timer = window.setTimeout(refresh, delayMs);
     };
@@ -55,10 +55,7 @@ export function useOnlineRoomPolling<Room>({
     const refresh = () => {
       timer = undefined;
       if (!active || inFlight) return;
-      if (document.visibilityState !== "visible") {
-        schedule(intervalMs);
-        return;
-      }
+      if (document.visibilityState !== "visible") return;
       inFlight = true;
       void callbacks.current.fetchRoom(code).then((latest) => {
         if (!active) return;
@@ -73,7 +70,11 @@ export function useOnlineRoomPolling<Room>({
       });
     };
     const onVisibilityChange = () => {
-      if (document.visibilityState !== "visible") return;
+      if (document.visibilityState !== "visible") {
+        if (timer !== undefined) window.clearTimeout(timer);
+        timer = undefined;
+        return;
+      }
       consecutiveFailures = 0;
       if (!inFlight) {
         if (timer !== undefined) window.clearTimeout(timer);

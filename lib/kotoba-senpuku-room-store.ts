@@ -225,7 +225,6 @@ export async function applyStoredKotobaSenpukuAction(code: string, action: Kotob
     if (action.type === "join-room" && claim === "claimed") await releasePlayerActiveRoom(playerActiveRoomKey(action.actorId), code);
     throw error;
   });
-  await redisCommand<number>(["SADD", roomIndexKey, room.code]);
   await saveActiveRooms(room);
   if (action.type === "leave-room") await clearActiveRoom(action.actorId, room.code);
   if (action.type === "remove-waiting-player") await clearActiveRoom(action.targetPlayerId, room.code);

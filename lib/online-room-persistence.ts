@@ -23,11 +23,17 @@ export async function createIndexedOnlineRoom<Room extends { code: string }>(roo
   roomIndexKey: string;
   conflictError: string;
 }) {
-  const saved = await redisCommand<"OK" | null>([
-    "SET", options.roomKey(room.code), JSON.stringify(room), "NX", ...multiplayerRoomExpiryArgs(),
+  const saved = await redisCommand<number>([
+    "EVAL",
+    "if redis.call('EXISTS',KEYS[1])==1 then return 0 end; redis.call('SET',KEYS[1],ARGV[1],'EX',ARGV[2]); redis.call('SADD',KEYS[2],ARGV[3]); return 1",
+    "2",
+    options.roomKey(room.code),
+    options.roomIndexKey,
+    JSON.stringify(room),
+    multiplayerRoomExpiryArgs()[1],
+    room.code,
   ]);
-  if (saved !== "OK") throw new Error(options.conflictError);
-  await redisCommand<number>(["SADD", options.roomIndexKey, room.code]);
+  if (saved !== 1) throw new Error(options.conflictError);
 }
 
 type RevisionedOnlineRoom = { code: string; revision: number; updatedAt: number };

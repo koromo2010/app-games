@@ -129,7 +129,7 @@ Neon Postgres、Upstash Redis、Vercel Blobの容量は `vercel.json` の日次C
 
 ## 5. マルチプレイ共通ルール
 
-登録済みオンラインゲームの部屋取得・active room復帰・一覧・POST/PATCH/DELETEは `lib/online-room-api-client.ts` を土台に、各ゲームの `*-room-api-client.ts` へ型付きで集約する。画面から部屋APIを直接 `fetch` しない。表示中だけの定期取得、タブ復帰時の即時更新、必要なゲームのlocalStorage cross-tab更新は `app/hooks/use-online-room-polling.ts` を使う。通常は短い同期フェーズ1秒、進行中2秒、ロビー・結果5秒を標準とし、ゲーム固有の理由がある場合だけ変更する。部屋GETは署名済みCookieから `requireAuthenticatedPlayerId` で本人IDを検証し、保存済み部屋の参加者と照合する。ポーリングのたびにプレイヤープロフィールをRedisから再取得しない。更新系は引き続き `requireAuthenticatedPlayer` を使い、最新プロフィールとアカウント存在確認を維持する。共同キャンバスは操作感を保つため、表示中の部屋500ms・広場2秒・非表示タブ10秒とする。
+登録済みオンラインゲームの部屋取得・active room復帰・一覧・POST/PATCH/DELETEは `lib/online-room-api-client.ts` を土台に、各ゲームの `*-room-api-client.ts` へ型付きで集約する。画面から部屋APIを直接 `fetch` しない。表示中だけの定期取得、タブ復帰時の即時更新、必要なゲームのlocalStorage cross-tab更新は `app/hooks/use-online-room-polling.ts` を使う。通常は短い同期フェーズ1秒、進行中2秒、ロビー・結果5秒を標準とし、ゲーム固有の理由がある場合だけ変更する。部屋GETは署名済みCookieから `requireAuthenticatedPlayerId` で本人IDを検証し、保存済み部屋の参加者と照合する。ポーリングのたびにプレイヤープロフィールをRedisから再取得しない。更新系は引き続き `requireAuthenticatedPlayer` を使い、最新プロフィールとアカウント存在確認を維持する。共同キャンバスは操作感を保つため、表示中の部屋500ms・広場2秒とし、通常ゲームと同様に非表示タブでは通信を停止して復帰時に即時同期する。
 
 書き込み契約は `POST = 新規作成`、`PATCH = 既存部屋へのCommand`、`DELETE = 解散`。既存部屋をRoom全体POSTで更新しない。UIは変更後Roomを組み立てず、変更意図だけのActionをadapterへ渡す。権限・フェーズ・入力正規化・revision競合は保存済みRoomを読むサーバー側で処理する。`npm run lint` は全オンラインゲームの型付きadapter、PATCH route、UI直fetch、旧`setAndSaveRoom`の再混入を検査する。
 
@@ -142,11 +142,12 @@ Neon Postgres、Upstash Redis、Vercel Blobの容量は `vercel.json` の日次C
 - 設定操作はロビーにいるホストだけ。
 - 設定デフォルトはプレイヤーごとにRedisへ保存し、localStorageをフォールバックにする。
 - 1プレイヤー1アクティブ部屋。新しい部屋作成時は古いホスト部屋を解散する。
-- 広場の復帰表示はゲーム別Room APIをブラウザから順次呼ばず、認証済みの共通 `/api/player-active-rooms` 1本から部屋コード・phase・参加者概要・更新時刻だけを受け取る。秘密語・手札・投稿・合言葉などRoom本文は返さない。`scripts/check-game-standards.mjs` は全オンラインゲームのloader登録を検査する。
+- 広場の復帰表示はゲーム別Room APIをブラウザから順次呼ばず、認証済みの共通 `/api/player-active-rooms` 1本から部屋コード・phase・参加者概要・更新時刻だけを受け取る。active roomコード7件は個別GETではなく1回のMGETで確認し、該当する部屋本体だけを読む。秘密語・手札・投稿・合言葉などRoom本文は返さない。`scripts/check-game-standards.mjs` は全オンラインゲームのloader登録を検査する。
 - コードインターセプト、ワードスケール、ワードソナー、ワードアウト、ノーザンブランチの入室画面は `useOnlineGameSessionRestore` を使う。保存済みのローカルセッションで画面枠を先に表示し、サーバーのアカウント確認とアクティブ部屋復元をバックグラウンドで行う。復元中は新規作成・参加欄を `inert` にして、別部屋操作との競合を防ぐ。アカウントCookieとRoomの正本は引き続きサーバーで検証する。
 - 参加人数のサーバー安全上限は `onlineRoomPlayerLimits` を正本とし、ワードウルフ20人、たほい屋8人、ノーザンブランチ4人、ワードスケール50人、ワードソナー20人、ワードアウト6人、コードインターセプト12人。満室は一覧から除外し、直接参加も409で拒否する。復元時も上限を超えた配列を切り詰め、デバッグ用ダミー追加にも同じ上限を適用する。
 - 投稿・投票がそろったらサーバー側で自動遷移する。
-- ルームGETは認証済み閲覧者向けJSONからETagを作り、クライアントは `If-None-Match` を送る。未変更時は304で本文転送とJSON再解析を省き、同じURLへの重複ポーリングはクライアント内で1本へまとめる。実装は `lib/conditional-json.ts` と `lib/conditional-json-client.ts`。現行の進行中・最終結果2秒／ロビー5秒間隔は維持し、SSE等への移行前の負荷軽減層とする。
+- ルームGETは認証済み閲覧者向けJSONからETagを作り、クライアントは `If-None-Match` を送る。未変更時は304で本文転送とJSON再解析を省き、同じURLへの重複ポーリングはクライアント内で1本へまとめる。実装は `lib/conditional-json.ts` と `lib/conditional-json-client.ts`。現行の進行中2秒／ロビー・最終結果5秒間隔を標準とし、SSE等への移行前の負荷軽減層とする。
+- 部屋作成時のRoom本体と一覧索引は1回のLua commandで原子的に保存する。更新時に一覧へ毎回 `SADD` しない。参加者別active room索引のTTL更新も人数分の個別SETではなく `saveOnlineRoomPlayerIndexes` の1 commandへまとめる。
 - 参加可能な部屋一覧は全件 `SMEMBERS` + 個別GETを行わず、`SSCAN` で1ページ24件ずつ取得し、部屋本体は1回の `MGET` にまとめる。レスポンスの `nextCursor` を次の `cursor` クエリへ渡せる。部屋コードを指定した直接参加はページ外でも利用できる。
 - 自動遷移しなかった場合の手動ボタンはホスト向けに残すが、必要条件を満たすまで表示しない。
 - オンライン部屋の最終結果画面では共通 `RoomResultActions` と `useRoomResultReturnGate` を使う。「部屋に戻る」を先頭・全幅の主導線とし、ホストがサーバー上の部屋をロビーへ戻した後に各クライアントで有効化する。「広場へ戻る」は確認付きの副導線とする。既存参加者の席は保持されるため満員でも復帰できるが、クリック時に最新の部屋と参加資格を再確認する。部屋が解散されても結果画面は強制遷移せず保持し、復帰ボタンを無効化して監視を止める。ホストにだけ「部屋を解散」も表示し、確認後にサーバー側のホスト権限検証を通す。参加枠から実際に外れる「退出」にも共通確認を入れる。各アクションの処理中は共通スピナーと進行中ラベルを表示して二重押しを防ぐ。ゲーム内の途中ラウンド進行はこの個人遷移と分けて扱う。
@@ -281,6 +282,8 @@ Neon Postgres、Upstash Redis、Vercel Blobの容量は `vercel.json` の日次C
 ## 9. 開発・検証・公開
 
 更新系API、タイマー、認証、戦績、LLMは `lib/observability` から1行JSONの構造化イベントを出力する。Vercel Runtime Logsでは `event`、`roomRef`、`requestId`、`outcome`、`errorCode` で追跡する。GETポーリング成功は記録しない。ログ禁止情報、調査順、将来collector構成は `docs/OBSERVABILITY.md` を正本とする。
+
+ブラウザのWeb Vitalsはセッション単位で50%を抽出し、1サンプルの追加・期限切れ削除・件数上限・TTL更新を1 Redis commandへまとめる。運営ダッシュボードは表示中だけ60秒間隔で基本集計を更新し、外部容量確認を含む診断詳細は初回・手動または5分経過後のタブ復帰時だけ更新する。
 
 本番ロビーはGitHub Actionsの `production-smoke.yml` で30分ごとに監視する。軽量負荷試験は `npm run load:smoke` を使い、localhost以外は `LOAD_TEST_ALLOW_REMOTE=1` を必須とする。本番への誤負荷を避けるためリモート実行は最大100リクエスト・同時数5、GETだけに制限する。詳細な閾値とVercel Alertsの初期値は `docs/OBSERVABILITY.md` を正本とする。
 

@@ -4,14 +4,14 @@ import {
 } from "@/lib/wordwolf";
 import type { Player, Room, RoomChoice, WordWolfRoomAction } from "@/lib/wordwolf-game-types";
 import { randomUUID } from "node:crypto";
-import { redisCommand, redisPipeline } from "@/lib/redis-store";
+import { redisCommand } from "@/lib/redis-store";
 import { recordWordWolfGameResults } from "@/lib/player-stats-store";
 import { recordWordWolfReplay } from "@/lib/game-replay-store";
 import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
 import { normalizeWordDifficulty } from "@/lib/word-selection-protocol";
 import { isMultiplayerRoomExpired, multiplayerRoomExpiryArgs } from "@/lib/multiplayer-room-lifecycle";
 import { canDissolveOnlineRoom } from "@/lib/room-dissolve-policy";
-import { claimOnlineRoomForPlayer, loadPlayerActiveOnlineRoom, releasePlayerActiveRoom } from "@/lib/player-active-room";
+import { claimOnlineRoomForPlayer, loadPlayerActiveOnlineRoom, releasePlayerActiveRoom, saveOnlineRoomPlayerIndexes } from "@/lib/player-active-room";
 import { isAvatarColor, isAvatarImage } from "@/lib/player-session";
 import { onlineRoomPlayerLimits } from "@/lib/online-room-policy";
 import { loadIndexedOnlineRoomPage } from "@/lib/online-room-list";
@@ -104,8 +104,8 @@ export async function saveStoredWordWolfRoom(room: unknown) {
   // revisionをRedis内で比較し、遅れて届いた画面から部屋全体が巻き戻るのを防ぐ。
   const saved = await redisCommand<number>([
     "EVAL",
-    "local raw=redis.call('GET',KEYS[1]); if raw then local current=cjson.decode(raw); local rev=tonumber(current.revision or 0); if tonumber(ARGV[1])<=rev then return 0 end end; redis.call('SET',KEYS[1],ARGV[2],'EX',ARGV[3]); return 1",
-    "1", roomKey(normalizedRoom.code), String(normalizedRoom.revision), JSON.stringify(normalizedRoom), multiplayerRoomExpiryArgs()[1],
+    "local raw=redis.call('GET',KEYS[1]); if raw then local current=cjson.decode(raw); local rev=tonumber(current.revision or 0); if tonumber(ARGV[1])<=rev then return 0 end end; redis.call('SET',KEYS[1],ARGV[2],'EX',ARGV[3]); redis.call('SADD',KEYS[2],ARGV[4]); return 1",
+    "2", roomKey(normalizedRoom.code), roomIndexKey, String(normalizedRoom.revision), JSON.stringify(normalizedRoom), multiplayerRoomExpiryArgs()[1], normalizedRoom.code,
   ]);
   if (saved !== 1) throw new Error("WORDWOLF_ROOM_CONFLICT");
 
@@ -113,13 +113,7 @@ export async function saveStoredWordWolfRoom(room: unknown) {
     await schedulePostResponseWork("wordwolf-result-persistence", () => Promise.all([recordWordWolfGameResults(normalizedRoom), recordWordWolfReplay(normalizedRoom)]));
   }
 
-  // 残る索引更新は1回のHTTP pipelineにまとめる。
-  await redisPipeline<unknown[]>([
-    ["SADD", roomIndexKey, normalizedRoom.code],
-    ...normalizedRoom.players.map((player) =>
-      ["SET", playerActiveRoomKey(player.id), normalizedRoom.code, ...multiplayerRoomExpiryArgs()],
-    ),
-  ]);
+  await saveOnlineRoomPlayerIndexes(normalizedRoom.code, normalizedRoom.players.map((player) => player.id), playerActiveRoomKey);
 
   return normalizedRoom;
 }

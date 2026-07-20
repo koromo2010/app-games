@@ -31,7 +31,7 @@ export function useHodoaiRoomSession({ room, setRoom, setError }: Params) {
 
   useOnlineRoomPolling({
     roomCode: playerId && !resultReturnGate.isRoomDissolved ? room?.code : null,
-    intervalMs: room?.phase === "arrange" ? onlineRoomPollingIntervals.realtime : room?.phase === "lobby" ? onlineRoomPollingIntervals.idle : onlineRoomPollingIntervals.active,
+    intervalMs: room?.phase === "arrange" ? onlineRoomPollingIntervals.realtime : room?.phase === "lobby" || room?.phase === "result" ? onlineRoomPollingIntervals.idle : onlineRoomPollingIntervals.active,
     fetchRoom: (code) => hodoaiRoomApi.fetchRoom(code, playerId),
     onRoom: resultReturnGate.acceptIncomingRoom,
     onMissing: () => {

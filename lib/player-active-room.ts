@@ -70,7 +70,15 @@ export async function saveOnlineRoomPlayerIndexes(
   playerIds: string[],
   key: (playerId: string) => string,
 ) {
-  await Promise.all(playerIds.map((playerId) => redisCommand<"OK">([
-    "SET", key(playerId), roomCode, ...multiplayerRoomExpiryArgs(),
-  ])));
+  const normalizedIds = playerIds.map((playerId) => playerId.trim()).filter(Boolean);
+  const keys = [...new Set(normalizedIds.map(key))];
+  if (keys.length === 0) return;
+  await redisCommand<number>([
+    "EVAL",
+    "for i=1,#KEYS do redis.call('SET',KEYS[i],ARGV[1],'EX',ARGV[2]) end; return #KEYS",
+    String(keys.length),
+    ...keys,
+    roomCode,
+    multiplayerRoomExpiryArgs()[1],
+  ]);
 }

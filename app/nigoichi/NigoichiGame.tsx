@@ -120,7 +120,7 @@ export function NigoichiGame() {
 
   useOnlineRoomPolling({
     roomCode: playerId && !resultReturnGate.isRoomDissolved ? roomCode : null,
-    intervalMs: roomPhase === "lobby" ? onlineRoomPollingIntervals.idle : onlineRoomPollingIntervals.active,
+    intervalMs: roomPhase === "lobby" || roomPhase === "result" ? onlineRoomPollingIntervals.idle : onlineRoomPollingIntervals.active,
     fetchRoom: (code) => nigoichiRoomApi.fetchRoom(code, playerId),
     onRoom: resultReturnGate.acceptIncomingRoom,
     onMissing: () => {

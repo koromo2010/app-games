@@ -88,7 +88,7 @@ export async function loadAdminDashboardCore(): Promise<AdminDashboardCore> {
 
   const [activityWithIds, gameOperations] = await Promise.all([
     redisStatus === "healthy" ? Promise.all(roomDefinitions.map(loadGameActivity)) : Promise.resolve([]),
-    loadGameOperations({ fresh: true }),
+    loadGameOperations(),
   ]);
   const onlinePlayerIds = new Set(activityWithIds.flatMap((game) => game.playerIds));
   const games = activityWithIds.map((game) => ({

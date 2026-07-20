@@ -318,7 +318,6 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
     if (action.type === "join-room" && claim === "claimed") await releasePlayerActiveRoom(playerActiveRoomKey(action.actorId), code);
     throw error;
   });
-  await redisCommand<number>(["SADD", roomIndexKey, room.code]);
   await saveActiveRooms(room);
   await schedulePostResponseWork("hodoai-result-persistence", () => Promise.all([recordHodoaiGameResults(room), recordHodoaiReplay(room)]));
   if (action.type === "leave-room") await clearActiveRoom(action.actorId, room.code);

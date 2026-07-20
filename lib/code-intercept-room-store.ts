@@ -328,7 +328,6 @@ export async function applyStoredCodeInterceptAction(code: string, action: CodeI
     if (action.type === "join-room" && claim === "claimed") await clearActiveRoom(action.actorId, normalizedCode);
     throw error;
   });
-  await redisCommand<number>(["SADD", roomIndexKey, room.code]);
   await saveActiveRooms(room);
   const completedStartDraw = startDrawRef.value;
   if (action.type === "start-game" && completedStartDraw) {

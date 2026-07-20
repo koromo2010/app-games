@@ -33,6 +33,6 @@ export function useTahoiyaRoomSession(params: Params) {
     if (saved) setRoom(saved);
     return saved;
   } });
-  useEffect(() => { const timer = window.setInterval(() => setNow(synchronizedNow()), 250); return () => window.clearInterval(timer); }, []);
+  useEffect(() => { const timer = window.setInterval(() => setNow(synchronizedNow()), 1_000); return () => window.clearInterval(timer); }, []);
   return { now, resultReturnGate };
 }

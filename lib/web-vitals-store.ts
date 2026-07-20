@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { getRedisConfig, redisCommand, redisPipeline } from "@/lib/redis-store";
-import { normalizeWebVitalInput, type WebVitalSample } from "@/lib/web-vitals";
+import { getRedisConfig, redisCommand } from "./redis-store.ts";
+import { normalizeWebVitalInput, type WebVitalSample } from "./web-vitals.ts";
 
 const webVitalsKey = "web-vitals:v1";
 const retentionMs = 7 * 24 * 60 * 60 * 1_000;
@@ -11,11 +11,16 @@ export async function recordWebVital(value: unknown) {
   const normalized = normalizeWebVitalInput(value);
   if (!normalized) return null;
   const sample: WebVitalSample = { ...normalized, id: randomUUID(), occurredAt: Date.now() };
-  await redisPipeline([
-    ["ZADD", webVitalsKey, String(sample.occurredAt), JSON.stringify(sample)],
-    ["ZREMRANGEBYSCORE", webVitalsKey, "-inf", String(Date.now() - retentionMs)],
-    ["ZREMRANGEBYRANK", webVitalsKey, "0", String(-(maximumSamples + 1))],
-    ["EXPIRE", webVitalsKey, String(Math.ceil(retentionMs / 1_000))],
+  await redisCommand<number>([
+    "EVAL",
+    "redis.call('ZADD',KEYS[1],ARGV[1],ARGV[2]); redis.call('ZREMRANGEBYSCORE',KEYS[1],'-inf',ARGV[3]); redis.call('ZREMRANGEBYRANK',KEYS[1],'0',ARGV[4]); redis.call('EXPIRE',KEYS[1],ARGV[5]); return 1",
+    "1",
+    webVitalsKey,
+    String(sample.occurredAt),
+    JSON.stringify(sample),
+    String(sample.occurredAt - retentionMs),
+    String(-(maximumSamples + 1)),
+    String(Math.ceil(retentionMs / 1_000)),
   ]);
   return sample;
 }
