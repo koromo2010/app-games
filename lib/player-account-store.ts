@@ -22,6 +22,7 @@ import { hasPlayerAccountEmailOwnerConflict } from "@/lib/player-account-migrati
 import { legalConsentIsCurrent } from "@/lib/legal";
 import { unverifiedAccountIsExpired, unverifiedPlayerAccountRetentionMs } from "@/lib/player-account-retention";
 import { tahoiyaHistoryKeysForPlayer } from "@/lib/tahoiya-topic-history-store";
+import { normalizeAppLocale, type AppLocale } from "@/lib/app-locale";
 
 export type PlayerAccount = {
   version: 2;
@@ -34,6 +35,7 @@ export type PlayerAccount = {
   avatarColor: string;
   avatarImage: string | null;
   shareNameAllowed: boolean;
+  locale: AppLocale;
   termsVersion: string | null;
   termsAcceptedAt: number | null;
   privacyVersion: string | null;
@@ -120,6 +122,7 @@ function normalizeAccount(value: unknown): PlayerAccount | null {
     avatarColor: isAvatarColor(parsedAvatarColor) ? parsedAvatarColor : fallbackAvatarColor,
     avatarImage: isAvatarImage(parsedAvatarImage) ? parsedAvatarImage : null,
     shareNameAllowed: parsed.shareNameAllowed === true,
+    locale: normalizeAppLocale(parsed.locale),
     termsVersion: typeof parsed.termsVersion === "string" ? parsed.termsVersion : null,
     termsAcceptedAt: typeof parsed.termsAcceptedAt === "number" ? parsed.termsAcceptedAt : null,
     privacyVersion: typeof parsed.privacyVersion === "string" ? parsed.privacyVersion : null,
@@ -193,12 +196,14 @@ async function accountSession(account: PlayerAccount): Promise<PlayerSession> {
         avatarColor: savedSession.avatarColor,
         avatarImage: savedSession.avatarImage,
         shareNameAllowed: savedSession.shareNameAllowed === true,
+        locale: normalizeAppLocale(savedSession.locale),
         updatedAt: savedSession.updatedAt,
       }).catch(() => undefined);
     }
     return saveStoredPlayerSession({
       ...savedSession,
       hasRecoveryEmail: Boolean(account.email),
+      locale: account.locale,
     });
   }
 
@@ -208,6 +213,7 @@ async function accountSession(account: PlayerAccount): Promise<PlayerSession> {
     avatarColor: account.avatarColor,
     avatarImage: account.avatarImage,
     shareNameAllowed: account.shareNameAllowed,
+    locale: account.locale,
     hasRecoveryEmail: Boolean(account.email),
     createdAt: account.createdAt,
     updatedAt: account.updatedAt,
@@ -247,6 +253,7 @@ export async function registerPlayerAccount(input: PlayerAccountAuthInput) {
     avatarColor: isAvatarColor(input.avatarColor ?? null) ? input.avatarColor! : fallbackAvatarColor,
     avatarImage: isAvatarImage(input.avatarImage ?? null) ? input.avatarImage! : null,
     shareNameAllowed: false,
+    locale: normalizeAppLocale(undefined),
     termsVersion: input.termsVersion!,
     termsAcceptedAt: now,
     privacyVersion: input.privacyVersion!,
@@ -471,11 +478,12 @@ export async function saveResetPlayerAccountPassword(account: PlayerAccount) {
 
 export async function savePlayerAccountProfile(
   playerId: string,
-  profile: Pick<PlayerSession, "name" | "avatarColor" | "avatarImage" | "shareNameAllowed" | "updatedAt">,
+  profile: Pick<PlayerSession, "name" | "avatarColor" | "avatarImage" | "shareNameAllowed" | "locale" | "updatedAt">,
 ) {
   if (!isPostgresConfigured()) return;
   await updatePostgresPlayerAccountProfile(playerId, {
     ...profile,
     shareNameAllowed: profile.shareNameAllowed === true,
+    locale: normalizeAppLocale(profile.locale),
   });
 }

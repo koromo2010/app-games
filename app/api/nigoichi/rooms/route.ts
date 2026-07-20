@@ -17,6 +17,8 @@ import { authenticatedRoomDraft } from "@/lib/online-room-input";
 import { requireAuthenticatedPlayer, requireAuthenticatedPlayerId } from "@/lib/player-auth";
 import { commonOnlineRoomErrorResponse } from "@/lib/online-room-route-errors";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
+import { assertGameLocaleAvailable, assertRoomLanguageAccess, filterRoomPageByLocale } from "@/lib/game-language";
+import { loadStoredPlayerSession } from "@/lib/player-store";
 
 function errorResponse(error: unknown) {
   const common = commonOnlineRoomErrorResponse(error);
@@ -60,7 +62,9 @@ export async function GET(request: Request) {
       const room = await loadNigoichiPlayerActiveRoom(authenticatedPlayerId);
       return room ? conditionalVersionedJsonResponse(request, `nigoichi:${room.code}:${room.revision}:${authenticatedPlayerId}`, () => ({ room: sanitizeNigoichiRoom(room, authenticatedPlayerId) })) : conditionalJsonResponse(request, { room: null });
     }
-    return conditionalJsonResponse(request, await listJoinableNigoichiRooms(url.searchParams.get("cursor")));
+    const session = await loadStoredPlayerSession(authenticatedPlayerId);
+    const page = await listJoinableNigoichiRooms(url.searchParams.get("cursor"));
+    return conditionalJsonResponse(request, filterRoomPageByLocale(page, session?.locale));
   } catch (error) {
     const response = errorResponse(error);
     if (response.status >= 500) telemetry.responseError("room.read", error, response.status, { roomRef: telemetry.roomRef(code) });
@@ -75,6 +79,7 @@ export async function POST(request: Request) {
   if (accessDenied) return accessDenied;
   try {
     const session = await requireAuthenticatedPlayer();
+    assertGameLocaleAvailable("nigoichi", session.locale);
     const limited = await rateLimitResponseFor(request, rateLimitPolicies.roomMutation, { playerId: session.id });
     if (limited) return limited;
     const body = await request.json() as { room?: unknown; actorId?: unknown };
@@ -106,6 +111,9 @@ export async function PATCH(request: Request) {
     if (actionRequiresDebugAccess(action)) await requirePlayerDebugAccess(session.id);
     logFields = { action: action.type, roomRef: telemetry.roomRef(code), actorRef: telemetry.actorRef(session.id) };
     if (action.type === "join-room") {
+      const targetRoom = await loadStoredNigoichiRoom(code);
+      if (!targetRoom) throw new Error("NIGOICHI_ROOM_NOT_FOUND");
+      assertRoomLanguageAccess(targetRoom, session.locale);
       action = {
         ...action,
         player: {

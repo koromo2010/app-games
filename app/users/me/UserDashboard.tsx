@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useState, type FormEvent, type MouseEvent } from "react";
-import { savePersistentPlayerSession, type PlayerSession } from "@/lib/player-session";
+import { savePersistentPlayerSession, savePlayerSession, type PlayerSession } from "@/lib/player-session";
 import type { PlayerGameResult, PlayerStatsResponse } from "@/lib/player-stats-store";
 import { GameReplayPanel } from "@/app/components/GameReplayPanel";
 import { PlayerAvatarEditor } from "@/app/components/PlayerAvatarEditor";
 import { games } from "@/app/games/game-catalog";
 import { defaultAvatarImage } from "@/lib/player-session";
+import { appLocales, type AppLocale } from "@/lib/app-locale";
 
 function formatDate(timestamp: number) {
   return new Intl.DateTimeFormat("ja-JP", {
@@ -48,6 +49,8 @@ export function UserDashboard() {
   const [isAvatarEditorOpen, setIsAvatarEditorOpen] = useState(false);
   const [isShareNameSaving, setIsShareNameSaving] = useState(false);
   const [shareNameMessage, setShareNameMessage] = useState("");
+  const [isLocaleSaving, setIsLocaleSaving] = useState(false);
+  const [localeMessage, setLocaleMessage] = useState("");
   const [recoveryEmail, setRecoveryEmail] = useState("");
   const [recoveryEmailPassword, setRecoveryEmailPassword] = useState("");
   const [isRecoveryEmailSaving, setIsRecoveryEmailSaving] = useState(false);
@@ -76,6 +79,7 @@ export function UserDashboard() {
         avatarImage: session.avatarImage,
         hasRecoveryEmail: session.hasRecoveryEmail,
         shareNameAllowed,
+        locale: session.locale,
         createdAt: session.createdAt,
       });
       applyPlayerSession(result.session);
@@ -84,6 +88,40 @@ export function UserDashboard() {
       setShareNameMessage("共有時の名前表示設定を保存できませんでした。");
     } finally {
       setIsShareNameSaving(false);
+    }
+  };
+
+  const updateLocale = async (locale: AppLocale) => {
+    if (!session || isLocaleSaving || locale === session.locale) return;
+    setIsLocaleSaving(true);
+    setLocaleMessage("");
+    try {
+      const response = await fetch("/api/player-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: session.name,
+          avatarColor: session.avatarColor,
+          avatarImage: session.avatarImage,
+          createdAt: session.createdAt,
+          shareNameAllowed: session.shareNameAllowed,
+          locale,
+        }),
+      });
+      const data = await response.json().catch(() => null) as { session?: PlayerSession; error?: string } | null;
+      if (!response.ok || !data?.session) {
+        setLocaleMessage(data?.error === "PLAYER_LOCALE_ACTIVE_ROOM"
+          ? "言語を使うゲームの部屋に参加中は変更できません。部屋を退出・解散してから変更してください。"
+          : "表示言語を保存できませんでした。");
+        return;
+      }
+      savePlayerSession(data.session);
+      applyPlayerSession(data.session);
+      setLocaleMessage("表示言語を保存しました。");
+    } catch {
+      setLocaleMessage("通信に失敗しました。もう一度試してください。");
+    } finally {
+      setIsLocaleSaving(false);
     }
   };
 
@@ -235,6 +273,19 @@ export function UserDashboard() {
       </header>
 
       <div className="mx-auto max-w-5xl px-4 py-6">
+        <section className="mb-5 rounded-lg border border-amber-100 bg-amber-50 p-4" aria-labelledby="locale-heading">
+          <p className="text-xs font-semibold uppercase text-amber-700">Language</p>
+          <h2 id="locale-heading" className="text-lg font-black text-slate-950">表示言語・ゲーム言語</h2>
+          <p className="mt-2 text-xs leading-5 text-slate-600">言葉を使うゲームでは、この設定と同じ言語の部屋だけを表示・作成・参加できます。部屋参加画面では変更できません。</p>
+          <label className="mt-3 block max-w-xs text-sm font-bold text-slate-700">
+            アカウントの言語
+            <select value={session?.locale ?? "ja"} disabled={!session || isLocaleSaving} onChange={(event) => void updateLocale(event.target.value as AppLocale)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-950 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 disabled:opacity-60">
+              {appLocales.map((locale) => <option key={locale.id} value={locale.id}>{locale.label}</option>)}
+            </select>
+          </label>
+          <p className="mt-2 text-xs text-amber-800">現在、言語依存ゲームのコンテンツは日本語版のみです。Englishを選ぶと、対応ゲームが追加されるまで日本語部屋には入れません。</p>
+          {localeMessage && <p className="mt-2 text-xs font-semibold text-amber-800" role="status">{localeMessage}</p>}
+        </section>
         <section className="mb-5 rounded-lg border border-violet-100 bg-violet-50 p-4" aria-labelledby="recovery-email-heading">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div><p className="text-xs font-semibold uppercase text-violet-700">Account</p><h2 id="recovery-email-heading" className="text-lg font-black text-slate-950">復旧用メール</h2></div>

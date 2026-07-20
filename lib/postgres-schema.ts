@@ -17,6 +17,7 @@ export async function ensurePostgresSchema() {
           avatar_color TEXT NOT NULL,
           avatar_image TEXT,
           share_name_allowed BOOLEAN NOT NULL DEFAULT FALSE,
+          locale TEXT NOT NULL DEFAULT 'ja',
           terms_version TEXT,
           privacy_version TEXT,
           terms_accepted_at BIGINT,
@@ -25,6 +26,7 @@ export async function ensurePostgresSchema() {
         )
       `;
       await sql`ALTER TABLE player_accounts ADD COLUMN IF NOT EXISTS share_name_allowed BOOLEAN NOT NULL DEFAULT FALSE`;
+      await sql`ALTER TABLE player_accounts ADD COLUMN IF NOT EXISTS locale TEXT NOT NULL DEFAULT 'ja'`;
       await sql`ALTER TABLE player_accounts ADD COLUMN IF NOT EXISTS terms_version TEXT`;
       await sql`ALTER TABLE player_accounts ADD COLUMN IF NOT EXISTS privacy_version TEXT`;
       await sql`ALTER TABLE player_accounts ADD COLUMN IF NOT EXISTS terms_accepted_at BIGINT`;

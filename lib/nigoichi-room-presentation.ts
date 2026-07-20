@@ -11,6 +11,7 @@ export function sanitizeNigoichiRoom(room: NigoichiRoom, playerId: string) {
 export function nigoichiRoomChoice(room: NigoichiRoom): NigoichiRoomChoice {
   return {
     code: room.code,
+    contentLocale: room.contentLocale,
     hostName: room.players.find((player) => player.id === room.hostId)?.name ?? "Unknown",
     playerCount: room.players.length,
     playerCapacity: room.playerCapacity,

@@ -1,6 +1,7 @@
 import { normalizeCommonTimeLimit } from "./game-room-config.ts";
 import type { PlayerTimeoutFields } from "./player-timeout-policy.ts";
 import type { RoomLobbyReturnAction, RoomLobbyReturnState } from "./room-lobby-return.ts";
+import type { AppLocale } from "./app-locale.ts";
 
 export type KotobaSenpukuTheme = {
   id: string;
@@ -50,6 +51,7 @@ export type KotobaSenpukuPhase = "lobby" | "secret" | "battle" | "result";
 
 export type KotobaSenpukuRoom = KotobaSenpukuConfig & PlayerTimeoutFields & {
   code: string;
+  contentLocale?: AppLocale;
   debugReplayEnabled: boolean;
   revision: number;
   hostId: string;
@@ -81,6 +83,7 @@ export type KotobaSenpukuRoom = KotobaSenpukuConfig & PlayerTimeoutFields & {
 
 export type KotobaSenpukuRoomChoice = {
   code: string;
+  contentLocale?: AppLocale;
   hostName: string;
   playerCount: number;
   roundsTotal: number;

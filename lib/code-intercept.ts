@@ -4,6 +4,7 @@ import { normalizeCommonTimeLimit } from "./game-room-config.ts";
 import { onlineRoomPlayerLimits } from "./online-room-policy.ts";
 import { runtimeHyperparameterNumber } from "./runtime-hyperparameters-core.ts";
 import { commonGameTimeoutGraceMs } from "./game-timer/policy.ts";
+import type { AppLocale } from "./app-locale.ts";
 
 export const codeInterceptGameId = "code-intercept" as const;
 export const codeInterceptMinimumPlayers = 4;
@@ -97,6 +98,7 @@ export type CodeInterceptWinner = CodeInterceptTeamId | "draw" | null;
 
 export type CodeInterceptRoom = {
   code: string;
+  contentLocale?: AppLocale;
   revision: number;
   hostId: string;
   ownerId?: string;
@@ -144,6 +146,7 @@ export type CodeInterceptRoom = {
 
 export type CodeInterceptRoomChoice = {
   code: string;
+  contentLocale?: AppLocale;
   hostName: string;
   playerCount: number;
   playerCapacity: number;

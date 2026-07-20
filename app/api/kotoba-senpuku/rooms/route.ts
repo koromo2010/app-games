@@ -17,6 +17,8 @@ import { gameApiAccessDeniedResponse } from "@/lib/game-access";
 import { authenticatedRoomDraft } from "@/lib/online-room-input";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 import { conditionalJsonResponse, conditionalVersionedJsonResponse } from "@/lib/conditional-json";
+import { assertGameLocaleAvailable, assertRoomLanguageAccess, filterRoomPageByLocale } from "@/lib/game-language";
+import { loadStoredPlayerSession } from "@/lib/player-store";
 
 function errorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : "";
@@ -57,7 +59,9 @@ export async function GET(request: Request) {
       const room = await loadKotobaSenpukuPlayerActiveRoom(authenticatedPlayerId);
       return room ? conditionalVersionedJsonResponse(request, `kotoba-senpuku:${room.code}:${room.revision}:${authenticatedPlayerId}`, () => ({ room: sanitizeKotobaSenpukuRoom(room, authenticatedPlayerId) })) : conditionalJsonResponse(request, { room: null });
     }
-    return conditionalJsonResponse(request, await listJoinableKotobaSenpukuRooms(url.searchParams.get("cursor")));
+    const session = await loadStoredPlayerSession(authenticatedPlayerId);
+    const page = await listJoinableKotobaSenpukuRooms(url.searchParams.get("cursor"));
+    return conditionalJsonResponse(request, filterRoomPageByLocale(page, session?.locale));
   } catch (error) {
     const response = errorResponse(error);
     if (response.status >= 500) telemetry.responseError("room.read", error, response.status, { roomRef: telemetry.roomRef(code) });
@@ -72,6 +76,7 @@ export async function POST(request: Request) {
   if (accessDenied) return accessDenied;
   try {
     const session = await requireAuthenticatedPlayer();
+    assertGameLocaleAvailable("kotoba-senpuku", session.locale);
     const limited = await rateLimitResponseFor(request, rateLimitPolicies.roomMutation, { playerId: session.id });
     if (limited) return limited;
     const body = (await request.json()) as { room?: unknown; actorId?: unknown };
@@ -108,6 +113,9 @@ export async function PATCH(request: Request) {
     if (actionRequiresDebugAccess(action)) await requirePlayerDebugAccess(actorId);
     logFields = { action: action.type, roomRef: telemetry.roomRef(code), actorRef: telemetry.actorRef(actorId) };
     if (action.type === "join-room") {
+      const targetRoom = await loadAndReconcileKotobaSenpukuRoom(code);
+      if (!targetRoom) throw new Error("KOTOBA_SENPUKU_ROOM_NOT_FOUND");
+      assertRoomLanguageAccess(targetRoom, session.locale);
       action = { ...action, player: { id: session.id!, name: session.name, joinedAt: Date.now(), avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined } };
     }
     const room = await applyStoredKotobaSenpukuAction(code, action);

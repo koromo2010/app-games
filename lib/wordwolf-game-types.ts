@@ -4,6 +4,7 @@ import type { GameGenerationMeta } from "@/lib/game-ai-types";
 import type { PlayerTimeoutFields } from "@/lib/player-timeout-policy";
 import type { WordDifficulty } from "@/lib/word-selection-protocol";
 import type { RoomLobbyReturnState } from "@/lib/room-lobby-return";
+import type { AppLocale } from "@/lib/app-locale";
 
 export type Phase = "lobby" | "clue" | "vote" | "wolfGuess" | "result";
 export type ClueLogVisibility = "always" | "result";
@@ -35,6 +36,7 @@ export type VoteRound = {
 export type Room = PlayerTimeoutFields & {
   revision: number;
   code: string;
+  contentLocale?: AppLocale;
   hostId: string;
   ownerId?: string;
   passphrase: string;
@@ -89,6 +91,7 @@ export type Room = PlayerTimeoutFields & {
 
 export type RoomChoice = {
   code: string;
+  contentLocale?: AppLocale;
   hostName: string;
   playerCount: number;
   roundsTotal: number;

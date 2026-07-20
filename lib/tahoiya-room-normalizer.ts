@@ -5,6 +5,7 @@ import { onlineRoomPlayerLimits } from "./online-room-policy.ts";
 import { normalizePlayerTimeoutFields } from "./player-timeout-policy.ts";
 import { isAvatarColor, isAvatarImage } from "./player-session.ts";
 import { normalizeRoomLobbyReturnState } from "./room-lobby-return.ts";
+import { normalizeRoomContentLocale } from "./game-language.ts";
 import { TAHOIYA_CORRECT_VOTE_POINTS, TAHOIYA_FOOLED_VOTE_POINTS } from "./tahoiya-scoring.ts";
 import { normalizeTahoiyaTopicGenerationProgress } from "./tahoiya-topic-generation-progress.ts";
 import { normalizeTahoiyaOptionId } from "./tahoiya-option-id.ts";
@@ -87,6 +88,7 @@ export function normalizeTahoiyaRoom(value: unknown): TahoiyaRoom | null {
 
   return {
     code,
+    contentLocale: normalizeRoomContentLocale(parsed.contentLocale),
     revision: typeof parsed.revision === "number" ? Math.max(0, Math.floor(parsed.revision)) : 0,
     hostId,
     ownerId: typeof parsed.ownerId === "string" ? parsed.ownerId : undefined,

@@ -11,6 +11,7 @@ import { loadStoredWordWolfRoom } from "./wordwolf-room-store.ts";
 
 export type SpectatorSourceRoom = {
   code: string;
+  contentLocale?: unknown;
   hostId: string;
   passphrase: string;
   phase: string;

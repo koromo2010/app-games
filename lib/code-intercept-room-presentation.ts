@@ -12,6 +12,7 @@ export function sanitizeCodeInterceptRoom(room: CodeInterceptRoom, playerId: str
 export function codeInterceptRoomChoice(room: CodeInterceptRoom): CodeInterceptRoomChoice {
   return {
     code: room.code,
+    contentLocale: room.contentLocale,
     hostName: room.players.find((player) => player.id === room.hostId)?.name ?? "Unknown",
     playerCount: room.players.length,
     playerCapacity: room.playerCapacity,

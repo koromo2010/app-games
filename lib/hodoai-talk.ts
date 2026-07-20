@@ -4,6 +4,7 @@ import { projectOrderedGameResult } from "./game-result-presentation.ts";
 import { onlineRoomPlayerLimits } from "./online-room-policy.ts";
 import type { PlayerTimeoutFields } from "./player-timeout-policy.ts";
 import { runtimeHyperparameterNumber } from "./runtime-hyperparameters-core.ts";
+import type { AppLocale } from "./app-locale.ts";
 
 export type HodoaiTheme = {
   id: string;
@@ -59,6 +60,7 @@ export type HodoaiRoundResult = {
 
 export type HodoaiRoom = HodoaiConfig & PlayerTimeoutFields & {
   code: string;
+  contentLocale?: AppLocale;
   debugReplayEnabled: boolean;
   revision: number;
   hostId: string;
@@ -91,6 +93,7 @@ export type HodoaiRoom = HodoaiConfig & PlayerTimeoutFields & {
 
 export type HodoaiRoomChoice = {
   code: string;
+  contentLocale?: AppLocale;
   hostName: string;
   playerCount: number;
   roundsTotal: number;

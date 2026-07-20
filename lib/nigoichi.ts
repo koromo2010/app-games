@@ -3,6 +3,7 @@ import type { RoomLobbyReturnAction, RoomLobbyReturnState } from "./room-lobby-r
 import { normalizeCommonTimeLimit } from "./game-room-config.ts";
 import { commonGameTimeoutGraceMs } from "./game-timer/policy.ts";
 import { onlineRoomPlayerLimits } from "./online-room-policy.ts";
+import type { AppLocale } from "./app-locale.ts";
 
 export type NigoichiPlayer = {
   id: string;
@@ -98,6 +99,7 @@ export function isValidNigoichiConfig(playerCount: number, cardsPerPlayer: numbe
 
 export type NigoichiRoom = {
   code: string;
+  contentLocale?: AppLocale;
   revision: number;
   hostId: string;
   ownerId?: string;
@@ -131,6 +133,7 @@ export type NigoichiRoom = {
 
 export type NigoichiRoomChoice = {
   code: string;
+  contentLocale?: AppLocale;
   hostName: string;
   playerCount: number;
   playerCapacity: number;

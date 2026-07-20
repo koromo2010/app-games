@@ -1,6 +1,7 @@
 import type { GameGenerationMeta } from "@/lib/game-ai-types";
 import type { PlayerTimeoutFields } from "./player-timeout-policy.ts";
 import type { RoomLobbyReturnAction, RoomLobbyReturnState } from "./room-lobby-return.ts";
+import type { AppLocale } from "./app-locale.ts";
 
 export type TahoiyaPhase = "lobby" | "writing" | "voting" | "result";
 export type TahoiyaAnswererMode = "manual" | "random";
@@ -51,6 +52,7 @@ export type TahoiyaDefinitionOption = {
 
 export type TahoiyaRoom = PlayerTimeoutFields & {
   code: string;
+  contentLocale?: AppLocale;
   revision: number;
   hostId: string;
   ownerId?: string;
@@ -117,6 +119,7 @@ export type TahoiyaRoomAction = RoomLobbyReturnAction
 
 export type TahoiyaRoomChoice = {
   code: string;
+  contentLocale?: AppLocale;
   hostName: string;
   playerCount: number;
   phase: TahoiyaPhase;

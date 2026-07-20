@@ -4,6 +4,8 @@ import { isPlayerAuthConfigurationError, requireAuthenticatedPlayer } from "@/li
 import { createRequestTelemetry } from "@/lib/observability";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 import { savePlayerAccountProfile } from "@/lib/player-account-store";
+import { isAppLocale, normalizeAppLocale } from "@/lib/app-locale";
+import { playerHasActiveLanguageRoom } from "@/lib/player-language-room-access";
 
 function isStoreNotConfigured(error: unknown) {
   return error instanceof Error && (
@@ -42,6 +44,7 @@ export async function POST(request: Request) {
     avatarImage?: unknown;
     createdAt?: unknown;
     shareNameAllowed?: unknown;
+    locale?: unknown;
   };
 
   try {
@@ -56,6 +59,13 @@ export async function POST(request: Request) {
     const limited = await rateLimitResponseFor(request, rateLimitPolicies.profileMutation, { playerId: authenticated.id });
     if (limited) return limited;
     const logFields = { action: "update", actorRef: telemetry.actorRef(authenticated.id) };
+    const requestedLocale = body.locale === undefined ? authenticated.locale : body.locale;
+    if (!isAppLocale(requestedLocale)) {
+      return Response.json({ error: "PLAYER_LOCALE_INVALID" }, { status: 400 });
+    }
+    if (requestedLocale !== normalizeAppLocale(authenticated.locale) && await playerHasActiveLanguageRoom(authenticated.id)) {
+      return Response.json({ error: "PLAYER_LOCALE_ACTIVE_ROOM" }, { status: 409 });
+    }
     const session = await saveStoredPlayerSession({
       id: authenticated.id,
       name: normalizePlayerName(typeof body.name === "string" ? body.name : ""),
@@ -65,6 +75,7 @@ export async function POST(request: Request) {
       shareNameAllowed: typeof body.shareNameAllowed === "boolean"
         ? body.shareNameAllowed
         : authenticated.shareNameAllowed === true,
+      locale: requestedLocale,
     });
     await savePlayerAccountProfile(authenticated.id, session);
 

@@ -1,6 +1,7 @@
 import { isAvatarColor, isAvatarImage, normalizePlayerName, type PlayerSession } from "@/lib/player-session";
 export { normalizeOnlineRoomCode, onlineRoomPassphraseMaximumLength } from "@/lib/online-room-policy";
 import { onlineRoomPassphraseMaximumLength } from "@/lib/online-room-policy";
+import { normalizeAppLocale } from "@/lib/app-locale";
 
 export function authenticatedRoomDraft(value: unknown, session: PlayerSession & { id: string }) {
   if (!value || typeof value !== "object") return value;
@@ -8,6 +9,7 @@ export function authenticatedRoomDraft(value: unknown, session: PlayerSession & 
   return {
     ...draft,
     hostId: session.id,
+    contentLocale: normalizeAppLocale(session.locale),
     players: [{
       id: session.id,
       name: normalizePlayerName(session.name),

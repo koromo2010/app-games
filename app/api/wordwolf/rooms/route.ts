@@ -17,6 +17,9 @@ import { actionRequiresDebugAccess, requirePlayerDebugAccess, roomRequestsDebugM
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 import { conditionalJsonResponse, conditionalVersionedJsonResponse } from "@/lib/conditional-json";
 import { gameApiAccessDeniedResponse } from "@/lib/game-access";
+import { assertGameLocaleAvailable, assertRoomLanguageAccess, filterRoomPageByLocale } from "@/lib/game-language";
+import { loadStoredPlayerSession } from "@/lib/player-store";
+import { commonOnlineRoomErrorResponse } from "@/lib/online-room-route-errors";
 
 function isStoreNotConfigured(error: unknown) {
   return error instanceof Error && error.message === "REDIS_STORE_NOT_CONFIGURED";
@@ -49,7 +52,8 @@ export async function GET(request: Request) {
     }
 
     const page = await listStoredJoinableWordWolfRooms(url.searchParams.get("cursor"));
-    return conditionalJsonResponse(request, page);
+    const session = await loadStoredPlayerSession(authenticatedPlayerId);
+    return conditionalJsonResponse(request, filterRoomPageByLocale(page, session?.locale));
   } catch (error) {
     if (error instanceof Error && error.message === "PLAYER_AUTH_REQUIRED") return Response.json({ error: "Login required" }, { status: 401 });
     if (isPlayerAuthConfigurationError(error)) {
@@ -73,6 +77,7 @@ export async function POST(request: Request) {
   let logFields: ObservabilityFields = {};
   try {
     const player = await requireAuthenticatedPlayer();
+    assertGameLocaleAvailable("wordwolf", player.locale);
     const limited = await rateLimitResponseFor(request, rateLimitPolicies.roomMutation, { playerId: player.id });
     if (limited) return limited;
     const body = (await request.json()) as { room?: unknown };
@@ -87,6 +92,8 @@ export async function POST(request: Request) {
     telemetry.success("room.mutation", { ...logFields, phase: room.phase, revision: room.revision, playerCount: room.players.length, debugMode: room.debugMode });
     return Response.json({ room: sanitizeWordWolfRoom(room, player.id) });
   } catch (error) {
+    const common = commonOnlineRoomErrorResponse(error);
+    if (common) return common;
     if (error instanceof Error && error.message === "DEBUG_ACCESS_REQUIRED") {
       telemetry.responseError("room.mutation", error, 403, logFields);
       return Response.json({ error: "Debug access required" }, { status: 403 });
@@ -158,11 +165,18 @@ export async function PATCH(request: Request) {
     if (actionRequiresDebugAccess(action)) await requirePlayerDebugAccess(player.id);
     logFields = { action: action.type, roomRef: telemetry.roomRef(code), actorRef: telemetry.actorRef(player.id) };
     const room = action.type === "join-room"
-      ? await joinStoredWordWolfRoom(code, { id: player.id, name: player.name, joinedAt: Date.now(), avatarColor: player.avatarColor, avatarImage: player.avatarImage ?? undefined }, action.passphrase)
+      ? await (async () => {
+        const targetRoom = await loadStoredWordWolfRoom(code);
+        if (!targetRoom) throw new Error("WORDWOLF_ROOM_NOT_FOUND");
+        assertRoomLanguageAccess(targetRoom, player.locale);
+        return joinStoredWordWolfRoom(code, { id: player.id, name: player.name, joinedAt: Date.now(), avatarColor: player.avatarColor, avatarImage: player.avatarImage ?? undefined }, action.passphrase);
+      })()
       : await applyStoredWordWolfRoomAction(code, player.id, action);
     telemetry.success("room.command", { ...logFields, phase: room.phase, revision: room.revision, playerCount: room.players.length, debugMode: room.debugMode });
     return Response.json({ room: sanitizeWordWolfRoom(room, player.id) });
   } catch (error) {
+    const common = commonOnlineRoomErrorResponse(error);
+    if (common) return common;
     if (error instanceof Error && error.message === "DEBUG_ACCESS_REQUIRED") return Response.json({ error: "Debug access required" }, { status: 403 });
     if (error instanceof Error && error.message === "PLAYER_AUTH_REQUIRED") return Response.json({ error: "Login required" }, { status: 401 });
     if (isPlayerAuthConfigurationError(error)) return Response.json({ error: "Player auth is not configured" }, { status: 503 });

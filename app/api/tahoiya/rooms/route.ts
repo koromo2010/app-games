@@ -26,6 +26,8 @@ import { actionRequiresDebugAccess, requirePlayerDebugAccess, roomRequestsDebugM
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 import { conditionalJsonResponse, conditionalVersionedJsonResponse } from "@/lib/conditional-json";
 import { gameApiAccessDeniedResponse } from "@/lib/game-access";
+import { assertGameLocaleAvailable, assertRoomLanguageAccess, filterRoomPageByLocale } from "@/lib/game-language";
+import { loadStoredPlayerSession } from "@/lib/player-store";
 
 function isStoreNotConfigured(error: unknown) {
   return error instanceof Error && error.message === "REDIS_STORE_NOT_CONFIGURED";
@@ -62,7 +64,8 @@ export async function GET(request: Request) {
     }
 
     const page = await listStoredJoinableTahoiyaRooms(url.searchParams.get("cursor"));
-    return conditionalJsonResponse(request, page);
+    const session = await loadStoredPlayerSession(authenticatedPlayerId);
+    return conditionalJsonResponse(request, filterRoomPageByLocale(page, session?.locale));
   } catch (error) {
     const authError = authErrorResponse(error);
     if (authError) {
@@ -86,6 +89,7 @@ export async function POST(request: Request) {
   let logFields: ObservabilityFields = { action: "create-room" };
   try {
     const player = await requireAuthenticatedPlayer();
+    assertGameLocaleAvailable("tahoiya", player.locale);
     const limited = await rateLimitResponseFor(request, rateLimitPolicies.roomMutation, { playerId: player.id });
     if (limited) return limited;
     const body = (await request.json()) as { room?: unknown; actorId?: unknown };
@@ -150,6 +154,9 @@ export async function PATCH(request: Request) {
       actorRef: telemetry.actorRef(player.id),
     };
     if (requestedAction.type === "join-room") {
+      const targetRoom = await loadStoredTahoiyaRoom(code);
+      if (!targetRoom) throw new Error("TAHOIYA_ROOM_NOT_FOUND");
+      assertRoomLanguageAccess(targetRoom, player.locale);
       const room = await joinStoredTahoiyaRoom(code, {
         id: player.id,
         name: player.name,

@@ -5,6 +5,7 @@ import {
   type PlayerSession,
 } from "@/lib/player-session";
 import { redisCommand } from "@/lib/redis-store";
+import { normalizeAppLocale } from "@/lib/app-locale";
 
 const playerKeyPrefix = "player:";
 
@@ -27,6 +28,7 @@ function normalizeStoredSession(id: string, value: unknown): PlayerSession | nul
     avatarImage,
     hasRecoveryEmail: parsed.hasRecoveryEmail === true,
     shareNameAllowed: parsed.shareNameAllowed === true,
+    locale: normalizeAppLocale(parsed.locale),
     createdAt: typeof parsed.createdAt === "number" ? parsed.createdAt : Date.now(),
     updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : Date.now(),
   };
@@ -56,6 +58,9 @@ export async function saveStoredPlayerSession(session: Omit<PlayerSession, "upda
     shareNameAllowed: typeof session.shareNameAllowed === "boolean"
       ? session.shareNameAllowed
       : previous?.shareNameAllowed === true,
+    locale: typeof session.locale === "string"
+      ? normalizeAppLocale(session.locale)
+      : previous?.locale ?? normalizeAppLocale(undefined),
     createdAt: previous?.createdAt ?? session.createdAt ?? now,
     updatedAt: session.updatedAt ?? now,
   };

@@ -3,6 +3,7 @@ import type { HodoaiRoom, HodoaiRoomChoice } from "./hodoai-talk.ts";
 export function hodoaiRoomChoice(room: HodoaiRoom): HodoaiRoomChoice {
   return {
     code: room.code,
+    contentLocale: room.contentLocale,
     hostName: room.players.find((player) => player.id === room.hostId)?.name ?? "Unknown",
     playerCount: room.players.length,
     roundsTotal: room.roundsTotal,

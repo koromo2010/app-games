@@ -17,6 +17,8 @@ import { gameApiAccessDeniedResponse } from "@/lib/game-access";
 import { authenticatedRoomDraft } from "@/lib/online-room-input";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 import { conditionalJsonResponse, conditionalVersionedJsonResponse } from "@/lib/conditional-json";
+import { assertGameLocaleAvailable, assertRoomLanguageAccess, filterRoomPageByLocale } from "@/lib/game-language";
+import { loadStoredPlayerSession } from "@/lib/player-store";
 
 function errorResponse(error: unknown) {
   const common = commonOnlineRoomErrorResponse(error);
@@ -55,7 +57,9 @@ export async function GET(request: Request) {
       const room = await loadHodoaiPlayerActiveRoom(authenticatedPlayerId);
       return room ? conditionalVersionedJsonResponse(request, `hodoai:${room.code}:${room.revision}:${authenticatedPlayerId}`, () => ({ room: sanitizeHodoaiRoom(room, authenticatedPlayerId) })) : conditionalJsonResponse(request, { room: null });
     }
-    return conditionalJsonResponse(request, await listJoinableHodoaiRooms(url.searchParams.get("cursor")));
+    const session = await loadStoredPlayerSession(authenticatedPlayerId);
+    const page = await listJoinableHodoaiRooms(url.searchParams.get("cursor"));
+    return conditionalJsonResponse(request, filterRoomPageByLocale(page, session?.locale));
   } catch (error) {
     const response = errorResponse(error);
     if (response.status >= 500) telemetry.responseError("room.read", error, response.status, { roomRef: telemetry.roomRef(code) });
@@ -70,6 +74,7 @@ export async function POST(request: Request) {
   if (accessDenied) return accessDenied;
   try {
     const session = await requireAuthenticatedPlayer();
+    assertGameLocaleAvailable("hodoai", session.locale);
     const limited = await rateLimitResponseFor(request, rateLimitPolicies.roomMutation, { playerId: session.id });
     if (limited) return limited;
     const body = (await request.json()) as { room?: unknown; actorId?: unknown };
@@ -105,6 +110,9 @@ export async function PATCH(request: Request) {
     if (actionRequiresDebugAccess(action)) await requirePlayerDebugAccess(session.id!);
     logFields = { action: action.type, roomRef: telemetry.roomRef(code), actorRef: telemetry.actorRef(session.id) };
     if (action.type === "join-room") {
+      const targetRoom = await loadAndReconcileHodoaiRoom(code);
+      if (!targetRoom) throw new Error("HODOAI_ROOM_NOT_FOUND");
+      assertRoomLanguageAccess(targetRoom, session.locale);
       action = {
         ...action,
         player: {

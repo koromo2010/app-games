@@ -38,5 +38,5 @@ export function sanitizeTahoiyaRoom(room: TahoiyaRoom, playerId: string): Tahoiy
 }
 
 export function tahoiyaRoomChoice(room: TahoiyaRoom): TahoiyaRoomChoice {
-  return { code: room.code, hostName: room.players.find((player) => player.id === room.hostId)?.name ?? "Unknown", playerCount: room.players.length, phase: room.phase, hasPassphrase: Boolean(room.passphrase), updatedAt: room.updatedAt };
+  return { code: room.code, contentLocale: room.contentLocale, hostName: room.players.find((player) => player.id === room.hostId)?.name ?? "Unknown", playerCount: room.players.length, phase: room.phase, hasPassphrase: Boolean(room.passphrase), updatedAt: room.updatedAt };
 }

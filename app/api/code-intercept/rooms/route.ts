@@ -17,6 +17,8 @@ import { authenticatedRoomDraft } from "@/lib/online-room-input";
 import { requireAuthenticatedPlayer, requireAuthenticatedPlayerId } from "@/lib/player-auth";
 import { commonOnlineRoomErrorResponse } from "@/lib/online-room-route-errors";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
+import { assertGameLocaleAvailable, assertRoomLanguageAccess, filterRoomPageByLocale } from "@/lib/game-language";
+import { loadStoredPlayerSession } from "@/lib/player-store";
 
 function errorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : "";
@@ -61,7 +63,9 @@ export async function GET(request: Request) {
         ? conditionalVersionedJsonResponse(request, `code-intercept:${room.code}:${room.revision}:${authenticatedPlayerId}`, () => ({ room: sanitizeCodeInterceptRoom(room, authenticatedPlayerId) }))
         : conditionalJsonResponse(request, { room: null });
     }
-    return conditionalJsonResponse(request, await listJoinableCodeInterceptRooms(url.searchParams.get("cursor")));
+    const session = await loadStoredPlayerSession(authenticatedPlayerId);
+    const page = await listJoinableCodeInterceptRooms(url.searchParams.get("cursor"));
+    return conditionalJsonResponse(request, filterRoomPageByLocale(page, session?.locale));
   } catch (error) {
     const response = errorResponse(error);
     if (response.status >= 500) telemetry.responseError("room.read", error, response.status, { roomRef: telemetry.roomRef(code) });
@@ -76,6 +80,7 @@ export async function POST(request: Request) {
   if (accessDenied) return accessDenied;
   try {
     const session = await requireAuthenticatedPlayer();
+    assertGameLocaleAvailable("code-intercept", session.locale);
     const limited = await rateLimitResponseFor(request, rateLimitPolicies.roomMutation, { playerId: session.id });
     if (limited) return limited;
     const body = await request.json() as { room?: unknown };
@@ -107,6 +112,9 @@ export async function PATCH(request: Request) {
     if (actionRequiresDebugAccess(action)) await requirePlayerDebugAccess(session.id);
     fields = { action: action.type, roomRef: telemetry.roomRef(code), actorRef: telemetry.actorRef(session.id) };
     if (action.type === "join-room") {
+      const targetRoom = await loadStoredCodeInterceptRoom(code);
+      if (!targetRoom) throw new Error("CODE_INTERCEPT_ROOM_NOT_FOUND");
+      assertRoomLanguageAccess(targetRoom, session.locale);
       action = { ...action, player: { id: session.id, name: session.name, joinedAt: Date.now(), teamId: "red", avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined, shareNameAllowed: session.shareNameAllowed === true } };
     }
     const room = await applyStoredCodeInterceptAction(code, action);

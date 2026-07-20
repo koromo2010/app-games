@@ -16,6 +16,7 @@ import {
 } from "@/lib/nigoichi";
 import { normalizeOnlineRoomCode } from "@/lib/online-room-input";
 import { normalizeRoomLobbyReturnState } from "@/lib/room-lobby-return";
+import { normalizeRoomContentLocale } from "@/lib/game-language";
 import { isAvatarColor, isAvatarImage } from "@/lib/player-session";
 
 function isPhase(value: unknown): value is NigoichiPhase {
@@ -194,6 +195,7 @@ export function normalizeNigoichiRoom(value: unknown): NigoichiRoom | null {
   const phase = isPhase(parsed.phase) ? parsed.phase : "lobby";
   const normalizedRoom: NigoichiRoom = {
     code,
+    contentLocale: normalizeRoomContentLocale(parsed.contentLocale),
     revision: typeof parsed.revision === "number" ? Math.max(0, Math.floor(parsed.revision)) : 0,
     hostId,
     ownerId: typeof parsed.ownerId === "string" ? parsed.ownerId.slice(0, 120) : undefined,

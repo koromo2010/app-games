@@ -3,6 +3,7 @@ import { normalizeOnlineRoomCode } from "./online-room-input.ts";
 import { normalizePlayerTimeoutFields } from "./player-timeout-policy.ts";
 import { isAvatarColor, isAvatarImage } from "./player-session.ts";
 import { normalizeRoomLobbyReturnState } from "./room-lobby-return.ts";
+import { normalizeRoomContentLocale } from "./game-language.ts";
 import {
   defaultHodoaiScoring,
   hodoaiTechnicalPlayerLimit,
@@ -155,6 +156,7 @@ export function normalizeHodoaiRoom(value: unknown): HodoaiRoom | null {
   const timeoutFields = normalizePlayerTimeoutFields(parsed, players.map((player) => player.id));
   return {
     code,
+    contentLocale: normalizeRoomContentLocale(parsed.contentLocale),
     revision: typeof parsed.revision === "number" ? Math.max(0, Math.floor(parsed.revision)) : 0,
     hostId,
     sorterId,

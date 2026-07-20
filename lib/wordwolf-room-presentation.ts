@@ -33,6 +33,7 @@ export function sanitizeWordWolfRoom(room: WordWolfRoom, playerId: string) {
 export function wordWolfRoomChoice(room: WordWolfRoom): WordWolfRoomChoice {
   return {
     code: room.code,
+    contentLocale: room.contentLocale,
     hostName: room.players.find((player) => player.id === room.hostId)?.name ?? "Unknown",
     playerCount: room.players.length,
     roundsTotal: room.roundsTotal,

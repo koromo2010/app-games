@@ -5,6 +5,7 @@ import { onlineRoomPlayerLimits } from "@/lib/online-room-policy";
 import { normalizePlayerTimeoutFields } from "@/lib/player-timeout-policy";
 import { isAvatarColor, isAvatarImage } from "@/lib/player-session";
 import { normalizeRoomLobbyReturnState } from "@/lib/room-lobby-return";
+import { normalizeRoomContentLocale } from "@/lib/game-language";
 import {
   normalizeTopicDictionarySource,
   normalizeTopicPairDistance,
@@ -162,6 +163,7 @@ export function normalizeWordWolfRoom(value: unknown): WordWolfRoom | null {
   })) as Player[];
 
   return {
+    contentLocale: normalizeRoomContentLocale(parsed.contentLocale),
     revision: typeof parsed.revision === "number" ? Math.max(0, Math.floor(parsed.revision)) : 0,
     code,
     hostId,

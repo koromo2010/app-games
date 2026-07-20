@@ -1,3 +1,5 @@
+import { normalizeAppLocale, type AppLocale } from "./app-locale.ts";
+
 export type PlayerSession = {
   id?: string;
   name: string;
@@ -5,6 +7,7 @@ export type PlayerSession = {
   avatarImage: string | null;
   hasRecoveryEmail?: boolean;
   shareNameAllowed?: boolean;
+  locale?: AppLocale;
   createdAt?: number;
   updatedAt: number;
 };
@@ -107,6 +110,7 @@ export function readPlayerSession(): PlayerSession | null {
       avatarImage,
       hasRecoveryEmail: parsed.hasRecoveryEmail === true,
       shareNameAllowed: parsed.shareNameAllowed === true,
+      locale: normalizeAppLocale(parsed.locale),
       createdAt: typeof parsed.createdAt === "number" ? parsed.createdAt : undefined,
       updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : Date.now(),
     };
@@ -125,6 +129,7 @@ export function savePlayerSession(session: Omit<PlayerSession, "updatedAt">) {
     avatarImage: isAvatarImage(session.avatarImage) ? session.avatarImage : null,
     hasRecoveryEmail: session.hasRecoveryEmail === true,
     shareNameAllowed: session.shareNameAllowed === true,
+    locale: normalizeAppLocale(session.locale),
     createdAt: session.createdAt,
     updatedAt: Date.now(),
   };

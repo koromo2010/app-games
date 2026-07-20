@@ -3,6 +3,7 @@ import type { KotobaSenpukuRoom, KotobaSenpukuRoomChoice } from "@/lib/kotoba-se
 export function kotobaSenpukuRoomChoice(room: KotobaSenpukuRoom): KotobaSenpukuRoomChoice {
   return {
     code: room.code,
+    contentLocale: room.contentLocale,
     hostName: room.players.find((player) => player.id === room.hostId)?.name ?? "不明",
     playerCount: room.players.length,
     roundsTotal: room.roundsTotal,
