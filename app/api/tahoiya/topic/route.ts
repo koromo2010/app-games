@@ -40,11 +40,26 @@ import {
   tahoiyaDefinitionStyleRules,
 } from "@/lib/tahoiya-definition-length";
 
-const tahoiyaTopicPromptVersion = "tahoiya-effective-zipf-topic-v17";
+const tahoiyaTopicPromptVersion = "tahoiya-effective-zipf-topic-v18";
 const tahoiyaDifficultyScreeningPromptVersion = "tahoiya-difficulty-screening-v2";
 const tahoiyaGenerationCandidateLimit = 3;
 const tahoiyaScreeningBatchLimit = 3;
 export const maxDuration = 180;
+
+const tahoiyaDefinitionJsonSchema = {
+  name: "tahoiya_catalog_definition",
+  strict: true,
+  schema: {
+    type: "object",
+    properties: {
+      sensitive: { type: "boolean" },
+      reading: { type: "string" },
+      realDefinition: { type: "string" },
+    },
+    required: ["sensitive", "reading", "realDefinition"],
+    additionalProperties: false,
+  },
+};
 
 function tahoiyaDifficultyScreeningJsonSchema(sourceIds: string[]) {
   return {
@@ -396,7 +411,14 @@ async function generateTopicFromCatalogWords(
       "選定理由、出典、確信度、解説、候補一覧は不要です。",
       "JSONのみで返してください: {\"sensitive\":trueまたはfalse,\"reading\":\"...\",\"realDefinition\":\"...\"}",
     ].join("\n\n");
-    const generated = await generateGameLlmText(prompt, mode, { quality: "high" });
+    // This is a short, constrained dictionary response. High reasoning asks Groq
+    // for an 8,192-token budget and has produced HTTP 413 responses in production;
+    // it also makes OpenAI vulnerable to the 30-second high-quality timeout.
+    const generated = await generateGameLlmText(prompt, mode, {
+      quality: "standard",
+      responseJsonSchema: tahoiyaDefinitionJsonSchema,
+      timeoutMs: 20_000,
+    });
     const parsed = parseTahoiyaCatalogTopicGeneration(
       generated.text,
       candidate,
