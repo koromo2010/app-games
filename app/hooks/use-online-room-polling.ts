@@ -3,9 +3,9 @@
 import { useEffect, useRef } from "react";
 
 export const onlineRoomPollingIntervals = {
-  realtime: 500,
-  active: 1000,
-  idle: 2000,
+  realtime: 1000,
+  active: 2000,
+  idle: 5000,
 } as const;
 
 const maximumOnlineRoomPollingDelayMs = 30_000;

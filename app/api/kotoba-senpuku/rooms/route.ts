@@ -9,7 +9,7 @@ import {
   sanitizeKotobaSenpukuRoom,
 } from "@/lib/kotoba-senpuku-room-store";
 import type { KotobaSenpukuRoomAction } from "@/lib/kotoba-senpuku";
-import { requireAuthenticatedPlayer } from "@/lib/player-auth";
+import { requireAuthenticatedPlayer, requireAuthenticatedPlayerId } from "@/lib/player-auth";
 import { commonOnlineRoomErrorResponse } from "@/lib/online-room-route-errors";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
 import { actionRequiresDebugAccess, requirePlayerDebugAccess } from "@/lib/debug-access";
@@ -45,8 +45,7 @@ export async function GET(request: Request) {
   const code = url.searchParams.get("code")?.trim().toUpperCase() ?? "";
   const playerId = url.searchParams.get("playerId")?.trim() ?? "";
   try {
-    const session = await requireAuthenticatedPlayer();
-    const authenticatedPlayerId = session.id!;
+    const authenticatedPlayerId = await requireAuthenticatedPlayerId();
     if (playerId && playerId !== authenticatedPlayerId) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
     if (code) {
       const room = await loadAndReconcileKotobaSenpukuRoom(code);

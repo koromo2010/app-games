@@ -14,7 +14,7 @@ import {
 } from "@/lib/code-intercept-room-store";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
 import { authenticatedRoomDraft } from "@/lib/online-room-input";
-import { requireAuthenticatedPlayer } from "@/lib/player-auth";
+import { requireAuthenticatedPlayer, requireAuthenticatedPlayerId } from "@/lib/player-auth";
 import { commonOnlineRoomErrorResponse } from "@/lib/online-room-route-errors";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 
@@ -47,17 +47,17 @@ export async function GET(request: Request) {
   const code = url.searchParams.get("code")?.trim().toUpperCase() ?? "";
   const playerId = url.searchParams.get("playerId")?.trim() ?? "";
   try {
-    const session = await requireAuthenticatedPlayer();
-    if (playerId && playerId !== session.id) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
+    const authenticatedPlayerId = await requireAuthenticatedPlayerId();
+    if (playerId && playerId !== authenticatedPlayerId) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
     if (code) {
       const room = await loadStoredCodeInterceptRoom(code);
       if (!room) return Response.json({ error: "Room not found" }, { status: 404 });
-      if (!room.players.some((player) => player.id === session.id)) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
-      return conditionalJsonResponse(request, { room: sanitizeCodeInterceptRoom(room, session.id) });
+      if (!room.players.some((player) => player.id === authenticatedPlayerId)) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
+      return conditionalJsonResponse(request, { room: sanitizeCodeInterceptRoom(room, authenticatedPlayerId) });
     }
     if (playerId) {
-      const room = await loadCodeInterceptPlayerActiveRoom(session.id);
-      return conditionalJsonResponse(request, { room: room ? sanitizeCodeInterceptRoom(room, session.id) : null });
+      const room = await loadCodeInterceptPlayerActiveRoom(authenticatedPlayerId);
+      return conditionalJsonResponse(request, { room: room ? sanitizeCodeInterceptRoom(room, authenticatedPlayerId) : null });
     }
     return conditionalJsonResponse(request, await listJoinableCodeInterceptRooms(url.searchParams.get("cursor")));
   } catch (error) {

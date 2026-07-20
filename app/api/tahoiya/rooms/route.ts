@@ -16,7 +16,7 @@ import {
 } from "@/lib/tahoiya-room-store";
 import type { TahoiyaRoomAction } from "@/lib/tahoiya-types";
 import type { TahoiyaTopic } from "@/lib/tahoiya-types";
-import { requireAuthenticatedPlayer } from "@/lib/player-auth";
+import { requireAuthenticatedPlayer, requireAuthenticatedPlayerId } from "@/lib/player-auth";
 import { commonOnlineRoomErrorResponse } from "@/lib/online-room-route-errors";
 import { authenticatedRoomDraft } from "@/lib/online-room-input";
 import { generateTahoiyaTopicResponse } from "@/app/api/tahoiya/topic/route";
@@ -44,21 +44,21 @@ export async function GET(request: Request) {
   const playerId = url.searchParams.get("playerId");
 
   try {
-    const player = await requireAuthenticatedPlayer();
-    if (playerId && playerId !== player.id) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
+    const authenticatedPlayerId = await requireAuthenticatedPlayerId();
+    if (playerId && playerId !== authenticatedPlayerId) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
     if (code) {
       const room = await loadAndReconcileStoredTahoiyaRoom(code);
       if (!room) {
         return Response.json({ error: "Room not found" }, { status: 404 });
       }
 
-      if (!room.players.some((item) => item.id === player.id)) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
-      return conditionalJsonResponse(request, { room: sanitizeTahoiyaRoom(room, player.id) });
+      if (!room.players.some((item) => item.id === authenticatedPlayerId)) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
+      return conditionalJsonResponse(request, { room: sanitizeTahoiyaRoom(room, authenticatedPlayerId) });
     }
 
     if (playerId) {
-      const room = await loadStoredTahoiyaPlayerActiveRoom(player.id);
-      return conditionalJsonResponse(request, { room: room ? sanitizeTahoiyaRoom(room, player.id) : null });
+      const room = await loadStoredTahoiyaPlayerActiveRoom(authenticatedPlayerId);
+      return conditionalJsonResponse(request, { room: room ? sanitizeTahoiyaRoom(room, authenticatedPlayerId) : null });
     }
 
     const page = await listStoredJoinableTahoiyaRooms(url.searchParams.get("cursor"));

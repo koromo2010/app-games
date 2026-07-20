@@ -129,7 +129,7 @@ Neon Postgres、Upstash Redis、Vercel Blobの容量は `vercel.json` の日次C
 
 ## 5. マルチプレイ共通ルール
 
-登録済みオンラインゲームの部屋取得・active room復帰・一覧・POST/PATCH/DELETEは `lib/online-room-api-client.ts` を土台に、各ゲームの `*-room-api-client.ts` へ型付きで集約する。画面から部屋APIを直接 `fetch` しない。表示中だけの定期取得、タブ復帰時の即時更新、必要なゲームのlocalStorage cross-tab更新は `app/hooks/use-online-room-polling.ts` を使う。通常は進行中2秒、ロビー・結果5秒を標準とし、ゲーム固有の理由がある場合だけ変更する。
+登録済みオンラインゲームの部屋取得・active room復帰・一覧・POST/PATCH/DELETEは `lib/online-room-api-client.ts` を土台に、各ゲームの `*-room-api-client.ts` へ型付きで集約する。画面から部屋APIを直接 `fetch` しない。表示中だけの定期取得、タブ復帰時の即時更新、必要なゲームのlocalStorage cross-tab更新は `app/hooks/use-online-room-polling.ts` を使う。通常は短い同期フェーズ1秒、進行中2秒、ロビー・結果5秒を標準とし、ゲーム固有の理由がある場合だけ変更する。部屋GETは署名済みCookieから `requireAuthenticatedPlayerId` で本人IDを検証し、保存済み部屋の参加者と照合する。ポーリングのたびにプレイヤープロフィールをRedisから再取得しない。更新系は引き続き `requireAuthenticatedPlayer` を使い、最新プロフィールとアカウント存在確認を維持する。共同キャンバスは操作感を保つため、表示中の部屋500ms・広場2秒・非表示タブ10秒とする。
 
 書き込み契約は `POST = 新規作成`、`PATCH = 既存部屋へのCommand`、`DELETE = 解散`。既存部屋をRoom全体POSTで更新しない。UIは変更後Roomを組み立てず、変更意図だけのActionをadapterへ渡す。権限・フェーズ・入力正規化・revision競合は保存済みRoomを読むサーバー側で処理する。`npm run lint` は全オンラインゲームの型付きadapter、PATCH route、UI直fetch、旧`setAndSaveRoom`の再混入を検査する。
 

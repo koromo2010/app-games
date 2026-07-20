@@ -8,7 +8,7 @@ import {
   loadHodoaiPlayerActiveRoom,
   sanitizeHodoaiRoom,
 } from "@/lib/hodoai-room-store";
-import { requireAuthenticatedPlayer } from "@/lib/player-auth";
+import { requireAuthenticatedPlayer, requireAuthenticatedPlayerId } from "@/lib/player-auth";
 import { commonOnlineRoomErrorResponse } from "@/lib/online-room-route-errors";
 import type { HodoaiRoomAction } from "@/lib/hodoai-talk";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
@@ -43,8 +43,7 @@ export async function GET(request: Request) {
   const code = url.searchParams.get("code")?.trim().toUpperCase() ?? "";
   const playerId = url.searchParams.get("playerId")?.trim() ?? "";
   try {
-    const session = await requireAuthenticatedPlayer();
-    const authenticatedPlayerId = session.id!;
+    const authenticatedPlayerId = await requireAuthenticatedPlayerId();
     if (playerId && playerId !== authenticatedPlayerId) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
     if (code) {
       const room = await loadAndReconcileHodoaiRoom(code);
