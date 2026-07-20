@@ -37,6 +37,7 @@ import {
   codeInterceptShareText,
   codeInterceptTimeoutGraceMs,
   codeInterceptTeamIds,
+  codeInterceptWordDifficulties,
   isValidCodeInterceptAnswer,
   normalizeCodeInterceptCodeLength,
   otherCodeInterceptTeam,
@@ -47,6 +48,7 @@ import {
   type CodeInterceptRoomChoice,
   type CodeInterceptTeamId,
   type CodeInterceptTeamRoundResult,
+  type CodeInterceptWordDifficulty,
 } from "@/lib/code-intercept";
 import { OnlineRoomApiError } from "@/lib/online-room-api-client";
 import { synchronizedNow } from "@/lib/server-clock";
@@ -68,6 +70,17 @@ function getOwnerId() {
 function teamLabel(teamId: CodeInterceptTeamId) { return teamId === "red" ? "赤チーム" : "青チーム"; }
 function codeRevealLabel(room: Pick<CodeInterceptRoom, "codeRevealMode">) { return room.codeRevealMode === "all" ? "全員に公開" : "自チームだけ"; }
 function timeLimitLabel(seconds: number) { return seconds > 0 ? `${seconds}秒` : "なし"; }
+function isCodeInterceptWordDifficulty(value: unknown): value is CodeInterceptWordDifficulty {
+  return typeof value === "string" && codeInterceptWordDifficulties.some((difficulty) => difficulty === value);
+}
+function wordDifficultyLabel(difficulty: CodeInterceptWordDifficulty) {
+  return difficulty === "easy" ? "簡単" : difficulty === "hard" ? "難しい" : "普通";
+}
+function wordDifficultyMixLabel(difficulty: CodeInterceptWordDifficulty) {
+  if (difficulty === "easy") return "簡単100%";
+  if (difficulty === "hard") return "難しい50%・普通40%・簡単10%";
+  return "普通80%・簡単20%";
+}
 function teamStyle(teamId: CodeInterceptTeamId) {
   return teamId === "red"
     ? "border-rose-300/35 bg-rose-300/10 text-rose-50"
@@ -97,11 +110,12 @@ async function sampleCodeInterceptDebugWords(roomCode: string): Promise<DebugWor
   }
   const words = Array.isArray(payload?.words) ? payload.words.filter((word): word is string => typeof word === "string" && Boolean(word.trim())) : [];
   if (words.length !== 10) throw new Error("候補語を10語揃えられませんでした。");
+  const difficulty = isCodeInterceptWordDifficulty(payload?.difficulty) ? payload.difficulty : null;
   return {
     fields: [
       { label: "抽出数", value: `${words.length}語` },
       { label: "抽選元", value: payload?.source === "general_word_pool" ? "General Game Pool（general_word_poolタグ）" : "不明" },
-      { label: "難易度", value: payload?.difficulty === "normal" ? "普通（80%）＋簡単（20%）" : "不明" },
+      { label: "難易度", value: difficulty ? `${wordDifficultyLabel(difficulty)}（${wordDifficultyMixLabel(difficulty)}）` : "不明" },
     ],
     items: words.map((word) => ({ title: word, fields: [] })),
     notice: "実際のゲーム開始と同じGeneral Game Pool（general_word_poolタグ）抽選を試しています。部屋、秘密カード、出題履歴は変更しません。",
@@ -358,7 +372,7 @@ export function CodeInterceptGame() {
     const host: CodeInterceptPlayer = { id: session.id, name: session.name, joinedAt: now, teamId: "red", avatarColor: session.avatarColor, avatarImage: session.avatarImage ?? undefined, shareNameAllowed: session.shareNameAllowed === true };
     const draft: CodeInterceptRoom = {
       code: makeRoomCode(), revision: 0, hostId: session.id, ownerId: getOwnerId(), passphrase: passphrase.trim(), phase: "lobby", players: [host], playerCapacity: newPlayerCapacity, gameNumber: 1, roundNumber: 1,
-      cardCount: codeInterceptDefaults.cardCount, teamAssignmentMode: codeInterceptDefaults.teamAssignmentMode, codeLengthMode: codeInterceptDefaults.codeLengthMode, codeRevealMode: codeInterceptDefaults.codeRevealMode, fixedCodeLength: codeInterceptDefaults.fixedCodeLength, initialPoints: codeInterceptDefaults.initialPoints, miscommunicationDamage: codeInterceptDefaults.miscommunicationDamage, interceptionDamage: codeInterceptDefaults.interceptionDamage, interceptionStartsAtRound: codeInterceptDefaults.interceptionStartsAtRound, clueTimeLimitSeconds: codeInterceptDefaults.clueTimeLimitSeconds, answerTimeLimitSeconds: codeInterceptDefaults.answerTimeLimitSeconds, phaseStartedAt: null,
+      cardCount: codeInterceptDefaults.cardCount, wordDifficulty: codeInterceptDefaults.wordDifficulty, teamAssignmentMode: codeInterceptDefaults.teamAssignmentMode, codeLengthMode: codeInterceptDefaults.codeLengthMode, codeRevealMode: codeInterceptDefaults.codeRevealMode, fixedCodeLength: codeInterceptDefaults.fixedCodeLength, initialPoints: codeInterceptDefaults.initialPoints, miscommunicationDamage: codeInterceptDefaults.miscommunicationDamage, interceptionDamage: codeInterceptDefaults.interceptionDamage, interceptionStartsAtRound: codeInterceptDefaults.interceptionStartsAtRound, clueTimeLimitSeconds: codeInterceptDefaults.clueTimeLimitSeconds, answerTimeLimitSeconds: codeInterceptDefaults.answerTimeLimitSeconds, phaseStartedAt: null,
       debugMode: false, debugReplayEnabled: false, teams: codeInterceptTeamIds.map((id) => ({ id, name: teamLabel(id), points: codeInterceptDefaults.initialPoints, secretWords: [] })), clueGiverIds: {}, codeLengthChoices: {}, roundCodeLengths: {}, secretCodes: {}, clues: {}, allyAnswerProposals: {}, interceptAnswerProposals: {}, allyAnswers: {}, interceptAnswers: {}, timeoutPenaltyPhases: {}, roundHistory: [], winner: null, debugLog: [], createdAt: now, updatedAt: now,
     };
     try { const data = await createCodeInterceptRoom(draft, session.id); setRoom(data.room); localStorage.setItem(lastRoomKey, data.room.code); }
@@ -407,6 +421,8 @@ export function CodeInterceptGame() {
     </div>
     <h3 className="mt-4 font-black text-white">チーム編成</h3>
     <p className="mt-2 text-slate-300">ロビーで決めたチームを使う「手動」と、ゲーム開始時に人数差1人以内で振り分ける「開始時ランダム」から選べます。ランダムではチーム内の出題順もシャッフルされます。</p>
+    <h3 className="mt-4 font-black text-white">秘密単語の難易度</h3>
+    <p className="mt-2 text-slate-300">簡単は簡単100%、普通は普通80%＋簡単20%、難しいは難しい50%＋普通40%＋簡単10%でGeneral Word Poolから抽選します。</p>
     <h3 className="mt-4 font-black text-white">暗号の桁数</h3>
     <div className="mt-2 space-y-2 text-slate-300">
       <p><strong className="text-white">固定モード</strong>では、両チームが全ラウンドで同じ桁数を使います。</p>
@@ -464,7 +480,7 @@ export function CodeInterceptGame() {
     {room.phase === "lobby" && <div className="mx-auto max-w-7xl px-4 pt-4"><GameLoungeVisual gameId="code-intercept" /></div>}
     <div className="mx-auto grid max-w-7xl gap-4 px-4 py-5 lg:grid-cols-[300px_minmax(0,1fr)]">
       <aside className="space-y-4"><section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4"><div className="flex items-center justify-between"><h2 className="font-black">参加者</h2><span className="text-sm text-slate-400">{room.players.length}/{room.playerCapacity}人</span></div><ul className="mt-3 space-y-2">{room.players.map((player) => <PlayerCard key={player.id} player={player} room={room} me={playerId} />)}</ul><RoomLobbyReturnStatus state={room.lobbyReturn} players={room.players} hostId={room.hostId} isHost={isHost} onRemoveWaitingPlayer={(player) => { if (window.confirm(`${player.name}さんを退出扱いにしますか？`)) void runAction({ type: "remove-waiting-player", actorId: playerId, targetPlayerId: player.id }); }} /></section>
-        <RoomConfigSummary items={[{ label: "チーム編成", value: room.teamAssignmentMode === "random" ? "開始時ランダム" : "手動" }, { label: "秘密カード C", value: `${room.cardCount}枚` }, { label: "暗号桁数", value: room.codeLengthMode === "fixed" ? `固定・${room.fixedCodeLength}桁` : "毎ラウンド選択" }, { label: "正解暗号", value: codeRevealLabel(room) }, { label: "初期ポイント X", value: `${room.initialPoints}点` }, { label: "伝達失敗", value: `−${room.miscommunicationDamage}` }, { label: "傍受成功", value: `−${room.interceptionDamage}` }, { label: "出題欄に空欄", value: "−1" }, { label: "全欄入力済み", value: "自動提出・減点なし" }, { label: "回答未提出", value: "減点なし" }, { label: "傍受開始", value: "第2ラウンド" }, { label: "出題・ヒント", value: timeLimitLabel(room.clueTimeLimitSeconds) }, { label: "ソナー選択", value: timeLimitLabel(room.answerTimeLimitSeconds) }]} />
+        <RoomConfigSummary items={[{ label: "チーム編成", value: room.teamAssignmentMode === "random" ? "開始時ランダム" : "手動" }, { label: "単語難易度", value: `${wordDifficultyLabel(room.wordDifficulty)}（${wordDifficultyMixLabel(room.wordDifficulty)}）` }, { label: "秘密カード C", value: `${room.cardCount}枚` }, { label: "暗号桁数", value: room.codeLengthMode === "fixed" ? `固定・${room.fixedCodeLength}桁` : "毎ラウンド選択" }, { label: "正解暗号", value: codeRevealLabel(room) }, { label: "初期ポイント X", value: `${room.initialPoints}点` }, { label: "伝達失敗", value: `−${room.miscommunicationDamage}` }, { label: "傍受成功", value: `−${room.interceptionDamage}` }, { label: "出題欄に空欄", value: "−1" }, { label: "全欄入力済み", value: "自動提出・減点なし" }, { label: "回答未提出", value: "減点なし" }, { label: "傍受開始", value: "第2ラウンド" }, { label: "出題・ヒント", value: timeLimitLabel(room.clueTimeLimitSeconds) }, { label: "ソナー選択", value: timeLimitLabel(room.answerTimeLimitSeconds) }]} />
       </aside>
       <div className="space-y-4">
         {error && <p className="rounded-xl border border-rose-300/30 bg-rose-300/10 p-3 text-sm font-bold text-rose-100">{error}</p>}
@@ -479,6 +495,15 @@ export function CodeInterceptGame() {
               <legend className="text-sm font-black">チーム編成</legend>
               <label className={`mt-2 block cursor-pointer rounded-xl border p-4 ${room.teamAssignmentMode === "manual" ? "border-amber-300 bg-amber-300/10" : "border-white/10 bg-slate-950/40"}`}><span className="flex items-center gap-2 font-black"><input type="radio" name="team-assignment-mode" checked={room.teamAssignmentMode === "manual"} onChange={() => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, teamAssignmentMode: "manual", codeLengthMode: room.codeLengthMode, codeRevealMode: room.codeRevealMode, fixedCodeLength: room.fixedCodeLength, clueTimeLimitSeconds: room.clueTimeLimitSeconds, answerTimeLimitSeconds: room.answerTimeLimitSeconds })} />手動</span><span className="mt-1 block text-sm text-slate-300">ロビーで決めた赤・青チームのまま開始します。</span></label>
               <label className={`mt-3 block cursor-pointer rounded-xl border p-4 ${room.teamAssignmentMode === "random" ? "border-cyan-300 bg-cyan-300/10" : "border-white/10 bg-slate-950/40"}`}><span className="flex items-center gap-2 font-black"><input type="radio" name="team-assignment-mode" checked={room.teamAssignmentMode === "random"} onChange={() => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, teamAssignmentMode: "random", codeLengthMode: room.codeLengthMode, codeRevealMode: room.codeRevealMode, fixedCodeLength: room.fixedCodeLength, clueTimeLimitSeconds: room.clueTimeLimitSeconds, answerTimeLimitSeconds: room.answerTimeLimitSeconds })} />開始時にランダム</span><span className="mt-1 block text-sm text-slate-300">人数差1人以内でチームと出題順をシャッフルします。</span></label>
+            </fieldset>
+            <fieldset className="mt-5" disabled={!isHost || isSaving}>
+              <legend className="text-sm font-black">秘密単語の難易度</legend>
+              <div className="mt-2 grid gap-3 sm:grid-cols-3">
+                {codeInterceptWordDifficulties.map((difficulty) => <label key={difficulty} className={`cursor-pointer rounded-xl border p-4 ${room.wordDifficulty === difficulty ? "border-amber-300 bg-amber-300/10" : "border-white/10 bg-slate-950/40"}`}>
+                  <span className="flex items-center gap-2 font-black"><input type="radio" name="word-difficulty" checked={room.wordDifficulty === difficulty} onChange={() => void runAction({ type: "set-config", actorId: playerId, cardCount: room.cardCount, wordDifficulty: difficulty, teamAssignmentMode: room.teamAssignmentMode, codeLengthMode: room.codeLengthMode, codeRevealMode: room.codeRevealMode, fixedCodeLength: room.fixedCodeLength, clueTimeLimitSeconds: room.clueTimeLimitSeconds, answerTimeLimitSeconds: room.answerTimeLimitSeconds })} />{wordDifficultyLabel(difficulty)}</span>
+                  <span className="mt-1 block text-xs leading-5 text-slate-300">{wordDifficultyMixLabel(difficulty)}</span>
+                </label>)}
+              </div>
             </fieldset>
             <label className="mt-4 block text-sm font-bold">秘密カード数
               <select value={room.cardCount} disabled={!isHost || isSaving} onChange={(event) => { const cardCount = Number(event.target.value); void runAction({ type: "set-config", actorId: playerId, cardCount, teamAssignmentMode: room.teamAssignmentMode, codeLengthMode: room.codeLengthMode, codeRevealMode: room.codeRevealMode, fixedCodeLength: normalizeCodeInterceptCodeLength(room.fixedCodeLength, cardCount), clueTimeLimitSeconds: room.clueTimeLimitSeconds, answerTimeLimitSeconds: room.answerTimeLimitSeconds }); }} className="mt-1 w-full rounded-xl border border-white/15 bg-slate-800 px-3 py-3 text-white disabled:opacity-60">

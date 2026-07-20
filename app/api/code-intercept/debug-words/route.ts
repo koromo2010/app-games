@@ -27,7 +27,7 @@ export async function GET(request: Request) {
     }
 
     await requirePlayerDebugAccess(player.id);
-    const words = await loadCodeInterceptWordPool(codeInterceptDebugWordSampleSize);
+    const words = await loadCodeInterceptWordPool(codeInterceptDebugWordSampleSize, room.wordDifficulty);
     if (words.length !== codeInterceptDebugWordSampleSize) {
       return Response.json({ error: "Not enough eligible words are available" }, { status: 503 });
     }
@@ -35,7 +35,7 @@ export async function GET(request: Request) {
     return Response.json({
       words,
       source: codeInterceptWordPoolSource,
-      difficulty: "normal",
+      difficulty: room.wordDifficulty,
     });
   } catch (error) {
     const common = commonOnlineRoomErrorResponse(error);

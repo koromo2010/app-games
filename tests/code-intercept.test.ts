@@ -18,6 +18,7 @@ import {
   normalizeCodeInterceptCodeLength,
   normalizeCodeInterceptTimeLimits,
   normalizeCodeInterceptTimeoutClues,
+  normalizeCodeInterceptWordDifficulty,
   randomizeCodeInterceptPlayers,
   sanitizeCodeInterceptRoomForPlayer,
   withCodeInterceptConsensusAnswer,
@@ -37,7 +38,7 @@ function room(): CodeInterceptRoom {
       { id: "b2", name: "青2", joinedAt: now, teamId: "blue" },
     ],
     playerCapacity: 6, gameNumber: 1, roundNumber: 2,
-    cardCount: 4, teamAssignmentMode: "manual", codeLengthMode: "fixed", codeRevealMode: "all", fixedCodeLength: 3, initialPoints: 5, miscommunicationDamage: 1, interceptionDamage: 2, interceptionStartsAtRound: 2,
+    cardCount: 4, wordDifficulty: "normal", teamAssignmentMode: "manual", codeLengthMode: "fixed", codeRevealMode: "all", fixedCodeLength: 3, initialPoints: 5, miscommunicationDamage: 1, interceptionDamage: 2, interceptionStartsAtRound: 2,
     clueTimeLimitSeconds: 0, answerTimeLimitSeconds: 0, phaseStartedAt: now, debugMode: false, debugReplayEnabled: false,
     teams: [
       { id: "red", name: "赤チーム", points: 5, secretWords: ["猫", "宇宙", "寿司", "雨"] },
@@ -101,6 +102,14 @@ test("secret cards reject a database pool that is too small after normalization"
 
 test("secret-card vocabulary uses the general_word_pool eligibility tag", () => {
   assert.equal(codeInterceptWordPoolSource, "general_word_pool");
+});
+
+test("word difficulty defaults to normal and preserves valid selections", () => {
+  assert.equal(normalizeCodeInterceptWordDifficulty(undefined), "normal");
+  assert.equal(normalizeCodeInterceptWordDifficulty("easy"), "easy");
+  assert.equal(normalizeCodeInterceptWordDifficulty("hard"), "hard");
+  assert.equal(normalizeCodeInterceptWordDifficulty("invalid"), "normal");
+  assert.equal(codeInterceptDefaults.wordDifficulty, "normal");
 });
 
 test("draft input is isolated when a phase restarts in the same game and round", () => {

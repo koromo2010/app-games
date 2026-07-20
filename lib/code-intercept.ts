@@ -9,9 +9,11 @@ export const codeInterceptGameId = "code-intercept" as const;
 export const codeInterceptMinimumPlayers = 4;
 export const codeInterceptPlayerLimit = onlineRoomPlayerLimits.codeIntercept;
 export const codeInterceptTeamIds = ["red", "blue"] as const;
+export const codeInterceptWordDifficulties = ["easy", "normal", "hard"] as const;
 export const codeInterceptTimedPhases = ["code-length", "clue", "answer"] as const;
 export type CodeInterceptTimedPhase = (typeof codeInterceptTimedPhases)[number];
 export type CodeInterceptTeamId = (typeof codeInterceptTeamIds)[number];
+export type CodeInterceptWordDifficulty = (typeof codeInterceptWordDifficulties)[number];
 export type CodeLengthMode = "fixed" | "per-round";
 export type CodeRevealMode = "all" | "own-team";
 export type CodeInterceptTeamAssignmentMode = "manual" | "random";
@@ -21,6 +23,7 @@ export const codeInterceptMaximumCardCount = 8;
 
 export const codeInterceptDefaults = {
   cardCount: 4,
+  wordDifficulty: "normal" as CodeInterceptWordDifficulty,
   teamAssignmentMode: "manual" as CodeInterceptTeamAssignmentMode,
   codeLengthMode: "fixed" as CodeLengthMode,
   codeRevealMode: "all" as CodeRevealMode,
@@ -105,6 +108,7 @@ export type CodeInterceptRoom = {
   gameNumber: number;
   roundNumber: number;
   cardCount: number;
+  wordDifficulty: CodeInterceptWordDifficulty;
   teamAssignmentMode: CodeInterceptTeamAssignmentMode;
   codeLengthMode: CodeLengthMode;
   codeRevealMode: CodeRevealMode;
@@ -154,7 +158,7 @@ export type CodeInterceptRoomAction = RoomLobbyReturnAction
   | { type: "set-team"; actorId: string; playerId?: string; teamId: CodeInterceptTeamId }
   | { type: "set-debug"; actorId: string; enabled: boolean }
   | { type: "set-debug-replay"; actorId: string; enabled: boolean }
-  | { type: "set-config"; actorId: string; cardCount: number; teamAssignmentMode: CodeInterceptTeamAssignmentMode; codeLengthMode: CodeLengthMode; codeRevealMode: CodeRevealMode; fixedCodeLength?: number; clueTimeLimitSeconds: number; answerTimeLimitSeconds: number }
+  | { type: "set-config"; actorId: string; cardCount: number; wordDifficulty?: CodeInterceptWordDifficulty; teamAssignmentMode: CodeInterceptTeamAssignmentMode; codeLengthMode: CodeLengthMode; codeRevealMode: CodeRevealMode; fixedCodeLength?: number; clueTimeLimitSeconds: number; answerTimeLimitSeconds: number }
   | { type: "expire-phase"; actorId: string; phaseStartedAt: number }
   | { type: "start-game"; actorId: string }
   | { type: "select-code-length"; actorId: string; playerId?: string; codeLength: number }
@@ -202,6 +206,10 @@ export function isCodeInterceptTeamAssignmentMode(value: unknown): value is Code
 export function normalizeCodeInterceptCardCount(value: unknown) {
   const count = typeof value === "number" && Number.isInteger(value) ? value : codeInterceptDefaults.cardCount;
   return Math.min(codeInterceptMaximumCardCount, Math.max(codeInterceptMinimumCardCount, count));
+}
+
+export function normalizeCodeInterceptWordDifficulty(value: unknown): CodeInterceptWordDifficulty {
+  return value === "easy" || value === "hard" ? value : "normal";
 }
 
 export function normalizeCodeInterceptCodeLength(value: unknown, cardCount: number) {

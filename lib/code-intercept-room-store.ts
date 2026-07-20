@@ -24,6 +24,7 @@ import {
   normalizeCodeInterceptCodeLength,
   normalizeCodeInterceptTimeLimits,
   normalizeCodeInterceptTimeoutClues,
+  normalizeCodeInterceptWordDifficulty,
   otherCodeInterceptTeam,
   withCodeInterceptConsensusAnswer,
   type CodeInterceptRoom,
@@ -184,10 +185,15 @@ export async function applyStoredCodeInterceptAction(code: string, action: CodeI
       if (!isHost || current.phase !== "lobby") throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
       const cardCount = normalizeCodeInterceptCardCount(action.cardCount);
       if (cardCount !== action.cardCount || !isCodeInterceptTeamAssignmentMode(action.teamAssignmentMode) || !isCodeLengthMode(action.codeLengthMode) || !isCodeRevealMode(action.codeRevealMode)) throw new Error("CODE_INTERCEPT_INVALID_CONFIG");
+      const wordDifficulty = action.wordDifficulty === undefined
+        ? current.wordDifficulty
+        : normalizeCodeInterceptWordDifficulty(action.wordDifficulty);
+      if (action.wordDifficulty !== undefined && wordDifficulty !== action.wordDifficulty) throw new Error("CODE_INTERCEPT_INVALID_CONFIG");
       if (action.codeLengthMode === "fixed" && (action.fixedCodeLength === undefined || normalizeCodeInterceptCodeLength(action.fixedCodeLength, cardCount) !== action.fixedCodeLength)) throw new Error("CODE_INTERCEPT_INVALID_CONFIG");
       return {
         ...current,
         cardCount,
+        wordDifficulty,
         teamAssignmentMode: action.teamAssignmentMode,
         codeLengthMode: action.codeLengthMode,
         codeRevealMode: action.codeRevealMode,
@@ -210,7 +216,7 @@ export async function applyStoredCodeInterceptAction(code: string, action: CodeI
         startDrawRef.value = await prepareGeneralGameWordDraw({
           game: "code-intercept",
           playerIds: current.players.filter((player) => !player.isDummy).map((player) => player.id),
-          difficulty: "normal",
+          difficulty: current.wordDifficulty,
           count: current.cardCount * 2,
         });
       } catch {
