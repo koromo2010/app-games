@@ -43,7 +43,9 @@ function safeTokenMatch(value: string, expectedHash: string) {
 async function registeredCreator(slug: string) {
   await ensureSdkSchema();
   const rows = await sdkSql()`SELECT id, slug, display_name, management_token_hash FROM sdk_creators WHERE slug = ${slug} LIMIT 1`;
-  return rows[0] as { id: string; slug: string; display_name: string; management_token_hash: string } | undefined;
+  return (Array.isArray(rows) ? rows[0] : undefined) as
+    | { id: string; slug: string; display_name: string; management_token_hash: string }
+    | undefined;
 }
 
 export async function instanceSlugAvailable(slug: string) {
@@ -75,9 +77,10 @@ export async function finalizeInstanceSlug(slug: string, reservationToken: strin
     ON CONFLICT (slug) DO NOTHING
     RETURNING id, slug, display_name
   `;
-  if (!rows[0]) return null;
+  const creator = Array.isArray(rows) ? rows[0] : undefined;
+  if (!creator) return null;
   await command(["DEL", keyFor(slug)]);
-  return { creator: rows[0], managementToken };
+  return { creator, managementToken };
 }
 
 export async function authenticateCreator(slug: string, managementToken: string) {
