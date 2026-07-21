@@ -1,6 +1,6 @@
 # 開発・本番DB分離と共通単語DB
 
-最終更新: 2026-07-17
+最終更新: 2026-07-21
 
 ## 正本となる境界
 
@@ -30,7 +30,7 @@ UPSTASH_REDIS_REST_TOKEN=...
 BLOB_READ_WRITE_TOKEN=...
 ```
 
-`APP_DATABASE_URL`をアプリDBの正本とする。Redis Cloud等は`APP_REDIS_URL`、Upstash RESTは`UPSTASH_REDIS_REST_URL`と`UPSTASH_REDIS_REST_TOKEN`を使う。既存`DATABASE_URL`、`REDIS_URL`等は移行中の互換読取に限る。新しい正本を使う場合、`VERCEL_ENV`、`APP_ENV`、`APP_DATABASE_ENV`が一致しなければ接続を拒否する。RedisとBlobはそれぞれ`REDIS_ENV`、`BLOB_ENV`を設定した時点から同じ検査を有効にする。
+`APP_DATABASE_URL`をアプリDBの正本とする。Redis Cloud等は`APP_REDIS_URL`、Upstash RESTは`UPSTASH_REDIS_REST_URL`と`UPSTASH_REDIS_REST_TOKEN`を使う。既存`DATABASE_URL`、`REDIS_URL`等は移行中の互換読取に限る。実行環境は`VERCEL_GIT_COMMIT_REF`を優先し、`main=production`、`develop=development`として判定する。`APP_DATABASE_ENV`を設定した時点で、Sensitiveな既存`DATABASE_URL`を含むアプリDB接続にも`APP_ENV`との一致検査を有効にする。RedisとBlobもそれぞれ`REDIS_ENV`、`BLOB_ENV`を設定した時点から同じ検査を有効にする。
 
 ## 共通DBの安全境界
 

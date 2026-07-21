@@ -78,7 +78,7 @@
 - `APP_REDIS_URL`（Redis Cloud等のURL。環境分離後の正本）
 - `REDIS_REQUEST_TIMEOUT_MS`（任意。既定4000ms、1000〜10000msに制限）
 - `ONLINE_ROOM_WEBSOCKET_ENABLED`（任意。`1`で明示有効、`0`で明示無効。未設定時はPreview・ローカル開発のみ有効でProductionは無効）
-- `APP_ENV`、`APP_DATABASE_URL`、`APP_DATABASE_ENV`（環境分離後のアプリDB正本と誤接続防止。旧URLは移行期間のみ）
+- `APP_ENV`、`APP_DATABASE_URL`、`APP_DATABASE_ENV`（環境分離後のアプリDB正本と誤接続防止。`main=production`、`develop=development`をGitブランチから判定し、環境マーカー設定後は旧`DATABASE_URL`にもガードを適用）
 - `VOCABULARY_DATABASE_URL`（本番・開発共通の単語カタログ。サーバー限定）
 - `REDIS_ENV`（`production | development`。Redis誤接続防止）
 - `BLOB_ENV`（`production | development`。Blob誤接続防止）

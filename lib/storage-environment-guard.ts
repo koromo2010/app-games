@@ -8,7 +8,11 @@ function normalizeAppEnvironment(value: string | undefined): AppEnvironment | nu
 export function expectedAppEnvironment(
   vercelEnvironment = process.env.VERCEL_ENV,
   nodeEnvironment = process.env.NODE_ENV,
+  gitCommitRef = process.env.VERCEL_GIT_COMMIT_REF,
 ): AppEnvironment {
+  const branch = gitCommitRef?.trim();
+  if (branch === "main") return "production";
+  if (branch === "develop") return "development";
   if (vercelEnvironment === "production") return "production";
   if (vercelEnvironment === "preview" || vercelEnvironment === "development") return "development";
   return nodeEnvironment === "test" ? "test" : nodeEnvironment === "production" ? "production" : "development";
@@ -35,8 +39,10 @@ function assertResourceEnvironment(resource: "APP_DATABASE" | "REDIS" | "BLOB", 
 }
 
 export function assertAppDatabaseEnvironment(configName: string) {
-  // Legacy variables remain readable during migration. APP_DATABASE_URL opts into strict guarding.
-  if (configName === "APP_DATABASE_URL") {
+  // APP_DATABASE_URL always opts into strict guarding. During migration, an
+  // APP_DATABASE_ENV marker also enables the same guard for a legacy URL so a
+  // Sensitive DATABASE_URL does not need to be copied or renamed in Vercel.
+  if (configName === "APP_DATABASE_URL" || process.env.APP_DATABASE_ENV?.trim()) {
     assertResourceEnvironment("APP_DATABASE", process.env.APP_DATABASE_ENV);
   }
 }
