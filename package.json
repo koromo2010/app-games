@@ -9,6 +9,7 @@
         "lint": "npm run check:games && eslint",
         "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test tests/*.test.ts",
         "check:games": "node scripts/check-game-standards.mjs",
+        "create-game": "node scripts/create-game.mjs",
         "load:smoke": "node scripts/load-test.mjs",
         "monitor:production": "node scripts/production-smoke.mjs",
         "vocabulary:migrate": "node --experimental-strip-types scripts/migrate-vocabulary-to-master.ts",
