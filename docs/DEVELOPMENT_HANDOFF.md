@@ -4,7 +4,7 @@
 >
 > 資料を読む順番や作業別の参照先は `docs/README.md` を入口にする。この文書は「現在の開発状態と共通仕様」、`docs/CONTAINER_ARCHITECTURE.md` は「将来案」である。
 
-最終更新: 2026-07-20
+最終更新: 2026-07-21
 
 ## ブランド・法務ページ
 
@@ -21,6 +21,14 @@
 - Next.js App Router / React 19 / TypeScript
 - RedisはUpstash互換REST APIを使用
 - 元の `paper-ai-app` とは完全に別物として扱う
+
+### SDK Developer Portal
+
+- SDK Portalは同じGitリポジトリの`apps/sdk-portal`に置く独立Next.jsアプリで、npm workspace `@game-fields/sdk-portal`として管理する。
+- Vercel Projectは`app-games-sdk`、Root Directoryは`apps/sdk-portal`、Production Branchは`main`、`develop`はPreviewとする。
+- SDK Projectへ本体のDB、Redis、Blob、管理者秘密情報を複製しない。Portalの初期ページは外部データ接続を持たない。
+- `npm run dev:sdk`は3001番でPortalを起動し、`npm run build:sdk`でPortal単体のproduction buildを確認する。
+- `sdk.game-fields.com`はSDK本番Deployment確認後に本体`app-games` ProjectからSDK Projectへ移管する。
 
 ## 2. 最初に確認する場所
 

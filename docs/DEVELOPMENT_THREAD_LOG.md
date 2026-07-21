@@ -66,3 +66,25 @@
 - 左端ホバーの反応が鈍く感じられたため、感知領域を幅12px・中央50%から幅24px・全高へ拡大し、Pointer Enterで即時に開くよう変更した。スライド時間も約200msへ短縮した。
 - ことば潜伏戦の作り込み開始にあたり、長音符「ー」を独立した文字スキャン候補へ追加し、呼び出し前は伏せるよう修正した。全5ゲームのルール説明を共通ダイアログへ揃え、現行の得点・終了条件・時間切れに更新した。ゲーム名の変更は候補提示後に決めるため未変更。
 - 「ことば潜伏戦」を「ことばソナー」へ改称した。デバッグ用パスワード認証をゲーム画面からマイページへ移し、認証済みアカウントだけ各ゲームのトップバナーに操作を表示する方式へ統一した。デバッグ中は同じ部屋・参加者を残してゲーム開始前へ戻す共通の中断操作を追加した。
+
+## 2026-07-21 — SDK Developer Portalのmain限定反映
+
+### 作業目的
+
+- `develop`でGit Preview検証済みのSDK Portalを、開発中ゲームの変更を混ぜずに`main`へ反映する。
+
+### 判断
+
+- `develop`全体はmainへ統合せず、`apps/sdk-portal`、npm workspace設定、Portal用script、lockfile、公開手順の記録だけを対象にする。
+- SDK Portalは本体と同じGitリポジトリに置くが、独立Next.jsアプリ・独立Vercel Projectとして扱う。
+- 本体のTailwind用PostCSS設定を継承しないよう、Portalは空の独立PostCSS設定を持つ。
+
+### 実施内容
+
+- 初期ランディング、レスポンシブ表示、metadata、proxy、instrumentation、独立build設定を`apps/sdk-portal`へ追加した。
+- ルートをnpm workspaces化し、`npm run dev:sdk`と`npm run build:sdk`を追加した。
+
+### 未対応・保留
+
+- mainからのSDK本番Deploymentを確認後、`sdk.game-fields.com`をSDK Projectへ移管する。
+- 公開npm package、チュートリアル、APIリファレンス、提出画面は今後実装する。
