@@ -875,4 +875,42 @@
 - `develop`へ公開前検査と型設定を反映した（`19ce506`）。
 - `sdk-starter`の現行履歴を維持したままmanifestを更新した（`660f29c`）。公開ファイルを再取得し、`platformVersion: 0.1.0`と`sdkContractVersion: 1`を確認した。
 - 公開ブランチ全体の再生成snapshotへの置換は、同時更新を保護するため見送った。今回の制作停止原因はmanifest更新で解消済み。
+## 2026-07-22 — SDKのGit自動保存と別オリジンmockプレビュー
+
+### 利用者からの要望
+
+- AIが作成したクライアント側mockを、制作者のSDKインスタンスURLからクライアントへ見せたい。
+- ゲームごとのVercel操作や手動アップロードを不要にし、この開発環境と同様にAIの生成物を裏側でGitへ自動保存したい。
+- SDK公開を前提に、未審査JavaScriptからPortal、本体認証、DB、管理APIへ影響しない構成にしたい。
+
+### 判断
+
+- 案内URLは`<SDK Portal>/<creator-slug>/mock/<game-id>`のままにし、未審査mockの実行だけを別オリジン`preview-dev.game-fields.com`／`preview.game-fields.com`へ分離する。
+- mockの正本は本体の公開Gitではなく、Game Fields管理下の専用非公開Gitリポジトリとする。SDK Portalだけに同repoの書込資格、隔離previewだけに別の読取専用資格を付ける。
+- AIは制作者の管理トークンで限定upload APIを呼ぶ。Portalが`previews/<slug>/<game-id>/mock`へcommitするため、外部開発者へGit、Vercel、`develop`、`main`の権限を渡さない。
+- Portal DBには確定commit SHAを保存し、Portalとpreviewの環境別共有秘密で10分の閲覧grantを署名する。previewはDB、Redis、Blob、管理API、Git書込資格を持たない。
+- iframe属性とHTTP CSPの両方から`allow-same-origin`、外部通信、フォーム、子frame、親画面操作を許可せず、mock scopeのHttpOnly Cookieだけを使う。
+
+### 実施結果
+
+- `apps/sdk-preview`を独立Next.jsアプリとして追加し、health、署名grant受領、scope限定Cookie、Git asset取得、MIME固定、容量上限、CSP sandbox、robots拒否を実装した。
+- 非公開workspace `packages/sdk-preview-auth`へgrantのHMAC署名・期限・ID・確定40桁revision検証を集約した。
+- SDK Portalへ管理トークン付きmock保存APIを追加した。必須3ファイル、拡張子、path traversal、重複、32ファイル、単体2MB、合計5MBを検査し、Git blob/tree/commit/refを原子的に更新する。並行ref更新は最新parentから最大3回再試行する。
+- `sdk_games.mock_revision`を追加し、制作者広場の実mockカード、共有ページ、隔離iframeを接続した。修正後も共有URLは変わらず、表示時に最新の紐付けrevisionへ短時間grantを発行する。
+- スターターへ`mock/preview.json`と`npm run publish:mock`を追加し、AIがcheck後にSDKへ保存して共有URLを案内する制作フローへ更新した。
+- 本体root buildから独立Next.js workspaceを除外し、Portalとpreviewはそれぞれのtsconfig/buildで検査する境界を明示した。
+
+### 検証
+
+- `npm run lint`、SDK Portal lint、隔離preview lintに成功した。
+- `npm test`で全378テストに成功し、追加の署名改ざん・期限、path traversal、MIME、upload必須ファイル・重複・容量境界も成功した。
+- `npm run build`、`npm run build:sdk`、`npm run build:sdk-preview`に成功した。
+- `npm run test:sdk-starter`で入口、公開Git用snapshot、ZIP展開、同梱SDK install、型検査、契約テスト、1ゲーム完走、提出ZIPを確認した。
+
+### 未対応・保留
+
+- 専用非公開mock Gitリポジトリを作成し、Portal用Contents read/write資格とpreview用Contents read資格を別々に発行する。
+- Vercel Project `app-games-preview-dev`をRoot Directory `apps/sdk-preview`、Production Branch `develop`で作成し、`preview-dev.game-fields.com`を割り当てる。
+- `docs/ENVIRONMENT_VARIABLES.md`記載のPortal／preview環境変数を設定し、再デプロイ後に実際のmock保存、Git commit、共有URL、iframe asset読込、期限切れ・不正URL拒否を実機確認する。
+- SDK本番用の専用Git・資格・署名鍵・preview Projectは、sdk-devの一連動作を確認してから別値で作成する。
 

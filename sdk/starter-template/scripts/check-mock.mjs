@@ -9,6 +9,7 @@ const requiredFiles = [
   "MOCK_GUIDE.md",
   "MOCK_REVIEW.md",
   "mock/index.html",
+  "mock/preview.json",
   "mock/styles.css",
   "mock/mock.js",
 ];
@@ -28,6 +29,14 @@ for (const path of ["GAME_SPEC.md", "MOCK_REVIEW.md"]) {
 const html = readFileSync(resolve(root, "mock/index.html"), "utf8");
 for (const marker of ["styles.css", "mock.js", "viewport", "data-screen=\"lobby\"", "data-screen=\"entry\"", "data-screen=\"room\"", "game-slot"]) {
   if (!html.includes(marker)) throw new Error(`mock/index.htmlに${marker}がありません。`);
+}
+
+const previewMetadata = JSON.parse(readFileSync(resolve(root, "mock/preview.json"), "utf8"));
+if (!/^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?$/.test(previewMetadata.gameId ?? "")) {
+  throw new Error("mock/preview.jsonのgameIdが不正です。");
+}
+if (typeof previewMetadata.title !== "string" || !previewMetadata.title.trim() || previewMetadata.title.length > 120) {
+  throw new Error("mock/preview.jsonのtitleが不正です。");
 }
 
 const spec = readFileSync(resolve(root, "GAME_SPEC.md"), "utf8");

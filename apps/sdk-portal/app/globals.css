@@ -68,11 +68,25 @@ main {
 .debug-panel button,.debug-panel select { width: 100%; margin: 6px 0 12px; padding: 10px; border: 1px solid var(--line); background: #0c1813; }
 .debug-panel label { display: block; color: var(--muted); font-size: .78rem; }
 
+.mock-review-shell { height: 100vh; min-height: 620px; display: grid; grid-template-rows: 72px minmax(0, 1fr); background: #040906; }
+.mock-review-header { width: 100%; min-width: 0; padding: 0 22px; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 20px; border-bottom: 1px solid var(--line); background: #07100c; }
+.mock-review-title { min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.mock-review-title span,.isolated-badge { color: var(--accent); font: .62rem ui-monospace, monospace; letter-spacing: .12em; }
+.mock-review-title strong { max-width: 46vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .9rem; }
+.isolated-badge { justify-self: end; padding: 7px 10px; border: 1px solid rgba(145,242,176,.2); border-radius: 999px; }
+.mock-review-frame { width: 100%; height: 100%; border: 0; background: #fff; }
+.mock-review-error { min-height: 100vh; display: grid; place-items: center; padding: 32px; text-align: center; }
+.mock-review-error section { max-width: 620px; padding: 42px; border: 1px solid var(--line); background: var(--surface); }
+.mock-review-error p:not(.eyebrow) { color: var(--muted); line-height: 1.8; }
+
 @media (max-width: 900px) {
   .preview-room { grid-template-columns: 1fr; }
   .preview-game-area { min-height: 480px; }
   .preview-topbar { grid-template-columns: 1fr auto; }
   .instance-label { display: none; }
+  .mock-review-header { grid-template-columns: 1fr auto; }
+  .mock-review-title { align-items: flex-end; }
+  .isolated-badge { display: none; }
 }
 
 .site-header {

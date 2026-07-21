@@ -116,9 +116,14 @@ cd game-fields-game
 
 `GAME_SPEC.md`の未決事項が解消したら、`APP_REQUIREMENTS.md`と`MOCK_GUIDE.md`に従い、`mock/`へブラウザで開ける画面モックを作ってください。
 
+`mock/preview.json`のゲームID・表示名・説明も今回の仕様へ更新し、`npm run check:mock`を成功させてください。その後、最初に確定したSDK接続先・制作者slug・管理トークンを環境変数`GAME_FIELDS_SDK_URL`、`GAME_FIELDS_INSTANCE_ID`、`GAME_FIELDS_MANAGEMENT_TOKEN`として`npm run publish:mock`を実行します。管理トークンをファイル、Git、会話、コマンド出力へ残してはいけません。
+
+SDKはモック一式を裏側の専用Gitへ自動保存し、同じ制作者URL内に`/<slug>/mock/<game-id>`の確認URLを発行します。利用者やクライアントへはこのSDK URLだけを案内し、GitHubやVercelでゲームごとのデプロイ操作をさせないでください。修正時も同じコマンドで更新し、案内URLは変えません。
+
 モック作成後は、利用者へ次の内容を短く説明してください。
 
 - 作った画面と操作の流れ
+- SDK上で発行されたモック確認URL
 - Game Fields共通要件をどう反映したか
 - モックで確認できる状態
 - 本実装まで動かない部分

@@ -14,7 +14,7 @@ const initialState: PreviewState = {
   players: [{ id: "host", name: "あなた" }],
 };
 
-type RegisteredGame = { gameId: string; title: string; description: string; status: string };
+type RegisteredGame = { gameId: string; title: string; description: string; status: string; mockAvailable: boolean };
 
 export function PreviewInstance({ instanceId, games }: { instanceId: string; games: RegisteredGame[] }) {
   const storageKey = `game-fields-sdk-preview:v1:${instanceId}`;
@@ -47,7 +47,7 @@ export function PreviewInstance({ instanceId, games }: { instanceId: string; gam
     {state.phase === "square" && <section className="preview-stage">
       <p className="eyebrow">YOUR GAME FIELDS</p><h1 className="preview-title">ゲーム広場</h1>
       <p className="preview-lead">この制作者環境に追加されたゲームを、本番と同じように選んで検証します。</p>
-      <div className="preview-game-grid">{games.length > 0 ? games.map((game) => <button className="game-preview-card" type="button" key={game.gameId} onClick={() => move("entry")}><span className="card-number">{game.status.toUpperCase()}</span><strong>{game.title}</strong><span>{game.description || game.gameId}</span></button>) : <button className="game-preview-card" type="button" onClick={() => move("entry")}><span className="card-number">PREVIEW</span><strong>制作中のゲーム</strong><span>SDKからゲームを登録するとここへ追加されます</span></button>}</div>
+      <div className="preview-game-grid">{games.length > 0 ? games.map((game) => game.mockAvailable ? <a className="game-preview-card" key={game.gameId} href={`/${instanceId}/mock/${game.gameId}`}><span className="card-number">CLIENT MOCK</span><strong>{game.title}</strong><span>{game.description || game.gameId}</span></a> : <button className="game-preview-card" type="button" key={game.gameId} onClick={() => move("entry")}><span className="card-number">{game.status.toUpperCase()}</span><strong>{game.title}</strong><span>{game.description || game.gameId}</span></button>) : <button className="game-preview-card" type="button" onClick={() => move("entry")}><span className="card-number">PREVIEW</span><strong>制作中のゲーム</strong><span>SDKからゲームを登録するとここへ追加されます</span></button>}</div>
     </section>}
 
     {state.phase === "entry" && <section className="preview-stage preview-panel">

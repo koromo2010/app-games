@@ -17,7 +17,7 @@ export async function GET(_: Request, context: { params: Promise<{ instanceId: s
     const games = await sdkSql()`
       SELECT g.game_id AS "gameId", g.title, g.description, g.manifest,
              g.sdk_package_version AS "sdkPackageVersion", g.sdk_contract_version AS "sdkContractVersion",
-             g.status, g.updated_at AS "updatedAt"
+             g.status, (g.mock_revision IS NOT NULL) AS "mockAvailable", g.updated_at AS "updatedAt"
       FROM sdk_games g JOIN sdk_creators c ON c.id = g.creator_id
       WHERE c.slug = ${slug} ORDER BY g.updated_at DESC
     `;

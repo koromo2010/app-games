@@ -9,8 +9,10 @@
     "scripts": {
         "dev": "npm run build:runtime-packages && next dev -p 3000",
         "dev:sdk": "npm run dev --workspace @game-fields/sdk-portal",
+        "dev:sdk-preview": "npm run dev --workspace @game-fields/sdk-preview",
         "build": "npm run build:runtime-packages && next build",
         "build:sdk": "npm run build --workspace @game-fields/sdk-portal",
+        "build:sdk-preview": "npm run build --workspace @game-fields/sdk-preview",
         "build:sdk-package": "npm run build --workspace @game-fields/game-sdk",
         "build:runtime-packages": "npm run build:sdk-package && npm run build --workspace @game-fields/game-runtime",
         "start": "next start -p 3000",

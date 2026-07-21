@@ -34,6 +34,8 @@ npm run demo
 npm run package
 ```
 
+ChatGPT経由で制作者URLを予約した場合は、モック確認後にSDK接続先・制作者slug・管理トークンを一時的な環境変数として`npm run publish:mock`を実行します。SDKが専用Gitへ保存し、クライアントへ共有できる同一URLを返します。管理トークンはファイルやGitへ保存しません。
+
 最初から入っている「はじめてのゲーム」はSDKの動作確認用です。ChatGPTに依頼すると、`GAME_SPEC.md`の内容に合わせて置き換えられます。
 
 提出物は`submission/game-fields-submission.zip`へ生成されます。`node_modules/`、`dist/`、`.git/`、過去の提出ZIPは含まれません。

@@ -9,6 +9,8 @@ const packages = [
   ["packages/game-sdk/package.json", readJson("packages/game-sdk/package.json")],
   ["packages/game-runtime/package.json", readJson("packages/game-runtime/package.json")],
   ["apps/sdk-portal/package.json", readJson("apps/sdk-portal/package.json")],
+  ["apps/sdk-preview/package.json", readJson("apps/sdk-preview/package.json")],
+  ["packages/sdk-preview-auth/package.json", readJson("packages/sdk-preview-auth/package.json")],
 ];
 const failures = [];
 
@@ -41,7 +43,7 @@ if (rootPackage.dependencies?.["@game-fields/game-runtime"] !== release.platform
 }
 
 const packageLock = readJson("package-lock.json");
-for (const workspacePath of ["", "apps/sdk-portal", "packages/game-sdk", "packages/game-runtime"]) {
+for (const workspacePath of ["", "apps/sdk-portal", "apps/sdk-preview", "packages/game-sdk", "packages/game-runtime", "packages/sdk-preview-auth"]) {
   const lockedVersion = packageLock.packages?.[workspacePath]?.version;
   if (lockedVersion !== release.platformVersion) {
     failures.push(`package-lock.json workspace ${workspacePath || "root"} does not match platform ${release.platformVersion}.`);

@@ -92,9 +92,23 @@ export async function authenticateCreator(slug: string, managementToken: string)
 export async function listCreatorGames(slug: string) {
   await ensureSdkSchema();
   const rows = await sdkSql()`
-    SELECT g.game_id AS "gameId", g.title, g.description, g.status
+    SELECT g.game_id AS "gameId", g.title, g.description, g.status,
+           (g.mock_revision IS NOT NULL) AS "mockAvailable"
     FROM sdk_games g JOIN sdk_creators c ON c.id = g.creator_id
     WHERE c.slug = ${slug} ORDER BY g.updated_at DESC
   `;
-  return rows as Array<{ gameId: string; title: string; description: string; status: string }>;
+  return rows as Array<{ gameId: string; title: string; description: string; status: string; mockAvailable: boolean }>;
+}
+
+export async function getCreatorGamePreview(slug: string, gameId: string) {
+  await ensureSdkSchema();
+  const rows = await sdkSql()`
+    SELECT g.game_id AS "gameId", g.title, g.mock_revision AS "mockRevision"
+    FROM sdk_games g JOIN sdk_creators c ON c.id = g.creator_id
+    WHERE c.slug = ${slug} AND g.game_id = ${gameId} AND g.mock_revision IS NOT NULL
+    LIMIT 1
+  `;
+  return (Array.isArray(rows) ? rows[0] : undefined) as
+    | { gameId: string; title: string; mockRevision: string }
+    | undefined;
 }

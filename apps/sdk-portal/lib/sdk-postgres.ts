@@ -40,12 +40,14 @@ export async function ensureSdkSchema() {
           manifest JSONB NOT NULL,
           sdk_package_version VARCHAR(32) NOT NULL,
           sdk_contract_version INTEGER NOT NULL,
+          mock_revision CHAR(40),
           status VARCHAR(24) NOT NULL DEFAULT 'draft',
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           UNIQUE (creator_id, game_id)
         )
       `;
+      await sql`ALTER TABLE sdk_games ADD COLUMN IF NOT EXISTS mock_revision CHAR(40)`;
       await sql`CREATE INDEX IF NOT EXISTS sdk_games_creator_updated_idx ON sdk_games (creator_id, updated_at DESC)`;
     })().catch((error) => {
       initialized = null;

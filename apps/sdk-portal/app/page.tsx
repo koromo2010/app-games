@@ -1,4 +1,5 @@
 import portalPackage from "../package.json";
+import Link from "next/link";
 
 const foundations = [
   {
@@ -140,9 +141,9 @@ export default function Home() {
             DownloadMe.mdを取得
             <span aria-hidden="true">↓</span>
           </a>
-          <a className="secondary-action" href="/demo">
+          <Link className="secondary-action" href="/demo">
             デモ環境を見る
-          </a>
+          </Link>
         </div>
       </section>
 

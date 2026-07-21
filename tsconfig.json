@@ -31,5 +31,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
   ],
-  "exclude": ["node_modules", "virtual-stock-app"]
+  "exclude": ["node_modules", "virtual-stock-app", "apps/sdk-portal", "apps/sdk-preview"]
 }

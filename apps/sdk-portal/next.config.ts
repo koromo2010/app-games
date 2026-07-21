@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  transpilePackages: ["@game-fields/sdk-preview-auth"],
   async headers() {
     return [
       {
