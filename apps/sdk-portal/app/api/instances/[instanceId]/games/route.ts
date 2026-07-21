@@ -52,6 +52,6 @@ export async function PUT(request: Request, context: { params: Promise<{ instanc
         updated_at = NOW()
       RETURNING game_id AS "gameId", status, updated_at AS "updatedAt"
     `;
-    return Response.json({ saved: true, game: rows[0] });
+    return Response.json({ saved: true, game: Array.isArray(rows) ? rows[0] : null });
   } catch { return Response.json({ saved: false, error: "ゲーム情報を現在保存できません。" }, { status: 503 }); }
 }
