@@ -1,9 +1,10 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { defaultAppLocale, normalizeAppLocale, type AppLocale } from "@/lib/app-locale";
+import { defaultAppLocale, isAppLocale, normalizeAppLocale, type AppLocale } from "@/lib/app-locale";
 import { translateApp, type AppMessageKey, type AppMessageValues } from "@/lib/app-i18n";
-import { readPlayerSession } from "@/lib/player-session";
+
+const APP_LOCALE_COOKIE = "game_fields_locale";
 
 type AppLocaleContextValue = {
   locale: AppLocale;
@@ -13,23 +14,31 @@ type AppLocaleContextValue = {
 
 const AppLocaleContext = createContext<AppLocaleContextValue | null>(null);
 
-export function AppLocaleProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<AppLocale>(defaultAppLocale);
-  const setLocale = useCallback((nextLocale: AppLocale) => setLocaleState(normalizeAppLocale(nextLocale)), []);
+function localePathname(pathname: string, locale: AppLocale) {
+  const segments = pathname.split("/");
+  if (isAppLocale(segments[1])) segments[1] = locale;
+  else segments.splice(1, 0, locale);
+  return segments.join("/") || `/${locale}`;
+}
 
-  useEffect(() => {
-    const sync = () => setLocaleState(normalizeAppLocale(readPlayerSession()?.locale));
-    const onSessionSaved = (event: Event) => {
-      const detail = (event as CustomEvent<{ locale?: unknown }>).detail;
-      setLocaleState(normalizeAppLocale(detail?.locale));
-    };
-    sync();
-    window.addEventListener("storage", sync);
-    window.addEventListener("game-fields:player-session-saved", onSessionSaved);
-    return () => {
-      window.removeEventListener("storage", sync);
-      window.removeEventListener("game-fields:player-session-saved", onSessionSaved);
-    };
+export function AppLocaleProvider({
+  children,
+  initialLocale = defaultAppLocale,
+}: {
+  children: ReactNode;
+  initialLocale?: AppLocale;
+}) {
+  const [locale, setLocaleState] = useState<AppLocale>(normalizeAppLocale(initialLocale));
+
+  const setLocale = useCallback((nextLocale: AppLocale) => {
+    const normalizedLocale = normalizeAppLocale(nextLocale);
+    setLocaleState(normalizedLocale);
+    document.cookie = `${APP_LOCALE_COOKIE}=${normalizedLocale}; Path=/; Max-Age=31536000; SameSite=Lax`;
+
+    const nextPathname = localePathname(window.location.pathname, normalizedLocale);
+    if (nextPathname !== window.location.pathname) {
+      window.location.assign(`${nextPathname}${window.location.search}${window.location.hash}`);
+    }
   }, []);
 
   useEffect(() => {
