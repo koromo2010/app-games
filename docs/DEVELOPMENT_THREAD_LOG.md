@@ -442,3 +442,22 @@
 - Root Directory `apps/sdk-portal`、Production Branch `main`、`develop` Preview、Ignored Build Stepは未設定。
 - `sdk.game-fields.com`を本番ProjectからSDK Projectへ移管し、独自ドメインでの実機確認を行う必要がある。
 - 現行Vercel ConnectorはGit接続、Project設定更新、独自ドメイン移管の書込み操作を公開しておらず、この環境のCLIはVercel認証先へ接続できなかった。Vercel Dashboardまたは認証済みCLI／REST APIで残設定を行う。
+
+## 2026-07-21 — SDK ProjectのGit接続とRoot Directory設定
+
+### 作業目的
+
+- SDK専用Vercel ProjectをGitHubへ接続し、monorepo内のPortalだけを自動デプロイできる状態にする。
+
+### 実施結果
+
+- `app-games-sdk`のRoot Directoryを`apps/sdk-portal`へ変更した。
+- Git Repositoryとして`koromo2010/app-games`が接続済みであることをVercel Dashboard上で確認した。
+- Ignored Build Stepは`main`と`develop`だけをbuild対象とする設定で保存済みであることを確認した。
+- Root Directory外のworkspace依存をBuild Stepへ含める設定は有効のままとした。
+
+### 未対応・保留
+
+- Production Branchが`main`であることは、Dashboard画像の表示範囲外だったため未確認。
+- `develop`更新からPreview Deploymentが自動作成されることを確認し、Production BranchとGit連携を実動作で検証する。
+- 検証成功後に`sdk.game-fields.com`を本番`app-games` Projectから`app-games-sdk`へ移管し、独自ドメインでHTTP応答を確認する。
