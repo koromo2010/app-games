@@ -2,9 +2,9 @@
 
 このファイルは、ChatGPT Proと一緒にGame Fields向けゲーム制作を始めるための入口です。SDK本体やゲーム雛形はこのファイルには入っていません。ChatGPTが下記の公開スターターを取得して作業します。
 
-- Game Fields Platform: `v__PLATFORM_VERSION__`
-- SDK package: `v__SDK_VERSION__`
-- SDK contract schema: `v__SDK_CONTRACT_VERSION__`
+- Game Fields Platform: `v0.1.0`
+- SDK package: `v0.1.0`
+- SDK contract schema: `v1`
 
 ## 利用者が行うこと
 

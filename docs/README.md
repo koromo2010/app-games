@@ -28,6 +28,7 @@
 | 新規ゲーム追加 | `NEW_GAME_CHECKLIST.md`、`GAME_SCAFFOLD.md` | `npm run create-game -- <game-id> "表示名"`、`config/game-registry.json`、`scripts/check-game-standards.mjs` |
 | PC/Mobile UI境界・Controller・権限層 | `UI_ARCHITECTURE.md` | `app/wordwolf/use-wordwolf-controller.ts`、`app/wordwolf/WordWolfDesktopLayout.tsx`、`app/wordwolf/wordwolf-view-permissions.ts` |
 | 外部開発者へゲーム部分だけ依頼する境界 | `EXTERNAL_GAME_PACKAGE.md` | ゲームmanifest、SDK、Runtime interface、import境界監査 |
+| SDK・mainの版管理と後方互換 | `SDK_VERSIONING.md` | `config/platform-release.json`、`scripts/check-platform-release.mjs` |
 | お題DB・既出判定・再利用 | `TOPIC_HISTORY_DATABASE.md` | ゲーム別topic catalog・history store・topic API |
 | 開発・本番DB分離、共通単語DB | `DATABASE_ENVIRONMENTS.md` | `lib/storage-environment-guard.ts`、`lib/vocabulary-postgres-store.ts`、`db/vocabulary` |
 | 環境変数の配置・Shared移行 | `ENVIRONMENT_VARIABLES.md` | Vercel Team Shared Variables、各Project Variables、環境別接続先 |

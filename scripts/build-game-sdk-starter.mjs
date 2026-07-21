@@ -15,6 +15,9 @@ const sdkRoot = join(root, "packages/game-sdk");
 const templateRoot = join(root, "sdk/starter-template");
 const packageJson = JSON.parse(readFileSync(join(sdkRoot, "package.json"), "utf8"));
 const version = packageJson.version;
+const platformRelease = JSON.parse(
+  readFileSync(join(root, "config/platform-release.json"), "utf8"),
+);
 const archiveRoot = "game-fields-sdk-starter";
 const temporaryDirectory = mkdtempSync(join(tmpdir(), "game-fields-sdk-download-"));
 const outputFlag = process.argv.indexOf("--output");
@@ -49,6 +52,8 @@ try {
 
   const replacements = new Map([
     ["__SDK_VERSION__", version],
+    ["__PLATFORM_VERSION__", platformRelease.platformVersion],
+    ["__SDK_CONTRACT_VERSION__", String(platformRelease.sdkContractVersion)],
     ["__SDK_TARBALL__", packResult.filename],
   ]);
   const entries = collectFiles(templateRoot).map((absolutePath) => {

@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "platformVersion": "0.1.0",
+  "sdkPackageVersion": "0.1.0",
+  "sdkContractVersion": 1,
+  "supportedSdkContractVersions": [1],
+  "roomSchemaVersion": 1,
+  "channel": "developer-preview"
+}

@@ -44,6 +44,7 @@ try {
     "AGENTS.md",
     "GAME_SPEC.md",
     "APP_REQUIREMENTS.md",
+    "SDK_MODULE_CATALOG.md",
     "MOCK_GUIDE.md",
     "MOCK_REVIEW.md",
     "SDK_API.md",

@@ -1,3 +1,5 @@
+import portalPackage from "../package.json";
+
 const foundations = [
   {
     number: "01",
@@ -20,7 +22,7 @@ const foundations = [
 ];
 
 const available = [
-  "@game-fields/game-sdk v0.1.0の独立package",
+  "Platformと同じリリース版の@game-fields/game-sdk",
   "認証済みactorを受け取るCommand契約",
   "保存Roomと閲覧者別RoomViewの分離",
   "revision不一致を拒否するRuntime契約",
@@ -38,6 +40,7 @@ const reviewFlow = [
 ];
 
 export default function Home() {
+  const platformVersion = portalPackage.version;
   return (
     <main>
       <header className="site-header">
@@ -50,11 +53,12 @@ export default function Home() {
           </span>
         </a>
         <nav aria-label="主要ナビゲーション">
+          <a href="#start">Start</a>
           <a href="#foundation">Foundation</a>
           <a href="#status">Status</a>
           <a href="#review">Review gate</a>
         </nav>
-        <span className="preview-badge">Developer preview</span>
+        <span className="preview-badge">Developer preview · v{platformVersion}</span>
       </header>
 
       <section className="hero" id="top">
@@ -69,6 +73,10 @@ export default function Home() {
             ゲーム固有部分を作成・検証・提出するための開発基盤です。
           </p>
           <div className="hero-actions">
+            <a className="primary-action" href="/DownloadMe.md" download>
+              最新のDownloadMe
+              <span aria-hidden="true">↓</span>
+            </a>
             <a className="primary-action" href="#foundation">
               SDKの構成を見る
               <span aria-hidden="true">→</span>
@@ -116,6 +124,25 @@ export default function Home() {
             <span>viewer-safe data</span>
             <span>revisioned command</span>
           </div>
+        </div>
+      </section>
+
+      <section className="start section" id="start">
+        <div className="section-heading">
+          <p className="eyebrow">START A PREVIEW INSTANCE</p>
+          <h2>自分専用のGame Fieldsで試す</h2>
+          <p>
+            制作者ごとの専用URLに広場と部屋を用意します。新しいゲームは同じ広場へ追加され、本番と同じ導線で検証できます。
+          </p>
+        </div>
+        <div className="hero-actions">
+          <a className="primary-action" href="/DownloadMe.md" download>
+            DownloadMe.mdを取得
+            <span aria-hidden="true">↓</span>
+          </a>
+          <a className="secondary-action" href="/demo">
+            デモ環境を見る
+          </a>
         </div>
       </section>
 
@@ -183,7 +210,7 @@ export default function Home() {
           </span>
           <span>Game Fields SDK</span>
         </div>
-        <p>Build the game. Submit the package. Release through the gate.</p>
+        <p>Platform v{platformVersion} · Build the game. Submit the package. Release through the gate.</p>
       </footer>
     </main>
   );
