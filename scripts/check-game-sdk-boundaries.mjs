@@ -7,9 +7,19 @@ const sourceRoot = join(packageRoot, "src");
 const sdkFiles = readdirSync(sourceRoot)
   .filter((name) => extname(name) === ".ts")
   .map((name) => join(sourceRoot, name));
+const runtimePackageRoot = join(root, "packages/game-runtime");
+const runtimeSourceRoot = join(runtimePackageRoot, "src");
+const runtimeFiles = readdirSync(runtimeSourceRoot)
+  .filter((name) => extname(name) === ".ts")
+  .map((name) => join(runtimeSourceRoot, name));
+const proofGameFile = join(root, "tests/fixtures/sdk-count-up-game.ts");
 const allowedRelativeImports = new Set([
   "./index.js",
   "./runtime.js",
+]);
+const allowedRuntimeImports = new Set([
+  "@game-fields/game-sdk",
+  "@game-fields/game-sdk/runtime",
 ]);
 const failures = [];
 
@@ -28,6 +38,32 @@ for (const absoluteFile of sdkFiles) {
   }
 }
 
+for (const absoluteFile of runtimeFiles) {
+  const file = relative(root, absoluteFile);
+  const source = readFileSync(absoluteFile, "utf8");
+  const imports = source.matchAll(/(?:import|export)\s+(?:type\s+)?(?:[^"']+?\s+from\s+)?["']([^"']+)["']/g);
+  for (const match of imports) {
+    const specifier = match[1];
+    if (!allowedRuntimeImports.has(specifier)) {
+      failures.push(`${file}: 内部Runtime coreから許可されていない依存 ${specifier} をimportしています。`);
+    }
+  }
+  if (/\bprocess\.env\b/.test(source)) {
+    failures.push(`${file}: 内部Runtime coreから環境変数へ直接アクセスしています。`);
+  }
+}
+
+const proofSource = readFileSync(proofGameFile, "utf8");
+for (const match of proofSource.matchAll(/(?:import|export)\s+(?:type\s+)?(?:[^"']+?\s+from\s+)?["']([^"']+)["']/g)) {
+  const specifier = match[1];
+  if (!allowedRuntimeImports.has(specifier)) {
+    failures.push(`${relative(root, proofGameFile)}: 実証ゲームがSDK外の依存 ${specifier} をimportしています。`);
+  }
+}
+if (/\bprocess\.env\b|Redis|DATABASE_URL|API_KEY/.test(proofSource)) {
+  failures.push(`${relative(root, proofGameFile)}: 実証ゲームがplatform資源へ直接アクセスしています。`);
+}
+
 const packageJson = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));
 if (packageJson.name !== "@game-fields/game-sdk") {
   failures.push("packages/game-sdk/package.json: package名が@game-fields/game-sdkではありません。");
@@ -44,10 +80,21 @@ if (Object.keys(packageJson.dependencies ?? {}).length > 0) {
   failures.push("packages/game-sdk/package.json: 公開SDKに外部runtime依存を追加しないでください。");
 }
 
+const runtimePackageJson = JSON.parse(readFileSync(join(runtimePackageRoot, "package.json"), "utf8"));
+if (runtimePackageJson.name !== "@game-fields/game-runtime") {
+  failures.push("packages/game-runtime/package.json: package名が@game-fields/game-runtimeではありません。");
+}
+if (runtimePackageJson.private !== true || runtimePackageJson.license !== "UNLICENSED") {
+  failures.push("packages/game-runtime/package.json: 内部RuntimeはprivateかつUNLICENSEDである必要があります。");
+}
+if (JSON.stringify(runtimePackageJson.dependencies ?? {}) !== JSON.stringify({ "@game-fields/game-sdk": "0.1.0" })) {
+  failures.push("packages/game-runtime/package.json: 内部Runtime coreは公開SDK以外へ依存できません。");
+}
+
 if (failures.length > 0) {
   console.error("\n[game-sdk-boundaries] SDK境界の検査に失敗しました:\n");
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
 }
 
-console.log(`[game-sdk-boundaries] ${sdkFiles.length}件の公開SDKソースとpackage境界を確認しました。`);
+console.log(`[game-sdk-boundaries] 公開SDK ${sdkFiles.length}件、内部Runtime ${runtimeFiles.length}件、実証ゲームの依存境界を確認しました。`);

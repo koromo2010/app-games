@@ -32,6 +32,7 @@ export type GameSdkViewer = {
 /** A signed-in actor resolved from the platform session, not from a Command payload. */
 export type GameSdkTrustedActor = {
   playerId: string;
+  displayName: string;
   role: "host" | "player";
   debugAccess: boolean;
 };

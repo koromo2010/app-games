@@ -122,6 +122,7 @@ npm run lint
 npm test
 npm run build
 npm run build:sdk
+npm run build:runtime-packages
 npm run test:sdk-package
 ```
 

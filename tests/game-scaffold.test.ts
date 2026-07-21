@@ -26,10 +26,12 @@ test("game scaffold creates SDK contracts without platform storage or actor IDs"
 
   const contracts = readFileSync(join(gameDir, "sample-game-contracts.ts"), "utf8");
   assert.doesNotMatch(contracts, /actorId/);
+  assert.doesNotMatch(contracts, /\bplayerName\b/);
   assert.match(contracts, /GameSdkStoredRoom/);
 
   const serverModule = readFileSync(join(gameDir, "sample-game-server-module.ts"), "utf8");
   assert.match(serverModule, /context\.actor\.playerId/);
+  assert.match(serverModule, /context\.actor\.displayName/);
   assert.match(serverModule, /presentRoom/);
   assert.doesNotMatch(serverModule, /Redis|DATABASE_URL|API_KEY/);
 

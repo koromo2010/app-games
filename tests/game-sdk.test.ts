@@ -59,8 +59,8 @@ const testGameModule = defineGameServerModule<Room, { secret: string }, Command,
   },
 });
 
-const host = { playerId: "host-1", role: "host", debugAccess: false } as const;
-const player = { playerId: "player-1", role: "player", debugAccess: false } as const;
+const host = { playerId: "host-1", displayName: "Host", role: "host", debugAccess: false } as const;
+const player = { playerId: "player-1", displayName: "Player", role: "player", debugAccess: false } as const;
 const spectatorViewer = { playerId: null, role: "spectator", debugAccess: false } as const;
 
 test("SDK manifest validates its version, id, localized titles and player range", () => {

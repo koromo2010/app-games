@@ -49,7 +49,7 @@
 | 共通デバッグ認証 | `lib/debug-access.ts`, `app/components/DebugModeButton.tsx`, `app/api/debug-auth/route.ts`, `app/users/me/UserDashboard.tsx` |
 | ゲーム公開範囲 | `config/game-registry.json` の `private`, `lib/game-access.ts`, `lib/private-game-access.ts`, `app/api/private-game-access/route.ts` |
 | ゲーム登録・自動監査 | `config/game-registry.json`, `scripts/check-game-standards.mjs`, `docs/NEW_GAME_CHECKLIST.md` |
-| ゲーム開発SDK | `packages/game-sdk`, `scripts/create-game.mjs`, `scripts/check-game-sdk-boundaries.mjs`, `scripts/check-game-sdk-package.mjs`, `docs/CHATGPT_GAME_SDK.md` |
+| ゲーム開発SDK | `packages/game-sdk`, `packages/game-runtime`, `lib/game-sdk-platform-adapter.ts`, `scripts/create-game.mjs`, `scripts/check-game-sdk-boundaries.mjs`, `scripts/check-game-sdk-package.mjs`, `docs/CHATGPT_GAME_SDK.md` |
 | SDK Developer Portal | `apps/sdk-portal`, `npm run dev:sdk`, `npm run build:sdk`, `docs/EXTERNAL_GAME_PACKAGE.md` |
 | 共通戦績・マイページ | `lib/player-stats-store.ts`, `app/api/player-stats/route.ts`, `app/users/me/UserDashboard.tsx` |
 | ログイン後の部屋復元・広場の復帰一覧 | `app/hooks/use-online-game-session-restore.ts`, `app/api/player-active-rooms/route.ts`, `lib/player-active-room-summary.ts`, `app/games/use-lobby-room-data.ts` |
@@ -65,11 +65,13 @@
 | たほい屋の問題再利用 | `lib/tahoiya-topic-catalog.ts`, `app/api/tahoiya/topic/route.ts` |
 | お題候補DB・経験履歴の目標設計 | `docs/TOPIC_HISTORY_DATABASE.md` |
 
-SDK v1は、manifest、Game→Controller→LayoutのUI三層、認可済みactorを注入するserver module、閲覧者別RoomView、revision付きCommand、DB不要のMock Runtimeまでを提供する。ゲーム側のCommandへactor IDを本人証明として入れず、保存Roomをクライアントへ直接返さない。`npm run check:sdk`は公開SDKの内部依存を拒否し、`npm run lint`から必ず実行される。本体のCookie認証・Redis CAS・WebSocket・戦績へ自動接続するplatform adapterとSDK専用環境は未実装である。
+SDK v1は、manifest、Game→Controller→LayoutのUI三層、認証済みID・表示名をactorとして注入するserver module、閲覧者別RoomView、revision付きCommand、DB不要のMock Runtimeまでを提供する。ゲーム側のCreate/Commandへactor IDや表示名を本人情報として入れず、保存Roomをクライアントへ直接返さない。`npm run check:sdk`は公開SDK、内部Runtime core、実証ゲームの依存境界を検査し、`npm run lint`から必ず実行される。
+
+非公開package `@game-fields/game-runtime`と`lib/game-sdk-platform-adapter.ts`は、署名済みプレイヤーCookieからidentityを解決し、作成者をhostとして固定し、Roomをplatform metadataで包んでRedisへ保存する。Commandはclientの`expectedRevision`を検査したあとRedis CASを1回だけ実行し、同時更新または古いrevisionを409相当の`STALE_REVISION`として拒否する。合計カウントの小規模fixtureで、作成、別アカウント参加、host開始、同時Command、閲覧者別presentationまで実証済みである。汎用HTTP route・Client Runtime、WebSocket、1人1部屋、解散、戦績、リプレイの注入は未実装である。
 
 リポジトリはnpm workspaces化済みで、Developer Portalの独立Next.jsアプリは`apps/sdk-portal`、公開SDKは`packages/game-sdk`に置く。Portalは`app-games-sdk`から`https://sdk.game-fields.com`へProduction公開済みで、`npm run dev:sdk`は3001番、`npm run build:sdk`はPortal単体を起動・検証する。
 
-公開SDK候補は`@game-fields/game-sdk@0.1.0`で、基本契約、server runtime、mock runtimeを別exportとして持つ。`npm run build:sdk-package`で独立buildし、`npm run test:sdk-package`でtarballを空の外部fixtureへinstallしてpackage名によるimportと実行を検査する。npm registryへは未公開で、初回公開の明示承認まで`private: true`かつ`UNLICENSED`を維持する。
+公開SDK候補は`@game-fields/game-sdk@0.1.0`で、基本契約、server runtime、mock runtimeを別exportとして持つ。`npm run build:sdk-package`で独立buildし、`npm run test:sdk-package`でtarballを空の外部fixtureへinstallしてpackage名によるimportと実行を検査する。`npm run build:runtime-packages`は公開SDKの後に非公開Runtimeをbuildする。npm registryへは未公開で、初回公開の明示承認まで`private: true`かつ`UNLICENSED`を維持する。
 
 Portal用の別Vercel Project `app-games-sdk`は`game-fields` Team内に作成済みで、`https://sdk.game-fields.com`から取得できる。本体・devのDB、Redis、Blob、管理者秘密情報は共有していない。GitHub `koromo2010/app-games`へ接続し、Root Directoryは`apps/sdk-portal`、Production Branchは`main`、`develop`はPreview、Ignored Build Stepは`main`と`develop`だけをbuild対象とする。`develop`からのGit Preview buildとPortalソースの`main`限定反映、SDK Projectへのドメイン移管は完了している。npm registryへの初回publish、チュートリアル、APIリファレンス、提出画面は未実装。リポジトリ分割は一般配布の必須条件ではなく、公開packageの独立性とデプロイ・権限・データ境界を先に保証する。外部開発者はSDKで作成したゲームをGame Fieldsへ提出するだけで、`develop`、`main`、Vercel、本番データへの書き込み権限を持たない。現段階では自動検査後も運営者が採用、dev統合、実プレイ確認、`main`反映、本番公開を一貫して管理する。提出数が増えた場合はAIによるセキュリティ、バグ、権利、低品質・量産提出の検査を採用ゲートへ組み込めるが、無審査公開は許可せず、すべての提出物を最低1つのGame Fields管理ゲートへ通す。
 

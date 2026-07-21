@@ -69,7 +69,7 @@ const module = defineGameServerModule({
     return { phase: room.phase, isHost: room.hostPlayerId === context.viewer.playerId };
   },
 });
-const actor = { playerId: "host-1", role: "host", debugAccess: false };
+const actor = { playerId: "host-1", displayName: "Host", role: "host", debugAccess: false };
 const runtime = createGameSdkMockRuntime({ module });
 const created = await runtime.createRoom({ roomCode: "PACK", create: {}, actor });
 const result = await runtime.sendCommand({
