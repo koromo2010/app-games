@@ -478,3 +478,22 @@
 
 - 修正後のGit Preview buildとHTTP応答を確認する。
 - Preview成功前は`sdk.game-fields.com`を移管しない。
+
+## 2026-07-21 — SDK Git Preview検証完了
+
+### 実施結果
+
+- PostCSS分離修正を`develop`へ反映し、GitHub更新から`app-games-sdk`のPreview Deploymentが自動作成された。
+- Vercelは`develop`をProductionではなくPreviewとして扱い、SDK Portal 2ルートのbuildが成功して`READY`になった。
+- Vercel上のGit接続、Root Directory、Production Branch、Ignored Build Stepが意図した運用で機能することを実動作で確認した。
+- Preview URLはVercel認証保護が有効なため未認証の本文取得はできないが、Deployment buildと配備処理は正常終了した。
+
+### 検証
+
+- ローカルで全369テスト、ESLint、本体72ルートbuild、SDK Portal 2ルートbuildに成功した。
+- Vercel Preview Deployment `f2974e2`が`READY`になった。
+
+### 未対応・保留
+
+- `main`にはまだPortalソースがないため、developの他機能を含めずSDK Portalとworkspace設定だけを限定反映する。
+- SDK本番build成功後に`sdk.game-fields.com`を本番`app-games` Projectから`app-games-sdk`へ移管する。

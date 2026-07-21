@@ -10,9 +10,9 @@
 | --- | --- | --- | --- | --- |
 | Production | `app-games` | `main` | `https://game-fields.com` | 一般公開 |
 | Development | `app-games-dev` | `develop` | `https://dev.game-fields.com` | 内部開発・検証 |
-| SDK | `app-games-sdk`（作成済み） | Git未接続。予定は`main`で公開、`develop`はPreview | 暫定 `https://app-games-sdk.vercel.app`、予定 `https://sdk.game-fields.com` | 外部開発者・Developer Portal |
+| SDK | `app-games-sdk` | `main`で公開、`develop`はPreview | 暫定 `https://app-games-sdk.vercel.app`、予定 `https://sdk.game-fields.com` | 外部開発者・Developer Portal |
 
-`apps/sdk-portal`のソース、workspace構成、`app-games-sdk` Vercel Project、初回Deploymentは作成済み。初回Deploymentはソースファイル直接送信であり、GitHub接続、Root Directory `apps/sdk-portal`、Production Branch、Ignored Build Step、`sdk.game-fields.com`割当は未設定である。初期Portalは外部データ接続を持たないため、本体・devの環境変数は複製していない。
+`apps/sdk-portal`のソース、workspace構成、`app-games-sdk` Vercel Project、GitHub接続、Root Directory `apps/sdk-portal`、Production Branch `main`、`develop` Preview、Ignored Build Stepは設定済みで、`develop`からのGit Preview buildも成功済み。`sdk.game-fields.com`の割当とPortalソースの`main`限定反映は未完了である。初期Portalは外部データ接続を持たないため、本体・devの環境変数は複製していない。
 
 Vercel Teamは `game-fields`（Team ID: `team_Q3rGaf7bwfZZsjaj1vqCg5YO`）。共通秘密情報はTeam Shared Environment Variablesへ置き、環境別データ接続とURLは各Project Variablesへ置く。
 
@@ -24,7 +24,7 @@ VercelのIgnored Build StepはProjectごとに次を設定済み。
 
 - `app-games`: `if [ "$VERCEL_GIT_COMMIT_REF" != "main" ]; then exit 0; else exit 1; fi`
 - `app-games-dev`: `if [ "$VERCEL_GIT_COMMIT_REF" != "develop" ]; then exit 0; else exit 1; fi`
-- `app-games-sdk`: 未設定。Git接続時に`main`と`develop`だけを対象にする。
+- `app-games-sdk`: `if [ "$VERCEL_GIT_COMMIT_REF" != "main" ] && [ "$VERCEL_GIT_COMMIT_REF" != "develop" ]; then exit 0; else exit 1; fi`
 
 VercelではIgnored Build Stepの終了コード`0`がスキップ、`1`がビルド実行を意味する。
 
