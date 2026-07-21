@@ -31,6 +31,12 @@ games/
 
 当面は既存のNext.js配置を維持しつつ、この依存方向へ段階的に寄せる。最初からmonorepo移動を行わない。
 
+## 現在の実装段階
+
+SDK v1の公開型、認可済みactorを受けるserver module契約、閲覧者別presentation、メモリMock Runtime、manifest検証、生成雛形、import境界検査は`lib/game-sdk*.ts`と`scripts/create-game.mjs`へ実装済み。Cookie認証、Redis、DB、管理機能には依存していない。
+
+本体のオンラインRoomへ接続するplatform adapter、SDK専用Vercel環境、外部配布用package、Developer Portalは次段階であり、現時点では実装済みと扱わない。
+
 ## 外部へ公開するもの
 
 - ゲームSDKの型
@@ -79,12 +85,13 @@ UI権限はControllerがpermissionsとして計算する。ただし最終認可
 
 ## 導入順
 
-1. WordWolfでController・DesktopLayout・permissionsの基準を確立
-2. manifestのTypeScript型を作る
-3. 大富豪または小規模ゲームでRuntime interfaceを試験
-4. import境界をlintで監査
-5. テンプレートゲームを作る
-6. 後から`packages/game-sdk`へ物理分離
+1. WordWolfでController・DesktopLayout・permissionsの基準を確立（完了）
+2. manifestとRuntimeのTypeScript契約を作る（完了）
+3. メモリMock Runtimeと契約テストを作る（完了）
+4. import境界をlintで監査する（完了）
+5. テンプレートゲームをRuntime契約対応にする（完了）
+6. 小規模オンラインゲームでplatform adapterを実証する
+7. 後から`packages/game-sdk`へ物理分離する
 
 ## 完了条件
 

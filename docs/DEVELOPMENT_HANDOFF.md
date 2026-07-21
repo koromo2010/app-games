@@ -49,6 +49,7 @@
 | 共通デバッグ認証 | `lib/debug-access.ts`, `app/components/DebugModeButton.tsx`, `app/api/debug-auth/route.ts`, `app/users/me/UserDashboard.tsx` |
 | ゲーム公開範囲 | `config/game-registry.json` の `private`, `lib/game-access.ts`, `lib/private-game-access.ts`, `app/api/private-game-access/route.ts` |
 | ゲーム登録・自動監査 | `config/game-registry.json`, `scripts/check-game-standards.mjs`, `docs/NEW_GAME_CHECKLIST.md` |
+| ゲーム開発SDK | `lib/game-sdk.ts`, `lib/game-sdk-runtime.ts`, `lib/game-sdk-mock-runtime.ts`, `scripts/create-game.mjs`, `scripts/check-game-sdk-boundaries.mjs`, `docs/CHATGPT_GAME_SDK.md` |
 | 共通戦績・マイページ | `lib/player-stats-store.ts`, `app/api/player-stats/route.ts`, `app/users/me/UserDashboard.tsx` |
 | ログイン後の部屋復元・広場の復帰一覧 | `app/hooks/use-online-game-session-restore.ts`, `app/api/player-active-rooms/route.ts`, `lib/player-active-room-summary.ts`, `app/games/use-lobby-room-data.ts` |
 | 実プレイ時間統計 | `lib/game-duration-statistics.ts`, `lib/game-duration-store.ts`, `app/api/game-duration/route.ts`, `app/games/page.tsx` |
@@ -62,6 +63,8 @@
 | キャンバス | `app/canvas/CanvasGame.tsx`, `app/canvas/canvas-room-api-client.ts`, `app/canvas/canvas-lobby-board-api-client.ts`, `app/canvas/use-canvas-sync.ts`, `app/canvas/use-canvas-stroke-queue.ts`, `lib/canvas-sync-policy.ts`, `app/components/DrawingCanvas.tsx`, `lib/drawing-canvas.ts`（非公開の描画UI試作。共同部屋・広場のHTTP通信、同期時計、ポインター描画送信は画面から分離。GETはETag、途中線は間引き。広場は初回取得後、キャンバス操作から30秒だけ同期し、共同部屋は継続同期） |
 | たほい屋の問題再利用 | `lib/tahoiya-topic-catalog.ts`, `app/api/tahoiya/topic/route.ts` |
 | お題候補DB・経験履歴の目標設計 | `docs/TOPIC_HISTORY_DATABASE.md` |
+
+SDK v1は、manifest、Game→Controller→LayoutのUI三層、認可済みactorを注入するserver module、閲覧者別RoomView、revision付きCommand、DB不要のMock Runtimeまでを提供する。ゲーム側のCommandへactor IDを本人証明として入れず、保存Roomをクライアントへ直接返さない。`npm run check:sdk`は公開SDKの内部依存を拒否し、`npm run lint`から必ず実行される。本体のCookie認証・Redis CAS・WebSocket・戦績へ自動接続するplatform adapterとSDK専用環境は未実装である。
 
 ## 3. 環境変数
 

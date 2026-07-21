@@ -3,6 +3,9 @@
 別スレッドや別の担当者がゲームを追加しても、共通仕様を会話の記憶に依存させないための必須手順です。
 
 1. `config/game-registry.json` に最初にゲームを登録する。
+   - `npm run create-game -- <game-id> "表示名"`で作ったゲームは、`GameSdkManifest`、保存Room、公開RoomView、Command、server moduleの境界を維持する。
+   - Commandのpayloadへactor IDを本人証明として入れず、Runtimeが署名済みセッションから注入するactorを使う。保存Roomは必ず閲覧者別presentationを通す。
+   - `createGameSdkMockRuntime`の契約テストで、ホスト以外の拒否、古いrevision、秘密情報の遮断を確認する。
 2. `playMode` を `online-room` または `local-pass-and-play` から選ぶ。
 3. LLM利用、公開範囲、アカウント戦績の有無を実態どおりに宣言する。ゲームの世界観と遊び方が情景として伝わる、文字なしの横長キービジュアルを `public/game-visuals/<game-id>.webp` に追加する。推奨サイズは1200×500pxとし、広場のカードでは枠全面へ `object-cover` で表示する。ゲーム入口と開始前ラウンジにも共通の `GameLoungeVisual` で表示し、ゲーム開始後は操作領域を優先して非表示にする。小さい表示でも主題が残る中央構図と十分なコントラストを確保し、高解像度の生成元ではなく最適化後のWebPだけを配信対象にする。タイトルやロゴは画像へ焼き込まず、HTMLのテキストとして画像から分離する。
 4. `requiredTokens` に、そのゲームで必須となる共通UIを列挙する。あわせて `timeLimit.mode` を原則 `configurable` とし、保存フィールドを `fields`、サーバー正本の期限処理を `expiryToken` に登録する。時間制限付きの文字入力がある場合は `textInputTimeout.mode: "adopt-entered-text"` とし、締切時に入力済み文字を送る実装の識別子を `implementationTokens` に登録する。文字入力がなければ `textInputTimeout.mode: "not-applicable"` と具体的な `reason` を必須にする。ゲーム進行そのものがない機能だけは `timeLimit` 自体を `not-applicable` にできる。
