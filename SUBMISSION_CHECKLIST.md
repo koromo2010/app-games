@@ -15,6 +15,15 @@
 - [ ] DB、Redis、Cookie、APIキー、管理機能へ直接アクセスしていない
 - [ ] 古いrevisionが拒否される
 
+## モック
+
+- [ ] `APP_REQUIREMENTS.md`を確認した
+- [ ] `mock/index.html`で主要画面と状態を確認できる
+- [ ] PCとスマホ幅で操作できる
+- [ ] `MOCK_REVIEW.md`に画面、操作、要件対応、未実装を書いた
+- [ ] 利用者がモックを確認し、本実装を承認した
+- [ ] `npm run check:mock`が成功する
+
 ## 動作
 
 - [ ] `npm run check`が成功する
