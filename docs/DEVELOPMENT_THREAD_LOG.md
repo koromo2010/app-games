@@ -461,3 +461,20 @@
 - Production Branchが`main`であることは、Dashboard画像の表示範囲外だったため未確認。
 - `develop`更新からPreview Deploymentが自動作成されることを確認し、Production BranchとGit連携を実動作で検証する。
 - 検証成功後に`sdk.game-fields.com`を本番`app-games` Projectから`app-games-sdk`へ移管し、独自ドメインでHTTP応答を確認する。
+
+## 2026-07-21 — SDK PreviewのGit buildエラー修正
+
+### 調査結果
+
+- `develop`更新から`app-games-sdk`のPreview Deploymentが自動作成され、Git接続とPreview運用が有効であることを確認した。
+- 初回Git buildは、SDK Portalがリポジトリ直下のTailwind用PostCSS設定を継承し、SDK packageにない`@tailwindcss/postcss`を要求したため失敗した。
+- PortalのCSSはTailwindを使用しておらず、SDKを本体のbuild依存から分離する方針に従い、本体側のTailwind依存をSDKへ追加しない。
+
+### 実施結果
+
+- `apps/sdk-portal/postcss.config.mjs`へ空の独立PostCSS設定を追加し、リポジトリ直下のTailwind設定を継承しないようにした。
+
+### 未対応・保留
+
+- 修正後のGit Preview buildとHTTP応答を確認する。
+- Preview成功前は`sdk.game-fields.com`を移管しない。
