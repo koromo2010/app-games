@@ -27,11 +27,11 @@ for (const game of games) {
   for (const file of game.moduleBoundaryFiles || []) if (!existsSync(join(root, file))) fail(`${game.id}: モジュール境界ファイル ${file} が存在しません。`);
   if (!game.entryFile || !existsSync(join(root, game.entryFile))) continue;
   const entry = read(game.entryFile);
-  if (!entry.includes("GameLoungeVisual")) fail(`${game.id}: キービジュアルをゲーム入口・開始前ラウンジへ表示してください。`);
   const registeredModuleSources = [game.entryFile, ...(game.moduleBoundaryFiles || [])]
     .filter((file, index, files) => file && files.indexOf(file) === index && existsSync(join(root, file)))
     .map(read)
     .join("\n");
+  if (!registeredModuleSources.includes("GameLoungeVisual")) fail(`${game.id}: キービジュアルをゲーム入口・開始前ラウンジへ表示してください。`);
   const timeLimitSources = [registeredModuleSources, game.roomStoreFile && existsSync(join(root, game.roomStoreFile)) ? read(game.roomStoreFile) : ""].join("\n");
   for (const token of game.requiredTokens || []) if (!registeredModuleSources.includes(token)) fail(`${game.id}: 共通要件「${token}」が登録済みモジュール境界にありません。`);
   if (!game.timeLimit || !["configurable", "not-applicable"].includes(game.timeLimit.mode)) {
@@ -63,7 +63,7 @@ for (const game of games) {
     if (!read("lib/online-room-policy.ts").includes(`"${game.id}"`)) fail(`${game.id}: 共通人数上限マップにゲームIDがありません。`);
     if (!read("lib/room-dissolve-policy.ts").includes(`"${game.id}"`)) fail(`${game.id}: 共通解散ポリシーにゲームIDがありません。`);
     if (!lobbyActiveRoomsRoute.includes(`${game.id}:`) && !lobbyActiveRoomsRoute.includes(`"${game.id}":`)) fail(`${game.id}: 共通のアクティブ部屋取得APIにloaderがありません。`);
-    if (!entry.includes("GameAdSlot")) fail(`${game.id}: 非プレイ面の共通広告スロットがありません。`);
+    if (!registeredModuleSources.includes("GameAdSlot")) fail(`${game.id}: 非プレイ面の共通広告スロットがありません。`);
     if (!game.roomStoreFile || !existsSync(join(root, game.roomStoreFile))) fail(`${game.id}: roomStoreFile がありません。`);
     else { const store = read(game.roomStoreFile); const modules = [entry, store, ...(game.moduleBoundaryFiles || []).map(read)].join("\n"); const usesRoomTtl = store.includes("multiplayerRoomTtlSeconds") || store.includes("multiplayerRoomExpiryArgs") || (store.includes("online-room-persistence") && sharedPersistenceModule.includes("multiplayerRoomExpiryArgs")); if (!usesRoomTtl) fail(`${game.id}: 共通の部屋TTLを使用していません。`); if (!store.includes("revision") && !store.includes("saveStoredWordWolfRoom")) fail(`${game.id}: サーバー側の部屋保存処理が見つかりません。`); if (!modules.includes("abort-game") && !modules.includes("abortGame")) fail(`${game.id}: ゲーム開始前へ戻すデバッグ中断処理がありません。`); if (!modules.includes("confirm-lobby-return") || !modules.includes("remove-waiting-player") || !modules.includes("allRoomPlayersReturned")) fail(`${game.id}: 共通のロビー復帰確認・待機者管理を使用していません。`); const usesDissolutionPolicy = store.includes("canDissolveOnlineRoom") || (store.includes("online-room-dissolution") && sharedDissolutionModule.includes("canDissolveOnlineRoom")); if (!usesDissolutionPolicy) fail(`${game.id}: 進行中の部屋解散を防ぐ共通ポリシーがありません。`); }
     if (!registeredModuleSources.includes("DebugModeButton") || !registeredModuleSources.includes("onAbort=") || !registeredModuleSources.includes("onReplayChange=")) fail(`${game.id}: トップバナーの共通デバッグメニュー（中断・プレイバック）がありません。`);
@@ -88,8 +88,8 @@ for (const game of games) {
     }
   }
   if (game.usesLlm) { if (!game.llmRouteFile || !existsSync(join(root, game.llmRouteFile))) fail(`${game.id}: llmRouteFile がありません。`); else if (!read(game.llmRouteFile).includes("generateGameLlmText")) fail(`${game.id}: 共通LLMゲートウェイを使用していません。`); }
-  if (game.debugActionLog) { if (!entry.includes("debugLogEntries")) fail(`${game.id}: デバッグプルダウンの行動ログ表示がありません。`); if (!read(game.roomStoreFile).includes("appendGameDebugLog")) fail(`${game.id}: サーバー正本のデバッグ行動ログ記録がありません。`); }
-  if (game.resultShare && !entry.includes("GameResultShareButton")) fail(`${game.id}: 最終結果の共通プレイログ共有がありません。`);
+  if (game.debugActionLog) { if (!registeredModuleSources.includes("debugLogEntries")) fail(`${game.id}: デバッグプルダウンの行動ログ表示がありません。`); if (!read(game.roomStoreFile).includes("appendGameDebugLog")) fail(`${game.id}: サーバー正本のデバッグ行動ログ記録がありません。`); }
+  if (game.resultShare && !registeredModuleSources.includes("GameResultShareButton")) fail(`${game.id}: 最終結果の共通プレイログ共有がありません。`);
   if (game.stats === "account") { if (!game.statsRecorder || !read("lib/player-stats-store.ts").includes(game.statsRecorder)) fail(`${game.id}: アカウント戦績の記録処理がありません。`); if (!game.replayRecorder || !read("lib/game-replay-store.ts").includes(game.replayRecorder) || !read(game.roomStoreFile).includes(game.replayRecorder)) fail(`${game.id}: 全ゲーム共通のプレイバック記録処理がありません。`); if (!read("app/games/GameLobby.tsx").includes('game.stats === "account"')) fail(`${game.id}: 登録簿連動の戦績フィルターがありません。`); }
 }
 if (!read("app/games/GameLobby.tsx").includes("GameAdSlot")) fail("ゲームロビーに共通広告スロットがありません。");

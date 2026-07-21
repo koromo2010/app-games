@@ -15,6 +15,7 @@ function settleDaifugoRoomGame(room: DaifugoRoom, now: number): DaifugoRoom {
   for (let step = 0; step < 200; step += 1) {
     if (current.phase !== "playing" || !current.game || current.game.status !== "playing") return current;
     const currentPlayerId = current.game.currentPlayerId;
+    if (!currentPlayerId) throw new Error("DAIFUGO_ROOM_CONFLICT");
     const currentPlayer = current.players.find((player) => player.id === currentPlayerId);
     if (!currentPlayer?.isDummy) return current;
 

@@ -34,6 +34,7 @@ function errorResponse(error: unknown) {
 async function recoverStalledDebugDummyTurn(room: DaifugoRoom, authenticatedPlayerId: string) {
   if (!room.debugMode || room.hostId !== authenticatedPlayerId || room.phase !== "playing" || !room.game || room.game.status !== "playing") return room;
   const currentPlayerId = room.game.currentPlayerId;
+  if (!currentPlayerId) return room;
   const currentPlayer = room.players.find((player) => player.id === currentPlayerId);
   if (!currentPlayer?.isDummy) return room;
 

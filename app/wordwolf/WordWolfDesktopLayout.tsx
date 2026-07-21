@@ -19,7 +19,7 @@ export function WordWolfDesktopLayout({ controller }: { controller: WordWolfCont
   const {
     room, activePlayerId, playerAccountId, playerName, roomPassphrase, joinCode, joinableRooms,
     isJoinListOpen, clueInput, guessInput, isGuessJudging, guessFeedbackMessage, error,
-    avatarColor, avatarImage, isAvatarPickerOpen, isStarting, isRulesOpen, isMyPageOpen,
+    avatarImage, isAvatarPickerOpen, isStarting, isRulesOpen, isMyPageOpen,
   } = state;
   const {
     activePlayer, currentPlayer, wolfIds, wolfPlayers, accusedPlayer, accusedIsWolf,

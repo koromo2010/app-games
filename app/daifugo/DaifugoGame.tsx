@@ -109,13 +109,6 @@ export function DaifugoGame() {
   const hand = useMemo(() => sortDaifugoHand(game?.hands[controlledPlayerId] ?? []), [controlledPlayerId, game?.hands]);
   const isControlledTurn = game?.currentPlayerId === controlledPlayerId && game.status === "playing";
 
-  useEffect(() => {
-    if (!room?.debugMode || !isHost || !room.players.some((player) => player.id === debugControlledPlayerId && player.isDummy)) {
-      setDebugControlledPlayerId("");
-      setSelectedCardIds([]);
-    }
-  }, [debugControlledPlayerId, isHost, room?.debugMode, room?.players]);
-
   const runAction = useCallback(async (action: DaifugoRoomAction) => {
     if (!room || saving) return null;
     setSaving(true); setError("");

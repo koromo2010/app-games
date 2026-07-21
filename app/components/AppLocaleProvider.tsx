@@ -47,16 +47,13 @@ export function AppLocaleProvider({
   }, []);
 
   useEffect(() => {
-    // The visible locale prefix is authoritative. This also protects against
-    // stale SSR/cache output after the prefixed URL is internally rewritten.
+    // The proxy passes the visible locale prefix to the server, which supplies
+    // initialLocale. Keep browser-owned locale metadata in sync without
+    // mirroring the same value through an effect-driven state update.
     const pathLocale = localeFromPathname(window.location.pathname);
-    if (pathLocale) {
-      setLocaleState(pathLocale);
-      document.cookie = `${APP_LOCALE_COOKIE}=${pathLocale}; Path=/; Max-Age=31536000; SameSite=Lax`;
-      document.documentElement.lang = pathLocale;
-      return;
-    }
-    document.documentElement.lang = locale;
+    const activeLocale = pathLocale ?? locale;
+    document.cookie = `${APP_LOCALE_COOKIE}=${activeLocale}; Path=/; Max-Age=31536000; SameSite=Lax`;
+    document.documentElement.lang = activeLocale;
   }, [locale]);
 
   const value = useMemo<AppLocaleContextValue>(() => ({
