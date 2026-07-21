@@ -143,6 +143,9 @@ try {
   }
 
   const entryGuide = readFileSync(join(root, "sdk/entry/START_GAME_FIELDS.md"), "utf8");
+  if (entryGuide.charCodeAt(0) !== 0xfeff) {
+    throw new Error("Entry guide must start with a UTF-8 BOM to prevent mojibake in browser downloads.");
+  }
   for (const requiredText of [
     "--branch sdk-starter",
     "https://github.com/koromo2010/app-games.git",
