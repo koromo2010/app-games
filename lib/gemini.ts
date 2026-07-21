@@ -1,4 +1,5 @@
 import { freeLlmModel } from "@/lib/llm-model";
+import { sharedEnvironmentVariable } from "@/lib/shared-environment";
 
 type GeminiPart = {
   text?: string;
@@ -17,14 +18,14 @@ type GeminiResponse = {
 };
 
 export function hasGeminiApiKey() {
-  return Boolean(process.env.GEMINI_API_KEY?.trim());
+  return Boolean(sharedEnvironmentVariable("GEMINI_API_KEY"));
 }
 
 export async function generateGeminiText(
   prompt: string,
   options: { quality?: "standard" | "high"; timeoutMs?: number; apiKey?: string } = {},
 ) {
-  const apiKey = options.apiKey?.trim() || process.env.GEMINI_API_KEY?.trim();
+  const apiKey = options.apiKey?.trim() || sharedEnvironmentVariable("GEMINI_API_KEY");
   if (!apiKey) throw new Error("GEMINI_API_KEY is not configured.");
   const quality = options.quality ?? "standard";
 

@@ -131,3 +131,11 @@
 2. CAS保存後の戦績記録をoutbox化し、保存直後のプロセス停止から再送できるようにする。
 3. アバターをサーバー側で寸法制限・再エンコードし、将来はオブジェクトストレージへ移す。
 4. 全Commandへ冪等な`commandId`を付け、通信再送時の重複適用を共通化する。
+
+## 2026-07-21 言語URLの開発起動確認
+
+### locale proxyの内部rewriteが同じURLへredirectする
+
+状態: 修正済み（2026-07-21、回帰テストあり）
+
+`/ja/games` を既存App Routerの `/games` へrewriteした後、Next.jsがproxyを内部URLでも再実行し、再び `/ja/games` へ307 redirectする経路があった。rewrite時に渡した `x-app-locale` がある内部再実行はそのままApp Routerへ進め、外部の接頭辞なしURLだけを言語付きURLへredirectするよう分岐した。

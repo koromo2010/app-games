@@ -1,4 +1,5 @@
 import { neon } from "@neondatabase/serverless";
+import { sharedEnvironmentVariable } from "../lib/shared-environment.ts";
 
 type LegacyRow = {
   word_master_id: string | number;
@@ -8,7 +9,7 @@ type LegacyRow = {
 };
 
 const sourceUrl = process.env.LEGACY_WORD_DATABASE_URL?.trim();
-const targetUrl = process.env.VOCABULARY_ADMIN_DATABASE_URL?.trim();
+const targetUrl = sharedEnvironmentVariable("VOCABULARY_ADMIN_DATABASE_URL");
 const apply = process.argv.includes("--apply");
 const batchSize = 500;
 

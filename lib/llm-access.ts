@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { freeGroqLlmModel, freeLlmModel, paidLlmModel } from "@/lib/llm-model";
+import { sharedEnvironmentVariable } from "@/lib/shared-environment";
 
 export { paidLlmModel };
 
@@ -22,7 +23,7 @@ function getSessionSecret() {
   if (configured.length >= 32) return configured;
 
   const accessPassword = getAccessPassword();
-  const sharedApiKey = process.env.OPENAI_API_KEY?.trim() ?? "";
+  const sharedApiKey = sharedEnvironmentVariable("OPENAI_API_KEY") ?? "";
   if (!accessPassword || !sharedApiKey) return "";
   return createHash("sha256")
     .update(`app-games-llm-session-fallback:${accessPassword}:${sharedApiKey}`)
@@ -92,7 +93,7 @@ export function hasPaidLlmPassword() {
 }
 
 export function hasOpenAiApiKey() {
-  return Boolean(process.env.OPENAI_API_KEY);
+  return Boolean(sharedEnvironmentVariable("OPENAI_API_KEY"));
 }
 
 export function hasPersonalLlmConfiguration() {

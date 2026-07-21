@@ -1,6 +1,7 @@
 import { Resend } from "resend";
 import { mergeOperationsEmailRecipients } from "@/lib/operations-email-recipients";
 import { listSiteAdminNotificationEmails, type SiteAdminNotificationKind } from "@/lib/site-admin-account-store";
+import { sharedEnvironmentVariable } from "@/lib/shared-environment";
 
 function escapeHtml(value: string) {
   return value
@@ -16,7 +17,7 @@ export async function sendPasswordResetEmail(input: {
   playerName: string;
   resetUrl: string;
 }) {
-  const apiKey = process.env.RESEND_API_KEY?.trim();
+  const apiKey = sharedEnvironmentVariable("RESEND_API_KEY");
   if (!apiKey) throw new Error("EMAIL_SERVICE_NOT_CONFIGURED");
 
   const resend = new Resend(apiKey);
@@ -57,7 +58,7 @@ async function operationsEmailRecipients(kind: SiteAdminNotificationKind) {
 }
 
 export async function sendOperationsAlertEmail(input: { subject: string; lines: string[]; audience?: SiteAdminNotificationKind; replyTo?: string }) {
-  const apiKey = process.env.RESEND_API_KEY?.trim();
+  const apiKey = sharedEnvironmentVariable("RESEND_API_KEY");
   const recipients = await operationsEmailRecipients(input.audience ?? "alerts");
   if (!apiKey || recipients.length === 0) throw new Error("OPERATIONS_EMAIL_NOT_CONFIGURED");
   const resend = new Resend(apiKey);

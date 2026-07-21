@@ -5,6 +5,7 @@ import {
   tahoiyaWordwolfFinalDecision,
   type VocabularyEvaluationDecision,
 } from "./vocabulary-review.ts";
+import { sharedEnvironmentVariable } from "./shared-environment.ts";
 
 export type VocabularyEvaluationFinalDecision = "adopted" | "rejected";
 
@@ -82,7 +83,7 @@ let client: NeonQueryFunction<boolean, boolean> | null = null;
 let clientUrl = "";
 
 function adminClient() {
-  const url = process.env.VOCABULARY_ADMIN_DATABASE_URL?.trim();
+  const url = sharedEnvironmentVariable("VOCABULARY_ADMIN_DATABASE_URL");
   if (!url) throw new Error("VOCABULARY_ADMIN_STORE_NOT_CONFIGURED");
   if (!client || clientUrl !== url) { client = neon(url); clientUrl = url; }
   return client;

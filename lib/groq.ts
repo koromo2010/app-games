@@ -1,8 +1,9 @@
 import { freeGroqLlmModel } from "@/lib/llm-model";
 import type { GameLlmJsonSchema } from "@/lib/game-llm";
+import { sharedEnvironmentVariable } from "@/lib/shared-environment";
 
 export function hasGroqApiKey() {
-  return Boolean(process.env.GROQ_API_KEY?.trim());
+  return Boolean(sharedEnvironmentVariable("GROQ_API_KEY"));
 }
 
 export async function generateGroqText(
@@ -12,7 +13,7 @@ export async function generateGroqText(
   timeoutMs?: number,
   responseJsonSchema?: GameLlmJsonSchema,
 ) {
-  const apiKey = apiKeyOverride?.trim() || process.env.GROQ_API_KEY?.trim();
+  const apiKey = apiKeyOverride?.trim() || sharedEnvironmentVariable("GROQ_API_KEY");
   if (!apiKey) throw new Error("GROQ_API_KEY is not configured.");
 
   const { default: OpenAI } = await import("openai");

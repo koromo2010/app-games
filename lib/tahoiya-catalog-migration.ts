@@ -1,4 +1,5 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { sharedEnvironmentVariable } from "./shared-environment.ts";
 import { redisCommand } from "./redis-store.ts";
 import {
   legacyTahoiyaCatalogKey,
@@ -61,7 +62,7 @@ function targetDatabase() {
   if (process.env.VERCEL_ENV !== "preview" || assertRuntimeEnvironmentAgreement() !== "development") {
     throw new Error("TAHOIYA_CATALOG_MIGRATION_PREVIEW_ONLY");
   }
-  const url = process.env.VOCABULARY_ADMIN_DATABASE_URL?.trim();
+  const url = sharedEnvironmentVariable("VOCABULARY_ADMIN_DATABASE_URL");
   if (!url) throw new Error("VOCABULARY_ADMIN_STORE_NOT_CONFIGURED");
   if (!targetClient || targetClientUrl !== url) {
     targetClient = neon(url);

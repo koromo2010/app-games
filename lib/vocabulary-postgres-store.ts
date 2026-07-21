@@ -1,15 +1,16 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import { canWriteVocabularyDrafts } from "./storage-environment-guard.ts";
+import { sharedEnvironmentVariable } from "./shared-environment.ts";
 
 let client: NeonQueryFunction<boolean, boolean> | null = null;
 let clientUrl = "";
 
 export function isVocabularyPostgresConfigured() {
-  return Boolean(process.env.VOCABULARY_DATABASE_URL?.trim());
+  return Boolean(sharedEnvironmentVariable("VOCABULARY_DATABASE_URL"));
 }
 
 export function getVocabularyPostgresClient() {
-  const url = process.env.VOCABULARY_DATABASE_URL?.trim();
+  const url = sharedEnvironmentVariable("VOCABULARY_DATABASE_URL");
   if (!url) throw new Error("VOCABULARY_STORE_NOT_CONFIGURED");
   if (!client || clientUrl !== url) {
     client = neon(url);

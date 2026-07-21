@@ -3,6 +3,7 @@ import { hasGroqApiKey, generateGroqText } from "@/lib/groq";
 import { getPaidLlmAccessSource, getPersonalLlmAccess } from "@/lib/llm-access";
 import { freeGroqLlmModel, freeLlmModel, paidLlmModel } from "@/lib/llm-model";
 import { emitObservabilityEvent, observabilityErrorCode } from "@/lib/observability";
+import { sharedEnvironmentVariable } from "@/lib/shared-environment";
 
 /**
  * Shared LLM gateway for every game in app-games.
@@ -95,7 +96,7 @@ async function callProvider(
   const personal = requestedMode === "personal" ? await getPersonalLlmAccess() : null;
   const personalApiKey = personal?.provider === provider ? personal.apiKey : undefined;
   if (provider === "openai") {
-    const apiKey = personalApiKey || (requestedMode === "paid" ? process.env.OPENAI_API_KEY?.trim() : "");
+    const apiKey = personalApiKey || (requestedMode === "paid" ? sharedEnvironmentVariable("OPENAI_API_KEY") : "");
     if (!apiKey) throw new Error("OpenAI API access is not available.");
     return {
       text: await generateOpenAiText(prompt, quality, apiKey, timeoutMs, responseJsonSchema),

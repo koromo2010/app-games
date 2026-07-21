@@ -35,8 +35,8 @@ All games must access AI providers through `lib/game-llm.ts`. New games should n
 The shared provider order is:
 
 1. Personal mode first attempt: the provider selected by the player (OpenAI, Gemini, or Groq)
-2. Game Fields paid mode: OpenAI using the app's `OPENAI_API_KEY`
-3. Provider fallback: Gemini (`GEMINI_API_KEY`) and Groq (`GROQ_API_KEY`)
+2. Game Fields paid mode: OpenAI using the app's `SHARED_OPENAI_API_KEY` (legacy fallback: `OPENAI_API_KEY`)
+3. Provider fallback: Gemini (`SHARED_GEMINI_API_KEY`) and Groq (`SHARED_GROQ_API_KEY`), with legacy-name fallbacks
 4. Final fallback: local game data with a user-visible notice
 
 Provider model IDs are centralized in `lib/llm-model.ts`.
@@ -50,7 +50,7 @@ Quality-critical tasks may pass `quality: "high"` to the shared gateway. Tahoiya
 The shared access panel separates personal provider access from Game Fields-provided paid access:
 
 - Personal API: the player selects OpenAI, Google Gemini, or Groq and supplies a key issued by that provider. Billing and free-tier limits belong to the selected provider.
-- Game Fields API: the app uses its own `OPENAI_API_KEY`. It currently uses an invite/test password and is designed so that authorization can later be replaced by a purchase or credit entitlement.
+- Game Fields API: the app uses its own `SHARED_OPENAI_API_KEY` (or the legacy `OPENAI_API_KEY` during migration). It currently uses an invite/test password and is designed so that authorization can later be replaced by a purchase or credit entitlement.
 
 Personal keys are validated server-side against the active provider model, never stored in Redis, player accounts, logs, or localStorage, and are retained for at most eight hours in an AES-256-GCM encrypted HttpOnly cookie. A server-only `LLM_SESSION_SECRET` of at least 32 characters is recommended; until it is configured, the existing server-only access password and shared OpenAI key are combined to derive the encryption secret. Players should create a game-specific key with permissions and spend controls where the provider supports them.
 
@@ -129,7 +129,7 @@ Player accounts may optionally register a recovery email address. New accounts c
 
 Configure these server-side environment variables:
 
-- `RESEND_API_KEY`
+- `SHARED_RESEND_API_KEY` (legacy fallback: `RESEND_API_KEY`)
 - `EMAIL_FROM` (optional; defaults to `Game Fields <noreply@game-fields.com>`)
 - `APP_BASE_URL` (recommended; `https://game-fields.com` in production)
 

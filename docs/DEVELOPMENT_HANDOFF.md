@@ -67,7 +67,7 @@
 
 本番Vercelには以下が必要。値をコード、ログ、クライアントへ出さない。
 
-- `OPENAI_API_KEY`
+- `SHARED_OPENAI_API_KEY`（移行中は旧 `OPENAI_API_KEY` へフォールバック）
 - `LLM_ACCESS_PASSWORD`
 - `LLM_SESSION_SECRET`（32文字以上を推奨。利用者持込APIキーのCookie暗号化専用。未設定時は既存のサーバー秘密値から導出）
 - `PLAYER_SESSION_SECRET`（32文字以上必須。ログインCookieの署名用。未設定時は32文字以上の `LLM_SESSION_SECRET` を使用）
@@ -77,11 +77,11 @@
 - `OBSERVABILITY_SERVICE_NAME`（任意。既定 `app-games-web`。将来のサービス分割時に指定）
 - `GAME_REPLAY_RETENTION_DAYS`（任意。通常プレイバックの保存日数。既定30、1〜3650）
 - `GAME_REPLAY_FAVORITE_LIMIT`（任意。1人のお気に入り上限。既定10、1〜100）
-- `GEMINI_API_KEY`
-- `GROQ_API_KEY`
+- `SHARED_GEMINI_API_KEY`（移行中は旧 `GEMINI_API_KEY` へフォールバック）
+- `SHARED_GROQ_API_KEY`（移行中は旧 `GROQ_API_KEY` へフォールバック）
 - `DEBUG_MODE_PASSWORD`
 - `PRIVATE_GAME_ACCESS_KEY`（個人利用ゲーム枠の解除キー）
-- `RESEND_API_KEY`
+- `SHARED_RESEND_API_KEY`（移行中は旧 `RESEND_API_KEY` へフォールバック）
 - `OPERATIONS_ALERT_EMAIL`（容量警告の送信先）
 - `CRON_SECRET`（Vercel Cronの認証。十分長いランダム値）
 - `POSTGRES_CAPACITY_BYTES`、`REDIS_CAPACITY_BYTES`、`BLOB_CAPACITY_BYTES`（契約プランの上限byte）
@@ -94,7 +94,8 @@
 - `REDIS_REQUEST_TIMEOUT_MS`（任意。既定4000ms、1000〜10000msに制限）
 - `ONLINE_ROOM_WEBSOCKET_ENABLED`（任意。`1`で明示有効、`0`で明示無効。未設定時はPreview・ローカル開発のみ有効でProductionは無効）
 - `APP_ENV`、`APP_DATABASE_URL`、`APP_DATABASE_ENV`（環境分離後のアプリDB正本と誤接続防止。旧URLは移行期間のみ）
-- `VOCABULARY_DATABASE_URL`（本番・開発共通の単語カタログ。サーバー限定）
+- `SHARED_VOCABULARY_DATABASE_URL`（本番・開発共通の単語カタログ。サーバー限定。移行中は旧 `VOCABULARY_DATABASE_URL` へフォールバック）
+- `SHARED_VOCABULARY_ADMIN_DATABASE_URL`（共通単語DBの管理・生成用。サーバー限定。移行中は旧 `VOCABULARY_ADMIN_DATABASE_URL` へフォールバック）
 - `REDIS_ENV`（`production | development`。Redis誤接続防止）
 - `BLOB_ENV`（`production | development`。Blob誤接続防止）
 - `database_DATABASE_URL`（Vercel管理Neon。移行互換として標準の`DATABASE_URL`等も認識）
@@ -121,7 +122,7 @@ Neon Postgres、Upstash Redis、Vercel Blobの容量は `vercel.json` の日次C
 
 ### メール送信の初期設定
 
-パスワード復旧メールはResendから送る。Resendで `game-fields.com` を追加し、案内されたSPF/DKIM等のDNSレコードを設定してドメイン認証を完了する。その後、Vercelへ `RESEND_API_KEY` を登録する。送信元を変える場合だけ `EMAIL_FROM` を設定する。
+パスワード復旧メールはResendから送る。Resendで `game-fields.com` を追加し、案内されたSPF/DKIM等のDNSレコードを設定してドメイン認証を完了する。その後、Vercel Team Shared Variablesの `SHARED_RESEND_API_KEY` を対象Projectへリンクする。送信元を変える場合だけ `EMAIL_FROM` を設定する。
 
 アカウント作成時のメール登録は任意。既存アカウントはログイン後、現在のパスワードを再入力してメールを追加・変更できる。メールアドレスそのものはクライアントの保存セッションへ含めず、登録有無だけを保持する。
 

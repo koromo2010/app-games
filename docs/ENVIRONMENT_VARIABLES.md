@@ -12,7 +12,9 @@
 | Development | `app-games-dev` | `develop` | `https://dev.game-fields.com` | 内部開発・検証 |
 | SDK | `app-games-sdk`（予定） | SDK用ブランチまたは独立運用 | `https://sdk.game-fields.com` | 外部開発者・Developer Portal |
 
-Vercel Teamは `game-fields`。共通秘密情報はTeam Shared Environment Variablesへ置き、環境別データ接続とURLは各Project Variablesへ置く。
+Vercel Teamは `game-fields`（Team ID: `team_Q3rGaf7bwfZZsjaj1vqCg5YO`）。共通秘密情報はTeam Shared Environment Variablesへ置き、環境別データ接続とURLは各Project Variablesへ置く。
+
+ChatGPTのVercel Connectorは現在このTeam scopeを持たず、Project IDを直接指定しても `403 Forbidden` と `must re-authenticate to this scope` を返す。Project設定やTeam membershipの追加ではなく、Connectorを `game-fields` scopeへ再認証してからDeploy・Build Log・Runtime Log操作を再確認する。
 
 ## 命名と移行ルール
 
@@ -29,15 +31,17 @@ Vercel Teamは `game-fields`。共通秘密情報はTeam Shared Environment Vari
 
 | 現在のキー | 最終候補 | Sensitive | Production | Development | SDK | 用途 | 状態 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| `SHARED_OPENAI_API_KEY` | `OPENAI_API_KEY` | Yes | Link予定 | Link予定 | Link予定 | OpenAI API | Shared作成済み |
-| `SHARED_GEMINI_API_KEY` | `GEMINI_API_KEY` | Yes | Link予定 | Link予定 | Link予定 | Gemini API | Shared作成済み |
-| `SHARED_GROQ_API_KEY` | `GROQ_API_KEY` | Yes | Link予定 | Link予定 | Link予定 | Groq API | Shared作成済み |
+| `SHARED_OPENAI_API_KEY` | `OPENAI_API_KEY` | Yes | Link済み | Link済み | Link予定 | OpenAI API | 両Project Link済み・コード対応済み |
+| `SHARED_GEMINI_API_KEY` | `GEMINI_API_KEY` | Yes | Link済み | Link済み | Link予定 | Gemini API | 両Project Link済み・コード対応済み |
+| `SHARED_GROQ_API_KEY` | `GROQ_API_KEY` | Yes | Link済み | Link済み | Link予定 | Groq API | 両Project Link済み・コード対応済み |
+| `SHARED_RESEND_API_KEY` | `RESEND_API_KEY` | Yes | Link済み | Link済み | Link予定 | Resendメール送信 | 両Project Link済み・コード対応済み |
+| `SHARED_VOCABULARY_DATABASE_URL` | `VOCABULARY_DATABASE_URL` | Yes | Link済み | Link済み | Link予定 | 共通単語DB読取 | 両Project Link済み・コード対応済み |
+| `SHARED_VOCABULARY_ADMIN_DATABASE_URL` | `VOCABULARY_ADMIN_DATABASE_URL` | Yes | Link済み | Link済み | 原則リンクしない | 共通単語DB管理 | 両Project Link済み・コード対応済み |
 
 Shared化候補:
 
 | キー | Sensitive | 用途 | Shared可否・注意 |
 | --- | --- | --- | --- |
-| `RESEND_API_KEY` | Yes | メール送信 | 全環境で同一契約を使うならShared。SDKで実送信を禁止する場合はSDKだけ別値または未設定 |
 | `EMAIL_FROM` | No | 送信元メールアドレス | 全環境同一ならShared。dev/sdk用送信元を分けるならProject |
 | `PRIVATE_GAME_ACCESS_KEY` | Yes | 非公開ゲームアクセス | 内部環境だけ共通ならShared。一般公開SDKへはリンクしない |
 | `LLM_ACCESS_PASSWORD` | Yes | LLMアクセス制御 | Production/dev共通可。SDKは別値推奨 |
@@ -64,8 +68,8 @@ Shared化候補:
 | キー | Production | Development | SDK | Sensitive | 用途 |
 | --- | --- | --- | --- | --- | --- |
 | `APP_DATABASE_URL` | `app-games-neon` | `dev-neon` | SDK専用DB予定 | Yes | アプリDB正本 |
-| `VOCABULARY_DATABASE_URL` | `word-master-neon` 読取用 | `word-master-neon` 開発用権限 | 原則読取専用 | Yes | 共通単語DB |
-| `VOCABULARY_ADMIN_DATABASE_URL` | 管理者ロール | 管理・生成用ロール | 原則リンクしない | Yes | 採否・昇格・管理処理 |
+| `SHARED_VOCABULARY_DATABASE_URL`（旧 `VOCABULARY_DATABASE_URL`） | `word-master-neon` 読取用 | `word-master-neon` 開発用権限 | 原則読取専用 | Yes | 共通単語DB |
+| `SHARED_VOCABULARY_ADMIN_DATABASE_URL`（旧 `VOCABULARY_ADMIN_DATABASE_URL`） | 管理者ロール | 管理・生成用ロール | 原則リンクしない | Yes | 採否・昇格・管理処理 |
 | `LEGACY_WORD_DATABASE_URL` | 原則なし | 移行作業中だけ | なし | Yes | 旧語彙移行専用 |
 
 互換変数として残っている可能性があるもの:
@@ -116,7 +120,7 @@ Blob Storeの現行候補:
 | キー | 配置 | Sensitive | 用途・注意 |
 | --- | --- | --- | --- |
 | `EMAIL_FROM` | SharedまたはProject | No | dev/sdkで実送信を抑止する設計と合わせる |
-| `RESEND_API_KEY` | Shared候補 | Yes | SDK一般公開時は共通キーを直接リンクしない |
+| `SHARED_RESEND_API_KEY`（旧 `RESEND_API_KEY`） | Shared | Yes | SDK一般公開時は共通キーを直接リンクしない |
 | `SITE_NAME` | Shared候補 | No | 全環境同一ならShared |
 | `SITE_URL` | Project | No | `APP_BASE_URL`と役割が重なる場合は統合候補 |
 
@@ -156,7 +160,7 @@ Blob Storeの現行候補:
 ## 未確認・更新が必要な項目
 
 - Vercel上に存在する全Project Variableの完全な一覧
-- `RESEND_API_KEY`、`EMAIL_FROM`、各管理パスワードのShared移行状況
+- `EMAIL_FROM`、各管理パスワードのShared移行状況
 - `APP_REDIS_URL`とUpstash REST変数のどちらが現在の正本か
 - Production / DevelopmentそれぞれのBlob Store名
 - SDK環境のDB・Redis・Blob分離方式

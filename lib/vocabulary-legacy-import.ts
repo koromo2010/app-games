@@ -1,5 +1,6 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import { assertRuntimeEnvironmentAgreement } from "./storage-environment-guard.ts";
+import { sharedEnvironmentVariable } from "./shared-environment.ts";
 
 const legacyCatalogTable = "shared_word_catalog";
 const importBatchSize = 1_000;
@@ -43,7 +44,7 @@ function importClients() {
     throw new Error("LEGACY_VOCABULARY_IMPORT_PREVIEW_ONLY");
   }
   const sourceUrl = resolveLegacyVocabularySourceUrl(process.env);
-  const targetUrl = process.env.VOCABULARY_ADMIN_DATABASE_URL?.trim();
+  const targetUrl = sharedEnvironmentVariable("VOCABULARY_ADMIN_DATABASE_URL");
   if (!sourceUrl) throw new Error("LEGACY_VOCABULARY_SOURCE_NOT_CONFIGURED");
   if (!targetUrl) throw new Error("VOCABULARY_ADMIN_STORE_NOT_CONFIGURED");
   if (sourceUrl === targetUrl) throw new Error("LEGACY_VOCABULARY_SOURCE_TARGET_MUST_DIFFER");
