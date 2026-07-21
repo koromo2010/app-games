@@ -1,4 +1,5 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { ensureSdkSchema, sdkSql } from "@/lib/sdk-postgres";
 
 const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])?$/;
 const RESERVED = new Set(["api", "download", "downloads", "foundation", "status", "review", "www", "admin"]);
@@ -29,7 +30,24 @@ async function command(parts: readonly string[]) {
 
 const keyFor = (slug: string) => `sdk:preview-instance:v1:${slug}`;
 
+function tokenHash(value: string) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+function safeTokenMatch(value: string, expectedHash: string) {
+  const actual = Buffer.from(tokenHash(value), "hex");
+  const expected = Buffer.from(expectedHash, "hex");
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
+async function registeredCreator(slug: string) {
+  await ensureSdkSchema();
+  const rows = await sdkSql()`SELECT id, slug, display_name, management_token_hash FROM sdk_creators WHERE slug = ${slug} LIMIT 1`;
+  return rows[0] as { id: string; slug: string; display_name: string; management_token_hash: string } | undefined;
+}
+
 export async function instanceSlugAvailable(slug: string) {
+  if (await registeredCreator(slug)) return false;
   const response = await command(["EXISTS", keyFor(slug)]);
   return Number(response.result) === 0;
 }
@@ -39,5 +57,41 @@ export async function reserveInstanceSlug(slug: string, displayName: string) {
   const value = JSON.stringify({ slug, displayName: displayName.slice(0, 80), status: "reserved", reservationToken, createdAt: new Date().toISOString() });
   const response = await command(["SET", keyFor(slug), value, "NX", "EX", String(7 * 24 * 60 * 60)]);
   if (response.result !== "OK") return null;
-  return { slug, url: `https://sdk.game-fields.com/${slug}`, reservationToken, expiresInSeconds: 7 * 24 * 60 * 60 };
+  const baseUrl = process.env.SDK_PORTAL_BASE_URL?.replace(/\/$/, "")
+    ?? (process.env.VERCEL_GIT_COMMIT_REF === "main" ? "https://sdk.game-fields.com" : "https://sdk-dev.game-fields.com");
+  return { slug, url: `${baseUrl}/${slug}`, reservationToken, expiresInSeconds: 7 * 24 * 60 * 60 };
+}
+
+export async function finalizeInstanceSlug(slug: string, reservationToken: string) {
+  const reservation = await command(["GET", keyFor(slug)]);
+  if (typeof reservation.result !== "string") return null;
+  const value = JSON.parse(reservation.result) as { displayName?: unknown; reservationToken?: unknown };
+  if (typeof value.reservationToken !== "string" || !safeTokenMatch(reservationToken, tokenHash(value.reservationToken))) return null;
+  await ensureSdkSchema();
+  const managementToken = randomBytes(32).toString("base64url");
+  const rows = await sdkSql()`
+    INSERT INTO sdk_creators (slug, display_name, management_token_hash)
+    VALUES (${slug}, ${typeof value.displayName === "string" ? value.displayName.slice(0, 80) : slug}, ${tokenHash(managementToken)})
+    ON CONFLICT (slug) DO NOTHING
+    RETURNING id, slug, display_name
+  `;
+  if (!rows[0]) return null;
+  await command(["DEL", keyFor(slug)]);
+  return { creator: rows[0], managementToken };
+}
+
+export async function authenticateCreator(slug: string, managementToken: string) {
+  const creator = await registeredCreator(slug);
+  if (!creator || !safeTokenMatch(managementToken, creator.management_token_hash)) return null;
+  return creator;
+}
+
+export async function listCreatorGames(slug: string) {
+  await ensureSdkSchema();
+  const rows = await sdkSql()`
+    SELECT g.game_id AS "gameId", g.title, g.description, g.status
+    FROM sdk_games g JOIN sdk_creators c ON c.id = g.creator_id
+    WHERE c.slug = ${slug} ORDER BY g.updated_at DESC
+  `;
+  return rows as Array<{ gameId: string; title: string; description: string; status: string }>;
 }

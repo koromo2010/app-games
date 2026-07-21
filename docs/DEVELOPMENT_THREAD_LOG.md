@@ -812,3 +812,33 @@
 
 - dev SDK／SDK本番のVercel Project分離と実環境公開は未実施。
 - contract schemaを将来追加した時点で、旧schema adapterと全登録ゲームの版別CIを実装する。
+
+## 2026-07-22 — SDK devのNeon・Redis保存基盤
+
+### 利用者からの要望
+
+- `sdk-dev`から先にSDK用DB基盤を整え、`sdk`とは保存先だけを分離しつつ同じ制作フローで使えるようにする。
+
+### 判断
+
+- 7日間のslug仮予約と競合ロックはRedis、正式な制作者slugとゲーム登録情報はPostgreSQLを正本とする。
+- 部屋の汎用JSON保存はゲームRuntime契約が未確定のため、この作業では先行実装しない。
+- 正式確定時に一度だけ管理トークンを返し、DBにはSHA-256ハッシュだけを保存する。
+
+### 実施結果
+
+- Vercelの`app-games-sdk-dev`へ`develop`をProduction Branchとして割り当て、`sdk-dev.game-fields.com`、`sdk-dev-neon`、`sdk-dev-redis`の接続と再デプロイまで完了した。
+- `sdk_creators`と`sdk_games`のschema、slug正式確定API、管理トークン認証付きゲーム登録API、公開ゲーム一覧APIを追加した。
+- 制作者広場がPostgreSQLへ登録されたゲームカードを表示するようにした。
+- DownloadMeはbuild元に応じて`sdk-dev.game-fields.com`または`sdk.game-fields.com`へ接続し、制作フロー自体は同一と明記した。
+
+### 検証
+
+- `npm run check:versions`、`npm run check:sdk`、DownloadMe同期、`git diff --check`に成功した。
+- SDK Portal buildは作業環境のnpm tarball展開破損により依存導入できず、ローカルでは未完了。
+
+### 未対応・保留
+
+- 変更を`develop`へ反映し、Vercel buildと実環境での予約→確定→ゲーム登録→広場表示を確認する。
+- SDK RoomのRedis永続化、複数端末同期、Runtime APIは次段階。
+- SDK本番側のNeon・Redisは、devで同じschemaとフローを確認した後に別ストアとして準備する。
