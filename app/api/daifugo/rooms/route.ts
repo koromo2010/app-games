@@ -1,6 +1,7 @@
 import { conditionalJsonResponse } from "@/lib/conditional-json";
 import { actionRequiresDebugAccess, requirePlayerDebugAccess } from "@/lib/debug-access";
-import type { DaifugoRoomAction } from "@/lib/daifugo-room";
+import { canPassDaifugoTurn, chooseDaifugoCpuPlay } from "@/lib/daifugo";
+import type { DaifugoRoom, DaifugoRoomAction } from "@/lib/daifugo-room";
 import { applyStoredDaifugoAction, createStoredDaifugoRoom, deleteHostedDaifugoRooms, deleteStoredDaifugoRoom, listJoinableDaifugoRooms, loadDaifugoPlayerActiveRoom, loadStoredDaifugoRoom, sanitizeDaifugoRoom } from "@/lib/daifugo-room-store";
 import { gameApiAccessDeniedResponse } from "@/lib/game-access";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
@@ -30,6 +31,31 @@ function errorResponse(error: unknown) {
   return response ? Response.json({ error: response[0] }, { status: response[1] }) : Response.json({ error: "Failed to update room" }, { status: 500 });
 }
 
+async function recoverStalledDebugDummyTurn(room: DaifugoRoom, authenticatedPlayerId: string) {
+  if (!room.debugMode || room.hostId !== authenticatedPlayerId || room.phase !== "playing" || !room.game || room.game.status !== "playing") return room;
+  const currentPlayerId = room.game.currentPlayerId;
+  const currentPlayer = room.players.find((player) => player.id === currentPlayerId);
+  if (!currentPlayer?.isDummy) return room;
+
+  const cards = chooseDaifugoCpuPlay(room.game, currentPlayerId);
+  if (cards) {
+    return applyStoredDaifugoAction(room.code, {
+      type: "play-cards",
+      actorId: authenticatedPlayerId,
+      playerId: currentPlayerId,
+      cardIds: cards.map((card) => card.id),
+    });
+  }
+  if (canPassDaifugoTurn(room.game, currentPlayerId)) {
+    return applyStoredDaifugoAction(room.code, {
+      type: "pass",
+      actorId: authenticatedPlayerId,
+      playerId: currentPlayerId,
+    });
+  }
+  return room;
+}
+
 export async function GET(request: Request) {
   const telemetry = createRequestTelemetry(request, "/api/daifugo/rooms", { game: "daifugo", operation: "room-read" });
   const accessDenied = await gameApiAccessDeniedResponse("daifugo");
@@ -41,13 +67,15 @@ export async function GET(request: Request) {
     const authenticatedPlayerId = await requireAuthenticatedPlayerId();
     if (playerId && playerId !== authenticatedPlayerId) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
     if (code) {
-      const room = await loadStoredDaifugoRoom(code);
+      let room = await loadStoredDaifugoRoom(code);
       if (!room) return Response.json({ error: "Room not found" }, { status: 404 });
       if (!room.players.some((player) => player.id === authenticatedPlayerId)) return Response.json({ error: "Room access is not allowed" }, { status: 403 });
+      room = await recoverStalledDebugDummyTurn(room, authenticatedPlayerId);
       return conditionalJsonResponse(request, { room: sanitizeDaifugoRoom(room, authenticatedPlayerId) });
     }
     if (playerId) {
-      const room = await loadDaifugoPlayerActiveRoom(authenticatedPlayerId);
+      let room = await loadDaifugoPlayerActiveRoom(authenticatedPlayerId);
+      if (room) room = await recoverStalledDebugDummyTurn(room, authenticatedPlayerId);
       return conditionalJsonResponse(request, { room: room ? sanitizeDaifugoRoom(room, authenticatedPlayerId) : null });
     }
     return conditionalJsonResponse(request, await listJoinableDaifugoRooms(url.searchParams.get("cursor")));
