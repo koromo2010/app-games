@@ -76,7 +76,9 @@ try {
   const starterManifest = JSON.parse(readFileSync(join(starterRoot, "starter-manifest.json"), "utf8"));
   if (starterManifest.repository !== "https://github.com/koromo2010/app-games"
     || starterManifest.ref !== "sdk-starter"
-    || starterManifest.sdkVersion !== "0.1.0") {
+    || starterManifest.sdkVersion !== "0.1.0"
+    || starterManifest.platformVersion !== "0.1.0"
+    || starterManifest.sdkContractVersion !== 1) {
     throw new Error("Starter manifest does not identify the expected public source and SDK version.");
   }
 
