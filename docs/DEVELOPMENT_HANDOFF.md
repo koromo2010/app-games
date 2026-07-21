@@ -69,7 +69,7 @@ SDK v1は、manifest、Game→Controller→LayoutのUI三層、認可済みactor
 
 リポジトリはnpm workspaces化済みで、Developer Portalの独立Next.jsアプリは`apps/sdk-portal`に置く。初期ランディング、レスポンシブ表示、独立metadata、SDK専用のproxy・instrumentation境界まで実装済みで、`npm run dev:sdk`は3001番、`npm run build:sdk`はPortal単体を起動・検証する。公開SDK本体は今後`packages/game-sdk`へ物理分離する。
 
-PortalはRoot Directoryを`apps/sdk-portal`とする別Vercel Project `app-games-sdk`で運用し、本体・devのDB、Redis、Blob、管理者秘密情報を共有しない。Vercel Project作成、`sdk.game-fields.com`への割当、公開npm package、チュートリアル、APIリファレンス、提出画面は未実装である。リポジトリ分割は一般配布の必須条件ではなく、公開packageの独立性とデプロイ・権限・データ境界を先に保証する。外部開発者はSDKで作成したゲームをGame Fieldsへ提出するだけで、`develop`、`main`、Vercel、本番データへの書き込み権限を持たない。現段階では自動検査後も運営者が採用、dev統合、実プレイ確認、`main`反映、本番公開を一貫して管理する。提出数が増えた場合はAIによるセキュリティ、バグ、権利、低品質・量産提出の検査を採用ゲートへ組み込めるが、無審査公開は許可せず、すべての提出物を最低1つのGame Fields管理ゲートへ通す。
+Portal用の別Vercel Project `app-games-sdk`は`game-fields` Team内に作成済みで、初期ランディングは暫定URL `https://app-games-sdk.vercel.app` から取得できる。本体・devのDB、Redis、Blob、管理者秘密情報は共有していない。現在の初回Deploymentはソースファイル直接送信で作成したため、GitHubリポジトリ接続、Root Directory `apps/sdk-portal`、Production Branch `main`、`develop` Preview、Ignored Build Stepはまだ未設定である。`sdk.game-fields.com`も本番`app-games` ProjectからSDK Projectへ未移管である。公開npm package、チュートリアル、APIリファレンス、提出画面も未実装。リポジトリ分割は一般配布の必須条件ではなく、公開packageの独立性とデプロイ・権限・データ境界を先に保証する。外部開発者はSDKで作成したゲームをGame Fieldsへ提出するだけで、`develop`、`main`、Vercel、本番データへの書き込み権限を持たない。現段階では自動検査後も運営者が採用、dev統合、実プレイ確認、`main`反映、本番公開を一貫して管理する。提出数が増えた場合はAIによるセキュリティ、バグ、権利、低品質・量産提出の検査を採用ゲートへ組み込めるが、無審査公開は許可せず、すべての提出物を最低1つのGame Fields管理ゲートへ通す。
 
 ## 3. 環境変数
 

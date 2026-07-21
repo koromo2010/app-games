@@ -411,3 +411,34 @@
 ### 未対応・保留
 
 - `app-games-sdk` Projectの作成、Root Directoryの`apps/sdk-portal`指定、Production Branch設定、`sdk.game-fields.com`割当、初回Deploymentは未実施。
+
+## 2026-07-21 — SDK Vercel Project作成と初回Deployment
+
+### 利用者からの要望
+
+- `sdk.game-fields.com`立ち上げを再開し、VercelでSDK専用Projectを作成する。
+
+### 判断
+
+- `game-fields` Team内に`app-games-sdk`を作成し、本体・devの環境変数やデータ資源は複製しない。
+- Git連携と独自ドメイン移管が完了するまでは、既存`app-games`の`game-fields.com`系ドメインを変更しない。
+
+### 実施結果
+
+- Vercel Project `app-games-sdk`を`game-fields` Team内に作成した。
+- `apps/sdk-portal`の最小ソースを直接送信して初回Deploymentを作成し、`READY`になった。
+- 暫定URL `https://app-games-sdk.vercel.app` がHTTP 200を返し、タイトル、SDK概要、管理下の公開ゲートを含む本文を確認した。
+- 本体・devのDB、Redis、Blob、管理者秘密情報、環境変数はSDK Projectへ複製していない。
+- `sdk.game-fields.com`は現時点で本番`app-games` Project側に登録されたままで、SDK Projectへは移管していない。
+
+### 検証
+
+- Vercel buildが成功し、Deployment状態`READY`を確認した。
+- 暫定URLのHTTP 200と主要本文を確認した。
+
+### 未対応・保留
+
+- 初回Deploymentはソースファイル直接送信であり、GitHub `koromo2010/app-games`との接続は未設定。
+- Root Directory `apps/sdk-portal`、Production Branch `main`、`develop` Preview、Ignored Build Stepは未設定。
+- `sdk.game-fields.com`を本番ProjectからSDK Projectへ移管し、独自ドメインでの実機確認を行う必要がある。
+- 現行Vercel ConnectorはGit接続、Project設定更新、独自ドメイン移管の書込み操作を公開しておらず、この環境のCLIはVercel認証先へ接続できなかった。Vercel Dashboardまたは認証済みCLI／REST APIで残設定を行う。

@@ -95,4 +95,4 @@ Mock Runtimeは作成時revision 1、Commandごとの1段階revision更新、古
 
 ## 現時点の限界
 
-SDK v1の型、サーバー契約、Mock Runtime、生成雛形、境界検査と、`apps/sdk-portal`の独立した初期ランディングまでは実装済み。Game Fields本体のCookie認証・Redis CAS・WebSocket・戦績・リプレイへSDK moduleを自動接続するplatform adapter、公開npm package、Developer Portalのチュートリアル・APIリファレンス・提出画面、Vercel公開は未実装である。したがって現段階は、ゲーム固有domainと閲覧者別presentationを本番資源なしで安全に開発・契約テストできるところまでである。
+SDK v1の型、サーバー契約、Mock Runtime、生成雛形、境界検査と、`apps/sdk-portal`の独立した初期ランディングまでは実装済み。Vercel Project `app-games-sdk`も作成し、暫定Vercel URLで初回Deploymentを公開済み。ただしGitHub接続、Root Directory、Production BranchとPreview運用、`sdk.game-fields.com`への移管は未完了である。Game Fields本体のCookie認証・Redis CAS・WebSocket・戦績・リプレイへSDK moduleを自動接続するplatform adapter、公開npm package、Developer Portalのチュートリアル・APIリファレンス・提出画面も未実装。したがって現段階は、ゲーム固有domainと閲覧者別presentationを本番資源なしで安全に開発・契約テストできるところまでである。

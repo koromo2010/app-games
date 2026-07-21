@@ -26,7 +26,7 @@ Game Fieldsの運営・開発で利用する外部サービスについて、契
 | --- | --- | --- | --- | --- | --- |
 | Production | `app-games` | `app-games-neon` | 本番Redis | 本番Blob | `game-fields.com` |
 | Development | `app-games-dev` | `dev-neon` | `dev-redis` | `dev-games-blob` | `dev.game-fields.com` |
-| SDK | 将来 `app-games-sdk` | SDK専用DBを予定 | SDK専用または名前空間分離 | SDK専用または名前空間分離 | `sdk.game-fields.com` |
+| SDK | `app-games-sdk` | 現在なし。必要時はSDK専用DB | 現在なし。必要時はSDK専用または名前空間分離 | 現在なし。必要時はSDK専用または名前空間分離 | 暫定 `app-games-sdk.vercel.app`、予定 `sdk.game-fields.com` |
 | Vocabulary | 各環境から共通利用 | `word-master-neon` | 原則使わない | 原則使わない | なし |
 
 ## 毎月確認する項目

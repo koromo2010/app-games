@@ -10,9 +10,9 @@
 | --- | --- | --- | --- | --- |
 | Production | `app-games` | `main` | `https://game-fields.com` | 一般公開 |
 | Development | `app-games-dev` | `develop` | `https://dev.game-fields.com` | 内部開発・検証 |
-| SDK | `app-games-sdk`（予定、Root Directory: `apps/sdk-portal`） | `main`で公開、`develop`はPreview | `https://sdk.game-fields.com` | 外部開発者・Developer Portal |
+| SDK | `app-games-sdk`（作成済み） | Git未接続。予定は`main`で公開、`develop`はPreview | 暫定 `https://app-games-sdk.vercel.app`、予定 `https://sdk.game-fields.com` | 外部開発者・Developer Portal |
 
-`apps/sdk-portal`のソースとworkspace構成は作成済みだが、`app-games-sdk` Vercel Projectとドメイン割当は未作成である。初期Portalは外部データ接続を持たないため、Project作成時に本体・devの環境変数を複製しない。
+`apps/sdk-portal`のソース、workspace構成、`app-games-sdk` Vercel Project、初回Deploymentは作成済み。初回Deploymentはソースファイル直接送信であり、GitHub接続、Root Directory `apps/sdk-portal`、Production Branch、Ignored Build Step、`sdk.game-fields.com`割当は未設定である。初期Portalは外部データ接続を持たないため、本体・devの環境変数は複製していない。
 
 Vercel Teamは `game-fields`（Team ID: `team_Q3rGaf7bwfZZsjaj1vqCg5YO`）。共通秘密情報はTeam Shared Environment Variablesへ置き、環境別データ接続とURLは各Project Variablesへ置く。
 
@@ -24,10 +24,11 @@ VercelのIgnored Build StepはProjectごとに次を設定済み。
 
 - `app-games`: `if [ "$VERCEL_GIT_COMMIT_REF" != "main" ]; then exit 0; else exit 1; fi`
 - `app-games-dev`: `if [ "$VERCEL_GIT_COMMIT_REF" != "develop" ]; then exit 0; else exit 1; fi`
+- `app-games-sdk`: 未設定。Git接続時に`main`と`develop`だけを対象にする。
 
 VercelではIgnored Build Stepの終了コード`0`がスキップ、`1`がビルド実行を意味する。
 
-ChatGPTのVercel Connectorは現在このTeam scopeを持たず、Project IDを直接指定しても `403 Forbidden` と `must re-authenticate to this scope` を返す。Project設定やTeam membershipの追加ではなく、Connectorを `game-fields` scopeへ再認証してからDeploy・Build Log・Runtime Log操作を再確認する。
+ChatGPTのVercel Connectorは`game-fields` Teamへ再認証済みで、Project一覧、Deployment、Build Logの参照とファイル直接Deploymentは利用できる。一方、現行ConnectorはGit接続、Project設定更新、Project間の独自ドメイン移管を公開していない。これらはVercel Dashboardまたは認証済みCLI／REST APIで行う。
 
 ## 命名と移行ルール
 
