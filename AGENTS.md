@@ -1,6 +1,6 @@
 # App Games agent guide
 
-このリポジトリを編集するAI・開発者は、作業開始時に `docs/README.md` の読書順に従い、`README.md` と `docs/DEVELOPMENT_HANDOFF.md` を読むこと。バグ修正・認証・マルチプレイ進行を変更する場合は `docs/KNOWN_ISSUES.md` も確認すること。新規ゲームの追加・ゲーム仕様の変更時は、さらに `config/game-registry.json` と `docs/NEW_GAME_CHECKLIST.md` を必ず確認すること。会話スレッド内の記憶や `docs/DEVELOPMENT_THREAD_LOG.md` を正本にしない。利用者からスレッド内容を残すよう依頼された場合は、秘密情報を除いた要望・判断・実施結果を同ログへ追記する。お題DB、既出判定、問題再利用を変更する場合は `docs/TOPIC_HISTORY_DATABASE.md` も先に読むこと。
+このリポジトリを編集するAI・開発者は、作業開始時に `docs/README.md` の読書順に従い、`README.md` と `docs/DEVELOPMENT_HANDOFF.md` を読むこと。バグ修正・認証・マルチプレイ進行を変更する場合は `docs/KNOWN_ISSUES.md` も確認すること。新規ゲームの追加・ゲーム仕様の変更時は、さらに `config/game-registry.json` と `docs/NEW_GAME_CHECKLIST.md` を必ず確認すること。会話スレッド内の記憶や `docs/DEVELOPMENT_THREAD_LOG.md` を正本にしない。開発上の要望・判断・調査結果・実装・外部設定・公開・保留事項が生じた作業単位は、利用者から明示的な保存依頼がなくても、終了前に `docs/DEVELOPMENT_LOGGING.md` に従って `docs/DEVELOPMENT_THREAD_LOG.md` へ必ず追記する。お題DB、既出判定、問題再利用を変更する場合は `docs/TOPIC_HISTORY_DATABASE.md` も先に読むこと。
 
 ## Project identity
 
@@ -29,6 +29,15 @@
 - サーバーログは `lib/observability` の閉じたイベントschemaを使う。リクエストbody、部屋JSON、合言葉、正解、秘密語、手札、投稿本文、Cookie、APIキー、氏名、メール、外部SDK例外本文をconsoleへ直接出さない。詳細は `docs/OBSERVABILITY.md`。
 - アカウント参加型ゲームは共通戦績へ結果を保存し、ロビーの全ゲーム・ゲーム別フィルターで確認可能にする。ローカル回しゲームは、アカウントへ安全に紐づけられるまで戦績対象外と明記する。
 - 詳細プレイバックは観測ログではなく `lib/game-replay-store.ts` へ保存し、参加者本人だけに返す。内部プレイヤーIDをユーザーURLへ使わず、共有文へ認証付きURLを含めない。ゲーム仕様として投稿本文や参加者名を共有する場合は送信前プレビューを必須にし、参加者名は本人のデフォルトOFFの同意を入室時に固定保存し、未同意なら匿名ラベルへ置き換える。
+
+## Development conversation logging
+
+- チャット全文ではなく、次の担当が目的と経緯を復元するために必要な要約を記録する。
+- コード変更がなくても、仕様決定、設計判断、調査で確定した事実、Vercel・DB等の外部設定変更、公開、保留・撤回は記録対象とする。
+- 原則として作業終了前に追記し、コードや文書を変更した場合は同じコミットへ含める。長い作業では重要な判断または公開の区切りでもチェックポイントを残す。
+- 要望、判断理由、実施結果、検証、関連コミット／PR、未対応・保留を区別する。推測を確定事項として書かない。
+- 秘密値、個人情報、ゲームの秘密情報、内部プロンプト、ツールの生出力は保存しない。
+- 詳細な書式と訂正方法は `docs/DEVELOPMENT_LOGGING.md` を正本とする。
 
 ## Verification and publishing
 

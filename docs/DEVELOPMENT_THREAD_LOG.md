@@ -4,6 +4,7 @@
 
 ## 記録ルール
 
+- 開発上の要望・判断・調査・実装・外部設定・公開・保留が生じた作業単位は、明示依頼がなくても終了前に必ず追記する。詳細は `DEVELOPMENT_LOGGING.md` を正本とする。
 - 新しい記録は末尾へ追記し、過去の記録は原則として書き換えない。訂正は新しい項目として追記する。
 - 利用者の要望、主要な判断、実施内容、関連コミット、未対応事項を簡潔に残す。
 - APIキー、Cookie、パスワード、メールアドレス、内部プロンプト、ツールの生出力、ゲームの秘密情報、個人情報は残さない。
@@ -66,3 +67,241 @@
 - 左端ホバーの反応が鈍く感じられたため、感知領域を幅12px・中央50%から幅24px・全高へ拡大し、Pointer Enterで即時に開くよう変更した。スライド時間も約200msへ短縮した。
 - ことば潜伏戦の作り込み開始にあたり、長音符「ー」を独立した文字スキャン候補へ追加し、呼び出し前は伏せるよう修正した。全5ゲームのルール説明を共通ダイアログへ揃え、現行の得点・終了条件・時間切れに更新した。ゲーム名の変更は候補提示後に決めるため未変更。
 - 「ことば潜伏戦」を「ことばソナー」へ改称した。デバッグ用パスワード認証をゲーム画面からマイページへ移し、認証済みアカウントだけ各ゲームのトップバナーに操作を表示する方式へ統一した。デバッグ中は同じ部屋・参加者を残してゲーム開始前へ戻す共通の中断操作を追加した。
+
+## 2026-07-14〜2026-07-15 — 負荷対策、共通オンライン基盤、新ゲーム
+
+### 利用者からの要望
+
+- 利用者増加時に耐えられるかを監査し、重大なボトルネックを順に解消する。
+- 共通時間管理、途中離脱者の復帰、二回連続時間切れ時の短縮と復帰操作、容量警告を各ゲームへ横展開する。
+- 将来の広告枠を共通化し、ゲーム固有コードから広告事業者を直接呼ばない構造にする。
+- ワードスケールを公開し、ゲーム分類タグを追加する。
+- 新しい言葉ゲームをWord Outへ発展させ、コードインターセプトとキャンバスの試作を始める。
+
+### 判断と実施結果
+
+- APIレート制限、部屋一覧のページング、参加人数上限、Redis要求の堅牢化、Neonへのアカウント・戦績保存、負荷検査を追加した。
+- オンラインルーム通信とCommand APIを共通化し、未変更Roomの転送量を削減した。
+- 共通広告スロット、非アクティブプレイヤー復帰、ストレージ容量警告を追加した。広告は既定で非表示とした。
+- ワードスケールの縦型並べ替えUI、確定・結果順、共有同意を整備し、公開ゲームへ変更した。
+- Word Outを公開し、得点ベースの多人数Eloを追加した。コードインターセプトは非公開のチーム対抗試作として追加した。
+- キャンバスは非公開試作として、キーボード描画、Undo/Redo、透明度、共同描画、プレイヤー別レイヤー、自分の線だけのUndo等を段階的に追加した。
+
+### 関連コミット
+
+- `9966852` — `Add shared API rate limits`
+- `340344b` — `Unify online room command APIs`
+- `3783ae0` — `Add ad slots, inactive-player recovery, and storage alerts`
+- `af67390` — `Publish Word Scale and add game tags`
+- `184b619` — `Generalize Nigoichi as Word Out`
+- `cd6c2f8` — `Use score-based multiplayer Elo`
+- `58d6943` — `Add private Code Intercept game`
+- `c3079b2` — `Add private Canvas drawing UI prototype`
+
+### 未対応・保留
+
+- 広告のlive配信は、同意管理、配信adapter、CSP、年齢・地域・コンテンツ方針を実装するまで保留。
+- キャンバスの一般公開は保留し、共通描画基盤の試作として扱う。
+
+## 2026-07-15〜2026-07-16 — GAME FIELDS共通UI、法務、管理画面、モジュール化
+
+### 利用者からの要望
+
+- 広場、ロビー、マイページ、ゲーム中の共通導線を整理し、PCと将来のスマホ専用UIを分離しやすくする。
+- キャンバスへズーム、全画面、機能ON/OFF、ロビー落書きボード等を追加する。
+- 利用規約・プライバシーポリシー、アカウント削除、サイト管理、管理者メール、容量・運用状況、ハイパーパラメータ管理を用意する。
+- 長大なゲームコンポーネントを、表示、通信、操作、ViewModel等へ分割する。
+
+### 判断と実施結果
+
+- 正式ブランドを`GAME FIELDS`とし、ゲーム選択画面を「広場」、募集・待機画面を「ロビー」と整理した。
+- 利用規約・プライバシーポリシーへの同意保存、未使用アカウント削除方針、本人によるアカウント削除を追加した。
+- キャンバスへズーム、ホイール操作、全画面表示、全画面パレット、機能フラグ、ロビー落書き、自分の線だけの全消去を追加した。
+- 管理画面へサイト設定、稼働状況、ゲーム公開管理、容量、ハイパーパラメータ一覧・安全な編集を追加した。管理者ログインは登録メールとPasskeyを要求する構成へ強化した。
+- Canvas同期、オンラインRoom service、主要ゲーム画面の責務分離を進めた。WordWolfは巨大コンポーネントから表示・通信・操作等を分離した。
+
+### 関連コミット
+
+- `8f0ff64` — `Add GAME FIELDS legal, consent, and account retention`
+- `1271a7d` — `Add self-service account deletion`
+- `ead08cc` — `Add configurable Canvas features and fullscreen palette`
+- `d185e4f` — `Add admin operations dashboard`
+- `e4f0ac3` — `Require passkeys for site administration`
+- `0b9c14f` — `Allow safe hyperparameter editing`
+- `3bc20f0` — `Modularize and optimize canvas synchronization`
+- `8b156d0` — `Modularize game client components`
+
+## 2026-07-16〜2026-07-18 — 本番・開発データ分離と共通単語DB
+
+### 利用者からの要望
+
+- 本番と開発を分け、通常のアカウント、部屋、戦績、Redis、Blobは混ざらないようにする。
+- 単語マスターDBだけは本番・開発で共通利用し、WordWolfのペア評価、たほい屋候補、一般単語プールを蓄積する。
+- 管理者レビュー、人間評価、正式採用、ゲーム別難易度を運用できるようにする。
+- たほい屋はZipfに基づく秘境・魔境の抽出と、抽出後のLLM語釈生成を維持する。
+
+### 判断と実施結果
+
+- アプリDB、Redis、Blobを本番・開発で分離し、単語カタログだけを共通層とする三層構成を採用した。
+- アプリDBのRedisフォールバックを廃止し、環境別接続先と厳格な分離検査を追加した。
+- 共通単語DBへ下書き、LLM評価、人間投票、正式採用、既レビュー候補非表示の流れを追加した。
+- WordWolfの共通語彙RAGと、たほい屋の共通カタログ参照へ移行した。
+- たほい屋は実効Zipfで難易度帯を分け、Zipf 0候補は抽出後にLLMで正解語釈を生成する流れへ修正した。
+- デバッグ権限は管理者登録メールとアカウント別付与へ限定し、復旧用メール設定をマイページへ移した。
+
+### 関連コミット
+
+- `530db1a` — `Add secure environment-separated vocabulary database foundation`
+- `4955133` — `Support environment-separated Redis Cloud connections`
+- `f785aab` — `Add strict app database environment helper`
+- `75131ba` — `Add shared vocabulary Word Wolf RAG`
+- `516d70a` — `Migrate Tahoiya topics to shared catalog`
+- `1659527` — `Split Tahoiya difficulties by effective Zipf`
+- `282ec0e` — `Restrict debug access to administrator emails`
+
+### 未対応・保留
+
+- 共通単語DBの編集は本番にも影響するため、通常の開発データと同じ感覚では扱わない。
+
+## 2026-07-17〜2026-07-19 — たほい屋、コードインターセプト、共通単語プール
+
+### 利用者からの要望
+
+- たほい屋の語釈生成、難易度スクリーニング、再利用、投票・復帰を安定させる。
+- コードインターセプトのチーム履歴、得点、ヒント、再提出、時間切れ、候補語抽出を改善する。
+- 一般単語プールをワードスケール、ワードアウト、コードインターセプトへ採用し、難易度を設定する。
+- ワードアウトとコードインターセプトの文字被り履歴は当日だけ保持し、候補を使い切れば当日中でも解除する。
+
+### 判断と実施結果
+
+- たほい屋へ難易度別LLMスクリーニング、進捗表示、不正形式の再試行、スクリーニング先行生成を追加した。
+- たほい屋の投票、ルーム復帰、全員復帰待ち、復帰待ち参加者をホストが外す操作を堅牢化した。
+- コードインターセプトはチーム別履歴、両チーム得点、カード番号別ヒント、回答再提出、ヒント修正、時間切れ減点、候補10語抽出を追加した。
+- 一般単語プールを複数ゲームへ接続し、保存済み難易度タグを参照するようにした。
+- オンラインRoom復帰管理と締切処理を共通化した。
+
+### 関連コミット
+
+- `a6335cd` — `Adopt Tahoiya screening-first flow`
+- `35b57a9` — `Harden Tahoiya voting and room recovery`
+- `bb1b842` — `Compact Code Intercept history and allow clue revision`
+- `2706fe3` — `コードインターセプトに時間切れ減点を追加`
+- `7e05f9c` — `コードインターセプトに候補10語抽出を追加`
+- `36d420d` — `Use general word pool for word games`
+- `278cb2b` — `オンライン部屋復帰管理と締切処理を共通化`
+
+## 2026-07-18〜2026-07-20 — 通信負荷削減とWebSocket段階導入
+
+### 利用者からの要望
+
+- プレイヤー増加時のRedis負荷と画面応答を改善する。
+- WebSocketを導入しつつ、切断や未対応環境ではpollingへ安全に戻す。
+- API直叩きや観戦モードでの秘密情報漏えいが残らないか確認する。
+
+### 判断と実施結果
+
+- プレイヤー操作の応答待ちを短縮し、RedisのRoom polling命令数とアプリ全体のサービス負荷を削減した。
+- PreviewからWebSocket Room更新を導入し、pollingフォールバックを完成させた。
+- 一時的なPreview試験用cleanup routeは確認後に削除した。
+- 観戦モードは保存Roomをそのまま返さず、閲覧者別の表示データへ変換し、参加者Commandと秘密情報をサーバー側で制限する方針とした。
+
+### 関連コミット
+
+- `51ac5a0` — `Improve multiplayer response latency`
+- `f739f21` — `Add preview WebSocket room updates`
+- `00c0ce1` — `Reduce Redis room polling commands`
+- `fd60f2d` — `Reduce application-wide service load`
+- `5f4a397` — `Complete WebSocket polling fallback`
+- `8bf541f` — `Add secure online room spectator mode`
+
+### 未対応・保留
+
+- 観戦・認可層はdevelopで実装・自動テスト済み。本番反映前のdev実プレイ確認は未完了。
+
+## 2026-07-20〜2026-07-21 — 多言語化、UI三層、ゲームSDK基盤
+
+### 利用者からの要望
+
+- 将来中国語等を追加できる多言語化基盤を入れ、まず英語版を作る。
+- 言語依存ゲームはマイページで言語を切り替えない限り、別言語の部屋を作成・閲覧・参加できないようにする。
+- スマホ専用UIへ発展できるよう、通信・状態管理とPC/Mobile表示を分離する。
+- 外部または別のChatGPTでもゲーム固有部分だけを安全に作れるSDKと雛形を準備する。
+
+### 判断と実施結果
+
+- アカウント言語、URL locale、共通UI辞書を追加した。言語依存Roomの`contentLocale`は認証済みアカウントからサーバー側で確定する。
+- 日本語コンテンツしかない言語依存ゲームは、英語設定から作成・閲覧・参加できない。言語非依存の大富豪は日英混在Roomを許可した。
+- 広場、ログイン、マイページ、共通Room操作、大富豪の初期英語UIを追加した。
+- WordWolfとWord ScaleをGame→Controller→Desktop Layoutの三層へ分離し、閲覧権限をView permissionsへ投影した。
+- 新規ゲーム生成script、manifest、認可済みactor、保存RoomとRoomViewの分離、revision付きCommand、DB不要のMock Runtime、SDK内部依存監査を追加した。
+
+### 関連コミット
+
+- `2a88a08` — `Add account locale room isolation`
+- `a6e0bb2` — `Add initial English app experience`
+- `73f1223` — `Make URL locale authoritative on client`
+- `69d6e43` — `Split WordWolf controller and desktop layout`
+- `a8f9e67` — `use Word Scale controller layout`
+- `c005989` — `feat: add game scaffold generator`
+- `594d0c2` — `Add Game SDK runtime contracts`
+
+### 未対応・保留
+
+- SDK v1の契約基盤はdevelopへ反映済みだが、本体のCookie認証、Redis CAS、WebSocket、戦績へ接続するplatform adapterは未実装。
+- `sdk.game-fields.com`の制作は保留。Developer PortalやSDK専用環境を実装済みとして扱わない。
+
+## 2026-07-20〜2026-07-21 — Vercel三層分離と誤接続ガード
+
+### 利用者からの要望
+
+- `main`を本番、`develop`を開発へ確実に割り当て、誤ブランチのデプロイや本番・開発ストレージの混線を防ぐ。
+- VercelのSensitive値を再表示・コピーせず、既存接続先を維持したまま環境識別ガードを有効にする。
+
+### 判断と実施結果
+
+- Vercel Projectを本番`app-games`と開発`app-games-dev`へ分け、本番は`main`、開発は`develop`だけをデプロイする構成にした。
+- 本番層、開発層、共通単語DB・LLM・メール送信等の共通層という三層構成を明文化した。
+- `APP_ENV`、`APP_DATABASE_ENV`、`REDIS_ENV`、`BLOB_ENV`を環境識別に使用した。Sensitiveな既存`DATABASE_URL`は変更せず、旧変数を使う場合にも識別ガードを適用した。
+- Shared Variablesへの共通LLM・共通語彙・メール送信キー移行に対応した。
+- develop側は環境ガードとSDK v1まで反映済み。本番mainには環境ガードに必要な変更だけを切り出し、開発中の英語版、観戦、SDK等は含めなかった。
+
+### 検証
+
+- develop側の環境ガードは全362テスト、ESLint、production buildに成功し、`app-games-dev`へデプロイ済み。
+- 本番向け切り出しは全301テスト、ESLint、production buildに成功し、`app-games`のVercelデプロイが成功した。
+
+### 関連コミット
+
+- `7842c7e` — `Support shared Vercel environment variables`
+- `48f4df4` — `Use Git branches for app environment detection`
+- `e8b5735` — develop: `Guard legacy database URLs by environment`
+- `bbb687a` — main: 本番向け環境ガードの限定反映
+
+## 2026-07-21 — 開発ログ保存運用の復旧
+
+### 利用者からの要望
+
+- 作業ログが7月13日で止まり、`sdk.game-fields.com`の過去判断が引き継がれなかったため、ログ保存を先に復旧する。
+- `sdk.game-fields.com`制作は保留し、保存ルールの整備と欠落ログの補完を優先する。
+
+### 判断
+
+- 「利用者が明示的に保存を依頼した場合だけ」という従来の弱い規定を廃止する。
+- 開発上の要望・判断・調査結果・実装・外部設定・公開・保留が生じた作業単位は、明示依頼がなくても終了前にGitへ記録する。
+- 会話全文は保存せず、目的、判断、実施結果、検証、関連コミット、未対応・保留を区別した要約を残す。
+- ログは経緯の参考資料とし、現行仕様の正本は引き続きコードと各専門資料とする。
+
+### 実施結果
+
+- `AGENTS.md`へ必須保存ルールを追加した。
+- `docs/DEVELOPMENT_LOGGING.md`を新設し、対象、タイミング、書式、禁止情報、訂正方法を定義した。
+- 7月14日から21日までの主要な欠落経緯を、現行資料とGitコミットで確認できる範囲に絞って本ログへ補完した。
+
+### 検証
+
+- 記載した関連コミットがGit履歴に存在することと、文書へ接続文字列等の秘密値が混入していないことを確認した。
+- 全369テスト、ESLint、production build（72ルート）に成功した。
+
+### 未対応・保留
+
+- `sdk.game-fields.com`の制作は保留。再開が明示されるまでサイト、Developer Portal、SDK専用Vercel環境を作らない。
