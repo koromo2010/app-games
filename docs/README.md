@@ -26,6 +26,8 @@
 | ノーザンブランチ | `NORTHERN_BRANCH_PROTOTYPE.md` | `lib/northern-branch-game.ts`、`lib/northern-branch-room-store.ts` |
 | コードインターセプト | `CODE_INTERCEPT.md` | `lib/code-intercept.ts`、`lib/code-intercept-room-store.ts` |
 | 新規ゲーム追加 | `NEW_GAME_CHECKLIST.md` | `config/game-registry.json`、`scripts/check-game-standards.mjs` |
+| PC/Mobile UI境界・Controller・権限層 | `UI_ARCHITECTURE.md` | `app/wordwolf/use-wordwolf-controller.ts`、`app/wordwolf/WordWolfDesktopLayout.tsx`、`app/wordwolf/wordwolf-view-permissions.ts` |
+| 外部開発者へゲーム部分だけ依頼する境界 | `EXTERNAL_GAME_PACKAGE.md` | ゲームmanifest、SDK、Runtime interface、import境界監査 |
 | お題DB・既出判定・再利用 | `TOPIC_HISTORY_DATABASE.md` | ゲーム別topic catalog・history store・topic API |
 | 開発・本番DB分離、共通単語DB | `DATABASE_ENVIRONMENTS.md` | `lib/storage-environment-guard.ts`、`lib/vocabulary-postgres-store.ts`、`db/vocabulary` |
 | モジュール分割・時間管理 | `MODULAR_GAME_ARCHITECTURE.md` | `moduleBoundaryFiles`、`lib/game-timer`、対象Command API |
@@ -59,6 +61,7 @@
 - ゲーム固有の詳細ルールは各ゲーム資料を優先する。
 - 登録ゲーム一覧と自動監査対象は `config/game-registry.json` を優先する。
 - 実装済みのモジュール境界は `MODULAR_GAME_ARCHITECTURE.md` と `moduleBoundaryFiles` を使う。
+- `UI_ARCHITECTURE.md` は実装済みのUI境界と横展開方針、`EXTERNAL_GAME_PACKAGE.md` は段階的な外部開発者向け分離方針として扱う。
 - `CONTAINER_ARCHITECTURE.md` と `PLATFORM_VISION.md` は将来構成であり、実装済みとはみなさない。
 - `DEVELOPMENT_THREAD_LOG.md` は過去の経緯を調べるときだけ参照し、現在仕様の根拠にはしない。
 - 資料とコードが食い違う場合は、片方だけを黙って合わせず、差分をバグまたは仕様判断として明示する。
