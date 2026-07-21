@@ -603,3 +603,37 @@
 - 利用者本人による実ダウンロード、ZIPのChatGPTへの再投入、ゲーム仕様相談、実装済みpackageの再提出、Game Fields dev統合は次の対話で確認する。
 - 試用結果を反映するまでは、SDK ZIPをPortalから一般公開しない。
 - npm registryのscope所有確認、公開ライセンス、初回publish、Portalの正式チュートリアル・APIリファレンス・提出画面は未実装。
+
+## 2026-07-21 — Pro版ChatGPT向け公開Git入口
+
+### 利用者からの要望
+
+- 無料版の検証より先に、Pro版ChatGPTを前提とした入口を完成させる。
+- SDK一式を毎回ダウンロードさせず、小さな指示書1ファイルから公開Gitを取得してゲーム制作を始められるようにする。
+
+### 判断
+
+- 入口は`sdk/entry/START_GAME_FIELDS.md`の1ファイルとし、現在のChatGPTモードでGit取得、複数ファイル編集、Node.js実行、ZIP返却ができない場合だけWorkまたはCodexへの切替を案内する。
+- 新しいGitHub repositoryは増やさず、公開済み`koromo2010/app-games`にスターター19ファイルだけを持つ`sdk-starter`ブランチを作る。入口は`--depth 1 --single-branch`でこのブランチだけを取得し、本体の`main`／`develop`を作業対象にしない。
+- スターター内容は従来ZIPと公開Git用snapshotで共通化し、`starter-manifest.json`で公式repository、ref、starter version、SDK versionを検証する。
+- 作成したゲームは自動公開せず、`npm run package`で提出ZIPを作り、Game Fields側の検査・審査・dev実プレイ確認へ渡す。
+
+### 実施結果
+
+- Pro版向け入口、公開Git用snapshot生成器、取得元manifest、提出ZIP生成器を追加した。
+- `npm run package`は`node_modules`、`dist`、`.git`、過去の提出物を除外し、`submission/game-fields-submission.zip`を生成する。
+- 公開`sdk-starter`ブランチをGitHub commit `ffe83c1`として作成した。19ファイルのblob SHAとtree `89254ce`はローカル検証済みsnapshotと一致する。
+- `main`、`develop`、Vercel、npm registry、SDK Portalの一般向け導線はこのブランチ公開では変更していない。
+
+### 検証
+
+- `npm run test:sdk-starter`で入口文書、公開Git用snapshotと試用ZIPの同一性、同梱SDK install、型検査、契約テスト、デモ完走、提出ZIPを確認した。
+- 公開ブランチを実際に`git clone --depth 1 --single-branch --branch sdk-starter`で取得し、SDK install、契約テスト3件、revision 5でのデモ完走、20ファイルの提出ZIP生成に成功した。
+- SDK境界検査を含むlint、全372テスト、本体72ルートのproduction build、SDK Portalのproduction buildに成功した。
+
+### 未対応・保留
+
+- 運営者本人が入口ファイルをPro版ChatGPTへ実際に添付し、ゲーム相談、実装、提出ZIP返却までの会話体験を検証する。
+- 生成された実ゲームをGame Fields devへ統合し、ブラウザから遊べるところまでは未検証である。
+- 無料版の通常Chat／Codexで同じ入口がどこまで進むかは、Pro版の実機検証後に確認する。
+- Portalからの入口ダウンロード、正式ライセンス、npm registry公開、提出画面は未実装である。

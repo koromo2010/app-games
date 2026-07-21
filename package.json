@@ -18,6 +18,7 @@
         "test": "npm run build:runtime-packages && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test tests/*.test.ts",
         "test:sdk-package": "npm run build:sdk-package && node scripts/check-game-sdk-package.mjs",
         "build:sdk-starter": "node scripts/build-game-sdk-starter.mjs",
+        "build:sdk-starter-repository": "node scripts/build-game-sdk-starter-repository.mjs",
         "test:sdk-starter": "node scripts/check-game-sdk-starter.mjs",
         "check:games": "node scripts/check-game-standards.mjs",
         "check:sdk": "node scripts/check-game-sdk-boundaries.mjs",

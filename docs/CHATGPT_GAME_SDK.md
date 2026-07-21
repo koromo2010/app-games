@@ -103,8 +103,8 @@ Mock Runtimeは作成時revision 1、Commandごとの1段階revision更新、古
 
 ## 現時点の限界
 
-SDK v1の型、サーバー契約、Mock Runtime、生成雛形、境界検査は`packages/game-sdk`へ物理分離済みである。`@game-fields/game-sdk@0.1.0`は単体build、tarball化、空の外部projectへのinstall、3つの公開exportの実行検査まで成功している。ChatGPT試用ZIPは同梱SDK install、型検査、契約テスト、ダミーによる1ゲーム完走まで自動検査できる。`apps/sdk-portal`はVercel Project `app-games-sdk`としてGitHubへ接続し、Root Directory、Production Branch `main`、`develop` Preview、対象ブランチのbuild制御を設定済みで、`https://sdk.game-fields.com`へProduction公開済みである。
+SDK v1の型、サーバー契約、Mock Runtime、生成雛形、境界検査は`packages/game-sdk`へ物理分離済みである。`@game-fields/game-sdk@0.1.0`は単体build、tarball化、空の外部projectへのinstall、3つの公開exportの実行検査まで成功している。Pro版ChatGPT向け入口は`sdk/entry/START_GAME_FIELDS.md`で、公開Gitの`sdk-starter`ブランチだけを浅く取得する。ChatGPTスターターは同梱SDK install、型検査、契約テスト、ダミーによる1ゲーム完走、提出ZIP作成まで自動検査できる。`apps/sdk-portal`はVercel Project `app-games-sdk`としてGitHubへ接続し、Root Directory、Production Branch `main`、`develop` Preview、対象ブランチのbuild制御を設定済みで、`https://sdk.game-fields.com`へProduction公開済みである。
 
 Game Fields本体では非公開`@game-fields/game-runtime`と`lib/game-sdk-platform-adapter.ts`を追加し、署名済みCookie由来identity、host/player判定、Redis TTL保存、revision CAS、閲覧者別presentationを小規模オンラインfixtureで実証済みである。外部ゲームfixtureは公開SDKだけをimportし、Commandへ偽のplayer IDを混ぜてもRuntime由来のidentityが使われ、同じrevisionの同時Commandは片方だけが保存される。
 
-ただし公開packageはまだnpm registryへpublishしておらず、`private: true`と`UNLICENSED`を維持している。試用ZIPもPortalへは置かず、一般配布前に運営者本人のダウンロード、ChatGPTとのゲーム作成、再提出、dev統合を確認する。汎用HTTP route・Client Runtime、WebSocket、1人1部屋、解散、戦績、リプレイ、Developer Portalの正式チュートリアル・APIリファレンス・提出画面も未実装である。platform adapterとRedisキー実装はGame Fields内部専用で、公開SDKやPortalへ含めない。
+ただし公開packageはまだnpm registryへpublishしておらず、`private: true`と`UNLICENSED`を維持している。入口と公開スターターGitはまず運営者本人のPro版ChatGPT実機検証に使い、Portalへ一般向けダウンロード導線は出さない。ゲーム作成、提出ZIP返却、dev統合を確認した後に無料版の能力・利用枠を検証する。汎用HTTP route・Client Runtime、WebSocket、1人1部屋、解散、戦績、リプレイ、Developer Portalの正式チュートリアル・APIリファレンス・提出画面も未実装である。platform adapterとRedisキー実装はGame Fields内部専用で、公開SDKやPortalへ含めない。

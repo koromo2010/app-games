@@ -8,7 +8,8 @@
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && node --test dist/tests/*.test.js",
     "demo": "npm run build && node dist/src/demo.js",
-    "check": "npm test"
+    "check": "npm test",
+    "package": "node scripts/build-submission.mjs"
   },
   "dependencies": {
     "@game-fields/game-sdk": "file:vendor/__SDK_TARBALL__"

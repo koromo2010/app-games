@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "starterVersion": "0.1.0",
+  "sdkVersion": "__SDK_VERSION__",
+  "repository": "https://github.com/koromo2010/app-games",
+  "ref": "sdk-starter"
+}
