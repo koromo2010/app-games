@@ -49,6 +49,7 @@ try {
     "package.json",
     "scripts/build-submission.mjs",
     "scripts/stored-zip.mjs",
+    "apps/sdk-portal/.vercel-root-placeholder",
     "src/manifest.ts",
     "src/contracts.ts",
     "src/server-module.ts",
@@ -115,6 +116,9 @@ try {
   }
   if (submissionEntries.some((entry) => /(^|\/)(?:node_modules|dist|\.git|submission)(?:\/|$)/.test(entry.replace("game-fields-submission/", "")))) {
     throw new Error("Submission archive contains generated or repository-only directories.");
+  }
+  if (submissionEntries.some((entry) => entry.includes("apps/sdk-portal"))) {
+    throw new Error("Submission archive contains the Vercel branch placeholder.");
   }
 
   execFileSync(process.execPath, [

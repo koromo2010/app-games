@@ -73,7 +73,7 @@ SDK v1は、manifest、Game→Controller→LayoutのUI三層、認証済みID・
 
 公開SDK候補は`@game-fields/game-sdk@0.1.0`で、基本契約、server runtime、mock runtimeを別exportとして持つ。`npm run build:sdk-package`で独立buildし、`npm run test:sdk-package`でtarballを空の外部fixtureへinstallしてpackage名によるimportと実行を検査する。`npm run build:runtime-packages`は公開SDKの後に非公開Runtimeをbuildする。npm registryへは未公開で、初回公開の明示承認まで`private: true`かつ`UNLICENSED`を維持する。
 
-Pro版ChatGPTから始める入口は`sdk/entry/START_GAME_FIELDS.md`である。通常ChatでGit取得、複数ファイル編集、Node.js実行、ZIP返却が使えなければWorkまたはCodexへ同じファイルを再投入するよう案内し、利用可能なら公開`koromo2010/app-games`の`sdk-starter`ブランチだけを`--depth 1 --single-branch`で取得する。ブランチsnapshotは`npm run build:sdk-starter-repository`で生成し、`starter-manifest.json`に公式repository、ref、starter version、SDK versionを持つ。本体の`main`／`develop`を取得する必要はない。
+Pro版ChatGPTから始める入口は`sdk/entry/START_GAME_FIELDS.md`である。通常ChatでGit取得、複数ファイル編集、Node.js実行、ZIP返却が使えなければWorkまたはCodexへ同じファイルを再投入するよう案内し、利用可能なら公開`koromo2010/app-games`の`sdk-starter`ブランチだけを`--depth 1 --single-branch`で取得する。ブランチsnapshotは`npm run build:sdk-starter-repository`で生成し、`starter-manifest.json`に公式repository、ref、starter version、SDK versionを持つ。本体の`main`／`develop`を取得する必要はない。`apps/sdk-portal/.vercel-root-placeholder`はSDK Portal ProjectがRoot Directory確認後に既存Ignored Build Stepを評価して、このブランチのDeploymentをCANCELEDにするためだけに置く。提出ZIPには含めない。
 
 `sdk/starter-template`を正本とし、SDK tarball、`START_HERE.md`、ChatGPT用`AGENTS.md`、`GAME_SPEC.md`、最小APIリファレンス、型付きmanifest／Command／RoomView、契約テスト、ダミー2人の完走デモを含む。従来の試用ZIPは`npm run build:sdk-starter`で生成できる。スターター内の`npm run package`は`node_modules`、`dist`、`.git`を除外した`submission/game-fields-submission.zip`を作る。`npm run test:sdk-starter`は入口文書、公開Git用snapshotとZIPの同一性、同梱SDK install、型検査、契約テスト、デモ完走、提出ZIPを確認する。Portalの一般向けダウンロード導線はまだ未実装である。
 

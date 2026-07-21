@@ -622,7 +622,8 @@
 
 - Pro版向け入口、公開Git用snapshot生成器、取得元manifest、提出ZIP生成器を追加した。
 - `npm run package`は`node_modules`、`dist`、`.git`、過去の提出物を除外し、`submission/game-fields-submission.zip`を生成する。
-- 公開`sdk-starter`ブランチをGitHub commit `ffe83c1`として作成した。19ファイルのblob SHAとtree `89254ce`はローカル検証済みsnapshotと一致する。
+- 公開`sdk-starter`ブランチをGitHub commit `ffe83c1`として作成し、Vercel用placeholder追加後の先端を`10d2dbb`とした。初回19ファイルのblob SHAとtree `89254ce`、最終20ファイルのtree `21b877c`はローカル検証済みsnapshotと一致する。
+- SDK Portal ProjectはRoot Directory `apps/sdk-portal`がスターターbranchにない場合、Ignored Build Stepより先にエラーとなるため、snapshotへ専用placeholderを追加した。これは提出ZIPには含めない。
 - `main`、`develop`、Vercel、npm registry、SDK Portalの一般向け導線はこのブランチ公開では変更していない。
 
 ### 検証
@@ -630,6 +631,7 @@
 - `npm run test:sdk-starter`で入口文書、公開Git用snapshotと試用ZIPの同一性、同梱SDK install、型検査、契約テスト、デモ完走、提出ZIPを確認した。
 - 公開ブランチを実際に`git clone --depth 1 --single-branch --branch sdk-starter`で取得し、SDK install、契約テスト3件、revision 5でのデモ完走、20ファイルの提出ZIP生成に成功した。
 - SDK境界検査を含むlint、全372テスト、本体72ルートのproduction build、SDK Portalのproduction buildに成功した。
+- `develop` commit `00fb5ad`の`app-games-dev`とSDK Previewが`READY`になった。`sdk-starter` commit `10d2dbb`のSDK Project Deploymentは既存Ignored Build Stepにより`CANCELED`となり、Root Directory欠落エラーを再発しないことを確認した。
 
 ### 未対応・保留
 
