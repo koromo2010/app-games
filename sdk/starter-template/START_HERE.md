@@ -10,9 +10,10 @@
 
 ```text
 このGame Fields SDKスターターを使ってゲームを1本作りたいです。
-最初にAGENTS.mdとSDK_API.mdを読み、私と相談しながらGAME_SPEC.mdを完成させてください。
+最初にAGENTS.md、APP_REQUIREMENTS.md、MOCK_GUIDE.md、SDK_API.mdを読み、私と相談しながらGAME_SPEC.mdを完成させてください。
 重要な未決事項だけを短く質問し、仕様が固まるまでは実装を始めないでください。
-仕様確定後はこのフォルダ内だけでゲーム固有コードと契約テストを実装し、npm run checkとnpm run demoを成功させてください。
+仕様確定後は、まず要件を守った画面モックを作り、内容と未実装部分を説明して私の確認を待ってください。
+私が承認した後だけ、このフォルダ内でゲーム固有コードと契約テストを実装し、npm run checkとnpm run demoを成功させてください。
 DB、Redis、認証Cookie、APIキー、管理権限には直接アクセスしないでください。
 ```
 
@@ -27,6 +28,7 @@ Node.js 20以上を用意し、このフォルダで次を実行します。
 
 ```bash
 npm install
+npm run check:mock
 npm run check
 npm run demo
 npm run package

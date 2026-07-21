@@ -57,17 +57,33 @@ cd game-fields-game
 
 1. `START_HERE.md`
 2. `AGENTS.md`
-3. `SDK_API.md`
+3. `APP_REQUIREMENTS.md`
 4. `GAME_SPEC.md`
+5. `MOCK_GUIDE.md`
+6. `SDK_API.md`
 
-読み終えたら、まず利用者へ「どんなゲームを作りたいですか？」と質問してください。重要な未決事項だけを短く確認し、`GAME_SPEC.md`が固まる前に実装を始めないでください。
+読み終えたら、まず利用者へ「どんなアプリを作りたいですか？」と質問してください。重要な未決事項だけを一つずつ短く確認し、`GAME_SPEC.md`が固まる前にモックや実装を作り始めないでください。
 
-### 4. 実装・検査・提出物作成まで進める
+### 4. 仕様に沿ったモックを作る
+
+`GAME_SPEC.md`の未決事項が解消したら、`APP_REQUIREMENTS.md`と`MOCK_GUIDE.md`に従い、`mock/`へブラウザで開ける画面モックを作ってください。
+
+モック作成後は、利用者へ次の内容を短く説明してください。
+
+- 作った画面と操作の流れ
+- Game Fields共通要件をどう反映したか
+- モックで確認できる状態
+- 本実装まで動かない部分
+
+利用者へモックの確認を依頼し、修正希望または本実装へ進む承認を待ってください。明確な承認前にSDK契約の本実装へ進まないでください。
+
+### 5. 承認後に実装・検査・提出物作成まで進める
 
 仕様確定後は、スターター内だけでゲーム固有コードとテストを実装し、次をすべて成功させてください。
 
 ```bash
 npm install
+npm run check:mock
 npm run check
 npm run demo
 npm run package
@@ -75,7 +91,7 @@ npm run package
 
 最後に`submission/game-fields-submission.zip`を利用者へ返し、実装済みの内容、テスト結果、未実装事項を簡潔に説明してください。
 
-### 5. 越えてはいけない境界
+### 6. 越えてはいけない境界
 
 - Game Fieldsの`main`、`develop`、Vercel、本番環境へpush・deployしない
 - DB、Redis、Blob、認証Cookie、APIキー、管理者情報へ直接アクセスしない

@@ -43,17 +43,22 @@ try {
     "START_HERE.md",
     "AGENTS.md",
     "GAME_SPEC.md",
+    "APP_REQUIREMENTS.md",
+    "MOCK_GUIDE.md",
+    "MOCK_REVIEW.md",
     "SDK_API.md",
     "SUBMISSION_CHECKLIST.md",
     "starter-manifest.json",
     "package.json",
     "scripts/build-submission.mjs",
+    "scripts/check-mock.mjs",
     "scripts/stored-zip.mjs",
     "apps/sdk-portal/.vercel-root-placeholder",
     "src/manifest.ts",
     "src/contracts.ts",
     "src/server-module.ts",
     "tests/game-contract.test.ts",
+    "mock/README.md",
   ]) {
     if (!entries.includes(`game-fields-sdk-starter/${required}`)) {
       throw new Error(`Starter archive is missing ${required}.`);

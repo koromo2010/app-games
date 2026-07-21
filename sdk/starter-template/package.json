@@ -8,6 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "test": "npm run build && node --test dist/tests/*.test.js",
     "demo": "npm run build && node dist/src/demo.js",
+    "check:mock": "node scripts/check-mock.mjs",
     "check": "npm test",
     "package": "node scripts/build-submission.mjs"
   },
