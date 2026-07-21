@@ -391,3 +391,23 @@
 - `app-games-sdk`の作成、Root Directory設定、Ignored Build Step、`sdk.game-fields.com`割当、Vercel上の初回Deploymentは未実施。
 - `packages/game-sdk`への公開SDK移動、pack/install契約、npm package名・ライセンス・初回publishは未実装。
 - チュートリアル、APIリファレンス、ゲーム雛形ダウンロード、提出画面は未実装。
+
+## 2026-07-21 — Vercel ConnectorのTeam権限復旧
+
+### 作業目的
+
+- ChatGPTのVercel Connectorを再接続し、`game-fields` Teamへアクセスできるか確認する。
+
+### 実施結果
+
+- Vercel ConnectorのTeam一覧に`game-fields`が表示されることを確認した。
+- `game-fields`配下の既存Project `app-games`と`app-games-dev`を参照できることを確認した。
+- SDK専用Projectを作成するためのConnector権限上の障害は解消した。
+
+### 検証
+
+- 全369テスト、ESLint、production build（72ルート）に成功した。
+
+### 未対応・保留
+
+- `app-games-sdk` Projectの作成、Root Directoryの`apps/sdk-portal`指定、Production Branch設定、`sdk.game-fields.com`割当、初回Deploymentは未実施。
