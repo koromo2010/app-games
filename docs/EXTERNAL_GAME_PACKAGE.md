@@ -4,7 +4,27 @@
 
 将来、Game Fields本体の認証・個人情報・DB・運用基盤を渡さず、ゲーム部分だけを他の開発者へ依頼できるようにする。
 
-## 境界
+## リポジトリと配布単位
+
+`app-games`、Developer Portal、公開SDKは同じGitリポジトリで管理する。ただし、同じNext.jsアプリや同じnpm packageには入れず、npm workspacesを使って物理的に分離する。
+
+```text
+apps/
+  sdk-portal/     sdk.game-fields.com用の独立Next.jsアプリ
+
+packages/
+  game-sdk/       npmへ一般配布できる公開package
+  game-runtime/   Game Fields内部専用。公開・配布しない
+```
+
+- `app-games-sdk`は同じGitリポジトリの`apps/sdk-portal`をRoot Directoryにする別Vercel Projectとする。
+- 公開SDKは独立した`package.json`、SemVer、`exports`、公開ファイル一覧、契約テストを持ち、本体アプリのビルド成果物やパスaliasに依存しない。
+- Gitリポジトリ自体は現時点で分けない。SDKを別組織へ移管する、外部開発者へSDKソースだけの権限を与える、リリース責任者や公開ライセンスを完全に分ける必要が生じた場合に別リポジトリ化を再検討する。
+- 将来SDKを別リポジトリへ移しても利用者側のimportを変えずに済むよう、ゲームは公開package名だけへ依存する。
+
+既存の本体Next.jsアプリは当面リポジトリ直下に維持し、SDK分離のためだけに本体全体を`apps/`へ移動しない。
+
+## ゲームパッケージの境界
 
 外部開発者が担当する範囲はゲーム固有パッケージ内に限定する。
 
@@ -29,7 +49,7 @@ games/
     tests/
 ```
 
-当面は既存のNext.js配置を維持しつつ、この依存方向へ段階的に寄せる。最初からmonorepo移動を行わない。
+当面は既存ゲームのNext.js配置を維持しつつ、この依存方向へ段階的に寄せる。公開SDKとDeveloper Portalだけを先にworkspace化し、既存ゲーム全体の一括移動は行わない。
 
 ## 現在の実装段階
 
@@ -90,8 +110,10 @@ UI権限はControllerがpermissionsとして計算する。ただし最終認可
 3. メモリMock Runtimeと契約テストを作る（完了）
 4. import境界をlintで監査する（完了）
 5. テンプレートゲームをRuntime契約対応にする（完了）
-6. 小規模オンラインゲームでplatform adapterを実証する
-7. 後から`packages/game-sdk`へ物理分離する
+6. 公開部分を`packages/game-sdk`へ物理分離し、単体でpack・install・testできるようにする
+7. `apps/sdk-portal`を作り、別Vercel Projectとして`sdk.game-fields.com`へ割り当てる
+8. 小規模オンラインゲームでplatform adapterを実証する
+9. npmの公開前検査、SemVer、リリース手順を整備して一般配布する
 
 ## 完了条件
 

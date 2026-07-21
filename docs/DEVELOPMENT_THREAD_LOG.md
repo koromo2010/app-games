@@ -305,3 +305,30 @@
 ### 未対応・保留
 
 - `sdk.game-fields.com`の制作は保留。再開が明示されるまでサイト、Developer Portal、SDK専用Vercel環境を作らない。
+
+## 2026-07-21 — SDK制作再開前の分離方針確認
+
+### 利用者からの要望
+
+- 保留していた`sdk.game-fields.com`制作へ戻る。
+- 将来SDKを一般配布するため、app-gamesと分ける必要があるか、同居しても問題ないかを確認する。
+
+### 判断
+
+- Gitリポジトリは`app-games`と共通のままでよい。一般配布に必要なのは別リポジトリ化ではなく、公開packageの独立性である。
+- 同じNext.jsアプリ・同じnpm packageへの同居は避け、npm workspacesで`packages/game-sdk`と`apps/sdk-portal`へ物理分離する。
+- Developer Portalは同一Gitリポジトリから、Root Directoryを`apps/sdk-portal`とする別Vercel Project `app-games-sdk`へデプロイする。
+- SDK用Vercel環境、DB・Redis・Blob名前空間、権限、秘密情報は本番`app-games`と開発`app-games-dev`から分離する。
+- 内部`game-runtime`は非公開とし、外部ゲームは公開SDK packageだけへ依存する。これにより将来SDKを別リポジトリへ移しても利用者側のimportを維持できる。
+
+### 確認根拠
+
+- 現在のSDK v1は内部DB・Redis・環境変数をimportしない境界検査を持つため、公開packageへ移す下地がある。
+- Vercelは同じmonorepoのディレクトリごとに別ProjectとRoot Directoryを設定できる。
+- npm workspacesは同一リポジトリ内のpackageを独立packageとして管理でき、公開SDKはscoped public packageとして個別に配布できる。
+
+### 未対応
+
+- `packages/game-sdk`への移動、workspace設定、pack/install検査は未実装。
+- `apps/sdk-portal`、`app-games-sdk`、`sdk.game-fields.com`へのデプロイは未実装。
+- npm organization、公開package名、公開ライセンス、初回publishは未決定。

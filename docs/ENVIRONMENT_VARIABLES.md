@@ -10,9 +10,11 @@
 | --- | --- | --- | --- | --- |
 | Production | `app-games` | `main` | `https://game-fields.com` | 一般公開 |
 | Development | `app-games-dev` | `develop` | `https://dev.game-fields.com` | 内部開発・検証 |
-| SDK | `app-games-sdk`（予定） | SDK用ブランチまたは独立運用 | `https://sdk.game-fields.com` | 外部開発者・Developer Portal |
+| SDK | `app-games-sdk`（予定、Root Directory: `apps/sdk-portal`） | `main`で公開、`develop`はPreview | `https://sdk.game-fields.com` | 外部開発者・Developer Portal |
 
 Vercel Teamは `game-fields`（Team ID: `team_Q3rGaf7bwfZZsjaj1vqCg5YO`）。共通秘密情報はTeam Shared Environment Variablesへ置き、環境別データ接続とURLは各Project Variablesへ置く。
+
+SDKは`app-games`と同じGitリポジトリ内の別アプリとして管理するが、Vercel Project、Root Directory、環境変数、DB・Redis・Blobの名前空間は本番・開発から分離する。公開npm packageは`packages/game-sdk`から生成し、SDK用Vercel Projectへ本体の管理者権限や書込用秘密情報をリンクしない。
 
 アプリ内の環境判定はVercelのDeployment種別ではなく、`VERCEL_GIT_COMMIT_REF`を優先する。`main`は`production`、`develop`は`development`として扱い、ブランチ情報がないローカル実行などでのみ`VERCEL_ENV`と`NODE_ENV`へフォールバックする。これにより、`app-games-dev`のProduction Deploymentである`develop`を本番アプリと誤認しない。
 
