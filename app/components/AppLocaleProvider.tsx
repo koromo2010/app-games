@@ -3,7 +3,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { defaultAppLocale, isAppLocale, normalizeAppLocale, type AppLocale } from "@/lib/app-locale";
 import { translateApp, type AppMessageKey, type AppMessageValues } from "@/lib/app-i18n";
-import { readPlayerSession } from "@/lib/player-session";
 
 const APP_LOCALE_COOKIE = "game_fields_locale";
 
@@ -14,6 +13,11 @@ type AppLocaleContextValue = {
 };
 
 const AppLocaleContext = createContext<AppLocaleContextValue | null>(null);
+
+function localeFromPathname(pathname: string): AppLocale | null {
+  const firstSegment = pathname.split("/")[1];
+  return isAppLocale(firstSegment) ? firstSegment : null;
+}
 
 function localePathname(pathname: string, locale: AppLocale) {
   const segments = pathname.split("/");
@@ -43,26 +47,15 @@ export function AppLocaleProvider({
   }, []);
 
   useEffect(() => {
-    const syncFromSession = () => {
-      const session = readPlayerSession();
-      if (session?.locale && isAppLocale(session.locale) && session.locale !== locale) {
-        setLocale(session.locale);
-      }
-    };
-    const onSessionSaved = (event: Event) => {
-      const detail = (event as CustomEvent<{ locale?: unknown }>).detail;
-      if (isAppLocale(detail?.locale) && detail.locale !== locale) setLocale(detail.locale);
-    };
-    syncFromSession();
-    window.addEventListener("storage", syncFromSession);
-    window.addEventListener("game-fields:player-session-saved", onSessionSaved);
-    return () => {
-      window.removeEventListener("storage", syncFromSession);
-      window.removeEventListener("game-fields:player-session-saved", onSessionSaved);
-    };
-  }, [locale, setLocale]);
-
-  useEffect(() => {
+    // The visible locale prefix is authoritative. This also protects against
+    // stale SSR/cache output after the prefixed URL is internally rewritten.
+    const pathLocale = localeFromPathname(window.location.pathname);
+    if (pathLocale) {
+      setLocaleState(pathLocale);
+      document.cookie = `${APP_LOCALE_COOKIE}=${pathLocale}; Path=/; Max-Age=31536000; SameSite=Lax`;
+      document.documentElement.lang = pathLocale;
+      return;
+    }
     document.documentElement.lang = locale;
   }, [locale]);
 
