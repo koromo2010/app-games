@@ -1,5 +1,6 @@
 ﻿node_modules
 .next
+packages/game-sdk/dist/
 *.tsbuildinfo
 out
 .vercel

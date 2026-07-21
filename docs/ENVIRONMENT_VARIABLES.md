@@ -12,7 +12,7 @@
 | Development | `app-games-dev` | `develop` | `https://dev.game-fields.com` | 内部開発・検証 |
 | SDK | `app-games-sdk` | `main`で公開、`develop`はPreview | 暫定 `https://app-games-sdk.vercel.app`、予定 `https://sdk.game-fields.com` | 外部開発者・Developer Portal |
 
-`apps/sdk-portal`のソース、workspace構成、`app-games-sdk` Vercel Project、GitHub接続、Root Directory `apps/sdk-portal`、Production Branch `main`、`develop` Preview、Ignored Build Stepは設定済みで、`develop`からのGit Preview buildも成功済み。`sdk.game-fields.com`の割当とPortalソースの`main`限定反映は未完了である。初期Portalは外部データ接続を持たないため、本体・devの環境変数は複製していない。
+`apps/sdk-portal`のソース、workspace構成、`app-games-sdk` Vercel Project、GitHub接続、Root Directory `apps/sdk-portal`、Production Branch `main`、`develop` Preview、Ignored Build Stepは設定済みで、`develop`からのGit Preview buildも成功済み。Portalソースは`main`へ限定反映し、`sdk.game-fields.com`をSDK Projectへ割り当ててProduction公開している。初期Portalは外部データ接続を持たないため、本体・devの環境変数は複製していない。
 
 Vercel Teamは `game-fields`（Team ID: `team_Q3rGaf7bwfZZsjaj1vqCg5YO`）。共通秘密情報はTeam Shared Environment Variablesへ置き、環境別データ接続とURLは各Project Variablesへ置く。
 

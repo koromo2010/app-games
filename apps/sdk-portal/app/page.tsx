@@ -20,10 +20,12 @@ const foundations = [
 ];
 
 const available = [
+  "@game-fields/game-sdk v0.1.0の独立package",
   "認証済みactorを受け取るCommand契約",
   "保存Roomと閲覧者別RoomViewの分離",
   "revision不一致を拒否するRuntime契約",
   "DB・Redis不要のメモリMock Runtime",
+  "tarballの外部install・export検査",
 ];
 
 const reviewFlow = [
@@ -139,9 +141,9 @@ export default function Home() {
         <div className="status-panel">
           <div>
             <p className="eyebrow">SDK V1 FOUNDATION</p>
-            <h2>安全な契約層から準備中</h2>
+            <h2>配布前に検証できるpackage境界まで完成</h2>
             <p className="status-copy">
-              公開npm package、チュートリアル、提出画面はこれから追加します。先にプラットフォーム内部へ依存しない型とテスト境界を固めています。
+              独立packageのbuild・pack・外部installは検証済みです。npm registryへの初回公開、チュートリアル、提出画面は審査ゲートを整えてから追加します。
             </p>
           </div>
           <ul>

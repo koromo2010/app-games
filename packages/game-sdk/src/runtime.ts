@@ -6,7 +6,7 @@ import type {
   GameSdkStoredRoom,
   GameSdkTrustedActor,
   GameSdkViewer,
-} from "./game-sdk.ts";
+} from "./index.js";
 
 export type GameSdkCreateContext = {
   actor: GameSdkTrustedActor;

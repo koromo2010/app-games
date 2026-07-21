@@ -43,7 +43,11 @@ test("game scaffold creates SDK contracts without platform storage or actor IDs"
       noEmit: true,
       skipLibCheck: true,
       baseUrl: resolve("."),
-      paths: { "@/*": ["*"] },
+      paths: {
+        "@game-fields/game-sdk": ["packages/game-sdk/dist/index.d.ts"],
+        "@game-fields/game-sdk/runtime": ["packages/game-sdk/dist/runtime.d.ts"],
+        "@game-fields/game-sdk/mock-runtime": ["packages/game-sdk/dist/mock-runtime.d.ts"],
+      },
     },
     include: [
       join(gameDir, "sample-game-manifest.ts"),

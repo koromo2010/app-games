@@ -78,11 +78,13 @@ games/
 
 ## 現在の実装段階
 
-SDK v1の公開型、認可済みactorを受けるserver module契約、閲覧者別presentation、メモリMock Runtime、manifest検証、生成雛形、import境界検査は`lib/game-sdk*.ts`と`scripts/create-game.mjs`へ実装済み。Cookie認証、Redis、DB、管理機能には依存していない。
+SDK v1の公開型、認可済みactorを受けるserver module契約、閲覧者別presentation、メモリMock Runtime、manifest検証、生成雛形、import境界検査は`packages/game-sdk`と`scripts/create-game.mjs`へ実装済み。Cookie認証、Redis、DB、管理機能には依存していない。
+
+公開候補package名は`@game-fields/game-sdk`、preview versionは`0.1.0`である。独立TypeScript build、SemVer、3つの`exports`、公開ファイル限定、tarballの外部install・実行検査まで実装済み。npm registryへの意図しない公開を防ぐため、初回公開承認までは`private: true`かつ`UNLICENSED`を維持する。
 
 npm workspacesと`apps/sdk-portal`の独立Next.jsアプリは実装済みで、SDKの目的、現在の契約層、提出から`main`公開までの管理ゲートを説明する初期ランディングを持つ。Portal単体の起動は`npm run dev:sdk`、production buildは`npm run build:sdk`を使う。
 
-SDK専用Vercel Project `app-games-sdk`は同一Gitリポジトリへ接続済みで、Root Directory `apps/sdk-portal`、Production Branch `main`、`develop` Preview、対象ブランチのbuild制御を設定し、`develop`からのGit Preview buildに成功した。暫定URL `https://app-games-sdk.vercel.app` はHTTP 200を返す。`sdk.game-fields.com`への移管とPortalソースの`main`限定反映は未完了である。本体のオンラインRoomへ接続するplatform adapter、外部配布用package、インストール手順、APIリファレンス、提出画面も次段階であり、現時点では実装済みと扱わない。
+SDK専用Vercel Project `app-games-sdk`は同一Gitリポジトリへ接続済みで、Root Directory `apps/sdk-portal`、Production Branch `main`、`develop` Preview、対象ブランチのbuild制御を設定している。`develop`からのGit Preview buildに成功し、Portalソースを`main`へ限定反映したうえで`https://sdk.game-fields.com`へProduction公開済みである。本体のオンラインRoomへ接続するplatform adapter、npm registryへの初回publish、利用者向けインストール手順、APIリファレンス、提出画面は次段階であり、現時点では実装済みと扱わない。
 
 ## 外部へ公開するもの
 
@@ -137,8 +139,8 @@ UI権限はControllerがpermissionsとして計算する。ただし最終認可
 3. メモリMock Runtimeと契約テストを作る（完了）
 4. import境界をlintで監査する（完了）
 5. テンプレートゲームをRuntime契約対応にする（完了）
-6. 公開部分を`packages/game-sdk`へ物理分離し、単体でpack・install・testできるようにする
-7. `apps/sdk-portal`を作り（初期アプリまで完了）、別Vercel Projectとして`sdk.game-fields.com`へ割り当てる
+6. 公開部分を`packages/game-sdk`へ物理分離し、単体でpack・install・testできるようにする（完了）
+7. `apps/sdk-portal`を作り、別Vercel Projectとして`sdk.game-fields.com`へ割り当てる（完了）
 8. 小規模オンラインゲームでplatform adapterを実証する
 9. npmの公開前検査、SemVer、リリース手順を整備して一般配布する
 

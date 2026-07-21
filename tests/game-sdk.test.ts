@@ -4,9 +4,9 @@ import {
   GAME_SDK_VERSION,
   defineGameManifest,
   type GameSdkStoredRoom,
-} from "../lib/game-sdk.ts";
-import { createGameSdkMockRuntime, GameSdkRuntimeError } from "../lib/game-sdk-mock-runtime.ts";
-import { advanceGameSdkRoom, defineGameServerModule } from "../lib/game-sdk-runtime.ts";
+} from "@game-fields/game-sdk";
+import { createGameSdkMockRuntime, GameSdkRuntimeError } from "@game-fields/game-sdk/mock-runtime";
+import { advanceGameSdkRoom, defineGameServerModule } from "@game-fields/game-sdk/runtime";
 
 const manifest = defineGameManifest({
   sdkVersion: GAME_SDK_VERSION,

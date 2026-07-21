@@ -121,6 +121,8 @@ npm run dev
 npm run lint
 npm test
 npm run build
+npm run build:sdk
+npm run test:sdk-package
 ```
 
 ## Password recovery email

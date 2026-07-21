@@ -3,12 +3,12 @@ import type {
   GameSdkRoomSnapshot,
   GameSdkStoredRoom,
   GameSdkViewer,
-} from "./game-sdk.ts";
+} from "./index.js";
 import {
   gameSdkViewerFromActor,
   type GameSdkServerModule,
   type GameSdkServerRuntime,
-} from "./game-sdk-runtime.ts";
+} from "./runtime.js";
 
 export type GameSdkRuntimeErrorCode =
   | "ROOM_ALREADY_EXISTS"
