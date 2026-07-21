@@ -357,3 +357,37 @@
 ### 未対応・保留
 
 - 提出形式、審査画面、権利・ライセンス申告書式、sandbox実行方法は未実装。
+
+## 2026-07-21 — SDK Developer Portalの初期構築
+
+### 利用者からの要望
+
+- ドメイン設定済みの`sdk.game-fields.com`を立ち上げる。
+- SDK専用Vercel Projectを新設する段階へ進む。
+
+### 判断
+
+- 空のVercel Projectを先に作らず、同一リポジトリの`apps/sdk-portal`へ独立Next.jsアプリを置いてから、Root Directoryを指定してVercelへ読み込む。
+- Portalは初期段階ではDB、Redis、Blob、管理者秘密情報、メール送信キーを必要としない。
+- Vercel Projectは`game-fields` Team内の`app-games-sdk`とし、Production Branchは`main`、`develop`はPreviewに限定する。
+- SDKの一般配布と本体への公開権限は引き続き分離し、Portalにも外部開発者から`main`へ直接公開する経路を作らない。
+
+### 実施結果
+
+- ルートをnpm workspaces化し、`apps/*`と将来の`packages/*`を独立単位として管理できるようにした。
+- `apps/sdk-portal`へSDK専用Next.jsアプリ、レスポンシブな初期ランディング、独立metadata、独立proxy・instrumentation、ESLint設定を追加した。
+- `npm run dev:sdk`と`npm run build:sdk`を追加した。
+- 初期ページにSDKの安全境界、SDK v1の準備状況、提出・自動検査・運営審査・dev実機確認・`main`公開のゲートを明記した。
+
+### 検証
+
+- SDK Portal単体と本体全体のESLint、全369テスト、本体72ルートのproduction build、Portal 2ルートのproduction buildに成功した。
+- SDK PortalのHTTP 200と主要本文のsmoke確認に成功した。
+- ブラウザ検証CLIは実行環境でUnix socketを作成できず、画像による目視確認は未実施。production buildとHTTP応答は成功している。
+
+### 未対応・保留
+
+- ChatGPTのVercel Connectorは`game-fields` Team scopeを持たず403となるため、`app-games-sdk` Project作成には同Team scopeへの再認証が必要。
+- `app-games-sdk`の作成、Root Directory設定、Ignored Build Step、`sdk.game-fields.com`割当、Vercel上の初回Deploymentは未実施。
+- `packages/game-sdk`への公開SDK移動、pack/install契約、npm package名・ライセンス・初回publishは未実装。
+- チュートリアル、APIリファレンス、ゲーム雛形ダウンロード、提出画面は未実装。

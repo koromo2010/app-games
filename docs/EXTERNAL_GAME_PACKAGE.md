@@ -80,7 +80,9 @@ games/
 
 SDK v1の公開型、認可済みactorを受けるserver module契約、閲覧者別presentation、メモリMock Runtime、manifest検証、生成雛形、import境界検査は`lib/game-sdk*.ts`と`scripts/create-game.mjs`へ実装済み。Cookie認証、Redis、DB、管理機能には依存していない。
 
-本体のオンラインRoomへ接続するplatform adapter、SDK専用Vercel環境、外部配布用package、Developer Portalは次段階であり、現時点では実装済みと扱わない。
+npm workspacesと`apps/sdk-portal`の独立Next.jsアプリは実装済みで、SDKの目的、現在の契約層、提出から`main`公開までの管理ゲートを説明する初期ランディングを持つ。Portal単体の起動は`npm run dev:sdk`、production buildは`npm run build:sdk`を使う。
+
+本体のオンラインRoomへ接続するplatform adapter、SDK専用Vercel Project、`sdk.game-fields.com`への公開、外部配布用package、インストール手順、APIリファレンス、提出画面は次段階であり、現時点では実装済みと扱わない。
 
 ## 外部へ公開するもの
 
@@ -136,7 +138,7 @@ UI権限はControllerがpermissionsとして計算する。ただし最終認可
 4. import境界をlintで監査する（完了）
 5. テンプレートゲームをRuntime契約対応にする（完了）
 6. 公開部分を`packages/game-sdk`へ物理分離し、単体でpack・install・testできるようにする
-7. `apps/sdk-portal`を作り、別Vercel Projectとして`sdk.game-fields.com`へ割り当てる
+7. `apps/sdk-portal`を作り（初期アプリまで完了）、別Vercel Projectとして`sdk.game-fields.com`へ割り当てる
 8. 小規模オンラインゲームでplatform adapterを実証する
 9. npmの公開前検査、SemVer、リリース手順を整備して一般配布する
 
