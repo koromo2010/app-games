@@ -25,7 +25,7 @@
 | ワードソナー | `KOTOBA_SENPUKU.md` | `lib/kotoba-senpuku-room-store.ts`、`app/api/kotoba-senpuku/rooms/route.ts` |
 | ノーザンブランチ | `NORTHERN_BRANCH_PROTOTYPE.md` | `lib/northern-branch-game.ts`、`lib/northern-branch-room-store.ts` |
 | コードインターセプト | `CODE_INTERCEPT.md` | `lib/code-intercept.ts`、`lib/code-intercept-room-store.ts` |
-| 新規ゲーム追加 | `NEW_GAME_CHECKLIST.md` | `config/game-registry.json`、`scripts/check-game-standards.mjs` |
+| 新規ゲーム追加 | `NEW_GAME_CHECKLIST.md`、`GAME_SCAFFOLD.md` | `npm run create-game -- <game-id> "表示名"`、`config/game-registry.json`、`scripts/check-game-standards.mjs` |
 | PC/Mobile UI境界・Controller・権限層 | `UI_ARCHITECTURE.md` | `app/wordwolf/use-wordwolf-controller.ts`、`app/wordwolf/WordWolfDesktopLayout.tsx`、`app/wordwolf/wordwolf-view-permissions.ts` |
 | 外部開発者へゲーム部分だけ依頼する境界 | `EXTERNAL_GAME_PACKAGE.md` | ゲームmanifest、SDK、Runtime interface、import境界監査 |
 | お題DB・既出判定・再利用 | `TOPIC_HISTORY_DATABASE.md` | ゲーム別topic catalog・history store・topic API |
