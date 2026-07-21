@@ -74,6 +74,26 @@ test("Productionから開発アプリDBへの接続を停止する", () => {
   });
 });
 
+test("環境マーカー設定後は旧DATABASE_URLにも誤接続ガードを適用する", () => {
+  withEnvironment({
+    VERCEL_ENV: "production",
+    VERCEL_GIT_COMMIT_REF: "develop",
+    APP_ENV: "development",
+    APP_DATABASE_ENV: "development",
+  }, () => {
+    assert.doesNotThrow(() => assertAppDatabaseEnvironment("DATABASE_URL"));
+  });
+
+  withEnvironment({
+    VERCEL_ENV: "production",
+    VERCEL_GIT_COMMIT_REF: "main",
+    APP_ENV: "production",
+    APP_DATABASE_ENV: "development",
+  }, () => {
+    assert.throws(() => assertAppDatabaseEnvironment("DATABASE_URL"), /APP_DATABASE_ENV_MISMATCH/);
+  });
+});
+
 test("Previewから本番Blobへの接続を停止する", () => {
   withEnvironment({
     VERCEL_ENV: "preview",
@@ -85,7 +105,7 @@ test("Previewから本番Blobへの接続を停止する", () => {
   });
 });
 
-test("旧DATABASE_URLは移行期間中だけ環境マーカーなしで利用できる", () => {
+test("旧DATABASE_URLは環境マーカー未設定の移行期間中だけガードなしで利用できる", () => {
   withEnvironment({
     VERCEL_ENV: "production",
     VERCEL_GIT_COMMIT_REF: "main",

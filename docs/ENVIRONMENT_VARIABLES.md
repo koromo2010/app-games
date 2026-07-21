@@ -93,6 +93,8 @@ Shared化候補:
 - `POSTGRES_PASSWORD`
 
 新規コードは `APP_DATABASE_URL` を正本として使い、互換変数は段階的に廃止する。
+Sensitive設定済みの互換変数をVercel上で複製できない移行期間は、`APP_DATABASE_ENV`を設定すれば
+`DATABASE_URL`等の互換変数にも同じ誤接続ガードを適用する。
 
 ### Redis / Upstash
 

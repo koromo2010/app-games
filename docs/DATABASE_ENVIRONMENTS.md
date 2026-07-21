@@ -30,7 +30,7 @@ UPSTASH_REDIS_REST_TOKEN=...
 BLOB_READ_WRITE_TOKEN=...
 ```
 
-`APP_DATABASE_URL`をアプリDBの正本とする。Redis Cloud等は`APP_REDIS_URL`、Upstash RESTは`UPSTASH_REDIS_REST_URL`と`UPSTASH_REDIS_REST_TOKEN`を使う。既存`DATABASE_URL`、`REDIS_URL`等は移行中の互換読取に限る。新しい正本を使う場合、`VERCEL_GIT_COMMIT_REF`を優先して`main=production`、`develop=development`と判定し、`APP_ENV`、`APP_DATABASE_ENV`との不一致では接続を拒否する。ブランチ情報がない場合だけ`VERCEL_ENV`と`NODE_ENV`へフォールバックする。RedisとBlobはそれぞれ`REDIS_ENV`、`BLOB_ENV`を設定した時点から同じ検査を有効にする。
+`APP_DATABASE_URL`をアプリDBの正本とする。Redis Cloud等は`APP_REDIS_URL`、Upstash RESTは`UPSTASH_REDIS_REST_URL`と`UPSTASH_REDIS_REST_TOKEN`を使う。既存`DATABASE_URL`、`REDIS_URL`等は移行中の互換読取に限る。`APP_DATABASE_URL`を使う場合、または互換URLとともに`APP_DATABASE_ENV`を設定した場合は、`VERCEL_GIT_COMMIT_REF`を優先して`main=production`、`develop=development`と判定し、`APP_ENV`、`APP_DATABASE_ENV`との不一致では接続を拒否する。これにより、VercelでSensitive設定済みの互換URLを複製できなくてもガードを有効化できる。ブランチ情報がない場合だけ`VERCEL_ENV`と`NODE_ENV`へフォールバックする。RedisとBlobはそれぞれ`REDIS_ENV`、`BLOB_ENV`を設定した時点から同じ検査を有効にする。
 
 ## 共通DBの安全境界
 

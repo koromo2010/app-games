@@ -39,8 +39,10 @@ function assertResourceEnvironment(resource: "APP_DATABASE" | "REDIS" | "BLOB", 
 }
 
 export function assertAppDatabaseEnvironment(configName: string) {
-  // Legacy variables remain readable during migration. APP_DATABASE_URL opts into strict guarding.
-  if (configName === "APP_DATABASE_URL") {
+  // APP_DATABASE_URL always opts into strict guarding. During migration, an
+  // APP_DATABASE_ENV marker also enables the same guard for a legacy URL so a
+  // Sensitive DATABASE_URL does not need to be copied or renamed in Vercel.
+  if (configName === "APP_DATABASE_URL" || process.env.APP_DATABASE_ENV?.trim()) {
     assertResourceEnvironment("APP_DATABASE", process.env.APP_DATABASE_ENV);
   }
 }
