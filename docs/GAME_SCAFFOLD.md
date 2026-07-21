@@ -67,3 +67,19 @@ DesktopLayout
 ## 外部開発者へ渡す範囲
 
 原則として、対象ゲームディレクトリ、ゲームSDKの公開インターフェース、仕様書、テスト環境だけを渡します。本番環境変数、DB接続情報、Redis、ユーザーデータ、管理画面は渡しません。
+
+### ChatGPTで試す外部スターター
+
+リポジトリを持たない試用者向けには、次でZIPを生成します。
+
+```bash
+npm run build:sdk-starter
+```
+
+`artifacts/game-fields-sdk-starter-v0.1.0.zip`には、SDK tarball、`START_HERE.md`、`AGENTS.md`、`GAME_SPEC.md`、最小APIリファレンス、manifest、保存Room／Command／RoomView、Mock Runtime契約テスト、ダミー2人で完走するデモを含めます。SDK packageのversionとtarball名は生成時に自動反映し、`artifacts/`はGitへ保存しません。
+
+```bash
+npm run test:sdk-starter
+```
+
+この検査は、生成したZIPを空の一時ディレクトリへ展開し、同梱SDKだけをinstallしたうえで型検査、契約テスト、1ゲーム完走まで確認します。現在は運営者本人によるダウンロード体験の試用段階で、Portalからの一般公開は行いません。

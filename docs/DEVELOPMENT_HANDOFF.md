@@ -49,7 +49,7 @@
 | 共通デバッグ認証 | `lib/debug-access.ts`, `app/components/DebugModeButton.tsx`, `app/api/debug-auth/route.ts`, `app/users/me/UserDashboard.tsx` |
 | ゲーム公開範囲 | `config/game-registry.json` の `private`, `lib/game-access.ts`, `lib/private-game-access.ts`, `app/api/private-game-access/route.ts` |
 | ゲーム登録・自動監査 | `config/game-registry.json`, `scripts/check-game-standards.mjs`, `docs/NEW_GAME_CHECKLIST.md` |
-| ゲーム開発SDK | `packages/game-sdk`, `packages/game-runtime`, `lib/game-sdk-platform-adapter.ts`, `scripts/create-game.mjs`, `scripts/check-game-sdk-boundaries.mjs`, `scripts/check-game-sdk-package.mjs`, `docs/CHATGPT_GAME_SDK.md` |
+| ゲーム開発SDK | `packages/game-sdk`, `packages/game-runtime`, `lib/game-sdk-platform-adapter.ts`, `sdk/starter-template`, `scripts/create-game.mjs`, `scripts/build-game-sdk-starter.mjs`, `scripts/check-game-sdk-boundaries.mjs`, `scripts/check-game-sdk-package.mjs`, `scripts/check-game-sdk-starter.mjs`, `docs/CHATGPT_GAME_SDK.md` |
 | SDK Developer Portal | `apps/sdk-portal`, `npm run dev:sdk`, `npm run build:sdk`, `docs/EXTERNAL_GAME_PACKAGE.md` |
 | 共通戦績・マイページ | `lib/player-stats-store.ts`, `app/api/player-stats/route.ts`, `app/users/me/UserDashboard.tsx` |
 | ログイン後の部屋復元・広場の復帰一覧 | `app/hooks/use-online-game-session-restore.ts`, `app/api/player-active-rooms/route.ts`, `lib/player-active-room-summary.ts`, `app/games/use-lobby-room-data.ts` |
@@ -73,7 +73,9 @@ SDK v1は、manifest、Game→Controller→LayoutのUI三層、認証済みID・
 
 公開SDK候補は`@game-fields/game-sdk@0.1.0`で、基本契約、server runtime、mock runtimeを別exportとして持つ。`npm run build:sdk-package`で独立buildし、`npm run test:sdk-package`でtarballを空の外部fixtureへinstallしてpackage名によるimportと実行を検査する。`npm run build:runtime-packages`は公開SDKの後に非公開Runtimeをbuildする。npm registryへは未公開で、初回公開の明示承認まで`private: true`かつ`UNLICENSED`を維持する。
 
-Portal用の別Vercel Project `app-games-sdk`は`game-fields` Team内に作成済みで、`https://sdk.game-fields.com`から取得できる。本体・devのDB、Redis、Blob、管理者秘密情報は共有していない。GitHub `koromo2010/app-games`へ接続し、Root Directoryは`apps/sdk-portal`、Production Branchは`main`、`develop`はPreview、Ignored Build Stepは`main`と`develop`だけをbuild対象とする。`develop`からのGit Preview buildとPortalソースの`main`限定反映、SDK Projectへのドメイン移管は完了している。npm registryへの初回publish、チュートリアル、APIリファレンス、提出画面は未実装。リポジトリ分割は一般配布の必須条件ではなく、公開packageの独立性とデプロイ・権限・データ境界を先に保証する。外部開発者はSDKで作成したゲームをGame Fieldsへ提出するだけで、`develop`、`main`、Vercel、本番データへの書き込み権限を持たない。現段階では自動検査後も運営者が採用、dev統合、実プレイ確認、`main`反映、本番公開を一貫して管理する。提出数が増えた場合はAIによるセキュリティ、バグ、権利、低品質・量産提出の検査を採用ゲートへ組み込めるが、無審査公開は許可せず、すべての提出物を最低1つのGame Fields管理ゲートへ通す。
+外部利用者の試用フローは`npm run build:sdk-starter`で`artifacts/game-fields-sdk-starter-v0.1.0.zip`を生成する。`sdk/starter-template`を正本とし、SDK tarball、`START_HERE.md`、ChatGPT用`AGENTS.md`、`GAME_SPEC.md`、最小APIリファレンス、型付きmanifest／Command／RoomView、契約テスト、ダミー2人の完走デモを同梱する。`npm run test:sdk-starter`は空の一時ディレクトリへZIPを展開し、同梱SDK install、型検査、契約テスト、デモ完走まで確認する。生成物はGitへ含めず、現在は運営者本人のダウンロード体験を確認する試用版である。
+
+Portal用の別Vercel Project `app-games-sdk`は`game-fields` Team内に作成済みで、`https://sdk.game-fields.com`から取得できる。本体・devのDB、Redis、Blob、管理者秘密情報は共有していない。GitHub `koromo2010/app-games`へ接続し、Root Directoryは`apps/sdk-portal`、Production Branchは`main`、`develop`はPreview、Ignored Build Stepは`main`と`develop`だけをbuild対象とする。`develop`からのGit Preview buildとPortalソースの`main`限定反映、SDK Projectへのドメイン移管は完了している。npm registryへの初回publish、Portal上の正式チュートリアル・APIリファレンス・ZIPダウンロード、提出画面は未実装。リポジトリ分割は一般配布の必須条件ではなく、公開packageの独立性とデプロイ・権限・データ境界を先に保証する。外部開発者はSDKで作成したゲームをGame Fieldsへ提出するだけで、`develop`、`main`、Vercel、本番データへの書き込み権限を持たない。現段階では自動検査後も運営者が採用、dev統合、実プレイ確認、`main`反映、本番公開を一貫して管理する。提出数が増えた場合はAIによるセキュリティ、バグ、権利、低品質・量産提出の検査を採用ゲートへ組み込めるが、無審査公開は許可せず、すべての提出物を最低1つのGame Fields管理ゲートへ通す。
 
 ## 3. 環境変数
 

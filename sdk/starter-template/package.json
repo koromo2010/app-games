@@ -1,0 +1,23 @@
+{
+  "name": "game-fields-my-first-game",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A game package created with the Game Fields SDK starter.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test dist/tests/*.test.js",
+    "demo": "npm run build && node dist/src/demo.js",
+    "check": "npm test"
+  },
+  "dependencies": {
+    "@game-fields/game-sdk": "file:vendor/__SDK_TARBALL__"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

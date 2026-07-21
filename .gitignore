@@ -4,6 +4,7 @@ packages/game-sdk/dist/
 packages/game-runtime/dist/
 *.tsbuildinfo
 out
+artifacts/
 .vercel
 .env*.local
 npm-debug.log*

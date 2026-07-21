@@ -86,7 +86,9 @@ npm workspacesと`apps/sdk-portal`の独立Next.jsアプリは実装済みで、
 
 SDK専用Vercel Project `app-games-sdk`は同一Gitリポジトリへ接続済みで、Root Directory `apps/sdk-portal`、Production Branch `main`、`develop` Preview、対象ブランチのbuild制御を設定している。`develop`からのGit Preview buildに成功し、Portalソースを`main`へ限定反映したうえで`https://sdk.game-fields.com`へProduction公開済みである。
 
-本体内部には非公開`@game-fields/game-runtime`とRedis/Cookie adapterを実装し、公開SDKだけを使う小規模オンラインfixtureで、認証identity注入、host/player判定、Redis TTL保存、revision CAS、閲覧者別RoomViewを実証済みである。内部Runtime coreは公開SDK以外へ依存せず、Cookie・Redis実装は本体`lib`側から注入する。汎用HTTP route・Client Runtime、WebSocket、1人1部屋、解散、戦績、リプレイ、npm registryへの初回publish、利用者向けインストール手順、APIリファレンス、提出画面は未実装である。
+本体内部には非公開`@game-fields/game-runtime`とRedis/Cookie adapterを実装し、公開SDKだけを使う小規模オンラインfixtureで、認証identity注入、host/player判定、Redis TTL保存、revision CAS、閲覧者別RoomViewを実証済みである。内部Runtime coreは公開SDK以外へ依存せず、Cookie・Redis実装は本体`lib`側から注入する。汎用HTTP route・Client Runtime、WebSocket、1人1部屋、解散、戦績、リプレイ、npm registryへの初回publish、Portal上の正式チュートリアル・APIリファレンス・提出画面は未実装である。
+
+運営者本人が外部利用者と同じ流れを試すため、`sdk/starter-template`と`scripts/build-game-sdk-starter.mjs`を実装済みである。生成ZIPにはSDK tarball、ChatGPT用の初回指示、`GAME_SPEC.md`、`AGENTS.md`、最小APIリファレンス、型付きゲームmodule、契約テスト、ダミー2人の完走デモを含む。`npm run test:sdk-starter`でZIP展開、同梱SDK install、型検査、契約テスト、完走まで検査する。これは一般公開前の試用物であり、Portalのダウンロード導線と正式な公開ライセンスは未実装である。
 
 ## 外部へ公開するもの
 

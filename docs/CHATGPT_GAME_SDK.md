@@ -27,6 +27,12 @@ npm run create-game -- sample-game "サンプルゲーム"
 
 SDK利用者は、完成したゲーム固有package、manifest、テスト、権利・ライセンス情報をGame Fieldsへ提出する。SDK利用者自身が`develop`や`main`へ統合したり、本番公開したりするものではない。提出後はGame Fields運営者が審査し、採用したものだけをdevで実プレイ確認したうえで、運営者が`main`へ反映する。
 
+### リポジトリを持たない試用者
+
+`npm run build:sdk-starter`で、ChatGPTへそのまま渡せる`game-fields-sdk-starter-v0.1.0.zip`を生成できる。ZIPには`@game-fields/game-sdk`のtarball、初回プロンプト、`AGENTS.md`、`GAME_SPEC.md`、最小APIリファレンス、型付きの動作例、契約テスト、ダミー2人で完走するCLIデモを含む。
+
+試用者はZIPを展開してChatGPTへ渡し、最初に仕様を相談して`GAME_SPEC.md`を確定したあと、同じフォルダ内だけを実装させる。`npm run test:sdk-starter`は別ディレクトリへの展開、同梱SDK install、型検査、契約テスト、デモ完走までを検査する。現在は運営者本人のダウンロード体験を確認する試用版であり、Portalからの一般配布物ではない。
+
 ## AIが編集してよい領域
 
 原則として以下だけ。
@@ -97,8 +103,8 @@ Mock Runtimeは作成時revision 1、Commandごとの1段階revision更新、古
 
 ## 現時点の限界
 
-SDK v1の型、サーバー契約、Mock Runtime、生成雛形、境界検査は`packages/game-sdk`へ物理分離済みである。`@game-fields/game-sdk@0.1.0`は単体build、tarball化、空の外部projectへのinstall、3つの公開exportの実行検査まで成功している。`apps/sdk-portal`はVercel Project `app-games-sdk`としてGitHubへ接続し、Root Directory、Production Branch `main`、`develop` Preview、対象ブランチのbuild制御を設定済みで、`https://sdk.game-fields.com`へProduction公開済みである。
+SDK v1の型、サーバー契約、Mock Runtime、生成雛形、境界検査は`packages/game-sdk`へ物理分離済みである。`@game-fields/game-sdk@0.1.0`は単体build、tarball化、空の外部projectへのinstall、3つの公開exportの実行検査まで成功している。ChatGPT試用ZIPは同梱SDK install、型検査、契約テスト、ダミーによる1ゲーム完走まで自動検査できる。`apps/sdk-portal`はVercel Project `app-games-sdk`としてGitHubへ接続し、Root Directory、Production Branch `main`、`develop` Preview、対象ブランチのbuild制御を設定済みで、`https://sdk.game-fields.com`へProduction公開済みである。
 
 Game Fields本体では非公開`@game-fields/game-runtime`と`lib/game-sdk-platform-adapter.ts`を追加し、署名済みCookie由来identity、host/player判定、Redis TTL保存、revision CAS、閲覧者別presentationを小規模オンラインfixtureで実証済みである。外部ゲームfixtureは公開SDKだけをimportし、Commandへ偽のplayer IDを混ぜてもRuntime由来のidentityが使われ、同じrevisionの同時Commandは片方だけが保存される。
 
-ただし公開packageはまだnpm registryへpublishしておらず、`private: true`と`UNLICENSED`を維持している。汎用HTTP route・Client Runtime、WebSocket、1人1部屋、解散、戦績、リプレイ、Developer Portalのチュートリアル・APIリファレンス・提出画面も未実装である。platform adapterとRedisキー実装はGame Fields内部専用で、公開SDKやPortalへ含めない。
+ただし公開packageはまだnpm registryへpublishしておらず、`private: true`と`UNLICENSED`を維持している。試用ZIPもPortalへは置かず、一般配布前に運営者本人のダウンロード、ChatGPTとのゲーム作成、再提出、dev統合を確認する。汎用HTTP route・Client Runtime、WebSocket、1人1部屋、解散、戦績、リプレイ、Developer Portalの正式チュートリアル・APIリファレンス・提出画面も未実装である。platform adapterとRedisキー実装はGame Fields内部専用で、公開SDKやPortalへ含めない。

@@ -13,6 +13,12 @@ const runtimeFiles = readdirSync(runtimeSourceRoot)
   .filter((name) => extname(name) === ".ts")
   .map((name) => join(runtimeSourceRoot, name));
 const proofGameFile = join(root, "tests/fixtures/sdk-count-up-game.ts");
+const starterRoot = join(root, "sdk/starter-template");
+const starterSourceFiles = ["src", "tests"].flatMap((directory) =>
+  readdirSync(join(starterRoot, directory))
+    .filter((name) => extname(name) === ".ts")
+    .map((name) => join(starterRoot, directory, name)),
+);
 const allowedRelativeImports = new Set([
   "./index.js",
   "./runtime.js",
@@ -64,6 +70,37 @@ if (/\bprocess\.env\b|Redis|DATABASE_URL|API_KEY/.test(proofSource)) {
   failures.push(`${relative(root, proofGameFile)}: 実証ゲームがplatform資源へ直接アクセスしています。`);
 }
 
+for (const absoluteFile of starterSourceFiles) {
+  const file = relative(root, absoluteFile);
+  const source = readFileSync(absoluteFile, "utf8");
+  const imports = source.matchAll(/(?:import|export)\s+(?:type\s+)?(?:[^"']+?\s+from\s+)?["']([^"']+)["']/g);
+  for (const match of imports) {
+    const specifier = match[1];
+    const allowed = specifier.startsWith("@game-fields/game-sdk")
+      || specifier.startsWith("./")
+      || specifier.startsWith("../")
+      || specifier === "node:assert/strict"
+      || specifier === "node:test";
+    if (!allowed) failures.push(`${file}: 試用スターターがSDK外の依存 ${specifier} をimportしています。`);
+  }
+  if (/\bprocess\.env\b|DATABASE_URL|API_KEY|from\s+["'](?:redis|@vercel\/blob)/.test(source)) {
+    failures.push(`${file}: 試用スターターがplatform資源へ直接アクセスしています。`);
+  }
+}
+
+const starterPackageJson = JSON.parse(readFileSync(join(starterRoot, "package.json"), "utf8"));
+if (starterPackageJson.private !== true) {
+  failures.push("sdk/starter-template/package.json: 試用スターターはprivateである必要があります。");
+}
+if (starterPackageJson.dependencies?.["@game-fields/game-sdk"] !== "file:vendor/__SDK_TARBALL__") {
+  failures.push("sdk/starter-template/package.json: SDKは同梱tarballだけを参照する必要があります。");
+}
+const starterRuntimeDependencies = Object.keys(starterPackageJson.dependencies ?? {})
+  .filter((name) => name !== "@game-fields/game-sdk");
+if (starterRuntimeDependencies.length > 0) {
+  failures.push(`sdk/starter-template/package.json: 未承認のruntime依存があります: ${starterRuntimeDependencies.join(", ")}`);
+}
+
 const packageJson = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));
 if (packageJson.name !== "@game-fields/game-sdk") {
   failures.push("packages/game-sdk/package.json: package名が@game-fields/game-sdkではありません。");
@@ -97,4 +134,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(`[game-sdk-boundaries] 公開SDK ${sdkFiles.length}件、内部Runtime ${runtimeFiles.length}件、実証ゲームの依存境界を確認しました。`);
+console.log(`[game-sdk-boundaries] 公開SDK ${sdkFiles.length}件、内部Runtime ${runtimeFiles.length}件、実証ゲーム、試用スターター ${starterSourceFiles.length}件の依存境界を確認しました。`);
