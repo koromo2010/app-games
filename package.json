@@ -1,48 +1,24 @@
 {
-    "name": "app-games",
-    "version": "0.1.0",
-    "private": true,
-    "workspaces": [
-        "apps/*",
-        "packages/*"
-    ],
-    "scripts": {
-        "dev": "next dev -p 3000",
-        "dev:sdk": "npm run dev --workspace @game-fields/sdk-portal",
-        "build": "next build",
-        "build:sdk": "npm run build --workspace @game-fields/sdk-portal",
-        "start": "next start -p 3000",
-        "lint": "npm run check:games && eslint",
-        "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test tests/*.test.ts",
-        "check:games": "node scripts/check-game-standards.mjs",
-        "load:smoke": "node scripts/load-test.mjs",
-        "monitor:production": "node scripts/production-smoke.mjs",
-        "vocabulary:migrate": "node --experimental-strip-types scripts/migrate-vocabulary-to-master.ts",
-        "vocabulary:import-legacy-words": "node --experimental-strip-types scripts/import-legacy-word-catalog.ts"
-    },
-    "dependencies": {
-        "@neondatabase/serverless": "^1.1.0",
-        "@simplewebauthn/browser": "^13.3.0",
-        "@simplewebauthn/server": "^13.3.2",
-        "@vercel/blob": "^2.6.1",
-        "@vercel/functions": "^3.7.5",
-        "next": "16.2.4",
-        "openai": "^6.34.0",
-        "react": "19.2.4",
-        "react-dom": "19.2.4",
-        "redis": "^5.12.1",
-        "resend": "^6.17.2",
-        "ws": "^8.21.1"
-    },
-    "devDependencies": {
-        "@tailwindcss/postcss": "^4",
-        "@types/node": "^20",
-        "@types/react": "^19",
-        "@types/react-dom": "^19",
-        "@types/ws": "^8.18.1",
-        "eslint": "^9",
-        "eslint-config-next": "16.2.4",
-        "tailwindcss": "^4",
-        "typescript": "^5"
-    }
+  "name": "game-fields-my-first-game",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A game package created with the Game Fields SDK starter.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test dist/tests/*.test.js",
+    "demo": "npm run build && node dist/src/demo.js",
+    "check": "npm test",
+    "package": "node scripts/build-submission.mjs"
+  },
+  "dependencies": {
+    "@game-fields/game-sdk": "file:vendor/game-fields-game-sdk-0.1.0.tgz"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "typescript": "^5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
 }

@@ -1,7 +1,0 @@
-{
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "crons": [
-    { "path": "/api/cron/storage-capacity", "schedule": "17 0 * * *" },
-    { "path": "/api/cron/account-retention", "schedule": "43 0 * * *" }
-  ]
-}

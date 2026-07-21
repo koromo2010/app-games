@@ -1,5 +1,0 @@
-export function LobbyPrivateAccessControl({ accessKey, isUnlocked, isUpdating, onAccessKeyChange, onClear }: { accessKey: string; isUnlocked: boolean; isUpdating: boolean; onAccessKeyChange: (value: string) => void; onClear: () => void }) {
-  return <div className="mx-auto flex max-w-6xl justify-end px-4 pb-3">
-    {isUnlocked ? <button type="button" disabled={isUpdating} onClick={onClear} className="rounded-md border border-violet-300/20 bg-violet-300/[0.05] px-2 py-1 text-[10px] font-semibold text-violet-200/50 transition hover:text-violet-100 disabled:opacity-40">{isUpdating ? "解除中..." : "PRIVATE OFF"}</button> : <input type="password" value={accessKey} onChange={(event) => onAccessKeyChange(event.target.value)} aria-label="Private access key" autoComplete="off" title="Private access" className="h-7 w-7 rounded-md border border-white/10 bg-white/[0.03] px-2 text-center text-xs text-white opacity-20 outline-none transition focus:w-28 focus:border-white/30 focus:opacity-100" />}
-  </div>;
-}
