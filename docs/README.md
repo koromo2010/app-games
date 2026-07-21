@@ -30,7 +30,8 @@
 | 外部開発者へゲーム部分だけ依頼する境界 | `EXTERNAL_GAME_PACKAGE.md` | ゲームmanifest、SDK、Runtime interface、import境界監査 |
 | お題DB・既出判定・再利用 | `TOPIC_HISTORY_DATABASE.md` | ゲーム別topic catalog・history store・topic API |
 | 開発・本番DB分離、共通単語DB | `DATABASE_ENVIRONMENTS.md` | `lib/storage-environment-guard.ts`、`lib/vocabulary-postgres-store.ts`、`db/vocabulary` |
-| 外部サービスの契約・課金確認 | `EXTERNAL_SERVICE_COSTS.md` | Vercel、Redis、Neon、Blob、Resend、LLM各社、お名前.comのBilling / Usage画面 |
+| 環境変数の配置・Shared移行 | `ENVIRONMENT_VARIABLES.md` | Vercel Team Shared Variables、各Project Variables、環境別接続先 |
+| 外部サービスの契約・課金確認 | `EXTERNAL_SERVICE_COSTS.md` | Vercel、Upstash、Neon、Blob、Resend、LLM各社、お名前.comのBilling / Usage画面 |
 | モジュール分割・時間管理 | `MODULAR_GAME_ARCHITECTURE.md` | `moduleBoundaryFiles`、`lib/game-timer`、対象Command API |
 | ログ確認・障害調査・観測基盤 | `OBSERVABILITY.md` | `lib/observability`、`instrumentation.ts`、Vercel Runtime Logs |
 | 将来の物理コンテナ分割 | `CONTAINER_ARCHITECTURE.md` | 現在は将来案。先にモジュラーモノリスの境界を守る |
