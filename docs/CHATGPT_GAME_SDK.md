@@ -25,6 +25,8 @@ npm run create-game -- sample-game "サンプルゲーム"
 
 > `app/sample-game/AGENTS.md` と `GAME_SPEC.md` を正本として、このゲームを実装してください。対象ゲームフォルダ外を変更する必要がある場合は、先に理由と変更候補を列挙してください。認証、DB、Redis、APIキーへ直接アクセスせず、既存の共通Runtimeを利用してください。最後に lint/test/build と新規ゲーム監査を実行してください。
 
+SDK利用者は、完成したゲーム固有package、manifest、テスト、権利・ライセンス情報をGame Fieldsへ提出する。SDK利用者自身が`develop`や`main`へ統合したり、本番公開したりするものではない。提出後はGame Fields運営者が審査し、採用したものだけをdevで実プレイ確認したうえで、運営者が`main`へ反映する。
+
 ## AIが編集してよい領域
 
 原則として以下だけ。

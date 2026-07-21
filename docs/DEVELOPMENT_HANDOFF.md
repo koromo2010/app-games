@@ -66,7 +66,7 @@
 
 SDK v1は、manifest、Game→Controller→LayoutのUI三層、認可済みactorを注入するserver module、閲覧者別RoomView、revision付きCommand、DB不要のMock Runtimeまでを提供する。ゲーム側のCommandへactor IDを本人証明として入れず、保存Roomをクライアントへ直接返さない。`npm run check:sdk`は公開SDKの内部依存を拒否し、`npm run lint`から必ず実行される。本体のCookie認証・Redis CAS・WebSocket・戦績へ自動接続するplatform adapterとSDK専用環境は未実装である。
 
-`sdk.game-fields.com`の再開時は、Gitリポジトリは`app-games`と共通のままnpm workspaces化し、公開SDKを`packages/game-sdk`、Developer Portalを`apps/sdk-portal`へ物理分離する。PortalはRoot Directoryを`apps/sdk-portal`とする別Vercel Project `app-games-sdk`で運用し、本体・devのDB、Redis、Blob、管理者秘密情報を共有しない。リポジトリ分割は一般配布の必須条件ではなく、公開packageの独立性とデプロイ・権限・データ境界を先に保証する。
+`sdk.game-fields.com`の再開時は、Gitリポジトリは`app-games`と共通のままnpm workspaces化し、公開SDKを`packages/game-sdk`、Developer Portalを`apps/sdk-portal`へ物理分離する。PortalはRoot Directoryを`apps/sdk-portal`とする別Vercel Project `app-games-sdk`で運用し、本体・devのDB、Redis、Blob、管理者秘密情報を共有しない。リポジトリ分割は一般配布の必須条件ではなく、公開packageの独立性とデプロイ・権限・データ境界を先に保証する。外部開発者はSDKで作成したゲームをGame Fieldsへ提出するだけで、`develop`、`main`、Vercel、本番データへの書き込み権限を持たない。現段階では自動検査後も運営者が採用、dev統合、実プレイ確認、`main`反映、本番公開を一貫して管理する。提出数が増えた場合はAIによるセキュリティ、バグ、権利、低品質・量産提出の検査を採用ゲートへ組み込めるが、無審査公開は許可せず、すべての提出物を最低1つのGame Fields管理ゲートへ通す。
 
 ## 3. 環境変数
 
