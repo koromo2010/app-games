@@ -25,6 +25,6 @@ export function createHodoaiViewPermissions(
     canDebug: isHost,
     canDissolve: Boolean(isHost && (isLobby || room?.phase === "result")),
     canLeave: Boolean(room && !isHost && isLobby),
-    canRecover: Boolean(room?.playerTimeouts?.[playerId]?.reduced),
+    canRecover: Boolean(room?.playerTimeouts?.[playerId]?.reducedTime),
   };
 }
