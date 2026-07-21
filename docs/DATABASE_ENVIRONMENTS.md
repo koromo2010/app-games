@@ -21,7 +21,7 @@ APP_DATABASE_URL=...
 APP_DATABASE_ENV=production|development
 VOCABULARY_DATABASE_URL=...
 VOCABULARY_ADMIN_DATABASE_URL=... # 管理画面だけ。vocabulary_adminロールを使用
-LEGACY_WORD_DATABASE_URL=...      # 初回移行だけ。旧カタログの読取専用ロールをdevelop Previewへ一時設定
+LEGACY_WORD_DATABASE_URL=...      # 初回移行だけ。旧カタログの読取専用ロールをdevelop環境へ一時設定
 REDIS_ENV=production|development
 BLOB_ENV=production|development
 APP_REDIS_URL=... # Redis Cloud等のredis:// / rediss://接続
@@ -30,7 +30,7 @@ UPSTASH_REDIS_REST_TOKEN=...
 BLOB_READ_WRITE_TOKEN=...
 ```
 
-`APP_DATABASE_URL`をアプリDBの正本とする。Redis Cloud等は`APP_REDIS_URL`、Upstash RESTは`UPSTASH_REDIS_REST_URL`と`UPSTASH_REDIS_REST_TOKEN`を使う。既存`DATABASE_URL`、`REDIS_URL`等は移行中の互換読取に限る。新しい正本を使う場合、`VERCEL_ENV`、`APP_ENV`、`APP_DATABASE_ENV`が一致しなければ接続を拒否する。RedisとBlobはそれぞれ`REDIS_ENV`、`BLOB_ENV`を設定した時点から同じ検査を有効にする。
+`APP_DATABASE_URL`をアプリDBの正本とする。Redis Cloud等は`APP_REDIS_URL`、Upstash RESTは`UPSTASH_REDIS_REST_URL`と`UPSTASH_REDIS_REST_TOKEN`を使う。既存`DATABASE_URL`、`REDIS_URL`等は移行中の互換読取に限る。新しい正本を使う場合、`VERCEL_GIT_COMMIT_REF`を優先して`main=production`、`develop=development`と判定し、`APP_ENV`、`APP_DATABASE_ENV`との不一致では接続を拒否する。ブランチ情報がない場合だけ`VERCEL_ENV`と`NODE_ENV`へフォールバックする。RedisとBlobはそれぞれ`REDIS_ENV`、`BLOB_ENV`を設定した時点から同じ検査を有効にする。
 
 ## 共通DBの安全境界
 

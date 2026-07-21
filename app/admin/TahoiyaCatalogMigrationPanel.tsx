@@ -15,7 +15,7 @@ type MigrationResult = {
 
 function errorMessage(code: string | undefined) {
   if (code === "TAHOIYA_CATALOG_SCHEMA_MISSING") return "先に共通単語DBへ 009_tahoiya_catalog.sql を適用してください。";
-  if (code === "TAHOIYA_CATALOG_MIGRATION_PREVIEW_ONLY") return "この移行はdevelop Previewだけで実行できます。";
+  if (code === "TAHOIYA_CATALOG_MIGRATION_PREVIEW_ONLY") return "この移行はdevelop開発環境だけで実行できます。";
   if (code === "VOCABULARY_ADMIN_STORE_NOT_CONFIGURED") return "共通単語DBの管理接続がありません。";
   if (code === "ADMIN_STEP_UP_REQUIRED") return "パスキー確認の有効時間が切れました。もう一度実行してください。";
   return code || "たほい屋カタログの移行状態を確認できませんでした。";
@@ -84,7 +84,7 @@ export function TahoiyaCatalogMigrationPanel({ onAuthExpired }: { onAuthExpired:
   const hasNoSourceRecords = status?.sourceRecordCount === 0;
 
   return <section className="mb-8 rounded-2xl border border-violet-300/20 bg-violet-300/[0.06] p-5">
-    <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-wide text-violet-300">Preview限定・たほい屋DB移行</p><h2 className="mt-1 text-xl font-black">たほい屋のお題を共通DBへ移す</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">旧Redisのお題本体を共通DBへ移し、候補内の経験済みプレイヤー配列をプレイヤー別Redis Setへ反転します。旧Redisは削除せず、移行中も互換読み取りを続けます。</p></div><button type="button" onClick={() => void load()} disabled={loading || migrating} className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold disabled:opacity-40">件数を再確認</button></div>
+    <div className="flex flex-wrap items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-wide text-violet-300">develop限定・たほい屋DB移行</p><h2 className="mt-1 text-xl font-black">たほい屋のお題を共通DBへ移す</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">旧Redisのお題本体を共通DBへ移し、候補内の経験済みプレイヤー配列をプレイヤー別Redis Setへ反転します。旧Redisは削除せず、移行中も互換読み取りを続けます。</p></div><button type="button" onClick={() => void load()} disabled={loading || migrating} className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold disabled:opacity-40">件数を再確認</button></div>
     {status && <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-3"><div className="rounded-xl bg-black/20 p-3"><dt className="text-slate-400">旧Redisの有効お題</dt><dd className="mt-1 text-lg font-black">{status.sourceValidCount.toLocaleString("ja-JP")}件</dd></div><div className="rounded-xl bg-black/20 p-3"><dt className="text-slate-400">共通DBのお題</dt><dd className="mt-1 text-lg font-black">{status.targetTopicCount.toLocaleString("ja-JP")}件</dd></div><div className="rounded-xl bg-black/20 p-3"><dt className="text-slate-400">移行状態</dt><dd className="mt-1 text-lg font-black">{hasNoSourceRecords ? "対象なし" : status.complete ? "完了" : "未完了"}</dd></div></dl>}
     {hasNoSourceRecords && <p role="status" className="mt-4 rounded-xl border border-violet-300/25 bg-black/20 px-4 py-3 text-sm text-violet-100">開発Redisに旧たほい屋お題はありません。移行処理は不要です。今後、管理画面で採用したお題は共通DBへ保存されます。</p>}
     {migrating && <div className="mt-4"><div className="h-2 overflow-hidden rounded-full bg-black/30" role="progressbar" aria-label="たほい屋カタログ移行の進捗" aria-valuemin={0} aria-valuemax={100} aria-valuenow={progress}><div className="h-full bg-violet-300 transition-[width]" style={{ width: `${progress}%` }} /></div><p className="mt-2 text-xs text-slate-300">{processed.toLocaleString("ja-JP")} / {status?.sourceRecordCount.toLocaleString("ja-JP") ?? "—"}件を確認中</p></div>}

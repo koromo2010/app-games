@@ -2,6 +2,7 @@ import {
   getPostgresClient,
   isPostgresConfigured,
 } from "./postgres-store.ts";
+import { expectedAppEnvironment } from "./storage-environment-guard.ts";
 
 export const generalGameWordPoolKey = "standard-game" as const;
 export const generalGameWordPoolFlag = "general_game_pool" as const;
@@ -51,7 +52,7 @@ function logGeneralGameWordPoolDiagnostic(
     level,
     event: "word.pool",
     service: "app-games-web",
-    environment: process.env.VERCEL_ENV || process.env.NODE_ENV || "development",
+    environment: expectedAppEnvironment(),
     deployment: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 12),
     fields: { game: "general-word-pool", operation, ...fields },
   }));

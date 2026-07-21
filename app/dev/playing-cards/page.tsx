@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { expectedAppEnvironment } from "@/lib/storage-environment-guard";
 import { PlayingCardsPlayground } from "./PlayingCardsPlayground";
 
 export const metadata: Metadata = {
@@ -8,6 +9,6 @@ export const metadata: Metadata = {
 };
 
 export default function PlayingCardsDevelopmentPage() {
-  if (process.env.APP_ENV === "production" || process.env.VERCEL_ENV === "production") notFound();
+  if (process.env.APP_ENV === "production" || expectedAppEnvironment() === "production") notFound();
   return <PlayingCardsPlayground />;
 }

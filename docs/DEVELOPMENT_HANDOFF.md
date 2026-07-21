@@ -102,6 +102,8 @@
 - `NEXT_PUBLIC_GAME_ADS_MODE`（任意。既定`off`。`preview`は広告予定位置のレイアウト確認専用。`live`は同意管理・配信adapter・CSP・ポリシー審査完了後だけ使用）
 - 既存の `KV_*`, `REDIS_URL` も環境に設定されている場合がある
 
+アプリ環境は`lib/storage-environment-guard.ts`で一元判定する。Vercelでは`VERCEL_GIT_COMMIT_REF`を最優先し、`main=production`、`develop=development`とする。ブランチ情報がないときだけ`VERCEL_ENV`、`NODE_ENV`へフォールバックする。`app-games-dev`の`develop`はVercel上のProduction Deploymentだが、アプリとしてはdevelopmentであり、`APP_ENV=development`、`APP_DATABASE_ENV=development`、`REDIS_ENV=development`、`BLOB_ENV=development`と一致させる。本番ProjectはIgnored Build Stepで`main`だけ、開発Projectは`develop`だけをビルドする。
+
 ゲームの公開／非公開は `config/game-registry.json` の `private` を正本とする。ページは `gamePageAccessAllowed`、部屋APIは `gameApiAccessDeniedResponse` を通し、非公開ゲームだけ共通Cookieを要求する。ワードソナーとワードスケールは公開ゲームのためアクセスキー不要だが、ログインと部屋内の操作権限は引き続き必要。
 
 ロビーの分類タグも同じ登録簿の `tags` を正本とする。先頭は遊び方を示す `対戦`、`協力`、`チーム戦` のいずれかとし、残りは `正体隠匿`、`ブラフ`、`連想`、`推理`、`戦略` などゲーム選びに役立つ特徴を付ける。カードがタグだらけにならないよう1ゲーム3件以内とする。開発段階を示す旧 `Playable` / `Prototype` は利用者向けカードへ表示せず、プレイ中・メンテナンス・プライベートだけを運用状態として動的表示する。
@@ -233,8 +235,8 @@ API直叩き対策では、全オンラインRoom APIのGETをCookie本人と保
 - 順番投稿・全員同時投稿、順番ランダム、同時投票、同率・決選投票、狼の逆転回答に対応
 - お題はJST同日同語禁止、順序非依存ペアは標準30日間禁止。固有名詞は語だけで類推できない距離へ調整済み
 - OpenAI OFF時はGemini、Groq、ローカルの順。逆転判定は無料APIまたはfuzzy/feedbackを使用
-- 一般単語の新RAGは共通DBから難易度別に起点語3件を抽出し、1回のLLMで3件を独立審査・相方生成する。生成時の距離とフィードバック集計後の距離を別カラムで保持する。DB migration、旧197,040語の取込、Preview確認は `docs/WORDWOLF_RAG.md` を正本とする
-- 旧197,040語の初回移行中だけ、develop Previewの管理画面に再開可能な取込パネルを置く。`LEGACY_WORD_DATABASE_URL`（未設定時は開発用 `APP_DATABASE_URL`）の `shared_word_catalog` だけを読み、`VOCABULARY_ADMIN_DATABASE_URL`（共通DB）へ1,000件ずつupsertする。旧カタログが開発DBにない場合は読取専用URLをdevelop Previewだけへ一時設定する。Productionでは実行不能で、完了・件数照合後に一時API、パネル、環境変数、読取ロールを撤去する
+- 一般単語の新RAGは共通DBから難易度別に起点語3件を抽出し、1回のLLMで3件を独立審査・相方生成する。生成時の距離とフィードバック集計後の距離を別カラムで保持する。DB migration、旧197,040語の取込、develop環境確認は `docs/WORDWOLF_RAG.md` を正本とする
+- 旧197,040語の初回移行中だけ、`app-games-dev`のdevelop環境の管理画面に再開可能な取込パネルを置く。`LEGACY_WORD_DATABASE_URL`（未設定時は開発用 `APP_DATABASE_URL`）の `shared_word_catalog` だけを読み、`VOCABULARY_ADMIN_DATABASE_URL`（共通DB）へ1,000件ずつupsertする。旧カタログが開発DBにない場合は読取専用URLをdevelop環境だけへ一時設定する。`main`の本番環境では実行不能で、完了・件数照合後に一時API、パネル、環境変数、読取ロールを撤去する
 
 詳細な挙動を変える前に、`lib/wordwolf-command-domain.ts`、`lib/wordwolf-room-normalizer.ts`、`lib/wordwolf-room-presentation.ts`、`lib/wordwolf-room-store.ts` の境界を確認する。
 
@@ -299,7 +301,7 @@ API直叩き対策では、全オンラインRoom APIのGETをCookie本人と保
 
 正解説明の長さは全体共通の管理ハイパラ `tahoiya-definition-median` で中央値を10〜50文字帯から10文字刻みで選ぶ。初期値は30文字帯で、約10字、20字、30字、40字、50字、55〜60字を `15% / 25% / 30% / 17% / 9% / 4%` の順で混在させる。30文字帯までの累積確率は70%（20文字帯までは40%）で、上限は60文字。部屋設定には出さず、変更は保存済みのお題を書き換えず新しく生成する正解文から反映する。新規生成では各帯を単なる上限ではなく `6〜14 / 14〜25 / 24〜38 / 32〜46 / 40〜55 / 48〜60` 文字の目標範囲として扱い、長い帯ほど上位概念、識別特徴、対象、用途、成立条件など正確な語義要素を増やす。同義反復や周知度・語源・歴史・用例で水増しせず、正確な語義だけで選択帯へ自然に収まらない語は説明を短く採用せず候補ごと替える。保存済みのお題はこの検査で再判定せず、そのまま再利用する。
 
-`lib/tahoiya-topic-catalog.ts` はBad評価語と今回の参加者が経験済みの語を除外する。誰が見たかはプレイヤー別Redis Setへ保存する。難易度判定の正本は `tahoiya_word_screenings`、説明完成後の正本は `tahoiya_topics` / `word_definitions` とする。旧Redis Hashと既存 `active_tahoiya_topics` も再利用対象として残し、管理画面のPreview限定移行からお題と既出履歴を冪等に移す。
+`lib/tahoiya-topic-catalog.ts` はBad評価語と今回の参加者が経験済みの語を除外する。誰が見たかはプレイヤー別Redis Setへ保存する。難易度判定の正本は `tahoiya_word_screenings`、説明完成後の正本は `tahoiya_topics` / `word_definitions` とする。旧Redis Hashと既存 `active_tahoiya_topics` も再利用対象として残し、管理画面のdevelop限定移行からお題と既出履歴を冪等に移す。
 
 ## 8. フィードバック/RAG
 

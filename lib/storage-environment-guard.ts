@@ -8,7 +8,11 @@ function normalizeAppEnvironment(value: string | undefined): AppEnvironment | nu
 export function expectedAppEnvironment(
   vercelEnvironment = process.env.VERCEL_ENV,
   nodeEnvironment = process.env.NODE_ENV,
+  gitCommitRef = process.env.VERCEL_GIT_COMMIT_REF,
 ): AppEnvironment {
+  const branch = gitCommitRef?.trim();
+  if (branch === "main") return "production";
+  if (branch === "develop") return "development";
   if (vercelEnvironment === "production") return "production";
   if (vercelEnvironment === "preview" || vercelEnvironment === "development") return "development";
   return nodeEnvironment === "test" ? "test" : nodeEnvironment === "production" ? "production" : "development";

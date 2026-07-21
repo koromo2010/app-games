@@ -59,7 +59,7 @@ let targetClient: NeonQueryFunction<boolean, boolean> | null = null;
 let targetClientUrl = "";
 
 function targetDatabase() {
-  if (process.env.VERCEL_ENV !== "preview" || assertRuntimeEnvironmentAgreement() !== "development") {
+  if (assertRuntimeEnvironmentAgreement() !== "development") {
     throw new Error("TAHOIYA_CATALOG_MIGRATION_PREVIEW_ONLY");
   }
   const url = sharedEnvironmentVariable("VOCABULARY_ADMIN_DATABASE_URL");

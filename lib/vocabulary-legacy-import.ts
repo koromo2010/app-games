@@ -40,7 +40,7 @@ export function resolveLegacyVocabularySourceUrl(env: Record<string, string | un
 }
 
 function importClients() {
-  if (process.env.VERCEL_ENV !== "preview" || assertRuntimeEnvironmentAgreement() !== "development") {
+  if (assertRuntimeEnvironmentAgreement() !== "development") {
     throw new Error("LEGACY_VOCABULARY_IMPORT_PREVIEW_ONLY");
   }
   const sourceUrl = resolveLegacyVocabularySourceUrl(process.env);

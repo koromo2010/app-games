@@ -8,6 +8,7 @@ import {
   type OnlineRoomSubscription,
 } from "./online-room-realtime-protocol.ts";
 import { redisCommand, resolveSocketRedisUrl } from "./redis-store.ts";
+import { expectedAppEnvironment } from "./storage-environment-guard.ts";
 
 const eventStreamKey = "online-room:events:v1";
 const eventStreamMaxLength = 2_000;
@@ -29,7 +30,7 @@ const hub = {
 export function onlineRoomRealtimeEnabled(env: NodeJS.ProcessEnv = process.env) {
   if (env.ONLINE_ROOM_WEBSOCKET_ENABLED === "0") return false;
   if (env.ONLINE_ROOM_WEBSOCKET_ENABLED === "1") return true;
-  return env.VERCEL_ENV === "preview" || env.NODE_ENV === "development";
+  return expectedAppEnvironment(env.VERCEL_ENV, env.NODE_ENV, env.VERCEL_GIT_COMMIT_REF) === "development";
 }
 
 export function onlineRoomRealtimeSocketConfigured() {

@@ -14,6 +14,15 @@
 
 Vercel Teamは `game-fields`（Team ID: `team_Q3rGaf7bwfZZsjaj1vqCg5YO`）。共通秘密情報はTeam Shared Environment Variablesへ置き、環境別データ接続とURLは各Project Variablesへ置く。
 
+アプリ内の環境判定はVercelのDeployment種別ではなく、`VERCEL_GIT_COMMIT_REF`を優先する。`main`は`production`、`develop`は`development`として扱い、ブランチ情報がないローカル実行などでのみ`VERCEL_ENV`と`NODE_ENV`へフォールバックする。これにより、`app-games-dev`のProduction Deploymentである`develop`を本番アプリと誤認しない。
+
+VercelのIgnored Build StepはProjectごとに次を設定済み。
+
+- `app-games`: `if [ "$VERCEL_GIT_COMMIT_REF" != "main" ]; then exit 0; else exit 1; fi`
+- `app-games-dev`: `if [ "$VERCEL_GIT_COMMIT_REF" != "develop" ]; then exit 0; else exit 1; fi`
+
+VercelではIgnored Build Stepの終了コード`0`がスキップ、`1`がビルド実行を意味する。
+
 ChatGPTのVercel Connectorは現在このTeam scopeを持たず、Project IDを直接指定しても `403 Forbidden` と `must re-authenticate to this scope` を返す。Project設定やTeam membershipの追加ではなく、Connectorを `game-fields` scopeへ再認証してからDeploy・Build Log・Runtime Log操作を再確認する。
 
 ## 命名と移行ルール
@@ -134,6 +143,8 @@ Blob Storeの現行候補:
 - `VERCEL_PROJECT_PRODUCTION_URL`
 - `VERCEL_GIT_COMMIT_REF`
 - その他Vercel System Environment Variables
+
+`VERCEL_GIT_COMMIT_REF`は`lib/storage-environment-guard.ts`が`main`／`develop`を識別するために使用する。これらのSystem Environment Variablesは手動で上書きしない。
 
 ## 移行チェックリスト
 

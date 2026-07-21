@@ -8,13 +8,14 @@ import {
 } from "@/lib/observability/event";
 import { getObservabilitySink } from "@/lib/observability/sink";
 import type { ObservabilityFields, ObservabilityLevel } from "@/lib/observability/types";
+import { expectedAppEnvironment } from "@/lib/storage-environment-guard";
 
 type RequestLogBase = Pick<ObservabilityFields, "game" | "operation">;
 
 function runtimeMetadata() {
   return {
     service: process.env.OBSERVABILITY_SERVICE_NAME || "app-games-web",
-    environment: process.env.VERCEL_ENV || process.env.NODE_ENV || "development",
+    environment: expectedAppEnvironment(),
     deployment: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 12),
     region: process.env.VERCEL_REGION,
   };

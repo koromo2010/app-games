@@ -7,6 +7,7 @@ import { getRedisConfig, redisCommand } from "@/lib/redis-store";
 import { summarizeWebVitals } from "@/lib/web-vitals";
 import { loadWebVitalSamples } from "@/lib/web-vitals-store";
 import { loadAdminStorageUsage, type StorageUsageSnapshot } from "@/lib/storage-capacity-monitor";
+import { expectedAppEnvironment } from "@/lib/storage-environment-guard";
 
 type GenericRoom = {
   phase?: unknown;
@@ -111,7 +112,7 @@ export async function loadAdminDashboardCore(): Promise<AdminDashboardCore> {
     responseTimeMs: Date.now() - startedAt,
     deployment: {
       commit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 12) ?? null,
-      environment: process.env.VERCEL_ENV || process.env.NODE_ENV || "development",
+      environment: expectedAppEnvironment(),
       region: process.env.VERCEL_REGION ?? null,
     },
     services: {

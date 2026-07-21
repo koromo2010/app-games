@@ -30,7 +30,13 @@ test("WebSocket通知はrevisionだけを運び、部屋の秘密情報を受け
   }), null);
 });
 
-test("WebSocketは既定でPreviewとローカル開発だけ有効にする", () => {
+test("WebSocketは既定でdevelop、Preview、ローカル開発だけ有効にする", () => {
+  assert.equal(onlineRoomRealtimeEnabled({
+    VERCEL_ENV: "production", VERCEL_GIT_COMMIT_REF: "develop", NODE_ENV: "production",
+  }), true);
+  assert.equal(onlineRoomRealtimeEnabled({
+    VERCEL_ENV: "production", VERCEL_GIT_COMMIT_REF: "main", NODE_ENV: "production",
+  }), false);
   assert.equal(onlineRoomRealtimeEnabled({ VERCEL_ENV: "preview", NODE_ENV: "production" }), true);
   assert.equal(onlineRoomRealtimeEnabled({ VERCEL_ENV: "production", NODE_ENV: "production" }), false);
   assert.equal(onlineRoomRealtimeEnabled({ NODE_ENV: "development" }), true);
