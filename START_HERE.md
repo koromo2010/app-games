@@ -1,6 +1,6 @@
 # Game Fields SDK — ここから始める
 
-これは、ChatGPTと一緒にGame Fields向けゲームを1本作るための試用スターターです。SDK本体 `@game-fields/game-sdk` v__SDK_VERSION__ も `vendor/` に同梱されているため、npm公開前でもこの公開Gitまたは試用ZIPだけで契約テストを実行できます。
+これは、ChatGPTと一緒にGame Fields向けゲームを1本作るための試用スターターです。SDK本体 `@game-fields/game-sdk` v0.1.0 も `vendor/` に同梱されているため、npm公開前でもこの公開Gitまたは試用ZIPだけで契約テストを実行できます。
 
 ## いちばん簡単な使い方
 
@@ -33,6 +33,8 @@ npm run check
 npm run demo
 npm run package
 ```
+
+ChatGPT経由で制作者URLを予約した場合は、モック確認後にSDK接続先・制作者slug・管理トークンを一時的な環境変数として`npm run publish:mock`を実行します。SDKが専用Gitへ保存し、クライアントへ共有できる同一URLを返します。管理トークンはファイルやGitへ保存しません。
 
 最初から入っている「はじめてのゲーム」はSDKの動作確認用です。ChatGPTに依頼すると、`GAME_SPEC.md`の内容に合わせて置き換えられます。
 
