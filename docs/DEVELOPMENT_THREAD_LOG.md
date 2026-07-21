@@ -98,6 +98,7 @@
 - `58d6943` — `Add private Code Intercept game`
 - `c3079b2` — `Add private Canvas drawing UI prototype`
 
+
 ### 未対応・保留
 
 - 広告のlive配信は、同意管理、配信adapter、CSP、年齢・地域・コンテンツ方針を実装するまで保留。
@@ -197,6 +198,7 @@
 - プレイヤー増加時のRedis負荷と画面応答を改善する。
 - WebSocketを導入しつつ、切断や未対応環境ではpollingへ安全に戻す。
 - API直叩きや観戦モードでの秘密情報漏えいが残らないか確認する。
+
 
 ### 判断と実施結果
 
@@ -299,6 +301,7 @@
 
 ### 検証
 
+
 - 記載した関連コミットがGit履歴に存在することと、文書へ接続文字列等の秘密値が混入していないことを確認した。
 - 全369テスト、ESLint、production build（72ルート）に成功した。
 
@@ -397,6 +400,7 @@
 ### 作業目的
 
 - ChatGPTのVercel Connectorを再接続し、`game-fields` Teamへアクセスできるか確認する。
+
 
 ### 実施結果
 
@@ -498,6 +502,7 @@
 - `main`にはまだPortalソースがないため、developの他機能を含めずSDK Portalとworkspace設定だけを限定反映する。
 - SDK本番build成功後に`sdk.game-fields.com`を本番`app-games` Projectから`app-games-sdk`へ移管する。
 
+
 ## 2026-07-21 — SDK独自ドメイン公開と配布packageの物理分離
 
 ### 利用者からの要望
@@ -597,6 +602,7 @@
 - `npm run test:sdk-starter`で同梱SDK install、型検査、3件の契約テスト、revision 5での1ゲーム完走に成功した。
 - `npm run test:sdk-package`でSDK tarballの外部installと3 exportの実行に成功した。
 - SDK境界検査を含むESLint、全372テスト、本体72ルートのproduction build、SDK Portalのproduction buildに成功した。
+
 
 ### 未対応・保留
 
@@ -699,6 +705,7 @@
 
 - 本番共通UIパッケージをSDKモックから直接利用する仕組みと、公開`sdk-starter`ブランチへの同期は別途確認する。
 
+
 ## 2026-07-21 — SDK標準UIプレビューと再利用モジュール案内
 
 ### 利用者からの要望
@@ -798,6 +805,7 @@
 
 ### 実施結果
 
+
 - `config/platform-release.json`を版情報の正本として追加した。
 - package、SDK contract、room schemaの不一致を拒否する`check:versions`をlintへ追加した。
 - DownloadMeとSDK Portalへリリース情報を同期し、スターターmanifestへPlatform・SDK contract版を埋め込むようにした。
@@ -867,3 +875,4 @@
 - `develop`へ公開前検査と型設定を反映した（`19ce506`）。
 - `sdk-starter`の現行履歴を維持したままmanifestを更新した（`660f29c`）。公開ファイルを再取得し、`platformVersion: 0.1.0`と`sdkContractVersion: 1`を確認した。
 - 公開ブランチ全体の再生成snapshotへの置換は、同時更新を保護するため見送った。今回の制作停止原因はmanifest更新で解消済み。
+
