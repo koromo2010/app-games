@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { defaultAppLocale, isAppLocale, normalizeAppLocale, type AppLocale } from "@/lib/app-locale";
 import { translateApp, type AppMessageKey, type AppMessageValues } from "@/lib/app-i18n";
+import { readPlayerSession } from "@/lib/player-session";
 
 const APP_LOCALE_COOKIE = "game_fields_locale";
 
@@ -40,6 +41,26 @@ export function AppLocaleProvider({
       window.location.assign(`${nextPathname}${window.location.search}${window.location.hash}`);
     }
   }, []);
+
+  useEffect(() => {
+    const syncFromSession = () => {
+      const session = readPlayerSession();
+      if (session?.locale && isAppLocale(session.locale) && session.locale !== locale) {
+        setLocale(session.locale);
+      }
+    };
+    const onSessionSaved = (event: Event) => {
+      const detail = (event as CustomEvent<{ locale?: unknown }>).detail;
+      if (isAppLocale(detail?.locale) && detail.locale !== locale) setLocale(detail.locale);
+    };
+    syncFromSession();
+    window.addEventListener("storage", syncFromSession);
+    window.addEventListener("game-fields:player-session-saved", onSessionSaved);
+    return () => {
+      window.removeEventListener("storage", syncFromSession);
+      window.removeEventListener("game-fields:player-session-saved", onSessionSaved);
+    };
+  }, [locale, setLocale]);
 
   useEffect(() => {
     document.documentElement.lang = locale;
