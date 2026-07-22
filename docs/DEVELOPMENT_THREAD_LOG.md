@@ -1312,3 +1312,10 @@
 
 - 変更を共有`develop`へ反映し、SDK-devの本体UI共用表示を実機確認する。
 - 内部互換の`publish_mock`、保存API、private Git階層は、game package契約が固まるまで残す。利用者向けURLには出さない。
+
+### 公開・実機確認
+
+- 共有`develop`の`1313e35`へ反映した。
+- `app-games-dev`と`app-games-sdk-dev`の対象DeploymentがともにREADYになった。
+- `https://sdk-dev.game-fields.com/test10-1`が200を返し、本体devのゲーム広場UI内に保存済み「21ゲーム」カードが追加されることをHTML応答で確認した。
+- `https://sdk-dev.game-fields.com/test10-1/games/twenty-one-misere`が200を返すことを確認した。ブラウザ上の操作・ログイン・ゲーム進行は利用者による画面確認を残す。
