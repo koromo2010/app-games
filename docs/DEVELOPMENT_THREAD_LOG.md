@@ -1645,7 +1645,15 @@
 - `npm run lint`成功。
 - `npm test`成功（395件）。
 - 通常配置の依存を持つ検証コピーで`npm run build`成功し、`/sdk-examples`と`/sdk-examples/word-wolf`の生成を確認した。
+- `29654e5`の`app-games-dev`と`app-games-sdk-dev`がREADYになったことを確認した。
+- `https://sdk-dev.game-fields.com/sdk-examples`を実ブラウザで開き、共通ラウンジのアカウント欄・検索欄・通常カードUIと「ワードウルフ SDK」カード1件の表示を確認した。
+- `https://sdk-dev.game-fields.com/sdk-examples/word-wolf`を実ブラウザで開き、共通トップバー、広場導線、MENU、プレイヤーメニュー、共通Room設定、参加者3人、ゲーム開始ボタンの表示を確認した。
+
+### 関連コミット
+
+- `4479ee3` — SDK公式一覧とワードウルフ画面を共通UIへ統合。
+- `29654e5` — 公式ワードウルフを共通ラウンジ上で公開表示。
 
 ### 未対応・保留
 
-- sdk-devへの反映と公開URLの実機確認。
+- 永続Room、HttpOnly session由来actor、HTTP Client Runtimeへの接続は次工程。
