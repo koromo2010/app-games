@@ -48,6 +48,8 @@ export async function ensureSdkSchema() {
         )
       `;
       await sql`ALTER TABLE sdk_games ADD COLUMN IF NOT EXISTS mock_revision CHAR(40)`;
+      await sql`ALTER TABLE sdk_creators ADD COLUMN IF NOT EXISTS owner_player_id VARCHAR(120)`;
+      await sql`CREATE UNIQUE INDEX IF NOT EXISTS sdk_creators_owner_slug_idx ON sdk_creators (owner_player_id, slug) WHERE owner_player_id IS NOT NULL`;
       await sql`CREATE INDEX IF NOT EXISTS sdk_games_creator_updated_idx ON sdk_games (creator_id, updated_at DESC)`;
     })().catch((error) => {
       initialized = null;

@@ -1,4 +1,5 @@
 import { finalizeInstanceSlug, normalizeInstanceSlug, validateInstanceSlug } from "@/lib/instance-registry";
+import { getSdkAccountPlayerId } from "@/lib/account-session";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +9,7 @@ export async function POST(request: Request) {
   const error = validateInstanceSlug(slug);
   if (error || typeof body?.reservationToken !== "string") return Response.json({ finalized: false, error: error ?? "予約トークンが必要です。" }, { status: 400 });
   try {
-    const result = await finalizeInstanceSlug(slug, body.reservationToken);
+    const result = await finalizeInstanceSlug(slug, body.reservationToken, await getSdkAccountPlayerId());
     if (!result) return Response.json({ finalized: false, error: "予約が期限切れか、すでに確定されています。" }, { status: 409 });
     return Response.json({ finalized: true, ...result }, { status: 201 });
   } catch {

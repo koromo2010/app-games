@@ -1,5 +1,6 @@
 import portalPackage from "../package.json";
 import Link from "next/link";
+import { getSdkAccountPlayerId } from "@/lib/account-session";
 
 const foundations = [
   {
@@ -40,8 +41,27 @@ const reviewFlow = [
   "Main release",
 ];
 
-export default function Home() {
+const firstBuildGuide = [
+  {
+    title: "最初のモックは10〜20分が目安",
+    description:
+      "ゲーム内容を伝えたあと、AIが画面作成・検査・SDKへの保存まで進めます。内容によってはもう少しかかることがあります。",
+  },
+  {
+    title: "作業中でも、気づいたことを書いてOK",
+    description:
+      "「色を変えたい」「このルールも追加したい」など、完成を待たずにそのまま送ってください。AIが追加内容を受け取り、制作の続きへ反映します。",
+  },
+  {
+    title: "完成すると、遊べるURLが届きます",
+    description:
+      "ローカルファイルではなく、Game Fields SDKの確認URLが案内されます。URLを開いて遊び、気に入らない部分は同じチャットで修正できます。",
+  },
+];
+
+export default async function Home() {
   const platformVersion = portalPackage.version;
+  const linked = Boolean(await getSdkAccountPlayerId().catch(() => null));
   return (
     <main>
       <header className="site-header">
@@ -74,8 +94,8 @@ export default function Home() {
             ゲーム固有部分を作成・検証・提出するための開発基盤です。
           </p>
           <div className="hero-actions">
-            <a className="primary-action" href="/GameFieldsDownloadMe.md" download>
-              最新のGameFieldsDownloadMe
+            <a className="primary-action" href="/GameFieldsDownloadMe-ver1.md" download>
+              GameFieldsDownloadMe-ver1
               <span aria-hidden="true">↓</span>
             </a>
             <a className="primary-action" href="#foundation">
@@ -136,9 +156,43 @@ export default function Home() {
             制作者ごとの専用URLに広場と部屋を用意します。新しいゲームは同じ広場へ追加され、本番と同じ導線で検証できます。
           </p>
         </div>
+        <aside className="required-environment" aria-labelledby="account-link-title">
+          <span className="required-environment-label">アカウント接続</span>
+          <div>
+            <h3 id="account-link-title">{linked ? "Game Fieldsアカウントへ接続済みです" : "先にGame Fieldsアカウントを接続してください"}</h3>
+            <p>表のGame Fieldsと同じアカウントへ制作物を紐づけます。パスワードや表サイトのログインCookieをSDKやChatGPTへ渡すことはありません。</p>
+            {!linked && <a className="secondary-action" href="/api/account-link/start">Game Fieldsでログインして接続</a>}
+          </div>
+        </aside>
+        <div className="first-build-guide" aria-label="初めてゲームを作る方への案内">
+          {firstBuildGuide.map((item, index) => (
+            <article key={item.title}>
+              <span>{String(index + 1).padStart(2, "0")}</span>
+              <div>
+                <h3>{item.title}</h3>
+                <p>{item.description}</p>
+              </div>
+            </article>
+          ))}
+        </div>
+        <aside className="required-environment" aria-labelledby="required-environment-title">
+          <span className="required-environment-label">ご利用前に確認</span>
+          <div>
+            <h3 id="required-environment-title">ゲーム制作にはChatGPTのCodexまたはWorkが必要です</h3>
+            <p>
+              ダウンロードしたファイルは、CodexまたはWorkのチャットへ添付してください。ゲームのコード取得・複数ファイルの編集・動作検査・SDKへの保存とURL発行を行うため、通常のChatGPTチャットだけでは制作を完了できません。
+            </p>
+            <p>
+              通常チャットでHTMLファイルだけが作られた場合、それはGame Fields SDKへ保存された完成版ではありません。CodexまたはWorkへ切り替え、同じファイルとゲームの希望を送ってください。
+            </p>
+          </div>
+        </aside>
+        <p className="start-note">
+          途中で画面を閉じたり新しいチャットへ移ったりせず、URLが案内されるまで同じチャットでお待ちください。エラーなどで保存できなかった場合は、AIが未完了であることと次の対応を案内します。
+        </p>
         <div className="hero-actions">
-          <a className="primary-action" href="/GameFieldsDownloadMe.md" download>
-            GameFieldsDownloadMe.mdを取得
+          <a className="primary-action" href="/GameFieldsDownloadMe-ver1.md" download>
+            GameFieldsDownloadMe-ver1.mdを取得
             <span aria-hidden="true">↓</span>
           </a>
           <Link className="secondary-action" href="/demo">

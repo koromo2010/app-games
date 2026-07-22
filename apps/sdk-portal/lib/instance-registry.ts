@@ -64,7 +64,7 @@ export async function reserveInstanceSlug(slug: string, displayName: string) {
   return { slug, url: `${baseUrl}/${slug}`, reservationToken, expiresInSeconds: 7 * 24 * 60 * 60 };
 }
 
-export async function finalizeInstanceSlug(slug: string, reservationToken: string) {
+export async function finalizeInstanceSlug(slug: string, reservationToken: string, ownerPlayerId?: string | null) {
   const reservation = await command(["GET", keyFor(slug)]);
   if (typeof reservation.result !== "string") return null;
   const value = JSON.parse(reservation.result) as { displayName?: unknown; reservationToken?: unknown };
@@ -72,8 +72,8 @@ export async function finalizeInstanceSlug(slug: string, reservationToken: strin
   await ensureSdkSchema();
   const managementToken = randomBytes(32).toString("base64url");
   const rows = await sdkSql()`
-    INSERT INTO sdk_creators (slug, display_name, management_token_hash)
-    VALUES (${slug}, ${typeof value.displayName === "string" ? value.displayName.slice(0, 80) : slug}, ${tokenHash(managementToken)})
+    INSERT INTO sdk_creators (slug, display_name, management_token_hash, owner_player_id)
+    VALUES (${slug}, ${typeof value.displayName === "string" ? value.displayName.slice(0, 80) : slug}, ${tokenHash(managementToken)}, ${ownerPlayerId ?? null})
     ON CONFLICT (slug) DO NOTHING
     RETURNING id, slug, display_name
   `;

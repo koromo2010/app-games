@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import type { PlayerStatsGameFilter } from "@/lib/player-stats-store";
 import type { GameDurationEstimate, GameDurationGameId } from "@/lib/game-duration-statistics";
 import { GameAdSlot } from "../components/GameAdSlot";
@@ -25,14 +26,15 @@ import { useAppLocale } from "@/app/components/AppLocaleProvider";
 
 export function GameLobby({ siteName = "GAME FIELDS", gameOperations, durationEstimates = {} }: { siteName?: string; gameOperations: GameOperation[]; durationEstimates?: Partial<Record<GameDurationGameId, GameDurationEstimate>> }) {
   const { locale, t } = useAppLocale();
+  const sdkLoginRequired = useSearchParams().get("sdkLoginRequired") === "1";
   const [password, setPassword] = useState("");
   const [email, setEmail] = useState("");
   const [resetEmail, setResetEmail] = useState("");
   const [showPasswordReset, setShowPasswordReset] = useState(false);
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState(sdkLoginRequired ? "SDKへ接続するため、Game Fieldsアカウントへログインしてください。ログイン後は自動的にSDKへ戻ります。" : "");
   const [authMode, setAuthMode] = useState<LobbyAuthMode>("login");
   const [legalAccepted, setLegalAccepted] = useState(false);
-  const [isMobileInfoOpen, setIsMobileInfoOpen] = useState(false);
+  const [isMobileInfoOpen, setIsMobileInfoOpen] = useState(sdkLoginRequired);
   const [isMyPageOpen, setIsMyPageOpen] = useState(false);
   const { name, setName, playerId, avatarColor, setAvatarColor, avatarImage, setAvatarImage, isLoggedIn,
     hasRecoveryEmail, applySession, logout } = useLobbySession(setMessage);
@@ -50,6 +52,14 @@ export function GameLobby({ siteName = "GAME FIELDS", gameOperations, durationEs
   const { isSaving, isRequestingReset, submitAccount, requestPasswordReset } = useLobbyAuthActions({
     name, password, email, resetEmail, authMode, legalAccepted, avatarColor, avatarImage,
     applySession, setMessage, setPassword, setEmail, setResetEmail, setShowPasswordReset,
+    onAuthenticated: () => {
+      const candidate = new URLSearchParams(window.location.search).get("sdkReturn");
+      if (!candidate) return;
+      try {
+        const target = new URL(candidate);
+        if (target.origin === window.location.origin && target.pathname === "/api/sdk-account-link") window.location.assign(target);
+      } catch { /* Invalid return URL is ignored. */ }
+    },
   });
   const { isAvatarSaving, isAvatarDragging, setIsAvatarDragging, updateAvatar, uploadAvatar, dropAvatar } = useLobbyAvatarActions({
     name, playerId, avatarColor, hasRecoveryEmail, setAvatarColor, setAvatarImage, setMessage,

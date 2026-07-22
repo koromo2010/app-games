@@ -12,7 +12,7 @@ const errors: Record<AppLocale, Record<string, string>> = {
 
 const authMessage = (code: unknown, locale: AppLocale) => typeof code === "string" ? errors[locale][code] ?? errors[locale].UNKNOWN : errors[locale].UNKNOWN;
 type Setter = Dispatch<SetStateAction<string>>;
-type Params = { name: string; password: string; email: string; resetEmail: string; authMode: LobbyAuthMode; legalAccepted: boolean; avatarColor: string; avatarImage: string | null; applySession: (session: PlayerSession) => void; setMessage: Setter; setPassword: Setter; setEmail: Setter; setResetEmail: Setter; setShowPasswordReset: Dispatch<SetStateAction<boolean>> };
+type Params = { name: string; password: string; email: string; resetEmail: string; authMode: LobbyAuthMode; legalAccepted: boolean; avatarColor: string; avatarImage: string | null; applySession: (session: PlayerSession) => void; setMessage: Setter; setPassword: Setter; setEmail: Setter; setResetEmail: Setter; setShowPasswordReset: Dispatch<SetStateAction<boolean>>; onAuthenticated?: () => void };
 
 export function useLobbyAuthActions(params: Params) {
   const { locale, t } = useAppLocale();
@@ -26,6 +26,7 @@ export function useLobbyAuthActions(params: Params) {
       if (!response.ok || !data.session) return params.setMessage(authMessage(data.error, locale));
       params.applySession(data.session); params.setPassword(""); params.setEmail("");
       params.setMessage(params.authMode === "register" ? t("account.registerSuccess") : t("account.loginSuccess"));
+      params.onAuthenticated?.();
     } catch { params.setMessage(t("account.networkError")); } finally { setIsSaving(false); }
   };
   const requestPasswordReset = async () => {
