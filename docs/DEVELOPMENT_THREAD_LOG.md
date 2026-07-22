@@ -1164,3 +1164,33 @@
 ### 未対応・保留
 
 - `develop`共有反映とSDK-devの再デプロイ後、`test10`で再連携し、表示名とログアウトをブラウザで確認する。
+
+## 2026-07-22 — Work／Codex共通のSDK OAuth・MCP制作経路
+
+### 利用者からの要望
+
+- DownloadMeを別チャットへ渡した制作でSDK認証が引き継がれず、登録前に完成扱いになる問題を修正する。
+- Codex専用ではなくChatGPT Workにも対応し、Game Fieldsアカウントへ正式ログインする方式にする。
+
+### 判断
+
+- DownloadMeへ期限付きtokenを埋め込む途中案は撤回する。
+- WorkはApp、CodexはリモートMCPとして、同じOAuth 2.1付きSDK接続を使用する。
+- 初回だけブラウザでGame Fieldsアカウントと制作権限を承認し、以後はaccess tokenの更新をクライアントへ任せる。DownloadMeだけで未登録Appが自動導入されるとは扱わない。
+- MCP toolは制作者URLの確認・本人名義の予約／確定・本人環境へのモック保存に限定する。
+
+### 実施結果
+
+- OAuth protected resource metadata、authorization server discovery、DCR、authorization code + S256 PKCE、refresh token rotation、revocationをSDK Portalへ追加した。
+- OAuth資格はPostgreSQLへハッシュ保存し、scopeと所有者を各SDK操作で検証する。
+- `/api/mcp`へ制作toolsを追加し、`publish_mock`が実保存後にだけ`saved: true`と`previewUrl`を返すようにした。
+- DownloadMeを`ver2`へ更新し、秘密値埋込みと旧管理token前提を新規Work／Codexフローから外した。
+
+### 検証
+
+- SDK Portal単体build、`npm run lint`、386件の`npm test`、本体production buildに成功した。
+- OAuth／MCP境界のsource regression testを追加し、PKCE、認証challenge、scope、本人所有権、DownloadMeへの秘密値非混入を自動検査した。
+
+### 未対応・保留
+
+- 共有`develop`反映、SDK-dev再デプロイ、ChatGPT Work側のGame Fields App登録、Codex側のリモートMCP接続、OAuth実機認可、`publish_mock`実保存を順に確認する。

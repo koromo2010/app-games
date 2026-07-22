@@ -1,0 +1,88 @@
+import { authenticateAccessToken, portalBaseUrl } from "@/lib/oauth-store";
+import { authenticateCreatorOwner, finalizeInstanceSlug, instanceSlugAvailable, normalizeInstanceSlug, reserveInstanceSlug, validateInstanceSlug } from "@/lib/instance-registry";
+import { saveMockFilesToGit } from "@/lib/mock-git-store";
+import { ensureSdkSchema, sdkSql } from "@/lib/sdk-postgres";
+import platformRelease from "../../../../../config/platform-release.json";
+
+export const dynamic = "force-dynamic";
+const GAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?$/;
+
+function bearer(request: Request) {
+  const value = request.headers.get("authorization") ?? "";
+  return value.startsWith("Bearer ") ? value.slice(7).trim() : "";
+}
+
+function rpc(id: unknown, result: unknown, status = 200) {
+  return Response.json({ jsonrpc: "2.0", id, result }, { status });
+}
+
+function rpcError(id: unknown, code: number, message: string, status = 200) {
+  return Response.json({ jsonrpc: "2.0", id, error: { code, message } }, { status });
+}
+
+function textResult(value: unknown) {
+  return { content: [{ type: "text", text: JSON.stringify(value) }], structuredContent: value, isError: false };
+}
+
+const tools = [
+  { name: "check_creator_url", description: "Game Fields SDKの制作者URL名が利用可能か確認します。", inputSchema: { type: "object", properties: { slug: { type: "string" } }, required: ["slug"], additionalProperties: false } },
+  { name: "reserve_creator_url", description: "ログイン中のGame Fieldsアカウント用に制作者URLを7日間予約します。", inputSchema: { type: "object", properties: { slug: { type: "string" }, displayName: { type: "string" } }, required: ["slug", "displayName"], additionalProperties: false } },
+  { name: "finalize_creator_url", description: "予約トークンを使い、制作者URLをログイン中のアカウントへ正式登録します。", inputSchema: { type: "object", properties: { slug: { type: "string" }, reservationToken: { type: "string" } }, required: ["slug", "reservationToken"], additionalProperties: false } },
+  { name: "publish_mock", description: "本人所有のSDK環境へ検査済みゲームモックを保存し、実在する確認URLを返します。saved=trueとpreviewUrlが返るまで完成扱いにしないでください。", inputSchema: { type: "object", properties: { slug: { type: "string" }, gameId: { type: "string" }, title: { type: "string" }, description: { type: "string" }, files: { type: "object", additionalProperties: { type: "string" } } }, required: ["slug", "gameId", "title", "files"], additionalProperties: false } },
+];
+
+async function callTool(name: string, args: Record<string, unknown>, playerId: string, origin: string) {
+  const slug = normalizeInstanceSlug(typeof args.slug === "string" ? args.slug : "");
+  const slugError = validateInstanceSlug(slug);
+  if (slugError) throw new Error(slugError);
+  if (name === "check_creator_url") return textResult({ slug, available: await instanceSlugAvailable(slug) });
+  if (name === "reserve_creator_url") {
+    const displayName = typeof args.displayName === "string" ? args.displayName.trim() : "";
+    if (!displayName) throw new Error("表示名が必要です。");
+    const result = await reserveInstanceSlug(slug, displayName, playerId);
+    if (!result) throw new Error("このURL名はすでに使用されています。");
+    return textResult({ reserved: true, ...result });
+  }
+  if (name === "finalize_creator_url") {
+    const reservationToken = typeof args.reservationToken === "string" ? args.reservationToken : "";
+    const result = await finalizeInstanceSlug(slug, reservationToken, playerId);
+    if (!result) throw new Error("予約が期限切れか、現在のアカウントの予約ではありません。");
+    return textResult({ finalized: true, creator: result.creator, creatorUrl: `${portalBaseUrl(origin)}/${slug}` });
+  }
+  if (name === "publish_mock") {
+    const creator = await authenticateCreatorOwner(slug, playerId);
+    if (!creator) throw new Error("この制作者URLは現在のアカウントに属していません。");
+    const gameId = typeof args.gameId === "string" ? args.gameId.trim().toLowerCase() : "";
+    const title = typeof args.title === "string" ? args.title.trim() : "";
+    const description = typeof args.description === "string" ? args.description.trim().slice(0, 500) : "";
+    if (!GAME_PATTERN.test(gameId) || !title || title.length > 120 || !args.files || typeof args.files !== "object") throw new Error("モック登録情報が不正です。");
+    const revision = await saveMockFilesToGit({ instanceId: slug, gameId, files: args.files });
+    await ensureSdkSchema();
+    const manifest = JSON.stringify({ stage: "mock", id: gameId });
+    await sdkSql()`INSERT INTO sdk_games (creator_id, game_id, title, description, manifest, sdk_package_version, sdk_contract_version, mock_revision) VALUES (${creator.id}, ${gameId}, ${title}, ${description}, ${manifest}::jsonb, ${platformRelease.sdkPackageVersion}, ${platformRelease.sdkContractVersion}, ${revision}) ON CONFLICT (creator_id, game_id) DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description, mock_revision = EXCLUDED.mock_revision, updated_at = NOW()`;
+    return textResult({ saved: true, gameId, mockRevision: revision, previewUrl: `${portalBaseUrl(origin)}/${slug}/mock/${gameId}` });
+  }
+  throw new Error("Unknown tool");
+}
+
+export async function POST(request: Request) {
+  const base = portalBaseUrl(new URL(request.url).origin);
+  const metadata = `${base}/.well-known/oauth-protected-resource`;
+  const access = bearer(request);
+  const auth = access ? await authenticateAccessToken(access, "sdk:creator", `${base}/api/mcp`) : null;
+  if (!auth) return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { "Content-Type": "application/json", "WWW-Authenticate": `Bearer resource_metadata="${metadata}", scope="sdk:creator sdk:mock"` } });
+  const body = await request.json().catch(() => null) as { jsonrpc?: unknown; id?: unknown; method?: unknown; params?: { name?: unknown; arguments?: unknown } } | null;
+  if (!body || body.jsonrpc !== "2.0") return rpcError(body?.id ?? null, -32600, "Invalid Request", 400);
+  if (body.method === "initialize") return rpc(body.id, { protocolVersion: "2025-03-26", capabilities: { tools: {} }, serverInfo: { name: "Game Fields SDK", version: platformRelease.platformVersion } });
+  if (body.method === "notifications/initialized") return new Response(null, { status: 202 });
+  if (body.method === "tools/list") return rpc(body.id, { tools });
+  if (body.method === "tools/call") {
+    const name = typeof body.params?.name === "string" ? body.params.name : "";
+    if (name === "publish_mock" && !auth.scope.split(" ").includes("sdk:mock")) return rpcError(body.id, -32001, "Insufficient scope", 403);
+    const args = body.params?.arguments && typeof body.params.arguments === "object" ? body.params.arguments as Record<string, unknown> : {};
+    try { return rpc(body.id, await callTool(name, args, auth.playerId, base)); }
+    catch (error) { return rpc(body.id, { content: [{ type: "text", text: error instanceof Error ? error.message : "SDK操作に失敗しました。" }], isError: true }); }
+  }
+  if (body.method === "ping") return rpc(body.id, {});
+  return rpcError(body.id, -32601, "Method not found");
+}

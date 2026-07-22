@@ -9,7 +9,7 @@ export async function GET(request: Request) {
   const target = new URL("/api/sdk-account-link", appBase);
   target.searchParams.set("callback", callback);
   const state = randomBytes(16).toString("base64url");
-  await setAccountLinkState(state);
+  await setAccountLinkState(state, url.searchParams.get("returnTo") ?? "/");
   target.searchParams.set("state", state);
   return Response.redirect(target, 303);
 }

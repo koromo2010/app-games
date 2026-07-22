@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 
 const cookieName = "game-fields-sdk-account";
 const stateCookieName = "game-fields-sdk-link-state";
+const returnCookieName = "game-fields-sdk-link-return";
 const maxAgeSeconds = 30 * 24 * 60 * 60;
 
 export type SdkAccountSession = { playerId: string; playerName: string | null; expiresAt: number };
@@ -70,8 +71,12 @@ export async function clearSdkAccountSession() {
   });
 }
 
-export async function setAccountLinkState(state: string) {
-  (await cookies()).set(stateCookieName, state, {
+export async function setAccountLinkState(state: string, returnTo = "/") {
+  const store = await cookies();
+  store.set(stateCookieName, state, {
+    httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/api/account-link", maxAge: 5 * 60,
+  });
+  store.set(returnCookieName, returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : "/", {
     httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/api/account-link", maxAge: 5 * 60,
   });
 }
@@ -86,4 +91,11 @@ export async function consumeAccountLinkState(state: string) {
   const actualBytes = Buffer.from(state);
   const expectedBytes = Buffer.from(expected);
   return actualBytes.length === expectedBytes.length && timingSafeEqual(actualBytes, expectedBytes);
+}
+
+export async function consumeAccountLinkReturn() {
+  const store = await cookies();
+  const value = store.get(returnCookieName)?.value ?? "/";
+  store.set(returnCookieName, "", { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/api/account-link", maxAge: 0 });
+  return value.startsWith("/") && !value.startsWith("//") ? value : "/";
 }

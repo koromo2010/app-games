@@ -42,9 +42,9 @@ function safeTokenMatch(value: string, expectedHash: string) {
 
 async function registeredCreator(slug: string) {
   await ensureSdkSchema();
-  const rows = await sdkSql()`SELECT id, slug, display_name, management_token_hash FROM sdk_creators WHERE slug = ${slug} LIMIT 1`;
+  const rows = await sdkSql()`SELECT id, slug, display_name, management_token_hash, owner_player_id FROM sdk_creators WHERE slug = ${slug} LIMIT 1`;
   return (Array.isArray(rows) ? rows[0] : undefined) as
-    | { id: string; slug: string; display_name: string; management_token_hash: string }
+    | { id: string; slug: string; display_name: string; management_token_hash: string; owner_player_id: string | null }
     | undefined;
 }
 
@@ -54,9 +54,9 @@ export async function instanceSlugAvailable(slug: string) {
   return Number(response.result) === 0;
 }
 
-export async function reserveInstanceSlug(slug: string, displayName: string) {
+export async function reserveInstanceSlug(slug: string, displayName: string, ownerPlayerId?: string | null) {
   const reservationToken = randomBytes(24).toString("base64url");
-  const value = JSON.stringify({ slug, displayName: displayName.slice(0, 80), status: "reserved", reservationToken, createdAt: new Date().toISOString() });
+  const value = JSON.stringify({ slug, displayName: displayName.slice(0, 80), status: "reserved", reservationToken, ownerPlayerId: ownerPlayerId ?? null, createdAt: new Date().toISOString() });
   const response = await command(["SET", keyFor(slug), value, "NX", "EX", String(7 * 24 * 60 * 60)]);
   if (response.result !== "OK") return null;
   const baseUrl = process.env.SDK_PORTAL_BASE_URL?.replace(/\/$/, "")
@@ -67,8 +67,9 @@ export async function reserveInstanceSlug(slug: string, displayName: string) {
 export async function finalizeInstanceSlug(slug: string, reservationToken: string, ownerPlayerId?: string | null) {
   const reservation = await command(["GET", keyFor(slug)]);
   if (typeof reservation.result !== "string") return null;
-  const value = JSON.parse(reservation.result) as { displayName?: unknown; reservationToken?: unknown };
+  const value = JSON.parse(reservation.result) as { displayName?: unknown; reservationToken?: unknown; ownerPlayerId?: unknown };
   if (typeof value.reservationToken !== "string" || !safeTokenMatch(reservationToken, tokenHash(value.reservationToken))) return null;
+  if (typeof value.ownerPlayerId === "string" && value.ownerPlayerId !== ownerPlayerId) return null;
   await ensureSdkSchema();
   const managementToken = randomBytes(32).toString("base64url");
   const rows = await sdkSql()`
@@ -87,6 +88,11 @@ export async function authenticateCreator(slug: string, managementToken: string)
   const creator = await registeredCreator(slug);
   if (!creator || !safeTokenMatch(managementToken, creator.management_token_hash)) return null;
   return creator;
+}
+
+export async function authenticateCreatorOwner(slug: string, playerId: string) {
+  const creator = await registeredCreator(slug);
+  return creator?.owner_player_id === playerId ? creator : null;
 }
 
 export async function listCreatorGames(slug: string) {
