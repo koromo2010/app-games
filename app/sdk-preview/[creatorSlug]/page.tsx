@@ -29,5 +29,18 @@ export default async function SdkCreatorLobbyPage({ params }: { params: Promise<
     loadSdkGames(creatorSlug),
   ]);
   if (!sdkGames) notFound();
-  return <GameLobby siteName={settings.siteName} gameOperations={operations} additionalGames={sdkGamesForCatalog(creatorSlug, sdkGames)} />;
+  const creatorGames = sdkGamesForCatalog(creatorSlug, sdkGames);
+  const creatorOperations = creatorGames.map((game) => ({
+    gameId: game.id,
+    publication: "public" as const,
+    maintenance: false,
+    message: "",
+    updatedAt: null,
+  }));
+  return <GameLobby
+    siteName={settings.siteName}
+    gameOperations={[...operations, ...creatorOperations]}
+    additionalGames={creatorGames}
+    includeBuiltInGames={false}
+  />;
 }
