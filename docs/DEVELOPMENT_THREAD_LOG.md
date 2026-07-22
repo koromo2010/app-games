@@ -1438,3 +1438,29 @@
 ### 未対応・保留
 
 - 保存済み21ゲームは自動変換しない。更新後のスターター指示を使って再生成・再保存し、実URLで確認する。
+## 2026-07-23 — DownloadMe配布名をver3へ更新
+
+### 利用者からの要望
+
+- SDKスターターと制作指示を改版した以上、配布ファイル名も`ver2`のままにせず`ver3`へ上げる。
+
+### 判断
+
+- SDK入口の内容改版と配布名の版を一致させる既存方針に従い、Portalの表示、取得URL、添付名、同期先を`GameFieldsDownloadMe-ver3.md`へ統一する。
+- 既に取得された`ver2`との区別を明確にするため、新しい名前で配布物を生成する。旧ファイルは既存リンクの互換用として残すが、Portalからは案内しない。
+
+### 実施結果
+
+- SDK Portalの2つの取得導線、download response header、同期scriptを`ver3`へ更新した。
+- 正本`START_GAME_FIELDS.md`から`public/GameFieldsDownloadMe-ver3.md`を生成した。
+- `DEVELOPMENT_HANDOFF.md`の現行配布名も`ver3`へ更新した。
+
+### 検証
+
+- lint成功。
+- 全390テスト成功。
+- root production buildは、検証用worktreeの`node_modules`が外部symlinkであることをTurbopackが拒否したため未完了。ソースのcompile errorではない。
+
+### 未対応・保留
+
+- `develop`反映後のSDK-devデプロイと実URL取得確認。

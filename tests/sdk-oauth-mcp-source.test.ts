@@ -33,3 +33,14 @@ test("DownloadMe contains no embedded credential placeholders", () => {
   assert.doesNotMatch(entry, /__GAME_FIELDS_AGENT_TOKEN__/);
   assert.doesNotMatch(entry, /GAME_FIELDS_AGENT_TOKEN=/);
 });
+
+test("SDK Portal distributes the current DownloadMe revision", () => {
+  const page = read("apps/sdk-portal/app/page.tsx");
+  const nextConfig = read("apps/sdk-portal/next.config.ts");
+  const syncScript = read("apps/sdk-portal/scripts/sync-download.mjs");
+
+  for (const source of [page, nextConfig, syncScript]) {
+    assert.match(source, /GameFieldsDownloadMe-ver3\.md/);
+    assert.doesNotMatch(source, /GameFieldsDownloadMe-ver2\.md/);
+  }
+});
