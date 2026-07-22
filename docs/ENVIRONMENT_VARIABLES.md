@@ -231,7 +231,7 @@ preview実行Projectには`SDK_DATABASE_URL`、SDK Redis、管理者・本体資
 | --- | --- | --- | --- | --- |
 | `SDK_PREVIEW_SIGNING_SECRET` | Team SharedをLink | 同じTeam SharedをLink | Production | 両ProjectでLink確認済み・環境変数追加後のDeployment作成済み |
 | `SDK_PREVIEW_BASE_URL` | 未登録。コード既定値`https://preview-dev.game-fields.com`を使用 | 不要 | Production | previewドメイン割当・Valid Configuration確認済み |
-| `SDK_PREVIEW_FRAME_ANCESTORS` | 不要 | 未登録。`develop`時のコード既定値`https://sdk-dev.game-fields.com`を使用 | Production | 明示設定は任意、実機CSP確認待ち |
+| `SDK_PREVIEW_FRAME_ANCESTORS` | 不要 | 未登録。`develop`時のコード既定値として外枠`https://sdk-dev.game-fields.com`と、ゲーム固有iframeの直近親`https://dev.game-fields.com`を許可 | Production | 本体UI共用後の二段iframeに対応。明示設定する場合も両originが必要 |
 | `SDK_MOCK_GITHUB_REPOSITORY` | Project Variable登録済み。値はdev専用private repository | Project Variable登録済み | Production | 追加後Deployment作成済み、保存成功を実機確認済み |
 | `SDK_MOCK_GITHUB_BRANCH` | 未登録。コード既定値`sdk-previews`を使用 | 不要 | Production | 初回mock保存時にbranchを自動作成 |
 | `SDK_MOCK_GITHUB_WRITE_TOKEN` | Project Variable、Sensitive登録済み | 設定禁止・未設定 | Production | 専用private repoのContents read/writeだけ。保存成功を実機確認済み |
