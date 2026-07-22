@@ -68,7 +68,7 @@ async function callTool(name: string, args: Record<string, unknown>, playerId: s
     await ensureSdkSchema();
     const manifest = JSON.stringify({ stage: "mock", id: gameId });
     await sdkSql()`INSERT INTO sdk_games (creator_id, game_id, title, description, manifest, sdk_package_version, sdk_contract_version, mock_revision) VALUES (${creator.id}, ${gameId}, ${title}, ${description}, ${manifest}::jsonb, ${platformRelease.sdkPackageVersion}, ${platformRelease.sdkContractVersion}, ${revision}) ON CONFLICT (creator_id, game_id) DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description, mock_revision = EXCLUDED.mock_revision, updated_at = NOW()`;
-    return textResult({ saved: true, gameId, mockRevision: revision, previewUrl: `${portalBaseUrl(origin)}/${slug}/mock/${gameId}` });
+    return textResult({ saved: true, gameId, mockRevision: revision, previewUrl: `${portalBaseUrl(origin)}/${slug}/games/${gameId}` });
   }
   throw new Error("Unknown tool");
 }

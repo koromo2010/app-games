@@ -68,7 +68,7 @@ export async function PUT(
       saved: true,
       gameId,
       mockRevision: revision,
-      previewUrl: `${portalBaseUrl}/${slug}/mock/${gameId}`,
+      previewUrl: `${portalBaseUrl}/${slug}/games/${gameId}`,
     });
   } catch (error) {
     if (error instanceof Error && /invalid|missing|large|between|encoding|path/i.test(error.message)) {

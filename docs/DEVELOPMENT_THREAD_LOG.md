@@ -1254,3 +1254,61 @@
 
 - 変更を共有`develop`へ反映してSDK-devを再デプロイする。
 - `publish_mock`を再試行して不足キーを特定し、`app-games-sdk-dev`のProduction環境変数を修正後、`saved: true`とpreview表示まで確認する。
+## 2026-07-22 — SDK制作者環境を本体UI・module構成へ変更
+
+### 利用者からの要望
+
+- `/<creator>/mock/<game>`の独自簡易UIではなく、本番と同じログイン・広場・カード・共通メニュー上で制作中ゲームを検証したい。
+- ゲーム全体Sourceがmodule構成を持ち、ゲームごとに任意moduleを不採用にでき、Game Fieldsが必須moduleを強制する設計にしたい。
+
+### 判断
+
+- カード情報だけのSourceではゲーム固有Controller・domain・presentation・server処理を表現できないため、Runtime参照とmodule policyを含む`GameDefinition`を共通入口にする。
+- 認証、session、共通ナビ、プレイヤーメニュー、永続化adapter、最終認可、観測はplatform固定とし、ゲームpackageから無効化・置換できない。
+- 任意moduleの未採用は欠落ではなく、理由付き`disabled`を必須にする。
+
+### 実施結果
+
+- 現行registryとSDK game descriptorを同じ`GameDefinition`へ変換し、本体`GameLobby`へ追加ゲームを渡せるようにした。
+- SDK Portalの制作者URLを本体dev UIの全画面表示へ変更し、公開ゲームURLを`/<creator>/games/<game-id>`へ変更した。
+- platform/core/capabilityの型付きmodule policyを追加した。
+
+### 検証
+
+- `npm run lint`成功。
+- 本体production buildとSDK Portal production build成功。
+- 全386テスト成功。現行9ゲームのcapability採否を明示registryへ移す監査とSDKゲーム固有surfaceの完全package化は未完了。
+
+### 未対応・保留
+
+- `publish_mock`というtool名、内部Gitの`mock`保存名、旧互換URLをgame package表現へ移行する。
+- 現行各ゲームのmodule境界を監査し、推測変換ではなくregistryの明示policyを正本にする。
+- SDK-devへ反映後、`test10-1`で本体ログイン画面・本体カード・ゲーム固有領域を実機確認する。
+
+## 2026-07-22 — 既存ゲームのmodule採否を明示正本化
+
+### 利用者からの要望
+
+- SDK公開は先でもよいので、Source全体がmodule構成を持ち、将棋盤・サイコロ等の公式packageを後から増やせる基盤を先に作る。
+
+### 判断
+
+- オンライン部屋の有無から観戦、戦績保存からratingのようにcapabilityを自動推定しない。
+- platform固定module、全ゲーム必須core、ゲーム別の任意capabilityを分け、任意moduleの不採用には理由を必須とする。
+
+### 実施結果
+
+- 現行9ゲームのmodule採否を`app/games/built-in-game-module-policies.ts`へ明示した。
+- SDK game descriptorも同じcapability policyを受け取れるようにした。
+- 登録ゲームとpolicyの過不足、理由なしdisabledを拒否するテストを追加した。
+- 環境変数台帳を、Repository追加後に`test10-1`保存が成功した実機結果へ訂正した。
+
+### 検証
+
+- module policy単体テスト成功。
+- 本体production build成功。
+
+### 未対応・保留
+
+- 変更を共有`develop`へ反映し、SDK-devの本体UI共用表示を実機確認する。
+- 内部互換の`publish_mock`、保存API、private Git階層は、game package契約が固まるまで残す。利用者向けURLには出さない。

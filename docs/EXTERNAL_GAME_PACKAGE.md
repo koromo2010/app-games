@@ -130,6 +130,18 @@ Platform runtime -> Game package manifest / commands / presentation
 
 ゲーム側はGame Fields内部storeをimportせず、Runtimeから渡されたinterfaceだけを利用する。
 
+## GameDefinitionとmodule採用方針
+
+本体組み込みゲームとSDKゲームは、どちらも`GameDefinition`へ正規化してからGame Fieldsへ載せる。`GameDefinition`はカード情報だけではなく、組み込みmoduleまたはSDK packageへのRuntime参照と、各moduleの採否を持つ。
+
+- `platform`: 認証、アカウントsession、共通ナビ、プレイヤーメニュー、永続化adapter、最終認可、観測。Game Fields固定で、ゲームpackageは無効化・置換できない。
+- `core`: ルール、ゲーム固有surface、純粋domain、閲覧者別presentation。すべてのプレイ可能なゲームで必須。
+- `capabilities`: online room、timer、debug、spectator、stats、rating、replay、result share、LLM。ゲームごとに採用できる。
+
+任意moduleを採用しない場合も定義自体を省略せず、`disabled`と具体的な理由を宣言する。これにより、意図した不採用と実装漏れを自動検査で区別する。ゲーム種別によって実質必須になるmodule（例: `online-room`でのroom command・復帰）は、manifestとの組合せをpolicy検査する。
+
+現行の`config/game-registry.json`は`app/games/game-definition-source.ts`で組み込み`GameDefinition`へ変換する。任意moduleの明示的な採否は`app/games/built-in-game-module-policies.ts`を正本とし、登録ゲームとの過不足と理由なし`disabled`をテストで拒否する。SDK制作者環境の定義も同じ契約へ変換し、本体の`GameLobby`と固定カード外枠へ追加する。SDK Portal独自ロビーは廃止し、制作者URLはGame Fields本体のdev UIを全画面で使用する。
+
 ## UI標準
 
 外部ゲームも次の三層を必須とする。

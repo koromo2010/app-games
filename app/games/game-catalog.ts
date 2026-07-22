@@ -1,13 +1,11 @@
-import registry from "@/config/game-registry.json";
 import { normalizeAppLocale, type AppLocale } from "@/lib/app-locale";
+import { builtInGameDefinitions, catalogEntryFromDefinition, type GameDefinitionTag } from "./game-definition-source";
 
-export type GameTag = "対戦" | "協力" | "チーム戦" | "正体隠匿" | "会話" | "ブラフ" | "作文" | "戦略" | "連想" | "推理" | "お絵描き";
+export type GameTag = GameDefinitionTag;
 
 export type GameCatalogEntry = { id: string; title: string; englishTitle?: string; visual: string; tags: GameTag[]; href: string; players: string; time: string; timeSampleCount?: number; summary: string; accent: string; private: boolean; stats: "account" | "local-disabled" };
 
-export const games: GameCatalogEntry[] = registry.map((game) => ({
-  id: game.id, title: game.title, englishTitle: "englishTitle" in game ? game.englishTitle : undefined, visual: `/game-visuals/${game.id}.webp`, tags: game.tags as GameTag[], href: game.href, players: game.players, time: game.time, summary: game.summary, accent: game.accent, private: game.private, stats: game.stats as GameCatalogEntry["stats"],
-}));
+export const games: GameCatalogEntry[] = builtInGameDefinitions().map(catalogEntryFromDefinition);
 
 const englishTags: Record<GameTag, string> = {
   "対戦": "Competitive",

@@ -7,6 +7,7 @@ import type { GameDurationEstimate, GameDurationGameId } from "@/lib/game-durati
 import { GameAdSlot } from "../components/GameAdSlot";
 import { FullScreenPageOverlay } from "../components/FullScreenPageOverlay";
 import { gamesForLocale } from "./game-catalog";
+import type { GameCatalogEntry } from "./game-catalog";
 import { gameOperationFor, type GameOperation } from "@/lib/game-operations";
 import { LobbyGameGrid } from "./LobbyGameGrid";
 import { LobbyStatsPanel } from "./LobbyStatsPanel";
@@ -24,7 +25,7 @@ import { LobbyPrivateAccessControl } from "./LobbyPrivateAccessControl";
 import { useAppLocale } from "@/app/components/AppLocaleProvider";
 
 
-export function GameLobby({ siteName = "GAME FIELDS", gameOperations, durationEstimates = {} }: { siteName?: string; gameOperations: GameOperation[]; durationEstimates?: Partial<Record<GameDurationGameId, GameDurationEstimate>> }) {
+export function GameLobby({ siteName = "GAME FIELDS", gameOperations, durationEstimates = {}, additionalGames = [] }: { siteName?: string; gameOperations: GameOperation[]; durationEstimates?: Partial<Record<GameDurationGameId, GameDurationEstimate>>; additionalGames?: GameCatalogEntry[] }) {
   const { locale, t } = useAppLocale();
   const sdkLoginRequired = useSearchParams().get("sdkLoginRequired") === "1";
   const [password, setPassword] = useState("");
@@ -64,7 +65,7 @@ export function GameLobby({ siteName = "GAME FIELDS", gameOperations, durationEs
   const { isAvatarSaving, isAvatarDragging, setIsAvatarDragging, updateAvatar, uploadAvatar, dropAvatar } = useLobbyAvatarActions({
     name, playerId, avatarColor, hasRecoveryEmail, setAvatarColor, setAvatarImage, setMessage,
   });
-  const localizedGames = gamesForLocale(locale);
+  const localizedGames = [...gamesForLocale(locale), ...additionalGames];
   const statsGameOptions = [
     { value: "all" as const, label: t("stats.allGames") },
     ...localizedGames.filter((game) => game.stats === "account").map((game) => ({ value: game.id as PlayerStatsGameFilter, label: game.title })),
