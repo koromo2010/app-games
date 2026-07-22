@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { defaultAppLocale, isAppLocale, normalizeAppLocale, type AppLocale } from "@/lib/app-locale";
 import { translateApp, type AppMessageKey, type AppMessageValues } from "@/lib/app-i18n";
+import { isPlayerAuthenticated, readPlayerSession } from "@/lib/player-session";
 
 const APP_LOCALE_COOKIE = "game_fields_locale";
 
@@ -55,6 +56,27 @@ export function AppLocaleProvider({
     document.cookie = `${APP_LOCALE_COOKIE}=${activeLocale}; Path=/; Max-Age=31536000; SameSite=Lax`;
     document.documentElement.lang = activeLocale;
   }, [locale]);
+
+  useEffect(() => {
+    const applyAccountLocale = (value: unknown) => {
+      if (!isAppLocale(value) || value === locale) return;
+      setLocale(value);
+    };
+
+    // The account setting is authoritative after sign-in. This also covers
+    // embedded pages (My Page and SDK preview), whose initial URL may have
+    // been selected from the browser language before the session was loaded.
+    if (isPlayerAuthenticated()) {
+      applyAccountLocale(readPlayerSession()?.locale);
+    }
+
+    const handleSessionSaved = (event: Event) => {
+      const detail = (event as CustomEvent<{ locale?: unknown }>).detail;
+      applyAccountLocale(detail?.locale);
+    };
+    window.addEventListener("game-fields:player-session-saved", handleSessionSaved);
+    return () => window.removeEventListener("game-fields:player-session-saved", handleSessionSaved);
+  }, [locale, setLocale]);
 
   const value = useMemo<AppLocaleContextValue>(() => ({
     locale,
