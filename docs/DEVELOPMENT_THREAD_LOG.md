@@ -1208,3 +1208,24 @@
 ### 未対応・保留
 
 - ChatGPT WorkへのGame Fields App登録、CodexへのリモートMCP接続、ブラウザでのOAuth認可、認証後のtool一覧・予約・`publish_mock`実保存は未実施。
+
+## 2026-07-22 — ChatGPT WorkでSDK MCP toolが0件になる問題
+
+### 利用者からの要望
+
+- SDK-devをOAuth接続して更新しても、ChatGPTのプラグイン画面に利用可能なアクションが表示されない問題を修正する。
+
+### 判断
+
+- OAuth接続は成立しており、問題をMCP初期化とtool discoveryの互換層として扱う。
+- 手書きMCP routeが固定していたprotocol versionを、ChatGPTが提示する対応版から選ぶ方式へ変更する。
+- ChatGPTが各操作の性質を安全に判定できるよう、tool title、引数説明、read-only／destructive／idempotent／open-world annotationsを明示する。
+
+### 実施結果
+
+- MCPの対応版として`2025-06-18`、`2025-03-26`、`2024-11-05`を宣言し、対応するクライアント提示版をinitialize responseへ返すようにした。
+- tools capabilityへ`listChanged: false`を明記し、4件のtool定義へ表示名と操作属性を追加した。
+
+### 未対応・保留
+
+- 自動テスト・build後に共有`develop`へ反映し、SDK-dev再デプロイ後、ChatGPTの「更新する」で4アクションが表示されることを実機確認する。

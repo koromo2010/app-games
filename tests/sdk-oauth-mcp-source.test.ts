@@ -20,6 +20,11 @@ test("SDK MCP challenges unauthenticated callers and scopes mock publication", (
   assert.match(mcp, /name === "publish_mock"/);
   assert.match(mcp, /includes\("sdk:mock"\)/);
   assert.match(mcp, /authenticateCreatorOwner\(slug, playerId\)/);
+  assert.match(mcp, /SUPPORTED_PROTOCOL_VERSIONS/);
+  assert.match(mcp, /body\.params\?\.protocolVersion/);
+  assert.match(mcp, /listChanged: false/);
+  assert.match(mcp, /readOnlyHint: true/);
+  assert.match(mcp, /title: "ゲームモックの保存"/);
 });
 
 test("DownloadMe contains no embedded credential placeholders", () => {

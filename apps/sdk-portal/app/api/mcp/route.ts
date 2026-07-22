@@ -13,7 +13,7 @@ function bearer(request: Request) {
 }
 
 function rpc(id: unknown, result: unknown, status = 200) {
-  return Response.json({ jsonrpc: "2.0", id, result }, { status });
+  return Response.json({ jsonrpc: "2.0", id, result }, { status, headers: { "Cache-Control": "no-store" } });
 }
 
 function rpcError(id: unknown, code: number, message: string, status = 200) {
@@ -25,11 +25,19 @@ function textResult(value: unknown) {
 }
 
 const tools = [
-  { name: "check_creator_url", description: "Game Fields SDKの制作者URL名が利用可能か確認します。", inputSchema: { type: "object", properties: { slug: { type: "string" } }, required: ["slug"], additionalProperties: false } },
-  { name: "reserve_creator_url", description: "ログイン中のGame Fieldsアカウント用に制作者URLを7日間予約します。", inputSchema: { type: "object", properties: { slug: { type: "string" }, displayName: { type: "string" } }, required: ["slug", "displayName"], additionalProperties: false } },
-  { name: "finalize_creator_url", description: "予約トークンを使い、制作者URLをログイン中のアカウントへ正式登録します。", inputSchema: { type: "object", properties: { slug: { type: "string" }, reservationToken: { type: "string" } }, required: ["slug", "reservationToken"], additionalProperties: false } },
-  { name: "publish_mock", description: "本人所有のSDK環境へ検査済みゲームモックを保存し、実在する確認URLを返します。saved=trueとpreviewUrlが返るまで完成扱いにしないでください。", inputSchema: { type: "object", properties: { slug: { type: "string" }, gameId: { type: "string" }, title: { type: "string" }, description: { type: "string" }, files: { type: "object", additionalProperties: { type: "string" } } }, required: ["slug", "gameId", "title", "files"], additionalProperties: false } },
+  { name: "check_creator_url", title: "制作者URLの空き確認", description: "Game Fields SDKの制作者URL名が利用可能か確認します。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "確認する制作者URL名" } }, required: ["slug"], additionalProperties: false } },
+  { name: "reserve_creator_url", title: "制作者URLの予約", description: "ログイン中のGame Fieldsアカウント用に制作者URLを7日間予約します。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "予約する制作者URL名" }, displayName: { type: "string", description: "制作者の表示名" } }, required: ["slug", "displayName"], additionalProperties: false } },
+  { name: "finalize_creator_url", title: "制作者URLの確定", description: "予約トークンを使い、制作者URLをログイン中のアカウントへ正式登録します。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "確定する制作者URL名" }, reservationToken: { type: "string", description: "予約時に発行されたトークン" } }, required: ["slug", "reservationToken"], additionalProperties: false } },
+  { name: "publish_mock", title: "ゲームモックの保存", description: "本人所有のSDK環境へ検査済みゲームモックを保存し、実在する確認URLを返します。saved=trueとpreviewUrlが返るまで完成扱いにしないでください。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "本人所有の制作者URL名" }, gameId: { type: "string", description: "ゲームID" }, title: { type: "string", description: "ゲーム名" }, description: { type: "string", description: "ゲームの説明" }, files: { type: "object", description: "相対パスをキー、UTF-8本文を値とするファイル一覧", additionalProperties: { type: "string" } } }, required: ["slug", "gameId", "title", "files"], additionalProperties: false } },
 ];
+
+const SUPPORTED_PROTOCOL_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"] as const;
+
+function negotiateProtocolVersion(value: unknown) {
+  return typeof value === "string" && SUPPORTED_PROTOCOL_VERSIONS.includes(value as typeof SUPPORTED_PROTOCOL_VERSIONS[number])
+    ? value
+    : SUPPORTED_PROTOCOL_VERSIONS[0];
+}
 
 async function callTool(name: string, args: Record<string, unknown>, playerId: string, origin: string) {
   const slug = normalizeInstanceSlug(typeof args.slug === "string" ? args.slug : "");
@@ -71,9 +79,9 @@ export async function POST(request: Request) {
   const access = bearer(request);
   const auth = access ? await authenticateAccessToken(access, "sdk:creator", `${base}/api/mcp`) : null;
   if (!auth) return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { "Content-Type": "application/json", "WWW-Authenticate": `Bearer resource_metadata="${metadata}", scope="sdk:creator sdk:mock"` } });
-  const body = await request.json().catch(() => null) as { jsonrpc?: unknown; id?: unknown; method?: unknown; params?: { name?: unknown; arguments?: unknown } } | null;
+  const body = await request.json().catch(() => null) as { jsonrpc?: unknown; id?: unknown; method?: unknown; params?: { protocolVersion?: unknown; name?: unknown; arguments?: unknown } } | null;
   if (!body || body.jsonrpc !== "2.0") return rpcError(body?.id ?? null, -32600, "Invalid Request", 400);
-  if (body.method === "initialize") return rpc(body.id, { protocolVersion: "2025-03-26", capabilities: { tools: {} }, serverInfo: { name: "Game Fields SDK", version: platformRelease.platformVersion } });
+  if (body.method === "initialize") return rpc(body.id, { protocolVersion: negotiateProtocolVersion(body.params?.protocolVersion), capabilities: { tools: { listChanged: false } }, serverInfo: { name: "Game Fields SDK", title: "Game Fields SDK", version: platformRelease.platformVersion }, instructions: "Game Fieldsアカウント本人のSDK制作環境だけを操作します。保存操作は結果のsavedとpreviewUrlを確認してください。" });
   if (body.method === "notifications/initialized") return new Response(null, { status: 202 });
   if (body.method === "tools/list") return rpc(body.id, { tools });
   if (body.method === "tools/call") {
