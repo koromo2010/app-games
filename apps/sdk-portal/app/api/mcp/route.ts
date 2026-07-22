@@ -29,7 +29,7 @@ const tools = [
   { name: "check_creator_url", title: "制作者URLの空き確認", description: "Game Fields SDKの制作者URL名が利用可能か確認します。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "確認する制作者URL名" } }, required: ["slug"], additionalProperties: false } },
   { name: "reserve_creator_url", title: "制作者URLの予約", description: "ログイン中のGame Fieldsアカウント用に制作者URLを7日間予約します。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "予約する制作者URL名" }, displayName: { type: "string", description: "制作者の表示名" } }, required: ["slug", "displayName"], additionalProperties: false } },
   { name: "finalize_creator_url", title: "制作者URLの確定", description: "予約トークンを使い、制作者URLをログイン中のアカウントへ正式登録します。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "確定する制作者URL名" }, reservationToken: { type: "string", description: "予約時に発行されたトークン" } }, required: ["slug", "reservationToken"], additionalProperties: false } },
-  { name: "publish_mock", title: "ゲームモックの保存", description: "本人所有のSDK環境へ検査済みゲームモックを保存し、実在する確認URLを返します。saved=trueとpreviewUrlが返るまで完成扱いにしないでください。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "本人所有の制作者URL名" }, gameId: { type: "string", description: "ゲームID" }, title: { type: "string", description: "ゲーム名" }, description: { type: "string", description: "ゲームの説明" }, files: { type: "object", description: "相対パスをキー、UTF-8本文を値とするファイル一覧", additionalProperties: { type: "string" } } }, required: ["slug", "gameId", "title", "files"], additionalProperties: false } },
+  { name: "publish_mock", title: "ゲームモックの保存", description: "本人所有のSDK環境へ検査済みゲームモックを保存し、制作者トップURLと今回のゲームURLを返します。saved=trueとcreatorUrlが返るまで完成扱いにしないでください。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "本人所有の制作者URL名" }, gameId: { type: "string", description: "ゲームID" }, title: { type: "string", description: "ゲーム名" }, description: { type: "string", description: "ゲームの説明" }, files: { type: "object", description: "相対パスをキー、UTF-8本文を値とするファイル一覧", additionalProperties: { type: "string" } } }, required: ["slug", "gameId", "title", "files"], additionalProperties: false } },
 ];
 
 const SUPPORTED_PROTOCOL_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"] as const;
@@ -79,7 +79,9 @@ async function callTool(name: string, args: Record<string, unknown>, playerId: s
     await ensureSdkSchema();
     const manifest = JSON.stringify({ stage: "mock", id: gameId });
     await sdkSql()`INSERT INTO sdk_games (creator_id, game_id, title, description, manifest, sdk_package_version, sdk_contract_version, mock_revision) VALUES (${creator.id}, ${gameId}, ${title}, ${description}, ${manifest}::jsonb, ${platformRelease.sdkPackageVersion}, ${platformRelease.sdkContractVersion}, ${revision}) ON CONFLICT (creator_id, game_id) DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description, mock_revision = EXCLUDED.mock_revision, updated_at = NOW()`;
-    return textResult({ saved: true, gameId, mockRevision: revision, previewUrl: `${portalBaseUrl(origin)}/${slug}/games/${gameId}` });
+    const creatorUrl = `${portalBaseUrl(origin)}/${slug}/`;
+    const gameUrl = `${portalBaseUrl(origin)}/${slug}/games/${gameId}`;
+    return textResult({ saved: true, gameId, mockRevision: revision, creatorUrl, gameUrl, previewUrl: gameUrl });
   }
   throw new Error("Unknown tool");
 }
@@ -92,7 +94,7 @@ export async function POST(request: Request) {
   if (!auth) return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { "Content-Type": "application/json", "WWW-Authenticate": `Bearer resource_metadata="${metadata}", scope="sdk:creator sdk:mock"` } });
   const body = await request.json().catch(() => null) as { jsonrpc?: unknown; id?: unknown; method?: unknown; params?: { protocolVersion?: unknown; name?: unknown; arguments?: unknown } } | null;
   if (!body || body.jsonrpc !== "2.0") return rpcError(body?.id ?? null, -32600, "Invalid Request", 400);
-  if (body.method === "initialize") return rpc(body.id, { protocolVersion: negotiateProtocolVersion(body.params?.protocolVersion), capabilities: { tools: { listChanged: false } }, serverInfo: { name: "Game Fields SDK", title: "Game Fields SDK", version: platformRelease.platformVersion }, instructions: "Game Fieldsアカウント本人のSDK制作環境だけを操作します。保存操作は結果のsavedとpreviewUrlを確認してください。" });
+  if (body.method === "initialize") return rpc(body.id, { protocolVersion: negotiateProtocolVersion(body.params?.protocolVersion), capabilities: { tools: { listChanged: false } }, serverInfo: { name: "Game Fields SDK", title: "Game Fields SDK", version: platformRelease.platformVersion }, instructions: "Game Fieldsアカウント本人のSDK制作環境だけを操作します。保存後はsavedとcreatorUrlを確認し、制作者トップを最初の案内リンクにしてください。" });
   if (body.method === "notifications/initialized") return new Response(null, { status: 202 });
   if (body.method === "tools/list") return rpc(body.id, { tools });
   if (body.method === "tools/call") {

@@ -1503,3 +1503,30 @@
 ### 未対応・保留
 
 - `develop`反映後、SDK-devのMCP tool一覧と`ver4`実ファイルを確認する。
+## 2026-07-23 — SDK保存後の案内を制作者トップへ統一
+
+### 利用者からの要望
+
+- ゲーム保存直後の最初のリンクを個別ゲームではなく、`https://sdk-dev.game-fields.com/test10-1/`のような制作者環境トップにしたい。
+
+### 判断
+
+- 保存済みゲーム一覧と再ログイン先を同じ入口にするため、制作者トップを主リンクとする。
+- 今回のゲームへ直接入るURLも補助リンクとして残し、既存クライアント向け`previewUrl`は互換維持する。
+- DownloadMeの動作指示が変わるため配布名を`ver5`へ上げる。
+
+### 実施結果
+
+- `publish_mock`と旧管理トークン互換APIが`creatorUrl`、`gameUrl`、`previewUrl`を返すよう変更した。
+- DownloadMeとスターター指示を、`creatorUrl`を最初に案内する内容へ更新した。
+- SDK Portalの新規配布導線を`GameFieldsDownloadMe-ver5.md`へ変更した。
+
+### 検証
+
+- `npm run lint`成功。
+- `npm test`成功（391件）。
+- `npm run build`は検証用worktreeの`node_modules`シンボリックリンクをTurbopackが拒否したため未完了。変更コード由来の型・lint・テスト失敗はない。
+
+### 未対応・保留
+
+- `develop`への反映とSDK-dev実機確認は未実施。

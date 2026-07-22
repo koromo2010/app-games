@@ -40,7 +40,7 @@
 11. 390px前後のスマホ幅と1280px前後のPC幅で確認する。
 12. `MOCK_REVIEW.md`を完成させ、`npm run check:mock`を実行する。
 13. 入口で受け取ったSDK URL・制作者slug・管理トークンを一時環境変数として`npm run publish:mock`を実行し、発行されたSDK URLを利用者へ案内する。トークンをファイル、Git、会話、出力へ残さない。
-14. コマンド結果が`saved: true`であり、`previewUrl`が`https://sdk-dev.game-fields.com/<制作者slug>/mock/<game-id>`形式で返ったことを確認する。保存またはURL取得に失敗した場合、ローカルHTMLを代替の完成品として案内しない。
+14. コマンド結果が`saved: true`であり、`creatorUrl`が`https://sdk-dev.game-fields.com/<制作者slug>/`、`gameUrl`が`https://sdk-dev.game-fields.com/<制作者slug>/games/<game-id>`形式で返ったことを確認する。最初の案内リンクは`creatorUrl`にする。保存またはURL取得に失敗した場合、ローカルHTMLを代替の完成品として案内しない。
 
 ## 利用者への説明
 

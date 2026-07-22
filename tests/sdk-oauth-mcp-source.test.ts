@@ -28,6 +28,7 @@ test("SDK MCP challenges unauthenticated callers and scopes mock publication", (
   assert.match(mcp, /listChanged: false/);
   assert.match(mcp, /readOnlyHint: true/);
   assert.match(mcp, /title: "ゲームモックの保存"/);
+  assert.match(mcp, /creatorUrl, gameUrl, previewUrl: gameUrl/);
 });
 
 test("DownloadMe contains no embedded credential placeholders", () => {
@@ -43,7 +44,14 @@ test("SDK Portal distributes the current DownloadMe revision", () => {
   const syncScript = read("apps/sdk-portal/scripts/sync-download.mjs");
 
   for (const source of [page, nextConfig, syncScript]) {
-    assert.match(source, /GameFieldsDownloadMe-ver4\.md/);
-    assert.doesNotMatch(source, /GameFieldsDownloadMe-ver[23]\.md/);
+    assert.match(source, /GameFieldsDownloadMe-ver5\.md/);
+    assert.doesNotMatch(source, /GameFieldsDownloadMe-ver[234]\.md/);
   }
+});
+
+test("DownloadMe makes the creator environment the primary link", () => {
+  const entry = read("sdk/entry/START_GAME_FIELDS.md");
+  assert.match(entry, /\[あなたのGame Fields環境を開く\]\(SDKから返されたcreatorUrl\)/);
+  assert.match(entry, /\[今回のゲームを直接開く\]\(SDKから返されたgameUrl\)/);
+  assert.match(entry, /最初の案内には使わず`creatorUrl`を優先/);
 });

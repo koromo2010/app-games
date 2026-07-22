@@ -64,11 +64,15 @@ export async function PUT(
     `;
     const portalBaseUrl = process.env.SDK_PORTAL_BASE_URL?.replace(/\/$/, "")
       ?? (process.env.VERCEL_GIT_COMMIT_REF === "main" ? "https://sdk.game-fields.com" : "https://sdk-dev.game-fields.com");
+    const creatorUrl = `${portalBaseUrl}/${slug}/`;
+    const gameUrl = `${portalBaseUrl}/${slug}/games/${gameId}`;
     return Response.json({
       saved: true,
       gameId,
       mockRevision: revision,
-      previewUrl: `${portalBaseUrl}/${slug}/games/${gameId}`,
+      creatorUrl,
+      gameUrl,
+      previewUrl: gameUrl,
     });
   } catch (error) {
     if (error instanceof Error && /invalid|missing|large|between|encoding|path/i.test(error.message)) {
