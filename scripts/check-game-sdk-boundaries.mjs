@@ -13,6 +13,10 @@ const runtimeFiles = readdirSync(runtimeSourceRoot)
   .filter((name) => extname(name) === ".ts")
   .map((name) => join(runtimeSourceRoot, name));
 const proofGameFile = join(root, "tests/fixtures/sdk-count-up-game.ts");
+const pilotGameRoot = join(root, "games/wordwolf-sdk");
+const pilotGameFiles = readdirSync(pilotGameRoot, { recursive: true })
+  .filter((name) => extname(name) === ".ts")
+  .map((name) => join(pilotGameRoot, name));
 const starterRoot = join(root, "sdk/starter-template");
 const starterSourceFiles = ["src", "tests"].flatMap((directory) =>
   readdirSync(join(starterRoot, directory))
@@ -68,6 +72,20 @@ for (const match of proofSource.matchAll(/(?:import|export)\s+(?:type\s+)?(?:[^"
 }
 if (/\bprocess\.env\b|Redis|DATABASE_URL|API_KEY/.test(proofSource)) {
   failures.push(`${relative(root, proofGameFile)}: 実証ゲームがplatform資源へ直接アクセスしています。`);
+}
+
+for (const absoluteFile of pilotGameFiles) {
+  const file = relative(root, absoluteFile);
+  const source = readFileSync(absoluteFile, "utf8");
+  for (const match of source.matchAll(/(?:import|export)\s+(?:type\s+)?(?:[^"']+?\s+from\s+)?["']([^"']+)["']/g)) {
+    const specifier = match[1];
+    if (!specifier.startsWith("@game-fields/game-sdk") && !specifier.startsWith("./") && !specifier.startsWith("../")) {
+      failures.push(`${file}: SDKワードウルフがSDK外の依存 ${specifier} をimportしています。`);
+    }
+  }
+  if (/\bprocess\.env\b|Redis|DATABASE_URL|API_KEY|@\/|lib\//.test(source)) {
+    failures.push(`${file}: SDKワードウルフがplatform内部資源へ依存しています。`);
+  }
 }
 
 for (const absoluteFile of starterSourceFiles) {
@@ -134,4 +152,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(`[game-sdk-boundaries] 公開SDK ${sdkFiles.length}件、内部Runtime ${runtimeFiles.length}件、実証ゲーム、試用スターター ${starterSourceFiles.length}件の依存境界を確認しました。`);
+console.log(`[game-sdk-boundaries] 公開SDK ${sdkFiles.length}件、内部Runtime ${runtimeFiles.length}件、実証ゲーム、SDKワードウルフ ${pilotGameFiles.length}件、試用スターター ${starterSourceFiles.length}件の依存境界を確認しました。`);

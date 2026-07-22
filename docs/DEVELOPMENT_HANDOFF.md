@@ -240,6 +240,8 @@ API直叩き対策では、全オンラインRoom APIのGETをCookie本人と保
 
 ## 6. ワードウルフ現行仕様の要点
 
+SDK分離pilotは`games/wordwolf-sdk/manifest.ts`、`domain.ts`、`server-module.ts`に置く。共通Roomの参加者・ホスト・設定とLifecycle Commandは`packages/game-sdk`、秘密語・ヒント・投票・逆転回答はゲームpackageが所有する。`tests/wordwolf-sdk-pilot.test.ts`は3人参加から再戦までをMock Runtimeで完走する。`/sdk-examples/`と`/sdk-examples/word-wolf`は制作者アカウントを使わないコード管理の`Game Fields Official`サンプルで、SDK Portalの同名URLから本体dev画面を表示する。ワードウルフ画面は同じserver moduleをin-memory Runtimeへ接続し、参加者・観戦者視点、秘密語、Command、revision、中断、再戦をブラウザ確認できる。現行本体ワードウルフはまだ旧Room Storeを使用しており、永続HTTP/Client Runtime接続後に段階移行する。
+
 現在のモジュール分離は `docs/MODULAR_GAME_ARCHITECTURE.md`、将来のweb・game-server・timer-service・ai-worker・batch-worker構成は `docs/CONTAINER_ARCHITECTURE.md` を正本とする。オンラインゲームでは部屋HTTPクライアントと同期hookをUIから分離済み。ワードウルフはフェーズ時計も分離済み。部屋一覧は `lib/online-room-list.ts`、active-roomの移動・復帰は `lib/player-active-room.ts`、revision CASと新規作成は `lib/online-room-persistence.ts`、共通権限は `lib/online-room-access.ts`、API共通エラーは `lib/online-room-route-errors.ts`、主要5ゲームの解散は `lib/online-room-dissolution.ts` に集約した。登録簿の `moduleBoundaryFiles` をlint時に検査する。
 
 オンラインゲームのroom moduleは、ゲーム別の `*-room-normalizer.ts`（復元・入力正規化）、必要に応じた `*-room-domain.ts`（ラウンド進行・タイムアウト）、`*-room-presentation.ts`（sanitizer・ロビー表示）、`*-room-store.ts`（Redis/application）へ物理分割済み。ワードウルフの特殊な戦績記録付きCASはstoreに維持する。

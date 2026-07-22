@@ -1571,3 +1571,52 @@
 ### 未対応・保留
 
 - なし。途中の不完全修正は後続コミットで解消済み。
+
+## 2026-07-23 — ワードウルフを使ったSDK共通Room境界の第一段階
+
+### 利用者からの要望
+
+- 既存ワードウルフを分解してsdk-devで動かし、SDKへ切り出す共通部分を実物で確定する。
+
+### 判断
+
+- 現行のWordWolf Roomを丸ごとSDKへ移さず、共通Room envelopeとゲーム固有stateを分離する。
+- 参加、退出、設定更新、中断、再戦はSDK共通Lifecycle reducer、お題配布、ヒント、投票、逆転回答、秘密情報projectionはワードウルフpackageが所有する。
+- まずMock Runtimeで1試合完走するserver契約を固定し、その後に汎用HTTP/Client Runtimeとsdk-devの正式Room UIへ接続する。
+
+### 実施結果
+
+- 公開SDKへオンラインRoom、Player、Settings schema、Lifecycle Commandと純粋reducerを追加した。
+- `games/wordwolf-sdk`をmanifest、domain、server moduleへ分離し、SDK以外のplatform内部importを禁止する自動検査対象へ追加した。
+- 市民・狼には本人のお題だけを返し、観戦者には秘密語を返さない閲覧者別projectionを実装した。
+
+### 検証
+
+- `npm run lint`成功。
+- `npm test`成功（394件）。新規テストで3人参加、開始、ヒント、投票、逆転回答、結果、再戦まで完走した。
+- sdk-devの正式Room UIと永続化Runtimeへの接続は未実施。
+
+### 未対応・保留
+
+- Game Fields共通Room UIからSDK moduleを操作する汎用HTTP routeとClient Runtime。
+- sdk-devへワードウルフpilotを登録し、ブラウザ実機で部屋作成から再戦まで確認する。
+- 現行本体ワードウルフを新契約へ接続し、旧専用Lifecycleを削除する作業は実機確認後に行う。
+## 2026-07-23 SDK公式サンプルエリアとワードウルフUI接続
+
+### 要望
+
+- ワードウルフ用の一般制作者アカウントを増やさず、SDK-dev内に公式サンプル専用エリアを用意する。
+- 分離済みワードウルフserver moduleをブラウザ画面へ接続し、SDKへ切り出す共通部分を実物で検証する。
+
+### 判断・実装
+
+- `/sdk-examples/`を`Game Fields Official`のコード管理カタログとし、`sdk_creators`、`owner_player_id`、管理トークンに依存させない。
+- `/sdk-examples/word-wolf`は`games/wordwolf-sdk/server-module.ts`をin-memory Mock Runtimeで実行する。別の見た目用ゲーム進行は作らない。
+- SDK共通欄にRoom code、phase、revision、host、playersを表示し、固有欄で秘密語、ヒント、投票、逆転回答、勝敗を扱う。
+- ホスト・参加者・観戦者の視点切替、秘密語projection、進行中断、同じ参加者での再戦を確認できる。
+- SDK Portalにも同名routeを追加し、dev/mainに応じたGame Fields本体をiframe表示する。
+
+### 検証・保留
+
+- SDK package build、対象lint、公式エリア回帰テスト、既存ワードウルフpilotテストに成功。
+- 永続Room、HttpOnly session由来actor、HTTP Client Runtimeは未接続。今回の画面はSDK境界の公式ブラウザpilotであり、本番ルーム基盤への移行は次工程。

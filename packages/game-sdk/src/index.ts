@@ -5,6 +5,33 @@ export type GameSdkPlayMode = "online-room" | "local-pass-and-play";
 export type GameSdkPhase = "entry" | "lobby" | "playing" | "result";
 export type GameSdkViewerRole = "host" | "player" | "spectator" | "anonymous";
 
+export type GameSdkRoomPlayer = {
+  id: string;
+  displayName: string;
+  joinedAt: number;
+  connected: boolean;
+};
+
+export type GameSdkOnlineRoomPhase = "lobby" | "playing" | "result";
+
+/** Platform-owned room fields shared by every online-room game package. */
+export type GameSdkOnlineRoomState<TSettings> = GameSdkStoredRoom & {
+  phase: GameSdkOnlineRoomPhase | string;
+  hostPlayerId: string;
+  players: GameSdkRoomPlayer[];
+  settings: TSettings;
+};
+
+export type GameSdkSettingDefinition = {
+  key: string;
+  label: Record<GameSdkLocale, string>;
+  type: "boolean" | "number" | "select" | "text";
+  required?: boolean;
+  minimum?: number;
+  maximum?: number;
+  options?: readonly (string | number)[];
+};
+
 export type GameSdkManifest = {
   sdkVersion: typeof GAME_SDK_VERSION;
   id: string;
@@ -17,6 +44,7 @@ export type GameSdkManifest = {
   supportsReplay: boolean;
   supportsRating: boolean;
   usesLlm: boolean;
+  settings?: readonly GameSdkSettingDefinition[];
 };
 
 /**
@@ -89,6 +117,14 @@ export type GameSdkCommandResult<TRoomView> = {
   revision: number;
 };
 
+/** Commands whose authorization and state transition are identical across games. */
+export type GameSdkRoomLifecycleCommand<TSettings> =
+  | { type: "room/join" }
+  | { type: "room/leave" }
+  | { type: "room/update-settings"; settings: Partial<TSettings> }
+  | { type: "room/abort" }
+  | { type: "room/rematch" };
+
 /**
  * Browser-facing Runtime injected by Game Fields. Actor identity is omitted on
  * purpose: the platform derives it from the signed HttpOnly session.
@@ -132,6 +168,19 @@ export function assertGameManifest(manifest: GameSdkManifest): void {
   ] as const) {
     if (typeof manifest[field] !== "boolean") {
       throw new Error(`Game SDK manifest ${field} must be boolean.`);
+    }
+  }
+  const settingKeys = new Set<string>();
+  for (const setting of manifest.settings ?? []) {
+    if (!/^[a-z][A-Za-z0-9]*$/.test(setting.key) || settingKeys.has(setting.key)) {
+      throw new Error("Game SDK manifest setting keys must be unique camelCase identifiers.");
+    }
+    settingKeys.add(setting.key);
+    if (!setting.label.ja.trim() || !setting.label.en.trim()) {
+      throw new Error(`Game SDK manifest setting ${setting.key} requires ja/en labels.`);
+    }
+    if (setting.type === "select" && (!setting.options || setting.options.length === 0)) {
+      throw new Error(`Game SDK manifest select setting ${setting.key} requires options.`);
     }
   }
 }
