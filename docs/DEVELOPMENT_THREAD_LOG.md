@@ -914,3 +914,34 @@
 - `docs/ENVIRONMENT_VARIABLES.md`記載のPortal／preview環境変数を設定し、再デプロイ後に実際のmock保存、Git commit、共有URL、iframe asset読込、期限切れ・不正URL拒否を実機確認する。
 - SDK本番用の専用Git・資格・署名鍵・preview Projectは、sdk-devの一連動作を確認してから別値で作成する。
 
+## 2026-07-22 — SDK dev mock保存先と隔離previewの外部設定
+
+### 利用者からの要望
+
+- SDK devの環境変数はVercel画面だけで場当たり的に扱わず、以前決めたとおりGitの環境変数台帳を正本として継続管理する。
+
+### 判断
+
+- 秘密値はGitへ保存せず、キー名、配置Project、Vercel対象環境、Sensitive区分、設定確認状態、再デプロイ状態だけを`docs/ENVIRONMENT_VARIABLES.md`へ記録する。
+- Vercel操作の案内前に台帳を確認し、操作後に同じ行の状態を更新する。期待配置と現在配置を分け、未確認を設定済みと扱わない。
+
+### 実施結果
+
+- private repo `koromo2010/game-fields-sdk-mocks-dev`を作成した。
+- Portal用にContents read/writeだけの資格、preview用にContents read-onlyだけの別資格を発行した。
+- `app-games-sdk-dev`へ`SDK_MOCK_GITHUB_REPOSITORY`と`SDK_MOCK_GITHUB_WRITE_TOKEN`、`app-games-preview-dev`へ`SDK_MOCK_GITHUB_REPOSITORY`と`SDK_MOCK_GITHUB_READ_TOKEN`をProduction対象で登録した。
+- `SDK_PREVIEW_SIGNING_SECRET`をTeam Shared Variableとして作成し、両ProjectのProductionへLinkした。
+- `app-games-preview-dev`をRoot Directory `apps/sdk-preview`で作成し、Production Branchを`develop`へ変更した。
+- Git台帳の現在配置表を更新した。途中で既存`SDK_MOCK_GITHUB_REPOSITORY`を重複追加する誤案内があり、台帳を参照していなかった運用上の問題として訂正した。
+
+### 検証
+
+- Vercel上で両Projectへの共有署名鍵Linkと各Project Variableのキー名・対象環境を画面確認した。秘密値は記録・表示していない。
+- Vercel APIで`app-games-preview-dev`の最新Deploymentが初回`main`由来のままであることを確認した。環境変数追加後の`develop`再デプロイと実機動作は未実施。
+
+### 未対応・保留
+
+- `app-games-sdk-dev`と`app-games-preview-dev`を新しい環境変数構成で再デプロイする。
+- `preview-dev.game-fields.com`を割り当て、mock保存、private Git commit、共有URL、iframe asset、期限切れ・不正署名拒否を実機確認する。
+- `app-games-preview-dev`のIgnored Build Stepを確認・設定する。
+- 作成途中に増えた`app-games-sdk-portal`はcustom domainを持たない。使用予定がないことを確認後、削除するか判断する。
