@@ -1,6 +1,6 @@
 # App Games agent guide
 
-このリポジトリを編集するAI・開発者は、作業開始時に `docs/README.md` の読書順に従い、`README.md` と `docs/DEVELOPMENT_HANDOFF.md` を読むこと。バグ修正・認証・マルチプレイ進行を変更する場合は `docs/KNOWN_ISSUES.md` も確認すること。新規ゲームの追加・ゲーム仕様の変更時は、さらに `config/game-registry.json` と `docs/NEW_GAME_CHECKLIST.md` を必ず確認すること。会話スレッド内の記憶や `docs/DEVELOPMENT_THREAD_LOG.md` を正本にしない。開発上の要望・判断・調査結果・実装・外部設定・公開・保留事項が生じた作業単位は、利用者から明示的な保存依頼がなくても、終了前に `docs/DEVELOPMENT_LOGGING.md` に従って `docs/DEVELOPMENT_THREAD_LOG.md` へ必ず追記する。お題DB、既出判定、問題再利用を変更する場合は `docs/TOPIC_HISTORY_DATABASE.md` も先に読むこと。
+このリポジトリを編集するAI・開発者は、作業開始時に `docs/README.md` の読書順に従い、`README.md` と `docs/DEVELOPMENT_HANDOFF.md` を読むこと。Vercel、環境変数、DB、Redis、Blob、DNS、GitHub権限、外部API設定を扱う場合は、説明や操作案内を始める前に現在の対象ブランチの `docs/ENVIRONMENT_VARIABLES.md` も必ず読むこと。バグ修正・認証・マルチプレイ進行を変更する場合は `docs/KNOWN_ISSUES.md` も確認すること。新規ゲームの追加・ゲーム仕様の変更時は、さらに `config/game-registry.json` と `docs/NEW_GAME_CHECKLIST.md` を必ず確認すること。会話スレッド内の記憶や `docs/DEVELOPMENT_THREAD_LOG.md` を正本にしない。開発上の要望・判断・調査結果・実装・外部設定・公開・保留事項が生じた作業単位は、利用者から明示的な保存依頼がなくても、終了前に `docs/DEVELOPMENT_LOGGING.md` に従って `docs/DEVELOPMENT_THREAD_LOG.md` へ必ず追記する。お題DB、既出判定、問題再利用を変更する場合は `docs/TOPIC_HISTORY_DATABASE.md` も先に読むこと。
 
 ## Project identity
 
@@ -29,6 +29,15 @@
 - サーバーログは `lib/observability` の閉じたイベントschemaを使う。リクエストbody、部屋JSON、合言葉、正解、秘密語、手札、投稿本文、Cookie、APIキー、氏名、メール、外部SDK例外本文をconsoleへ直接出さない。詳細は `docs/OBSERVABILITY.md`。
 - アカウント参加型ゲームは共通戦績へ結果を保存し、ロビーの全ゲーム・ゲーム別フィルターで確認可能にする。ローカル回しゲームは、アカウントへ安全に紐づけられるまで戦績対象外と明記する。
 - 詳細プレイバックは観測ログではなく `lib/game-replay-store.ts` へ保存し、参加者本人だけに返す。内部プレイヤーIDをユーザーURLへ使わず、共有文へ認証付きURLを含めない。ゲーム仕様として投稿本文や参加者名を共有する場合は送信前プレビューを必須にし、参加者名は本人のデフォルトOFFの同意を入室時に固定保存し、未同意なら匿名ラベルへ置き換える。
+
+## Environment variables and external configuration
+
+- Vercel、Neon、Upstash、Blob、DNS、GitHub Secrets／Tokens、外部APIキー等について、追加・変更・削除・共有Link・再デプロイ・ドメイン割当・Ignored Build Stepの案内または確認を行う前に、必ず `docs/ENVIRONMENT_VARIABLES.md` の現在配置と未完了事項を確認する。過去チャット、記憶、スクリーンショットだけを根拠にしない。
+- 操作対象は、Vercel Team、Project名、Git branch、Root Directory、Deployment Environment、キー名、Sensitive区分まで特定する。台帳にない状態は「未確認」とし、推測で「設定済み」にしない。
+- 外部設定を変更した作業は、同じ作業単位で `docs/ENVIRONMENT_VARIABLES.md` の現在状態を更新するまで完了扱いにしない。「登録済み」「ProjectへLink済み」「再デプロイ済み」「実機確認済み」を別の状態として記録する。
+- 経緯は `docs/DEVELOPMENT_THREAD_LOG.md`、現在配置は `docs/ENVIRONMENT_VARIABLES.md` を正本とする。両方が必要な変更では同時に更新し、ログだけに現在状態を残さない。
+- 秘密値、トークン、接続文字列、パスワードはGit、Issue、PR、チャット、スクリーンショットへ残さない。記録するのはキー名、配置先、権限範囲、Sensitive区分、確認状態、必要なローテーション期限だけとする。
+- 最終報告前に、今回触れた外部設定が台帳へ反映され、次回の担当がチャット履歴なしで次の一手を判断できることを確認する。
 
 ## Development conversation logging
 
