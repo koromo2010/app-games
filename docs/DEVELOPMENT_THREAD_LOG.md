@@ -1374,4 +1374,10 @@
 
 ### 未対応・保留
 
-- 共有branch反映後、`app-games-preview-dev`のDeploymentがREADYになってから、21ゲームの画面表示と操作をブラウザで再確認する。
+- 21ゲームの操作自体は利用者ブラウザで再確認する。
+
+### 公開・実機確認
+
+- `main`と`develop`を`75a284b`へfast-forwardし、同一コミットへそろえた。
+- `app-games-preview-dev`のdevelop Production Deployment `dpl_D7krEAsXqA4dUFncRanjG8HmUKLb`がREADYになった。
+- 保存済み21ゲームの隔離Runtimeを実際に開き、CSPが`https://sdk-dev.game-fields.com`と`https://dev.game-fields.com`を許可し、`allow-same-origin`を許可していないことをHTTP応答で確認した。
