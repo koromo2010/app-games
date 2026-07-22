@@ -1124,4 +1124,18 @@
 ### 未対応・保留
 
 - 共有`develop`反映後にVercelの再デプロイを確認し、開発Neonへschemaを適用する。
+
+## 2026-07-22 開発ストレージ分離の共有反映・接続確認
+
+### 実施
+
+- 開発Neon／共有Free Redisの優先接続と`app-dev:`名前空間分離を、共有`develop`の`0773a78`へ反映した。
+- Vercel `app-games-dev`のProduction Deployment `dpl_BD5vAa8NDCkSAe3eEog1qq4uWudx`が対象SHAをビルドし、`READY`および`dev.game-fields.com`へのalias反映を確認した。
+- 存在しない資格で`POST /api/player-account`を実行し、`401 INVALID_CREDENTIALS`を確認した。この経路でRedisレート制限、PostgreSQL schema自動適用、アカウント照会が成功している。
+
+### 現在状態
+
+- `NEON_DATABASE_URL`優先接続、開発Neonのschema、`DEV_REDIS_*`優先接続は実機確認済み。
+- 新規アカウントの登録・ログイン・セッション保持をブラウザで確認する工程は未実施。
+- 旧`DATABASE_URL`と旧`REDIS_URL`は安全のため保持中であり、削除判断は新規登録・ログイン確認後とする。
 - `dev.game-fields.com`で新規登録・ログイン、Redis利用、SDK-dev SSOを実機確認する。
