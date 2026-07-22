@@ -1341,7 +1341,11 @@
 ### 検証
 
 - 修正前の実APIで`test10-1`に`twenty-one-misere`（21ゲーム）が保存済みであることを確認した。
+- `npm run lint`、全388テスト、本体production build、SDK Portal production buildに成功した。
+- 共有`develop`の`38bf4ab`へ反映し、`app-games-dev`と`app-games-sdk-dev`の対象DeploymentがREADYになった。
+- `https://sdk-dev.game-fields.com/test10-1`が参照する本体dev広場で、カード見出しが「21ゲーム」1件だけであり、組み込みゲームカードがないことをHTML応答で確認した。
+- `https://sdk-dev.game-fields.com/test10-1/games/twenty-one-misere`が200を返すことを確認した。
 
 ### 未対応・保留
 
-- テスト・build後、共有`develop`へ反映し、SDK-devのブラウザ画面で既存ゲーム非表示と21ゲーム表示を再確認する。
+- ブラウザ上でログイン後のカード遷移と21ゲームの進行を確認する。
