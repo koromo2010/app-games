@@ -1099,3 +1099,29 @@
 - 台帳が手書きだけだったため、コードが参照する環境変数のうち21キーが未記載だった。
 - `scripts/check-environment-ledger.mjs`を追加し、コード参照キーが台帳にない場合は`npm run lint`を失敗させるようにした。
 - 台帳編集だけで完了とせず、検査、コミット、共有branch反映、共有側からの再取得確認までを永続更新の完了条件とする。
+
+## 2026-07-22 — 開発DB・共有Free Redisのコード切替
+
+### 利用者からの要望
+
+- `app-games-dev-neon`と、追加課金を避けてSDK-devのFree Redisを共有する外部設定の続きを実装する。
+
+### 判断
+
+- 開発Neonは`NEON_DATABASE_URL`を旧`DATABASE_URL`より優先する。
+- Redisは`DEV_REDIS_*`資格を旧Redis資格より優先し、dev本体の全キーへ中央アクセス層で`app-dev:`を付け、SDK Portalの既存`sdk:`キーと論理分離する。
+
+### 実施結果
+
+- Vercel画面で`DEV_REDIS_REDIS_URL`、`DEV_REDIS_KV_URL`、`DEV_REDIS_KV_REST_API_URL`、`DEV_REDIS_KV_REST_API_TOKEN`、`DEV_REDIS_KV_REST_API_READ_ONLY_TOKEN`のProduction登録を確認した。
+- DB・Redisの接続優先順位とRedisコマンドの名前空間化を実装し、環境変数台帳と引継ぎ資料を更新した。
+
+### 検証
+
+- `npm test`（383件）、`npm run lint`、`npm run build`に成功した。
+- Vercel再デプロイ、schema migration、登録・ログイン実機確認は未実施。
+
+### 未対応・保留
+
+- 共有`develop`反映後にVercelの再デプロイを確認し、開発Neonへschemaを適用する。
+- `dev.game-fields.com`で新規登録・ログイン、Redis利用、SDK-dev SSOを実機確認する。

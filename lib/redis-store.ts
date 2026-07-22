@@ -11,8 +11,8 @@ type RedisErrorResponse = {
 };
 
 type RedisConfig =
-  | { transport: "rest"; url: string; token: string }
-  | { transport: "socket"; url: string };
+  | { transport: "rest"; url: string; token: string; keyPrefix: string }
+  | { transport: "socket"; url: string; keyPrefix: string };
 
 let socketClient: RedisClientType | null = null;
 let socketClientUrl = "";
@@ -97,7 +97,7 @@ async function fetchRedis(url: string, token: string, body: string, retrySafe: b
 }
 
 export function resolveSocketRedisUrl(env: RedisEnvironment = process.env) {
-  for (const key of ["APP_REDIS_URL", "REDIS_URL"]) {
+  for (const key of ["APP_REDIS_URL", "DEV_REDIS_REDIS_URL", "REDIS_URL"]) {
     const value = env[key]?.trim();
     if (value) return { key, url: value };
   }
@@ -109,9 +109,54 @@ export function resolveSocketRedisUrl(env: RedisEnvironment = process.env) {
   return integrationUrls[0] ?? null;
 }
 
+function appRedisKeyPrefix(configKey: string) {
+  return configKey.startsWith("DEV_REDIS_") ? "app-dev:" : "";
+}
+
+function prefixRedisKey(value: unknown, prefix: string) {
+  if (!prefix || typeof value !== "string" || value.startsWith(prefix)) return value;
+  return `${prefix}${value}`;
+}
+
+const singleKeyCommands = new Set([
+  "DECR", "EXPIRE", "GET", "HDEL", "HGET", "HGETALL", "HINCRBY", "HKEYS", "HLEN", "HMGET", "HSCAN",
+  "HSET", "HVALS", "INCR", "INCRBY", "LLEN", "LPUSH", "LRANGE", "LTRIM", "RPUSH", "SADD", "SCARD",
+  "SISMEMBER", "SMEMBERS", "SMISMEMBER", "SREM", "SSCAN", "SET", "TTL", "ZADD", "ZCARD", "ZINCRBY",
+  "ZMSCORE", "ZRANGE", "ZREM", "ZREVRANGE", "ZSCORE",
+]);
+const allKeyCommands = new Set(["DEL", "EXISTS", "MGET"]);
+
+export function namespaceRedisCommand(command: unknown[], prefix: string) {
+  if (!prefix || command.length === 0) return command;
+  const namespaced = [...command];
+  const name = commandName(namespaced);
+  if (singleKeyCommands.has(name)) {
+    namespaced[1] = prefixRedisKey(namespaced[1], prefix);
+  } else if (allKeyCommands.has(name)) {
+    for (let index = 1; index < namespaced.length; index += 1) namespaced[index] = prefixRedisKey(namespaced[index], prefix);
+  } else if (name === "EVAL" || name === "EVALSHA") {
+    const keyCount = Number(namespaced[2]);
+    if (Number.isInteger(keyCount) && keyCount >= 0) {
+      for (let index = 3; index < 3 + keyCount && index < namespaced.length; index += 1) {
+        namespaced[index] = prefixRedisKey(namespaced[index], prefix);
+      }
+    }
+  } else if (name === "SCAN") {
+    for (let index = 2; index < namespaced.length - 1; index += 1) {
+      if (String(namespaced[index]).toUpperCase() === "MATCH") {
+        namespaced[index + 1] = prefixRedisKey(namespaced[index + 1], prefix);
+      }
+    }
+  }
+  return namespaced;
+}
+
 export function getRedisConfig() {
-  const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
+  const devUrl = process.env.DEV_REDIS_KV_REST_API_URL;
+  const devToken = process.env.DEV_REDIS_KV_REST_API_TOKEN;
+  const usesDevIntegration = Boolean(devUrl && devToken);
+  const url = usesDevIntegration ? devUrl : process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+  const token = usesDevIntegration ? devToken : process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
 
   if (url && token) {
     assertRedisEnvironment();
@@ -119,6 +164,7 @@ export function getRedisConfig() {
       transport: "rest",
       url: url.replace(/\/$/, ""),
       token,
+      keyPrefix: usesDevIntegration ? "app-dev:" : "",
     } satisfies RedisConfig;
   }
 
@@ -129,6 +175,7 @@ export function getRedisConfig() {
   return {
     transport: "socket",
     url: socketConfig.url,
+    keyPrefix: appRedisKeyPrefix(socketConfig.key),
   } satisfies RedisConfig;
 }
 
@@ -190,10 +237,11 @@ export async function redisCommand<T>(command: unknown[]) {
 
   if (config.transport === "socket") {
     const client = await getSocketRedisClient(config.url);
-    return await client.sendCommand(stringifyRedisCommand(command)) as T;
+    return await client.sendCommand(stringifyRedisCommand(namespaceRedisCommand(command, config.keyPrefix))) as T;
   }
 
-  const response = await fetchRedis(config.url, config.token, JSON.stringify(command), redisReadCommands.has(commandName(command)));
+  const namespacedCommand = namespaceRedisCommand(command, config.keyPrefix);
+  const response = await fetchRedis(config.url, config.token, JSON.stringify(namespacedCommand), redisReadCommands.has(commandName(command)));
 
   if (!response.ok) {
     throw await redisRequestError(response);
@@ -215,11 +263,12 @@ export async function redisPipeline<T extends unknown[]>(commands: unknown[][]) 
   if (config.transport === "socket") {
     const client = await getSocketRedisClient(config.url);
     const transaction = client.multi();
-    for (const command of commands) transaction.addCommand(stringifyRedisCommand(command));
+    for (const command of commands) transaction.addCommand(stringifyRedisCommand(namespaceRedisCommand(command, config.keyPrefix)));
     return await transaction.exec() as T;
   }
 
-  const response = await fetchRedis(`${config.url}/pipeline`, config.token, JSON.stringify(commands), commandsAreSafeToRetry(commands));
+  const namespacedCommands = commands.map((command) => namespaceRedisCommand(command, config.keyPrefix));
+  const response = await fetchRedis(`${config.url}/pipeline`, config.token, JSON.stringify(namespacedCommands), commandsAreSafeToRetry(commands));
   if (!response.ok) throw await redisRequestError(response);
 
   const data = (await response.json()) as RedisResponse<unknown>[];

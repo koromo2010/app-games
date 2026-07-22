@@ -3,6 +3,7 @@ import { assertAppDatabaseEnvironment } from "./storage-environment-guard.ts";
 
 const postgresUrlEnvironmentNames = [
   "APP_DATABASE_URL",
+  "NEON_DATABASE_URL",
   "DATABASE_URL",
   "database_DATABASE_URL",
   "database_POSTGRES_URL",
