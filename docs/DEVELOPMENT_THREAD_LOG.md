@@ -1461,6 +1461,16 @@
 - 全390テスト成功。
 - root production buildは、検証用worktreeの`node_modules`が外部symlinkであることをTurbopackが拒否したため未完了。ソースのcompile errorではない。
 
+### 関連コミット
+
+- `c7488c0` — `develop`へ`GameFieldsDownloadMe-ver3.md`の配布導線と生成物を反映。
+
+### 公開確認
+
+- `app-games-sdk-dev`の`c7488c0` Production DeploymentがREADY。
+- `https://sdk-dev.game-fields.com/GameFieldsDownloadMe-ver3.md`が200、添付名`GameFieldsDownloadMe-ver3.md`、正本から生成した内容との完全一致を確認した。
+- SDK-devトップページが`ver3`だけを新規取得導線として表示することを確認した。
+
 ### 未対応・保留
 
-- `develop`反映後のSDK-devデプロイと実URL取得確認。
+- なし。
