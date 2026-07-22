@@ -74,8 +74,8 @@ export default function Home() {
             ゲーム固有部分を作成・検証・提出するための開発基盤です。
           </p>
           <div className="hero-actions">
-            <a className="primary-action" href="/DownloadMe.md" download>
-              最新のDownloadMe
+            <a className="primary-action" href="/GameFieldsDownloadMe.md" download>
+              最新のGameFieldsDownloadMe
               <span aria-hidden="true">↓</span>
             </a>
             <a className="primary-action" href="#foundation">
@@ -137,8 +137,8 @@ export default function Home() {
           </p>
         </div>
         <div className="hero-actions">
-          <a className="primary-action" href="/DownloadMe.md" download>
-            DownloadMe.mdを取得
+          <a className="primary-action" href="/GameFieldsDownloadMe.md" download>
+            GameFieldsDownloadMe.mdを取得
             <span aria-hidden="true">↓</span>
           </a>
           <Link className="secondary-action" href="/demo">

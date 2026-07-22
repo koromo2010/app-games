@@ -159,6 +159,9 @@ try {
     "npm run demo",
     "npm run package",
     "submission/game-fields-submission.zip",
+    "saved: true",
+    "previewUrl",
+    "ローカルプレビューを代替完成品として返さず",
   ]) {
     if (!entryGuide.includes(requiredText)) {
       throw new Error(`Entry guide is missing required instruction: ${requiredText}`);
