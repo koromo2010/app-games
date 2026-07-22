@@ -22,6 +22,7 @@ test("SDK preview content stays sandboxed and scopes its session cookie to one r
   assert.match(policy, /form-action 'none'/);
   assert.match(policy, /sandbox allow-scripts/);
   assert.doesNotMatch(policy, /allow-same-origin/);
+  assert.match(policy, /frame-ancestors https:\/\/sdk-dev\.game-fields\.com https:\/\/dev\.game-fields\.com/);
   assert.equal(previewCookiePath({
     instanceId: "creator-lab",
     gameId: "sample-game",
