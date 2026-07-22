@@ -1474,3 +1474,32 @@
 ### 未対応・保留
 
 - なし。
+
+## 2026-07-23 — SDK制作環境への再ログイン導線を追加
+
+### 利用者からの要望
+
+- DownloadMeの制作開始手順が新規URL作成だけを前提にしているため、既に作成済みのSDK環境へ再ログインして制作を続けられるようにする。
+
+### 判断
+
+- OAuthで確認したGame Fieldsアカウントの所有環境をMCPから安全に一覧取得し、既存環境が1件なら自動再利用、複数なら利用者が選択、0件の場合だけ新規予約へ進む。
+- 他利用者の環境検索や任意slugからの所有者推測は許さず、ログイン本人の`owner_player_id`に一致する環境だけを返す。
+- 制作フローの改版に当たるため、既存`ver3`を上書きせず新規配布名を`GameFieldsDownloadMe-ver4.md`へ上げる。
+
+### 実施結果
+
+- 読み取り専用MCP tool `list_creator_environments`を追加し、本人所有のslug、表示名、ゲーム数だけを返すようにした。
+- DownloadMeを既存環境優先の開始手順へ変更し、既存環境では空き確認・予約・確定を再実行しないよう明記した。
+- Portalの新規取得導線、添付名、同期先を`ver4`へ更新した。旧配布ファイルは互換用に残した。
+
+### 検証
+
+- `npm run lint`成功。
+- 全390テスト成功。
+- `npm run test:sdk-starter`で入口、公開Git snapshot、ZIP、SDK install、型検査、契約テスト、1ゲーム完走、提出ZIPまで成功。
+- `npm run build`は検証用worktree外を指す`node_modules` symlinkをTurbopackが拒否したため未完了。Runtime packageの型検査は成功し、今回のソース由来のcompile errorは検出されていない。
+
+### 未対応・保留
+
+- `develop`反映後、SDK-devのMCP tool一覧と`ver4`実ファイルを確認する。

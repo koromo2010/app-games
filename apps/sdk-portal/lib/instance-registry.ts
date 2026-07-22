@@ -95,6 +95,19 @@ export async function authenticateCreatorOwner(slug: string, playerId: string) {
   return creator?.owner_player_id === playerId ? creator : null;
 }
 
+export async function listCreatorEnvironments(ownerPlayerId: string) {
+  await ensureSdkSchema();
+  const rows = await sdkSql()`
+    SELECT c.slug, c.display_name AS "displayName", COUNT(g.id)::int AS "gameCount"
+    FROM sdk_creators c
+    LEFT JOIN sdk_games g ON g.creator_id = c.id
+    WHERE c.owner_player_id = ${ownerPlayerId}
+    GROUP BY c.id, c.slug, c.display_name, c.created_at
+    ORDER BY c.created_at ASC
+  `;
+  return rows as Array<{ slug: string; displayName: string; gameCount: number }>;
+}
+
 export async function listCreatorGames(slug: string) {
   await ensureSdkSchema();
   const rows = await sdkSql()`

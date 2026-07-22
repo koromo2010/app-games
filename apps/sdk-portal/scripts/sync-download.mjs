@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const source = resolve(appRoot, "../../sdk/entry/START_GAME_FIELDS.md");
-const destination = resolve(appRoot, "public/GameFieldsDownloadMe-ver3.md");
+const destination = resolve(appRoot, "public/GameFieldsDownloadMe-ver4.md");
 const releaseSource = resolve(appRoot, "../../config/platform-release.json");
 const releaseDestination = resolve(appRoot, "public/platform-release.json");
 const release = JSON.parse(readFileSync(releaseSource, "utf8"));
@@ -27,5 +27,5 @@ const download = readFileSync(source, "utf8")
 writeFileSync(destination, download);
 copyFileSync(releaseSource, releaseDestination);
 console.log(
-  `[sdk-portal] GameFieldsDownloadMe-ver3.md synced for ${sdkChannel} at ${sdkPortalBaseUrl} (platform v${release.platformVersion})`,
+  `[sdk-portal] GameFieldsDownloadMe-ver4.md synced for ${sdkChannel} at ${sdkPortalBaseUrl} (platform v${release.platformVersion})`,
 );

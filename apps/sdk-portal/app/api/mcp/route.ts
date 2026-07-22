@@ -1,5 +1,5 @@
 import { authenticateAccessToken, portalBaseUrl } from "@/lib/oauth-store";
-import { authenticateCreatorOwner, finalizeInstanceSlug, instanceSlugAvailable, normalizeInstanceSlug, reserveInstanceSlug, validateInstanceSlug } from "@/lib/instance-registry";
+import { authenticateCreatorOwner, finalizeInstanceSlug, instanceSlugAvailable, listCreatorEnvironments, normalizeInstanceSlug, reserveInstanceSlug, validateInstanceSlug } from "@/lib/instance-registry";
 import { saveMockFilesToGit } from "@/lib/mock-git-store";
 import { ensureSdkSchema, sdkSql } from "@/lib/sdk-postgres";
 import platformRelease from "../../../../../config/platform-release.json";
@@ -25,6 +25,7 @@ function textResult(value: unknown) {
 }
 
 const tools = [
+  { name: "list_creator_environments", title: "自分のSDK環境一覧", description: "ログイン中のGame Fieldsアカウントに紐づく既存の制作者環境を一覧表示します。新規URLを予約する前に必ず呼び出してください。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: {}, additionalProperties: false } },
   { name: "check_creator_url", title: "制作者URLの空き確認", description: "Game Fields SDKの制作者URL名が利用可能か確認します。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "確認する制作者URL名" } }, required: ["slug"], additionalProperties: false } },
   { name: "reserve_creator_url", title: "制作者URLの予約", description: "ログイン中のGame Fieldsアカウント用に制作者URLを7日間予約します。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "予約する制作者URL名" }, displayName: { type: "string", description: "制作者の表示名" } }, required: ["slug", "displayName"], additionalProperties: false } },
   { name: "finalize_creator_url", title: "制作者URLの確定", description: "予約トークンを使い、制作者URLをログイン中のアカウントへ正式登録します。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "確定する制作者URL名" }, reservationToken: { type: "string", description: "予約時に発行されたトークン" } }, required: ["slug", "reservationToken"], additionalProperties: false } },
@@ -40,6 +41,16 @@ function negotiateProtocolVersion(value: unknown) {
 }
 
 async function callTool(name: string, args: Record<string, unknown>, playerId: string, origin: string) {
+  if (name === "list_creator_environments") {
+    const environments = await listCreatorEnvironments(playerId);
+    return textResult({
+      environments: environments.map((environment) => ({
+        ...environment,
+        url: `${portalBaseUrl(origin)}/${environment.slug}`,
+      })),
+      count: environments.length,
+    });
+  }
   const slug = normalizeInstanceSlug(typeof args.slug === "string" ? args.slug : "");
   const slugError = validateInstanceSlug(slug);
   if (slugError) throw new Error(slugError);

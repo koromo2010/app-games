@@ -18,6 +18,9 @@ test("SDK MCP challenges unauthenticated callers and scopes mock publication", (
   assert.match(mcp, /WWW-Authenticate/);
   assert.match(mcp, /oauth-protected-resource/);
   assert.match(mcp, /name === "publish_mock"/);
+  assert.match(mcp, /name: "list_creator_environments"/);
+  assert.match(mcp, /name === "list_creator_environments"/);
+  assert.match(mcp, /listCreatorEnvironments\(playerId\)/);
   assert.match(mcp, /includes\("sdk:mock"\)/);
   assert.match(mcp, /authenticateCreatorOwner\(slug, playerId\)/);
   assert.match(mcp, /SUPPORTED_PROTOCOL_VERSIONS/);
@@ -40,7 +43,7 @@ test("SDK Portal distributes the current DownloadMe revision", () => {
   const syncScript = read("apps/sdk-portal/scripts/sync-download.mjs");
 
   for (const source of [page, nextConfig, syncScript]) {
-    assert.match(source, /GameFieldsDownloadMe-ver3\.md/);
-    assert.doesNotMatch(source, /GameFieldsDownloadMe-ver2\.md/);
+    assert.match(source, /GameFieldsDownloadMe-ver4\.md/);
+    assert.doesNotMatch(source, /GameFieldsDownloadMe-ver[23]\.md/);
   }
 });

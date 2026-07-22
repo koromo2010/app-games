@@ -99,8 +99,8 @@ export default async function Home() {
             ゲーム固有部分を作成・検証・提出するための開発基盤です。
           </p>
           <div className="hero-actions">
-            <a className="primary-action" href="/GameFieldsDownloadMe-ver3.md" download>
-              GameFieldsDownloadMe-ver3
+            <a className="primary-action" href="/GameFieldsDownloadMe-ver4.md" download>
+              GameFieldsDownloadMe-ver4
               <span aria-hidden="true">↓</span>
             </a>
             <a className="primary-action" href="#foundation">
@@ -196,8 +196,8 @@ export default async function Home() {
           途中で画面を閉じたり新しいチャットへ移ったりせず、URLが案内されるまで同じチャットでお待ちください。エラーなどで保存できなかった場合は、AIが未完了であることと次の対応を案内します。
         </p>
         <div className="hero-actions">
-          <a className="primary-action" href="/GameFieldsDownloadMe-ver3.md" download>
-            GameFieldsDownloadMe-ver3.mdを取得
+          <a className="primary-action" href="/GameFieldsDownloadMe-ver4.md" download>
+            GameFieldsDownloadMe-ver4.mdを取得
             <span aria-hidden="true">↓</span>
           </a>
           <Link className="secondary-action" href="/demo">
