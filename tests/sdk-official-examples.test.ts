@@ -11,6 +11,8 @@ test("official SDK examples are system-owned routes, not creator accounts", () =
   assert.match(catalog, /<GameLobby/);
   assert.match(catalog, /additionalGames=\{officialGames\}/);
   assert.match(catalog, /includeBuiltInGames=\{false\}/);
+  assert.match(catalog, /gameId: "sdk-official-word-wolf"/);
+  assert.match(catalog, /publication: "public"/);
   assert.match(catalog, /sdk-examples\/word-wolf/);
   assert.match(example, /wordWolfSdkServerModule/);
   assert.match(example, /createGameSdkMockRuntime/);

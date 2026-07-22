@@ -30,11 +30,21 @@ export default async function SdkExamplesPage() {
     loadSiteSettings(),
     loadGameOperations(),
   ]);
+  const officialGameOperations = [
+    ...gameOperations,
+    {
+      gameId: "sdk-official-word-wolf",
+      publication: "public" as const,
+      maintenance: false,
+      message: "",
+      updatedAt: null,
+    },
+  ];
 
   return (
     <GameLobby
       siteName={`${settings.siteName} · SDK公式サンプル`}
-      gameOperations={gameOperations}
+      gameOperations={officialGameOperations}
       additionalGames={officialGames}
       includeBuiltInGames={false}
     />

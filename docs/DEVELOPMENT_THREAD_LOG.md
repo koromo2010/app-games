@@ -1635,6 +1635,7 @@
 ### 実施結果
 
 - `/sdk-examples`の独自カタログUIを廃止し、共通`GameLobby`へ公式ワードウルフのカードを登録した。
+- 登録簿外IDを安全側で非表示にする共通運用設定へ、公式ワードウルフ専用の公開設定を明示し、共通ラウンジ上でカードが表示されるようにした。
 - `/sdk-examples/word-wolf`の独自ヘッダーを共通`GameTopBanner`、`GameTopMenu`、`GamePlayerMenu`へ置換した。
 - SDK共通Room情報を共通`RoomConfigSummary`で表示し、ゲーム画面とデバッグ欄も既存Game Fieldsのパネル表現へ統一した。
 - 回帰テストを、独自公式UIの固定文言ではなく共通UIコンポーネント利用を必須とする検査へ変更した。
