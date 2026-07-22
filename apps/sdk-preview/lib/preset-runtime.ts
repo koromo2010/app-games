@@ -81,7 +81,10 @@ export function gameFieldsPresetRuntimeSource() {
       panel.classList.toggle("is-open", state.debugOpen);
       panel.setAttribute("aria-hidden", String(!state.debugOpen));
     }
-    document.querySelectorAll("[data-gf-phase]:not(select)").forEach((node) => {
+    // The root element stores the machine-readable phase for game CSS. It is
+    // not a visible phase label; replacing its textContent would erase the
+    // entire preview document.
+    document.querySelectorAll("[data-gf-phase]:not(select):not(html)").forEach((node) => {
       node.textContent = state.phase === "lobby" ? "開始前" : state.phase === "playing" ? "プレイ中" : "結果";
     });
   };

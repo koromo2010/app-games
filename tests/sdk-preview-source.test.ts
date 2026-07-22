@@ -23,6 +23,7 @@ test("SDK preview injects one platform preset runtime into mock HTML", () => {
   assert.match(source, /dummy:add/);
   assert.match(source, /game:abort/);
   assert.match(source, /viewer:set/);
+  assert.match(source, /\[data-gf-phase\]:not\(select\):not\(html\)/);
 });
 
 test("SDK preview injects the runtime when game code references the preset API", () => {
