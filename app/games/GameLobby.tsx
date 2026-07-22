@@ -25,7 +25,7 @@ import { LobbyPrivateAccessControl } from "./LobbyPrivateAccessControl";
 import { useAppLocale } from "@/app/components/AppLocaleProvider";
 
 
-export function GameLobby({ siteName = "GAME FIELDS", gameOperations, durationEstimates = {}, additionalGames = [] }: { siteName?: string; gameOperations: GameOperation[]; durationEstimates?: Partial<Record<GameDurationGameId, GameDurationEstimate>>; additionalGames?: GameCatalogEntry[] }) {
+export function GameLobby({ siteName = "GAME FIELDS", gameOperations, durationEstimates = {}, additionalGames = [], includeBuiltInGames = true }: { siteName?: string; gameOperations: GameOperation[]; durationEstimates?: Partial<Record<GameDurationGameId, GameDurationEstimate>>; additionalGames?: GameCatalogEntry[]; includeBuiltInGames?: boolean }) {
   const { locale, t } = useAppLocale();
   const sdkLoginRequired = useSearchParams().get("sdkLoginRequired") === "1";
   const [password, setPassword] = useState("");
@@ -65,7 +65,7 @@ export function GameLobby({ siteName = "GAME FIELDS", gameOperations, durationEs
   const { isAvatarSaving, isAvatarDragging, setIsAvatarDragging, updateAvatar, uploadAvatar, dropAvatar } = useLobbyAvatarActions({
     name, playerId, avatarColor, hasRecoveryEmail, setAvatarColor, setAvatarImage, setMessage,
   });
-  const localizedGames = [...gamesForLocale(locale), ...additionalGames];
+  const localizedGames = [...(includeBuiltInGames ? gamesForLocale(locale) : []), ...additionalGames];
   const statsGameOptions = [
     { value: "all" as const, label: t("stats.allGames") },
     ...localizedGames.filter((game) => game.stats === "account").map((game) => ({ value: game.id as PlayerStatsGameFilter, label: game.title })),
