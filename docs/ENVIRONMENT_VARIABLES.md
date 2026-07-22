@@ -230,9 +230,9 @@ preview実行Projectには`SDK_DATABASE_URL`、SDK Redis、管理者・本体資
 | `SDK_PREVIEW_SIGNING_SECRET` | Team SharedをLink | 同じTeam SharedをLink | Production | 両ProjectでLink確認済み・環境変数追加後のDeployment作成済み |
 | `SDK_PREVIEW_BASE_URL` | 未登録。コード既定値`https://preview-dev.game-fields.com`を使用 | 不要 | Production | previewドメイン割当・Valid Configuration確認済み |
 | `SDK_PREVIEW_FRAME_ANCESTORS` | 不要 | 未登録。`develop`時のコード既定値`https://sdk-dev.game-fields.com`を使用 | Production | 明示設定は任意、実機CSP確認待ち |
-| `SDK_MOCK_GITHUB_REPOSITORY` | Project Variable登録済み | Project Variable登録済み | Production | 値は専用private repo。両Projectで確認済み |
+| `SDK_MOCK_GITHUB_REPOSITORY` | DashboardではProject Variable登録済みと確認していたが、2026-07-22の`publish_mock`実行はGit保存設定不備で失敗 | Project Variable登録済み | Production | Portal側の値・対象Environment・最新Deploymentへの反映を再確認する |
 | `SDK_MOCK_GITHUB_BRANCH` | 未登録。コード既定値`sdk-previews`を使用 | 不要 | Production | 初回mock保存時にbranchを自動作成 |
-| `SDK_MOCK_GITHUB_WRITE_TOKEN` | Project Variable、Sensitive登録済み | 設定禁止・未設定 | Production | 専用private repoのContents read/writeだけ |
+| `SDK_MOCK_GITHUB_WRITE_TOKEN` | DashboardではProject Variable、Sensitive登録済みと確認していたが、2026-07-22の`publish_mock`実行はGit保存設定不備で失敗 | 設定禁止・未設定 | Production | Portal側の対象Environment・最新Deploymentへの反映を再確認する。専用private repoのContents read/writeだけ |
 | `SDK_MOCK_GITHUB_READ_TOKEN` | 設定禁止・未設定 | Project Variable、Sensitive登録済み | Production | 専用private repoのContents read-onlyだけ |
 | `SDK_ACCOUNT_LINK_SECRET` | Project Variable、Sensitive登録を画面確認済み | 設定禁止・未登録 | Production | 本体develop側への追加申告済み。両者が同一のdev専用値であることとSSO実機確認は未完了 |
 | `GAME_FIELDS_APP_BASE_URL` | Project Variable登録を画面確認済み（`https://dev.game-fields.com`） | 不要 | Production | 追加後のSDK Portal再デプロイ済み。表アカウント側DB復旧後にSSO実機確認 |
@@ -241,8 +241,8 @@ preview実行Projectには`SDK_DATABASE_URL`、SDK Redis、管理者・本体資
 
 | 対象 | 現在状態 | 次の確認 |
 | --- | --- | --- |
-| private mock Git | `koromo2010/game-fields-sdk-mocks-dev`作成済み | Portalからの初回保存と`sdk-previews` branch作成 |
-| Portal Vercel Project | `app-games-sdk-dev`、Root Directory `apps/sdk-portal`、Production Branch `develop`。OAuth・MCP実装SHA `53c6b35`のDeployment `dpl_9AiJM4M4MQmHY2ZtV77dmbKktPW5`はREADY。OAuth metadata 200、未認証MCP 401 challenge、DownloadMe ver2取得を実機確認済み | Work／CodexからOAuth認可し、認証後のtool一覧・mock保存を実機確認 |
+| private mock Git | `koromo2010/game-fields-sdk-mocks-dev`作成済み。2026-07-22の初回`publish_mock`は`SDK mock Git storage is not configured`で失敗 | 詳細化した診断をSDK-devへ反映し、不足キーを特定してPortalのProduction環境変数を修正後、初回保存と`sdk-previews` branch作成を再試行 |
+| Portal Vercel Project | `app-games-sdk-dev`、Root Directory `apps/sdk-portal`、Production Branch `develop`。MCP互換修正SHA `6dfd884`のDeployment `dpl_DNhVg9BRvhU2SQ4AdLCMw7HxwF5P`はREADY。OAuth接続とtool表示は実機確認済み、mock保存はGit設定不備で失敗 | Git保存の不足キーを特定・修正し、`publish_mock`の`saved: true`とpreview表示を実機確認 |
 | Preview Vercel Project | `app-games-preview-dev`、Root Directory `apps/sdk-preview`、Production Branch `develop` | Tailwind依存修正コミット`dfdab59`のProduction DeploymentがREADY |
 | Preview domain | `preview-dev.game-fields.com`割当済み・Valid Configuration。`/health`が200で隔離preview serviceを返す | Portalからのmock保存・iframe表示確認 |
 | 不要Project候補 | `app-games-sdk-portal`が作成途中に増加。custom domainなし | 使用予定がないことを再確認後に削除判断 |

@@ -1229,3 +1229,28 @@
 ### 未対応・保留
 
 - 自動テスト・build後に共有`develop`へ反映し、SDK-dev再デプロイ後、ChatGPTの「更新する」で4アクションが表示されることを実機確認する。
+
+## 2026-07-22 — DownloadMeのプラグイン導線とSDK mock Git保存エラー
+
+### 利用者からの要望
+
+- Game Fields toolsがない状態でURL名・ゲーム内容を先に聞いた案内がミスリードだったため、DownloadMeへプラグイン導入案内を明記する。
+- Workからのモック保存で`SDK mock Git storage is not configured`となる問題を修正する。
+
+### 調査結果と判断
+
+- ChatGPT Workでは`gameapp-dev`プラグインが未選択なら、制作質問より先に追加・選択を案内する。候補に存在しない場合だけ、開発者モードからOAuth MCP Appを追加する手順へ進む。
+- OAuth接続、MCP初期化、tool discoveryまでは成功し、4操作が表示された。
+- `publish_mock`はGit保存開始時に失敗した。Vercel台帳ではRepositoryとWrite Tokenを登録済みとしていたが、実行時にはRepository形式不正またはWrite Token欠落のどちらかを検出しており、台帳と実態が矛盾している。
+- 秘密値をログへ出さず不足キーだけを特定できるよう、Git保存設定エラーへ環境変数名を含める。
+
+### 実施結果
+
+- `GameFieldsDownloadMe-ver2.md`へ`gameapp-dev`優先の接続案内と、接続確認前に制作質問を始めない制約を追加した。
+- mock Git設定検査を、不足・不正な環境変数名が分かるエラーへ変更した。
+- 環境変数台帳を実機結果に合わせて訂正した。
+
+### 未対応・保留
+
+- 変更を共有`develop`へ反映してSDK-devを再デプロイする。
+- `publish_mock`を再試行して不足キーを特定し、`app-games-sdk-dev`のProduction環境変数を修正後、`saved: true`とpreview表示まで確認する。

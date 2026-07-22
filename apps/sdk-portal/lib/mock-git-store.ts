@@ -33,8 +33,13 @@ function mockGitConfig() {
   const repository = process.env.SDK_MOCK_GITHUB_REPOSITORY ?? "";
   const branch = process.env.SDK_MOCK_GITHUB_BRANCH?.trim() || "sdk-previews";
   const token = process.env.SDK_MOCK_GITHUB_WRITE_TOKEN ?? "";
-  if (!REPOSITORY_PATTERN.test(repository) || !BRANCH_PATTERN.test(branch) || !token) {
-    throw new Error("SDK mock Git storage is not configured.");
+  const missing = [
+    !REPOSITORY_PATTERN.test(repository) ? "SDK_MOCK_GITHUB_REPOSITORY" : "",
+    !BRANCH_PATTERN.test(branch) ? "SDK_MOCK_GITHUB_BRANCH" : "",
+    !token ? "SDK_MOCK_GITHUB_WRITE_TOKEN" : "",
+  ].filter(Boolean);
+  if (missing.length > 0) {
+    throw new Error(`SDK mock Git storage is not configured (${missing.join(", ")}).`);
   }
   return { repository, branch, token };
 }
