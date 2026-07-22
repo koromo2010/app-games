@@ -75,6 +75,18 @@ try {
   if (!existsSync(join(starterRoot, sdkReference.slice("file:".length)))) {
     throw new Error("Bundled SDK tarball is missing.");
   }
+  const mockHtml = readFileSync(join(starterRoot, "mock/index.html"), "utf8");
+  const mockScript = readFileSync(join(starterRoot, "mock/mock.js"), "utf8");
+  for (const forbidden of ["data-screen=\"lobby\"", "data-screen=\"entry\"", "data-screen=\"room\"", "data-gf-player-list", "data-gf-debug-panel"]) {
+    if (mockHtml.includes(forbidden)) {
+      throw new Error(`Starter mock duplicates Platform shell UI: ${forbidden}`);
+    }
+  }
+  for (const required of ["game-slot", "GameFieldsPreset", "registerGame", "onStateChange"]) {
+    if (!`${mockHtml}\n${mockScript}`.includes(required)) {
+      throw new Error(`Starter mock is missing game-slot preset contract: ${required}`);
+    }
+  }
   const starterManifest = JSON.parse(readFileSync(join(starterRoot, "starter-manifest.json"), "utf8"));
   if (starterManifest.repository !== "https://github.com/koromo2010/app-games"
     || starterManifest.ref !== "sdk-starter"

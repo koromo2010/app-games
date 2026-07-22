@@ -3,61 +3,22 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Game Fields SDK Preview</title>
-    <link rel="stylesheet" href="styles.css" />
+    <title>ゲーム固有プレビュー</title>
+    <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <header class="topbar">
-      <button class="brand" data-route="lobby" aria-label="Game Fieldsの広場へ戻る">
-        <span class="brand-mark">GF</span><span><small>GAME FIELDS</small><strong id="page-title">ゲーム広場</strong></span>
-      </button>
-      <nav class="top-actions">
-        <button data-action="rules">ルール</button>
-        <button data-action="debug">デバッグ</button>
-        <button>プレイヤー ▼</button>
-        <button>MENU ▼</button>
-      </nav>
-    </header>
-
-    <main>
-      <section class="screen is-active" data-screen="lobby">
-        <div class="hero"><p>GAME FIELDS SDK PREVIEW</p><h1>ゲームを選ぶ</h1><span>新作が本番の広場へ掲載された状態を確認できます。</span></div>
-        <div class="catalog-head"><div><small>GAMES</small><h2>ゲーム一覧</h2></div><input type="search" placeholder="ゲームを検索" aria-label="ゲームを検索" /></div>
-        <div class="game-grid">
-          <button class="game-card featured" data-route="entry">
-            <div class="visual"><span>SDK PREVIEW</span><b>YOUR<br />GAME</b></div>
-            <h3 data-game-title>新しいゲーム</h3><div class="tags"><span>新作</span><span>対戦</span></div>
-            <p data-game-summary>このカードとゲーム固有画面を編集してください。共通ロビーと導線はSDKが提供します。</p>
-            <footer><span>2–6人</span><strong>遊ぶ</strong></footer>
-          </button>
-          <article class="game-card muted"><div class="visual sample">WORD<br />GAME</div><h3>掲載イメージ</h3><div class="tags"><span>協力</span></div><p>既存ゲームと並んだときの大きさや説明の見え方を確認するためのカードです。</p><footer><span>3–8人</span><strong>サンプル</strong></footer></article>
-        </div>
-      </section>
-
-      <section class="screen" data-screen="entry">
-        <div class="back-row"><button data-route="lobby">← 広場へ戻る</button></div>
-        <div class="panel entry-panel"><small>GAME ENTRY</small><h1 data-game-title>新しいゲーム</h1><p data-game-summary>ゲームの説明</p><div class="entry-actions"><button class="primary" data-route="room">部屋を作る</button><label>合言葉<input value="GF01" maxlength="12" /></label><button data-route="room">部屋に参加</button></div></div>
-      </section>
-
-      <section class="screen" data-screen="room">
-        <div class="room-layout">
-          <aside class="panel players"><small>ROOM GF01</small><h2>参加者 <span data-gf-player-count>3</span>/6</h2><ul data-gf-player-list><li>あなた <b>HOST</b></li><li>Michel</li><li>Sora</li></ul><button data-action="dummy">＋ ダミー参加者</button></aside>
-          <section class="panel game-stage">
-            <div class="status"><span data-gf-phase>開始前</span><strong>全員が準備できたら開始</strong></div>
-            <div id="game-slot">
-              <p class="eyebrow">GAME-SPECIFIC UI</p><h1 data-game-title>新しいゲーム</h1>
-              <p>ここがLLMの編集するゲーム固有領域です。共通の広場・入室・参加者・ルール・デバッグ・結果導線は変更しません。</p>
-              <div class="placeholder-grid"><button>ゲーム操作 A</button><button>ゲーム操作 B</button><button>選択肢 C</button></div>
-            </div>
-            <div class="room-actions"><button data-route="lobby">退出</button><button class="primary" data-action="start">ゲーム開始</button></div>
-          </section>
+    <!-- このファイルは外側のGame Fields Shellへ差し込まれます。共通ヘッダー、広場、部屋、参加者、ルール、デバッグUIを追加しないでください。 -->
+    <main id="game-slot" data-game-slot>
+      <section class="game-board" aria-labelledby="game-title">
+        <p class="eyebrow">GAME-SPECIFIC UI</p>
+        <h1 id="game-title">新しいゲーム</h1>
+        <p class="game-status" data-game-status>ゲーム開始前です</p>
+        <div class="game-actions" aria-label="ゲーム固有の操作">
+          <button type="button" data-game-action="primary">ゲーム固有操作</button>
         </div>
       </section>
     </main>
-
-    <dialog id="rules"><button class="close" data-action="close">×</button><small>RULES</small><h2>遊び方</h2><ol><li>部屋を作り、参加者を待ちます。</li><li>ゲーム固有の操作を行います。</li><li>終了後は同じ部屋へ戻れます。</li></ol></dialog>
-    <aside id="debug-panel" data-gf-debug-panel aria-hidden="true"><div class="debug-head"><div><small>SDK DEBUG</small><h2>デバッグモード</h2></div><button data-action="debug">×</button></div><label>デバッグ権限<select disabled><option>あり（ホスト）</option></select></label><label>視点<select data-gf-viewer><option value="host">あなた</option></select></label><label>フェーズ<select data-gf-phase><option value="lobby">ロビー</option><option value="playing">プレイ中</option><option value="result">結果</option></select></label><div class="debug-grid"><button data-action="dummy">ダミー追加</button><button data-gf-command="remove-dummy">ダミー削除</button><button data-gf-command="auto-progress">一括入力・自動進行</button><button data-action="abort">進行中断</button></div><p>秘密情報は明示的に選んだデバッグ視点だけに表示します。</p></aside>
-    <div id="toast" role="status"></div>
-    <script src="mock.js"></script>
+    <div id="game-toast" role="status" aria-live="polite"></div>
+    <script src="./mock.js"></script>
   </body>
 </html>

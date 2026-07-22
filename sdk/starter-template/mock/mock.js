@@ -1,23 +1,14 @@
-const screens = [...document.querySelectorAll("[data-screen]")];
-const title = document.querySelector("#page-title");
-const toast = document.querySelector("#toast");
-const titles = { lobby: "ゲーム広場", entry: "ゲーム入口", room: "新しいゲーム" };
+const status = document.querySelector("[data-game-status]");
+const toast = document.querySelector("#game-toast");
+let gameState = { turns: 0 };
 
-// Game Fields Previewが参加者・デバッグ・視点・中断を提供する。
-// ここにはゲーム固有状態だけを登録する。
-window.addEventListener("DOMContentLoaded", () => {
-  window.GameFieldsPreset?.registerGame({
-    start() { notify("ゲームを開始しました"); },
-    abort() { notify("ゲーム固有状態を初期化しました"); },
-    rematch() { notify("同じ部屋でもう一度遊べます"); },
-    autoProgress() { notify("ゲーム固有の自動進行を実行しました"); }
-  });
-});
+function resetGame(message = "ゲーム開始前です") {
+  gameState = { turns: 0 };
+  renderGame(message);
+}
 
-function route(name) {
-  screens.forEach((screen) => screen.classList.toggle("is-active", screen.dataset.screen === name));
-  title.textContent = titles[name] || "Game Fields";
-  window.scrollTo({ top: 0, behavior: "smooth" });
+function renderGame(message) {
+  status.textContent = message ?? `ゲーム固有の進行: ${gameState.turns}`;
 }
 
 function notify(message) {
@@ -26,10 +17,37 @@ function notify(message) {
   window.setTimeout(() => toast.classList.remove("is-visible"), 1800);
 }
 
-document.addEventListener("click", (event) => {
-  const button = event.target.closest("button");
-  if (!button) return;
-  if (button.dataset.route) route(button.dataset.route);
-  if (button.dataset.action === "rules") document.querySelector("#rules").showModal();
-  if (button.dataset.action === "close") button.closest("dialog").close();
+function registerPreset() {
+  if (!window.GameFieldsPreset) {
+    renderGame("Game Fields Previewから開いてください");
+    return;
+  }
+
+  window.GameFieldsPreset.registerGame({
+    start() {
+      resetGame("ゲームを開始しました");
+    },
+    abort() {
+      resetGame();
+    },
+    rematch() {
+      resetGame("再戦の準備ができました");
+    },
+    autoProgress() {
+      gameState.turns += 1;
+      renderGame();
+    },
+    onStateChange(platformState, command) {
+      document.documentElement.dataset.viewer = platformState.viewerId;
+      document.documentElement.dataset.phase = platformState.phase;
+      if (command) notify(`共通操作: ${command}`);
+    },
+  });
+}
+
+document.querySelector("[data-game-action=\"primary\"]")?.addEventListener("click", () => {
+  gameState.turns += 1;
+  renderGame();
 });
+
+window.addEventListener("DOMContentLoaded", registerPreset);
