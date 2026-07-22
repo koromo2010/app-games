@@ -27,6 +27,40 @@
 
 「登録済み」だけで「反映済み」や「実機確認済み」と記録しない。
 
+## コード参照キーの完全性検査
+
+`npm run check:env-ledger`は、リポジトリ内の静的な`process.env.KEY`参照を抽出し、この台帳にキー名が存在するか検査する。新しい環境変数をコードへ追加したのに台帳を更新していない場合は失敗し、`npm run lint`も通らない。これはキー名の記載漏れを防ぐ検査であり、Vercelへの登録、値の正当性、再デプロイ、実機動作までは保証しない。
+
+### その他のコード参照キー（配置監査待ち）
+
+以下はコードから参照されるが、Project別の現在配置をまだ監査できていないキーである。System Variableを除き、利用機能を実機確認する前に対象Project、Environment、Sensitive区分を確定する。
+
+| キー | 現在状態 |
+| --- | --- |
+| `CRON_SECRET` | 配置未監査 |
+| `GAME_FIELDS_INSTANCE_ID` | 配置未監査 |
+| `GAME_FIELDS_MANAGEMENT_TOKEN` | 配置未監査 |
+| `GAME_FIELDS_SDK_URL` | 配置未監査 |
+| `LLM_SESSION_SECRET` | 配置未監査 |
+| `NEXT_PUBLIC_GAME_ADS_MODE` | 配置未監査 |
+| `OBSERVABILITY_HASH_SECRET` | 配置未監査 |
+| `OBSERVABILITY_LOG_LEVEL` | 配置未監査 |
+| `OBSERVABILITY_SERVICE_NAME` | 配置未監査 |
+| `OPERATIONS_ALERT_EMAIL` | 配置未監査 |
+| `PRODUCTION_SMOKE_URL` | GitHub Actionsまたは監視環境の配置未監査 |
+| `RATE_LIMIT_HASH_SECRET` | 配置未監査 |
+| `REDIS_REQUEST_TIMEOUT_MS` | 配置未監査 |
+| `SDK_PORTAL_BASE_URL` | 配置未監査 |
+| `SDK_PORTAL_CHANNEL` | 配置未監査 |
+| `SDK_REDIS_REST_TOKEN` | SDK環境の配置未監査 |
+| `SDK_REDIS_REST_URL` | SDK環境の配置未監査 |
+| `SITE_ADMIN_BREAK_GLASS_ENABLED` | 配置未監査 |
+| `SITE_ADMIN_PASSWORD` | 配置未監査 |
+| `STORAGE_ALERT_THRESHOLD_PERCENT` | 配置未監査 |
+| `WORDWOLF_PAIR_COOLDOWN_DAYS` | 配置未監査 |
+
+Vercel／Next.jsが実行時に提供するSystem Variableとして、`NODE_ENV`、`NEXT_RUNTIME`、`VERCEL_ENV`、`VERCEL_GIT_COMMIT_REF`、`VERCEL_GIT_COMMIT_SHA`、`VERCEL_OIDC_TOKEN`、`VERCEL_REGION`もコードから参照する。これらはProject Variableとして手動追加しない。
+
 ## 環境構成
 
 | 環境 | Vercelプロジェクト | ブランチ | URL | 用途 |
@@ -129,6 +163,21 @@ Shared化候補:
 Sensitive設定済みの互換変数をVercel上で複製できない移行期間は、`APP_DATABASE_ENV`を設定すれば
 `DATABASE_URL`等の互換変数にも同じ誤接続ガードを適用する。
 
+#### Development本体 現在配置（2026-07-22確認）
+
+この表は`app-games-dev`のVercel Dashboardで確認した現在状態を記録する。登録済みでも、再デプロイまたは実機確認が終わっていないものは分けて扱う。
+
+| キー／リソース | Vercel対象 | Sensitive | 現在状態 | 次の対応 |
+| --- | --- | --- | --- | --- |
+| `PLAYER_SESSION_SECRET` | Production | Yes | Project Variableの登録を画面確認済み・追加後の再デプロイ済み。未設定エラーの解消を実行ログで確認済み | DB・Redis復旧後に登録・ログインを実機確認 |
+| `SDK_ACCOUNT_LINK_SECRET` | Production | Yes | Project Variableへの追加申告済み。最新の一覧画面による再確認は未実施 | 本体とSDK Portalで同一のdev専用値であること、再デプロイ後のSSOを確認 |
+| 既存`DATABASE_URL` | Production | Yes | Project Variableの存在を画面確認済み。接続先の正当性は未確認で、現行APIではPostgreSQL接続エラー | 削除せず保持。新Neonをコード側で明示選択後に廃止判断 |
+| `app-games-dev-neon` | Production | Integration管理 | Singapore、Authなし、Freeで作成し`app-games-dev`へ接続済み | schema migrationと接続実機確認 |
+| `NEON_DATABASE_*`一式 | Production | Yes | Neon Integrationによる自動登録を画面確認済み。`NEON_DATABASE_URL`、unpooled URL、Postgres互換変数等を含む | コードを`NEON_DATABASE_URL`優先へ変更後、再デプロイ |
+| 開発用Redis | — | — | 未作成 | 本番Redisと分離した`app-games-dev-redis`を作成・接続 |
+
+`NEON_DATABASE_*`は既存`DATABASE_URL`と衝突させず新Neonを識別するためのIntegration接頭辞である。現行コードはまだこの接頭辞を読まないため、登録確認だけでDB接続反映済みとは扱わない。
+
 ### Redis / Upstash
 
 現在の契約は Vercel Storage上の `wy-app-games`、Upstash for Redis Fixed 250MB。
@@ -178,8 +227,8 @@ preview実行Projectには`SDK_DATABASE_URL`、SDK Redis、管理者・本体資
 | `SDK_MOCK_GITHUB_BRANCH` | 未登録。コード既定値`sdk-previews`を使用 | 不要 | Production | 初回mock保存時にbranchを自動作成 |
 | `SDK_MOCK_GITHUB_WRITE_TOKEN` | Project Variable、Sensitive登録済み | 設定禁止・未設定 | Production | 専用private repoのContents read/writeだけ |
 | `SDK_MOCK_GITHUB_READ_TOKEN` | 設定禁止・未設定 | Project Variable、Sensitive登録済み | Production | 専用private repoのContents read-onlyだけ |
-| `SDK_ACCOUNT_LINK_SECRET` | 未登録 | 設定禁止・未登録 | Production | 本体develop側にも同じdev専用値を登録し、両Project再デプロイ後に実機確認する |
-| `GAME_FIELDS_APP_BASE_URL` | 未登録 | 不要 | Production | develop本体の確定公開URLを確認して登録する |
+| `SDK_ACCOUNT_LINK_SECRET` | Project Variable、Sensitive登録を画面確認済み | 設定禁止・未登録 | Production | 本体develop側への追加申告済み。両者が同一のdev専用値であることとSSO実機確認は未完了 |
+| `GAME_FIELDS_APP_BASE_URL` | Project Variable登録を画面確認済み（`https://dev.game-fields.com`） | 不要 | Production | 追加後のSDK Portal再デプロイ済み。表アカウント側DB復旧後にSSO実機確認 |
 
 #### SDK Development 外部設定の進捗（2026-07-22確認）
 

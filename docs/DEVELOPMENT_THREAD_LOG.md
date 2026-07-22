@@ -1072,6 +1072,30 @@
 
 ### 未対応・保留
 
-- `SDK_ACCOUNT_LINK_SECRET`と`GAME_FIELDS_APP_BASE_URL`はVercel未登録。登録・再デプロイ・実機SSO確認が必要。
+- `SDK_ACCOUNT_LINK_SECRET`と`GAME_FIELDS_APP_BASE_URL`はVercelへ登録・再デプロイ済み。表アカウント側DB・Redis復旧後の実機SSO確認が必要。
 - ChatGPT App用MCPサーバー、OAuth discovery、PKCE、アクセストークン、scope検証、App登録は未実装。
 - 所有者未設定の既存`test3`等をアカウントへ引き取る管理導線は未実装。
+
+## 2026-07-22 — develop本体の環境変数・Storage状態を台帳へ反映
+
+### 確認結果
+
+- `PLAYER_SESSION_SECRET`は`app-games-dev`のProductionへSensitive登録・再デプロイ済みで、実行ログ上の未設定エラーは解消した。
+- `SDK_ACCOUNT_LINK_SECRET`は本体側が追加申告済み、SDK Portal側は画面確認済み。共有値の一致とSSO実機動作は未確認として区別した。
+- `GAME_FIELDS_APP_BASE_URL`はSDK PortalのProductionへ登録・再デプロイ済み。
+- 開発用Neonを`app-games-dev-neon`としてSingapore、Authなし、Freeで作成し、`app-games-dev`のProductionへ接続した。
+- Neon Integrationが`NEON_DATABASE_*`一式を自動登録したことをVercel画面で確認した。既存`DATABASE_URL`は削除せず保持している。
+- 現行コードはまだ`NEON_DATABASE_URL`を読まないため、DB接続反映済みとは扱わない。schema migrationも未実施である。
+- 開発用Redisは未作成で、アカウント登録・ログイン・SDK SSOの実機確認は未完了である。
+
+### 台帳更新
+
+- `docs/ENVIRONMENT_VARIABLES.md`へDevelopment本体の現在配置表を追加した。
+- 「登録済み」「再デプロイ済み」「実行ログ確認済み」「実機確認済み」を混同せず記録した。
+
+### 管理漏れの原因と再発防止
+
+- 最初の台帳更新はローカル編集だけで止まり、未コミット・共有`develop`未反映のまま「更新済み」と報告していた。別スレッドから参照できる永続状態ではなかった。
+- 台帳が手書きだけだったため、コードが参照する環境変数のうち21キーが未記載だった。
+- `scripts/check-environment-ledger.mjs`を追加し、コード参照キーが台帳にない場合は`npm run lint`を失敗させるようにした。
+- 台帳編集だけで完了とせず、検査、コミット、共有branch反映、共有側からの再取得確認までを永続更新の完了条件とする。
