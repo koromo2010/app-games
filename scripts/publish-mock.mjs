@@ -43,4 +43,12 @@ const response = await fetch(`${portalUrl}/api/instances/${instanceId}/games/${m
 });
 const result = await response.json().catch(() => ({}));
 if (!response.ok || result.saved !== true) throw new Error(result.error || "モックをSDKへ保存できませんでした。");
-console.log(`[mock] ${result.previewUrl}`);
+if (typeof result.previewUrl !== "string" || !/^https:\/\/[^/]+\/.+\/mock\/.+/.test(result.previewUrl)) {
+  throw new Error("SDKへの保存結果に有効なpreviewUrlがありません。");
+}
+console.log(JSON.stringify({
+  saved: true,
+  gameId: result.gameId ?? metadata.gameId,
+  previewUrl: result.previewUrl,
+}));
+console.log(`[mock] SDKへ保存しました: ${result.previewUrl}`);
