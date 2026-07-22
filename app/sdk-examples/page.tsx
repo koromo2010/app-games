@@ -1,21 +1,42 @@
-import Link from "next/link";
+import type { Metadata } from "next";
+import { GameLobby } from "@/app/games/GameLobby";
+import type { GameCatalogEntry } from "@/app/games/game-catalog";
+import { loadGameOperations } from "@/lib/game-operations-store";
+import { loadSiteSettings } from "@/lib/site-settings-store";
 
-export const metadata = { title: "SDK公式サンプル" };
+export const metadata: Metadata = {
+  title: "SDK公式サンプル",
+  description: "Game Fieldsの共通UIとSDKの境界を確認できる公式サンプルです。",
+};
 
-export default function SdkExamplesPage() {
-  return <main className="min-h-screen bg-slate-950 px-5 py-12 text-slate-100">
-    <section className="mx-auto max-w-5xl">
-      <p className="text-xs font-bold tracking-[0.22em] text-emerald-300">GAME FIELDS OFFICIAL</p>
-      <h1 className="mt-3 text-4xl font-black">SDK公式サンプル</h1>
-      <p className="mt-4 max-w-2xl leading-7 text-slate-300">Game Fields共通機能とゲーム固有部分の境界を、実際に遊んで確認するための読み取り専用サンプルです。</p>
-      <div className="mt-10 grid gap-5 md:grid-cols-2">
-        <Link href="/sdk-examples/word-wolf" className="rounded-3xl border border-emerald-300/30 bg-slate-900 p-7 transition hover:border-emerald-300">
-          <span className="text-xs font-bold text-emerald-300">REFERENCE IMPLEMENTATION</span>
-          <h2 className="mt-3 text-2xl font-black">ワードウルフ SDK</h2>
-          <p className="mt-3 leading-6 text-slate-300">共通ルーム、参加者、設定、開始・中断・再戦と、ワードウルフ固有の秘密語・ヒント・投票を分離した基準実装。</p>
-          <span className="mt-6 inline-block font-bold text-emerald-300">サンプルを開く →</span>
-        </Link>
-      </div>
-    </section>
-  </main>;
+const officialGames: GameCatalogEntry[] = [
+  {
+    id: "sdk-official-word-wolf",
+    title: "ワードウルフ SDK",
+    visual: "/game-visuals/wordwolf.webp",
+    tags: ["対戦", "正体隠匿", "会話"],
+    href: "/sdk-examples/word-wolf",
+    players: "3人（検証用）",
+    time: "5-15分",
+    summary: "共通ルームとワードウルフ固有処理を分離した、Game Fields公式のSDK基準実装。",
+    accent: "from-cyan-300 via-emerald-200 to-amber-200",
+    private: false,
+    stats: "local-disabled",
+  },
+];
+
+export default async function SdkExamplesPage() {
+  const [settings, gameOperations] = await Promise.all([
+    loadSiteSettings(),
+    loadGameOperations(),
+  ]);
+
+  return (
+    <GameLobby
+      siteName={`${settings.siteName} · SDK公式サンプル`}
+      gameOperations={gameOperations}
+      additionalGames={officialGames}
+      includeBuiltInGames={false}
+    />
+  );
 }

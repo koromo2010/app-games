@@ -1620,3 +1620,31 @@
 
 - SDK package build、対象lint、公式エリア回帰テスト、既存ワードウルフpilotテストに成功。
 - 永続Room、HttpOnly session由来actor、HTTP Client Runtimeは未接続。今回の画面はSDK境界の公式ブラウザpilotであり、本番ルーム基盤への移行は次工程。
+
+## 2026-07-23 — SDK公式サンプルをGame Fields共通UIへ統合
+
+### 利用者からの要望
+
+- SDK公式サンプルだけを独立した濃紺UIへ分けず、一般ゲームと同じGame Fields共通UI上で表示する。
+
+### 判断
+
+- `game-fields-official`は所有・編集権限上の区分であり、別デザインの画面区分にはしない。
+- SDKゲームも通常ゲームと同じ共通ラウンジ、ゲームカード、トップバー、プレイヤーメニュー、ルーム設定表示を利用し、ゲーム固有部分だけを差し替える。
+
+### 実施結果
+
+- `/sdk-examples`の独自カタログUIを廃止し、共通`GameLobby`へ公式ワードウルフのカードを登録した。
+- `/sdk-examples/word-wolf`の独自ヘッダーを共通`GameTopBanner`、`GameTopMenu`、`GamePlayerMenu`へ置換した。
+- SDK共通Room情報を共通`RoomConfigSummary`で表示し、ゲーム画面とデバッグ欄も既存Game Fieldsのパネル表現へ統一した。
+- 回帰テストを、独自公式UIの固定文言ではなく共通UIコンポーネント利用を必須とする検査へ変更した。
+
+### 検証
+
+- `npm run lint`成功。
+- `npm test`成功（395件）。
+- 通常配置の依存を持つ検証コピーで`npm run build`成功し、`/sdk-examples`と`/sdk-examples/word-wolf`の生成を確認した。
+
+### 未対応・保留
+
+- sdk-devへの反映と公開URLの実機確認。
