@@ -1349,3 +1349,29 @@
 ### 未対応・保留
 
 - ブラウザ上でログイン後のカード遷移と21ゲームの進行を確認する。
+
+
+## 2026-07-22 — SDK隔離ゲームのiframe接続拒否を修正
+
+### 利用者からの要望
+
+- SDK制作者広場で「21ゲーム」を開いた際、`preview-dev.game-fields.com`の接続拒否でゲーム固有領域が表示されない不具合を直す。
+
+### 判断
+
+- 本体UI共用後は、隔離Runtimeの直近のiframe親がSDK Portalではなく本体devになる。CSPの`frame-ancestors`は外側のSDK Portalと直近親の本体UIを環境別に限定許可する。
+- `allow-same-origin`を付けないsandbox、DB・Redis・書込資格を持たない隔離Projectという既存の境界は維持する。
+
+### 実施結果
+
+- developの既定CSPへ`https://dev.game-fields.com`、mainの既定CSPへ本体production originを追加した。
+- 環境変数で明示上書きする場合も二段iframeの両originが必要であることを台帳へ記録した。
+- developの既定CSPにSDK Portalと本体devの両originが含まれる回帰テストを追加した。
+
+### 検証
+
+- `npm run lint`、全388テスト、SDK Preview production buildに成功した。
+
+### 未対応・保留
+
+- 共有branch反映後、`app-games-preview-dev`のDeploymentがREADYになってから、21ゲームの画面表示と操作をブラウザで再確認する。
