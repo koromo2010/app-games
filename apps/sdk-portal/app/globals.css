@@ -156,6 +156,27 @@ nav a:focus-visible {
   text-transform: uppercase;
 }
 
+.header-account-area { justify-self: end; display: flex; align-items: center; gap: 10px; }
+.preview-account-area,.mock-account-area { min-width: 0; }
+.account-login { border: 1px solid rgba(145,242,176,.42); border-radius: 999px; padding: 8px 14px; color: var(--accent); font-size: .75rem; font-weight: 700; }
+.account-menu { position: relative; }
+.account-menu summary { display: flex; align-items: center; gap: 8px; min-width: 172px; padding: 5px 9px 5px 5px; border: 1px solid var(--line); border-radius: 999px; background: rgba(16,27,23,.9); cursor: pointer; list-style: none; }
+.account-menu summary::-webkit-details-marker { display: none; }
+.account-avatar { width: 30px; height: 30px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 50%; background: var(--accent); color: #07100c; font-size: .68rem; font-weight: 900; }
+.account-summary-copy { min-width: 0; display: flex; flex: 1; flex-direction: column; line-height: 1.15; }
+.account-summary-copy small { color: var(--accent); font: .52rem ui-monospace, monospace; letter-spacing: .06em; }
+.account-summary-copy strong { max-width: 110px; overflow: hidden; color: var(--ink); font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
+.account-popover { position: absolute; z-index: 20; top: calc(100% + 10px); right: 0; width: 290px; padding: 16px; border: 1px solid rgba(145,242,176,.24); background: #101b17; box-shadow: 0 18px 55px rgba(0,0,0,.4); }
+.account-popover p { margin-bottom: 12px; }
+.account-status { color: var(--accent); font-size: .72rem; font-weight: 800; }
+.linked-account { display: flex; flex-direction: column; gap: 4px; margin-bottom: 14px; padding: 12px; background: rgba(145,242,176,.06); }
+.linked-account small { color: var(--muted); font-size: .65rem; }
+.linked-account strong { font-size: .78rem; }
+.account-popover > a,.account-popover button { width: 100%; display: block; padding: 9px 10px; border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: .74rem; text-align: left; }
+.account-popover > a:hover,.account-popover button:hover { background: rgba(145,242,176,.07); color: var(--ink); }
+.account-popover form { margin: 4px 0 0; border-top: 1px solid var(--line); padding-top: 4px; }
+.account-popover form button { color: #ffaaa2; }
+
 .hero {
   width: min(1180px, calc(100% - 40px));
   min-height: 670px;
@@ -627,9 +648,11 @@ footer p {
   }
 
   .preview-badge {
-    padding: 6px 8px;
-    font-size: 0.55rem;
+    display: none;
   }
+
+  .account-menu summary { min-width: 0; }
+  .account-summary-copy { display: none; }
 
   .hero {
     min-height: auto;

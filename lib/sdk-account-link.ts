@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 export type SdkAccountLinkPayload = {
   playerId: string;
+  playerName?: string;
   audience: string;
   expiresAt: number;
 };

@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { getAuthenticatedPlayerId, isPlayerAuthConfigurationError } from "@/lib/player-auth";
+import { getAuthenticatedPlayer, isPlayerAuthConfigurationError } from "@/lib/player-auth";
 import { createSdkAccountLinkCode } from "@/lib/sdk-account-link";
 
 const allowedOrigins = new Set([
@@ -9,8 +9,8 @@ const allowedOrigins = new Set([
 
 export async function GET(request: Request) {
   try {
-    const playerId = await getAuthenticatedPlayerId();
-    if (!playerId) {
+    const player = await getAuthenticatedPlayer();
+    if (!player?.id) {
       const loginUrl = new URL("/games", request.url);
       loginUrl.searchParams.set("sdkLoginRequired", "1");
       loginUrl.searchParams.set("sdkReturn", request.url);
@@ -25,7 +25,8 @@ export async function GET(request: Request) {
       return Response.json({ error: "INVALID_CALLBACK" }, { status: 400 });
     }
     const code = createSdkAccountLinkCode({
-      playerId,
+      playerId: player.id,
+      playerName: player.name,
       audience: callbackUrl.origin,
       expiresAt: Date.now() + 60_000,
     });

@@ -1,6 +1,7 @@
 import portalPackage from "../package.json";
 import Link from "next/link";
-import { getSdkAccountPlayerId } from "@/lib/account-session";
+import { getSdkAccountSession } from "@/lib/account-session";
+import { AccountMenu } from "./account-menu";
 
 const foundations = [
   {
@@ -61,7 +62,8 @@ const firstBuildGuide = [
 
 export default async function Home() {
   const platformVersion = portalPackage.version;
-  const linked = Boolean(await getSdkAccountPlayerId().catch(() => null));
+  const account = await getSdkAccountSession().catch(() => null);
+  const linked = Boolean(account);
   return (
     <main>
       <header className="site-header">
@@ -79,7 +81,10 @@ export default async function Home() {
           <a href="#status">Status</a>
           <a href="#review">Review gate</a>
         </nav>
-        <span className="preview-badge">Developer preview · v{platformVersion}</span>
+        <div className="header-account-area">
+          <span className="preview-badge">Developer preview · v{platformVersion}</span>
+          <AccountMenu />
+        </div>
       </header>
 
       <section className="hero" id="top">
@@ -159,7 +164,7 @@ export default async function Home() {
         <aside className="required-environment" aria-labelledby="account-link-title">
           <span className="required-environment-label">アカウント接続</span>
           <div>
-            <h3 id="account-link-title">{linked ? "Game Fieldsアカウントへ接続済みです" : "先にGame Fieldsアカウントを接続してください"}</h3>
+            <h3 id="account-link-title">{linked ? `${account?.playerName || "Game Fieldsアカウント"}へ接続済みです` : "先にGame Fieldsアカウントを接続してください"}</h3>
             <p>表のGame Fieldsと同じアカウントへ制作物を紐づけます。パスワードや表サイトのログインCookieをSDKやChatGPTへ渡すことはありません。</p>
             {!linked && <a className="secondary-action" href="/api/account-link/start">Game Fieldsでログインして接続</a>}
           </div>

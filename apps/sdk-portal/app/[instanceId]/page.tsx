@@ -1,5 +1,6 @@
 import { PreviewInstance } from "./preview-instance";
 import { listCreatorGames, normalizeInstanceSlug, validateInstanceSlug } from "@/lib/instance-registry";
+import { AccountMenu } from "../account-menu";
 
 export default async function PreviewInstancePage({ params }: {
   params: Promise<{ instanceId: string }>;
@@ -9,5 +10,5 @@ export default async function PreviewInstancePage({ params }: {
   const games = validateInstanceSlug(slug)
     ? []
     : await listCreatorGames(slug).catch(() => []);
-  return <PreviewInstance instanceId={slug || instanceId} games={games} />;
+  return <PreviewInstance instanceId={slug || instanceId} games={games} accountMenu={<AccountMenu />} />;
 }

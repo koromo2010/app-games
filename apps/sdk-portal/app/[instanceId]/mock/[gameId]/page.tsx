@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getCreatorGamePreview, normalizeInstanceSlug, validateInstanceSlug } from "@/lib/instance-registry";
 import { createPreviewRuntimeUrl } from "@/lib/preview-links";
+import { AccountMenu } from "../../../account-menu";
 
 export const dynamic = "force-dynamic";
 
@@ -45,7 +46,10 @@ export default async function GameMockPage({ params }: {
           <span>CLIENT MOCK</span>
           <strong>{game.title}</strong>
         </div>
-        <span className="isolated-badge">ISOLATED PREVIEW</span>
+        <div className="header-account-area mock-account-area">
+          <span className="isolated-badge">ISOLATED PREVIEW</span>
+          <AccountMenu />
+        </div>
       </header>
       <iframe
         className="mock-review-frame"

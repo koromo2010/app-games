@@ -5,8 +5,8 @@ const cookieName = "game-fields-sdk-account";
 const stateCookieName = "game-fields-sdk-link-state";
 const maxAgeSeconds = 30 * 24 * 60 * 60;
 
-type SessionPayload = { playerId: string; expiresAt: number };
-type LinkPayload = { playerId: string; audience: string; expiresAt: number };
+export type SdkAccountSession = { playerId: string; playerName: string | null; expiresAt: number };
+type LinkPayload = { playerId: string; playerName?: string; audience: string; expiresAt: number };
 
 function secret() {
   const value = process.env.SDK_ACCOUNT_LINK_SECRET;
@@ -32,24 +32,42 @@ function createSigned(payload: object) {
   return `${encoded}.${signature(encoded)}`;
 }
 
-export function verifyAccountLinkCode(code: string, audience: string) {
+export function verifyAccountLinkCode(code: string, audience: string): Omit<SdkAccountSession, "expiresAt"> | null {
   const payload = parseSigned<LinkPayload>(code);
   if (!payload?.playerId || payload.audience !== audience || payload.expiresAt < Date.now()) return null;
-  return payload.playerId;
+  return {
+    playerId: payload.playerId,
+    playerName: typeof payload.playerName === "string" && payload.playerName.trim() ? payload.playerName.trim().slice(0, 40) : null,
+  };
 }
 
-export async function setSdkAccountSession(playerId: string) {
+export async function setSdkAccountSession(account: Omit<SdkAccountSession, "expiresAt">) {
   const store = await cookies();
-  store.set(cookieName, createSigned({ playerId, expiresAt: Date.now() + maxAgeSeconds * 1000 }), {
+  store.set(cookieName, createSigned({ ...account, expiresAt: Date.now() + maxAgeSeconds * 1000 }), {
     httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: maxAgeSeconds,
   });
 }
 
-export async function getSdkAccountPlayerId() {
+export async function getSdkAccountSession(): Promise<SdkAccountSession | null> {
   const value = (await cookies()).get(cookieName)?.value;
   if (!value) return null;
-  const payload = parseSigned<SessionPayload>(value);
-  return payload?.playerId && payload.expiresAt >= Date.now() ? payload.playerId : null;
+  const payload = parseSigned<SdkAccountSession>(value);
+  if (!payload?.playerId || payload.expiresAt < Date.now()) return null;
+  return {
+    playerId: payload.playerId,
+    playerName: typeof payload.playerName === "string" && payload.playerName.trim() ? payload.playerName : null,
+    expiresAt: payload.expiresAt,
+  };
+}
+
+export async function getSdkAccountPlayerId() {
+  return (await getSdkAccountSession())?.playerId ?? null;
+}
+
+export async function clearSdkAccountSession() {
+  (await cookies()).set(cookieName, "", {
+    httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 0,
+  });
 }
 
 export async function setAccountLinkState(state: string) {

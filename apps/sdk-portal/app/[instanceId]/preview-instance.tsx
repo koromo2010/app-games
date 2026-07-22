@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 type Phase = "square" | "entry" | "lobby" | "playing" | "result";
 type Player = { id: string; name: string; dummy?: boolean };
@@ -16,7 +16,7 @@ const initialState: PreviewState = {
 
 type RegisteredGame = { gameId: string; title: string; description: string; status: string; mockAvailable: boolean };
 
-export function PreviewInstance({ instanceId, games }: { instanceId: string; games: RegisteredGame[] }) {
+export function PreviewInstance({ instanceId, games, accountMenu }: { instanceId: string; games: RegisteredGame[]; accountMenu: ReactNode }) {
   const storageKey = `game-fields-sdk-preview:v1:${instanceId}`;
   const [state, setState] = useState(initialState);
   const [loaded, setLoaded] = useState(false);
@@ -41,7 +41,10 @@ export function PreviewInstance({ instanceId, games }: { instanceId: string; gam
     <header className="preview-topbar">
       <button type="button" onClick={() => move("square")} className="brand preview-brand"><span className="brand-mark">GF</span><span>Game Fields <strong>SDK</strong></span></button>
       <span className="instance-label">CREATOR / {instanceId}</span>
-      <button type="button" className="preview-badge" onClick={() => setState((current) => ({ ...current, debug: !current.debug }))}>DEBUG {state.debug ? "ON" : "OFF"}</button>
+      <div className="header-account-area preview-account-area">
+        <button type="button" className="preview-badge" onClick={() => setState((current) => ({ ...current, debug: !current.debug }))}>DEBUG {state.debug ? "ON" : "OFF"}</button>
+        {accountMenu}
+      </div>
     </header>
 
     {state.phase === "square" && <section className="preview-stage">
