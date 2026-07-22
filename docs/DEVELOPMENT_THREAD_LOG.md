@@ -1548,6 +1548,7 @@
 - `injectGameFieldsPreset`の重複判定をscript markerへ限定した。
 - `allow-same-origin`を持たない隔離iframeでは認証Cookie付き外部`preset.js`を取得できないため、信頼済み共通RuntimeをHTMLへインライン注入する方式へ変更した。隔離条件と外部通信禁止は維持した。
 - Runtimeが状態保存用の`html[data-gf-phase]`を表示ラベルと誤認して文書全体を消去しないよう、ルート要素をラベル更新対象から除外した。
+- 外側Platform Shellへ開始・自動進行・中断・再戦ボタンを追加し、隔離iframeとは送信元windowとCommand allowlistを検証する`postMessage`で接続した。iframe側からは表示用phaseだけをShellへ通知する。
 - HTML内のゲームコードが`GameFieldsPreset.registerGame`を参照していてもRuntimeが1回だけ注入される回帰テストを追加した。
 
 ### 検証
@@ -1559,4 +1560,4 @@
 
 ### 未対応・保留
 
-- 最初のmarker判定修正だけを反映した`a8e58e1`では外部Runtime取得が隔離originで失敗し、インライン注入だけの`144be2f`ではRuntimeが`html`を表示ラベルとして上書きすることをSDK-dev実機で確認した。ルート除外修正を追加反映後、既存21 revisionで再確認する。
+- 最初のmarker判定修正だけを反映した`a8e58e1`では外部Runtime取得が隔離originで失敗し、インライン注入だけの`144be2f`ではRuntimeが`html`を表示ラベルとして上書きすることをSDK-dev実機で確認した。ルート除外後は警告が消えたが、外側Shellに開始操作がないことも確認した。共通操作接続を追加反映後、既存21 revisionで開始まで再確認する。

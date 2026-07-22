@@ -36,6 +36,7 @@ export function gameFieldsPresetRuntimeSource() {
   const emit = (command, detail = {}) => {
     const snapshot = clone();
     window.dispatchEvent(new CustomEvent("gamefields:statechange", { detail: { command, state: snapshot, ...detail } }));
+    window.parent.postMessage({ type: "game-fields:state", command, state: snapshot }, "*");
     listeners.forEach((listener) => listener(snapshot));
     adapters.forEach((adapter) => adapter.onStateChange?.(snapshot, command));
   };
@@ -157,6 +158,13 @@ export function gameFieldsPresetRuntimeSource() {
       const values = { "ロビー": "lobby", "プレイ中": "playing", "結果": "result" };
       command("phase:set", { phase: values[target.value] || target.value });
     }
+  });
+  window.addEventListener("message", (event) => {
+    if (event.source !== window.parent) return;
+    const message = event.data;
+    if (!message || message.type !== "game-fields:command" || typeof message.name !== "string") return;
+    if (!["game:start", "game:abort", "game:auto-progress", "game:rematch"].includes(message.name)) return;
+    command(message.name);
   });
   const boot = () => { render(); emit("preset:ready"); };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot, { once: true }); else boot();

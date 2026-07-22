@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { normalizePreviewAssetPath, previewContentType } from "../apps/sdk-preview/lib/preview-source.ts";
 import { previewContentSecurityPolicy, previewCookiePath } from "../apps/sdk-preview/lib/preview-security.ts";
@@ -24,6 +25,18 @@ test("SDK preview injects one platform preset runtime into mock HTML", () => {
   assert.match(source, /game:abort/);
   assert.match(source, /viewer:set/);
   assert.match(source, /\[data-gf-phase\]:not\(select\):not\(html\)/);
+  assert.match(source, /event\.source !== window\.parent/);
+  assert.match(source, /game-fields:command/);
+  assert.match(source, /game-fields:state/);
+});
+
+test("SDK platform shell owns start, abort, auto progress, and rematch controls", () => {
+  const shell = readFileSync("app/sdk-preview/[creatorSlug]/games/[gameId]/SdkPreviewGameShell.tsx", "utf8");
+  assert.match(shell, /event\.source !== frameRef\.current\?\.contentWindow/);
+  assert.match(shell, /postMessage\(\{ type: "game-fields:command", name \}, "\*"\)/);
+  for (const command of ["game:start", "game:abort", "game:auto-progress", "game:rematch"]) {
+    assert.match(shell, new RegExp(command.replace(":", "\\:")));
+  }
 });
 
 test("SDK preview injects the runtime when game code references the preset API", () => {
