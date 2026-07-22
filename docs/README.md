@@ -12,6 +12,8 @@
 
 `README.md` は利用者向け概要、`DEVELOPMENT_HANDOFF.md` は現在の開発状態、各ゲーム資料は詳細ルール、`CONTAINER_ARCHITECTURE.md` と `PLATFORM_VISION.md` は将来案である。将来案を現在実装済みの仕様と読み違えないこと。
 
+> Vercel、環境変数、DB／Redis／Blob、DNS、GitHub権限、外部API設定を扱う作業では、最初の説明や画面操作案内より前に `ENVIRONMENT_VARIABLES.md` を読む。別スレッドの会話記憶ではなく、同文書の「現在配置」「外部設定の進捗」「未確認事項」から再開する。外部設定を触った場合は、再デプロイや実機確認と同様に台帳更新を作業完了条件とする。
+
 ## 作業別の資料索引
 
 | 作業 | 最初に読む資料 | 次に確認する正本・コード |
