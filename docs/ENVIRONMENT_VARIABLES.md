@@ -245,7 +245,7 @@ preview実行Projectには`SDK_DATABASE_URL`、SDK Redis、管理者・本体資
 | 対象 | 現在状態 | 次の確認 |
 | --- | --- | --- |
 | private mock Git | `koromo2010/game-fields-sdk-mocks-dev`作成済み。Repository変数追加後、`test10-1`の初回保存と`sdk-previews` branch作成に成功 | 内部`mock`名称をgame package名称へ段階移行する |
-| Portal Vercel Project | `app-games-sdk-dev`、Root Directory `apps/sdk-portal`、Production Branch `develop`。OAuth接続、4 tool表示、`test10-1`保存を確認済み。本体UI共用コミット`1313e35`のDeploymentがREADYで、`/test10-1`と`/test10-1/games/twenty-one-misere`の200応答を確認済み | ブラウザ上のログイン・カード操作・ゲーム進行を画面確認する |
+| Portal Vercel Project | `app-games-sdk-dev`、Root Directory `apps/sdk-portal`、Production Branch `develop`。OAuth接続、4 tool表示、`test10-1`保存を確認済み。カタログ分離コミット`38bf4ab`のPortal・本体dev DeploymentがREADY。`/test10-1`の本体広場には保存済み「21ゲーム」だけが表示され、組み込みゲームカードがないこと、`/test10-1/games/twenty-one-misere`が200であることを実機確認済み | ブラウザ上のログイン後操作とゲーム進行を確認する |
 | Preview Vercel Project | `app-games-preview-dev`、Root Directory `apps/sdk-preview`、Production Branch `develop` | Tailwind依存修正コミット`dfdab59`のProduction DeploymentがREADY |
 | Preview domain | `preview-dev.game-fields.com`割当済み・Valid Configuration。`/health`が200で隔離preview serviceを返す | Portalからのmock保存・iframe表示確認 |
 | 不要Project候補 | `app-games-sdk-portal`が作成途中に増加。custom domainなし | 使用予定がないことを再確認後に削除判断 |
