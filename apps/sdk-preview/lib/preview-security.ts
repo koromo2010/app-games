@@ -23,9 +23,9 @@ function configuredFrameAncestors() {
       .split(/[\s,]+/)
       .filter((value) => /^https:\/\/[a-z0-9.-]+(?::\d+)?$/i.test(value));
   }
-  const defaults = [process.env.VERCEL_GIT_COMMIT_REF === "main"
-    ? "https://sdk.game-fields.com"
-    : "https://sdk-dev.game-fields.com"];
+  const defaults = process.env.VERCEL_GIT_COMMIT_REF === "main"
+    ? ["https://sdk.game-fields.com", "https://www.game-fields.com", "https://game-fields.com"]
+    : ["https://sdk-dev.game-fields.com", "https://dev.game-fields.com"];
   if (process.env.NODE_ENV !== "production") defaults.push("http://localhost:3001");
   return defaults;
 }
