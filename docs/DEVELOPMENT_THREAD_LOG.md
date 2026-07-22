@@ -1001,7 +1001,12 @@
 
 - `npm run build:sdk-preview`に成功し、`/health`、`/open/...`、`/p/...`を含む隔離previewの全Routeがbuildされた。
 
+### 公開確認
+
+- 修正コミット`dfdab59`を`develop`へ反映した。
+- VercelのProduction buildが`@game-fields/sdk-preview`を対象に完了し、DeploymentがREADYになった。
+- `https://preview-dev.game-fields.com/health`がHTTP 200と`{"ok":true,"service":"game-fields-sdk-preview"}`を返すことを確認した。
+
 ### 未対応・保留
 
-- 修正を`develop`へ反映し、`app-games-preview-dev`の自動DeploymentがREADYになることを確認する。
-- READY後に`preview-dev.game-fields.com/health`とPortalからのmock保存・iframe表示を実機確認する。
+- Portalからのmock保存、private Git commit、共有URL、iframe asset読込、期限切れ・不正署名拒否を実機確認する。

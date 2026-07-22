@@ -183,8 +183,8 @@ preview実行Projectには`SDK_DATABASE_URL`、SDK Redis、管理者・本体資
 | --- | --- | --- |
 | private mock Git | `koromo2010/game-fields-sdk-mocks-dev`作成済み | Portalからの初回保存と`sdk-previews` branch作成 |
 | Portal Vercel Project | `app-games-sdk-dev`、Root Directory `apps/sdk-portal`、Production Branch `develop` | 環境変数追加後の`develop` DeploymentはREADY。mock保存の実機確認 |
-| Preview Vercel Project | `app-games-preview-dev`、Root Directory `apps/sdk-preview`、Production Branch `develop` | Root Directory訂正後の初回buildで不足していたTailwind依存をコード修正。修正DeploymentのREADY確認 |
-| Preview domain | `preview-dev.game-fields.com`割当済み・Valid Configuration | 修正Deployment後にhealth、Portal iframe表示確認 |
+| Preview Vercel Project | `app-games-preview-dev`、Root Directory `apps/sdk-preview`、Production Branch `develop` | Tailwind依存修正コミット`dfdab59`のProduction DeploymentがREADY |
+| Preview domain | `preview-dev.game-fields.com`割当済み・Valid Configuration。`/health`が200で隔離preview serviceを返す | Portalからのmock保存・iframe表示確認 |
 | 不要Project候補 | `app-games-sdk-portal`が作成途中に増加。custom domainなし | 使用予定がないことを再確認後に削除判断 |
 
 ### Vercel Blob
