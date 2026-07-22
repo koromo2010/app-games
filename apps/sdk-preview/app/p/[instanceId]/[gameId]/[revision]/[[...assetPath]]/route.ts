@@ -2,6 +2,7 @@ import { verifySdkPreviewToken } from "@game-fields/sdk-preview-auth";
 import { cookies } from "next/headers";
 import { fetchPreviewAsset, normalizePreviewAssetPath, previewContentType } from "@/lib/preview-source";
 import { previewContentSecurityPolicy, previewCookieName, previewSigningSecret } from "@/lib/preview-security";
+import { GAME_FIELDS_PRESET_ASSET, gameFieldsPresetRuntimeSource, injectGameFieldsPreset } from "@/lib/preset-runtime";
 
 export const dynamic = "force-dynamic";
 
@@ -29,9 +30,15 @@ export async function GET(
   if (!assetPath) return new Response("Invalid preview asset path.", { status: 400 });
 
   try {
-    const content = await fetchPreviewAsset({ ...scope, assetPath });
+    const isPresetAsset = assetPath === GAME_FIELDS_PRESET_ASSET;
+    const content = isPresetAsset
+      ? new TextEncoder().encode(gameFieldsPresetRuntimeSource()).buffer
+      : await fetchPreviewAsset({ ...scope, assetPath });
     if (!content) return new Response("Preview asset was not found.", { status: 404 });
-    return new Response(content, {
+    const responseContent = assetPath.toLowerCase().endsWith(".html")
+      ? injectGameFieldsPreset(new TextDecoder().decode(content))
+      : content;
+    return new Response(responseContent, {
       headers: {
         "Content-Type": previewContentType(assetPath),
         "Cache-Control": "private, no-store",

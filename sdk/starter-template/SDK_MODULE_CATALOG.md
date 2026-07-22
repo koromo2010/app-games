@@ -15,8 +15,41 @@
 | 標準プレビューシェル | SDK標準 | ゲーム広場、ゲームカード、入室前、部屋ロビー、ゲーム領域、結果から同じ部屋へ戻る導線 |
 | ゲーム共通ヘッダー | 本体統合時に利用 | 広場へ戻る、メニュー、ルール、プレイヤーメニュー |
 | 部屋共通UI | 本体統合時に利用 | 参加者一覧、全員に見える部屋設定、ホストだけの設定変更、時間制限 |
-| デバッグUI | SDK標準／本体統合時に利用 | 権限表示、ダミー参加者、視点・フェーズ・異常状態切替、自動進行、進行中断 |
+| デバッグUI | SDK標準／本体統合時に利用 | 権限表示、ダミー参加者、視点・フェーズ切替、自動進行、参加者を維持した進行中断 |
 | 結果UI | 本体統合時に利用 | 同じ部屋へ戻る、広場へ戻る、共有、再戦導線 |
+
+## プレビュープリセット（実装済み）
+
+隔離Previewは全`index.html`へ`window.GameFieldsPreset`を自動注入します。ゲーム側で同名の見た目や状態管理を再実装しません。次の標準属性は、保存済みの旧モックにも自動接続されます。
+
+| 属性 | 実際の動作 |
+| --- | --- |
+| `data-action="debug"` または `data-gf-command="debug"` | 共通デバッグパネルを開閉 |
+| `data-action="dummy"` | ダミープレイヤーを追加し、参加者一覧と視点候補を更新 |
+| `data-gf-command="remove-dummy"` | 最後のダミープレイヤーを削除 |
+| `data-action="start"` | フェーズを`playing`へ変更し、登録済みゲームの`start`を実行 |
+| `data-action="abort"` | ゲーム固有状態を中断し、参加者を維持して`lobby`へ戻す |
+| `data-gf-command="auto-progress"` | 登録済みゲームのデバッグ自動進行を実行 |
+| `data-gf-command="rematch"` | ゲーム固有状態を初期化して同じ部屋へ戻す |
+| `data-gf-player-list` | Runtimeが参加者`li`を描画する領域 |
+| `data-gf-viewer` | デバッグ閲覧視点の`select` |
+| `data-gf-phase` | 現在フェーズの表示、またはフェーズ切替`select` |
+
+ゲーム固有コードは、石・カード・盤面など固有状態だけを登録します。
+
+```js
+GameFieldsPreset.registerGame({
+  start() { resetGame(); },
+  abort() { resetGame(); },
+  rematch() { resetGame(); },
+  autoProgress() { playOneSafeDebugStep(); },
+  onStateChange(platformState, command) {
+    renderGame(platformState.viewerId, platformState.phase, command);
+  }
+});
+```
+
+`GameFieldsPreset.command(...)`へactor IDや管理権限を渡して本人証明にしてはいけません。Previewの状態は画面確認専用で、本体統合時は認証済みRuntimeが同じ役割を引き取ります。
 
 ## トランプ
 

@@ -41,9 +41,9 @@
 
       <section class="screen" data-screen="room">
         <div class="room-layout">
-          <aside class="panel players"><small>ROOM GF01</small><h2>参加者 4/6</h2><ul><li>あなた <b>HOST</b></li><li>Michel</li><li>Sora</li><li>ダミー03</li></ul><button data-action="dummy">＋ ダミー参加者</button></aside>
+          <aside class="panel players"><small>ROOM GF01</small><h2>参加者 <span data-gf-player-count>3</span>/6</h2><ul data-gf-player-list><li>あなた <b>HOST</b></li><li>Michel</li><li>Sora</li></ul><button data-action="dummy">＋ ダミー参加者</button></aside>
           <section class="panel game-stage">
-            <div class="status"><span>開始前</span><strong>全員が準備できたら開始</strong></div>
+            <div class="status"><span data-gf-phase>開始前</span><strong>全員が準備できたら開始</strong></div>
             <div id="game-slot">
               <p class="eyebrow">GAME-SPECIFIC UI</p><h1 data-game-title>新しいゲーム</h1>
               <p>ここがLLMの編集するゲーム固有領域です。共通の広場・入室・参加者・ルール・デバッグ・結果導線は変更しません。</p>
@@ -56,7 +56,7 @@
     </main>
 
     <dialog id="rules"><button class="close" data-action="close">×</button><small>RULES</small><h2>遊び方</h2><ol><li>部屋を作り、参加者を待ちます。</li><li>ゲーム固有の操作を行います。</li><li>終了後は同じ部屋へ戻れます。</li></ol></dialog>
-    <aside id="debug-panel" aria-hidden="true"><div class="debug-head"><div><small>SDK DEBUG</small><h2>デバッグモード</h2></div><button data-action="debug">×</button></div><label>デバッグ権限<select><option>あり（ホスト）</option><option>なし（通常利用者）</option></select></label><label>視点<select><option>あなた</option><option>Michel</option><option>Sora</option><option>観戦者</option></select></label><label>フェーズ<select><option>ロビー</option><option>プレイ中</option><option>結果</option></select></label><div class="debug-grid"><button data-action="dummy">ダミー追加</button><button>一括入力・自動進行</button><button>時間切れ</button><button>切断</button><button>入力エラー</button><button data-action="abort">進行中断</button></div><p>秘密情報は明示的に選んだデバッグ視点だけに表示します。</p></aside>
+    <aside id="debug-panel" data-gf-debug-panel aria-hidden="true"><div class="debug-head"><div><small>SDK DEBUG</small><h2>デバッグモード</h2></div><button data-action="debug">×</button></div><label>デバッグ権限<select disabled><option>あり（ホスト）</option></select></label><label>視点<select data-gf-viewer><option value="host">あなた</option></select></label><label>フェーズ<select data-gf-phase><option value="lobby">ロビー</option><option value="playing">プレイ中</option><option value="result">結果</option></select></label><div class="debug-grid"><button data-action="dummy">ダミー追加</button><button data-gf-command="remove-dummy">ダミー削除</button><button data-gf-command="auto-progress">一括入力・自動進行</button><button data-action="abort">進行中断</button></div><p>秘密情報は明示的に選んだデバッグ視点だけに表示します。</p></aside>
     <div id="toast" role="status"></div>
     <script src="mock.js"></script>
   </body>

@@ -1,8 +1,18 @@
 const screens = [...document.querySelectorAll("[data-screen]")];
 const title = document.querySelector("#page-title");
-const debug = document.querySelector("#debug-panel");
 const toast = document.querySelector("#toast");
 const titles = { lobby: "ゲーム広場", entry: "ゲーム入口", room: "新しいゲーム" };
+
+// Game Fields Previewが参加者・デバッグ・視点・中断を提供する。
+// ここにはゲーム固有状態だけを登録する。
+window.addEventListener("DOMContentLoaded", () => {
+  window.GameFieldsPreset?.registerGame({
+    start() { notify("ゲームを開始しました"); },
+    abort() { notify("ゲーム固有状態を初期化しました"); },
+    rematch() { notify("同じ部屋でもう一度遊べます"); },
+    autoProgress() { notify("ゲーム固有の自動進行を実行しました"); }
+  });
+});
 
 function route(name) {
   screens.forEach((screen) => screen.classList.toggle("is-active", screen.dataset.screen === name));
@@ -22,11 +32,4 @@ document.addEventListener("click", (event) => {
   if (button.dataset.route) route(button.dataset.route);
   if (button.dataset.action === "rules") document.querySelector("#rules").showModal();
   if (button.dataset.action === "close") button.closest("dialog").close();
-  if (button.dataset.action === "debug") {
-    debug.classList.toggle("is-open");
-    debug.setAttribute("aria-hidden", String(!debug.classList.contains("is-open")));
-  }
-  if (button.dataset.action === "dummy") notify("ダミー参加者を追加しました");
-  if (button.dataset.action === "start") { notify("ゲームを開始しました"); button.textContent = "結果を表示"; }
-  if (button.dataset.action === "abort") { route("room"); notify("進行中断：同じ参加者でロビーへ戻りました"); }
 });

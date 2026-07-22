@@ -77,3 +77,25 @@ defineGameServerModule({
 `createGameSdkMockRuntime`はDB不要のメモリ実装です。Room作成、閲覧、revision付きCommand、古いrevision拒否をテストできます。
 
 Mock Runtimeはローカルテスト用であり、本番Redisや認証への接続権限を持ちません。
+
+## Preview preset API
+
+SDK Previewでは`window.GameFieldsPreset`が自動で利用できます。`script`タグを自分で追加する必要はありません。
+
+```ts
+type PreviewPlatformState = {
+  roomCode: string;
+  phase: "lobby" | "playing" | "result";
+  debugOpen: boolean;
+  debugAccess: boolean;
+  viewerId: string;
+  players: Array<{ id: string; name: string; role: "host" | "player"; dummy: boolean }>;
+};
+
+GameFieldsPreset.getState(): PreviewPlatformState;
+GameFieldsPreset.command(name: string, payload?: Record<string, unknown>): void;
+GameFieldsPreset.subscribe(listener): () => void;
+GameFieldsPreset.registerGame(adapter): () => void;
+```
+
+標準Commandは`debug:toggle`、`dummy:add`、`dummy:remove`、`viewer:set`、`phase:set`、`game:start`、`game:abort`、`game:auto-progress`、`game:rematch`です。ゲーム固有コードは`registerGame`で`start`、`abort`、`autoProgress`、`rematch`、`onStateChange`だけを接続します。
