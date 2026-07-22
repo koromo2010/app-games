@@ -984,3 +984,24 @@
 
 - 現在進行中のSDK-dev／preview-dev設定作業は、台帳記載の未完了事項から再開する。共有鍵追加後の再デプロイ、previewドメイン割当、Ignored Build Step、実機mock確認はまだ完了扱いにしない。
 
+## 2026-07-22 — 隔離SDK previewのVercel build修正
+
+### 調査結果
+
+- `preview-dev.game-fields.com`のDNS割当はValid Configurationになったが、`app-games-preview-dev`が誤って`apps/sdk-portal`を配信していた。
+- VercelのRoot Directoryを`apps/sdk-preview`へ訂正した後、PostCSS設定が要求する`@tailwindcss/postcss`を単独workspace installで解決できずbuildが失敗した。
+- ルートworkspaceにはTailwind依存があったが、Vercelは`apps/sdk-preview`をRoot Directoryとして単独installするため、previewアプリ自身のmanifestにも依存宣言が必要だった。
+
+### 実施結果
+
+- `apps/sdk-preview/package.json`へ`@tailwindcss/postcss`と`tailwindcss`をdevDependencyとして追加し、lockfileを同期した。
+- 環境変数台帳へ、共有鍵反映後のDeployment、previewドメイン、Root Directory訂正とbuild修正の状態を反映した。秘密値は変更・記録していない。
+
+### 検証
+
+- `npm run build:sdk-preview`に成功し、`/health`、`/open/...`、`/p/...`を含む隔離previewの全Routeがbuildされた。
+
+### 未対応・保留
+
+- 修正を`develop`へ反映し、`app-games-preview-dev`の自動DeploymentがREADYになることを確認する。
+- READY後に`preview-dev.game-fields.com/health`とPortalからのmock保存・iframe表示を実機確認する。

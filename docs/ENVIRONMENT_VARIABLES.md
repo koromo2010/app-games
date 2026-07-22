@@ -169,8 +169,8 @@ preview実行Projectには`SDK_DATABASE_URL`、SDK Redis、管理者・本体資
 
 | キー | `app-games-sdk-dev` | `app-games-preview-dev` | Vercel対象 | 状態 |
 | --- | --- | --- | --- | --- |
-| `SDK_PREVIEW_SIGNING_SECRET` | Team SharedをLink | 同じTeam SharedをLink | Production | 両ProjectでLink確認済み・新Deploymentへの反映待ち |
-| `SDK_PREVIEW_BASE_URL` | 未登録。コード既定値`https://preview-dev.game-fields.com`を使用 | 不要 | Production | previewドメイン割当待ち |
+| `SDK_PREVIEW_SIGNING_SECRET` | Team SharedをLink | 同じTeam SharedをLink | Production | 両ProjectでLink確認済み・環境変数追加後のDeployment作成済み |
+| `SDK_PREVIEW_BASE_URL` | 未登録。コード既定値`https://preview-dev.game-fields.com`を使用 | 不要 | Production | previewドメイン割当・Valid Configuration確認済み |
 | `SDK_PREVIEW_FRAME_ANCESTORS` | 不要 | 未登録。`develop`時のコード既定値`https://sdk-dev.game-fields.com`を使用 | Production | 明示設定は任意、実機CSP確認待ち |
 | `SDK_MOCK_GITHUB_REPOSITORY` | Project Variable登録済み | Project Variable登録済み | Production | 値は専用private repo。両Projectで確認済み |
 | `SDK_MOCK_GITHUB_BRANCH` | 未登録。コード既定値`sdk-previews`を使用 | 不要 | Production | 初回mock保存時にbranchを自動作成 |
@@ -182,9 +182,9 @@ preview実行Projectには`SDK_DATABASE_URL`、SDK Redis、管理者・本体資
 | 対象 | 現在状態 | 次の確認 |
 | --- | --- | --- |
 | private mock Git | `koromo2010/game-fields-sdk-mocks-dev`作成済み | Portalからの初回保存と`sdk-previews` branch作成 |
-| Portal Vercel Project | `app-games-sdk-dev`、Root Directory `apps/sdk-portal`、Production Branch `develop` | 共有署名鍵追加後の再デプロイ |
-| Preview Vercel Project | `app-games-preview-dev`、Root Directory `apps/sdk-preview`、Production Branch `develop` | 最新Deploymentは初回`main`のため、`develop`で再デプロイ |
-| Preview domain | 未割当 | `preview-dev.game-fields.com`を割当後、Portalからiframe表示確認 |
+| Portal Vercel Project | `app-games-sdk-dev`、Root Directory `apps/sdk-portal`、Production Branch `develop` | 環境変数追加後の`develop` DeploymentはREADY。mock保存の実機確認 |
+| Preview Vercel Project | `app-games-preview-dev`、Root Directory `apps/sdk-preview`、Production Branch `develop` | Root Directory訂正後の初回buildで不足していたTailwind依存をコード修正。修正DeploymentのREADY確認 |
+| Preview domain | `preview-dev.game-fields.com`割当済み・Valid Configuration | 修正Deployment後にhealth、Portal iframe表示確認 |
 | 不要Project候補 | `app-games-sdk-portal`が作成途中に増加。custom domainなし | 使用予定がないことを再確認後に削除判断 |
 
 ### Vercel Blob
