@@ -1194,3 +1194,17 @@
 ### 未対応・保留
 
 - 共有`develop`反映、SDK-dev再デプロイ、ChatGPT Work側のGame Fields App登録、Codex側のリモートMCP接続、OAuth実機認可、`publish_mock`実保存を順に確認する。
+
+## 2026-07-22 — SDK OAuth・MCPの共有反映と公開疎通確認
+
+### 実施
+
+- Work／Codex共通のOAuth・MCP実装を共有`develop`の`53c6b35`へ反映した。
+- Vercel `app-games-sdk-dev`のProduction Deployment `dpl_9AiJM4M4MQmHY2ZtV77dmbKktPW5`が対象SHAをビルドし、`READY`になったことを確認した。
+- `sdk-dev.game-fields.com`でOAuth authorization server metadataとprotected resource metadataが200を返すことを確認した。
+- 未認証のMCP POSTが401を返し、`WWW-Authenticate`でprotected resource metadataと`scope="sdk:creator sdk:mock"`を案内することを確認した。
+- `GameFieldsDownloadMe-ver2.md`が200かつ添付ファイルとして取得できることを確認した。
+
+### 未対応・保留
+
+- ChatGPT WorkへのGame Fields App登録、CodexへのリモートMCP接続、ブラウザでのOAuth認可、認証後のtool一覧・予約・`publish_mock`実保存は未実施。
