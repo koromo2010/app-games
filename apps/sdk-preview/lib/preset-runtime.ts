@@ -165,6 +165,11 @@ export function injectGameFieldsPreset(html: string) {
   // registers its adapter. That reference does not mean the platform runtime
   // has already been loaded. Only our injected script marker is authoritative.
   if (/<script\b[^>]*\bdata-game-fields-preset(?:\s|=|>)/i.test(html)) return html;
-  const script = `<script src="${GAME_FIELDS_PRESET_ASSET}" data-game-fields-preset></script>`;
+  // The preview document deliberately runs in a sandboxed opaque origin
+  // (`allow-same-origin` is not granted). An external preset.js request cannot
+  // rely on the scoped preview cookie in that context. Inject the trusted
+  // platform runtime inline so isolation remains strict and no authenticated
+  // subresource request is required.
+  const script = `<script data-game-fields-preset>${gameFieldsPresetRuntimeSource()}</script>`;
   return /<\/head\s*>/i.test(html) ? html.replace(/<\/head\s*>/i, `${script}</head>`) : `${script}${html}`;
 }

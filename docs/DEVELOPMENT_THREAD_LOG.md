@@ -1546,6 +1546,7 @@
 ### 実施結果
 
 - `injectGameFieldsPreset`の重複判定をscript markerへ限定した。
+- `allow-same-origin`を持たない隔離iframeでは認証Cookie付き外部`preset.js`を取得できないため、信頼済み共通RuntimeをHTMLへインライン注入する方式へ変更した。隔離条件と外部通信禁止は維持した。
 - HTML内のゲームコードが`GameFieldsPreset.registerGame`を参照していてもRuntimeが1回だけ注入される回帰テストを追加した。
 
 ### 検証
@@ -1557,4 +1558,4 @@
 
 ### 未対応・保留
 
-- `develop`反映後、SDK-devの既存21 revisionを制作者トップから開き、警告が消えて開始操作へ接続されることを実機確認する。
+- 最初のmarker判定修正だけを反映した`a8e58e1`では、外部Runtime取得が隔離originで失敗することをSDK-dev実機で確認した。インライン注入修正を`develop`へ追加反映後、既存21 revisionで再確認する。

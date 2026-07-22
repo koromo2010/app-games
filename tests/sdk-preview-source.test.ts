@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { normalizePreviewAssetPath, previewContentType } from "../apps/sdk-preview/lib/preview-source.ts";
 import { previewContentSecurityPolicy, previewCookiePath } from "../apps/sdk-preview/lib/preview-security.ts";
-import { GAME_FIELDS_PRESET_ASSET, gameFieldsPresetRuntimeSource, injectGameFieldsPreset } from "../apps/sdk-preview/lib/preset-runtime.ts";
+import { gameFieldsPresetRuntimeSource, injectGameFieldsPreset } from "../apps/sdk-preview/lib/preset-runtime.ts";
 
 test("SDK preview source keeps every asset inside its mock directory", () => {
   assert.equal(normalizePreviewAssetPath([]), "index.html");
@@ -13,7 +13,9 @@ test("SDK preview source keeps every asset inside its mock directory", () => {
 
 test("SDK preview injects one platform preset runtime into mock HTML", () => {
   const html = injectGameFieldsPreset("<!doctype html><html><head><title>Game</title></head><body></body></html>");
-  assert.match(html, new RegExp(`<script src="${GAME_FIELDS_PRESET_ASSET}" data-game-fields-preset></script></head>`));
+  assert.match(html, /<script data-game-fields-preset>\(\(\) => \{/);
+  assert.match(html, /window\.GameFieldsPreset = Object\.freeze/);
+  assert.match(html, /<\/script><\/head>/);
   assert.equal(injectGameFieldsPreset(html), html);
   const source = gameFieldsPresetRuntimeSource();
   assert.doesNotThrow(() => new Function(source));
@@ -31,7 +33,7 @@ test("SDK preview injects the runtime when game code references the preset API",
   </script></head><body></body></html>`;
 
   const injected = injectGameFieldsPreset(gameHtml);
-  assert.match(injected, new RegExp(`<script src="${GAME_FIELDS_PRESET_ASSET}" data-game-fields-preset></script>`));
+  assert.match(injected, /<script data-game-fields-preset>\(\(\) => \{/);
   assert.equal(injected.match(/data-game-fields-preset/g)?.length, 1);
 });
 
