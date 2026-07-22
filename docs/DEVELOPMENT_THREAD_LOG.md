@@ -1530,3 +1530,31 @@
 ### 未対応・保留
 
 - `develop`への反映とSDK-dev実機確認は未実施。
+
+## 2026-07-23 — SDK Preview Runtimeの誤った未接続判定を修正
+
+### 利用者からの要望
+
+- 制作者トップから保存済みゲームを開いても「Game Fields Previewから開いてください」と表示される問題を解消する。
+
+### 判断
+
+- 起動導線ではなく、PreviewがHTMLへ共通Runtimeを注入済みか判定する条件が原因だった。
+- ゲーム側が契約どおり`window.GameFieldsPreset`を参照するだけでは注入済みとみなさず、Previewが追加する`data-game-fields-preset`付きscriptだけを注入済みの正本とする。
+- Preview配信時にHTMLへ注入する処理の修正なので、保存済みゲームの再生成や新revision保存は不要とする。
+
+### 実施結果
+
+- `injectGameFieldsPreset`の重複判定をscript markerへ限定した。
+- HTML内のゲームコードが`GameFieldsPreset.registerGame`を参照していてもRuntimeが1回だけ注入される回帰テストを追加した。
+
+### 検証
+
+- 対象テスト5件成功。
+- `npm run lint`成功。
+- `npm test`成功（392件）。
+- `npm run build`成功。
+
+### 未対応・保留
+
+- `develop`反映後、SDK-devの既存21 revisionを制作者トップから開き、警告が消えて開始操作へ接続されることを実機確認する。

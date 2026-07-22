@@ -161,7 +161,10 @@ export function gameFieldsPresetRuntimeSource() {
 }
 
 export function injectGameFieldsPreset(html: string) {
-  if (/GameFieldsPreset|data-game-fields-preset/.test(html)) return html;
+  // Game code is expected to reference `window.GameFieldsPreset` when it
+  // registers its adapter. That reference does not mean the platform runtime
+  // has already been loaded. Only our injected script marker is authoritative.
+  if (/<script\b[^>]*\bdata-game-fields-preset(?:\s|=|>)/i.test(html)) return html;
   const script = `<script src="${GAME_FIELDS_PRESET_ASSET}" data-game-fields-preset></script>`;
   return /<\/head\s*>/i.test(html) ? html.replace(/<\/head\s*>/i, `${script}</head>`) : `${script}${html}`;
 }

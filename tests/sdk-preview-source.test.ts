@@ -23,6 +23,18 @@ test("SDK preview injects one platform preset runtime into mock HTML", () => {
   assert.match(source, /viewer:set/);
 });
 
+test("SDK preview injects the runtime when game code references the preset API", () => {
+  const gameHtml = `<!doctype html><html><head><script>
+    window.addEventListener("DOMContentLoaded", () => {
+      window.GameFieldsPreset?.registerGame({ start() {} });
+    });
+  </script></head><body></body></html>`;
+
+  const injected = injectGameFieldsPreset(gameHtml);
+  assert.match(injected, new RegExp(`<script src="${GAME_FIELDS_PRESET_ASSET}" data-game-fields-preset></script>`));
+  assert.equal(injected.match(/data-game-fields-preset/g)?.length, 1);
+});
+
 test("SDK preview source returns strict content types", () => {
   assert.equal(previewContentType("mock.js"), "text/javascript; charset=utf-8");
   assert.equal(previewContentType("image.svg"), "image/svg+xml");
