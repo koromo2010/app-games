@@ -2624,7 +2624,11 @@
 - `npm run build`成功。既存`.next`生成キャッシュによる初回`ENOTEMPTY`後、キャッシュを退避したクリーンbuildで77ページ生成を完了した。
 - `npm run build:sdk`成功。SDK Portalのproduction buildと14ページ生成を完了した。
 - `git diff --check`成功。
+- 検証済みtreeをcommit `d0b660c67cb2ecdc3f7e66b3eeb66f69e2db92c0`として`develop`へforceなしで反映した。SDK Portal `dpl_6HZcuNXeppXw7wVgKknyKC5VTfX7`、本体dev `dpl_M3Ddn7uPLiJ17rtbbRj5HhrcyqwH`、preview dev `dpl_29f7w8UefetxpFg9yGbMdyMEcU3i`が同commitで`READY`となった。
+- 公開starterの生成済みsnapshotをcommit `90ccd1f837ca3acce09c1aaedee45c5ead67ad41`として`sdk-starter`へforceなしで反映し、`starter-manifest.json`と`START_HERE.md`の`downloadMeVersion: 8`を公開branchから確認した。
+- `https://sdk-dev.game-fields.com/GameFieldsDownloadMe-ver8.md`がHTTP 200、`DownloadMe: ver8`、`Content-Disposition: GameFieldsDownloadMe-ver8.md`を返すことを確認した。旧`GameFieldsDownloadMe-ver7.md`は現行ver8へHTTP 307で転送される。
+- 公開`/.well-known/game-fields-sdk`がPortal用4 capabilityだけを返し、更新済み`gameapp-dev`から同4件を要求したhandshakeが`accepted: true`、`problems: []`になることを実機確認した。
 
 ### 未対応・保留
 
-- `develop`、`sdk-starter`への反映とSDK-dev Deploymentの実機確認は、この記録時点では未完了。
+- 更新前プラグインを保持したままの既存チャットでは、新しいtool schemaが反映されない可能性がある。`get_sdk_handshake`自体がない場合だけ、ver8の案内どおりプラグイン更新後に新しいチャットで再試験する。
