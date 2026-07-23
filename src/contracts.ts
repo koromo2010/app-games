@@ -1,28 +1,52 @@
-import type { GameSdkStoredRoom } from "@game-fields/game-sdk";
+import type {
+  GameSdkOnlineRoom,
+  GameSdkOnlineRoomCommand,
+  GameSdkOnlineRoomCreateInput,
+  GameSdkOnlineRoomView,
+} from "@game-fields/game-sdk/runtime";
 
-export type MyFirstGameCreateInput = {
+/** Settings rendered and updated by the SDK basic set. */
+export type MyFirstGameSettings = {
   target: number;
 };
 
-export type MyFirstGameCommand =
-  | { type: "join" }
-  | { type: "start" }
-  | { type: "advance" };
+/** Only the input needed to initialize this game's AppSet. */
+export type MyFirstGameAppInput = Record<string, never>;
 
-export type MyFirstGameRoom = GameSdkStoredRoom & {
-  phase: "lobby" | "playing" | "result";
-  hostPlayerId: string;
-  players: Array<{ id: string; name: string }>;
+/** Only state that belongs to this game. Room members and revision stay outside. */
+export type MyFirstGameAppState = {
   count: number;
-  target: number;
   lastActorPlayerId: string | null;
 };
 
-export type MyFirstGameRoomView = {
-  phase: MyFirstGameRoom["phase"];
-  playerNames: string[];
+/** Only game-specific Commands. Use room/* Commands from the SDK for lifecycle. */
+export type MyFirstGameAppCommand =
+  | { type: "game/start" }
+  | { type: "game/advance" };
+
+export type MyFirstGameAppView = {
   count: number;
   target: number;
-  isHost: boolean;
-  isMember: boolean;
+  lastActorSeat: number | null;
+  canAdvance: boolean;
 };
+
+export type MyFirstGameRoom = GameSdkOnlineRoom<
+  MyFirstGameSettings,
+  MyFirstGameAppState
+>;
+
+export type MyFirstGameCreateInput = GameSdkOnlineRoomCreateInput<
+  MyFirstGameSettings,
+  MyFirstGameAppInput
+>;
+
+export type MyFirstGameCommand = GameSdkOnlineRoomCommand<
+  MyFirstGameSettings,
+  MyFirstGameAppCommand
+>;
+
+export type MyFirstGameRoomView = GameSdkOnlineRoomView<
+  MyFirstGameSettings,
+  MyFirstGameAppView
+>;

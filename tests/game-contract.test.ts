@@ -21,45 +21,60 @@ const player = {
 
 test("ダミー2人で1ゲームを最後まで進められる", async () => {
   const runtime = createGameSdkMockRuntime({ module: myFirstGameServerModule });
-  const created = await runtime.createRoom({ roomCode: "TEST", create: { target: 2 }, actor: host });
+  const created = await runtime.createRoom({
+    roomCode: "TEST",
+    create: {
+      settings: { target: 2 },
+      app: {},
+    },
+    actor: host,
+  });
   const joined = await runtime.sendCommand({
     code: "TEST",
-    envelope: { expectedRevision: created.revision, command: { type: "join" } },
+    envelope: { expectedRevision: created.revision, command: { type: "room/join" } },
     actor: player,
   });
   const started = await runtime.sendCommand({
     code: "TEST",
-    envelope: { expectedRevision: joined.revision, command: { type: "start" } },
+    envelope: { expectedRevision: joined.revision, command: { type: "game/start" } },
     actor: host,
   });
   const first = await runtime.sendCommand({
     code: "TEST",
-    envelope: { expectedRevision: started.revision, command: { type: "advance" } },
+    envelope: { expectedRevision: started.revision, command: { type: "game/advance" } },
     actor: host,
   });
   const finished = await runtime.sendCommand({
     code: "TEST",
-    envelope: { expectedRevision: first.revision, command: { type: "advance" } },
+    envelope: { expectedRevision: first.revision, command: { type: "game/advance" } },
     actor: player,
   });
 
   assert.equal(finished.room.phase, "result");
   assert.equal(finished.revision, 5);
-  assert.equal(finished.room.view.count, 2);
+  assert.equal(finished.room.view.app.count, 2);
+  assert.equal("id" in finished.room.view.common.players[0]!, false);
 });
 
 test("ホスト専用操作を一般プレイヤーへ許可しない", async () => {
   const runtime = createGameSdkMockRuntime({ module: myFirstGameServerModule });
-  await runtime.createRoom({ roomCode: "AUTH", create: { target: 2 }, actor: host });
+  await runtime.createRoom({
+    roomCode: "AUTH",
+    create: {
+      settings: { target: 2 },
+      app: {},
+    },
+    actor: host,
+  });
   await runtime.sendCommand({
     code: "AUTH",
-    envelope: { expectedRevision: 1, command: { type: "join" } },
+    envelope: { expectedRevision: 1, command: { type: "room/join" } },
     actor: player,
   });
   await assert.rejects(
     () => runtime.sendCommand({
       code: "AUTH",
-      envelope: { expectedRevision: 2, command: { type: "start" } },
+      envelope: { expectedRevision: 2, command: { type: "game/start" } },
       actor: player,
     }),
     /HOST_REQUIRED/,
@@ -68,7 +83,14 @@ test("ホスト専用操作を一般プレイヤーへ許可しない", async ()
 
 test("古いrevisionを拒否し、公開Viewへ内部IDを出さない", async () => {
   const runtime = createGameSdkMockRuntime({ module: myFirstGameServerModule });
-  const created = await runtime.createRoom({ roomCode: "SAFE", create: { target: 3 }, actor: host });
+  const created = await runtime.createRoom({
+    roomCode: "SAFE",
+    create: {
+      settings: { target: 3 },
+      app: {},
+    },
+    actor: host,
+  });
   const spectator = await runtime.readRoom("SAFE", {
     playerId: null,
     role: "spectator",
@@ -79,7 +101,7 @@ test("古いrevisionを拒否し、公開Viewへ内部IDを出さない", async 
   await assert.rejects(
     () => runtime.sendCommand({
       code: "SAFE",
-      envelope: { expectedRevision: created.revision - 1, command: { type: "start" } },
+      envelope: { expectedRevision: created.revision - 1, command: { type: "game/start" } },
       actor: host,
     }),
     (error: unknown) => error instanceof GameSdkRuntimeError

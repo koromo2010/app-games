@@ -15,28 +15,35 @@ const player = {
 } as const;
 const runtime = createGameSdkMockRuntime({ module: myFirstGameServerModule });
 
-let room = await runtime.createRoom({ roomCode: "DEMO", create: { target: 2 }, actor: host });
+let room = await runtime.createRoom({
+  roomCode: "DEMO",
+  create: {
+    settings: { target: 2 },
+    app: {},
+  },
+  actor: host,
+});
 console.log("部屋作成", room.view);
 room = (await runtime.sendCommand({
   code: room.code,
-  envelope: { expectedRevision: room.revision, command: { type: "join" } },
+  envelope: { expectedRevision: room.revision, command: { type: "room/join" } },
   actor: player,
 })).room;
 console.log("参加", room.view);
 room = (await runtime.sendCommand({
   code: room.code,
-  envelope: { expectedRevision: room.revision, command: { type: "start" } },
+  envelope: { expectedRevision: room.revision, command: { type: "game/start" } },
   actor: host,
 })).room;
 console.log("ゲーム開始", room.view);
 room = (await runtime.sendCommand({
   code: room.code,
-  envelope: { expectedRevision: room.revision, command: { type: "advance" } },
+  envelope: { expectedRevision: room.revision, command: { type: "game/advance" } },
   actor: host,
 })).room;
 room = (await runtime.sendCommand({
   code: room.code,
-  envelope: { expectedRevision: room.revision, command: { type: "advance" } },
+  envelope: { expectedRevision: room.revision, command: { type: "game/advance" } },
   actor: player,
 })).room;
 console.log("ゲーム終了", { revision: room.revision, view: room.view });

@@ -43,12 +43,17 @@ const response = await fetch(`${portalUrl}/api/instances/${instanceId}/games/${m
 });
 const result = await response.json().catch(() => ({}));
 if (!response.ok || result.saved !== true) throw new Error(result.error || "モックをSDKへ保存できませんでした。");
-if (typeof result.previewUrl !== "string" || !/^https:\/\/[^/]+\/.+\/mock\/.+/.test(result.previewUrl)) {
-  throw new Error("SDKへの保存結果に有効なpreviewUrlがありません。");
+if (typeof result.creatorUrl !== "string" || !/^https:\/\/[^/]+\/[a-z0-9-]+\/$/.test(result.creatorUrl)) {
+  throw new Error("SDKへの保存結果に有効なcreatorUrlがありません。");
+}
+if (typeof result.previewUrl !== "string" || !/^https:\/\/[^/]+\/.+\/(?:mock|games)\/.+/.test(result.previewUrl)) {
+  throw new Error("SDKへの保存結果に有効なゲーム確認URLがありません。");
 }
 console.log(JSON.stringify({
   saved: true,
   gameId: result.gameId ?? metadata.gameId,
+  creatorUrl: result.creatorUrl,
+  gameUrl: result.gameUrl ?? result.previewUrl,
   previewUrl: result.previewUrl,
 }));
-console.log(`[mock] SDKへ保存しました: ${result.previewUrl}`);
+console.log(`[mock] SDKへ保存しました: ${result.creatorUrl}`);

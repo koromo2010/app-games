@@ -12,4 +12,13 @@ export const myFirstGameManifest = defineGameManifest({
   supportsReplay: false,
   supportsRating: false,
   usesLlm: false,
+  settings: [
+    {
+      key: "target",
+      label: { ja: "ゴール", en: "Target" },
+      type: "number",
+      minimum: 2,
+      maximum: 10,
+    },
+  ],
 });

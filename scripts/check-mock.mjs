@@ -49,6 +49,11 @@ if (!/^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?$/.test(previewMetadata.gameId ?? "")
 if (typeof previewMetadata.title !== "string" || !previewMetadata.title.trim() || previewMetadata.title.length > 120) {
   throw new Error("mock/preview.jsonのtitleが不正です。");
 }
+for (const forbiddenKey of ["modules", "moduleProfile", "disabledModules", "optionalModules"]) {
+  if (Object.hasOwn(previewMetadata, forbiddenKey)) {
+    throw new Error(`mock/preview.jsonからmodule採否「${forbiddenKey}」を指定できません。初期モックの三段階profileはPlatform側が所有します。`);
+  }
+}
 
 const spec = readFileSync(resolve(root, "GAME_SPEC.md"), "utf8");
 for (const marker of ["## デバッグ", "ダミー", "視点切替", "主要フェーズ", "進行中断"]) {
@@ -65,4 +70,4 @@ for (const marker of ["GameFieldsPreset", "registerGame", "start", "abort", "rem
   if (!mockJs.includes(marker)) throw new Error(`mock/mock.jsにプリセット接続「${marker}」がありません。`);
 }
 
-console.log("[mock] 仕様、ゲーム固有slot、共通UI非重複、プリセット接続を確認しました。");
+console.log("[mock] 仕様、ゲーム固有slot、共通UI非重複、プリセット接続、全module必須profileのPlatform所有を確認しました。");
