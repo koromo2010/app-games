@@ -19,7 +19,7 @@ try {
   const [packResult] = JSON.parse(packOutput);
   if (!packResult?.filename) throw new Error("SDK tarball was not created.");
 
-  const allowedFiles = /^(README\.md|package\.json|dist\/(index|runtime|mock-runtime|client-runtime|client-realtime)\.(js|js\.map|d\.ts|d\.ts\.map))$/;
+  const allowedFiles = /^(README\.md|package\.json|dist\/(index|runtime|mock-runtime|client-runtime|client-realtime|handshake)\.(js|js\.map|d\.ts|d\.ts\.map))$/;
   const unexpectedFiles = (packResult.files ?? [])
     .map((file) => file.path)
     .filter((path) => !allowedFiles.test(path));
@@ -43,6 +43,11 @@ import { GAME_SDK_VERSION, defineGameManifest } from "@game-fields/game-sdk";
 import { advanceGameSdkRoom, defineGameServerModule } from "@game-fields/game-sdk/runtime";
 import { createGameSdkMockRuntime } from "@game-fields/game-sdk/mock-runtime";
 import { createGameSdkHttpClientRuntime } from "@game-fields/game-sdk/client-runtime";
+import {
+  GAME_FIELDS_SDK_HANDSHAKE_PROTOCOL,
+  GAME_FIELDS_SDK_HANDSHAKE_VERSION,
+  negotiateGameSdkHandshake,
+} from "@game-fields/game-sdk/handshake";
 
 const manifest = defineGameManifest({
   sdkVersion: GAME_SDK_VERSION,
@@ -86,6 +91,36 @@ const httpRuntime = createGameSdkHttpClientRuntime({
 });
 const remoteRoom = await httpRuntime.readRoom("PACK");
 if (remoteRoom?.revision !== 1) process.exit(1);
+const handshake = negotiateGameSdkHandshake({
+  protocol: GAME_FIELDS_SDK_HANDSHAKE_PROTOCOL,
+  handshakeVersion: GAME_FIELDS_SDK_HANDSHAKE_VERSION,
+  client: { kind: "starter-cli" },
+  expected: {
+    environment: "development",
+    platformVersion: "0.1.0",
+    sdkPackageVersion: "0.1.0",
+    sdkContractVersion: 1,
+  },
+  requiredCapabilities: ["starter-download"],
+}, {
+  protocol: GAME_FIELDS_SDK_HANDSHAKE_PROTOCOL,
+  handshakeVersion: GAME_FIELDS_SDK_HANDSHAKE_VERSION,
+  surface: "creator-portal",
+  environment: "development",
+  release: {
+    platformVersion: "0.1.0",
+    sdkPackageVersion: "0.1.0",
+    sdkContractVersion: 1,
+    supportedSdkContractVersions: [1],
+    roomSchemaVersion: 1,
+  },
+  capabilities: ["starter-download"],
+  endpoints: {
+    portal: "https://sdk-dev.game-fields.com",
+    handshake: "https://sdk-dev.game-fields.com/.well-known/game-fields-sdk",
+  },
+});
+if (!handshake.accepted || handshake.environment !== "development") process.exit(1);
 `);
 
   execFileSync("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"], {
@@ -103,7 +138,7 @@ if (remoteRoom?.revision !== 1) process.exit(1);
     throw new Error("Installed SDK package identity does not match the expected preview package.");
   }
 
-  console.log(`[game-sdk-package] ${packResult.filename}を外部fixtureへinstallし、4つの公開exportを確認しました。`);
+  console.log(`[game-sdk-package] ${packResult.filename}を外部fixtureへinstallし、5つの公開exportを確認しました。`);
 } finally {
   rmSync(fixtureRoot, { recursive: true, force: true });
 }

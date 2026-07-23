@@ -4,14 +4,15 @@
   "private": true,
   "scripts": {
     "sync:download": "node scripts/sync-download.mjs",
-    "predev": "npm run sync:download",
+    "predev": "npm run sync:download && npm run build --workspace @game-fields/game-sdk",
     "dev": "next dev -p 3001",
-    "prebuild": "npm run sync:download",
+    "prebuild": "npm run sync:download && npm run build --workspace @game-fields/game-sdk",
     "build": "next build",
     "start": "next start -p 3001",
     "lint": "eslint ."
   },
   "dependencies": {
+    "@game-fields/game-sdk": "0.1.0",
     "@game-fields/sdk-preview-auth": "0.1.0",
     "@neondatabase/serverless": "^1.1.0",
     "next": "16.2.4",

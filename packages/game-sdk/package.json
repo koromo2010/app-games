@@ -31,6 +31,11 @@
       "import": "./dist/client-runtime.js",
       "default": "./dist/client-runtime.js"
     },
+    "./handshake": {
+      "types": "./dist/handshake.d.ts",
+      "import": "./dist/handshake.js",
+      "default": "./dist/handshake.js"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

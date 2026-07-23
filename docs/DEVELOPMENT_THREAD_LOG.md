@@ -2365,3 +2365,47 @@
 
 - ログイン済み複数アカウントによる永続SDK Roomの作成・参加・Command・Realtime更新・解散の実操作は未確認。異なるidentityのactive-room競合、参加、進行、結果後解散、cleanupは自動縦断テストで確認済み。
 - npm registryへの初回公開、Portal上の正式チュートリアル・APIリファレンス・提出画面は引き続き未実装。
+
+## 2026-07-24 — SDK固有ハンドシェイクを先に定義
+
+### 利用者からの要望
+
+- SDK Portalの画面や提出フローを先に進めず、SDKとして接続時のハンドシェイクを最初に定義する。
+- DownloadMeから`sdk-dev`へ接続する場合も、将来`sdk`へ接続する場合も、AIから見た制作手順と契約を同じにする。
+
+### 判断
+
+- MCP `initialize`はMCP transport、OAuth 2.1 + PKCEは本人認証、Game Fields SDK handshakeは環境・release・contract schema・capabilityの互換性確認として分離する。
+- clientは期待する`environment`、Platform版、SDK package版、SDK contract schema、必須capabilityを提示し、serverはcanonical endpointと対応release・capabilityを返す。
+- `accepted=true`、`problems=[]`、接続先一致の確認前は制作者環境取得やゲーム仕様の質問へ進まない。
+- `sdk`と`sdk-dev`はhandshake schemaを共用し、`environment`とcanonical endpointだけで接続先を区別する。自動的な別環境・旧版・非公式mirrorへの切替は行わない。
+- handshakeはsessionやactorを発行せず、後続APIの認証・認可を省略しない。
+
+### 実施結果
+
+- 公開`@game-fields/game-sdk/handshake`へrequest、server descriptor、capability、拒否code、純粋な互換判定を追加した。
+- `config/platform-release.json`へ`sdkHandshakeVersion`を追加し、公開SDK定数との一致をlintで検査するようにした。
+- SDK Portalへ公開`GET/POST /.well-known/game-fields-sdk`と、OAuth後に使うMCP tool `get_sdk_handshake`を追加した。
+- MCP `initialize`応答にも同じserver descriptorを載せるが、DownloadMeは明示的な`get_sdk_handshake`の`accepted=true`を完成条件とする。
+- DownloadMeをver6へ更新し、接続直後にhandshakeを行ってから`list_creator_environments`へ進む順序へ変更した。
+- starter manifestへ`sdkHandshakeVersion`を追加し、同梱SDK、Platform、contract schemaと一緒に取得元handshakeとの一致を確認するようにした。
+- `docs/SDK_HANDSHAKE.md`を正本として追加し、versioning、SDK資料、モジュール境界、引き継ぎ資料を更新した。
+- SDK Portalのclean buildでも公開SDK handshake exportを利用できるよう、Portalのpredev／prebuildでSDK packageを先にbuildするようにした。
+
+### 検証
+
+- handshake成功、環境違い、release・contract・capability複合不一致、不正requestの契約テストを追加した。
+- `npm run lint`成功。Platform release、SDK境界、9ゲーム共通要件、ESLintを通過した。
+- `npm test`成功（456件）。
+- `npm run test:sdk-package`成功。tarballを外部consumerへ導入し、handshakeを含む公開export 5本を確認した。
+- `npm run test:sdk-starter`成功。handshake versionを含むstarter、公開snapshot、ZIP、契約テスト、完走、提出ZIPを確認した。
+- SDK packageの`dist`を一度削除した状態から`npm run build:sdk`が成功し、Portal 25ルートに`/.well-known/game-fields-sdk`が生成された。
+- local production serverで公開handshakeを確認し、一致requestはHTTP 200・`accepted=true`、環境違いと未提供capabilityはHTTP 409・安全なproblem codeを返した。
+- `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
+- `git diff --check`成功。
+
+### 未対応・保留
+
+- `develop`および`sdk-dev.game-fields.com`への反映と、公開handshake endpointの実応答確認は未実施。
+- Portalの正式チュートリアル、APIリファレンス、提出画面はhandshake確定後の次段階として未実装。
+- 採用済みゲームのbrowser Runtimeへhandshakeを強制する処理は未実装。今回のv1はDownloadMe／AIとSDK Portalのcontrol planeを先に確定した。

@@ -174,7 +174,7 @@ if (packageJson.name !== "@game-fields/game-sdk") {
 if (packageJson.private !== true || packageJson.license !== "UNLICENSED") {
   failures.push("packages/game-sdk/package.json: 初回公開承認前はprivateかつUNLICENSEDである必要があります。");
 }
-for (const exportPath of [".", "./runtime", "./mock-runtime", "./client-runtime", "./package.json"]) {
+for (const exportPath of [".", "./runtime", "./mock-runtime", "./client-runtime", "./handshake", "./package.json"]) {
   if (!packageJson.exports?.[exportPath]) {
     failures.push(`packages/game-sdk/package.json: exports ${exportPath} がありません。`);
   }

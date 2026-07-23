@@ -6,7 +6,8 @@
 
 1. 公開Gitから取得したこのフォルダ、または展開した試用ZIPをChatGPTの作業場所に置きます。
 2. ChatGPTまたはCodexへこのフォルダを渡します。
-3. 下の文章をそのまま送ります。
+3. `starter-manifest.json`の`sdkHandshakeVersion`、`platformVersion`、`sdkVersion`、`sdkContractVersion`が、取得元DownloadMeで成功したSDK handshakeと一致することを確認します。
+4. 下の文章をそのまま送ります。
 
 ```text
 このGame Fields SDKスターターを使ってゲームを1本作りたいです。
@@ -17,8 +18,8 @@
 DB、Redis、認証Cookie、APIキー、管理権限には直接アクセスしないでください。
 ```
 
-4. ChatGPTがまとめて出す質問票へ一度に回答します。「おまかせ」「未定」や空欄でも構いません。
-5. `npm run package`で提出ZIPを作り、Game Fieldsへ提出します。
+5. ChatGPTがまとめて出す質問票へ一度に回答します。「おまかせ」「未定」や空欄でも構いません。
+6. `npm run package`で提出ZIPを作り、Game Fieldsへ提出します。
 
 `npm install`を実行した場合も、再提出ZIPには`node_modules/`と`dist/`を含めません。
 

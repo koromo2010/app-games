@@ -1,5 +1,11 @@
 # Game Fields SDK v__SDK_VERSION__ 最小リファレンス
 
+## SDK handshake
+
+制作クライアントはスターター取得前にDownloadMeの指示で`get_sdk_handshake`を実行済みである必要があります。`starter-manifest.json`の`sdkHandshakeVersion`、`platformVersion`、`sdkVersion`、`sdkContractVersion`がhandshake成功時のreleaseと一致しない場合は実装を始めません。
+
+MCP `initialize`はMCP transport、OAuthは本人認証、Game Fields SDK handshakeは環境・release・契約・capabilityの互換性をそれぞれ担当します。いずれかを他の代わりに使ってはいけません。ゲーム固有コードはhandshakeやOAuthを再実装せず、公開SDKとPlatformから注入されたRuntimeだけを利用します。
+
 ## Imports
 
 ```ts

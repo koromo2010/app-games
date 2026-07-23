@@ -53,6 +53,7 @@ try {
   const replacements = new Map([
     ["__SDK_VERSION__", version],
     ["__PLATFORM_VERSION__", platformRelease.platformVersion],
+    ["__SDK_HANDSHAKE_VERSION__", String(platformRelease.sdkHandshakeVersion)],
     ["__SDK_CONTRACT_VERSION__", String(platformRelease.sdkContractVersion)],
     ["__SDK_TARBALL__", packResult.filename],
   ]);

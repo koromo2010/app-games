@@ -18,6 +18,9 @@ test("SDK MCP challenges unauthenticated callers and scopes mock publication", (
   assert.match(mcp, /WWW-Authenticate/);
   assert.match(mcp, /oauth-protected-resource/);
   assert.match(mcp, /name === "publish_mock"/);
+  assert.match(mcp, /name: "get_sdk_handshake"/);
+  assert.match(mcp, /name === "get_sdk_handshake"/);
+  assert.match(mcp, /accepted=true/);
   assert.match(mcp, /name: "list_creator_environments"/);
   assert.match(mcp, /name === "list_creator_environments"/);
   assert.match(mcp, /listCreatorEnvironments\(playerId\)/);
@@ -34,6 +37,10 @@ test("SDK MCP challenges unauthenticated callers and scopes mock publication", (
 test("DownloadMe contains no embedded credential placeholders", () => {
   const entry = read("sdk/entry/START_GAME_FIELDS.md");
   assert.match(entry, /__SDK_PORTAL_BASE_URL__\/api\/mcp/);
+  assert.match(entry, /get_sdk_handshake/);
+  assert.match(entry, /"handshakeVersion": __SDK_HANDSHAKE_VERSION__/);
+  assert.match(entry, /"environment": "__SDK_ENVIRONMENT__"/);
+  assert.match(entry, /accepted.*true/);
   assert.doesNotMatch(entry, /__GAME_FIELDS_AGENT_TOKEN__/);
   assert.doesNotMatch(entry, /GAME_FIELDS_AGENT_TOKEN=/);
 });
@@ -44,9 +51,20 @@ test("SDK Portal distributes the current DownloadMe revision", () => {
   const syncScript = read("apps/sdk-portal/scripts/sync-download.mjs");
 
   for (const source of [page, nextConfig, syncScript]) {
-    assert.match(source, /GameFieldsDownloadMe-ver5\.md/);
-    assert.doesNotMatch(source, /GameFieldsDownloadMe-ver[234]\.md/);
+    assert.match(source, /GameFieldsDownloadMe-ver6\.md/);
+    assert.doesNotMatch(source, /GameFieldsDownloadMe-ver[2345]\.md/);
   }
+});
+
+test("SDK Portal exposes one public handshake contract before authenticated tools", () => {
+  const route = read("apps/sdk-portal/app/.well-known/game-fields-sdk/route.ts");
+  const handshake = read("apps/sdk-portal/lib/sdk-handshake.ts");
+  assert.match(route, /negotiateSdkPortalHandshake/);
+  assert.match(route, /result\.accepted \? 200 : 409/);
+  assert.match(route, /Access-Control-Allow-Origin/);
+  assert.match(handshake, /GAME_FIELDS_SDK_HANDSHAKE_VERSION/);
+  assert.match(handshake, /surface: "creator-portal"/);
+  assert.match(handshake, /sdkPortalEnvironment/);
 });
 
 test("DownloadMe makes the creator environment the primary link", () => {

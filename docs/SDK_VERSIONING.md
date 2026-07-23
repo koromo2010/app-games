@@ -6,6 +6,7 @@
 
 - `platformVersion`: Game Fields本体、SDK Portal、DownloadMe、SDK packageを同時に公開するリリース番号。
 - `sdkPackageVersion`: 配布する`@game-fields/game-sdk`のSemVer。現在は`platformVersion`と一致させる。
+- `sdkHandshakeVersion`: SDK接続時に交換するhandshake JSONの破壊的schema。
 - `sdkContractVersion`: ゲームmanifestとRuntime間の破壊的変更を表す整数schema。
 - `supportedSdkContractVersions`: 現在のmain Runtimeが受け入れる契約schema。既存ゲームが使うschemaは、移行完了まで残す。
 - `roomSchemaVersion`: Game Fields内部で保存するSDK room envelopeのschema。
@@ -16,9 +17,10 @@ Platformの公開版を揃えることと、既存ゲームを最新SDKへ強制
 
 1. 同じSDK contract schema内ではfieldとCommandを削除・改名しない。追加fieldは省略可能か既定値を持たせる。
 2. 破壊的変更は`sdkContractVersion`を上げ、旧schema用adapterと検査を残す。
-3. `supportedSdkContractVersions`から旧schemaを削除する前に、登録ゲームがゼロであることと移行テスト完了を確認する。
-4. SDK PortalはPlatformと同じ安定版だけを本番配布する。dev SDKは次版候補を配布してよいが、本番mainの対応版として表示しない。
-5. 全登録ゲームの契約テストをmainのCIで実行し、未対応schemaの提出物は取込時に拒否する。
+3. handshake request／responseのfield削除・改名は`sdkHandshakeVersion`を上げる。capability追加だけでは上げない。
+4. `supportedSdkContractVersions`から旧schemaを削除する前に、登録ゲームがゼロであることと移行テスト完了を確認する。
+5. SDK PortalはPlatformと同じ安定版だけを本番配布する。dev SDKは次版候補を配布してよいが、本番mainの対応版として表示しない。
+6. 全登録ゲームの契約テストをmainのCIで実行し、未対応schemaの提出物は取込時に拒否する。
 
 ## リリース手順
 

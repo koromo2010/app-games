@@ -1,6 +1,7 @@
 import { authenticateAccessToken, portalBaseUrl } from "@/lib/oauth-store";
 import { authenticateCreatorOwner, finalizeInstanceSlug, instanceSlugAvailable, listCreatorEnvironments, normalizeInstanceSlug, reserveInstanceSlug, validateInstanceSlug } from "@/lib/instance-registry";
 import { saveMockFilesToGit } from "@/lib/mock-git-store";
+import { createSdkPortalHandshakeDescriptor, negotiateSdkPortalHandshake } from "@/lib/sdk-handshake";
 import { ensureSdkSchema, sdkSql } from "@/lib/sdk-postgres";
 import platformRelease from "../../../../../config/platform-release.json";
 
@@ -25,6 +26,7 @@ function textResult(value: unknown) {
 }
 
 const tools = [
+  { name: "get_sdk_handshake", title: "SDK接続互換性の確認", description: "制作を始める前に、接続先環境、Platform・SDK契約版、必要機能の互換性を確認します。accepted=trueになるまで他のSDK toolを使わないでください。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { protocol: { type: "string", const: "game-fields-sdk" }, handshakeVersion: { type: "integer", minimum: 1 }, client: { type: "object", properties: { kind: { type: "string", enum: ["ai-agent", "starter-cli", "browser-runtime", "platform"] }, name: { type: "string" }, version: { type: "string" } }, required: ["kind"], additionalProperties: false }, expected: { type: "object", properties: { environment: { type: "string", enum: ["development", "production"] }, platformVersion: { type: "string" }, sdkPackageVersion: { type: "string" }, sdkContractVersion: { type: "integer", minimum: 1 } }, required: ["environment", "platformVersion", "sdkPackageVersion", "sdkContractVersion"], additionalProperties: false }, requiredCapabilities: { type: "array", items: { type: "string", enum: ["oauth2-pkce", "creator-environments", "starter-download", "mock-publish", "submission-upload", "persistent-rooms", "room-realtime", "common-shell"] }, uniqueItems: true } }, required: ["protocol", "handshakeVersion", "client", "expected", "requiredCapabilities"], additionalProperties: false } },
   { name: "list_creator_environments", title: "自分のSDK環境一覧", description: "ログイン中のGame Fieldsアカウントに紐づく既存の制作者環境を一覧表示します。新規URLを予約する前に必ず呼び出してください。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: {}, additionalProperties: false } },
   { name: "check_creator_url", title: "制作者URLの空き確認", description: "Game Fields SDKの制作者URL名が利用可能か確認します。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "確認する制作者URL名" } }, required: ["slug"], additionalProperties: false } },
   { name: "reserve_creator_url", title: "制作者URLの予約", description: "ログイン中のGame Fieldsアカウント用に制作者URLを7日間予約します。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "予約する制作者URL名" }, displayName: { type: "string", description: "制作者の表示名" } }, required: ["slug", "displayName"], additionalProperties: false } },
@@ -41,6 +43,9 @@ function negotiateProtocolVersion(value: unknown) {
 }
 
 async function callTool(name: string, args: Record<string, unknown>, playerId: string, origin: string) {
+  if (name === "get_sdk_handshake") {
+    return textResult(negotiateSdkPortalHandshake(args, origin));
+  }
   if (name === "list_creator_environments") {
     const environments = await listCreatorEnvironments(playerId);
     return textResult({
@@ -94,7 +99,7 @@ export async function POST(request: Request) {
   if (!auth) return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { "Content-Type": "application/json", "WWW-Authenticate": `Bearer resource_metadata="${metadata}", scope="sdk:creator sdk:mock"` } });
   const body = await request.json().catch(() => null) as { jsonrpc?: unknown; id?: unknown; method?: unknown; params?: { protocolVersion?: unknown; name?: unknown; arguments?: unknown } } | null;
   if (!body || body.jsonrpc !== "2.0") return rpcError(body?.id ?? null, -32600, "Invalid Request", 400);
-  if (body.method === "initialize") return rpc(body.id, { protocolVersion: negotiateProtocolVersion(body.params?.protocolVersion), capabilities: { tools: { listChanged: false } }, serverInfo: { name: "Game Fields SDK", title: "Game Fields SDK", version: platformRelease.platformVersion }, instructions: "Game Fieldsアカウント本人のSDK制作環境だけを操作します。保存後はsavedとcreatorUrlを確認し、制作者トップを最初の案内リンクにしてください。" });
+  if (body.method === "initialize") return rpc(body.id, { protocolVersion: negotiateProtocolVersion(body.params?.protocolVersion), capabilities: { tools: { listChanged: false } }, serverInfo: { name: "Game Fields SDK", title: "Game Fields SDK", version: platformRelease.platformVersion }, gameFieldsHandshake: createSdkPortalHandshakeDescriptor(base), instructions: "最初にget_sdk_handshakeを呼び、accepted=trueを確認してください。その後、Game Fieldsアカウント本人のSDK制作環境だけを操作します。保存後はsavedとcreatorUrlを確認し、制作者トップを最初の案内リンクにしてください。" });
   if (body.method === "notifications/initialized") return new Response(null, { status: 202 });
   if (body.method === "tools/list") return rpc(body.id, { tools });
   if (body.method === "tools/call") {

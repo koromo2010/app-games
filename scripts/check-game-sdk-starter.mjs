@@ -92,6 +92,7 @@ try {
     || starterManifest.ref !== "sdk-starter"
     || starterManifest.sdkVersion !== "0.1.0"
     || starterManifest.platformVersion !== "0.1.0"
+    || starterManifest.sdkHandshakeVersion !== 1
     || starterManifest.sdkContractVersion !== 1) {
     throw new Error("Starter manifest does not identify the expected public source and SDK version.");
   }
@@ -167,6 +168,9 @@ try {
     "--branch sdk-starter",
     "https://github.com/koromo2010/app-games.git",
     "starter-manifest.json",
+    "get_sdk_handshake",
+    "accepted=true",
+    "sdkHandshakeVersion",
     "npm run check",
     "npm run demo",
     "npm run package",

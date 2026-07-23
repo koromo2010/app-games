@@ -56,6 +56,17 @@ if (Number(sdkContractMatch?.[1]) !== release.sdkContractVersion) {
   failures.push("GAME_SDK_VERSION does not match sdkContractVersion.");
 }
 
+const handshakeSource = readFileSync(join(root, "packages/game-sdk/src/handshake.ts"), "utf8");
+const handshakeVersionMatch = handshakeSource.match(
+  /GAME_FIELDS_SDK_HANDSHAKE_VERSION\s*=\s*(\d+)\s+as const/,
+);
+if (!Number.isInteger(release.sdkHandshakeVersion) || release.sdkHandshakeVersion < 1) {
+  failures.push("sdkHandshakeVersion must be a positive integer.");
+}
+if (Number(handshakeVersionMatch?.[1]) !== release.sdkHandshakeVersion) {
+  failures.push("GAME_FIELDS_SDK_HANDSHAKE_VERSION does not match sdkHandshakeVersion.");
+}
+
 const runtimeSource = readFileSync(join(root, "packages/game-runtime/src/index.ts"), "utf8");
 const roomSchemaMatch = runtimeSource.match(/GAME_FIELDS_PLATFORM_ROOM_SCHEMA_VERSION\s*=\s*(\d+)\s+as const/);
 if (Number(roomSchemaMatch?.[1]) !== release.roomSchemaVersion) {
