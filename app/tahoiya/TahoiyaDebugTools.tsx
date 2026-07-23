@@ -11,14 +11,12 @@ type Reason = { value: string; label: string };
 type GameToolsProps = {
   room: TahoiyaRoom;
   activePlayerId: string;
-  isStarting: boolean;
   writingDone: boolean;
   skipReason: string;
   skipComment: string;
   skipReasons: Reason[];
   isSkipping: boolean;
   onActivePlayerChange: (playerId: string) => void;
-  onAddTestPlayer: () => void;
   onAutoFillDefinitions: () => void;
   onAdvanceToVoting: () => void;
   onAutoFillVotes: () => void;
@@ -29,7 +27,6 @@ type GameToolsProps = {
 };
 
 export function TahoiyaDebugGameTools(props: GameToolsProps) {
-  const generationInProgress = Boolean(props.room.topicGenerationProgress);
   return (
     <>
       <DebugToolsSection title="操作プレイヤー" description="偽説明・投票を代理操作する対象を切り替えます。">
@@ -40,15 +37,7 @@ export function TahoiyaDebugGameTools(props: GameToolsProps) {
         />
       </DebugToolsSection>
 
-      <DebugToolsSection title="ゲーム操作" description="現在のフェーズで使えるデバッグ操作だけを表示します。">
-        {props.room.phase === "lobby" && (
-          <DebugToolButton
-            disabled={props.isStarting || generationInProgress || props.room.players.length >= 8}
-            onClick={props.onAddTestPlayer}
-          >
-            ダミーを追加
-          </DebugToolButton>
-        )}
+      {props.room.phase !== "lobby" && <DebugToolsSection title="ゲーム操作" description="現在のフェーズで使えるデバッグ操作だけを表示します。">
         {props.room.phase === "writing" && (
           <>
             <DebugToolButton onClick={props.onAutoFillDefinitions}>未投稿の偽説明を自動入力</DebugToolButton>
@@ -62,7 +51,7 @@ export function TahoiyaDebugGameTools(props: GameToolsProps) {
           </>
         )}
         {props.room.phase === "result" && <p className="text-xs font-semibold text-slate-600">結果確認中です。次ラウンドは通常の結果操作から進めます。</p>}
-      </DebugToolsSection>
+      </DebugToolsSection>}
 
       {props.room.phase !== "lobby" && (
         <DebugToolsSection title="お題をスキップ" description="問題点を保存して、同じ設定の次のお題へ進みます。">

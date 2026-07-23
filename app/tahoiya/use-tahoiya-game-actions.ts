@@ -6,6 +6,7 @@ import { nextMissingDefinitionIndex, playerDefinitionsComplete } from "@/lib/tah
 import { getAnswerer, getDefinitionWriters } from "./use-tahoiya-view-model";
 import { syncTahoiyaDeviceTopicHistory } from "./tahoiya-device-topic-history";
 import { aiActivityFetch } from "@/lib/ai-activity-client";
+import { preferLatestOnlineRoom } from "@/lib/online-room-client-state";
 
 type RunAction = (action: TahoiyaRoomAction, persistDefaults?: boolean) => Promise<TahoiyaRoom | null>;
 type Setter = Dispatch<SetStateAction<string>>;
@@ -21,7 +22,7 @@ export function useTahoiyaGameActions(params: Params) {
     if (!room.debugMode && room.players.length < 2) return params.setMessage("ゲーム開始には2人以上が必要です。");
     if (room.playMode === "single-answerer" && room.answererMode === "manual" && !room.players.some((player) => player.id === room.answererId)) return params.setMessage("回答者を指定するか、ランダムで選ぶ設定にしてください。");
     params.setIsStarting(true); params.setMessage("");
-    try { await syncTahoiyaDeviceTopicHistory().catch(() => false); const started = await applyTahoiyaSpecialAction(room.code, { type: "start-round" }); params.setRoom(started); const writer = getDefinitionWriters(started)[0]; if (writer) params.setActivePlayerId(writer.id); clearRoundInput(); }
+    try { await syncTahoiyaDeviceTopicHistory().catch(() => false); const started = await applyTahoiyaSpecialAction(room.code, { type: "start-round" }); params.setRoom((current) => preferLatestOnlineRoom(current, started)); const writer = getDefinitionWriters(started)[0]; if (writer) params.setActivePlayerId(writer.id); clearRoundInput(); }
     catch (error) {
       params.setMessage(error instanceof Error && error.message && error.message !== "ROOM_ACTION_FAILED"
         ? error.message

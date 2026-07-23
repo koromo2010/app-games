@@ -109,6 +109,7 @@ export type TahoiyaRoomAction = RoomLobbyReturnAction
   | { type: "set-debug"; actorId: string; enabled: boolean }
   | { type: "set-debug-replay"; actorId: string; enabled: boolean }
   | { type: "debug-add-player"; actorId: string }
+  | { type: "debug-remove-player"; actorId: string; targetPlayerId: string }
   | { type: "next-round"; actorId: string }
   | { type: "debug-replace-topic"; actorId: string; round: number; topic: TahoiyaTopic }
   | { type: "submit-definition"; actorId: string; playerId: string; round: number; definitionIndex: number; text: string }

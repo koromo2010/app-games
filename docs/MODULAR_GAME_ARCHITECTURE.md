@@ -52,6 +52,8 @@ UI / hooks -> API client -> HTTP route -> application/domain -> storage
 
 デバッグ用ダミー参加者は、追加・一覧・削除の表示を共通 `DebugParticipantControls` が担当する。ゲームのController／Layoutは、閲覧者向けRoomから抽出したダミー一覧と型付きCommand関数だけを渡す。ワード生成を含む各操作の型付きCommand、ダミー生成、人数依存設定の補正、権限・フェーズ・上限検査、永続化はゲーム固有Storeに残し、共通UIをセキュリティ境界にしない。
 
+たほい屋は`lib/tahoiya-debug-participants.ts`で、個別削除とDEBUG OFF時の一括整理を同じ純粋処理へ集約する。参加者配列だけでなく、回答者、得点、偽説明、投票、時間切れ、復帰状態も現在の参加者へ合わせ、Storeはダミーをactive-room索引から除外する。
+
 AI APIを呼ぶ可能性があるクライアント操作は`aiActivityFetch`または`withAiActivity`を通し、共通ストアが同時処理数を管理する。`GameTopBanner`内の`AiActivityVital`だけが通信状態を表示し、各ゲームLayoutへ発光状態を複製しない。これは待機・利用量発生可能性の表示であり、課金額やサーバー側認可の正本にはしない。
 
 オンライン部屋の操作表示は`OnlineRoomLifecycleActions`へ集約し、ゲーム側は現在の表示面を`lobby / playing / result`で渡す。ロビーではホストの解散だけ、プレイ中は何も表示せず、結果では内部の`RoomResultActions`が復帰・広場・解散を提供する。サーバー側の解散可否は従来どおり`canDissolveOnlineRoom`と各Storeを正本とする。

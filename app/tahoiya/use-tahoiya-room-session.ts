@@ -7,6 +7,7 @@ import { onlineRoomPollingIntervals, useOnlineRoomPolling } from "../hooks/use-o
 import { useRoomResultReturnGate } from "../hooks/use-room-result-return-gate";
 import { useRoomLobbyReturnConfirmation } from "../hooks/use-room-lobby-return-confirmation";
 import { applyRoomActionToStore, deleteRoomLocally, loadActiveRoomFromStore, loadRoomFromStore } from "./tahoiya-room-adapter";
+import { preferLatestOnlineRoom } from "@/lib/online-room-client-state";
 
 type StringSetter = Dispatch<SetStateAction<string>>;
 type Params = { room: TahoiyaRoom | null; playerId: string; setRoom: Dispatch<SetStateAction<TahoiyaRoom | null>>; setPlayerId: StringSetter; setActivePlayerId: StringSetter; setPlayerName: StringSetter; setAvatarColor: StringSetter; setAvatarImage: Dispatch<SetStateAction<string | null>>; setMessage: StringSetter };
@@ -43,7 +44,7 @@ export function useTahoiyaRoomSession(params: Params) {
   useRoomLobbyReturnConfirmation({ room, playerId, confirmReturn: async () => {
     if (!room) return null;
     const saved = await applyRoomActionToStore(room.code, { type: "confirm-lobby-return", actorId: playerId });
-    if (saved) setRoom(saved);
+    if (saved) setRoom((current) => preferLatestOnlineRoom(current, saved));
     return saved;
   } });
   useEffect(() => { const timer = window.setInterval(() => setNow(synchronizedNow()), 1_000); return () => window.clearInterval(timer); }, []);

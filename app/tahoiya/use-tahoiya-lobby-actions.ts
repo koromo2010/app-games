@@ -7,7 +7,7 @@ import { applyTahoiyaSpecialAction, createEmptyRoom, createPlayer, createRoomInS
 import { aiActivityFetch } from "@/lib/ai-activity-client";
 
 type RunAction = (action: TahoiyaRoomAction, persistDefaults?: boolean) => Promise<TahoiyaRoom | null>;
-type Params = { room: TahoiyaRoom | null; playerId: string; playerName: string; avatarColor: string; avatarImage: string | null; passphrase: string; joinCode: string; runRoomAction: RunAction; setRoom: Dispatch<SetStateAction<TahoiyaRoom | null>>; setActivePlayerId: Dispatch<SetStateAction<string>>; setJoinableRooms: Dispatch<SetStateAction<TahoiyaRoomChoice[]>>; setMessage: Dispatch<SetStateAction<string>> };
+type Params = { room: TahoiyaRoom | null; playerId: string; playerName: string; avatarColor: string; avatarImage: string | null; passphrase: string; joinCode: string; activePlayerId: string; runRoomAction: RunAction; setRoom: Dispatch<SetStateAction<TahoiyaRoom | null>>; setActivePlayerId: Dispatch<SetStateAction<string>>; setJoinableRooms: Dispatch<SetStateAction<TahoiyaRoomChoice[]>>; setMessage: Dispatch<SetStateAction<string>> };
 
 export function useTahoiyaLobbyActions(params: Params) {
   const { room, playerId, playerName, passphrase, runRoomAction } = params;
@@ -31,8 +31,23 @@ export function useTahoiyaLobbyActions(params: Params) {
     catch (error) { params.setMessage(error instanceof Error && error.message === "Bad passphrase" ? "合言葉が違います。" : "部屋に参加できませんでした。開始済み・満員でないか確認してください。"); }
   };
   const updateConfig = (config: Extract<TahoiyaRoomAction, { type: "update-config" }>["config"]) => { if (room?.phase === "lobby") void runRoomAction({ type: "update-config", actorId: playerId, config }, true); };
-  const setDebugMode = (enabled: boolean) => { if (room?.phase !== "lobby") return; void runRoomAction({ type: "set-debug", actorId: playerId, enabled }); if (!enabled) params.setActivePlayerId(playerId); };
-  const addTestPlayer = () => { if (room?.phase === "lobby" && room.debugMode) void runRoomAction({ type: "debug-add-player", actorId: playerId }); };
+  const setDebugMode = async (enabled: boolean) => {
+    if (room?.phase !== "lobby") return;
+    const saved = await runRoomAction({ type: "set-debug", actorId: playerId, enabled });
+    if (saved && !enabled) params.setActivePlayerId(playerId);
+  };
+  const addTestPlayer = async () => {
+    if (room?.phase === "lobby" && room.debugMode) {
+      await runRoomAction({ type: "debug-add-player", actorId: playerId });
+    }
+  };
+  const removeTestPlayer = async (targetPlayerId: string) => {
+    if (room?.phase !== "lobby" || !room.debugMode) return;
+    const saved = await runRoomAction({ type: "debug-remove-player", actorId: playerId, targetPlayerId });
+    if (saved && params.activePlayerId === targetPlayerId) {
+      params.setActivePlayerId(saved.hostId);
+    }
+  };
   const removeWaitingPlayer = async (targetPlayerId: string, targetPlayerName: string) => {
     if (!room || room.phase !== "lobby" || room.hostId !== playerId) return;
     if (!window.confirm(`${targetPlayerName}さんを復帰待ちから退出させますか？`)) return;
@@ -88,5 +103,5 @@ export function useTahoiyaLobbyActions(params: Params) {
       generation: data.generation,
     };
   };
-  return { refreshJoinableRooms, createRoom, joinRoom, addTestPlayer, removeWaitingPlayer, setDebugMode, setAnswererMode: (value: TahoiyaAnswererMode) => updateConfig({ answererMode: value }), setPlayMode: (value: TahoiyaPlayMode) => updateConfig({ playMode: value }), setTopicDifficulty: (value: TahoiyaDifficulty) => updateConfig({ topicDifficulty: value }), setManualAnswerer: (value: string) => updateConfig({ answererId: value }), setShowRealDefinitionToWriters: (value: boolean) => updateConfig({ showRealDefinitionToWriters: value }), setFakeDefinitionsPerPlayer: (value: number) => updateConfig({ fakeDefinitionsPerPlayer: value }), setActionTimeLimit: (value: number) => updateConfig({ actionTimeLimitSeconds: normalizeCommonTimeLimit(value) }), testWordGeneration, testDifficultyScreening };
+  return { refreshJoinableRooms, createRoom, joinRoom, addTestPlayer, removeTestPlayer, removeWaitingPlayer, setDebugMode, setAnswererMode: (value: TahoiyaAnswererMode) => updateConfig({ answererMode: value }), setPlayMode: (value: TahoiyaPlayMode) => updateConfig({ playMode: value }), setTopicDifficulty: (value: TahoiyaDifficulty) => updateConfig({ topicDifficulty: value }), setManualAnswerer: (value: string) => updateConfig({ answererId: value }), setShowRealDefinitionToWriters: (value: boolean) => updateConfig({ showRealDefinitionToWriters: value }), setFakeDefinitionsPerPlayer: (value: number) => updateConfig({ fakeDefinitionsPerPlayer: value }), setActionTimeLimit: (value: number) => updateConfig({ actionTimeLimitSeconds: normalizeCommonTimeLimit(value) }), testWordGeneration, testDifficultyScreening };
 }

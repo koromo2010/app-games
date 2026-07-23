@@ -53,7 +53,7 @@ export function useTahoiyaController() {
 
   const { runRoomAction, dissolveRoom } = useTahoiyaRoomActions({ room, playerId, markRoomDissolved: resultReturnGate.markRoomDissolved, setRoom, setMessage });
   const lobbyActions = useTahoiyaLobbyActions({
-    room, playerId, playerName, avatarColor, avatarImage, passphrase, joinCode, runRoomAction,
+    room, playerId, playerName, avatarColor, avatarImage, passphrase, joinCode, activePlayerId, runRoomAction,
     setRoom, setActivePlayerId, setJoinableRooms, setMessage,
   });
   const gameActions = useTahoiyaGameActions({
@@ -66,7 +66,7 @@ export function useTahoiyaController() {
   });
   const debugActions = useTahoiyaDebugActions({
     room, playerId, isHost, isDebugMode, skipReason, skipComment, isSkipping: isSkippingTopic,
-    runRoomAction, setRoom, setActivePlayerId, setDefinitionInput, setSelectedOptionId,
+    runRoomAction, setActivePlayerId, setDefinitionInput, setSelectedOptionId,
     setPolishMessage, setSkipReason, setSkipComment, setMessage, setIsSkipping: setIsSkippingTopic,
   });
 

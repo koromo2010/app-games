@@ -21,6 +21,8 @@ import { submittedCount, voterCount } from "./use-tahoiya-view-model";
 import { TahoiyaEmptyState, TahoiyaScorePanel } from "./TahoiyaScorePanel";
 import { TahoiyaDebugGameTools, TahoiyaDebugWordGenerationTools } from "./TahoiyaDebugTools";
 import type { TahoiyaController } from "./use-tahoiya-controller";
+import { isOnlineRoomDebugPlayer } from "@/lib/online-room-access";
+import { onlineRoomPlayerLimits } from "@/lib/online-room-policy";
 
 const tahoiyaFeedbackReasons = [
   { value: "too-difficult", label: "難しすぎる", rating: "bad" as const },
@@ -60,19 +62,22 @@ export function TahoiyaDesktopLayout({ controller }: { controller: TahoiyaContro
           : <Link href="/games" className={gameTopBannerActionClass}>広場へ戻る</Link>)}
         {room && isHost && <DebugModeButton variant="banner" enabled={Boolean(room.debugMode)} disabled={room.phase !== "lobby"}
           onAbort={room.debugMode && room.phase !== "lobby" ? actions.abortGame : undefined}
-          replayEnabled={Boolean(room.debugReplayEnabled)} onReplayChange={(enabled) => void actions.runRoomAction({ type: "set-debug-replay", actorId: playerId, enabled })}
+          replayEnabled={Boolean(room.debugReplayEnabled)} onReplayChange={(enabled) => actions.runRoomAction({ type: "set-debug-replay", actorId: playerId, enabled }).then(() => undefined)}
           onChange={actions.setDebugMode}
+          debugParticipants={room.players.filter(isOnlineRoomDebugPlayer)}
+          debugParticipantManagementDisabled={room.phase !== "lobby" || Boolean(room.topicGenerationProgress)}
+          debugParticipantLimitReached={room.players.length >= onlineRoomPlayerLimits.tahoiya}
+          onAddDebugParticipant={actions.addTestPlayer}
+          onRemoveDebugParticipant={actions.removeTestPlayer}
           gameTools={<TahoiyaDebugGameTools
             room={room}
             activePlayerId={activePlayerId}
-            isStarting={isStarting}
             writingDone={writingDone}
             skipReason={skipReason}
             skipComment={skipComment}
             skipReasons={tahoiyaSkipReasons}
             isSkipping={isSkippingTopic}
             onActivePlayerChange={(value) => { setters.setActivePlayerId(value); setters.setDefinitionIndex(0); setters.setDefinitionInput(room.fakeDefinitions[value]?.[0] ?? ""); setters.setPolishMessage(""); }}
-            onAddTestPlayer={actions.addTestPlayer}
             onAutoFillDefinitions={actions.autoFillTestDefinitions}
             onAdvanceToVoting={actions.forceAdvanceToVoting}
             onAutoFillVotes={actions.autoFillTestVotes}
