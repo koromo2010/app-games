@@ -2441,8 +2441,12 @@
 - `npm test`成功（456件）。
 - `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
 - `npm run build:sdk`成功。SDK Portalのproduction build、TypeScript検査、25ルート生成を完了した。
+- 実装commit `2ad001765049c6e18dead8ce1d6040beddb7550c`を`develop`へforceなしでfast-forwardし、GitHub上のtreeがローカル検証済みtreeと一致することを確認した。
+- 本体devのDeployment `dpl_3s5x4kvCdBkzWWPA8LhwZtN2vLXW`とSDK PortalのDeployment `dpl_7j3DeHvLNz2jCeUpG5iCMtsnAUNV`が同じ実装commitで`READY`となった。
+- `sdk-dev.game-fields.com/sdk-examples/word-wolf`のiframeが`dev.game-fields.com/sdk-examples/word-wolf`を参照し、遷移先で現行UIの「ワードウルフ・ラウンジ」が表示されることを確認した。旧Mock UIの「SDK共通ルーム」は存在しなかった。
+- 両Deploymentのerror・fatalログと集約Runtime Errorsはいずれも0件だった。
 
 ### 未対応・保留
 
 - SDK基本セットへの物理移動は次段階。現時点では現行ワードウルフをSDK-devの差分検出用基準として確立した段階である。
-- SDK-dev実環境への反映と、ログイン済み画面での部屋作成・DEBUG完走はデプロイ後に確認する。
+- クラウドブラウザにログイン済みセッションがなかったため、認証が必要な部屋作成とDEBUG完走の実操作は未確認。ゲスト状態で現行UIへの置換と旧Mock UIの除去までは確認済み。
