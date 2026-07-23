@@ -1991,7 +1991,7 @@
 
 ### 未対応・保留
 
-- `develop`へは未push。dev実機でゲーム操作との同時利用、PCの移動・サイズ変更・最小化、スマホ幅での固定表示を確認する。
+- dev実機でゲーム操作との同時利用、PCの移動・サイズ変更・最小化、スマホ幅での固定表示を確認する。
 
 ## 2026-07-23 — AI通信バイタルと共通部屋操作を追加
 
@@ -2026,7 +2026,12 @@
 - `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
 - `git diff --check`成功。
 
+### 公開
+
+- `e8f5b48`（`Add shared debug window and AI vital`）として、画面内DEBUGウィンドウ、AI通信バイタル、共通部屋操作を`develop`へfast-forward反映した。
+- `app-games-dev`の対象Deploymentが`READY`となり、`dev.game-fields.com`への割当を確認した。
+
 ### 未対応・保留
 
 - 現在のバイタルは通信状態と課金可能性の注意を示す。実際のtoken数・金額・利用枠の表示には、サーバー側usage集計と利用者別の課金ルールが別途必要。
-- `develop`へは未push。dev実機でAI処理中の点灯、並列処理、プレイ中の解散非表示、結果画面の3操作を確認する。
+- dev実機でAI処理中の点灯、並列処理、プレイ中の解散非表示、結果画面の3操作を確認する。
