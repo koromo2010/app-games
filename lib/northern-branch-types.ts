@@ -142,6 +142,7 @@ export type NorthernRoomAction = RoomLobbyReturnAction
   | { type: "set-debug-replay"; actorId: string; enabled: boolean }
   | { type: "set-config"; actorId: string; turnTimeLimitSeconds: number }
   | { type: "debug-add-player"; actorId: string }
+  | { type: "debug-remove-player"; actorId: string; targetPlayerId: string }
   | { type: "start-game"; actorId: string }
   | { type: "expire-turn"; actorId: string; turnStartedAt: number }
   | { type: "game-action"; actorId: string; action: NorthernGameAction }

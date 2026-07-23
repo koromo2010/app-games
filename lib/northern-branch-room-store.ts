@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { applyNorthernAction, createNorthernGame } from "@/lib/northern-branch-game";
 import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
 import { isMultiplayerRoomExpired } from "@/lib/multiplayer-room-lifecycle";
@@ -10,6 +9,11 @@ import { claimOnlineRoomForPlayer, loadPlayerActiveOnlineRoom, releasePlayerActi
 import { onlineRoomPlayerLimits } from "@/lib/online-room-policy";
 import { loadIndexedOnlineRoomPage } from "@/lib/online-room-list";
 import { canLeaveOnlineRoomLobby, onlineRoomActorAccess } from "@/lib/online-room-access";
+import {
+  applyOnlineRoomDebugParticipantCommand,
+  onlineRoomNonDebugPlayerActiveRoomKeys,
+  releaseOnlineRoomDebugParticipantActiveRooms,
+} from "@/lib/online-room-debug-participants";
 import { createIndexedOnlineRoom, mutateOnlineRoomWithRetry } from "@/lib/online-room-persistence";
 import { schedulePostResponseWork } from "@/lib/post-response-work";
 import { allRoomPlayersReturned, beginRoomLobbyReturn, canRemoveWaitingRoomPlayer, confirmRoomLobbyReturn } from "@/lib/room-lobby-return";
@@ -50,7 +54,7 @@ function playerActiveRoomKey(playerId: string) {
 
 
 async function mutateStoredRoom(code: string, mutate: (room: NorthernRoom) => NorthernRoom) {
-  return mutateOnlineRoomWithRetry({ code, roomKey, loadRoom: loadStoredNorthernRoom, mutate, normalize: normalizeNorthernRoom, activeRoomKeys: (room) => room.players.filter((player) => !player.isDummy).map((player) => playerActiveRoomKey(player.id)), errors: { notFound: "NORTHERN_ROOM_NOT_FOUND", invalid: "INVALID_NORTHERN_ROOM", conflict: "NORTHERN_ROOM_CONFLICT" }, realtimeGame: "northern-branch", afterSave: (room) => Promise.all([recordNorthernBranchGameResults(room), recordNorthernBranchReplay(room)]) });
+  return mutateOnlineRoomWithRetry({ code, roomKey, loadRoom: loadStoredNorthernRoom, mutate, normalize: normalizeNorthernRoom, activeRoomKeys: (room) => onlineRoomNonDebugPlayerActiveRoomKeys(room.players, playerActiveRoomKey), errors: { notFound: "NORTHERN_ROOM_NOT_FOUND", invalid: "INVALID_NORTHERN_ROOM", conflict: "NORTHERN_ROOM_CONFLICT" }, realtimeGame: "northern-branch", afterSave: (room) => Promise.all([recordNorthernBranchGameResults(room), recordNorthernBranchReplay(room)]) });
 }
 
 async function clearActiveRoom(playerId: string, code: string) {
@@ -105,7 +109,7 @@ export async function createStoredNorthernRoom(value: unknown, actorId: string) 
   const activeRoom = await loadNorthernPlayerActiveRoom(actorId);
   const claim = await claimOnlineRoomForPlayer({ key: playerActiveRoomKey(actorId), targetCode: created.code, currentRoom: activeRoom, gameId: "northern-branch", conflictError: "NORTHERN_PLAYER_ALREADY_ACTIVE" });
   try {
-    await createIndexedOnlineRoom(created, { roomKey, roomIndexKey, activeRoomKeys: (room) => room.players.filter((player) => !player.isDummy).map((player) => playerActiveRoomKey(player.id)), conflictError: "NORTHERN_ROOM_CONFLICT" });
+    await createIndexedOnlineRoom(created, { roomKey, roomIndexKey, activeRoomKeys: (room) => onlineRoomNonDebugPlayerActiveRoomKeys(room.players, playerActiveRoomKey), conflictError: "NORTHERN_ROOM_CONFLICT" });
     return created;
   } catch (error) {
     if (claim === "claimed") await releasePlayerActiveRoom(playerActiveRoomKey(actorId), created.code);
@@ -115,6 +119,7 @@ export async function createStoredNorthernRoom(value: unknown, actorId: string) 
 
 export async function applyStoredNorthernAction(code: string, action: NorthernRoomAction) {
   let claim: ActiveRoomClaim | null = null;
+  const removedDebugPlayerIds = new Set<string>();
   if (action.type === "join-room") {
     const activeRoom = await loadNorthernPlayerActiveRoom(action.actorId);
     claim = await claimOnlineRoomForPlayer({ key: playerActiveRoomKey(action.actorId), targetCode: code, currentRoom: activeRoom, gameId: "northern-branch", conflictError: "NORTHERN_PLAYER_ALREADY_ACTIVE" });
@@ -150,14 +155,36 @@ export async function applyStoredNorthernAction(code: string, action: NorthernRo
       return expireNorthernRoomTurn(current);
     }
     if (isNorthernTurnExpired(current)) return expireNorthernRoomTurn(current);
-    if (action.type === "set-debug") {
-      if (!actorIsHost || current.phase !== "lobby") throw new Error("NORTHERN_ROOM_FORBIDDEN");
-      return {
-        ...current,
-        debugMode: action.enabled,
-        debugReplayEnabled: action.enabled ? current.debugReplayEnabled : false,
-        players: action.enabled ? current.players : current.players.filter((player) => !player.isDummy),
-      };
+    if (action.type === "set-debug"
+      || action.type === "debug-add-player"
+      || action.type === "debug-remove-player") {
+      const result = applyOnlineRoomDebugParticipantCommand(
+        current,
+        action.actorId,
+        action,
+        {
+          forbiddenError: "NORTHERN_ROOM_FORBIDDEN",
+          assertCanAdd: (room) => {
+            if (room.players.length >= maximumPlayers) {
+              throw new Error("NORTHERN_ROOM_FULL");
+            }
+          },
+          createPlayer: (seed) => {
+            const colors = ["#38bdf8", "#a78bfa", "#f472b6"];
+            return {
+              id: seed.id,
+              name: seed.name,
+              joinedAt: seed.joinedAt,
+              avatarColor: colors[seed.debugParticipantIndex % colors.length],
+              isDummy: true,
+            };
+          },
+        },
+      );
+      result.removedPlayerIds.forEach((playerId) => (
+        removedDebugPlayerIds.add(playerId)
+      ));
+      return result.room;
     }
     if (action.type === "set-debug-replay") {
       if (!actorIsHost || !current.debugMode) throw new Error("NORTHERN_ROOM_FORBIDDEN");
@@ -166,22 +193,6 @@ export async function applyStoredNorthernAction(code: string, action: NorthernRo
     if (action.type === "set-config") {
       if (!actorIsHost || current.phase !== "lobby") throw new Error("NORTHERN_ROOM_FORBIDDEN");
       return { ...current, turnTimeLimitSeconds: normalizeCommonTimeLimit(action.turnTimeLimitSeconds) };
-    }
-    if (action.type === "debug-add-player") {
-      if (!actorIsHost || !current.debugMode || current.phase !== "lobby") throw new Error("NORTHERN_ROOM_FORBIDDEN");
-      if (current.players.length >= maximumPlayers) throw new Error("NORTHERN_ROOM_FULL");
-      const dummyNumber = current.players.filter((player) => player.isDummy).length + 1;
-      const colors = ["#38bdf8", "#a78bfa", "#f472b6"];
-      return {
-        ...current,
-        players: [...current.players, {
-          id: `dummy-${randomUUID()}`,
-          name: `ダミー${dummyNumber}`,
-          joinedAt: Date.now(),
-          avatarColor: colors[(dummyNumber - 1) % colors.length],
-          isDummy: true,
-        }],
-      };
     }
     if (action.type === "start-game") {
       if (!actorIsHost || current.phase !== "lobby") throw new Error("NORTHERN_ROOM_FORBIDDEN");
@@ -224,6 +235,13 @@ export async function applyStoredNorthernAction(code: string, action: NorthernRo
   });
   if (action.type === "leave-room") await clearActiveRoom(action.actorId, room.code);
   if (action.type === "remove-waiting-player") await clearActiveRoom(action.targetPlayerId, room.code);
+  if (removedDebugPlayerIds.size > 0) {
+    await releaseOnlineRoomDebugParticipantActiveRooms(
+      removedDebugPlayerIds,
+      room.code,
+      playerActiveRoomKey,
+    );
+  }
   return room;
 }
 

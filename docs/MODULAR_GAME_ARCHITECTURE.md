@@ -32,6 +32,7 @@ UI / hooks -> API client -> HTTP route -> application/domain -> storage
 - クライアントの単調revision採用: `lib/online-room-client-state.ts`
 - 共通actor権限・ロビー退出判定: `lib/online-room-access.ts`
 - 共通デバッグメニュー・ゲーム固有操作・ダミー参加者UI: `app/components/DebugModeButton.tsx`, `app/components/DebugGameTools.tsx`, `app/components/DebugParticipantControls.tsx`
+- デバッグ参加者Command・active-room整理: `lib/online-room-debug-participants.ts`
 - 共通AI通信状態・トップバナー表示: `lib/ai-activity-client.ts`, `app/components/AiActivityVital.tsx`, `app/components/GameTopBanner.tsx`
 - 共通部屋操作表示: `app/components/OnlineRoomLifecycleActions.tsx`, `app/components/RoomResultActions.tsx`
 - Room API共通エラー変換: `lib/online-room-route-errors.ts`
@@ -50,9 +51,9 @@ UI / hooks -> API client -> HTTP route -> application/domain -> storage
 
 共通 `DebugModeButton` は、デバッグON/OFF、ダミー参加者、プレイバック、中断、行動ログに加えて、ゲーム固有操作を受け取る `gameTools` と、DBを使うゲームだけが明示的に有効化する `wordGenerationTools` を非モーダルの共通画面内ウィンドウへ表示する。ウィンドウ枠と移動・サイズ変更・最小化は `DebugToolWindow`、デバッグ内容は `DebugModeButton` が担当する。通常のフェーズ画面や参加者一覧には操作ボタンを重ねず、必要なら現在の代理操作対象などの状態表示だけを残す。ワード・お題DBを使わないゲームは `wordGenerationTools` を渡さず、生成テストを表示しない。
 
-デバッグ用ダミー参加者は、追加・一覧・削除の表示を共通 `DebugParticipantControls` が担当する。ゲームのController／Layoutは、閲覧者向けRoomから抽出したダミー一覧と型付きCommand関数だけを渡す。ワード生成を含む各操作の型付きCommand、ダミー生成、人数依存設定の補正、権限・フェーズ・上限検査、永続化はゲーム固有Storeに残し、共通UIをセキュリティ境界にしない。
+デバッグ用ダミー参加者は、追加・一覧・削除の表示を共通 `DebugParticipantControls` が担当する。ゲームのController／Layoutは、閲覧者向けRoomから抽出したダミー一覧と型付きCommand関数だけを渡す。サーバー側では`lib/online-room-debug-participants.ts`がホスト・ロビー・DEBUG中・削除対象の認可、IDと表示名の生成、追加、個別削除、DEBUG OFF時の一括整理、ロビー復帰状態、active-room索引の除外と旧索引解放を担う。各Storeには人数上限、Player生成、参加者変更後のゲーム固有補正、永続化だけを残し、共通UIをセキュリティ境界にしない。
 
-たほい屋は`lib/tahoiya-debug-participants.ts`で、個別削除とDEBUG OFF時の一括整理を同じ純粋処理へ集約する。参加者配列だけでなく、回答者、得点、偽説明、投票、時間切れ、復帰状態も現在の参加者へ合わせ、Storeはダミーをactive-room索引から除外する。
+たほい屋は`lib/tahoiya-debug-participants.ts`を共通Commandの補正hookとして使う。参加者配列の変更に合わせて回答者、得点、偽説明、投票、時間切れを現在の参加者へ正規化する。ほかのゲームも、並べ替え役、人数依存設定、代理操作対象、チーム所属など必要な補正だけを同じhookへ渡す。
 
 AI APIを呼ぶ可能性があるクライアント操作は`aiActivityFetch`または`withAiActivity`を通し、共通ストアが同時処理数を管理する。`GameTopBanner`内の`AiActivityVital`だけが通信状態を表示し、各ゲームLayoutへ発光状態を複製しない。これは待機・利用量発生可能性の表示であり、課金額やサーバー側認可の正本にはしない。
 

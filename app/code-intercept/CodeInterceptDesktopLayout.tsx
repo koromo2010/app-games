@@ -18,6 +18,7 @@ import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { OnlineRoomLifecycleActions } from "@/app/components/OnlineRoomLifecycleActions";
 import { RoomLobbyReturnStatus } from "@/app/components/RoomLobbyReturnStatus";
 import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
+import { isOnlineRoomDebugPlayer } from "@/lib/online-room-access";
 import {
   codeInterceptClueHistory,
   codeLengthForTeam,
@@ -303,8 +304,12 @@ export function CodeInterceptDesktopLayout({ controller }: { controller: CodeInt
         onReplayChange={(enabled) => runAction({ type: "set-debug-replay", actorId: playerId, enabled }).then(() => undefined)}
         debugLogEntries={room.debugLog}
         onChange={(enabled) => runAction({ type: "set-debug", actorId: playerId, enabled }).then(() => undefined)}
+        debugParticipants={room.players.filter(isOnlineRoomDebugPlayer)}
+        debugParticipantManagementDisabled={isSaving || room.phase !== "lobby"}
+        debugParticipantLimitReached={room.players.length >= room.playerCapacity}
+        onAddDebugParticipant={() => runAction({ type: "debug-add-player", actorId: playerId }).then(() => undefined)}
+        onRemoveDebugParticipant={(targetPlayerId) => runAction({ type: "debug-remove-player", actorId: playerId, targetPlayerId }).then(() => undefined)}
         gameTools={<DebugToolsSection title="ゲーム操作" description="現在のフェーズで使える一括入力を表示します。">
-          {room.phase === "lobby" && <DebugToolButton disabled={isSaving || room.players.length >= room.playerCapacity} onClick={() => void runAction({ type: "debug-add-player", actorId: playerId })}>ダミーを追加</DebugToolButton>}
           {room.phase === "code-length" && <DebugToolButton disabled={isSaving} onClick={() => void runAction({ type: "debug-fill-code-lengths", actorId: playerId })}>未選択の桁数を自動入力</DebugToolButton>}
           {room.phase === "clue" && <DebugToolButton disabled={isSaving} onClick={() => void runAction({ type: "debug-fill-clues", actorId: playerId })}>ヒントを自動入力</DebugToolButton>}
           {room.phase === "answer" && <DebugToolButton disabled={isSaving} onClick={() => void runAction({ type: "debug-fill-answers", actorId: playerId })}>未回答を正解で埋める</DebugToolButton>}

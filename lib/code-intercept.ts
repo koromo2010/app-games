@@ -175,6 +175,7 @@ export type CodeInterceptRoomAction = RoomLobbyReturnAction
   | { type: "reset-game"; actorId: string }
   | { type: "abort-game"; actorId: string }
   | { type: "debug-add-player"; actorId: string }
+  | { type: "debug-remove-player"; actorId: string; targetPlayerId: string }
   | { type: "debug-fill-code-lengths"; actorId: string }
   | { type: "debug-fill-clues"; actorId: string }
   | { type: "debug-fill-answers"; actorId: string };
@@ -270,6 +271,25 @@ export function nextBalancedTeam(players: readonly Pick<CodeInterceptPlayer, "te
   const red = players.filter((player) => player.teamId === "red").length;
   const blue = players.length - red;
   return red <= blue ? "red" : "blue";
+}
+
+export function rebalanceCodeInterceptDebugPlayers(
+  players: readonly CodeInterceptPlayer[],
+) {
+  let redCount = players.filter((player) => (
+    !player.isDummy && player.teamId === "red"
+  )).length;
+  let blueCount = players.filter((player) => (
+    !player.isDummy && player.teamId === "blue"
+  )).length;
+  return players.map((player) => {
+    if (!player.isDummy) return player;
+    const teamId: CodeInterceptTeamId =
+      redCount <= blueCount ? "red" : "blue";
+    if (teamId === "red") redCount += 1;
+    else blueCount += 1;
+    return { ...player, teamId };
+  });
 }
 
 export function shuffledCode(cardCount: number, codeLength: number, random = Math.random) {

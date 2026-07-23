@@ -66,8 +66,8 @@ test("たほい屋のダミー管理は共通DEBUGメニューへ接続する", 
   assert.match(layoutSource, /onRemoveDebugParticipant=\{actions\.removeTestPlayer\}/);
   assert.doesNotMatch(gameToolsSource, /onAddTestPlayer/);
   assert.match(actionSource, /type:\s*"debug-remove-player"/);
-  assert.match(storeSource, /canRemoveOnlineRoomDebugPlayer/);
-  assert.match(storeSource, /removeTahoiyaDebugParticipants/);
+  assert.match(storeSource, /applyOnlineRoomDebugParticipantCommand/);
+  assert.match(storeSource, /withTahoiyaDebugParticipants/);
 });
 
 test("公開オンラインゲームのダミー管理は共通DEBUGメニューへ接続する", () => {
@@ -86,8 +86,40 @@ test("公開オンラインゲームのダミー管理は共通DEBUGメニュー
     assert.match(layoutSource, /onAddDebugParticipant=/);
     assert.match(layoutSource, /onRemoveDebugParticipant=/);
     assert.doesNotMatch(layoutSource, /<DebugToolButton[^>]+debug-add-player/);
-    assert.match(storeSource, /canRemoveOnlineRoomDebugPlayer/);
-    assert.match(storeSource, /type === "debug-remove-player"/);
-    assert.match(storeSource, /removeOnlineRoomDebugParticipants/);
+    assert.match(storeSource, /applyOnlineRoomDebugParticipantCommand/);
   }
+});
+
+test("privateオンラインゲームも共通ダミー参加者Commandへ接続する", () => {
+  const targets = [
+    [
+      "app/northern-branch/NorthernBranchDesktopLayout.tsx",
+      "lib/northern-branch-room-store.ts",
+    ],
+    [
+      "app/code-intercept/CodeInterceptDesktopLayout.tsx",
+      "lib/code-intercept-room-store.ts",
+    ],
+  ] as const;
+
+  for (const [layoutPath, storePath] of targets) {
+    const layoutSource = read(layoutPath);
+    const storeSource = read(storePath);
+
+    assert.match(layoutSource, /debugParticipants=\{room\.players\.filter\(isOnlineRoomDebugPlayer\)\}/);
+    assert.match(layoutSource, /onAddDebugParticipant=/);
+    assert.match(layoutSource, /onRemoveDebugParticipant=/);
+    assert.doesNotMatch(layoutSource, /<DebugToolButton[^>]+debug-add-player/);
+    assert.match(storeSource, /applyOnlineRoomDebugParticipantCommand/);
+    assert.match(storeSource, /releaseOnlineRoomDebugParticipantActiveRooms/);
+  }
+});
+
+test("ダミー参加者の認可・削除・active-room整理は共通application層が担う", () => {
+  const source = read("lib/online-room-debug-participants.ts");
+
+  assert.match(source, /canRemoveOnlineRoomDebugPlayer/);
+  assert.match(source, /removeOnlineRoomDebugParticipants/);
+  assert.match(source, /releaseOnlineRoomDebugParticipantActiveRooms/);
+  assert.match(source, /onlineRoomNonDebugPlayerActiveRoomKeys/);
 });

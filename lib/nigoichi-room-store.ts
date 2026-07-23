@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { appendGameDebugLog } from "@/lib/game-debug-log";
 import { prepareGeneralGameWordDraw, rememberGeneralGameWordHistory } from "@/lib/general-game-word-history-store";
 import { recordNigoichiReplay } from "@/lib/game-replay-store";
@@ -23,8 +22,12 @@ import {
 import { claimOnlineRoomForPlayer, loadPlayerActiveOnlineRoom, releasePlayerActiveRoom, type ActiveRoomClaim } from "@/lib/player-active-room";
 import { recordNigoichiGameResults } from "@/lib/player-stats-store";
 import { loadIndexedOnlineRoomPage } from "@/lib/online-room-list";
-import { canLeaveOnlineRoomLobby, canRemoveOnlineRoomDebugPlayer, isOnlineRoomDebugPlayer, onlineRoomActorAccess } from "@/lib/online-room-access";
-import { nextOnlineRoomDebugParticipantName, removeOnlineRoomDebugParticipants } from "@/lib/online-room-debug-participants";
+import { canLeaveOnlineRoomLobby, onlineRoomActorAccess } from "@/lib/online-room-access";
+import {
+  applyOnlineRoomDebugParticipantCommand,
+  onlineRoomNonDebugPlayerActiveRoomKeys,
+  releaseOnlineRoomDebugParticipantActiveRooms,
+} from "@/lib/online-room-debug-participants";
 import { createIndexedOnlineRoom, mutateOnlineRoomWithRetry } from "@/lib/online-room-persistence";
 import { deleteIndexedOnlineRoomStorage, dissolveHostedIndexedOnlineRooms, dissolveIndexedOnlineRoom } from "@/lib/online-room-dissolution";
 import { redisCommand } from "@/lib/redis-store";
@@ -72,7 +75,7 @@ function playerActiveRoomKey(playerId: string) {
 type DebugEvent = { actorId?: string; action: string };
 
 async function mutateStoredRoom(code: string, mutate: (room: NigoichiRoom) => NigoichiRoom | Promise<NigoichiRoom>, debugEvent?: DebugEvent) {
-  return mutateOnlineRoomWithRetry({ code, roomKey, loadRoom: loadStoredNigoichiRoom, mutate, normalize: normalizeNigoichiRoom, activeRoomKeys: (room) => room.players.filter((player) => !isOnlineRoomDebugPlayer(player)).map((player) => playerActiveRoomKey(player.id)), errors: { notFound: "NIGOICHI_ROOM_NOT_FOUND", invalid: "INVALID_NIGOICHI_ROOM", conflict: "NIGOICHI_ROOM_CONFLICT" }, prepare: (current, changed, { revision, timestamp }) => {
+  return mutateOnlineRoomWithRetry({ code, roomKey, loadRoom: loadStoredNigoichiRoom, mutate, normalize: normalizeNigoichiRoom, activeRoomKeys: (room) => onlineRoomNonDebugPlayerActiveRoomKeys(room.players, playerActiveRoomKey), errors: { notFound: "NIGOICHI_ROOM_NOT_FOUND", invalid: "INVALID_NIGOICHI_ROOM", conflict: "NIGOICHI_ROOM_CONFLICT" }, prepare: (current, changed, { revision, timestamp }) => {
     const actorName = debugEvent?.actorId
       ? changed.players.find((player) => player.id === debugEvent.actorId)?.name ?? "不明なプレイヤー"
       : "システム";
@@ -136,7 +139,7 @@ export async function createStoredNigoichiRoom(value: unknown, actorId: string) 
   const activeRoom = await loadNigoichiPlayerActiveRoom(actorId);
   const claim = await claimOnlineRoomForPlayer({ key: playerActiveRoomKey(actorId), targetCode: created.code, currentRoom: activeRoom, gameId: "nigoichi", conflictError: "NIGOICHI_PLAYER_ALREADY_ACTIVE" });
   try {
-    await createIndexedOnlineRoom(created, { roomKey, roomIndexKey, activeRoomKeys: (room) => room.players.filter((player) => !isOnlineRoomDebugPlayer(player)).map((player) => playerActiveRoomKey(player.id)), conflictError: "NIGOICHI_ROOM_CONFLICT" });
+    await createIndexedOnlineRoom(created, { roomKey, roomIndexKey, activeRoomKeys: (room) => onlineRoomNonDebugPlayerActiveRoomKeys(room.players, playerActiveRoomKey), conflictError: "NIGOICHI_ROOM_CONFLICT" });
     return created;
   } catch (error) {
     if (claim === "claimed") await clearActiveRoom(actorId, created.code);
@@ -188,19 +191,40 @@ export async function applyStoredNigoichiAction(code: string, action: NigoichiRo
       if (!canLeaveOnlineRoomLobby({ isHost, isMember }, current.phase)) throw new Error("NIGOICHI_ROOM_FORBIDDEN");
       return withPlayersAndCorrectedConfig(current, current.players.filter((player) => player.id !== action.actorId));
     }
-    if (action.type === "set-debug") {
-      if (!isHost || current.phase !== "lobby") throw new Error("NIGOICHI_ROOM_FORBIDDEN");
-      const cleanup = action.enabled
-        ? null
-        : removeOnlineRoomDebugParticipants(current.players, current.lobbyReturn);
-      cleanup?.removedPlayerIds.forEach((playerId) => removedDebugPlayerIds.add(playerId));
-      return withPlayersAndCorrectedConfig({
-        ...current,
-        debugMode: action.enabled,
-        debugReplayEnabled: action.enabled ? current.debugReplayEnabled : false,
-        debugLog: [],
-        lobbyReturn: cleanup?.lobbyReturn ?? current.lobbyReturn,
-      }, cleanup?.players ?? current.players);
+    if (action.type === "set-debug"
+      || action.type === "debug-add-player"
+      || action.type === "debug-remove-player") {
+      const result = applyOnlineRoomDebugParticipantCommand(
+        current,
+        action.actorId,
+        action,
+        {
+          forbiddenError: "NIGOICHI_ROOM_FORBIDDEN",
+          assertCanAdd: (room) => {
+            if (!nigoichiRoomHasSpace(room)) {
+              throw new Error("NIGOICHI_ROOM_FULL");
+            }
+          },
+          createPlayer: (seed) => {
+            const colors = ["#38bdf8", "#a78bfa", "#f472b6", "#f59e0b", "#84cc16"];
+            return {
+              id: seed.id,
+              name: seed.name,
+              joinedAt: seed.joinedAt,
+              avatarColor: colors[seed.debugParticipantIndex % colors.length],
+              isDummy: true,
+            };
+          },
+          afterParticipantsChanged: (room, change) => (
+            withPlayersAndCorrectedConfig(room, change.players)
+          ),
+          afterModeChanged: (room) => ({ ...room, debugLog: [] }),
+        },
+      );
+      result.removedPlayerIds.forEach((playerId) => (
+        removedDebugPlayerIds.add(playerId)
+      ));
+      return result.room;
     }
     if (action.type === "set-debug-replay") {
       if (!isHost || !current.debugMode) throw new Error("NIGOICHI_ROOM_FORBIDDEN");
@@ -223,44 +247,6 @@ export async function applyStoredNigoichiAction(code: string, action: NigoichiRo
         clueTimeLimitSeconds: normalizeNigoichiTimeLimit(action.clueTimeLimitSeconds),
         guessTimeLimitSeconds: normalizeNigoichiTimeLimit(action.guessTimeLimitSeconds),
       };
-    }
-    if (action.type === "debug-add-player") {
-      if (!isHost || !current.debugMode || current.phase !== "lobby") throw new Error("NIGOICHI_ROOM_FORBIDDEN");
-      if (!nigoichiRoomHasSpace(current)) throw new Error("NIGOICHI_ROOM_FULL");
-      const name = nextOnlineRoomDebugParticipantName(current.players);
-      const colors = ["#38bdf8", "#a78bfa", "#f472b6", "#f59e0b", "#84cc16"];
-      const player = {
-        id: `dummy-${randomUUID()}`,
-        name,
-        joinedAt: Date.now(),
-        avatarColor: colors[current.players.filter(isOnlineRoomDebugPlayer).length % colors.length],
-        isDummy: true,
-      };
-      const players = [...current.players, player];
-      return withPlayersAndCorrectedConfig({
-        ...current,
-        lobbyReturn: confirmRoomLobbyReturn(current.lobbyReturn, players, player.id),
-      }, players);
-    }
-    if (action.type === "debug-remove-player") {
-      if (!canRemoveOnlineRoomDebugPlayer({
-        actorId: action.actorId,
-        debugMode: current.debugMode,
-        hostId: current.hostId,
-        phase: current.phase,
-        players: current.players,
-        targetPlayerId: action.targetPlayerId,
-      })) throw new Error("NIGOICHI_ROOM_FORBIDDEN");
-      const cleanup = removeOnlineRoomDebugParticipants(
-        current.players,
-        current.lobbyReturn,
-        action.targetPlayerId,
-      );
-      cleanup.removedPlayerIds.forEach((playerId) => removedDebugPlayerIds.add(playerId));
-      return withPlayersAndCorrectedConfig({
-        ...current,
-        lobbyReturn: cleanup.lobbyReturn,
-      }, cleanup.players);
     }
     if (action.type === "start-game") {
       if (!isHost || current.phase !== "lobby") throw new Error("NIGOICHI_ROOM_FORBIDDEN");
@@ -340,8 +326,10 @@ export async function applyStoredNigoichiAction(code: string, action: NigoichiRo
   if (action.type === "leave-room") await clearActiveRoom(action.actorId, room.code);
   if (action.type === "remove-waiting-player") await clearActiveRoom(action.targetPlayerId, room.code);
   if (removedDebugPlayerIds.size > 0) {
-    await Promise.all(
-      [...removedDebugPlayerIds].map((playerId) => clearActiveRoom(playerId, room.code)),
+    await releaseOnlineRoomDebugParticipantActiveRooms(
+      removedDebugPlayerIds,
+      room.code,
+      playerActiveRoomKey,
     );
   }
   return room;

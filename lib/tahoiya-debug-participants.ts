@@ -1,4 +1,5 @@
 import { isOnlineRoomDebugPlayer } from "./online-room-access.ts";
+import { removeOnlineRoomDebugParticipants } from "./online-room-debug-participants.ts";
 import { normalizeRoomLobbyReturnState } from "./room-lobby-return.ts";
 import type { TahoiyaPlayer, TahoiyaRoom } from "./tahoiya-types.ts";
 
@@ -24,18 +25,25 @@ export function removeTahoiyaDebugParticipants(
   room: TahoiyaRoom,
   targetPlayerId?: string,
 ) {
+  const cleanup = removeOnlineRoomDebugParticipants(
+    room.players,
+    room.lobbyReturn,
+    targetPlayerId,
+  );
+  if (cleanup.removedPlayerIds.length === 0) return room;
+  return withTahoiyaDebugParticipants(room, cleanup.players);
+}
+
+export function withTahoiyaDebugParticipants(
+  room: TahoiyaRoom,
+  players: TahoiyaPlayer[],
+) {
+  const retainedPlayerIds = new Set(players.map((player) => player.id));
   const removedPlayerIds = new Set(
     room.players
-      .filter((player) => (
-        isOnlineRoomDebugPlayer(player)
-        && (!targetPlayerId || player.id === targetPlayerId)
-      ))
+      .filter((player) => !retainedPlayerIds.has(player.id))
       .map((player) => player.id),
   );
-  if (removedPlayerIds.size === 0) return room;
-
-  const players = room.players.filter((player) => !removedPlayerIds.has(player.id));
-  const retainedPlayerIds = new Set(players.map((player) => player.id));
   return {
     ...room,
     players,

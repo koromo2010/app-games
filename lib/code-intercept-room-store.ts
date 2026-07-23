@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import {
   areValidCodeInterceptClues,
   canSetCodeInterceptPlayerTeam,
@@ -26,6 +25,7 @@ import {
   normalizeCodeInterceptTimeoutClues,
   normalizeCodeInterceptWordDifficulty,
   otherCodeInterceptTeam,
+  rebalanceCodeInterceptDebugPlayers,
   withCodeInterceptConsensusAnswer,
   type CodeInterceptRoom,
   type CodeInterceptRoomAction,
@@ -36,6 +36,11 @@ import { recordCodeInterceptReplay } from "@/lib/game-replay-store";
 import { isMultiplayerRoomExpired } from "@/lib/multiplayer-room-lifecycle";
 import { loadIndexedOnlineRoomPage } from "@/lib/online-room-list";
 import { canLeaveOnlineRoomLobby, onlineRoomActorAccess } from "@/lib/online-room-access";
+import {
+  applyOnlineRoomDebugParticipantCommand,
+  onlineRoomNonDebugPlayerActiveRoomKeys,
+  releaseOnlineRoomDebugParticipantActiveRooms,
+} from "@/lib/online-room-debug-participants";
 import { createIndexedOnlineRoom, mutateOnlineRoomWithRetry } from "@/lib/online-room-persistence";
 import { deleteIndexedOnlineRoomStorage, dissolveHostedIndexedOnlineRooms, dissolveIndexedOnlineRoom } from "@/lib/online-room-dissolution";
 import { claimOnlineRoomForPlayer, loadPlayerActiveOnlineRoom, releasePlayerActiveRoom, type ActiveRoomClaim } from "@/lib/player-active-room";
@@ -72,6 +77,7 @@ const debugActionLabels: Record<CodeInterceptRoomAction["type"], string> = {
   "reset-game": "同じ部屋で再戦準備",
   "abort-game": "ゲームを中断",
   "debug-add-player": "ダミープレイヤーを追加",
+  "debug-remove-player": "ダミープレイヤーを削除",
   "debug-fill-code-lengths": "未選択の暗号桁数を自動入力",
   "debug-fill-clues": "未提出ヒントを自動入力",
   "debug-fill-answers": "未提出回答を自動入力",
@@ -80,9 +86,8 @@ const debugActionLabels: Record<CodeInterceptRoomAction["type"], string> = {
 function roomKey(code: string) { return `${roomKeyPrefix}${code.trim().toUpperCase()}`; }
 function playerActiveRoomKey(playerId: string) { return `${playerActiveRoomKeyPrefix}${playerId}`; }
 
-
 async function mutateStoredRoom(code: string, mutate: (room: CodeInterceptRoom) => CodeInterceptRoom | Promise<CodeInterceptRoom>, actorId: string, action: string) {
-  return mutateOnlineRoomWithRetry({ code, roomKey, loadRoom: loadStoredCodeInterceptRoom, mutate, normalize: normalizeCodeInterceptRoom, activeRoomKeys: (room) => room.players.filter((player) => !player.isDummy).map((player) => playerActiveRoomKey(player.id)), errors: { notFound: "CODE_INTERCEPT_ROOM_NOT_FOUND", invalid: "INVALID_CODE_INTERCEPT_ROOM", conflict: "CODE_INTERCEPT_ROOM_CONFLICT" }, prepare: (current, changed, { revision, timestamp }) => {
+  return mutateOnlineRoomWithRetry({ code, roomKey, loadRoom: loadStoredCodeInterceptRoom, mutate, normalize: normalizeCodeInterceptRoom, activeRoomKeys: (room) => onlineRoomNonDebugPlayerActiveRoomKeys(room.players, playerActiveRoomKey), errors: { notFound: "CODE_INTERCEPT_ROOM_NOT_FOUND", invalid: "INVALID_CODE_INTERCEPT_ROOM", conflict: "CODE_INTERCEPT_ROOM_CONFLICT" }, prepare: (current, changed, { revision, timestamp }) => {
     const actorName = changed.players.find((player) => player.id === actorId)?.name ?? "システム";
     return changed.debugMode
       ? { ...changed, debugLog: appendGameDebugLog(changed.debugLog, { timestamp, actorName, action, phaseBefore: current.phase, phaseAfter: changed.phase, revision }) }
@@ -117,7 +122,7 @@ export async function createStoredCodeInterceptRoom(value: unknown, actorId: str
   const activeRoom = await loadCodeInterceptPlayerActiveRoom(actorId);
   const claim = await claimOnlineRoomForPlayer({ key: playerActiveRoomKey(actorId), targetCode: created.code, currentRoom: activeRoom, gameId: "code-intercept", conflictError: "CODE_INTERCEPT_PLAYER_ALREADY_ACTIVE" });
   try {
-    await createIndexedOnlineRoom(created, { roomKey, roomIndexKey, activeRoomKeys: (room) => room.players.filter((player) => !player.isDummy).map((player) => playerActiveRoomKey(player.id)), conflictError: "CODE_INTERCEPT_ROOM_CONFLICT" });
+    await createIndexedOnlineRoom(created, { roomKey, roomIndexKey, activeRoomKeys: (room) => onlineRoomNonDebugPlayerActiveRoomKeys(room.players, playerActiveRoomKey), conflictError: "CODE_INTERCEPT_ROOM_CONFLICT" });
     return created;
   } catch (error) {
     if (claim === "claimed") await clearActiveRoom(actorId, created.code);
@@ -127,6 +132,7 @@ export async function createStoredCodeInterceptRoom(value: unknown, actorId: str
 
 export async function applyStoredCodeInterceptAction(code: string, action: CodeInterceptRoomAction) {
   let claim: ActiveRoomClaim | null = null;
+  const removedDebugPlayerIds = new Set<string>();
   const normalizedCode = code.trim().toUpperCase();
   if (action.type === "join-room") {
     const activeRoom = await loadCodeInterceptPlayerActiveRoom(action.actorId);
@@ -166,9 +172,41 @@ export async function applyStoredCodeInterceptAction(code: string, action: CodeI
       if (!isCodeInterceptTeamId(action.teamId) || !canSetCodeInterceptPlayerTeam(current, action.actorId, targetId)) throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
       return { ...current, players: current.players.map((player) => player.id === targetId ? { ...player, teamId: action.teamId } : player) };
     }
-    if (action.type === "set-debug") {
-      if (!isHost || current.phase !== "lobby") throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
-      return { ...current, debugMode: action.enabled, debugReplayEnabled: action.enabled ? current.debugReplayEnabled : false, debugLog: [], players: action.enabled ? current.players : current.players.filter((player) => !player.isDummy) };
+    if (action.type === "set-debug"
+      || action.type === "debug-add-player"
+      || action.type === "debug-remove-player") {
+      const result = applyOnlineRoomDebugParticipantCommand(
+        current,
+        action.actorId,
+        action,
+        {
+          forbiddenError: "CODE_INTERCEPT_ROOM_FORBIDDEN",
+          assertCanAdd: (room) => {
+            if (!codeInterceptRoomHasSpace(room)) {
+              throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
+            }
+          },
+          createPlayer: (seed, room) => ({
+            id: seed.id,
+            name: seed.name,
+            joinedAt: seed.joinedAt,
+            teamId: nextBalancedTeam(room.players),
+            avatarColor: seed.debugParticipantIndex % 2
+              ? "#60a5fa"
+              : "#f87171",
+            isDummy: true,
+          }),
+          afterParticipantsChanged: (room, change) => ({
+            ...room,
+            players: rebalanceCodeInterceptDebugPlayers(change.players),
+          }),
+          afterModeChanged: (room) => ({ ...room, debugLog: [] }),
+        },
+      );
+      result.removedPlayerIds.forEach((playerId) => (
+        removedDebugPlayerIds.add(playerId)
+      ));
+      return result.room;
     }
     if (action.type === "set-debug-replay") {
       if (!isHost || !current.debugMode) throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
@@ -195,11 +233,6 @@ export async function applyStoredCodeInterceptAction(code: string, action: CodeI
           : normalizeCodeInterceptCodeLength(current.fixedCodeLength, cardCount),
         ...normalizeCodeInterceptTimeLimits(action),
       };
-    }
-    if (action.type === "debug-add-player") {
-      if (!isHost || !current.debugMode || current.phase !== "lobby" || !codeInterceptRoomHasSpace(current)) throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
-      const number = current.players.filter((player) => player.isDummy).length + 1;
-      return { ...current, players: [...current.players, { id: `dummy-${randomUUID()}`, name: `ダミー${number}`, joinedAt: Date.now(), teamId: nextBalancedTeam(current.players), avatarColor: number % 2 ? "#f87171" : "#60a5fa", isDummy: true }] };
     }
     if (action.type === "start-game") {
       if (!isHost || current.phase !== "lobby") throw new Error("CODE_INTERCEPT_ROOM_FORBIDDEN");
@@ -333,6 +366,13 @@ export async function applyStoredCodeInterceptAction(code: string, action: CodeI
   }
   if (action.type === "leave-room") await clearActiveRoom(action.actorId, room.code);
   if (action.type === "remove-waiting-player") await clearActiveRoom(action.targetPlayerId, room.code);
+  if (removedDebugPlayerIds.size > 0) {
+    await releaseOnlineRoomDebugParticipantActiveRooms(
+      removedDebugPlayerIds,
+      room.code,
+      playerActiveRoomKey,
+    );
+  }
   return room;
 }
 

@@ -20,6 +20,7 @@ import {
   normalizeCodeInterceptTimeoutClues,
   normalizeCodeInterceptWordDifficulty,
   randomizeCodeInterceptPlayers,
+  rebalanceCodeInterceptDebugPlayers,
   sanitizeCodeInterceptRoomForPlayer,
   withCodeInterceptConsensusAnswer,
   type CodeInterceptRoom,
@@ -78,6 +79,24 @@ test("random team assignment can start from an unbalanced lobby and produces bal
   assert.deepEqual(randomized.map((player) => player.id), ["r2", "b1", "b2", "p5", "r1"]);
   assert.deepEqual(randomized.map((player) => player.teamId), ["red", "blue", "red", "blue", "red"]);
   assert.deepEqual(new Set(randomized.map((player) => player.id)), new Set(players.map((player) => player.id)));
+});
+
+test("debug participants rebalance without changing real player teams", () => {
+  const base = room().players;
+  const players = [
+    ...base,
+    { id: "d1", name: "ダミー1", joinedAt: 1, teamId: "red" as const, isDummy: true },
+    { id: "d2", name: "ダミー2", joinedAt: 2, teamId: "red" as const, isDummy: true },
+  ];
+  const rebalanced = rebalanceCodeInterceptDebugPlayers(players);
+  assert.deepEqual(
+    rebalanced.slice(0, base.length).map((player) => player.teamId),
+    base.map((player) => player.teamId),
+  );
+  assert.deepEqual(
+    rebalanced.slice(base.length).map((player) => player.teamId),
+    ["red", "blue"],
+  );
 });
 
 test("a rematch clears the previous game history and deals only the supplied database words", () => {

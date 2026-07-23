@@ -2,7 +2,6 @@
 
 import { AppLink as Link } from "@/app/components/AppLink";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
-import { DebugToolButton, DebugToolsSection } from "@/app/components/DebugGameTools";
 import { GameAdSlot } from "@/app/components/GameAdSlot";
 import { GameLoungeVisual } from "@/app/components/GameLoungeVisual";
 import { GamePhaseTimer } from "@/app/components/GamePhaseTimer";
@@ -19,6 +18,7 @@ import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
 import { northernBaseResources, northernBuildings, northernCards } from "@/lib/northern-branch-data";
 import { northernRules } from "@/lib/northern-branch-game";
 import type { NorthernRoomPlayer } from "@/lib/northern-branch-types";
+import { isOnlineRoomDebugPlayer } from "@/lib/online-room-access";
 import {
   defaultAvatarImage,
   fallbackAvatarColor,
@@ -144,11 +144,11 @@ export function NorthernBranchDesktopLayout({ controller }: { controller: Northe
           replayDisabled={isSaving}
           onReplayChange={(enabled) => runAction({ type: "set-debug-replay", actorId: playerId, enabled }).then(() => undefined)}
           onChange={(enabled) => runAction({ type: "set-debug", actorId: playerId, enabled }).then(() => undefined)}
-          gameTools={room.phase === "lobby"
-            ? <DebugToolsSection title="ダミー参加者" description="ホスト1人で手番を切り替えながら確認できます。">
-                <DebugToolButton disabled={isSaving || room.players.length >= 4} onClick={() => void runAction({ type: "debug-add-player", actorId: playerId })}>ダミーを追加</DebugToolButton>
-              </DebugToolsSection>
-            : undefined}
+          debugParticipants={room.players.filter(isOnlineRoomDebugPlayer)}
+          debugParticipantManagementDisabled={isSaving || room.phase !== "lobby"}
+          debugParticipantLimitReached={room.players.length >= 4}
+          onAddDebugParticipant={() => runAction({ type: "debug-add-player", actorId: playerId }).then(() => undefined)}
+          onRemoveDebugParticipant={(targetPlayerId) => runAction({ type: "debug-remove-player", actorId: playerId, targetPlayerId }).then(() => undefined)}
         />}
         <GamePlayerMenu id={session.id} name={session.name} avatarColor={session.avatarColor} avatarImage={session.avatarImage} hasRecoveryEmail={session.hasRecoveryEmail} />
       </GameTopBanner>
