@@ -1,9 +1,14 @@
 import {
   GAME_SDK_VERSION,
   defineGameManifest,
-  type GameSdkStoredRoom,
+  type GameSdkOnlineRoomState,
+  type GameSdkRoomLifecycleCommand,
 } from "@game-fields/game-sdk";
-import { advanceGameSdkRoom, defineGameServerModule } from "@game-fields/game-sdk/runtime";
+import {
+  advanceGameSdkRoom,
+  applyGameSdkRoomLifecycleCommand,
+  defineGameServerModule,
+} from "@game-fields/game-sdk/runtime";
 
 export const sdkCountUpManifest = defineGameManifest({
   sdkVersion: GAME_SDK_VERSION,
@@ -19,10 +24,10 @@ export const sdkCountUpManifest = defineGameManifest({
   usesLlm: false,
 });
 
-export type SdkCountUpRoom = GameSdkStoredRoom & {
+type SdkCountUpSettings = Record<string, never>;
+
+export type SdkCountUpRoom = GameSdkOnlineRoomState<SdkCountUpSettings> & {
   phase: "lobby" | "playing" | "result";
-  hostPlayerId: string;
-  players: Array<{ id: string; name: string }>;
   count: number;
   target: number;
   lastActorPlayerId: string | null;
@@ -33,7 +38,7 @@ export type SdkCountUpCreateInput = {
 };
 
 export type SdkCountUpCommand =
-  | { type: "join" }
+  | GameSdkRoomLifecycleCommand<SdkCountUpSettings>
   | { type: "start" }
   | { type: "count-up" };
 
@@ -61,7 +66,13 @@ export const sdkCountUpServerModule = defineGameServerModule<
       revision: 1,
       phase: "lobby",
       hostPlayerId: context.actor.playerId,
-      players: [{ id: context.actor.playerId, name: context.actor.displayName }],
+      players: [{
+        id: context.actor.playerId,
+        displayName: context.actor.displayName,
+        joinedAt: context.now,
+        connected: true,
+      }],
+      settings: {},
       count: 0,
       target,
       lastActorPlayerId: null,
@@ -69,15 +80,16 @@ export const sdkCountUpServerModule = defineGameServerModule<
   },
 
   applyCommand(room, command, context) {
+    const lifecycle = applyGameSdkRoomLifecycleCommand(room, command, context, {
+      minimumPlayers: sdkCountUpManifest.minimumPlayers,
+      maximumPlayers: sdkCountUpManifest.maximumPlayers,
+      resetGame: () => ({
+        count: 0,
+        lastActorPlayerId: null,
+      }),
+    });
+    if (lifecycle.handled) return lifecycle.room;
     const actorIsMember = room.players.some((player) => player.id === context.actor.playerId);
-    if (command.type === "join") {
-      if (room.phase !== "lobby") throw new Error("INVALID_PHASE");
-      if (actorIsMember) throw new Error("PLAYER_ALREADY_JOINED");
-      if (room.players.length >= sdkCountUpManifest.maximumPlayers) throw new Error("ROOM_FULL");
-      return advanceGameSdkRoom(room, {
-        players: [...room.players, { id: context.actor.playerId, name: context.actor.displayName }],
-      });
-    }
     if (!actorIsMember) throw new Error("MEMBER_REQUIRED");
     if (command.type === "start") {
       if (context.actor.role !== "host") throw new Error("HOST_REQUIRED");
@@ -97,7 +109,7 @@ export const sdkCountUpServerModule = defineGameServerModule<
   presentRoom(room, context) {
     return {
       phase: room.phase,
-      playerNames: room.players.map((player) => player.name),
+      playerNames: room.players.map((player) => player.displayName),
       count: room.count,
       target: room.target,
       isHost: context.viewer.playerId === room.hostPlayerId,

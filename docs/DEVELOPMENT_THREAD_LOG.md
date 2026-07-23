@@ -2321,3 +2321,43 @@
 - devのSDK例2画面がHTTP 200を返し、HTML内のDeployment IDが対象Deploymentと一致した。登録済み`wordwolf-sdk` Room APIは未認証401、未登録`creator-upload`は404を返し、対象Deploymentの実行時error・fatalログはなかった。
 - SDK向けRealtime／WebSocket transportと、active-room・一覧・解散のClient Runtimeは未実装。
 - ログイン済み複数アカウントで、SDK Roomの作成・参加・Command・競合再試行を実操作確認する。
+
+## 2026-07-23 — SDKゲームのRoom lifecycle・Realtimeを共通化
+
+### 利用者からの要望
+
+- SDK永続HTTP／Client Runtimeの次段階として、Realtime／WebSocket、active-room、部屋一覧、解散を実装する。
+- `develop`とdev環境で先行し、`main`には触れない。
+- 可能な範囲でログイン済み複数アカウントの実操作も確認する。
+
+### 判断
+
+- SDK clientへactor identityを追加せず、active-room・一覧・解散も署名済みCookieから解決した本人だけで処理する。
+- SDK用のRedis Room StoreへTTL、部屋索引、1人1active room、一覧、解散、revision通知を集約し、ゲーム固有server moduleには進行と閲覧者別presentationだけを残す。
+- WebSocketは状態や秘密情報を運ばず、`sdk:<game-id>`、部屋コード、revision、timestampだけを通知する。通知を受けたClient Runtimeは認証済みHTTPで閲覧者別RoomViewを再取得する。
+- 未審査PreviewはRuntimeへ接続せず、静的registryに採用登録したmoduleだけを対象とする。`wordwolf-sdk`は引き続きdevelop限定とする。
+
+### 実施結果
+
+- `lib/game-sdk-platform-room-store.ts`を追加し、SDK roomのRedis TTL、索引、active-room claim／rollback、期限切れ整理、公開ロビー一覧、host解散を集約した。
+- `lib/game-sdk-platform-adapter.ts`へactive room復元、一覧、個別／host一括解散と、`room/join`・`room/leave`に連動するactive-room処理を追加した。
+- `/api/game-sdk/[gameId]/rooms`へGETのactive／一覧分岐とDELETEを追加し、認証・mutation rate limit・安全なTelemetryを既存境界のまま適用した。
+- 公開`@game-fields/game-sdk/client-runtime`へ`readActiveRoom`、`listRooms`、`dissolveRoom`、`dissolveHostedRooms`、`watchRoom`を追加した。
+- Realtime protocolは組み込みゲームの4文字コード契約を維持しつつ、`sdk:<game-id>`だけ4〜12文字のSDK room codeを受理するよう拡張した。
+- SDK watcherはWebSocket利用不能時にポーリングへフォールバックし、接続時も45秒ごとのHTTP整合確認を維持する。
+- SDK fixtureを共通`room/join` lifecycleへ移し、作成、別室競合、active room、一覧、参加、進行中解散拒否、結果後解散、host一括解散、revision通知後のHTTP再取得を縦断テストへ追加した。
+
+### 検証
+
+- `npm run lint`成功。SDK lifecycle・静的registry・actor非送信・DELETE境界を含む規約検査を警告なしで通過した。
+- `npm test`成功（451件）。
+- `npm run test:sdk-package`成功。tarballを外部consumerへ導入し、公開export 4本とClient Runtimeの型・実行を確認した。
+- `npm run test:sdk-starter`成功。公開snapshot、ZIP展開、同梱SDK install、型検査、契約テスト、1ゲーム完走、提出ZIPを確認した。
+- `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
+- `git diff --check`成功。
+
+### 未対応・保留
+
+- `develop`への反映とdev Deployment確認は、この実装コミット作成後に行う。
+- ログイン済み複数アカウントの実操作は、dev Deployment後に利用可能な認証済みブラウザセッションの範囲で確認する。
+- npm registryへの初回公開、Portal上の正式チュートリアル・APIリファレンス・提出画面は引き続き未実装。

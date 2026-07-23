@@ -9,7 +9,11 @@ export const onlineRoomRealtimeGames = [
   "wordwolf",
 ] as const;
 
-export type OnlineRoomRealtimeGame = typeof onlineRoomRealtimeGames[number];
+export type BuiltInOnlineRoomRealtimeGame = typeof onlineRoomRealtimeGames[number];
+export type GameSdkOnlineRoomRealtimeGame = `sdk:${string}`;
+export type OnlineRoomRealtimeGame =
+  | BuiltInOnlineRoomRealtimeGame
+  | GameSdkOnlineRoomRealtimeGame;
 
 export type OnlineRoomSubscription = {
   type: "subscribe";
@@ -37,29 +41,44 @@ export function nextOnlineRoomRealtimeReconnectDelay(currentDelay: number) {
 }
 
 const gameSet = new Set<string>(onlineRoomRealtimeGames);
+const gameSdkRealtimeGamePattern = /^sdk:[a-z][a-z0-9-]{0,63}$/;
+
+export function normalizeOnlineRoomRealtimeGame(value: unknown): OnlineRoomRealtimeGame | null {
+  if (typeof value !== "string") return null;
+  if (gameSet.has(value)) return value as BuiltInOnlineRoomRealtimeGame;
+  return gameSdkRealtimeGamePattern.test(value)
+    ? value as GameSdkOnlineRoomRealtimeGame
+    : null;
+}
 
 export function normalizeOnlineRoomCode(value: unknown) {
   const code = typeof value === "string" ? value.trim().toUpperCase() : "";
   return /^[A-Z0-9]{4}$/.test(code) ? code : "";
 }
 
+export function normalizeOnlineRoomRealtimeCode(
+  game: OnlineRoomRealtimeGame,
+  value: unknown,
+) {
+  const code = typeof value === "string" ? value.normalize("NFKC").trim().toUpperCase() : "";
+  return game.startsWith("sdk:")
+    ? (/^[A-Z0-9]{4,12}$/.test(code) ? code : "")
+    : normalizeOnlineRoomCode(code);
+}
+
 export function parseOnlineRoomSubscription(value: unknown): OnlineRoomSubscription | null {
   if (!value || typeof value !== "object") return null;
   const input = value as Record<string, unknown>;
-  const game = typeof input.game === "string" && gameSet.has(input.game)
-    ? input.game as OnlineRoomRealtimeGame
-    : null;
-  const code = normalizeOnlineRoomCode(input.code);
+  const game = normalizeOnlineRoomRealtimeGame(input.game);
+  const code = game ? normalizeOnlineRoomRealtimeCode(game, input.code) : "";
   return input.type === "subscribe" && game && code ? { type: "subscribe", game, code } : null;
 }
 
 export function parseOnlineRoomRevisionEvent(value: unknown): OnlineRoomRevisionEvent | null {
   if (!value || typeof value !== "object") return null;
   const input = value as Record<string, unknown>;
-  const game = typeof input.game === "string" && gameSet.has(input.game)
-    ? input.game as OnlineRoomRealtimeGame
-    : null;
-  const code = normalizeOnlineRoomCode(input.code);
+  const game = normalizeOnlineRoomRealtimeGame(input.game);
+  const code = game ? normalizeOnlineRoomRealtimeCode(game, input.code) : "";
   const revision = typeof input.revision === "number" && Number.isSafeInteger(input.revision) && input.revision >= 0
     ? input.revision
     : null;
@@ -72,5 +91,5 @@ export function parseOnlineRoomRevisionEvent(value: unknown): OnlineRoomRevision
 }
 
 export function onlineRoomRealtimeChannel(game: OnlineRoomRealtimeGame, code: string) {
-  return `${game}:${normalizeOnlineRoomCode(code)}`;
+  return `${game}:${normalizeOnlineRoomRealtimeCode(game, code)}`;
 }

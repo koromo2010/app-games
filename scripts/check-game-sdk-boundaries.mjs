@@ -28,6 +28,7 @@ const starterSourceFiles = ["src", "tests"].flatMap((directory) =>
     .map((name) => join(starterRoot, directory, name)),
 );
 const allowedRelativeImports = new Set([
+  "./client-realtime.js",
   "./index.js",
   "./runtime.js",
 ]);
@@ -58,6 +59,7 @@ for (const token of [
   "requireAuthenticatedPlayer",
   "rateLimitPolicies.roomMutation",
   "createGameSdkOnlineRoomHttpHandlers",
+  "export function DELETE",
 ]) {
   if (!sdkRoomRouteSource.includes(token)) {
     failures.push(`${relative(root, sdkRoomRouteFile)}: SDK Room Routeに必須境界 ${token} がありません。`);
@@ -79,6 +81,11 @@ if (/fetch\s*\(|SDK_PORTAL_INTERNAL_URL|preview-runtime/.test(sdkServerRegistryS
 const sdkHttpClientSource = readFileSync(sdkHttpClientFile, "utf8");
 if (!sdkHttpClientSource.includes("credentials: \"same-origin\"")) {
   failures.push(`${relative(root, sdkHttpClientFile)}: 署名済みplatform sessionを使うsame-origin通信がありません。`);
+}
+for (const token of ["readActiveRoom", "listRooms", "dissolveRoom", "watchRoom"]) {
+  if (!sdkHttpClientSource.includes(token)) {
+    failures.push(`${relative(root, sdkHttpClientFile)}: Online Room lifecycle契約 ${token} がありません。`);
+  }
 }
 if (/\b(actor|playerId|displayName|debugAccess)\s*:/.test(sdkHttpClientSource)) {
   failures.push(`${relative(root, sdkHttpClientFile)}: Client Runtimeがactor identityをHTTP payloadへ組み立てています。`);

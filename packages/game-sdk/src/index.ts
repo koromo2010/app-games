@@ -117,6 +117,20 @@ export type GameSdkCommandResult<TRoomView> = {
   revision: number;
 };
 
+export type GameSdkRoomListItem = {
+  code: string;
+  phase: string;
+  revision: number;
+  playerCount: number;
+  maximumPlayers: number;
+  updatedAt: number;
+};
+
+export type GameSdkRoomListPage = {
+  rooms: GameSdkRoomListItem[];
+  nextCursor: string | null;
+};
+
 /** Commands whose authorization and state transition are identical across games. */
 export type GameSdkRoomLifecycleCommand<TSettings> =
   | { type: "room/join" }
@@ -130,12 +144,27 @@ export type GameSdkRoomLifecycleCommand<TSettings> =
  * purpose: the platform derives it from the signed HttpOnly session.
  */
 export type GameSdkClientRuntime<TCreateInput, TCommand extends { type: string }, TRoomView> = {
-  createRoom(input: TCreateInput): Promise<GameSdkRoomSnapshot<TRoomView>>;
+  createRoom(input: {
+    roomCode: string;
+    create: TCreateInput;
+  }): Promise<GameSdkRoomSnapshot<TRoomView>>;
   readRoom(code: string): Promise<GameSdkRoomSnapshot<TRoomView> | null>;
+  readActiveRoom(): Promise<GameSdkRoomSnapshot<TRoomView> | null>;
+  listRooms(cursor?: string | null): Promise<GameSdkRoomListPage>;
   sendCommand(
     code: string,
     envelope: GameSdkCommandEnvelope<TCommand>,
   ): Promise<GameSdkCommandResult<TRoomView>>;
+  dissolveRoom(code: string): Promise<boolean>;
+  dissolveHostedRooms(): Promise<number>;
+  watchRoom(
+    code: string,
+    observer: {
+      onRoom(room: GameSdkRoomSnapshot<TRoomView> | null): void;
+      onError?(error: unknown): void;
+      onStatus?(status: "connecting" | "connected" | "polling" | "closed"): void;
+    },
+  ): { close(): void };
 };
 
 export function assertGameManifest(manifest: GameSdkManifest): void {

@@ -1,8 +1,22 @@
 import type {
   GameSdkCommandEnvelope,
   GameSdkCommandResult,
+  GameSdkRoomListPage,
   GameSdkRoomSnapshot,
 } from "./index.js";
+import {
+  createGameSdkRoomWatcher,
+  type GameSdkRoomWatch,
+  type GameSdkRoomWatchObserver,
+  type GameSdkWebSocketLike,
+} from "./client-realtime.js";
+
+export type {
+  GameSdkRoomWatch,
+  GameSdkRoomWatchObserver,
+  GameSdkRoomWatchStatus,
+  GameSdkWebSocketLike,
+} from "./client-realtime.js";
 
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
@@ -16,14 +30,27 @@ export type GameSdkHttpClientRuntime<
     create: TCreateInput;
   }): Promise<GameSdkRoomSnapshot<TRoomView>>;
   readRoom(code: string): Promise<GameSdkRoomSnapshot<TRoomView> | null>;
+  readActiveRoom(): Promise<GameSdkRoomSnapshot<TRoomView> | null>;
+  listRooms(cursor?: string | null): Promise<GameSdkRoomListPage>;
   sendCommand(
     code: string,
     envelope: GameSdkCommandEnvelope<TCommand>,
   ): Promise<GameSdkCommandResult<TRoomView>>;
+  dissolveRoom(code: string): Promise<boolean>;
+  dissolveHostedRooms(): Promise<number>;
+  watchRoom(
+    code: string,
+    observer: GameSdkRoomWatchObserver<TRoomView>,
+  ): GameSdkRoomWatch;
 };
 
 export type GameSdkHttpClientRuntimeOptions = {
+  gameId: string;
   endpoint: string;
+  realtimeEndpoint?: string;
+  pollingInterval?: number;
+  reconciliationInterval?: number;
+  webSocketFactory?: (url: string) => GameSdkWebSocketLike;
   fetcher?: Fetcher;
 };
 
@@ -54,6 +81,13 @@ function roomUrl(endpoint: string, code: string) {
   return `${url.pathname}${url.search}`;
 }
 
+function queryUrl(endpoint: string, query: Record<string, string>) {
+  const url = new URL(endpoint, "https://game-fields.invalid");
+  for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
+  if (/^https?:\/\//.test(endpoint)) return url.toString();
+  return `${url.pathname}${url.search}`;
+}
+
 function errorCode(payload: unknown, fallback: string) {
   if (!payload || typeof payload !== "object") return fallback;
   const value = (payload as { error?: unknown }).error;
@@ -71,6 +105,25 @@ function isRoomSnapshot<TRoomView>(value: unknown): value is GameSdkRoomSnapshot
     && Number(room.revision) >= 1
     && typeof room.phase === "string"
     && "view" in room
+  );
+}
+
+function isRoomListPage(value: unknown): value is GameSdkRoomListPage {
+  if (!value || typeof value !== "object") return false;
+  const page = value as Partial<GameSdkRoomListPage>;
+  return (
+    Array.isArray(page.rooms)
+    && (page.nextCursor === null || typeof page.nextCursor === "string")
+    && page.rooms.every((room) => (
+      room
+      && typeof room === "object"
+      && typeof room.code === "string"
+      && typeof room.phase === "string"
+      && Number.isSafeInteger(room.revision)
+      && Number.isSafeInteger(room.playerCount)
+      && Number.isSafeInteger(room.maximumPlayers)
+      && typeof room.updatedAt === "number"
+    ))
   );
 }
 
@@ -114,12 +167,21 @@ export function createGameSdkHttpClientRuntime<
   TCommand extends { type: string },
   TRoomView,
 >({
+  gameId: gameIdInput,
   endpoint: endpointInput,
+  realtimeEndpoint = "/api/online-room-events",
+  pollingInterval = 4_000,
+  reconciliationInterval = 45_000,
+  webSocketFactory,
   fetcher = fetch,
 }: GameSdkHttpClientRuntimeOptions): GameSdkHttpClientRuntime<TCreateInput, TCommand, TRoomView> {
   const endpoint = normalizeEndpoint(endpointInput);
+  const gameId = gameIdInput.trim().toLowerCase();
+  if (!/^[a-z][a-z0-9-]*$/.test(gameId)) {
+    throw new Error("Game SDK gameId is invalid.");
+  }
 
-  return {
+  const runtime: GameSdkHttpClientRuntime<TCreateInput, TCommand, TRoomView> = {
     async createRoom(input) {
       const payload = await requestJson(
         fetcher,
@@ -170,6 +232,44 @@ export function createGameSdkHttpClientRuntime<
       return room;
     },
 
+    async readActiveRoom() {
+      const payload = await requestJson(
+        fetcher,
+        queryUrl(endpoint, { active: "1" }),
+        { method: "GET" },
+        "GAME_SDK_ACTIVE_ROOM_READ_FAILED",
+      );
+      const room = (payload as { room?: unknown }).room;
+      if (room === null) return null;
+      if (!isRoomSnapshot<TRoomView>(room)) {
+        throw new GameSdkHttpClientRuntimeError(
+          "GAME_SDK_INVALID_ROOM_RESPONSE",
+          502,
+          payload,
+        );
+      }
+      return room;
+    },
+
+    async listRooms(cursor = null) {
+      const query: Record<string, string> = {};
+      if (cursor) query.cursor = cursor;
+      const payload = await requestJson(
+        fetcher,
+        queryUrl(endpoint, query),
+        { method: "GET" },
+        "GAME_SDK_ROOM_LIST_FAILED",
+      );
+      if (!isRoomListPage(payload)) {
+        throw new GameSdkHttpClientRuntimeError(
+          "GAME_SDK_INVALID_ROOM_LIST_RESPONSE",
+          502,
+          payload,
+        );
+      }
+      return payload;
+    },
+
     async sendCommand(code, envelope) {
       const payload = await requestJson(
         fetcher,
@@ -195,5 +295,50 @@ export function createGameSdkHttpClientRuntime<
       }
       return result as GameSdkCommandResult<TRoomView>;
     },
+
+    async dissolveRoom(code) {
+      const payload = await requestJson(
+        fetcher,
+        roomUrl(endpoint, code),
+        { method: "DELETE" },
+        "GAME_SDK_ROOM_DISSOLVE_FAILED",
+      );
+      return (payload as { dissolved?: unknown }).dissolved === true;
+    },
+
+    async dissolveHostedRooms() {
+      const payload = await requestJson(
+        fetcher,
+        queryUrl(endpoint, { hosted: "1" }),
+        { method: "DELETE" },
+        "GAME_SDK_HOSTED_ROOMS_DISSOLVE_FAILED",
+      );
+      const count = (payload as { dissolved?: unknown }).dissolved;
+      if (!Number.isSafeInteger(count) || Number(count) < 0) {
+        throw new GameSdkHttpClientRuntimeError(
+          "GAME_SDK_INVALID_DISSOLVE_RESPONSE",
+          502,
+          payload,
+        );
+      }
+      return Number(count);
+    },
+
+    watchRoom(code, observer) {
+      return createGameSdkRoomWatcher({
+        gameId,
+        code,
+        endpoint,
+        realtimeEndpoint,
+        fetcher,
+        readRoom: runtime.readRoom,
+        observer,
+        pollingInterval,
+        reconciliationInterval,
+        webSocketFactory,
+      });
+    },
   };
+
+  return runtime;
 }

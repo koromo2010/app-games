@@ -1,22 +1,29 @@
 import type {
   GameSdkCommandEnvelope,
   GameSdkCommandResult,
+  GameSdkRoomListPage,
   GameSdkRoomSnapshot,
   GameSdkStoredRoom,
 } from "@game-fields/game-sdk";
 import type { GameSdkServerModule } from "@game-fields/game-sdk/runtime";
 import {
   createGameFieldsPlatformRuntime,
-  GAME_FIELDS_PLATFORM_ROOM_SCHEMA_VERSION,
   type GameFieldsAuthenticatedIdentity,
   type GameFieldsPlatformRoomPersistence,
-  type GameFieldsPlatformRoomRecord,
 } from "@game-fields/game-runtime";
-import { createIndexedOnlineRoom, compareAndSetOnlineRoom } from "./online-room-persistence.ts";
-import { redisCommand } from "./redis-store.ts";
+import {
+  createRedisGameSdkPlatformPersistence,
+  createRedisGameSdkPlatformRoomStore,
+  normalizeGameSdkPlatformRoomCode,
+  type GameSdkPlatformRoomStore,
+} from "./game-sdk-platform-room-store.ts";
 
-const maximumPlatformRoomBytes = 512_000;
-const platformRoomCreateConflict = "GAME_SDK_PLATFORM_ROOM_ALREADY_EXISTS";
+export {
+  createRedisGameSdkPlatformPersistence,
+  gameSdkPlatformRoomIndexKey,
+  gameSdkPlatformRoomKey,
+  normalizeGameSdkPlatformRoomCode,
+} from "./game-sdk-platform-room-store.ts";
 
 type IdentityResolver = () => Promise<GameFieldsAuthenticatedIdentity>;
 
@@ -28,6 +35,7 @@ type AuthenticatedPlatformAdapterOptions<
 > = {
   module: GameSdkServerModule<TRoom, TCreateInput, TCommand, TRoomView>;
   persistence?: GameFieldsPlatformRoomPersistence<TRoom>;
+  roomStore?: GameSdkPlatformRoomStore<TRoom>;
   resolveIdentity?: IdentityResolver;
   now?: () => number;
   createRequestId?: () => string;
@@ -43,106 +51,15 @@ export type AuthenticatedGameSdkPlatformAdapter<
     create: TCreateInput;
   }): Promise<GameSdkRoomSnapshot<TRoomView>>;
   readRoom(code: string): Promise<GameSdkRoomSnapshot<TRoomView> | null>;
+  readActiveRoom(): Promise<GameSdkRoomSnapshot<TRoomView> | null>;
+  listRooms(cursor?: string | null): Promise<GameSdkRoomListPage>;
   sendCommand(input: {
     code: string;
     envelope: GameSdkCommandEnvelope<TCommand>;
   }): Promise<GameSdkCommandResult<TRoomView>>;
+  dissolveRoom(code: string): Promise<boolean>;
+  dissolveHostedRooms(): Promise<number>;
 };
-
-export function normalizeGameSdkPlatformRoomCode(value: string) {
-  const code = value.normalize("NFKC").trim().toUpperCase();
-  if (!/^[A-Z0-9]{4,12}$/.test(code)) throw new Error("GAME_SDK_INVALID_ROOM_CODE");
-  return code;
-}
-
-function roomPrefix(gameId: string) {
-  return `game-sdk-runtime:v1:${gameId}`;
-}
-
-export function gameSdkPlatformRoomKey(gameId: string, code: string) {
-  return `${roomPrefix(gameId)}:room:${normalizeGameSdkPlatformRoomCode(code)}`;
-}
-
-export function gameSdkPlatformRoomIndexKey(gameId: string) {
-  return `${roomPrefix(gameId)}:rooms`;
-}
-
-function serializedRecord<TRoom extends GameSdkStoredRoom>(record: GameFieldsPlatformRoomRecord<TRoom>) {
-  const value = JSON.stringify(record);
-  if (Buffer.byteLength(value, "utf8") > maximumPlatformRoomBytes) {
-    throw new Error("GAME_SDK_PLATFORM_ROOM_TOO_LARGE");
-  }
-  return value;
-}
-
-function parseRecord<TRoom extends GameSdkStoredRoom>(raw: string, gameId: string, code: string) {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    throw new Error("GAME_SDK_INVALID_STORED_ROOM");
-  }
-  if (!parsed || typeof parsed !== "object") throw new Error("GAME_SDK_INVALID_STORED_ROOM");
-  const record = parsed as Partial<GameFieldsPlatformRoomRecord<TRoom>>;
-  const room = record.room as Partial<TRoom> | undefined;
-  if (
-    record.schemaVersion !== GAME_FIELDS_PLATFORM_ROOM_SCHEMA_VERSION
-    || record.gameId !== gameId
-    || record.code !== code
-    || typeof record.hostPlayerId !== "string"
-    || !record.hostPlayerId.trim()
-    || !Number.isSafeInteger(record.revision)
-    || typeof record.phase !== "string"
-    || typeof record.createdAt !== "number"
-    || typeof record.updatedAt !== "number"
-    || !room
-    || room.code !== code
-    || room.revision !== record.revision
-    || room.phase !== record.phase
-  ) {
-    throw new Error("GAME_SDK_INVALID_STORED_ROOM");
-  }
-  return record as GameFieldsPlatformRoomRecord<TRoom>;
-}
-
-export function createRedisGameSdkPlatformPersistence<TRoom extends GameSdkStoredRoom>(
-  gameId: string,
-): GameFieldsPlatformRoomPersistence<TRoom> {
-  return {
-    async create(record) {
-      serializedRecord(record);
-      try {
-        await createIndexedOnlineRoom(record, {
-          roomKey: (code) => gameSdkPlatformRoomKey(gameId, code),
-          roomIndexKey: gameSdkPlatformRoomIndexKey(gameId),
-          conflictError: platformRoomCreateConflict,
-        });
-        return "created";
-      } catch (error) {
-        if (error instanceof Error && error.message === platformRoomCreateConflict) return "exists";
-        throw error;
-      }
-    },
-
-    async load(codeInput) {
-      const code = normalizeGameSdkPlatformRoomCode(codeInput);
-      const raw = await redisCommand<string | null>(["GET", gameSdkPlatformRoomKey(gameId, code)]);
-      return raw ? parseRecord<TRoom>(raw, gameId, code) : null;
-    },
-
-    async compareAndSet(expectedRevision, record) {
-      serializedRecord(record);
-      const result = await compareAndSetOnlineRoom(
-        expectedRevision,
-        record,
-        (code) => gameSdkPlatformRoomKey(gameId, code),
-      );
-      if (result === 1) return "saved";
-      if (result === -1) return "missing";
-      return "conflict";
-    },
-  };
-}
 
 async function resolveAuthenticatedIdentity(supportsDebug: boolean): Promise<GameFieldsAuthenticatedIdentity> {
   const [{ requireAuthenticatedPlayer }, { playerHasDebugAccess }] = await Promise.all([
@@ -169,11 +86,17 @@ export function createAuthenticatedGameSdkPlatformAdapter<
   TRoomView,
 >({
   module,
-  persistence = createRedisGameSdkPlatformPersistence<TRoom>(module.manifest.id),
+  persistence: persistenceInput,
+  roomStore: roomStoreInput,
   resolveIdentity = () => resolveAuthenticatedIdentity(module.manifest.supportsDebug),
   now,
   createRequestId,
 }: AuthenticatedPlatformAdapterOptions<TRoom, TCreateInput, TCommand, TRoomView>): AuthenticatedGameSdkPlatformAdapter<TCreateInput, TCommand, TRoomView> {
+  const roomStore = roomStoreInput
+    ?? (persistenceInput ? null : createRedisGameSdkPlatformRoomStore<TRoom>(module.manifest.id));
+  const persistence = roomStore
+    ?? persistenceInput
+    ?? createRedisGameSdkPlatformPersistence<TRoom>(module.manifest.id);
   const runtime = createGameFieldsPlatformRuntime({
     module,
     persistence,
@@ -184,11 +107,23 @@ export function createAuthenticatedGameSdkPlatformAdapter<
   return {
     async createRoom({ roomCode, create }) {
       const identity = await resolveIdentity();
-      return runtime.createRoom({
-        roomCode: normalizeGameSdkPlatformRoomCode(roomCode),
-        create,
-        identity,
-      });
+      const normalizedCode = normalizeGameSdkPlatformRoomCode(roomCode);
+      const claim = roomStore
+        ? await roomStore.claimActiveRoom(identity.playerId, normalizedCode)
+        : null;
+      try {
+        const room = await runtime.createRoom({
+          roomCode: normalizedCode,
+          create,
+          identity,
+        });
+        const record = roomStore ? await roomStore.load(normalizedCode) : null;
+        if (record) await roomStore!.publishRevision(record);
+        return room;
+      } catch (error) {
+        if (claim) await roomStore!.rollbackActiveRoomClaim(claim);
+        throw error;
+      }
     },
 
     async readRoom(code) {
@@ -199,13 +134,64 @@ export function createAuthenticatedGameSdkPlatformAdapter<
       });
     },
 
+    async readActiveRoom() {
+      const identity = await resolveIdentity();
+      if (!roomStore) throw new Error("GAME_SDK_LIFECYCLE_UNAVAILABLE");
+      const record = await roomStore.loadActiveRoom(identity.playerId);
+      if (!record) return null;
+      return runtime.readRoom({ code: record.code, identity });
+    },
+
+    async listRooms(cursor) {
+      await resolveIdentity();
+      if (!roomStore) throw new Error("GAME_SDK_LIFECYCLE_UNAVAILABLE");
+      return roomStore.listRooms(cursor, module.manifest.maximumPlayers);
+    },
+
     async sendCommand({ code, envelope }) {
       const identity = await resolveIdentity();
-      return runtime.sendCommand({
-        code: normalizeGameSdkPlatformRoomCode(code),
-        envelope,
-        identity,
-      });
+      const normalizedCode = normalizeGameSdkPlatformRoomCode(code);
+      const lifecycleType = envelope.command.type;
+      const claim = roomStore && lifecycleType === "room/join"
+        ? await roomStore.claimActiveRoom(identity.playerId, normalizedCode)
+        : null;
+      try {
+        const result = await runtime.sendCommand({
+          code: normalizedCode,
+          envelope,
+          identity,
+        });
+        if (roomStore && lifecycleType === "room/leave") {
+          await roomStore.releaseActiveRoom(identity.playerId, normalizedCode);
+        }
+        const record = roomStore ? await roomStore.load(normalizedCode) : null;
+        if (record) await roomStore!.publishRevision(record);
+        return result;
+      } catch (error) {
+        if (claim) await roomStore!.rollbackActiveRoomClaim(claim);
+        throw error;
+      }
+    },
+
+    async dissolveRoom(code) {
+      const identity = await resolveIdentity();
+      if (!roomStore) throw new Error("GAME_SDK_LIFECYCLE_UNAVAILABLE");
+      const record = await roomStore.dissolveRoom(
+        normalizeGameSdkPlatformRoomCode(code),
+        identity.playerId,
+      );
+      if (record) await roomStore.publishRevision(record, record.revision + 1);
+      return Boolean(record);
+    },
+
+    async dissolveHostedRooms() {
+      const identity = await resolveIdentity();
+      if (!roomStore) throw new Error("GAME_SDK_LIFECYCLE_UNAVAILABLE");
+      const records = await roomStore.dissolveHostedRooms(identity.playerId);
+      await Promise.all(records.map(
+        (record) => roomStore.publishRevision(record, record.revision + 1),
+      ));
+      return records.length;
     },
   };
 }

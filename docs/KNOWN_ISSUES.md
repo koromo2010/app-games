@@ -132,6 +132,14 @@
 3. アバターをサーバー側で寸法制限・再エンコードし、将来はオブジェクトストレージへ移す。
 4. ワードウルフ以外も含む全Commandへ、保存済みreceiptを使う冪等な`commandId`処理を共通化する。ワードウルフの開始・発言・投票・逆転回答は状態ベースの重複判定とフェーズscopeまで対応済み。
 
+## 2026-07-23 SDKゲームのRoom lifecycleとRealtimeが本体契約へ未接続
+
+状態: 修正済み（2026-07-23、回帰テストあり）
+
+採用済みSDKゲームは作成・取得・Commandの汎用HTTPまで接続されていたが、1人1active room、参加可能な部屋一覧、ロビー／結果後の解散、revision通知がなく、本体8ゲームと復帰・同期契約が異なっていた。
+
+SDK用Redis Room StoreへTTL、索引、active-room claim、一覧、host解散を集約し、公開Client Runtimeへ復元・一覧・解散・watcherを追加した。WebSocketは`game = sdk:<game-id>`と4〜12文字の部屋コード、revision、時刻だけを運び、クライアントは通知後に認証済みHTTPから閲覧者別Viewを再取得する。未審査Previewと`main`未登録moduleは引き続き接続できない。
+
 ## 2026-07-21 言語URLの開発起動確認
 
 ### locale proxyの内部rewriteが同じURLへredirectする

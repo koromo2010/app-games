@@ -19,7 +19,7 @@ try {
   const [packResult] = JSON.parse(packOutput);
   if (!packResult?.filename) throw new Error("SDK tarball was not created.");
 
-  const allowedFiles = /^(README\.md|package\.json|dist\/(index|runtime|mock-runtime|client-runtime)\.(js|js\.map|d\.ts|d\.ts\.map))$/;
+  const allowedFiles = /^(README\.md|package\.json|dist\/(index|runtime|mock-runtime|client-runtime|client-realtime)\.(js|js\.map|d\.ts|d\.ts\.map))$/;
   const unexpectedFiles = (packResult.files ?? [])
     .map((file) => file.path)
     .filter((path) => !allowedFiles.test(path));
@@ -80,6 +80,7 @@ const result = await runtime.sendCommand({
 });
 if (result.revision !== 2 || result.room.view.phase !== "playing") process.exit(1);
 const httpRuntime = createGameSdkHttpClientRuntime({
+  gameId: "pack-consumer",
   endpoint: "https://game-fields.example/api/game-sdk/pack-consumer/rooms",
   fetcher: async () => Response.json({ room: created }),
 });

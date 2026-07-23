@@ -15,7 +15,7 @@ type RouteContext = {
   params: Promise<{ gameId: string }>;
 };
 
-type Method = "GET" | "POST" | "PATCH";
+type Method = "GET" | "POST" | "PATCH" | "DELETE";
 
 function json(payload: unknown, status: number) {
   return Response.json(payload, {
@@ -33,7 +33,13 @@ async function handle(request: Request, context: RouteContext, method: Method) {
   const route = `/api/game-sdk/${gameId}/rooms`;
   const telemetry = createRequestTelemetry(request, route, {
     game: `sdk:${gameId}`,
-    operation: method === "GET" ? "room-read" : method === "POST" ? "room-create" : "room-command",
+    operation: method === "GET"
+      ? "room-read"
+      : method === "POST"
+        ? "room-create"
+        : method === "PATCH"
+          ? "room-command"
+          : "room-dissolve",
   });
 
   try {
@@ -57,14 +63,15 @@ async function handle(request: Request, context: RouteContext, method: Method) {
     let observed = false;
     const handlers = createGameSdkOnlineRoomHttpHandlers({
       adapter: registration.createAdapter(async () => identity),
-      onSuccess(operation, room) {
+      onSuccess(operation, room, affected) {
         observed = true;
+        if (method === "GET") return;
         telemetry.success("game-sdk.room", {
           action: operation,
-          roomRef: telemetry.roomRef(room.code),
+          ...(room ? { roomRef: telemetry.roomRef(room.code) } : {}),
           actorRef,
-          phase: room.phase,
-          revision: room.revision,
+          ...(room ? { phase: room.phase, revision: room.revision } : {}),
+          ...(affected === undefined ? {} : { affected }),
         });
       },
       onError(operation, error, status) {
@@ -101,4 +108,8 @@ export function POST(request: Request, context: RouteContext) {
 
 export function PATCH(request: Request, context: RouteContext) {
   return handle(request, context, "PATCH");
+}
+
+export function DELETE(request: Request, context: RouteContext) {
+  return handle(request, context, "DELETE");
 }

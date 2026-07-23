@@ -88,6 +88,7 @@ Mock Runtimeはローカルテスト用であり、本番Redisや認証への接
 
 ```ts
 const runtime = createGameSdkHttpClientRuntime<CreateInput, Command, RoomView>({
+  gameId: "<game-id>",
   endpoint: "/api/game-sdk/<game-id>/rooms",
 });
 
@@ -100,7 +101,20 @@ await runtime.sendCommand(room.code, {
   expectedRevision: room.revision,
   command: { type: "game/start" },
 });
+
+const activeRoom = await runtime.readActiveRoom();
+const lobbyPage = await runtime.listRooms();
+const watch = runtime.watchRoom(room.code, {
+  onRoom(nextRoom) {
+    // revision通知後に再取得された閲覧者別RoomView
+  },
+});
+
+// 画面破棄時
+watch.close();
 ```
+
+`dissolveRoom(code)`はhostがロビーまたは結果後に使い、`dissolveHostedRooms()`は同じ条件でhost所有Roomを整理します。`watchRoom`のWebSocket通知はゲームID、部屋コード、revision、時刻だけを運び、Room状態や秘密情報を運びません。接続不能時はポーリングへフォールバックします。
 
 Client Runtimeへactor ID、表示名、debug資格を渡す引数はありません。Game Fieldsが同一originの署名済みHttpOnly Cookieから本人を解決し、server moduleの`context.actor`へ注入します。404のRoom取得は`null`、認証・競合・入力拒否はstatusと安全なcodeを持つ`GameSdkHttpClientRuntimeError`になります。
 

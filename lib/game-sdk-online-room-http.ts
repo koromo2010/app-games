@@ -6,7 +6,14 @@ import type {
 import { GameFieldsPlatformRuntimeError } from "@game-fields/game-runtime";
 import type { AuthenticatedGameSdkPlatformAdapter } from "./game-sdk-platform-adapter.ts";
 
-export type GameSdkOnlineRoomHttpOperation = "read" | "create" | "command";
+export type GameSdkOnlineRoomHttpOperation =
+  | "read"
+  | "active"
+  | "list"
+  | "create"
+  | "command"
+  | "dissolve"
+  | "dissolve-hosted";
 
 type SafeCommand = { type: string };
 
@@ -20,7 +27,8 @@ type HttpHandlerOptions = {
   adapter: HttpAdapter;
   onSuccess?: (
     operation: GameSdkOnlineRoomHttpOperation,
-    room: GameSdkRoomSnapshot<unknown>,
+    room?: GameSdkRoomSnapshot<unknown>,
+    affected?: number,
   ) => void;
   onError?: (
     operation: GameSdkOnlineRoomHttpOperation,
@@ -42,6 +50,7 @@ const conflictCodes = new Set([
   "INVALID_PHASE",
   "LOBBY_REQUIRED",
   "NOT_ENOUGH_PLAYERS",
+  "PLAYER_ACTIVE_ROOM",
   "PLAYER_ALREADY_JOINED",
   "RESULT_REQUIRED",
   "ROOM_FULL",
@@ -130,10 +139,22 @@ export function createGameSdkOnlineRoomHttpHandlers({
   onError,
 }: HttpHandlerOptions) {
   async function GET(request: Request) {
-    const operation = "read" as const;
+    let operation: GameSdkOnlineRoomHttpOperation = "list";
     try {
-      const code = new URL(request.url).searchParams.get("code") ?? "";
-      if (!code.trim()) return json({ error: "GAME_SDK_ROOM_CODE_REQUIRED" }, 400);
+      const searchParams = new URL(request.url).searchParams;
+      if (searchParams.get("active") === "1") {
+        operation = "active";
+        const room = await adapter.readActiveRoom();
+        onSuccess?.(operation, room ?? undefined);
+        return json({ room });
+      }
+      const code = searchParams.get("code") ?? "";
+      if (!code.trim()) {
+        const page = await adapter.listRooms(searchParams.get("cursor"));
+        onSuccess?.(operation, undefined, page.rooms.length);
+        return json(page);
+      }
+      operation = "read";
       const room = await adapter.readRoom(code);
       if (!room) return json({ error: "ROOM_NOT_FOUND" }, 404);
       onSuccess?.(operation, room);
@@ -187,5 +208,27 @@ export function createGameSdkOnlineRoomHttpHandlers({
     }
   }
 
-  return { GET, POST, PATCH };
+  async function DELETE(request: Request) {
+    let operation: GameSdkOnlineRoomHttpOperation = "dissolve";
+    try {
+      const searchParams = new URL(request.url).searchParams;
+      if (searchParams.get("hosted") === "1") {
+        operation = "dissolve-hosted";
+        const dissolved = await adapter.dissolveHostedRooms();
+        onSuccess?.(operation, undefined, dissolved);
+        return json({ dissolved });
+      }
+      const code = searchParams.get("code") ?? "";
+      if (!code.trim()) return json({ error: "GAME_SDK_ROOM_CODE_REQUIRED" }, 400);
+      const dissolved = await adapter.dissolveRoom(code);
+      onSuccess?.(operation, undefined, dissolved ? 1 : 0);
+      return json({ dissolved });
+    } catch (error) {
+      const response = gameSdkOnlineRoomErrorResponse(error);
+      onError?.(operation, error, response.status);
+      return response;
+    }
+  }
+
+  return { GET, POST, PATCH, DELETE };
 }
