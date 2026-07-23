@@ -2199,5 +2199,7 @@
 
 ### 未対応・保留
 
-- `develop`と`app-games-dev`への反映は、この記録を含むコミットで行う。
-- dev実機で8ゲームの追加・個別削除・DEBUG OFF一括整理と、コードインターセプトのチーム再調整を確認する。
+- `develop`へ実装コミット`e3ed58e`をforceなしのfast-forwardで反映済み。
+- `app-games-dev`の対象Deployment `dpl_3gZgXT8S7j25HGLvnkKYb2aEhUcj`が`READY`となり、`dev.game-fields.com`へのalias割当を確認した。
+- devのノーザンブランチとコードインターセプトがHTTP 200を返し、HTML内のDeployment IDが対象Deploymentと一致すること、実行時error・fatalログがないことを確認した。
+- ログイン・privateアクセス認証済み画面で、8ゲームの追加・個別削除・DEBUG OFF一括整理と、コードインターセプトのチーム再調整を実ボタン確認する。
