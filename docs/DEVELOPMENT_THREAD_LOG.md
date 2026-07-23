@@ -2403,9 +2403,12 @@
 - local production serverで公開handshakeを確認し、一致requestはHTTP 200・`accepted=true`、環境違いと未提供capabilityはHTTP 409・安全なproblem codeを返した。
 - `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
 - `git diff --check`成功。
+- 実装commit `1bc2fb7130041e948cd64403aaee40510aa8330b`を`develop`へforceなしでfast-forwardし、GitHub上のtreeがローカル検証済みtreeと一致することを確認した。
+- SDK PortalのDeployment `dpl_9RwycG1GhhXZUGP8sVcRJHy4HPxH`と本体devのDeployment `dpl_GZwoT5kbTS7yLdv1j54nS9v9bxVt`が同じ実装commitで`READY`となり、`sdk-dev.game-fields.com`と`dev.game-fields.com`のaliasがそれぞれ切り替わった。
+- 公開`/.well-known/game-fields-sdk`のGETでdevelopment descriptorを確認した。一致requestはHTTP 200・`accepted=true`・`problems=[]`、production環境と未提供`submission-upload`を要求した場合はHTTP 409・`ENVIRONMENT_MISMATCH`・`CAPABILITY_UNAVAILABLE`を返した。
+- 公開DownloadMe ver6に`get_sdk_handshake`を制作質問より先に呼び、`accepted=true`確認後だけ`list_creator_environments`へ進む指示が含まれることを確認した。
+- 両Deploymentのerror・fatalログと集約Runtime Errorsはいずれも0件だった。
 
 ### 未対応・保留
-
-- `develop`および`sdk-dev.game-fields.com`への反映と、公開handshake endpointの実応答確認は未実施。
 - Portalの正式チュートリアル、APIリファレンス、提出画面はhandshake確定後の次段階として未実装。
 - 採用済みゲームのbrowser Runtimeへhandshakeを強制する処理は未実装。今回のv1はDownloadMe／AIとSDK Portalのcontrol planeを先に確定した。
