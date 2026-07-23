@@ -38,6 +38,7 @@ export async function ensureSdkSchema() {
           title VARCHAR(120) NOT NULL,
           description VARCHAR(500) NOT NULL DEFAULT '',
           manifest JSONB NOT NULL,
+          module_policy JSONB NOT NULL DEFAULT '{}'::jsonb,
           sdk_package_version VARCHAR(32) NOT NULL,
           sdk_contract_version INTEGER NOT NULL,
           mock_revision CHAR(40),
@@ -48,6 +49,7 @@ export async function ensureSdkSchema() {
         )
       `;
       await sql`ALTER TABLE sdk_games ADD COLUMN IF NOT EXISTS mock_revision CHAR(40)`;
+      await sql`ALTER TABLE sdk_games ADD COLUMN IF NOT EXISTS module_policy JSONB NOT NULL DEFAULT '{}'::jsonb`;
       await sql`ALTER TABLE sdk_creators ADD COLUMN IF NOT EXISTS owner_player_id VARCHAR(120)`;
       await sql`CREATE UNIQUE INDEX IF NOT EXISTS sdk_creators_owner_slug_idx ON sdk_creators (owner_player_id, slug) WHERE owner_player_id IS NOT NULL`;
       await sql`CREATE INDEX IF NOT EXISTS sdk_games_creator_updated_idx ON sdk_games (creator_id, updated_at DESC)`;

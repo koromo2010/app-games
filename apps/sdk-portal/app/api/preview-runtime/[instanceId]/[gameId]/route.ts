@@ -1,5 +1,6 @@
 import { getCreatorGamePreview, normalizeInstanceSlug, validateInstanceSlug } from "@/lib/instance-registry";
 import { createPreviewRuntimeUrl } from "@/lib/preview-links";
+import { normalizeGameSdkModuleProfile } from "@game-fields/game-sdk/modules";
 
 export const dynamic = "force-dynamic";
 const GAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?$/;
@@ -12,7 +13,15 @@ export async function GET(_: Request, { params }: { params: Promise<{ instanceId
   const game = await getCreatorGamePreview(instanceId, gameId).catch(() => null);
   if (!game) return Response.json({ error: "not_found" }, { status: 404 });
   try {
-    return Response.json({ title: game.title, runtimeUrl: createPreviewRuntimeUrl({ instanceId, gameId, revision: game.mockRevision }) }, { headers: { "Cache-Control": "no-store" } });
+    return Response.json({
+      title: game.title,
+      runtimeUrl: createPreviewRuntimeUrl({
+        instanceId,
+        gameId,
+        revision: game.mockRevision,
+      }),
+      modulePolicy: normalizeGameSdkModuleProfile(game.modulePolicy),
+    }, { headers: { "Cache-Control": "no-store" } });
   } catch {
     return Response.json({ error: "preview_unavailable" }, { status: 503 });
   }

@@ -5,6 +5,7 @@ import { onlineRoomPlayerLimits } from "./online-room-policy.ts";
 import { runtimeHyperparameterNumber } from "./runtime-hyperparameters-core.ts";
 import { commonGameTimeoutGraceMs } from "./game-timer/policy.ts";
 import type { AppLocale } from "./app-locale.ts";
+import { distributeGameSdkBalancedTeams } from "@game-fields/game-sdk/modules";
 
 export const codeInterceptGameId = "code-intercept" as const;
 export const codeInterceptMinimumPlayers = 4;
@@ -255,15 +256,15 @@ export function codeInterceptRoomIsStartable(room: Pick<CodeInterceptRoom, "play
 }
 
 export function randomizeCodeInterceptPlayers(players: readonly CodeInterceptPlayer[], random = Math.random) {
-  const shuffled = players.map((player) => ({ ...player }));
-  for (let index = shuffled.length - 1; index > 0; index -= 1) {
-    const target = Math.floor(random() * (index + 1));
-    [shuffled[index], shuffled[target]] = [shuffled[target], shuffled[index]];
-  }
-  const firstTeam: CodeInterceptTeamId = random() < 0.5 ? "red" : "blue";
-  return shuffled.map((player, index) => ({
-    ...player,
-    teamId: index % 2 === 0 ? firstTeam : otherCodeInterceptTeam(firstTeam),
+  const distributed = distributeGameSdkBalancedTeams(
+    players.map((player) => player.id),
+    codeInterceptTeamIds,
+    random,
+  );
+  const byId = new Map(players.map((player) => [player.id, player]));
+  return distributed.participantIds.map((playerId) => ({
+    ...byId.get(playerId)!,
+    teamId: distributed.assignments[playerId],
   }));
 }
 

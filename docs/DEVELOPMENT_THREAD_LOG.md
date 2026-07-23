@@ -2450,3 +2450,136 @@
 
 - SDK基本セットへの物理移動は次段階。現時点では現行ワードウルフをSDK-devの差分検出用基準として確立した段階である。
 - クラウドブラウザにログイン済みセッションがなかったため、認証が必要な部屋作成とDEBUG完走の実操作は未確認。ゲスト状態で現行UIへの置換と旧Mock UIの除去までは確認済み。
+
+## 2026-07-24 — SDK基本セットとAppSetによるゲーム生成境界
+
+### 利用者からの要望
+
+- SDK-devの現行ワードウルフを受け入れ基準にしたうえで、ワードウルフ固有部分をアプリセット、それ以外をSDK基本セットとして、新しいゲームを作れる仕組みにする。
+- 制作者がRoom、参加・退出、revision、共通View等をゲームごとに再実装せず、ゲーム固有のルール・state・Command・表示だけを実装できる形にする。
+
+### 判断
+
+- 現行`WordWolfGame`を直接表示するSDK-dev基準画面は変更せず、今後の共通部分抽出で機能差を検出する受け入れ基準として維持する。
+- SDK基本セットがRoom、ホスト、参加者、設定、revision、参加・退出・設定変更・中断・再戦、安全な共通Viewを所有する。
+- ゲーム側は`GameSdkOnlineRoomAppSet`として、ゲーム固有の初期state、Command遷移、再戦時reset、閲覧者別AppViewを登録する。
+- 既存の低水準`defineGameServerModule`は互換性のため残し、新規Online Roomゲームと外部starterは基本セットとAppSetの合成APIを標準経路にする。
+- 内部player IDは保存stateとサーバー判定だけに使い、基本セットの公開Viewでは安定したseatと表示名へ変換する。
+
+### 実施結果
+
+- 公開SDKへ`GameSdkOnlineRoom`、共通Create／Command／View、`defineGameSdkOnlineRoomAppSet`、`createGameSdkOnlineRoomModule`を追加した。
+- SDK基本セットへ共通Room生成、lifecycle Command、revision更新、参加者・host権限、安全な共通player Viewを集約した。
+- `games/wordwolf-sdk`を、Room lifecycleを持たずワードウルフ固有のお題・役職・ヒント・投票・逆転回答だけを持つAppSetへ変更した。
+- Redis・認証・CAS・HTTP・Realtimeを通るcount-up fixtureもAppSet合成へ移し、新境界がMock専用ではないことを回帰テストへ固定した。
+- 外部starterへ`src/app-set.ts`を追加し、`server-module.ts`はSDK基本セットとの合成だけを行う形にした。配布ZIP、提出ZIP、境界検査もAppSetを必須にした。
+- 内部`npm run create-game`もcontracts、AppSet、合成server module、契約テストを生成するよう変更した。
+- SDK Portal、SDK package資料、外部package資料、生成手順、チェックリスト、引き継ぎ資料を新しい二層構成へ更新した。
+
+### 検証
+
+- `npm run lint`成功。
+- `npm test`成功（456件）。
+- `npm run check:sdk`成功。
+- `npm run build:sdk-package`成功。
+- `npm run test:sdk-starter`成功。外部install、型検査、契約テスト、1ゲーム完走、提出ZIPまで確認した。
+- `npm run build`成功。Next.js production build、TypeScript検査、77ページ生成を完了した。
+- `npm run build:sdk`成功。SDK Portalのproduction buildと全ルート生成を完了した。
+- `git diff --check`成功。
+
+### 未対応・保留
+
+- 現行`WordWolfGame`自体の共通UI、設定画面、時間管理、DEBUG、結果導線はまだ物理的にSDK基本セットへ移していない。基準画面との同等性を保ちながら順次抽出する。
+- 今回のAppSet化対象である`games/wordwolf-sdk`はserver契約fixtureであり、現行ワードウルフ製品UIのSDK移植完了を意味しない。
+- Portal上の対話型ゲーム作成UI、提出・審査画面、npm registryへのSDK初回公開は未実装。
+- この作業単位ではdev／本番Deploymentと複数実アカウントによる実操作を行っていない。
+
+## 2026-07-24 — 全必須から始める共通モジュールprofile
+
+### 利用者からの要望
+
+- 直前工程で本体へ切り出した共通モジュールを、SDK側で別実装せずAppSetから利用する。
+- 再利用候補はすべて物理的にモジュール化する。
+- 制作AIが安易に未採用へしないよう、最初のモックは全モジュール必須で開始する。
+- ゲームに合わない場合だけ、SDK-dev上で人間が意図的に必須解除できるようにする。
+- まず全必須のまま複数ゲームへ適用し、どこまで必須で成り立つかを検証する。
+
+### 判断
+
+- 共通module profileは新しいRoom・認証・UI実装ではなく、既存の`online-room-route-factory`、`online-room-store-runtime`、`@game-fields/game-runtime`、共通UI、純粋domain部品を採用するレシピとする。
+- profileは初回mock発行時に全件`required`でPlatformが作成する。AppSet、mock metadata、manifest、制作AIは採否を宣言しない。
+- 管理トークンを使うmock発行とMCPにはprofile変更手段を与えない。MCPは確定profileの参照だけを提供する。
+- SDK-devへ署名済みアカウントでログインした環境所有者だけが、Platform固定以外を理由付きで解除できる。mock再発行では既存の人間レビューを上書きしない。
+- 認証、アカウント、最終認可、保存、観測、共通ナビ、プレイヤーメニューはPlatform固定とし、人間でも解除できない。
+
+### 実施結果
+
+- `@game-fields/game-sdk/modules`へ38件の共通module catalogと、全必須profileの生成・正規化・人間レビュー更新契約を追加した。
+- 提出完了、投票、フェーズ・ラウンド・手番、役職・チーム、秘密情報のseat変換、標準結果を小さな純粋moduleへ物理分割した。
+- WordWolf、Tahoiya、Word Scale、Word Sonar、Word Out、Code Intercept、Northern Branch、Daifugoの8オンラインゲームを同じ純粋moduleへ接続した。
+- SDK DBへ`module_policy`を追加し、RESTとMCPの初回mock発行で全必須profileを保存するようにした。競合更新時はprofileを更新せず、人間レビューを維持する。
+- SDK Portalへ所有者専用の「共通モジュール」画面を追加した。全38件の状態、Platform固定、解除理由、全必須への復帰を表示し、理由付き更新だけを許可する。
+- MCPへ`get_game_module_requirements`を追加し、`editableByAi: false`を返す。変更toolは追加していない。
+- starterのmock検査で`modules`、`moduleProfile`、`disabledModules`、`optionalModules`を拒否し、AIが採否を埋め込めないようにした。
+- starter、SDK reference、外部package資料、新規ゲーム手順、引き継ぎを全必須開始と人間レビューの仕様へ更新した。
+
+### 検証
+
+- module profile、所有者専用更新境界、初回mock発行、8ゲームの共通module採用を対象とする追加テスト15件が成功した。
+- `npm run lint`成功。公開SDKの依存境界はサブディレクトリを含む14ファイルを検査した。
+- `npm test`成功（471件）。
+- `npm run test:sdk-package`成功。外部fixtureへのinstall、6つの公開export、全38件必須profileを確認した。
+- `npm run test:sdk-starter`成功。入口、公開Git snapshot、ZIP展開、同梱SDK install、型検査、契約テスト、1ゲーム完走、提出ZIPまで確認した。
+- `npm run build`成功。Next.js production build、TypeScript検査、77ページ生成を完了した。
+- `npm run build:sdk`成功。SDK Portalのproduction build、TypeScript検査、新しい所有者専用module APIを含む全ルート生成を完了した。
+- `git diff --check`成功。
+
+### 未対応・保留
+
+- 全38件を全ゲームが実際に利用できることを示したわけではない。今回の初期profileで不要と判断されたmoduleと解除理由を蓄積し、必須化できる最大集合を次段階で確定する。
+- SDK-dev実環境での所有者ログイン、理由付き解除、再発行後の維持は未確認。
+- dev／本番へのpushとDeploymentはこの作業単位では行わない。
+
+## 2026-07-24 — DownloadMe ver7と人間専用module分類
+
+### 利用者からの要望
+
+- 最新DownloadMeだけを渡した制作GPTが、公開starter取得、モック、AppSet実装、検査、提出ZIPまで進めるver7を作る。
+- moduleは将来「必須・解除可・任意」の三段階へ分類できるようにする。
+- ただし制作GPTへ解除可能性を先に教えると共通moduleを使わない危険があるため、初回は38件すべて必須という情報だけを渡す。
+- SDKを実際に確認して不満がある人間だけが、SDK-devの所有者画面で解除可moduleを任意へ変更できればよい。
+- moduleカスタマイズは将来の課金要素にできる余地を残す。
+
+### 判断
+
+- 三段階分類と変更UIはSDK Portal内部へ閉じ、DownloadMe、starter資料、公開SDK catalog、MCPへ解除可能性を露出しない。
+- 新規mockは従来どおり38件すべて`required`で保存する。制作GPTはモック承認後も、MCPが返す確定済み`requiredModuleIds`だけを正本とする。
+- MCP `get_game_module_requirements`からprofile全体と三段階分類を除き、slug、gameId、`requiredModuleIds`、`editableByAi: false`だけを返す。
+- Portalの所有者向け画面では、Platform固定7件を「必須」、残りの現在使用中を「解除可」、人間が理由付きで外した項目を「任意」と表示する。
+- module変更は所有者認証に加え、server-onlyの`getCreatorModuleCustomizationAccess`を通す。Developer Previewでは所有者へ含めるが、将来はこの判定だけを購入entitlementへ差し替える。
+- DownloadMeと公開starterの取り違えを防ぐため、starter manifestへ`downloadMeVersion: 7`を追加し、ver7入口が取得直後に一致を検査する。
+
+### 実施結果
+
+- SDK Portalの配布リンク、Content-Disposition、同期scriptを`GameFieldsDownloadMe-ver7.md`へ更新し、development用ver7実体を生成した。
+- 制作GPT向け文書を全必須契約へ統一し、解除可・任意・人間向け変更方式を含めない回帰検査を追加した。
+- 公開SDK catalogから`humanReviewable`を除去し、Platform固定判定を公開catalogへ載せない形へ変更した。
+- 所有者画面へ必須・解除可・任意の件数と各module状態を表示し、解除理由を保存する。カスタマイズ権限がない場合はUIとAPIの双方で変更を拒否する。
+- entitlement判定をclient bundleから分離し、`server-only`境界へ置いた。未許可時の更新APIは`402 customization_not_available`を返す。
+- `sdk-starter`生成物へ`downloadMeVersion: 7`を含め、旧starterではver7制作を開始できないようにした。
+
+### 検証
+
+- `npm run lint`成功。
+- `npm test`成功（472件）。
+- `npm run test:sdk-package`成功。空の外部fixtureへのinstallと全38件必須profileを確認した。
+- `npm run test:sdk-starter`成功。ver7入口、公開Git用snapshot、ZIP展開、同梱SDK install、型検査、契約テスト、1ゲーム完走、提出ZIPまで確認した。
+- `npm run build`成功。Next.js production build、TypeScript検査、77ページ生成を完了した。
+- `npm run build:sdk`成功。SDK Portalのproduction build、TypeScript検査、14ページ生成を完了した。
+- `git diff --check`成功。
+
+### 未対応・保留
+
+- GitHubの公開`sdk-starter`は確認時点で`ed7ccd3`の旧manifestで、`sdkHandshakeVersion`と`downloadMeVersion`を持たない。ver7を実URLから利用するには、検証済みstarter snapshotを同branchへ反映する必要がある。
+- SDK-devと公開starterへのpush、Deployment、実URLからのDownloadMe取得・cloneは、本記録作成時点では未実施。
+- 実際の決済、商品plan、価格、購入・返金・権利復元は未実装。今回追加したのはserver側entitlement差し替え境界までである。

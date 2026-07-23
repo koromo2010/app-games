@@ -17,6 +17,7 @@ use-sample-game-controller.ts
 sample-game-view-permissions.ts
 sample-game-manifest.ts
 sample-game-contracts.ts
+sample-game-app-set.ts
 sample-game-server-module.ts
 SampleGameDesktopLayout.tsx
 SampleGameMobileLayout.tsx.example
@@ -43,6 +44,8 @@ DesktopLayout
 ```
 
 専用スマホUIを実装する段階で、`.example` を参考にMobileLayoutを追加します。現段階ではDesktopLayoutだけを実装し、既存デザインを変えません。
+
+オンラインRoomのserver側は`SDK基本セット + アプリセット`で生成します。`<game-id>-app-set.ts`へゲーム固有state・Command・勝敗・固有Viewだけを実装し、`<game-id>-server-module.ts`は`createGameSdkOnlineRoomModule`で合成するだけに保ちます。Room作成、参加者、設定、revision、共通Viewをゲーム側へ複製しません。
 
 ## 安全性
 

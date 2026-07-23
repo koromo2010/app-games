@@ -6,7 +6,7 @@
 
 1. 公開Gitから取得したこのフォルダ、または展開した試用ZIPをChatGPTの作業場所に置きます。
 2. ChatGPTまたはCodexへこのフォルダを渡します。
-3. `starter-manifest.json`の`sdkHandshakeVersion`、`platformVersion`、`sdkVersion`、`sdkContractVersion`が、取得元DownloadMeで成功したSDK handshakeと一致することを確認します。
+3. `starter-manifest.json`の`downloadMeVersion`が`7`であり、`sdkHandshakeVersion`、`platformVersion`、`sdkVersion`、`sdkContractVersion`が、取得元DownloadMeで成功したSDK handshakeと一致することを確認します。
 4. 下の文章をそのまま送ります。
 
 ```text
@@ -15,6 +15,7 @@
 私の回答後は、未定部分を安全な初期値で補ってGAME_SPEC.mdを完成させ、原則として追加確認なしで要件を守った画面モックまで作ってください。
 完成後は内容と未実装部分を短く説明し、「実際に画面を見て、変えたいところはありますか？ 特になければ『これでOK』と答えてください」と聞いてください。
 私が承認した後だけ、このフォルダ内でゲーム固有コードと契約テストを実装し、npm run checkとnpm run demoを成功させてください。
+共通モジュールは最初すべて必須です。私がSDK-dev上で確認するまで、採否を決めたり外したりしないでください。
 DB、Redis、認証Cookie、APIキー、管理権限には直接アクセスしないでください。
 ```
 
@@ -37,7 +38,9 @@ npm run package
 
 ChatGPT経由で制作者URLを予約した場合は、モック確認後にSDK接続先・制作者slug・管理トークンを一時的な環境変数として`npm run publish:mock`を実行します。SDKが専用Gitへ保存し、クライアントへ共有できる同一URLを返します。管理トークンはファイルやGitへ保存しません。
 
-最初から入っている「はじめてのゲーム」はSDKの動作確認用です。ChatGPTに依頼すると、`GAME_SPEC.md`の内容に合わせて置き換えられます。
+最初から入っている「はじめてのゲーム」は、SDK基本セットへ小さな`AppSet`を登録する動作確認用です。ChatGPTに依頼すると、Room・認証・共通UIを作り直さず、`GAME_SPEC.md`に合わせて`src/app-set.ts`とゲーム固有slotを置き換えます。
+
+最初のモックをSDKへ保存すると、共通モジュール38件がすべて必須になります。ChatGPTや管理トークンからは変更できません。利用者がモックを承認した後、ChatGPTは`get_game_module_requirements`から返る確定済みの`requiredModuleIds`だけを正本として本実装します。
 
 提出物は`submission/game-fields-submission.zip`へ生成されます。`node_modules/`、`dist/`、`.git/`、過去の提出ZIPは含まれません。
 

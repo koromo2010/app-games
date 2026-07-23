@@ -7,6 +7,7 @@ import {
   type CodeInterceptRoom,
   type CodeInterceptTeamId,
 } from "./code-intercept.ts";
+import { allGameSdkParticipantsComplete } from "@game-fields/game-sdk/modules";
 
 export function dealSecretWords(cardCount: number, wordPool: readonly string[]) {
   const pool = [...new Set(wordPool.map((word) => word.trim()).filter(Boolean))];
@@ -87,15 +88,24 @@ export function resetGame(room: CodeInterceptRoom) {
 }
 
 export function allCodeLengthsChosen(room: CodeInterceptRoom) {
-  return codeInterceptTeamIds.every((teamId) => Boolean(room.codeLengthChoices[teamId]));
+  return allGameSdkParticipantsComplete(
+    codeInterceptTeamIds,
+    (teamId) => Boolean(room.codeLengthChoices[teamId]),
+  );
 }
 
 export function allCluesSubmitted(room: CodeInterceptRoom) {
-  return codeInterceptTeamIds.every((teamId) => Boolean(room.clues[teamId]));
+  return allGameSdkParticipantsComplete(
+    codeInterceptTeamIds,
+    (teamId) => Boolean(room.clues[teamId]),
+  );
 }
 
 export function allAnswersSubmitted(room: CodeInterceptRoom) {
-  return codeInterceptTeamIds.every((teamId) => codeInterceptTeamHasSubmittedAnswers(room, teamId));
+  return allGameSdkParticipantsComplete(
+    codeInterceptTeamIds,
+    (teamId) => codeInterceptTeamHasSubmittedAnswers(room, teamId),
+  );
 }
 
 export function targetPlayer(room: CodeInterceptRoom, actorId: string, playerId?: string) {

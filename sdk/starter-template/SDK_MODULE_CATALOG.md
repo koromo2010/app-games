@@ -1,6 +1,14 @@
 # Game Fields SDK モジュールカタログ
 
-ゲームをゼロから作り直さず、ここにある公式モジュールを優先して組み合わせます。AIは仕様を整理した後、この表を確認し、採用するモジュールと不足する機能を`GAME_SPEC.md`へ記録してください。
+ゲームをゼロから作り直さず、ここにある公式モジュールを組み合わせます。最初のモックでは全moduleが必須です。AIは採否を決めず、同等機能をAppSetへ再実装しません。
+
+## 初期profile
+
+- 初回モック保存時にPlatformが38件すべてを`required`として付与する。
+- `mock/preview.json`、manifest、AppSet、管理トークン、MCPから必須一覧を変更できない。
+- モック承認後、AIは読み取り専用`get_game_module_requirements`で返る`requiredModuleIds`だけを正本としてAppSetを作る。
+
+機械可読な正本は`@game-fields/game-sdk/modules`の`GAME_SDK_MODULE_CATALOG`です。
 
 ## 利用区分
 
@@ -17,6 +25,19 @@
 | 部屋共通UI | 本体統合時に利用 | 参加者一覧、全員に見える部屋設定、ホストだけの設定変更、時間制限 |
 | デバッグUI | SDK標準／本体統合時に利用 | 権限表示、ダミー参加者、視点・フェーズ切替、自動進行、参加者を維持した進行中断 |
 | 結果UI | 本体統合時に利用 | 同じ部屋へ戻る、広場へ戻る、共有、再戦導線 |
+
+## SDK基本セット（実装済み）
+
+| モジュール | 区分 | 提供するもの |
+| --- | --- | --- |
+| Online Room | SDK標準 | Room作成、ホスト、参加・退出、人数上限、設定、開始前状態 |
+| AppSet合成 | SDK標準 | `defineGameSdkOnlineRoomAppSet`で固有state・Command・Viewを登録し、`createGameSdkOnlineRoomModule`で基本セットと合成 |
+| Revision | SDK標準 | Command成功ごとにrevisionを1増加し、古いrevisionを拒否 |
+| 閲覧者別共通View | SDK標準 | 内部player IDを出さず、seat・表示名・接続・本人／ホスト表示を提供 |
+| Lifecycle | SDK標準 | `room/join`、`room/leave`、`room/update-settings`、`room/abort`、`room/rematch` |
+| 認証・保存・Realtime | 本体統合時に利用 | Cookie由来actor、Redis保存、active room、一覧、WebSocket通知とpolling fallback |
+
+新しいオンラインゲームはこの基本セットを必ず起点にします。アプリセットへRoom作成、参加者管理、設定更新、revision、共通permissionsを再実装しません。
 
 ## プレビュープリセット（実装済み）
 
@@ -79,12 +100,13 @@ Game Fields本体には共通キャンバス基盤があります。描画を使
 
 採用時は`GAME_SPEC.md`に、描ける人、描けるフェーズ、消去・全消去の権限、レイヤー、保存期間、最大線数、観戦者への公開範囲を記録します。
 
-## AIの選択ルール
+## AIの利用ルール
 
-1. ゲームの核が決まったら、このカタログから使えるモジュールを一括提案する。
-2. 利用者へ内部コンポーネント名の選択を求めず、ゲーム内容に合う標準構成をAIが選ぶ。
+1. 最初のモックでは全moduleを必須として扱い、AI判断で外さない。
+2. 利用者へ内部コンポーネント名の選択を求めず、SDK-devで実物を確認してもらう。
 3. 既存モジュールで満たせる機能をゲーム固有コードへ複製しない。
 4. カタログにない再利用価値の高い機能は、今回だけの実装にするか共通モジュール候補にするかを明記する。
-5. SDKからまだ直接importできない本体モジュールは、利用可能と偽らず`SDK_REQUESTS.md`へ統合要求を書く。
+5. モック承認後は`get_game_module_requirements`の`requiredModuleIds`だけを正本とし、必須moduleを省略しない。
+6. SDKからまだ直接importできない本体モジュールは、利用可能と偽らず`SDK_REQUESTS.md`へ統合要求を書く。
 
 このカタログはモジュール追加時に更新します。スターターへ固定コピーした共通UIではなく、将来はSDKのversionに対応するモジュール実体と機械可読manifestを正本にします。

@@ -5,6 +5,12 @@ import { getGameTimerDeadlineAt, isGameTimerExpired, timerHyperparameter, type G
 import { playerTimeLimitSeconds, recordPlayerActivity, recordPlayerTimeout, reducedPlayerTimeLimitSeconds } from "@/lib/player-timeout-policy";
 import { allRoomPlayersReturned } from "@/lib/room-lobby-return";
 import { isValidWordWolfVoteTarget } from "./wordwolf-voting.ts";
+import {
+  allGameSdkParticipantsComplete,
+  assignGameSdkRoles,
+  nextGameSdkEligibleSeat,
+  tallyGameSdkVotes,
+} from "@game-fields/game-sdk/modules";
 
 const abstainVoteId = "__abstain__";
 const timeoutText = "時間切れ";
@@ -43,8 +49,16 @@ export function applyWordWolfStartCommand(room: Room, actorId: string, topic: Wo
   const orderedPlayers = room.randomizeTurnOrder ? shuffled(players) : players;
   const shouldHaveWolf = room.gameMode === "wordwolf" || Math.random() >= 0.1;
   const wolfCount = shouldHaveWolf ? Math.max(1, Math.min(maximumWolfCount(orderedPlayers.length), room.wolfCount)) : 0;
-  const selectedWolves = shouldHaveWolf ? shuffled(orderedPlayers).slice(0, wolfCount) : [];
-  const selectedWolfIds = selectedWolves.map((player) => player.id);
+  const roles = assignGameSdkRoles(
+    orderedPlayers.map((player) => player.id),
+    { wolf: wolfCount },
+    "village",
+  );
+  const selectedWolfIds = shouldHaveWolf
+    ? orderedPlayers
+      .filter((player) => roles[player.id] === "wolf")
+      .map((player) => player.id)
+    : [];
   return {
     ...room,
     lobbyReturn: undefined,
@@ -97,11 +111,20 @@ function timeoutClue(room: Room, now: number, onlyIds?: string[]): Room {
   let changed = room;
   for (const player of missing) changed = recordPlayerTimeout(changed, player.id, player.name, now);
   const clues = [...room.clues, ...missing.map((player) => ({ playerId: player.id, round: room.currentRound, text: timeoutText, at: now }))];
-  const complete = participants.every((player) => clues.some((clue) => clue.round === room.currentRound && clue.playerId === player.id));
+  const complete = allGameSdkParticipantsComplete(
+    participants.map((player) => player.id),
+    (playerId) => clues.some((clue) => (
+      clue.round === room.currentRound && clue.playerId === playerId
+    )),
+  );
   if (!complete) {
     if (room.clueMode === "simultaneous") return { ...changed, clues };
     const currentIndex = participants.findIndex((player) => player.id === room.players[room.currentTurnIndex]?.id);
-    const next = participants[(currentIndex + 1) % participants.length];
+    const nextSeat = nextGameSdkEligibleSeat(
+      participants.map((player) => player.id),
+      currentIndex,
+    );
+    const next = participants[nextSeat];
     return { ...changed, clues, currentTurnIndex: Math.max(0, room.players.findIndex((player) => player.id === next?.id)), currentTurnStartedAt: now };
   }
   const runoff = Boolean(room.runoffCandidateIds?.length); const lastRound = room.currentRound >= room.roundsTotal;
@@ -112,9 +135,11 @@ function timeoutVote(room: Room, now: number): Room {
   let changed = room;
   const votes = { ...room.votes }; for (const player of voteVoters(room)) if (!votes[player.id]) { votes[player.id] = abstainVoteId; changed = recordPlayerTimeout(changed, player.id, player.name, now); }
   const candidates = runoffCandidates(room);
-  const counts = candidates.map((player) => ({ id: player.id, count: Object.values(votes).filter((id) => id === player.id).length }));
-  const max = Math.max(0, ...counts.map((item) => item.count));
-  const top = max ? counts.filter((item) => item.count === max).map((item) => item.id) : [];
+  const tally = tallyGameSdkVotes(
+    votes,
+    candidates.map((player) => player.id),
+  );
+  const top = tally.leaderIds;
   const voteHistory = [...room.voteHistory, { round: room.voteHistory.length + 1, votes, candidateIds: candidates.map((player) => player.id), at: now }];
   if (top.length > 1) {
     const extraRound = room.currentRound + 1;
@@ -140,11 +165,20 @@ export function applyWordWolfClueCommand(room: Room, playerId: string, rawText: 
   if (room.clueMode === "turn" && room.players[room.currentTurnIndex]?.id !== playerId) return null;
   room = recordPlayerActivity(room, playerId);
   const clues = [...room.clues, { playerId, round: room.currentRound, text, at: now }];
-  const complete = participants.every((player) => clues.some((clue) => clue.round === room.currentRound && clue.playerId === player.id));
+  const complete = allGameSdkParticipantsComplete(
+    participants.map((player) => player.id),
+    (participantId) => clues.some((clue) => (
+      clue.round === room.currentRound && clue.playerId === participantId
+    )),
+  );
   if (!complete) {
     if (room.clueMode === "simultaneous") return { ...room, clues };
     const index = participants.findIndex((player) => player.id === playerId);
-    const next = participants[(index + 1) % participants.length];
+    const nextSeat = nextGameSdkEligibleSeat(
+      participants.map((player) => player.id),
+      index,
+    );
+    const next = participants[nextSeat];
     return { ...room, clues, currentTurnIndex: Math.max(0, room.players.findIndex((player) => player.id === next?.id)), currentTurnStartedAt: now };
   }
   const runoff = Boolean(room.runoffCandidateIds?.length); const lastRound = room.currentRound >= room.roundsTotal;
@@ -155,7 +189,10 @@ export function applyWordWolfVoteCommand(room: Room, playerId: string, targetId:
   if (room.phase !== "vote" || room.votes[playerId]) return null;
   if (!isValidWordWolfVoteTarget(room, playerId, targetId)) return null;
   const withVote = recordPlayerActivity({ ...room, votes: { ...room.votes, [playerId]: targetId } }, playerId);
-  if (!voteVoters(withVote).every((player) => withVote.votes[player.id])) return withVote;
+  if (!allGameSdkParticipantsComplete(
+    voteVoters(withVote).map((player) => player.id),
+    (voterId) => Boolean(withVote.votes[voterId]),
+  )) return withVote;
   return timeoutVote(withVote, now);
 }
 
@@ -173,7 +210,10 @@ export function applyWordWolfTimeout(room: Room, now = Date.now()) {
       const votes = { ...room.votes };
       for (const player of reducedMissing) { votes[player.id] = abstainVoteId; changed = recordPlayerTimeout(changed, player.id, player.name, now); }
       changed = { ...changed, votes };
-      return voteVoters(changed).every((player) => changed.votes[player.id]) ? timeoutVote(changed, now) : changed;
+      return allGameSdkParticipantsComplete(
+        voteVoters(changed).map((player) => player.id),
+        (voterId) => Boolean(changed.votes[voterId]),
+      ) ? timeoutVote(changed, now) : changed;
     }
   }
   const personalId = room.phase === "clue" && room.clueMode === "turn" ? room.players[room.currentTurnIndex]?.id : room.phase === "wolfGuess" ? room.accusedId ?? undefined : undefined;

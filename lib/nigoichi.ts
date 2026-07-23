@@ -4,6 +4,7 @@ import { normalizeCommonTimeLimit } from "./game-room-config.ts";
 import { commonGameTimeoutGraceMs } from "./game-timer/policy.ts";
 import { onlineRoomPlayerLimits } from "./online-room-policy.ts";
 import type { AppLocale } from "./app-locale.ts";
+import { allGameSdkParticipantsComplete } from "@game-fields/game-sdk/modules";
 
 export type NigoichiPlayer = {
   id: string;
@@ -204,11 +205,17 @@ export function normalizeNigoichiTimeoutAssociations(clues: readonly unknown[], 
 }
 
 export function allNigoichiAssociationsSubmitted(room: Pick<NigoichiRoom, "players" | "associations">) {
-  return room.players.every((player) => (room.associations[player.id]?.length ?? 0) > 0);
+  return allGameSdkParticipantsComplete(
+    room.players.map((player) => player.id),
+    (playerId) => (room.associations[playerId]?.length ?? 0) > 0,
+  );
 }
 
 export function allNigoichiGuessesSubmitted(room: Pick<NigoichiRoom, "players" | "guesses">) {
-  return room.players.every((player) => Number.isInteger(room.guesses[player.id]));
+  return allGameSdkParticipantsComplete(
+    room.players.map((player) => player.id),
+    (playerId) => Number.isInteger(room.guesses[playerId]),
+  );
 }
 
 export function nigoichiGuessIsCorrect(room: Pick<NigoichiRoom, "guesses" | "missingNumber">, playerId: string) {

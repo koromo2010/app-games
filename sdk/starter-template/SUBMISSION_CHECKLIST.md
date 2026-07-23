@@ -8,6 +8,10 @@
 
 ## 安全性
 
+- [ ] 共通モジュールは全件必須から開始し、AIがprofileを変更していない
+- [ ] モック承認後、`get_game_module_requirements`の`requiredModuleIds`を取得して全件実装した
+- [ ] `server-module.ts`はSDK基本セットとアプリセットの合成だけで、Room作成・参加者・設定・revisionを再実装していない
+- [ ] `app-set.ts`にはゲーム固有state、Command、勝敗、固有presentationだけがある
 - [ ] Commandは権限、フェーズ、手番、入力値をサーバー契約内で検証する
 - [ ] Command payloadを本人証明に使っていない
 - [ ] 保存Roomを直接クライアントへ返していない

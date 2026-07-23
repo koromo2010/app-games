@@ -3,6 +3,10 @@ import { commonGameTimeoutGraceMs } from "./game-timer/policy.ts";
 import { playerTimeLimitSeconds, recordPlayerTimeout } from "./player-timeout-policy.ts";
 import { calculateTahoiyaRoundScores, tahoiyaValidVotes } from "./tahoiya-scoring.ts";
 import type { TahoiyaDefinitionOption, TahoiyaRoom } from "./tahoiya-types.ts";
+import {
+  allGameSdkParticipantsComplete,
+  tallyGameSdkVotes,
+} from "@game-fields/game-sdk/modules";
 
 export const tahoiyaTimeoutSubmission = "__timeout__";
 
@@ -74,12 +78,9 @@ export function scoreRoom(room: TahoiyaRoom) {
   const votes = tahoiyaValidVotes(room);
   const roundScores = calculateTahoiyaRoundScores({ ...room, votes });
   const scoreLines: string[] = [];
-  const voteCounts = Object.values(votes).reduce<Record<string, number>>((counts, optionId) => {
-    counts[optionId] = (counts[optionId] ?? 0) + 1;
-    return counts;
-  }, {});
-  const maxVotes = Math.max(0, ...Object.values(voteCounts));
-  const leaders = room.options.filter((option) => maxVotes > 0 && (voteCounts[option.id] ?? 0) === maxVotes);
+  const tally = tallyGameSdkVotes(votes, room.options.map((option) => option.id));
+  const maxVotes = tally.maximumVotes;
+  const leaders = room.options.filter((option) => tally.leaderIds.includes(option.id));
   const leaderNames = leaders.map((option) => option.isReal
     ? "本物の説明"
     : `${room.players.find((player) => player.id === option.authorId)?.name ?? "Unknown"}の偽説明`);
@@ -112,12 +113,18 @@ export function scoreRoom(room: TahoiyaRoom) {
 
 export function writingComplete(room: TahoiyaRoom) {
   const writers = definitionWriterIds(room);
-  return writers.length > 0 && writers.every((playerId) => playerDefinitionsComplete(room, playerId));
+  return allGameSdkParticipantsComplete(
+    writers,
+    (playerId) => playerDefinitionsComplete(room, playerId),
+  );
 }
 
 export function votingComplete(room: TahoiyaRoom) {
   const voters = voterIds(room);
-  return voters.length > 0 && voters.every((playerId) => Boolean(room.votes[playerId]));
+  return allGameSdkParticipantsComplete(
+    voters,
+    (playerId) => Boolean(room.votes[playerId]),
+  );
 }
 
 export function timedOut(room: TahoiyaRoom, seconds = room.actionTimeLimitSeconds, now = Date.now()) {

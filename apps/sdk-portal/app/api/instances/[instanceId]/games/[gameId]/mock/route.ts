@@ -2,6 +2,7 @@ import { authenticateCreator, normalizeInstanceSlug, validateInstanceSlug } from
 import { saveMockFilesToGit } from "@/lib/mock-git-store";
 import { ensureSdkSchema, sdkSql } from "@/lib/sdk-postgres";
 import platformRelease from "../../../../../../../../../config/platform-release.json";
+import { createInitialGameSdkModuleProfile } from "@game-fields/game-sdk/modules";
 
 export const dynamic = "force-dynamic";
 
@@ -47,14 +48,18 @@ export async function PUT(
     const revision = await saveMockFilesToGit({ instanceId: slug, gameId, files: body.files });
     await ensureSdkSchema();
     const mockManifest = JSON.stringify({ stage: "mock", id: gameId });
+    const initialModulePolicy = JSON.stringify(
+      createInitialGameSdkModuleProfile(),
+    );
     await sdkSql()`
       INSERT INTO sdk_games (
         creator_id, game_id, title, description, manifest,
-        sdk_package_version, sdk_contract_version, mock_revision
+        module_policy, sdk_package_version, sdk_contract_version, mock_revision
       )
       VALUES (
         ${creator.id}, ${gameId}, ${title}, ${description}, ${mockManifest}::jsonb,
-        ${platformRelease.sdkPackageVersion}, ${platformRelease.sdkContractVersion}, ${revision}
+        ${initialModulePolicy}::jsonb, ${platformRelease.sdkPackageVersion},
+        ${platformRelease.sdkContractVersion}, ${revision}
       )
       ON CONFLICT (creator_id, game_id) DO UPDATE SET
         title = EXCLUDED.title,

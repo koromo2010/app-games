@@ -19,7 +19,7 @@ try {
   const [packResult] = JSON.parse(packOutput);
   if (!packResult?.filename) throw new Error("SDK tarball was not created.");
 
-  const allowedFiles = /^(README\.md|package\.json|dist\/(index|runtime|mock-runtime|client-runtime|client-realtime|handshake)\.(js|js\.map|d\.ts|d\.ts\.map))$/;
+  const allowedFiles = /^(README\.md|package\.json|dist\/(index|runtime|modules|modules\/(profile|collection|voting|flow|assignment|presentation|result)|mock-runtime|client-runtime|client-realtime|handshake)\.(js|js\.map|d\.ts|d\.ts\.map))$/;
   const unexpectedFiles = (packResult.files ?? [])
     .map((file) => file.path)
     .filter((path) => !allowedFiles.test(path));
@@ -41,6 +41,11 @@ try {
   writeFileSync(join(consumerRoot, "consumer.mjs"), `
 import { GAME_SDK_VERSION, defineGameManifest } from "@game-fields/game-sdk";
 import { advanceGameSdkRoom, defineGameServerModule } from "@game-fields/game-sdk/runtime";
+import {
+  createInitialGameSdkModuleProfile,
+  nextGameSdkRoundStep,
+  requiredGameSdkModuleIds,
+} from "@game-fields/game-sdk/modules";
 import { createGameSdkMockRuntime } from "@game-fields/game-sdk/mock-runtime";
 import { createGameSdkHttpClientRuntime } from "@game-fields/game-sdk/client-runtime";
 import {
@@ -121,6 +126,14 @@ const handshake = negotiateGameSdkHandshake({
   },
 });
 if (!handshake.accepted || handshake.environment !== "development") process.exit(1);
+const round = nextGameSdkRoundStep({
+  currentRound: 1,
+  totalRounds: 2,
+  repeatPhase: "playing",
+  completedPhase: "result",
+});
+if (round.round !== 2 || round.phase !== "playing" || round.complete) process.exit(1);
+if (requiredGameSdkModuleIds(createInitialGameSdkModuleProfile()).length !== 38) process.exit(1);
 `);
 
   execFileSync("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"], {
@@ -138,7 +151,7 @@ if (!handshake.accepted || handshake.environment !== "development") process.exit
     throw new Error("Installed SDK package identity does not match the expected preview package.");
   }
 
-  console.log(`[game-sdk-package] ${packResult.filename}を外部fixtureへinstallし、5つの公開exportを確認しました。`);
+  console.log(`[game-sdk-package] ${packResult.filename}を外部fixtureへinstallし、6つの公開exportと全必須module profileを確認しました。`);
 } finally {
   rmSync(fixtureRoot, { recursive: true, force: true });
 }

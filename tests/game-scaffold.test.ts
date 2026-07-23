@@ -18,6 +18,7 @@ test("game scaffold creates SDK contracts without platform storage or actor IDs"
   const gameDir = join(cwd, "app", "sample-game");
   const files = readdirSync(gameDir).sort();
   assert.equal(files.includes("sample-game-contracts.ts"), true);
+  assert.equal(files.includes("sample-game-app-set.ts"), true);
   assert.equal(files.includes("sample-game-server-module.ts"), true);
   assert.equal(files.includes("SDK_CONTRACT.test.ts.example"), true);
 
@@ -27,12 +28,15 @@ test("game scaffold creates SDK contracts without platform storage or actor IDs"
   const contracts = readFileSync(join(gameDir, "sample-game-contracts.ts"), "utf8");
   assert.doesNotMatch(contracts, /actorId/);
   assert.doesNotMatch(contracts, /\bplayerName\b/);
-  assert.match(contracts, /GameSdkStoredRoom/);
+  assert.match(contracts, /GameSdkOnlineRoom/);
 
+  const appSet = readFileSync(join(gameDir, "sample-game-app-set.ts"), "utf8");
+  assert.match(appSet, /defineGameSdkOnlineRoomAppSet/);
+  assert.match(appSet, /context\.actor\.playerId/);
+  assert.match(appSet, /applyAppCommand/);
   const serverModule = readFileSync(join(gameDir, "sample-game-server-module.ts"), "utf8");
-  assert.match(serverModule, /context\.actor\.playerId/);
-  assert.match(serverModule, /context\.actor\.displayName/);
-  assert.match(serverModule, /presentRoom/);
+  assert.match(serverModule, /createGameSdkOnlineRoomModule/);
+  assert.doesNotMatch(serverModule, /createRoom|applyCommand|presentRoom/);
   assert.doesNotMatch(serverModule, /Redis|DATABASE_URL|API_KEY/);
 
   const typeScriptConfig = join(cwd, "tsconfig.sdk.json");
@@ -54,6 +58,7 @@ test("game scaffold creates SDK contracts without platform storage or actor IDs"
     include: [
       join(gameDir, "sample-game-manifest.ts"),
       join(gameDir, "sample-game-contracts.ts"),
+      join(gameDir, "sample-game-app-set.ts"),
       join(gameDir, "sample-game-server-module.ts"),
     ],
   }));

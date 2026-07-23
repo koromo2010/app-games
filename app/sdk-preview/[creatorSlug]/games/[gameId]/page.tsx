@@ -1,5 +1,9 @@
 import { notFound } from "next/navigation";
 import { SdkPreviewGameShell } from "./SdkPreviewGameShell";
+import {
+  normalizeGameSdkModuleProfile,
+  type GameSdkModuleProfile,
+} from "@game-fields/game-sdk/modules";
 
 export const dynamic = "force-dynamic";
 const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])?$/;
@@ -16,6 +20,17 @@ export default async function SdkGamePage({ params }: { params: Promise<{ creato
   const response = await fetch(`${sdkPortalBaseUrl()}/api/preview-runtime/${creatorSlug}/${gameId}`, { cache: "no-store" });
   if (response.status === 404) notFound();
   if (!response.ok) throw new Error("SDK game runtime is unavailable.");
-  const game = await response.json() as { title: string; runtimeUrl: string };
-  return <SdkPreviewGameShell backHref={`/sdk-preview/${creatorSlug}`} runtimeUrl={game.runtimeUrl} title={game.title} />;
+  const game = await response.json() as {
+    title: string;
+    runtimeUrl: string;
+    modulePolicy?: GameSdkModuleProfile;
+  };
+  return (
+    <SdkPreviewGameShell
+      backHref={`/sdk-preview/${creatorSlug}`}
+      runtimeUrl={game.runtimeUrl}
+      title={game.title}
+      moduleProfile={normalizeGameSdkModuleProfile(game.modulePolicy)}
+    />
+  );
 }

@@ -1,6 +1,7 @@
 import { createNorthernOfferDeck, northernBuildings, northernCards, northernCardLabel, shuffle } from "./northern-branch-data.ts";
 import type { NorthernActionResult, NorthernBuildingId, NorthernCardId, NorthernGameAction, NorthernGameState, NorthernOffer, NorthernPlayer, NorthernPlayerSeed } from "./northern-branch-types.ts";
 import { runtimeHyperparameterNumber } from "./runtime-hyperparameters-core.ts";
+import { nextGameSdkEligibleSeat } from "@game-fields/game-sdk/modules";
 
 const handLimit = 7;
 const victoryPoints = 10;
@@ -178,7 +179,10 @@ export function applyNorthernAction(state: NorthernGameState, action: NorthernGa
   if (gainedDung) hand.push("dung");
   const players = [...state.players];
   players[state.activePlayerIndex] = { ...player, hand, usedBuildings: [] };
-  const activePlayerIndex = (state.activePlayerIndex + 1) % players.length;
+  const activePlayerIndex = nextGameSdkEligibleSeat(
+    players.map((candidate) => candidate.id),
+    state.activePlayerIndex,
+  );
   const turn = activePlayerIndex === 0 ? state.turn + 1 : state.turn;
   const next = log({ ...state, players, activePlayerIndex, turn, mainActionUsed: false }, gainedDung ? `${player.name}：家畜からダングが発生` : `${player.name}：手番終了`);
   return result(next, true, gainedDung ? "ダングを受け取り、次の人へ交代しました。" : "次の人へ交代しました。");
@@ -190,7 +194,10 @@ export function expireNorthernTurn(state: NorthernGameState): NorthernActionResu
   if (!player) return result(state, false, "手番プレイヤーが見つかりません。");
   const players = [...state.players];
   players[state.activePlayerIndex] = { ...player, usedBuildings: [] };
-  const activePlayerIndex = (state.activePlayerIndex + 1) % players.length;
+  const activePlayerIndex = nextGameSdkEligibleSeat(
+    players.map((candidate) => candidate.id),
+    state.activePlayerIndex,
+  );
   const turn = activePlayerIndex === 0 ? state.turn + 1 : state.turn;
   const next = log({ ...state, players, activePlayerIndex, turn, mainActionUsed: false }, `${player.name}：時間切れで手番終了`);
   return result(next, true, `${player.name}さんの時間切れです。次の人へ交代しました。`);

@@ -21,6 +21,11 @@
       "import": "./dist/runtime.js",
       "default": "./dist/runtime.js"
     },
+    "./modules": {
+      "types": "./dist/modules.d.ts",
+      "import": "./dist/modules.js",
+      "default": "./dist/modules.js"
+    },
     "./mock-runtime": {
       "types": "./dist/mock-runtime.d.ts",
       "import": "./dist/mock-runtime.js",

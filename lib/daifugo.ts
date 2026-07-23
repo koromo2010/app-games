@@ -8,6 +8,7 @@ import {
   type PlayingCardRank,
   type StandardPlayingCard,
 } from "./playing-cards.ts";
+import { nextGameSdkEligibleSeat } from "@game-fields/game-sdk/modules";
 
 export const daifugoPlayerIds = ["you", "cpu-1", "cpu-2", "cpu-3"] as const;
 
@@ -84,11 +85,12 @@ function finishedPlayerIds(state: DaifugoGameState) {
 
 function nextPlayerId(state: DaifugoGameState, afterPlayerId: string, excludedPlayerIds: ReadonlySet<string>) {
   const startIndex = playerIndex(state, afterPlayerId);
-  for (let offset = 1; offset <= state.players.length; offset += 1) {
-    const candidate = state.players[(startIndex + offset) % state.players.length];
-    if (!excludedPlayerIds.has(candidate.id)) return candidate.id;
-  }
-  return null;
+  const nextSeat = nextGameSdkEligibleSeat(
+    state.players.map((player) => player.id),
+    startIndex,
+    excludedPlayerIds,
+  );
+  return nextSeat < 0 ? null : state.players[nextSeat]?.id ?? null;
 }
 
 function diamondThree(card: PlayingCard): card is StandardPlayingCard {

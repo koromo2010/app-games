@@ -51,9 +51,13 @@ test("SDK Portal distributes the current DownloadMe revision", () => {
   const syncScript = read("apps/sdk-portal/scripts/sync-download.mjs");
 
   for (const source of [page, nextConfig, syncScript]) {
-    assert.match(source, /GameFieldsDownloadMe-ver6\.md/);
-    assert.doesNotMatch(source, /GameFieldsDownloadMe-ver[2345]\.md/);
+    assert.match(source, /GameFieldsDownloadMe-ver7\.md/);
+    assert.doesNotMatch(source, /GameFieldsDownloadMe-ver[23456]\.md/);
   }
+  const download = read("apps/sdk-portal/public/GameFieldsDownloadMe-ver7.md");
+  assert.match(download, /DownloadMe: `ver7`/);
+  assert.match(download, /`downloadMeVersion`が`7`/);
+  assert.doesNotMatch(download, /解除可|任意へ|必須解除/);
 });
 
 test("SDK Portal exposes one public handshake contract before authenticated tools", () => {

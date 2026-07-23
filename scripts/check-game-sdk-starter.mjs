@@ -58,6 +58,7 @@ try {
     "apps/sdk-portal/.vercel-root-placeholder",
     "src/manifest.ts",
     "src/contracts.ts",
+    "src/app-set.ts",
     "src/server-module.ts",
     "tests/game-contract.test.ts",
     "mock/README.md",
@@ -88,13 +89,25 @@ try {
     }
   }
   const starterManifest = JSON.parse(readFileSync(join(starterRoot, "starter-manifest.json"), "utf8"));
-  if (starterManifest.repository !== "https://github.com/koromo2010/app-games"
+  if (starterManifest.downloadMeVersion !== 7
+    || starterManifest.repository !== "https://github.com/koromo2010/app-games"
     || starterManifest.ref !== "sdk-starter"
     || starterManifest.sdkVersion !== "0.1.0"
     || starterManifest.platformVersion !== "0.1.0"
     || starterManifest.sdkHandshakeVersion !== 1
     || starterManifest.sdkContractVersion !== 1) {
     throw new Error("Starter manifest does not identify the expected public source and SDK version.");
+  }
+  const appSetSource = readFileSync(join(starterRoot, "src/app-set.ts"), "utf8");
+  const serverModuleSource = readFileSync(join(starterRoot, "src/server-module.ts"), "utf8");
+  if (!appSetSource.includes("defineGameSdkOnlineRoomAppSet")) {
+    throw new Error("Starter does not define its game-specific AppSet.");
+  }
+  if (
+    !serverModuleSource.includes("createGameSdkOnlineRoomModule")
+    || /\bcreateRoom\s*\(|\bapplyCommand\s*\(|\bpresentRoom\s*\(/.test(serverModuleSource)
+  ) {
+    throw new Error("Starter server module reimplements SDK basic-set responsibilities.");
   }
 
   execFileSync("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"], {
@@ -129,6 +142,7 @@ try {
   for (const required of [
     "game-fields-submission/GAME_SPEC.md",
     "game-fields-submission/package.json",
+    "game-fields-submission/src/app-set.ts",
     "game-fields-submission/src/server-module.ts",
     "game-fields-submission/tests/game-contract.test.ts",
     "game-fields-submission/vendor/game-fields-game-sdk-0.1.0.tgz",
@@ -168,6 +182,7 @@ try {
     "--branch sdk-starter",
     "https://github.com/koromo2010/app-games.git",
     "starter-manifest.json",
+    "downloadMeVersion",
     "get_sdk_handshake",
     "accepted=true",
     "sdkHandshakeVersion",

@@ -1,5 +1,6 @@
 import type { GameCatalogEntry, GameTag } from "./game-catalog";
 import { catalogEntryFromDefinition, lockedPlatformModules, type GameDefinition, type GameModulePolicy } from "./game-definition-source";
+import type { GameSdkModuleProfile } from "@game-fields/game-sdk/modules";
 
 export type SdkGameDescriptor = {
   id: string;
@@ -10,6 +11,7 @@ export type SdkGameDescriptor = {
   tags?: string[];
   visual?: string;
   modules?: GameModulePolicy["capabilities"];
+  moduleProfile?: GameSdkModuleProfile;
 };
 
 const allowedTags = new Set<GameTag>([

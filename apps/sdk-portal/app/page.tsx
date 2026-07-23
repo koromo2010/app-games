@@ -25,6 +25,8 @@ const foundations = [
 ];
 
 const available = [
+  "SDK基本セットとゲーム固有AppSetの合成",
+  "Room作成・参加・設定・revisionの共通実装",
   "Platformと同じリリース版の@game-fields/game-sdk",
   "認証済みactorを受け取るCommand契約",
   "保存Roomと閲覧者別RoomViewの分離",
@@ -96,11 +98,11 @@ export default async function Home() {
           </h1>
           <p className="hero-description">
             Game Fields SDKは、外部開発者が本番データや管理機能へ触れずに、
-            ゲーム固有部分を作成・検証・提出するための開発基盤です。
+            SDK基本セットへゲーム固有のAppSetだけを登録し、作成・検証・提出するための開発基盤です。
           </p>
           <div className="hero-actions">
-            <a className="primary-action" href="/GameFieldsDownloadMe-ver6.md" download>
-              GameFieldsDownloadMe-ver6
+            <a className="primary-action" href="/GameFieldsDownloadMe-ver7.md" download>
+              GameFieldsDownloadMe-ver7
               <span aria-hidden="true">↓</span>
             </a>
             <a className="primary-action" href="#foundation">
@@ -121,34 +123,33 @@ export default async function Home() {
             <code>game-module.ts</code>
           </div>
           <pre>
-            <code>{`defineGameServerModule({
-  createRoom(input, context) {
-    return createInitialRoom(
-      input,
-      context.actor
-    )
+            <code>{`const appSet =
+  defineGameSdkOnlineRoomAppSet({
+  createAppState(input) {
+    return createGameState(input)
   },
 
-  applyCommand(room, command, context) {
-    return runAuthorizedCommand(
+  applyAppCommand(room, command, context) {
+    return runGameCommand(
       room,
       command,
       context.actor
     )
   },
 
-  presentRoom(room, context) {
-    return createViewerSafeView(
-      room,
-      context.viewer
-    )
+  presentApp(room, context) {
+    return {
+      view: createGameView(room, context.viewer)
+    }
   }
-})`}</code>
+})
+
+createGameSdkOnlineRoomModule(appSet)`}</code>
           </pre>
           <div className="contract-card__footer">
-            <span>trusted actor</span>
-            <span>viewer-safe data</span>
-            <span>revisioned command</span>
+            <span>SDK basic set</span>
+            <span>game AppSet</span>
+            <span>safe composition</span>
           </div>
         </div>
       </section>
@@ -158,7 +159,7 @@ export default async function Home() {
           <p className="eyebrow">START A PREVIEW INSTANCE</p>
           <h2>自分専用のGame Fieldsで試す</h2>
           <p>
-            制作者ごとの専用URLに広場と部屋を用意します。新しいゲームは同じ広場へ追加され、本番と同じ導線で検証できます。
+            制作者ごとの専用URLにSDK基本セットの広場と部屋を用意します。新しいゲームはAppSetとして同じ広場へ追加され、本番と同じ導線で検証できます。
           </p>
         </div>
         <aside className="required-environment" aria-labelledby="account-link-title">
@@ -196,8 +197,8 @@ export default async function Home() {
           途中で画面を閉じたり新しいチャットへ移ったりせず、URLが案内されるまで同じチャットでお待ちください。エラーなどで保存できなかった場合は、AIが未完了であることと次の対応を案内します。
         </p>
         <div className="hero-actions">
-          <a className="primary-action" href="/GameFieldsDownloadMe-ver6.md" download>
-            GameFieldsDownloadMe-ver6.mdを取得
+          <a className="primary-action" href="/GameFieldsDownloadMe-ver7.md" download>
+            GameFieldsDownloadMe-ver7.mdを取得
             <span aria-hidden="true">↓</span>
           </a>
           <Link className="secondary-action" href="/demo">
@@ -229,9 +230,9 @@ export default async function Home() {
         <div className="status-panel">
           <div>
             <p className="eyebrow">SDK V1 FOUNDATION</p>
-            <h2>配布前に検証できるpackage境界まで完成</h2>
+            <h2>基本セットからAppSetを作るpackage境界まで完成</h2>
             <p className="status-copy">
-              独立packageのbuild・pack・外部installと、本体側adapterの認証・Redis CASは検証済みです。npm registryへの初回公開、チュートリアル、提出画面は審査ゲートを整えてから追加します。
+              独立packageのbuild・pack・外部install、AppSet合成、本体側adapterの認証・Redis CASは検証済みです。npm registryへの初回公開、チュートリアル、提出画面は審査ゲートを整えてから追加します。
             </p>
           </div>
           <ul>

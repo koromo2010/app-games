@@ -4,14 +4,16 @@ import { extname, join, relative } from "node:path";
 const root = process.cwd();
 const packageRoot = join(root, "packages/game-sdk");
 const sourceRoot = join(packageRoot, "src");
-const sdkFiles = readdirSync(sourceRoot)
+const typescriptFiles = (directory) => readdirSync(
+  directory,
+  { recursive: true },
+)
   .filter((name) => extname(name) === ".ts")
-  .map((name) => join(sourceRoot, name));
+  .map((name) => join(directory, name));
+const sdkFiles = typescriptFiles(sourceRoot);
 const runtimePackageRoot = join(root, "packages/game-runtime");
 const runtimeSourceRoot = join(runtimePackageRoot, "src");
-const runtimeFiles = readdirSync(runtimeSourceRoot)
-  .filter((name) => extname(name) === ".ts")
-  .map((name) => join(runtimeSourceRoot, name));
+const runtimeFiles = typescriptFiles(runtimeSourceRoot);
 const proofGameFile = join(root, "tests/fixtures/sdk-count-up-game.ts");
 const pilotGameRoot = join(root, "games/wordwolf-sdk");
 const pilotGameFiles = readdirSync(pilotGameRoot, { recursive: true })
@@ -29,7 +31,15 @@ const starterSourceFiles = ["src", "tests"].flatMap((directory) =>
 );
 const allowedRelativeImports = new Set([
   "./client-realtime.js",
+  "./collection.js",
   "./index.js",
+  "./modules/assignment.js",
+  "./modules/collection.js",
+  "./modules/flow.js",
+  "./modules/presentation.js",
+  "./modules/profile.js",
+  "./modules/result.js",
+  "./modules/voting.js",
   "./runtime.js",
 ]);
 const allowedRuntimeImports = new Set([
@@ -154,6 +164,26 @@ for (const absoluteFile of starterSourceFiles) {
   }
 }
 
+const starterAppSetSource = readFileSync(join(starterRoot, "src/app-set.ts"), "utf8");
+const starterServerModuleSource = readFileSync(join(starterRoot, "src/server-module.ts"), "utf8");
+if (!starterAppSetSource.includes("defineGameSdkOnlineRoomAppSet")) {
+  failures.push("sdk/starter-template/src/app-set.ts: SDK基本セットへ登録するAppSetがありません。");
+}
+if (
+  !starterServerModuleSource.includes("createGameSdkOnlineRoomModule")
+  || /\bcreateRoom\s*\(|\bapplyCommand\s*\(|\bpresentRoom\s*\(/.test(starterServerModuleSource)
+) {
+  failures.push("sdk/starter-template/src/server-module.ts: 基本セットとの合成以外を実装しないでください。");
+}
+const wordWolfAppSetSource = readFileSync(join(pilotGameRoot, "server-module.ts"), "utf8");
+if (
+  !wordWolfAppSetSource.includes("defineGameSdkOnlineRoomAppSet")
+  || !wordWolfAppSetSource.includes("createGameSdkOnlineRoomModule")
+  || wordWolfAppSetSource.includes("applyGameSdkRoomLifecycleCommand")
+) {
+  failures.push("games/wordwolf-sdk: ワードウルフ固有部をSDK基本セットへAppSetとして登録してください。");
+}
+
 const starterPackageJson = JSON.parse(readFileSync(join(starterRoot, "package.json"), "utf8"));
 if (starterPackageJson.private !== true) {
   failures.push("sdk/starter-template/package.json: 試用スターターはprivateである必要があります。");
@@ -174,7 +204,7 @@ if (packageJson.name !== "@game-fields/game-sdk") {
 if (packageJson.private !== true || packageJson.license !== "UNLICENSED") {
   failures.push("packages/game-sdk/package.json: 初回公開承認前はprivateかつUNLICENSEDである必要があります。");
 }
-for (const exportPath of [".", "./runtime", "./mock-runtime", "./client-runtime", "./handshake", "./package.json"]) {
+for (const exportPath of [".", "./runtime", "./modules", "./mock-runtime", "./client-runtime", "./handshake", "./package.json"]) {
   if (!packageJson.exports?.[exportPath]) {
     failures.push(`packages/game-sdk/package.json: exports ${exportPath} がありません。`);
   }

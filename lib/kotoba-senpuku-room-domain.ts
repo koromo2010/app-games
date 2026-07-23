@@ -15,6 +15,7 @@ import {
   type KotobaSenpukuRoundResult,
 } from "@/lib/kotoba-senpuku";
 import { playerTimeLimitSeconds, recordPlayerTimeout } from "@/lib/player-timeout-policy";
+import { allGameSdkParticipantsComplete } from "@game-fields/game-sdk/modules";
 
 export function timedOut(room: KotobaSenpukuRoom, seconds: number, now = Date.now()) {
   return Boolean(room.phaseStartedAt && seconds > 0 && now >= room.phaseStartedAt + seconds * 1000 + commonGameTimeoutGraceMs());
@@ -43,7 +44,10 @@ export function fillMissingSecrets(room: KotobaSenpukuRoom, targetIds = room.pla
 }
 
 export function allSecretsSubmitted(room: KotobaSenpukuRoom) {
-  return room.players.every((player) => Boolean(room.secrets[player.id]));
+  return allGameSdkParticipantsComplete(
+    room.players.map((player) => player.id),
+    (playerId) => Boolean(room.secrets[playerId]),
+  );
 }
 
 export function beginBattle(room: KotobaSenpukuRoom) {
@@ -205,4 +209,3 @@ export function reconcileProgress(room: KotobaSenpukuRoom) {
   }
   return room;
 }
-

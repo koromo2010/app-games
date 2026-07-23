@@ -3,7 +3,6 @@ import { playerTimeLimitSeconds, recordPlayerTimeout } from "./player-timeout-po
 import {
   countHodoaiInversions,
   dealHodoaiCards,
-  hodoaiClueRoundDestination,
   hodoaiThemes,
   pickHodoaiTheme,
   pickRandomHodoaiSorter,
@@ -13,9 +12,16 @@ import {
   type HodoaiRoom,
   type HodoaiRoundResult,
 } from "./hodoai-talk.ts";
+import {
+  allGameSdkParticipantsComplete,
+  nextGameSdkRoundStep,
+} from "@game-fields/game-sdk/modules";
 
 export function clueComplete(room: HodoaiRoom) {
-  return room.cards.every((card) => Boolean(room.clues[card.id]));
+  return allGameSdkParticipantsComplete(
+    room.cards.map((card) => card.id),
+    (cardId) => Boolean(room.clues[cardId]),
+  );
 }
 
 export function timedOut(room: HodoaiRoom, seconds: number, now = Date.now()) {
@@ -27,11 +33,17 @@ export function completeClueRound(room: HodoaiRoom) {
   for (const card of room.cards) clues[card.id] ||= "時間切れのためパス";
   const clueRound: HodoaiClueRound = { round: room.round, theme: room.theme ?? hodoaiThemes[0], clues };
   const clueHistory = [...room.clueHistory.filter((item) => item.round !== room.round), clueRound].sort((left, right) => left.round - right.round);
-  if (hodoaiClueRoundDestination(room.round, room.roundsTotal) === "clue") {
+  const step = nextGameSdkRoundStep({
+    currentRound: room.round,
+    totalRounds: room.roundsTotal,
+    repeatPhase: "clue" as const,
+    completedPhase: "arrange" as const,
+  });
+  if (!step.complete) {
     return {
       ...room,
       phase: "clue" as const,
-      round: room.round + 1,
+      round: step.round,
       theme: pickHodoaiTheme(clueHistory),
       clues: {},
       clueHistory,

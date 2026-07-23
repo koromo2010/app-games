@@ -2,6 +2,7 @@ import { normalizeCommonTimeLimit } from "./game-room-config.ts";
 import type { PlayerTimeoutFields } from "./player-timeout-policy.ts";
 import type { RoomLobbyReturnAction, RoomLobbyReturnState } from "./room-lobby-return.ts";
 import type { AppLocale } from "./app-locale.ts";
+import { nextGameSdkEligibleSeat } from "@game-fields/game-sdk/modules";
 
 export type KotobaSenpukuTheme = {
   id: string;
@@ -261,11 +262,8 @@ export function isFullyRevealedKotobaSenpukuWord(word: string, calledKana: strin
 }
 
 export function nextKotobaSenpukuSurvivorIndex(playerIds: string[], eliminatedIds: string[], currentIndex: number) {
-  for (let offset = 1; offset <= playerIds.length; offset += 1) {
-    const candidateIndex = (currentIndex + offset) % playerIds.length;
-    if (!eliminatedIds.includes(playerIds[candidateIndex] ?? "")) return candidateIndex;
-  }
-  return currentIndex;
+  const next = nextGameSdkEligibleSeat(playerIds, currentIndex, eliminatedIds);
+  return next >= 0 ? next : currentIndex;
 }
 
 export function resolveKotobaSenpukuWinnerIds(

@@ -3,16 +3,120 @@ import type {
   GameSdkCommandResult,
   GameSdkManifest,
   GameSdkOnlineRoomState,
+  GameSdkRoomPlayer,
   GameSdkRoomLifecycleCommand,
   GameSdkRoomSnapshot,
   GameSdkStoredRoom,
   GameSdkTrustedActor,
+  GameSdkViewPermissions,
   GameSdkViewer,
 } from "./index.js";
 
 export type GameSdkRoomLifecycleResult<TRoom> =
   | { handled: false }
   | { handled: true; room: TRoom };
+
+/**
+ * Platform-owned online room state with one isolated game-specific AppSet
+ * state. AppSet code cannot replace the room code, host, players, settings or
+ * revision because it only returns the nested `app` state and next phase.
+ */
+export type GameSdkOnlineRoom<
+  TSettings extends Record<string, unknown>,
+  TAppState,
+> = GameSdkOnlineRoomState<TSettings> & {
+  app: TAppState;
+};
+
+/** Standard create payload used by every online-room AppSet. */
+export type GameSdkOnlineRoomCreateInput<
+  TSettings extends Record<string, unknown>,
+  TAppInput,
+> = {
+  settings?: Partial<TSettings>;
+  app: TAppInput;
+};
+
+/** Platform lifecycle Commands plus Commands owned by one AppSet. */
+export type GameSdkOnlineRoomCommand<
+  TSettings extends Record<string, unknown>,
+  TAppCommand extends { type: string },
+> = GameSdkRoomLifecycleCommand<TSettings> | TAppCommand;
+
+export type GameSdkOnlineRoomPlayerView = {
+  seat: number;
+  displayName: string;
+  connected: boolean;
+  isHost: boolean;
+  isSelf: boolean;
+};
+
+export type GameSdkOnlineRoomCommonView<TSettings> = {
+  phase: string;
+  players: GameSdkOnlineRoomPlayerView[];
+  settings: TSettings;
+  minimumPlayers: number;
+  maximumPlayers: number;
+  isHost: boolean;
+  isMember: boolean;
+  permissions: GameSdkViewPermissions;
+};
+
+/**
+ * Browser-safe composition returned by the SDK basic set.
+ *
+ * `common` is rendered by the Game Fields shell. `app` is the only surface a
+ * game package owns. Stored player IDs are intentionally not exposed here.
+ */
+export type GameSdkOnlineRoomView<TSettings, TAppView> = {
+  common: GameSdkOnlineRoomCommonView<TSettings>;
+  app: TAppView;
+};
+
+export type GameSdkAppTransition<TAppState> = {
+  phase: string;
+  app: TAppState;
+};
+
+export type GameSdkAppPresentation<TAppView> = {
+  view: TAppView;
+  canSeeSecret?: boolean;
+  canStartGame?: boolean;
+};
+
+/**
+ * The game-specific half of an online game. Authentication, room lifecycle,
+ * settings, participant membership, revision handling and common presentation
+ * belong to the SDK basic set and are deliberately absent from this contract.
+ */
+export type GameSdkOnlineRoomAppSet<
+  TSettings extends Record<string, unknown>,
+  TAppState,
+  TAppInput,
+  TAppCommand extends { type: string },
+  TAppView,
+> = {
+  manifest: GameSdkManifest;
+  defaultSettings: TSettings;
+  normalizeSettings?: (settings: TSettings) => TSettings;
+  createAppState(
+    input: TAppInput,
+    context: GameSdkCreateContext,
+    settings: TSettings,
+  ): TAppState;
+  resetAppState(
+    room: Readonly<GameSdkOnlineRoom<TSettings, TAppState>>,
+  ): TAppState;
+  applyAppCommand(
+    room: Readonly<GameSdkOnlineRoom<TSettings, TAppState>>,
+    command: TAppCommand,
+    context: GameSdkCommandContext,
+  ): GameSdkAppTransition<TAppState>;
+  presentApp(
+    room: Readonly<GameSdkOnlineRoom<TSettings, TAppState>>,
+    context: GameSdkPresentationContext,
+  ): GameSdkAppPresentation<TAppView>;
+};
 
 /**
  * Pure shared lifecycle reducer. Storage, sessions and CAS stay in the platform
@@ -151,6 +255,180 @@ export function defineGameServerModule<
   TRoomView,
 >(module: GameSdkServerModule<TRoom, TCreateInput, TCommand, TRoomView>) {
   return module;
+}
+
+export function defineGameSdkOnlineRoomAppSet<
+  TSettings extends Record<string, unknown>,
+  TAppState,
+  TAppInput,
+  TAppCommand extends { type: string },
+  TAppView,
+>(
+  appSet: GameSdkOnlineRoomAppSet<
+    TSettings,
+    TAppState,
+    TAppInput,
+    TAppCommand,
+    TAppView
+  >,
+) {
+  if (appSet.manifest.playMode !== "online-room") {
+    throw new Error("Game SDK online AppSet requires an online-room manifest.");
+  }
+  return appSet;
+}
+
+function normalizeAppSetPhase(phase: string) {
+  const normalized = phase.trim();
+  if (
+    normalized === "lobby"
+    || !/^[a-z][A-Za-z0-9-]{0,63}$/.test(normalized)
+  ) {
+    throw new Error("APP_SET_INVALID_PHASE");
+  }
+  return normalized;
+}
+
+function createCommonPlayerView(
+  player: GameSdkRoomPlayer,
+  seat: number,
+  room: { hostPlayerId: string },
+  viewer: GameSdkViewer,
+): GameSdkOnlineRoomPlayerView {
+  return {
+    seat,
+    displayName: player.displayName,
+    connected: player.connected,
+    isHost: player.id === room.hostPlayerId,
+    isSelf: player.id === viewer.playerId,
+  };
+}
+
+/**
+ * Composes the platform-owned SDK basic set with one game-specific AppSet.
+ *
+ * Game packages should prefer this over implementing `createRoom`,
+ * lifecycle Commands and common RoomView fields themselves.
+ */
+export function createGameSdkOnlineRoomModule<
+  TSettings extends Record<string, unknown>,
+  TAppState,
+  TAppInput,
+  TAppCommand extends { type: string },
+  TAppView,
+>(
+  appSet: GameSdkOnlineRoomAppSet<
+    TSettings,
+    TAppState,
+    TAppInput,
+    TAppCommand,
+    TAppView
+  >,
+): GameSdkServerModule<
+  GameSdkOnlineRoom<TSettings, TAppState>,
+  GameSdkOnlineRoomCreateInput<TSettings, TAppInput>,
+  GameSdkOnlineRoomCommand<TSettings, TAppCommand>,
+  GameSdkOnlineRoomView<TSettings, TAppView>
+> {
+  const manifest = appSet.manifest;
+  if (manifest.playMode !== "online-room") {
+    throw new Error("Game SDK online AppSet requires an online-room manifest.");
+  }
+
+  const normalizeSettings = (settings: TSettings) => (
+    appSet.normalizeSettings ? appSet.normalizeSettings(settings) : settings
+  );
+
+  return defineGameServerModule({
+    manifest,
+
+    createRoom(input, context) {
+      const settings = normalizeSettings({
+        ...appSet.defaultSettings,
+        ...(input.settings ?? {}),
+      });
+      return {
+        code: context.roomCode,
+        revision: 1,
+        phase: "lobby",
+        hostPlayerId: context.actor.playerId,
+        players: [{
+          id: context.actor.playerId,
+          displayName: context.actor.displayName,
+          joinedAt: context.now,
+          connected: true,
+        }],
+        settings,
+        app: appSet.createAppState(input.app, context, settings),
+      };
+    },
+
+    applyCommand(room, command, context) {
+      const lifecycle = applyGameSdkRoomLifecycleCommand(room, command, context, {
+        minimumPlayers: manifest.minimumPlayers,
+        maximumPlayers: manifest.maximumPlayers,
+        normalizeSettings,
+        resetGame: (current) => ({
+          app: appSet.resetAppState(current),
+        }),
+      });
+      if (lifecycle.handled) return lifecycle.room;
+      if (command.type.startsWith("room/")) throw new Error("UNKNOWN_ROOM_COMMAND");
+      if (!room.players.some((player) => player.id === context.actor.playerId)) {
+        throw new Error("PLAYER_NOT_IN_ROOM");
+      }
+      const transition = appSet.applyAppCommand(
+        room,
+        command as TAppCommand,
+        context,
+      );
+      return advanceGameSdkRoom(room, {
+        phase: normalizeAppSetPhase(transition.phase),
+        app: transition.app,
+      });
+    },
+
+    presentRoom(room, context) {
+      const presented = appSet.presentApp(room, context);
+      const isHost = context.viewer.playerId === room.hostPlayerId;
+      const isMember = Boolean(
+        context.viewer.playerId
+        && room.players.some((player) => player.id === context.viewer.playerId),
+      );
+      const hasEnoughPlayers = room.players.length >= manifest.minimumPlayers;
+      return {
+        common: {
+          phase: room.phase,
+          players: room.players.map((player, seat) => (
+            createCommonPlayerView(
+              player,
+              seat,
+              room,
+              context.viewer,
+            )
+          )),
+          settings: room.settings,
+          minimumPlayers: manifest.minimumPlayers,
+          maximumPlayers: manifest.maximumPlayers,
+          isHost,
+          isMember,
+          permissions: {
+            canStartGame: (
+              isHost
+              && room.phase === "lobby"
+              && hasEnoughPlayers
+              && presented.canStartGame !== false
+            ),
+            canEditRoomSettings: isHost && room.phase === "lobby",
+            canAbort: isHost && room.phase !== "lobby",
+            canDebug: manifest.supportsDebug && context.viewer.debugAccess,
+            canSeeSecret: Boolean(presented.canSeeSecret),
+          },
+        },
+        app: presented.view,
+      };
+    },
+  });
 }
 
 /** Helper for pure domains to produce the one-step revision required by CAS. */

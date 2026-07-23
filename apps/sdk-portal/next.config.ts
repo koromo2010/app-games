@@ -6,11 +6,11 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        source: "/GameFieldsDownloadMe-ver6.md",
+        source: "/GameFieldsDownloadMe-ver7.md",
         headers: [
           {
             key: "Content-Disposition",
-            value: 'attachment; filename="GameFieldsDownloadMe-ver6.md"',
+            value: 'attachment; filename="GameFieldsDownloadMe-ver7.md"',
           },
           {
             key: "Content-Type",

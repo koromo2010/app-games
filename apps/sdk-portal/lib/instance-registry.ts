@@ -1,5 +1,10 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { ensureSdkSchema, sdkSql } from "@/lib/sdk-postgres";
+import {
+  normalizeGameSdkModuleProfile,
+  updateGameSdkModuleProfile,
+  type GameSdkModuleProfile,
+} from "@game-fields/game-sdk/modules";
 
 const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])?$/;
 const RESERVED = new Set(["api", "download", "downloads", "foundation", "status", "review", "www", "admin"]);
@@ -112,22 +117,92 @@ export async function listCreatorGames(slug: string) {
   await ensureSdkSchema();
   const rows = await sdkSql()`
     SELECT g.game_id AS "gameId", g.title, g.description, g.status,
+           g.module_policy AS "modulePolicy",
            (g.mock_revision IS NOT NULL) AS "mockAvailable"
     FROM sdk_games g JOIN sdk_creators c ON c.id = g.creator_id
     WHERE c.slug = ${slug} ORDER BY g.updated_at DESC
   `;
-  return rows as Array<{ gameId: string; title: string; description: string; status: string; mockAvailable: boolean }>;
+  return (rows as Array<{
+    gameId: string;
+    title: string;
+    description: string;
+    status: string;
+    modulePolicy: unknown;
+    mockAvailable: boolean;
+  }>).map((game) => ({
+    ...game,
+    modulePolicy: normalizeGameSdkModuleProfile(game.modulePolicy),
+  }));
 }
 
 export async function getCreatorGamePreview(slug: string, gameId: string) {
   await ensureSdkSchema();
   const rows = await sdkSql()`
-    SELECT g.game_id AS "gameId", g.title, g.mock_revision AS "mockRevision"
+    SELECT g.game_id AS "gameId", g.title,
+           g.mock_revision AS "mockRevision",
+           g.module_policy AS "modulePolicy"
     FROM sdk_games g JOIN sdk_creators c ON c.id = g.creator_id
     WHERE c.slug = ${slug} AND g.game_id = ${gameId} AND g.mock_revision IS NOT NULL
     LIMIT 1
   `;
   return (Array.isArray(rows) ? rows[0] : undefined) as
-    | { gameId: string; title: string; mockRevision: string }
+    | {
+        gameId: string;
+        title: string;
+        mockRevision: string;
+        modulePolicy: unknown;
+      }
     | undefined;
+}
+
+export async function getCreatorGameModuleProfile(
+  slug: string,
+  gameId: string,
+): Promise<GameSdkModuleProfile | null> {
+  await ensureSdkSchema();
+  const rows = await sdkSql()`
+    SELECT g.module_policy AS "modulePolicy"
+    FROM sdk_games g
+    JOIN sdk_creators c ON c.id = g.creator_id
+    WHERE c.slug = ${slug} AND g.game_id = ${gameId}
+    LIMIT 1
+  `;
+  const row = (Array.isArray(rows) ? rows[0] : undefined) as
+    | { modulePolicy?: unknown }
+    | undefined;
+  return row
+    ? normalizeGameSdkModuleProfile(row.modulePolicy)
+    : null;
+}
+
+export async function updateCreatorGameModuleProfile(input: {
+  slug: string;
+  gameId: string;
+  ownerPlayerId: string;
+  updates: unknown;
+}): Promise<GameSdkModuleProfile | null> {
+  await ensureSdkSchema();
+  const current = await getCreatorGameModuleProfile(
+    input.slug,
+    input.gameId,
+  );
+  if (!current) return null;
+  const next = updateGameSdkModuleProfile(current, input.updates);
+  const rows = await sdkSql()`
+    UPDATE sdk_games g
+    SET module_policy = ${JSON.stringify(next)}::jsonb,
+        updated_at = NOW()
+    FROM sdk_creators c
+    WHERE g.creator_id = c.id
+      AND c.slug = ${input.slug}
+      AND c.owner_player_id = ${input.ownerPlayerId}
+      AND g.game_id = ${input.gameId}
+    RETURNING g.module_policy AS "modulePolicy"
+  `;
+  const saved = (Array.isArray(rows) ? rows[0] : undefined) as
+    | { modulePolicy?: unknown }
+    | undefined;
+  return saved
+    ? normalizeGameSdkModuleProfile(saved.modulePolicy)
+    : null;
 }

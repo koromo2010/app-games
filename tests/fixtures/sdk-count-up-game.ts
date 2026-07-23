@@ -1,13 +1,14 @@
 import {
   GAME_SDK_VERSION,
   defineGameManifest,
-  type GameSdkOnlineRoomState,
-  type GameSdkRoomLifecycleCommand,
 } from "@game-fields/game-sdk";
 import {
-  advanceGameSdkRoom,
-  applyGameSdkRoomLifecycleCommand,
-  defineGameServerModule,
+  createGameSdkOnlineRoomModule,
+  defineGameSdkOnlineRoomAppSet,
+  type GameSdkOnlineRoom,
+  type GameSdkOnlineRoomCommand,
+  type GameSdkOnlineRoomCreateInput,
+  type GameSdkOnlineRoomView,
 } from "@game-fields/game-sdk/runtime";
 
 export const sdkCountUpManifest = defineGameManifest({
@@ -22,98 +23,123 @@ export const sdkCountUpManifest = defineGameManifest({
   supportsReplay: false,
   supportsRating: false,
   usesLlm: false,
+  settings: [{
+    key: "target",
+    label: { ja: "ゴール", en: "Target" },
+    type: "number",
+    minimum: 2,
+    maximum: 10,
+  }],
 });
 
-type SdkCountUpSettings = Record<string, never>;
-
-export type SdkCountUpRoom = GameSdkOnlineRoomState<SdkCountUpSettings> & {
-  phase: "lobby" | "playing" | "result";
-  count: number;
+type SdkCountUpSettings = {
   target: number;
+};
+
+type SdkCountUpAppState = {
+  count: number;
   lastActorPlayerId: string | null;
 };
 
-export type SdkCountUpCreateInput = {
-  target: number;
-};
+type SdkCountUpAppInput = Record<string, never>;
 
-export type SdkCountUpCommand =
-  | GameSdkRoomLifecycleCommand<SdkCountUpSettings>
-  | { type: "start" }
-  | { type: "count-up" };
+type SdkCountUpAppCommand =
+  | { type: "game/start" }
+  | { type: "game/count-up" };
 
-export type SdkCountUpRoomView = {
-  phase: SdkCountUpRoom["phase"];
-  playerNames: string[];
+type SdkCountUpAppView = {
   count: number;
   target: number;
-  isHost: boolean;
-  isMember: boolean;
+  lastActorSeat: number | null;
 };
 
-export const sdkCountUpServerModule = defineGameServerModule<
-  SdkCountUpRoom,
-  SdkCountUpCreateInput,
-  SdkCountUpCommand,
-  SdkCountUpRoomView
+export type SdkCountUpRoom = GameSdkOnlineRoom<
+  SdkCountUpSettings,
+  SdkCountUpAppState
+>;
+
+export type SdkCountUpCreateInput = GameSdkOnlineRoomCreateInput<
+  SdkCountUpSettings,
+  SdkCountUpAppInput
+>;
+
+export type SdkCountUpCommand = GameSdkOnlineRoomCommand<
+  SdkCountUpSettings,
+  SdkCountUpAppCommand
+>;
+
+export type SdkCountUpRoomView = GameSdkOnlineRoomView<
+  SdkCountUpSettings,
+  SdkCountUpAppView
+>;
+
+export const sdkCountUpAppSet = defineGameSdkOnlineRoomAppSet<
+  SdkCountUpSettings,
+  SdkCountUpAppState,
+  SdkCountUpAppInput,
+  SdkCountUpAppCommand,
+  SdkCountUpAppView
 >({
   manifest: sdkCountUpManifest,
-
-  createRoom(input, context) {
-    const target = Number.isSafeInteger(input.target) ? Math.min(10, Math.max(2, input.target)) : 3;
+  defaultSettings: {
+    target: 3,
+  },
+  normalizeSettings(settings) {
     return {
-      code: context.roomCode,
-      revision: 1,
-      phase: "lobby",
-      hostPlayerId: context.actor.playerId,
-      players: [{
-        id: context.actor.playerId,
-        displayName: context.actor.displayName,
-        joinedAt: context.now,
-        connected: true,
-      }],
-      settings: {},
+      target: Number.isSafeInteger(settings.target)
+        ? Math.min(10, Math.max(2, settings.target))
+        : 3,
+    };
+  },
+  createAppState() {
+    return {
       count: 0,
-      target,
       lastActorPlayerId: null,
     };
   },
-
-  applyCommand(room, command, context) {
-    const lifecycle = applyGameSdkRoomLifecycleCommand(room, command, context, {
-      minimumPlayers: sdkCountUpManifest.minimumPlayers,
-      maximumPlayers: sdkCountUpManifest.maximumPlayers,
-      resetGame: () => ({
-        count: 0,
-        lastActorPlayerId: null,
-      }),
-    });
-    if (lifecycle.handled) return lifecycle.room;
-    const actorIsMember = room.players.some((player) => player.id === context.actor.playerId);
-    if (!actorIsMember) throw new Error("MEMBER_REQUIRED");
-    if (command.type === "start") {
-      if (context.actor.role !== "host") throw new Error("HOST_REQUIRED");
+  resetAppState() {
+    return {
+      count: 0,
+      lastActorPlayerId: null,
+    };
+  },
+  applyAppCommand(room, command, context) {
+    if (command.type === "game/start") {
+      if (context.actor.playerId !== room.hostPlayerId) throw new Error("HOST_REQUIRED");
       if (room.phase !== "lobby") throw new Error("INVALID_PHASE");
-      if (room.players.length < sdkCountUpManifest.minimumPlayers) throw new Error("NOT_ENOUGH_PLAYERS");
-      return advanceGameSdkRoom(room, { phase: "playing" });
+      if (room.players.length < sdkCountUpManifest.minimumPlayers) {
+        throw new Error("NOT_ENOUGH_PLAYERS");
+      }
+      return {
+        phase: "playing",
+        app: room.app,
+      };
     }
     if (room.phase !== "playing") throw new Error("INVALID_PHASE");
-    const count = room.count + 1;
-    return advanceGameSdkRoom(room, {
-      count,
-      phase: count >= room.target ? "result" : "playing",
-      lastActorPlayerId: context.actor.playerId,
-    });
-  },
-
-  presentRoom(room, context) {
+    const count = room.app.count + 1;
     return {
-      phase: room.phase,
-      playerNames: room.players.map((player) => player.displayName),
-      count: room.count,
-      target: room.target,
-      isHost: context.viewer.playerId === room.hostPlayerId,
-      isMember: room.players.some((player) => player.id === context.viewer.playerId),
+      phase: count >= room.settings.target ? "result" : "playing",
+      app: {
+        count,
+        lastActorPlayerId: context.actor.playerId,
+      },
+    };
+  },
+  presentApp(room) {
+    return {
+      view: {
+        count: room.app.count,
+        target: room.settings.target,
+        lastActorSeat: room.app.lastActorPlayerId
+          ? room.players.findIndex((player) => (
+            player.id === room.app.lastActorPlayerId
+          ))
+          : null,
+      },
     };
   },
 });
+
+export const sdkCountUpServerModule = createGameSdkOnlineRoomModule(
+  sdkCountUpAppSet,
+);
