@@ -2060,8 +2060,9 @@
 - `npm test`成功（427件）。
 - `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
 - `git diff --check`成功。
+- 最終HEAD `9c1a2a1`の`app-games-dev` Vercel Deploymentが`READY`となり、`dev.game-fields.com`への割当を確認した。
 
 ### 未対応・保留
 
-- `develop`へ実装コミット`8d3710a`をpush済み。Vercel自動デプロイの取り込み待ち。
-- 反映後、dev実機でPC幅と狭い画面の表示、移動・サイズ変更・最小化を確認する。
+- `develop`へ実装コミット`8d3710a`、公開記録コミット`9c1a2a1`をpush済み。
+- dev実機でのPC幅・狭い画面表示、移動・サイズ変更・最小化の確認は未実施。
