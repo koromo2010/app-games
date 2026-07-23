@@ -106,6 +106,9 @@ export function WordWolfDesktopLayout({ controller }: { controller: WordWolfCont
               onCopyRoomCode={() => void actions.copyRoomCode()}
               onCopyRoomInvite={() => void actions.copyRoomInvite()}
               onDissolveRoom={() => void actions.dissolveRoom()}
+              canReturnToRoom={permissions.isHost || result.canReturnToRoom}
+              isRoomDissolved={result.isRoomDissolved}
+              onReturnToRoom={permissions.isHost ? actions.resetRoom : actions.returnToRoom}
               onRemoveWaitingPlayer={(targetPlayerId, targetName) => { if (window.confirm(`${targetName}さんを退出扱いにしますか？`)) void actions.runRoomAction({ type: "remove-waiting-player", targetPlayerId }); }}
             >
               {room.phase === "lobby" && (

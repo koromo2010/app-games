@@ -1,5 +1,5 @@
 import { GameFeedbackPanel } from "../components/GameFeedbackPanel";
-import { RoomResultActions } from "../components/RoomResultActions";
+import { OnlineRoomLifecycleActions } from "../components/OnlineRoomLifecycleActions";
 import type { Room } from "@/lib/wordwolf-game-types";
 import { VoteHistoryPanel } from "./WordWolfPanels";
 import { panelClass } from "./styles";
@@ -75,7 +75,7 @@ export function WordWolfResultPanel({ room, resultTitle, hasWolf, wolfPlayers, a
       </dl>
       <p className="mt-3 text-xs leading-5 text-slate-500">お題理由: {room.topicReason} / 取得元: {topicSourceLabel}</p>
       {room.topicGeneration && feedbackPlayerId && <GameFeedbackPanel artifactId={`wordwolf:${room.code}:${room.gameNumber}:${room.villageWord}:${room.wolfWord}`} artifactText={`村側=${room.villageWord} / 狼側=${room.wolfWord} / 理由=${room.topicReason}`} game="wordwolf" task="wordwolf.topic" playerId={feedbackPlayerId} generation={room.topicGeneration} reasonOptions={feedbackReasons} settings={{ dictionarySource: room.topicDictionarySource, pairDistance: room.topicPairDistance, difficulty: room.topicDifficulty, topicHint: room.topicHint, anchorWordId: room.topicAnchorWordId ?? "", anchorWord: room.topicAnchorWord ?? "", partnerWordId: room.topicPartnerWordId ?? "", playerCount: room.players.length, wolfCount }} outcome={{ winner: room.winner ?? "unknown", accusedIsWolf, voteRounds: room.voteHistory.length }} />}
-      <RoomResultActions canReturnToRoom={canReturnToRoom} isHost={isHost} isRoomDissolved={isRoomDissolved} onReturnToRoom={onReturnToRoom} onDissolve={onDissolve} />
+      <OnlineRoomLifecycleActions surface="result" canReturnToRoom={canReturnToRoom} isHost={isHost} isRoomDissolved={isRoomDissolved} onReturnToRoom={onReturnToRoom} onDissolve={onDissolve} />
     </div>
   );
 }

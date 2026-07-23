@@ -6,6 +6,7 @@ import { normalizeWolfCount } from "./wordwolf-room-adapter";
 import { normalizeWordDifficulty, type WordDifficulty } from "@/lib/word-selection-protocol";
 import type { GameGenerationMeta } from "@/lib/game-ai-types";
 import type { WordWolfDebugTrace } from "@/lib/wordwolf-topic-types";
+import { aiActivityFetch } from "@/lib/ai-activity-client";
 
 type RunRoomAction = (action: WordWolfRoomAction, persistDefaults?: boolean) => Promise<Room | null>;
 
@@ -31,7 +32,11 @@ export function useWordWolfLobbyActions(room: Room | null, runRoomAction: RunRoo
     const params = new URLSearchParams({ test: "1", roomCode: room.code, source: room.topicDictionarySource, distance: room.topicPairDistance, difficulty: room.topicDifficulty });
     if (forceNew) params.set("forceNew", "1");
     if (room.topicHint.trim()) params.set("hint", room.topicHint.trim().slice(0, 80));
-    const response = await fetch(`/api/wordwolf/topic?${params.toString()}`, { cache: "no-store" });
+    const response = await aiActivityFetch(
+      forceNew ? "ワードウルフの新規ワード生成" : "ワードウルフの候補確認",
+      `/api/wordwolf/topic?${params.toString()}`,
+      { cache: "no-store" },
+    );
     const topic = (await response.json()) as Partial<WordWolfTopic> & {
       error?: string;
       diagnosticCode?: string;

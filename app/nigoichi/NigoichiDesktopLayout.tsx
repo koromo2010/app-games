@@ -14,7 +14,7 @@ import { GameTopMenu, gameTopBannerActionClass, gameTopBannerDangerActionClass, 
 import { OnlineRoomSpectatorLink } from "@/app/components/OnlineRoomSpectatorLink";
 import { PageLoadingOverlay } from "@/app/components/PageLoadingOverlay";
 import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
-import { RoomResultActions } from "@/app/components/RoomResultActions";
+import { OnlineRoomLifecycleActions } from "@/app/components/OnlineRoomLifecycleActions";
 import { RoomLobbyReturnStatus } from "@/app/components/RoomLobbyReturnStatus";
 import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
 import {
@@ -308,7 +308,7 @@ export function NigoichiDesktopLayout({ controller }: { controller: NigoichiCont
                 </dl>}
               </article>;
             })}</div>
-            <RoomResultActions canReturnToRoom={isHost || resultReturnGate.canReturnToRoom} disabled={isSaving} isHost={isHost} isRoomDissolved={resultReturnGate.isRoomDissolved} onReturnToRoom={isHost ? () => runAction({ type: "reset-game", actorId: playerId }) : returnToRoom} onDissolve={isHost ? dissolveRoom : undefined} />
+            <OnlineRoomLifecycleActions surface="result" canReturnToRoom={isHost || resultReturnGate.canReturnToRoom} disabled={isSaving} isHost={isHost} isRoomDissolved={resultReturnGate.isRoomDissolved} onReturnToRoom={isHost ? () => runAction({ type: "reset-game", actorId: playerId }) : returnToRoom} onDissolve={isHost ? dissolveRoom : undefined} />
           </section>}
           {room.phase === "result" && <GameResultShareButton title="ワードアウト プレイログ" text={nigoichiShareText(room)} url="/word-out" />}
           {room.phase === "clue" && !myHand && <p className="rounded-xl border border-rose-300/30 bg-rose-300/10 p-3 text-sm font-bold">あなたの手札を取得できませんでした。画面を再読み込みしてください。</p>}

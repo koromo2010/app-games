@@ -4,6 +4,7 @@ import { isPlayerAuthenticated } from "@/lib/player-session";
 import type { TahoiyaAnswererMode, TahoiyaDifficulty, TahoiyaPlayMode, TahoiyaRoom, TahoiyaRoomAction, TahoiyaRoomChoice, TahoiyaTopic } from "@/lib/tahoiya-types";
 import type { DebugWordGenerationResult } from "../components/DebugWordGenerationTest";
 import { applyTahoiyaSpecialAction, createEmptyRoom, createPlayer, createRoomInStore, deleteHostedRoomsFromStore, getOwnerId, listJoinableRoomsFromStore, loadActiveRoomFromStore, loadRoomDefaultsFromStore, saveRoomDefaultsToStore } from "./tahoiya-room-adapter";
+import { aiActivityFetch } from "@/lib/ai-activity-client";
 
 type RunAction = (action: TahoiyaRoomAction, persistDefaults?: boolean) => Promise<TahoiyaRoom | null>;
 type Params = { room: TahoiyaRoom | null; playerId: string; playerName: string; avatarColor: string; avatarImage: string | null; passphrase: string; joinCode: string; runRoomAction: RunAction; setRoom: Dispatch<SetStateAction<TahoiyaRoom | null>>; setActivePlayerId: Dispatch<SetStateAction<string>>; setJoinableRooms: Dispatch<SetStateAction<TahoiyaRoomChoice[]>>; setMessage: Dispatch<SetStateAction<string>> };
@@ -40,7 +41,7 @@ export function useTahoiyaLobbyActions(params: Params) {
   const testWordGeneration = async (): Promise<DebugWordGenerationResult> => {
     if (!room) throw new Error("部屋の設定を読み込めませんでした。");
     const query = new URLSearchParams({ test: "1", roomCode: room.code, difficulty: room.topicDifficulty });
-    const response = await fetch(`/api/tahoiya/topic?${query}`, { cache: "no-store" });
+    const response = await aiActivityFetch("たほい屋のお題生成テスト", `/api/tahoiya/topic?${query}`, { cache: "no-store" });
     const topic = await response.json() as TahoiyaTopic & { error?: string };
     if (!response.ok) throw new Error(topic.notice || topic.error || "ワードを生成できませんでした。");
     if (!topic.word || !topic.realDefinition) throw new Error(topic.notice || topic.error || "ワードを生成できませんでした。");
@@ -49,7 +50,7 @@ export function useTahoiyaLobbyActions(params: Params) {
   const testDifficultyScreening = async (): Promise<DebugWordGenerationResult> => {
     if (!room) throw new Error("部屋の設定を読み込めませんでした。");
     const query = new URLSearchParams({ roomCode: room.code, difficulty: room.topicDifficulty, screenDifficulty: "1" });
-    const response = await fetch(`/api/tahoiya/topic?${query}`, { cache: "no-store" });
+    const response = await aiActivityFetch("たほい屋の未判定語審査", `/api/tahoiya/topic?${query}`, { cache: "no-store" });
     const data = await response.json() as { error?: string; persisted?: boolean; persistedCount?: number; generation?: TahoiyaTopic["generation"]; screening?: Array<{ difficulty: "extreme" | "standard" | "rejected"; word: string; verdict: "known" | "borderline" | "ordinary-unknown" | "almost-nobody-knows"; exclusionFlags: Array<"sensitive" | "university" | "company" | "place">; estimatedRecognitionPercent: number; confidence: number; reason: string }> };
     if (!response.ok || !data.screening) throw new Error(data.error || "難易度を審査できませんでした。");
     const labels = { known: "既知寄り", borderline: "境界", "ordinary-unknown": "一般には不明", "almost-nobody-knows": "ほぼ誰も知らない" } as const;

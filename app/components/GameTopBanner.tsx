@@ -1,5 +1,6 @@
 import Image from "next/image";
 import type { ReactNode } from "react";
+import { AiActivityVital } from "@/app/components/AiActivityVital";
 
 type GameTopBannerProps = {
   eyebrow: string;
@@ -16,7 +17,10 @@ export function GameTopBanner({ eyebrow, title, children }: GameTopBannerProps) 
         <div className="flex min-w-0 shrink-0 items-center gap-3">
           <Image src="/site-icon" alt="" width={44} height={44} unoptimized className="h-11 w-11 shrink-0 rounded-xl object-cover shadow-lg shadow-slate-950/30" />
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase text-cyan-200">{eyebrow}</p>
+            <div className="flex items-center gap-2">
+              <p className="truncate text-xs font-semibold uppercase text-cyan-200">{eyebrow}</p>
+              <AiActivityVital />
+            </div>
             <h1 className="mt-0.5 truncate text-2xl font-black tracking-normal sm:text-3xl">{title}</h1>
           </div>
         </div>

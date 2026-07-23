@@ -110,7 +110,9 @@ export function TahoiyaDesktopLayout({ controller }: { controller: TahoiyaContro
             onPlayModeChange={actions.setPlayMode} onDifficultyChange={actions.setTopicDifficulty} onAnswererModeChange={actions.setAnswererMode}
             onAnswererChange={actions.setManualAnswerer} onShowDefinitionChange={actions.setShowRealDefinitionToWriters}
             onFakeDefinitionsPerPlayerChange={actions.setFakeDefinitionsPerPlayer} onTimeLimitChange={actions.setActionTimeLimit}
-            onStartRound={() => void actions.startRound()} onDissolveRoom={() => void actions.dissolveRoom()} />
+            onStartRound={() => void actions.startRound()} onDissolveRoom={() => void actions.dissolveRoom()}
+            canReturnToRoom={isHost || result.canReturnToRoom} isRoomDissolved={result.isRoomDissolved}
+            onReturnToRoom={isHost ? actions.nextRound : actions.returnToLobby} />
           {room && <TahoiyaScorePanel room={room} players={sortedScores} />}
         </aside>
         <section className="space-y-4">

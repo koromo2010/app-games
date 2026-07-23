@@ -5,6 +5,7 @@ import { applyTahoiyaSpecialAction } from "./tahoiya-room-adapter";
 import { nextMissingDefinitionIndex, playerDefinitionsComplete } from "@/lib/tahoiya-room-domain";
 import { getAnswerer, getDefinitionWriters } from "./use-tahoiya-view-model";
 import { syncTahoiyaDeviceTopicHistory } from "./tahoiya-device-topic-history";
+import { aiActivityFetch } from "@/lib/ai-activity-client";
 
 type RunAction = (action: TahoiyaRoomAction, persistDefaults?: boolean) => Promise<TahoiyaRoom | null>;
 type Setter = Dispatch<SetStateAction<string>>;
@@ -52,7 +53,7 @@ export function useTahoiyaGameActions(params: Params) {
   const polishDefinition = async () => {
     const room = params.room; if (!room || params.isAnswerer || params.writingDone || !params.definitionInput.trim() || params.isPolishing) return;
     params.setIsPolishing(true); params.setPolishMessage("");
-    try { const response = await fetch("/api/tahoiya/polish-definition", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ roomCode: room.code, text: params.definitionInput.trim() }) }); const data = await response.json() as { text?: string; provider?: string; model?: string; error?: string }; if (!response.ok || !data.text) return params.setPolishMessage(data.error || "偽説明を整えられませんでした。"); params.setDefinitionInput(data.text); params.setPolishMessage(`辞書調に整えました（${data.provider ?? "AI"} / ${data.model ?? "model"}）。内容を確認してから投稿してください。`); }
+    try { const response = await aiActivityFetch("たほい屋の偽説明調整", "/api/tahoiya/polish-definition", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ roomCode: room.code, text: params.definitionInput.trim() }) }); const data = await response.json() as { text?: string; provider?: string; model?: string; error?: string }; if (!response.ok || !data.text) return params.setPolishMessage(data.error || "偽説明を整えられませんでした。"); params.setDefinitionInput(data.text); params.setPolishMessage(`辞書調に整えました（${data.provider ?? "AI"} / ${data.model ?? "model"}）。内容を確認してから投稿してください。`); }
     catch { params.setPolishMessage("偽説明を整えられませんでした。"); } finally { params.setIsPolishing(false); }
   };
   const castVote = async () => {

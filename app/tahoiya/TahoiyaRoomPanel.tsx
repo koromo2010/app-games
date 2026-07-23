@@ -2,6 +2,7 @@ import type { TahoiyaAnswererMode, TahoiyaDifficulty, TahoiyaPlayMode, TahoiyaPl
 import { allRoomPlayersReturned } from "@/lib/room-lobby-return";
 import { RoomConfigSummary } from "../components/RoomConfigSummary";
 import { RoomTimeLimitControl } from "../components/RoomTimeLimitControl";
+import { OnlineRoomLifecycleActions } from "../components/OnlineRoomLifecycleActions";
 import { cyanButtonClass, dangerButtonClass, inputClass, panelClass, primaryButtonClass, subtleButtonClass } from "../wordwolf/styles";
 import { tahoiyaFakeDefinitionsPerPlayerChoices } from "@/lib/tahoiya-definitions";
 
@@ -48,6 +49,9 @@ type Props = {
   onTimeLimitChange: (value: number) => void;
   onStartRound: () => void;
   onDissolveRoom: () => void;
+  canReturnToRoom: boolean;
+  isRoomDissolved: boolean;
+  onReturnToRoom: () => void;
 };
 
 const amberChoice = "border-amber-500 bg-amber-100 text-amber-950";
@@ -100,7 +104,15 @@ function ActiveRoomPanel(props: Props & { room: TahoiyaRoom }) {
         {props.isDebugMode && <span className="ml-2 text-xs font-bold text-cyan-700">切替はDEBUGメニュー</span>}
       </div>
       {room.phase === "lobby" && (props.isHost ? <HostActions {...props} room={room} /> : !room.topicGenerationProgress && <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-center text-xs font-semibold text-slate-600">ホストのラウンド開始を待っています。</p>)}
-      {props.isHost && <button onClick={props.onDissolveRoom} className={`w-full ${dangerButtonClass}`}>部屋を解散</button>}
+      <OnlineRoomLifecycleActions
+        surface={room.phase === "lobby" ? "lobby" : room.phase === "result" ? "result" : "playing"}
+        canReturnToRoom={props.canReturnToRoom}
+        isHost={props.isHost}
+        isRoomDissolved={props.isRoomDissolved}
+        lobbyDissolveClassName={`w-full ${dangerButtonClass}`}
+        onReturnToRoom={props.onReturnToRoom}
+        onDissolve={props.onDissolveRoom}
+      />
     </div>
   );
 }

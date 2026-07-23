@@ -3,6 +3,7 @@ import { defaultAvatarImage, fallbackAvatarColor } from "@/lib/player-session";
 import type { Room } from "@/lib/wordwolf-game-types";
 import { dangerButtonClass, panelClass } from "./styles";
 import { RoomLobbyReturnStatus } from "@/app/components/RoomLobbyReturnStatus";
+import { OnlineRoomLifecycleActions } from "@/app/components/OnlineRoomLifecycleActions";
 import { isOnlineRoomDebugPlayer } from "@/lib/online-room-access";
 
 type Props = {
@@ -12,11 +13,14 @@ type Props = {
   onCopyRoomCode: () => void;
   onCopyRoomInvite: () => void;
   onDissolveRoom: () => void;
+  canReturnToRoom: boolean;
+  isRoomDissolved: boolean;
+  onReturnToRoom: () => void;
   onRemoveWaitingPlayer: (playerId: string, playerName: string) => void;
   children?: ReactNode;
 };
 
-export function WordWolfRoomSidebar({ room, activePlayerId, isHost, onCopyRoomCode, onCopyRoomInvite, onDissolveRoom, onRemoveWaitingPlayer, children }: Props) {
+export function WordWolfRoomSidebar({ room, activePlayerId, isHost, onCopyRoomCode, onCopyRoomInvite, onDissolveRoom, canReturnToRoom, isRoomDissolved, onReturnToRoom, onRemoveWaitingPlayer, children }: Props) {
   const scoreRows = room.players
     .map((player) => ({ player, wins: room.scores[player.id] ?? 0 }))
     .sort((left, right) => right.wins - left.wins || left.player.joinedAt - right.player.joinedAt);
@@ -47,7 +51,15 @@ export function WordWolfRoomSidebar({ room, activePlayerId, isHost, onCopyRoomCo
       <div className="mt-3 space-y-2">{scoreRows.map(({ player, wins }) => <div key={player.id} className="flex items-center justify-between gap-3 text-sm"><span className="min-w-0 truncate text-slate-700">{player.name}</span><span className="shrink-0 rounded-md bg-white px-2 py-1 font-bold text-slate-950">{wins}勝</span></div>)}</div>
     </div>
     <RoomLobbyReturnStatus state={room.lobbyReturn} players={room.players} hostId={room.hostId} isHost={isHost} variant="light" onRemoveWaitingPlayer={(player) => onRemoveWaitingPlayer(player.id, player.name)} />
-    {isHost && <button onClick={onDissolveRoom} className={`mt-4 w-full ${dangerButtonClass}`}>部屋を解散</button>}
+    <OnlineRoomLifecycleActions
+      surface={room.phase === "lobby" ? "lobby" : room.phase === "result" ? "result" : "playing"}
+      canReturnToRoom={canReturnToRoom}
+      isHost={isHost}
+      isRoomDissolved={isRoomDissolved}
+      lobbyDissolveClassName={`mt-4 w-full ${dangerButtonClass}`}
+      onReturnToRoom={onReturnToRoom}
+      onDissolve={onDissolveRoom}
+    />
     {children}
   </div>;
 }

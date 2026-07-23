@@ -25,6 +25,7 @@ export function createWordWolfViewPermissions(input: {
   const { room, playerAccountId } = input;
   const isHost = Boolean(room && playerAccountId === room.hostId);
   const isLobby = room?.phase === "lobby";
+  const isResult = room?.phase === "result";
 
   return {
     isHost,
@@ -35,7 +36,7 @@ export function createWordWolfViewPermissions(input: {
     canSubmitFinalAnswer: input.isMyFinalAnswerTurn,
     canAbort: isHost && Boolean(room?.debugMode) && Boolean(room && !isLobby),
     canDebug: isHost,
-    canDissolve: isHost,
+    canDissolve: isHost && Boolean(isLobby || isResult),
     canSeeSecret: Boolean(input.ownWord),
   };
 }

@@ -45,10 +45,11 @@
 | 共通部屋設定 | `lib/room-defaults-store.ts`, `lib/game-room-defaults-client.ts`, `app/components/RoomConfigSummary.tsx` |
 | 共通トランプ基盤 | `lib/playing-cards.ts`, `lib/playing-card-presentation.ts`, `app/components/PlayingCard.tsx`, `app/components/PlayingCardHand.tsx`, `app/components/PlayingCardBackStack.tsx` |
 | 大富豪 | `lib/daifugo.ts`, `lib/daifugo-room-store.ts`, `app/daifugo/DaifugoGame.tsx`, `app/daifugo/DaifugoPractice.tsx`, `docs/DAIFUGO.md`（3〜6人オンライン＋CPU練習） |
-| 共通結果操作 | `app/components/RoomResultActions.tsx` |
+| 共通部屋操作 | `app/components/OnlineRoomLifecycleActions.tsx`, `app/components/RoomResultActions.tsx` |
+| 共通AI通信表示 | `lib/ai-activity-client.ts`, `app/components/AiActivityVital.tsx`, `app/components/GameTopBanner.tsx` |
 | 共通ページ遷移 | `app/components/AppLink.tsx`, `app/components/RouteTransitionProvider.tsx`, `app/components/PageLoadingOverlay.tsx`, `app/loading.tsx` |
 | 共通時間制限 | `lib/game-room-config.ts`, `app/components/RoomTimeLimitControl.tsx` |
-| 共通デバッグ認証・操作 | `lib/debug-access.ts`, `app/components/DebugModeButton.tsx`, `app/components/DebugGameTools.tsx`, `app/components/DebugParticipantControls.tsx`, `app/api/debug-auth/route.ts`, `app/users/me/UserDashboard.tsx` |
+| 共通デバッグ認証・操作 | `lib/debug-access.ts`, `app/components/DebugModeButton.tsx`, `app/components/DebugToolWindow.tsx`, `app/components/DebugGameTools.tsx`, `app/components/DebugParticipantControls.tsx`, `app/api/debug-auth/route.ts`, `app/users/me/UserDashboard.tsx` |
 | ゲーム公開範囲 | `config/game-registry.json` の `private`, `lib/game-access.ts`, `lib/private-game-access.ts`, `app/api/private-game-access/route.ts` |
 | ゲーム登録・自動監査 | `config/game-registry.json`, `scripts/check-game-standards.mjs`, `docs/NEW_GAME_CHECKLIST.md` |
 | ゲーム開発SDK | `packages/game-sdk`, `packages/game-runtime`, `lib/game-sdk-platform-adapter.ts`, `sdk/entry/START_GAME_FIELDS.md`, `sdk/starter-template`, `scripts/create-game.mjs`, `scripts/build-game-sdk-starter.mjs`, `scripts/build-game-sdk-starter-repository.mjs`, `scripts/check-game-sdk-boundaries.mjs`, `scripts/check-game-sdk-package.mjs`, `scripts/check-game-sdk-starter.mjs`, `docs/CHATGPT_GAME_SDK.md` |
@@ -207,7 +208,8 @@ API直叩き対策では、全オンラインRoom APIのGETをCookie本人と保
 - 部屋作成時のRoom本体と一覧索引は1回のLua commandで原子的に保存する。更新時に一覧へ毎回 `SADD` しない。参加者別active room索引のTTL更新も人数分の個別SETではなく、RoomのCAS保存と同じLua commandへまとめる。
 - 参加可能な部屋一覧は全件 `SMEMBERS` + 個別GETを行わず、`SSCAN` で1ページ24件ずつ取得し、部屋本体は1回の `MGET` にまとめる。レスポンスの `nextCursor` を次の `cursor` クエリへ渡せる。部屋コードを指定した直接参加はページ外でも利用できる。
 - 自動遷移しなかった場合の手動ボタンはホスト向けに残すが、必要条件を満たすまで表示しない。
-- オンライン部屋の最終結果画面では共通 `RoomResultActions` と `useRoomResultReturnGate` を使う。「部屋に戻る」を先頭・全幅の主導線とし、ホストがサーバー上の部屋をロビーへ戻した後に各クライアントで有効化する。「広場へ戻る」は確認付きの副導線とする。既存参加者の席は保持されるため満員でも復帰できるが、クリック時に最新の部屋と参加資格を再確認する。部屋が解散されても結果画面は強制遷移せず保持し、復帰ボタンを無効化して監視を止める。ホストにだけ「部屋を解散」も表示し、確認後にサーバー側のホスト権限検証を通す。参加枠から実際に外れる「退出」にも共通確認を入れる。各アクションの処理中は共通スピナーと進行中ラベルを表示して二重押しを防ぐ。ゲーム内の途中ラウンド進行はこの個人遷移と分けて扱う。
+- オンライン部屋の操作表示では共通 `OnlineRoomLifecycleActions` と `useRoomResultReturnGate` を使う。ゲーム側は`lobby / playing / result`を渡し、ロビーはホストの解散、プレイ中は部屋操作なし、結果は内部の`RoomResultActions`による「部屋に戻る／広場へ戻る／部屋を解散」とする。「部屋に戻る」を先頭・全幅の主導線とし、ホストがサーバー上の部屋をロビーへ戻した後に各クライアントで有効化する。「広場へ戻る」は確認付きの副導線とする。既存参加者の席は保持されるため満員でも復帰できるが、クリック時に最新の部屋と参加資格を再確認する。部屋が解散されても結果画面は強制遷移せず保持し、復帰ボタンを無効化して監視を止める。ホストにだけ「部屋を解散」も表示し、確認後にサーバー側のホスト権限検証を通す。各アクションの処理中は共通スピナーと進行中ラベルを表示して二重押しを防ぐ。
+- AI APIを呼ぶ可能性があるクライアント操作は`aiActivityFetch`または`withAiActivity`を通す。共通`GameTopBanner`の`AiActivityVital`は処理中に発光・脈動し、複数処理が重なった場合はすべて完了するまで通信中表示を維持する。これは利用量が発生し得る処理の可視化であり、課金額・残量・API認可の正本ではない。
 - 通常の部屋解散はロビーまたはゲーム終了後だけ許可する。各Room Storeは共通 `canDissolveOnlineRoom` を通し、進行中のDELETEをAPI側で409にする。デバッグ中は `DebugModeButton` の「ゲームを中断」でロビーへ戻してから解散する。
 - 全ゲームは `config/game-registry.json` の `timeLimit` で時間制限方針を宣言する。通常のゲームは共通プリセットと秒数手入力に対応し、`0` は制限なし。`fields` の保存実装、`expiryToken` のサーバー正本処理、`RoomTimeLimitControl` が欠けると `npm run lint` が失敗する。時間制限付き文字入力は `textInputTimeout.mode: "adopt-entered-text"` と実装の `implementationTokens`、文字入力がなければ `not-applicable` と具体的な理由が必要で、宣言または実装が欠けてもlintを失敗させる。勝敗や開始・終了フェーズを持たない機能だけは `timeLimit` 自体を具体的な理由付きで `not-applicable` にできる。
 - 時間制限付き文字入力では、表示上の締切時に入力ルールを満たすローカルの文字を自動送信し、サーバー受付猶予内なら採用する。複数欄は有効な入力を保持して空欄・無効欄だけを補完または既存ペナルティの対象とし、全必須欄が有効なら通常提出として扱う。送信は冪等にし、期限・フェーズ・採否の正本判定はクライアント時刻を信用せずサーバーで行う。新規ゲームには締切直前、部分入力、空欄、重複送信の自動テストを追加する。
@@ -215,7 +217,7 @@ API直叩き対策では、全オンラインRoom APIのGETをCookie本人と保
 - ログイン成功時は署名・期限付き・HttpOnly・SameSite=LaxのプレイヤーCookieを発行する。オンラインAPIはリクエスト本文のactor IDではなくCookieから本人を確定する。
 - 書き込みAPIは `lib/rate-limit.ts` の共通Redisレート制限を通す。ログイン名・IP・プレイヤーIDはHMAC化したキーだけを保存し、生値をRedisへ残さない。共有回線を考慮してIP枠は広く、プレイヤー／入力名枠を厳しくする。ログイン、パスワード再設定、アクセス認証、画像アップロード、部屋操作、AI生成、プロフィール更新、フィードバックを別枠にし、超過時は `429 RATE_LIMITED` と `Retry-After` を返す。制限用Redisだけが失敗した場合は操作を止めず、`rate-limit.store` 警告を出してfail-openする。
 - デバッグ利用資格はマイページで `DEBUG_MODE_PASSWORD` を共有APIへ送って認証し、プレイヤー別Redisフラグへ保存する。資格のあるホストだけ各ゲームのトップバーに `DebugModeButton` が表示され、ゲームAPIもデバッグON・デバッグ専用操作・中断時に資格を再確認する。ゲーム個別のパスワードUIは作らない。
-- デバッグのON/OFF・ダミー参加者管理・代理操作対象の切替・ゲーム固有の異常状態再現や一括入力・プレイバック記録・進行中断・行動ログは、ゲーム固有画面へ個別配置せず `DebugModeButton` のポップアップへまとめる。ゲーム固有操作は `gameTools` から注入し、通常のフェーズ画面にはデバッグ状態の説明だけを残せる。中断はゲーム一覧へ移動せず、同じ部屋・参加者・部屋設定を維持し、進行中の秘密情報と提出状態を破棄してゲーム開始前へ戻す。
+- デバッグのON/OFF・ダミー参加者管理・代理操作対象の切替・ゲーム固有の異常状態再現や一括入力・プレイバック記録・進行中断・行動ログは、ゲーム固有画面へ個別配置せず `DebugModeButton` の非モーダル画面内ウィンドウへまとめる。PCではゲームを操作可能なまま移動・サイズ変更・最小化でき、狭い画面ではビューポート内の固定パネルにする。ゲーム固有操作は `gameTools` から注入し、通常のフェーズ画面にはデバッグ状態の説明だけを残せる。中断はゲーム一覧へ移動せず、同じ部屋・参加者・部屋設定を維持し、進行中の秘密情報と提出状態を破棄してゲーム開始前へ戻す。
 - オンラインゲームのトップバーは `GameTopBanner` と `GamePlayerMenu` を使う。ログアウトはプレイヤーメニュー内だけに置き、トップバーへ単独配置しない。
 - デバッグON中は、成功した操作の時刻・操作者表示名・操作種別・フェーズ遷移・revisionをサーバー正本の行動ログへ最大200件保存し、`DebugModeButton` 内で表示・コピーする。秘密の数字、手札、秘密語、ヒントや投稿本文、合言葉、Cookie、APIキーは記録しない。これは常時出力する構造化運用ログとは別物である。
 - 最終結果ではホスト以外も共通 `GameResultShareButton` からプレイログを共有できるようにする。共有先を開く前に実際の共有文と公開URLをプレビューする。ゲーム仕様として投稿本文や参加者名を共有する場合は、本人のデフォルトOFFの同意を入室時に固定保存し、未同意者の名前は匿名ラベルへ置き換える。認証付きURLは共有しない。

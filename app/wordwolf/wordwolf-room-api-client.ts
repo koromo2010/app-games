@@ -1,6 +1,7 @@
 import type { Room, RoomChoice, WordWolfRoomAction } from "@/lib/wordwolf-game-types";
 import { createWordWolfCommandScope, type WordWolfCommandType } from "@/lib/wordwolf-command-scope";
 import { createOnlineRoomApiClient } from "@/lib/online-room-api-client";
+import { aiActivityFetch } from "@/lib/ai-activity-client";
 
 const endpoint = "/api/wordwolf/rooms";
 const roomApi = createOnlineRoomApiClient<Room, RoomChoice>({ endpoint });
@@ -58,7 +59,7 @@ async function sendWordWolfCommand(
     guess?: string;
   },
 ) {
-  const response = await fetch("/api/wordwolf/commands", {
+  const requestInit = {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -66,7 +67,15 @@ async function sendWordWolfCommand(
       scope: createWordWolfCommandScope(room),
       ...input,
     }),
-  });
+  } satisfies RequestInit;
+  const activityLabel = input.type === "start-game"
+    ? "ワードウルフのお題準備"
+    : input.type === "submit-wolf-guess"
+      ? "ワードウルフの逆転回答判定"
+      : null;
+  const response = activityLabel
+    ? await aiActivityFetch(activityLabel, "/api/wordwolf/commands", requestInit)
+    : await fetch("/api/wordwolf/commands", requestInit);
   return readJson<{ room: Room; applied: boolean }>(response, "ROOM_COMMAND_FAILED");
 }
 

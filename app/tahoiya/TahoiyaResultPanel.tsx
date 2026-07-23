@@ -1,6 +1,6 @@
 import type { TahoiyaRoom } from "@/lib/tahoiya-types";
 import { GameFeedbackPanel } from "../components/GameFeedbackPanel";
-import { RoomResultActions } from "../components/RoomResultActions";
+import { OnlineRoomLifecycleActions } from "../components/OnlineRoomLifecycleActions";
 import { panelClass } from "../wordwolf/styles";
 import { submittedDefinitionCount } from "@/lib/tahoiya-room-domain";
 
@@ -21,6 +21,6 @@ export function TahoiyaResultPanel({ room, playerId, reasons, isHost, canReturn,
     <div className="mt-4 grid gap-2">{room.options.map((option, index) => { const author = option.authorId ? room.players.find((player) => player.id === option.authorId) : null; const votes = Object.entries(room.votes).filter(([, id]) => id === option.id).map(([id]) => room.players.find((player) => player.id === id)?.name ?? "Unknown"); return <div key={option.id} className={`rounded-lg border px-3 py-3 text-sm ${option.isReal ? "border-amber-300 bg-amber-50" : "border-slate-200 bg-slate-50"}`}><p className="font-bold text-slate-950">{index + 1}. {option.text}</p><p className="mt-1 text-xs text-slate-500">{option.isReal ? "本物" : `作者: ${author?.name ?? "Unknown"}`} / 投票: {votes.length ? votes.join(", ") : "なし"}</p></div>; })}</div>
     <p className="mt-4 text-sm font-semibold text-slate-700">{room.resultText}</p>
     {room.topicGeneration && playerId && <GameFeedbackPanel artifactId={`tahoiya:${room.code}:${room.round}:${room.word}`} artifactText={`単語=${room.word} / 読み=${room.reading ?? ""} / 語釈=${room.realDefinition} / 注記=${room.topicNote}`} game="tahoiya" task="tahoiya.topic" playerId={playerId} generation={room.topicGeneration} reasonOptions={reasons} settings={{ playerCount: room.players.length, playMode: room.playMode, answererMode: room.answererMode, showRealDefinitionToWriters: room.showRealDefinitionToWriters, fakeDefinitionsPerPlayer: room.fakeDefinitionsPerPlayer, difficulty: room.topicDifficulty, reusedFromCatalog: room.topicGeneration.reusedFromCatalog === true, definitionStyle: definition.style, definitionLength: definition.length, punctuationStyle: "no-parentheses" }} outcome={{ correctVotes: Object.entries(room.votes).filter(([, id]) => room.options.find((option) => option.id === id)?.isReal).length, fakeDefinitionCount: submittedDefinitionCount(room) }} />}
-    <RoomResultActions canReturnToRoom={canReturn} isHost={isHost} isRoomDissolved={isDissolved} onReturnToRoom={onReturn} onDissolve={onDissolve} />
+    <OnlineRoomLifecycleActions surface="result" canReturnToRoom={canReturn} isHost={isHost} isRoomDissolved={isDissolved} onReturnToRoom={onReturn} onDissolve={onDissolve} />
   </div>;
 }

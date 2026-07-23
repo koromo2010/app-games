@@ -13,6 +13,19 @@ test("ゲーム固有デバッグ操作は共通DEBUGメニューの拡張枠へ
   assert.match(source, /enabled && wordGenerationTools/);
 });
 
+test("共通DEBUGメニューはゲーム操作を妨げない画面内ウィンドウとして表示する", () => {
+  const buttonSource = read("app/components/DebugModeButton.tsx");
+  const windowSource = read("app/components/DebugToolWindow.tsx");
+
+  assert.match(buttonSource, /<DebugToolWindow/);
+  assert.match(windowSource, /role="dialog"/);
+  assert.doesNotMatch(windowSource, /aria-modal="true"/);
+  assert.doesNotMatch(windowSource, /fixed inset-0/);
+  assert.match(windowSource, /kind: "move" \| "resize"/);
+  assert.match(windowSource, /setIsMinimized/);
+  assert.match(windowSource, /setPointerCapture/);
+});
+
 test("DBワード生成テストは明示的に対応したDEBUGメニューだけへ接続する", () => {
   const supportedSources = [
     read("app/wordwolf/WordWolfHeader.tsx"),
