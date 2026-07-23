@@ -2276,6 +2276,8 @@
 
 ### 未対応・保留
 
-- `develop`への反映、`app-games-dev` Deployment確認を行う。
+- `develop`へ実装コミット`056a853`をforceなしのfast-forwardで反映した。
+- `app-games-dev`の対象Deployment `dpl_9eiSdv9w6Yqy54swb5e5V7epcJn1`が`READY`となり、`dev.game-fields.com`へのalias割当を確認した。
+- 8ゲームのdev画面がHTTP 200を返し、HTML内のDeployment IDが対象Deploymentと一致した。未認証Room APIは公開6本が401、private 2本が403を返し、対象Deploymentの実行時error・fatalログはなかった。
 - 外部SDKゲームを同じ永続HTTP／Client Runtimeへ直接接続する層は未実装。
 - ログイン・privateアクセス認証済み画面で、8ゲームの作成・参加・更新・解散を実操作確認する。
