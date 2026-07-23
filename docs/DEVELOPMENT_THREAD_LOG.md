@@ -2577,9 +2577,10 @@
 - `npm run build`成功。Next.js production build、TypeScript検査、77ページ生成を完了した。
 - `npm run build:sdk`成功。SDK Portalのproduction build、TypeScript検査、14ページ生成を完了した。
 - `git diff --check`成功。
+- 実装treeをcommit `571f0e16e5e07799bd55ee85ca11954c75ab2bdd`として`develop`へforceなしで反映した。SDK PortalのDeployment `dpl_9yZJhUsE9wDMa4ygZXhzbjw6kwjK`、本体devのDeployment `dpl_4toZQemRanHwAc66FeRhXGZheyvV`、preview devのDeployment `dpl_CJuf6t1XF2mgYWNSdtUwqL59HsRp`が同じcommitで`READY`となった。
+- 検証済みstarter snapshot全32ファイルをcommit `d673e1cd34952b73f0f50a1fadc99e05c2067ce1`として`sdk-starter`へforceなしで反映した。公開branchで`downloadMeVersion: 7`、`START_HERE.md`、`src/app-set.ts`を確認した。
+- `https://sdk-dev.game-fields.com/GameFieldsDownloadMe-ver7.md`を実際に取得し、`DownloadMe: ver7`、SDK handshake v1、development接続先が公開Deploymentから返ることを確認した。`https://dev.game-fields.com`もHTTP 307で正規の`/ja`へ遷移することを確認した。
 
 ### 未対応・保留
 
-- GitHubの公開`sdk-starter`は確認時点で`ed7ccd3`の旧manifestで、`sdkHandshakeVersion`と`downloadMeVersion`を持たない。ver7を実URLから利用するには、検証済みstarter snapshotを同branchへ反映する必要がある。
-- SDK-devと公開starterへのpush、Deployment、実URLからのDownloadMe取得・cloneは、本記録作成時点では未実施。
 - 実際の決済、商品plan、価格、購入・返金・権利復元は未実装。今回追加したのはserver側entitlement差し替え境界までである。
