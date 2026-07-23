@@ -1955,6 +1955,11 @@
 - `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
 - `git diff --check`成功。
 
+### 公開
+
+- `002b4ee`（`Centralize debug tools in popup`）として`develop`へfast-forward反映した。
+- `app-games-dev`の対象Deploymentが`READY`となり、`dev.game-fields.com`への割当を確認した。
+
 ### 未対応・保留
 
-- `develop`へは未push。反映後、devでDEBUGのON、ポップアップの各フェーズ表示、ワードウルフの新規生成切替、DB非対応ゲームで生成テストが出ないことを実機確認する。
+- devでDEBUGのON、ポップアップの各フェーズ表示、ワードウルフの新規生成切替、DB非対応ゲームで生成テストが出ないことを実機確認する。
