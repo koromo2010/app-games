@@ -70,12 +70,20 @@ WordWolfを最初の基準実装とする。
 - `app/wordwolf/wordwolf-view-permissions.ts`
 - `app/wordwolf/WordWolfDesktopLayout.tsx`
 
-## 横展開順
+## 横展開状況
 
-1. Word Scale
-2. Word Out
-3. Code Intercept
-4. Tahoiya
-5. Word Sonar
+登録済みの全9ゲームは標準三層へ移行済み。
 
-各移行では見た目・ルール・API契約を変えず、構造変更だけを行う。
+| ゲーム | Entry | Controller | DesktopLayout |
+| --- | --- | --- | --- |
+| WordWolf | `WordWolfGame.tsx` | `use-wordwolf-controller.ts` | `WordWolfDesktopLayout.tsx` |
+| Word Scale | `HodoaiTalkGame.tsx` | `use-hodoai-controller.ts` | `HodoaiDesktopLayout.tsx` |
+| Word Out | `NigoichiGame.tsx` | `use-nigoichi-controller.ts` | `NigoichiDesktopLayout.tsx` |
+| Code Intercept | `CodeInterceptGame.tsx` | `use-code-intercept-controller.ts` | `CodeInterceptDesktopLayout.tsx` |
+| Tahoiya | `TahoiyaGame.tsx` | `use-tahoiya-controller.ts` | `TahoiyaDesktopLayout.tsx` |
+| Word Sonar | `KotobaSenpukuGame.tsx` | `use-kotoba-senpuku-controller.ts` | `KotobaSenpukuDesktopLayout.tsx` |
+| Northern Branch | `NorthernBranchGame.tsx` | `use-northern-branch-controller.ts` | `NorthernBranchDesktopLayout.tsx` |
+| Canvas | `CanvasGame.tsx` | `use-canvas-controller.ts` | `CanvasDesktopLayout.tsx` |
+| Daifugo | `DaifugoGame.tsx` | `use-daifugo-controller.ts` | `DaifugoDesktopLayout.tsx` |
+
+各EntryはController生成とLayout選択だけを行う。`config/game-registry.json`の`moduleBoundaryFiles`を境界の正本とし、`scripts/check-game-standards.mjs`が全登録ゲームについてEntryの薄さ、Controller・DesktopLayout・permissionsの存在、DesktopLayoutへの通信混入を検査する。新しいゲームを登録した場合も同じ三層が必須になる。今後の移行でも見た目・ルール・API契約を同時に変えない。

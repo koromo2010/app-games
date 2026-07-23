@@ -10,6 +10,7 @@ if (!existsSync(registryPath)) { console.error("[game-standards] config/game-reg
 const games = JSON.parse(readFileSync(registryPath, "utf8"));
 const ids = new Set(); const hrefs = new Set();
 const allowedGameTags = new Set(["対戦", "協力", "チーム戦", "正体隠匿", "会話", "ブラフ", "作文", "戦略", "連想", "推理", "お絵描き"]);
+const standardThreeLayerUiGameIds = new Set(games.map((game) => game.id));
 const sharedDissolutionModule = read("lib/online-room-dissolution.ts");
 const sharedPersistenceModule = read("lib/online-room-persistence.ts");
 const lobbyActiveRoomsRoute = existsSync(join(root, "app/api/player-active-rooms/route.ts")) ? read("app/api/player-active-rooms/route.ts") : "";
@@ -27,6 +28,31 @@ for (const game of games) {
   for (const file of game.moduleBoundaryFiles || []) if (!existsSync(join(root, file))) fail(`${game.id}: モジュール境界ファイル ${file} が存在しません。`);
   if (!game.entryFile || !existsSync(join(root, game.entryFile))) continue;
   const entry = read(game.entryFile);
+  if (standardThreeLayerUiGameIds.has(game.id)) {
+    const controllerFile = (game.moduleBoundaryFiles || []).find((file) => /\/use-[^/]+-controller\.ts$/.test(file));
+    const desktopLayoutFile = (game.moduleBoundaryFiles || []).find((file) => /DesktopLayout\.tsx$/.test(file));
+    if (!controllerFile) fail(`${game.id}: 標準三層UIのControllerがmoduleBoundaryFilesにありません。`);
+    if (!desktopLayoutFile) fail(`${game.id}: 標準三層UIのDesktopLayoutがmoduleBoundaryFilesにありません。`);
+    if (entry.split("\n").filter((line) => line.trim()).length > 12 || !entry.includes("controller={controller}")) {
+      fail(`${game.id}: entryFileはController生成とDesktopLayout選択だけにしてください。`);
+    }
+    if (controllerFile && !entry.includes(controllerFile.split("/").at(-1).replace(/\.ts$/, ""))) {
+      fail(`${game.id}: entryFileが登録済みControllerを呼び出していません。`);
+    }
+    if (controllerFile && !read(controllerFile).includes("permissions")) {
+      fail(`${game.id}: ControllerがUI表示用permissionsを公開していません。`);
+    }
+    if (desktopLayoutFile && !entry.includes(desktopLayoutFile.split("/").at(-1).replace(/\.tsx$/, ""))) {
+      fail(`${game.id}: entryFileが登録済みDesktopLayoutを呼び出していません。`);
+    }
+    if (desktopLayoutFile) {
+      const desktopLayout = read(desktopLayoutFile);
+      if (!desktopLayout.includes("permissions")) fail(`${game.id}: DesktopLayoutがControllerのpermissionsを使用していません。`);
+      if (/room-api-client|useOnlineRoomPolling|useOnlineGameSessionRestore|\bfetch\s*\(/.test(desktopLayout)) {
+        fail(`${game.id}: DesktopLayoutへ通信・room同期を置かずController/API clientへ移してください。`);
+      }
+    }
+  }
   const registeredModuleSources = [game.entryFile, ...(game.moduleBoundaryFiles || [])]
     .filter((file, index, files) => file && files.indexOf(file) === index && existsSync(join(root, file)))
     .map(read)

@@ -1657,3 +1657,35 @@
 ### 未対応・保留
 
 - 永続Room、HttpOnly session由来actor、HTTP Client Runtimeへの接続は次工程。
+
+## 2026-07-23 — main側の標準クライアント三層を完成
+
+### 利用者からの要望
+
+- SDK側の呼び出し構造を揃える前に、main側の共通モジュール化を完成させる。
+- 共通部分を呼び出し、ゲーム固有部分だけを差し替えられる構造にする。
+
+### 判断
+
+- `docs/UI_ARCHITECTURE.md`の基準どおり、EntryはController生成とDesktopLayout選択だけに限定する。
+- Controllerがstate、session、room同期、actions、ViewModel、UI用permissionsを束ね、DesktopLayoutから通信・API client参照を除く。
+- 今回はmain側を先に確定し、SDK／SDK-devの呼び出し合わせは次工程とする。
+
+### 実施結果
+
+- Tahoiya、Word Out、Code Intercept、Word Sonar、Northern Branch、Canvas、Daifugoを`<Game>Game -> use<Game>Controller -> <Game>DesktopLayout`へ移行した。
+- 既に移行済みのWordWolf、Word Scaleを含む登録済み全9ゲームのEntryを同じ9行構成へ統一した。
+- 各Controllerから`permissions`を明示し、Code Interceptのデバッグ語彙取得をroom API clientへ移した。
+- Word Scaleの結果復帰、Canvasの退出・自分の線の消去を含むDesktopLayoutのroom API参照をController actionへ移した。
+- `config/game-registry.json`の`moduleBoundaryFiles`へ新しいController／DesktopLayoutを登録した。
+- `scripts/check-game-standards.mjs`へ、全登録ゲームの薄いEntry、Controller、DesktopLayout、permissions、DesktopLayout通信禁止の回帰検査を追加した。今後の登録ゲームにも自動適用する。
+
+### 検証
+
+- `npm run lint`成功。
+- `npm test`成功（395件）。
+- `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、75ページ生成を完了した。
+
+### 次工程
+
+- mainで確定した三層と共通Room境界を正本に、SDK／SDK-devのGame package呼び出しを同じ構造へ合わせる。

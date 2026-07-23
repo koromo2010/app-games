@@ -7,6 +7,7 @@ import { createHodoaiViewPermissions } from "./hodoai-view-permissions";
 import { useHodoaiRoomActions } from "./use-hodoai-room-actions";
 import { useHodoaiRoomSession } from "./use-hodoai-room-session";
 import { useHodoaiViewModel } from "./use-hodoai-view-model";
+import { hodoaiRoomApi } from "./hodoai-room-api-client";
 
 export function useHodoaiController() {
   const [room, setRoom] = useState<HodoaiRoom | null>(null);
@@ -42,6 +43,11 @@ export function useHodoaiController() {
     confirmReturn: () => actions.runAction({ type: "confirm-lobby-return", actorId: playerId }),
   });
 
+  const returnToRoom = () => resultReturnGate.returnToRoom(
+    (code) => hodoaiRoomApi.fetchRoom(code, playerId),
+    () => setError("部屋に戻れません。解散されたか、参加情報が変更されています。"),
+  );
+
   return {
     state: {
       room,
@@ -62,7 +68,7 @@ export function useHodoaiController() {
     resultReturnGate,
     actions: {
       ...actions,
-      setError,
+      returnToRoom,
       setPassphrase,
       setJoinCode,
       setRulesOpen,
