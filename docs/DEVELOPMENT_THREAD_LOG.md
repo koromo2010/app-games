@@ -2632,3 +2632,39 @@
 ### 未対応・保留
 
 - 更新前プラグインを保持したままの既存チャットでは、新しいtool schemaが反映されない可能性がある。`get_sdk_handshake`自体がない場合だけ、ver8の案内どおりプラグイン更新後に新しいチャットで再試験する。
+
+## 2026-07-24 — 遅延tool検索を必須にするDownloadMe ver9
+
+### 利用者からの要望
+
+- `GameFieldsDownloadMe-ver8.md`と更新済み`gameapp-dev`を新しいWorkチャットで選択しても、制作GPTが`get_sdk_handshake`を見つけず、プラグイン旧版と誤案内して停止する問題を直す。
+
+### 判断
+
+- WorkのApp toolは必要になるまで遅延読み込みされるため、最初のtool一覧に名前がないことを、未接続または旧版の根拠にしない。
+- 制作GPTは旧版判定の前に、tool検索・発見機能で`gameapp-dev get_sdk_handshake Game Fields SDK接続互換性`を明示検索し、見つかったtoolを現在のチャットへ読み込む。
+- 明示的な検索後も、ほかの`gameapp-dev` toolだけが見つかり`get_sdk_handshake`がない場合に限って、旧版更新案内を表示する。
+- 入口の実行契約が変わるためver8を上書きせず、DownloadMeと公開starterの`downloadMeVersion`を9へ上げる。旧ver1〜8 URLはver9へ一時redirectする。
+
+### 実施結果
+
+- `sdk/entry/START_GAME_FIELDS.md`の初期接続確認と制作開始手順へ、旧版判定前の明示的tool検索を追加した。
+- MCP initialize instructionsにも同じ検索語と判定順を追加した。
+- SDK Portalの配布リンク、Content-Disposition、同期scriptを`GameFieldsDownloadMe-ver9.md`へ更新した。
+- starter manifest、`START_HERE.md`、スターター検査、SDK Portal回帰テスト、現行資料をver9へそろえた。
+- `DownloadMe.md`、`GameFieldsDownloadMe.md`、`GameFieldsDownloadMe-ver1.md`〜`ver8.md`からver9への一時redirectを追加した。
+
+### 検証
+
+- 更新済み`gameapp-dev`をtool検索して`get_sdk_handshake`を取得し、Portal capability 4件の実handshakeが`accepted: true`、`problems: []`になることを確認した。
+- `npm run test:sdk-starter`成功。ver9入口、公開Git snapshot、ZIP展開、同梱SDK install、型検査、契約テスト、1ゲーム完走、提出ZIPを確認した。
+- `npm run lint`成功。
+- `npm test`成功（472件）。
+- `npm run build`成功。Next.js production build、TypeScript検査、77ページ生成を完了した。
+- `npm run build:sdk`成功。SDK Portalのproduction build、TypeScript検査、14ページ生成を完了した。
+- SDK Portal build成果物で旧DownloadMe 10 URLがver9へ307 redirectされることを確認した。
+- `git diff --check`成功。
+
+### 未対応・保留
+
+- `develop`、公開`sdk-starter`への反映とSDK-dev Deploymentの実機確認は未実施。

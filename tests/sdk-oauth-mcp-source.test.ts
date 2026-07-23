@@ -24,7 +24,9 @@ test("SDK MCP challenges unauthenticated callers and scopes mock publication", (
   assert.match(mcp, /DownloadMe記載の必要機能だけ/);
   assert.match(mcp, /enumの全候補を要求せず/);
   assert.match(mcp, /accepted=true/);
-  assert.match(mcp, /プラグインが古い/);
+  assert.match(mcp, /toolが遅延読み込み/);
+  assert.match(mcp, /gameapp-dev get_sdk_handshake Game Fields SDK接続互換性でtool検索/);
+  assert.match(mcp, /明示的な検索後/);
   assert.match(mcp, /新しいチャット/);
   assert.match(mcp, /name: "list_creator_environments"/);
   assert.match(mcp, /name === "list_creator_environments"/);
@@ -56,12 +58,16 @@ test("SDK Portal distributes the current DownloadMe revision", () => {
   const syncScript = read("apps/sdk-portal/scripts/sync-download.mjs");
 
   for (const source of [page, nextConfig, syncScript]) {
-    assert.match(source, /GameFieldsDownloadMe-ver8\.md/);
-    assert.doesNotMatch(source, /GameFieldsDownloadMe-ver[234567]\.md/);
+    assert.match(source, /GameFieldsDownloadMe-ver9\.md/);
+    assert.doesNotMatch(source, /GameFieldsDownloadMe-ver[2345678]\.md/);
   }
-  const download = read("apps/sdk-portal/public/GameFieldsDownloadMe-ver8.md");
-  assert.match(download, /DownloadMe: `ver8`/);
-  assert.match(download, /`downloadMeVersion`が`8`/);
+  const download = read("apps/sdk-portal/public/GameFieldsDownloadMe-ver9.md");
+  assert.match(download, /DownloadMe: `ver9`/);
+  assert.match(download, /`downloadMeVersion`が`9`/);
+  assert.match(download, /必要になるまで遅延読み込み/);
+  assert.match(download, /tool検索・発見機能で`gameapp-dev get_sdk_handshake Game Fields SDK接続互換性`を検索/);
+  assert.match(download, /最初のtool一覧に名前がないことだけを根拠に、未接続や旧版と判定してはいけません/);
+  assert.match(download, /明示的なtool検索を実行しても/);
   assert.match(download, /`gameapp-dev`プラグインが古い/);
   assert.match(download, /プラグイン管理画面で`gameapp-dev`を更新/);
   assert.match(download, /更新後に新しいチャットを開いて/);

@@ -89,7 +89,7 @@ try {
     }
   }
   const starterManifest = JSON.parse(readFileSync(join(starterRoot, "starter-manifest.json"), "utf8"));
-  if (starterManifest.downloadMeVersion !== 8
+  if (starterManifest.downloadMeVersion !== 9
     || starterManifest.repository !== "https://github.com/koromo2010/app-games"
     || starterManifest.ref !== "sdk-starter"
     || starterManifest.sdkVersion !== "0.1.0"
@@ -184,6 +184,7 @@ try {
     "starter-manifest.json",
     "downloadMeVersion",
     "get_sdk_handshake",
+    "tool検索",
     "accepted=true",
     "sdkHandshakeVersion",
     "npm run check",

@@ -6,7 +6,7 @@
 
 1. 公開Gitから取得したこのフォルダ、または展開した試用ZIPをChatGPTの作業場所に置きます。
 2. ChatGPTまたはCodexへこのフォルダを渡します。
-3. `starter-manifest.json`の`downloadMeVersion`が`8`であり、`sdkHandshakeVersion`、`platformVersion`、`sdkVersion`、`sdkContractVersion`が、取得元DownloadMeで成功したSDK handshakeと一致することを確認します。
+3. `starter-manifest.json`の`downloadMeVersion`が`9`であり、`sdkHandshakeVersion`、`platformVersion`、`sdkVersion`、`sdkContractVersion`が、取得元DownloadMeで成功したSDK handshakeと一致することを確認します。
 4. 下の文章をそのまま送ります。
 
 ```text
