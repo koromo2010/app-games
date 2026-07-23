@@ -2664,7 +2664,17 @@
 - `npm run build:sdk`成功。SDK Portalのproduction build、TypeScript検査、14ページ生成を完了した。
 - SDK Portal build成果物で旧DownloadMe 10 URLがver9へ307 redirectされることを確認した。
 - `git diff --check`成功。
+- 検証済みtreeをcommit `02ea8684589697c4d0c1153d792a392c5c174e6b`として`develop`へforceなしで反映した。SDK Portal `dpl_7AAtPjzrZWooU4bGnepUp5UsQTxu`、本体dev `dpl_FXcdkLo6MuiDKv9QyLMaMj5UpmRr`、preview dev `dpl_2bL5Y12tbvRSb4EKH23iioabuvex`が同commitで`READY`となり、それぞれの開発用aliasへ割り当てられた。
+- 公開starterの生成済みsnapshot全32ファイルをcommit `389cb31924d78964e3393e0bab7c845519d55b9b`として`sdk-starter`へforceなしで反映し、公開branchの`starter-manifest.json`が`downloadMeVersion: 9`であることを確認した。
+- `https://sdk-dev.game-fields.com/GameFieldsDownloadMe-ver9.md`がHTTP 200、`DownloadMe: ver9`、`Content-Disposition: GameFieldsDownloadMe-ver9.md`を返すことを確認した。旧`GameFieldsDownloadMe-ver8.md`は現行ver9へHTTP 307で転送される。
+- 公開`/.well-known/game-fields-sdk`がdevelopment環境とPortal用4 capabilityを返すことを確認した。
+- 上記3 Deploymentのerror・fatalログはいずれも0件だった。
+
+### 関連コミット
+
+- `02ea868` — DownloadMe ver9の実装を`develop`へ反映。
+- `389cb31` — ver9の公開starter snapshotを`sdk-starter`へ反映。
 
 ### 未対応・保留
 
-- `develop`、公開`sdk-starter`への反映とSDK-dev Deploymentの実機確認は未実施。
+- 新しいWorkチャットで更新済み`gameapp-dev`と公開ver9を選び、制作GPTが遅延tool検索からhandshake、starter取得へ自律的に進む最終実機確認は未実施。
