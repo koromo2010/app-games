@@ -1,7 +1,7 @@
 import type { TahoiyaPlayer, TahoiyaRoom } from "@/lib/tahoiya-types";
-import { cyanButtonClass, panelClass, primaryButtonClass, subtleButtonClass } from "../wordwolf/styles";
+import { cyanButtonClass, panelClass } from "../wordwolf/styles";
 
-type Props = { room: TahoiyaRoom; activePlayer: TahoiyaPlayer | null; voteCount: number; voterTarget: number; isAllVoteMode: boolean; isAnswerer: boolean; hasVoted: boolean; votingDone: boolean; displayedOptionId: string; selectedOptionId: string; isHost: boolean; isDebugMode: boolean; onSelect: (id: string) => void; onVote: () => void; onAutoFill: () => void; onAdvance: () => void };
+type Props = { room: TahoiyaRoom; activePlayer: TahoiyaPlayer | null; voteCount: number; voterTarget: number; isAllVoteMode: boolean; isAnswerer: boolean; hasVoted: boolean; votingDone: boolean; displayedOptionId: string; selectedOptionId: string; onSelect: (id: string) => void; onVote: () => void };
 
 export function TahoiyaVotingPanel(props: Props) {
   const { room } = props;
@@ -13,7 +13,6 @@ export function TahoiyaVotingPanel(props: Props) {
       <button onClick={props.onVote} disabled={!props.selectedOptionId || props.votingDone} className={cyanButtonClass}>{props.hasVoted ? "投票を変更" : "投票する"}</button>
     </div>}
     <p className="mt-4 text-xs font-semibold text-slate-500">必要な投票がそろうと、自動で採点して結果を表示します。</p>
-    {props.isHost && props.isDebugMode && <div className="mt-3 flex flex-wrap gap-2"><button onClick={props.onAutoFill} className={subtleButtonClass}>未投票をテスト投票</button><button onClick={props.onAdvance} className={primaryButtonClass}>結果へ進む（デバッグ）</button></div>}
   </div>;
 }
 

@@ -95,6 +95,7 @@ for (const game of games) {
     if (!registeredModuleSources.includes("DebugModeButton") || !registeredModuleSources.includes("onAbort=") || !registeredModuleSources.includes("onReplayChange=")) fail(`${game.id}: トップバナーの共通デバッグメニュー（中断・プレイバック）がありません。`);
     if (!registeredModuleSources.includes("GamePlayerMenu")) fail(`${game.id}: ログアウトを内包する共通プレイヤーメニューがありません。`);
     if (entry.includes("DebugReplayButton")) fail(`${game.id}: プレイバック操作は独立表示せずDebugModeButtonへ入れてください。`);
+    if (registeredModuleSources.includes("DebugWordGenerationTest") && !registeredModuleSources.includes("wordGenerationTools=")) fail(`${game.id}: DBワード生成テストはDebugModeButtonのwordGenerationToolsへ入れてください。`);
     if (!registeredModuleSources.includes("RoomResultActions")) fail(`${game.id}: 結果画面の「同じ部屋でもう一度／部屋を解散」共通操作がありません。`);
     const routeFile = `app/api/${game.id}/rooms/route.ts`;
     const roomClientFile = (game.moduleBoundaryFiles || []).find((file) => file.endsWith("room-api-client.ts"));

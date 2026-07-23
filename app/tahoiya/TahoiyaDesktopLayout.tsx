@@ -19,6 +19,7 @@ import { TahoiyaVotingPanel } from "./TahoiyaVotingPanel";
 import { TahoiyaResultPanel } from "./TahoiyaResultPanel";
 import { submittedCount, voterCount } from "./use-tahoiya-view-model";
 import { TahoiyaEmptyState, TahoiyaScorePanel } from "./TahoiyaScorePanel";
+import { TahoiyaDebugGameTools, TahoiyaDebugWordGenerationTools } from "./TahoiyaDebugTools";
 import type { TahoiyaController } from "./use-tahoiya-controller";
 
 const tahoiyaFeedbackReasons = [
@@ -60,7 +61,32 @@ export function TahoiyaDesktopLayout({ controller }: { controller: TahoiyaContro
         {room && isHost && <DebugModeButton variant="banner" enabled={Boolean(room.debugMode)} disabled={room.phase !== "lobby"}
           onAbort={room.debugMode && room.phase !== "lobby" ? actions.abortGame : undefined}
           replayEnabled={Boolean(room.debugReplayEnabled)} onReplayChange={(enabled) => void actions.runRoomAction({ type: "set-debug-replay", actorId: playerId, enabled })}
-          onChange={actions.setDebugMode} />}
+          onChange={actions.setDebugMode}
+          gameTools={<TahoiyaDebugGameTools
+            room={room}
+            activePlayerId={activePlayerId}
+            isStarting={isStarting}
+            writingDone={writingDone}
+            skipReason={skipReason}
+            skipComment={skipComment}
+            skipReasons={tahoiyaSkipReasons}
+            isSkipping={isSkippingTopic}
+            onActivePlayerChange={(value) => { setters.setActivePlayerId(value); setters.setDefinitionIndex(0); setters.setDefinitionInput(room.fakeDefinitions[value]?.[0] ?? ""); setters.setPolishMessage(""); }}
+            onAddTestPlayer={actions.addTestPlayer}
+            onAutoFillDefinitions={actions.autoFillTestDefinitions}
+            onAdvanceToVoting={actions.forceAdvanceToVoting}
+            onAutoFillVotes={actions.autoFillTestVotes}
+            onAdvanceToResult={actions.forceAdvanceToResult}
+            onSkipReasonChange={setters.setSkipReason}
+            onSkipCommentChange={setters.setSkipComment}
+            onSkipTopic={() => void actions.skipDebugTopic()}
+          />}
+          wordGenerationTools={<TahoiyaDebugWordGenerationTools
+            room={room}
+            onTestDifficultyScreening={actions.testDifficultyScreening}
+            onTestWordGeneration={actions.testWordGeneration}
+          />}
+        />}
         <GameTopMenu>
           {room && room.phase !== "lobby" && <Link href="/games" data-menu-close="true" className={gameTopMenuItemClass}>広場へ戻る</Link>}
           {room && <OnlineRoomSpectatorLink game="tahoiya" code={room.code} />}
@@ -77,37 +103,33 @@ export function TahoiyaDesktopLayout({ controller }: { controller: TahoiyaContro
         <aside className="space-y-4">
           <TahoiyaRoomPanel room={room} passphrase={passphrase} joinCode={joinCode} joinableRooms={joinableRooms}
             answerer={answerer} answererCandidates={answererCandidates} roomConfigItems={roomConfigItems}
-            activePlayer={activePlayer} activePlayerId={activePlayerId} playerName={playerName}
+            activePlayer={activePlayer} playerName={playerName}
             isHost={isHost} isDebugMode={isDebugMode} isStarting={isStarting} message={message}
             onPassphraseChange={setters.setPassphrase} onJoinCodeChange={setters.setJoinCode}
-            onActivePlayerChange={(value) => { setters.setActivePlayerId(value); setters.setDefinitionIndex(0); setters.setDefinitionInput(room?.fakeDefinitions[value]?.[0] ?? ""); setters.setPolishMessage(""); }}
             onCreateRoom={() => void actions.createRoom()} onRefreshRooms={() => void actions.refreshJoinableRooms()} onJoinRoom={(code) => void actions.joinRoom(code)}
             onPlayModeChange={actions.setPlayMode} onDifficultyChange={actions.setTopicDifficulty} onAnswererModeChange={actions.setAnswererMode}
             onAnswererChange={actions.setManualAnswerer} onShowDefinitionChange={actions.setShowRealDefinitionToWriters}
             onFakeDefinitionsPerPlayerChange={actions.setFakeDefinitionsPerPlayer} onTimeLimitChange={actions.setActionTimeLimit}
-            onTestWordGeneration={actions.testWordGeneration} onTestDifficultyScreening={actions.testDifficultyScreening}
-            onAddTestPlayer={actions.addTestPlayer} onStartRound={() => void actions.startRound()} onDissolveRoom={() => void actions.dissolveRoom()} />
+            onStartRound={() => void actions.startRound()} onDissolveRoom={() => void actions.dissolveRoom()} />
           {room && <TahoiyaScorePanel room={room} players={sortedScores} />}
         </aside>
         <section className="space-y-4">
           {!room ? <TahoiyaEmptyState /> : <>
             <TahoiyaRoundOverview room={room} isAnswerer={isAnswerer} remainingSeconds={remainingSeconds}
               isDebugMode={isDebugMode} isHost={isHost} nextWriter={nextWriter} nextVoter={nextVoter}
-              skipReason={skipReason} skipComment={skipComment} skipReasons={tahoiyaSkipReasons} isSkipping={isSkippingTopic}
-              onReasonChange={setters.setSkipReason} onCommentChange={setters.setSkipComment} onSkip={() => void actions.skipDebugTopic()}
               onRemoveWaitingPlayer={(targetPlayerId, targetPlayerName) => void actions.removeWaitingPlayer(targetPlayerId, targetPlayerName)} />
             {room.phase === "writing" && <TahoiyaWritingPanel room={room} activePlayer={activePlayer} isAnswerer={isAnswerer}
               submittedCount={submittedCount(room)} definitionTargetCount={definitionTargetCount} activePlayerDefinitions={activePlayerDefinitions}
               definitionIndex={definitionIndex} hasSubmitted={hasActivePlayerSubmitted} writingDone={writingDone}
-              definitionInput={definitionInput} polishMessage={polishMessage} isPolishing={isPolishingDefinition} isHost={isHost} isDebugMode={isDebugMode}
+              definitionInput={definitionInput} polishMessage={polishMessage} isPolishing={isPolishingDefinition}
               onDefinitionChange={(value) => { setters.setDefinitionInput(value); setters.setPolishMessage(""); }}
               onDefinitionIndexChange={(index) => { setters.setDefinitionIndex(index); setters.setDefinitionInput(activePlayerDefinitions[index] ?? ""); setters.setPolishMessage(""); }}
               onEditSubmitted={() => setters.setDefinitionInput(activePlayerDefinitions[definitionIndex] ?? "")}
-              onPolish={() => void actions.polishDefinition()} onSubmit={actions.submitDefinition} onAutoFill={actions.autoFillTestDefinitions} onAdvance={actions.forceAdvanceToVoting} />}
+              onPolish={() => void actions.polishDefinition()} onSubmit={actions.submitDefinition} />}
             {room.phase === "voting" && <TahoiyaVotingPanel room={room} activePlayer={activePlayer} voteCount={voterCount(room)} voterTarget={voterTarget}
               isAllVoteMode={isAllVoteMode} isAnswerer={isAnswerer} hasVoted={hasActivePlayerVoted} votingDone={votingDone}
-              displayedOptionId={displayedVoteOptionId} selectedOptionId={selectedOptionId} isHost={isHost} isDebugMode={isDebugMode}
-              onSelect={setters.setSelectedOptionId} onVote={actions.castVote} onAutoFill={actions.autoFillTestVotes} onAdvance={actions.forceAdvanceToResult} />}
+              displayedOptionId={displayedVoteOptionId} selectedOptionId={selectedOptionId}
+              onSelect={setters.setSelectedOptionId} onVote={actions.castVote} />}
             {room.phase === "result" && <TahoiyaResultPanel room={room} playerId={operationPlayerId} reasons={tahoiyaFeedbackReasons}
               isHost={isHost} canReturn={isHost || result.canReturnToRoom} isDissolved={result.isRoomDissolved}
               onReturn={isHost ? actions.nextRound : actions.returnToLobby} onDissolve={isHost ? actions.dissolveRoom : undefined} />}

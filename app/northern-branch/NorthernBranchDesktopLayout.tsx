@@ -2,6 +2,7 @@
 
 import { AppLink as Link } from "@/app/components/AppLink";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
+import { DebugToolButton, DebugToolsSection } from "@/app/components/DebugGameTools";
 import { GameAdSlot } from "@/app/components/GameAdSlot";
 import { GameLoungeVisual } from "@/app/components/GameLoungeVisual";
 import { GamePhaseTimer } from "@/app/components/GamePhaseTimer";
@@ -132,9 +133,23 @@ export function NorthernBranchDesktopLayout({ controller }: { controller: Northe
           {room.phase !== "lobby" && <Link href="/games" data-menu-close="true" className={gameTopMenuItemClass}>広場へ戻る</Link>}
           <OnlineRoomSpectatorLink game="northern-branch" code={room.code} />
           <button type="button" data-menu-close="true" onClick={() => setRulesOpen(true)} className={gameTopMenuItemClass}>ルール</button>
-          {isHost && <DebugModeButton enabled={room.debugMode} disabled={isSaving || room.phase !== "lobby"} onAbort={room.debugMode && room.phase !== "lobby" ? () => runAction({ type: "abort-game", actorId: playerId }).then(() => undefined) : undefined} replayEnabled={room.debugReplayEnabled} replayDisabled={isSaving} onReplayChange={(enabled) => runAction({ type: "set-debug-replay", actorId: playerId, enabled }).then(() => undefined)} onChange={(enabled) => runAction({ type: "set-debug", actorId: playerId, enabled }).then(() => undefined)} />}
           {room.phase === "lobby" && !isHost && <button type="button" data-menu-close="true" onClick={() => void leaveRoom()} className={gameTopMenuItemClass}>退出</button>}
         </GameTopMenu>
+        {isHost && <DebugModeButton
+          variant="banner"
+          enabled={room.debugMode}
+          disabled={isSaving || room.phase !== "lobby"}
+          onAbort={room.debugMode && room.phase !== "lobby" ? () => runAction({ type: "abort-game", actorId: playerId }).then(() => undefined) : undefined}
+          replayEnabled={room.debugReplayEnabled}
+          replayDisabled={isSaving}
+          onReplayChange={(enabled) => runAction({ type: "set-debug-replay", actorId: playerId, enabled }).then(() => undefined)}
+          onChange={(enabled) => runAction({ type: "set-debug", actorId: playerId, enabled }).then(() => undefined)}
+          gameTools={room.phase === "lobby"
+            ? <DebugToolsSection title="ダミー参加者" description="ホスト1人で手番を切り替えながら確認できます。">
+                <DebugToolButton disabled={isSaving || room.players.length >= 4} onClick={() => void runAction({ type: "debug-add-player", actorId: playerId })}>ダミーを追加</DebugToolButton>
+              </DebugToolsSection>
+            : undefined}
+        />}
         <GamePlayerMenu id={session.id} name={session.name} avatarColor={session.avatarColor} avatarImage={session.avatarImage} hasRecoveryEmail={session.hasRecoveryEmail} />
       </GameTopBanner>
       <GameAdSlot
@@ -148,7 +163,7 @@ export function NorthernBranchDesktopLayout({ controller }: { controller: Northe
         <div className="space-y-4">
           {error && <p className="rounded-xl border border-rose-300/30 bg-rose-300/10 p-3 text-sm font-bold text-rose-100">{error}</p>}
           {room.notice && <p className="rounded-xl border border-cyan-300/30 bg-cyan-300/10 p-3 text-sm font-bold text-cyan-50">{room.notice}</p>}
-          {room.phase === "lobby" && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><h2 className="text-2xl font-black">ゲーム開始前</h2><p className="mt-3 rounded-xl bg-white/[0.05] p-4 text-sm leading-6 text-slate-300">2〜4人で遊びます。開始後は各自の手札が本人の端末だけに表示され、手番のプレイヤーだけが行動できます。</p>{isHost && <div className="mt-5 rounded-xl bg-white p-4 text-slate-950"><RoomTimeLimitControl label="1手番の時間" value={room.turnTimeLimitSeconds} onChange={(seconds) => void runAction({ type: "set-config", actorId: playerId, turnTimeLimitSeconds: seconds })} /></div>}{isHost && room.debugMode && <div className="mt-5 rounded-xl border border-cyan-300/25 bg-cyan-300/10 p-4"><p className="text-sm font-bold text-cyan-50">デバッグ用の参加者を追加し、ホスト1人で手番を切り替えながら確認できます。</p><button type="button" disabled={isSaving || room.players.length >= 4} onClick={() => void runAction({ type: "debug-add-player", actorId: playerId })} className="mt-3 w-full rounded-lg border border-cyan-200/40 bg-cyan-200 px-4 py-2 font-black text-cyan-950 disabled:opacity-40">ダミーユーザーを追加</button></div>}{isHost ? <button type="button" disabled={isSaving || room.players.length < 2} onClick={() => void runAction({ type: "start-game", actorId: playerId })} className="mt-6 w-full rounded-xl bg-amber-300 px-4 py-4 text-lg font-black text-slate-950 disabled:opacity-40">{room.players.length < 2 ? "2人以上で開始できます" : "このメンバーで開始"}</button> : <p className="mt-5 text-center font-bold text-slate-300">ホストがゲームを開始するまでお待ちください。</p>}</section>}
+          {room.phase === "lobby" && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><h2 className="text-2xl font-black">ゲーム開始前</h2><p className="mt-3 rounded-xl bg-white/[0.05] p-4 text-sm leading-6 text-slate-300">2〜4人で遊びます。開始後は各自の手札が本人の端末だけに表示され、手番のプレイヤーだけが行動できます。</p>{isHost && <div className="mt-5 rounded-xl bg-white p-4 text-slate-950"><RoomTimeLimitControl label="1手番の時間" value={room.turnTimeLimitSeconds} onChange={(seconds) => void runAction({ type: "set-config", actorId: playerId, turnTimeLimitSeconds: seconds })} /></div>}{isHost ? <button type="button" disabled={isSaving || room.players.length < 2} onClick={() => void runAction({ type: "start-game", actorId: playerId })} className="mt-6 w-full rounded-xl bg-amber-300 px-4 py-4 text-lg font-black text-slate-950 disabled:opacity-40">{room.players.length < 2 ? "2人以上で開始できます" : "このメンバーで開始"}</button> : <p className="mt-5 text-center font-bold text-slate-300">ホストがゲームを開始するまでお待ちください。</p>}</section>}
 
           {game && <>
             <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-black uppercase tracking-[0.2em] text-lime-300">第{game.turn}巡目</p><h2 className="mt-1 text-2xl font-black">{activePlayer?.name}の手番</h2></div><div className="flex flex-wrap items-center gap-2">{room.turnStartedAt && <GamePhaseTimer key={room.turnStartedAt} durationSeconds={room.turnTimeLimitSeconds} startedAt={room.turnStartedAt} label="手番時間" />}<span className={`rounded-xl px-4 py-2 text-sm font-black ${canControlTurn ? "bg-lime-400 text-lime-950" : "bg-white/10 text-slate-300"}`}>{canControlTurn ? "操作できます" : "手番を待っています"}</span></div></div>{room.debugMode && isHost && activePlayer?.id !== playerId && <p className="mt-3 rounded-lg border border-cyan-300/20 bg-cyan-300/10 p-3 text-sm font-bold text-cyan-50">デバッグ中：ホストが{activePlayer?.name}の手番を操作しています。</p>}</section>

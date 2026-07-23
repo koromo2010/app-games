@@ -1,6 +1,5 @@
 import { normalizeTopicDictionarySource, type TopicDictionarySource, type TopicPairDistance } from "@/lib/wordwolf";
 import type { ClueLogVisibility, ClueMode, GameMode, Room } from "@/lib/wordwolf-game-types";
-import { DebugWordGenerationTest, type DebugWordGenerationResult } from "../components/DebugWordGenerationTest";
 import { RoomTimeLimitControl } from "../components/RoomTimeLimitControl";
 import { inputClass, primaryButtonClass } from "./styles";
 import { lobbyRounds, normalizeRoundsTotal } from "./wordwolf-room-adapter";
@@ -23,7 +22,6 @@ type Props = {
   onTopicPairDistanceChange: (value: TopicPairDistance) => void;
   onTopicDifficultyChange: (value: WordDifficulty) => void;
   onClueLogVisibilityChange: (value: ClueLogVisibility) => void;
-  onTestWordGeneration: (forceNew: boolean) => Promise<DebugWordGenerationResult>;
   onStartGame: () => void;
 };
 
@@ -44,7 +42,6 @@ export function WordWolfLobbySettings({
   onTopicPairDistanceChange: setTopicPairDistance,
   onTopicDifficultyChange: setTopicDifficulty,
   onClueLogVisibilityChange: setClueLogVisibility,
-  onTestWordGeneration: testWordGeneration,
   onStartGame: startGame,
 }: Props) {
   return (
@@ -282,9 +279,6 @@ export function WordWolfLobbySettings({
                           </button>
                         </div>
                       </div>
-                      {room.debugMode && (
-                        <DebugWordGenerationTest onGenerate={testWordGeneration} />
-                      )}
                       <label className="block text-sm font-medium text-slate-700">
                         発言ログ
                         <select

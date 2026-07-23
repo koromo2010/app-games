@@ -44,6 +44,7 @@ export function WordWolfDesktopLayout({ controller }: { controller: WordWolfCont
     <main className={`min-h-screen bg-slate-950 text-slate-950 ${gameTopBannerOffsetClass}`}>
       <WordWolfHeader
         room={room} isHost={permissions.isHost} currentPlayerId={currentPlayerId} playerId={playerAccountId || undefined}
+        debugControlledPlayerId={activePlayerId}
         playerName={playerName} headerName={headerName} avatarImage={avatarImage}
         headerAvatarColor={headerAvatarColor} headerAvatarImage={headerAvatarImage}
         isAvatarPickerOpen={isAvatarPickerOpen} isMyPageOpen={isMyPageOpen}
@@ -55,6 +56,11 @@ export function WordWolfDesktopLayout({ controller }: { controller: WordWolfCont
         onRemoveDebugParticipant={(targetPlayerId) => actions.runRoomAction({ type: "debug-remove-player", targetPlayerId }).then((saved) => {
           if (saved && activePlayerId === targetPlayerId) setters.setActivePlayerId(saved.hostId);
         })}
+        onSelectDebugPlayer={(playerId) => {
+          setters.setActivePlayerId(playerId);
+          localStorage.setItem("wordwolf-last-player", playerId);
+        }}
+        onTestWordGeneration={actions.testWordGeneration}
         onAvatarPickerOpenChange={setters.setIsAvatarPickerOpen} onPlayerNameChange={actions.updatePlayerName}
         onCommitPlayerName={actions.commitPlayerName} onAvatarColorChange={actions.updateAvatarColor}
         onAvatarImageChange={actions.updateAvatarImage} onAvatarUpload={actions.uploadAvatarImage}
@@ -97,7 +103,6 @@ export function WordWolfDesktopLayout({ controller }: { controller: WordWolfCont
               room={room}
               activePlayerId={activePlayerId}
               isHost={permissions.isHost}
-              onSelectPlayer={(playerId) => { setters.setActivePlayerId(playerId); localStorage.setItem("wordwolf-last-player", playerId); }}
               onCopyRoomCode={() => void actions.copyRoomCode()}
               onCopyRoomInvite={() => void actions.copyRoomInvite()}
               onDissolveRoom={() => void actions.dissolveRoom()}
@@ -121,7 +126,6 @@ export function WordWolfDesktopLayout({ controller }: { controller: WordWolfCont
                   onTopicPairDistanceChange={actions.setTopicPairDistance}
                   onTopicDifficultyChange={actions.setTopicDifficulty}
                   onClueLogVisibilityChange={actions.setClueLogVisibility}
-                  onTestWordGeneration={actions.testWordGeneration}
                   onStartGame={actions.startGame}
                 />
               )}

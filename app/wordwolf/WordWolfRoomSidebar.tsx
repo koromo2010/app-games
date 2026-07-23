@@ -9,7 +9,6 @@ type Props = {
   room: Room;
   activePlayerId: string;
   isHost: boolean;
-  onSelectPlayer: (playerId: string) => void;
   onCopyRoomCode: () => void;
   onCopyRoomInvite: () => void;
   onDissolveRoom: () => void;
@@ -17,7 +16,7 @@ type Props = {
   children?: ReactNode;
 };
 
-export function WordWolfRoomSidebar({ room, activePlayerId, isHost, onSelectPlayer, onCopyRoomCode, onCopyRoomInvite, onDissolveRoom, onRemoveWaitingPlayer, children }: Props) {
+export function WordWolfRoomSidebar({ room, activePlayerId, isHost, onCopyRoomCode, onCopyRoomInvite, onDissolveRoom, onRemoveWaitingPlayer, children }: Props) {
   const scoreRows = room.players
     .map((player) => ({ player, wins: room.scores[player.id] ?? 0 }))
     .sort((left, right) => right.wins - left.wins || left.player.joinedAt - right.player.joinedAt);
@@ -36,10 +35,10 @@ export function WordWolfRoomSidebar({ room, activePlayerId, isHost, onSelectPlay
     <div className="mt-4 space-y-2">
       {room.players.map((player) => {
         return <div key={player.id} className={`flex items-center gap-2 rounded-lg border px-2 py-1.5 text-sm ${player.id === activePlayerId ? "border-cyan-500 bg-cyan-50 text-cyan-950" : "border-slate-200 bg-slate-50 text-slate-800"}`}>
-          <button type="button" onClick={() => onSelectPlayer(player.id)} className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-md px-1 py-0.5 text-left hover:bg-white/70">
+          <div className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-md px-1 py-0.5">
             <span className="flex min-w-0 items-center gap-2"><span className="h-4 w-4 shrink-0 rounded-full border border-white bg-cover bg-center shadow-sm" style={{ backgroundColor: player.avatarColor || fallbackAvatarColor, backgroundImage: `url(${player.avatarImage || defaultAvatarImage})` }} aria-hidden="true" /><span className="truncate font-medium">{player.name}</span></span>
             <span className="flex shrink-0 items-center gap-1">{isOnlineRoomDebugPlayer(player) && <span className="rounded bg-cyan-100 px-1.5 py-0.5 text-[10px] font-bold text-cyan-800">dummy</span>}{player.id === room.hostId && <span className="text-xs text-slate-500">host</span>}</span>
-          </button>
+          </div>
         </div>;
       })}
     </div>

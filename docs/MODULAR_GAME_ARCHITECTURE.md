@@ -31,7 +31,7 @@ UI / hooks -> API client -> HTTP route -> application/domain -> storage
 - revision CAS・新規部屋永続化: `lib/online-room-persistence.ts`
 - クライアントの単調revision採用: `lib/online-room-client-state.ts`
 - 共通actor権限・ロビー退出判定: `lib/online-room-access.ts`
-- 共通デバッグメニュー・ダミー参加者UI: `app/components/DebugModeButton.tsx`, `app/components/DebugParticipantControls.tsx`
+- 共通デバッグメニュー・ゲーム固有操作・ダミー参加者UI: `app/components/DebugModeButton.tsx`, `app/components/DebugGameTools.tsx`, `app/components/DebugParticipantControls.tsx`
 - Room API共通エラー変換: `lib/online-room-route-errors.ts`
 - 部屋解散application/storage境界: `lib/online-room-dissolution.ts`
 - ワードウルフadapter: `app/wordwolf/wordwolf-room-api-client.ts`
@@ -46,7 +46,9 @@ UI / hooks -> API client -> HTTP route -> application/domain -> storage
 
 共通クライアントはURL、method、条件付きGET、JSON応答、HTTP status/payload付きエラーまでを担当する。各adapterはゲーム固有のRoom・Action型を付ける。操作・時間切れ・ポーリングの応答は `preferLatestOnlineRoom` を通し、同じ部屋で現在以下のrevisionを画面状態へ戻さない。フェーズ遷移、権限、勝敗、レスポンスの秘密情報除去は従来どおりサーバーdomain/storeの責務で、クライアント共通化へ移さない。
 
-デバッグ用ダミー参加者は、追加・一覧・削除の表示を共通 `DebugParticipantControls` が担当する。ゲームのController／Layoutは、閲覧者向けRoomから抽出したダミー一覧と型付きCommand関数だけを渡す。ダミー生成、人数依存設定の補正、権限・フェーズ・上限検査、永続化はゲーム固有Storeに残し、共通UIをセキュリティ境界にしない。
+共通 `DebugModeButton` は、デバッグON/OFF、ダミー参加者、プレイバック、中断、行動ログに加えて、ゲーム固有操作を受け取る `gameTools` と、DBを使うゲームだけが明示的に有効化する `wordGenerationTools` をポップアップ内に持つ。通常のフェーズ画面や参加者一覧には操作ボタンを重ねず、必要なら現在の代理操作対象などの状態表示だけを残す。ワード・お題DBを使わないゲームは `wordGenerationTools` を渡さず、生成テストを表示しない。
+
+デバッグ用ダミー参加者は、追加・一覧・削除の表示を共通 `DebugParticipantControls` が担当する。ゲームのController／Layoutは、閲覧者向けRoomから抽出したダミー一覧と型付きCommand関数だけを渡す。ワード生成を含む各操作の型付きCommand、ダミー生成、人数依存設定の補正、権限・フェーズ・上限検査、永続化はゲーム固有Storeに残し、共通UIをセキュリティ境界にしない。
 
 観戦は保存Roomや参加者向けsanitizerを流用せず、ゲーム別許可リストから小さな公開スナップショットを組み立てる。観戦者をRoomのplayers、手番、戦績、active room索引へ追加しない。公開可否はRoom外のRedis policyへ部屋作成時刻付きで保存し、コード再利用時の設定継承を防ぐ。新しいオンラインゲームは観戦registryへloaderと公開項目を明示追加し、秘密フィールド非公開テストを通す。
 

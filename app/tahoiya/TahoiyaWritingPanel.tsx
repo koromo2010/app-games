@@ -1,12 +1,12 @@
 import type { TahoiyaPlayer, TahoiyaRoom } from "@/lib/tahoiya-types";
-import { cyanButtonClass, inputClass, panelClass, primaryButtonClass, subtleButtonClass } from "../wordwolf/styles";
+import { cyanButtonClass, inputClass, panelClass, subtleButtonClass } from "../wordwolf/styles";
 
 type Props = {
   room: TahoiyaRoom; activePlayer: TahoiyaPlayer | null; isAnswerer: boolean;
   submittedCount: number; definitionTargetCount: number; activePlayerDefinitions: string[]; definitionIndex: number; hasSubmitted: boolean; writingDone: boolean;
-  definitionInput: string; polishMessage: string; isPolishing: boolean; isHost: boolean; isDebugMode: boolean;
+  definitionInput: string; polishMessage: string; isPolishing: boolean;
   onDefinitionChange: (value: string) => void; onDefinitionIndexChange: (value: number) => void; onEditSubmitted: () => void; onPolish: () => void;
-  onSubmit: () => void; onAutoFill: () => void; onAdvance: () => void;
+  onSubmit: () => void;
 };
 
 export function TahoiyaWritingPanel(props: Props) {
@@ -35,6 +35,5 @@ export function TahoiyaWritingPanel(props: Props) {
       </>}
     </>}
     <p className="mt-4 text-xs font-semibold text-slate-500">必要な数の偽説明が全員分そろうと、自動で投票へ進みます。</p>
-    {props.isHost && <div className="mt-3 flex flex-wrap gap-2">{props.isDebugMode && <button onClick={props.onAutoFill} className={subtleButtonClass}>未投稿をテスト入力</button>}{props.writingDone && <button onClick={props.onAdvance} className={primaryButtonClass}>投票へ進む（手動）</button>}</div>}
   </div>;
 }

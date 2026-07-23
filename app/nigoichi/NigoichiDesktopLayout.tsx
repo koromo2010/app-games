@@ -2,6 +2,7 @@
 
 import { AppLink as Link } from "@/app/components/AppLink";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
+import { DebugToolButton, DebugToolsSection } from "@/app/components/DebugGameTools";
 import { GameAdSlot } from "@/app/components/GameAdSlot";
 import { GameLoungeVisual } from "@/app/components/GameLoungeVisual";
 import { GamePhaseTimer } from "@/app/components/GamePhaseTimer";
@@ -156,7 +157,22 @@ export function NigoichiDesktopLayout({ controller }: { controller: NigoichiCont
           <button type="button" data-menu-close="true" onClick={() => setRulesOpen(true)} className={gameTopMenuItemClass}>ルール</button>
           {room.phase === "lobby" && !isHost && <button type="button" data-menu-close="true" onClick={() => void leaveRoom()} className={gameTopMenuItemClass}>退出</button>}
         </GameTopMenu>
-        {isHost && <DebugModeButton variant="banner" enabled={room.debugMode} disabled={isSaving || room.phase !== "lobby"} onAbort={room.debugMode && room.phase !== "lobby" ? () => runAction({ type: "abort-game", actorId: playerId }).then(() => undefined) : undefined} replayEnabled={room.debugReplayEnabled} replayDisabled={isSaving} onReplayChange={(enabled) => runAction({ type: "set-debug-replay", actorId: playerId, enabled }).then(() => undefined)} debugLogEntries={room.debugLog} onChange={(enabled) => runAction({ type: "set-debug", actorId: playerId, enabled }).then(() => undefined)} />}
+        {isHost && <DebugModeButton
+          variant="banner"
+          enabled={room.debugMode}
+          disabled={isSaving || room.phase !== "lobby"}
+          onAbort={room.debugMode && room.phase !== "lobby" ? () => runAction({ type: "abort-game", actorId: playerId }).then(() => undefined) : undefined}
+          replayEnabled={room.debugReplayEnabled}
+          replayDisabled={isSaving}
+          onReplayChange={(enabled) => runAction({ type: "set-debug-replay", actorId: playerId, enabled }).then(() => undefined)}
+          debugLogEntries={room.debugLog}
+          onChange={(enabled) => runAction({ type: "set-debug", actorId: playerId, enabled }).then(() => undefined)}
+          gameTools={<DebugToolsSection title="ゲーム操作" description="現在のフェーズで使える一括入力を表示します。">
+            {room.phase === "lobby" && <DebugToolButton disabled={isSaving || room.players.length >= room.playerCapacity} onClick={() => void runAction({ type: "debug-add-player", actorId: playerId })}>ダミーを追加</DebugToolButton>}
+            {room.phase === "clue" && <DebugToolButton disabled={isSaving} onClick={() => void runAction({ type: "debug-fill-associations", actorId: playerId })}>未提出の連想語を自動入力</DebugToolButton>}
+            {room.phase === "guess" && <DebugToolButton disabled={isSaving} onClick={() => void runAction({ type: "debug-fill-guesses", actorId: playerId })}>未提出の予想を正解で自動入力</DebugToolButton>}
+          </DebugToolsSection>}
+        />}
         <GamePlayerMenu id={session.id} name={session.name} avatarColor={session.avatarColor} avatarImage={session.avatarImage} hasRecoveryEmail={session.hasRecoveryEmail} />
       </GameTopBanner>
       {rulesDialog}
@@ -197,7 +213,6 @@ export function NigoichiDesktopLayout({ controller }: { controller: NigoichiCont
               </div>
               <p className="mt-2 rounded-lg bg-indigo-950/40 px-3 py-2 text-xs font-bold text-indigo-100">B = {roomConfigPlayerCount} × {room.cardsPerPlayer} + 1 = {roomTotalCards}枚。場に並ぶカード総数は最大21枚です。単語は共通一般プールから選びます。</p>
             </div>}
-            {isHost && room.debugMode && <div className="mt-5 rounded-xl border border-cyan-300/25 bg-cyan-300/10 p-4"><p className="text-sm font-bold text-cyan-50">ダミーを最大募集人数まで追加し、ホスト1人で提出・予想・結果表示まで確認できます。</p><button type="button" disabled={isSaving || room.players.length >= room.playerCapacity} onClick={() => void runAction({ type: "debug-add-player", actorId: playerId })} className="mt-3 w-full rounded-lg bg-cyan-200 px-4 py-2 font-black text-cyan-950 disabled:opacity-40">ダミーユーザーを追加</button></div>}
             {isHost ? <button type="button" disabled={isSaving || (!room.debugMode && room.players.length < nigoichiMinimumPlayers) || !allRoomPlayersReturned(room.lobbyReturn, room.players)} onClick={() => void runAction({ type: "start-game", actorId: playerId })} className="mt-6 w-full rounded-xl bg-amber-300 px-4 py-4 text-lg font-black text-slate-950 disabled:opacity-40">{!allRoomPlayersReturned(room.lobbyReturn, room.players) ? "参加者の復帰待ち" : !room.debugMode && room.players.length < nigoichiMinimumPlayers ? "2人以上で開始できます" : "このメンバーで開始"}</button> : <p className="mt-5 text-center font-bold text-slate-300">ホストがゲームを開始するまでお待ちください。</p>}
           </section>}
 
@@ -248,7 +263,6 @@ export function NigoichiDesktopLayout({ controller }: { controller: NigoichiCont
               </article>;
             })}</div>
             <p className="mt-4 text-center text-sm text-slate-300">全員が提出すると連想語を一斉公開します。</p>
-            {isHost && room.debugMode && <button type="button" onClick={() => void runAction({ type: "debug-fill-associations", actorId: playerId })} className="mt-4 w-full rounded-xl border border-cyan-300/30 bg-cyan-300/10 px-4 py-3 text-sm font-black text-cyan-100">デバッグ：未提出の連想語を自動入力</button>}
           </section>}
 
           {room.phase === "guess" && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6">
@@ -273,7 +287,6 @@ export function NigoichiDesktopLayout({ controller }: { controller: NigoichiCont
               </fieldset>;
             })}</div>
             <p className="mt-4 text-center text-sm text-slate-300">全員が選ぶまで他人の予想は表示されません。</p>
-            {isHost && room.debugMode && <button type="button" onClick={() => void runAction({ type: "debug-fill-guesses", actorId: playerId })} className="mt-4 w-full rounded-xl border border-cyan-300/30 bg-cyan-300/10 px-4 py-3 text-sm font-black text-cyan-100">デバッグ：未提出の予想を正解で自動入力</button>}
           </section>}
 
           {room.phase === "result" && room.missingNumber !== null && <section className="rounded-2xl border border-rose-300/30 bg-slate-950/80 p-6">

@@ -1,7 +1,7 @@
 "use client";
 
 import { createPortal } from "react-dom";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { DebugActionLog } from "@/app/components/DebugActionLog";
 import {
   onlineRoomSyncModeLabel,
@@ -27,6 +27,8 @@ type DebugModeButtonProps = {
   debugParticipantLimitReached?: boolean;
   onAddDebugParticipant?: () => void | Promise<void>;
   onRemoveDebugParticipant?: (participantId: string) => void | Promise<void>;
+  gameTools?: ReactNode;
+  wordGenerationTools?: ReactNode;
   variant?: "banner" | "menu";
 };
 
@@ -44,6 +46,8 @@ export function DebugModeButton({
   debugParticipantLimitReached = false,
   onAddDebugParticipant,
   onRemoveDebugParticipant,
+  gameTools,
+  wordGenerationTools,
   variant = "menu",
 }: DebugModeButtonProps) {
   const syncDiagnostics = useOnlineRoomSyncDiagnostics();
@@ -53,6 +57,7 @@ export function DebugModeButton({
   const [isOpen, setIsOpen] = useState(false);
   const [position, setPosition] = useState({ top: 80, left: 12 });
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const submissionRef = useRef(false);
 
   useEffect(() => {
@@ -65,12 +70,30 @@ export function DebugModeButton({
     return () => controller.abort();
   }, []);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    dialogRef.current?.focus();
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsOpen(false);
+        buttonRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [isOpen]);
+
   if (isLoading || !hasAccess) return null;
+
+  const closeMenu = () => {
+    setIsOpen(false);
+    buttonRef.current?.focus();
+  };
 
   const openMenu = () => {
     const rect = buttonRef.current?.getBoundingClientRect();
     if (rect) {
-      const width = Math.min(288, window.innerWidth - 24);
+      const width = Math.min(384, window.innerWidth - 24);
       setPosition({ top: rect.bottom + 8, left: Math.max(12, Math.min(rect.right - width, window.innerWidth - width - 12)) });
     }
     setIsOpen(true);
@@ -86,15 +109,15 @@ export function DebugModeButton({
   const abort = async () => {
     if (!onAbort || !window.confirm("進行中のゲームを中断し、同じ部屋のゲーム開始前へ戻しますか？")) return;
     await run(onAbort);
-    setIsOpen(false);
+    closeMenu();
   };
 
   return <>
     <button ref={buttonRef} type="button" title="開発者向け操作を開く" onClick={openMenu} className={variant === "menu" ? `rounded-lg border px-3 py-2 text-sm font-bold transition ${enabled ? "border-cyan-300 bg-cyan-50 text-cyan-900" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}` : `rounded-md border px-2 py-1 font-mono text-[11px] font-medium tracking-wide transition ${enabled ? "border-cyan-300/35 bg-cyan-300/10 text-cyan-100" : "border-white/10 bg-white/[0.03] text-white/60 hover:border-white/20 hover:text-white/80"}`} aria-haspopup="dialog" aria-expanded={isOpen}>
       {enabled ? "DEBUG · ON" : "DEBUG"} <span aria-hidden="true">▼</span>
     </button>
-    {isOpen && createPortal(<div className="fixed inset-0 z-[9999]" onClick={() => setIsOpen(false)}><div role="dialog" aria-label="開発者向け操作" className="fixed max-h-[min(80vh,42rem)] w-[min(18rem,calc(100vw-1.5rem))] overflow-y-auto rounded-lg border border-slate-200 bg-white p-3 text-slate-900 shadow-2xl" style={position} onClick={(event) => event.stopPropagation()}>
-      <div className="flex items-center justify-between gap-2"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Debug tools</p><button type="button" onClick={() => setIsOpen(false)} className="rounded border border-slate-200 px-2 py-1 text-xs font-bold text-slate-500">閉じる</button></div>
+    {isOpen && createPortal(<div className="fixed inset-0 z-[9999]" onClick={closeMenu}><div ref={dialogRef} role="dialog" aria-modal="true" aria-label="開発者向け操作" tabIndex={-1} className="fixed max-h-[min(80vh,42rem)] w-[min(24rem,calc(100vw-1.5rem))] overflow-y-auto rounded-lg border border-slate-200 bg-white p-3 text-slate-900 shadow-2xl outline-none" style={position} onClick={(event) => event.stopPropagation()}>
+      <div className="flex items-center justify-between gap-2"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Debug tools</p><button type="button" onClick={closeMenu} className="rounded border border-slate-200 px-2 py-1 text-xs font-bold text-slate-500">閉じる</button></div>
       <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">
         <div className="flex items-center justify-between gap-2"><span className="font-bold">部屋同期</span><strong>{onlineRoomSyncModeLabel(syncDiagnostics.mode)}</strong></div>
         <div className="mt-1 flex items-center justify-between gap-2 font-mono text-[11px] text-slate-500"><span>部屋GET {syncDiagnostics.roomGetCount}回</span><span>通知 {syncDiagnostics.notificationCount}件</span></div>
@@ -111,6 +134,8 @@ export function DebugModeButton({
           run={run}
         />
       )}
+      {enabled && gameTools && <div className="mt-3 space-y-3">{gameTools}</div>}
+      {enabled && wordGenerationTools && <div className="mt-3 space-y-3">{wordGenerationTools}</div>}
       {enabled && onReplayChange && <button type="button" disabled={replayDisabled || isSubmitting} aria-pressed={replayEnabled} onClick={() => void run(() => onReplayChange(!replayEnabled))} className="mt-2 flex w-full items-center justify-between rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold text-slate-700 disabled:opacity-40"><span>プレイバック記録</span><span>{replayEnabled ? "ON" : "OFF"}</span></button>}
       {enabled && onAbort && <button type="button" disabled={isSubmitting} onClick={() => void abort()} className="mt-2 w-full rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm font-bold text-rose-700 disabled:opacity-40">ゲームを中断</button>}
       {enabled && <DebugActionLog entries={debugLogEntries} />}

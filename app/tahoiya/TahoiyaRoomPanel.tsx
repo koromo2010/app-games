@@ -1,7 +1,5 @@
 import type { TahoiyaAnswererMode, TahoiyaDifficulty, TahoiyaPlayMode, TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomChoice } from "@/lib/tahoiya-types";
-import { tahoiyaDifficultyCriterionDescription, tahoiyaDifficultyLabel } from "@/lib/tahoiya-difficulty";
 import { allRoomPlayersReturned } from "@/lib/room-lobby-return";
-import { DebugWordGenerationTest, type DebugWordGenerationResult } from "../components/DebugWordGenerationTest";
 import { RoomConfigSummary } from "../components/RoomConfigSummary";
 import { RoomTimeLimitControl } from "../components/RoomTimeLimitControl";
 import { cyanButtonClass, dangerButtonClass, inputClass, panelClass, primaryButtonClass, subtleButtonClass } from "../wordwolf/styles";
@@ -31,7 +29,6 @@ type Props = {
   answererCandidates: TahoiyaPlayer[];
   roomConfigItems: ConfigItem[];
   activePlayer: TahoiyaPlayer | null;
-  activePlayerId: string;
   playerName: string;
   isHost: boolean;
   isDebugMode: boolean;
@@ -39,7 +36,6 @@ type Props = {
   message: string;
   onPassphraseChange: (value: string) => void;
   onJoinCodeChange: (value: string) => void;
-  onActivePlayerChange: (value: string) => void;
   onCreateRoom: () => void;
   onRefreshRooms: () => void;
   onJoinRoom: (code?: string) => void;
@@ -50,9 +46,6 @@ type Props = {
   onShowDefinitionChange: (value: boolean) => void;
   onFakeDefinitionsPerPlayerChange: (value: number) => void;
   onTimeLimitChange: (value: number) => void;
-  onTestWordGeneration: () => Promise<DebugWordGenerationResult>;
-  onTestDifficultyScreening: () => Promise<DebugWordGenerationResult>;
-  onAddTestPlayer: () => void;
   onStartRound: () => void;
   onDissolveRoom: () => void;
 };
@@ -102,13 +95,10 @@ function ActiveRoomPanel(props: Props & { room: TahoiyaRoom }) {
       <RoomConfigSummary items={props.roomConfigItems} />
       {room.phase === "lobby" && !props.isHost && <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-600">部屋設定は参加者全員に表示され、変更できるのはホストだけです。</p>}
       {room.phase === "lobby" && <TopicGenerationProgress room={room} isStarting={props.isStarting} />}
-      {props.isDebugMode ? (
-        <label className="block text-sm font-medium text-slate-700">操作プレイヤー
-          <select value={props.activePlayer?.id ?? props.activePlayerId} onChange={(event) => props.onActivePlayerChange(event.target.value)} className={`mt-1 ${inputClass}`}>
-            {room.players.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}
-          </select>
-        </label>
-      ) : <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">操作中: <span className="font-bold text-slate-950">{props.activePlayer?.name ?? props.playerName}</span></div>}
+      <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
+        操作中: <span className="font-bold text-slate-950">{props.activePlayer?.name ?? props.playerName}</span>
+        {props.isDebugMode && <span className="ml-2 text-xs font-bold text-cyan-700">切替はDEBUGメニュー</span>}
+      </div>
       {room.phase === "lobby" && (props.isHost ? <HostActions {...props} room={room} /> : !room.topicGenerationProgress && <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-center text-xs font-semibold text-slate-600">ホストのラウンド開始を待っています。</p>)}
       {props.isHost && <button onClick={props.onDissolveRoom} className={`w-full ${dangerButtonClass}`}>部屋を解散</button>}
     </div>
@@ -176,9 +166,8 @@ function Setting({ title, description, children }: { title: string; description?
 }
 
 function HostActions(props: Props & { room: TahoiyaRoom }) {
-  const difficulty = `${tahoiyaDifficultyLabel(props.room.topicDifficulty)}（${tahoiyaDifficultyCriterionDescription(props.room.topicDifficulty)}）`;
   const allPlayersReturned = allRoomPlayersReturned(props.room.lobbyReturn, props.room.players);
   const waitingPlayerCount = props.room.players.length - (props.room.lobbyReturn?.returnedPlayerIds.length ?? 0);
   const generationInProgress = Boolean(props.room.topicGenerationProgress);
-  return <>{props.isDebugMode && !generationInProgress && <><DebugWordGenerationTest onGenerate={() => props.onTestDifficultyScreening()} heading="未判定10語を難易度審査" description="共通DBの未判定10語をLLMへ渡し、認知率と除外フラグを判定済みDBへ保存します。秘境は1%超〜14%、魔境は0〜1%。センシティブ・大学名・企業名・地名は除外します。説明文と出題履歴はまだ作りません。" showModeToggle={false} fixedButtonLabel="未判定10語を審査して保存" fixedRepeatLabel="次の未判定10語を審査" /><DebugWordGenerationTest onGenerate={() => props.onTestWordGeneration()} heading={`${difficulty}正式採用フロー確認`} description="完成済み候補、判定済みで説明未作成の候補、未判定10語の順に探します。使用する1語だけ説明文を生成して完成済み候補へ保存し、デバッグ確認では出題履歴を付けません。" showModeToggle={false} fixedButtonLabel="正式採用フローを確認" fixedRepeatLabel="もう一度正式フローを確認" /><button onClick={props.onAddTestPlayer} disabled={props.room.players.length >= 8} className={`w-full ${subtleButtonClass}`}>テストプレイヤー追加</button></>}<button onClick={props.onStartRound} disabled={props.isStarting || generationInProgress || !allPlayersReturned} className={`w-full ${primaryButtonClass}`}>{props.isStarting || generationInProgress ? "お題を準備中..." : allPlayersReturned ? "ラウンド開始" : `復帰待ち（あと${waitingPlayerCount}人）`}</button></>;
+  return <button onClick={props.onStartRound} disabled={props.isStarting || generationInProgress || !allPlayersReturned} className={`w-full ${primaryButtonClass}`}>{props.isStarting || generationInProgress ? "お題を準備中..." : allPlayersReturned ? "ラウンド開始" : `復帰待ち（あと${waitingPlayerCount}人）`}</button>;
 }

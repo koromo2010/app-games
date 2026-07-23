@@ -2,6 +2,7 @@
 
 import { AppLink as Link } from "@/app/components/AppLink";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
+import { DebugToolButton, DebugToolsSection } from "@/app/components/DebugGameTools";
 import { GameAdSlot } from "@/app/components/GameAdSlot";
 import { GameLoungeVisual } from "@/app/components/GameLoungeVisual";
 import { PlayerTimeoutNotice } from "@/app/components/PlayerTimeoutNotice";
@@ -80,9 +81,24 @@ export function HodoaiDesktopLayout({ controller }: { controller: HodoaiControll
           {room.phase !== "lobby" && <Link href="/games" data-menu-close="true" className={gameTopMenuItemClass}>広場へ戻る</Link>}
           <OnlineRoomSpectatorLink game="hodoai" code={room.code} />
           <button type="button" data-menu-close="true" onClick={() => setRulesOpen(true)} className={gameTopMenuItemClass}>ルール</button>
-          {permissions.canDebug && <DebugModeButton enabled={room.debugMode} disabled={isSaving || room.phase !== "lobby"} onAbort={permissions.canAbort ? () => runAction({ type: "abort-game", actorId: playerId }).then(() => undefined) : undefined} replayEnabled={room.debugReplayEnabled} replayDisabled={isSaving} onReplayChange={(enabled) => runAction({ type: "set-debug-replay", actorId: playerId, enabled }).then(() => undefined)} debugLogEntries={room.debugLog} onChange={(enabled) => runAction({ type: "set-debug", actorId: playerId, enabled }).then(() => undefined)} />}
           {permissions.canLeave && <button type="button" data-menu-close="true" onClick={() => void leaveRoom()} className={gameTopMenuItemClass}>退出</button>}
         </GameTopMenu>
+        {permissions.canDebug && <DebugModeButton
+          variant="banner"
+          enabled={room.debugMode}
+          disabled={isSaving || room.phase !== "lobby"}
+          onAbort={permissions.canAbort ? () => runAction({ type: "abort-game", actorId: playerId }).then(() => undefined) : undefined}
+          replayEnabled={room.debugReplayEnabled}
+          replayDisabled={isSaving}
+          onReplayChange={(enabled) => runAction({ type: "set-debug-replay", actorId: playerId, enabled }).then(() => undefined)}
+          debugLogEntries={room.debugLog}
+          onChange={(enabled) => runAction({ type: "set-debug", actorId: playerId, enabled }).then(() => undefined)}
+          gameTools={<DebugToolsSection title="ゲーム操作" description="現在のフェーズで使えるデバッグ操作だけを表示します。">
+            {room.phase === "lobby" && <DebugToolButton disabled={isSaving} onClick={() => void runAction({ type: "debug-add-player", actorId: playerId })}>ダミーを追加</DebugToolButton>}
+            {room.phase === "clue" && <DebugToolButton disabled={isSaving} onClick={() => void runAction({ type: "debug-fill-clues", actorId: playerId, round: room.round })}>今回の未提出ことばを自動入力</DebugToolButton>}
+            {room.phase === "arrange" && <DebugToolButton disabled={isSaving} onClick={() => void runAction({ type: "debug-sort", actorId: playerId, round: room.round })}>正解順に並べる</DebugToolButton>}
+          </DebugToolsSection>}
+        />}
         <GamePlayerMenu id={session.id} name={session.name} avatarColor={session.avatarColor} avatarImage={session.avatarImage} hasRecoveryEmail={session.hasRecoveryEmail} />
       </GameTopBanner>
       {rulesDialog}

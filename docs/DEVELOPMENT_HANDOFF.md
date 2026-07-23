@@ -48,7 +48,7 @@
 | 共通結果操作 | `app/components/RoomResultActions.tsx` |
 | 共通ページ遷移 | `app/components/AppLink.tsx`, `app/components/RouteTransitionProvider.tsx`, `app/components/PageLoadingOverlay.tsx`, `app/loading.tsx` |
 | 共通時間制限 | `lib/game-room-config.ts`, `app/components/RoomTimeLimitControl.tsx` |
-| 共通デバッグ認証・操作 | `lib/debug-access.ts`, `app/components/DebugModeButton.tsx`, `app/components/DebugParticipantControls.tsx`, `app/api/debug-auth/route.ts`, `app/users/me/UserDashboard.tsx` |
+| 共通デバッグ認証・操作 | `lib/debug-access.ts`, `app/components/DebugModeButton.tsx`, `app/components/DebugGameTools.tsx`, `app/components/DebugParticipantControls.tsx`, `app/api/debug-auth/route.ts`, `app/users/me/UserDashboard.tsx` |
 | ゲーム公開範囲 | `config/game-registry.json` の `private`, `lib/game-access.ts`, `lib/private-game-access.ts`, `app/api/private-game-access/route.ts` |
 | ゲーム登録・自動監査 | `config/game-registry.json`, `scripts/check-game-standards.mjs`, `docs/NEW_GAME_CHECKLIST.md` |
 | ゲーム開発SDK | `packages/game-sdk`, `packages/game-runtime`, `lib/game-sdk-platform-adapter.ts`, `sdk/entry/START_GAME_FIELDS.md`, `sdk/starter-template`, `scripts/create-game.mjs`, `scripts/build-game-sdk-starter.mjs`, `scripts/build-game-sdk-starter-repository.mjs`, `scripts/check-game-sdk-boundaries.mjs`, `scripts/check-game-sdk-package.mjs`, `scripts/check-game-sdk-starter.mjs`, `docs/CHATGPT_GAME_SDK.md` |
@@ -200,7 +200,7 @@ API直叩き対策では、全オンラインRoom APIのGETをCookie本人と保
 - 広場の復帰表示はゲーム別Room APIをブラウザから順次呼ばず、認証済みの共通 `/api/player-active-rooms` 1本から部屋コード・phase・参加者概要・更新時刻だけを受け取る。active roomコード7件は個別GETではなく1回のMGETで確認し、該当する部屋本体だけを読む。秘密語・手札・投稿・合言葉などRoom本文は返さない。`scripts/check-game-standards.mjs` は全オンラインゲームのloader登録を検査する。
 - コードインターセプト、ワードスケール、ワードソナー、ワードアウト、ノーザンブランチの入室画面は `useOnlineGameSessionRestore` を使う。保存済みローカルセッションのactive-room取得をサーバーのアカウント確認と並行して始め、確認済みIDと一致した場合だけ採用する。復元中は新規作成・参加欄を `inert` にして、別部屋操作との競合を防ぐ。ワードウルフとたほい屋の個別session hookも同じ並列復元と初期loading表示を使う。アカウントCookieとRoomの正本は引き続きサーバーで検証する。
 - 参加人数のサーバー安全上限は `onlineRoomPlayerLimits` を正本とし、ワードウルフ20人、たほい屋8人、ノーザンブランチ4人、ワードスケール50人、ワードソナー20人、ワードアウト6人、コードインターセプト12人。満室は一覧から除外し、直接参加も409で拒否する。復元時も上限を超えた配列を切り詰め、デバッグ用ダミー追加にも同じ上限を適用する。
-- デバッグ用ダミー参加者の追加・一覧・削除UIは、ゲーム固有のロビー設定や参加者一覧へ置かず、共通 `DebugModeButton` 内の `DebugParticipantControls` に集約する。ゲーム側はダミー一覧と追加・削除Commandだけを注入し、認可・フェーズ・人数上限はサーバー側Storeで再検証する。ワードウルフを最初の適用先とし、デバッグOFF時は残っているダミーを全員整理する。
+- デバッグ用ダミー参加者の追加・一覧・削除UIは、ゲーム固有のロビー設定や参加者一覧へ置かず、共通 `DebugModeButton` 内の `DebugParticipantControls` に集約する。ゲーム側はダミー一覧と追加・削除Commandだけを注入し、認可・フェーズ・人数上限はサーバー側Storeで再検証する。ワードウルフではデバッグOFF時に残っているダミーを全員整理する。
 - 投稿・投票がそろったらサーバー側で自動遷移する。
 - ルームGETは認証済み閲覧者向けJSONからETagを作り、クライアントは `If-None-Match` を送る。未変更時は304で本文転送とJSON再解析を省き、同じURLへの重複取得はクライアント内で直列化する。実装は `lib/conditional-json.ts` と `lib/conditional-json-client.ts`。WebSocketはゲーム名・部屋コード・revision・timestampだけの更新通知を運び、Redisの部屋状態や秘密情報は載せない。DEBUGメニューでWS／ポーリング／再接続の状態、部屋GET回数、通知受信数を確認できる。
 - 広場のアクセス判定ではruntime hyperparameterとゲーム運用状態を並列取得する。同一プロセス内のruntime hyperparameter、ゲーム運用状態、実プレイ時間sampleは短時間cacheと同時loadの共有を使い、同じ画面生成中のRedis／Postgres重複読取を避ける。
@@ -215,12 +215,12 @@ API直叩き対策では、全オンラインRoom APIのGETをCookie本人と保
 - ログイン成功時は署名・期限付き・HttpOnly・SameSite=LaxのプレイヤーCookieを発行する。オンラインAPIはリクエスト本文のactor IDではなくCookieから本人を確定する。
 - 書き込みAPIは `lib/rate-limit.ts` の共通Redisレート制限を通す。ログイン名・IP・プレイヤーIDはHMAC化したキーだけを保存し、生値をRedisへ残さない。共有回線を考慮してIP枠は広く、プレイヤー／入力名枠を厳しくする。ログイン、パスワード再設定、アクセス認証、画像アップロード、部屋操作、AI生成、プロフィール更新、フィードバックを別枠にし、超過時は `429 RATE_LIMITED` と `Retry-After` を返す。制限用Redisだけが失敗した場合は操作を止めず、`rate-limit.store` 警告を出してfail-openする。
 - デバッグ利用資格はマイページで `DEBUG_MODE_PASSWORD` を共有APIへ送って認証し、プレイヤー別Redisフラグへ保存する。資格のあるホストだけ各ゲームのトップバーに `DebugModeButton` が表示され、ゲームAPIもデバッグON・デバッグ専用操作・中断時に資格を再確認する。ゲーム個別のパスワードUIは作らない。
-- デバッグのON/OFF・ダミー参加者管理・プレイバック記録・進行中断は、ゲーム固有画面へ個別配置せず `DebugModeButton` のプルダウンへまとめる。ゲーム固有の異常状態再現や一括入力は必要なフェーズ面へ残してよい。中断はゲーム一覧へ移動せず、同じ部屋・参加者・部屋設定を維持し、進行中の秘密情報と提出状態を破棄してゲーム開始前へ戻す。
+- デバッグのON/OFF・ダミー参加者管理・代理操作対象の切替・ゲーム固有の異常状態再現や一括入力・プレイバック記録・進行中断・行動ログは、ゲーム固有画面へ個別配置せず `DebugModeButton` のポップアップへまとめる。ゲーム固有操作は `gameTools` から注入し、通常のフェーズ画面にはデバッグ状態の説明だけを残せる。中断はゲーム一覧へ移動せず、同じ部屋・参加者・部屋設定を維持し、進行中の秘密情報と提出状態を破棄してゲーム開始前へ戻す。
 - オンラインゲームのトップバーは `GameTopBanner` と `GamePlayerMenu` を使う。ログアウトはプレイヤーメニュー内だけに置き、トップバーへ単独配置しない。
 - デバッグON中は、成功した操作の時刻・操作者表示名・操作種別・フェーズ遷移・revisionをサーバー正本の行動ログへ最大200件保存し、`DebugModeButton` 内で表示・コピーする。秘密の数字、手札、秘密語、ヒントや投稿本文、合言葉、Cookie、APIキーは記録しない。これは常時出力する構造化運用ログとは別物である。
 - 最終結果ではホスト以外も共通 `GameResultShareButton` からプレイログを共有できるようにする。共有先を開く前に実際の共有文と公開URLをプレビューする。ゲーム仕様として投稿本文や参加者名を共有する場合は、本人のデフォルトOFFの同意を入室時に固定保存し、未同意者の名前は匿名ラベルへ置き換える。認証付きURLは共有しない。
-- ワード・お題生成があるゲームは、デバッグONのロビーに `DebugWordGenerationTest` を表示する。生成テストはゲームを開始せず、部屋・ラウンド・出題済み履歴を変更しないプレビューAPIとして実行する。
-- 新規生成と再利用を切り替えるゲーム（現状はワードウルフ）だけ、デバッグのワード生成テストに「新規ワード生成」フラグを表示する。たほい屋はこの切替を使わず、後述の完成済み再利用→判定済み候補→未判定10語審査という正式フローをそのままプレビューする。
+- DBを使うワード・お題生成機能を持つゲームだけ、共通 `DebugModeButton` の任意 `wordGenerationTools` を有効化して `DebugWordGenerationTest` を表示する。DB機能を持たないゲームには表示しない。生成テストはゲームを開始せず、部屋・ラウンド・出題済み履歴を変更しないプレビューAPIとして実行する。候補生成・審査自体が検査対象なら、その結果だけを対応する候補DBへ保存できる。
+- 新規生成とDB内候補の再利用を切り替えるゲーム（現状はワードウルフ）だけ、DEBUGポップアップのワード生成テストに「新規ワード生成」フラグを表示する。たほい屋はこの切替を使わず、後述の完成済み再利用→判定済み候補→未判定10語審査という正式フローをそのままプレビューする。
 - ワード候補DBと使用履歴はゲーム別に分離する。通常出題では参加者の誰か一人でも使用済みの単語を除外し、参加者全員が未使用のローカル／再利用候補を優先する。該当候補が尽きた場合だけLLM APIで新規生成し、そのゲーム専用候補DBへ追加する。デバッグ生成の結果もゲーム専用候補DBへ追加するが、使用済みプレイヤーは登録せず、全員未使用の候補として扱う。
 - 参加者全員が未使用という条件を満たす再利用候補が複数ある場合は品質と利用分散を両立させる。たほい屋は全体使用回数が少なく最終使用が古い上位50語から、ゲーム別フィードバックの `Good - Bad` を最大6倍までの重みにしたランダム抽選を行い、同じ高評価語への固定化を防ぐ。
 - たほい屋は完成済みお題を共通DBの`tahoiya_topics`、既出IDをプレイヤー別Redis Set `game-history:v2:tahoiya:<playerId>`へ分離する。さらに同じ端末へ本文ではなく直近100語のSHA-256履歴IDだけを保存し、現在のアカウントへ90日TTLの `game-history:device-bridge:v1:tahoiya:<playerId>` として同期する。アカウントを作り直しても同じ端末では再出題を避け、補助履歴で候補が尽きた場合だけ補助履歴を緩和して既存語を優先する。旧アカウントと新アカウントをサーバー側識別子で紐付けない。移行中だけ旧Redis候補と埋込`experiencedPlayerIds`も互換読み取りする。ワードウルフはv3へ移行済みで、JST同日内は単語単位、順序非依存ペアは標準30日（`WORDWOLF_PAIR_COOLDOWN_DAYS`）で禁則にする。詳細は `docs/TOPIC_HISTORY_DATABASE.md` を参照する。
