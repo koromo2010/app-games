@@ -1813,3 +1813,10 @@
 
 - `develop`へ反映後、再送を再試行し、新しい安全な分類ログでResend側の認証・送信元ドメイン・送信先制限のどれかを確定する。
 - Resend Dashboard上の送信元ドメイン認証とAPIキー権限は、この環境から直接確認できず未確認。
+
+### 公開・外部設定確認
+
+- `74f76ee`（`Clarify recovery email resend errors`）として`develop`へfast-forwardし、`app-games-dev`の対象Deploymentが`READY`、`dev.game-fields.com`へ割り当て済みであることを確認した。
+- Vercel Runtime Logsで、直前の再送要求が`EMAIL_SERVICE_NOT_CONFIGURED`ではなくResend送信後の`EMAIL_SEND_FAILED`だったことを再確認した。したがって、ResendアカウントとAPIキー変数は作成・接続済みである。
+- Google Public DNSで`resend._domainkey.game-fields.com`のDKIM TXT、`send.game-fields.com`のSPF TXTとAmazon SES向けMXを確認した。DNS登録自体は存在する。
+- 最新コード反映後の再送はまだ行っていない。次回の1回で画面表示または閉じたログの分類コードを確認し、Resend Dashboard上の状態またはAPIキー権限を確定する。
