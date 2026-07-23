@@ -33,7 +33,7 @@ export function useTahoiyaController() {
   const [isSkippingTopic, setIsSkippingTopic] = useState(false);
   const [message, setMessage] = useState("");
   const [rulesOpen, setRulesOpen] = useState(false);
-  const { now, resultReturnGate } = useTahoiyaRoomSession({ room, playerId, setRoom, setPlayerId, setActivePlayerId, setPlayerName, setAvatarColor, setAvatarImage, setMessage });
+  const { now, ready, isRestoringRoom, resultReturnGate } = useTahoiyaRoomSession({ room, playerId, setRoom, setPlayerId, setActivePlayerId, setPlayerName, setAvatarColor, setAvatarImage, setMessage });
 
   useEffect(() => {
     if (!playerId) return;
@@ -83,7 +83,7 @@ export function useTahoiyaController() {
       room, playerId, playerName, avatarColor, avatarImage, passphrase, joinCode, joinableRooms,
       activePlayerId, definitionIndex, definitionInput, selectedOptionId, isStarting,
       isPolishingDefinition, polishMessage, skipReason, skipComment, isSkippingTopic, message,
-      rulesOpen,
+      rulesOpen, ready, isRestoringRoom,
     },
     setters: {
       setPassphrase, setJoinCode, setActivePlayerId, setDefinitionIndex, setDefinitionInput,

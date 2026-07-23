@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { AppLink as Link } from "@/app/components/AppLink";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
 import { GameAdSlot } from "@/app/components/GameAdSlot";
 import { GameLoungeVisual } from "@/app/components/GameLoungeVisual";
@@ -10,6 +10,7 @@ import { GameResultShareButton } from "@/app/components/GameResultShareButton";
 import { GameTopBanner, gameTopBannerOffsetClass } from "@/app/components/GameTopBanner";
 import { GameTopMenu, gameTopBannerActionClass, gameTopBannerDangerActionClass, gameTopMenuItemClass } from "@/app/components/GameTopMenu";
 import { OnlineRoomSpectatorLink } from "@/app/components/OnlineRoomSpectatorLink";
+import { PageLoadingOverlay } from "@/app/components/PageLoadingOverlay";
 import { PlayingCardHand } from "@/app/components/PlayingCardHand";
 import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomLobbyReturnStatus } from "@/app/components/RoomLobbyReturnStatus";
@@ -63,7 +64,7 @@ export function DaifugoDesktopLayout({ controller }: { controller: DaifugoContro
     play, pass, returnToRoom,
   } = actions;
 
-  if (!ready) return <main className="min-h-screen bg-slate-950 p-8 text-white">{d.checking}</main>;
+  if (!ready) return <PageLoadingOverlay label={d.checking} />;
   if (!session?.id) return <main className="min-h-screen bg-slate-950 px-4 py-12 text-white"><div className="mx-auto max-w-lg rounded-2xl border border-white/10 bg-white/[0.06] p-6 text-center"><h1 className="text-3xl font-black">{d.title}</h1><p className="mt-4 text-slate-300">{d.loginRequired}</p><Link href="/games" className="mt-6 inline-flex rounded-xl bg-cyan-300 px-5 py-3 font-black text-slate-950">{d.lobbyShort}</Link><Link href="/daifugo/practice" className="ml-3 mt-6 inline-flex rounded-xl border border-white/20 px-5 py-3 font-black">{d.practice}</Link></div><GameAdSlot gameId="daifugo" surface="game-entry" /></main>;
 
   if (!room) return <main className={`min-h-screen bg-[radial-gradient(circle_at_top,#164e63_0%,#0f172a_45%,#020617_100%)] text-white ${gameTopBannerOffsetClass}`}>

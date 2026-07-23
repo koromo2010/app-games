@@ -3,6 +3,7 @@ import { defaultAvatarImage, fallbackAvatarColor } from "@/lib/player-session";
 import type { Room } from "@/lib/wordwolf-game-types";
 import { dangerButtonClass, panelClass } from "./styles";
 import { RoomLobbyReturnStatus } from "@/app/components/RoomLobbyReturnStatus";
+import { isOnlineRoomDebugPlayer } from "@/lib/online-room-access";
 
 type Props = {
   room: Room;
@@ -33,7 +34,14 @@ export function WordWolfRoomSidebar({ room, activePlayerId, isHost, onSelectPlay
       </div>
     </div>
     <div className="mt-4 space-y-2">
-      {room.players.map((player) => <button key={player.id} onClick={() => onSelectPlayer(player.id)} className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-left text-sm ${player.id === activePlayerId ? "border-cyan-500 bg-cyan-50 text-cyan-950" : "border-slate-200 bg-slate-50 text-slate-800 hover:bg-slate-100"}`}><span className="flex min-w-0 items-center gap-2"><span className="h-4 w-4 shrink-0 rounded-full border border-white bg-cover bg-center shadow-sm" style={{ backgroundColor: player.avatarColor || fallbackAvatarColor, backgroundImage: `url(${player.avatarImage || defaultAvatarImage})` }} aria-hidden="true" /><span className="truncate font-medium">{player.name}</span></span>{player.id === room.hostId && <span className="text-xs text-slate-500">host</span>}</button>)}
+      {room.players.map((player) => {
+        return <div key={player.id} className={`flex items-center gap-2 rounded-lg border px-2 py-1.5 text-sm ${player.id === activePlayerId ? "border-cyan-500 bg-cyan-50 text-cyan-950" : "border-slate-200 bg-slate-50 text-slate-800"}`}>
+          <button type="button" onClick={() => onSelectPlayer(player.id)} className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-md px-1 py-0.5 text-left hover:bg-white/70">
+            <span className="flex min-w-0 items-center gap-2"><span className="h-4 w-4 shrink-0 rounded-full border border-white bg-cover bg-center shadow-sm" style={{ backgroundColor: player.avatarColor || fallbackAvatarColor, backgroundImage: `url(${player.avatarImage || defaultAvatarImage})` }} aria-hidden="true" /><span className="truncate font-medium">{player.name}</span></span>
+            <span className="flex shrink-0 items-center gap-1">{isOnlineRoomDebugPlayer(player) && <span className="rounded bg-cyan-100 px-1.5 py-0.5 text-[10px] font-bold text-cyan-800">dummy</span>}{player.id === room.hostId && <span className="text-xs text-slate-500">host</span>}</span>
+          </button>
+        </div>;
+      })}
     </div>
     <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
       <div className="flex items-center justify-between gap-3"><p className="text-sm font-bold text-slate-950">部屋内戦績</p><span className="rounded-md bg-white px-2 py-1 text-xs font-semibold text-slate-500">{room.gamesPlayed}戦</span></div>

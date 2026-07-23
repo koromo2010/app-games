@@ -58,7 +58,7 @@ export function useWordWolfController() {
     onReturnUnavailable: () => setError("部屋に戻れません。解散されたか、参加情報が変更されています。"),
   });
 
-  useWordWolfRoomSession({
+  const roomSession = useWordWolfRoomSession({
     room,
     isRoomDissolved: resultReturnGate.isRoomDissolved,
     acceptIncomingRoom: resultReturnGate.acceptIncomingRoom,
@@ -197,6 +197,8 @@ export function useWordWolfController() {
       isRoomLifecyclePending,
       isRulesOpen,
       isMyPageOpen,
+      ready: roomSession.ready,
+      isRestoringRoom: roomSession.isRestoringRoom,
     },
     setters: {
       setActivePlayerId,

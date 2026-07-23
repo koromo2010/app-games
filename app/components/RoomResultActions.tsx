@@ -2,8 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
+import { useAppLocale } from "@/app/components/AppLocaleProvider";
+import { useRouteTransition } from "@/app/components/RouteTransitionProvider";
+import { localizedAppHref } from "@/lib/app-locale-routing";
 import { confirmResultLobbyNavigation } from "./room-navigation-confirmation";
-import { useAppLocale } from "./AppLocaleProvider";
 
 type RoomResultActionsProps = {
   canReturnToRoom: boolean;
@@ -24,8 +26,9 @@ export function RoomResultActions({
   onReturnToRoom,
   returnHref = "/games",
 }: RoomResultActionsProps) {
-  const { t } = useAppLocale();
+  const { locale, t } = useAppLocale();
   const router = useRouter();
+  const { beginRouteTransition } = useRouteTransition();
   const [pendingAction, setPendingAction] = useState<"lobby" | "room" | "dissolve" | null>(null);
   const pendingActionRef = useRef(false);
   const isPending = pendingAction !== null;
@@ -47,7 +50,8 @@ export function RoomResultActions({
     if (!confirmResultLobbyNavigation(() => window.confirm(t("game.resultLobbyConfirm")))) return;
     pendingActionRef.current = true;
     setPendingAction("lobby");
-    router.push(returnHref);
+    beginRouteTransition();
+    router.push(localizedAppHref(returnHref, locale));
   };
 
   const pendingLabel = (label: string) => <span className="inline-flex items-center justify-center gap-2"><span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-r-transparent" aria-hidden="true" />{label}</span>;

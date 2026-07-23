@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { AppLink as Link } from "@/app/components/AppLink";
 import type { RoomChoice } from "@/lib/wordwolf-game-types";
 import { cyanButtonClass, inputClass, panelClass, subtleButtonClass } from "./styles";
 

@@ -3,6 +3,8 @@
 import { gameTopBannerOffsetClass } from "../components/GameTopBanner";
 import { GameAdSlot } from "../components/GameAdSlot";
 import { GameLoungeVisual } from "../components/GameLoungeVisual";
+import { PageLoadingOverlay } from "../components/PageLoadingOverlay";
+import { isOnlineRoomDebugPlayer } from "@/lib/online-room-access";
 import { ClueLogPanel } from "./WordWolfPanels";
 import { WordWolfActionPanels } from "./WordWolfActionPanels";
 import { WordWolfEntryPanel } from "./WordWolfEntryPanel";
@@ -21,7 +23,9 @@ export function WordWolfDesktopLayout({ controller }: { controller: WordWolfCont
     isJoinListOpen, clueInput, guessInput, isGuessJudging, guessFeedbackMessage, error,
     avatarImage, isAvatarPickerOpen, isStarting, isClueSubmitting, isVoteSubmitting,
     isGuessFeedbackSaving, isRoomLifecyclePending, isRulesOpen, isMyPageOpen,
+    ready,
   } = state;
+  if (!ready) return <PageLoadingOverlay />;
   const {
     activePlayer, currentPlayer, wolfIds, wolfPlayers, accusedPlayer, accusedIsWolf,
     finalAnswerPlayer, nextVotePlayer, isDebugMode, voteActor, voteDisplayPlayer, headerName,
@@ -46,6 +50,11 @@ export function WordWolfDesktopLayout({ controller }: { controller: WordWolfCont
         onDissolve={() => void actions.dissolveRoom()} onOpenRules={() => setters.setIsRulesOpen(true)} onAbort={actions.abortGame}
         onDebugReplayChange={(enabled) => void actions.runRoomAction({ type: "set-debug-replay", enabled })}
         onDebugChange={(enabled) => { void actions.runRoomAction({ type: "set-debug", enabled }); setters.setError(""); }}
+        debugParticipants={room?.players.filter(isOnlineRoomDebugPlayer) ?? []}
+        onAddDebugParticipant={() => actions.runRoomAction({ type: "debug-add-player" }).then(() => undefined)}
+        onRemoveDebugParticipant={(targetPlayerId) => actions.runRoomAction({ type: "debug-remove-player", targetPlayerId }).then((saved) => {
+          if (saved && activePlayerId === targetPlayerId) setters.setActivePlayerId(saved.hostId);
+        })}
         onAvatarPickerOpenChange={setters.setIsAvatarPickerOpen} onPlayerNameChange={actions.updatePlayerName}
         onCommitPlayerName={actions.commitPlayerName} onAvatarColorChange={actions.updateAvatarColor}
         onAvatarImageChange={actions.updateAvatarImage} onAvatarUpload={actions.uploadAvatarImage}
@@ -113,7 +122,6 @@ export function WordWolfDesktopLayout({ controller }: { controller: WordWolfCont
                   onTopicDifficultyChange={actions.setTopicDifficulty}
                   onClueLogVisibilityChange={actions.setClueLogVisibility}
                   onTestWordGeneration={actions.testWordGeneration}
-                  onAddSeat={actions.addSeat}
                   onStartGame={actions.startGame}
                 />
               )}

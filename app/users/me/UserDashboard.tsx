@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { AppLink as Link } from "@/app/components/AppLink";
 import { useEffect, useState, type FormEvent, type MouseEvent } from "react";
 import { savePersistentPlayerSession, savePlayerSession, type PlayerSession } from "@/lib/player-session";
 import type { PlayerGameResult, PlayerStatsResponse } from "@/lib/player-stats-store";

@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { AppLink as Link } from "@/app/components/AppLink";
 import { type ChangeEvent, type FormEvent, useCallback, useEffect, useState } from "react";
 import { startAuthentication, startRegistration, type PublicKeyCredentialCreationOptionsJSON, type PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/browser";
 import { uploadSiteIcon } from "@/lib/site-icon-image-client";

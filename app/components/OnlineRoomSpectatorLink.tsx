@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { AppLink as Link } from "@/app/components/AppLink";
 import type { OnlineRoomRealtimeGame } from "@/lib/online-room-realtime-protocol";
 import { gameTopMenuItemClass } from "./GameTopMenu";
 import { useAppLocale } from "./AppLocaleProvider";

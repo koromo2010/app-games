@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { AppLink as Link } from "@/app/components/AppLink";
 import { useAppLocale } from "@/app/components/AppLocaleProvider";
 import { appIntlLocale } from "@/lib/app-i18n";
 import type { ActiveWordWolfRoom } from "./use-lobby-room-data";

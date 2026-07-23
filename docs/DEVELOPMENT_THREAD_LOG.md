@@ -1888,3 +1888,38 @@
 
 - `develop`へは未push。反映後にdevで、同時発言・同時投票、フェーズ遷移直後、タイマーと手動送信の競合を実機確認する。
 - 全ゲーム共通の永続command receiptは未実装。ワードウルフは現在のRoom状態とscopeによる重複判定まで対応した。
+
+## 2026-07-23 — ダミー参加者管理、共通遷移表示、初期表示性能を改善
+
+### 利用者からの要望
+
+- ワードウルフのデバッグ用ダミーを削除できるようにする。
+- 追加・削除をワードウルフ固有の「テストプレイヤー」機能ではなく、共通デバッグモジュールで扱う。
+- 画面遷移待ちで内容が点滅しない、一般的な遷移中表示を用意する。
+- 全体のもっさり感がモジュール化によるものか切り分ける。
+
+### 判断
+
+- ダミー参加者の追加・一覧・削除UIは共通デバッグメニューへ集約し、ワードウルフは型付きCommandだけを渡す。削除は画面上のボタンだけでなく、ホスト・デバッグ中・ロビー・ダミー対象をサーバーで検査する。
+- 遷移表示は即時に出すと短い遷移まで点滅するため、120msを超えたときだけ共通オーバーレイを表示する。
+- Controller／Layoutのモジュール境界はbuild時にbundleされるため、runtimeの主因とは見なさない。locale redirect、直列API、重複したRedis／Postgres読取を個別に改善する。
+
+### 実施結果
+
+- 共通`DebugParticipantControls`を追加し、`DebugModeButton`内でダミーの追加・一覧・削除を行う構成にした。ワードウルフのロビー設定から固有の追加ボタン、参加者一覧から固有の削除ボタンを除去した。
+- ワードウルフへ`debug-remove-player`をサーバーCommandとして実装し、デバッグOFF時もダミーを整理する。
+- `AppLink`と`localizedAppHref`で内部リンクを現在localeへ直接向け、不要なredirectを避けた。
+- `RouteTransitionProvider`、`PageLoadingOverlay`、App Routerの`loading.tsx`を追加した。オンラインゲームの初期復元表示も同じUIへ揃えた。
+- 共通session restore、ワードウルフ、たほい屋で、保存済みIDのactive room取得を永続session確認と並列化した。
+- 広場のアクセス判定を並列化し、runtime hyperparameter、ゲーム運用状態、実プレイ時間sampleへ短時間cacheと同時load共有を追加した。
+
+### 検証
+
+- locale付き内部リンク、ダミー削除権限の回帰テストを追加した。
+- `npm run lint`成功。
+- `npm test`成功（421件）。
+- `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
+
+### 未対応・保留
+
+- `develop`へは未push。反映後、devで共通デバッグメニューからのダミー追加・個別削除、デバッグOFF時の整理、広場からゲームへの遷移、保存部屋の復元表示を実機確認する。

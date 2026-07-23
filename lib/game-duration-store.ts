@@ -41,6 +41,9 @@ export type RecordGameDurationInput = {
 const sampleKey = (gameType: GameDurationGameId) => `game-duration-samples:v1:${gameType}`;
 const eventKey = (id: string) => `game-duration-event:v1:${id}`;
 const eventRetentionSeconds = 2 * 365 * 24 * 60 * 60;
+const sampleCacheDurationMs = 5 * 60 * 1000;
+let sampleCache: { samples: GameDurationSample[]; expiresAt: number } | null = null;
+let pendingSampleLoad: Promise<GameDurationSample[]> | null = null;
 
 function normalizeSample(input: RecordGameDurationInput): GameDurationSample | null {
   if (!input.id || !isGameDurationGameId(input.gameType) || typeof input.startedAt !== "number") return null;
@@ -116,7 +119,9 @@ export async function recordGameDurationSample(input: RecordGameDurationInput) {
   const results = await Promise.allSettled(writes);
   const successes = results.filter((result): result is PromiseFulfilledResult<number> => result.status === "fulfilled");
   if (successes.length === 0) throw (results[0] as PromiseRejectedResult).reason;
-  return successes.some((result) => result.value > 0);
+  const inserted = successes.some((result) => result.value > 0);
+  if (inserted) sampleCache = null;
+  return inserted;
 }
 
 async function loadPostgresSamples() {
@@ -154,14 +159,31 @@ async function loadRedisSamples() {
   return results.flatMap((values) => values.map(parseRedisSample).filter((sample): sample is GameDurationSample => Boolean(sample)));
 }
 
+async function loadDurationSamples() {
+  if (sampleCache && sampleCache.expiresAt > Date.now()) return sampleCache.samples;
+  if (pendingSampleLoad) return pendingSampleLoad;
+
+  const request = (async () => {
+    let samples: GameDurationSample[] = [];
+    if (isPostgresConfigured()) {
+      samples = await loadPostgresSamples().catch(() => []);
+    }
+    if (samples.length === 0 && getRedisConfig()) {
+      samples = await loadRedisSamples().catch(() => []);
+    }
+    sampleCache = { samples, expiresAt: Date.now() + sampleCacheDurationMs };
+    return samples;
+  })();
+  pendingSampleLoad = request;
+  try {
+    return await request;
+  } finally {
+    if (pendingSampleLoad === request) pendingSampleLoad = null;
+  }
+}
+
 export async function loadGameDurationEstimates(filters: { playerCount?: number; variantKey?: string } = {}) {
-  let samples: GameDurationSample[] = [];
-  if (isPostgresConfigured()) {
-    samples = await loadPostgresSamples().catch(() => []);
-  }
-  if (samples.length === 0 && getRedisConfig()) {
-    samples = await loadRedisSamples().catch(() => []);
-  }
+  const samples = await loadDurationSamples();
   const filtered = samples.filter((sample) => (
     (filters.playerCount === undefined || sample.playerCount === filters.playerCount)
     && (filters.variantKey === undefined || sample.variantKey === filters.variantKey)

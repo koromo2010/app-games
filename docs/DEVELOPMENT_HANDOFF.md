@@ -15,6 +15,7 @@
 - 言語変更はマイページだけに置く。言語依存ゲームの部屋へ参加中は `/api/player-session` が `PLAYER_LOCALE_ACTIVE_ROOM` で変更を拒否する。
 - Postgres `player_accounts.locale`、Redisプレイヤーセッション、ブラウザセッションは同じ値を持つ。Postgresの旧行はスキーマ更新時に `ja` が入る。
 - 共通UI辞書は `lib/app-i18n.ts`、クライアントの現在言語は `AppLocaleProvider` を正本とする。プレイヤーセッション保存時のイベントで `<html lang>` と表示を同期する。中国語などを追加するときは `app-locale.ts` と同じ辞書キーの言語辞書を追加する。
+- アプリ内ページへの通常リンクは `app/components/AppLink.tsx` を使い、現在言語を付けたURLへ直接遷移する。`next/link`を直接使って接頭辞なしURLからlocale redirectを1往復増やさない。プログラム遷移も `localizedAppHref` と `RouteTransitionProvider` を通す。
 - Englishでは広場、ログイン、マイページ、共通ルーム操作、大富豪（オンライン／CPU練習／ルール）を表示できる。言語非依存ゲームは英語・日本語アカウントが同じ部屋で遊べるが、英語UI未完了のゲームは `isGameUiLocaleAvailable` で広場の起動導線だけを止める。
 - 言語依存ゲームのコンテンツは現在日本語だけ。ゲーム側でお題・単語・画面を明示的に対応し `gameContentLocales` へ追加するまでは、English設定から日本語部屋を作成・閲覧・参加できず、広場カードも起動不可として表示する。
 
@@ -45,8 +46,9 @@
 | 共通トランプ基盤 | `lib/playing-cards.ts`, `lib/playing-card-presentation.ts`, `app/components/PlayingCard.tsx`, `app/components/PlayingCardHand.tsx`, `app/components/PlayingCardBackStack.tsx` |
 | 大富豪 | `lib/daifugo.ts`, `lib/daifugo-room-store.ts`, `app/daifugo/DaifugoGame.tsx`, `app/daifugo/DaifugoPractice.tsx`, `docs/DAIFUGO.md`（3〜6人オンライン＋CPU練習） |
 | 共通結果操作 | `app/components/RoomResultActions.tsx` |
+| 共通ページ遷移 | `app/components/AppLink.tsx`, `app/components/RouteTransitionProvider.tsx`, `app/components/PageLoadingOverlay.tsx`, `app/loading.tsx` |
 | 共通時間制限 | `lib/game-room-config.ts`, `app/components/RoomTimeLimitControl.tsx` |
-| 共通デバッグ認証 | `lib/debug-access.ts`, `app/components/DebugModeButton.tsx`, `app/api/debug-auth/route.ts`, `app/users/me/UserDashboard.tsx` |
+| 共通デバッグ認証・操作 | `lib/debug-access.ts`, `app/components/DebugModeButton.tsx`, `app/components/DebugParticipantControls.tsx`, `app/api/debug-auth/route.ts`, `app/users/me/UserDashboard.tsx` |
 | ゲーム公開範囲 | `config/game-registry.json` の `private`, `lib/game-access.ts`, `lib/private-game-access.ts`, `app/api/private-game-access/route.ts` |
 | ゲーム登録・自動監査 | `config/game-registry.json`, `scripts/check-game-standards.mjs`, `docs/NEW_GAME_CHECKLIST.md` |
 | ゲーム開発SDK | `packages/game-sdk`, `packages/game-runtime`, `lib/game-sdk-platform-adapter.ts`, `sdk/entry/START_GAME_FIELDS.md`, `sdk/starter-template`, `scripts/create-game.mjs`, `scripts/build-game-sdk-starter.mjs`, `scripts/build-game-sdk-starter-repository.mjs`, `scripts/check-game-sdk-boundaries.mjs`, `scripts/check-game-sdk-package.mjs`, `scripts/check-game-sdk-starter.mjs`, `docs/CHATGPT_GAME_SDK.md` |
@@ -196,10 +198,12 @@ API直叩き対策では、全オンラインRoom APIのGETをCookie本人と保
 - 設定デフォルトはプレイヤーごとにRedisへ保存し、localStorageをフォールバックにする。
 - 1プレイヤー1アクティブ部屋。新しい部屋作成時は古いホスト部屋を解散する。
 - 広場の復帰表示はゲーム別Room APIをブラウザから順次呼ばず、認証済みの共通 `/api/player-active-rooms` 1本から部屋コード・phase・参加者概要・更新時刻だけを受け取る。active roomコード7件は個別GETではなく1回のMGETで確認し、該当する部屋本体だけを読む。秘密語・手札・投稿・合言葉などRoom本文は返さない。`scripts/check-game-standards.mjs` は全オンラインゲームのloader登録を検査する。
-- コードインターセプト、ワードスケール、ワードソナー、ワードアウト、ノーザンブランチの入室画面は `useOnlineGameSessionRestore` を使う。保存済みのローカルセッションで画面枠を先に表示し、サーバーのアカウント確認とアクティブ部屋復元をバックグラウンドで行う。復元中は新規作成・参加欄を `inert` にして、別部屋操作との競合を防ぐ。アカウントCookieとRoomの正本は引き続きサーバーで検証する。
+- コードインターセプト、ワードスケール、ワードソナー、ワードアウト、ノーザンブランチの入室画面は `useOnlineGameSessionRestore` を使う。保存済みローカルセッションのactive-room取得をサーバーのアカウント確認と並行して始め、確認済みIDと一致した場合だけ採用する。復元中は新規作成・参加欄を `inert` にして、別部屋操作との競合を防ぐ。ワードウルフとたほい屋の個別session hookも同じ並列復元と初期loading表示を使う。アカウントCookieとRoomの正本は引き続きサーバーで検証する。
 - 参加人数のサーバー安全上限は `onlineRoomPlayerLimits` を正本とし、ワードウルフ20人、たほい屋8人、ノーザンブランチ4人、ワードスケール50人、ワードソナー20人、ワードアウト6人、コードインターセプト12人。満室は一覧から除外し、直接参加も409で拒否する。復元時も上限を超えた配列を切り詰め、デバッグ用ダミー追加にも同じ上限を適用する。
+- デバッグ用ダミー参加者の追加・一覧・削除UIは、ゲーム固有のロビー設定や参加者一覧へ置かず、共通 `DebugModeButton` 内の `DebugParticipantControls` に集約する。ゲーム側はダミー一覧と追加・削除Commandだけを注入し、認可・フェーズ・人数上限はサーバー側Storeで再検証する。ワードウルフを最初の適用先とし、デバッグOFF時は残っているダミーを全員整理する。
 - 投稿・投票がそろったらサーバー側で自動遷移する。
 - ルームGETは認証済み閲覧者向けJSONからETagを作り、クライアントは `If-None-Match` を送る。未変更時は304で本文転送とJSON再解析を省き、同じURLへの重複取得はクライアント内で直列化する。実装は `lib/conditional-json.ts` と `lib/conditional-json-client.ts`。WebSocketはゲーム名・部屋コード・revision・timestampだけの更新通知を運び、Redisの部屋状態や秘密情報は載せない。DEBUGメニューでWS／ポーリング／再接続の状態、部屋GET回数、通知受信数を確認できる。
+- 広場のアクセス判定ではruntime hyperparameterとゲーム運用状態を並列取得する。同一プロセス内のruntime hyperparameter、ゲーム運用状態、実プレイ時間sampleは短時間cacheと同時loadの共有を使い、同じ画面生成中のRedis／Postgres重複読取を避ける。
 - 部屋作成時のRoom本体と一覧索引は1回のLua commandで原子的に保存する。更新時に一覧へ毎回 `SADD` しない。参加者別active room索引のTTL更新も人数分の個別SETではなく、RoomのCAS保存と同じLua commandへまとめる。
 - 参加可能な部屋一覧は全件 `SMEMBERS` + 個別GETを行わず、`SSCAN` で1ページ24件ずつ取得し、部屋本体は1回の `MGET` にまとめる。レスポンスの `nextCursor` を次の `cursor` クエリへ渡せる。部屋コードを指定した直接参加はページ外でも利用できる。
 - 自動遷移しなかった場合の手動ボタンはホスト向けに残すが、必要条件を満たすまで表示しない。
@@ -211,7 +215,7 @@ API直叩き対策では、全オンラインRoom APIのGETをCookie本人と保
 - ログイン成功時は署名・期限付き・HttpOnly・SameSite=LaxのプレイヤーCookieを発行する。オンラインAPIはリクエスト本文のactor IDではなくCookieから本人を確定する。
 - 書き込みAPIは `lib/rate-limit.ts` の共通Redisレート制限を通す。ログイン名・IP・プレイヤーIDはHMAC化したキーだけを保存し、生値をRedisへ残さない。共有回線を考慮してIP枠は広く、プレイヤー／入力名枠を厳しくする。ログイン、パスワード再設定、アクセス認証、画像アップロード、部屋操作、AI生成、プロフィール更新、フィードバックを別枠にし、超過時は `429 RATE_LIMITED` と `Retry-After` を返す。制限用Redisだけが失敗した場合は操作を止めず、`rate-limit.store` 警告を出してfail-openする。
 - デバッグ利用資格はマイページで `DEBUG_MODE_PASSWORD` を共有APIへ送って認証し、プレイヤー別Redisフラグへ保存する。資格のあるホストだけ各ゲームのトップバーに `DebugModeButton` が表示され、ゲームAPIもデバッグON・デバッグ専用操作・中断時に資格を再確認する。ゲーム個別のパスワードUIは作らない。
-- デバッグのON/OFF・プレイバック記録・進行中断は、トップバーへ個別配置せず `DebugModeButton` のプルダウンへまとめる。中断はゲーム一覧へ移動せず、同じ部屋・参加者・部屋設定を維持し、進行中の秘密情報と提出状態を破棄してゲーム開始前へ戻す。
+- デバッグのON/OFF・ダミー参加者管理・プレイバック記録・進行中断は、ゲーム固有画面へ個別配置せず `DebugModeButton` のプルダウンへまとめる。ゲーム固有の異常状態再現や一括入力は必要なフェーズ面へ残してよい。中断はゲーム一覧へ移動せず、同じ部屋・参加者・部屋設定を維持し、進行中の秘密情報と提出状態を破棄してゲーム開始前へ戻す。
 - オンラインゲームのトップバーは `GameTopBanner` と `GamePlayerMenu` を使う。ログアウトはプレイヤーメニュー内だけに置き、トップバーへ単独配置しない。
 - デバッグON中は、成功した操作の時刻・操作者表示名・操作種別・フェーズ遷移・revisionをサーバー正本の行動ログへ最大200件保存し、`DebugModeButton` 内で表示・コピーする。秘密の数字、手札、秘密語、ヒントや投稿本文、合言葉、Cookie、APIキーは記録しない。これは常時出力する構造化運用ログとは別物である。
 - 最終結果ではホスト以外も共通 `GameResultShareButton` からプレイログを共有できるようにする。共有先を開く前に実際の共有文と公開URLをプレビューする。ゲーム仕様として投稿本文や参加者名を共有する場合は、本人のデフォルトOFFの同意を入室時に固定保存し、未同意者の名前は匿名ラベルへ置き換える。認証付きURLは共有しない。

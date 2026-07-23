@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { AppLink as Link } from "@/app/components/AppLink";
 
 type VerificationPageProps = {
   searchParams: Promise<{ token?: string; status?: string }>;

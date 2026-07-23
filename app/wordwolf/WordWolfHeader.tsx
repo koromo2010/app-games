@@ -1,4 +1,6 @@
-import Link from "next/link";
+import { AppLink as Link } from "@/app/components/AppLink";
+import type { DebugParticipant } from "@/app/components/DebugParticipantControls";
+import { onlineRoomPlayerLimits } from "@/lib/online-room-policy";
 import type { Room } from "@/lib/wordwolf-game-types";
 import { DebugModeButton } from "../components/DebugModeButton";
 import { FullScreenPageOverlay } from "../components/FullScreenPageOverlay";
@@ -14,6 +16,8 @@ type Props = {
   avatarImage: string | null; headerAvatarColor: string; headerAvatarImage: string; isAvatarPickerOpen: boolean; isMyPageOpen: boolean;
   onDissolve: () => void; onOpenRules: () => void; onAbort?: () => void; onDebugReplayChange: (enabled: boolean) => void;
   onDebugChange: (enabled: boolean) => void; onAvatarPickerOpenChange: (open: boolean) => void; onPlayerNameChange: (name: string) => void;
+  debugParticipants: readonly DebugParticipant[]; onAddDebugParticipant: () => void | Promise<void>;
+  onRemoveDebugParticipant: (participantId: string) => void | Promise<void>;
   onCommitPlayerName: () => void; onAvatarColorChange: (color: string) => void; onAvatarImageChange: (image: string | null) => void;
   onAvatarUpload: (file?: File) => void; onMyPageOpenChange: (open: boolean) => void; onRecover: () => void;
 };
@@ -27,7 +31,20 @@ export function WordWolfHeader(props: Props) {
         {props.room && <OnlineRoomSpectatorLink game="wordwolf" code={props.room.code} />}
         <button type="button" data-menu-close="true" onClick={props.onOpenRules} className={gameTopMenuItemClass}>ルール</button>
         <PaidLlmAccessButton variant="menu" />
-        {props.room && props.isHost && <DebugModeButton variant="menu" enabled={Boolean(props.room.debugMode)} disabled={props.room.phase !== "lobby"} onAbort={props.room.debugMode && props.room.phase !== "lobby" ? props.onAbort : undefined} replayEnabled={Boolean(props.room.debugReplayEnabled)} onReplayChange={props.onDebugReplayChange} onChange={props.onDebugChange} />}
+        {props.room && props.isHost && <DebugModeButton
+          variant="menu"
+          enabled={Boolean(props.room.debugMode)}
+          disabled={props.room.phase !== "lobby"}
+          onAbort={props.room.debugMode && props.room.phase !== "lobby" ? props.onAbort : undefined}
+          replayEnabled={Boolean(props.room.debugReplayEnabled)}
+          onReplayChange={props.onDebugReplayChange}
+          onChange={props.onDebugChange}
+          debugParticipants={props.debugParticipants}
+          debugParticipantManagementDisabled={props.room.phase !== "lobby"}
+          debugParticipantLimitReached={props.room.players.length >= onlineRoomPlayerLimits.wordwolf}
+          onAddDebugParticipant={props.onAddDebugParticipant}
+          onRemoveDebugParticipant={props.onRemoveDebugParticipant}
+        />}
       </GameTopMenu>
       <WordWolfPlayerProfile playerId={props.playerId} playerName={props.playerName} headerName={props.headerName} avatarImage={props.avatarImage} headerAvatarColor={props.headerAvatarColor} headerAvatarImage={props.headerAvatarImage} isOpen={props.isAvatarPickerOpen} onOpenChange={props.onAvatarPickerOpenChange} onPlayerNameChange={props.onPlayerNameChange} onCommitPlayerName={props.onCommitPlayerName} onAvatarColorChange={props.onAvatarColorChange} onAvatarImageChange={props.onAvatarImageChange} onAvatarUpload={props.onAvatarUpload} onOpenMyPage={() => props.onMyPageOpenChange(true)} />
     </GameTopBanner>

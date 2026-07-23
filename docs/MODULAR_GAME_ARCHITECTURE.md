@@ -31,6 +31,7 @@ UI / hooks -> API client -> HTTP route -> application/domain -> storage
 - revision CAS・新規部屋永続化: `lib/online-room-persistence.ts`
 - クライアントの単調revision採用: `lib/online-room-client-state.ts`
 - 共通actor権限・ロビー退出判定: `lib/online-room-access.ts`
+- 共通デバッグメニュー・ダミー参加者UI: `app/components/DebugModeButton.tsx`, `app/components/DebugParticipantControls.tsx`
 - Room API共通エラー変換: `lib/online-room-route-errors.ts`
 - 部屋解散application/storage境界: `lib/online-room-dissolution.ts`
 - ワードウルフadapter: `app/wordwolf/wordwolf-room-api-client.ts`
@@ -44,6 +45,8 @@ UI / hooks -> API client -> HTTP route -> application/domain -> storage
 - 観戦policy・grant・共通API: `lib/online-room-spectator-store.ts`, `lib/online-room-spectator-auth.ts`, `app/api/online-room-spectators/route.ts`
 
 共通クライアントはURL、method、条件付きGET、JSON応答、HTTP status/payload付きエラーまでを担当する。各adapterはゲーム固有のRoom・Action型を付ける。操作・時間切れ・ポーリングの応答は `preferLatestOnlineRoom` を通し、同じ部屋で現在以下のrevisionを画面状態へ戻さない。フェーズ遷移、権限、勝敗、レスポンスの秘密情報除去は従来どおりサーバーdomain/storeの責務で、クライアント共通化へ移さない。
+
+デバッグ用ダミー参加者は、追加・一覧・削除の表示を共通 `DebugParticipantControls` が担当する。ゲームのController／Layoutは、閲覧者向けRoomから抽出したダミー一覧と型付きCommand関数だけを渡す。ダミー生成、人数依存設定の補正、権限・フェーズ・上限検査、永続化はゲーム固有Storeに残し、共通UIをセキュリティ境界にしない。
 
 観戦は保存Roomや参加者向けsanitizerを流用せず、ゲーム別許可リストから小さな公開スナップショットを組み立てる。観戦者をRoomのplayers、手番、戦績、active room索引へ追加しない。公開可否はRoom外のRedis policyへ部屋作成時刻付きで保存し、コード再利用時の設定継承を防ぐ。新しいオンラインゲームは観戦registryへloaderと公開項目を明示追加し、秘密フィールド非公開テストを通す。
 

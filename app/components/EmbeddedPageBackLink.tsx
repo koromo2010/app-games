@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { AppLink as Link } from "@/app/components/AppLink";
 import type { MouseEvent, ReactNode } from "react";
 
 type Props = { href: string; className?: string; children: ReactNode };

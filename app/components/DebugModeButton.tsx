@@ -7,6 +7,10 @@ import {
   onlineRoomSyncModeLabel,
   useOnlineRoomSyncDiagnostics,
 } from "@/app/hooks/online-room-sync-diagnostics";
+import {
+  DebugParticipantControls,
+  type DebugParticipant,
+} from "@/app/components/DebugParticipantControls";
 import type { GameDebugLogEntry } from "@/lib/game-debug-log";
 
 type DebugModeButtonProps = {
@@ -18,10 +22,30 @@ type DebugModeButtonProps = {
   replayDisabled?: boolean;
   onReplayChange?: (enabled: boolean) => void | Promise<void>;
   debugLogEntries?: GameDebugLogEntry[];
+  debugParticipants?: readonly DebugParticipant[];
+  debugParticipantManagementDisabled?: boolean;
+  debugParticipantLimitReached?: boolean;
+  onAddDebugParticipant?: () => void | Promise<void>;
+  onRemoveDebugParticipant?: (participantId: string) => void | Promise<void>;
   variant?: "banner" | "menu";
 };
 
-export function DebugModeButton({ enabled, disabled = false, onChange, onAbort, replayEnabled = false, replayDisabled = false, onReplayChange, debugLogEntries = [], variant = "menu" }: DebugModeButtonProps) {
+export function DebugModeButton({
+  enabled,
+  disabled = false,
+  onChange,
+  onAbort,
+  replayEnabled = false,
+  replayDisabled = false,
+  onReplayChange,
+  debugLogEntries = [],
+  debugParticipants = [],
+  debugParticipantManagementDisabled = false,
+  debugParticipantLimitReached = false,
+  onAddDebugParticipant,
+  onRemoveDebugParticipant,
+  variant = "menu",
+}: DebugModeButtonProps) {
   const syncDiagnostics = useOnlineRoomSyncDiagnostics();
   const [hasAccess, setHasAccess] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -69,13 +93,24 @@ export function DebugModeButton({ enabled, disabled = false, onChange, onAbort, 
     <button ref={buttonRef} type="button" title="開発者向け操作を開く" onClick={openMenu} className={variant === "menu" ? `rounded-lg border px-3 py-2 text-sm font-bold transition ${enabled ? "border-cyan-300 bg-cyan-50 text-cyan-900" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}` : `rounded-md border px-2 py-1 font-mono text-[11px] font-medium tracking-wide transition ${enabled ? "border-cyan-300/35 bg-cyan-300/10 text-cyan-100" : "border-white/10 bg-white/[0.03] text-white/60 hover:border-white/20 hover:text-white/80"}`} aria-haspopup="dialog" aria-expanded={isOpen}>
       {enabled ? "DEBUG · ON" : "DEBUG"} <span aria-hidden="true">▼</span>
     </button>
-    {isOpen && createPortal(<div className="fixed inset-0 z-[9999]" onClick={() => setIsOpen(false)}><div role="dialog" aria-label="開発者向け操作" className="fixed w-[min(18rem,calc(100vw-1.5rem))] rounded-lg border border-slate-200 bg-white p-3 text-slate-900 shadow-2xl" style={position} onClick={(event) => event.stopPropagation()}>
+    {isOpen && createPortal(<div className="fixed inset-0 z-[9999]" onClick={() => setIsOpen(false)}><div role="dialog" aria-label="開発者向け操作" className="fixed max-h-[min(80vh,42rem)] w-[min(18rem,calc(100vw-1.5rem))] overflow-y-auto rounded-lg border border-slate-200 bg-white p-3 text-slate-900 shadow-2xl" style={position} onClick={(event) => event.stopPropagation()}>
       <div className="flex items-center justify-between gap-2"><p className="text-xs font-bold uppercase tracking-wide text-slate-500">Debug tools</p><button type="button" onClick={() => setIsOpen(false)} className="rounded border border-slate-200 px-2 py-1 text-xs font-bold text-slate-500">閉じる</button></div>
       <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-2 text-xs text-slate-700">
         <div className="flex items-center justify-between gap-2"><span className="font-bold">部屋同期</span><strong>{onlineRoomSyncModeLabel(syncDiagnostics.mode)}</strong></div>
         <div className="mt-1 flex items-center justify-between gap-2 font-mono text-[11px] text-slate-500"><span>部屋GET {syncDiagnostics.roomGetCount}回</span><span>通知 {syncDiagnostics.notificationCount}件</span></div>
       </div>
       <button type="button" disabled={disabled || isSubmitting} aria-pressed={enabled} onClick={() => void run(() => onChange(!enabled))} className={`mt-3 flex w-full items-center justify-between rounded-lg border px-3 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-40 ${enabled ? "border-cyan-300 bg-cyan-50 text-cyan-950" : "border-slate-300 bg-slate-50 text-slate-700"}`}><span>デバッグモード</span><span>{enabled ? "ON" : "OFF"}</span></button>
+      {enabled && onAddDebugParticipant && onRemoveDebugParticipant && (
+        <DebugParticipantControls
+          participants={debugParticipants}
+          disabled={debugParticipantManagementDisabled}
+          addDisabled={debugParticipantLimitReached}
+          isSubmitting={isSubmitting}
+          onAdd={onAddDebugParticipant}
+          onRemove={onRemoveDebugParticipant}
+          run={run}
+        />
+      )}
       {enabled && onReplayChange && <button type="button" disabled={replayDisabled || isSubmitting} aria-pressed={replayEnabled} onClick={() => void run(() => onReplayChange(!replayEnabled))} className="mt-2 flex w-full items-center justify-between rounded-lg border border-slate-300 px-3 py-2 text-sm font-bold text-slate-700 disabled:opacity-40"><span>プレイバック記録</span><span>{replayEnabled ? "ON" : "OFF"}</span></button>}
       {enabled && onAbort && <button type="button" disabled={isSubmitting} onClick={() => void abort()} className="mt-2 w-full rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-sm font-bold text-rose-700 disabled:opacity-40">ゲームを中断</button>}
       {enabled && <DebugActionLog entries={debugLogEntries} />}

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Image from "next/image";
-import Link from "next/link";
+import { AppLink as Link } from "@/app/components/AppLink";
 import { useAppLocale } from "@/app/components/AppLocaleProvider";
 import type { AppLocale } from "@/lib/app-locale";
 import { filterGamesBySearch } from "@/lib/game-catalog-search";

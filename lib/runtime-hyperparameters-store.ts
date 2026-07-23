@@ -9,17 +9,32 @@ import {
 const storageKey = "site-runtime-hyperparameters:v1";
 const cacheDurationMs = 5_000;
 let cache: { values: RuntimeHyperparameterOverrides; expiresAt: number } | null = null;
+let pendingLoad: Promise<RuntimeHyperparameterOverrides> | null = null;
 
 export async function loadRuntimeHyperparameterOverrides(options: { fresh?: boolean } = {}) {
   if (!options.fresh && cache && cache.expiresAt > Date.now()) return installRuntimeHyperparameterOverrides(cache.values);
+  if (!options.fresh && pendingLoad) {
+    try {
+      return installRuntimeHyperparameterOverrides(await pendingLoad);
+    } catch {
+      return installRuntimeHyperparameterOverrides(cache?.values ?? {});
+    }
+  }
   if (!getRedisConfig()) return installRuntimeHyperparameterOverrides({});
-  try {
+
+  const request = (async () => {
     const raw = await redisCommand<string | null>(["GET", storageKey]);
     const values = normalizeRuntimeHyperparameterOverrides(raw ? JSON.parse(raw) : {});
     cache = { values, expiresAt: Date.now() + cacheDurationMs };
-    return installRuntimeHyperparameterOverrides(values);
+    return values;
+  })();
+  if (!options.fresh) pendingLoad = request;
+  try {
+    return installRuntimeHyperparameterOverrides(await request);
   } catch {
     return installRuntimeHyperparameterOverrides(cache?.values ?? {});
+  } finally {
+    if (pendingLoad === request) pendingLoad = null;
   }
 }
 

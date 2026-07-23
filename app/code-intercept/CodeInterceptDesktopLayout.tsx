@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { AppLink as Link } from "@/app/components/AppLink";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
 import { DebugWordGenerationTest } from "@/app/components/DebugWordGenerationTest";
 import { GameAdSlot } from "@/app/components/GameAdSlot";
@@ -12,6 +12,7 @@ import { GameRulesDialog } from "@/app/components/GameRulesDialog";
 import { GameTopBanner, gameTopBannerOffsetClass } from "@/app/components/GameTopBanner";
 import { GameTopMenu, gameTopBannerActionClass, gameTopBannerDangerActionClass, gameTopMenuItemClass } from "@/app/components/GameTopMenu";
 import { OnlineRoomSpectatorLink } from "@/app/components/OnlineRoomSpectatorLink";
+import { PageLoadingOverlay } from "@/app/components/PageLoadingOverlay";
 import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomResultActions } from "@/app/components/RoomResultActions";
 import { RoomLobbyReturnStatus } from "@/app/components/RoomLobbyReturnStatus";
@@ -269,7 +270,7 @@ export function CodeInterceptDesktopLayout({ controller }: { controller: CodeInt
     <p className="mt-2">終了したラウンドのヒントは過去ログで確認できます。正解暗号は部屋設定が「全員に公開」の場合だけ相手にも表示され、「自チームだけ」では相手の正解暗号と味方回答を伏せます。敵の秘密単語そのものは、ゲームが終わるまで見えません。時間制限は、出題・ヒント作成とソナー選択で別々に設定できます。</p>
   </GameRulesDialog>;
 
-  if (!ready) return <main className="min-h-screen bg-slate-950 p-8 text-white">ログイン情報と部屋を確認中...</main>;
+  if (!ready) return <PageLoadingOverlay />;
   if (!session?.id) return <main className="min-h-screen bg-slate-950 px-4 py-12 text-white"><div className="mx-auto max-w-lg rounded-2xl border border-white/10 bg-white/[0.06] p-6 text-center"><h1 className="text-3xl font-black">コードインターセプト</h1><p className="mt-4 text-slate-300">このゲームはログインしたプレイヤー同士で遊びます。</p><Link href="/games" className="mt-6 inline-flex rounded-xl bg-amber-300 px-5 py-3 font-black text-slate-950">広場へ</Link></div><GameAdSlot gameId="code-intercept" surface="game-entry" /></main>;
 
   if (!room) return <main className={`min-h-screen bg-[radial-gradient(circle_at_top,#7f1d1d_0%,#172033_42%,#020617_82%)] px-4 pb-8 text-white ${gameTopBannerOffsetClass}`}>

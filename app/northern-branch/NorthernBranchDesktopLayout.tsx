@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { AppLink as Link } from "@/app/components/AppLink";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
 import { GameAdSlot } from "@/app/components/GameAdSlot";
 import { GameLoungeVisual } from "@/app/components/GameLoungeVisual";
@@ -9,6 +9,7 @@ import { GameRulesDialog } from "@/app/components/GameRulesDialog";
 import { GameTopBanner, gameTopBannerOffsetClass } from "@/app/components/GameTopBanner";
 import { GameTopMenu, gameTopBannerActionClass, gameTopBannerDangerActionClass, gameTopMenuItemClass } from "@/app/components/GameTopMenu";
 import { OnlineRoomSpectatorLink } from "@/app/components/OnlineRoomSpectatorLink";
+import { PageLoadingOverlay } from "@/app/components/PageLoadingOverlay";
 import { GamePlayerMenu } from "@/app/components/GamePlayerMenu";
 import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomResultActions } from "@/app/components/RoomResultActions";
@@ -92,7 +93,7 @@ export function NorthernBranchDesktopLayout({ controller }: { controller: Northe
     <p className="mt-3 text-amber-200">現在は試作版のため、カードの種類や数値は今後変わることがあります。</p>
   </GameRulesDialog>;
 
-  if (!ready) return <main className="min-h-screen bg-slate-950 p-8 text-white">ログイン情報と部屋を確認中...</main>;
+  if (!ready) return <PageLoadingOverlay />;
 
   if (!session?.id) {
     return <main className="min-h-screen bg-slate-950 px-4 py-12 text-white"><div className="mx-auto max-w-lg rounded-2xl border border-white/10 bg-white/[0.06] p-6 text-center"><h1 className="text-3xl font-black">ノーザンブランチ</h1><p className="mt-4 leading-7 text-slate-300">このゲームはログインしたプレイヤー同士で遊びます。広場でログインしてください。</p><Link href="/games" className="mt-6 inline-flex rounded-xl bg-lime-400 px-5 py-3 font-black text-lime-950">広場へ</Link></div></main>;

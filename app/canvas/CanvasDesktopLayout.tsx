@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { AppLink as Link } from "@/app/components/AppLink";
 import { DrawingCanvas } from "@/app/components/DrawingCanvas";
 import { GamePlayerMenu } from "@/app/components/GamePlayerMenu";
 import { GameLoungeVisual } from "@/app/components/GameLoungeVisual";

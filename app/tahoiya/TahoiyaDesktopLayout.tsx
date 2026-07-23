@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { AppLink as Link } from "@/app/components/AppLink";
 import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
 import { DebugModeButton } from "../components/DebugModeButton";
 import { GameAdSlot } from "../components/GameAdSlot";
@@ -10,6 +10,7 @@ import { GameTopBanner, gameTopBannerOffsetClass } from "../components/GameTopBa
 import { GameTopMenu, gameTopBannerActionClass, gameTopBannerDangerActionClass, gameTopMenuItemClass } from "../components/GameTopMenu";
 import { OnlineRoomSpectatorLink } from "../components/OnlineRoomSpectatorLink";
 import { GamePlayerMenu } from "../components/GamePlayerMenu";
+import { PageLoadingOverlay } from "../components/PageLoadingOverlay";
 import { TahoiyaRulesDialog } from "./TahoiyaRulesDialog";
 import { TahoiyaRoomPanel } from "./TahoiyaRoomPanel";
 import { TahoiyaRoundOverview } from "./TahoiyaRoundOverview";
@@ -42,7 +43,8 @@ export function TahoiyaDesktopLayout({ controller }: { controller: TahoiyaContro
   const { room, playerId, playerName, avatarColor, avatarImage, passphrase, joinCode,
     joinableRooms, activePlayerId, definitionIndex, definitionInput, selectedOptionId,
     isStarting, isPolishingDefinition, polishMessage, skipReason, skipComment,
-    isSkippingTopic, message, rulesOpen } = state;
+    isSkippingTopic, message, rulesOpen, ready } = state;
+  if (!ready) return <PageLoadingOverlay />;
   const { isDebugMode, isHost, operationPlayerId, activePlayer } = permissions;
   const { isAllVoteMode, answererCandidates, answerer, isAnswerer, activePlayerDefinitions,
     hasActivePlayerSubmitted, hasActivePlayerVoted, displayedVoteOptionId, definitionTargetCount,

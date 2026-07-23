@@ -5,11 +5,14 @@ const gameOperationsKey = "site-game-operations:v2";
 const legacyGameOperationsKey = "site-game-operations:v1";
 const cacheDurationMs = 15_000;
 let cache: { operations: GameOperation[]; expiresAt: number } | null = null;
+let pendingLoad: Promise<GameOperation[]> | null = null;
 
 export async function loadGameOperations(options: { fresh?: boolean } = {}) {
   if (!options.fresh && cache && cache.expiresAt > Date.now()) return cache.operations;
+  if (!options.fresh && pendingLoad) return pendingLoad;
   if (!getRedisConfig()) return defaultGameOperations();
-  try {
+
+  const request = (async () => {
     const stored = await redisCommand<string | null>(["GET", gameOperationsKey]);
     const legacyStored = stored ? null : await redisCommand<string | null>(["GET", legacyGameOperationsKey]);
     const operations = stored
@@ -17,8 +20,14 @@ export async function loadGameOperations(options: { fresh?: boolean } = {}) {
       : legacyStored ? migrateLegacyGameOperations(JSON.parse(legacyStored)) : defaultGameOperations();
     cache = { operations, expiresAt: Date.now() + cacheDurationMs };
     return operations;
+  })();
+  if (!options.fresh) pendingLoad = request;
+  try {
+    return await request;
   } catch {
-    return defaultGameOperations();
+    return cache?.operations ?? defaultGameOperations();
+  } finally {
+    if (pendingLoad === request) pendingLoad = null;
   }
 }
 

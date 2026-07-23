@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { AppLink as Link } from "@/app/components/AppLink";
 import { useState } from "react";
 
 export function ResetPasswordForm({ token }: { token: string }) {

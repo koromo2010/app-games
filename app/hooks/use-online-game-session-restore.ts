@@ -1,5 +1,4 @@
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
-import { restoreOnlineRoom } from "@/lib/online-room-api-client";
 import {
   isPlayerAuthenticated,
   loadPersistentPlayerSession,
@@ -48,6 +47,9 @@ export function useOnlineGameSessionRestore<Room extends { code: string }>({
     }
 
     const cachedSession = readPlayerSession();
+    const cachedActiveRoom = cachedSession?.id
+      ? fetchActiveRoom(cachedSession.id).catch(() => null)
+      : Promise.resolve(null);
     if (cachedSession?.id) {
       defer(() => {
         if (sessionVerified) return;
@@ -71,12 +73,11 @@ export function useOnlineGameSessionRestore<Room extends { code: string }>({
       setReady(true);
       setIsRestoringRoom(true);
       try {
-        const savedRoom = await restoreOnlineRoom({
-          playerId: savedSession.id,
-          lastCode: localStorage.getItem(lastRoomKey),
-          fetchActiveRoom,
-          fetchRoom,
-        });
+        const activeRoom = cachedSession?.id === savedSession.id
+          ? await cachedActiveRoom
+          : await fetchActiveRoom(savedSession.id);
+        const lastCode = localStorage.getItem(lastRoomKey);
+        const savedRoom = activeRoom ?? (lastCode ? await fetchRoom(lastCode, savedSession.id) : null);
         if (!active) return;
         if (savedRoom) {
           setRoom(savedRoom);

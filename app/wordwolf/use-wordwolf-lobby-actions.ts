@@ -15,7 +15,6 @@ export function useWordWolfLobbyActions(room: Room | null, runRoomAction: RunRoo
     void runRoomAction({ type: "update-config", config }, true);
   };
 
-  const addSeat = () => { if (room) void runRoomAction({ type: "debug-add-player" }); };
   const setClueLogVisibility = (value: ClueLogVisibility) => updateConfig({ clueLogVisibility: value });
   const setGameMode = (value: GameMode) => updateConfig({ gameMode: value });
   const setWolfCount = (value: number) => { if (room) updateConfig({ wolfCount: normalizeWolfCount(value, room.players.length) }); };
@@ -79,5 +78,5 @@ export function useWordWolfLobbyActions(room: Room | null, runRoomAction: RunRoo
     };
   };
 
-  return { addSeat, setClueLogVisibility, setGameMode, setWolfCount, setClueMode, setRandomizeTurnOrder, setTurnTimeLimit, setTopicDictionarySource, setTopicPairDistance, setTopicDifficulty, setTopicHint, testWordGeneration };
+  return { setClueLogVisibility, setGameMode, setWolfCount, setClueMode, setRandomizeTurnOrder, setTurnTimeLimit, setTopicDictionarySource, setTopicPairDistance, setTopicDifficulty, setTopicHint, testWordGeneration };
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { AppLink as Link } from "@/app/components/AppLink";
 import { useEffect, useRef, useState } from "react";
 import { GamePlayerMenu } from "@/app/components/GamePlayerMenu";
 import { GameTopBanner, gameTopBannerOffsetClass } from "@/app/components/GameTopBanner";

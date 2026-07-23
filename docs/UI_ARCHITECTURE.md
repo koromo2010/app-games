@@ -24,6 +24,13 @@ return isMobile
 
 MobileLayoutは必要になるまで作らない。
 
+## 共通ページ遷移
+
+- アプリ内ページリンクは `AppLink` を使い、現在のlocaleをURLへ付けたまま移動する。
+- `RouteTransitionProvider` は遷移開始から120msを超えた場合だけ `PageLoadingOverlay` を表示する。短い遷移では表示せず、ローディングUI自体の点滅を避ける。
+- App Routerのsegment待機は `app/loading.tsx`、オンラインゲームの初期セッション／部屋復元は同じ `PageLoadingOverlay` を使う。
+- ボタン内の短い保存処理やゲーム内フェーズ更新は従来の局所pending表示を使い、ページ遷移用オーバーレイと混ぜない。
+
 ## Controller層
 
 Controllerは次を束ねる。

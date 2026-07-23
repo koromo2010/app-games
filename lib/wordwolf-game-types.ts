@@ -123,5 +123,6 @@ export type WordWolfRoomAction =
   | { type: "set-debug"; enabled: boolean }
   | { type: "set-debug-replay"; enabled: boolean }
   | { type: "debug-add-player" }
+  | { type: "debug-remove-player"; targetPlayerId: string }
   | { type: "reset-game" }
   | { type: "abort-game" };

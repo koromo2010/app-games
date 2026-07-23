@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { AppLink as Link } from "@/app/components/AppLink";
 import { useAppLocale } from "./AppLocaleProvider";
 
 export function SiteFooter({ siteName = "GAME FIELDS" }: { siteName?: string }) {

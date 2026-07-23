@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { AppLink as Link } from "@/app/components/AppLink";
 import { useEffect, useRef, useState } from "react";
 import type { GameSdkRoomSnapshot, GameSdkTrustedActor, GameSdkViewer } from "@game-fields/game-sdk";
 import { createGameSdkMockRuntime, type GameSdkMockRuntime } from "@game-fields/game-sdk/mock-runtime";

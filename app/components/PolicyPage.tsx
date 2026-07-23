@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { AppLink as Link } from "@/app/components/AppLink";
 import type { ReactNode } from "react";
 
 export function PolicyPage({ eyebrow, title, updatedAt, children }: { eyebrow: string; title: string; updatedAt: string; children: ReactNode }) {

@@ -2,7 +2,7 @@ import { normalizeTopicDictionarySource, type TopicDictionarySource, type TopicP
 import type { ClueLogVisibility, ClueMode, GameMode, Room } from "@/lib/wordwolf-game-types";
 import { DebugWordGenerationTest, type DebugWordGenerationResult } from "../components/DebugWordGenerationTest";
 import { RoomTimeLimitControl } from "../components/RoomTimeLimitControl";
-import { inputClass, primaryButtonClass, subtleButtonClass } from "./styles";
+import { inputClass, primaryButtonClass } from "./styles";
 import { lobbyRounds, normalizeRoundsTotal } from "./wordwolf-room-adapter";
 import type { WordDifficulty } from "@/lib/word-selection-protocol";
 
@@ -24,7 +24,6 @@ type Props = {
   onTopicDifficultyChange: (value: WordDifficulty) => void;
   onClueLogVisibilityChange: (value: ClueLogVisibility) => void;
   onTestWordGeneration: (forceNew: boolean) => Promise<DebugWordGenerationResult>;
-  onAddSeat: () => void;
   onStartGame: () => void;
 };
 
@@ -46,7 +45,6 @@ export function WordWolfLobbySettings({
   onTopicDifficultyChange: setTopicDifficulty,
   onClueLogVisibilityChange: setClueLogVisibility,
   onTestWordGeneration: testWordGeneration,
-  onAddSeat: addSeat,
   onStartGame: startGame,
 }: Props) {
   return (
@@ -285,15 +283,7 @@ export function WordWolfLobbySettings({
                         </div>
                       </div>
                       {room.debugMode && (
-                        <>
-                          <DebugWordGenerationTest onGenerate={testWordGeneration} />
-                          <button
-                            onClick={addSeat}
-                            className={`w-full ${subtleButtonClass}`}
-                          >
-                            テスト用プレイヤー追加
-                          </button>
-                        </>
+                        <DebugWordGenerationTest onGenerate={testWordGeneration} />
                       )}
                       <label className="block text-sm font-medium text-slate-700">
                         発言ログ
