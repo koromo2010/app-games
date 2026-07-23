@@ -2355,9 +2355,13 @@
 - `npm run test:sdk-starter`成功。公開snapshot、ZIP展開、同梱SDK install、型検査、契約テスト、1ゲーム完走、提出ZIPを確認した。
 - `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
 - `git diff --check`成功。
+- 実装commit `da4fdbfba6e9a200ee147ad5a476f7d5ea7a379d`を`develop`へforceなしでfast-forwardし、GitHub上のtreeがローカル検証済みtreeと一致することを確認した。
+- `app-games-dev`のDeployment `dpl_89TyfGC9qhgGtSE82j6DUaLj1JPb`と、SDK Portal側のDeployment `dpl_3ETLo9TpVF8C9ApqFT7KE5DXosgv`が同じ実装commitで`READY`となった。`dev.game-fields.com` aliasは本体Deploymentへ切り替わった。
+- devのSDK例2画面はHTTP 200で、HTML内のDeployment IDも本体Deploymentと一致した。SDK Roomのactive取得、一覧、host一括解散は未認証401、未登録moduleは404、Realtime endpointのHEADは204を返した。
+- 本体Deploymentのerror・fatalログと、SDK Room／Realtime routeの集約Runtime Errorsはいずれも0件だった。
+- クラウドブラウザではSDK公式サンプルのRoom、revision、host／参加者／観戦者Viewを確認した。ただし同画面は意図どおりMock RuntimeとDEBUG fixtureを使うため、複数の実アカウントによる永続Room操作の代替確認にはしていない。認証済みAPIの直接表示はブラウザ側の`ERR_BLOCKED_BY_CLIENT`で実施できなかった。
 
 ### 未対応・保留
 
-- `develop`への反映とdev Deployment確認は、この実装コミット作成後に行う。
-- ログイン済み複数アカウントの実操作は、dev Deployment後に利用可能な認証済みブラウザセッションの範囲で確認する。
+- ログイン済み複数アカウントによる永続SDK Roomの作成・参加・Command・Realtime更新・解散の実操作は未確認。異なるidentityのactive-room競合、参加、進行、結果後解散、cleanupは自動縦断テストで確認済み。
 - npm registryへの初回公開、Portal上の正式チュートリアル・APIリファレンス・提出画面は引き続き未実装。
