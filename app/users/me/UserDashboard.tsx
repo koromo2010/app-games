@@ -47,6 +47,11 @@ function recoveryEmailErrorMessage(code: string | undefined, locale: AppLocale) 
     if (code === "AUTH_REQUIRED") return "Sign in again and retry.";
     if (code === "INVALID_CREDENTIALS") return "Your current password is incorrect.";
     if (code === "EMAIL_NOT_CONFIGURED") return "Email delivery is not configured yet.";
+    if (code === "EMAIL_PROVIDER_AUTH_FAILED") return "The email service credentials are not valid. An administrator must update the delivery settings.";
+    if (code === "EMAIL_SENDER_NOT_VERIFIED") return "The sender domain has not been verified. An administrator must finish the email-domain setup.";
+    if (code === "EMAIL_RECIPIENT_RESTRICTED") return "The email service is still limited to test recipients. An administrator must verify the sender domain.";
+    if (code === "EMAIL_DELIVERY_QUOTA_EXCEEDED") return "The email delivery quota has been reached. Please try again later.";
+    if (code === "EMAIL_DELIVERY_RATE_LIMITED") return "Too many emails were requested. Wait a moment and try again.";
     if (code === "EMAIL_SEND_FAILED") return "Could not send the confirmation email. Please try again later.";
     return "Could not save the recovery email address.";
   }
@@ -56,6 +61,11 @@ function recoveryEmailErrorMessage(code: string | undefined, locale: AppLocale) 
   if (code === "AUTH_REQUIRED") return "ログインし直してから再度お試しください。";
   if (code === "INVALID_CREDENTIALS") return "現在のパスワードが正しくありません。";
   if (code === "EMAIL_NOT_CONFIGURED") return "メール送信機能がまだ設定されていません。";
+  if (code === "EMAIL_PROVIDER_AUTH_FAILED") return "メール送信サービスの認証設定が無効です。管理者側で送信設定の更新が必要です。";
+  if (code === "EMAIL_SENDER_NOT_VERIFIED") return "メールの送信元ドメインが未確認です。管理者側でドメイン認証を完了する必要があります。";
+  if (code === "EMAIL_RECIPIENT_RESTRICTED") return "メール送信サービスがテスト送信先だけに制限されています。管理者側で送信元ドメインの認証が必要です。";
+  if (code === "EMAIL_DELIVERY_QUOTA_EXCEEDED") return "メール送信枠の上限に達しています。時間をおいて再度お試しください。";
+  if (code === "EMAIL_DELIVERY_RATE_LIMITED") return "メール送信が集中しています。少し待って再度お試しください。";
   if (code === "EMAIL_SEND_FAILED") return "確認メールを送信できませんでした。時間をおいて再度お試しください。";
   return "復旧用メールアドレスを保存できませんでした。";
 }
@@ -97,8 +107,10 @@ export function UserDashboard() {
   const [localeMessage, setLocaleMessage] = useState("");
   const [recoveryEmail, setRecoveryEmail] = useState("");
   const [recoveryEmailPassword, setRecoveryEmailPassword] = useState("");
+  const [recoveryEmailResendPassword, setRecoveryEmailResendPassword] = useState("");
   const [isRecoveryEmailSaving, setIsRecoveryEmailSaving] = useState(false);
-  const [recoveryEmailMessage, setRecoveryEmailMessage] = useState("");
+  const [recoveryEmailUpdateMessage, setRecoveryEmailUpdateMessage] = useState("");
+  const [recoveryEmailResendMessage, setRecoveryEmailResendMessage] = useState("");
   const [accountSecurity, setAccountSecurity] = useState<PlayerAccountSecuritySummary | null>(null);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -242,7 +254,7 @@ export function UserDashboard() {
     event.preventDefault();
     if (!session || isRecoveryEmailSaving) return;
     setIsRecoveryEmailSaving(true);
-    setRecoveryEmailMessage("");
+    setRecoveryEmailUpdateMessage("");
     try {
       const response = await fetch("/api/player-account", {
         method: "POST",
@@ -256,27 +268,27 @@ export function UserDashboard() {
         emailVerificationPending?: boolean;
       } | null;
       if (!response.ok || !data?.session) {
-        setRecoveryEmailMessage(recoveryEmailErrorMessage(data?.error, locale));
+        setRecoveryEmailUpdateMessage(recoveryEmailErrorMessage(data?.error, locale));
         return;
       }
       applyPlayerSession(data.session);
       setAccountSecurity(data.accountSecurity ?? null);
       setRecoveryEmail("");
       setRecoveryEmailPassword("");
-      setRecoveryEmailMessage(data.emailVerificationPending
+      setRecoveryEmailUpdateMessage(data.emailVerificationPending
         ? (locale === "en" ? "A confirmation email was sent. Approve it to finish registration." : "確認メールを送信しました。メール内で承認すると登録が完了します。")
         : (locale === "en" ? "This email address is already verified." : "このメールアドレスは確認済みです。"));
     } catch {
-      setRecoveryEmailMessage(copy.networkFailed);
+      setRecoveryEmailUpdateMessage(copy.networkFailed);
     } finally {
       setIsRecoveryEmailSaving(false);
     }
   };
 
   const resendRecoveryEmail = async () => {
-    if (!session || isRecoveryEmailSaving || !recoveryEmailPassword) return;
+    if (!session || isRecoveryEmailSaving || !recoveryEmailResendPassword) return;
     setIsRecoveryEmailSaving(true);
-    setRecoveryEmailMessage("");
+    setRecoveryEmailResendMessage("");
     try {
       const response = await fetch("/api/player-account", {
         method: "POST",
@@ -284,7 +296,7 @@ export function UserDashboard() {
         body: JSON.stringify({
           mode: "resend-email-verification",
           name: session.name,
-          password: recoveryEmailPassword,
+          password: recoveryEmailResendPassword,
         }),
       });
       const data = await response.json().catch(() => null) as {
@@ -294,13 +306,13 @@ export function UserDashboard() {
         emailVerificationPending?: boolean;
       } | null;
       if (!response.ok || !data?.session) {
-        setRecoveryEmailMessage(recoveryEmailErrorMessage(data?.error, locale));
+        setRecoveryEmailResendMessage(recoveryEmailErrorMessage(data?.error, locale));
         return;
       }
       applyPlayerSession(data.session);
       setAccountSecurity(data.accountSecurity ?? null);
-      setRecoveryEmailPassword("");
-      setRecoveryEmailMessage(data.emailVerificationPending
+      setRecoveryEmailResendPassword("");
+      setRecoveryEmailResendMessage(data.emailVerificationPending
         ? (locale === "en"
           ? "A new confirmation email was sent to the registered address. The previous link is no longer valid."
           : "登録済みアドレスへ確認メールを再送しました。以前の確認リンクは無効になりました。")
@@ -308,7 +320,7 @@ export function UserDashboard() {
           ? "The registered recovery email is already verified."
           : "登録済みの復旧用メールはすでに確認済みです。"));
     } catch {
-      setRecoveryEmailMessage(copy.networkFailed);
+      setRecoveryEmailResendMessage(copy.networkFailed);
     } finally {
       setIsRecoveryEmailSaving(false);
     }
@@ -470,36 +482,56 @@ export function UserDashboard() {
               <p className="mt-0.5 font-mono text-sm font-bold text-slate-800">{accountSecurity.recoveryEmailHint}</p>
             </div>
           )}
-          <form onSubmit={updateRecoveryEmail} className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
+          {recoveryEmailStatus === "unverified" && (
+            <form onSubmit={(event) => {
+              event.preventDefault();
+              void resendRecoveryEmail();
+            }} className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+              <p className="text-sm font-black text-amber-950">
+                {locale === "en" ? "Resend confirmation to the registered address" : "登録済みメールへ確認を再送"}
+              </p>
+              <p className="mt-1 text-xs leading-5 text-amber-800">
+                {locale === "en"
+                  ? `The confirmation will be sent to ${accountSecurity?.recoveryEmailHint ?? "the registered address"}. You do not need to enter a new email address. Enter your current password below to confirm this action.`
+                  : `確認メールは ${accountSecurity?.recoveryEmailHint ?? "現在の登録先"} へ送ります。新しいメールアドレス欄への入力は不要です。本人確認のため、下に現在のパスワードを入力してください。`}
+              </p>
+              <div className="mt-2 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                <label className="text-sm font-bold text-slate-700">
+                  {locale === "en" ? "Current password for resend" : "再送のための現在のパスワード"}
+                  <input value={recoveryEmailResendPassword} onChange={(event) => setRecoveryEmailResendPassword(event.target.value)} type="password" autoComplete="current-password" required className="mt-1 w-full rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-normal text-slate-950 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20" />
+                </label>
+                <button
+                  type="submit"
+                  disabled={isRecoveryEmailSaving || !recoveryEmailResendPassword}
+                  className="rounded-lg border border-violet-300 bg-white px-4 py-2 text-sm font-bold text-violet-700 transition hover:bg-violet-100 disabled:border-slate-200 disabled:text-slate-400"
+                >
+                  {isRecoveryEmailSaving
+                    ? (locale === "en" ? "Sending…" : "送信中…")
+                    : (locale === "en" ? "Resend confirmation" : "確認メールを再送")}
+                </button>
+              </div>
+              {recoveryEmailResendMessage && <p className="mt-2 text-xs font-semibold text-amber-900" role="status">{recoveryEmailResendMessage}</p>}
+            </form>
+          )}
+          <p className="mt-4 text-sm font-black text-slate-800">
+            {recoveryEmailStatus === "none"
+              ? (locale === "en" ? "Register a recovery email" : "復旧用メールを登録")
+              : (locale === "en" ? "Change the recovery email" : "復旧用メールを変更")}
+          </p>
+          <form onSubmit={updateRecoveryEmail} className="mt-2 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
             <label className="text-sm font-bold text-slate-700">
               {recoveryEmailStatus === "none"
                 ? copy.email
                 : (locale === "en" ? "New email address" : "新しいメールアドレス")}
               <input value={recoveryEmail} onChange={(event) => setRecoveryEmail(event.target.value)} type="email" autoComplete="email" required className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-950 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20" placeholder="you@example.com" />
             </label>
-            <label className="text-sm font-bold text-slate-700">{copy.currentPassword}<input value={recoveryEmailPassword} onChange={(event) => setRecoveryEmailPassword(event.target.value)} type="password" autoComplete="current-password" required className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-950 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20" /></label>
+            <label className="text-sm font-bold text-slate-700">
+              {locale === "en" ? "Current password for registration/change" : "登録・変更のための現在のパスワード"}
+              <input value={recoveryEmailPassword} onChange={(event) => setRecoveryEmailPassword(event.target.value)} type="password" autoComplete="current-password" required className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-950 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20" />
+            </label>
             <button type="submit" disabled={isRecoveryEmailSaving || !recoveryEmail.trim() || !recoveryEmailPassword} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-violet-500 disabled:bg-slate-300">{isRecoveryEmailSaving ? (locale === "en" ? "Sending…" : "送信中…") : (locale === "en" ? "Send confirmation" : "確認メールを送信")}</button>
           </form>
-          {recoveryEmailStatus === "unverified" && (
-            <button
-              type="button"
-              disabled={isRecoveryEmailSaving || !recoveryEmailPassword}
-              onClick={() => void resendRecoveryEmail()}
-              className="mt-3 rounded-lg border border-violet-300 bg-white px-3 py-2 text-xs font-bold text-violet-700 transition hover:bg-violet-100 disabled:border-slate-200 disabled:text-slate-400"
-            >
-              {isRecoveryEmailSaving
-                ? (locale === "en" ? "Sending…" : "送信中…")
-                : (locale === "en" ? "Resend to registered address" : "登録済みメールへ確認を再送")}
-            </button>
-          )}
-          {recoveryEmailStatus === "unverified" && (
-            <p className="mt-1 text-[11px] leading-5 text-slate-500">
-              {locale === "en"
-                ? "Enter your current password above to resend the confirmation to the masked registered address."
-                : "上の現在のパスワードを入力すると、表示中の登録済みアドレスへ確認メールを再送できます。"}
-            </p>
-          )}
-          {recoveryEmailMessage && <p className="mt-2 text-xs font-semibold text-violet-800" role="status">{recoveryEmailMessage}</p>}
+          {recoveryEmailUpdateMessage && <p className="mt-2 text-xs font-semibold text-violet-800" role="status">{recoveryEmailUpdateMessage}</p>}
         </section>
         <section className="mb-5 rounded-lg border border-sky-100 bg-sky-50 p-4" aria-labelledby="password-change-heading">
           <p className="text-xs font-semibold uppercase text-sky-700">Security</p>

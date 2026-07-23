@@ -1,4 +1,5 @@
 import { Resend } from "resend";
+import { emailDeliveryError } from "@/lib/email-delivery-error";
 import { mergeOperationsEmailRecipients } from "@/lib/operations-email-recipients";
 import { listSiteAdminNotificationEmails, type SiteAdminNotificationKind } from "@/lib/site-admin-account-store";
 import { sharedEnvironmentVariable } from "@/lib/shared-environment";
@@ -44,7 +45,7 @@ export async function sendPasswordResetEmail(input: {
     `,
   });
 
-  if (error) throw new Error("EMAIL_SEND_FAILED");
+  if (error) throw emailDeliveryError(error);
 }
 
 export async function sendRecoveryEmailVerificationEmail(input: {
@@ -79,7 +80,7 @@ export async function sendRecoveryEmailVerificationEmail(input: {
     `,
   });
 
-  if (error) throw new Error("EMAIL_SEND_FAILED");
+  if (error) throw emailDeliveryError(error);
 }
 
 async function operationsEmailRecipients(kind: SiteAdminNotificationKind) {
@@ -108,5 +109,6 @@ export async function sendOperationsAlertEmail(input: { subject: string; lines: 
     text,
     html,
   })));
-  if (results.some(({ error }) => error)) throw new Error("EMAIL_SEND_FAILED");
+  const firstError = results.find(({ error }) => error)?.error;
+  if (firstError) throw emailDeliveryError(firstError);
 }

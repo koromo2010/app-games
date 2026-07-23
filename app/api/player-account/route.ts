@@ -11,6 +11,7 @@ import {
   requestPlayerEmailVerification,
   resendPlayerEmailVerification,
 } from "@/lib/player-email-verification";
+import { isEmailDeliveryError } from "@/lib/email-delivery-error";
 import { clearPlayerAuthCookie, getAuthenticatedPlayer, isPlayerAuthConfigurationError, setPlayerAuthCookie } from "@/lib/player-auth";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
@@ -65,6 +66,12 @@ function statusForError(error: unknown) {
       return { code: "TERMS_REQUIRED", status: 400 };
     case "EMAIL_SERVICE_NOT_CONFIGURED":
       return { code: "EMAIL_NOT_CONFIGURED", status: 503 };
+    case "EMAIL_PROVIDER_AUTH_FAILED":
+    case "EMAIL_SENDER_NOT_VERIFIED":
+    case "EMAIL_RECIPIENT_RESTRICTED":
+    case "EMAIL_DELIVERY_QUOTA_EXCEEDED":
+    case "EMAIL_DELIVERY_RATE_LIMITED":
+      return { code: error.message, status: 503 };
     case "EMAIL_SEND_FAILED":
       return { code: "EMAIL_SEND_FAILED", status: 502 };
     default:
@@ -129,14 +136,14 @@ export async function POST(request: Request) {
         } catch (error) {
           if (error instanceof Error && (
             error.message === "EMAIL_SERVICE_NOT_CONFIGURED"
-            || error.message === "EMAIL_SEND_FAILED"
+            || isEmailDeliveryError(error)
             || error.message === "PLAYER_ACCOUNT_EMAIL_ALREADY_EXISTS"
           )) {
             emailVerificationError = error.message === "EMAIL_SERVICE_NOT_CONFIGURED"
               ? "EMAIL_NOT_CONFIGURED"
               : error.message === "PLAYER_ACCOUNT_EMAIL_ALREADY_EXISTS"
                 ? "EMAIL_ALREADY_EXISTS"
-                : "EMAIL_SEND_FAILED";
+                : error.message;
           } else {
             throw error;
           }
