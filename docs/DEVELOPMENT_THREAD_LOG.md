@@ -2128,4 +2128,6 @@
 
 ### 未対応・保留
 
+- `develop`へ実装コミット`a89f4e2`をfast-forwardで反映済み。
+- `app-games-dev`のVercel Deployment完了確認は、この記録コミット後に行う。
 - dev実機で、たほい屋のダミー追加・個別削除・DEBUG OFF一括整理と、全フェーズのデバッグ操作を確認する。
