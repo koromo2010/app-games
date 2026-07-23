@@ -29,6 +29,14 @@ import {
   playerAccountHasUnverifiedEmail,
   playerAccountHasVerifiedEmail,
 } from "@/lib/player-email-verification-policy";
+import {
+  playerAccountSecuritySummary,
+  type PlayerAccountSecuritySummary,
+} from "@/lib/player-account-security";
+import {
+  isValidPlayerPassword,
+  playerPasswordChangeError,
+} from "@/lib/player-password-policy";
 
 export type PlayerAccount = {
   version: 2;
@@ -85,10 +93,6 @@ export function isValidEmail(email: string) {
 export function playerAccountEmailKey(email: string) {
   const digest = createHash("sha256").update(normalizeEmail(email)).digest("hex");
   return `${emailKeyPrefix}${digest}`;
-}
-
-function validatePassword(password: string) {
-  return password.length >= 4 && password.length <= 128;
 }
 
 function hashPassword(password: string, salt: string) {
@@ -218,7 +222,7 @@ export async function registerPlayerAccount(input: PlayerAccountAuthInput) {
     throw new Error("PLAYER_ACCOUNT_NAME_REQUIRED");
   }
 
-  if (!validatePassword(password)) {
+  if (!isValidPlayerPassword(password)) {
     throw new Error("PLAYER_ACCOUNT_PASSWORD_INVALID");
   }
 
@@ -320,6 +324,73 @@ export async function refreshPlayerAccountSession(authenticatedPlayerId: string)
   return accountSession(account);
 }
 
+async function loadAuthenticatedPlayerAccount(
+  authenticatedPlayerId: string,
+  accountName: string,
+) {
+  if (isPostgresConfigured()) {
+    try {
+      const stored = await loadPostgresPlayerAccountByPlayerId(authenticatedPlayerId);
+      const account = stored ? normalizeAccount(stored) : null;
+      if (account?.playerId === authenticatedPlayerId) return account;
+      if (usesStrictAppDatabase()) return null;
+    } catch (error) {
+      if (usesStrictAppDatabase()) throw error;
+    }
+  }
+
+  const account = await loadAccount(accountName);
+  return account?.playerId === authenticatedPlayerId ? account : null;
+}
+
+export async function loadPlayerAccountSecuritySummary(
+  authenticatedPlayerId: string,
+  accountName: string,
+): Promise<PlayerAccountSecuritySummary> {
+  const account = await loadAuthenticatedPlayerAccount(authenticatedPlayerId, accountName);
+  return account
+    ? playerAccountSecuritySummary(account)
+    : { recoveryEmailStatus: "none", recoveryEmailHint: null };
+}
+
+export async function changePlayerAccountPassword(
+  input: PlayerAccountAuthInput & { newPassword: string },
+  authenticatedPlayerId: string,
+) {
+  const account = await loadAuthenticatedPlayerAccount(authenticatedPlayerId, input.name);
+  const currentPasswordValid = Boolean(
+    account
+    && isValidPlayerPassword(input.password)
+    && verifyPassword(input.password, account.passwordSalt, account.passwordHash),
+  );
+  const newPasswordValid = isValidPlayerPassword(input.newPassword);
+  const newPasswordMatchesCurrent = Boolean(
+    account
+    && newPasswordValid
+    && verifyPassword(input.newPassword, account.passwordSalt, account.passwordHash),
+  );
+  const policyError = playerPasswordChangeError({
+    accountPlayerId: account?.playerId ?? null,
+    authenticatedPlayerId,
+    currentPasswordValid,
+    newPassword: input.newPassword,
+    newPasswordMatchesCurrent,
+  });
+  if (policyError) throw new Error(policyError);
+  if (!account) throw new Error("PLAYER_ACCOUNT_INVALID_CREDENTIALS");
+
+  const passwordSalt = randomBytes(16).toString("hex");
+  const updatedAccount: PlayerAccount = {
+    ...account,
+    passwordHash: hashPassword(input.newPassword, passwordSalt),
+    passwordSalt,
+    updatedAt: Date.now(),
+  };
+  if (isPostgresConfigured()) await savePostgresPlayerAccount(updatedAccount);
+  if (!usesStrictAppDatabase()) await mirrorAccountToRedis(updatedAccount).catch(() => undefined);
+  return accountSession(updatedAccount);
+}
+
 export async function deleteExpiredUnverifiedPlayerAccounts(now = Date.now()) {
   const cutoff = now - unverifiedPlayerAccountRetentionMs;
   let postgresDeleted = 0;
@@ -392,19 +463,7 @@ export async function prepareExistingPlayerAccountEmailVerification(
   input: PlayerAccountAuthInput,
   authenticatedPlayerId: string,
 ) {
-  let postgresAccount: PlayerAccount | null = null;
-  if (isPostgresConfigured()) {
-    try {
-      postgresAccount = normalizeAccount(await loadPostgresPlayerAccountByPlayerId(authenticatedPlayerId));
-    } catch (error) {
-      if (usesStrictAppDatabase()) throw error;
-    }
-  }
-  const account = postgresAccount ?? (
-    !isPostgresConfigured() || !usesStrictAppDatabase()
-      ? await loadAccount(input.name)
-      : null
-  );
+  const account = await loadAuthenticatedPlayerAccount(authenticatedPlayerId, input.name);
   if (
     !account
     || account.playerId !== authenticatedPlayerId
@@ -529,7 +588,7 @@ export async function loadPlayerAccountByEmail(email: string) {
 }
 
 export async function resetPlayerAccountPassword(loginName: string, password: string) {
-  if (!validatePassword(password)) {
+  if (!isValidPlayerPassword(password)) {
     throw new Error("PLAYER_ACCOUNT_PASSWORD_INVALID");
   }
 

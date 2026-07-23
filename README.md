@@ -130,7 +130,9 @@ npm run test:sdk-starter
 
 ## Password recovery email
 
-Player accounts may optionally register a recovery email address. New accounts can request it during registration, and existing accounts can request an addition or change after confirming the current password. The address is not registered until the recipient opens the one-hour confirmation link and explicitly approves it. Only verified addresses can receive password-reset links or trigger administrator-email debug access. Existing addresses created before this verification flow are migrated to unverified status; their owners can resend a confirmation to the stored address from My Page after entering the current password.
+Player accounts may optionally register a recovery email address. New accounts can request it during registration, and existing accounts can request an addition or change after confirming the current password. The address is not registered until the recipient opens the one-hour confirmation link and explicitly approves it. Only verified addresses can receive password-reset links or trigger administrator-email debug access. Existing addresses created before this verification flow are migrated to unverified status; My Page shows a masked hint and lets their owners resend a confirmation after entering the current password.
+
+Signed-in players can also change their password from My Page. The server requires both the signed player session and the current password before accepting a different new password. The repeated new-password field is a client-side typo check and is not used as identity verification.
 
 Configure these server-side environment variables:
 

@@ -11,6 +11,11 @@ import { defaultAvatarImage } from "@/lib/player-session";
 import { appLocales, type AppLocale } from "@/lib/app-locale";
 import { useAppLocale } from "@/app/components/AppLocaleProvider";
 import { appIntlLocale } from "@/lib/app-i18n";
+import type { PlayerAccountSecuritySummary } from "@/lib/player-account-security";
+import {
+  playerPasswordMaximumLength,
+  playerPasswordMinimumLength,
+} from "@/lib/player-password-policy";
 
 function formatDate(timestamp: number, locale: AppLocale) {
   return new Intl.DateTimeFormat(appIntlLocale(locale), {
@@ -55,6 +60,21 @@ function recoveryEmailErrorMessage(code: string | undefined, locale: AppLocale) 
   return "復旧用メールアドレスを保存できませんでした。";
 }
 
+function passwordChangeErrorMessage(code: string | undefined, locale: AppLocale) {
+  if (locale === "en") {
+    if (code === "INVALID_CREDENTIALS") return "Your current password is incorrect.";
+    if (code === "PASSWORD_INVALID") return `Use ${playerPasswordMinimumLength} to ${playerPasswordMaximumLength} characters for the new password.`;
+    if (code === "PASSWORD_UNCHANGED") return "The new password must be different from the current password.";
+    if (code === "AUTH_REQUIRED") return "Sign in again and retry.";
+    return "Could not change the password.";
+  }
+  if (code === "INVALID_CREDENTIALS") return "現在のパスワードが正しくありません。";
+  if (code === "PASSWORD_INVALID") return `新しいパスワードは${playerPasswordMinimumLength}文字以上${playerPasswordMaximumLength}文字以内で入力してください。`;
+  if (code === "PASSWORD_UNCHANGED") return "現在とは異なるパスワードを入力してください。";
+  if (code === "AUTH_REQUIRED") return "ログインし直してから再度お試しください。";
+  return "パスワードを変更できませんでした。";
+}
+
 const dashboardCopy = {
   ja: { shareSaved: "共有時の名前表示設定を保存しました。", shareLocal: "この端末にだけ設定を保存しました。ログインし直してからお試しください。", shareFailed: "共有時の名前表示設定を保存できませんでした。", localeActiveRoom: "言語を使うゲームの部屋に参加中は変更できません。部屋を退出・解散してから変更してください。", localeFailed: "表示言語を保存できませんでした。", localeSaved: "表示言語を保存しました。", networkFailed: "通信に失敗しました。もう一度試してください。", userLoadFailed: "ユーザー情報を読み込めませんでした。", statsLoadFailed: "戦績を読み込めませんでした。ほかのアカウント設定はそのまま利用できます。", recoverySaved: "復旧用メールアドレスを保存しました。", deleteConfirm: "アカウント、戦績、設定を削除します。この操作は取り消せません。削除しますか？", passwordIncorrect: "パスワードが正しくありません。", deleteFailed: "アカウントを削除できませんでした。", loading: "マイページを読み込み中...", loginRequired: "ログインが必要です", privatePage: "マイページは本人だけが閲覧できます。", back: "戻る", avatarEditor: "アイコンの模様替えを開く", player: "プレイヤー", pageSummary: "戦績・プレイバック・お気に入り", languageTitle: "表示言語・ゲーム言語", languageHelp: "言葉を使うゲームでは、この設定と同じ言語の部屋だけを表示・作成・参加できます。部屋参加画面では変更できません。", accountLanguage: "アカウントの言語", languageNotice: "現在、言語依存ゲームのコンテンツは日本語版のみです。Englishを選ぶと、対応ゲームが追加されるまで日本語部屋には入れません。", recoveryTitle: "復旧用メール", registered: "登録済み", unregistered: "未登録", recoveryHelp: "パスワードを忘れた場合の再設定に使用します。管理者と同じメールの場合はデバッグ権限も自動付与されます。変更には現在のパスワードが必要です。", email: "メールアドレス", currentPassword: "現在のパスワード", saving: "保存中…", saveRecovery: "登録・変更", shareTitle: "共有ログの表示名", shareConsent: "ほかの参加者が共有するワードスケールのプレイログに、自分の表示名を載せてもよい", shareHelp: "ゲーム画面の参加者名はこの設定に関係なく表示されます。OFFのとき外部共有では入室順の PLAYER1 などに置き換わります。設定は次に入室する部屋から反映されます。", stats: "戦績", today: "当日", month: "月間", total: "通算", loadingShort: "読み込み中", ratingLoading: "レーティングを読み込み中...", ratingEmpty: "ゲームを1回以上遊ぶとレーティングが表示されます。", recent: "最近の結果", statsLoading: "戦績を読み込み中...", replayHelp: "共有は、右側のプレイバックに見どころを添えて行えます。", statsEmpty: "まだ戦績はありません。", deleteAccount: "アカウントを削除", deleteHelp: "アカウント、戦績、設定を削除します。この操作は取り消せません。本人確認のため現在のパスワードを入力してください。", deleting: "削除中...", deletePermanently: "完全に削除する" },
   en: { shareSaved: "The shared-log name setting was saved.", shareLocal: "The setting was saved on this device only. Sign in again and retry.", shareFailed: "Could not save the shared-log name setting.", localeActiveRoom: "You cannot change language while you are in a language-based game room. Leave or dissolve the room first.", localeFailed: "Could not save the language.", localeSaved: "Language saved.", networkFailed: "Connection failed. Please try again.", userLoadFailed: "Could not load your account.", statsLoadFailed: "Could not load stats. Other account settings remain available.", recoverySaved: "Recovery email saved.", deleteConfirm: "Delete the account, stats, and settings? This cannot be undone.", passwordIncorrect: "The password is incorrect.", deleteFailed: "Could not delete the account.", loading: "Loading My Page...", loginRequired: "Sign-in required", privatePage: "Only you can view your My Page.", back: "Back", avatarEditor: "Open avatar editor", player: "Player", pageSummary: "Stats, replays, and favorites", languageTitle: "Display and game language", languageHelp: "Language-based games only show, create, and join rooms matching this setting. It cannot be changed from a room screen.", accountLanguage: "Account language", languageNotice: "Language-based game content is currently available in Japanese only. With English selected, you cannot enter Japanese rooms until English content is added.", recoveryTitle: "Recovery email", registered: "Registered", unregistered: "Not registered", recoveryHelp: "Used to reset your password. If it matches an administrator email, debug access is also granted automatically. Your current password is required to change it.", email: "Email address", currentPassword: "Current password", saving: "Saving…", saveRecovery: "Save or change", shareTitle: "Name in shared logs", shareConsent: "Allow my display name to appear in Word Scale play logs shared by other participants", shareHelp: "Player names in the game are always visible. When this is off, external shares use labels such as PLAYER1 in join order. The setting applies from the next room you join.", stats: "Stats", today: "Today", month: "This month", total: "All time", loadingShort: "Loading", ratingLoading: "Loading ratings...", ratingEmpty: "Ratings appear after you play a game at least once.", recent: "Recent results", statsLoading: "Loading stats...", replayHelp: "Use the replay panel on the right to add highlights before sharing.", statsEmpty: "No stats yet.", deleteAccount: "Delete account", deleteHelp: "This deletes the account, stats, and settings and cannot be undone. Enter your current password to confirm.", deleting: "Deleting...", deletePermanently: "Delete permanently" },
@@ -79,6 +99,13 @@ export function UserDashboard() {
   const [recoveryEmailPassword, setRecoveryEmailPassword] = useState("");
   const [isRecoveryEmailSaving, setIsRecoveryEmailSaving] = useState(false);
   const [recoveryEmailMessage, setRecoveryEmailMessage] = useState("");
+  const [accountSecurity, setAccountSecurity] = useState<PlayerAccountSecuritySummary | null>(null);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [newPasswordConfirmation, setNewPasswordConfirmation] = useState("");
+  const [isPasswordChanging, setIsPasswordChanging] = useState(false);
+  const [passwordChangeMessage, setPasswordChangeMessage] = useState("");
+  const [passwordChangeSucceeded, setPasswordChangeSucceeded] = useState(false);
   const [showAccountDeletion, setShowAccountDeletion] = useState(false);
   const [deleteAccountPassword, setDeleteAccountPassword] = useState("");
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
@@ -172,9 +199,13 @@ export function UserDashboard() {
           setRequiresLogin(true);
           return;
         }
-        const sessionBody = (await sessionResponse.json()) as { session?: PlayerSession };
+        const sessionBody = (await sessionResponse.json()) as {
+          session?: PlayerSession;
+          accountSecurity?: PlayerAccountSecuritySummary;
+        };
         if (!sessionResponse.ok || !sessionBody.session?.id) throw new Error("SESSION_LOAD_FAILED");
         setSession(sessionBody.session);
+        setAccountSecurity(sessionBody.accountSecurity ?? null);
       } catch (error) {
         if (error instanceof Error && error.name === "AbortError") return;
         setMessage(copy.userLoadFailed);
@@ -218,12 +249,18 @@ export function UserDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mode: "update-email", name: session.name, password: recoveryEmailPassword, email: recoveryEmail }),
       });
-      const data = await response.json().catch(() => null) as { session?: PlayerSession; error?: string; emailVerificationPending?: boolean } | null;
+      const data = await response.json().catch(() => null) as {
+        session?: PlayerSession;
+        accountSecurity?: PlayerAccountSecuritySummary;
+        error?: string;
+        emailVerificationPending?: boolean;
+      } | null;
       if (!response.ok || !data?.session) {
         setRecoveryEmailMessage(recoveryEmailErrorMessage(data?.error, locale));
         return;
       }
       applyPlayerSession(data.session);
+      setAccountSecurity(data.accountSecurity ?? null);
       setRecoveryEmail("");
       setRecoveryEmailPassword("");
       setRecoveryEmailMessage(data.emailVerificationPending
@@ -252,6 +289,7 @@ export function UserDashboard() {
       });
       const data = await response.json().catch(() => null) as {
         session?: PlayerSession;
+        accountSecurity?: PlayerAccountSecuritySummary;
         error?: string;
         emailVerificationPending?: boolean;
       } | null;
@@ -260,6 +298,7 @@ export function UserDashboard() {
         return;
       }
       applyPlayerSession(data.session);
+      setAccountSecurity(data.accountSecurity ?? null);
       setRecoveryEmailPassword("");
       setRecoveryEmailMessage(data.emailVerificationPending
         ? (locale === "en"
@@ -272,6 +311,55 @@ export function UserDashboard() {
       setRecoveryEmailMessage(copy.networkFailed);
     } finally {
       setIsRecoveryEmailSaving(false);
+    }
+  };
+
+  const changePassword = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!session || isPasswordChanging) return;
+    setPasswordChangeSucceeded(false);
+    if (newPassword !== newPasswordConfirmation) {
+      setPasswordChangeMessage(locale === "en"
+        ? "The new-password entries do not match."
+        : "新しいパスワードと確認入力が一致しません。");
+      return;
+    }
+
+    setIsPasswordChanging(true);
+    setPasswordChangeMessage("");
+    try {
+      const response = await fetch("/api/player-account", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "change-password",
+          name: session.name,
+          password: currentPassword,
+          newPassword,
+        }),
+      });
+      const data = await response.json().catch(() => null) as {
+        session?: PlayerSession;
+        accountSecurity?: PlayerAccountSecuritySummary;
+        error?: string;
+      } | null;
+      if (!response.ok || !data?.session) {
+        setPasswordChangeMessage(passwordChangeErrorMessage(data?.error, locale));
+        return;
+      }
+      applyPlayerSession(data.session);
+      setAccountSecurity(data.accountSecurity ?? accountSecurity);
+      setCurrentPassword("");
+      setNewPassword("");
+      setNewPasswordConfirmation("");
+      setPasswordChangeSucceeded(true);
+      setPasswordChangeMessage(locale === "en"
+        ? "Password changed."
+        : "パスワードを変更しました。");
+    } catch {
+      setPasswordChangeMessage(copy.networkFailed);
+    } finally {
+      setIsPasswordChanging(false);
     }
   };
 
@@ -318,6 +406,13 @@ export function UserDashboard() {
     );
   }
 
+  const recoveryEmailStatus = accountSecurity?.recoveryEmailStatus
+    ?? (session?.hasRecoveryEmail
+      ? "verified"
+      : session?.hasUnverifiedRecoveryEmail
+        ? "unverified"
+        : "none");
+
   return (
     <main className="min-h-screen bg-slate-950 text-slate-950">
       <header className="border-b border-white/10 bg-[radial-gradient(circle_at_15%_0%,rgba(139,92,246,0.28),transparent_38%),linear-gradient(135deg,#020617,#172033)] text-white">
@@ -354,10 +449,10 @@ export function UserDashboard() {
         <section className="mb-5 rounded-lg border border-violet-100 bg-violet-50 p-4" aria-labelledby="recovery-email-heading">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div><p className="text-xs font-semibold uppercase text-violet-700">Account</p><h2 id="recovery-email-heading" className="text-lg font-black text-slate-950">{copy.recoveryTitle}</h2></div>
-            <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${session?.hasRecoveryEmail ? "bg-emerald-100 text-emerald-700" : session?.hasUnverifiedRecoveryEmail ? "bg-amber-100 text-amber-700" : "bg-slate-200 text-slate-600"}`}>
-              {session?.hasRecoveryEmail
+            <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${recoveryEmailStatus === "verified" ? "bg-emerald-100 text-emerald-700" : recoveryEmailStatus === "unverified" ? "bg-amber-100 text-amber-700" : "bg-slate-200 text-slate-600"}`}>
+              {recoveryEmailStatus === "verified"
                 ? (locale === "en" ? "Verified" : "確認済み")
-                : session?.hasUnverifiedRecoveryEmail
+                : recoveryEmailStatus === "unverified"
                   ? (locale === "en" ? "Unverified" : "未確認")
                   : (locale === "en" ? "Not registered" : "未登録")}
             </span>
@@ -367,12 +462,25 @@ export function UserDashboard() {
               ? "Used for password recovery. The address is not registered, and grants no access, until you approve the confirmation email. A verified address matching an administrator email receives debug access automatically. Your current password is required."
               : "パスワード再設定に使用します。確認メール内で承認するまでは復旧先として利用できず、デバッグ権限も付与されません。確認済みメールが管理者メールと一致する場合はデバッグ権限を自動付与します。既存の登録メールも一度再確認が必要です。"}
           </p>
+          {accountSecurity?.recoveryEmailHint && (
+            <div className="mt-3 rounded-lg border border-violet-200 bg-white px-3 py-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-600">
+                {locale === "en" ? "Current registered address" : "現在の登録先"}
+              </p>
+              <p className="mt-0.5 font-mono text-sm font-bold text-slate-800">{accountSecurity.recoveryEmailHint}</p>
+            </div>
+          )}
           <form onSubmit={updateRecoveryEmail} className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
-            <label className="text-sm font-bold text-slate-700">{copy.email}<input value={recoveryEmail} onChange={(event) => setRecoveryEmail(event.target.value)} type="email" autoComplete="email" required className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-950 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20" placeholder="you@example.com" /></label>
+            <label className="text-sm font-bold text-slate-700">
+              {recoveryEmailStatus === "none"
+                ? copy.email
+                : (locale === "en" ? "New email address" : "新しいメールアドレス")}
+              <input value={recoveryEmail} onChange={(event) => setRecoveryEmail(event.target.value)} type="email" autoComplete="email" required className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-950 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20" placeholder="you@example.com" />
+            </label>
             <label className="text-sm font-bold text-slate-700">{copy.currentPassword}<input value={recoveryEmailPassword} onChange={(event) => setRecoveryEmailPassword(event.target.value)} type="password" autoComplete="current-password" required className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-950 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20" /></label>
             <button type="submit" disabled={isRecoveryEmailSaving || !recoveryEmail.trim() || !recoveryEmailPassword} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-violet-500 disabled:bg-slate-300">{isRecoveryEmailSaving ? (locale === "en" ? "Sending…" : "送信中…") : (locale === "en" ? "Send confirmation" : "確認メールを送信")}</button>
           </form>
-          {session?.hasUnverifiedRecoveryEmail && (
+          {recoveryEmailStatus === "unverified" && (
             <button
               type="button"
               disabled={isRecoveryEmailSaving || !recoveryEmailPassword}
@@ -384,14 +492,49 @@ export function UserDashboard() {
                 : (locale === "en" ? "Resend to registered address" : "登録済みメールへ確認を再送")}
             </button>
           )}
-          {session?.hasUnverifiedRecoveryEmail && (
+          {recoveryEmailStatus === "unverified" && (
             <p className="mt-1 text-[11px] leading-5 text-slate-500">
               {locale === "en"
-                ? "For an address registered before email verification was introduced. Enter only your current password above; the address is never displayed."
-                : "確認機能の導入前に登録したメール向けです。上の現在のパスワードだけ入力して再送できます。登録アドレスは画面に表示しません。"}
+                ? "Enter your current password above to resend the confirmation to the masked registered address."
+                : "上の現在のパスワードを入力すると、表示中の登録済みアドレスへ確認メールを再送できます。"}
             </p>
           )}
           {recoveryEmailMessage && <p className="mt-2 text-xs font-semibold text-violet-800" role="status">{recoveryEmailMessage}</p>}
+        </section>
+        <section className="mb-5 rounded-lg border border-sky-100 bg-sky-50 p-4" aria-labelledby="password-change-heading">
+          <p className="text-xs font-semibold uppercase text-sky-700">Security</p>
+          <h2 id="password-change-heading" className="text-lg font-black text-slate-950">
+            {locale === "en" ? "Change password" : "パスワード変更"}
+          </h2>
+          <p className="mt-2 text-xs leading-5 text-slate-600">
+            {locale === "en"
+              ? "Your current password verifies your identity. Entering the new password twice only prevents typing mistakes."
+              : "本人確認のため現在のパスワードが必要です。新しいパスワードの2回入力は、入力ミスを防ぐためのものです。"}
+          </p>
+          <form onSubmit={changePassword} className="mt-3 grid gap-3 md:grid-cols-3">
+            <label className="text-sm font-bold text-slate-700">
+              {copy.currentPassword}
+              <input value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} type="password" autoComplete="current-password" required maxLength={playerPasswordMaximumLength} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-950 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20" />
+            </label>
+            <label className="text-sm font-bold text-slate-700">
+              {locale === "en" ? "New password" : "新しいパスワード"}
+              <input value={newPassword} onChange={(event) => setNewPassword(event.target.value)} type="password" autoComplete="new-password" required minLength={playerPasswordMinimumLength} maxLength={playerPasswordMaximumLength} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-950 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20" />
+            </label>
+            <label className="text-sm font-bold text-slate-700">
+              {locale === "en" ? "New password (confirm)" : "新しいパスワード（確認）"}
+              <input value={newPasswordConfirmation} onChange={(event) => setNewPasswordConfirmation(event.target.value)} type="password" autoComplete="new-password" required minLength={playerPasswordMinimumLength} maxLength={playerPasswordMaximumLength} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-950 outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20" />
+            </label>
+            <button type="submit" disabled={isPasswordChanging || !currentPassword || !newPassword || !newPasswordConfirmation} className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-sky-500 disabled:bg-slate-300 md:col-span-3 md:justify-self-start">
+              {isPasswordChanging
+                ? (locale === "en" ? "Changing…" : "変更中…")
+                : (locale === "en" ? "Change password" : "パスワードを変更")}
+            </button>
+          </form>
+          {passwordChangeMessage && (
+            <p className={`mt-2 text-xs font-semibold ${passwordChangeSucceeded ? "text-emerald-700" : "text-rose-700"}`} role="status">
+              {passwordChangeMessage}
+            </p>
+          )}
         </section>
         <section className="mb-5 rounded-lg border border-cyan-100 bg-cyan-50 p-4" aria-labelledby="share-privacy-heading">
           <p className="text-xs font-semibold uppercase text-cyan-700">Privacy</p>

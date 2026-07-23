@@ -1,7 +1,9 @@
 import {
+  changePlayerAccountPassword,
   loginPlayerAccount,
   registerPlayerAccount,
   deletePlayerAccount,
+  loadPlayerAccountSecuritySummary,
   refreshPlayerAccountSession,
   type PlayerAccountAuthInput,
 } from "@/lib/player-account-store";
@@ -14,7 +16,8 @@ import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observab
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 
 type PlayerAccountRequest = PlayerAccountAuthInput & {
-  mode?: "login" | "register" | "update-email" | "resend-email-verification" | "delete" | "logout";
+  mode?: "login" | "register" | "update-email" | "resend-email-verification" | "change-password" | "delete" | "logout";
+  newPassword?: string;
 };
 
 function isStoreNotConfigured(error: unknown) {
@@ -26,7 +29,11 @@ export async function GET() {
     const session = await getAuthenticatedPlayer();
     if (!session) return Response.json({ error: "AUTH_REQUIRED" }, { status: 401 });
     const refreshed = session.id ? await refreshPlayerAccountSession(session.id) : null;
-    return Response.json({ session: refreshed ?? session });
+    const currentSession = refreshed ?? session;
+    const accountSecurity = currentSession.id
+      ? await loadPlayerAccountSecuritySummary(currentSession.id, currentSession.name)
+      : { recoveryEmailStatus: "none" as const, recoveryEmailHint: null };
+    return Response.json({ session: currentSession, accountSecurity });
   } catch (error) {
     if (isPlayerAuthConfigurationError(error)) return Response.json({ error: "AUTH_NOT_CONFIGURED" }, { status: 503 });
     if (isStoreNotConfigured(error)) return Response.json({ error: "STORE_NOT_CONFIGURED" }, { status: 503 });
@@ -42,6 +49,8 @@ function statusForError(error: unknown) {
       return { code: "NAME_REQUIRED", status: 400 };
     case "PLAYER_ACCOUNT_PASSWORD_INVALID":
       return { code: "PASSWORD_INVALID", status: 400 };
+    case "PLAYER_ACCOUNT_PASSWORD_UNCHANGED":
+      return { code: "PASSWORD_UNCHANGED", status: 400 };
     case "PLAYER_ACCOUNT_ALREADY_EXISTS":
       return { code: "ALREADY_EXISTS", status: 409 };
     case "PLAYER_ACCOUNT_EMAIL_INVALID":
@@ -93,8 +102,17 @@ export async function POST(request: Request) {
       telemetry.success("auth.session", { ...logFields, actorRef: telemetry.actorRef(authenticated.id) });
       return Response.json({ ok: true });
     }
+    const authenticatedMutation = body.mode === "resend-email-verification" || body.mode === "change-password"
+      ? await getAuthenticatedPlayer()
+      : null;
+    if (
+      (body.mode === "resend-email-verification" || body.mode === "change-password")
+      && !authenticatedMutation?.id
+    ) {
+      return Response.json({ error: "AUTH_REQUIRED" }, { status: 401 });
+    }
     const limited = await rateLimitResponseFor(request, rateLimitPolicies.auth, {
-      identity: typeof body.name === "string" ? body.name : null,
+      identity: authenticatedMutation?.id ?? (typeof body.name === "string" ? body.name : null),
     });
     if (limited) return limited;
     const origin = new URL(request.url).origin;
@@ -129,19 +147,28 @@ export async function POST(request: Request) {
       session = verification.session;
       emailVerificationPending = verification.pending;
     } else if (body.mode === "resend-email-verification") {
-      const authenticated = await getAuthenticatedPlayer();
-      if (!authenticated?.id) return Response.json({ error: "AUTH_REQUIRED" }, { status: 401 });
-      const verification = await resendPlayerEmailVerification(body, authenticated.id, origin);
+      const verification = await resendPlayerEmailVerification(body, authenticatedMutation!.id!, origin);
       session = verification.session;
       emailVerificationPending = verification.pending;
+    } else if (body.mode === "change-password") {
+      session = await changePlayerAccountPassword({
+        ...body,
+        newPassword: typeof body.newPassword === "string" ? body.newPassword : "",
+      }, authenticatedMutation!.id!);
     } else {
       session = await loginPlayerAccount(body);
     }
 
     if (!session.id) throw new Error("PLAYER_ACCOUNT_SESSION_INVALID");
     await setPlayerAuthCookie(session.id);
+    const accountSecurity = await loadPlayerAccountSecuritySummary(session.id, session.name);
     telemetry.success("auth.session", { ...logFields, actorRef: telemetry.actorRef(session.id) });
-    return Response.json({ session, emailVerificationPending, ...(emailVerificationError ? { emailVerificationError } : {}) });
+    return Response.json({
+      session,
+      accountSecurity,
+      emailVerificationPending,
+      ...(emailVerificationError ? { emailVerificationError } : {}),
+    });
   } catch (error) {
     if (isPlayerAuthConfigurationError(error)) {
       telemetry.responseError("auth.session", error, 503, logFields);
