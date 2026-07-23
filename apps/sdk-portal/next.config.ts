@@ -1,16 +1,33 @@
 import type { NextConfig } from "next";
 
+const currentDownloadMePath = "/GameFieldsDownloadMe-ver8.md";
+const legacyDownloadMePaths = [
+  "/DownloadMe.md",
+  "/GameFieldsDownloadMe.md",
+  ...Array.from(
+    { length: 7 },
+    (_, index) => `/GameFieldsDownloadMe-ver${index + 1}.md`,
+  ),
+];
+
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   transpilePackages: ["@game-fields/sdk-preview-auth"],
+  async redirects() {
+    return legacyDownloadMePaths.map((source) => ({
+      source,
+      destination: currentDownloadMePath,
+      permanent: false,
+    }));
+  },
   async headers() {
     return [
       {
-        source: "/GameFieldsDownloadMe-ver7.md",
+        source: currentDownloadMePath,
         headers: [
           {
             key: "Content-Disposition",
-            value: 'attachment; filename="GameFieldsDownloadMe-ver7.md"',
+            value: 'attachment; filename="GameFieldsDownloadMe-ver8.md"',
           },
           {
             key: "Content-Type",

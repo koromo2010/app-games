@@ -23,6 +23,8 @@ Game Fields SDKへ接続するAI、スターター、browser Runtimeは、制作
 
 公開の`GET /.well-known/game-fields-sdk`は認証前のdiscoveryに利用できる。`POST /.well-known/game-fields-sdk`と`get_sdk_handshake`は同じ純粋な互換判定を使う。ハンドシェイク自体は認証sessionや権限を発行せず、OAuth、署名Cookie、Room actor解決の代わりにはならない。
 
+Portalの`get_sdk_handshake`へ送る`requiredCapabilities`はDownloadMe記載の4件だけとする。公開SDK全体のcapability型にはgame Runtime向けの`persistent-rooms`、`room-realtime`、`common-shell`等も含まれるが、Portal control planeのhandshakeへenum候補を一括送信しない。MCP tool schemaのenumとPortal descriptorは`SDK_PORTAL_CAPABILITIES`を共用し、DownloadMeとの不一致を回帰テストで拒否する。
+
 ## Request v1
 
 ```json
@@ -101,4 +103,3 @@ Game Fields SDKへ接続するAI、スターター、browser Runtimeは、制作
 ## Versioning
 
 `sdkHandshakeVersion`はhandshake JSON自体の破壊的変更で上げる。`sdkContractVersion`はゲームmanifest／Runtime契約、`roomSchemaVersion`は内部保存envelopeの版であり、相互に代用しない。同じhandshake version内ではfieldを削除・改名せず、追加fieldは省略可能にする。
-

@@ -8,7 +8,7 @@ import {
 import platformRelease from "../../../config/platform-release.json";
 import { portalBaseUrl } from "@/lib/oauth-store";
 
-const PORTAL_CAPABILITIES = [
+export const SDK_PORTAL_CAPABILITIES = [
   "oauth2-pkce",
   "creator-environments",
   "starter-download",
@@ -38,7 +38,7 @@ export function createSdkPortalHandshakeDescriptor(origin?: string): GameSdkHand
       supportedSdkContractVersions: platformRelease.supportedSdkContractVersions,
       roomSchemaVersion: platformRelease.roomSchemaVersion,
     },
-    capabilities: PORTAL_CAPABILITIES,
+    capabilities: SDK_PORTAL_CAPABILITIES,
     endpoints: {
       portal: base,
       handshake: `${base}/.well-known/game-fields-sdk`,
@@ -53,4 +53,3 @@ export function negotiateSdkPortalHandshake(
 ) {
   return negotiateGameSdkHandshake(request, createSdkPortalHandshakeDescriptor(origin));
 }
-

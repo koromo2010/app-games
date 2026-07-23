@@ -2584,3 +2584,47 @@
 ### 未対応・保留
 
 - 実際の決済、商品plan、価格、購入・返金・権利復元は未実装。今回追加したのはserver側entitlement差し替え境界までである。
+
+## 2026-07-24 — 旧gameapp-devを更新へ案内するDownloadMe ver8
+
+### 利用者からの要望
+
+- `gameapp-dev`が更新前で`get_sdk_handshake`を利用できない場合、原因だけを報告して止まるのではなく、プラグイン更新を利用者へ案内する。
+- 実機ではプラグイン更新済みなのに旧`GameFieldsDownloadMe-ver7`が使われていた。DownloadMeを改版したなら、利用者が取得する入口もver8へ確実に切り替える。
+- 更新済みプラグインで`get_sdk_handshake`は呼べたが、制作GPTが公開SDK全体のcapability enum 8件をPortalへ要求し、未提供4件で`accepted=false`になった。この誤要求を防ぐ。
+
+### 判断
+
+- Game Fields toolがまったくない未接続状態と、旧`gameapp-dev`のtoolは見えるが`get_sdk_handshake`だけがない更新前状態を分ける。
+- 更新前状態ではURL名やゲーム内容を質問せず、`gameapp-dev`の更新、新しいチャットでの再選択、同じDownloadMeの再添付だけを定型案内して停止する。
+- 更新前のtool一覧を持つ既存チャットは、プラグイン更新後もその場で新toolを取得できない可能性があるため、新しいチャットを必須案内に含める。
+- 版付き入口を上書きせず、入口と公開starterの`downloadMeVersion`を同時に8へ上げる。
+- `get_sdk_handshake`が存在する場合はプラグイン旧版と判定しない。Portal control planeが要求する4件と、公開SDK型に含まれるgame Runtime向けcapability候補を分離する。
+- MCP tool schemaの`requiredCapabilities` enumはPortal descriptorと同じ`SDK_PORTAL_CAPABILITIES`を共用する。DownloadMeにも4件をそのまま送り、別surface向け候補を追加しないよう明記する。
+- 旧入口を再利用しても古い文書を取得し続けないよう、過去のDownloadMe URLは現行ver8へ一時redirectする。
+
+### 実施結果
+
+- `GameFieldsDownloadMe-ver8.md`の正本へ、更新前pluginの判定条件と利用者向け定型文を追加した。
+- SDK Portalの配布リンク、Content-Disposition、同期scriptをver8へ更新した。
+- MCP initialize instructionsにも同じ更新案内を追加し、接続クライアント側からも方針を取得できるようにした。
+- starter manifest、`START_HERE.md`、検査scriptを`downloadMeVersion: 8`へそろえた。
+- 現行資料と回帰テストをver8へ更新した。
+- SDK Portalのhandshake descriptorとMCP tool schemaで4件の`SDK_PORTAL_CAPABILITIES`を共用し、MCPから未提供の`submission-upload`、`persistent-rooms`、`room-realtime`、`common-shell`を要求候補として出さないようにした。
+- ver8へ、記載された4件をそのまま送り、別surface向け候補を追加しない指示を追加した。
+- `DownloadMe.md`、`GameFieldsDownloadMe.md`、`GameFieldsDownloadMe-ver1.md`〜`ver7.md`から`GameFieldsDownloadMe-ver8.md`への一時redirectをSDK Portalへ追加した。
+
+### 検証
+
+- SDK OAuth／MCP／DownloadMeの対象テスト6件が成功した。
+- 更新済み`gameapp-dev`の実接続で、Portalの4 capabilityだけを要求したhandshakeが`accepted: true`、`problems: []`になることを確認した。
+- `npm run test:sdk-starter`成功。入口、公開Git snapshot、ZIP展開、同梱SDK install、型検査、契約テスト、1ゲーム完走、提出ZIPまで確認した。
+- `npm run lint`成功。
+- `npm test`成功（472件）。
+- `npm run build`成功。既存`.next`生成キャッシュによる初回`ENOTEMPTY`後、キャッシュを退避したクリーンbuildで77ページ生成を完了した。
+- `npm run build:sdk`成功。SDK Portalのproduction buildと14ページ生成を完了した。
+- `git diff --check`成功。
+
+### 未対応・保留
+
+- `develop`、`sdk-starter`への反映とSDK-dev Deploymentの実機確認は、この記録時点では未完了。
