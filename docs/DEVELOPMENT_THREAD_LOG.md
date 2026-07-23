@@ -2091,8 +2091,9 @@
 - `npm run lint`成功。9ゲーム共通要件、SDK境界、ESLintを通過した。
 - `npm test`成功（427件）。
 - `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
+- 実装コミット`8211de6`の`app-games-dev` Vercel Deploymentが`READY`となり、`dev.game-fields.com`への割当を確認した。
 
 ### 未対応・保留
 
-- `develop`へ実装コミット`8211de6`をpush済み。Vercel自動デプロイの取り込み待ち。
+- `develop`へ実装コミット`8211de6`、push記録コミット`49ae302`を反映済み。
 - dev実機確認は未実施。
