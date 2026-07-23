@@ -2160,8 +2160,10 @@
 - `npm test`成功（435件）。
 - `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
 - `git diff --check`成功。
+- 実装コミット`164a0f1`の`app-games-dev` Vercel Deploymentが`READY`となり、`dev.game-fields.com`へのalias割当を確認した。
+- devのワードスケール、ワードソナー、ワードアウト、大富豪がHTTP 200を返し、対象Deploymentの実行時error・fatalログがないことを確認した。
 
 ### 未対応・保留
 
-- `develop`反映とdev Deployment確認をこの後に行う。
+- `develop`へ実装コミット`164a0f1`をfast-forwardで反映済み。
 - dev実機で公開6ゲームのダミー追加・個別削除・DEBUG OFF一括整理を確認する。
