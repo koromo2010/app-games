@@ -21,6 +21,8 @@ test("共通DEBUGメニューはゲーム操作を妨げない画面内ウィン
   assert.match(windowSource, /role="dialog"/);
   assert.doesNotMatch(windowSource, /aria-modal="true"/);
   assert.doesNotMatch(windowSource, /fixed inset-0/);
+  assert.match(windowSource, /className="fixed z-\[9999\] flex flex-col /);
+  assert.match(windowSource, /className="min-h-0 w-full min-w-0 flex-1 /);
   assert.match(windowSource, /kind: "move" \| "resize"/);
   assert.match(windowSource, /setIsMinimized/);
   assert.match(windowSource, /setPointerCapture/);

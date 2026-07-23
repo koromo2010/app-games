@@ -239,7 +239,7 @@ export function DebugToolWindow({
       role="dialog"
       aria-label="開発者向け操作"
       tabIndex={-1}
-      className="fixed z-[9999] flex overflow-hidden rounded-xl border border-slate-300 bg-white text-slate-900 shadow-2xl outline-none ring-1 ring-slate-950/10"
+      className="fixed z-[9999] flex flex-col overflow-hidden rounded-xl border border-slate-300 bg-white text-slate-900 shadow-2xl outline-none ring-1 ring-slate-950/10"
       style={windowStyle}
       onPointerMove={handlePointerMove}
       onPointerUp={finishPointerOperation}
@@ -290,7 +290,7 @@ export function DebugToolWindow({
 
       {!isMinimized && (
         <>
-          <div className="min-h-0 flex-1 overflow-y-auto p-3">{children}</div>
+          <div className="min-h-0 w-full min-w-0 flex-1 overflow-y-auto p-3">{children}</div>
           {!isCompact && (
             <button
               type="button"
