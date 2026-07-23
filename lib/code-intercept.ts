@@ -158,7 +158,7 @@ export type CodeInterceptRoomChoice = {
 };
 
 export type CodeInterceptRoomAction = RoomLobbyReturnAction
-  | { type: "join-room"; actorId: string; player: CodeInterceptPlayer; passphrase: string }
+  | { type: "join-room"; actorId: string; player: Omit<CodeInterceptPlayer, "teamId"> & { teamId?: CodeInterceptTeamId }; passphrase: string }
   | { type: "leave-room"; actorId: string }
   | { type: "set-team"; actorId: string; playerId?: string; teamId: CodeInterceptTeamId }
   | { type: "set-debug"; actorId: string; enabled: boolean }

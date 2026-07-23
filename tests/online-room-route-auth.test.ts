@@ -5,12 +5,14 @@ import { readFile } from "node:fs/promises";
 const games = ["wordwolf", "tahoiya", "hodoai", "kotoba-senpuku", "nigoichi", "northern-branch", "code-intercept", "daifugo"];
 
 test("全オンラインRoom APIはCookie認証とGET参加者照合を持つ", async () => {
+  const factory = await readFile(new URL("../lib/online-room-route-factory.ts", import.meta.url), "utf8");
   for (const game of games) {
-    const source = await readFile(new URL(`../app/api/${game}/rooms/route.ts`, import.meta.url), "utf8");
-    assert.match(source, /requireAuthenticatedPlayer(?:Id)?\(/, `${game}: signed-cookie auth`);
-    assert.match(source, /players\.some\([^\n]+authenticatedPlayerId|players\.some\([^\n]+session\.id/, `${game}: GET membership check`);
-    assert.match(source, /body\.action/, `${game}: typed command input`);
-    assert.match(source, /(?:actorId:\s*(?:player|session)\.id|(?:const|let) actorId = (?:player|session)\.id!?|applyStoredWordWolfRoomAction\(code, player\.id)/, `${game}: server-derived actor`);
+    const route = await readFile(new URL(`../app/api/${game}/rooms/route.ts`, import.meta.url), "utf8");
+    assert.match(route, /createOnlineRoomRouteHandlers/, `${game}: shared route factory`);
+    assert.match(factory, /requireAuthenticatedPlayer(?:Id)?\(/, `${game}: signed-cookie auth`);
+    assert.match(factory, /players\.some\([^\n]+authenticatedPlayerId/, `${game}: GET membership check`);
+    assert.match(factory, /body\.action/, `${game}: typed command input`);
+    assert.match(factory, /actorId: session\.id/, `${game}: server-derived actor`);
   }
 });
 

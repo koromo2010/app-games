@@ -2203,3 +2203,39 @@
 - `app-games-dev`の対象Deployment `dpl_3gZgXT8S7j25HGLvnkKYb2aEhUcj`が`READY`となり、`dev.game-fields.com`へのalias割当を確認した。
 - devのノーザンブランチとコードインターセプトがHTTP 200を返し、HTML内のDeployment IDが対象Deploymentと一致すること、実行時error・fatalログがないことを確認した。
 - ログイン・privateアクセス認証済み画面で、8ゲームの追加・個別削除・DEBUG OFF一括整理と、コードインターセプトのチーム再調整を実ボタン確認する。
+
+## 2026-07-23 — オンラインRoom API Routeを共通ファクトリへ集約
+
+### 利用者からの要望
+
+- DEBUG参加者Commandに続き、次のモジュール候補だったRoom API Routeを共通化する。
+- 例外hookを増やすだけでなく、安全に可能な範囲ではゲーム側を共通契約へ改編して揃える。
+
+### 判断
+
+- 公開範囲、認証、GET三分岐、参加者照合、言語、レート制限、DEBUG資格、Telemetry、DELETEを共通Routeファクトリへ移す。
+- ゲーム側は`load / loadActive / list / create / apply / delete / deleteHosted / sanitize`の同じ契約へ寄せ、固有進行をHTTP Routeへ残さない。
+- 大富豪のGET時ダミー進行はStoreのreconcile処理、たほい屋のAI付き`start-round`は専用application層へ置く。
+- 共同描画専用で登録上`local-pass-and-play`のキャンバスは、通常オンライン対戦Roomと契約が異なるため今回の対象外とする。
+
+### 実施結果
+
+- `lib/online-room-route-factory.ts`を追加し、ワードウルフ、たほい屋、ワードスケール、ワードソナー、ワードアウト、ノーザンブランチ、コードインターセプト、大富豪の8 Routeを接続した。
+- POSTのhost・初期参加者・content locale、PATCHのactor・参加者プロフィールを認証セッションから生成する共通入力処理へ統一した。
+- 共通認証・保存障害とゲーム固有エラー表を`lib/online-room-route-errors.ts`へ集約した。
+- Code Interceptの参加時team指定を必須入力から外し、Storeの均衡割当を正本にした。
+- 大富豪のダミー手番復旧を`lib/daifugo-room-store.ts`へ移した。
+- たほい屋のお題生成付き開始を`app/api/tahoiya/rooms/application.ts`へ分離した。
+- 8つのRoute合計を1,558行から507行へ削減した。共通ファクトリを含めても783行となった。
+- `scripts/check-game-standards.mjs`を更新し、新しいオンラインゲームが共通Routeファクトリを使わない場合はlintを失敗させるようにした。
+
+### 検証
+
+- `npm run lint`成功。9ゲーム共通要件、SDK境界、ESLintを通過した。
+- `npm test`成功（442件）。共通認証入力がクライアント指定のhost・participant・localeを上書きする回帰テストを含む。
+- `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
+- `git diff --check`成功。
+
+### 未対応・保留
+
+- `develop`への反映、Vercel dev Deployment確認、ログイン済みブラウザでの実操作確認は未実施。

@@ -33,9 +33,10 @@ UI / hooks -> API client -> HTTP route -> application/domain -> storage
 - 共通actor権限・ロビー退出判定: `lib/online-room-access.ts`
 - 共通デバッグメニュー・ゲーム固有操作・ダミー参加者UI: `app/components/DebugModeButton.tsx`, `app/components/DebugGameTools.tsx`, `app/components/DebugParticipantControls.tsx`
 - デバッグ参加者Command・active-room整理: `lib/online-room-debug-participants.ts`
+- Room API Routeファクトリ: `lib/online-room-route-factory.ts`
 - 共通AI通信状態・トップバナー表示: `lib/ai-activity-client.ts`, `app/components/AiActivityVital.tsx`, `app/components/GameTopBanner.tsx`
 - 共通部屋操作表示: `app/components/OnlineRoomLifecycleActions.tsx`, `app/components/RoomResultActions.tsx`
-- Room API共通エラー変換: `lib/online-room-route-errors.ts`
+- Room API共通・ゲーム別エラー表: `lib/online-room-route-errors.ts`
 - 部屋解散application/storage境界: `lib/online-room-dissolution.ts`
 - ワードウルフadapter: `app/wordwolf/wordwolf-room-api-client.ts`
 - たほい屋adapter: `app/tahoiya/tahoiya-room-api-client.ts`
@@ -69,7 +70,11 @@ AI APIを呼ぶ可能性があるクライアント操作は`aiActivityFetch`ま
 
 部屋作成・参加前のactive room確保は `lib/player-active-room.ts` が担当する。現在の別室から移動可能かを共通解散ポリシーで判定し、終了済みの索引解除と新しい部屋コードのCAS確保を一続きのapplication境界として扱う。参加人数、合言葉、フェーズなどの入室条件はゲーム固有storeで検証する。
 
-Redisのrevision CAS、競合時の最大6回再適用、保存後hook、`SET NX`による新規作成・索引登録は `lib/online-room-persistence.ts`、参加者全員のactive-room索引更新は `lib/player-active-room.ts` に置く。ゲーム固有Storeが独自の保存後処理を持つ場合も、同ファイルの `reapplyOnlineRoomMutationWithRetry` で最新Roomへ論理Commandを再適用し、単発CAS失敗をそのまま利用者エラーにしない。ホスト／参加者とロビー退出の純粋判定は `lib/online-room-access.ts` が担当する。Room APIで共通の認証・保存設定エラーは `lib/online-room-route-errors.ts` でHTTP応答へ変換し、ゲーム固有エラーだけを各Routeに残す。
+Redisのrevision CAS、競合時の最大6回再適用、保存後hook、`SET NX`による新規作成・索引登録は `lib/online-room-persistence.ts`、参加者全員のactive-room索引更新は `lib/player-active-room.ts` に置く。ゲーム固有Storeが独自の保存後処理を持つ場合も、同ファイルの `reapplyOnlineRoomMutationWithRetry` で最新Roomへ論理Commandを再適用し、単発CAS失敗をそのまま利用者エラーにしない。ホスト／参加者とロビー退出の純粋判定は `lib/online-room-access.ts` が担当する。
+
+登録済みオンラインゲーム8本のRoom Routeは `lib/online-room-route-factory.ts` を共通入口とする。同ファクトリが公開範囲検査、署名Cookie認証、GETの部屋・active room・一覧分岐、参加者照合、言語検査、入力actor・参加者情報の上書き、デバッグ資格、更新レート制限、Telemetry、DELETEの本人確認を所有する。ゲーム側は `load / loadActive / list / create / apply / delete / deleteHosted / sanitize` とTelemetry用の安全な状態項目だけを渡す。ゲーム固有エラーは `createOnlineRoomErrorResponder` の表で宣言し、認証・保存設定・Redis一時障害は共通変換を先に適用する。
+
+大富豪のGET時ダミー手番復旧は `lib/daifugo-room-store.ts` のreconcile処理へ置き、Routeへ進行ルールを戻さない。たほい屋のAIお題生成を伴う `start-round` は `app/api/tahoiya/rooms/application.ts` に分離し、Routeはほかのゲームと同じファクトリ契約を保つ。
 
 ワードスケールは物理分割の基準実装として、保存データ復元を `lib/hodoai-room-normalizer.ts`、純粋なラウンド進行とタイムアウト遷移を `lib/hodoai-room-domain.ts`、閲覧者別sanitizerとロビーChoiceを `lib/hodoai-room-presentation.ts` に分離する。`lib/hodoai-room-store.ts` はRedis/application処理とCommand orchestrationを担当する。
 

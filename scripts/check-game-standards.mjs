@@ -14,6 +14,7 @@ const standardThreeLayerUiGameIds = new Set(games.map((game) => game.id));
 const sharedDissolutionModule = read("lib/online-room-dissolution.ts");
 const sharedPersistenceModule = read("lib/online-room-persistence.ts");
 const lobbyActiveRoomsRoute = existsSync(join(root, "app/api/player-active-rooms/route.ts")) ? read("app/api/player-active-rooms/route.ts") : "";
+const sharedRoomRouteFactory = existsSync(join(root, "lib/online-room-route-factory.ts")) ? read("lib/online-room-route-factory.ts") : "";
 
 for (const game of games) {
   if (!game.id || ids.has(game.id)) fail(`ゲームIDが空または重複しています: ${game.id || "(empty)"}`);
@@ -110,8 +111,12 @@ for (const game of games) {
     if (!existsSync(join(root, routeFile))) fail(`${game.id}: room routeがありません。`);
     else {
       const route = read(routeFile);
-      if (!route.includes("requirePlayerDebugAccess")) fail(`${game.id}: デバッグ操作のサーバー側アカウント認証がありません。`);
-      if (!route.includes('operation: "room-create"') || !route.includes("export async function PATCH")) fail(`${game.id}: POST作成／PATCH Commandの共通契約になっていません。`);
+      const routeContract = route.includes("createOnlineRoomRouteHandlers")
+        ? `${route}\n${sharedRoomRouteFactory}`
+        : route;
+      if (!routeContract.includes("requirePlayerDebugAccess")) fail(`${game.id}: デバッグ操作のサーバー側アカウント認証がありません。`);
+      if (!routeContract.includes('operation: "room-create"') || !route.includes("export async function PATCH")) fail(`${game.id}: POST作成／PATCH Commandの共通契約になっていません。`);
+      if (!route.includes("createOnlineRoomRouteHandlers")) fail(`${game.id}: 共通Room API Routeファクトリを使用していません。`);
     }
   }
   if (game.usesLlm) { if (!game.llmRouteFile || !existsSync(join(root, game.llmRouteFile))) fail(`${game.id}: llmRouteFile がありません。`); else if (!read(game.llmRouteFile).includes("generateGameLlmText")) fail(`${game.id}: 共通LLMゲートウェイを使用していません。`); }

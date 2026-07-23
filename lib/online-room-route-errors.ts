@@ -1,5 +1,22 @@
 import { isPlayerAuthConfigurationError } from "./player-auth.ts";
 import { isRedisStoreUnavailableError } from "./redis-store.ts";
+import type { OnlineRoomRouteOperation } from "./online-room-route-factory.ts";
+
+export type OnlineRoomErrorDefinition = {
+  error: string;
+  status: number;
+  errorCode?: string;
+};
+
+type OnlineRoomErrorResponderConfig = {
+  errors?: Record<string, OnlineRoomErrorDefinition>;
+  dynamic?: (
+    message: string,
+    error: unknown,
+    operation: OnlineRoomRouteOperation,
+  ) => OnlineRoomErrorDefinition | null;
+  fallback?: Partial<Record<OnlineRoomRouteOperation, string>>;
+};
 
 export function commonOnlineRoomErrorResponse(error: unknown) {
   const message = error instanceof Error ? error.message : "";
@@ -14,4 +31,31 @@ export function commonOnlineRoomErrorResponse(error: unknown) {
     errorCode: message === "REDIS_STORE_REQUEST_LIMIT_EXCEEDED" ? "ROOM_STORE_LIMIT_EXCEEDED" : "ROOM_STORE_UNAVAILABLE",
   }, { status: 503 });
   return null;
+}
+
+export function createOnlineRoomErrorResponder(config: OnlineRoomErrorResponderConfig) {
+  return (error: unknown, operation: OnlineRoomRouteOperation) => {
+    const common = commonOnlineRoomErrorResponse(error);
+    if (common) return common;
+    const message = error instanceof Error ? error.message : "";
+    const definition = config.errors?.[message] ?? config.dynamic?.(message, error, operation);
+    if (definition) {
+      return Response.json(
+        {
+          error: definition.error,
+          ...(definition.errorCode ? { errorCode: definition.errorCode } : {}),
+        },
+        { status: definition.status },
+      );
+    }
+    const fallback = config.fallback?.[operation]
+      ?? (operation === "read"
+        ? "Failed to load rooms"
+        : operation === "create"
+          ? "Failed to save room"
+          : operation === "delete"
+            ? "Failed to delete room"
+            : "Failed to update room");
+    return Response.json({ error: fallback }, { status: 500 });
+  };
 }

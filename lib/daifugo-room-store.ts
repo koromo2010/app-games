@@ -1,4 +1,4 @@
-import { canPassDaifugoTurn, daifugoPlayError } from "@/lib/daifugo";
+import { canPassDaifugoTurn, chooseDaifugoCpuPlay, daifugoPlayError } from "@/lib/daifugo";
 import { type DaifugoRoom, type DaifugoRoomAction, daifugoMaximumPlayers, daifugoRoomChoice, sanitizeDaifugoRoom } from "@/lib/daifugo-room";
 import { beginDaifugoRoomGame, expireDaifugoTurn, passDaifugoRoomTurn, playDaifugoRoomCards, resetDaifugoRoom, updateDaifugoRoomConfig } from "@/lib/daifugo-room-domain";
 import { normalizeDaifugoRoom } from "@/lib/daifugo-room-normalizer";
@@ -98,6 +98,31 @@ function parseStoredRoom(raw: string | null) {
 
 export async function loadDaifugoPlayerActiveRoom(playerId: string) {
   return loadPlayerActiveOnlineRoom(playerId, { key: playerActiveRoomKey, loadRoom: loadStoredDaifugoRoom, isMember: (room, id) => room.players.some((player) => player.id === id) });
+}
+
+export async function reconcileDaifugoDebugDummyTurn(room: DaifugoRoom, authenticatedPlayerId: string) {
+  if (!room.debugMode || room.hostId !== authenticatedPlayerId || room.phase !== "playing" || !room.game || room.game.status !== "playing") return room;
+  const currentPlayerId = room.game.currentPlayerId;
+  if (!currentPlayerId) return room;
+  const currentPlayer = room.players.find((player) => player.id === currentPlayerId);
+  if (!currentPlayer?.isDummy) return room;
+  const cards = chooseDaifugoCpuPlay(room.game, currentPlayerId);
+  if (cards) {
+    return applyStoredDaifugoAction(room.code, {
+      type: "play-cards",
+      actorId: authenticatedPlayerId,
+      playerId: currentPlayerId,
+      cardIds: cards.map((card) => card.id),
+    });
+  }
+  if (canPassDaifugoTurn(room.game, currentPlayerId)) {
+    return applyStoredDaifugoAction(room.code, {
+      type: "pass",
+      actorId: authenticatedPlayerId,
+      playerId: currentPlayerId,
+    });
+  }
+  return room;
 }
 
 export async function createStoredDaifugoRoom(value: unknown, actorId: string) {
