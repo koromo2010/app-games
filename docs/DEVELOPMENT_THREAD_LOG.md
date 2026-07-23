@@ -2316,6 +2316,8 @@
 
 ### 未対応・保留
 
-- `develop`反映後に`app-games-dev`のDeployment、dev alias、未認証拒否、runtime error・fatalログを確認する。
+- `develop`へ実装コミット`ede5e68`をforceなしのfast-forwardで反映した。
+- `app-games-dev`の対象Deployment `dpl_EvLYP7ipknsaJ7kGgpQS3W4ZhbRU`と、SDK Portal側の対象Deployment `dpl_Dd3t738ptBjWgWMBHGAek5a7TYV8`が同じcommitで`READY`となった。`dev.game-fields.com` aliasが本体Deploymentへ切り替わったことも確認した。
+- devのSDK例2画面がHTTP 200を返し、HTML内のDeployment IDが対象Deploymentと一致した。登録済み`wordwolf-sdk` Room APIは未認証401、未登録`creator-upload`は404を返し、対象Deploymentの実行時error・fatalログはなかった。
 - SDK向けRealtime／WebSocket transportと、active-room・一覧・解散のClient Runtimeは未実装。
 - ログイン済み複数アカウントで、SDK Roomの作成・参加・Command・競合再試行を実操作確認する。
