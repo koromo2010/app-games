@@ -5,7 +5,8 @@ import { beginDaifugoRoomGame, expireDaifugoTurn, passDaifugoRoomTurn, playDaifu
 import { normalizeDaifugoRoom } from "@/lib/daifugo-room-normalizer";
 import { appendGameDebugLog } from "@/lib/game-debug-log";
 import { isMultiplayerRoomExpired } from "@/lib/multiplayer-room-lifecycle";
-import { canLeaveOnlineRoomLobby, onlineRoomActorAccess } from "@/lib/online-room-access";
+import { canLeaveOnlineRoomLobby, canRemoveOnlineRoomDebugPlayer, isOnlineRoomDebugPlayer, onlineRoomActorAccess } from "@/lib/online-room-access";
+import { nextOnlineRoomDebugParticipantName, removeOnlineRoomDebugParticipants } from "@/lib/online-room-debug-participants";
 import { dissolveHostedIndexedOnlineRooms, dissolveIndexedOnlineRoom } from "@/lib/online-room-dissolution";
 import { loadIndexedOnlineRoomPage } from "@/lib/online-room-list";
 import { createIndexedOnlineRoom, mutateOnlineRoomWithRetry } from "@/lib/online-room-persistence";
@@ -36,6 +37,7 @@ const debugActionLabels: Record<DaifugoRoomAction["type"], string> = {
   "set-debug": "デバッグモードを変更",
   "set-debug-replay": "プレイバック記録設定を変更",
   "debug-add-player": "ダミープレイヤーを追加",
+  "debug-remove-player": "ダミープレイヤーを削除",
 };
 
 function roomKey(code: string) { return `${roomKeyPrefix}${code.trim().toUpperCase()}`; }
@@ -51,7 +53,7 @@ async function mutateStoredRoom(code: string, mutate: (room: DaifugoRoom) => Dai
     loadRoom: loadStoredDaifugoRoom,
     mutate,
     normalize: normalizeDaifugoRoom,
-    activeRoomKeys: (room) => room.players.filter((player) => !player.isDummy).map((player) => playerActiveRoomKey(player.id)),
+    activeRoomKeys: (room) => room.players.filter((player) => !isOnlineRoomDebugPlayer(player)).map((player) => playerActiveRoomKey(player.id)),
     errors: { notFound: "DAIFUGO_ROOM_NOT_FOUND", invalid: "INVALID_DAIFUGO_ROOM", conflict: "DAIFUGO_ROOM_CONFLICT" },
     prepare: (current, changed, { revision, timestamp }) => {
       const actorName = debugEvent?.actorId
@@ -116,7 +118,7 @@ export async function createStoredDaifugoRoom(value: unknown, actorId: string) {
   const activeRoom = await loadDaifugoPlayerActiveRoom(actorId);
   const claim = await claimOnlineRoomForPlayer({ key: playerActiveRoomKey(actorId), targetCode: created.code, currentRoom: activeRoom, gameId: "daifugo", conflictError: "DAIFUGO_PLAYER_ALREADY_ACTIVE" });
   try {
-    await createIndexedOnlineRoom(created, { roomKey, roomIndexKey, activeRoomKeys: (room) => room.players.filter((player) => !player.isDummy).map((player) => playerActiveRoomKey(player.id)), conflictError: "DAIFUGO_ROOM_CONFLICT" });
+    await createIndexedOnlineRoom(created, { roomKey, roomIndexKey, activeRoomKeys: (room) => room.players.filter((player) => !isOnlineRoomDebugPlayer(player)).map((player) => playerActiveRoomKey(player.id)), conflictError: "DAIFUGO_ROOM_CONFLICT" });
     return created;
   } catch (error) {
     if (claim === "claimed") await clearActiveRoom(actorId, created.code);
@@ -126,6 +128,7 @@ export async function createStoredDaifugoRoom(value: unknown, actorId: string) {
 
 export async function applyStoredDaifugoAction(code: string, action: DaifugoRoomAction) {
   let claim: ActiveRoomClaim | null = null;
+  const removedDebugPlayerIds = new Set<string>();
   const normalizedCode = code.trim().toUpperCase();
   if (action.type === "join-room") {
     const activeRoom = await loadDaifugoPlayerActiveRoom(action.actorId);
@@ -161,7 +164,18 @@ export async function applyStoredDaifugoAction(code: string, action: DaifugoRoom
     }
     if (action.type === "set-debug") {
       if (!isHost || current.phase !== "lobby") throw new Error("DAIFUGO_ROOM_FORBIDDEN");
-      return { ...current, debugMode: action.enabled, debugReplayEnabled: action.enabled ? current.debugReplayEnabled : false, debugLog: [], players: action.enabled ? current.players : current.players.filter((player) => !player.isDummy) };
+      const cleanup = action.enabled
+        ? null
+        : removeOnlineRoomDebugParticipants(current.players, current.lobbyReturn);
+      cleanup?.removedPlayerIds.forEach((playerId) => removedDebugPlayerIds.add(playerId));
+      return {
+        ...current,
+        debugMode: action.enabled,
+        debugReplayEnabled: action.enabled ? current.debugReplayEnabled : false,
+        debugLog: [],
+        players: cleanup?.players ?? current.players,
+        lobbyReturn: cleanup?.lobbyReturn ?? current.lobbyReturn,
+      };
     }
     if (action.type === "set-debug-replay") {
       if (!isHost || !current.debugMode) throw new Error("DAIFUGO_ROOM_FORBIDDEN");
@@ -174,9 +188,42 @@ export async function applyStoredDaifugoAction(code: string, action: DaifugoRoom
     if (action.type === "debug-add-player") {
       if (!isHost || !current.debugMode || current.phase !== "lobby") throw new Error("DAIFUGO_ROOM_FORBIDDEN");
       if (!roomHasSpace(current)) throw new Error("DAIFUGO_ROOM_FULL");
-      const number = current.players.filter((player) => player.isDummy).length + 1;
+      const name = nextOnlineRoomDebugParticipantName(current.players);
       const colors = ["#38bdf8", "#a78bfa", "#f472b6", "#f59e0b", "#84cc16"];
-      return { ...current, players: [...current.players, { id: `dummy-${randomUUID()}`, name: `ダミー${number}`, joinedAt: Date.now(), avatarColor: colors[(number - 1) % colors.length], isDummy: true }] };
+      const player = {
+        id: `dummy-${randomUUID()}`,
+        name,
+        joinedAt: Date.now(),
+        avatarColor: colors[current.players.filter(isOnlineRoomDebugPlayer).length % colors.length],
+        isDummy: true,
+      };
+      const players = [...current.players, player];
+      return {
+        ...current,
+        players,
+        lobbyReturn: confirmRoomLobbyReturn(current.lobbyReturn, players, player.id),
+      };
+    }
+    if (action.type === "debug-remove-player") {
+      if (!canRemoveOnlineRoomDebugPlayer({
+        actorId: action.actorId,
+        debugMode: current.debugMode,
+        hostId: current.hostId,
+        phase: current.phase,
+        players: current.players,
+        targetPlayerId: action.targetPlayerId,
+      })) throw new Error("DAIFUGO_ROOM_FORBIDDEN");
+      const cleanup = removeOnlineRoomDebugParticipants(
+        current.players,
+        current.lobbyReturn,
+        action.targetPlayerId,
+      );
+      cleanup.removedPlayerIds.forEach((playerId) => removedDebugPlayerIds.add(playerId));
+      return {
+        ...current,
+        players: cleanup.players,
+        lobbyReturn: cleanup.lobbyReturn,
+      };
     }
     if (action.type === "start-game") {
       if (!isHost || current.phase !== "lobby") throw new Error("DAIFUGO_ROOM_FORBIDDEN");
@@ -203,6 +250,11 @@ export async function applyStoredDaifugoAction(code: string, action: DaifugoRoom
   });
   if (action.type === "leave-room") await clearActiveRoom(action.actorId, room.code);
   if (action.type === "remove-waiting-player") await clearActiveRoom(action.targetPlayerId, room.code);
+  if (removedDebugPlayerIds.size > 0) {
+    await Promise.all(
+      [...removedDebugPlayerIds].map((playerId) => clearActiveRoom(playerId, room.code)),
+    );
+  }
   return room;
 }
 

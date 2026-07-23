@@ -18,6 +18,8 @@ import { OnlineRoomLifecycleActions } from "@/app/components/OnlineRoomLifecycle
 import { RoomLobbyReturnStatus } from "@/app/components/RoomLobbyReturnStatus";
 import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
 import type { KotobaSenpukuPlayer } from "@/lib/kotoba-senpuku";
+import { isOnlineRoomDebugPlayer } from "@/lib/online-room-access";
+import { onlineRoomPlayerLimits } from "@/lib/online-room-policy";
 import {
   defaultAvatarImage,
   fallbackAvatarColor,
@@ -195,8 +197,12 @@ export function KotobaSenpukuDesktopLayout({ controller }: { controller: KotobaS
           replayDisabled={isSaving}
           onReplayChange={(enabled) => runAction({ type: "set-debug-replay", actorId: playerId, enabled }).then(() => undefined)}
           onChange={(enabled) => runAction({ type: "set-debug", actorId: playerId, enabled }).then(() => undefined)}
+          debugParticipants={room.players.filter(isOnlineRoomDebugPlayer)}
+          debugParticipantManagementDisabled={isSaving || room.phase !== "lobby"}
+          debugParticipantLimitReached={room.players.length >= onlineRoomPlayerLimits.kotobaSenpuku}
+          onAddDebugParticipant={() => runAction({ type: "debug-add-player", actorId: playerId }).then(() => undefined)}
+          onRemoveDebugParticipant={(targetPlayerId) => runAction({ type: "debug-remove-player", actorId: playerId, targetPlayerId }).then(() => undefined)}
           gameTools={<DebugToolsSection title="ゲーム操作" description="現在のフェーズで使える一括操作を表示します。">
-            {room.phase === "lobby" && <DebugToolButton disabled={isSaving} onClick={() => void runAction({ type: "debug-add-player", actorId: playerId })}>ダミーを追加</DebugToolButton>}
             {room.phase === "secret" && <DebugToolButton disabled={isSaving} onClick={() => void runAction({ type: "debug-fill-secrets", actorId: playerId, round: room.round })}>未入力の秘密語を自動で埋める</DebugToolButton>}
             {room.phase === "battle" && <DebugToolButton disabled={isSaving} onClick={() => void runAction({ type: "debug-auto-turn", actorId: playerId, round: room.round })}>現在の手番を自動実行</DebugToolButton>}
           </DebugToolsSection>}

@@ -69,3 +69,25 @@ test("たほい屋のダミー管理は共通DEBUGメニューへ接続する", 
   assert.match(storeSource, /canRemoveOnlineRoomDebugPlayer/);
   assert.match(storeSource, /removeTahoiyaDebugParticipants/);
 });
+
+test("公開オンラインゲームのダミー管理は共通DEBUGメニューへ接続する", () => {
+  const targets = [
+    ["app/hodoai-talk/HodoaiDesktopLayout.tsx", "lib/hodoai-room-store.ts"],
+    ["app/kotoba-senpuku/KotobaSenpukuDesktopLayout.tsx", "lib/kotoba-senpuku-room-store.ts"],
+    ["app/nigoichi/NigoichiDesktopLayout.tsx", "lib/nigoichi-room-store.ts"],
+    ["app/daifugo/DaifugoDesktopLayout.tsx", "lib/daifugo-room-store.ts"],
+  ] as const;
+
+  for (const [layoutPath, storePath] of targets) {
+    const layoutSource = read(layoutPath);
+    const storeSource = read(storePath);
+
+    assert.match(layoutSource, /debugParticipants=\{room\.players\.filter\(isOnlineRoomDebugPlayer\)\}/);
+    assert.match(layoutSource, /onAddDebugParticipant=/);
+    assert.match(layoutSource, /onRemoveDebugParticipant=/);
+    assert.doesNotMatch(layoutSource, /<DebugToolButton[^>]+debug-add-player/);
+    assert.match(storeSource, /canRemoveOnlineRoomDebugPlayer/);
+    assert.match(storeSource, /type === "debug-remove-player"/);
+    assert.match(storeSource, /removeOnlineRoomDebugParticipants/);
+  }
+});

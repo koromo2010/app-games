@@ -67,7 +67,8 @@ export type DaifugoRoomAction = RoomLobbyReturnAction
   | { type: "abort-game"; actorId: string }
   | { type: "set-debug"; actorId: string; enabled: boolean }
   | { type: "set-debug-replay"; actorId: string; enabled: boolean }
-  | { type: "debug-add-player"; actorId: string };
+  | { type: "debug-add-player"; actorId: string }
+  | { type: "debug-remove-player"; actorId: string; targetPlayerId: string };
 
 export function sanitizeDaifugoRoom(room: DaifugoRoom, viewerId: string): DaifugoRoomView {
   const revealAll = room.debugMode && room.hostId === viewerId;

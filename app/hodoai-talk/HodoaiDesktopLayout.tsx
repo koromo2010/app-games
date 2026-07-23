@@ -20,7 +20,8 @@ import { HodoaiRulesDialog } from "./HodoaiRulesDialog";
 import { WordScaleRoomPanel } from "./WordScaleRoomPanel";
 import type { HodoaiController } from "./use-hodoai-controller";
 import { defaultAvatarImage, fallbackAvatarColor } from "@/lib/player-session";
-import { hodoaiGameShareText, hodoaiFinalMessage, type HodoaiPlayer } from "@/lib/hodoai-talk";
+import { hodoaiGameShareText, hodoaiFinalMessage, hodoaiTechnicalPlayerLimit, type HodoaiPlayer } from "@/lib/hodoai-talk";
+import { isOnlineRoomDebugPlayer } from "@/lib/online-room-access";
 
 function PlayerRow({ player, isHost, isMe }: { player: HodoaiPlayer; isHost: boolean; isMe: boolean }) {
   return (
@@ -93,8 +94,12 @@ export function HodoaiDesktopLayout({ controller }: { controller: HodoaiControll
           onReplayChange={(enabled) => runAction({ type: "set-debug-replay", actorId: playerId, enabled }).then(() => undefined)}
           debugLogEntries={room.debugLog}
           onChange={(enabled) => runAction({ type: "set-debug", actorId: playerId, enabled }).then(() => undefined)}
+          debugParticipants={room.players.filter(isOnlineRoomDebugPlayer)}
+          debugParticipantManagementDisabled={isSaving || room.phase !== "lobby"}
+          debugParticipantLimitReached={room.players.length >= hodoaiTechnicalPlayerLimit || (room.players.length + 1) * room.cardsPerPlayer > 121}
+          onAddDebugParticipant={() => runAction({ type: "debug-add-player", actorId: playerId }).then(() => undefined)}
+          onRemoveDebugParticipant={(targetPlayerId) => runAction({ type: "debug-remove-player", actorId: playerId, targetPlayerId }).then(() => undefined)}
           gameTools={<DebugToolsSection title="ゲーム操作" description="現在のフェーズで使えるデバッグ操作だけを表示します。">
-            {room.phase === "lobby" && <DebugToolButton disabled={isSaving} onClick={() => void runAction({ type: "debug-add-player", actorId: playerId })}>ダミーを追加</DebugToolButton>}
             {room.phase === "clue" && <DebugToolButton disabled={isSaving} onClick={() => void runAction({ type: "debug-fill-clues", actorId: playerId, round: room.round })}>今回の未提出ことばを自動入力</DebugToolButton>}
             {room.phase === "arrange" && <DebugToolButton disabled={isSaving} onClick={() => void runAction({ type: "debug-sort", actorId: playerId, round: room.round })}>正解順に並べる</DebugToolButton>}
           </DebugToolsSection>}

@@ -35,6 +35,7 @@ import {
   defaultAvatarImage,
   fallbackAvatarColor,
 } from "@/lib/player-session";
+import { isOnlineRoomDebugPlayer } from "@/lib/online-room-access";
 import { allRoomPlayersReturned } from "@/lib/room-lobby-return";
 import type { NigoichiController } from "./use-nigoichi-controller";
 
@@ -167,8 +168,12 @@ export function NigoichiDesktopLayout({ controller }: { controller: NigoichiCont
           onReplayChange={(enabled) => runAction({ type: "set-debug-replay", actorId: playerId, enabled }).then(() => undefined)}
           debugLogEntries={room.debugLog}
           onChange={(enabled) => runAction({ type: "set-debug", actorId: playerId, enabled }).then(() => undefined)}
+          debugParticipants={room.players.filter(isOnlineRoomDebugPlayer)}
+          debugParticipantManagementDisabled={isSaving || room.phase !== "lobby"}
+          debugParticipantLimitReached={room.players.length >= room.playerCapacity}
+          onAddDebugParticipant={() => runAction({ type: "debug-add-player", actorId: playerId }).then(() => undefined)}
+          onRemoveDebugParticipant={(targetPlayerId) => runAction({ type: "debug-remove-player", actorId: playerId, targetPlayerId }).then(() => undefined)}
           gameTools={<DebugToolsSection title="ゲーム操作" description="現在のフェーズで使える一括入力を表示します。">
-            {room.phase === "lobby" && <DebugToolButton disabled={isSaving || room.players.length >= room.playerCapacity} onClick={() => void runAction({ type: "debug-add-player", actorId: playerId })}>ダミーを追加</DebugToolButton>}
             {room.phase === "clue" && <DebugToolButton disabled={isSaving} onClick={() => void runAction({ type: "debug-fill-associations", actorId: playerId })}>未提出の連想語を自動入力</DebugToolButton>}
             {room.phase === "guess" && <DebugToolButton disabled={isSaving} onClick={() => void runAction({ type: "debug-fill-guesses", actorId: playerId })}>未提出の予想を正解で自動入力</DebugToolButton>}
           </DebugToolsSection>}

@@ -7,7 +7,8 @@ import { deleteIndexedOnlineRoomStorage, dissolveHostedIndexedOnlineRooms, disso
 import { claimOnlineRoomForPlayer, loadPlayerActiveOnlineRoom, releasePlayerActiveRoom, type ActiveRoomClaim } from "@/lib/player-active-room";
 import { appendGameDebugLog } from "@/lib/game-debug-log";
 import { loadIndexedOnlineRoomPage } from "@/lib/online-room-list";
-import { canLeaveOnlineRoomLobby, onlineRoomActorAccess } from "@/lib/online-room-access";
+import { canLeaveOnlineRoomLobby, canRemoveOnlineRoomDebugPlayer, isOnlineRoomDebugPlayer, onlineRoomActorAccess } from "@/lib/online-room-access";
+import { nextOnlineRoomDebugParticipantName, removeOnlineRoomDebugParticipants } from "@/lib/online-room-debug-participants";
 import { createIndexedOnlineRoom, mutateOnlineRoomWithRetry } from "@/lib/online-room-persistence";
 import { schedulePostResponseWork } from "@/lib/post-response-work";
 import { allRoomPlayersReturned, beginRoomLobbyReturn, canRemoveWaitingRoomPlayer, confirmRoomLobbyReturn } from "@/lib/room-lobby-return";
@@ -53,6 +54,7 @@ const hodoaiDebugActionLabels: Record<HodoaiRoomAction["type"], string> = {
   "debug-fill-clues": "未提出ヒントを自動入力",
   "debug-sort": "正解順に並べ替え",
   "debug-add-player": "ダミープレイヤーを追加",
+  "debug-remove-player": "ダミープレイヤーを削除",
 };
 
 function roomKey(code: string) {
@@ -68,7 +70,7 @@ function playerActiveRoomKey(playerId: string) {
 type HodoaiDebugEvent = { actorId?: string; action: string };
 
 async function mutateStoredRoom(code: string, mutate: (room: HodoaiRoom) => HodoaiRoom, debugEvent?: HodoaiDebugEvent) {
-  return mutateOnlineRoomWithRetry({ code, roomKey, loadRoom: loadStoredHodoaiRoom, mutate, normalize: normalizeHodoaiRoom, activeRoomKeys: (room) => room.players.filter((player) => !player.isDummy).map((player) => playerActiveRoomKey(player.id)), errors: { notFound: "HODOAI_ROOM_NOT_FOUND", invalid: "INVALID_HODOAI_ROOM", conflict: "HODOAI_ROOM_CONFLICT" }, prepare: (current, changed, { revision, timestamp }) => {
+  return mutateOnlineRoomWithRetry({ code, roomKey, loadRoom: loadStoredHodoaiRoom, mutate, normalize: normalizeHodoaiRoom, activeRoomKeys: (room) => room.players.filter((player) => !isOnlineRoomDebugPlayer(player)).map((player) => playerActiveRoomKey(player.id)), errors: { notFound: "HODOAI_ROOM_NOT_FOUND", invalid: "INVALID_HODOAI_ROOM", conflict: "HODOAI_ROOM_CONFLICT" }, prepare: (current, changed, { revision, timestamp }) => {
     const actorName = debugEvent?.actorId
       ? changed.players.find((player) => player.id === debugEvent.actorId)?.name ?? "不明なプレイヤー"
       : "システム";
@@ -140,7 +142,7 @@ export async function createStoredHodoaiRoom(value: unknown, actorId: string) {
   const activeRoom = await loadHodoaiPlayerActiveRoom(actorId);
   const claim = await claimOnlineRoomForPlayer({ key: playerActiveRoomKey(actorId), targetCode: created.code, currentRoom: activeRoom, gameId: "hodoai", conflictError: "HODOAI_PLAYER_ALREADY_ACTIVE" });
   try {
-    await createIndexedOnlineRoom(created, { roomKey, roomIndexKey, activeRoomKeys: (room) => room.players.filter((player) => !player.isDummy).map((player) => playerActiveRoomKey(player.id)), conflictError: "HODOAI_ROOM_CONFLICT" });
+    await createIndexedOnlineRoom(created, { roomKey, roomIndexKey, activeRoomKeys: (room) => room.players.filter((player) => !isOnlineRoomDebugPlayer(player)).map((player) => playerActiveRoomKey(player.id)), conflictError: "HODOAI_ROOM_CONFLICT" });
     return created;
   } catch (error) {
     if (claim === "claimed") await releasePlayerActiveRoom(playerActiveRoomKey(actorId), created.code);
@@ -150,6 +152,7 @@ export async function createStoredHodoaiRoom(value: unknown, actorId: string) {
 
 export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAction) {
   let claim: ActiveRoomClaim | null = null;
+  const removedDebugPlayerIds = new Set<string>();
   if (action.type === "join-room") {
     const activeRoom = await loadHodoaiPlayerActiveRoom(action.actorId);
     claim = await claimOnlineRoomForPlayer({ key: playerActiveRoomKey(action.actorId), targetCode: code, currentRoom: activeRoom, gameId: "hodoai", conflictError: "HODOAI_PLAYER_ALREADY_ACTIVE" });
@@ -206,13 +209,18 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
     }
     if (action.type === "set-debug") {
       if (!actorIsHost || current.phase !== "lobby") throw new Error("HODOAI_ROOM_FORBIDDEN");
+      const cleanup = action.enabled
+        ? null
+        : removeOnlineRoomDebugParticipants(current.players, current.lobbyReturn);
+      cleanup?.removedPlayerIds.forEach((playerId) => removedDebugPlayerIds.add(playerId));
       return {
         ...current,
         debugMode: action.enabled,
         debugReplayEnabled: action.enabled ? current.debugReplayEnabled : false,
         debugLog: [],
-        players: action.enabled ? current.players : current.players.filter((player) => !player.isDummy),
-        sorterId: !action.enabled && current.players.find((player) => player.id === current.sorterId)?.isDummy
+        players: cleanup?.players ?? current.players,
+        lobbyReturn: cleanup?.lobbyReturn ?? current.lobbyReturn,
+        sorterId: cleanup?.removedPlayerIds.includes(current.sorterId)
           ? current.hostId
           : current.sorterId,
       };
@@ -232,16 +240,45 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
       if (!actorIsHost || !current.debugMode || current.phase !== "lobby") throw new Error("HODOAI_ROOM_FORBIDDEN");
       if (current.players.length >= hodoaiTechnicalPlayerLimit) throw new Error("HODOAI_ROOM_FULL");
       if ((current.players.length + 1) * current.cardsPerPlayer > 121) throw new Error("HODOAI_TOO_MANY_CARDS");
-      const dummyNumber = current.players.filter((player) => player.isDummy).length + 1;
+      const dummyName = nextOnlineRoomDebugParticipantName(current.players);
       const colors = ["#38bdf8", "#a78bfa", "#f472b6", "#f59e0b", "#84cc16", "#14b8a6"];
       const player: HodoaiPlayer = {
         id: `dummy-${randomUUID()}`,
-        name: `ダミー${dummyNumber}`,
+        name: dummyName,
         joinedAt: Date.now(),
-        avatarColor: colors[(dummyNumber - 1) % colors.length],
+        avatarColor: colors[current.players.filter(isOnlineRoomDebugPlayer).length % colors.length],
         isDummy: true,
       };
-      return { ...current, players: [...current.players, player] };
+      const players = [...current.players, player];
+      return {
+        ...current,
+        players,
+        lobbyReturn: confirmRoomLobbyReturn(current.lobbyReturn, players, player.id),
+      };
+    }
+    if (action.type === "debug-remove-player") {
+      if (!canRemoveOnlineRoomDebugPlayer({
+        actorId: action.actorId,
+        debugMode: current.debugMode,
+        hostId: current.hostId,
+        phase: current.phase,
+        players: current.players,
+        targetPlayerId: action.targetPlayerId,
+      })) throw new Error("HODOAI_ROOM_FORBIDDEN");
+      const cleanup = removeOnlineRoomDebugParticipants(
+        current.players,
+        current.lobbyReturn,
+        action.targetPlayerId,
+      );
+      cleanup.removedPlayerIds.forEach((playerId) => removedDebugPlayerIds.add(playerId));
+      return {
+        ...current,
+        players: cleanup.players,
+        lobbyReturn: cleanup.lobbyReturn,
+        sorterId: cleanup.removedPlayerIds.includes(current.sorterId)
+          ? current.hostId
+          : current.sorterId,
+      };
     }
     if (action.type === "submit-clue") {
       const card = current.cards.find((item) => item.id === action.cardId);
@@ -312,6 +349,11 @@ export async function applyStoredHodoaiAction(code: string, action: HodoaiRoomAc
   await schedulePostResponseWork("hodoai-result-persistence", () => Promise.all([recordHodoaiGameResults(room), recordHodoaiReplay(room)]));
   if (action.type === "leave-room") await clearActiveRoom(action.actorId, room.code);
   if (action.type === "remove-waiting-player") await clearActiveRoom(action.targetPlayerId, room.code);
+  if (removedDebugPlayerIds.size > 0) {
+    await Promise.all(
+      [...removedDebugPlayerIds].map((playerId) => clearActiveRoom(playerId, room.code)),
+    );
+  }
   return room;
 }
 

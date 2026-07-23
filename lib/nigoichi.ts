@@ -158,6 +158,7 @@ export type NigoichiRoomAction = RoomLobbyReturnAction
   | { type: "reset-game"; actorId: string }
   | { type: "abort-game"; actorId: string }
   | { type: "debug-add-player"; actorId: string }
+  | { type: "debug-remove-player"; actorId: string; targetPlayerId: string }
   | { type: "debug-fill-associations"; actorId: string }
   | { type: "debug-fill-guesses"; actorId: string };
 

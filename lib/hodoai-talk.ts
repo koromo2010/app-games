@@ -120,7 +120,8 @@ export type HodoaiRoomAction = RoomLobbyReturnAction
   | { type: "abort-game"; actorId: string }
   | { type: "debug-fill-clues"; actorId: string; round: number }
   | { type: "debug-sort"; actorId: string; round: number }
-  | { type: "debug-add-player"; actorId: string };
+  | { type: "debug-add-player"; actorId: string }
+  | { type: "debug-remove-player"; actorId: string; targetPlayerId: string };
 
 export const defaultHodoaiConfig: HodoaiConfig = {
   roundsTotal: 3,

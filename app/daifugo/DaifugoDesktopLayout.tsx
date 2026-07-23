@@ -2,7 +2,7 @@
 
 import { AppLink as Link } from "@/app/components/AppLink";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
-import { DebugPlayerSwitcher, DebugToolButton, DebugToolsSection } from "@/app/components/DebugGameTools";
+import { DebugPlayerSwitcher, DebugToolsSection } from "@/app/components/DebugGameTools";
 import { GameAdSlot } from "@/app/components/GameAdSlot";
 import { GameLoungeVisual } from "@/app/components/GameLoungeVisual";
 import { GamePhaseTimer } from "@/app/components/GamePhaseTimer";
@@ -22,6 +22,7 @@ import { canPassDaifugoTurn } from "@/lib/daifugo";
 import { daifugoMaximumPlayers, daifugoMinimumPlayers, type DaifugoRoomPlayer, type DaifugoRoomView } from "@/lib/daifugo-room";
 import { allRoomPlayersReturned } from "@/lib/room-lobby-return";
 import { defaultAvatarImage, fallbackAvatarColor } from "@/lib/player-session";
+import { isOnlineRoomDebugPlayer } from "@/lib/online-room-access";
 import { DaifugoRulesDialog } from "./DaifugoRulesDialog";
 import { DaifugoTable } from "./DaifugoTable";
 import { daifugoText, formatDaifugoText, type DaifugoCopy } from "./daifugo-i18n";
@@ -49,7 +50,7 @@ export function DaifugoDesktopLayout({ controller }: { controller: DaifugoContro
   const { state, setters, viewModel, permissions, actions, result: resultReturnGate } = controller;
   const {
     session, room, ready, error, passphrase, joinCode, choices, showChoices,
-    capacity, selectedCardIds, saving, rulesOpen,
+    capacity, selectedCardIds, debugControlledPlayerId, saving, rulesOpen,
   } = state;
   const {
     locale, d, rankNames, playerId, game, controlledPlayerId,
@@ -87,10 +88,18 @@ export function DaifugoDesktopLayout({ controller }: { controller: DaifugoContro
         onReplayChange={(enabled) => runAction({ type: "set-debug-replay", actorId: playerId, enabled }).then(() => undefined)}
         debugLogEntries={room.debugLog}
         onChange={(enabled) => runAction({ type: "set-debug", actorId: playerId, enabled }).then(() => undefined)}
+        debugParticipants={room.players.filter(isOnlineRoomDebugPlayer)}
+        debugParticipantManagementDisabled={saving || room.phase !== "lobby"}
+        debugParticipantLimitReached={room.players.length >= Math.min(room.playerCapacity, daifugoMaximumPlayers)}
+        onAddDebugParticipant={() => runAction({ type: "debug-add-player", actorId: playerId }).then(() => undefined)}
+        onRemoveDebugParticipant={async (targetPlayerId) => {
+          const saved = await runAction({ type: "debug-remove-player", actorId: playerId, targetPlayerId });
+          if (saved && debugControlledPlayerId === targetPlayerId) {
+            setDebugControlledPlayerId("");
+            setSelectedCardIds([]);
+          }
+        }}
         gameTools={<>
-          {room.phase === "lobby" && <DebugToolsSection title={d.dummy} description={locale === "en" ? "Add dummy players for a solo flow check." : "1人で進行確認するためのダミーを追加します。"}>
-            <DebugToolButton disabled={saving || room.players.length >= room.playerCapacity} onClick={() => void runAction({ type: "debug-add-player", actorId: playerId })}>{d.addDummy}</DebugToolButton>
-          </DebugToolsSection>}
           {game && <DebugToolsSection title={locale === "en" ? "Controlled player" : "操作プレイヤー"} description={locale === "en" ? "Inspect and control the host or a dummy hand." : "ホストまたはダミーの手札を表示して代理操作します。"}>
             <DebugPlayerSwitcher
               label={locale === "en" ? "Player" : "操作プレイヤー"}
