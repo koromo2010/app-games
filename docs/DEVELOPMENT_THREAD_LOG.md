@@ -2238,4 +2238,7 @@
 
 ### 未対応・保留
 
-- `develop`への反映、Vercel dev Deployment確認、ログイン済みブラウザでの実操作確認は未実施。
+- `develop`へ実装コミット`8ed0e0d`をforceなしのfast-forwardで反映した。
+- `app-games-dev`の対象Deployment `dpl_EEgwBAvdXRTobLdWtxvGaGpkBrcA`が`READY`となり、`dev.game-fields.com`へのalias割当を確認した。
+- 8ゲームのdev画面が最終的にHTTP 200を返し、HTML内のDeployment IDが対象Deploymentと一致した。未認証Room APIは公開6本が401、private 2本が403を返し、対象Deploymentの実行時error・fatalログはなかった。
+- ログイン・privateアクセス認証済み画面で、作成・参加・更新・解散と、たほい屋のお題生成、大富豪のDEBUGダミー手番を実操作確認する。
