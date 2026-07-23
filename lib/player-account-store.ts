@@ -23,6 +23,7 @@ import { legalConsentIsCurrent } from "@/lib/legal";
 import { unverifiedAccountIsExpired, unverifiedPlayerAccountRetentionMs } from "@/lib/player-account-retention";
 import { tahoiyaHistoryKeysForPlayer } from "@/lib/tahoiya-topic-history-store";
 import { normalizeAppLocale, type AppLocale } from "@/lib/app-locale";
+import { ensurePlayerAccountSession } from "@/lib/player-account-session";
 
 export type PlayerAccount = {
   version: 2;
@@ -188,36 +189,12 @@ async function loadAccount(name: string) {
 }
 
 async function accountSession(account: PlayerAccount): Promise<PlayerSession> {
-  const savedSession = await loadStoredPlayerSession(account.playerId).catch(() => null);
-  if (savedSession) {
-    if (isPostgresConfigured()) {
-      await updatePostgresPlayerAccountProfile(account.playerId, {
-        name: savedSession.name,
-        avatarColor: savedSession.avatarColor,
-        avatarImage: savedSession.avatarImage,
-        shareNameAllowed: savedSession.shareNameAllowed === true,
-        locale: normalizeAppLocale(savedSession.locale),
-        updatedAt: savedSession.updatedAt,
-      }).catch(() => undefined);
-    }
-    return saveStoredPlayerSession({
-      ...savedSession,
-      hasRecoveryEmail: Boolean(account.email),
-      locale: account.locale,
-    });
-  }
-
-  return {
-    id: account.playerId,
-    name: account.name,
-    avatarColor: account.avatarColor,
-    avatarImage: account.avatarImage,
-    shareNameAllowed: account.shareNameAllowed,
-    locale: account.locale,
-    hasRecoveryEmail: Boolean(account.email),
-    createdAt: account.createdAt,
-    updatedAt: account.updatedAt,
-  };
+  return ensurePlayerAccountSession(account, {
+    loadSession: loadStoredPlayerSession,
+    saveSession: saveStoredPlayerSession,
+    postgresConfigured: isPostgresConfigured,
+    updatePostgresProfile: updatePostgresPlayerAccountProfile,
+  });
 }
 
 export async function registerPlayerAccount(input: PlayerAccountAuthInput) {

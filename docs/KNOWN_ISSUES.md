@@ -139,3 +139,11 @@
 状態: 修正済み（2026-07-21、回帰テストあり）
 
 `/ja/games` を既存App Routerの `/games` へrewriteした後、Next.jsがproxyを内部URLでも再実行し、再び `/ja/games` へ307 redirectする経路があった。rewrite時に渡した `x-app-locale` がある内部再実行はそのままApp Routerへ進め、外部の接頭辞なしURLだけを言語付きURLへredirectするよう分岐した。
+
+## 2026-07-23 Postgres既存アカウントのログイン直後に401になる
+
+状態: 修正済み（2026-07-23、回帰テストあり）
+
+`APP_DATABASE_URL`を正本にするstrict環境では、ログイン成功時にパスワード情報を含むアカウント全体のRedisミラーを止めていた。一方、Redisにプレイヤープロフィールがない場合も安全なセッションだけを作成せず、署名Cookie発行後の`/api/player-session`が401になっていた。新規登録直後はRedisセッションが存在するため、Postgresだけに残る既存アカウントでだけ発生した。
+
+ログイン・メール更新時の共通`ensurePlayerAccountSession`で、RedisセッションがなければPostgresアカウントから公開プロフィールだけを再作成する。パスワードハッシュ、salt、メールアドレスはRedisセッションへ保存しない。
