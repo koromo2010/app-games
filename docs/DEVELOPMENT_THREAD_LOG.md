@@ -2410,5 +2410,6 @@
 - 両Deploymentのerror・fatalログと集約Runtime Errorsはいずれも0件だった。
 
 ### 未対応・保留
+
 - Portalの正式チュートリアル、APIリファレンス、提出画面はhandshake確定後の次段階として未実装。
 - 採用済みゲームのbrowser Runtimeへhandshakeを強制する処理は未実装。今回のv1はDownloadMe／AIとSDK Portalのcontrol planeを先に確定した。
