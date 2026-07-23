@@ -29,6 +29,7 @@ UI / hooks -> API client -> HTTP route -> application/domain -> storage
 - Redis部屋一覧・期限切れ索引整理: `lib/online-room-list.ts`
 - 1プレイヤー1部屋の確保・移動: `lib/player-active-room.ts`
 - revision CAS・新規部屋永続化: `lib/online-room-persistence.ts`
+- クライアントの単調revision採用: `lib/online-room-client-state.ts`
 - 共通actor権限・ロビー退出判定: `lib/online-room-access.ts`
 - Room API共通エラー変換: `lib/online-room-route-errors.ts`
 - 部屋解散application/storage境界: `lib/online-room-dissolution.ts`
@@ -42,7 +43,7 @@ UI / hooks -> API client -> HTTP route -> application/domain -> storage
 - 観戦用公開スナップショット: `lib/online-room-spectator.ts`
 - 観戦policy・grant・共通API: `lib/online-room-spectator-store.ts`, `lib/online-room-spectator-auth.ts`, `app/api/online-room-spectators/route.ts`
 
-共通クライアントはURL、method、条件付きGET、JSON応答、HTTP status/payload付きエラーまでを担当する。各adapterはゲーム固有のRoom・Action型を付ける。フェーズ遷移、権限、勝敗、レスポンスの秘密情報除去は従来どおりサーバーdomain/storeの責務で、クライアント共通化へ移さない。
+共通クライアントはURL、method、条件付きGET、JSON応答、HTTP status/payload付きエラーまでを担当する。各adapterはゲーム固有のRoom・Action型を付ける。操作・時間切れ・ポーリングの応答は `preferLatestOnlineRoom` を通し、同じ部屋で現在以下のrevisionを画面状態へ戻さない。フェーズ遷移、権限、勝敗、レスポンスの秘密情報除去は従来どおりサーバーdomain/storeの責務で、クライアント共通化へ移さない。
 
 観戦は保存Roomや参加者向けsanitizerを流用せず、ゲーム別許可リストから小さな公開スナップショットを組み立てる。観戦者をRoomのplayers、手番、戦績、active room索引へ追加しない。公開可否はRoom外のRedis policyへ部屋作成時刻付きで保存し、コード再利用時の設定継承を防ぐ。新しいオンラインゲームは観戦registryへloaderと公開項目を明示追加し、秘密フィールド非公開テストを通す。
 
@@ -54,7 +55,7 @@ UI / hooks -> API client -> HTTP route -> application/domain -> storage
 
 部屋作成・参加前のactive room確保は `lib/player-active-room.ts` が担当する。現在の別室から移動可能かを共通解散ポリシーで判定し、終了済みの索引解除と新しい部屋コードのCAS確保を一続きのapplication境界として扱う。参加人数、合言葉、フェーズなどの入室条件はゲーム固有storeで検証する。
 
-Redisのrevision CAS、競合時の最大6回再適用、保存後hook、`SET NX`による新規作成・索引登録は `lib/online-room-persistence.ts`、参加者全員のactive-room索引更新は `lib/player-active-room.ts` に置く。ホスト／参加者とロビー退出の純粋判定は `lib/online-room-access.ts` が担当する。Room APIで共通の認証・保存設定エラーは `lib/online-room-route-errors.ts` でHTTP応答へ変換し、ゲーム固有エラーだけを各Routeに残す。
+Redisのrevision CAS、競合時の最大6回再適用、保存後hook、`SET NX`による新規作成・索引登録は `lib/online-room-persistence.ts`、参加者全員のactive-room索引更新は `lib/player-active-room.ts` に置く。ゲーム固有Storeが独自の保存後処理を持つ場合も、同ファイルの `reapplyOnlineRoomMutationWithRetry` で最新Roomへ論理Commandを再適用し、単発CAS失敗をそのまま利用者エラーにしない。ホスト／参加者とロビー退出の純粋判定は `lib/online-room-access.ts` が担当する。Room APIで共通の認証・保存設定エラーは `lib/online-room-route-errors.ts` でHTTP応答へ変換し、ゲーム固有エラーだけを各Routeに残す。
 
 ワードスケールは物理分割の基準実装として、保存データ復元を `lib/hodoai-room-normalizer.ts`、純粋なラウンド進行とタイムアウト遷移を `lib/hodoai-room-domain.ts`、閲覧者別sanitizerとロビーChoiceを `lib/hodoai-room-presentation.ts` に分離する。`lib/hodoai-room-store.ts` はRedis/application処理とCommand orchestrationを担当する。
 
@@ -92,13 +93,14 @@ Redisのrevision CAS、競合時の最大6回再適用、保存後hook、`SET NX
 - room lifecycle behavior: `app/wordwolf/use-wordwolf-room-lifecycle.ts`
 - session restore and room polling: `app/wordwolf/use-wordwolf-room-session.ts`
 - derived presentation model: `app/wordwolf/use-wordwolf-view-model.ts`
+- gameplay command scope/idempotence: `lib/wordwolf-command-scope.ts`
 - storage: `lib/wordwolf-room-store.ts`
 - saved room normalizer: `lib/wordwolf-room-normalizer.ts`
 - viewer presentation: `lib/wordwolf-room-presentation.ts`
 - timer policy/event: `lib/game-timer/policy.ts`, `lib/game-timer/event.ts`
 - timer ingress: `app/api/game-timer/expire/route.ts`
 
-第一段階では部屋API通信と時計を巨大な画面コンポーネントから分離した。その後、部屋APIと表示中ポーリングの共通土台を全5ゲームへ適用した。ブラウザ内の旧ローカル部屋互換、部屋設定default、remote優先・local fallback、空Room生成は `app/wordwolf/wordwolf-room-adapter.ts` に分離した。部屋には単調増加する `revision` を持たせ、Redis内CASで古い保存を409拒否する。参加・ロビー設定・ゲーム開始・通常の発言・投票・最終回答・時間切れは `/api/wordwolf/commands` または専用部屋Commandへ移行済みで、`lib/wordwolf-command-domain.ts` と各Room Storeが検証と状態遷移を担当する。WordWolf/Tahoiyaに残っていた部屋全体POST互換経路も廃止済みで、全5ゲームのgame-server境界は同じHTTP契約になった。
+第一段階では部屋API通信と時計を巨大な画面コンポーネントから分離した。その後、部屋APIと表示中ポーリングの共通土台を全5ゲームへ適用した。ブラウザ内の旧ローカル部屋互換、部屋設定default、remote優先・local fallback、空Room生成は `app/wordwolf/wordwolf-room-adapter.ts` に分離した。部屋には単調増加する `revision` を持たせ、Redis内CASで古い保存を409拒否する。参加・ロビー設定・ゲーム開始・通常の発言・投票・最終回答・時間切れは `/api/wordwolf/commands` または専用部屋Commandへ移行済みで、`lib/wordwolf-command-domain.ts` と各Room Storeが検証と状態遷移を担当する。開始・発言・投票・逆転回答は送信時のゲーム番号・フェーズ・ラウンド・開始時刻をscopeとして送り、同じフェーズ内の別操作とCAS競合した場合だけ最新Roomへ再適用する。すでに反映済みなら最新Roomを成功応答し、古いフェーズから遅れて届いたCommandは拒否する。WordWolf/Tahoiyaに残っていた部屋全体POST互換経路も廃止済みで、全5ゲームのgame-server境界は同じHTTP契約になった。
 
 保存済み部屋の正規化・旧フィールド互換・試合得点確定は `lib/wordwolf-room-normalizer.ts`、狼ID・お題・投票・発言の閲覧者別秘匿とロビーChoiceは `lib/wordwolf-room-presentation.ts` に分離した。特殊な戦績記録付きCASとactive-room索引更新は `lib/wordwolf-room-store.ts` に維持する。
 

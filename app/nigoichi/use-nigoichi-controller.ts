@@ -20,6 +20,7 @@ import {
   type NigoichiRoomChoice,
 } from "@/lib/nigoichi";
 import { OnlineRoomApiError } from "@/lib/online-room-api-client";
+import { preferLatestOnlineRoom } from "@/lib/online-room-client-state";
 import { synchronizedNow } from "@/lib/server-clock";
 
 const lastRoomKey = "nigoichi-last-room";
@@ -114,7 +115,7 @@ export function useNigoichiController() {
     setError("");
     try {
       const saved = await applyNigoichiRoomAction(room.code, action);
-      setRoom(saved);
+      setRoom((current) => preferLatestOnlineRoom(current, saved));
       return saved;
     } catch (caught) {
       setError(apiMessage(caught, "操作を保存できませんでした。"));
@@ -137,7 +138,7 @@ export function useNigoichiController() {
     if (!roomCode || !playerId || !timerPhaseStartedAt || timerDurationSeconds <= 0 || !roomPhase || !["clue", "guess"].includes(roomPhase)) return;
     const timer = window.setTimeout(() => {
       void applyNigoichiRoomAction(roomCode, { type: "expire-phase", actorId: playerId, phaseStartedAt: timerPhaseStartedAt })
-        .then((saved) => setRoom((current) => current?.code === saved.code ? saved : current))
+        .then((saved) => setRoom((current) => current?.code === saved.code ? preferLatestOnlineRoom(current, saved) : current))
         .catch(() => undefined);
     }, Math.max(0, timerPhaseStartedAt + timerDurationSeconds * 1000 + commonGameTimeoutGraceMs() - synchronizedNow()) + 100 + timerClaimDelayMs);
     return () => window.clearTimeout(timer);
@@ -154,7 +155,7 @@ export function useNigoichiController() {
       timeoutAssociationKeyRef.current = key;
       void applyNigoichiRoomAction(room.code, { type: "submit-timeout-associations", actorId: playerId, playerId, clues })
         .then((saved) => {
-          setRoom((current) => current?.code === saved.code ? saved : current);
+          setRoom((current) => current?.code === saved.code ? preferLatestOnlineRoom(current, saved) : current);
           setAssociationDrafts((current) => { const next = { ...current }; delete next[playerId]; return next; });
         })
         .catch(() => undefined);

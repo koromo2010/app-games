@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { confirmResultLobbyNavigation } from "./room-navigation-confirmation";
 import { useAppLocale } from "./AppLocaleProvider";
 
@@ -27,19 +27,25 @@ export function RoomResultActions({
   const { t } = useAppLocale();
   const router = useRouter();
   const [pendingAction, setPendingAction] = useState<"lobby" | "room" | "dissolve" | null>(null);
+  const pendingActionRef = useRef(false);
   const isPending = pendingAction !== null;
 
   const runPendingAction = async (action: "room" | "dissolve", callback: () => unknown | Promise<unknown>) => {
+    if (pendingActionRef.current) return;
+    pendingActionRef.current = true;
     setPendingAction(action);
     try {
       await callback();
     } finally {
+      pendingActionRef.current = false;
       setPendingAction(null);
     }
   };
 
   const goToGameLobby = () => {
+    if (pendingActionRef.current) return;
     if (!confirmResultLobbyNavigation(() => window.confirm(t("game.resultLobbyConfirm")))) return;
+    pendingActionRef.current = true;
     setPendingAction("lobby");
     router.push(returnHref);
   };

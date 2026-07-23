@@ -2,6 +2,7 @@ import { useCallback, type Dispatch, type SetStateAction } from "react";
 import { applyHodoaiRoomAction, createHodoaiRoom, hodoaiRoomApi } from "./hodoai-room-api-client";
 import { loadPlayerRoomDefaults, savePlayerRoomDefaults } from "@/lib/game-room-defaults-client";
 import { OnlineRoomApiError } from "@/lib/online-room-api-client";
+import { preferLatestOnlineRoom } from "@/lib/online-room-client-state";
 import type { PlayerSession } from "@/lib/player-session";
 import { defaultHodoaiScoring, normalizeHodoaiConfig, type HodoaiConfig, type HodoaiPlayer, type HodoaiRoom, type HodoaiRoomAction, type HodoaiRoomChoice } from "@/lib/hodoai-talk";
 import { confirmRoomLeave } from "@/app/components/room-navigation-confirmation";
@@ -40,7 +41,7 @@ export function useHodoaiRoomActions(params: Params) {
   const runAction = useCallback(async (action: HodoaiRoomAction) => {
     if (!room) return null;
     setIsSaving(true);
-    try { const saved = await applyHodoaiRoomAction(room.code, action); setRoom(saved); setError(""); return saved; }
+    try { const saved = await applyHodoaiRoomAction(room.code, action); setRoom((current) => preferLatestOnlineRoom(current, saved)); setError(""); return saved; }
     catch (caught) { setError(caught instanceof OnlineRoomApiError ? apiMessage(caught.status, "操作を保存できませんでした。") : "通信できませんでした。接続を確認してください。"); return null; }
     finally { setIsSaving(false); }
   }, [room, setError, setIsSaving, setRoom]);

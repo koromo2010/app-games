@@ -1,4 +1,4 @@
-import type { Dispatch, SetStateAction } from "react";
+import { useRef, type Dispatch, type SetStateAction } from "react";
 import type { Room, RoomChoice } from "@/lib/wordwolf-game-types";
 import { createWordWolfRoom, joinWordWolfRoom } from "./wordwolf-room-api-client";
 import { createEmptyRoom, deleteHostedRoomsFromStore, deleteRoomFromStore, getOwnerId, listJoinableRoomsFromStore, loadRoomDefaultsFromStore, saveRoom, saveRoomDefaultsToStore } from "./wordwolf-room-adapter";
@@ -9,51 +9,89 @@ type Args = {
   setRoom: Dispatch<SetStateAction<Room | null>>; setActivePlayerId: Dispatch<SetStateAction<string>>;
   setJoinCode: Dispatch<SetStateAction<string>>; setJoinableRooms: Dispatch<SetStateAction<RoomChoice[]>>;
   setIsJoinListOpen: Dispatch<SetStateAction<boolean>>; setError: Dispatch<SetStateAction<string>>;
+  setIsRoomLifecyclePending: Dispatch<SetStateAction<boolean>>;
   markRoomDissolved: () => boolean;
 };
 
 export function useWordWolfRoomLifecycle(args: Args) {
+  const lifecyclePendingRef = useRef(false);
+  const beginLifecycleAction = () => {
+    if (lifecyclePendingRef.current) return false;
+    lifecyclePendingRef.current = true;
+    args.setIsRoomLifecyclePending(true);
+    return true;
+  };
+  const finishLifecycleAction = () => {
+    lifecyclePendingRef.current = false;
+    args.setIsRoomLifecyclePending(false);
+  };
+
   const createRoom = async () => {
-    const name = args.playerName.trim();
-    if (!name || !args.playerAccountId) { args.setError("広場でプレイヤー登録をしてください。"); return; }
-    const ownerId = getOwnerId();
-    const fallbackHostId = args.activePlayerId || localStorage.getItem("wordwolf-last-player") || "";
-    if (!await deleteHostedRoomsFromStore(ownerId, fallbackHostId)) { args.setError("プレイ中の部屋があるため、新しい部屋は作れません。その部屋へ戻ってください。"); return; }
-    const defaults = await loadRoomDefaultsFromStore(args.playerAccountId, ownerId);
-    const created = createEmptyRoom(name, args.roomPassphrase.trim(), ownerId, args.avatarColor, args.avatarImage, args.playerAccountId, defaults);
-    args.setIsJoinListOpen(false); args.setJoinableRooms([]); args.setActivePlayerId(created.player.id);
+    if (!beginLifecycleAction()) return;
     try {
+      const name = args.playerName.trim();
+      if (!name || !args.playerAccountId) { args.setError("広場でプレイヤー登録をしてください。"); return; }
+      const ownerId = getOwnerId();
+      const fallbackHostId = args.activePlayerId || localStorage.getItem("wordwolf-last-player") || "";
+      if (!await deleteHostedRoomsFromStore(ownerId, fallbackHostId)) { args.setError("プレイ中の部屋があるため、新しい部屋は作れません。その部屋へ戻ってください。"); return; }
+      const defaults = await loadRoomDefaultsFromStore(args.playerAccountId, ownerId);
+      const created = createEmptyRoom(name, args.roomPassphrase.trim(), ownerId, args.avatarColor, args.avatarImage, args.playerAccountId, defaults);
+      args.setIsJoinListOpen(false); args.setJoinableRooms([]); args.setActivePlayerId(created.player.id);
       const saved = await createWordWolfRoom(created.room);
       saveRoom(saved.room); args.setRoom(saved.room); void saveRoomDefaultsToStore(saved.room);
       localStorage.setItem("wordwolf-last-room", saved.room.code);
-    } catch { args.setError("部屋を作成できませんでした。"); return; }
-    localStorage.setItem("wordwolf-last-player", created.player.id); args.setError("");
+      localStorage.setItem("wordwolf-last-player", created.player.id); args.setError("");
+    } catch {
+      args.setError("部屋を作成できませんでした。");
+    } finally {
+      finishLifecycleAction();
+    }
   };
 
   const showJoinChoices = async () => {
-    const rooms = await listJoinableRoomsFromStore();
-    args.setJoinableRooms(rooms); args.setIsJoinListOpen(true);
-    args.setError(rooms.length > 0 ? "" : "参加できる未開始の部屋がありません。");
+    if (!beginLifecycleAction()) return;
+    try {
+      const rooms = await listJoinableRoomsFromStore();
+      args.setJoinableRooms(rooms); args.setIsJoinListOpen(true);
+      args.setError(rooms.length > 0 ? "" : "参加できる未開始の部屋がありません。");
+    } catch {
+      args.setError("参加できる部屋を取得できませんでした。");
+    } finally {
+      finishLifecycleAction();
+    }
   };
 
   const joinRoom = async (selectedCode = args.joinCode) => {
-    const code = selectedCode.trim().toUpperCase();
-    if (!args.playerName.trim() || !args.playerAccountId) { args.setError("広場でプレイヤー登録をしてください。"); return; }
-    if (!code) { args.setError("部屋コードを入力してください。"); return; }
+    if (!beginLifecycleAction()) return;
     try {
+      const code = selectedCode.trim().toUpperCase();
+      if (!args.playerName.trim() || !args.playerAccountId) { args.setError("広場でプレイヤー登録をしてください。"); return; }
+      if (!code) { args.setError("部屋コードを入力してください。"); return; }
       const { room } = await joinWordWolfRoom(code, args.roomPassphrase.trim());
       args.setJoinCode(code); args.setIsJoinListOpen(false); args.setJoinableRooms([]); args.setActivePlayerId(args.playerAccountId);
       saveRoom(room); args.setRoom(room);
       localStorage.setItem("wordwolf-last-player", args.playerAccountId); localStorage.setItem("wordwolf-last-room", room.code); args.setError("");
-    } catch { args.setError("部屋が見つからないか、合言葉が違います。"); }
+    } catch {
+      args.setError("部屋が見つからないか、合言葉が違います。");
+    } finally {
+      finishLifecycleAction();
+    }
   };
 
   const dissolveRoom = async () => {
     if (!args.room || !args.isHost || !window.confirm("部屋を解散しますか？参加者はこの部屋に戻れなくなります。")) return;
-    await deleteRoomFromStore(args.room.code);
-    if (localStorage.getItem("wordwolf-last-room") === args.room.code) { localStorage.removeItem("wordwolf-last-room"); localStorage.removeItem("wordwolf-last-player"); }
-    if (args.markRoomDissolved()) { args.setError("部屋を解散しました。結果画面はこのまま確認できます。"); return; }
-    args.setRoom(null); args.setActivePlayerId(""); args.setError("部屋を解散しました。");
+    if (!beginLifecycleAction()) return;
+    const roomCode = args.room.code;
+    try {
+      await deleteRoomFromStore(roomCode);
+      if (localStorage.getItem("wordwolf-last-room") === roomCode) { localStorage.removeItem("wordwolf-last-room"); localStorage.removeItem("wordwolf-last-player"); }
+      if (args.markRoomDissolved()) { args.setError("部屋を解散しました。結果画面はこのまま確認できます。"); return; }
+      args.setRoom(null); args.setActivePlayerId(""); args.setError("部屋を解散しました。");
+    } catch {
+      args.setError("部屋を解散できませんでした。最新状態を確認してください。");
+    } finally {
+      finishLifecycleAction();
+    }
   };
 
   const copyText = async (text: string, successMessage: string) => {

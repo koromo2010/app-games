@@ -184,6 +184,8 @@ API直叩き対策では、全オンラインRoom APIのGETをCookie本人と保
 
 書き込み契約は `POST = 新規作成`、`PATCH = 既存部屋へのCommand`、`DELETE = 解散`。既存部屋をRoom全体POSTで更新しない。UIは変更後Roomを組み立てず、変更意図だけのActionをadapterへ渡す。権限・フェーズ・入力正規化・revision競合は保存済みRoomを読むサーバー側で処理する。`npm run lint` は全オンラインゲームの型付きadapter、PATCH route、UI直fetch、旧`setAndSaveRoom`の再混入を検査する。
 
+操作・時間切れ・ポーリングから返るRoomは `lib/online-room-client-state.ts` の `preferLatestOnlineRoom` を通し、同じ部屋の古いrevisionで新しい画面状態を巻き戻さない。共通の結果・デバッグ・プロフィール操作はReact stateだけでなく同期refでも開始時にロックし、同一tickの連打を重複送信しない。
+
 結果の表示順、外部共有文、プレイバック保存で同じ並べ替えを複製しない。共通契約は `lib/game-result-presentation.ts`、ワードスケールの基準実装は `hodoaiResultPresentation`。結果の向きを変える場合はプロジェクターと契約テストを変更し、3つの出力先は同じ結果行を参照させる。
 
 将来の広告位置は `app/components/GameAdSlot.tsx` を共通入口とする。配置対象はゲーム一覧、入室前、部屋ロビー、結果だけで、進行中とデバッグ部屋には表示しない。既定は完全非表示で、`NEXT_PUBLIC_GAME_ADS_MODE=preview` のときだけ予約寸法を表示する。`live`へ進む前に、同意管理、配信事業者adapter、CSP、年齢・地域・コンテンツに応じた広告ポリシー、広告ブロック時のレイアウトを共通コンポーネント内で実装し、ゲーム画面から事業者SDKを直接呼ばない。
@@ -257,6 +259,8 @@ SDK分離pilotは`games/wordwolf-sdk/manifest.ts`、`domain.ts`、`server-module
 - `/wordwolf`
 - 部屋制、ログイン制、復帰対応、デバッグ時は1人テスト可
 - 順番投稿・全員同時投稿、順番ランダム、同時投票、同率・決選投票、狼の逆転回答に対応
+- 投票では自分自身を候補に出さず、API直送の自己投票も拒否する。開始・発言・投票・逆転回答は送信中の同期ロックとゲーム番号・フェーズ・ラウンド・開始時刻scopeを持つ。サーバーは同じフェーズ内のCAS競合時に最新RoomへCommandを再適用し、すでに保存済みなら最新Roomを返す成功扱い、古いフェーズから遅延したCommandは409拒否とする
+- プレイヤー名とお題ヒントは入力中の各キーでは保存せず、blurまたはEnterで1回だけ保存する。ロビー設定・プロフィール等のRoom Actionはクライアント内で直列化する
 - お題はJST同日同語禁止、順序非依存ペアは標準30日間禁止。固有名詞は語だけで類推できない距離へ調整済み
 - OpenAI OFF時はGemini、Groq、ローカルの順。逆転判定は無料APIまたはfuzzy/feedbackを使用
 - 一般単語の新RAGは共通DBから難易度別に起点語3件を抽出し、1回のLLMで3件を独立審査・相方生成する。生成時の距離とフィードバック集計後の距離を別カラムで保持する。DB migration、旧197,040語の取込、develop環境確認は `docs/WORDWOLF_RAG.md` を正本とする

@@ -71,6 +71,10 @@ export function getVoteCandidates(room: Room) {
   return room.players.filter((player) => candidateIds.has(player.id));
 }
 
+export function getVoteCandidatesForVoter(room: Room, voterId: string) {
+  return getVoteCandidates(room).filter((player) => player.id !== voterId);
+}
+
 export function getVoteVoters(room: Room) {
   if (!room.runoffCandidateIds?.length) return room.players;
 

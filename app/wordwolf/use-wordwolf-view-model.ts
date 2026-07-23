@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { defaultAvatarImage } from "@/lib/player-session";
 import { reducedPlayerTimeLimitSeconds } from "@/lib/player-timeout-policy";
 import type { Room } from "@/lib/wordwolf-game-types";
-import { getClueParticipants, getClueSubmittedCount, getNextSimultaneousCluePlayer, getNextVotePlayer, getVoteCandidates, getVoteVoters, hasPostedClueThisRound } from "./game-flow";
+import { getClueParticipants, getClueSubmittedCount, getNextSimultaneousCluePlayer, getNextVotePlayer, getVoteCandidates, getVoteCandidatesForVoter, getVoteVoters, hasPostedClueThisRound } from "./game-flow";
 import { maxWolfCount, normalizeStoredWolfCount, normalizeWolfIds } from "./wordwolf-room-adapter";
 import { useWordWolfPhaseClock } from "./use-wordwolf-phase-clock";
 
@@ -36,7 +36,11 @@ export function useWordWolfViewModel(room: Room | null, activePlayerId: string, 
   const clueParticipants = room ? getClueParticipants(room) : [];
   const clueSubmittedCount = room?.phase === "clue" ? getClueSubmittedCount(room) : 0;
   const canSubmitClue = Boolean(clueActor) && (room?.clueMode === "simultaneous" || clueActor?.id === currentPlayer?.id);
-  const voteCandidates = room ? getVoteCandidates(room) : [];
+  const voteCandidates = room
+    ? voteDisplayPlayer
+      ? getVoteCandidatesForVoter(room, voteDisplayPlayer.id)
+      : getVoteCandidates(room)
+    : [];
   const allowedWolfCount = room ? maxWolfCount(room.players.length) : 1;
   const wolfCountOptions = room ? Array.from(new Set([...Array.from({ length: allowedWolfCount }, (_, index) => index + 1), normalizeStoredWolfCount(room.wolfCount)])).sort((a, b) => a - b) : [1];
   const isRunoffVote = Boolean(room?.runoffCandidateIds?.length);

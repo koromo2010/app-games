@@ -41,7 +41,7 @@ export function WordWolfLobbySettings({
   onTurnTimeLimitChange: setTurnTimeLimit,
   onRandomizeTurnOrderChange: setRandomizeTurnOrder,
   onTopicDictionarySourceChange: setTopicDictionarySource,
-  onTopicHintChange: setTopicHint,
+  onTopicHintChange,
   onTopicPairDistanceChange: setTopicPairDistance,
   onTopicDifficultyChange: setTopicDifficulty,
   onClueLogVisibilityChange: setClueLogVisibility,
@@ -227,8 +227,17 @@ export function WordWolfLobbySettings({
                       <label className="block text-sm font-medium text-slate-700">
                         お題の方向性
                         <input
-                          value={room.topicHint}
-                          onChange={(event) => setTopicHint(event.target.value)}
+                          key={`${room.code}:${room.topicHint}`}
+                          defaultValue={room.topicHint}
+                          onBlur={(event) => {
+                            const normalized = event.currentTarget.value.trim().slice(0, 80);
+                            if (normalized !== room.topicHint) onTopicHintChange(normalized);
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key !== "Enter") return;
+                            event.preventDefault();
+                            event.currentTarget.blur();
+                          }}
                           className={`mt-1 ${inputClass}`}
                           maxLength={80}
                           placeholder="例: 夏、映画、食べ物、スポーツ"

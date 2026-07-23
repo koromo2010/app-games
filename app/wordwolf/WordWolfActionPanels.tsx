@@ -13,6 +13,7 @@ type WordWolfActionPanelsProps = {
   setClueInput: (value: string) => void;
   onClueKeyDown: KeyboardEventHandler<HTMLTextAreaElement>;
   onSubmitClue: () => void;
+  isClueSubmitting: boolean;
   canSubmitClue: boolean;
   isMyClueTurn: boolean;
   isMyVoteTurn: boolean;
@@ -25,6 +26,7 @@ type WordWolfActionPanelsProps = {
   voteCandidates: Player[];
   selectedVoteTargetId?: string;
   onCastVote: (playerId: string) => void;
+  isVoteSubmitting: boolean;
   isMyFinalAnswerTurn: boolean;
   accusedPlayer: Player | null;
   guessInput: string;
@@ -46,6 +48,7 @@ export function WordWolfActionPanels(props: WordWolfActionPanelsProps) {
     setClueInput,
     onClueKeyDown,
     onSubmitClue,
+    isClueSubmitting,
     canSubmitClue,
     isMyClueTurn,
     isMyVoteTurn,
@@ -58,6 +61,7 @@ export function WordWolfActionPanels(props: WordWolfActionPanelsProps) {
     voteCandidates,
     selectedVoteTargetId,
     onCastVote,
+    isVoteSubmitting,
     isMyFinalAnswerTurn,
     accusedPlayer,
     guessInput,
@@ -107,16 +111,16 @@ export function WordWolfActionPanels(props: WordWolfActionPanelsProps) {
           value={clueInput}
           onChange={(event) => setClueInput(event.target.value)}
           onKeyDown={onClueKeyDown}
-          disabled={!canSubmitClue}
+          disabled={!canSubmitClue || isClueSubmitting}
           className={`mt-4 min-h-28 resize-y ${inputClass} ${isMyClueTurn ? "border-cyan-400 bg-white ring-2 ring-cyan-400/20" : ""}`}
           placeholder="お題そのものを言わずに関連することを書き込む"
         />
         <button
           onClick={onSubmitClue}
-          disabled={!clueInput.trim() || !canSubmitClue}
+          disabled={!clueInput.trim() || !canSubmitClue || isClueSubmitting}
           className={`mt-3 ${cyanButtonClass}`}
         >
-          {room.clueMode === "simultaneous" ? "投稿する" : "投稿して次へ"}
+          {isClueSubmitting ? "送信中…" : room.clueMode === "simultaneous" ? "投稿する" : "投稿して次へ"}
         </button>
       </div>
     );
@@ -137,6 +141,9 @@ export function WordWolfActionPanels(props: WordWolfActionPanelsProps) {
         ) : null}
         {isDebugMode && voteActor ? (
           <p className="mt-1 text-sm font-semibold text-slate-600">{voteActor.name}の投票を操作中</p>
+        ) : null}
+        {isVoteSubmitting ? (
+          <p className="mt-1 text-sm font-semibold text-violet-700">投票を送信中です…</p>
         ) : null}
         {isRunoffVote && (
           <div className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-sm leading-6 text-violet-950">
@@ -159,7 +166,7 @@ export function WordWolfActionPanels(props: WordWolfActionPanelsProps) {
             <button
               key={player.id}
               onClick={() => onCastVote(player.id)}
-              disabled={!voteActor}
+              disabled={!voteActor || isVoteSubmitting}
               className={`rounded-lg border px-3 py-3 text-left font-semibold disabled:cursor-not-allowed disabled:opacity-50 ${
                 selectedVoteTargetId === player.id
                   ? "border-violet-500 bg-violet-100 text-violet-950"

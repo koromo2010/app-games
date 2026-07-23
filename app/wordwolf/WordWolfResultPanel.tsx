@@ -30,6 +30,7 @@ type Props = {
   feedbackPlayerId: string;
   wolfCount: number;
   guessFeedbackMessage: string;
+  isGuessFeedbackSaving: boolean;
   onGuessFeedback: (accepted: boolean) => void;
   canReturnToRoom: boolean;
   isHost: boolean;
@@ -38,7 +39,7 @@ type Props = {
   onDissolve?: () => void;
 };
 
-export function WordWolfResultPanel({ room, resultTitle, hasWolf, wolfPlayers, accusedPlayerName, accusedIsWolf, topicSourceLabel, feedbackPlayerId, wolfCount, guessFeedbackMessage, onGuessFeedback, canReturnToRoom, isHost, isRoomDissolved, onReturnToRoom, onDissolve }: Props) {
+export function WordWolfResultPanel({ room, resultTitle, hasWolf, wolfPlayers, accusedPlayerName, accusedIsWolf, topicSourceLabel, feedbackPlayerId, wolfCount, guessFeedbackMessage, isGuessFeedbackSaving, onGuessFeedback, canReturnToRoom, isHost, isRoomDissolved, onReturnToRoom, onDissolve }: Props) {
   return (
     <div className={panelClass}>
       <p className="text-xs font-semibold uppercase text-cyan-700">Result</p>
@@ -59,8 +60,8 @@ export function WordWolfResultPanel({ room, resultTitle, hasWolf, wolfPlayers, a
           </dl>
           {room.wolfGuessJudgement && <p className="mt-3 text-sm leading-6 text-slate-700">判定理由: {room.wolfGuessJudgement.reason} / source: {room.wolfGuessJudgement.source} / confidence: {Math.round(room.wolfGuessJudgement.confidence * 100)}%</p>}
           <div className="mt-3 flex flex-wrap gap-2">
-            <button type="button" onClick={() => onGuessFeedback(true)} className="rounded-lg border border-cyan-200 bg-cyan-100 px-3 py-2 text-sm font-bold text-cyan-950 transition hover:bg-cyan-50">正解扱いで記憶</button>
-            <button type="button" onClick={() => onGuessFeedback(false)} className="rounded-lg border border-rose-200 bg-rose-100 px-3 py-2 text-sm font-bold text-rose-950 transition hover:bg-rose-50">不正解扱いで記憶</button>
+            <button type="button" disabled={isGuessFeedbackSaving} onClick={() => onGuessFeedback(true)} className="rounded-lg border border-cyan-200 bg-cyan-100 px-3 py-2 text-sm font-bold text-cyan-950 transition hover:bg-cyan-50 disabled:opacity-50">正解扱いで記憶</button>
+            <button type="button" disabled={isGuessFeedbackSaving} onClick={() => onGuessFeedback(false)} className="rounded-lg border border-rose-200 bg-rose-100 px-3 py-2 text-sm font-bold text-rose-950 transition hover:bg-rose-50 disabled:opacity-50">不正解扱いで記憶</button>
           </div>
           {guessFeedbackMessage && <p className="mt-2 text-sm font-semibold text-slate-700">{guessFeedbackMessage}</p>}
         </div>

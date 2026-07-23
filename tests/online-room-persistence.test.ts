@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { compareAndSetOnlineRoom, createIndexedOnlineRoom, mutateOnlineRoomWithRetry } from "../lib/online-room-persistence.ts";
+import {
+  compareAndSetOnlineRoom,
+  createIndexedOnlineRoom,
+  mutateOnlineRoomWithRetry,
+  reapplyOnlineRoomMutationWithRetry,
+} from "../lib/online-room-persistence.ts";
+
+type Room = { code: string; revision: number; updatedAt: number; values: string[] };
 
 test("部屋CASと新規作成は共通Redis契約を使う", async () => {
   const originalFetch = globalThis.fetch;
@@ -98,4 +105,44 @@ test("非同期Commandの結果もCASへ保存する", async () => {
     if (originalToken === undefined) delete process.env.UPSTASH_REDIS_REST_TOKEN;
     else process.env.UPSTASH_REDIS_REST_TOKEN = originalToken;
   }
+});
+
+test("revision conflicts reload and reapply the logical room mutation", async () => {
+  let stored: Room = { code: "ABCD", revision: 1, updatedAt: 1, values: [] };
+  let firstSave = true;
+  const result = await reapplyOnlineRoomMutationWithRetry({
+    code: stored.code,
+    loadRoom: async () => stored,
+    mutate: (room) => ({ ...room, values: [...room.values, "mine"] }),
+    saveRoom: async (room) => {
+      if (firstSave) {
+        firstSave = false;
+        stored = { ...stored, revision: 2, values: ["other"] };
+        throw new Error("ROOM_CONFLICT");
+      }
+      stored = room;
+      return room;
+    },
+    errors: { notFound: "ROOM_NOT_FOUND", conflict: "ROOM_CONFLICT" },
+  });
+
+  assert.equal(result.applied, true);
+  assert.deepEqual(result.room.values, ["other", "mine"]);
+  assert.equal(result.room.revision, 3);
+});
+
+test("an already-applied mutation returns the current room without saving", async () => {
+  const stored: Room = { code: "ABCD", revision: 2, updatedAt: 1, values: ["mine"] };
+  let saveCount = 0;
+  const result = await reapplyOnlineRoomMutationWithRetry({
+    code: stored.code,
+    loadRoom: async () => stored,
+    mutate: (room) => room,
+    saveRoom: async (room) => { saveCount += 1; return room; },
+    errors: { notFound: "ROOM_NOT_FOUND", conflict: "ROOM_CONFLICT" },
+  });
+
+  assert.equal(result.applied, false);
+  assert.equal(result.room, stored);
+  assert.equal(saveCount, 0);
 });

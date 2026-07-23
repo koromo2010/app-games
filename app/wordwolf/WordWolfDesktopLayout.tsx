@@ -19,7 +19,8 @@ export function WordWolfDesktopLayout({ controller }: { controller: WordWolfCont
   const {
     room, activePlayerId, playerAccountId, playerName, roomPassphrase, joinCode, joinableRooms,
     isJoinListOpen, clueInput, guessInput, isGuessJudging, guessFeedbackMessage, error,
-    avatarImage, isAvatarPickerOpen, isStarting, isRulesOpen, isMyPageOpen,
+    avatarImage, isAvatarPickerOpen, isStarting, isClueSubmitting, isVoteSubmitting,
+    isGuessFeedbackSaving, isRoomLifecyclePending, isRulesOpen, isMyPageOpen,
   } = state;
   const {
     activePlayer, currentPlayer, wolfIds, wolfPlayers, accusedPlayer, accusedIsWolf,
@@ -71,6 +72,7 @@ export function WordWolfDesktopLayout({ controller }: { controller: WordWolfCont
               joinCode={joinCode}
               joinableRooms={joinableRooms}
               isJoinListOpen={isJoinListOpen}
+              isPending={isRoomLifecyclePending}
               onRoomPassphraseChange={setters.setRoomPassphrase}
               onJoinCodeChange={setters.setJoinCode}
               onCreateRoom={() => void actions.createRoom()}
@@ -165,6 +167,7 @@ export function WordWolfDesktopLayout({ controller }: { controller: WordWolfCont
                 setClueInput={setters.setClueInput}
                 onClueKeyDown={actions.submitClueOnEnter}
                 onSubmitClue={() => void actions.submitClue()}
+                isClueSubmitting={isClueSubmitting}
                 canSubmitClue={permissions.canSubmitClue || canSubmitClue}
                 isMyClueTurn={permissions.canSubmitClue || isMyClueTurn}
                 isMyVoteTurn={permissions.canVote}
@@ -177,6 +180,7 @@ export function WordWolfDesktopLayout({ controller }: { controller: WordWolfCont
                 voteCandidates={voteCandidates}
                 selectedVoteTargetId={selectedVoteTargetId}
                 onCastVote={(targetPlayerId) => void actions.castVote(targetPlayerId)}
+                isVoteSubmitting={isVoteSubmitting}
                 isMyFinalAnswerTurn={permissions.canSubmitFinalAnswer}
                 accusedPlayer={accusedPlayer}
                 guessInput={guessInput}
@@ -198,6 +202,7 @@ export function WordWolfDesktopLayout({ controller }: { controller: WordWolfCont
                   feedbackPlayerId={activePlayerId || playerAccountId}
                   wolfCount={wolfIds.length}
                   guessFeedbackMessage={guessFeedbackMessage}
+                  isGuessFeedbackSaving={isGuessFeedbackSaving}
                   onGuessFeedback={(accepted) => void actions.submitGuessFeedback(accepted)}
                   canReturnToRoom={permissions.isHost || result.canReturnToRoom}
                   isHost={permissions.isHost}

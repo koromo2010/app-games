@@ -9,6 +9,7 @@ import { useRoomLobbyReturnConfirmation } from "@/app/hooks/use-room-lobby-retur
 import { applyKotobaSenpukuRoomAction, createKotobaSenpukuRoom, kotobaSenpukuRoomApi } from "./kotoba-senpuku-room-api-client";
 import { loadPlayerRoomDefaults, savePlayerRoomDefaults } from "@/lib/game-room-defaults-client";
 import { OnlineRoomApiError } from "@/lib/online-room-api-client";
+import { preferLatestOnlineRoom } from "@/lib/online-room-client-state";
 import { synchronizedNow } from "@/lib/server-clock";
 import {
   kotobaSenpukuKanaKey,
@@ -128,7 +129,7 @@ export function useKotobaSenpukuController() {
     setIsSaving(true);
     try {
       const savedRoom = await applyKotobaSenpukuRoomAction(room.code, action);
-      setRoom(savedRoom);
+      setRoom((current) => preferLatestOnlineRoom(current, savedRoom));
       setError("");
       return savedRoom;
     } catch (caught) {
@@ -174,7 +175,7 @@ export function useKotobaSenpukuController() {
         : { type: "challenge-word", actorId: playerId, round: room.round, targetId: effectiveTarget, guess: challengeGuess };
       void applyKotobaSenpukuRoomAction(room.code, action)
         .then((saved) => {
-          setRoom((current) => current?.code === saved.code ? saved : current);
+          setRoom((current) => current?.code === saved.code ? preferLatestOnlineRoom(current, saved) : current);
           if (canSubmitSecret) setSecretWord("");
           else setChallengeGuess("");
         })

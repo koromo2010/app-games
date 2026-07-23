@@ -28,6 +28,7 @@ import {
   type CodeInterceptWordDifficulty,
 } from "@/lib/code-intercept";
 import { OnlineRoomApiError } from "@/lib/online-room-api-client";
+import { preferLatestOnlineRoom } from "@/lib/online-room-client-state";
 import { synchronizedNow } from "@/lib/server-clock";
 
 const lastRoomKey = "code-intercept-last-room";
@@ -144,7 +145,7 @@ export function useCodeInterceptController() {
     const delay = Math.max(0, timerPhaseStartedAt + timerDurationSeconds * 1000 + codeInterceptTimeoutGraceMs() - synchronizedNow()) + 100 + timerClaimDelayMs;
     const timer = window.setTimeout(() => {
       void applyCodeInterceptRoomAction(timerRoomCode, { type: "expire-phase", actorId: playerId, phaseStartedAt: timerPhaseStartedAt })
-        .then((saved) => setRoom((current) => current?.code === saved.code ? saved : current))
+        .then((saved) => setRoom((current) => current?.code === saved.code ? preferLatestOnlineRoom(current, saved) : current))
         .catch(() => undefined);
     }, delay);
     return () => window.clearTimeout(timer);
@@ -153,7 +154,7 @@ export function useCodeInterceptController() {
   const runAction = useCallback(async (action: CodeInterceptRoomAction) => {
     if (!room || isSaving) return null;
     setIsSaving(true); setError("");
-    try { const saved = await applyCodeInterceptRoomAction(room.code, action); setRoom(saved); return saved; }
+    try { const saved = await applyCodeInterceptRoomAction(room.code, action); setRoom((current) => preferLatestOnlineRoom(current, saved)); return saved; }
     catch (caught) { setError(apiMessage(caught, "操作を保存できませんでした。")); return null; }
     finally { setIsSaving(false); }
   }, [isSaving, room]);
@@ -172,7 +173,7 @@ export function useCodeInterceptController() {
         ? { type: "submit-clues", actorId: playerId, clues: typedClues.map((clue) => clue.trim()) }
         : { type: "submit-timeout-clues", actorId: playerId, clues: typedClues };
       void applyCodeInterceptRoomAction(room.code, action)
-        .then((saved) => setRoom((current) => current?.code === saved.code ? saved : current))
+        .then((saved) => setRoom((current) => current?.code === saved.code ? preferLatestOnlineRoom(current, saved) : current))
         .catch(() => undefined);
     }, delay);
     return () => window.clearTimeout(timer);

@@ -19,6 +19,8 @@ export function GamePlayerMenu(props: Props) {
   const [isMyPageOpen, setIsMyPageOpen] = useState(false);
   const [position, setPosition] = useState({ top: 80, left: 12 });
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const avatarSavingRef = useRef(false);
+  const logoutRef = useRef(false);
   const color = colorOverride ?? props.avatarColor;
   const image = imageOverride ?? props.avatarImage ?? defaultAvatarImage;
 
@@ -49,7 +51,8 @@ export function GamePlayerMenu(props: Props) {
   };
 
   const updateAvatar = async (nextColor: string, nextImage: string) => {
-    if (isSaving) return;
+    if (avatarSavingRef.current) return;
+    avatarSavingRef.current = true;
     setColorOverride(nextColor);
     setImageOverride(nextImage);
     setIsSaving(true);
@@ -62,12 +65,14 @@ export function GamePlayerMenu(props: Props) {
     } catch {
       setMessage(t("account.avatarSaveFailed"));
     } finally {
+      avatarSavingRef.current = false;
       setIsSaving(false);
     }
   };
 
   const logout = async () => {
-    if (isLoggingOut) return;
+    if (logoutRef.current) return;
+    logoutRef.current = true;
     setIsLoggingOut(true);
     setMessage("");
     try {
@@ -81,6 +86,7 @@ export function GamePlayerMenu(props: Props) {
       window.location.assign("/games");
     } catch {
       setMessage(t("account.logoutNetworkError"));
+      logoutRef.current = false;
       setIsLoggingOut(false);
     }
   };

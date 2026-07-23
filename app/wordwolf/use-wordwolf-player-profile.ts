@@ -24,10 +24,6 @@ export function useWordWolfPlayerProfile(args: Args) {
 
   const updatePlayerName = (nextName: string) => {
     args.setPlayerName(nextName);
-    const normalizedName = normalizePlayerName(nextName);
-    if (!nextName.trim() || nextName.trim() === "名無し") return;
-    void savePersistentPlayerSession({ name: normalizedName, avatarColor: args.avatarColor, avatarImage: args.avatarImage });
-    persistRoomPlayer(normalizedName, args.avatarColor, args.avatarImage);
   };
 
   const commitPlayerName = () => {

@@ -45,6 +45,41 @@ export async function createIndexedOnlineRoom<Room extends { code: string }>(roo
 
 type RevisionedOnlineRoom = { code: string; revision: number; updatedAt: number };
 
+/**
+ * Reapplies a logical mutation after a revision conflict.
+ *
+ * Use this when a game already owns its save/CAS boundary but still needs the
+ * shared online-room guarantee that concurrent commands are not silently lost.
+ * Returning the current room from `mutate` marks the command as already applied.
+ */
+export async function reapplyOnlineRoomMutationWithRetry<Room extends RevisionedOnlineRoom>(options: {
+  code: string;
+  loadRoom: (code: string) => Promise<Room | null>;
+  mutate: (room: Room) => Room | Promise<Room>;
+  saveRoom: (room: Room) => Promise<Room>;
+  errors: { notFound: string; conflict: string };
+  maxAttempts?: number;
+}) {
+  const maxAttempts = Math.max(1, options.maxAttempts ?? 6);
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    const current = await options.loadRoom(options.code);
+    if (!current) throw new Error(options.errors.notFound);
+    const changed = await options.mutate(current);
+    if (changed === current) return { room: current, applied: false };
+    try {
+      const saved = await options.saveRoom({
+        ...changed,
+        revision: current.revision + 1,
+        updatedAt: Date.now(),
+      });
+      return { room: saved, applied: true };
+    } catch (error) {
+      if (!(error instanceof Error) || error.message !== options.errors.conflict) throw error;
+    }
+  }
+  throw new Error(options.errors.conflict);
+}
+
 export async function mutateOnlineRoomWithRetry<Room extends RevisionedOnlineRoom>(options: {
   code: string;
   roomKey: (code: string) => string;

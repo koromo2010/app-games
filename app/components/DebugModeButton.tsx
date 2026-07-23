@@ -29,6 +29,7 @@ export function DebugModeButton({ enabled, disabled = false, onChange, onAbort, 
   const [isOpen, setIsOpen] = useState(false);
   const [position, setPosition] = useState({ top: 80, left: 12 });
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const submissionRef = useRef(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -52,9 +53,10 @@ export function DebugModeButton({ enabled, disabled = false, onChange, onAbort, 
   };
 
   const run = async (action: () => void | Promise<void>) => {
-    if (isSubmitting) return;
+    if (submissionRef.current) return;
+    submissionRef.current = true;
     setIsSubmitting(true);
-    try { await action(); } finally { setIsSubmitting(false); }
+    try { await action(); } finally { submissionRef.current = false; setIsSubmitting(false); }
   };
 
   const abort = async () => {

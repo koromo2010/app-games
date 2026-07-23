@@ -11,6 +11,7 @@ import { applyNorthernBranchRoomAction, createNorthernBranchRoom, northernBranch
 import { northernCards } from "@/lib/northern-branch-data";
 import { northernRules } from "@/lib/northern-branch-game";
 import { OnlineRoomApiError } from "@/lib/online-room-api-client";
+import { preferLatestOnlineRoom } from "@/lib/online-room-client-state";
 import { synchronizedNow } from "@/lib/server-clock";
 import type {
   NorthernGameAction,
@@ -111,7 +112,7 @@ export function useNorthernBranchController() {
     if (!roomCode || !playerId || roomPhase !== "playing" || !timerTurnStartedAt || timerDurationSeconds <= 0) return;
     const timer = window.setTimeout(() => {
       void applyNorthernBranchRoomAction(roomCode, { type: "expire-turn", actorId: playerId, turnStartedAt: timerTurnStartedAt })
-        .then((saved) => setRoom((current) => current?.code === saved.code ? saved : current))
+        .then((saved) => setRoom((current) => current?.code === saved.code ? preferLatestOnlineRoom(current, saved) : current))
         .catch(() => undefined);
     }, Math.max(0, timerTurnStartedAt + timerDurationSeconds * 1000 - synchronizedNow()) + 100 + timerClaimDelayMs);
     return () => window.clearTimeout(timer);
@@ -122,7 +123,7 @@ export function useNorthernBranchController() {
     setIsSaving(true);
     try {
       const savedRoom = await applyNorthernBranchRoomAction(room.code, action);
-      setRoom(savedRoom);
+      setRoom((current) => preferLatestOnlineRoom(current, savedRoom));
       setError("");
       return savedRoom;
     } catch (caught) {

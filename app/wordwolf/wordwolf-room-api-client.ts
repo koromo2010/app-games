@@ -1,4 +1,5 @@
 import type { Room, RoomChoice, WordWolfRoomAction } from "@/lib/wordwolf-game-types";
+import { createWordWolfCommandScope, type WordWolfCommandType } from "@/lib/wordwolf-command-scope";
 import { createOnlineRoomApiClient } from "@/lib/online-room-api-client";
 
 const endpoint = "/api/wordwolf/rooms";
@@ -46,23 +47,41 @@ export async function expireWordWolfPhase(code: string, commandId: string) {
   return readJson<{ room: Room | null; applied: boolean; retryAfterMs?: number }>(response, "ROOM_COMMAND_FAILED");
 }
 
-async function sendWordWolfCommand(input: Record<string, string>) {
-  const response = await fetch("/api/wordwolf/commands", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input) });
+async function sendWordWolfCommand(
+  room: Room,
+  input: {
+    type: WordWolfCommandType;
+    commandId: string;
+    playerId?: string;
+    text?: string;
+    targetId?: string;
+    guess?: string;
+  },
+) {
+  const response = await fetch("/api/wordwolf/commands", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      code: room.code,
+      scope: createWordWolfCommandScope(room),
+      ...input,
+    }),
+  });
   return readJson<{ room: Room; applied: boolean }>(response, "ROOM_COMMAND_FAILED");
 }
 
-export function submitWordWolfClue(code: string, playerId: string, text: string, commandId: string) {
-  return sendWordWolfCommand({ code, playerId, text, commandId, type: "submit-clue" });
+export function submitWordWolfClue(room: Room, playerId: string, text: string, commandId: string) {
+  return sendWordWolfCommand(room, { playerId, text, commandId, type: "submit-clue" });
 }
 
-export function castWordWolfVote(code: string, playerId: string, targetId: string, commandId: string) {
-  return sendWordWolfCommand({ code, playerId, targetId, commandId, type: "cast-vote" });
+export function castWordWolfVote(room: Room, playerId: string, targetId: string, commandId: string) {
+  return sendWordWolfCommand(room, { playerId, targetId, commandId, type: "cast-vote" });
 }
 
-export function startWordWolfGame(code: string, commandId: string) {
-  return sendWordWolfCommand({ code, commandId, type: "start-game" });
+export function startWordWolfGame(room: Room, commandId: string) {
+  return sendWordWolfCommand(room, { commandId, type: "start-game" });
 }
 
-export function submitWordWolfGuessCommand(code: string, guess: string, commandId: string) {
-  return sendWordWolfCommand({ code, guess, commandId, type: "submit-wolf-guess" });
+export function submitWordWolfGuessCommand(room: Room, guess: string, commandId: string) {
+  return sendWordWolfCommand(room, { guess, commandId, type: "submit-wolf-guess" });
 }

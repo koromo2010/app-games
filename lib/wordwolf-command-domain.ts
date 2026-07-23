@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { getGameTimerDeadlineAt, isGameTimerExpired, timerHyperparameter, type GameTimerPolicy } from "@/lib/game-timer/policy";
 import { playerTimeLimitSeconds, recordPlayerActivity, recordPlayerTimeout, reducedPlayerTimeLimitSeconds } from "@/lib/player-timeout-policy";
 import { allRoomPlayersReturned } from "@/lib/room-lobby-return";
+import { isValidWordWolfVoteTarget } from "./wordwolf-voting.ts";
 
 const abstainVoteId = "__abstain__";
 const timeoutText = "時間切れ";
@@ -152,7 +153,7 @@ export function applyWordWolfClueCommand(room: Room, playerId: string, rawText: 
 
 export function applyWordWolfVoteCommand(room: Room, playerId: string, targetId: string, now = Date.now()) {
   if (room.phase !== "vote" || room.votes[playerId]) return null;
-  if (!voteVoters(room).some((player) => player.id === playerId) || !runoffCandidates(room).some((player) => player.id === targetId)) return null;
+  if (!isValidWordWolfVoteTarget(room, playerId, targetId)) return null;
   const withVote = recordPlayerActivity({ ...room, votes: { ...room.votes, [playerId]: targetId } }, playerId);
   if (!voteVoters(withVote).every((player) => withVote.votes[player.id])) return withVote;
   return timeoutVote(withVote, now);

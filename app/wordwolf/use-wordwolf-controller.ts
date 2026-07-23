@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
+import { preferLatestOnlineRoom } from "@/lib/online-room-client-state";
 import { fallbackAvatarColor } from "@/lib/player-session";
 import type { Room, RoomChoice, WordWolfRoomAction } from "@/lib/wordwolf-game-types";
 import { useRoomResultReturnGate } from "../hooks/use-room-result-return-gate";
@@ -33,8 +34,21 @@ export function useWordWolfController() {
   const [avatarImage, setAvatarImage] = useState<string | null>(null);
   const [isAvatarPickerOpen, setIsAvatarPickerOpen] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
+  const [isClueSubmitting, setIsClueSubmitting] = useState(false);
+  const [isVoteSubmitting, setIsVoteSubmitting] = useState(false);
+  const [isGuessFeedbackSaving, setIsGuessFeedbackSaving] = useState(false);
+  const [isRoomLifecyclePending, setIsRoomLifecyclePending] = useState(false);
   const [isRulesOpen, setIsRulesOpen] = useState(false);
   const [isMyPageOpen, setIsMyPageOpen] = useState(false);
+  const roomActionQueueRef = useRef<Promise<void>>(Promise.resolve());
+
+  const acceptRoom = useCallback((incomingRoom: Room) => {
+    setRoom((currentRoom) => {
+      const acceptedRoom = preferLatestOnlineRoom(currentRoom, incomingRoom);
+      if (acceptedRoom === incomingRoom) saveRoom(incomingRoom);
+      return acceptedRoom;
+    });
+  }, []);
 
   const resultReturnGate = useRoomResultReturnGate({
     room,
@@ -70,21 +84,26 @@ export function useWordWolfController() {
     ownWord: viewModel.ownWord,
   });
 
-  const runRoomAction = useCallback(async (action: WordWolfRoomAction, persistDefaults = false) => {
-    if (!room) return null;
-    try {
-      const saved = await applyWordWolfRoomAction(room.code, action);
-      saveRoom(saved);
-      setRoom(saved);
-      if (persistDefaults) void saveRoomDefaultsToStore(saved);
-      localStorage.setItem("wordwolf-last-room", saved.code);
-      setError("");
-      return saved;
-    } catch {
-      setError("部屋の更新に失敗しました。最新状態を確認してもう一度お試しください。");
-      return null;
-    }
-  }, [room]);
+  const roomCode = room?.code;
+  const runRoomAction = useCallback((action: WordWolfRoomAction, persistDefaults = false) => {
+    if (!roomCode) return Promise.resolve(null);
+    const execute = async () => {
+      try {
+        const saved = await applyWordWolfRoomAction(roomCode, action);
+        acceptRoom(saved);
+        if (persistDefaults) void saveRoomDefaultsToStore(saved);
+        localStorage.setItem("wordwolf-last-room", saved.code);
+        setError("");
+        return saved;
+      } catch {
+        setError("部屋の更新に失敗しました。最新状態を確認してもう一度お試しください。");
+        return null;
+      }
+    };
+    const queued = roomActionQueueRef.current.then(execute, execute);
+    roomActionQueueRef.current = queued.then(() => undefined, () => undefined);
+    return queued;
+  }, [acceptRoom, roomCode]);
 
   useRoomLobbyReturnConfirmation({
     room,
@@ -124,6 +143,7 @@ export function useWordWolfController() {
     setJoinableRooms,
     setIsJoinListOpen,
     setError,
+    setIsRoomLifecyclePending,
     markRoomDissolved: resultReturnGate.markRoomDissolved,
   });
 
@@ -138,11 +158,15 @@ export function useWordWolfController() {
     guessInput,
     isGuessJudging,
     isStarting,
-    setRoom,
+    isVoteSubmitting,
+    acceptRoom,
     setClueInput,
     setGuessInput,
     setIsGuessJudging,
     setIsStarting,
+    setIsClueSubmitting,
+    setIsVoteSubmitting,
+    setIsGuessFeedbackSaving,
     setGuessFeedbackMessage,
     setError,
     runRoomAction,
@@ -167,6 +191,10 @@ export function useWordWolfController() {
       avatarImage,
       isAvatarPickerOpen,
       isStarting,
+      isClueSubmitting,
+      isVoteSubmitting,
+      isGuessFeedbackSaving,
+      isRoomLifecyclePending,
       isRulesOpen,
       isMyPageOpen,
     },

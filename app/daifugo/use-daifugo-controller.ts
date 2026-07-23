@@ -9,6 +9,7 @@ import { applyDaifugoRoomAction, createDaifugoRoom, daifugoRoomApi } from "./dai
 import { daifugoPlayError, sortDaifugoHand } from "@/lib/daifugo";
 import { type DaifugoRoomAction, type DaifugoRoomChoice, type DaifugoRoomPlayer, type DaifugoRoomView } from "@/lib/daifugo-room";
 import { OnlineRoomApiError, restoreOnlineRoom } from "@/lib/online-room-api-client";
+import { preferLatestOnlineRoom } from "@/lib/online-room-client-state";
 import { isPlayerAuthenticated, loadPersistentPlayerSession, type PlayerSession } from "@/lib/player-session";
 import { daifugoText, localizeDaifugoPlayError, type DaifugoCopy } from "./daifugo-i18n";
 
@@ -76,7 +77,7 @@ export function useDaifugoController() {
   const runAction = useCallback(async (action: DaifugoRoomAction) => {
     if (!room || saving) return null;
     setSaving(true); setError("");
-    try { const saved = await applyDaifugoRoomAction(room.code, action); setRoom(saved); setSelectedCardIds([]); return saved; }
+    try { const saved = await applyDaifugoRoomAction(room.code, action); setRoom((current) => preferLatestOnlineRoom(current, saved)); setSelectedCardIds([]); return saved; }
     catch (caught) { setError(apiMessage(caught, d.actionFailed, d)); return null; }
     finally { setSaving(false); }
   }, [d, room, saving]);
@@ -85,7 +86,7 @@ export function useDaifugoController() {
   useEffect(() => {
     if (!roomCode || !playerId || roomPhase !== "playing" || !room?.phaseStartedAt || room.turnTimeLimitSeconds <= 0) return;
     const startedAt = room.phaseStartedAt;
-    const timer = window.setTimeout(() => void applyDaifugoRoomAction(roomCode, { type: "expire-turn", actorId: playerId, phaseStartedAt: startedAt }).then(setRoom).catch(() => undefined), Math.max(0, startedAt + room.turnTimeLimitSeconds * 1000 - Date.now()) + 100);
+    const timer = window.setTimeout(() => void applyDaifugoRoomAction(roomCode, { type: "expire-turn", actorId: playerId, phaseStartedAt: startedAt }).then((saved) => setRoom((current) => current?.code === saved.code ? preferLatestOnlineRoom(current, saved) : current)).catch(() => undefined), Math.max(0, startedAt + room.turnTimeLimitSeconds * 1000 - Date.now()) + 100);
     return () => window.clearTimeout(timer);
   }, [playerId, room?.phaseStartedAt, room?.turnTimeLimitSeconds, roomCode, roomPhase]);
 
