@@ -8,22 +8,16 @@ import {
   type KotobaSenpukuRoom,
   type KotobaSenpukuRoomAction,
 } from "@/lib/kotoba-senpuku";
-import { isMultiplayerRoomExpired } from "@/lib/multiplayer-room-lifecycle";
 import { recordKotobaSenpukuGameResults } from "@/lib/player-stats-store";
 import { recordKotobaSenpukuReplay } from "@/lib/game-replay-store";
-import { redisCommand } from "@/lib/redis-store";
 import { recordPlayerActivity, recoverPlayerTimeout } from "@/lib/player-timeout-policy";
-import { deleteIndexedOnlineRoomStorage, dissolveHostedIndexedOnlineRooms, dissolveIndexedOnlineRoom } from "@/lib/online-room-dissolution";
-import { claimOnlineRoomForPlayer, loadPlayerActiveOnlineRoom, releasePlayerActiveRoom, type ActiveRoomClaim } from "@/lib/player-active-room";
+import type { ActiveRoomClaim } from "@/lib/player-active-room";
 import { onlineRoomPlayerLimits } from "@/lib/online-room-policy";
-import { loadIndexedOnlineRoomPage } from "@/lib/online-room-list";
 import { canLeaveOnlineRoomLobby, onlineRoomActorAccess } from "@/lib/online-room-access";
 import {
   applyOnlineRoomDebugParticipantCommand,
-  onlineRoomNonDebugPlayerActiveRoomKeys,
-  releaseOnlineRoomDebugParticipantActiveRooms,
 } from "@/lib/online-room-debug-participants";
-import { createIndexedOnlineRoom, mutateOnlineRoomWithRetry } from "@/lib/online-room-persistence";
+import { createPlatformOnlineRoomStoreRuntime } from "@/lib/online-room-store-runtime";
 import { schedulePostResponseWork } from "@/lib/post-response-work";
 import { allRoomPlayersReturned, beginRoomLobbyReturn, canRemoveWaitingRoomPlayer, confirmRoomLobbyReturn } from "@/lib/room-lobby-return";
 import { addLog, beginBattle, beginRound, fillMissingSecrets, finishRound, performChallenge, performScan, reconcileProgress } from "@/lib/kotoba-senpuku-room-domain";
@@ -32,50 +26,37 @@ import { kotobaSenpukuRoomChoice, sanitizeKotobaSenpukuRoom } from "@/lib/kotoba
 
 export { sanitizeKotobaSenpukuRoom };
 
-const roomKeyPrefix = "kotoba-senpuku:room:";
-const roomIndexKey = "kotoba-senpuku:rooms";
-const playerActiveRoomKeyPrefix = "kotoba-senpuku:player-active-room:";
+const roomRuntime = createPlatformOnlineRoomStoreRuntime({
+  gameId: "kotoba-senpuku",
+  normalize: normalizeKotobaSenpukuRoom,
+  isJoinable: (room) => (
+    room.phase === "lobby"
+    && room.players.length < onlineRoomPlayerLimits.kotobaSenpuku
+  ),
+  toChoice: kotobaSenpukuRoomChoice,
+  errors: {
+    notFound: "KOTOBA_SENPUKU_ROOM_NOT_FOUND",
+    invalid: "INVALID_KOTOBA_SENPUKU_ROOM",
+    conflict: "KOTOBA_SENPUKU_ROOM_CONFLICT",
+    playerActive: "KOTOBA_SENPUKU_PLAYER_ALREADY_ACTIVE",
+    forbidden: "KOTOBA_SENPUKU_ROOM_FORBIDDEN",
+    inProgress: "KOTOBA_SENPUKU_ROOM_IN_PROGRESS",
+  },
+  afterSave: (room) => Promise.all([
+    recordKotobaSenpukuGameResults(room),
+    recordKotobaSenpukuReplay(room),
+  ]),
+});
 
-function roomKey(code: string) {
-  return `${roomKeyPrefix}${code.trim().toUpperCase()}`;
-}
-
-function playerActiveRoomKey(playerId: string) {
-  return `${playerActiveRoomKeyPrefix}${playerId}`;
-}
-
-
-async function mutateStoredRoom(code: string, mutate: (room: KotobaSenpukuRoom) => KotobaSenpukuRoom) {
-  return mutateOnlineRoomWithRetry({ code, roomKey, loadRoom: loadStoredKotobaSenpukuRoom, mutate, normalize: normalizeKotobaSenpukuRoom, activeRoomKeys: (room) => onlineRoomNonDebugPlayerActiveRoomKeys(room.players, playerActiveRoomKey), errors: { notFound: "KOTOBA_SENPUKU_ROOM_NOT_FOUND", invalid: "INVALID_KOTOBA_SENPUKU_ROOM", conflict: "KOTOBA_SENPUKU_ROOM_CONFLICT" }, realtimeGame: "kotoba-senpuku", afterSave: (room) => Promise.all([recordKotobaSenpukuGameResults(room), recordKotobaSenpukuReplay(room)]) });
-}
-
-async function clearActiveRoom(playerId: string, code: string) {
-  await releasePlayerActiveRoom(playerActiveRoomKey(playerId), code);
+async function mutateStoredRoom(
+  code: string,
+  mutate: (room: KotobaSenpukuRoom) => KotobaSenpukuRoom,
+) {
+  return roomRuntime.mutate(code, mutate);
 }
 
 export async function loadStoredKotobaSenpukuRoom(code: string) {
-  const raw = await redisCommand<string | null>(["GET", roomKey(code)]);
-  if (!raw) return null;
-  try {
-    const room = normalizeKotobaSenpukuRoom(JSON.parse(raw));
-    if (!room) return null;
-    if (isMultiplayerRoomExpired(room.updatedAt)) {
-      await deleteIndexedOnlineRoomStorage({ roomCode: room.code, roomKey: roomKey(room.code), roomIndexKey, playerActiveRoomKeys: room.players.map((player) => playerActiveRoomKey(player.id)) });
-      return null;
-    }
-    return room;
-  } catch {
-    return null;
-  }
-}
-
-function parseStoredKotobaSenpukuRoom(raw: string | null) {
-  if (!raw) return null;
-  try {
-    return normalizeKotobaSenpukuRoom(JSON.parse(raw));
-  } catch {
-    return null;
-  }
+  return roomRuntime.load(code);
 }
 
 export async function loadAndReconcileKotobaSenpukuRoom(code: string) {
@@ -89,30 +70,29 @@ export async function loadAndReconcileKotobaSenpukuRoom(code: string) {
 }
 
 export async function loadKotobaSenpukuPlayerActiveRoom(playerId: string) {
-  return loadPlayerActiveOnlineRoom(playerId, { key: playerActiveRoomKey, loadRoom: loadAndReconcileKotobaSenpukuRoom, isMember: (room, id) => room.players.some((player) => player.id === id) });
+  return roomRuntime.loadActive(playerId, loadAndReconcileKotobaSenpukuRoom);
 }
 
 export async function createStoredKotobaSenpukuRoom(value: unknown, actorId: string) {
   const room = normalizeKotobaSenpukuRoom(value);
   if (!room || actorId !== room.hostId) throw new Error("INVALID_KOTOBA_SENPUKU_ROOM");
   const created = { ...room, revision: 0, gameNumber: 1, phase: "lobby" as const, debugMode: false, debugReplayEnabled: false, theme: null, secrets: {}, submittedIds: [], masks: {}, calledKana: [], exposedIds: [], roundEvents: [], history: [], log: ["参加者を待っています。"], phaseStartedAt: null, updatedAt: Date.now() };
-  const activeRoom = await loadKotobaSenpukuPlayerActiveRoom(actorId);
-  const claim = await claimOnlineRoomForPlayer({ key: playerActiveRoomKey(actorId), targetCode: created.code, currentRoom: activeRoom, gameId: "kotoba-senpuku", conflictError: "KOTOBA_SENPUKU_PLAYER_ALREADY_ACTIVE" });
-  try {
-    await createIndexedOnlineRoom(created, { roomKey, roomIndexKey, activeRoomKeys: (room) => onlineRoomNonDebugPlayerActiveRoomKeys(room.players, playerActiveRoomKey), conflictError: "KOTOBA_SENPUKU_ROOM_CONFLICT" });
-    return created;
-  } catch (error) {
-    if (claim === "claimed") await releasePlayerActiveRoom(playerActiveRoomKey(actorId), created.code);
-    throw error;
-  }
+  return roomRuntime.create(
+    created,
+    actorId,
+    loadAndReconcileKotobaSenpukuRoom,
+  );
 }
 
 export async function applyStoredKotobaSenpukuAction(code: string, action: KotobaSenpukuRoomAction) {
   let claim: ActiveRoomClaim | null = null;
   const removedDebugPlayerIds = new Set<string>();
   if (action.type === "join-room") {
-    const activeRoom = await loadKotobaSenpukuPlayerActiveRoom(action.actorId);
-    claim = await claimOnlineRoomForPlayer({ key: playerActiveRoomKey(action.actorId), targetCode: code, currentRoom: activeRoom, gameId: "kotoba-senpuku", conflictError: "KOTOBA_SENPUKU_PLAYER_ALREADY_ACTIVE" });
+    claim = await roomRuntime.claim(
+      action.actorId,
+      code,
+      loadAndReconcileKotobaSenpukuRoom,
+    );
   }
   const room = await mutateStoredRoom(code, (current) => {
     if (action.type === "join-room") {
@@ -239,43 +219,34 @@ export async function applyStoredKotobaSenpukuAction(code: string, action: Kotob
     }
     return current;
   }).catch(async (error) => {
-    if (action.type === "join-room" && claim === "claimed") await releasePlayerActiveRoom(playerActiveRoomKey(action.actorId), code);
+    if (action.type === "join-room" && claim === "claimed") {
+      await roomRuntime.release(action.actorId, code);
+    }
     throw error;
   });
-  if (action.type === "leave-room") await clearActiveRoom(action.actorId, room.code);
-  if (action.type === "remove-waiting-player") await clearActiveRoom(action.targetPlayerId, room.code);
+  if (action.type === "leave-room") {
+    await roomRuntime.release(action.actorId, room.code);
+  }
+  if (action.type === "remove-waiting-player") {
+    await roomRuntime.release(action.targetPlayerId, room.code);
+  }
   if (removedDebugPlayerIds.size > 0) {
-    await releaseOnlineRoomDebugParticipantActiveRooms(
+    await roomRuntime.releaseMany(
       removedDebugPlayerIds,
       room.code,
-      playerActiveRoomKey,
     );
   }
   return room;
 }
 
 export async function listJoinableKotobaSenpukuRooms(cursor?: unknown) {
-  const page = await loadIndexedOnlineRoomPage(cursor, { indexKey: roomIndexKey, roomKey, parseRoom: parseStoredKotobaSenpukuRoom, loadRoom: loadStoredKotobaSenpukuRoom });
-  const rooms = page.rooms
-    .filter((room): room is KotobaSenpukuRoom => Boolean(room && !isMultiplayerRoomExpired(room.updatedAt) && room.phase === "lobby" && room.players.length < onlineRoomPlayerLimits.kotobaSenpuku))
-    .map(kotobaSenpukuRoomChoice)
-    .sort((left, right) => right.updatedAt - left.updatedAt);
-  return { rooms, nextCursor: page.nextCursor };
+  return roomRuntime.list(cursor);
 }
 
 export async function deleteStoredKotobaSenpukuRoom(code: string, actorId: string) {
-  await dissolveIndexedOnlineRoom(code, actorId, dissolutionOptions);
+  await roomRuntime.dissolve(code, actorId);
 }
 
 export async function deleteHostedKotobaSenpukuRooms(_ownerId: string, authenticatedHostId: string) {
-  return dissolveHostedIndexedOnlineRooms(authenticatedHostId, dissolutionOptions);
+  return roomRuntime.dissolveHosted(authenticatedHostId);
 }
-
-const dissolutionOptions = {
-  gameId: "kotoba-senpuku" as const,
-  roomIndexKey,
-  roomKey,
-  playerActiveRoomKey,
-  errors: { forbidden: "KOTOBA_SENPUKU_ROOM_FORBIDDEN", inProgress: "KOTOBA_SENPUKU_ROOM_IN_PROGRESS" },
-  loadRoom: loadStoredKotobaSenpukuRoom,
-};

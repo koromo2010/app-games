@@ -111,7 +111,7 @@ test("privateオンラインゲームも共通ダミー参加者Commandへ接続
     assert.match(layoutSource, /onRemoveDebugParticipant=/);
     assert.doesNotMatch(layoutSource, /<DebugToolButton[^>]+debug-add-player/);
     assert.match(storeSource, /applyOnlineRoomDebugParticipantCommand/);
-    assert.match(storeSource, /releaseOnlineRoomDebugParticipantActiveRooms/);
+    assert.match(storeSource, /roomRuntime\.releaseMany/);
   }
 });
 

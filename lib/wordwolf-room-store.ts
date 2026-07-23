@@ -8,12 +8,9 @@ import { recordWordWolfGameResults } from "@/lib/player-stats-store";
 import { recordWordWolfReplay } from "@/lib/game-replay-store";
 import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
 import { normalizeWordDifficulty } from "@/lib/word-selection-protocol";
-import { isMultiplayerRoomExpired, multiplayerRoomExpiryArgs } from "@/lib/multiplayer-room-lifecycle";
-import { canDissolveOnlineRoom } from "@/lib/room-dissolve-policy";
-import { claimOnlineRoomForPlayer, loadPlayerActiveOnlineRoom, releasePlayerActiveRoom } from "@/lib/player-active-room";
+import { multiplayerRoomExpiryArgs } from "@/lib/multiplayer-room-lifecycle";
 import { isAvatarColor, isAvatarImage } from "@/lib/player-session";
 import { onlineRoomPlayerLimits } from "@/lib/online-room-policy";
-import { loadIndexedOnlineRoomPage } from "@/lib/online-room-list";
 import { publishOnlineRoomRevision } from "@/lib/online-room-realtime-server";
 import { schedulePostResponseWork } from "@/lib/post-response-work";
 import { recoverPlayerTimeout } from "@/lib/player-timeout-policy";
@@ -21,9 +18,8 @@ import { beginRoomLobbyReturn, canRemoveWaitingRoomPlayer, confirmRoomLobbyRetur
 import {
   applyOnlineRoomDebugParticipantCommand,
   onlineRoomNonDebugPlayerActiveRoomKeys,
-  releaseOnlineRoomDebugParticipantActiveRooms,
 } from "@/lib/online-room-debug-participants";
-import { deleteIndexedOnlineRoomStorage } from "@/lib/online-room-dissolution";
+import { createPlatformOnlineRoomStoreRuntime } from "@/lib/online-room-store-runtime";
 import {
   addRoomScore,
   normalizeClueMode,
@@ -39,81 +35,73 @@ export { sanitizeWordWolfRoom };
 export type WordWolfRoom = Room;
 export type WordWolfRoomChoice = RoomChoice;
 
-const roomKeyPrefix = "wordwolf:room:";
 const roomIndexKey = "wordwolf:rooms";
-const playerActiveRoomKeyPrefix = "wordwolf:player-active-room:";
 
-function roomKey(code: string) {
-  return `${roomKeyPrefix}${code.trim().toUpperCase()}`;
+function normalizeWordWolfRoomForPersistence(value: unknown) {
+  let room = normalizeWordWolfRoom(value);
+  if (!room) return null;
+  if (room.phase === "result" && room.winner && !room.statsRecordedAt) {
+    room = {
+      ...addRoomScore(room),
+      statsRecordedAt: Date.now(),
+    };
+  }
+  return room;
 }
 
-function playerActiveRoomKey(playerId: string) {
-  return `${playerActiveRoomKeyPrefix}${playerId}`;
-}
-
-async function deleteWordWolfRoomStorage(roomCode: string, playerIds: string[]) {
-  await deleteIndexedOnlineRoomStorage({
-    roomCode,
-    roomKey: roomKey(roomCode),
-    roomIndexKey,
-    playerActiveRoomKeys: playerIds.map(playerActiveRoomKey),
-  });
-}
+const roomRuntime = createPlatformOnlineRoomStoreRuntime({
+  gameId: "wordwolf",
+  normalize: normalizeWordWolfRoom,
+  normalizeMutation: normalizeWordWolfRoomForPersistence,
+  isJoinable: (room) => (
+    room.phase === "lobby"
+    && room.players.length < onlineRoomPlayerLimits.wordwolf
+  ),
+  toChoice: wordWolfRoomChoice,
+  errors: {
+    notFound: "WORDWOLF_ROOM_NOT_FOUND",
+    invalid: "INVALID_WORDWOLF_ROOM",
+    conflict: "WORDWOLF_ROOM_CONFLICT",
+    playerActive: "WORDWOLF_PLAYER_ALREADY_ACTIVE",
+    forbidden: "WORDWOLF_ROOM_FORBIDDEN",
+    inProgress: "WORDWOLF_ROOM_IN_PROGRESS",
+  },
+  afterSave: (room) => Promise.all([
+    recordWordWolfGameResults(room),
+    recordWordWolfReplay(room),
+  ]),
+});
 
 export async function loadStoredWordWolfRoom(code: string) {
-  const raw = await redisCommand<string | null>(["GET", roomKey(code)]);
-  if (!raw) return null;
-
-  try {
-    const room = normalizeWordWolfRoom(JSON.parse(raw));
-    if (!room) return null;
-    if (isMultiplayerRoomExpired(room.updatedAt)) {
-      await deleteWordWolfRoomStorage(room.code, room.players.map((player) => player.id));
-      return null;
-    }
-    return room;
-  } catch {
-    return null;
-  }
-}
-
-function parseStoredWordWolfRoom(raw: string | null) {
-  if (!raw) return null;
-  try {
-    return normalizeWordWolfRoom(JSON.parse(raw));
-  } catch {
-    return null;
-  }
-}
-
-async function deletePlayerActiveRoom(playerId: string, roomCode: string) {
-  await releasePlayerActiveRoom(playerActiveRoomKey(playerId), roomCode);
+  return roomRuntime.load(code);
 }
 
 export async function loadStoredPlayerActiveRoom(playerId: string) {
-  return loadPlayerActiveOnlineRoom(playerId, { key: playerActiveRoomKey, loadRoom: loadStoredWordWolfRoom, isMember: (room, id) => room.players.some((player) => player.id === id) });
+  return roomRuntime.loadActive(playerId);
 }
 
 export async function saveStoredWordWolfRoom(room: unknown) {
-  let normalizedRoom = normalizeWordWolfRoom(room);
+  const originalRoom = normalizeWordWolfRoom(room);
+  const normalizedRoom = normalizeWordWolfRoomForPersistence(room);
   if (!normalizedRoom) {
     throw new Error("INVALID_WORDWOLF_ROOM");
   }
 
-  const shouldRecordResults = normalizedRoom.phase === "result" && Boolean(normalizedRoom.winner) && !normalizedRoom.statsRecordedAt;
-  if (shouldRecordResults) {
-    normalizedRoom = addRoomScore(normalizedRoom);
-    normalizedRoom = {
-      ...normalizedRoom,
-      statsRecordedAt: Date.now(),
-    };
-  }
+  const shouldRecordResults = Boolean(
+    originalRoom
+    && normalizedRoom.statsRecordedAt
+    && !originalRoom.statsRecordedAt,
+  );
 
   const activeRoomKeys = onlineRoomNonDebugPlayerActiveRoomKeys(
     normalizedRoom.players,
-    playerActiveRoomKey,
+    roomRuntime.playerActiveRoomKey,
   );
-  const keys = [roomKey(normalizedRoom.code), roomIndexKey, ...activeRoomKeys];
+  const keys = [
+    roomRuntime.roomKey(normalizedRoom.code),
+    roomIndexKey,
+    ...activeRoomKeys,
+  ];
   // revisionをRedis内で比較し、遅れて届いた画面から部屋全体が巻き戻るのを防ぐ。
   const saved = await redisCommand<number>([
     "EVAL",
@@ -138,19 +126,10 @@ export async function saveStoredWordWolfRoom(room: unknown) {
 export async function createStoredWordWolfRoom(room: unknown, actorId: string) {
   const normalizedRoom = normalizeWordWolfRoom(room);
   if (!normalizedRoom) throw new Error("INVALID_WORDWOLF_ROOM");
-  const current = await loadStoredWordWolfRoom(normalizedRoom.code);
-  if (current) throw new Error("WORDWOLF_ROOM_CONFLICT");
   if (normalizedRoom.hostId !== actorId || !normalizedRoom.players.some((player) => player.id === actorId)) {
     throw new Error("WORDWOLF_ROOM_FORBIDDEN");
   }
-  const activeRoom = await loadStoredPlayerActiveRoom(actorId);
-  const claim = await claimOnlineRoomForPlayer({ key: playerActiveRoomKey(actorId), targetCode: normalizedRoom.code, currentRoom: activeRoom, gameId: "wordwolf", conflictError: "WORDWOLF_PLAYER_ALREADY_ACTIVE" });
-  try {
-    return await saveStoredWordWolfRoom(normalizedRoom);
-  } catch (error) {
-    if (claim === "claimed") await releasePlayerActiveRoom(playerActiveRoomKey(actorId), normalizedRoom.code);
-    throw error;
-  }
+  return roomRuntime.create(normalizedRoom, actorId);
 }
 
 function resetWordWolfRoomToLobby(room: WordWolfRoom, advanceGame: boolean) {
@@ -188,15 +167,14 @@ function resetWordWolfRoomToLobby(room: WordWolfRoom, advanceGame: boolean) {
 }
 
 export async function applyStoredWordWolfRoomAction(code: string, actorId: string, action: WordWolfRoomAction) {
-  for (let attempt = 0; attempt < 6; attempt += 1) {
-    const current = await loadStoredWordWolfRoom(code);
-    if (!current) throw new Error("WORDWOLF_ROOM_NOT_FOUND");
+  let removedDebugPlayerIds: string[] = [];
+  const saved = await roomRuntime.mutate(code, (current) => {
     const actorIsHost = current.hostId === actorId;
     const actorIsMember = current.players.some((player) => player.id === actorId);
     if (!actorIsMember) throw new Error("WORDWOLF_ROOM_FORBIDDEN");
 
     let next: WordWolfRoom = current;
-    let removedDebugPlayerIds: string[] = [];
+    removedDebugPlayerIds = [];
     if (action.type === "confirm-lobby-return") {
       if (current.phase !== "lobby" || !current.lobbyReturn) return current;
       next = { ...current, lobbyReturn: confirmRoomLobbyReturn(current.lobbyReturn, current.players, actorId) };
@@ -292,104 +270,74 @@ export async function applyStoredWordWolfRoomAction(code: string, actorId: strin
       }
     }
 
-    if (next === current) return current;
-    try {
-      const saved = await saveStoredWordWolfRoom({ ...next, revision: current.revision + 1, updatedAt: Date.now() });
-      if (action.type === "remove-waiting-player") await deletePlayerActiveRoom(action.targetPlayerId, saved.code);
-      if (removedDebugPlayerIds.length > 0) {
-        await releaseOnlineRoomDebugParticipantActiveRooms(
-          removedDebugPlayerIds,
-          saved.code,
-          playerActiveRoomKey,
-        );
-      }
-      return saved;
-    } catch (error) {
-      if (!(error instanceof Error) || error.message !== "WORDWOLF_ROOM_CONFLICT") throw error;
-    }
+    return next;
+  });
+  if (action.type === "remove-waiting-player") {
+    await roomRuntime.release(action.targetPlayerId, saved.code);
   }
-  throw new Error("WORDWOLF_ROOM_CONFLICT");
+  if (removedDebugPlayerIds.length > 0) {
+    await roomRuntime.releaseMany(removedDebugPlayerIds, saved.code);
+  }
+  return saved;
 }
 
 export async function joinStoredWordWolfRoom(code: string, player: Player, passphrase: string) {
   const normalizedCode = code.trim().toUpperCase();
-  const activeRoom = await loadStoredPlayerActiveRoom(player.id);
-  const claim = await claimOnlineRoomForPlayer({ key: playerActiveRoomKey(player.id), targetCode: normalizedCode, currentRoom: activeRoom, gameId: "wordwolf", conflictError: "WORDWOLF_PLAYER_ALREADY_ACTIVE" });
+  const claim = await roomRuntime.claim(player.id, normalizedCode);
   try {
-    for (let attempt = 0; attempt < 6; attempt += 1) {
-      const room = await loadStoredWordWolfRoom(normalizedCode);
-      if (!room) throw new Error("WORDWOLF_ROOM_NOT_FOUND");
+    return await roomRuntime.mutate(normalizedCode, (room) => {
       if (room.phase !== "lobby") throw new Error("WORDWOLF_ROOM_STARTED");
       if (room.passphrase && room.passphrase !== passphrase.trim()) throw new Error("WORDWOLF_BAD_PASSPHRASE");
       if (room.players.some((item) => item.id === player.id)) {
-        if (!room.lobbyReturn || room.lobbyReturn.returnedPlayerIds.includes(player.id)) return room;
-        try {
-          return await saveStoredWordWolfRoom({ ...room, lobbyReturn: confirmRoomLobbyReturn(room.lobbyReturn, room.players, player.id), revision: room.revision + 1, updatedAt: Date.now() });
-        } catch (error) {
-          if (!(error instanceof Error) || error.message !== "WORDWOLF_ROOM_CONFLICT") throw error;
-          continue;
+        if (!room.lobbyReturn || room.lobbyReturn.returnedPlayerIds.includes(player.id)) {
+          return room;
         }
+        return {
+          ...room,
+          lobbyReturn: confirmRoomLobbyReturn(
+            room.lobbyReturn,
+            room.players,
+            player.id,
+          ),
+        };
       }
       if (room.players.length >= onlineRoomPlayerLimits.wordwolf) throw new Error("WORDWOLF_ROOM_FULL");
-      try {
-        return await saveStoredWordWolfRoom({
-          ...room,
-          players: [...room.players, player],
-          lobbyReturn: confirmRoomLobbyReturn(room.lobbyReturn, [...room.players, player], player.id),
-          revision: room.revision + 1,
-          updatedAt: Date.now(),
-        });
-      } catch (error) {
-        if (!(error instanceof Error) || error.message !== "WORDWOLF_ROOM_CONFLICT") throw error;
-      }
-    }
-    throw new Error("WORDWOLF_ROOM_CONFLICT");
+      const players = [...room.players, player];
+      return {
+        ...room,
+        players,
+        lobbyReturn: confirmRoomLobbyReturn(
+          room.lobbyReturn,
+          players,
+          player.id,
+        ),
+      };
+    });
   } catch (error) {
-    if (claim === "claimed") await releasePlayerActiveRoom(playerActiveRoomKey(player.id), normalizedCode);
+    if (claim === "claimed") {
+      await roomRuntime.release(player.id, normalizedCode);
+    }
     throw error;
   }
 }
 
-export async function deleteStoredWordWolfRoom(code: string) {
-  const normalizedCode = code.trim().toUpperCase();
-  const room = await loadStoredWordWolfRoom(normalizedCode);
-  if (room && !canDissolveOnlineRoom("wordwolf", room)) throw new Error("WORDWOLF_ROOM_IN_PROGRESS");
-  await deleteWordWolfRoomStorage(normalizedCode, room?.players.map((player) => player.id) ?? []);
+export async function deleteStoredWordWolfRoom(code: string, actorId = "") {
+  if (actorId) {
+    await roomRuntime.dissolve(code, actorId);
+    return;
+  }
+  const room = await loadStoredWordWolfRoom(code);
+  if (room) await roomRuntime.dissolve(code, room.hostId);
 }
 
 export async function listStoredWordWolfRooms() {
-  const codes = await redisCommand<string[]>(["SMEMBERS", roomIndexKey]);
-  const rooms = await Promise.all(codes.map((code) => loadStoredWordWolfRoom(code)));
-  const missingCodes = codes.filter((_, index) => !rooms[index]);
-  if (missingCodes.length > 0) await redisCommand<number>(["SREM", roomIndexKey, ...missingCodes]);
-  return rooms.filter((room): room is WordWolfRoom => Boolean(room));
+  return roomRuntime.listAll();
 }
 
 export async function listStoredJoinableWordWolfRooms(cursor?: unknown) {
-  const page = await loadIndexedOnlineRoomPage(cursor, { indexKey: roomIndexKey, roomKey, parseRoom: parseStoredWordWolfRoom, loadRoom: loadStoredWordWolfRoom });
-  const rooms = page.rooms
-    .filter((room): room is WordWolfRoom => Boolean(room && !isMultiplayerRoomExpired(room.updatedAt)))
-    .filter((room) => room.phase === "lobby" && room.players.length < onlineRoomPlayerLimits.wordwolf)
-    .map(wordWolfRoomChoice)
-    .sort((left, right) => right.updatedAt - left.updatedAt);
-  return { rooms, nextCursor: page.nextCursor };
+  return roomRuntime.list(cursor);
 }
 
 export async function deleteStoredHostedWordWolfRooms(hostId: string) {
-  const activeRoom = await loadStoredPlayerActiveRoom(hostId);
-  if (activeRoom?.hostId === hostId) {
-    if (!canDissolveOnlineRoom("wordwolf", activeRoom)) throw new Error("WORDWOLF_ROOM_IN_PROGRESS");
-    await deleteWordWolfRoomStorage(activeRoom.code, activeRoom.players.map((player) => player.id));
-    return 1;
-  }
-
-  const rooms = await listStoredWordWolfRooms();
-  const hostedRooms = rooms.filter((room) => room.hostId === hostId);
-  if (hostedRooms.some((room) => !canDissolveOnlineRoom("wordwolf", room))) throw new Error("WORDWOLF_ROOM_IN_PROGRESS");
-  const deletions = rooms
-    .filter((room) => room.hostId === hostId)
-    .map((room) => deleteStoredWordWolfRoom(room.code));
-
-  await Promise.all(deletions);
-  return deletions.length;
+  return roomRuntime.dissolveHosted(hostId);
 }

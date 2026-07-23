@@ -152,9 +152,9 @@ web / game-server / timer-service / ai-worker / batch-worker
 
 ## 8. 現在地
 
-- 全5ゲームでPOSTを新規作成専用、PATCHを既存部屋Command、DELETEを解散に統一済み。
+- 全8オンラインゲームでPOSTを新規作成専用、PATCHを既存部屋Command、DELETEを解散に統一済み。
 - ワードウルフは参加・ロビー設定・開始・発言・投票・逆転回答・時間切れをCommand化済み。
-- 部屋に`revision`を持ち、Redis内CASで巻き戻りを防止済み。
+- 部屋に`revision`を持ち、非公開`@game-fields/game-runtime`のstorage-neutral mutation lifecycleと本体adapterを全8オンラインゲームで共有し、Redis内CASで巻き戻りを防止済み。
 - `lib/game-timer`と`/api/game-timer/expire`を共通時間管理境界として導入済み。
 - クライアントから既存部屋全体を保存する互換経路は廃止済み。
 - `lib/observability` で構造化イベントschema、request/trace相関、不透明参照、差し替え可能なsinkを導入済み。現在の出力先はVercel Runtime Logs。

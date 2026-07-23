@@ -1,4 +1,3 @@
-import { redisCommand } from "@/lib/redis-store";
 import { randomUUID } from "node:crypto";
 import type { TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomAction, TahoiyaTopic, TahoiyaTopicGenerationStage } from "@/lib/tahoiya-types";
 import { tahoiyaRuntimeScoring } from "@/lib/tahoiya-scoring";
@@ -6,14 +5,9 @@ import { recordTahoiyaRoundResults } from "@/lib/player-stats-store";
 import { recordTahoiyaReplay } from "@/lib/game-replay-store";
 import { recordTahoiyaDecoyCandidates } from "@/lib/tahoiya-decoy-candidate-store";
 import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
-import { isMultiplayerRoomExpired } from "@/lib/multiplayer-room-lifecycle";
-import { canDissolveOnlineRoom } from "@/lib/room-dissolve-policy";
 import { allRoomPlayersReturned, beginRoomLobbyReturn, canRemoveWaitingRoomPlayer, confirmRoomLobbyReturn } from "@/lib/room-lobby-return";
-import { claimOnlineRoomForPlayer, loadPlayerActiveOnlineRoom, releasePlayerActiveRoom } from "@/lib/player-active-room";
 import { onlineRoomPlayerLimits } from "@/lib/online-room-policy";
-import { loadIndexedOnlineRoomPage } from "@/lib/online-room-list";
-import { createIndexedOnlineRoom, mutateOnlineRoomWithRetry } from "@/lib/online-room-persistence";
-import { deleteIndexedOnlineRoomStorage } from "@/lib/online-room-dissolution";
+import { createPlatformOnlineRoomStoreRuntime } from "@/lib/online-room-store-runtime";
 import { schedulePostResponseWork } from "@/lib/post-response-work";
 import { normalizeTahoiyaRoom } from "@/lib/tahoiya-room-normalizer";
 import { sanitizeTahoiyaRoom, tahoiyaRoomChoice } from "@/lib/tahoiya-room-presentation";
@@ -23,64 +17,43 @@ import { isTahoiyaTopicGenerationProgressFresh } from "@/lib/tahoiya-topic-gener
 import { normalizeTahoiyaFakeDefinitionsPerPlayer } from "@/lib/tahoiya-definitions";
 import {
   applyOnlineRoomDebugParticipantCommand,
-  onlineRoomNonDebugPlayerActiveRoomKeys,
-  releaseOnlineRoomDebugParticipantActiveRooms,
 } from "@/lib/online-room-debug-participants";
 import { nextTahoiyaDebugPlayerName, withTahoiyaDebugParticipants } from "@/lib/tahoiya-debug-participants";
 
-const roomKeyPrefix = "tahoiya:room:";
-const roomIndexKey = "tahoiya:rooms";
-const playerActiveRoomKeyPrefix = "tahoiya:player-active-room:";
-
 export { sanitizeTahoiyaRoom };
 
-function roomKey(code: string) {
-  return `${roomKeyPrefix}${code.trim().toUpperCase()}`;
-}
+const roomRuntime = createPlatformOnlineRoomStoreRuntime({
+  gameId: "tahoiya",
+  normalize: normalizeTahoiyaRoom,
+  isJoinable: (room) => (
+    room.phase === "lobby"
+    && room.players.length < onlineRoomPlayerLimits.tahoiya
+  ),
+  toChoice: tahoiyaRoomChoice,
+  errors: {
+    notFound: "TAHOIYA_ROOM_NOT_FOUND",
+    invalid: "INVALID_TAHOIYA_ROOM",
+    conflict: "TAHOIYA_ROOM_CONFLICT",
+    playerActive: "TAHOIYA_PLAYER_ALREADY_ACTIVE",
+    forbidden: "TAHOIYA_ROOM_FORBIDDEN",
+    inProgress: "TAHOIYA_ROOM_IN_PROGRESS",
+  },
+  afterSave: (room) => Promise.all([
+    recordTahoiyaRoundResults(room),
+    recordTahoiyaReplay(room),
+    recordTahoiyaDecoyCandidates(room),
+  ]),
+});
 
-function playerActiveRoomKey(playerId: string) {
-  return `${playerActiveRoomKeyPrefix}${playerId}`;
-}
-
-
-
-async function mutateStoredTahoiyaRoom(code: string, mutate: (room: TahoiyaRoom) => TahoiyaRoom) {
-  return mutateOnlineRoomWithRetry({ code, roomKey, loadRoom: loadStoredTahoiyaRoom, mutate, normalize: normalizeTahoiyaRoom, activeRoomKeys: (room) => onlineRoomNonDebugPlayerActiveRoomKeys(room.players, playerActiveRoomKey), errors: { notFound: "TAHOIYA_ROOM_NOT_FOUND", invalid: "INVALID_TAHOIYA_ROOM", conflict: "TAHOIYA_ROOM_CONFLICT" }, realtimeGame: "tahoiya", afterSave: (room) => Promise.all([recordTahoiyaRoundResults(room), recordTahoiyaReplay(room), recordTahoiyaDecoyCandidates(room)]) });
-}
-
-async function deleteTahoiyaRoomStorage(roomCode: string, playerIds: string[]) {
-  await deleteIndexedOnlineRoomStorage({
-    roomCode,
-    roomKey: roomKey(roomCode),
-    roomIndexKey,
-    playerActiveRoomKeys: playerIds.map(playerActiveRoomKey),
-  });
+async function mutateStoredTahoiyaRoom(
+  code: string,
+  mutate: (room: TahoiyaRoom) => TahoiyaRoom,
+) {
+  return roomRuntime.mutate(code, mutate);
 }
 
 export async function loadStoredTahoiyaRoom(code: string) {
-  const raw = await redisCommand<string | null>(["GET", roomKey(code)]);
-  if (!raw) return null;
-
-  try {
-    const room = normalizeTahoiyaRoom(JSON.parse(raw));
-    if (!room) return null;
-    if (isMultiplayerRoomExpired(room.updatedAt)) {
-      await deleteTahoiyaRoomStorage(room.code, room.players.map((player) => player.id));
-      return null;
-    }
-    return room;
-  } catch {
-    return null;
-  }
-}
-
-function parseStoredTahoiyaRoom(raw: string | null) {
-  if (!raw) return null;
-  try {
-    return normalizeTahoiyaRoom(JSON.parse(raw));
-  } catch {
-    return null;
-  }
+  return roomRuntime.load(code);
 }
 
 export async function loadAndReconcileStoredTahoiyaRoom(code: string) {
@@ -99,7 +72,7 @@ export async function loadAndReconcileStoredTahoiyaRoom(code: string) {
 }
 
 export async function loadStoredTahoiyaPlayerActiveRoom(playerId: string) {
-  return loadPlayerActiveOnlineRoom(playerId, { key: playerActiveRoomKey, loadRoom: loadAndReconcileStoredTahoiyaRoom, isMember: (room, id) => room.players.some((player) => player.id === id) });
+  return roomRuntime.loadActive(playerId, loadAndReconcileStoredTahoiyaRoom);
 }
 
 export async function createStoredTahoiyaRoom(room: unknown, actorId = "") {
@@ -112,23 +85,20 @@ export async function createStoredTahoiyaRoom(room: unknown, actorId = "") {
   if (existingRoom) throw new Error("TAHOIYA_ROOM_CONFLICT");
   if (actorId && actorId !== normalizedRoom.hostId) throw new Error("TAHOIYA_ROOM_FORBIDDEN");
   const createdRoom = { ...normalizedRoom, ...tahoiyaRuntimeScoring(), revision: 0, updatedAt: Date.now() };
-  const activeRoom = actorId ? await loadStoredTahoiyaPlayerActiveRoom(actorId) : null;
-  const claim = actorId
-    ? await claimOnlineRoomForPlayer({ key: playerActiveRoomKey(actorId), targetCode: createdRoom.code, currentRoom: activeRoom, gameId: "tahoiya", conflictError: "TAHOIYA_PLAYER_ALREADY_ACTIVE" })
-    : "already-claimed";
-  try {
-    await createIndexedOnlineRoom(createdRoom, { roomKey, roomIndexKey, activeRoomKeys: (room) => onlineRoomNonDebugPlayerActiveRoomKeys(room.players, playerActiveRoomKey), conflictError: "TAHOIYA_ROOM_CONFLICT" });
-    return createdRoom;
-  } catch (error) {
-    if (actorId && claim === "claimed") await releasePlayerActiveRoom(playerActiveRoomKey(actorId), createdRoom.code);
-    throw error;
-  }
+  return roomRuntime.create(
+    createdRoom,
+    actorId,
+    loadAndReconcileStoredTahoiyaRoom,
+  );
 }
 
 export async function joinStoredTahoiyaRoom(code: string, player: TahoiyaPlayer, passphrase: string) {
   const normalizedCode = code.trim().toUpperCase();
-  const activeRoom = await loadStoredTahoiyaPlayerActiveRoom(player.id);
-  const claim = await claimOnlineRoomForPlayer({ key: playerActiveRoomKey(player.id), targetCode: normalizedCode, currentRoom: activeRoom, gameId: "tahoiya", conflictError: "TAHOIYA_PLAYER_ALREADY_ACTIVE" });
+  const claim = await roomRuntime.claim(
+    player.id,
+    normalizedCode,
+    loadAndReconcileStoredTahoiyaRoom,
+  );
   try {
     const joined = await mutateStoredTahoiyaRoom(normalizedCode, (current) => {
       if (current.phase !== "lobby") throw new Error("TAHOIYA_ROOM_STARTED");
@@ -143,7 +113,9 @@ export async function joinStoredTahoiyaRoom(code: string, player: TahoiyaPlayer,
     });
     return joined;
   } catch (error) {
-    if (claim === "claimed") await releasePlayerActiveRoom(playerActiveRoomKey(player.id), normalizedCode);
+    if (claim === "claimed") {
+      await roomRuntime.release(player.id, normalizedCode);
+    }
     throw error;
   }
 }
@@ -405,59 +377,34 @@ export async function applyStoredTahoiyaRoomAction(code: string, action: Tahoiya
     return current;
   });
   if (action.type === "remove-waiting-player" && !room.players.some((player) => player.id === action.targetPlayerId)) {
-    await releasePlayerActiveRoom(playerActiveRoomKey(action.targetPlayerId), room.code);
+    await roomRuntime.release(action.targetPlayerId, room.code);
   }
   if (removedDebugPlayerIds.size > 0) {
-    await releaseOnlineRoomDebugParticipantActiveRooms(
+    await roomRuntime.releaseMany(
       removedDebugPlayerIds,
       room.code,
-      playerActiveRoomKey,
     );
   }
   return room;
 }
 
 export async function deleteStoredTahoiyaRoom(code: string, actorId = "") {
-  const normalizedCode = code.trim().toUpperCase();
-  const room = await loadStoredTahoiyaRoom(normalizedCode);
-  if (room && actorId && actorId !== room.hostId) throw new Error("TAHOIYA_ROOM_FORBIDDEN");
-  if (room && !canDissolveOnlineRoom("tahoiya", room)) throw new Error("TAHOIYA_ROOM_IN_PROGRESS");
-  await deleteTahoiyaRoomStorage(normalizedCode, room?.players.map((player) => player.id) ?? []);
+  if (actorId) {
+    await roomRuntime.dissolve(code, actorId);
+    return;
+  }
+  const room = await loadStoredTahoiyaRoom(code);
+  if (room) await roomRuntime.dissolve(code, room.hostId);
 }
 
 export async function listStoredTahoiyaRooms() {
-  const codes = await redisCommand<string[]>(["SMEMBERS", roomIndexKey]);
-  const rooms = await Promise.all(codes.map((code) => loadStoredTahoiyaRoom(code)));
-  const missingCodes = codes.filter((_, index) => !rooms[index]);
-  if (missingCodes.length > 0) await redisCommand<number>(["SREM", roomIndexKey, ...missingCodes]);
-  return rooms.filter((room): room is TahoiyaRoom => Boolean(room));
+  return roomRuntime.listAll();
 }
 
 export async function listStoredJoinableTahoiyaRooms(cursor?: unknown) {
-  const page = await loadIndexedOnlineRoomPage(cursor, { indexKey: roomIndexKey, roomKey, parseRoom: parseStoredTahoiyaRoom, loadRoom: loadStoredTahoiyaRoom });
-  const rooms = page.rooms
-    .filter((room): room is TahoiyaRoom => Boolean(room && !isMultiplayerRoomExpired(room.updatedAt)))
-    .filter((room) => room.phase === "lobby" && room.players.length < onlineRoomPlayerLimits.tahoiya)
-    .map(tahoiyaRoomChoice)
-    .sort((left, right) => right.updatedAt - left.updatedAt);
-  return { rooms, nextCursor: page.nextCursor };
+  return roomRuntime.list(cursor);
 }
 
 export async function deleteStoredHostedTahoiyaRooms(authenticatedHostId: string) {
-  const activeRoom = await loadStoredTahoiyaPlayerActiveRoom(authenticatedHostId);
-  if (activeRoom?.hostId === authenticatedHostId) {
-    if (!canDissolveOnlineRoom("tahoiya", activeRoom)) throw new Error("TAHOIYA_ROOM_IN_PROGRESS");
-    await deleteTahoiyaRoomStorage(activeRoom.code, activeRoom.players.map((player) => player.id));
-    return 1;
-  }
-
-  const rooms = await listStoredTahoiyaRooms();
-  const hostedRooms = rooms.filter((room) => room.hostId === authenticatedHostId);
-  if (hostedRooms.some((room) => !canDissolveOnlineRoom("tahoiya", room))) throw new Error("TAHOIYA_ROOM_IN_PROGRESS");
-  const deletions = rooms
-    .filter((room) => room.hostId === authenticatedHostId)
-    .map((room) => deleteStoredTahoiyaRoom(room.code));
-
-  await Promise.all(deletions);
-  return deletions.length;
+  return roomRuntime.dissolveHosted(authenticatedHostId);
 }

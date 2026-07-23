@@ -10,6 +10,15 @@ import {
   type GameSdkServerModule,
 } from "@game-fields/game-sdk/runtime";
 
+export {
+  createGameFieldsOnlineRoomMutationRuntime,
+  type GameFieldsOnlineRoomCompareAndSetResult,
+  type GameFieldsOnlineRoomMutationContext,
+  type GameFieldsOnlineRoomMutationOptions,
+  type GameFieldsOnlineRoomMutationRuntime,
+  type GameFieldsRevisionedOnlineRoom,
+} from "./online-room.js";
+
 export const GAME_FIELDS_PLATFORM_ROOM_SCHEMA_VERSION = 1 as const;
 
 export type GameFieldsAuthenticatedIdentity = {

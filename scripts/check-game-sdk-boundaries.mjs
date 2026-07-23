@@ -54,7 +54,7 @@ for (const absoluteFile of runtimeFiles) {
   const imports = source.matchAll(/(?:import|export)\s+(?:type\s+)?(?:[^"']+?\s+from\s+)?["']([^"']+)["']/g);
   for (const match of imports) {
     const specifier = match[1];
-    if (!allowedRuntimeImports.has(specifier)) {
+    if (!allowedRuntimeImports.has(specifier) && !specifier.startsWith("./")) {
       failures.push(`${file}: 内部Runtime coreから許可されていない依存 ${specifier} をimportしています。`);
     }
   }

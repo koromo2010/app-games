@@ -2242,3 +2242,40 @@
 - `app-games-dev`の対象Deployment `dpl_EEgwBAvdXRTobLdWtxvGaGpkBrcA`が`READY`となり、`dev.game-fields.com`へのalias割当を確認した。
 - 8ゲームのdev画面が最終的にHTTP 200を返し、HTML内のDeployment IDが対象Deploymentと一致した。未認証Room APIは公開6本が401、private 2本が403を返し、対象Deploymentの実行時error・fatalログはなかった。
 - ログイン・privateアクセス認証済み画面で、作成・参加・更新・解散と、たほい屋のお題生成、大富豪のDEBUGダミー手番を実操作確認する。
+
+## 2026-07-23 — オンラインRoom Store Runtimeを8ゲームで共通化
+
+### 利用者からの要望
+
+- Room API Route共通化後も、さらにモジュール化できる箇所を進める。
+- 本体だけの共通Storeを増やすのではなく、`@game-fields/game-runtime`を本体でも使えるOnline Room Runtimeへ育てる。
+
+### 判断
+
+- ゲーム進行、得点、秘匿、参加条件、時間切れreconcileはゲーム固有Storeへ残す。
+- revision更新、競合時の再適用、保存前正規化、保存後hookはstorage-neutralな非公開Runtime coreへ移す。
+- Redis CAS、TTL、一覧、active-room、新規作成、解散、Realtime、戦績・リプレイは本体adapterが注入する。
+- 大富豪をpilotに契約を確認し、同じ境界をほかの7オンラインゲームへ展開する。
+
+### 実施結果
+
+- `packages/game-runtime/src/online-room.ts`へ、最大6回の競合再適用、revision・更新時刻の確定、保存前正規化、保存後hookを持つmutation lifecycleを追加した。
+- `lib/online-room-store-runtime.ts`へ、Redis key、TTL、期限切れ整理、公開一覧、1人1active room、新規作成、個別・host一括解散、Realtimeと保存後処理を注入する本体adapterを追加した。
+- ワードウルフ、たほい屋、ワードスケール、ワードソナー、ワードアウト、ノーザンブランチ、コードインターセプト、大富豪の8 Storeを共通Runtimeへ接続した。
+- 8 Storeからclaim、active-room読取・解放、一覧、解散、CASの重複を外し、合計2,840行から2,583行へ削減した。
+- ワードウルフのtimer・専用Command向け互換保存入口は維持し、通常Room Commandだけを共通mutation lifecycleへ移した。
+- `scripts/check-game-standards.mjs`へ、全オンラインRoom Storeが共通Runtimeを利用する契約検査を追加した。
+
+### 検証
+
+- Runtimeの競合再適用、missing・不正Room・競合上限、8 Storeの接続、active-room解放、期限切れ一覧除外の回帰テストを追加した。
+- `npm run lint`成功。9ゲーム共通要件、SDK境界、ESLintを警告なしで通過した。
+- `npm test`成功（446件）。
+- `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
+- `git diff --check`成功。
+
+### 未対応・保留
+
+- `develop`への反映、`app-games-dev` Deployment確認を行う。
+- 外部SDKゲームを同じ永続HTTP／Client Runtimeへ直接接続する層は未実装。
+- ログイン・privateアクセス認証済み画面で、8ゲームの作成・参加・更新・解散を実操作確認する。

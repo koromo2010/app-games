@@ -28,6 +28,8 @@ UI / hooks -> API client -> HTTP route -> application/domain -> storage
 - 広場の全ゲーム復帰概要: `app/api/player-active-rooms/route.ts`
 - Redis部屋一覧・期限切れ索引整理: `lib/online-room-list.ts`
 - 1プレイヤー1部屋の確保・移動: `lib/player-active-room.ts`
+- storage-neutralなRoom mutation lifecycle: `packages/game-runtime/src/online-room.ts`
+- 本体オンラインRoom Store adapter: `lib/online-room-store-runtime.ts`
 - revision CAS・新規部屋永続化: `lib/online-room-persistence.ts`
 - クライアントの単調revision採用: `lib/online-room-client-state.ts`
 - 共通actor権限・ロビー退出判定: `lib/online-room-access.ts`
@@ -70,19 +72,19 @@ AI APIを呼ぶ可能性があるクライアント操作は`aiActivityFetch`ま
 
 部屋作成・参加前のactive room確保は `lib/player-active-room.ts` が担当する。現在の別室から移動可能かを共通解散ポリシーで判定し、終了済みの索引解除と新しい部屋コードのCAS確保を一続きのapplication境界として扱う。参加人数、合言葉、フェーズなどの入室条件はゲーム固有storeで検証する。
 
-Redisのrevision CAS、競合時の最大6回再適用、保存後hook、`SET NX`による新規作成・索引登録は `lib/online-room-persistence.ts`、参加者全員のactive-room索引更新は `lib/player-active-room.ts` に置く。ゲーム固有Storeが独自の保存後処理を持つ場合も、同ファイルの `reapplyOnlineRoomMutationWithRetry` で最新Roomへ論理Commandを再適用し、単発CAS失敗をそのまま利用者エラーにしない。ホスト／参加者とロビー退出の純粋判定は `lib/online-room-access.ts` が担当する。
+storage-neutralなrevision更新、競合時の最大6回再適用、保存前正規化、保存後hookは非公開 `@game-fields/game-runtime` の `online-room.ts` を正本とする。本体側の `lib/online-room-store-runtime.ts` がRedis CAS、TTL、一覧、1人1active room、新規作成、解散、Realtime、戦績・リプレイhookを注入し、登録済みオンラインゲーム8本のStoreは同じRuntimeを利用する。Redis Luaと索引の低水準処理は `lib/online-room-persistence.ts`、`lib/player-active-room.ts`、`lib/online-room-list.ts`、`lib/online-room-dissolution.ts` に維持する。ゲーム固有StoreにはCommand認可、進行、得点、秘匿、参加者変更後の補正、時間切れreconcileだけを残す。
 
 登録済みオンラインゲーム8本のRoom Routeは `lib/online-room-route-factory.ts` を共通入口とする。同ファクトリが公開範囲検査、署名Cookie認証、GETの部屋・active room・一覧分岐、参加者照合、言語検査、入力actor・参加者情報の上書き、デバッグ資格、更新レート制限、Telemetry、DELETEの本人確認を所有する。ゲーム側は `load / loadActive / list / create / apply / delete / deleteHosted / sanitize` とTelemetry用の安全な状態項目だけを渡す。ゲーム固有エラーは `createOnlineRoomErrorResponder` の表で宣言し、認証・保存設定・Redis一時障害は共通変換を先に適用する。
 
 大富豪のGET時ダミー手番復旧は `lib/daifugo-room-store.ts` のreconcile処理へ置き、Routeへ進行ルールを戻さない。たほい屋のAIお題生成を伴う `start-round` は `app/api/tahoiya/rooms/application.ts` に分離し、Routeはほかのゲームと同じファクトリ契約を保つ。
 
-ワードスケールは物理分割の基準実装として、保存データ復元を `lib/hodoai-room-normalizer.ts`、純粋なラウンド進行とタイムアウト遷移を `lib/hodoai-room-domain.ts`、閲覧者別sanitizerとロビーChoiceを `lib/hodoai-room-presentation.ts` に分離する。`lib/hodoai-room-store.ts` はRedis/application処理とCommand orchestrationを担当する。
+ワードスケールは物理分割の基準実装として、保存データ復元を `lib/hodoai-room-normalizer.ts`、純粋なラウンド進行とタイムアウト遷移を `lib/hodoai-room-domain.ts`、閲覧者別sanitizerとロビーChoiceを `lib/hodoai-room-presentation.ts` に分離する。`lib/hodoai-room-store.ts` はapplication処理とCommand orchestrationを担当し、Redis lifecycleは共通Room Runtimeへ委譲する。
 
 たほい屋も同じ境界で、`lib/tahoiya-room-normalizer.ts`、`lib/tahoiya-room-domain.ts`、`lib/tahoiya-room-presentation.ts`、`lib/tahoiya-room-store.ts` に分離する。得点、投票完了、時間切れ遷移はdomainに置き、AIお題生成を含むCommand orchestrationとRedis操作はstoreに残す。
 
 ワードソナーも、保存データ復元を `lib/kotoba-senpuku-room-normalizer.ts`、対戦・得点・タイムアウト遷移を `lib/kotoba-senpuku-room-domain.ts`、閲覧者別sanitizerとロビーChoiceを `lib/kotoba-senpuku-room-presentation.ts` に分離する。storeはRedis/application処理とCommand orchestrationを担当する。
 
-コードインターセプトも、保存データ復元を `lib/code-intercept-room-normalizer.ts`、ラウンド準備と進行判定を `lib/code-intercept-room-domain.ts`、閲覧者別sanitizerとロビーChoiceを `lib/code-intercept-room-presentation.ts` に分離する。storeは権限を含むCommand orchestration、CAS、戦績・リプレイ記録を担当する。
+コードインターセプトも、保存データ復元を `lib/code-intercept-room-normalizer.ts`、ラウンド準備と進行判定を `lib/code-intercept-room-domain.ts`、閲覧者別sanitizerとロビーChoiceを `lib/code-intercept-room-presentation.ts` に分離する。storeは権限を含むCommand orchestrationとチーム補正を担当し、CASと保存後処理は共通Room Runtimeへ委譲する。
 
 ワードアウト（内部ID `nigoichi`）も、保存データ復元と旧形式移行を `lib/nigoichi-room-normalizer.ts`、配札・再戦準備・参加人数に応じた設定補正を `lib/nigoichi-room-domain.ts`、閲覧者別sanitizerとロビーChoiceを `lib/nigoichi-room-presentation.ts` に分離する。storeはCommand orchestrationと永続化を担当する。
 
@@ -119,9 +121,9 @@ Redisのrevision CAS、競合時の最大6回再適用、保存後hook、`SET NX
 - timer policy/event: `lib/game-timer/policy.ts`, `lib/game-timer/event.ts`
 - timer ingress: `app/api/game-timer/expire/route.ts`
 
-第一段階では部屋API通信と時計を巨大な画面コンポーネントから分離した。その後、部屋APIと表示中ポーリングの共通土台を全5ゲームへ適用した。ブラウザ内の旧ローカル部屋互換、部屋設定default、remote優先・local fallback、空Room生成は `app/wordwolf/wordwolf-room-adapter.ts` に分離した。部屋には単調増加する `revision` を持たせ、Redis内CASで古い保存を409拒否する。参加・ロビー設定・ゲーム開始・通常の発言・投票・最終回答・時間切れは `/api/wordwolf/commands` または専用部屋Commandへ移行済みで、`lib/wordwolf-command-domain.ts` と各Room Storeが検証と状態遷移を担当する。開始・発言・投票・逆転回答は送信時のゲーム番号・フェーズ・ラウンド・開始時刻をscopeとして送り、同じフェーズ内の別操作とCAS競合した場合だけ最新Roomへ再適用する。すでに反映済みなら最新Roomを成功応答し、古いフェーズから遅れて届いたCommandは拒否する。WordWolf/Tahoiyaに残っていた部屋全体POST互換経路も廃止済みで、全5ゲームのgame-server境界は同じHTTP契約になった。
+第一段階では部屋API通信と時計を巨大な画面コンポーネントから分離した。その後、部屋APIと表示中ポーリングの共通土台を全8オンラインゲームへ適用した。ブラウザ内の旧ローカル部屋互換、部屋設定default、remote優先・local fallback、空Room生成は `app/wordwolf/wordwolf-room-adapter.ts` に分離した。部屋には単調増加する `revision` を持たせ、Redis内CASで古い保存を409拒否する。参加・ロビー設定・ゲーム開始・通常の発言・投票・最終回答・時間切れは `/api/wordwolf/commands` または専用部屋Commandへ移行済みで、`lib/wordwolf-command-domain.ts` と各Room Storeが検証と状態遷移を担当する。開始・発言・投票・逆転回答は送信時のゲーム番号・フェーズ・ラウンド・開始時刻をscopeとして送り、同じフェーズ内の別操作とCAS競合した場合だけ最新Roomへ再適用する。すでに反映済みなら最新Roomを成功応答し、古いフェーズから遅れて届いたCommandは拒否する。WordWolf/Tahoiyaに残っていた部屋全体POST互換経路も廃止済みで、全8オンラインゲームのgame-server境界は同じHTTP契約になった。
 
-保存済み部屋の正規化・旧フィールド互換・試合得点確定は `lib/wordwolf-room-normalizer.ts`、狼ID・お題・投票・発言の閲覧者別秘匿とロビーChoiceは `lib/wordwolf-room-presentation.ts` に分離した。特殊な戦績記録付きCASとactive-room索引更新は `lib/wordwolf-room-store.ts` に維持する。
+保存済み部屋の正規化・旧フィールド互換・試合得点確定は `lib/wordwolf-room-normalizer.ts`、狼ID・お題・投票・発言の閲覧者別秘匿とロビーChoiceは `lib/wordwolf-room-presentation.ts` に分離した。通常CommandのCASとactive-room索引更新は共通Room Runtimeを使い、timer・専用Commandとの互換保存入口だけを `lib/wordwolf-room-store.ts` に維持する。
 
 `config/game-registry.json` の `moduleBoundaryFiles` は分離済み境界の正本であり、`npm run lint` が存在を検査する。新しいスレッドや新ゲームでファイルを1つへ戻さない。
 

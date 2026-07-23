@@ -1,3 +1,4 @@
+import { createGameFieldsOnlineRoomMutationRuntime } from "@game-fields/game-runtime";
 import { multiplayerRoomExpiryArgs, multiplayerRoomTtlSeconds } from "./multiplayer-room-lifecycle.ts";
 import { publishOnlineRoomRevision } from "./online-room-realtime-server.ts";
 import type { OnlineRoomRealtimeGame } from "./online-room-realtime-protocol.ts";
@@ -92,31 +93,38 @@ export async function mutateOnlineRoomWithRetry<Room extends RevisionedOnlineRoo
   realtimeGame?: OnlineRoomRealtimeGame;
   errors: { notFound: string; invalid: string; conflict: string };
 }) {
-  for (let attempt = 0; attempt < 6; attempt += 1) {
-    const current = await options.loadRoom(options.code);
-    if (!current) throw new Error(options.errors.notFound);
-    const changed = await options.mutate(current);
-    if (changed === current) return current;
-    const revision = current.revision + 1;
-    const timestamp = Date.now();
-    const prepared = options.prepare?.(current, changed, { revision, timestamp }) ?? changed;
-    const next = options.normalize({ ...prepared, revision, updatedAt: timestamp });
-    if (!next) throw new Error(options.errors.invalid);
-    const saved = await compareAndSetOnlineRoom(current.revision, next, options.roomKey, options.activeRoomKeys?.(next));
-    if (saved === 1) {
+  const runtime = createGameFieldsOnlineRoomMutationRuntime<Room>({
+    loadRoom: options.loadRoom,
+    normalizeRoom: options.normalize,
+    compareAndSet: async (expectedRevision, room) => {
+      const saved = await compareAndSetOnlineRoom(
+        expectedRevision,
+        room,
+        options.roomKey,
+        options.activeRoomKeys?.(room),
+      );
+      if (saved === 1) return "saved";
+      if (saved === -1) return "missing";
+      return "conflict";
+    },
+    onSaved: async (room) => {
       if (options.realtimeGame) {
         await schedulePostResponseWork(
-          `online-room-realtime:${options.realtimeGame}:${next.code}`,
-          () => publishOnlineRoomRevision(options.realtimeGame!, next),
+          `online-room-realtime:${options.realtimeGame}:${room.code}`,
+          () => publishOnlineRoomRevision(options.realtimeGame!, room),
           { outsideRequest: "skip" },
         );
       }
       if (options.afterSave) {
-        await schedulePostResponseWork(`online-room:${next.code}`, () => options.afterSave!(next));
+        await schedulePostResponseWork(
+          `online-room:${room.code}`,
+          () => options.afterSave!(room),
+        );
       }
-      return next;
-    }
-    if (saved === -1) throw new Error(options.errors.notFound);
-  }
-  throw new Error(options.errors.conflict);
+    },
+    errors: options.errors,
+  });
+  return runtime.mutate(options.code, options.mutate, {
+    prepare: options.prepare,
+  });
 }
