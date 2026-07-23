@@ -2066,3 +2066,32 @@
 
 - `develop`へ実装コミット`8d3710a`、公開記録コミット`9c1a2a1`をpush済み。
 - dev実機でのPC幅・狭い画面表示、移動・サイズ変更・最小化の確認は未実施。
+
+## 2026-07-23 — DEBUGウィンドウ外の操作で自動最小化
+
+### 利用者からの要望
+
+- DEBUGツールボックス以外の場所を押したとき、ウィンドウを自動的に最小化する。
+
+### 判断
+
+- ゲームごとには実装せず、共通`DebugToolWindow`がdocument-level Pointer Eventを監視する。
+- マウス・タッチ・ペンの主操作だけを対象とし、ウィンドウ内操作と右クリックでは最小化しない。
+- 外側で押したゲームUIのイベントは止めず、DEBUGウィンドウの最小化とクリック先の操作を同時に成立させる。
+
+### 実施結果
+
+- ウィンドウ外のpointer downを検出して`isMinimized`を有効化する共通処理を追加した。
+- document listenerはcaptureで登録し、コンポーネントの破棄時に解除する。
+- 共通DEBUGメニュー契約テストへ、外側判定・document listener登録の検査を追加した。
+
+### 検証
+
+- DEBUGメニュー契約テスト3件成功。
+- `npm run lint`成功。9ゲーム共通要件、SDK境界、ESLintを通過した。
+- `npm test`成功（427件）。
+- `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
+
+### 未対応・保留
+
+- `develop`反映とdev実機確認は未実施。

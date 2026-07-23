@@ -115,6 +115,14 @@ export function DebugToolWindow({
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
     };
+    const handleOutsidePointerDown = (event: PointerEvent) => {
+      if (
+        event.button !== 0
+        || !(event.target instanceof Node)
+        || windowRef.current?.contains(event.target)
+      ) return;
+      setIsMinimized(true);
+    };
     const handleViewportResize = () => {
       const compact = window.innerWidth < COMPACT_BREAKPOINT;
       setIsCompact(compact);
@@ -122,9 +130,11 @@ export function DebugToolWindow({
     };
 
     window.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("pointerdown", handleOutsidePointerDown, true);
     window.addEventListener("resize", handleViewportResize);
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("pointerdown", handleOutsidePointerDown, true);
       window.removeEventListener("resize", handleViewportResize);
     };
   }, [onClose]);
