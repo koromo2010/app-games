@@ -2281,3 +2281,41 @@
 - 8ゲームのdev画面がHTTP 200を返し、HTML内のDeployment IDが対象Deploymentと一致した。未認証Room APIは公開6本が401、private 2本が403を返し、対象Deploymentの実行時error・fatalログはなかった。
 - 外部SDKゲームを同じ永続HTTP／Client Runtimeへ直接接続する層は未実装。
 - ログイン・privateアクセス認証済み画面で、8ゲームの作成・参加・更新・解散を実操作確認する。
+
+## 2026-07-23 — SDKゲームを永続HTTP／Client Runtimeへ接続
+
+### 利用者からの要望
+
+- Online Room Store Runtime共通化後に残った、外部SDKゲームを同じ永続HTTP／Client Runtimeへ直接接続する層を実装する。
+- `develop`とdev環境で先行し、`main`の公開ゲームにはまだ含めない。
+
+### 判断
+
+- 公開SDKにはactorを受け取らないHTTP Client Runtimeを追加し、署名済みHttpOnly sessionからの認証情報注入、レート制限、TelemetryはNext.js Routeで行う。
+- server moduleは静的に審査・登録したものだけを利用し、Portal metadata、creator upload、未審査preview HTMLから動的にserver moduleを解決しない。
+- pilotは`wordwolf-sdk`を`development` channelで登録し、`main` deploymentではregistryから除外する。
+- HTTP層は作成、取得、revision付きCommandに絞り、Room永続化とCASは既存の認証済みSDK platform adapterと`@game-fields/game-runtime`をそのまま正本にする。
+
+### 実施結果
+
+- `@game-fields/game-sdk/client-runtime`を追加し、`createRoom`、`readRoom`、`sendCommand`、型付きHTTPエラーを公開した。
+- `/api/game-sdk/[gameId]/rooms`を追加し、認証、mutation rate limit、DEBUG資格、Telemetry、安全なエラー応答を共通化した。
+- `lib/game-sdk-server-registry.ts`へ静的な審査済みmodule登録を追加し、`wordwolf-sdk`をdevelop限定で永続Redis／CAS Runtimeへ接続した。
+- HTTP handlerをNext.jsから分離し、公開Client Runtimeから認証adapter、永続Runtimeまでをmemory persistenceで縦断する回帰テストを追加した。
+- SDK境界検査へ、同一origin資格情報、actor非送信、静的registry、main非公開、preview非接続の契約を追加した。
+- SDK packageとstarter資料へClient Runtimeの導入方法とsession境界を追加した。
+
+### 検証
+
+- `npm run lint`成功。9ゲーム共通要件、SDK境界、ESLintを警告なしで通過した。
+- `npm test`成功（449件）。
+- `npm run test:sdk-package`成功。tarballを外部consumerへ導入し、公開export 4本とClient Runtimeの型・実行を確認した。
+- `npm run test:sdk-starter`成功。公開snapshot、ZIP展開、同梱SDK install、型検査、契約テスト、1ゲーム完走、提出ZIPを確認した。
+- `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
+- `git diff --check`成功。
+
+### 未対応・保留
+
+- `develop`反映後に`app-games-dev`のDeployment、dev alias、未認証拒否、runtime error・fatalログを確認する。
+- SDK向けRealtime／WebSocket transportと、active-room・一覧・解散のClient Runtimeは未実装。
+- ログイン済み複数アカウントで、SDK Roomの作成・参加・Command・競合再試行を実操作確認する。

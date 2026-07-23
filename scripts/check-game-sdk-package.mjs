@@ -19,7 +19,7 @@ try {
   const [packResult] = JSON.parse(packOutput);
   if (!packResult?.filename) throw new Error("SDK tarball was not created.");
 
-  const allowedFiles = /^(README\.md|package\.json|dist\/(index|runtime|mock-runtime)\.(js|js\.map|d\.ts|d\.ts\.map))$/;
+  const allowedFiles = /^(README\.md|package\.json|dist\/(index|runtime|mock-runtime|client-runtime)\.(js|js\.map|d\.ts|d\.ts\.map))$/;
   const unexpectedFiles = (packResult.files ?? [])
     .map((file) => file.path)
     .filter((path) => !allowedFiles.test(path));
@@ -42,6 +42,7 @@ try {
 import { GAME_SDK_VERSION, defineGameManifest } from "@game-fields/game-sdk";
 import { advanceGameSdkRoom, defineGameServerModule } from "@game-fields/game-sdk/runtime";
 import { createGameSdkMockRuntime } from "@game-fields/game-sdk/mock-runtime";
+import { createGameSdkHttpClientRuntime } from "@game-fields/game-sdk/client-runtime";
 
 const manifest = defineGameManifest({
   sdkVersion: GAME_SDK_VERSION,
@@ -78,6 +79,12 @@ const result = await runtime.sendCommand({
   actor,
 });
 if (result.revision !== 2 || result.room.view.phase !== "playing") process.exit(1);
+const httpRuntime = createGameSdkHttpClientRuntime({
+  endpoint: "https://game-fields.example/api/game-sdk/pack-consumer/rooms",
+  fetcher: async () => Response.json({ room: created }),
+});
+const remoteRoom = await httpRuntime.readRoom("PACK");
+if (remoteRoom?.revision !== 1) process.exit(1);
 `);
 
   execFileSync("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"], {
@@ -95,7 +102,7 @@ if (result.revision !== 2 || result.room.view.phase !== "playing") process.exit(
     throw new Error("Installed SDK package identity does not match the expected preview package.");
   }
 
-  console.log(`[game-sdk-package] ${packResult.filename}を外部fixtureへinstallし、3つの公開exportを確認しました。`);
+  console.log(`[game-sdk-package] ${packResult.filename}を外部fixtureへinstallし、4つの公開exportを確認しました。`);
 } finally {
   rmSync(fixtureRoot, { recursive: true, force: true });
 }

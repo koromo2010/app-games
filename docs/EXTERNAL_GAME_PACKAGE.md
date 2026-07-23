@@ -88,7 +88,9 @@ npm workspacesと`apps/sdk-portal`の独立Next.jsアプリは実装済みで、
 
 SDK専用Vercel Project `app-games-sdk`は同一Gitリポジトリへ接続済みで、Root Directory `apps/sdk-portal`、Production Branch `main`、`develop` Preview、対象ブランチのbuild制御を設定している。`develop`からのGit Preview buildに成功し、Portalソースを`main`へ限定反映したうえで`https://sdk.game-fields.com`へProduction公開済みである。
 
-本体内部には非公開`@game-fields/game-runtime`とRedis/Cookie adapterを実装し、公開SDKだけを使う小規模オンラインfixtureで、認証identity注入、host/player判定、Redis TTL保存、revision CAS、閲覧者別RoomViewを実証済みである。内部Runtime coreは公開SDK以外へ依存せず、storage-neutralなRoom mutation lifecycleとして競合再適用、保存前正規化、保存後hookを提供する。本体`lib/online-room-store-runtime.ts`がRedis、TTL、1人1部屋、一覧、解散、Realtime、戦績・リプレイを注入し、登録済みオンラインゲーム8本が利用する。外部ゲーム向けの汎用HTTP route・Client Runtime、WebSocket接続、npm registryへの初回publish、Portal上の正式チュートリアル・APIリファレンス・提出画面は未実装である。
+本体内部には非公開`@game-fields/game-runtime`とRedis/Cookie adapterを実装し、公開SDKだけを使う小規模オンラインfixtureで、認証identity注入、host/player判定、Redis TTL保存、revision CAS、閲覧者別RoomViewを実証済みである。内部Runtime coreは公開SDK以外へ依存せず、storage-neutralなRoom mutation lifecycleとして競合再適用、保存前正規化、保存後hookを提供する。本体`lib/online-room-store-runtime.ts`がRedis、TTL、1人1部屋、一覧、解散、Realtime、戦績・リプレイを注入し、登録済みオンラインゲーム8本が利用する。
+
+採用済みSDK module向けには、汎用`/api/game-sdk/[gameId]/rooms` Routeと公開`@game-fields/game-sdk/client-runtime`を実装済みである。Clientは部屋コード、作成input、expected revision付きCommandだけを送り、Routeが署名済みCookie、レート制限、debug資格、Telemetryを適用して非公開Runtimeへ接続する。server moduleは`lib/game-sdk-server-registry.ts`へ静的に審査登録したものだけを読み、Portal metadataや隔離PreviewのHTMLを動的に実行しない。最初の登録moduleはdevelop限定の`wordwolf-sdk`で、mainでは利用不可とする。SDKゲームのWebSocket購読、npm registryへの初回publish、Portal上の正式チュートリアル・APIリファレンス・提出画面は未実装である。
 
 Pro版ChatGPTで運営者本人が外部利用者と同じ流れを試すため、入口`sdk/entry/START_GAME_FIELDS.md`、正本`sdk/starter-template`、ZIP生成`scripts/build-game-sdk-starter.mjs`、公開Git用snapshot生成`scripts/build-game-sdk-starter-repository.mjs`を実装済みである。入口は公開`koromo2010/app-games`の`sdk-starter`ブランチだけを浅く取得させ、能力不足の通常ChatにはWorkまたはCodexへの切替を案内する。スターターにはSDK tarball、ChatGPT用指示、仕様書、APIリファレンス、型付きゲームmodule、契約テスト、完走デモ、提出ZIP生成器を含む。`npm run test:sdk-starter`で入口、公開Git用snapshotとZIPの同一性、SDK install、型検査、契約テスト、完走、提出ZIPまで検査する。Portalの一般向けダウンロード導線と正式な公開ライセンスは未実装である。
 
@@ -171,7 +173,8 @@ UI権限はControllerがpermissionsとして計算する。ただし最終認可
 7. `apps/sdk-portal`を作り、別Vercel Projectとして`sdk.game-fields.com`へ割り当てる（完了）
 8. 小規模オンラインゲームでplatform adapterの認証・Redis CAS境界を実証する（完了）
 9. 本体8オンラインゲームをstorage-neutral mutation lifecycleへ接続する（完了）
-10. npmの公開前検査、SemVer、リリース手順を整備して一般配布する
+10. 採用済みSDK moduleを汎用HTTP Route・Client Runtimeへ接続する（HTTPは完了、WebSocketは未実装）
+11. npmの公開前検査、SemVer、リリース手順を整備して一般配布する
 
 ## 完了条件
 

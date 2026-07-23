@@ -18,6 +18,10 @@ const pilotGameFiles = readdirSync(pilotGameRoot, { recursive: true })
   .filter((name) => extname(name) === ".ts")
   .map((name) => join(pilotGameRoot, name));
 const starterRoot = join(root, "sdk/starter-template");
+const sdkRoomRouteFile = join(root, "app/api/game-sdk/[gameId]/rooms/route.ts");
+const sdkServerRegistryFile = join(root, "lib/game-sdk-server-registry.ts");
+const sdkHttpClientFile = join(sourceRoot, "client-runtime.ts");
+const sdkPreviewPageFile = join(root, "app/sdk-preview/[creatorSlug]/games/[gameId]/page.tsx");
 const starterSourceFiles = ["src", "tests"].flatMap((directory) =>
   readdirSync(join(starterRoot, directory))
     .filter((name) => extname(name) === ".ts")
@@ -46,6 +50,43 @@ for (const absoluteFile of sdkFiles) {
   if (/\bprocess\.env\b/.test(source)) {
     failures.push(`${file}: 公開SDKから環境変数へ直接アクセスしています。`);
   }
+}
+
+const sdkRoomRouteSource = readFileSync(sdkRoomRouteFile, "utf8");
+for (const token of [
+  "approvedGameSdkRegistration",
+  "requireAuthenticatedPlayer",
+  "rateLimitPolicies.roomMutation",
+  "createGameSdkOnlineRoomHttpHandlers",
+]) {
+  if (!sdkRoomRouteSource.includes(token)) {
+    failures.push(`${relative(root, sdkRoomRouteFile)}: SDK Room Routeに必須境界 ${token} がありません。`);
+  }
+}
+
+const sdkServerRegistrySource = readFileSync(sdkServerRegistryFile, "utf8");
+if (
+  !sdkServerRegistrySource.includes("wordWolfSdkServerModule")
+  || !sdkServerRegistrySource.includes("channel: \"development\"")
+  || !sdkServerRegistrySource.includes("createAuthenticatedGameSdkPlatformAdapter")
+) {
+  failures.push(`${relative(root, sdkServerRegistryFile)}: 審査済みmoduleの静的登録境界がありません。`);
+}
+if (/fetch\s*\(|SDK_PORTAL_INTERNAL_URL|preview-runtime/.test(sdkServerRegistrySource)) {
+  failures.push(`${relative(root, sdkServerRegistryFile)}: 未審査Portal metadataからserver moduleを動的登録しています。`);
+}
+
+const sdkHttpClientSource = readFileSync(sdkHttpClientFile, "utf8");
+if (!sdkHttpClientSource.includes("credentials: \"same-origin\"")) {
+  failures.push(`${relative(root, sdkHttpClientFile)}: 署名済みplatform sessionを使うsame-origin通信がありません。`);
+}
+if (/\b(actor|playerId|displayName|debugAccess)\s*:/.test(sdkHttpClientSource)) {
+  failures.push(`${relative(root, sdkHttpClientFile)}: Client Runtimeがactor identityをHTTP payloadへ組み立てています。`);
+}
+
+const sdkPreviewPageSource = readFileSync(sdkPreviewPageFile, "utf8");
+if (/game-sdk-server-registry|game-sdk-platform-adapter|\/api\/game-sdk\//.test(sdkPreviewPageSource)) {
+  failures.push(`${relative(root, sdkPreviewPageFile)}: 未審査previewを認証済みserver Runtimeへ直接接続しています。`);
 }
 
 for (const absoluteFile of runtimeFiles) {
@@ -126,7 +167,7 @@ if (packageJson.name !== "@game-fields/game-sdk") {
 if (packageJson.private !== true || packageJson.license !== "UNLICENSED") {
   failures.push("packages/game-sdk/package.json: 初回公開承認前はprivateかつUNLICENSEDである必要があります。");
 }
-for (const exportPath of [".", "./runtime", "./mock-runtime", "./package.json"]) {
+for (const exportPath of [".", "./runtime", "./mock-runtime", "./client-runtime", "./package.json"]) {
   if (!packageJson.exports?.[exportPath]) {
     failures.push(`packages/game-sdk/package.json: exports ${exportPath} がありません。`);
   }

@@ -16,6 +16,10 @@ import {
   createGameSdkMockRuntime,
   GameSdkRuntimeError,
 } from "@game-fields/game-sdk/mock-runtime";
+import {
+  createGameSdkHttpClientRuntime,
+  GameSdkHttpClientRuntimeError,
+} from "@game-fields/game-sdk/client-runtime";
 ```
 
 ## Manifest
@@ -77,6 +81,30 @@ defineGameServerModule({
 `createGameSdkMockRuntime`はDB不要のメモリ実装です。Room作成、閲覧、revision付きCommand、古いrevision拒否をテストできます。
 
 Mock Runtimeはローカルテスト用であり、本番Redisや認証への接続権限を持ちません。
+
+## Client Runtime
+
+採用後のGame Fields統合では、platformが審査登録済みゲームのendpointを指定してbrowser Runtimeを生成します。
+
+```ts
+const runtime = createGameSdkHttpClientRuntime<CreateInput, Command, RoomView>({
+  endpoint: "/api/game-sdk/<game-id>/rooms",
+});
+
+const room = await runtime.createRoom({
+  roomCode: "ABCD",
+  create: { /* ゲーム固有input */ },
+});
+
+await runtime.sendCommand(room.code, {
+  expectedRevision: room.revision,
+  command: { type: "game/start" },
+});
+```
+
+Client Runtimeへactor ID、表示名、debug資格を渡す引数はありません。Game Fieldsが同一originの署名済みHttpOnly Cookieから本人を解決し、server moduleの`context.actor`へ注入します。404のRoom取得は`null`、認証・競合・入力拒否はstatusと安全なcodeを持つ`GameSdkHttpClientRuntimeError`になります。
+
+未審査の隔離PreviewはこのRoom APIへ接続しません。Previewで保存したHTMLやmetadataがserver moduleとして動的に実行されることもありません。
 
 ## Preview preset API
 

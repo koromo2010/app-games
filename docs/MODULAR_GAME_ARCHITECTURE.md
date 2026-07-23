@@ -23,6 +23,8 @@ UI / hooks -> API client -> HTTP route -> application/domain -> storage
 ## 全オンラインゲームの共通クライアント境界
 
 - HTTP共通処理: `lib/online-room-api-client.ts`
+- 採用済みSDKゲームのbrowser transport: `packages/game-sdk/src/client-runtime.ts`
+- 採用済みSDKゲームの汎用HTTP入口・審査登録簿: `app/api/game-sdk/[gameId]/rooms/route.ts`, `lib/game-sdk-online-room-http.ts`, `lib/game-sdk-server-registry.ts`
 - 表示中の部屋同期: `app/hooks/use-online-room-polling.ts`
 - ログイン画面先行表示と部屋復元: `app/hooks/use-online-game-session-restore.ts`
 - 広場の全ゲーム復帰概要: `app/api/player-active-rooms/route.ts`
@@ -75,6 +77,8 @@ AI APIを呼ぶ可能性があるクライアント操作は`aiActivityFetch`ま
 storage-neutralなrevision更新、競合時の最大6回再適用、保存前正規化、保存後hookは非公開 `@game-fields/game-runtime` の `online-room.ts` を正本とする。本体側の `lib/online-room-store-runtime.ts` がRedis CAS、TTL、一覧、1人1active room、新規作成、解散、Realtime、戦績・リプレイhookを注入し、登録済みオンラインゲーム8本のStoreは同じRuntimeを利用する。Redis Luaと索引の低水準処理は `lib/online-room-persistence.ts`、`lib/player-active-room.ts`、`lib/online-room-list.ts`、`lib/online-room-dissolution.ts` に維持する。ゲーム固有StoreにはCommand認可、進行、得点、秘匿、参加者変更後の補正、時間切れreconcileだけを残す。
 
 登録済みオンラインゲーム8本のRoom Routeは `lib/online-room-route-factory.ts` を共通入口とする。同ファクトリが公開範囲検査、署名Cookie認証、GETの部屋・active room・一覧分岐、参加者照合、言語検査、入力actor・参加者情報の上書き、デバッグ資格、更新レート制限、Telemetry、DELETEの本人確認を所有する。ゲーム側は `load / loadActive / list / create / apply / delete / deleteHosted / sanitize` とTelemetry用の安全な状態項目だけを渡す。ゲーム固有エラーは `createOnlineRoomErrorResponder` の表で宣言し、認証・保存設定・Redis一時障害は共通変換を先に適用する。
+
+採用済みSDKゲームは`/api/game-sdk/[gameId]/rooms`を共通入口とし、公開`createGameSdkHttpClientRuntime`から作成・閲覧・revision付きCommandを送る。Client payloadへactor identityを含めず、Routeが署名済みプレイヤーCookieから本人を確定して`createAuthenticatedGameSdkPlatformAdapter`へ注入する。server moduleは`lib/game-sdk-server-registry.ts`へ静的に登録した審査済みpackageだけを対象とし、制作者Portalのmetadataや未審査Previewをimport・実行しない。現時点の`wordwolf-sdk`登録はdevelop限定である。
 
 大富豪のGET時ダミー手番復旧は `lib/daifugo-room-store.ts` のreconcile処理へ置き、Routeへ進行ルールを戻さない。たほい屋のAIお題生成を伴う `start-round` は `app/api/tahoiya/rooms/application.ts` に分離し、Routeはほかのゲームと同じファクトリ契約を保つ。
 
