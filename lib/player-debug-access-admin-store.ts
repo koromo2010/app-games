@@ -54,8 +54,8 @@ export async function listPlayerDebugAccessCandidates(searchInput = "") {
   const pattern = `%${search}%`;
   const rows = await getPostgresClient()`
     SELECT player.player_id, player.display_name,
-      (player.email IS NOT NULL) AS has_recovery_email,
-      (admin.email IS NOT NULL) AS automatic_access,
+      (player.email IS NOT NULL AND player.email_verified_at IS NOT NULL) AS has_recovery_email,
+      (admin.email IS NOT NULL AND player.email_verified_at IS NOT NULL) AS automatic_access,
       (manual.player_id IS NOT NULL) AS manual_access,
       manual.granted_by_email,
       manual.updated_at AS granted_at
@@ -63,7 +63,7 @@ export async function listPlayerDebugAccessCandidates(searchInput = "") {
     LEFT JOIN site_admin_accounts admin ON admin.email = player.email
     LEFT JOIN player_debug_access_grants manual ON manual.player_id = player.player_id
     WHERE ${search} = '' OR player.display_name ILIKE ${pattern} OR player.login_name ILIKE ${pattern}
-    ORDER BY (manual.player_id IS NOT NULL) DESC, (admin.email IS NOT NULL) DESC, player.updated_at DESC
+    ORDER BY (manual.player_id IS NOT NULL) DESC, (admin.email IS NOT NULL AND player.email_verified_at IS NOT NULL) DESC, player.updated_at DESC
     LIMIT 50
   ` as PlayerDebugAccessAdminRow[];
   return rows.map(summary);

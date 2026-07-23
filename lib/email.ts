@@ -47,6 +47,41 @@ export async function sendPasswordResetEmail(input: {
   if (error) throw new Error("EMAIL_SEND_FAILED");
 }
 
+export async function sendRecoveryEmailVerificationEmail(input: {
+  email: string;
+  playerName: string;
+  verificationUrl: string;
+}) {
+  const apiKey = sharedEnvironmentVariable("RESEND_API_KEY");
+  if (!apiKey) throw new Error("EMAIL_SERVICE_NOT_CONFIGURED");
+
+  const resend = new Resend(apiKey);
+  const from = process.env.EMAIL_FROM?.trim() || "Game Fields <noreply@game-fields.com>";
+  const safeName = escapeHtml(input.playerName);
+  const safeUrl = escapeHtml(input.verificationUrl);
+  const { error } = await resend.emails.send({
+    from,
+    to: input.email,
+    subject: "【Game Fields】復旧用メールアドレスの確認",
+    text: `${input.playerName} さん\n\nGame Fieldsの復旧用メールアドレスとして登録するには、以下のURLを開き「このメールを承認」を押してください。URLの有効期限は1時間です。\n${input.verificationUrl}\n\nこの登録に心当たりがない場合は、承認せずメールを破棄してください。`,
+    html: `
+      <div style="background:#f8fafc;padding:32px 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#0f172a">
+        <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:28px">
+          <h1 style="font-size:22px;margin:0 0 20px">復旧用メールアドレスの確認</h1>
+          <p>${safeName} さん</p>
+          <p style="line-height:1.7">Game Fieldsの復旧用メールアドレスとして登録するには、以下のボタンから確認画面を開き、「このメールを承認」を押してください。このリンクの有効期限は1時間です。</p>
+          <p style="margin:28px 0">
+            <a href="${safeUrl}" style="display:inline-block;background:#7c3aed;color:#fff;text-decoration:none;font-weight:700;padding:12px 20px;border-radius:8px">確認画面を開く</a>
+          </p>
+          <p style="font-size:13px;line-height:1.7;color:#475569">この登録に心当たりがない場合は、承認せずメールを破棄してください。メールアドレスや権限は変更されません。</p>
+        </div>
+      </div>
+    `,
+  });
+
+  if (error) throw new Error("EMAIL_SEND_FAILED");
+}
+
 async function operationsEmailRecipients(kind: SiteAdminNotificationKind) {
   let registered: string[] = [];
   try {

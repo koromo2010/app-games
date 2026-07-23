@@ -1,9 +1,14 @@
 import type { PlayerSession } from "./player-session.ts";
+import {
+  playerAccountHasUnverifiedEmail,
+  playerAccountHasVerifiedEmail,
+} from "./player-email-verification-policy.ts";
 
 export type PlayerAccountSessionSource = {
   playerId: string;
   name: string;
   email: string | null;
+  emailVerifiedAt: number | null;
   avatarColor: string;
   avatarImage: string | null;
   shareNameAllowed: boolean;
@@ -49,7 +54,8 @@ export async function ensurePlayerAccountSession(
     }
     return dependencies.saveSession({
       ...savedSession,
-      hasRecoveryEmail: Boolean(account.email),
+      hasRecoveryEmail: playerAccountHasVerifiedEmail(account),
+      hasUnverifiedRecoveryEmail: playerAccountHasUnverifiedEmail(account),
       locale: account.locale,
     });
   }
@@ -65,7 +71,8 @@ export async function ensurePlayerAccountSession(
     avatarImage: account.avatarImage,
     shareNameAllowed: account.shareNameAllowed,
     locale: account.locale,
-    hasRecoveryEmail: Boolean(account.email),
+    hasRecoveryEmail: playerAccountHasVerifiedEmail(account),
+    hasUnverifiedRecoveryEmail: playerAccountHasUnverifiedEmail(account),
     createdAt: account.createdAt,
     updatedAt: account.updatedAt,
   });

@@ -38,12 +38,20 @@ function recoveryEmailErrorMessage(code: string | undefined, locale: AppLocale) 
   if (locale === "en") {
     if (code === "EMAIL_INVALID") return "Check the email address format.";
     if (code === "EMAIL_ALREADY_EXISTS") return "That email address is already used by another player account.";
+    if (code === "EMAIL_NOT_REGISTERED") return "No unverified recovery email is registered. Enter an address and send a new confirmation.";
+    if (code === "AUTH_REQUIRED") return "Sign in again and retry.";
     if (code === "INVALID_CREDENTIALS") return "Your current password is incorrect.";
+    if (code === "EMAIL_NOT_CONFIGURED") return "Email delivery is not configured yet.";
+    if (code === "EMAIL_SEND_FAILED") return "Could not send the confirmation email. Please try again later.";
     return "Could not save the recovery email address.";
   }
   if (code === "EMAIL_INVALID") return "メールアドレスの形式を確認してください。";
   if (code === "EMAIL_ALREADY_EXISTS") return "そのメールアドレスは別のプレイヤーアカウントで使われています。";
+  if (code === "EMAIL_NOT_REGISTERED") return "再確認できる登録済みメールがありません。アドレスを入力して新しく確認メールを送信してください。";
+  if (code === "AUTH_REQUIRED") return "ログインし直してから再度お試しください。";
   if (code === "INVALID_CREDENTIALS") return "現在のパスワードが正しくありません。";
+  if (code === "EMAIL_NOT_CONFIGURED") return "メール送信機能がまだ設定されていません。";
+  if (code === "EMAIL_SEND_FAILED") return "確認メールを送信できませんでした。時間をおいて再度お試しください。";
   return "復旧用メールアドレスを保存できませんでした。";
 }
 
@@ -159,7 +167,7 @@ export function UserDashboard() {
     const controller = new AbortController();
     void (async () => {
       try {
-        const sessionResponse = await fetch("/api/player-session", { cache: "no-store", signal: controller.signal });
+        const sessionResponse = await fetch("/api/player-account", { cache: "no-store", signal: controller.signal });
         if (sessionResponse.status === 401) {
           setRequiresLogin(true);
           return;
@@ -210,7 +218,7 @@ export function UserDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mode: "update-email", name: session.name, password: recoveryEmailPassword, email: recoveryEmail }),
       });
-      const data = await response.json().catch(() => null) as { session?: PlayerSession; error?: string } | null;
+      const data = await response.json().catch(() => null) as { session?: PlayerSession; error?: string; emailVerificationPending?: boolean } | null;
       if (!response.ok || !data?.session) {
         setRecoveryEmailMessage(recoveryEmailErrorMessage(data?.error, locale));
         return;
@@ -218,7 +226,48 @@ export function UserDashboard() {
       applyPlayerSession(data.session);
       setRecoveryEmail("");
       setRecoveryEmailPassword("");
-      setRecoveryEmailMessage(copy.recoverySaved);
+      setRecoveryEmailMessage(data.emailVerificationPending
+        ? (locale === "en" ? "A confirmation email was sent. Approve it to finish registration." : "確認メールを送信しました。メール内で承認すると登録が完了します。")
+        : (locale === "en" ? "This email address is already verified." : "このメールアドレスは確認済みです。"));
+    } catch {
+      setRecoveryEmailMessage(copy.networkFailed);
+    } finally {
+      setIsRecoveryEmailSaving(false);
+    }
+  };
+
+  const resendRecoveryEmail = async () => {
+    if (!session || isRecoveryEmailSaving || !recoveryEmailPassword) return;
+    setIsRecoveryEmailSaving(true);
+    setRecoveryEmailMessage("");
+    try {
+      const response = await fetch("/api/player-account", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "resend-email-verification",
+          name: session.name,
+          password: recoveryEmailPassword,
+        }),
+      });
+      const data = await response.json().catch(() => null) as {
+        session?: PlayerSession;
+        error?: string;
+        emailVerificationPending?: boolean;
+      } | null;
+      if (!response.ok || !data?.session) {
+        setRecoveryEmailMessage(recoveryEmailErrorMessage(data?.error, locale));
+        return;
+      }
+      applyPlayerSession(data.session);
+      setRecoveryEmailPassword("");
+      setRecoveryEmailMessage(data.emailVerificationPending
+        ? (locale === "en"
+          ? "A new confirmation email was sent to the registered address. The previous link is no longer valid."
+          : "登録済みアドレスへ確認メールを再送しました。以前の確認リンクは無効になりました。")
+        : (locale === "en"
+          ? "The registered recovery email is already verified."
+          : "登録済みの復旧用メールはすでに確認済みです。"));
     } catch {
       setRecoveryEmailMessage(copy.networkFailed);
     } finally {
@@ -305,14 +354,43 @@ export function UserDashboard() {
         <section className="mb-5 rounded-lg border border-violet-100 bg-violet-50 p-4" aria-labelledby="recovery-email-heading">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div><p className="text-xs font-semibold uppercase text-violet-700">Account</p><h2 id="recovery-email-heading" className="text-lg font-black text-slate-950">{copy.recoveryTitle}</h2></div>
-            <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${session?.hasRecoveryEmail ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600"}`}>{session?.hasRecoveryEmail ? copy.registered : copy.unregistered}</span>
+            <span className={`rounded-full px-2.5 py-1 text-xs font-bold ${session?.hasRecoveryEmail ? "bg-emerald-100 text-emerald-700" : session?.hasUnverifiedRecoveryEmail ? "bg-amber-100 text-amber-700" : "bg-slate-200 text-slate-600"}`}>
+              {session?.hasRecoveryEmail
+                ? (locale === "en" ? "Verified" : "確認済み")
+                : session?.hasUnverifiedRecoveryEmail
+                  ? (locale === "en" ? "Unverified" : "未確認")
+                  : (locale === "en" ? "Not registered" : "未登録")}
+            </span>
           </div>
-          <p className="mt-2 text-xs leading-5 text-slate-600">{copy.recoveryHelp}</p>
+          <p className="mt-2 text-xs leading-5 text-slate-600">
+            {locale === "en"
+              ? "Used for password recovery. The address is not registered, and grants no access, until you approve the confirmation email. A verified address matching an administrator email receives debug access automatically. Your current password is required."
+              : "パスワード再設定に使用します。確認メール内で承認するまでは復旧先として利用できず、デバッグ権限も付与されません。確認済みメールが管理者メールと一致する場合はデバッグ権限を自動付与します。既存の登録メールも一度再確認が必要です。"}
+          </p>
           <form onSubmit={updateRecoveryEmail} className="mt-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] sm:items-end">
             <label className="text-sm font-bold text-slate-700">{copy.email}<input value={recoveryEmail} onChange={(event) => setRecoveryEmail(event.target.value)} type="email" autoComplete="email" required className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-950 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20" placeholder="you@example.com" /></label>
             <label className="text-sm font-bold text-slate-700">{copy.currentPassword}<input value={recoveryEmailPassword} onChange={(event) => setRecoveryEmailPassword(event.target.value)} type="password" autoComplete="current-password" required className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-950 outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20" /></label>
-            <button type="submit" disabled={isRecoveryEmailSaving || !recoveryEmail.trim() || !recoveryEmailPassword} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-violet-500 disabled:bg-slate-300">{isRecoveryEmailSaving ? copy.saving : copy.saveRecovery}</button>
+            <button type="submit" disabled={isRecoveryEmailSaving || !recoveryEmail.trim() || !recoveryEmailPassword} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-bold text-white transition hover:bg-violet-500 disabled:bg-slate-300">{isRecoveryEmailSaving ? (locale === "en" ? "Sending…" : "送信中…") : (locale === "en" ? "Send confirmation" : "確認メールを送信")}</button>
           </form>
+          {session?.hasUnverifiedRecoveryEmail && (
+            <button
+              type="button"
+              disabled={isRecoveryEmailSaving || !recoveryEmailPassword}
+              onClick={() => void resendRecoveryEmail()}
+              className="mt-3 rounded-lg border border-violet-300 bg-white px-3 py-2 text-xs font-bold text-violet-700 transition hover:bg-violet-100 disabled:border-slate-200 disabled:text-slate-400"
+            >
+              {isRecoveryEmailSaving
+                ? (locale === "en" ? "Sending…" : "送信中…")
+                : (locale === "en" ? "Resend to registered address" : "登録済みメールへ確認を再送")}
+            </button>
+          )}
+          {session?.hasUnverifiedRecoveryEmail && (
+            <p className="mt-1 text-[11px] leading-5 text-slate-500">
+              {locale === "en"
+                ? "For an address registered before email verification was introduced. Enter only your current password above; the address is never displayed."
+                : "確認機能の導入前に登録したメール向けです。上の現在のパスワードだけ入力して再送できます。登録アドレスは画面に表示しません。"}
+            </p>
+          )}
           {recoveryEmailMessage && <p className="mt-2 text-xs font-semibold text-violet-800" role="status">{recoveryEmailMessage}</p>}
         </section>
         <section className="mb-5 rounded-lg border border-cyan-100 bg-cyan-50 p-4" aria-labelledby="share-privacy-heading">

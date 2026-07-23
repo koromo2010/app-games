@@ -12,6 +12,7 @@ import {
   createPostgresPlayerAccount,
   loadPostgresPlayerAccountByEmail,
   loadPostgresPlayerAccountByLogin,
+  loadPostgresPlayerAccountByPlayerId,
   savePostgresPlayerAccount,
   updatePostgresPlayerAccountProfile,
   deleteExpiredPostgresPlayerAccounts,
@@ -24,6 +25,10 @@ import { unverifiedAccountIsExpired, unverifiedPlayerAccountRetentionMs } from "
 import { tahoiyaHistoryKeysForPlayer } from "@/lib/tahoiya-topic-history-store";
 import { normalizeAppLocale, type AppLocale } from "@/lib/app-locale";
 import { ensurePlayerAccountSession } from "@/lib/player-account-session";
+import {
+  playerAccountHasUnverifiedEmail,
+  playerAccountHasVerifiedEmail,
+} from "@/lib/player-email-verification-policy";
 
 export type PlayerAccount = {
   version: 2;
@@ -33,6 +38,7 @@ export type PlayerAccount = {
   passwordHash: string;
   passwordSalt: string;
   email: string | null;
+  emailVerifiedAt: number | null;
   avatarColor: string;
   avatarImage: string | null;
   shareNameAllowed: boolean;
@@ -107,6 +113,9 @@ function normalizeAccount(value: unknown): PlayerAccount | null {
   const email = typeof parsed.email === "string" && isValidEmail(parsed.email)
     ? normalizeEmail(parsed.email)
     : null;
+  const emailVerifiedAt = email && typeof parsed.emailVerifiedAt === "number" && Number.isFinite(parsed.emailVerifiedAt) && parsed.emailVerifiedAt > 0
+    ? parsed.emailVerifiedAt
+    : null;
   const parsedAvatarColor = typeof parsed.avatarColor === "string" ? parsed.avatarColor : null;
   const parsedAvatarImage = typeof parsed.avatarImage === "string" ? parsed.avatarImage : null;
 
@@ -120,6 +129,7 @@ function normalizeAccount(value: unknown): PlayerAccount | null {
     passwordHash,
     passwordSalt,
     email,
+    emailVerifiedAt,
     avatarColor: isAvatarColor(parsedAvatarColor) ? parsedAvatarColor : fallbackAvatarColor,
     avatarImage: isAvatarImage(parsedAvatarImage) ? parsedAvatarImage : null,
     shareNameAllowed: parsed.shareNameAllowed === true,
@@ -201,7 +211,7 @@ export async function registerPlayerAccount(input: PlayerAccountAuthInput) {
   const name = input.name.trim();
   const loginName = normalizeAccountName(name);
   const password = input.password;
-  const email = input.email?.trim() ? normalizeEmail(input.email) : null;
+  const requestedEmail = input.email?.trim() ? normalizeEmail(input.email) : null;
   if (!legalConsentIsCurrent(input)) throw new Error("PLAYER_ACCOUNT_TERMS_REQUIRED");
 
   if (!name || !loginName) {
@@ -212,7 +222,7 @@ export async function registerPlayerAccount(input: PlayerAccountAuthInput) {
     throw new Error("PLAYER_ACCOUNT_PASSWORD_INVALID");
   }
 
-  if (email && !isValidEmail(email)) {
+  if (requestedEmail && !isValidEmail(requestedEmail)) {
     throw new Error("PLAYER_ACCOUNT_EMAIL_INVALID");
   }
 
@@ -226,7 +236,8 @@ export async function registerPlayerAccount(input: PlayerAccountAuthInput) {
     name,
     passwordHash: hashPassword(password, passwordSalt),
     passwordSalt,
-    email,
+    email: null,
+    emailVerifiedAt: null,
     avatarColor: isAvatarColor(input.avatarColor ?? null) ? input.avatarColor! : fallbackAvatarColor,
     avatarImage: isAvatarImage(input.avatarImage ?? null) ? input.avatarImage! : null,
     shareNameAllowed: false,
@@ -239,25 +250,25 @@ export async function registerPlayerAccount(input: PlayerAccountAuthInput) {
   };
 
   if (isPostgresConfigured()) {
+    const [existingEmail, legacyLogin, legacyEmail] = await Promise.all([
+      requestedEmail ? loadPostgresPlayerAccountByEmail(requestedEmail) : Promise.resolve(null),
+      usesStrictAppDatabase() ? Promise.resolve(null) : loadRedisAccount(loginName),
+      !usesStrictAppDatabase() && requestedEmail ? loadRedisAccountByEmail(requestedEmail) : Promise.resolve(null),
+    ]);
+    if (existingEmail || legacyEmail) throw new Error("PLAYER_ACCOUNT_EMAIL_ALREADY_EXISTS");
     if (!usesStrictAppDatabase()) {
-      const [legacyLogin, legacyEmail] = await Promise.all([
-        loadRedisAccount(loginName),
-        email ? loadRedisAccountByEmail(email) : Promise.resolve(null),
-      ]);
       if (legacyLogin) throw new Error("PLAYER_ACCOUNT_ALREADY_EXISTS");
-      if (legacyEmail) throw new Error("PLAYER_ACCOUNT_EMAIL_ALREADY_EXISTS");
     }
 
     const created = await createPostgresPlayerAccount(account);
     if (created === "login-exists") throw new Error("PLAYER_ACCOUNT_ALREADY_EXISTS");
     if (created === "email-exists") throw new Error("PLAYER_ACCOUNT_EMAIL_ALREADY_EXISTS");
     if (!usesStrictAppDatabase()) await mirrorAccountToRedis(account).catch(() => undefined);
-  } else if (email) {
+  } else if (requestedEmail) {
     const createAccountScript = `
       if redis.call("EXISTS", KEYS[1]) == 1 then return 1 end
       if redis.call("EXISTS", KEYS[2]) == 1 then return 2 end
       redis.call("SET", KEYS[1], ARGV[1])
-      redis.call("SET", KEYS[2], ARGV[2])
       return 0
     `;
     const result = await redisCommand<number>([
@@ -265,9 +276,8 @@ export async function registerPlayerAccount(input: PlayerAccountAuthInput) {
       createAccountScript,
       "2",
       accountKey(name),
-      playerAccountEmailKey(email),
+      playerAccountEmailKey(requestedEmail),
       JSON.stringify(account),
-      loginName,
     ]);
     if (result === 1) throw new Error("PLAYER_ACCOUNT_ALREADY_EXISTS");
     if (result === 2) throw new Error("PLAYER_ACCOUNT_EMAIL_ALREADY_EXISTS");
@@ -284,7 +294,8 @@ export async function registerPlayerAccount(input: PlayerAccountAuthInput) {
     avatarColor: account.avatarColor,
     avatarImage: account.avatarImage,
     shareNameAllowed: account.shareNameAllowed,
-    hasRecoveryEmail: Boolean(account.email),
+    hasRecoveryEmail: playerAccountHasVerifiedEmail(account),
+    hasUnverifiedRecoveryEmail: playerAccountHasUnverifiedEmail(account),
     createdAt: now,
   });
 }
@@ -299,6 +310,14 @@ export async function loginPlayerAccount(input: PlayerAccountAuthInput) {
   if (isPostgresConfigured()) await savePostgresPlayerAccount(activeAccount);
   if (!usesStrictAppDatabase()) await mirrorAccountToRedis(activeAccount).catch(() => undefined);
   return accountSession(activeAccount);
+}
+
+export async function refreshPlayerAccountSession(authenticatedPlayerId: string) {
+  if (!isPostgresConfigured()) return null;
+  const stored = await loadPostgresPlayerAccountByPlayerId(authenticatedPlayerId);
+  const account = stored ? normalizeAccount(stored) : null;
+  if (!account || account.playerId !== authenticatedPlayerId) return null;
+  return accountSession(account);
 }
 
 export async function deleteExpiredUnverifiedPlayerAccounts(now = Date.now()) {
@@ -328,7 +347,14 @@ export async function deleteExpiredUnverifiedPlayerAccounts(now = Date.now()) {
   return { cutoff, postgresDeleted, redisDeleted };
 }
 
-export async function updatePlayerAccountEmail(input: PlayerAccountAuthInput) {
+export type PlayerEmailVerificationCandidate = {
+  playerId: string;
+  loginName: string;
+  playerName: string;
+  email: string;
+};
+
+export async function preparePlayerAccountEmailVerification(input: PlayerAccountAuthInput) {
   const account = await loadAccount(input.name);
   if (!account || !verifyPassword(input.password, account.passwordSalt, account.passwordHash)) {
     throw new Error("PLAYER_ACCOUNT_INVALID_CREDENTIALS");
@@ -339,60 +365,133 @@ export async function updatePlayerAccountEmail(input: PlayerAccountAuthInput) {
     throw new Error("PLAYER_ACCOUNT_EMAIL_INVALID");
   }
 
-  if (account.email !== email) {
-    const previousEmail = account.email;
-    const updatedAccount: PlayerAccount = {
-      ...account,
-      email,
-      updatedAt: Date.now(),
-    };
-    if (isPostgresConfigured()) {
-      const [existing, legacyOwner] = await Promise.all([
-        loadPostgresPlayerAccountByEmail(email),
-        usesStrictAppDatabase() ? Promise.resolve(null) : loadRedisEmailOwner(email),
-      ]);
-      if (hasPlayerAccountEmailOwnerConflict(account.loginName, {
-        postgresLoginName: existing?.loginName ?? null,
-        redisLoginName: legacyOwner,
-      })) {
-        throw new Error("PLAYER_ACCOUNT_EMAIL_ALREADY_EXISTS");
-      }
-      try {
-        await savePostgresPlayerAccount(updatedAccount);
-      } catch (error) {
-        if (error instanceof Error && "code" in error && error.code === "23505") {
-          throw new Error("PLAYER_ACCOUNT_EMAIL_ALREADY_EXISTS");
-        }
-        throw error;
-      }
-      if (usesStrictAppDatabase()) return accountSession(updatedAccount);
-    }
-
-    const updateEmailScript = `
-      local owner = redis.call("GET", KEYS[2])
-      if owner and owner ~= ARGV[1] then return 1 end
-      redis.call("SET", KEYS[1], ARGV[2])
-      redis.call("SET", KEYS[2], ARGV[1])
-      if ARGV[3] == "1" and KEYS[3] ~= KEYS[2] then redis.call("DEL", KEYS[3]) end
-      return 0
-    `;
-    const updateRedis = () => redisCommand<number>([
-      "EVAL",
-      updateEmailScript,
-      "3",
-      accountKey(account.loginName),
-      playerAccountEmailKey(email),
-      previousEmail ? playerAccountEmailKey(previousEmail) : `${emailKeyPrefix}unused`,
-      account.loginName,
-      JSON.stringify(updatedAccount),
-      previousEmail ? "1" : "0",
-    ]);
-    const result = isPostgresConfigured() ? await updateRedis().catch(() => 0) : await updateRedis();
-    if (result === 1) throw new Error("PLAYER_ACCOUNT_EMAIL_ALREADY_EXISTS");
-    return accountSession(updatedAccount);
+  const [existing, legacyOwner] = await Promise.all([
+    isPostgresConfigured() ? loadPostgresPlayerAccountByEmail(email) : Promise.resolve(null),
+    isPostgresConfigured() && usesStrictAppDatabase() ? Promise.resolve(null) : loadRedisEmailOwner(email),
+  ]);
+  if (hasPlayerAccountEmailOwnerConflict(account.loginName, {
+    postgresLoginName: existing?.loginName ?? null,
+    redisLoginName: legacyOwner,
+  })) {
+    throw new Error("PLAYER_ACCOUNT_EMAIL_ALREADY_EXISTS");
   }
 
-  return accountSession(account);
+  return {
+    candidate: {
+      playerId: account.playerId,
+      loginName: account.loginName,
+      playerName: account.name,
+      email,
+    } satisfies PlayerEmailVerificationCandidate,
+    session: await accountSession(account),
+    alreadyVerified: account.email === email && playerAccountHasVerifiedEmail(account),
+  };
+}
+
+export async function prepareExistingPlayerAccountEmailVerification(
+  input: PlayerAccountAuthInput,
+  authenticatedPlayerId: string,
+) {
+  let postgresAccount: PlayerAccount | null = null;
+  if (isPostgresConfigured()) {
+    try {
+      postgresAccount = normalizeAccount(await loadPostgresPlayerAccountByPlayerId(authenticatedPlayerId));
+    } catch (error) {
+      if (usesStrictAppDatabase()) throw error;
+    }
+  }
+  const account = postgresAccount ?? (
+    !isPostgresConfigured() || !usesStrictAppDatabase()
+      ? await loadAccount(input.name)
+      : null
+  );
+  if (
+    !account
+    || account.playerId !== authenticatedPlayerId
+    || !verifyPassword(input.password, account.passwordSalt, account.passwordHash)
+  ) {
+    throw new Error("PLAYER_ACCOUNT_INVALID_CREDENTIALS");
+  }
+  if (!account.email) {
+    throw new Error("PLAYER_ACCOUNT_EMAIL_NOT_REGISTERED");
+  }
+
+  return {
+    candidate: {
+      playerId: account.playerId,
+      loginName: account.loginName,
+      playerName: account.name,
+      email: account.email,
+    } satisfies PlayerEmailVerificationCandidate,
+    session: await accountSession(account),
+    alreadyVerified: !playerAccountHasUnverifiedEmail(account),
+  };
+}
+
+export async function confirmPlayerAccountEmail(
+  candidate: Pick<PlayerEmailVerificationCandidate, "playerId" | "loginName" | "email">,
+) {
+  const account = await loadAccount(candidate.loginName);
+  if (!account || account.playerId !== candidate.playerId) {
+    throw new Error("PLAYER_ACCOUNT_EMAIL_VERIFICATION_INVALID");
+  }
+
+  const email = normalizeEmail(candidate.email);
+  if (!isValidEmail(email)) throw new Error("PLAYER_ACCOUNT_EMAIL_VERIFICATION_INVALID");
+
+  const [existing, legacyOwner] = await Promise.all([
+    isPostgresConfigured() ? loadPostgresPlayerAccountByEmail(email) : Promise.resolve(null),
+    isPostgresConfigured() && usesStrictAppDatabase() ? Promise.resolve(null) : loadRedisEmailOwner(email),
+  ]);
+  if (hasPlayerAccountEmailOwnerConflict(account.loginName, {
+    postgresLoginName: existing?.loginName ?? null,
+    redisLoginName: legacyOwner,
+  })) {
+    throw new Error("PLAYER_ACCOUNT_EMAIL_ALREADY_EXISTS");
+  }
+
+  const previousEmail = account.email;
+  const updatedAccount: PlayerAccount = {
+    ...account,
+    email,
+    emailVerifiedAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+
+  if (isPostgresConfigured()) {
+    try {
+      await savePostgresPlayerAccount(updatedAccount);
+    } catch (error) {
+      if (error instanceof Error && "code" in error && error.code === "23505") {
+        throw new Error("PLAYER_ACCOUNT_EMAIL_ALREADY_EXISTS");
+      }
+      throw error;
+    }
+    if (usesStrictAppDatabase()) return accountSession(updatedAccount);
+  }
+
+  const updateEmailScript = `
+    local owner = redis.call("GET", KEYS[2])
+    if owner and owner ~= ARGV[1] then return 1 end
+    redis.call("SET", KEYS[1], ARGV[2])
+    redis.call("SET", KEYS[2], ARGV[1])
+    if ARGV[3] == "1" and KEYS[3] ~= KEYS[2] then redis.call("DEL", KEYS[3]) end
+    return 0
+  `;
+  const updateRedis = () => redisCommand<number>([
+    "EVAL",
+    updateEmailScript,
+    "3",
+    accountKey(account.loginName),
+    playerAccountEmailKey(email),
+    previousEmail ? playerAccountEmailKey(previousEmail) : `${emailKeyPrefix}unused`,
+    account.loginName,
+    JSON.stringify(updatedAccount),
+    previousEmail ? "1" : "0",
+  ]);
+  const result = isPostgresConfigured() ? await updateRedis().catch(() => 0) : await updateRedis();
+  if (result === 1) throw new Error("PLAYER_ACCOUNT_EMAIL_ALREADY_EXISTS");
+  return accountSession(updatedAccount);
 }
 
 export async function deletePlayerAccount(input: PlayerAccountAuthInput, authenticatedPlayerId: string) {
@@ -414,7 +513,10 @@ export async function loadPlayerAccountByEmail(email: string) {
   if (isPostgresConfigured()) {
     try {
       const stored = await loadPostgresPlayerAccountByEmail(normalizedEmail);
-      if (stored) return normalizeAccount(stored);
+      if (stored) {
+        const account = normalizeAccount(stored);
+        return account && playerAccountHasVerifiedEmail(account) ? account : null;
+      }
       if (usesStrictAppDatabase()) return null;
     } catch (error) {
       if (usesStrictAppDatabase()) throw error;
@@ -423,7 +525,7 @@ export async function loadPlayerAccountByEmail(email: string) {
   }
   const legacy = await loadRedisAccountByEmail(normalizedEmail);
   if (legacy && isPostgresConfigured()) await savePostgresPlayerAccount(legacy).catch(() => undefined);
-  return legacy;
+  return legacy && playerAccountHasVerifiedEmail(legacy) ? legacy : null;
 }
 
 export async function resetPlayerAccountPassword(loginName: string, password: string) {

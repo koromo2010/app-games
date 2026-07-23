@@ -22,10 +22,20 @@ export function useLobbyAuthActions(params: Params) {
     setIsSaving(true); params.setMessage("");
     try {
       const response = await fetch("/api/player-account", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: params.authMode, name: params.name.trim(), password: params.password, email: params.authMode === "register" ? params.email : undefined, avatarColor: params.avatarColor, avatarImage: params.avatarImage, acceptedTerms: params.authMode === "register" ? params.legalAccepted : undefined, termsVersion: params.authMode === "register" ? currentTermsVersion : undefined, privacyVersion: params.authMode === "register" ? currentPrivacyVersion : undefined }) });
-      const data = await response.json() as { session?: PlayerSession; error?: string };
+      const data = await response.json() as { session?: PlayerSession; error?: string; emailVerificationPending?: boolean; emailVerificationError?: string };
       if (!response.ok || !data.session) return params.setMessage(authMessage(data.error, locale));
       params.applySession(data.session); params.setPassword(""); params.setEmail("");
-      params.setMessage(params.authMode === "register" ? t("account.registerSuccess") : t("account.loginSuccess"));
+      if (params.authMode === "register" && params.email.trim() && data.emailVerificationPending) {
+        params.setMessage(locale === "en"
+          ? "Account created and signed in. Approve the confirmation email to register the recovery address."
+          : "アカウントを作成してログインしました。確認メール内で承認すると復旧用メールの登録が完了します。");
+      } else if (params.authMode === "register" && data.emailVerificationError) {
+        params.setMessage(locale === "en"
+          ? "Account created and signed in, but the confirmation email could not be sent. Retry from My Page."
+          : "アカウントを作成してログインしましたが、確認メールを送信できませんでした。マイページから再送してください。");
+      } else {
+        params.setMessage(params.authMode === "register" ? t("account.registerSuccess") : t("account.loginSuccess"));
+      }
       params.onAuthenticated?.();
     } catch { params.setMessage(t("account.networkError")); } finally { setIsSaving(false); }
   };

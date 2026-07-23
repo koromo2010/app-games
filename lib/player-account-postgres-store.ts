@@ -9,6 +9,7 @@ type PlayerAccountRow = {
   password_hash: string;
   password_salt: string;
   email: string | null;
+  email_verified_at: string | number | null;
   avatar_color: string;
   avatar_image: string | null;
   share_name_allowed: boolean;
@@ -29,6 +30,7 @@ function rowToAccount(row: PlayerAccountRow): PlayerAccount {
     passwordHash: row.password_hash,
     passwordSalt: row.password_salt,
     email: row.email,
+    emailVerifiedAt: row.email_verified_at === null ? null : Number(row.email_verified_at),
     avatarColor: row.avatar_color,
     avatarImage: row.avatar_image,
     shareNameAllowed: row.share_name_allowed === true,
@@ -49,7 +51,7 @@ export async function loadPostgresPlayerAccountByLogin(loginName: string) {
   await ensurePlayerAccountSchema();
   const sql = getPostgresClient();
   const rows = await sql`
-    SELECT player_id, login_name, display_name, password_hash, password_salt, email,
+    SELECT player_id, login_name, display_name, password_hash, password_salt, email, email_verified_at,
            avatar_color, avatar_image, share_name_allowed, locale, terms_version, privacy_version, terms_accepted_at, created_at, updated_at
     FROM player_accounts
     WHERE login_name = ${loginName}
@@ -62,10 +64,23 @@ export async function loadPostgresPlayerAccountByEmail(email: string) {
   await ensurePlayerAccountSchema();
   const sql = getPostgresClient();
   const rows = await sql`
-    SELECT player_id, login_name, display_name, password_hash, password_salt, email,
+    SELECT player_id, login_name, display_name, password_hash, password_salt, email, email_verified_at,
            avatar_color, avatar_image, share_name_allowed, locale, terms_version, privacy_version, terms_accepted_at, created_at, updated_at
     FROM player_accounts
     WHERE email = ${email}
+    LIMIT 1
+  ` as PlayerAccountRow[];
+  return rows[0] ? rowToAccount(rows[0]) : null;
+}
+
+export async function loadPostgresPlayerAccountByPlayerId(playerId: string) {
+  await ensurePlayerAccountSchema();
+  const sql = getPostgresClient();
+  const rows = await sql`
+    SELECT player_id, login_name, display_name, password_hash, password_salt, email, email_verified_at,
+           avatar_color, avatar_image, share_name_allowed, locale, terms_version, privacy_version, terms_accepted_at, created_at, updated_at
+    FROM player_accounts
+    WHERE player_id = ${playerId}
     LIMIT 1
   ` as PlayerAccountRow[];
   return rows[0] ? rowToAccount(rows[0]) : null;
@@ -76,11 +91,11 @@ export async function createPostgresPlayerAccount(account: PlayerAccount) {
   const sql = getPostgresClient();
   const inserted = await sql`
     INSERT INTO player_accounts (
-      login_name, player_id, display_name, password_hash, password_salt, email,
+      login_name, player_id, display_name, password_hash, password_salt, email, email_verified_at,
       avatar_color, avatar_image, share_name_allowed, locale, terms_version, privacy_version, terms_accepted_at, created_at, updated_at
     ) VALUES (
       ${account.loginName}, ${account.playerId}, ${account.name}, ${account.passwordHash},
-      ${account.passwordSalt}, ${account.email}, ${account.avatarColor}, ${account.avatarImage}, ${account.shareNameAllowed}, ${account.locale}, ${account.termsVersion}, ${account.privacyVersion}, ${account.termsAcceptedAt},
+      ${account.passwordSalt}, ${account.email}, ${account.emailVerifiedAt}, ${account.avatarColor}, ${account.avatarImage}, ${account.shareNameAllowed}, ${account.locale}, ${account.termsVersion}, ${account.privacyVersion}, ${account.termsAcceptedAt},
       ${account.createdAt}, ${account.updatedAt}
     )
     ON CONFLICT DO NOTHING
@@ -102,11 +117,11 @@ export async function savePostgresPlayerAccount(account: PlayerAccount) {
   const sql = getPostgresClient();
   await sql`
     INSERT INTO player_accounts (
-      login_name, player_id, display_name, password_hash, password_salt, email,
+      login_name, player_id, display_name, password_hash, password_salt, email, email_verified_at,
       avatar_color, avatar_image, share_name_allowed, locale, terms_version, privacy_version, terms_accepted_at, created_at, updated_at
     ) VALUES (
       ${account.loginName}, ${account.playerId}, ${account.name}, ${account.passwordHash},
-      ${account.passwordSalt}, ${account.email}, ${account.avatarColor}, ${account.avatarImage}, ${account.shareNameAllowed}, ${account.locale}, ${account.termsVersion}, ${account.privacyVersion}, ${account.termsAcceptedAt},
+      ${account.passwordSalt}, ${account.email}, ${account.emailVerifiedAt}, ${account.avatarColor}, ${account.avatarImage}, ${account.shareNameAllowed}, ${account.locale}, ${account.termsVersion}, ${account.privacyVersion}, ${account.termsAcceptedAt},
       ${account.createdAt}, ${account.updatedAt}
     )
     ON CONFLICT (login_name) DO UPDATE SET
@@ -115,6 +130,7 @@ export async function savePostgresPlayerAccount(account: PlayerAccount) {
       password_hash = EXCLUDED.password_hash,
       password_salt = EXCLUDED.password_salt,
       email = EXCLUDED.email,
+      email_verified_at = EXCLUDED.email_verified_at,
       avatar_color = EXCLUDED.avatar_color,
       avatar_image = EXCLUDED.avatar_image,
       share_name_allowed = EXCLUDED.share_name_allowed,

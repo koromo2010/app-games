@@ -73,7 +73,7 @@ The first retrieval implementation uses Redis indexes plus game/task/settings ta
 
 Every multiplayer game must expose the current room configuration to all participants, while only the host can change it. New games should render configuration values with `app/components/RoomConfigSummary.tsx` so clients can verify the rules before play starts and while the room is active.
 
-Every game must provide a debug mode and place `app/components/DebugModeButton.tsx` in its top bar for the host. At minimum it must support dummy participants, viewer/phase switching appropriate to the game, abnormal-state reproduction, unattended dummy progression, and aborting the active game back to the same room's pre-game state without removing participants. Debug controls are available when the player's registered recovery email matches an account registered in the site administration screen, or when an administrator explicitly grants access to that player ID. The shared `/api/debug-auth` check and mutation APIs enforce the same rule; players cannot grant the permission to themselves. Recovery-email registration and changes live on `/users/me`, not in the game catalog.
+Every game must provide a debug mode and place `app/components/DebugModeButton.tsx` in its top bar for the host. At minimum it must support dummy participants, viewer/phase switching appropriate to the game, abnormal-state reproduction, unattended dummy progression, and aborting the active game back to the same room's pre-game state without removing participants. Debug controls are available when the player's email ownership has been confirmed and the verified recovery email matches an account registered in the site administration screen, or when an administrator explicitly grants access to that player ID. The shared `/api/debug-auth` check and mutation APIs enforce the same rule; players cannot grant the permission to themselves. Recovery-email registration and changes live on `/users/me`, not in the game catalog.
 
 Room configuration defaults are stored per game and per player in Redis, with local storage as an offline fallback. New games should use `lib/game-room-defaults-client.ts` for loading and saving, and add their server-side normalizer to `lib/room-defaults-store.ts`.
 
@@ -130,7 +130,7 @@ npm run test:sdk-starter
 
 ## Password recovery email
 
-Player accounts may optionally register a recovery email address. New accounts can add it during registration, and existing accounts can add or change it after confirming the current password. Password reset links expire after one hour and can be used only once.
+Player accounts may optionally register a recovery email address. New accounts can request it during registration, and existing accounts can request an addition or change after confirming the current password. The address is not registered until the recipient opens the one-hour confirmation link and explicitly approves it. Only verified addresses can receive password-reset links or trigger administrator-email debug access. Existing addresses created before this verification flow are migrated to unverified status; their owners can resend a confirmation to the stored address from My Page after entering the current password.
 
 Configure these server-side environment variables:
 

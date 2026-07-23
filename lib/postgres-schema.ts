@@ -14,6 +14,7 @@ export async function ensurePostgresSchema() {
           password_hash TEXT NOT NULL,
           password_salt TEXT NOT NULL,
           email TEXT UNIQUE,
+          email_verified_at BIGINT,
           avatar_color TEXT NOT NULL,
           avatar_image TEXT,
           share_name_allowed BOOLEAN NOT NULL DEFAULT FALSE,
@@ -26,6 +27,25 @@ export async function ensurePostgresSchema() {
         )
       `;
       await sql`ALTER TABLE player_accounts ADD COLUMN IF NOT EXISTS share_name_allowed BOOLEAN NOT NULL DEFAULT FALSE`;
+      await sql`ALTER TABLE player_accounts ADD COLUMN IF NOT EXISTS email_verified_at BIGINT`;
+      await sql`
+        CREATE TABLE IF NOT EXISTS app_schema_migrations (
+          id TEXT PRIMARY KEY,
+          applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `;
+      await sql`
+        WITH applied AS (
+          INSERT INTO app_schema_migrations (id)
+          VALUES ('20260723_require_recovery_email_verification')
+          ON CONFLICT DO NOTHING
+          RETURNING id
+        )
+        UPDATE player_accounts
+        SET email_verified_at = NULL
+        WHERE email IS NOT NULL
+          AND EXISTS (SELECT 1 FROM applied)
+      `;
       await sql`ALTER TABLE player_accounts ADD COLUMN IF NOT EXISTS locale TEXT NOT NULL DEFAULT 'ja'`;
       await sql`ALTER TABLE player_accounts ADD COLUMN IF NOT EXISTS terms_version TEXT`;
       await sql`ALTER TABLE player_accounts ADD COLUMN IF NOT EXISTS privacy_version TEXT`;

@@ -15,6 +15,7 @@ const account: PlayerAccountSessionSource & {
   passwordHash: "must-not-enter-session",
   passwordSalt: "must-not-enter-session",
   email: "player@example.com",
+  emailVerifiedAt: 150,
   avatarColor: "#22d3ee",
   avatarImage: null,
   shareNameAllowed: true,
@@ -40,9 +41,22 @@ test("Postgresだけに存在する既存アカウントのログインでRedis�
   assert.equal(session.id, account.playerId);
   assert.equal(session.name, account.name);
   assert.equal(session.hasRecoveryEmail, true);
+  assert.equal(session.hasUnverifiedRecoveryEmail, false);
   assert.equal(session.locale, account.locale);
   assert.equal(storedInput?.id, account.playerId);
   assert.equal("passwordHash" in (storedInput ?? {}), false);
   assert.equal("passwordSalt" in (storedInput ?? {}), false);
   assert.equal("email" in (storedInput ?? {}), false);
+  assert.equal("emailVerifiedAt" in (storedInput ?? {}), false);
+});
+
+test("未確認メールは復旧用メールとしてセッションへ公開しない", async () => {
+  const session = await ensurePlayerAccountSession({ ...account, emailVerifiedAt: null }, {
+    loadSession: async () => null,
+    saveSession: async (input) => ({ ...input, updatedAt: input.updatedAt ?? 300 }),
+    postgresConfigured: () => true,
+    updatePostgresProfile: async () => undefined,
+  });
+  assert.equal(session.hasRecoveryEmail, false);
+  assert.equal(session.hasUnverifiedRecoveryEmail, true);
 });

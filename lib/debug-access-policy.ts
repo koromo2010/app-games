@@ -24,8 +24,12 @@ function normalizeDebugAccessEmail(value: string) {
   return value.trim().normalize("NFKC").toLocaleLowerCase("en-US");
 }
 
-export function playerEmailHasAdminDebugAccess(playerEmail: string | null | undefined, adminEmails: readonly string[]) {
-  if (!playerEmail) return false;
+export function playerEmailHasAdminDebugAccess(
+  playerEmail: string | null | undefined,
+  emailVerifiedAt: number | null | undefined,
+  adminEmails: readonly string[],
+) {
+  if (!playerEmail || !emailVerifiedAt) return false;
   const normalizedPlayerEmail = normalizeDebugAccessEmail(playerEmail);
   if (!normalizedPlayerEmail) return false;
   return adminEmails.some((email) => normalizeDebugAccessEmail(email) === normalizedPlayerEmail);
@@ -33,8 +37,9 @@ export function playerEmailHasAdminDebugAccess(playerEmail: string | null | unde
 
 export function playerHasResolvedDebugAccess(
   playerEmail: string | null | undefined,
+  emailVerifiedAt: number | null | undefined,
   adminEmails: readonly string[],
   manuallyGranted: boolean,
 ) {
-  return manuallyGranted || playerEmailHasAdminDebugAccess(playerEmail, adminEmails);
+  return manuallyGranted || playerEmailHasAdminDebugAccess(playerEmail, emailVerifiedAt, adminEmails);
 }

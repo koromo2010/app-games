@@ -6,6 +6,7 @@ export type PlayerSession = {
   avatarColor: string;
   avatarImage: string | null;
   hasRecoveryEmail?: boolean;
+  hasUnverifiedRecoveryEmail?: boolean;
   shareNameAllowed?: boolean;
   locale?: AppLocale;
   createdAt?: number;
@@ -109,6 +110,7 @@ export function readPlayerSession(): PlayerSession | null {
       avatarColor,
       avatarImage,
       hasRecoveryEmail: parsed.hasRecoveryEmail === true,
+      hasUnverifiedRecoveryEmail: parsed.hasUnverifiedRecoveryEmail === true,
       shareNameAllowed: parsed.shareNameAllowed === true,
       locale: normalizeAppLocale(parsed.locale),
       createdAt: typeof parsed.createdAt === "number" ? parsed.createdAt : undefined,
@@ -122,12 +124,16 @@ export function readPlayerSession(): PlayerSession | null {
 export function savePlayerSession(session: Omit<PlayerSession, "updatedAt">) {
   if (typeof window === "undefined") return;
 
+  const previous = readPlayerSession();
   const nextSession: PlayerSession = {
     id: session.id || localStorage.getItem(playerSessionIdKey) || undefined,
     name: session.name.trim(),
     avatarColor: isAvatarColor(session.avatarColor) ? session.avatarColor : fallbackAvatarColor,
     avatarImage: isAvatarImage(session.avatarImage) ? session.avatarImage : null,
     hasRecoveryEmail: session.hasRecoveryEmail === true,
+    hasUnverifiedRecoveryEmail: typeof session.hasUnverifiedRecoveryEmail === "boolean"
+      ? session.hasUnverifiedRecoveryEmail
+      : previous?.hasUnverifiedRecoveryEmail === true,
     shareNameAllowed: session.shareNameAllowed === true,
     locale: normalizeAppLocale(session.locale),
     createdAt: session.createdAt,
@@ -195,6 +201,7 @@ export async function savePersistentPlayerSession(session: Omit<PlayerSession, "
     ...session,
     id: session.id || (typeof window !== "undefined" ? localStorage.getItem(playerSessionIdKey) || undefined : undefined),
     hasRecoveryEmail: session.hasRecoveryEmail ?? currentSession?.hasRecoveryEmail,
+    hasUnverifiedRecoveryEmail: session.hasUnverifiedRecoveryEmail ?? currentSession?.hasUnverifiedRecoveryEmail,
     shareNameAllowed: session.shareNameAllowed ?? currentSession?.shareNameAllowed,
     locale: normalizeAppLocale(session.locale ?? currentSession?.locale),
     createdAt: session.createdAt ?? currentSession?.createdAt,
