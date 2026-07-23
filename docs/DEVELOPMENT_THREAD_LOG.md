@@ -2413,3 +2413,36 @@
 
 - Portalの正式チュートリアル、APIリファレンス、提出画面はhandshake確定後の次段階として未実装。
 - 採用済みゲームのbrowser Runtimeへhandshakeを強制する処理は未実装。今回のv1はDownloadMe／AIとSDK Portalのcontrol planeを先に確定した。
+
+## 2026-07-24 — 現行ワードウルフをSDK-devの受け入れ基準へ変更
+
+### 利用者からの要望
+
+- SDK用に縮小した別のワードウルフではなく、`main`にある現行ワードウルフをそのままSDK-devへ載せる。
+- 現行ゲームが動くことで共通部分の移植を確認し、ワードウルフ固有部分を「アプリセット」、それ以外の再利用部分を「SDK基本セット」として分離する。
+
+### 判断
+
+- `games/wordwolf-sdk`の小規模moduleはserver契約とtransportのfixtureとして残すが、製品UIの完成判定には使わない。
+- `/sdk-examples/word-wolf`は現行`WordWolfGame`を直接描画し、`/wordwolf`と同じUI・設定・お題生成・DEBUG・進行・結果を受け入れ基準にする。
+- コピーを作らず正本componentを参照し、現行版とSDK-dev版が実装差分で再び分岐しないようにする。
+- 今後はこの基準画面を壊さず、別ゲームでも再利用できる単位をSDK基本セットへ移し、お題・役職・ヒント・投票・決選投票・逆転回答等をワードウルフのアプリセットとして残す。
+
+### 実施結果
+
+- SDK-dev公式ワードウルフから独自Mock UIと固定3人fixtureの接続を外し、現行`app/wordwolf/WordWolfGame.tsx`を直接利用する薄い受け入れharnessへ置換した。
+- SDK公式一覧の表示情報も現行ワードウルフのcatalogを正本とし、人数・時間・説明が別定義でずれないようにした。
+- 公式サンプル回帰テストで、現行`WordWolfGame`の直接利用とMock Runtimeへの後戻り禁止を固定した。
+- `docs/EXTERNAL_GAME_PACKAGE.md`と本引き継ぎに、SDK基本セットとアプリセットの二層を正本として追記した。
+
+### 検証
+
+- `npm run lint`成功。
+- `npm test`成功（456件）。
+- `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
+- `npm run build:sdk`成功。SDK Portalのproduction build、TypeScript検査、25ルート生成を完了した。
+
+### 未対応・保留
+
+- SDK基本セットへの物理移動は次段階。現時点では現行ワードウルフをSDK-devの差分検出用基準として確立した段階である。
+- SDK-dev実環境への反映と、ログイン済み画面での部屋作成・DEBUG完走はデプロイ後に確認する。

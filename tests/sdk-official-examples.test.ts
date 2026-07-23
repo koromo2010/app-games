@@ -14,14 +14,9 @@ test("official SDK examples are system-owned routes, not creator accounts", () =
   assert.match(catalog, /gameId: "sdk-official-word-wolf"/);
   assert.match(catalog, /publication: "public"/);
   assert.match(catalog, /sdk-examples\/word-wolf/);
-  assert.match(example, /wordWolfSdkServerModule/);
-  assert.match(example, /createGameSdkMockRuntime/);
-  assert.match(example, /<GameTopBanner/);
-  assert.match(example, /<GameTopMenu>/);
-  assert.match(example, /<GamePlayerMenu/);
-  assert.match(example, /<RoomConfigSummary/);
-  assert.match(example, /room\/rematch/);
-  assert.match(example, /role: "spectator"/);
+  assert.match(example, /import \{ WordWolfGame \} from "@\/app\/wordwolf\/WordWolfGame"/);
+  assert.match(example, /return <WordWolfGame \/>/);
+  assert.doesNotMatch(example, /createGameSdkMockRuntime|wordWolfSdkServerModule/);
   assert.match(portal, /\/sdk-examples/);
   assert.doesNotMatch(catalog + example + portal, /sdk_creators|owner_player_id|management_token/);
 });
