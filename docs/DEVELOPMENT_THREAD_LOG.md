@@ -3178,3 +3178,26 @@
 - revision指定で4ファイルを読み戻し、HTML／JavaScriptは検証済み本文とblob SHAが完全一致し、CSS／metadataは旧revisionと同一だった。固定秘密語、ローカル単語DB、直接network callはなく、Word DB取得、語釈参照、3難易度、`timer:turn-complete`を確認した。
 - 隔離Previewが実配信した`mock.js`も保存revisionの本文と完全一致した。
 - 3 deploymentのerrors-only build logは0件、直近30分のruntime errorは0件だった。
+
+## 2026-07-24 — SDK Word DB版のブラウザE2E再確認
+
+### 作業目的
+
+- `test10-1 / ai-word-guess`を最新の本体devで開き、1人開始、隔離iframe、難易度UI、Word DB取得の実動作を確認する。
+
+### 実施結果
+
+- 修正前bundleを保持した既存タブでは旧「開始には2人以上必要」表示が残っていたが、最新デプロイへreload後は1人部屋の設定欄に「最小人数 1人」と表示され、ホスト1人でプレイ中へ遷移した。
+- 隔離iframe内のゲーム固有画面が読み込まれ、出題語彙の標準／レアと、Word DB難易度の簡単／普通／難しいを選択できることを確認した。
+- Word DB取得要求は固定fallbackへ切り替わらず、401時に手番入力を無効のまま「Word DBから再取得する」を表示した。
+- Preview外枠のプレイヤーメニューは「認証済みセッション」と固定表示するが、今回のCloud Browserには本体の署名済みプレイヤーCookieがなく、`/api/sdk-preview/content-source`は`PLAYER_AUTH_REQUIRED`として拒否した。外枠の確認用identity表示は本体プレイヤー認証の証明ではない。
+
+### 検証
+
+- 最新dev画面で1人の部屋作成、ゲーム開始、隔離iframe読込、3難易度表示をブラウザ確認した。
+- 匿名状態でWord DB候補や固定秘密語が返らず、再取得可能な認証エラーになることを確認した。
+
+### 未対応・保留
+
+- 実Word DBから返る`surface / reading / difficulty / tags`の最終E2Eは、本体へ実際にログインした同一ブラウザセッションで再取得する必要がある。
+- Preview外枠の「認証済みセッション」固定表示は実際の本体認証状態と誤認し得るため、実セッション連動または確認用identityであることが分かる表示への変更を別途検討する。
