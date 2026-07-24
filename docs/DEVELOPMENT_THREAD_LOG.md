@@ -3495,3 +3495,31 @@
 
 - `develop`へ反映して同じ操作を再実行し、Vercel Runtime Logsの`phase`、`operation`、`databaseCode`から500の具体原因を確定する。
 - 原因に応じたDBまたは共通content-source修正と、Word DB取得からAI応答までの最終E2Eは未実施。
+
+## 2026-07-24 — SDK Preview Word DBの42P01確定と共通語彙DBへの統一
+
+### 診断反映と実機結果
+
+- 安全な診断変更をGitHubの`develop`へforceなしで反映した。GitHubコミットは`d9e49cae9178`で、本体dev deploymentがREADYになった後に固定クライアント`test10-1 / ai-word-guess`を再実行した。
+- Room `GF50`でPreview限定セッション交換、Room作成、隔離Runtime接続、ゲーム開始までは成功した。
+- 同じ実行の`POST /api/sdk-preview/content-source`は500になり、共通`sdk.resource`イベントから`phase=content-source`、`operation=drawWords`、`errorCode=NEONDBERROR`、`databaseCode=42P01`を確認した。秘密語、SQL、リクエスト本文、例外message・stackは記録していない。
+
+### 原因と判断
+
+- 一般ゲーム語の読取先は環境別アプリDBの`shared_word_catalog`と`shared_word_pool_evaluations`だったが、dev本体を新しい分離Neon DBへ切り替えた後、この外部公開表を作るDDL／migrationが存在しなかった。
+- 一般ゲーム語はmain／developで共有するコンテンツで、共通`word-master-neon`を正本とする既存DB責務に合わせる。devアプリDBへ語彙表を複製せず、既存の`SHARED_VOCABULARY_DATABASE_URL`／`VOCABULARY_DATABASE_URL`経路を使う。外部環境変数とDBは変更しない。
+
+### 実装
+
+- `lib/general-game-word-repository.ts`を追加し、共通単語DBの`active_words`から固有名詞を除外した実効Zipf 4.5〜6.5の語を読み取る。
+- 難易度は簡単5.5〜6.5、普通5.0以上5.5未満、難しい4.5以上5.0未満へ投影する。既存の難易度混合率と当日重複除外は維持する。
+- SDKの一般単語、ワードアウト、コードインターセプトを同じRepositoryへ統一した。Word pairとdefinitionも従来どおり共通単語DBを使う。
+- AIことば当てのコード、設定、保存済みrevisionは変更していない。
+
+### 検証・保留
+
+- `npm test`成功（全502件）。
+- `npm run lint`成功。
+- 本体、SDK Portal、隔離PreviewのProduction build成功。
+- 修正を`develop`へ反映した後、新規Roomで秘密語取得とAI応答までのログイン済み実機E2Eを行う。成功後に本項と既知問題の状態を確定する。
+- `main`、本番SDK、npm package versionは変更しない。

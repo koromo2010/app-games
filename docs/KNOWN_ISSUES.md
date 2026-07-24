@@ -321,3 +321,23 @@ Preview Shellの全resource要求へ同一origin Cookieを明示し、Word DBま
 401を返した場合は`PLAYER_AUTH_REQUIRED`へ統一してゲームShellを停止し、SDK Portal
 での再ログインが必要な共通Session Gateへ戻す。AI APIの401も安定した同一コードで
 返す。認証を省略してWord DBやAIを匿名公開する変更は行わない。
+
+## 2026-07-24 SDK Previewの一般単語取得が42P01で失敗する
+
+状態: 修正実装済み・dev実機確認待ち（2026-07-24、回帰テストあり）
+
+`test10-1 / ai-word-guess`のログイン済み実機確認で、Preview限定セッション交換、
+Room作成、隔離Runtime接続、ゲーム開始までは成功したが、
+`POST /api/sdk-preview/content-source`の`drawWords`が500になった。安全な共通診断
+イベントで、失敗段階は`content-source`、PostgreSQLコードは未定義relationを表す
+`42P01`と確認した。
+
+一般ゲーム語の読取実装は環境別アプリDBの`shared_word_catalog`と
+`shared_word_pool_evaluations`を参照していたが、dev本体を分離した新しいNeon DBには
+この外部選定表を作るmigrationがなかった。一方、一般ゲーム語はmain／developで
+共有する語彙であり、既存の共通`word-master-neon`が正本である。
+
+一般ゲーム語Repositoryを共通単語DBの`active_words`へ統一し、固有名詞を除外した
+実効Zipf 4.5〜6.5を簡単・普通・難しいへ分類する。SDKのWord DB、ワードアウト、
+コードインターセプトが同じRepositoryを使い、環境別アプリDBへ語彙表を複製しない。
+既存の難易度混合率と当日重複除外は維持する。外部環境変数やDBは変更しない。

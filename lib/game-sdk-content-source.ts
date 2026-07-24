@@ -17,7 +17,7 @@ import {
   normalizeGeneralGameWord,
   type GeneralGameWordDifficulty,
 } from "./general-game-word-pool.ts";
-import { getPostgresClient } from "./postgres-store.ts";
+import { loadGeneralGameWordRecords } from "./general-game-word-repository.ts";
 import { expectedAppEnvironment } from "./storage-environment-guard.ts";
 import { getVocabularyPostgresClient } from "./vocabulary-postgres-store.ts";
 
@@ -51,13 +51,6 @@ export type GameFieldsSdkContentRepository = {
   loadDefinitions(
     words: readonly GameFieldsSdkContentWordRecord[],
   ): Promise<readonly GameFieldsSdkContentDefinitionRecord[]>;
-};
-
-type GeneralWordRow = {
-  id: string | number;
-  surface: string;
-  reading: string | null;
-  difficulty: GameSdkContentDifficulty;
 };
 
 type VocabularyWordRow = {
@@ -126,26 +119,12 @@ function vocabularyWord(
 export function createPostgresGameFieldsSdkContentRepository(): GameFieldsSdkContentRepository {
   return {
     async loadGeneralWords() {
-      const rows = await getPostgresClient()`
-        SELECT catalog.word_master_id AS id, catalog.surface, catalog.reading,
-               evaluation.difficulty_tier AS difficulty
-        FROM shared_word_catalog catalog
-        JOIN shared_word_pool_evaluations evaluation
-          ON evaluation.word_master_id = catalog.word_master_id
-        WHERE catalog.active
-          AND evaluation.pool_key = 'standard-game'
-          AND evaluation.active
-          AND evaluation.eligibility_status = 'eligible'
-          AND evaluation.difficulty_tier IN ('easy', 'normal', 'hard')
-          AND 'general_game_pool' = ANY(evaluation.evaluation_flags)
-          AND ('difficulty_' || evaluation.difficulty_tier) = ANY(evaluation.evaluation_flags)
-        ORDER BY catalog.word_master_id
-      ` as GeneralWordRow[];
+      const rows = await loadGeneralGameWordRecords();
       return rows.map((row) => ({
-        source: "app" as const,
-        internalId: String(row.id),
+        source: "vocabulary" as const,
+        internalId: row.id,
         surface: row.surface,
-        normalizedSurface: normalizeGeneralGameWord(row.surface),
+        normalizedSurface: row.normalizedSurface,
         reading: row.reading,
         difficulty: row.difficulty,
       }));

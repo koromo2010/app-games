@@ -1,44 +1,22 @@
 import {
-  getPostgresClient,
-  isPostgresConfigured,
-} from "./postgres-store.ts";
+  generalGameWordPoolSource,
+  generalGameWordZipfBands,
+  loadGeneralGameWordRecords,
+  type GeneralGameWordDifficulty,
+} from "./general-game-word-repository.ts";
 import { expectedAppEnvironment } from "./storage-environment-guard.ts";
+import { vocabularyDatabaseErrorCode } from "./vocabulary-postgres-store.ts";
 
-export const generalGameWordPoolKey = "standard-game" as const;
-export const generalGameWordPoolFlag = "general_game_pool" as const;
+export { generalGameWordPoolSource, generalGameWordZipfBands };
 export const generalGameWordDifficulties = ["easy", "normal", "hard"] as const;
-export const generalGameWordDifficultyTags = {
-  easy: "difficulty_easy",
-  normal: "difficulty_normal",
-  hard: "difficulty_hard",
-} as const;
-export type GeneralGameWordDifficulty = (typeof generalGameWordDifficulties)[number];
+export type { GeneralGameWordDifficulty };
 export type GeneralGameWordPools = Record<GeneralGameWordDifficulty, string[]>;
-
-type GeneralGameWordRow = {
-  surface: string;
-  difficulty: GeneralGameWordDifficulty;
-};
-
-type GeneralGameWordPoolDiagnosticRow = {
-  active_catalog_count: string | number;
-  standard_pool_count: string | number;
-  general_flag_count: string | number;
-  classified_count: string | number;
-};
 
 function generalGameWordPoolErrorCode(error: unknown) {
   if (!(error instanceof Error)) return "UNEXPECTED_ERROR";
   const candidate = error.message.split(":", 1)[0]?.trim() ?? "";
   if (/^[A-Z][A-Z0-9_]{2,79}$/.test(candidate)) return candidate;
   return error.name.trim().toUpperCase().replace(/[^A-Z0-9_]/g, "_").slice(0, 80) || "UNEXPECTED_ERROR";
-}
-
-function postgresDatabaseErrorCode(error: unknown) {
-  const code = error && typeof error === "object" && "code" in error
-    ? (error as { code?: unknown }).code
-    : undefined;
-  return typeof code === "string" && /^[0-9A-Z]{5}$/.test(code) ? code : undefined;
 }
 
 function logGeneralGameWordPoolDiagnostic(
@@ -139,31 +117,16 @@ export async function loadGeneralGameWordPools(
   limitPerDifficulty = 100,
   excludeWords: readonly string[] = [],
 ): Promise<GeneralGameWordPools> {
-  if (!isPostgresConfigured()) throw new Error("GENERAL_GAME_WORD_POOL_UNAVAILABLE");
-  const sql = getPostgresClient();
   const safeLimit = Math.max(1, Math.min(500, Math.floor(limitPerDifficulty)));
   const excluded = new Set(excludeWords.map(normalizeGeneralGameWord).filter(Boolean));
 
-  let rows: GeneralGameWordRow[];
+  let rows;
   try {
-    rows = await sql`
-      SELECT catalog.surface, evaluation.difficulty_tier AS difficulty
-      FROM shared_word_catalog catalog
-      JOIN shared_word_pool_evaluations evaluation
-        ON evaluation.word_master_id = catalog.word_master_id
-      WHERE catalog.active
-        AND evaluation.pool_key = ${generalGameWordPoolKey}
-        AND evaluation.active
-        AND evaluation.eligibility_status = 'eligible'
-        AND evaluation.difficulty_tier IN ('easy', 'normal', 'hard')
-        AND ${generalGameWordPoolFlag} = ANY(evaluation.evaluation_flags)
-        AND ('difficulty_' || evaluation.difficulty_tier) = ANY(evaluation.evaluation_flags)
-      ORDER BY catalog.word_master_id
-    ` as GeneralGameWordRow[];
+    rows = await loadGeneralGameWordRecords(safeLimit);
   } catch (error) {
     logGeneralGameWordPoolDiagnostic("error", "load-query", {
       errorCode: generalGameWordPoolErrorCode(error),
-      databaseCode: postgresDatabaseErrorCode(error),
+      databaseCode: vocabularyDatabaseErrorCode(error),
       outcome: "failed",
     });
     throw error;
@@ -185,44 +148,6 @@ export async function loadGeneralGameWordPools(
       sourceCount: pools[difficulty].length,
       outcome: pools[difficulty].length > 0 ? "success" : "failed",
     });
-  }
-  if (rows.length === 0) {
-    try {
-      const diagnosticRows = await sql`
-        SELECT
-          COUNT(*) FILTER (WHERE catalog.active) AS active_catalog_count,
-          COUNT(*) FILTER (WHERE evaluation.pool_key = ${generalGameWordPoolKey}
-            AND evaluation.active AND evaluation.eligibility_status = 'eligible') AS standard_pool_count,
-          COUNT(*) FILTER (WHERE evaluation.pool_key = ${generalGameWordPoolKey}
-            AND evaluation.active AND evaluation.eligibility_status = 'eligible'
-            AND ${generalGameWordPoolFlag} = ANY(evaluation.evaluation_flags)) AS general_flag_count,
-          COUNT(*) FILTER (WHERE evaluation.pool_key = ${generalGameWordPoolKey}
-            AND evaluation.active AND evaluation.eligibility_status = 'eligible'
-            AND ${generalGameWordPoolFlag} = ANY(evaluation.evaluation_flags)
-            AND evaluation.difficulty_tier IN ('easy', 'normal', 'hard')) AS classified_count
-        FROM shared_word_catalog catalog
-        LEFT JOIN shared_word_pool_evaluations evaluation
-          ON evaluation.word_master_id = catalog.word_master_id
-      ` as GeneralGameWordPoolDiagnosticRow[];
-      const diagnostic = diagnosticRows[0];
-      for (const [operation, value] of [
-        ["active-catalog", diagnostic?.active_catalog_count],
-        ["standard-pool", diagnostic?.standard_pool_count],
-        ["general-flag", diagnostic?.general_flag_count],
-        ["classified", diagnostic?.classified_count],
-      ] as const) {
-        logGeneralGameWordPoolDiagnostic("warn", operation, {
-          sourceCount: Number(value ?? 0),
-          outcome: "failed",
-        });
-      }
-    } catch (error) {
-      logGeneralGameWordPoolDiagnostic("error", "diagnostic-query", {
-        errorCode: generalGameWordPoolErrorCode(error),
-        databaseCode: postgresDatabaseErrorCode(error),
-        outcome: "failed",
-      });
-    }
   }
   return pools;
 }
