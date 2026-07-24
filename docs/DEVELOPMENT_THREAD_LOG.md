@@ -2904,14 +2904,18 @@
 - npm Organization `@game-fields`を作成し、所有者アカウントの2FAを有効化した。
 - 初回公開用の7日間tokenを発行し、`@game-fields` scopeをread/write、Organization管理権限をnoneに限定した。
 - GitHub Environment `npm-public`へ`main`限定branch rule、required reviewer、Environment Secret `NPM_TOKEN`を設定した。
+- 検証済み`develop`をGitHub `main`へforceなしでfast-forwardし、本体とSDK Portalの本番デプロイを開始した。
 
 ### 検証
 
 - npm registryで`@game-fields/game-sdk@0.1.0`が未登録であることを確認した。
 - tokenの秘密値はGit、文書、チャットへ記録していない。
+- `npm run lint`、`npm test`（481件）、`npm run build`（77ページ）に成功した。
+- `main` commit `72a735e6575055296b56f068d55ae9c67f8de0fa`の本体deployment `dpl_12LkKNj9EQ1JdK6xvkBv6X6SkSzM`とSDK Portal deployment `dpl_8mPgws9kC5zAH2S5FzKYSmM9Vcz3`が`READY`となり、`game-fields.com`／`www.game-fields.com`と`sdk.game-fields.com`へalias切替された。
+- 両deploymentのbuild errorは0件、直近30分のruntime `error`／`fatal`は0件だった。
 
 ### 未対応・保留
 
-- `develop`の検証済みtreeを`main`へfast-forwardし、`Publish Game SDK` workflowをversion `0.1.0`で手動実行する。
-- required reviewerの承認、workflow成功、npm registryからのpackument取得、Vercel本番デプロイを確認する。
+- `Publish Game SDK` workflowをversion `0.1.0`、confirm `publish-game-sdk`で手動実行する。
+- required reviewerの承認、workflow成功、npm registryからのpackument取得を確認する。
 - 初回公開成功後に短期tokenを失効し、Trusted Publishing設定へ移行する。
