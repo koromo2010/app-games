@@ -131,7 +131,7 @@ test("SDK preview content bridge authenticates and validates the saved game prof
     "utf8",
   );
   for (const marker of [
-    "requireAuthenticatedPlayer",
+    "requireSdkPreviewAuthenticatedPlayer",
     "rateLimitPolicies.sdkContentRead",
     "loadSdkPreviewRuntimeDefinition",
     "gameSdkModuleIsRequired(moduleProfile, \"content-source\")",
@@ -144,6 +144,40 @@ test("SDK preview content bridge authenticates and validates the saved game prof
     assert.match(route, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
   assert.doesNotMatch(route, /process\.env\.[A-Z_]+.*Response/);
+});
+
+test("SDK Portal exchanges its account session for a scoped Preview API session", () => {
+  const gate = readFileSync(
+    "app/sdk-preview/SdkPreviewSessionGate.tsx",
+    "utf8",
+  );
+  const sessionRoute = readFileSync(
+    "app/api/sdk-preview/session/route.ts",
+    "utf8",
+  );
+  const previewSession = readFileSync(
+    "lib/sdk-preview-account-session.ts",
+    "utf8",
+  );
+  const portalPage = readFileSync(
+    "apps/sdk-portal/app/[instanceId]/page.tsx",
+    "utf8",
+  );
+  for (const marker of [
+    "sdkPreviewLink",
+    "/api/sdk-preview/session",
+    "window.history.replaceState",
+  ]) {
+    assert.match(gate, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
+  assert.match(sessionRoute, /parseSdkPreviewAccountLinkCode/);
+  assert.match(sessionRoute, /setSdkPreviewAccountSession/);
+  assert.match(previewSession, /path: "\/api\/sdk-preview"/);
+  assert.match(previewSession, /purpose: "sdk-preview-session"/);
+  assert.match(previewSession, /requireSdkPreviewAuthenticatedPlayer/);
+  assert.doesNotMatch(previewSession, /setPlayerAuthCookie/);
+  assert.match(portalPage, /createSdkPreviewAccountLinkCode/);
+  assert.match(portalPage, /sdkPreviewLink/);
 });
 
 test("every required SDK module resolves to a concrete preview implementation", () => {

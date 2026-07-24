@@ -185,7 +185,8 @@ const words = await requireGameSdkContentSource({ contentSource }).drawWords({
 });
 if (words.length !== 2) process.exit(1);
 if (GAME_SDK_CONTENT_POOL_DEFINITIONS["general-words"].displayName !== "一般語彙") process.exit(1);
-if (GAME_SDK_CONTENT_POOL_DEFINITIONS["rare-words"].displayName !== "低認知語彙") process.exit(1);
+if (GAME_SDK_CONTENT_POOL_DEFINITIONS["word-pairs"].displayName !== "審査済みワードペア") process.exit(1);
+if ("rare-words" in GAME_SDK_CONTENT_POOL_DEFINITIONS) process.exit(1);
 if (createStandardPlayingCardDeck({ jokersPerDeck: 2 }).length !== 54) process.exit(1);
 if (!normalizeDrawingStroke({
   id: "stroke-1",

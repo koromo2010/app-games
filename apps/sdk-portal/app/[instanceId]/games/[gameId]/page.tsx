@@ -1,11 +1,15 @@
 import { notFound } from "next/navigation";
+import { redirect } from "next/navigation";
 import {
   authenticateCreatorOwner,
   getCreatorGameModuleProfile,
   normalizeInstanceSlug,
   validateInstanceSlug,
 } from "@/lib/instance-registry";
-import { getSdkAccountSession } from "@/lib/account-session";
+import {
+  createSdkPreviewAccountLinkCode,
+  getSdkAccountSession,
+} from "@/lib/account-session";
 import { getCreatorModuleCustomizationAccess } from "@/lib/module-customization-access";
 import { GameModuleReview } from "./GameModuleReview";
 
@@ -17,6 +21,11 @@ export default async function CreatorGamePage({ params }: { params: Promise<{ in
   const gameId = raw.gameId.trim().toLowerCase();
   if (validateInstanceSlug(instanceId) || !GAME_PATTERN.test(gameId)) notFound();
   const account = await getSdkAccountSession().catch(() => null);
+  if (!account) {
+    redirect(
+      `/api/account-link/start?returnTo=${encodeURIComponent(`/${instanceId}/games/${gameId}`)}`,
+    );
+  }
   const owner = account
     ? await authenticateCreatorOwner(instanceId, account.playerId).catch(
       () => null,
@@ -35,8 +44,17 @@ export default async function CreatorGamePage({ params }: { params: Promise<{ in
     : null;
   const appBaseUrl = process.env.GAME_FIELDS_PREVIEW_APP_URL?.replace(/\/$/, "")
     ?? (process.env.VERCEL_GIT_COMMIT_REF === "main" ? "https://www.game-fields.com" : "https://dev.game-fields.com");
+  const linkCode = createSdkPreviewAccountLinkCode({
+    playerId: account.playerId,
+    playerName: account.playerName,
+    audience: new URL(appBaseUrl).origin,
+    creatorSlug: instanceId,
+  });
+  const previewUrl = `${appBaseUrl}/sdk-preview/${instanceId}/games/${gameId}#${new URLSearchParams({
+    sdkPreviewLink: linkCode,
+  }).toString()}`;
   return <main className="platform-preview-shell">
-    <iframe className="platform-preview-frame" src={`${appBaseUrl}/sdk-preview/${instanceId}/games/${gameId}`} title={`${gameId}のGame Fields開発環境`} allow="fullscreen" />
+    <iframe className="platform-preview-frame" src={previewUrl} title={`${gameId}のGame Fields開発環境`} allow="fullscreen" />
     {moduleProfile && (
       <GameModuleReview
         instanceId={instanceId}

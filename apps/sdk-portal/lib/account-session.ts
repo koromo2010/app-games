@@ -8,6 +8,10 @@ const maxAgeSeconds = 30 * 24 * 60 * 60;
 
 export type SdkAccountSession = { playerId: string; playerName: string | null; expiresAt: number };
 type LinkPayload = { playerId: string; playerName?: string; audience: string; expiresAt: number };
+type PreviewLinkPayload = LinkPayload & {
+  purpose: "sdk-preview-resource";
+  creatorSlug: string;
+};
 
 function secret() {
   const value = process.env.SDK_ACCOUNT_LINK_SECRET;
@@ -31,6 +35,30 @@ function parseSigned<T>(value: string): T | null {
 function createSigned(payload: object) {
   const encoded = Buffer.from(JSON.stringify(payload)).toString("base64url");
   return `${encoded}.${signature(encoded)}`;
+}
+
+export function createSdkPreviewAccountLinkCode(input: {
+  playerId: string;
+  playerName: string | null;
+  audience: string;
+  creatorSlug: string;
+}) {
+  if (
+    !input.playerId.trim()
+    || !/^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])?$/.test(input.creatorSlug)
+  ) {
+    throw new Error("SDK_PREVIEW_ACCOUNT_LINK_INVALID");
+  }
+  return createSigned({
+    playerId: input.playerId,
+    ...(input.playerName?.trim()
+      ? { playerName: input.playerName.trim().slice(0, 40) }
+      : {}),
+    audience: input.audience,
+    creatorSlug: input.creatorSlug,
+    purpose: "sdk-preview-resource",
+    expiresAt: Date.now() + 60_000,
+  } satisfies PreviewLinkPayload);
 }
 
 export function verifyAccountLinkCode(code: string, audience: string): Omit<SdkAccountSession, "expiresAt"> | null {

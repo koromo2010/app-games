@@ -47,7 +47,6 @@ export type GameFieldsSdkContentDefinitionRecord = {
 
 export type GameFieldsSdkContentRepository = {
   loadGeneralWords(): Promise<readonly GameFieldsSdkContentWordRecord[]>;
-  loadRareWords(): Promise<readonly GameFieldsSdkContentWordRecord[]>;
   loadWordPairs(): Promise<readonly GameFieldsSdkContentPairRecord[]>;
   loadDefinitions(
     words: readonly GameFieldsSdkContentWordRecord[],
@@ -150,29 +149,6 @@ export function createPostgresGameFieldsSdkContentRepository(): GameFieldsSdkCon
         reading: row.reading,
         difficulty: row.difficulty,
       }));
-    },
-
-    async loadRareWords() {
-      const sql = getVocabularyPostgresClient();
-      const rows = expectedAppEnvironment() === "production"
-        ? await sql`
-          SELECT id, surface, normalized_surface, reading, effective_zipf AS zipf
-          FROM active_words
-          WHERE effective_zipf >= 0 AND effective_zipf < 3
-          ORDER BY updated_at DESC
-          LIMIT 500
-        ` as VocabularyWordRow[]
-        : await sql`
-          SELECT id, surface, normalized_surface, reading,
-                 COALESCE(selection_zipf_override, zipf) AS zipf
-          FROM words
-          WHERE status = 'active'
-            AND COALESCE(selection_zipf_override, zipf) >= 0
-            AND COALESCE(selection_zipf_override, zipf) < 3
-          ORDER BY updated_at DESC
-          LIMIT 500
-        ` as VocabularyWordRow[];
-      return rows.map(vocabularyWord);
     },
 
     async loadWordPairs() {
@@ -321,15 +297,16 @@ export function createPostgresGameFieldsSdkContentRepository(): GameFieldsSdkCon
 }
 
 type OpaqueWordPayload = {
-  version: 1;
+  version: 2;
   kind: "word";
+  pool: "general-words" | "word-pairs";
   source: ContentWordSource;
   internalId: string;
   normalizedSurface: string;
 };
 
 type OpaquePairPayload = {
-  version: 1;
+  version: 2;
   kind: "pair";
   internalId: string;
 };
@@ -345,7 +322,7 @@ function defaultIdSecret() {
 
 function opaqueIdKey(secret: string) {
   return createHash("sha256")
-    .update("game-fields-sdk-content:v1:")
+    .update("game-fields-sdk-content:v2:")
     .update(secret)
     .digest();
 }
@@ -353,12 +330,12 @@ function opaqueIdKey(secret: string) {
 function opaqueId(payload: OpaquePayload, secret: string) {
   const nonce = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", opaqueIdKey(secret), nonce);
-  cipher.setAAD(Buffer.from("game-fields-sdk-content:v1", "utf8"));
+  cipher.setAAD(Buffer.from("game-fields-sdk-content:v2", "utf8"));
   const ciphertext = Buffer.concat([
     cipher.update(JSON.stringify(payload), "utf8"),
     cipher.final(),
   ]);
-  return `gfc1.${Buffer.concat([
+  return `gfc2.${Buffer.concat([
     nonce,
     cipher.getAuthTag(),
     ciphertext,
@@ -367,7 +344,7 @@ function opaqueId(payload: OpaquePayload, secret: string) {
 
 function decodeOpaqueId(value: string, secret: string): OpaquePayload | null {
   const [prefix, encoded, extra] = value.split(".");
-  if (prefix !== "gfc1" || !encoded || extra) return null;
+  if (prefix !== "gfc2" || !encoded || extra) return null;
   try {
     const encrypted = Buffer.from(encoded, "base64url");
     if (encrypted.length <= 28) return null;
@@ -375,7 +352,7 @@ function decodeOpaqueId(value: string, secret: string): OpaquePayload | null {
     const authTag = encrypted.subarray(12, 28);
     const ciphertext = encrypted.subarray(28);
     const decipher = createDecipheriv("aes-256-gcm", opaqueIdKey(secret), nonce);
-    decipher.setAAD(Buffer.from("game-fields-sdk-content:v1", "utf8"));
+    decipher.setAAD(Buffer.from("game-fields-sdk-content:v2", "utf8"));
     decipher.setAuthTag(authTag);
     const parsed = JSON.parse(
       Buffer.concat([
@@ -383,21 +360,23 @@ function decodeOpaqueId(value: string, secret: string): OpaquePayload | null {
         decipher.final(),
       ]).toString("utf8"),
     ) as Record<string, unknown>;
-    if (parsed.version !== 1 || (parsed.kind !== "word" && parsed.kind !== "pair")) return null;
+    if (parsed.version !== 2 || (parsed.kind !== "word" && parsed.kind !== "pair")) return null;
     if (typeof parsed.internalId !== "string" || !parsed.internalId.trim()) return null;
     if (parsed.kind === "pair") return {
-      version: 1,
+      version: 2,
       kind: "pair",
       internalId: parsed.internalId,
     };
     if (
       (parsed.source !== "app" && parsed.source !== "vocabulary")
+      || (parsed.pool !== "general-words" && parsed.pool !== "word-pairs")
       || typeof parsed.normalizedSurface !== "string"
       || !parsed.normalizedSurface.trim()
     ) return null;
     return {
-      version: 1,
+      version: 2,
       kind: "word",
+      pool: parsed.pool,
       source: parsed.source,
       internalId: parsed.internalId,
       normalizedSurface: parsed.normalizedSurface,
@@ -421,11 +400,13 @@ function publicWord(
   word: GameFieldsSdkContentWordRecord,
   secret: string,
   tags: readonly string[],
+  pool: "general-words" | "word-pairs",
 ): GameSdkWordContent {
   return {
     id: opaqueId({
-      version: 1,
+      version: 2,
       kind: "word",
+      pool,
       source: word.source,
       internalId: word.internalId,
       normalizedSurface: word.normalizedSurface,
@@ -486,21 +467,24 @@ export function createGameFieldsSdkContentSource(options: {
       const excludedSurfaces = new Set(
         (request.excludeSurfaces ?? []).map(normalizeGeneralGameWord),
       );
-      const available = (request.pool === "general-words"
-        ? await repository.loadGeneralWords()
-        : await repository.loadRareWords())
+      const available = (await repository.loadGeneralWords())
         .filter((word) => (
           !excludedIds.has(`${word.source}:${word.internalId}`)
           && !excludedSurfaces.has(normalizeGeneralGameWord(word.surface))
         ));
-      const selected = request.pool === "general-words"
-        ? selectGeneralWords(available, request.difficulty ?? "normal", request.count, random)
-        : shuffle(
-            available.filter((word) => word.difficulty === (request.difficulty ?? "normal")),
-            random,
-          ).slice(0, request.count);
+      const selected = selectGeneralWords(
+        available,
+        request.difficulty ?? "normal",
+        request.count,
+        random,
+      );
       if (selected.length !== request.count) throw new Error("GAME_SDK_CONTENT_UNAVAILABLE");
-      return selected.map((word) => publicWord(word, secret, [request.pool]));
+      return selected.map((word) => publicWord(
+        word,
+        secret,
+        ["general-words"],
+        "general-words",
+      ));
     },
 
     async drawWordPairs(request) {
@@ -520,12 +504,12 @@ export function createGameFieldsSdkContentSource(options: {
       if (selected.length !== request.count) throw new Error("GAME_SDK_CONTENT_UNAVAILABLE");
       return selected.map((pair): GameSdkWordPairContent => ({
         id: opaqueId({
-          version: 1,
+          version: 2,
           kind: "pair",
           internalId: pair.internalId,
         }, secret),
-        first: publicWord(pair.first, secret, ["word-pairs"]),
-        second: publicWord(pair.second, secret, ["word-pairs"]),
+        first: publicWord(pair.first, secret, ["word-pairs"], "word-pairs"),
+        second: publicWord(pair.second, secret, ["word-pairs"], "word-pairs"),
         difficulty: pair.difficulty,
         relation: pair.relation,
       }));

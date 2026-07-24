@@ -3,6 +3,7 @@ import { loadGameOperations } from "@/lib/game-operations-store";
 import { loadSiteSettings } from "@/lib/site-settings-store";
 import { GameLobby } from "@/app/games/GameLobby";
 import { sdkGamesForCatalog, type SdkGameDescriptor } from "@/app/games/sdk-game-catalog";
+import { SdkPreviewSessionGate } from "@/app/sdk-preview/SdkPreviewSessionGate";
 
 export const dynamic = "force-dynamic";
 const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])?$/;
@@ -37,10 +38,17 @@ export default async function SdkCreatorLobbyPage({ params }: { params: Promise<
     message: "",
     updatedAt: null,
   }));
-  return <GameLobby
-    siteName={settings.siteName}
-    gameOperations={[...operations, ...creatorOperations]}
-    additionalGames={creatorGames}
-    includeBuiltInGames={false}
-  />;
+  return (
+    <SdkPreviewSessionGate
+      creatorSlug={creatorSlug}
+      portalHref={`${sdkPortalBaseUrl()}/${creatorSlug}`}
+    >
+      <GameLobby
+        siteName={settings.siteName}
+        gameOperations={[...operations, ...creatorOperations]}
+        additionalGames={creatorGames}
+        includeBuiltInGames={false}
+      />
+    </SdkPreviewSessionGate>
+  );
 }

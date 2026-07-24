@@ -1,7 +1,6 @@
 export const GAME_SDK_CONTENT_POOLS = [
   "general-words",
   "word-pairs",
-  "rare-words",
 ] as const;
 
 export const GAME_SDK_CONTENT_DIFFICULTIES = [
@@ -25,12 +24,7 @@ export type GameSdkContentPoolDefinition = {
   difficultySelection: "weighted-mix" | "exact-tier";
 };
 
-/**
- * Canonical public names and meanings of the Platform content pools.
- *
- * `rare-words` shares its source vocabulary with Tahoiya candidate discovery,
- * but does not mean that a word has been screened or accepted for Tahoiya.
- */
+/** Canonical public names and meanings of the Platform content pools. */
 export const GAME_SDK_CONTENT_POOL_DEFINITIONS = {
   "general-words": {
     id: "general-words",
@@ -44,13 +38,6 @@ export const GAME_SDK_CONTENT_POOL_DEFINITIONS = {
     displayName: "審査済みワードペア",
     description:
       "2語の関係と距離を審査したワードウルフ向けペアのプールです。",
-    difficultySelection: "exact-tier",
-  },
-  "rare-words": {
-    id: "rare-words",
-    displayName: "低認知語彙",
-    description:
-      "共通語彙DBの実効Zipf値が0以上3未満の有効語です。読みが難しい語だけでなく、読みは平易でも意味を知る人が少ない語や意味が難しい語を含みます。たほい屋候補と母集団は重なりますが、たほい屋専用または審査・採用済みのお題という意味ではありません。",
     difficultySelection: "exact-tier",
   },
 } as const satisfies Record<GameSdkContentPool, GameSdkContentPoolDefinition>;
@@ -97,8 +84,8 @@ export type GameSdkWordDefinitionContent = {
 };
 
 export type GameSdkDrawWordsRequest = {
-  /** Reviewed general vocabulary or active low-recognition vocabulary. */
-  pool: "general-words" | "rare-words";
+  /** Reviewed general vocabulary. Low-recognition and Tahoiya pools are private. */
+  pool: "general-words";
   /** Number of distinct items to draw. Integer from 1 through 100. */
   count: number;
   /** Client-selected difficulty. Defaults to normal. */
@@ -169,7 +156,7 @@ function safeDifficulty(value: GameSdkContentDifficulty | undefined) {
 export function normalizeGameSdkDrawWordsRequest(
   request: GameSdkDrawWordsRequest,
 ): GameSdkDrawWordsRequest {
-  if (request.pool !== "general-words" && request.pool !== "rare-words") {
+  if (request.pool !== "general-words") {
     throw new Error("GAME_SDK_CONTENT_WORD_POOL_REQUIRED");
   }
   return {

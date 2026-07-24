@@ -13,7 +13,9 @@ import {
   observabilityErrorCode,
 } from "@/lib/observability";
 import { commonOnlineRoomErrorResponse } from "@/lib/online-room-route-errors";
-import { requireAuthenticatedPlayer } from "@/lib/player-auth";
+import {
+  requireSdkPreviewAuthenticatedPlayer,
+} from "@/lib/sdk-preview-account-session";
 import {
   loadSdkPreviewRuntimeDefinition,
   sdkPreviewCreatorSlugPattern,
@@ -59,6 +61,12 @@ function sdkLlmErrorResponse(error: unknown) {
     return json({ error: code }, 503);
   }
   if (
+    code === "SDK_ACCOUNT_LINK_SECRET_NOT_CONFIGURED"
+    || code === "PLAYER_SESSION_SECRET_NOT_CONFIGURED"
+  ) {
+    return json({ error: "GAME_SDK_LLM_UNAVAILABLE" }, 503);
+  }
+  if (
     code.startsWith("GAME_SDK_LLM_INVALID_")
     || code === "GAME_SDK_LLM_HIGH_QUALITY_NOT_ALLOWED"
   ) {
@@ -75,7 +83,6 @@ export async function POST(request: Request) {
     { operation: "sdk-preview-llm" },
   );
   try {
-    const session = await requireAuthenticatedPlayer();
     const body = objectBody(await request.json().catch(() => null));
     const creatorSlug = typeof body?.creatorSlug === "string"
       ? body.creatorSlug.trim().toLowerCase()
@@ -96,6 +103,7 @@ export async function POST(request: Request) {
       return json({ error: "GAME_SDK_LLM_INPUT_REQUIRED" }, 400);
     }
 
+    const session = await requireSdkPreviewAuthenticatedPlayer(creatorSlug);
     const definition = await loadSdkPreviewRuntimeDefinition(
       creatorSlug,
       gameId,

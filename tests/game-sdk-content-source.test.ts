@@ -27,14 +27,6 @@ const words = {
     reading: "ひこうせん",
     difficulty: "easy",
   },
-  rare: {
-    source: "vocabulary",
-    internalId: "123e4567-e89b-42d3-a456-426614174000",
-    surface: "寂寥",
-    normalizedSurface: "寂寥",
-    reading: "せきりょう",
-    difficulty: "normal",
-  },
   pairA: {
     source: "vocabulary",
     internalId: "223e4567-e89b-42d3-a456-426614174000",
@@ -61,9 +53,6 @@ function repository(): GameFieldsSdkContentRepository {
     async loadGeneralWords() {
       return [words.easyA, words.easyB];
     },
-    async loadRareWords() {
-      return [words.rare];
-    },
     async loadWordPairs() {
       return [{
         internalId: "423e4567-e89b-42d3-a456-426614174000",
@@ -87,26 +76,22 @@ function repository(): GameFieldsSdkContentRepository {
 
 const idSecret = "0123456789abcdef0123456789abcdef";
 
-test("SDK content pools expose canonical names without limiting low-recognition words to difficult readings", () => {
+test("SDK content pools expose only general words and reviewed word pairs", () => {
   assert.deepEqual(
     Object.keys(GAME_SDK_CONTENT_POOL_DEFINITIONS),
     [...GAME_SDK_CONTENT_POOLS],
+  );
+  assert.deepEqual(
+    GAME_SDK_CONTENT_POOLS,
+    ["general-words", "word-pairs"],
   );
   assert.equal(
     GAME_SDK_CONTENT_POOL_DEFINITIONS["general-words"].displayName,
     "一般語彙",
   );
   assert.equal(
-    GAME_SDK_CONTENT_POOL_DEFINITIONS["rare-words"].displayName,
-    "低認知語彙",
-  );
-  assert.match(
-    GAME_SDK_CONTENT_POOL_DEFINITIONS["rare-words"].description,
-    /意味が難しい語を含みます/,
-  );
-  assert.match(
-    GAME_SDK_CONTENT_POOL_DEFINITIONS["rare-words"].description,
-    /たほい屋専用または審査・採用済みのお題という意味ではありません/,
+    GAME_SDK_CONTENT_POOL_DEFINITIONS["word-pairs"].displayName,
+    "審査済みワードペア",
   );
 });
 
@@ -123,7 +108,7 @@ test("SDK content source draws opaque words and resolves definitions without exp
     excludeSurfaces: ["飛行船"],
   });
   assert.equal(word?.surface, "ひまわり");
-  assert.match(word?.id ?? "", /^gfc1\./);
+  assert.match(word?.id ?? "", /^gfc2\./);
   assert.equal(word?.id.includes("101"), false);
   assert.doesNotMatch(
     Buffer.from(word!.id.split(".")[1]!, "base64url").toString("utf8"),
@@ -142,21 +127,35 @@ test("SDK content source draws opaque words and resolves definitions without exp
   assert.deepEqual(await source.findDefinitions({
     wordIds: [tamperedId],
   }), []);
+  assert.deepEqual(await source.findDefinitions({
+    wordIds: [word!.id.replace(/^gfc2\./, "gfc1.")],
+  }), []);
 });
 
-test("SDK content source applies pool difficulty and opaque pair exclusions", async () => {
+test("SDK content source rejects private low-recognition and Tahoiya pools", async () => {
   const source = createGameFieldsSdkContentSource({
     repository: repository(),
     idSecret,
     random: () => 0,
   });
-  const [rare] = await source.drawWords({
-    pool: "rare-words",
-    difficulty: "normal",
-    count: 1,
-  });
-  assert.equal(rare?.surface, "寂寥");
+  for (const pool of ["rare-words", "tahoiya-candidates"]) {
+    await assert.rejects(
+      source.drawWords({
+        pool,
+        difficulty: "normal",
+        count: 1,
+      } as never),
+      /GAME_SDK_CONTENT_WORD_POOL_REQUIRED/,
+    );
+  }
+});
 
+test("SDK content source applies pair difficulty and opaque pair exclusions", async () => {
+  const source = createGameFieldsSdkContentSource({
+    repository: repository(),
+    idSecret,
+    random: () => 0,
+  });
   const [pair] = await source.drawWordPairs({
     pool: "word-pairs",
     difficulty: "normal",

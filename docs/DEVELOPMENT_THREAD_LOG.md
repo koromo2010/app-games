@@ -3275,3 +3275,46 @@
 ### 未対応・保留
 
 - SDK本体の変更はまだGitHubへpushしていない。`main`、本番SDK、npm package versionも更新していない。
+
+## 2026-07-24 — SDK内部語彙の非公開化とPreview認証引き継ぎ
+
+### 利用者からの指摘
+
+- 低認知語彙はSDKへ開放せず、たほい屋候補も同様にPlatform内部だけで扱う。
+- SDK Portalではログイン済みと表示されるのに、ゲーム開始時のWord DB・AI APIが`PLAYER_AUTH_REQUIRED`で停止する。
+
+### 判断
+
+- 公開`content-source`は`general-words`と`word-pairs`だけとする。低認知語彙、たほい屋の未審査候補、審査結果、採用済みお題を一つの内部境界として扱い、公開名を与えない。
+- 公開型から外すだけでなく、任意文字列による直接要求もサーバーで拒否する。
+- 過去に公開した低認知語彙のopaque IDから語釈を再取得できないよう、ID暗号化のversionと鍵導出domainを`gfc2`へ更新する。
+- Portalと本体devの別origin間では通常Cookieを共有しない。Portalは対象origin・制作者・60秒に限定した署名コードをfragmentで渡し、本体は`/api/sdk-preview`だけに効く制作者別HttpOnly Cookieへ交換する。
+- Preview限定セッションを通常プレイヤーCookieへ変換せず、ゲーム本体・アカウント・ほかの制作者Previewへ権限を拡張しない。
+
+### 実施結果
+
+- 公開SDKのpool定数・定義・`drawWords`型から`rare-words`を削除し、`drawWords`を一般語彙専用にした。
+- Platform adapterから低認知語彙loaderを削除した。`rare-words`と`tahoiya-candidates`の直接要求を拒否する回帰テストを追加した。
+- opaque word／pair IDを`gfc2`へ更新し、word IDへ公開poolを暗号化して保持するようにした。旧`gfc1`はdecodeしない。
+- package README、SDK API、module catalog、ゲーム仕様、外部package構想、module inventory、引き継ぎ資料を「一般語彙・審査済みワードペアだけ公開」へ更新した。
+- SDK Portalの制作者トップとゲーム画面から60秒の署名fragmentを発行し、本体`/api/sdk-preview/session`で8時間のPreview API限定セッションへ交換する導線を追加した。
+- Word DBとAI APIは、通常プレイヤーCookieまたは対象制作者のPreview限定Cookieを受理する。限定Cookieは`/api/sdk-preview` pathだけへ送信する。
+- `test10-1 / ai-word-guess`から語彙種類selectを削除し、`drawWords({ pool: "general-words" })`へ固定した。制限時間はゲーム側の`preview.json`で既定60秒、30／60／90／120秒を宣言した。
+- 同モックをrevision`1e430352a7741910644bdfb6b42671e9f404481c`として保存し、4ファイルを配信元Git revisionから読み戻してローカル本文との完全一致を確認した。
+
+### 検証
+
+- 公開pool、低認知語彙・たほい屋pool拒否、opaque ID v2、Preview署名scope、限定Cookie交換を含む対象テスト18件成功。
+- `npm test`成功（496件）。
+- `npm run lint`成功。環境変数台帳60キー、9ゲーム共通要件、SDK依存境界を確認した。
+- `npm run test:sdk-package`成功。外部fixtureへinstallした公開packageで、低認知語彙poolが公開exportに含まれないことを確認した。
+- `npm run test:sdk-starter`成功。入口、公開Git用snapshot、ZIP、同梱SDK install、型検査、契約テスト、完走デモ、提出ZIPを確認した。
+- `npm run build`成功。本体77ページと`/api/sdk-preview/session`を生成した。
+- `npm run build:sdk`成功。SDK Portal 14ページを生成した。
+- `npm run build:sdk-preview`成功。隔離Preview 5ページを生成した。
+- AIことば当てのJavaScript構文検査に成功し、低認知語彙・たほい屋pool・語彙選択UIがないこと、一般語彙固定要求を確認した。
+
+### 未対応・保留
+
+- SDK本体とPreview認証修正はまだGitHubへpushしていないため、現在のdev本体では新しい限定セッション交換は未反映。
+- `main`、本番SDK、npm package versionはこの変更では更新しない。

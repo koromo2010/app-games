@@ -10,9 +10,11 @@ import {
 import { createGameFieldsSdkContentSource } from "@/lib/game-sdk-content-source";
 import {
   isPlayerAuthConfigurationError,
-  requireAuthenticatedPlayer,
 } from "@/lib/player-auth";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
+import {
+  requireSdkPreviewAuthenticatedPlayer,
+} from "@/lib/sdk-preview-account-session";
 import {
   loadSdkPreviewRuntimeDefinition,
   sdkPreviewCreatorSlugPattern,
@@ -74,6 +76,9 @@ function contentErrorResponse(error: unknown) {
   if (isPlayerAuthConfigurationError(error) || unavailableErrors.has(code)) {
     return json({ error: "GAME_SDK_CONTENT_UNAVAILABLE" }, 503);
   }
+  if (code === "SDK_ACCOUNT_LINK_SECRET_NOT_CONFIGURED") {
+    return json({ error: "GAME_SDK_CONTENT_UNAVAILABLE" }, 503);
+  }
   if (code === "PLAYER_AUTH_REQUIRED") {
     return json({ error: code }, 401);
   }
@@ -102,14 +107,6 @@ async function runContentOperation(
 
 export async function POST(request: Request) {
   try {
-    const session = await requireAuthenticatedPlayer();
-    const limited = await rateLimitResponseFor(
-      request,
-      rateLimitPolicies.sdkContentRead,
-      { playerId: session.id },
-    );
-    if (limited) return limited;
-
     const body = objectBody(await request.json().catch(() => null));
     const creatorSlug = typeof body?.creatorSlug === "string"
       ? body.creatorSlug.trim().toLowerCase()
@@ -130,6 +127,14 @@ export async function POST(request: Request) {
     ) {
       return json({ error: "GAME_SDK_CONTENT_INPUT_REQUIRED" }, 400);
     }
+
+    const session = await requireSdkPreviewAuthenticatedPlayer(creatorSlug);
+    const limited = await rateLimitResponseFor(
+      request,
+      rateLimitPolicies.sdkContentRead,
+      { playerId: session.id },
+    );
+    if (limited) return limited;
 
     const definition = await loadSdkPreviewRuntimeDefinition(
       creatorSlug,
