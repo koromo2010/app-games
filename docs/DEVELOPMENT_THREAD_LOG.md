@@ -3112,6 +3112,13 @@
 
 ### 未対応・保留
 
-- `develop`反映後に本体dev、SDK-dev、隔離Preview devのREADYを確認し、「AIことば当て（仮）」が参加者1人で開始できることを公開契約から確認する。
 - SDK側の利用者専用Route、合言葉管理、公開申請・審査UIは将来実装とし、今回は構想の正本化だけを行う。
 - `main`、本番SDK、npm package versionはこの変更では更新しない。
+
+### develop反映・公開確認
+
+- 検証済みtreeをGitHub commit `87b5116ecadfa7b391177955e6dcaa54a34ce26b`として`develop`へforceなしで反映した。
+- 本体dev deployment `dpl_X2nWg8boFFe7HgUzvc9mfGVxwc5Q`、SDK-dev `dpl_DG3SCDpPtTWSt8cqmsmFdEJZaFTe`、隔離Preview dev `dpl_6Xd8a3CbQbqefNH3z2h7e8K43iHc`が同commitで`READY`となり、各開発用aliasへ切り替わった。
+- 公開本体bundleから`minimumPlayers: 1`、`game-fields:frame-size`、`timer:turn-complete`を確認し、旧「開始には2人以上必要です」文言がないことを確認した。
+- 公開中の`test10-1 / ai-word-guess`へ隔離Runtimeを通して接続し、ゲームHTMLに`data-gf-timer`、可変高通知、手番完了通知が同時に含まれることを確認した。SDKゲームURLとDownloadMeはHTTP 200で、DownloadMeにも`minimumPlayers: 1`が反映されている。
+- 3 deploymentのerrors-only build logは0件、直近30分のruntime errorは0件だった。
