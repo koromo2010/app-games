@@ -60,7 +60,10 @@ test("only the linked human owner route can mutate module requirements", () => {
 
   const mcp = read("apps/sdk-portal/app/api/mcp/route.ts");
   assert.match(mcp, /get_game_module_requirements/);
-  assert.match(mcp, /requiredModuleIds:\s*requiredGameSdkModuleIds/);
+  assert.match(mcp, /requiredModuleIds\s*=\s*requiredGameSdkModuleIds/);
+  assert.match(mcp, /requiredModules/);
+  assert.match(mcp, /GAME_SDK_MODULE_CATALOG/);
+  assert.match(mcp, /packageExports/);
   assert.doesNotMatch(mcp, /classification:/);
   assert.doesNotMatch(mcp, /\n\s+moduleProfile,\n/);
   assert.match(mcp, /editableByAi:\s*false/);
@@ -100,6 +103,33 @@ test("creator AI receives only the current all-required contract", () => {
       /解除可|任意へ|必須解除|理由付き解除|humanReviewable|classification\./,
     );
   }
+});
+
+test("machine-readable resource modules expose delivery and import contracts", () => {
+  const content = GAME_SDK_MODULE_CATALOG.find(
+    (definition) => definition.id === "content-source",
+  );
+  const cards = GAME_SDK_MODULE_CATALOG.find(
+    (definition) => definition.id === "playing-cards",
+  );
+  const drawing = GAME_SDK_MODULE_CATALOG.find(
+    (definition) => definition.id === "drawing",
+  );
+  assert.equal(content?.delivery, "platform-resource");
+  assert.deepEqual(
+    content?.packageExports,
+    ["@game-fields/game-sdk/content-source"],
+  );
+  assert.equal(cards?.delivery, "sdk-resource");
+  assert.ok(
+    cards?.packageExports.includes(
+      "@game-fields/game-sdk/playing-cards-react",
+    ),
+  );
+  assert.equal(drawing?.delivery, "sdk-resource");
+  assert.ok(
+    drawing?.publicApis.includes("DrawingCanvas"),
+  );
 });
 
 test("SDK dev preview exposes the owner-only module review surface", () => {

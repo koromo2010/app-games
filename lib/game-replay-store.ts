@@ -499,7 +499,7 @@ export async function recordDaifugoReplay(room: DaifugoRoom) {
   );
   const highlights = [
     `順位: ${finishOrder.map((id, index) => `${index + 1}位 ${players.find((player) => player.id === id)?.name ?? "Unknown"}`).join("、")}`,
-    ...players.map((player) => `${player.name}の残り手札: ${(room.game!.hands[player.id] ?? []).map(playingCardLabel).join("、") || "なし"}`),
+    ...players.map((player) => `${player.name}の残り手札: ${(room.game!.hands[player.id] ?? []).map((card) => playingCardLabel(card)).join("、") || "なし"}`),
   ];
   return storeReplay({ ...base, gameType: "daifugo", overview: `${winner?.name ?? "Unknown"}が1位`, highlights: cleanLines(highlights), scoreLabels: resultLabels }, room.code);
 }

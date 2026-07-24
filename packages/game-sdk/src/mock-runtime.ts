@@ -9,6 +9,7 @@ import {
   type GameSdkServerModule,
   type GameSdkServerRuntime,
 } from "./runtime.js";
+import type { GameSdkPlatformResources } from "./resources.js";
 
 export type GameSdkRuntimeErrorCode =
   | "ROOM_ALREADY_EXISTS"
@@ -40,6 +41,7 @@ type MockRuntimeOptions<
   initialRooms?: readonly TRoom[];
   now?: () => number;
   createRequestId?: () => string;
+  resources?: Readonly<GameSdkPlatformResources>;
 };
 
 export type GameSdkMockRuntime<
@@ -81,6 +83,7 @@ export function createGameSdkMockRuntime<
   initialRooms = [],
   now = Date.now,
   createRequestId,
+  resources = {},
 }: MockRuntimeOptions<TRoom, TCreateInput, TCommand, TRoomView>): GameSdkMockRuntime<TRoom, TCreateInput, TCommand, TRoomView> {
   const rooms = new Map<string, TRoom>();
   for (const room of initialRooms) {
@@ -92,7 +95,11 @@ export function createGameSdkMockRuntime<
 
   const present = (room: Readonly<TRoom>, viewer: GameSdkViewer) => snapshot(
     room,
-    module.presentRoom(clone(room), { viewer: clone(viewer), now: now() }),
+    module.presentRoom(clone(room), {
+      viewer: clone(viewer),
+      now: now(),
+      resources,
+    }),
   );
 
   return {
@@ -103,6 +110,7 @@ export function createGameSdkMockRuntime<
         now: now(),
         requestId: nextRequestId(),
         roomCode,
+        resources,
       });
       if (rooms.has(roomCode)) throw new GameSdkRuntimeError("ROOM_ALREADY_EXISTS", 409);
       if (room.code !== roomCode) throw new GameSdkRuntimeError("ROOM_CODE_CHANGED", 500);
@@ -126,6 +134,7 @@ export function createGameSdkMockRuntime<
         actor: clone(actor),
         now: now(),
         requestId: nextRequestId(),
+        resources,
       });
       const current = rooms.get(code);
       if (!current) throw new GameSdkRuntimeError("ROOM_NOT_FOUND", 404);

@@ -6,6 +6,9 @@ import type {
   GameSdkStoredRoom,
 } from "@game-fields/game-sdk";
 import type { GameSdkServerModule } from "@game-fields/game-sdk/runtime";
+import type {
+  GameSdkPlatformResources,
+} from "@game-fields/game-sdk/resources";
 import {
   createGameFieldsPlatformRuntime,
   type GameFieldsAuthenticatedIdentity,
@@ -39,6 +42,7 @@ type AuthenticatedPlatformAdapterOptions<
   resolveIdentity?: IdentityResolver;
   now?: () => number;
   createRequestId?: () => string;
+  resources?: Readonly<GameSdkPlatformResources>;
 };
 
 export type AuthenticatedGameSdkPlatformAdapter<
@@ -91,6 +95,7 @@ export function createAuthenticatedGameSdkPlatformAdapter<
   resolveIdentity = () => resolveAuthenticatedIdentity(module.manifest.supportsDebug),
   now,
   createRequestId,
+  resources,
 }: AuthenticatedPlatformAdapterOptions<TRoom, TCreateInput, TCommand, TRoomView>): AuthenticatedGameSdkPlatformAdapter<TCreateInput, TCommand, TRoomView> {
   const roomStore = roomStoreInput
     ?? (persistenceInput ? null : createRedisGameSdkPlatformRoomStore<TRoom>(module.manifest.id));
@@ -102,6 +107,7 @@ export function createAuthenticatedGameSdkPlatformAdapter<
     persistence,
     now,
     createRequestId,
+    resources,
   });
 
   return {

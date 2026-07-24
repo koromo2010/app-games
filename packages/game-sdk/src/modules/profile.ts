@@ -47,12 +47,139 @@ export type GameSdkModuleGroup =
   | "flow"
   | "resource";
 
+export type GameSdkModuleDelivery =
+  | "platform-owned"
+  | "sdk-helper"
+  | "platform-resource"
+  | "sdk-resource";
+
 export type GameSdkModuleDefinition = {
   id: GameSdkModuleId;
   group: GameSdkModuleGroup;
   label: string;
   description: string;
+  delivery: GameSdkModuleDelivery;
+  packageExports: readonly string[];
+  publicApis: readonly string[];
+  usage: string;
 };
+
+const FLOW_MODULE_PUBLIC_APIS: Partial<
+  Record<GameSdkModuleId, readonly string[]>
+> = {
+  "start-guard": ["assertGameSdkCanStart"],
+  "phase-flow": ["assertGameSdkPhase"],
+  rounds: ["nextGameSdkRoundStep"],
+  "turn-order": ["nextGameSdkEligibleSeat"],
+  "collect-text": [
+    "recordGameSdkParticipantValue",
+    "missingGameSdkParticipantIds",
+    "allGameSdkParticipantsComplete",
+  ],
+  "collect-choice": [
+    "recordGameSdkParticipantValue",
+    "missingGameSdkParticipantIds",
+    "allGameSdkParticipantsComplete",
+  ],
+  vote: ["recordGameSdkVote", "tallyGameSdkVotes"],
+  "role-assignment": ["assignGameSdkRoles"],
+  "team-assignment": [
+    "distributeGameSdkBalancedTeams",
+    "assignGameSdkBalancedTeams",
+  ],
+  "secret-presentation": ["gameSdkPlayerSeat", "gameSdkPlayerSeats"],
+  "standard-outcome": ["defineGameSdkStandardResult"],
+};
+
+function moduleContract(
+  id: GameSdkModuleId,
+  group: GameSdkModuleGroup,
+): Pick<
+  GameSdkModuleDefinition,
+  "delivery" | "packageExports" | "publicApis" | "usage"
+> {
+  if (id === "content-source") {
+    return {
+      delivery: "platform-resource",
+      packageExports: ["@game-fields/game-sdk/content-source"],
+      publicApis: [
+        "GameSdkContentSource.drawWords",
+        "GameSdkContentSource.drawWordPairs",
+        "GameSdkContentSource.findDefinitions",
+      ],
+      usage:
+        "公開型をimportし、Game Fieldsから注入されたcontent sourceを使う。DBへ直接接続しない。",
+    };
+  }
+  if (id === "playing-cards") {
+    return {
+      delivery: "sdk-resource",
+      packageExports: [
+        "@game-fields/game-sdk/playing-cards",
+        "@game-fields/game-sdk/playing-cards-react",
+      ],
+      publicApis: [
+        "createStandardPlayingCardDeck",
+        "shufflePlayingCards",
+        "dealPlayingCardsRoundRobin",
+        "presentPlayingCardHands",
+        "PlayingCardView",
+        "PlayingCardHand",
+        "PlayingCardBackStack",
+      ],
+      usage:
+        "カード型・デッキ操作・秘密手札投影・React UIを公開packageから直接importする。",
+    };
+  }
+  if (id === "drawing") {
+    return {
+      delivery: "sdk-resource",
+      packageExports: [
+        "@game-fields/game-sdk/drawing",
+        "@game-fields/game-sdk/drawing-react",
+      ],
+      publicApis: [
+        "DrawingStroke",
+        "normalizeDrawingStroke",
+        "normalizeDrawingStrokes",
+        "drawingFeatures",
+        "DrawingCanvas",
+        "DrawingToolbar",
+        "DrawingLayerPanel",
+      ],
+      usage:
+        "ストローク型・正規化・機能preset・Reactキャンバスを公開packageからimportし、保存とRoom同期はPlatform adapterへ委ねる。",
+    };
+  }
+  if (id === "llm") {
+    return {
+      delivery: "platform-resource",
+      packageExports: ["@game-fields/game-sdk/llm"],
+      publicApis: [
+        "GameSdkLlmGateway.generate",
+        "GameSdkGenerationMeta",
+      ],
+      usage:
+        "公開型をimportし、Game Fieldsから注入された共通LLM gatewayを使う。ProviderやAPIキーへ直接接続しない。",
+    };
+  }
+  if (group === "flow") {
+    return {
+      delivery: "sdk-helper",
+      packageExports: ["@game-fields/game-sdk/modules"],
+      publicApis: FLOW_MODULE_PUBLIC_APIS[id] ?? [],
+      usage:
+        "公開SDKの純粋helperをimportし、ゲーム固有state transitionから利用する。",
+    };
+  }
+  return {
+    delivery: "platform-owned",
+    packageExports: [],
+    publicApis: [],
+    usage:
+      "Game Fields共通ShellまたはPlatformが合成する。ゲームpackageで再実装しない。",
+  };
+}
 
 const moduleDefinition = (
   id: GameSdkModuleId,
@@ -64,6 +191,7 @@ const moduleDefinition = (
   group,
   label,
   description,
+  ...moduleContract(id, group),
 });
 
 /**

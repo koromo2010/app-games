@@ -1,10 +1,25 @@
 {
   "name": "@game-fields/game-sdk",
   "version": "0.1.0",
-  "description": "Public game contracts and a dependency-free mock runtime for Game Fields.",
-  "private": true,
+  "description": "Public contracts, reusable game resources, and mock/runtime helpers for Game Fields.",
+  "keywords": [
+    "game-fields",
+    "game-sdk",
+    "multiplayer",
+    "cards",
+    "drawing"
+  ],
+  "homepage": "https://sdk.game-fields.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/koromo2010/app-games.git",
+    "directory": "packages/game-sdk"
+  },
+  "bugs": {
+    "url": "https://github.com/koromo2010/app-games/issues"
+  },
   "type": "module",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "sideEffects": false,
   "files": [
     "dist",
@@ -25,6 +40,41 @@
       "types": "./dist/modules.d.ts",
       "import": "./dist/modules.js",
       "default": "./dist/modules.js"
+    },
+    "./content-source": {
+      "types": "./dist/content-source.d.ts",
+      "import": "./dist/content-source.js",
+      "default": "./dist/content-source.js"
+    },
+    "./llm": {
+      "types": "./dist/llm.d.ts",
+      "import": "./dist/llm.js",
+      "default": "./dist/llm.js"
+    },
+    "./resources": {
+      "types": "./dist/resources.d.ts",
+      "import": "./dist/resources.js",
+      "default": "./dist/resources.js"
+    },
+    "./playing-cards": {
+      "types": "./dist/playing-cards.d.ts",
+      "import": "./dist/playing-cards.js",
+      "default": "./dist/playing-cards.js"
+    },
+    "./playing-cards-react": {
+      "types": "./dist/playing-cards-react.d.ts",
+      "import": "./dist/playing-cards-react.js",
+      "default": "./dist/playing-cards-react.js"
+    },
+    "./drawing": {
+      "types": "./dist/drawing.d.ts",
+      "import": "./dist/drawing.js",
+      "default": "./dist/drawing.js"
+    },
+    "./drawing-react": {
+      "types": "./dist/drawing-react.d.ts",
+      "import": "./dist/drawing-react.js",
+      "default": "./dist/drawing-react.js"
     },
     "./mock-runtime": {
       "types": "./dist/mock-runtime.d.ts",
@@ -47,6 +97,18 @@
     "build": "tsc -p tsconfig.json",
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
     "prepack": "npm run build"
+  },
+  "peerDependencies": {
+    "react": ">=18.2.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   },
   "engines": {
     "node": ">=20"

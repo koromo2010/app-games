@@ -40,4 +40,4 @@ npm run package
 
 `npm run check:mock`は、仕様の未記入がなく、モックと説明書が用意されていることを確認します。`npm run publish:mock`は入口で受け取ったSDK URL・制作者slug・管理トークンを一時環境変数から読み、モックを専用Gitへ自動保存して共有URLを返します。`npm run check`は型検査と契約テストを実行します。`npm run package`は`submission/game-fields-submission.zip`を生成します。本体への統合、認証、永続化はGame Fields運営側の審査後に接続します。
 
-モックを初めて保存すると、共通モジュール38件はすべて必須になります。ChatGPTはモックやAppSetへ採否を書き込まず、profileも変更しません。利用者のモック承認後はChatGPTが`get_game_module_requirements`で確定済みの`requiredModuleIds`だけを読み、その一覧をすべて使うAppSetを実装します。
+モックを初めて保存すると、共通モジュール38件はすべて必須になります。ChatGPTはモックやAppSetへ採否を書き込まず、profileも変更しません。利用者のモック承認後はChatGPTが`get_game_module_requirements`で確定済みの`requiredModuleIds`と各moduleの公開契約を読み、その一覧をすべて使うAppSetを実装します。

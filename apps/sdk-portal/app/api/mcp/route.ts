@@ -18,6 +18,7 @@ import {
 import { ensureSdkSchema, sdkSql } from "@/lib/sdk-postgres";
 import platformRelease from "../../../../../config/platform-release.json";
 import {
+  GAME_SDK_MODULE_CATALOG,
   createInitialGameSdkModuleProfile,
   requiredGameSdkModuleIds,
 } from "@game-fields/game-sdk/modules";
@@ -49,7 +50,7 @@ const tools = [
   { name: "reserve_creator_url", title: "制作者URLの予約", description: "ログイン中のGame Fieldsアカウント用に制作者URLを7日間予約します。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "予約する制作者URL名" }, displayName: { type: "string", description: "制作者の表示名" } }, required: ["slug", "displayName"], additionalProperties: false } },
   { name: "finalize_creator_url", title: "制作者URLの確定", description: "予約トークンを使い、制作者URLをログイン中のアカウントへ正式登録します。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "確定する制作者URL名" }, reservationToken: { type: "string", description: "予約時に発行されたトークン" } }, required: ["slug", "reservationToken"], additionalProperties: false } },
   { name: "publish_mock", title: "ゲームモックの保存", description: "本人所有のSDK環境へ検査済みゲームモックを保存し、制作者トップURLと今回のゲームURLを返します。saved=trueとcreatorUrlが返るまで完成扱いにしないでください。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "本人所有の制作者URL名" }, gameId: { type: "string", description: "ゲームID" }, title: { type: "string", description: "ゲーム名" }, description: { type: "string", description: "ゲームの説明" }, files: { type: "object", description: "mock/直下を基準とする相対パスをキー、UTF-8本文を値とするファイル一覧。index.html、styles.css、mock.jsを必ず含めます。", additionalProperties: { type: "string" } } }, required: ["slug", "gameId", "title", "files"], additionalProperties: false } },
-  { name: "get_game_module_requirements", title: "確定済み必須モジュール取得", description: "モック承認後、AppSet実装を始める直前に、今回必ず使用するrequiredModuleIdsを取得します。返された一覧を省略しないでください。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "本人所有の制作者URL名" }, gameId: { type: "string", description: "ゲームID" } }, required: ["slug", "gameId"], additionalProperties: false } },
+  { name: "get_game_module_requirements", title: "確定済み必須モジュール取得", description: "モック承認後、AppSet実装を始める直前に、今回必ず使用するrequiredModuleIdsと、各moduleの提供方式・公開import・API契約を取得します。返された一覧と契約を省略しないでください。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "本人所有の制作者URL名" }, gameId: { type: "string", description: "ゲームID" } }, required: ["slug", "gameId"], additionalProperties: false } },
 ];
 
 const SUPPORTED_PROTOCOL_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"] as const;
@@ -122,13 +123,22 @@ async function callTool(name: string, args: Record<string, unknown>, playerId: s
     if (!GAME_PATTERN.test(gameId)) throw new Error("ゲームIDが不正です。");
     const moduleProfile = await getCreatorGameModuleProfile(slug, gameId);
     if (!moduleProfile) throw new Error("ゲームが見つかりません。");
+    const requiredModuleIds = requiredGameSdkModuleIds(moduleProfile);
+    const requiredModules = GAME_SDK_MODULE_CATALOG.filter(
+      (definition) => requiredModuleIds.includes(definition.id),
+    );
     return textResult({
       slug,
       gameId,
-      requiredModuleIds: requiredGameSdkModuleIds(moduleProfile),
+      sdkPackage: {
+        name: "@game-fields/game-sdk",
+        version: platformRelease.sdkPackageVersion,
+      },
+      requiredModuleIds,
+      requiredModules,
       editableByAi: false,
       instruction:
-        "このprofileをAppSet実装の正本にし、必須moduleを省略しないでください。",
+        "このprofileと各moduleのdelivery・packageExports・publicApis・usageをAppSet実装の正本にし、必須moduleを省略しないでください。",
     });
   }
   throw new Error("Unknown tool");

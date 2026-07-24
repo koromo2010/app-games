@@ -1,0 +1,49 @@
+name: Publish Game SDK
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact @game-fields/game-sdk version to publish
+        required: true
+        type: string
+      confirm:
+        description: Type publish-game-sdk
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publish-game-sdk
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main' && inputs.confirm == 'publish-game-sdk'
+    runs-on: ubuntu-latest
+    environment: npm-public
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci
+
+      - name: Verify requested version
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          node -e "const pkg=require('./packages/game-sdk/package.json'); const release=require('./config/platform-release.json'); if(pkg.version!==process.env.REQUESTED_VERSION||release.sdkPackageVersion!==pkg.version){throw new Error('SDK version does not match workflow input or platform release')}"
+
+      - run: npm run lint
+      - run: npm run test:sdk-package
+      - run: npm publish --workspace @game-fields/game-sdk --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

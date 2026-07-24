@@ -8,7 +8,7 @@ const typescriptFiles = (directory) => readdirSync(
   directory,
   { recursive: true },
 )
-  .filter((name) => extname(name) === ".ts")
+  .filter((name) => [".ts", ".tsx"].includes(extname(name)))
   .map((name) => join(directory, name));
 const sdkFiles = typescriptFiles(sourceRoot);
 const runtimePackageRoot = join(root, "packages/game-runtime");
@@ -32,7 +32,10 @@ const starterSourceFiles = ["src", "tests"].flatMap((directory) =>
 const allowedRelativeImports = new Set([
   "./client-realtime.js",
   "./collection.js",
+  "./content-source.js",
+  "./drawing.js",
   "./index.js",
+  "./llm.js",
   "./modules/assignment.js",
   "./modules/collection.js",
   "./modules/flow.js",
@@ -40,10 +43,14 @@ const allowedRelativeImports = new Set([
   "./modules/profile.js",
   "./modules/result.js",
   "./modules/voting.js",
+  "./playing-cards.js",
+  "./resources.js",
   "./runtime.js",
+  "react",
 ]);
 const allowedRuntimeImports = new Set([
   "@game-fields/game-sdk",
+  "@game-fields/game-sdk/resources",
   "@game-fields/game-sdk/runtime",
 ]);
 const failures = [];
@@ -201,10 +208,30 @@ const packageJson = JSON.parse(readFileSync(join(packageRoot, "package.json"), "
 if (packageJson.name !== "@game-fields/game-sdk") {
   failures.push("packages/game-sdk/package.json: package名が@game-fields/game-sdkではありません。");
 }
-if (packageJson.private !== true || packageJson.license !== "UNLICENSED") {
-  failures.push("packages/game-sdk/package.json: 初回公開承認前はprivateかつUNLICENSEDである必要があります。");
+if (
+  packageJson.private === true
+  || packageJson.license !== "MIT"
+  || packageJson.publishConfig?.access !== "public"
+  || packageJson.publishConfig?.provenance !== true
+) {
+  failures.push("packages/game-sdk/package.json: 公開SDKはpublic access・MIT・provenanceを固定してください。");
 }
-for (const exportPath of [".", "./runtime", "./modules", "./mock-runtime", "./client-runtime", "./handshake", "./package.json"]) {
+for (const exportPath of [
+  ".",
+  "./runtime",
+  "./modules",
+  "./content-source",
+  "./llm",
+  "./resources",
+  "./playing-cards",
+  "./playing-cards-react",
+  "./drawing",
+  "./drawing-react",
+  "./mock-runtime",
+  "./client-runtime",
+  "./handshake",
+  "./package.json",
+]) {
   if (!packageJson.exports?.[exportPath]) {
     failures.push(`packages/game-sdk/package.json: exports ${exportPath} がありません。`);
   }

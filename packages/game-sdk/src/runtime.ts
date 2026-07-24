@@ -11,6 +11,10 @@ import type {
   GameSdkViewPermissions,
   GameSdkViewer,
 } from "./index.js";
+import type {
+  GameSdkPlatformResources,
+  GameSdkResourceContext,
+} from "./resources.js";
 
 export type GameSdkRoomLifecycleResult<TRoom> =
   | { handled: false }
@@ -103,7 +107,7 @@ export type GameSdkOnlineRoomAppSet<
     input: TAppInput,
     context: GameSdkCreateContext,
     settings: TSettings,
-  ): TAppState;
+  ): TAppState | Promise<TAppState>;
   resetAppState(
     room: Readonly<GameSdkOnlineRoom<TSettings, TAppState>>,
   ): TAppState;
@@ -111,7 +115,7 @@ export type GameSdkOnlineRoomAppSet<
     room: Readonly<GameSdkOnlineRoom<TSettings, TAppState>>,
     command: TAppCommand,
     context: GameSdkCommandContext,
-  ): GameSdkAppTransition<TAppState>;
+  ): GameSdkAppTransition<TAppState> | Promise<GameSdkAppTransition<TAppState>>;
   presentApp(
     room: Readonly<GameSdkOnlineRoom<TSettings, TAppState>>,
     context: GameSdkPresentationContext,
@@ -184,20 +188,20 @@ export function applyGameSdkRoomLifecycleCommand<
   return { handled: false };
 }
 
-export type GameSdkCreateContext = {
+export type GameSdkCreateContext = GameSdkResourceContext & {
   actor: GameSdkTrustedActor;
   now: number;
   requestId: string;
   roomCode: string;
 };
 
-export type GameSdkCommandContext = {
+export type GameSdkCommandContext = GameSdkResourceContext & {
   actor: GameSdkTrustedActor;
   now: number;
   requestId: string;
 };
 
-export type GameSdkPresentationContext = {
+export type GameSdkPresentationContext = GameSdkResourceContext & {
   viewer: GameSdkViewer;
   now: number;
 };
@@ -324,6 +328,9 @@ export function createGameSdkOnlineRoomModule<
     TAppCommand,
     TAppView
   >,
+  options: {
+    resources?: Readonly<GameSdkPlatformResources>;
+  } = {},
 ): GameSdkServerModule<
   GameSdkOnlineRoom<TSettings, TAppState>,
   GameSdkOnlineRoomCreateInput<TSettings, TAppInput>,
@@ -331,6 +338,7 @@ export function createGameSdkOnlineRoomModule<
   GameSdkOnlineRoomView<TSettings, TAppView>
 > {
   const manifest = appSet.manifest;
+  const resources = options.resources ?? {};
   if (manifest.playMode !== "online-room") {
     throw new Error("Game SDK online AppSet requires an online-room manifest.");
   }
@@ -342,11 +350,16 @@ export function createGameSdkOnlineRoomModule<
   return defineGameServerModule({
     manifest,
 
-    createRoom(input, context) {
+    async createRoom(input, context) {
       const settings = normalizeSettings({
         ...appSet.defaultSettings,
         ...(input.settings ?? {}),
       });
+      const app = await appSet.createAppState(
+        input.app,
+        { ...context, resources: { ...resources, ...context.resources } },
+        settings,
+      ) as TAppState;
       return {
         code: context.roomCode,
         revision: 1,
@@ -359,11 +372,11 @@ export function createGameSdkOnlineRoomModule<
           connected: true,
         }],
         settings,
-        app: appSet.createAppState(input.app, context, settings),
+        app,
       };
     },
 
-    applyCommand(room, command, context) {
+    async applyCommand(room, command, context) {
       const lifecycle = applyGameSdkRoomLifecycleCommand(room, command, context, {
         minimumPlayers: manifest.minimumPlayers,
         maximumPlayers: manifest.maximumPlayers,
@@ -377,11 +390,11 @@ export function createGameSdkOnlineRoomModule<
       if (!room.players.some((player) => player.id === context.actor.playerId)) {
         throw new Error("PLAYER_NOT_IN_ROOM");
       }
-      const transition = appSet.applyAppCommand(
+      const transition = await appSet.applyAppCommand(
         room,
         command as TAppCommand,
-        context,
-      );
+        { ...context, resources: { ...resources, ...context.resources } },
+      ) as GameSdkAppTransition<TAppState>;
       return advanceGameSdkRoom(room, {
         phase: normalizeAppSetPhase(transition.phase),
         app: transition.app,
@@ -389,7 +402,10 @@ export function createGameSdkOnlineRoomModule<
     },
 
     presentRoom(room, context) {
-      const presented = appSet.presentApp(room, context);
+      const presented = appSet.presentApp(
+        room,
+        { ...context, resources: { ...resources, ...context.resources } },
+      );
       const isHost = context.viewer.playerId === room.hostPlayerId;
       const isMember = Boolean(
         context.viewer.playerId

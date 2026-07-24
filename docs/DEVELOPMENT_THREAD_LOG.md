@@ -2839,3 +2839,42 @@
 - 最小化したまま「観戦者」を選択し、`aria-pressed`が「あなた」から「観戦者」へ切り替わることを確認した。
 - 上記3 deploymentを対象に直近30分の`error`・`fatal`ログを確認し、該当ログは0件だった。ブラウザ側では検証用Chrome拡張由来のmetadata送信エラーだけを確認し、対象ページ由来のエラーはなかった。
 - `main`、本番SDK、公開`sdk-starter`は変更対象外。
+
+## 2026-07-24 — SDK共通モジュール棚卸しと公開ライブラリ化
+
+### 利用者からの要望
+
+- ワードDB、トランプ等を制作クライアントへどう伝えているかを踏まえ、お絵描きUIを含む共通機能を棚卸しする。
+- 外部ゲームから再利用できる部分をライブラリ化し、公開まで進める。
+
+### 判断
+
+- 全38moduleをPlatform固定7件、共通Shell16件、純粋進行helper11件、再利用resource 4件に分ける。
+- 認証、保存、認可、共通Shell、DEBUG、広告はPlatform所有のまま外部packageへ公開しない。
+- ワードDBとLLMはDB、provider、APIキーを公開せず、型付きresourceをRuntime contextへ注入する契約だけを公開する。
+- トランプはカード型、デッキ操作、秘密手札投影、React UIを公開する。
+- 描画はstroke、正規化、機能preset、Canvas、ツールバー、レイヤーパネルを公開し、Room同期、保存、最終認可はPlatform adapterへ残す。
+- 公開packageはMITとし、Game Fieldsへの提出、審査、サービス利用条件はPlatform側の規約と管理ゲートへ分離する。
+
+### 実施結果
+
+- `@game-fields/game-sdk`をpublic packageへ変更し、`content-source`、`llm`、`resources`、`playing-cards`、`playing-cards-react`、`drawing`、`drawing-react`のsubpath exportを追加した。
+- `DrawingCanvas`、`DrawingToolbar`、`DrawingLayerPanel`をReact peerだけで動く共通UIとして実装し、マウス、タッチ、ペン、塗りつぶし、スポイト、パン、undo／redo用callback、zoom、レイヤー表示を公開した。
+- Game Fields本体のトランプ・描画実装を公開package経由へ切り替え、内部実装と外部SDKの二重管理を解消した。
+- Runtime、Mock Runtime、内部Platform Runtimeへ`GameSdkPlatformResources`を追加し、AppSetの作成・Command・Viewへresourceを注入できるようにした。
+- 機械可読module catalogへ`delivery`、`packageExports`、`publicApis`、`usage`を追加し、MCP `get_game_module_requirements`がIDだけでなく利用契約も返すようにした。
+- 棚卸し正本`docs/SDK_MODULE_INVENTORY.md`、MIT License、公開README、外部fixture検査、publish dry-run、main限定の手動GitHub Actions workflowを追加した。
+
+### 検証
+
+- 公開packageのTypeScript build、pack、空の外部fixtureへのinstall、Runtime・resource・React UI import検査に成功した。
+- `npm publish --dry-run`に成功し、87ファイル、約65.7KBのpublic tarballとして解決された。
+- SDK starterの入口、公開Git snapshot、ZIP、同梱SDK install、型検査、契約テスト、完走デモ、提出ZIP検査に成功した。
+- `npm test`成功（481件）。
+- `npm run lint`成功。公開SDK 21ソース、内部Runtime、実証ゲーム、SDKワードウルフ、スターターの依存境界を確認した。
+- 本体、SDK Portal、隔離Previewのproduction buildに成功した。
+
+### 未対応・保留
+
+- npm registryへの実publishには、npm側の`@game-fields` scope所有権と、GitHub Environment `npm-public`の承認者、対象package限定`NPM_TOKEN`が必要である。現在の実行環境はnpm未認証のため、registryは未変更。
+- workflowは`main`からの手動実行だけを許可する。developでの実機確認と外部設定完了後にmainへ反映し、`@game-fields/game-sdk@0.1.0`を初回publishする。

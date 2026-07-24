@@ -29,6 +29,10 @@ Platformの公開版を揃えることと、既存ゲームを最新SDKへ強制
 3. 契約破壊がある場合だけ`sdkContractVersion`を上げる。
 4. `npm run check:versions`、SDK検査、全ゲームテストをdevで通す。
 5. dev SDKとGame Fields developの組合せを実機確認する。
-6. 同じcommitを基準にmainとSDK本番を公開し、両方のPlatform Version表示が一致することを確認する。
+6. `npm run release:sdk:check`で公開tarball・外部install・npm publish dry-runを確認する。
+7. 検証済みcommitをmainへ反映し、GitHub Actionsの`Publish Game SDK`をmainから手動実行する。versionは`config/platform-release.json`と完全一致させ、確認欄へ`publish-game-sdk`を入力する。
+8. npmの`@game-fields/game-sdk@<version>`、main、SDK本番の公開を確認し、Platform Version表示が一致することを確認する。
+
+初回publish前にnpm側で`@game-fields` scopeの所有権と、GitHub Environment `npm-public`の承認者、Repository Secret `NPM_TOKEN`（対象packageへのpublishだけを許可するgranular token）を設定する。token値はGit、文書、ログへ残さない。npm Trusted Publishingへ移行した後はworkflowから`NODE_AUTH_TOKEN`を削除する。
 
 `npm run lint`は先頭で`check:versions`を実行し、版のずれをエラーにする。

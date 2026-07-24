@@ -37,7 +37,9 @@ export function PlayingCardsPlayground() {
   const players = allPlayers.slice(0, playerCount);
   const presentedHands = useMemo(() => presentPlayingCardHands(hands, "player-1"), [hands]);
   const ownCards = useMemo(() => sortPlayingCardsForDisplay(presentedHands["player-1"]?.cards ?? []), [presentedHands]);
-  const selectedLabels = ownCards.filter((card) => selectedCardIds.has(card.id)).map(playingCardLabel);
+  const selectedLabels = ownCards
+    .filter((card) => selectedCardIds.has(card.id))
+    .map((card) => playingCardLabel(card));
 
   const redeal = () => {
     setHands(newHands(playerCount, jokersPerDeck, true));

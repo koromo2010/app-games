@@ -19,6 +19,7 @@
         "lint": "npm run check:versions && npm run check:env-ledger && npm run check:games && npm run check:sdk && eslint",
         "test": "npm run build:runtime-packages && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test tests/*.test.ts",
         "test:sdk-package": "npm run build:sdk-package && node scripts/check-game-sdk-package.mjs",
+        "release:sdk:check": "npm run test:sdk-package && npm publish --workspace @game-fields/game-sdk --dry-run",
         "build:sdk-starter": "node scripts/build-game-sdk-starter.mjs",
         "build:sdk-starter-repository": "node scripts/build-game-sdk-starter-repository.mjs",
         "test:sdk-starter": "node scripts/check-game-sdk-starter.mjs",

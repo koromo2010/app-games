@@ -9,6 +9,9 @@ import {
   gameSdkViewerFromActor,
   type GameSdkServerModule,
 } from "@game-fields/game-sdk/runtime";
+import type {
+  GameSdkPlatformResources,
+} from "@game-fields/game-sdk/resources";
 
 export {
   createGameFieldsOnlineRoomMutationRuntime,
@@ -83,6 +86,7 @@ type PlatformRuntimeOptions<
   persistence: GameFieldsPlatformRoomPersistence<TRoom>;
   now?: () => number;
   createRequestId?: () => string;
+  resources?: Readonly<GameSdkPlatformResources>;
 };
 
 export type GameFieldsPlatformRuntime<
@@ -173,12 +177,14 @@ export function createGameFieldsPlatformRuntime<
   persistence,
   now = Date.now,
   createRequestId = () => crypto.randomUUID(),
+  resources = {},
 }: PlatformRuntimeOptions<TRoom, TCreateInput, TCommand, TRoomView>): GameFieldsPlatformRuntime<TCreateInput, TCommand, TRoomView> {
   const present = (room: Readonly<TRoom>, actor: GameSdkTrustedActor, timestamp: number) => snapshot(
     room,
     module.presentRoom(clone(room), {
       viewer: gameSdkViewerFromActor(actor),
       now: timestamp,
+      resources,
     }),
   );
 
@@ -191,6 +197,7 @@ export function createGameFieldsPlatformRuntime<
         now: timestamp,
         requestId: createRequestId(),
         roomCode,
+        resources,
       });
       if (room.code !== roomCode) {
         throw new GameFieldsPlatformRuntimeError("ROOM_CODE_CHANGED", 500);
@@ -240,6 +247,7 @@ export function createGameFieldsPlatformRuntime<
           actor: clone(actor),
           now: timestamp,
           requestId: createRequestId(),
+          resources,
         },
       );
       if (nextRoom.code !== record.room.code) {

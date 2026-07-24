@@ -14,6 +14,7 @@ const eslintConfig = defineConfig([
     "virtual-stock-app/**",
     "out/**",
     "build/**",
+    "**/dist/**",
     "next-env.d.ts",
   ]),
 ]);
