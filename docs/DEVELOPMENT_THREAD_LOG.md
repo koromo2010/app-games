@@ -2873,8 +2873,16 @@
 - `npm test`成功（481件）。
 - `npm run lint`成功。公開SDK 21ソース、内部Runtime、実証ゲーム、SDKワードウルフ、スターターの依存境界を確認した。
 - 本体、SDK Portal、隔離Previewのproduction buildに成功した。
+- `develop`反映後、本体dev `dpl_7X9tcohVf8tW7fVkaWDhFRucTs2M`、SDK-dev `dpl_2iZECrY1euzRJf2yJiwzjYNrWuQ7`、隔離Preview dev `dpl_7uHdsghna7K2W5XgEhRSirk72LZ6`が対象commitで`READY`となり、各開発用aliasへ切り替わった。
+- 公開`/dev/playing-cards`で表向き手札、他参加者の秘密手札枚数、カード選択を実操作した。ブラウザ側の対象ページ由来error／warningは0件だった。
+- 3 deploymentのbuild errorと、直近30分のruntime `error`／`fatal`は0件だった。
+
+### 関連コミット
+
+- `80a863817805546fedb8c3b4f52a55d60a079a7a` — `Publish reusable Game SDK resources`
 
 ### 未対応・保留
 
 - npm registryへの実publishには、npm側の`@game-fields` scope所有権と、GitHub Environment `npm-public`の承認者、対象package限定`NPM_TOKEN`が必要である。現在の実行環境はnpm未認証のため、registryは未変更。
 - workflowは`main`からの手動実行だけを許可する。developでの実機確認と外部設定完了後にmainへ反映し、`@game-fields/game-sdk@0.1.0`を初回publishする。
+- `main`、本番SDK、npm registryは変更していない。
