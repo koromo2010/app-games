@@ -19,6 +19,7 @@ export type MockUploadFile = {
 };
 
 type PreparedFile = Required<MockUploadFile> & { bytes: number };
+type MockUploadFileMap = Record<string, string>;
 
 class GitHubApiError extends Error {
   readonly status: number;
@@ -56,17 +57,28 @@ function fileExtension(path: string) {
   return [...ALLOWED_EXTENSIONS].find((extension) => fileName.endsWith(extension)) ?? "";
 }
 
+function normalizeMockUploadFiles(value: unknown): unknown {
+  if (Array.isArray(value) || !value || typeof value !== "object") return value;
+  return Object.entries(value as MockUploadFileMap).map(([path, content]) => ({
+    path,
+    content,
+    encoding: "utf-8" as const,
+  }));
+}
+
 export function prepareMockUploadFiles(value: unknown): PreparedFile[] {
-  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_FILES) {
+  const normalizedValue = normalizeMockUploadFiles(value);
+  if (!Array.isArray(normalizedValue) || normalizedValue.length === 0 || normalizedValue.length > MAX_FILES) {
     throw new Error("Mock upload must contain between 1 and 32 files.");
   }
   const seen = new Set<string>();
   let totalBytes = 0;
-  const files = value.map((item): PreparedFile => {
+  const files = normalizedValue.map((item): PreparedFile => {
     if (!item || typeof item !== "object") throw new Error("Mock upload file is invalid.");
     const candidate = item as Partial<MockUploadFile>;
     const path = typeof candidate.path === "string" ? candidate.path : "";
-    const content = typeof candidate.content === "string" ? candidate.content : "";
+    if (typeof candidate.content !== "string") throw new Error("Mock upload file is invalid.");
+    const content = candidate.content;
     const encoding = candidate.encoding ?? "utf-8";
     if (!safeRelativePath(path) || !fileExtension(path) || seen.has(path)) throw new Error("Mock upload path is invalid.");
     if (encoding !== "utf-8" && encoding !== "base64") throw new Error("Mock upload encoding is invalid.");

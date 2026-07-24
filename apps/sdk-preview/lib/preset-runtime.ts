@@ -113,7 +113,35 @@ export function gameFieldsPresetRuntimeSource() {
     adapters.forEach((adapter) => adapter.abort?.());
     setPhase("lobby"); notify("進行中断：参加者を維持して開始前へ戻りました");
   };
+  const hydrateRoom = (payload) => {
+    const nextRoomCode = typeof payload.roomCode === "string"
+      ? payload.roomCode.trim().slice(0, 12)
+      : state.roomCode;
+    const nextPlayers = Array.isArray(payload.players)
+      ? payload.players.flatMap((candidate) => {
+          if (!candidate || typeof candidate !== "object") return [];
+          const id = typeof candidate.id === "string" ? candidate.id.trim().slice(0, 80) : "";
+          const name = typeof candidate.name === "string" ? candidate.name.trim().slice(0, 40) : "";
+          if (!id || !name) return [];
+          return [{
+            id,
+            name,
+            role: candidate.role === "host" ? "host" : "player",
+            dummy: candidate.dummy === true
+          }];
+        }).slice(0, 12)
+      : state.players;
+    if (nextRoomCode) state.roomCode = nextRoomCode;
+    if (nextPlayers.length > 0) state.players = nextPlayers;
+    const requestedViewer = typeof payload.viewerId === "string" ? payload.viewerId : state.viewerId;
+    state.viewerId = requestedViewer === "spectator"
+      || state.players.some((player) => player.id === requestedViewer)
+      ? requestedViewer
+      : state.players[0]?.id || "host";
+    render(); emit("room:hydrate");
+  };
   const command = (name, payload = {}) => {
+    if (name === "room:hydrate") return hydrateRoom(payload);
     if (name === "debug:toggle") { state.debugOpen = !state.debugOpen; render(); emit(name); return; }
     if (name === "dummy:add") return addDummy();
     if (name === "dummy:remove") return removeDummy();
@@ -163,8 +191,8 @@ export function gameFieldsPresetRuntimeSource() {
     if (event.source !== window.parent) return;
     const message = event.data;
     if (!message || message.type !== "game-fields:command" || typeof message.name !== "string") return;
-    if (!["game:start", "game:abort", "game:auto-progress", "game:rematch"].includes(message.name)) return;
-    command(message.name);
+    if (!["room:hydrate", "debug:toggle", "dummy:add", "dummy:remove", "viewer:set", "phase:set", "game:start", "game:abort", "game:auto-progress", "game:rematch"].includes(message.name)) return;
+    command(message.name, message.payload && typeof message.payload === "object" ? message.payload : {});
   });
   const boot = () => { render(); emit("preset:ready"); };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot, { once: true }); else boot();

@@ -4,6 +4,15 @@ import test from "node:test";
 import { normalizePreviewAssetPath, previewContentType } from "../apps/sdk-preview/lib/preview-source.ts";
 import { previewContentSecurityPolicy, previewCookiePath } from "../apps/sdk-preview/lib/preview-security.ts";
 import { gameFieldsPresetRuntimeSource, injectGameFieldsPreset } from "../apps/sdk-preview/lib/preset-runtime.ts";
+import {
+  GAME_SDK_MODULE_IDS,
+  createInitialGameSdkModuleProfile,
+  updateGameSdkModuleProfile,
+} from "@game-fields/game-sdk/modules";
+import {
+  SDK_PREVIEW_MODULE_IMPLEMENTATIONS,
+  resolveRequiredSdkPreviewModules,
+} from "../app/sdk-preview/[creatorSlug]/games/[gameId]/sdk-preview-module-registry.ts";
 
 test("SDK preview source keeps every asset inside its mock directory", () => {
   assert.equal(normalizePreviewAssetPath([]), "index.html");
@@ -24,6 +33,8 @@ test("SDK preview injects one platform preset runtime into mock HTML", () => {
   assert.match(source, /dummy:add/);
   assert.match(source, /game:abort/);
   assert.match(source, /viewer:set/);
+  assert.match(source, /room:hydrate/);
+  assert.match(source, /hydrateRoom/);
   assert.match(source, /\[data-gf-phase\]:not\(select\):not\(html\)/);
   assert.match(source, /event\.source !== window\.parent/);
   assert.match(source, /game-fields:command/);
@@ -33,10 +44,67 @@ test("SDK preview injects one platform preset runtime into mock HTML", () => {
 test("SDK platform shell owns start, abort, auto progress, and rematch controls", () => {
   const shell = readFileSync("app/sdk-preview/[creatorSlug]/games/[gameId]/SdkPreviewGameShell.tsx", "utf8");
   assert.match(shell, /event\.source !== frameRef\.current\?\.contentWindow/);
-  assert.match(shell, /postMessage\(\{ type: "game-fields:command", name \}, "\*"\)/);
+  assert.match(shell, /type: "game-fields:command"/);
+  assert.match(shell, /name,\s+payload,/);
   for (const command of ["game:start", "game:abort", "game:auto-progress", "game:rematch"]) {
     assert.match(shell, new RegExp(command.replace(":", "\\:")));
   }
+});
+
+test("every required SDK module resolves to a concrete preview implementation", () => {
+  assert.deepEqual(
+    Object.keys(SDK_PREVIEW_MODULE_IMPLEMENTATIONS),
+    [...GAME_SDK_MODULE_IDS],
+  );
+  const initial = createInitialGameSdkModuleProfile();
+  const resolved = resolveRequiredSdkPreviewModules(initial);
+  assert.deepEqual(resolved.map((module) => module.id), [...GAME_SDK_MODULE_IDS]);
+  assert.equal(
+    resolved.every((module) => (
+      module.implementation.source.trim().length > 0
+      && module.implementation.surfaces.length > 0
+    )),
+    true,
+  );
+
+  const withoutDrawing = updateGameSdkModuleProfile(initial, {
+    drawing: { mode: "disabled", reason: "描画を利用しないため" },
+  });
+  assert.equal(
+    resolveRequiredSdkPreviewModules(withoutDrawing).some(
+      (module) => module.id === "drawing",
+    ),
+    false,
+  );
+});
+
+test("SDK preview composes the common room lifecycle around the game slot", () => {
+  const shell = readFileSync(
+    "app/sdk-preview/[creatorSlug]/games/[gameId]/SdkPreviewGameShell.tsx",
+    "utf8",
+  );
+  for (const surface of ["entry", "result"]) {
+    assert.match(shell, new RegExp(`data-sdk-preview-surface="${surface}"`));
+  }
+  assert.match(shell, /surface === "lobby" \|\| surface === "playing"/);
+  assert.match(shell, /data-sdk-preview-surface=\{surface\}/);
+  for (const sharedComponent of [
+    "RoomConfigSummary",
+    "RoomTimeLimitControl",
+    "DebugToolWindow",
+    "DebugParticipantControls",
+    "OnlineRoomLifecycleActions",
+    "GameResultShareButton",
+  ]) {
+    assert.match(shell, new RegExp(sharedComponent));
+  }
+  assert.match(shell, /Game-specific slot/);
+  assert.match(shell, /resolveRequiredSdkPreviewModules/);
+  assert.equal(
+    shell.match(/<iframe/g)?.length,
+    1,
+    "lobby and playing must retain the same game-specific iframe",
+  );
 });
 
 test("SDK preview injects the runtime when game code references the preset API", () => {

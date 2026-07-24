@@ -2678,3 +2678,44 @@
 ### 未対応・保留
 
 - 新しいWorkチャットで更新済み`gameapp-dev`と公開ver9を選び、制作GPTが遅延tool検索からhandshake、starter取得へ自律的に進む最終実機確認は未実施。
+
+## 2026-07-24 — SDK-dev必須モジュールを実画面へ合成
+
+### 利用者からの要望
+
+- 制作GPTがゲーム固有slotを作るところまではいったん許容するが、全38件を必須と判定しているSDK-dev確認画面にRoomロビー、参加者、設定、DEBUG、結果等の共通モジュール実体がない問題を直す。
+- 必須項目は制作側へ再実装させず、SDK-devの確認画面側が必ず用意した完成形として表示・操作できるようにする。
+- 直前に`publish_mock`で正しい5ファイルを送っても許可ファイル一覧が空として拒否された保存契約の不一致も解消する。
+
+### 判断
+
+- `@game-fields/game-sdk/modules`のcatalogは採用方針であり、件数を表示するだけでは実装済みとみなさない。
+- SDK-devはcatalogとは別の実装レジストリで、全module IDを具体的な本体共通部品、SDK helper、または隔離Preview adapterへ解決する。必須IDに割当がなければ確認画面を完成扱いにしない。
+- 画面遷移は`部屋作成・参加 → Roomロビー → プレイ → 共通結果`とし、ゲーム固有HTMLは外側Shell内のiframe slotへ限定する。
+- ロビーからプレイ中への遷移では同じiframe要素を保持し、外側の共通UI切替でゲーム固有状態を初期化しない。
+- 認証、永続化、観測等は隔離Preview上の確認用adapterであり、本体統合時の署名済みsession、サーバー認可、Redis永続化を代用しない。
+
+### 実施結果
+
+- `SdkPreviewGameShell`へ部屋作成・コード参加・参加可能な部屋、参加者一覧、ホスト開始条件、最大人数・ラウンド・時間設定、共通設定要約、DEBUGダミー管理、閲覧視点、フェーズ切替、revision、時間表示、中断、共通結果、再戦・解散、戦績・rating・リプレイ投影、結果共有を追加した。
+- ゲーム固有iframeは共通Room Shell内のslotとして1つだけ描画し、ロビーとプレイ中で保持する。
+- `sdk-preview-module-registry.ts`を追加し、全38 IDへ実体sourceと確認surfaceを割り当てた。共通モジュール確認画面から進行helper、コンテンツ供給、LLM通信バイタル、トランプ、描画を操作確認できる。
+- `GameFieldsPreset`へ外側Room状態を安全に反映する`room:hydrate`を追加し、親iframeから受理するCommandを明示的な許可リストに限定した。
+- MCPの`publish_mock.files`公開schemaがpath-to-content map、保存層が配列だけを受理していた不一致を、保存境界で両形式を正規化して解消した。文字列以外の本文、パストラバーサル、重複、必須ファイル不足は引き続き拒否する。
+- 現行仕様を`DEVELOPMENT_HANDOFF.md`と`EXTERNAL_GAME_PACKAGE.md`へ反映した。
+
+### 検証
+
+- `npm run lint`成功。
+- `npm test`成功（475件）。
+- 全module IDと実装レジストリの完全一致、必須解除時の合成除外、共通4面、共通部品、iframe単一保持、`room:hydrate`、MCP map形式保存を回帰テストへ追加した。
+- `npm run build`成功。Next.js production build、TypeScript検査、77ページ生成を完了した。
+- `npm run build:sdk`成功。SDK Portalのproduction build、TypeScript検査、14ページ生成を完了した。
+- `npm run build:sdk-preview`成功。隔離Previewのproduction build、TypeScript検査、5ページ生成を完了した。
+- `git diff --check`成功。
+- ローカルNext.jsは`127.0.0.1`固定で起動できた。画面確認用`agent-browser`は環境に未導入だったため一時CLIを取得したが、Chrome取得先の証明書が実行環境で`UnknownIssuer`となり、実ブラウザ確認は実施できなかった。アプリのbuild失敗とは区別して保留する。
+
+### 未対応・保留
+
+- 現在の変更はローカルcommitに固定済みで、`develop`、SDK-dev、公開starter、本番には未反映。
+- 公開SDK-devでのRoom作成、ロビー、開始、結果、再戦までのブラウザ実機確認は、`develop`反映後に行う。
