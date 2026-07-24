@@ -507,7 +507,7 @@ export function SdkPreviewGameShell({
 
       {(surface === "lobby" || surface === "playing") && (
         <section
-          className={`mx-auto grid max-w-6xl gap-5 px-4 py-6 ${surface === "lobby" ? "lg:grid-cols-[340px_minmax(0,1fr)]" : "lg:grid-cols-[260px_minmax(0,1fr)]"}`}
+          className={`mx-auto grid max-w-6xl gap-5 px-4 py-6 ${surface === "lobby" ? "lg:grid-cols-[340px_minmax(0,1fr)]" : "lg:grid-cols-[minmax(0,1fr)_260px]"}`}
           data-sdk-preview-surface={surface}
         >
           <aside className={`space-y-4 ${surface === "playing" ? "lg:order-2" : "lg:order-1"}`}>

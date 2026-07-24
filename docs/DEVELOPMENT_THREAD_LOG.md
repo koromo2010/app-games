@@ -2764,3 +2764,37 @@
 - 保存済みじゃんけんはCSS適用と`ゲーム固有Runtime接続済み`を確認した。ダミー参加者追加、共通開始、プレイ中への遷移後に「パー」を選択し、固有画面が`手を送信しています…`へ遷移するところまで操作できた。プレイ中にも広告DOMは存在しない。
 - 上記3 deploymentを対象に直近30分の`error`・`fatal`ログを確認し、該当ログは0件だった。
 - `main`、本番SDK、公開`sdk-starter`は変更対象外。
+
+## 2026-07-24 — SDK-devプレイ中ゲーム領域の列配置修正
+
+### 利用者からの要望
+
+- Roomロビーでは正しい位置に表示される一方、プレイ開始後だけゲーム固有領域が左側の細い列へ押し込まれる問題を直す。
+- 制作クライアントへの指示ではなく、SDK-dev共通Shellの責任範囲として修正する。
+
+### 判断
+
+- プレイ中はゲーム固有領域を先頭、Room情報を末尾へ並べ替えているため、列幅も`可変幅 / 260px`の順にする。
+- ゲームpackageは隔離iframe内から親Shellのグリッドを変更できず、制作側を修正対象にしない。
+- ロビーの`340px / 可変幅`配置は現状どおり維持する。
+
+### 実施結果
+
+- `SdkPreviewGameShell`のプレイ中グリッドを`lg:grid-cols-[minmax(0,1fr)_260px]`へ変更した。
+- ゲーム固有iframeが左の可変幅列、Room参加者・設定が右の260px列へ配置されるよう、既存の表示順と列幅を一致させた。
+- 正しい列定義の存在と、誤った`260px / 可変幅`定義の不在をSDK Preview回帰テストへ追加した。
+
+### 検証
+
+- SDK Preview対象テスト9件成功。
+- `npm run lint`成功。
+- `npm test`成功（476件）。
+- `npm run build`成功。Next.js production build、TypeScript検査、77ページ生成を完了した。
+- `npm run build:sdk`成功。SDK Portalのproduction build、TypeScript検査、14ページ生成を完了した。
+- `npm run build:sdk-preview`成功。隔離Previewのproduction build、TypeScript検査、5ページ生成を完了した。
+- `git diff --check`成功。
+
+### 未対応・保留
+
+- `develop`への反映、3環境のDeployment READY確認、SDK-dev実画面でのプレイ中配置確認は未実施。
+- `main`、本番SDK、公開`sdk-starter`は変更対象外。
