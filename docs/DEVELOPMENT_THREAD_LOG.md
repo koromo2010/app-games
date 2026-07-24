@@ -3425,3 +3425,22 @@
 - SDK配布tarballの外部install検査と、starterの型・契約・完走・提出ZIP検査に成功。
 - Cloud Browserはログイン画面で停止しているため、有効な本人セッションを使ったWord DB本文とAI応答の最終E2Eは未確認。資格情報を入力せず、認証済み利用者操作を残す。
 - GitHubへのpushとdev deploymentは未実施。`main`、本番SDK、npm package versionは変更しない。
+
+## 2026-07-24 — SDK Preview認証切れ修正のdevelop反映
+
+### 利用者からの要望
+
+- 検証済みのSDK Preview認証切れ修正をGitHubの`develop`へpushする。
+
+### 実施結果
+
+- `origin/develop`の`e8afe5d9073c`から、共通Session Gate、Preview Shell、Word DB／AI APIの認証切れ応答、回帰テスト、関連資料をfast-forwardで反映した。
+- GitHub上の実装コミットは`281e75ae9fc8`。
+- AIことば当てのコード、設定、保存済みrevisionは変更していない。
+
+### 検証・保留
+
+- push前にGitHub上の`develop`が`e8afe5d9073c`と一致すること、作業treeがクリーンで差分が対象7ファイルだけであることを確認した。
+- 実装コミット時点で502テスト、lint、本体・SDK Portal・隔離PreviewのProduction build、SDK配布package・starter検査が成功済み。
+- dev deploymentの完了状態と、ログイン済み本人セッションでのWord DB／AI API最終E2Eはpush後に確認する。
+- `main`、本番SDK、npm package versionは今回更新しない。
