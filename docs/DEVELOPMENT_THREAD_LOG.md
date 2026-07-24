@@ -3444,3 +3444,54 @@
 - 実装コミット時点で502テスト、lint、本体・SDK Portal・隔離PreviewのProduction build、SDK配布package・starter検査が成功済み。
 - dev deploymentの完了状態と、ログイン済み本人セッションでのWord DB／AI API最終E2Eはpush後に確認する。
 - `main`、本番SDK、npm package versionは今回更新しない。
+
+## 2026-07-24 — SDK Previewログイン済みE2Eの再開確認
+
+### 作業目的
+
+- develop反映後の`test10-1 / ai-word-guess`を固定クライアントのまま開き、Portal本人認証、隔離Runtime、Word DB、AI APIを実機で順に確認する。
+
+### 調査結果
+
+- 再読込前の古いタブでは、Portal外枠と本体Preview Shellは表示され、実Roomも作成できたが、隔離Runtimeの署名URLはすでに期限切れで開始できなかった。
+- SDK Portalのゲーム画面を再読込すると、共通Session Gateが古いRuntimeを継続せず、Game Fields本体devの再ログイン画面へ遷移した。認証切れをWord DB障害として継続表示しない修正は実機で確認できた。
+- 検証ブラウザには有効な本体dev本人セッションがなく、資格情報を入力していないため、Word DB取得本文とAI応答の最終E2Eまでは到達していない。
+- AIことば当てのコード、設定、保存済みrevisionは変更していない。
+
+### 未対応・保留
+
+- 本体devへ本人がログインし、自動的にSDK Portalへ戻った後、同じゲームで新規Roomを作成して秘密語取得とAI応答を確認する。
+- 今回はコード、外部設定、deploymentを変更していない。
+
+## 2026-07-24 — SDK Preview Word DB中継500の安全な診断
+
+### 作業目的
+
+- ログイン成功後も`test10-1 / ai-word-guess`の秘密語取得が失敗するため、固定クライアントを変更せず、共通`content-source`中継の500発生箇所を特定できるようにする。
+
+### 調査結果
+
+- 本体devへの再ログイン後、Preview専用セッション交換は`200`、新規Room作成とゲーム開始も成功した。
+- 同じ実行の`POST /api/sdk-preview/content-source`は`500`で、認証401とは別の次段階まで到達している。
+- 現行Routeは内部例外を安全な共通エラーへ変換していたが、失敗段階やPostgreSQLの5桁コードを観測ログへ残しておらず、テーブル、列、権限、接続のどこで失敗したかを区別できなかった。
+
+### 判断
+
+- AIことば当てのコード、設定、保存済みrevisionは変更しない。
+- 共通observability schemaを通し、失敗した段階、content operation、許可済みのエラーコード、PostgreSQLの5桁コードだけを記録する。秘密語、SQL、リクエスト本文、例外message・stackは記録しない。
+
+### 実施結果
+
+- `/api/sdk-preview/content-source`へ段階追跡と共通`createRequestTelemetry`による`sdk.resource`失敗イベントを追加した。
+- 入力、session、rate-limit、Runtime定義、module profile、content sourceのどこで失敗したかを`phase`で区別できる。
+- 外部設定とAIことば当て本体は変更していない。
+
+### 検証
+
+- 全502テスト、lint、本体Production buildが成功した。
+- 診断イベントは共通observability schemaとruntime allowlistを通り、未許可フィールドや例外本文を直接出力しない。
+
+### 未対応・保留
+
+- `develop`へ反映して同じ操作を再実行し、Vercel Runtime Logsの`phase`、`operation`、`databaseCode`から500の具体原因を確定する。
+- 原因に応じたDBまたは共通content-source修正と、Word DB取得からAI応答までの最終E2Eは未実施。

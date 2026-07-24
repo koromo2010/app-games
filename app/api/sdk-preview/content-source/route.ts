@@ -11,6 +11,7 @@ import { createGameFieldsSdkContentSource } from "@/lib/game-sdk-content-source"
 import {
   isPlayerAuthConfigurationError,
 } from "@/lib/player-auth";
+import { createRequestTelemetry } from "@/lib/observability";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 import {
   requireSdkPreviewAuthenticatedPlayer,
@@ -28,6 +29,14 @@ type ContentOperation =
   | "drawWords"
   | "drawWordPairs"
   | "findDefinitions";
+
+type ContentStage =
+  | "input"
+  | "session"
+  | "rate-limit"
+  | "runtime"
+  | "module-profile"
+  | "content-source";
 
 const contentOperations = new Set<ContentOperation>([
   "drawWords",
@@ -60,6 +69,15 @@ function objectBody(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : null;
+}
+
+function safeDatabaseErrorCode(error: unknown) {
+  const code = error && typeof error === "object" && "code" in error
+    ? (error as { code?: unknown }).code
+    : undefined;
+  return typeof code === "string" && /^[0-9A-Z]{5}$/.test(code)
+    ? code
+    : undefined;
 }
 
 function contentErrorResponse(error: unknown) {
@@ -106,6 +124,13 @@ async function runContentOperation(
 }
 
 export async function POST(request: Request) {
+  const telemetry = createRequestTelemetry(
+    request,
+    "/api/sdk-preview/content-source",
+    { operation: "sdk-preview-content-source" },
+  );
+  let stage: ContentStage = "input";
+  let operation: ContentOperation | null = null;
   try {
     const body = objectBody(await request.json().catch(() => null));
     const creatorSlug = typeof body?.creatorSlug === "string"
@@ -114,7 +139,7 @@ export async function POST(request: Request) {
     const gameId = typeof body?.gameId === "string"
       ? body.gameId.trim().toLowerCase()
       : "";
-    const operation = typeof body?.operation === "string"
+    operation = typeof body?.operation === "string"
       && contentOperations.has(body.operation as ContentOperation)
       ? body.operation as ContentOperation
       : null;
@@ -128,7 +153,9 @@ export async function POST(request: Request) {
       return json({ error: "GAME_SDK_CONTENT_INPUT_REQUIRED" }, 400);
     }
 
+    stage = "session";
     const session = await requireSdkPreviewAuthenticatedPlayer(creatorSlug);
+    stage = "rate-limit";
     const limited = await rateLimitResponseFor(
       request,
       rateLimitPolicies.sdkContentRead,
@@ -136,11 +163,13 @@ export async function POST(request: Request) {
     );
     if (limited) return limited;
 
+    stage = "runtime";
     const definition = await loadSdkPreviewRuntimeDefinition(
       creatorSlug,
       gameId,
     );
     if (!definition) return json({ error: "SDK_GAME_NOT_FOUND" }, 404);
+    stage = "module-profile";
     const moduleProfile = normalizeGameSdkModuleProfile(
       definition.modulePolicy,
     );
@@ -148,9 +177,17 @@ export async function POST(request: Request) {
       return json({ error: "GAME_SDK_CONTENT_MODULE_REQUIRED" }, 403);
     }
 
+    stage = "content-source";
     const response = await runContentOperation(operation, contentRequest);
     return json({ response });
   } catch (error) {
-    return contentErrorResponse(error);
+    const response = contentErrorResponse(error);
+    telemetry.responseError("sdk.resource", error, response.status, {
+      action: "content-source",
+      operation: operation ?? undefined,
+      phase: stage,
+      databaseCode: safeDatabaseErrorCode(error),
+    });
+    return response;
   }
 }
