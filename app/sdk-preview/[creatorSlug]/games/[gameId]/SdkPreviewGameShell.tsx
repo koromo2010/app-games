@@ -4,7 +4,6 @@ import { AppLink as Link } from "@/app/components/AppLink";
 import { DebugParticipantControls } from "@/app/components/DebugParticipantControls";
 import { DebugToolWindow } from "@/app/components/DebugToolWindow";
 import { DrawingCanvas } from "@/app/components/DrawingCanvas";
-import { GamePhaseTimer } from "@/app/components/GamePhaseTimer";
 import { GameAdSlot } from "@/app/components/GameAdSlot";
 import { GameResultShareButton } from "@/app/components/GameResultShareButton";
 import { GameRulesDialog } from "@/app/components/GameRulesDialog";
@@ -69,6 +68,7 @@ type PreviewViewerSelectorProps = {
 };
 type PreviewCommand =
   | "room:hydrate"
+  | "timer:sync"
   | "debug:toggle"
   | "dummy:add"
   | "dummy:remove"
@@ -213,6 +213,7 @@ export function SdkPreviewGameShell({
   const [maximumPlayers, setMaximumPlayers] = useState(6);
   const [timeLimitSeconds, setTimeLimitSeconds] = useState(60);
   const [startedAt, setStartedAt] = useState(() => Date.now());
+  const [frameHeight, setFrameHeight] = useState(680);
   const [message, setMessage] = useState("");
   const [moduleListOpen, setModuleListOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
@@ -273,6 +274,10 @@ export function SdkPreviewGameShell({
       viewerId: nextViewerId,
       players: nextPlayers,
     });
+    send("timer:sync", {
+      durationSeconds: timeLimitSeconds,
+      startedAt: phase === "playing" ? startedAt : null,
+    });
     send("phase:set", { phase });
   };
 
@@ -285,8 +290,17 @@ export function SdkPreviewGameShell({
         requestId?: unknown;
         request?: unknown;
         command?: unknown;
+        height?: unknown;
         state?: { phase?: unknown; gameAdapterReady?: unknown };
       } | null;
+      if (
+        data?.type === "game-fields:frame-size"
+        && typeof data.height === "number"
+        && Number.isFinite(data.height)
+      ) {
+        setFrameHeight(Math.min(12000, Math.max(320, Math.ceil(data.height))));
+        return;
+      }
       if (
         data?.type === "game-fields:resource-request"
         && data.resource === "llm"
@@ -330,6 +344,9 @@ export function SdkPreviewGameShell({
         return;
       }
       if (data?.type !== "game-fields:state") return;
+      if (data.command === "timer:turn-complete") {
+        setStartedAt(previewNow());
+      }
       if (typeof data.state?.gameAdapterReady === "boolean") {
         setGameAdapterReady(data.state.gameAdapterReady);
       }
@@ -357,6 +374,7 @@ export function SdkPreviewGameShell({
     setPlayers(input.members);
     setViewerId("host");
     setSurface("lobby");
+    setFrameHeight(680);
     setRevision(1);
     setMessage("");
     setStartedAt(previewNow());
@@ -407,7 +425,12 @@ export function SdkPreviewGameShell({
       return;
     }
     setMessage("");
-    setStartedAt(previewNow());
+    const nextStartedAt = previewNow();
+    setStartedAt(nextStartedAt);
+    send("timer:sync", {
+      durationSeconds: timeLimitSeconds,
+      startedAt: nextStartedAt,
+    });
     setSurface("playing");
     send("game:start");
     bumpRevision("ゲーム開始");
@@ -429,6 +452,7 @@ export function SdkPreviewGameShell({
   const returnToRoom = () => {
     send("game:rematch");
     setSurface("lobby");
+    setFrameHeight(680);
     setStartedAt(previewNow());
     bumpRevision("同じ参加者で部屋へ復帰");
   };
@@ -478,7 +502,12 @@ export function SdkPreviewGameShell({
   };
 
   const changeTimeLimit = (seconds: number) => {
-    setTimeLimitSeconds(Math.max(0, seconds));
+    const normalized = Math.max(0, seconds);
+    setTimeLimitSeconds(normalized);
+    send("timer:sync", {
+      durationSeconds: normalized,
+      startedAt: surface === "playing" ? startedAt : null,
+    });
     bumpRevision("制限時間を更新");
   };
 
@@ -784,7 +813,6 @@ export function SdkPreviewGameShell({
                 <span className="font-bold">{players.length}人</span>
                 <span className="text-slate-400">rev {revision} · 視点 {viewerId === "spectator" ? "観戦者" : viewerId}</span>
               </div>
-              {moduleRequired("timer") && <GamePhaseTimer durationSeconds={timeLimitSeconds} startedAt={startedAt} label="この手番" />}
               {moduleRequired("standard-outcome") && (
                 <button type="button" className={commandClass} onClick={finishGame}>結果画面を確認</button>
               )}
@@ -801,7 +829,8 @@ export function SdkPreviewGameShell({
               </header>
               <iframe
                 ref={frameRef}
-                className={`block w-full border-0 bg-white ${surface === "lobby" ? "h-[620px]" : "min-h-[680px]"}`}
+                className="block min-h-[320px] w-full border-0 bg-white"
+                style={{ height: `${frameHeight}px` }}
                 src={runtimeUrl}
                 title={`${title}のゲーム固有領域`}
                 sandbox="allow-scripts allow-modals allow-pointer-lock"

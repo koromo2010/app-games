@@ -51,6 +51,11 @@ test("SDK preview injects one platform preset runtime into mock HTML", () => {
   assert.match(source, /game-fields:state/);
   assert.match(source, /game-fields:resource-request/);
   assert.match(source, /game-fields:resource-response/);
+  assert.match(source, /game-fields:frame-size/);
+  assert.match(source, /ResizeObserver/);
+  assert.match(source, /\[data-gf-timer\]/);
+  assert.match(source, /timer:turn-complete/);
+  assert.match(source, /onTimeExpired/);
   assert.match(source, /resources: Object\.freeze/);
   assert.match(source, /generate: generateLlm/);
   assert.match(source, /gameAdapterReady/);
@@ -125,6 +130,11 @@ test("SDK preview composes the common room lifecycle around the game slot", () =
   assert.match(shell, /max-w-\[1600px\]/);
   assert.match(shell, /lg:grid-cols-\[minmax\(0,1fr\)_280px\]/);
   assert.doesNotMatch(shell, /lg:grid-cols-\[260px_minmax\(0,1fr\)\]/);
+  assert.match(shell, /data\?\.type === "game-fields:frame-size"/);
+  assert.match(shell, /style=\{\{ height: `\$\{frameHeight\}px` \}\}/);
+  assert.doesNotMatch(shell, /h-\[620px\]/);
+  assert.doesNotMatch(shell, /min-h-\[680px\]/);
+  assert.doesNotMatch(shell, /<GamePhaseTimer/);
   assert.match(shell, /\/api\/sdk-preview\/content-sample/);
   assert.match(shell, /\/api\/sdk-preview\/llm/);
   assert.match(shell, /game-fields:resource-request/);

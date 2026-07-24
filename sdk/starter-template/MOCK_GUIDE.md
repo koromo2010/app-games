@@ -33,6 +33,7 @@
 4. `index.html`をゲーム固有slotだけに保ち、共通UIを複製していないことを確認する。
 5. `mock.js`で`GameFieldsPreset.registerGame()`を必ず呼び、`start`、`abort`、`rematch`、`autoProgress`、`onStateChange`をゲーム固有状態へ接続する。
    - LLMを使う場合は`GameFieldsPreset.resources.llm.generate({ task, prompt, promptVersion })`へゲーム内容だけを渡す。provider、モデル、APIキー、課金元、endpointをゲーム側へ持たせない。
+   - 時間表示はHTML内の任意位置へ`data-gf-timer`を置く。正常に1手を確定した直後だけ`GameFieldsPreset.command("timer:turn-complete")`を呼び、入力エラーやAI失敗ではリセットしない。
 6. 外側のデバッグメニューから、ダミー参加者追加、閲覧プレイヤー視点切替、主要フェーズ切替、待機、時間切れ、切断、入力エラー、結果を再現できるようにする。slot内にデバッグ操作を重複配置しない。
 7. ダミー参加者を自動進行または一括入力でき、1人で開始から結果まで止まらず確認できるようにする。
 8. `abort`でゲーム固有状態を初期化し、外側Shellが同じ参加者のロビーへ戻せるようにする。

@@ -92,6 +92,33 @@ SDK基本セットが次を所有します。
 
 AppSetが所有するのはゲーム固有state、ゲーム固有Command、フェーズ・勝敗、ゲーム固有Viewだけです。AppSetは`code`、revision、参加者配列、共通設定を更新できません。
 
+## 共通timerと手番完了
+
+締切、残り時間、受付猶予、時間切れCommandはSDK基本セットが所有します。ゲーム固有クライアントは表示位置と見た目だけを決め、締切時刻や残り時間を正本として更新しません。
+
+AppSetは部屋設定から制限時間を返し、正常に1手を採用したtransitionで`timer: "reset"`を返します。共通RuntimeはCommand成功後だけ新しい`startedAt`と`deadlineAt`を生成します。入力エラー、AI失敗、権限拒否、revision競合ではtransition自体が保存されないため、時間もリセットされません。
+
+```ts
+const appSet = defineGameSdkOnlineRoomAppSet({
+  // ...
+  timer: {
+    durationSeconds(settings) {
+      return settings.timeLimitSeconds; // 0は制限なし
+    },
+  },
+  applyAppCommand(room, command, context) {
+    const next = applyAcceptedTurn(room, command, context);
+    return {
+      phase: next.complete ? "result" : "playing",
+      app: next.app,
+      timer: next.complete ? "stop" : "reset",
+    };
+  },
+});
+```
+
+閲覧者別RoomViewでは`room.view.common.timer`から`durationSeconds`、`startedAt`、`deadlineAt`、`turnSequence`を読めます。表示はゲーム画面内の任意位置へ置けますが、ブラウザからtimer時刻を送ってサーバー正本を上書きしてはいけません。
+
 ## LLM resource
 
 本実装では、ブラウザは「AI回答を生成する」ゲームCommandと質問・履歴等のゲーム入力だけを送ります。審査済みAppSetのserver側が固定promptを組み立て、Game Fieldsから注入された共通LLM gatewayを呼びます。
@@ -220,6 +247,14 @@ type PreviewPlatformState = {
   debugOpen: boolean;
   debugAccess: boolean;
   viewerId: string;
+  timer: {
+    durationSeconds: number;
+    startedAt: number | null;
+    deadlineAt: number | null;
+    remainingSeconds: number | null;
+    running: boolean;
+    turnSequence: number;
+  };
   players: Array<{ id: string; name: string; role: "host" | "player"; dummy: boolean }>;
 };
 
@@ -231,6 +266,12 @@ GameFieldsPreset.resources.llm.generate(request): Promise<GameSdkLlmResponse>;
 ```
 
 標準Commandは`debug:toggle`、`dummy:add`、`dummy:remove`、`viewer:set`、`phase:set`、`game:start`、`game:abort`、`game:auto-progress`、`game:rematch`です。ゲーム固有コードは`registerGame`で`start`、`abort`、`autoProgress`、`rematch`、`onStateChange`だけを接続します。
+
+Previewでは、ゲームHTMLの任意位置へ`data-gf-timer`を付けると共通timerが`1:00`形式または`制限なし`を描画します。正常に1手を確定した直後だけ`GameFieldsPreset.command("timer:turn-complete")`を呼びます。これは画面確認用のPreview通知です。本体統合後は上記AppSet transitionが同じリセットをサーバー側で行い、ブラウザ通知を正本にしません。
+
+```html
+<span class="my-turn-timer" data-gf-timer>制限なし</span>
+```
 
 LLMを使うモックは次のように呼びます。
 

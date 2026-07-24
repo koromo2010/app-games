@@ -3015,3 +3015,66 @@
 - AI生成失敗時は入力と手番を保持し、ターンを消費せず再試行できる。最終回答だけは従来どおり秘密語との厳密一致で判定する。
 - 保存revisionは`7cc0489239092df8fa55ed7ed559c3d2d8ae04d7`。revision指定で`mock.js`を読み戻し、検証済み本文との完全一致、共通bridge markerあり、旧固定判定と直接network callなしを確認した。
 - この実行環境には利用者の署名済みCookieと持込API設定がないため、実providerからの回答本文だけはログイン済み画面で1回質問して目視確認する。
+
+## 2026-07-24 — SDK Previewの可変高さと手番タイマー契約
+
+### 利用者からの要望
+
+- SDK-devのゲーム内だけに縦スクロールが発生し、下部まで自然に到達できない表示を修正する。
+- 時間の締切・リセットは共通moduleが管理し、ゲーム制作者は時間を表示する場所だけを決められるようにする。
+- 手番が正常終了したら次の手番時間へリセットし、入力失敗やAI生成失敗ではリセットしない。
+
+### 判断
+
+- 固定620px／最小680pxのiframeを廃止し、隔離Preview Runtimeが実コンテンツ高を親Shellへ通知してiframe高を追従させる。縦スクロールは外側ページへ一本化する。
+- 本番採用後の締切はserver AppSetの保存Roomを正本とし、accept済みCommandが返す`timer: "reset"`だけが新しい締切を作る。browser入力から直接締切を変更させない。
+- Previewでは同じ制作者体験を提供するためPreset Runtimeがtimer stateを持つ。表示先はゲームHTML内の`data-gf-timer`要素とし、共通Shellに固定表示しない。
+- 「AIことば当て（仮）」は既存の`advanceTurn()`だけを手番完了点とし、成功後に`timer:turn-complete`を送る。AIエラーと入力検証エラーは`advanceTurn()`へ到達しないため時間を維持する。
+
+### 実施結果
+
+- 隔離Runtimeへ`ResizeObserver`／`MutationObserver`による実高計測と`game-fields:frame-size`通知を追加し、親Shellを最大12,000pxの可変iframe高へ変更した。
+- 公開SDK Roomへ`timer`保存状態、設定からの秒数解決、accept済みtransitionの`preserve / reset / stop`を追加した。開始時は自動開始し、結果・中止・再戦では停止する。
+- Preview Presetへ`timer:sync`、`timer:turn-complete`、`timer:expired`、`onTimeExpired`と`data-gf-timer`描画を追加した。
+- 共通Shellの固定`GamePhaseTimer`を削除し、ゲーム制作者がHTML上の任意位置へ時間表示を配置できるようにした。
+- DownloadMeスターター、公開SDK README、module catalog、Mockガイド、外部package正本へ時間管理と表示責務を記載した。
+- 本人所有の`test10-1 / ai-word-guess`を更新し、表示位置、成功時リセット、時間切れ時の手番進行を接続した。保存revisionは`a9e79de4497fb7bb0db446b1d8c28f8a458b022f`。
+- 暗号化opaque IDの改ざんテストが偶然同じ末尾文字を選ぶ可能性を除き、必ず異なる文字へ変更する安定した検査へ修正した。
+
+### 検証
+
+- `npm test`成功（488件）。
+- `npm run lint`成功。環境変数台帳60キー、9ゲーム共通要件、SDK依存境界を確認した。
+- `npm run test:sdk-package`成功。公開tarballの外部fixture installと公開exportを確認した。
+- `npm run test:sdk-starter`成功。入口、snapshot、ZIP、同梱SDK install、型検査、契約テスト、完走デモを確認した。
+- `npm run build`成功。Next.js production build、TypeScript検査、77ページ生成を完了した。
+- `npm run build:sdk`成功。SDK Portalのproduction build、TypeScript検査、14ページ生成を完了した。
+- `npm run build:sdk-preview`成功。隔離Previewのproduction build、TypeScript検査、5ページ生成を完了した。
+- `git diff --check`成功。
+
+### 未対応・保留
+
+- `develop`反映後に本体dev、SDK-dev、隔離Preview devのREADYと公開画面の可変高さ・timer contractを確認する。
+- `main`、本番SDK、npm package versionはこの変更では更新しない。
+
+## 2026-07-24 — 制作者別の合言葉付き本番広場構想
+
+### 利用者からの要望
+
+- 将来、`game-fields.com/<制作者slug>/ja`等の個人ページを本体`main`側に用意し、合言葉必須で制作者のアプリを友人等と遊べるようにしたい。
+
+### 判断
+
+- SDK Previewをそのまま本番公開せず、運営審査済み・固定revisionのゲームだけをGame Fields本体の共通Roomへ登録する「制作者別広場」として扱う。
+- 合言葉は制作者別ページの閲覧・起動権限に限定し、Room内のactor本人確認は通常のGame Fieldsアカウントを正本とする。
+- 制作者ごとに個別のhash済み合言葉とscope付きHttpOnly Cookieを使い、既存の共通`PRIVATE_GAME_ACCESS_KEY`は使い回さない。
+- URLは`/<creator-slug>/<locale>`を候補として残す。現在の正規URLが`/<locale>/...`であるため、実装時に正規形またはalias転送のどちらにするか決める。
+
+### 実施結果
+
+- `docs/PLATFORM_VISION.md`へ、権限境界、審査済みゲーム限定、共通module再利用、URLと言語の保留点を将来構想として追加した。
+
+### 未対応・保留
+
+- 本番Route、制作者別合言葉管理、公開申請・審査UI、正規URL形は未実装。
+- 今回は`develop`のSDK Preview可変高さ・timer修正だけを公開し、`main`と本番挙動は変更しない。

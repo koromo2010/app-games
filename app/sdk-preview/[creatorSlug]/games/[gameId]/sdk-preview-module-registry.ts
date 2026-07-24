@@ -91,7 +91,7 @@ export const SDK_PREVIEW_MODULE_IMPLEMENTATIONS = {
   },
   timer: {
     kind: "shared-component",
-    source: "GamePhaseTimer and common time-limit policy",
+    source: "Preview preset timer state and common time-limit policy",
     surfaces: ["lobby", "playing"],
   },
   result: {

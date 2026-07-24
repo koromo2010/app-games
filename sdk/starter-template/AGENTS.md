@@ -32,6 +32,7 @@
 
 - `mock/index.html`は外側のGame Fields Shellへ差し込む**ゲーム固有slotだけ**にする。広場、ゲームカード、共通ヘッダー、入室、部屋作成・参加、参加者一覧、プレイヤーメニュー、ルール、デバッグパネル、退出・再戦導線を生成物へ複製しない。
 - 共通操作に似たボタンを見た目だけ自作しない。開始・中断・再戦・自動進行は`window.GameFieldsPreset.registerGame()`へゲーム固有処理を登録し、外側の公式UIから呼ばせる。
+- 時間の締切・受付・リセットは共通timerを正本とする。モックの表示位置は`data-gf-timer`でゲーム固有画面内に選び、正常に1手を確定した後だけ`timer:turn-complete`を通知する。本体AppSetでは成功transitionの`timer: "reset"`を使い、ブラウザ時刻を正本にしない。
 - ゲーム固有slot内に置いてよいのは、盤面、石、カード、手番、入力、ゲーム固有の得点・結果表示など、そのゲームにしかない要素だけである。
 - DB、Redis、Blob、認証Cookie、APIキー、管理者情報へ直接アクセスしない。
 - Command payloadへactor ID、player ID、表示名を本人証明として入れない。Runtimeが`context.actor`を注入する。

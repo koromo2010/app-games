@@ -82,6 +82,29 @@ async function answerQuestion(
 
 Game Fieldsがpersonal／Game Fields提供枠／共有無料枠、provider fallback、認証、レート制限、観測を処理します。Previewのゲーム固有iframeは事業者APIを直接呼ばず、外側Shellの`GameFieldsPreset.resources.llm.generate`から同じrequest／response契約を確認します。
 
+## Turn timer
+
+AppSetは制限時間の取得方法だけを登録し、正常に1手を採用したtransitionで`timer: "reset"`を返します。SDK基本セットがサーバー時刻から次の`startedAt`と`deadlineAt`を生成し、`RoomView.common.timer`へ投影します。拒否されたCommand、入力エラー、AI失敗では保存transitionがないためdeadlineも変わりません。
+
+```ts
+const appSet = defineGameSdkOnlineRoomAppSet({
+  // ...
+  timer: {
+    durationSeconds: (settings) => settings.timeLimitSeconds,
+  },
+  applyAppCommand(room, command, context) {
+    const next = applyAcceptedTurn(room, command, context);
+    return {
+      phase: next.complete ? "result" : "playing",
+      app: next.app,
+      timer: next.complete ? "stop" : "reset",
+    };
+  },
+});
+```
+
+ゲーム固有クライアントはtimerの表示位置と見た目を選べますが、ブラウザから締切時刻や残り秒数を正本として送信しません。
+
 ## Playing cards
 
 ```ts

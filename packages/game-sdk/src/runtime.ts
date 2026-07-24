@@ -29,7 +29,15 @@ export type GameSdkOnlineRoom<
   TSettings extends Record<string, unknown>,
   TAppState,
 > = GameSdkOnlineRoomState<TSettings> & {
+  timer?: GameSdkOnlineRoomTimer;
   app: TAppState;
+};
+
+export type GameSdkOnlineRoomTimer = {
+  durationSeconds: number;
+  startedAt: number | null;
+  deadlineAt: number | null;
+  turnSequence: number;
 };
 
 /** Standard create payload used by every online-room AppSet. */
@@ -59,6 +67,7 @@ export type GameSdkOnlineRoomCommonView<TSettings> = {
   phase: string;
   players: GameSdkOnlineRoomPlayerView[];
   settings: TSettings;
+  timer?: GameSdkOnlineRoomTimer;
   minimumPlayers: number;
   maximumPlayers: number;
   isHost: boolean;
@@ -80,6 +89,12 @@ export type GameSdkOnlineRoomView<TSettings, TAppView> = {
 export type GameSdkAppTransition<TAppState> = {
   phase: string;
   app: TAppState;
+  /**
+   * `reset` starts a fresh deadline after this Command is accepted.
+   * Browser input must never set this directly; the reviewed AppSet returns it
+   * from the authoritative server-side transition.
+   */
+  timer?: "preserve" | "reset" | "stop";
 };
 
 export type GameSdkAppPresentation<TAppView> = {
@@ -102,6 +117,9 @@ export type GameSdkOnlineRoomAppSet<
 > = {
   manifest: GameSdkManifest;
   defaultSettings: TSettings;
+  timer?: {
+    durationSeconds(settings: Readonly<TSettings>): number;
+  };
   normalizeSettings?: (settings: TSettings) => TSettings;
   createAppState(
     input: TAppInput,
@@ -293,6 +311,40 @@ function normalizeAppSetPhase(phase: string) {
   return normalized;
 }
 
+function normalizeGameSdkTimerDuration(value: number) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(3600, Math.max(0, Math.floor(value)));
+}
+
+function stoppedGameSdkTimer(
+  durationSeconds: number,
+  previous?: Readonly<GameSdkOnlineRoomTimer>,
+): GameSdkOnlineRoomTimer {
+  return {
+    durationSeconds: normalizeGameSdkTimerDuration(durationSeconds),
+    startedAt: null,
+    deadlineAt: null,
+    turnSequence: previous?.turnSequence ?? 0,
+  };
+}
+
+function resetGameSdkTimer(
+  durationSeconds: number,
+  now: number,
+  previous?: Readonly<GameSdkOnlineRoomTimer>,
+): GameSdkOnlineRoomTimer {
+  const normalizedDuration = normalizeGameSdkTimerDuration(durationSeconds);
+  if (normalizedDuration === 0) {
+    return stoppedGameSdkTimer(0, previous);
+  }
+  return {
+    durationSeconds: normalizedDuration,
+    startedAt: now,
+    deadlineAt: now + normalizedDuration * 1000,
+    turnSequence: (previous?.turnSequence ?? 0) + 1,
+  };
+}
+
 function createCommonPlayerView(
   player: GameSdkRoomPlayer,
   seat: number,
@@ -346,6 +398,11 @@ export function createGameSdkOnlineRoomModule<
   const normalizeSettings = (settings: TSettings) => (
     appSet.normalizeSettings ? appSet.normalizeSettings(settings) : settings
   );
+  const timerDurationSeconds = (settings: Readonly<TSettings>) => (
+    appSet.timer
+      ? normalizeGameSdkTimerDuration(appSet.timer.durationSeconds(settings))
+      : 0
+  );
 
   return defineGameServerModule({
     manifest,
@@ -372,6 +429,9 @@ export function createGameSdkOnlineRoomModule<
           connected: true,
         }],
         settings,
+        ...(appSet.timer ? {
+          timer: stoppedGameSdkTimer(timerDurationSeconds(settings)),
+        } : {}),
         app,
       };
     },
@@ -385,7 +445,24 @@ export function createGameSdkOnlineRoomModule<
           app: appSet.resetAppState(current),
         }),
       });
-      if (lifecycle.handled) return lifecycle.room;
+      if (lifecycle.handled) {
+        if (!appSet.timer || !lifecycle.room.timer) return lifecycle.room;
+        const shouldStop = (
+          command.type === "room/abort"
+          || command.type === "room/rematch"
+          || lifecycle.room.phase === "lobby"
+          || lifecycle.room.phase === "result"
+        );
+        return {
+          ...lifecycle.room,
+          timer: shouldStop
+            ? stoppedGameSdkTimer(
+                timerDurationSeconds(lifecycle.room.settings),
+                lifecycle.room.timer,
+              )
+            : lifecycle.room.timer,
+        };
+      }
       if (command.type.startsWith("room/")) throw new Error("UNKNOWN_ROOM_COMMAND");
       if (!room.players.some((player) => player.id === context.actor.playerId)) {
         throw new Error("PLAYER_NOT_IN_ROOM");
@@ -395,8 +472,39 @@ export function createGameSdkOnlineRoomModule<
         command as TAppCommand,
         { ...context, resources: { ...resources, ...context.resources } },
       ) as GameSdkAppTransition<TAppState>;
+      const nextPhase = normalizeAppSetPhase(transition.phase);
+      const timerAction = (
+        nextPhase === "result"
+        || nextPhase === "lobby"
+        || transition.timer === "stop"
+      )
+        ? "stop"
+        : (
+            transition.timer === "reset"
+            || (
+              room.phase === "lobby"
+              && nextPhase !== "lobby"
+            )
+          )
+          ? "reset"
+          : "preserve";
+      const nextTimer = !appSet.timer || !room.timer
+        ? undefined
+        : timerAction === "reset"
+          ? resetGameSdkTimer(
+              timerDurationSeconds(room.settings),
+              context.now,
+              room.timer,
+            )
+          : timerAction === "stop"
+            ? stoppedGameSdkTimer(
+                timerDurationSeconds(room.settings),
+                room.timer,
+              )
+            : room.timer;
       return advanceGameSdkRoom(room, {
-        phase: normalizeAppSetPhase(transition.phase),
+        phase: nextPhase,
+        ...(nextTimer ? { timer: nextTimer } : {}),
         app: transition.app,
       });
     },
@@ -424,6 +532,7 @@ export function createGameSdkOnlineRoomModule<
             )
           )),
           settings: room.settings,
+          ...(room.timer ? { timer: room.timer } : {}),
           minimumPlayers: manifest.minimumPlayers,
           maximumPlayers: manifest.maximumPlayers,
           isHost,
