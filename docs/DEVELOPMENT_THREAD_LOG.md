@@ -3365,10 +3365,11 @@
 - DEBUG資格を持つhostだけがlobbyでダミーを追加・削除できるserver Commandを追加した。
 - `manifest.rules`を追加し、`manifest.settings`とともに正式Shellへ宣言駆動表示する。設定値はRoomへ同期し、宣言済みの有効値だけをアカウント別の次回既定値として保存する。
 - SDK package境界検査、starter、公開資料を新しいresult、timeout、DEBUG、rules契約へ更新した。
+- 最終監査で、非hostの結果復帰がhost専用`room/rematch`を直接送る不整合と、SDK観戦APIだけが4文字Roomコードへ狭める不整合を検出した。結果更新を端末ごとに保留する共通復帰規約へ接続し、`room/confirm-lobby-return`が全員分揃うまでserver側でも次ゲーム開始を拒否する。結果中の解散でも結果を保持し、観戦はSDKの4〜12文字コードを受理する。
 
 ### 検証・保留
 
-- `npm test`: 499件成功。
+- `npm test`: 501件成功。
 - `npm run build`: 本体Production build成功。
 - `npm run lint`、SDK Portal build、隔離Preview build、SDK配布tarballの外部install検査、starterの型・契約・完走・提出ZIP検査が成功した。
 - developへのpush・dev deployment・ログイン済み複数ブラウザE2Eは未実施。

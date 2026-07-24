@@ -43,9 +43,15 @@ export type GameSdkOnlineRoom<
   TAppState,
 > = GameSdkOnlineRoomState<TSettings> & {
   timer?: GameSdkOnlineRoomTimer;
+  lobbyReturn: GameSdkLobbyReturnState;
   playerTimeouts: GameSdkPlayerTimeoutState<string>;
   standardResult?: GameSdkStandardResult<string>;
   app: TAppState;
+};
+
+export type GameSdkLobbyReturnState = {
+  required: boolean;
+  confirmedPlayerIds: string[];
 };
 
 export type GameSdkOnlineRoomTimer = {
@@ -93,6 +99,7 @@ export type GameSdkOnlineRoomCommonView<TSettings> = {
   players: GameSdkOnlineRoomPlayerView[];
   settings: TSettings;
   timer?: GameSdkOnlineRoomTimerView;
+  pendingLobbyReturnSeats: number[];
   minimumPlayers: number;
   maximumPlayers: number;
   isHost: boolean;
@@ -488,6 +495,17 @@ function gameSdkRoomTimeoutState(
   );
 }
 
+function gameSdkRoomLobbyReturnState(
+  room: Readonly<{
+    lobbyReturn?: GameSdkLobbyReturnState;
+  }>,
+): GameSdkLobbyReturnState {
+  return room.lobbyReturn ?? {
+    required: false,
+    confirmedPlayerIds: [],
+  };
+}
+
 /**
  * Composes the platform-owned SDK basic set with one game-specific AppSet.
  *
@@ -562,6 +580,10 @@ export function createGameSdkOnlineRoomModule<
           connected: true,
         }],
         settings,
+        lobbyReturn: {
+          required: false,
+          confirmedPlayerIds: [],
+        },
         playerTimeouts: createGameSdkPlayerTimeoutState([
           context.actor.playerId,
         ]),
@@ -574,6 +596,26 @@ export function createGameSdkOnlineRoomModule<
 
     async applyCommand(room, command, context) {
       const currentPlayerTimeouts = gameSdkRoomTimeoutState(room);
+      const currentLobbyReturn = gameSdkRoomLobbyReturnState(room);
+      if (command.type === "room/confirm-lobby-return") {
+        if (room.phase !== "lobby" || !currentLobbyReturn.required) {
+          throw new Error("LOBBY_RETURN_NOT_REQUIRED");
+        }
+        if (!room.players.some((player) => player.id === context.actor.playerId)) {
+          throw new Error("PLAYER_NOT_IN_ROOM");
+        }
+        return advanceGameSdkRoom(room, {
+          lobbyReturn: {
+            required: true,
+            confirmedPlayerIds: [
+              ...new Set([
+                ...currentLobbyReturn.confirmedPlayerIds,
+                context.actor.playerId,
+              ]),
+            ],
+          },
+        });
+      }
       if (command.type === "room/recover-timeout") {
         const recovered = recoverGameSdkPlayerTimeout(
           currentPlayerTimeouts,
@@ -668,14 +710,50 @@ export function createGameSdkOnlineRoomModule<
         resetGame: (current) => ({
           app: appSet.resetAppState(current),
           standardResult: undefined,
+          lobbyReturn: command.type === "room/rematch"
+            ? {
+                required: true,
+                confirmedPlayerIds: current.players
+                  .filter((player) => (
+                    player.id === current.hostPlayerId
+                    || player.isDummy === true
+                  ))
+                  .map((player) => player.id),
+              }
+            : {
+                required: false,
+                confirmedPlayerIds: [],
+              },
         }),
       });
       if (lifecycle.handled) {
+        const joinedPlayerIds = lifecycle.room.players
+          .filter((player) => (
+            !room.players.some((previous) => previous.id === player.id)
+          ))
+          .map((player) => player.id);
+        const lifecycleLobbyReturn = gameSdkRoomLobbyReturnState(
+          lifecycle.room,
+        );
+        const confirmedPlayerIds = lifecycleLobbyReturn.required
+          ? lifecycle.room.players
+              .filter((player) => (
+                lifecycleLobbyReturn.confirmedPlayerIds.includes(player.id)
+                || joinedPlayerIds.includes(player.id)
+                || player.id === lifecycle.room.hostPlayerId
+                || player.isDummy === true
+              ))
+              .map((player) => player.id)
+          : [];
         const timeoutDefaults = createGameSdkPlayerTimeoutState(
           lifecycle.room.players.map((player) => player.id),
         );
         const lifecycleRoom = {
           ...lifecycle.room,
+          lobbyReturn: {
+            required: lifecycleLobbyReturn.required,
+            confirmedPlayerIds,
+          },
           playerTimeouts: {
             ...timeoutDefaults,
             statuses: Object.fromEntries(
@@ -707,6 +785,14 @@ export function createGameSdkOnlineRoomModule<
       if (command.type.startsWith("room/")) throw new Error("UNKNOWN_ROOM_COMMAND");
       if (!room.players.some((player) => player.id === context.actor.playerId)) {
         throw new Error("PLAYER_NOT_IN_ROOM");
+      }
+      const pendingLobbyReturns = currentLobbyReturn.required
+        ? room.players.filter((player) => (
+            !currentLobbyReturn.confirmedPlayerIds.includes(player.id)
+          ))
+        : [];
+      if (room.phase === "lobby" && pendingLobbyReturns.length > 0) {
+        throw new Error("LOBBY_RETURN_PENDING");
       }
       const transition = await appSet.applyAppCommand(
         room,
@@ -762,10 +848,17 @@ export function createGameSdkOnlineRoomModule<
                 room.timer,
               )
             : room.timer;
+      const lobbyReturn = room.phase === "lobby" && nextPhase !== "lobby"
+        ? {
+            required: false,
+            confirmedPlayerIds: [],
+          }
+        : currentLobbyReturn;
       return advanceGameSdkRoom(room, {
         phase: nextPhase,
         ...(nextTimer ? { timer: nextTimer } : {}),
         ...(standardResult ? { standardResult } : {}),
+        lobbyReturn,
         playerTimeouts,
         app: transition.app,
       });
@@ -783,6 +876,12 @@ export function createGameSdkOnlineRoomModule<
         && room.players.some((player) => player.id === context.viewer.playerId),
       );
       const hasEnoughPlayers = room.players.length >= manifest.minimumPlayers;
+      const lobbyReturn = gameSdkRoomLobbyReturnState(room);
+      const pendingLobbyReturnSeats = lobbyReturn.required
+        ? room.players.flatMap((player, seat) => (
+            lobbyReturn.confirmedPlayerIds.includes(player.id) ? [] : [seat]
+          ))
+        : [];
       const standardResult = room.standardResult
         ? {
             winnerSeats: room.standardResult.winnerIds.flatMap((winnerId) => {
@@ -835,6 +934,7 @@ export function createGameSdkOnlineRoomModule<
               }),
             },
           } : {}),
+          pendingLobbyReturnSeats,
           minimumPlayers: manifest.minimumPlayers,
           maximumPlayers: manifest.maximumPlayers,
           isHost,
@@ -844,6 +944,7 @@ export function createGameSdkOnlineRoomModule<
               isHost
               && room.phase === "lobby"
               && hasEnoughPlayers
+              && pendingLobbyReturnSeats.length === 0
               && presented.canStartGame !== false
             ),
             canEditRoomSettings: isHost && room.phase === "lobby",

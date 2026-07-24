@@ -17,6 +17,13 @@ import {
   createGameSdkHttpClientRuntime,
   GameSdkHttpClientRuntimeError,
 } from "@game-fields/game-sdk/client-runtime";
+import {
+  roomUpdateIsOlder,
+  roomUpdateIsUnchanged,
+  sdkRoomViewHasReturningPlayer,
+  shouldHoldRoomResultTransition,
+  shouldKeepRoomResultAfterDissolve,
+} from "@/lib/room-result-return";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -62,6 +69,7 @@ function runtimeErrorMessage(error: unknown) {
     if (error.status === 401) return "ログインしてからもう一度お試しください。";
     if (error.code === "STALE_REVISION") return "部屋が更新されました。最新状態を読み直します。";
     if (error.code === "PLAYER_ACTIVE_ROOM") return "進行中の別の部屋があります。";
+    if (error.code === "LOBBY_RETURN_PENDING") return "参加者全員が部屋へ戻るまで開始できません。";
     return `操作を完了できませんでした（${error.code}）。`;
   }
   return "操作を完了できませんでした。";
@@ -86,6 +94,9 @@ export function ApprovedSdkGameShell({
   }), [gameId]);
   const watchRef = useRef<{ close(): void } | null>(null);
   const expiryRef = useRef<number | null>(null);
+  const pendingActionRef = useRef(false);
+  const pendingLobbyRoomRef = useRef<RoomSnapshot | null>(null);
+  const roomRef = useRef<RoomSnapshot | null>(null);
   const [room, setRoom] = useState<RoomSnapshot | null>(null);
   const [rooms, setRooms] = useState<Array<{
     code: string;
@@ -98,6 +109,8 @@ export function ApprovedSdkGameShell({
   const [message, setMessage] = useState("");
   const [pending, setPending] = useState(false);
   const [clockNow, setClockNow] = useState<number | null>(null);
+  const [canReturnToRoom, setCanReturnToRoom] = useState(false);
+  const [isRoomDissolved, setIsRoomDissolved] = useState(false);
   const [playerDefaults, setPlayerDefaults] = useState<
     Record<string, GameSdkSettingValue>
   >({});
@@ -127,16 +140,57 @@ export function ApprovedSdkGameShell({
     }
   }, [runtime]);
 
-  const attachRoom = useCallback((next: RoomSnapshot | null) => {
+  const commitRoom = useCallback((next: RoomSnapshot | null) => {
+    roomRef.current = next;
     setRoom(next);
+  }, []);
+
+  const acceptIncomingRoom = useCallback((next: RoomSnapshot | null) => {
+    const current = roomRef.current;
+    if (!next) {
+      if (shouldKeepRoomResultAfterDissolve(current, "result")) {
+        pendingLobbyRoomRef.current = null;
+        setCanReturnToRoom(false);
+        setIsRoomDissolved(true);
+        return;
+      }
+      commitRoom(null);
+      return;
+    }
+    if (
+      roomUpdateIsOlder(current, next)
+      || roomUpdateIsUnchanged(current, next)
+    ) return;
+    if (shouldHoldRoomResultTransition(current, next, "result")) {
+      if (!sdkRoomViewHasReturningPlayer(next)) {
+        pendingLobbyRoomRef.current = null;
+        setCanReturnToRoom(false);
+        setIsRoomDissolved(true);
+        return;
+      }
+      pendingLobbyRoomRef.current = next;
+      setCanReturnToRoom(true);
+      return;
+    }
+    pendingLobbyRoomRef.current = null;
+    setCanReturnToRoom(false);
+    setIsRoomDissolved(false);
+    commitRoom(next);
+  }, [commitRoom]);
+
+  const attachRoom = useCallback((next: RoomSnapshot | null) => {
+    commitRoom(next);
+    pendingLobbyRoomRef.current = null;
+    setCanReturnToRoom(false);
+    setIsRoomDissolved(false);
     watchRef.current?.close();
     watchRef.current = null;
     if (!next) return;
     watchRef.current = runtime.watchRoom(next.code, {
-      onRoom: setRoom,
+      onRoom: acceptIncomingRoom,
       onError: (error) => setMessage(runtimeErrorMessage(error)),
     });
-  }, [runtime]);
+  }, [acceptIncomingRoom, commitRoom, runtime]);
 
   useEffect(() => {
     let active = true;
@@ -157,24 +211,28 @@ export function ApprovedSdkGameShell({
   }, [attachRoom, refreshRooms, runtime]);
 
   const run = useCallback(async (operation: () => Promise<RoomSnapshot>) => {
-    if (pending) return;
+    if (pendingActionRef.current) return false;
+    pendingActionRef.current = true;
     setPending(true);
     setMessage("");
     try {
       attachRoom(await operation());
+      return true;
     } catch (error) {
       setMessage(runtimeErrorMessage(error));
       if (
         error instanceof GameSdkHttpClientRuntimeError
         && error.code === "STALE_REVISION"
-        && room
+        && roomRef.current
       ) {
-        attachRoom(await runtime.readRoom(room.code));
+        attachRoom(await runtime.readRoom(roomRef.current.code));
       }
+      return false;
     } finally {
+      pendingActionRef.current = false;
       setPending(false);
     }
-  }, [attachRoom, pending, room, runtime]);
+  }, [attachRoom, runtime]);
 
   const send = useCallback(async (command: WordWolfSdkCommand) => {
     if (!room) throw new Error("ROOM_REQUIRED");
@@ -213,7 +271,7 @@ export function ApprovedSdkGameShell({
           turnSequence: timer.turnSequence,
         },
       }).then((result) => {
-        setRoom(result.room);
+        acceptIncomingRoom(result.room);
       }).catch((error) => {
         if (
           error instanceof GameSdkHttpClientRuntimeError
@@ -229,7 +287,43 @@ export function ApprovedSdkGameShell({
     return () => {
       if (expiryRef.current !== null) window.clearTimeout(expiryRef.current);
     };
-  }, [room, runtime]);
+  }, [acceptIncomingRoom, room, runtime]);
+
+  const returnToRoom = useCallback(async () => {
+    const pendingLobbyRoom = pendingLobbyRoomRef.current;
+    if (!pendingLobbyRoom || isRoomDissolved) return;
+    try {
+      const latestRoom = await runtime.readRoom(pendingLobbyRoom.code);
+      if (
+        !latestRoom
+        || latestRoom.phase !== "lobby"
+        || !sdkRoomViewHasReturningPlayer(latestRoom)
+      ) {
+        pendingLobbyRoomRef.current = null;
+        setCanReturnToRoom(false);
+        setIsRoomDissolved(true);
+        setMessage("部屋が解散されたか、参加情報が変更されています。");
+        return;
+      }
+      const selfSeat = latestRoom.view.common.players.find(
+        (player) => player.isSelf,
+      )?.seat;
+      if (
+        selfSeat === undefined
+        || !latestRoom.view.common.pendingLobbyReturnSeats.includes(selfSeat)
+      ) {
+        attachRoom(latestRoom);
+        return;
+      }
+      const confirmed = await runtime.sendCommand(latestRoom.code, {
+        expectedRevision: latestRoom.revision,
+        command: { type: "room/confirm-lobby-return" },
+      });
+      attachRoom(confirmed.room);
+    } catch {
+      setMessage("部屋へ戻れる状態を確認できませんでした。");
+    }
+  }, [attachRoom, isRoomDissolved, runtime]);
 
   const common = room?.view.common;
   const commonSettings = common?.settings as
@@ -344,7 +438,9 @@ export function ApprovedSdkGameShell({
                 <li key={player.seat} className="flex justify-between rounded-lg bg-slate-100 p-3 text-sm">
                   <strong>SEAT {player.seat + 1} · {player.displayName}{player.isSelf ? "（あなた）" : ""}</strong>
                   <span>
-                    {player.reducedTime
+                    {common.pendingLobbyReturnSeats.includes(player.seat)
+                      ? "復帰待ち"
+                      : player.reducedTime
                       ? "5秒制限"
                       : player.isDummy
                         ? "DUMMY"
@@ -523,16 +619,41 @@ export function ApprovedSdkGameShell({
           <OnlineRoomLifecycleActions
             surface={room.phase === "result" ? "result" : room.phase === "lobby" ? "lobby" : "playing"}
             isHost={common?.isHost === true}
-            canReturnToRoom={room.phase === "result"}
+            disabled={pending}
+            canReturnToRoom={
+              room.phase === "result"
+              && (common?.isHost === true || canReturnToRoom)
+            }
+            isRoomDissolved={isRoomDissolved}
             onReturnToRoom={room.phase === "result"
-              ? () => void run(() => send({ type: "room/rematch" }))
+              ? common?.isHost
+                ? () => run(() => send({ type: "room/rematch" }))
+                : returnToRoom
               : undefined}
             onDissolve={room.phase === "lobby" || room.phase === "result"
-              ? () => void (async () => {
-                  await runtime.dissolveRoom(room.code);
-                  attachRoom(null);
-                  await refreshRooms();
-                })()
+              ? async () => {
+                  if (pendingActionRef.current) return;
+                  pendingActionRef.current = true;
+                  setPending(true);
+                  try {
+                    await runtime.dissolveRoom(room.code);
+                    if (room.phase === "result") {
+                      watchRef.current?.close();
+                      watchRef.current = null;
+                      pendingLobbyRoomRef.current = null;
+                      setCanReturnToRoom(false);
+                      setIsRoomDissolved(true);
+                    } else {
+                      attachRoom(null);
+                    }
+                    await refreshRooms();
+                  } catch (error) {
+                    setMessage(runtimeErrorMessage(error));
+                  } finally {
+                    pendingActionRef.current = false;
+                    setPending(false);
+                  }
+                }
               : undefined}
             returnHref="/games"
           />
@@ -548,14 +669,22 @@ export function ApprovedSdkGameShell({
             </div>
           )}
           {room.phase === "lobby" && (
-            <button
-              type="button"
-              className={`${primaryClass} w-full`}
-              disabled={!common?.permissions.canStartGame || pending}
-              onClick={() => void run(() => send({ type: "wordwolf/start" }))}
-            >
-              このメンバーで開始
-            </button>
+            <>
+              <button
+                type="button"
+                className={`${primaryClass} w-full`}
+                disabled={!common?.permissions.canStartGame || pending}
+                onClick={() => void run(() => send({ type: "wordwolf/start" }))}
+              >
+                このメンバーで開始
+              </button>
+              {common && common.pendingLobbyReturnSeats.length > 0 && (
+                <p className="mt-3 text-center text-sm font-bold text-amber-700">
+                  参加者の復帰を待っています（残り
+                  {common.pendingLobbyReturnSeats.length}人）
+                </p>
+              )}
+            </>
           )}
           {app?.myWord && (
             <div className="rounded-xl bg-cyan-50 p-5 text-center">
@@ -567,7 +696,9 @@ export function ApprovedSdkGameShell({
             <form className="mt-5 flex gap-2" onSubmit={(event) => {
               event.preventDefault();
               void run(() => send({ type: "wordwolf/submit-clue", text: clue }))
-                .then(() => setClue(""));
+                .then((succeeded) => {
+                  if (succeeded) setClue("");
+                });
             }}>
               <input value={clue} onChange={(event) => setClue(event.target.value)} className="min-w-0 flex-1 rounded-xl border border-slate-300 px-4 py-3" placeholder="ヒント" />
               <button className={primaryClass} disabled={!clue.trim() || pending}>送信</button>
@@ -597,7 +728,9 @@ export function ApprovedSdkGameShell({
             <form className="mt-5 flex gap-2" onSubmit={(event) => {
               event.preventDefault();
               void run(() => send({ type: "wordwolf/guess", answer: guess }))
-                .then(() => setGuess(""));
+                .then((succeeded) => {
+                  if (succeeded) setGuess("");
+                });
             }}>
               <input value={guess} onChange={(event) => setGuess(event.target.value)} className="min-w-0 flex-1 rounded-xl border border-slate-300 px-4 py-3" placeholder="村人のお題を回答" />
               <button className={primaryClass} disabled={!guess.trim() || pending}>回答</button>

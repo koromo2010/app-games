@@ -111,6 +111,43 @@ test("SDK WordWolf completes room join, play, result and rematch without platfor
   snapshot = (await runtime.sendCommand({ code: "WOLF", envelope: { expectedRevision: snapshot.revision, command: { type: "room/rematch" } }, actor: actor("host", "host") })).room;
   assert.equal(snapshot.phase, "lobby");
   assert.equal(snapshot.view.common.players.length, 3);
+  assert.deepEqual(snapshot.view.common.pendingLobbyReturnSeats, [1, 2]);
+  assert.equal(snapshot.view.common.permissions.canStartGame, false);
+  await assert.rejects(
+    runtime.sendCommand({
+      code: "WOLF",
+      envelope: {
+        expectedRevision: snapshot.revision,
+        command: { type: "wordwolf/start" },
+      },
+      actor: actor("host", "host"),
+    }),
+    /LOBBY_RETURN_PENDING/,
+  );
+  snapshot = (await runtime.sendCommand({
+    code: "WOLF",
+    envelope: {
+      expectedRevision: snapshot.revision,
+      command: { type: "room/confirm-lobby-return" },
+    },
+    actor: actor("p2"),
+  })).room;
+  assert.deepEqual(snapshot.view.common.pendingLobbyReturnSeats, [2]);
+  snapshot = (await runtime.sendCommand({
+    code: "WOLF",
+    envelope: {
+      expectedRevision: snapshot.revision,
+      command: { type: "room/confirm-lobby-return" },
+    },
+    actor: actor("p3"),
+  })).room;
+  const returnedHostView = await runtime.readRoom("WOLF", {
+    playerId: "host",
+    role: "host",
+    debugAccess: false,
+  });
+  assert.deepEqual(returnedHostView?.view.common.pendingLobbyReturnSeats, []);
+  assert.equal(returnedHostView?.view.common.permissions.canStartGame, true);
   assert.equal(snapshot.view.app.currentRound, 0);
   assert.equal(snapshot.view.app.clues.length, 0);
   assert.equal(snapshot.view.app.winner, null);

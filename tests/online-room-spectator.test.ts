@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { createOnlineRoomSpectatorGrant, parseOnlineRoomSpectatorGrant } from "../lib/online-room-spectator-auth.ts";
 import { presentOnlineRoomForSpectator } from "../lib/online-room-spectator.ts";
@@ -46,4 +47,13 @@ test("観戦grantはゲーム・部屋・本人・部屋作成時刻へ署名さ
     if (previousSecret === undefined) delete process.env.PLAYER_SESSION_SECRET;
     else process.env.PLAYER_SESSION_SECRET = previousSecret;
   }
+});
+
+test("SDK観戦APIはSDK Room用の4〜12文字コード正規化を使う", () => {
+  const route = readFileSync(
+    new URL("../app/api/online-room-spectators/route.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(route, /normalizeOnlineRoomRealtimeCode/);
+  assert.doesNotMatch(route, /normalizeOnlineRoomCode\(/);
 });

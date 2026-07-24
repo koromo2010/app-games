@@ -265,7 +265,7 @@ type Command = GameSdkOnlineRoomCommand<Settings, AppCommand>;
 type RoomView = GameSdkOnlineRoomView<Settings, AppView>;
 ```
 
-共通Lifecycle Commandは`room/join`、`room/leave`、`room/update-settings`、`room/abort`、`room/rematch`、`room/expire-timer`、`room/recover-timeout`です。DEBUG対応ゲームでは権限付きホストだけがロビーで`room/debug-add-dummy`、`room/debug-remove-dummy`を使えます。AppSetのCommandは`game/start`のようにゲーム固有namespaceを使い、`room/*`を定義しません。
+共通Lifecycle Commandは`room/join`、`room/leave`、`room/update-settings`、`room/abort`、`room/rematch`、`room/confirm-lobby-return`、`room/expire-timer`、`room/recover-timeout`です。結果後はhostの`room/rematch`でRoomをロビーへ戻し、各参加者の`room/confirm-lobby-return`が揃うまで次ゲームを開始できません。DEBUG対応ゲームでは権限付きホストだけがロビーで`room/debug-add-dummy`、`room/debug-remove-dummy`を使えます。AppSetのCommandは`game/start`のようにゲーム固有namespaceを使い、`room/*`を定義しません。
 
 ## 標準結果
 

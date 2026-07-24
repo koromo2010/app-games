@@ -159,6 +159,9 @@ const appSet = defineGameSdkOnlineRoomAppSet({
 で再検証し、2回連続で時間切れになった本人だけを5秒へ短縮します。
 短縮解除は本人の`room/recover-timeout`だけです。
 
+結果後の`room/rematch`はhostだけが実行し、ほかの参加者は結果画面を保持します。
+各参加者が`room/confirm-lobby-return`を送るまで次ゲームは開始できません。
+
 ## Standard result and platform persistence
 
 ゲーム終了transitionは`standardResult`へ全参加者の順位・得点・勝者・終了理由

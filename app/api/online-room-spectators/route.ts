@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { conditionalVersionedJsonResponse } from "@/lib/conditional-json";
 import { gameApiAccessDeniedResponse } from "@/lib/game-access";
-import { normalizeOnlineRoomCode } from "@/lib/online-room-realtime-protocol";
+import { normalizeOnlineRoomRealtimeCode } from "@/lib/online-room-realtime-protocol";
 import {
   createOnlineRoomSpectatorGrant,
   onlineRoomSpectatorCookieName,
@@ -22,9 +22,12 @@ import { assertRoomLanguageAccess, isLanguageBoundGame } from "@/lib/game-langua
 
 function requestTarget(request: Request) {
   const url = new URL(request.url);
+  const game = parseOnlineRoomSpectatorGame(url.searchParams.get("game"));
   return {
-    game: parseOnlineRoomSpectatorGame(url.searchParams.get("game")),
-    code: normalizeOnlineRoomCode(url.searchParams.get("code")),
+    game,
+    code: game
+      ? normalizeOnlineRoomRealtimeCode(game, url.searchParams.get("code"))
+      : "",
   };
 }
 
@@ -33,8 +36,14 @@ function invalidTarget() {
 }
 
 async function loadTarget(request: Request, input?: { game?: unknown; code?: unknown }) {
+  const inputGame = input ? parseOnlineRoomSpectatorGame(input.game) : null;
   const target = input
-    ? { game: parseOnlineRoomSpectatorGame(input.game), code: normalizeOnlineRoomCode(input.code) }
+    ? {
+        game: inputGame,
+        code: inputGame
+          ? normalizeOnlineRoomRealtimeCode(inputGame, input.code)
+          : "",
+      }
     : requestTarget(request);
   const game = target.game;
   const code = target.code;

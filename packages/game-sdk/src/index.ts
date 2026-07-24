@@ -443,6 +443,7 @@ export type GameSdkRoomLifecycleCommand<TSettings> =
   | { type: "room/update-settings"; settings: Partial<TSettings> }
   | { type: "room/abort" }
   | { type: "room/rematch" }
+  | { type: "room/confirm-lobby-return" }
   | { type: "room/expire-timer"; turnSequence: number }
   | { type: "room/recover-timeout" }
   | { type: "room/debug-add-dummy" }

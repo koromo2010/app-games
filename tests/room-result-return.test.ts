@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { roomHasReturningPlayer, roomUpdateIsOlder, roomUpdateIsUnchanged, shouldHoldRoomResultTransition, shouldKeepRoomResultAfterDissolve } from "../lib/room-result-return.ts";
+import {
+  roomHasReturningPlayer,
+  roomUpdateIsOlder,
+  roomUpdateIsUnchanged,
+  sdkRoomViewHasReturningPlayer,
+  shouldHoldRoomResultTransition,
+  shouldKeepRoomResultAfterDissolve,
+} from "../lib/room-result-return.ts";
 
 test("遅れて届いた古い部屋更新で復帰済み表示を巻き戻さない", () => {
   assert.equal(roomUpdateIsOlder({ code: "ABCD", revision: 12 }, { code: "ABCD", revision: 11 }), true);
@@ -30,4 +37,21 @@ test("満員でも既存参加者の席が残っていれば部屋へ戻れる",
   const fullRoom = { players: [{ id: "host" }, { id: "guest" }] };
   assert.equal(roomHasReturningPlayer(fullRoom, "guest"), true);
   assert.equal(roomHasReturningPlayer(fullRoom, "former-player"), false);
+});
+
+test("SDK RoomViewは内部IDなしでも本人の席が残るか判定できる", () => {
+  assert.equal(sdkRoomViewHasReturningPlayer({
+    view: {
+      common: {
+        players: [{ isSelf: false }, { isSelf: true }],
+      },
+    },
+  }), true);
+  assert.equal(sdkRoomViewHasReturningPlayer({
+    view: {
+      common: {
+        players: [{ isSelf: false }],
+      },
+    },
+  }), false);
 });

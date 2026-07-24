@@ -454,7 +454,11 @@ turn sequence、graceをRuntimeで検証する。連続時間切れと5秒短縮
 snapshotは匿名席、phase、共通timer、確定結果だけを許可する。DEBUGは
 権限付きhostのlobbyでダミー追加・削除だけを許可する。manifestの
 `settings`と`rules`を正式Shellへ描画し、宣言済み設定だけをアカウント別
-既定値として保存する。
+既定値として保存する。結果後にhostがRoomをlobbyへ戻しても、ほかの参加者は
+表示中の結果を保持し、各自が「部屋に戻る」を選んだ時点で最新lobbyへ復帰する。
+各参加者の`room/confirm-lobby-return`が揃うまではserver側でも次ゲームの開始を
+拒否する。結果画面でRoomが解散された場合も結果を保持して復帰だけを無効化する。
+SDK RoomコードはRealtime、観戦、正式Room APIの全経路で4〜12文字を受け付ける。
 
 AIことば当てのコード、設定、保存済みrevisionはこの実装で変更していない。
 同クライアントは既存のままSDK側変更を検証する固定クライアントとして扱う。

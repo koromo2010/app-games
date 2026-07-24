@@ -55,3 +55,9 @@ export function shouldKeepRoomResultAfterDissolve(
 export function roomHasReturningPlayer(room: RoomPlayers, playerId: string) {
   return Boolean(playerId) && room.players.some((player) => player.id === playerId);
 }
+
+export function sdkRoomViewHasReturningPlayer(
+  room: { view: { common: { players: Array<{ isSelf: boolean }> } } },
+) {
+  return room.view.common.players.some((player) => player.isSelf);
+}
