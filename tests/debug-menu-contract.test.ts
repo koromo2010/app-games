@@ -25,6 +25,9 @@ test("共通DEBUGメニューはゲーム操作を妨げない画面内ウィン
   assert.match(windowSource, /className="min-h-0 w-full min-w-0 flex-1 /);
   assert.match(windowSource, /kind: "move" \| "resize"/);
   assert.match(windowSource, /setIsMinimized/);
+  assert.match(windowSource, /persistentContent\?: ReactNode/);
+  assert.match(windowSource, /data-debug-window-persistent/);
+  assert.match(windowSource, /height: isMinimized \? "auto"/);
   assert.match(windowSource, /handleOutsidePointerDown/);
   assert.match(windowSource, /windowRef\.current\?\.contains\(event\.target\)/);
   assert.match(windowSource, /document\.addEventListener\("pointerdown", handleOutsidePointerDown, true\)/);

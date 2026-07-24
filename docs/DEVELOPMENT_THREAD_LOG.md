@@ -2801,3 +2801,38 @@
 - ゲーム固有領域は左840px、Room情報は右260px、固有iframeは838pxで描画され、ゲーム領域が260px列へ縮退しないことを確認した。
 - 上記3 deploymentを対象に直近30分の`error`・`fatal`ログを確認し、該当ログは0件だった。ブラウザ側では検証用Chrome拡張由来のmetadata送信エラーだけを確認し、対象ページ由来のエラーはなかった。
 - `main`、本番SDK、公開`sdk-starter`は変更対象外。
+
+## 2026-07-24 — SDK-dev閲覧視点の常設選択UI
+
+### 利用者からの要望
+
+- DEBUG TOOLSを折りたたんだ後も閲覧視点だけは表示し、ゲーム画面を操作しながら切り替えられるようにする。
+- 閲覧視点のプルダウンをやめ、参加者・観戦者を直接選ぶ選択式UIへ変更する。
+
+### 判断
+
+- 閲覧視点はSDK-dev外側Shellが所有する共通デバッグ機能であり、隔離iframe内のゲームpackageは変更しない。
+- 共通`DebugToolWindow`へ任意の固定領域を設け、最小化時は通常本文だけを隠して固定領域を残す。固定領域を渡さない既存ゲームの表示は変更しない。
+- SDK-devの閲覧視点は、現在値を`aria-pressed`で示す参加者・観戦者ボタン群とする。ダミー追加・削除時は現在の参加者配列から選択肢を再構成する。
+
+### 実施結果
+
+- `DebugToolWindow`へ`persistentContent`を追加し、最小化時の高さをタイトルバーと固定領域の実高に合わせた。
+- `SdkPreviewGameShell`の閲覧視点`select`を削除し、選択中をシアン表示するボタン群へ置き換えた。
+- 閲覧視点ボタン群を固定領域へ接続し、DEBUG本文を最小化しても表示と操作を維持するようにした。
+- 現行仕様を`DEVELOPMENT_HANDOFF.md`、`UI_ARCHITECTURE.md`、`KNOWN_ISSUES.md`へ反映した。
+
+### 検証
+
+- DEBUG／SDK Preview対象テスト16件成功。
+- `npm run lint`成功。
+- `npm test`成功（476件）。
+- `npm run build`成功。Next.js production build、TypeScript検査、77ページ生成を完了した。
+- `npm run build:sdk`成功。SDK Portalのproduction build、TypeScript検査、14ページ生成を完了した。
+- `npm run build:sdk-preview`成功。隔離Previewのproduction build、TypeScript検査、5ページ生成を完了した。
+- `git diff --check`成功。
+
+### 未対応・保留
+
+- SDK-devへの反映と公開画面での最小化・視点切替の実機確認は未実施。
+- `main`、本番SDK、公開`sdk-starter`は変更対象外。

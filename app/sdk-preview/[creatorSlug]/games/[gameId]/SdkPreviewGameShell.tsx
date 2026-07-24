@@ -55,6 +55,12 @@ type PreviewLogEntry = {
   label: string;
   at: string;
 };
+type PreviewViewerSelectorProps = {
+  players: readonly PreviewPlayer[];
+  selectedViewerId: string;
+  showSpectator: boolean;
+  onChange: (viewerId: string) => void;
+};
 type PreviewCommand =
   | "room:hydrate"
   | "debug:toggle"
@@ -103,6 +109,44 @@ function createPreviewRoomCode() {
   const values = new Uint32Array(1);
   crypto.getRandomValues(values);
   return `GF${String((values[0] % 90) + 10)}`;
+}
+
+function PreviewViewerSelector({
+  players,
+  selectedViewerId,
+  showSpectator,
+  onChange,
+}: PreviewViewerSelectorProps) {
+  const choices = [
+    ...players.map((player) => ({ id: player.id, label: player.name })),
+    ...(showSpectator ? [{ id: "spectator", label: "観戦者" }] : []),
+  ];
+
+  return (
+    <fieldset data-sdk-preview-viewer-selector>
+      <legend className="text-xs font-bold text-slate-700">閲覧視点</legend>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {choices.map((choice) => {
+          const selected = choice.id === selectedViewerId;
+          return (
+            <button
+              key={choice.id}
+              type="button"
+              aria-pressed={selected}
+              onClick={() => onChange(choice.id)}
+              className={`rounded-lg border px-3 py-2 text-sm font-bold transition ${
+                selected
+                  ? "border-cyan-500 bg-cyan-100 text-cyan-950 shadow-sm"
+                  : "border-slate-300 bg-white text-slate-700 hover:border-cyan-300 hover:bg-cyan-50"
+              }`}
+            >
+              {choice.label}
+            </button>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
 }
 
 export function SdkPreviewGameShell({
@@ -698,7 +742,18 @@ export function SdkPreviewGameShell({
       )}
 
       {debugOpen && (
-        <DebugToolWindow initialPosition={{ top: 88, left: 12 }} onClose={() => setDebugOpen(false)}>
+        <DebugToolWindow
+          initialPosition={{ top: 88, left: 12 }}
+          onClose={() => setDebugOpen(false)}
+          persistentContent={debugEnabled ? (
+            <PreviewViewerSelector
+              players={players}
+              selectedViewerId={viewerId}
+              showSpectator={moduleRequired("spectators")}
+              onChange={changeViewer}
+            />
+          ) : undefined}
+        >
           <div className="mt-3 rounded-lg border border-cyan-200 bg-cyan-50 p-3 text-xs text-cyan-950">
             <div className="flex justify-between gap-3"><strong>部屋同期</strong><span>Preview bridge</span></div>
             <div className="mt-1 flex justify-between gap-3 font-mono text-[11px]"><span>revision {revision}</span><span>{roomCode || "NO ROOM"}</span></div>
@@ -723,13 +778,6 @@ export function SdkPreviewGameShell({
                 onRemove={removeDummy}
                 run={async (action) => { await action(); }}
               />
-              <div className="mt-3 rounded-lg border border-slate-200 p-3">
-                <label className="text-xs font-bold text-slate-700" htmlFor="sdk-preview-viewer">閲覧視点</label>
-                <select id="sdk-preview-viewer" value={viewerId} onChange={(event) => changeViewer(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
-                  {players.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}
-                  {moduleRequired("spectators") && <option value="spectator">観戦者</option>}
-                </select>
-              </div>
               {surface === "playing" && (
                 <button type="button" className={`${secondaryClass} mt-3 w-full`} onClick={() => {
                   send("game:auto-progress");

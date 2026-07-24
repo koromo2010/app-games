@@ -120,6 +120,10 @@ test("SDK preview composes the common room lifecycle around the game slot", () =
   );
   assert.match(shell, /lg:grid-cols-\[minmax\(0,1fr\)_260px\]/);
   assert.doesNotMatch(shell, /lg:grid-cols-\[260px_minmax\(0,1fr\)\]/);
+  assert.match(shell, /persistentContent=\{debugEnabled/);
+  assert.match(shell, /data-sdk-preview-viewer-selector/);
+  assert.match(shell, /aria-pressed=\{selected\}/);
+  assert.doesNotMatch(shell, /<select id="sdk-preview-viewer"/);
   assert.doesNotMatch(shell, /ADVERTISEMENT SLOT/);
   assert.doesNotMatch(shell, /\(\["lobby", "playing", "result"\] as const\)\.map/);
   assert.match(shell, /ゲーム固有Runtime未接続/);

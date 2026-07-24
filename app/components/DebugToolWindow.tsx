@@ -32,6 +32,7 @@ type DebugToolWindowProps = {
     left: number;
   };
   onClose: () => void;
+  persistentContent?: ReactNode;
 };
 
 const VIEWPORT_GAP = 8;
@@ -100,6 +101,7 @@ export function DebugToolWindow({
   children,
   initialPosition,
   onClose,
+  persistentContent,
 }: DebugToolWindowProps) {
   const [geometry, setGeometry] = useState(() => initialGeometry(initialPosition));
   const [isCompact, setIsCompact] = useState(
@@ -162,7 +164,9 @@ export function DebugToolWindow({
     const deltaX = event.clientX - operation.startX;
     const deltaY = event.clientY - operation.startY;
     if (operation.kind === "move") {
-      const effectiveHeight = isMinimized ? TITLE_BAR_HEIGHT : operation.geometry.height;
+      const effectiveHeight = isMinimized
+        ? windowRef.current?.offsetHeight ?? TITLE_BAR_HEIGHT
+        : operation.geometry.height;
       const viewport = viewportSize();
       setGeometry({
         ...operation.geometry,
@@ -240,7 +244,7 @@ export function DebugToolWindow({
     top: geometry.top,
     left: geometry.left,
     width: geometry.width,
-    height: isMinimized ? TITLE_BAR_HEIGHT : geometry.height,
+    height: isMinimized ? "auto" : geometry.height,
   };
 
   return createPortal(
@@ -297,6 +301,15 @@ export function DebugToolWindow({
           <span aria-hidden="true">×</span>
         </button>
       </header>
+
+      {persistentContent && (
+        <div
+          className="w-full shrink-0 border-b border-slate-200 bg-white p-3"
+          data-debug-window-persistent
+        >
+          {persistentContent}
+        </div>
+      )}
 
       {!isMinimized && (
         <>
