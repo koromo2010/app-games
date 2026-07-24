@@ -2759,5 +2759,8 @@
 
 ### 未対応・保留
 
-- `develop`への公開と、公開`janken-classic`でCSS適用、固有Runtime接続、手の選択、広告枠非表示を確認する実ブラウザ試験は、この記録時点では未実施。
+- 検証済みtreeをcommit `cb19399d851d18568b4add6aa0c6ae08826274b8`として`develop`へforceなしで反映した。本体dev `dpl_B2hj1SuqA31wadpPkg9i2DZJeuSe`、SDK-dev `dpl_6dKhWqSg8wPvyHCE2RseP8rjQgas`、隔離Preview dev `dpl_ER1XpKHJV6QY4oThkmL2znMZb1UM`が同commitで`READY`となり、各開発用aliasへ割り当てられた。
+- 公開`https://sdk-dev.game-fields.com/test10-1/games/janken-classic`を実ブラウザで確認した。入室画面とRoomロビーに広告枠は描画されず、DEBUG TOOLSにも`lobby / playing / result`直行ボタンは存在しない。
+- 保存済みじゃんけんはCSS適用と`ゲーム固有Runtime接続済み`を確認した。ダミー参加者追加、共通開始、プレイ中への遷移後に「パー」を選択し、固有画面が`手を送信しています…`へ遷移するところまで操作できた。プレイ中にも広告DOMは存在しない。
+- 上記3 deploymentを対象に直近30分の`error`・`fatal`ログを確認し、該当ログは0件だった。
 - `main`、本番SDK、公開`sdk-starter`は変更対象外。
