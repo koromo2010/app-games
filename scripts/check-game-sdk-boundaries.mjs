@@ -42,6 +42,7 @@ const allowedRelativeImports = new Set([
   "./modules/presentation.js",
   "./modules/profile.js",
   "./modules/result.js",
+  "./modules/timeout.js",
   "./modules/voting.js",
   "./playing-cards.js",
   "./resources.js",
@@ -50,6 +51,7 @@ const allowedRelativeImports = new Set([
 ]);
 const allowedRuntimeImports = new Set([
   "@game-fields/game-sdk",
+  "@game-fields/game-sdk/modules",
   "@game-fields/game-sdk/resources",
   "@game-fields/game-sdk/runtime",
 ]);

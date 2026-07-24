@@ -89,7 +89,7 @@ function cleanLines(lines: unknown[], maximumLines = 100) {
 }
 
 function isReplayGameType(value: unknown): value is GameReplayGameType {
-  return value === "wordwolf" || value === "tahoiya" || value === "northern-branch" || value === "hodoai" || value === "kotoba-senpuku" || value === "nigoichi" || value === "code-intercept" || value === "daifugo";
+  return value === "wordwolf" || value === "tahoiya" || value === "northern-branch" || value === "hodoai" || value === "kotoba-senpuku" || value === "nigoichi" || value === "code-intercept" || value === "daifugo" || value === "wordwolf-sdk";
 }
 
 function parseStoredReplay(value: unknown): StoredGameReplay | null {
@@ -232,6 +232,67 @@ async function storeReplay(replay: StoredGameReplay, roomCode: string) {
     });
     return false;
   }
+}
+
+export type StandardPlatformGameReplayInput = {
+  gameType: Exclude<GameReplayGameType, "tahoiya">;
+  eventId: string;
+  roomCode: string;
+  finishedAt: number;
+  gameNumber: number;
+  title: string;
+  players: StoredReplayPlayer[];
+  winnerIds: string[];
+  rankings: Array<{
+    participantId: string;
+    rank: number;
+    score: number;
+  }>;
+  reason: string;
+};
+
+/** Stores only the common, player-safe result contract for SDK playback. */
+export async function recordStandardPlatformGameReplay(
+  input: StandardPlatformGameReplayInput,
+) {
+  const winnerIds = new Set(input.winnerIds);
+  const playerNames = new Map(
+    input.players.map((player) => [player.id, player.name]),
+  );
+  const resultLabels = Object.fromEntries(input.rankings.map((ranking) => [
+    ranking.participantId,
+    winnerIds.has(ranking.participantId)
+      ? `勝利・${ranking.score}点`
+      : `${ranking.rank}位・${ranking.score}点`,
+  ]));
+  const base = makeReplayBase(
+    input.eventId,
+    input.gameType,
+    input.finishedAt,
+    input.gameNumber,
+    input.title,
+    input.players,
+    resultLabels,
+    [
+      input.reason,
+      ...input.rankings
+        .slice()
+        .sort((left, right) => left.rank - right.rank)
+        .slice(0, 2)
+        .map((ranking) => (
+          `${ranking.rank}位 ${playerNames.get(ranking.participantId) ?? "Unknown"}`
+        )),
+    ],
+  );
+  return storeReplay({
+    ...base,
+    gameType: input.gameType,
+    overview: cleanText(input.reason, 300) || "ゲーム終了",
+    highlights: cleanLines(input.rankings.map((ranking) => (
+      `${ranking.rank}位 ${playerNames.get(ranking.participantId) ?? "Unknown"}・${ranking.score}点`
+    ))),
+    scoreLabels: resultLabels,
+  }, input.roomCode);
 }
 
 function wordWolfIds(room: WordWolfRoom) {

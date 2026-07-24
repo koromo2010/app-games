@@ -87,6 +87,10 @@ type PlatformRuntimeOptions<
   now?: () => number;
   createRequestId?: () => string;
   resources?: Readonly<GameSdkPlatformResources>;
+  onSaved?: (
+    previous: Readonly<GameFieldsPlatformRoomRecord<TRoom>>,
+    next: Readonly<GameFieldsPlatformRoomRecord<TRoom>>,
+  ) => Promise<unknown>;
 };
 
 export type GameFieldsPlatformRuntime<
@@ -178,6 +182,7 @@ export function createGameFieldsPlatformRuntime<
   now = Date.now,
   createRequestId = () => crypto.randomUUID(),
   resources = {},
+  onSaved,
 }: PlatformRuntimeOptions<TRoom, TCreateInput, TCommand, TRoomView>): GameFieldsPlatformRuntime<TCreateInput, TCommand, TRoomView> {
   const present = (room: Readonly<TRoom>, actor: GameSdkTrustedActor, timestamp: number) => snapshot(
     room,
@@ -266,6 +271,7 @@ export function createGameFieldsPlatformRuntime<
       const saved = await persistence.compareAndSet(record.revision, nextRecord);
       if (saved === "missing") throw new GameFieldsPlatformRuntimeError("ROOM_NOT_FOUND", 404);
       if (saved === "conflict") throw new GameFieldsPlatformRuntimeError("STALE_REVISION", 409);
+      await onSaved?.(clone(record), clone(nextRecord));
       const room = present(nextRoom, actor, timestamp);
       return { room, revision: room.revision };
     },

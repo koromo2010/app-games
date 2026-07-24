@@ -57,6 +57,7 @@ import type {
 - `minimumPlayers` / `maximumPlayers`
 - debug、観戦、replay、rating、LLMの利用有無
 - `settings`: 共通設定画面へ表示する、このゲームの設定項目
+- `rules`: 共通Shellへ表示する`ja` / `en`のルール一覧
 
 Game Fields SDKの共通初期値は`minimumPlayers: 1`です。1人で開始・確認できる状態を維持し、複数人が必須となるゲーム固有ルールだけをAppSet側で追加検証します。
 
@@ -81,6 +82,8 @@ settings: [
 ```
 
 `defaultSettings`は宣言した全項目と同じキーを持ち、各値を`defaultValue`と一致させます。共通画面で変更された値はRoom設定として保存・同期され、Previewのゲーム固有JavaScriptでは`GameFieldsPreset.getState().settings`、本実装のAppSetでは`settings`引数から参照します。iframe内へ同じ設定UIを重複配置しません。
+
+本体統合後は、利用者が現在の宣言済み設定をゲーム別の個人既定値として保存できます。Platformはmanifestにないキー、型違い、未宣言のselect値を保存しません。
 
 ## SDK基本セット + AppSet
 
@@ -136,6 +139,15 @@ const appSet = defineGameSdkOnlineRoomAppSet({
     durationSeconds(settings) {
       return settings.timeLimitSeconds; // 0は制限なし
     },
+    graceMs: 1_500,
+  },
+  expireAppTurn(room) {
+    return {
+      phase: "playing",
+      app: applyServerTimeout(room.app),
+      timer: "reset",
+      timedOutPlayerIds: [currentPlayerId(room)],
+    };
   },
   applyAppCommand(room, command, context) {
     const next = applyAcceptedTurn(room, command, context);
@@ -149,6 +161,10 @@ const appSet = defineGameSdkOnlineRoomAppSet({
 ```
 
 閲覧者別RoomViewでは`room.view.common.timer`から`durationSeconds`、`startedAt`、`deadlineAt`、`turnSequence`を読めます。表示はゲーム画面内の任意位置へ置けますが、ブラウザからtimer時刻を送ってサーバー正本を上書きしてはいけません。
+
+正式RoomではShellが`room/expire-timer`を要求し、Runtimeがサーバー時刻、
+turn sequence、graceを再検証してから`expireAppTurn`を実行します。2回連続
+時間切れの本人だけ5秒制限となり、本人の`room/recover-timeout`で復帰します。
 
 ## Word DB resource
 
@@ -249,7 +265,14 @@ type Command = GameSdkOnlineRoomCommand<Settings, AppCommand>;
 type RoomView = GameSdkOnlineRoomView<Settings, AppView>;
 ```
 
-共通Lifecycle Commandは`room/join`、`room/leave`、`room/update-settings`、`room/abort`、`room/rematch`です。AppSetのCommandは`game/start`のようにゲーム固有namespaceを使い、`room/*`を定義しません。
+共通Lifecycle Commandは`room/join`、`room/leave`、`room/update-settings`、`room/abort`、`room/rematch`、`room/expire-timer`、`room/recover-timeout`です。DEBUG対応ゲームでは権限付きホストだけがロビーで`room/debug-add-dummy`、`room/debug-remove-dummy`を使えます。AppSetのCommandは`game/start`のようにゲーム固有namespaceを使い、`room/*`を定義しません。
+
+## 標準結果
+
+結果へ進むtransitionは`defineGameSdkStandardResult`で全参加者の順位、得点、
+勝者、終了理由を返します。Platformはこれを共通結果、戦績、rating、
+playbackへ使用します。提出がない場合にPlatformが参加順から仮結果を作る
+ことはありません。
 
 ## Trusted actor
 

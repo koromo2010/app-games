@@ -6,6 +6,61 @@ import { wordWolfSdkServerModule } from "../games/wordwolf-sdk/server-module.ts"
 
 const actor = (playerId: string, role: "host" | "player" = "player") => ({ playerId, displayName: playerId, role, debugAccess: false } as const);
 
+test("SDK formal room DEBUG can add and remove lobby-only dummies", async () => {
+  const runtime = createGameSdkMockRuntime({
+    module: wordWolfSdkServerModule,
+    now: () => 1_000,
+  });
+  const debugHost = {
+    playerId: "host",
+    displayName: "Host",
+    role: "host",
+    debugAccess: true,
+  } as const;
+  let snapshot = await runtime.createRoom({
+    roomCode: "DBUG",
+    create: {
+      app: {
+        topic: {
+          villageWord: "犬",
+          wolfWord: "猫",
+        },
+      },
+    },
+    actor: debugHost,
+  });
+  snapshot = (await runtime.sendCommand({
+    code: "DBUG",
+    envelope: {
+      expectedRevision: snapshot.revision,
+      command: { type: "room/debug-add-dummy" },
+    },
+    actor: debugHost,
+  })).room;
+  assert.equal(snapshot.view.common.players[1]?.isDummy, true);
+  assert.equal(snapshot.view.common.permissions.canDebug, true);
+  snapshot = (await runtime.sendCommand({
+    code: "DBUG",
+    envelope: {
+      expectedRevision: snapshot.revision,
+      command: { type: "room/debug-remove-dummy", seat: 1 },
+    },
+    actor: debugHost,
+  })).room;
+  assert.equal(snapshot.view.common.players.length, 1);
+  await assert.rejects(
+    runtime.sendCommand({
+      code: "DBUG",
+      envelope: {
+        expectedRevision: snapshot.revision,
+        command: { type: "room/debug-add-dummy" },
+      },
+      actor: actor("host", "host"),
+    }),
+    /DEBUG_ACCESS_REQUIRED/,
+  );
+});
+
 test("SDK WordWolf completes room join, play, result and rematch without platform imports", async () => {
   const runtime = createGameSdkMockRuntime({ module: wordWolfSdkServerModule, now: () => 1000 });
   let snapshot = await runtime.createRoom({

@@ -7,6 +7,7 @@ export const gameDurationGameIds = [
   "nigoichi",
   "code-intercept",
   "daifugo",
+  "wordwolf-sdk",
 ] as const;
 
 export type GameDurationGameId = typeof gameDurationGameIds[number];

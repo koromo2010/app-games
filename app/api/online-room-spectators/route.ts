@@ -39,7 +39,9 @@ async function loadTarget(request: Request, input?: { game?: unknown; code?: unk
   const game = target.game;
   const code = target.code;
   if (!game || !code) return { response: invalidTarget() } as const;
-  const accessDenied = await gameApiAccessDeniedResponse(game);
+  const accessDenied = game.startsWith("sdk:")
+    ? null
+    : await gameApiAccessDeniedResponse(game);
   if (accessDenied) return { response: accessDenied } as const;
   const room = await loadOnlineRoomForSpectator(game, code);
   if (!room) return { response: Response.json({ error: "Room not found" }, { status: 404 }) } as const;

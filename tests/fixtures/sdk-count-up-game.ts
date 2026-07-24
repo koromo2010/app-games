@@ -10,6 +10,7 @@ import {
   type GameSdkOnlineRoomCreateInput,
   type GameSdkOnlineRoomView,
 } from "@game-fields/game-sdk/runtime";
+import { defineGameSdkStandardResult } from "@game-fields/game-sdk/modules";
 
 export const sdkCountUpManifest = defineGameManifest({
   sdkVersion: GAME_SDK_VERSION,
@@ -109,6 +110,21 @@ export const sdkCountUpAppSet = defineGameSdkOnlineRoomAppSet<
       return settings.timeLimitSeconds;
     },
   },
+  expireAppTurn(room) {
+    const count = room.app.count + 1;
+    return {
+      phase: count >= room.settings.target ? "result" : "playing",
+      app: {
+        count,
+        lastActorPlayerId: room.timer?.ownerPlayerId ?? room.hostPlayerId,
+      },
+      timer: count >= room.settings.target ? "stop" : "reset",
+      timerOwnerPlayerId: room.hostPlayerId,
+      timedOutPlayerIds: [
+        room.timer?.ownerPlayerId ?? room.hostPlayerId,
+      ],
+    };
+  },
   createAppState() {
     return {
       count: 0,
@@ -131,6 +147,7 @@ export const sdkCountUpAppSet = defineGameSdkOnlineRoomAppSet<
       return {
         phase: "playing",
         app: room.app,
+        timerOwnerPlayerId: room.hostPlayerId,
       };
     }
     if (room.phase !== "playing") throw new Error("INVALID_PHASE");
@@ -142,6 +159,20 @@ export const sdkCountUpAppSet = defineGameSdkOnlineRoomAppSet<
         lastActorPlayerId: context.actor.playerId,
       },
       timer: count >= room.settings.target ? "stop" : "reset",
+      timerOwnerPlayerId: room.hostPlayerId,
+      ...(count >= room.settings.target ? {
+        standardResult: defineGameSdkStandardResult({
+          winnerIds: [context.actor.playerId],
+          rankings: room.players.map((player) => ({
+            participantId: player.id,
+            rank: player.id === context.actor.playerId ? 1 : 2,
+            score: player.id === context.actor.playerId ? count : 0,
+          })),
+          reason: "target-reached",
+        }, {
+          participantIds: room.players.map((player) => player.id),
+        }),
+      } : {}),
     };
   },
   presentApp(room) {

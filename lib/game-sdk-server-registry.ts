@@ -1,3 +1,4 @@
+import type { GameSdkSettingDefinition } from "@game-fields/game-sdk";
 import type { GameFieldsAuthenticatedIdentity } from "@game-fields/game-runtime";
 import { wordWolfSdkServerModule } from "../games/wordwolf-sdk/server-module.ts";
 import { createGameFieldsSdkContentSource } from "./game-sdk-content-source.ts";
@@ -21,8 +22,12 @@ export type ApprovedGameSdkRoomAdapter = AuthenticatedGameSdkPlatformAdapter<
 export type ApprovedGameSdkRegistration = {
   id: string;
   title: string;
+  clientKind: "wordwolf";
   channel: "development" | "stable";
   supportsDebug: boolean;
+  supportsSpectators: boolean;
+  settings: readonly GameSdkSettingDefinition[];
+  rules: readonly string[];
   createAdapter(
     resolveIdentity: () => Promise<GameFieldsAuthenticatedIdentity>,
     request: Request,
@@ -34,8 +39,12 @@ const registrations: readonly ApprovedGameSdkRegistration[] = [
   {
     id: wordWolfSdkServerModule.manifest.id,
     title: wordWolfSdkServerModule.manifest.title.ja,
+    clientKind: "wordwolf",
     channel: "development",
     supportsDebug: wordWolfSdkServerModule.manifest.supportsDebug,
+    supportsSpectators: wordWolfSdkServerModule.manifest.supportsSpectators,
+    settings: wordWolfSdkServerModule.manifest.settings ?? [],
+    rules: (wordWolfSdkServerModule.manifest.rules ?? []).map((rule) => rule.ja),
     createAdapter(resolveIdentity, request, playerId) {
       return createAuthenticatedGameSdkPlatformAdapter({
         module: wordWolfSdkServerModule,
@@ -50,6 +59,26 @@ const registrations: readonly ApprovedGameSdkRegistration[] = [
               playerId,
             ),
           }),
+        },
+        async onRoomSaved(previous, next) {
+          if (
+            next.phase !== "result"
+            || !(
+              "standardResult" in next.room
+              && next.room.standardResult
+            )
+          ) return;
+          const { persistApprovedGameSdkResult } = await import(
+            "./game-sdk-result-persistence.ts"
+          );
+          await persistApprovedGameSdkResult({
+            gameType: "wordwolf-sdk",
+            title: wordWolfSdkServerModule.manifest.title.ja,
+            supportsRating: wordWolfSdkServerModule.manifest.supportsRating,
+            supportsReplay: wordWolfSdkServerModule.manifest.supportsReplay,
+            previous,
+            next,
+          });
         },
       }) as unknown as ApprovedGameSdkRoomAdapter;
     },

@@ -51,6 +51,22 @@ const files = {
   "README.md": `# ${title}\n\nGenerated Game Fields SDK scaffold.\n\n## Boundaries\n\n- \`${pascal}Game.tsx\`: layout selection only\n- \`use-${gameId}-controller.ts\`: state, session, polling, actions, ViewModel\n- \`${gameId}-view-permissions.ts\`: UI-only permission projection\n- \`${gameId}-manifest.ts\`: machine-readable feature declaration\n- \`${gameId}-contracts.ts\`: AppSet state, input, Command, View and SDK composition types\n- \`${gameId}-app-set.ts\`: game-specific rules, authorization and presentation\n- \`${gameId}-server-module.ts\`: SDK basic set + AppSet composition only\n- \`${pascal}DesktopLayout.tsx\`: current desktop presentation\n- \`${pascal}MobileLayout.tsx.example\`: future dedicated mobile presentation\n- \`SDK_CONTRACT.test.ts.example\`: DB-free local Runtime contract test\n- \`GAME_SPEC.md\`: game rules and acceptance criteria\n- \`AGENTS.md\`: instructions for ChatGPT or another coding agent\n\nServer Commands remain the final authority. Do not place secrets, DB clients, Redis access, or API keys in this package.\n\n## Required follow-up\n\n1. Complete GAME_SPEC.md before implementation.\n2. Register the game in \`config/game-registry.json\`.\n3. Replace the starter AppSet domain without reimplementing SDK basic-set responsibilities.\n4. Add i18n dictionaries for Japanese and English.\n5. Rename and extend the SDK contract test, then update \`docs/NEW_GAME_CHECKLIST.md\`.\n6. Run \`npm run lint\`, \`npm test\`, and \`npm run build\`.\n`,
 };
 
+const appSetPath = `${gameId}-app-set.ts`;
+files[appSetPath] = files[appSetPath].replace(
+  "  createAppState() { return {}; },",
+  `  expireAppTurn(room) {
+    const timedOutPlayerId = room.timer?.ownerPlayerId ?? room.hostPlayerId;
+    return {
+      phase: room.phase,
+      app: room.app,
+      timer: "reset",
+      timerOwnerPlayerId: timedOutPlayerId,
+      timedOutPlayerIds: [timedOutPlayerId],
+    };
+  },
+  createAppState() { return {}; },`,
+);
+
 await mkdir(path.dirname(gameDir), { recursive: true });
 await mkdir(gameDir, { recursive: false });
 for (const [relativePath, content] of Object.entries(files)) {

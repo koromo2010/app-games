@@ -33,6 +33,7 @@ import {
   assertGameSdkCanStart,
   assignGameSdkRoles,
   distributeGameSdkBalancedTeams,
+  defineGameSdkStandardResultView,
   gameSdkModuleIsRequired,
   nextGameSdkEligibleSeat,
   nextGameSdkRoundStep,
@@ -42,6 +43,7 @@ import {
   tallyGameSdkVotes,
   type GameSdkModuleGroup,
   type GameSdkModuleProfile,
+  type GameSdkStandardResultView,
 } from "@game-fields/game-sdk/modules";
 import {
   normalizeGameSdkLlmRequest,
@@ -281,6 +283,8 @@ export function SdkPreviewGameShell({
   const [llmSample, setLlmSample] = useState("AIサンプル未生成");
   const [llmSamplePending, setLlmSamplePending] = useState(false);
   const [drawingStrokes, setDrawingStrokes] = useState<DrawingStroke[]>([]);
+  const [standardResult, setStandardResult] =
+    useState<GameSdkStandardResultView | null>(null);
 
   const requiredModuleIds = requiredGameSdkModuleIds(moduleProfile);
   const resolvedModules = useMemo(
@@ -375,7 +379,11 @@ export function SdkPreviewGameShell({
         request?: unknown;
         command?: unknown;
         height?: unknown;
-        state?: { phase?: unknown; gameAdapterReady?: unknown };
+        state?: {
+          phase?: unknown;
+          gameAdapterReady?: unknown;
+          standardResult?: unknown;
+        };
       } | null;
       if (
         data?.type === "game-fields:frame-size"
@@ -499,8 +507,29 @@ export function SdkPreviewGameShell({
       if (data.command === "timer:turn-complete") {
         setStartedAt(previewNow());
       }
+      if (data.command === "timer:expired") {
+        logSequenceRef.current += 1;
+        setLogs((current) => [{
+          id: logSequenceRef.current,
+          label: "制限時間に到達し、ゲーム固有の時間切れ処理を実行",
+          at: previewTimestamp(),
+        }, ...current].slice(0, 24));
+        setMessage("制限時間に到達しました。ゲーム固有Runtimeの時間切れ処理を確認してください。");
+      }
       if (typeof data.state?.gameAdapterReady === "boolean") {
         setGameAdapterReady(data.state.gameAdapterReady);
+      }
+      if (data.command === "result:submitted") {
+        try {
+          setStandardResult(defineGameSdkStandardResultView(
+            data.state?.standardResult as GameSdkStandardResultView,
+            { participantCount: players.length },
+          ));
+          setMessage("");
+        } catch {
+          setStandardResult(null);
+          setMessage("ゲーム固有Runtimeから受け取った結果形式が正しくありません。");
+        }
       }
       if (
         surface !== "entry"
@@ -515,7 +544,7 @@ export function SdkPreviewGameShell({
     };
     window.addEventListener("message", receive);
     return () => window.removeEventListener("message", receive);
-  }, [creatorSlug, gameId, moduleProfile, surface]);
+  }, [creatorSlug, gameId, moduleProfile, players.length, surface]);
 
   const enterRoom = (input: {
     code: string;
@@ -530,6 +559,7 @@ export function SdkPreviewGameShell({
     setRevision(1);
     setMessage("");
     setStartedAt(previewNow());
+    setStandardResult(null);
     appendLog(input.action);
   };
 
@@ -577,6 +607,7 @@ export function SdkPreviewGameShell({
       return;
     }
     setMessage("");
+    setStandardResult(null);
     const nextStartedAt = previewNow();
     setStartedAt(nextStartedAt);
     send("timer:sync", {
@@ -592,6 +623,7 @@ export function SdkPreviewGameShell({
     send("game:abort");
     setSurface("lobby");
     setStartedAt(previewNow());
+    setStandardResult(null);
     bumpRevision("ゲームを中断してロビーへ復帰");
   };
 
@@ -614,6 +646,7 @@ export function SdkPreviewGameShell({
     setRoomCode("");
     setPlayers([{ id: "host", name: "あなた", role: "host", dummy: false }]);
     setRevision(0);
+    setStandardResult(null);
     setMessage("部屋を解散しました。");
     appendLog("部屋を解散");
   };
@@ -998,17 +1031,31 @@ export function SdkPreviewGameShell({
             <p className="text-xs font-black uppercase tracking-[.18em] text-amber-700">Standard result</p>
             <h2 className="mt-2 text-4xl font-black">ゲーム終了</h2>
             <p className="mt-2 text-slate-600">ゲーム固有の勝敗を共通結果形式へ投影した確認用表示です。</p>
-            <ol className="mt-6 space-y-3">
-              {players.map((player, index) => (
-                <li key={player.id} className={`flex items-center justify-between rounded-xl border px-4 py-3 ${index === 0 ? "border-amber-300 bg-amber-50" : "border-slate-200 bg-slate-50"}`}>
-                  <div className="flex items-center gap-3">
-                    <span className={`grid h-9 w-9 place-items-center rounded-full font-black ${index === 0 ? "bg-amber-300 text-amber-950" : "bg-slate-200"}`}>{index + 1}</span>
-                    <strong>{player.name}</strong>
-                  </div>
-                  <span className="font-mono font-black">{Math.max(0, players.length - index) * 10} pt</span>
-                </li>
-              ))}
-            </ol>
+            {standardResult ? (
+              <>
+                <p className="mt-4 rounded-lg bg-slate-100 px-3 py-2 text-sm font-bold text-slate-700">
+                  終了理由: {standardResult.reason}
+                </p>
+                <ol className="mt-6 space-y-3">
+                  {standardResult.rankings.map((ranking) => {
+                    const won = standardResult.winnerSeats.includes(ranking.seat);
+                    return (
+                      <li key={ranking.seat} className={`flex items-center justify-between rounded-xl border px-4 py-3 ${won ? "border-amber-300 bg-amber-50" : "border-slate-200 bg-slate-50"}`}>
+                        <div className="flex items-center gap-3">
+                          <span className={`grid h-9 w-9 place-items-center rounded-full font-black ${won ? "bg-amber-300 text-amber-950" : "bg-slate-200"}`}>{ranking.rank}</span>
+                          <strong>{ranking.displayName}{ranking.isSelf ? "（あなた）" : ""}</strong>
+                        </div>
+                        <span className="font-mono font-black">{ranking.score} pt</span>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </>
+            ) : (
+              <div className="mt-6 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">
+                ゲーム固有Runtimeから共通結果データが送られていません。仮順位・仮得点は生成しません。
+              </div>
+            )}
             <OnlineRoomLifecycleActions
               surface="result"
               canReturnToRoom

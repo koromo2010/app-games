@@ -12,6 +12,12 @@ export const myFirstGameManifest = defineGameManifest({
   supportsReplay: false,
   supportsRating: false,
   usesLlm: false,
+  rules: [
+    {
+      ja: "目標値に先に到達したプレイヤーが勝利します。",
+      en: "The first player to reach the target wins.",
+    },
+  ],
   settings: [
     {
       key: "target",

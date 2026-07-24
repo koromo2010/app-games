@@ -12,6 +12,7 @@ import type {
 import {
   createGameFieldsPlatformRuntime,
   type GameFieldsAuthenticatedIdentity,
+  type GameFieldsPlatformRoomRecord,
   type GameFieldsPlatformRoomPersistence,
 } from "@game-fields/game-runtime";
 import {
@@ -20,6 +21,7 @@ import {
   normalizeGameSdkPlatformRoomCode,
   type GameSdkPlatformRoomStore,
 } from "./game-sdk-platform-room-store.ts";
+import { schedulePostResponseWork } from "./post-response-work.ts";
 
 export {
   createRedisGameSdkPlatformPersistence,
@@ -43,6 +45,10 @@ type AuthenticatedPlatformAdapterOptions<
   now?: () => number;
   createRequestId?: () => string;
   resources?: Readonly<GameSdkPlatformResources>;
+  onRoomSaved?: (
+    previous: Readonly<GameFieldsPlatformRoomRecord<TRoom>>,
+    next: Readonly<GameFieldsPlatformRoomRecord<TRoom>>,
+  ) => Promise<unknown>;
 };
 
 export type AuthenticatedGameSdkPlatformAdapter<
@@ -96,18 +102,30 @@ export function createAuthenticatedGameSdkPlatformAdapter<
   now,
   createRequestId,
   resources,
+  onRoomSaved,
 }: AuthenticatedPlatformAdapterOptions<TRoom, TCreateInput, TCommand, TRoomView>): AuthenticatedGameSdkPlatformAdapter<TCreateInput, TCommand, TRoomView> {
   const roomStore = roomStoreInput
     ?? (persistenceInput ? null : createRedisGameSdkPlatformRoomStore<TRoom>(module.manifest.id));
   const persistence = roomStore
     ?? persistenceInput
     ?? createRedisGameSdkPlatformPersistence<TRoom>(module.manifest.id);
-  const runtime = createGameFieldsPlatformRuntime({
+  const runtime = createGameFieldsPlatformRuntime<
+    TRoom,
+    TCreateInput,
+    TCommand,
+    TRoomView
+  >({
     module,
     persistence,
     now,
     createRequestId,
     resources,
+    ...(onRoomSaved ? {
+      onSaved: (previous, next) => schedulePostResponseWork(
+        `game-sdk-result:${module.manifest.id}:${next.code}:${next.revision}`,
+        () => onRoomSaved(previous, next),
+      ),
+    } : {}),
   });
 
   return {

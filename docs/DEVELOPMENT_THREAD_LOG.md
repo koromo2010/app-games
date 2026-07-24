@@ -3318,3 +3318,58 @@
 
 - SDK本体とPreview認証修正はまだGitHubへpushしていないため、現在のdev本体では新しい限定セッション交換は未反映。
 - `main`、本番SDK、npm package versionはこの変更では更新しない。
+
+## 2026-07-24 — SDK共通モジュールの未接続監査
+
+### 利用者からの要望
+
+- Word DB、設定、Preview認証以外にも、契約または「接続済み」表示だけが存在し、実処理へ未接続の共通機能がないか確認する。
+- SDK変更の回帰確認に使う既存クライアントをPlatform側から改版しない。特に本人所有の`test10-1 / ai-word-guess`は、明示依頼がない限りコード、設定、保存revisionを変更しない。
+
+### 判断
+
+- 未審査Previewで意図的にメモリ模擬する機能と、採用済みSDK Runtimeにも接続先がない機能を分けて扱う。
+- module registryへ実装名があることや、module labに見本UIがあることだけを「完成接続」と判定しない。ゲーム固有stateからの入力、Platform側の権限検査、永続化、別セッション同期、結果後hookまで実経路を確認する。
+
+### 調査結果
+
+- Previewの`result`はゲーム固有の標準勝敗を受け取らず、参加者配列順と仮点で表示している。`standard-outcome` helperは公開されているが、Preview Shellおよび採用済みSDK Room Viewとの結果受渡し契約へ未接続。
+- `stats`、`rating`、`replay`はPreview上の予定文言だけで、SDK Platform adapterの保存後hook、共通戦績、rating、本人向けreplay storeへ未接続。
+- SDK timerは期限表示と成功Command後のresetまではあるが、Preview Shellは`timer:expired`を処理せず、採用済みSDK Runtimeにも期限後reconcile、受付猶予、時間切れCommand、連続放置・復帰処理がない。
+- PreviewのRoom作成、参加、revision、復帰、解散はReactメモリ内の模擬で、Redis、別ブラウザ、WebSocket、polling fallbackへ接続していない。採用済みSDK用API／Redis／revision watcher自体は存在するが、保存済み制作者ゲームの画面は引き続き`/sdk-preview/...`へ遷移し、正式Runtimeを描画する本体Shellへ未接続。
+- `spectators`はPreviewの視点切替だけで、採用済みSDK側には公開policy、grant、匿名観戦API、ゲーム別公開snapshotがない。
+- `debug`はPreview内のダミー・視点・中断UIだけで、採用済みSDK RoomのサーバーCommand、ダミー参加者整理、active-room除外、ゲーム固有state補正へ未接続。
+- Room内の設定値保存はあるが、ゲーム別・プレイヤー別の設定既定値を共通`room-defaults`へ保存・復元するSDK接続がない。
+- Previewのルール画面はゲームpackageの具体的ルールを受け取らず共通説明だけを表示し、プレイヤーメニューの表示名も連携済み本人情報ではなく確認用固定表示。
+- `result-share`、`ai-activity`、広告、トランプ、描画、Word DB、LLMにはPreview上の具体的な接続経路がある。ただし結果共有は仮結果を参照し、描画strokeのRoom保存・同期は別途online-room接続が必要。
+
+### 未対応・保留
+
+- 今回は監査のみで、SDKコード、AIことば当て、保存済みrevision、GitHub branch、deploymentは変更していない。
+- 修正順は、固有結果契約、サーバー時間切れ、正式SDK ShellとRoom transport、結果後の戦績系hook、観戦・DEBUG、設定既定値の順が妥当。
+## 2026-07-24 — SDK未接続機能の順次接続
+
+### 要望・判断
+
+- 「接続済み」表示だけで実処理へつながっていないSDK機能を、固有結果、時間切れ、正式Room、戦績系、観戦、DEBUG、個人既定値、ルール表示の順で接続する。
+- AIことば当ては既存クライアントの回帰確認に使うため、コード・設定・保存済みrevisionを変更しない。
+- 未審査Previewと承認済み正式Runtimeを混ぜず、正式Runtimeは静的server registryに登録されたmoduleだけを動かす。
+
+### 実装
+
+- AppSet transitionへ全参加者の`standardResult`を追加し、共通結果画面が参加順から仮順位・仮点数を生成する処理を削除した。
+- `expireAppTurn`、server deadline、turn sequence、grace、連続時間切れ、本人だけの5秒短縮、明示復帰をSDK基本セットへ追加した。
+- `/sdk-games/[gameId]`へ正式Room Shellを追加し、Cookie認証、Redis CAS、active room、一覧、Realtime、設定、開始、プレイ、結果、再戦、解散を承認済みmoduleへ接続した。
+- 保存後hookから標準結果を`wordwolf-sdk`専用の戦績、rating、playbackへ冪等保存する。playbackは共通結果だけを使い、固有秘密stateを保存しない。
+- SDK観戦を既存の署名grantとhost policyへ接続した。SDK snapshotは匿名席、phase、timer、確定結果だけを許可し、ゲーム固有stateを展開しない。
+- DEBUG資格を持つhostだけがlobbyでダミーを追加・削除できるserver Commandを追加した。
+- `manifest.rules`を追加し、`manifest.settings`とともに正式Shellへ宣言駆動表示する。設定値はRoomへ同期し、宣言済みの有効値だけをアカウント別の次回既定値として保存する。
+- SDK package境界検査、starter、公開資料を新しいresult、timeout、DEBUG、rules契約へ更新した。
+
+### 検証・保留
+
+- `npm test`: 499件成功。
+- `npm run build`: 本体Production build成功。
+- `npm run lint`、SDK Portal build、隔離Preview build、SDK配布tarballの外部install検査、starterの型・契約・完走・提出ZIP検査が成功した。
+- developへのpush・dev deployment・ログイン済み複数ブラウザE2Eは未実施。
+- AIことば当てのコード・設定・保存済みrevisionは変更していない。

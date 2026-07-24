@@ -15,6 +15,19 @@ import type {
   GameSdkPlatformResources,
   GameSdkResourceContext,
 } from "./resources.js";
+import {
+  defineGameSdkStandardResult,
+  type GameSdkStandardResult,
+  type GameSdkStandardResultView,
+} from "./modules/result.js";
+import {
+  createGameSdkPlayerTimeoutState,
+  gameSdkPlayerTimeLimitSeconds,
+  recordGameSdkPlayerActivity,
+  recordGameSdkPlayerTimeout,
+  recoverGameSdkPlayerTimeout,
+  type GameSdkPlayerTimeoutState,
+} from "./modules/timeout.js";
 
 export type GameSdkRoomLifecycleResult<TRoom> =
   | { handled: false }
@@ -30,6 +43,8 @@ export type GameSdkOnlineRoom<
   TAppState,
 > = GameSdkOnlineRoomState<TSettings> & {
   timer?: GameSdkOnlineRoomTimer;
+  playerTimeouts: GameSdkPlayerTimeoutState<string>;
+  standardResult?: GameSdkStandardResult<string>;
   app: TAppState;
 };
 
@@ -38,6 +53,14 @@ export type GameSdkOnlineRoomTimer = {
   startedAt: number | null;
   deadlineAt: number | null;
   turnSequence: number;
+  ownerPlayerId?: string | null;
+};
+
+export type GameSdkOnlineRoomTimerView = Omit<
+  GameSdkOnlineRoomTimer,
+  "ownerPlayerId"
+> & {
+  ownerSeat?: number | null;
 };
 
 /** Standard create payload used by every online-room AppSet. */
@@ -59,20 +82,23 @@ export type GameSdkOnlineRoomPlayerView = {
   seat: number;
   displayName: string;
   connected: boolean;
+  isDummy: boolean;
   isHost: boolean;
   isSelf: boolean;
+  reducedTime: boolean;
 };
 
 export type GameSdkOnlineRoomCommonView<TSettings> = {
   phase: string;
   players: GameSdkOnlineRoomPlayerView[];
   settings: TSettings;
-  timer?: GameSdkOnlineRoomTimer;
+  timer?: GameSdkOnlineRoomTimerView;
   minimumPlayers: number;
   maximumPlayers: number;
   isHost: boolean;
   isMember: boolean;
   permissions: GameSdkViewPermissions;
+  standardResult?: GameSdkStandardResultView;
 };
 
 /**
@@ -95,7 +121,20 @@ export type GameSdkAppTransition<TAppState> = {
    * from the authoritative server-side transition.
    */
   timer?: "preserve" | "reset" | "stop";
+  /** Player whose next deadline is being started; null means a shared timer. */
+  timerOwnerPlayerId?: string | null;
+  /**
+   * Platform result consumed by the common result, stats, rating and replay
+   * modules. Internal player IDs stay in stored state and are projected to
+   * seats before the browser receives the RoomView.
+   */
+  standardResult?: GameSdkStandardResult<string>;
 };
+
+export type GameSdkExpiredTurnTransition<TAppState> =
+  GameSdkAppTransition<TAppState> & {
+    timedOutPlayerIds: string[];
+  };
 
 export type GameSdkAppPresentation<TAppView> = {
   view: TAppView;
@@ -119,7 +158,13 @@ export type GameSdkOnlineRoomAppSet<
   defaultSettings: TSettings;
   timer?: {
     durationSeconds(settings: Readonly<TSettings>): number;
+    graceMs?: number;
   };
+  expireAppTurn?(
+    room: Readonly<GameSdkOnlineRoom<TSettings, TAppState>>,
+    context: GameSdkCommandContext,
+  ): GameSdkExpiredTurnTransition<TAppState>
+    | Promise<GameSdkExpiredTurnTransition<TAppState>>;
   normalizeSettings?: (settings: TSettings) => TSettings;
   createAppState(
     input: TAppInput,
@@ -154,6 +199,7 @@ export function applyGameSdkRoomLifecycleCommand<
   options: {
     minimumPlayers: number;
     maximumPlayers: number;
+    supportsDebug?: boolean;
     normalizeSettings?: (settings: TSettings) => TSettings;
     resetGame: (room: Readonly<TRoom>) => Omit<Partial<TRoom>, "code" | "revision">;
   },
@@ -173,6 +219,46 @@ export function applyGameSdkRoomLifecycleCommand<
           joinedAt: context.now,
           connected: true,
         }],
+      } as Partial<TRoom>),
+    };
+  }
+  if (
+    command.type === "room/debug-add-dummy"
+    || command.type === "room/debug-remove-dummy"
+  ) {
+    if (
+      !options.supportsDebug
+      || !context.actor.debugAccess
+      || context.actor.playerId !== room.hostPlayerId
+    ) {
+      throw new Error("DEBUG_ACCESS_REQUIRED");
+    }
+    if (room.phase !== "lobby") throw new Error("DEBUG_LOBBY_ONLY");
+    if (command.type === "room/debug-add-dummy") {
+      if (room.players.length >= options.maximumPlayers) throw new Error("ROOM_FULL");
+      const dummyCount = room.players.filter((player) => player.isDummy).length;
+      return {
+        handled: true,
+        room: advanceGameSdkRoom(room, {
+          players: [...room.players, {
+            id: `debug:${context.requestId}`,
+            displayName: `ダミー${dummyCount + 1}`,
+            joinedAt: context.now,
+            connected: false,
+            isDummy: true,
+          }],
+        } as Partial<TRoom>),
+      };
+    }
+    const seat = "seat" in command && Number.isSafeInteger(command.seat)
+      ? command.seat
+      : -1;
+    const target = room.players[seat];
+    if (!target?.isDummy) throw new Error("DEBUG_DUMMY_REQUIRED");
+    return {
+      handled: true,
+      room: advanceGameSdkRoom(room, {
+        players: room.players.filter((_player, index) => index !== seat),
       } as Partial<TRoom>),
     };
   }
@@ -317,10 +403,11 @@ export function defineGameSdkOnlineRoomAppSet<
   if (
     !timeLimitSetting
     || !appSet.timer
+    || !appSet.expireAppTurn
     || appSet.timer.durationSeconds(appSet.defaultSettings)
       !== timeLimitSetting.defaultValue
   ) {
-    throw new Error("Game SDK AppSet timer must use the manifest time-limit setting.");
+    throw new Error("Game SDK AppSet timer must use the manifest time-limit setting and expireAppTurn.");
   }
   return appSet;
 }
@@ -357,6 +444,7 @@ function resetGameSdkTimer(
   durationSeconds: number,
   now: number,
   previous?: Readonly<GameSdkOnlineRoomTimer>,
+  ownerPlayerId: string | null = null,
 ): GameSdkOnlineRoomTimer {
   const normalizedDuration = normalizeGameSdkTimerDuration(durationSeconds);
   if (normalizedDuration === 0) {
@@ -367,6 +455,7 @@ function resetGameSdkTimer(
     startedAt: now,
     deadlineAt: now + normalizedDuration * 1000,
     turnSequence: (previous?.turnSequence ?? 0) + 1,
+    ownerPlayerId,
   };
 }
 
@@ -375,14 +464,28 @@ function createCommonPlayerView(
   seat: number,
   room: { hostPlayerId: string },
   viewer: GameSdkViewer,
+  playerTimeouts: GameSdkPlayerTimeoutState<string>,
 ): GameSdkOnlineRoomPlayerView {
   return {
     seat,
     displayName: player.displayName,
     connected: player.connected,
+    isDummy: player.isDummy === true,
     isHost: player.id === room.hostPlayerId,
     isSelf: player.id === viewer.playerId,
+    reducedTime: playerTimeouts.statuses[player.id]?.reducedTime === true,
   };
+}
+
+function gameSdkRoomTimeoutState(
+  room: Readonly<{
+    players: GameSdkRoomPlayer[];
+    playerTimeouts?: GameSdkPlayerTimeoutState<string>;
+  }>,
+) {
+  return room.playerTimeouts ?? createGameSdkPlayerTimeoutState(
+    room.players.map((player) => player.id),
+  );
 }
 
 /**
@@ -429,7 +532,12 @@ export function createGameSdkOnlineRoomModule<
       : 0
   );
 
-  return defineGameServerModule({
+  return defineGameServerModule<
+    GameSdkOnlineRoom<TSettings, TAppState>,
+    GameSdkOnlineRoomCreateInput<TSettings, TAppInput>,
+    GameSdkOnlineRoomCommand<TSettings, TAppCommand>,
+    GameSdkOnlineRoomView<TSettings, TAppView>
+  >({
     manifest,
 
     async createRoom(input, context) {
@@ -454,6 +562,9 @@ export function createGameSdkOnlineRoomModule<
           connected: true,
         }],
         settings,
+        playerTimeouts: createGameSdkPlayerTimeoutState([
+          context.actor.playerId,
+        ]),
         ...(appSet.timer ? {
           timer: stoppedGameSdkTimer(timerDurationSeconds(settings)),
         } : {}),
@@ -462,30 +573,135 @@ export function createGameSdkOnlineRoomModule<
     },
 
     async applyCommand(room, command, context) {
+      const currentPlayerTimeouts = gameSdkRoomTimeoutState(room);
+      if (command.type === "room/recover-timeout") {
+        const recovered = recoverGameSdkPlayerTimeout(
+          currentPlayerTimeouts,
+          context.actor.playerId,
+          context.now,
+        );
+        if (!recovered) throw new Error("PLAYER_TIMEOUT_RECOVERY_NOT_REQUIRED");
+        return advanceGameSdkRoom(room, { playerTimeouts: recovered });
+      }
+      if (command.type === "room/expire-timer") {
+        const expireCommand = command as {
+          type: "room/expire-timer";
+          turnSequence: number;
+        };
+        if (!appSet.timer || !room.timer || !appSet.expireAppTurn) {
+          throw new Error("TIMER_EXPIRY_UNSUPPORTED");
+        }
+        if (
+          !Number.isSafeInteger(expireCommand.turnSequence)
+          || expireCommand.turnSequence !== room.timer.turnSequence
+        ) {
+          throw new Error("TIMER_EVENT_STALE");
+        }
+        const graceMs = Math.max(
+          0,
+          Math.min(30_000, Math.floor(appSet.timer.graceMs ?? 1_500)),
+        );
+        if (
+          room.phase === "lobby"
+          || room.phase === "result"
+          || room.timer.deadlineAt === null
+          || context.now < room.timer.deadlineAt + graceMs
+        ) {
+          throw new Error("TIMER_NOT_EXPIRED");
+        }
+        const transition = await appSet.expireAppTurn(
+          room,
+          { ...context, resources: { ...resources, ...context.resources } },
+        );
+        const timedOutPlayerIds = [...new Set(transition.timedOutPlayerIds)];
+        if (
+          timedOutPlayerIds.length === 0
+          || timedOutPlayerIds.some((playerId) => (
+            !room.players.some((player) => player.id === playerId)
+          ))
+        ) {
+          throw new Error("TIMER_TIMEOUT_PLAYERS_INVALID");
+        }
+        let playerTimeouts = currentPlayerTimeouts;
+        for (const playerId of timedOutPlayerIds) {
+          playerTimeouts = recordGameSdkPlayerTimeout(
+            playerTimeouts,
+            playerId,
+            context.now,
+          );
+        }
+        const nextPhase = normalizeAppSetPhase(transition.phase);
+        const standardResult = transition.standardResult
+          ? defineGameSdkStandardResult(transition.standardResult, {
+              participantIds: room.players.map((player) => player.id),
+            })
+          : room.standardResult;
+        if (nextPhase !== "result" && transition.standardResult) {
+          throw new Error("RESULT_PHASE_REQUIRED");
+        }
+        const ownerPlayerId = transition.timerOwnerPlayerId ?? null;
+        const timer = nextPhase === "result" || transition.timer === "stop"
+          ? stoppedGameSdkTimer(timerDurationSeconds(room.settings), room.timer)
+          : resetGameSdkTimer(
+              gameSdkPlayerTimeLimitSeconds(
+                timerDurationSeconds(room.settings),
+                playerTimeouts,
+                ownerPlayerId,
+              ),
+              context.now,
+              room.timer,
+              ownerPlayerId,
+            );
+        return advanceGameSdkRoom(room, {
+          phase: nextPhase,
+          app: transition.app,
+          playerTimeouts,
+          timer,
+          ...(standardResult ? { standardResult } : {}),
+        });
+      }
       const lifecycle = applyGameSdkRoomLifecycleCommand(room, command, context, {
         minimumPlayers: manifest.minimumPlayers,
         maximumPlayers: manifest.maximumPlayers,
+        supportsDebug: manifest.supportsDebug,
         normalizeSettings,
         resetGame: (current) => ({
           app: appSet.resetAppState(current),
+          standardResult: undefined,
         }),
       });
       if (lifecycle.handled) {
-        if (!appSet.timer || !lifecycle.room.timer) return lifecycle.room;
+        const timeoutDefaults = createGameSdkPlayerTimeoutState(
+          lifecycle.room.players.map((player) => player.id),
+        );
+        const lifecycleRoom = {
+          ...lifecycle.room,
+          playerTimeouts: {
+            ...timeoutDefaults,
+            statuses: Object.fromEntries(
+              lifecycle.room.players.map((player) => [
+                player.id,
+                currentPlayerTimeouts.statuses[player.id]
+                  ?? timeoutDefaults.statuses[player.id]!,
+              ]),
+            ),
+          },
+        };
+        if (!appSet.timer || !lifecycleRoom.timer) return lifecycleRoom;
         const shouldStop = (
           command.type === "room/abort"
           || command.type === "room/rematch"
-          || lifecycle.room.phase === "lobby"
-          || lifecycle.room.phase === "result"
+          || lifecycleRoom.phase === "lobby"
+          || lifecycleRoom.phase === "result"
         );
         return {
-          ...lifecycle.room,
+          ...lifecycleRoom,
           timer: shouldStop
             ? stoppedGameSdkTimer(
-                timerDurationSeconds(lifecycle.room.settings),
-                lifecycle.room.timer,
+                timerDurationSeconds(lifecycleRoom.settings),
+                lifecycleRoom.timer,
               )
-            : lifecycle.room.timer,
+            : lifecycleRoom.timer,
         };
       }
       if (command.type.startsWith("room/")) throw new Error("UNKNOWN_ROOM_COMMAND");
@@ -498,6 +714,20 @@ export function createGameSdkOnlineRoomModule<
         { ...context, resources: { ...resources, ...context.resources } },
       ) as GameSdkAppTransition<TAppState>;
       const nextPhase = normalizeAppSetPhase(transition.phase);
+      const standardResult = transition.standardResult
+        ? defineGameSdkStandardResult(transition.standardResult, {
+            participantIds: room.players.map((player) => player.id),
+          })
+        : room.standardResult;
+      if (nextPhase !== "result" && transition.standardResult) {
+        throw new Error("RESULT_PHASE_REQUIRED");
+      }
+      const playerTimeouts = recordGameSdkPlayerActivity(
+        currentPlayerTimeouts,
+        context.actor.playerId,
+      );
+      const timerOwnerPlayerId =
+        transition.timerOwnerPlayerId ?? context.actor.playerId;
       const timerAction = (
         nextPhase === "result"
         || nextPhase === "lobby"
@@ -517,9 +747,14 @@ export function createGameSdkOnlineRoomModule<
         ? undefined
         : timerAction === "reset"
           ? resetGameSdkTimer(
-              timerDurationSeconds(room.settings),
+              gameSdkPlayerTimeLimitSeconds(
+                timerDurationSeconds(room.settings),
+                playerTimeouts,
+                timerOwnerPlayerId,
+              ),
               context.now,
               room.timer,
+              timerOwnerPlayerId,
             )
           : timerAction === "stop"
             ? stoppedGameSdkTimer(
@@ -530,11 +765,14 @@ export function createGameSdkOnlineRoomModule<
       return advanceGameSdkRoom(room, {
         phase: nextPhase,
         ...(nextTimer ? { timer: nextTimer } : {}),
+        ...(standardResult ? { standardResult } : {}),
+        playerTimeouts,
         app: transition.app,
       });
     },
 
     presentRoom(room, context) {
+      const playerTimeouts = gameSdkRoomTimeoutState(room);
       const presented = appSet.presentApp(
         room,
         { ...context, resources: { ...resources, ...context.resources } },
@@ -545,6 +783,30 @@ export function createGameSdkOnlineRoomModule<
         && room.players.some((player) => player.id === context.viewer.playerId),
       );
       const hasEnoughPlayers = room.players.length >= manifest.minimumPlayers;
+      const standardResult = room.standardResult
+        ? {
+            winnerSeats: room.standardResult.winnerIds.flatMap((winnerId) => {
+              const seat = room.players.findIndex((player) => player.id === winnerId);
+              return seat >= 0 ? [seat] : [];
+            }),
+            rankings: room.standardResult.rankings.flatMap((ranking) => {
+              const seat = room.players.findIndex(
+                (player) => player.id === ranking.participantId,
+              );
+              const player = room.players[seat];
+              return seat >= 0 && player
+                ? [{
+                    seat,
+                    displayName: player.displayName,
+                    rank: ranking.rank,
+                    score: ranking.score,
+                    isSelf: player.id === context.viewer.playerId,
+                  }]
+                : [];
+            }),
+            reason: room.standardResult.reason,
+          } satisfies GameSdkStandardResultView
+        : undefined;
       return {
         common: {
           phase: room.phase,
@@ -554,10 +816,25 @@ export function createGameSdkOnlineRoomModule<
               seat,
               room,
               context.viewer,
+              playerTimeouts,
             )
           )),
           settings: room.settings,
-          ...(room.timer ? { timer: room.timer } : {}),
+          ...(room.timer ? {
+            timer: {
+              durationSeconds: room.timer.durationSeconds,
+              startedAt: room.timer.startedAt,
+              deadlineAt: room.timer.deadlineAt,
+              turnSequence: room.timer.turnSequence,
+              ...(room.timer.ownerPlayerId === undefined ? {} : {
+                ownerSeat: room.timer.ownerPlayerId === null
+                  ? null
+                  : room.players.findIndex(
+                      (player) => player.id === room.timer?.ownerPlayerId,
+                    ),
+              }),
+            },
+          } : {}),
           minimumPlayers: manifest.minimumPlayers,
           maximumPlayers: manifest.maximumPlayers,
           isHost,
@@ -571,9 +848,15 @@ export function createGameSdkOnlineRoomModule<
             ),
             canEditRoomSettings: isHost && room.phase === "lobby",
             canAbort: isHost && room.phase !== "lobby",
-            canDebug: manifest.supportsDebug && context.viewer.debugAccess,
+            canDebug: (
+              manifest.supportsDebug
+              && context.viewer.debugAccess
+              && isHost
+              && room.phase === "lobby"
+            ),
             canSeeSecret: Boolean(presented.canSeeSecret),
           },
+          ...(standardResult ? { standardResult } : {}),
         },
         app: presented.view,
       };

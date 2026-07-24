@@ -10,6 +10,7 @@ export type GameSdkRoomPlayer = {
   displayName: string;
   joinedAt: number;
   connected: boolean;
+  isDummy?: boolean;
 };
 
 export type GameSdkOnlineRoomPhase = "lobby" | "playing" | "result";
@@ -348,6 +349,7 @@ export type GameSdkManifest = {
   supportsRating: boolean;
   usesLlm: boolean;
   settings?: readonly GameSdkSettingDefinition[];
+  rules?: readonly Readonly<Record<GameSdkLocale, string>>[];
 };
 
 /**
@@ -440,7 +442,11 @@ export type GameSdkRoomLifecycleCommand<TSettings> =
   | { type: "room/leave" }
   | { type: "room/update-settings"; settings: Partial<TSettings> }
   | { type: "room/abort" }
-  | { type: "room/rematch" };
+  | { type: "room/rematch" }
+  | { type: "room/expire-timer"; turnSequence: number }
+  | { type: "room/recover-timeout" }
+  | { type: "room/debug-add-dummy" }
+  | { type: "room/debug-remove-dummy"; seat: number };
 
 /**
  * Browser-facing Runtime injected by Game Fields. Actor identity is omitted on
@@ -505,6 +511,22 @@ export function assertGameManifest(manifest: GameSdkManifest): void {
   parseGameSdkSettingDefinitions(manifest.settings, {
     requireTimeLimit: manifest.playMode === "online-room",
   });
+  if (manifest.rules) {
+    if (manifest.rules.length > 20) {
+      throw new Error("Game SDK manifest rules cannot exceed 20 items.");
+    }
+    for (const [index, rule] of manifest.rules.entries()) {
+      for (const locale of ["ja", "en"] satisfies GameSdkLocale[]) {
+        if (
+          typeof rule[locale] !== "string"
+          || !rule[locale].trim()
+          || rule[locale].length > 300
+        ) {
+          throw new Error(`Game SDK manifest rules[${index}].${locale} is invalid.`);
+        }
+      }
+    }
+  }
 }
 
 export function defineGameManifest<const TManifest extends GameSdkManifest>(manifest: TManifest) {

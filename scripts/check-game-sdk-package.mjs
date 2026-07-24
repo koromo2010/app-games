@@ -19,7 +19,7 @@ try {
   const [packResult] = JSON.parse(packOutput);
   if (!packResult?.filename) throw new Error("SDK tarball was not created.");
 
-  const allowedFiles = /^(LICENSE|README\.md|package\.json|dist\/(index|runtime|modules|modules\/(profile|collection|voting|flow|assignment|presentation|result)|content-source|llm|resources|playing-cards|playing-cards-react|drawing|drawing-react|mock-runtime|client-runtime|client-realtime|handshake)\.(js|js\.map|d\.ts|d\.ts\.map))$/;
+  const allowedFiles = /^(LICENSE|README\.md|package\.json|dist\/(index|runtime|modules|modules\/(profile|collection|voting|flow|assignment|presentation|result|timeout)|content-source|llm|resources|playing-cards|playing-cards-react|drawing|drawing-react|mock-runtime|client-runtime|client-realtime|handshake)\.(js|js\.map|d\.ts|d\.ts\.map))$/;
   const unexpectedFiles = (packResult.files ?? [])
     .map((file) => file.path)
     .filter((path) => !allowedFiles.test(path));

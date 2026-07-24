@@ -1,6 +1,7 @@
 import {
   createGameSdkOnlineRoomModule,
   defineGameSdkOnlineRoomAppSet,
+  type GameSdkOnlineRoom,
 } from "@game-fields/game-sdk/runtime";
 import {
   allGameSdkParticipantsComplete,
@@ -10,6 +11,7 @@ import {
   gameSdkPlayerSeats,
   recordGameSdkVote,
   tallyGameSdkVotes,
+  defineGameSdkStandardResult,
 } from "@game-fields/game-sdk/modules";
 import { requireGameSdkContentSource } from "@game-fields/game-sdk/resources";
 import {
@@ -41,6 +43,33 @@ export type WordWolfSdkAppView = {
   };
 };
 
+function wordWolfSdkStandardResult(
+  room: Readonly<GameSdkOnlineRoom<WordWolfSdkSettings, WordWolfSdkAppState>>,
+  winner: NonNullable<WordWolfSdkAppState["winner"]>,
+) {
+  const winnerIds = room.players
+    .filter((player) => (
+      winner === "wolf"
+        ? room.app.wolfIds.includes(player.id)
+        : !room.app.wolfIds.includes(player.id)
+    ))
+    .map((player) => player.id);
+  return defineGameSdkStandardResult({
+    winnerIds,
+    rankings: room.players.map((player) => {
+      const won = winnerIds.includes(player.id);
+      return {
+        participantId: player.id,
+        rank: won ? 1 : 2,
+        score: won ? 1 : 0,
+      };
+    }),
+    reason: winner === "wolf" ? "wolf-win" : "village-win",
+  }, {
+    participantIds: room.players.map((player) => player.id),
+  });
+}
+
 export const wordWolfSdkAppSet = defineGameSdkOnlineRoomAppSet<
   WordWolfSdkSettings,
   WordWolfSdkAppState,
@@ -60,6 +89,112 @@ export const wordWolfSdkAppSet = defineGameSdkOnlineRoomAppSet<
     durationSeconds(settings) {
       return settings.timeLimitSeconds;
     },
+  },
+  expireAppTurn(room, context) {
+    const participantIds = room.players.map((player) => player.id);
+    if (room.phase === "clue") {
+      const missingIds = participantIds.filter((playerId) => (
+        !room.app.clues.some((clue) => (
+          clue.round === room.app.currentRound
+          && clue.playerId === playerId
+        ))
+      ));
+      const timedOutPlayerIds = room.settings.clueMode === "simultaneous"
+        ? missingIds
+        : [room.timer?.ownerPlayerId ?? missingIds[0]].filter(
+            (playerId): playerId is string => Boolean(playerId),
+          );
+      if (timedOutPlayerIds.length === 0) {
+        throw new Error("TIMER_TIMEOUT_PLAYERS_INVALID");
+      }
+      const clues = [
+        ...room.app.clues,
+        ...timedOutPlayerIds.map((playerId) => ({
+          playerId,
+          round: room.app.currentRound,
+          text: "（時間切れ）",
+          at: context.now,
+        })),
+      ];
+      const roundComplete = participantIds.every((playerId) => (
+        clues.some((clue) => (
+          clue.round === room.app.currentRound
+          && clue.playerId === playerId
+        ))
+      ));
+      const isLastRound =
+        room.app.currentRound >= room.settings.roundsTotal;
+      const nextRound = roundComplete && !isLastRound
+        ? room.app.currentRound + 1
+        : room.app.currentRound;
+      const nextOwner = room.settings.clueMode === "turn"
+        ? participantIds.find((playerId) => (
+            !clues.some((clue) => (
+              clue.round === nextRound
+              && clue.playerId === playerId
+            ))
+          )) ?? null
+        : null;
+      return {
+        phase: roundComplete && isLastRound ? "vote" : "clue",
+        app: {
+          ...room.app,
+          clues,
+          currentRound: nextRound,
+        },
+        timer: "reset",
+        timerOwnerPlayerId: nextOwner,
+        timedOutPlayerIds,
+      };
+    }
+    if (room.phase === "vote") {
+      const timedOutPlayerIds = participantIds.filter(
+        (playerId) => !room.app.votes[playerId],
+      );
+      if (timedOutPlayerIds.length === 0) {
+        throw new Error("TIMER_TIMEOUT_PLAYERS_INVALID");
+      }
+      const votes = { ...room.app.votes };
+      for (const playerId of timedOutPlayerIds) {
+        votes[playerId] = participantIds.find(
+          (targetId) => targetId !== playerId,
+        ) ?? playerId;
+      }
+      const tally = tallyGameSdkVotes(votes, participantIds);
+      const accusedId = tally.leaderIds[0] ?? null;
+      const wolfWasAccused = room.app.wolfIds.includes(accusedId ?? "");
+      return {
+        phase: wolfWasAccused ? "wolfGuess" : "result",
+        app: {
+          ...room.app,
+          votes,
+          accusedId,
+          winner: wolfWasAccused ? null : "wolf",
+        },
+        timer: wolfWasAccused ? "reset" : "stop",
+        timerOwnerPlayerId: wolfWasAccused ? accusedId : null,
+        timedOutPlayerIds,
+        ...(!wolfWasAccused ? {
+          standardResult: wordWolfSdkStandardResult(room, "wolf"),
+        } : {}),
+      };
+    }
+    if (room.phase === "wolfGuess") {
+      const timedOutPlayerId =
+        room.app.accusedId ?? room.app.wolfIds[0];
+      if (!timedOutPlayerId) {
+        throw new Error("TIMER_TIMEOUT_PLAYERS_INVALID");
+      }
+      return {
+        phase: "result",
+        app: { ...room.app, winner: "village" },
+        timer: "stop",
+        timerOwnerPlayerId: null,
+        timedOutPlayerIds: [timedOutPlayerId],
+        standardResult: wordWolfSdkStandardResult(room, "village"),
+      };
+    }
+    throw new Error("TIMER_EXPIRY_UNSUPPORTED_PHASE");
   },
 
   async createAppState(input, context) {
@@ -120,6 +255,9 @@ export const wordWolfSdkAppSet = defineGameSdkOnlineRoomAppSet<
             .filter((player) => roles[player.id] === "wolf")
             .map((player) => player.id),
         },
+        timerOwnerPlayerId: room.settings.clueMode === "turn"
+          ? room.players[0]?.id ?? null
+          : null,
       };
     }
     if (command.type === "wordwolf/submit-clue") {
@@ -156,6 +294,21 @@ export const wordWolfSdkAppSet = defineGameSdkOnlineRoomAppSet<
             : app.currentRound,
         },
         timer: "reset",
+        timerOwnerPlayerId: (
+          roundComplete && isLastRound
+          || room.settings.clueMode === "simultaneous"
+        )
+          ? null
+          : room.players.find((player) => (
+              !clues.some((clue) => (
+                clue.round === (
+                  roundComplete && !isLastRound
+                    ? app.currentRound + 1
+                    : app.currentRound
+                )
+                && clue.playerId === player.id
+              ))
+            ))?.id ?? null,
       };
     }
     if (command.type === "wordwolf/vote") {
@@ -183,6 +336,7 @@ export const wordWolfSdkAppSet = defineGameSdkOnlineRoomAppSet<
           phase: "vote",
           app: { ...app, votes },
           timer: "reset",
+          timerOwnerPlayerId: null,
         };
       }
       const tally = tallyGameSdkVotes(votes, participantIds);
@@ -197,6 +351,10 @@ export const wordWolfSdkAppSet = defineGameSdkOnlineRoomAppSet<
           winner: wolfWasAccused ? null : "wolf",
         },
         timer: wolfWasAccused ? "reset" : "stop",
+        timerOwnerPlayerId: wolfWasAccused ? accusedId : null,
+        ...(!wolfWasAccused ? {
+          standardResult: wordWolfSdkStandardResult(room, "wolf"),
+        } : {}),
       };
     }
     if (command.type === "wordwolf/guess") {
@@ -214,6 +372,10 @@ export const wordWolfSdkAppSet = defineGameSdkOnlineRoomAppSet<
           winner: correct ? "wolf" : "village",
         },
         timer: "stop",
+        standardResult: wordWolfSdkStandardResult(
+          room,
+          correct ? "wolf" : "village",
+        ),
       };
     }
     throw new Error("UNKNOWN_COMMAND");

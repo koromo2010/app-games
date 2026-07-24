@@ -99,6 +99,11 @@ Game Fieldsがpersonal／Game Fields提供枠／共有無料枠、provider fallb
 
 `manifest.settings` is the app-owned declaration for the shared room settings screen. The Platform renders only the declared fields; it does not add maximum-player or round-count inputs automatically.
 
+`manifest.rules` is the app-owned localized rule list. The shared Shell renders
+these rules without requiring a second game-specific rules panel. Signed-in
+players may save the current declared settings as their defaults for the next
+room; undeclared keys and invalid option values are discarded by the Platform.
+
 Every `online-room` manifest must declare exactly one setting with `platformRole: "time-limit"`. The app owns that setting's `defaultValue` and `options`, including whether `0` is offered as no limit. Other fields are optional. Use `platformRole: "maximum-players"` or `"round-count"` only when the shared shell needs those meanings.
 
 ```ts
@@ -126,6 +131,15 @@ const appSet = defineGameSdkOnlineRoomAppSet({
   // ...
   timer: {
     durationSeconds: (settings) => settings.timeLimitSeconds,
+    graceMs: 1_500,
+  },
+  expireAppTurn(room) {
+    return {
+      phase: "playing",
+      app: applyServerTimeout(room.app),
+      timer: "reset",
+      timedOutPlayerIds: [currentPlayerId(room)],
+    };
   },
   applyAppCommand(room, command, context) {
     const next = applyAcceptedTurn(room, command, context);
@@ -139,6 +153,36 @@ const appSet = defineGameSdkOnlineRoomAppSet({
 ```
 
 ゲーム固有クライアントはtimerの表示位置と見た目を選べますが、ブラウザから締切時刻や残り秒数を正本として送信しません。
+
+正式Room Shellはdeadlineと`turnSequence`だけを使って
+`room/expire-timer`を要求します。Runtimeはdeadline＋graceをサーバー時刻
+で再検証し、2回連続で時間切れになった本人だけを5秒へ短縮します。
+短縮解除は本人の`room/recover-timeout`だけです。
+
+## Standard result and platform persistence
+
+ゲーム終了transitionは`standardResult`へ全参加者の順位・得点・勝者・終了理由
+を返します。Platformはこの契約を共通結果、戦績、レーティング、
+プレイバックへ一度だけ保存します。結果がない場合、Shellは参加順から
+仮順位や仮得点を生成しません。
+
+```ts
+standardResult: defineGameSdkStandardResult({
+  winnerIds: [winnerId],
+  rankings: room.players.map((player) => ({
+    participantId: player.id,
+    rank: player.id === winnerId ? 1 : 2,
+    score: scores[player.id] ?? 0,
+  })),
+  reason: "target-reached",
+}, {
+  participantIds: room.players.map((player) => player.id),
+})
+```
+
+承認済みonline-roomゲームは`/sdk-games/<game-id>`の正式Shellで動作します。
+Cookie認証、Redis CAS、active room、一覧、Realtime、観戦grant、DEBUG権限、
+結果保存はPlatformが所有し、ゲームpackageや隔離Previewは直接書き込みません。
 
 ## Playing cards
 

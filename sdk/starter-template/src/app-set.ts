@@ -3,6 +3,7 @@ import {
 } from "@game-fields/game-sdk/runtime";
 import {
   assertGameSdkCanStart,
+  defineGameSdkStandardResult,
   gameSdkPlayerSeat,
 } from "@game-fields/game-sdk/modules";
 import type {
@@ -41,6 +42,21 @@ export const myFirstGameAppSet = defineGameSdkOnlineRoomAppSet<
       return settings.timeLimitSeconds;
     },
   },
+  expireAppTurn(room) {
+    const count = room.app.count + 1;
+    return {
+      phase: count >= room.settings.target ? "result" : "playing",
+      app: {
+        count,
+        lastActorPlayerId: room.timer?.ownerPlayerId ?? room.hostPlayerId,
+      },
+      timer: count >= room.settings.target ? "stop" : "reset",
+      timerOwnerPlayerId: room.hostPlayerId,
+      timedOutPlayerIds: [
+        room.timer?.ownerPlayerId ?? room.hostPlayerId,
+      ],
+    };
+  },
 
   createAppState() {
     return {
@@ -69,6 +85,7 @@ export const myFirstGameAppSet = defineGameSdkOnlineRoomAppSet<
       return {
         phase: "playing",
         app: room.app,
+        timerOwnerPlayerId: room.hostPlayerId,
       };
     }
     if (room.phase !== "playing") throw new Error("INVALID_PHASE");
@@ -80,6 +97,20 @@ export const myFirstGameAppSet = defineGameSdkOnlineRoomAppSet<
         lastActorPlayerId: context.actor.playerId,
       },
       timer: count >= room.settings.target ? "stop" : "reset",
+      timerOwnerPlayerId: room.hostPlayerId,
+      ...(count >= room.settings.target ? {
+        standardResult: defineGameSdkStandardResult({
+          winnerIds: [context.actor.playerId],
+          rankings: room.players.map((player) => ({
+            participantId: player.id,
+            rank: player.id === context.actor.playerId ? 1 : 2,
+            score: player.id === context.actor.playerId ? count : 0,
+          })),
+          reason: "target-reached",
+        }, {
+          participantIds: room.players.map((player) => player.id),
+        }),
+      } : {}),
     };
   },
 

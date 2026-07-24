@@ -26,6 +26,7 @@ export function gameFieldsPresetRuntimeSource() {
     gameAdapterReady: false,
     viewerId: "host",
     settings: {},
+    standardResult: null,
     timer: {
       durationSeconds: 0,
       startedAt: null,
@@ -273,6 +274,54 @@ export function gameFieldsPresetRuntimeSource() {
     startTimerInterval();
     render(); emit("phase:set", { phase });
   };
+  const submitStandardResult = (payload = {}) => {
+    const source = payload.result && typeof payload.result === "object"
+      ? payload.result
+      : payload;
+    const rankings = Array.isArray(source.rankings)
+      ? source.rankings.flatMap((candidate) => {
+          if (!candidate || typeof candidate !== "object") return [];
+          const seat = Number.isSafeInteger(candidate.seat) ? candidate.seat : -1;
+          const rank = Number.isSafeInteger(candidate.rank) ? candidate.rank : 0;
+          const score = Number.isFinite(candidate.score) ? candidate.score : 0;
+          if (seat < 0 || seat >= state.players.length || rank < 1) return [];
+          return [{
+            seat,
+            displayName: state.players[seat]?.name || ("SEAT " + (seat + 1)),
+            rank,
+            score,
+            isSelf: state.players[seat]?.id === state.viewerId
+          }];
+        })
+      : [];
+    const winnerSeats = Array.isArray(source.winnerSeats)
+      ? [...new Set(source.winnerSeats.filter((seat) => (
+          Number.isSafeInteger(seat)
+          && seat >= 0
+          && seat < state.players.length
+        )))]
+      : [];
+    const reason = typeof source.reason === "string"
+      ? source.reason.trim().slice(0, 200)
+      : "";
+    if (
+      !reason
+      || rankings.length !== state.players.length
+      || new Set(rankings.map((row) => row.seat)).size !== rankings.length
+      || winnerSeats.some((seat) => !rankings.some((row) => row.seat === seat))
+    ) {
+      notify("共通結果の形式が正しくありません");
+      emit("result:rejected");
+      return;
+    }
+    state.standardResult = { winnerSeats, rankings, reason };
+    state.phase = "result";
+    state.timer.startedAt = null;
+    state.timer.deadlineAt = null;
+    startTimerInterval();
+    render();
+    emit("result:submitted");
+  };
   const abort = () => {
     if (!state.debugAccess) return notify("デバッグ権限が必要です");
     adapters.forEach((adapter) => adapter.abort?.());
@@ -315,7 +364,9 @@ export function gameFieldsPresetRuntimeSource() {
     if (name === "dummy:remove") return removeDummy();
     if (name === "viewer:set") { state.viewerId = payload.viewerId || "host"; render(); emit(name); return; }
     if (name === "phase:set") return setPhase(payload.phase);
+    if (name === "result:submit") return submitStandardResult(payload);
     if (name === "game:start") {
+      state.standardResult = null;
       adapters.forEach((adapter) => adapter.start?.());
       state.phase = "playing";
       resetTurnTimer();
@@ -325,7 +376,7 @@ export function gameFieldsPresetRuntimeSource() {
     }
     if (name === "game:abort") return abort();
     if (name === "game:auto-progress") { adapters.forEach((adapter) => adapter.autoProgress?.()); emit(name); return; }
-    if (name === "game:rematch") { adapters.forEach((adapter) => adapter.rematch?.()); setPhase("lobby"); return; }
+    if (name === "game:rematch") { state.standardResult = null; adapters.forEach((adapter) => adapter.rematch?.()); setPhase("lobby"); return; }
     emit(name, { payload });
   };
   const requestResource = (resource, operation, request, timeoutMs, timeoutError) => new Promise((resolve, reject) => {
@@ -448,7 +499,7 @@ export function gameFieldsPresetRuntimeSource() {
       return;
     }
     if (!message || message.type !== "game-fields:command" || typeof message.name !== "string") return;
-    if (!["room:hydrate", "settings:sync", "timer:sync", "debug:toggle", "dummy:add", "dummy:remove", "viewer:set", "phase:set", "game:start", "game:abort", "game:auto-progress", "game:rematch"].includes(message.name)) return;
+    if (!["room:hydrate", "settings:sync", "timer:sync", "debug:toggle", "dummy:add", "dummy:remove", "viewer:set", "phase:set", "result:submit", "game:start", "game:abort", "game:auto-progress", "game:rematch"].includes(message.name)) return;
     command(message.name, message.payload && typeof message.payload === "object" ? message.payload : {});
   });
   const boot = () => {

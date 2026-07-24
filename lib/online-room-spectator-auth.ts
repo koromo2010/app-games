@@ -1,9 +1,11 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { onlineRoomRealtimeGames, type OnlineRoomRealtimeGame } from "./online-room-realtime-protocol.ts";
+import {
+  normalizeOnlineRoomRealtimeGame,
+  type OnlineRoomRealtimeGame,
+} from "./online-room-realtime-protocol.ts";
 
 export const onlineRoomSpectatorCookieName = "game-fields-spectator";
 export const onlineRoomSpectatorGrantMaxAgeSeconds = 6 * 60 * 60;
-const onlineRoomRealtimeGameSet = new Set<string>(onlineRoomRealtimeGames);
 
 type SpectatorGrant = {
   version: 1;
@@ -37,7 +39,7 @@ export function parseOnlineRoomSpectatorGrant(token: string, now = Date.now()): 
   if (expected.length !== received.length || !timingSafeEqual(expected, received)) return null;
   try {
     const payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")) as Partial<SpectatorGrant>;
-    return payload.version === 1 && typeof payload.game === "string" && onlineRoomRealtimeGameSet.has(payload.game) && typeof payload.code === "string" && typeof payload.playerId === "string" && typeof payload.roomCreatedAt === "number" && typeof payload.expiresAt === "number" && payload.expiresAt > now
+    return payload.version === 1 && normalizeOnlineRoomRealtimeGame(payload.game) && typeof payload.code === "string" && typeof payload.playerId === "string" && typeof payload.roomCreatedAt === "number" && typeof payload.expiresAt === "number" && payload.expiresAt > now
       ? payload as SpectatorGrant
       : null;
   } catch {

@@ -104,12 +104,16 @@ test("platform adapterは認証identityを注入し、Redis CASで小規模ゲ�
   const harness = installRedisHarness();
   let identity = host;
   let now = 1_000;
+  const savedRevisions: number[] = [];
   const adapter = createAuthenticatedGameSdkPlatformAdapter({
     module: sdkCountUpServerModule,
     persistence: createRedisGameSdkPlatformPersistence<SdkCountUpRoom>(sdkCountUpServerModule.manifest.id),
     resolveIdentity: async () => identity,
     now: () => ++now,
     createRequestId: () => `request-${now}`,
+    onRoomSaved: async (_previous, next) => {
+      savedRevisions.push(next.revision);
+    },
   });
 
   try {
@@ -190,6 +194,7 @@ test("platform adapterは認証identityを注入し、Redis CASで小規模ゲ�
     assert.equal(JSON.stringify(safeView).includes("lastActorPlayerId"), false);
     assert.equal(JSON.stringify(safeView).includes(host.playerId), false);
     assert.equal(JSON.stringify(safeView).includes(player.playerId), false);
+    assert.deepEqual(savedRevisions, [2, 3, 4]);
   } finally {
     harness.restore();
   }

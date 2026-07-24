@@ -58,6 +58,26 @@ const ratingEventKey = (eventId: string) => `rating-event:v1:${eventId}`;
 type RatingOutcome = { playerId: string; won: boolean; performanceScore?: number };
 type RecordedRating = { before: number; after: number; change: number };
 
+export type StandardPlatformGameResultInput = {
+  gameType: PlayerStatsGameType;
+  eventId: string;
+  roomCode: string;
+  roomCreatedAt: number;
+  gameNumber: number;
+  startedAt?: number | null;
+  finishedAt: number;
+  players: Array<{ id: string; name: string }>;
+  winnerIds: string[];
+  rankings: Array<{
+    participantId: string;
+    rank: number;
+    score: number;
+  }>;
+  reason: string;
+  supportsRating: boolean;
+  variantKey?: string;
+};
+
 async function recordGameRatings(gameType: PlayerStatsGameType, eventId: string, outcomes: RatingOutcome[], cooperative = false) {
   const ids = outcomes.map((item) => item.playerId);
   const [stored, storedGames] = await Promise.all([
@@ -149,6 +169,77 @@ async function observeStatsRecord(fields: ObservabilityFields, record: () => Pro
     emitObservabilityEvent("error", "stats.record", { ...fields, outcome: "failed", errorCode: observabilityErrorCode(error) });
     throw error;
   }
+}
+
+/** Records a reviewed SDK result through the same idempotent stats pipeline. */
+export async function recordStandardPlatformGameResults(
+  input: StandardPlatformGameResultInput,
+) {
+  const rankingByPlayer = new Map(
+    input.rankings.map((ranking) => [ranking.participantId, ranking]),
+  );
+  if (
+    input.players.length === 0
+    || input.players.some((player) => !rankingByPlayer.has(player.id))
+  ) return 0;
+  const winnerIds = new Set(input.winnerIds);
+  return observeStatsRecord({
+    game: input.gameType,
+    operation: "record-results",
+    roomRef: observabilityRef("room", input.roomCode),
+    eventRef: observabilityRef("event", input.eventId),
+    gameNumber: input.gameNumber,
+    playerCount: input.players.length,
+  }, async () => {
+    const [, ratings] = await Promise.all([
+      recordGameDurationSample({
+        id: input.eventId,
+        gameType: input.gameType,
+        startedAt: input.startedAt,
+        finishedAt: input.finishedAt,
+        playerCount: input.players.length,
+        variantKey: input.variantKey,
+      }),
+      input.supportsRating
+        ? recordGameRatings(
+            input.gameType,
+            input.eventId,
+            input.players.map((player) => ({
+              playerId: player.id,
+              won: winnerIds.has(player.id),
+              performanceScore: rankingByPlayer.get(player.id)?.score ?? 0,
+            })),
+          )
+        : Promise.resolve(new Map<string, RecordedRating>()),
+    ]);
+    return recordPlayerResults(input.players.map((player) => {
+      const ranking = rankingByPlayer.get(player.id)!;
+      const won = winnerIds.has(player.id);
+      const rating = ratings.get(player.id);
+      return {
+        schemaVersion: 1,
+        id: `${input.eventId}:${player.id}`,
+        gameType: input.gameType,
+        roomCode: input.roomCode,
+        roomCreatedAt: input.roomCreatedAt,
+        gameNumber: input.gameNumber,
+        finishedAt: input.finishedAt,
+        playerId: player.id,
+        playerName: player.name,
+        won,
+        resultLabel: won ? "勝利" : `${ranking.rank}位`,
+        playerCount: input.players.length,
+        details: {
+          rank: ranking.rank,
+          score: ranking.score,
+          reason: input.reason,
+        },
+        ratingBefore: rating?.before,
+        ratingAfter: rating?.after,
+        ratingChange: rating?.change,
+      } satisfies PlayerGameResult;
+    }));
+  });
 }
 
 function wolfIds(room: WordWolfRoom) { return Array.isArray(room.wolfIds) && room.wolfIds.length > 0 ? room.wolfIds : room.wolfId ? [room.wolfId] : []; }
