@@ -16,6 +16,9 @@ import { OnlineRoomLifecycleActions } from "@/app/components/OnlineRoomLifecycle
 import { PaidLlmAccessButton } from "@/app/components/PaidLlmAccessButton";
 import { PlayingCard } from "@/app/components/PlayingCard";
 import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
+import {
+  useSdkPreviewSessionRequired,
+} from "@/app/sdk-preview/SdkPreviewSessionGate";
 import { aiActivityFetch } from "@/lib/ai-activity-client";
 import type { DrawingStroke } from "@/lib/drawing-canvas";
 import { createStandardPlayingCardDeck } from "@/lib/playing-cards";
@@ -133,6 +136,7 @@ async function generatePreviewLlm(
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
       body: JSON.stringify({
         creatorSlug,
         gameId,
@@ -146,7 +150,9 @@ async function generatePreviewLlm(
   } | null;
   if (!response.ok || !payload?.response) {
     throw new Error(
-      typeof payload?.error === "string"
+      response.status === 401
+        ? "PLAYER_AUTH_REQUIRED"
+        : typeof payload?.error === "string"
         ? payload.error
         : "GAME_SDK_LLM_FAILED",
     );
@@ -163,6 +169,7 @@ async function requestPreviewContentSource(
   const response = await fetch("/api/sdk-preview/content-source", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
     cache: "no-store",
     body: JSON.stringify({
       creatorSlug,
@@ -177,7 +184,9 @@ async function requestPreviewContentSource(
   } | null;
   if (!response.ok || !payload || !("response" in payload)) {
     throw new Error(
-      typeof payload?.error === "string"
+      response.status === 401
+        ? "PLAYER_AUTH_REQUIRED"
+        : typeof payload?.error === "string"
         ? payload.error
         : "GAME_SDK_CONTENT_FAILED",
     );
@@ -250,6 +259,7 @@ export function SdkPreviewGameShell({
   moduleProfile,
   settingDefinitions,
 }: Props) {
+  const requirePreviewSession = useSdkPreviewSessionRequired();
   const frameRef = useRef<HTMLIFrameElement>(null);
   const logSequenceRef = useRef(0);
   const [surface, setSurface] = useState<PreviewSurface>("entry");
@@ -449,6 +459,12 @@ export function SdkPreviewGameShell({
             response,
           }, "*");
         }).catch((error: unknown) => {
+          if (
+            error instanceof Error
+            && error.message === "PLAYER_AUTH_REQUIRED"
+          ) {
+            requirePreviewSession();
+          }
           target?.postMessage({
             type: "game-fields:resource-response",
             resource: "content-source",
@@ -491,6 +507,12 @@ export function SdkPreviewGameShell({
             response,
           }, "*");
         }).catch((error: unknown) => {
+          if (
+            error instanceof Error
+            && error.message === "PLAYER_AUTH_REQUIRED"
+          ) {
+            requirePreviewSession();
+          }
           target?.postMessage({
             type: "game-fields:resource-response",
             resource: "llm",
@@ -544,7 +566,14 @@ export function SdkPreviewGameShell({
     };
     window.addEventListener("message", receive);
     return () => window.removeEventListener("message", receive);
-  }, [creatorSlug, gameId, moduleProfile, players.length, surface]);
+  }, [
+    creatorSlug,
+    gameId,
+    moduleProfile,
+    players.length,
+    requirePreviewSession,
+    surface,
+  ]);
 
   const enterRoom = (input: {
     code: string;
@@ -786,6 +815,10 @@ export function SdkPreviewGameShell({
       );
     } catch (error) {
       const code = error instanceof Error ? error.message : "";
+      if (code === "PLAYER_AUTH_REQUIRED") {
+        requirePreviewSession();
+        return;
+      }
       setLabResult(
         code === "GAME_SDK_LLM_UNAVAILABLE"
           ? "利用できるAI APIがありません。プレイヤーメニューの「API」から接続してください。"
@@ -820,7 +853,14 @@ export function SdkPreviewGameShell({
         : contentDifficulty;
       setContentSample(`${surface}（返却難易度: ${actualDifficulty}）`);
       setLabResult(`共通単語DBから「${contentDifficulty}」設定で候補を取得しました。`);
-    } catch {
+    } catch (error) {
+      if (
+        error instanceof Error
+        && error.message === "PLAYER_AUTH_REQUIRED"
+      ) {
+        requirePreviewSession();
+        return;
+      }
       setLabResult("共通単語DBから素材を取得できませんでした。ログインと接続設定を確認してください。");
     } finally {
       setContentSamplePending(false);

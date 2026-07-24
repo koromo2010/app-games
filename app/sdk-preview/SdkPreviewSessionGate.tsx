@@ -1,9 +1,21 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 
 type SessionState = "checking" | "ready" | "required" | "failed";
+
+const SdkPreviewSessionRequiredContext = createContext<() => void>(() => {});
+
+export function useSdkPreviewSessionRequired() {
+  return useContext(SdkPreviewSessionRequiredContext);
+}
 
 export function SdkPreviewSessionGate({
   children,
@@ -15,6 +27,9 @@ export function SdkPreviewSessionGate({
   portalHref: string;
 }) {
   const [state, setState] = useState<SessionState>("checking");
+  const requireSession = useCallback(() => {
+    setState("required");
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -32,6 +47,7 @@ export function SdkPreviewSessionGate({
       const exchange = await fetch("/api/sdk-preview/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         cache: "no-store",
         body: JSON.stringify({
           creatorSlug,
@@ -43,6 +59,7 @@ export function SdkPreviewSessionGate({
       return fetch("/api/sdk-preview/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
         cache: "no-store",
         body: JSON.stringify({ creatorSlug }),
       });
@@ -65,7 +82,13 @@ export function SdkPreviewSessionGate({
     };
   }, [creatorSlug]);
 
-  if (state === "ready") return children;
+  if (state === "ready") {
+    return (
+      <SdkPreviewSessionRequiredContext.Provider value={requireSession}>
+        {children}
+      </SdkPreviewSessionRequiredContext.Provider>
+    );
+  }
   return (
     <main className="grid min-h-screen place-items-center bg-slate-950 px-4 text-white">
       <section className="w-full max-w-lg rounded-2xl border border-white/15 bg-white/5 p-6 text-center shadow-2xl">

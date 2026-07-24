@@ -178,6 +178,30 @@ test("SDK Portal exchanges its account session for a scoped Preview API session"
   assert.doesNotMatch(previewSession, /setPlayerAuthCookie/);
   assert.match(portalPage, /createSdkPreviewAccountLinkCode/);
   assert.match(portalPage, /sdkPreviewLink/);
+  assert.match(gate, /credentials: "same-origin"/);
+  assert.match(gate, /useSdkPreviewSessionRequired/);
+});
+
+test("SDK preview stops the game shell when a resource session expires", () => {
+  const shell = readFileSync(
+    "app/sdk-preview/[creatorSlug]/games/[gameId]/SdkPreviewGameShell.tsx",
+    "utf8",
+  );
+  const llmRoute = readFileSync(
+    "app/api/sdk-preview/llm/route.ts",
+    "utf8",
+  );
+  assert.match(shell, /useSdkPreviewSessionRequired/);
+  assert.match(shell, /response\.status === 401\s+\? "PLAYER_AUTH_REQUIRED"/);
+  assert.equal(
+    shell.match(/requirePreviewSession\(\)/g)?.length,
+    4,
+    "content bridge, LLM bridge, and both module-lab actions must stop on auth expiry",
+  );
+  assert.match(
+    llmRoute,
+    /code === "PLAYER_AUTH_REQUIRED"[\s\S]*json\(\{ error: code \}, 401\)/,
+  );
 });
 
 test("every required SDK module resolves to a concrete preview implementation", () => {

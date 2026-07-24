@@ -3396,3 +3396,32 @@
 
 - dev deploymentの完了状態と、ログイン済み複数ブラウザでの実機E2Eは別途確認する。
 - `main`、本番SDK、npm package versionは今回更新しない。
+
+## 2026-07-24 — SDK Previewの認証切れ再調査
+
+### 利用者からの報告
+
+- develop反映後も、固定した`test10-1 / ai-word-guess`で1人開始後に秘密語を取得できず、AI APIも待機のままになる検証結果が示された。
+- 回帰確認用クライアントは改版せず、SDK／共通側で原因を調査する。
+
+### 調査・判断
+
+- Vercelの本体dev実行ログで、同時刻の`POST /api/sdk-preview/content-source`が401、`POST /api/sdk-preview/session`も401だった。Word DBのSQL・抽選処理へ到達する前の認証拒否である。
+- SDK Portal側の同ゲームURLも307を返し、Cloud Browserは本体のログイン画面へ転送された。検証ブラウザには有効なPortal本人セッションがなく、署名fragmentからPreview限定Cookieへの交換に成功した記録もなかった。
+- 認証を不要にして内部素材やAIを公開するのではなく、Preview resourceの401を共通認証切れとして扱い、ゲーム固有エラーへ埋没させない。
+
+### 実装
+
+- `SdkPreviewSessionGate`に共通の再認証要求contextを追加し、Word DBまたはAI APIが401を返した時点でゲームShellを停止して、SDK Portalからの再ログイン案内へ戻す。
+- session交換・検証、Word DB、AI APIの同一origin要求へCookie送信を明示した。
+- `/api/sdk-preview/llm`の401を`PLAYER_AUTH_REQUIRED`へ統一した。
+- AIことば当てのコード、設定、保存済みrevisionは変更していない。
+
+### 検証・保留
+
+- `npm test`成功（502件）。Preview限定セッション交換と、resource認証切れでShellを停止する回帰テストを含む。
+- `npm run lint`成功。
+- 本体、SDK Portal、隔離PreviewのProduction build成功。
+- SDK配布tarballの外部install検査と、starterの型・契約・完走・提出ZIP検査に成功。
+- Cloud Browserはログイン画面で停止しているため、有効な本人セッションを使ったWord DB本文とAI応答の最終E2Eは未確認。資格情報を入力せず、認証済み利用者操作を残す。
+- GitHubへのpushとdev deploymentは未実施。`main`、本番SDK、npm package versionは変更しない。

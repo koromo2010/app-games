@@ -66,6 +66,9 @@ function sdkLlmErrorResponse(error: unknown) {
   ) {
     return json({ error: "GAME_SDK_LLM_UNAVAILABLE" }, 503);
   }
+  if (code === "PLAYER_AUTH_REQUIRED") {
+    return json({ error: code }, 401);
+  }
   if (
     code.startsWith("GAME_SDK_LLM_INVALID_")
     || code === "GAME_SDK_LLM_HIGH_QUALITY_NOT_ALLOWED"
