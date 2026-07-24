@@ -90,6 +90,14 @@ const manifest = defineGameManifest({
   supportsReplay: false,
   supportsRating: false,
   usesLlm: false,
+  settings: [{
+    key: "timeLimitSeconds",
+    label: { ja: "制限時間", en: "Time limit" },
+    type: "select",
+    defaultValue: 60,
+    platformRole: "time-limit",
+    options: [0, 30, 60],
+  }],
 });
 const module = defineGameServerModule({
   manifest,

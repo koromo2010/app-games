@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   GAME_SDK_VERSION,
   defineGameManifest,
+  parseGameSdkSettingDefinitions,
   type GameSdkStoredRoom,
 } from "@game-fields/game-sdk";
 import { createGameSdkMockRuntime, GameSdkRuntimeError } from "@game-fields/game-sdk/mock-runtime";
@@ -20,6 +21,14 @@ const manifest = defineGameManifest({
   supportsReplay: false,
   supportsRating: false,
   usesLlm: false,
+  settings: [{
+    key: "timeLimitSeconds",
+    label: { ja: "制限時間", en: "Time limit" },
+    type: "select",
+    defaultValue: 60,
+    platformRole: "time-limit",
+    options: [0, 30, 60],
+  }],
 });
 
 type Room = GameSdkStoredRoom & {
@@ -76,6 +85,61 @@ test("SDK manifest validates its version, id, localized titles and player range"
   assert.throws(
     () => defineGameManifest({ ...manifest, minimumPlayers: 5, maximumPlayers: 4 }),
     /maximumPlayers/,
+  );
+  assert.throws(
+    () => defineGameManifest({ ...manifest, settings: [] }),
+    /settings/,
+  );
+});
+
+test("SDK settings require only time-limit while each app controls defaults and choices", () => {
+  const settings = parseGameSdkSettingDefinitions([{
+    key: "timeLimitSeconds",
+    label: { ja: "回答時間", en: "Answer time" },
+    type: "select",
+    defaultValue: 45,
+    platformRole: "time-limit",
+    options: [
+      { value: 0, label: { ja: "制限なし", en: "Unlimited" } },
+      15,
+      45,
+      180,
+    ],
+  }, {
+    key: "answerMode",
+    label: { ja: "回答方式", en: "Answer mode" },
+    type: "select",
+    defaultValue: "yes-no",
+    options: [
+      { value: "yes-no", label: { ja: "はい・いいえ", en: "Yes or no" } },
+      { value: "distance", label: { ja: "近さ", en: "Distance" } },
+    ],
+  }], { requireTimeLimit: true });
+  assert.deepEqual(settings.map((setting) => setting.key), [
+    "timeLimitSeconds",
+    "answerMode",
+  ]);
+  assert.equal(settings.some((setting) => setting.platformRole === "maximum-players"), false);
+  assert.equal(settings.some((setting) => setting.platformRole === "round-count"), false);
+  assert.equal(settings[0]?.defaultValue, 45);
+  assert.deepEqual(settings[0]?.options, [
+    { value: 0, label: { ja: "制限なし", en: "Unlimited" } },
+    15,
+    45,
+    180,
+  ]);
+  assert.throws(
+    () => parseGameSdkSettingDefinitions([settings[1]], {
+      requireTimeLimit: true,
+    }),
+    /time-limit/,
+  );
+  assert.throws(
+    () => parseGameSdkSettingDefinitions([{
+      ...settings[0],
+      options: [45, 3601],
+    }], { requireTimeLimit: true }),
+    /0 to 3600/,
   );
 });
 

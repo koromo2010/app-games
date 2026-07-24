@@ -27,13 +27,22 @@ export const sdkCountUpManifest = defineGameManifest({
     key: "target",
     label: { ja: "ゴール", en: "Target" },
     type: "number",
+    defaultValue: 3,
     minimum: 2,
     maximum: 10,
+  }, {
+    key: "timeLimitSeconds",
+    label: { ja: "1手の制限時間", en: "Turn time limit" },
+    type: "select",
+    defaultValue: 60,
+    platformRole: "time-limit",
+    options: [0, 30, 60, 90, 120],
   }],
 });
 
 type SdkCountUpSettings = {
   target: number;
+  timeLimitSeconds: number;
 };
 
 type SdkCountUpAppState = {
@@ -83,13 +92,22 @@ export const sdkCountUpAppSet = defineGameSdkOnlineRoomAppSet<
   manifest: sdkCountUpManifest,
   defaultSettings: {
     target: 3,
+    timeLimitSeconds: 60,
   },
   normalizeSettings(settings) {
     return {
       target: Number.isSafeInteger(settings.target)
         ? Math.min(10, Math.max(2, settings.target))
         : 3,
+      timeLimitSeconds: Number.isSafeInteger(settings.timeLimitSeconds)
+        ? Math.min(3600, Math.max(0, settings.timeLimitSeconds))
+        : 60,
     };
+  },
+  timer: {
+    durationSeconds(settings) {
+      return settings.timeLimitSeconds;
+    },
   },
   createAppState() {
     return {
@@ -123,6 +141,7 @@ export const sdkCountUpAppSet = defineGameSdkOnlineRoomAppSet<
         count,
         lastActorPlayerId: context.actor.playerId,
       },
+      timer: count >= room.settings.target ? "stop" : "reset",
     };
   },
   presentApp(room) {

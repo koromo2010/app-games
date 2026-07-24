@@ -88,6 +88,28 @@ async function answerQuestion(
 
 Game Fieldsがpersonal／Game Fields提供枠／共有無料枠、provider fallback、認証、レート制限、観測を処理します。Previewのゲーム固有iframeは事業者APIを直接呼ばず、外側Shellの`GameFieldsPreset.resources.llm.generate`から同じrequest／response契約を確認します。
 
+## Room settings
+
+`manifest.settings` is the app-owned declaration for the shared room settings screen. The Platform renders only the declared fields; it does not add maximum-player or round-count inputs automatically.
+
+Every `online-room` manifest must declare exactly one setting with `platformRole: "time-limit"`. The app owns that setting's `defaultValue` and `options`, including whether `0` is offered as no limit. Other fields are optional. Use `platformRole: "maximum-players"` or `"round-count"` only when the shared shell needs those meanings.
+
+```ts
+settings: [
+  {
+    key: "timeLimitSeconds",
+    label: { ja: "1手の制限時間", en: "Turn time limit" },
+    type: "select",
+    defaultValue: 45,
+    platformRole: "time-limit",
+    options: [0, 15, 45, 90],
+    unit: { ja: "秒", en: "s" },
+  },
+]
+```
+
+`defaultSettings` must contain exactly the same keys and values as each declaration's `defaultValue`. The shared screen saves the selected values to room settings and exposes the same values to the app.
+
 ## Turn timer
 
 AppSetは制限時間の取得方法だけを登録し、正常に1手を採用したtransitionで`timer: "reset"`を返します。SDK基本セットがサーバー時刻から次の`startedAt`と`deadlineAt`を生成し、`RoomView.common.timer`へ投影します。拒否されたCommand、入力エラー、AI失敗では保存transitionがないためdeadlineも変わりません。

@@ -10,6 +10,7 @@ export type WordWolfSdkSettings = {
   roundsTotal: number;
   wolfCount: number;
   clueMode: "turn" | "simultaneous";
+  timeLimitSeconds: number;
 };
 
 export type WordWolfSdkClue = {
@@ -68,6 +69,9 @@ export function normalizeWordWolfSdkSettings(
     roundsTotal: Math.max(1, Math.min(4, Math.floor(settings.roundsTotal))),
     wolfCount: Math.max(1, Math.floor(settings.wolfCount)),
     clueMode: settings.clueMode === "simultaneous" ? "simultaneous" : "turn",
+    timeLimitSeconds: Number.isSafeInteger(settings.timeLimitSeconds)
+      ? Math.max(0, Math.min(3600, settings.timeLimitSeconds))
+      : 60,
   };
 }
 

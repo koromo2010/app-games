@@ -25,6 +25,7 @@ export function gameFieldsPresetRuntimeSource() {
     debugAccess: true,
     gameAdapterReady: false,
     viewerId: "host",
+    settings: {},
     timer: {
       durationSeconds: 0,
       startedAt: null,
@@ -224,6 +225,30 @@ export function gameFieldsPresetRuntimeSource() {
     startTimerInterval();
     emit("timer:turn-complete");
   };
+  const syncSettings = (payload = {}) => {
+    const source = payload.settings
+      && typeof payload.settings === "object"
+      && !Array.isArray(payload.settings)
+      ? payload.settings
+      : {};
+    state.settings = Object.fromEntries(
+      Object.entries(source)
+        .filter(([key, value]) => (
+          /^[a-z][A-Za-z0-9]*$/.test(key)
+          && (
+            typeof value === "boolean"
+            || (typeof value === "number" && Number.isFinite(value))
+            || typeof value === "string"
+          )
+        ))
+        .slice(0, 32)
+        .map(([key, value]) => [
+          key,
+          typeof value === "string" ? value.slice(0, 200) : value
+        ])
+    );
+    emit("settings:sync");
+  };
   const addDummy = () => {
     if (!state.debugAccess) return notify("デバッグ権限が必要です");
     const number = state.players.filter((player) => player.dummy).length + 1;
@@ -282,6 +307,7 @@ export function gameFieldsPresetRuntimeSource() {
   };
   const command = (name, payload = {}) => {
     if (name === "room:hydrate") return hydrateRoom(payload);
+    if (name === "settings:sync") return syncSettings(payload);
     if (name === "timer:sync") return syncTimer(payload);
     if (name === "timer:turn-complete") return resetTurnTimer();
     if (name === "debug:toggle") { state.debugOpen = !state.debugOpen; render(); emit(name); return; }
@@ -422,7 +448,7 @@ export function gameFieldsPresetRuntimeSource() {
       return;
     }
     if (!message || message.type !== "game-fields:command" || typeof message.name !== "string") return;
-    if (!["room:hydrate", "timer:sync", "debug:toggle", "dummy:add", "dummy:remove", "viewer:set", "phase:set", "game:start", "game:abort", "game:auto-progress", "game:rematch"].includes(message.name)) return;
+    if (!["room:hydrate", "settings:sync", "timer:sync", "debug:toggle", "dummy:add", "dummy:remove", "viewer:set", "phase:set", "game:start", "game:abort", "game:auto-progress", "game:rematch"].includes(message.name)) return;
     command(message.name, message.payload && typeof message.payload === "object" ? message.payload : {});
   });
   const boot = () => {

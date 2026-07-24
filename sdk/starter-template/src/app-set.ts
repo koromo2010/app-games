@@ -24,13 +24,22 @@ export const myFirstGameAppSet = defineGameSdkOnlineRoomAppSet<
   manifest: myFirstGameManifest,
   defaultSettings: {
     target: 3,
+    timeLimitSeconds: 60,
   },
   normalizeSettings(settings) {
     return {
       target: Number.isSafeInteger(settings.target)
         ? Math.min(10, Math.max(2, settings.target))
         : 3,
+      timeLimitSeconds: Number.isSafeInteger(settings.timeLimitSeconds)
+        ? Math.min(3600, Math.max(0, settings.timeLimitSeconds))
+        : 60,
     };
+  },
+  timer: {
+    durationSeconds(settings) {
+      return settings.timeLimitSeconds;
+    },
   },
 
   createAppState() {
@@ -70,6 +79,7 @@ export const myFirstGameAppSet = defineGameSdkOnlineRoomAppSet<
         count,
         lastActorPlayerId: context.actor.playerId,
       },
+      timer: count >= room.settings.target ? "stop" : "reset",
     };
   },
 

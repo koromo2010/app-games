@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { parseGameSdkSettingDefinitions } from "@game-fields/game-sdk";
 
 const root = resolve(import.meta.dirname, "..");
 const requiredFiles = [
@@ -49,6 +50,9 @@ if (!/^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?$/.test(previewMetadata.gameId ?? "")
 if (typeof previewMetadata.title !== "string" || !previewMetadata.title.trim() || previewMetadata.title.length > 120) {
   throw new Error("mock/preview.jsonのtitleが不正です。");
 }
+parseGameSdkSettingDefinitions(previewMetadata.settings, {
+  requireTimeLimit: true,
+});
 for (const forbiddenKey of ["modules", "moduleProfile", "disabledModules", "optionalModules"]) {
   if (Object.hasOwn(previewMetadata, forbiddenKey)) {
     throw new Error(`mock/preview.jsonからmodule採否「${forbiddenKey}」を指定できません。初期モックの三段階profileはPlatform側が所有します。`);

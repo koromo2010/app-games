@@ -10,6 +10,7 @@ import {
   validateInstanceSlug,
 } from "@/lib/instance-registry";
 import { saveMockFilesToGit } from "@/lib/mock-git-store";
+import { parseSdkMockPreviewManifest } from "@/lib/mock-preview-manifest";
 import {
   createSdkPortalHandshakeDescriptor,
   negotiateSdkPortalHandshake,
@@ -49,7 +50,7 @@ const tools = [
   { name: "check_creator_url", title: "制作者URLの空き確認", description: "Game Fields SDKの制作者URL名が利用可能か確認します。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "確認する制作者URL名" } }, required: ["slug"], additionalProperties: false } },
   { name: "reserve_creator_url", title: "制作者URLの予約", description: "ログイン中のGame Fieldsアカウント用に制作者URLを7日間予約します。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "予約する制作者URL名" }, displayName: { type: "string", description: "制作者の表示名" } }, required: ["slug", "displayName"], additionalProperties: false } },
   { name: "finalize_creator_url", title: "制作者URLの確定", description: "予約トークンを使い、制作者URLをログイン中のアカウントへ正式登録します。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "確定する制作者URL名" }, reservationToken: { type: "string", description: "予約時に発行されたトークン" } }, required: ["slug", "reservationToken"], additionalProperties: false } },
-  { name: "publish_mock", title: "ゲームモックの保存", description: "本人所有のSDK環境へ検査済みゲームモックを保存し、制作者トップURLと今回のゲームURLを返します。saved=trueとcreatorUrlが返るまで完成扱いにしないでください。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "本人所有の制作者URL名" }, gameId: { type: "string", description: "ゲームID" }, title: { type: "string", description: "ゲーム名" }, description: { type: "string", description: "ゲームの説明" }, files: { type: "object", description: "mock/直下を基準とする相対パスをキー、UTF-8本文を値とするファイル一覧。index.html、styles.css、mock.jsを必ず含めます。", additionalProperties: { type: "string" } } }, required: ["slug", "gameId", "title", "files"], additionalProperties: false } },
+  { name: "publish_mock", title: "ゲームモックの保存", description: "本人所有のSDK環境へ検査済みゲームモックを保存し、制作者トップURLと今回のゲームURLを返します。saved=trueとcreatorUrlが返るまで完成扱いにしないでください。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "本人所有の制作者URL名" }, gameId: { type: "string", description: "ゲームID" }, title: { type: "string", description: "ゲーム名" }, description: { type: "string", description: "ゲームの説明" }, files: { type: "object", description: "mock/直下を基準とする相対パスをキー、UTF-8本文を値とするファイル一覧。index.html、styles.css、mock.js、制限時間を含むsettings宣言付きpreview.jsonを必ず含めます。", additionalProperties: { type: "string" } } }, required: ["slug", "gameId", "title", "files"], additionalProperties: false } },
   { name: "get_game_module_requirements", title: "確定済み必須モジュール取得", description: "モック承認後、AppSet実装を始める直前に、今回必ず使用するrequiredModuleIdsと、各moduleの提供方式・公開import・API契約を取得します。返された一覧と契約を省略しないでください。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "本人所有の制作者URL名" }, gameId: { type: "string", description: "ゲームID" } }, required: ["slug", "gameId"], additionalProperties: false } },
 ];
 
@@ -99,13 +100,14 @@ async function callTool(name: string, args: Record<string, unknown>, playerId: s
     const title = typeof args.title === "string" ? args.title.trim() : "";
     const description = typeof args.description === "string" ? args.description.trim().slice(0, 500) : "";
     if (!GAME_PATTERN.test(gameId) || !title || title.length > 120 || !args.files || typeof args.files !== "object") throw new Error("モック登録情報が不正です。");
+    const manifest = parseSdkMockPreviewManifest(gameId, args.files);
     const revision = await saveMockFilesToGit({ instanceId: slug, gameId, files: args.files });
     await ensureSdkSchema();
-    const manifest = JSON.stringify({ stage: "mock", id: gameId });
+    const manifestJson = JSON.stringify(manifest);
     const initialModulePolicy = JSON.stringify(
       createInitialGameSdkModuleProfile(),
     );
-    await sdkSql()`INSERT INTO sdk_games (creator_id, game_id, title, description, manifest, module_policy, sdk_package_version, sdk_contract_version, mock_revision) VALUES (${creator.id}, ${gameId}, ${title}, ${description}, ${manifest}::jsonb, ${initialModulePolicy}::jsonb, ${platformRelease.sdkPackageVersion}, ${platformRelease.sdkContractVersion}, ${revision}) ON CONFLICT (creator_id, game_id) DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description, mock_revision = EXCLUDED.mock_revision, updated_at = NOW()`;
+    await sdkSql()`INSERT INTO sdk_games (creator_id, game_id, title, description, manifest, module_policy, sdk_package_version, sdk_contract_version, mock_revision) VALUES (${creator.id}, ${gameId}, ${title}, ${description}, ${manifestJson}::jsonb, ${initialModulePolicy}::jsonb, ${platformRelease.sdkPackageVersion}, ${platformRelease.sdkContractVersion}, ${revision}) ON CONFLICT (creator_id, game_id) DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description, manifest = EXCLUDED.manifest, mock_revision = EXCLUDED.mock_revision, updated_at = NOW()`;
     const creatorUrl = `${portalBaseUrl(origin)}/${slug}/`;
     const gameUrl = `${portalBaseUrl(origin)}/${slug}/games/${gameId}`;
     return textResult({ saved: true, gameId, mockRevision: revision, creatorUrl, gameUrl, previewUrl: gameUrl });

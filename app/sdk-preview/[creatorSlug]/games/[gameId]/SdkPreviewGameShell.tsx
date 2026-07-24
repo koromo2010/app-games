@@ -16,10 +16,13 @@ import { OnlineRoomLifecycleActions } from "@/app/components/OnlineRoomLifecycle
 import { PaidLlmAccessButton } from "@/app/components/PaidLlmAccessButton";
 import { PlayingCard } from "@/app/components/PlayingCard";
 import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
-import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
 import { aiActivityFetch } from "@/lib/ai-activity-client";
 import type { DrawingStroke } from "@/lib/drawing-canvas";
 import { createStandardPlayingCardDeck } from "@/lib/playing-cards";
+import type {
+  GameSdkSettingDefinition,
+  GameSdkSettingValue,
+} from "@game-fields/game-sdk";
 import type {
   GameSdkContentDifficulty,
   GameSdkContentSource,
@@ -50,6 +53,13 @@ import {
   resolveRequiredSdkPreviewModules,
   type SdkPreviewModuleSurface,
 } from "./sdk-preview-module-registry";
+import {
+  createSdkPreviewSettingValues,
+  formatSdkPreviewSettingValue,
+  sdkPreviewNumericSettingValue,
+  sdkPreviewSettingByRole,
+  SdkPreviewSettingsControl,
+} from "./SdkPreviewSettingsControl";
 
 type PreviewPhase = "lobby" | "playing" | "result";
 type PreviewSurface = "entry" | PreviewPhase;
@@ -73,6 +83,7 @@ type PreviewViewerSelectorProps = {
 };
 type PreviewCommand =
   | "room:hydrate"
+  | "settings:sync"
   | "timer:sync"
   | "debug:toggle"
   | "dummy:add"
@@ -91,6 +102,7 @@ type Props = {
   runtimeUrl: string;
   title: string;
   moduleProfile: GameSdkModuleProfile;
+  settingDefinitions: readonly GameSdkSettingDefinition[];
 };
 
 const commandClass = "rounded-lg border border-white/20 bg-white/10 px-3 py-2 font-bold text-white transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-45";
@@ -234,6 +246,7 @@ export function SdkPreviewGameShell({
   runtimeUrl,
   title,
   moduleProfile,
+  settingDefinitions,
 }: Props) {
   const frameRef = useRef<HTMLIFrameElement>(null);
   const logSequenceRef = useRef(0);
@@ -245,9 +258,9 @@ export function SdkPreviewGameShell({
   ]);
   const [viewerId, setViewerId] = useState("host");
   const [revision, setRevision] = useState(0);
-  const [rounds, setRounds] = useState(3);
-  const [maximumPlayers, setMaximumPlayers] = useState(6);
-  const [timeLimitSeconds, setTimeLimitSeconds] = useState(60);
+  const [settingValues, setSettingValues] = useState(
+    () => createSdkPreviewSettingValues(settingDefinitions),
+  );
   const [startedAt, setStartedAt] = useState(() => Date.now());
   const [frameHeight, setFrameHeight] = useState(680);
   const [message, setMessage] = useState("");
@@ -279,6 +292,38 @@ export function SdkPreviewGameShell({
   ) => gameSdkModuleIsRequired(moduleProfile, id);
   const phase: PreviewPhase = surface === "entry" ? "lobby" : surface;
   const dummyPlayers = players.filter((player) => player.dummy);
+  const configuredMaximumPlayers = sdkPreviewNumericSettingValue(
+    settingDefinitions,
+    settingValues,
+    "maximum-players",
+  );
+  const maximumPlayers = Math.max(
+    1,
+    Math.min(50, Math.floor(configuredMaximumPlayers ?? 12)),
+  );
+  const hasMaximumPlayersSetting = Boolean(
+    sdkPreviewSettingByRole(settingDefinitions, "maximum-players"),
+  );
+  const rounds = Math.max(
+    1,
+    Math.floor(
+      sdkPreviewNumericSettingValue(
+        settingDefinitions,
+        settingValues,
+        "round-count",
+      ) ?? 3,
+    ),
+  );
+  const timeLimitSeconds = Math.max(
+    0,
+    Math.floor(
+      sdkPreviewNumericSettingValue(
+        settingDefinitions,
+        settingValues,
+        "time-limit",
+      ) ?? 60,
+    ),
+  );
 
   const appendLog = (label: string) => {
     logSequenceRef.current += 1;
@@ -312,6 +357,7 @@ export function SdkPreviewGameShell({
       viewerId: nextViewerId,
       players: nextPlayers,
     });
+    send("settings:sync", { settings: settingValues });
     send("timer:sync", {
       durationSeconds: timeLimitSeconds,
       startedAt: phase === "playing" ? startedAt : null,
@@ -607,14 +653,26 @@ export function SdkPreviewGameShell({
     appendLog(`閲覧視点を ${nextViewerId === "spectator" ? "観戦者" : nextViewerId} へ変更`);
   };
 
-  const changeTimeLimit = (seconds: number) => {
-    const normalized = Math.max(0, seconds);
-    setTimeLimitSeconds(normalized);
-    send("timer:sync", {
-      durationSeconds: normalized,
-      startedAt: surface === "playing" ? startedAt : null,
-    });
-    bumpRevision("制限時間を更新");
+  const changeSetting = (
+    definition: GameSdkSettingDefinition,
+    value: GameSdkSettingValue,
+  ) => {
+    const nextValues = {
+      ...settingValues,
+      [definition.key]: value,
+    };
+    setSettingValues(nextValues);
+    send("settings:sync", { settings: nextValues });
+    if (
+      definition.platformRole === "time-limit"
+      && typeof value === "number"
+    ) {
+      send("timer:sync", {
+        durationSeconds: value,
+        startedAt: surface === "playing" ? startedAt : null,
+      });
+    }
+    bumpRevision(`${definition.label.ja}を更新`);
   };
 
   const runFlowLab = (kind: "round" | "turn" | "collect" | "vote" | "assign") => {
@@ -736,13 +794,13 @@ export function SdkPreviewGameShell({
     }
   };
 
-  const settingsItems = [
-    { label: "部屋コード", value: roomCode || "未作成" },
-    { label: "最小人数", value: `${SDK_PREVIEW_MINIMUM_PLAYERS}人` },
-    { label: "最大人数", value: `${maximumPlayers}人` },
-    { label: "ラウンド", value: `${rounds}回` },
-    { label: "制限時間", value: timeLimitSeconds === 0 ? "なし" : `${timeLimitSeconds}秒` },
-  ];
+  const settingsItems = settingDefinitions.map((definition) => ({
+    label: definition.label.ja,
+    value: formatSdkPreviewSettingValue(
+      definition,
+      settingValues[definition.key] ?? definition.defaultValue,
+    ),
+  }));
 
   const groupedModules = (["platform", "shell", "flow", "resource"] as const).map((group) => ({
     group,
@@ -812,7 +870,9 @@ export function SdkPreviewGameShell({
                   <p className="text-xs font-black uppercase tracking-[.16em] text-emerald-700">Available room</p>
                   <h3 className="mt-1 text-xl font-black">{title} テスト部屋</h3>
                 </div>
-                <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-800">2 / 6</span>
+                <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-800">
+                  {hasMaximumPlayersSetting ? `2 / ${maximumPlayers}` : "2人"}
+                </span>
               </div>
               <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
                 <div className="rounded-lg bg-slate-100 p-3"><dt className="text-xs text-slate-500">部屋コード</dt><dd className="mt-1 font-mono font-black">GF01</dd></div>
@@ -846,7 +906,11 @@ export function SdkPreviewGameShell({
               </div>
               <div className="mt-4 flex items-center justify-between text-sm">
                 <strong>参加者</strong>
-                <span>{players.length} / {maximumPlayers}人</span>
+                <span>
+                  {hasMaximumPlayersSetting
+                    ? `${players.length} / ${maximumPlayers}人`
+                    : `${players.length}人`}
+                </span>
               </div>
               <ul className="mt-2 space-y-2">
                 {players.map((player, seat) => (
@@ -864,44 +928,18 @@ export function SdkPreviewGameShell({
 
             {surface === "lobby" && moduleRequired("room-settings") && (
               <div className={`${panelClass} space-y-4`}>
-                <div>
-                  <label className="text-sm font-bold text-slate-700" htmlFor="sdk-preview-max-players">最大人数</label>
-                  <select
-                    id="sdk-preview-max-players"
-                    value={maximumPlayers}
-                    onChange={(event) => {
-                      setMaximumPlayers(Number(event.target.value));
-                      bumpRevision("最大人数を更新");
-                    }}
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-                  >
-                    {[2, 3, 4, 5, 6, 8, 10, 12].map((value) => <option key={value} value={value}>{value}人</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-sm font-bold text-slate-700" htmlFor="sdk-preview-rounds">ラウンド数</label>
-                  <select
-                    id="sdk-preview-rounds"
-                    value={rounds}
-                    onChange={(event) => {
-                      setRounds(Number(event.target.value));
-                      bumpRevision("ラウンド数を更新");
-                    }}
-                    className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
-                  >
-                    {[1, 2, 3, 5, 7, 10].map((value) => <option key={value} value={value}>{value}回</option>)}
-                  </select>
-                </div>
-                {moduleRequired("timer") && (
-                  <RoomTimeLimitControl label="1手の制限時間" value={timeLimitSeconds} onChange={changeTimeLimit} />
-                )}
+                <SdkPreviewSettingsControl
+                  definitions={settingDefinitions}
+                  values={settingValues}
+                  onChange={changeSetting}
+                />
                 <RoomConfigSummary items={settingsItems} />
               </div>
             )}
 
             {surface === "playing" && (
               <div className={panelClass}>
-                <RoomConfigSummary items={settingsItems.slice(1)} title="現在の部屋設定" />
+                <RoomConfigSummary items={settingsItems} title="現在の部屋設定" />
               </div>
             )}
 

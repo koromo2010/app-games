@@ -138,7 +138,7 @@ export async function listCreatorGames(slug: string) {
 export async function getCreatorGamePreview(slug: string, gameId: string) {
   await ensureSdkSchema();
   const rows = await sdkSql()`
-    SELECT g.game_id AS "gameId", g.title,
+    SELECT g.game_id AS "gameId", g.title, g.manifest,
            g.mock_revision AS "mockRevision",
            g.module_policy AS "modulePolicy"
     FROM sdk_games g JOIN sdk_creators c ON c.id = g.creator_id
@@ -149,6 +149,7 @@ export async function getCreatorGamePreview(slug: string, gameId: string) {
     | {
         gameId: string;
         title: string;
+        manifest: unknown;
         mockRevision: string;
         modulePolicy: unknown;
       }

@@ -1,4 +1,8 @@
 import type { GameSdkModuleProfile } from "@game-fields/game-sdk/modules";
+import {
+  parseGameSdkSettingDefinitions,
+  type GameSdkSettingDefinition,
+} from "@game-fields/game-sdk";
 
 export const sdkPreviewCreatorSlugPattern =
   /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])?$/;
@@ -9,6 +13,7 @@ export type SdkPreviewRuntimeDefinition = {
   title: string;
   runtimeUrl: string;
   modulePolicy?: GameSdkModuleProfile;
+  settings: GameSdkSettingDefinition[];
 };
 
 export function sdkPortalInternalBaseUrl(
@@ -52,5 +57,8 @@ export async function loadSdkPreviewRuntimeDefinition(
     title: payload.title.trim(),
     runtimeUrl: payload.runtimeUrl.trim(),
     modulePolicy: payload.modulePolicy,
+    settings: parseGameSdkSettingDefinitions(payload.settings, {
+      legacyTimeLimitFallback: true,
+    }),
   };
 }

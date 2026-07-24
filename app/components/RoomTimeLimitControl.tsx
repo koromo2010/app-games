@@ -7,21 +7,43 @@ type RoomTimeLimitControlProps = {
   label: string;
   value: number;
   onChange: (seconds: number) => void;
+  presets?: readonly number[];
+  allowCustom?: boolean;
+  minimumSeconds?: number;
+  maximumSeconds?: number;
+  formatPreset?: (seconds: number) => string;
 };
 
 const controlClass =
   "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-950 outline-none transition focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20";
 
-export function RoomTimeLimitControl({ label, value, onChange }: RoomTimeLimitControlProps) {
+export function RoomTimeLimitControl({
+  label,
+  value,
+  onChange,
+  presets = commonTimeLimitOptions,
+  allowCustom = true,
+  minimumSeconds = 0,
+  maximumSeconds = commonTimeLimitMaxSeconds,
+  formatPreset,
+}: RoomTimeLimitControlProps) {
   const { t } = useAppLocale();
-  const presetValue = commonTimeLimitOptions.includes(value as (typeof commonTimeLimitOptions)[number])
+  const normalizedPresets = [...new Set(
+    presets
+      .filter((seconds) => Number.isFinite(seconds))
+      .map((seconds) => Math.max(
+        minimumSeconds,
+        Math.min(maximumSeconds, Math.floor(seconds)),
+      )),
+  )].sort((a, b) => a - b);
+  const presetValue = normalizedPresets.includes(value)
     ? String(value)
     : "custom";
 
   return (
     <fieldset>
       <legend className="text-sm font-medium text-slate-700">{label}</legend>
-      <div className="mt-1 grid grid-cols-2 gap-2">
+      <div className={`mt-1 grid gap-2 ${allowCustom ? "grid-cols-2" : "grid-cols-1"}`}>
         <select
           value={presetValue}
           onChange={(event) => {
@@ -30,32 +52,38 @@ export function RoomTimeLimitControl({ label, value, onChange }: RoomTimeLimitCo
           aria-label={t("game.timePreset", { label })}
           className={controlClass}
         >
-          {commonTimeLimitOptions.map((seconds) => (
+          {normalizedPresets.map((seconds) => (
             <option key={seconds} value={seconds}>
-              {seconds === 0 ? t("game.none") : t("game.seconds", { seconds })}
+              {formatPreset?.(seconds) ?? (
+                seconds === 0 ? t("game.none") : t("game.seconds", { seconds })
+              )}
             </option>
           ))}
-          <option value="custom">{t("game.custom")}</option>
+          {allowCustom && <option value="custom">{t("game.custom")}</option>}
         </select>
-        <label className="flex items-center gap-2 text-sm text-slate-600">
-          <input
-            key={value}
-            type="number"
-            min={0}
-            max={commonTimeLimitMaxSeconds}
-            step={1}
-            defaultValue={value}
-            onBlur={(event) => onChange(Number(event.target.value))}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") event.currentTarget.blur();
-            }}
-            aria-label={t("game.timeInput", { label })}
-            className={controlClass}
-          />
-          {t("game.secondsUnit")}
-        </label>
+        {allowCustom && (
+          <label className="flex items-center gap-2 text-sm text-slate-600">
+            <input
+              key={value}
+              type="number"
+              min={minimumSeconds}
+              max={maximumSeconds}
+              step={1}
+              defaultValue={value}
+              onBlur={(event) => onChange(Number(event.target.value))}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") event.currentTarget.blur();
+              }}
+              aria-label={t("game.timeInput", { label })}
+              className={controlClass}
+            />
+            {t("game.secondsUnit")}
+          </label>
+        )}
       </div>
-      <p className="mt-1 text-xs text-slate-500">{t("game.timeHelp", { max: commonTimeLimitMaxSeconds })}</p>
+      {allowCustom && (
+        <p className="mt-1 text-xs text-slate-500">{t("game.timeHelp", { max: maximumSeconds })}</p>
+      )}
     </fieldset>
   );
 }

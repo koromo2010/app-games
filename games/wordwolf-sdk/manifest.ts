@@ -13,8 +13,9 @@ export const wordWolfSdkManifest = defineGameManifest({
   supportsRating: true,
   usesLlm: true,
   settings: [
-    { key: "roundsTotal", label: { ja: "ヒント周回数", en: "Clue rounds" }, type: "select", options: [1, 2, 3, 4] },
-    { key: "wolfCount", label: { ja: "狼の人数", en: "Wolf count" }, type: "number", minimum: 1, maximum: 9 },
-    { key: "clueMode", label: { ja: "ヒント方式", en: "Clue mode" }, type: "select", options: ["turn", "simultaneous"] },
+    { key: "roundsTotal", label: { ja: "ヒント周回数", en: "Clue rounds" }, type: "select", defaultValue: 1, platformRole: "round-count", options: [1, 2, 3, 4], unit: { ja: "回", en: "rounds" } },
+    { key: "wolfCount", label: { ja: "狼の人数", en: "Wolf count" }, type: "number", defaultValue: 1, minimum: 1, maximum: 9, unit: { ja: "人", en: "players" } },
+    { key: "clueMode", label: { ja: "ヒント方式", en: "Clue mode" }, type: "select", defaultValue: "turn", options: [{ value: "turn", label: { ja: "順番", en: "Turn order" } }, { value: "simultaneous", label: { ja: "同時", en: "Simultaneous" } }] },
+    { key: "timeLimitSeconds", label: { ja: "1手の制限時間", en: "Turn time limit" }, type: "select", defaultValue: 60, platformRole: "time-limit", options: [0, 30, 60, 90, 120], unit: { ja: "秒", en: "s" } },
   ],
 } as const);

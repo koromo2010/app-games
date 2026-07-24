@@ -22,15 +22,318 @@ export type GameSdkOnlineRoomState<TSettings> = GameSdkStoredRoom & {
   settings: TSettings;
 };
 
+export type GameSdkSettingValue = string | number | boolean;
+export type GameSdkSettingPlatformRole =
+  | "time-limit"
+  | "maximum-players"
+  | "round-count";
+export type GameSdkSettingOption = {
+  value: string | number;
+  label: Record<GameSdkLocale, string>;
+};
+
 export type GameSdkSettingDefinition = {
   key: string;
   label: Record<GameSdkLocale, string>;
   type: "boolean" | "number" | "select" | "text";
+  defaultValue: GameSdkSettingValue;
+  platformRole?: GameSdkSettingPlatformRole;
   required?: boolean;
   minimum?: number;
   maximum?: number;
-  options?: readonly (string | number)[];
+  options?: readonly (string | number | GameSdkSettingOption)[];
+  unit?: Record<GameSdkLocale, string>;
+  help?: Record<GameSdkLocale, string>;
 };
+
+export const DEFAULT_GAME_SDK_TIME_LIMIT_SETTING = {
+  key: "timeLimitSeconds",
+  label: {
+    ja: "1手の制限時間",
+    en: "Turn time limit",
+  },
+  type: "select",
+  defaultValue: 60,
+  platformRole: "time-limit",
+  options: [0, 30, 60, 90, 120],
+  unit: {
+    ja: "秒",
+    en: "s",
+  },
+} as const satisfies GameSdkSettingDefinition;
+
+type ParseGameSdkSettingDefinitionsOptions = {
+  requireTimeLimit?: boolean;
+  legacyTimeLimitFallback?: boolean;
+};
+
+function localizedSettingText(
+  value: unknown,
+  field: string,
+): Record<GameSdkLocale, string> {
+  const candidate = value && typeof value === "object"
+    ? value as Partial<Record<GameSdkLocale, unknown>>
+    : {};
+  if (
+    typeof candidate.ja !== "string"
+    || !candidate.ja.trim()
+    || typeof candidate.en !== "string"
+    || !candidate.en.trim()
+  ) {
+    throw new Error(`Game SDK setting ${field} requires ja/en text.`);
+  }
+  return {
+    ja: candidate.ja.trim().slice(0, 120),
+    en: candidate.en.trim().slice(0, 120),
+  };
+}
+
+export function gameSdkSettingOptionValue(
+  option: string | number | GameSdkSettingOption,
+) {
+  return typeof option === "object" ? option.value : option;
+}
+
+function settingValueMatchesType(
+  value: unknown,
+  type: GameSdkSettingDefinition["type"],
+): value is GameSdkSettingValue {
+  if (type === "boolean") return typeof value === "boolean";
+  if (type === "number") return typeof value === "number" && Number.isFinite(value);
+  if (type === "text") return typeof value === "string";
+  return typeof value === "string"
+    || (typeof value === "number" && Number.isFinite(value));
+}
+
+function parseSettingOption(
+  value: unknown,
+  settingKey: string,
+): string | number | GameSdkSettingOption {
+  if (
+    typeof value === "string"
+    || (typeof value === "number" && Number.isFinite(value))
+  ) {
+    return value;
+  }
+  if (!value || typeof value !== "object") {
+    throw new Error(`Game SDK setting ${settingKey} has an invalid option.`);
+  }
+  const candidate = value as {
+    value?: unknown;
+    label?: unknown;
+  };
+  if (
+    typeof candidate.value !== "string"
+    && !(typeof candidate.value === "number" && Number.isFinite(candidate.value))
+  ) {
+    throw new Error(`Game SDK setting ${settingKey} has an invalid option value.`);
+  }
+  return {
+    value: candidate.value,
+    label: localizedSettingText(
+      candidate.label,
+      `${settingKey}.option.label`,
+    ),
+  };
+}
+
+function cloneDefaultTimeLimitSetting(): GameSdkSettingDefinition {
+  return {
+    ...DEFAULT_GAME_SDK_TIME_LIMIT_SETTING,
+    label: { ...DEFAULT_GAME_SDK_TIME_LIMIT_SETTING.label },
+    options: [...DEFAULT_GAME_SDK_TIME_LIMIT_SETTING.options],
+    unit: { ...DEFAULT_GAME_SDK_TIME_LIMIT_SETTING.unit },
+  };
+}
+
+export function parseGameSdkSettingDefinitions(
+  value: unknown,
+  options: ParseGameSdkSettingDefinitionsOptions = {},
+): GameSdkSettingDefinition[] {
+  if (
+    options.legacyTimeLimitFallback
+    && (!Array.isArray(value) || value.length === 0)
+  ) {
+    return [cloneDefaultTimeLimitSetting()];
+  }
+  if (!Array.isArray(value) || value.length === 0 || value.length > 32) {
+    throw new Error("Game SDK settings must contain between 1 and 32 definitions.");
+  }
+
+  const keys = new Set<string>();
+  const roles = new Set<GameSdkSettingPlatformRole>();
+  const definitions = value.map((raw): GameSdkSettingDefinition => {
+    if (!raw || typeof raw !== "object") {
+      throw new Error("Game SDK setting definition is invalid.");
+    }
+    const candidate = raw as Partial<GameSdkSettingDefinition>;
+    const key = typeof candidate.key === "string" ? candidate.key.trim() : "";
+    if (!/^[a-z][A-Za-z0-9]*$/.test(key) || keys.has(key)) {
+      throw new Error("Game SDK setting keys must be unique camelCase identifiers.");
+    }
+    keys.add(key);
+    const type = candidate.type;
+    if (!type || !["boolean", "number", "select", "text"].includes(type)) {
+      throw new Error(`Game SDK setting ${key} has an unsupported type.`);
+    }
+    if (!settingValueMatchesType(candidate.defaultValue, type)) {
+      throw new Error(`Game SDK setting ${key} has an invalid defaultValue.`);
+    }
+    const platformRole = candidate.platformRole;
+    if (
+      platformRole
+      && !["time-limit", "maximum-players", "round-count"].includes(platformRole)
+    ) {
+      throw new Error(`Game SDK setting ${key} has an unsupported platformRole.`);
+    }
+    if (platformRole && roles.has(platformRole)) {
+      throw new Error(`Game SDK platformRole ${platformRole} must be unique.`);
+    }
+    if (platformRole) roles.add(platformRole);
+
+    const minimum = candidate.minimum;
+    const maximum = candidate.maximum;
+    if (minimum !== undefined && !Number.isFinite(minimum)) {
+      throw new Error(`Game SDK setting ${key} has an invalid minimum.`);
+    }
+    if (maximum !== undefined && !Number.isFinite(maximum)) {
+      throw new Error(`Game SDK setting ${key} has an invalid maximum.`);
+    }
+    if (
+      minimum !== undefined
+      && maximum !== undefined
+      && minimum > maximum
+    ) {
+      throw new Error(`Game SDK setting ${key} minimum exceeds maximum.`);
+    }
+
+    const parsedOptions = candidate.options === undefined
+      ? undefined
+      : (
+          Array.isArray(candidate.options)
+          && candidate.options.length > 0
+          && candidate.options.length <= 64
+        )
+        ? candidate.options.map((option) => parseSettingOption(option, key))
+        : (() => {
+            throw new Error(`Game SDK setting ${key} has invalid options.`);
+          })();
+    if (type === "select" && !parsedOptions) {
+      throw new Error(`Game SDK select setting ${key} requires options.`);
+    }
+    if (parsedOptions) {
+      const optionValues = parsedOptions.map(gameSdkSettingOptionValue);
+      const optionKeys = new Set(optionValues.map(
+        (option) => `${typeof option}:${String(option)}`,
+      ));
+      if (optionKeys.size !== optionValues.length) {
+        throw new Error(`Game SDK setting ${key} options must be unique.`);
+      }
+      const defaultKey = `${typeof candidate.defaultValue}:${String(candidate.defaultValue)}`;
+      if (type === "select" && !optionKeys.has(defaultKey)) {
+        throw new Error(`Game SDK setting ${key} options must include defaultValue.`);
+      }
+    }
+
+    if (platformRole === "time-limit") {
+      if (
+        (type !== "number" && type !== "select")
+        || typeof candidate.defaultValue !== "number"
+        || !Number.isInteger(candidate.defaultValue)
+        || candidate.defaultValue < 0
+        || candidate.defaultValue > 3600
+      ) {
+        throw new Error("Game SDK time-limit must use integer seconds from 0 to 3600.");
+      }
+      if (
+        (minimum !== undefined && (
+          !Number.isInteger(minimum)
+          || minimum < 0
+          || minimum > 3600
+        ))
+        || (maximum !== undefined && (
+          !Number.isInteger(maximum)
+          || maximum < 0
+          || maximum > 3600
+        ))
+      ) {
+        throw new Error("Game SDK time-limit bounds must use integer seconds from 0 to 3600.");
+      }
+      for (const option of parsedOptions ?? []) {
+        const optionValue = gameSdkSettingOptionValue(option);
+        if (
+          typeof optionValue !== "number"
+          || !Number.isInteger(optionValue)
+          || optionValue < 0
+          || optionValue > 3600
+        ) {
+          throw new Error("Game SDK time-limit options must use integer seconds from 0 to 3600.");
+        }
+      }
+    }
+    if (
+      (platformRole === "maximum-players" || platformRole === "round-count")
+      && (
+        (type !== "number" && type !== "select")
+        || typeof candidate.defaultValue !== "number"
+        || !Number.isInteger(candidate.defaultValue)
+        || candidate.defaultValue < 1
+      )
+    ) {
+      throw new Error(`Game SDK ${platformRole} must use a positive integer.`);
+    }
+    if (platformRole === "maximum-players" || platformRole === "round-count") {
+      for (const option of parsedOptions ?? []) {
+        const optionValue = gameSdkSettingOptionValue(option);
+        if (
+          typeof optionValue !== "number"
+          || !Number.isInteger(optionValue)
+          || optionValue < 1
+        ) {
+          throw new Error(`Game SDK ${platformRole} options must use positive integers.`);
+        }
+      }
+    }
+    if (
+      typeof candidate.defaultValue === "number"
+      && (
+        (minimum !== undefined && candidate.defaultValue < minimum)
+        || (maximum !== undefined && candidate.defaultValue > maximum)
+      )
+    ) {
+      throw new Error(`Game SDK setting ${key} defaultValue is outside its bounds.`);
+    }
+
+    return {
+      key,
+      label: localizedSettingText(candidate.label, `${key}.label`),
+      type,
+      defaultValue: candidate.defaultValue,
+      ...(platformRole ? { platformRole } : {}),
+      ...(candidate.required === true ? { required: true } : {}),
+      ...(minimum !== undefined ? { minimum } : {}),
+      ...(maximum !== undefined ? { maximum } : {}),
+      ...(parsedOptions ? { options: parsedOptions } : {}),
+      ...(candidate.unit ? {
+        unit: localizedSettingText(candidate.unit, `${key}.unit`),
+      } : {}),
+      ...(candidate.help ? {
+        help: localizedSettingText(candidate.help, `${key}.help`),
+      } : {}),
+    };
+  });
+
+  const timeLimitCount = definitions.filter(
+    (setting) => setting.platformRole === "time-limit",
+  ).length;
+  if (options.requireTimeLimit && timeLimitCount !== 1) {
+    throw new Error("Game SDK online-room settings require one time-limit definition.");
+  }
+  if (options.legacyTimeLimitFallback && timeLimitCount === 0) {
+    definitions.push(cloneDefaultTimeLimitSetting());
+  }
+  return definitions;
+}
 
 export type GameSdkManifest = {
   sdkVersion: typeof GAME_SDK_VERSION;
@@ -199,19 +502,9 @@ export function assertGameManifest(manifest: GameSdkManifest): void {
       throw new Error(`Game SDK manifest ${field} must be boolean.`);
     }
   }
-  const settingKeys = new Set<string>();
-  for (const setting of manifest.settings ?? []) {
-    if (!/^[a-z][A-Za-z0-9]*$/.test(setting.key) || settingKeys.has(setting.key)) {
-      throw new Error("Game SDK manifest setting keys must be unique camelCase identifiers.");
-    }
-    settingKeys.add(setting.key);
-    if (!setting.label.ja.trim() || !setting.label.en.trim()) {
-      throw new Error(`Game SDK manifest setting ${setting.key} requires ja/en labels.`);
-    }
-    if (setting.type === "select" && (!setting.options || setting.options.length === 0)) {
-      throw new Error(`Game SDK manifest select setting ${setting.key} requires options.`);
-    }
-  }
+  parseGameSdkSettingDefinitions(manifest.settings, {
+    requireTimeLimit: manifest.playMode === "online-room",
+  });
 }
 
 export function defineGameManifest<const TManifest extends GameSdkManifest>(manifest: TManifest) {

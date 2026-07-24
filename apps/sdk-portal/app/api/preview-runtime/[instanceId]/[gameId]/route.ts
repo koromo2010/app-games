@@ -1,6 +1,7 @@
 import { getCreatorGamePreview, normalizeInstanceSlug, validateInstanceSlug } from "@/lib/instance-registry";
 import { createPreviewRuntimeUrl } from "@/lib/preview-links";
 import { normalizeGameSdkModuleProfile } from "@game-fields/game-sdk/modules";
+import { parseGameSdkSettingDefinitions } from "@game-fields/game-sdk";
 
 export const dynamic = "force-dynamic";
 const GAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?$/;
@@ -21,6 +22,12 @@ export async function GET(_: Request, { params }: { params: Promise<{ instanceId
         revision: game.mockRevision,
       }),
       modulePolicy: normalizeGameSdkModuleProfile(game.modulePolicy),
+      settings: parseGameSdkSettingDefinitions(
+        game.manifest && typeof game.manifest === "object"
+          ? (game.manifest as { settings?: unknown }).settings
+          : undefined,
+        { legacyTimeLimitFallback: true },
+      ),
     }, { headers: { "Cache-Control": "no-store" } });
   } catch {
     return Response.json({ error: "preview_unavailable" }, { status: 503 });

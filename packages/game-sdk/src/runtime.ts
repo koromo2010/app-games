@@ -297,6 +297,31 @@ export function defineGameSdkOnlineRoomAppSet<
   if (appSet.manifest.playMode !== "online-room") {
     throw new Error("Game SDK online AppSet requires an online-room manifest.");
   }
+  const manifestSettings = appSet.manifest.settings ?? [];
+  const manifestKeys = new Set(manifestSettings.map((setting) => setting.key));
+  const defaultKeys = Object.keys(appSet.defaultSettings);
+  if (
+    defaultKeys.length !== manifestKeys.size
+    || defaultKeys.some((key) => !manifestKeys.has(key))
+  ) {
+    throw new Error("Game SDK AppSet defaultSettings must match manifest.settings.");
+  }
+  for (const setting of manifestSettings) {
+    if (!Object.is(appSet.defaultSettings[setting.key], setting.defaultValue)) {
+      throw new Error(`Game SDK AppSet default for ${setting.key} must match manifest defaultValue.`);
+    }
+  }
+  const timeLimitSetting = manifestSettings.find(
+    (setting) => setting.platformRole === "time-limit",
+  );
+  if (
+    !timeLimitSetting
+    || !appSet.timer
+    || appSet.timer.durationSeconds(appSet.defaultSettings)
+      !== timeLimitSetting.defaultValue
+  ) {
+    throw new Error("Game SDK AppSet timer must use the manifest time-limit setting.");
+  }
   return appSet;
 }
 

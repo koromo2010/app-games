@@ -3201,3 +3201,44 @@
 
 - 実Word DBから返る`surface / reading / difficulty / tags`の最終E2Eは、本体へ実際にログインした同一ブラウザセッションで再取得する必要がある。
 - Preview外枠の「認証済みセッション」固定表示は実際の本体認証状態と誤認し得るため、実セッション連動または確認用identityであることが分かる表示への変更を別途検討する。
+
+## 2026-07-24 — SDK共通設定画面のゲーム別宣言
+
+### 利用者からの要望
+
+- SDK共通設定画面の「最大人数」「ラウンド数」「制限時間」を固定3項目にせず、ゲームによって存在しない項目を表示しない。
+- `online-room`で必須にする設定は制限時間だけとする。
+- 制限時間の初期値と選択肢もPlatform固定にせず、ゲーム側から変更できるようにする。
+
+### 判断
+
+- ゲームpackageの`settings`宣言を共通設定画面の唯一の表示元とし、Platform Shellは宣言されていない最大人数・ラウンド数・難易度・モード等を追加しない。
+- `online-room`では`platformRole: "time-limit"`を持つ設定を正確に1項目要求する。`defaultValue`、`options`、任意の選択肢表示名をゲーム側の正本とし、0秒を含めた場合だけ制限なしを選べるようにする。
+- `platformRole: "maximum-players"`と`"round-count"`は、共通Shellの人数上限またはラウンド進行にも意味を渡したいゲームだけが任意宣言する。
+- 新規モックは`mock/preview.json`へ設定宣言を必須保存する。保存済み旧モックは閲覧不能にしないため、従来の60秒候補だけを互換補完する。
+- Previewの選択値は外側Shellから`GameFieldsPreset.state.settings`へ同期し、ゲーム固有iframeは値を参照するだけとする。本実装は同じmanifest宣言、`defaultSettings`、AppSetの`settings`引数を使う。
+
+### 実施結果
+
+- 公開SDKへ設定値、選択肢表示名、Platform role、初期値、単位、補足文と厳格な設定schema検査を追加した。オンラインRoomの制限時間、設定キー重複、型、範囲、選択肢、初期値不一致を拒否する。
+- `SdkPreviewGameShell`の固定「最大人数・ラウンド数・制限時間」UIを削除し、`SdkPreviewSettingsControl`でゲーム宣言からboolean／number／select／textを描画するようにした。最大人数・ラウンド数の表示と共通進行への利用もrole宣言時だけにした。
+- 制限時間UIはゲームが宣言した初期値・候補・候補表示名を使い、変更時に共通timerとiframe設定を同期する。
+- Portalの旧PUT経路とOAuth MCP `publish_mock`の両方で`preview.json`を検証し、設定宣言を`manifest`へ保存するようにした。Preview runtimeは保存宣言を本体Shellへ返す。
+- スターター、ゲーム生成雛形、SDK WordWolf実証AppSetを新しい設定契約へ移行し、制限時間の既定値とtimer接続を追加した。
+- SDK API、Mockガイド、共通要件、ゲーム仕様、DownloadMe、外部package構想、ChatGPT向け資料、引き継ぎ資料へ現行仕様を反映した。
+
+### 検証
+
+- `npm test`成功（492件）。
+- `npm run lint`成功。環境変数台帳60キー、9ゲーム共通要件、SDK依存境界を確認した。
+- `npm run test:sdk-package`成功。公開tarballの外部fixture install、Runtime、resource、React UIの公開exportを確認した。
+- `npm run test:sdk-starter`成功。入口、公開Git snapshot、ZIP、同梱SDK install、型検査、契約テスト、完走デモ、提出ZIPを確認した。
+- `npm run build`成功。本体77ページを生成した。
+- `npm run build:sdk`成功。SDK Portal 14ページを生成した。
+- `npm run build:sdk-preview`成功。隔離Preview 5ページを生成した。
+- `git diff --check`成功。
+
+### 未対応・保留
+
+- GitHubへのpushとdevelop deploymentはまだ行っていない。
+- `main`、本番SDK、npm package versionはこの変更では更新しない。

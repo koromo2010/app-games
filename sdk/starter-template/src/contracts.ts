@@ -8,6 +8,7 @@ import type {
 /** Settings rendered and updated by the SDK basic set. */
 export type MyFirstGameSettings = {
   target: number;
+  timeLimitSeconds: number;
 };
 
 /** Only the input needed to initialize this game's AppSet. */

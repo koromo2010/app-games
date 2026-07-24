@@ -168,7 +168,7 @@ cd game-fields-game
 
 `GAME_SPEC.md`の未決事項が解消したら、`APP_REQUIREMENTS.md`と`MOCK_GUIDE.md`に従い、`mock/`へブラウザで開ける画面モックを作ってください。
 
-`mock/preview.json`のゲームID・表示名・説明も今回の仕様へ更新し、`npm run check:mock`を成功させてください。SDK Preview共通の開始条件は`minimumPlayers: 1`であり、ホスト1人でも開始できる状態を維持します。その後、Game Fields SDKの`publish_mock` toolへ制作者slug、ゲーム情報、検査済み`mock/`ファイル一式を渡します。OAuth資格情報をファイル、Git、会話、コマンド引数へ展開してはいけません。スターターの`npm run publish:mock`は旧管理トークン互換用であり、Work／Codexの新規制作では使いません。
+`mock/preview.json`のゲームID・表示名・説明・共通設定画面へ出す`settings`も今回の仕様へ更新し、`npm run check:mock`を成功させてください。共通設定画面は宣言項目だけを表示し、最大人数やラウンド数等は必要なゲームだけが追加します。`online-room`で必須なのは`platformRole: "time-limit"`を持つ制限時間1項目だけで、その`defaultValue`と`options`もゲーム側で決めます。ゲーム固有slotへ設定UIを複製せず、同期された`GameFieldsPreset`の`settings`を参照してください。SDK Preview共通の開始条件は`minimumPlayers: 1`であり、ホスト1人でも開始できる状態を維持します。その後、Game Fields SDKの`publish_mock` toolへ制作者slug、ゲーム情報、検査済み`mock/`ファイル一式を渡します。OAuth資格情報をファイル、Git、会話、コマンド引数へ展開してはいけません。スターターの`npm run publish:mock`は旧管理トークン互換用であり、Work／Codexの新規制作では使いません。
 
 SDKはモック一式を裏側の専用Gitへ自動保存し、制作者トップ`/<slug>/`と今回のゲーム`/<slug>/games/<game-id>`のURLを発行します。利用者への最初のリンクは、保存ゲーム一覧を確認できる制作者トップにしてください。今回のゲームURLは直接確認用の補助リンクとして添えます。GitHubやVercelでゲームごとのデプロイ操作をさせないでください。修正時も同じコマンドで更新し、案内URLは変えません。
 

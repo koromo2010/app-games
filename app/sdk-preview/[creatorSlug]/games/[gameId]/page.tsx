@@ -21,6 +21,7 @@ export default async function SdkGamePage({ params }: { params: Promise<{ creato
       runtimeUrl={game.runtimeUrl}
       title={game.title}
       moduleProfile={normalizeGameSdkModuleProfile(game.modulePolicy)}
+      settingDefinitions={game.settings}
     />
   );
 }

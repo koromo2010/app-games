@@ -56,8 +56,31 @@ import type {
 - `playMode`: `online-room` または `local-pass-and-play`
 - `minimumPlayers` / `maximumPlayers`
 - debug、観戦、replay、rating、LLMの利用有無
+- `settings`: 共通設定画面へ表示する、このゲームの設定項目
 
 Game Fields SDKの共通初期値は`minimumPlayers: 1`です。1人で開始・確認できる状態を維持し、複数人が必須となるゲーム固有ルールだけをAppSet側で追加検証します。
+
+### 共通設定画面へ出す項目
+
+共通設定画面は、`manifest.settings`へ宣言した項目だけを表示します。「最大人数」「ラウンド数」「難易度」「モード」等はゲームごとの任意項目であり、Platformが固定追加しません。
+
+`online-room`で必須なのは`platformRole: "time-limit"`を持つ制限時間1項目だけです。その`defaultValue`と`options`もゲーム側で決めます。`0`を選択肢へ含める場合は制限なしです。最大人数またはラウンド数を共通Shellの人数上限・表示にも使うゲームだけ、それぞれ`platformRole: "maximum-players"`、`"round-count"`を宣言します。
+
+```ts
+settings: [
+  {
+    key: "timeLimitSeconds",
+    label: { ja: "1手の制限時間", en: "Turn time limit" },
+    type: "select",
+    defaultValue: 45,
+    platformRole: "time-limit",
+    options: [0, 15, 45, 90],
+    unit: { ja: "秒", en: "s" },
+  },
+]
+```
+
+`defaultSettings`は宣言した全項目と同じキーを持ち、各値を`defaultValue`と一致させます。共通画面で変更された値はRoom設定として保存・同期され、Previewのゲーム固有JavaScriptでは`GameFieldsPreset.getState().settings`、本実装のAppSetでは`settings`引数から参照します。iframe内へ同じ設定UIを重複配置しません。
 
 ## SDK基本セット + AppSet
 

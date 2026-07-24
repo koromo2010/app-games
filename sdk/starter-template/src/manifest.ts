@@ -17,8 +17,18 @@ export const myFirstGameManifest = defineGameManifest({
       key: "target",
       label: { ja: "ゴール", en: "Target" },
       type: "number",
+      defaultValue: 3,
       minimum: 2,
       maximum: 10,
+    },
+    {
+      key: "timeLimitSeconds",
+      label: { ja: "1手の制限時間", en: "Turn time limit" },
+      type: "select",
+      defaultValue: 60,
+      platformRole: "time-limit",
+      options: [0, 30, 60, 90, 120],
+      unit: { ja: "秒", en: "s" },
     },
   ],
 });

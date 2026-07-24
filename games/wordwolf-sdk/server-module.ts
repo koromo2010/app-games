@@ -53,8 +53,14 @@ export const wordWolfSdkAppSet = defineGameSdkOnlineRoomAppSet<
     roundsTotal: 1,
     wolfCount: 1,
     clueMode: "turn",
+    timeLimitSeconds: 60,
   },
   normalizeSettings: normalizeWordWolfSdkSettings,
+  timer: {
+    durationSeconds(settings) {
+      return settings.timeLimitSeconds;
+    },
+  },
 
   async createAppState(input, context) {
     const providedTopic = input.topic?.villageWord.trim()
@@ -149,6 +155,7 @@ export const wordWolfSdkAppSet = defineGameSdkOnlineRoomAppSet<
             ? app.currentRound + 1
             : app.currentRound,
         },
+        timer: "reset",
       };
     }
     if (command.type === "wordwolf/vote") {
@@ -175,6 +182,7 @@ export const wordWolfSdkAppSet = defineGameSdkOnlineRoomAppSet<
         return {
           phase: "vote",
           app: { ...app, votes },
+          timer: "reset",
         };
       }
       const tally = tallyGameSdkVotes(votes, participantIds);
@@ -188,6 +196,7 @@ export const wordWolfSdkAppSet = defineGameSdkOnlineRoomAppSet<
           accusedId,
           winner: wolfWasAccused ? null : "wolf",
         },
+        timer: wolfWasAccused ? "reset" : "stop",
       };
     }
     if (command.type === "wordwolf/guess") {
@@ -204,6 +213,7 @@ export const wordWolfSdkAppSet = defineGameSdkOnlineRoomAppSet<
           ...app,
           winner: correct ? "wolf" : "village",
         },
+        timer: "stop",
       };
     }
     throw new Error("UNKNOWN_COMMAND");

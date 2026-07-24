@@ -21,15 +21,17 @@
 - `index.html`: 外側のGame Fields Shellへ差し込むゲーム固有領域
 - `styles.css`: ゲーム固有の盤面・操作・状態表示とPC・スマホ配置
 - `mock.js`: ゲーム固有状態と`GameFieldsPreset.registerGame()`の接続
-- `preview.json`: 制作者広場のカードと共有URLに使うゲームID・表示名・説明
+- `preview.json`: 制作者広場のカードと共有URLに使うゲームID・表示名・説明、および共通設定画面へ表示する設定宣言
 
 外部CDN、事業者API、ログイン、DBへ直接依存させません。単語を使わない表示用データは架空データを使えますが、ゲームのお題となる単語・ペア・読み・語釈は固定配列や初期DBを作らず、外側Shellが提供する`GameFieldsPreset.resources.contentSource`から取得します。LLMが必要なゲームは`GameFieldsPreset.resources.llm`を利用できます。AIは`#game-slot`の内側とゲーム固有JavaScriptを編集します。広場、ヘッダー、ゲームカード、入室、部屋、参加者、ルール、デバッグパネル、プレイヤーメニュー、退出・再戦を追加してはいけません。これらは保存URLの外側にすでに存在します。
 
 SDK Previewの共通開始条件は`minimumPlayers: 1`です。ホスト1人でも開始でき、必要な人数はDEBUGのダミー参加者で補える状態にします。複数人を前提とする固有ルールの検証はゲーム内で行いますが、Preview Shellの開始自体を2人待ちに戻してはいけません。
 
+共通設定画面は`preview.json`の`settings`だけを描画します。最大人数、ラウンド数、難易度、モード等は必要なゲームだけが宣言します。`online-room`では制限時間だけが必須で、`platformRole: "time-limit"`を1項目に付けます。初期値は`defaultValue`、候補は`options`でゲーム側が決め、`0`を含める場合は制限なしとして扱います。ゲーム固有slotへ同じ設定UIを作らず、`GameFieldsPreset.getState().settings`または`onStateChange(platformState).settings`から選択値を参照します。
+
 ## 作り方
 
-1. `GAME_SPEC.md`からゲームカード情報、ゲーム固有画面、利用者の操作順を取り出す。
+1. `GAME_SPEC.md`からゲームカード情報、共通設定画面へ出す項目、ゲーム固有画面、利用者の操作順を取り出す。
 2. `SDK_MODULE_CATALOG.md`から利用する公式モジュールを選び、`APP_REQUIREMENTS.md`の各要件を「該当」「非該当」「本実装時」のいずれかに分類する。
 3. 最短の主要フローを操作できるようにする。
 4. `index.html`をゲーム固有slotだけに保ち、共通UIを複製していないことを確認する。

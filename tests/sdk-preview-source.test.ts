@@ -19,12 +19,55 @@ import {
   SDK_PREVIEW_MODULE_IMPLEMENTATIONS,
   resolveRequiredSdkPreviewModules,
 } from "../app/sdk-preview/[creatorSlug]/games/[gameId]/sdk-preview-module-registry.ts";
+import {
+  loadSdkPreviewRuntimeDefinition,
+} from "../lib/sdk-preview-runtime-source.ts";
 
 test("SDK preview source keeps every asset inside its mock directory", () => {
   assert.equal(normalizePreviewAssetPath([]), "index.html");
   assert.equal(normalizePreviewAssetPath(["images", "table.webp"]), "images/table.webp");
   assert.equal(normalizePreviewAssetPath(["..", "secret.txt"]), null);
   assert.equal(normalizePreviewAssetPath(["folder\\secret.js"]), null);
+});
+
+test("SDK preview loads app-declared settings and gives legacy mocks only a timer", async () => {
+  const declared = await loadSdkPreviewRuntimeDefinition(
+    "creator-lab",
+    "sample-game",
+    (async () => Response.json({
+      title: "設定テスト",
+      runtimeUrl: "https://example.com/runtime",
+      settings: [{
+        key: "timeLimitSeconds",
+        label: { ja: "回答時間", en: "Answer time" },
+        type: "select",
+        defaultValue: 45,
+        platformRole: "time-limit",
+        options: [0, 15, 45],
+      }, {
+        key: "difficulty",
+        label: { ja: "難易度", en: "Difficulty" },
+        type: "select",
+        defaultValue: "normal",
+        options: ["easy", "normal", "hard"],
+      }],
+    })) as typeof fetch,
+  );
+  assert.equal(declared?.settings.length, 2);
+  assert.equal(declared?.settings[0]?.defaultValue, 45);
+
+  const legacy = await loadSdkPreviewRuntimeDefinition(
+    "creator-lab",
+    "legacy-game",
+    (async () => Response.json({
+      title: "旧モック",
+      runtimeUrl: "https://example.com/legacy",
+    })) as typeof fetch,
+  );
+  assert.deepEqual(
+    legacy?.settings.map((setting) => setting.platformRole),
+    ["time-limit"],
+  );
 });
 
 test("SDK preview injects one platform preset runtime into mock HTML", () => {
@@ -44,6 +87,8 @@ test("SDK preview injects one platform preset runtime into mock HTML", () => {
   assert.match(source, /game:abort/);
   assert.match(source, /viewer:set/);
   assert.match(source, /room:hydrate/);
+  assert.match(source, /settings:sync/);
+  assert.match(source, /state\.settings/);
   assert.match(source, /hydrateRoom/);
   assert.match(source, /\[data-gf-phase\]:not\(select\):not\(html\)/);
   assert.match(source, /event\.source !== window\.parent/);
@@ -133,6 +178,10 @@ test("SDK preview composes the common room lifecycle around the game slot", () =
     "app/sdk-preview/[creatorSlug]/games/[gameId]/SdkPreviewGameShell.tsx",
     "utf8",
   );
+  const settingsControl = readFileSync(
+    "app/sdk-preview/[creatorSlug]/games/[gameId]/SdkPreviewSettingsControl.tsx",
+    "utf8",
+  );
   for (const surface of ["entry", "result"]) {
     assert.match(shell, new RegExp(`data-sdk-preview-surface="${surface}"`));
   }
@@ -141,7 +190,6 @@ test("SDK preview composes the common room lifecycle around the game slot", () =
   for (const sharedComponent of [
     "GameAdSlot",
     "RoomConfigSummary",
-    "RoomTimeLimitControl",
     "DebugToolWindow",
     "DebugParticipantControls",
     "OnlineRoomLifecycleActions",
@@ -149,6 +197,14 @@ test("SDK preview composes the common room lifecycle around the game slot", () =
   ]) {
     assert.match(shell, new RegExp(sharedComponent));
   }
+  assert.match(shell, /SdkPreviewSettingsControl/);
+  assert.match(settingsControl, /RoomTimeLimitControl/);
+  assert.match(shell, /settingDefinitions\.map/);
+  assert.match(shell, /"settings:sync"/);
+  assert.doesNotMatch(shell, /sdk-preview-max-players/);
+  assert.doesNotMatch(shell, /sdk-preview-rounds/);
+  assert.doesNotMatch(shell, /\[2, 3, 4, 5, 6, 8, 10, 12\]/);
+  assert.doesNotMatch(shell, /\[1, 2, 3, 5, 7, 10\]/);
   assert.match(shell, /Game-specific slot/);
   assert.match(shell, /resolveRequiredSdkPreviewModules/);
   assert.equal(

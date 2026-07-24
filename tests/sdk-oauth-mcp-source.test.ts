@@ -38,7 +38,18 @@ test("SDK MCP challenges unauthenticated callers and scopes mock publication", (
   assert.match(mcp, /listChanged: false/);
   assert.match(mcp, /readOnlyHint: true/);
   assert.match(mcp, /title: "ゲームモックの保存"/);
+  assert.match(mcp, /parseSdkMockPreviewManifest\(gameId, args\.files\)/);
+  assert.match(mcp, /manifest = EXCLUDED\.manifest/);
   assert.match(mcp, /creatorUrl, gameUrl, previewUrl: gameUrl/);
+});
+
+test("SDK Portal persists app-declared settings and exposes them to preview", () => {
+  const parser = read("apps/sdk-portal/lib/mock-preview-manifest.ts");
+  const runtime = read("apps/sdk-portal/app/api/preview-runtime/[instanceId]/[gameId]/route.ts");
+  assert.match(parser, /preview\.json/);
+  assert.match(parser, /requireTimeLimit: true/);
+  assert.match(runtime, /legacyTimeLimitFallback: true/);
+  assert.match(runtime, /settings: parseGameSdkSettingDefinitions/);
 });
 
 test("DownloadMe contains no embedded credential placeholders", () => {

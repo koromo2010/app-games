@@ -1,5 +1,6 @@
 import { authenticateCreator, normalizeInstanceSlug, validateInstanceSlug } from "@/lib/instance-registry";
 import { saveMockFilesToGit } from "@/lib/mock-git-store";
+import { parseSdkMockPreviewManifest } from "@/lib/mock-preview-manifest";
 import { ensureSdkSchema, sdkSql } from "@/lib/sdk-postgres";
 import platformRelease from "../../../../../../../../../config/platform-release.json";
 import { createInitialGameSdkModuleProfile } from "@game-fields/game-sdk/modules";
@@ -45,9 +46,10 @@ export async function PUT(
     const creator = await authenticateCreator(slug, token);
     if (!creator) return Response.json({ saved: false, error: "認証情報が正しくありません。" }, { status: 403 });
 
+    const mockManifest = parseSdkMockPreviewManifest(gameId, body.files);
     const revision = await saveMockFilesToGit({ instanceId: slug, gameId, files: body.files });
     await ensureSdkSchema();
-    const mockManifest = JSON.stringify({ stage: "mock", id: gameId });
+    const mockManifestJson = JSON.stringify(mockManifest);
     const initialModulePolicy = JSON.stringify(
       createInitialGameSdkModuleProfile(),
     );
@@ -57,13 +59,14 @@ export async function PUT(
         module_policy, sdk_package_version, sdk_contract_version, mock_revision
       )
       VALUES (
-        ${creator.id}, ${gameId}, ${title}, ${description}, ${mockManifest}::jsonb,
+        ${creator.id}, ${gameId}, ${title}, ${description}, ${mockManifestJson}::jsonb,
         ${initialModulePolicy}::jsonb, ${platformRelease.sdkPackageVersion},
         ${platformRelease.sdkContractVersion}, ${revision}
       )
       ON CONFLICT (creator_id, game_id) DO UPDATE SET
         title = EXCLUDED.title,
         description = EXCLUDED.description,
+        manifest = EXCLUDED.manifest,
         mock_revision = EXCLUDED.mock_revision,
         updated_at = NOW()
     `;
