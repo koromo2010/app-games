@@ -3374,3 +3374,25 @@
 - `npm run lint`、SDK Portal build、隔離Preview build、SDK配布tarballの外部install検査、starterの型・契約・完走・提出ZIP検査が成功した。
 - developへのpush・dev deployment・ログイン済み複数ブラウザE2Eは未実施。
 - AIことば当てのコード・設定・保存済みrevisionは変更していない。
+
+## 2026-07-24 — SDK共通接続のdevelop反映
+
+### 利用者からの要望
+
+- 検証済みのSDK共通接続変更をGitHubの`develop`へpushする。
+
+### 実施結果
+
+- `origin/develop`の`082ce011e01a`から、SDK設定宣言、公開語彙境界、Preview認証、正式Room・結果・時間管理・戦績・観戦・DEBUG・個人既定値・ルール表示・全員復帰確認を含む変更をfast-forwardで反映した。
+- GitHub上の実装先頭コミットは`01a6644`、最終実装コミットは`a0cc5b1`。
+- AIことば当てのコード、設定、保存済みrevisionは変更していない。
+
+### 検証
+
+- push前にリモートを再取得し、`origin/develop`がローカル履歴の祖先で、競合や他者の未取込更新がないことを確認した。
+- 実装コミット時点で501テスト、lint、本体・SDK Portal・隔離PreviewのProduction build、SDK配布package・starter検査が成功済み。
+
+### 未対応・保留
+
+- dev deploymentの完了状態と、ログイン済み複数ブラウザでの実機E2Eは別途確認する。
+- `main`、本番SDK、npm package versionは今回更新しない。
