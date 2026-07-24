@@ -70,6 +70,9 @@ test("SDK platform shell owns start, abort, auto progress, and rematch controls"
   for (const command of ["game:start", "game:abort", "game:auto-progress", "game:rematch"]) {
     assert.match(shell, new RegExp(command.replace(":", "\\:")));
   }
+  assert.match(shell, /const SDK_PREVIEW_MINIMUM_PLAYERS = 1/);
+  assert.match(shell, /minimumPlayers: SDK_PREVIEW_MINIMUM_PLAYERS/);
+  assert.doesNotMatch(shell, /開始には2人以上必要です/);
 });
 
 test("every required SDK module resolves to a concrete preview implementation", () => {

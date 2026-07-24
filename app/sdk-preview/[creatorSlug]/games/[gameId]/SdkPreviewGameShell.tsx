@@ -49,6 +49,7 @@ import {
 
 type PreviewPhase = "lobby" | "playing" | "result";
 type PreviewSurface = "entry" | PreviewPhase;
+const SDK_PREVIEW_MINIMUM_PLAYERS = 1;
 type PreviewPlayer = {
   id: string;
   name: string;
@@ -418,10 +419,10 @@ export function SdkPreviewGameShell({
         hostId: "host",
         phase,
         participantCount: players.length,
-        minimumPlayers: 2,
+        minimumPlayers: SDK_PREVIEW_MINIMUM_PLAYERS,
       });
     } catch {
-      setMessage("開始には2人以上必要です。DEBUGからダミーを追加できます。");
+      setMessage("ゲームを開始できません。参加者とフェーズを確認してください。");
       return;
     }
     setMessage("");
@@ -631,6 +632,7 @@ export function SdkPreviewGameShell({
 
   const settingsItems = [
     { label: "部屋コード", value: roomCode || "未作成" },
+    { label: "最小人数", value: `${SDK_PREVIEW_MINIMUM_PLAYERS}人` },
     { label: "最大人数", value: `${maximumPlayers}人` },
     { label: "ラウンド", value: `${rounds}回` },
     { label: "制限時間", value: timeLimitSeconds === 0 ? "なし" : `${timeLimitSeconds}秒` },

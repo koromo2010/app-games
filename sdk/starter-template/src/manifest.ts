@@ -5,7 +5,7 @@ export const myFirstGameManifest = defineGameManifest({
   id: "my-first-game",
   title: { ja: "はじめてのゲーム", en: "My First Game" },
   playMode: "online-room",
-  minimumPlayers: 2,
+  minimumPlayers: 1,
   maximumPlayers: 4,
   supportsDebug: true,
   supportsSpectators: false,

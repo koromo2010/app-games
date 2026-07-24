@@ -51,6 +51,8 @@ import {
 - `minimumPlayers` / `maximumPlayers`
 - debug、観戦、replay、rating、LLMの利用有無
 
+Game Fields SDKの共通初期値は`minimumPlayers: 1`です。1人で開始・確認できる状態を維持し、複数人が必須となるゲーム固有ルールだけをAppSet側で追加検証します。
+
 ## SDK基本セット + AppSet
 
 新しいオンラインゲームは、Room全体を実装せずゲーム固有の`AppSet`を登録します。

@@ -19,6 +19,26 @@ const player = {
   debugAccess: false,
 } as const;
 
+test("ホスト1人でゲームを開始できる", async () => {
+  const runtime = createGameSdkMockRuntime({ module: myFirstGameServerModule });
+  const created = await runtime.createRoom({
+    roomCode: "SOLO",
+    create: {
+      settings: { target: 2 },
+      app: {},
+    },
+    actor: host,
+  });
+  const started = await runtime.sendCommand({
+    code: "SOLO",
+    envelope: { expectedRevision: created.revision, command: { type: "game/start" } },
+    actor: host,
+  });
+
+  assert.equal(started.room.phase, "playing");
+  assert.equal(started.room.view.common.players.length, 1);
+});
+
 test("ダミー2人で1ゲームを最後まで進められる", async () => {
   const runtime = createGameSdkMockRuntime({ module: myFirstGameServerModule });
   const created = await runtime.createRoom({

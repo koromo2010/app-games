@@ -3078,3 +3078,40 @@
 
 - 本番Route、制作者別合言葉管理、公開申請・審査UI、正規URL形は未実装。
 - 今回は`develop`のSDK Preview可変高さ・timer修正だけを公開し、`main`と本番挙動は変更しない。
+
+## 2026-07-24 — SDK Previewの1人開始と利用者向けSDK広場方針
+
+### 利用者からの要望
+
+- SDKゲームの共通開始人数をゲーム別に保存せず、全体で`minimumPlayers: 1`へ変更する。
+- 将来の制作者別ページはGame Fields本体へ混在させず、SDK側から制作者の利用者が遊べる画面として分離する。
+
+### 判断
+
+- SDK Preview Shellの共通開始条件を1人へ固定し、ホスト1人だけでもゲーム固有Runtimeを開始できるようにする。
+- 新規SDKスターターのmanifestと仕様初期値も1人へ揃える。複数人が必要なゲーム固有ルールはAppSet内で追加検証できるが、共通Preview Shellは2人待ちに戻さない。
+- SDK側の制作者向け編集・module確認・DEBUG画面と、制作者の利用者向けプレイ専用画面を分離する。利用者画面は審査済み固定revisionだけを本体の認証・Room・AI・DB Runtimeへ接続し、未審査Previewや管理機能を公開しない。
+
+### 実施結果
+
+- `SdkPreviewGameShell`の開始ガードを`SDK_PREVIEW_MINIMUM_PLAYERS = 1`へ変更し、設定概要にも最小1人を表示した。
+- スターターmanifestと`GAME_SPEC.md`の初期値を1人へ変更し、Mockガイド、SDK API、DownloadMeへ共通開始条件を記載した。
+- スターター契約テストへ、ホスト1人だけでRoomを`playing`へ遷移できる検査を追加した。
+- `PLATFORM_VISION.md`の将来構想を、SDK側の制作者向け画面と利用者向けプレイ画面を分離する方針へ更新した。
+
+### 検証
+
+- `npm run lint`成功。環境変数台帳60キー、9ゲーム共通要件、SDK依存境界を確認した。
+- `npm test`成功（488件）。
+- `npm run test:sdk-package`成功。公開tarballの外部fixture installと公開exportを確認した。
+- `npm run test:sdk-starter`成功。1人開始契約を含むスターター、公開Git snapshot、ZIP、型検査、完走デモ、提出ZIPを確認した。
+- `npm run build`成功。本体77ページを生成した。
+- `npm run build:sdk`成功。SDK Portal 14ページを生成した。
+- `npm run build:sdk-preview`成功。隔離Preview 5ページを生成した。
+- `git diff --check`成功。
+
+### 未対応・保留
+
+- `develop`反映後に本体dev、SDK-dev、隔離Preview devのREADYを確認し、「AIことば当て（仮）」が参加者1人で開始できることを公開契約から確認する。
+- SDK側の利用者専用Route、合言葉管理、公開申請・審査UIは将来実装とし、今回は構想の正本化だけを行う。
+- `main`、本番SDK、npm package versionはこの変更では更新しない。
