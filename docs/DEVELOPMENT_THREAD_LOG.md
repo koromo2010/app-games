@@ -2796,5 +2796,8 @@
 
 ### 未対応・保留
 
-- `develop`への反映、3環境のDeployment READY確認、SDK-dev実画面でのプレイ中配置確認は未実施。
+- 検証済みtreeをcommit `006099a2beaaf2129ddb9101a75835f8ca9efa44`として`develop`へforceなしで反映した。本体dev `dpl_GjwMJPY3M9CkbFWaRGtpstVJibAr`、SDK-dev `dpl_FX5AuxBioiz5VAQmHPjuHcaC5TuG`、隔離Preview dev `dpl_AGog8M9EXEgtuSqc2dr2CyCmrJin`が同commitで`READY`となった。
+- 公開`https://sdk-dev.game-fields.com/test10-1/games/janken-classic`を実ブラウザで確認した。共通ロビーからダミー参加者を追加してプレイへ進み、幅1152pxのプレイ中グリッドが`840px / 260px`として計算されることを確認した。
+- ゲーム固有領域は左840px、Room情報は右260px、固有iframeは838pxで描画され、ゲーム領域が260px列へ縮退しないことを確認した。
+- 上記3 deploymentを対象に直近30分の`error`・`fatal`ログを確認し、該当ログは0件だった。ブラウザ側では検証用Chrome拡張由来のmetadata送信エラーだけを確認し、対象ページ由来のエラーはなかった。
 - `main`、本番SDK、公開`sdk-starter`は変更対象外。
