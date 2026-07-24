@@ -2834,5 +2834,8 @@
 
 ### 未対応・保留
 
-- SDK-devへの反映と公開画面での最小化・視点切替の実機確認は未実施。
+- 検証済みtreeをcommit `106d75770471d52a1cd71118fb18fc76158ca7d4`として`develop`へforceなしで反映した。本体dev `dpl_2r2Et5ox5L4ZMde9CmAr3sybry3C`、SDK-dev `dpl_AjAGpzTwhGt539NzkafPNDgmjiFE`、隔離Preview dev `dpl_3zsMtSTahMbsnpCVqdMnHrowow46`が同commitで`READY`となった。
+- 公開`https://sdk-dev.game-fields.com/test10-1/games/janken-classic`を実ブラウザで確認した。閲覧視点は旧`select`が0件、直接選択ボタンが表示され、DEBUG TOOLSを最小化した後も常設領域が表示された。
+- 最小化したまま「観戦者」を選択し、`aria-pressed`が「あなた」から「観戦者」へ切り替わることを確認した。
+- 上記3 deploymentを対象に直近30分の`error`・`fatal`ログを確認し、該当ログは0件だった。ブラウザ側では検証用Chrome拡張由来のmetadata送信エラーだけを確認し、対象ページ由来のエラーはなかった。
 - `main`、本番SDK、公開`sdk-starter`は変更対象外。
