@@ -332,6 +332,17 @@ if (
 ) {
   failures.push("packages/game-sdk/package.json: 公開SDKはpublic access・MIT・provenanceを固定してください。");
 }
+const sdkPreviewPackageJson = JSON.parse(
+  readFileSync(join(root, "apps/sdk-preview/package.json"), "utf8"),
+);
+for (const script of ["predev", "prebuild"]) {
+  if (
+    sdkPreviewPackageJson.scripts?.[script]
+    !== "npm run build --workspace @game-fields/game-sdk"
+  ) {
+    failures.push(`apps/sdk-preview/package.json: ${script}で公開SDK workspaceを先にbuildしてください。`);
+  }
+}
 for (const exportPath of [
   ".",
   "./runtime",

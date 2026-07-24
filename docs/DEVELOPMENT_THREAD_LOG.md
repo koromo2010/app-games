@@ -3601,6 +3601,10 @@
   asset grantは8時間、内部server grantは10分とし、長いRoomでも遅延読込assetを維持しつつ
   server実行権限を短命に保つ。
 - lint成功。全513テスト成功。本体、SDK Portal、隔離Previewの3環境Production build成功。
+- 最初の`develop`反映`44008ba45302`では、クリーンcheckoutからbuildする隔離Previewだけが
+  `@game-fields/game-sdk/portable-server`の未生成`dist`を解決できずVercel buildで停止した。
+  AppSet実行やpackage内容の問題ではない。SDK Portalと同じくPreviewの`predev`／`prebuild`で
+  公開SDK workspaceを先にbuildし、ローカルの先行生成物へ依存しない手順へ統一した。
 - 検証用AI AppSet原文hash
   `bad5f5743698f35aaccf1b0939855b1fb63ad4d185bbfaadbcf99eef3e7a8504`
   とserver bundle hash
