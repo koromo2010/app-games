@@ -23,7 +23,7 @@
 - `mock.js`: ゲーム固有状態と`GameFieldsPreset.registerGame()`の接続
 - `preview.json`: 制作者広場のカードと共有URLに使うゲームID・表示名・説明
 
-外部CDN、API、ログイン、DBへ依存させません。架空データだけを使います。AIは`#game-slot`の内側とゲーム固有JavaScriptを編集します。広場、ヘッダー、ゲームカード、入室、部屋、参加者、ルール、デバッグパネル、プレイヤーメニュー、退出・再戦を追加してはいけません。これらは保存URLの外側にすでに存在します。
+外部CDN、事業者API、ログイン、DBへ直接依存させません。架空データだけを使います。LLMが必要なゲームだけは、外側Shellが提供する`GameFieldsPreset.resources.llm`を利用できます。AIは`#game-slot`の内側とゲーム固有JavaScriptを編集します。広場、ヘッダー、ゲームカード、入室、部屋、参加者、ルール、デバッグパネル、プレイヤーメニュー、退出・再戦を追加してはいけません。これらは保存URLの外側にすでに存在します。
 
 ## 作り方
 
@@ -32,6 +32,7 @@
 3. 最短の主要フローを操作できるようにする。
 4. `index.html`をゲーム固有slotだけに保ち、共通UIを複製していないことを確認する。
 5. `mock.js`で`GameFieldsPreset.registerGame()`を必ず呼び、`start`、`abort`、`rematch`、`autoProgress`、`onStateChange`をゲーム固有状態へ接続する。
+   - LLMを使う場合は`GameFieldsPreset.resources.llm.generate({ task, prompt, promptVersion })`へゲーム内容だけを渡す。provider、モデル、APIキー、課金元、endpointをゲーム側へ持たせない。
 6. 外側のデバッグメニューから、ダミー参加者追加、閲覧プレイヤー視点切替、主要フェーズ切替、待機、時間切れ、切断、入力エラー、結果を再現できるようにする。slot内にデバッグ操作を重複配置しない。
 7. ダミー参加者を自動進行または一括入力でき、1人で開始から結果まで止まらず確認できるようにする。
 8. `abort`でゲーム固有状態を初期化し、外側Shellが同じ参加者のロビーへ戻せるようにする。

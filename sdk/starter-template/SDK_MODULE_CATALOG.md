@@ -94,6 +94,38 @@ const words = await requireGameSdkContentSource(context.resources).drawWords({
 
 取得結果の`id`はopaqueです。DBキーとして解釈せず、API・Redis・PostgreSQLへ直接接続しません。利用可能なpoolは確定済みprofileとPlatform権限に従います。
 
+## LLM
+
+ゲームはOpenAI、Gemini、Groqを直接呼びません。provider、モデル、APIキー、課金元、fallbackはGame Fieldsが所有し、ゲーム側は生成する内容と固定task／promptVersionだけを渡します。
+
+本実装では、ブラウザのゲームCommandに質問・履歴等の入力だけを含め、審査済みAppSetのserver側から呼びます。
+
+```ts
+import { requireGameSdkLlmGateway } from "@game-fields/game-sdk/resources";
+
+const generated = await requireGameSdkLlmGateway(
+  context.resources,
+).generate({
+  task: "answer-question",
+  prompt: buildReviewedPrompt(command.question, room.app.history),
+  promptVersion: "answer-question-v1",
+  quality: "standard",
+});
+```
+
+モックでは、同じrequest／response契約を外側Shellの安全なbridgeで確認できます。
+
+```js
+const generated = await GameFieldsPreset.resources.llm.generate({
+  task: "answer-question",
+  prompt: buildPromptFromGameInput(question, history),
+  promptVersion: "answer-question-v1",
+  quality: "standard"
+});
+```
+
+Preview iframeは事業者endpointやGame Fields APIへ直接接続しません。外側Shellが認証・module profile・レート制限を検査し、共通AI通信バイタルを点灯してから中継します。Previewはstandard品質だけで、高品質生成は採用審査時に用途を確認します。
+
 ## トランプ
 
 Game Fields本体には共通トランプ基盤があります。トランプを使うゲームでは独自のカード型・シャッフル・カードUIを新設せず、この基盤の利用を指定します。

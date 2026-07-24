@@ -28,6 +28,8 @@ UI / hooks -> API client -> HTTP route -> application/domain -> storage
 - SDK接続前のrelease・環境・capability合意: `packages/game-sdk/src/handshake.ts`, `apps/sdk-portal/lib/sdk-handshake.ts`, `apps/sdk-portal/app/.well-known/game-fields-sdk/route.ts`
 - 採用済みSDKゲームの汎用HTTP入口・審査登録簿: `app/api/game-sdk/[gameId]/rooms/route.ts`, `lib/game-sdk-online-room-http.ts`, `lib/game-sdk-server-registry.ts`
 - 採用済みSDKゲームのRedis Room lifecycle: `lib/game-sdk-platform-room-store.ts`, `lib/game-sdk-platform-adapter.ts`
+- 採用済みSDKゲームのLLM注入境界: `lib/game-sdk-llm-gateway.ts`, `packages/game-sdk/src/llm.ts`, `packages/game-sdk/src/resources.ts`
+- 未審査Previewの限定LLM bridge: `apps/sdk-preview/lib/preset-runtime.ts`, `app/api/sdk-preview/llm/route.ts`
 - 表示中の部屋同期: `app/hooks/use-online-room-polling.ts`
 - ログイン画面先行表示と部屋復元: `app/hooks/use-online-game-session-restore.ts`
 - 広場の全ゲーム復帰概要: `app/api/player-active-rooms/route.ts`
@@ -64,6 +66,8 @@ UI / hooks -> API client -> HTTP route -> application/domain -> storage
 たほい屋は`lib/tahoiya-debug-participants.ts`を共通Commandの補正hookとして使う。参加者配列の変更に合わせて回答者、得点、偽説明、投票、時間切れを現在の参加者へ正規化する。ほかのゲームも、並べ替え役、人数依存設定、代理操作対象、チーム所属など必要な補正だけを同じhookへ渡す。
 
 AI APIを呼ぶ可能性があるクライアント操作は`aiActivityFetch`または`withAiActivity`を通し、共通ストアが同時処理数を管理する。`GameTopBanner`内の`AiActivityVital`だけが通信状態を表示し、各ゲームLayoutへ発光状態を複製しない。これは待機・利用量発生可能性の表示であり、課金額やサーバー側認可の正本にはしない。
+
+SDKゲームのclientはAI事業者を選ばず、provider URL、APIキー、model、課金情報を保持しない。本体採用後はclientがゲームCommandと入力値だけを送り、審査済みserver AppSetがpromptを構築して`context.resources.llm.generate`を呼ぶ。`lib/game-sdk-llm-gateway.ts`が公開requestを検証し、共通`lib/game-llm.ts`へprovider選択、持込／Game Fields課金、fallbackを委譲する。未審査Previewだけは本番server moduleがまだないため、`GameFieldsPreset.resources.llm.generate`から外側ShellへのpostMessage bridgeを使うが、同じくprovider情報は返さず、ログイン、module profile、レート制限を本体APIで再検証する。
 
 オンライン部屋の操作表示は`OnlineRoomLifecycleActions`へ集約し、ゲーム側は現在の表示面を`lobby / playing / result`で渡す。ロビーではホストの解散だけ、プレイ中は何も表示せず、結果では内部の`RoomResultActions`が復帰・広場・解散を提供する。サーバー側の解散可否は従来どおり`canDissolveOnlineRoom`と各Storeを正本とする。
 

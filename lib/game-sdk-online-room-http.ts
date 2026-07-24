@@ -5,6 +5,7 @@ import type {
 } from "@game-fields/game-sdk";
 import { GameFieldsPlatformRuntimeError } from "@game-fields/game-runtime";
 import type { AuthenticatedGameSdkPlatformAdapter } from "./game-sdk-platform-adapter.ts";
+import { GameSdkLlmRateLimitError } from "./game-sdk-llm-gateway.ts";
 
 export type GameSdkOnlineRoomHttpOperation =
   | "read"
@@ -92,6 +93,23 @@ function safeModuleErrorCode(error: unknown) {
 export function gameSdkOnlineRoomErrorResponse(error: unknown) {
   if (error instanceof GameFieldsPlatformRuntimeError) {
     return json({ error: error.code }, error.status);
+  }
+  if (error instanceof GameSdkLlmRateLimitError) {
+    return Response.json(
+      {
+        error: error.message,
+        retryAfterMs: error.retryAfterMs,
+      },
+      {
+        status: 429,
+        headers: {
+          "Cache-Control": "no-store",
+          "Retry-After": String(
+            Math.max(1, Math.ceil(error.retryAfterMs / 1000)),
+          ),
+        },
+      },
+    );
   }
   const code = safeModuleErrorCode(error);
   if (!code) return json({ error: "GAME_SDK_RUNTIME_FAILED" }, 500);

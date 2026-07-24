@@ -62,7 +62,11 @@ async function handle(request: Request, context: RouteContext, method: Method) {
     const actorRef = telemetry.actorRef(session.id);
     let observed = false;
     const handlers = createGameSdkOnlineRoomHttpHandlers({
-      adapter: registration.createAdapter(async () => identity),
+      adapter: registration.createAdapter(
+        async () => identity,
+        request,
+        session.id,
+      ),
       onSuccess(operation, room, affected) {
         observed = true;
         if (method === "GET") return;

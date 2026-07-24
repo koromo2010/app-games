@@ -49,6 +49,10 @@ test("SDK preview injects one platform preset runtime into mock HTML", () => {
   assert.match(source, /event\.source !== window\.parent/);
   assert.match(source, /game-fields:command/);
   assert.match(source, /game-fields:state/);
+  assert.match(source, /game-fields:resource-request/);
+  assert.match(source, /game-fields:resource-response/);
+  assert.match(source, /resources: Object\.freeze/);
+  assert.match(source, /generate: generateLlm/);
   assert.match(source, /gameAdapterReady/);
   assert.match(source, /game:register/);
 });
@@ -122,6 +126,12 @@ test("SDK preview composes the common room lifecycle around the game slot", () =
   assert.match(shell, /lg:grid-cols-\[minmax\(0,1fr\)_280px\]/);
   assert.doesNotMatch(shell, /lg:grid-cols-\[260px_minmax\(0,1fr\)\]/);
   assert.match(shell, /\/api\/sdk-preview\/content-sample/);
+  assert.match(shell, /\/api\/sdk-preview\/llm/);
+  assert.match(shell, /game-fields:resource-request/);
+  assert.match(shell, /normalizeGameSdkLlmRequest/);
+  assert.match(shell, /PaidLlmAccessButton/);
+  assert.match(shell, /AI APIを実際に呼ぶ/);
+  assert.doesNotMatch(shell, /new Promise<void>\(\(resolve\) => window\.setTimeout/);
   assert.doesNotMatch(shell, /\["ひまわり", "飛行船", "珊瑚礁"\]/);
   assert.match(shell, /persistentContent=\{debugEnabled/);
   assert.match(shell, /data-sdk-preview-viewer-selector/);

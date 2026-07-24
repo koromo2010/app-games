@@ -2,6 +2,10 @@ import type { GameFieldsAuthenticatedIdentity } from "@game-fields/game-runtime"
 import { wordWolfSdkServerModule } from "../games/wordwolf-sdk/server-module.ts";
 import { createGameFieldsSdkContentSource } from "./game-sdk-content-source.ts";
 import {
+  createGameFieldsSdkLlmGateway,
+  enforceGameSdkLlmRateLimit,
+} from "./game-sdk-llm-gateway.ts";
+import {
   createAuthenticatedGameSdkPlatformAdapter,
   type AuthenticatedGameSdkPlatformAdapter,
 } from "./game-sdk-platform-adapter.ts";
@@ -21,6 +25,8 @@ export type ApprovedGameSdkRegistration = {
   supportsDebug: boolean;
   createAdapter(
     resolveIdentity: () => Promise<GameFieldsAuthenticatedIdentity>,
+    request: Request,
+    playerId: string,
   ): ApprovedGameSdkRoomAdapter;
 };
 
@@ -30,12 +36,20 @@ const registrations: readonly ApprovedGameSdkRegistration[] = [
     title: wordWolfSdkServerModule.manifest.title.ja,
     channel: "development",
     supportsDebug: wordWolfSdkServerModule.manifest.supportsDebug,
-    createAdapter(resolveIdentity) {
+    createAdapter(resolveIdentity, request, playerId) {
       return createAuthenticatedGameSdkPlatformAdapter({
         module: wordWolfSdkServerModule,
         resolveIdentity,
         resources: {
           contentSource: createGameFieldsSdkContentSource(),
+          llm: createGameFieldsSdkLlmGateway({
+            gameId: wordWolfSdkServerModule.manifest.id,
+            allowHighQuality: true,
+            beforeGenerate: () => enforceGameSdkLlmRateLimit(
+              request,
+              playerId,
+            ),
+          }),
         },
       }) as unknown as ApprovedGameSdkRoomAdapter;
     },

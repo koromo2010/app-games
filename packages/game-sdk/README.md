@@ -59,6 +59,29 @@ async function createRound(context: GameSdkCommandContext) {
 
 `general-words`、`word-pairs`、`rare-words`は公開pool IDです。実際に利用できるpoolは審査済みmodule profileとゲーム権限でPlatform側が制限します。
 
+## LLM
+
+ゲームはprovider clientやAPIキーを持たず、Game Fieldsがserver contextへ注入したgatewayだけを使います。ブラウザはゲームCommandとゲーム入力だけを送り、審査済みAppSetが固定promptを組み立てます。
+
+```ts
+import { requireGameSdkLlmGateway } from "@game-fields/game-sdk/resources";
+
+async function answerQuestion(
+  context: GameSdkCommandContext,
+  question: string,
+  history: readonly string[],
+) {
+  return requireGameSdkLlmGateway(context.resources).generate({
+    task: "answer-question",
+    prompt: buildReviewedPrompt(question, history),
+    promptVersion: "answer-question-v1",
+    quality: "standard",
+  });
+}
+```
+
+Game Fieldsがpersonal／Game Fields提供枠／共有無料枠、provider fallback、認証、レート制限、観測を処理します。Previewのゲーム固有iframeは事業者APIを直接呼ばず、外側Shellの`GameFieldsPreset.resources.llm.generate`から同じrequest／response契約を確認します。
+
 ## Playing cards
 
 ```ts

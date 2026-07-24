@@ -35,6 +35,10 @@ import {
   createGameSdkHttpClientRuntime,
   GameSdkHttpClientRuntimeError,
 } from "@game-fields/game-sdk/client-runtime";
+import {
+  requireGameSdkContentSource,
+  requireGameSdkLlmGateway,
+} from "@game-fields/game-sdk/resources";
 ```
 
 ## Manifest
@@ -87,6 +91,33 @@ SDK基本セットが次を所有します。
 - 本体統合後の認証、保存、active room、一覧、Realtime、解散
 
 AppSetが所有するのはゲーム固有state、ゲーム固有Command、フェーズ・勝敗、ゲーム固有Viewだけです。AppSetは`code`、revision、参加者配列、共通設定を更新できません。
+
+## LLM resource
+
+本実装では、ブラウザは「AI回答を生成する」ゲームCommandと質問・履歴等のゲーム入力だけを送ります。審査済みAppSetのserver側が固定promptを組み立て、Game Fieldsから注入された共通LLM gatewayを呼びます。
+
+```ts
+const llm = requireGameSdkLlmGateway(context.resources);
+const generated = await llm.generate({
+  task: "answer-question",
+  prompt: buildReviewedPrompt(command.question, room.app.history),
+  promptVersion: "answer-question-v1",
+  quality: "standard",
+  responseJsonSchema: {
+    name: "answer",
+    schema: {
+      type: "object",
+      properties: {
+        answer: { type: "string" },
+      },
+      required: ["answer"],
+      additionalProperties: false,
+    },
+  },
+});
+```
+
+ゲーム側はprovider、モデル、APIキー、課金元、endpointを指定しません。Game Fieldsが利用者のpersonal／Game Fields提供枠／共有無料枠、provider fallback、認証、レート制限、観測を処理します。promptは20,000文字、JSON Schemaは32,000文字、timeoutは45秒が上限です。Previewでは`quality: "standard"`だけを利用します。
 
 ## 共通モジュールprofile
 
@@ -196,6 +227,21 @@ GameFieldsPreset.getState(): PreviewPlatformState;
 GameFieldsPreset.command(name: string, payload?: Record<string, unknown>): void;
 GameFieldsPreset.subscribe(listener): () => void;
 GameFieldsPreset.registerGame(adapter): () => void;
+GameFieldsPreset.resources.llm.generate(request): Promise<GameSdkLlmResponse>;
 ```
 
 標準Commandは`debug:toggle`、`dummy:add`、`dummy:remove`、`viewer:set`、`phase:set`、`game:start`、`game:abort`、`game:auto-progress`、`game:rematch`です。ゲーム固有コードは`registerGame`で`start`、`abort`、`autoProgress`、`rematch`、`onStateChange`だけを接続します。
+
+LLMを使うモックは次のように呼びます。
+
+```js
+const generated = await GameFieldsPreset.resources.llm.generate({
+  task: "answer-question",
+  prompt: buildPromptFromGameInput(question, history),
+  promptVersion: "answer-question-v1",
+  quality: "standard"
+});
+renderAnswer(generated.text);
+```
+
+この呼び出しはopaque-origin iframeから外部APIへ直接通信しません。外側Shellが要求を受け、ログイン済みGame Fieldsセッション、確定済みmodule profile、AI利用設定、利用上限を確認して共通gatewayへ中継します。

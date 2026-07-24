@@ -88,6 +88,27 @@ test("LLM gateway validates public requests and keeps providers behind adapter",
     }),
     /GAME_SDK_LLM_INVALID_TASK/,
   );
+  await assert.rejects(
+    gateway.generate({
+      task: "test-generation",
+      prompt: "hello",
+      promptVersion: "v1",
+      responseJsonSchema: {
+        name: "INVALID SCHEMA",
+        schema: { type: "object" },
+      },
+    }),
+    /GAME_SDK_LLM_INVALID_SCHEMA_NAME/,
+  );
+  await assert.rejects(
+    gateway.generate({
+      task: "test-generation",
+      prompt: "hello",
+      promptVersion: "v1",
+      timeoutMs: 45_001,
+    }),
+    /GAME_SDK_LLM_INVALID_TIMEOUT/,
+  );
 });
 
 test("playing cards are reusable through the public package", () => {

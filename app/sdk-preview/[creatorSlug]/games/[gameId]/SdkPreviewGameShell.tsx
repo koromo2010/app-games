@@ -14,10 +14,11 @@ import {
   gameTopMenuItemClass,
 } from "@/app/components/GameTopMenu";
 import { OnlineRoomLifecycleActions } from "@/app/components/OnlineRoomLifecycleActions";
+import { PaidLlmAccessButton } from "@/app/components/PaidLlmAccessButton";
 import { PlayingCard } from "@/app/components/PlayingCard";
 import { RoomConfigSummary } from "@/app/components/RoomConfigSummary";
 import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
-import { withAiActivity } from "@/lib/ai-activity-client";
+import { aiActivityFetch } from "@/lib/ai-activity-client";
 import type { DrawingStroke } from "@/lib/drawing-canvas";
 import { createStandardPlayingCardDeck } from "@/lib/playing-cards";
 import {
@@ -36,6 +37,11 @@ import {
   type GameSdkModuleGroup,
   type GameSdkModuleProfile,
 } from "@game-fields/game-sdk/modules";
+import {
+  normalizeGameSdkLlmRequest,
+  type GameSdkLlmRequest,
+  type GameSdkLlmResponse,
+} from "@game-fields/game-sdk/llm";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   resolveRequiredSdkPreviewModules,
@@ -75,6 +81,7 @@ type PreviewCommand =
 
 type Props = {
   backHref: string;
+  creatorSlug: string;
   gameId: string;
   runtimeUrl: string;
   title: string;
@@ -92,6 +99,41 @@ const moduleGroupLabels: Record<GameSdkModuleGroup, string> = {
   resource: "共通リソース",
 };
 const previewCards = createStandardPlayingCardDeck().slice(0, 4);
+
+async function generatePreviewLlm(
+  creatorSlug: string,
+  gameId: string,
+  request: unknown,
+) {
+  const normalizedRequest = normalizeGameSdkLlmRequest(
+    request as GameSdkLlmRequest,
+  );
+  const response = await aiActivityFetch(
+    "SDKゲームがAI回答を生成中",
+    "/api/sdk-preview/llm",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        creatorSlug,
+        gameId,
+        request: normalizedRequest,
+      }),
+    },
+  );
+  const payload = await response.json().catch(() => null) as {
+    response?: GameSdkLlmResponse;
+    error?: unknown;
+  } | null;
+  if (!response.ok || !payload?.response) {
+    throw new Error(
+      typeof payload?.error === "string"
+        ? payload.error
+        : "GAME_SDK_LLM_FAILED",
+    );
+  }
+  return payload.response;
+}
 
 function previewTimestamp() {
   return new Intl.DateTimeFormat("ja-JP", {
@@ -151,6 +193,7 @@ function PreviewViewerSelector({
 
 export function SdkPreviewGameShell({
   backHref,
+  creatorSlug,
   gameId,
   runtimeUrl,
   title,
@@ -183,6 +226,8 @@ export function SdkPreviewGameShell({
   const [labResult, setLabResult] = useState("共通進行部品は操作テストできます。");
   const [contentSample, setContentSample] = useState("サンプル未取得");
   const [contentSamplePending, setContentSamplePending] = useState(false);
+  const [llmSample, setLlmSample] = useState("AIサンプル未生成");
+  const [llmSamplePending, setLlmSamplePending] = useState(false);
   const [drawingStrokes, setDrawingStrokes] = useState<DrawingStroke[]>([]);
 
   const requiredModuleIds = requiredGameSdkModuleIds(moduleProfile);
@@ -236,9 +281,54 @@ export function SdkPreviewGameShell({
       if (event.source !== frameRef.current?.contentWindow) return;
       const data = event.data as {
         type?: unknown;
+        resource?: unknown;
+        requestId?: unknown;
+        request?: unknown;
         command?: unknown;
         state?: { phase?: unknown; gameAdapterReady?: unknown };
       } | null;
+      if (
+        data?.type === "game-fields:resource-request"
+        && data.resource === "llm"
+        && typeof data.requestId === "string"
+      ) {
+        const requestId = data.requestId.slice(0, 120);
+        const target = frameRef.current?.contentWindow;
+        if (!gameSdkModuleIsRequired(moduleProfile, "llm")) {
+          target?.postMessage({
+            type: "game-fields:resource-response",
+            resource: "llm",
+            requestId,
+            ok: false,
+            error: "GAME_SDK_LLM_MODULE_REQUIRED",
+          }, "*");
+          return;
+        }
+        void generatePreviewLlm(
+          creatorSlug,
+          gameId,
+          data.request,
+        ).then((response) => {
+          target?.postMessage({
+            type: "game-fields:resource-response",
+            resource: "llm",
+            requestId,
+            ok: true,
+            response,
+          }, "*");
+        }).catch((error: unknown) => {
+          target?.postMessage({
+            type: "game-fields:resource-response",
+            resource: "llm",
+            requestId,
+            ok: false,
+            error: error instanceof Error
+              ? error.message
+              : "GAME_SDK_LLM_FAILED",
+          }, "*");
+        });
+        return;
+      }
       if (data?.type !== "game-fields:state") return;
       if (typeof data.state?.gameAdapterReady === "boolean") {
         setGameAdapterReady(data.state.gameAdapterReady);
@@ -256,7 +346,7 @@ export function SdkPreviewGameShell({
     };
     window.addEventListener("message", receive);
     return () => window.removeEventListener("message", receive);
-  }, [surface]);
+  }, [creatorSlug, gameId, moduleProfile, surface]);
 
   const enterRoom = (input: {
     code: string;
@@ -450,11 +540,34 @@ export function SdkPreviewGameShell({
   };
 
   const testLlmActivity = async () => {
-    await withAiActivity(
-      "SDK共通LLM接続テスト",
-      () => new Promise<void>((resolve) => window.setTimeout(resolve, 900)),
-    );
-    setLabResult("AI通信バイタルと共通LLM adapterを確認しました。");
+    if (llmSamplePending) return;
+    setLlmSamplePending(true);
+    try {
+      const response = await generatePreviewLlm(
+        creatorSlug,
+        gameId,
+        {
+          task: "preview-connection-check",
+          prompt: "Game Fields SDKの共通AI接続確認です。「接続できました」と日本語だけで短く答えてください。",
+          promptVersion: "sdk-preview-connection-v1",
+          quality: "standard",
+          timeoutMs: 15000,
+        } satisfies GameSdkLlmRequest,
+      );
+      setLlmSample(response.text);
+      setLabResult(
+        `共通LLM adapterから${response.generation.provider}の回答を取得しました。`,
+      );
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "";
+      setLabResult(
+        code === "GAME_SDK_LLM_UNAVAILABLE"
+          ? "利用できるAI APIがありません。プレイヤーメニューの「API」から接続してください。"
+          : "共通LLMから回答を取得できませんでした。API接続と利用上限を確認してください。",
+      );
+    } finally {
+      setLlmSamplePending(false);
+    }
   };
 
   const testContentSource = async () => {
@@ -766,6 +879,11 @@ export function SdkPreviewGameShell({
             <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
               認証済みセッション · 所有者権限 · 表示用IDはゲームslotへ渡しません
             </div>
+            {moduleRequired("llm") && (
+              <div className="mt-3">
+                <PaidLlmAccessButton variant="menu" />
+              </div>
+            )}
             <Link href="/users/me" className={`${secondaryClass} mt-3 block text-center`}>マイページを確認</Link>
             <button type="button" className={`${secondaryClass} mt-2 w-full`} onClick={() => setPlayerMenuOpen(false)}>閉じる</button>
           </section>
@@ -885,6 +1003,11 @@ export function SdkPreviewGameShell({
                 <div className="rounded-xl border border-white/10 bg-white/[.04] p-4">
                   <h3 className="font-black">コンテンツ・LLM</h3>
                   <p className="mt-2 rounded-lg bg-black/20 p-3 text-sm text-cyan-100">{contentSample}</p>
+                  {moduleRequired("llm") && (
+                    <p className="mt-2 rounded-lg bg-black/20 p-3 text-sm text-violet-100">
+                      {llmSample}
+                    </p>
+                  )}
                   {moduleRequired("content-source") && <button
                     type="button"
                     className={`${commandClass} mt-3 w-full`}
@@ -893,7 +1016,14 @@ export function SdkPreviewGameShell({
                   >
                     {contentSamplePending ? "取得中…" : "素材を取得"}
                   </button>}
-                  {moduleRequired("llm") && <button type="button" className={`${commandClass} mt-2 w-full`} onClick={() => void testLlmActivity()}>AI通信表示をテスト</button>}
+                  {moduleRequired("llm") && <button
+                    type="button"
+                    className={`${commandClass} mt-2 w-full`}
+                    disabled={llmSamplePending}
+                    onClick={() => void testLlmActivity()}
+                  >
+                    {llmSamplePending ? "AI回答を生成中…" : "AI APIを実際に呼ぶ"}
+                  </button>}
                 </div>
               )}
 

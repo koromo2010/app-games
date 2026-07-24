@@ -2963,3 +2963,46 @@
 - sample APIは未ログイン要求を401 `Login required`で拒否し、匿名利用者へDB候補を返さないことを確認した。この実行環境には署名済み利用者Cookieがないため、認証後の実DB候補本文の取得だけは利用者画面で「共通モジュール実体を確認」→「素材を取得」を押して確認する。
 - 3 deploymentのbuild errorと、直近30分のruntime `error`／`fatal`は0件だった。
 - `main`、本番SDK、npm package versionはこの変更では更新していない。
+
+## 2026-07-24 — SDKゲームの共通AI API実配線
+
+### 利用者からの要望
+
+- SDKゲームからGame Fields管理のAI APIを実際に呼べる導線を作る。
+- client側はAI事業者やAPIキーを持たず、呼び出す操作と送る内容だけを渡す形にする。
+
+### 判断
+
+- 本体採用後はbrowserがゲームCommandと入力値だけを送り、審査済みserver AppSetがtaskとpromptを組み立ててPlatform注入`context.resources.llm`を呼ぶ。
+- provider、APIキー、接続先、model、持込／Game Fields課金、fallbackは共通`lib/game-llm.ts`の内側へ閉じる。
+- 未審査Previewはserver AppSetが未接続のため、公式`GameFieldsPreset.resources.llm.generate`だけをopaque-origin iframeへ注入し、外側Shellからログイン必須の本体APIへpostMessage中継する。
+- Previewではhigh qualityを許可せず、保存済みゲーム、`llm`必須profile、利用者別レート制限、request上限を本体で再検証する。
+- SDK Portal／隔離Preview ProjectへLLM providerのAPIキーやDB変数を追加せず、既存の本体dev／productionだけが共通AI gatewayを実行する。
+
+### 実施結果
+
+- `lib/game-sdk-llm-gateway.ts`を追加し、公開LLM request検証、共通gateway呼出、生成meta、prompt非記録Telemetry、実生成単位の利用者別レート制限を実装した。
+- 静的審査登録済みSDK server moduleへ`context.resources.llm`を注入し、Room APIで429と`Retry-After`を返せるようにした。
+- `/api/sdk-preview/llm`を追加し、署名済みプレイヤー認証、保存済みruntime取得、module profile検査、standard quality限定、レート制限を適用した。
+- 隔離Runtimeへ`GameFieldsPreset.resources.llm.generate`とrequest／response bridgeを追加した。iframeへprovider APIキー、接続先、model選択、課金情報は渡さない。
+- SDK-dev module labの疑似待機を実AI接続テストへ置き換え、共通プレイヤーメニューから持込API／Game Fields提供枠を接続できるようにした。
+- 公開requestをprompt 20,000文字、JSON schema 32,000文字、timeout 45秒へ制限し、Previewでは送信前とサーバー内の両方で正規化する。
+- 公開SDK README、DownloadMeスターターの要件・仕様・Mockガイド・API・module catalog、正本文書、環境変数台帳へ利用方法と秘密値境界を反映した。新しい外部環境変数は追加していない。
+
+### 検証
+
+- LLM adapter、公開request、Room 429、Preview bridgeを含む`npm test`成功（487件）。
+- `npm run lint`成功。環境変数台帳60キー、9ゲーム共通要件、SDK依存境界を確認した。
+- `npm run test:sdk-package`成功。公開tarballを空の外部fixtureへinstallし、Runtime・resource・React UIの公開exportを確認した。
+- `npm run test:sdk-starter`成功。入口、公開Git snapshot、ZIP、同梱SDK install、型検査、契約テスト、完走デモ、提出ZIPを確認した。
+- `npm run build`成功。Next.js production build、TypeScript検査、77ページ生成を完了した。
+- `npm run build:sdk`成功。SDK Portalのproduction build、TypeScript検査、14ページ生成を完了した。
+- `npm run build:sdk-preview`成功。隔離Previewのproduction build、TypeScript検査、5ページ生成を完了した。
+- `git diff --check`成功。
+
+### 未対応・保留
+
+- `develop`反映後に本体dev、SDK-dev、隔離Preview devの対象commitと`READY`、build／runtime errorを確認する。
+- この実行環境には利用者の署名済みCookieと持込API設定がないため、ログイン後の実回答取得はSDK-dev module labの「AI APIを実際に呼ぶ」で目視確認する。
+- 保存済みの既存ゲームはbridge追加だけではAI呼出コードへ自動変換されない。各ゲームの次回更新で`GameFieldsPreset.resources.llm.generate`を接続する。
+- `main`、本番SDK、npm package versionはこの変更では更新しない。

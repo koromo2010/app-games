@@ -36,6 +36,40 @@ export type GameSdkLlmResponse = {
   generation: GameSdkGenerationMeta;
 };
 
+const maximumGameSdkLlmPromptLength = 20_000;
+const maximumGameSdkLlmSchemaLength = 32_000;
+const maximumGameSdkLlmTimeoutMs = 45_000;
+
+function normalizeGameSdkLlmJsonSchema(
+  value: GameSdkLlmJsonSchema,
+): GameSdkLlmJsonSchema {
+  const name = value.name.trim();
+  if (!/^[a-z][a-z0-9_-]{0,63}$/.test(name)) {
+    throw new Error("GAME_SDK_LLM_INVALID_SCHEMA_NAME");
+  }
+  if (
+    !value.schema
+    || typeof value.schema !== "object"
+    || Array.isArray(value.schema)
+  ) {
+    throw new Error("GAME_SDK_LLM_INVALID_SCHEMA");
+  }
+  let serialized = "";
+  try {
+    serialized = JSON.stringify(value.schema);
+  } catch {
+    throw new Error("GAME_SDK_LLM_INVALID_SCHEMA");
+  }
+  if (!serialized || serialized.length > maximumGameSdkLlmSchemaLength) {
+    throw new Error("GAME_SDK_LLM_INVALID_SCHEMA");
+  }
+  return {
+    name,
+    schema: value.schema,
+    strict: value.strict !== false,
+  };
+}
+
 /**
  * Platform-injected LLM contract. API keys and provider clients never cross
  * this boundary into a game package.
@@ -53,7 +87,7 @@ export function normalizeGameSdkLlmRequest(
   if (!/^[a-z][a-z0-9-]{0,79}$/.test(task)) {
     throw new Error("GAME_SDK_LLM_INVALID_TASK");
   }
-  if (!prompt || prompt.length > 100_000) {
+  if (!prompt || prompt.length > maximumGameSdkLlmPromptLength) {
     throw new Error("GAME_SDK_LLM_INVALID_PROMPT");
   }
   if (!promptVersion || promptVersion.length > 100) {
@@ -65,7 +99,7 @@ export function normalizeGameSdkLlmRequest(
     && (
       !Number.isSafeInteger(timeoutMs)
       || timeoutMs < 1_000
-      || timeoutMs > 120_000
+      || timeoutMs > maximumGameSdkLlmTimeoutMs
     )
   ) {
     throw new Error("GAME_SDK_LLM_INVALID_TIMEOUT");
@@ -76,7 +110,11 @@ export function normalizeGameSdkLlmRequest(
     promptVersion,
     quality: request.quality === "high" ? "high" : "standard",
     ...(request.responseJsonSchema
-      ? { responseJsonSchema: request.responseJsonSchema }
+      ? {
+          responseJsonSchema: normalizeGameSdkLlmJsonSchema(
+            request.responseJsonSchema,
+          ),
+        }
       : {}),
     ...(timeoutMs === undefined ? {} : { timeoutMs }),
   };

@@ -12,6 +12,8 @@ export function gameFieldsPresetRuntimeSource() {
 
   const listeners = new Set();
   const adapters = new Set();
+  const pendingResourceRequests = new Map();
+  let resourceRequestSequence = 0;
   const state = {
     roomCode: "GF01",
     phase: "lobby",
@@ -154,11 +156,35 @@ export function gameFieldsPresetRuntimeSource() {
     if (name === "game:rematch") { adapters.forEach((adapter) => adapter.rematch?.()); setPhase("lobby"); return; }
     emit(name, { payload });
   };
+  const generateLlm = (request) => new Promise((resolve, reject) => {
+    resourceRequestSequence += 1;
+    const requestId = "llm-" + Date.now().toString(36) + "-" + resourceRequestSequence.toString(36);
+    const timeoutId = window.setTimeout(() => {
+      pendingResourceRequests.delete(requestId);
+      reject(new Error("GAME_SDK_LLM_TIMEOUT"));
+    }, 50000);
+    pendingResourceRequests.set(requestId, {
+      resolve,
+      reject,
+      timeoutId
+    });
+    window.parent.postMessage({
+      type: "game-fields:resource-request",
+      resource: "llm",
+      requestId,
+      request
+    }, "*");
+  });
 
   window.GameFieldsPreset = Object.freeze({
     version: 1,
     getState: clone,
     command,
+    resources: Object.freeze({
+      llm: Object.freeze({
+        generate: generateLlm
+      })
+    }),
     subscribe(listener) { listeners.add(listener); listener(clone()); return () => listeners.delete(listener); },
     registerGame(adapter) {
       adapters.add(adapter);
@@ -200,6 +226,27 @@ export function gameFieldsPresetRuntimeSource() {
   window.addEventListener("message", (event) => {
     if (event.source !== window.parent) return;
     const message = event.data;
+    if (
+      message
+      && message.type === "game-fields:resource-response"
+      && message.resource === "llm"
+      && typeof message.requestId === "string"
+    ) {
+      const pending = pendingResourceRequests.get(message.requestId);
+      if (!pending) return;
+      pendingResourceRequests.delete(message.requestId);
+      window.clearTimeout(pending.timeoutId);
+      if (message.ok === true) {
+        pending.resolve(message.response);
+      } else {
+        pending.reject(new Error(
+          typeof message.error === "string"
+            ? message.error
+            : "GAME_SDK_LLM_FAILED"
+        ));
+      }
+      return;
+    }
     if (!message || message.type !== "game-fields:command" || typeof message.name !== "string") return;
     if (!["room:hydrate", "debug:toggle", "dummy:add", "dummy:remove", "viewer:set", "phase:set", "game:start", "game:abort", "game:auto-progress", "game:rematch"].includes(message.name)) return;
     command(message.name, message.payload && typeof message.payload === "object" ? message.payload : {});
