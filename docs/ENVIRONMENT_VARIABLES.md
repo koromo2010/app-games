@@ -78,7 +78,7 @@ Vercel Teamは `game-fields`（Team ID: `team_Q3rGaf7bwfZZsjaj1vqCg5YO`）。共
 
 SDKは`app-games`と同じGitリポジトリ内の別アプリとして管理するが、Vercel Project、Root Directory、環境変数、DB・Redis・Blobの名前空間は本番・開発から分離する。公開npm packageは`packages/game-sdk`から生成し、SDK用Vercel Projectへ本体の管理者権限や書込用秘密情報をリンクしない。
 
-npm公開はGitHub Actionsの`Publish Game SDK`だけから実施する。GitHub Environmentは`npm-public`、資格名はRepository Secret `NPM_TOKEN`とし、`@game-fields/game-sdk`へのpublishだけを許可するgranular tokenを使う。現在のscope所有権、Environment、Secret登録、初回publishは未確認。token値は台帳へ記録しない。
+npm公開はGitHub Actionsの`Publish Game SDK`だけから実施する。GitHub Environmentは`npm-public`、資格名はEnvironment Secret `NPM_TOKEN`とし、`@game-fields` scopeへのread/writeだけを許可するgranular tokenを使う。2026-07-24にnpm Organization `@game-fields`の作成、所有者アカウントの2FA有効化、7日間の初回公開用token発行、`npm-public` Environment、`main`限定branch rule、required reviewer、`NPM_TOKEN`登録を利用者の画面と申告で確認した。secret値は台帳へ記録しない。初回publish後はtokenを失効し、Trusted Publishingへ移行する。
 
 アプリ内の環境判定はVercelのDeployment種別ではなく、`VERCEL_GIT_COMMIT_REF`を優先する。`main`は`production`、`develop`は`development`として扱い、ブランチ情報がないローカル実行などでのみ`VERCEL_ENV`と`NODE_ENV`へフォールバックする。これにより、`app-games-dev`のProduction Deploymentである`develop`を本番アプリと誤認しない。
 
