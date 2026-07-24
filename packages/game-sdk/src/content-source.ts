@@ -14,6 +14,47 @@ export type GameSdkContentPool = (typeof GAME_SDK_CONTENT_POOLS)[number];
 export type GameSdkContentDifficulty =
   (typeof GAME_SDK_CONTENT_DIFFICULTIES)[number];
 
+export type GameSdkContentPoolDefinition = {
+  /** Stable API value. Store and send this value instead of the display name. */
+  id: GameSdkContentPool;
+  /** Canonical Japanese name for creator and player-facing UI. */
+  displayName: string;
+  /** Public selection boundary and intended use. */
+  description: string;
+  /** Whether a requested difficulty is mixed or matched exactly. */
+  difficultySelection: "weighted-mix" | "exact-tier";
+};
+
+/**
+ * Canonical public names and meanings of the Platform content pools.
+ *
+ * `rare-words` shares its source vocabulary with Tahoiya candidate discovery,
+ * but does not mean that a word has been screened or accepted for Tahoiya.
+ */
+export const GAME_SDK_CONTENT_POOL_DEFINITIONS = {
+  "general-words": {
+    id: "general-words",
+    displayName: "一般語彙",
+    description:
+      "単語ゲーム向けに利用可否と難易度を審査した、一般的な単語のプールです。",
+    difficultySelection: "weighted-mix",
+  },
+  "word-pairs": {
+    id: "word-pairs",
+    displayName: "審査済みワードペア",
+    description:
+      "2語の関係と距離を審査したワードウルフ向けペアのプールです。",
+    difficultySelection: "exact-tier",
+  },
+  "rare-words": {
+    id: "rare-words",
+    displayName: "低認知語彙",
+    description:
+      "共通語彙DBの実効Zipf値が0以上3未満の有効語です。読みが難しい語だけでなく、読みは平易でも意味を知る人が少ない語や意味が難しい語を含みます。たほい屋候補と母集団は重なりますが、たほい屋専用または審査・採用済みのお題という意味ではありません。",
+    difficultySelection: "exact-tier",
+  },
+} as const satisfies Record<GameSdkContentPool, GameSdkContentPoolDefinition>;
+
 export type GameSdkWordContent = {
   /**
    * Opaque Platform identifier used by excludeIds and findDefinitions.
@@ -56,7 +97,7 @@ export type GameSdkWordDefinitionContent = {
 };
 
 export type GameSdkDrawWordsRequest = {
-  /** Curated standard vocabulary or reviewed rare vocabulary. */
+  /** Reviewed general vocabulary or active low-recognition vocabulary. */
   pool: "general-words" | "rare-words";
   /** Number of distinct items to draw. Integer from 1 through 100. */
   count: number;

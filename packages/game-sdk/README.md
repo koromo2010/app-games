@@ -57,7 +57,15 @@ async function createRound(context: GameSdkCommandContext) {
 }
 ```
 
-`general-words`、`word-pairs`、`rare-words`は公開pool IDです。実際に利用できるpoolは審査済みmodule profileとゲーム権限でPlatform側が制限します。
+`general-words`、`word-pairs`、`rare-words`は互換性を維持する公開pool IDです。画面と仕様書では、SDKが公開する`GAME_SDK_CONTENT_POOL_DEFINITIONS`の正式名を使います。
+
+| pool ID | 正式名 | 定義 |
+| --- | --- | --- |
+| `general-words` | 一般語彙 | 単語ゲーム向けに利用可否と難易度を審査した一般的な単語 |
+| `rare-words` | 低認知語彙 | 共通語彙DBの実効Zipf値が0以上3未満で、意味を知る人が少ない有効語 |
+| `word-pairs` | 審査済みワードペア | 2語の関係と距離を審査したワードウルフ向けペア |
+
+低認知語彙は読みが難しい語だけでなく、読みは平易でも意味を知る人が少ない語や意味が難しい語を含みます。たほい屋が候補を探す母集団と重なりますが、`rare-words`に含まれることは、たほい屋専用、たほい屋の難易度審査済み、またはお題として採用済みであることを意味しません。実際に利用できるpoolは審査済みmodule profileとゲーム権限でPlatform側が制限します。
 
 難易度の保存・API値は`easy | normal | hard`、利用者向け表示は「簡単・普通・難しい」です。`general-words`は普通で標準80%＋簡単20%、難しいで難しい50%＋標準40%＋簡単10%を混ぜます。返却された`word.difficulty`は各項目自身のtierです。
 

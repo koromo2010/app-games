@@ -180,9 +180,11 @@ const words = await contentSource.drawWords({
 
 | API | フィールド |
 | --- | --- |
-| `drawWords` | `pool: "general-words" | "rare-words"`、`count: 1..100`、`difficulty?`、`excludeIds?`、`excludeSurfaces?` |
+| `drawWords` | `pool: "general-words"`（一般語彙）または`"rare-words"`（低認知語彙）、`count: 1..100`、`difficulty?`、`excludeIds?`、`excludeSurfaces?` |
 | `drawWordPairs` | `pool: "word-pairs"`、`count: 1..100`、`difficulty?`、`excludeIds?` |
 | `findDefinitions` | `wordIds`。`drawWords`またはpair内のwordから返されたopaque IDだけを渡す |
+
+`general-words`は単語ゲーム向けに審査した一般語彙です。`rare-words`は共通語彙DBの実効Zipf値が0以上3未満の低認知語彙で、読みが難しい語だけでなく、読みは平易でも意味を知る人が少ない語や意味が難しい語を含みます。たほい屋候補の母集団と重なりますが、たほい屋専用・審査済み・採用済みを意味しません。`word-pairs`の正式名は「審査済みワードペア」です。表示名と説明は`GAME_SDK_CONTENT_POOL_DEFINITIONS`を参照します。
 
 ### Response
 
@@ -199,7 +201,7 @@ const words = await contentSource.drawWords({
 | `GameSdkWordDefinitionContent.wordId` | 語釈取得元のopaque word ID |
 | `definition` | 短いゲーム用語釈 |
 
-`general-words`は、普通で`normal` 80% + `easy` 20%、難しいで`hard` 50% + `normal` 40% + `easy` 10%を混ぜます。このためrequestの難易度と、個々の返却項目の`difficulty`が異なる場合があります。`rare-words`と`word-pairs`は指定tierから取得します。
+`general-words`は、普通で`normal` 80% + `easy` 20%、難しいで`hard` 50% + `normal` 40% + `easy` 10%を混ぜます。このためrequestの難易度と、個々の返却項目の`difficulty`が異なる場合があります。`rare-words`は読みの難しさではなく低認知語彙内の相対的な認知・出現頻度として、実効Zipf 2以上3未満=`easy`、1以上2未満=`normal`、0以上1未満=`hard`に分け、指定tierから取得します。`word-pairs`も指定tierから取得します。
 
 取得に失敗した場合、ローカル固定語彙へfallbackせず、現在の入力・手番を維持して再試行可能なエラーを返します。
 

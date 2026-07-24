@@ -83,9 +83,21 @@ GameFieldsPreset.registerGame({
 
 | 公開契約 | 内容 |
 | --- | --- |
-| `drawWords` | `general-words`または`rare-words`から難易度・件数・除外条件を指定して取得 |
+| `drawWords` | 一般語彙`general-words`または低認知語彙`rare-words`から難易度・件数・除外条件を指定して取得 |
 | `drawWordPairs` | `word-pairs`から難易度・件数・既出IDを指定して取得 |
 | `findDefinitions` | opaqueなword IDに対応する短いゲーム用語釈を取得 |
+
+### 語彙プール
+
+pool IDはAPI互換用の固定値です。設定画面や説明文では次の正式名を使います。公開packageでは`GAME_SDK_CONTENT_POOL_DEFINITIONS`から同じ名前と説明を参照できます。
+
+| pool ID | 正式名 | 定義・用途 |
+| --- | --- | --- |
+| `general-words` | 一般語彙 | 単語ゲーム向けに利用可否と難易度を審査した一般的な単語 |
+| `rare-words` | 低認知語彙 | 共通語彙DBの実効Zipf値が0以上3未満で、意味を知る人が少ない有効語 |
+| `word-pairs` | 審査済みワードペア | 2語の関係と距離を審査したワードウルフ向けペア |
+
+低認知語彙は読みが難しい語だけでなく、読みは平易でも意味を知る人が少ない語や意味が難しい語を含みます。たほい屋が候補を探す母集団と重なりますが、たほい屋専用poolではなく、たほい屋の難易度審査やお題採用が完了した語だけを返すpoolでもありません。ゲームが「意味を知る人の少ない単語」を必要とするときに使います。
 
 ### 難易度
 
@@ -97,7 +109,7 @@ GameFieldsPreset.registerGame({
 | 普通 | `normal` | 標準候補を中心に、一部簡単な候補も混ぜる |
 | 難しい | `hard` | 難しい候補を中心に、普通・簡単も少量混ぜる |
 
-`general-words`の混合比率は簡単=`easy` 100%、普通=`normal` 80% + `easy` 20%、難しい=`hard` 50% + `normal` 40% + `easy` 10%です。返却された各項目の`difficulty`は、その項目自身の実際のtierです。`rare-words`と`word-pairs`は指定tierから取得します。
+`general-words`の混合比率は簡単=`easy` 100%、普通=`normal` 80% + `easy` 20%、難しい=`hard` 50% + `normal` 40% + `easy` 10%です。返却された各項目の`difficulty`は、その項目自身の実際のtierです。`rare-words`は読みの難しさではなく低認知語彙内の相対的な認知・出現頻度として、実効Zipf 2以上3未満=`easy`、1以上2未満=`normal`、0以上1未満=`hard`に分け、指定tierから取得します。`word-pairs`も指定tierから取得します。
 
 ### 返却フィールド
 

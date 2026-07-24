@@ -3242,3 +3242,36 @@
 
 - GitHubへのpushとdevelop deploymentはまだ行っていない。
 - `main`、本番SDK、npm package versionはこの変更では更新しない。
+
+## 2026-07-24 — SDK語彙プールの正式名称
+
+### 利用者からの指摘
+
+- AIことば当てモックが`rare-words`を独自に「レア語彙」と表示しており、Platform側の正式名称と定義がなかった。
+- 当該poolはたほい屋候補の母集団と重なるが、読みが難しい語だけでなく、読みは平易でも意味を知る人が少ない語や意味が難しい語を含む。
+
+### 判断
+
+- 公開pool IDは既存クライアント互換のため変更しない。
+- 正式名を`general-words`＝「一般語彙」、`rare-words`＝「低認知語彙」、`word-pairs`＝「審査済みワードペア」とする。
+- 低認知語彙は実効Zipf値が0以上3未満の有効語とし、たほい屋候補と母集団は重なるが、たほい屋専用、難易度審査済み、またはお題採用済みを意味しない。
+- `rare-words`の`easy / normal / hard`は読みの難しさではなく、低認知語彙内の相対的な認知・出現頻度を表す。
+
+### 実施結果
+
+- 公開SDKに`GAME_SDK_CONTENT_POOL_DEFINITIONS`を追加し、各poolの固定ID、正式表示名、定義、難易度選択方式をクライアントと制作AIから参照可能にした。
+- package README、SDK API、module catalog、ゲーム仕様書へ同じ名称と境界を記載した。
+- 新規の画面・仕様では「レア語彙」「難読語彙」を推測表示せず、公開定義の「低認知語彙」を使う。
+- 本人所有の`test10-1 / ai-word-guess`モックも「標準語彙／レア語彙」から「一般語彙／低認知語彙」へ更新した。保存revisionは`4db2eb4b9815c78e9cf672ebd7d6caa771368662`。
+
+### 検証
+
+- `npm test`成功（493件）。
+- `npm run lint`成功。環境変数台帳60キー、9ゲーム共通要件、SDK依存境界を確認した。
+- `npm run test:sdk-package`成功。公開tarballを外部fixtureへinstallし、語彙プール定義の公開exportを確認した。
+- `npm run test:sdk-starter`成功。
+- `git diff --check`成功。
+
+### 未対応・保留
+
+- SDK本体の変更はまだGitHubへpushしていない。`main`、本番SDK、npm package versionも更新していない。

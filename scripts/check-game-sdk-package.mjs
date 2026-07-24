@@ -51,6 +51,7 @@ import { createGameSdkMockRuntime } from "@game-fields/game-sdk/mock-runtime";
 import { createGameSdkHttpClientRuntime } from "@game-fields/game-sdk/client-runtime";
 import {
   defineGameSdkContentSource,
+  GAME_SDK_CONTENT_POOL_DEFINITIONS,
 } from "@game-fields/game-sdk/content-source";
 import {
   createStandardPlayingCardDeck,
@@ -183,6 +184,8 @@ const words = await requireGameSdkContentSource({ contentSource }).drawWords({
   count: 2,
 });
 if (words.length !== 2) process.exit(1);
+if (GAME_SDK_CONTENT_POOL_DEFINITIONS["general-words"].displayName !== "一般語彙") process.exit(1);
+if (GAME_SDK_CONTENT_POOL_DEFINITIONS["rare-words"].displayName !== "低認知語彙") process.exit(1);
 if (createStandardPlayingCardDeck({ jokersPerDeck: 2 }).length !== 54) process.exit(1);
 if (!normalizeDrawingStroke({
   id: "stroke-1",

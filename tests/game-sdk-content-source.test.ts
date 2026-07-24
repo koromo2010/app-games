@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  GAME_SDK_CONTENT_POOL_DEFINITIONS,
+  GAME_SDK_CONTENT_POOLS,
+} from "../packages/game-sdk/src/content-source.ts";
+import {
   createGameFieldsSdkContentSource,
   type GameFieldsSdkContentRepository,
   type GameFieldsSdkContentWordRecord,
@@ -82,6 +86,29 @@ function repository(): GameFieldsSdkContentRepository {
 }
 
 const idSecret = "0123456789abcdef0123456789abcdef";
+
+test("SDK content pools expose canonical names without limiting low-recognition words to difficult readings", () => {
+  assert.deepEqual(
+    Object.keys(GAME_SDK_CONTENT_POOL_DEFINITIONS),
+    [...GAME_SDK_CONTENT_POOLS],
+  );
+  assert.equal(
+    GAME_SDK_CONTENT_POOL_DEFINITIONS["general-words"].displayName,
+    "一般語彙",
+  );
+  assert.equal(
+    GAME_SDK_CONTENT_POOL_DEFINITIONS["rare-words"].displayName,
+    "低認知語彙",
+  );
+  assert.match(
+    GAME_SDK_CONTENT_POOL_DEFINITIONS["rare-words"].description,
+    /意味が難しい語を含みます/,
+  );
+  assert.match(
+    GAME_SDK_CONTENT_POOL_DEFINITIONS["rare-words"].description,
+    /たほい屋専用または審査・採用済みのお題という意味ではありません/,
+  );
+});
 
 test("SDK content source draws opaque words and resolves definitions without exposing database access", async () => {
   const source = createGameFieldsSdkContentSource({
