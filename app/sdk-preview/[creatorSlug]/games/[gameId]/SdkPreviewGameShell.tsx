@@ -5,6 +5,7 @@ import { DebugParticipantControls } from "@/app/components/DebugParticipantContr
 import { DebugToolWindow } from "@/app/components/DebugToolWindow";
 import { DrawingCanvas } from "@/app/components/DrawingCanvas";
 import { GamePhaseTimer } from "@/app/components/GamePhaseTimer";
+import { GameAdSlot } from "@/app/components/GameAdSlot";
 import { GameResultShareButton } from "@/app/components/GameResultShareButton";
 import { GameRulesDialog } from "@/app/components/GameRulesDialog";
 import { GameTopBanner, gameTopBannerOffsetClass } from "@/app/components/GameTopBanner";
@@ -68,6 +69,7 @@ type PreviewCommand =
 
 type Props = {
   backHref: string;
+  gameId: string;
   runtimeUrl: string;
   title: string;
   moduleProfile: GameSdkModuleProfile;
@@ -103,16 +105,9 @@ function createPreviewRoomCode() {
   return `GF${String((values[0] % 90) + 10)}`;
 }
 
-function PreviewAdSlot({ title }: { title: string }) {
-  return (
-    <aside className="rounded-xl border border-dashed border-slate-400/50 bg-slate-900/70 px-4 py-3 text-center text-xs font-semibold text-slate-400" data-sdk-preview-module="ads">
-      ADVERTISEMENT SLOT · {title} · プレイ中は非表示
-    </aside>
-  );
-}
-
 export function SdkPreviewGameShell({
   backHref,
+  gameId,
   runtimeUrl,
   title,
   moduleProfile,
@@ -137,6 +132,7 @@ export function SdkPreviewGameShell({
   const [playerMenuOpen, setPlayerMenuOpen] = useState(false);
   const [debugOpen, setDebugOpen] = useState(false);
   const [debugEnabled, setDebugEnabled] = useState(true);
+  const [gameAdapterReady, setGameAdapterReady] = useState(false);
   const [logs, setLogs] = useState<PreviewLogEntry[]>([]);
   const [labRound, setLabRound] = useState(1);
   const [labTurn, setLabTurn] = useState(0);
@@ -196,9 +192,12 @@ export function SdkPreviewGameShell({
       const data = event.data as {
         type?: unknown;
         command?: unknown;
-        state?: { phase?: unknown };
+        state?: { phase?: unknown; gameAdapterReady?: unknown };
       } | null;
       if (data?.type !== "game-fields:state") return;
+      if (typeof data.state?.gameAdapterReady === "boolean") {
+        setGameAdapterReady(data.state.gameAdapterReady);
+      }
       if (
         surface !== "entry"
         && (
@@ -255,6 +254,11 @@ export function SdkPreviewGameShell({
   };
 
   const startGame = () => {
+    if (!gameAdapterReady) {
+      setMessage("ゲーム固有Runtimeへ接続できていません。隔離PreviewのCSS・JavaScript読込を確認してください。");
+      appendLog("ゲーム固有Runtime未接続のため開始を拒否");
+      return;
+    }
     try {
       assertGameSdkCanStart({
         actorId: "host",
@@ -336,12 +340,6 @@ export function SdkPreviewGameShell({
     setViewerId(nextViewerId);
     send("viewer:set", { viewerId: nextViewerId });
     appendLog(`閲覧視点を ${nextViewerId === "spectator" ? "観戦者" : nextViewerId} へ変更`);
-  };
-
-  const changePhaseFromDebug = (nextPhase: PreviewPhase) => {
-    setSurface(nextPhase);
-    send("phase:set", { phase: nextPhase });
-    bumpRevision(`DEBUGで${nextPhase}へ遷移`);
   };
 
   const changeTimeLimit = (seconds: number) => {
@@ -500,7 +498,9 @@ export function SdkPreviewGameShell({
                 joinRoom();
               }}>この部屋へ参加</button>
             </div>
-            {moduleRequired("ads") && <PreviewAdSlot title={title} />}
+            {moduleRequired("ads") && (
+              <GameAdSlot gameId={gameId} surface="game-entry" disabled={debugEnabled} className="w-full" />
+            )}
           </div>
         </section>
       )}
@@ -607,7 +607,9 @@ export function SdkPreviewGameShell({
                   <p className="text-[10px] font-black uppercase tracking-[.15em] text-slate-500">Game-specific slot</p>
                   <strong>ゲーム固有画面の確認</strong>
                 </div>
-                <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-black text-emerald-800">SDK共通枠の内側</span>
+                <span className={`rounded-full px-3 py-1 text-xs font-black ${gameAdapterReady ? "bg-emerald-100 text-emerald-800" : "bg-rose-100 text-rose-800"}`}>
+                  {gameAdapterReady ? "ゲーム固有Runtime接続済み" : "ゲーム固有Runtime未接続"}
+                </span>
               </header>
               <iframe
                 ref={frameRef}
@@ -620,7 +622,9 @@ export function SdkPreviewGameShell({
                 onLoad={() => hydrateFrame()}
               />
             </section>
-            {surface === "lobby" && moduleRequired("ads") && <PreviewAdSlot title={title} />}
+            {surface === "lobby" && moduleRequired("ads") && (
+              <GameAdSlot gameId={gameId} surface="room-lobby" disabled={debugEnabled} />
+            )}
           </div>
         </section>
       )}
@@ -670,7 +674,9 @@ export function SdkPreviewGameShell({
                 url={backHref}
               />
             )}
-            {moduleRequired("ads") && <PreviewAdSlot title={title} />}
+            {moduleRequired("ads") && (
+              <GameAdSlot gameId={gameId} surface="result" disabled={debugEnabled} />
+            )}
           </aside>
         </section>
       )}
@@ -723,11 +729,6 @@ export function SdkPreviewGameShell({
                   {players.map((player) => <option key={player.id} value={player.id}>{player.name}</option>)}
                   {moduleRequired("spectators") && <option value="spectator">観戦者</option>}
                 </select>
-              </div>
-              <div className="mt-3 grid grid-cols-3 gap-2">
-                {(["lobby", "playing", "result"] as const).map((target) => (
-                  <button key={target} type="button" className="rounded-lg border border-slate-300 px-2 py-2 text-xs font-bold text-slate-700" onClick={() => changePhaseFromDebug(target)}>{target}</button>
-                ))}
               </div>
               {surface === "playing" && (
                 <button type="button" className={`${secondaryClass} mt-3 w-full`} onClick={() => {

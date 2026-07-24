@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { normalizePreviewAssetPath, previewContentType } from "../apps/sdk-preview/lib/preview-source.ts";
-import { previewContentSecurityPolicy, previewCookiePath } from "../apps/sdk-preview/lib/preview-security.ts";
+import {
+  createPreviewAssetToken,
+  previewAssetBasePath,
+  previewContentSecurityPolicy,
+  previewCookiePath,
+  verifyPreviewAssetToken,
+} from "../apps/sdk-preview/lib/preview-security.ts";
 import { gameFieldsPresetRuntimeSource, injectGameFieldsPreset } from "../apps/sdk-preview/lib/preset-runtime.ts";
 import {
   GAME_SDK_MODULE_IDS,
@@ -22,7 +28,11 @@ test("SDK preview source keeps every asset inside its mock directory", () => {
 });
 
 test("SDK preview injects one platform preset runtime into mock HTML", () => {
-  const html = injectGameFieldsPreset("<!doctype html><html><head><title>Game</title></head><body></body></html>");
+  const html = injectGameFieldsPreset(
+    "<!doctype html><html><head><title>Game</title></head><body></body></html>",
+    "/p/creator/sample/revision/a/token/",
+  );
+  assert.match(html, /<head><base data-game-fields-asset-base href="\/p\/creator\/sample\/revision\/a\/token\/">/);
   assert.match(html, /<script data-game-fields-preset>\(\(\) => \{/);
   assert.match(html, /window\.GameFieldsPreset = Object\.freeze/);
   assert.match(html, /<\/script><\/head>/);
@@ -39,6 +49,8 @@ test("SDK preview injects one platform preset runtime into mock HTML", () => {
   assert.match(source, /event\.source !== window\.parent/);
   assert.match(source, /game-fields:command/);
   assert.match(source, /game-fields:state/);
+  assert.match(source, /gameAdapterReady/);
+  assert.match(source, /game:register/);
 });
 
 test("SDK platform shell owns start, abort, auto progress, and rematch controls", () => {
@@ -89,6 +101,7 @@ test("SDK preview composes the common room lifecycle around the game slot", () =
   assert.match(shell, /surface === "lobby" \|\| surface === "playing"/);
   assert.match(shell, /data-sdk-preview-surface=\{surface\}/);
   for (const sharedComponent of [
+    "GameAdSlot",
     "RoomConfigSummary",
     "RoomTimeLimitControl",
     "DebugToolWindow",
@@ -105,6 +118,9 @@ test("SDK preview composes the common room lifecycle around the game slot", () =
     1,
     "lobby and playing must retain the same game-specific iframe",
   );
+  assert.doesNotMatch(shell, /ADVERTISEMENT SLOT/);
+  assert.doesNotMatch(shell, /\(\["lobby", "playing", "result"\] as const\)\.map/);
+  assert.match(shell, /ゲーム固有Runtime未接続/);
 });
 
 test("SDK preview injects the runtime when game code references the preset API", () => {
@@ -131,10 +147,37 @@ test("SDK preview content stays sandboxed and scopes its session cookie to one r
   assert.match(policy, /form-action 'none'/);
   assert.match(policy, /sandbox allow-scripts/);
   assert.doesNotMatch(policy, /allow-same-origin/);
+  assert.match(policy, /base-uri 'self'/);
   assert.match(policy, /frame-ancestors https:\/\/sdk-dev\.game-fields\.com https:\/\/dev\.game-fields\.com/);
   assert.equal(previewCookiePath({
     instanceId: "creator-lab",
     gameId: "sample-game",
     revision: "a".repeat(40),
   }), `/p/creator-lab/sample-game/${"a".repeat(40)}/`);
+});
+
+test("SDK preview grants opaque-origin subresources read-only access to one revision", () => {
+  const scope = {
+    instanceId: "creator-lab",
+    gameId: "sample-game",
+    revision: "a".repeat(40),
+  };
+  const secret = "test-preview-signing-secret";
+  const now = Date.now();
+  const token = createPreviewAssetToken(
+    { ...scope, expiresAt: now + 60_000 },
+    secret,
+  );
+
+  assert.equal(verifyPreviewAssetToken(token, scope, now, secret), true);
+  assert.equal(
+    verifyPreviewAssetToken(token, { ...scope, gameId: "other-game" }, now, secret),
+    false,
+  );
+  assert.equal(verifyPreviewAssetToken(token, scope, now + 60_001, secret), false);
+  assert.equal(verifyPreviewAssetToken(`${token}x`, scope, now, secret), false);
+  assert.equal(
+    previewAssetBasePath(scope, token),
+    `/p/${scope.instanceId}/${scope.gameId}/${scope.revision}/a/${token}/`,
+  );
 });

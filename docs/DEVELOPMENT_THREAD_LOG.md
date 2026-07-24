@@ -2721,3 +2721,43 @@
 - 公開`https://sdk-dev.game-fields.com/test10-1/games/janken-classic`を実ブラウザで確認し、共通入室画面、部屋作成、参加者・設定ロビー、DEBUGダミー追加、プレイ中、共通結果、部屋へ戻る、部屋解散まで操作できた。
 - `GameFieldsPreset`の外側bridgeは保存済みじゃんけんiframeへ`playing`を反映し、`data-gf-phase=playing`になったことを確認した。一方、保存済み`mock.js`は`DOMContentLoaded`へだけ起動処理を登録しており、遅延取得時にイベントを取り逃してゲームadapterが未登録となるため、固有じゃんけん操作は開始前表示のまま停止した。SDK共通Shellの不具合とは分離し、制作物の起動契約検査として残す。
 - `sdk-starter`と本番`main`、本番SDKは未変更。
+
+## 2026-07-24 — SDK隔離asset読込・広告枠・DEBUGフェーズ表示の修正
+
+### 利用者からの要望
+
+- SDK-devの`ADVERTISEMENT SLOT`をゲーム制作側から編集できない共通所有にし、広告配信がない場合は枠ごと完全に非表示にする。
+- 共通接続が全件グリーンに見える一方で、保存済みじゃんけんのグー・チョキ・パーを選べない原因がどの層にあるか特定して直す。
+- DEBUG TOOLS内に理由なく表示される`lobby / playing / result`の3ボタンをなくす。
+
+### 判断
+
+- 保存済みじゃんけんのHTML、CSS、JavaScriptをprivate mock Gitから確認した。固有`mock.js`には`registerGame`、`start`、手の選択処理が存在するため、ゲームロジック不足ではない。
+- 隔離iframeは`allow-same-origin`を付けないopaque originである。入口`index.html`はpath限定HttpOnly Cookieで取得できるが、相対参照の`styles.css`と`mock.js`にはCookieが送られず403となる。このため素のHTMLだけが表示され、adapter未登録のまま外側Shellだけが`playing`へ進んでいた。
+- 原因層はゲーム固有ロジックでも共通Room Shellでもなく、`apps/sdk-preview`の静的asset認証境界である。安全性を下げる`allow-same-origin`追加ではなく、同一制作者・ゲーム・commit・期限だけを読めるasset tokenで解消する。
+- SDK-dev独自の`PreviewAdSlot`は共通広告制御を迂回していたため廃止し、本体共通`GameAdSlot`へ統一する。広告OFF、進行中、DEBUG中はDOMごと描画しない。
+- フェーズ確認は公式Lifecycle導線で行い、DEBUG内の無条件フェーズ遷移ボタンは撤去する。
+
+### 実施結果
+
+- 認証済みPreview HTMLへ、同一scopeの短時間HMAC asset token付き`base` URLを注入した。CSS、JavaScript、画像、フォント等の相対参照はそのread-only経路へ解決する。
+- asset tokenは署名、期限、制作者slug、ゲームID、確定commitを検証し、別ゲーム・別revision・期限切れ・改ざんを拒否する。iframeの`allow-same-origin`禁止、外部通信禁止、フォーム禁止は維持した。
+- `GameFieldsPreset`が`gameAdapterReady`を外側Shellへ通知するようにした。adapter未登録ならゲーム開始を拒否し、固有Runtime未接続を画面と安全な操作ログへ明示する。
+- SDK-devの常時表示`ADVERTISEMENT SLOT`を削除し、外側Shellの共通`GameAdSlot`へ統一した。ゲームpackageとiframeから表示条件を変更できない。
+- DEBUG TOOLSの`lobby / playing / result`直行ボタンを削除した。ダミー追加、閲覧視点、自動進行、中断は維持した。
+- 実装レジストリの広告moduleも`GameAdSlot`実体へ更新した。
+
+### 検証
+
+- `git diff --check`成功。
+- `npm test`成功（476件）。
+- asset tokenの正しいscope、別ゲーム拒否、期限切れ拒否、改ざん拒否、asset base注入、adapter接続状態、広告独自枠とDEBUGフェーズボタンの不在を回帰テストへ追加した。
+- `npm run lint`成功。
+- `npm run build`成功。Next.js production build、TypeScript検査、77ページ生成を完了した。
+- `npm run build:sdk`成功。SDK Portalのproduction build、TypeScript検査、14ページ生成を完了した。
+- `npm run build:sdk-preview`成功。隔離Previewのproduction build、TypeScript検査、5ページ生成を完了した。
+
+### 未対応・保留
+
+- `develop`への公開と、公開`janken-classic`でCSS適用、固有Runtime接続、手の選択、広告枠非表示を確認する実ブラウザ試験は、この記録時点では未実施。
+- `main`、本番SDK、公開`sdk-starter`は変更対象外。

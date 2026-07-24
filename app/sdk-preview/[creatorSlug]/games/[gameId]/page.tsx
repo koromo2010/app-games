@@ -28,6 +28,7 @@ export default async function SdkGamePage({ params }: { params: Promise<{ creato
   return (
     <SdkPreviewGameShell
       backHref={`/sdk-preview/${creatorSlug}`}
+      gameId={gameId}
       runtimeUrl={game.runtimeUrl}
       title={game.title}
       moduleProfile={normalizeGameSdkModuleProfile(game.modulePolicy)}

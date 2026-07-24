@@ -140,8 +140,8 @@ export const SDK_PREVIEW_MODULE_IMPLEMENTATIONS = {
     surfaces: ["platform", "module-lab"],
   },
   ads: {
-    kind: "platform-adapter",
-    source: "provider-neutral preview ad slot",
+    kind: "shared-component",
+    source: "GameAdSlot（配信なし・進行中・DEBUGは描画しない）",
     surfaces: ["entry", "lobby", "result"],
   },
   "start-guard": {
