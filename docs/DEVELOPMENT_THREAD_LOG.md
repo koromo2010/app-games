@@ -2958,5 +2958,8 @@
 
 ### 未対応・保留
 
-- ローカル環境にはDB接続値を配置していないため、実DB sampleと広幅表示の公開実機確認は`develop`反映後に行う。
-- `main`、本番SDK、npm package versionはこの変更では更新しない。
+- 検証済みtreeをcommit `1d9d1ac5718c7f8b616764de364ec9090a67badb`として`develop`へforceなしで反映した。本体dev `dpl_BEWRLij9pAq7wM8FbNPeoV5Q11Ye`、SDK-dev `dpl_BCWa7cPmd6UydRtBXpHUTFpXhVpf`、隔離Preview dev `dpl_FH2h4GRKXMnM1CHQdQwZqsi6qipx`が同commitで`READY`となり、各開発用aliasへ切り替わった。
+- 公開SDK-devから読み込まれる本体devのHTMLとJavaScript bundleを確認し、`max-w-[1600px]`、`lg:grid-cols-[minmax(0,1fr)_280px]`、`/api/sdk-preview/content-sample`、`read-only PostgreSQL content-source adapter`が対象deploymentに含まれることを確認した。旧1920px表示時のゲーム列840px相当は約1268pxまで拡張される。
+- sample APIは未ログイン要求を401 `Login required`で拒否し、匿名利用者へDB候補を返さないことを確認した。この実行環境には署名済み利用者Cookieがないため、認証後の実DB候補本文の取得だけは利用者画面で「共通モジュール実体を確認」→「素材を取得」を押して確認する。
+- 3 deploymentのbuild errorと、直近30分のruntime `error`／`fatal`は0件だった。
+- `main`、本番SDK、npm package versionはこの変更では更新していない。
