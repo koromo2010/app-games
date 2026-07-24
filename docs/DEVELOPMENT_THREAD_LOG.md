@@ -3002,7 +3002,16 @@
 
 ### 未対応・保留
 
-- `develop`反映後に本体dev、SDK-dev、隔離Preview devの対象commitと`READY`、build／runtime errorを確認する。
 - この実行環境には利用者の署名済みCookieと持込API設定がないため、ログイン後の実回答取得はSDK-dev module labの「AI APIを実際に呼ぶ」で目視確認する。
-- 保存済みの既存ゲームはbridge追加だけではAI呼出コードへ自動変換されない。各ゲームの次回更新で`GameFieldsPreset.resources.llm.generate`を接続する。
 - `main`、本番SDK、npm package versionはこの変更では更新しない。
+
+### develop反映・既存ゲーム接続確認
+
+- 検証済みtreeをGitHub commit `af27a5f69634dc51f1c168e8398e50b9268cb635`として`develop`へforceなしで反映した。
+- 本体dev deployment `dpl_G8JU83ynG5jvSM2NTFqeEPvcN8Rv`、SDK-dev `dpl_FTtrDu1ZBxDvhuAxh35zVAQAobWm`、隔離Preview dev `dpl_4U4jLr1ZRmjf3cuZxWLoq2Lp7hFj`が対象commitで`READY`となり、`dev.game-fields.com`、`sdk-dev.game-fields.com`、`preview-dev.game-fields.com`のaliasが切り替わった。
+- 3 deploymentのbuild errorと直近30分のruntime errorは0件だった。
+- `/api/sdk-preview/llm`への未ログインPOSTが401となり、匿名利用者がAI gatewayを実行できないことを確認した。
+- 本人所有の`test10-1`環境にある「AIことば当て（仮）」を更新し、5段階判定はtask `akinator-five-verdict`、近さスコアはtask `akinator-distance-score`で`GameFieldsPreset.resources.llm.generate`を呼ぶようにした。provider直結、APIキー、直接`fetch`、固定判定fallbackは含めない。
+- AI生成失敗時は入力と手番を保持し、ターンを消費せず再試行できる。最終回答だけは従来どおり秘密語との厳密一致で判定する。
+- 保存revisionは`7cc0489239092df8fa55ed7ed559c3d2d8ae04d7`。revision指定で`mock.js`を読み戻し、検証済み本文との完全一致、共通bridge markerあり、旧固定判定と直接network callなしを確認した。
+- この実行環境には利用者の署名済みCookieと持込API設定がないため、実providerからの回答本文だけはログイン済み画面で1回質問して目視確認する。
