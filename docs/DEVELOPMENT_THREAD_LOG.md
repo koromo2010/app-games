@@ -3514,11 +3514,13 @@
 - `lib/general-game-word-repository.ts`を追加し、共通単語DBの`active_words`から固有名詞を除外した実効Zipf 4.5〜6.5の語を読み取る。
 - 難易度は簡単5.5〜6.5、普通5.0以上5.5未満、難しい4.5以上5.0未満へ投影する。既存の難易度混合率と当日重複除外は維持する。
 - SDKの一般単語、ワードアウト、コードインターセプトを同じRepositoryへ統一した。Word pairとdefinitionも従来どおり共通単語DBを使う。
+- 最初のdev反映`a8d28db0d2bd`後、Room `GF62`では`drawWords`が200になり、続く`findDefinitions`だけが`databaseCode=42501`で失敗した。dev分岐が共通DBの内部`words`／`word_definitions`表を読んでいたため、SDK content repositoryの一般語、ペア、語釈を環境に関係なく公開済み`active_*` viewへ統一した。
+- 内部語彙表へ戻らないソース境界の回帰テストを追加した。
 - AIことば当てのコード、設定、保存済みrevisionは変更していない。
 
 ### 検証・保留
 
-- `npm test`成功（全502件）。
+- `npm test`成功（全503件）。
 - `npm run lint`成功。
 - 本体、SDK Portal、隔離PreviewのProduction build成功。
 - 修正を`develop`へ反映した後、新規Roomで秘密語取得とAI応答までのログイン済み実機E2Eを行う。成功後に本項と既知問題の状態を確定する。

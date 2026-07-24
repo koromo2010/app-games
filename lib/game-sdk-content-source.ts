@@ -18,7 +18,6 @@ import {
   type GeneralGameWordDifficulty,
 } from "./general-game-word-pool.ts";
 import { loadGeneralGameWordRecords } from "./general-game-word-repository.ts";
-import { expectedAppEnvironment } from "./storage-environment-guard.ts";
 import { getVocabularyPostgresClient } from "./vocabulary-postgres-store.ts";
 
 type ContentWordSource = "app" | "vocabulary";
@@ -132,62 +131,31 @@ export function createPostgresGameFieldsSdkContentRepository(): GameFieldsSdkCon
 
     async loadWordPairs() {
       const sql = getVocabularyPostgresClient();
-      const rows = expectedAppEnvironment() === "production"
-        ? await sql`
-          SELECT pair.id,
-                 word_a.id AS word_a_id,
-                 word_a.surface AS word_a_surface,
-                 word_a.normalized_surface AS word_a_normalized_surface,
-                 word_a.reading AS word_a_reading,
-                 word_a.effective_zipf AS word_a_zipf,
-                 word_b.id AS word_b_id,
-                 word_b.surface AS word_b_surface,
-                 word_b.normalized_surface AS word_b_normalized_surface,
-                 word_b.reading AS word_b_reading,
-                 word_b.effective_zipf AS word_b_zipf,
-                 pair.relation, pair.pair_distance, pair.difficulty
-          FROM active_word_pairs pair
-          JOIN active_word_game_eligibility eligibility
-            ON eligibility.subject_type = 'pair'
-            AND eligibility.subject_id = pair.id
-            AND eligibility.game_id = 'wordwolf'
-          JOIN active_words word_a ON word_a.id = pair.word_a_id
-          JOIN active_words word_b ON word_b.id = pair.word_b_id
-          WHERE (eligibility.valid_from IS NULL OR eligibility.valid_from <= NOW())
-            AND (eligibility.valid_until IS NULL OR eligibility.valid_until > NOW())
-          ORDER BY pair.updated_at DESC
-          LIMIT 500
-        ` as VocabularyPairRow[]
-        : await sql`
-          SELECT pair.id,
-                 word_a.id AS word_a_id,
-                 word_a.surface AS word_a_surface,
-                 word_a.normalized_surface AS word_a_normalized_surface,
-                 word_a.reading AS word_a_reading,
-                 COALESCE(word_a.selection_zipf_override, word_a.zipf) AS word_a_zipf,
-                 word_b.id AS word_b_id,
-                 word_b.surface AS word_b_surface,
-                 word_b.normalized_surface AS word_b_normalized_surface,
-                 word_b.reading AS word_b_reading,
-                 COALESCE(word_b.selection_zipf_override, word_b.zipf) AS word_b_zipf,
-                 pair.relation, pair.pair_distance, pair.difficulty
-          FROM word_pairs pair
-          JOIN word_game_eligibility eligibility
-            ON eligibility.subject_type = 'pair'
-            AND eligibility.subject_id = pair.id
-            AND eligibility.game_id = 'wordwolf'
-          JOIN words word_a ON word_a.id = pair.word_a_id
-          JOIN words word_b ON word_b.id = pair.word_b_id
-          WHERE pair.status = 'active'
-            AND eligibility.enabled
-            AND NOT eligibility.manually_suspended
-            AND word_a.status = 'active'
-            AND word_b.status = 'active'
-            AND (eligibility.valid_from IS NULL OR eligibility.valid_from <= NOW())
-            AND (eligibility.valid_until IS NULL OR eligibility.valid_until > NOW())
-          ORDER BY pair.updated_at DESC
-          LIMIT 500
-        ` as VocabularyPairRow[];
+      const rows = await sql`
+        SELECT pair.id,
+               word_a.id AS word_a_id,
+               word_a.surface AS word_a_surface,
+               word_a.normalized_surface AS word_a_normalized_surface,
+               word_a.reading AS word_a_reading,
+               word_a.effective_zipf AS word_a_zipf,
+               word_b.id AS word_b_id,
+               word_b.surface AS word_b_surface,
+               word_b.normalized_surface AS word_b_normalized_surface,
+               word_b.reading AS word_b_reading,
+               word_b.effective_zipf AS word_b_zipf,
+               pair.relation, pair.pair_distance, pair.difficulty
+        FROM active_word_pairs pair
+        JOIN active_word_game_eligibility eligibility
+          ON eligibility.subject_type = 'pair'
+          AND eligibility.subject_id = pair.id
+          AND eligibility.game_id = 'wordwolf'
+        JOIN active_words word_a ON word_a.id = pair.word_a_id
+        JOIN active_words word_b ON word_b.id = pair.word_b_id
+        WHERE (eligibility.valid_from IS NULL OR eligibility.valid_from <= NOW())
+          AND (eligibility.valid_until IS NULL OR eligibility.valid_until > NOW())
+        ORDER BY pair.updated_at DESC
+        LIMIT 500
+      ` as VocabularyPairRow[];
       return rows.map((row) => ({
         internalId: row.id,
         first: vocabularyWord({
@@ -218,32 +186,16 @@ export function createPostgresGameFieldsSdkContentRepository(): GameFieldsSdkCon
         .map((word) => word.normalizedSurface);
       if (vocabularyIds.length === 0 && normalizedSurfaces.length === 0) return [];
       const sql = getVocabularyPostgresClient();
-      const rows = expectedAppEnvironment() === "production"
-        ? await sql`
-          SELECT word.id AS word_id, word.surface, word.normalized_surface,
-                 word.reading, word.effective_zipf AS zipf,
-                 definition.short_definition
-          FROM active_words word
-          JOIN active_word_definitions definition ON definition.word_id = word.id
-          WHERE word.id = ANY(${vocabularyIds}::uuid[])
-             OR word.normalized_surface = ANY(${normalizedSurfaces}::text[])
-          ORDER BY definition.updated_at DESC
-        ` as VocabularyDefinitionRow[]
-        : await sql`
-          SELECT word.id AS word_id, word.surface, word.normalized_surface,
-                 word.reading,
-                 COALESCE(word.selection_zipf_override, word.zipf) AS zipf,
-                 definition.short_definition
-          FROM words word
-          JOIN word_definitions definition ON definition.word_id = word.id
-          WHERE word.status = 'active'
-            AND definition.status = 'active'
-            AND (
-              word.id = ANY(${vocabularyIds}::uuid[])
-              OR word.normalized_surface = ANY(${normalizedSurfaces}::text[])
-            )
-          ORDER BY definition.updated_at DESC
-        ` as VocabularyDefinitionRow[];
+      const rows = await sql`
+        SELECT word.id AS word_id, word.surface, word.normalized_surface,
+               word.reading, word.effective_zipf AS zipf,
+               definition.short_definition
+        FROM active_words word
+        JOIN active_word_definitions definition ON definition.word_id = word.id
+        WHERE word.id = ANY(${vocabularyIds}::uuid[])
+           OR word.normalized_surface = ANY(${normalizedSurfaces}::text[])
+        ORDER BY definition.updated_at DESC
+      ` as VocabularyDefinitionRow[];
       const requestedByVocabularyId = new Map(
         words
           .filter((word) => word.source === "vocabulary")

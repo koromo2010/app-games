@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   GAME_SDK_CONTENT_POOL_DEFINITIONS,
@@ -75,6 +76,21 @@ function repository(): GameFieldsSdkContentRepository {
 }
 
 const idSecret = "0123456789abcdef0123456789abcdef";
+
+test("SDK content repository reads only published vocabulary views", () => {
+  const source = readFileSync(
+    new URL("../lib/game-sdk-content-source.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /FROM active_word_pairs pair/);
+  assert.match(source, /JOIN active_word_game_eligibility eligibility/);
+  assert.match(source, /FROM active_words word/);
+  assert.match(source, /JOIN active_word_definitions definition/);
+  assert.doesNotMatch(source, /FROM word_pairs pair/);
+  assert.doesNotMatch(source, /JOIN word_game_eligibility eligibility/);
+  assert.doesNotMatch(source, /FROM words word/);
+  assert.doesNotMatch(source, /JOIN word_definitions definition/);
+});
 
 test("SDK content pools expose only general words and reviewed word pairs", () => {
   assert.deepEqual(
