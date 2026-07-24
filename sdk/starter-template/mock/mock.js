@@ -1,15 +1,6 @@
 const status = document.querySelector("[data-game-status]");
+const action = document.querySelector("[data-game-action=\"primary\"]");
 const toast = document.querySelector("#game-toast");
-let gameState = { turns: 0 };
-
-function resetGame(message = "ゲーム開始前です") {
-  gameState = { turns: 0 };
-  renderGame(message);
-}
-
-function renderGame(message) {
-  status.textContent = message ?? `ゲーム固有の進行: ${gameState.turns}`;
-}
 
 function notify(message) {
   toast.textContent = message;
@@ -17,37 +8,37 @@ function notify(message) {
   window.setTimeout(() => toast.classList.remove("is-visible"), 1800);
 }
 
-function registerPreset() {
-  if (!window.GameFieldsPreset) {
-    renderGame("Game Fields Previewから開いてください");
+function render(snapshot) {
+  const app = snapshot?.view?.app;
+  const phase = snapshot?.phase ?? "loading";
+  if (!app) {
+    status.textContent = "Roomの同期を待っています";
+    action.disabled = true;
     return;
   }
+  status.textContent = phase === "result"
+    ? `ゲーム終了: ${app.count} / ${app.target}`
+    : phase === "playing"
+      ? `ゲーム固有の進行: ${app.count} / ${app.target}`
+      : "ゲーム開始前です";
+  action.disabled = !app.canAdvance;
+}
 
-  window.GameFieldsPreset.registerGame({
-    start() {
-      resetGame("ゲームを開始しました");
-    },
-    abort() {
-      resetGame();
-    },
-    rematch() {
-      resetGame("再戦の準備ができました");
-    },
-    autoProgress() {
-      gameState.turns += 1;
-      renderGame();
-    },
-    onStateChange(platformState, command) {
-      document.documentElement.dataset.viewer = platformState.viewerId;
-      document.documentElement.dataset.phase = platformState.phase;
-      if (command) notify(`共通操作: ${command}`);
-    },
+function connectRoom() {
+  if (!window.GameFieldsRoom) {
+    status.textContent = "Game Fields Roomから開いてください";
+    action.disabled = true;
+    return;
+  }
+  window.GameFieldsRoom.subscribe(render);
+  action.addEventListener("click", async () => {
+    action.disabled = true;
+    try {
+      await window.GameFieldsRoom.send({ type: "game/advance" });
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "操作を完了できませんでした");
+    }
   });
 }
 
-document.querySelector("[data-game-action=\"primary\"]")?.addEventListener("click", () => {
-  gameState.turns += 1;
-  renderGame();
-});
-
-window.addEventListener("DOMContentLoaded", registerPreset);
+window.addEventListener("DOMContentLoaded", connectRoom);

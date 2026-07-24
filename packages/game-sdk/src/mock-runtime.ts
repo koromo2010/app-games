@@ -93,9 +93,9 @@ export function createGameSdkMockRuntime<
   let requestSequence = 0;
   const nextRequestId = createRequestId ?? (() => `sdk-mock-${++requestSequence}`);
 
-  const present = (room: Readonly<TRoom>, viewer: GameSdkViewer) => snapshot(
+  const present = async (room: Readonly<TRoom>, viewer: GameSdkViewer) => snapshot(
     room,
-    module.presentRoom(clone(room), {
+    await module.presentRoom(clone(room), {
       viewer: clone(viewer),
       now: now(),
       resources,
@@ -116,12 +116,12 @@ export function createGameSdkMockRuntime<
       if (room.code !== roomCode) throw new GameSdkRuntimeError("ROOM_CODE_CHANGED", 500);
       if (room.revision !== 1) throw new GameSdkRuntimeError("INVALID_INITIAL_REVISION", 500);
       rooms.set(room.code, clone(room));
-      return present(room, gameSdkViewerFromActor(actor));
+      return await present(room, gameSdkViewerFromActor(actor));
     },
 
     async readRoom(code, viewer) {
       const room = rooms.get(code);
-      return room ? present(room, viewer) : null;
+      return room ? await present(room, viewer) : null;
     },
 
     async sendCommand({ code, envelope, actor }): Promise<GameSdkCommandResult<TRoomView>> {
@@ -146,7 +146,7 @@ export function createGameSdkMockRuntime<
         throw new GameSdkRuntimeError("INVALID_NEXT_REVISION", 500);
       }
       rooms.set(code, clone(nextRoom));
-      const room = present(nextRoom, gameSdkViewerFromActor(actor));
+      const room = await present(nextRoom, gameSdkViewerFromActor(actor));
       return { room, revision: room.revision };
     },
 

@@ -1,4 +1,8 @@
-export type GameReplayGameType = "wordwolf" | "tahoiya" | "northern-branch" | "hodoai" | "kotoba-senpuku" | "nigoichi" | "code-intercept" | "daifugo" | "wordwolf-sdk";
+export type BuiltInGameReplayGameType = "wordwolf" | "tahoiya" | "northern-branch" | "hodoai" | "kotoba-senpuku" | "nigoichi" | "code-intercept" | "daifugo" | "wordwolf-sdk";
+export type GameSdkReplayGameType = `sdk:${string}`;
+export type GameReplayGameType =
+  | BuiltInGameReplayGameType
+  | GameSdkReplayGameType;
 
 export type GameReplayPolicy = {
   retentionDays: number;
@@ -94,7 +98,7 @@ export function tahoiyaReplaySummaryHighlights({
   ];
 }
 
-export const gameReplayMetadata: Record<GameReplayGameType, { title: string; href: string }> = {
+export const gameReplayMetadata: Record<BuiltInGameReplayGameType, { title: string; href: string }> = {
   wordwolf: { title: "ワードウルフ", href: "/wordwolf" },
   tahoiya: { title: "たほい屋", href: "/tahoiya" },
   "northern-branch": { title: "ノーザンブランチ", href: "/northern-branch" },
@@ -106,10 +110,29 @@ export const gameReplayMetadata: Record<GameReplayGameType, { title: string; hre
   "wordwolf-sdk": { title: "ワードウルフ SDK", href: "/sdk-games/wordwolf-sdk" },
 };
 
+function isGameSdkReplayGameType(
+  gameType: GameReplayGameType,
+): gameType is GameSdkReplayGameType {
+  return gameType.startsWith("sdk:");
+}
+
+export function gameReplayMetadataFor(
+  gameType: GameReplayGameType,
+  fallbackTitle = "SDKゲーム",
+) {
+  if (isGameSdkReplayGameType(gameType)) {
+    return {
+      title: fallbackTitle,
+      href: `/sdk-games/${gameType.slice("sdk:".length)}`,
+    };
+  }
+  return gameReplayMetadata[gameType];
+}
+
 export function gameReplayShareText(
   replay: Pick<GameReplaySummary, "gameType" | "title" | "resultLabel" | "shareHighlights">,
 ) {
-  const gameTitle = gameReplayMetadata[replay.gameType].title;
+  const gameTitle = gameReplayMetadataFor(replay.gameType, replay.title).title;
   const highlights = replay.shareHighlights.slice(0, 3).map((highlight) => `・${highlight}`);
   return [
     `${gameTitle}のプレイバック`,

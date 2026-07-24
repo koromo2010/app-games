@@ -26,6 +26,14 @@ export function previewCookiePath(grant: Pick<SdkPreviewGrant, "instanceId" | "g
   return `/p/${grant.instanceId}/${grant.gameId}/${grant.revision}/`;
 }
 
+export function packageCookieName(grant: Pick<SdkPreviewGrant, "instanceId" | "gameId" | "revision">) {
+  return `${previewCookieName(grant)}_package`;
+}
+
+export function packageCookiePath(grant: Pick<SdkPreviewGrant, "instanceId" | "gameId" | "revision">) {
+  return `/package/${grant.instanceId}/${grant.gameId}/${grant.revision}/`;
+}
+
 function previewAssetSignature(payload: string, secret: string) {
   return createHmac("sha256", secret)
     .update(`${PREVIEW_ASSET_TOKEN_AUDIENCE}:${payload}`)
@@ -90,6 +98,10 @@ export function verifyPreviewAssetToken(
 
 export function previewAssetBasePath(scope: PreviewAssetScope, token: string) {
   return `${previewCookiePath(scope)}a/${encodeURIComponent(token)}/`;
+}
+
+export function packageAssetBasePath(scope: PreviewAssetScope, token: string) {
+  return `${packageCookiePath(scope)}a/${encodeURIComponent(token)}/`;
 }
 
 function configuredFrameAncestors() {

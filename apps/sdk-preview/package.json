@@ -1,6 +1,6 @@
 {
   "name": "@game-fields/sdk-preview",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "scripts": {
     "dev": "next dev -p 3002",
@@ -9,8 +9,10 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@game-fields/sdk-preview-auth": "0.1.0",
+    "@game-fields/game-sdk": "0.1.1",
+    "@game-fields/sdk-preview-auth": "0.1.1",
     "next": "16.2.4",
+    "quickjs-emscripten": "^0.32.0",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },

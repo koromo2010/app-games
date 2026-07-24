@@ -14,8 +14,8 @@ const descriptor: GameSdkHandshakeDescriptor = {
   surface: "creator-portal",
   environment: "development",
   release: {
-    platformVersion: "0.1.0",
-    sdkPackageVersion: "0.1.0",
+    platformVersion: "0.1.1",
+    sdkPackageVersion: "0.1.1",
     sdkContractVersion: 1,
     supportedSdkContractVersions: [1],
     roomSchemaVersion: 1,
@@ -39,8 +39,8 @@ const request: GameSdkHandshakeRequest = {
   client: { kind: "ai-agent", name: "Contract test" },
   expected: {
     environment: "development",
-    platformVersion: "0.1.0",
-    sdkPackageVersion: "0.1.0",
+    platformVersion: "0.1.1",
+    sdkPackageVersion: "0.1.1",
     sdkContractVersion: 1,
   },
   requiredCapabilities: [
@@ -103,4 +103,3 @@ test("SDK handshake rejects malformed or foreign protocol requests without throw
     ["PROTOCOL_MISMATCH"],
   );
 });
-

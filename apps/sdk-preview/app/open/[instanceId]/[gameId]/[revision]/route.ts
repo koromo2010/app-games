@@ -17,6 +17,7 @@ export async function GET(
     return new Response("Preview runtime is not configured.", { status: 503 });
   }
   if (!grant
+    || grant.audience !== "mock-client"
     || grant.instanceId !== params.instanceId
     || grant.gameId !== params.gameId
     || grant.revision !== params.revision) {

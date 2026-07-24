@@ -22,7 +22,11 @@ export type ApprovedGameSdkRoomAdapter = AuthenticatedGameSdkPlatformAdapter<
 export type ApprovedGameSdkRegistration = {
   id: string;
   title: string;
-  clientKind: "wordwolf";
+  clientKind: "wordwolf" | "iframe-package";
+  clientRuntimeUrl?: string;
+  revision?: string;
+  serverBundleSha256?: string;
+  appSetSourceSha256?: string;
   channel: "development" | "stable";
   supportsDebug: boolean;
   supportsSpectators: boolean;

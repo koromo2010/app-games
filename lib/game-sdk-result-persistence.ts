@@ -1,3 +1,4 @@
+import type { GameSdkStoredRoom } from "@game-fields/game-sdk";
 import type { GameSdkStandardResult } from "@game-fields/game-sdk/modules";
 import type { GameFieldsPlatformRoomRecord } from "@game-fields/game-runtime";
 import {
@@ -9,8 +10,8 @@ import {
   type PlayerStatsGameType,
 } from "./player-stats-store.ts";
 
-type ResultRoom = {
-  players: Array<{ id: string; displayName: string }>;
+type ResultRoom = GameSdkStoredRoom & {
+  players?: Array<{ id: string; displayName: string }>;
   settings?: Record<string, unknown>;
   standardResult?: GameSdkStandardResult<string>;
 };
@@ -21,16 +22,8 @@ type ApprovedSdkResultPersistenceOptions = {
   title: string;
   supportsRating: boolean;
   supportsReplay: boolean;
-  previous: Readonly<GameFieldsPlatformRoomRecord<ResultRoom & {
-    code: string;
-    revision: number;
-    phase: string;
-  }>>;
-  next: Readonly<GameFieldsPlatformRoomRecord<ResultRoom & {
-    code: string;
-    revision: number;
-    phase: string;
-  }>>;
+  previous: Readonly<GameFieldsPlatformRoomRecord<GameSdkStoredRoom>>;
+  next: Readonly<GameFieldsPlatformRoomRecord<GameSdkStoredRoom>>;
 };
 
 /**
@@ -46,13 +39,16 @@ export async function persistApprovedGameSdkResult({
   previous,
   next,
 }: ApprovedSdkResultPersistenceOptions) {
-  const result = next.room.standardResult;
+  const previousRoom = previous.room as ResultRoom;
+  const nextRoom = next.room as ResultRoom;
+  const result = nextRoom.standardResult;
   if (
     next.phase !== "result"
     || !result
-    || previous.room.standardResult
+    || previousRoom.standardResult
+    || !Array.isArray(nextRoom.players)
   ) return;
-  const players = next.room.players.map((player) => ({
+  const players = nextRoom.players.map((player) => ({
     id: player.id,
     name: player.displayName,
   }));
@@ -71,7 +67,7 @@ export async function persistApprovedGameSdkResult({
       rankings: result.rankings,
       reason: result.reason,
       supportsRating,
-      variantKey: Object.entries(next.room.settings ?? {})
+      variantKey: Object.entries(nextRoom.settings ?? {})
         .filter((entry): entry is [string, string | number | boolean | null] => (
           entry[1] === null
           || typeof entry[1] === "string"

@@ -13,6 +13,9 @@ export const SDK_PORTAL_CAPABILITIES = [
   "creator-environments",
   "starter-download",
   "mock-publish",
+  "game-package-publish",
+  "formal-room-preview",
+  "hash-pinned-promotion",
 ] as const;
 
 export function sdkPortalEnvironment(base: string) {

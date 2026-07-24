@@ -19,7 +19,7 @@ try {
   const [packResult] = JSON.parse(packOutput);
   if (!packResult?.filename) throw new Error("SDK tarball was not created.");
 
-  const allowedFiles = /^(LICENSE|README\.md|package\.json|dist\/(index|runtime|modules|modules\/(profile|collection|voting|flow|assignment|presentation|result|timeout)|content-source|llm|resources|playing-cards|playing-cards-react|drawing|drawing-react|mock-runtime|client-runtime|client-realtime|handshake)\.(js|js\.map|d\.ts|d\.ts\.map))$/;
+  const allowedFiles = /^(LICENSE|README\.md|package\.json|dist\/(index|runtime|modules|modules\/(profile|collection|voting|flow|assignment|presentation|result|timeout)|content-source|llm|resources|playing-cards|playing-cards-react|drawing|drawing-react|mock-runtime|client-runtime|client-realtime|portable-server|handshake)\.(js|js\.map|d\.ts|d\.ts\.map))$/;
   const unexpectedFiles = (packResult.files ?? [])
     .map((file) => file.path)
     .filter((path) => !allowedFiles.test(path));
@@ -78,6 +78,9 @@ import {
   GAME_FIELDS_SDK_HANDSHAKE_VERSION,
   negotiateGameSdkHandshake,
 } from "@game-fields/game-sdk/handshake";
+import {
+  GAME_SDK_PORTABLE_SERVER_GLOBAL,
+} from "@game-fields/game-sdk/portable-server";
 
 const manifest = defineGameManifest({
   sdkVersion: GAME_SDK_VERSION,
@@ -135,8 +138,8 @@ const handshake = negotiateGameSdkHandshake({
   client: { kind: "starter-cli" },
   expected: {
     environment: "development",
-    platformVersion: "0.1.0",
-    sdkPackageVersion: "0.1.0",
+    platformVersion: "0.1.1",
+    sdkPackageVersion: "0.1.1",
     sdkContractVersion: 1,
   },
   requiredCapabilities: ["starter-download"],
@@ -146,8 +149,8 @@ const handshake = negotiateGameSdkHandshake({
   surface: "creator-portal",
   environment: "development",
   release: {
-    platformVersion: "0.1.0",
-    sdkPackageVersion: "0.1.0",
+    platformVersion: "0.1.1",
+    sdkPackageVersion: "0.1.1",
     sdkContractVersion: 1,
     supportedSdkContractVersions: [1],
     roomSchemaVersion: 1,
@@ -159,6 +162,7 @@ const handshake = negotiateGameSdkHandshake({
   },
 });
 if (!handshake.accepted || handshake.environment !== "development") process.exit(1);
+if (GAME_SDK_PORTABLE_SERVER_GLOBAL !== "GameFieldsServerBundle") process.exit(1);
 const round = nextGameSdkRoundStep({
   currentRound: 1,
   totalRounds: 2,
@@ -237,7 +241,7 @@ if (
   ));
   if (
     installedPackage.name !== "@game-fields/game-sdk"
-    || installedPackage.version !== "0.1.0"
+    || installedPackage.version !== "0.1.1"
     || installedPackage.private === true
     || installedPackage.license !== "MIT"
     || installedPackage.publishConfig?.access !== "public"

@@ -3,6 +3,7 @@ import {
   saveGameSdkPlayerDefaults,
 } from "@/lib/game-sdk-player-defaults-store";
 import { approvedGameSdkRegistration } from "@/lib/game-sdk-server-registry";
+import { loadApprovedGameSdkRuntimeRegistration } from "@/lib/game-sdk-runtime-catalog";
 import { requireAuthenticatedPlayer } from "@/lib/player-auth";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 
@@ -18,7 +19,8 @@ async function target(context: RouteContext) {
   const gameId = rawGameId.trim().toLowerCase();
   return {
     gameId,
-    registration: approvedGameSdkRegistration(gameId),
+    registration: approvedGameSdkRegistration(gameId)
+      ?? await loadApprovedGameSdkRuntimeRegistration(gameId),
   };
 }
 

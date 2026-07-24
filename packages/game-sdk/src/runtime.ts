@@ -334,7 +334,10 @@ export type GameSdkServerModule<
     command: TCommand,
     context: GameSdkCommandContext,
   ): TRoom | Promise<TRoom>;
-  presentRoom(room: Readonly<TRoom>, context: GameSdkPresentationContext): TRoomView;
+  presentRoom(
+    room: Readonly<TRoom>,
+    context: GameSdkPresentationContext,
+  ): TRoomView | Promise<TRoomView>;
 };
 
 export type GameSdkServerRuntime<

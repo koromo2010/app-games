@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  gameReplayMetadata,
+  gameReplayMetadataFor,
   gameReplayShareText,
   type GameReplayDetail,
   type GameReplayListResponse,
@@ -120,7 +120,7 @@ export function GameReplayPanel() {
 
   const openSharePreview = (replay: GameReplaySummary) => {
     const text = gameReplayShareText(replay);
-    const game = gameReplayMetadata[replay.gameType];
+    const game = gameReplayMetadataFor(replay.gameType, replay.title);
     const url = new URL(game.href, window.location.origin).toString();
     setMessage("");
     setSharePreview({ title: `Game Fields ${game.title} ${en ? "Replay" : "プレイバック"}`, text, url });
@@ -175,7 +175,7 @@ export function GameReplayPanel() {
             <article key={replay.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-[11px] font-bold text-violet-700">{gameReplayMetadata[replay.gameType].title}</p>
+                  <p className="text-[11px] font-bold text-violet-700">{gameReplayMetadataFor(replay.gameType, replay.title).title}</p>
                   <p className="truncate font-bold text-slate-900">{replay.title}</p>
                   <p className="mt-1 text-xs text-slate-500">
                     {formatReplayDate(replay.finishedAt, locale)} / {replay.resultLabel} / {replay.playerCount} {en ? "players" : "人"}
@@ -238,7 +238,7 @@ export function GameReplayPanel() {
         >
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold text-violet-700">{gameReplayMetadata[selectedReplay.gameType].title} / PLAYBACK {selectedReplay.round}</p>
+              <p className="text-xs font-semibold text-violet-700">{gameReplayMetadataFor(selectedReplay.gameType, selectedReplay.title).title} / PLAYBACK {selectedReplay.round}</p>
               <h3 id="replay-detail-heading" className="text-lg font-black text-slate-950">{selectedReplay.title}</h3>
               {selectedReplay.gameType === "tahoiya" && selectedReplay.reading && <p className="text-xs text-slate-500">{selectedReplay.reading}</p>}
             </div>

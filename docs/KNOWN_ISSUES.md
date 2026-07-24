@@ -347,3 +347,35 @@ Room作成、隔離Runtime接続、ゲーム開始までは成功したが、
 `words`／`word_definitions`表を読んでいたためである。制作者ゲームへ渡す内容は
 環境に関係なく公開済みデータだけに限定し、一般語、ペア、語釈をすべて
 `active_*` view経由へ統一した。内部表へ戻らないソース境界もテストで固定する。
+
+## 2026-07-24 SDK Preview Roomがブラウザ模擬で正式昇格を検証できない
+
+状態: 共通基盤の修正実装済み・dev実機確認待ち（2026-07-24、回帰テストあり）
+
+従来Previewは外見上Roomコード、参加者、revisionを表示していたが、実体はReactと
+iframe内JavaScriptのローカルstateだった。別端末参加、Redis CAS、再接続、
+閲覧者別Viewを使わず、保存revisionもserver AppSetを含まなかったため、SDKで
+完成したゲームを同じ実行物のまま正式版へ昇格できなかった。
+
+正式packageをクライアントasset、portable server bundle、AppSet原文、manifestの
+一つのcommitとして保存する。正式Previewは本体共通Room APIを使い、未審査AppSetは
+QuickJS WASMで呼出しごとに隔離する。guestが要求できる外部処理はWord DB／LLMの
+宣言済みeffectだけで、DB、Redis、認証、環境変数、networkは渡さない。
+
+Portalは受信時にserver bundleとAppSet原文のSHA-256を再計算し、
+candidate→development→stableでrevision、2つのhash、manifestをそのままコピーする。
+昇格時の再build、変換、AppSet補正は行わない。旧AIことば当てを無改造で診断した結果、
+ゲームID不一致、Room bridge欠落、browser resource bridge、browser-local adapterの
+4件を別々の安定診断コードとして検出した。これらはAI固有fallbackで隠さず、SDKの
+説明・生成物・bridge不足を見つける回帰fixtureとして保持する。
+
+package clientとserver runnerのgrantは別audienceへ分け、ブラウザ用routeから
+server bundle、package manifest、AppSet原文を取得できないようにする。server runnerは
+保存revisionから取得したbundleのSHA-256を実行直前に再計算し、昇格元に固定したhashと
+違う場合は実行しない。これによりclient URLの漏えいをserver実行権限へ昇格させず、
+保存先で実体だけが変わった場合も固定AppSetの検証として扱わない。
+
+package更新ではGit subtreeを完全置換して前revisionのasset残留を防ぎ、1 MiB超の
+portable bundleは提出時に拒否する。昇格UPDATEは検査した元revisionと両hashの一致を
+条件にし、並行再提出があれば409で停止する。本体はPortalから受け取るrunner URLも
+環境別の固定Preview originと対象revisionのpathへ限定する。

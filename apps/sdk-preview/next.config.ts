@@ -2,7 +2,13 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
-  transpilePackages: ["@game-fields/sdk-preview-auth"],
+  outputFileTracingIncludes: {
+    "/server/**": [
+      "../../node_modules/@jitl/quickjs-wasmfile-release-sync/dist/emscripten-module.wasm",
+    ],
+  },
+  serverExternalPackages: ["quickjs-emscripten"],
+  transpilePackages: ["@game-fields/game-sdk", "@game-fields/sdk-preview-auth"],
   async headers() {
     return [
       {

@@ -52,7 +52,11 @@ try {
     "starter-manifest.json",
     "package.json",
     "scripts/build-submission.mjs",
+    "scripts/build-game-package.mjs",
+    "scripts/check-promotion-readiness.mjs",
     "scripts/check-mock.mjs",
+    "scripts/promotion-readiness.mjs",
+    "scripts/publish-game-package.mjs",
     "scripts/publish-mock.mjs",
     "scripts/stored-zip.mjs",
     "apps/sdk-portal/.vercel-root-placeholder",
@@ -87,13 +91,18 @@ try {
       throw new Error(`Starter mock duplicates Platform shell UI: ${forbidden}`);
     }
   }
-  for (const required of ["game-slot", "GameFieldsPreset", "registerGame", "onStateChange"]) {
+  for (const required of ["game-slot", "GameFieldsRoom", "subscribe", "send"]) {
     if (!`${mockHtml}\n${mockScript}`.includes(required)) {
-      throw new Error(`Starter mock is missing game-slot preset contract: ${required}`);
+      throw new Error(`Starter mock is missing the promotable Room bridge: ${required}`);
+    }
+  }
+  for (const forbidden of ["GameFieldsPreset.resources", "GameFieldsPreset.registerGame"]) {
+    if (mockScript.includes(forbidden)) {
+      throw new Error(`Starter mock keeps browser-local Preview behavior: ${forbidden}`);
     }
   }
   for (const required of [
-    "GameFieldsPreset.resources.contentSource",
+    "context.resources.contentSource",
     "初期Word DB",
     "easy | normal | hard",
   ]) {
@@ -102,11 +111,11 @@ try {
     }
   }
   const starterManifest = JSON.parse(readFileSync(join(starterRoot, "starter-manifest.json"), "utf8"));
-  if (starterManifest.downloadMeVersion !== 9
+  if (starterManifest.downloadMeVersion !== 10
     || starterManifest.repository !== "https://github.com/koromo2010/app-games"
     || starterManifest.ref !== "sdk-starter"
-    || starterManifest.sdkVersion !== "0.1.0"
-    || starterManifest.platformVersion !== "0.1.0"
+    || starterManifest.sdkVersion !== "0.1.1"
+    || starterManifest.platformVersion !== "0.1.1"
     || starterManifest.sdkHandshakeVersion !== 1
     || starterManifest.sdkContractVersion !== 1) {
     throw new Error("Starter manifest does not identify the expected public source and SDK version.");
@@ -142,6 +151,27 @@ try {
     throw new Error("Starter demo did not complete the expected game flow.");
   }
 
+  execFileSync("npm", ["run", "diagnose:promotion"], {
+    cwd: starterRoot,
+    stdio: "pipe",
+    env: npmEnvironment,
+  });
+  execFileSync("npm", ["run", "build:game-package"], {
+    cwd: starterRoot,
+    stdio: "pipe",
+    env: npmEnvironment,
+  });
+  const builtPackage = JSON.parse(
+    readFileSync(join(starterRoot, "game-package/game-fields-package.json"), "utf8"),
+  );
+  if (
+    builtPackage.gameId !== "my-first-game"
+    || !/^[a-f0-9]{64}$/.test(builtPackage.server?.bundleSha256 ?? "")
+    || !/^[a-f0-9]{64}$/.test(builtPackage.server?.appSetSourceSha256 ?? "")
+  ) {
+    throw new Error("Starter did not build one hash-pinned promotable game package.");
+  }
+
   execFileSync("npm", ["run", "package"], {
     cwd: starterRoot,
     stdio: "pipe",
@@ -158,7 +188,7 @@ try {
     "game-fields-submission/src/app-set.ts",
     "game-fields-submission/src/server-module.ts",
     "game-fields-submission/tests/game-contract.test.ts",
-    "game-fields-submission/vendor/game-fields-game-sdk-0.1.0.tgz",
+    "game-fields-submission/vendor/game-fields-game-sdk-0.1.1.tgz",
   ]) {
     if (!submissionEntries.includes(required)) {
       throw new Error(`Submission archive is missing ${required}.`);
@@ -177,7 +207,7 @@ try {
     repositoryRoot,
   ], { cwd: root, stdio: "pipe", env: npmEnvironment });
   const extractedFiles = fileMap(starterRoot);
-  for (const generated of ["node_modules", "dist", "submission", "package-lock.json"]) {
+  for (const generated of ["node_modules", "dist", "game-package", "submission", "package-lock.json"]) {
     for (const key of [...extractedFiles.keys()]) {
       if (key === generated || key.startsWith(`${generated}/`)) extractedFiles.delete(key);
     }

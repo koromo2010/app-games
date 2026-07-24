@@ -55,9 +55,12 @@ export async function fetchPreviewAsset(input: {
   gameId: string;
   revision: string;
   assetPath: string;
+  sourceKind?: "mock" | "package";
 }) {
   const { repository, token } = sourceConfig();
-  const repositoryPath = `previews/${input.instanceId}/${input.gameId}/mock/${input.assetPath}`;
+  const repositoryPath = input.sourceKind === "package"
+    ? `packages/${input.instanceId}/${input.gameId}/bundle/${input.assetPath}`
+    : `previews/${input.instanceId}/${input.gameId}/mock/${input.assetPath}`;
   const encodedPath = repositoryPath.split("/").map(encodeURIComponent).join("/");
   const url = `https://api.github.com/repos/${repository}/contents/${encodedPath}?ref=${input.revision}`;
   const response = await fetch(url, {

@@ -3,6 +3,7 @@ import {
   createGameSdkOnlineRoomHttpHandlers,
 } from "@/lib/game-sdk-online-room-http";
 import { approvedGameSdkRegistration } from "@/lib/game-sdk-server-registry";
+import { loadApprovedGameSdkRuntimeRegistration } from "@/lib/game-sdk-runtime-catalog";
 import { createRequestTelemetry } from "@/lib/observability";
 import { commonOnlineRoomErrorResponse } from "@/lib/online-room-route-errors";
 import { requireAuthenticatedPlayer } from "@/lib/player-auth";
@@ -27,7 +28,8 @@ function json(payload: unknown, status: number) {
 async function handle(request: Request, context: RouteContext, method: Method) {
   const { gameId: rawGameId } = await context.params;
   const gameId = rawGameId.trim().toLowerCase();
-  const registration = approvedGameSdkRegistration(gameId);
+  const registration = approvedGameSdkRegistration(gameId)
+    ?? await loadApprovedGameSdkRuntimeRegistration(gameId);
   if (!registration) return json({ error: "GAME_SDK_NOT_AVAILABLE" }, 404);
 
   const route = `/api/game-sdk/${gameId}/rooms`;
@@ -44,14 +46,14 @@ async function handle(request: Request, context: RouteContext, method: Method) {
 
   try {
     const session = await requireAuthenticatedPlayer();
-    if (method !== "GET") {
-      const limited = await rateLimitResponseFor(
-        request,
-        rateLimitPolicies.roomMutation,
-        { playerId: session.id },
-      );
-      if (limited) return limited;
-    }
+    const limited = await rateLimitResponseFor(
+      request,
+      method === "GET"
+        ? rateLimitPolicies.sdkRuntimeRead
+        : rateLimitPolicies.roomMutation,
+      { playerId: session.id },
+    );
+    if (limited) return limited;
     const identity = {
       playerId: session.id,
       displayName: session.name,

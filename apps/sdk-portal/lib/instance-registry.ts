@@ -140,9 +140,13 @@ export async function getCreatorGamePreview(slug: string, gameId: string) {
   const rows = await sdkSql()`
     SELECT g.game_id AS "gameId", g.title, g.manifest,
            g.mock_revision AS "mockRevision",
+           g.package_revision AS "packageRevision",
+           g.package_bundle_sha256 AS "packageBundleSha256",
+           g.package_app_set_sha256 AS "packageAppSetSha256",
            g.module_policy AS "modulePolicy"
     FROM sdk_games g JOIN sdk_creators c ON c.id = g.creator_id
-    WHERE c.slug = ${slug} AND g.game_id = ${gameId} AND g.mock_revision IS NOT NULL
+    WHERE c.slug = ${slug} AND g.game_id = ${gameId}
+      AND (g.mock_revision IS NOT NULL OR g.package_revision IS NOT NULL)
     LIMIT 1
   `;
   return (Array.isArray(rows) ? rows[0] : undefined) as
@@ -150,7 +154,10 @@ export async function getCreatorGamePreview(slug: string, gameId: string) {
         gameId: string;
         title: string;
         manifest: unknown;
-        mockRevision: string;
+        mockRevision: string | null;
+        packageRevision: string | null;
+        packageBundleSha256: string | null;
+        packageAppSetSha256: string | null;
         modulePolicy: unknown;
       }
     | undefined;

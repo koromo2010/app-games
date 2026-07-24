@@ -22,7 +22,8 @@ import { buildPlayedGameRatings } from "@/lib/player-rating-visibility";
 import { gameDurationVariantKey, isGameDurationGameId, type GameDurationGameId } from "@/lib/game-duration-statistics";
 import { recordGameDurationSample } from "@/lib/game-duration-store";
 
-export type PlayerStatsGameType = GameDurationGameId;
+export type GameSdkStatsGameType = `sdk:${string}`;
+export type PlayerStatsGameType = GameDurationGameId | GameSdkStatsGameType;
 
 export type PlayerGameResult = {
   schemaVersion: 1;
@@ -128,7 +129,13 @@ function summarize(results: PlayerGameResult[]): PlayerStatsSummary {
 }
 function startOfToday() { const now = new Date(); return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime(); }
 function startOfMonth() { const now = new Date(); return new Date(now.getFullYear(), now.getMonth(), 1).getTime(); }
-function isPlayerStatsGameType(value: unknown): value is PlayerStatsGameType { return isGameDurationGameId(value); }
+function isPlayerStatsGameType(value: unknown): value is PlayerStatsGameType {
+  return isGameDurationGameId(value)
+    || (
+      typeof value === "string"
+      && /^sdk:[a-z][a-z0-9-]{1,63}$/.test(value)
+    );
+}
 
 function parseResult(value: unknown): PlayerGameResult | null {
   if (!value || typeof value !== "string") return null;
@@ -192,14 +199,16 @@ export async function recordStandardPlatformGameResults(
     playerCount: input.players.length,
   }, async () => {
     const [, ratings] = await Promise.all([
-      recordGameDurationSample({
-        id: input.eventId,
-        gameType: input.gameType,
-        startedAt: input.startedAt,
-        finishedAt: input.finishedAt,
-        playerCount: input.players.length,
-        variantKey: input.variantKey,
-      }),
+      isGameDurationGameId(input.gameType)
+        ? recordGameDurationSample({
+            id: input.eventId,
+            gameType: input.gameType,
+            startedAt: input.startedAt,
+            finishedAt: input.finishedAt,
+            playerCount: input.players.length,
+            variantKey: input.variantKey,
+          })
+        : Promise.resolve(false),
       input.supportsRating
         ? recordGameRatings(
             input.gameType,
@@ -412,19 +421,14 @@ export async function recordCodeInterceptGameResults(room: CodeInterceptRoom) {
 }
 
 export async function getPlayerStats(playerId: string, gameFilter: PlayerStatsGameFilter = "all"): Promise<PlayerStatsResponse> {
-  const gameTypes: PlayerStatsGameType[] = ["wordwolf", "tahoiya", "northern-branch", "hodoai", "kotoba-senpuku", "nigoichi", "code-intercept", "daifugo"];
   const postgresEnabled = isPostgresConfigured();
-  const [postgresResults, postgresRatingStates, rawResults, ...storedRatings] = await Promise.all([
+  const [postgresResults, postgresRatingStates, rawResults] = await Promise.all([
     postgresEnabled ? loadPostgresPlayerResults(playerId, 200).catch(() => []) : Promise.resolve([]),
     postgresEnabled ? loadPostgresPlayerRatingStates(playerId).catch(() => new Map()) : Promise.resolve(new Map()),
     redisCommand<string[]>(["ZREVRANGE", playerResultsKey(playerId), 0, 199]).catch((error) => {
       if (postgresEnabled) return [];
       throw error;
     }),
-    ...gameTypes.map((gameType) => redisCommand<string | null>(["HGET", playerRatingKey(gameType), playerId]).catch((error) => {
-      if (postgresEnabled) return null;
-      throw error;
-    })),
   ]);
   const redisResults = rawResults.map(parseResult).filter((result): result is PlayerGameResult => Boolean(result));
   const results = mergePlayerGameResults(postgresResults, redisResults);
@@ -433,6 +437,30 @@ export async function getPlayerStats(playerId: string, gameFilter: PlayerStatsGa
     const legacyResults = redisResults.filter((result) => !postgresIds.has(result.id));
     if (legacyResults.length > 0) await savePostgresPlayerResults(legacyResults).catch(() => undefined);
   }
+  const gameTypes: PlayerStatsGameType[] = [
+    "wordwolf",
+    "tahoiya",
+    "northern-branch",
+    "hodoai",
+    "kotoba-senpuku",
+    "nigoichi",
+    "code-intercept",
+    "daifugo",
+    ...new Set(
+      results
+        .map((result) => result.gameType)
+        .filter((gameType): gameType is GameSdkStatsGameType => (
+          gameType.startsWith("sdk:")
+        )),
+    ),
+  ];
+  const storedRatings = await Promise.all(gameTypes.map((gameType) => (
+    redisCommand<string | null>(["HGET", playerRatingKey(gameType), playerId])
+      .catch((error) => {
+        if (postgresEnabled) return null;
+        throw error;
+      })
+  )));
   const filteredResults = gameFilter === "all" ? results : results.filter((result) => result.gameType === gameFilter);
   const todayStart = startOfToday(); const monthStart = startOfMonth();
   const ratings = buildPlayedGameRatings({ gameTypes, results, storedRatings, postgresStates: postgresRatingStates, initialRating: initialGameRating });

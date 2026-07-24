@@ -70,6 +70,63 @@ test("SDK preview loads app-declared settings and gives legacy mocks only a time
   );
 });
 
+test("SDK package runtime accepts only its configured isolated origin and exact revision paths", async () => {
+  const revision = "a".repeat(40);
+  const manifest = {
+    sdkVersion: 1 as const,
+    id: "sample-game",
+    title: { ja: "サンプル", en: "Sample" },
+    playMode: "online-room" as const,
+    minimumPlayers: 1,
+    maximumPlayers: 4,
+    supportsDebug: false,
+    supportsSpectators: false,
+    supportsReplay: false,
+    supportsRating: false,
+    usesLlm: false,
+    settings: [{
+      key: "timeLimitSeconds",
+      label: { ja: "制限時間", en: "Time limit" },
+      type: "select" as const,
+      defaultValue: 60,
+      platformRole: "time-limit" as const,
+      options: [0, 60],
+    }],
+  };
+  const env = {
+    ...process.env,
+    SDK_PREVIEW_BASE_URL: "https://preview.example",
+  };
+  const validPayload = {
+    title: "サンプル",
+    runtimeKind: "package",
+    runtimeUrl: `https://preview.example/package-open/creator-lab/sample-game/${revision}?token=client`,
+    revision,
+    manifest,
+    serverRuntimeUrl: `https://preview.example/server/creator-lab/sample-game/${revision}`,
+    serverRuntimeToken: "server-token",
+    serverRuntimeExpiresAt: Date.now() + 60_000,
+    serverBundleSha256: "b".repeat(64),
+    appSetSourceSha256: "c".repeat(64),
+  };
+  const accepted = await loadSdkPreviewRuntimeDefinition(
+    "creator-lab",
+    "sample-game",
+    (async () => Response.json(validPayload)) as typeof fetch,
+    env,
+  );
+  assert.equal(accepted?.runtimeKind, "package");
+  await assert.rejects(() => loadSdkPreviewRuntimeDefinition(
+    "creator-lab",
+    "sample-game",
+    (async () => Response.json({
+      ...validPayload,
+      serverRuntimeUrl: `https://attacker.example/server/creator-lab/sample-game/${revision}`,
+    })) as typeof fetch,
+    env,
+  ), /SDK_PREVIEW_PACKAGE_RUNTIME_INVALID/);
+});
+
 test("SDK preview injects one platform preset runtime into mock HTML", () => {
   const html = injectGameFieldsPreset(
     "<!doctype html><html><head><title>Game</title></head><body></body></html>",

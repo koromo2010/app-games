@@ -72,9 +72,9 @@
 
 ## 採用するSDKモジュール
 
-- 初期モック: 全共通module必須（AI判断で外さない）
-- SDK-dev人間レビュー: モック確認後に環境所有者が実施
-- 本実装の必須module: モック承認後に`get_game_module_requirements`から取得（AIは採否を推測しない）
+- 初期候補package: 全共通module必須（AI判断で外さない）
+- SDK-dev人間レビュー: 正式Preview確認後に環境所有者が実施
+- 実装する必須module: `get_game_module_requirements`から取得（AIは採否を推測しない）
 - 共通moduleでは表現できず追加が必要な固有機能: 未記入
 - `SDK_REQUESTS.md`へ記録する不足機能: 未記入
 
@@ -105,8 +105,7 @@
 - 1回の取得件数: 未記入
 - 既出除外の単位: opaque ID／表示語／なし
 - 取得失敗時: 偽データへfallbackせず、手番を消費しない再試行エラー
-- モック: 使用する場合は`GameFieldsPreset.resources.contentSource`
-- 本実装: 使用する場合は`requireGameSdkContentSource(context.resources)`
+- Preview／昇格後: AppSetから`requireGameSdkContentSource(context.resources)`だけを使う
 
 ## 素材・権利
 

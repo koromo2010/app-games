@@ -81,9 +81,9 @@ settings: [
 ]
 ```
 
-`defaultSettings`は宣言した全項目と同じキーを持ち、各値を`defaultValue`と一致させます。共通画面で変更された値はRoom設定として保存・同期され、Previewのゲーム固有JavaScriptでは`GameFieldsPreset.getState().settings`、本実装のAppSetでは`settings`引数から参照します。iframe内へ同じ設定UIを重複配置しません。
+`defaultSettings`は宣言した全項目と同じキーを持ち、各値を`defaultValue`と一致させます。共通画面で変更された値はRoom設定として保存・同期され、クライアントでは`GameFieldsRoom`の`view.common.settings`、AppSetでは`room.settings`から参照します。iframe内へ同じ設定UIを重複配置しません。
 
-本体統合後は、利用者が現在の宣言済み設定をゲーム別の個人既定値として保存できます。Platformはmanifestにないキー、型違い、未宣言のselect値を保存しません。
+正式Runtimeでは、利用者が現在の宣言済み設定をゲーム別の個人既定値として保存できます。Platformはmanifestにないキー、型違い、未宣言のselect値を保存しません。
 
 ## SDK基本セット + AppSet
 
@@ -122,7 +122,7 @@ SDK基本セットが次を所有します。
 - `code`、revision、人数上限
 - 開始前へ戻す中断、結果後の再戦
 - 共通permissionsと内部player IDを除いた共通View
-- 本体統合後の認証、保存、active room、一覧、Realtime、解散
+- Platform側の認証、保存、active room、一覧、Realtime、解散
 
 AppSetが所有するのはゲーム固有state、ゲーム固有Command、フェーズ・勝敗、ゲーム固有Viewだけです。AppSetは`code`、revision、参加者配列、共通設定を更新できません。
 
@@ -250,7 +250,7 @@ const generated = await llm.generate({
 
 ## 共通モジュールprofile
 
-最初のモックは`GAME_SDK_MODULE_CATALOG`の全件を必須としてPlatformが保存します。`mock/preview.json`、AppSet、manifestへmodule採否を表す独自キーを書いてはいけません。
+最初の候補packageは`GAME_SDK_MODULE_CATALOG`の全件を必須としてPlatformが保存します。`mock/preview.json`、AppSet、manifestへmodule採否を表す独自キーを書いてはいけません。
 
 制作AIが利用できるMCPは`get_game_module_requirements`による参照だけです。profileの変更はSDK-devの人間向け管理に限定します。AIは内部分類を推測せず、人間のレビュー後に返される`requiredModuleIds`をすべて使うAppSetを実装します。
 
@@ -343,71 +343,50 @@ watch.close();
 
 Client Runtimeへactor ID、表示名、debug資格を渡す引数はありません。Game Fieldsが同一originの署名済みHttpOnly Cookieから本人を解決し、server moduleの`context.actor`へ注入します。404のRoom取得は`null`、認証・競合・入力拒否はstatusと安全なcodeを持つ`GameSdkHttpClientRuntimeError`になります。
 
-未審査の隔離PreviewはこのRoom APIへ接続しません。Previewで保存したHTMLやmetadataがserver moduleとして動的に実行されることもありません。
+PreviewはこのRoom APIへ接続し、candidate packageのAppSetを隔離server runnerで実行します。未審査コードへDB、Redis、認証Cookie、環境変数、外部networkは渡しません。AppSetが要求できる外部処理は、SDK protocolで宣言されたPlatform resource effectだけです。
 
-## Preview preset API
+## Package Room bridge
 
-SDK Previewでは`window.GameFieldsPreset`が自動で利用できます。`script`タグを自分で追加する必要はありません。
+packageの`index.html`へ`window.GameFieldsRoom`が自動注入されます。
 
 ```ts
-type PreviewPlatformState = {
-  roomCode: string;
-  phase: "lobby" | "playing" | "result";
-  debugOpen: boolean;
-  debugAccess: boolean;
-  viewerId: string;
-  timer: {
-    durationSeconds: number;
-    startedAt: number | null;
-    deadlineAt: number | null;
-    remainingSeconds: number | null;
-    running: boolean;
-    turnSequence: number;
-  };
-  players: Array<{ id: string; name: string; role: "host" | "player"; dummy: boolean }>;
+type GameFieldsRoomBridge<TRoomView> = {
+  getSnapshot(): GameSdkRoomSnapshot<TRoomView> | null;
+  subscribe(
+    listener: (snapshot: GameSdkRoomSnapshot<TRoomView> | null) => void,
+  ): () => void;
+  send(command: { type: string; [key: string]: unknown }): Promise<
+    GameSdkRoomSnapshot<TRoomView>
+  >;
 };
-
-GameFieldsPreset.getState(): PreviewPlatformState;
-GameFieldsPreset.command(name: string, payload?: Record<string, unknown>): void;
-GameFieldsPreset.subscribe(listener): () => void;
-GameFieldsPreset.registerGame(adapter): () => void;
-GameFieldsPreset.resources.contentSource.drawWords(request): Promise<readonly GameSdkWordContent[]>;
-GameFieldsPreset.resources.contentSource.drawWordPairs(request): Promise<readonly GameSdkWordPairContent[]>;
-GameFieldsPreset.resources.contentSource.findDefinitions(request): Promise<readonly GameSdkWordDefinitionContent[]>;
-GameFieldsPreset.resources.llm.generate(request): Promise<GameSdkLlmResponse>;
 ```
-
-標準Commandは`debug:toggle`、`dummy:add`、`dummy:remove`、`viewer:set`、`phase:set`、`game:start`、`game:abort`、`game:auto-progress`、`game:rematch`です。ゲーム固有コードは`registerGame`で`start`、`abort`、`autoProgress`、`rematch`、`onStateChange`だけを接続します。
-
-Previewでは、ゲームHTMLの任意位置へ`data-gf-timer`を付けると共通timerが`1:00`形式または`制限なし`を描画します。正常に1手を確定した直後だけ`GameFieldsPreset.command("timer:turn-complete")`を呼びます。これは画面確認用のPreview通知です。本体統合後は上記AppSet transitionが同じリセットをサーバー側で行い、ブラウザ通知を正本にしません。
-
-```html
-<span class="my-turn-timer" data-gf-timer>制限なし</span>
-```
-
-単語を使うモックは、初期配列を作らずPreview bridgeから取得します。
 
 ```js
-const words = await GameFieldsPreset.resources.contentSource.drawWords({
-  pool: "general-words",
-  difficulty: selectedDifficulty, // easy | normal | hard
-  count: 8
+GameFieldsRoom.subscribe((snapshot) => {
+  render(snapshot?.view?.app, snapshot?.view?.common);
 });
-renderWords(words);
+
+await GameFieldsRoom.send({
+  type: "game/submit",
+  answer: answerInput.value
+});
 ```
 
-このbridgeは外側Shellがログイン、ゲーム、module profile、レート制限を確認して、本体の読取専用adapterへ中継します。iframeへDB接続、テーブル、内部ID、API URLは渡りません。
+Commandに`expectedRevision`、actor ID、認証情報を含める必要はありません。外側Shellが現在のrevisionを付け、同一originの署名済みsessionからactorを解決します。
 
-LLMを使うモックは次のように呼びます。
+クライアントへ`contentSource`や`llm`は公開されません。Word DBとLLMはAppSetの`context.resources`から使います。effectが失敗した場合はCommand全体を失敗させ、Room state、revision、手番、timerを更新しません。
 
-```js
-const generated = await GameFieldsPreset.resources.llm.generate({
-  task: "answer-question",
-  prompt: buildPromptFromGameInput(question, history),
-  promptVersion: "answer-question-v1",
-  quality: "standard"
-});
-renderAnswer(generated.text);
-```
+`window.GameFieldsPreset.room`は移行用aliasです。`GameFieldsPreset.registerGame()`によるブラウザ内ゲーム進行と`GameFieldsPreset.resources`は昇格packageでは利用できません。
 
-この呼び出しはopaque-origin iframeから外部APIへ直接通信しません。外側Shellが要求を受け、ログイン済みGame Fieldsセッション、確定済みmodule profile、AI利用設定、利用上限を確認して共通gatewayへ中継します。
+## Hash固定と昇格
+
+`npm run build:game-package`は次を1つのpackageへまとめます。
+
+- クライアントassets
+- `server.bundle.js`
+- `source/app-set.ts`
+- `source/manifest.ts`
+- `source/server-module.ts`
+- `game-fields-package.json`
+
+manifestにはserver bundleとAppSet sourceのSHA-256を記録します。Portalはupload時に実ファイルから再計算し、developmentとstableへ同じrevision・同じhashをコピーします。昇格処理はAppSetを翻訳、修正、再buildしません。

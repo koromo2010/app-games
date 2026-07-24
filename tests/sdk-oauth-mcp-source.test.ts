@@ -15,9 +15,15 @@ test("SDK OAuth discovery requires authorization code with S256 PKCE", () => {
 
 test("SDK MCP challenges unauthenticated callers and scopes mock publication", () => {
   const mcp = read("apps/sdk-portal/app/api/mcp/route.ts");
+  const packageStore = read("apps/sdk-portal/lib/game-package-store.ts");
   assert.match(mcp, /WWW-Authenticate/);
   assert.match(mcp, /oauth-protected-resource/);
   assert.match(mcp, /name === "publish_mock"/);
+  assert.match(mcp, /name: "publish_game_package"/);
+  assert.match(mcp, /saveCreatorGamePackage/);
+  assert.match(packageStore, /appSetSourceSha256/);
+  assert.match(packageStore, /package_app_set_sha256/);
+  assert.match(mcp, /immutableAppSet: true/);
   assert.match(mcp, /name: "get_sdk_handshake"/);
   assert.match(mcp, /name === "get_sdk_handshake"/);
   assert.match(mcp, /enum: \[\.\.\.SDK_PORTAL_CAPABILITIES\]/);
@@ -69,12 +75,12 @@ test("SDK Portal distributes the current DownloadMe revision", () => {
   const syncScript = read("apps/sdk-portal/scripts/sync-download.mjs");
 
   for (const source of [page, nextConfig, syncScript]) {
-    assert.match(source, /GameFieldsDownloadMe-ver9\.md/);
+    assert.match(source, /GameFieldsDownloadMe-ver10\.md/);
     assert.doesNotMatch(source, /GameFieldsDownloadMe-ver[2345678]\.md/);
   }
-  const download = read("apps/sdk-portal/public/GameFieldsDownloadMe-ver9.md");
-  assert.match(download, /DownloadMe: `ver9`/);
-  assert.match(download, /`downloadMeVersion`が`9`/);
+  const download = read("apps/sdk-portal/public/GameFieldsDownloadMe-ver10.md");
+  assert.match(download, /DownloadMe: `ver10`/);
+  assert.match(download, /`downloadMeVersion`が`10`/);
   assert.match(download, /必要になるまで遅延読み込み/);
   assert.match(download, /tool検索・発見機能で`gameapp-dev get_sdk_handshake Game Fields SDK接続互換性`を検索/);
   assert.match(download, /最初のtool一覧に名前がないことだけを根拠に、未接続や旧版と判定してはいけません/);
@@ -83,7 +89,10 @@ test("SDK Portal distributes the current DownloadMe revision", () => {
   assert.match(download, /プラグイン管理画面で`gameapp-dev`を更新/);
   assert.match(download, /更新後に新しいチャットを開いて/);
   assert.match(download, /このDownloadMeをもう一度添付/);
-  assert.match(download, /`requiredCapabilities`は以下の4件をそのまま送り/);
+  assert.match(download, /`requiredCapabilities`は以下の7件をそのまま送り/);
+  assert.match(download, /"game-package-publish"/);
+  assert.match(download, /AppSet原文を翻訳、補正、再生成してはいけません/);
+  assert.match(download, /同一revisionと同一hashだけをdevelopment、stableへ昇格/);
   assert.doesNotMatch(download, /解除可|任意へ|必須解除/);
   assert.match(nextConfig, /legacyDownloadMePaths/);
   assert.match(nextConfig, /GameFieldsDownloadMe-ver\$\{index \+ 1\}\.md/);

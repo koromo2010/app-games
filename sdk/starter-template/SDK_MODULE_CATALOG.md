@@ -1,12 +1,12 @@
 # Game Fields SDK モジュールカタログ
 
-ゲームをゼロから作り直さず、ここにある公式モジュールを組み合わせます。最初のモックでは全moduleが必須です。AIは採否を決めず、同等機能をAppSetへ再実装しません。
+ゲームをゼロから作り直さず、ここにある公式モジュールを組み合わせます。最初の候補packageでは全moduleが必須です。AIは採否を決めず、同等機能をAppSetへ再実装しません。
 
 ## 初期profile
 
-- 初回モック保存時にPlatformが38件すべてを`required`として付与する。
+- 初回ゲーム登録時にPlatformが38件すべてを`required`として付与する。
 - `mock/preview.json`、manifest、AppSet、管理トークン、MCPから必須一覧を変更できない。
-- モック承認後、AIは読み取り専用`get_game_module_requirements`で返る`requiredModuleIds`と各moduleの`delivery`、`packageExports`、`publicApis`、`usage`を正本としてAppSetを作る。
+- AIは読み取り専用`get_game_module_requirements`で返る`requiredModuleIds`と各moduleの`delivery`、`packageExports`、`publicApis`、`usage`を正本としてAppSetを作る。
 
 機械可読な正本は`@game-fields/game-sdk/modules`の`GAME_SDK_MODULE_CATALOG`です。
 
@@ -39,47 +39,25 @@
 
 新しいオンラインゲームはこの基本セットを必ず起点にします。アプリセットへRoom作成、参加者管理、設定更新、revision、共通permissionsを再実装しません。
 
-## プレビュープリセット（実装済み）
+## Preview／正式共通Room bridge
 
-隔離Previewは全`index.html`へ`window.GameFieldsPreset`を自動注入します。外側Shellが共通UIを所有するため、ゲーム側で同名の見た目や状態管理を再実装しません。次の標準属性は旧モック互換用であり、新規ゲームでは共通UIをHTMLへ置かず、`registerGame`だけを使います。
+packageの`index.html`には`window.GameFieldsRoom`が注入されます。Previewと昇格後は同じAPI、同じAppSet bundle、同じクライアントを使います。
 
-| 属性 | 実際の動作 |
-| --- | --- |
-| `data-action="debug"` または `data-gf-command="debug"` | 共通デバッグパネルを開閉 |
-| `data-action="dummy"` | ダミープレイヤーを追加し、参加者一覧と視点候補を更新 |
-| `data-gf-command="remove-dummy"` | 最後のダミープレイヤーを削除 |
-| `data-action="start"` | フェーズを`playing`へ変更し、登録済みゲームの`start`を実行 |
-| `data-action="abort"` | ゲーム固有状態を中断し、参加者を維持して`lobby`へ戻す |
-| `data-gf-command="auto-progress"` | 登録済みゲームのデバッグ自動進行を実行 |
-| `data-gf-command="rematch"` | ゲーム固有状態を初期化して同じ部屋へ戻す |
-| `data-gf-player-list` | Runtimeが参加者`li`を描画する領域 |
-| `data-gf-viewer` | DEBUG外側Shellが所有する閲覧視点の直接選択ボタン群。ゲーム固有コードから生成・変更しない |
-| `data-gf-phase` | 現在フェーズの表示。ゲーム固有コードからフェーズ強制UIを追加しない |
-| `data-gf-timer` | 共通timerが残り時間または`制限なし`を描画する任意位置。ゲーム側は配置と見た目だけを所有 |
-
-ゲーム固有コードは、石・カード・盤面など固有状態だけを登録します。以下の5 handlerは省略せず、該当処理が軽微でも明示します。
-
-```js
-GameFieldsPreset.registerGame({
-  start() { resetGame(); },
-  abort() { resetGame(); },
-  rematch() { resetGame(); },
-  autoProgress() { playOneSafeDebugStep(); },
-  onStateChange(platformState, command) {
-    renderGame(platformState.viewerId, platformState.phase, command);
-  }
-});
+```ts
+GameFieldsRoom.getSnapshot(): GameSdkRoomSnapshot | null;
+GameFieldsRoom.subscribe(listener): () => void;
+GameFieldsRoom.send(command): Promise<GameSdkRoomSnapshot>;
 ```
 
-`GameFieldsPreset.command(...)`へactor IDや管理権限を渡して本人証明にしてはいけません。Previewの状態は画面確認専用で、本体統合時は認証済みRuntimeが同じ役割を引き取ります。
+クライアントは閲覧者別Viewを描画し、ゲーム固有Commandだけを送ります。Room作成・参加、参加者、settings、開始、中断、再戦、timer、デバッグは外側Shellが所有します。
 
-正常に1手が完了したPreviewでは`GameFieldsPreset.command("timer:turn-complete")`を呼ぶと、共通timerが次手番の締切と表示をリセットします。入力エラーやAI失敗時には呼びません。本体統合後は審査済みAppSetが成功transitionで`timer: "reset"`を返し、共通Runtimeがサーバー時刻でリセットします。ブラウザから送った時刻や残り秒数は正本にしません。
+`GameFieldsPreset`は旧クライアントの移行用名称だけを残し、`GameFieldsPreset.room`が同じRoom bridgeを指します。`registerGame`によるブラウザ内進行と`resources`によるブラウザ側Word DB／LLM呼出しは昇格packageで禁止です。
 
 ## ワード・コンテンツ供給
 
 ワードDBはGame Fieldsの非公開Platform resourceです。DB接続やテーブルをゲームへ渡さず、公開型`@game-fields/game-sdk/content-source`と`context.resources`に注入されたadapterだけを使います。
 
-単語ゲームのモックを作るときも、初期Word DBや固定単語配列を置きません。隔離Previewへ同じ3 APIを持つ`GameFieldsPreset.resources.contentSource`が注入されるため、モックの時点から共通Word DBを参照します。
+単語ゲームでも、初期Word DBや固定単語配列を置きません。Previewと昇格後の両方でAppSetの`context.resources.contentSource`から同じ3 APIを使います。
 
 | 公開契約 | 内容 |
 | --- | --- |
@@ -146,18 +124,7 @@ const words = await requireGameSdkContentSource(context.resources).drawWords({
 
 `wordDifficulty`はクライアントで「簡単・普通・難しい」から選び、SDK基本セットのRoom settingsとして保存します。取得結果の`id`はopaqueです。DBキーとして解釈せず、API・Redis・PostgreSQLへ直接接続しません。利用可能なpoolは確定済みprofileとPlatform権限に従います。
 
-### モック
-
-```js
-const difficulty = difficultySelect.value; // easy | normal | hard
-const words = await GameFieldsPreset.resources.contentSource.drawWords({
-  pool: "general-words",
-  difficulty,
-  count: 8
-});
-```
-
-Preview bridgeはログイン、保存済みゲーム、`content-source` module、レート制限を外側Shellで検査します。取得失敗時は初期配列へfallbackせず、入力と手番を維持して再試行表示にします。
+PreviewでもこのAppSetコードをそのまま実行します。クライアントには取得済みの安全なViewだけを返します。取得失敗時はtransitionを保存せず、入力と手番を維持して再試行表示にします。
 
 ## LLM
 
@@ -178,18 +145,7 @@ const generated = await requireGameSdkLlmGateway(
 });
 ```
 
-モックでは、同じrequest／response契約を外側Shellの安全なbridgeで確認できます。
-
-```js
-const generated = await GameFieldsPreset.resources.llm.generate({
-  task: "answer-question",
-  prompt: buildPromptFromGameInput(question, history),
-  promptVersion: "answer-question-v1",
-  quality: "standard"
-});
-```
-
-Preview iframeは事業者endpointやGame Fields APIへ直接接続しません。外側Shellが認証・module profile・レート制限を検査し、共通AI通信バイタルを点灯してから中継します。Previewはstandard品質だけで、高品質生成は採用審査時に用途を確認します。
+Preview iframeはLLMを直接呼びません。AppSetのeffect requestを信頼済みPlatform側が検査し、module profile・レート制限・共通gatewayを通してから、同じAppSet実行へ結果を返します。
 
 ## トランプ
 
@@ -222,11 +178,11 @@ Game Fields本体には共通キャンバス基盤があります。描画を使
 
 ## AIの利用ルール
 
-1. 最初のモックでは全moduleを必須として扱い、AI判断で外さない。
+1. 最初の候補packageでは全moduleを必須として扱い、AI判断で外さない。
 2. 利用者へ内部コンポーネント名の選択を求めず、SDK-devで実物を確認してもらう。
 3. 既存モジュールで満たせる機能をゲーム固有コードへ複製しない。
 4. カタログにない再利用価値の高い機能は、今回だけの実装にするか共通モジュール候補にするかを明記する。
-5. モック承認後は`get_game_module_requirements`の`requiredModuleIds`と`requiredModules`の公開契約を正本とし、必須moduleを省略しない。
+5. `get_game_module_requirements`の`requiredModuleIds`と`requiredModules`の公開契約を正本とし、必須moduleを省略しない。
 6. `delivery=platform-owned`または`platform-resource`のmoduleは本体ファイルをコピーせず、注入契約を使う。`sdk-helper`または`sdk-resource`は返された`packageExports`からimportする。
 
 このカタログはモジュール追加時に更新します。スターターへ固定コピーした共通UIではなく、将来はSDKのversionに対応するモジュール実体と機械可読manifestを正本にします。

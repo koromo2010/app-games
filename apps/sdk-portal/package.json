@@ -1,6 +1,6 @@
 {
   "name": "@game-fields/sdk-portal",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "scripts": {
     "sync:download": "node scripts/sync-download.mjs",
@@ -12,8 +12,8 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "@game-fields/game-sdk": "0.1.0",
-    "@game-fields/sdk-preview-auth": "0.1.0",
+    "@game-fields/game-sdk": "0.1.1",
+    "@game-fields/sdk-preview-auth": "0.1.1",
     "@neondatabase/serverless": "^1.1.0",
     "next": "16.2.4",
     "react": "19.2.4",

@@ -2,6 +2,8 @@
 
 `config/platform-release.json`を、Game Fields本体とSDK配布のリリース互換性に関する正本とする。
 
+現在の開発候補はPlatform／SDK package `0.1.1`、SDK handshake `1`、SDK contract `1`、Room schema `1`である。`0.1.1`はportable AppSet、正式Preview Room、hash固定昇格を追加する後方互換リリースで、contract schemaは上げない。
+
 ## バージョンの役割
 
 - `platformVersion`: Game Fields本体、SDK Portal、DownloadMe、SDK packageを同時に公開するリリース番号。

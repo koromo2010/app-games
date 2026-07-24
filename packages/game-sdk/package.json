@@ -1,6 +1,6 @@
 {
   "name": "@game-fields/game-sdk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Public contracts, reusable game resources, and mock/runtime helpers for Game Fields.",
   "keywords": [
     "game-fields",
@@ -55,6 +55,11 @@
       "types": "./dist/resources.d.ts",
       "import": "./dist/resources.js",
       "default": "./dist/resources.js"
+    },
+    "./portable-server": {
+      "types": "./dist/portable-server.d.ts",
+      "import": "./dist/portable-server.js",
+      "default": "./dist/portable-server.js"
     },
     "./playing-cards": {
       "types": "./dist/playing-cards.d.ts",

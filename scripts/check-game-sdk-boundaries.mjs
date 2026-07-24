@@ -24,6 +24,21 @@ const sdkRoomRouteFile = join(root, "app/api/game-sdk/[gameId]/rooms/route.ts");
 const sdkServerRegistryFile = join(root, "lib/game-sdk-server-registry.ts");
 const sdkHttpClientFile = join(sourceRoot, "client-runtime.ts");
 const sdkPreviewPageFile = join(root, "app/sdk-preview/[creatorSlug]/games/[gameId]/page.tsx");
+const sdkPreviewRoomRouteFile = join(root, "app/api/sdk-preview/[creatorSlug]/games/[gameId]/rooms/route.ts");
+const packageClientRuntimeFile = join(root, "apps/sdk-preview/lib/package-client-runtime.ts");
+const packageServerRunnerFile = join(root, "apps/sdk-preview/lib/server-runner.ts");
+const packageServerRouteFile = join(
+  root,
+  "apps/sdk-preview/app/server/[instanceId]/[gameId]/[revision]/route.ts",
+);
+const packageAssetRouteFile = join(
+  root,
+  "apps/sdk-preview/app/package/[instanceId]/[gameId]/[revision]/[[...assetPath]]/route.ts",
+);
+const previewLinksFile = join(root, "apps/sdk-portal/lib/preview-links.ts");
+const packageManifestFile = join(root, "apps/sdk-portal/lib/game-package-manifest.ts");
+const packageGitStoreFile = join(root, "apps/sdk-portal/lib/mock-git-store.ts");
+const promotionRouteFile = join(root, "apps/sdk-portal/app/api/internal/promotions/route.ts");
 const starterSourceFiles = ["src", "tests"].flatMap((directory) =>
   readdirSync(join(starterRoot, directory))
     .filter((name) => extname(name) === ".ts")
@@ -77,6 +92,7 @@ for (const token of [
   "approvedGameSdkRegistration",
   "requireAuthenticatedPlayer",
   "rateLimitPolicies.roomMutation",
+  "rateLimitPolicies.sdkRuntimeRead",
   "createGameSdkOnlineRoomHttpHandlers",
   "export function DELETE",
 ]) {
@@ -113,6 +129,104 @@ if (/\b(actor|playerId|displayName|debugAccess)\s*:/.test(sdkHttpClientSource)) 
 const sdkPreviewPageSource = readFileSync(sdkPreviewPageFile, "utf8");
 if (/game-sdk-server-registry|game-sdk-platform-adapter|\/api\/game-sdk\//.test(sdkPreviewPageSource)) {
   failures.push(`${relative(root, sdkPreviewPageFile)}: 未審査previewを認証済みserver Runtimeへ直接接続しています。`);
+}
+const sdkPreviewRoomRouteSource = readFileSync(sdkPreviewRoomRouteFile, "utf8");
+for (const token of [
+  "loadSdkPreviewPackageModule",
+  "createGameSdkOnlineRoomHttpHandlers",
+  "createAuthenticatedGameSdkPlatformAdapter",
+]) {
+  if (!sdkPreviewRoomRouteSource.includes(token)) {
+    failures.push(`${relative(root, sdkPreviewRoomRouteFile)}: 正式Preview Room境界 ${token} がありません。`);
+  }
+}
+const packageClientRuntimeSource = readFileSync(packageClientRuntimeFile, "utf8");
+for (const token of ["GameFieldsRoom", "game-fields:room-command", "resources: Object.freeze({})"]) {
+  if (!packageClientRuntimeSource.includes(token)) {
+    failures.push(`${relative(root, packageClientRuntimeFile)}: package client bridge境界 ${token} がありません。`);
+  }
+}
+if (/contentSource\s*:|llm\s*:\s*\{/.test(packageClientRuntimeSource)) {
+  failures.push(`${relative(root, packageClientRuntimeFile)}: ブラウザへPlatform resource adapterを公開しています。`);
+}
+const packageServerRunnerSource = readFileSync(packageServerRunnerFile, "utf8");
+for (const token of [
+  "VM_MEMORY_LIMIT_BYTES",
+  "VM_STACK_LIMIT_BYTES",
+  "VM_EXECUTION_LIMIT_MS",
+  "setInterruptHandler",
+  "newContext",
+]) {
+  if (!packageServerRunnerSource.includes(token)) {
+    failures.push(`${relative(root, packageServerRunnerFile)}: 隔離server runner制限 ${token} がありません。`);
+  }
+}
+const packageServerRouteSource = readFileSync(packageServerRouteFile, "utf8");
+for (const token of [
+  'grant.audience !== "package-server"',
+  "grant.bundleSha256",
+  "SERVER_RUNTIME_BUNDLE_HASH_MISMATCH",
+  'assetPath: "server.bundle.js"',
+]) {
+  if (!packageServerRouteSource.includes(token)) {
+    failures.push(`${relative(root, packageServerRouteFile)}: hash固定server実行境界 ${token} がありません。`);
+  }
+}
+const packageAssetRouteSource = readFileSync(packageAssetRouteFile, "utf8");
+for (const token of [
+  'grant.audience !== "package-client"',
+  'assetPath === "server.bundle.js"',
+  'assetPath === "game-fields-package.json"',
+  'assetPath.startsWith("source/")',
+]) {
+  if (!packageAssetRouteSource.includes(token)) {
+    failures.push(`${relative(root, packageAssetRouteFile)}: client/server package分離境界 ${token} がありません。`);
+  }
+}
+const previewLinksSource = readFileSync(previewLinksFile, "utf8");
+for (const token of [
+  'audience: "package-client"',
+  'audience: "package-server"',
+  "bundleSha256: input.serverBundleSha256",
+]) {
+  if (!previewLinksSource.includes(token)) {
+    failures.push(`${relative(root, previewLinksFile)}: client/server token分離境界 ${token} がありません。`);
+  }
+}
+const packageManifestSource = readFileSync(packageManifestFile, "utf8");
+for (const token of [
+  "MAX_PORTABLE_SERVER_BUNDLE_BYTES",
+  "GAME_SDK_PACKAGE_SERVER_BUNDLE_TOO_LARGE",
+  "actualBundleSha256",
+  "actualAppSetSourceSha256",
+]) {
+  if (!packageManifestSource.includes(token)) {
+    failures.push(`${relative(root, packageManifestFile)}: package受信時の固定hash境界 ${token} がありません。`);
+  }
+}
+const packageGitStoreSource = readFileSync(packageGitStoreFile, "utf8");
+for (const token of [
+  "const packageTree =",
+  'mode: "040000"',
+  "path: input.prefix",
+]) {
+  if (!packageGitStoreSource.includes(token)) {
+    failures.push(`${relative(root, packageGitStoreFile)}: package subtreeの完全置換境界 ${token} がありません。`);
+  }
+}
+const promotionRouteSource = readFileSync(promotionRouteFile, "utf8");
+for (const token of [
+  "packageRevision",
+  "packageBundleSha256",
+  "packageAppSetSha256",
+  "developmentRevision",
+  "stableRevision",
+  "verifyPortableManifest",
+  "promotion_source_changed",
+]) {
+  if (!promotionRouteSource.includes(token)) {
+    failures.push(`${relative(root, promotionRouteFile)}: 無再build昇格境界 ${token} がありません。`);
+  }
 }
 
 for (const absoluteFile of runtimeFiles) {
@@ -231,6 +345,7 @@ for (const exportPath of [
   "./drawing-react",
   "./mock-runtime",
   "./client-runtime",
+  "./portable-server",
   "./handshake",
   "./package.json",
 ]) {
@@ -249,7 +364,7 @@ if (runtimePackageJson.name !== "@game-fields/game-runtime") {
 if (runtimePackageJson.private !== true || runtimePackageJson.license !== "UNLICENSED") {
   failures.push("packages/game-runtime/package.json: 内部RuntimeはprivateかつUNLICENSEDである必要があります。");
 }
-if (JSON.stringify(runtimePackageJson.dependencies ?? {}) !== JSON.stringify({ "@game-fields/game-sdk": "0.1.0" })) {
+if (JSON.stringify(runtimePackageJson.dependencies ?? {}) !== JSON.stringify({ "@game-fields/game-sdk": "0.1.1" })) {
   failures.push("packages/game-runtime/package.json: 内部Runtime coreは公開SDK以外へ依存できません。");
 }
 

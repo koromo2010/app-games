@@ -184,9 +184,13 @@ export function createGameFieldsPlatformRuntime<
   resources = {},
   onSaved,
 }: PlatformRuntimeOptions<TRoom, TCreateInput, TCommand, TRoomView>): GameFieldsPlatformRuntime<TCreateInput, TCommand, TRoomView> {
-  const present = (room: Readonly<TRoom>, actor: GameSdkTrustedActor, timestamp: number) => snapshot(
+  const present = async (
+    room: Readonly<TRoom>,
+    actor: GameSdkTrustedActor,
+    timestamp: number,
+  ) => snapshot(
     room,
-    module.presentRoom(clone(room), {
+    await module.presentRoom(clone(room), {
       viewer: gameSdkViewerFromActor(actor),
       now: timestamp,
       resources,
@@ -225,7 +229,7 @@ export function createGameFieldsPlatformRuntime<
       if (result === "exists") {
         throw new GameFieldsPlatformRuntimeError("ROOM_ALREADY_EXISTS", 409);
       }
-      return present(room, actor, timestamp);
+      return await present(room, actor, timestamp);
     },
 
     async readRoom({ code, identity }) {
@@ -233,7 +237,7 @@ export function createGameFieldsPlatformRuntime<
       if (!record) return null;
       assertStoredRecord(record, module.manifest.id, code);
       const actor = trustedActor(identity, record.hostPlayerId);
-      return present(record.room, actor, now());
+      return await present(record.room, actor, now());
     },
 
     async sendCommand({ code, envelope, identity }) {
@@ -272,7 +276,7 @@ export function createGameFieldsPlatformRuntime<
       if (saved === "missing") throw new GameFieldsPlatformRuntimeError("ROOM_NOT_FOUND", 404);
       if (saved === "conflict") throw new GameFieldsPlatformRuntimeError("STALE_REVISION", 409);
       await onSaved?.(clone(record), clone(nextRecord));
-      const room = present(nextRoom, actor, timestamp);
+      const room = await present(nextRoom, actor, timestamp);
       return { room, revision: room.revision };
     },
   };

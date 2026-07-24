@@ -6,6 +6,9 @@ export const GAME_FIELDS_SDK_CAPABILITIES = [
   "creator-environments",
   "starter-download",
   "mock-publish",
+  "game-package-publish",
+  "formal-room-preview",
+  "hash-pinned-promotion",
   "submission-upload",
   "persistent-rooms",
   "room-realtime",
@@ -225,4 +228,3 @@ export function negotiateGameSdkHandshake(
     problems,
   };
 }
-

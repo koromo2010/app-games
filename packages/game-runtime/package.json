@@ -1,6 +1,6 @@
 {
   "name": "@game-fields/game-runtime",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Private Game Fields adapter for authenticated, revisioned game rooms.",
   "private": true,
   "type": "module",
@@ -22,7 +22,7 @@
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\""
   },
   "dependencies": {
-    "@game-fields/game-sdk": "0.1.0"
+    "@game-fields/game-sdk": "0.1.1"
   },
   "engines": {
     "node": ">=20"

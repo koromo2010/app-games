@@ -1,66 +1,87 @@
-# 仕様確定後のモック作成ガイド
+# 昇格可能なゲーム画面の作成ガイド
 
 ## 目的
 
-本実装の前に、利用者がGame Fields標準Shellの中でゲーム固有画面、操作順、情報の見え方を確認できる状態を作ります。モックは完成品のふりをせず、動く部分と未実装部分を明確に分けます。
+`mock/`は旧称です。ここにあるHTML・CSS・JavaScriptは画面確認だけの使い捨てモックではなく、AppSetと同じpackageへ入り、Previewと昇格後に同じrevisionで実行される正式クライアントです。
 
-## 開始条件
-
-利用者が一括質問票へ回答したら、次をAIが整理してモックを作り始めます。
-
-- `GAME_SPEC.md`の必須項目が埋まっている。
-- 勝利・終了条件、主な操作、秘密情報、時間切れ、切断・復帰が決まっている。
-- 未定・空欄は、AIが安全で一般的な初期値を仮置きし、`GAME_SPEC.md`でAI判断と分かるようにする。
-
-仮置きで進められる事項を一問ずつ聞き返しません。安全性や根本構造に関わり仮置き不能な事項だけ、追加質問を一度にまとめて行います。
+Previewと正式版で変わるのは公開channelだけです。昇格時にAppSetを翻訳、再build、差し替えしてはいけません。
 
 ## 作るもの
 
-`mock/`には次のゲーム固有slot用テンプレートがプレインストールされています。
+- `mock/index.html`: 外側のGame Fields Shellへ差し込むゲーム固有slot
+- `mock/styles.css`: ゲーム固有画面のPC・スマホ表示
+- `mock/mock.js`: `GameFieldsRoom`のView描画とCommand送信
+- `mock/preview.json`: ゲームID・表示名・説明
+- `src/manifest.ts`: AppSetと共通Shellの機能宣言
+- `src/contracts.ts`: AppState・AppCommand・AppView
+- `src/app-set.ts`: サーバーを正本とするゲーム進行
+- `tests/`: 完走、権限、revision、秘密情報の契約テスト
 
-- `index.html`: 外側のGame Fields Shellへ差し込むゲーム固有領域
-- `styles.css`: ゲーム固有の盤面・操作・状態表示とPC・スマホ配置
-- `mock.js`: ゲーム固有状態と`GameFieldsPreset.registerGame()`の接続
-- `preview.json`: 制作者広場のカードと共有URLに使うゲームID・表示名・説明、および共通設定画面へ表示する設定宣言
+## 必須の接続
 
-外部CDN、事業者API、ログイン、DBへ直接依存させません。単語を使わない表示用データは架空データを使えますが、ゲームのお題となる単語・ペア・読み・語釈は固定配列や初期DBを作らず、外側Shellが提供する`GameFieldsPreset.resources.contentSource`から取得します。LLMが必要なゲームは`GameFieldsPreset.resources.llm`を利用できます。AIは`#game-slot`の内側とゲーム固有JavaScriptを編集します。広場、ヘッダー、ゲームカード、入室、部屋、参加者、ルール、デバッグパネル、プレイヤーメニュー、退出・再戦を追加してはいけません。これらは保存URLの外側にすでに存在します。
+クライアントはAppSetが返した閲覧者別Viewだけを描画します。
 
-SDK Previewの共通開始条件は`minimumPlayers: 1`です。ホスト1人でも開始でき、必要な人数はDEBUGのダミー参加者で補える状態にします。複数人を前提とする固有ルールの検証はゲーム内で行いますが、Preview Shellの開始自体を2人待ちに戻してはいけません。
+```js
+GameFieldsRoom.subscribe((snapshot) => {
+  render(snapshot?.view?.app, snapshot?.view?.common);
+});
 
-共通設定画面は`preview.json`の`settings`だけを描画します。最大人数、ラウンド数、難易度、モード等は必要なゲームだけが宣言します。`online-room`では制限時間だけが必須で、`platformRole: "time-limit"`を1項目に付けます。初期値は`defaultValue`、候補は`options`でゲーム側が決め、`0`を含める場合は制限なしとして扱います。ゲーム固有slotへ同じ設定UIを作らず、`GameFieldsPreset.getState().settings`または`onStateChange(platformState).settings`から選択値を参照します。
+await GameFieldsRoom.send({
+  type: "game/submit",
+  value: input.value
+});
+```
 
-## 作り方
+- ブラウザ内の変数をゲーム状態の正本にしない。
+- `start`、`abort`、`rematch`をローカルcallbackへ接続しない。
+- actor ID、player ID、表示名を本人証明として送らない。
+- 外側Shellの広場、部屋作成・参加、参加者、設定、ルール、デバッグ、再戦を複製しない。
+- AppSetの`presentApp`で本人・他プレイヤー・観戦者ごとの情報を分ける。
 
-1. `GAME_SPEC.md`からゲームカード情報、共通設定画面へ出す項目、ゲーム固有画面、利用者の操作順を取り出す。
-2. `SDK_MODULE_CATALOG.md`から利用する公式モジュールを選び、`APP_REQUIREMENTS.md`の各要件を「該当」「非該当」「本実装時」のいずれかに分類する。
-3. 最短の主要フローを操作できるようにする。
-4. `index.html`をゲーム固有slotだけに保ち、共通UIを複製していないことを確認する。
-5. `mock.js`で`GameFieldsPreset.registerGame()`を必ず呼び、`start`、`abort`、`rematch`、`autoProgress`、`onStateChange`をゲーム固有状態へ接続する。
-   - 単語を使う場合は`GameFieldsPreset.resources.contentSource.drawWords(...)`等を呼ぶ。難易度設定は`easy | normal | hard`で保持してrequestへ渡す。固定単語配列、初期Word DB、seed/fallback語彙は作らない。
-   - Word DB取得中は二重操作を止め、失敗時は手番や入力を維持して再試行可能にする。取得失敗を偽の結果へ置き換えない。
-   - LLMを使う場合は`GameFieldsPreset.resources.llm.generate({ task, prompt, promptVersion })`へゲーム内容だけを渡す。provider、モデル、APIキー、課金元、endpointをゲーム側へ持たせない。
-   - 時間表示はHTML内の任意位置へ`data-gf-timer`を置く。正常に1手を確定した直後だけ`GameFieldsPreset.command("timer:turn-complete")`を呼び、入力エラーやAI失敗ではリセットしない。
-6. 外側のデバッグメニューから、ダミー参加者追加、閲覧プレイヤー視点切替、主要フェーズ切替、待機、時間切れ、切断、入力エラー、結果を再現できるようにする。slot内にデバッグ操作を重複配置しない。
-7. ダミー参加者を自動進行または一括入力でき、1人で開始から結果まで止まらず確認できるようにする。
-8. `abort`でゲーム固有状態を初期化し、外側Shellが同じ参加者のロビーへ戻せるようにする。
-9. デバッグ権限なしへ切り替え、デバッグUIが消えることと秘密情報が通常視点へ漏れないことを確認できるようにする。
-10. `onStateChange(platformState)`の`viewerId`と`phase`を使い、ホスト／一般参加者などで見えるゲーム固有情報の差を確認する。
-11. 390px前後のスマホ幅と1280px前後のPC幅で確認する。
-12. `MOCK_REVIEW.md`を完成させ、`npm run check:mock`を実行する。
-13. 入口で受け取ったSDK URL・制作者slug・管理トークンを一時環境変数として`npm run publish:mock`を実行し、発行されたSDK URLを利用者へ案内する。トークンをファイル、Git、会話、出力へ残さない。
-14. コマンド結果が`saved: true`であり、`creatorUrl`が`https://sdk-dev.game-fields.com/<制作者slug>/`、`gameUrl`が`https://sdk-dev.game-fields.com/<制作者slug>/games/<game-id>`形式で返ったことを確認する。最初の案内リンクは`creatorUrl`にする。保存またはURL取得に失敗した場合、ローカルHTMLを代替の完成品として案内しない。
+Word DBとLLMはクライアントへbridgeしません。AppSetからPlatform resourceを呼びます。
 
-## 利用者への説明
+```ts
+const words = await requireGameSdkContentSource(
+  context.resources,
+).drawWords({
+  pool: "general-words",
+  difficulty: room.settings.wordDifficulty, // easy | normal | hard
+  count: 8,
+});
+```
 
-モック作成後は長い技術説明をせず、次を伝えます。
+```ts
+const generated = await requireGameSdkLlmGateway(
+  context.resources,
+).generate({
+  task: "answer-question",
+  prompt: buildReviewedPrompt(command.question, room.app.history),
+  promptVersion: "answer-question-v1",
+  quality: "standard",
+});
+```
 
-1. 作った画面と試せる操作
-2. SDK上で発行されたモック確認URL
-3. 仕様のどこを画面へ反映したか
-4. 共通要件への主な対応
-5. モックのため実際には動かないもの
-6. 「実際に画面を見て、変えたいところはありますか？ 特になければ『これでOK』と答えてください」
+取得・生成に失敗したtransitionは保存せず、revision、手番、timerを進めません。固定単語、偽の回答、ブラウザ側fallbackを追加しません。
 
-モック確認URLは必ず`npm run publish:mock`の返却値を使い、推測して組み立てません。少なくとも「SDKへ保存しました」とクリック可能な「ゲームを開く」リンクを含めます。
+## 実装順
 
-利用者が本実装を明確に承認するまで、`src/`と`tests/`を個別仕様へ書き換えません。
+1. `GAME_SPEC.md`を確定する。
+2. `manifest.ts`と`preview.json`を同じゲームIDへ更新する。
+3. `contracts.ts`と`app-set.ts`へゲーム固有state・Command・Viewを実装する。
+4. `mock.js`を`GameFieldsRoom.subscribe/send`へ接続する。
+5. PC幅・スマホ幅、ホスト・一般参加者、待機・エラー・結果を確認する。
+6. 正常完走、権限拒否、古いrevision、秘密遮断をテストする。
+7. `npm run check`と`npm run demo`を通す。
+8. `npm run diagnose:promotion`を実行する。
+9. `npm run publish:game-package`でpackageを保存する。
+10. 返された正式Preview Roomを複数ブラウザで確認する。
+
+画面だけを先に相談したい場合は`npm run publish:mock`を使えますが、これは静的UIレビューです。Room同期、再接続、AppSet、Word DB、LLM、本番昇格の検証結果には数えません。
+
+## 完了条件
+
+- Previewで別ブラウザが同じRoomへ参加・同期できる。
+- 再読込後に同じRoomへ復帰できる。
+- AppSet source SHA-256とserver bundle SHA-256が保存時に表示される。
+- development昇格、stable昇格で両hashが変わらない。
+- クライアントがブラウザ内の正本状態やresource bridgeへ依存していない。

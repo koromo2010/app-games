@@ -1,6 +1,6 @@
 {
     "name": "app-games",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "private": true,
     "workspaces": [
         "apps/*",
@@ -34,7 +34,8 @@
         "vocabulary:import-legacy-words": "node --experimental-strip-types scripts/import-legacy-word-catalog.ts"
     },
     "dependencies": {
-        "@game-fields/game-runtime": "0.1.0",
+        "@game-fields/game-runtime": "0.1.1",
+        "@game-fields/sdk-preview-auth": "0.1.1",
         "@neondatabase/serverless": "^1.1.0",
         "@simplewebauthn/browser": "^13.3.0",
         "@simplewebauthn/server": "^13.3.2",
@@ -54,6 +55,7 @@
         "@types/react": "^19",
         "@types/react-dom": "^19",
         "@types/ws": "^8.18.1",
+        "esbuild": "^0.28.1",
         "eslint": "^9",
         "eslint-config-next": "16.2.4",
         "tailwindcss": "^4",

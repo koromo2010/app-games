@@ -17,7 +17,7 @@ export default async function GameMockPage({ params }: {
   if (validateInstanceSlug(instanceId) || !GAME_PATTERN.test(gameId)) notFound();
 
   const game = await getCreatorGamePreview(instanceId, gameId).catch(() => null);
-  if (!game) notFound();
+  if (!game || !game.mockRevision) notFound();
 
   let previewUrl: string;
   try {

@@ -65,6 +65,11 @@ export const rateLimitPolicies = {
     ip: { limit: 2_500, windowMs: minute },
     player: { limit: 180, windowMs: minute },
   },
+  sdkRuntimeRead: {
+    id: "sdk-runtime-read",
+    ip: { limit: 1_800, windowMs: minute },
+    player: { limit: 120, windowMs: minute },
+  },
   aiGeneration: {
     id: "ai-generation",
     ip: { limit: 300, windowMs: tenMinutes },

@@ -9,7 +9,7 @@
 ## 安全性
 
 - [ ] 共通モジュールは全件必須から開始し、AIがprofileを変更していない
-- [ ] モック承認後、`get_game_module_requirements`の`requiredModuleIds`を取得して全件実装した
+- [ ] `get_game_module_requirements`の`requiredModuleIds`を取得して全件実装した
 - [ ] `server-module.ts`はSDK基本セットとアプリセットの合成だけで、Room作成・参加者・設定・revisionを再実装していない
 - [ ] `app-set.ts`にはゲーム固有state、Command、勝敗、固有presentationだけがある
 - [ ] Commandは権限、フェーズ、手番、入力値をサーバー契約内で検証する
@@ -19,21 +19,26 @@
 - [ ] DB、Redis、Cookie、APIキー、管理機能へ直接アクセスしていない
 - [ ] 古いrevisionが拒否される
 
-## モック
+## クライアントとPreview
 
 - [ ] `APP_REQUIREMENTS.md`を確認した
 - [ ] `mock/index.html`で主要画面と状態を確認できる
+- [ ] `mock/mock.js`は`GameFieldsRoom`のViewを描画し、Commandだけを送る
+- [ ] ブラウザ内に正本のゲーム状態やWord DB／LLM bridgeがない
 - [ ] PCとスマホ幅で操作できる
 - [ ] `MOCK_REVIEW.md`に画面、操作、要件対応、未実装を書いた
 - [ ] `mock/preview.json`のゲームID・表示名・説明を今回のゲームへ更新した
-- [ ] SDKへ保存し、制作者URL内のモック確認URLを利用者へ案内した
-- [ ] 利用者がモックを確認し、本実装を承認した
+- [ ] `publish:game-package`でAppSetとクライアントを一緒に保存した
+- [ ] 正式Preview Roomで別ブラウザ参加、同期、再読込復帰を確認した
+- [ ] 利用者が正式Previewを確認した
 - [ ] `npm run check:mock`が成功する
 
 ## 動作
 
 - [ ] `npm run check`が成功する
 - [ ] `npm run demo`でダミーだけの1ゲームが最後まで進む
+- [ ] `npm run diagnose:promotion`が`promotionReady: true`を返す
+- [ ] 保存revisionのAppSet source SHA-256とserver bundle SHA-256を記録した
 - [ ] ホスト以外にホスト専用操作を拒否するテストがある
 - [ ] 終了条件のテストがある
 - [ ] `npm run package`が成功し、提出ZIPを生成できる

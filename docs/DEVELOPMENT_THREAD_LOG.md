@@ -3525,3 +3525,87 @@
 - 本体、SDK Portal、隔離PreviewのProduction build成功。
 - 修正を`develop`へ反映した後、新規Roomで秘密語取得とAI応答までのログイン済み実機E2Eを行う。成功後に本項と既知問題の状態を確定する。
 - `main`、本番SDK、npm package versionは変更しない。
+
+## 2026-07-24 — SDK Previewを正式Roomと同一契約へ戻す難易度の調査
+
+### 利用者からの要望
+
+- 未審査コードの隔離を理由にローカル模擬へ縮退したSDK Previewを、当初想定した本体共通Roomへ戻せるか確認する。
+- SDKで完成したrevisionをゲームごとに作り直さず、同じ実行契約のまま正式版へ昇格できる持続的な構造を優先する。
+
+### 調査結果
+
+- 署名Cookie認証、Redis CAS、active room、一覧、再接続、解散、revision通知、閲覧者別Viewを持つ正式SDK Room基盤は既に実装されている。
+- 現在のPreview Shellは部屋コード、参加者、phase、revisionをReact stateで保持し、隔離iframeの`GameFieldsPreset`もゲーム固有状態をブラウザ内で実行するため、外側Shellのtransportだけを差し替えてもゲーム状態は端末間同期されない。
+- 保存済みgame packageはHTML／CSS／browser JavaScript中心で、正式Roomが必要とするserver AppSetをrevisionに含めない。現行の正式server registryは審査済みmoduleの静的importだけを許可し、保存revisionを動的server codeとして実行しない。
+- したがって単純なgit revertではなく、保存revisionへclient surfaceとserver AppSetの両方を含め、Previewでも正式版でも同じAppSetを隔離されたserver実行境界から呼ぶ経路が必要である。
+- iframe隔離、revision Git保存、Portal、共通Room Runtime、Word DB、LLM gateway、timer等は再利用可能で、基盤全体の作り直しではない。
+
+### 判断
+
+- 参加者だけを共通Roomへつなぎ、ゲーム固有状態をブラウザに残す部分修正は、同期済みに見える二重構造を再発させるため採用しない。
+- AIことば当ては現在のUI assetを維持できるが、ブラウザ内のゲーム遷移をserver AppSetへ一度移す必要がある。以後のゲームは制作時からclientとAppSetを同じrevisionへ保存する。
+- 正式昇格をrevisionの状態変更だけにするには、未審査AppSetを本体プロセスへ直接importせず実行できるserver側の隔離runnerと、承認済みrevisionをproduction catalogへ指す仕組みが未実装である。
+
+### 未対応・保留
+
+- server側隔離runnerの方式、revision package schema、Preview Room APIへの接続、承認catalogを設計・実装する。
+- AIことば当てのコード、設定、保存済みrevision、`develop`、`main`、外部設定は今回変更していない。
+
+## 2026-07-24 — hash固定AppSetを正式Roomのまま昇格するSDK基盤
+
+### 利用者からの要望
+
+- AIことば当ては基盤の検証用とし、AI固有要件へ共通部分を寄せない。
+- AIことば当てを載せる際は、検査済みAppSetを昇格工程で改造しない。
+- 既存AIことば当てを無改造で流し、失敗箇所をSDKの指示・生成物・bridge不足として特定する。
+
+### 実装
+
+- game packageを正式クライアント、portable server bundle、AppSet原文、manifestの一つの不変revisionとして保存するschemaとbuild／readiness検査を追加した。
+- Portalは受信時にserver bundleとAppSet原文のSHA-256を再計算し、candidate revisionへ保存する。OAuth MCPへ`publish_game_package`を追加し、Work／Codexから秘密トークンを展開せず同じ経路で提出できるようにした。
+- 未審査AppSetを本体プロセスへimportせず、QuickJS WASMの新規module／contextで1呼出しごとに実行する。memory 32 MiB、stack 1 MiB、execution 750 ms、bundle／request／response各1 MiBを上限とし、host network、filesystem、process、環境変数、Platform adapterを公開しない。
+- portable protocolはWord DBとLLMをeffectとして要求し、本体が承認済みadapterを実行して同じAppSet呼出しへ結果を戻す。ブラウザには`GameFieldsRoom.subscribe/send`だけを公開し、resource adapterやゲーム状態の正本を置かない。
+- Preview Roomを本体共通Room API、Redis CAS、active room、一覧、再接続、解散、閲覧者別Viewへ接続した。candidateと正式版の差はcatalog channelとpackage revisionだけである。
+- candidate→development→stableはpackage revision、server bundle hash、AppSet原文hash、manifestをそのままコピーする。再build、変換、AppSet補正を昇格処理へ入れない。
+- development／stable catalogからSDKゲームカード、正式Shell、戦績、rating、replayを`publicGameId`で汎用登録する。AIことば当て固有の共通分岐は追加していない。
+
+### 無改造fixtureの結果
+
+- 旧AIことば当てのAppSet原文は変更せず、SHA-256
+  `ed0aa3543b61d2417532eca1cd3fb31868603d2a06e2929df2a568a0b6413e8b`
+  のまま診断した。
+- `GAME_SDK_PACKAGE_GAME_ID_MISMATCH`、`GAME_SDK_CLIENT_ROOM_BRIDGE_MISSING`、
+  `GAME_SDK_CLIENT_RESOURCE_BRIDGE_FORBIDDEN`、
+  `GAME_SDK_CLIENT_LOCAL_GAME_ADAPTER_FORBIDDEN`を独立して検出した。
+- これらをAI固有変換で通さず、新SDKのスターター、DownloadMe、readiness診断、
+  正式Room bridgeの必要条件へ反映した。
+- 新SDKで一度作った検証用AI AppSetはSHA-256
+  `bad5f5743698f35aaccf1b0939855b1fb63ad4d185bbfaadbcf99eef3e7a8504`
+  に固定した。SDKを`0.1.1`へ更新して再packageしてもAppSet原文hashは同一で、
+  Word DB秘密非漏洩、LLM失敗時のrevision不変、複数人手番同期の3テストが成功した。
+
+### リリースと検証状況
+
+- additiveな共通機能追加のためSDK contractは`1`を維持し、Platform／SDK packageを
+  `0.1.1`、DownloadMeを`ver10`へ更新した。
+- 公開SDK tarballを外部fixtureへinstallし、portable-serverを含む公開exportを確認した。
+- スターターの展開、同梱SDK install、型検査、契約テスト、1ゲーム完走、提出ZIP検査に成功した。
+- package clientとportable serverのgrantを別audienceへ分離した。ブラウザから
+  `server.bundle.js`、package manifest、AppSet原文を取得できず、server runnerは
+  実行直前にbundle SHA-256を再計算して固定grantと不一致なら拒否する。
+- package保存は対象subtreeを完全置換し、前revisionの未提出assetを新commitへ残さない。
+  1 MiBを超えるportable bundleは提出時に拒否し、昇格元が検査中に変わった場合は
+  競合として止める。runner URLも設定済み隔離originと対象revisionのpathへ固定した。
+- 隔離AppSetの閲覧系呼出しへ認証player単位のrate limitを追加した。正式クライアント用
+  asset grantは8時間、内部server grantは10分とし、長いRoomでも遅延読込assetを維持しつつ
+  server実行権限を短命に保つ。
+- lint成功。全513テスト成功。本体、SDK Portal、隔離Previewの3環境Production build成功。
+- 検証用AI AppSet原文hash
+  `bad5f5743698f35aaccf1b0939855b1fb63ad4d185bbfaadbcf99eef3e7a8504`
+  とserver bundle hash
+  `7388ce50765c49baee4e673b2c3ddb20335a249e490d7f303fc97019e6768cf8`
+  は最終検査後も不変である。
+- `develop`への反映、dev deployment、candidate package提出、development昇格、
+  複数ブラウザの正式Room実機E2Eは続けて確認する。
+- `main`、本番SDK、npm registryは未変更。

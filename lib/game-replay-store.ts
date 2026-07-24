@@ -89,7 +89,19 @@ function cleanLines(lines: unknown[], maximumLines = 100) {
 }
 
 function isReplayGameType(value: unknown): value is GameReplayGameType {
-  return value === "wordwolf" || value === "tahoiya" || value === "northern-branch" || value === "hodoai" || value === "kotoba-senpuku" || value === "nigoichi" || value === "code-intercept" || value === "daifugo" || value === "wordwolf-sdk";
+  return value === "wordwolf"
+    || value === "tahoiya"
+    || value === "northern-branch"
+    || value === "hodoai"
+    || value === "kotoba-senpuku"
+    || value === "nigoichi"
+    || value === "code-intercept"
+    || value === "daifugo"
+    || value === "wordwolf-sdk"
+    || (
+      typeof value === "string"
+      && /^sdk:[a-z][a-z0-9-]{1,63}$/.test(value)
+    );
 }
 
 function parseStoredReplay(value: unknown): StoredGameReplay | null {
