@@ -182,6 +182,7 @@ export function SdkPreviewGameShell({
   const [labTurn, setLabTurn] = useState(0);
   const [labResult, setLabResult] = useState("共通進行部品は操作テストできます。");
   const [contentSample, setContentSample] = useState("サンプル未取得");
+  const [contentSamplePending, setContentSamplePending] = useState(false);
   const [drawingStrokes, setDrawingStrokes] = useState<DrawingStroke[]>([]);
 
   const requiredModuleIds = requiredGameSdkModuleIds(moduleProfile);
@@ -456,6 +457,36 @@ export function SdkPreviewGameShell({
     setLabResult("AI通信バイタルと共通LLM adapterを確認しました。");
   };
 
+  const testContentSource = async () => {
+    if (contentSamplePending) return;
+    setContentSamplePending(true);
+    try {
+      const response = await fetch("/api/sdk-preview/content-sample", {
+        cache: "no-store",
+      });
+      const payload = await response.json().catch(() => null) as {
+        word?: { surface?: unknown };
+        error?: unknown;
+      } | null;
+      const surface = typeof payload?.word?.surface === "string"
+        ? payload.word.surface.trim()
+        : "";
+      if (!response.ok || !surface) {
+        throw new Error(
+          typeof payload?.error === "string"
+            ? payload.error
+            : "SDK_CONTENT_SAMPLE_FAILED",
+        );
+      }
+      setContentSample(surface);
+      setLabResult("共通単語DBの読取専用adapterから候補を取得しました。");
+    } catch {
+      setLabResult("共通単語DBから素材を取得できませんでした。ログインと接続設定を確認してください。");
+    } finally {
+      setContentSamplePending(false);
+    }
+  };
+
   const settingsItems = [
     { label: "部屋コード", value: roomCode || "未作成" },
     { label: "最大人数", value: `${maximumPlayers}人` },
@@ -551,7 +582,7 @@ export function SdkPreviewGameShell({
 
       {(surface === "lobby" || surface === "playing") && (
         <section
-          className={`mx-auto grid max-w-6xl gap-5 px-4 py-6 ${surface === "lobby" ? "lg:grid-cols-[340px_minmax(0,1fr)]" : "lg:grid-cols-[minmax(0,1fr)_260px]"}`}
+          className={`mx-auto grid w-full gap-5 px-4 py-6 ${surface === "lobby" ? "max-w-6xl lg:grid-cols-[340px_minmax(0,1fr)]" : "max-w-[1600px] lg:grid-cols-[minmax(0,1fr)_280px]"}`}
           data-sdk-preview-surface={surface}
         >
           <aside className={`space-y-4 ${surface === "playing" ? "lg:order-2" : "lg:order-1"}`}>
@@ -854,10 +885,14 @@ export function SdkPreviewGameShell({
                 <div className="rounded-xl border border-white/10 bg-white/[.04] p-4">
                   <h3 className="font-black">コンテンツ・LLM</h3>
                   <p className="mt-2 rounded-lg bg-black/20 p-3 text-sm text-cyan-100">{contentSample}</p>
-                  {moduleRequired("content-source") && <button type="button" className={`${commandClass} mt-3 w-full`} onClick={() => {
-                    setContentSample(["ひまわり", "飛行船", "珊瑚礁"][Math.floor(Math.random() * 3)]!);
-                    setLabResult("共通コンテンツ供給adapterから候補を取得しました。");
-                  }}>素材を取得</button>}
+                  {moduleRequired("content-source") && <button
+                    type="button"
+                    className={`${commandClass} mt-3 w-full`}
+                    disabled={contentSamplePending}
+                    onClick={() => void testContentSource()}
+                  >
+                    {contentSamplePending ? "取得中…" : "素材を取得"}
+                  </button>}
                   {moduleRequired("llm") && <button type="button" className={`${commandClass} mt-2 w-full`} onClick={() => void testLlmActivity()}>AI通信表示をテスト</button>}
                 </div>
               )}

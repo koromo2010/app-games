@@ -70,6 +70,11 @@ export const rateLimitPolicies = {
     ip: { limit: 300, windowMs: tenMinutes },
     player: { limit: 30, windowMs: tenMinutes },
   },
+  sdkContentRead: {
+    id: "sdk-content-read",
+    ip: { limit: 600, windowMs: tenMinutes },
+    player: { limit: 60, windowMs: tenMinutes },
+  },
   profileMutation: {
     id: "profile-mutation",
     ip: { limit: 300, windowMs: tenMinutes },

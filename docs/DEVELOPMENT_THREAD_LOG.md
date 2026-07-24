@@ -2919,3 +2919,44 @@
 - `Publish Game SDK` workflowをversion `0.1.0`、confirm `publish-game-sdk`で手動実行する。
 - required reviewerの承認、workflow成功、npm registryからのpackument取得を確認する。
 - 初回公開成功後に短期tokenを失効し、Trusted Publishing設定へ移行する。
+
+## 2026-07-24 — SDK単語DB実配線とプレイ領域の広幅化
+
+### 利用者からの要望
+
+- 公開契約だけ用意されていたSDKの単語DB導線を、実際の共通DB読取へ接続する。
+- SDK-devでゲーム領域が狭く見える原因がiframeかを確認し、共通側で直せる場合は修正する。
+
+### 判断
+
+- SDKゲームはDB接続やテーブルを受け取らず、Platform内の読取専用`content-source` adapterを`context.resources`へ注入する。
+- 一般語はアプリDBの審査済み`standard-game`プール、難読語・ワードペア・語釈は共通語彙DBのactiveデータを正本とする。
+- 外部へ返すword／pair IDはDB IDを契約にせず、本体秘密値から導出した鍵で認証付き暗号化したopaque IDにする。
+- 未審査iframeへDB接続またはresource APIを渡さない。SDK-dev外側のmodule labだけが、認証・レート制限付きsample APIで実DB接続を確認する。
+- SDK Portal最外層iframeとゲーム側CSSはどちらも幅100%／最大1320pxまで利用できた。直接の幅制限は本体Shellの`max-w-6xl`と右260px列だったため、プレイ中だけ最大1600px、ゲーム可変幅／Room情報280pxへ変更する。
+
+### 実施結果
+
+- `lib/game-sdk-content-source.ts`を追加し、`general-words`、`rare-words`、`word-pairs`、語釈取得を一つのPlatform adapterへ実装した。
+- 一般語の既存難易度比率、難読語のZipf帯、ワードペア距離をSDKの`easy / normal / hard`へ投影した。
+- DB IDを露出しない認証付き暗号化・改ざん検査付きopaque IDと、除外ID・除外表記・件数上限を実装した。
+- 静的審査登録済み`wordwolf-sdk`へadapterを注入し、作成入力にお題がない場合は審査済みワードペアを取得するようにした。手動topicを渡す既存fixture互換は維持した。
+- `/api/sdk-preview/content-sample`を追加し、SDK-dev module labの固定3語を実DBからの1語取得へ置き換えた。
+- プレイ中Shellを`max-w-[1600px]`、`minmax(0,1fr) / 280px`へ広げた。ロビーの既存幅は変更していない。
+- 現行仕様を`DEVELOPMENT_HANDOFF.md`、`SDK_MODULE_INVENTORY.md`、`EXTERNAL_GAME_PACKAGE.md`、`ENVIRONMENT_VARIABLES.md`へ反映した。新しい外部環境変数は追加していない。
+
+### 検証
+
+- npm registryから`@game-fields/game-sdk@0.1.0`のpackage metadataと公開tarball URLを取得し、初回publish済みであることを再確認した。
+- Content Source、SDK WordWolf、SDK Previewの対象テスト13件成功。
+- `npm run lint`成功。環境変数台帳60キー、9ゲーム共通要件、SDK依存境界を確認した。
+- `npm test`成功（484件）。
+- `npm run build`成功。Next.js production build、TypeScript検査、77ページ生成を完了した。
+- `npm run build:sdk`成功。SDK Portalのproduction build、TypeScript検査、14ページ生成を完了した。
+- `npm run build:sdk-preview`成功。隔離Previewのproduction build、TypeScript検査、5ページ生成を完了した。
+- `git diff --check`成功。
+
+### 未対応・保留
+
+- ローカル環境にはDB接続値を配置していないため、実DB sampleと広幅表示の公開実機確認は`develop`反映後に行う。
+- `main`、本番SDK、npm package versionはこの変更では更新しない。

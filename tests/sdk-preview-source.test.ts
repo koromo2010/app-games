@@ -118,8 +118,11 @@ test("SDK preview composes the common room lifecycle around the game slot", () =
     1,
     "lobby and playing must retain the same game-specific iframe",
   );
-  assert.match(shell, /lg:grid-cols-\[minmax\(0,1fr\)_260px\]/);
+  assert.match(shell, /max-w-\[1600px\]/);
+  assert.match(shell, /lg:grid-cols-\[minmax\(0,1fr\)_280px\]/);
   assert.doesNotMatch(shell, /lg:grid-cols-\[260px_minmax\(0,1fr\)\]/);
+  assert.match(shell, /\/api\/sdk-preview\/content-sample/);
+  assert.doesNotMatch(shell, /\["ひまわり", "飛行船", "珊瑚礁"\]/);
   assert.match(shell, /persistentContent=\{debugEnabled/);
   assert.match(shell, /data-sdk-preview-viewer-selector/);
   assert.match(shell, /aria-pressed=\{selected\}/);

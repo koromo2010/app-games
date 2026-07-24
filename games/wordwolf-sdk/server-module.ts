@@ -11,6 +11,7 @@ import {
   recordGameSdkVote,
   tallyGameSdkVotes,
 } from "@game-fields/game-sdk/modules";
+import { requireGameSdkContentSource } from "@game-fields/game-sdk/resources";
 import {
   emptyWordWolfSdkState,
   normalizeWordWolfSdkSettings,
@@ -55,8 +56,27 @@ export const wordWolfSdkAppSet = defineGameSdkOnlineRoomAppSet<
   },
   normalizeSettings: normalizeWordWolfSdkSettings,
 
-  createAppState(input) {
-    return emptyWordWolfSdkState(input.topic);
+  async createAppState(input, context) {
+    const providedTopic = input.topic?.villageWord.trim()
+      && input.topic.wolfWord.trim()
+      ? {
+          villageWord: input.topic.villageWord.trim(),
+          wolfWord: input.topic.wolfWord.trim(),
+        }
+      : null;
+    if (providedTopic) return emptyWordWolfSdkState(providedTopic);
+    const [pair] = await requireGameSdkContentSource(
+      context.resources,
+    ).drawWordPairs({
+      pool: "word-pairs",
+      count: 1,
+      difficulty: "normal",
+    });
+    if (!pair) throw new Error("GAME_SDK_CONTENT_UNAVAILABLE");
+    return emptyWordWolfSdkState({
+      villageWord: pair.first.surface,
+      wolfWord: pair.second.surface,
+    });
   },
 
   resetAppState(room) {

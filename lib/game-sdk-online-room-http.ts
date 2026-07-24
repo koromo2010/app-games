@@ -67,6 +67,14 @@ const badRequestCodes = new Set([
   "UNKNOWN_COMMAND",
 ]);
 
+const unavailableCodes = new Set([
+  "GAME_SDK_CONTENT_ID_SECRET_UNAVAILABLE",
+  "GAME_SDK_CONTENT_SOURCE_UNAVAILABLE",
+  "GAME_SDK_CONTENT_UNAVAILABLE",
+  "POSTGRES_STORE_NOT_CONFIGURED",
+  "VOCABULARY_STORE_NOT_CONFIGURED",
+]);
+
 function json(payload: unknown, status = 200) {
   return Response.json(payload, {
     status,
@@ -90,6 +98,7 @@ export function gameSdkOnlineRoomErrorResponse(error: unknown) {
   if (code === "GAME_SDK_PLATFORM_ROOM_TOO_LARGE") {
     return json({ error: code }, 413);
   }
+  if (unavailableCodes.has(code)) return json({ error: code }, 503);
   if (forbiddenCodes.has(code)) return json({ error: code }, 403);
   if (conflictCodes.has(code)) return json({ error: code }, 409);
   if (badRequestCodes.has(code) || code.startsWith("GAME_SDK_INVALID_")) {

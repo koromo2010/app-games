@@ -32,7 +32,7 @@ export type WordWolfSdkAppState = {
 };
 
 export type WordWolfSdkAppInput = {
-  topic: {
+  topic?: {
     villageWord: string;
     wolfWord: string;
   };
@@ -72,7 +72,7 @@ export function normalizeWordWolfSdkSettings(
 }
 
 export function emptyWordWolfSdkState(
-  topic: WordWolfSdkAppInput["topic"],
+  topic: NonNullable<WordWolfSdkAppInput["topic"]>,
 ): WordWolfSdkAppState {
   return {
     currentRound: 0,

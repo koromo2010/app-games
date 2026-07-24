@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { defineGameSdkContentSource } from "@game-fields/game-sdk/content-source";
 import { createGameSdkMockRuntime } from "@game-fields/game-sdk/mock-runtime";
 import { wordWolfSdkServerModule } from "../games/wordwolf-sdk/server-module.ts";
 
@@ -58,4 +59,74 @@ test("SDK WordWolf completes room join, play, result and rematch without platfor
   assert.equal(snapshot.view.app.currentRound, 0);
   assert.equal(snapshot.view.app.clues.length, 0);
   assert.equal(snapshot.view.app.winner, null);
+});
+
+test("SDK WordWolf receives a reviewed word pair through the injected content source", async () => {
+  const contentSource = defineGameSdkContentSource({
+    async drawWords() {
+      return [];
+    },
+    async drawWordPairs() {
+      return [{
+        id: "opaque-pair",
+        first: {
+          id: "opaque-word-1",
+          surface: "海",
+          reading: "うみ",
+          difficulty: "normal",
+        },
+        second: {
+          id: "opaque-word-2",
+          surface: "湖",
+          reading: "みずうみ",
+          difficulty: "normal",
+        },
+        difficulty: "normal",
+        relation: "水域",
+      }];
+    },
+    async findDefinitions() {
+      return [];
+    },
+  });
+  const runtime = createGameSdkMockRuntime({
+    module: wordWolfSdkServerModule,
+    resources: { contentSource },
+    now: () => 1000,
+  });
+  let snapshot = await runtime.createRoom({
+    roomCode: "WORDS",
+    create: { app: {} },
+    actor: actor("host", "host"),
+  });
+  for (const id of ["p2", "p3"]) {
+    snapshot = (await runtime.sendCommand({
+      code: "WORDS",
+      envelope: {
+        expectedRevision: snapshot.revision,
+        command: { type: "room/join" },
+      },
+      actor: actor(id),
+    })).room;
+  }
+  snapshot = (await runtime.sendCommand({
+    code: "WORDS",
+    envelope: {
+      expectedRevision: snapshot.revision,
+      command: { type: "wordwolf/start" },
+    },
+    actor: actor("host", "host"),
+  })).room;
+  const wordsByPlayer = await Promise.all(
+    ["host", "p2", "p3"].map(async (playerId) => (
+      (await runtime.readRoom("WORDS", {
+        playerId,
+        role: playerId === "host" ? "host" : "player",
+        debugAccess: false,
+      }))?.view.app.myWord
+    )),
+  );
+  assert.equal(wordsByPlayer.every((word) => word === "海" || word === "湖"), true);
+  assert.equal(wordsByPlayer.includes("海"), true);
+  assert.equal(wordsByPlayer.includes("湖"), true);
 });

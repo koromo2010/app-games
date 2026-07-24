@@ -1,5 +1,6 @@
 import type { GameFieldsAuthenticatedIdentity } from "@game-fields/game-runtime";
 import { wordWolfSdkServerModule } from "../games/wordwolf-sdk/server-module.ts";
+import { createGameFieldsSdkContentSource } from "./game-sdk-content-source.ts";
 import {
   createAuthenticatedGameSdkPlatformAdapter,
   type AuthenticatedGameSdkPlatformAdapter,
@@ -33,6 +34,9 @@ const registrations: readonly ApprovedGameSdkRegistration[] = [
       return createAuthenticatedGameSdkPlatformAdapter({
         module: wordWolfSdkServerModule,
         resolveIdentity,
+        resources: {
+          contentSource: createGameFieldsSdkContentSource(),
+        },
       }) as unknown as ApprovedGameSdkRoomAdapter;
     },
   },

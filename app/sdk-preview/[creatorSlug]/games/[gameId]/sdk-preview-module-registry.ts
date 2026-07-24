@@ -201,7 +201,7 @@ export const SDK_PREVIEW_MODULE_IMPLEMENTATIONS = {
   },
   "content-source": {
     kind: "platform-adapter",
-    source: "preview content-source adapter",
+    source: "read-only PostgreSQL content-source adapter",
     surfaces: ["module-lab"],
   },
   llm: {
