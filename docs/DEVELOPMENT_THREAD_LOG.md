@@ -2717,5 +2717,7 @@
 
 ### 未対応・保留
 
-- 現在の変更はローカルcommitに固定済みで、`develop`、SDK-dev、公開starter、本番には未反映。
-- 公開SDK-devでのRoom作成、ロビー、開始、結果、再戦までのブラウザ実機確認は、`develop`反映後に行う。
+- 検証済みtreeをcommit `30023635d9e016a249342ed9b65bfc5f83d0bcda`として`develop`へforceなしで反映した。SDK Portal `dpl_EqoK4Gi3DZkD8mChoar2KgtMhWP7`、本体dev `dpl_44YMskXj8mWxM3y9BvQ7abusLDLr`、preview dev `dpl_AwUZ2qAy4mKsHsMWQYAk6jYysxP1`が同commitで`READY`となり、各開発用aliasへ割り当てられた。
+- 公開`https://sdk-dev.game-fields.com/test10-1/games/janken-classic`を実ブラウザで確認し、共通入室画面、部屋作成、参加者・設定ロビー、DEBUGダミー追加、プレイ中、共通結果、部屋へ戻る、部屋解散まで操作できた。
+- `GameFieldsPreset`の外側bridgeは保存済みじゃんけんiframeへ`playing`を反映し、`data-gf-phase=playing`になったことを確認した。一方、保存済み`mock.js`は`DOMContentLoaded`へだけ起動処理を登録しており、遅延取得時にイベントを取り逃してゲームadapterが未登録となるため、固有じゃんけん操作は開始前表示のまま停止した。SDK共通Shellの不具合とは分離し、制作物の起動契約検査として残す。
+- `sdk-starter`と本番`main`、本番SDKは未変更。
