@@ -3165,6 +3165,16 @@
 
 ### 未対応・保留
 
-- 検証済みtreeを`develop`へforceなしで反映し、本体dev、SDK-dev、隔離Preview devのREADY後に`test10-1 / ai-word-guess`を保存する。
 - この実行環境には署名済み利用者Cookieがないため、実Word DBの返却本文はログイン済みゲーム画面で開始操作を行って確認する。
 - `main`、本番SDK、npm package versionはこの変更では更新しない。
+
+### develop反映・公開確認
+
+- 検証済みtreeをGitHub commit `6e2b1e84e2d4d4accfaf16a53d1b2be833e2b413`として`develop`へforceなしで反映した。
+- 本体dev deployment `dpl_HxD6voBZi9EQZXtSqHFefapAsmuT`、SDK-dev `dpl_5gu5hv52iwMCdyJN7h92EoTznqtq`、隔離Preview dev `dpl_CbZWYpMjxMv9WvEMfJDf3YfiNDp8`が同commitで`READY`となり、各開発用aliasへ切り替わった。
+- 公開本体bundleから`content-source` bridge、`drawWords / drawWordPairs / findDefinitions`、module profile拒否、`easy / normal / hard`の3難易度を確認した。
+- `/api/sdk-preview/content-source`への未ログインPOSTは401 `PLAYER_AUTH_REQUIRED`となり、匿名利用者へDB候補を返さなかった。
+- 本人所有の`test10-1 / ai-word-guess`をWord DB版へ保存した。revisionは`efd26591bb9594bc3a36af3bb738e2ecc81c751e`。
+- revision指定で4ファイルを読み戻し、HTML／JavaScriptは検証済み本文とblob SHAが完全一致し、CSS／metadataは旧revisionと同一だった。固定秘密語、ローカル単語DB、直接network callはなく、Word DB取得、語釈参照、3難易度、`timer:turn-complete`を確認した。
+- 隔離Previewが実配信した`mock.js`も保存revisionの本文と完全一致した。
+- 3 deploymentのerrors-only build logは0件、直近30分のruntime errorは0件だった。
