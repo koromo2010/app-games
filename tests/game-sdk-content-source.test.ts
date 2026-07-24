@@ -109,9 +109,11 @@ test("SDK content source draws opaque words and resolves definitions without exp
     surface: "ひまわり",
     definition: "ひまわりの短い説明",
   }]);
-  const replacement = word!.id.endsWith("x") ? "y" : "x";
+  const tamperIndex = Math.floor(word!.id.length / 2);
+  const replacement = word!.id[tamperIndex] === "A" ? "B" : "A";
+  const tamperedId = `${word!.id.slice(0, tamperIndex)}${replacement}${word!.id.slice(tamperIndex + 1)}`;
   assert.deepEqual(await source.findDefinitions({
-    wordIds: [`${word!.id.slice(0, -1)}${replacement}`],
+    wordIds: [tamperedId],
   }), []);
 });
 

@@ -52,6 +52,14 @@ test("content source validates requests without exposing a database", async () =
     }),
     /GAME_SDK_CONTENT_INVALID_COUNT/,
   );
+  await assert.rejects(
+    contentSource.drawWords({
+      pool: "general-words",
+      count: 1,
+      difficulty: "very-hard" as never,
+    }),
+    /GAME_SDK_CONTENT_INVALID_DIFFICULTY/,
+  );
   assert.throws(
     () => requireGameSdkContentSource({}),
     /GAME_SDK_CONTENT_SOURCE_UNAVAILABLE/,

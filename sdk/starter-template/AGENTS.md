@@ -35,6 +35,7 @@
 - 時間の締切・受付・リセットは共通timerを正本とする。モックの表示位置は`data-gf-timer`でゲーム固有画面内に選び、正常に1手を確定した後だけ`timer:turn-complete`を通知する。本体AppSetでは成功transitionの`timer: "reset"`を使い、ブラウザ時刻を正本にしない。
 - ゲーム固有slot内に置いてよいのは、盤面、石、カード、手番、入力、ゲーム固有の得点・結果表示など、そのゲームにしかない要素だけである。
 - DB、Redis、Blob、認証Cookie、APIキー、管理者情報へ直接アクセスしない。
+- 単語、ワードペア、読み、語釈を使うゲームでは、モック用の初期Word DB、固定単語配列、seed/fallback語彙を作らない。モックは`window.GameFieldsPreset.resources.contentSource`、本実装は`context.resources.contentSource`を使い、`easy | normal | hard`のゲーム設定を取得requestへ渡す。
 - Command payloadへactor ID、player ID、表示名を本人証明として入れない。Runtimeが`context.actor`を注入する。
 - UI上の表示制御だけで認可しない。最終認可は`app-set.ts`の`applyAppCommand`で検証する。
 - SDK基本セットがRoom作成、参加・退出、設定、revision、共通権限、共通RoomView、中断、再戦を所有する。これらを`app-set.ts`へ複製しない。

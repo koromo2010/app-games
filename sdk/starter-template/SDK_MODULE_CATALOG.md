@@ -79,23 +79,74 @@ GameFieldsPreset.registerGame({
 
 ワードDBはGame Fieldsの非公開Platform resourceです。DB接続やテーブルをゲームへ渡さず、公開型`@game-fields/game-sdk/content-source`と`context.resources`に注入されたadapterだけを使います。
 
+単語ゲームのモックを作るときも、初期Word DBや固定単語配列を置きません。隔離Previewへ同じ3 APIを持つ`GameFieldsPreset.resources.contentSource`が注入されるため、モックの時点から共通Word DBを参照します。
+
 | 公開契約 | 内容 |
 | --- | --- |
 | `drawWords` | `general-words`または`rare-words`から難易度・件数・除外条件を指定して取得 |
 | `drawWordPairs` | `word-pairs`から難易度・件数・既出IDを指定して取得 |
 | `findDefinitions` | opaqueなword IDに対応する短いゲーム用語釈を取得 |
 
+### 難易度
+
+クライアントの表示名と保存値は次で固定します。部屋設定では保存値を使い、表示だけ日本語化します。
+
+| 表示 | 保存・API値 | 意味 |
+| --- | --- | --- |
+| 簡単 | `easy` | 親しみやすい候補を中心に取得 |
+| 普通 | `normal` | 標準候補を中心に、一部簡単な候補も混ぜる |
+| 難しい | `hard` | 難しい候補を中心に、普通・簡単も少量混ぜる |
+
+`general-words`の混合比率は簡単=`easy` 100%、普通=`normal` 80% + `easy` 20%、難しい=`hard` 50% + `normal` 40% + `easy` 10%です。返却された各項目の`difficulty`は、その項目自身の実際のtierです。`rare-words`と`word-pairs`は指定tierから取得します。
+
+### 返却フィールド
+
+| 型・フィールド | 内容 |
+| --- | --- |
+| `GameSdkWordContent.id` | 除外と語釈取得に使うopaque ID。内部DB IDではなく、解析しない |
+| `surface` | プレイヤーへ表示する表記 |
+| `reading` | 利用可能な場合の読み。未登録なら`null` |
+| `difficulty` | その単語自身の`easy | normal | hard` |
+| `tags` | `general-words`等の公開分類 |
+| `GameSdkWordPairContent.id` | ペア単位の既出除外に使うopaque ID |
+| `first` / `second` | ペアを構成する2つの`GameSdkWordContent` |
+| `relation` | 登録済みの場合の短い関係説明。未登録なら`null` |
+| `GameSdkWordDefinitionContent.wordId` | 語釈取得を依頼したopaque word ID |
+| `definition` | Game Fieldsの短いゲーム用語釈 |
+
+### 本実装
+
 ```ts
+import type {
+  GameSdkContentDifficulty,
+} from "@game-fields/game-sdk/content-source";
 import { requireGameSdkContentSource } from "@game-fields/game-sdk/resources";
+
+type Settings = {
+  wordDifficulty: GameSdkContentDifficulty;
+};
 
 const words = await requireGameSdkContentSource(context.resources).drawWords({
   pool: "general-words",
-  difficulty: "normal",
+  difficulty: room.settings.wordDifficulty,
   count: 8,
 });
 ```
 
-取得結果の`id`はopaqueです。DBキーとして解釈せず、API・Redis・PostgreSQLへ直接接続しません。利用可能なpoolは確定済みprofileとPlatform権限に従います。
+`wordDifficulty`はクライアントで「簡単・普通・難しい」から選び、SDK基本セットのRoom settingsとして保存します。取得結果の`id`はopaqueです。DBキーとして解釈せず、API・Redis・PostgreSQLへ直接接続しません。利用可能なpoolは確定済みprofileとPlatform権限に従います。
+
+### モック
+
+```js
+const difficulty = difficultySelect.value; // easy | normal | hard
+const words = await GameFieldsPreset.resources.contentSource.drawWords({
+  pool: "general-words",
+  difficulty,
+  count: 8
+});
+```
+
+Preview bridgeはログイン、保存済みゲーム、`content-source` module、レート制限を外側Shellで検査します。取得失敗時は初期配列へfallbackせず、入力と手番を維持して再試行表示にします。
 
 ## LLM
 

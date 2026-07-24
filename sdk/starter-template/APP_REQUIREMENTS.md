@@ -58,6 +58,9 @@
 - LLMはGame Fields共通ゲートウェイ経由で使い、ゲームから事業者APIを直接呼ばない。
 - モックでLLMを使う場合は`GameFieldsPreset.resources.llm.generate`だけを呼ぶ。ゲーム固有JavaScriptは質問・履歴等の内容と固定task／promptVersionを渡し、provider、モデル、APIキー、課金元、endpointを指定しない。
 - 本実装ではブラウザから任意promptを送らず、ゲームCommandに必要な入力だけを含める。審査済みAppSetのserver側でpromptを組み立て、`context.resources.llm`を呼ぶ。
+- 単語、ペア、読み、短い語釈を使うゲームはGame Fields共通Word DBを正本にする。モック用の初期DB、固定単語配列、seed語彙、取得失敗時の偽データfallbackを作らない。
+- モックは`GameFieldsPreset.resources.contentSource`、本実装は`requireGameSdkContentSource(context.resources)`だけを使う。ゲーム設定の`easy | normal | hard`を取得requestの`difficulty`へ渡し、利用者向け表示は「簡単・普通・難しい」とする。
+- Word DB取得に失敗した場合は偽の候補へ切り替えず、再試行できるエラーとして表示する。DB接続、テーブル名、SQL、内部IDをゲームpackageへ持ち込まない。
 - APIキー、DB、Redis、Blob、認証Cookie、管理者情報へゲームpackageから直接アクセスしない。
 - LLM失敗時、待機時、再試行時、ローカル代替時の利用者表示を決める。
 - 画像、音声、文章、外部データの出典と利用条件を記録する。

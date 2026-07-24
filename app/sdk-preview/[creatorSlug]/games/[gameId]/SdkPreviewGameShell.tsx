@@ -20,6 +20,10 @@ import { RoomTimeLimitControl } from "@/app/components/RoomTimeLimitControl";
 import { aiActivityFetch } from "@/lib/ai-activity-client";
 import type { DrawingStroke } from "@/lib/drawing-canvas";
 import { createStandardPlayingCardDeck } from "@/lib/playing-cards";
+import type {
+  GameSdkContentDifficulty,
+  GameSdkContentSource,
+} from "@game-fields/game-sdk/content-source";
 import {
   GAME_SDK_MODULE_IDS,
   allGameSdkParticipantsComplete,
@@ -136,6 +140,37 @@ async function generatePreviewLlm(
   return payload.response;
 }
 
+async function requestPreviewContentSource(
+  creatorSlug: string,
+  gameId: string,
+  operation: keyof GameSdkContentSource,
+  request: unknown,
+) {
+  const response = await fetch("/api/sdk-preview/content-source", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    cache: "no-store",
+    body: JSON.stringify({
+      creatorSlug,
+      gameId,
+      operation,
+      request,
+    }),
+  });
+  const payload = await response.json().catch(() => null) as {
+    response?: unknown;
+    error?: unknown;
+  } | null;
+  if (!response.ok || !payload || !("response" in payload)) {
+    throw new Error(
+      typeof payload?.error === "string"
+        ? payload.error
+        : "GAME_SDK_CONTENT_FAILED",
+    );
+  }
+  return payload.response;
+}
+
 function previewTimestamp() {
   return new Intl.DateTimeFormat("ja-JP", {
     hour: "2-digit",
@@ -228,6 +263,8 @@ export function SdkPreviewGameShell({
   const [labResult, setLabResult] = useState("共通進行部品は操作テストできます。");
   const [contentSample, setContentSample] = useState("サンプル未取得");
   const [contentSamplePending, setContentSamplePending] = useState(false);
+  const [contentDifficulty, setContentDifficulty] =
+    useState<GameSdkContentDifficulty>("normal");
   const [llmSample, setLlmSample] = useState("AIサンプル未生成");
   const [llmSamplePending, setLlmSamplePending] = useState(false);
   const [drawingStrokes, setDrawingStrokes] = useState<DrawingStroke[]>([]);
@@ -300,6 +337,74 @@ export function SdkPreviewGameShell({
         && Number.isFinite(data.height)
       ) {
         setFrameHeight(Math.min(12000, Math.max(320, Math.ceil(data.height))));
+        return;
+      }
+      if (
+        data?.type === "game-fields:resource-request"
+        && data.resource === "content-source"
+        && typeof data.requestId === "string"
+      ) {
+        const requestId = data.requestId.slice(0, 120);
+        const target = frameRef.current?.contentWindow;
+        if (!gameSdkModuleIsRequired(moduleProfile, "content-source")) {
+          target?.postMessage({
+            type: "game-fields:resource-response",
+            resource: "content-source",
+            requestId,
+            ok: false,
+            error: "GAME_SDK_CONTENT_MODULE_REQUIRED",
+          }, "*");
+          return;
+        }
+        const envelope = data.request
+          && typeof data.request === "object"
+          && !Array.isArray(data.request)
+          ? data.request as {
+              operation?: unknown;
+              request?: unknown;
+            }
+          : null;
+        const operation = (
+          envelope?.operation === "drawWords"
+          || envelope?.operation === "drawWordPairs"
+          || envelope?.operation === "findDefinitions"
+        )
+          ? envelope.operation
+          : null;
+        if (!operation) {
+          target?.postMessage({
+            type: "game-fields:resource-response",
+            resource: "content-source",
+            requestId,
+            ok: false,
+            error: "GAME_SDK_CONTENT_INPUT_REQUIRED",
+          }, "*");
+          return;
+        }
+        void requestPreviewContentSource(
+          creatorSlug,
+          gameId,
+          operation,
+          envelope?.request,
+        ).then((response) => {
+          target?.postMessage({
+            type: "game-fields:resource-response",
+            resource: "content-source",
+            requestId,
+            ok: true,
+            response,
+          }, "*");
+        }).catch((error: unknown) => {
+          target?.postMessage({
+            type: "game-fields:resource-response",
+            resource: "content-source",
+            requestId,
+            ok: false,
+            error: error instanceof Error
+              ? error.message
+              : "GAME_SDK_CONTENT_FAILED",
+          }, "*");
+        });
         return;
       }
       if (
@@ -604,25 +709,26 @@ export function SdkPreviewGameShell({
     if (contentSamplePending) return;
     setContentSamplePending(true);
     try {
-      const response = await fetch("/api/sdk-preview/content-sample", {
-        cache: "no-store",
-      });
-      const payload = await response.json().catch(() => null) as {
-        word?: { surface?: unknown };
-        error?: unknown;
-      } | null;
-      const surface = typeof payload?.word?.surface === "string"
-        ? payload.word.surface.trim()
+      const payload = await requestPreviewContentSource(
+        creatorSlug,
+        gameId,
+        "drawWords",
+        {
+          pool: "general-words",
+          difficulty: contentDifficulty,
+          count: 1,
+        },
+      ) as Array<{ surface?: unknown; difficulty?: unknown }>;
+      const word = Array.isArray(payload) ? payload[0] : null;
+      const surface = typeof word?.surface === "string"
+        ? word.surface.trim()
         : "";
-      if (!response.ok || !surface) {
-        throw new Error(
-          typeof payload?.error === "string"
-            ? payload.error
-            : "SDK_CONTENT_SAMPLE_FAILED",
-        );
-      }
-      setContentSample(surface);
-      setLabResult("共通単語DBの読取専用adapterから候補を取得しました。");
+      if (!surface) throw new Error("SDK_CONTENT_SAMPLE_FAILED");
+      const actualDifficulty = typeof word?.difficulty === "string"
+        ? word.difficulty
+        : contentDifficulty;
+      setContentSample(`${surface}（返却難易度: ${actualDifficulty}）`);
+      setLabResult(`共通単語DBから「${contentDifficulty}」設定で候補を取得しました。`);
     } catch {
       setLabResult("共通単語DBから素材を取得できませんでした。ログインと接続設定を確認してください。");
     } finally {
@@ -1034,6 +1140,22 @@ export function SdkPreviewGameShell({
                 <div className="rounded-xl border border-white/10 bg-white/[.04] p-4">
                   <h3 className="font-black">コンテンツ・LLM</h3>
                   <p className="mt-2 rounded-lg bg-black/20 p-3 text-sm text-cyan-100">{contentSample}</p>
+                  {moduleRequired("content-source") && (
+                    <label className="mt-3 block text-xs font-bold text-slate-200">
+                      単語難易度
+                      <select
+                        value={contentDifficulty}
+                        onChange={(event) => setContentDifficulty(
+                          event.target.value as GameSdkContentDifficulty,
+                        )}
+                        className="mt-1 w-full rounded-lg border border-white/20 bg-slate-900 px-3 py-2 text-sm text-white"
+                      >
+                        <option value="easy">簡単</option>
+                        <option value="normal">普通</option>
+                        <option value="hard">難しい</option>
+                      </select>
+                    </label>
+                  )}
                   {moduleRequired("llm") && (
                     <p className="mt-2 rounded-lg bg-black/20 p-3 text-sm text-violet-100">
                       {llmSample}

@@ -3122,3 +3122,49 @@
 - 公開本体bundleから`minimumPlayers: 1`、`game-fields:frame-size`、`timer:turn-complete`を確認し、旧「開始には2人以上必要です」文言がないことを確認した。
 - 公開中の`test10-1 / ai-word-guess`へ隔離Runtimeを通して接続し、ゲームHTMLに`data-gf-timer`、可変高通知、手番完了通知が同時に含まれることを確認した。SDKゲームURLとDownloadMeはHTTP 200で、DownloadMeにも`minimumPlayers: 1`が反映されている。
 - 3 deploymentのerrors-only build logは0件、直近30分のruntime errorは0件だった。
+
+## 2026-07-24 — SDKモックのWord DB bridgeと難易度契約
+
+### 利用者からの要望
+
+- SDKゲームのモックからGame FieldsのWord DBを実際に参照できるようにする。
+- AIがモック内へ初期単語DBや固定fallbackを作ろうとした場合は、共通Word DBへ接続する制作導線へ誘導する。
+- Word DBのrequest／responseフィールドを説明し、`easy`（簡単）／`normal`（普通）／`hard`（難しい）をクライアント設定から指定・参照できるようにする。
+
+### 判断
+
+- 未審査iframeへDB接続、接続文字列、テーブル名、内部IDを渡さない。隔離Runtimeへ`GameFieldsPreset.resources.contentSource`だけを注入し、外側Shellが認証済み本体dev APIへpostMessage中継する。
+- 保存済みゲームと`content-source`必須profileを本体APIで再検証し、`drawWords`、`drawWordPairs`、`findDefinitions`以外は受け付けない。
+- 難易度はクライアントがrequestへ指定する。一般語の抽選は既存の重み付き難易度契約を維持するため、ゲームは返却itemの実際の`difficulty`も参照する。
+- `id`は既出除外と語釈参照用のopaque ID、`surface`は表示語、`reading`は任意の読み、`difficulty`は返却itemの実tier、`tags`は公開分類と説明する。DBの内部識別子として解析させない。
+- Word DB利用宣言があるモックでは固定の初期・seed・fallback単語DBを静的検査で拒否し、取得失敗時は偽データへ切り替えず手番を消費しない再試行エラーとする。
+
+### 実施結果
+
+- 隔離Preview Runtimeへ`contentSource.drawWords`、`drawWordPairs`、`findDefinitions`とrequest／response bridgeを追加した。
+- `/api/sdk-preview/content-source`を追加し、署名済みプレイヤー認証、利用者別読取レート制限、保存済みruntime、module profile、operation、公開requestの再検証を実装した。
+- SDK-dev module labへ難易度selectを追加し、選択した難易度と返却itemの実際の難易度を同時に表示するようにした。旧固定sample APIは互換用に残すが、共通Shellからは新bridgeを使用する。
+- 公開SDK型の全フィールドへ用途説明を追加し、不正な難易度文字列を`normal`へ黙って丸めず`GAME_SDK_CONTENT_INVALID_DIFFICULTY`で拒否するようにした。
+- DownloadMeスターターのAGENTS、要件、ゲーム仕様、Mockガイド、SDK API、module catalog、mock READMEへ、Word DB利用宣言、フィールド、難易度、Preview／本実装の利用例、秘密値境界を追加した。
+- `check:mock`へWord DB利用時の共通bridge、難易度、公開API呼出を要求する検査と、初期・seed・fallback単語DB識別子の拒否を追加した。
+- 本人所有の`test10-1 / ai-word-guess`用に、固定秘密語を削除し、開始時に選択pool・難易度で`drawWords`し、opaque IDで`findDefinitions`するモック更新を準備した。返却`surface / reading / difficulty / tags`だけをゲームとAI判定へ使い、取得失敗時は開始前のまま再取得する。
+- 現行仕様を`DEVELOPMENT_HANDOFF.md`、`ENVIRONMENT_VARIABLES.md`、`EXTERNAL_GAME_PACKAGE.md`、`SDK_MODULE_INVENTORY.md`へ反映した。新しい外部環境変数は追加していない。
+
+### 検証
+
+- Content Source、公開resource、SDK Preview bridgeの対象テスト16件成功。
+- `npm run lint`成功。環境変数台帳60キー、9ゲーム共通要件、SDK依存境界を確認した。
+- `npm test`成功（489件）。
+- `npm run test:sdk-package`成功。公開tarballの外部fixture install、Runtime、resource、React UIの公開exportを確認した。
+- `npm run test:sdk-starter`成功。入口、snapshot、ZIP、同梱SDK install、型検査、契約テスト、完走デモ、提出ZIPを確認した。
+- `npm run build`成功。本体77ページと新しいcontent-source APIを生成した。
+- `npm run build:sdk`成功。SDK Portal 14ページを生成した。
+- `npm run build:sdk-preview`成功。隔離Preview 5ページを生成した。
+- `git diff --check`成功。
+- 更新予定の`ai-word-guess`モックはJavaScript構文、共通bridge、難易度指定、公開API呼出、固定秘密語・ローカル単語DB・直接network callなしを確認した。
+
+### 未対応・保留
+
+- 検証済みtreeを`develop`へforceなしで反映し、本体dev、SDK-dev、隔離Preview devのREADY後に`test10-1 / ai-word-guess`を保存する。
+- この実行環境には署名済み利用者Cookieがないため、実Word DBの返却本文はログイン済みゲーム画面で開始操作を行って確認する。
+- `main`、本番SDK、npm package versionはこの変更では更新しない。

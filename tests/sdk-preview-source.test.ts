@@ -57,6 +57,11 @@ test("SDK preview injects one platform preset runtime into mock HTML", () => {
   assert.match(source, /timer:turn-complete/);
   assert.match(source, /onTimeExpired/);
   assert.match(source, /resources: Object\.freeze/);
+  assert.match(source, /contentSource: Object\.freeze/);
+  assert.match(source, /drawWords\(request\)/);
+  assert.match(source, /drawWordPairs\(request\)/);
+  assert.match(source, /findDefinitions\(request\)/);
+  assert.match(source, /resource === "content-source"/);
   assert.match(source, /generate: generateLlm/);
   assert.match(source, /gameAdapterReady/);
   assert.match(source, /game:register/);
@@ -73,6 +78,27 @@ test("SDK platform shell owns start, abort, auto progress, and rematch controls"
   assert.match(shell, /const SDK_PREVIEW_MINIMUM_PLAYERS = 1/);
   assert.match(shell, /minimumPlayers: SDK_PREVIEW_MINIMUM_PLAYERS/);
   assert.doesNotMatch(shell, /開始には2人以上必要です/);
+});
+
+test("SDK preview content bridge authenticates and validates the saved game profile", () => {
+  const route = readFileSync(
+    "app/api/sdk-preview/content-source/route.ts",
+    "utf8",
+  );
+  for (const marker of [
+    "requireAuthenticatedPlayer",
+    "rateLimitPolicies.sdkContentRead",
+    "loadSdkPreviewRuntimeDefinition",
+    "gameSdkModuleIsRequired(moduleProfile, \"content-source\")",
+    "createGameFieldsSdkContentSource",
+    "\"drawWords\"",
+    "\"drawWordPairs\"",
+    "\"findDefinitions\"",
+    "\"Cache-Control\": \"private, no-store\"",
+  ]) {
+    assert.match(route, new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
+  assert.doesNotMatch(route, /process\.env\.[A-Z_]+.*Response/);
 });
 
 test("every required SDK module resolves to a concrete preview implementation", () => {
@@ -138,9 +164,14 @@ test("SDK preview composes the common room lifecycle around the game slot", () =
   assert.doesNotMatch(shell, /h-\[620px\]/);
   assert.doesNotMatch(shell, /min-h-\[680px\]/);
   assert.doesNotMatch(shell, /<GamePhaseTimer/);
-  assert.match(shell, /\/api\/sdk-preview\/content-sample/);
+  assert.match(shell, /\/api\/sdk-preview\/content-source/);
   assert.match(shell, /\/api\/sdk-preview\/llm/);
   assert.match(shell, /game-fields:resource-request/);
+  assert.match(shell, /data\.resource === "content-source"/);
+  assert.match(shell, /GAME_SDK_CONTENT_MODULE_REQUIRED/);
+  assert.match(shell, /<option value="easy">簡単<\/option>/);
+  assert.match(shell, /<option value="normal">普通<\/option>/);
+  assert.match(shell, /<option value="hard">難しい<\/option>/);
   assert.match(shell, /normalizeGameSdkLlmRequest/);
   assert.match(shell, /PaidLlmAccessButton/);
   assert.match(shell, /AI APIを実際に呼ぶ/);

@@ -302,31 +302,57 @@ export function gameFieldsPresetRuntimeSource() {
     if (name === "game:rematch") { adapters.forEach((adapter) => adapter.rematch?.()); setPhase("lobby"); return; }
     emit(name, { payload });
   };
-  const generateLlm = (request) => new Promise((resolve, reject) => {
+  const requestResource = (resource, operation, request, timeoutMs, timeoutError) => new Promise((resolve, reject) => {
     resourceRequestSequence += 1;
-    const requestId = "llm-" + Date.now().toString(36) + "-" + resourceRequestSequence.toString(36);
+    const requestId = resource + "-" + Date.now().toString(36) + "-" + resourceRequestSequence.toString(36);
     const timeoutId = window.setTimeout(() => {
       pendingResourceRequests.delete(requestId);
-      reject(new Error("GAME_SDK_LLM_TIMEOUT"));
-    }, 50000);
+      reject(new Error(timeoutError));
+    }, timeoutMs);
     pendingResourceRequests.set(requestId, {
+      resource,
       resolve,
       reject,
       timeoutId
     });
     window.parent.postMessage({
       type: "game-fields:resource-request",
-      resource: "llm",
+      resource,
       requestId,
-      request
+      request: operation ? { operation, request } : request
     }, "*");
   });
+  const generateLlm = (request) => requestResource(
+    "llm",
+    null,
+    request,
+    50000,
+    "GAME_SDK_LLM_TIMEOUT"
+  );
+  const requestContentSource = (operation, request) => requestResource(
+    "content-source",
+    operation,
+    request,
+    20000,
+    "GAME_SDK_CONTENT_TIMEOUT"
+  );
 
   window.GameFieldsPreset = Object.freeze({
     version: 1,
     getState: clone,
     command,
     resources: Object.freeze({
+      contentSource: Object.freeze({
+        drawWords(request) {
+          return requestContentSource("drawWords", request);
+        },
+        drawWordPairs(request) {
+          return requestContentSource("drawWordPairs", request);
+        },
+        findDefinitions(request) {
+          return requestContentSource("findDefinitions", request);
+        }
+      }),
       llm: Object.freeze({
         generate: generateLlm
       })
@@ -375,11 +401,11 @@ export function gameFieldsPresetRuntimeSource() {
     if (
       message
       && message.type === "game-fields:resource-response"
-      && message.resource === "llm"
+      && (message.resource === "llm" || message.resource === "content-source")
       && typeof message.requestId === "string"
     ) {
       const pending = pendingResourceRequests.get(message.requestId);
-      if (!pending) return;
+      if (!pending || pending.resource !== message.resource) return;
       pendingResourceRequests.delete(message.requestId);
       window.clearTimeout(pending.timeoutId);
       if (message.ok === true) {
@@ -388,7 +414,9 @@ export function gameFieldsPresetRuntimeSource() {
         pending.reject(new Error(
           typeof message.error === "string"
             ? message.error
-            : "GAME_SDK_LLM_FAILED"
+            : message.resource === "content-source"
+              ? "GAME_SDK_CONTENT_FAILED"
+              : "GAME_SDK_LLM_FAILED"
         ));
       }
       return;

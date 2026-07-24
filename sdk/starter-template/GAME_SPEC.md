@@ -90,6 +90,18 @@
 - 失敗・利用上限時の代替: なし
 - 高品質生成が必要な処理: なし（Previewはstandardのみ）
 
+## Word DB・初期データ
+
+- 使用する／しない: 未記入
+- 使用するpool: `general-words`／`rare-words`／`word-pairs`／なし
+- 取得する内容: 単語／ペア／読み／語釈／なし
+- 難易度設定: `easy`（簡単）／`normal`（普通）／`hard`（難しい）／固定／利用者が部屋設定で選択／なし
+- 1回の取得件数: 未記入
+- 既出除外の単位: opaque ID／表示語／なし
+- 取得失敗時: 偽データへfallbackせず、手番を消費しない再試行エラー
+- モック: 使用する場合は`GameFieldsPreset.resources.contentSource`
+- 本実装: 使用する場合は`requireGameSdkContentSource(context.resources)`
+
 ## 素材・権利
 
 - 画像、音声、文章、外部データ: なし

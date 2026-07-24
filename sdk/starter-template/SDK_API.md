@@ -39,6 +39,12 @@ import {
   requireGameSdkContentSource,
   requireGameSdkLlmGateway,
 } from "@game-fields/game-sdk/resources";
+import type {
+  GameSdkContentDifficulty,
+  GameSdkWordContent,
+  GameSdkWordPairContent,
+  GameSdkWordDefinitionContent,
+} from "@game-fields/game-sdk/content-source";
 ```
 
 ## Manifest
@@ -120,6 +126,59 @@ const appSet = defineGameSdkOnlineRoomAppSet({
 ```
 
 閲覧者別RoomViewでは`room.view.common.timer`から`durationSeconds`、`startedAt`、`deadlineAt`、`turnSequence`を読めます。表示はゲーム画面内の任意位置へ置けますが、ブラウザからtimer時刻を送ってサーバー正本を上書きしてはいけません。
+
+## Word DB resource
+
+単語・ペア・読み・語釈はGame Fields共通Word DBから取得します。ゲームpackageへ初期Word DB、固定単語配列、DB client、接続文字列、SQLを入れません。
+
+クライアントの難易度設定は次の値を保存します。
+
+| 表示 | 値 |
+| --- | --- |
+| 簡単 | `easy` |
+| 普通 | `normal` |
+| 難しい | `hard` |
+
+```ts
+type Settings = {
+  wordDifficulty: GameSdkContentDifficulty;
+};
+
+const contentSource = requireGameSdkContentSource(context.resources);
+const words = await contentSource.drawWords({
+  pool: "general-words",
+  difficulty: room.settings.wordDifficulty,
+  count: 8,
+  excludeIds: room.app.usedWordIds,
+});
+```
+
+### Request
+
+| API | フィールド |
+| --- | --- |
+| `drawWords` | `pool: "general-words" | "rare-words"`、`count: 1..100`、`difficulty?`、`excludeIds?`、`excludeSurfaces?` |
+| `drawWordPairs` | `pool: "word-pairs"`、`count: 1..100`、`difficulty?`、`excludeIds?` |
+| `findDefinitions` | `wordIds`。`drawWords`またはpair内のwordから返されたopaque IDだけを渡す |
+
+### Response
+
+| 型・フィールド | 説明 |
+| --- | --- |
+| `GameSdkWordContent.id` | 除外・語釈取得用のopaque ID。内部DB IDではない |
+| `surface` | 表示用の単語表記 |
+| `reading` | 登録されている場合の読み。なければ`null` |
+| `difficulty` | 返却項目自身の`easy | normal | hard` |
+| `tags` | 公開pool等の分類 |
+| `GameSdkWordPairContent.id` | ペア単位の既出除外用opaque ID |
+| `first` / `second` | ペアを構成する2語 |
+| `relation` | 登録されている場合の短い関係説明 |
+| `GameSdkWordDefinitionContent.wordId` | 語釈取得元のopaque word ID |
+| `definition` | 短いゲーム用語釈 |
+
+`general-words`は、普通で`normal` 80% + `easy` 20%、難しいで`hard` 50% + `normal` 40% + `easy` 10%を混ぜます。このためrequestの難易度と、個々の返却項目の`difficulty`が異なる場合があります。`rare-words`と`word-pairs`は指定tierから取得します。
+
+取得に失敗した場合、ローカル固定語彙へfallbackせず、現在の入力・手番を維持して再試行可能なエラーを返します。
 
 ## LLM resource
 
@@ -264,6 +323,9 @@ GameFieldsPreset.getState(): PreviewPlatformState;
 GameFieldsPreset.command(name: string, payload?: Record<string, unknown>): void;
 GameFieldsPreset.subscribe(listener): () => void;
 GameFieldsPreset.registerGame(adapter): () => void;
+GameFieldsPreset.resources.contentSource.drawWords(request): Promise<readonly GameSdkWordContent[]>;
+GameFieldsPreset.resources.contentSource.drawWordPairs(request): Promise<readonly GameSdkWordPairContent[]>;
+GameFieldsPreset.resources.contentSource.findDefinitions(request): Promise<readonly GameSdkWordDefinitionContent[]>;
 GameFieldsPreset.resources.llm.generate(request): Promise<GameSdkLlmResponse>;
 ```
 
@@ -274,6 +336,19 @@ Previewでは、ゲームHTMLの任意位置へ`data-gf-timer`を付けると共
 ```html
 <span class="my-turn-timer" data-gf-timer>制限なし</span>
 ```
+
+単語を使うモックは、初期配列を作らずPreview bridgeから取得します。
+
+```js
+const words = await GameFieldsPreset.resources.contentSource.drawWords({
+  pool: "general-words",
+  difficulty: selectedDifficulty, // easy | normal | hard
+  count: 8
+});
+renderWords(words);
+```
+
+このbridgeは外側Shellがログイン、ゲーム、module profile、レート制限を確認して、本体の読取専用adapterへ中継します。iframeへDB接続、テーブル、内部ID、API URLは渡りません。
 
 LLMを使うモックは次のように呼びます。
 

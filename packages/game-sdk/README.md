@@ -59,6 +59,12 @@ async function createRound(context: GameSdkCommandContext) {
 
 `general-words`、`word-pairs`、`rare-words`は公開pool IDです。実際に利用できるpoolは審査済みmodule profileとゲーム権限でPlatform側が制限します。
 
+難易度の保存・API値は`easy | normal | hard`、利用者向け表示は「簡単・普通・難しい」です。`general-words`は普通で標準80%＋簡単20%、難しいで難しい50%＋標準40%＋簡単10%を混ぜます。返却された`word.difficulty`は各項目自身のtierです。
+
+`GameSdkWordContent`はopaque `id`、表示用`surface`、任意の`reading`、実際の`difficulty`、公開`tags`を返します。pairはopaque `id`、`first`、`second`、`difficulty`、任意の`relation`、definitionは`wordId`、`surface`、短い`definition`を返します。opaque IDは除外と語釈取得にだけ使い、解析やDBキー化をしません。
+
+SDK Previewでは同じ契約が`GameFieldsPreset.resources.contentSource`へ注入されます。単語ゲームのモックも固定単語配列や初期DBを作らず、ここから取得します。
+
 ## LLM
 
 ゲームはprovider clientやAPIキーを持たず、Game Fieldsがserver contextへ注入したgatewayだけを使います。ブラウザはゲームCommandとゲーム入力だけを送り、審査済みAppSetが固定promptを組み立てます。

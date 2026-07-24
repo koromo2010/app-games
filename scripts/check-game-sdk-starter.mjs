@@ -78,6 +78,10 @@ try {
   }
   const mockHtml = readFileSync(join(starterRoot, "mock/index.html"), "utf8");
   const mockScript = readFileSync(join(starterRoot, "mock/mock.js"), "utf8");
+  const appRequirements = readFileSync(join(starterRoot, "APP_REQUIREMENTS.md"), "utf8");
+  const moduleCatalog = readFileSync(join(starterRoot, "SDK_MODULE_CATALOG.md"), "utf8");
+  const sdkApi = readFileSync(join(starterRoot, "SDK_API.md"), "utf8");
+  const mockCheck = readFileSync(join(starterRoot, "scripts/check-mock.mjs"), "utf8");
   for (const forbidden of ["data-screen=\"lobby\"", "data-screen=\"entry\"", "data-screen=\"room\"", "data-gf-player-list", "data-gf-debug-panel"]) {
     if (mockHtml.includes(forbidden)) {
       throw new Error(`Starter mock duplicates Platform shell UI: ${forbidden}`);
@@ -86,6 +90,15 @@ try {
   for (const required of ["game-slot", "GameFieldsPreset", "registerGame", "onStateChange"]) {
     if (!`${mockHtml}\n${mockScript}`.includes(required)) {
       throw new Error(`Starter mock is missing game-slot preset contract: ${required}`);
+    }
+  }
+  for (const required of [
+    "GameFieldsPreset.resources.contentSource",
+    "初期Word DB",
+    "easy | normal | hard",
+  ]) {
+    if (!`${appRequirements}\n${moduleCatalog}\n${sdkApi}\n${mockCheck}`.includes(required)) {
+      throw new Error(`Starter does not route Word DB use through the content source: ${required}`);
     }
   }
   const starterManifest = JSON.parse(readFileSync(join(starterRoot, "starter-manifest.json"), "utf8"));
