@@ -179,6 +179,25 @@ const byDifficulty = Object.fromEntries(
     records.filter((record) => record.difficulty === difficulty).length,
   ]),
 );
+const regressionRows = await target`
+  SELECT COUNT(DISTINCT word.id)::bigint AS classified_count
+  FROM active_words word
+  JOIN active_word_game_eligibility pool
+    ON pool.subject_type = 'word'
+    AND pool.subject_id = word.id
+    AND pool.game_id = ${generalGameWordPoolKey}
+  JOIN active_word_game_eligibility general_flag
+    ON general_flag.subject_type = 'word'
+    AND general_flag.subject_id = word.id
+    AND general_flag.game_id = ${generalGameWordPoolFlag}
+  JOIN active_word_game_eligibility difficulty_flag
+    ON difficulty_flag.subject_type = 'word'
+    AND difficulty_flag.subject_id = word.id
+    AND difficulty_flag.game_id = ('difficulty_' || pool.difficulty)
+  WHERE word.normalized_surface = ${"度者".normalize("NFKC").toLocaleLowerCase("ja-JP")}
+` as Array<{ classified_count: string }>;
+const unreviewedEasyRegressionClassified =
+  Number(regressionRows[0]?.classified_count ?? 0) > 0;
 
 if (
   (apply || syncMissingWords)
@@ -295,6 +314,9 @@ if (!apply) {
       selectedLegacyRows: expectedLegacyRows,
       uniqueClassifications: expectedUniqueClassifications,
     },
+    regressionChecks: {
+      unreviewedEasyTermExcluded: !unreviewedEasyRegressionClassified,
+    },
     next: matchedCount === sourceCount
       ? "Re-run with --apply."
       : "Run --sync-missing-words, then repeat this dry run before --apply.",
@@ -394,4 +416,7 @@ process.stdout.write(JSON.stringify({
   activeByDifficulty: Object.fromEntries(
     verificationRows.map((row) => [row.difficulty, Number(row.count)]),
   ),
+  regressionChecks: {
+    unreviewedEasyTermExcluded: !unreviewedEasyRegressionClassified,
+  },
 }) + "\n");
