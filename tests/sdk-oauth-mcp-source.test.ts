@@ -26,14 +26,17 @@ test("SDK MCP challenges unauthenticated callers and scopes mock publication", (
   assert.match(mcp, /immutableAppSet: true/);
   assert.match(mcp, /name: "get_sdk_handshake"/);
   assert.match(mcp, /name === "get_sdk_handshake"/);
-  assert.match(mcp, /enum: \[\.\.\.SDK_PORTAL_CAPABILITIES\]/);
+  assert.doesNotMatch(mcp, /enum: \[\.\.\.SDK_PORTAL_CAPABILITIES\]/);
+  assert.match(mcp, /固定enumではなく/);
+  assert.match(mcp, /CAPABILITY_UNAVAILABLE/);
   assert.match(mcp, /DownloadMe記載の必要機能だけ/);
-  assert.match(mcp, /enumの全候補を要求せず/);
+  assert.match(mcp, /将来の機能名も送信でき/);
   assert.match(mcp, /accepted=true/);
   assert.match(mcp, /toolが遅延読み込み/);
   assert.match(mcp, /gameapp-dev get_sdk_handshake Game Fields SDK接続互換性でtool検索/);
   assert.match(mcp, /明示的な検索後/);
   assert.match(mcp, /新しいチャット/);
+  assert.match(mcp, /既存チャットのtool schemaはプラグイン更新後も差し替わりません/);
   assert.match(mcp, /name: "list_creator_environments"/);
   assert.match(mcp, /name === "list_creator_environments"/);
   assert.match(mcp, /listCreatorEnvironments\(playerId\)/);
@@ -75,21 +78,24 @@ test("SDK Portal distributes the current DownloadMe revision", () => {
   const syncScript = read("apps/sdk-portal/scripts/sync-download.mjs");
 
   for (const source of [page, nextConfig, syncScript]) {
-    assert.match(source, /GameFieldsDownloadMe-ver11\.md/);
+    assert.match(source, /GameFieldsDownloadMe-ver12\.md/);
     assert.doesNotMatch(source, /GameFieldsDownloadMe-ver[2345678]\.md/);
   }
-  const download = read("apps/sdk-portal/public/GameFieldsDownloadMe-ver11.md");
-  assert.match(download, /# GF-AECP\/11/);
+  const download = read("apps/sdk-portal/public/GameFieldsDownloadMe-ver12.md");
+  assert.match(download, /# GF-AECP\/12/);
   assert.match(download, /HUMAN_DOCUMENTATION := false/);
-  assert.match(download, /downloadMeVersion == 11/);
+  assert.match(download, /downloadMeVersion == 12/);
   assert.match(download, /IF surface == Work AND get_sdk_handshake not_loaded/);
   assert.match(download, /WORK_DISCOVERY_QUERY := "gameapp-dev get_sdk_handshake Game Fields SDK接続互換性"/);
   assert.match(download, /CALL tool検索\(WORK_DISCOVERY_QUERY\)/);
   assert.match(download, /discovered\(gameapp-dev\.\*\) AND NOT discovered\(gameapp-dev\.get_sdk_handshake\)/);
-  assert.match(download, /`gameapp-dev`プラグインが古い/);
+  assert.match(download, /`gameapp-dev`のtool schemaがこのDownloadMeより古い/);
   assert.match(download, /プラグイン管理画面で`gameapp-dev`を更新/);
-  assert.match(download, /更新後に新しいチャットを開いて/);
-  assert.match(download, /このDownloadMeをもう一度添付/);
+  assert.match(download, /現在のチャットを閉じて新しいWork／Codexチャットを作成/);
+  assert.match(download, /更新ボタンを押しても既存チャットのtool schemaは差し替わりません/);
+  assert.match(download, /schema_accepts_all\(C0\.capabilityVector\)/);
+  assert.match(download, /GameFieldsDownloadMe-ver12\.mdだけを添付/);
+  assert.match(download, /保存済みの制作者環境とゲームは、新しいチャットから再取得できます/);
   assert.match(download, /capabilityVector:/);
   assert.match(download, /"game-package-publish"/);
   assert.match(download, /MUST preserve submitted AppSet source and package hashes through preview\/review\/promotion/);
@@ -98,6 +104,9 @@ test("SDK Portal distributes the current DownloadMe revision", () => {
   assert.match(nextConfig, /legacyDownloadMePaths/);
   assert.match(nextConfig, /GameFieldsDownloadMe-ver\$\{index \+ 1\}\.md/);
   assert.match(nextConfig, /destination: currentDownloadMePath/);
+  assert.match(page, /プラグイン更新後は、必ず新しいチャットを作成してください/);
+  assert.match(page, /既存チャットへ読み込まれたtool schemaは更新されない/);
+  assert.match(page, /保存済みの制作者環境とゲームはアカウントに紐づいている/);
 });
 
 test("SDK Portal exposes one public handshake contract before authenticated tools", () => {

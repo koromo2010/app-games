@@ -3870,3 +3870,91 @@
 - 次は新しいWork／Codexスレッドへ公開DownloadMe ver11を添付し、
   AIことば当てを固定検査対象としてcandidate提出、development昇格、
   複数ブラウザ正式Roomまで接続済みE2Eを行う。
+
+## 2026-07-25 — ChatGPT側gameapp-dev定義の版ずれ確認
+
+### 利用者からの要望
+
+- `gameapp-dev`の最新版を0.1.1と案内したが、ChatGPTのプラグイン管理画面では
+  バージョン注記が`dev-8`であり、数値が一致しない理由を確認する。
+
+### 判断
+
+- `0.1.1`はSDK Portalがhandshakeで返すPlatform／SDK package版であり、
+  ChatGPTへ登録したApp定義のバージョン注記ではない。先の「プラグイン最新版は
+  0.1.1」という案内は層を混同していたため訂正する。
+- DownloadMe `ver11`、Platform／SDK package `0.1.1`、SDK handshake `1`、
+  Room schema `2`、ChatGPT App定義の注記`dev-8`は別々の版系列として扱う。
+
+### 実施結果
+
+- 利用者の管理画面で、現在接続中の`gameapp-dev`はバージョン名`dev mode`、
+  バージョン注記`dev-8`と確認した。
+- Workのtool discoveryで読み込まれる定義は、handshakeの
+  `requiredCapabilities`が旧4件までで、現行Portalに存在する
+  `publish_game_package`も公開していなかった。
+- 公開`/.well-known/game-fields-sdk`はPlatform／SDK package `0.1.1`、
+  capability 7件を返した。したがって、Portal serverだけが現行化され、
+  ChatGPT側App定義は更新前の状態である。
+
+### 未対応・保留
+
+- ChatGPTのプラグイン管理画面で`gameapp-dev`を更新し、更新後の新規チャットで
+  `publish_game_package`と7 capabilityを含む現行tool schemaが見えることを
+  実機確認する。今回は外部App設定を変更していない。
+
+## 2026-07-25 — 旧ChatGPT tool schemaの再発防止とDownloadMe ver12
+
+### 利用者からの要望
+
+- ver11への更新と新規チャットを案内した後も、保存済み制作者環境からver10、
+  安定版`sdk-starter`、旧4 capabilityを参照した同じ問い合わせが届く状態を解消する。
+
+### 判断
+
+- ChatGPT側でプラグインを更新しても、既存チャットへ読み込まれたtool schemaは
+  差し替わらない。古い制作チャットへ新しいDownloadMeを追加して継続させず、
+  更新後に作成した新しいWork／Codexチャットへ最新版だけを添付させる。
+- 保存済み制作者環境とゲームはChatGPTの会話ではなくSDKアカウント側が正本であり、
+  新しいチャットから`list_creator_environments`で再取得する。チャット移行のために
+  制作者環境を作り直したり新しいslugを予約したりしない。
+- `requiredCapabilities`をMCP入力schemaの固定enumにすると、capability追加のたびに
+  古いschemaが未知名を送れずhandshake前に停止する。構文上有効な将来名を許可し、
+  未提供名はserver側の`CAPABILITY_UNAVAILABLE`で返す。
+- 入口契約と利用者導線が変わるためver11を上書きせず、DownloadMeとdevelopment
+  Starterをver12へ上げる。安定版`sdk-starter` ver9／SDK 0.1.0は正式E2E前のため
+  変更しない。
+
+### 実施結果
+
+- `get_sdk_handshake.requiredCapabilities`を自由なkebab-case文字列へ変更し、
+  1件64文字、最大64件に制限した。SDK coreは未知の有効名を
+  `CAPABILITY_UNAVAILABLE`、不正な構文を`INVALID_REQUEST`として区別する。
+- DownloadMe ver12は添付されたDownloadMeが1件かつver12であることを入口で検査し、
+  古い添付または7 capabilityを受け付けないtool schemaでは、新規チャットへの
+  切替定型文を出して停止する。
+- SDK Portalに、プラグイン更新後は必ず新しいチャットを作り、ver12だけを添付する
+  ことと、保存済み環境は新しいチャットから再取得できることを表示した。
+- 旧DownloadMe URL 1〜11はver12へ転送する設定とし、development Starter manifestを
+  `downloadMeVersion: 12`へ更新した。
+- 先の記録を訂正し、現在のWork tool discoveryでは`gameapp-dev`の8 toolと
+  7 capability入力が見え、公開development Portalへのhandshakeは
+  `accepted: true`であることを確認した。管理画面の`dev-8`は別の表示注記である。
+
+### 検証
+
+- 全523テスト成功。
+- Starter E2E成功。公開snapshot／ZIP一致、SDK install、型検査、契約テスト、
+  デモ完走、提出ZIPまで確認した。
+- `npm run lint`成功。
+- 本体production buildとSDK Portal production build成功。
+- live `gameapp-dev`からPlatform／SDK 0.1.1、7 capabilities、
+  `accepted: true`を確認した。ver12と自由文字列schemaは未公開のため、
+  dev Deployment後の再確認が必要。
+
+### 未対応・保留
+
+- 変更を`develop`へ反映し、3開発Deploymentの`READY`、ver12配布、
+  ver11 URLの転送、自由文字列schema、`sdk-starter-dev` ver12を実機確認する。
+- 更新後に作成した新しいWork／Codexチャットでver12を単独添付し、
+  保存済み制作者環境の再取得から制作を再開できることを正式E2Eで確認する。

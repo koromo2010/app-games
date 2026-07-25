@@ -38,7 +38,13 @@ export type GameSdkHandshakeRequest = {
     sdkPackageVersion: string;
     sdkContractVersion: number;
   };
-  requiredCapabilities: readonly GameSdkCapability[];
+  /**
+   * Capability names are intentionally open-ended at the transport boundary.
+   * A newer DownloadMe must still be able to ask an older Portal about a
+   * capability and receive CAPABILITY_UNAVAILABLE instead of being blocked by
+   * a stale MCP input enum before the handshake can run.
+   */
+  requiredCapabilities: readonly string[];
 };
 
 export type GameSdkHandshakeDescriptor = {
@@ -91,7 +97,7 @@ const CLIENT_KINDS = new Set<GameSdkHandshakeClientKind>([
   "platform",
 ]);
 const ENVIRONMENTS = new Set<GameSdkEnvironment>(["development", "production"]);
-const CAPABILITIES = new Set<GameSdkCapability>(GAME_FIELDS_SDK_CAPABILITIES);
+const CAPABILITY_NAME_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -137,9 +143,11 @@ function readRequest(value: unknown): {
     && Number.isInteger(value.expected.sdkContractVersion)
     && Number(value.expected.sdkContractVersion) > 0
     && requiredCapabilities !== null
+    && requiredCapabilities.length <= 64
     && requiredCapabilities.every((capability) => (
       typeof capability === "string"
-      && CAPABILITIES.has(capability as GameSdkCapability)
+      && capability.length <= 64
+      && CAPABILITY_NAME_PATTERN.test(capability)
     ));
   if (!valid) {
     const code = value.protocol === GAME_FIELDS_SDK_HANDSHAKE_PROTOCOL
@@ -215,7 +223,7 @@ export function negotiateGameSdkHandshake(
         request.expected.sdkContractVersion,
       ));
     }
-    const available = new Set(descriptor.capabilities);
+    const available = new Set<string>(descriptor.capabilities);
     for (const capability of new Set(request.requiredCapabilities)) {
       if (!available.has(capability)) {
         problems.push(problem("CAPABILITY_UNAVAILABLE", "requiredCapabilities", capability));

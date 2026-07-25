@@ -101,8 +101,8 @@ export default async function Home() {
             SDK基本セットへゲーム固有のAppSetだけを登録し、作成・検証・提出するための開発基盤です。
           </p>
           <div className="hero-actions">
-            <a className="primary-action" href="/GameFieldsDownloadMe-ver11.md" download>
-              GameFieldsDownloadMe-ver11
+            <a className="primary-action" href="/GameFieldsDownloadMe-ver12.md" download>
+              GameFieldsDownloadMe-ver12
               <span aria-hidden="true">↓</span>
             </a>
             <a className="primary-action" href="#foundation">
@@ -192,16 +192,23 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
               DownloadMeはAIが読む実行契約です。人間向けの説明書ではないため、内容を読んだり編集したりせず、そのままチャットへ添付してください。
             </p>
             <p>
-              通常チャットでHTMLファイルだけが作られた場合、それはGame Fields SDKへ保存された完成版ではありません。CodexまたはWorkへ切り替え、同じファイルとゲームの希望を送ってください。
+              <strong>プラグイン更新後は、必ず新しいチャットを作成してください。</strong>
+              既存チャットへ読み込まれたtool schemaは更新されないため、古いチャットへ最新版を追加しても制作を再開できません。新しいチャットで`gameapp-dev`を選択し、ver12だけを添付します。
+            </p>
+            <p>
+              保存済みの制作者環境とゲームはアカウントに紐づいているため、新しいチャットから自動的に再取得できます。作り直しや新しいURLの予約は不要です。
+            </p>
+            <p>
+              通常チャットでHTMLファイルだけが作られた場合、それはGame Fields SDKへ保存された完成版ではありません。CodexまたはWorkの新しいチャットへ切り替え、最新版ファイルとゲームの希望を送ってください。
             </p>
           </div>
         </aside>
         <p className="start-note">
-          途中で画面を閉じたり新しいチャットへ移ったりせず、URLが案内されるまで同じチャットでお待ちください。エラーなどで保存できなかった場合は、AIが未完了であることと次の対応を案内します。
+          制作開始時は必ず新しいチャットを使います。ver12のhandshakeが成功して制作が始まった後は、URLが案内されるまでそのチャットを継続してください。エラーなどで保存できなかった場合は、AIが未完了であることと次の対応を案内します。
         </p>
         <div className="hero-actions">
-          <a className="primary-action" href="/GameFieldsDownloadMe-ver11.md" download>
-            GameFieldsDownloadMe-ver11.mdを取得
+          <a className="primary-action" href="/GameFieldsDownloadMe-ver12.md" download>
+            GameFieldsDownloadMe-ver12.mdを取得
             <span aria-hidden="true">↓</span>
           </a>
           <Link className="secondary-action" href="/demo">

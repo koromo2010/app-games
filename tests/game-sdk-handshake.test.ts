@@ -90,6 +90,19 @@ test("SDK handshake rejects release, contract and capability mismatches together
   ]);
 });
 
+test("SDK handshake reports a future capability as unavailable instead of rejecting the request schema", () => {
+  const result = negotiateGameSdkHandshake({
+    ...request,
+    requiredCapabilities: ["mock-publish", "future-capability"],
+  }, descriptor);
+  assert.equal(result.accepted, false);
+  assert.deepEqual(result.problems, [{
+    code: "CAPABILITY_UNAVAILABLE",
+    field: "requiredCapabilities",
+    expected: "future-capability",
+  }]);
+});
+
 test("SDK handshake rejects malformed or foreign protocol requests without throwing", () => {
   assert.deepEqual(
     negotiateGameSdkHandshake(null, descriptor).problems.map(({ code }) => code),
@@ -101,5 +114,12 @@ test("SDK handshake rejects malformed or foreign protocol requests without throw
       protocol: "other-sdk",
     }, descriptor).problems.map(({ code }) => code),
     ["PROTOCOL_MISMATCH"],
+  );
+  assert.deepEqual(
+    negotiateGameSdkHandshake({
+      ...request,
+      requiredCapabilities: ["INVALID CAPABILITY"],
+    }, descriptor).problems.map(({ code }) => code),
+    ["INVALID_REQUEST"],
   );
 });

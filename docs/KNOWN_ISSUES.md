@@ -379,3 +379,18 @@ package更新ではGit subtreeを完全置換して前revisionのasset残留を�
 portable bundleは提出時に拒否する。昇格UPDATEは検査した元revisionと両hashの一致を
 条件にし、並行再提出があれば409で停止する。本体はPortalから受け取るrunner URLも
 環境別の固定Preview originと対象revisionのpathへ限定する。
+
+## 2026-07-25 SDK更新後も既存チャットが旧capability schemaで停止する
+
+状態: 修正実装済み・dev公開確認待ち（2026-07-25、回帰テストあり）
+
+ChatGPT側で`gameapp-dev`を更新しても、すでに開いているチャットへ読み込まれた
+tool schemaは差し替わらない。加えて、handshakeの`requiredCapabilities`を
+Portal提供機能の固定enumにしていたため、新しいDownloadMeが追加したcapability名を
+旧schemaから送れず、handshakeを呼ぶ前に制作AIが停止して同じ問い合わせを繰り返した。
+
+MCP入力schemaは構文上有効なcapability文字列を受け付け、未提供名をserver側の
+`CAPABILITY_UNAVAILABLE`として返す契約へ変更する。DownloadMe ver12とPortalは、
+古いDownloadMeまたは固定enumが読み込まれたチャットでは継続せず、プラグイン更新後に
+作成した新しいWork／Codexチャットへver12だけを添付するよう明示する。
+保存済み制作者環境はアカウントから再取得し、新しいURLを作らない。

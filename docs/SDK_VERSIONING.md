@@ -23,7 +23,7 @@ Platformの公開版を揃えることと、既存ゲームを最新SDKへ強制
 
 1. 同じSDK contract schema内ではfieldとCommandを削除・改名しない。追加fieldは省略可能か既定値を持たせる。
 2. 破壊的変更は`sdkContractVersion`を上げ、旧schema用adapterと検査を残す。
-3. handshake request／responseのfield削除・改名は`sdkHandshakeVersion`を上げる。capability追加だけでは上げない。
+3. handshake request／responseのfield削除・改名は`sdkHandshakeVersion`を上げる。capability追加だけでは上げない。`requiredCapabilities`のMCP入力schemaは固定enumにせず、構文上有効な将来の名前もserverへ送れる状態を維持する。未提供名はrequest schemaで遮断せず、handshake応答の`CAPABILITY_UNAVAILABLE`として返す。
 4. `supportedSdkContractVersions`から旧schemaを削除する前に、登録ゲームがゼロであることと移行テスト完了を確認する。
 5. SDK PortalはPlatformと同じ安定版だけを本番配布する。dev SDKは次版候補を配布してよいが、本番mainの対応版として表示しない。
 6. 全登録ゲームの契約テストをmainのCIで実行し、未対応schemaの提出物は取込時に拒否する。
@@ -50,6 +50,11 @@ Room schema v1にはPackage Root Hash、Runner Runtime、Resource Protocol、Cli
 9. main反映時に`channel: stable`と`starterRef: sdk-starter`へ切り替え、同じsnapshotを安定Starterへ公開する。
 10. 検証済みcommitをmainへ反映し、GitHub Actionsの`Publish Game SDK`をmainから手動実行する。versionは`config/platform-release.json`と完全一致させ、確認欄へ`publish-game-sdk`を入力する。
 11. npmの`@game-fields/game-sdk@<version>`、main、SDK本番の公開を確認し、Platform Version表示が一致することを確認する。
+
+ChatGPT Workへ読み込まれたtool schemaは、プラグイン更新後も既存チャット内では
+差し替わらない。tool追加・入力schema変更を含むSDK更新後の実機確認は、更新後に
+作成した新しいチャットでAppを選択し直して行う。保存済み制作者環境はアカウント
+正本から再取得し、チャット継続のために新しい制作者URLを作らない。
 
 初回publish前にnpm側で`@game-fields` scopeの所有権と、GitHub Environment `npm-public`の承認者、Repository Secret `NPM_TOKEN`（対象packageへのpublishだけを許可するgranular token）を設定する。token値はGit、文書、ログへ残さない。npm Trusted Publishingへ移行した後はworkflowから`NODE_AUTH_TOKEN`を削除する。
 
