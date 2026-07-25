@@ -5,12 +5,21 @@
 ## 最初の読み順
 
 1. ルートの `AGENTS.md` で、変更してはいけない共通制約を確認する。
-2. `docs/DEVELOPMENT_HANDOFF.md` で、現在の仕様・主要ファイル・環境変数・公開手順を確認する。
-3. 下表から、今回の作業に該当する資料だけを追加で読む。
-4. `git status --short --branch` と直近コミットを確認し、既存変更を上書きしない。
-5. 変更後は最低限 `npm run lint`、`npm test`、`npm run build` を実行する。
+2. [`CURRENT_STATE.md`](./CURRENT_STATE.md) で、現在実装・運用されている全体像を確認する。
+3. `DEVELOPMENT_HANDOFF.md` で、現在の仕様・主要ファイル・環境変数・公開手順を確認する。
+4. 下表から、今回の作業に該当する資料だけを追加で読む。
+5. `git status --short --branch` と直近コミットを確認し、既存変更を上書きしない。
+6. 変更後は最低限 `npm run lint`、`npm test`、`npm run build` を実行する。
 
-`README.md` は利用者向け概要、`DEVELOPMENT_HANDOFF.md` は現在の開発状態、各ゲーム資料は詳細ルール、`CONTAINER_ARCHITECTURE.md` と `PLATFORM_VISION.md` は将来案である。将来案を現在実装済みの仕様と読み違えないこと。
+現状と構想は明確に分離する。
+
+- [`CURRENT_STATE.md`](./CURRENT_STATE.md): 現在の実態
+- [`FUTURE_PLAN.md`](./FUTURE_PLAN.md): 未実装・検討中の構想
+- `DEVELOPMENT_HANDOFF.md`: 現在の詳細な開発状態
+- 各ゲーム資料: 詳細ルール
+- `CONTAINER_ARCHITECTURE.md` と `PLATFORM_VISION.md`: 将来案
+
+将来案を現在実装済みの仕様と読み違えないこと。実装と検証が完了した構想は `CURRENT_STATE.md` へ移し、将来文書に残したままにしない。
 
 > Vercel、環境変数、DB／Redis／Blob、DNS、GitHub権限、外部API設定を扱う作業では、最初の説明や画面操作案内より前に `ENVIRONMENT_VARIABLES.md` を読む。別スレッドの会話記憶ではなく、同文書の「現在配置」「外部設定の進捗」「未確認事項」から再開する。外部設定を触った場合は、再デプロイや実機確認と同様に台帳更新を作業完了条件とする。
 
@@ -18,6 +27,8 @@
 
 | 作業 | 最初に読む資料 | 次に確認する正本・コード |
 | --- | --- | --- |
+| 現在の全体像 | `CURRENT_STATE.md` | `DEVELOPMENT_HANDOFF.md`、コード、設定 |
+| 将来構想・未実装計画 | `FUTURE_PLAN.md` | `PLATFORM_VISION.md`、SDK関連資料 |
 | 未修正バグ・次の修正順 | `KNOWN_ISSUES.md` | 対象項目に記載したAPI・store・domain |
 | バグ調査・全体監査 | `DEVELOPMENT_HANDOFF.md` の共通ルールと現行仕様 | `config/game-registry.json`、対象ゲームの画面・API route・room store、`package.json` |
 | ワードウルフのルール・進行 | `DEVELOPMENT_HANDOFF.md` 6章、`game-concept.md` 2章 | `lib/wordwolf-command-domain.ts`、`lib/wordwolf-room-store.ts`、`app/wordwolf/game-flow.ts` |
@@ -65,12 +76,13 @@
 
 ## 文書間で迷ったとき
 
-- 現在の共通仕様は `DEVELOPMENT_HANDOFF.md` を優先する。
+- 全体の現在実態は `CURRENT_STATE.md` を優先する。
+- 現在の詳細仕様は `DEVELOPMENT_HANDOFF.md` を優先する。
+- 将来構想は `FUTURE_PLAN.md`、`PLATFORM_VISION.md`、`CONTAINER_ARCHITECTURE.md` を確認する。
 - 監査済みの未修正バグと着手順は `KNOWN_ISSUES.md` を確認する。
 - ゲーム固有の詳細ルールは各ゲーム資料を優先する。
 - 登録ゲーム一覧と自動監査対象は `config/game-registry.json` を優先する。
 - 実装済みのモジュール境界は `MODULAR_GAME_ARCHITECTURE.md` と `moduleBoundaryFiles` を使う。
 - `UI_ARCHITECTURE.md` は実装済みのUI境界と横展開方針、`EXTERNAL_GAME_PACKAGE.md` は段階的な外部開発者向け分離方針として扱う。
-- `CONTAINER_ARCHITECTURE.md` と `PLATFORM_VISION.md` は将来構成であり、実装済みとはみなさない。
 - `DEVELOPMENT_THREAD_LOG.md` は過去の経緯を調べるときだけ参照し、現在仕様の根拠にはしない。
 - 資料とコードが食い違う場合は、片方だけを黙って合わせず、差分をバグまたは仕様判断として明示する。
