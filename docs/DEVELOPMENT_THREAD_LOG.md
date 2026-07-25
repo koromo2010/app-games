@@ -4006,3 +4006,100 @@
 
 - プラグイン更新後に作成した新しいWork／Codexチャットへver12だけを添付し、
   保存済み制作者環境の再取得からCandidate提出まで正式E2Eを行う。
+
+## 2026-07-25 — 一般語easyに低認知語「度者」が混入する
+
+### 利用者からの要望
+
+- SDK PreviewのAIことば当てで、難易度「簡単」にもかかわらず、一般には知られて
+  いない「度者」が秘密語として出題された原因を調査する。
+
+### 判断
+
+- AIことば当て固有の難易度受渡しは正常で、保存packageはRoom設定の
+  `wordDifficulty`をそのまま`general-words`の`drawWords`へ渡している。
+- 問題は共通の一般ゲーム語Repositoryにある。現在の候補条件は
+  `active_words`、非固有名詞、実効Zipf帯だけであり、「一般ゲーム語として審査済み」
+  という公開SDK契約上の条件を検査していない。
+- 2026-07-24の共通単語DB切替前は、環境別アプリDBの
+  `shared_word_pool_evaluations`で`standard-game`、`eligible`、
+  `general_game_pool`、難易度flagを要求していた。未定義relation障害を解消する際、
+  読取先を共通DBの`active_words`へ変更したことで、この品質ゲートが失われた。
+- 個別語を共通DB全体でrejectすると、たほい屋等の別用途まで失う。修正時は共通DBへ
+  一般ゲーム用のgame-specific eligibility／難易度審査を保持し、SDK、
+  ワードアウト、コードインターセプトが同じ審査済みviewを読む形にする。
+
+### 実施結果
+
+- Vercelの実行ログで、該当AIことば当てがcandidate packageから
+  `drawWords`、`findDefinitions`、秘密語プロフィール生成をすべて成功させている
+  ことを確認した。モック固定語彙やLLM生成語へのfallbackではない。
+- 該当package revisionの`source/app-set.ts`を確認し、
+  `difficulty: settings.wordDifficulty`で共通content sourceへ要求していることを
+  確認した。
+- `easy`要求はeasy 100%であり、RepositoryのSQL上は実効Zipf 5.5〜6.5だけを返す。
+  したがって「度者」は共通DBで非固有名詞かつeasy帯として扱われている。
+  読取専用DB接続値はローカルにないため、個別行の正確なZipf値・読み・出典は
+  この調査では直接取得していない。
+- 旧カタログ移行処理は取込語を一律`proper_noun = FALSE`、`status = active`とし、
+  品詞や一般ゲーム適格性を移していないことも確認した。このためZipfだけでは
+  古語・専門語・辞書的には実在する低認知語を除外できない。
+
+### 検証
+
+- 現行develop commitとVercelの対象Deploymentが同じ共通Repository実装を使用して
+  いることを確認した。
+- 保存packageの難易度受渡しと、ライブの`drawWords`成功を照合した。
+- コード、DB、Vercel、保存package、公開状態は変更していない。
+
+### 未対応・保留
+
+- 共通DBへ一般ゲーム用の審査済みeligibilityと難易度を導入し、旧
+  `standard-game`適格語を移行する。
+- 「度者」を一般ゲーム対象外にしたうえで、easy／normal／hardの候補を一括監査する。
+- SDKだけでなく、同じRepositoryを使うワードアウトとコードインターセプトも
+  回帰確認する。
+
+## 2026-07-25 — 一般ゲーム語を保存済み分類へ戻す
+
+### 利用者からの要望
+
+- 旧一般語プールにはeasy／normal／hardを分類した保存済みフラグがあるため、
+  Zipf値から分類し直さず、その分類を使う形で修正する。
+
+### 判断
+
+- 新しい品質判定や「度者」だけのブラックリストは作らない。
+- 旧`shared_word_pool_evaluations`の`standard-game`適格行が持つ
+  `general_game_pool`と`difficulty_*`を、共通DB既存の
+  `word_game_eligibility`へ3つの有効行として保存する。
+- Repositoryは`standard-game`、`general_game_pool`、保存済み難易度flagが
+  すべて揃うactive語だけを返す。これによりSDK、ワードアウト、
+  コードインターセプトが同じ審査済み集合を使う。
+
+### 実施結果
+
+- `lib/general-game-word-classification.ts`へ保存済み分類契約と旧行の正規化を追加した。
+- `lib/general-game-word-repository.ts`からZipf帯による難易度再生成を除去し、
+  共通DBの保存済みeligibilityを参照するSQLへ戻した。
+- `scripts/import-legacy-general-game-classifications.ts`を追加した。dry-runを既定とし、
+  共通DB側の対応語が不足する場合はapplyを拒否し、適用時は旧分類を冪等同期する。
+- 現行仕様文書と環境変数台帳を保存済み分類基準へ更新した。
+
+### 検証
+
+- 対象テスト35件成功。
+- `npm run lint`成功。
+- `npm test`全525件成功。
+- `npm run build`成功。
+- SDKの`general-words`、ワードアウト、コードインターセプトが同じ
+  `general-game-word-repository`を使うことを確認した。
+
+### 未対応・保留
+
+- この作業環境には旧DB読取用および共通DB管理用の接続設定がないため、
+  分類移行のdry-run／applyは未実行。DB、Vercel、公開環境は変更していない。
+- develop反映前に移行元の審査済み件数、共通DB対応件数、難易度別件数をdry-runで
+  照合し、不足0件を確認してからapplyする。
+- コードは未コミット・未push。devでeasy抽選に低認知語が混入しないことの
+  実機確認は、分類同期とdevelop反映後に行う。

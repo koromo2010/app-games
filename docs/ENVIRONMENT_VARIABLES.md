@@ -152,7 +152,7 @@ Shared化候補:
 | `APP_DATABASE_URL` | `app-games-neon` | `dev-neon` | SDK専用DB予定 | Yes | アプリDB正本 |
 | `SHARED_VOCABULARY_DATABASE_URL`（旧 `VOCABULARY_DATABASE_URL`） | `word-master-neon` 読取用 | `word-master-neon` 開発用権限 | 原則読取専用 | Yes | 共通単語DB |
 | `SHARED_VOCABULARY_ADMIN_DATABASE_URL`（旧 `VOCABULARY_ADMIN_DATABASE_URL`） | 管理者ロール | 管理・生成用ロール | 原則リンクしない | Yes | 採否・昇格・管理処理 |
-| `LEGACY_WORD_DATABASE_URL` | 原則なし | 移行作業中だけ | なし | Yes | 旧語彙移行専用 |
+| `LEGACY_WORD_DATABASE_URL` | 原則なし | 移行作業中だけ | なし | Yes | 旧語彙本体および旧`standard-game`分類の読取専用移行元 |
 
 互換変数として残っている可能性があるもの:
 

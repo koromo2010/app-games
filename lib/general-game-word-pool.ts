@@ -1,14 +1,14 @@
 import {
+  generalGameWordDifficulties,
   generalGameWordPoolSource,
-  generalGameWordZipfBands,
   loadGeneralGameWordRecords,
   type GeneralGameWordDifficulty,
 } from "./general-game-word-repository.ts";
 import { expectedAppEnvironment } from "./storage-environment-guard.ts";
 import { vocabularyDatabaseErrorCode } from "./vocabulary-postgres-store.ts";
 
-export { generalGameWordPoolSource, generalGameWordZipfBands };
-export const generalGameWordDifficulties = ["easy", "normal", "hard"] as const;
+export { generalGameWordPoolSource };
+export { generalGameWordDifficulties };
 export type { GeneralGameWordDifficulty };
 export type GeneralGameWordPools = Record<GeneralGameWordDifficulty, string[]>;
 

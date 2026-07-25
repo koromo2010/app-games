@@ -4,7 +4,7 @@
 >
 > 資料を読む順番や作業別の参照先は `docs/README.md` を入口にする。この文書は「現在の開発状態と共通仕様」、`docs/CONTAINER_ARCHITECTURE.md` は「将来案」である。
 
-最終更新: 2026-07-24
+最終更新: 2026-07-25
 
 ## アカウント言語と言語依存ルーム
 
@@ -72,7 +72,7 @@ SDK v1は、manifest、Game→Controller→LayoutのUI三層、認証済みID・
 
 SDK Portalのmodule変更は所有者認証に加え、`apps/sdk-portal/lib/module-customization-access.ts`のserver側entitlement境界を必ず通す。Developer Previewでは所有者へ含めているが、将来の有料化ではこの判定だけを購入権限へ差し替え、公開SDK、AppSet、MCPの必須一覧契約を変更しない。
 
-非公開package `@game-fields/game-runtime`と`lib/game-sdk-platform-adapter.ts`は、署名済みプレイヤーCookieからidentityを解決し、作成者をhostとして固定し、Roomをplatform metadataで包んでRedisへ保存する。SDK fixture向けadapterはclientの`expectedRevision`を検査し、古いrevisionを409相当の`STALE_REVISION`として拒否する。加えてRuntime coreはstorage-neutralなRoom mutation lifecycleを持ち、競合時の論理Command再適用、保存前正規化、保存後hookを提供する。本体の`lib/online-room-store-runtime.ts`が組み込み8ゲーム、`lib/game-sdk-platform-room-store.ts`が審査済みSDKゲームへRedis CAS、TTL、一覧、1人1active room、解散、Realtimeを注入する。`lib/game-sdk-content-source.ts`はアプリDBの一般プールと共通語彙DBの審査済みワードペア・対応語釈だけをSDK向けに読取専用で束ね、認証付き暗号化opaque IDへ変換して、静的審査登録済みSDKゲームの`context.resources.contentSource`だけへ注入する。低認知語彙と、たほい屋の候補・審査・お題は内部専用としてSDK契約から遮断する。`lib/game-sdk-llm-gateway.ts`は同じ審査済みserver moduleの`context.resources.llm`へ共通LLM gatewayを注入し、実生成直前の利用者別レート制限、provider・model・課金元・fallback、TelemetryをPlatform内で処理する。SDK browser側は`@game-fields/game-sdk/client-runtime`から作成・取得・Command・active room・一覧・解散・revision購読を利用し、WebSocket通知後も閲覧者別RoomViewをHTTPで再取得する。
+非公開package `@game-fields/game-runtime`と`lib/game-sdk-platform-adapter.ts`は、署名済みプレイヤーCookieからidentityを解決し、作成者をhostとして固定し、Roomをplatform metadataで包んでRedisへ保存する。SDK fixture向けadapterはclientの`expectedRevision`を検査し、古いrevisionを409相当の`STALE_REVISION`として拒否する。加えてRuntime coreはstorage-neutralなRoom mutation lifecycleを持ち、競合時の論理Command再適用、保存前正規化、保存後hookを提供する。本体の`lib/online-room-store-runtime.ts`が組み込み8ゲーム、`lib/game-sdk-platform-room-store.ts`が審査済みSDKゲームへRedis CAS、TTL、一覧、1人1active room、解散、Realtimeを注入する。`lib/game-sdk-content-source.ts`は共通語彙DBの審査済みGeneral Game Pool、審査済みワードペア、対応語釈だけをSDK向けに読取専用で束ね、認証付き暗号化opaque IDへ変換して、静的審査登録済みSDKゲームの`context.resources.contentSource`だけへ注入する。低認知語彙と、たほい屋の候補・審査・お題は内部専用としてSDK契約から遮断する。`lib/game-sdk-llm-gateway.ts`は同じ審査済みserver moduleの`context.resources.llm`へ共通LLM gatewayを注入し、実生成直前の利用者別レート制限、provider・model・課金元・fallback、TelemetryをPlatform内で処理する。SDK browser側は`@game-fields/game-sdk/client-runtime`から作成・取得・Command・active room・一覧・解散・revision購読を利用し、WebSocket通知後も閲覧者別RoomViewをHTTPで再取得する。
 
 SDK Room schema v2は、作成時のPackage Revision／Root Hash、Runner Runtime、SDK／Room／Resource／Client Bridge各version、settings snapshotをRoomへ固定する。Commandは`commandId`、作成は`requestId`で冪等化し、課金effectはjournal、結果保存はRoom CAS内のoutboxで再開する。データの正本・保持・削除は`docs/SDK_DATA_LIFECYCLE.md`、version境界とRoom schema v1排出手順は`docs/SDK_VERSIONING.md`を正本とする。v1 recordには固定契約がないためv2へ自動変換せず、本番切替前に新規v1 Roomを止め、既存Roomを解散または6時間TTLで排出する。SDK Portal PostgreSQLは`db/sdk`の番号付きmigrationとchecksum台帳を正本とし、`ensureSdkSchema()`はversion確認だけを行う。適用・backup・rollbackは`docs/SDK_DATABASE_MIGRATIONS.md`に従う。
 
@@ -289,12 +289,12 @@ SDKゲームは`SDK基本セット + アプリセット`の二層とする。Roo
 - デバッグONのホストはダミーを最大6人まで追加・個別削除し、ダミーの連想語・予想を代行できる。未提出の一括補完、中断、行動ログ、任意のデバッグプレイバック記録に対応する。デバッグ部屋とダミーは通常戦績へ含めない。
 - 余り番号を正解したプレイヤーは参加人数P−1点を得る。自分のカードがほかのプレイヤーの誤答に選ばれるたび1点を失い、`ラウンド得点 = 正解ボーナス − 被誤答票数` とするため負の得点もあり得る。同じ部屋での再戦は累計得点を引き継ぐ。固定の目標点・終了ラウンドはない。連想語入力と予想には別々の時間制限を設定でき、連想語の時間切れは「未提出」、予想の時間切れは不正解としてサーバーがラウンドを進める。余り番号の正解・不正解は1ゲームの結果として戦績へ記録する。
 - 結果共有のプレイログには、番号順の言葉一覧（各語の持ち主または余り）と、各プレイヤーの「手札A枚 → 連想語M個」を含める。参加者名は入室時に保存した共有同意がONのときだけ表示し、それ以外は `PLAYER1` 形式で匿名化する。共有前に実際の文章をプレビューする。
-- 単語はmain／develop共通の単語DB `word-master-neon` にある `active_words` を正本とし、固有名詞を除外した実効Zipf 4.5〜6.5を使う。難易度は、簡単5.5〜6.5、普通5.0以上5.5未満、難しい4.5以上5.0未満へ投影し、開始時に必要枚数を重複なしで抽出する。簡単は簡単100%、普通は普通80%＋簡単20%、難しいは難しい50%＋普通40%＋簡単10%を各語ごとに抽選する。同じ参加者が当日（JST）このゲームで見た単語は除外し、必要数を揃えられないほど使い切った場合だけ当日履歴を全解除する。DB未設定または必要枚数を確保できない場合はローカル固定語彙へ戻さず、開始を503で失敗させる。実装は `lib/general-game-word-repository.ts`、`lib/general-game-word-pool.ts`、`lib/general-game-word-history-store.ts`。
+- 単語はmain／develop共通の単語DB `word-master-neon` にある審査済みGeneral Game Poolを正本とする。旧選定表から移した`standard-game`適格性、`general_game_pool`フラグ、保存済み`difficulty_easy | difficulty_normal | difficulty_hard`フラグがすべて揃う語だけを使い、Zipf値から難易度を再生成しない。開始時に必要枚数を重複なしで抽出し、簡単は簡単100%、普通は普通80%＋簡単20%、難しいは難しい50%＋普通40%＋簡単10%を各語ごとに抽選する。同じ参加者が当日（JST）このゲームで見た単語は除外し、必要数を揃えられないほど使い切った場合だけ当日履歴を全解除する。DB未設定または必要枚数を確保できない場合はローカル固定語彙へ戻さず、開始を503で失敗させる。実装は `lib/general-game-word-classification.ts`、`lib/general-game-word-repository.ts`、`lib/general-game-word-pool.ts`、`lib/general-game-word-history-store.ts`。
 
 ### コードインターセプト（非公開オンライン試作・内部ID `code-intercept`）
 
 - `/games/code-intercept` は非公開アクセスキーかつログイン済みの利用者向け。旧 `/code-intercept` は正式URLへ転送する。4〜12人を赤・青へ分け、各チーム2人以上・人数差1人以内で開始する。チーム編成は手動または開始時ランダムを選べる。手動時はホストが全参加者、各参加者が自分を赤・青へ割り当てられ、ランダム時は人数を均等に振り分けてチーム内の出題順もシャッフルする。
-- 秘密単語はワードアウトと同じ共通単語DBのactive一般語から重複なしに抽出する。固有名詞を除外し、実効Zipf 4.5〜6.5を上記3難易度へ投影する。ロビーで簡単・普通・難しいを選べ、簡単は簡単100%、普通は普通80%＋簡単20%、難しいは難しい50%＋普通40%＋簡単10%を各語ごとに抽選する。旧ルームは普通として復元する。同じ参加者が当日（JST）コードインターセプトで見た単語は除外し、使い切り時だけ当日履歴を全解除する。ワードアウトの履歴とは混ぜない。
+- 秘密単語はワードアウトと同じ共通単語DBの審査済みGeneral Game Poolから重複なしに抽出する。保存済みの簡単・普通・難しい分類を使い、Zipf値から再分類しない。ロビーで簡単・普通・難しいを選べ、簡単は簡単100%、普通は普通80%＋簡単20%、難しいは難しい50%＋普通40%＋簡単10%を各語ごとに抽選する。旧ルームは普通として復元する。同じ参加者が当日（JST）コードインターセプトで見た単語は除外し、使い切り時だけ当日履歴を全解除する。ワードアウトの履歴とは混ぜない。
 
 ### コードインターセプト（非公開オンライン試作・内部ID `code-intercept`）
 

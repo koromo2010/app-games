@@ -119,8 +119,8 @@ test("secret cards reject a database pool that is too small after normalization"
   );
 });
 
-test("secret-card vocabulary uses the shared word-master active Zipf pool", () => {
-  assert.equal(codeInterceptWordPoolSource, "word-master-active-zipf");
+test("secret-card vocabulary uses the reviewed General Game Pool", () => {
+  assert.equal(codeInterceptWordPoolSource, "general_game_pool");
 });
 
 test("word difficulty defaults to normal and preserves valid selections", () => {

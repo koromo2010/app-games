@@ -3,32 +3,84 @@ import test from "node:test";
 import {
   generalGameWordDifficultyWeights,
   generalGameWordPoolSource,
-  generalGameWordZipfBands,
   pickGeneralGameWordBand,
   selectGeneralGameWordsForBands,
 } from "../lib/general-game-word-pool.ts";
 import {
-  generalGameWordDifficultyFromZipf,
-} from "../lib/general-game-word-repository.ts";
+  generalGameWordDifficultyTags,
+  generalGameWordPoolFlag,
+  generalGameWordPoolKey,
+  normalizeLegacyGeneralGameWordClassifications,
+} from "../lib/general-game-word-classification.ts";
 import {
   generalGameWordDailyHistoryKey,
   generalGameWordHistoryTokyoDay,
 } from "../lib/general-game-word-history-store.ts";
 
-test("General Game Pool uses the shared active vocabulary Zipf contract", () => {
-  assert.equal(generalGameWordPoolSource, "word-master-active-zipf");
-  assert.deepEqual(generalGameWordZipfBands, {
-    easy: { min: 5.5, max: 6.5 },
-    normal: { min: 5, max: 5.5 },
-    hard: { min: 4.5, max: 5 },
+test("General Game Pool uses the stored reviewed classification contract", () => {
+  assert.equal(generalGameWordPoolSource, "general_game_pool");
+  assert.equal(generalGameWordPoolKey, "standard-game");
+  assert.equal(generalGameWordPoolFlag, "general_game_pool");
+  assert.deepEqual(generalGameWordDifficultyTags, {
+    easy: "difficulty_easy",
+    normal: "difficulty_normal",
+    hard: "difficulty_hard",
   });
-  assert.equal(generalGameWordDifficultyFromZipf(6.5), "easy");
-  assert.equal(generalGameWordDifficultyFromZipf(5.5), "easy");
-  assert.equal(generalGameWordDifficultyFromZipf(5.499), "normal");
-  assert.equal(generalGameWordDifficultyFromZipf(5), "normal");
-  assert.equal(generalGameWordDifficultyFromZipf(4.999), "hard");
-  assert.equal(generalGameWordDifficultyFromZipf(4.5), "hard");
-  assert.equal(generalGameWordDifficultyFromZipf(4.499), null);
+});
+
+test("legacy classifications require both the general-pool and saved difficulty flags", () => {
+  const records = normalizeLegacyGeneralGameWordClassifications([
+    {
+      word_master_id: 1,
+      surface: " 猫 ",
+      reading: "ねこ",
+      difficulty_tier: "easy",
+      evaluation_flags: ["general_game_pool", "difficulty_easy"],
+    },
+    {
+      word_master_id: 2,
+      surface: "度者",
+      reading: "どしゃ",
+      difficulty_tier: "easy",
+      evaluation_flags: ["general_game_pool"],
+    },
+    {
+      word_master_id: 3,
+      surface: "宇宙",
+      reading: "うちゅう",
+      difficulty_tier: "normal",
+      evaluation_flags: ["difficulty_normal"],
+    },
+  ]);
+  assert.deepEqual(records, [{
+    wordMasterId: 1,
+    surface: "猫",
+    normalizedSurface: "猫",
+    reading: "ねこ",
+    difficulty: "easy",
+  }]);
+});
+
+test("conflicting saved difficulty classifications are rejected", () => {
+  assert.throws(
+    () => normalizeLegacyGeneralGameWordClassifications([
+      {
+        word_master_id: 1,
+        surface: "猫",
+        reading: "ねこ",
+        difficulty_tier: "easy",
+        evaluation_flags: ["general_game_pool", "difficulty_easy"],
+      },
+      {
+        word_master_id: 2,
+        surface: "猫",
+        reading: "ねこ",
+        difficulty_tier: "hard",
+        evaluation_flags: ["general_game_pool", "difficulty_hard"],
+      },
+    ]),
+    /GENERAL_GAME_WORD_CLASSIFICATION_CONFLICT/,
+  );
 });
 
 test("difficulty mixing follows the shared ratios", () => {

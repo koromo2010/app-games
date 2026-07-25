@@ -324,7 +324,7 @@ Preview Shellの全resource要求へ同一origin Cookieを明示し、Word DBま
 
 ## 2026-07-24 SDK Previewの一般単語取得が42P01で失敗する
 
-状態: 修正実装済み・dev実機確認待ち（2026-07-24、回帰テストあり）
+状態: 再修正実装済み・分類データ同期とdev実機確認待ち（2026-07-25、回帰テストあり）
 
 `test10-1 / ai-word-guess`のログイン済み実機確認で、Preview限定セッション交換、
 Room作成、隔離Runtime接続、ゲーム開始までは成功したが、
@@ -337,10 +337,15 @@ Room作成、隔離Runtime接続、ゲーム開始までは成功したが、
 この外部選定表を作るmigrationがなかった。一方、一般ゲーム語はmain／developで
 共有する語彙であり、既存の共通`word-master-neon`が正本である。
 
-一般ゲーム語Repositoryを共通単語DBの`active_words`へ統一し、固有名詞を除外した
-実効Zipf 4.5〜6.5を簡単・普通・難しいへ分類する。SDKのWord DB、ワードアウト、
-コードインターセプトが同じRepositoryを使い、環境別アプリDBへ語彙表を複製しない。
-既存の難易度混合率と当日重複除外は維持する。外部環境変数やDBは変更しない。
+最初の修正では一般ゲーム語Repositoryを共通単語DBの`active_words`へ統一したが、
+旧選定表に保存されていた一般ゲーム適格性と難易度フラグを移さず、Zipf値だけから
+難易度を再生成した。このため`easy`へ低認知の仏教語「度者」が混入した。
+
+再修正では、旧`shared_word_pool_evaluations`の審査済み分類を、共通DB既存の
+`word_game_eligibility`へ`standard-game`適格性、`general_game_pool`フラグ、
+`difficulty_easy | difficulty_normal | difficulty_hard`フラグとして冪等同期する。
+Repositoryは3条件が揃う語だけを読み、SDKのWord DB、ワードアウト、
+コードインターセプトで共通利用する。単語本体やZipf値は変更しない。
 
 最初のdev反映では`drawWords`が200になった後、続く`findDefinitions`が`42501`
 （権限不足）になった。SDK content repositoryのdev分岐が共通DBの内部

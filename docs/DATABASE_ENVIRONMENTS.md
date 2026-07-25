@@ -1,6 +1,6 @@
 # 開発・本番DB分離と共通単語DB
 
-最終更新: 2026-07-24
+最終更新: 2026-07-25
 
 ## 正本となる境界
 
@@ -13,7 +13,12 @@
 
 アカウント、メール、認証情報、戦績、レーティング、プレイバック、既出履歴、評価生データ、問い合わせは環境別に保存する。単語、語釈、ペア、連想グループと本番評価から作る品質集計だけを共通DBへ置く。別DB間のID参照はUUIDによる論理参照であり、外部キーではない。
 
-一般ゲーム用の語も共通DBの `active_words` を正本とする。固有名詞を除外した実効Zipf 4.5〜6.5を簡単・普通・難しいへ投影し、SDK、ワードアウト、コードインターセプトが同じ読取Repositoryを使う。環境別アプリDBへ `shared_word_catalog` や選定表を複製しない。
+一般ゲーム用の語も共通DBを正本とするが、`active_words`のZipf値から難易度を
+再生成しない。旧選定表で審査済みの`standard-game`適格性、
+`general_game_pool`フラグ、`difficulty_easy | difficulty_normal | difficulty_hard`
+フラグを、共通DBの`word_game_eligibility`へ保存する。SDK、ワードアウト、
+コードインターセプトは、3条件が揃った同じ読取Repositoryだけを使う。
+環境別アプリDBへ語彙表や選定表を複製しない。
 
 ## 必須環境変数
 
@@ -58,5 +63,18 @@ BLOB_READ_WRITE_TOKEN=...
 6. 抽出結果を照合後、旧候補への書込みを停止する。
 
 本番ゲームの停止を伴う一括切替は行わない。
+
+旧`shared_word_pool_evaluations`の審査済み一般ゲーム語を移すときは、旧選定表の
+読取専用接続を`LEGACY_WORD_DATABASE_URL`、共通DB管理ロールを
+`VOCABULARY_ADMIN_DATABASE_URL`へ一時設定し、最初にdry-runする。
+
+```bash
+npm run vocabulary:import-general-game-classifications
+npm run vocabulary:import-general-game-classifications -- --apply
+```
+
+dry-runで旧分類の選択件数、共通DBに対応するactive語の件数、難易度別件数を照合し、
+不足語が0の場合だけ適用する。適用処理は旧`standard-game`分類を冪等に同期し、
+対象外になった旧移行行は無効化する。単語本体やZipf値は変更しない。
 
 開発Redisの既存ワードウルフ・たほい屋候補は、接続変数をローカルの一時環境へ設定してから`npm run vocabulary:migrate`でdraft受付箱へ移せる。deduplication keyを使うため再実行しても重複しない。本番Redisからの移行は、開発接続を本番へ向けず、管理・batchロールを使う専用ジョブとして別途実行する。

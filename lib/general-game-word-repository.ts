@@ -2,16 +2,24 @@ import {
   getVocabularyPostgresClient,
   isVocabularyPostgresConfigured,
 } from "./vocabulary-postgres-store.ts";
+import {
+  generalGameWordDifficulties,
+  generalGameWordDifficultyTags,
+  generalGameWordPoolFlag,
+  generalGameWordPoolKey,
+  generalGameWordPoolSource,
+  isGeneralGameWordDifficulty,
+  type GeneralGameWordDifficulty,
+} from "./general-game-word-classification.ts";
 
-export const generalGameWordPoolSource = "word-master-active-zipf" as const;
-
-export const generalGameWordZipfBands = {
-  easy: { min: 5.5, max: 6.5 },
-  normal: { min: 5, max: 5.5 },
-  hard: { min: 4.5, max: 5 },
-} as const;
-
-export type GeneralGameWordDifficulty = keyof typeof generalGameWordZipfBands;
+export {
+  generalGameWordDifficulties,
+  generalGameWordDifficultyTags,
+  generalGameWordPoolFlag,
+  generalGameWordPoolKey,
+  generalGameWordPoolSource,
+};
+export type { GeneralGameWordDifficulty };
 
 export type GeneralGameWordRecord = {
   id: string;
@@ -26,27 +34,8 @@ type GeneralGameWordRow = {
   surface: string;
   normalized_surface: string;
   reading: string | null;
-  difficulty: GeneralGameWordDifficulty;
+  difficulty: string;
 };
-
-export function generalGameWordDifficultyFromZipf(
-  value: number,
-): GeneralGameWordDifficulty | null {
-  if (!Number.isFinite(value)) return null;
-  if (
-    value >= generalGameWordZipfBands.easy.min
-    && value <= generalGameWordZipfBands.easy.max
-  ) return "easy";
-  if (
-    value >= generalGameWordZipfBands.normal.min
-    && value < generalGameWordZipfBands.normal.max
-  ) return "normal";
-  if (
-    value >= generalGameWordZipfBands.hard.min
-    && value < generalGameWordZipfBands.hard.max
-  ) return "hard";
-  return null;
-}
 
 export async function loadGeneralGameWordRecords(
   limitPerDifficulty = 500,
@@ -59,21 +48,31 @@ export async function loadGeneralGameWordRecords(
   const rows = await sql`
     WITH classified AS (
       SELECT word.id, word.surface, word.normalized_surface, word.reading,
-        CASE
-          WHEN word.effective_zipf >= ${generalGameWordZipfBands.easy.min}
-            AND word.effective_zipf <= ${generalGameWordZipfBands.easy.max}
-            THEN 'easy'
-          WHEN word.effective_zipf >= ${generalGameWordZipfBands.normal.min}
-            AND word.effective_zipf < ${generalGameWordZipfBands.normal.max}
-            THEN 'normal'
-          WHEN word.effective_zipf >= ${generalGameWordZipfBands.hard.min}
-            AND word.effective_zipf < ${generalGameWordZipfBands.hard.max}
-            THEN 'hard'
-        END AS difficulty
+        pool.difficulty
       FROM active_words word
-      WHERE NOT word.proper_noun
-        AND word.effective_zipf >= ${generalGameWordZipfBands.hard.min}
-        AND word.effective_zipf <= ${generalGameWordZipfBands.easy.max}
+      JOIN active_word_game_eligibility pool
+        ON pool.subject_type = 'word'
+        AND pool.subject_id = word.id
+        AND pool.game_id = ${generalGameWordPoolKey}
+      JOIN active_word_game_eligibility general_flag
+        ON general_flag.subject_type = 'word'
+        AND general_flag.subject_id = word.id
+        AND general_flag.game_id = ${generalGameWordPoolFlag}
+      JOIN active_word_game_eligibility difficulty_flag
+        ON difficulty_flag.subject_type = 'word'
+        AND difficulty_flag.subject_id = word.id
+        AND difficulty_flag.game_id = ('difficulty_' || pool.difficulty)
+      WHERE pool.difficulty IN (
+        ${generalGameWordDifficulties[0]},
+        ${generalGameWordDifficulties[1]},
+        ${generalGameWordDifficulties[2]}
+      )
+        AND (pool.valid_from IS NULL OR pool.valid_from <= NOW())
+        AND (pool.valid_until IS NULL OR pool.valid_until > NOW())
+        AND (general_flag.valid_from IS NULL OR general_flag.valid_from <= NOW())
+        AND (general_flag.valid_until IS NULL OR general_flag.valid_until > NOW())
+        AND (difficulty_flag.valid_from IS NULL OR difficulty_flag.valid_from <= NOW())
+        AND (difficulty_flag.valid_until IS NULL OR difficulty_flag.valid_until > NOW())
     ), deduplicated AS (
       SELECT DISTINCT ON (normalized_surface)
         id, surface, normalized_surface, reading, difficulty
@@ -89,11 +88,11 @@ export async function loadGeneralGameWordRecords(
     FROM ranked
     WHERE pool_order <= ${safeLimit}
   ` as GeneralGameWordRow[];
-  return rows.map((row) => ({
+  return rows.flatMap((row) => isGeneralGameWordDifficulty(row.difficulty) ? [{
     id: row.id,
     surface: row.surface,
     normalizedSurface: row.normalized_surface,
     reading: row.reading,
     difficulty: row.difficulty,
-  }));
+  }] : []);
 }

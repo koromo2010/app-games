@@ -10,7 +10,7 @@
         "dev": "npm run build:runtime-packages && next dev -p 3000",
         "dev:sdk": "npm run dev --workspace @game-fields/sdk-portal",
         "dev:sdk-preview": "npm run dev --workspace @game-fields/sdk-preview",
-        "build": "npm run build:runtime-packages && next build",
+        "build": "node scripts/run-general-game-classification-migration-build.mjs && npm run build:runtime-packages && next build",
         "build:sdk": "npm run build --workspace @game-fields/sdk-portal",
         "build:sdk-preview": "npm run build --workspace @game-fields/sdk-preview",
         "build:sdk-package": "npm run build --workspace @game-fields/game-sdk",
@@ -35,7 +35,8 @@
         "load:smoke": "node scripts/load-test.mjs",
         "monitor:production": "node scripts/production-smoke.mjs",
         "vocabulary:migrate": "node --experimental-strip-types scripts/migrate-vocabulary-to-master.ts",
-        "vocabulary:import-legacy-words": "node --experimental-strip-types scripts/import-legacy-word-catalog.ts"
+        "vocabulary:import-legacy-words": "node --experimental-strip-types scripts/import-legacy-word-catalog.ts",
+        "vocabulary:import-general-game-classifications": "node --experimental-strip-types scripts/import-legacy-general-game-classifications.ts"
     },
     "dependencies": {
         "@game-fields/game-runtime": "0.1.1",
