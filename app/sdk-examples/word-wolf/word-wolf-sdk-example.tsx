@@ -1,6 +1,7 @@
 "use client";
 
 import { WordWolfGame } from "@/app/wordwolf/WordWolfGame";
+import { SdkOfficialExampleNavigationBridge } from "../SdkOfficialExampleNavigationBridge";
 
 /**
  * SDK-dev acceptance harness.
@@ -9,5 +10,5 @@ import { WordWolfGame } from "@/app/wordwolf/WordWolfGame";
  * accepted only while this renders and completes the same game as /wordwolf.
  */
 export function WordWolfSdkExample() {
-  return <WordWolfGame />;
+  return <SdkOfficialExampleNavigationBridge><WordWolfGame /></SdkOfficialExampleNavigationBridge>;
 }
