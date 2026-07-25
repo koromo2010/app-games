@@ -123,7 +123,7 @@ try {
     }
   }
   const starterManifest = JSON.parse(readFileSync(join(starterRoot, "starter-manifest.json"), "utf8"));
-  if (starterManifest.downloadMeVersion !== 10
+  if (starterManifest.downloadMeVersion !== 11
     || starterManifest.repository !== "https://github.com/koromo2010/app-games"
     || starterManifest.ref !== platformRelease.starterRef
     || starterManifest.sdkVersion !== platformRelease.sdkPackageVersion
@@ -267,21 +267,23 @@ try {
     throw new Error("Entry guide must start with a UTF-8 BOM to prevent mojibake in browser downloads.");
   }
   for (const requiredText of [
+    "# GF-AECP/11",
+    "HUMAN_DOCUMENTATION := false",
     `--branch ${platformRelease.starterRef}`,
     "https://github.com/koromo2010/app-games.git",
     "starter-manifest.json",
-    "downloadMeVersion",
+    "downloadMeVersion == 11",
     "get_sdk_handshake",
     "tool検索",
-    "accepted=true",
+    "response.accepted == true",
     "sdkHandshakeVersion",
     "npm run check",
     "npm run demo",
     "npm run package",
     "submission/game-fields-submission.zip",
-    "saved: true",
+    "publish_game_package.saved == true",
     "previewUrl",
-    "ローカルプレビューを代替完成品として返さず",
+    "MUST_NOT substitute mock preview",
   ]) {
     if (!entryGuide.includes(requiredText)) {
       throw new Error(`Entry guide is missing required instruction: ${requiredText}`);

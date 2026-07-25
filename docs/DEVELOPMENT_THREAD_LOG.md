@@ -3776,3 +3776,50 @@
 - Dashboard設定のドリフトへ依存しないよう、Starter snapshotのPortal／隔離Preview
   Rootへ公式`vercel.json`の`ignoreCommand`を追加した。`main`／`develop`以外は
   source側でも終了コード0とし、ゲーム提出ZIPにはこれらrepository用guardを含めない。
+
+## 2026-07-25 — DownloadMe ver11のAI実行契約化
+
+### 利用者からの要望
+
+- DownloadMeは人間向けの自然な説明書ではなく、人間にはむしろ理解しにくく、
+  AIが直接解釈する言葉と構造にする。
+
+### 判断
+
+- 意図的な暗号化や秘密情報の埋込みは行わず、読みづらさを安全境界にも使わない。
+- 人間向けの導入説明はSDK Portalへ分離し、DownloadMe本体は定数、述語、
+  global invariant、状態遷移、tool呼出し、停止条件、定型出力で構成する
+  宣言的なAI実行契約とする。
+- 入口契約の表現とMock公開手順が変わるためver10を上書きせずver11へ改版し、
+  development Starterだけを`downloadMeVersion: 11`へ進める。安定版
+  `sdk-starter`のver9／SDK 0.1.0は変更しない。
+
+### 実施結果
+
+- `sdk/entry/START_GAME_FIELDS.md`を`GF-AECP/11`形式へ変更し、
+  `C0`定数、`I01`〜`I15`不変条件、`P_MOCK`／`P_FORMAL`完了述語、
+  `S0`〜`S7`状態機械として制作フローを再定義した。
+- 旧文書内で混在していたMock公開のCLI表現を解消し、新規Work／Codexは
+  OAuth MCPの`publish_mock`／`publish_game_package`だけを使う契約へ統一した。
+- SDK Portalへ「DownloadMeはAI向け実行契約なので、そのまま添付する」案内を追加し、
+  配布URL、Content-Disposition、同期script、旧ver1〜10からのredirectをver11へ更新した。
+- Starter manifest、Starter E2E、OAuth／MCP配布テスト、現行資料をver11へそろえ、
+  development用`GameFieldsDownloadMe-ver11.md`を生成した。
+
+### 検証
+
+- DownloadMe／OAuth／MCPの対象テスト7件が成功した。
+- `npm run test:sdk-starter`が成功し、公開snapshot、SDK install、型検査、
+  契約テスト、1ゲーム完走、昇格診断、正式package、提出ZIPまで確認した。
+- `npm run lint`成功、`npm test`全522件成功、本体とSDK Portalの
+  Production buildが成功した。
+- ローカルSDK Portal buildではDB migrationが`local/local`のdeploy gateにより
+  skipされ、DownloadMe ver11生成後にbuildが成功した。
+
+### 未対応・保留
+
+- 変更はローカルcommitへ固定した。`develop` pushは外部公開の
+  明示承認待ちであり、SDK-dev Deploymentと`sdk-starter-dev` snapshot更新も
+  まだ行っていない。
+- 実環境へ反映後、新しいWork／Codexスレッドでver11を添付し、
+  状態機械形式をAIが最後まで解釈できることを接続済みE2Eで確認する。

@@ -75,24 +75,25 @@ test("SDK Portal distributes the current DownloadMe revision", () => {
   const syncScript = read("apps/sdk-portal/scripts/sync-download.mjs");
 
   for (const source of [page, nextConfig, syncScript]) {
-    assert.match(source, /GameFieldsDownloadMe-ver10\.md/);
+    assert.match(source, /GameFieldsDownloadMe-ver11\.md/);
     assert.doesNotMatch(source, /GameFieldsDownloadMe-ver[2345678]\.md/);
   }
-  const download = read("apps/sdk-portal/public/GameFieldsDownloadMe-ver10.md");
-  assert.match(download, /DownloadMe: `ver10`/);
-  assert.match(download, /`downloadMeVersion`が`10`/);
-  assert.match(download, /必要になるまで遅延読み込み/);
-  assert.match(download, /tool検索・発見機能で`gameapp-dev get_sdk_handshake Game Fields SDK接続互換性`を検索/);
-  assert.match(download, /最初のtool一覧に名前がないことだけを根拠に、未接続や旧版と判定してはいけません/);
-  assert.match(download, /明示的なtool検索を実行しても/);
+  const download = read("apps/sdk-portal/public/GameFieldsDownloadMe-ver11.md");
+  assert.match(download, /# GF-AECP\/11/);
+  assert.match(download, /HUMAN_DOCUMENTATION := false/);
+  assert.match(download, /downloadMeVersion == 11/);
+  assert.match(download, /IF surface == Work AND get_sdk_handshake not_loaded/);
+  assert.match(download, /WORK_DISCOVERY_QUERY := "gameapp-dev get_sdk_handshake Game Fields SDK接続互換性"/);
+  assert.match(download, /CALL tool検索\(WORK_DISCOVERY_QUERY\)/);
+  assert.match(download, /discovered\(gameapp-dev\.\*\) AND NOT discovered\(gameapp-dev\.get_sdk_handshake\)/);
   assert.match(download, /`gameapp-dev`プラグインが古い/);
   assert.match(download, /プラグイン管理画面で`gameapp-dev`を更新/);
   assert.match(download, /更新後に新しいチャットを開いて/);
   assert.match(download, /このDownloadMeをもう一度添付/);
-  assert.match(download, /`requiredCapabilities`は以下の7件をそのまま送り/);
+  assert.match(download, /capabilityVector:/);
   assert.match(download, /"game-package-publish"/);
-  assert.match(download, /AppSet原文を翻訳、補正、再生成してはいけません/);
-  assert.match(download, /同一revisionと同一hashだけをdevelopment、stableへ昇格/);
+  assert.match(download, /MUST preserve submitted AppSet source and package hashes through preview\/review\/promotion/);
+  assert.match(download, /FREEZE \{AppSet source, client, package manifest, both hashes\}/);
   assert.doesNotMatch(download, /解除可|任意へ|必須解除/);
   assert.match(nextConfig, /legacyDownloadMePaths/);
   assert.match(nextConfig, /GameFieldsDownloadMe-ver\$\{index \+ 1\}\.md/);
@@ -114,7 +115,8 @@ test("SDK Portal exposes one public handshake contract before authenticated tool
 
 test("DownloadMe makes the creator environment the primary link", () => {
   const entry = read("sdk/entry/START_GAME_FIELDS.md");
-  assert.match(entry, /\[あなたのGame Fields環境を開く\]\(SDKから返されたcreatorUrl\)/);
-  assert.match(entry, /\[今回のゲームを直接開く\]\(SDKから返されたgameUrl\)/);
-  assert.match(entry, /最初の案内には使わず`creatorUrl`を優先/);
+  assert.match(entry, /\[あなたのGame Fields環境を開く\]\(creatorUrl\)/);
+  assert.match(entry, /\[今回のゲームを直接開く\]\(gameUrl\)/);
+  assert.match(entry, /EMIT publish_mock\.creatorUrl as first clickable link/);
+  assert.match(entry, /MUST_NOT prefer backward-compatible previewUrl/);
 });

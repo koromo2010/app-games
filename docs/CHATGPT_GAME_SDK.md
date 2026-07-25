@@ -31,7 +31,7 @@ SDK利用者は、完成したゲーム固有package、manifest、テスト、�
 
 `npm run build:sdk-starter`で、ChatGPTへそのまま渡せる`game-fields-sdk-starter-v0.1.1.zip`を生成できる。ZIPには`@game-fields/game-sdk`のtarball、初回プロンプト、`AGENTS.md`、`GAME_SPEC.md`、APIリファレンス、AppSetと正式client、契約テスト、完走デモ、昇格診断、game package builderを含む。
 
-試用者はdevelopment Portalの`GameFieldsDownloadMe-ver10.md`をChatGPTへ渡し、そこから`downloadMeVersion: 10`の`sdk-starter-dev`を取得する。安定版`sdk-starter`は現行npm安定版と同期させ、development候補で上書きしない。最初に仕様を相談して`GAME_SPEC.md`を確定したあと、同じフォルダ内だけを実装させる。`npm run test:sdk-starter`は別ディレクトリへの展開、同梱SDK install、型検査、契約テスト、デモ完走、提出ZIPまでを検査する。
+試用者はdevelopment Portalの`GameFieldsDownloadMe-ver11.md`をChatGPTへそのまま渡し、そこから`downloadMeVersion: 11`の`sdk-starter-dev`を取得する。DownloadMeは人間向けの説明書ではなく、AIが解釈する宣言的な実行契約とする。人間向けの導入説明はSDK Portalへ置き、DownloadMe内では状態、前提条件、禁止条件、tool呼出し、停止条件を機械的な識別子で記述する。安定版`sdk-starter`は現行npm安定版と同期させ、development候補で上書きしない。最初に仕様を相談して`GAME_SPEC.md`を確定したあと、同じフォルダ内だけを実装させる。`npm run test:sdk-starter`は別ディレクトリへの展開、同梱SDK install、型検査、契約テスト、デモ完走、提出ZIPまでを検査する。
 
 ## AIが編集してよい領域
 

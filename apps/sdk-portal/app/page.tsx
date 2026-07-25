@@ -101,8 +101,8 @@ export default async function Home() {
             SDK基本セットへゲーム固有のAppSetだけを登録し、作成・検証・提出するための開発基盤です。
           </p>
           <div className="hero-actions">
-            <a className="primary-action" href="/GameFieldsDownloadMe-ver10.md" download>
-              GameFieldsDownloadMe-ver10
+            <a className="primary-action" href="/GameFieldsDownloadMe-ver11.md" download>
+              GameFieldsDownloadMe-ver11
               <span aria-hidden="true">↓</span>
             </a>
             <a className="primary-action" href="#foundation">
@@ -189,6 +189,9 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
               ダウンロードしたファイルは、CodexまたはWorkのチャットへ添付してください。ゲームのコード取得・複数ファイルの編集・動作検査・SDKへの保存とURL発行を行うため、通常のChatGPTチャットだけでは制作を完了できません。
             </p>
             <p>
+              DownloadMeはAIが読む実行契約です。人間向けの説明書ではないため、内容を読んだり編集したりせず、そのままチャットへ添付してください。
+            </p>
+            <p>
               通常チャットでHTMLファイルだけが作られた場合、それはGame Fields SDKへ保存された完成版ではありません。CodexまたはWorkへ切り替え、同じファイルとゲームの希望を送ってください。
             </p>
           </div>
@@ -197,8 +200,8 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
           途中で画面を閉じたり新しいチャットへ移ったりせず、URLが案内されるまで同じチャットでお待ちください。エラーなどで保存できなかった場合は、AIが未完了であることと次の対応を案内します。
         </p>
         <div className="hero-actions">
-          <a className="primary-action" href="/GameFieldsDownloadMe-ver10.md" download>
-            GameFieldsDownloadMe-ver10.mdを取得
+          <a className="primary-action" href="/GameFieldsDownloadMe-ver11.md" download>
+            GameFieldsDownloadMe-ver11.mdを取得
             <span aria-hidden="true">↓</span>
           </a>
           <Link className="secondary-action" href="/demo">
