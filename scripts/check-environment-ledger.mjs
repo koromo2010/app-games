@@ -4,6 +4,8 @@ import { join, relative } from "node:path";
 const root = process.cwd();
 const ledgerPath = join(root, "docs", "ENVIRONMENT_VARIABLES.md");
 const ledger = readFileSync(ledgerPath, "utf8");
+const changeRegistryPath = join(root, "config", "environment-change-registry.json");
+const changeRegistry = JSON.parse(readFileSync(changeRegistryPath, "utf8"));
 const ignoredDirectories = new Set([".git", ".next", "node_modules", "dist", "coverage"]);
 const sourceExtensions = new Set([".js", ".cjs", ".mjs", ".ts", ".tsx"]);
 const references = new Map();
@@ -54,4 +56,56 @@ if (missing.length > 0) {
   process.exit(1);
 }
 
-console.log(`Environment ledger covers ${references.size} code-referenced keys.`);
+const allowedStatuses = new Set([
+  "requested",
+  "registered",
+  "redeployed",
+  "verified",
+  "cancelled",
+]);
+const allowedOperations = new Set(["set", "change", "remove", "link", "unlink"]);
+const registryFailures = [];
+const ids = new Set();
+for (const change of changeRegistry.changes ?? []) {
+  if (!change || typeof change !== "object") {
+    registryFailures.push("change entry must be an object");
+    continue;
+  }
+  if (typeof change.id !== "string" || !change.id) {
+    registryFailures.push("change id is required");
+  } else if (ids.has(change.id)) {
+    registryFailures.push(`duplicate change id: ${change.id}`);
+  } else {
+    ids.add(change.id);
+  }
+  for (const field of ["key", "project", "branch", "environment", "note"]) {
+    if (typeof change[field] !== "string" || !change[field].trim()) {
+      registryFailures.push(`${change.id ?? "unknown"}: ${field} is required`);
+    }
+  }
+  if (!allowedStatuses.has(change.status)) {
+    registryFailures.push(`${change.id ?? "unknown"}: invalid status ${change.status}`);
+  }
+  if (!allowedOperations.has(change.operation)) {
+    registryFailures.push(`${change.id ?? "unknown"}: invalid operation ${change.operation}`);
+  }
+  if (typeof change.sensitive !== "boolean"
+    || typeof change.redeployRequired !== "boolean"
+    || typeof change.temporary !== "boolean") {
+    registryFailures.push(`${change.id ?? "unknown"}: boolean metadata is incomplete`);
+  }
+  if (typeof change.key === "string" && !ledger.includes(`\`${change.key}\``)) {
+    registryFailures.push(`${change.id ?? "unknown"}: ${change.key} is missing from the Markdown ledger`);
+  }
+}
+
+if (registryFailures.length > 0) {
+  console.error("Environment change registry is invalid:");
+  for (const failure of registryFailures) console.error(`- ${failure}`);
+  process.exit(1);
+}
+
+console.log(
+  `Environment ledger covers ${references.size} code-referenced keys and `
+  + `${changeRegistry.changes?.length ?? 0} tracked change requests.`,
+);

@@ -21,6 +21,19 @@ function releaseError(error: unknown) {
   return Response.json({ error: "GITHUB_RELEASE_FAILED" }, { status: 503 });
 }
 
+function requireReleaseReadEnvironment() {
+  const environment = expectedAppEnvironment();
+  const branch = process.env.VERCEL_GIT_COMMIT_REF;
+  if (
+    !(
+      (environment === "production" && branch === "main")
+      || (environment === "development" && branch === "develop")
+    )
+  ) {
+    throw new GitHubReleaseError("GITHUB_RELEASE_MAIN_ONLY", 403);
+  }
+}
+
 function requireMainEnvironment() {
   if (
     expectedAppEnvironment() !== "production"
@@ -33,7 +46,7 @@ function requireMainEnvironment() {
 export async function GET() {
   try {
     await requireSiteAdminSession();
-    requireMainEnvironment();
+    requireReleaseReadEnvironment();
     return Response.json(await loadDevMainReleaseStatus(), {
       headers: { "Cache-Control": "private, no-store" },
     });

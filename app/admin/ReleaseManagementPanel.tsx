@@ -67,10 +67,13 @@ function sdkPackageIsCurrent(game: SdkCandidate) {
 }
 
 export function ReleaseManagementPanel({
+  mode,
   onAuthExpired,
 }: {
+  mode: "preview" | "live";
   onAuthExpired: () => void;
 }) {
+  const isPreview = mode === "preview";
   const [sdkGames, setSdkGames] = useState<SdkCandidate[]>([]);
   const [publicIds, setPublicIds] = useState<Record<string, string>>({});
   const [devRelease, setDevRelease] = useState<DevRelease | null>(null);
@@ -225,6 +228,8 @@ export function ReleaseManagementPanel({
         <p className="mt-2 text-sm leading-6 text-slate-400">SDK作品の採用と、本体developの反映は互いに独立した経路です。</p>
       </header>
 
+      {isPreview && <p className="rounded-xl border border-amber-300/30 bg-amber-300/10 px-4 py-3 text-sm font-bold leading-6 text-amber-100">dev試作表示です。候補・差分・画面構成は確認できますが、SDK→mainとdevelop→mainの実行はサーバー側でも無効です。</p>}
+
       {message && <p role="status" className="rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-4 py-3 text-sm leading-6 text-cyan-50">{message}</p>}
 
       <section className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.05]">
@@ -258,11 +263,11 @@ export function ReleaseManagementPanel({
                   </div>
                   <label className="block text-xs font-bold text-slate-300">
                     mainで使うゲームID
-                    <input value={publicIds[key] ?? ""} disabled={current || activeAction === `sdk:${key}`} onChange={(event) => setPublicIds((values) => ({ ...values, [key]: event.target.value }))} className="mt-1 w-full rounded-lg border border-white/15 bg-black/25 px-3 py-2 font-mono text-sm text-white outline-none focus:border-cyan-300 disabled:opacity-50" />
+                    <input value={publicIds[key] ?? ""} disabled={isPreview || current || activeAction === `sdk:${key}`} onChange={(event) => setPublicIds((values) => ({ ...values, [key]: event.target.value }))} className="mt-1 w-full rounded-lg border border-white/15 bg-black/25 px-3 py-2 font-mono text-sm text-white outline-none focus:border-cyan-300 disabled:opacity-50" />
                   </label>
                   <div className="flex gap-2 lg:justify-end">
                     {game.reviewUrl && <a href={game.reviewUrl} target="_blank" rel="noreferrer" className="rounded-lg border border-white/15 px-4 py-2 text-sm font-bold hover:bg-white/10">レビュー</a>}
-                    <button type="button" disabled={current || !complete || activeAction === `sdk:${key}`} onClick={() => void promoteSdkGame(game)} className="rounded-lg bg-emerald-300 px-4 py-2 text-sm font-black text-emerald-950 disabled:cursor-not-allowed disabled:opacity-40">{activeAction === `sdk:${key}` ? "採用中…" : current ? "採用済み" : "SDK→main"}</button>
+                    <button type="button" disabled={isPreview || current || !complete || activeAction === `sdk:${key}`} onClick={() => void promoteSdkGame(game)} className="rounded-lg bg-emerald-300 px-4 py-2 text-sm font-black text-emerald-950 disabled:cursor-not-allowed disabled:opacity-40">{isPreview ? "本番管理画面で実行" : activeAction === `sdk:${key}` ? "採用中…" : current ? "採用済み" : "SDK→main"}</button>
                   </div>
                 </article>
               );
@@ -285,7 +290,7 @@ export function ReleaseManagementPanel({
             </div>
             <div className="flex gap-2">
               <a href={devRelease.compareUrl} target="_blank" rel="noreferrer" className="rounded-lg border border-white/15 px-4 py-2 text-sm font-bold hover:bg-white/10">差分</a>
-              <button type="button" disabled={!devRelease.canPromote || !devRelease.writeConfigured || activeAction === "dev:main"} onClick={() => void promoteDev()} className="rounded-lg bg-violet-300 px-4 py-2 text-sm font-black text-violet-950 disabled:cursor-not-allowed disabled:opacity-40">{activeAction === "dev:main" ? "反映中…" : "dev→main"}</button>
+              <button type="button" disabled={isPreview || !devRelease.canPromote || !devRelease.writeConfigured || activeAction === "dev:main"} onClick={() => void promoteDev()} className="rounded-lg bg-violet-300 px-4 py-2 text-sm font-black text-violet-950 disabled:cursor-not-allowed disabled:opacity-40">{isPreview ? "本番管理画面で実行" : activeAction === "dev:main" ? "反映中…" : "dev→main"}</button>
             </div>
           </div>
         )}

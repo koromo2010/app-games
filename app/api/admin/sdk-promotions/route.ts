@@ -15,6 +15,19 @@ function internalUrl() {
   return `${sdkPortalInternalBaseUrl()}/api/internal/promotions`;
 }
 
+function requirePromotionReadEnvironment() {
+  const environment = expectedAppEnvironment();
+  const branch = process.env.VERCEL_GIT_COMMIT_REF;
+  if (
+    !(
+      (environment === "production" && branch === "main")
+      || (environment === "development" && branch === "develop")
+    )
+  ) {
+    throw new Error("SDK_PROMOTION_MAIN_ONLY");
+  }
+}
+
 function requireMainEnvironment() {
   if (
     expectedAppEnvironment() !== "production"
@@ -44,7 +57,7 @@ async function proxyPayload(response: Response): Promise<unknown> {
 export async function GET() {
   try {
     await requireSiteAdminSession();
-    requireMainEnvironment();
+    requirePromotionReadEnvironment();
     const url = internalUrl();
     const response = await fetch(url, {
       headers: sdkServiceHeaders("GET", url),

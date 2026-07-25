@@ -32,6 +32,7 @@
 
 ## Environment variables and external configuration
 
+- 環境変数の追加・変更・削除・Linkを利用者へ案内する前に、`config/environment-change-registry.json`へ`requested`として登録する。登録していない設定手順を先に案内してはならない。外部操作後は同じ項目を`registered`、`redeployed`、`verified`へ進め、撤回時は`cancelled`にする。一時変数は復旧後の`remove`依頼も別項目として先に登録する。
 - Vercel、Neon、Upstash、Blob、DNS、GitHub Secrets／Tokens、外部APIキー等について、追加・変更・削除・共有Link・再デプロイ・ドメイン割当・Ignored Build Stepの案内または確認を行う前に、必ず `docs/ENVIRONMENT_VARIABLES.md` の現在配置と未完了事項を確認する。過去チャット、記憶、スクリーンショットだけを根拠にしない。
 - 操作対象は、Vercel Team、Project名、Git branch、Root Directory、Deployment Environment、キー名、Sensitive区分まで特定する。台帳にない状態は「未確認」とし、推測で「設定済み」にしない。
 - 外部設定を変更した作業は、同じ作業単位で `docs/ENVIRONMENT_VARIABLES.md` の現在状態を更新するまで完了扱いにしない。「登録済み」「ProjectへLink済み」「再デプロイ済み」「実機確認済み」を別の状態として記録する。

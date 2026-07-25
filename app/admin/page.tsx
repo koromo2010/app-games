@@ -8,12 +8,18 @@ export const revalidate = 0;
 export const metadata: Metadata = { title: "サイト管理", robots: { index: false, follow: false, nocache: true } };
 
 export default function SiteAdminPage() {
-  const showPreviewVocabularyMigrations = expectedAppEnvironment() === "development"
+  const appEnvironment = expectedAppEnvironment();
+  const showPreviewVocabularyMigrations = appEnvironment === "development"
     && process.env.APP_ENV === "development";
-  const showReleaseManagement = expectedAppEnvironment() === "production"
-    && process.env.VERCEL_GIT_COMMIT_REF === "main";
+  const releaseManagementMode = appEnvironment === "production"
+    && process.env.VERCEL_GIT_COMMIT_REF === "main"
+    ? "live"
+    : appEnvironment === "development"
+      && process.env.VERCEL_GIT_COMMIT_REF === "develop"
+      ? "preview"
+      : null;
   return <SiteAdminPanel
     showPreviewVocabularyMigrations={showPreviewVocabularyMigrations}
-    showReleaseManagement={showReleaseManagement}
+    releaseManagementMode={releaseManagementMode}
   />;
 }

@@ -4506,4 +4506,40 @@
 
 ### 未対応・保留
 
-- `develop`へのpush、devへの反映、実機での再登録確認は未完了。
+- `develop`へのpushとdevへの反映、MFAリセットまでは完了した。
+- devで新しいパスキーをブラウザへ保存した後、サーバー検証が失敗した。原因は
+  `SITE_ADMIN_WEBAUTHN_ORIGIN`が未設定で、本番Originだけが既定許可されていたこと。
+- `app-games-dev` Productionへ
+  `SITE_ADMIN_WEBAUTHN_ORIGIN=https://dev.game-fields.com`を登録し、再デプロイ後に
+  パスキー登録と通常ログインを実機確認する。
+- 通常ログイン確認後、`SITE_ADMIN_BREAK_GLASS_ENABLED`を削除して再デプロイする。
+
+## 2026-07-26 — 昇格管理のdev試作表示と環境変数変更マスター
+
+### 利用者からの要望
+
+- 昇格管理をいきなりmainへ入れず、まずdev管理画面で確認できるようにする。
+- 環境変数の設定依頼時にGit側の管理台帳更新が漏れない仕組みを入れる。
+
+### 判断
+
+- devではSDK→mainとdevelop→mainの候補・差分・UIを表示するが、実行ボタンを無効化し、POST APIも従来どおりmain限定とする。
+- 現在配置のMarkdown台帳とは別に、進行中の設定依頼を`config/environment-change-registry.json`で機械可読に管理する。案内前に`requested`登録し、登録・再デプロイ・実機確認を別状態として進める。
+
+### 実施結果
+
+- `develop`の管理画面へ「昇格管理」を試作表示し、devであることと実更新不能を明示した。
+- devのGET APIからSDK候補とmain/develop比較を読めるようにした。両POST APIのmain限定境界は維持した。
+- 環境変数変更マスターとCI検査を追加し、今回の管理パスワード、break-glass削除依頼、WebAuthn Origin追加依頼を登録した。
+
+### 検証
+
+- `npm run lint`成功。環境変数コード参照61件と変更依頼3件の整合を確認した。
+- 全537テスト成功。
+- production build成功。
+
+### 未対応・保留
+
+- `develop`へpush後、`app-games-dev`のDeploymentがREADYになることと、管理画面の昇格管理タブを実機確認する。
+- `SITE_ADMIN_WEBAUTHN_ORIGIN`登録・再デプロイ・パスキー通常ログイン確認後、マスターの状態を進める。
+- 復旧完了後に`SITE_ADMIN_BREAK_GLASS_ENABLED`を削除し、再デプロイ・無効化を確認する。

@@ -95,6 +95,8 @@ Portal用の別Vercel Project `app-games-sdk`は`game-fields` Team内に作成�
 
 ## 3. 環境変数
 
+環境変数の現在配置は`docs/ENVIRONMENT_VARIABLES.md`、進行中の追加・変更・削除依頼は`config/environment-change-registry.json`を正本とする。利用者へVercel等の設定手順を案内する前に、必ず依頼を`requested`で登録する。`npm run check:env-ledger`はコード参照、Markdown台帳、依頼マスターの整合を検査する。
+
 本番Vercelには以下が必要。値をコード、ログ、クライアントへ出さない。
 
 - `SHARED_OPENAI_API_KEY`（移行中は旧 `OPENAI_API_KEY` へフォールバック）

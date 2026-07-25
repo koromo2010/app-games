@@ -2,13 +2,13 @@
 
 最終更新: 2026-07-26
 
-この文書を Game Fields の環境変数配置の正本とする。実値、接続文字列、APIキー、パスワードはGitへ保存しない。Vercel、Neon、Upstash、Blob、各API提供元だけで管理する。
+現在配置はこの文書、追加・変更・削除の進行中依頼は`config/environment-change-registry.json`を正本とする。実値、接続文字列、APIキー、パスワードはGitへ保存しない。Vercel、Neon、Upstash、Blob、各API提供元だけで管理する。
 
 ## 別スレッド・別担当で再開するときの必須手順
 
 この文書は会話履歴より優先する。環境変数や外部インフラを扱う担当は、操作案内を始める前に次を行う。
 
-1. 対象ブランチの最新版でこの文書を読み、対象Projectと「現在配置」「外部設定の進捗」「未確認・更新が必要な項目」を確認する。
+1. 対象ブランチの最新版でこの文書と`config/environment-change-registry.json`を読み、対象Projectと「現在配置」「進行中依頼」「未確認・更新が必要な項目」を確認する。
 2. 対象のTeam、Project、branch、Root Directory、Deployment Environment、キー名、Sensitive区分を特定する。記載がなければ未確認として扱い、過去チャットから補完しない。
 3. Vercel等の画面または読取APIで確認できた事実だけを現在状態へ反映する。期待仕様と実際の配置を混ぜない。
 4. 変数の追加・変更・削除・Shared Link、再デプロイ、ドメイン割当、Ignored Build Step変更は、それぞれ別の進捗として直後に更新する。
@@ -29,7 +29,7 @@
 
 ## コード参照キーの完全性検査
 
-`npm run check:env-ledger`は、リポジトリ内の静的な`process.env.KEY`参照を抽出し、この台帳にキー名が存在するか検査する。新しい環境変数をコードへ追加したのに台帳を更新していない場合は失敗し、`npm run lint`も通らない。これはキー名の記載漏れを防ぐ検査であり、Vercelへの登録、値の正当性、再デプロイ、実機動作までは保証しない。
+`npm run check:env-ledger`は、リポジトリ内の静的な`process.env.KEY`参照を抽出し、この台帳にキー名が存在するか検査する。さらに、`config/environment-change-registry.json`の各依頼について、対象Project、branch、Environment、Sensitive、操作、状態、再デプロイ要否、一時変数区分とMarkdown台帳へのキー記載を検査する。新しい環境変数をコードへ追加したのに台帳を更新していない場合や、設定依頼の機械可読情報が欠ける場合は`npm run lint`も失敗する。Vercel上の実値や実際の配置は別途画面または読取APIで確認する。
 
 ### その他のコード参照キー（配置監査待ち）
 
@@ -56,8 +56,10 @@
 | `SDK_PORTAL_CHANNEL` | 配置未監査 |
 | `SDK_REDIS_REST_TOKEN` | SDK環境の配置未監査 |
 | `SDK_REDIS_REST_URL` | SDK環境の配置未監査 |
-| `SITE_ADMIN_BREAK_GLASS_ENABLED` | 配置未監査 |
-| `SITE_ADMIN_PASSWORD` | 配置未監査 |
+| `SITE_ADMIN_BREAK_GLASS_ENABLED` | `app-games-dev` Productionへ2026-07-26一時登録・再デプロイ・復旧ログイン確認済み。MFA再登録完了後に削除必須 |
+| `SITE_ADMIN_PASSWORD` | `app-games-dev` Productionへ2026-07-26登録・再デプロイ・マスターパスワード認証確認済み。Sensitive |
+| `SITE_ADMIN_WEBAUTHN_ORIGIN` | `app-games-dev` Productionへ`https://dev.game-fields.com`を登録待ち |
+| `SITE_ADMIN_WEBAUTHN_RP_ID` | 未登録。既定`game-fields.com`を使用 |
 | `STORAGE_ALERT_THRESHOLD_PERCENT` | 配置未監査 |
 | `WORDWOLF_PAIR_COOLDOWN_DAYS` | 配置未監査 |
 
@@ -217,6 +219,10 @@ Sensitive設定済みの互換変数をVercel上で複製できない移行期�
 | `DEV_REDIS_KV_REST_API_TOKEN` | Production | Yes | Integrationによる登録を画面確認済み。`0773a78`で再デプロイ後、実機接続確認済み | `app-dev:`名前空間でのみ書込。SDK側との論理分離を継続監視 |
 | `DEV_REDIS_KV_REST_API_READ_ONLY_TOKEN` | Production | Yes | Integrationによる登録を画面確認済み | 現行サーバーコードでは未使用 |
 | `SDK_PORTAL_INTERNAL_URL` | Production | No | 未登録。developコード既定値`https://sdk-dev.game-fields.com`を使用 | 本体が制作者別ゲーム定義と隔離実行URLをSDK Portalから読む。独自接続先が必要な場合だけ設定 |
+| `SITE_ADMIN_PASSWORD` | Production | Yes | Project Variable登録・再デプロイ済み。マスターパスワードで復旧ログインを実機確認済み | 秘密値を安全な保管先で管理。Gitへ値を保存しない |
+| `SITE_ADMIN_BREAK_GLASS_ENABLED` | Production | No | `true`を一時登録・再デプロイし、MFAリセットを実機確認済み | WebAuthn再登録と通常ログイン確認後、変数を削除して再デプロイ |
+| `SITE_ADMIN_WEBAUTHN_ORIGIN` | Production | No | 未登録。devでのパスキー登録はOrigin不一致によりサーバー検証失敗 | `https://dev.game-fields.com`を登録し、再デプロイ後にパスキー登録を再確認 |
+| `SITE_ADMIN_WEBAUTHN_RP_ID` | Production | No | 未登録。コード既定値`game-fields.com`を使用 | 追加不要。ProductionとDevelopmentのパスキーを親domain配下で扱う |
 
 `NEON_DATABASE_*`は既存`DATABASE_URL`と衝突させず新Neonを識別するためのIntegration接頭辞である。コードは`APP_DATABASE_URL`、`NEON_DATABASE_URL`、旧`DATABASE_URL`の順で選ぶ。2026-07-22に`0773a78`のProduction DeploymentがREADYとなり、存在しない資格で`POST /api/player-account`を実行して`401 INVALID_CREDENTIALS`を確認した。この経路はRedisレート制限とPostgreSQLの`ensurePostgresSchema`・アカウント照会を通るため、開発Redis接続と開発Neonへのschema自動適用・接続は確認済みである。新規登録・ログインのブラウザ実機確認は別途行う。
 

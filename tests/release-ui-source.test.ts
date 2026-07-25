@@ -21,6 +21,7 @@ test("lobby keeps card UI and adds a persisted accessible list view", () => {
 
 test("admin exposes independent SDK to main and dev to main paths", () => {
   const panel = read("app/admin/ReleaseManagementPanel.tsx");
+  const page = read("app/admin/page.tsx");
   const sdkRoute = read("app/api/admin/sdk-promotions/route.ts");
   const devRoute = read("app/api/admin/dev-release/route.ts");
   const portalRoute = read(
@@ -32,6 +33,12 @@ test("admin exposes independent SDK to main and dev to main paths", () => {
   assert.match(panel, /SDK→main/);
   assert.match(panel, /dev反映/);
   assert.match(panel, /dev→main/);
+  assert.match(page, /releaseManagementMode/);
+  assert.match(page, /"preview"/);
+  assert.match(panel, /dev試作表示です/);
+  assert.match(panel, /isPreview \|\|/);
+  assert.match(sdkRoute, /requirePromotionReadEnvironment/);
+  assert.match(devRoute, /requireReleaseReadEnvironment/);
   assert.match(sdkRoute, /sdk-game\.promote/);
   assert.match(sdkRoute, /SDK_PROMOTION_MAIN_ONLY/);
   assert.match(devRoute, /code\.promote-develop-to-main/);
