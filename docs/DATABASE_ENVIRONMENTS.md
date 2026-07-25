@@ -70,11 +70,18 @@ BLOB_READ_WRITE_TOKEN=...
 
 ```bash
 npm run vocabulary:import-general-game-classifications
+npm run vocabulary:import-general-game-classifications -- --sync-missing-words
 npm run vocabulary:import-general-game-classifications -- --apply
 ```
 
 dry-runで旧分類の選択件数、共通DBに対応するactive語の件数、難易度別件数を照合し、
-不足語が0の場合だけ適用する。適用処理は旧`standard-game`分類を冪等に同期し、
-対象外になった旧移行行は無効化する。単語本体やZipf値は変更しない。
+不足語が0の場合だけ適用する。不足がある場合、`--sync-missing-words`は審査済みの
+旧選定行に対応する欠落語だけを旧カタログのsurface、reading、Zipf、文字数で
+冪等追加し、既存語は変更しない。適用処理は旧`standard-game`分類を冪等に同期し、
+対象外になった旧移行行を無効化する。
+
+2026-07-25の実移行では、旧選定347行をsurface＋readingで346語へ正規化した。
+初回対応319語に対して欠落27語を同期し、再dry-runで対応346語・不足0を確認後、
+easy 119語、normal 164語、hard 63語の分類を適用した。
 
 開発Redisの既存ワードウルフ・たほい屋候補は、接続変数をローカルの一時環境へ設定してから`npm run vocabulary:migrate`でdraft受付箱へ移せる。deduplication keyを使うため再実行しても重複しない。本番Redisからの移行は、開発接続を本番へ向けず、管理・batchロールを使う専用ジョブとして別途実行する。

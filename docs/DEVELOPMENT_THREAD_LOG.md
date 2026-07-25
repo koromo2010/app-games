@@ -4167,3 +4167,50 @@
   `shared_word_catalog`と`shared_word_pool_evaluations`の`SELECT`を付与する。
 - 付与後にdry-runを再実行し、一意分類347件・不足0件の場合だけapplyする。
 - 移行完了後に`LEGACY_WORD_DATABASE_URL`と一時読取権限を削除する。
+
+## 2026-07-25 — 審査済み一般ゲーム語の共通DB移行完了
+
+### 利用者による外部設定
+
+- `app-games-neon/main/neondb`で`vocabulary_migration_reader`へ
+  `public` schemaの`USAGE`と、`shared_word_catalog`、
+  `shared_word_pool_evaluations`の`SELECT`を付与した。
+- 接続文字列や秘密値はログ、文書、commitへ記録していない。
+
+### dry-run・不足語同期
+
+- 権限付与後のdry-runで、旧選定347行、surface＋reading正規化後346語、
+  easy 119／normal 164／hard 63を確認した。
+- 初回は共通DBの対応319語・不足27語だった。内訳はreading違いでsurfaceだけ一致が
+  3語、surface自体が存在しないものが24語で、inactiveや曖昧一致はなかった。
+- `--sync-missing-words`で審査済み旧選定行に対応する不足27語だけを
+  旧カタログのsurface、reading、Zipf、文字数から冪等追加した。既存語と既存Zipfは
+  変更していない。
+- 再dry-runで対応346語、不足0、全診断0を確認した。
+
+### 分類適用・回帰確認
+
+- `--apply`を一度だけ実行し、346語へ`standard-game`、
+  `general_game_pool`、各`difficulty_*`の3条件を冪等同期した。
+- 適用結果はeasy 119語、normal 164語、hard 63語である。
+- その後の読取専用dry-runでも旧347行、346語、対応346語、不足0を再確認した。
+  `regressionChecks.unreviewedEasyTermExcluded`は`true`で、「度者」は審査済み
+  General Game Poolに含まれない。
+- DB適用Deployment `dpl_Dhk2kFYru2GppnhV8pmKXyhZVqno`は`READY`。
+  読取回帰Deployment `dpl_hYtVCPDTRyChXJojX8CJmPsX1SQy`で上記件数を確認した。
+
+### コード・検証
+
+- `scripts/import-legacy-general-game-classifications.ts`へ件数固定の安全停止、
+  不足語の限定同期、match診断、適用後集計、回帰確認を追加した。
+- 一時Vercel build hookは最終commitで撤去し、通常の
+  `npm run build:runtime-packages && next build`へ戻す。
+- ローカルで`npm run lint`、`npm test`全525件、`npm run build`が成功した。
+- `develop`へはforceなしで反映し、`main`、stable Starter、npmは変更していない。
+
+### 未対応・保留
+
+- `app-games-dev` Productionの`LEGACY_WORD_DATABASE_URL`を削除する。
+- 旧DBで`vocabulary_migration_reader`の旧2表`SELECT`とschema `USAGE`をrevokeする。
+- 外部設定削除後、通常buildの再デプロイで現行Deploymentへ旧接続が残らないことを
+  確認する。

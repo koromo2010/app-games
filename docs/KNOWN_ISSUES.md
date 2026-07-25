@@ -324,7 +324,7 @@ Preview Shellの全resource要求へ同一origin Cookieを明示し、Word DBま
 
 ## 2026-07-24 SDK Previewの一般単語取得が42P01で失敗する
 
-状態: 再修正コードdevelop反映済み・旧DB読取権限の追加待ち（2026-07-25、回帰テストあり）
+状態: 修正済み・共通DB移行／dev回帰確認済み（2026-07-25、回帰テストあり）
 
 `test10-1 / ai-word-guess`のログイン済み実機確認で、Preview限定セッション交換、
 Room作成、隔離Runtime接続、ゲーム開始までは成功したが、
@@ -347,10 +347,12 @@ Room作成、隔離Runtime接続、ゲーム開始までは成功したが、
 Repositoryは3条件が揃う語だけを読み、SDKのWord DB、ワードアウト、
 コードインターセプトで共通利用する。単語本体やZipf値は変更しない。
 
-2026-07-25に移行コードを`develop`へ反映し、`LEGACY_WORD_DATABASE_URL`を
-`app-games-dev` Productionへ追加してdry-runを再試行した。旧DBへの接続は成功したが、
-読取ロールの`shared_word_pool_evaluations`に`SELECT`権限がなく`42501`で停止した。
-347語の分類はまだ共通DBへ書き込まれていない。
+2026-07-25に読取ロールへ旧2表の一時`SELECT`権限を付与し、旧選定347行を
+surface＋readingで346語へ正規化した。初回dry-runで共通DBに不足していた27語だけを
+旧カタログから冪等追加し、再dry-runの対応346語・不足0を確認してから分類を適用した。
+適用後の有効分類はeasy 119語、normal 164語、hard 63語である。devの読取専用
+回帰確認では全件対応・不足0に加え、「度者」が3条件を満たす審査済み集合に
+含まれないことを確認した。一時build hookは撤去し、通常buildへ戻す。
 
 最初のdev反映では`drawWords`が200になった後、続く`findDefinitions`が`42501`
 （権限不足）になった。SDK content repositoryのdev分岐が共通DBの内部

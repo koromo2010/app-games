@@ -155,11 +155,12 @@ Shared化候補:
 | `LEGACY_WORD_DATABASE_URL` | 原則なし | 移行作業中だけ | なし | Yes | 旧語彙本体および旧`standard-game`分類の読取専用移行元 |
 
 2026-07-25に`LEGACY_WORD_DATABASE_URL`を`app-games-dev` Productionへ
-Project Variable・Sensitiveとして登録し、dry-run用Deploymentで値の読込と旧DBへの
-接続を確認した。ただし`vocabulary_migration_reader`は`shared_word_catalog`を読める
-一方、`shared_word_pool_evaluations`への`SELECT`が`42501`で拒否された。
-読取ロールへ旧2表の`SELECT`を付与した後にdry-runを再実行し、移行完了後は変数と
-一時権限を削除する。
+Project Variable・Sensitiveとして登録し、`vocabulary_migration_reader`へ旧2表の
+一時`SELECT`権限を付与した。旧347行を346語へ正規化し、共通DBへ不足していた27語の
+冪等同期、対応346語・不足0の再dry-run、easy 119／normal 164／hard 63の分類適用、
+「度者」が審査済み集合に含まれないことの読取確認まで完了した。
+一時build hookは撤去済みである。Project Variableと旧DBの一時読取権限は、
+利用者による削除確認が終わるまで残存扱いとする。
 
 互換変数として残っている可能性があるもの:
 
@@ -184,7 +185,7 @@ Sensitive設定済みの互換変数をVercel上で複製できない移行期�
 | --- | --- | --- | --- | --- |
 | `PLAYER_SESSION_SECRET` | Production | Yes | Project Variableの登録を画面確認済み・追加後の再デプロイ済み。未設定エラーの解消を実行ログで確認済み | DB・Redis復旧後に登録・ログインを実機確認 |
 | `SDK_ACCOUNT_LINK_SECRET` | Production | Yes | Project Variableへの追加申告済み。最新の一覧画面による再確認は未実施 | 本体とSDK Portalで同一のdev専用値であること、再デプロイ後のSSOを確認 |
-| `LEGACY_WORD_DATABASE_URL` | Production | Yes | Project Variable登録済み。dry-run Deploymentで旧DBへの接続を確認したが、読取ロールの`shared_word_pool_evaluations`権限不足で適用前に停止 | 旧2表の`SELECT`を付与して再dry-runし、移行完了後に変数と一時権限を削除 |
+| `LEGACY_WORD_DATABASE_URL` | Production | Yes | Project Variable登録済み。旧347行→346語、不足27語同期、分類適用、回帰確認まで完了。一時build hookは撤去済み | Project Variableを削除し、旧2表の一時`SELECT`とschema `USAGE`をrevokeした後、通常commitを再デプロイ |
 | 既存`DATABASE_URL` | Production | Yes | Project Variableの存在を画面確認済み。接続先の正当性は未確認で、現行APIではPostgreSQL接続エラー | 削除せず保持。新Neonをコード側で明示選択後に廃止判断 |
 | `app-games-dev-neon` | Production | Integration管理 | Singapore、Authなし、Freeで作成し`app-games-dev`へ接続済み。`0773a78`の再デプロイ後、アカウント照会でschema自動適用と接続を確認済み | 新規登録・ログインの画面実機確認 |
 | `NEON_DATABASE_*`一式 | Production | Yes | Neon Integrationによる自動登録を画面確認済み。`NEON_DATABASE_URL`、unpooled URL、Postgres互換変数等を含む。コード優先切替・再デプロイ・接続確認済み | 旧`DATABASE_URL`の廃止は新規登録確認後に判断 |
