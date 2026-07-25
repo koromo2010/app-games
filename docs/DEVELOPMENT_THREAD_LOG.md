@@ -3728,3 +3728,44 @@
 - migration／Starter分離後にも`npm run lint`、全522テスト、`npm run test:sdk-starter`、本体・SDK Portal・隔離Previewの3 Production buildを再実行し、すべて成功した。ローカルSDK Portal buildではdeploy migrationがProject／branch gateによりskipされることも確認した。
 - push、deployment、DB migration実適用、複数ブラウザの接続済み実機E2E、`sdk-starter-dev` branch公開はまだ行っていない。DownloadMe ver10はdev Starter公開完了まで取得不能である。
 - Room schema v1には固定Runtime契約がなく安全なv2自動変換ができないため、本番反映前に新規v1 Roomを止め、既存Roomを解散または6時間TTLで排出する。v1継続readerを別途用意しない限り、この切替確認をdeploymentのblocking条件とする。
+
+## 2026-07-25 — SDK監査実装のdevelop反映と実環境確認
+
+### GitHub・Starter
+
+- SDK監査、migration、Starter分離を含む109ファイルのtree
+  `dceae06a24de2fb1a4cbac457960b07117fa0df3`を`develop`へ反映した。
+  GitHub commitは`4e67b0983a6450d196b949d18e8effdbfd7081ec`である。
+- development用Starter snapshot 36ファイルをtree
+  `5c3efac828521e90a33d690b4f475b16bbda8f18`、
+  commit`4e1b2772e6207febb763b7a9a11382f8b891dac1`として
+  `sdk-starter-dev` branchへ公開した。
+- 公開`starter-manifest.json`からDownloadMe ver10、Platform／Starter／SDK 0.1.1、
+  SDK handshake／contract 1、ref `sdk-starter-dev`を再取得して確認した。
+- stableの`sdk-starter`はver9／SDK 0.1.0の
+  `389cb31924d78964e3393e0bab7c845519d55b9b`から動かしていない。
+
+### Deployment・migration
+
+- GitHub commit`4e67b098`から起動した以下3 Deploymentがすべて`READY`になった。
+  - `app-games-dev`: `dpl_8MwRXzVYYyQPcxCNnxyygGhLmTkv`
+  - `app-games-sdk-dev`: `dpl_8PHth63zHc2F7BYjGVy6ghNhprh1`
+  - `app-games-preview-dev`: `dpl_H8cmVC9saFbmxpdsVZYDp7zU6LLo`
+- SDK Portal buildで`001_sdk_registry.sql`、`002_sdk_portal_runtime.sql`、
+  `003_immutable_packages_and_lifecycle.sql`を順に適用した。公開
+  `GET https://sdk-dev.game-fields.com/api/health`は
+  `status: ok`、`schemaVersion: 3`を返した。
+- 3 ProjectともDeployment後1時間のVercel集約runtime errorは0件だった。
+
+### 公開API smoke
+
+- 公開handshakeはHTTP 200でPlatform／SDK 0.1.1、SDK contract 1、
+  Room schema 2、development環境、7 capabilityを返した。
+- OAuth authorization server／protected resource metadataはHTTP 200で、
+  authorization code、refresh token、PKCE S256、`sdk:creator`／`sdk:mock`
+  scopeを公開した。
+- 未認証のMCPは401、内部Runtime catalogとPreview Runtimeは403、
+  隔離Runnerは`SERVER_RUNTIME_FORBIDDEN`の403となり、内部境界が公開されていない。
+- 次のblocking作業は、新しいWork／CodexスレッドからDownloadMe ver10と
+  `sdk-starter-dev`を取得し、AIことば当てを無改造の検査対象として
+  candidate提出、development昇格、複数ブラウザ正式Roomまで通す接続済みE2Eである。
