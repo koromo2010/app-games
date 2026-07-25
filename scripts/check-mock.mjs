@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { parseGameSdkSettingDefinitions } from "@game-fields/game-sdk";
 
 const root = resolve(import.meta.dirname, "..");
 const requiredFiles = [
@@ -49,6 +50,9 @@ if (!/^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?$/.test(previewMetadata.gameId ?? "")
 if (typeof previewMetadata.title !== "string" || !previewMetadata.title.trim() || previewMetadata.title.length > 120) {
   throw new Error("mock/preview.jsonのtitleが不正です。");
 }
+parseGameSdkSettingDefinitions(previewMetadata.settings, {
+  requireTimeLimit: true,
+});
 for (const forbiddenKey of ["modules", "moduleProfile", "disabledModules", "optionalModules"]) {
   if (Object.hasOwn(previewMetadata, forbiddenKey)) {
     throw new Error(`mock/preview.jsonからmodule採否「${forbiddenKey}」を指定できません。初期モックの三段階profileはPlatform側が所有します。`);
@@ -59,6 +63,9 @@ const spec = readFileSync(resolve(root, "GAME_SPEC.md"), "utf8");
 for (const marker of ["## デバッグ", "ダミー", "視点切替", "主要フェーズ", "進行中断"]) {
   if (!spec.includes(marker)) throw new Error(`GAME_SPEC.mdに必須デバッグ項目「${marker}」がありません。`);
 }
+if (!spec.includes("## Word DB・初期データ")) {
+  throw new Error("GAME_SPEC.mdにWord DB・初期データの利用宣言がありません。");
+}
 
 const review = readFileSync(resolve(root, "MOCK_REVIEW.md"), "utf8");
 for (const marker of ["デバッグ権限あり／なし", "ダミー参加者・自動進行", "視点・フェーズ・異常状態切替", "進行中断とロビー復帰"]) {
@@ -66,8 +73,34 @@ for (const marker of ["デバッグ権限あり／なし", "ダミー参加者�
 }
 
 const mockJs = readFileSync(resolve(root, "mock/mock.js"), "utf8");
-for (const marker of ["GameFieldsPreset", "registerGame", "start", "abort", "rematch", "autoProgress", "onStateChange"]) {
-  if (!mockJs.includes(marker)) throw new Error(`mock/mock.jsにプリセット接続「${marker}」がありません。`);
+for (const marker of ["GameFieldsRoom", "subscribe", "send"]) {
+  if (!mockJs.includes(marker)) throw new Error(`mock/mock.jsに正式Room接続「${marker}」がありません。`);
+}
+for (const forbidden of ["GameFieldsPreset", "registerGame", "autoProgress", "onStateChange"]) {
+  if (mockJs.includes(forbidden)) throw new Error(`mock/mock.jsに旧ローカルPreview接続「${forbidden}」を残さないでください。`);
 }
 
-console.log("[mock] 仕様、ゲーム固有slot、共通UI非重複、プリセット接続、全module必須profileのPlatform所有を確認しました。");
+const contentSourceSection = spec.match(
+  /## Word DB・初期データ[\s\S]*?(?=\n## |\s*$)/,
+)?.[0] ?? "";
+const usesContentSource = /使用する／しない:\s*使用する/.test(contentSourceSection);
+if (usesContentSource) {
+  const appSet = readFileSync(resolve(root, "src/app-set.ts"), "utf8");
+  if (!/context\.resources/.test(appSet) || !/requireGameSdkContentSource/.test(appSet)) {
+    throw new Error("Word DBを使うゲームはAppSetのcontext.resourcesから共通content-sourceへ接続してください。");
+  }
+  if (!appSet.includes("difficulty")) {
+    throw new Error("Word DBを使うAppSetはdifficultyを同期settingsから共通content-sourceへ渡してください。");
+  }
+  if (!/\.(?:drawWords|drawWordPairs|findDefinitions)\s*\(/.test(appSet)) {
+    throw new Error("Word DBを使うAppSetはdrawWords、drawWordPairs、findDefinitionsのいずれかを呼んでください。");
+  }
+  if (/\b(?:initialWords|seedWords|fallbackWords|mockWords|wordDatabase|wordDb)\b/i.test(appSet)) {
+    throw new Error("Word DBを使うAppSetへ初期・seed・fallback単語DBを作らず、共通content-sourceだけを使ってください。");
+  }
+  if (/\bGameFieldsPreset(?:\?\.|\.)resources\b/.test(mockJs)) {
+    throw new Error("ブラウザからWord DBを呼ばず、AppSetのcontext.resourcesだけを使ってください。");
+  }
+}
+
+console.log("[mock] 仕様、ゲーム固有slot、共通UI非重複、正式Room接続、全module必須profileのPlatform所有を確認しました。");

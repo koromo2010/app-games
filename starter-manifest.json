@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "downloadMeVersion": 9,
-  "platformVersion": "0.1.0",
-  "starterVersion": "0.1.0",
-  "sdkVersion": "0.1.0",
+  "downloadMeVersion": 10,
+  "platformVersion": "0.1.1",
+  "starterVersion": "0.1.1",
+  "sdkVersion": "0.1.1",
   "sdkHandshakeVersion": 1,
   "sdkContractVersion": 1,
   "repository": "https://github.com/koromo2010/app-games",
-  "ref": "sdk-starter"
+  "ref": "sdk-starter-dev"
 }

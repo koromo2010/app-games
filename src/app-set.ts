@@ -3,6 +3,7 @@ import {
 } from "@game-fields/game-sdk/runtime";
 import {
   assertGameSdkCanStart,
+  defineGameSdkStandardResult,
   gameSdkPlayerSeat,
 } from "@game-fields/game-sdk/modules";
 import type {
@@ -24,12 +25,36 @@ export const myFirstGameAppSet = defineGameSdkOnlineRoomAppSet<
   manifest: myFirstGameManifest,
   defaultSettings: {
     target: 3,
+    timeLimitSeconds: 60,
   },
   normalizeSettings(settings) {
     return {
       target: Number.isSafeInteger(settings.target)
         ? Math.min(10, Math.max(2, settings.target))
         : 3,
+      timeLimitSeconds: Number.isSafeInteger(settings.timeLimitSeconds)
+        ? Math.min(3600, Math.max(0, settings.timeLimitSeconds))
+        : 60,
+    };
+  },
+  timer: {
+    durationSeconds(settings) {
+      return settings.timeLimitSeconds;
+    },
+  },
+  expireAppTurn(room) {
+    const count = room.app.count + 1;
+    return {
+      phase: count >= room.settings.target ? "result" : "playing",
+      app: {
+        count,
+        lastActorPlayerId: room.timer?.ownerPlayerId ?? room.hostPlayerId,
+      },
+      timer: count >= room.settings.target ? "stop" : "reset",
+      timerOwnerPlayerId: room.hostPlayerId,
+      timedOutPlayerIds: [
+        room.timer?.ownerPlayerId ?? room.hostPlayerId,
+      ],
     };
   },
 
@@ -54,12 +79,16 @@ export const myFirstGameAppSet = defineGameSdkOnlineRoomAppSet<
         hostId: room.hostPlayerId,
         phase: room.phase,
         participantCount: room.players.length,
-        minimumPlayers: myFirstGameManifest.minimumPlayers,
+        minimumPlayers: context.actor.debugAccess
+          ? myFirstGameManifest.previewMinimumPlayers
+            ?? myFirstGameManifest.minimumPlayers
+          : myFirstGameManifest.minimumPlayers,
         errors: { phase: "INVALID_PHASE" },
       });
       return {
         phase: "playing",
         app: room.app,
+        timerOwnerPlayerId: room.hostPlayerId,
       };
     }
     if (room.phase !== "playing") throw new Error("INVALID_PHASE");
@@ -70,6 +99,21 @@ export const myFirstGameAppSet = defineGameSdkOnlineRoomAppSet<
         count,
         lastActorPlayerId: context.actor.playerId,
       },
+      timer: count >= room.settings.target ? "stop" : "reset",
+      timerOwnerPlayerId: room.hostPlayerId,
+      ...(count >= room.settings.target ? {
+        standardResult: defineGameSdkStandardResult({
+          winnerIds: [context.actor.playerId],
+          rankings: room.players.map((player) => ({
+            participantId: player.id,
+            rank: player.id === context.actor.playerId ? 1 : 2,
+            score: player.id === context.actor.playerId ? count : 0,
+          })),
+          reason: "target-reached",
+        }, {
+          participantIds: room.players.map((player) => player.id),
+        }),
+      } : {}),
     };
   },
 
