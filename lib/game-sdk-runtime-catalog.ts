@@ -2,6 +2,10 @@ import {
   assertGameManifest,
   type GameSdkManifest,
 } from "@game-fields/game-sdk";
+import {
+  normalizeGameSdkModuleProfile,
+  type GameSdkModuleProfile,
+} from "@game-fields/game-sdk/modules";
 import type { GameCatalogEntry, GameTag } from "@/app/games/game-catalog";
 import type {
   GameFieldsAuthenticatedIdentity,
@@ -18,6 +22,7 @@ import {
 import { createGameSdkRemoteServerModule } from "./game-sdk-remote-module.ts";
 import { createRemoteGameSdkRuntimeContract } from "./game-sdk-runtime-contract.ts";
 import { createRedisGameSdkEffectJournal } from "./game-sdk-effect-journal.ts";
+import { createRedisGameSdkFeedbackCapture } from "./game-sdk-feedback-store.ts";
 import type {
   ApprovedGameSdkRegistration,
   ApprovedGameSdkRoomAdapter,
@@ -38,6 +43,7 @@ type RuntimeCatalogPayload = {
   serverBundleSha256: string;
   appSetSourceSha256: string;
   manifest: GameSdkManifest;
+  moduleProfile: GameSdkModuleProfile;
   channel: "development" | "stable";
   clientRuntimeUrl: string;
   serverRuntimeUrl: string;
@@ -161,6 +167,9 @@ function validCatalogPayload(
     || typeof item.serverRuntimeExpiresAt !== "number"
     || item.serverRuntimeExpiresAt <= Date.now()
     || !item.manifest
+    || !item.moduleProfile
+    || typeof item.moduleProfile !== "object"
+    || Array.isArray(item.moduleProfile)
   ) return false;
   if (
     !isSdkPreviewRuntimeUrl(
@@ -201,10 +210,14 @@ async function loadRuntimeCatalogPayload(
   if (!validCatalogPayload(payload, gameId, channel, env)) {
     throw new Error("GAME_SDK_RUNTIME_CATALOG_INVALID");
   }
-  return payload;
+  return {
+    ...payload,
+    moduleProfile: normalizeGameSdkModuleProfile(payload.moduleProfile),
+  };
 }
 
 function remoteModule(payload: RuntimeCatalogPayload, runtimeId: string) {
+  const feedbackRequired = payload.moduleProfile.feedback.mode === "required";
   return createGameSdkRemoteServerModule({
     manifest: payload.manifest,
     runtimeId,
@@ -213,6 +226,9 @@ function remoteModule(payload: RuntimeCatalogPayload, runtimeId: string) {
     serverRuntimeUrl: payload.serverRuntimeUrl,
     serverRuntimeToken: payload.serverRuntimeToken,
     effectJournal: createRedisGameSdkEffectJournal(),
+    ...(feedbackRequired && payload.manifest.usesLlm ? {
+      feedbackCapture: createRedisGameSdkFeedbackCapture(payload.gameId),
+    } : {}),
   });
 }
 
@@ -239,6 +255,9 @@ function resultPersistence(
   gameId: string,
   payload: RuntimeCatalogPayload,
 ) {
+  const moduleRequired = (id: keyof GameSdkModuleProfile) => (
+    payload.moduleProfile[id].mode === "required"
+  );
   return async (result: Readonly<GameFieldsPlatformResultOutboxEntry>) => {
     const { persistApprovedGameSdkResultEvent } = await import(
       "./game-sdk-result-persistence.ts"
@@ -246,8 +265,11 @@ function resultPersistence(
     await persistApprovedGameSdkResultEvent({
       gameType: `sdk:${gameId}`,
       title: payload.manifest.title.ja,
-      supportsRating: payload.manifest.supportsRating,
-      supportsReplay: payload.manifest.supportsReplay,
+      supportsStats: moduleRequired("stats"),
+      supportsRating: payload.manifest.supportsRating
+        && moduleRequired("rating"),
+      supportsReplay: payload.manifest.supportsReplay
+        && moduleRequired("replay"),
       result,
     });
   };
@@ -279,6 +301,10 @@ export async function loadApprovedGameSdkRuntimeRegistration(
     appSetSourceSha256: payload.appSetSourceSha256,
     supportsDebug: payload.manifest.supportsDebug,
     supportsSpectators: payload.manifest.supportsSpectators,
+    supportsReplay: payload.manifest.supportsReplay,
+    supportsRating: payload.manifest.supportsRating,
+    usesLlm: payload.manifest.usesLlm,
+    moduleProfile: payload.moduleProfile,
     settings: payload.manifest.settings ?? [],
     rules: (payload.manifest.rules ?? []).map((rule) => rule.ja),
     createAdapter(

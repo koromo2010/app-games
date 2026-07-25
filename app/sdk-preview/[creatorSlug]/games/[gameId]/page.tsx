@@ -38,6 +38,9 @@ export default async function SdkGamePage({ params }: { params: Promise<{ creato
           title={game.title}
           settingDefinitions={game.settings}
           rules={(game.manifest.rules ?? []).map((rule) => rule.ja)}
+          moduleProfile={normalizeGameSdkModuleProfile(game.modulePolicy)}
+          supportsReplay={game.manifest.supportsReplay}
+          usesLlm={game.manifest.usesLlm}
         />
       ) : (
         <SdkPreviewGameShell

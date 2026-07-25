@@ -337,21 +337,23 @@ test("SDK HTTP Client Runtimeはactorを送らず認証adapterと永続Runtime�
     command: { type: "game/count-up" },
   })).room;
   assert.equal(room.phase, "result");
-  assert.equal(await runtime.dissolveRoom("RACE"), true);
-  assert.equal(await runtime.readRoom("RACE"), null);
-  assert.equal(await runtime.readActiveRoom(), null);
-  identity = player;
-  assert.equal(await runtime.readActiveRoom(), null);
-  identity = host;
-  await runtime.createRoom({
-    roomCode: "DONE",
+  const nextRoom = await runtime.createRoom({
+    roomCode: "NEXT",
     create: {
       settings: { target: 2 },
       app: {},
     },
   });
+  assert.equal(nextRoom.code, "NEXT");
+  assert.equal((await runtime.readActiveRoom())?.code, "NEXT");
+  assert.equal(await runtime.dissolveRoom("RACE"), true);
+  assert.equal(await runtime.readRoom("RACE"), null);
+  assert.equal((await runtime.readActiveRoom())?.code, "NEXT");
+  identity = player;
+  assert.equal(await runtime.readActiveRoom(), null);
+  identity = host;
   assert.equal(await runtime.dissolveHostedRooms(), 1);
-  assert.equal(await runtime.readRoom("DONE"), null);
+  assert.equal(await runtime.readRoom("NEXT"), null);
 });
 
 test("result outboxは保存失敗をconfirmedへ戻し、次のreadで同じeventを再開する", async () => {

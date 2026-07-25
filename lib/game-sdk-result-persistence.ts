@@ -23,6 +23,7 @@ type ApprovedSdkResultPersistenceOptions = {
   gameType: PlayerStatsGameType
     & StandardPlatformGameReplayInput["gameType"];
   title: string;
+  supportsStats: boolean;
   supportsRating: boolean;
   supportsReplay: boolean;
   previous: Readonly<GameFieldsPlatformRoomRecord<GameSdkStoredRoom>>;
@@ -39,6 +40,7 @@ type ApprovedSdkResultEventPersistenceOptions = Omit<
 export async function persistApprovedGameSdkResultEvent({
   gameType,
   title,
+  supportsStats,
   supportsRating,
   supportsReplay,
   result: outbox,
@@ -63,7 +65,7 @@ export async function persistApprovedGameSdkResultEvent({
     ? snapshot.settings as Record<string, unknown>
     : {};
   await Promise.all([
-    recordStandardPlatformGameResults({
+    ...(supportsStats ? [recordStandardPlatformGameResults({
       gameType,
       eventId: outbox.eventId,
       roomCode: snapshot.roomCode,
@@ -87,7 +89,7 @@ export async function persistApprovedGameSdkResultEvent({
         .map(([key, value]) => `${key}=${String(value)}`)
         .join(";")
         .slice(0, 300),
-    }),
+    })] : []),
     ...(supportsReplay ? [
       recordStandardPlatformGameReplay({
         gameType,
@@ -114,6 +116,7 @@ export async function persistApprovedGameSdkResultEvent({
 export async function persistApprovedGameSdkResult({
   gameType,
   title,
+  supportsStats,
   supportsRating,
   supportsReplay,
   previous,
@@ -135,6 +138,7 @@ export async function persistApprovedGameSdkResult({
   await persistApprovedGameSdkResultEvent({
     gameType,
     title,
+    supportsStats,
     supportsRating,
     supportsReplay,
     result: {

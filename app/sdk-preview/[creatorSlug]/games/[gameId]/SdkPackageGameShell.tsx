@@ -6,11 +6,22 @@ import {
   type GameSdkSettingDefinition,
   type GameSdkSettingValue,
 } from "@game-fields/game-sdk";
+import type {
+  GameSdkModuleId,
+  GameSdkModuleProfile,
+} from "@game-fields/game-sdk/modules";
 import {
   createGameSdkHttpClientRuntime,
   GameSdkHttpClientRuntimeError,
 } from "@game-fields/game-sdk/client-runtime";
-import Link from "next/link";
+import { GameSdkShellHeader } from "@/app/components/GameSdkShellHeader";
+import { GameSdkFeedbackPanel } from "@/app/components/GameSdkFeedbackPanel";
+import { gameTopBannerOffsetClass } from "@/app/components/GameTopBanner";
+import { GameResultShareButton } from "@/app/components/GameResultShareButton";
+import { AppLink as Link } from "@/app/components/AppLink";
+import { gameTopBannerActionClass } from "@/app/components/GameTopMenu";
+import { useGameSdkActiveRoomRestore } from "@/app/hooks/use-game-sdk-active-room-restore";
+import { withAiActivity } from "@/lib/ai-activity-client";
 import {
   useCallback,
   useEffect,
@@ -42,6 +53,17 @@ type CommonView = {
     deadlineAt: number | null;
     turnSequence: number;
   };
+  standardResult?: {
+    winnerSeats: number[];
+    rankings: Array<{
+      seat: number;
+      displayName: string;
+      rank: number;
+      score: number;
+      isSelf: boolean;
+    }>;
+    reason: string;
+  };
 };
 
 type PackageRoomView = {
@@ -62,6 +84,9 @@ type Props = {
   title: string;
   settingDefinitions: readonly GameSdkSettingDefinition[];
   rules: readonly string[];
+  moduleProfile: GameSdkModuleProfile;
+  supportsReplay: boolean;
+  usesLlm: boolean;
 };
 
 const panel =
@@ -96,6 +121,9 @@ export function SdkPackageGameShell({
   title,
   settingDefinitions,
   rules,
+  moduleProfile,
+  supportsReplay,
+  usesLlm,
 }: Props) {
   const endpoint = endpointInput
     ?? `/api/sdk-preview/${creatorSlug}/games/${gameId}/rooms`;
@@ -121,6 +149,9 @@ export function SdkPackageGameShell({
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState("");
   const [frameHeight, setFrameHeight] = useState(720);
+  const moduleRequired = useCallback((id: GameSdkModuleId) => (
+    moduleProfile[id].mode === "required"
+  ), [moduleProfile]);
 
   const postRoom = useCallback((next: PackageRoom | null) => {
     iframeRef.current?.contentWindow?.postMessage({
@@ -164,20 +195,25 @@ export function SdkPackageGameShell({
     }
   }, [runtime]);
 
+  const loadActiveRoom = useCallback(
+    () => runtime.readActiveRoom(),
+    [runtime],
+  );
+  const handleRestoreError = useCallback((error: unknown) => {
+    setMessage(errorMessage(error));
+  }, []);
+  const isRestoringRoom = useGameSdkActiveRoomRestore({
+    loadActiveRoom,
+    onRoom: attachRoom,
+    onEmpty: refreshRooms,
+    onError: handleRestoreError,
+  });
+
   useEffect(() => {
-    let active = true;
-    void runtime.readActiveRoom().then((next) => {
-      if (!active) return;
-      if (next) attachRoom(next);
-      else void refreshRooms();
-    }).catch((error) => {
-      if (active) setMessage(errorMessage(error));
-    });
     return () => {
-      active = false;
       watchRef.current?.close();
     };
-  }, [attachRoom, refreshRooms, runtime]);
+  }, []);
 
   const run = useCallback(async (operation: () => Promise<PackageRoom>) => {
     if (pending) return null;
@@ -188,6 +224,21 @@ export function SdkPackageGameShell({
       attachRoom(next);
       return next;
     } catch (error) {
+      if (
+        error instanceof GameSdkHttpClientRuntimeError
+        && error.code === "PLAYER_ACTIVE_ROOM"
+      ) {
+        try {
+          const activeRoom = await runtime.readActiveRoom();
+          if (activeRoom) {
+            attachRoom(activeRoom);
+            setMessage("進行中の部屋へ戻りました。");
+            return activeRoom;
+          }
+        } catch {
+          // Fall through to the original lifecycle error.
+        }
+      }
       setMessage(errorMessage(error));
       if (
         error instanceof GameSdkHttpClientRuntimeError
@@ -205,11 +256,14 @@ export function SdkPackageGameShell({
   const send = useCallback(async (command: SafeCommand) => {
     const current = roomRef.current;
     if (!current) throw new Error("ROOM_REQUIRED");
-    return (await runtime.sendCommand(current.code, {
+    const operation = async () => (await runtime.sendCommand(current.code, {
       expectedRevision: current.revision,
       command,
     })).room;
-  }, [runtime]);
+    return usesLlm && moduleRequired("ai-activity")
+      ? withAiActivity("SDKゲームのAI処理", operation)
+      : operation();
+  }, [moduleRequired, runtime, usesLlm]);
 
   useEffect(() => {
     const listener = (event: MessageEvent) => {
@@ -277,17 +331,40 @@ export function SdkPackageGameShell({
     ]),
   );
   const common = room?.view.common;
+  const standardResult = common?.standardResult;
+  const resultShareText = room?.phase === "result" && standardResult
+    ? [
+        `${title}を${common?.players.length ?? 0}人でプレイしました。`,
+        `終了理由: ${standardResult.reason}`,
+        ...standardResult.rankings.slice(0, 3).map((ranking) => (
+          `${ranking.rank}位 PLAYER${ranking.seat + 1}: ${ranking.score}pt`
+        )),
+      ].join("\n")
+    : `${title}をプレイしました。`;
+  const feedbackEndpoint = creatorSlug
+    ? `/api/sdk-preview/${creatorSlug}/games/${gameId}/feedback`
+    : `/api/game-sdk/${gameId}/feedback`;
 
   if (!room) {
     return (
-      <main className="min-h-screen bg-slate-950 px-4 py-10 text-white">
-        <header className="mx-auto mb-6 flex max-w-5xl items-center justify-between gap-4">
-          <div>
-            <p className="text-xs font-black tracking-[0.24em] text-cyan-300">SDK PACKAGE PREVIEW</p>
-            <h1 className="mt-2 text-3xl font-black">{title}</h1>
-          </div>
-          <Link href={backHref} className={secondary}>制作者ページへ</Link>
-        </header>
+      <main className={`min-h-screen bg-slate-950 px-4 py-10 text-white ${gameTopBannerOffsetClass}`}>
+        <GameSdkShellHeader
+          eyebrow="SDK PACKAGE"
+          title={title}
+          rules={rules}
+          backHref={backHref}
+          backLabel={creatorSlug ? "制作者ページへ" : "ゲーム広場へ戻る"}
+        />
+        {isRestoringRoom ? (
+          <section className="mx-auto max-w-5xl">
+            <div className={panel}>
+              <h2 className="text-xl font-black">前の部屋を確認中</h2>
+              <p className="mt-2 text-sm text-slate-600">
+                参加中の部屋があれば、そのまま復帰します。
+              </p>
+            </div>
+          </section>
+        ) : (
         <section className="mx-auto grid max-w-5xl gap-5 lg:grid-cols-2">
           <div className={panel}>
             <h2 className="text-xl font-black">正式Roomで確認</h2>
@@ -350,20 +427,36 @@ export function SdkPackageGameShell({
             )}
           </div>
         </section>
+        )}
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 px-4 py-8 text-white">
-      <header className="mx-auto mb-5 flex max-w-7xl items-center justify-between gap-4">
-        <div>
-          <p className="font-mono text-xs font-black text-cyan-300">ROOM {room.code} · rev {room.revision}</p>
-          <h1 className="mt-1 text-3xl font-black">{title}</h1>
-        </div>
-        <Link href={backHref} className={secondary}>制作者ページへ</Link>
-      </header>
-      <section className="mx-auto grid max-w-7xl gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
+    <main className={`min-h-screen bg-slate-950 px-4 py-8 text-white ${gameTopBannerOffsetClass}`}>
+      <GameSdkShellHeader
+        eyebrow={`ROOM ${room.code} · rev ${room.revision}`}
+        title={title}
+        rules={rules}
+        backHref={backHref}
+        backLabel={creatorSlug ? "制作者ページへ" : "ゲーム広場へ戻る"}
+      >
+        {common?.permissions.canAbort && room.phase === "playing" && (
+          <button
+            type="button"
+            className={gameTopBannerActionClass}
+            disabled={pending}
+            onClick={() => void run(() => send({ type: "room/abort" }))}
+          >
+            中断
+          </button>
+        )}
+      </GameSdkShellHeader>
+      <section className={room.phase === "playing"
+        ? "mx-auto max-w-7xl"
+        : "mx-auto grid max-w-7xl gap-5 lg:grid-cols-[300px_minmax(0,1fr)]"}
+      >
+        {room.phase !== "playing" && (
         <aside className="space-y-4">
           <div className={panel}>
             <h2 className="text-lg font-black">
@@ -383,119 +476,165 @@ export function SdkPackageGameShell({
                 ゲームを開始
               </button>
             )}
-            {common?.permissions.canAbort && room.phase === "playing" && (
-              <button type="button" className={`${secondary} mt-3 w-full`} disabled={pending} onClick={() => void run(() => send({ type: "room/abort" }))}>
-                ゲームを中断
-              </button>
-            )}
             {common?.isHost && room.phase === "result" && (
               <button type="button" className={`${primary} mt-3 w-full`} disabled={pending} onClick={() => void run(() => send({ type: "room/rematch" }))}>
                 再戦
               </button>
             )}
+            {room.phase === "result" && standardResult && moduleRequired("result") && (
+              <div className="mt-4 border-t border-slate-200 pt-4">
+                <p className="text-xs font-black uppercase tracking-wide text-cyan-700">
+                  Standard result
+                </p>
+                <p className="mt-2 text-sm font-semibold text-slate-600">
+                  {standardResult.reason}
+                </p>
+                <ol className="mt-3 space-y-2">
+                  {standardResult.rankings.map((ranking) => (
+                    <li
+                      key={ranking.seat}
+                      className="flex items-center justify-between rounded-lg bg-slate-100 px-3 py-2 text-sm"
+                    >
+                      <span>
+                        {ranking.rank}位 · {ranking.displayName}
+                        {ranking.isSelf ? "（あなた）" : ""}
+                      </span>
+                      <strong>{ranking.score} pt</strong>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
             {message && <p className="mt-3 text-sm font-bold text-rose-700">{message}</p>}
           </div>
-          <div className={panel}>
-            <h2 className="text-lg font-black">部屋設定</h2>
-            <div className="mt-3 space-y-3">
-              {settingDefinitions.map((definition) => {
-                const value = common?.settings[definition.key]
-                  ?? definition.defaultValue;
-                return (
-                  <label key={definition.key} className="block text-sm font-bold">
-                    {definition.label.ja}
-                    {definition.type === "select" && definition.options ? (
-                      <select
-                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
-                        disabled={!common?.permissions.canEditRoomSettings || pending}
-                        value={String(value)}
-                        onChange={(event) => {
-                          const option = definition.options?.find(
-                            (candidate) => String(gameSdkSettingOptionValue(candidate)) === event.target.value,
-                          );
-                          if (!option) return;
-                          void run(() => send({
-                            type: "room/update-settings",
-                            settings: {
-                              [definition.key]: gameSdkSettingOptionValue(option),
-                            },
-                          }));
-                        }}
-                      >
-                        {definition.options.map((option) => {
-                          const optionValue = gameSdkSettingOptionValue(option);
-                          return <option key={String(optionValue)} value={String(optionValue)}>{typeof option === "object" ? option.label.ja : `${optionValue}${definition.unit?.ja ?? ""}`}</option>;
-                        })}
-                      </select>
-                    ) : definition.type === "boolean" ? (
-                      <input
-                        type="checkbox"
-                        className="mt-2 block size-5 accent-cyan-600"
-                        disabled={!common?.permissions.canEditRoomSettings || pending}
-                        checked={value === true}
-                        onChange={(event) => {
-                          void run(() => send({
-                            type: "room/update-settings",
-                            settings: {
-                              [definition.key]: event.target.checked,
-                            },
-                          }));
-                        }}
-                      />
-                    ) : definition.type === "number" ? (
-                      <input
-                        key={`${room.revision}:${definition.key}`}
-                        type="number"
-                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
-                        disabled={!common?.permissions.canEditRoomSettings || pending}
-                        defaultValue={typeof value === "number" ? value : ""}
-                        min={definition.minimum}
-                        max={definition.maximum}
-                        onBlur={(event) => {
-                          const nextValue = Number(event.target.value);
-                          if (!Number.isFinite(nextValue) || nextValue === value) return;
-                          void run(() => send({
-                            type: "room/update-settings",
-                            settings: {
-                              [definition.key]: nextValue,
-                            },
-                          }));
-                        }}
-                      />
-                    ) : definition.type === "text" ? (
-                      <input
-                        key={`${room.revision}:${definition.key}`}
-                        type="text"
-                        className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
-                        disabled={!common?.permissions.canEditRoomSettings || pending}
-                        defaultValue={typeof value === "string" ? value : ""}
-                        onBlur={(event) => {
-                          if (event.target.value === value) return;
-                          void run(() => send({
-                            type: "room/update-settings",
-                            settings: {
-                              [definition.key]: event.target.value,
-                            },
-                          }));
-                        }}
-                      />
-                    ) : (
-                      <span className="mt-1 block rounded-lg bg-slate-100 px-3 py-2">{String(value)}</span>
-                    )}
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-          {rules.length > 0 && (
+          {room.phase === "lobby" && (
             <div className={panel}>
-              <h2 className="text-lg font-black">ルール</h2>
-              <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-slate-700">
-                {rules.map((rule) => <li key={rule}>{rule}</li>)}
-              </ol>
+              <h2 className="text-lg font-black">部屋設定</h2>
+              <div className="mt-3 space-y-3">
+                {settingDefinitions.map((definition) => {
+                  const value = common?.settings[definition.key]
+                    ?? definition.defaultValue;
+                  return (
+                    <label key={definition.key} className="block text-sm font-bold">
+                      {definition.label.ja}
+                      {definition.type === "select" && definition.options ? (
+                        <select
+                          className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
+                          disabled={!common?.permissions.canEditRoomSettings || pending}
+                          value={String(value)}
+                          onChange={(event) => {
+                            const option = definition.options?.find(
+                              (candidate) => String(gameSdkSettingOptionValue(candidate)) === event.target.value,
+                            );
+                            if (!option) return;
+                            void run(() => send({
+                              type: "room/update-settings",
+                              settings: {
+                                [definition.key]: gameSdkSettingOptionValue(option),
+                              },
+                            }));
+                          }}
+                        >
+                          {definition.options.map((option) => {
+                            const optionValue = gameSdkSettingOptionValue(option);
+                            return <option key={String(optionValue)} value={String(optionValue)}>{typeof option === "object" ? option.label.ja : `${optionValue}${definition.unit?.ja ?? ""}`}</option>;
+                          })}
+                        </select>
+                      ) : definition.type === "boolean" ? (
+                        <input
+                          type="checkbox"
+                          className="mt-2 block size-5 accent-cyan-600"
+                          disabled={!common?.permissions.canEditRoomSettings || pending}
+                          checked={value === true}
+                          onChange={(event) => {
+                            void run(() => send({
+                              type: "room/update-settings",
+                              settings: {
+                                [definition.key]: event.target.checked,
+                              },
+                            }));
+                          }}
+                        />
+                      ) : definition.type === "number" ? (
+                        <input
+                          key={`${room.revision}:${definition.key}`}
+                          type="number"
+                          className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
+                          disabled={!common?.permissions.canEditRoomSettings || pending}
+                          defaultValue={typeof value === "number" ? value : ""}
+                          min={definition.minimum}
+                          max={definition.maximum}
+                          onBlur={(event) => {
+                            const nextValue = Number(event.target.value);
+                            if (!Number.isFinite(nextValue) || nextValue === value) return;
+                            void run(() => send({
+                              type: "room/update-settings",
+                              settings: {
+                                [definition.key]: nextValue,
+                              },
+                            }));
+                          }}
+                        />
+                      ) : definition.type === "text" ? (
+                        <input
+                          key={`${room.revision}:${definition.key}`}
+                          type="text"
+                          className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
+                          disabled={!common?.permissions.canEditRoomSettings || pending}
+                          defaultValue={typeof value === "string" ? value : ""}
+                          onBlur={(event) => {
+                            if (event.target.value === value) return;
+                            void run(() => send({
+                              type: "room/update-settings",
+                              settings: {
+                                [definition.key]: event.target.value,
+                              },
+                            }));
+                          }}
+                        />
+                      ) : (
+                        <span className="mt-1 block rounded-lg bg-slate-100 px-3 py-2">{String(value)}</span>
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
             </div>
           )}
+          {room.phase === "result" && supportsReplay && moduleRequired("replay") && (
+            <div className={panel}>
+              <p className="text-xs font-black uppercase tracking-wide text-violet-700">
+                プレイバック
+              </p>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                この結果は参加者本人の履歴へ保存され、マイページから確認できます。
+              </p>
+              <Link
+                href="/users/me"
+                className={`${secondary} mt-4 block text-center`}
+              >
+                履歴を確認
+              </Link>
+            </div>
+          )}
+          {room.phase === "result" && moduleRequired("result-share") && (
+            <GameResultShareButton
+              title={`${title}の結果`}
+              text={resultShareText}
+              url={creatorSlug ? backHref : `/sdk-games/${gameId}`}
+            />
+          )}
+          {room.phase === "result"
+            && usesLlm
+            && moduleRequired("feedback") && (
+            <GameSdkFeedbackPanel
+              endpoint={feedbackEndpoint}
+              roomCode={room.code}
+              resultReason={standardResult?.reason ?? "result"}
+            />
+          )}
         </aside>
+        )}
         <div className="min-w-0 overflow-hidden">
           <iframe
             ref={iframeRef}

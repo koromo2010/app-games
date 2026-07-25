@@ -4,12 +4,12 @@
 
 Game Fields本体にある共通機能と、外部ゲームpackageが直接利用できる公開ライブラリを混同しないための台帳。機械可読な採用正本は`@game-fields/game-sdk/modules`の`GAME_SDK_MODULE_CATALOG`とし、この文書は責任境界と実装状況を説明する。
 
-## 全38モジュールの区分
+## 全39モジュールの区分
 
 | 区分 | 件数 | module ID | 外部ゲームからの使い方 |
 | --- | ---: | --- | --- |
 | Platform固定 | 7 | `authentication`, `account-session`, `authorization`, `persistence`, `observability`, `common-navigation`, `player-menu` | Game Fieldsが所有・合成。再実装不可 |
-| 共通Shell | 16 | `common-shell`, `online-room`, `room-sync`, `room-settings`, `debug`, `timer`, `result`, `rematch`, `dissolution`, `stats`, `rating`, `replay`, `result-share`, `spectators`, `ai-activity`, `ads` | Game Fieldsが画面・Runtime・保存adapterを合成。ゲーム固有slotへ複製しない |
+| 共通Shell | 17 | `common-shell`, `online-room`, `room-sync`, `room-settings`, `debug`, `timer`, `result`, `rematch`, `dissolution`, `stats`, `rating`, `replay`, `result-share`, `feedback`, `spectators`, `ai-activity`, `ads` | Game Fieldsが画面・Runtime・保存adapterを合成。ゲーム固有slotへ複製しない |
 | 純粋進行helper | 11 | `start-guard`, `phase-flow`, `rounds`, `turn-order`, `collect-text`, `collect-choice`, `vote`, `role-assignment`, `team-assignment`, `secret-presentation`, `standard-outcome` | `@game-fields/game-sdk/modules`からimport |
 | 再利用resource | 4 | `content-source`, `llm`, `playing-cards`, `drawing` | 非公開resourceは注入契約、ローカルresourceは公開packageからimport |
 
@@ -21,6 +21,10 @@ Game Fields本体にある共通機能と、外部ゲームpackageが直接利�
 | `llm` | 共通gatewayは本体だけ。外部package用の注入型・実adapterなし | `@game-fields/game-sdk/llm`にtask、送信内容、prompt version、任意の返却schemaを持つrequestとresponse・生成metaを公開。provider/APIキーは非公開 | `lib/game-sdk-llm-gateway.ts`が審査済みserver moduleへ注入し、`lib/game-llm.ts`がprovider選択、課金元、model、fallbackを所有。Previewは`GameFieldsPreset.resources.llm`から認証・レート制限付き本体APIへ限定中継 |
 | `playing-cards` | pure helperとReact UIが本体`lib/`・`app/components/`に分散 | `@game-fields/game-sdk/playing-cards`と`playing-cards-react`へ公開 | 本体も公開packageを参照し、Daifugo等と外部ゲームの実装を共通化 |
 | `drawing` | stroke helper・Canvas UI・機能preset・Room同期が混在 | `@game-fields/game-sdk/drawing`と`drawing-react`へ描画コア・UIを公開 | 本体も公開packageを参照。Room同期、保存、消去権限は本体adapterに残す |
+
+`common-shell`はformal packageでも本体の`GameTopBanner`を使い、manifestのルールを全phaseからダイアログ表示する。`room-settings`はロビーだけを標準表示とし、playingでは共通サイド欄ごと外してゲームpackageを全幅表示し、中断だけをトップバナーへ移す。結果では採用profileに従い、`replay`を本人履歴、`result-share`を参加者名を含まない共有文、`feedback`をRoom参加者だけが開けるAI生成物評価へ接続する。
+
+`online-room`はformal package表示時にactive Room確認を先行し、復元完了までは新規作成・参加を許可しない。既存Roomがあれば自動復帰し、別タブ競合で`PLAYER_ACTIVE_ROOM`になった場合も同じ復元経路へ戻す。進行中Roomを暗黙に破棄せず、終了済み・期限切れ・欠損RoomだけをPlatform Storeが解除する。
 
 ## お絵描きUIの分離結果
 

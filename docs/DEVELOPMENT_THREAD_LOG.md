@@ -4214,3 +4214,106 @@
 - 旧DBで`vocabulary_migration_reader`の旧2表`SELECT`とschema `USAGE`をrevokeする。
 - 外部設定削除後、通常buildの再デプロイで現行Deploymentへ旧接続が残らないことを
   確認する。
+
+## 2026-07-25 — SDK formal package共通Shellのphase別モジュール化
+
+### 利用者からの要望
+
+- WordWolf／たほいやにあるフィードバック、履歴保存、結果共有をSDKゲームでも
+  ゲーム固有実装ではなく共通モジュールとして使う。
+- manifestのルールをページ下部へ常設せず、共通トップバナーから開けるようにする。
+- 部屋設定等はロビーだけに表示し、対戦中は既定で消してゲーム領域を優先する。
+
+### 判断
+
+- 保存済みAIことば当てのAppSet、client、package revisionは変更しない。
+  formal packageの外側にあるPlatform Shellとruntime catalogの接続を修正する。
+- phaseごとの既定を、lobby=`参加者・部屋設定・開始`、
+  playing=`トップバナー・中断・全幅game iframe`、
+  result=`標準結果・再戦・履歴・匿名共有・フィードバック`とする。
+- ルール本文はmanifestを正本とし、全phaseで本体共通`GameTopBanner`の
+  `GameRulesDialog`から開く。
+- `feedback`を独立した39番目のmodule IDとして追加する。Portalで人間が確定した
+  module profileをdevelopment／stable runtime catalogへ渡し、画面だけでなく
+  stats／rating／replay保存とLLM artifact captureにも同じ採否を使う。
+
+### 実施結果
+
+- formal package Shellを`GameSdkShellHeader`へ接続し、共通トップバナー、ルール、
+  共通メニュー、プレイヤーメニュー、AI通信表示を利用するようにした。
+- playingでは共通サイド欄を描画せずgame iframeを全幅化し、hostの中断操作だけを
+  トップバナーへ移した。部屋設定はlobby限定、結果用moduleはresult限定である。
+- standard resultを共通表示し、`replay`は本人の`/users/me`、`result-share`は
+  `PLAYERn`形式の匿名共有へ接続した。`stats`、`rating`、`replay`の永続化も
+  保存済みmodule profileへ連動する。
+- LLM成功effectのresponseだけをRoom単位・最大8件・Room TTLで一時保存する
+  feedback targetを追加した。promptは保存しない。candidate／approved双方の
+  participant-only result APIから取得し、既存`GameFeedbackPanel`へ接続した。
+- 保存されたGood／Bad・理由・自由記述は既存共通feedback storeへ入り、次回の
+  同一SDK game/task生成でuntrustedな参考例として利用する。入力promptを優先し、
+  合計20,000文字を超えるfeedback例は追加しない。
+- module catalogを全39件（Platform固定7、共通Shell17、進行helper11、
+  resource 4）へ更新した。development配布契約は旧ver12を上書きせず
+  `GameFieldsDownloadMe-ver13.md`／`downloadMeVersion: 13`へ進め、
+  ver12までをver13へ一時redirectする。
+
+### 検証
+
+- SDK Shell、module profile伝播、結果phase membership、匿名共有、feedback RAGの
+  対象テスト34件成功。
+- `npm test`全528件成功。
+- `npm run lint`成功。
+- `npm run test:sdk-starter`成功。入口、公開Git用snapshot、ZIP展開、同梱SDK
+  install、型検査、契約テスト、1ゲーム完走、提出ZIPを確認した。
+- 本体`npm run build`成功。
+- SDK PortalはDB migrationを実行しない直接`next build`でproduction build成功。
+
+### 未対応・保留
+
+- コードは未コミット・未pushで、DB、Vercel、保存済みpackage revisionは
+  変更していない。
+- `develop`反映後にAIことば当ての実Roomで、ロビーの部屋設定、playing全幅表示、
+  トップバナーのルール、中断、resultの履歴・匿名共有・feedbackを複数ブラウザで
+  人間確認する。
+- development Starter branchとPortalのver13公開は、今回の変更を明示承認後に
+  forceなしで反映する。
+
+## 2026-07-25 — SDK active Room復元中の新規作成競合を共通修正
+
+### 利用者からの要望
+
+- AIことば当ての新revision確認時に表示された`PLAYER_ACTIVE_ROOM`も、
+  ゲーム固有ではなくSDK共通Room側で解消する。
+
+### 判断
+
+- Redis Storeはすでにresult、期限切れ、欠損、非参加Roomを移動可能としており、
+  進行中かつ本人が参加中のRoomだけを安全に拒否していた。
+- 原因はformal package Shellが初回`readActiveRoom()`完了前から新規作成UIを
+  操作可能にしていた初期化競合である。進行中Roomの索引を強制削除せず、
+  復元を先行し、競合時は既存Roomへ戻す。
+
+### 実施結果
+
+- candidate／development／stableのformal package Shellと旧静的SDK Shellで使う
+  `useGameSdkActiveRoomRestore`を追加した。
+- active Room確認中は作成・参加画面の代わりに復元中表示を出し、確認後だけ入口を
+  有効にする。参加中Roomがあれば自動接続する。
+- 別タブ等との競合で`PLAYER_ACTIVE_ROOM`が返った場合もactive Roomを再取得し、
+  「進行中の部屋へ戻りました」と表示して復帰する。
+- result Roomを残したまま新規Roomへ移動でき、旧結果Roomの解散で新Roomのactive
+  索引を消さないことをRuntime縦断テストへ追加した。
+
+### 検証
+
+- `npm run lint`成功。39モジュール境界、環境変数台帳、9ゲーム共通要件、
+  SDK migrationを含む。
+- `npm test`全528件成功。
+- 本体、SDK Portal、隔離Previewのproduction build成功。
+- `npm run test:sdk-starter`成功。ver13の入口、公開Git用snapshot、ZIP展開、
+  同梱SDK install、型検査、契約テスト、1ゲーム完走、提出ZIPを確認した。
+
+### 未対応・保留
+
+- `develop`へ反映後、AIことば当ての実Roomで初回復元中に作成操作が出ないこと、
+  既存Roomへの自動復帰、result後の新規Room作成を人間確認する。

@@ -1,6 +1,7 @@
 import { requireSdkServiceRequest } from "@/lib/sdk-service-auth";
 import { createPackageRuntimeAccess } from "@/lib/preview-links";
 import { ensureSdkSchema, sdkSql } from "@/lib/sdk-postgres";
+import { normalizeGameSdkModuleProfile } from "@game-fields/game-sdk/modules";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +32,8 @@ export async function GET(
                r.package_root_sha256 AS "packageRootSha256",
                r.server_bundle_sha256 AS "serverBundleSha256",
                r.app_set_source_sha256 AS "appSetSourceSha256",
-               r.manifest
+               r.manifest,
+               g.module_policy AS "modulePolicy"
         FROM sdk_games g
         JOIN sdk_creators c ON c.id = g.creator_id
         JOIN sdk_game_package_revisions r ON r.game_id = g.id
@@ -51,7 +53,8 @@ export async function GET(
                g.development_root_sha256 AS "packageRootSha256",
                g.development_bundle_sha256 AS "serverBundleSha256",
                g.development_app_set_sha256 AS "appSetSourceSha256",
-               g.development_manifest AS manifest
+               g.development_manifest AS manifest,
+               g.module_policy AS "modulePolicy"
         FROM sdk_games g
         JOIN sdk_creators c ON c.id = g.creator_id
         WHERE g.public_game_id = ${gameId}
@@ -66,7 +69,8 @@ export async function GET(
                g.stable_root_sha256 AS "packageRootSha256",
                g.stable_bundle_sha256 AS "serverBundleSha256",
                g.stable_app_set_sha256 AS "appSetSourceSha256",
-               g.stable_manifest AS manifest
+               g.stable_manifest AS manifest,
+               g.module_policy AS "modulePolicy"
         FROM sdk_games g
         JOIN sdk_creators c ON c.id = g.creator_id
         WHERE g.public_game_id = ${gameId}
@@ -84,6 +88,7 @@ export async function GET(
     serverBundleSha256: string;
     appSetSourceSha256: string;
     manifest: unknown;
+    modulePolicy: unknown;
   } | undefined : undefined;
   if (!game) return Response.json({ error: "not_found" }, { status: 404 });
   const access = createPackageRuntimeAccess({
@@ -93,8 +98,10 @@ export async function GET(
     serverBundleSha256: game.serverBundleSha256,
     channel,
   });
+  const { modulePolicy, ...publicGame } = game;
   return Response.json({
-    ...game,
+    ...publicGame,
+    moduleProfile: normalizeGameSdkModuleProfile(modulePolicy),
     channel,
     clientRuntimeUrl: access.clientRuntimeUrl,
     serverRuntimeUrl: access.serverRuntimeUrl,

@@ -44,4 +44,4 @@ npm run package
 
 新規Work／Codex制作はOAuth接続済みGame Fields SDK MCPの`publish_mock`と`publish_game_package`を使います。正式なPreviewではAppSet・クライアント・source hashを一緒に保存します。`npm run publish:mock:legacy`と`npm run publish:game-package:legacy`は既存管理トークン運用専用です。Previewと昇格後は同じpackage revisionを実行し、昇格時にAppSetを変換・再buildしません。
 
-共通モジュール38件は最初すべて必須です。ChatGPTはprofileを変更せず、確定済みの`requiredModuleIds`と各moduleの公開契約を使ってAppSetを実装します。
+共通モジュール39件は最初すべて必須です。ChatGPTはprofileを変更せず、確定済みの`requiredModuleIds`と各moduleの公開契約を使ってAppSetを実装します。

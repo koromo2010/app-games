@@ -19,7 +19,7 @@ test("new SDK mock starts with every module required", () => {
   assert.equal(GAME_SDK_MODULE_IDS.length, GAME_SDK_MODULE_CATALOG.length);
   assert.deepEqual(requiredGameSdkModuleIds(initial), GAME_SDK_MODULE_IDS);
   assert.equal(classification.required.length, 7);
-  assert.equal(classification.removable.length, 31);
+  assert.equal(classification.removable.length, 32);
   assert.equal(classification.optional.length, 0);
   assert.deepEqual(normalizeGameSdkModuleProfile(undefined), initial);
 });

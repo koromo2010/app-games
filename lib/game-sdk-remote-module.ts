@@ -17,6 +17,7 @@ import {
   type GameSdkPortableServerResponse,
 } from "@game-fields/game-sdk/portable-server";
 import type { GameSdkEffectJournal } from "./game-sdk-effect-journal.ts";
+import type { GameSdkFeedbackCapture } from "./game-sdk-feedback-store.ts";
 
 const MAX_RESOURCE_EFFECTS = 8;
 const MAX_RUNNER_RESPONSE_BYTES = 1024 * 1024;
@@ -29,6 +30,7 @@ export type GameSdkRemoteBundleDefinition = {
   serverRuntimeUrl: string;
   serverRuntimeToken: string;
   effectJournal?: GameSdkEffectJournal;
+  feedbackCapture?: GameSdkFeedbackCapture;
 };
 
 function safeResourceError(error: unknown) {
@@ -139,6 +141,7 @@ export function createGameSdkRemoteServerModule(
       const roomCode = invocation.operation === "createRoom"
         ? invocationInput.context?.roomCode
         : invocationInput.room?.code;
+      let effectResult: GameSdkPortableEffectResult;
       if (definition.effectJournal) {
         if (
           typeof requestId !== "string"
@@ -148,7 +151,7 @@ export function createGameSdkRemoteServerModule(
         ) {
           throw new Error("GAME_SDK_EFFECT_CONTEXT_INVALID");
         }
-        effects[result.effect.id] = await definition.effectJournal.execute({
+        effectResult = await definition.effectJournal.execute({
           runtimeId: definition.runtimeId,
           packageRevision: definition.revision,
           roomCode,
@@ -156,7 +159,18 @@ export function createGameSdkRemoteServerModule(
           effect: result.effect,
         }, () => executeEffect(result.effect, resources));
       } else {
-        effects[result.effect.id] = await executeEffect(result.effect, resources);
+        effectResult = await executeEffect(result.effect, resources);
+      }
+      effects[result.effect.id] = effectResult;
+      if (definition.feedbackCapture && result.effect.resource === "llm") {
+        await definition.feedbackCapture.capture({
+          runtimeId: definition.runtimeId,
+          packageRevision: definition.revision,
+          roomCode: String(roomCode),
+          requestId: String(requestId),
+          effect: result.effect,
+          result: effectResult,
+        }).catch(() => undefined);
       }
     }
     throw new Error("GAME_SDK_RESOURCE_EFFECT_LIMIT");

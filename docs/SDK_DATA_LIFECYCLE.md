@@ -17,6 +17,8 @@ SDK公開後のデータは、用途ごとに正本、保持期間、削除方�
 | --- | --- | --- | --- |
 | Room、Command receipt、result outbox | 環境別Redis | 最終更新から6時間 | TTLまたはhost解散。終了後の再実行に使わない |
 | effect journal | 環境別Redis | 6時間 | TTL。`pending`消失後も同じeffectを自動再課金しない |
+| SDK feedback対象artifact | 環境別Redis | Roomと同じ6時間 | LLM成功結果だけをRoomごと最大8件保存。promptは保存せず、Room TTLで消去 |
+| player feedback | 環境別Redis | taskごと直近500件 | 本人単位で同じartifactへの評価を上書き。AI生成時はuntrustedな参考例としてのみ利用 |
 | player別settings既定値 | 環境別Redis | 最終更新から2年 | TTL。Room開始後のsnapshotはRoom側の寿命に従う |
 | replay | 環境別Redis | 既定30日 | TTL。お気に入り制御はreplay policyに従う |
 | 戦績・rating | Platform PostgreSQL／Redis | サービス提供中 | account削除時にplayer別結果とrating fieldを削除 |
@@ -52,6 +54,7 @@ Platform account削除は、player IDをキーに戦績、rating、replay、sett
 
 - `GAME_FIELDS_ENV`が各deploymentに明示され、`NODE_ENV`だけで保存先を決めていない。
 - candidate-previewがproductionのRedis、rating、replay、PostgreSQL channel pointerへ書き込まない。
+- SDK feedback対象artifactが結果phaseのRoom参加者以外へ返らず、prompt本文を保存しない。
 - tombstone済みgameがcatalogと新規Previewへ出ない。
 - unpublish後も開始済みRoomが固定Revisionを読める。
 - OAuth期限切れ行とrevoke済み行が定期maintenanceで減少する。

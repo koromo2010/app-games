@@ -358,6 +358,83 @@ test("SDK preview composes the common room lifecycle around the game slot", () =
   assert.match(shell, /ゲーム固有Runtime未接続/);
 });
 
+test("formal SDK package shell owns the top banner and phase-specific common modules", () => {
+  const shell = readFileSync(
+    "app/sdk-preview/[creatorSlug]/games/[gameId]/SdkPackageGameShell.tsx",
+    "utf8",
+  );
+  const header = readFileSync(
+    "app/components/GameSdkShellHeader.tsx",
+    "utf8",
+  );
+  const approvedShell = readFileSync(
+    "app/sdk-games/[gameId]/ApprovedSdkGameShell.tsx",
+    "utf8",
+  );
+  const activeRoomRestore = readFileSync(
+    "app/hooks/use-game-sdk-active-room-restore.ts",
+    "utf8",
+  );
+  const runtimeCatalog = readFileSync(
+    "apps/sdk-portal/app/api/runtime-catalog/[gameId]/route.ts",
+    "utf8",
+  );
+
+  assert.match(header, /GameTopBanner/);
+  assert.match(header, /GameRulesDialog/);
+  assert.match(header, /GamePlayerMenu/);
+  assert.match(shell, /GameSdkShellHeader/);
+  assert.match(shell, /room\.phase !== "playing" && \(\s*<aside/);
+  assert.match(shell, /room\.phase === "playing"\s*\? "mx-auto max-w-7xl"/);
+  assert.match(shell, /room\.phase === "lobby" && \(\s*<div className=\{panel\}>\s*<h2 className="text-lg font-black">部屋設定/);
+  assert.match(shell, /moduleRequired\("replay"\)/);
+  assert.match(shell, /moduleRequired\("result-share"\)/);
+  assert.match(shell, /moduleRequired\("feedback"\)/);
+  assert.match(shell, /GameSdkFeedbackPanel/);
+  for (const formalShell of [shell, approvedShell]) {
+    assert.match(formalShell, /useGameSdkActiveRoomRestore/);
+    assert.match(formalShell, /isRestoringRoom/);
+    assert.match(formalShell, /error\.code === "PLAYER_ACTIVE_ROOM"/);
+    assert.match(formalShell, /進行中の部屋へ戻りました/);
+  }
+  assert.match(activeRoomRestore, /useState\(true\)/);
+  assert.match(activeRoomRestore, /await onEmpty\(\)/);
+  assert.match(activeRoomRestore, /setIsRestoringRoom\(false\)/);
+  assert.match(shell, /PLAYER\$\{ranking\.seat \+ 1\}/);
+  const resultShareSource = shell.slice(
+    shell.indexOf("const resultShareText"),
+    shell.indexOf("if (!room)"),
+  );
+  assert.doesNotMatch(resultShareSource, /ranking\.displayName/);
+  assert.match(runtimeCatalog, /g\.module_policy AS "modulePolicy"/);
+  assert.match(runtimeCatalog, /moduleProfile: normalizeGameSdkModuleProfile\(modulePolicy\)/);
+});
+
+test("SDK feedback artifacts stay behind result-room membership", () => {
+  const approvedRoute = readFileSync(
+    "app/api/game-sdk/[gameId]/feedback/route.ts",
+    "utf8",
+  );
+  const previewRoute = readFileSync(
+    "app/api/sdk-preview/[creatorSlug]/games/[gameId]/feedback/route.ts",
+    "utf8",
+  );
+  const store = readFileSync(
+    "lib/game-sdk-feedback-store.ts",
+    "utf8",
+  );
+  for (const route of [approvedRoute, previewRoute]) {
+    assert.match(route, /room\.phase !== "result"/);
+    assert.match(route, /common\?\.isMember !== true/);
+    assert.match(route, /"Cache-Control": "private, no-store"/);
+    assert.match(route, /rateLimitPolicies\.sdkRuntimeRead/);
+  }
+  assert.match(store, /input\.effect\.resource !== "llm"/);
+  assert.match(store, /input\.effect\.operation !== "generate"/);
+  assert.match(store, /maximumRoomArtifacts = 8/);
+  assert.doesNotMatch(store, /prompt:/);
+});
+
 test("SDK preview injects the runtime when game code references the preset API", () => {
   const gameHtml = `<!doctype html><html><head><script>
     window.addEventListener("DOMContentLoaded", () => {

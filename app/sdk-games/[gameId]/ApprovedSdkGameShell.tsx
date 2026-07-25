@@ -24,6 +24,7 @@ import {
   shouldHoldRoomResultTransition,
   shouldKeepRoomResultAfterDissolve,
 } from "@/lib/room-result-return";
+import { useGameSdkActiveRoomRestore } from "@/app/hooks/use-game-sdk-active-room-restore";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -192,23 +193,26 @@ export function ApprovedSdkGameShell({
     });
   }, [acceptIncomingRoom, commitRoom, runtime]);
 
+  const loadActiveRoom = useCallback(
+    () => runtime.readActiveRoom(),
+    [runtime],
+  );
+  const handleRestoreError = useCallback((error: unknown) => {
+    setMessage(runtimeErrorMessage(error));
+  }, []);
+  const isRestoringRoom = useGameSdkActiveRoomRestore({
+    loadActiveRoom,
+    onRoom: attachRoom,
+    onEmpty: refreshRooms,
+    onError: handleRestoreError,
+  });
+
   useEffect(() => {
-    let active = true;
-    void runtime.readActiveRoom()
-      .then((next) => {
-        if (!active) return;
-        if (next) attachRoom(next);
-        else void refreshRooms();
-      })
-      .catch((error) => {
-        if (active) setMessage(runtimeErrorMessage(error));
-      });
     return () => {
-      active = false;
       watchRef.current?.close();
       if (expiryRef.current !== null) window.clearTimeout(expiryRef.current);
     };
-  }, [attachRoom, refreshRooms, runtime]);
+  }, []);
 
   const run = useCallback(async (operation: () => Promise<RoomSnapshot>) => {
     if (pendingActionRef.current) return false;
@@ -219,6 +223,21 @@ export function ApprovedSdkGameShell({
       attachRoom(await operation());
       return true;
     } catch (error) {
+      if (
+        error instanceof GameSdkHttpClientRuntimeError
+        && error.code === "PLAYER_ACTIVE_ROOM"
+      ) {
+        try {
+          const activeRoom = await runtime.readActiveRoom();
+          if (activeRoom) {
+            attachRoom(activeRoom);
+            setMessage("進行中の部屋へ戻りました。");
+            return true;
+          }
+        } catch {
+          // Fall through to the original lifecycle error.
+        }
+      }
       setMessage(runtimeErrorMessage(error));
       if (
         error instanceof GameSdkHttpClientRuntimeError
@@ -342,6 +361,16 @@ export function ApprovedSdkGameShell({
         <GameTopBanner eyebrow="SDK GAME" title={title}>
           <Link href="/games" className={secondaryClass}>ゲーム一覧へ</Link>
         </GameTopBanner>
+        {isRestoringRoom ? (
+          <section className="mx-auto max-w-5xl">
+            <div className={panelClass}>
+              <h2 className="text-2xl font-black">前の部屋を確認中</h2>
+              <p className="mt-2 text-sm text-slate-600">
+                参加中の部屋があれば、そのまま復帰します。
+              </p>
+            </div>
+          </section>
+        ) : (
         <section className="mx-auto grid max-w-5xl gap-5 lg:grid-cols-2">
           <div className={panelClass}>
             <h2 className="text-2xl font-black">新しい部屋</h2>
@@ -409,6 +438,7 @@ export function ApprovedSdkGameShell({
             )}
           </div>
         </section>
+        )}
       </main>
     );
   }

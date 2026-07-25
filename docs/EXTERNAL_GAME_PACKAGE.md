@@ -140,11 +140,13 @@ Pro版ChatGPTで運営者本人が外部利用者と同じ流れを試すため�
 
 共通モジュールは`@game-fields/game-sdk/modules`の一つのcatalogへ集約する。初回モックはcatalog全件を必須として保存し、制作AIと管理トークンには変更手段を与えない。SDK-devへ署名済みアカウントでログインした環境所有者だけが、Platform固定以外を理由付きで必須解除できる。モック再発行では人間レビューを上書きしない。これはSDK側へ別のRoom・認証・UI基盤を再実装する仕組みではなく、既存の`online-room-route-factory`、`online-room-store-runtime`、`@game-fields/game-runtime`、共通UIと純粋domain部品を採用するprofileである。
 
-catalogは採用方針であり、それだけを表示して実装済みとは判定しない。SDK-devは`app/sdk-preview/[creatorSlug]/games/[gameId]/sdk-preview-module-registry.ts`で全module IDを具体的な本体共通部品、SDK helper、または隔離Preview adapterへ解決する。必須IDに実装割当がない場合はPreview合成を失敗させ、`38/38`の件数表示だけで完成扱いにしない。画面を持たない進行helperやリソースも、共通モジュール確認画面から実行または表示を確認できる状態にする。
+catalogは採用方針であり、それだけを表示して実装済みとは判定しない。SDK-devは`app/sdk-preview/[creatorSlug]/games/[gameId]/sdk-preview-module-registry.ts`で全module IDを具体的な本体共通部品、SDK helper、または隔離Preview adapterへ解決する。必須IDに実装割当がない場合はPreview合成を失敗させ、`39/39`の件数表示だけで完成扱いにしない。画面を持たない進行helperやリソースも、共通モジュール確認画面から実行または表示を確認できる状態にする。
 
 `content-source`の実体は`lib/game-sdk-content-source.ts`とする。SDKへ公開するのはアプリDBの一般語プール、共通語彙DBの審査済みワードペア、その返却IDに対応する語釈だけとする。低認知語彙と、たほい屋の未審査候補・審査結果・採用済みお題は内部専用で、公開型・定数・APIへ出さず、文字列による直接要求も拒否する。外部には認証付き暗号化opaque IDと必要な表示値だけを返す。静的に審査登録したSDK server moduleへは`context.resources.contentSource`を注入する。未審査の隔離iframeにはDB接続、テーブル、SQL、内部ID、直接endpointを渡さず、`GameFieldsPreset.resources.contentSource`だけを注入する。外側ShellはpostMessageをログイン必須の`/api/sdk-preview/content-source`へ中継し、保存済みゲーム、`content-source`必須profile、レート制限を確認してから`drawWords`、`drawWordPairs`、`findDefinitions`を実行する。制作AIはモック用の初期Word DBや固定・seed・fallback語彙を作らない。難易度はクライアント設定の`easy | normal | hard`を使い、表示は「簡単・普通・難しい」とする。
 
 `llm`の実体は`lib/game-sdk-llm-gateway.ts`とする。clientはゲーム固有Commandと入力値だけを送り、審査済みserver AppSetがtaskとpromptを組み立てて`context.resources.llm.generate`を呼ぶ。adapterは実生成単位の利用者別レート制限を適用し、共通`lib/game-llm.ts`へprovider選択、持込／Game Fields課金、model、fallbackを委譲する。Previewでは同じ公開request型をpostMessage bridgeから`/api/sdk-preview/llm`へ送るが、high qualityは許可せず、保存済みゲームと`llm`必須profileを毎回検証する。
+
+formal packageの外側Shellは`GameTopBanner`、manifestルール、プレイヤーメニューを本体共通部品から合成する。部屋設定はロビーだけに表示し、playingでは共通サイド欄ごと隠してgame iframeを全幅にする。中断はトップバナーへ移し、resultでは結果用共通moduleだけを表示する。Portalで確定したmodule profileはdevelopment／stableのruntime catalogへ渡し、`stats`、`rating`、`replay`、`result-share`、`feedback`の保存・表示を同じ採否で制御する。共有文はseat由来の`PLAYERn`だけを用い、フィードバック対象は結果phaseの参加者へだけ返す。LLM生成物への評価は既存の共通feedback storeへ保存し、同じgame/taskの次回生成では命令として信用しない参考例として利用する。
 
 進行部品は提出完了、選択、投票、役職、チーム、ラウンド、手番、seat変換、標準結果へ物理分割した。WordWolf、Tahoiya、Word Scale、Word Sonar、Word Out、Code Intercept、Northern Branch、Daifugoの8オンラインゲームが同じ公開部品を直接利用する回帰検査を持つ。AppSetへ同じ判定をコピーしない。
 

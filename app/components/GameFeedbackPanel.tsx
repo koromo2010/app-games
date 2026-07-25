@@ -15,6 +15,7 @@ type GameFeedbackPanelProps = {
   reasonOptions: ReasonOption[];
   settings?: Record<string, string | number | boolean>;
   outcome?: Record<string, string | number | boolean>;
+  heading?: string;
 };
 
 export function GameFeedbackPanel(props: GameFeedbackPanelProps) {
@@ -139,7 +140,9 @@ function GameFeedbackPanelContent(props: GameFeedbackPanelProps) {
   return (
     <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
       <p className="text-xs font-semibold uppercase text-slate-500">Feedback</p>
-      <h3 className="mt-1 text-base font-black text-slate-950">今回のお題はどうでしたか？</h3>
+      <h3 className="mt-1 text-base font-black text-slate-950">
+        {props.heading ?? "今回のお題はどうでしたか？"}
+      </h3>
       <div className="mt-3 flex gap-2">
         <button
           type="button"

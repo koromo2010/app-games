@@ -402,7 +402,22 @@ Portal提供機能の固定enumにしていたため、新しいDownloadMeが追
 旧schemaから送れず、handshakeを呼ぶ前に制作AIが停止して同じ問い合わせを繰り返した。
 
 MCP入力schemaは構文上有効なcapability文字列を受け付け、未提供名をserver側の
-`CAPABILITY_UNAVAILABLE`として返す契約へ変更する。DownloadMe ver12とPortalは、
+`CAPABILITY_UNAVAILABLE`として返す契約へ変更する。DownloadMe ver13とPortalは、
 古いDownloadMeまたは固定enumが読み込まれたチャットでは継続せず、プラグイン更新後に
-作成した新しいWork／Codexチャットへver12だけを添付するよう明示する。
+作成した新しいWork／Codexチャットへver13だけを添付するよう明示する。
 保存済み制作者環境はアカウントから再取得し、新しいURLを作らない。
+
+## 2026-07-25 SDK正式Shellの復元前に新規Roomを作ると409になる
+
+状態: 修正実装済み・dev実機確認待ち（2026-07-25、回帰テストあり）
+
+formal package Shellは初期表示で`readActiveRoom()`を実行していたが、その完了前から
+新規作成・参加UIを操作できた。前のRoomへ参加中のプレイヤーが短い復元待ちの間に
+「部屋を作る」を押すと、Redisの1人1active room契約が正しく新規作成を拒否し、
+画面には`PLAYER_ACTIVE_ROOM`だけが表示された。終了済み、期限切れ、欠損Roomを
+自動解除するStore側の処理ではなく、Shell初期化と利用者操作の競合だった。
+
+candidate／development／stableで共有するSDK active-room復元hookを追加し、確認中は
+作成・参加UIを出さず、既存Roomがあればそのまま復帰する。別タブとの競合等で
+`PLAYER_ACTIVE_ROOM`が返った場合もactive Roomを再取得して復帰する。進行中Roomを
+黙って破棄せず、result Roomから新規Roomへ移れる既存Runtime契約もテストで固定する。

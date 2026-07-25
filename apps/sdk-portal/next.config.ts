@@ -1,11 +1,11 @@
 import type { NextConfig } from "next";
 
-const currentDownloadMePath = "/GameFieldsDownloadMe-ver12.md";
+const currentDownloadMePath = "/GameFieldsDownloadMe-ver13.md";
 const legacyDownloadMePaths = [
   "/DownloadMe.md",
   "/GameFieldsDownloadMe.md",
   ...Array.from(
-    { length: 11 },
+    { length: 12 },
     (_, index) => `/GameFieldsDownloadMe-ver${index + 1}.md`,
   ),
 ];
@@ -27,7 +27,7 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: "Content-Disposition",
-            value: 'attachment; filename="GameFieldsDownloadMe-ver12.md"',
+            value: 'attachment; filename="GameFieldsDownloadMe-ver13.md"',
           },
           {
             key: "Content-Type",

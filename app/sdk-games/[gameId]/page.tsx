@@ -26,6 +26,9 @@ export default async function ApprovedSdkGamePage({
         title={registration.title}
         settingDefinitions={registration.settings}
         rules={registration.rules}
+        moduleProfile={registration.moduleProfile}
+        supportsReplay={registration.supportsReplay}
+        usesLlm={registration.usesLlm}
       />
     );
   }

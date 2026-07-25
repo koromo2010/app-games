@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { GameSdkStoredRoom } from "@game-fields/game-sdk";
+import { normalizeGameSdkModuleProfile } from "@game-fields/game-sdk/modules";
 import type { GameSdkServerModule } from "@game-fields/game-sdk/runtime";
 import { createGameFieldsSdkContentSource } from "./game-sdk-content-source.ts";
 import {
@@ -9,6 +10,7 @@ import {
 import { createGameSdkRemoteServerModule } from "./game-sdk-remote-module.ts";
 import { createRemoteGameSdkRuntimeContract } from "./game-sdk-runtime-contract.ts";
 import { createRedisGameSdkEffectJournal } from "./game-sdk-effect-journal.ts";
+import { createRedisGameSdkFeedbackCapture } from "./game-sdk-feedback-store.ts";
 import {
   loadSdkPreviewRuntimeDefinition,
   type SdkPreviewRuntimeDefinition,
@@ -71,6 +73,17 @@ export async function loadSdkPreviewPackageModule(input: {
     serverRuntimeUrl: definition.serverRuntimeUrl,
     serverRuntimeToken: definition.serverRuntimeToken,
     effectJournal: createRedisGameSdkEffectJournal("candidate-preview"),
+    ...(definition.manifest.usesLlm
+      && normalizeGameSdkModuleProfile(
+        definition.modulePolicy,
+      ).feedback.mode === "required"
+      ? {
+          feedbackCapture: createRedisGameSdkFeedbackCapture(
+            input.gameId,
+            "candidate-preview",
+          ),
+        }
+      : {}),
   });
   return {
     definition,

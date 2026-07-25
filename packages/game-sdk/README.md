@@ -169,6 +169,8 @@ const appSet = defineGameSdkOnlineRoomAppSet({
 プレイバックへ一度だけ保存します。結果がない場合、Shellは参加順から
 仮順位や仮得点を生成しません。
 
+Platform Shellはmanifestのルールを共通トップバナーから全phaseで開けるようにし、部屋設定はロビーだけに表示します。playingでは共通サイド欄を隠してゲーム領域を全幅にし、中断だけをトップバナーへ置きます。resultでは採用済みmodule profileに従って標準結果、再戦、本人履歴、匿名共有、LLM生成物へのfeedbackを合成します。AppSetやclientへこれらの外枠を複製しません。
+
 ```ts
 standardResult: defineGameSdkStandardResult({
   winnerIds: [winnerId],

@@ -129,6 +129,11 @@ export const SDK_PREVIEW_MODULE_IMPLEMENTATIONS = {
     source: "GameResultShareButton",
     surfaces: ["result"],
   },
+  feedback: {
+    kind: "shared-component",
+    source: "GameFeedbackPanel and SDK LLM effect capture",
+    surfaces: ["result", "module-lab"],
+  },
   spectators: {
     kind: "platform-adapter",
     source: "viewer-safe spectator perspective",

@@ -1,4 +1,8 @@
 import type { GameSdkSettingDefinition } from "@game-fields/game-sdk";
+import {
+  createInitialGameSdkModuleProfile,
+  type GameSdkModuleProfile,
+} from "@game-fields/game-sdk/modules";
 import type { GameFieldsAuthenticatedIdentity } from "@game-fields/game-runtime";
 import { wordWolfSdkServerModule } from "../games/wordwolf-sdk/server-module.ts";
 import { createGameFieldsSdkContentSource } from "./game-sdk-content-source.ts";
@@ -31,6 +35,10 @@ export type ApprovedGameSdkRegistration = {
   channel: "development" | "stable";
   supportsDebug: boolean;
   supportsSpectators: boolean;
+  supportsReplay: boolean;
+  supportsRating: boolean;
+  usesLlm: boolean;
+  moduleProfile: GameSdkModuleProfile;
   settings: readonly GameSdkSettingDefinition[];
   rules: readonly string[];
   createAdapter(
@@ -48,6 +56,10 @@ const registrations: readonly ApprovedGameSdkRegistration[] = [
     channel: "development",
     supportsDebug: wordWolfSdkServerModule.manifest.supportsDebug,
     supportsSpectators: wordWolfSdkServerModule.manifest.supportsSpectators,
+    supportsReplay: wordWolfSdkServerModule.manifest.supportsReplay,
+    supportsRating: wordWolfSdkServerModule.manifest.supportsRating,
+    usesLlm: wordWolfSdkServerModule.manifest.usesLlm,
+    moduleProfile: createInitialGameSdkModuleProfile(),
     settings: wordWolfSdkServerModule.manifest.settings ?? [],
     rules: (wordWolfSdkServerModule.manifest.rules ?? []).map((rule) => rule.ja),
     createAdapter(resolveIdentity, request, playerId) {
@@ -73,6 +85,7 @@ const registrations: readonly ApprovedGameSdkRegistration[] = [
           await persistApprovedGameSdkResultEvent({
             gameType: "wordwolf-sdk",
             title: wordWolfSdkServerModule.manifest.title.ja,
+            supportsStats: true,
             supportsRating: wordWolfSdkServerModule.manifest.supportsRating,
             supportsReplay: wordWolfSdkServerModule.manifest.supportsReplay,
             result,

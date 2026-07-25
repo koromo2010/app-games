@@ -81,9 +81,11 @@ SDKゲームのclientはAI事業者を選ばず、provider URL、APIキー、mod
 
 部屋作成・参加前のactive room確保は `lib/player-active-room.ts` が担当する。現在の別室から移動可能かを共通解散ポリシーで判定し、終了済みの索引解除と新しい部屋コードのCAS確保を一続きのapplication境界として扱う。参加人数、合言葉、フェーズなどの入室条件はゲーム固有storeで検証する。
 
+SDK formal Shellの初回復元は`app/hooks/use-game-sdk-active-room-restore.ts`を共通入口とする。active Room確認中は作成・参加UIを表示せず、参加中Roomがあれば先に復帰する。作成・参加と別タブ更新が競合して`PLAYER_ACTIVE_ROOM`になった場合も最新active Roomを再取得して接続する。Shellは進行中Roomの索引を削除せず、result・期限切れ・欠損・非参加Roomの解除可否は`lib/game-sdk-platform-room-store.ts`を正本とする。
+
 storage-neutralなrevision更新、競合時の最大6回再適用、保存前正規化、保存後hookは非公開 `@game-fields/game-runtime` の `online-room.ts` を正本とする。本体側の `lib/online-room-store-runtime.ts` がRedis CAS、TTL、一覧、1人1active room、新規作成、解散、Realtime、戦績・リプレイhookを注入し、登録済みオンラインゲーム8本のStoreは同じRuntimeを利用する。Redis Luaと索引の低水準処理は `lib/online-room-persistence.ts`、`lib/player-active-room.ts`、`lib/online-room-list.ts`、`lib/online-room-dissolution.ts` に維持する。ゲーム固有StoreにはCommand認可、進行、得点、秘匿、参加者変更後の補正、時間切れreconcileだけを残す。
 
-承認済みSDKゲームも`/api/game-sdk/[gameId]/rooms`と`/sdk-games/[gameId]`から同じ非公開Runtimeへ接続する。AppSetの`standardResult`だけを共通結果・戦績・rating・安全なplaybackへ保存し、ゲーム固有の秘密stateは保存hookへ渡さない。期限切れはserver callback、観戦は署名grantとSDK専用の許可リストsnapshot、DEBUGダミーは権限付きhostのlobby Command、個人既定値とルール表示はmanifest宣言を正本とする。
+承認済みSDKゲームも`/api/game-sdk/[gameId]/rooms`と`/sdk-games/[gameId]`から同じ非公開Runtimeへ接続する。AppSetの`standardResult`だけを共通結果・戦績・rating・安全なplaybackへ保存し、ゲーム固有の秘密stateは保存hookへ渡さない。期限切れはserver callback、観戦は署名grantとSDK専用の許可リストsnapshot、DEBUGダミーは権限付きhostのlobby Command、個人既定値とルール表示はmanifest宣言を正本とする。formal packageの外側は共通`GameTopBanner`を必ず使い、ルールは全phaseから開ける。部屋設定はロビーだけ、playingではゲームとtimer、resultでは標準結果・再戦・履歴・匿名共有・AI生成物feedbackをmodule profileに従って表示する。
 
 登録済みオンラインゲーム8本のRoom Routeは `lib/online-room-route-factory.ts` を共通入口とする。同ファクトリが公開範囲検査、署名Cookie認証、GETの部屋・active room・一覧分岐、参加者照合、言語検査、入力actor・参加者情報の上書き、デバッグ資格、更新レート制限、Telemetry、DELETEの本人確認を所有する。ゲーム側は `load / loadActive / list / create / apply / delete / deleteHosted / sanitize` とTelemetry用の安全な状態項目だけを渡す。ゲーム固有エラーは `createOnlineRoomErrorResponder` の表で宣言し、認証・保存設定・Redis一時障害は共通変換を先に適用する。
 
