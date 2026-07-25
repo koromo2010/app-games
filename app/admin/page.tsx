@@ -10,5 +10,10 @@ export const metadata: Metadata = { title: "サイト管理", robots: { index: f
 export default function SiteAdminPage() {
   const showPreviewVocabularyMigrations = expectedAppEnvironment() === "development"
     && process.env.APP_ENV === "development";
-  return <SiteAdminPanel showPreviewVocabularyMigrations={showPreviewVocabularyMigrations} />;
+  const showReleaseManagement = expectedAppEnvironment() === "production"
+    && process.env.VERCEL_GIT_COMMIT_REF === "main";
+  return <SiteAdminPanel
+    showPreviewVocabularyMigrations={showPreviewVocabularyMigrations}
+    showReleaseManagement={showReleaseManagement}
+  />;
 }

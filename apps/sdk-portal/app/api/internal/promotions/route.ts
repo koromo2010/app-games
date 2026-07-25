@@ -11,6 +11,9 @@ export const runtime = "nodejs";
 const GAME_PATTERN = /^[a-z][a-z0-9-]{1,63}$/;
 
 function authorize(request: Request) {
+  if (process.env.VERCEL_GIT_COMMIT_REF !== "main") {
+    return Response.json({ error: "promotion_main_only" }, { status: 403 });
+  }
   try {
     requireSdkServiceRequest(request);
     return null;
@@ -30,10 +33,6 @@ export async function GET(request: Request) {
            g.package_root_sha256 AS "packageRootSha256",
            g.package_bundle_sha256 AS "packageBundleSha256",
            g.package_app_set_sha256 AS "packageAppSetSha256",
-           g.development_revision AS "developmentRevision",
-           g.development_root_sha256 AS "developmentRootSha256",
-           g.development_bundle_sha256 AS "developmentBundleSha256",
-           g.development_app_set_sha256 AS "developmentAppSetSha256",
            g.stable_revision AS "stableRevision",
            g.stable_root_sha256 AS "stableRootSha256",
            g.stable_bundle_sha256 AS "stableBundleSha256",
@@ -58,7 +57,11 @@ export async function POST(request: Request) {
     creatorSlug?: unknown;
     gameId?: unknown;
     publicGameId?: unknown;
-    channel?: unknown;
+    target?: unknown;
+    expectedRevision?: unknown;
+    expectedPackageRootSha256?: unknown;
+    expectedServerBundleSha256?: unknown;
+    expectedAppSetSourceSha256?: unknown;
   } | null;
   const creatorSlug = typeof body?.creatorSlug === "string"
     ? body.creatorSlug.trim().toLowerCase()
@@ -69,11 +72,11 @@ export async function POST(request: Request) {
   const publicGameId = typeof body?.publicGameId === "string"
     ? body.publicGameId.trim().toLowerCase()
     : "";
-  const channel = body?.channel;
+  const target = body?.target;
   if (
     !GAME_PATTERN.test(gameId)
     || !GAME_PATTERN.test(publicGameId)
-    || (channel !== "development" && channel !== "stable")
+    || target !== "main"
   ) {
     return Response.json({ error: "promotion_input_invalid" }, { status: 400 });
   }
@@ -83,7 +86,23 @@ export async function POST(request: Request) {
       creatorSlug,
       gameId,
       publicGameId,
-      channel,
+      expectedSource: {
+        revision: typeof body?.expectedRevision === "string"
+          ? body.expectedRevision
+          : "",
+        packageRootSha256:
+          typeof body?.expectedPackageRootSha256 === "string"
+            ? body.expectedPackageRootSha256
+            : "",
+        serverBundleSha256:
+          typeof body?.expectedServerBundleSha256 === "string"
+            ? body.expectedServerBundleSha256
+            : "",
+        appSetSourceSha256:
+          typeof body?.expectedAppSetSourceSha256 === "string"
+            ? body.expectedAppSetSourceSha256
+            : "",
+      },
     }));
   } catch (error) {
     return promotionErrorResponse(error);
@@ -91,8 +110,8 @@ export async function POST(request: Request) {
 }
 
 /**
- * Remove a mutable channel pointer without deleting the immutable package
- * revision or its append-only promotion history. Existing Rooms continue from
+ * Remove the main catalog pointer without deleting the immutable package
+ * revision or its append-only adoption history. Existing Rooms continue from
  * the contract pinned when they were created; only new catalog resolution is
  * stopped.
  */
@@ -102,7 +121,7 @@ export async function DELETE(request: Request) {
   const body = await request.json().catch(() => null) as {
     creatorSlug?: unknown;
     gameId?: unknown;
-    channel?: unknown;
+    target?: unknown;
   } | null;
   const creatorSlug = typeof body?.creatorSlug === "string"
     ? body.creatorSlug.trim().toLowerCase()
@@ -110,56 +129,33 @@ export async function DELETE(request: Request) {
   const gameId = typeof body?.gameId === "string"
     ? body.gameId.trim().toLowerCase()
     : "";
-  const channel = body?.channel;
+  const target = body?.target;
   if (
     !GAME_PATTERN.test(creatorSlug)
     || !GAME_PATTERN.test(gameId)
-    || (channel !== "development" && channel !== "stable")
+    || target !== "main"
   ) {
     return Response.json({ error: "promotion_input_invalid" }, { status: 400 });
   }
 
   try {
     await ensureSdkSchema();
-    const rows = channel === "development"
-      ? await sdkSql()`
-          UPDATE sdk_games g
-          SET development_revision = NULL,
-              development_root_sha256 = NULL,
-              development_bundle_sha256 = NULL,
-              development_app_set_sha256 = NULL,
-              development_manifest = NULL,
-              status = CASE
-                WHEN stable_revision IS NOT NULL THEN 'stable'
-                ELSE 'submitted'
-              END,
-              updated_at = NOW()
-          FROM sdk_creators c
-          WHERE g.creator_id = c.id
-            AND c.slug = ${creatorSlug}
-            AND g.game_id = ${gameId}
-            AND g.deleted_at IS NULL
-          RETURNING g.game_id AS "gameId"
-        `
-      : await sdkSql()`
-          UPDATE sdk_games g
-          SET stable_revision = NULL,
-              stable_root_sha256 = NULL,
-              stable_bundle_sha256 = NULL,
-              stable_app_set_sha256 = NULL,
-              stable_manifest = NULL,
-              status = CASE
-                WHEN development_revision IS NOT NULL THEN 'development'
-                ELSE 'submitted'
-              END,
-              updated_at = NOW()
-          FROM sdk_creators c
-          WHERE g.creator_id = c.id
-            AND c.slug = ${creatorSlug}
-            AND g.game_id = ${gameId}
-            AND g.deleted_at IS NULL
-          RETURNING g.game_id AS "gameId"
-        `;
+    const rows = await sdkSql()`
+      UPDATE sdk_games g
+      SET stable_revision = NULL,
+          stable_root_sha256 = NULL,
+          stable_bundle_sha256 = NULL,
+          stable_app_set_sha256 = NULL,
+          stable_manifest = NULL,
+          status = 'submitted',
+          updated_at = NOW()
+      FROM sdk_creators c
+      WHERE g.creator_id = c.id
+        AND c.slug = ${creatorSlug}
+        AND g.game_id = ${gameId}
+        AND g.deleted_at IS NULL
+      RETURNING g.game_id AS "gameId"
+    `;
     if (!Array.isArray(rows) || rows.length === 0) {
       return Response.json({ error: "promotion_target_not_found" }, { status: 404 });
     }
@@ -167,7 +163,7 @@ export async function DELETE(request: Request) {
       unpublished: true,
       creatorSlug,
       gameId,
-      channel,
+      target,
     });
   } catch {
     return Response.json({ error: "unpublish_failed" }, { status: 503 });

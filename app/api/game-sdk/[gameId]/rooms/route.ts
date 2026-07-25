@@ -98,7 +98,7 @@ async function handle(request: Request, context: RouteContext, method: Method) {
         if (method === "GET") return;
         telemetry.success("game-sdk.room", {
           action: operation,
-          channel: registration.channel,
+          channel: registration.deployment,
           ...(registration.revision ? {
             packageRevision: registration.revision,
           } : {}),
@@ -120,7 +120,7 @@ async function handle(request: Request, context: RouteContext, method: Method) {
         observed = true;
         telemetry.responseError("game-sdk.room", error, status, {
           action: operation,
-          channel: registration.channel,
+          channel: registration.deployment,
           ...(registration.revision ? {
             packageRevision: registration.revision,
           } : {}),

@@ -83,5 +83,5 @@ const generated = await requireGameSdkLlmGateway(
 - Previewで別ブラウザが同じRoomへ参加・同期できる。
 - 再読込後に同じRoomへ復帰できる。
 - AppSet source SHA-256とserver bundle SHA-256が保存時に表示される。
-- development昇格、stable昇格で両hashが変わらない。
+- 正式Previewからmain採用まで両hashが変わらない。
 - クライアントがブラウザ内の正本状態やresource bridgeへ依存していない。

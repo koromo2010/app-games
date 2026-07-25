@@ -375,7 +375,7 @@ QuickJS WASMで呼出しごとに隔離する。guestが要求できる外部処
 宣言済みeffectだけで、DB、Redis、認証、環境変数、networkは渡さない。
 
 Portalは受信時にserver bundleとAppSet原文のSHA-256を再計算し、
-candidate→development→stableでrevision、2つのhash、manifestをそのままコピーする。
+運営の`SDK → main`採用でrevision、2つのhash、manifestをそのままコピーする。
 昇格時の再build、変換、AppSet補正は行わない。旧AIことば当てを無改造で診断した結果、
 ゲームID不一致、Room bridge欠落、browser resource bridge、browser-local adapterの
 4件を別々の安定診断コードとして検出した。これらはAI固有fallbackで隠さず、SDKの
@@ -417,7 +417,7 @@ formal package Shellは初期表示で`readActiveRoom()`を実行していたが
 画面には`PLAYER_ACTIVE_ROOM`だけが表示された。終了済み、期限切れ、欠損Roomを
 自動解除するStore側の処理ではなく、Shell初期化と利用者操作の競合だった。
 
-candidate／development／stableで共有するSDK active-room復元hookを追加し、確認中は
+candidate／mainで共有するSDK active-room復元hookを追加し、確認中は
 作成・参加UIを出さず、既存Roomがあればそのまま復帰する。別タブとの競合等で
 `PLAYER_ACTIVE_ROOM`が返った場合もactive Roomを再取得して復帰する。進行中Roomを
 黙って破棄せず、result Roomから新規Roomへ移れる既存Runtime契約もテストで固定する。

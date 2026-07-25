@@ -419,4 +419,4 @@ Commandに`expectedRevision`、actor ID、認証情報を含める必要はあ�
 - `source/server-module.ts`
 - `game-fields-package.json`
 
-manifestにはserver bundleとAppSet sourceのSHA-256を記録します。Portalはupload時に実ファイルから再計算し、developmentとstableへ同じrevision・同じhashをコピーします。昇格処理はAppSetを翻訳、修正、再buildしません。
+manifestにはserver bundleとAppSet sourceのSHA-256を記録します。Portalはupload時に実ファイルから再計算し、Game Fields運営者がmain採用時に同じrevision・同じhashをコピーします。採用処理はAppSetを翻訳、修正、再buildしません。SDK作品は本体コードの検証環境であるdevを経由しません。

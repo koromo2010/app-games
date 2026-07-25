@@ -25,7 +25,7 @@ npm run create-game -- sample-game "サンプルゲーム"
 
 > `app/sample-game/AGENTS.md` と `GAME_SPEC.md` を正本として、このゲームを実装してください。対象ゲームフォルダ外を変更する必要がある場合は、先に理由と変更候補を列挙してください。認証、DB、Redis、APIキーへ直接アクセスせず、既存の共通Runtimeを利用してください。最後に lint/test/build と新規ゲーム監査を実行してください。
 
-SDK利用者は、完成したゲーム固有package、manifest、テスト、権利・ライセンス情報をGame Fieldsへ提出する。SDK利用者自身がGitの`develop`や`main`へ統合したり、本番公開したりするものではない。本人所有のCandidateは、提出時のrevisionと全hashを固定した`promote_game_package_to_development`でdevelopment実プレイへ移せる。stable公開はGame Fields運営者のMFA付き審査だけが実行する。
+SDK利用者は、完成したゲーム固有package、manifest、テスト、権利・ライセンス情報をGame Fieldsへ提出する。SDK利用者自身がGitの`develop`や`main`へ統合したり、本番公開したりするものではない。SDK作品は正式Previewで審査され、Game Fields運営者だけが提出時のrevisionと全hashを固定したまま`main`採用カタログへ直接反映する。`dev`は本体コードの検証環境であり、SDK作品の採用経路には含めない。
 
 ### リポジトリを持たない試用者
 
@@ -108,7 +108,7 @@ Mock Runtimeは作成時revision 1、Commandごとの1段階revision更新、古
 
 ## 現時点の限界
 
-SDK v1の型、サーバー契約、Mock Runtime、portable AppSet protocol、生成雛形、境界検査は`packages/game-sdk`へ物理分離済みである。`0.1.1`候補は単体build、tarball化、空の外部projectへのinstall、公開exportの実行検査まで成功している。正式packageはclient、server bundle、AppSet原文を同じrevisionとhashで保存し、正式Previewは本体共通Roomを使う。candidate→development→stableでは同じrevisionとhashをコピーし、AppSetを再build・変換・補正しない。
+SDK v1の型、サーバー契約、Mock Runtime、portable AppSet protocol、生成雛形、境界検査は`packages/game-sdk`へ物理分離済みである。`0.1.1`候補は単体build、tarball化、空の外部projectへのinstall、公開exportの実行検査まで成功している。正式packageはclient、server bundle、AppSet原文を同じrevisionとhashで保存し、正式Previewはmainと同じ`GameSdkFrame`と本体共通Roomを使う。運営による`SDK → main`採用では同じrevisionとhashをコピーし、AppSetを再build・変換・補正しない。
 
 Game Fields本体では非公開`@game-fields/game-runtime`と`lib/game-sdk-platform-adapter.ts`を追加し、署名済みCookie由来identity、host/player判定、Redis TTL保存、revision CAS、閲覧者別presentationを小規模オンラインfixtureで実証済みである。外部ゲームfixtureは公開SDKだけをimportし、Commandへ偽のplayer IDを混ぜてもRuntime由来のidentityが使われ、同じrevisionの同時Commandは片方だけが保存される。
 

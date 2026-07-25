@@ -15,13 +15,10 @@ const IDENTIFIER_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?$/;
 const REVISION_PATTERN = /^[a-f0-9]{40}$/;
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 
-export type GamePackagePromotionChannel = "development" | "stable";
-
 export type PromoteGamePackageInput = {
   creatorSlug: string;
   gameId: string;
   publicGameId: string;
-  channel: GamePackagePromotionChannel;
   expectedSource?: ExpectedGamePackageSource;
 };
 
@@ -38,7 +35,6 @@ function normalizedInput(input: PromoteGamePackageInput) {
     !IDENTIFIER_PATTERN.test(creatorSlug)
     || !IDENTIFIER_PATTERN.test(gameId)
     || !IDENTIFIER_PATTERN.test(publicGameId)
-    || (input.channel !== "development" && input.channel !== "stable")
   ) {
     throw new GamePackagePromotionError("promotion_input_invalid", 400);
   }
@@ -51,7 +47,7 @@ function normalizedInput(input: PromoteGamePackageInput) {
   )) {
     throw new GamePackagePromotionError("promotion_expected_source_invalid", 400);
   }
-  return { creatorSlug, gameId, publicGameId, channel: input.channel, expected };
+  return { creatorSlug, gameId, publicGameId, expected };
 }
 
 async function verifyPortableManifest(target: {
@@ -101,7 +97,6 @@ export async function promoteGamePackage(input: PromoteGamePackageInput) {
     creatorSlug,
     gameId,
     publicGameId,
-    channel,
     expected,
   } = normalizedInput(input);
   await ensureSdkSchema();
@@ -110,12 +105,7 @@ export async function promoteGamePackage(input: PromoteGamePackageInput) {
            g.package_revision AS "packageRevision",
            g.package_root_sha256 AS "packageRootSha256",
            g.package_bundle_sha256 AS "packageBundleSha256",
-           g.package_app_set_sha256 AS "packageAppSetSha256",
-           g.development_revision AS "developmentRevision",
-           g.development_root_sha256 AS "developmentRootSha256",
-           g.development_bundle_sha256 AS "developmentBundleSha256",
-           g.development_app_set_sha256 AS "developmentAppSetSha256",
-           g.development_manifest AS "developmentManifest"
+           g.package_app_set_sha256 AS "packageAppSetSha256"
     FROM sdk_games g
     JOIN sdk_creators c ON c.id = g.creator_id
     WHERE c.slug = ${creatorSlug} AND g.game_id = ${gameId}
@@ -128,7 +118,7 @@ export async function promoteGamePackage(input: PromoteGamePackageInput) {
   if (!target) {
     throw new GamePackagePromotionError("promotion_target_not_found", 404);
   }
-  const source = gamePackagePromotionSource(target, channel);
+  const source = gamePackagePromotionSource(target);
   if (!source) {
     throw new GamePackagePromotionError("promotion_source_missing", 409);
   }
@@ -148,55 +138,30 @@ export async function promoteGamePackage(input: PromoteGamePackageInput) {
     manifest,
   });
   const manifestJson = JSON.stringify(manifest);
-  const rows = channel === "development"
-    ? await sdkSql()`
-        UPDATE sdk_games g
-        SET public_game_id = ${publicGameId},
-            development_revision = ${revision},
-            development_root_sha256 = ${packageRootSha256},
-            development_bundle_sha256 = ${bundleSha256},
-            development_app_set_sha256 = ${appSetSha256},
-            development_manifest = ${manifestJson}::jsonb,
-            status = 'development',
-            updated_at = NOW()
-        FROM sdk_creators c
-        WHERE g.creator_id = c.id
-          AND c.slug = ${creatorSlug}
-          AND g.game_id = ${gameId}
-          AND g.package_revision = ${revision}
-          AND g.package_root_sha256 = ${packageRootSha256}
-          AND g.package_bundle_sha256 = ${bundleSha256}
-          AND g.package_app_set_sha256 = ${appSetSha256}
-        RETURNING g.public_game_id AS "publicGameId",
-                  g.development_revision AS revision,
-                  g.development_root_sha256 AS "packageRootSha256",
-                  g.development_bundle_sha256 AS "serverBundleSha256",
-                  g.development_app_set_sha256 AS "appSetSourceSha256"
-      `
-    : await sdkSql()`
-        UPDATE sdk_games g
-        SET public_game_id = ${publicGameId},
-            stable_revision = ${revision},
-            stable_root_sha256 = ${packageRootSha256},
-            stable_bundle_sha256 = ${bundleSha256},
-            stable_app_set_sha256 = ${appSetSha256},
-            stable_manifest = ${manifestJson}::jsonb,
-            status = 'stable',
-            updated_at = NOW()
-        FROM sdk_creators c
-        WHERE g.creator_id = c.id
-          AND c.slug = ${creatorSlug}
-          AND g.game_id = ${gameId}
-          AND g.development_revision = ${revision}
-          AND g.development_root_sha256 = ${packageRootSha256}
-          AND g.development_bundle_sha256 = ${bundleSha256}
-          AND g.development_app_set_sha256 = ${appSetSha256}
-        RETURNING g.public_game_id AS "publicGameId",
-                  g.stable_revision AS revision,
-                  g.stable_root_sha256 AS "packageRootSha256",
-                  g.stable_bundle_sha256 AS "serverBundleSha256",
-                  g.stable_app_set_sha256 AS "appSetSourceSha256"
-      `;
+  const rows = await sdkSql()`
+    UPDATE sdk_games g
+    SET public_game_id = ${publicGameId},
+        stable_revision = ${revision},
+        stable_root_sha256 = ${packageRootSha256},
+        stable_bundle_sha256 = ${bundleSha256},
+        stable_app_set_sha256 = ${appSetSha256},
+        stable_manifest = ${manifestJson}::jsonb,
+        status = 'stable',
+        updated_at = NOW()
+    FROM sdk_creators c
+    WHERE g.creator_id = c.id
+      AND c.slug = ${creatorSlug}
+      AND g.game_id = ${gameId}
+      AND g.package_revision = ${revision}
+      AND g.package_root_sha256 = ${packageRootSha256}
+      AND g.package_bundle_sha256 = ${bundleSha256}
+      AND g.package_app_set_sha256 = ${appSetSha256}
+    RETURNING g.public_game_id AS "publicGameId",
+              g.stable_revision AS revision,
+              g.stable_root_sha256 AS "packageRootSha256",
+              g.stable_bundle_sha256 AS "serverBundleSha256",
+              g.stable_app_set_sha256 AS "appSetSourceSha256"
+  `;
   const promoted = Array.isArray(rows) ? rows[0] : null;
   if (!promoted) {
     throw new GamePackagePromotionError("promotion_source_changed", 409);
@@ -209,7 +174,7 @@ export async function promoteGamePackage(input: PromoteGamePackageInput) {
     INSERT INTO sdk_game_channel_history (
       game_id, channel, revision, package_root_sha256
     )
-    SELECT g.id, ${channel}, ${promotedRecord.revision},
+    SELECT g.id, 'stable', ${promotedRecord.revision},
            ${promotedRecord.packageRootSha256}
     FROM sdk_games g
     JOIN sdk_creators c ON c.id = g.creator_id
@@ -218,7 +183,7 @@ export async function promoteGamePackage(input: PromoteGamePackageInput) {
   `;
   return {
     promoted: true as const,
-    channel,
+    target: "main" as const,
     creatorSlug,
     gameId,
     ...(promoted as {

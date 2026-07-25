@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { SdkPreviewGameShell } from "./SdkPreviewGameShell";
-import { SdkPackageGameShell } from "./SdkPackageGameShell";
+import { GameSdkFrame } from "@/app/components/GameSdkFrame";
 import {
   normalizeGameSdkModuleProfile,
 } from "@game-fields/game-sdk/modules";
@@ -26,7 +26,7 @@ export default async function SdkGamePage({ params }: { params: Promise<{ creato
       portalHref={`${portalBaseUrl}/${creatorSlug}/games/${gameId}`}
     >
       {game.runtimeKind === "package" && game.revision && game.manifest ? (
-        <SdkPackageGameShell
+        <GameSdkFrame
           backHref={`/sdk-preview/${creatorSlug}`}
           creatorSlug={creatorSlug}
           gameId={gameId}

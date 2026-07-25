@@ -274,6 +274,6 @@ Game Fieldsへの統合後は、platformが`gameId`とゲームごとのendpoint
 
 Client Runtimeが送るのは部屋コード、作成input、expected revision付きCommandだけです。actor ID、表示名、debug資格は入力に持たず、同一originの署名済みHttpOnly Cookieからserver側が解決します。
 
-外部開発者がこのpackageを使って作成したゲームは、Game Fields管理下の検査・審査・dev実プレイ確認を経たものだけが公開対象になります。このpackageは`develop`、`main`、Vercel、DB等への書き込み権限を付与しません。
+外部開発者がこのpackageを使って作成したゲームは、Game Fields管理下の検査・正式Preview・運営審査を経たものだけが`main`採用対象になります。SDK作品は`dev`を経由しません。このpackageは`develop`、`main`、Vercel、DB等への書き込み権限を付与しません。
 
 SDKコードはMIT Licenseです。Game Fieldsのサービス利用、ゲーム提出、審査・公開は別途Platform側の規約と管理ゲートに従います。

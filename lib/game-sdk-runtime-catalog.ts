@@ -44,7 +44,7 @@ type RuntimeCatalogPayload = {
   appSetSourceSha256: string;
   manifest: GameSdkManifest;
   moduleProfile: GameSdkModuleProfile;
-  channel: "development" | "stable";
+  channel: "main";
   clientRuntimeUrl: string;
   serverRuntimeUrl: string;
   serverRuntimeToken: string;
@@ -52,13 +52,12 @@ type RuntimeCatalogPayload = {
 };
 
 function deploymentChannel(env: NodeJS.ProcessEnv) {
-  return env.VERCEL_GIT_COMMIT_REF === "main"
-    ? "stable" as const
-    : "development" as const;
+  void env;
+  return "main" as const;
 }
 
 type RuntimeCatalogListPayload = {
-  channel: "development" | "stable";
+  channel: "main";
   games: Array<{
     id: string;
     description: string;
@@ -79,7 +78,7 @@ function catalogTag(manifest: GameSdkManifest): GameTag {
 
 function validCatalogListPayload(
   value: unknown,
-  expectedChannel: "development" | "stable",
+  expectedChannel: "main",
 ): value is RuntimeCatalogListPayload {
   if (!value || typeof value !== "object") return false;
   const payload = value as Partial<RuntimeCatalogListPayload>;
@@ -142,7 +141,7 @@ export async function loadApprovedGameSdkCatalog(
 function validCatalogPayload(
   value: unknown,
   expectedGameId: string,
-  expectedChannel: "development" | "stable",
+  expectedChannel: "main",
   env: NodeJS.ProcessEnv,
 ): value is RuntimeCatalogPayload {
   if (!value || typeof value !== "object") return false;
@@ -193,7 +192,7 @@ function validCatalogPayload(
 
 async function loadRuntimeCatalogPayload(
   gameId: string,
-  channel: "development" | "stable",
+  channel: "main",
   env: NodeJS.ProcessEnv,
   revision?: string,
 ) {
@@ -294,7 +293,7 @@ export async function loadApprovedGameSdkRuntimeRegistration(
     title: payload.manifest.title.ja,
     clientKind: "iframe-package",
     clientRuntimeUrl: payload.clientRuntimeUrl,
-    channel,
+    deployment: "main",
     revision: payload.revision,
     packageRootSha256: payload.packageRootSha256,
     serverBundleSha256: payload.serverBundleSha256,

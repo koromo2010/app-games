@@ -90,14 +90,6 @@ P_FORMAL :=
   && isNonEmpty(publish_game_package.packageRevision)
   && isURL(publish_game_package.packagePreviewUrl)
 
-P_DEVELOPMENT :=
-  P_FORMAL
-  && promote_game_package_to_development.promoted == true
-  && promote_game_package_to_development.channel == "development"
-  && promote_game_package_to_development.revision == publish_game_package.packageRevision
-  && promote_game_package_to_development.packageRootSha256 == publish_game_package.packageRootSha256
-  && promote_game_package_to_development.serverBundleSha256 == publish_game_package.serverBundleSha256
-  && promote_game_package_to_development.appSetSourceSha256 == publish_game_package.appSetSourceSha256
 ```
 
 ## S0::HOST_CAPABILITY_GATE
@@ -422,45 +414,6 @@ EMIT {
 
 ASSERT P_FORMAL.
 ONLY_IF P_FORMAL MAY report formal package submission complete.
-EMIT review_gate_notice := "Game Fields側の検査・審査・development実プレイ確認・昇格は別工程です。"
-
-IF owner explicitly requests Candidate -> development promotion:
-  GOTO S8.
-ELSE:
-  HALT SUCCESS.
-```
-
-## S8::OWNER_CONFIRMED_DEVELOPMENT_PROMOTION
-
-```text
-MUST use only the immutable values returned by the successful S7 submission.
-MUST_NOT infer, shorten, rewrite, or substitute any revision or SHA-256.
-
-CALL promote_game_package_to_development WITH {
-  slug: selected.slug,
-  gameId,
-  publicGameId: gameId unless owner explicitly selected another available ID,
-  expectedRevision: publish_game_package.packageRevision,
-  expectedPackageRootSha256: publish_game_package.packageRootSha256,
-  expectedServerBundleSha256: publish_game_package.serverBundleSha256,
-  expectedAppSetSourceSha256: publish_game_package.appSetSourceSha256
-}.
-
-ASSERT P_DEVELOPMENT.
-ASSERT promote_game_package_to_development.immutableAppSet == true.
-
-ON_ASSERT_FAILURE:
-  EMIT development_promotion_not_completed;
-  HALT.
-
-EMIT {
-  channel,
-  publicGameId,
-  revision,
-  packageRootSha256,
-  serverBundleSha256,
-  appSetSourceSha256
-}.
-EMIT "Candidateと同一の実行物をdevelopmentへ昇格しました。stable公開は運営者のMFA付き審査が必要です。"
+EMIT review_gate_notice := "Game Fields側の検査・審査・本番採用は運営管理画面で行う別工程です。制作者はSDKからdevまたはmainへ昇格できません。"
 HALT SUCCESS.
 ```

@@ -106,7 +106,7 @@ for (const token of [
 const sdkServerRegistrySource = readFileSync(sdkServerRegistryFile, "utf8");
 if (
   !sdkServerRegistrySource.includes("wordWolfSdkServerModule")
-  || !sdkServerRegistrySource.includes("channel: \"development\"")
+  || !sdkServerRegistrySource.includes("deployment: \"develop-only\"")
   || !sdkServerRegistrySource.includes("createAuthenticatedGameSdkPlatformAdapter")
 ) {
   failures.push(`${relative(root, sdkServerRegistryFile)}: 審査済みmoduleの静的登録境界がありません。`);
@@ -224,13 +224,13 @@ for (const token of [
   "packageRevision",
   "packageBundleSha256",
   "packageAppSetSha256",
-  "developmentRevision",
   "stableRevision",
   "verifyPortableManifest",
+  "expectedSource",
   "promotion_source_changed",
 ]) {
   if (!promotionRouteSource.includes(token)) {
-    failures.push(`${relative(root, promotionRouteFile)}: 無再build昇格境界 ${token} がありません。`);
+    failures.push(`${relative(root, promotionRouteFile)}: 無再build採用境界 ${token} がありません。`);
   }
 }
 

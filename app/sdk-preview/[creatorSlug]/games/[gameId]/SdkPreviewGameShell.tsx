@@ -1036,7 +1036,7 @@ export function SdkPreviewGameShell({
                 <button type="button" className={commandClass} onClick={finishGame}>結果画面を確認</button>
               )}
             </div>
-            <section className="overflow-hidden rounded-2xl border border-white/10 bg-white shadow-2xl shadow-black/30">
+            <section className="overflow-hidden">
               <header className={surface === "lobby" ? "flex items-center justify-between gap-3 border-b border-slate-200 bg-slate-100 px-4 py-3 text-slate-950" : "hidden"}>
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-[.15em] text-slate-500">Game-specific slot</p>
@@ -1048,7 +1048,7 @@ export function SdkPreviewGameShell({
               </header>
               <iframe
                 ref={frameRef}
-                className="block min-h-[320px] w-full border-0 bg-white"
+                className="block min-h-[320px] w-full border-0 bg-transparent"
                 style={{ height: `${frameHeight}px` }}
                 src={runtimeUrl}
                 title={`${title}のゲーム固有領域`}

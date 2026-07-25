@@ -1,6 +1,6 @@
 # 環境変数管理台帳
 
-最終更新: 2026-07-25
+最終更新: 2026-07-26
 
 この文書を Game Fields の環境変数配置の正本とする。実値、接続文字列、APIキー、パスワードはGitへ保存しない。Vercel、Neon、Upstash、Blob、各API提供元だけで管理する。
 
@@ -41,6 +41,8 @@
 | `GAME_FIELDS_INSTANCE_ID` | 配置未監査 |
 | `GAME_FIELDS_MANAGEMENT_TOKEN` | 配置未監査 |
 | `GAME_FIELDS_SDK_URL` | 配置未監査 |
+| `GAME_FIELDS_GITHUB_REPOSITORY` | `app-games` Productionだけ。未登録時は`koromo2010/app-games` |
+| `GAME_FIELDS_GITHUB_RELEASE_TOKEN` | `app-games` Productionだけ。2026-07-26登録済み。Sensitive、対象repositoryのContents read/writeに限定。新Deployment・実機確認は未実施 |
 | `LLM_SESSION_SECRET` | 配置未監査 |
 | `NEXT_PUBLIC_GAME_ADS_MODE` | 配置未監査 |
 | `OBSERVABILITY_HASH_SECRET` | 配置未監査 |
@@ -74,6 +76,10 @@ Vercel／Next.jsが実行時に提供するSystem Variableとして、`NODE_ENV`
 
 `apps/sdk-portal`は本番`app-games-sdk`と開発`app-games-sdk-dev`へ分け、本体とは別のSDK専用Neon・Redisを使う。隔離実行コードは`apps/sdk-preview`に置き、Portal、本体、devとは別のVercel Projectへ配置する。preview実行ProjectにはDB、Redis、Blob、管理者秘密情報、Git書込権限を与えず、専用の非公開mock Gitリポジトリ`koromo2010/game-fields-sdk-mocks-dev`に対する読取専用資格だけを持たせる。
 
+`app-games-dev`は`main`へ入れる本体コードの検証用コピーである。SDK作品は
+SDK Portalのcandidateから運営審査を経てmain採用カタログへ直接反映し、
+`app-games-dev`やdevelopment SDK catalogを中間昇格先として使わない。
+
 Vercel Teamは `game-fields`（Team ID: `team_Q3rGaf7bwfZZsjaj1vqCg5YO`）。共通秘密情報はTeam Shared Environment Variablesへ置き、環境別データ接続とURLは各Project Variablesへ置く。
 
 SDKは`app-games`と同じGitリポジトリ内の別アプリとして管理するが、Vercel Project、Root Directory、環境変数、DB・Redis・Blobの名前空間は本番・開発から分離する。公開npm packageは`packages/game-sdk`から生成し、SDK用Vercel Projectへ本体の管理者権限や書込用秘密情報をリンクしない。
@@ -96,6 +102,21 @@ snapshot内の`apps/sdk-portal/vercel.json`と`apps/sdk-preview/vercel.json`に�
 同じbranch gateを`ignoreCommand`として持たせる。ゲーム提出ZIPからは除外する。
 
 ChatGPTのVercel Connectorは`game-fields` Teamへ再認証済みで、Project一覧、Deployment、Build Logの参照とファイル直接Deploymentは利用できる。一方、現行ConnectorはGit接続、Project設定更新、Project間の独自ドメイン移管を公開していない。これらはVercel Dashboardまたは認証済みCLI／REST APIで行う。
+
+### 本体dev反映用GitHub資格
+
+本番管理画面の`dev → main`はGitHub compareを読んで両branchのSHAを再確認し、
+fast-forward可能な場合だけ`force: false`でmain refを更新する。SDK作品の採用APIと
+資格を共有しない。
+
+| キー | 配置先 | Sensitive | 現在状態 | 用途 |
+| --- | --- | --- | --- | --- |
+| `GAME_FIELDS_GITHUB_REPOSITORY` | `app-games` Production | No | 未登録。既定`koromo2010/app-games` | compareとref更新の対象repository |
+| `GAME_FIELDS_GITHUB_RELEASE_TOKEN` | `app-games` Production | Yes | 2026-07-26登録済み。新Deployment・実機確認は未実施 | `koromo2010/app-games`だけのContents read/write。管理画面の`dev → main`実行時に必須 |
+
+このtokenは`app-games-dev`、SDK Portal、隔離Previewへ設定しない。設定後は
+`app-games`を再デプロイし、管理画面で差分読取、分岐時拒否、MFA後の
+fast-forwardを実機確認する。
 
 ## 命名と移行ルール
 

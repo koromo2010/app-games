@@ -12,7 +12,7 @@ const grant = {
   version: 3 as const,
   audience: "package-server" as const,
   environment: "development" as const,
-  channel: "development" as const,
+  channel: "main" as const,
   role: "runner" as const,
   instanceId: "creator-lab",
   gameId: "sample-game",

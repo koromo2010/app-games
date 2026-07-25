@@ -4418,3 +4418,62 @@
 - `develop`へ反映し、SDK Portal deployment完了後に新toolを再取得する。
 - AIことば当てCandidate revision `74e45e07fe1feb7855c2e246cdd358569e4d280c`
   を同一hashのままdevelopmentへ昇格し、development実Roomを確認する。
+
+## 2026-07-26 — 広場表示と昇格経路の設計修正
+
+### 利用者からの要望
+
+- 広場の既存カードを残し、PC／スマホ対応の簡易一覧表示と切替ボタンを追加する。
+  選択は`localStorage`へ保存し、公開状態、タグ、参加中Room、入室導線を維持する。
+- SDK専用の白枠を廃止し、本番と同じ`GameFrame → AppSet`を使う。
+- 従来の`SDK → dev → main`理解を破棄する。SDK作品の`SDK → main`採用と、
+  本体コードの`dev → main`反映を独立させる。`dev`はmainの検証環境に限定する。
+
+### 判断
+
+- SDK制作者はpackage提出までとし、devまたはmainへ昇格するMCP toolを持たない。
+- 運営のSDK採用はcandidateのrevisionと全hashを再照合し、main採用カタログへ直接
+  固定する。本体コード反映はGitHub branchの別操作とする。
+- `dev → main`はmain側管理画面だけに置き、main/develop SHAの再確認と
+  fast-forward可能性を条件に`force: false`で更新する。
+
+### 実施結果
+
+- 広場へカード／簡易一覧の切替と保存、共通の入室／復帰判定を追加した。
+- formal SDK shellを共通`GameSdkFrame`へ移し、candidate Previewとmainで共有した。
+  legacy Preview外側の白いborder、背景、shadowも除去した。
+- 管理画面へ「SDK作品採用」と「dev反映」の独立sectionを追加した。
+- SDK promotion serviceをcandidateからmain採用カタログへの直接反映へ変更し、
+  制作者向けdevelopment昇格toolをOAuth MCPとDownloadMeから削除した。
+- 本体`dev → main`用のGitHub compare、SHA再確認、非force ref更新APIと監査記録を
+  追加した。書込資格は本番本体だけに置く新規環境変数として台帳化した。
+
+### 検証
+
+- 新しい直接採用、hash固定、dev fast-forwardの単体テストを追加した。
+- DownloadMe ver15を新契約から再生成した。
+- `npm run lint`成功。環境変数台帳61キー、9ゲーム共通要件、SDK境界、
+  SDK migration 3件とESLintを確認した。
+- `npm test`全537件成功。
+- 本体、SDK Portal、隔離Previewのproduction build成功。
+- `npm run test:sdk-starter`成功。入口、公開Git snapshot、ZIP展開、同梱SDK install、
+  型検査、契約テスト、1ゲーム完走、提出ZIPを確認した。
+- 人間E2E用に本体dev serverを`127.0.0.1`固定で起動し、ブラウザ操作検査を開始した。
+  ただし作業環境には`agent-browser`とPlaywright browser実体がなく、Cloud Browserは
+  localhostを`ERR_BLOCKED_BY_CLIENT`で拒否したため、画面操作の完了確認はdev公開後へ
+  持ち越した。production buildとソース回帰テストは通過している。
+
+### 前記録の訂正
+
+- 直前の「本人所有Candidateのdevelopment昇格tool」は今回の設計判断で撤回した。
+  `promote_game_package_to_development`は公開せず、AIことば当てを含むSDK作品を
+  developmentへ昇格する未対応項目も破棄する。
+
+### 外部設定
+
+- Vercel Team `game-fields` / Project `app-games` のProductionへ
+  `GAME_FIELDS_GITHUB_RELEASE_TOKEN`をSensitiveで登録した。
+- tokenは`koromo2010/app-games`だけを対象とするFine-grained personal access tokenで、
+  Repository permissionはContents read/writeに限定した。
+- 秘密値はGit・文書へ保存していない。新しいProduction Deploymentでの読込と
+  管理画面からの実機確認は、本変更のmain反映後に行う。

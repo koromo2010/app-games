@@ -40,8 +40,7 @@ const reviewFlow = [
   "Package submission",
   "Automated checks",
   "Game Fields review",
-  "Dev playtest",
-  "Main release",
+  "Main adoption",
 ];
 
 const firstBuildGuide = [

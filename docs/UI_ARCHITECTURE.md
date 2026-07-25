@@ -31,6 +31,18 @@ MobileLayoutは必要になるまで作らない。
 - App Routerのsegment待機は `app/loading.tsx`、オンラインゲームの初期セッション／部屋復元は同じ `PageLoadingOverlay` を使う。
 - ボタン内の短い保存処理やゲーム内フェーズ更新は従来の局所pending表示を使い、ページ遷移用オーバーレイと混ぜない。
 
+## 広場のゲーム表示
+
+- トップページのゲーム一覧は既存カード表示と簡易一覧表示を切り替えられる。
+- 選択は`game-fields:lobby-game-view-mode`として`localStorage`へ保存し、次回も復元する。保存できないブラウザでも現在の表示中は切替を維持する。
+- 簡易一覧でも公開状態、メンテナンス、言語、タグ、参加中Room、ログイン要求、入室／復帰導線をカード表示と同じ判定から出す。
+- PCとスマホのどちらでも切替・検索・入室を操作できること。カード表示は廃止しない。
+
+## SDKゲームの共通フレーム
+
+- 正式candidate Previewとmain採用ゲームは同じ`app/components/GameSdkFrame.tsx`を使い、その内側へ不変のAppSet clientを描画する。
+- SDK専用の白枠や別UI階層を作らず、トップバナー、Room、設定、結果、復帰、共通moduleは本体と同じフレームが所有する。
+
 ## 共通デバッグメニュー
 
 - ホスト向け `DebugModeButton` は `GameTopBanner` に直接置き、DEBUGボタンから開く共通画面内ウィンドウをデバッグ操作の唯一の入口とする。

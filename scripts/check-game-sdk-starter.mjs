@@ -294,8 +294,7 @@ try {
     "npm run package",
     "submission/game-fields-submission.zip",
     "publish_game_package.saved == true",
-    "CALL promote_game_package_to_development WITH",
-    "expectedPackageRootSha256",
+    "制作者はSDKからdevまたはmainへ昇格できません",
     "previewUrl",
     "MUST_NOT substitute mock preview",
   ]) {

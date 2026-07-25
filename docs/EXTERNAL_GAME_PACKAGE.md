@@ -4,7 +4,7 @@
 
 将来、Game Fields本体の認証・個人情報・DB・運用基盤を渡さず、ゲーム部分だけを他の開発者へ依頼できるようにする。
 
-公開SDKは、外部開発者へGame Fields本番の公開権限を渡す仕組みではない。外部開発者はSDKを使ってゲーム固有packageを作成し、完成物をGame Fields運営者へ提出する。採用判断、`develop`への統合、最終検証、`main`への反映と本番公開はGame Fields運営者だけが行う。
+公開SDKは、外部開発者へGame Fields本番の公開権限を渡す仕組みではない。外部開発者はSDKを使ってゲーム固有packageを作成し、完成物をGame Fields運営者へ提出する。採用判断と`main`採用カタログへの反映はGame Fields運営者だけが行う。SDK作品の採用経路は`SDK → main`であり、本体コードの検証環境である`dev`を経由しない。
 
 ## 提出・審査・公開権限
 
@@ -14,8 +14,8 @@
 2. ゲーム固有package、manifest、テスト、権利・ライセンス情報をGame Fieldsへ提出する。
 3. 自動検査でSDK契約、import境界、秘密情報、依存関係、基本動作を確認する。
 4. Game Fields運営者が内容、品質、権利、安全性を審査し、採用可否を決める。
-5. 採用したものだけを運営者が`develop`へ統合し、dev環境で実プレイ確認する。
-6. 運営者が最終承認したものだけを`main`へ反映し、本番公開する。
+5. 運営者が正式Previewで人間レビューし、提出時のrevisionとhashを照合する。
+6. 最終承認したものだけを運営者が`main`採用カタログへ直接反映し、本番公開する。
 
 - 外部開発者へ`develop`、`main`、Vercel本番、DB、Redis、Blobの書き込み権限を付与しない。
 - Developer Portalから提出しても、自動でGitへmerge、Vercelへdeploy、ゲームを公開しない。
@@ -101,10 +101,13 @@ Room API、Redis CAS、再接続、閲覧者別Viewで実行する。
 DB、Redis、Cookie、environment、network、filesystem、Platform adapterへ
 直接到達しない。browser clientへ公開するのはRoom Viewの購読とCommand送信だけである。
 
-candidate→development→stableは、revision、server bundle SHA-256、
-AppSet原文SHA-256、manifestをそのままコピーする。昇格時の再build、変換、
-AppSet補正は禁止する。ゲーム固有の不足はAppSet revisionを直して再提出し、
+SDK作品の採用はcandidateから`main`採用カタログへ、revision、server bundle
+SHA-256、AppSet原文SHA-256、manifestをそのままコピーする。採用時の再build、
+変換、AppSet補正は禁止する。ゲーム固有の不足はAppSet revisionを直して再提出し、
 SDK共通契約の不足はSDKの説明、生成物、bridgeへ汎用的に追加する。
+
+本体コードの`dev → main`はこれとは独立した管理経路である。`dev`は`main`の
+検証用コピーであり、SDK提出物の中間channelや採用ステージとして使用しない。
 
 ## 現在の実装段階
 
@@ -146,7 +149,7 @@ catalogは採用方針であり、それだけを表示して実装済みとは�
 
 `llm`の実体は`lib/game-sdk-llm-gateway.ts`とする。clientはゲーム固有Commandと入力値だけを送り、審査済みserver AppSetがtaskとpromptを組み立てて`context.resources.llm.generate`を呼ぶ。adapterは実生成単位の利用者別レート制限を適用し、共通`lib/game-llm.ts`へprovider選択、持込／Game Fields課金、model、fallbackを委譲する。Previewでは同じ公開request型をpostMessage bridgeから`/api/sdk-preview/llm`へ送るが、high qualityは許可せず、保存済みゲームと`llm`必須profileを毎回検証する。
 
-formal packageの外側Shellは`GameTopBanner`、manifestルール、プレイヤーメニューを本体共通部品から合成する。部屋設定はロビーだけに表示し、playingでは共通サイド欄ごと隠してgame iframeを全幅にする。中断はトップバナーへ移し、resultでは結果用共通moduleだけを表示する。Portalで確定したmodule profileはdevelopment／stableのruntime catalogへ渡し、`stats`、`rating`、`replay`、`result-share`、`feedback`の保存・表示を同じ採否で制御する。共有文はseat由来の`PLAYERn`だけを用い、フィードバック対象は結果phaseの参加者へだけ返す。LLM生成物への評価は既存の共通feedback storeへ保存し、同じgame/taskの次回生成では命令として信用しない参考例として利用する。
+formal packageの外側は候補Previewとmainで共通の`GameSdkFrame`を使い、その内側へAppSet clientを描画する。SDK専用の白枠や別ロビーは作らない。`GameSdkFrame`は`GameTopBanner`、manifestルール、プレイヤーメニューを本体共通部品から合成する。部屋設定はロビーだけに表示し、playingでは共通サイド欄ごと隠してgame iframeを全幅にする。中断はトップバナーへ移し、resultでは結果用共通moduleだけを表示する。Portalで確定したmodule profileはmain採用カタログへ渡し、`stats`、`rating`、`replay`、`result-share`、`feedback`の保存・表示を同じ採否で制御する。共有文はseat由来の`PLAYERn`だけを用い、フィードバック対象は結果phaseの参加者へだけ返す。LLM生成物への評価は既存の共通feedback storeへ保存し、同じgame/taskの次回生成では命令として信用しない参考例として利用する。
 
 進行部品は提出完了、選択、投票、役職、チーム、ラウンド、手番、seat変換、標準結果へ物理分割した。WordWolf、Tahoiya、Word Scale、Word Sonar、Word Out、Code Intercept、Northern Branch、Daifugoの8オンラインゲームが同じ公開部品を直接利用する回帰検査を持つ。AppSetへ同じ判定をコピーしない。
 

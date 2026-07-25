@@ -12,7 +12,7 @@ export type SdkPreviewGrant = {
   version: 3;
   audience: "mock-client" | "package-client" | "package-server";
   environment: "production" | "development";
-  channel: "candidate-preview" | "development" | "stable";
+  channel: "candidate-preview" | "main";
   role: "client" | "runner";
   instanceId: string;
   gameId: string;
@@ -42,8 +42,7 @@ export function isSdkPreviewGrant(value: unknown): value is SdkPreviewGrant {
     )
     && (
       grant.channel === "candidate-preview"
-      || grant.channel === "development"
-      || grant.channel === "stable"
+      || grant.channel === "main"
     )
     && (
       (grant.audience === "package-server" && grant.role === "runner")

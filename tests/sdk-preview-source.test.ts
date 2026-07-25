@@ -358,9 +358,9 @@ test("SDK preview composes the common room lifecycle around the game slot", () =
   assert.match(shell, /ゲーム固有Runtime未接続/);
 });
 
-test("formal SDK package shell owns the top banner and phase-specific common modules", () => {
+test("shared GameFrame owns the top banner and phase-specific common modules", () => {
   const shell = readFileSync(
-    "app/sdk-preview/[creatorSlug]/games/[gameId]/SdkPackageGameShell.tsx",
+    "app/components/GameSdkFrame.tsx",
     "utf8",
   );
   const header = readFileSync(

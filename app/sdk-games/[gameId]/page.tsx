@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { approvedGameSdkRegistration } from "@/lib/game-sdk-server-registry";
 import { ApprovedSdkGameShell } from "./ApprovedSdkGameShell";
-import { SdkPackageGameShell } from "@/app/sdk-preview/[creatorSlug]/games/[gameId]/SdkPackageGameShell";
+import { GameSdkFrame } from "@/app/components/GameSdkFrame";
 import { loadApprovedGameSdkRuntimeRegistration } from "@/lib/game-sdk-runtime-catalog";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +17,7 @@ export default async function ApprovedSdkGamePage({
   if (!registration) notFound();
   if (registration.clientKind === "iframe-package" && registration.clientRuntimeUrl) {
     return (
-      <SdkPackageGameShell
+      <GameSdkFrame
         backHref="/games"
         endpoint={`/api/game-sdk/${registration.id}/rooms`}
         gameId={registration.id}

@@ -4,7 +4,14 @@
 >
 > 資料を読む順番や作業別の参照先は `docs/README.md` を入口にする。この文書は「現在の開発状態と共通仕様」、`docs/CONTAINER_ARCHITECTURE.md` は「将来案」である。
 
-最終更新: 2026-07-25
+最終更新: 2026-07-26
+
+## 2026-07-26 優先設計の修正
+
+- 広場のゲーム一覧はカード／簡易一覧を切り替え、`localStorage`へ選択を保存する。簡易一覧も公開状態、タグ、参加中Room、入室／復帰を維持する。
+- SDK packageは候補Previewとmainで同じ`GameSdkFrame → AppSet`を使う。SDK専用の白枠を持たない。
+- 昇格経路は`SDK → main`と本体コードの`dev → main`の2本だけで、管理画面でも別sectionとして扱う。
+- `dev`は`main`の検証環境であり、SDK作品を`SDK → dev → main`と流す設計は使用しない。
 
 ## アカウント言語と言語依存ルーム
 
@@ -84,7 +91,7 @@ Pro版ChatGPTから始める入口は`sdk/entry/START_GAME_FIELDS.md`である�
 
 `sdk/starter-template`を正本とし、SDK tarball、`START_HERE.md`、ChatGPT用`AGENTS.md`、`GAME_SPEC.md`、APIリファレンス、型付きmanifest／Command／RoomView／AppSet、契約テスト、完走デモ、promotion readiness、game package builderを含む。`npm run test:sdk-starter`は入口文書、公開Git用snapshotとZIPの同一性、同梱SDK install、型検査、契約テスト、デモ完走、提出ZIPを確認する。Portal developmentの一般向け入口は`GameFieldsDownloadMe-ver15.md`で、`sdk-starter-dev`側の`downloadMeVersion: 15`と一致しない場合は制作開始前に停止する。DownloadMeは人間向け説明を持たないAI実行契約とし、状態機械、述語、禁止条件、tool呼出し中心の宣言形式で記述する。利用者向けの導入説明はPortalへ分離する。安定版`sdk-starter`のver9／SDK 0.1.0は、0.1.1のmain昇格まで更新しない。WorkではSDK toolが遅延読み込みされるため、初期一覧に`get_sdk_handshake`がない場合も、まず`gameapp-dev get_sdk_handshake Game Fields SDK接続互換性`でtool検索する。`requiredCapabilities`のMCP入力schemaは固定enumにせず、将来名もserver側の`CAPABILITY_UNAVAILABLE`判定へ到達させる。既存チャットのtool schemaはプラグイン更新で差し替わらないため、更新後に作成した新しいチャットへver15だけを添付する。保存済み制作者環境は`list_creator_environments`で再取得する。
 
-Portal用の別Vercel Project `app-games-sdk`は`game-fields` Team内に作成済みで、`https://sdk.game-fields.com`から取得できる。本体・devのDB、Redis、Blob、管理者秘密情報は共有していない。GitHub `koromo2010/app-games`へ接続し、Root Directoryは`apps/sdk-portal`、Production Branchは`main`、`develop`はPreview、Ignored Build Stepは`main`と`develop`だけをbuild対象とする。`@game-fields/game-sdk@0.1.0`の初回npm公開は完了している。`0.1.1`のportable AppSet、正式Preview、hash固定昇格はdevelop候補で、mainとnpmには未公開である。外部開発者はSDKで作成したpackageを提出するだけで、`develop`、`main`、Vercel、本番データへの書き込み権限を持たない。candidate→development→stableは運営者管理ゲートを通り、同じrevisionとhashだけを昇格する。
+Portal用の別Vercel Project `app-games-sdk`は`game-fields` Team内に作成済みで、`https://sdk.game-fields.com`から取得できる。本体・devのDB、Redis、Blob、管理者秘密情報は共有していない。GitHub `koromo2010/app-games`へ接続し、Root Directoryは`apps/sdk-portal`、Production Branchは`main`、`develop`はPreview、Ignored Build Stepは`main`と`develop`だけをbuild対象とする。`@game-fields/game-sdk@0.1.0`の初回npm公開は完了している。`0.1.1`のportable AppSet、正式Preview、hash固定採用はdevelop候補で、mainとnpmには未公開である。外部開発者はSDKで作成したpackageを提出するだけで、`develop`、`main`、Vercel、本番データへの書き込み権限を持たない。運営の`SDK → main`採用だけが同じrevisionとhashを本番カタログへ反映し、本体コードの`dev → main`とは完全に分離する。
 
 ## 3. 環境変数
 
@@ -441,8 +448,9 @@ ChatGPT Workではスレッドごとに作業環境が新しくなり、前ス�
 - 隔離previewはGitの確定commitを動的に読むため、ゲームごとのVercel deploymentを行わない。実行ProjectはDB・Redis・Blob・管理API・Git書込権限を持たず、専用mock Gitの読取専用資格だけを持つ。入口Cookieはmock scopeのpathへ限定したHttpOnlyとする。`allow-same-origin`を付けないopaque-origin iframeではCSS・JavaScript等のsubresourceへCookieが送られないため、認証済みHTMLへ同一制作者・同一ゲーム・同一commit・同一期限だけを読めるHMAC asset token付き`base`を注入する。asset tokenは入口sessionや別revisionの読取には使えない。CSPとiframeの両方で`allow-same-origin`、外部通信、フォーム、親画面アクセスを許可しない。
 - 正式packageのブラウザ側へ注入するのは`GameFieldsRoom.subscribe`と`GameFieldsRoom.send`だけで、Platform resource adapterは公開しない。クライアントは閲覧者別Viewを描画してCommandを送るだけとし、ゲーム状態、秘密、参加者同期、手番、結果をブラウザ正本にしない。AppSetだけが`context.resources.contentSource`と`context.resources.llm`を要求でき、portable protocolはeffectを外側へ返して承認済みPlatform adapterから結果を受け取る。effect失敗時に状態を進めるかどうかはAppSetの通常Command契約で決まり、共通側にゲーム固有fallbackを置かない。
 - package client用grantとportable server用grantはaudienceを分離する。ブラウザ用asset routeから`server.bundle.js`、package manifest、`source/`配下を返さない。server grantだけが保存済みbundle SHA-256を持ち、QuickJS runnerは実行直前に取得したbundleを再hashして不一致を拒否する。クライアントURLやasset tokenを取得してもserver AppSetを実行・取得できる権限へ昇格させない。client asset grantは8時間、server grantは10分とし、runner URLは環境別の固定Preview originとrevision path以外を本体側でも拒否する。
-- candidateからdevelopment、developmentからstableへの昇格は、Portal DBのrevision、server bundle SHA-256、AppSet原文SHA-256、manifestをそのままコピーする。昇格時の再build、変換、AppSet補正は禁止する。development／stable catalogは署名済み内部APIから本体へ読み込み、広場・正式Shell・戦績・rating・replayは`publicGameId`で汎用登録する。AIことば当て固有の分岐は共通catalog、Room Shell、resource bridgeへ入れない。
-- development PortalのOAuth MCPは`promote_game_package_to_development`を公開する。現在のGame Fieldsアカウントが所有する制作者slugだけを対象にし、`publish_game_package`が返したrevision、package root、server bundle、AppSet原文の全hashを必須入力として照合する。Candidateが再提出等で変わっていれば昇格せず409相当で停止する。このtoolはdevelopment環境専用で、stable昇格、channel解除、他制作者の操作はできない。stableは本体管理者セッション＋直近MFAから署名済み内部APIを呼ぶ運営経路だけに残す。
+- SDK作品の採用は運営管理画面の`SDK → main`だけとし、Portal DBのcandidate revision、server bundle SHA-256、AppSet原文SHA-256、manifestをそのままmain採用カタログへコピーする。採用時の再build、変換、AppSet補正は禁止する。main catalogは署名済み内部APIから本体へ読み込み、広場・正式`GameSdkFrame`・戦績・rating・replayは`publicGameId`で汎用登録する。AIことば当て固有の分岐は共通catalog、Room Shell、resource bridgeへ入れない。
+- 制作者向けOAuth MCPはgame package保存までを公開し、SDKからdevまたはmainへ昇格するtoolを公開しない。運営管理画面は本体管理者セッション＋直近MFAから署名済み内部APIを呼び、採用対象のrevision、package root、server bundle、AppSet原文の全hashを必須入力として照合する。Candidateが再提出等で変わっていれば採用せず409相当で停止する。
+- 本体コードの`dev → main`は別の管理カードで扱う。GitHubのmain/develop両SHAを再確認し、developがmainに対してfast-forward可能なときだけ`force: false`でmain refを更新する。`dev`はmainの検証環境であり、SDK packageの中間channelではない。
 - package Git保存は対象subtreeを完全置換し、前revisionだけにあったassetを新commitへ残さない。server bundleは提出時にも1 MiB上限を検査する。昇格処理は検査後のUPDATEへ元revisionと2つのhashを条件として付け、再提出または別昇格と競合した場合はコピーせず409で停止する。
 - `SDK_PREVIEW_SIGNING_SECRET`はPortalと対応previewだけで環境別に共有する。Portalだけに`SDK_MOCK_GITHUB_WRITE_TOKEN`、previewだけに別の`SDK_MOCK_GITHUB_READ_TOKEN`を設定し、どちらも専用非公開repo以外へ権限を与えない。変数配置は`docs/ENVIRONMENT_VARIABLES.md`を正本とする。
 

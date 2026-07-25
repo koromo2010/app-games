@@ -32,7 +32,7 @@ export type ApprovedGameSdkRegistration = {
   packageRootSha256?: string;
   serverBundleSha256?: string;
   appSetSourceSha256?: string;
-  channel: "development" | "stable";
+  deployment: "develop-only" | "main";
   supportsDebug: boolean;
   supportsSpectators: boolean;
   supportsReplay: boolean;
@@ -53,7 +53,7 @@ const registrations: readonly ApprovedGameSdkRegistration[] = [
     id: wordWolfSdkServerModule.manifest.id,
     title: wordWolfSdkServerModule.manifest.title.ja,
     clientKind: "wordwolf",
-    channel: "development",
+    deployment: "develop-only",
     supportsDebug: wordWolfSdkServerModule.manifest.supportsDebug,
     supportsSpectators: wordWolfSdkServerModule.manifest.supportsSpectators,
     supportsReplay: wordWolfSdkServerModule.manifest.supportsReplay,
@@ -111,12 +111,12 @@ export function approvedGameSdkRegistration(
   const normalized = gameId.trim().toLowerCase();
   const registration = registrations.find((item) => item.id === normalized);
   if (!registration) return null;
-  if (registration.channel === "development" && isMainDeployment(env)) return null;
+  if (registration.deployment === "develop-only" && isMainDeployment(env)) return null;
   return registration;
 }
 
 export function approvedGameSdkIds(env: NodeJS.ProcessEnv = process.env) {
   return registrations
-    .filter((item) => item.channel === "stable" || !isMainDeployment(env))
+    .filter((item) => item.deployment === "main" || !isMainDeployment(env))
     .map((item) => item.id);
 }

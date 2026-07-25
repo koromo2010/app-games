@@ -122,7 +122,14 @@ function errorMessage(error: unknown) {
   return "操作を完了できませんでした。";
 }
 
-export function SdkPackageGameShell({
+/**
+ * Platform-owned GameFrame shared by candidate Preview and main.
+ *
+ * The immutable game package contributes only its sandboxed AppSet client
+ * surface. Navigation, Room lifecycle, settings, results and Platform modules
+ * remain identical in both channels.
+ */
+export function GameSdkFrame({
   backHref,
   creatorSlug,
   endpoint: endpointInput,

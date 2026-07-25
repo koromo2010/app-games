@@ -1,6 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import {
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import Image from "next/image";
 import { AppLink as Link } from "@/app/components/AppLink";
 import { useAppLocale } from "@/app/components/AppLocaleProvider";
@@ -13,26 +18,82 @@ import type { LocalizedGameCatalogEntry } from "./game-catalog";
 
 type ActiveRoom = { code: string; phase: string; players: { id: string; name: string }[]; updatedAt: number };
 type Props = { games: LocalizedGameCatalogEntry[]; operations: GameOperation[]; activeRooms: Record<string, ActiveRoom>; isLoggedIn: boolean; locale: AppLocale; onLoginRequired: () => void; onRememberWordWolf: () => void };
+type ViewMode = "cards" | "list";
+
+const viewModeStorageKey = "game-fields:lobby-game-view-mode";
+const viewModeChangeEvent = "game-fields:lobby-game-view-mode-change";
+let fallbackViewMode: ViewMode = "cards";
+
+function readViewMode(): ViewMode {
+  try {
+    const saved = window.localStorage.getItem(viewModeStorageKey);
+    fallbackViewMode = saved === "list" ? "list" : "cards";
+  } catch {
+    // Keep the last in-memory choice when storage is unavailable.
+  }
+  return fallbackViewMode;
+}
+
+function subscribeViewMode(onStoreChange: () => void) {
+  const onStorage = (event: StorageEvent) => {
+    if (event.key === viewModeStorageKey) onStoreChange();
+  };
+  window.addEventListener("storage", onStorage);
+  window.addEventListener(viewModeChangeEvent, onStoreChange);
+  return () => {
+    window.removeEventListener("storage", onStorage);
+    window.removeEventListener(viewModeChangeEvent, onStoreChange);
+  };
+}
 
 export function LobbyGameGrid({ games, operations, activeRooms, isLoggedIn, locale, onLoginRequired, onRememberWordWolf }: Props) {
   const { t } = useAppLocale();
   const [searchQuery, setSearchQuery] = useState("");
+  const viewMode = useSyncExternalStore(
+    subscribeViewMode,
+    readViewMode,
+    () => "cards",
+  );
   const filteredGames = useMemo(() => filterGamesBySearch(games, searchQuery), [games, searchQuery]);
+
+  const selectViewMode = (next: ViewMode) => {
+    fallbackViewMode = next;
+    try {
+      window.localStorage.setItem(viewModeStorageKey, next);
+    } catch {
+      // Storage may be unavailable in privacy-restricted browsers.
+    }
+    window.dispatchEvent(new Event(viewModeChangeEvent));
+  };
+
   return <div className={`${isLoggedIn ? "order-1" : "order-2"} min-w-0 lg:order-2 lg:col-start-2 lg:row-start-1`}>
     <div className="mb-4 rounded-lg border border-white/10 bg-white/[0.08] px-4 py-3 text-white">
       <p className="text-xs font-semibold uppercase text-cyan-200">Games</p>
       <div className="mt-1 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <h2 className="text-xl font-black">{t("games.choose")}</h2>
-        <label className="relative block w-full sm:max-w-xs">
-          <span className="sr-only">{t("games.search")}</span>
-          <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">⌕</span>
-          <input type="search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder={t("games.searchPlaceholder")} className="w-full rounded-lg border border-white/15 bg-white px-9 py-2 text-sm text-slate-950 outline-none placeholder:text-slate-400 focus:border-cyan-300 focus:ring-2 focus:ring-cyan-300/25" />
-          {searchQuery && <button type="button" onClick={() => setSearchQuery("")} aria-label={t("games.clearSearch")} className="absolute inset-y-0 right-2 px-2 text-lg font-bold text-slate-400 hover:text-slate-700">×</button>}
-        </label>
+        <div className="flex w-full flex-col gap-2 sm:max-w-md sm:flex-row sm:items-center sm:justify-end">
+          <div className="grid shrink-0 grid-cols-2 rounded-lg border border-white/15 bg-black/20 p-1" role="group" aria-label={t("games.viewMode")}>
+            <button type="button" aria-pressed={viewMode === "cards"} onClick={() => selectViewMode("cards")} className={`rounded-md px-3 py-1.5 text-xs font-bold transition ${viewMode === "cards" ? "bg-cyan-300 text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>
+              <span aria-hidden="true">▦ </span>{t("games.cardView")}
+            </button>
+            <button type="button" aria-pressed={viewMode === "list"} onClick={() => selectViewMode("list")} className={`rounded-md px-3 py-1.5 text-xs font-bold transition ${viewMode === "list" ? "bg-cyan-300 text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>
+              <span aria-hidden="true">☰ </span>{t("games.listView")}
+            </button>
+          </div>
+          <label className="relative block w-full sm:max-w-xs">
+            <span className="sr-only">{t("games.search")}</span>
+            <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-slate-400">⌕</span>
+            <input type="search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder={t("games.searchPlaceholder")} className="w-full rounded-lg border border-white/15 bg-white px-9 py-2 text-sm text-slate-950 outline-none placeholder:text-slate-400 focus:border-cyan-300 focus:ring-2 focus:ring-cyan-300/25" />
+            {searchQuery && <button type="button" onClick={() => setSearchQuery("")} aria-label={t("games.clearSearch")} className="absolute inset-y-0 right-2 px-2 text-lg font-bold text-slate-400 hover:text-slate-700">×</button>}
+          </label>
+        </div>
       </div>
       {searchQuery.trim() && <p className="mt-2 text-xs text-slate-300">{t("games.searchResults", { count: filteredGames.length })}</p>}
     </div>
-    {filteredGames.length > 0 ? <div className="grid grid-cols-1 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(210px,230px))] sm:justify-start">{filteredGames.map((game) => <LobbyGameCard key={game.id} game={game} operation={gameOperationFor(operations, game.id)} activeRoom={activeRooms[game.id]} isLoggedIn={isLoggedIn} locale={locale} onLoginRequired={onLoginRequired} onRememberWordWolf={onRememberWordWolf} />)}</div> : <div className="rounded-lg border border-dashed border-white/20 bg-white/[0.06] px-5 py-8 text-center text-white"><p className="font-bold">{t("games.noResults")}</p><p className="mt-1 text-sm text-slate-400">{t("games.noResultsHelp")}</p><button type="button" onClick={() => setSearchQuery("")} className="mt-4 rounded-lg border border-white/20 px-4 py-2 text-sm font-bold hover:bg-white/10">{t("games.clearSearch")}</button></div>}
+    {filteredGames.length > 0 ? viewMode === "cards"
+      ? <div className="grid grid-cols-1 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(210px,230px))] sm:justify-start">{filteredGames.map((game) => <LobbyGameCard key={game.id} game={game} operation={gameOperationFor(operations, game.id)} activeRoom={activeRooms[game.id]} isLoggedIn={isLoggedIn} locale={locale} onLoginRequired={onLoginRequired} onRememberWordWolf={onRememberWordWolf} />)}</div>
+      : <div className="overflow-hidden rounded-xl border border-white/10 bg-white/[0.06]">{filteredGames.map((game) => <LobbyGameListRow key={game.id} game={game} operation={gameOperationFor(operations, game.id)} activeRoom={activeRooms[game.id]} isLoggedIn={isLoggedIn} locale={locale} onLoginRequired={onLoginRequired} onRememberWordWolf={onRememberWordWolf} />)}</div>
+      : <div className="rounded-lg border border-dashed border-white/20 bg-white/[0.06] px-5 py-8 text-center text-white"><p className="font-bold">{t("games.noResults")}</p><p className="mt-1 text-sm text-slate-400">{t("games.noResultsHelp")}</p><button type="button" onClick={() => setSearchQuery("")} className="mt-4 rounded-lg border border-white/20 px-4 py-2 text-sm font-bold hover:bg-white/10">{t("games.clearSearch")}</button></div>}
   </div>;
 }
 
@@ -57,6 +118,51 @@ function LobbyGameCard({ game, operation, activeRoom, isLoggedIn, locale, onLogi
   </article>;
   if (!game.href || maintenance || unavailable) return <div className="block opacity-80">{card}</div>;
   return isLoggedIn ? <Link href={game.href} onClick={game.id === "wordwolf" && active ? onRememberWordWolf : undefined} className="block">{card}</Link> : <button type="button" onClick={onLoginRequired} className="block text-left">{card}</button>;
+}
+
+function LobbyGameListRow({ game, operation, activeRoom, isLoggedIn, locale, onLoginRequired, onRememberWordWolf }: { game: LocalizedGameCatalogEntry; operation: GameOperation; activeRoom?: ActiveRoom; isLoggedIn: boolean; locale: AppLocale; onLoginRequired: () => void; onRememberWordWolf: () => void }) {
+  const { t } = useAppLocale();
+  const localeAvailable = isGameLocaleAvailable(game.id, locale);
+  const uiLocaleAvailable = isGameUiLocaleAvailable(game.id, locale);
+  const unavailable = !localeAvailable || !uiLocaleAvailable;
+  const maintenance = operation.maintenance;
+  const active = Boolean(activeRoom);
+  const privateGame = operation.publication === "private";
+  const actionLabel = active
+    ? t("games.return")
+    : maintenance || unavailable
+      ? t("games.unavailable")
+      : game.href
+        ? isLoggedIn ? t("games.play") : t("games.loginToPlay")
+        : t("games.comingSoon");
+  const row = (
+    <article className={`flex min-h-16 items-center gap-3 border-b border-white/10 px-3 py-3 text-white transition last:border-b-0 sm:px-4 ${active ? "bg-cyan-300/10 ring-1 ring-inset ring-cyan-300/40" : "hover:bg-white/[0.06]"} ${maintenance || unavailable ? "opacity-75" : ""}`}>
+      <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${active ? "bg-cyan-300 shadow-[0_0_12px_rgba(103,232,249,.9)]" : maintenance || unavailable ? "bg-amber-300" : game.href ? "bg-emerald-300" : "bg-slate-500"}`} aria-hidden="true" />
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <h2 className="mr-1 truncate text-base font-black">{game.title}</h2>
+          {active && <Badge active>{t("games.playing")}</Badge>}
+          {maintenance && !active && <Badge active={false} state>{t("games.maintenance")}</Badge>}
+          {privateGame && <Badge active={active} state>{t("games.private")}</Badge>}
+          {!localeAvailable && <Badge active={false} state>{t("games.japaneseOnly")}</Badge>}
+          {localeAvailable && !uiLocaleAvailable && <Badge active={false} state>{t("games.englishUiPending")}</Badge>}
+          {game.tags.map((tag) => <Badge key={tag} active={active} tag={tag}>{tag}</Badge>)}
+        </div>
+        {activeRoom && <p className="mt-1 text-xs font-bold text-cyan-200">{t("games.roomJoined", { code: activeRoom.code })}</p>}
+      </div>
+      <span className={`shrink-0 rounded-lg px-3 py-2 text-xs font-black sm:min-w-24 sm:text-center ${active ? "bg-amber-300 text-amber-950" : maintenance || unavailable || !game.href ? "border border-white/15 bg-white/5 text-slate-400" : isLoggedIn ? "bg-cyan-600 text-white" : "bg-slate-700 text-slate-300"}`}>
+        {actionLabel}
+      </span>
+    </article>
+  );
+  return <GameEntryAction game={game} active={active} disabled={maintenance || unavailable} isLoggedIn={isLoggedIn} onLoginRequired={onLoginRequired} onRememberWordWolf={onRememberWordWolf}>{row}</GameEntryAction>;
+}
+
+function GameEntryAction({ game, active, disabled, isLoggedIn, onLoginRequired, onRememberWordWolf, children }: { game: LocalizedGameCatalogEntry; active: boolean; disabled: boolean; isLoggedIn: boolean; onLoginRequired: () => void; onRememberWordWolf: () => void; children: ReactNode }) {
+  if (!game.href || disabled) return <div>{children}</div>;
+  return isLoggedIn
+    ? <Link href={game.href} onClick={game.id === "wordwolf" && active ? onRememberWordWolf : undefined} className="block">{children}</Link>
+    : <button type="button" onClick={onLoginRequired} className="block w-full text-left">{children}</button>;
 }
 
 function Badge({ active, state = false, tag, children }: { active: boolean; state?: boolean; tag?: string; children: React.ReactNode }) {

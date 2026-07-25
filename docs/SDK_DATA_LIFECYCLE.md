@@ -5,7 +5,7 @@ SDK公開後のデータは、用途ごとに正本、保持期間、削除方�
 ## 原則
 
 - Package Revisionは不変とし、同じRevisionの内容を更新しない。
-- development／stableはRevisionへの可変pointerであり、公開停止ではpointerだけを外す。
+- main採用カタログはRevisionへの可変pointerであり、公開停止ではpointerだけを外す。
 - Roomは開始時のRuntime契約とsettings snapshotを保持する。Packageの公開停止後も、開始済みRoomは固定済みRevisionで終了できる。
 - Browserから送られたplayer IDや削除対象は信用せず、Platformが認証情報から主体を解決する。
 - token、Cookie、prompt本文、effect本文を運用ログへ保存しない。
@@ -23,7 +23,7 @@ SDK公開後のデータは、用途ごとに正本、保持期間、削除方�
 | replay | 環境別Redis | 既定30日 | TTL。お気に入り制御はreplay policyに従う |
 | 戦績・rating | Platform PostgreSQL／Redis | サービス提供中 | account削除時にplayer別結果とrating fieldを削除 |
 | Package Revision | SDK PostgreSQL | 公開・監査に必要な期間 | 通常は物理更新・上書き禁止 |
-| channel pointer | SDK PostgreSQL | 公開中 | unpublishで即時解除。履歴とRevisionは残す |
+| main catalog pointer | SDK PostgreSQL | 公開中 | unpublishで即時解除。履歴とRevisionは残す |
 | game catalog record | SDK PostgreSQL | 制作者が保持する間 | DELETEで`tombstone`。新規Preview／catalogから即時除外 |
 | channel history | SDK PostgreSQL | 監査に必要な期間 | append-only。通常のunpublish／game削除では消さない |
 | OAuth authorization code | SDK PostgreSQL | 5分 | 交換時に一回で削除。期限切れもOAuth store maintenanceで削除 |
@@ -38,7 +38,7 @@ SDK公開後のデータは、用途ごとに正本、保持期間、削除方�
 
 ### 公開停止
 
-内部promotion APIの`DELETE`は指定channelのpointerとmanifest snapshotだけを外す。Package blob、Revision registry、promotion historyは削除しない。新規Roomは解除済みchannelを解決できず、既存Roomは固定済みRevisionを明示解決できる。
+内部adoption APIの`DELETE`はmain catalog pointerとmanifest snapshotだけを外す。Package blob、Revision registry、adoption historyは削除しない。新規Roomは解除済みcatalogを解決できず、既存Roomは固定済みRevisionを明示解決できる。
 
 ### ゲーム削除
 
