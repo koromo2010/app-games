@@ -11,12 +11,18 @@ import { sharedEnvironmentVariable } from "../lib/shared-environment.ts";
 const sourceUrl = process.env.LEGACY_WORD_DATABASE_URL?.trim();
 const targetUrl = sharedEnvironmentVariable("VOCABULARY_ADMIN_DATABASE_URL");
 const apply = process.argv.includes("--apply");
+const syncMissingWords = process.argv.includes("--sync-missing-words");
 const importedReason = "legacy standard-game classification import";
+const expectedLegacyRows = 347;
+const expectedUniqueClassifications = 346;
 
 if (!sourceUrl || !targetUrl) {
   throw new Error("LEGACY_WORD_DATABASE_URL and VOCABULARY_ADMIN_DATABASE_URL are required");
 }
 if (sourceUrl === targetUrl) throw new Error("SOURCE_AND_TARGET_DATABASE_MUST_DIFFER");
+if (apply && syncMissingWords) {
+  throw new Error("GENERAL_GAME_CLASSIFICATION_MIGRATION_MODE_CONFLICT");
+}
 
 const source = neon(sourceUrl);
 const target = neon(targetUrl);
@@ -49,6 +55,7 @@ const sourceRows = await source`
     catalog.word_master_id,
     catalog.surface,
     catalog.reading,
+    catalog.zipf_frequency,
     evaluation.difficulty_tier,
     evaluation.evaluation_flags
   FROM shared_word_catalog catalog
@@ -62,11 +69,34 @@ const sourceRows = await source`
     AND ${generalGameWordPoolFlag} = ANY(evaluation.evaluation_flags)
     AND ('difficulty_' || evaluation.difficulty_tier) = ANY(evaluation.evaluation_flags)
   ORDER BY catalog.word_master_id
-` as LegacyGeneralGameWordClassificationRow[];
+` as Array<LegacyGeneralGameWordClassificationRow & {
+  zipf_frequency: string | number | null;
+}>;
 
 const records = normalizeLegacyGeneralGameWordClassifications(sourceRows);
 if (records.length === 0) throw new Error("GENERAL_GAME_CLASSIFICATION_SOURCE_EMPTY");
-const payload = JSON.stringify(records);
+const sourceDetails = new Map(
+  sourceRows.map((row) => {
+    const surface = String(row.surface ?? "").normalize("NFKC").trim();
+    const reading = String(row.reading ?? "").normalize("NFKC").trim();
+    const zipf = Number(row.zipf_frequency);
+    return [
+      `${surface.toLocaleLowerCase("ja-JP")}\u0000${reading}`,
+      {
+        zipf: Number.isFinite(zipf) && zipf >= 0 && zipf <= 10 ? zipf : null,
+        characterCount: Array.from(surface).length,
+      },
+    ] as const;
+  }),
+);
+const importRecords = records.map((record) => ({
+  ...record,
+  ...(sourceDetails.get(`${record.normalizedSurface}\u0000${record.reading}`) ?? {
+    zipf: null,
+    characterCount: Array.from(record.surface).length,
+  }),
+}));
+const payload = JSON.stringify(importRecords);
 
 const matchRows = await target`
   WITH incoming AS (
@@ -150,6 +180,102 @@ const byDifficulty = Object.fromEntries(
   ]),
 );
 
+if (
+  (apply || syncMissingWords)
+  && (
+    sourceRows.length !== expectedLegacyRows
+    || records.length !== expectedUniqueClassifications
+  )
+) {
+  throw new Error("GENERAL_GAME_CLASSIFICATION_SOURCE_COUNT_CHANGED");
+}
+
+if (syncMissingWords) {
+  await target`
+    WITH incoming AS (
+      SELECT *
+      FROM jsonb_to_recordset(${payload}::jsonb) AS item(
+        "wordMasterId" bigint,
+        surface text,
+        "normalizedSurface" text,
+        reading text,
+        difficulty text,
+        zipf double precision,
+        "characterCount" integer
+      )
+    )
+    INSERT INTO words (
+      surface,
+      reading,
+      normalized_surface,
+      proper_noun,
+      character_count,
+      zipf,
+      source_name,
+      status,
+      source_type,
+      source_environment,
+      source_reference,
+      created_by,
+      reviewed_at,
+      reviewed_by
+    )
+    SELECT
+      surface,
+      NULLIF(reading, ''),
+      "normalizedSurface",
+      FALSE,
+      "characterCount",
+      zipf,
+      'legacy-shared-word-catalog',
+      'active',
+      'import',
+      'admin',
+      'legacy-shared-word-catalog:' || "wordMasterId"::text,
+      'legacy-import',
+      NOW(),
+      'legacy-import'
+    FROM incoming
+    ON CONFLICT (normalized_surface, (COALESCE(reading, ''))) DO NOTHING
+  `;
+
+  const syncedRows = await target`
+    WITH incoming AS (
+      SELECT *
+      FROM jsonb_to_recordset(${payload}::jsonb) AS item(
+        "wordMasterId" bigint,
+        surface text,
+        "normalizedSurface" text,
+        reading text,
+        difficulty text,
+        zipf double precision,
+        "characterCount" integer
+      )
+    )
+    SELECT COUNT(word.id)::bigint AS matched_count
+    FROM incoming
+    LEFT JOIN words word
+      ON word.normalized_surface = incoming."normalizedSurface"
+      AND COALESCE(word.reading, '') = incoming.reading
+      AND word.status = 'active'
+  ` as Array<{ matched_count: string }>;
+  const syncedCount = Number(syncedRows[0]?.matched_count ?? 0);
+  if (syncedCount !== sourceCount) {
+    throw new Error("GENERAL_GAME_CLASSIFICATION_WORD_SYNC_INCOMPLETE");
+  }
+
+  process.stdout.write(JSON.stringify({
+    wordSyncComplete: true,
+    selectedLegacyRows: sourceRows.length,
+    uniqueClassifications: records.length,
+    matchedBeforeSync: matchedCount,
+    matchedAfterSync: syncedCount,
+    insertedOrRecoveredWords: syncedCount - matchedCount,
+    next: "Re-run the dry run and require missingTargetWords to be zero before --apply.",
+  }) + "\n");
+  process.exit(0);
+}
+
 if (!apply) {
   process.stdout.write(JSON.stringify({
     dryRun: true,
@@ -165,7 +291,13 @@ if (!apply) {
       ambiguousSurface: Number(matchRows[0]?.ambiguous_surface_count ?? 0),
       absentSurface: Number(matchRows[0]?.absent_surface_count ?? 0),
     },
-    next: "Re-run with --apply only after missingTargetWords is zero.",
+    expectedSource: {
+      selectedLegacyRows: expectedLegacyRows,
+      uniqueClassifications: expectedUniqueClassifications,
+    },
+    next: matchedCount === sourceCount
+      ? "Re-run with --apply."
+      : "Run --sync-missing-words, then repeat this dry run before --apply.",
   }) + "\n");
   process.exit(0);
 }

@@ -13,7 +13,7 @@ const apply = process.argv.includes("--apply");
 const args = [
   "--experimental-strip-types",
   "scripts/import-legacy-general-game-classifications.ts",
-  ...(apply ? ["--apply"] : []),
+  ...(apply ? ["--apply"] : ["--sync-missing-words"]),
 ];
 const result = spawnSync(process.execPath, args, {
   cwd: process.cwd(),
