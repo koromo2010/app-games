@@ -15,7 +15,7 @@ export type SavedGamePackage = {
   packageRootSha256: string;
   serverBundleSha256: string;
   appSetSourceSha256: string;
-  status: "submitted";
+  status: "ready-for-submission";
 };
 
 export async function saveCreatorGamePackage(input: {
@@ -58,17 +58,6 @@ export async function saveCreatorGamePackage(input: {
       }
     | null;
   if (existing) {
-    await sdkSql()`
-      UPDATE sdk_games
-      SET package_revision = ${existing.revision},
-          package_root_sha256 = ${existing.packageRootSha256},
-          package_bundle_sha256 = ${existing.serverBundleSha256},
-          package_app_set_sha256 = ${existing.appSetSourceSha256},
-          status = 'submitted',
-          deleted_at = NULL,
-          updated_at = NOW()
-      WHERE creator_id = ${input.creatorId} AND game_id = ${input.gameId}
-    `;
     return {
       saved: true,
       gameId: input.gameId,
@@ -76,7 +65,7 @@ export async function saveCreatorGamePackage(input: {
       packageRootSha256: existing.packageRootSha256,
       serverBundleSha256: existing.serverBundleSha256,
       appSetSourceSha256: existing.appSetSourceSha256,
-      status: "submitted",
+      status: "ready-for-submission",
     };
   }
 
@@ -125,25 +114,6 @@ export async function saveCreatorGamePackage(input: {
   if (!Array.isArray(revisionRows) || revisionRows.length === 0) {
     throw new Error("GAME_SDK_PACKAGE_REVISION_CONFLICT");
   }
-  const rows = await sdkSql()`
-    UPDATE sdk_games
-    SET manifest = ${manifestJson}::jsonb,
-        sdk_package_version = ${parsed.manifest.sdkPackageVersion},
-        sdk_contract_version = ${parsed.manifest.sdkContractVersion},
-        package_revision = ${revision},
-        package_root_sha256 = ${parsed.packageRootSha256},
-        package_bundle_sha256 = ${parsed.bundleSha256},
-        package_app_set_sha256 = ${parsed.appSetSourceSha256},
-        status = 'submitted',
-        deleted_at = NULL,
-        updated_at = NOW()
-    WHERE creator_id = ${input.creatorId} AND game_id = ${input.gameId}
-    RETURNING game_id
-  `;
-  if (!Array.isArray(rows) || rows.length === 0) {
-    throw new Error("GAME_SDK_PACKAGE_GAME_NOT_FOUND");
-  }
-
   return {
     saved: true,
     gameId: input.gameId,
@@ -151,6 +121,6 @@ export async function saveCreatorGamePackage(input: {
     packageRootSha256: parsed.packageRootSha256,
     serverBundleSha256: parsed.bundleSha256,
     appSetSourceSha256: parsed.appSetSourceSha256,
-    status: "submitted",
+    status: "ready-for-submission",
   };
 }

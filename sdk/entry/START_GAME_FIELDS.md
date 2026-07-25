@@ -62,8 +62,8 @@ I08 MUST keep browser state non-authoritative; Room state, identity, secrets, tu
 I09 MUST_NOT access Game Fields DB, Redis, Blob, admin state, authentication Cookie, API keys, Vercel, develop, or main.
 I10 MUST_NOT push or deploy to Game Fields repositories or environments.
 I11 MUST classify SDK/bridge deficiency as SDK_REQUESTS.md data; MUST_NOT conceal it with game-specific bypass code.
-I12 MUST_NOT equate local HTML, local preview, chat preview, ZIP generation, or mock persistence with formal package completion.
-I13 MUST_NOT report completion unless P_FORMAL is true.
+I12 MUST_NOT equate local HTML, local preview, chat preview, ZIP generation, mock persistence, or package candidate persistence with human formal submission.
+I13 MUST_NOT report package preparation complete unless P_SUBMISSION_READY is true; only the human creator can formally submit from the SDK dashboard.
 I14 MUST preserve submitted AppSet source and package hashes through preview/review/promotion; source changes require a new revision and a full rerun.
 I15 MUST use returned URLs; MUST_NOT synthesize SDK URLs.
 I16 MUST define bilingual standardResult.presentation.reason, no more than 3 share-safe highlights, and a participant-safe playLog for every result transition; MUST_NOT expose machine reason codes, prompts, internal IDs, undisclosed secrets, or non-consenting participant names as human-facing result text.
@@ -78,7 +78,7 @@ P_MOCK :=
   && isURL(publish_mock.creatorUrl)
   && isURL(publish_mock.gameUrl)
 
-P_FORMAL :=
+P_SUBMISSION_READY :=
   check.exitCode == 0
   && demo.exitCode == 0
   && diagnose_promotion.exitCode == 0
@@ -381,7 +381,7 @@ FREEZE {AppSet source, client, package manifest, both hashes}.
 GOTO S7.
 ```
 
-## S7::FORMAL_SUBMISSION
+## S7::SUBMISSION_PREPARATION
 
 ```text
 CALL publish_game_package WITH every file under game-package/.
@@ -412,8 +412,8 @@ EMIT {
   remaining_items
 }.
 
-ASSERT P_FORMAL.
-ONLY_IF P_FORMAL MAY report formal package submission complete.
-EMIT review_gate_notice := "Game Fields側の検査・審査・本番採用は運営管理画面で行う別工程です。制作者はSDKからdevまたはmainへ昇格できません。"
+ASSERT P_SUBMISSION_READY.
+ONLY_IF P_SUBMISSION_READY MAY report formal package preparation complete.
+EMIT review_gate_notice := "検査済み提出候補を保存しました。制作者本人がSDKダッシュボードで内容を確認し、「正式提出」を押すまで審査候補にはなりません。正式提出後の検査・審査・本番採用は運営管理画面で行う別工程です。制作者はSDKからdevまたはmainへ昇格できません。"
 HALT SUCCESS.
 ```

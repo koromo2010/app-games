@@ -18,6 +18,8 @@ test("SDK OAuth discovery requires authorization code with S256 PKCE", () => {
 test("SDK MCP challenges unauthenticated callers and scopes mock publication", () => {
   const mcp = read("apps/sdk-portal/app/api/mcp/route.ts");
   const packageStore = read("apps/sdk-portal/lib/game-package-store.ts");
+  const dashboardSubmit = read("apps/sdk-portal/app/api/dashboard/games/[instanceId]/[gameId]/submit/route.ts");
+  const dashboard = read("apps/sdk-portal/app/dashboard/page.tsx");
   assert.match(mcp, /WWW-Authenticate/);
   assert.match(mcp, /oauth-protected-resource/);
   assert.match(mcp, /name === "publish_mock"/);
@@ -26,7 +28,13 @@ test("SDK MCP challenges unauthenticated callers and scopes mock publication", (
   assert.doesNotMatch(mcp, /name: "promote_game_package_to_development"/);
   assert.doesNotMatch(mcp, /promoteGamePackage/);
   assert.match(packageStore, /appSetSourceSha256/);
-  assert.match(packageStore, /package_app_set_sha256/);
+  assert.match(packageStore, /ready-for-submission/);
+  assert.doesNotMatch(packageStore, /status = 'submitted'/);
+  assert.match(dashboardSubmit, /package_app_set_sha256/);
+  assert.match(dashboardSubmit, /status = 'submitted'/);
+  assert.match(dashboardSubmit, /authenticateCreatorOwner/);
+  assert.match(dashboardSubmit, /r\.revision IS DISTINCT FROM g\.package_revision/);
+  assert.match(dashboard, /<SubmitGameButton/);
   assert.match(mcp, /immutableAppSet: true/);
   assert.match(mcp, /name: "get_sdk_handshake"/);
   assert.match(mcp, /name === "get_sdk_handshake"/);
