@@ -3823,3 +3823,50 @@
   まだ行っていない。
 - 実環境へ反映後、新しいWork／Codexスレッドでver11を添付し、
   状態機械形式をAIが最後まで解釈できることを接続済みE2Eで確認する。
+
+## 2026-07-25 — DownloadMe ver11のdevelop公開
+
+### 利用者からの要望
+
+- ローカルcommit `a934d52`のDownloadMe ver11変更を
+  `koromo2010/app-games`の`develop`へpushする。
+
+### 実施結果
+
+- GitHub連携で11ファイルのblobを照合し、ローカル`a934d52`と同じtree
+  `f792b4fddf45146078027dff7126d27161cc1f6a`を
+  GitHub commit `889113a77a7cfb2edf1f8a5f8f193e9beb95d187`として
+  `develop`へfast-forwardした。force更新は使用していない。
+- development Starter 38ファイルをtree
+  `b14c3fb9fbb31015d95d375612b074c45130a806`、
+  commit `eab69e165e86f76811994dfe69a102f01e730867`として
+  `sdk-starter-dev`へfast-forwardした。
+- 公開Starter manifestでDownloadMe ver11、Platform／Starter／SDK 0.1.1、
+  handshake／contract 1、ref `sdk-starter-dev`を再取得した。
+- stableの`sdk-starter`はver9／SDK 0.1.0の
+  `389cb31924d78964e3393e0bab7c845519d55b9b`から動かしていない。
+- `main`とnpm packageは変更していない。
+
+### 検証
+
+- `develop`のGitHub commitから起動した`app-games-dev`、
+  `app-games-sdk-dev`、`app-games-preview-dev`の3 Deploymentは
+  すべて`READY`になり、いずれもcommit `889113a`を取得している。
+- `https://sdk-dev.game-fields.com/GameFieldsDownloadMe-ver11.md`はHTTP 200で、
+  配信内容のSHA-256がcommit内のver11ファイルと一致した。
+- 旧`GameFieldsDownloadMe-ver10.md`はHTTP 307でver11へ転送され、
+  転送後の内容もver11と一致した。
+- 公開`/api/health`は`status: ok`、`schemaVersion: 3`を返した。
+- `sdk-starter-dev`更新を検出した6 Vercel Projectはすべて
+  source側branch guardにより`CANCELED`となり、不要buildとERRORは発生しなかった。
+
+### 関連コミット
+
+- `889113a` — DownloadMe ver11のAI実行契約を`develop`へ反映。
+- `eab69e1` — development Starterをver11へ更新。
+
+### 未対応・保留
+
+- 次は新しいWork／Codexスレッドへ公開DownloadMe ver11を添付し、
+  AIことば当てを固定検査対象としてcandidate提出、development昇格、
+  複数ブラウザ正式Roomまで接続済みE2Eを行う。
