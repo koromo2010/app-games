@@ -3,6 +3,7 @@ import type { AuthenticatorTransportFuture, Base64URLString, CredentialDeviceTyp
 import { ensurePostgresSchema } from "@/lib/postgres-schema";
 import { getPostgresClient, isPostgresConfigured } from "@/lib/postgres-store";
 import type { SiteAdminSessionPayload } from "@/lib/site-admin-auth-core";
+import { isValidSiteAdminEmail, normalizeSiteAdminEmail } from "@/lib/site-admin-account-core";
 
 const maximumPasskeysPerAdmin = 5;
 const recoveryCodeCount = 10;
@@ -122,6 +123,22 @@ export async function consumeSiteAdminRecoveryCode(email: string, code: string) 
     RETURNING code_hash
   ` as Array<{ code_hash: string }>;
   return rows.length === 1;
+}
+
+export async function resetSiteAdminMfa(emailInput: string) {
+  requireStore(); await ensurePostgresSchema();
+  const email = normalizeSiteAdminEmail(emailInput);
+  if (!isValidSiteAdminEmail(email)) throw new Error("SITE_ADMIN_EMAIL_INVALID");
+  const sql = getPostgresClient();
+  const accounts = await sql`
+    SELECT email FROM site_admin_accounts WHERE email = ${email} LIMIT 1
+  ` as Array<{ email: string }>;
+  if (!accounts[0]) throw new Error("SITE_ADMIN_ACCOUNT_NOT_FOUND");
+  const passkeys = await sql`
+    DELETE FROM site_admin_passkeys WHERE admin_email = ${email} RETURNING credential_id
+  ` as Array<{ credential_id: string }>;
+  await sql`DELETE FROM site_admin_recovery_codes WHERE admin_email = ${email}`;
+  return { email, removedPasskeyCount: passkeys.length };
 }
 
 function requestFingerprint(request: Request) {

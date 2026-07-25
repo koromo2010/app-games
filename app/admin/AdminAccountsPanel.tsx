@@ -27,6 +27,8 @@ const accountMessages: Record<string, string> = {
   SITE_ADMIN_ACCOUNT_DELETE_FAILED: "管理者アカウントを削除できませんでした。",
   SITE_ADMIN_PASSKEY_ADD_FAILED: "パスキーを追加できませんでした。",
   SITE_ADMIN_PASSKEY_LIMIT_REACHED: "登録できるパスキー数の上限に達しています。",
+  SITE_ADMIN_MFA_RESET_FAILED: "MFAをリセットできませんでした。",
+  SITE_ADMIN_RECOVERY_REQUIRED: "MFAのリセットは復旧モードでのみ実行できます。",
   SITE_ADMIN_SUBSCRIPTIONS_SAVE_FAILED: "メール通知の設定を保存できませんでした。",
   SITE_ADMIN_ACCOUNT_NOT_FOUND: "対象の管理者アカウントが見つかりません。",
 };
@@ -51,6 +53,7 @@ export function AdminAccountsPanel({ onAuthExpired, recoveryMode, currentEmail }
   const [saving, setSaving] = useState(false);
   const [deletingEmail, setDeletingEmail] = useState<string | null>(null);
   const [addingPasskey, setAddingPasskey] = useState(false);
+  const [resettingMfaEmail, setResettingMfaEmail] = useState<string | null>(null);
   const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
   const [updatingEmail, setUpdatingEmail] = useState<string | null>(null);
 
@@ -148,6 +151,28 @@ export function AdminAccountsPanel({ onAuthExpired, recoveryMode, currentEmail }
     } finally { setAddingPasskey(false); }
   };
 
+  const resetMfa = async (targetEmail: string) => {
+    if (resettingMfaEmail || !window.confirm(`${targetEmail} のパスキーと復旧コードをすべて無効にしますか？\n次回のメールログイン時に、新しいパスキーの登録が必要になります。`)) return;
+    setResettingMfaEmail(targetEmail); setMessage("");
+    try {
+      const response = await fetch("/api/admin/accounts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reset-mfa", email: targetEmail }),
+      });
+      const data = await response.json().catch(() => null) as { accounts?: SiteAdminAccount[]; error?: string } | null;
+      if (response.status === 401) { onAuthExpired(); return; }
+      if (!response.ok || !data?.accounts) throw new Error(data?.error || "SITE_ADMIN_MFA_RESET_FAILED");
+      setAccounts(data.accounts);
+      setMessage("MFAをリセットしました。復旧モードを無効化した後、メールとパスワードでログインし、新しいパスキーを登録してください。");
+    } catch (error) {
+      const code = error instanceof Error ? error.message : undefined;
+      setMessage(messageFor(code, "MFAをリセットできませんでした。"));
+    } finally {
+      setResettingMfaEmail(null);
+    }
+  };
+
   const regenerateRecoveryCodes = async () => {
     if (saving || !window.confirm("現在の未使用復旧コードをすべて無効にして、新しいコードを発行しますか？")) return;
     setSaving(true); setMessage("");
@@ -176,7 +201,7 @@ export function AdminAccountsPanel({ onAuthExpired, recoveryMode, currentEmail }
           <ul className="mt-6 space-y-3">
             {accounts.map((account) => (
               <li key={account.email} className="rounded-xl border border-white/10 bg-black/20 p-4">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div className="min-w-0"><p className="truncate font-bold text-white">{account.email}</p><p className="mt-1 text-xs text-slate-400">パスキー {account.passkeyCount}件 ・ 未使用復旧コード {account.unusedRecoveryCodeCount}件</p><p className="mt-1 text-xs text-slate-500">登録 {formatDate(account.createdAt)} ・ 更新 {formatDate(account.updatedAt)}</p><p className={`mt-2 text-xs font-bold ${account.debugAccessEnabled ? "text-emerald-300" : "text-amber-200"}`}>{account.debugAccessEnabled ? `デバッグ権限：${account.matchingPlayerName} に付与中` : "デバッグ権限：同じメールのプレイヤーは未登録"}</p></div><div className="flex gap-2">{!recoveryMode && currentEmail === account.email && <button type="button" onClick={() => void addPasskey()} disabled={addingPasskey || Boolean(deletingEmail) || Boolean(updatingEmail)} className="rounded-lg border border-cyan-300/30 px-3 py-2 text-sm font-bold text-cyan-200 hover:bg-cyan-300/10 disabled:opacity-40">{addingPasskey ? "追加中…" : "パスキー追加"}</button>}<button type="button" onClick={() => void remove(account.email)} disabled={Boolean(deletingEmail) || Boolean(updatingEmail)} className="rounded-lg border border-rose-300/30 px-3 py-2 text-sm font-bold text-rose-200 hover:bg-rose-300/10 disabled:opacity-40">{deletingEmail === account.email ? "削除中…" : "削除"}</button></div></div>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div className="min-w-0"><p className="truncate font-bold text-white">{account.email}</p><p className="mt-1 text-xs text-slate-400">パスキー {account.passkeyCount}件 ・ 未使用復旧コード {account.unusedRecoveryCodeCount}件</p><p className="mt-1 text-xs text-slate-500">登録 {formatDate(account.createdAt)} ・ 更新 {formatDate(account.updatedAt)}</p><p className={`mt-2 text-xs font-bold ${account.debugAccessEnabled ? "text-emerald-300" : "text-amber-200"}`}>{account.debugAccessEnabled ? `デバッグ権限：${account.matchingPlayerName} に付与中` : "デバッグ権限：同じメールのプレイヤーは未登録"}</p></div><div className="flex flex-wrap gap-2">{!recoveryMode && currentEmail === account.email && <button type="button" onClick={() => void addPasskey()} disabled={addingPasskey || Boolean(deletingEmail) || Boolean(updatingEmail)} className="rounded-lg border border-cyan-300/30 px-3 py-2 text-sm font-bold text-cyan-200 hover:bg-cyan-300/10 disabled:opacity-40">{addingPasskey ? "追加中…" : "パスキー追加"}</button>}{recoveryMode && account.passkeyCount > 0 && <button type="button" onClick={() => void resetMfa(account.email)} disabled={Boolean(resettingMfaEmail) || Boolean(deletingEmail)} className="rounded-lg border border-amber-300/30 px-3 py-2 text-sm font-bold text-amber-200 hover:bg-amber-300/10 disabled:opacity-40">{resettingMfaEmail === account.email ? "リセット中…" : "MFAを再設定"}</button>}<button type="button" onClick={() => void remove(account.email)} disabled={Boolean(deletingEmail) || Boolean(updatingEmail) || Boolean(resettingMfaEmail)} className="rounded-lg border border-rose-300/30 px-3 py-2 text-sm font-bold text-rose-200 hover:bg-rose-300/10 disabled:opacity-40">{deletingEmail === account.email ? "削除中…" : "削除"}</button></div></div>
                 <div className="mt-4 flex flex-col gap-2 border-t border-white/10 pt-4 text-sm sm:flex-row sm:gap-5"><label className="flex cursor-pointer items-center gap-2 text-slate-200"><input type="checkbox" checked={account.receiveAlerts} disabled={recoveryMode || Boolean(updatingEmail)} onChange={(event) => void updateSubscriptions(account, { receiveAlerts: event.target.checked })} className="h-4 w-4 accent-cyan-300" />運用アラートを受け取る</label><label className="flex cursor-pointer items-center gap-2 text-slate-200"><input type="checkbox" checked={account.receiveContacts} disabled={recoveryMode || Boolean(updatingEmail)} onChange={(event) => void updateSubscriptions(account, { receiveContacts: event.target.checked })} className="h-4 w-4 accent-cyan-300" />問い合わせ内容を受け取る</label>{updatingEmail === account.email && <span className="text-xs text-cyan-200">保存中…</span>}</div>
               </li>
             ))}
