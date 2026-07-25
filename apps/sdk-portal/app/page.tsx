@@ -77,6 +77,7 @@ export default async function Home() {
           </span>
         </a>
         <nav aria-label="主要ナビゲーション">
+          {linked && <Link href="/dashboard">マイゲーム</Link>}
           <a href="#start">Start</a>
           <a href="#foundation">Foundation</a>
           <a href="#status">Status</a>
@@ -166,7 +167,7 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
           <div>
             <h3 id="account-link-title">{linked ? `${account?.playerName || "Game Fieldsアカウント"}へ接続済みです` : "先にGame Fieldsアカウントを接続してください"}</h3>
             <p>表のGame Fieldsと同じアカウントへ制作物を紐づけます。パスワードや表サイトのログインCookieをSDKやChatGPTへ渡すことはありません。</p>
-            {!linked && <a className="secondary-action" href="/api/account-link/start">Game Fieldsでログインして接続</a>}
+            {!linked && <Link className="secondary-action" href="/api/account-link/start">Game Fieldsでログインして接続</Link>}
           </div>
         </aside>
         <div className="first-build-guide" aria-label="初めてゲームを作る方への案内">

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getSdkAccountSession } from "@/lib/account-session";
 
 function accountInitial(name: string | null) {
@@ -8,7 +9,7 @@ export async function AccountMenu() {
   const account = await getSdkAccountSession().catch(() => null);
 
   if (!account) {
-    return <a className="account-login" href="/api/account-link/start">ログイン</a>;
+    return <Link className="account-login" href="/api/account-link/start">ログイン</Link>;
   }
 
   const label = account.playerName || "連携済みアカウント";
@@ -28,7 +29,8 @@ export async function AccountMenu() {
           <small>Game Fields本体との連携</small>
           <strong>{account.playerName ? `${account.playerName} と連携済み` : "連携済み（表示名は再連携後に表示）"}</strong>
         </div>
-        <a href="/api/account-link/start">本体アカウントを再連携</a>
+        <Link href="/dashboard">マイゲーム</Link>
+        <Link href="/api/account-link/start">本体アカウントを再連携</Link>
         <form action="/api/account-link/logout" method="post">
           <button type="submit">ログアウト</button>
         </form>

@@ -121,6 +121,44 @@ export async function listCreatorEnvironments(ownerPlayerId: string) {
   return rows as Array<{ slug: string; displayName: string; gameCount: number }>;
 }
 
+export async function listAccountGames(ownerPlayerId: string) {
+  await ensureSdkSchema();
+  const rows = await sdkSql()`
+    SELECT c.slug AS "creatorSlug",
+           c.display_name AS "creatorDisplayName",
+           g.game_id AS "gameId",
+           g.title,
+           g.description,
+           g.status,
+           g.updated_at AS "updatedAt",
+           (g.mock_revision IS NOT NULL) AS "mockAvailable",
+           (g.package_revision IS NOT NULL) AS "packageAvailable",
+           (g.development_revision IS NOT NULL) AS "developmentAvailable",
+           (g.stable_revision IS NOT NULL) AS "stableAvailable",
+           g.public_game_id AS "publicGameId"
+    FROM sdk_games g
+    JOIN sdk_creators c ON c.id = g.creator_id
+    WHERE c.owner_player_id = ${ownerPlayerId}
+      AND c.deleted_at IS NULL
+      AND g.deleted_at IS NULL
+    ORDER BY g.updated_at DESC, g.created_at DESC
+  `;
+  return rows as Array<{
+    creatorSlug: string;
+    creatorDisplayName: string;
+    gameId: string;
+    title: string;
+    description: string;
+    status: string;
+    updatedAt: string;
+    mockAvailable: boolean;
+    packageAvailable: boolean;
+    developmentAvailable: boolean;
+    stableAvailable: boolean;
+    publicGameId: string | null;
+  }>;
+}
+
 export async function listCreatorGames(slug: string) {
   await ensureSdkSchema();
   const rows = await sdkSql()`

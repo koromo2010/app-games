@@ -1,10 +1,15 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { redirect } from "next/navigation";
 import {
   createSdkPreviewAccountLinkCode,
   getSdkAccountSession,
 } from "@/lib/account-session";
-import { normalizeInstanceSlug, validateInstanceSlug } from "@/lib/instance-registry";
+import {
+  authenticateCreatorOwner,
+  normalizeInstanceSlug,
+  validateInstanceSlug,
+} from "@/lib/instance-registry";
 
 export default async function PreviewInstancePage({ params }: {
   params: Promise<{ instanceId: string }>;
@@ -18,6 +23,9 @@ export default async function PreviewInstancePage({ params }: {
       `/api/account-link/start?returnTo=${encodeURIComponent(`/${slug}`)}`,
     );
   }
+  const isOwner = Boolean(
+    await authenticateCreatorOwner(slug, account.playerId).catch(() => null),
+  );
   const appBaseUrl = process.env.GAME_FIELDS_PREVIEW_APP_URL?.replace(/\/$/, "")
     ?? (process.env.VERCEL_GIT_COMMIT_REF === "main" ? "https://www.game-fields.com" : "https://dev.game-fields.com");
   const linkCode = createSdkPreviewAccountLinkCode({
@@ -31,5 +39,11 @@ export default async function PreviewInstancePage({ params }: {
   }).toString()}`;
   return <main className="platform-preview-shell">
     <iframe className="platform-preview-frame" src={previewUrl} title={`${slug}のGame Fields開発環境`} allow="fullscreen" />
+    {isOwner && (
+      <nav className="creator-preview-actions" aria-label="制作者用メニュー">
+        <span>CREATOR</span>
+        <Link href="/dashboard">マイゲーム・編集</Link>
+      </nav>
+    )}
   </main>;
 }
