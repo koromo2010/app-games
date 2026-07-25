@@ -3769,3 +3769,10 @@
 - 次のblocking作業は、新しいWork／CodexスレッドからDownloadMe ver10と
   `sdk-starter-dev`を取得し、AIことば当てを無改造の検査対象として
   candidate提出、development昇格、複数ブラウザ正式Roomまで通す接続済みE2Eである。
+- 初回`sdk-starter-dev`公開では6 Vercel Projectがbranchを検出し、本体3件は
+  既存Ignored Build StepでCANCELEDになった。一方、SDK Portal 2件はbranch gateが
+  実行されずNext.js root不足、隔離Preview 1件はRoot Directory
+  `apps/sdk-preview`不足でERRORとなった。公開Starterと稼働中aliasには影響しない。
+- Dashboard設定のドリフトへ依存しないよう、Starter snapshotのPortal／隔離Preview
+  Rootへ公式`vercel.json`の`ignoreCommand`を追加した。`main`／`develop`以外は
+  source側でも終了コード0とし、ゲーム提出ZIPにはこれらrepository用guardを含めない。

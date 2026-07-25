@@ -70,6 +70,8 @@ try {
     "scripts/publish-mock.mjs",
     "scripts/stored-zip.mjs",
     "apps/sdk-portal/.vercel-root-placeholder",
+    "apps/sdk-portal/vercel.json",
+    "apps/sdk-preview/vercel.json",
     "src/manifest.ts",
     "src/contracts.ts",
     "src/app-set.ts",
@@ -226,8 +228,8 @@ try {
   if (submissionEntries.some((entry) => /(^|\/)(?:node_modules|dist|\.git|submission)(?:\/|$)/.test(entry.replace("game-fields-submission/", "")))) {
     throw new Error("Submission archive contains generated or repository-only directories.");
   }
-  if (submissionEntries.some((entry) => entry.includes("apps/sdk-portal"))) {
-    throw new Error("Submission archive contains the Vercel branch placeholder.");
+  if (submissionEntries.some((entry) => entry.startsWith("game-fields-submission/apps/"))) {
+    throw new Error("Submission archive contains repository-only Vercel branch guards.");
   }
 
   for (const [path, content] of unansweredReviewFiles) {

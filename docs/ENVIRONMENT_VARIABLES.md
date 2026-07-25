@@ -91,6 +91,9 @@ VercelのIgnored Build StepはProjectごとに次を設定済み。
 - `app-games-preview-dev`: Production Branchは`develop`へ変更済み。Ignored Build Stepは未確認。設定値は `if [ "$VERCEL_GIT_COMMIT_REF" != "develop" ]; then exit 0; else exit 1; fi`
 
 VercelではIgnored Build Stepの終了コード`0`がスキップ、`1`がビルド実行を意味する。
+公開Starter branchではProject設定の欠落やRoot Directory先行検査にも耐えるため、
+snapshot内の`apps/sdk-portal/vercel.json`と`apps/sdk-preview/vercel.json`にも
+同じbranch gateを`ignoreCommand`として持たせる。ゲーム提出ZIPからは除外する。
 
 ChatGPTのVercel Connectorは`game-fields` Teamへ再認証済みで、Project一覧、Deployment、Build Logの参照とファイル直接Deploymentは利用できる。一方、現行ConnectorはGit接続、Project設定更新、Project間の独自ドメイン移管を公開していない。これらはVercel Dashboardまたは認証済みCLI／REST APIで行う。
 
