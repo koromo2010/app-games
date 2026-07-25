@@ -22,6 +22,7 @@ import { usesStrictAppDatabase } from "@/lib/player-account-environment";
 import { hasPlayerAccountEmailOwnerConflict } from "@/lib/player-account-migration";
 import { legalConsentIsCurrent } from "@/lib/legal";
 import { unverifiedAccountIsExpired, unverifiedPlayerAccountRetentionMs } from "@/lib/player-account-retention";
+import { deletePlayerDependentData } from "@/lib/player-data-deletion";
 import { tahoiyaHistoryKeysForPlayer } from "@/lib/tahoiya-topic-history-store";
 import { normalizeAppLocale, type AppLocale } from "@/lib/app-locale";
 import { ensurePlayerAccountSession } from "@/lib/player-account-session";
@@ -559,10 +560,11 @@ export async function deletePlayerAccount(input: PlayerAccountAuthInput, authent
     throw new Error("PLAYER_ACCOUNT_INVALID_CREDENTIALS");
   }
 
-  if (isPostgresConfigured()) await deletePostgresPlayerAccount(account.playerId);
+  await deletePlayerDependentData(account.playerId);
   const keys = [accountKey(account.loginName), `player:${account.playerId}`, ...tahoiyaHistoryKeysForPlayer(account.playerId)];
   if (account.email) keys.push(playerAccountEmailKey(account.email));
   await redisCommand<number>(["DEL", ...keys]);
+  if (isPostgresConfigured()) await deletePostgresPlayerAccount(account.playerId);
   return { playerId: account.playerId };
 }
 

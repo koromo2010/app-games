@@ -32,6 +32,8 @@
 | 外部開発者へゲーム部分だけ依頼する境界 | `EXTERNAL_GAME_PACKAGE.md` | ゲームmanifest、SDK、Runtime interface、`apps/sdk-preview`、import境界監査 |
 | SDK共通機能・ワード・トランプ・お絵描き棚卸し | `SDK_MODULE_INVENTORY.md` | `packages/game-sdk/src/modules/profile.ts`、resource別public export |
 | SDK・mainの版管理と後方互換 | `SDK_VERSIONING.md` | `config/platform-release.json`、`scripts/check-platform-release.mjs` |
+| SDKデータの正本・保持・削除 | `SDK_DATA_LIFECYCLE.md` | Room、effect、replay、戦績、Package、OAuth、Account削除 |
+| SDK PostgreSQL schema更新 | `SDK_DATABASE_MIGRATIONS.md` | `db/sdk`、`scripts/migrate-sdk-database.mjs`、`apps/sdk-portal/lib/sdk-postgres.ts` |
 | お題DB・既出判定・再利用 | `TOPIC_HISTORY_DATABASE.md` | ゲーム別topic catalog・history store・topic API |
 | 開発・本番DB分離、共通単語DB | `DATABASE_ENVIRONMENTS.md` | `lib/storage-environment-guard.ts`、`lib/vocabulary-postgres-store.ts`、`db/vocabulary` |
 | 環境変数の配置・Shared移行 | `ENVIRONMENT_VARIABLES.md` | Vercel Team Shared Variables、各Project Variables、環境別接続先 |

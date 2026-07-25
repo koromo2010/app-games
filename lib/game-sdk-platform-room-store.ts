@@ -7,7 +7,11 @@ import {
   type GameFieldsPlatformRoomPersistence,
   type GameFieldsPlatformRoomRecord,
 } from "@game-fields/game-runtime";
-import { isMultiplayerRoomExpired, multiplayerRoomExpiryArgs } from "./multiplayer-room-lifecycle.ts";
+import {
+  isMultiplayerRoomExpired,
+  multiplayerRoomExpiryArgs,
+  multiplayerRoomTtlSeconds,
+} from "./multiplayer-room-lifecycle.ts";
 import { loadIndexedOnlineRoomPage } from "./online-room-list.ts";
 import {
   compareAndSetOnlineRoom,
@@ -17,6 +21,10 @@ import { publishOnlineRoomRevision } from "./online-room-realtime-server.ts";
 import { deleteIndexedOnlineRoomStorage } from "./online-room-dissolution.ts";
 import { schedulePostResponseWork } from "./post-response-work.ts";
 import { redisCommand } from "./redis-store.ts";
+import {
+  resolveGameFieldsEnvironment,
+  type GameFieldsEnvironment,
+} from "./game-fields-environment.ts";
 
 const maximumPlatformRoomBytes = 512_000;
 const platformRoomCreateConflict = "GAME_SDK_PLATFORM_ROOM_ALREADY_EXISTS";
@@ -44,6 +52,22 @@ export type GameSdkPlatformRoomStore<TRoom extends GameSdkStoredRoom> =
     ): Promise<GameFieldsPlatformRoomRecord<TRoom> | null>;
     dissolveHostedRooms(actorId: string): Promise<GameFieldsPlatformRoomRecord<TRoom>[]>;
     publishRevision(record: GameFieldsPlatformRoomRecord<TRoom>, revision?: number): Promise<void>;
+    claimResultOutbox(
+      code: string,
+      eventId: string,
+      now: number,
+    ): Promise<GameFieldsPlatformRoomRecord<TRoom> | null>;
+    completeResultOutbox(
+      code: string,
+      eventId: string,
+      now: number,
+    ): Promise<boolean>;
+    retryResultOutbox(
+      code: string,
+      eventId: string,
+      now: number,
+      errorCode: string,
+    ): Promise<boolean>;
   };
 
 export function normalizeGameSdkPlatformRoomCode(value: string) {
@@ -52,20 +76,34 @@ export function normalizeGameSdkPlatformRoomCode(value: string) {
   return code;
 }
 
-function roomPrefix(gameId: string) {
-  return `game-sdk-runtime:v1:${gameId}`;
+function roomPrefix(
+  gameId: string,
+  environment?: GameFieldsEnvironment,
+) {
+  return `game-sdk-runtime:v2:${resolveGameFieldsEnvironment(environment)}:${gameId}`;
 }
 
-export function gameSdkPlatformRoomKey(gameId: string, code: string) {
-  return `${roomPrefix(gameId)}:room:${normalizeGameSdkPlatformRoomCode(code)}`;
+export function gameSdkPlatformRoomKey(
+  gameId: string,
+  code: string,
+  environment?: GameFieldsEnvironment,
+) {
+  return `${roomPrefix(gameId, environment)}:room:${normalizeGameSdkPlatformRoomCode(code)}`;
 }
 
-export function gameSdkPlatformRoomIndexKey(gameId: string) {
-  return `${roomPrefix(gameId)}:rooms`;
+export function gameSdkPlatformRoomIndexKey(
+  gameId: string,
+  environment?: GameFieldsEnvironment,
+) {
+  return `${roomPrefix(gameId, environment)}:rooms`;
 }
 
-export function gameSdkPlatformActiveRoomKey(gameId: string, playerId: string) {
-  return `${roomPrefix(gameId)}:player-active-room:${playerId.trim()}`;
+export function gameSdkPlatformActiveRoomKey(
+  gameId: string,
+  playerId: string,
+  environment?: GameFieldsEnvironment,
+) {
+  return `${roomPrefix(gameId, environment)}:player-active-room:${playerId.trim()}`;
 }
 
 function roomPlayerIds<TRoom extends GameSdkStoredRoom>(
@@ -113,10 +151,24 @@ export function parseGameSdkPlatformRoomRecord<TRoom extends GameSdkStoredRoom>(
     || record.code !== code
     || typeof record.hostPlayerId !== "string"
     || !record.hostPlayerId.trim()
+    || typeof record.creationRequestId !== "string"
+    || !/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/.test(record.creationRequestId)
     || !Number.isSafeInteger(record.revision)
     || typeof record.phase !== "string"
     || typeof record.createdAt !== "number"
     || typeof record.updatedAt !== "number"
+    || !record.runtimeContract
+    || typeof record.runtimeContract !== "object"
+    || typeof record.runtimeContract.packageRevision !== "string"
+    || !/^[a-f0-9]{64}$/.test(record.runtimeContract.packageRootSha256 ?? "")
+    || typeof record.runtimeContract.runtimeVersion !== "string"
+    || !Number.isSafeInteger(record.runtimeContract.sdkContractVersion)
+    || !Number.isSafeInteger(record.runtimeContract.roomSchemaVersion)
+    || !Number.isSafeInteger(record.runtimeContract.resourceProtocolVersion)
+    || !Number.isSafeInteger(record.runtimeContract.clientBridgeVersion)
+    || !("settingsSnapshot" in record)
+    || !Array.isArray(record.commandReceipts)
+    || !Array.isArray(record.resultOutbox)
     || !room
     || room.code !== code
     || room.revision !== record.revision
@@ -129,10 +181,17 @@ export function parseGameSdkPlatformRoomRecord<TRoom extends GameSdkStoredRoom>(
 
 export function createRedisGameSdkPlatformRoomStore<TRoom extends GameSdkStoredRoom>(
   gameId: string,
+  environment?: GameFieldsEnvironment,
 ): GameSdkPlatformRoomStore<TRoom> {
-  const indexKey = gameSdkPlatformRoomIndexKey(gameId);
-  const activeKey = (playerId: string) => gameSdkPlatformActiveRoomKey(gameId, playerId);
-  const roomKey = (code: string) => gameSdkPlatformRoomKey(gameId, code);
+  const indexKey = gameSdkPlatformRoomIndexKey(gameId, environment);
+  const activeKey = (playerId: string) => (
+    gameSdkPlatformActiveRoomKey(gameId, playerId, environment)
+  );
+  const roomKey = (code: string) => gameSdkPlatformRoomKey(
+    gameId,
+    code,
+    environment,
+  );
 
   const deleteStorage = async (record: GameFieldsPlatformRoomRecord<TRoom>) => {
     await deleteIndexedOnlineRoomStorage({
@@ -181,6 +240,50 @@ export function createRedisGameSdkPlatformRoomStore<TRoom extends GameSdkStoredR
       if (result === 1) return "saved";
       if (result === -1) return "missing";
       return "conflict";
+    },
+
+    async claimResultOutbox(codeInput, eventId, now) {
+      const code = normalizeGameSdkPlatformRoomCode(codeInput);
+      const raw = await redisCommand<string | null>([
+        "EVAL",
+        "local raw=redis.call('GET',KEYS[1]); if not raw then return nil end; local record=cjson.decode(raw); for _,entry in ipairs(record.resultOutbox or {}) do if entry.eventId==ARGV[1] then if entry.status=='completed' then return nil end; if entry.status=='result-persisting' and (entry.leaseExpiresAt or 0)>tonumber(ARGV[2]) then return nil end; entry.status='result-persisting'; entry.attempts=(entry.attempts or 0)+1; entry.updatedAt=tonumber(ARGV[2]); entry.leaseExpiresAt=tonumber(ARGV[2])+tonumber(ARGV[3]); entry.lastErrorCode=nil; local next=cjson.encode(record); redis.call('SET',KEYS[1],next,'EX',ARGV[4]); return next end end; return nil",
+        "1",
+        roomKey(code),
+        eventId,
+        String(now),
+        String(60_000),
+        String(multiplayerRoomTtlSeconds),
+      ]);
+      return raw ? parseGameSdkPlatformRoomRecord<TRoom>(raw, gameId, code) : null;
+    },
+
+    async completeResultOutbox(codeInput, eventId, now) {
+      const code = normalizeGameSdkPlatformRoomCode(codeInput);
+      const saved = await redisCommand<number>([
+        "EVAL",
+        "local raw=redis.call('GET',KEYS[1]); if not raw then return -1 end; local record=cjson.decode(raw); for _,entry in ipairs(record.resultOutbox or {}) do if entry.eventId==ARGV[1] then if entry.status=='completed' then return 1 end; if entry.status~='result-persisting' then return 0 end; entry.status='completed'; entry.updatedAt=tonumber(ARGV[2]); entry.leaseExpiresAt=nil; entry.lastErrorCode=nil; redis.call('SET',KEYS[1],cjson.encode(record),'EX',ARGV[3]); return 1 end end; return 0",
+        "1",
+        roomKey(code),
+        eventId,
+        String(now),
+        String(multiplayerRoomTtlSeconds),
+      ]);
+      return saved === 1;
+    },
+
+    async retryResultOutbox(codeInput, eventId, now, errorCode) {
+      const code = normalizeGameSdkPlatformRoomCode(codeInput);
+      const saved = await redisCommand<number>([
+        "EVAL",
+        "local raw=redis.call('GET',KEYS[1]); if not raw then return -1 end; local record=cjson.decode(raw); for _,entry in ipairs(record.resultOutbox or {}) do if entry.eventId==ARGV[1] then if entry.status=='completed' then return 1 end; entry.status='result-confirmed'; entry.updatedAt=tonumber(ARGV[2]); entry.leaseExpiresAt=nil; entry.lastErrorCode=ARGV[3]; redis.call('SET',KEYS[1],cjson.encode(record),'EX',ARGV[4]); return 1 end end; return 0",
+        "1",
+        roomKey(code),
+        eventId,
+        String(now),
+        errorCode,
+        String(multiplayerRoomTtlSeconds),
+      ]);
+      return saved === 1;
     },
 
     async claimActiveRoom(playerIdInput, targetCodeInput) {
@@ -348,14 +451,15 @@ export function createRedisGameSdkPlatformRoomStore<TRoom extends GameSdkStoredR
 
 export function createRedisGameSdkPlatformPersistence<TRoom extends GameSdkStoredRoom>(
   gameId: string,
+  environment?: GameFieldsEnvironment,
 ): GameFieldsPlatformRoomPersistence<TRoom> {
   return {
     async create(record) {
       serializedRecord(record);
       try {
         await createIndexedOnlineRoom(record, {
-          roomKey: (code) => gameSdkPlatformRoomKey(gameId, code),
-          roomIndexKey: gameSdkPlatformRoomIndexKey(gameId),
+          roomKey: (code) => gameSdkPlatformRoomKey(gameId, code, environment),
+          roomIndexKey: gameSdkPlatformRoomIndexKey(gameId, environment),
           conflictError: platformRoomCreateConflict,
         });
         return "created";
@@ -369,7 +473,7 @@ export function createRedisGameSdkPlatformPersistence<TRoom extends GameSdkStore
       const code = normalizeGameSdkPlatformRoomCode(codeInput);
       const raw = await redisCommand<string | null>([
         "GET",
-        gameSdkPlatformRoomKey(gameId, code),
+        gameSdkPlatformRoomKey(gameId, code, environment),
       ]);
       return raw ? parseGameSdkPlatformRoomRecord<TRoom>(raw, gameId, code) : null;
     },
@@ -379,7 +483,7 @@ export function createRedisGameSdkPlatformPersistence<TRoom extends GameSdkStore
       const result = await compareAndSetOnlineRoom(
         expectedRevision,
         record,
-        (code) => gameSdkPlatformRoomKey(gameId, code),
+        (code) => gameSdkPlatformRoomKey(gameId, code, environment),
       );
       if (result === 1) return "saved";
       if (result === -1) return "missing";

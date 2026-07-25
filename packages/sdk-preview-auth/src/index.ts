@@ -9,8 +9,11 @@ const SDK_SERVICE_AUTH_VERSION = 1;
 const SDK_SERVICE_AUTH_MAX_AGE_MS = 60_000;
 
 export type SdkPreviewGrant = {
-  version: 2;
+  version: 3;
   audience: "mock-client" | "package-client" | "package-server";
+  environment: "production" | "development";
+  channel: "candidate-preview" | "development" | "stable";
+  role: "client" | "runner";
   instanceId: string;
   gameId: string;
   revision: string;
@@ -27,11 +30,24 @@ function assertSecret(secret: string) {
 export function isSdkPreviewGrant(value: unknown): value is SdkPreviewGrant {
   if (!value || typeof value !== "object") return false;
   const grant = value as Partial<SdkPreviewGrant>;
-  return grant.version === 2
+  return grant.version === 3
     && (
       grant.audience === "mock-client"
       || grant.audience === "package-client"
       || grant.audience === "package-server"
+    )
+    && (
+      grant.environment === "production"
+      || grant.environment === "development"
+    )
+    && (
+      grant.channel === "candidate-preview"
+      || grant.channel === "development"
+      || grant.channel === "stable"
+    )
+    && (
+      (grant.audience === "package-server" && grant.role === "runner")
+      || (grant.audience !== "package-server" && grant.role === "client")
     )
     && typeof grant.instanceId === "string"
     && INSTANCE_PATTERN.test(grant.instanceId)

@@ -3,6 +3,8 @@ import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 let client: NeonQueryFunction<boolean, boolean> | null = null;
 let initialized: Promise<void> | null = null;
 
+export const SDK_SCHEMA_VERSION = 3;
+
 function databaseUrl() {
   const url = process.env.SDK_DATABASE_URL
     ?? process.env.POSTGRES_PRISMA_URL
@@ -20,103 +22,28 @@ export async function ensureSdkSchema() {
   if (!initialized) {
     initialized = (async () => {
       const sql = sdkSql();
-      await sql`
-        CREATE TABLE IF NOT EXISTS sdk_creators (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          slug VARCHAR(32) NOT NULL UNIQUE,
-          display_name VARCHAR(80) NOT NULL,
-          management_token_hash CHAR(64) NOT NULL,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )
-      `;
-      await sql`
-        CREATE TABLE IF NOT EXISTS sdk_games (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          creator_id UUID NOT NULL REFERENCES sdk_creators(id) ON DELETE CASCADE,
-          game_id VARCHAR(64) NOT NULL,
-          title VARCHAR(120) NOT NULL,
-          description VARCHAR(500) NOT NULL DEFAULT '',
-          manifest JSONB NOT NULL,
-          module_policy JSONB NOT NULL DEFAULT '{}'::jsonb,
-          sdk_package_version VARCHAR(32) NOT NULL,
-          sdk_contract_version INTEGER NOT NULL,
-          mock_revision CHAR(40),
-          package_revision CHAR(40),
-          package_bundle_sha256 CHAR(64),
-          package_app_set_sha256 CHAR(64),
-          development_revision CHAR(40),
-          development_bundle_sha256 CHAR(64),
-          development_app_set_sha256 CHAR(64),
-          development_manifest JSONB,
-          stable_revision CHAR(40),
-          stable_bundle_sha256 CHAR(64),
-          stable_app_set_sha256 CHAR(64),
-          stable_manifest JSONB,
-          public_game_id VARCHAR(64),
-          status VARCHAR(24) NOT NULL DEFAULT 'draft',
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          UNIQUE (creator_id, game_id)
-        )
-      `;
-      await sql`ALTER TABLE sdk_games ADD COLUMN IF NOT EXISTS mock_revision CHAR(40)`;
-      await sql`ALTER TABLE sdk_games ADD COLUMN IF NOT EXISTS package_revision CHAR(40)`;
-      await sql`ALTER TABLE sdk_games ADD COLUMN IF NOT EXISTS package_bundle_sha256 CHAR(64)`;
-      await sql`ALTER TABLE sdk_games ADD COLUMN IF NOT EXISTS package_app_set_sha256 CHAR(64)`;
-      await sql`ALTER TABLE sdk_games ADD COLUMN IF NOT EXISTS development_revision CHAR(40)`;
-      await sql`ALTER TABLE sdk_games ADD COLUMN IF NOT EXISTS development_bundle_sha256 CHAR(64)`;
-      await sql`ALTER TABLE sdk_games ADD COLUMN IF NOT EXISTS development_app_set_sha256 CHAR(64)`;
-      await sql`ALTER TABLE sdk_games ADD COLUMN IF NOT EXISTS development_manifest JSONB`;
-      await sql`ALTER TABLE sdk_games ADD COLUMN IF NOT EXISTS stable_revision CHAR(40)`;
-      await sql`ALTER TABLE sdk_games ADD COLUMN IF NOT EXISTS stable_bundle_sha256 CHAR(64)`;
-      await sql`ALTER TABLE sdk_games ADD COLUMN IF NOT EXISTS stable_app_set_sha256 CHAR(64)`;
-      await sql`ALTER TABLE sdk_games ADD COLUMN IF NOT EXISTS stable_manifest JSONB`;
-      await sql`ALTER TABLE sdk_games ADD COLUMN IF NOT EXISTS public_game_id VARCHAR(64)`;
-      await sql`ALTER TABLE sdk_games ADD COLUMN IF NOT EXISTS module_policy JSONB NOT NULL DEFAULT '{}'::jsonb`;
-      await sql`ALTER TABLE sdk_creators ADD COLUMN IF NOT EXISTS owner_player_id VARCHAR(120)`;
-      await sql`CREATE UNIQUE INDEX IF NOT EXISTS sdk_creators_owner_slug_idx ON sdk_creators (owner_player_id, slug) WHERE owner_player_id IS NOT NULL`;
-      await sql`CREATE INDEX IF NOT EXISTS sdk_games_creator_updated_idx ON sdk_games (creator_id, updated_at DESC)`;
-      await sql`CREATE UNIQUE INDEX IF NOT EXISTS sdk_games_public_game_id_idx ON sdk_games (public_game_id) WHERE public_game_id IS NOT NULL`;
-      await sql`
-        CREATE TABLE IF NOT EXISTS sdk_oauth_clients (
-          client_id VARCHAR(96) PRIMARY KEY,
-          client_name VARCHAR(120) NOT NULL,
-          redirect_uris JSONB NOT NULL,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )
-      `;
-      await sql`
-        CREATE TABLE IF NOT EXISTS sdk_oauth_codes (
-          code_hash CHAR(64) PRIMARY KEY,
-          client_id VARCHAR(96) NOT NULL REFERENCES sdk_oauth_clients(client_id) ON DELETE CASCADE,
-          redirect_uri TEXT NOT NULL,
-          player_id VARCHAR(120) NOT NULL,
-          scope TEXT NOT NULL,
-          audience TEXT NOT NULL,
-          code_challenge VARCHAR(128) NOT NULL,
-          expires_at TIMESTAMPTZ NOT NULL,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )
-      `;
-      await sql`
-        CREATE TABLE IF NOT EXISTS sdk_oauth_grants (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          access_token_hash CHAR(64) NOT NULL UNIQUE,
-          refresh_token_hash CHAR(64) NOT NULL UNIQUE,
-          client_id VARCHAR(96) NOT NULL REFERENCES sdk_oauth_clients(client_id) ON DELETE CASCADE,
-          player_id VARCHAR(120) NOT NULL,
-          scope TEXT NOT NULL,
-          audience TEXT NOT NULL,
-          access_expires_at TIMESTAMPTZ NOT NULL,
-          refresh_expires_at TIMESTAMPTZ NOT NULL,
-          revoked_at TIMESTAMPTZ,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )
-      `;
-      await sql`CREATE INDEX IF NOT EXISTS sdk_oauth_grants_access_idx ON sdk_oauth_grants (access_token_hash) WHERE revoked_at IS NULL`;
-      await sql`ALTER TABLE sdk_oauth_codes ADD COLUMN IF NOT EXISTS audience TEXT NOT NULL DEFAULT ''`;
-      await sql`ALTER TABLE sdk_oauth_grants ADD COLUMN IF NOT EXISTS audience TEXT NOT NULL DEFAULT ''`;
+      let rows: Array<{ version: number }>;
+      try {
+        rows = await sql`
+          SELECT COALESCE(MAX(version), 0)::INTEGER AS version
+          FROM sdk_schema_migrations
+        ` as Array<{ version: number }>;
+      } catch (error) {
+        const code = (error as { code?: string }).code;
+        if (code === "42P01") {
+          throw new Error(
+            `SDK_SCHEMA_MIGRATION_REQUIRED: run npm run sdk:migrate (required version ${SDK_SCHEMA_VERSION}).`,
+          );
+        }
+        throw error;
+      }
+      const appliedVersion = Number(rows[0]?.version ?? 0);
+      if (appliedVersion < SDK_SCHEMA_VERSION) {
+        throw new Error(
+          `SDK_SCHEMA_MIGRATION_REQUIRED: database is at version ${appliedVersion}; `
+          + `run npm run sdk:migrate for version ${SDK_SCHEMA_VERSION}.`,
+        );
+      }
     })().catch((error) => {
       initialized = null;
       throw error;

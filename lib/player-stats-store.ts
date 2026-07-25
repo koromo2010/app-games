@@ -1,4 +1,4 @@
-import { redisCommand } from "@/lib/redis-store";
+import { redisCommand, redisPipeline } from "@/lib/redis-store";
 import type { HodoaiRoom } from "@/lib/hodoai-talk";
 import type { KotobaSenpukuRoom } from "@/lib/kotoba-senpuku";
 import type { NorthernRoom } from "@/lib/northern-branch-types";
@@ -249,6 +249,39 @@ export async function recordStandardPlatformGameResults(
       } satisfies PlayerGameResult;
     }));
   });
+}
+
+export async function deletePlayerStatsData(playerId: string) {
+  const [rawResults, postgresRatings] = await Promise.all([
+    redisCommand<string[]>([
+      "ZRANGE",
+      playerResultsKey(playerId),
+      "0",
+      "-1",
+    ]),
+    isPostgresConfigured()
+      ? loadPostgresPlayerRatingStates(playerId).catch(() => new Map())
+      : Promise.resolve(new Map()),
+  ]);
+  const parsedResults = rawResults
+    .map(parseResult)
+    .filter((result): result is PlayerGameResult => Boolean(result));
+  const gameTypes = new Set<PlayerStatsGameType>([
+    ...parsedResults.map((result) => result.gameType),
+    ...postgresRatings.keys(),
+  ]);
+  await redisPipeline([
+    ["DEL", playerResultsKey(playerId)],
+    ...parsedResults.map((result) => ["DEL", resultEventKey(result.id)]),
+    ...[...gameTypes].flatMap((gameType) => [
+      ["HDEL", playerRatingKey(gameType), playerId],
+      ["HDEL", playerRatingGamesKey(gameType), playerId],
+    ]),
+  ]);
+  return {
+    deletedResults: parsedResults.length,
+    deletedRatingScopes: gameTypes.size,
+  };
 }
 
 function wolfIds(room: WordWolfRoom) { return Array.isArray(room.wolfIds) && room.wolfIds.length > 0 ? room.wolfIds : room.wolfId ? [room.wolfId] : []; }

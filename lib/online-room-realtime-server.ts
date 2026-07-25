@@ -7,6 +7,10 @@ import {
   type OnlineRoomRevisionEvent,
   type OnlineRoomSubscription,
 } from "./online-room-realtime-protocol.ts";
+import {
+  emitObservabilityEvent,
+  observabilityErrorCode,
+} from "./observability/index.ts";
 import { redisCommand, resolveSocketRedisUrl } from "./redis-store.ts";
 import { expectedAppEnvironment } from "./storage-environment-guard.ts";
 
@@ -98,7 +102,13 @@ async function runStream(url: string) {
       }
     }
   } catch (error) {
-    if (hub.streaming && hub.sockets.size > 0) console.error("[online-room-realtime] stream failed", error);
+    if (hub.streaming && hub.sockets.size > 0) {
+      emitObservabilityEvent("error", "online-room-realtime.stream", {
+        operation: "redis-stream",
+        outcome: "failed",
+        errorCode: observabilityErrorCode(error),
+      });
+    }
   } finally {
     await closeStreamClient(client);
     if (hub.streamClient === client) hub.streamClient = null;

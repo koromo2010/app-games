@@ -78,6 +78,7 @@ async function generateOpenAiText(
         },
       },
     } : {}),
+    max_output_tokens: quality === "high" ? 8192 : 2048,
     input: prompt,
   });
   const text = response.output_text.trim();

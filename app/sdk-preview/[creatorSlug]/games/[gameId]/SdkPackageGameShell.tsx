@@ -496,7 +496,7 @@ export function SdkPackageGameShell({
             </div>
           )}
         </aside>
-        <div className="overflow-hidden rounded-2xl bg-white shadow-2xl shadow-black/20">
+        <div className="min-w-0 overflow-hidden">
           <iframe
             ref={iframeRef}
             src={runtimeUrl}

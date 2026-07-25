@@ -11,7 +11,7 @@
 クライアントはGameFieldsRoomのViewだけを描画し、Commandだけを送ってください。ブラウザ内にゲーム状態の正本を作らないでください。
 Word DBとLLMはAppSetのcontext.resourcesからだけ利用してください。
 共通モジュールは最初すべて必須です。profileを変更したり、同等機能をゲーム側へ複製しないでください。
-npm run check、npm run demo、npm run diagnose:promotionを成功させ、最後にpublish:game-packageで正式Previewへ保存してください。
+npm run check、npm run demo、npm run diagnose:promotionを成功させ、最後にOAuth接続済みGame Fields SDK MCPのpublish_game_packageで正式Previewへ保存してください。
 ```
 
 ## ローカル確認
@@ -26,9 +26,9 @@ npm run diagnose:promotion
 npm run build:game-package
 ```
 
-画面だけを先に相談するときは`npm run publish:mock`を使えます。ただし静的UIレビューであり、Room同期や本番昇格の検証ではありません。
+画面だけを先に相談するときはMCPの`publish_mock`を使えます。ただし静的UIレビューであり、Room同期や本番昇格の検証ではありません。
 
-ゲームとしての確認は`npm run publish:game-package`を使います。AppSet、クライアント、source、SHA-256を1つのrevisionへ保存し、正式な共通Roomで実行します。
+ゲームとしての確認は`npm run build:game-package`で作成した`game-package/`をMCPの`publish_game_package`へ渡します。AppSet、クライアント、source、SHA-256を1つのrevisionへ保存し、正式な共通Roomで実行します。OAuth資格情報を会話、ファイル、Git、コマンド引数へ展開しません。
 
 ```text
 SDK-devのcandidate package

@@ -25,6 +25,7 @@ const download = readFileSync(source, "utf8")
   .replaceAll("__SDK_HANDSHAKE_VERSION__", String(release.sdkHandshakeVersion))
   .replaceAll("__SDK_CONTRACT_VERSION__", String(release.sdkContractVersion))
   .replaceAll("__SDK_ENVIRONMENT__", sdkChannel)
+  .replaceAll("__SDK_STARTER_REF__", release.starterRef)
   .replaceAll("__SDK_PORTAL_BASE_URL__", sdkPortalBaseUrl);
 writeFileSync(destination, download);
 copyFileSync(releaseSource, releaseDestination);

@@ -1,6 +1,6 @@
 # 環境変数管理台帳
 
-最終更新: 2026-07-23
+最終更新: 2026-07-25
 
 この文書を Game Fields の環境変数配置の正本とする。実値、接続文字列、APIキー、パスワードはGitへ保存しない。Vercel、Neon、Upstash、Blob、各API提供元だけで管理する。
 
@@ -59,7 +59,7 @@
 | `STORAGE_ALERT_THRESHOLD_PERCENT` | 配置未監査 |
 | `WORDWOLF_PAIR_COOLDOWN_DAYS` | 配置未監査 |
 
-Vercel／Next.jsが実行時に提供するSystem Variableとして、`NODE_ENV`、`NEXT_RUNTIME`、`VERCEL_ENV`、`VERCEL_GIT_COMMIT_REF`、`VERCEL_GIT_COMMIT_SHA`、`VERCEL_OIDC_TOKEN`、`VERCEL_REGION`もコードから参照する。これらはProject Variableとして手動追加しない。
+Vercel／Next.jsが実行時に提供するSystem Variableとして、`NODE_ENV`、`NEXT_RUNTIME`、`VERCEL_ENV`、`VERCEL_GIT_COMMIT_REF`、`VERCEL_GIT_COMMIT_SHA`、`VERCEL_OIDC_TOKEN`、`VERCEL_PROJECT_NAME`、`VERCEL_REGION`もコードから参照する。これらはProject Variableとして手動追加しない。
 
 ## 環境構成
 
@@ -80,7 +80,7 @@ SDKは`app-games`と同じGitリポジトリ内の別アプリとして管理す
 
 npm公開はGitHub Actionsの`Publish Game SDK`だけから実施する。GitHub Environmentは`npm-public`、資格名はEnvironment Secret `NPM_TOKEN`とし、`@game-fields` scopeへのread/writeだけを許可するgranular tokenを使う。2026-07-24にnpm Organization `@game-fields`の作成、所有者アカウントの2FA有効化、7日間の初回公開用token発行、`npm-public` Environment、`main`限定branch rule、required reviewer、`NPM_TOKEN`登録、`@game-fields/game-sdk@0.1.0`の初回publishまで完了した。secret値は台帳へ記録しない。残る外部設定は短期tokenの失効とTrusted Publishingへの移行である。
 
-アプリ内の環境判定はVercelのDeployment種別ではなく、`VERCEL_GIT_COMMIT_REF`を優先する。`main`は`production`、`develop`は`development`として扱い、ブランチ情報がないローカル実行などでのみ`VERCEL_ENV`と`NODE_ENV`へフォールバックする。これにより、`app-games-dev`のProduction Deploymentである`develop`を本番アプリと誤認しない。
+アプリ内の環境判定はVercelのDeployment種別ではなく、`VERCEL_GIT_COMMIT_REF`を優先する。`main`は`production`、`develop`は`development`として扱い、ブランチ情報がないローカル実行などでのみ`VERCEL_ENV`と`NODE_ENV`へフォールバックする。これにより、`app-games-dev`のProduction Deploymentである`develop`を本番アプリと誤認しない。SDK PostgreSQL migrationのbuild gateは`VERCEL_PROJECT_NAME`と`VERCEL_GIT_COMMIT_REF`を同時に検査し、`app-games-sdk-dev/develop`または`app-games-sdk/main`以外ではDBへ接続しない。
 
 VercelのIgnored Build StepはProjectごとに次を設定済み。
 
@@ -135,6 +135,7 @@ Shared化候補:
 
 | キー | Production | Development | SDK | Sensitive | 用途 |
 | --- | --- | --- | --- | --- | --- |
+| `GAME_FIELDS_ENV` | `production` | `development`（candidate実行だけ`candidate-preview`） | `sdk-portal`、隔離Previewは`candidate-preview` | No | SDK Room、effect、quota、履歴の環境namespace。未知値は起動・request時に拒否 |
 | `APP_ENV` | `production` | `development` | `sdk` または専用値を将来定義 | No | アプリ環境識別 |
 | `APP_DATABASE_ENV` | `production` | `development` | `sdk` | No | アプリDB誤接続防止 |
 | `REDIS_ENV` | `production` | `development` | `sdk` | No | Redis誤接続防止 |

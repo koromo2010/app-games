@@ -7,6 +7,9 @@ import {
 import type {
   PreparedUploadFile,
 } from "../apps/sdk-portal/lib/mock-git-store.ts";
+import {
+  prepareGamePackageUploadFiles,
+} from "../apps/sdk-portal/lib/mock-git-store.ts";
 
 function sha256(content: string) {
   return createHash("sha256").update(content).digest("hex");
@@ -79,6 +82,30 @@ test("game package accepts only hashes recomputed from its immutable files", () 
   assert.equal(parsed.manifest.gameId, "portable-fixture");
   assert.match(parsed.bundleSha256, /^[a-f0-9]{64}$/);
   assert.match(parsed.appSetSourceSha256, /^[a-f0-9]{64}$/);
+  assert.match(parsed.packageRootSha256, /^[a-f0-9]{64}$/);
+});
+
+test("package root hash normalizes JSON key order, file order and LF", () => {
+  const first = packageFiles();
+  const second = [...first]
+    .reverse()
+    .map((file) => ({
+      ...file,
+      content: file.path.endsWith(".json")
+        ? `${JSON.stringify(JSON.parse(file.content), null, 2)}\r\n`
+        : ["source/manifest.ts", "source/server-module.ts"].includes(file.path)
+          ? file.content.replaceAll("\n", "\r\n")
+          : file.content,
+    }));
+  const left = parseGameFieldsPackageManifest({
+    gameId: "portable-fixture",
+    files: first,
+  });
+  const right = parseGameFieldsPackageManifest({
+    gameId: "portable-fixture",
+    files: second,
+  });
+  assert.equal(left.packageRootSha256, right.packageRootSha256);
 });
 
 test("game package rejects changed server bundle or AppSet source", () => {
@@ -101,4 +128,28 @@ test("game package rejects browser entrypoints and bundles outside the portable 
     gameId: "portable-fixture",
     files: packageFiles({ serverBundle: "x".repeat(1024 * 1024 + 1) }),
   }), /GAME_SDK_PACKAGE_SERVER_BUNDLE_TOO_LARGE/);
+});
+
+test("package inspection rejects active SVG and extension/MIME mismatches", () => {
+  const raw = packageFiles().map(({ path, content, encoding }) => ({
+    path,
+    content,
+    encoding,
+  }));
+  assert.throws(() => prepareGamePackageUploadFiles([
+    ...raw,
+    {
+      path: "assets/active.svg",
+      content: "<svg xmlns=\"http://www.w3.org/2000/svg\"><script>alert(1)</script></svg>",
+      encoding: "utf-8",
+    },
+  ]), /SDK_UPLOAD_SVG_ACTIVE_CONTENT_FORBIDDEN/);
+  assert.throws(() => prepareGamePackageUploadFiles([
+    ...raw,
+    {
+      path: "assets/not-a-png.png",
+      content: Buffer.from("plain text").toString("base64"),
+      encoding: "base64",
+    },
+  ]), /SDK_UPLOAD_MIME_MISMATCH/);
 });

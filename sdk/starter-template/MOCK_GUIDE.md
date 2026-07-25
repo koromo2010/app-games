@@ -73,10 +73,10 @@ const generated = await requireGameSdkLlmGateway(
 6. 正常完走、権限拒否、古いrevision、秘密遮断をテストする。
 7. `npm run check`と`npm run demo`を通す。
 8. `npm run diagnose:promotion`を実行する。
-9. `npm run publish:game-package`でpackageを保存する。
+9. `npm run build:game-package`後、OAuth接続済みMCPの`publish_game_package`でpackageを保存する。
 10. 返された正式Preview Roomを複数ブラウザで確認する。
 
-画面だけを先に相談したい場合は`npm run publish:mock`を使えますが、これは静的UIレビューです。Room同期、再接続、AppSet、Word DB、LLM、本番昇格の検証結果には数えません。
+画面だけを先に相談したい場合はMCPの`publish_mock`を使えますが、これは静的UIレビューです。Room同期、再接続、AppSet、Word DB、LLM、本番昇格の検証結果には数えません。`publish:*:legacy` npm scriptは既存管理トークン運用専用です。
 
 ## 完了条件
 

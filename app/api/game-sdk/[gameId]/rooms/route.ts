@@ -28,10 +28,6 @@ function json(payload: unknown, status: number) {
 async function handle(request: Request, context: RouteContext, method: Method) {
   const { gameId: rawGameId } = await context.params;
   const gameId = rawGameId.trim().toLowerCase();
-  const registration = approvedGameSdkRegistration(gameId)
-    ?? await loadApprovedGameSdkRuntimeRegistration(gameId);
-  if (!registration) return json({ error: "GAME_SDK_NOT_AVAILABLE" }, 404);
-
   const route = `/api/game-sdk/${gameId}/rooms`;
   const telemetry = createRequestTelemetry(request, route, {
     game: `sdk:${gameId}`,
@@ -43,17 +39,34 @@ async function handle(request: Request, context: RouteContext, method: Method) {
           ? "room-command"
           : "room-dissolve",
   });
+  let registration;
+  try {
+    registration = approvedGameSdkRegistration(gameId)
+      ?? await loadApprovedGameSdkRuntimeRegistration(gameId);
+  } catch (error) {
+    telemetry.failure("game-sdk.catalog", error, 503, {
+      action: "runtime-resolve",
+    });
+    return json({ error: "GAME_SDK_RUNTIME_CATALOG_UNAVAILABLE" }, 503);
+  }
+  if (!registration) {
+    telemetry.reject("game-sdk.catalog", 404, {
+      action: "runtime-resolve",
+      errorCode: "GAME_SDK_NOT_AVAILABLE",
+    });
+    return json({ error: "GAME_SDK_NOT_AVAILABLE" }, 404);
+  }
 
   try {
     const session = await requireAuthenticatedPlayer();
-    const limited = await rateLimitResponseFor(
-      request,
-      method === "GET"
-        ? rateLimitPolicies.sdkRuntimeRead
-        : rateLimitPolicies.roomMutation,
-      { playerId: session.id },
-    );
-    if (limited) return limited;
+    if (method === "GET") {
+      const limited = await rateLimitResponseFor(
+        request,
+        rateLimitPolicies.sdkRuntimeRead,
+        { playerId: session.id },
+      );
+      if (limited) return limited;
+    }
     const identity = {
       playerId: session.id,
       displayName: session.name,
@@ -69,21 +82,48 @@ async function handle(request: Request, context: RouteContext, method: Method) {
         request,
         session.id,
       ),
-      onSuccess(operation, room, affected) {
+      beforeMutation: (mutationRequest, _operation, roomCode) => (
+        rateLimitResponseFor(
+          mutationRequest,
+          rateLimitPolicies.sdkRoomMutation,
+          {
+            playerId: session.id,
+            packageId: gameId,
+            roomId: `${gameId}/${roomCode}`,
+          },
+        )
+      ),
+      onSuccess(operation, room, affected, command) {
         observed = true;
         if (method === "GET") return;
         telemetry.success("game-sdk.room", {
           action: operation,
+          channel: registration.channel,
+          ...(registration.revision ? {
+            packageRevision: registration.revision,
+          } : {}),
+          ...(registration.packageRootSha256 ? {
+            packageRoot: registration.packageRootSha256,
+          } : {}),
           ...(room ? { roomRef: telemetry.roomRef(room.code) } : {}),
           actorRef,
           ...(room ? { phase: room.phase, revision: room.revision } : {}),
-          ...(affected === undefined ? {} : { affected }),
+          ...(affected === undefined ? {} : { affectedCount: affected }),
+          ...(command ? {
+            commandRef: telemetry.commandRef(command.commandId),
+            commandRevision: command.commandRevision,
+            applied: command.applied,
+          } : {}),
         });
       },
       onError(operation, error, status) {
         observed = true;
         telemetry.responseError("game-sdk.room", error, status, {
           action: operation,
+          channel: registration.channel,
+          ...(registration.revision ? {
+            packageRevision: registration.revision,
+          } : {}),
           actorRef,
         });
       },

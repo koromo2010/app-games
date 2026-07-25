@@ -1,11 +1,21 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { extractStoredZip } from "./lib/stored-zip.mjs";
 
 const root = resolve(import.meta.dirname, "..");
+const platformRelease = JSON.parse(
+  readFileSync(join(root, "config/platform-release.json"), "utf8"),
+);
 const fixtureRoot = mkdtempSync(join(tmpdir(), "game-fields-sdk-starter-check-"));
 const zipPath = join(fixtureRoot, "starter.zip");
 const extractRoot = join(fixtureRoot, "extracted");
@@ -113,11 +123,11 @@ try {
   const starterManifest = JSON.parse(readFileSync(join(starterRoot, "starter-manifest.json"), "utf8"));
   if (starterManifest.downloadMeVersion !== 10
     || starterManifest.repository !== "https://github.com/koromo2010/app-games"
-    || starterManifest.ref !== "sdk-starter"
-    || starterManifest.sdkVersion !== "0.1.1"
-    || starterManifest.platformVersion !== "0.1.1"
-    || starterManifest.sdkHandshakeVersion !== 1
-    || starterManifest.sdkContractVersion !== 1) {
+    || starterManifest.ref !== platformRelease.starterRef
+    || starterManifest.sdkVersion !== platformRelease.sdkPackageVersion
+    || starterManifest.platformVersion !== platformRelease.platformVersion
+    || starterManifest.sdkHandshakeVersion !== platformRelease.sdkHandshakeVersion
+    || starterManifest.sdkContractVersion !== platformRelease.sdkContractVersion) {
     throw new Error("Starter manifest does not identify the expected public source and SDK version.");
   }
   const appSetSource = readFileSync(join(starterRoot, "src/app-set.ts"), "utf8");
@@ -132,12 +142,31 @@ try {
     throw new Error("Starter server module reimplements SDK basic-set responsibilities.");
   }
 
+  // The distributed starter intentionally contains unanswered review fields,
+  // and `npm run check` must reject that state. Complete only this disposable
+  // fixture before exercising the submission pipeline end to end.
+  const unansweredReviewFiles = new Map();
+  for (const relativePath of ["GAME_SPEC.md", "MOCK_REVIEW.md"]) {
+    const path = join(starterRoot, relativePath);
+    const unanswered = readFileSync(path, "utf8");
+    unansweredReviewFiles.set(path, unanswered);
+    writeFileSync(
+      path,
+      unanswered.replaceAll("未記入", "スターター検証済み"),
+    );
+  }
+
   execFileSync("npm", ["install", "--ignore-scripts", "--no-audit", "--no-fund"], {
     cwd: starterRoot,
     stdio: "pipe",
     env: npmEnvironment,
   });
   execFileSync("npm", ["run", "check"], {
+    cwd: starterRoot,
+    stdio: "pipe",
+    env: npmEnvironment,
+  });
+  execFileSync("npm", ["run", "check:mock"], {
     cwd: starterRoot,
     stdio: "pipe",
     env: npmEnvironment,
@@ -201,6 +230,10 @@ try {
     throw new Error("Submission archive contains the Vercel branch placeholder.");
   }
 
+  for (const [path, content] of unansweredReviewFiles) {
+    writeFileSync(path, content);
+  }
+
   execFileSync(process.execPath, [
     join(root, "scripts/build-game-sdk-starter-repository.mjs"),
     "--output",
@@ -217,12 +250,22 @@ try {
     throw new Error("Public starter repository snapshot differs from the tested starter ZIP.");
   }
 
-  const entryGuide = readFileSync(join(root, "sdk/entry/START_GAME_FIELDS.md"), "utf8");
+  const entryTemplate = readFileSync(
+    join(root, "sdk/entry/START_GAME_FIELDS.md"),
+    "utf8",
+  );
+  if (!entryTemplate.includes("__SDK_STARTER_REF__")) {
+    throw new Error("Entry guide must receive its starter ref from the release ledger.");
+  }
+  const entryGuide = entryTemplate.replaceAll(
+    "__SDK_STARTER_REF__",
+    platformRelease.starterRef,
+  );
   if (entryGuide.charCodeAt(0) !== 0xfeff) {
     throw new Error("Entry guide must start with a UTF-8 BOM to prevent mojibake in browser downloads.");
   }
   for (const requiredText of [
-    "--branch sdk-starter",
+    `--branch ${platformRelease.starterRef}`,
     "https://github.com/koromo2010/app-games.git",
     "starter-manifest.json",
     "downloadMeVersion",

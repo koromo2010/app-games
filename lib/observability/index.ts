@@ -1,4 +1,4 @@
-export { createRequestTelemetry, emitObservabilityEvent } from "@/lib/observability/logger";
-export { observabilityErrorCode, observabilityRef, sanitizeObservabilityFields } from "@/lib/observability/event";
-export { setObservabilitySink } from "@/lib/observability/sink";
-export type { ObservabilityEvent, ObservabilityFields, ObservabilitySink } from "@/lib/observability/types";
+export { createRequestTelemetry, emitObservabilityEvent } from "./logger.ts";
+export { observabilityErrorCode, observabilityRef, sanitizeObservabilityFields } from "./event.ts";
+export { setObservabilitySink } from "./sink.ts";
+export type { ObservabilityEvent, ObservabilityFields, ObservabilitySink } from "./types.ts";

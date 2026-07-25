@@ -26,6 +26,15 @@ if (!Number.isInteger(release.sdkContractVersion) || release.sdkContractVersion 
 if (!release.supportedSdkContractVersions?.includes(release.sdkContractVersion)) {
   failures.push("supportedSdkContractVersions must include the current sdkContractVersion.");
 }
+if (!/^sdk-starter(?:-dev)?$/.test(release.starterRef ?? "")) {
+  failures.push("starterRef must identify the stable or development starter branch.");
+}
+if (release.channel === "developer-preview" && release.starterRef !== "sdk-starter-dev") {
+  failures.push("developer-preview releases must use sdk-starter-dev.");
+}
+if (release.channel === "stable" && release.starterRef !== "sdk-starter") {
+  failures.push("stable releases must use sdk-starter.");
+}
 
 for (const [path, packageJson] of packages) {
   if (packageJson.version !== release.platformVersion) {

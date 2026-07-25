@@ -79,7 +79,10 @@ export const myFirstGameAppSet = defineGameSdkOnlineRoomAppSet<
         hostId: room.hostPlayerId,
         phase: room.phase,
         participantCount: room.players.length,
-        minimumPlayers: myFirstGameManifest.minimumPlayers,
+        minimumPlayers: context.actor.debugAccess
+          ? myFirstGameManifest.previewMinimumPlayers
+            ?? myFirstGameManifest.minimumPlayers
+          : myFirstGameManifest.minimumPlayers,
         errors: { phase: "INVALID_PHASE" },
       });
       return {

@@ -59,7 +59,7 @@ import type {
 - `settings`: 共通設定画面へ表示する、このゲームの設定項目
 - `rules`: 共通Shellへ表示する`ja` / `en`のルール一覧
 
-Game Fields SDKの共通初期値は`minimumPlayers: 1`です。1人で開始・確認できる状態を維持し、複数人が必須となるゲーム固有ルールだけをAppSet側で追加検証します。
+`minimumPlayers`は公開カタログと通常Roomで実際に開始できる最少人数です。1人Previewが必要な場合だけ`previewMinimumPlayers: 1`を併記し、debug権限のPreview actorに限定して人数条件を緩和します。公開要件をPreview都合で1人へ書き換えません。
 
 ### 共通設定画面へ出す項目
 

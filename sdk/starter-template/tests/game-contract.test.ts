@@ -27,12 +27,12 @@ test("ホスト1人でゲームを開始できる", async () => {
       settings: { target: 2 },
       app: {},
     },
-    actor: host,
+    actor: { ...host, debugAccess: true },
   });
   const started = await runtime.sendCommand({
     code: "SOLO",
     envelope: { expectedRevision: created.revision, command: { type: "game/start" } },
-    actor: host,
+    actor: { ...host, debugAccess: true },
   });
 
   assert.equal(started.room.phase, "playing");

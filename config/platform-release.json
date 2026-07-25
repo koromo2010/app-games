@@ -5,6 +5,10 @@
   "sdkHandshakeVersion": 1,
   "sdkContractVersion": 1,
   "supportedSdkContractVersions": [1],
-  "roomSchemaVersion": 1,
-  "channel": "developer-preview"
+  "roomSchemaVersion": 2,
+  "runnerRuntimeVersion": "quickjs-wasm-v1",
+  "resourceProtocolVersion": 1,
+  "clientBridgeVersion": 1,
+  "channel": "developer-preview",
+  "starterRef": "sdk-starter-dev"
 }

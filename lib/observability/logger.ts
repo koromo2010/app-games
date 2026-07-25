@@ -5,10 +5,10 @@ import {
   observabilityRef,
   sanitizeObservabilityFields,
   traceIdFromRequest,
-} from "@/lib/observability/event";
-import { getObservabilitySink } from "@/lib/observability/sink";
-import type { ObservabilityFields, ObservabilityLevel } from "@/lib/observability/types";
-import { expectedAppEnvironment } from "@/lib/storage-environment-guard";
+} from "./event.ts";
+import { getObservabilitySink } from "./sink.ts";
+import type { ObservabilityFields, ObservabilityLevel } from "./types.ts";
+import { expectedAppEnvironment } from "../storage-environment-guard.ts";
 
 type RequestLogBase = Pick<ObservabilityFields, "game" | "operation">;
 
@@ -61,6 +61,7 @@ export function createRequestTelemetry(request: Request, route: string, base: Re
     actorRef: (id: unknown) => observabilityRef("actor", id),
     eventRef: (id: unknown) => observabilityRef("event", id),
     commandRef: (id: unknown) => observabilityRef("command", id),
+    effectRef: (id: unknown) => observabilityRef("effect", id),
     info(event: string, fields: ObservabilityFields = {}) {
       emitObservabilityEvent("info", event, withCommon(fields), context);
     },

@@ -35,6 +35,52 @@ function sha256(file: PreparedUploadFile) {
   return createHash("sha256").update(fileBytes(file)).digest("hex");
 }
 
+function canonicalJson(value: unknown): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => canonicalJson(item)).join(",")}]`;
+  }
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
+    .join(",")}}`;
+}
+
+function normalizedPackageFile(file: PreparedUploadFile) {
+  if (file.encoding === "base64") return fileBytes(file);
+  const normalizedText = file.content.replace(/\r\n?/g, "\n");
+  if (!file.path.toLowerCase().endsWith(".json")) {
+    return Buffer.from(normalizedText, "utf8");
+  }
+  try {
+    return Buffer.from(`${canonicalJson(JSON.parse(normalizedText))}\n`, "utf8");
+  } catch {
+    throw new Error(`GAME_SDK_PACKAGE_JSON_INVALID:${file.path}`);
+  }
+}
+
+/**
+ * Canonical tree hash. Paths are UTF-8 byte sorted, text uses LF, JSON keys are
+ * recursively sorted, and binary assets retain their exact bytes.
+ */
+export function gameFieldsPackageRootSha256(
+  files: readonly PreparedUploadFile[],
+) {
+  const hash = createHash("sha256");
+  const ordered = [...files].sort((left, right) => (
+    Buffer.compare(Buffer.from(left.path, "utf8"), Buffer.from(right.path, "utf8"))
+  ));
+  for (const file of ordered) {
+    const content = normalizedPackageFile(file);
+    hash.update(Buffer.from(file.path, "utf8"));
+    hash.update("\0");
+    hash.update(createHash("sha256").update(content).digest());
+    hash.update("\0");
+  }
+  return hash.digest("hex");
+}
+
 function textFile(files: ReadonlyMap<string, PreparedUploadFile>, path: string) {
   const file = files.get(path);
   if (!file || file.encoding !== "utf-8") {
@@ -102,5 +148,6 @@ export function parseGameFieldsPackageManifest(input: {
     manifest: candidate as GameFieldsPackageManifest,
     bundleSha256: actualBundleSha256,
     appSetSourceSha256: actualAppSetSourceSha256,
+    packageRootSha256: gameFieldsPackageRootSha256(input.files),
   };
 }

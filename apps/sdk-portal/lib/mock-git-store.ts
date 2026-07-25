@@ -19,6 +19,9 @@ const REQUIRED_PACKAGE_FILES = new Set([
 const MAX_FILES = 32;
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 5 * 1024 * 1024;
+const TEXT_EXTENSIONS = new Set([
+  ".html", ".css", ".js", ".mjs", ".json", ".txt", ".svg", ".ts", ".tsx",
+]);
 
 export type MockUploadFile = {
   path: string;
@@ -65,6 +68,81 @@ function fileExtension(path: string) {
   return [...ALLOWED_EXTENSIONS].find((extension) => fileName.endsWith(extension)) ?? "";
 }
 
+function hasBinarySignature(extension: string, bytes: Buffer) {
+  if (extension === ".png") {
+    return bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  }
+  if (extension === ".jpg" || extension === ".jpeg") {
+    return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes.at(-2) === 0xff && bytes.at(-1) === 0xd9;
+  }
+  if (extension === ".gif") {
+    return bytes.subarray(0, 6).toString("ascii") === "GIF87a"
+      || bytes.subarray(0, 6).toString("ascii") === "GIF89a";
+  }
+  if (extension === ".webp") {
+    return bytes.subarray(0, 4).toString("ascii") === "RIFF"
+      && bytes.subarray(8, 12).toString("ascii") === "WEBP";
+  }
+  if (extension === ".woff") return bytes.subarray(0, 4).toString("ascii") === "wOFF";
+  if (extension === ".woff2") return bytes.subarray(0, 4).toString("ascii") === "wOF2";
+  if (extension === ".ogg") return bytes.subarray(0, 4).toString("ascii") === "OggS";
+  if (extension === ".wav") {
+    return bytes.subarray(0, 4).toString("ascii") === "RIFF"
+      && bytes.subarray(8, 12).toString("ascii") === "WAVE";
+  }
+  if (extension === ".ico") {
+    return bytes.length >= 6
+      && bytes[0] === 0
+      && bytes[1] === 0
+      && bytes[2] === 1
+      && bytes[3] === 0;
+  }
+  if (extension === ".mp3") {
+    return bytes.subarray(0, 3).toString("ascii") === "ID3"
+      || (bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0);
+  }
+  return true;
+}
+
+function inspectUploadContent(
+  path: string,
+  extension: string,
+  content: string,
+  encoding: "utf-8" | "base64",
+) {
+  const bytes = encoding === "base64"
+    ? Buffer.from(content, "base64")
+    : Buffer.from(content, "utf8");
+  if (TEXT_EXTENSIONS.has(extension)) {
+    if (encoding !== "utf-8" || content.includes("\0")) {
+      throw new Error(`SDK_UPLOAD_TEXT_ENCODING_INVALID:${path}`);
+    }
+    if (
+      extension === ".svg"
+      && (
+        /<\s*(?:script|foreignObject|iframe|object|embed)\b/i.test(content)
+        || /\b(?:href|src)\s*=\s*["']\s*(?:https?:|\/\/|data:text\/html)/i.test(content)
+      )
+    ) {
+      throw new Error(`SDK_UPLOAD_SVG_ACTIVE_CONTENT_FORBIDDEN:${path}`);
+    }
+    if (
+      extension === ".html"
+      && (
+        /<\s*(?:iframe|object|embed)\b/i.test(content)
+        || /<\s*meta\b[^>]*http-equiv\s*=\s*["']?\s*refresh\b/i.test(content)
+        || /<\s*base\b[^>]*href\s*=\s*["']?\s*(?:https?:|\/\/)/i.test(content)
+      )
+    ) {
+      throw new Error(`SDK_UPLOAD_HTML_EMBED_FORBIDDEN:${path}`);
+    }
+    return;
+  }
+  if (!hasBinarySignature(extension, bytes)) {
+    throw new Error(`SDK_UPLOAD_MIME_MISMATCH:${path}`);
+  }
+}
+
 function normalizeMockUploadFiles(value: unknown): unknown {
   if (Array.isArray(value) || !value || typeof value !== "object") return value;
   return Object.entries(value as MockUploadFileMap).map(([path, content]) => ({
@@ -93,13 +171,15 @@ function prepareUploadFiles(input: {
     if (typeof candidate.content !== "string") throw new Error("Mock upload file is invalid.");
     const content = candidate.content;
     const encoding = candidate.encoding ?? "utf-8";
-    if (!safeRelativePath(path) || !fileExtension(path) || seen.has(path)) throw new Error("Mock upload path is invalid.");
+    const extension = fileExtension(path);
+    if (!safeRelativePath(path) || !extension || seen.has(path)) throw new Error("Mock upload path is invalid.");
     if (encoding !== "utf-8" && encoding !== "base64") throw new Error("Mock upload encoding is invalid.");
     if (encoding === "base64" && (content.length % 4 !== 0 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(content))) {
       throw new Error("Mock upload base64 content is invalid.");
     }
     const bytes = encoding === "base64" ? Buffer.from(content, "base64").byteLength : Buffer.byteLength(content, "utf8");
     if (bytes > MAX_FILE_BYTES) throw new Error("Mock upload file is too large.");
+    inspectUploadContent(path, extension, content, encoding);
     totalBytes += bytes;
     if (totalBytes > MAX_TOTAL_BYTES) throw new Error("Mock upload is too large.");
     seen.add(path);

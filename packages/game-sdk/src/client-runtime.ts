@@ -28,6 +28,7 @@ export type GameSdkHttpClientRuntime<
   createRoom(input: {
     roomCode: string;
     create: TCreateInput;
+    requestId?: string;
   }): Promise<GameSdkRoomSnapshot<TRoomView>>;
   readRoom(code: string): Promise<GameSdkRoomSnapshot<TRoomView> | null>;
   readActiveRoom(): Promise<GameSdkRoomSnapshot<TRoomView> | null>;
@@ -156,6 +157,12 @@ async function requestJson(
   return payload;
 }
 
+function createCommandId() {
+  const randomUuid = globalThis.crypto?.randomUUID?.();
+  if (randomUuid) return randomUuid;
+  return `sdk-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`;
+}
+
 /**
  * Browser transport injected by Game Fields for an approved SDK game.
  *
@@ -183,16 +190,25 @@ export function createGameSdkHttpClientRuntime<
 
   const runtime: GameSdkHttpClientRuntime<TCreateInput, TCommand, TRoomView> = {
     async createRoom(input) {
-      const payload = await requestJson(
+      const requestId = input.requestId?.trim() || createCommandId();
+      input.requestId = requestId;
+      const request = () => requestJson(
         fetcher,
         endpoint,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(input),
+          body: JSON.stringify({ ...input, requestId }),
         },
         "GAME_SDK_ROOM_CREATE_FAILED",
       );
+      let payload: unknown;
+      try {
+        payload = await request();
+      } catch (error) {
+        if (error instanceof GameSdkHttpClientRuntimeError) throw error;
+        payload = await request();
+      }
       const room = (payload as { room?: unknown }).room;
       if (!isRoomSnapshot<TRoomView>(room)) {
         throw new GameSdkHttpClientRuntimeError(
@@ -271,21 +287,36 @@ export function createGameSdkHttpClientRuntime<
     },
 
     async sendCommand(code, envelope) {
-      const payload = await requestJson(
+      const commandId = envelope.commandId?.trim() || createCommandId();
+      envelope.commandId = commandId;
+      const request = () => requestJson(
         fetcher,
         endpoint,
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ code, envelope }),
+          body: JSON.stringify({
+            code,
+            envelope: { ...envelope, commandId },
+          }),
         },
         "GAME_SDK_COMMAND_FAILED",
       );
+      let payload: unknown;
+      try {
+        payload = await request();
+      } catch (error) {
+        if (error instanceof GameSdkHttpClientRuntimeError) throw error;
+        payload = await request();
+      }
       const result = payload as Partial<GameSdkCommandResult<TRoomView>>;
       if (
         !isRoomSnapshot<TRoomView>(result.room)
         || !Number.isSafeInteger(result.revision)
         || result.revision !== result.room.revision
+        || result.commandId !== commandId
+        || !Number.isSafeInteger(result.commandRevision)
+        || typeof result.applied !== "boolean"
       ) {
         throw new GameSdkHttpClientRuntimeError(
           "GAME_SDK_INVALID_COMMAND_RESPONSE",

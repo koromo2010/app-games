@@ -74,6 +74,8 @@ function statusForError(error: unknown) {
       return { code: error.message, status: 503 };
     case "EMAIL_SEND_FAILED":
       return { code: "EMAIL_SEND_FAILED", status: 502 };
+    case "SDK_ACCOUNT_DELETION_UNAVAILABLE":
+      return { code: error.message, status: 503 };
     default:
       return { code: "UNKNOWN", status: 500 };
   }

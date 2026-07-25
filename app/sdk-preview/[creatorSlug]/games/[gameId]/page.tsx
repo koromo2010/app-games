@@ -33,7 +33,6 @@ export default async function SdkGamePage({ params }: { params: Promise<{ creato
           runtimeId={sdkPreviewPackageRuntimeId(
             creatorSlug,
             gameId,
-            game.revision,
           )}
           runtimeUrl={game.runtimeUrl}
           title={game.title}

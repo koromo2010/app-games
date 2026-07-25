@@ -31,18 +31,22 @@ export async function GET(request: Request) {
     SELECT c.slug AS "creatorSlug", g.game_id AS "gameId",
            g.title, g.status, g.public_game_id AS "publicGameId",
            g.package_revision AS "packageRevision",
+           g.package_root_sha256 AS "packageRootSha256",
            g.package_bundle_sha256 AS "packageBundleSha256",
            g.package_app_set_sha256 AS "packageAppSetSha256",
            g.development_revision AS "developmentRevision",
+           g.development_root_sha256 AS "developmentRootSha256",
            g.development_bundle_sha256 AS "developmentBundleSha256",
            g.development_app_set_sha256 AS "developmentAppSetSha256",
            g.stable_revision AS "stableRevision",
+           g.stable_root_sha256 AS "stableRootSha256",
            g.stable_bundle_sha256 AS "stableBundleSha256",
            g.stable_app_set_sha256 AS "stableAppSetSha256",
            g.updated_at AS "updatedAt"
     FROM sdk_games g
     JOIN sdk_creators c ON c.id = g.creator_id
     WHERE g.package_revision IS NOT NULL
+      AND g.deleted_at IS NULL
     ORDER BY g.updated_at DESC
     LIMIT 100
   `;
@@ -127,15 +131,18 @@ export async function POST(request: Request) {
     const targets = await sdkSql()`
       SELECT c.slug AS "creatorSlug", g.game_id AS "gameId", g.manifest,
              g.package_revision AS "packageRevision",
+             g.package_root_sha256 AS "packageRootSha256",
              g.package_bundle_sha256 AS "packageBundleSha256",
              g.package_app_set_sha256 AS "packageAppSetSha256",
              g.development_revision AS "developmentRevision",
+             g.development_root_sha256 AS "developmentRootSha256",
              g.development_bundle_sha256 AS "developmentBundleSha256",
              g.development_app_set_sha256 AS "developmentAppSetSha256",
              g.development_manifest AS "developmentManifest"
       FROM sdk_games g
       JOIN sdk_creators c ON c.id = g.creator_id
       WHERE c.slug = ${creatorSlug} AND g.game_id = ${gameId}
+        AND g.deleted_at IS NULL
       LIMIT 1
     `;
     const target = (Array.isArray(targets) ? targets[0] : null) as
@@ -150,6 +157,7 @@ export async function POST(request: Request) {
     }
     const {
       revision,
+      packageRootSha256,
       bundleSha256,
       appSetSha256,
       manifest,
@@ -167,6 +175,7 @@ export async function POST(request: Request) {
           UPDATE sdk_games g
           SET public_game_id = ${publicGameId},
               development_revision = ${revision},
+              development_root_sha256 = ${packageRootSha256},
               development_bundle_sha256 = ${bundleSha256},
               development_app_set_sha256 = ${appSetSha256},
               development_manifest = ${manifestJson}::jsonb,
@@ -177,10 +186,12 @@ export async function POST(request: Request) {
             AND c.slug = ${creatorSlug}
             AND g.game_id = ${gameId}
             AND g.package_revision = ${revision}
+            AND g.package_root_sha256 = ${packageRootSha256}
             AND g.package_bundle_sha256 = ${bundleSha256}
             AND g.package_app_set_sha256 = ${appSetSha256}
           RETURNING g.public_game_id AS "publicGameId",
                     g.development_revision AS revision,
+                    g.development_root_sha256 AS "packageRootSha256",
                     g.development_bundle_sha256 AS "serverBundleSha256",
                     g.development_app_set_sha256 AS "appSetSourceSha256"
         `
@@ -188,6 +199,7 @@ export async function POST(request: Request) {
           UPDATE sdk_games g
           SET public_game_id = ${publicGameId},
               stable_revision = ${revision},
+              stable_root_sha256 = ${packageRootSha256},
               stable_bundle_sha256 = ${bundleSha256},
               stable_app_set_sha256 = ${appSetSha256},
               stable_manifest = ${manifestJson}::jsonb,
@@ -198,10 +210,12 @@ export async function POST(request: Request) {
             AND c.slug = ${creatorSlug}
             AND g.game_id = ${gameId}
             AND g.development_revision = ${revision}
+            AND g.development_root_sha256 = ${packageRootSha256}
             AND g.development_bundle_sha256 = ${bundleSha256}
             AND g.development_app_set_sha256 = ${appSetSha256}
           RETURNING g.public_game_id AS "publicGameId",
                     g.stable_revision AS revision,
+                    g.stable_root_sha256 AS "packageRootSha256",
                     g.stable_bundle_sha256 AS "serverBundleSha256",
                     g.stable_app_set_sha256 AS "appSetSourceSha256"
         `;
@@ -209,6 +223,21 @@ export async function POST(request: Request) {
     if (!promoted) {
       return Response.json({ error: "promotion_source_changed" }, { status: 409 });
     }
+    const promotedRecord = promoted as {
+      revision: string;
+      packageRootSha256: string;
+    };
+    await sdkSql()`
+      INSERT INTO sdk_game_channel_history (
+        game_id, channel, revision, package_root_sha256
+      )
+      SELECT g.id, ${channel}, ${promotedRecord.revision},
+             ${promotedRecord.packageRootSha256}
+      FROM sdk_games g
+      JOIN sdk_creators c ON c.id = g.creator_id
+      WHERE c.slug = ${creatorSlug} AND g.game_id = ${gameId}
+      ON CONFLICT (game_id, channel, revision) DO NOTHING
+    `;
     return Response.json({
       promoted: true,
       channel,
@@ -225,5 +254,89 @@ export async function POST(request: Request) {
       return Response.json({ error: "public_game_id_conflict" }, { status: 409 });
     }
     return Response.json({ error: "promotion_failed" }, { status: 503 });
+  }
+}
+
+/**
+ * Remove a mutable channel pointer without deleting the immutable package
+ * revision or its append-only promotion history. Existing Rooms continue from
+ * the contract pinned when they were created; only new catalog resolution is
+ * stopped.
+ */
+export async function DELETE(request: Request) {
+  const denied = authorize(request);
+  if (denied) return denied;
+  const body = await request.json().catch(() => null) as {
+    creatorSlug?: unknown;
+    gameId?: unknown;
+    channel?: unknown;
+  } | null;
+  const creatorSlug = typeof body?.creatorSlug === "string"
+    ? body.creatorSlug.trim().toLowerCase()
+    : "";
+  const gameId = typeof body?.gameId === "string"
+    ? body.gameId.trim().toLowerCase()
+    : "";
+  const channel = body?.channel;
+  if (
+    !GAME_PATTERN.test(creatorSlug)
+    || !GAME_PATTERN.test(gameId)
+    || (channel !== "development" && channel !== "stable")
+  ) {
+    return Response.json({ error: "promotion_input_invalid" }, { status: 400 });
+  }
+
+  try {
+    await ensureSdkSchema();
+    const rows = channel === "development"
+      ? await sdkSql()`
+          UPDATE sdk_games g
+          SET development_revision = NULL,
+              development_root_sha256 = NULL,
+              development_bundle_sha256 = NULL,
+              development_app_set_sha256 = NULL,
+              development_manifest = NULL,
+              status = CASE
+                WHEN stable_revision IS NOT NULL THEN 'stable'
+                ELSE 'submitted'
+              END,
+              updated_at = NOW()
+          FROM sdk_creators c
+          WHERE g.creator_id = c.id
+            AND c.slug = ${creatorSlug}
+            AND g.game_id = ${gameId}
+            AND g.deleted_at IS NULL
+          RETURNING g.game_id AS "gameId"
+        `
+      : await sdkSql()`
+          UPDATE sdk_games g
+          SET stable_revision = NULL,
+              stable_root_sha256 = NULL,
+              stable_bundle_sha256 = NULL,
+              stable_app_set_sha256 = NULL,
+              stable_manifest = NULL,
+              status = CASE
+                WHEN development_revision IS NOT NULL THEN 'development'
+                ELSE 'submitted'
+              END,
+              updated_at = NOW()
+          FROM sdk_creators c
+          WHERE g.creator_id = c.id
+            AND c.slug = ${creatorSlug}
+            AND g.game_id = ${gameId}
+            AND g.deleted_at IS NULL
+          RETURNING g.game_id AS "gameId"
+        `;
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return Response.json({ error: "promotion_target_not_found" }, { status: 404 });
+    }
+    return Response.json({
+      unpublished: true,
+      creatorSlug,
+      gameId,
+      channel,
+    });
+  } catch {
+    return Response.json({ error: "unpublish_failed" }, { status: 503 });
   }
 }

@@ -73,8 +73,11 @@ for (const marker of ["デバッグ権限あり／なし", "ダミー参加者�
 }
 
 const mockJs = readFileSync(resolve(root, "mock/mock.js"), "utf8");
-for (const marker of ["GameFieldsPreset", "registerGame", "start", "abort", "rematch", "autoProgress", "onStateChange"]) {
-  if (!mockJs.includes(marker)) throw new Error(`mock/mock.jsにプリセット接続「${marker}」がありません。`);
+for (const marker of ["GameFieldsRoom", "subscribe", "send"]) {
+  if (!mockJs.includes(marker)) throw new Error(`mock/mock.jsに正式Room接続「${marker}」がありません。`);
+}
+for (const forbidden of ["GameFieldsPreset", "registerGame", "autoProgress", "onStateChange"]) {
+  if (mockJs.includes(forbidden)) throw new Error(`mock/mock.jsに旧ローカルPreview接続「${forbidden}」を残さないでください。`);
 }
 
 const contentSourceSection = spec.match(
@@ -82,18 +85,22 @@ const contentSourceSection = spec.match(
 )?.[0] ?? "";
 const usesContentSource = /使用する／しない:\s*使用する/.test(contentSourceSection);
 if (usesContentSource) {
-  if (!/GameFieldsPreset(?:\?\.|\.)resources(?:\?\.|\.)contentSource/.test(mockJs)) {
-    throw new Error("Word DBを使うモックは「GameFieldsPreset.resources.contentSource」で共通content-sourceへ接続してください。");
+  const appSet = readFileSync(resolve(root, "src/app-set.ts"), "utf8");
+  if (!/context\.resources/.test(appSet) || !/requireGameSdkContentSource/.test(appSet)) {
+    throw new Error("Word DBを使うゲームはAppSetのcontext.resourcesから共通content-sourceへ接続してください。");
   }
-  if (!mockJs.includes("difficulty")) {
-    throw new Error("Word DBを使うモックは「difficulty」をクライアント設定から共通content-sourceへ渡してください。");
+  if (!appSet.includes("difficulty")) {
+    throw new Error("Word DBを使うAppSetはdifficultyを同期settingsから共通content-sourceへ渡してください。");
   }
-  if (!/\.(?:drawWords|drawWordPairs|findDefinitions)\s*\(/.test(mockJs)) {
-    throw new Error("Word DBを使うモックはdrawWords、drawWordPairs、findDefinitionsのいずれかを呼んでください。");
+  if (!/\.(?:drawWords|drawWordPairs|findDefinitions)\s*\(/.test(appSet)) {
+    throw new Error("Word DBを使うAppSetはdrawWords、drawWordPairs、findDefinitionsのいずれかを呼んでください。");
   }
-  if (/\b(?:initialWords|seedWords|fallbackWords|mockWords|wordDatabase|wordDb)\b/i.test(mockJs)) {
-    throw new Error("Word DBを使うモックへ初期・seed・fallback単語DBを作らず、共通content-sourceだけを使ってください。");
+  if (/\b(?:initialWords|seedWords|fallbackWords|mockWords|wordDatabase|wordDb)\b/i.test(appSet)) {
+    throw new Error("Word DBを使うAppSetへ初期・seed・fallback単語DBを作らず、共通content-sourceだけを使ってください。");
+  }
+  if (/\bGameFieldsPreset(?:\?\.|\.)resources\b/.test(mockJs)) {
+    throw new Error("ブラウザからWord DBを呼ばず、AppSetのcontext.resourcesだけを使ってください。");
   }
 }
 
-console.log("[mock] 仕様、ゲーム固有slot、共通UI非重複、プリセット接続、全module必須profileのPlatform所有を確認しました。");
+console.log("[mock] 仕様、ゲーム固有slot、共通UI非重複、正式Room接続、全module必須profileのPlatform所有を確認しました。");

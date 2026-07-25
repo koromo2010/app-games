@@ -6,6 +6,9 @@ export const SDK_SCOPE = SDK_SCOPES.join(" ");
 
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const token = () => randomBytes(32).toString("base64url");
+const OAUTH_MAINTENANCE_INTERVAL_MS = 60 * 60 * 1000;
+let oauthMaintenanceStartedAt = 0;
+let oauthMaintenance: Promise<void> | null = null;
 
 function safeEqual(left: string, right: string) {
   const a = Buffer.from(left);
@@ -24,8 +27,33 @@ export function normalizeScope(value: string | null | undefined) {
   return [...new Set(requested)].filter((scope) => SDK_SCOPES.includes(scope as typeof SDK_SCOPES[number])).join(" ");
 }
 
-export async function registerOAuthClient(input: { clientName?: string; redirectUris: string[] }) {
+async function prepareOAuthStore() {
   await ensureSdkSchema();
+  const now = Date.now();
+  if (oauthMaintenance && now - oauthMaintenanceStartedAt < OAUTH_MAINTENANCE_INTERVAL_MS) {
+    await oauthMaintenance;
+    return;
+  }
+  oauthMaintenanceStartedAt = now;
+  oauthMaintenance = (async () => {
+    await sdkSql()`DELETE FROM sdk_oauth_codes WHERE expires_at <= NOW()`;
+    await sdkSql()`
+      DELETE FROM sdk_oauth_grants
+      WHERE refresh_expires_at <= NOW()
+         OR (
+           revoked_at IS NOT NULL
+           AND revoked_at <= NOW() - INTERVAL '30 days'
+         )
+    `;
+  })().catch((error) => {
+    oauthMaintenanceStartedAt = 0;
+    throw error;
+  });
+  await oauthMaintenance;
+}
+
+export async function registerOAuthClient(input: { clientName?: string; redirectUris: string[] }) {
+  await prepareOAuthStore();
   if (!input.redirectUris.length || input.redirectUris.some((uri) => {
     try { return new URL(uri).protocol !== "https:"; } catch { return true; }
   })) throw new Error("INVALID_REDIRECT_URI");
@@ -35,21 +63,21 @@ export async function registerOAuthClient(input: { clientName?: string; redirect
 }
 
 export async function validateOAuthClient(clientId: string, redirectUri: string) {
-  await ensureSdkSchema();
+  await prepareOAuthStore();
   const rows = await sdkSql()`SELECT redirect_uris FROM sdk_oauth_clients WHERE client_id = ${clientId} LIMIT 1`;
   const row = (Array.isArray(rows) ? rows[0] : null) as { redirect_uris?: unknown } | null;
   return Array.isArray(row?.redirect_uris) && row.redirect_uris.includes(redirectUri);
 }
 
 export async function createAuthorizationCode(input: { clientId: string; redirectUri: string; playerId: string; scope: string; codeChallenge: string; audience: string }) {
-  await ensureSdkSchema();
+  await prepareOAuthStore();
   const code = token();
   await sdkSql()`INSERT INTO sdk_oauth_codes (code_hash, client_id, redirect_uri, player_id, scope, audience, code_challenge, expires_at) VALUES (${hash(code)}, ${input.clientId}, ${input.redirectUri}, ${input.playerId}, ${input.scope}, ${input.audience}, ${input.codeChallenge}, NOW() + INTERVAL '5 minutes')`;
   return code;
 }
 
 export async function exchangeAuthorizationCode(input: { code: string; clientId: string; redirectUri: string; codeVerifier: string }) {
-  await ensureSdkSchema();
+  await prepareOAuthStore();
   const rows = await sdkSql()`DELETE FROM sdk_oauth_codes WHERE code_hash = ${hash(input.code)} AND client_id = ${input.clientId} AND redirect_uri = ${input.redirectUri} AND expires_at > NOW() RETURNING player_id, scope, audience, code_challenge`;
   const row = (Array.isArray(rows) ? rows[0] : null) as { player_id: string; scope: string; audience: string; code_challenge: string } | null;
   if (!row) return null;
@@ -66,14 +94,14 @@ async function issueTokens(playerId: string, clientId: string, scope: string, au
 }
 
 export async function refreshAccessToken(refreshToken: string, clientId: string) {
-  await ensureSdkSchema();
+  await prepareOAuthStore();
   const rows = await sdkSql()`DELETE FROM sdk_oauth_grants WHERE refresh_token_hash = ${hash(refreshToken)} AND client_id = ${clientId} AND revoked_at IS NULL AND refresh_expires_at > NOW() RETURNING player_id, scope, audience`;
   const row = (Array.isArray(rows) ? rows[0] : null) as { player_id: string; scope: string; audience: string } | null;
   return row ? issueTokens(row.player_id, clientId, row.scope, row.audience) : null;
 }
 
 export async function authenticateAccessToken(value: string, requiredScope: string, audience: string) {
-  await ensureSdkSchema();
+  await prepareOAuthStore();
   const rows = await sdkSql()`SELECT player_id, scope FROM sdk_oauth_grants WHERE access_token_hash = ${hash(value)} AND audience = ${audience} AND revoked_at IS NULL AND access_expires_at > NOW() LIMIT 1`;
   const row = (Array.isArray(rows) ? rows[0] : null) as { player_id: string; scope: string } | null;
   if (!row || !row.scope.split(" ").includes(requiredScope)) return null;
@@ -81,6 +109,6 @@ export async function authenticateAccessToken(value: string, requiredScope: stri
 }
 
 export async function revokeOAuthToken(value: string) {
-  await ensureSdkSchema();
+  await prepareOAuthStore();
   await sdkSql()`UPDATE sdk_oauth_grants SET revoked_at = NOW() WHERE access_token_hash = ${hash(value)} OR refresh_token_hash = ${hash(value)}`;
 }

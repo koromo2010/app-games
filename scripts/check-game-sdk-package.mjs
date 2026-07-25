@@ -153,7 +153,7 @@ const handshake = negotiateGameSdkHandshake({
     sdkPackageVersion: "0.1.1",
     sdkContractVersion: 1,
     supportedSdkContractVersions: [1],
-    roomSchemaVersion: 1,
+    roomSchemaVersion: 2,
   },
   capabilities: ["starter-download"],
   endpoints: {

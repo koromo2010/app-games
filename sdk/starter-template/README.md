@@ -23,10 +23,10 @@ ChatGPTと共同で、Game Fields向けゲーム固有packageを作るための�
 - `vendor/__SDK_TARBALL__`: 同梱SDK package
 - `starter-manifest.json`: 公式取得元、starter version、SDK version
 - `scripts/build-submission.mjs`: 提出ZIP生成器
-- `scripts/publish-mock.mjs`: モックをSDKの専用Git保存APIへ送る補助スクリプト
+- `scripts/publish-mock.mjs`: 既存管理トークン運用だけで使う互換スクリプト
 - `scripts/check-promotion-readiness.mjs`: AppSetとクライアントの昇格前診断
 - `scripts/build-game-package.mjs`: AppSetを改変せずhash固定packageへまとめる
-- `scripts/publish-game-package.mjs`: packageを正式Previewへ保存する
+- `scripts/publish-game-package.mjs`: 既存管理トークン運用だけで使う互換スクリプト
 
 ## Commands
 
@@ -36,13 +36,12 @@ npm run build
 npm test
 npm run demo
 npm run check:mock
-npm run publish:mock
 npm run check
 npm run diagnose:promotion
-npm run publish:game-package
+npm run build:game-package
 npm run package
 ```
 
-`npm run publish:mock`は画面だけの早期レビュー用で、Room動作や昇格可否の検証には使いません。正式なPreviewは`npm run publish:game-package`でAppSet・クライアント・source hashを一緒に保存します。Previewと昇格後は同じpackage revisionを実行し、昇格時にAppSetを変換・再buildしません。
+新規Work／Codex制作はOAuth接続済みGame Fields SDK MCPの`publish_mock`と`publish_game_package`を使います。正式なPreviewではAppSet・クライアント・source hashを一緒に保存します。`npm run publish:mock:legacy`と`npm run publish:game-package:legacy`は既存管理トークン運用専用です。Previewと昇格後は同じpackage revisionを実行し、昇格時にAppSetを変換・再buildしません。
 
 共通モジュール38件は最初すべて必須です。ChatGPTはprofileを変更せず、確定済みの`requiredModuleIds`と各moduleの公開契約を使ってAppSetを実装します。

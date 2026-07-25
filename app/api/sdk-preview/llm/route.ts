@@ -128,6 +128,7 @@ export async function POST(request: Request) {
       beforeGenerate: () => enforceGameSdkLlmRateLimit(
         request,
         session.id,
+        `preview:${creatorSlug}:${gameId}`,
       ),
     });
     const response = await gateway.generate(

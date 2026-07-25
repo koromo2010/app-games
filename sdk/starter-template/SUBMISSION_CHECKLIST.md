@@ -28,7 +28,7 @@
 - [ ] PCとスマホ幅で操作できる
 - [ ] `MOCK_REVIEW.md`に画面、操作、要件対応、未実装を書いた
 - [ ] `mock/preview.json`のゲームID・表示名・説明を今回のゲームへ更新した
-- [ ] `publish:game-package`でAppSetとクライアントを一緒に保存した
+- [ ] MCPの`publish_game_package`でAppSetとクライアントを一緒に保存した
 - [ ] 正式Preview Roomで別ブラウザ参加、同期、再読込復帰を確認した
 - [ ] 利用者が正式Previewを確認した
 - [ ] `npm run check:mock`が成功する

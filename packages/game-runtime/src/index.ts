@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type {
   GameSdkCommandEnvelope,
   GameSdkCommandResult,
@@ -22,7 +23,48 @@ export {
   type GameFieldsRevisionedOnlineRoom,
 } from "./online-room.js";
 
-export const GAME_FIELDS_PLATFORM_ROOM_SCHEMA_VERSION = 1 as const;
+export const GAME_FIELDS_PLATFORM_ROOM_SCHEMA_VERSION = 2 as const;
+
+export type GameFieldsPlatformRuntimeContract = {
+  packageRevision: string;
+  packageRootSha256: string;
+  runtimeVersion: string;
+  sdkContractVersion: number;
+  roomSchemaVersion: number;
+  resourceProtocolVersion: number;
+  clientBridgeVersion: number;
+};
+
+export type GameFieldsPlatformCommandReceipt = {
+  commandId: string;
+  actorPlayerId: string;
+  commandSha256: string;
+  expectedRevision: number;
+  resultRevision: number;
+  createdAt: number;
+};
+
+export type GameFieldsPlatformResultSnapshot = {
+  roomCode: string;
+  roomCreatedAt: number;
+  resultRevision: number;
+  finishedAt: number;
+  runtimeContract: GameFieldsPlatformRuntimeContract;
+  players: unknown;
+  settings: unknown;
+  standardResult: unknown;
+};
+
+export type GameFieldsPlatformResultOutboxEntry = {
+  eventId: string;
+  status: "result-confirmed" | "result-persisting" | "completed";
+  attempts: number;
+  confirmedAt: number;
+  updatedAt: number;
+  leaseExpiresAt?: number;
+  lastErrorCode?: string;
+  snapshot: GameFieldsPlatformResultSnapshot;
+};
 
 export type GameFieldsAuthenticatedIdentity = {
   playerId: string;
@@ -37,8 +79,13 @@ export type GameFieldsPlatformRoomRecord<TRoom extends GameSdkStoredRoom> = {
   revision: number;
   phase: string;
   hostPlayerId: string;
+  creationRequestId: string;
   createdAt: number;
   updatedAt: number;
+  runtimeContract: GameFieldsPlatformRuntimeContract;
+  settingsSnapshot: unknown;
+  commandReceipts: GameFieldsPlatformCommandReceipt[];
+  resultOutbox: GameFieldsPlatformResultOutboxEntry[];
   room: TRoom;
 };
 
@@ -62,7 +109,9 @@ export type GameFieldsPlatformRuntimeErrorCode =
   | "INVALID_INITIAL_REVISION"
   | "INVALID_NEXT_REVISION"
   | "INVALID_PLATFORM_IDENTITY"
-  | "INVALID_STORED_ROOM";
+  | "INVALID_STORED_ROOM"
+  | "ROOM_RUNTIME_MISMATCH"
+  | "COMMAND_ID_CONFLICT";
 
 export class GameFieldsPlatformRuntimeError extends Error {
   readonly code: GameFieldsPlatformRuntimeErrorCode;
@@ -87,6 +136,7 @@ type PlatformRuntimeOptions<
   now?: () => number;
   createRequestId?: () => string;
   resources?: Readonly<GameSdkPlatformResources>;
+  runtimeContract?: Readonly<GameFieldsPlatformRuntimeContract>;
   onSaved?: (
     previous: Readonly<GameFieldsPlatformRoomRecord<TRoom>>,
     next: Readonly<GameFieldsPlatformRoomRecord<TRoom>>,
@@ -101,6 +151,7 @@ export type GameFieldsPlatformRuntime<
   createRoom(input: {
     roomCode: string;
     create: TCreateInput;
+    requestId?: string;
     identity: GameFieldsAuthenticatedIdentity;
   }): Promise<GameSdkRoomSnapshot<TRoomView>>;
   readRoom(input: {
@@ -116,6 +167,177 @@ export type GameFieldsPlatformRuntime<
 
 function clone<T>(value: T): T {
   return structuredClone(value);
+}
+
+function canonicalJson(value: unknown): string {
+  if (value === undefined) return "null";
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => canonicalJson(item)).join(",")}]`;
+  }
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
+    .join(",")}}`;
+}
+
+function sha256(value: unknown) {
+  return createHash("sha256").update(canonicalJson(value)).digest("hex");
+}
+
+function roomSettingsSnapshot(room: Readonly<GameSdkStoredRoom>) {
+  if (!("settings" in room)) return null;
+  return clone((room as GameSdkStoredRoom & { settings: unknown }).settings);
+}
+
+function validRuntimeContract(
+  value: unknown,
+): value is GameFieldsPlatformRuntimeContract {
+  if (!value || typeof value !== "object") return false;
+  const contract = value as Partial<GameFieldsPlatformRuntimeContract>;
+  return (
+    typeof contract.packageRevision === "string"
+    && contract.packageRevision.trim().length > 0
+    && contract.packageRevision.length <= 160
+    && typeof contract.packageRootSha256 === "string"
+    && /^[a-f0-9]{64}$/.test(contract.packageRootSha256)
+    && typeof contract.runtimeVersion === "string"
+    && contract.runtimeVersion.trim().length > 0
+    && contract.runtimeVersion.length <= 80
+    && Number.isSafeInteger(contract.sdkContractVersion)
+    && contract.sdkContractVersion! >= 1
+    && Number.isSafeInteger(contract.roomSchemaVersion)
+    && contract.roomSchemaVersion! >= 1
+    && Number.isSafeInteger(contract.resourceProtocolVersion)
+    && contract.resourceProtocolVersion! >= 1
+    && Number.isSafeInteger(contract.clientBridgeVersion)
+    && contract.clientBridgeVersion! >= 1
+  );
+}
+
+const maximumCommandReceipts = 128;
+const maximumResultOutboxEntries = 32;
+const commandIdPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
+
+function validCommandReceipt(
+  value: unknown,
+): value is GameFieldsPlatformCommandReceipt {
+  if (!value || typeof value !== "object") return false;
+  const receipt = value as Partial<GameFieldsPlatformCommandReceipt>;
+  return (
+    typeof receipt.commandId === "string"
+    && commandIdPattern.test(receipt.commandId)
+    && typeof receipt.actorPlayerId === "string"
+    && receipt.actorPlayerId.trim().length > 0
+    && typeof receipt.commandSha256 === "string"
+    && /^[a-f0-9]{64}$/.test(receipt.commandSha256)
+    && Number.isSafeInteger(receipt.expectedRevision)
+    && receipt.expectedRevision! >= 1
+    && Number.isSafeInteger(receipt.resultRevision)
+    && receipt.resultRevision === receipt.expectedRevision! + 1
+    && typeof receipt.createdAt === "number"
+    && Number.isFinite(receipt.createdAt)
+  );
+}
+
+function validResultOutboxEntry(
+  value: unknown,
+): value is GameFieldsPlatformResultOutboxEntry {
+  if (!value || typeof value !== "object") return false;
+  const entry = value as Partial<GameFieldsPlatformResultOutboxEntry>;
+  const snapshot = entry.snapshot as Partial<GameFieldsPlatformResultSnapshot> | undefined;
+  return (
+    typeof entry.eventId === "string"
+    && /^[a-f0-9]{64}$/.test(entry.eventId)
+    && (
+      entry.status === "result-confirmed"
+      || entry.status === "result-persisting"
+      || entry.status === "completed"
+    )
+    && Number.isSafeInteger(entry.attempts)
+    && entry.attempts! >= 0
+    && typeof entry.confirmedAt === "number"
+    && typeof entry.updatedAt === "number"
+    && (
+      entry.leaseExpiresAt === undefined
+      || typeof entry.leaseExpiresAt === "number"
+    )
+    && (
+      entry.lastErrorCode === undefined
+      || (
+        typeof entry.lastErrorCode === "string"
+        && /^[A-Z][A-Z0-9_]{1,99}$/.test(entry.lastErrorCode)
+      )
+    )
+    && snapshot !== undefined
+    && typeof snapshot.roomCode === "string"
+    && typeof snapshot.roomCreatedAt === "number"
+    && Number.isSafeInteger(snapshot.resultRevision)
+    && typeof snapshot.finishedAt === "number"
+    && validRuntimeContract(snapshot.runtimeContract)
+    && "players" in snapshot
+    && "settings" in snapshot
+    && "standardResult" in snapshot
+  );
+}
+
+function resultSnapshot(
+  room: Readonly<GameSdkStoredRoom>,
+  record: Pick<
+    GameFieldsPlatformRoomRecord<GameSdkStoredRoom>,
+    "createdAt" | "runtimeContract"
+  >,
+  finishedAt: number,
+): GameFieldsPlatformResultSnapshot | null {
+  if (
+    room.phase !== "result"
+    || !("standardResult" in room)
+    || !(room as GameSdkStoredRoom & { standardResult?: unknown }).standardResult
+    || !("players" in room)
+    || !Array.isArray((room as GameSdkStoredRoom & { players?: unknown }).players)
+  ) return null;
+  return {
+    roomCode: room.code,
+    roomCreatedAt: record.createdAt,
+    resultRevision: room.revision,
+    finishedAt,
+    runtimeContract: clone(record.runtimeContract),
+    players: clone((room as GameSdkStoredRoom & { players: unknown }).players),
+    settings: roomSettingsSnapshot(room),
+    standardResult: clone(
+      (room as GameSdkStoredRoom & { standardResult: unknown }).standardResult,
+    ),
+  };
+}
+
+export function gameFieldsPlatformRuntimeContractsEqual(
+  left: Readonly<GameFieldsPlatformRuntimeContract>,
+  right: Readonly<GameFieldsPlatformRuntimeContract>,
+) {
+  return (
+    left.packageRevision === right.packageRevision
+    && left.packageRootSha256 === right.packageRootSha256
+    && left.runtimeVersion === right.runtimeVersion
+    && left.sdkContractVersion === right.sdkContractVersion
+    && left.roomSchemaVersion === right.roomSchemaVersion
+    && left.resourceProtocolVersion === right.resourceProtocolVersion
+    && left.clientBridgeVersion === right.clientBridgeVersion
+  );
+}
+
+function defaultRuntimeContract(
+  module: GameSdkServerModule<GameSdkStoredRoom, unknown, { type: string }, unknown>,
+): GameFieldsPlatformRuntimeContract {
+  return {
+    packageRevision: `builtin:${module.manifest.id}:sdk-${module.manifest.sdkVersion}`,
+    packageRootSha256: sha256(module.manifest),
+    runtimeVersion: "game-fields-platform-runtime-v1",
+    sdkContractVersion: module.manifest.sdkVersion,
+    roomSchemaVersion: GAME_FIELDS_PLATFORM_ROOM_SCHEMA_VERSION,
+    resourceProtocolVersion: 1,
+    clientBridgeVersion: 1,
+  };
 }
 
 function trustedActor(
@@ -139,6 +361,7 @@ function assertStoredRecord<TRoom extends GameSdkStoredRoom>(
   record: GameFieldsPlatformRoomRecord<TRoom>,
   gameId: string,
   code: string,
+  runtimeContract: Readonly<GameFieldsPlatformRuntimeContract>,
 ) {
   if (
     record.schemaVersion !== GAME_FIELDS_PLATFORM_ROOM_SCHEMA_VERSION
@@ -150,8 +373,20 @@ function assertStoredRecord<TRoom extends GameSdkStoredRoom>(
     || !Number.isSafeInteger(record.revision)
     || record.revision < 1
     || !record.hostPlayerId.trim()
+    || !commandIdPattern.test(record.creationRequestId)
+    || !validRuntimeContract(record.runtimeContract)
+    || canonicalJson(record.settingsSnapshot) !== canonicalJson(roomSettingsSnapshot(record.room))
+    || !Array.isArray(record.commandReceipts)
+    || record.commandReceipts.length > maximumCommandReceipts
+    || !record.commandReceipts.every(validCommandReceipt)
+    || !Array.isArray(record.resultOutbox)
+    || record.resultOutbox.length > maximumResultOutboxEntries
+    || !record.resultOutbox.every(validResultOutboxEntry)
   ) {
     throw new GameFieldsPlatformRuntimeError("INVALID_STORED_ROOM", 500);
+  }
+  if (!gameFieldsPlatformRuntimeContractsEqual(record.runtimeContract, runtimeContract)) {
+    throw new GameFieldsPlatformRuntimeError("ROOM_RUNTIME_MISMATCH", 409);
   }
 }
 
@@ -182,8 +417,23 @@ export function createGameFieldsPlatformRuntime<
   now = Date.now,
   createRequestId = () => crypto.randomUUID(),
   resources = {},
+  runtimeContract: runtimeContractInput,
   onSaved,
 }: PlatformRuntimeOptions<TRoom, TCreateInput, TCommand, TRoomView>): GameFieldsPlatformRuntime<TCreateInput, TCommand, TRoomView> {
+  const runtimeContract = clone(
+    runtimeContractInput
+      ?? defaultRuntimeContract(
+        module as unknown as GameSdkServerModule<
+          GameSdkStoredRoom,
+          unknown,
+          { type: string },
+          unknown
+        >,
+      ),
+  );
+  if (!validRuntimeContract(runtimeContract)) {
+    throw new GameFieldsPlatformRuntimeError("ROOM_RUNTIME_MISMATCH", 500);
+  }
   const present = async (
     room: Readonly<TRoom>,
     actor: GameSdkTrustedActor,
@@ -198,13 +448,28 @@ export function createGameFieldsPlatformRuntime<
   );
 
   return {
-    async createRoom({ roomCode, create, identity }) {
+    async createRoom({ roomCode, create, requestId: requestIdInput, identity }) {
       const timestamp = now();
       const actor = trustedActor(identity, identity.playerId.trim());
+      const requestId = requestIdInput?.trim() || createRequestId();
+      if (!commandIdPattern.test(requestId)) {
+        throw new GameFieldsPlatformRuntimeError("COMMAND_ID_CONFLICT", 409);
+      }
+      const existing = await persistence.load(roomCode);
+      if (existing) {
+        assertStoredRecord(existing, module.manifest.id, roomCode, runtimeContract);
+        if (
+          existing.creationRequestId === requestId
+          && existing.hostPlayerId === actor.playerId
+        ) {
+          return await present(existing.room, actor, timestamp);
+        }
+        throw new GameFieldsPlatformRuntimeError("ROOM_ALREADY_EXISTS", 409);
+      }
       const room = await module.createRoom(clone(create), {
         actor: clone(actor),
         now: timestamp,
-        requestId: createRequestId(),
+        requestId,
         roomCode,
         resources,
       });
@@ -221,8 +486,13 @@ export function createGameFieldsPlatformRuntime<
         revision: room.revision,
         phase: room.phase,
         hostPlayerId: actor.playerId,
+        creationRequestId: requestId,
         createdAt: timestamp,
         updatedAt: timestamp,
+        runtimeContract: clone(runtimeContract),
+        settingsSnapshot: roomSettingsSnapshot(room),
+        commandReceipts: [],
+        resultOutbox: [],
         room: clone(room),
       };
       const result = await persistence.create(record);
@@ -235,7 +505,7 @@ export function createGameFieldsPlatformRuntime<
     async readRoom({ code, identity }) {
       const record = await persistence.load(code);
       if (!record) return null;
-      assertStoredRecord(record, module.manifest.id, code);
+      assertStoredRecord(record, module.manifest.id, code, runtimeContract);
       const actor = trustedActor(identity, record.hostPlayerId);
       return await present(record.room, actor, now());
     },
@@ -243,19 +513,52 @@ export function createGameFieldsPlatformRuntime<
     async sendCommand({ code, envelope, identity }) {
       const record = await persistence.load(code);
       if (!record) throw new GameFieldsPlatformRuntimeError("ROOM_NOT_FOUND", 404);
-      assertStoredRecord(record, module.manifest.id, code);
+      assertStoredRecord(record, module.manifest.id, code, runtimeContract);
+      const timestamp = now();
+      const actor = trustedActor(identity, record.hostPlayerId);
+      const commandId = envelope.commandId?.trim() || createRequestId();
+      if (!commandIdPattern.test(commandId)) {
+        throw new GameFieldsPlatformRuntimeError("COMMAND_ID_CONFLICT", 409);
+      }
+      const commandSha256 = sha256({
+        expectedRevision: envelope.expectedRevision,
+        command: envelope.command,
+      });
+      const receiptResult = async (
+        source: GameFieldsPlatformRoomRecord<TRoom>,
+      ): Promise<GameSdkCommandResult<TRoomView> | null> => {
+        const receipt = source.commandReceipts.find(
+          (item) => item.commandId === commandId,
+        );
+        if (!receipt) return null;
+        if (
+          receipt.actorPlayerId !== actor.playerId
+          || receipt.commandSha256 !== commandSha256
+          || receipt.expectedRevision !== envelope.expectedRevision
+        ) {
+          throw new GameFieldsPlatformRuntimeError("COMMAND_ID_CONFLICT", 409);
+        }
+        const room = await present(source.room, actor, now());
+        return {
+          room,
+          revision: room.revision,
+          commandId,
+          commandRevision: receipt.resultRevision,
+          applied: false,
+        };
+      };
+      const duplicate = await receiptResult(record);
+      if (duplicate) return duplicate;
       if (record.revision !== envelope.expectedRevision) {
         throw new GameFieldsPlatformRuntimeError("STALE_REVISION", 409);
       }
-      const timestamp = now();
-      const actor = trustedActor(identity, record.hostPlayerId);
       const nextRoom = await module.applyCommand(
         clone(record.room),
         clone(envelope.command),
         {
           actor: clone(actor),
           now: timestamp,
-          requestId: createRequestId(),
+          requestId: commandId,
           resources,
         },
       );
@@ -270,14 +573,64 @@ export function createGameFieldsPlatformRuntime<
         revision: nextRoom.revision,
         phase: nextRoom.phase,
         updatedAt: timestamp,
+        settingsSnapshot: roomSettingsSnapshot(nextRoom),
+        commandReceipts: [
+          ...record.commandReceipts,
+          {
+            commandId,
+            actorPlayerId: actor.playerId,
+            commandSha256,
+            expectedRevision: record.revision,
+            resultRevision: nextRoom.revision,
+            createdAt: timestamp,
+          },
+        ].slice(-maximumCommandReceipts),
+        resultOutbox: (() => {
+          const confirmed = resultSnapshot(
+            nextRoom,
+            record,
+            timestamp,
+          );
+          if (!confirmed || record.phase === "result") {
+            return record.resultOutbox;
+          }
+          return [
+            ...record.resultOutbox,
+            {
+              eventId: sha256({
+                packageRootSha256: runtimeContract.packageRootSha256,
+                roomCode: record.code,
+                resultRevision: nextRoom.revision,
+              }),
+              status: "result-confirmed" as const,
+              attempts: 0,
+              confirmedAt: timestamp,
+              updatedAt: timestamp,
+              snapshot: confirmed,
+            },
+          ].slice(-maximumResultOutboxEntries);
+        })(),
         room: clone(nextRoom),
       };
       const saved = await persistence.compareAndSet(record.revision, nextRecord);
       if (saved === "missing") throw new GameFieldsPlatformRuntimeError("ROOM_NOT_FOUND", 404);
-      if (saved === "conflict") throw new GameFieldsPlatformRuntimeError("STALE_REVISION", 409);
+      if (saved === "conflict") {
+        const latest = await persistence.load(code);
+        if (!latest) throw new GameFieldsPlatformRuntimeError("ROOM_NOT_FOUND", 404);
+        assertStoredRecord(latest, module.manifest.id, code, runtimeContract);
+        const concurrentDuplicate = await receiptResult(latest);
+        if (concurrentDuplicate) return concurrentDuplicate;
+        throw new GameFieldsPlatformRuntimeError("STALE_REVISION", 409);
+      }
       await onSaved?.(clone(record), clone(nextRecord));
       const room = await present(nextRoom, actor, timestamp);
-      return { room, revision: room.revision };
+      return {
+        room,
+        revision: room.revision,
+        commandId,
+        commandRevision: room.revision,
+        applied: true,
+      };
     },
   };
 }

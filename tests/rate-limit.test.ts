@@ -57,3 +57,49 @@ test("rate limiting fails open when its Redis check is unavailable", async () =>
   assert.equal(result.allowed, true);
   assert.equal(result.storeAvailable, false);
 });
+
+test("SDK Room quota combines actor, creator, package and Room buckets", async () => {
+  let captured: unknown[] = [];
+  const execute = async <T>(command: unknown[]) => {
+    captured = command;
+    return [1, 0] as T;
+  };
+  const result = await checkRateLimitCore(
+    new Request("https://game-fields.com/api/game-sdk/test/rooms", {
+      headers: { "x-forwarded-for": "203.0.113.12" },
+    }),
+    rateLimitPolicies.sdkRoomMutation,
+    {
+      playerId: "player-1",
+      creatorId: "creator-1",
+      packageId: "creator-1/game-1",
+      roomId: "creator-1/game-1/ROOM",
+      environment: "candidate-preview",
+    },
+    execute,
+  );
+  assert.equal(result.allowed, true);
+  assert.equal(result.bucketCount, 5);
+  assert.equal(captured[2], "5");
+  assert.equal(captured.some((value) => String(value).includes("creator-1")), false);
+  assert.equal(captured.some((value) => String(value).includes("ROOM")), false);
+});
+
+test("SDK Room quota fails closed when its store is unavailable", async () => {
+  const result = await checkRateLimitCore(
+    new Request("https://game-fields.com/api/game-sdk/test/rooms"),
+    rateLimitPolicies.sdkRoomMutation,
+    {
+      playerId: "player-1",
+      packageId: "game-1",
+      roomId: "game-1/ROOM",
+      environment: "test",
+    },
+    async <T>(): Promise<T> => {
+      throw new Error("REDIS_UNAVAILABLE");
+    },
+  );
+  assert.equal(result.allowed, false);
+  assert.equal(result.storeAvailable, false);
+  assert.equal(result.retryAfterMs, 1_000);
+});

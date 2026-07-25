@@ -11,9 +11,13 @@ import type {
 } from "@game-fields/game-sdk/resources";
 import {
   createGameFieldsPlatformRuntime,
+  GameFieldsPlatformRuntimeError,
+  gameFieldsPlatformRuntimeContractsEqual,
   type GameFieldsAuthenticatedIdentity,
   type GameFieldsPlatformRoomRecord,
   type GameFieldsPlatformRoomPersistence,
+  type GameFieldsPlatformResultOutboxEntry,
+  type GameFieldsPlatformRuntimeContract,
 } from "@game-fields/game-runtime";
 import {
   createRedisGameSdkPlatformPersistence,
@@ -22,6 +26,11 @@ import {
   type GameSdkPlatformRoomStore,
 } from "./game-sdk-platform-room-store.ts";
 import { schedulePostResponseWork } from "./post-response-work.ts";
+import type { GameFieldsEnvironment } from "./game-fields-environment.ts";
+import {
+  emitObservabilityEvent,
+  observabilityRef,
+} from "./observability/index.ts";
 
 export {
   createRedisGameSdkPlatformPersistence,
@@ -31,6 +40,24 @@ export {
 } from "./game-sdk-platform-room-store.ts";
 
 type IdentityResolver = () => Promise<GameFieldsAuthenticatedIdentity>;
+
+export type GameSdkPlatformRuntimeDefinition<
+  TRoom extends GameSdkStoredRoom,
+  TCreateInput,
+  TCommand extends { type: string },
+  TRoomView,
+> = {
+  module: GameSdkServerModule<TRoom, TCreateInput, TCommand, TRoomView>;
+  runtimeContract: Readonly<GameFieldsPlatformRuntimeContract>;
+  resources?: Readonly<GameSdkPlatformResources>;
+  onRoomSaved?: (
+    previous: Readonly<GameFieldsPlatformRoomRecord<TRoom>>,
+    next: Readonly<GameFieldsPlatformRoomRecord<TRoom>>,
+  ) => Promise<unknown>;
+  onResultConfirmed?: (
+    result: Readonly<GameFieldsPlatformResultOutboxEntry>,
+  ) => Promise<unknown>;
+};
 
 type AuthenticatedPlatformAdapterOptions<
   TRoom extends GameSdkStoredRoom,
@@ -45,9 +72,23 @@ type AuthenticatedPlatformAdapterOptions<
   now?: () => number;
   createRequestId?: () => string;
   resources?: Readonly<GameSdkPlatformResources>;
+  roomScopeId?: string;
+  environment?: GameFieldsEnvironment;
+  runtimeContract?: Readonly<GameFieldsPlatformRuntimeContract>;
+  resolveRuntime?: (
+    contract: Readonly<GameFieldsPlatformRuntimeContract>,
+  ) => Promise<GameSdkPlatformRuntimeDefinition<
+    TRoom,
+    TCreateInput,
+    TCommand,
+    TRoomView
+  > | null>;
   onRoomSaved?: (
     previous: Readonly<GameFieldsPlatformRoomRecord<TRoom>>,
     next: Readonly<GameFieldsPlatformRoomRecord<TRoom>>,
+  ) => Promise<unknown>;
+  onResultConfirmed?: (
+    result: Readonly<GameFieldsPlatformResultOutboxEntry>,
   ) => Promise<unknown>;
 };
 
@@ -59,6 +100,7 @@ export type AuthenticatedGameSdkPlatformAdapter<
   createRoom(input: {
     roomCode: string;
     create: TCreateInput;
+    requestId?: string;
   }): Promise<GameSdkRoomSnapshot<TRoomView>>;
   readRoom(code: string): Promise<GameSdkRoomSnapshot<TRoomView> | null>;
   readActiveRoom(): Promise<GameSdkRoomSnapshot<TRoomView> | null>;
@@ -102,47 +144,201 @@ export function createAuthenticatedGameSdkPlatformAdapter<
   now,
   createRequestId,
   resources,
+  roomScopeId,
+  environment,
+  runtimeContract,
+  resolveRuntime,
   onRoomSaved,
+  onResultConfirmed,
 }: AuthenticatedPlatformAdapterOptions<TRoom, TCreateInput, TCommand, TRoomView>): AuthenticatedGameSdkPlatformAdapter<TCreateInput, TCommand, TRoomView> {
+  const roomScope = roomScopeId ?? module.manifest.id;
   const roomStore = roomStoreInput
-    ?? (persistenceInput ? null : createRedisGameSdkPlatformRoomStore<TRoom>(module.manifest.id));
+    ?? (persistenceInput
+      ? null
+      : createRedisGameSdkPlatformRoomStore<TRoom>(roomScope, environment));
   const persistence = roomStore
     ?? persistenceInput
-    ?? createRedisGameSdkPlatformPersistence<TRoom>(module.manifest.id);
-  const runtime = createGameFieldsPlatformRuntime<
+    ?? createRedisGameSdkPlatformPersistence<TRoom>(roomScope, environment);
+  const currentDefinition = {
+    module,
+    resources,
+    onRoomSaved,
+    onResultConfirmed,
+    ...(runtimeContract ? { runtimeContract } : {}),
+  };
+
+  const createRuntime = (
+    definition: typeof currentDefinition | GameSdkPlatformRuntimeDefinition<
+      TRoom,
+      TCreateInput,
+      TCommand,
+      TRoomView
+    >,
+  ) => createGameFieldsPlatformRuntime<
     TRoom,
     TCreateInput,
     TCommand,
     TRoomView
   >({
-    module,
+    module: definition.module,
     persistence,
     now,
     createRequestId,
-    resources,
-    ...(onRoomSaved ? {
-      onSaved: (previous, next) => schedulePostResponseWork(
-        `game-sdk-result:${module.manifest.id}:${next.code}:${next.revision}`,
-        () => onRoomSaved(previous, next),
-      ),
+    resources: definition.resources,
+    ...("runtimeContract" in definition && definition.runtimeContract
+      ? { runtimeContract: definition.runtimeContract }
+      : {}),
+    ...((definition.onRoomSaved || definition.onResultConfirmed) ? {
+      onSaved: async (previous, next) => {
+        if (definition.onRoomSaved) {
+          await schedulePostResponseWork(
+            `game-sdk-saved:${roomScope}:${next.code}:${next.revision}`,
+            () => definition.onRoomSaved!(previous, next),
+          );
+        }
+        if (definition.onResultConfirmed) {
+          await scheduleResultOutbox(next, definition);
+        }
+      },
     } : {}),
   });
 
+  const definitionForRecord = async (
+    record: GameFieldsPlatformRoomRecord<TRoom>,
+  ) => {
+    if (
+      runtimeContract
+      && gameFieldsPlatformRuntimeContractsEqual(
+        record.runtimeContract,
+        runtimeContract,
+      )
+    ) return currentDefinition;
+    if (!runtimeContract) return currentDefinition;
+    const resolved = await resolveRuntime?.(record.runtimeContract);
+    if (
+      !resolved
+      || resolved.module.manifest.id !== record.gameId
+      || !gameFieldsPlatformRuntimeContractsEqual(
+        resolved.runtimeContract,
+        record.runtimeContract,
+      )
+    ) {
+      throw new GameFieldsPlatformRuntimeError("ROOM_RUNTIME_MISMATCH", 409);
+    }
+    return resolved;
+  };
+
+  const runtimeForCode = async (code: string) => {
+    if (!roomStore || !runtimeContract) return createRuntime(currentDefinition);
+    const record = await roomStore.load(code);
+    if (!record) return createRuntime(currentDefinition);
+    return createRuntime(await definitionForRecord(record));
+  };
+
+  const safeResultErrorCode = (error: unknown) => {
+    const code = error instanceof Error ? error.message : "";
+    return /^[A-Z][A-Z0-9_]{1,99}$/.test(code)
+      ? code
+      : "GAME_SDK_RESULT_PERSISTENCE_FAILED";
+  };
+
+  async function scheduleResultOutbox(
+    record: GameFieldsPlatformRoomRecord<TRoom>,
+    definitionInput?: typeof currentDefinition | GameSdkPlatformRuntimeDefinition<
+      TRoom,
+      TCreateInput,
+      TCommand,
+      TRoomView
+    >,
+  ) {
+    if (!roomStore) return;
+    const pending = record.resultOutbox.filter(
+      (entry) => entry.status !== "completed",
+    );
+    if (pending.length === 0) return;
+    const definition = definitionInput ?? await definitionForRecord(record);
+    if (!definition.onResultConfirmed) return;
+    await Promise.all(pending.map((entry) => schedulePostResponseWork(
+      `game-sdk-result:${roomScope}:${record.code}:${entry.eventId}`,
+      async () => {
+        const claimed = await roomStore.claimResultOutbox(
+          record.code,
+          entry.eventId,
+          Date.now(),
+        );
+        const claimedEntry = claimed?.resultOutbox.find(
+          (item) => item.eventId === entry.eventId,
+        );
+        if (!claimedEntry) return;
+        emitObservabilityEvent("info", "game-sdk.result-outbox", {
+          game: `sdk:${roomScope}`,
+          operation: "persist-result",
+          roomRef: observabilityRef("room", record.code),
+          eventRef: observabilityRef("event", entry.eventId),
+          revision: entry.snapshot.resultRevision,
+          attempt: claimedEntry.attempts,
+          outcome: "started",
+        });
+        try {
+          await definition.onResultConfirmed!(claimedEntry);
+          const completed = await roomStore.completeResultOutbox(
+            record.code,
+            entry.eventId,
+            Date.now(),
+          );
+          if (!completed) throw new Error("GAME_SDK_RESULT_OUTBOX_CONFLICT");
+          emitObservabilityEvent("info", "game-sdk.result-outbox", {
+            game: `sdk:${roomScope}`,
+            operation: "persist-result",
+            roomRef: observabilityRef("room", record.code),
+            eventRef: observabilityRef("event", entry.eventId),
+            revision: entry.snapshot.resultRevision,
+            attempt: claimedEntry.attempts,
+            outcome: "success",
+          });
+        } catch (error) {
+          const code = safeResultErrorCode(error);
+          await roomStore.retryResultOutbox(
+            record.code,
+            entry.eventId,
+            Date.now(),
+            code,
+          );
+          emitObservabilityEvent("error", "game-sdk.result-outbox", {
+            game: `sdk:${roomScope}`,
+            operation: "persist-result",
+            roomRef: observabilityRef("room", record.code),
+            eventRef: observabilityRef("event", entry.eventId),
+            revision: entry.snapshot.resultRevision,
+            attempt: claimedEntry.attempts,
+            outcome: "failed",
+            errorCode: code,
+          });
+          throw new Error(code);
+        }
+      },
+    )));
+  }
+
   return {
-    async createRoom({ roomCode, create }) {
+    async createRoom({ roomCode, create, requestId }) {
       const identity = await resolveIdentity();
       const normalizedCode = normalizeGameSdkPlatformRoomCode(roomCode);
       const claim = roomStore
         ? await roomStore.claimActiveRoom(identity.playerId, normalizedCode)
         : null;
       try {
-        const room = await runtime.createRoom({
+        const room = await createRuntime(currentDefinition).createRoom({
           roomCode: normalizedCode,
           create,
+          requestId,
           identity,
         });
         const record = roomStore ? await roomStore.load(normalizedCode) : null;
-        if (record) await roomStore!.publishRevision(record);
+        if (record) {
+          await roomStore!.publishRevision(record);
+          await scheduleResultOutbox(record);
+        }
         return room;
       } catch (error) {
         if (claim) await roomStore!.rollbackActiveRoomClaim(claim);
@@ -152,10 +348,15 @@ export function createAuthenticatedGameSdkPlatformAdapter<
 
     async readRoom(code) {
       const identity = await resolveIdentity();
-      return runtime.readRoom({
-        code: normalizeGameSdkPlatformRoomCode(code),
+      const normalizedCode = normalizeGameSdkPlatformRoomCode(code);
+      const runtime = await runtimeForCode(normalizedCode);
+      const room = await runtime.readRoom({
+        code: normalizedCode,
         identity,
       });
+      const record = roomStore ? await roomStore.load(normalizedCode) : null;
+      if (record) await scheduleResultOutbox(record);
+      return room;
     },
 
     async readActiveRoom() {
@@ -163,7 +364,10 @@ export function createAuthenticatedGameSdkPlatformAdapter<
       if (!roomStore) throw new Error("GAME_SDK_LIFECYCLE_UNAVAILABLE");
       const record = await roomStore.loadActiveRoom(identity.playerId);
       if (!record) return null;
-      return runtime.readRoom({ code: record.code, identity });
+      const runtime = createRuntime(await definitionForRecord(record));
+      const room = await runtime.readRoom({ code: record.code, identity });
+      await scheduleResultOutbox(record);
+      return room;
     },
 
     async listRooms(cursor) {
@@ -180,6 +384,7 @@ export function createAuthenticatedGameSdkPlatformAdapter<
         ? await roomStore.claimActiveRoom(identity.playerId, normalizedCode)
         : null;
       try {
+        const runtime = await runtimeForCode(normalizedCode);
         const result = await runtime.sendCommand({
           code: normalizedCode,
           envelope,
@@ -189,7 +394,10 @@ export function createAuthenticatedGameSdkPlatformAdapter<
           await roomStore.releaseActiveRoom(identity.playerId, normalizedCode);
         }
         const record = roomStore ? await roomStore.load(normalizedCode) : null;
-        if (record) await roomStore!.publishRevision(record);
+        if (record) {
+          await roomStore!.publishRevision(record);
+          await scheduleResultOutbox(record);
+        }
         return result;
       } catch (error) {
         if (claim) await roomStore!.rollbackActiveRoomClaim(claim);

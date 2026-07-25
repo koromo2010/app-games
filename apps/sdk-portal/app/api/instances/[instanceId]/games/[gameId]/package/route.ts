@@ -1,5 +1,6 @@
 import { authenticateCreator, normalizeInstanceSlug, validateInstanceSlug } from "@/lib/instance-registry";
 import { saveCreatorGamePackage } from "@/lib/game-package-store";
+import { ensureSdkSchema, sdkSql } from "@/lib/sdk-postgres";
 
 export const dynamic = "force-dynamic";
 
@@ -56,9 +57,57 @@ export async function PUT(
         error: "先にモックを保存してゲームIDを確定してください。",
       }, { status: 409 });
     }
+    if (code === "GAME_SDK_PACKAGE_REVISION_QUOTA_EXCEEDED") {
+      return Response.json({
+        saved: false,
+        error: code,
+      }, { status: 409 });
+    }
     if (code.startsWith("GAME_SDK_PACKAGE_") || /upload|missing|invalid|large|path|encoding/i.test(code)) {
       return Response.json({ saved: false, error: code || "ゲームパッケージが不正です。" }, { status: 400 });
     }
     return Response.json({ saved: false, error: "ゲームパッケージを現在保存できません。" }, { status: 503 });
+  }
+}
+
+/**
+ * Logical deletion is immediate for catalogs and new Preview sessions. Package
+ * revisions and channel history remain immutable so already-created Rooms can
+ * finish on their pinned contract and operators retain an audit trail.
+ */
+export async function DELETE(
+  request: Request,
+  context: { params: Promise<{ instanceId: string; gameId: string }> },
+) {
+  const params = await context.params;
+  const slug = normalizeInstanceSlug(params.instanceId);
+  const gameId = params.gameId.trim().toLowerCase();
+  const token = bearerToken(request);
+  if (validateInstanceSlug(slug) || !GAME_PATTERN.test(gameId) || !token) {
+    return Response.json({ deleted: false, error: "認証情報が必要です。" }, { status: 401 });
+  }
+  try {
+    const creator = await authenticateCreator(slug, token);
+    if (!creator) {
+      return Response.json({ deleted: false, error: "認証情報が正しくありません。" }, { status: 403 });
+    }
+    await ensureSdkSchema();
+    const rows = await sdkSql()`
+      UPDATE sdk_games
+      SET status = 'deleted', deleted_at = NOW(), updated_at = NOW()
+      WHERE creator_id = ${creator.id}
+        AND game_id = ${gameId}
+        AND deleted_at IS NULL
+      RETURNING game_id
+    `;
+    return Response.json({
+      deleted: Array.isArray(rows) && rows.length > 0,
+      gameId,
+    });
+  } catch {
+    return Response.json({
+      deleted: false,
+      error: "ゲームを現在削除できません。",
+    }, { status: 503 });
   }
 }

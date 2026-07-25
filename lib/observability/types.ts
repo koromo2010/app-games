@@ -20,10 +20,18 @@ export type ObservabilityFields = {
   actorRef?: string;
   eventRef?: string;
   commandRef?: string;
+  effectRef?: string;
   phase?: string;
+  channel?: string;
+  packageRevision?: string;
+  packageRoot?: string;
+  runtimeVersion?: string;
   provider?: string;
   model?: string;
+  billingSource?: string;
   revision?: number;
+  commandRevision?: number;
+  roomSchemaVersion?: number;
   playerCount?: number;
   round?: number;
   gameNumber?: number;
@@ -33,6 +41,9 @@ export type ObservabilityFields = {
   attempt?: number;
   affectedCount?: number;
   sourceCount?: number;
+  promptTokens?: number;
+  completionTokens?: number;
+  costMicros?: number;
   applied?: boolean;
   debugMode?: boolean;
   outcome?: ObservabilityOutcome;

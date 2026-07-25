@@ -1,4 +1,8 @@
 import { createHmac } from "node:crypto";
+import {
+  resolveGameFieldsEnvironment,
+  type GameFieldsEnvironment,
+} from "./game-fields-environment.ts";
 
 type RateLimitBudget = {
   limit: number;
@@ -10,11 +14,19 @@ export type RateLimitPolicy = {
   ip?: RateLimitBudget;
   player?: RateLimitBudget;
   identity?: RateLimitBudget;
+  creator?: RateLimitBudget;
+  package?: RateLimitBudget;
+  room?: RateLimitBudget;
+  failClosed?: boolean;
 };
 
 export type RateLimitSubjects = {
   playerId?: string | null;
   identity?: string | null;
+  creatorId?: string | null;
+  packageId?: string | null;
+  roomId?: string | null;
+  environment?: GameFieldsEnvironment;
 };
 
 export type RedisExecutor = <T>(command: unknown[]) => Promise<T>;
@@ -65,6 +77,15 @@ export const rateLimitPolicies = {
     ip: { limit: 2_500, windowMs: minute },
     player: { limit: 180, windowMs: minute },
   },
+  sdkRoomMutation: {
+    id: "sdk-room-mutation",
+    ip: { limit: 2_500, windowMs: minute },
+    player: { limit: 180, windowMs: minute },
+    creator: { limit: 2_000, windowMs: minute },
+    package: { limit: 1_200, windowMs: minute },
+    room: { limit: 600, windowMs: minute },
+    failClosed: true,
+  },
   sdkRuntimeRead: {
     id: "sdk-runtime-read",
     ip: { limit: 1_800, windowMs: minute },
@@ -74,6 +95,10 @@ export const rateLimitPolicies = {
     id: "ai-generation",
     ip: { limit: 300, windowMs: tenMinutes },
     player: { limit: 30, windowMs: tenMinutes },
+  },
+  sdkPackageAiGeneration: {
+    id: "sdk-package-ai-generation",
+    identity: { limit: 300, windowMs: hour },
   },
   sdkContentRead: {
     id: "sdk-content-read",
@@ -126,20 +151,37 @@ function hashSecret() {
     || "game-fields-local-rate-limit-v1";
 }
 
-function subjectKey(policyId: string, kind: "ip" | "player" | "identity", value: string) {
+type RateLimitSubjectKind =
+  | "ip"
+  | "player"
+  | "identity"
+  | "creator"
+  | "package"
+  | "room";
+
+function subjectKey(
+  policyId: string,
+  kind: RateLimitSubjectKind,
+  value: string,
+  environment: GameFieldsEnvironment,
+) {
   const normalized = value.trim().normalize("NFKC").toLocaleLowerCase(kind === "identity" ? "ja-JP" : "en-US");
   const digest = createHmac("sha256", hashSecret())
-    .update(`${kind}:${normalized}`)
+    .update(`${environment}:${kind}:${normalized}`)
     .digest("base64url")
     .slice(0, 24);
-  return `rate-limit:v1:${policyId}:${kind}:${digest}`;
+  return `rate-limit:v2:${environment}:${policyId}:${kind}:${digest}`;
 }
 
 function rateLimitBuckets(request: Request, policy: RateLimitPolicy, subjects: RateLimitSubjects) {
   const buckets: { key: string; budget: RateLimitBudget }[] = [];
-  if (policy.ip) buckets.push({ key: subjectKey(policy.id, "ip", clientAddress(request)), budget: policy.ip });
-  if (policy.player && subjects.playerId) buckets.push({ key: subjectKey(policy.id, "player", subjects.playerId), budget: policy.player });
-  if (policy.identity && subjects.identity?.trim()) buckets.push({ key: subjectKey(policy.id, "identity", subjects.identity), budget: policy.identity });
+  const environment = resolveGameFieldsEnvironment(subjects.environment);
+  if (policy.ip) buckets.push({ key: subjectKey(policy.id, "ip", clientAddress(request), environment), budget: policy.ip });
+  if (policy.player && subjects.playerId) buckets.push({ key: subjectKey(policy.id, "player", subjects.playerId, environment), budget: policy.player });
+  if (policy.identity && subjects.identity?.trim()) buckets.push({ key: subjectKey(policy.id, "identity", subjects.identity, environment), budget: policy.identity });
+  if (policy.creator && subjects.creatorId?.trim()) buckets.push({ key: subjectKey(policy.id, "creator", subjects.creatorId, environment), budget: policy.creator });
+  if (policy.package && subjects.packageId?.trim()) buckets.push({ key: subjectKey(policy.id, "package", subjects.packageId, environment), budget: policy.package });
+  if (policy.room && subjects.roomId?.trim()) buckets.push({ key: subjectKey(policy.id, "room", subjects.roomId, environment), budget: policy.room });
   return buckets;
 }
 
@@ -169,7 +211,12 @@ export async function checkRateLimitCore(
       storeAvailable: true,
     };
   } catch {
-    return { allowed: true, retryAfterMs: 0, bucketCount: buckets.length, storeAvailable: false };
+    return {
+      allowed: policy.failClosed !== true,
+      retryAfterMs: policy.failClosed === true ? 1_000 : 0,
+      bucketCount: buckets.length,
+      storeAvailable: false,
+    };
   }
 }
 

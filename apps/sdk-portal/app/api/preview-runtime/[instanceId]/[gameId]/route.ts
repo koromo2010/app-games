@@ -1,4 +1,9 @@
-import { getCreatorGamePreview, normalizeInstanceSlug, validateInstanceSlug } from "@/lib/instance-registry";
+import {
+  getCreatorGamePackageRevision,
+  getCreatorGamePreview,
+  normalizeInstanceSlug,
+  validateInstanceSlug,
+} from "@/lib/instance-registry";
 import {
   createPackageRuntimeAccess,
   createPreviewRuntimeUrl,
@@ -20,7 +25,15 @@ export async function GET(request: Request, { params }: { params: Promise<{ inst
   const instanceId = normalizeInstanceSlug(raw.instanceId);
   const gameId = raw.gameId.trim().toLowerCase();
   if (validateInstanceSlug(instanceId) || !GAME_PATTERN.test(gameId)) return Response.json({ error: "not_found" }, { status: 404 });
-  const game = await getCreatorGamePreview(instanceId, gameId).catch(() => null);
+  const requestedRevision = new URL(request.url).searchParams.get("revision");
+  if (requestedRevision && !/^[a-f0-9]{40}$/.test(requestedRevision)) {
+    return Response.json({ error: "revision_invalid" }, { status: 400 });
+  }
+  const game = await (
+    requestedRevision
+      ? getCreatorGamePackageRevision(instanceId, gameId, requestedRevision)
+      : getCreatorGamePreview(instanceId, gameId)
+  ).catch(() => null);
   if (!game) return Response.json({ error: "not_found" }, { status: 404 });
   try {
     const packageAccess = game.packageRevision
@@ -47,6 +60,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ inst
         serverRuntimeExpiresAt: packageAccess.expiresAt,
         serverBundleSha256: game.packageBundleSha256,
         appSetSourceSha256: game.packageAppSetSha256,
+        packageRootSha256: game.packageRootSha256,
       } : {}),
       modulePolicy: normalizeGameSdkModuleProfile(game.modulePolicy),
       settings: parseGameSdkSettingDefinitions(

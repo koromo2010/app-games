@@ -7,6 +7,8 @@ import {
   enforceGameSdkLlmRateLimit,
 } from "./game-sdk-llm-gateway.ts";
 import { createGameSdkRemoteServerModule } from "./game-sdk-remote-module.ts";
+import { createRemoteGameSdkRuntimeContract } from "./game-sdk-runtime-contract.ts";
+import { createRedisGameSdkEffectJournal } from "./game-sdk-effect-journal.ts";
 import {
   loadSdkPreviewRuntimeDefinition,
   type SdkPreviewRuntimeDefinition,
@@ -15,10 +17,9 @@ import {
 export function sdkPreviewPackageRuntimeId(
   creatorSlug: string,
   gameId: string,
-  revision: string,
 ) {
   const digest = createHash("sha256")
-    .update(`${creatorSlug}/${gameId}/${revision}`)
+    .update(`${creatorSlug}/${gameId}`)
     .digest("hex")
     .slice(0, 24);
   return `preview-${digest}`;
@@ -29,6 +30,7 @@ export async function loadSdkPreviewPackageModule(input: {
   gameId: string;
   request: Request;
   playerId: string;
+  revision?: string;
 }): Promise<{
   definition: SdkPreviewRuntimeDefinition;
   module: GameSdkServerModule<GameSdkStoredRoom, unknown, { type: string }, unknown>;
@@ -36,10 +38,15 @@ export async function loadSdkPreviewPackageModule(input: {
     contentSource: ReturnType<typeof createGameFieldsSdkContentSource>;
     llm: ReturnType<typeof createGameFieldsSdkLlmGateway>;
   };
+  roomScopeId: string;
+  runtimeContract: ReturnType<typeof createRemoteGameSdkRuntimeContract>;
 } | null> {
   const definition = await loadSdkPreviewRuntimeDefinition(
     input.creatorSlug,
     input.gameId,
+    fetch,
+    process.env,
+    input.revision,
   );
   if (
     !definition
@@ -49,6 +56,7 @@ export async function loadSdkPreviewPackageModule(input: {
     || !definition.serverRuntimeUrl
     || !definition.serverRuntimeToken
     || !definition.serverBundleSha256
+    || !definition.packageRootSha256
   ) {
     return null;
   }
@@ -57,16 +65,24 @@ export async function loadSdkPreviewPackageModule(input: {
     runtimeId: sdkPreviewPackageRuntimeId(
       input.creatorSlug,
       input.gameId,
-      definition.revision,
     ),
     revision: definition.revision,
     serverBundleSha256: definition.serverBundleSha256,
     serverRuntimeUrl: definition.serverRuntimeUrl,
     serverRuntimeToken: definition.serverRuntimeToken,
+    effectJournal: createRedisGameSdkEffectJournal("candidate-preview"),
   });
   return {
     definition,
     module: remoteModule,
+    roomScopeId: sdkPreviewPackageRuntimeId(
+      input.creatorSlug,
+      input.gameId,
+    ),
+    runtimeContract: createRemoteGameSdkRuntimeContract({
+      revision: definition.revision,
+      packageRootSha256: definition.packageRootSha256,
+    }),
     resources: {
       contentSource: createGameFieldsSdkContentSource(),
       llm: createGameFieldsSdkLlmGateway({
@@ -75,6 +91,7 @@ export async function loadSdkPreviewPackageModule(input: {
         beforeGenerate: () => enforceGameSdkLlmRateLimit(
           input.request,
           input.playerId,
+          input.gameId,
         ),
       }),
     },

@@ -3,7 +3,10 @@ import {
   type GameSdkManifest,
 } from "@game-fields/game-sdk";
 import type { GameCatalogEntry, GameTag } from "@/app/games/game-catalog";
-import type { GameFieldsAuthenticatedIdentity } from "@game-fields/game-runtime";
+import type {
+  GameFieldsAuthenticatedIdentity,
+  GameFieldsPlatformResultOutboxEntry,
+} from "@game-fields/game-runtime";
 import { createGameFieldsSdkContentSource } from "./game-sdk-content-source.ts";
 import {
   createAuthenticatedGameSdkPlatformAdapter,
@@ -13,6 +16,8 @@ import {
   enforceGameSdkLlmRateLimit,
 } from "./game-sdk-llm-gateway.ts";
 import { createGameSdkRemoteServerModule } from "./game-sdk-remote-module.ts";
+import { createRemoteGameSdkRuntimeContract } from "./game-sdk-runtime-contract.ts";
+import { createRedisGameSdkEffectJournal } from "./game-sdk-effect-journal.ts";
 import type {
   ApprovedGameSdkRegistration,
   ApprovedGameSdkRoomAdapter,
@@ -29,6 +34,7 @@ type RuntimeCatalogPayload = {
   gameId: string;
   title: string;
   revision: string;
+  packageRootSha256: string;
   serverBundleSha256: string;
   appSetSourceSha256: string;
   manifest: GameSdkManifest;
@@ -51,6 +57,7 @@ type RuntimeCatalogListPayload = {
     id: string;
     description: string;
     revision: string;
+    packageRootSha256: string;
     serverBundleSha256: string;
     appSetSourceSha256: string;
     manifest: GameSdkManifest;
@@ -80,6 +87,7 @@ function validCatalogListPayload(
       || !/^[a-z][a-z0-9-]{1,63}$/.test(game.id)
       || typeof game.description !== "string"
       || !/^[a-f0-9]{40}$/.test(game.revision)
+      || !/^[a-f0-9]{64}$/.test(game.packageRootSha256)
       || !/^[a-f0-9]{64}$/.test(game.serverBundleSha256)
       || !/^[a-f0-9]{64}$/.test(game.appSetSourceSha256)
     ) return false;
@@ -142,6 +150,8 @@ function validCatalogPayload(
     || !/^[a-z][a-z0-9-]{1,63}$/.test(item.sourceGameId)
     || typeof item.revision !== "string"
     || !/^[a-f0-9]{40}$/.test(item.revision)
+    || typeof item.packageRootSha256 !== "string"
+    || !/^[a-f0-9]{64}$/.test(item.packageRootSha256)
     || typeof item.serverBundleSha256 !== "string"
     || !/^[a-f0-9]{64}$/.test(item.serverBundleSha256)
     || typeof item.appSetSourceSha256 !== "string"
@@ -172,14 +182,15 @@ function validCatalogPayload(
   return item.manifest.id === item.sourceGameId;
 }
 
-export async function loadApprovedGameSdkRuntimeRegistration(
-  gameIdInput: string,
-  env: NodeJS.ProcessEnv = process.env,
-): Promise<ApprovedGameSdkRegistration | null> {
-  const gameId = gameIdInput.trim().toLowerCase();
-  if (!/^[a-z][a-z0-9-]{1,63}$/.test(gameId)) return null;
-  const channel = deploymentChannel(env);
-  const url = `${sdkPortalInternalBaseUrl(env)}/api/runtime-catalog/${gameId}?channel=${channel}`;
+async function loadRuntimeCatalogPayload(
+  gameId: string,
+  channel: "development" | "stable",
+  env: NodeJS.ProcessEnv,
+  revision?: string,
+) {
+  const url = `${sdkPortalInternalBaseUrl(env)}/api/runtime-catalog/${gameId}?channel=${channel}${
+    revision ? `&revision=${encodeURIComponent(revision)}` : ""
+  }`;
   const response = await fetch(url, {
     headers: sdkServiceHeaders("GET", url),
     cache: "no-store",
@@ -190,14 +201,71 @@ export async function loadApprovedGameSdkRuntimeRegistration(
   if (!validCatalogPayload(payload, gameId, channel, env)) {
     throw new Error("GAME_SDK_RUNTIME_CATALOG_INVALID");
   }
+  return payload;
+}
 
-  const remoteModule = createGameSdkRemoteServerModule({
+function remoteModule(payload: RuntimeCatalogPayload, runtimeId: string) {
+  return createGameSdkRemoteServerModule({
     manifest: payload.manifest,
-    runtimeId: gameId,
+    runtimeId,
     revision: payload.revision,
     serverBundleSha256: payload.serverBundleSha256,
     serverRuntimeUrl: payload.serverRuntimeUrl,
     serverRuntimeToken: payload.serverRuntimeToken,
+    effectJournal: createRedisGameSdkEffectJournal(),
+  });
+}
+
+function runtimeResources(
+  gameId: string,
+  request: Request,
+  playerId: string,
+) {
+  return {
+    contentSource: createGameFieldsSdkContentSource(),
+    llm: createGameFieldsSdkLlmGateway({
+      gameId,
+      allowHighQuality: false,
+      beforeGenerate: () => enforceGameSdkLlmRateLimit(
+        request,
+        playerId,
+        gameId,
+      ),
+    }),
+  };
+}
+
+function resultPersistence(
+  gameId: string,
+  payload: RuntimeCatalogPayload,
+) {
+  return async (result: Readonly<GameFieldsPlatformResultOutboxEntry>) => {
+    const { persistApprovedGameSdkResultEvent } = await import(
+      "./game-sdk-result-persistence.ts"
+    );
+    await persistApprovedGameSdkResultEvent({
+      gameType: `sdk:${gameId}`,
+      title: payload.manifest.title.ja,
+      supportsRating: payload.manifest.supportsRating,
+      supportsReplay: payload.manifest.supportsReplay,
+      result,
+    });
+  };
+}
+
+export async function loadApprovedGameSdkRuntimeRegistration(
+  gameIdInput: string,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<ApprovedGameSdkRegistration | null> {
+  const gameId = gameIdInput.trim().toLowerCase();
+  if (!/^[a-z][a-z0-9-]{1,63}$/.test(gameId)) return null;
+  const channel = deploymentChannel(env);
+  const payload = await loadRuntimeCatalogPayload(gameId, channel, env);
+  if (!payload) return null;
+  const currentModule = remoteModule(payload, gameId);
+  const currentContract = createRemoteGameSdkRuntimeContract({
+    revision: payload.revision,
+    packageRootSha256: payload.packageRootSha256,
   });
   return {
     id: gameId,
@@ -206,6 +274,7 @@ export async function loadApprovedGameSdkRuntimeRegistration(
     clientRuntimeUrl: payload.clientRuntimeUrl,
     channel,
     revision: payload.revision,
+    packageRootSha256: payload.packageRootSha256,
     serverBundleSha256: payload.serverBundleSha256,
     appSetSourceSha256: payload.appSetSourceSha256,
     supportsDebug: payload.manifest.supportsDebug,
@@ -218,39 +287,29 @@ export async function loadApprovedGameSdkRuntimeRegistration(
       playerId: string,
     ) {
       return createAuthenticatedGameSdkPlatformAdapter({
-        module: remoteModule,
-        resolveIdentity,
-        resources: {
-          contentSource: createGameFieldsSdkContentSource(),
-          llm: createGameFieldsSdkLlmGateway({
+        module: currentModule,
+        runtimeContract: currentContract,
+        async resolveRuntime(contract) {
+          const pinned = await loadRuntimeCatalogPayload(
             gameId,
-            allowHighQuality: true,
-            beforeGenerate: () => enforceGameSdkLlmRateLimit(
-              adapterRequest,
-              playerId,
-            ),
-          }),
-        },
-        async onRoomSaved(previous, next) {
-          if (
-            next.phase !== "result"
-            || !(
-              "standardResult" in next.room
-              && next.room.standardResult
-            )
-          ) return;
-          const { persistApprovedGameSdkResult } = await import(
-            "./game-sdk-result-persistence.ts"
+            channel,
+            env,
+            contract.packageRevision,
           );
-          await persistApprovedGameSdkResult({
-            gameType: `sdk:${gameId}`,
-            title: payload.manifest.title.ja,
-            supportsRating: payload.manifest.supportsRating,
-            supportsReplay: payload.manifest.supportsReplay,
-            previous,
-            next,
-          });
+          if (!pinned) return null;
+          return {
+            module: remoteModule(pinned, gameId),
+            runtimeContract: createRemoteGameSdkRuntimeContract({
+              revision: pinned.revision,
+              packageRootSha256: pinned.packageRootSha256,
+            }),
+            resources: runtimeResources(gameId, adapterRequest, playerId),
+            onResultConfirmed: resultPersistence(gameId, pinned),
+          };
         },
+        resolveIdentity,
+        resources: runtimeResources(gameId, adapterRequest, playerId),
+        onResultConfirmed: resultPersistence(gameId, payload),
       }) as unknown as ApprovedGameSdkRoomAdapter;
     },
   };

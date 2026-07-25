@@ -136,13 +136,41 @@ test("platform adapterは認証identityを注入し、Redis CASで小規模ゲ�
     const beforeJoin = await adapter.readRoom("race");
     assert.equal(beforeJoin?.view.common.isMember, false);
     const joinCommand = { type: "room/join", playerId: "forged-account" } as unknown as SdkCountUpCommand;
+    const joinEnvelope = {
+      commandId: "command-join-0001",
+      expectedRevision: 1,
+      command: joinCommand,
+    };
     const joined = await adapter.sendCommand({
       code: "race",
-      envelope: { expectedRevision: 1, command: joinCommand },
+      envelope: joinEnvelope,
     });
+    assert.equal(joined.applied, true);
+    assert.equal(joined.commandRevision, 2);
     assert.deepEqual(
       joined.room.view.common.players.map((roomPlayer) => roomPlayer.displayName),
       ["Host", "Player"],
+    );
+    const duplicateJoin = await adapter.sendCommand({
+      code: "race",
+      envelope: joinEnvelope,
+    });
+    assert.equal(duplicateJoin.applied, false);
+    assert.equal(duplicateJoin.commandRevision, 2);
+    assert.equal(duplicateJoin.revision, 2);
+    await assert.rejects(
+      () => adapter.sendCommand({
+        code: "race",
+        envelope: {
+          commandId: joinEnvelope.commandId,
+          expectedRevision: 2,
+          command: { type: "game/start" },
+        },
+      }),
+      (error: unknown) => (
+        error instanceof GameFieldsPlatformRuntimeError
+        && error.code === "COMMAND_ID_CONFLICT"
+      ),
     );
 
     identity = host;

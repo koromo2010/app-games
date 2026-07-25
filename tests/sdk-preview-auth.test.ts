@@ -9,8 +9,11 @@ import {
 
 const secret = "sdk-preview-test-secret-with-at-least-32-bytes";
 const grant = {
-  version: 2 as const,
+  version: 3 as const,
   audience: "package-server" as const,
+  environment: "development" as const,
+  channel: "development" as const,
+  role: "runner" as const,
   instanceId: "creator-lab",
   gameId: "sample-game",
   revision: "a".repeat(40),
@@ -39,10 +42,14 @@ test("SDK preview token binds client and server audiences with a bundle hash", (
   assert.throws(() => createSdkPreviewToken({
     ...grant,
     audience: "package-client",
+    role: "client",
   }, secret));
   const clientGrant = {
-    version: 2 as const,
+    version: 3 as const,
     audience: "package-client" as const,
+    environment: "development" as const,
+    channel: "candidate-preview" as const,
+    role: "client" as const,
     instanceId: grant.instanceId,
     gameId: grant.gameId,
     revision: grant.revision,

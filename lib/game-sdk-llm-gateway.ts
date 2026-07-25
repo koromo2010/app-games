@@ -139,17 +139,29 @@ export class GameSdkLlmRateLimitError extends Error {
 export async function enforceGameSdkLlmRateLimit(
   request: Request,
   playerId: string,
+  gameId: string,
 ) {
   const {
     checkRateLimit,
     rateLimitPolicies,
   } = await import("./rate-limit.ts");
-  const result = await checkRateLimit(
-    request,
-    rateLimitPolicies.aiGeneration,
-    { playerId },
-  );
-  if (!result.allowed) {
-    throw new GameSdkLlmRateLimitError(result.retryAfterMs);
+  const results = await Promise.all([
+    checkRateLimit(
+      request,
+      rateLimitPolicies.aiGeneration,
+      { playerId },
+    ),
+    checkRateLimit(
+      request,
+      rateLimitPolicies.sdkPackageAiGeneration,
+      { identity: gameId },
+    ),
+  ]);
+  if (results.some((result) => !result.storeAvailable)) {
+    throw new Error("GAME_SDK_LLM_BUDGET_UNAVAILABLE");
+  }
+  const rejected = results.find((result) => !result.allowed);
+  if (rejected) {
+    throw new GameSdkLlmRateLimitError(rejected.retryAfterMs);
   }
 }

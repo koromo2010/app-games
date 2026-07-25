@@ -26,10 +26,23 @@ type HttpAdapter = AuthenticatedGameSdkPlatformAdapter<
 
 type HttpHandlerOptions = {
   adapter: HttpAdapter;
+  beforeMutation?: (
+    request: Request,
+    operation: Extract<
+      GameSdkOnlineRoomHttpOperation,
+      "create" | "command" | "dissolve" | "dissolve-hosted"
+    >,
+    roomCode: string,
+  ) => Promise<Response | null>;
   onSuccess?: (
     operation: GameSdkOnlineRoomHttpOperation,
     room?: GameSdkRoomSnapshot<unknown>,
     affected?: number,
+    command?: {
+      commandId: string;
+      commandRevision: number;
+      applied: boolean;
+    },
   ) => void;
   onError?: (
     operation: GameSdkOnlineRoomHttpOperation,
@@ -72,9 +85,14 @@ const unavailableCodes = new Set([
   "GAME_SDK_CONTENT_ID_SECRET_UNAVAILABLE",
   "GAME_SDK_CONTENT_SOURCE_UNAVAILABLE",
   "GAME_SDK_CONTENT_UNAVAILABLE",
+  "GAME_SDK_EFFECT_INDETERMINATE",
+  "GAME_SDK_EFFECT_JOURNAL_MISSING",
+  "GAME_SDK_LLM_BUDGET_UNAVAILABLE",
   "POSTGRES_STORE_NOT_CONFIGURED",
   "VOCABULARY_STORE_NOT_CONFIGURED",
 ]);
+
+const maximumRoomRequestBytes = 128 * 1024;
 
 function json(payload: unknown, status = 200) {
   return Response.json(payload, {
@@ -116,6 +134,9 @@ export function gameSdkOnlineRoomErrorResponse(error: unknown) {
   if (code === "GAME_SDK_PLATFORM_ROOM_TOO_LARGE") {
     return json({ error: code }, 413);
   }
+  if (code === "GAME_SDK_HTTP_BODY_TOO_LARGE") {
+    return json({ error: code }, 413);
+  }
   if (unavailableCodes.has(code)) return json({ error: code }, 503);
   if (forbiddenCodes.has(code)) return json({ error: code }, 403);
   if (conflictCodes.has(code)) return json({ error: code }, 409);
@@ -129,6 +150,25 @@ function objectBody(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : null;
+}
+
+async function readRoomRequestJson(request: Request) {
+  const declaredLength = Number(request.headers.get("content-length") ?? 0);
+  if (
+    Number.isFinite(declaredLength)
+    && declaredLength > maximumRoomRequestBytes
+  ) {
+    throw new Error("GAME_SDK_HTTP_BODY_TOO_LARGE");
+  }
+  const body = await request.text();
+  if (new TextEncoder().encode(body).byteLength > maximumRoomRequestBytes) {
+    throw new Error("GAME_SDK_HTTP_BODY_TOO_LARGE");
+  }
+  try {
+    return JSON.parse(body) as unknown;
+  } catch {
+    return null;
+  }
 }
 
 function roomCode(value: unknown) {
@@ -145,10 +185,13 @@ function commandEnvelope(value: unknown): GameSdkCommandEnvelope<SafeCommand> | 
     || !command.type.trim()
     || !Number.isSafeInteger(envelope.expectedRevision)
     || Number(envelope.expectedRevision) < 1
+    || typeof envelope.commandId !== "string"
+    || !/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/.test(envelope.commandId)
   ) {
     return null;
   }
   return {
+    commandId: envelope.commandId,
     expectedRevision: Number(envelope.expectedRevision),
     command: command as SafeCommand,
   };
@@ -162,6 +205,7 @@ function commandEnvelope(value: unknown): GameSdkCommandEnvelope<SafeCommand> | 
  */
 export function createGameSdkOnlineRoomHttpHandlers({
   adapter,
+  beforeMutation,
   onSuccess,
   onError,
 }: HttpHandlerOptions) {
@@ -196,13 +240,26 @@ export function createGameSdkOnlineRoomHttpHandlers({
   async function POST(request: Request) {
     const operation = "create" as const;
     try {
-      const body = objectBody(await request.json().catch(() => null));
+      const body = objectBody(await readRoomRequestJson(request));
       if (!body || !roomCode(body.roomCode).trim() || !("create" in body)) {
         return json({ error: "GAME_SDK_CREATE_INPUT_REQUIRED" }, 400);
       }
+      if (
+        typeof body.requestId !== "string"
+        || !/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/.test(body.requestId)
+      ) {
+        return json({ error: "GAME_SDK_CREATE_REQUEST_ID_REQUIRED" }, 400);
+      }
+      const limited = await beforeMutation?.(
+        request,
+        operation,
+        roomCode(body.roomCode),
+      );
+      if (limited) return limited;
       const room = await adapter.createRoom({
         roomCode: roomCode(body.roomCode),
         create: body.create,
+        requestId: body.requestId,
       });
       onSuccess?.(operation, room);
       return json({ room });
@@ -216,17 +273,23 @@ export function createGameSdkOnlineRoomHttpHandlers({
   async function PATCH(request: Request) {
     const operation = "command" as const;
     try {
-      const body = objectBody(await request.json().catch(() => null));
+      const body = objectBody(await readRoomRequestJson(request));
       const code = roomCode(body?.code);
       const envelope = commandEnvelope(body?.envelope);
       if (!code.trim() || !envelope) {
         return json({ error: "GAME_SDK_COMMAND_INPUT_REQUIRED" }, 400);
       }
+      const limited = await beforeMutation?.(request, operation, code);
+      if (limited) return limited;
       const result: GameSdkCommandResult<unknown> = await adapter.sendCommand({
         code,
         envelope,
       });
-      onSuccess?.(operation, result.room);
+      onSuccess?.(operation, result.room, undefined, {
+        commandId: result.commandId,
+        commandRevision: result.commandRevision,
+        applied: result.applied,
+      });
       return json(result);
     } catch (error) {
       const response = gameSdkOnlineRoomErrorResponse(error);
@@ -241,12 +304,20 @@ export function createGameSdkOnlineRoomHttpHandlers({
       const searchParams = new URL(request.url).searchParams;
       if (searchParams.get("hosted") === "1") {
         operation = "dissolve-hosted";
+        const limited = await beforeMutation?.(
+          request,
+          operation,
+          "hosted",
+        );
+        if (limited) return limited;
         const dissolved = await adapter.dissolveHostedRooms();
         onSuccess?.(operation, undefined, dissolved);
         return json({ dissolved });
       }
       const code = searchParams.get("code") ?? "";
       if (!code.trim()) return json({ error: "GAME_SDK_ROOM_CODE_REQUIRED" }, 400);
+      const limited = await beforeMutation?.(request, operation, code);
+      if (limited) return limited;
       const dissolved = await adapter.dissolveRoom(code);
       onSuccess?.(operation, undefined, dissolved ? 1 : 0);
       return json({ dissolved });

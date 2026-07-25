@@ -33,6 +33,12 @@ export async function POST(
   if (
     !grant
     || grant.audience !== "package-server"
+    || grant.role !== "runner"
+    || grant.environment !== (
+      process.env.VERCEL_GIT_COMMIT_REF === "main"
+        ? "production"
+        : "development"
+    )
     || grant.instanceId !== params.instanceId
     || grant.gameId !== params.gameId
     || grant.revision !== params.revision

@@ -108,6 +108,7 @@ test("SDK package runtime accepts only its configured isolated origin and exact 
     serverRuntimeExpiresAt: Date.now() + 60_000,
     serverBundleSha256: "b".repeat(64),
     appSetSourceSha256: "c".repeat(64),
+    packageRootSha256: "d".repeat(64),
   };
   const accepted = await loadSdkPreviewRuntimeDefinition(
     "creator-lab",

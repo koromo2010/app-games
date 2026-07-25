@@ -1,5 +1,5 @@
 import { createHash, createHmac } from "node:crypto";
-import type { ObservabilityFields, ObservabilityLevel, ObservabilityOutcome } from "@/lib/observability/types";
+import type { ObservabilityFields, ObservabilityLevel, ObservabilityOutcome } from "./types.ts";
 
 const stringFieldNames = [
   "game",
@@ -9,14 +9,22 @@ const stringFieldNames = [
   "actorRef",
   "eventRef",
   "commandRef",
+  "effectRef",
   "phase",
+  "channel",
+  "packageRevision",
+  "packageRoot",
+  "runtimeVersion",
   "provider",
   "model",
+  "billingSource",
   "errorCode",
   "databaseCode",
 ] as const;
 const numberFieldNames = [
   "revision",
+  "commandRevision",
+  "roomSchemaVersion",
   "playerCount",
   "round",
   "gameNumber",
@@ -26,6 +34,9 @@ const numberFieldNames = [
   "attempt",
   "affectedCount",
   "sourceCount",
+  "promptTokens",
+  "completionTokens",
+  "costMicros",
 ] as const;
 const booleanFieldNames = ["applied", "debugMode"] as const;
 const outcomes = new Set<ObservabilityOutcome>(["started", "success", "rejected", "conflict", "ignored", "failed"]);
@@ -65,7 +76,10 @@ function hashSecret() {
 }
 
 /** Stable opaque reference for correlating rooms/players without logging raw IDs. */
-export function observabilityRef(kind: "room" | "actor" | "event" | "command", value: unknown) {
+export function observabilityRef(
+  kind: "room" | "actor" | "event" | "command" | "effect",
+  value: unknown,
+) {
   const normalized = cleanString(value, 240);
   if (!normalized) return undefined;
   const digest = createHmac("sha256", hashSecret()).update(`${kind}:${normalized}`).digest("base64url").slice(0, 16);

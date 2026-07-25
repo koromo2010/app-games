@@ -16,6 +16,7 @@ import {
   type GameSdkPortableServerRequest,
   type GameSdkPortableServerResponse,
 } from "@game-fields/game-sdk/portable-server";
+import type { GameSdkEffectJournal } from "./game-sdk-effect-journal.ts";
 
 const MAX_RESOURCE_EFFECTS = 8;
 const MAX_RUNNER_RESPONSE_BYTES = 1024 * 1024;
@@ -27,6 +28,7 @@ export type GameSdkRemoteBundleDefinition = {
   serverBundleSha256: string;
   serverRuntimeUrl: string;
   serverRuntimeToken: string;
+  effectJournal?: GameSdkEffectJournal;
 };
 
 function safeResourceError(error: unknown) {
@@ -80,6 +82,7 @@ export function createGameSdkRemoteServerModule(
     resources: Readonly<GameSdkPlatformResources>,
   ) => {
     const effects: Record<string, GameSdkPortableEffectResult> = {};
+    let llmEffects = 0;
     for (let pass = 0; pass <= MAX_RESOURCE_EFFECTS; pass += 1) {
       const request: GameSdkPortableServerRequest = {
         version: GAME_SDK_PORTABLE_SERVER_PROTOCOL_VERSION,
@@ -116,7 +119,45 @@ export function createGameSdkRemoteServerModule(
       if (pass === MAX_RESOURCE_EFFECTS || effects[result.effect.id]) {
         throw new Error("GAME_SDK_RESOURCE_EFFECT_LIMIT");
       }
-      effects[result.effect.id] = await executeEffect(result.effect, resources);
+      if (invocation.operation === "presentRoom") {
+        throw new Error("GAME_SDK_PRESENTATION_EFFECT_FORBIDDEN");
+      }
+      if (result.effect.resource === "llm") {
+        llmEffects += 1;
+        if (llmEffects > 1) {
+          throw new Error("GAME_SDK_LLM_EFFECT_LIMIT");
+        }
+      }
+      const invocationInput = invocation.input as {
+        room?: { code?: unknown };
+        context?: {
+          requestId?: unknown;
+          roomCode?: unknown;
+        };
+      };
+      const requestId = invocationInput.context?.requestId;
+      const roomCode = invocation.operation === "createRoom"
+        ? invocationInput.context?.roomCode
+        : invocationInput.room?.code;
+      if (definition.effectJournal) {
+        if (
+          typeof requestId !== "string"
+          || !requestId
+          || typeof roomCode !== "string"
+          || !roomCode
+        ) {
+          throw new Error("GAME_SDK_EFFECT_CONTEXT_INVALID");
+        }
+        effects[result.effect.id] = await definition.effectJournal.execute({
+          runtimeId: definition.runtimeId,
+          packageRevision: definition.revision,
+          roomCode,
+          requestId,
+          effect: result.effect,
+        }, () => executeEffect(result.effect, resources));
+      } else {
+        effects[result.effect.id] = await executeEffect(result.effect, resources);
+      }
     }
     throw new Error("GAME_SDK_RESOURCE_EFFECT_LIMIT");
   };

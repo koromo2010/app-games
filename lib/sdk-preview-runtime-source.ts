@@ -23,6 +23,7 @@ export type SdkPreviewRuntimeDefinition = {
   serverRuntimeExpiresAt?: number;
   serverBundleSha256?: string;
   appSetSourceSha256?: string;
+  packageRootSha256?: string;
   modulePolicy?: GameSdkModuleProfile;
   settings: GameSdkSettingDefinition[];
 };
@@ -83,6 +84,7 @@ export async function loadSdkPreviewRuntimeDefinition(
   gameId: string,
   fetchRuntime: typeof fetch = fetch,
   env: NodeJS.ProcessEnv = process.env,
+  revision?: string,
 ): Promise<SdkPreviewRuntimeDefinition | null> {
   if (
     !sdkPreviewCreatorSlugPattern.test(creatorSlug)
@@ -90,7 +92,10 @@ export async function loadSdkPreviewRuntimeDefinition(
   ) {
     return null;
   }
-  const url = `${sdkPortalInternalBaseUrl(env)}/api/preview-runtime/${creatorSlug}/${gameId}`;
+  if (revision && !/^[a-f0-9]{40}$/.test(revision)) return null;
+  const url = `${sdkPortalInternalBaseUrl(env)}/api/preview-runtime/${creatorSlug}/${gameId}${
+    revision ? `?revision=${encodeURIComponent(revision)}` : ""
+  }`;
   const response = await fetchRuntime(url, {
     cache: "no-store",
     ...(fetchRuntime === fetch
@@ -122,6 +127,8 @@ export async function loadSdkPreviewRuntimeDefinition(
       || !/^[a-f0-9]{64}$/.test(payload.serverBundleSha256)
       || typeof payload.appSetSourceSha256 !== "string"
       || !/^[a-f0-9]{64}$/.test(payload.appSetSourceSha256)
+      || typeof payload.packageRootSha256 !== "string"
+      || !/^[a-f0-9]{64}$/.test(payload.packageRootSha256)
     ) {
       throw new Error("SDK_PREVIEW_PACKAGE_RUNTIME_INVALID");
     }
@@ -156,6 +163,7 @@ export async function loadSdkPreviewRuntimeDefinition(
       serverRuntimeExpiresAt: payload.serverRuntimeExpiresAt,
       serverBundleSha256: payload.serverBundleSha256,
       appSetSourceSha256: payload.appSetSourceSha256,
+      packageRootSha256: payload.packageRootSha256,
     } : {}),
     modulePolicy: payload.modulePolicy,
     settings: parseGameSdkSettingDefinitions(payload.settings, {

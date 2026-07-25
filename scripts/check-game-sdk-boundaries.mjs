@@ -69,6 +69,7 @@ const allowedRuntimeImports = new Set([
   "@game-fields/game-sdk/modules",
   "@game-fields/game-sdk/resources",
   "@game-fields/game-sdk/runtime",
+  "node:crypto",
 ]);
 const failures = [];
 
@@ -91,7 +92,7 @@ const sdkRoomRouteSource = readFileSync(sdkRoomRouteFile, "utf8");
 for (const token of [
   "approvedGameSdkRegistration",
   "requireAuthenticatedPlayer",
-  "rateLimitPolicies.roomMutation",
+  "rateLimitPolicies.sdkRoomMutation",
   "rateLimitPolicies.sdkRuntimeRead",
   "createGameSdkOnlineRoomHttpHandlers",
   "export function DELETE",

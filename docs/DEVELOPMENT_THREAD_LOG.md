@@ -3613,3 +3613,118 @@
 - `develop`への反映、dev deployment、candidate package提出、development昇格、
   複数ブラウザの正式Room実機E2Eは続けて確認する。
 - `main`、本番SDK、npm registryは未変更。
+
+## 2026-07-25 — SDK最上位設計監査（第6〜第10）
+
+### 監査方針
+
+- 個別修正を先行させず、正本・環境・package不変性・Runtime互換性・securityに続いて、障害復旧、Resource原価、観測性、保存・削除、SDK利用者体験を一周した。
+- 本項ではコードと現行文書の調査結果だけを固定する。実装変更、外部設定変更、push、deployment、E2Eは行っていない。
+
+### 第6監査：障害復旧・冪等性
+
+- RedisのRoom作成、revision CAS、Room・index・active roomの削除はLuaで原子的に処理され、個別の戦績、rating、replayもevent IDまたは`SET NX`で重複保存を防いでいる。
+- 一方、保存Roomはpackage revision、package root hash、Runtime／各契約version、settings snapshotを持たない。stableは各requestで最新channel pointerを解決するため進行中Roomが別revisionへ移り得る。candidateはrevisionがstore namespaceへ入るため再提出後に既存Roomを継続できない。
+- portable Resource effectの結果は1回のserver invocation内のmemoryにしかなく、effect IDもresource・operation・request JSONだけである。Runner応答消失、再試行、process障害で同じLLM／content処理を再実行し得る。
+- Command契約に`commandId`と保存済みreceiptがない。CAS成功後に応答だけ失われた場合、再送は`STALE_REVISION`となり、直前の成功結果を返せない。
+- 結果保存はCAS後の`after()`からstatsとreplayを並列実行する。durable outboxと`result-confirmed → result-persisting → completed`がなく、CAS後のprocess障害や部分成功を回収できない。
+- package／mock再提出は同一内容でも毎回Git commitを作るが、MCP toolは`idempotentHint: true`を宣言している。Git成功後のDB失敗も再試行で別revisionを作る。
+- realtime通知はbest effortだがpollingで回復できる。Room本体はRedis消失時の復旧元とSLOが未定義である。
+
+### 第7監査：Resource・費用
+
+- package、Runner、Room state、LLM prompt／schema／timeout、content件数には個別上限がある。Runnerはbundle／request／response各1 MiB、memory 32 MiB、stack 1 MiB、実行750 ms、Room recordは512 KiBに制限される。
+- 課金Resourceのrate limitはIPとplayerだけで、Creator、Package、Room、Command、task、日次／月次budgetを持たない。1 Commandは最大8 effectを要求でき、すべてLLM生成にもできる。
+- Redis limiter障害時は全policyがfail-openであり、Game Fields負担のLLMも無制限に通り得る。
+- OpenAIとstandard Groq、Geminiに明示的な出力token上限がなく、provider fallbackの複数試行も1回分のrate limitとしてしか数えない。
+- provider、model、latencyは記録するが、入力／出力token、provider試行別利用量、推定／確定原価、billing source別集計、Creator／Package帰属、hard spend ceilingがない。
+- stable RuntimeはLLM moduleを持つpackageへhigh qualityを一律許可し、task単位のentitlementや費用tierを持たない。
+- content sourceは1 effectで最大100件、1 invocationで最大8 effectを許可する。一般語は難易度別最大500件ずつをDBから読み、毎回memoryでfilter／shuffleする。package／Room単位quotaとcache方針がない。
+- Room HTTPのJSON bodyは`request.json()`前のsize検査がなく、隔離Runnerやuploadにある入力上限が共通Command routeにはない。
+
+### 第8監査：観測性・ログ
+
+- 閉じたfield allowlist、HMACによるRoom／actor／event参照、request／trace ID、安全なerror code化は良好である。
+- 正式SDK Room routeは構造化eventを持つが、candidate Room route、隔離Runner、SDK Portalのpackage保存・昇格、Resource effectには同じ観測境界がない。Portalの`instrumentation.ts`は観測runtimeを持たないことを明示している。
+- 正式RoomでもRuntime catalog解決はtelemetry生成より前で、catalog障害をroute eventへ残せない。Resource eventにはpackage revision、channel、Room、Command、effect、billing source、token利用量がない。
+- `post-response-work.ts`とrealtime失敗だけが生の例外を`console.error`へ渡し、外部SDK例外のmessage／stackを保存しない規約を迂回する。
+- candidate Roomは認証以外の上位失敗を`SDK_PREVIEW_RUNTIME_FAILED`へまとめ、内部にも段階ログを残さない。Runnerのmemory／timeout／bundle不正も安全な応答codeだけで、件数、revision、所要時間を運用側で追えない。
+- resultのstats／replay eventは個別に観測できるが、同じrequest traceやoutbox IDがなく、Room結果Commandから部分保存までを横断できない。
+- Room一括解散は`affected`を渡すがschemaは`affectedCount`だけのためruntime sanitizerで件数が落ちる。
+
+### 第9監査：保存・削除
+
+- Roomは最終更新から6時間のTTLとhost解散を持ち、通常replayは既定30日、player別settings既定値は2年で失効する。OAuth tokenは平文で保存せず、認可codeとrefresh tokenは交換時に行を削除する。
+- Creator、Game、Revision、channel公開を停止・tombstone・削除するAPIがない。`sdk_games`はDB上Creator削除へcascadeするが、Creator削除自体の導線がない。
+- packageとmockはGit branchへappend-only commitとして残る。DB pointerを消しても過去asset／sourceはGit履歴に残り、公開停止、権利取下げ、保持期間後の物理purge方針がない。
+- 本体アカウント削除は別SDK DBの`owner_player_id`、OAuth grant、Creator環境を失効させない。期限切れ／revoked OAuth code、grant、動的clientの定期cleanupもない。
+- SDK schemaはrequest中の`CREATE TABLE IF NOT EXISTS`と`ALTER TABLE IF NOT EXISTS`で更新され、version付きmigration、rollback、backup／restore検証がない。
+- DBはcandidate／development／stableの現在pointerだけを持ち、昇格者、from／to revision、理由、時刻を持つappend-only監査台帳がない。
+- Room、player defaults、戦績、replay、運用issue、OAuth、Creator mapping、Git packageごとのデータ分類・保持・削除matrixがない。
+
+### 第10監査：SDK利用者体験
+
+- 現行DownloadMe ver10は`platform/sdk 0.1.1`と`formal-room-preview`等を要求し、公開`sdk-starter` branchを取得する。しかし2026-07-25確認時の公開branch先端`389cb319`はDownloadMe ver9、SDK 0.1.0で、game package build／promotion診断も含まない。手順どおりならstarter manifest検査で制作開始前に必ず停止する。
+- developのstarter clientは正式`GameFieldsRoom`だけを使う一方、`check:mock`は旧`GameFieldsPreset.registerGame()`、start／abort／rematch等を必須とする。promotion readinessは同じ`registerGame()`とbrowser Resource bridgeを禁止するため、静的mock承認と正式clientを同じ`mock/`で満たせない。
+- `npm run test:sdk-starter`は`check:mock`を実行しないため、上記の相互矛盾を検出しない。
+- DownloadMeはWork／CodexではOAuth MCPの`publish_mock`／`publish_game_package`を使い、legacy management token scriptを使わないとする。一方、starterの`AGENTS.md`、`START_HERE.md`、`MOCK_GUIDE.md`は`npm run publish:*`を正規手順として要求する。MCP finalizeはmanagement tokenを返さないため、新規OAuth制作はstarter側の手順を実行できない。
+- promotion readinessの自動判定はgame ID、play mode、bridge文字列、禁止browser Resource文字列だけを検査する。必須module契約、settings整合、標準結果、秘密View、外部通信、package root、asset、Command冪等性を確認せず、`promotionReady: true`が実際の昇格安全性より強い表現になっている。
+- candidate Roomの上位例外は汎用codeへ潰れ、Creatorはpackage revision、Runner段階、effect段階、再試行可否を画面から判断できない。
+- manifestの`minimumPlayers: 1`を全gameへ推奨しつつ公開catalogも同じ値を人数表示へ使うため、本来複数人必須のゲームで公開人数表示とAppSet開始条件がずれる。Preview用最小人数と実ゲーム最小人数を分離していない。
+- starterの安全境界、AppSet分離、閲覧者別View、正式Roomとhash固定昇格の説明自体は一貫しており、基礎教材としての方向性は良い。
+
+### 検証状況
+
+- `git ls-remote`と公開branch取得で、`sdk-starter`先端`389cb319`の`starter-manifest.json`がver9／0.1.0であることを確認した。
+- `npm run test:sdk-starter`は依存未導入のため`tsc: not found`で停止した。続く依存導入は実行環境のnpm cache／tar展開エラーで完了せず、製品testの成否判定には使用していない。作成された不完全な`node_modules`は削除し、作業treeをクリーンへ戻した。
+- 次の実装では、Room固定契約を最初に導入し、その識別子をCommand receipt、effect journal、result outbox、quota、observability、retentionへ共通利用する。公開starter同期と二段階Preview契約の解消はE2E前のblocking項目とする。
+
+## 2026-07-25 — SDK最上位設計監査の一括実装
+
+### Room・Runtime契約
+
+- Platform Room schemaをv2へ更新し、Room開始時に`packageRevision`、`packageRootSha256`、Runner Runtime、SDK／Room／Resource／Client Bridge各契約version、settings snapshotを固定した。
+- stable／development／candidateのいずれも、既存Roomは保存済み契約から明示Revisionを解決する。channel pointer更新やcandidate再提出で進行中Roomを別Revisionへ移さない。
+- `commandId`と作成`requestId`をHTTP Client、Mock Runtime、Platform Runtime、保存Roomへ追加した。同じactor・revision・payloadの再送は保存済みreceiptから`applied: false`を返し、ID再利用の内容衝突は拒否する。
+- effectは環境、Runtime、Package Revision、Room、Command、effect IDへ束縛したRedis journalで、実行前`pending`、成功後`completed`を保存する。成功結果は再利用し、結果不明の課金処理を自動再実行しない。LLMは1 Command最大1 effectとした。
+- 結果保存はRoomと同じCAS内でoutboxへ追加し、`result-confirmed → result-persisting → completed`と60秒leaseで回収する。失敗はconfirmedへ戻し、後続read／Commandで同じevent IDを再開する。playbackへRoom固定Runtime契約も保存する。
+
+### Package・channel・環境
+
+- Package全fileをUTF-8 path順、text LF、再帰key順JSON、binary exact byteでcanonical tree hash化し、`packageRootSha256`をRevision registry、channel pointer、Room契約、token、catalogへ通した。
+- Package Revisionとchannel履歴をappend-only tableへ分離した。同一rootの再提出は既存Revisionを返し、昇格はblob再コピーではなくRevision pointerを更新する。公開停止はpointerだけを外し、論理削除は新規catalog／Preview／昇格から即時除外する。
+- `GAME_FIELDS_ENV`をproduction、development、candidate-preview、sdk-portal、testへ限定した。未知値はfail-closedとし、SDK Room、effect、quota keyへ環境namespaceを含めた。
+- Preview grantをenvironment、channel、package、revision、Room用途、role、audienceへ束縛した。client／server audienceと短命server grantの分離は維持した。
+
+### Security・Resource・観測
+
+- SDK Room mutationへIP、player、Creator、Package、Roomの同時quotaを追加し、この課金・実行境界だけはlimiter障害時にfail-closedとした。Command body 128 KiB、Room record 512 KiB、Package 128 files／合計5 MiB／1 file 2 MiB、1 game 100 Revision、1 Creator 64 gameを上限とした。
+- Package uploadでtext encoding、binary magic MIME、active SVG、埋込HTMLを追加検査した。WASM／ZIPは許可extension外で、Runnerのmemory 32 MiB、stack 1 MiB、execution 750 ms、入出力・bundle各1 MiBとBrowser CSP `connect-src 'none'`を維持した。
+- SDK LLMはplayerとPackageの両budget、standard限定、provider output上限を持ち、budget store障害時は生成しない。課金Resource eventへPackage Revision、Room、Command、effect、token数、原価・billing帰属用fieldを追加した。
+- candidate Room、stable catalog、effect、result outbox、post-response、realtimeを同じ構造化telemetryへ通した。外部例外本文・stackを生の`console.error`へ渡さず、相関用IDはHMAC参照だけを保存する。
+
+### 保存・削除
+
+- `docs/SDK_DATA_LIFECYCLE.md`を追加し、Room、effect、settings、replay、戦績、Package、channel、OAuth、運用issueの正本・保持・削除matrixを固定した。
+- OAuth期限切れcode、期限切れrefresh grant、revoke後30日経過grantをOAuth store maintenanceで物理削除する。
+- Account削除は、SDK内部APIでOAuth grant失効、所有Creator無効化・匿名表示化、所有game tombstoneを先に行う。本体側はplayer別replay、戦績、rating、SDK settingsを冪等削除し、Redis account、最後にPostgreSQL accountを消す。SDK側失敗時はaccountを残して再試行可能にする。
+- Package Revisionとchannel履歴は開始済みRoomと監査証跡のため通常削除では残し、新規resolveだけを停止する。
+
+### Starter・Client責務
+
+- StarterのMock検査を正式`GameFieldsRoom.subscribe/send`へ統一し、旧`GameFieldsPreset`、browser Resource bridge、browser-local正本を禁止した。`npm run check`はMock、契約test、promotion診断を一続きで実行する。
+- Work／Codexの正規提出経路をOAuth MCPへ統一し、management token scriptはlegacy互換名へ移した。promotion readinessへsettings、秘密View、host権限、stale revision、外部通信禁止の検査を追加した。
+- `minimumPlayers`を公開・通常Roomの実人数とし、debug Previewだけに任意の`previewMinimumPlayers`を追加した。Starterは公開2人、Preview 1人とした。
+- package iframeのPlatform側白背景、白枠、shadow、角丸、装飾paddingを外し、ShellはRoom UI、配置、サイズだけを持つ。
+
+### 検証・未反映
+
+- `npm run lint`成功。公開SDK packを外部fixtureへinstallする`npm run test:sdk-package`成功。
+- `npm test`成功（全522件）。追加回帰はRuntime固定、command receipt、effect journal、outbox再開、Package root、環境namespace、複合quota、active asset検査、token scopeを含む。
+- `npm run test:sdk-starter`成功。未回答の配布仕様書は拒否し、一時的な回答済みfixtureで型検査、契約test、1ゲーム完走、promotion診断、game package／提出ZIP、公開repository snapshot一致まで確認した。
+- 本体、SDK Portal、隔離Previewの3つのProduction build成功。
+- SDK Portal PostgreSQLを`001`〜`003`の番号付きmigration、checksum台帳、明示runnerへ移した。request内のDDLを廃止し、Runtimeはversion 3未適用時にfail-closedとする。Vercel buildでは`app-games-sdk-dev/develop`と`app-games-sdk/main`だけがDeployment前にmigrationを適用し、失敗時はbuildを止める。
+- Starter参照を安定版`sdk-starter`とdevelopment候補`sdk-starter-dev`へ分離した。`config/platform-release.json`の`starterRef`をDownloadMe、manifest、生成・検査へ同時反映し、現行0.1.1／ver10は`sdk-starter-dev`を参照する。安定版ver9／0.1.0は変更しない。
+- migration／Starter分離後にも`npm run lint`、全522テスト、`npm run test:sdk-starter`、本体・SDK Portal・隔離Previewの3 Production buildを再実行し、すべて成功した。ローカルSDK Portal buildではdeploy migrationがProject／branch gateによりskipされることも確認した。
+- push、deployment、DB migration実適用、複数ブラウザの接続済み実機E2E、`sdk-starter-dev` branch公開はまだ行っていない。DownloadMe ver10はdev Starter公開完了まで取得不能である。
+- Room schema v1には固定Runtime契約がなく安全なv2自動変換ができないため、本番反映前に新規v1 Roomを止め、既存Roomを解散または6時間TTLで排出する。v1継続readerを別途用意しない限り、この切替確認をdeploymentのblocking条件とする。

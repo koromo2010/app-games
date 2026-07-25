@@ -7,5 +7,5 @@
   "sdkHandshakeVersion": __SDK_HANDSHAKE_VERSION__,
   "sdkContractVersion": __SDK_CONTRACT_VERSION__,
   "repository": "https://github.com/koromo2010/app-games",
-  "ref": "sdk-starter"
+  "ref": "__STARTER_REF__"
 }

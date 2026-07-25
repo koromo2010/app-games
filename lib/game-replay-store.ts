@@ -1,4 +1,7 @@
 import { createHmac } from "node:crypto";
+import type {
+  GameFieldsPlatformRuntimeContract,
+} from "@game-fields/game-runtime";
 import { hodoaiResultPresentation, type HodoaiRoom } from "@/lib/hodoai-talk";
 import type { KotobaSenpukuRoom } from "@/lib/kotoba-senpuku";
 import type { NorthernRoom } from "@/lib/northern-branch-types";
@@ -40,6 +43,7 @@ type StoredReplayBase = {
   players: StoredReplayPlayer[];
   resultLabels: Record<string, string>;
   shareHighlights: string[];
+  runtimeContract?: GameFieldsPlatformRuntimeContract;
 };
 
 type StoredGenericReplay = StoredReplayBase & {
@@ -253,6 +257,7 @@ export type StandardPlatformGameReplayInput = {
   finishedAt: number;
   gameNumber: number;
   title: string;
+  runtimeContract: GameFieldsPlatformRuntimeContract;
   players: StoredReplayPlayer[];
   winnerIds: string[];
   rankings: Array<{
@@ -298,6 +303,7 @@ export async function recordStandardPlatformGameReplay(
   );
   return storeReplay({
     ...base,
+    runtimeContract: structuredClone(input.runtimeContract),
     gameType: input.gameType,
     overview: cleanText(input.reason, 300) || "ゲーム終了",
     highlights: cleanLines(input.rankings.map((ranking) => (
@@ -692,4 +698,34 @@ export async function setPlayerGameReplayFavorite(playerId: string, id: string, 
     ]);
   }
   return getPlayerGameReplay(playerId, id);
+}
+
+export async function deletePlayerGameReplayData(playerId: string) {
+  const [indexedIds, favoriteIds] = await Promise.all([
+    redisCommand<string[]>(["ZRANGE", playerIndexKey(playerId), "0", "-1"]),
+    redisCommand<string[]>(["SMEMBERS", playerFavoritesKey(playerId)]),
+  ]);
+  const ids = [...new Set([...indexedIds, ...favoriteIds])];
+  const raw = ids.length > 0
+    ? await redisCommand<Array<string | null>>([
+        "MGET",
+        ...ids.map(replayKey),
+      ])
+    : [];
+  const commands: unknown[][] = [
+    ["DEL", playerIndexKey(playerId), playerFavoritesKey(playerId)],
+  ];
+  let deletedReplays = 0;
+  ids.forEach((id, index) => {
+    const replay = parseStoredReplay(raw[index]);
+    if (!replay || !isParticipant(replay, playerId)) return;
+    deletedReplays += 1;
+    commands.push(["DEL", replayKey(id), replayFavoritersKey(id)]);
+    for (const player of replay.players) {
+      commands.push(["ZREM", playerIndexKey(player.id), id]);
+      commands.push(["SREM", playerFavoritesKey(player.id), id]);
+    }
+  });
+  await redisPipeline(commands);
+  return { deletedReplays };
 }

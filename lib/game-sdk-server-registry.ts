@@ -25,6 +25,7 @@ export type ApprovedGameSdkRegistration = {
   clientKind: "wordwolf" | "iframe-package";
   clientRuntimeUrl?: string;
   revision?: string;
+  packageRootSha256?: string;
   serverBundleSha256?: string;
   appSetSourceSha256?: string;
   channel: "development" | "stable";
@@ -61,27 +62,20 @@ const registrations: readonly ApprovedGameSdkRegistration[] = [
             beforeGenerate: () => enforceGameSdkLlmRateLimit(
               request,
               playerId,
+              wordWolfSdkServerModule.manifest.id,
             ),
           }),
         },
-        async onRoomSaved(previous, next) {
-          if (
-            next.phase !== "result"
-            || !(
-              "standardResult" in next.room
-              && next.room.standardResult
-            )
-          ) return;
-          const { persistApprovedGameSdkResult } = await import(
+        async onResultConfirmed(result) {
+          const { persistApprovedGameSdkResultEvent } = await import(
             "./game-sdk-result-persistence.ts"
           );
-          await persistApprovedGameSdkResult({
+          await persistApprovedGameSdkResultEvent({
             gameType: "wordwolf-sdk",
             title: wordWolfSdkServerModule.manifest.title.ja,
             supportsRating: wordWolfSdkServerModule.manifest.supportsRating,
             supportsReplay: wordWolfSdkServerModule.manifest.supportsReplay,
-            previous,
-            next,
+            result,
           });
         },
       }) as unknown as ApprovedGameSdkRoomAdapter;

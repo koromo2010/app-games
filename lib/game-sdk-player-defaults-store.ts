@@ -11,6 +11,10 @@ function key(playerId: string, gameId: string) {
   return `game-sdk-player-defaults:v1:${playerId}:${gameId}`;
 }
 
+function indexKey(playerId: string) {
+  return `game-sdk-player-defaults-index:v1:${playerId}`;
+}
+
 export function normalizeGameSdkPlayerDefaults(
   input: unknown,
   definitions: readonly GameSdkSettingDefinition[],
@@ -71,12 +75,24 @@ export async function saveGameSdkPlayerDefaults(
   input: unknown,
 ) {
   const settings = normalizeGameSdkPlayerDefaults(input, definitions);
-  await redisCommand<string>([
-    "SET",
+  await redisCommand<number>([
+    "EVAL",
+    "redis.call('SET',KEYS[1],ARGV[1],'EX',ARGV[2]); redis.call('SADD',KEYS[2],ARGV[3]); redis.call('EXPIRE',KEYS[2],ARGV[2]); return 1",
+    "2",
     key(playerId, gameId),
+    indexKey(playerId),
     JSON.stringify(settings),
-    "EX",
     String(retentionSeconds),
+    gameId,
   ]);
   return settings;
+}
+
+export async function deleteGameSdkPlayerDefaults(playerId: string) {
+  const gameIds = await redisCommand<string[]>(["SMEMBERS", indexKey(playerId)]);
+  return redisCommand<number>([
+    "DEL",
+    indexKey(playerId),
+    ...gameIds.map((gameId) => key(playerId, gameId)),
+  ]);
 }

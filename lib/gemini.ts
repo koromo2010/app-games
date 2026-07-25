@@ -41,6 +41,7 @@ export async function generateGeminiText(
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         generationConfig: {
           responseMimeType: "application/json",
+          maxOutputTokens: quality === "high" ? 8192 : 2048,
           thinkingConfig: { thinkingLevel: quality === "high" ? "high" : "minimal" },
         },
       }),

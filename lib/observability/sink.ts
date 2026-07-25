@@ -1,5 +1,5 @@
-import type { ObservabilityEvent, ObservabilitySink } from "@/lib/observability/types";
-import { recordAdminIssue } from "@/lib/admin-observability-store";
+import type { ObservabilityEvent, ObservabilitySink } from "./types.ts";
+import { recordAdminIssue } from "../admin-observability-store.ts";
 
 export const consoleObservabilitySink: ObservabilitySink = {
   emit(event: ObservabilityEvent) {

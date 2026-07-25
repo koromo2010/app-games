@@ -47,9 +47,9 @@ function safeTokenMatch(value: string, expectedHash: string) {
 
 async function registeredCreator(slug: string) {
   await ensureSdkSchema();
-  const rows = await sdkSql()`SELECT id, slug, display_name, management_token_hash, owner_player_id FROM sdk_creators WHERE slug = ${slug} LIMIT 1`;
+  const rows = await sdkSql()`SELECT id, slug, display_name, management_token_hash, owner_player_id, deleted_at FROM sdk_creators WHERE slug = ${slug} LIMIT 1`;
   return (Array.isArray(rows) ? rows[0] : undefined) as
-    | { id: string; slug: string; display_name: string; management_token_hash: string; owner_player_id: string | null }
+    | { id: string; slug: string; display_name: string; management_token_hash: string; owner_player_id: string | null; deleted_at: string | null }
     | undefined;
 }
 
@@ -91,13 +91,20 @@ export async function finalizeInstanceSlug(slug: string, reservationToken: strin
 
 export async function authenticateCreator(slug: string, managementToken: string) {
   const creator = await registeredCreator(slug);
-  if (!creator || !safeTokenMatch(managementToken, creator.management_token_hash)) return null;
+  if (
+    !creator
+    || creator.deleted_at
+    || !safeTokenMatch(managementToken, creator.management_token_hash)
+  ) return null;
   return creator;
 }
 
 export async function authenticateCreatorOwner(slug: string, playerId: string) {
   const creator = await registeredCreator(slug);
-  return creator?.owner_player_id === playerId ? creator : null;
+  if (!creator || creator.deleted_at || creator.owner_player_id !== playerId) {
+    return null;
+  }
+  return creator;
 }
 
 export async function listCreatorEnvironments(ownerPlayerId: string) {
@@ -105,8 +112,9 @@ export async function listCreatorEnvironments(ownerPlayerId: string) {
   const rows = await sdkSql()`
     SELECT c.slug, c.display_name AS "displayName", COUNT(g.id)::int AS "gameCount"
     FROM sdk_creators c
-    LEFT JOIN sdk_games g ON g.creator_id = c.id
+    LEFT JOIN sdk_games g ON g.creator_id = c.id AND g.deleted_at IS NULL
     WHERE c.owner_player_id = ${ownerPlayerId}
+      AND c.deleted_at IS NULL
     GROUP BY c.id, c.slug, c.display_name, c.created_at
     ORDER BY c.created_at ASC
   `;
@@ -120,7 +128,9 @@ export async function listCreatorGames(slug: string) {
            g.module_policy AS "modulePolicy",
            (g.mock_revision IS NOT NULL) AS "mockAvailable"
     FROM sdk_games g JOIN sdk_creators c ON c.id = g.creator_id
-    WHERE c.slug = ${slug} ORDER BY g.updated_at DESC
+    WHERE c.slug = ${slug}
+      AND g.deleted_at IS NULL
+    ORDER BY g.updated_at DESC
   `;
   return (rows as Array<{
     gameId: string;
@@ -141,11 +151,14 @@ export async function getCreatorGamePreview(slug: string, gameId: string) {
     SELECT g.game_id AS "gameId", g.title, g.manifest,
            g.mock_revision AS "mockRevision",
            g.package_revision AS "packageRevision",
+           g.package_root_sha256 AS "packageRootSha256",
            g.package_bundle_sha256 AS "packageBundleSha256",
            g.package_app_set_sha256 AS "packageAppSetSha256",
            g.module_policy AS "modulePolicy"
     FROM sdk_games g JOIN sdk_creators c ON c.id = g.creator_id
     WHERE c.slug = ${slug} AND g.game_id = ${gameId}
+      AND g.deleted_at IS NULL
+      AND g.deleted_at IS NULL
       AND (g.mock_revision IS NOT NULL OR g.package_revision IS NOT NULL)
     LIMIT 1
   `;
@@ -156,8 +169,46 @@ export async function getCreatorGamePreview(slug: string, gameId: string) {
         manifest: unknown;
         mockRevision: string | null;
         packageRevision: string | null;
+        packageRootSha256: string | null;
         packageBundleSha256: string | null;
         packageAppSetSha256: string | null;
+        modulePolicy: unknown;
+      }
+    | undefined;
+}
+
+export async function getCreatorGamePackageRevision(
+  slug: string,
+  gameId: string,
+  revision: string,
+) {
+  await ensureSdkSchema();
+  const rows = await sdkSql()`
+    SELECT g.game_id AS "gameId", g.title, r.manifest,
+           NULL::CHAR(40) AS "mockRevision",
+           r.revision AS "packageRevision",
+           r.package_root_sha256 AS "packageRootSha256",
+           r.server_bundle_sha256 AS "packageBundleSha256",
+           r.app_set_source_sha256 AS "packageAppSetSha256",
+           g.module_policy AS "modulePolicy"
+    FROM sdk_games g
+    JOIN sdk_creators c ON c.id = g.creator_id
+    JOIN sdk_game_package_revisions r ON r.game_id = g.id
+    WHERE c.slug = ${slug}
+      AND g.game_id = ${gameId}
+      AND r.revision = ${revision}
+    LIMIT 1
+  `;
+  return (Array.isArray(rows) ? rows[0] : undefined) as
+    | {
+        gameId: string;
+        title: string;
+        manifest: unknown;
+        mockRevision: null;
+        packageRevision: string;
+        packageRootSha256: string;
+        packageBundleSha256: string;
+        packageAppSetSha256: string;
         modulePolicy: unknown;
       }
     | undefined;
@@ -205,6 +256,7 @@ export async function updateCreatorGameModuleProfile(input: {
       AND c.slug = ${input.slug}
       AND c.owner_player_id = ${input.ownerPlayerId}
       AND g.game_id = ${input.gameId}
+      AND g.deleted_at IS NULL
     RETURNING g.module_policy AS "modulePolicy"
   `;
   const saved = (Array.isArray(rows) ? rows[0] : undefined) as

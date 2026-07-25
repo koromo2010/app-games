@@ -10,10 +10,10 @@
 4. 共通moduleは最初全件必須として扱う。AIはprofileを変更せず、既存moduleと同等の処理をAppSetへ複製しない。
 5. ゲーム固有AppSet、閲覧者別View、正式クライアント、契約テストを一緒に実装する。
 6. `npm run check`、`npm run demo`、`npm run diagnose:promotion`を成功させる。
-7. 入口から受け取ったSDK URL・制作者slug・管理トークンを一時環境変数として`npm run publish:game-package`を実行する。トークンはファイル、Git、会話、出力へ残さない。
+7. OAuth接続済みGame Fields SDK MCPの`publish_game_package`へ、検査済み`game-package/`を渡す。アクセストークンや管理トークンを取得・表示・保存しない。
 8. SDKが返した制作者URLと正式Preview Roomを案内し、複数ブラウザ参加・同期・再接続を確認する。
 
-`npm run publish:mock`は任意の静的UIレビューです。成功してもRoom、AppSet、同期、昇格の検証完了とは扱いません。
+MCPの`publish_mock`は任意の静的UIレビューです。成功してもRoom、AppSet、同期、昇格の検証完了とは扱いません。`publish:*:legacy` npm scriptは既存の管理トークン運用専用で、新規Work／Codex制作では実行しません。
 
 ## 編集してよい範囲
 
@@ -54,7 +54,7 @@
 6. `mock/`の正式クライアントをRoom ViewとCommandへ接続する。
 7. 正常完走、権限拒否、古いrevision、秘密遮断、失敗時非更新をテストする。
 8. `npm run check`、`npm run demo`、`npm run diagnose:promotion`を実行する。
-9. `npm run publish:game-package`でhash固定packageを保存する。
+9. `npm run build:game-package`後、MCPの`publish_game_package`でhash固定packageを保存する。
 10. 正式Preview Roomで別ブラウザ参加、同期、再読込復帰、Word DB／LLM失敗を検証する。
 
 ## 完了条件

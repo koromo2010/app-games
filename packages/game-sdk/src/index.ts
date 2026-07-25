@@ -342,6 +342,7 @@ export type GameSdkManifest = {
   title: Record<GameSdkLocale, string>;
   playMode: GameSdkPlayMode;
   minimumPlayers: number;
+  previewMinimumPlayers?: number;
   maximumPlayers: number;
   supportsDebug: boolean;
   supportsSpectators: boolean;
@@ -413,6 +414,7 @@ export type GameSdkCommand<TType extends string = string, TPayload = unknown> = 
 };
 
 export type GameSdkCommandEnvelope<TCommand extends { type: string }> = {
+  commandId?: string;
   expectedRevision: number;
   command: TCommand;
 };
@@ -420,6 +422,9 @@ export type GameSdkCommandEnvelope<TCommand extends { type: string }> = {
 export type GameSdkCommandResult<TRoomView> = {
   room: GameSdkRoomSnapshot<TRoomView>;
   revision: number;
+  commandId: string;
+  commandRevision: number;
+  applied: boolean;
 };
 
 export type GameSdkRoomListItem = {
@@ -457,6 +462,7 @@ export type GameSdkClientRuntime<TCreateInput, TCommand extends { type: string }
   createRoom(input: {
     roomCode: string;
     create: TCreateInput;
+    requestId?: string;
   }): Promise<GameSdkRoomSnapshot<TRoomView>>;
   readRoom(code: string): Promise<GameSdkRoomSnapshot<TRoomView> | null>;
   readActiveRoom(): Promise<GameSdkRoomSnapshot<TRoomView> | null>;
@@ -494,6 +500,16 @@ export function assertGameManifest(manifest: GameSdkManifest): void {
   }
   if (!Number.isInteger(manifest.maximumPlayers) || manifest.maximumPlayers < manifest.minimumPlayers) {
     throw new Error("Game SDK manifest maximumPlayers must be an integer at least minimumPlayers.");
+  }
+  if (
+    manifest.previewMinimumPlayers !== undefined
+    && (
+      !Number.isInteger(manifest.previewMinimumPlayers)
+      || manifest.previewMinimumPlayers < 1
+      || manifest.previewMinimumPlayers > manifest.minimumPlayers
+    )
+  ) {
+    throw new Error("Game SDK manifest previewMinimumPlayers must be between 1 and minimumPlayers.");
   }
   if (!(["online-room", "local-pass-and-play"] as const).includes(manifest.playMode)) {
     throw new Error("Game SDK manifest playMode is not supported.");

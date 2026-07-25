@@ -10,6 +10,12 @@ function previewSigningSecret() {
   return secret;
 }
 
+function previewEnvironment() {
+  return process.env.VERCEL_GIT_COMMIT_REF === "main"
+    ? "production" as const
+    : "development" as const;
+}
+
 export function previewRuntimeBaseUrl() {
   return process.env.SDK_PREVIEW_BASE_URL?.replace(/\/$/, "")
     ?? (process.env.VERCEL_GIT_COMMIT_REF === "main"
@@ -25,8 +31,11 @@ export function createPreviewRuntimeUrl(input: {
 }) {
   const now = input.now ?? Date.now();
   const grant = {
-    version: 2 as const,
+    version: 3 as const,
     audience: "mock-client" as const,
+    environment: previewEnvironment(),
+    channel: "candidate-preview" as const,
+    role: "client" as const,
     instanceId: input.instanceId,
     gameId: input.gameId,
     revision: input.revision,
@@ -42,20 +51,27 @@ export function createPackageRuntimeAccess(input: {
   gameId: string;
   revision: string;
   serverBundleSha256: string;
+  channel?: "candidate-preview" | "development" | "stable";
   now?: number;
 }) {
   const now = input.now ?? Date.now();
   const clientGrant = {
-    version: 2 as const,
+    version: 3 as const,
     audience: "package-client" as const,
+    environment: previewEnvironment(),
+    channel: input.channel ?? "candidate-preview",
+    role: "client" as const,
     instanceId: input.instanceId,
     gameId: input.gameId,
     revision: input.revision,
     expiresAt: now + PACKAGE_CLIENT_TOKEN_LIFETIME_MS,
   };
   const serverGrant = {
-    version: 2 as const,
+    version: 3 as const,
     audience: "package-server" as const,
+    environment: previewEnvironment(),
+    channel: input.channel ?? "candidate-preview",
+    role: "runner" as const,
     instanceId: input.instanceId,
     gameId: input.gameId,
     revision: input.revision,

@@ -55,6 +55,46 @@ function memoryRoomStore(): GameSdkPlatformRoomStore<SdkCountUpRoom> {
       for (const playerId of playerIds(record)) activeRooms.set(playerId, record.code);
       return "saved";
     },
+    async claimResultOutbox(code, eventId, now) {
+      const record = rooms.get(code);
+      const entry = record?.resultOutbox.find((item) => item.eventId === eventId);
+      if (
+        !record
+        || !entry
+        || entry.status === "completed"
+        || (
+          entry.status === "result-persisting"
+          && (entry.leaseExpiresAt ?? 0) > now
+        )
+      ) return null;
+      entry.status = "result-persisting";
+      entry.attempts += 1;
+      entry.updatedAt = now;
+      entry.leaseExpiresAt = now + 60_000;
+      return clone(record);
+    },
+    async completeResultOutbox(code, eventId, now) {
+      const entry = rooms.get(code)?.resultOutbox.find(
+        (item) => item.eventId === eventId,
+      );
+      if (!entry) return false;
+      entry.status = "completed";
+      entry.updatedAt = now;
+      delete entry.leaseExpiresAt;
+      delete entry.lastErrorCode;
+      return true;
+    },
+    async retryResultOutbox(code, eventId, now, errorCode) {
+      const entry = rooms.get(code)?.resultOutbox.find(
+        (item) => item.eventId === eventId,
+      );
+      if (!entry) return false;
+      entry.status = "result-confirmed";
+      entry.updatedAt = now;
+      entry.lastErrorCode = errorCode;
+      delete entry.leaseExpiresAt;
+      return true;
+    },
     async claimActiveRoom(playerId, targetCode) {
       const previousCode = activeRooms.get(playerId) ?? null;
       const previous = previousCode ? rooms.get(previousCode) : null;
@@ -312,6 +352,78 @@ test("SDK HTTP Client Runtimeはactorを送らず認証adapterと永続Runtime�
   });
   assert.equal(await runtime.dissolveHostedRooms(), 1);
   assert.equal(await runtime.readRoom("DONE"), null);
+});
+
+test("result outboxは保存失敗をconfirmedへ戻し、次のreadで同じeventを再開する", async () => {
+  let identity = host;
+  const store = memoryRoomStore();
+  const observedEvents: string[] = [];
+  let failures = 1;
+  const adapter = createAuthenticatedGameSdkPlatformAdapter({
+    module: sdkCountUpServerModule,
+    roomStore: store,
+    resolveIdentity: async () => identity,
+    now: (() => {
+      let value = 2_000;
+      return () => ++value;
+    })(),
+    onResultConfirmed: async (result) => {
+      observedEvents.push(result.eventId);
+      if (failures-- > 0) throw new Error("RESULT_STORE_TEMPORARY");
+    },
+  });
+
+  let room = await adapter.createRoom({
+    roomCode: "OUTBOX",
+    create: { settings: { target: 2 }, app: {} },
+  });
+  identity = player;
+  room = (await adapter.sendCommand({
+    code: room.code,
+    envelope: {
+      commandId: "outbox-join-0001",
+      expectedRevision: room.revision,
+      command: { type: "room/join" },
+    },
+  })).room;
+  identity = host;
+  room = (await adapter.sendCommand({
+    code: room.code,
+    envelope: {
+      commandId: "outbox-start-001",
+      expectedRevision: room.revision,
+      command: { type: "game/start" },
+    },
+  })).room;
+  room = (await adapter.sendCommand({
+    code: room.code,
+    envelope: {
+      commandId: "outbox-count-001",
+      expectedRevision: room.revision,
+      command: { type: "game/count-up" },
+    },
+  })).room;
+  await assert.rejects(
+    () => adapter.sendCommand({
+      code: room.code,
+      envelope: {
+        commandId: "outbox-count-002",
+        expectedRevision: room.revision,
+        command: { type: "game/count-up" },
+      },
+    }),
+    /RESULT_STORE_TEMPORARY/,
+  );
+
+  const confirmed = await store.load(room.code);
+  assert.equal(confirmed?.phase, "result");
+  assert.equal(confirmed?.resultOutbox[0]?.status, "result-confirmed");
+  const recovered = await adapter.readRoom(room.code);
+  assert.equal(recovered?.phase, "result");
+  const completed = await store.load(room.code);
+  assert.equal(completed?.resultOutbox[0]?.status, "completed");
+  assert.equal(observedEvents.length, 2);
+  assert.equal(observedEvents[0], observedEvents[1]);
 });
 
 test("SDK HTTP Client Runtimeは404をnull、壊れたRoom応答を契約エラーにする", async () => {

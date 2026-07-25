@@ -706,7 +706,9 @@ export function createGameSdkOnlineRoomModule<
         });
       }
       const lifecycle = applyGameSdkRoomLifecycleCommand(room, command, context, {
-        minimumPlayers: manifest.minimumPlayers,
+        minimumPlayers: context.actor.debugAccess
+          ? manifest.previewMinimumPlayers ?? manifest.minimumPlayers
+          : manifest.minimumPlayers,
         maximumPlayers: manifest.maximumPlayers,
         supportsDebug: manifest.supportsDebug,
         normalizeSettings,
@@ -878,7 +880,10 @@ export function createGameSdkOnlineRoomModule<
         context.viewer.playerId
         && room.players.some((player) => player.id === context.viewer.playerId),
       );
-      const hasEnoughPlayers = room.players.length >= manifest.minimumPlayers;
+      const presentedMinimumPlayers = context.viewer.debugAccess
+        ? manifest.previewMinimumPlayers ?? manifest.minimumPlayers
+        : manifest.minimumPlayers;
+      const hasEnoughPlayers = room.players.length >= presentedMinimumPlayers;
       const lobbyReturn = gameSdkRoomLobbyReturnState(room);
       const pendingLobbyReturnSeats = lobbyReturn.required
         ? room.players.flatMap((player, seat) => (
@@ -938,7 +943,7 @@ export function createGameSdkOnlineRoomModule<
             },
           } : {}),
           pendingLobbyReturnSeats,
-          minimumPlayers: manifest.minimumPlayers,
+          minimumPlayers: presentedMinimumPlayers,
           maximumPlayers: manifest.maximumPlayers,
           isHost,
           isMember,

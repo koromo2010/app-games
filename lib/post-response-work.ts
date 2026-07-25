@@ -1,4 +1,9 @@
 import { after } from "next/server.js";
+import {
+  emitObservabilityEvent,
+  observabilityErrorCode,
+  observabilityRef,
+} from "./observability/index.ts";
 
 function isMissingRequestScope(error: unknown) {
   return error instanceof Error && error.message.includes("outside a request scope");
@@ -19,7 +24,12 @@ export async function schedulePostResponseWork(
       try {
         await work();
       } catch (error) {
-        console.error(`[post-response-work] ${name} failed`, error);
+        emitObservabilityEvent("error", "post-response-work", {
+          operation: "background-work",
+          eventRef: observabilityRef("event", name),
+          outcome: "failed",
+          errorCode: observabilityErrorCode(error),
+        });
       }
     });
   } catch (error) {

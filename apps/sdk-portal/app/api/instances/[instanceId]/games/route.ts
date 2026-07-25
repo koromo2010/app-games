@@ -3,6 +3,7 @@ import { ensureSdkSchema, sdkSql } from "@/lib/sdk-postgres";
 import platformRelease from "../../../../../../../config/platform-release.json";
 
 export const dynamic = "force-dynamic";
+const MAX_GAMES_PER_CREATOR = 64;
 
 function bearerToken(request: Request) {
   const header = request.headers.get("authorization") ?? "";
@@ -19,7 +20,9 @@ export async function GET(_: Request, context: { params: Promise<{ instanceId: s
              g.sdk_package_version AS "sdkPackageVersion", g.sdk_contract_version AS "sdkContractVersion",
              g.status, (g.mock_revision IS NOT NULL) AS "mockAvailable", g.updated_at AS "updatedAt"
       FROM sdk_games g JOIN sdk_creators c ON c.id = g.creator_id
-      WHERE c.slug = ${slug} ORDER BY g.updated_at DESC
+      WHERE c.slug = ${slug}
+        AND g.deleted_at IS NULL
+      ORDER BY g.updated_at DESC
     `;
     return Response.json({ games });
   } catch { return Response.json({ games: [], error: "ゲーム一覧を現在取得できません。" }, { status: 503 }); }
@@ -45,13 +48,31 @@ export async function PUT(request: Request, context: { params: Promise<{ instanc
     if (!creator) return Response.json({ saved: false, error: "認証情報が正しくありません。" }, { status: 403 });
     const rows = await sdkSql()`
       INSERT INTO sdk_games (creator_id, game_id, title, description, manifest, sdk_package_version, sdk_contract_version)
-      VALUES (${creator.id}, ${gameId}, ${title}, ${description}, ${manifestJson}::jsonb, ${sdkPackageVersion}, ${sdkContractVersion})
+      SELECT ${creator.id}, ${gameId}, ${title}, ${description},
+             ${manifestJson}::jsonb, ${sdkPackageVersion},
+             ${sdkContractVersion}
+      WHERE EXISTS (
+        SELECT 1 FROM sdk_games
+        WHERE creator_id = ${creator.id} AND game_id = ${gameId}
+      ) OR (
+        SELECT COUNT(*) < ${MAX_GAMES_PER_CREATOR}
+        FROM sdk_games
+        WHERE creator_id = ${creator.id} AND deleted_at IS NULL
+      )
       ON CONFLICT (creator_id, game_id) DO UPDATE SET
         title = EXCLUDED.title, description = EXCLUDED.description, manifest = EXCLUDED.manifest,
         sdk_package_version = EXCLUDED.sdk_package_version, sdk_contract_version = EXCLUDED.sdk_contract_version,
+        deleted_at = NULL,
+        status = CASE WHEN sdk_games.deleted_at IS NULL THEN sdk_games.status ELSE 'draft' END,
         updated_at = NOW()
       RETURNING game_id AS "gameId", status, updated_at AS "updatedAt"
     `;
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return Response.json({
+        saved: false,
+        error: "SDK_GAME_QUOTA_EXCEEDED",
+      }, { status: 409 });
+    }
     return Response.json({ saved: true, game: Array.isArray(rows) ? rows[0] : null });
   } catch { return Response.json({ saved: false, error: "ゲーム情報を現在保存できません。" }, { status: 503 }); }
 }
