@@ -42,6 +42,8 @@ MCPの`publish_mock`は任意の静的UIレビューです。成功してもRoom
 - `app-set.ts`はゲーム固有state、Command、勝敗、固有presentationだけを登録する。
 - `presentApp`は閲覧者別のゲーム固有Viewだけを返し、秘密、内部player ID、正解を権限のないViewへ含めない。
 - 取得・生成・入力検証に失敗したtransitionは保存せず、revision、手番、timerを進めない。
+- 結果の`reason`は機械判定用コード、`presentation.reason`は日本語・英語の終了理由として分離する。
+- `presentation.highlights`には共有して安全な見どころを最大3件、`presentation.playLog`には参加者本人の履歴へ残す時系列を最大50件入れる。秘密、内部ID、prompt、未公開情報、同意のない参加者名は含めない。
 - Game Fields本体、`develop`、`main`、Vercelへ直接公開しない。
 
 ## 実装の順番

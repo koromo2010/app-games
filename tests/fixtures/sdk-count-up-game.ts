@@ -169,6 +169,20 @@ export const sdkCountUpAppSet = defineGameSdkOnlineRoomAppSet<
             score: player.id === context.actor.playerId ? count : 0,
           })),
           reason: "target-reached",
+          presentation: {
+            reason: {
+              ja: "目標回数に達したため終了",
+              en: "The target count was reached",
+            },
+            highlights: [{
+              ja: `${count}回の操作で決着`,
+              en: `Finished after ${count} actions`,
+            }],
+            playLog: [{
+              ja: `最後の操作でカウントが${count}になりました`,
+              en: `The final action raised the count to ${count}`,
+            }],
+          },
         }, {
           participantIds: room.players.map((player) => player.id),
         }),

@@ -2,6 +2,9 @@ import { createHmac } from "node:crypto";
 import type {
   GameFieldsPlatformRuntimeContract,
 } from "@game-fields/game-runtime";
+import type {
+  GameSdkStandardResultPresentation,
+} from "@game-fields/game-sdk/modules";
 import { hodoaiResultPresentation, type HodoaiRoom } from "@/lib/hodoai-talk";
 import type { KotobaSenpukuRoom } from "@/lib/kotoba-senpuku";
 import type { NorthernRoom } from "@/lib/northern-branch-types";
@@ -43,6 +46,10 @@ type StoredReplayBase = {
   players: StoredReplayPlayer[];
   resultLabels: Record<string, string>;
   shareHighlights: string[];
+  localizedShareHighlights?: {
+    ja?: string[];
+    en?: string[];
+  };
   runtimeContract?: GameFieldsPlatformRuntimeContract;
 };
 
@@ -50,6 +57,14 @@ type StoredGenericReplay = StoredReplayBase & {
   gameType: Exclude<GameReplayGameType, "tahoiya">;
   overview: string;
   highlights: string[];
+  localizedOverview?: {
+    ja?: string;
+    en?: string;
+  };
+  localizedHighlights?: {
+    ja?: string[];
+    en?: string[];
+  };
   scoreLabels: Record<string, string>;
 };
 
@@ -92,6 +107,26 @@ function cleanLines(lines: unknown[], maximumLines = 100) {
   return lines.map((line) => cleanText(line, 300)).filter(Boolean).slice(0, maximumLines);
 }
 
+function cleanLocalizedLines(value: unknown, maximumLines: number) {
+  if (!value || typeof value !== "object") return undefined;
+  const candidate = value as { ja?: unknown; en?: unknown };
+  const ja = Array.isArray(candidate.ja)
+    ? cleanLines(candidate.ja, maximumLines)
+    : [];
+  const en = Array.isArray(candidate.en)
+    ? cleanLines(candidate.en, maximumLines)
+    : [];
+  return ja.length > 0 || en.length > 0 ? { ja, en } : undefined;
+}
+
+function cleanLocalizedText(value: unknown, maximumLength: number) {
+  if (!value || typeof value !== "object") return undefined;
+  const candidate = value as { ja?: unknown; en?: unknown };
+  const ja = cleanText(candidate.ja, maximumLength);
+  const en = cleanText(candidate.en, maximumLength);
+  return ja || en ? { ja, en } : undefined;
+}
+
 function isReplayGameType(value: unknown): value is GameReplayGameType {
   return value === "wordwolf"
     || value === "tahoiya"
@@ -122,6 +157,9 @@ function parseStoredReplay(value: unknown): StoredGameReplay | null {
       overview?: unknown;
       highlights?: unknown[];
       scoreLabels?: Record<string, string>;
+      localizedShareHighlights?: unknown;
+      localizedOverview?: unknown;
+      localizedHighlights?: unknown;
     };
     if (
       parsed.schemaVersion !== 1
@@ -150,11 +188,26 @@ function parseStoredReplay(value: unknown): StoredGameReplay | null {
     }
 
     if (!Array.isArray(parsed.highlights) || !parsed.scoreLabels || typeof parsed.scoreLabels !== "object") return null;
+    const localizedShareHighlights = cleanLocalizedLines(
+      parsed.localizedShareHighlights,
+      3,
+    );
+    const localizedOverview = cleanLocalizedText(
+      parsed.localizedOverview,
+      300,
+    );
+    const localizedHighlights = cleanLocalizedLines(
+      parsed.localizedHighlights,
+      50,
+    );
     return {
       ...(parsed as StoredGenericReplay),
       title: cleanText(parsed.title, 120) || "プレイバック",
       resultLabels: parsed.resultLabels && typeof parsed.resultLabels === "object" ? parsed.resultLabels : {},
       shareHighlights: Array.isArray(parsed.shareHighlights) ? cleanLines(parsed.shareHighlights, 3) : [],
+      ...(localizedShareHighlights ? { localizedShareHighlights } : {}),
+      ...(localizedOverview ? { localizedOverview } : {}),
+      ...(localizedHighlights ? { localizedHighlights } : {}),
     };
   } catch {
     return null;
@@ -186,6 +239,9 @@ function replaySummary(replay: StoredGameReplay, playerId: string, favorite: boo
     playerCount: replay.players.length,
     round: replay.round,
     shareHighlights: cleanLines(shareHighlights, 3),
+    ...(replay.localizedShareHighlights
+      ? { localizedShareHighlights: replay.localizedShareHighlights }
+      : {}),
   };
 }
 
@@ -266,6 +322,7 @@ export type StandardPlatformGameReplayInput = {
     score: number;
   }>;
   reason: string;
+  presentation?: GameSdkStandardResultPresentation;
 };
 
 /** Stores only the common, player-safe result contract for SDK playback. */
@@ -282,6 +339,21 @@ export async function recordStandardPlatformGameReplay(
       ? `勝利・${ranking.score}点`
       : `${ranking.rank}位・${ranking.score}点`,
   ]));
+  const presentation = input.presentation;
+  const localizedShareHighlights = presentation ? {
+    ja: [
+      presentation.reason.ja,
+      ...(presentation.highlights ?? []).map((line) => line.ja),
+    ].slice(0, 3),
+    en: [
+      presentation.reason.en,
+      ...(presentation.highlights ?? []).map((line) => line.en),
+    ].slice(0, 3),
+  } : undefined;
+  const localizedHighlights = presentation?.playLog ? {
+    ja: presentation.playLog.map((line) => line.ja),
+    en: presentation.playLog.map((line) => line.en),
+  } : undefined;
   const base = makeReplayBase(
     input.eventId,
     input.gameType,
@@ -290,7 +362,7 @@ export async function recordStandardPlatformGameReplay(
     input.title,
     input.players,
     resultLabels,
-    [
+    localizedShareHighlights?.ja ?? [
       input.reason,
       ...input.rankings
         .slice()
@@ -303,12 +375,20 @@ export async function recordStandardPlatformGameReplay(
   );
   return storeReplay({
     ...base,
+    ...(localizedShareHighlights ? { localizedShareHighlights } : {}),
     runtimeContract: structuredClone(input.runtimeContract),
     gameType: input.gameType,
-    overview: cleanText(input.reason, 300) || "ゲーム終了",
-    highlights: cleanLines(input.rankings.map((ranking) => (
+    overview: cleanText(presentation?.reason.ja ?? input.reason, 300) || "ゲーム終了",
+    ...(presentation ? {
+      localizedOverview: {
+        ja: presentation.reason.ja,
+        en: presentation.reason.en,
+      },
+    } : {}),
+    highlights: localizedHighlights?.ja ?? cleanLines(input.rankings.map((ranking) => (
       `${ranking.rank}位 ${playerNames.get(ranking.participantId) ?? "Unknown"}・${ranking.score}点`
     ))),
+    ...(localizedHighlights ? { localizedHighlights } : {}),
     scoreLabels: resultLabels,
   }, input.roomCode);
 }
@@ -603,6 +683,12 @@ function genericDetail(replay: StoredGenericReplay, playerId: string, favorite: 
     gameType: replay.gameType,
     overview: replay.overview,
     highlights: replay.gameType === "kotoba-senpuku" ? readableKotobaHighlights(replay) : replay.highlights,
+    ...(replay.localizedOverview
+      ? { localizedOverview: replay.localizedOverview }
+      : {}),
+    ...(replay.localizedHighlights
+      ? { localizedHighlights: replay.localizedHighlights }
+      : {}),
     scores: replay.players.map((player) => ({ playerName: player.name, scoreLabel: replay.resultLabels[player.id] || replay.scoreLabels[player.id] || "プレイ完了", isViewer: player.id === playerId })),
   };
 }

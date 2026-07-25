@@ -912,6 +912,9 @@ export function createGameSdkOnlineRoomModule<
                 : [];
             }),
             reason: room.standardResult.reason,
+            ...(room.standardResult.presentation ? {
+              presentation: room.standardResult.presentation,
+            } : {}),
           } satisfies GameSdkStandardResultView
         : undefined;
       return {

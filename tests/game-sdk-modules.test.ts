@@ -227,4 +227,67 @@ test("seat, start and standard result modules expose the shared contracts", () =
       reason: "score",
     },
   );
+
+  assert.deepEqual(
+    defineGameSdkStandardResult({
+      winnerIds: ["a"],
+      rankings: [
+        { participantId: "a", rank: 1, score: 3 },
+        { participantId: "b", rank: 2, score: 0 },
+      ],
+      reason: "turn-limit-reached",
+      presentation: {
+        reason: {
+          ja: "手数上限に達したため終了",
+          en: "The turn limit was reached",
+        },
+        highlights: [
+          { ja: "全5手をプレイ", en: "All 5 turns were played" },
+        ],
+        playLog: [
+          { ja: "1手目：人間？ → いいえ", en: "Turn 1: Human? → No" },
+        ],
+      },
+    }),
+    {
+      winnerIds: ["a"],
+      rankings: [
+        { participantId: "a", rank: 1, score: 3 },
+        { participantId: "b", rank: 2, score: 0 },
+      ],
+      reason: "turn-limit-reached",
+      presentation: {
+        reason: {
+          ja: "手数上限に達したため終了",
+          en: "The turn limit was reached",
+        },
+        highlights: [
+          { ja: "全5手をプレイ", en: "All 5 turns were played" },
+        ],
+        playLog: [
+          { ja: "1手目：人間？ → いいえ", en: "Turn 1: Human? → No" },
+        ],
+      },
+    },
+  );
+  assert.throws(() => defineGameSdkStandardResult({
+    winnerIds: ["a"],
+    rankings: [{ participantId: "a", rank: 1, score: 0 }],
+    reason: "completed",
+    presentation: {
+      reason: { ja: "完了", en: "" },
+    },
+  }), /RESULT_REASON_LOCALES_REQUIRED/);
+  assert.throws(() => defineGameSdkStandardResult({
+    winnerIds: ["a"],
+    rankings: [{ participantId: "a", rank: 1, score: 0 }],
+    reason: "completed",
+    presentation: {
+      reason: { ja: "完了", en: "Completed" },
+      highlights: Array.from({ length: 4 }, (_, index) => ({
+        ja: `要点${index + 1}`,
+        en: `Highlight ${index + 1}`,
+      })),
+    },
+  }), /RESULT_HIGHLIGHTS_INVALID/);
 });

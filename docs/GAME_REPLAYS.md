@@ -6,7 +6,7 @@
 
 アカウント戦績対象の全オンラインゲームで、通常ゲームが結果になった時点にプレイバックを保存する。デバッグゲームは保存しない。
 
-SDKゲームはmanifestの`supportsReplay`に加え、保存済みmodule profileで`replay`が`required`のときだけ標準結果を保存する。formal packageの結果Shellは同じ条件で本人用マイページへの履歴導線を出す。ゲーム固有stateや秘密情報は保存せず、`standardResult`の順位・得点・終了理由とruntime revisionだけを使う。
+SDKゲームはmanifestの`supportsReplay`に加え、保存済みmodule profileで`replay`が`required`のときだけ標準結果を保存する。formal packageの結果Shellは同じ条件で本人用マイページへの履歴導線を出す。ゲーム固有stateや秘密情報は保存せず、`standardResult`の順位・得点・終了理由、`presentation`の日本語／英語終了理由・共有用見どころ・本人用プレイログ、runtime revisionだけを使う。`highlights`は共有して安全な最大3件、`playLog`は結果時点で参加者に公開済みの内容だけを最大50件とする。
 
 マイページはアカウント設定を最初に表示し、戦績とプレイバックを独立して取得する。プレイバック一覧は下方の欄がビューポートの320px手前へ近づいた時点で初めて読み込み、初期表示のアカウントAPI・戦績APIと競合させない。マイページを共通オーバーレイで開いた場合は、初回に作成したiframeをその親ページの滞在中だけ保持し、閉じて開き直した際の全件再取得を避ける。
 

@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import type { GameSdkCapturedFeedbackArtifact } from "@/lib/game-sdk-feedback-store";
+import { presentGameSdkFeedbackArtifact } from "@/lib/game-sdk-feedback-presentation";
 import { readPlayerSession } from "@/lib/player-session";
+import { useAppLocale } from "./AppLocaleProvider";
 import { GameFeedbackPanel } from "./GameFeedbackPanel";
 
 const reasonOptions = [
@@ -26,6 +28,7 @@ export function GameSdkFeedbackPanel({
   roomCode: string;
   resultReason: string;
 }) {
+  const { locale } = useAppLocale();
   const [artifacts, setArtifacts] = useState<GameSdkCapturedFeedbackArtifact[]>(
     [],
   );
@@ -74,30 +77,42 @@ export function GameSdkFeedbackPanel({
 
   return (
     <div className="space-y-4">
-      {artifacts.map((artifact, index) => (
-        <div
-          key={artifact.artifactId}
-          className="rounded-2xl border border-slate-200 bg-white p-5 text-slate-950 shadow-xl shadow-black/10"
-        >
-          <p className="text-xs font-black uppercase tracking-wide text-cyan-700">
-            AI生成 {artifacts.length - index} · {artifact.task}
-          </p>
-          <p className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-100 p-3 text-sm leading-6 text-slate-700">
-            {artifact.artifactText}
-          </p>
-          <GameFeedbackPanel
-            artifactId={artifact.artifactId}
-            artifactText={artifact.artifactText}
-            game={artifact.game}
-            task={artifact.task}
-            playerId={playerId}
-            generation={artifact.generation}
-            reasonOptions={reasonOptions}
-            outcome={{ resultReason }}
-            heading="このAI生成内容はどうでしたか？"
-          />
-        </div>
-      ))}
+      {artifacts.map((artifact, index) => {
+        const presentation = presentGameSdkFeedbackArtifact(
+          artifact.artifactText,
+          artifact.task,
+          locale,
+        );
+        return (
+          <div
+            key={artifact.artifactId}
+            className="rounded-2xl border border-slate-200 bg-white p-5 text-slate-950 shadow-xl shadow-black/10"
+          >
+            <p className="text-xs font-black uppercase tracking-wide text-cyan-700">
+              {locale === "en" ? "AI output" : "AI生成"} {artifacts.length - index}
+            </p>
+            <h3 className="mt-2 text-base font-black text-slate-950">
+              {presentation.title}
+            </h3>
+            <p className="mt-2 rounded-lg bg-slate-100 p-3 text-sm leading-6 text-slate-700">
+              {presentation.summary}
+            </p>
+            <GameFeedbackPanel
+              artifactId={artifact.artifactId}
+              artifactText={artifact.artifactText}
+              game={artifact.game}
+              task={artifact.task}
+              playerId={playerId}
+              generation={artifact.generation}
+              reasonOptions={reasonOptions}
+              outcome={{ resultReason }}
+              heading={locale === "en"
+                ? "Was this AI output appropriate?"
+                : "このAI生成内容は適切でしたか？"}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }

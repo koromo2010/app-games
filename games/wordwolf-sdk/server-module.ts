@@ -65,6 +65,19 @@ function wordWolfSdkStandardResult(
       };
     }),
     reason: winner === "wolf" ? "wolf-win" : "village-win",
+    presentation: {
+      reason: winner === "wolf"
+        ? { ja: "人狼陣営の勝利", en: "The wolves won" }
+        : { ja: "村人陣営の勝利", en: "The villagers won" },
+      highlights: [{
+        ja: `${room.players.length}人で対戦`,
+        en: `${room.players.length}-player match`,
+      }],
+      playLog: [{
+        ja: `最終結果：${winner === "wolf" ? "人狼陣営" : "村人陣営"}の勝利`,
+        en: `Final result: ${winner === "wolf" ? "wolves" : "villagers"} won`,
+      }],
+    },
   }, {
     participantIds: room.players.map((player) => player.id),
   });

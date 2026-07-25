@@ -1,3 +1,16 @@
+export type GameSdkLocalizedResultText = Readonly<
+  Record<"ja" | "en", string>
+>;
+
+export type GameSdkStandardResultPresentation = {
+  /** Human-readable finish reason. The machine-stable code stays in `reason`. */
+  reason: GameSdkLocalizedResultText;
+  /** Share-safe public highlights. Never include secrets, names or internal IDs. */
+  highlights?: GameSdkLocalizedResultText[];
+  /** Participant-only chronological lines for detailed playback. */
+  playLog?: GameSdkLocalizedResultText[];
+};
+
 export type GameSdkStandardResult<TId extends string = string> = {
   winnerIds: TId[];
   rankings: Array<{
@@ -6,6 +19,7 @@ export type GameSdkStandardResult<TId extends string = string> = {
     score: number;
   }>;
   reason: string;
+  presentation?: GameSdkStandardResultPresentation;
 };
 
 export type GameSdkStandardResultView = {
@@ -18,7 +32,56 @@ export type GameSdkStandardResultView = {
     isSelf: boolean;
   }>;
   reason: string;
+  presentation?: GameSdkStandardResultPresentation;
 };
+
+function normalizeLocalizedResultText(
+  value: unknown,
+  field: string,
+): GameSdkLocalizedResultText {
+  const candidate = value && typeof value === "object"
+    ? value as Partial<Record<"ja" | "en", unknown>>
+    : {};
+  if (
+    typeof candidate.ja !== "string"
+    || !candidate.ja.trim()
+    || typeof candidate.en !== "string"
+    || !candidate.en.trim()
+  ) {
+    throw new Error(`RESULT_${field.toUpperCase()}_LOCALES_REQUIRED`);
+  }
+  return {
+    ja: candidate.ja.trim().slice(0, 300),
+    en: candidate.en.trim().slice(0, 300),
+  };
+}
+
+function normalizeResultPresentation(
+  value: GameSdkStandardResultPresentation | undefined,
+): GameSdkStandardResultPresentation | undefined {
+  if (value === undefined) return undefined;
+  const highlights = value.highlights ?? [];
+  const playLog = value.playLog ?? [];
+  if (!Array.isArray(highlights) || highlights.length > 3) {
+    throw new Error("RESULT_HIGHLIGHTS_INVALID");
+  }
+  if (!Array.isArray(playLog) || playLog.length > 50) {
+    throw new Error("RESULT_PLAY_LOG_INVALID");
+  }
+  return {
+    reason: normalizeLocalizedResultText(value.reason, "reason"),
+    ...(highlights.length > 0 ? {
+      highlights: highlights.map((line) => (
+        normalizeLocalizedResultText(line, "highlight")
+      )),
+    } : {}),
+    ...(playLog.length > 0 ? {
+      playLog: playLog.map((line) => (
+        normalizeLocalizedResultText(line, "play_log")
+      )),
+    } : {}),
+  };
+}
 
 export function defineGameSdkStandardResultView(
   result: GameSdkStandardResultView,
@@ -55,6 +118,9 @@ export function defineGameSdkStandardResultView(
     winnerSeats,
     rankings,
     reason: result.reason.trim().slice(0, 200),
+    ...(result.presentation ? {
+      presentation: normalizeResultPresentation(result.presentation),
+    } : {}),
   } satisfies GameSdkStandardResultView;
 }
 
@@ -94,5 +160,8 @@ export function defineGameSdkStandardResult<TId extends string>(
     winnerIds,
     rankings,
     reason: result.reason.trim(),
+    ...(result.presentation ? {
+      presentation: normalizeResultPresentation(result.presentation),
+    } : {}),
   } satisfies GameSdkStandardResult<TId>;
 }

@@ -274,6 +274,36 @@ type RoomView = GameSdkOnlineRoomView<Settings, AppView>;
 playbackへ使用します。提出がない場合にPlatformが参加順から仮結果を作る
 ことはありません。
 
+`reason`は集計・監査用の機械コードです。利用者へは直接表示されない前提で、
+日本語・英語と安全な履歴を`presentation`へ分けます。
+
+```ts
+standardResult: defineGameSdkStandardResult({
+  winnerIds,
+  rankings,
+  reason: "turn-limit-reached",
+  presentation: {
+    reason: {
+      ja: "手数上限に達したため終了",
+      en: "The turn limit was reached",
+    },
+    highlights: [
+      { ja: "8手で決着", en: "Finished in 8 turns" },
+    ],
+    playLog: room.app.publicHistory.map((entry, index) => ({
+      ja: `${index + 1}手目：${entry.publicLabelJa}`,
+      en: `Turn ${index + 1}: ${entry.publicLabelEn}`,
+    })),
+  },
+}, {
+  participantIds: room.players.map((player) => player.id),
+})
+```
+
+`highlights`は共有文へ使える最大3件、`playLog`は参加者本人の詳細履歴へ
+保存できる最大50件です。どちらも結果時点で公開済みの情報だけを使い、
+内部player ID、prompt、未公開の秘密、同意のない参加者名を含めません。
+
 ## Trusted actor
 
 `createRoom`と`applyCommand`の`context.actor`は、Game Fieldsが署名済みセッションから解決した本人です。

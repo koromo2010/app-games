@@ -103,6 +103,7 @@ export async function persistApprovedGameSdkResultEvent({
         winnerIds: standardResult.winnerIds,
         rankings: standardResult.rankings,
         reason: standardResult.reason,
+        presentation: standardResult.presentation,
       }),
     ] : []),
   ]);

@@ -180,10 +180,28 @@ standardResult: defineGameSdkStandardResult({
     score: scores[player.id] ?? 0,
   })),
   reason: "target-reached",
+  presentation: {
+    reason: {
+      ja: "目標を達成して終了",
+      en: "The target was reached",
+    },
+    highlights: [
+      { ja: "8手で決着", en: "Finished in 8 turns" },
+    ],
+    playLog: publicHistory.map((line) => ({
+      ja: line.ja,
+      en: line.en,
+    })),
+  },
 }, {
   participantIds: room.players.map((player) => player.id),
 })
 ```
+
+`reason`は集計用の機械コードです。`presentation.reason`は画面・共有・履歴へ
+出す日本語／英語、`highlights`は共有して安全な最大3件、`playLog`は
+参加者本人の履歴へ保存する最大50件です。結果時点で公開済みの情報だけを使い、
+内部ID、prompt、未公開の秘密、同意のない参加者名は含めません。
 
 承認済みonline-roomゲームは`/sdk-games/<game-id>`の正式Shellで動作します。
 Cookie認証、Redis CAS、active room、一覧、Realtime、観戦grant、DEBUG権限、

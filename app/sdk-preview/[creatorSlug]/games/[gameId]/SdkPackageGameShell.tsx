@@ -16,12 +16,18 @@ import {
 } from "@game-fields/game-sdk/client-runtime";
 import { GameSdkShellHeader } from "@/app/components/GameSdkShellHeader";
 import { GameSdkFeedbackPanel } from "@/app/components/GameSdkFeedbackPanel";
+import { useAppLocale } from "@/app/components/AppLocaleProvider";
 import { gameTopBannerOffsetClass } from "@/app/components/GameTopBanner";
 import { GameResultShareButton } from "@/app/components/GameResultShareButton";
 import { AppLink as Link } from "@/app/components/AppLink";
 import { gameTopBannerActionClass } from "@/app/components/GameTopMenu";
 import { useGameSdkActiveRoomRestore } from "@/app/hooks/use-game-sdk-active-room-restore";
 import { withAiActivity } from "@/lib/ai-activity-client";
+import {
+  gameSdkResultHighlights,
+  gameSdkResultPlayLog,
+  gameSdkResultReasonText,
+} from "@/lib/game-sdk-result-presentation";
 import {
   useCallback,
   useEffect,
@@ -63,6 +69,11 @@ type CommonView = {
       isSelf: boolean;
     }>;
     reason: string;
+    presentation?: {
+      reason: { ja: string; en: string };
+      highlights?: Array<{ ja: string; en: string }>;
+      playLog?: Array<{ ja: string; en: string }>;
+    };
   };
 };
 
@@ -125,6 +136,7 @@ export function SdkPackageGameShell({
   supportsReplay,
   usesLlm,
 }: Props) {
+  const { locale } = useAppLocale();
   const endpoint = endpointInput
     ?? `/api/sdk-preview/${creatorSlug}/games/${gameId}/rooms`;
   const runtime = useMemo(() => createGameSdkHttpClientRuntime<
@@ -332,13 +344,27 @@ export function SdkPackageGameShell({
   );
   const common = room?.view.common;
   const standardResult = common?.standardResult;
+  const resultReason = standardResult
+    ? gameSdkResultReasonText(standardResult, locale)
+    : "";
+  const resultHighlights = standardResult
+    ? gameSdkResultHighlights(standardResult, locale)
+    : [];
+  const resultPlayLog = standardResult
+    ? gameSdkResultPlayLog(standardResult, locale)
+    : [];
   const resultShareText = room?.phase === "result" && standardResult
     ? [
-        `${title}を${common?.players.length ?? 0}人でプレイしました。`,
-        `終了理由: ${standardResult.reason}`,
+        locale === "en"
+          ? `Played ${title} with ${common?.players.length ?? 0} player(s).`
+          : `${title}を${common?.players.length ?? 0}人でプレイしました。`,
+        `${locale === "en" ? "Finished" : "終了理由"}: ${resultReason}`,
         ...standardResult.rankings.slice(0, 3).map((ranking) => (
-          `${ranking.rank}位 PLAYER${ranking.seat + 1}: ${ranking.score}pt`
+          locale === "en"
+            ? `#${ranking.rank} PLAYER${ranking.seat + 1}: ${ranking.score}pt`
+            : `${ranking.rank}位 PLAYER${ranking.seat + 1}: ${ranking.score}pt`
         )),
+        ...resultHighlights.map((highlight) => `・${highlight}`),
       ].join("\n")
     : `${title}をプレイしました。`;
   const feedbackEndpoint = creatorSlug
@@ -457,7 +483,9 @@ export function SdkPackageGameShell({
         : "mx-auto grid max-w-7xl gap-5 lg:grid-cols-[300px_minmax(0,1fr)]"}
       >
         {room.phase !== "playing" && (
-        <aside className="space-y-4">
+        <aside className={`space-y-4 ${
+          room.phase === "result" ? "order-2 lg:order-1" : "order-1"
+        }`}>
           <div className={panel}>
             <h2 className="text-lg font-black">
               {room.phase === "lobby" ? "ゲーム開始前" : room.phase === "result" ? "結果" : "プレイ中"}
@@ -487,7 +515,7 @@ export function SdkPackageGameShell({
                   Standard result
                 </p>
                 <p className="mt-2 text-sm font-semibold text-slate-600">
-                  {standardResult.reason}
+                  {resultReason}
                 </p>
                 <ol className="mt-3 space-y-2">
                   {standardResult.rankings.map((ranking) => (
@@ -503,6 +531,20 @@ export function SdkPackageGameShell({
                     </li>
                   ))}
                 </ol>
+                {resultPlayLog.length > 0 && (
+                  <div className="mt-4 border-t border-slate-200 pt-4">
+                    <p className="text-xs font-black uppercase tracking-wide text-violet-700">
+                      {locale === "en" ? "Play log" : "プレイログ"}
+                    </p>
+                    <ol className="mt-2 space-y-2 text-sm leading-6 text-slate-700">
+                      {resultPlayLog.map((line, index) => (
+                        <li key={`${index}:${line}`} className="rounded-lg bg-slate-100 px-3 py-2">
+                          {line}
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
               </div>
             )}
             {message && <p className="mt-3 text-sm font-bold text-rose-700">{message}</p>}
@@ -630,12 +672,14 @@ export function SdkPackageGameShell({
             <GameSdkFeedbackPanel
               endpoint={feedbackEndpoint}
               roomCode={room.code}
-              resultReason={standardResult?.reason ?? "result"}
+              resultReason={resultReason || "result"}
             />
           )}
         </aside>
         )}
-        <div className="min-w-0 overflow-hidden">
+        <div className={`min-w-0 overflow-hidden ${
+          room.phase === "result" ? "order-1 lg:order-2" : "order-2"
+        }`}>
           <iframe
             ref={iframeRef}
             src={runtimeUrl}

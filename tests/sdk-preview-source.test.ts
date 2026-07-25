@@ -391,6 +391,16 @@ test("formal SDK package shell owns the top banner and phase-specific common mod
   assert.match(shell, /moduleRequired\("result-share"\)/);
   assert.match(shell, /moduleRequired\("feedback"\)/);
   assert.match(shell, /GameSdkFeedbackPanel/);
+  assert.match(
+    shell,
+    /room\.phase === "result" \? "order-2 lg:order-1" : "order-1"/,
+  );
+  assert.match(
+    shell,
+    /room\.phase === "result" \? "order-1 lg:order-2" : "order-2"/,
+  );
+  assert.match(shell, /gameSdkResultReasonText\(standardResult, locale\)/);
+  assert.match(shell, /gameSdkResultPlayLog\(standardResult, locale\)/);
   for (const formalShell of [shell, approvedShell]) {
     assert.match(formalShell, /useGameSdkActiveRoomRestore/);
     assert.match(formalShell, /isRestoringRoom/);

@@ -20,6 +20,7 @@ export type GameReplaySummary = {
   playerCount: number;
   round: number;
   shareHighlights: string[];
+  localizedShareHighlights?: Partial<Record<AppLocale, string[]>>;
 };
 
 export type GameReplayScore = {
@@ -32,6 +33,8 @@ export type GenericGameReplayDetail = GameReplaySummary & {
   gameType: Exclude<GameReplayGameType, "tahoiya">;
   overview: string;
   highlights: string[];
+  localizedOverview?: Partial<Record<AppLocale, string>>;
+  localizedHighlights?: Partial<Record<AppLocale, string[]>>;
   scores: GameReplayScore[];
 };
 
@@ -130,10 +133,20 @@ export function gameReplayMetadataFor(
 }
 
 export function gameReplayShareText(
-  replay: Pick<GameReplaySummary, "gameType" | "title" | "resultLabel" | "shareHighlights">,
+  replay: Pick<
+    GameReplaySummary,
+    | "gameType"
+    | "title"
+    | "resultLabel"
+    | "shareHighlights"
+    | "localizedShareHighlights"
+  >,
+  locale: AppLocale = "ja",
 ) {
   const gameTitle = gameReplayMetadataFor(replay.gameType, replay.title).title;
-  const highlights = replay.shareHighlights.slice(0, 3).map((highlight) => `・${highlight}`);
+  const localized = replay.localizedShareHighlights?.[locale]
+    ?? replay.shareHighlights;
+  const highlights = localized.slice(0, 3).map((highlight) => `・${highlight}`);
   return [
     `${gameTitle}のプレイバック`,
     replay.title,
@@ -142,3 +155,4 @@ export function gameReplayShareText(
     "#GameFields",
   ].filter(Boolean).join("\n");
 }
+import type { AppLocale } from "./app-locale";

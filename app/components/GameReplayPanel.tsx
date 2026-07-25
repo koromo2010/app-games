@@ -119,7 +119,7 @@ export function GameReplayPanel() {
   };
 
   const openSharePreview = (replay: GameReplaySummary) => {
-    const text = gameReplayShareText(replay);
+    const text = gameReplayShareText(replay, locale);
     const game = gameReplayMetadataFor(replay.gameType, replay.title);
     const url = new URL(game.href, window.location.origin).toString();
     setMessage("");
@@ -183,9 +183,13 @@ export function GameReplayPanel() {
                   <p className="mt-1 text-[11px] text-slate-500">
                     {replay.favorite ? (en ? "Favorite · No expiry" : "お気に入り・期限なし") : en ? `Until ${formatReplayDate(replay.expiresAt, locale)}` : `${formatReplayDate(replay.expiresAt, locale)}まで`}
                   </p>
-                  {replay.shareHighlights.length > 0 && (
+                  {(replay.localizedShareHighlights?.[locale] ?? replay.shareHighlights).length > 0 && (
                     <ul className="mt-2 space-y-0.5 text-xs leading-5 text-slate-600">
-                      {(replay.gameType === "tahoiya" ? replay.shareHighlights : replay.shareHighlights.slice(0, 3)).map((highlight) => <li key={highlight}>・{highlight}</li>)}
+                      {(replay.localizedShareHighlights?.[locale]
+                        ?? (replay.gameType === "tahoiya"
+                          ? replay.shareHighlights
+                          : replay.shareHighlights.slice(0, 3)))
+                        .map((highlight) => <li key={highlight}>・{highlight}</li>)}
                     </ul>
                   )}
                 </div>
@@ -289,15 +293,17 @@ export function GameReplayPanel() {
             <>
               <div className="mt-4 rounded-lg bg-white p-3">
                 <p className="text-xs font-bold text-violet-700">試合の結果</p>
-                <p className="mt-1 text-sm font-bold leading-6 text-slate-800">{selectedReplay.overview}</p>
+                <p className="mt-1 text-sm font-bold leading-6 text-slate-800">
+                  {selectedReplay.localizedOverview?.[locale] ?? selectedReplay.overview}
+                </p>
               </div>
               <div className="mt-4">
                 <p className="text-xs font-bold text-slate-600">プレイ記録</p>
                 <div className="mt-2 space-y-2">
-                {selectedReplay.highlights.map((highlight, index) => (
+                {(selectedReplay.localizedHighlights?.[locale] ?? selectedReplay.highlights).map((highlight, index) => (
                   <p key={`${index}-${highlight}`} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm leading-6 text-slate-700">{highlight}</p>
                 ))}
-                {selectedReplay.highlights.length === 0 && <p className="rounded-lg bg-white px-3 py-2 text-sm text-slate-500">この試合には詳しい記録がありません。</p>}
+                {(selectedReplay.localizedHighlights?.[locale] ?? selectedReplay.highlights).length === 0 && <p className="rounded-lg bg-white px-3 py-2 text-sm text-slate-500">この試合には詳しい記録がありません。</p>}
                 </div>
               </div>
               <div className="mt-4">

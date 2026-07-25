@@ -122,8 +122,18 @@ try {
       throw new Error(`Starter does not route Word DB use through the content source: ${required}`);
     }
   }
+  for (const required of [
+    "presentation.reason",
+    "presentation.highlights",
+    "presentation.playLog",
+    "共有可能",
+  ]) {
+    if (!`${appRequirements}\n${moduleCatalog}\n${sdkApi}`.includes(required)) {
+      throw new Error(`Starter does not define localized safe result playback: ${required}`);
+    }
+  }
   const starterManifest = JSON.parse(readFileSync(join(starterRoot, "starter-manifest.json"), "utf8"));
-  if (starterManifest.downloadMeVersion !== 13
+  if (starterManifest.downloadMeVersion !== 14
     || starterManifest.repository !== "https://github.com/koromo2010/app-games"
     || starterManifest.ref !== platformRelease.starterRef
     || starterManifest.sdkVersion !== platformRelease.sdkPackageVersion
@@ -267,12 +277,12 @@ try {
     throw new Error("Entry guide must start with a UTF-8 BOM to prevent mojibake in browser downloads.");
   }
   for (const requiredText of [
-    "# GF-AECP/13",
+    "# GF-AECP/14",
     "HUMAN_DOCUMENTATION := false",
     `--branch ${platformRelease.starterRef}`,
     "https://github.com/koromo2010/app-games.git",
     "starter-manifest.json",
-    "downloadMeVersion == 13",
+    "downloadMeVersion == 14",
     "schema_accepts_all(C0.capabilityVector)",
     "更新ボタンを押しても既存チャットのtool schemaは差し替わりません",
     "get_sdk_handshake",
