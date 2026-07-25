@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  assertExpectedGamePackageSource,
   gamePackagePromotionSource,
+  GamePackagePromotionError,
 } from "../apps/sdk-portal/lib/game-package-promotion.ts";
 
 const candidate = {
@@ -39,4 +41,28 @@ test("stable promotion copies development revision and hashes unchanged", () => 
     ...candidate,
     developmentAppSetSha256: null,
   }, "stable"), null);
+});
+
+test("creator promotion requires the exact submitted revision and all hashes", () => {
+  const source = gamePackagePromotionSource(candidate, "development");
+  assert.ok(source);
+  const expected = {
+    revision: source.revision,
+    packageRootSha256: source.packageRootSha256,
+    serverBundleSha256: source.bundleSha256,
+    appSetSourceSha256: source.appSetSha256,
+  };
+  assert.doesNotThrow(() =>
+    assertExpectedGamePackageSource(source, expected)
+  );
+  assert.throws(
+    () => assertExpectedGamePackageSource(source, {
+      ...expected,
+      appSetSourceSha256: "0".repeat(64),
+    }),
+    (error) =>
+      error instanceof GamePackagePromotionError
+      && error.code === "promotion_expected_source_changed"
+      && error.status === 409,
+  );
 });

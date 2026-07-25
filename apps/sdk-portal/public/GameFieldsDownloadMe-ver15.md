@@ -12,18 +12,18 @@ NORMATIVE_TERMS := MUST | MUST_NOT | MAY | HALT | EMIT | CALL | ASSERT
 
 ```yaml
 release:
-  platform: "__PLATFORM_VERSION__"
+  platform: "0.1.1"
   downloadMe: 15
-  sdkPackage: "__SDK_VERSION__"
-  sdkHandshake: __SDK_HANDSHAKE_VERSION__
-  sdkContract: __SDK_CONTRACT_VERSION__
-  environment: "__SDK_ENVIRONMENT__"
+  sdkPackage: "0.1.1"
+  sdkHandshake: 1
+  sdkContract: 1
+  environment: "development"
 transport:
-  portal: "__SDK_PORTAL_BASE_URL__"
-  mcp: "__SDK_PORTAL_BASE_URL__/api/mcp"
+  portal: "https://sdk-dev.game-fields.com"
+  mcp: "https://sdk-dev.game-fields.com/api/mcp"
 starter:
   repository: "https://github.com/koromo2010/app-games"
-  ref: "__SDK_STARTER_REF__"
+  ref: "sdk-starter-dev"
   directory: "game-fields-game"
 capabilityVector:
   - oauth2-pkce
@@ -158,16 +158,16 @@ MUST_NOT request credentials in conversation.
 CALL get_sdk_handshake WITH:
 {
   "protocol": "game-fields-sdk",
-  "handshakeVersion": __SDK_HANDSHAKE_VERSION__,
+  "handshakeVersion": 1,
   "client": {
     "kind": "ai-agent",
     "name": "ChatGPT"
   },
   "expected": {
-    "environment": "__SDK_ENVIRONMENT__",
-    "platformVersion": "__PLATFORM_VERSION__",
-    "sdkPackageVersion": "__SDK_VERSION__",
-    "sdkContractVersion": __SDK_CONTRACT_VERSION__
+    "environment": "development",
+    "platformVersion": "0.1.1",
+    "sdkPackageVersion": "0.1.1",
+    "sdkContractVersion": 1
   },
   "requiredCapabilities": [
     "oauth2-pkce",
@@ -245,7 +245,7 @@ GOTO S3.
 ## S3::STARTER_ACQUISITION
 
 ```bash
-git clone --depth 1 --single-branch --branch __SDK_STARTER_REF__ https://github.com/koromo2010/app-games.git game-fields-game
+git clone --depth 1 --single-branch --branch sdk-starter-dev https://github.com/koromo2010/app-games.git game-fields-game
 cd game-fields-game
 ```
 

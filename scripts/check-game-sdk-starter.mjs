@@ -133,7 +133,7 @@ try {
     }
   }
   const starterManifest = JSON.parse(readFileSync(join(starterRoot, "starter-manifest.json"), "utf8"));
-  if (starterManifest.downloadMeVersion !== 14
+  if (starterManifest.downloadMeVersion !== 15
     || starterManifest.repository !== "https://github.com/koromo2010/app-games"
     || starterManifest.ref !== platformRelease.starterRef
     || starterManifest.sdkVersion !== platformRelease.sdkPackageVersion
@@ -277,12 +277,12 @@ try {
     throw new Error("Entry guide must start with a UTF-8 BOM to prevent mojibake in browser downloads.");
   }
   for (const requiredText of [
-    "# GF-AECP/14",
+    "# GF-AECP/15",
     "HUMAN_DOCUMENTATION := false",
     `--branch ${platformRelease.starterRef}`,
     "https://github.com/koromo2010/app-games.git",
     "starter-manifest.json",
-    "downloadMeVersion == 14",
+    "downloadMeVersion == 15",
     "schema_accepts_all(C0.capabilityVector)",
     "更新ボタンを押しても既存チャットのtool schemaは差し替わりません",
     "get_sdk_handshake",
@@ -294,6 +294,8 @@ try {
     "npm run package",
     "submission/game-fields-submission.zip",
     "publish_game_package.saved == true",
+    "CALL promote_game_package_to_development WITH",
+    "expectedPackageRootSha256",
     "previewUrl",
     "MUST_NOT substitute mock preview",
   ]) {

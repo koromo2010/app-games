@@ -39,6 +39,7 @@ const previewLinksFile = join(root, "apps/sdk-portal/lib/preview-links.ts");
 const packageManifestFile = join(root, "apps/sdk-portal/lib/game-package-manifest.ts");
 const packageGitStoreFile = join(root, "apps/sdk-portal/lib/mock-git-store.ts");
 const promotionRouteFile = join(root, "apps/sdk-portal/app/api/internal/promotions/route.ts");
+const promotionServiceFile = join(root, "apps/sdk-portal/lib/game-package-promotion-service.ts");
 const starterSourceFiles = ["src", "tests"].flatMap((directory) =>
   readdirSync(join(starterRoot, directory))
     .filter((name) => extname(name) === ".ts")
@@ -215,7 +216,10 @@ for (const token of [
     failures.push(`${relative(root, packageGitStoreFile)}: package subtreeの完全置換境界 ${token} がありません。`);
   }
 }
-const promotionRouteSource = readFileSync(promotionRouteFile, "utf8");
+const promotionRouteSource = [
+  readFileSync(promotionRouteFile, "utf8"),
+  readFileSync(promotionServiceFile, "utf8"),
+].join("\n");
 for (const token of [
   "packageRevision",
   "packageBundleSha256",

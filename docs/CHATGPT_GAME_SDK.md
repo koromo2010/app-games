@@ -25,13 +25,13 @@ npm run create-game -- sample-game "サンプルゲーム"
 
 > `app/sample-game/AGENTS.md` と `GAME_SPEC.md` を正本として、このゲームを実装してください。対象ゲームフォルダ外を変更する必要がある場合は、先に理由と変更候補を列挙してください。認証、DB、Redis、APIキーへ直接アクセスせず、既存の共通Runtimeを利用してください。最後に lint/test/build と新規ゲーム監査を実行してください。
 
-SDK利用者は、完成したゲーム固有package、manifest、テスト、権利・ライセンス情報をGame Fieldsへ提出する。SDK利用者自身が`develop`や`main`へ統合したり、本番公開したりするものではない。提出後はGame Fields運営者が審査し、採用したものだけをdevで実プレイ確認したうえで、運営者が`main`へ反映する。
+SDK利用者は、完成したゲーム固有package、manifest、テスト、権利・ライセンス情報をGame Fieldsへ提出する。SDK利用者自身がGitの`develop`や`main`へ統合したり、本番公開したりするものではない。本人所有のCandidateは、提出時のrevisionと全hashを固定した`promote_game_package_to_development`でdevelopment実プレイへ移せる。stable公開はGame Fields運営者のMFA付き審査だけが実行する。
 
 ### リポジトリを持たない試用者
 
 `npm run build:sdk-starter`で、ChatGPTへそのまま渡せる`game-fields-sdk-starter-v0.1.1.zip`を生成できる。ZIPには`@game-fields/game-sdk`のtarball、初回プロンプト、`AGENTS.md`、`GAME_SPEC.md`、APIリファレンス、AppSetと正式client、契約テスト、完走デモ、昇格診断、game package builderを含む。
 
-試用者はdevelopment Portalの`GameFieldsDownloadMe-ver14.md`を、`gameapp-dev`更新後に作成した新しいWork／Codexチャットへ単独で渡し、そこから`downloadMeVersion: 14`の`sdk-starter-dev`を取得する。既存チャットのtool schemaはプラグイン更新後も差し替わらないため、ver13以前の会話へ最新版を追加して継続しない。保存済み制作者環境は新しいチャットの`list_creator_environments`から再取得できる。DownloadMeは人間向けの説明書ではなく、AIが解釈する宣言的な実行契約とする。人間向けの導入説明はSDK Portalへ置き、DownloadMe内では状態、前提条件、禁止条件、tool呼出し、停止条件を機械的な識別子で記述する。安定版`sdk-starter`は現行npm安定版と同期させ、development候補で上書きしない。最初に仕様を相談して`GAME_SPEC.md`を確定したあと、同じフォルダ内だけを実装させる。`npm run test:sdk-starter`は別ディレクトリへの展開、同梱SDK install、型検査、契約テスト、デモ完走、提出ZIPまでを検査する。
+試用者はdevelopment Portalの`GameFieldsDownloadMe-ver15.md`を、`gameapp-dev`更新後に作成した新しいWork／Codexチャットへ単独で渡し、そこから`downloadMeVersion: 15`の`sdk-starter-dev`を取得する。既存チャットのtool schemaはプラグイン更新後も差し替わらないため、ver14以前の会話へ最新版を追加して継続しない。保存済み制作者環境は新しいチャットの`list_creator_environments`から再取得できる。DownloadMeは人間向けの説明書ではなく、AIが解釈する宣言的な実行契約とする。人間向けの導入説明はSDK Portalへ置き、DownloadMe内では状態、前提条件、禁止条件、tool呼出し、停止条件を機械的な識別子で記述する。安定版`sdk-starter`は現行npm安定版と同期させ、development候補で上書きしない。最初に仕様を相談して`GAME_SPEC.md`を確定したあと、同じフォルダ内だけを実装させる。`npm run test:sdk-starter`は別ディレクトリへの展開、同梱SDK install、型検査、契約テスト、デモ完走、提出ZIPまでを検査する。
 
 ## AIが編集してよい領域
 

@@ -19,6 +19,44 @@ export type GamePackagePromotionSource = {
   manifest: object;
 };
 
+export type ExpectedGamePackageSource = {
+  revision: string;
+  packageRootSha256: string;
+  serverBundleSha256: string;
+  appSetSourceSha256: string;
+};
+
+export class GamePackagePromotionError extends Error {
+  readonly code: string;
+  readonly status: number;
+
+  constructor(code: string, status: number) {
+    super(code);
+    this.code = code;
+    this.status = status;
+  }
+}
+
+export function assertExpectedGamePackageSource(
+  source: {
+    revision: string;
+    packageRootSha256: string;
+    bundleSha256: string;
+    appSetSha256: string;
+  },
+  expected: ExpectedGamePackageSource | undefined,
+) {
+  if (!expected) return;
+  if (
+    source.revision !== expected.revision
+    || source.packageRootSha256 !== expected.packageRootSha256
+    || source.bundleSha256 !== expected.serverBundleSha256
+    || source.appSetSha256 !== expected.appSetSourceSha256
+  ) {
+    throw new GamePackagePromotionError("promotion_expected_source_changed", 409);
+  }
+}
+
 export function gamePackagePromotionSource(
   target: GamePackagePromotionTarget,
   channel: "development" | "stable",

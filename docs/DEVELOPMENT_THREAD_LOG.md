@@ -4317,3 +4317,104 @@
 
 - `develop`へ反映後、AIことば当ての実Roomで初回復元中に作成操作が出ないこと、
   既存Roomへの自動復帰、result後の新規Room作成を人間確認する。
+
+## 2026-07-25 — AIことば当てを結果presentation契約へ移行
+
+### 利用者からの要望
+
+- AIことば当てを、共通結果Shell、多言語終了理由、安全な共有要点、本人用詳細ログを
+  持つ現行SDK契約へ移行する。
+
+### 判断
+
+- AppSetの機械判定用`reason`は安定した内部codeのまま保持し、画面・共有・履歴には
+  `presentation.reason`の日英文言を渡す。
+- `presentation.highlights`は共有して安全な最大3件、
+  `presentation.playLog`は参加者本人向けの最大50件とし、秘密語、内部player ID、
+  prompt等は含めない。
+- 旧Roomの不足fieldはclient側で空配列等へ正規化し、保存済みRoomの復元で新clientが
+  例外にならないようにする。
+- sandbox iframe内でbuttonの既定submitが伝播しない環境にも対応するため、
+  form submitを残した上で最終回答buttonの明示click handlerを追加する。
+
+### 実施結果
+
+- 協力・対戦のstandard resultへ、日英の終了理由、匿名`PLAYERn`表記の共有要点、
+  時系列プレイログを追加した。完了した最後の1手もログへ含める。
+- 旧Room viewの`history`、`targetOptions`、`revealedSecrets`等が欠損しても
+  clientが描画できる後方互換処理を追加した。
+- 正式packageをCandidate revision
+  `74e45e07fe1feb7855c2e246cdd358569e4d280c`として保存した。
+  package rootは
+  `b3b24bb5afc875a369ca79d17c859334a3ae8e183c6eb7c916836463c18c3504`、
+  AppSet SHA-256は
+  `13da5558a798c5f7421451d1d7d632ee19e69e604648b9effeade0615c6f3afc`、
+  server bundle SHA-256は
+  `a868160e762ba1e1d0663795ffbc2491ceaebb25e3bfb039f2d0741b0786a7ff`で固定した。
+
+### 検証
+
+- TypeScript build、package build、契約テスト3件が成功した。
+- 保存済みCandidateを正式Roomで復元し、最終回答buttonからRoom revisionが進み、
+  AI判定後に誤答が人間向け表示で履歴へ追加されることを確認した。
+- 20手を完走し、共通結果Shellに「手数上限に達したため終了」、履歴、共有、
+  feedbackが表示され、ゲーム固有結果に20手の推理履歴が表示されることを確認した。
+- AI生成物は生JSONではなく「ゲーム進行に使うデータを生成しました」と表示された。
+- 現Candidate由来の新規browser例外はなく、確認されたgame client例外は途中で破棄した
+  旧revisionだけに限定される。
+
+### 未対応・保留
+
+- Candidateから`development`へのhash固定昇格は未実施である。
+- 現在の制作者向け`gameapp-dev`接続はpackage提出までで昇格toolを公開していない。
+  内部promotion APIは`SDK_ACCOUNT_LINK_SECRET`によるservice署名専用であり、
+  この作業環境には署名値がない。DB直書きや秘密値の持ち出しは行わない。
+- operator用の安全なpromotion callableを追加するか、既存の署名済み運用経路から
+  上記Candidate revisionを`development`へ昇格し、同一revision／SHA-256、
+  development実Room、履歴保存、共有文を再確認する。
+
+## 2026-07-25 — 本人所有Candidateのdevelopment昇格tool
+
+### 利用者からの要望
+
+- AIことば当てのCandidate移行を続けるため、所有者確認付きの安全な昇格toolを
+  追加する。
+
+### 判断
+
+- OAuth接続した一般制作者へは、本人所有Candidateをdevelopmentへ移す権限だけを
+  提供する。stable昇格、channel解除、他制作者の操作は公開しない。
+- 昇格入力には`publish_game_package`が返したrevision、package root SHA-256、
+  server bundle SHA-256、AppSet原文SHA-256をすべて必須とする。現在のCandidateと
+  1件でも異なれば停止し、保存物を再build、変換、補正しない。
+- stable公開は従来どおり、本体管理者セッションと直近MFAからサービス署名APIを
+  呼ぶ運営経路だけに残す。
+
+### 実施結果
+
+- SDK OAuth MCPへ`promote_game_package_to_development`を追加した。
+- tool呼出し時に、OAuthのplayer IDと制作者slugの所有者を照合し、development
+  Portal以外では拒否する。
+- 共通promotion serviceへCandidate／development source選択、期待hash照合、
+  隔離Runtime manifest再検査、CAS付きpointer更新、append-only履歴記録を集約した。
+  既存のMFA付き内部promotion APIも同じserviceを使う。
+- OAuth許可画面へ正式package保存と本人Candidateのdevelopment昇格を明示し、
+  stable／本体DB／管理画面／他人環境へアクセスできないことを表示した。
+- AI実行契約をver15へ更新した。所有者が明示的に昇格を求めた場合だけ、提出応答の
+  revisionと全hashをそのままtoolへ渡し、応答の同一性を再確認する。
+
+### 検証
+
+- `npm run lint`成功。
+- `npm test`全532件成功。
+- 本体、SDK Portal、隔離Previewのproduction build成功。
+- `npm run test:sdk-starter`成功。ver15入口、公開Git用snapshot、ZIP展開、
+  同梱SDK install、型検査、契約テスト、1ゲーム完走、提出ZIPを確認した。
+- source回帰テストで本人所有確認、development環境限定、全hash必須、
+  stable tool非公開を固定した。
+
+### 未対応・保留
+
+- `develop`へ反映し、SDK Portal deployment完了後に新toolを再取得する。
+- AIことば当てCandidate revision `74e45e07fe1feb7855c2e246cdd358569e4d280c`
+  を同一hashのままdevelopmentへ昇格し、development実Roomを確認する。

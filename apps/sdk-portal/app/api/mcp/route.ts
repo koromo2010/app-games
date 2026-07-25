@@ -11,10 +11,12 @@ import {
 } from "@/lib/instance-registry";
 import { saveMockFilesToGit } from "@/lib/mock-git-store";
 import { saveCreatorGamePackage } from "@/lib/game-package-store";
+import { promoteGamePackage } from "@/lib/game-package-promotion-service";
 import { parseSdkMockPreviewManifest } from "@/lib/mock-preview-manifest";
 import {
   createSdkPortalHandshakeDescriptor,
   negotiateSdkPortalHandshake,
+  sdkPortalEnvironment,
 } from "@/lib/sdk-handshake";
 import { ensureSdkSchema, sdkSql } from "@/lib/sdk-postgres";
 import platformRelease from "../../../../../config/platform-release.json";
@@ -53,6 +55,7 @@ const tools = [
   { name: "publish_mock", title: "ゲームモックの保存", description: "本人所有のSDK環境へ検査済みゲームモックを保存し、制作者トップURLと今回のゲームURLを返します。saved=trueとcreatorUrlが返るまで完成扱いにしないでください。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "本人所有の制作者URL名" }, gameId: { type: "string", description: "ゲームID" }, title: { type: "string", description: "ゲーム名" }, description: { type: "string", description: "ゲームの説明" }, files: { type: "object", description: "mock/直下を基準とする相対パスをキー、UTF-8本文を値とするファイル一覧。index.html、styles.css、mock.js、制限時間を含むsettings宣言付きpreview.jsonを必ず含めます。", additionalProperties: { type: "string" } } }, required: ["slug", "gameId", "title", "files"], additionalProperties: false } },
   { name: "get_game_module_requirements", title: "確定済み必須モジュール取得", description: "モック承認後、AppSet実装を始める直前に、今回必ず使用するrequiredModuleIdsと、各moduleの提供方式・公開import・API契約を取得します。返された一覧と契約を省略しないでください。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "本人所有の制作者URL名" }, gameId: { type: "string", description: "ゲームID" } }, required: ["slug", "gameId"], additionalProperties: false } },
   { name: "publish_game_package", title: "正式ゲームパッケージの提出", description: "検査済みのクライアントとAppSetを同じ不変revisionとして保存します。Platform側でAppSet原文とserver bundleのSHA-256を再計算し、返された値を昇格時の正本にします。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "本人所有の制作者URL名" }, gameId: { type: "string", description: "ゲームID" }, files: { type: "array", description: "npm run build:game-packageで作ったpackage/の全ファイル。UTF-8またはbase64本文を指定します。", items: { type: "object", properties: { path: { type: "string" }, content: { type: "string" }, encoding: { type: "string", enum: ["utf-8", "base64"] } }, required: ["path", "content", "encoding"], additionalProperties: false }, maxItems: 128 } }, required: ["slug", "gameId", "files"], additionalProperties: false } },
+  { name: "promote_game_package_to_development", title: "Candidateをdevelopmentへ昇格", description: "ログイン中の本人が所有するCandidateを、提出時に返されたrevisionと3つのSHA-256がすべて一致する場合だけdevelopmentへ昇格します。AppSet・server bundle・manifestは再build、変換、補正せず、同じ不変revisionを使います。stable公開はこのtoolではできません。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "本人所有の制作者URL名" }, gameId: { type: "string", description: "CandidateのゲームID" }, publicGameId: { type: "string", description: "development catalogで使う公開ゲームID" }, expectedRevision: { type: "string", pattern: "^[a-f0-9]{40}$", description: "publish_game_packageが返したpackageRevision" }, expectedPackageRootSha256: { type: "string", pattern: "^[a-f0-9]{64}$", description: "publish_game_packageが返したpackageRootSha256" }, expectedServerBundleSha256: { type: "string", pattern: "^[a-f0-9]{64}$", description: "publish_game_packageが返したserverBundleSha256" }, expectedAppSetSourceSha256: { type: "string", pattern: "^[a-f0-9]{64}$", description: "publish_game_packageが返したappSetSourceSha256" } }, required: ["slug", "gameId", "publicGameId", "expectedRevision", "expectedPackageRootSha256", "expectedServerBundleSha256", "expectedAppSetSourceSha256"], additionalProperties: false } },
 ];
 
 const SUPPORTED_PROTOCOL_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"] as const;
@@ -114,8 +117,7 @@ async function callTool(name: string, args: Record<string, unknown>, playerId: s
     return textResult({ saved: true, gameId, mockRevision: revision, creatorUrl, gameUrl, previewUrl: gameUrl });
   }
   if (name === "get_game_module_requirements") {
-    const creator = await authenticateCreatorOwner(slug, playerId);
-    if (!creator) {
+    if (!await authenticateCreatorOwner(slug, playerId)) {
       throw new Error(
         "この制作者URLは現在のアカウントに属していません。",
       );
@@ -167,6 +169,52 @@ async function callTool(name: string, args: Record<string, unknown>, playerId: s
         "AppSet原文とserver bundleはこのrevisionとSHA-256で固定されました。修正が必要な場合は別revisionとして再提出してください。",
     });
   }
+  if (name === "promote_game_package_to_development") {
+    if (sdkPortalEnvironment(origin) !== "development") {
+      throw new Error("DEVELOPMENT_PROMOTION_ENVIRONMENT_REQUIRED");
+    }
+    if (!await authenticateCreatorOwner(slug, playerId)) {
+      throw new Error("この制作者URLは現在のアカウントに属していません。");
+    }
+    const gameId = typeof args.gameId === "string"
+      ? args.gameId.trim().toLowerCase()
+      : "";
+    const publicGameId = typeof args.publicGameId === "string"
+      ? args.publicGameId.trim().toLowerCase()
+      : "";
+    if (!GAME_PATTERN.test(gameId) || !GAME_PATTERN.test(publicGameId)) {
+      throw new Error("ゲームIDが不正です。");
+    }
+    const result = await promoteGamePackage({
+      creatorSlug: slug,
+      gameId,
+      publicGameId,
+      channel: "development",
+      expectedSource: {
+        revision: typeof args.expectedRevision === "string"
+          ? args.expectedRevision
+          : "",
+        packageRootSha256:
+          typeof args.expectedPackageRootSha256 === "string"
+            ? args.expectedPackageRootSha256
+            : "",
+        serverBundleSha256:
+          typeof args.expectedServerBundleSha256 === "string"
+            ? args.expectedServerBundleSha256
+            : "",
+        appSetSourceSha256:
+          typeof args.expectedAppSetSourceSha256 === "string"
+            ? args.expectedAppSetSourceSha256
+            : "",
+      },
+    });
+    return textResult({
+      ...result,
+      immutableAppSet: true,
+      instruction:
+        "Candidateと同一のrevision・SHA-256をdevelopmentへ昇格しました。stable公開には運営者のMFA付き審査が必要です。",
+    });
+  }
   throw new Error("Unknown tool");
 }
 
@@ -183,7 +231,7 @@ export async function POST(request: Request) {
   if (body.method === "tools/list") return rpc(body.id, { tools });
   if (body.method === "tools/call") {
     const name = typeof body.params?.name === "string" ? body.params.name : "";
-    if ((name === "publish_mock" || name === "publish_game_package") && !auth.scope.split(" ").includes("sdk:mock")) return rpcError(body.id, -32001, "Insufficient scope", 403);
+    if ((name === "publish_mock" || name === "publish_game_package" || name === "promote_game_package_to_development") && !auth.scope.split(" ").includes("sdk:mock")) return rpcError(body.id, -32001, "Insufficient scope", 403);
     const args = body.params?.arguments && typeof body.params.arguments === "object" ? body.params.arguments as Record<string, unknown> : {};
     try { return rpc(body.id, await callTool(name, args, auth.playerId, base)); }
     catch (error) { return rpc(body.id, { content: [{ type: "text", text: error instanceof Error ? error.message : "SDK操作に失敗しました。" }], isError: true }); }
