@@ -1,125 +1,39 @@
-﻿# App Games
+# App Games / Game Fields
 
-Party game prototypes built with Next.js.
+オンラインゲーム本体、共通ゲーム基盤、外部ゲーム制作向けSDKを開発するリポジトリです。
 
-> AI・別スレッドで開発を再開する場合は、最初に [`docs/README.md`](./docs/README.md) の資料ナビを開いてください。必読資料、作業別の参照先、バグ調査の確認順をまとめています。
+## 最初に確認する文書
 
-## Routes
+### 現在の実態
 
-- `/games` - game lobby
-- `/admin` - password-protected site settings for the site name, search title/description, and favicon
-- `/users/me` - signed-in player's private stats, replay, favorites, and sharing page
-- `/wordwolf` - Wordwolf prototype
-- `/tahoiya` - Tahoiya prototype
-- `/northern-branch` - Private-use online Northern Branch room game for logged-in players (requires `PRIVATE_GAME_ACCESS_KEY`)
-- `/word-scale` - Private-use online room game for logged-in players (requires `PRIVATE_GAME_ACCESS_KEY`)
-- `/word-sonar` - Online word deduction room game for logged-in players (legacy `/kotoba-senpuku` redirects here)
-- `/kotoba-de-kazu-narabe` and `/hodoai-talk` - Redirect to `/word-scale`
-- `/word-out` - Word Out: private online 2-6 player room game with configurable cards and association groups, plus one undealt word (`/nigoichi` redirects here)
-- `/games/code-intercept` - Private 4-12 player team prototype with fixed or per-round team-selected code lengths
-- `/daifugo` - Online Daifugo for 3–6 players, with CPU practice at `/daifugo/practice`
-- `/canvas` - Private drawing-canvas UI prototype with mouse, touch, pen, undo, erase, local save, and same-browser tab sync
+[`docs/CURRENT_STATE.md`](./docs/CURRENT_STATE.md)
 
-## Private game access
+現在実装・運用されている機能、主要ルート、共通基盤、環境設定の概要を記録します。
+「いま何が動くか」を確認するときはこちらを正本として扱います。
 
-Set the server-side environment variable `PRIVATE_GAME_ACCESS_KEY`. Entering the same value in the unlabeled access field on the game lobby reveals private-use game cards and issues a 30-day HttpOnly access cookie.
+### 今後の構想
 
-## Site administration
+[`docs/FUTURE_PLAN.md`](./docs/FUTURE_PLAN.md)
 
-Set the server-only `SITE_ADMIN_PASSWORD`, then open `/admin`. When it is not configured, the existing `DEBUG_MODE_PASSWORD` is accepted as a compatibility fallback. The management screen stores the site name, homepage search title, search-description candidate, and uploaded favicon in Redis/Vercel Blob. The admin session uses a separate signed HttpOnly cookie and expires after 12 hours. Search engines may rewrite the displayed snippet for a particular query.
+未実装、検討中、段階導入中の構想を記録します。
+この文書にある内容を実装済みとして扱わないでください。
 
-## Shared game LLM gateway
+### 開発資料ナビ
 
-All games must access AI providers through `lib/game-llm.ts`. New games should not call OpenAI, Gemini, or Groq directly.
+[`docs/README.md`](./docs/README.md)
 
-The shared provider order is:
+作業内容ごとの正本、確認順、バグ調査手順をまとめています。別スレッドや別担当者が開発を再開する場合は、ここから開始してください。
 
-1. Personal mode first attempt: the provider selected by the player (OpenAI, Gemini, or Groq)
-2. Game Fields paid mode: OpenAI using the app's `SHARED_OPENAI_API_KEY` (legacy fallback: `OPENAI_API_KEY`)
-3. Provider fallback: Gemini (`SHARED_GEMINI_API_KEY`) and Groq (`SHARED_GROQ_API_KEY`), with legacy-name fallbacks
-4. Final fallback: local game data with a user-visible notice
+## 文書の原則
 
-Provider model IDs are centralized in `lib/llm-model.ts`.
+- `CURRENT_STATE.md` は現在の実態を記録する
+- `FUTURE_PLAN.md` は未実装の構想を記録する
+- 実装と検証が完了した構想は、将来文書に残したままにせず現行文書へ移す
+- READMEの記述だけで実装済みと判断せず、関連コード・設定・テストも確認する
+- 仕様変更時は新規コードだけでなく、既存コードへのバックフィル対象も確認する
+- 文書と実装が食い違う場合は、片方を黙って正しいものとして扱わず差分を明示する
 
-Provider failover runs only inside the shared gateway. Game routes must not repeat the provider chain. Topic generation is cached per room and round so duplicate clicks or tabs reuse the same result instead of spending another LLM request.
-
-Client requests that can invoke the shared LLM gateway use `lib/ai-activity-client.ts`. While one or more requests are active, the shared `GameTopBanner` vital indicator glows and identifies AI API activity. Concurrent requests keep the indicator active until all requests finish.
-
-Quality-critical tasks may pass `quality: "high"` to the shared gateway. Tahoiya topic generation uses high reasoning to create three candidates, then prefers a different provider for independent review and records both the generating and reviewing providers in `GameGenerationMeta`.
-
-## Paid API access
-
-The shared access panel separates personal provider access from Game Fields-provided paid access:
-
-- Personal API: the player selects OpenAI, Google Gemini, or Groq and supplies a key issued by that provider. Billing and free-tier limits belong to the selected provider.
-- Game Fields API: the app uses its own `SHARED_OPENAI_API_KEY` (or the legacy `OPENAI_API_KEY` during migration). It currently uses an invite/test password and is designed so that authorization can later be replaced by a purchase or credit entitlement.
-
-Personal keys are validated server-side against the active provider model, never stored in Redis, player accounts, logs, or localStorage, and are retained for at most eight hours in an AES-256-GCM encrypted HttpOnly cookie. A server-only `LLM_SESSION_SECRET` of at least 32 characters is recommended; until it is configured, the existing server-only access password and shared OpenAI key are combined to derive the encryption secret. Players should create a game-specific key with permissions and spend controls where the provider supports them.
-
-Player login is also backed by a signed, 30-day HttpOnly cookie. Configure a server-only `PLAYER_SESSION_SECRET` of at least 32 characters; a sufficiently long `LLM_SESSION_SECRET` is used only as a compatibility fallback. Multiplayer APIs derive the acting player from this cookie instead of trusting IDs in request bodies.
-
-State-changing APIs use shared Redis-backed rate limits for IP, player, and normalized identity buckets. Bucket subjects are HMAC-obscured; set an optional server-only `RATE_LIMIT_HASH_SECRET` (32+ characters recommended), or the player session secret is reused.
-
-## Shared feedback and RAG
-
-AI output feedback is shared infrastructure for every game:
-
-- Store and retrieve feedback through `app/api/game-feedback/route.ts` and `lib/game-feedback-store.ts`.
-- Attach `GameGenerationMeta` from `lib/game-ai-types.ts` to generated game data. It records the provider, model, personal/paid/free/local mode, prompt version, latency, and feedback examples used for that generation.
-- Render per-player Good/Bad feedback with `app/components/GameFeedbackPanel.tsx`. A player can update their feedback for the same generated artifact.
-- Before calling `generateGameLlmText`, retrieve relevant examples and add the result of `formatGameFeedbackContext` to the prompt.
-
-The first retrieval implementation uses Redis indexes plus game/task/settings tags. The stored schema also keeps stable feedback IDs and generation metadata so retrieval can later move to embeddings/vector search without replacing the UI or provider gateway.
-
-## Shared room UI
-
-Every multiplayer game must expose the current room configuration to all participants, while only the host can change it. New games should render configuration values with `app/components/RoomConfigSummary.tsx` so clients can verify the rules before play starts and while the room is active.
-
-Online room lifecycle controls use `app/components/OnlineRoomLifecycleActions.tsx`. It is the shared phase policy for room actions: lobby shows host dissolve, active play shows no room lifecycle actions, and final results show return-to-room, return-to-lobby, and host dissolve through `RoomResultActions`.
-
-Every game must provide a debug mode and place `app/components/DebugModeButton.tsx` directly in its top bar for the host. All interactive debug controls live in the shared non-modal in-page window: dummy participants, viewer/phase switching, abnormal-state reproduction, unattended dummy progression, replay recording, and aborting the active game back to the same room's pre-game state without removing participants. On desktop the window can be moved, resized, and minimized while the game remains interactive; clicking or tapping outside the window minimizes it without consuming the underlying game action. Compact screens keep it inside the viewport as a fixed panel. A game that uses a word/topic database may opt into the dedicated `wordGenerationTools` slot; games without that capability do not show a word-generation test. Debug previews may update their dedicated candidate database when that is the feature under test, but they must not start a game or change the room, round, or played-word history. Debug controls are available when the player's email ownership has been confirmed and the verified recovery email matches an account registered in the site administration screen, or when an administrator explicitly grants access to that player ID. The shared `/api/debug-auth` check and mutation APIs enforce the same rule; players cannot grant the permission to themselves. Recovery-email registration and changes live on `/users/me`, not in the game catalog.
-
-Room configuration defaults are stored per game and per player in Redis, with local storage as an offline fallback. New games should use `lib/game-room-defaults-client.ts` for loading and saving, and add their server-side normalizer to `lib/room-defaults-store.ts`.
-
-Every game must declare its time-limit policy in `config/game-registry.json`. Multiplayer games use the shared presets, manual seconds input, and normalizer in `lib/game-room-config.ts` and `app/components/RoomTimeLimitControl.tsx`; `0` always means no limit. Each game keeps its timeout transition on the server and declares its saved fields and expiry handler so `npm run lint` rejects a new game with missing timer support. A non-game utility may opt out only with an explicit reason.
-
-Tahoiya gameplay mutations are revisioned server actions. The server rejects stale phase rollback, reapplies concurrent submissions with compare-and-set, and decides completion or timeout transitions without depending on the host browser.
-
-All online games route room queries and mutations through `lib/online-room-api-client.ts` and a game-specific typed adapter. Visible-tab synchronization and cross-tab refresh use `app/hooks/use-online-room-polling.ts`; game screens must not duplicate room URLs, HTTP methods, or interval/listener setup. Preview and local development use revision-only WebSocket notifications: normal polling stops after subscription, a 45-second reconciliation remains, and disconnects immediately fall back to polling while reconnecting with backoff. Production keeps WebSocket disabled unless explicitly enabled. Result ordering shared by UI, external share text, and replay storage should be projected once through `lib/game-result-presentation.ts`.
-
-Approved SDK games use `@game-fields/game-sdk/client-runtime` for the same lifecycle: create/read/Command, active-room restoration, paged lobby listing, host dissolution, and revision-only watching. SDK clients never send actor identity; the signed player session remains the server-side source of truth, and every revision notification is reconciled through an authoritative viewer-specific HTTP read.
-
-Future advertising uses the provider-neutral `app/components/GameAdSlot.tsx`. Slots exist only on the game catalog, pre-entry, room lobby, and result surfaces; active play and debug rooms do not show ads. Advertising is off by default. Set `NEXT_PUBLIC_GAME_ADS_MODE=preview` only to inspect reserved layout space. Do not use `live` until a consent flow, provider adapter, CSP rules, and production policy review are complete.
-
-## Vocabulary sources
-
-The curated Tahoiya seed catalog uses or references terminology from the following open vocabulary sources. Definitions stored by Game Fields are short game-oriented paraphrases, not reproduced dictionary entries.
-
-- [JMdict/EDICT](https://www.edrdg.org/wiki/index.php/JMdict-EDICT_Dictionary_Project), Electronic Dictionary Research and Development Group, licensed under [CC BY-SA 4.0](https://www.edrdg.org/edrdg/licence.html).
-- [Medical Subject Headings (MeSH)](https://meshb.nlm.nih.gov/), courtesy of the U.S. National Library of Medicine, under the [NLM data terms and conditions](https://www.nlm.nih.gov/databases/download/terms_and_conditions.html).
-- [Getty Vocabularies / Art & Architecture Thesaurus](https://www.getty.edu/research/tools/vocabularies/), J. Paul Getty Trust, licensed under ODC-By 1.0. Contributor and record-level sources should also be retained when bulk ingestion is added.
-- [National Diet Library](https://www.ndl.go.jp/), used as a historical-material discovery reference under the applicable [content reuse terms](https://www.ndl.go.jp/use/reproduction).
-
-### Tahoiya candidate generation
-
-Tahoiya candidates are generated separately from gameplay. The manual GitHub Actions workflow
-`Generate Tahoiya candidate catalog` randomly chooses 10 distinct sources from the configured
-20-source registry, collects one unseen heading from each, and reviews all 10 in one LLM request.
-Accepted words are appended to `data/tahoiya-candidates.json`; reruns continue from the existing
-catalog until the requested total (100 for the first run) is reached. After checking quality and API
-cost, the same workflow can continue the catalog toward 1000. The deployed app imports only new
-JSON records into Redis with `HSETNX`, so existing per-player usage history is preserved.
-
-Before running the workflow, add `OPENAI_API_KEY` under GitHub repository Settings → Secrets and
-variables → Actions. An optional Actions variable `TAHOIYA_GENERATOR_MODEL` selects the review model;
-when omitted, the script uses `gpt-5.6-sol`. The generation job uses the configured paid API and may
-take several hours. Gameplay does not call these external vocabulary sources. It screens batches of
-10 previously unjudged words from the shared database, persists the estimated recognition rate and
-exclusion flags, and classifies `0-1%` as 魔境 and `>1%-14%` as 秘境. Only the selected word receives
-a generated and verified reading and correct-definition sentence; the other screening results remain
-available for later rounds.
-
-## Development
+## 開発コマンド
 
 ```bash
 npm install
@@ -134,16 +48,10 @@ npm run build:sdk-starter
 npm run test:sdk-starter
 ```
 
-## Password recovery email
+## 主要な正本
 
-Player accounts may optionally register a recovery email address. New accounts can request it during registration, and existing accounts can request an addition or change after confirming the current password. The address is not registered until the recipient opens the one-hour confirmation link and explicitly approves it. Only verified addresses can receive password-reset links or trigger administrator-email debug access. Existing addresses created before this verification flow are migrated to unverified status; My Page shows a masked hint and lets their owners resend a confirmation after entering the current password.
-
-Signed-in players can also change their password from My Page. The server requires both the signed player session and the current password before accepting a different new password. The repeated new-password field is a client-side typo check and is not used as identity verification.
-
-Configure these server-side environment variables:
-
-- `SHARED_RESEND_API_KEY` (legacy fallback: `RESEND_API_KEY`)
-- `EMAIL_FROM` (optional; defaults to `Game Fields <noreply@game-fields.com>`)
-- `APP_BASE_URL` (recommended; `https://game-fields.com` in production)
-
-Verify `game-fields.com` in Resend before using the default sender. Never expose the Resend API key to the browser.
+- 現在の開発状態: [`docs/DEVELOPMENT_HANDOFF.md`](./docs/DEVELOPMENT_HANDOFF.md)
+- 未修正事項: [`docs/KNOWN_ISSUES.md`](./docs/KNOWN_ISSUES.md)
+- 環境変数台帳: [`docs/ENVIRONMENT_VARIABLES.md`](./docs/ENVIRONMENT_VARIABLES.md)
+- ゲーム登録: [`config/game-registry.json`](./config/game-registry.json)
+- 長期構想: [`docs/PLATFORM_VISION.md`](./docs/PLATFORM_VISION.md)
