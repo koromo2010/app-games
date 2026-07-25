@@ -4137,3 +4137,33 @@
 - Link後にdry-runで一意分類347件・不足0件を確認し、共通DBへ冪等適用する。
 - 適用後に一時変数を削除し、easy抽選で「度者」が対象外かつ審査済み語だけに
   なることをSDK、ワードアウト、コードインターセプトで確認する。
+
+## 2026-07-25 — 旧分類DBの読取権限不足で再停止
+
+### 利用者による外部設定
+
+- `app-games-dev`のProductionへ`LEGACY_WORD_DATABASE_URL`をProject Variable・
+  Sensitiveとして登録した。
+
+### 実施結果
+
+- dry-run専用build hookを一時的に`develop`へ反映し、新しい環境変数を読み込む
+  Production Deploymentを作成した。
+- 旧DBへの接続と`shared_word_catalog`の存在確認は通ったが、
+  `vocabulary_migration_reader`による`shared_word_pool_evaluations`の読取が
+  PostgreSQL `42501`で拒否された。
+- dry-runは旧分類の取得中に停止しており、共通Word DBへの書込みは行っていない。
+- 一時build hookを撤去し、`develop`を通常buildへ戻す。
+
+### 検証
+
+- hook反映前に`npm run lint`、全525テスト、`npm run build`が成功した。
+- Vercel build logで対象commit、`app-games-dev/develop`、権限不足の対象表と
+  PostgreSQLコードを確認した。接続文字列や秘密値は記録していない。
+
+### 未対応・保留
+
+- `app-games-neon/main/neondb`で`vocabulary_migration_reader`へ
+  `shared_word_catalog`と`shared_word_pool_evaluations`の`SELECT`を付与する。
+- 付与後にdry-runを再実行し、一意分類347件・不足0件の場合だけapplyする。
+- 移行完了後に`LEGACY_WORD_DATABASE_URL`と一時読取権限を削除する。
