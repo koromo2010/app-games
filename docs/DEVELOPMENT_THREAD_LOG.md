@@ -3958,3 +3958,51 @@
   ver11 URLの転送、自由文字列schema、`sdk-starter-dev` ver12を実機確認する。
 - 更新後に作成した新しいWork／Codexチャットでver12を単独添付し、
   保存済み制作者環境の再取得から制作を再開できることを正式E2Eで確認する。
+
+## 2026-07-25 — DownloadMe ver12のdevelop公開
+
+### 利用者からの要望
+
+- ローカルcommit `8367bf1`の旧ChatGPT tool schema再発防止と
+  DownloadMe ver12変更を`koromo2010/app-games`の`develop`へpushする。
+
+### 実施結果
+
+- ローカル`8367bf1`と同じtree
+  `23c549929140a7e1862af9da86fa021c2e6c8ed3`をGitHub commit
+  `ed27ec8ae8fb5824bde610afb707dfc2d42b1898`として`develop`へ
+  fast-forwardした。force更新は使用していない。
+- development Starter 38ファイルをtree
+  `2c455eb43f6092e59258f394d76608a8f7be51ba`、commit
+  `ceda501bf1aa3c52a106f7ec4d68151be440c11d`として
+  `sdk-starter-dev`へfast-forwardした。
+- 公開Starter manifestはDownloadMe ver12、Platform／Starter／SDK 0.1.1、
+  handshake／contract 1、ref `sdk-starter-dev`である。
+- stableの`sdk-starter`はver9／SDK 0.1.0のまま変更していない。
+  `main`とnpm packageも変更していない。
+
+### 検証
+
+- `develop`のGitHub commitから起動した`app-games-dev`、
+  `app-games-sdk-dev`、`app-games-preview-dev`の3 Deploymentは
+  すべて`READY`になり、commit `ed27ec8`を取得している。
+- `https://sdk-dev.game-fields.com/GameFieldsDownloadMe-ver12.md`は
+  HTTP 200で、配信内容のSHA-256
+  `692a561b49f6139ee4eeb6fb2839af37f26c00826ac5b373130b52bd1a3c8476`が
+  commit内ファイルと一致した。
+- 旧`GameFieldsDownloadMe-ver11.md`はHTTP 307でver12へ転送された。
+  公開`/api/health`は`status: ok`、`schemaVersion: 3`を返した。
+- live `gameapp-dev`でPlatform／SDK 0.1.1、7 capabilities、
+  `accepted: true`を確認した。
+- `sdk-starter-dev`更新を検出した6 Vercel Projectはすべて
+  branch guardにより`CANCELED`となり、不要buildは実行されなかった。
+
+### 関連コミット
+
+- `ed27ec8` — DownloadMe ver12と旧schema再発防止を`develop`へ反映。
+- `ceda501` — development Starterをver12へ更新。
+
+### 未対応・保留
+
+- プラグイン更新後に作成した新しいWork／Codexチャットへver12だけを添付し、
+  保存済み制作者環境の再取得からCandidate提出まで正式E2Eを行う。
