@@ -10,6 +10,13 @@ if (!isDevelopmentAppBuild) {
 }
 
 const apply = process.argv.includes("--apply");
+const childEnvironment = { ...process.env };
+let sourceMode = "LEGACY_WORD_DATABASE_URL";
+if (!childEnvironment.LEGACY_WORD_DATABASE_URL?.trim() && childEnvironment.DATABASE_URL?.trim()) {
+  childEnvironment.LEGACY_WORD_DATABASE_URL = childEnvironment.DATABASE_URL;
+  sourceMode = "DATABASE_URL compatibility fallback";
+}
+process.stdout.write(`[general-game-classification] source=${sourceMode}\n`);
 const args = [
   "--experimental-strip-types",
   "scripts/import-legacy-general-game-classifications.ts",
@@ -17,7 +24,7 @@ const args = [
 ];
 const result = spawnSync(process.execPath, args, {
   cwd: process.cwd(),
-  env: process.env,
+  env: childEnvironment,
   stdio: "inherit",
 });
 

@@ -13,9 +13,8 @@ const targetUrl = sharedEnvironmentVariable("VOCABULARY_ADMIN_DATABASE_URL");
 const apply = process.argv.includes("--apply");
 const importedReason = "legacy standard-game classification import";
 
-if (!sourceUrl || !targetUrl) {
-  throw new Error("LEGACY_WORD_DATABASE_URL and VOCABULARY_ADMIN_DATABASE_URL are required");
-}
+if (!sourceUrl) throw new Error("LEGACY_WORD_DATABASE_URL is required");
+if (!targetUrl) throw new Error("VOCABULARY_ADMIN_DATABASE_URL is required");
 if (sourceUrl === targetUrl) throw new Error("SOURCE_AND_TARGET_DATABASE_MUST_DIFFER");
 
 const source = neon(sourceUrl);
