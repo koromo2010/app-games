@@ -78,16 +78,68 @@ const matchRows = await target`
       reading text,
       difficulty text
     )
+  ), match_stats AS (
+    SELECT
+      incoming."wordMasterId",
+      (
+        SELECT COUNT(*)::integer
+        FROM words word
+        WHERE word.normalized_surface = incoming."normalizedSurface"
+          AND COALESCE(word.reading, '') = incoming.reading
+          AND word.status = 'active'
+      ) AS exact_active_matches,
+      (
+        SELECT COUNT(*)::integer
+        FROM words word
+        WHERE word.normalized_surface = incoming."normalizedSurface"
+          AND COALESCE(word.reading, '') = incoming.reading
+      ) AS exact_all_status_matches,
+      (
+        SELECT COUNT(*)::integer
+        FROM words word
+        WHERE word.source_reference =
+          ('legacy-shared-word-catalog:' || incoming."wordMasterId"::text)
+          AND word.status = 'active'
+      ) AS source_reference_matches,
+      (
+        SELECT COUNT(*)::integer
+        FROM words word
+        WHERE word.normalized_surface = incoming."normalizedSurface"
+          AND word.status = 'active'
+      ) AS surface_active_matches
+    FROM incoming
   )
   SELECT
     COUNT(*)::bigint AS source_count,
-    COUNT(word.id)::bigint AS matched_count
-  FROM incoming
-  LEFT JOIN words word
-    ON word.normalized_surface = incoming."normalizedSurface"
-    AND COALESCE(word.reading, '') = incoming.reading
-    AND word.status = 'active'
-` as Array<{ source_count: string; matched_count: string }>;
+    COUNT(*) FILTER (WHERE exact_active_matches = 1)::bigint AS matched_count,
+    COUNT(*) FILTER (
+      WHERE exact_active_matches = 0 AND exact_all_status_matches > 0
+    )::bigint AS inactive_exact_count,
+    COUNT(*) FILTER (
+      WHERE exact_active_matches = 0 AND source_reference_matches = 1
+    )::bigint AS source_reference_only_count,
+    COUNT(*) FILTER (
+      WHERE exact_active_matches = 0 AND surface_active_matches = 1
+    )::bigint AS unique_surface_only_count,
+    COUNT(*) FILTER (
+      WHERE exact_active_matches = 0 AND surface_active_matches > 1
+    )::bigint AS ambiguous_surface_count,
+    COUNT(*) FILTER (
+      WHERE exact_active_matches = 0
+        AND exact_all_status_matches = 0
+        AND source_reference_matches = 0
+        AND surface_active_matches = 0
+    )::bigint AS absent_surface_count
+  FROM match_stats
+` as Array<{
+  source_count: string;
+  matched_count: string;
+  inactive_exact_count: string;
+  source_reference_only_count: string;
+  unique_surface_only_count: string;
+  ambiguous_surface_count: string;
+  absent_surface_count: string;
+}>;
 
 const sourceCount = Number(matchRows[0]?.source_count ?? 0);
 const matchedCount = Number(matchRows[0]?.matched_count ?? 0);
@@ -106,6 +158,13 @@ if (!apply) {
     matchedTargetWords: matchedCount,
     missingTargetWords: sourceCount - matchedCount,
     byDifficulty,
+    matchDiagnostics: {
+      inactiveExact: Number(matchRows[0]?.inactive_exact_count ?? 0),
+      sourceReferenceOnly: Number(matchRows[0]?.source_reference_only_count ?? 0),
+      uniqueSurfaceOnly: Number(matchRows[0]?.unique_surface_only_count ?? 0),
+      ambiguousSurface: Number(matchRows[0]?.ambiguous_surface_count ?? 0),
+      absentSurface: Number(matchRows[0]?.absent_surface_count ?? 0),
+    },
     next: "Re-run with --apply only after missingTargetWords is zero.",
   }) + "\n");
   process.exit(0);
