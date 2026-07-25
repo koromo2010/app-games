@@ -1,4 +1,4 @@
-import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { neon } from "@neondatabase/serverless";
 import {
   generalGameWordDifficultyTags,
   generalGameWordPoolFlag,
@@ -8,56 +8,38 @@ import {
 } from "../lib/general-game-word-classification.ts";
 import { sharedEnvironmentVariable } from "../lib/shared-environment.ts";
 
+const sourceUrl = process.env.LEGACY_WORD_DATABASE_URL?.trim();
 const targetUrl = sharedEnvironmentVariable("VOCABULARY_ADMIN_DATABASE_URL");
 const apply = process.argv.includes("--apply");
 const importedReason = "legacy standard-game classification import";
 
-if (!targetUrl) throw new Error("VOCABULARY_ADMIN_DATABASE_URL is required");
+if (!sourceUrl || !targetUrl) {
+  throw new Error("LEGACY_WORD_DATABASE_URL and VOCABULARY_ADMIN_DATABASE_URL are required");
+}
+if (sourceUrl === targetUrl) throw new Error("SOURCE_AND_TARGET_DATABASE_MUST_DIFFER");
 
+const source = neon(sourceUrl);
 const target = neon(targetUrl);
 
-const sourceCandidates = [
-  ["LEGACY_WORD_DATABASE_URL", process.env.LEGACY_WORD_DATABASE_URL],
-  ["database_DATABASE_URL", process.env.database_DATABASE_URL],
-  ["DATABASE_URL", process.env.DATABASE_URL],
-  ["POSTGRES_PRISMA_URL", process.env.POSTGRES_PRISMA_URL],
-  ["POSTGRES_URL", process.env.POSTGRES_URL],
-  ["APP_DATABASE_URL", process.env.APP_DATABASE_URL],
-  ["NEON_DATABASE_URL", process.env.NEON_DATABASE_URL],
-] as const;
-
-let source: NeonQueryFunction<false, false> | null = null;
-let sourceName = "";
-const visitedUrls = new Set<string>();
-for (const [candidateName, rawCandidateUrl] of sourceCandidates) {
-  const candidateUrl = rawCandidateUrl?.trim();
-  if (!candidateUrl || candidateUrl === targetUrl || visitedUrls.has(candidateUrl)) continue;
-  visitedUrls.add(candidateUrl);
-  const candidate = neon(candidateUrl);
-  try {
-    const sourceTables = await candidate`
-      SELECT
-        to_regclass('public.shared_word_catalog')::text AS catalog_table,
-        to_regclass('public.shared_word_pool_evaluations')::text AS evaluations_table
-    ` as Array<{ catalog_table: string | null; evaluations_table: string | null }>;
-    if (sourceTables[0]?.catalog_table && sourceTables[0]?.evaluations_table) {
-      source = candidate;
-      sourceName = candidateName;
-      break;
-    }
-  } catch {
-    // Keep probing known server-only compatibility connections. Values and
-    // provider error messages must never be written to build logs.
-  }
-}
-if (!source) throw new Error("LEGACY_GENERAL_GAME_CLASSIFICATION_SOURCE_NOT_FOUND");
-process.stdout.write(`[general-game-classification] source=${sourceName}\n`);
-
-const targetTables = await target`
+const [sourceTables, targetTables] = await Promise.all([
+  source`
+    SELECT
+      to_regclass('public.shared_word_catalog')::text AS catalog_table,
+      to_regclass('public.shared_word_pool_evaluations')::text AS evaluations_table
+  `,
+  target`
     SELECT
       to_regclass('public.words')::text AS words_table,
       to_regclass('public.word_game_eligibility')::text AS eligibility_table
-` as Array<{ words_table: string | null; eligibility_table: string | null }>;
+  `,
+]) as [
+  Array<{ catalog_table: string | null; evaluations_table: string | null }>,
+  Array<{ words_table: string | null; eligibility_table: string | null }>,
+];
+
+if (!sourceTables[0]?.catalog_table || !sourceTables[0]?.evaluations_table) {
+  throw new Error("LEGACY_GENERAL_GAME_CLASSIFICATION_SOURCE_NOT_FOUND");
+}
 if (!targetTables[0]?.words_table || !targetTables[0]?.eligibility_table) {
   throw new Error("GENERAL_GAME_CLASSIFICATION_TARGET_SCHEMA_NOT_FOUND");
 }

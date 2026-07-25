@@ -154,6 +154,13 @@ Shared化候補:
 | `SHARED_VOCABULARY_ADMIN_DATABASE_URL`（旧 `VOCABULARY_ADMIN_DATABASE_URL`） | 管理者ロール | 管理・生成用ロール | 原則リンクしない | Yes | 採否・昇格・管理処理 |
 | `LEGACY_WORD_DATABASE_URL` | 原則なし | 移行作業中だけ | なし | Yes | 旧語彙本体および旧`standard-game`分類の読取専用移行元 |
 
+2026-07-25の一般ゲーム語分類移行dry-runでは、`app-games-dev` Production buildで
+共通語彙DBの管理接続は利用可能だったが、`LEGACY_WORD_DATABASE_URL`は未Linkだった。
+旧`app-games` ProjectのProduction変数として追加した記録はあるものの、現在の
+develop実行先である`app-games-dev`へは引き継がれていない。移行時は旧
+`app-games-neon`の`shared_word_catalog`と`shared_word_pool_evaluations`をSELECTできる
+読取専用URLを`app-games-dev`のProductionへ一時設定し、完了後に削除する。
+
 互換変数として残っている可能性があるもの:
 
 - `DATABASE_URL`

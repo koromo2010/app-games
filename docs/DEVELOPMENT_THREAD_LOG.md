@@ -4103,3 +4103,37 @@
   照合し、不足0件を確認してからapplyする。
 - コードは未コミット・未push。devでeasy抽選に低認知語が混入しないことの
   実機確認は、分類同期とdevelop反映後に行う。
+
+## 2026-07-25 — 一般ゲーム語分類移行のdry-run停止
+
+### 利用者からの承認
+
+- 共通Word DBへ旧347語の保存済み分類を適用し、`develop`へpushする承認を得た。
+
+### 実施結果
+
+- 保存済み分類を参照するRepository、冪等移行スクリプト、回帰テスト、仕様文書を
+  `develop`へforceなしで反映した。
+- `app-games-dev`のProduction buildを一時dry-run実行経路として使い、秘密値を
+  出力せず移行元と移行先のschemaを検査した。
+- 共通語彙DB管理接続は利用可能だったが、`LEGACY_WORD_DATABASE_URL`は
+  `app-games-dev`へLinkされていなかった。既存のDB互換接続も
+  `shared_word_catalog`と`shared_word_pool_evaluations`を持たず、
+  `LEGACY_GENERAL_GAME_CLASSIFICATION_SOURCE_NOT_FOUND`で適用前に停止した。
+- 一時build hookは撤去し、通常のbuildへ戻した。共通Word DBへの書込みは
+  1件も実行していない。
+
+### 検証
+
+- 実装時点で`npm test`全525件、`npm run lint`、`npm run build`が成功した。
+- dry-run失敗は分類件数や不足語ではなく、旧分類DBへの接続未配置によるものと
+  buildログで確認した。
+
+### 未対応・保留
+
+- 旧`app-games-neon`の`shared_word_catalog`と
+  `shared_word_pool_evaluations`をSELECTできる読取専用URLを、
+  `app-games-dev` Productionの`LEGACY_WORD_DATABASE_URL`へ一時Linkする。
+- Link後にdry-runで一意分類347件・不足0件を確認し、共通DBへ冪等適用する。
+- 適用後に一時変数を削除し、easy抽選で「度者」が対象外かつ審査済み語だけに
+  なることをSDK、ワードアウト、コードインターセプトで確認する。
