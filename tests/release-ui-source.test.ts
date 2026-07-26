@@ -97,7 +97,7 @@ test("adopted SDK runtime catalogs are paired to their deployment environment", 
   assert.match(gameRoute, /channel !== expectedChannel\(\)/);
 });
 
-test("main can promote one dev app release and append-only rollback it", () => {
+test("main can promote one adopted dev app and append-only rollback it", () => {
   const panel = read("app/admin/AppReleaseManagementPanel.tsx");
   const adminRoute = read("app/api/admin/app-releases/route.ts");
   const portalRoute = read(
@@ -111,9 +111,13 @@ test("main can promote one dev app release and append-only rollback it", () => {
   );
 
   assert.match(panel, /アプリ昇格・ロールバック/);
-  assert.match(panel, /既存mainアプリを更新/);
+  assert.match(panel, /dev採用済み/);
+  assert.match(panel, /main確認待ち/);
   assert.match(panel, /この版へ復元/);
-  assert.match(adminRoute, /sdkDevelopmentInternalBaseUrl/);
+  assert.match(adminRoute, /developmentCatalogEndpoint/);
+  assert.match(adminRoute, /\/api\/runtime-catalog\?channel=development/);
+  assert.match(adminRoute, /developmentReleases/);
+  assert.match(adminRoute, /developmentOk \|\| mainOk/);
   assert.match(adminRoute, /sdk-app\.promote-dev-to-main/);
   assert.match(adminRoute, /sdk-app\.rollback/);
   assert.match(portalRoute, /process\.env\.VERCEL_GIT_COMMIT_REF !== "main"/);
@@ -122,6 +126,7 @@ test("main can promote one dev app release and append-only rollback it", () => {
   assert.match(store, /currentPublicGameId/);
   assert.match(migration, /WHERE is_current/);
   assert.match(migration, /restored_from UUID REFERENCES sdk_app_releases/);
-  assert.match(runtimeList, /FROM sdk_app_releases r/);
+  assert.match(runtimeList, /lineage_id AS "lineageId"/);
+  assert.match(runtimeList, /module_policy AS "modulePolicy"/);
   assert.match(runtimeGame, /FROM sdk_app_releases r/);
 });
