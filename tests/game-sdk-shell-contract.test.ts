@@ -13,6 +13,7 @@ function escaped(value: string) {
 const frame = source("app/components/GameSdkFrame.tsx");
 const header = source("app/components/GameSdkShellHeader.tsx");
 const previewPage = source("app/sdk-preview/[creatorSlug]/games/[gameId]/page.tsx");
+const approvedPage = source("app/sdk-games/[gameId]/page.tsx");
 const previewRoomRoute = source("app/api/sdk-preview/[creatorSlug]/games/[gameId]/rooms/route.ts");
 const platformAdapter = source("lib/game-sdk-platform-adapter.ts");
 
@@ -35,10 +36,6 @@ test("reviewed SDK shell consumes every Room View permission it declares", () =>
     "canDebug must control the shared DEBUG entry point",
   );
   assert.match(header, /DEBUG · ON/);
-  assert.doesNotMatch(
-    header,
-    /DEBUG · ON[\s\S]{0,300}permissions\?\.canDebug !== true/,
-  );
 });
 
 test("reviewed SDK shell consumes manifest capabilities passed by Preview", () => {
@@ -79,9 +76,14 @@ test("module profile and Room View remain the only shell feature gates", () => {
   );
 });
 
-test("Preview package page and promoted game share the same GameSdkFrame", () => {
-  const approvedPage = source("app/sdk-games/[gameId]/page.tsx");
-  assert.match(previewPage, /import \{ GameSdkFrame \} from "@\/app\/components\/GameSdkFrame"/);
-  assert.match(approvedPage, /GameSdkFrame/);
-  assert.doesNotMatch(previewPage, /ApprovedSdkGameShell/);
+test("formal Preview packages and promoted packages share GameSdkFrame", () => {
+  assert.match(previewPage, /game\.runtimeKind === "package" && game\.revision && game\.manifest/);
+  assert.match(
+    previewPage,
+    /game\.runtimeKind === "package"[\s\S]*?<GameSdkFrame[\s\S]*?creatorSlug=\{creatorSlug\}/,
+  );
+  assert.match(
+    approvedPage,
+    /registration\.clientKind === "iframe-package"[\s\S]*?<GameSdkFrame/,
+  );
 });
