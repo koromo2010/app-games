@@ -85,29 +85,14 @@ export default async function Home() {
 
       <section className="hero" id="top">
         <div className="hero-copy">
-          <p className="eyebrow">本番環境にさわらずにゲーム開発</p>
+          <p className="eyebrow">アイデアを、動くゲームへ</p>
           <h1>
-            ゲームを面白くすることだけ考えよう。
-            <span>安全に届ける仕組みは、Game Fieldsが用意します。</span>
+            最初の試作は、10〜20分でできあがる。
+            <span>そこから先の安全な届け方は、Game Fieldsが引き受けます。</span>
           </h1>
           <p className="hero-description">
-            Game Fields SDKを使うと、外部の人でも本番のデータや管理画面にさわらずに、ゲームを作って提出できます。
+            Game Fields SDKは、ChatGPTに作りたいゲームを伝えるだけで、画面づくり・動作確認・SDKへの保存までAIが進めてくれる開発基盤です。本番のデータや管理画面に触れることなく、思いついたゲームをすぐに動くカタチにできます。
           </p>
-          <aside className="required-environment" aria-labelledby="before-download-title">
-            <span className="required-environment-label">ダウンロード前に確認</span>
-            <div>
-              <h3 id="before-download-title">ChatGPTの有料プランと「gameapp-dev」プラグインが必要です</h3>
-              <p>
-                ゲームを作るには、ChatGPTの有料プラン（Plus・Pro・Teamなど）と、CodexまたはWork、そして「gameapp-dev」というプラグインが必要です。この3つを用意してから、下のDownloadMeを取得してください。
-              </p>
-              <p>
-                ChatGPTの利用料金は、あなた自身の支払いになります。Game Fieldsが代わりに支払うことはありません。
-              </p>
-              <p>
-                作り始める前に、<Link href="/terms">利用規約</Link>を読んでおいてください。DownloadMeを取得・使用した時点で、規約に同意したものとして扱います。
-              </p>
-            </div>
-          </aside>
           <div className="hero-actions">
             <a className="primary-action" href="/GameFieldsDownloadMe-ver15.md" download>
               GameFieldsDownloadMe-ver15
@@ -121,6 +106,9 @@ export default async function Home() {
               現在の準備状況
             </a>
           </div>
+          <p className="hero-requirement-note">
+            ChatGPTの有料プラン（Codex・Work）と「gameapp-dev」プラグインが必要です。利用料はご自身の負担となります。取得・使用した時点で<Link href="/terms">利用規約</Link>に同意したものとして扱います。
+          </p>
         </div>
 
         <div className="contract-card" aria-label="SDK契約の概要">
@@ -194,20 +182,14 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
           <div>
             <h3 id="required-environment-title">ダウンロードしたファイルは、Codex(またはWork)のチャットにそのまま貼り付けてください</h3>
             <p>
-              ゲーム作りには、コードを作ったり、複数のファイルを編集したり、動きを確認したりする作業が必要です。ふつうのChatGPTチャットだけでは、これができません。必ずCodexまたはWorkのチャットで進めてください。
-            </p>
-            <p>
-              DownloadMeは、AIに読ませるためのファイルです。人が読むための説明書ではないので、中身を読んだり書き換えたりせず、そのままチャットに貼り付けてください。
+              DownloadMeはAIに読ませる実行用ファイルです。中身を読んだり書き換えたりせず、そのままCodexまたはWorkのチャットに貼り付けてください。ふつうのChatGPTチャットでは制作を進められません。
             </p>
             <p>
               <strong>プラグインが新しくなったときは、必ず新しいチャットを作り直してください。</strong>
-              古いチャットのまま新しいファイルを送っても、古いままの動きになってしまい、うまく続きが作れません。新しいチャットで`gameapp-dev`を選び、最新のDownloadMeだけを貼り付けてください。
+              古いチャットのままだと動きが古いままになり、うまく続きが作れません。
             </p>
             <p>
-              作りかけのゲームは、あなたのアカウントに保存されています。新しいチャットを開けば自動的に続きから始められるので、作り直したり新しいURLを用意し直したりする必要はありません。
-            </p>
-            <p>
-              ふつうのチャットでHTMLファイルだけが出てきた場合、それはまだGame Fields SDKに保存された完成版ではありません。CodexまたはWorkの新しいチャットに切り替えて、最新のファイルと作りたい内容を送ってください。
+              作りかけのゲームはアカウントに保存されているので、新しいチャットを開けば自動的に続きから始められます。作り直しの必要はありません。ふつうのチャットでHTMLファイルだけが出てきた場合は、まだ完成版ではないので、CodexまたはWorkの新しいチャットに切り替えてください。
             </p>
           </div>
         </aside>

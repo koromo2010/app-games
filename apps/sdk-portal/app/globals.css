@@ -293,6 +293,14 @@ h1 span {
   gap: 13px;
 }
 
+.hero-requirement-note {
+  max-width: 640px;
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.75;
+}
+
 .first-build-guide {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
