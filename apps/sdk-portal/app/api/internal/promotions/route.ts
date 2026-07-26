@@ -10,8 +10,12 @@ export const runtime = "nodejs";
 
 const GAME_PATTERN = /^[a-z][a-z0-9-]{1,63}$/;
 
-function authorize(request: Request) {
-  if (process.env.VERCEL_GIT_COMMIT_REF !== "main") {
+function authorize(request: Request, options?: { readOnly?: boolean }) {
+  const branch = process.env.VERCEL_GIT_COMMIT_REF;
+  if (
+    branch !== "main"
+    && !(options?.readOnly && branch === "develop")
+  ) {
     return Response.json({ error: "promotion_main_only" }, { status: 403 });
   }
   try {
@@ -23,7 +27,7 @@ function authorize(request: Request) {
 }
 
 export async function GET(request: Request) {
-  const denied = authorize(request);
+  const denied = authorize(request, { readOnly: true });
   if (denied) return denied;
   await ensureSdkSchema();
   const rows = await sdkSql()`
