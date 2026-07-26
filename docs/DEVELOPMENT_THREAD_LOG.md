@@ -5029,3 +5029,47 @@
 
 - devへのcommit反映と、本体dev・SDK Portal dev双方のDeployment／Runtime Error確認。
 - full管理者、SDK制作者、公開問い合わせ者の3セッションを使う公開後の実画面E2E。
+
+## 2026-07-26 — 双方向support機能のdevelop公開
+
+### 利用者からの要望
+
+- 検証済みの報告・お問い合わせ会話、人間承認付きAI報告を`develop`へpushし、
+  本体devとSDK Portal devへ反映する。
+
+### 判断
+
+- push直前に共有`develop`を再取得し、先行していた管理者Passkey関連5コミットを
+  保持した最新先端へsupport変更をrebaseする。
+- 先行変更で検出したReact Hooks lint誤検知は、Hookではない補助関数の`use`接頭辞だけを
+  変更し、挙動を変えない独立commitとして同時に修正する。
+- GitHub CLI資格がない環境では、接続済みGitHub経路で各ローカルcommitと同一treeを作り、
+  リモート先端を再確認してから非forceで`develop`をfast-forwardする。
+
+### 実施結果
+
+- 管理者Passkey関連5コミットとファイル競合なくrebaseし、support機能、事前調査記録、
+  lint修正の3コミットを`develop`へfast-forward反映した。
+- 各GitHub tree SHAをローカルの検証済みtreeと照合し、3段階とも完全一致を確認した。
+- 本体devとSDK Portal devは同じ最終commit`b213a7b`を認識し、それぞれ
+  `dev.game-fields.com`と`sdk-dev.game-fields.com`へ反映された。
+
+### 検証
+
+- 最新`develop`を含む最終treeで`npm test`に成功し、全583テストが通過した。
+- `npm run verify`、本体`npm run build`、SDK Portal`npm run build:sdk`に成功した。
+- `app-games-dev`のDeployment`dpl_Dx9K95hiBb1jyvET575qgV2phP22`はREADYとなり、
+  `dev.game-fields.com`へaliasされた。
+- `app-games-sdk-dev`のDeployment`dpl_8SKdChTTHZBiFa8d12WoxkjSN8qa`はREADYとなり、
+  `sdk-dev.game-fields.com`へaliasされた。
+- 両Deployment固有のerror／fatal Runtime Logは0件だった。
+
+### 関連コミット
+
+- `0d704e8` — 報告・問い合わせの会話、SDK Portal／AI support、人間承認付き報告を実装。
+- `b213a7b` — 管理者復旧コード補助関数のReact Hooks lint誤検知を解消。
+
+### 未対応・保留
+
+- full管理者、SDK制作者、公開問い合わせ者の3セッションを使う実画面E2E。
+- `moi-lab`所有者でのSkull DEBUGダミー追加表示の最終実機確認。
