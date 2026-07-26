@@ -5,6 +5,12 @@ import { normalizeGameSdkModuleProfile } from "@game-fields/game-sdk/modules";
 
 export const dynamic = "force-dynamic";
 
+function expectedChannel() {
+  return process.env.VERCEL_GIT_COMMIT_REF === "main"
+    ? "main" as const
+    : "development" as const;
+}
+
 export async function GET(
   request: Request,
   context: { params: Promise<{ gameId: string }> },
@@ -17,7 +23,7 @@ export async function GET(
   const { gameId } = await context.params;
   const channel = new URL(request.url).searchParams.get("channel");
   const requestedRevision = new URL(request.url).searchParams.get("revision");
-  if (channel !== "main") {
+  if (channel !== expectedChannel()) {
     return Response.json({ error: "channel_required" }, { status: 400 });
   }
   if (requestedRevision && !/^[a-f0-9]{40}$/.test(requestedRevision)) {

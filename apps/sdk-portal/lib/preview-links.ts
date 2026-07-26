@@ -51,7 +51,7 @@ export function createPackageRuntimeAccess(input: {
   gameId: string;
   revision: string;
   serverBundleSha256: string;
-  channel?: "candidate-preview" | "main";
+  channel?: "candidate-preview" | "development" | "main";
   now?: number;
 }) {
   const now = input.now ?? Date.now();

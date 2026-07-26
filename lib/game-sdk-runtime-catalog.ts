@@ -32,6 +32,9 @@ import {
   sdkPortalInternalBaseUrl,
 } from "./sdk-preview-runtime-source.ts";
 import { sdkServiceHeaders } from "./sdk-service-auth.ts";
+import { expectedAppEnvironment } from "./storage-environment-guard.ts";
+
+type RuntimeCatalogChannel = "development" | "main";
 
 type RuntimeCatalogPayload = {
   creatorSlug: string;
@@ -44,7 +47,7 @@ type RuntimeCatalogPayload = {
   appSetSourceSha256: string;
   manifest: GameSdkManifest;
   moduleProfile: GameSdkModuleProfile;
-  channel: "main";
+  channel: RuntimeCatalogChannel;
   clientRuntimeUrl: string;
   serverRuntimeUrl: string;
   serverRuntimeToken: string;
@@ -52,12 +55,17 @@ type RuntimeCatalogPayload = {
 };
 
 function deploymentChannel(env: NodeJS.ProcessEnv) {
-  void env;
-  return "main" as const;
+  return expectedAppEnvironment(
+    env.VERCEL_ENV,
+    env.NODE_ENV,
+    env.VERCEL_GIT_COMMIT_REF,
+  ) === "production"
+    ? "main" as const
+    : "development" as const;
 }
 
 type RuntimeCatalogListPayload = {
-  channel: "main";
+  channel: RuntimeCatalogChannel;
   games: Array<{
     id: string;
     description: string;
@@ -78,7 +86,7 @@ function catalogTag(manifest: GameSdkManifest): GameTag {
 
 function validCatalogListPayload(
   value: unknown,
-  expectedChannel: "main",
+  expectedChannel: RuntimeCatalogChannel,
 ): value is RuntimeCatalogListPayload {
   if (!value || typeof value !== "object") return false;
   const payload = value as Partial<RuntimeCatalogListPayload>;
@@ -141,7 +149,7 @@ export async function loadApprovedGameSdkCatalog(
 function validCatalogPayload(
   value: unknown,
   expectedGameId: string,
-  expectedChannel: "main",
+  expectedChannel: RuntimeCatalogChannel,
   env: NodeJS.ProcessEnv,
 ): value is RuntimeCatalogPayload {
   if (!value || typeof value !== "object") return false;
@@ -192,7 +200,7 @@ function validCatalogPayload(
 
 async function loadRuntimeCatalogPayload(
   gameId: string,
-  channel: "main",
+  channel: RuntimeCatalogChannel,
   env: NodeJS.ProcessEnv,
   revision?: string,
 ) {

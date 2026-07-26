@@ -3,6 +3,12 @@ import { ensureSdkSchema, sdkSql } from "@/lib/sdk-postgres";
 
 export const dynamic = "force-dynamic";
 
+function expectedChannel() {
+  return process.env.VERCEL_GIT_COMMIT_REF === "main"
+    ? "main" as const
+    : "development" as const;
+}
+
 export async function GET(request: Request) {
   try {
     requireSdkServiceRequest(request);
@@ -10,7 +16,7 @@ export async function GET(request: Request) {
     return Response.json({ error: "forbidden" }, { status: 403 });
   }
   const channel = new URL(request.url).searchParams.get("channel");
-  if (channel !== "main") {
+  if (channel !== expectedChannel()) {
     return Response.json({ error: "channel_required" }, { status: 400 });
   }
   await ensureSdkSchema();

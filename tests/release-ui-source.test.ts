@@ -79,4 +79,20 @@ test("admin publication management includes adopted SDK games", () => {
   assert.match(route, /validateGameOperationsInput\(body\.operations, games\)/);
   assert.match(operations, /additionalGames: GameOperationDefinition\[\]/);
   assert.match(store, /normalizeGameOperations\(value, additionalGames\)/);
+  assert.match(store, /site-game-operations:v3:\$\{environment\}/);
+  assert.match(store, /unscopedGameOperationsKey/);
+});
+
+test("adopted SDK runtime catalogs are paired to their deployment environment", () => {
+  const runtimeCatalog = read("lib/game-sdk-runtime-catalog.ts");
+  const listRoute = read("apps/sdk-portal/app/api/runtime-catalog/route.ts");
+  const gameRoute = read(
+    "apps/sdk-portal/app/api/runtime-catalog/[gameId]/route.ts",
+  );
+
+  assert.match(runtimeCatalog, /type RuntimeCatalogChannel = "development" \| "main"/);
+  assert.match(runtimeCatalog, /expectedAppEnvironment/);
+  assert.match(runtimeCatalog, /\? "main" as const\s*: "development" as const/);
+  assert.match(listRoute, /channel !== expectedChannel\(\)/);
+  assert.match(gameRoute, /channel !== expectedChannel\(\)/);
 });

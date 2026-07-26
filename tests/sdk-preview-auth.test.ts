@@ -12,7 +12,7 @@ const grant = {
   version: 3 as const,
   audience: "package-server" as const,
   environment: "development" as const,
-  channel: "main" as const,
+  channel: "development" as const,
   role: "runner" as const,
   instanceId: "creator-lab",
   gameId: "sample-game",
@@ -27,6 +27,36 @@ test("SDK preview token accepts only the signed immutable scope before expiry", 
   assert.equal(verifySdkPreviewToken(token, secret, 2_000), null);
   const replacement = token.endsWith("a") ? "b" : "a";
   assert.equal(verifySdkPreviewToken(`${token.slice(0, -1)}${replacement}`, secret, 1_000), null);
+});
+
+test("SDK preview token keeps adopted development and main channels distinct", () => {
+  const developmentGrant = { ...grant, channel: "development" as const };
+  assert.deepEqual(
+    verifySdkPreviewToken(
+      createSdkPreviewToken(developmentGrant, secret),
+      secret,
+      1_999,
+    ),
+    developmentGrant,
+  );
+  assert.notDeepEqual(developmentGrant, { ...developmentGrant, channel: "main" });
+  assert.throws(() => createSdkPreviewToken({
+    ...developmentGrant,
+    channel: "main",
+  }, secret));
+  assert.throws(() => createSdkPreviewToken({
+    ...developmentGrant,
+    environment: "production",
+  }, secret));
+  const mainGrant = {
+    ...developmentGrant,
+    environment: "production" as const,
+    channel: "main" as const,
+  };
+  assert.deepEqual(
+    verifySdkPreviewToken(createSdkPreviewToken(mainGrant, secret), secret, 1_999),
+    mainGrant,
+  );
 });
 
 test("SDK preview token rejects invalid identifiers and weak secrets", () => {
