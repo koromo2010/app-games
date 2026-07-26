@@ -108,7 +108,7 @@ export default async function Home() {
             </a>
           </div>
           <p className="hero-requirement-note">
-            ChatGPTの有料プラン（Codex・Work）と「gameapp-dev」プラグインが必要です。利用料はご自身の負担となります。取得・使用した時点で<Link href="/terms">利用規約</Link>に同意したものとして扱います。
+            <strong>制作にはChatGPT（Codex・Work）が必須で、「gameapp-dev」プラグインの導入が必要です。</strong>他のAIツールやふつうのチャットでは進められません。利用料はご自身の負担となります。取得・使用した時点で<Link href="/terms">利用規約</Link>に同意したものとして扱います。
           </p>
         </div>
 
@@ -183,7 +183,7 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
           <div>
             <h3 id="required-environment-title">ダウンロードしたファイルは、Codex(またはWork)のチャットにそのまま貼り付けてください</h3>
             <p>
-              DownloadMeはAIに読ませる実行用ファイルです。中身を読んだり書き換えたりせず、そのままCodexまたはWorkのチャットに貼り付けてください。ふつうのChatGPTチャットでは制作を進められません。
+              <strong>制作にはChatGPTのCodexまたはWorkが必須です。</strong>ふつうのChatGPTチャットや他のAIツールでは進められません。DownloadMeはAIに読ませる実行用ファイルです。中身を読んだり書き換えたりせず、そのままCodexまたはWorkのチャットに貼り付けてください。
             </p>
             <p>
               <strong>プラグインが新しくなったときは、必ず新しいチャットを作り直してください。</strong>
