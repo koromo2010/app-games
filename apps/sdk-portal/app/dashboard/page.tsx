@@ -44,6 +44,7 @@ export default async function CreatorDashboard() {
         <Link className="dashboard-nav-active" href="/dashboard">マイゲーム</Link>
         <Link href="/#start">新しく作る</Link>
         <Link href="/#review">提出について</Link>
+        <Link href="/help">Help</Link>
       </nav>
       <div className="header-account-area"><AccountMenu /></div>
     </header>
