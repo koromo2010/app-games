@@ -46,7 +46,7 @@ export default function ForParentsPage() {
           <article>
             <h2>費用について</h2>
             <p>
-              利用にはChatGPTの有料プラン（Plus・Pro・Teamなど）と、Codex・Workが使える環境が必要です。この利用料金はご家庭のご負担となり、Game Fieldsが代わりに支払うことはありません。始める前に、ご家庭のChatGPTの契約状況をご確認ください。
+              <strong>利用にはChatGPTの有料プラン（Plus・Pro・Teamなど）が必須で、Codex・Workが使える環境と「gameapp-dev」プラグインの導入が必要です。</strong>他のAIツールでは制作できません。この利用料金はご家庭のご負担となり、Game Fieldsが代わりに支払うことはありません。始める前に、ご家庭のChatGPTの契約状況をご確認ください。
             </p>
           </article>
           <article>
