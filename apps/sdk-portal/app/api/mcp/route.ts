@@ -17,6 +17,7 @@ import {
   negotiateSdkPortalHandshake,
 } from "@/lib/sdk-handshake";
 import { ensureSdkSchema, sdkSql } from "@/lib/sdk-postgres";
+import { searchSdkHelp } from "@/lib/sdk-help";
 import platformRelease from "../../../../../config/platform-release.json";
 import {
   GAME_SDK_MODULE_CATALOG,
@@ -46,6 +47,7 @@ function textResult(value: unknown) {
 
 const tools = [
   { name: "get_sdk_handshake", title: "SDK接続互換性の確認", description: "制作を始める前に、接続先環境、Platform・SDK契約版、DownloadMe記載の必要機能だけを送って互換性を確認します。requiredCapabilitiesは将来の機能名も送信でき、未提供の機能は応答のCAPABILITY_UNAVAILABLEで判定します。accepted=trueになるまで他のSDK toolを使わないでください。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { protocol: { type: "string", const: "game-fields-sdk" }, handshakeVersion: { type: "integer", minimum: 1 }, client: { type: "object", properties: { kind: { type: "string", enum: ["ai-agent", "starter-cli", "browser-runtime", "platform"] }, name: { type: "string" }, version: { type: "string" } }, required: ["kind"], additionalProperties: false }, expected: { type: "object", properties: { environment: { type: "string", enum: ["development", "production"] }, platformVersion: { type: "string" }, sdkPackageVersion: { type: "string" }, sdkContractVersion: { type: "integer", minimum: 1 } }, required: ["environment", "platformVersion", "sdkPackageVersion", "sdkContractVersion"], additionalProperties: false }, requiredCapabilities: { type: "array", description: "添付されたDownloadMeのrequiredCapabilitiesをそのまま指定します。固定enumではなく、Portal未提供名はhandshake応答で拒否します。", items: { type: "string", minLength: 1, maxLength: 64, pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" }, maxItems: 64, uniqueItems: true } }, required: ["protocol", "handshakeVersion", "client", "expected", "requiredCapabilities"], additionalProperties: false } },
+  { name: "search_sdk_help", title: "SDK Help検索", description: "制作・保存・提出・審査・権限に関するSDKの正本Helpを検索します。利用者から仕様について質問されたときは、推測で答える前に使用してください。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { query: { type: "string", description: "利用者の質問または検索語", minLength: 1, maxLength: 500 }, limit: { type: "integer", minimum: 1, maximum: 10 } }, required: ["query"], additionalProperties: false } },
   { name: "list_creator_environments", title: "自分のSDK環境一覧", description: "ログイン中のGame Fieldsアカウントに紐づく既存の制作者環境を一覧表示します。新規URLを予約する前に必ず呼び出してください。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: {}, additionalProperties: false } },
   { name: "check_creator_url", title: "制作者URLの空き確認", description: "Game Fields SDKの制作者URL名が利用可能か確認します。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "確認する制作者URL名" } }, required: ["slug"], additionalProperties: false } },
   { name: "reserve_creator_url", title: "制作者URLの予約", description: "ログイン中のGame Fieldsアカウント用に制作者URLを7日間予約します。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "予約する制作者URL名" }, displayName: { type: "string", description: "制作者の表示名" } }, required: ["slug", "displayName"], additionalProperties: false } },
@@ -66,6 +68,12 @@ function negotiateProtocolVersion(value: unknown) {
 async function callTool(name: string, args: Record<string, unknown>, playerId: string, origin: string) {
   if (name === "get_sdk_handshake") {
     return textResult(negotiateSdkPortalHandshake(args, origin));
+  }
+  if (name === "search_sdk_help") {
+    const query = typeof args.query === "string" ? args.query.trim() : "";
+    if (!query) throw new Error("検索する質問が必要です。");
+    const limit = typeof args.limit === "number" ? args.limit : 5;
+    return textResult(searchSdkHelp(query, limit));
   }
   if (name === "list_creator_environments") {
     const environments = await listCreatorEnvironments(playerId);
