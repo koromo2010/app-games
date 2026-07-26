@@ -443,7 +443,7 @@ moduleが必須でない場合にも表示しない。Shell接続、確認、Run
 
 ## 2026-07-26 SDK正式Package Shellの必須module監査が旧Preview経路だけで通過する
 
-状態: 修正実装済み・dev反映待ち（2026-07-26、全Shell module回帰テストあり）
+状態: 修正済み・dev公開済み（2026-07-26、全Shell module回帰テストあり）
 
 解散導線の欠落を受けて必須moduleを再監査したところ、既存の
 「全moduleに実装定義がある」テストは旧Preview Shellのregistryを確認しており、

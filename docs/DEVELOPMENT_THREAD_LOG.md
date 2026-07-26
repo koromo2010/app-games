@@ -4748,10 +4748,17 @@
 
 - 正式Package Shellの対象テスト33件に成功した。
 - `npm test`に成功し、全562テストが通過した。
+- `npm run lint`と`npm run build`に成功した。
 - Shell group全17moduleと実装証拠の完全一致、非host退出とactive room索引解放、
   DEBUGのphase別表示・認可、candidate既定値の認証scopeを回帰テストへ追加した。
+- `2dd8b18`をdevelopへ反映し、`app-games-dev`の対象DeploymentがREADYになった。
+- dev全routeを対象にした公開直後10分のVercel Runtime Error集計は0件だった。
 
 ### 未対応・保留
 
 - develop公開後、制作者アカウントで退出、既定値、タイマー復旧、DEBUGダミー操作を
   candidate Preview上で実機確認する。
+
+### 関連コミット
+
+- `2dd8b18` — 正式Package Shellの全必須module監査と移行漏れ修正。
