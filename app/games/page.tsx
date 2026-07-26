@@ -19,23 +19,16 @@ export async function generateMetadata(): Promise<Metadata> {
 }
 
 export default async function GameLobbyPage() {
-  const [settings, gameOperations, durationEstimates, sdkGames] = await Promise.all([
+  const sdkGames = await loadApprovedGameSdkCatalog().catch(() => []);
+  const [settings, gameOperations, durationEstimates] = await Promise.all([
     loadSiteSettings(),
-    loadGameOperations(),
+    loadGameOperations({}, sdkGames),
     loadGameDurationEstimates(),
-    loadApprovedGameSdkCatalog().catch(() => []),
   ]);
-  const sdkOperations = sdkGames.map((game) => ({
-    gameId: game.id,
-    publication: "public" as const,
-    maintenance: false,
-    message: "",
-    updatedAt: null,
-  }));
   return (
     <GameLobby
       siteName={settings.siteName}
-      gameOperations={[...gameOperations, ...sdkOperations]}
+      gameOperations={gameOperations}
       durationEstimates={durationEstimates}
       additionalGames={sdkGames}
     />
