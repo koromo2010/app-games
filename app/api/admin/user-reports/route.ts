@@ -3,9 +3,13 @@ import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 import {
   appendUserReportMessage,
   listUserReports,
+  loadUserReport,
   updateUserReportMessageDelivery,
   updateUserReportStatus,
 } from "@/lib/user-report-store";
+import {
+  deliverUserReportAdminNotification,
+} from "@/lib/user-report-admin-notification";
 import { sendCreatorSupportReplyEmail } from "@/lib/email";
 import { isUserReportStatus } from "@/lib/user-report-core";
 import { loadVerifiedPlayerEmailByPlayerId } from "@/lib/player-account-store";
@@ -135,6 +139,82 @@ export async function POST(request: Request) {
     telemetry.failure("user-report.reply", error, 500);
     return Response.json(
       { error: "USER_REPORT_REPLY_FAILED" },
+      { status: 500 },
+    );
+  }
+}
+
+export async function PUT(request: Request) {
+  const telemetry = createRequestTelemetry(request, "/api/admin/user-reports", {
+    operation: "user-report-admin-notification-retry",
+  });
+  const limited = await rateLimitResponseFor(
+    request,
+    rateLimitPolicies.profileMutation,
+  );
+  if (limited) return limited;
+  try {
+    const session = await requireRecentSiteAdminMfa();
+    const body = await request.json().catch(() => null) as {
+      reportId?: unknown;
+      requestId?: unknown;
+    } | null;
+    const reportId = typeof body?.reportId === "string"
+      ? body.reportId
+      : "";
+    const requestId = typeof body?.requestId === "string"
+      ? body.requestId.trim().slice(0, 120)
+      : "";
+    if (!reportId || !requestId) {
+      return Response.json(
+        { error: "USER_REPORT_NOTIFICATION_RETRY_INVALID" },
+        { status: 400 },
+      );
+    }
+    const existing = await loadUserReport(reportId);
+    if (!existing) {
+      return Response.json(
+        { error: "USER_REPORT_NOT_FOUND" },
+        { status: 404 },
+      );
+    }
+    const notification = await deliverUserReportAdminNotification(existing, {
+      idempotencyKey: `user-report-admin-retry-${existing.id}-${requestId}`,
+    });
+    await appendSiteAdminAuditLog(
+      request,
+      session,
+      "user-report.notification-retry",
+      notification.report.id,
+      null,
+      {
+        deliveryStatus: notification.deliveryStatus,
+        errorCode: notification.errorCode,
+      },
+    );
+    if (notification.deliveryStatus === "failed") {
+      telemetry.failure(
+        "user-report.admin-notification",
+        new Error(notification.errorCode ?? "EMAIL_SEND_FAILED"),
+        502,
+        { action: "retry", channel: "email" },
+      );
+    } else {
+      telemetry.success("user-report.admin-notification", {
+        action: "retry",
+        channel: "email",
+      });
+    }
+    return Response.json(notification);
+  } catch (error) {
+    const auth = siteAdminAuthorizationError(error);
+    if (auth) return auth;
+    telemetry.failure("user-report.admin-notification", error, 500, {
+      action: "retry",
+      channel: "email",
+    });
+    return Response.json(
+      { error: "USER_REPORT_NOTIFICATION_RETRY_FAILED" },
       { status: 500 },
     );
   }

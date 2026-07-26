@@ -7,6 +7,7 @@ import {
 import {
   normalizeStoredUserReport,
   type UserReport,
+  type UserReportNotificationStatus,
   type UserReportStatus,
   type UserReportType,
 } from "@/lib/user-report-core";
@@ -46,6 +47,9 @@ export async function saveUserReport(
     id: reportId,
     ...input,
     status: "open",
+    notificationStatus: "pending",
+    notificationErrorCode: null,
+    notificationAttemptedAt: null,
     messages: [],
     createdAt: now,
     updatedAt: now,
@@ -168,6 +172,20 @@ export async function updateUserReportStatus(
   }));
 }
 
+export async function updateUserReportNotificationStatus(
+  reportId: string,
+  notificationStatus: UserReportNotificationStatus,
+  notificationErrorCode: string | null = null,
+) {
+  return updateUserReport(reportId, (current) => ({
+    ...current,
+    notificationStatus,
+    notificationErrorCode,
+    notificationAttemptedAt: Date.now(),
+    updatedAt: Date.now(),
+  }));
+}
+
 export async function appendUserReportMessage(input: {
   reportId: string;
   playerId?: string;
@@ -204,6 +222,13 @@ export async function appendUserReportMessage(input: {
     const updated: UserReport = {
       ...current,
       status: input.status,
+      ...(input.author === "requester"
+        ? {
+          notificationStatus: "pending" as const,
+          notificationErrorCode: null,
+          notificationAttemptedAt: null,
+        }
+        : {}),
       messages: [...current.messages, message],
       updatedAt: now,
     };

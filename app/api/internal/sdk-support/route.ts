@@ -4,6 +4,9 @@ import {
   loadUserReport,
   saveUserReport,
 } from "@/lib/user-report-store";
+import {
+  deliverUserReportAdminNotification,
+} from "@/lib/user-report-admin-notification";
 import { requireSdkServiceRequest } from "@/lib/sdk-service-auth";
 import {
   approveUserReportReplyDraft,
@@ -183,9 +186,14 @@ export async function POST(request: Request) {
       }, {
         reportId: `report_${requestId}`,
       });
-      const report = await loadUserReport(saved.id);
+      let report = await loadUserReport(saved.id);
       if (!report || report.playerId !== playerId) {
         throw new Error("USER_REPORT_SAVE_FAILED");
+      }
+      if (saved.inserted || report.notificationStatus !== "sent") {
+        report = (await deliverUserReportAdminNotification(report, {
+          idempotencyKey: `user-report-admin-notification-${report.id}`,
+        })).report;
       }
       return Response.json(
         { report },
@@ -309,7 +317,7 @@ export async function POST(request: Request) {
       );
     }
     try {
-      const report = await approveUserReportDraft({
+      let report = await approveUserReportDraft({
         draftId,
         playerId,
         type,
@@ -317,6 +325,11 @@ export async function POST(request: Request) {
         details,
         page,
       });
+      if (report.notificationStatus !== "sent") {
+        report = (await deliverUserReportAdminNotification(report, {
+          idempotencyKey: `user-report-admin-notification-${report.id}`,
+        })).report;
+      }
       return Response.json({ report }, { status: 201 });
     } catch (error) {
       if (
@@ -348,11 +361,17 @@ export async function POST(request: Request) {
       );
     }
     try {
-      const report = await approveUserReportReplyDraft({
+      let report = await approveUserReportReplyDraft({
         draftId: replyDraftId,
         playerId,
         message,
       });
+      if (report.notificationStatus !== "sent") {
+        report = (await deliverUserReportAdminNotification(report, {
+          idempotencyKey: `user-report-admin-followup-${replyDraftId}`,
+          body: message,
+        })).report;
+      }
       return Response.json({ report }, { status: 201 });
     } catch (error) {
       if (
@@ -399,8 +418,15 @@ export async function POST(request: Request) {
       body: message,
       status: "open",
     });
+    let report = result.report;
+    if (result.inserted || report.notificationStatus !== "sent") {
+      report = (await deliverUserReportAdminNotification(report, {
+        idempotencyKey: `user-report-admin-followup-${result.message.id}`,
+        body: result.message.body,
+      })).report;
+    }
     return Response.json(
-      { report: result.report },
+      { report },
       { status: result.inserted ? 201 : 200 },
     );
   } catch (error) {

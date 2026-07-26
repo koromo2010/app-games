@@ -37,23 +37,22 @@ test("support conversations normalize messages and expose the waiting state", ()
 });
 
 test("admin inboxes reply into the shared thread and choose the next state", () => {
-  const reportPanel = read("app/admin/AdminUserReportsPanel.tsx");
+  const panel = read("app/admin/AdminSupportInboxPanel.tsx");
   const reportRoute = read("app/api/admin/user-reports/route.ts");
-  const contactPanel = read("app/admin/AdminContactMessagesPanel.tsx");
   const contactRoute = read("app/api/admin/contact-messages/route.ts");
   const email = read("lib/email.ts");
 
-  for (const panel of [reportPanel, contactPanel]) {
-    assert.match(panel, /返信後の状態/);
-    assert.match(panel, /waiting-user/);
-    assert.match(panel, /crypto\.randomUUID/);
-  }
+  assert.match(panel, /返信後の状態/);
+  assert.match(panel, /waiting-user/);
+  assert.match(panel, /crypto\.randomUUID/);
+  assert.match(panel, /\/api\/admin\/user-reports/);
+  assert.match(panel, /\/api\/admin\/contact-messages/);
   assert.match(reportRoute, /appendUserReportMessage/);
   assert.match(reportRoute, /user-report\.reply/);
   assert.match(reportRoute, /sendCreatorSupportReplyEmail/);
   assert.match(reportRoute, /loadVerifiedPlayerEmailByPlayerId/);
   assert.match(reportRoute, /sdkSupportThreadUrl/);
-  assert.match(reportPanel, /確認済みメールにも通知/);
+  assert.match(panel, /登録メールにも通知/);
   assert.match(contactRoute, /appendContactThreadMessage/);
   assert.match(contactRoute, /sendSupportReplyEmail/);
   assert.match(contactRoute, /contact-message\.reply/);

@@ -9,6 +9,14 @@ import {
 export type UserReportType = "bug" | "request";
 export const userReportStatuses = supportThreadStatuses;
 export type UserReportStatus = SupportThreadStatus;
+export const userReportNotificationStatuses = [
+  "pending",
+  "sent",
+  "failed",
+  "unknown",
+] as const;
+export type UserReportNotificationStatus =
+  (typeof userReportNotificationStatuses)[number];
 
 export type UserReport = {
   id: string;
@@ -18,6 +26,9 @@ export type UserReport = {
   page: string;
   playerId: string;
   status: UserReportStatus;
+  notificationStatus: UserReportNotificationStatus;
+  notificationErrorCode: string | null;
+  notificationAttemptedAt: number | null;
   messages: SupportThreadMessage[];
   createdAt: number;
   updatedAt: number;
@@ -29,6 +40,21 @@ function isUserReportType(value: unknown): value is UserReportType {
 
 export function isUserReportStatus(value: unknown): value is UserReportStatus {
   return isSupportThreadStatus(value);
+}
+
+export function isUserReportNotificationStatus(
+  value: unknown,
+): value is UserReportNotificationStatus {
+  return typeof value === "string"
+    && userReportNotificationStatuses.includes(
+      value as UserReportNotificationStatus,
+    );
+}
+
+function normalizeNotificationErrorCode(value: unknown) {
+  return typeof value === "string" && /^[A-Z][A-Z0-9_]{2,79}$/.test(value)
+    ? value
+    : null;
 }
 
 export function normalizeStoredUserReport(value: unknown): UserReport | null {
@@ -53,6 +79,17 @@ export function normalizeStoredUserReport(value: unknown): UserReport | null {
     page: input.page,
     playerId: input.playerId,
     status: isUserReportStatus(input.status) ? input.status : "open",
+    notificationStatus: isUserReportNotificationStatus(
+      input.notificationStatus,
+    )
+      ? input.notificationStatus
+      : "unknown",
+    notificationErrorCode: normalizeNotificationErrorCode(
+      input.notificationErrorCode,
+    ),
+    notificationAttemptedAt: Number.isFinite(input.notificationAttemptedAt)
+      ? Number(input.notificationAttemptedAt)
+      : null,
     messages: normalizeSupportThreadMessages(input.messages),
     createdAt,
     updatedAt: Number.isFinite(input.updatedAt) ? Number(input.updatedAt) : createdAt,

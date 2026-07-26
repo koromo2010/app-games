@@ -25,6 +25,9 @@ test("legacy user reports remain readable as open reports", () => {
   });
   assert.equal(report?.status, "open");
   assert.equal(report?.updatedAt, 1234);
+  assert.equal(report?.notificationStatus, "unknown");
+  assert.equal(report?.notificationErrorCode, null);
+  assert.equal(report?.notificationAttemptedAt, null);
   assert.deepEqual(report?.messages, []);
 });
 
@@ -36,22 +39,31 @@ test("user report status accepts only the management workflow", () => {
   assert.equal(isUserReportStatus("deleted"), false);
 });
 
-test("admin has an authenticated report inbox and status workflow", () => {
-  const panel = read("app/admin/AdminUserReportsPanel.tsx");
+test("admin has one authenticated inbox for reports and contacts", () => {
+  const panel = read("app/admin/AdminSupportInboxPanel.tsx");
   const shell = read("app/admin/SiteAdminPanel.tsx");
-  const route = read("app/api/admin/user-reports/route.ts");
-  const store = read("lib/user-report-store.ts");
+  const reportRoute = read("app/api/admin/user-reports/route.ts");
+  const contactRoute = read("app/api/admin/contact-messages/route.ts");
+  const reportStore = read("lib/user-report-store.ts");
 
-  assert.match(shell, /\['reports', '報告'\]/);
-  assert.match(shell, /AdminUserReportsPanel/);
-  assert.match(panel, /改善・バグ報告/);
+  assert.match(shell, /\['support', '問い合わせ・報告'\]/);
+  assert.match(shell, /AdminSupportInboxPanel/);
+  assert.doesNotMatch(shell, /\['reports', '報告'\]/);
+  assert.doesNotMatch(shell, /\['contacts', 'お問い合わせ'\]/);
+  assert.match(panel, /問い合わせ・報告/);
   assert.match(panel, /ensureSiteAdminStepUp/);
   assert.match(panel, /\/api\/admin\/user-reports/);
-  assert.match(route, /requireFullSiteAdminSession/);
-  assert.match(route, /requireRecentSiteAdminMfa/);
-  assert.match(route, /appendSiteAdminAuditLog/);
-  assert.match(store, /userReportRetentionSeconds/);
-  assert.match(store, /redis\.call\('DEL',prefix\.\.id\)/);
+  assert.match(panel, /\/api\/admin\/contact-messages/);
+  assert.match(panel, /管理者通知を再送/);
+  assert.match(reportRoute, /requireFullSiteAdminSession/);
+  assert.match(reportRoute, /requireRecentSiteAdminMfa/);
+  assert.match(reportRoute, /export async function PUT/);
+  assert.match(reportRoute, /user-report\.notification-retry/);
+  assert.match(reportRoute, /appendSiteAdminAuditLog/);
+  assert.match(contactRoute, /export async function PUT/);
+  assert.match(reportStore, /userReportRetentionSeconds/);
+  assert.match(reportStore, /notificationErrorCode/);
+  assert.match(reportStore, /redis\.call\('DEL',prefix\.\.id\)/);
 });
 
 test("legacy contact messages remain readable and notification failures remain visible", () => {
@@ -74,15 +86,12 @@ test("legacy contact messages remain readable and notification failures remain v
 });
 
 test("admin has an authenticated contact inbox independent of notification email", () => {
-  const panel = read("app/admin/AdminContactMessagesPanel.tsx");
-  const shell = read("app/admin/SiteAdminPanel.tsx");
+  const panel = read("app/admin/AdminSupportInboxPanel.tsx");
   const route = read("app/api/admin/contact-messages/route.ts");
   const publicRoute = read("app/api/contact/route.ts");
   const store = read("lib/contact-store.ts");
 
-  assert.match(shell, /\['contacts', 'お問い合わせ'\]/);
-  assert.match(shell, /AdminContactMessagesPanel/);
-  assert.match(panel, /通知メールが失敗しても、ここには保存されます/);
+  assert.match(panel, /通知メールが失敗しても、会話はここに保存されます/);
   assert.match(panel, /管理者通知を再送/);
   assert.match(panel, /notificationErrorCode/);
   assert.match(route, /requireFullSiteAdminSession/);
@@ -97,6 +106,21 @@ test("admin has an authenticated contact inbox independent of notification email
   assert.match(store, /contactRetentionSeconds/);
   assert.match(store, /notificationErrorCode/);
   assert.match(store, /redis\.call\('DEL',prefix\.\.id\)/);
+});
+
+test("new reports and requester follow-ups notify the shared admin audience", () => {
+  const submitRoute = read("app/api/user-reports/route.ts");
+  const supportRoute = read("app/api/internal/sdk-support/route.ts");
+  const delivery = read("lib/user-report-admin-notification.ts");
+  const accounts = read("app/admin/AdminAccountsPanel.tsx");
+
+  assert.match(submitRoute, /user-report-admin-notification-/);
+  assert.match(supportRoute, /user-report-admin-notification-/);
+  assert.match(supportRoute, /user-report-admin-followup-/);
+  assert.match(delivery, /audience: "contacts"/);
+  assert.match(delivery, /updateUserReportNotificationStatus/);
+  assert.match(accounts, /問い合わせ・報告を受け取る/);
+  assert.match(accounts, /問い合わせフォーム、改善要望、バグ報告と、その追記内容/);
 });
 
 test("account deletion covers reports, feedback, defaults, and word histories", () => {
