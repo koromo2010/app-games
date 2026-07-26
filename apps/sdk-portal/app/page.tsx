@@ -87,12 +87,9 @@ export default async function Home() {
       <section className="hero" id="top">
         <div className="hero-copy">
           <p className="eyebrow">アイデアを、動くゲームへ</p>
-          <h1>
-            思いつきを、遊べるゲームに。
-            <span>安全な公開は、おまかせください。</span>
-          </h1>
+          <h1>思いつきを、遊べるゲームに。</h1>
           <p className="hero-description">
-            ChatGPTに作りたいゲームを伝えるだけで、AIが画面づくり・動作確認・保存まで進めます。最初の試作は10〜20分が目安。本番のデータや管理画面に触れることはありません。
+            安全な公開は、おまかせください。ChatGPTに作りたいゲームを伝えるだけで、AIが画面づくり・動作確認・保存まで進めます。最初の試作は10〜20分が目安。本番のデータや管理画面に触れることはありません。
           </p>
           <div className="hero-actions">
             <a className="primary-action" href="/GameFieldsDownloadMe-ver15.md" download>
