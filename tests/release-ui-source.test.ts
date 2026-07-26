@@ -42,6 +42,10 @@ test("admin exposes environment-paired SDK adoption and independent dev to main"
   assert.doesNotMatch(panel, /disabled=\{isPreview \|\| current \|\| !complete/);
   assert.match(panel, /sdkLoadError/);
   assert.match(panel, /devLoadError/);
+  assert.match(panel, /sdkFailureMessage/);
+  assert.match(panel, /識別情報: \$\{statusLabel\} \/ \$\{safeCode\}/);
+  assert.match(panel, /次の操作:/);
+  assert.match(panel, /whitespace-pre-line/);
   assert.match(sdkRoute, /requirePromotionReadEnvironment/);
   assert.match(sdkRoute, /requirePromotionAdminEnvironment/);
   assert.match(sdkRoute, /sdkPromotionInternalBaseUrl/);
