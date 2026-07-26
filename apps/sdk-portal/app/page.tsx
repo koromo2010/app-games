@@ -71,9 +71,9 @@ export default async function Home() {
         </a>
         <nav aria-label="主要ナビゲーション">
           {linked && <Link href="/dashboard">マイゲーム</Link>}
-          <a href="#start">Start</a>
-          <a href="#foundation">Foundation</a>
-          <a href="#status">Status</a>
+          <a href="#start">スタート</a>
+          <a href="#foundation">しくみ</a>
+          <a href="#status">状況</a>
         </nav>
         <div className="header-account-area">
           <span className="preview-badge">開発者向け先行公開 · v{platformVersion}</span>
@@ -153,16 +153,16 @@ export default async function Home() {
 createGameSdkOnlineRoomModule(appSet)`}</code>
           </pre>
           <div className="contract-card__footer">
-            <span>SDK basic set</span>
-            <span>game AppSet</span>
-            <span>safe composition</span>
+            <span>SDK基本セット</span>
+            <span>ゲームAppSet</span>
+            <span>安全な組み合わせ</span>
           </div>
         </div>
       </section>
 
       <section className="start section" id="start">
         <div className="section-heading">
-          <p className="eyebrow">START A PREVIEW INSTANCE</p>
+          <p className="eyebrow">お試し環境で確認</p>
           <h2>自分専用のお試し環境で遊んでみる</h2>
           <p>
             あなた専用のURLを1つ用意します。作ったゲームはそこに追加され、本番と同じように動くかを確認できます。
@@ -225,7 +225,7 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
 
       <section className="foundation section" id="foundation">
         <div className="section-heading">
-          <p className="eyebrow">THE DEVELOPMENT BOUNDARY</p>
+          <p className="eyebrow">開発の考え方</p>
           <h2>自由に作れる。でも、公開は必ずチェックする。</h2>
           <p>
             SDKは誰でも使えるようにします。でも、Game Fields本体で公開する前には、必ずチェックを行います。
@@ -244,7 +244,7 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
 
       <section className="section" id="scope">
         <div className="section-heading">
-          <p className="eyebrow">WHAT YOU CAN BUILD</p>
+          <p className="eyebrow">できること・できないこと</p>
           <h2>SDKで作れるもの・作れないもの</h2>
           <p>
             外部の人が作れる範囲と、Game Fieldsが管理する範囲を分けています。作り始める前に確認してください。
@@ -269,7 +269,7 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
       <section className="status section" id="status">
         <div className="status-panel">
           <div>
-            <p className="eyebrow">CURRENT STATUS</p>
+            <p className="eyebrow">いまの状況</p>
             <h2>今できること、これから増えること</h2>
             <p className="status-copy">
               SDKを使ったゲーム作りと動作確認は、今すぐ始められます。誰でもダウンロードできるようにする公開や、使い方の説明、提出画面はまだ準備中です。審査の仕組みが整い次第、追加します。
@@ -293,7 +293,7 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
           </span>
           <span>Game Fields SDK</span>
         </div>
-        <p>Platform v{platformVersion} · Build the game. Submit the package. Release through the gate. · <Link href="/terms">利用規約</Link></p>
+        <p>Platform v{platformVersion} · ゲームを作って、届けよう。 · <Link href="/terms">利用規約</Link></p>
       </footer>
     </main>
   );

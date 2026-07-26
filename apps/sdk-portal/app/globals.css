@@ -36,6 +36,14 @@ a {
   text-decoration: none;
 }
 
+p a,
+.required-environment p a,
+.hero-description a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 button,
 select { font: inherit; }
 button { color: inherit; }
