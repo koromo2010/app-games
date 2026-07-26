@@ -5649,6 +5649,17 @@
 
 ### 未対応・保留
 
-- `develop`へ反映し、本体・SDK Portal・SDK PreviewのDeploymentをREADYまで確認する。
-- `sdk-dev.game-fields.com/api/health`の署名probe成功と、正式PreviewからのRoom作成成功を
+- `develop`へ機能commit`023ab274c4a843211e9b4240ad2d8a097e386b23`、
+  記録commit`bd6395ba8a75c88cedcc4b5e4cb27ef8f25037d0`を非forceで反映した。
+- 本体`dpl_5MFt2pUWfvVKhtT111w4x3JFmefX`、Portal
+  `dpl_5pzHbjPFsM28rj25mrpHkDmeJJ3V`、Preview
+  `dpl_8BEYaib4zjnH1cdxjm9rVVbvrT16`はすべて`READY`で、errors-only build logに
+  失敗はなかった。
+- 配備後の`sdk-dev.game-fields.com/api/health`は503
+  `SDK_PREVIEW_SIGNING_MISMATCH`を返し、Previewの`event=sdk.preview-runner-auth`は
+  `TOKEN_INVALID`だった。Portal／Previewのdevelopment署名鍵不一致と確定した。
+- `app-games-sdk-dev`と`app-games-preview-dev`へ同じdevelopment用
+  `SDK_PREVIEW_SIGNING_SECRET` Team Shared Variableを再Linkし、両方を再デプロイする
+  外部設定変更を`config/environment-change-registry.json`へ`requested`で登録した。
+- 再Link後にPortal healthの`previewSigning: ok`と、正式PreviewからのRoom作成成功を
   Runtime Logで照合する。

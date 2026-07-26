@@ -42,6 +42,19 @@
       "note": "VERCEL_GIT_COMMIT_REF=developからdev Originを安全に決定する実装へ変更したため、Project Variable追加は不要。"
     },
     {
+      "id": "2026-07-27-sdk-development-signing-secret-resync",
+      "key": "SDK_PREVIEW_SIGNING_SECRET",
+      "project": "app-games-sdk-dev,app-games-preview-dev",
+      "branch": "develop",
+      "environment": "Production",
+      "sensitive": true,
+      "operation": "link",
+      "status": "requested",
+      "redeployRequired": true,
+      "temporary": false,
+      "note": "Portal health probeがPreviewでTOKEN_INVALIDとなった。両Projectへ同じdevelopment用Team Shared Variableを再Linkし、両方を再デプロイする。値はGitやログへ保存しない。"
+    },
+    {
       "id": "2026-07-26-sdk-production-signing-secret",
       "key": "SDK_PREVIEW_SIGNING_SECRET",
       "project": "app-games-sdk,app-games-sdk-preview",

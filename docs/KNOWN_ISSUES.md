@@ -634,7 +634,7 @@ AI承認追記は新しいメッセージのinsert結果で通知を判定する
 
 ## 2026-07-27 SDK正式Previewの新しい配備だけserver grantが403になる
 
-状態: 修正実装済み（2026-07-27、回帰テスト・lint・3 Project buildあり、dev配備確認待ち）
+状態: コード修正・dev配備済み（2026-07-27、development署名鍵の再Link・再デプロイ待ち）
 
 `moi-dev`の正式PreviewでスカルのRoom作成を行うと、本体
 `POST /api/sdk-preview/moi-lab/games/skull/rooms`が503
@@ -652,3 +652,8 @@ SDK Previewはgrant拒否を安全な理由別の構造化ログへ記録する�
 対応Previewへ固定scopeの署名probeを送り、Room作成前にPortal／Previewの署名・環境一致を
 検出する。本体remote runnerはネットワーク例外と408／502／503／504だけを1回再試行し、
 401／403は専用の`GAME_SDK_REMOTE_RUNNER_AUTH_FAILED`として利用者表示と運用調査を分ける。
+
+修正配備後のPortal healthは503`SDK_PREVIEW_SIGNING_MISMATCH`、Previewの安全な理由は
+`TOKEN_INVALID`だったため、両Projectのdevelopment用`SDK_PREVIEW_SIGNING_SECRET`が
+一致していないことまで確定した。`app-games-sdk-dev`と`app-games-preview-dev`へ同じ
+Team Shared Variableを再Linkし、両方を再デプロイする外部設定変更を依頼中である。

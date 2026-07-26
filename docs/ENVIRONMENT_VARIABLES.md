@@ -273,13 +273,13 @@ SDK `content-source`の実DB adapter、module lab、Preview中継API `/api/sdk-p
 
 SDK `llm` adapter、module lab、Preview中継API `/api/sdk-preview/llm`も本体`app-games`／`app-games-dev`で動作し、既存の共通LLM変数と利用者の暗号化HttpOnly Cookieだけを使用する。`app-games-sdk*`および`app-games-preview*`へOpenAI・Gemini・GroqのAPIキー、`LLM_SESSION_SECRET`、`LLM_ACCESS_PASSWORD`を追加・Linkしない。iframeと公開SDKへ渡すのはtask、送信内容、prompt version、任意の返却schemaだけで、新しい外部変数は追加しない。
 
-#### SDK Development 現在配置（2026-07-22確認）
+#### SDK Development 現在配置（2026-07-27確認）
 
 この表は期待仕様ではなく、Vercel Dashboardで確認した現在の配置を記録する。秘密値は記録しない。環境変数を追加・変更・削除した場合は、再デプロイ前にこの表を更新する。
 
 | キー | `app-games-sdk-dev` | `app-games-preview-dev` | Vercel対象 | 状態 |
 | --- | --- | --- | --- | --- |
-| `SDK_PREVIEW_SIGNING_SECRET` | Team SharedをLink | 同じTeam SharedをLink | Production | 両ProjectでLink確認済み・環境変数追加後のDeployment作成済み |
+| `SDK_PREVIEW_SIGNING_SECRET` | Team Sharedを再Link依頼中 | 同じdevelopment用Team Sharedを再Link依頼中 | Production | 2026-07-27のPortal署名probeがPreviewで`TOKEN_INVALID`。両Projectの同一値再Linkと再デプロイ後、`/api/health`の`previewSigning: ok`を確認する |
 | `SDK_PREVIEW_BASE_URL` | 未登録。コード既定値`https://preview-dev.game-fields.com`を使用 | 不要 | Production | previewドメイン割当・Valid Configuration確認済み |
 | `SDK_PREVIEW_FRAME_ANCESTORS` | 不要 | 未登録。`develop`時のコード既定値として外枠`https://sdk-dev.game-fields.com`と、ゲーム固有iframeの直近親`https://dev.game-fields.com`を許可 | Production | 本体UI共用後の二段iframeに対応。明示設定する場合も両originが必要 |
 | `SDK_MOCK_GITHUB_REPOSITORY` | Project Variable登録済み。値はdev専用private repository | Project Variable登録済み | Production | 追加後Deployment作成済み、保存成功を実機確認済み |
@@ -290,7 +290,7 @@ SDK `llm` adapter、module lab、Preview中継API `/api/sdk-preview/llm`も本�
 | `GAME_FIELDS_APP_BASE_URL` | Project Variable登録を画面確認済み（`https://dev.game-fields.com`） | 不要 | Production | 追加後のSDK Portal再デプロイ済み。表アカウント側DB復旧後にSSO実機確認 |
 | `GAME_FIELDS_PREVIEW_APP_URL` | 未登録。developコード既定値`https://dev.game-fields.com`を使用 | 不要 | Production | 本体UI共用の制作者URLを実機確認後、必要な場合だけ明示設定 |
 
-#### SDK Development 外部設定の進捗（2026-07-22確認）
+#### SDK Development 外部設定の進捗（2026-07-27確認）
 
 | 対象 | 現在状態 | 次の確認 |
 | --- | --- | --- |
