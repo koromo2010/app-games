@@ -105,6 +105,37 @@ test("creator AI receives only the current all-required contract", () => {
   }
 });
 
+test("creator contract enumerates the complete Platform DEBUG surface", () => {
+  const sdkApi = read("sdk/starter-template/SDK_API.md");
+  const requirements = read("sdk/starter-template/APP_REQUIREMENTS.md");
+  const catalog = read("sdk/starter-template/SDK_MODULE_CATALOG.md");
+  const debugModule = GAME_SDK_MODULE_CATALOG.find(
+    (definition) => definition.id === "debug",
+  );
+
+  for (const command of [
+    "room/debug-add-dummy",
+    "room/debug-remove-dummy",
+    "room/debug-auto-progress",
+    "room/debug-simulate-timeout",
+    "room/debug-set-connected",
+    "room/debug-simulate-input-error",
+  ]) {
+    assert.match(sdkApi, new RegExp(command.replace("/", "\\/")));
+  }
+  for (const marker of [
+    "閲覧プレイヤー視点切替",
+    "安全な主要状態進行",
+    "時間切れ・切断・入力エラー",
+    "自動進行",
+    "進行中断",
+  ]) {
+    assert.match(`${requirements}\n${catalog}\n${sdkApi}`, new RegExp(marker));
+  }
+  assert.match(debugModule?.description ?? "", /閲覧視点/);
+  assert.match(debugModule?.description ?? "", /時間切れ・切断・入力拒否/);
+});
+
 test("machine-readable resource modules expose delivery and import contracts", () => {
   const content = GAME_SDK_MODULE_CATALOG.find(
     (definition) => definition.id === "content-source",

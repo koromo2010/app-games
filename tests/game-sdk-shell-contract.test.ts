@@ -20,6 +20,9 @@ const previewDefaultsRoute = source("app/api/sdk-preview/[creatorSlug]/games/[ga
 const platformAdapter = source("lib/game-sdk-platform-adapter.ts");
 const runtimeCatalog = source("lib/game-sdk-runtime-catalog.ts");
 const sdkRuntime = source("packages/game-sdk/src/runtime.ts");
+const sdkClientRuntime = source("packages/game-sdk/src/client-runtime.ts");
+const platformRuntime = source("packages/game-runtime/src/index.ts");
+const roomHttp = source("lib/game-sdk-online-room-http.ts");
 const lifecycleActions = source("app/components/OnlineRoomLifecycleActions.tsx");
 const resultActions = source("app/components/RoomResultActions.tsx");
 const spectatorRegistry = source("lib/online-room-spectator-registry.ts");
@@ -45,6 +48,30 @@ test("reviewed SDK shell consumes every Room View permission it declares", () =>
   assert.match(header, /debugRoom\?: GameSdkDebugRoom \| null/);
   assert.match(header, /DEBUG · ON/);
   assert.match(header, /DebugParticipantControls/);
+  for (const marker of [
+    "閲覧視点",
+    "1手だけ自動進行",
+    "次の主要状態まで進める",
+    "結果まで自動進行",
+    "現在手番の時間切れを再現",
+    "不正入力の拒否を確認",
+    "切断を再現",
+  ]) {
+    assert.match(header, new RegExp(marker));
+  }
+  for (const command of [
+    "room/debug-auto-progress",
+    "room/debug-simulate-timeout",
+    "room/debug-set-connected",
+    "room/debug-simulate-input-error",
+  ]) {
+    assert.match(frame, new RegExp(command.replace("/", "\\/")));
+    assert.match(sdkRuntime, new RegExp(command.replace("/", "\\/")));
+  }
+  assert.match(frame, /readRoomAsDebugViewer/);
+  assert.match(sdkClientRuntime, /readRoomAsDebugViewer/);
+  assert.match(platformRuntime, /debugViewer/);
+  assert.match(roomHttp, /debugViewer/);
 });
 
 test("SDK header receives Room View state and never fetches it independently", () => {
@@ -151,7 +178,15 @@ test("every shared Shell module has executable evidence in the formal package pa
       [frame, /moduleRequired\("debug"\)/],
       [frame, /room\/debug-add-dummy/],
       [frame, /room\/debug-remove-dummy/],
+      [frame, /room\/debug-auto-progress/],
+      [frame, /room\/debug-simulate-timeout/],
+      [frame, /room\/debug-set-connected/],
+      [frame, /room\/debug-simulate-input-error/],
       [header, /DebugParticipantControls/],
+      [header, /閲覧視点/],
+      [header, /次の主要状態まで進める/],
+      [sdkClientRuntime, /readRoomAsDebugViewer/],
+      [platformRuntime, /debugViewer/],
       [sdkRuntime, /canDebug:[\s\S]*manifest\.supportsDebug[\s\S]*context\.viewer\.debugAccess[\s\S]*isHost/],
     ],
     timer: [

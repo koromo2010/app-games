@@ -460,3 +460,25 @@ active room索引解放、DEBUG操作のロビー限定認可もHTTP／Runtime�
 新しい契約テストはShell groupのcatalog全17件と実装証拠の対応を完全一致で検査する。
 module追加時は証拠定義の追加が必須になり、各既存moduleも正式PackageのUI、Command、
 Runtimeまたは公開経路の接続が消えると失敗する。
+
+## 2026-07-26 SDK正式PackageのDEBUG監査がダミー操作だけで通過する
+
+状態: 修正済み・dev公開前（2026-07-26、DEBUG縦断回帰テストあり）
+
+必須Shell moduleの再監査で`debug`を実装済みと判定していたが、契約テストが確認したのは
+ダミー追加・削除だけだった。正式Packageの`GameSdkFrame`には閲覧視点、安全な主要状態
+進行、時間切れ・切断・入力拒否の再現、自動進行がなく、SDK文書の「デバッグUI」全体を
+満たしていなかった。旧Previewや個別ゲームのDEBUG画面が存在しても、candidateと昇格後で
+共有する正式Package経路の実装証拠にはならない。
+
+共通DEBUGウィンドウへhost本人・各参加者・観戦者の読取専用View切替、1手・次の主要状態・
+結果までの安全な自動進行、現在手番の時間切れ、参加者の切断／復帰、入力拒否検証を追加した。
+自動進行はAppSetの`expireAppTurn`を使い、ゲーム固有stateのphase文字列を直接書き換えない。
+閲覧ViewはCommand actorへ流用せず、入力拒否はRoomを保存しない。既存の進行中断は
+`room/abort`へ接続済みである。
+
+既存Roomが固定している旧package bundleでも動作するよう、Platform Runtimeが新DEBUG
+Commandを旧Runtimeの`room/expire-timer`へ変換する互換bridgeを追加した。自動進行では
+連続放置状態を増やさず、時間切れ再現だけが通常のtimeout状態を更新する。Shell、HTTP、
+Client Runtime、Platform adapter、旧bundle互換を縦断テストへ固定し、配布Starterも
+全DEBUG Commandと表示項目を列挙しなければ検査に失敗するようにした。

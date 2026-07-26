@@ -132,6 +132,29 @@ try {
       throw new Error(`Starter does not define localized safe result playback: ${required}`);
     }
   }
+  for (const required of [
+    "room/debug-add-dummy",
+    "room/debug-remove-dummy",
+    "room/debug-auto-progress",
+    "room/debug-simulate-timeout",
+    "room/debug-set-connected",
+    "room/debug-simulate-input-error",
+  ]) {
+    if (!sdkApi.includes(required)) {
+      throw new Error(`Starter does not define the shared DEBUG command: ${required}`);
+    }
+  }
+  for (const required of [
+    "閲覧プレイヤー視点切替",
+    "安全な主要状態進行",
+    "時間切れ・切断・入力エラー",
+    "自動進行",
+    "進行中断",
+  ]) {
+    if (!`${appRequirements}\n${moduleCatalog}\n${sdkApi}`.includes(required)) {
+      throw new Error(`Starter does not define the complete shared DEBUG surface: ${required}`);
+    }
+  }
   const starterManifest = JSON.parse(readFileSync(join(starterRoot, "starter-manifest.json"), "utf8"));
   if (starterManifest.downloadMeVersion !== 15
     || starterManifest.repository !== "https://github.com/koromo2010/app-games"

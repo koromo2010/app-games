@@ -211,7 +211,12 @@ export const GAME_SDK_MODULE_CATALOG: readonly GameSdkModuleDefinition[] = [
   moduleDefinition("online-room", "shell", "オンラインRoom", "作成・参加・退出・復帰・人数上限を管理する。"),
   moduleDefinition("room-sync", "shell", "Room同期", "revision、Realtime通知、polling fallbackを管理する。"),
   moduleDefinition("room-settings", "shell", "部屋設定", "全員への設定表示、ホスト編集、既定値保存を提供する。"),
-  moduleDefinition("debug", "shell", "DEBUG", "ダミー、視点、状態再現、自動進行、中断を提供する。"),
+  moduleDefinition(
+    "debug",
+    "shell",
+    "DEBUG",
+    "ダミー、閲覧視点、安全な状態進行、時間切れ・切断・入力拒否の再現、中断を提供する。",
+  ),
   moduleDefinition("timer", "shell", "時間管理", "期限、受付猶予、時間切れCommand、連続放置を管理する。"),
   moduleDefinition("result", "shell", "結果画面", "標準結果を共通結果画面へ投影する。"),
   moduleDefinition("rematch", "shell", "再戦", "同じ部屋と参加者を保った再戦を管理する。"),

@@ -103,6 +103,10 @@ export type AuthenticatedGameSdkPlatformAdapter<
     requestId?: string;
   }): Promise<GameSdkRoomSnapshot<TRoomView>>;
   readRoom(code: string): Promise<GameSdkRoomSnapshot<TRoomView> | null>;
+  readRoomAsDebugViewer(
+    code: string,
+    viewer: number | "spectator",
+  ): Promise<GameSdkRoomSnapshot<TRoomView> | null>;
   readActiveRoom(): Promise<GameSdkRoomSnapshot<TRoomView> | null>;
   listRooms(cursor?: string | null): Promise<GameSdkRoomListPage>;
   sendCommand(input: {
@@ -356,6 +360,67 @@ export function createAuthenticatedGameSdkPlatformAdapter<
       });
       const record = roomStore ? await roomStore.load(normalizedCode) : null;
       if (record) await scheduleResultOutbox(record);
+      return room;
+    },
+
+    async readRoomAsDebugViewer(code, viewer) {
+      const identity = await resolveIdentity();
+      if (!identity.debugAccess) {
+        throw new GameFieldsPlatformRuntimeError(
+          "DEBUG_ACCESS_REQUIRED",
+          403,
+        );
+      }
+      if (!roomStore) throw new Error("GAME_SDK_LIFECYCLE_UNAVAILABLE");
+      const normalizedCode = normalizeGameSdkPlatformRoomCode(code);
+      const record = await roomStore.load(normalizedCode);
+      if (!record) return null;
+      if (record.hostPlayerId !== identity.playerId) {
+        throw new GameFieldsPlatformRuntimeError(
+          "DEBUG_ACCESS_REQUIRED",
+          403,
+        );
+      }
+      const players = "players" in record.room
+        && Array.isArray(
+          (record.room as GameSdkStoredRoom & { players?: unknown }).players,
+        )
+        ? (record.room as GameSdkStoredRoom & {
+            players: Array<{ id?: unknown }>;
+          }).players
+        : [];
+      const target = viewer === "spectator" ? null : players[viewer];
+      if (
+        viewer !== "spectator"
+        && (
+          !Number.isSafeInteger(viewer)
+          || viewer < 0
+          || !target
+          || typeof target.id !== "string"
+        )
+      ) {
+        throw new GameFieldsPlatformRuntimeError(
+          "DEBUG_VIEWER_INVALID",
+          400,
+        );
+      }
+      const runtime = createRuntime(await definitionForRecord(record));
+      const room = await runtime.readRoom({
+        code: normalizedCode,
+        identity,
+        debugViewer: target
+          ? {
+              playerId: target.id as string,
+              role: target.id === record.hostPlayerId ? "host" : "player",
+              debugAccess: true,
+            }
+          : {
+              playerId: null,
+              role: "spectator",
+              debugAccess: true,
+            },
+      });
+      await scheduleResultOutbox(record);
       return room;
     },
 

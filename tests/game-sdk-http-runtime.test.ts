@@ -193,6 +193,10 @@ const host: GameFieldsAuthenticatedIdentity = {
   displayName: "Host",
   debugAccess: false,
 };
+const debugHost: GameFieldsAuthenticatedIdentity = {
+  ...host,
+  debugAccess: true,
+};
 
 const player: GameFieldsAuthenticatedIdentity = {
   playerId: "player-account",
@@ -298,6 +302,38 @@ test("SDK HTTP Client Runtimeはactorを送らず認証adapterと永続Runtime�
   })).room;
 
   identity = host;
+  await assert.rejects(
+    () => runtime.readRoomAsDebugViewer("RACE", 1),
+    (error: unknown) => (
+      error instanceof GameSdkHttpClientRuntimeError
+      && error.status === 403
+      && error.code === "DEBUG_ACCESS_REQUIRED"
+    ),
+  );
+  identity = debugHost;
+  const playerView = await runtime.readRoomAsDebugViewer("RACE", 1);
+  assert.equal(
+    playerView?.view.common.players.find((candidate) => candidate.isSelf)?.seat,
+    1,
+  );
+  await assert.rejects(
+    () => runtime.readRoomAsDebugViewer("RACE", "spectator"),
+    (error: unknown) => (
+      error instanceof GameSdkHttpClientRuntimeError
+      && error.status === 400
+      && error.code === "DEBUG_VIEWER_INVALID"
+    ),
+  );
+  await assert.rejects(
+    () => runtime.readRoomAsDebugViewer("RACE", 99),
+    (error: unknown) => (
+      error instanceof GameSdkHttpClientRuntimeError
+      && error.status === 400
+      && error.code === "DEBUG_VIEWER_INVALID"
+    ),
+  );
+
+  identity = host;
   room = (await runtime.sendCommand("RACE", {
     expectedRevision: room.revision,
     command: { type: "game/start" },
@@ -368,6 +404,100 @@ test("SDK HTTP Client Runtimeはactorを送らず認証adapterと永続Runtime�
   identity = host;
   assert.equal(await runtime.dissolveHostedRooms(), 1);
   assert.equal(await runtime.readRoom("NEXT"), null);
+});
+
+test("Platform DEBUG bridge keeps pinned package bundles compatible", async () => {
+  let identity = debugHost;
+  const legacyModule = {
+    ...sdkCountUpServerModule,
+    applyCommand(
+      room: SdkCountUpRoom,
+      command: SdkCountUpCommand,
+      context: Parameters<typeof sdkCountUpServerModule.applyCommand>[2],
+    ) {
+      assert.notEqual(command.type, "room/debug-auto-progress");
+      assert.notEqual(command.type, "room/debug-simulate-timeout");
+      assert.notEqual(command.type, "room/debug-set-connected");
+      assert.notEqual(command.type, "room/debug-simulate-input-error");
+      return sdkCountUpServerModule.applyCommand(room, command, context);
+    },
+  };
+  const adapter = createAuthenticatedGameSdkPlatformAdapter({
+    module: legacyModule,
+    roomStore: memoryRoomStore(),
+    resolveIdentity: async () => identity,
+    now: (() => {
+      let value = 3_000;
+      return () => ++value;
+    })(),
+  });
+  const handlers = createGameSdkOnlineRoomHttpHandlers({
+    adapter: adapter as unknown as AuthenticatedGameSdkPlatformAdapter<
+      unknown,
+      { type: string },
+      unknown
+    >,
+  });
+  const runtime = createGameSdkHttpClientRuntime<
+    SdkCountUpCreateInput,
+    SdkCountUpCommand,
+    SdkCountUpRoomView
+  >({
+    endpoint: "https://game-fields.test/api/game-sdk/sdk-count-up-proof/rooms",
+    fetcher: httpFetcher(handlers),
+    gameId: "sdk-count-up-proof",
+  });
+
+  let room = await runtime.createRoom({
+    roomCode: "OLD1",
+    create: { settings: { target: 2 }, app: {} },
+  });
+  identity = player;
+  room = (await runtime.sendCommand(room.code, {
+    expectedRevision: room.revision,
+    command: { type: "room/join" },
+  })).room;
+  identity = debugHost;
+  room = (await runtime.sendCommand(room.code, {
+    expectedRevision: room.revision,
+    command: { type: "game/start" },
+  })).room;
+
+  room = (await runtime.sendCommand(room.code, {
+    expectedRevision: room.revision,
+    command: { type: "room/debug-auto-progress" },
+  })).room;
+  assert.equal(room.view.app.count, 1);
+  assert.equal(room.view.common.players[0]?.reducedTime, false);
+
+  const revisionBeforeRejection = room.revision;
+  await assert.rejects(
+    () => runtime.sendCommand(room.code, {
+      expectedRevision: room.revision,
+      command: { type: "room/debug-simulate-input-error" },
+    }),
+    (error: unknown) => (
+      error instanceof GameSdkHttpClientRuntimeError
+      && error.code === "DEBUG_INPUT_ERROR_SIMULATED"
+    ),
+  );
+  assert.equal((await runtime.readRoom(room.code))?.revision, revisionBeforeRejection);
+
+  room = (await runtime.sendCommand(room.code, {
+    expectedRevision: room.revision,
+    command: {
+      type: "room/debug-set-connected",
+      seat: 1,
+      connected: false,
+    },
+  })).room;
+  assert.equal(room.view.common.players[1]?.connected, false);
+
+  room = (await runtime.sendCommand(room.code, {
+    expectedRevision: room.revision,
+    command: { type: "room/debug-simulate-timeout" },
+  })).room;
+  assert.equal(room.phase, "result");
 });
 
 test("result outboxは保存失敗をconfirmedへ戻し、次のreadで同じeventを再開する", async () => {

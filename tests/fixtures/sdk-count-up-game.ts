@@ -19,7 +19,7 @@ export const sdkCountUpManifest = defineGameManifest({
   playMode: "online-room",
   minimumPlayers: 2,
   maximumPlayers: 4,
-  supportsDebug: false,
+  supportsDebug: true,
   supportsSpectators: false,
   supportsReplay: false,
   supportsRating: false,

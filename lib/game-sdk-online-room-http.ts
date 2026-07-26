@@ -9,6 +9,7 @@ import { GameSdkLlmRateLimitError } from "./game-sdk-llm-gateway.ts";
 
 export type GameSdkOnlineRoomHttpOperation =
   | "read"
+  | "debug-view"
   | "active"
   | "list"
   | "create"
@@ -52,6 +53,7 @@ type HttpHandlerOptions = {
 };
 
 const forbiddenCodes = new Set([
+  "DEBUG_ACCESS_REQUIRED",
   "HOST_REQUIRED",
   "MEMBER_REQUIRED",
   "PLAYER_NOT_IN_ROOM",
@@ -60,6 +62,12 @@ const forbiddenCodes = new Set([
 
 const conflictCodes = new Set([
   "CLUE_ALREADY_SUBMITTED",
+  "DEBUG_AUTO_PROGRESS_UNSUPPORTED",
+  "DEBUG_DUMMY_REQUIRED",
+  "DEBUG_INPUT_ERROR_SIMULATED",
+  "DEBUG_LOBBY_ONLY",
+  "DEBUG_PLAYER_REQUIRED",
+  "DEBUG_PROGRESS_PHASE_REQUIRED",
   "GAME_IN_PROGRESS",
   "INVALID_PHASE",
   "LOBBY_REQUIRED",
@@ -76,6 +84,7 @@ const conflictCodes = new Set([
 
 const badRequestCodes = new Set([
   "CLUE_REQUIRED",
+  "DEBUG_VIEWER_INVALID",
   "GAME_SDK_INVALID_ROOM_CODE",
   "INVALID_VOTE_TARGET",
   "UNKNOWN_COMMAND",
@@ -224,6 +233,23 @@ export function createGameSdkOnlineRoomHttpHandlers({
         const page = await adapter.listRooms(searchParams.get("cursor"));
         onSuccess?.(operation, undefined, page.rooms.length);
         return json(page);
+      }
+      const debugViewer = searchParams.get("debugViewer");
+      if (debugViewer !== null) {
+        operation = "debug-view";
+        const viewer = debugViewer === "spectator"
+          ? "spectator"
+          : Number(debugViewer);
+        if (
+          viewer !== "spectator"
+          && (!Number.isSafeInteger(viewer) || viewer < 0)
+        ) {
+          return json({ error: "DEBUG_VIEWER_INVALID" }, 400);
+        }
+        const room = await adapter.readRoomAsDebugViewer(code, viewer);
+        if (!room) return json({ error: "ROOM_NOT_FOUND" }, 404);
+        onSuccess?.(operation, room);
+        return json({ room });
       }
       operation = "read";
       const room = await adapter.readRoom(code);

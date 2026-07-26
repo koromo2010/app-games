@@ -149,7 +149,7 @@ catalogは採用方針であり、それだけを表示して実装済みとは�
 
 `llm`の実体は`lib/game-sdk-llm-gateway.ts`とする。clientはゲーム固有Commandと入力値だけを送り、審査済みserver AppSetがtaskとpromptを組み立てて`context.resources.llm.generate`を呼ぶ。adapterは実生成単位の利用者別レート制限を適用し、共通`lib/game-llm.ts`へprovider選択、持込／Game Fields課金、model、fallbackを委譲する。Previewでは同じ公開request型をpostMessage bridgeから`/api/sdk-preview/llm`へ送るが、high qualityは許可せず、保存済みゲームと`llm`必須profileを毎回検証する。
 
-formal packageの外側は候補Previewとmainで共通の`GameSdkFrame`を使い、その内側へAppSet clientを描画する。SDK専用の白枠や別ロビーは作らない。`GameSdkFrame`は`GameTopBanner`、manifestルール、プレイヤーメニューを本体共通部品から合成する。部屋設定はロビーだけに表示し、playingでは共通サイド欄ごと隠してgame iframeを全幅にする。中断はトップバナーへ移し、resultでは結果用共通moduleだけを表示する。Portalで確定したmodule profileはmain採用カタログへ渡し、`stats`、`rating`、`replay`、`result-share`、`feedback`の保存・表示を同じ採否で制御する。共有文はseat由来の`PLAYERn`だけを用い、フィードバック対象は結果phaseの参加者へだけ返す。LLM生成物への評価は既存の共通feedback storeへ保存し、同じgame/taskの次回生成では命令として信用しない参考例として利用する。
+formal packageの外側は候補Previewとmainで共通の`GameSdkFrame`を使い、その内側へAppSet clientを描画する。SDK専用の白枠や別ロビーは作らない。`GameSdkFrame`は`GameTopBanner`、manifestルール、プレイヤーメニューを本体共通部品から合成する。部屋設定はロビーだけに表示し、playingでは共通サイド欄ごと隠してgame iframeを全幅にする。中断はトップバナーへ移し、resultでは結果用共通moduleだけを表示する。DEBUGでは権限付きhostへダミー管理、読取専用の閲覧視点、安全な自動進行、時間切れ・切断・入力拒否の再現を共通Shellから提供する。自動進行はAppSetの`expireAppTurn`を使い、固定済み旧package bundleにはPlatform Runtimeが既存の`room/expire-timer`へ変換する互換bridgeを持つ。Portalで確定したmodule profileはmain採用カタログへ渡し、`stats`、`rating`、`replay`、`result-share`、`feedback`の保存・表示を同じ採否で制御する。共有文はseat由来の`PLAYERn`だけを用い、フィードバック対象は結果phaseの参加者へだけ返す。LLM生成物への評価は既存の共通feedback storeへ保存し、同じgame/taskの次回生成では命令として信用しない参考例として利用する。
 
 進行部品は提出完了、選択、投票、役職、チーム、ラウンド、手番、seat変換、標準結果へ物理分割した。WordWolf、Tahoiya、Word Scale、Word Sonar、Word Out、Code Intercept、Northern Branch、Daifugoの8オンラインゲームが同じ公開部品を直接利用する回帰検査を持つ。AppSetへ同じ判定をコピーしない。
 

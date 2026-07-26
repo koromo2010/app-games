@@ -452,7 +452,11 @@ export type GameSdkRoomLifecycleCommand<TSettings> =
   | { type: "room/expire-timer"; turnSequence: number }
   | { type: "room/recover-timeout" }
   | { type: "room/debug-add-dummy" }
-  | { type: "room/debug-remove-dummy"; seat: number };
+  | { type: "room/debug-remove-dummy"; seat: number }
+  | { type: "room/debug-auto-progress" }
+  | { type: "room/debug-simulate-timeout" }
+  | { type: "room/debug-set-connected"; seat: number; connected: boolean }
+  | { type: "room/debug-simulate-input-error" };
 
 /**
  * Browser-facing Runtime injected by Game Fields. Actor identity is omitted on

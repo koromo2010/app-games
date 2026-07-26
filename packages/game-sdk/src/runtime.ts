@@ -211,6 +211,16 @@ export function applyGameSdkRoomLifecycleCommand<
     resetGame: (room: Readonly<TRoom>) => Omit<Partial<TRoom>, "code" | "revision">;
   },
 ): GameSdkRoomLifecycleResult<TRoom> {
+  const assertDebugHost = () => {
+    if (
+      !options.supportsDebug
+      || !context.actor.debugAccess
+      || context.actor.playerId !== room.hostPlayerId
+    ) {
+      throw new Error("DEBUG_ACCESS_REQUIRED");
+    }
+  };
+
   if (command.type === "room/join") {
     if (room.phase !== "lobby") throw new Error("ROOM_NOT_JOINABLE");
     if (room.players.some((player) => player.id === context.actor.playerId)) {
@@ -233,13 +243,7 @@ export function applyGameSdkRoomLifecycleCommand<
     command.type === "room/debug-add-dummy"
     || command.type === "room/debug-remove-dummy"
   ) {
-    if (
-      !options.supportsDebug
-      || !context.actor.debugAccess
-      || context.actor.playerId !== room.hostPlayerId
-    ) {
-      throw new Error("DEBUG_ACCESS_REQUIRED");
-    }
+    assertDebugHost();
     if (room.phase !== "lobby") throw new Error("DEBUG_LOBBY_ONLY");
     if (command.type === "room/debug-add-dummy") {
       if (room.players.length >= options.maximumPlayers) throw new Error("ROOM_FULL");
@@ -268,6 +272,35 @@ export function applyGameSdkRoomLifecycleCommand<
         players: room.players.filter((_player, index) => index !== seat),
       } as Partial<TRoom>),
     };
+  }
+  if (command.type === "room/debug-set-connected") {
+    assertDebugHost();
+    const connectionCommand = command as {
+      type: "room/debug-set-connected";
+      seat?: unknown;
+      connected?: unknown;
+    };
+    const seat = Number.isSafeInteger(connectionCommand.seat)
+      ? Number(connectionCommand.seat)
+      : -1;
+    const target = room.players[seat];
+    if (!target || typeof connectionCommand.connected !== "boolean") {
+      throw new Error("DEBUG_PLAYER_REQUIRED");
+    }
+    return {
+      handled: true,
+      room: advanceGameSdkRoom(room, {
+        players: room.players.map((player, index) => (
+          index === seat
+            ? { ...player, connected: connectionCommand.connected as boolean }
+            : player
+        )),
+      } as Partial<TRoom>),
+    };
+  }
+  if (command.type === "room/debug-simulate-input-error") {
+    assertDebugHost();
+    throw new Error("DEBUG_INPUT_ERROR_SIMULATED");
   }
   if (command.type === "room/leave") {
     if (!room.players.some((player) => player.id === context.actor.playerId)) throw new Error("PLAYER_NOT_IN_ROOM");
@@ -628,31 +661,54 @@ export function createGameSdkOnlineRoomModule<
         if (!recovered) throw new Error("PLAYER_TIMEOUT_RECOVERY_NOT_REQUIRED");
         return advanceGameSdkRoom(room, { playerTimeouts: recovered });
       }
-      if (command.type === "room/expire-timer") {
-        const expireCommand = command as {
-          type: "room/expire-timer";
-          turnSequence: number;
-        };
+      if (
+        command.type === "room/expire-timer"
+        || command.type === "room/debug-auto-progress"
+        || command.type === "room/debug-simulate-timeout"
+      ) {
+        const isDebugProgress = command.type !== "room/expire-timer";
+        if (
+          isDebugProgress
+          && (
+            !manifest.supportsDebug
+            || !context.actor.debugAccess
+            || context.actor.playerId !== room.hostPlayerId
+          )
+        ) {
+          throw new Error("DEBUG_ACCESS_REQUIRED");
+        }
         if (!appSet.timer || !room.timer || !appSet.expireAppTurn) {
-          throw new Error("TIMER_EXPIRY_UNSUPPORTED");
+          throw new Error(
+            isDebugProgress
+              ? "DEBUG_AUTO_PROGRESS_UNSUPPORTED"
+              : "TIMER_EXPIRY_UNSUPPORTED",
+          );
         }
-        if (
-          !Number.isSafeInteger(expireCommand.turnSequence)
-          || expireCommand.turnSequence !== room.timer.turnSequence
-        ) {
-          throw new Error("TIMER_EVENT_STALE");
-        }
-        const graceMs = Math.max(
-          0,
-          Math.min(30_000, Math.floor(appSet.timer.graceMs ?? 1_500)),
-        );
-        if (
-          room.phase === "lobby"
-          || room.phase === "result"
-          || room.timer.deadlineAt === null
-          || context.now < room.timer.deadlineAt + graceMs
-        ) {
-          throw new Error("TIMER_NOT_EXPIRED");
+        if (command.type === "room/expire-timer") {
+          const expireCommand = command as {
+            type: "room/expire-timer";
+            turnSequence: number;
+          };
+          if (
+            !Number.isSafeInteger(expireCommand.turnSequence)
+            || expireCommand.turnSequence !== room.timer.turnSequence
+          ) {
+            throw new Error("TIMER_EVENT_STALE");
+          }
+          const graceMs = Math.max(
+            0,
+            Math.min(30_000, Math.floor(appSet.timer.graceMs ?? 1_500)),
+          );
+          if (
+            room.phase === "lobby"
+            || room.phase === "result"
+            || room.timer.deadlineAt === null
+            || context.now < room.timer.deadlineAt + graceMs
+          ) {
+            throw new Error("TIMER_NOT_EXPIRED");
+          }
+        } else if (room.phase === "lobby" || room.phase === "result") {
+          throw new Error("DEBUG_PROGRESS_PHASE_REQUIRED");
         }
         const transition = await appSet.expireAppTurn(
           room,
@@ -668,12 +724,17 @@ export function createGameSdkOnlineRoomModule<
           throw new Error("TIMER_TIMEOUT_PLAYERS_INVALID");
         }
         let playerTimeouts = currentPlayerTimeouts;
-        for (const playerId of timedOutPlayerIds) {
-          playerTimeouts = recordGameSdkPlayerTimeout(
-            playerTimeouts,
-            playerId,
-            context.now,
-          );
+        if (
+          command.type === "room/expire-timer"
+          || command.type === "room/debug-simulate-timeout"
+        ) {
+          for (const playerId of timedOutPlayerIds) {
+            playerTimeouts = recordGameSdkPlayerTimeout(
+              playerTimeouts,
+              playerId,
+              context.now,
+            );
+          }
         }
         const nextPhase = normalizeAppSetPhase(transition.phase);
         const standardResult = transition.standardResult

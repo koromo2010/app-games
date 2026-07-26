@@ -31,6 +31,10 @@ export type GameSdkHttpClientRuntime<
     requestId?: string;
   }): Promise<GameSdkRoomSnapshot<TRoomView>>;
   readRoom(code: string): Promise<GameSdkRoomSnapshot<TRoomView> | null>;
+  readRoomAsDebugViewer(
+    code: string,
+    viewer: number | "spectator",
+  ): Promise<GameSdkRoomSnapshot<TRoomView> | null>;
   readActiveRoom(): Promise<GameSdkRoomSnapshot<TRoomView> | null>;
   listRooms(cursor?: string | null): Promise<GameSdkRoomListPage>;
   sendCommand(
@@ -238,6 +242,27 @@ export function createGameSdkHttpClientRuntime<
       const room = payload && typeof payload === "object"
         ? (payload as { room?: unknown }).room
         : null;
+      if (!isRoomSnapshot<TRoomView>(room)) {
+        throw new GameSdkHttpClientRuntimeError(
+          "GAME_SDK_INVALID_ROOM_RESPONSE",
+          502,
+          payload,
+        );
+      }
+      return room;
+    },
+
+    async readRoomAsDebugViewer(code, viewer) {
+      const payload = await requestJson(
+        fetcher,
+        queryUrl(endpoint, {
+          code,
+          debugViewer: String(viewer),
+        }),
+        { method: "GET" },
+        "GAME_SDK_DEBUG_VIEW_READ_FAILED",
+      );
+      const room = (payload as { room?: unknown }).room;
       if (!isRoomSnapshot<TRoomView>(room)) {
         throw new GameSdkHttpClientRuntimeError(
           "GAME_SDK_INVALID_ROOM_RESPONSE",

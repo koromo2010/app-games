@@ -162,6 +162,24 @@ const appSet = defineGameSdkOnlineRoomAppSet({
 結果後の`room/rematch`はhostだけが実行し、ほかの参加者は結果画面を保持します。
 各参加者が`room/confirm-lobby-return`を送るまで次ゲームは開始できません。
 
+## Platform DEBUG
+
+`manifest.supportsDebug`が有効なゲームでは、Platformの権限付きhostだけが外側Shellの
+共通DEBUG操作を使えます。ゲームpackageはDEBUGパネルや`room/*` Commandを実装しません。
+
+- lobbyでダミー参加者を追加・削除する。
+- host本人、各参加者、対応ゲームの観戦者へ閲覧Viewだけを切り替える。
+- `expireAppTurn`を1回、次の主要状態まで、または結果まで安全に実行する。
+- 現在手番の時間切れ、参加者の切断、入力拒否を再現する。
+- playingから`room/abort`で参加者と設定を保ったままlobbyへ戻す。
+
+自動進行と時間切れ再現は同じ`expireAppTurn`を使いますが、自動進行では連続放置回数を
+増やしません。閲覧Viewの切替は表示専用で、以後のCommandもhost本人のactorとして
+認可します。入力拒否の再現はRoomを保存せず、revisionとdeadlineを変更しません。
+
+正式Packageが古い同一contract版へ固定されている場合も、Platform Runtimeが新しい
+DEBUG操作を既存の`room/expire-timer`へ変換するため、AppSetの再提出を要求しません。
+
 ## Standard result and platform persistence
 
 ゲーム終了transitionは`standardResult`へ全参加者の順位・得点・勝者・終了理由

@@ -51,6 +51,7 @@ type CommonView = {
   players: Array<{
     seat: number;
     displayName: string;
+    connected: boolean;
     isHost: boolean;
     isSelf: boolean;
     isDummy: boolean;
@@ -99,6 +100,8 @@ type PackageRoomView = {
 
 type PackageRoom = GameSdkRoomSnapshot<PackageRoomView>;
 type SafeCommand = { type: string; [key: string]: unknown };
+type DebugViewer = "self" | "spectator" | number;
+type DebugAutoProgressTarget = "step" | "phase" | "result";
 
 type Props = {
   backHref: string;
@@ -133,9 +136,28 @@ function errorMessage(error: unknown) {
   if (error instanceof GameSdkHttpClientRuntimeError) {
     if (error.status === 401) return "Preview認証を更新してください。";
     if (error.code === "STALE_REVISION") return "部屋を最新状態へ更新しました。";
+    if (error.code === "DEBUG_AUTO_PROGRESS_UNSUPPORTED") {
+      return "このPackageには安全な自動進行処理がありません。";
+    }
+    if (error.code === "DEBUG_AUTO_PROGRESS_LIMIT") {
+      return "自動進行の安全上限に達しました。現在の状態から操作を確認してください。";
+    }
     return `操作を完了できませんでした（${error.code}）。`;
   }
+  if (
+    error instanceof Error
+    && error.message === "DEBUG_AUTO_PROGRESS_LIMIT"
+  ) {
+    return "自動進行の安全上限に達しました。現在の状態から操作を確認してください。";
+  }
   return "操作を完了できませんでした。";
+}
+
+function appPhase(room: PackageRoom | null) {
+  const app = room?.view.app;
+  if (!app || typeof app !== "object" || !("phase" in app)) return null;
+  const phase = (app as { phase?: unknown }).phase;
+  return typeof phase === "string" && phase.trim() ? phase : null;
 }
 
 /**
@@ -176,6 +198,7 @@ export function GameSdkFrame({
   const pendingActionRef = useRef(false);
   const pendingLobbyRoomRef = useRef<PackageRoom | null>(null);
   const roomRef = useRef<PackageRoom | null>(null);
+  const debugViewerRef = useRef<DebugViewer>("self");
   const expiryRef = useRef<number | null>(null);
   const [room, setRoom] = useState<PackageRoom | null>(null);
   const [rooms, setRooms] = useState<Array<{
@@ -190,6 +213,7 @@ export function GameSdkFrame({
   const [clockNow, setClockNow] = useState<number | null>(null);
   const [canReturnToRoom, setCanReturnToRoom] = useState(false);
   const [isRoomDissolved, setIsRoomDissolved] = useState(false);
+  const [debugViewer, setDebugViewer] = useState<DebugViewer>("self");
   const [playerDefaults, setPlayerDefaults] = useState<
     Record<string, GameSdkSettingValue>
   >({});
@@ -218,12 +242,35 @@ export function GameSdkFrame({
     };
   }, [defaultsEndpoint, moduleRequired]);
 
-  const postRoom = useCallback((next: PackageRoom | null) => {
+  const postRoomSnapshot = useCallback((next: PackageRoom | null) => {
     iframeRef.current?.contentWindow?.postMessage({
       type: "game-fields:room-snapshot",
       room: next,
     }, "*");
   }, []);
+
+  const postRoom = useCallback((next: PackageRoom | null) => {
+    const viewer = debugViewerRef.current;
+    if (!next || viewer === "self") {
+      postRoomSnapshot(next);
+      return;
+    }
+    void runtime.readRoomAsDebugViewer(next.code, viewer).then((debugRoom) => {
+      if (
+        debugViewerRef.current === viewer
+        && roomRef.current?.code === next.code
+        && roomRef.current.revision === next.revision
+      ) {
+        postRoomSnapshot(debugRoom);
+      }
+    }).catch(() => {
+      if (debugViewerRef.current !== viewer) return;
+      debugViewerRef.current = "self";
+      setDebugViewer("self");
+      postRoomSnapshot(roomRef.current);
+      setMessage("選択した閲覧視点を取得できないため、本人視点へ戻しました。");
+    });
+  }, [postRoomSnapshot, runtime]);
 
   const commitRoom = useCallback((next: PackageRoom | null) => {
     roomRef.current = next;
@@ -269,8 +316,13 @@ export function GameSdkFrame({
   }, [commitRoom]);
 
   const attachRoom = useCallback((next: PackageRoom | null) => {
+    const previousCode = roomRef.current?.code;
     watchRef.current?.close();
     watchRef.current = null;
+    if (!next || (previousCode && previousCode !== next.code)) {
+      debugViewerRef.current = "self";
+      setDebugViewer("self");
+    }
     commitRoom(next);
     pendingLobbyRoomRef.current = null;
     setCanReturnToRoom(false);
@@ -362,6 +414,91 @@ export function GameSdkFrame({
       ? withAiActivity("SDKゲームのAI処理", operation)
       : operation();
   }, [moduleRequired, runtime, usesLlm]);
+
+  const selectDebugViewer = useCallback((viewer: DebugViewer) => {
+    debugViewerRef.current = viewer;
+    setDebugViewer(viewer);
+    postRoom(roomRef.current);
+  }, [postRoom]);
+
+  const autoProgressDebug = useCallback(async (
+    target: DebugAutoProgressTarget,
+  ) => {
+    const initial = roomRef.current;
+    if (!initial) throw new Error("ROOM_REQUIRED");
+    const initialOuterPhase = initial.phase;
+    const initialAppPhase = appPhase(initial);
+    const maximumSteps = target === "step"
+      ? 1
+      : target === "phase" && initialAppPhase !== null
+        ? 64
+        : target === "phase"
+          ? 1
+          : 160;
+    const perform = async () => {
+      let next = initial;
+      for (let step = 0; step < maximumSteps; step += 1) {
+        next = (await runtime.sendCommand(next.code, {
+          expectedRevision: next.revision,
+          command: { type: "room/debug-auto-progress" },
+        })).room;
+        if (
+          target === "step"
+          || (target === "result" && next.phase === "result")
+          || (
+            target === "phase"
+            && (
+              initialAppPhase === null
+              || next.phase !== initialOuterPhase
+              || appPhase(next) !== initialAppPhase
+            )
+          )
+        ) {
+          setMessage(
+            target === "step"
+              ? "DEBUG自動進行で1手進めました。"
+              : target === "phase"
+                ? initialAppPhase === null
+                  ? "Appの状態名が非公開のため、安全に1手進めました。"
+                  : `次の状態まで進めました（${appPhase(next) ?? next.phase}）。`
+                : "DEBUG自動進行で結果まで完走しました。",
+          );
+          return next;
+        }
+      }
+      throw new Error("DEBUG_AUTO_PROGRESS_LIMIT");
+    };
+    return usesLlm && moduleRequired("ai-activity")
+      ? withAiActivity("SDKゲームのDEBUG自動進行", perform)
+      : perform();
+  }, [moduleRequired, runtime, usesLlm]);
+
+  const simulateDebugInputError = useCallback(async () => {
+    const current = roomRef.current;
+    if (!current || pendingActionRef.current) return;
+    pendingActionRef.current = true;
+    setPending(true);
+    setMessage("");
+    try {
+      await runtime.sendCommand(current.code, {
+        expectedRevision: current.revision,
+        command: { type: "room/debug-simulate-input-error" },
+      });
+      setMessage("入力エラーの拒否を再現できませんでした。");
+    } catch (error) {
+      if (
+        error instanceof GameSdkHttpClientRuntimeError
+        && error.code === "DEBUG_INPUT_ERROR_SIMULATED"
+      ) {
+        setMessage("不正入力がRoomを変更せず拒否されることを確認しました。");
+      } else {
+        setMessage(errorMessage(error));
+      }
+    } finally {
+      pendingActionRef.current = false;
+      setPending(false);
+    }
+  }, [runtime]);
 
   useEffect(() => {
     const listener = (event: MessageEvent) => {
@@ -683,8 +820,19 @@ export function GameSdkFrame({
         backHref={backHref}
         backLabel={creatorSlug ? "制作者ページへ" : "ゲーム広場へ戻る"}
         debugRoom={moduleRequired("debug") && common?.permissions.canDebug ? {
+          appPhase: appPhase(room),
+          canAutoProgress: (
+            room.phase !== "lobby"
+            && room.phase !== "result"
+            && Boolean(common.timer)
+          ),
+          canUseSpectatorView: (
+            supportsSpectators
+            && moduleRequired("spectators")
+          ),
           code: room.code,
           disabled: room.phase !== "lobby",
+          selectedViewer: debugViewer,
           isSubmitting: pending,
           maximumPlayers: common.maximumPlayers,
           onAddDummy: async () => {
@@ -698,9 +846,27 @@ export function GameSdkFrame({
               seat,
             }));
           },
+          onAutoProgress: async (target) => {
+            await run(() => autoProgressDebug(target));
+          },
+          onSelectViewer: selectDebugViewer,
+          onSetConnected: async (seat, connected) => {
+            await run(() => send({
+              type: "room/debug-set-connected",
+              seat,
+              connected,
+            }));
+          },
+          onSimulateInputError: simulateDebugInputError,
+          onSimulateTimeout: async () => {
+            await run(() => send({
+              type: "room/debug-simulate-timeout",
+            }));
+          },
           players: common.players,
           revision: room.revision,
           phase: room.phase,
+          statusMessage: message,
         } : null}
       >
         {!creatorSlug

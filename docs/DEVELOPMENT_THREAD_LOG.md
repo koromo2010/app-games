@@ -4762,3 +4762,47 @@
 ### 関連コミット
 
 - `2dd8b18` — 正式Package Shellの全必須module監査と移行漏れ修正。
+
+## 2026-07-26 — SDK正式Package DEBUG操作の完全化
+
+### 利用者からの要望
+
+- 正式PreviewのDEBUGパネルにダミー管理以外の操作がない不具合を修正する。
+- 閲覧視点、主要状態・異常状態、自動進行を共通Shellへ接続し、同系統の監査漏れも
+  横断確認する。
+- 既存の固定Packageを使うRoomでも、ダミーを含めた開始・完走確認ができるようにする。
+
+### 判断
+
+- 前回の必須module監査は`debug`について追加・削除Commandだけを実装証拠にしており、
+  SDK文書が要求するDEBUG surface全体を検査していなかった。
+- 主要状態の再現でゲーム固有stateを直接書き換えると、手札・役割・提出状態等がphaseと
+  不整合になるため、AppSetの`expireAppTurn`を使って正規transitionだけを進める。
+- 閲覧視点は表示用Viewだけを切り替え、Command actorは常に認証済みhost本人とする。
+- 既存Roomは提出時の旧SDK bundleへ固定されるため、package再提出を前提にせず、
+  Platform Runtimeで新DEBUG Commandを既存の`room/expire-timer`へ変換する。
+
+### 実施結果
+
+- 共通DEBUGウィンドウへ、host本人・各参加者・対応ゲームの観戦者View、1手・次の主要状態・
+  結果までの自動進行、時間切れ、切断／復帰、入力拒否確認を追加した。
+- 自動進行は連続放置状態を増やさず、時間切れ再現だけが通常のtimeout状態を更新する。
+  入力拒否は保存前に停止し、revisionとdeadlineを変更しない。
+- DEBUG View専用GETをClient Runtime、HTTP、認証adapter、Platform Runtimeへ接続した。
+  debug資格とhostをサーバー側で再検証し、内部player IDをbrowserへ渡さない。
+- 観戦非対応ゲームへの観戦View要求は、UI非表示だけに頼らずサーバーでも拒否する。
+- 配布Starterとmodule監査に全DEBUG Command・表示項目を列挙し、ダミー管理だけでは
+  `debug`実装済みと判定できないようにした。
+
+### 検証
+
+- DEBUG Shell、SDK Runtime、HTTP、認証、旧bundle互換を含む全565テストが通過した。
+- 配布Starterの生成、同梱SDK install、型検査、契約テスト、1ゲーム完走、提出ZIPを
+  `npm run test:sdk-starter`で確認した。
+- `npm run lint`と`npm run build`に成功した。
+
+### 未対応・保留
+
+- 対象の制作者アカウント認証はこの作業環境にないため、報告対象Roomでの実機操作は
+  未確認である。develop公開後にhostでダミー追加、開始、結果までの自動進行を確認する。
+- develop反映と対象DeploymentのREADY確認、公開後Runtime Error確認は未実施である。

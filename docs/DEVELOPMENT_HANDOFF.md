@@ -473,7 +473,12 @@ timerは`expireAppTurn`をserver callbackとして必須化し、deadline、
 turn sequence、graceをRuntimeで検証する。連続時間切れと5秒短縮、本人の
 明示復帰も共通stateで管理する。観戦は既存の署名grantへ接続し、SDK用
 snapshotは匿名席、phase、共通timer、確定結果だけを許可する。DEBUGは
-権限付きhostのlobbyでダミー追加・削除だけを許可する。manifestの
+権限付きhostへ、lobbyでのダミー追加・削除、読取専用の参加者／観戦者View切替、
+AppSetの`expireAppTurn`を使う1手・次状態・結果までの安全な自動進行、
+時間切れ・切断・入力拒否の再現を提供する。閲覧視点をCommand actorには使わず、
+ゲーム固有stateのphase文字列も直接書き換えない。固定済みの旧package bundleには
+Platform Runtimeが新しいDEBUG Commandを既存の`room/expire-timer`へ変換する。
+進行中断は既存の`room/abort`を使う。manifestの
 `settings`と`rules`を正式Shellへ描画し、宣言済み設定だけをアカウント別
 既定値として保存する。結果後にhostがRoomをlobbyへ戻しても、ほかの参加者は
 表示中の結果を保持し、各自が「部屋に戻る」を選んだ時点で最新lobbyへ復帰する。

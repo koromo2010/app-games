@@ -26,6 +26,8 @@ Game Fields本体にある共通機能と、外部ゲームpackageが直接利�
 
 `online-room`はformal package表示時にactive Room確認を先行し、復元完了までは新規作成・参加を許可しない。既存Roomがあれば自動復帰し、別タブ競合で`PLAYER_ACTIVE_ROOM`になった場合も同じ復元経路へ戻す。進行中Roomを暗黙に破棄せず、終了済み・期限切れ・欠損RoomだけをPlatform Storeが解除する。
 
+`debug`はformal packageでも外側Shellが所有する。権限付きhostへダミー管理、読取専用の閲覧視点切替、安全な自動進行、時間切れ・切断・入力拒否の再現、既存`room/abort`による中断を提供する。主要状態はAppSetの`expireAppTurn`を経由して進め、ゲーム固有stateを直接書き換えない。固定済みの旧package bundleにはPlatform Runtimeの互換bridgeが新しいDEBUG Commandを既存の時間切れ処理へ変換する。
+
 ## お絵描きUIの分離結果
 
 公開するもの:

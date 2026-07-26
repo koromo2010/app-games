@@ -23,6 +23,10 @@ const player: GameSdkTrustedActor = {
   role: "player",
   debugAccess: false,
 };
+const debugHost: GameSdkTrustedActor = {
+  ...host,
+  debugAccess: true,
+};
 const manifest = defineGameManifest({
   sdkVersion: GAME_SDK_VERSION,
   id: "sdk-timer-proof",
@@ -30,7 +34,7 @@ const manifest = defineGameManifest({
   playMode: "online-room",
   minimumPlayers: 2,
   maximumPlayers: 4,
-  supportsDebug: false,
+  supportsDebug: true,
   supportsSpectators: false,
   supportsReplay: false,
   supportsRating: false,
@@ -263,4 +267,104 @@ test("SDK timer expires on the server, applies grace and requires explicit recov
     actor: host,
   });
   assert.equal(recovered.room.view.common.players[0]?.reducedTime, false);
+});
+
+test("SDK DEBUG can safely advance, reproduce timeout and connection errors", async () => {
+  const now = 1_000;
+  const runtime = createGameSdkMockRuntime({
+    module: createGameSdkOnlineRoomModule(appSet),
+    now: () => now,
+  });
+  const created = await runtime.createRoom({
+    roomCode: "DBUG",
+    create: { app: {} },
+    actor: debugHost,
+  });
+  const joined = await runtime.sendCommand({
+    code: "DBUG",
+    envelope: {
+      expectedRevision: created.revision,
+      command: { type: "room/join" },
+    },
+    actor: player,
+  });
+  const started = await runtime.sendCommand({
+    code: "DBUG",
+    envelope: {
+      expectedRevision: joined.revision,
+      command: { type: "game/start" },
+    },
+    actor: debugHost,
+  });
+
+  const advanced = await runtime.sendCommand({
+    code: "DBUG",
+    envelope: {
+      expectedRevision: started.revision,
+      command: { type: "room/debug-auto-progress" },
+    },
+    actor: debugHost,
+  });
+  assert.equal(advanced.room.view.app.turns, 1);
+  assert.equal(
+    advanced.room.view.common.players[0]?.reducedTime,
+    false,
+    "safe auto progress must not count as player inactivity",
+  );
+
+  const firstTimeout = await runtime.sendCommand({
+    code: "DBUG",
+    envelope: {
+      expectedRevision: advanced.revision,
+      command: { type: "room/debug-simulate-timeout" },
+    },
+    actor: debugHost,
+  });
+  const secondTimeout = await runtime.sendCommand({
+    code: "DBUG",
+    envelope: {
+      expectedRevision: firstTimeout.revision,
+      command: { type: "room/debug-simulate-timeout" },
+    },
+    actor: debugHost,
+  });
+  assert.equal(secondTimeout.room.view.common.players[0]?.reducedTime, true);
+
+  const disconnected = await runtime.sendCommand({
+    code: "DBUG",
+    envelope: {
+      expectedRevision: secondTimeout.revision,
+      command: {
+        type: "room/debug-set-connected",
+        seat: 1,
+        connected: false,
+      },
+    },
+    actor: debugHost,
+  });
+  assert.equal(disconnected.room.view.common.players[1]?.connected, false);
+  await assert.rejects(
+    runtime.sendCommand({
+      code: "DBUG",
+      envelope: {
+        expectedRevision: disconnected.revision,
+        command: { type: "room/debug-simulate-input-error" },
+      },
+      actor: debugHost,
+    }),
+    /DEBUG_INPUT_ERROR_SIMULATED/,
+  );
+  assert.equal(runtime.inspectStoredRoom("DBUG")?.revision, disconnected.revision);
+
+  await assert.rejects(
+    runtime.sendCommand({
+      code: "DBUG",
+      envelope: {
+        expectedRevision: disconnected.revision,
+        command: { type: "room/debug-auto-progress" },
+      },
+      actor: host,
+    }),
+    /DEBUG_ACCESS_REQUIRED/,
+  );
 });

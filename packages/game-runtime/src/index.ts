@@ -5,6 +5,7 @@ import type {
   GameSdkRoomSnapshot,
   GameSdkStoredRoom,
   GameSdkTrustedActor,
+  GameSdkViewer,
 } from "@game-fields/game-sdk";
 import {
   gameSdkViewerFromActor,
@@ -111,7 +112,12 @@ export type GameFieldsPlatformRuntimeErrorCode =
   | "INVALID_PLATFORM_IDENTITY"
   | "INVALID_STORED_ROOM"
   | "ROOM_RUNTIME_MISMATCH"
-  | "COMMAND_ID_CONFLICT";
+  | "COMMAND_ID_CONFLICT"
+  | "DEBUG_ACCESS_REQUIRED"
+  | "DEBUG_VIEWER_INVALID"
+  | "DEBUG_AUTO_PROGRESS_UNSUPPORTED"
+  | "DEBUG_INPUT_ERROR_SIMULATED"
+  | "DEBUG_PLAYER_REQUIRED";
 
 export class GameFieldsPlatformRuntimeError extends Error {
   readonly code: GameFieldsPlatformRuntimeErrorCode;
@@ -157,6 +163,7 @@ export type GameFieldsPlatformRuntime<
   readRoom(input: {
     code: string;
     identity: GameFieldsAuthenticatedIdentity;
+    debugViewer?: GameSdkViewer;
   }): Promise<GameSdkRoomSnapshot<TRoomView> | null>;
   sendCommand(input: {
     code: string;
@@ -438,10 +445,11 @@ export function createGameFieldsPlatformRuntime<
     room: Readonly<TRoom>,
     actor: GameSdkTrustedActor,
     timestamp: number,
+    viewer: GameSdkViewer = gameSdkViewerFromActor(actor),
   ) => snapshot(
     room,
     await module.presentRoom(clone(room), {
-      viewer: gameSdkViewerFromActor(actor),
+      viewer: clone(viewer),
       now: timestamp,
       resources,
     }),
@@ -502,12 +510,46 @@ export function createGameFieldsPlatformRuntime<
       return await present(room, actor, timestamp);
     },
 
-    async readRoom({ code, identity }) {
+    async readRoom({ code, identity, debugViewer }) {
       const record = await persistence.load(code);
       if (!record) return null;
       assertStoredRecord(record, module.manifest.id, code, runtimeContract);
       const actor = trustedActor(identity, record.hostPlayerId);
-      return await present(record.room, actor, now());
+      if (debugViewer) {
+        if (
+          !module.manifest.supportsDebug
+          || !actor.debugAccess
+          || actor.role !== "host"
+        ) {
+          throw new GameFieldsPlatformRuntimeError(
+            "DEBUG_ACCESS_REQUIRED",
+            403,
+          );
+        }
+        const players = "players" in record.room
+          && Array.isArray(
+            (record.room as GameSdkStoredRoom & { players?: unknown }).players,
+          )
+          ? (record.room as GameSdkStoredRoom & {
+              players: Array<{ id?: unknown }>;
+            }).players
+          : [];
+        const playerExists = debugViewer.playerId === null
+          || players.some((player) => player.id === debugViewer.playerId);
+        const roleMatches = debugViewer.playerId === null
+          ? (
+              module.manifest.supportsSpectators
+              && debugViewer.role === "spectator"
+            )
+          : debugViewer.role === "host" || debugViewer.role === "player";
+        if (!playerExists || !roleMatches) {
+          throw new GameFieldsPlatformRuntimeError(
+            "DEBUG_VIEWER_INVALID",
+            400,
+          );
+        }
+      }
+      return await present(record.room, actor, now(), debugViewer);
     },
 
     async sendCommand({ code, envelope, identity }) {
@@ -552,16 +594,142 @@ export function createGameFieldsPlatformRuntime<
       if (record.revision !== envelope.expectedRevision) {
         throw new GameFieldsPlatformRuntimeError("STALE_REVISION", 409);
       }
-      const nextRoom = await module.applyCommand(
-        clone(record.room),
-        clone(envelope.command),
+      const debugCommand = envelope.command.type.startsWith("room/debug-");
+      if (
+        debugCommand
+        && (
+          !module.manifest.supportsDebug
+          || !actor.debugAccess
+          || actor.role !== "host"
+        )
+      ) {
+        throw new GameFieldsPlatformRuntimeError(
+          "DEBUG_ACCESS_REQUIRED",
+          403,
+        );
+      }
+      const commandRoom = clone(record.room);
+      let command = clone(envelope.command);
+      const commandTimestamp = timestamp;
+      let platformRoom: TRoom | null = null;
+      if (
+        envelope.command.type === "room/debug-auto-progress"
+        || envelope.command.type === "room/debug-simulate-timeout"
+      ) {
+        const timer = "timer" in commandRoom
+          && commandRoom.timer
+          && typeof commandRoom.timer === "object"
+          ? commandRoom.timer as {
+              deadlineAt?: unknown;
+              durationSeconds?: unknown;
+              startedAt?: unknown;
+              turnSequence?: unknown;
+            }
+          : null;
+        if (!timer || !Number.isSafeInteger(timer.turnSequence)) {
+          throw new GameFieldsPlatformRuntimeError(
+            "DEBUG_AUTO_PROGRESS_UNSUPPORTED",
+            409,
+          );
+        }
+        timer.deadlineAt = timestamp - 30_001;
+        command = {
+          type: "room/expire-timer",
+          turnSequence: timer.turnSequence,
+        } as unknown as TCommand;
+      } else if (envelope.command.type === "room/debug-set-connected") {
+        const players = "players" in commandRoom
+          && Array.isArray(commandRoom.players)
+          ? commandRoom.players as Array<{
+              connected?: unknown;
+              [key: string]: unknown;
+            }>
+          : [];
+        const debugConnection = envelope.command as {
+          seat?: unknown;
+          connected?: unknown;
+        };
+        const seat = Number.isSafeInteger(debugConnection.seat)
+          ? Number(debugConnection.seat)
+          : -1;
+        if (
+          !players[seat]
+          || typeof debugConnection.connected !== "boolean"
+        ) {
+          throw new GameFieldsPlatformRuntimeError(
+            "DEBUG_PLAYER_REQUIRED",
+            409,
+          );
+        }
+        players[seat] = {
+          ...players[seat],
+          connected: debugConnection.connected,
+        };
+        platformRoom = {
+          ...commandRoom,
+          revision: commandRoom.revision + 1,
+        };
+      } else if (
+        envelope.command.type === "room/debug-simulate-input-error"
+      ) {
+        throw new GameFieldsPlatformRuntimeError(
+          "DEBUG_INPUT_ERROR_SIMULATED",
+          409,
+        );
+      }
+      let nextRoom = platformRoom ?? await module.applyCommand(
+        commandRoom,
+        command,
         {
           actor: clone(actor),
-          now: timestamp,
+          now: commandTimestamp,
           requestId: commandId,
           resources,
         },
       );
+      if (
+        (
+          envelope.command.type === "room/debug-auto-progress"
+          || envelope.command.type === "room/debug-simulate-timeout"
+        )
+        && "timer" in record.room
+        && "timer" in nextRoom
+      ) {
+        const previousTimer = record.room.timer as {
+          durationSeconds?: unknown;
+        } | undefined;
+        const nextTimer = nextRoom.timer as {
+          deadlineAt?: unknown;
+          durationSeconds?: unknown;
+          startedAt?: unknown;
+        } | undefined;
+        const previousDuration = typeof previousTimer?.durationSeconds === "number"
+          ? previousTimer.durationSeconds
+          : null;
+        const nextDuration = typeof nextTimer?.durationSeconds === "number"
+          ? nextTimer.durationSeconds
+          : null;
+        const durationSeconds = envelope.command.type === "room/debug-auto-progress"
+          ? previousDuration
+          : nextDuration;
+        nextRoom = {
+          ...nextRoom,
+          ...(nextTimer && durationSeconds !== null ? {
+            timer: {
+              ...nextTimer,
+              durationSeconds,
+              startedAt: nextTimer.startedAt === null ? null : timestamp,
+              deadlineAt: nextTimer.deadlineAt === null
+                ? null
+                : timestamp + durationSeconds * 1_000,
+            },
+          } : {}),
+          ...(envelope.command.type === "room/debug-auto-progress"
+            && "playerTimeouts" in record.room ? {
+              playerTimeouts: clone(record.room.playerTimeouts),
+            } : {}),
+        };
+      }
       if (nextRoom.code !== record.room.code) {
         throw new GameFieldsPlatformRuntimeError("ROOM_CODE_CHANGED", 500);
       }
