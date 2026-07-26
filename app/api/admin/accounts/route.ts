@@ -57,20 +57,21 @@ export async function PATCH(request: Request) {
   try {
     const session = await requireSiteAdminSession();
     const body = await request.json() as { action?: unknown; email?: unknown; receiveAlerts?: unknown; receiveContacts?: unknown };
-    const email = typeof body.email === "string" ? body.email : "";
+    const email = typeof body.email === "string" ? body.email.trim().toLocaleLowerCase("en-US") : "";
     if (body.action === "reset-mfa") {
-      if (session.scope !== "recovery") throw new Error("SITE_ADMIN_RECOVERY_REQUIRED");
+      const resettingOwnAccount = session.scope === "full" && session.email === email;
+      if (session.scope !== "recovery" && !resettingOwnAccount) throw new Error("SITE_ADMIN_RECOVERY_REQUIRED");
       const result = await resetSiteAdminMfa(email);
       const accounts = await listSiteAdminAccounts();
       await appendSiteAdminAuditLog(request, session, "admin-account.mfa-reset", result.email, { passkeyCount: result.removedPasskeyCount }, { passkeyCount: 0 });
       telemetry.success("auth.access", { action: "site-admin-mfa-reset" });
-      return Response.json({ accounts });
+      return Response.json({ accounts, resetOwnAccount: resettingOwnAccount });
     }
     await requireRecentSiteAdminMfa();
-    const before = (await listSiteAdminAccounts()).find((entry) => entry.email === email.trim().toLocaleLowerCase("en-US")) ?? null;
+    const before = (await listSiteAdminAccounts()).find((entry) => entry.email === email) ?? null;
     await updateSiteAdminAccountSubscriptions(email, { receiveAlerts: body.receiveAlerts === true, receiveContacts: body.receiveContacts === true });
     const accounts = await listSiteAdminAccounts();
-    await appendSiteAdminAuditLog(request, session, "admin-account.subscriptions", email.trim().toLocaleLowerCase("en-US"), before, accounts.find((entry) => entry.email === email.trim().toLocaleLowerCase("en-US")) ?? null);
+    await appendSiteAdminAuditLog(request, session, "admin-account.subscriptions", email, before, accounts.find((entry) => entry.email === email) ?? null);
     telemetry.success("auth.access", { action: "site-admin-subscriptions-update" });
     return Response.json({ accounts });
   } catch (error) {
