@@ -4665,3 +4665,5 @@
 
 - 統合後の`npm run verify`、全549テスト、`npm run build`、`npm run build:sdk`に成功した。
 - 本体buildの初回だけ並行実行中の`.next`整理で`ENOTEMPTY`になったが、単独再実行では正常完了し、コード・型エラーではないことを確認した。
+- Redis名前空間変更を含む`develop@53d0e3a`の`app-games-sdk-dev` Production DeploymentがREADYになった。
+- `https://sdk-dev.game-fields.com/api/health`は`status: ok`、`schemaVersion: 4`を返し、`/api/instances/check`も正常応答した。
