@@ -8,40 +8,35 @@ const foundations = [
     number: "01",
     title: "Build locally",
     description:
-      "本番DBやアカウント情報に触れず、ゲーム固有のルールと画面をローカルで組み立てます。",
+      "本番のデータやアカウント情報にはさわらず、自分のパソコンの中でゲームのルールや画面を作ります。",
   },
   {
     number: "02",
     title: "Validate safely",
     description:
-      "本番と同じ挙動を再現する確認用Runtimeを使い、権限・秘密情報の扱いや同時更新時の動作を提出前にチェックします。",
+      "本番と同じ動きをする確認用の仕組みを使って、提出する前に安全かどうかをチェックします。",
   },
   {
     number: "03",
     title: "Submit for review",
     description:
-      "完成したゲームをGame Fieldsへ提出します。外部開発者に本番環境の権限は渡しません。",
+      "完成したゲームはGame Fieldsに提出します。外部の開発者に本番環境の権限を渡すことはありません。",
   },
 ];
 
 const available = [
-  "SDK基本セットの上にゲーム固有のルールや画面を組み込める",
-  "Room(対戦・協力プレイ用の部屋)の作成・参加・設定を標準機能として利用できる",
-  "本体Game Fieldsと同じバージョンのSDKで動作確認できる",
-  "認証済みの操作だけを受け付ける仕組みがあり、なりすましを防げる",
-  "保存データとプレイヤーごとの見え方を安全に分け、情報漏れを防げる",
-  "古いデータのまま上書きしてしまう事故を防ぐ仕組みがある",
-  "本番のデータベースやRedisがなくても、手元だけで動作確認できる",
-  "作ったSDKパッケージを外部にインストールして最終確認できる",
-  "本番環境との接続部分もあらかじめ検証済み",
+  "SDKを使って、そのゲームだけのルールや画面を作れる",
+  "対戦や協力プレイをする「部屋」を作ったり、参加したり、設定したりできる",
+  "本物のGame Fieldsと同じSDKで、動きを確認できる",
+  "本人だと確認された操作しか受け付けないので、なりすましを防げる",
+  "保存したデータとプレイヤーごとの画面を安全に分けて、情報が漏れないようにできる",
+  "古いデータのまま間違って上書きしてしまう事故を防げる",
+  "本番のデータベースがなくても、自分のパソコンだけで動作を確認できる",
+  "作ったものを外部に取り込んで、最後の確認ができる",
+  "本番環境とつなぐ部分も、あらかじめ確認済み",
 ];
 
-const reviewFlow = [
-  "Package submission",
-  "Automated checks",
-  "Game Fields review",
-  "Main adoption",
-];
+const reviewFlow = ["提出", "自動チェック", "Game Fieldsの確認", "本番への反映"];
 
 const firstBuildGuide = [
   {
@@ -93,24 +88,24 @@ export default async function Home() {
         <div className="hero-copy">
           <p className="eyebrow">GAME DEVELOPMENT, WITHOUT PLATFORM ACCESS</p>
           <h1>
-            ゲームの面白さに集中する。
-            <span>公開の安全性は、プラットフォームが守る。</span>
+            ゲームを面白くすることだけ考えよう。
+            <span>安全に届ける仕組みは、Game Fieldsが用意します。</span>
           </h1>
           <p className="hero-description">
-            Game Fields SDKは、外部の開発者が本番データや管理機能に触れずに、ゲームを作って提出できる開発基盤です。
+            Game Fields SDKを使うと、外部の人でも本番のデータや管理画面にさわらずに、ゲームを作って提出できます。
           </p>
           <aside className="required-environment" aria-labelledby="before-download-title">
             <span className="required-environment-label">ダウンロード前に確認</span>
             <div>
               <h3 id="before-download-title">ChatGPTの有料プランと「gameapp-dev」プラグインが必要です</h3>
               <p>
-                DownloadMeを使った制作には、ChatGPTの有料プラン（Plus・Pro・Team等）でCodexまたはWorkが利用できることと、「gameapp-dev」プラグインが導入済みであることが前提です。準備ができてから、下のDownloadMeを取得してください。
+                ゲームを作るには、ChatGPTの有料プラン（Plus・Pro・Teamなど）と、CodexまたはWork、そして「gameapp-dev」というプラグインが必要です。この3つを用意してから、下のDownloadMeを取得してください。
               </p>
               <p>
-                ChatGPTの利用料金はご自身のアカウントでの契約・お支払いとなります。Game Fieldsが利用料を負担することはありません。
+                ChatGPTの利用料金は、あなた自身の支払いになります。Game Fieldsが代わりに支払うことはありません。
               </p>
               <p>
-                制作を始める前に<Link href="/terms">利用規約</Link>をご確認ください。DownloadMeを取得・使用した時点で、利用規約に同意したものとして扱います。
+                作り始める前に、<Link href="/terms">利用規約</Link>を読んでおいてください。DownloadMeを取得・使用した時点で、規約に同意したものとして扱います。
               </p>
             </div>
           </aside>
@@ -171,16 +166,16 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
       <section className="start section" id="start">
         <div className="section-heading">
           <p className="eyebrow">START A PREVIEW INSTANCE</p>
-          <h2>自分専用の確認環境で試す</h2>
+          <h2>自分専用のお試し環境で遊んでみる</h2>
           <p>
-            制作者ごとに専用のURLを用意します。作ったゲームはそこに追加され、本番と同じ流れで動作を確認できます。
+            あなた専用のURLを1つ用意します。作ったゲームはそこに追加され、本番と同じように動くかを確認できます。
           </p>
         </div>
         <aside className="required-environment" aria-labelledby="account-link-title">
           <span className="required-environment-label">アカウント接続</span>
           <div>
             <h3 id="account-link-title">{linked ? `${account?.playerName || "Game Fieldsアカウント"}へ接続済みです` : "先にGame Fieldsアカウントを接続してください"}</h3>
-            <p>Game Fields本体と同じアカウントに制作物を紐づけます。パスワードやログイン情報をSDKやChatGPTへ渡すことはありません。</p>
+            <p>作ったゲームは、あなたのGame Fieldsアカウントに結びつけます。パスワードなどのログイン情報をSDKやChatGPTに渡すことはありません。</p>
             {!linked && <Link className="secondary-action" href="/api/account-link/start">Game Fieldsでログインして接続</Link>}
           </div>
         </aside>
@@ -198,27 +193,27 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
         <aside className="required-environment" aria-labelledby="required-environment-title">
           <span className="required-environment-label">利用時の注意</span>
           <div>
-            <h3 id="required-environment-title">ダウンロードしたファイルは、そのままCodex/Workのチャットへ添付してください</h3>
+            <h3 id="required-environment-title">ダウンロードしたファイルは、Codex(またはWork)のチャットにそのまま貼り付けてください</h3>
             <p>
-              ゲームのコード取得・複数ファイルの編集・動作検査・SDKへの保存とURL発行を行うため、通常のChatGPTチャットだけでは制作を完了できません。CodexまたはWorkのチャットで進めてください。
+              ゲーム作りには、コードを作ったり、複数のファイルを編集したり、動きを確認したりする作業が必要です。ふつうのChatGPTチャットだけでは、これができません。必ずCodexまたはWorkのチャットで進めてください。
             </p>
             <p>
-              DownloadMeはAIが読む実行契約です。人間向けの説明書ではないため、内容を読んだり編集したりせず、そのままチャットへ添付してください。
+              DownloadMeは、AIに読ませるためのファイルです。人が読むための説明書ではないので、中身を読んだり書き換えたりせず、そのままチャットに貼り付けてください。
             </p>
             <p>
-              <strong>プラグインが更新された後は、必ず新しいチャットを作成してください。</strong>
-              古いチャットのまま最新版のファイルを送っても、更新前の内容のまま動いてしまい、制作を正しく再開できません。新しいチャットで`gameapp-dev`を選択し、最新版のDownloadMeだけを添付してください。
+              <strong>プラグインが新しくなったときは、必ず新しいチャットを作り直してください。</strong>
+              古いチャットのまま新しいファイルを送っても、古いままの動きになってしまい、うまく続きが作れません。新しいチャットで`gameapp-dev`を選び、最新のDownloadMeだけを貼り付けてください。
             </p>
             <p>
-              保存済みの制作者環境とゲームはアカウントに紐づいているため、新しいチャットから自動的に再取得できます。作り直しや新しいURLの予約は不要です。
+              作りかけのゲームは、あなたのアカウントに保存されています。新しいチャットを開けば自動的に続きから始められるので、作り直したり新しいURLを用意し直したりする必要はありません。
             </p>
             <p>
-              通常チャットでHTMLファイルだけが作られた場合、それはGame Fields SDKへ保存された完成版ではありません。CodexまたはWorkの新しいチャットへ切り替え、最新版ファイルとゲームの希望を送ってください。
+              ふつうのチャットでHTMLファイルだけが出てきた場合、それはまだGame Fields SDKに保存された完成版ではありません。CodexまたはWorkの新しいチャットに切り替えて、最新のファイルと作りたい内容を送ってください。
             </p>
           </div>
         </aside>
         <p className="start-note">
-          制作開始時は必ず新しいチャットを使ってください。接続が成功して制作が始まった後は、URLが案内されるまで同じチャットを続けてください。エラーで保存できなかった場合は、AIが未完了であることと次にすべきことを案内します。
+          作り始めるときは、必ず新しいチャットを使ってください。うまくつながって制作が始まったら、URLが届くまで同じチャットのまま続けてください。もし保存でエラーが起きたときは、AIが「まだ終わっていないこと」と「次にやること」を教えてくれます。
         </p>
         <div className="hero-actions">
           <a className="primary-action" href="/GameFieldsDownloadMe-ver15.md" download>
@@ -234,9 +229,9 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
       <section className="foundation section" id="foundation">
         <div className="section-heading">
           <p className="eyebrow">THE DEVELOPMENT BOUNDARY</p>
-          <h2>作る自由と、公開権限を分ける</h2>
+          <h2>自由に作れる。でも、公開は必ずチェックする。</h2>
           <p>
-            SDKは一般に利用できるようにしつつ、Game Fields本体への公開は必ず管理下のゲートを通します。
+            SDKは誰でも使えるようにします。でも、Game Fields本体で公開する前には、必ずチェックを行います。
           </p>
         </div>
         <div className="foundation-grid">
@@ -255,20 +250,20 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
           <p className="eyebrow">WHAT YOU CAN BUILD</p>
           <h2>SDKで作れるもの・作れないもの</h2>
           <p>
-            外部開発者が担当できる範囲と、Game Fields側が管理する範囲を分けています。着手前に必ずご確認ください。
+            外部の人が作れる範囲と、Game Fieldsが管理する範囲を分けています。作り始める前に確認してください。
           </p>
         </div>
         <div className="sdk-help-list">
           <article>
             <h2>作れるもの</h2>
             <p>
-              SDK基本セットの上に、ゲーム固有のルール・画面・進行ロジックを組み込めます。Room作成・参加・設定・データ管理など、対戦や協力プレイに必要な共通機能はSDKが提供するため、ゲーム内容そのものの作り込みに専念できます。
+              SDKを使えば、そのゲームだけのルールや画面、進み方を作れます。対戦や協力プレイに必要な部屋作り・参加・設定などの共通の仕組みはSDKが用意しているので、あなたはゲームの中身を作ることだけに集中できます。
             </p>
           </article>
           <article>
             <h2>作れないもの</h2>
             <p>
-              本番データベース・Redis・Blobストレージへの直接アクセス、独自の認証・決済・課金機能の実装、Game Fields本体やVercel本番環境への直接デプロイはできません。これらはGame Fields側が管理し、外部開発者に権限を渡すことはありません。必要な機能がSDKにない場合は、AIがその内容を記録し、審査チームへ共有します。
+              本番のデータベースやファイル保存の仕組みに直接さわることはできません。自分でログイン機能や課金機能を作ったり、Game Fields本体やVercelの本番環境に直接公開したりすることもできません。これらはすべてGame Fields側が管理しています。もし足りない機能があれば、AIがその内容を記録して、審査チームに伝えます。
             </p>
           </article>
         </div>
@@ -278,9 +273,9 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
         <div className="status-panel">
           <div>
             <p className="eyebrow">CURRENT STATUS</p>
-            <h2>いま使える機能と、これから追加される機能</h2>
+            <h2>今できること、これから増えること</h2>
             <p className="status-copy">
-              SDK基本セットを使ったゲームの制作・検証は今すぐ行えます。npm registryでの一般公開、チュートリアル、提出画面は準備中で、審査の仕組みが整い次第追加します。
+              SDKを使ったゲーム作りと動作確認は、今すぐ始められます。誰でもダウンロードできるようにする公開や、使い方の説明、提出画面はまだ準備中です。審査の仕組みが整い次第、追加します。
             </p>
           </div>
           <ul>
@@ -297,9 +292,9 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
       <section className="review section" id="review">
         <div className="section-heading">
           <p className="eyebrow">MANAGED RELEASE GATE</p>
-          <h2>すべての提出物は審査を経てから公開されます</h2>
+          <h2>提出したものは、必ず確認してから公開します</h2>
           <p>
-            自動検査に加えて、Game Fieldsによる審査を必ず経てから本番へ反映されます。検査の一部は今後AIによる自動化を広げていく予定です。
+            自動チェックに加えて、Game Fieldsの人による確認も必ず行ってから、本番に反映します。この確認は、これから少しずつAIにも手伝ってもらう予定です。
           </p>
         </div>
         <ol className="review-flow">
