@@ -219,6 +219,7 @@ Sensitive設定済みの互換変数をVercel上で複製できない移行期�
 | `DEV_REDIS_KV_REST_API_TOKEN` | Production | Yes | Integrationによる登録を画面確認済み。`0773a78`で再デプロイ後、実機接続確認済み | `app-dev:`名前空間でのみ書込。SDK側との論理分離を継続監視 |
 | `DEV_REDIS_KV_REST_API_READ_ONLY_TOKEN` | Production | Yes | Integrationによる登録を画面確認済み | 現行サーバーコードでは未使用 |
 | `SDK_PORTAL_INTERNAL_URL` | Production | No | 未登録。developコード既定値`https://sdk-dev.game-fields.com`を使用 | 本体が制作者別ゲーム定義と隔離実行URLをSDK Portalから読む。独自接続先が必要な場合だけ設定 |
+| `SDK_PROMOTION_INTERNAL_URL` | Production / Preview | No | 未登録時は`https://sdk.game-fields.com` | dev・main両方の運営管理画面から、SDK本番の正式提出候補をmain採用する内部接続先 |
 | `SITE_ADMIN_PASSWORD` | Production | Yes | Project Variable登録・再デプロイ済み。マスターパスワードで復旧ログインを実機確認済み | 秘密値を安全な保管先で管理。Gitへ値を保存しない |
 | `SITE_ADMIN_BREAK_GLASS_ENABLED` | Production | No | `true`を一時登録・再デプロイし、MFAリセットを実機確認済み | WebAuthn再登録と通常ログイン確認後、変数を削除して再デプロイ |
 | `SITE_ADMIN_WEBAUTHN_ORIGIN` | Production | No | 未登録。devでのパスキー登録はOrigin不一致によりサーバー検証失敗 | `https://dev.game-fields.com`を登録し、再デプロイ後にパスキー登録を再確認 |
