@@ -40,7 +40,7 @@ const errors: Record<string, string> = {
   promotion_expected_source_changed: "提出物が更新されています。再読み込みしてから審査してください。",
   promotion_source_changed: "採用処理中に提出物が更新されました。",
   public_game_id_conflict: "その本番ゲームIDはすでに使われています。",
-  SDK_PROMOTION_MAIN_ONLY: "SDK作品のmain採用はmain側の管理画面だけで利用できます。",
+  SDK_PROMOTION_MAIN_ONLY: "SDK作品のmain採用はdevまたはmainの運営管理画面で利用できます。",
   GITHUB_RELEASE_TOKEN_NOT_CONFIGURED: "dev→main用のGitHub資格が本番環境にまだ設定されていません。",
   GITHUB_RELEASE_SOURCE_CHANGED: "mainまたはdevelopが更新されています。差分を再読込してください。",
   GITHUB_RELEASE_NOT_FAST_FORWARD: "developを安全にそのままmainへ進められない状態です。GitHubで分岐を解消してください。",
@@ -242,7 +242,7 @@ export function ReleaseManagementPanel({
         <p className="mt-2 text-sm leading-6 text-slate-400">SDK作品の採用と、本体developの反映は互いに独立した経路です。</p>
       </header>
 
-      {isPreview && <p className="rounded-xl border border-amber-300/30 bg-amber-300/10 px-4 py-3 text-sm font-bold leading-6 text-amber-100">dev試作表示です。候補・差分・画面構成は確認できますが、SDK→mainとdevelop→mainの実行はサーバー側でも無効です。</p>}
+      {isPreview && <p className="rounded-xl border border-amber-300/30 bg-amber-300/10 px-4 py-3 text-sm font-bold leading-6 text-amber-100">dev管理画面です。SDK→mainはここから実行できます。develop→mainはmain管理画面で実行します。</p>}
 
       {message && <p role="status" className="rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-4 py-3 text-sm leading-6 text-cyan-50">{message}</p>}
 
@@ -281,11 +281,11 @@ export function ReleaseManagementPanel({
                   </div>
                   <label className="block text-xs font-bold text-slate-300">
                     mainで使うゲームID
-                    <input value={publicIds[key] ?? ""} disabled={isPreview || current || activeAction === `sdk:${key}`} onChange={(event) => setPublicIds((values) => ({ ...values, [key]: event.target.value }))} className="mt-1 w-full rounded-lg border border-white/15 bg-black/25 px-3 py-2 font-mono text-sm text-white outline-none focus:border-cyan-300 disabled:opacity-50" />
+                    <input value={publicIds[key] ?? ""} disabled={current || activeAction === `sdk:${key}`} onChange={(event) => setPublicIds((values) => ({ ...values, [key]: event.target.value }))} className="mt-1 w-full rounded-lg border border-white/15 bg-black/25 px-3 py-2 font-mono text-sm text-white outline-none focus:border-cyan-300 disabled:opacity-50" />
                   </label>
                   <div className="flex gap-2 lg:justify-end">
                     {game.reviewUrl && <a href={game.reviewUrl} target="_blank" rel="noreferrer" className="rounded-lg border border-white/15 px-4 py-2 text-sm font-bold hover:bg-white/10">レビュー</a>}
-                    <button type="button" disabled={isPreview || current || !complete || activeAction === `sdk:${key}`} onClick={() => void promoteSdkGame(game)} className="rounded-lg bg-emerald-300 px-4 py-2 text-sm font-black text-emerald-950 disabled:cursor-not-allowed disabled:opacity-40">{isPreview ? "本番管理画面で実行" : activeAction === `sdk:${key}` ? "採用中…" : current ? "採用済み" : "SDK→main"}</button>
+                    <button type="button" disabled={current || !complete || activeAction === `sdk:${key}`} onClick={() => void promoteSdkGame(game)} className="rounded-lg bg-emerald-300 px-4 py-2 text-sm font-black text-emerald-950 disabled:cursor-not-allowed disabled:opacity-40">{activeAction === `sdk:${key}` ? "採用中…" : current ? "採用済み" : "SDK→main"}</button>
                   </div>
                 </article>
               );
