@@ -5,12 +5,20 @@ import type { PublicKeyCredentialCreationOptionsJSON, PublicKeyCredentialRequest
 
 type PasskeyResponse = {
   error?: string;
+  detail?: string;
+  stage?: string;
   verified?: boolean;
   options?: unknown;
 };
 
 async function responseJson(response: Response) {
   return await response.json().catch(() => null) as PasskeyResponse | null;
+}
+
+function diagnosticError(data: PasskeyResponse | null, fallback: string) {
+  const code = data?.error || fallback;
+  const context = [data?.stage, data?.detail].filter(Boolean).join(" / ");
+  return context ? `${code}\n[${context}]` : code;
 }
 
 function isCancelledWebAuthn(error: unknown) {
@@ -34,7 +42,7 @@ async function useRecoveryCodeForStepUp() {
   });
   const data = await responseJson(response);
   if (!response.ok || !data?.verified) {
-    throw new Error(data?.error || "ADMIN_RECOVERY_CODE_STEP_UP_FAILED");
+    throw new Error(diagnosticError(data, "ADMIN_RECOVERY_CODE_STEP_UP_FAILED"));
   }
 }
 
@@ -43,9 +51,9 @@ export async function ensureSiteAdminStepUp() {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "begin-step-up" }),
   });
   const beginData = await responseJson(begin);
-  if (!begin.ok) throw new Error(beginData?.error || "ADMIN_STEP_UP_FAILED");
+  if (!begin.ok) throw new Error(diagnosticError(beginData, "ADMIN_STEP_UP_FAILED"));
   if (beginData?.verified) return;
-  if (!beginData?.options) throw new Error("ADMIN_STEP_UP_FAILED");
+  if (!beginData?.options) throw new Error(diagnosticError(beginData, "ADMIN_STEP_UP_FAILED"));
 
   let credential;
   try {
@@ -62,7 +70,7 @@ export async function ensureSiteAdminStepUp() {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "verify-authentication", response: credential }),
   });
   const verifyData = await responseJson(verify);
-  if (!verify.ok || !verifyData?.verified) throw new Error(verifyData?.error || "ADMIN_STEP_UP_FAILED");
+  if (!verify.ok || !verifyData?.verified) throw new Error(diagnosticError(verifyData, "ADMIN_STEP_UP_FAILED"));
 }
 
 export async function addSiteAdminPasskey() {
@@ -71,11 +79,11 @@ export async function addSiteAdminPasskey() {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "begin-add-passkey" }),
   });
   const beginData = await responseJson(begin);
-  if (!begin.ok || !beginData?.options) throw new Error(beginData?.error || "SITE_ADMIN_PASSKEY_ADD_FAILED");
+  if (!begin.ok || !beginData?.options) throw new Error(diagnosticError(beginData, "SITE_ADMIN_PASSKEY_ADD_FAILED"));
   const credential = await startRegistration({ optionsJSON: beginData.options as PublicKeyCredentialCreationOptionsJSON });
   const verify = await fetch("/api/admin/passkeys", {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "verify-registration", response: credential }),
   });
   const verifyData = await responseJson(verify);
-  if (!verify.ok || !verifyData?.verified) throw new Error(verifyData?.error || "SITE_ADMIN_PASSKEY_ADD_FAILED");
+  if (!verify.ok || !verifyData?.verified) throw new Error(diagnosticError(verifyData, "SITE_ADMIN_PASSKEY_ADD_FAILED"));
 }
