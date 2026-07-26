@@ -52,7 +52,7 @@ export function GameSdkShellHeader({
 }: Props) {
   const [rulesOpen, setRulesOpen] = useState(false);
   const [session, setSession] = useState<PlayerSession | null>(null);
-  const [debugOpen, setDebugOpen] = useState(false);
+  const [debugOpenRoomCode, setDebugOpenRoomCode] = useState<string | null>(null);
 
   useEffect(() => {
     const refresh = () => setSession(readPlayerSession());
@@ -63,10 +63,6 @@ export function GameSdkShellHeader({
     };
   }, []);
 
-  useEffect(() => {
-    if (!debugRoom) setDebugOpen(false);
-  }, [debugRoom]);
-
   return (
     <>
       <GameTopBanner eyebrow={eyebrow} title={title}>
@@ -75,7 +71,7 @@ export function GameSdkShellHeader({
           <button
             type="button"
             className={gameTopBannerActionClass}
-            onClick={() => setDebugOpen(true)}
+            onClick={() => setDebugOpenRoomCode(debugRoom.code)}
           >
             DEBUG · ON
           </button>
@@ -106,10 +102,10 @@ export function GameSdkShellHeader({
           hasRecoveryEmail={session?.hasRecoveryEmail}
         />
       </GameTopBanner>
-      {debugOpen && debugRoom && (
+      {debugRoom && debugOpenRoomCode === debugRoom.code && (
         <DebugToolWindow
           initialPosition={{ top: 88, left: 24 }}
-          onClose={() => setDebugOpen(false)}
+          onClose={() => setDebugOpenRoomCode(null)}
           persistentContent={(
             <div className="text-xs font-bold text-cyan-950">
               Room {debugRoom.code} · rev {debugRoom.revision}

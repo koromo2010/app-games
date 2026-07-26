@@ -95,3 +95,17 @@ test("formal Preview packages and promoted packages share GameSdkFrame", () => {
     /registration\.clientKind === "iframe-package"[\s\S]*?<GameSdkFrame/,
   );
 });
+
+test("shared package frame exposes Platform-owned Room dissolution in lobby and result", () => {
+  assert.match(frame, /<OnlineRoomLifecycleActions/);
+  assert.match(
+    frame,
+    /surface=\{room\.phase === "result" \? "result" : room\.phase === "lobby" \? "lobby" : "playing"\}/,
+  );
+  assert.match(frame, /moduleRequired\("dissolution"\)/);
+  assert.match(frame, /await runtime\.dissolveRoom\(current\.code\)/);
+  assert.match(frame, /window\.confirm\("部屋を解散しますか？参加者はこの部屋に戻れなくなります。"\)/);
+  assert.match(frame, /await refreshRooms\(\)/);
+  assert.match(frame, /setIsRoomDissolved\(true\)/);
+  assert.match(frame, /setMessage\("部屋を解散しました。新しい部屋を作成できます。"\)/);
+});

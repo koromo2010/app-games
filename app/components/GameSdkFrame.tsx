@@ -16,6 +16,7 @@ import {
 } from "@game-fields/game-sdk/client-runtime";
 import { GameSdkShellHeader } from "@/app/components/GameSdkShellHeader";
 import { GameSdkFeedbackPanel } from "@/app/components/GameSdkFeedbackPanel";
+import { OnlineRoomLifecycleActions } from "@/app/components/OnlineRoomLifecycleActions";
 import { useAppLocale } from "@/app/components/AppLocaleProvider";
 import { gameTopBannerOffsetClass } from "@/app/components/GameTopBanner";
 import { GameResultShareButton } from "@/app/components/GameResultShareButton";
@@ -28,6 +29,13 @@ import {
   gameSdkResultPlayLog,
   gameSdkResultReasonText,
 } from "@/lib/game-sdk-result-presentation";
+import {
+  roomUpdateIsOlder,
+  roomUpdateIsUnchanged,
+  sdkRoomViewHasReturningPlayer,
+  shouldHoldRoomResultTransition,
+  shouldKeepRoomResultAfterDissolve,
+} from "@/lib/room-result-return";
 import {
   useCallback,
   useEffect,
@@ -46,6 +54,7 @@ type CommonView = {
     isDummy: boolean;
   }>;
   settings: Record<string, GameSdkSettingValue>;
+  pendingLobbyReturnSeats: number[];
   minimumPlayers: number;
   maximumPlayers: number;
   isHost: boolean;
@@ -156,6 +165,8 @@ export function GameSdkFrame({
   }), [endpoint, runtimeId]);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const watchRef = useRef<{ close(): void } | null>(null);
+  const pendingActionRef = useRef(false);
+  const pendingLobbyRoomRef = useRef<PackageRoom | null>(null);
   const roomRef = useRef<PackageRoom | null>(null);
   const expiryRef = useRef<number | null>(null);
   const [room, setRoom] = useState<PackageRoom | null>(null);
@@ -168,6 +179,8 @@ export function GameSdkFrame({
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState("");
   const [frameHeight, setFrameHeight] = useState(720);
+  const [canReturnToRoom, setCanReturnToRoom] = useState(false);
+  const [isRoomDissolved, setIsRoomDissolved] = useState(false);
   const moduleRequired = useCallback((id: GameSdkModuleId) => (
     moduleProfile[id].mode === "required"
   ), [moduleProfile]);
@@ -185,25 +198,56 @@ export function GameSdkFrame({
     postRoom(next);
   }, [postRoom]);
 
+  const acceptIncomingRoom = useCallback((next: PackageRoom | null) => {
+    const current = roomRef.current;
+    if (!next) {
+      if (shouldKeepRoomResultAfterDissolve(current, "result")) {
+        watchRef.current?.close();
+        watchRef.current = null;
+        pendingLobbyRoomRef.current = null;
+        setCanReturnToRoom(false);
+        setIsRoomDissolved(true);
+        return;
+      }
+      commitRoom(null);
+      return;
+    }
+    if (
+      roomUpdateIsOlder(current, next)
+      || roomUpdateIsUnchanged(current, next)
+    ) return;
+    if (shouldHoldRoomResultTransition(current, next, "result")) {
+      if (!sdkRoomViewHasReturningPlayer(next)) {
+        watchRef.current?.close();
+        watchRef.current = null;
+        pendingLobbyRoomRef.current = null;
+        setCanReturnToRoom(false);
+        setIsRoomDissolved(true);
+        return;
+      }
+      pendingLobbyRoomRef.current = next;
+      setCanReturnToRoom(true);
+      return;
+    }
+    pendingLobbyRoomRef.current = null;
+    setCanReturnToRoom(false);
+    setIsRoomDissolved(false);
+    commitRoom(next);
+  }, [commitRoom]);
+
   const attachRoom = useCallback((next: PackageRoom | null) => {
     watchRef.current?.close();
     watchRef.current = null;
     commitRoom(next);
+    pendingLobbyRoomRef.current = null;
+    setCanReturnToRoom(false);
+    setIsRoomDissolved(false);
     if (!next) return;
     watchRef.current = runtime.watchRoom(next.code, {
-      onRoom: (incoming) => {
-        const current = roomRef.current;
-        if (
-          incoming
-          && current
-          && incoming.code === current.code
-          && incoming.revision <= current.revision
-        ) return;
-        commitRoom(incoming);
-      },
+      onRoom: acceptIncomingRoom,
       onError: (error) => setMessage(errorMessage(error)),
     });
-  }, [commitRoom, runtime]);
+  }, [acceptIncomingRoom, commitRoom, runtime]);
 
   const refreshRooms = useCallback(async () => {
     try {
@@ -235,7 +279,8 @@ export function GameSdkFrame({
   }, []);
 
   const run = useCallback(async (operation: () => Promise<PackageRoom>) => {
-    if (pending) return null;
+    if (pendingActionRef.current) return null;
+    pendingActionRef.current = true;
     setPending(true);
     setMessage("");
     try {
@@ -268,9 +313,10 @@ export function GameSdkFrame({
       }
       return null;
     } finally {
+      pendingActionRef.current = false;
       setPending(false);
     }
-  }, [attachRoom, pending, runtime]);
+  }, [attachRoom, runtime]);
 
   const send = useCallback(async (command: SafeCommand) => {
     const current = roomRef.current;
@@ -342,6 +388,77 @@ export function GameSdkFrame({
       if (expiryRef.current !== null) window.clearTimeout(expiryRef.current);
     };
   }, [attachRoom, room, send]);
+
+  const returnToRoom = useCallback(async () => {
+    const pendingLobbyRoom = pendingLobbyRoomRef.current;
+    if (!pendingLobbyRoom || isRoomDissolved) return;
+    try {
+      const latestRoom = await runtime.readRoom(pendingLobbyRoom.code);
+      if (
+        !latestRoom
+        || latestRoom.phase !== "lobby"
+        || !sdkRoomViewHasReturningPlayer(latestRoom)
+      ) {
+        pendingLobbyRoomRef.current = null;
+        setCanReturnToRoom(false);
+        setIsRoomDissolved(true);
+        setMessage("部屋が解散されたか、参加情報が変更されています。");
+        return;
+      }
+      const selfSeat = latestRoom.view.common.players.find(
+        (player) => player.isSelf,
+      )?.seat;
+      if (
+        selfSeat === undefined
+        || !latestRoom.view.common.pendingLobbyReturnSeats.includes(selfSeat)
+      ) {
+        attachRoom(latestRoom);
+        return;
+      }
+      const confirmed = await runtime.sendCommand(latestRoom.code, {
+        expectedRevision: latestRoom.revision,
+        command: { type: "room/confirm-lobby-return" },
+      });
+      attachRoom(confirmed.room);
+    } catch {
+      setMessage("部屋へ戻れる状態を確認できませんでした。");
+    }
+  }, [attachRoom, isRoomDissolved, runtime]);
+
+  const dissolveRoom = useCallback(async () => {
+    const current = roomRef.current;
+    if (
+      !current
+      || (current.phase !== "lobby" && current.phase !== "result")
+      || pendingActionRef.current
+      || !moduleRequired("dissolution")
+      || !window.confirm("部屋を解散しますか？参加者はこの部屋に戻れなくなります。")
+    ) return;
+    pendingActionRef.current = true;
+    setPending(true);
+    setMessage("");
+    try {
+      const dissolved = await runtime.dissolveRoom(current.code);
+      if (!dissolved) throw new Error("GAME_SDK_ROOM_DISSOLVE_FAILED");
+      if (current.phase === "result") {
+        watchRef.current?.close();
+        watchRef.current = null;
+        pendingLobbyRoomRef.current = null;
+        setCanReturnToRoom(false);
+        setIsRoomDissolved(true);
+        setMessage("部屋を解散しました。結果画面はこのまま確認できます。");
+      } else {
+        attachRoom(null);
+        setMessage("部屋を解散しました。新しい部屋を作成できます。");
+      }
+      await refreshRooms();
+    } catch (error) {
+      setMessage(errorMessage(error));
+    } finally {
+      pendingActionRef.current = false;
+      setPending(false);
+    }
+  }, [attachRoom, moduleRequired, refreshRooms, runtime]);
 
   const defaultSettings = Object.fromEntries(
     settingDefinitions.map((definition) => [
@@ -516,11 +633,6 @@ export function GameSdkFrame({
                 ゲームを開始
               </button>
             )}
-            {common?.isHost && room.phase === "result" && (
-              <button type="button" className={`${primary} mt-3 w-full`} disabled={pending} onClick={() => void run(() => send({ type: "room/rematch" }))}>
-                再戦
-              </button>
-            )}
             {room.phase === "result" && standardResult && moduleRequired("result") && (
               <div className="mt-4 border-t border-slate-200 pt-4">
                 <p className="text-xs font-black uppercase tracking-wide text-cyan-700">
@@ -560,6 +672,26 @@ export function GameSdkFrame({
               </div>
             )}
             {message && <p className="mt-3 text-sm font-bold text-rose-700">{message}</p>}
+            <OnlineRoomLifecycleActions
+              surface={room.phase === "result" ? "result" : room.phase === "lobby" ? "lobby" : "playing"}
+              isHost={common?.isHost === true}
+              disabled={pending}
+              canReturnToRoom={
+                room.phase === "result"
+                && (common?.isHost === true || canReturnToRoom)
+              }
+              isRoomDissolved={isRoomDissolved}
+              onReturnToRoom={room.phase === "result"
+                ? common?.isHost
+                  ? () => run(() => send({ type: "room/rematch" }))
+                  : returnToRoom
+                : undefined}
+              onDissolve={moduleRequired("dissolution")
+                && (room.phase === "lobby" || room.phase === "result")
+                ? dissolveRoom
+                : undefined}
+              returnHref={backHref}
+            />
           </div>
           {room.phase === "lobby" && (
             <div className={panel}>

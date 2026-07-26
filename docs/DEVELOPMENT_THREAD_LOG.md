@@ -4667,3 +4667,42 @@
 - 本体buildの初回だけ並行実行中の`.next`整理で`ENOTEMPTY`になったが、単独再実行では正常完了し、コード・型エラーではないことを確認した。
 - Redis名前空間変更を含む`develop@53d0e3a`の`app-games-sdk-dev` Production DeploymentがREADYになった。
 - `https://sdk-dev.game-fields.com/api/health`は`status: ok`、`schemaVersion: 4`を返し、`/api/instances/check`も正常応答した。
+
+## 2026-07-26 — SDK正式Package Roomの解散導線復旧
+
+### 利用者からの要望
+
+- 制作者Packageのhostが、ゲーム開始前または結果画面から現在のRoomを解散し、
+  active room索引を整理して新しいRoomを作成できるようにする。
+- AppSetへ共通UIを再実装せず、必須`dissolution` moduleをPlatform共通Shellで提供する。
+
+### 判断
+
+- Client Runtime、DELETE route、Room Storeの解散処理は既に存在し、欠落箇所は
+  candidate Previewと昇格後で共有する`GameSdkFrame`のUI接続と確定した。
+- 旧Preview専用Shellやゲーム固有packageへ回避UIを追加せず、共通
+  `OnlineRoomLifecycleActions`を`GameSdkFrame`へ接続する。
+- 結果からの解散では表示中の結果を保持し、非hostの結果復帰も既存の共通規約へ揃える。
+
+### 実施結果
+
+- ロビーと結果だけhostへ解散を表示し、確認後に`runtime.dissolveRoom(code)`を呼ぶようにした。
+- ロビー解散後はRoom監視を終了して新規作成画面へ戻し、部屋一覧を再取得する。
+- 結果解散後は結果を保持したまま復帰を無効化する。
+- hostの再戦後、非hostは本人の席を再確認して`room/confirm-lobby-return`を送るまで
+  結果画面を保持する。
+- 同一tickの重複操作をrefで直列化し、進行中または`dissolution`非必須時は解散を表示しない。
+
+### 検証
+
+- Shellのphase、module gate、確認、`dissolveRoom`、一覧再取得を固定する契約テストを追加した。
+- `npm test`に成功し、全560テストが通過した。
+- 既存のSDK HTTP縦断テストで、解散時のRoom本体・参加者active room索引の整理と、
+  別の現行active roomを維持する処理も通過した。
+
+### 未対応・保留
+
+- develop公開後、制作者アカウントで既存Roomのロビー解散、新規Room作成、
+  結果解散の実機E2Eを確認する。
+- 報告対象の既存Roomを管理側から直接削除する操作は行っていない。公開後も
+  hostの解散操作が失敗する場合だけ、保存状態を確認して個別整理する。

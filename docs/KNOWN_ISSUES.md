@@ -421,3 +421,22 @@ candidate／mainで共有するSDK active-room復元hookを追加し、確認中
 作成・参加UIを出さず、既存Roomがあればそのまま復帰する。別タブとの競合等で
 `PLAYER_ACTIVE_ROOM`が返った場合もactive Roomを再取得して復帰する。進行中Roomを
 黙って破棄せず、result Roomから新規Roomへ移れる既存Runtime契約もテストで固定する。
+
+## 2026-07-26 SDK正式Package Shellに部屋解散導線が表示されない
+
+状態: 修正済み（2026-07-26、回帰テストあり。ログイン済み実機E2Eは未確認）
+
+candidate Previewと昇格後で共有する`GameSdkFrame`へ移行したPackageでは、
+`dissolveRoom`のClient RuntimeとRedis上のRoom・一覧・active room索引整理は
+実装済みだったが、Platform-ownedの`OnlineRoomLifecycleActions`を描画していなかった。
+このため必須module profileに`dissolution`があっても、hostがロビーまたは結果から
+解散できず、1人1active room契約によって新しいRoom作成も止まる状態になった。
+
+`GameSdkFrame`を共通RoomライフサイクルUIへ接続し、ロビーと結果だけhostへ解散を
+表示する。確認後に`runtime.dissolveRoom(code)`を呼び、ロビーではRoomを閉じて
+新規作成画面へ戻し、結果では結果表示を保持したまま復帰だけを無効にする。
+非hostの結果復帰も、hostのロビー更新をいったん保持して本人の
+`room/confirm-lobby-return`を通す共通規約へ揃えた。進行中には解散を表示せず、
+moduleが必須でない場合にも表示しない。Shell接続、確認、Runtime呼出し、一覧再取得を
+契約テストへ追加し、既存のSDK HTTP縦断テストでRoom本体・参加者active room索引の
+整理と、別の現行active roomを誤って消さないことを継続検査する。
