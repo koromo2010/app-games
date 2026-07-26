@@ -79,6 +79,7 @@ export default async function Home() {
         </nav>
         <div className="header-account-area">
           <span className="preview-badge">開発者向け先行公開 · v{platformVersion}</span>
+          <Link className="parent-link" href="/for-parents">保護者の方へ</Link>
           <AccountMenu />
         </div>
       </header>
