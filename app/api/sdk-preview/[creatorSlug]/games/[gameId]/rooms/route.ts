@@ -1,7 +1,10 @@
 import { createGameSdkOnlineRoomHttpHandlers } from "@/lib/game-sdk-online-room-http";
 import { createAuthenticatedGameSdkPlatformAdapter } from "@/lib/game-sdk-platform-adapter";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
-import { requireSdkPreviewAuthenticatedPlayer } from "@/lib/sdk-preview-account-session";
+import {
+  getSdkPreviewAccountPlayerId,
+  requireSdkPreviewAuthenticatedPlayer,
+} from "@/lib/sdk-preview-account-session";
 import { loadSdkPreviewPackageModule } from "@/lib/sdk-preview-package-runtime";
 import { createRequestTelemetry } from "@/lib/observability";
 
@@ -36,6 +39,7 @@ async function handle(request: Request, context: RouteContext, method: Method) {
   });
   try {
     const session = await requireSdkPreviewAuthenticatedPlayer(creatorSlug);
+    const creatorPlayerId = await getSdkPreviewAccountPlayerId(creatorSlug);
     if (method === "GET") {
       const limited = await rateLimitResponseFor(
         request,
@@ -60,7 +64,7 @@ async function handle(request: Request, context: RouteContext, method: Method) {
     const identity = {
       playerId: session.id,
       displayName: session.name?.trim() || "SDK Player",
-      debugAccess: true,
+      debugAccess: creatorPlayerId === session.id,
     };
     const adapter = createAuthenticatedGameSdkPlatformAdapter({
       module: runtime.module,
