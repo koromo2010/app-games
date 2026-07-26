@@ -4697,12 +4697,18 @@
 
 - Shellのphase、module gate、確認、`dissolveRoom`、一覧再取得を固定する契約テストを追加した。
 - `npm test`に成功し、全560テストが通過した。
+- `npm run lint`と`npm run build`に成功した。
 - 既存のSDK HTTP縦断テストで、解散時のRoom本体・参加者active room索引の整理と、
   別の現行active roomを維持する処理も通過した。
+- `179959b`をdevelopへ反映し、`app-games-dev`の対象DeploymentがREADYになった。
+- 対象画面とSDK Room APIを含む直近10分のVercel Runtime Error集計は0件だった。
 
 ### 未対応・保留
 
-- develop公開後、制作者アカウントで既存Roomのロビー解散、新規Room作成、
-  結果解散の実機E2Eを確認する。
+- 制作者アカウントで既存Roomのロビー解散、新規Room作成、結果解散の実機E2Eを確認する。
 - 報告対象の既存Roomを管理側から直接削除する操作は行っていない。公開後も
   hostの解散操作が失敗する場合だけ、保存状態を確認して個別整理する。
+
+### 関連コミット
+
+- `179959b` — SDK正式Package Roomの共通解散導線を復旧。

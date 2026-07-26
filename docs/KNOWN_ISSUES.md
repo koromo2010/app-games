@@ -424,7 +424,7 @@ candidate／mainで共有するSDK active-room復元hookを追加し、確認中
 
 ## 2026-07-26 SDK正式Package Shellに部屋解散導線が表示されない
 
-状態: 修正済み（2026-07-26、回帰テストあり。ログイン済み実機E2Eは未確認）
+状態: 修正済み・dev公開済み（2026-07-26、回帰テストあり。ログイン済み実機E2Eは未確認）
 
 candidate Previewと昇格後で共有する`GameSdkFrame`へ移行したPackageでは、
 `dissolveRoom`のClient RuntimeとRedis上のRoom・一覧・active room索引整理は
