@@ -5580,3 +5580,28 @@
   増えないことと実メール受信を照合する。
 - 複数管理者宛て通知の部分成功管理、運用警告メールの再試行、通知先用途の分離は
   今回の優先修正範囲外として別途扱う。
+
+## 2026-07-27 — メール信頼性修正のdevelop公開
+
+### 実施結果
+
+- メール経路の部分失敗修正、返信メールだけの再送、利用者送信の冪等化を
+  GitHubの`develop`へ非forceで公開した。
+- GitHub上の機能commitは`b5c17b1309b063523c5a887e2d4bd23110ef14fd`。
+  内容tree `26104f94ff2269c643d0622d25d2dbbdd761d8a8`は、最新`develop`統合後に
+  全600テスト・lint・production buildを通したローカルtreeと一致する。
+- `app-games-dev`は対象commitを認識し、`dev.game-fields.com`へaliasされた。
+
+### 検証
+
+- Deployment `dpl_7emRoASVUMsqnCkzWHRaBr83rpUr`は`READY`。
+- errors-only build logに失敗はなく、直近1時間のRuntime Errorは0件。
+
+### 関連コミット
+
+- `b5c17b1` — メール送信の部分失敗と通信再試行を冪等化。
+
+### 未対応・保留
+
+- dev管理画面から失敗済み返信メールだけを再送し、会話件数が増えないことと
+  実メール受信を照合する。
