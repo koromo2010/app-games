@@ -10,13 +10,13 @@ export const runtime = "nodejs";
 
 const GAME_PATTERN = /^[a-z][a-z0-9-]{1,63}$/;
 
-function authorize(request: Request, options?: { readOnly?: boolean }) {
+function authorize(request: Request) {
   const branch = process.env.VERCEL_GIT_COMMIT_REF;
-  if (
-    branch !== "main"
-    && !(options?.readOnly && branch === "develop")
-  ) {
-    return Response.json({ error: "promotion_main_only" }, { status: 403 });
+  if (branch !== "main" && branch !== "develop") {
+    return Response.json(
+      { error: "promotion_environment_not_supported" },
+      { status: 403 },
+    );
   }
   try {
     requireSdkServiceRequest(request);
@@ -33,7 +33,7 @@ function expectedPromotionTarget() {
 }
 
 export async function GET(request: Request) {
-  const denied = authorize(request, { readOnly: true });
+  const denied = authorize(request);
   if (denied) return denied;
   await ensureSdkSchema();
   const rows = await sdkSql()`

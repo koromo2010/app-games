@@ -51,10 +51,13 @@ test("admin exposes environment-paired SDK adoption and independent dev to main"
   assert.match(sdkRoute, /SDK_PROMOTION_MAIN_ONLY/);
   assert.match(devRoute, /code\.promote-develop-to-main/);
   assert.match(devRoute, /confirmation !== "dev→main"/);
-  assert.match(portalRoute, /readOnly && branch === "develop"/);
-  assert.match(portalRoute, /authorize\(request, \{ readOnly: true \}\)/);
+  assert.match(
+    portalRoute,
+    /branch !== "main" && branch !== "develop"/,
+  );
+  assert.match(portalRoute, /authorize\(request\)/);
   assert.match(portalRoute, /const expectedTarget = expectedPromotionTarget\(\)/);
   assert.match(portalRoute, /target !== expectedTarget/);
-  assert.match(portalRoute, /branch !== "main"/);
+  assert.doesNotMatch(portalRoute, /promotion_main_only/);
   assert.doesNotMatch(mcp, /promote_game_package_to_development/);
 });
