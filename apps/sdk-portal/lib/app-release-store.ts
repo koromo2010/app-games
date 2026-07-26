@@ -23,8 +23,12 @@ export type AppReleaseSnapshot = {
 };
 
 export class AppReleaseError extends Error {
-  constructor(readonly code: string, readonly status: number) {
-    super(code);
+  constructor(
+    readonly code: string,
+    readonly status: number,
+    readonly detail?: string,
+  ) {
+    super(detail ? `${code}:${detail}` : code);
   }
 }
 
@@ -51,6 +55,7 @@ async function verifyRuntime(snapshot: AppReleaseSnapshot) {
     gameId: snapshot.sourceGameId,
     revision: snapshot.revision,
     serverBundleSha256: snapshot.serverBundleSha256,
+    channel: "development",
   });
   const response = await fetch(access.serverRuntimeUrl, {
     method: "POST",
@@ -65,9 +70,32 @@ async function verifyRuntime(snapshot: AppReleaseSnapshot) {
     }),
     cache: "no-store",
   });
-  const payload = await response.json().catch(() => null) as { ok?: unknown; value?: unknown } | null;
-  if (!response.ok || payload?.ok !== true || !jsonValuesEqual(payload.value, snapshot.manifest)) {
-    throw new AppReleaseError("APP_RELEASE_RUNTIME_MANIFEST_MISMATCH", 422);
+  const payload = await response.json().catch(() => null) as {
+    ok?: unknown;
+    value?: unknown;
+    error?: unknown;
+  } | null;
+  if (!response.ok) {
+    const upstream = typeof payload?.error === "string" ? payload.error : "UNKNOWN";
+    throw new AppReleaseError(
+      "APP_RELEASE_RUNTIME_MANIFEST_MISMATCH",
+      422,
+      `RUNTIME_HTTP_${response.status}_${upstream}`,
+    );
+  }
+  if (payload?.ok !== true) {
+    throw new AppReleaseError(
+      "APP_RELEASE_RUNTIME_MANIFEST_MISMATCH",
+      422,
+      "RUNTIME_PAYLOAD_NOT_OK",
+    );
+  }
+  if (!jsonValuesEqual(payload.value, snapshot.manifest)) {
+    throw new AppReleaseError(
+      "APP_RELEASE_RUNTIME_MANIFEST_MISMATCH",
+      422,
+      "RUNTIME_MANIFEST_VALUE_MISMATCH",
+    );
   }
 }
 
