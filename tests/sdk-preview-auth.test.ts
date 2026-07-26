@@ -6,6 +6,9 @@ import {
   verifySdkPreviewToken,
   verifySdkServiceAuthorization,
 } from "../packages/sdk-preview-auth/src/index.ts";
+import {
+  createPackageRuntimeAccess,
+} from "../apps/sdk-portal/lib/preview-links.ts";
 
 const secret = "sdk-preview-test-secret-with-at-least-32-bytes";
 const grant = {
@@ -57,6 +60,40 @@ test("SDK preview token keeps adopted development and main channels distinct", (
     verifySdkPreviewToken(createSdkPreviewToken(mainGrant, secret), secret, 1_999),
     mainGrant,
   );
+});
+
+test("main runtime access stays production-scoped when requested from develop", () => {
+  const previousSecret = process.env.SDK_PREVIEW_SIGNING_SECRET;
+  const previousRef = process.env.VERCEL_GIT_COMMIT_REF;
+  const previousBaseUrl = process.env.SDK_PREVIEW_BASE_URL;
+  process.env.SDK_PREVIEW_SIGNING_SECRET = secret;
+  process.env.VERCEL_GIT_COMMIT_REF = "develop";
+  process.env.SDK_PREVIEW_BASE_URL = "https://preview-dev.example";
+  try {
+    const access = createPackageRuntimeAccess({
+      instanceId: grant.instanceId,
+      gameId: grant.gameId,
+      revision: grant.revision,
+      serverBundleSha256: grant.bundleSha256,
+      channel: "main",
+      now: 1_000,
+    });
+    assert.match(access.serverRuntimeUrl, /^https:\/\/preview\.game-fields\.com\//);
+    const runtimeGrant = verifySdkPreviewToken(
+      access.serverRuntimeToken,
+      secret,
+      1_001,
+    );
+    assert.equal(runtimeGrant?.environment, "production");
+    assert.equal(runtimeGrant?.channel, "main");
+  } finally {
+    if (previousSecret === undefined) delete process.env.SDK_PREVIEW_SIGNING_SECRET;
+    else process.env.SDK_PREVIEW_SIGNING_SECRET = previousSecret;
+    if (previousRef === undefined) delete process.env.VERCEL_GIT_COMMIT_REF;
+    else process.env.VERCEL_GIT_COMMIT_REF = previousRef;
+    if (previousBaseUrl === undefined) delete process.env.SDK_PREVIEW_BASE_URL;
+    else process.env.SDK_PREVIEW_BASE_URL = previousBaseUrl;
+  }
 });
 
 test("SDK preview token rejects invalid identifiers and weak secrets", () => {

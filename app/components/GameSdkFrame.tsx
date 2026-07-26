@@ -117,6 +117,9 @@ function errorMessage(error: unknown) {
   if (error instanceof GameSdkHttpClientRuntimeError) {
     if (error.status === 401) return "Preview認証を更新してください。";
     if (error.code === "STALE_REVISION") return "部屋を最新状態へ更新しました。";
+    if (error.code === "GAME_SDK_REMOTE_RUNNER_UNAVAILABLE") {
+      return "ゲーム実行サーバーへ接続できません。少し待ってから、もう一度お試しください。";
+    }
     return `操作を完了できませんでした（${error.code}）。`;
   }
   return "操作を完了できませんでした。";

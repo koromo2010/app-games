@@ -4667,3 +4667,52 @@
 - 本体buildの初回だけ並行実行中の`.next`整理で`ENOTEMPTY`になったが、単独再実行では正常完了し、コード・型エラーではないことを確認した。
 - Redis名前空間変更を含む`develop@53d0e3a`の`app-games-sdk-dev` Production DeploymentがREADYになった。
 - `https://sdk-dev.game-fields.com/api/health`は`status: ok`、`schemaVersion: 4`を返し、`/api/instances/check`も正常応答した。
+
+## 2026-07-27 — 「コトバに迫れ」公開表示と正式Room起動障害
+
+### 利用者からの要望
+
+- `ai-word-guess`の公開名を「コトバに迫れ」へ変更し、広場カードへ専用画像を設定する。
+- 正式画面でRoom作成直後に`GAME_SDK_COMMAND_REJECTED`となる障害を解消する。
+
+### 判断
+
+- 採用済みAppSetとmanifestは改変せず、表示名と画像を`publicGameId`別のPlatform
+  presentationとして解決する。
+- 2026-07-27 15:18 JST前後の本番Runtime Logでは、本体Room APIの真の失敗コードは
+  `GAME_SDK_REMOTE_RUNNER_UNAVAILABLE`で、SDK Previewのportable server routeが403を
+  返していた。ゲーム固有ロジックではなく、main package runtime grantとPreview
+  deployment世代のずれを起点とする実行基盤障害として扱う。
+- Remote runner停止は競合ではなく一時利用不能なので、HTTP 503と再試行可能な
+  日本語メッセージを返す。
+
+### 実施結果
+
+- 「コトバに迫れ」／`Close in on the Word`と専用1200×500 WebP画像を追加し、
+  広場・Room・結果・戦績・replayの表示名解決を統一した。
+- `main` channelのgrantをproduction environmentと`preview.game-fields.com`へ固定した。
+- SDK Previewのhealth応答へchannelとgrant versionを追加し、次のmain Deploymentで
+  Preview Runtimeを必ず再構築する変更を加えた。
+- エラー分類・画面メッセージ・presentation・grant境界の回帰テストを追加した。
+
+### 検証
+
+- `develop@1945287`を非forceで反映した。
+- `app-games-dev`、`app-games-preview-dev`、`app-games-sdk-dev`の対象Deploymentは
+  READY。`preview-dev.game-fields.com/health`は`channel: development`、
+  `grantVersion: 3`を返した。
+- `dev.game-fields.com/ja/games`のHTMLで新表示名と専用画像URLを確認し、画像URLは
+  HTTP 200・`image/webp`を返した。
+- ローカルで全594テスト、lint、本体・SDK Portal・SDK Preview build、`npm run verify`
+  に成功した。
+- main hotfix treeで全564テストと今回変更ファイルのESLint、本体・SDK Portal・
+  SDK Preview production buildに成功した。
+- main全体の`npm run lint`は今回未変更の`GameSdkShellHeader.tsx`と
+  `site-admin-passkey-client.ts`に残る既存2件のlint違反で失敗した。hotfix固有の
+  lint・型・build失敗はない。
+
+### 未対応・保留
+
+- 現在のmainへ最小hotfixを非forceで反映し、本番3プロジェクトのDeploymentを確認する。
+- 本番反映後、正式画面からRoomを作成し、Preview server routeの403が解消したことを
+  Runtime Logと画面の両方で確認する。

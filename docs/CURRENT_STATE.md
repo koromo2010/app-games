@@ -48,6 +48,8 @@ devとmainの採用済みSDKアプリ情報は環境別DBに分離する。管�
 
 アプリ更新時はmainのゲームID・URL・公開設定を維持する。各更新前の版は`sdk_app_releases`へ追加専用履歴として残り、管理画面から過去版を選んでアプリ単位で復元できる。復元自体も新しい`rollback`リリースとして記録し、本体や他アプリ、既存Roomは巻き戻さない。
 
+採用済みSDKゲームのAppSetとmanifestは不変のまま保持し、公開後に調整する表示名と広場カード画像は`config/sdk-game-presentations.ts`で管理する。現行の`ai-word-guess`は公開名「コトバに迫れ」と専用カード画像を使用する。
+
 ## 共通LLMゲートウェイ
 
 ゲームからAIプロバイダーを利用する処理は `lib/game-llm.ts` を経由する。ゲーム固有ルートからOpenAI、Gemini、Groqを直接呼ばない。
