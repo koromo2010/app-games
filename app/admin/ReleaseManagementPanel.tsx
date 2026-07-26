@@ -49,12 +49,54 @@ const errors: Record<string, string> = {
   GITHUB_RELEASE_MAIN_ONLY: "dev→main操作はmain側の管理画面だけで利用できます。",
 };
 
+const sdkPromotionActions: Record<string, string> = {
+  ADMIN_STEP_UP_REQUIRED: "パスキーで再確認してから、もう一度実行してください。",
+  promotion_expected_source_changed: "状態を再読込し、更新後の提出物をレビューしてください。",
+  promotion_source_changed: "状態を再読込し、更新後の提出物をレビューしてください。",
+  public_game_id_conflict: "別のゲームIDへ変更するか、既存カタログの割当を確認してください。",
+  promotion_input_invalid: "ゲームIDと提出物のrevision・hashを確認してください。",
+  promotion_target_not_found: "作品が削除・移動されていないか確認し、状態を再読込してください。",
+  promotion_environment_not_supported: "SDK Portalのデプロイ元ブランチと対象環境を確認してください。",
+  forbidden: "本体とSDK Portalの内部認証設定が一致しているか確認してください。",
+  SDK_PROMOTION_MAIN_ONLY: "対応するdevまたはmainの管理画面から実行してください。",
+  SDK_PROMOTION_TARGET_MISMATCH: "状態を再読込し、表示中の環境から再実行してください。",
+  SDK_PROMOTION_INVALID_RESPONSE: "SDK Portalの稼働状態とRuntime Logを確認してください。",
+  SDK_PROMOTION_FAILED: "状態を再読込して再試行し、続く場合はSDK PortalのRuntime Logを確認してください。",
+};
+
 function shortSha(value: string | null) {
   return value ? value.slice(0, 8) : "未採用";
 }
 
 function messageFor(code: unknown, fallback: string) {
   return typeof code === "string" ? errors[code] ?? fallback : fallback;
+}
+
+function safeErrorCode(code: unknown) {
+  return typeof code === "string" && /^[A-Za-z0-9_-]{1,80}$/.test(code)
+    ? code
+    : "UNKNOWN_ERROR";
+}
+
+function sdkFailureMessage({
+  code,
+  status,
+  action,
+  fallback,
+}: {
+  code: unknown;
+  status?: number;
+  action: string;
+  fallback: string;
+}) {
+  const safeCode = safeErrorCode(code);
+  const reason = messageFor(safeCode, fallback);
+  const nextAction = sdkPromotionActions[safeCode]
+    ?? (status && status >= 500
+      ? "一時的なサーバー障害の可能性があります。状態を再読込して再試行し、続く場合はRuntime Logを確認してください。"
+      : "状態を再読込して再試行し、続く場合は監査ログとRuntime Logを確認してください。");
+  const statusLabel = status ? `HTTP ${status}` : "通信失敗";
+  return `${action}\n理由: ${reason}\n識別情報: ${statusLabel} / ${safeCode}\n次の操作: ${nextAction}`;
 }
 
 function sdkPackageIsCurrent(game: SdkCandidate) {
@@ -117,10 +159,12 @@ export function ReleaseManagementPanel({
         ])));
       } else {
         setSdkGames([]);
-        setSdkLoadError(messageFor(
-          sdkPayload?.error,
-          "SDK提出候補を読み込めませんでした。",
-        ));
+        setSdkLoadError(sdkFailureMessage({
+          code: sdkPayload?.error,
+          status: sdkResponse.status,
+          action: "SDK提出候補を読み込めませんでした。",
+          fallback: "SDK側から候補一覧を取得できませんでした。",
+        }));
       }
       if (devResponse.ok && devPayload?.repository) {
         setDevRelease(devPayload);
@@ -181,7 +225,15 @@ export function ReleaseManagementPanel({
       const payload = await response.json().catch(() => null) as {
         error?: string;
       } | null;
-      if (!response.ok) throw new Error(payload?.error || "SDK_PROMOTION_FAILED");
+      if (!response.ok) {
+        setMessage(sdkFailureMessage({
+          code: payload?.error || "SDK_PROMOTION_FAILED",
+          status: response.status,
+          action: `SDK作品を${sdkTargetLabel}へ採用できませんでした。`,
+          fallback: `${sdkSource}側で採用処理が完了しませんでした。`,
+        }));
+        return;
+      }
       await load();
       setMessage(`${game.title} を${sdkTargetLabel}採用カタログへ反映しました。`);
     } catch (error) {
@@ -189,10 +241,12 @@ export function ReleaseManagementPanel({
         onAuthExpired();
         return;
       }
-      setMessage(messageFor(
-        error instanceof Error ? error.message : "",
-        `SDK作品を${sdkTargetLabel}へ採用できませんでした。`,
-      ));
+      const code = error instanceof Error ? error.message : "";
+      setMessage(sdkFailureMessage({
+        code,
+        action: `SDK作品を${sdkTargetLabel}へ採用できませんでした。`,
+        fallback: "管理画面から採用APIへ接続できませんでした。",
+      }));
     } finally {
       setActiveAction("");
     }
@@ -249,7 +303,7 @@ export function ReleaseManagementPanel({
 
       {isPreview && <p className="rounded-xl border border-amber-300/30 bg-amber-300/10 px-4 py-3 text-sm font-bold leading-6 text-amber-100">dev管理画面です。SDK-dev→devの採用検証をここで実行できます。SDK→mainとdev→mainはmain管理画面で実行します。</p>}
 
-      {message && <p role="status" className="rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-4 py-3 text-sm leading-6 text-cyan-50">{message}</p>}
+      {message && <p role="status" className="whitespace-pre-line rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-4 py-3 text-sm leading-6 text-cyan-50">{message}</p>}
 
       <section className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.05]">
         <div className="border-b border-white/10 px-5 py-5">
@@ -259,7 +313,7 @@ export function ReleaseManagementPanel({
         </div>
         {sdkLoadError ? (
           <div className="px-5 py-6">
-            <p className="rounded-xl border border-rose-300/25 bg-rose-300/10 px-4 py-3 text-sm font-bold text-rose-100">{sdkLoadError}</p>
+            <p className="whitespace-pre-line rounded-xl border border-rose-300/25 bg-rose-300/10 px-4 py-3 text-sm font-bold leading-6 text-rose-100">{sdkLoadError}</p>
           </div>
         ) : sdkGames.length === 0 ? (
           <p className="px-5 py-8 text-sm text-slate-400">正式提出済みのSDK作品はありません。</p>
