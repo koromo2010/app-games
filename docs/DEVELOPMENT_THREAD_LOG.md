@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 85678)
-Total output lines: 4596
-
 # 開発スレッドログ
 
 この文書は、GPTとの開発スレッドで出た要望、判断経緯、実施結果を後から追跡するための参考ログである。現在仕様の正本ではない。実装時は `docs/README.md` の読書順に従い、`DEVELOPMENT_HANDOFF.md`、ゲーム別資料、登録簿、コードを優先する。
@@ -1466,7 +1463,1734 @@ Total output lines: 4596
 
 ### 関連コミット
 
-- `c7488c0` — `d…35678 tokens truncated…示は本体プレイヤー認証の証明ではない。
+- `c7488c0` — `develop`へ`GameFieldsDownloadMe-ver3.md`の配布導線と生成物を反映。
+
+### 公開確認
+
+- `app-games-sdk-dev`の`c7488c0` Production DeploymentがREADY。
+- `https://sdk-dev.game-fields.com/GameFieldsDownloadMe-ver3.md`が200、添付名`GameFieldsDownloadMe-ver3.md`、正本から生成した内容との完全一致を確認した。
+- SDK-devトップページが`ver3`だけを新規取得導線として表示することを確認した。
+
+### 未対応・保留
+
+- なし。
+
+## 2026-07-23 — SDK制作環境への再ログイン導線を追加
+
+### 利用者からの要望
+
+- DownloadMeの制作開始手順が新規URL作成だけを前提にしているため、既に作成済みのSDK環境へ再ログインして制作を続けられるようにする。
+
+### 判断
+
+- OAuthで確認したGame Fieldsアカウントの所有環境をMCPから安全に一覧取得し、既存環境が1件なら自動再利用、複数なら利用者が選択、0件の場合だけ新規予約へ進む。
+- 他利用者の環境検索や任意slugからの所有者推測は許さず、ログイン本人の`owner_player_id`に一致する環境だけを返す。
+- 制作フローの改版に当たるため、既存`ver3`を上書きせず新規配布名を`GameFieldsDownloadMe-ver4.md`へ上げる。
+
+### 実施結果
+
+- 読み取り専用MCP tool `list_creator_environments`を追加し、本人所有のslug、表示名、ゲーム数だけを返すようにした。
+- DownloadMeを既存環境優先の開始手順へ変更し、既存環境では空き確認・予約・確定を再実行しないよう明記した。
+- Portalの新規取得導線、添付名、同期先を`ver4`へ更新した。旧配布ファイルは互換用に残した。
+
+### 検証
+
+- `npm run lint`成功。
+- 全390テスト成功。
+- `npm run test:sdk-starter`で入口、公開Git snapshot、ZIP、SDK install、型検査、契約テスト、1ゲーム完走、提出ZIPまで成功。
+- `npm run build`は検証用worktree外を指す`node_modules` symlinkをTurbopackが拒否したため未完了。Runtime packageの型検査は成功し、今回のソース由来のcompile errorは検出されていない。
+
+### 未対応・保留
+
+- `develop`反映後、SDK-devのMCP tool一覧と`ver4`実ファイルを確認する。
+## 2026-07-23 — SDK保存後の案内を制作者トップへ統一
+
+### 利用者からの要望
+
+- ゲーム保存直後の最初のリンクを個別ゲームではなく、`https://sdk-dev.game-fields.com/test10-1/`のような制作者環境トップにしたい。
+
+### 判断
+
+- 保存済みゲーム一覧と再ログイン先を同じ入口にするため、制作者トップを主リンクとする。
+- 今回のゲームへ直接入るURLも補助リンクとして残し、既存クライアント向け`previewUrl`は互換維持する。
+- DownloadMeの動作指示が変わるため配布名を`ver5`へ上げる。
+
+### 実施結果
+
+- `publish_mock`と旧管理トークン互換APIが`creatorUrl`、`gameUrl`、`previewUrl`を返すよう変更した。
+- DownloadMeとスターター指示を、`creatorUrl`を最初に案内する内容へ更新した。
+- SDK Portalの新規配布導線を`GameFieldsDownloadMe-ver5.md`へ変更した。
+
+### 検証
+
+- `npm run lint`成功。
+- `npm test`成功（391件）。
+- `npm run build`は検証用worktreeの`node_modules`シンボリックリンクをTurbopackが拒否したため未完了。変更コード由来の型・lint・テスト失敗はない。
+
+### 未対応・保留
+
+- `develop`への反映とSDK-dev実機確認は未実施。
+
+## 2026-07-23 — SDK Preview Runtimeの誤った未接続判定を修正
+
+### 利用者からの要望
+
+- 制作者トップから保存済みゲームを開いても「Game Fields Previewから開いてください」と表示される問題を解消する。
+
+### 判断
+
+- 起動導線ではなく、PreviewがHTMLへ共通Runtimeを注入済みか判定する条件が原因だった。
+- ゲーム側が契約どおり`window.GameFieldsPreset`を参照するだけでは注入済みとみなさず、Previewが追加する`data-game-fields-preset`付きscriptだけを注入済みの正本とする。
+- Preview配信時にHTMLへ注入する処理の修正なので、保存済みゲームの再生成や新revision保存は不要とする。
+
+### 実施結果
+
+- `injectGameFieldsPreset`の重複判定をscript markerへ限定した。
+- `allow-same-origin`を持たない隔離iframeでは認証Cookie付き外部`preset.js`を取得できないため、信頼済み共通RuntimeをHTMLへインライン注入する方式へ変更した。隔離条件と外部通信禁止は維持した。
+- Runtimeが状態保存用の`html[data-gf-phase]`を表示ラベルと誤認して文書全体を消去しないよう、ルート要素をラベル更新対象から除外した。
+- 外側Platform Shellへ開始・自動進行・中断・再戦ボタンを追加し、隔離iframeとは送信元windowとCommand allowlistを検証する`postMessage`で接続した。iframe側からは表示用phaseだけをShellへ通知する。
+- HTML内のゲームコードが`GameFieldsPreset.registerGame`を参照していてもRuntimeが1回だけ注入される回帰テストを追加した。
+
+### 検証
+
+- 対象テスト6件成功。
+- `npm run lint`成功。
+- `npm test`成功（393件）。
+- `npm run build`成功。
+- SDK-devの`countdown-21-v2`既存revisionを実機確認し、未接続警告が消えて外側の「ゲーム開始」が表示されることを確認した。
+- 「ゲーム開始」後に1〜3個の操作が有効になり、「1個取る」で残数21→20、手番がMichelへ交代、履歴が1手増えることを確認した。
+- `app-games-dev`と`app-games-preview-dev`の対象デプロイがともにREADYになったことを確認した。
+
+### 関連コミット
+
+- `a8e58e1` — Runtime注入済み判定をmarkerへ限定。
+- `144be2f` — Runtimeを隔離HTMLへインライン注入。
+- `0298f1e` — Runtime描画時に文書ルートを保持。
+- `48f3d26` — 外側Shellの共通操作と隔離Runtimeを接続。
+
+### 未対応・保留
+
+- なし。途中の不完全修正は後続コミットで解消済み。
+
+## 2026-07-23 — ワードウルフを使ったSDK共通Room境界の第一段階
+
+### 利用者からの要望
+
+- 既存ワードウルフを分解してsdk-devで動かし、SDKへ切り出す共通部分を実物で確定する。
+
+### 判断
+
+- 現行のWordWolf Roomを丸ごとSDKへ移さず、共通Room envelopeとゲーム固有stateを分離する。
+- 参加、退出、設定更新、中断、再戦はSDK共通Lifecycle reducer、お題配布、ヒント、投票、逆転回答、秘密情報projectionはワードウルフpackageが所有する。
+- まずMock Runtimeで1試合完走するserver契約を固定し、その後に汎用HTTP/Client Runtimeとsdk-devの正式Room UIへ接続する。
+
+### 実施結果
+
+- 公開SDKへオンラインRoom、Player、Settings schema、Lifecycle Commandと純粋reducerを追加した。
+- `games/wordwolf-sdk`をmanifest、domain、server moduleへ分離し、SDK以外のplatform内部importを禁止する自動検査対象へ追加した。
+- 市民・狼には本人のお題だけを返し、観戦者には秘密語を返さない閲覧者別projectionを実装した。
+
+### 検証
+
+- `npm run lint`成功。
+- `npm test`成功（394件）。新規テストで3人参加、開始、ヒント、投票、逆転回答、結果、再戦まで完走した。
+- sdk-devの正式Room UIと永続化Runtimeへの接続は未実施。
+
+### 未対応・保留
+
+- Game Fields共通Room UIからSDK moduleを操作する汎用HTTP routeとClient Runtime。
+- sdk-devへワードウルフpilotを登録し、ブラウザ実機で部屋作成から再戦まで確認する。
+- 現行本体ワードウルフを新契約へ接続し、旧専用Lifecycleを削除する作業は実機確認後に行う。
+## 2026-07-23 SDK公式サンプルエリアとワードウルフUI接続
+
+### 要望
+
+- ワードウルフ用の一般制作者アカウントを増やさず、SDK-dev内に公式サンプル専用エリアを用意する。
+- 分離済みワードウルフserver moduleをブラウザ画面へ接続し、SDKへ切り出す共通部分を実物で検証する。
+
+### 判断・実装
+
+- `/sdk-examples/`を`Game Fields Official`のコード管理カタログとし、`sdk_creators`、`owner_player_id`、管理トークンに依存させない。
+- `/sdk-examples/word-wolf`は`games/wordwolf-sdk/server-module.ts`をin-memory Mock Runtimeで実行する。別の見た目用ゲーム進行は作らない。
+- SDK共通欄にRoom code、phase、revision、host、playersを表示し、固有欄で秘密語、ヒント、投票、逆転回答、勝敗を扱う。
+- ホスト・参加者・観戦者の視点切替、秘密語projection、進行中断、同じ参加者での再戦を確認できる。
+- SDK Portalにも同名routeを追加し、dev/mainに応じたGame Fields本体をiframe表示する。
+
+### 検証・保留
+
+- SDK package build、対象lint、公式エリア回帰テスト、既存ワードウルフpilotテストに成功。
+- 永続Room、HttpOnly session由来actor、HTTP Client Runtimeは未接続。今回の画面はSDK境界の公式ブラウザpilotであり、本番ルーム基盤への移行は次工程。
+
+## 2026-07-23 — SDK公式サンプルをGame Fields共通UIへ統合
+
+### 利用者からの要望
+
+- SDK公式サンプルだけを独立した濃紺UIへ分けず、一般ゲームと同じGame Fields共通UI上で表示する。
+
+### 判断
+
+- `game-fields-official`は所有・編集権限上の区分であり、別デザインの画面区分にはしない。
+- SDKゲームも通常ゲームと同じ共通ラウンジ、ゲームカード、トップバー、プレイヤーメニュー、ルーム設定表示を利用し、ゲーム固有部分だけを差し替える。
+
+### 実施結果
+
+- `/sdk-examples`の独自カタログUIを廃止し、共通`GameLobby`へ公式ワードウルフのカードを登録した。
+- 登録簿外IDを安全側で非表示にする共通運用設定へ、公式ワードウルフ専用の公開設定を明示し、共通ラウンジ上でカードが表示されるようにした。
+- `/sdk-examples/word-wolf`の独自ヘッダーを共通`GameTopBanner`、`GameTopMenu`、`GamePlayerMenu`へ置換した。
+- SDK共通Room情報を共通`RoomConfigSummary`で表示し、ゲーム画面とデバッグ欄も既存Game Fieldsのパネル表現へ統一した。
+- 回帰テストを、独自公式UIの固定文言ではなく共通UIコンポーネント利用を必須とする検査へ変更した。
+
+### 検証
+
+- `npm run lint`成功。
+- `npm test`成功（395件）。
+- 通常配置の依存を持つ検証コピーで`npm run build`成功し、`/sdk-examples`と`/sdk-examples/word-wolf`の生成を確認した。
+- `29654e5`の`app-games-dev`と`app-games-sdk-dev`がREADYになったことを確認した。
+- `https://sdk-dev.game-fields.com/sdk-examples`を実ブラウザで開き、共通ラウンジのアカウント欄・検索欄・通常カードUIと「ワードウルフ SDK」カード1件の表示を確認した。
+- `https://sdk-dev.game-fields.com/sdk-examples/word-wolf`を実ブラウザで開き、共通トップバー、広場導線、MENU、プレイヤーメニュー、共通Room設定、参加者3人、ゲーム開始ボタンの表示を確認した。
+
+### 関連コミット
+
+- `4479ee3` — SDK公式一覧とワードウルフ画面を共通UIへ統合。
+- `29654e5` — 公式ワードウルフを共通ラウンジ上で公開表示。
+
+### 未対応・保留
+
+- 永続Room、HttpOnly session由来actor、HTTP Client Runtimeへの接続は次工程。
+
+## 2026-07-23 — main側の標準クライアント三層を完成
+
+### 利用者からの要望
+
+- SDK側の呼び出し構造を揃える前に、main側の共通モジュール化を完成させる。
+- 共通部分を呼び出し、ゲーム固有部分だけを差し替えられる構造にする。
+
+### 判断
+
+- `docs/UI_ARCHITECTURE.md`の基準どおり、EntryはController生成とDesktopLayout選択だけに限定する。
+- Controllerがstate、session、room同期、actions、ViewModel、UI用permissionsを束ね、DesktopLayoutから通信・API client参照を除く。
+- 今回はmain側を先に確定し、SDK／SDK-devの呼び出し合わせは次工程とする。
+
+### 実施結果
+
+- Tahoiya、Word Out、Code Intercept、Word Sonar、Northern Branch、Canvas、Daifugoを`<Game>Game -> use<Game>Controller -> <Game>DesktopLayout`へ移行した。
+- 既に移行済みのWordWolf、Word Scaleを含む登録済み全9ゲームのEntryを同じ9行構成へ統一した。
+- 各Controllerから`permissions`を明示し、Code Interceptのデバッグ語彙取得をroom API clientへ移した。
+- Word Scaleの結果復帰、Canvasの退出・自分の線の消去を含むDesktopLayoutのroom API参照をController actionへ移した。
+- `config/game-registry.json`の`moduleBoundaryFiles`へ新しいController／DesktopLayoutを登録した。
+- `scripts/check-game-standards.mjs`へ、全登録ゲームの薄いEntry、Controller、DesktopLayout、permissions、DesktopLayout通信禁止の回帰検査を追加した。今後の登録ゲームにも自動適用する。
+
+### 検証
+
+- `npm run lint`成功。
+- `npm test`成功（395件）。
+- `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、75ページ生成を完了した。
+
+### 次工程
+
+- mainで確定した三層と共通Room境界を正本に、SDK／SDK-devのGame package呼び出しを同じ構造へ合わせる。
+
+## 2026-07-23 — ワードウルフ入場時にログアウト状態になる問題を修正
+
+### 利用者からの要望
+
+- devでログイン後にワードウルフへ入るとログアウト状態になる問題を解消する。
+
+### 判断
+
+- dev実行ログではログインAPIが200で成功した直後、`/wordwolf`遷移後の`/api/player-session`と戦績APIが401になっていた。
+- 原因はlocale転送やワードウルフ固有UIではなく、Postgresにだけ存在する既存アカウントのログイン時にRedisプレイヤーセッションを再作成しないstrict DB分岐だった。
+- Postgresをアカウント正本、Redisを現在プロフィールのセッション保存先とする現行設計を維持し、パスワード情報を含むアカウント全体はミラーせず、安全なプロフィールだけを復元する。
+
+### 実施結果
+
+- `ensurePlayerAccountSession`を共通化し、Redisセッションがない既存アカウントでもログイン成功時にプロフィールセッションを再作成するよう変更した。
+- 同じ処理をメール更新後のセッション返却にも適用した。
+- パスワードハッシュ、salt、メールアドレスをRedisプレイヤーセッションへ含めない回帰テストを追加した。
+
+### 検証
+
+- dev実行ログで、修正前はログイン成功直後の`/api/player-session`が401になることを確認した。
+- `npm run lint`成功。
+- `npm test`成功（396件）。
+- `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、75ページ生成を完了した。
+
+### 未対応・保留
+
+- `develop`反映後、既存アカウントで再ログインし、ワードウルフ入場後もログイン状態が維持されることを確認する。
+
+## 2026-07-23 — 復旧用メールの所有確認を必須化
+
+### 利用者からの要望
+
+- 復旧用メールへ任意のアドレスを入力でき、管理者メールを知っているだけでデバッグ権限が自動付与される問題を解消する。
+- メール確認後の管理者メール一致による自動付与は維持する。
+
+### 判断
+
+- 入力直後はメールをアカウントへ保存せず、1時間有効・一度きりの確認メールを送る。
+- メールセキュリティ製品の自動リンク巡回で確定しないよう、リンク先の確認画面で「このメールを承認」をPOSTした場合だけ登録を完了する。
+- パスワード再設定と管理者メール一致による自動デバッグ付与は、メールと`email_verified_at`がそろった場合だけ許可する。
+- 管理画面からのプレイヤーID別の個別付与は維持する。導入前の既存メールは自動的に確認済みにせず、再承認を必要とする。
+
+### 実施結果
+
+- `player_accounts`へ`email_verified_at`を追加し、確認中メールはRedisの期限付きトークンとしてのみ保持するよう変更した。
+- 一度きりのDB migrationで、導入前から保存されているメールのアドレスは保持し、確認日時だけを消して未確認へ移すようにした。
+- 新規登録とマイページのメール追加・変更を同じ確認メールフローへ統合した。変更確認中は既存の確認済み復旧メールを維持する。
+- マイページで未登録・未確認・確認済みを区別し、未確認の既存メールは現在のパスワードだけで保存済みアドレスへ確認メールを再送できるようにした。再送時は古い確認リンクを無効化する。
+- `/verify-email`へ明示承認画面、`/api/player-email-verification`へ一度きりの確定処理を追加した。
+- 確認済みメールだけをセッションの`hasRecoveryEmail`、パスワード再設定、管理者メール一致の自動権限判定へ使用するよう変更した。
+- 既存Resend設定を再利用し、新しい環境変数は追加していない。
+
+### 検証
+
+- `npm run lint`成功。
+- `npm test`成功（400件）。
+- `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
+
+### 未対応・保留
+
+- `develop`反映後、確認メールの受信、明示承認、マイページの確認済み表示、管理者メール一致による自動デバッグ付与、未承認メールでの拒否を実機確認する。
+
+## 2026-07-23 — 登録メールの識別表示とパスワード変更を追加
+
+### 利用者からの要望
+
+- 未確認表示なのに、どのメールアドレスが登録済みなのかマイページで分からない状態を解消する。
+- パスワード変更では現在のパスワードを確認し、新しいパスワードを確認入力できる安全な導線を用意する。
+
+### 判断
+
+- 復旧用メールの平文は保存セッションやlocalStorageへ含めず、本人専用のアカウント取得APIだけがマスク済みヒントを返す。
+- マイページでは「現在の登録先」と「新しいメールアドレス」を分け、未確認メールの再送先を識別できるようにする。
+- パスワード変更の本人確認は、署名済みCookieのプレイヤーIDと現在のパスワードのサーバー照合で行う。新パスワードの2回入力は入力ミス防止であり、認証要素にはしない。
+
+### 実施結果
+
+- `/api/player-account`の本人向け応答へ、復旧メールの状態とマスク済み登録先を追加した。
+- マイページへ現在の登録先表示、新規・変更先入力、未確認メール再送の関係が分かる表示を追加した。
+- マイページへ「現在のパスワード＋新しいパスワード＋確認入力」の変更フォームを追加した。
+- サーバーはCookieの本人ID、現在のパスワード、新パスワードの長さ、現在と異なる値であることを検証し、認証済みプレイヤーIDをレート制限キーに使う。
+
+### 検証
+
+- `npm run lint`成功。
+- `npm test`成功（404件）。
+- `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
+
+### 未対応・保留
+
+- 利用者の明示指示に基づき`develop`へ反映する。反映後、devで未確認メールのマスク表示、確認メール再送、現在パスワードを使うパスワード変更を実機確認する。
+
+## 2026-07-23 — 確認メール再送UIと送信障害の判別を改善
+
+### 利用者からの要望
+
+- 「登録済みメールへ確認を再送」で現在のパスワードが必要なことを分かりやすくする。
+- devで確認メールを再送できなかった原因を調査し、修正する。
+
+### 判断
+
+- 再送操作は新しいメールの登録・変更と別の目的なので、パスワード状態もフォームも分離する。
+- 外部メールサービスの生エラー本文は、メールアドレス等を含む可能性があるためログや応答へ出さない。安全な固定コードへ分類して原因を判別する。
+
+### 実施結果
+
+- 未確認メールの再送を独立枠へ移し、マスク済み登録先、新規メール入力が不要であること、再送専用の現在パスワード欄、再送ボタンをまとめた。
+- Resendの送信エラーを認証設定、送信元未確認、テスト送信先制限、送信枠、レート制限、その他へ分類し、マイページの案内と閉じた観測ログへ反映した。
+- `app-games-dev`の実行ログで、再送要求は現在パスワードの照合とトークン発行後、Resend送信時に502となったことを確認した。Sharedキー自体は読み込まれているが、Resend側の具体的な拒否理由は旧コードでは失われていた。
+
+### 検証
+
+- メール送信エラー分類、既存のメール確認ポリシー、アカウントセキュリティの対象テスト10件に成功。
+- 対象ファイルのESLintに成功。
+- `npm run lint`成功。
+- `npm test`成功（407件）。
+- `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
+
+### 未対応・保留
+
+- `develop`へ反映後、再送を再試行し、新しい安全な分類ログでResend側の認証・送信元ドメイン・送信先制限のどれかを確定する。
+- Resend Dashboard上の送信元ドメイン認証とAPIキー権限は、この環境から直接確認できず未確認。
+
+### 公開・外部設定確認
+
+- `74f76ee`（`Clarify recovery email resend errors`）として`develop`へfast-forwardし、`app-games-dev`の対象Deploymentが`READY`、`dev.game-fields.com`へ割り当て済みであることを確認した。
+- Vercel Runtime Logsで、直前の再送要求が`EMAIL_SERVICE_NOT_CONFIGURED`ではなくResend送信後の`EMAIL_SEND_FAILED`だったことを再確認した。したがって、ResendアカウントとAPIキー変数は作成・接続済みである。
+- Google Public DNSで`resend._domainkey.game-fields.com`のDKIM TXT、`send.game-fields.com`のSPF TXTとAmazon SES向けMXを確認した。DNS登録自体は存在する。
+- 最新コード反映後の再送はまだ行っていない。次回の1回で画面表示または閉じたログの分類コードを確認し、Resend Dashboard上の状態またはAPIキー権限を確定する。
+
+## 2026-07-23 — Resend認証完了とワードウルフ投票競合を修正
+
+### 利用者からの要望
+
+- Resend設定後に確認メールを受信できた状態を引き継ぐ。
+- devのワードウルフで、投票完了後に「投票を反映できませんでした」と表示されるエラーを解消する。
+
+### 判断
+
+- ResendはDashboardの`game-fields.com`が`Verified`となり、devからの確認メール受信まで成功したため、外部設定と実送信を確認済みへ更新する。
+- ワードウルフの保存済み結果は正しく、Vercel Runtime Logsでは最後の投票成功から約1秒後に同じ投票者の別command IDが409になっていた。投票送信中の即時ロックと、保存済み投票のサーバー冪等応答を併用する。
+- ワードウルフでは自己投票を許可せず、UI候補とサーバーdomainの両方で拒否する。
+
+### 実施結果
+
+- 投票要求の開始時に同期refとUI stateを設定し、応答完了まで全候補ボタンを無効化して送信中表示を出すよう変更した。
+- サーバーは投票者の票がすでに保存済みなら、409にせず最新の閲覧者別Roomを`applied: false`で返すよう変更した。
+- 投票者本人を候補一覧から除外し、共通のサーバー投票検証でも自己投票を拒否した。
+- ResendのVerifiedとdev確認メール受信成功を環境変数台帳・既知課題へ反映した。
+
+### 検証
+
+- Vercel Runtime Logsで、同一投票者から`cast-vote`が200成功後に409となった2要求を確認した。成功した要求は結果フェーズ・revision 13を保存していた。
+- 投票者、決選投票、自己投票、保存済み投票判定の個別回帰テストに成功した。
+- `npm run lint`成功。
+- `npm test`成功（411件）。
+- `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
+
+### 未対応・保留
+
+- `develop`へは未push。反映後にdevで連打時の警告非表示と自己投票候補の除外を実機確認する。
+
+## 2026-07-23 — ワードウルフと共通モジュールの重複導線を横断監査
+
+### 利用者からの要望
+
+- 投票以外にも導線が重複していないか確認する。
+- ワードウルフ固有の問題か、オンラインゲーム共通モジュールの問題かを切り分ける。
+
+### 判断
+
+- 共通側は、操作・時間切れ応答とポーリング／別操作の到着順が逆転しても、画面のRoom revisionを巻き戻さない契約にする。
+- ゲーム固有Storeの保存後処理を維持したままCAS競合を再適用できるhelperは共通永続化へ置く。
+- ワードウルフのゲーム進行Commandは、ゲーム番号・フェーズ・ラウンド・フェーズ開始時刻をscopeとして固定し、同じフェーズ内の同時操作だけを再適用する。
+- React stateの更新を待つ送信抑止では同一tickの連打を防げないため、共通操作とワードウルフ操作は同期refも併用する。
+
+### 実施結果
+
+- `preferLatestOnlineRoom`を追加し、コードインターセプト、ワードアウト、ワードソナー、ノーザンブランチ、大富豪、ワードスケール、たほい屋の通常操作・時間切れ応答と、ワードウルフのRoom採用へ適用した。
+- 共通の結果操作、デバッグ操作、アバター保存・ログアウトを同期refでロックした。
+- 共通永続化へ、ゲーム固有の保存境界でも最新Roomへ論理Commandを最大6回再適用できるhelperを追加した。
+- ワードウルフの開始・発言・投票・逆転回答へscope検証、保存済み操作の成功応答、CAS競合再適用を追加した。別フェーズ・別ラウンドから遅れて届いた操作は拒否する。
+- ワードウルフの開始・発言・投票・逆転回答・回答評価・部屋作成／参加／一覧／解散を同期ロックし、ロビーRoom Actionを直列化した。
+- プレイヤー名とお題ヒントはキー入力ごとに保存せず、blurまたはEnterで1回だけ保存するよう変更した。
+- 参加可能部屋の一覧取得失敗にも利用者向けエラーを表示するよう補完した。
+
+### 検証
+
+- 共通revision採用、共通CAS再適用、ワードウルフCommand scope、投票・決選投票・自己投票の個別回帰テストに成功した。
+- `npm run lint`成功。
+- `npm test`成功（既存の共通Redis契約テストを維持したうえで419件）。
+- `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
+
+### 未対応・保留
+
+- `develop`へは未push。反映後にdevで、同時発言・同時投票、フェーズ遷移直後、タイマーと手動送信の競合を実機確認する。
+- 全ゲーム共通の永続command receiptは未実装。ワードウルフは現在のRoom状態とscopeによる重複判定まで対応した。
+
+## 2026-07-23 — ダミー参加者管理、共通遷移表示、初期表示性能を改善
+
+### 利用者からの要望
+
+- ワードウルフのデバッグ用ダミーを削除できるようにする。
+- 追加・削除をワードウルフ固有の「テストプレイヤー」機能ではなく、共通デバッグモジュールで扱う。
+- 画面遷移待ちで内容が点滅しない、一般的な遷移中表示を用意する。
+- 全体のもっさり感がモジュール化によるものか切り分ける。
+
+### 判断
+
+- ダミー参加者の追加・一覧・削除UIは共通デバッグメニューへ集約し、ワードウルフは型付きCommandだけを渡す。削除は画面上のボタンだけでなく、ホスト・デバッグ中・ロビー・ダミー対象をサーバーで検査する。
+- 遷移表示は即時に出すと短い遷移まで点滅するため、120msを超えたときだけ共通オーバーレイを表示する。
+- Controller／Layoutのモジュール境界はbuild時にbundleされるため、runtimeの主因とは見なさない。locale redirect、直列API、重複したRedis／Postgres読取を個別に改善する。
+
+### 実施結果
+
+- 共通`DebugParticipantControls`を追加し、`DebugModeButton`内でダミーの追加・一覧・削除を行う構成にした。ワードウルフのロビー設定から固有の追加ボタン、参加者一覧から固有の削除ボタンを除去した。
+- ワードウルフへ`debug-remove-player`をサーバーCommandとして実装し、デバッグOFF時もダミーを整理する。
+- `AppLink`と`localizedAppHref`で内部リンクを現在localeへ直接向け、不要なredirectを避けた。
+- `RouteTransitionProvider`、`PageLoadingOverlay`、App Routerの`loading.tsx`を追加した。オンラインゲームの初期復元表示も同じUIへ揃えた。
+- 共通session restore、ワードウルフ、たほい屋で、保存済みIDのactive room取得を永続session確認と並列化した。
+- 広場のアクセス判定を並列化し、runtime hyperparameter、ゲーム運用状態、実プレイ時間sampleへ短時間cacheと同時load共有を追加した。
+
+### 検証
+
+- locale付き内部リンク、ダミー削除権限の回帰テストを追加した。
+- `npm run lint`成功。
+- `npm test`成功（421件）。
+- `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
+
+### 未対応・保留
+
+- `develop`へは未push。反映後、devで共通デバッグメニューからのダミー追加・個別削除、デバッグOFF時の整理、広場からゲームへの遷移、保存部屋の復元表示を実機確認する。
+
+## 2026-07-23 — 全デバッグ操作とDBワード生成テストを共通ポップアップへ集約
+
+### 利用者からの要望
+
+- ダミー削除を共通デバッグメニューへ置くなら、ワード生成テストを含む全デバッグ操作を同じメニューへまとめる。
+- デバッグモードON中は、トップバーのDEBUGボタンからポップアップ形式で操作できるようにする。
+- 新規ワード生成テストは、DBを使うゲームだけがデバッグモジュールへ任意メソッドとして接続する。
+
+### 判断
+
+- `DebugModeButton`をデバッグ操作の唯一の入口とし、ゲーム固有の一括操作は`gameTools`、DBワード・お題生成テストは任意の`wordGenerationTools`として受け取る。
+- DB機能を持たないゲームは`wordGenerationTools`を渡さず、生成テストを表示しない。ワードウルフはDB候補の再利用と新規生成を切り替え、たほい屋とコードインターセプトは各正式DBフローを確認する。
+- 生成テストはRoom、ラウンド、出題済み履歴を変更しない。候補生成・審査自体が検査対象の場合だけ、対応する候補DBへ結果を保存できる。
+- 通常画面にはデバッグ中の状態説明と代理操作対象のゲーム盤面だけを残し、設定、対象切替、一括入力、強制進行の操作ボタンは置かない。
+
+### 実施結果
+
+- 共通`DebugGameTools`を追加し、ゲーム固有のセクション、操作ボタン、代理操作プレイヤー選択を同じ見た目で構成できるようにした。
+- ワードウルフ、たほい屋、ワードスケール、ワードソナー、ワードアウト、コードインターセプト、ノーザンブランチ、大富豪のデバッグ操作をトップバーのDEBUGポップアップへ移した。
+- ワードウルフのワード生成テスト、たほい屋の未判定語審査・正式採用フロー、コードインターセプトのDB候補抽出を`wordGenerationTools`へ接続した。
+- たほい屋の通常画面に残っていたデバッグ強制進行ボタンも撤去し、ポップアップ内へ一本化した。
+- ポップアップを24rem幅・縦スクロール対応にし、背景クリック、閉じるボタン、Escで閉じた後にDEBUGボタンへフォーカスを戻すようにした。
+- DB生成テストを通常画面へ戻さない契約テストと、ゲーム登録監査を追加した。
+
+### 検証
+
+- `npm run lint`成功。9ゲーム共通要件、SDK境界、ESLintを通過した。
+- `npm test`成功（423件）。
+- `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
+- `git diff --check`成功。
+
+### 公開
+
+- `002b4ee`（`Centralize debug tools in popup`）として`develop`へfast-forward反映した。
+- `app-games-dev`の対象Deploymentが`READY`となり、`dev.game-fields.com`への割当を確認した。
+
+### 未対応・保留
+
+- devでDEBUGのON、ポップアップの各フェーズ表示、ワードウルフの新規生成切替、DB非対応ゲームで生成テストが出ないことを実機確認する。
+
+## 2026-07-23 — DEBUGメニューを非モーダル画面内ウィンドウへ変更
+
+### 利用者からの要望
+
+- デバッグメニュー画面を、ゲーム画面内で扱えるウィンドウ形式にする。
+
+### 判断
+
+- 背景全面でクリックを遮るモーダルは使わず、ゲーム画面を表示・操作可能なままデバッグ操作を行える非モーダルウィンドウにする。
+- PCでは移動・サイズ変更・最小化・閉じるに対応し、狭い画面ではビューポート内の固定パネルとして誤操作と画面外への逸脱を防ぐ。
+- ゲーム固有ツールと権限・Commandの接続は変更せず、共通ウィンドウ枠だけを`DebugToolWindow`へ分離する。
+
+### 実施結果
+
+- 共通`DebugToolWindow`を追加し、`DebugModeButton`の内容を非モーダルの画面内ウィンドウへ表示するよう変更した。
+- マウス・ペン・タッチのPointer Eventsによる移動とサイズ変更、最小化、Esc／閉じるボタン、ビューポート変更時の位置・寸法補正を追加した。
+- 移動・サイズ変更はキーボードの矢印キーでも操作できる。
+
+### 検証
+
+- `npm run lint`成功。9ゲーム共通要件、SDK境界、ESLintを通過した。
+- `npm test`成功（427件）。
+- `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
+- `git diff --check`成功。
+
+### 未対応・保留
+
+- dev実機でゲーム操作との同時利用、PCの移動・サイズ変更・最小化、スマホ幅での固定表示を確認する。
+
+## 2026-07-23 — AI通信バイタルと共通部屋操作を追加
+
+### 利用者からの要望
+
+- AI APIと通信している間、トップバナーのバイタル表示が光るなど、利用者が通信と課金可能性を認識できるようにする。
+- 「部屋を解散」はプレイ中に表示せず、ロビーと結果画面だけにする。
+- 結果画面では「部屋に戻る」「広場へ戻る」「部屋を解散」をまとめ、サイドパネルからも操作できるようにする。
+- いずれもゲーム固有実装ではなく、全体モジュール側で契約を持つ。
+
+### 判断
+
+- AI処理は同時実行があり得るため、真偽値ではなく共通activity storeで実行中件数を管理する。すべての対象処理が終了した時だけアイドル表示へ戻す。
+- 表示はAI APIを呼ぶ可能性があるクライアント要求の開始から応答終了までとし、正確な課金額やtoken数を示すものではない。
+- 部屋操作は`lobby`、`playing`、`result`の共通surfaceで定義し、`playing`では何も表示しない。結果画面では既存の復帰・退出・解散処理を共通部品から呼ぶ。
+
+### 実施結果
+
+- 共通`AiActivityVital`と`ai-activity-client`を追加し、全ゲームの`GameTopBanner`へ常設した。アイドル時は小さく表示し、AI通信中は発光・脈動して通信中であることを示す。
+- ワードウルフとたほい屋の開始、AI生成・審査・文章補正など、AI APIを利用する可能性がある要求を共通activityへ接続した。
+- 同時に複数要求が走った場合、途中の1件が完了しても表示を消さず、成功・失敗を問わず最後の要求終了時に解除する。
+- 共通`OnlineRoomLifecycleActions`を追加し、全オンラインゲームの結果操作を同じ契約へ移行した。
+- ワードウルフとたほい屋のサイドパネルは、ロビーではホストの解散、プレイ中は非表示、結果では部屋復帰・広場復帰・解散を表示するようにした。
+- ワードウルフの権限判定も、解散可能なフェーズをロビーと結果だけへ制限した。
+
+### 検証
+
+- AI activityの同時実行、二重終了、失敗時cleanupの回帰テストを追加した。
+- 共通部屋操作のフェーズ別表示と、ワードウルフ・たほい屋の利用契約テストを追加した。
+- `npm run lint`成功。9ゲーム共通要件、SDK境界、ESLintを通過した。
+- `npm test`成功（427件）。
+- `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
+- `git diff --check`成功。
+
+### 公開
+
+- `e8f5b48`（`Add shared debug window and AI vital`）として、画面内DEBUGウィンドウ、AI通信バイタル、共通部屋操作を`develop`へfast-forward反映した。
+- `app-games-dev`の対象Deploymentが`READY`となり、`dev.game-fields.com`への割当を確認した。
+
+### 未対応・保留
+
+- 現在のバイタルは通信状態と課金可能性の注意を示す。実際のtoken数・金額・利用枠の表示には、サーバー側usage集計と利用者別の課金ルールが別途必要。
+- dev実機でAI処理中の点灯、並列処理、プレイ中の解散非表示、結果画面の3操作を確認する。
+
+## 2026-07-23 — DEBUGウィンドウの空白と幅崩れを修正
+
+### 利用者からの要望
+
+- DEBUGウィンドウの幅の使い方が不自然で、操作欄の左側に大きな空白が生じている状態を直す。
+
+### 判断
+
+- ゲーム固有ツールの幅ではなく、共通`DebugToolWindow`外枠のFlexbox方向指定漏れを原因と判断した。
+- タイトルバーとスクロール本文を縦に並べ、本文が常にウィンドウ全幅を使う共通レイアウトへ修正する。
+
+### 実施結果
+
+- 共通ウィンドウ外枠へ`flex-col`を追加し、タイトルバーと本文が左右に分断されないようにした。
+- 本文へ`w-full min-w-0`を追加し、ゲーム固有ツールが右端の細い列へ押し込まれないようにした。
+- 共通DEBUGメニューの契約テストへ、縦配置と本文全幅の回帰検査を追加した。
+
+### 検証
+
+- DEBUGメニュー契約テスト3件成功。
+- `npm run lint`成功。9ゲーム共通要件、SDK境界、ESLintを通過した。
+- `npm test`成功（427件）。
+- `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
+- `git diff --check`成功。
+- 最終HEAD `9c1a2a1`の`app-games-dev` Vercel Deploymentが`READY`となり、`dev.game-fields.com`への割当を確認した。
+
+### 未対応・保留
+
+- `develop`へ実装コミット`8d3710a`、公開記録コミット`9c1a2a1`をpush済み。
+- dev実機でのPC幅・狭い画面表示、移動・サイズ変更・最小化の確認は未実施。
+
+## 2026-07-23 — DEBUGウィンドウ外の操作で自動最小化
+
+### 利用者からの要望
+
+- DEBUGツールボックス以外の場所を押したとき、ウィンドウを自動的に最小化する。
+
+### 判断
+
+- ゲームごとには実装せず、共通`DebugToolWindow`がdocument-level Pointer Eventを監視する。
+- マウス・タッチ・ペンの主操作だけを対象とし、ウィンドウ内操作と右クリックでは最小化しない。
+- 外側で押したゲームUIのイベントは止めず、DEBUGウィンドウの最小化とクリック先の操作を同時に成立させる。
+
+### 実施結果
+
+- ウィンドウ外のpointer downを検出して`isMinimized`を有効化する共通処理を追加した。
+- document listenerはcaptureで登録し、コンポーネントの破棄時に解除する。
+- 共通DEBUGメニュー契約テストへ、外側判定・document listener登録の検査を追加した。
+
+### 検証
+
+- DEBUGメニュー契約テスト3件成功。
+- `npm run lint`成功。9ゲーム共通要件、SDK境界、ESLintを通過した。
+- `npm test`成功（427件）。
+- `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
+- 実装コミット`8211de6`の`app-games-dev` Vercel Deploymentが`READY`となり、`dev.game-fields.com`への割当を確認した。
+
+### 未対応・保留
+
+- `develop`へ実装コミット`8211de6`、push記録コミット`49ae302`を反映済み。
+- dev実機確認は未実施。
+
+## 2026-07-23 — たほい屋DEBUG機能のモジュール分割後監査
+
+### 利用者からの要望
+
+- たほい屋で少なくともダミー削除ができないため、モジュール化後に動かなくなったデバッグ機能を全体的に確認する。
+
+### 判断
+
+- たほい屋だけに残っていたゲーム固有の旧追加ボタンを延命せず、ワードウルフと同じ共通`DebugParticipantControls`へ追加・一覧・削除を接続する。
+- UI表示だけでなく、個別削除、DEBUG OFF、操作対象、参加者依存状態、active-room索引を同じ削除契約へ揃える。
+- 分割後の各hookを監査し、直接`setRoom`していた経路は共通の単調revision規則へ統一する。
+
+### 実施結果
+
+- `debug-remove-player` Commandを追加し、ホスト・DEBUG中・ロビー・ダミー対象の条件をサーバーで検証するようにした。
+- 個別削除とDEBUG OFFで、ダミーに紐づく得点、偽説明、投票、時間切れ、回答者、復帰状態を整理する純粋moduleを追加した。
+- ダミーをたほい屋のactive-room索引から除外し、既存のダミー索引も削除時に解放する。
+- 削除対象が現在の操作プレイヤーならホストへ戻し、途中削除後に追加したダミー名が重複しないようにした。
+- ラウンド開始、ロビー復帰確認、お題スキップのRoom反映を`preferLatestOnlineRoom`経由へ揃えた。
+- 操作プレイヤー切替、偽説明自動入力、投票補完、フェーズ進行、中断、お題スキップ、難易度審査、正式採用フロー確認のController・Layout・Command接続を監査し、分割による配線脱落がないことを確認した。
+
+### 検証
+
+- `npm run lint`成功。9ゲーム共通要件、SDK境界、ESLintを通過した。
+- `npm test`成功（431件）。
+- `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
+- `git diff --check`成功。
+
+### 未対応・保留
+
+- `develop`へ実装コミット`a89f4e2`をfast-forwardで反映済み。
+- `app-games-dev`のVercel Deployment完了確認は、この記録コミット後に行う。
+- dev実機で、たほい屋のダミー追加・個別削除・DEBUG OFF一括整理と、全フェーズのデバッグ操作を確認する。
+
+## 2026-07-23 — 公開ゲーム全体のDEBUGダミー管理を統一
+
+### 利用者からの要望
+
+- たほい屋の修正をまだ実機確認できていない間に、同じ修正をほかのアプリへ問題なく適用できるか確認し、まずprivateではないゲームへ適用する。
+
+### 判断
+
+- 公開範囲は`config/game-registry.json`の`private: false`を正本とする。
+- すでに共通ダミー管理へ接続済みのワードウルフとたほい屋を基準に、ワードスケール、ワードソナー、ワードアウト、大富豪のUI、Command、Store、active-room索引を監査する。
+- ゲーム固有の旧追加ボタンを残さず、共通`DebugParticipantControls`へ追加・一覧・個別削除を集約する。
+
+### 実施結果
+
+- 公開4ゲームへ`debug-remove-player` Commandを追加し、ホスト・DEBUG中・ロビー・ダミー対象の条件をサーバー側で検証するようにした。
+- 個別削除とDEBUG OFF時の一括整理でロビー復帰状態を正規化し、ダミーをactive-room索引から除外して旧索引も解放する。
+- 途中削除後も重複しないダミー名採番を共通moduleへ集約した。
+- ワードスケールで削除対象が並べ替え役だった場合と、大富豪で削除対象を代理操作中だった場合はホストへ戻す。
+- 4ゲームのクライアントで通常操作・時間切れ応答が共通の単調revision規則を維持していることを確認した。
+- privateのノーザンブランチ、コードインターセプト、キャンバスは変更していない。
+
+### 検証
+
+- ダミー管理の純粋関数テストと、公開4ゲームの共通メニュー接続契約テスト8件成功。
+- `npm run lint`成功。9ゲーム共通要件、SDK境界、ESLintを通過した。
+- `npm test`成功（435件）。
+- `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
+- `git diff --check`成功。
+- 実装コミット`164a0f1`の`app-games-dev` Vercel Deploymentが`READY`となり、`dev.game-fields.com`へのalias割当を確認した。
+- devのワードスケール、ワードソナー、ワードアウト、大富豪がHTTP 200を返し、対象Deploymentの実行時error・fatalログがないことを確認した。
+
+### 未対応・保留
+
+- `develop`へ実装コミット`164a0f1`をfast-forwardで反映済み。
+- dev実機で公開6ゲームのダミー追加・個別削除・DEBUG OFF一括整理を確認する。
+
+## 2026-07-23 — DEBUGダミー参加者Commandを共通application層へ集約
+
+### 利用者からの要望
+
+- 公開ゲームへの横展開を通して、さらにモジュール化できる要素を確認する。
+- 優先候補のDEBUG参加者Commandを共通化し、privateゲームへも適用する。
+
+### 判断
+
+- UIだけでなく、ホスト・ロビー・DEBUG中の認可、ID・名前生成、追加、個別削除、DEBUG OFF時の一括整理、ロビー復帰状態、active-room索引整理までを1つのapplication層へ移す。
+- ゲーム固有Storeには、人数上限、Player生成、参加者変更後の得点・並べ替え役・代理操作対象・チーム等の補正だけをhookとして残す。
+- privateゲームではオンライン参加者Roomを持つノーザンブランチとコードインターセプトへ適用し、オンライン参加者Commandを持たないキャンバスは対象外とする。
+
+### 実施結果
+
+- `lib/online-room-debug-participants.ts`へ共通Command適用、重複しないダミー名生成、個別・一括削除、ロビー復帰状態の正規化、非ダミーactive-roomキー生成、旧ダミー索引解放を集約した。
+- ワードウルフ、たほい屋、ワードスケール、ワードソナー、ワードアウト、大富豪、ノーザンブランチ、コードインターセプトの8つのStoreを共通Commandへ接続した。
+- ノーザンブランチとコードインターセプトの共通DEBUGメニューへ、ダミー一覧・追加・個別削除を接続した。
+- コードインターセプトは実参加者の所属を変えず、参加者変更後のダミーだけを赤・青へ再調整する純粋domain処理を追加した。
+- たほい屋の得点・偽説明・投票等、ワードスケールの並べ替え役、人数依存設定、代理操作対象などはゲーム固有補正として維持した。
+
+### 検証
+
+- 共通Command、private UI接続、コードインターセプトのチーム補正を含む回帰テストを追加した。
+- `npm run lint`成功。9ゲーム共通要件、SDK境界、ESLintを警告なしで通過した。
+- `npm test`成功（441件）。
+- `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
+- `git diff --check`成功。
+
+### 未対応・保留
+
+- `develop`へ実装コミット`e3ed58e`をforceなしのfast-forwardで反映済み。
+- `app-games-dev`の対象Deployment `dpl_3gZgXT8S7j25HGLvnkKYb2aEhUcj`が`READY`となり、`dev.game-fields.com`へのalias割当を確認した。
+- devのノーザンブランチとコードインターセプトがHTTP 200を返し、HTML内のDeployment IDが対象Deploymentと一致すること、実行時error・fatalログがないことを確認した。
+- ログイン・privateアクセス認証済み画面で、8ゲームの追加・個別削除・DEBUG OFF一括整理と、コードインターセプトのチーム再調整を実ボタン確認する。
+
+## 2026-07-23 — オンラインRoom API Routeを共通ファクトリへ集約
+
+### 利用者からの要望
+
+- DEBUG参加者Commandに続き、次のモジュール候補だったRoom API Routeを共通化する。
+- 例外hookを増やすだけでなく、安全に可能な範囲ではゲーム側を共通契約へ改編して揃える。
+
+### 判断
+
+- 公開範囲、認証、GET三分岐、参加者照合、言語、レート制限、DEBUG資格、Telemetry、DELETEを共通Routeファクトリへ移す。
+- ゲーム側は`load / loadActive / list / create / apply / delete / deleteHosted / sanitize`の同じ契約へ寄せ、固有進行をHTTP Routeへ残さない。
+- 大富豪のGET時ダミー進行はStoreのreconcile処理、たほい屋のAI付き`start-round`は専用application層へ置く。
+- 共同描画専用で登録上`local-pass-and-play`のキャンバスは、通常オンライン対戦Roomと契約が異なるため今回の対象外とする。
+
+### 実施結果
+
+- `lib/online-room-route-factory.ts`を追加し、ワードウルフ、たほい屋、ワードスケール、ワードソナー、ワードアウト、ノーザンブランチ、コードインターセプト、大富豪の8 Routeを接続した。
+- POSTのhost・初期参加者・content locale、PATCHのactor・参加者プロフィールを認証セッションから生成する共通入力処理へ統一した。
+- 共通認証・保存障害とゲーム固有エラー表を`lib/online-room-route-errors.ts`へ集約した。
+- Code Interceptの参加時team指定を必須入力から外し、Storeの均衡割当を正本にした。
+- 大富豪のダミー手番復旧を`lib/daifugo-room-store.ts`へ移した。
+- たほい屋のお題生成付き開始を`app/api/tahoiya/rooms/application.ts`へ分離した。
+- 8つのRoute合計を1,558行から507行へ削減した。共通ファクトリを含めても783行となった。
+- `scripts/check-game-standards.mjs`を更新し、新しいオンラインゲームが共通Routeファクトリを使わない場合はlintを失敗させるようにした。
+
+### 検証
+
+- `npm run lint`成功。9ゲーム共通要件、SDK境界、ESLintを通過した。
+- `npm test`成功（442件）。共通認証入力がクライアント指定のhost・participant・localeを上書きする回帰テストを含む。
+- `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
+- `git diff --check`成功。
+
+### 未対応・保留
+
+- `develop`へ実装コミット`8ed0e0d`をforceなしのfast-forwardで反映した。
+- `app-games-dev`の対象Deployment `dpl_EEgwBAvdXRTobLdWtxvGaGpkBrcA`が`READY`となり、`dev.game-fields.com`へのalias割当を確認した。
+- 8ゲームのdev画面が最終的にHTTP 200を返し、HTML内のDeployment IDが対象Deploymentと一致した。未認証Room APIは公開6本が401、private 2本が403を返し、対象Deploymentの実行時error・fatalログはなかった。
+- ログイン・privateアクセス認証済み画面で、作成・参加・更新・解散と、たほい屋のお題生成、大富豪のDEBUGダミー手番を実操作確認する。
+
+## 2026-07-23 — オンラインRoom Store Runtimeを8ゲームで共通化
+
+### 利用者からの要望
+
+- Room API Route共通化後も、さらにモジュール化できる箇所を進める。
+- 本体だけの共通Storeを増やすのではなく、`@game-fields/game-runtime`を本体でも使えるOnline Room Runtimeへ育てる。
+
+### 判断
+
+- ゲーム進行、得点、秘匿、参加条件、時間切れreconcileはゲーム固有Storeへ残す。
+- revision更新、競合時の再適用、保存前正規化、保存後hookはstorage-neutralな非公開Runtime coreへ移す。
+- Redis CAS、TTL、一覧、active-room、新規作成、解散、Realtime、戦績・リプレイは本体adapterが注入する。
+- 大富豪をpilotに契約を確認し、同じ境界をほかの7オンラインゲームへ展開する。
+
+### 実施結果
+
+- `packages/game-runtime/src/online-room.ts`へ、最大6回の競合再適用、revision・更新時刻の確定、保存前正規化、保存後hookを持つmutation lifecycleを追加した。
+- `lib/online-room-store-runtime.ts`へ、Redis key、TTL、期限切れ整理、公開一覧、1人1active room、新規作成、個別・host一括解散、Realtimeと保存後処理を注入する本体adapterを追加した。
+- ワードウルフ、たほい屋、ワードスケール、ワードソナー、ワードアウト、ノーザンブランチ、コードインターセプト、大富豪の8 Storeを共通Runtimeへ接続した。
+- 8 Storeからclaim、active-room読取・解放、一覧、解散、CASの重複を外し、合計2,840行から2,583行へ削減した。
+- ワードウルフのtimer・専用Command向け互換保存入口は維持し、通常Room Commandだけを共通mutation lifecycleへ移した。
+- `scripts/check-game-standards.mjs`へ、全オンラインRoom Storeが共通Runtimeを利用する契約検査を追加した。
+
+### 検証
+
+- Runtimeの競合再適用、missing・不正Room・競合上限、8 Storeの接続、active-room解放、期限切れ一覧除外の回帰テストを追加した。
+- `npm run lint`成功。9ゲーム共通要件、SDK境界、ESLintを警告なしで通過した。
+- `npm test`成功（446件）。
+- `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
+- `git diff --check`成功。
+
+### 未対応・保留
+
+- `develop`へ実装コミット`056a853`をforceなしのfast-forwardで反映した。
+- `app-games-dev`の対象Deployment `dpl_9eiSdv9w6Yqy54swb5e5V7epcJn1`が`READY`となり、`dev.game-fields.com`へのalias割当を確認した。
+- 8ゲームのdev画面がHTTP 200を返し、HTML内のDeployment IDが対象Deploymentと一致した。未認証Room APIは公開6本が401、private 2本が403を返し、対象Deploymentの実行時error・fatalログはなかった。
+- 外部SDKゲームを同じ永続HTTP／Client Runtimeへ直接接続する層は未実装。
+- ログイン・privateアクセス認証済み画面で、8ゲームの作成・参加・更新・解散を実操作確認する。
+
+## 2026-07-23 — SDKゲームを永続HTTP／Client Runtimeへ接続
+
+### 利用者からの要望
+
+- Online Room Store Runtime共通化後に残った、外部SDKゲームを同じ永続HTTP／Client Runtimeへ直接接続する層を実装する。
+- `develop`とdev環境で先行し、`main`の公開ゲームにはまだ含めない。
+
+### 判断
+
+- 公開SDKにはactorを受け取らないHTTP Client Runtimeを追加し、署名済みHttpOnly sessionからの認証情報注入、レート制限、TelemetryはNext.js Routeで行う。
+- server moduleは静的に審査・登録したものだけを利用し、Portal metadata、creator upload、未審査preview HTMLから動的にserver moduleを解決しない。
+- pilotは`wordwolf-sdk`を`development` channelで登録し、`main` deploymentではregistryから除外する。
+- HTTP層は作成、取得、revision付きCommandに絞り、Room永続化とCASは既存の認証済みSDK platform adapterと`@game-fields/game-runtime`をそのまま正本にする。
+
+### 実施結果
+
+- `@game-fields/game-sdk/client-runtime`を追加し、`createRoom`、`readRoom`、`sendCommand`、型付きHTTPエラーを公開した。
+- `/api/game-sdk/[gameId]/rooms`を追加し、認証、mutation rate limit、DEBUG資格、Telemetry、安全なエラー応答を共通化した。
+- `lib/game-sdk-server-registry.ts`へ静的な審査済みmodule登録を追加し、`wordwolf-sdk`をdevelop限定で永続Redis／CAS Runtimeへ接続した。
+- HTTP handlerをNext.jsから分離し、公開Client Runtimeから認証adapter、永続Runtimeまでをmemory persistenceで縦断する回帰テストを追加した。
+- SDK境界検査へ、同一origin資格情報、actor非送信、静的registry、main非公開、preview非接続の契約を追加した。
+- SDK packageとstarter資料へClient Runtimeの導入方法とsession境界を追加した。
+
+### 検証
+
+- `npm run lint`成功。9ゲーム共通要件、SDK境界、ESLintを警告なしで通過した。
+- `npm test`成功（449件）。
+- `npm run test:sdk-package`成功。tarballを外部consumerへ導入し、公開export 4本とClient Runtimeの型・実行を確認した。
+- `npm run test:sdk-starter`成功。公開snapshot、ZIP展開、同梱SDK install、型検査、契約テスト、1ゲーム完走、提出ZIPを確認した。
+- `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
+- `git diff --check`成功。
+
+### 未対応・保留
+
+- `develop`へ実装コミット`ede5e68`をforceなしのfast-forwardで反映した。
+- `app-games-dev`の対象Deployment `dpl_EvLYP7ipknsaJ7kGgpQS3W4ZhbRU`と、SDK Portal側の対象Deployment `dpl_Dd3t738ptBjWgWMBHGAek5a7TYV8`が同じcommitで`READY`となった。`dev.game-fields.com` aliasが本体Deploymentへ切り替わったことも確認した。
+- devのSDK例2画面がHTTP 200を返し、HTML内のDeployment IDが対象Deploymentと一致した。登録済み`wordwolf-sdk` Room APIは未認証401、未登録`creator-upload`は404を返し、対象Deploymentの実行時error・fatalログはなかった。
+- SDK向けRealtime／WebSocket transportと、active-room・一覧・解散のClient Runtimeは未実装。
+- ログイン済み複数アカウントで、SDK Roomの作成・参加・Command・競合再試行を実操作確認する。
+
+## 2026-07-23 — SDKゲームのRoom lifecycle・Realtimeを共通化
+
+### 利用者からの要望
+
+- SDK永続HTTP／Client Runtimeの次段階として、Realtime／WebSocket、active-room、部屋一覧、解散を実装する。
+- `develop`とdev環境で先行し、`main`には触れない。
+- 可能な範囲でログイン済み複数アカウントの実操作も確認する。
+
+### 判断
+
+- SDK clientへactor identityを追加せず、active-room・一覧・解散も署名済みCookieから解決した本人だけで処理する。
+- SDK用のRedis Room StoreへTTL、部屋索引、1人1active room、一覧、解散、revision通知を集約し、ゲーム固有server moduleには進行と閲覧者別presentationだけを残す。
+- WebSocketは状態や秘密情報を運ばず、`sdk:<game-id>`、部屋コード、revision、timestampだけを通知する。通知を受けたClient Runtimeは認証済みHTTPで閲覧者別RoomViewを再取得する。
+- 未審査PreviewはRuntimeへ接続せず、静的registryに採用登録したmoduleだけを対象とする。`wordwolf-sdk`は引き続きdevelop限定とする。
+
+### 実施結果
+
+- `lib/game-sdk-platform-room-store.ts`を追加し、SDK roomのRedis TTL、索引、active-room claim／rollback、期限切れ整理、公開ロビー一覧、host解散を集約した。
+- `lib/game-sdk-platform-adapter.ts`へactive room復元、一覧、個別／host一括解散と、`room/join`・`room/leave`に連動するactive-room処理を追加した。
+- `/api/game-sdk/[gameId]/rooms`へGETのactive／一覧分岐とDELETEを追加し、認証・mutation rate limit・安全なTelemetryを既存境界のまま適用した。
+- 公開`@game-fields/game-sdk/client-runtime`へ`readActiveRoom`、`listRooms`、`dissolveRoom`、`dissolveHostedRooms`、`watchRoom`を追加した。
+- Realtime protocolは組み込みゲームの4文字コード契約を維持しつつ、`sdk:<game-id>`だけ4〜12文字のSDK room codeを受理するよう拡張した。
+- SDK watcherはWebSocket利用不能時にポーリングへフォールバックし、接続時も45秒ごとのHTTP整合確認を維持する。
+- SDK fixtureを共通`room/join` lifecycleへ移し、作成、別室競合、active room、一覧、参加、進行中解散拒否、結果後解散、host一括解散、revision通知後のHTTP再取得を縦断テストへ追加した。
+
+### 検証
+
+- `npm run lint`成功。SDK lifecycle・静的registry・actor非送信・DELETE境界を含む規約検査を警告なしで通過した。
+- `npm test`成功（451件）。
+- `npm run test:sdk-package`成功。tarballを外部consumerへ導入し、公開export 4本とClient Runtimeの型・実行を確認した。
+- `npm run test:sdk-starter`成功。公開snapshot、ZIP展開、同梱SDK install、型検査、契約テスト、1ゲーム完走、提出ZIPを確認した。
+- `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
+- `git diff --check`成功。
+- 実装commit `da4fdbfba6e9a200ee147ad5a476f7d5ea7a379d`を`develop`へforceなしでfast-forwardし、GitHub上のtreeがローカル検証済みtreeと一致することを確認した。
+- `app-games-dev`のDeployment `dpl_89TyfGC9qhgGtSE82j6DUaLj1JPb`と、SDK Portal側のDeployment `dpl_3ETLo9TpVF8C9ApqFT7KE5DXosgv`が同じ実装commitで`READY`となった。`dev.game-fields.com` aliasは本体Deploymentへ切り替わった。
+- devのSDK例2画面はHTTP 200で、HTML内のDeployment IDも本体Deploymentと一致した。SDK Roomのactive取得、一覧、host一括解散は未認証401、未登録moduleは404、Realtime endpointのHEADは204を返した。
+- 本体Deploymentのerror・fatalログと、SDK Room／Realtime routeの集約Runtime Errorsはいずれも0件だった。
+- クラウドブラウザではSDK公式サンプルのRoom、revision、host／参加者／観戦者Viewを確認した。ただし同画面は意図どおりMock RuntimeとDEBUG fixtureを使うため、複数の実アカウントによる永続Room操作の代替確認にはしていない。認証済みAPIの直接表示はブラウザ側の`ERR_BLOCKED_BY_CLIENT`で実施できなかった。
+
+### 未対応・保留
+
+- ログイン済み複数アカウントによる永続SDK Roomの作成・参加・Command・Realtime更新・解散の実操作は未確認。異なるidentityのactive-room競合、参加、進行、結果後解散、cleanupは自動縦断テストで確認済み。
+- npm registryへの初回公開、Portal上の正式チュートリアル・APIリファレンス・提出画面は引き続き未実装。
+
+## 2026-07-24 — SDK固有ハンドシェイクを先に定義
+
+### 利用者からの要望
+
+- SDK Portalの画面や提出フローを先に進めず、SDKとして接続時のハンドシェイクを最初に定義する。
+- DownloadMeから`sdk-dev`へ接続する場合も、将来`sdk`へ接続する場合も、AIから見た制作手順と契約を同じにする。
+
+### 判断
+
+- MCP `initialize`はMCP transport、OAuth 2.1 + PKCEは本人認証、Game Fields SDK handshakeは環境・release・contract schema・capabilityの互換性確認として分離する。
+- clientは期待する`environment`、Platform版、SDK package版、SDK contract schema、必須capabilityを提示し、serverはcanonical endpointと対応release・capabilityを返す。
+- `accepted=true`、`problems=[]`、接続先一致の確認前は制作者環境取得やゲーム仕様の質問へ進まない。
+- `sdk`と`sdk-dev`はhandshake schemaを共用し、`environment`とcanonical endpointだけで接続先を区別する。自動的な別環境・旧版・非公式mirrorへの切替は行わない。
+- handshakeはsessionやactorを発行せず、後続APIの認証・認可を省略しない。
+
+### 実施結果
+
+- 公開`@game-fields/game-sdk/handshake`へrequest、server descriptor、capability、拒否code、純粋な互換判定を追加した。
+- `config/platform-release.json`へ`sdkHandshakeVersion`を追加し、公開SDK定数との一致をlintで検査するようにした。
+- SDK Portalへ公開`GET/POST /.well-known/game-fields-sdk`と、OAuth後に使うMCP tool `get_sdk_handshake`を追加した。
+- MCP `initialize`応答にも同じserver descriptorを載せるが、DownloadMeは明示的な`get_sdk_handshake`の`accepted=true`を完成条件とする。
+- DownloadMeをver6へ更新し、接続直後にhandshakeを行ってから`list_creator_environments`へ進む順序へ変更した。
+- starter manifestへ`sdkHandshakeVersion`を追加し、同梱SDK、Platform、contract schemaと一緒に取得元handshakeとの一致を確認するようにした。
+- `docs/SDK_HANDSHAKE.md`を正本として追加し、versioning、SDK資料、モジュール境界、引き継ぎ資料を更新した。
+- SDK Portalのclean buildでも公開SDK handshake exportを利用できるよう、Portalのpredev／prebuildでSDK packageを先にbuildするようにした。
+
+### 検証
+
+- handshake成功、環境違い、release・contract・capability複合不一致、不正requestの契約テストを追加した。
+- `npm run lint`成功。Platform release、SDK境界、9ゲーム共通要件、ESLintを通過した。
+- `npm test`成功（456件）。
+- `npm run test:sdk-package`成功。tarballを外部consumerへ導入し、handshakeを含む公開export 5本を確認した。
+- `npm run test:sdk-starter`成功。handshake versionを含むstarter、公開snapshot、ZIP、契約テスト、完走、提出ZIPを確認した。
+- SDK packageの`dist`を一度削除した状態から`npm run build:sdk`が成功し、Portal 25ルートに`/.well-known/game-fields-sdk`が生成された。
+- local production serverで公開handshakeを確認し、一致requestはHTTP 200・`accepted=true`、環境違いと未提供capabilityはHTTP 409・安全なproblem codeを返した。
+- `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
+- `git diff --check`成功。
+- 実装commit `1bc2fb7130041e948cd64403aaee40510aa8330b`を`develop`へforceなしでfast-forwardし、GitHub上のtreeがローカル検証済みtreeと一致することを確認した。
+- SDK PortalのDeployment `dpl_9RwycG1GhhXZUGP8sVcRJHy4HPxH`と本体devのDeployment `dpl_GZwoT5kbTS7yLdv1j54nS9v9bxVt`が同じ実装commitで`READY`となり、`sdk-dev.game-fields.com`と`dev.game-fields.com`のaliasがそれぞれ切り替わった。
+- 公開`/.well-known/game-fields-sdk`のGETでdevelopment descriptorを確認した。一致requestはHTTP 200・`accepted=true`・`problems=[]`、production環境と未提供`submission-upload`を要求した場合はHTTP 409・`ENVIRONMENT_MISMATCH`・`CAPABILITY_UNAVAILABLE`を返した。
+- 公開DownloadMe ver6に`get_sdk_handshake`を制作質問より先に呼び、`accepted=true`確認後だけ`list_creator_environments`へ進む指示が含まれることを確認した。
+- 両Deploymentのerror・fatalログと集約Runtime Errorsはいずれも0件だった。
+
+### 未対応・保留
+
+- Portalの正式チュートリアル、APIリファレンス、提出画面はhandshake確定後の次段階として未実装。
+- 採用済みゲームのbrowser Runtimeへhandshakeを強制する処理は未実装。今回のv1はDownloadMe／AIとSDK Portalのcontrol planeを先に確定した。
+
+## 2026-07-24 — 現行ワードウルフをSDK-devの受け入れ基準へ変更
+
+### 利用者からの要望
+
+- SDK用に縮小した別のワードウルフではなく、`main`にある現行ワードウルフをそのままSDK-devへ載せる。
+- 現行ゲームが動くことで共通部分の移植を確認し、ワードウルフ固有部分を「アプリセット」、それ以外の再利用部分を「SDK基本セット」として分離する。
+
+### 判断
+
+- `games/wordwolf-sdk`の小規模moduleはserver契約とtransportのfixtureとして残すが、製品UIの完成判定には使わない。
+- `/sdk-examples/word-wolf`は現行`WordWolfGame`を直接描画し、`/wordwolf`と同じUI・設定・お題生成・DEBUG・進行・結果を受け入れ基準にする。
+- コピーを作らず正本componentを参照し、現行版とSDK-dev版が実装差分で再び分岐しないようにする。
+- 今後はこの基準画面を壊さず、別ゲームでも再利用できる単位をSDK基本セットへ移し、お題・役職・ヒント・投票・決選投票・逆転回答等をワードウルフのアプリセットとして残す。
+
+### 実施結果
+
+- SDK-dev公式ワードウルフから独自Mock UIと固定3人fixtureの接続を外し、現行`app/wordwolf/WordWolfGame.tsx`を直接利用する薄い受け入れharnessへ置換した。
+- SDK公式一覧の表示情報も現行ワードウルフのcatalogを正本とし、人数・時間・説明が別定義でずれないようにした。
+- 公式サンプル回帰テストで、現行`WordWolfGame`の直接利用とMock Runtimeへの後戻り禁止を固定した。
+- `docs/EXTERNAL_GAME_PACKAGE.md`と本引き継ぎに、SDK基本セットとアプリセットの二層を正本として追記した。
+
+### 検証
+
+- `npm run lint`成功。
+- `npm test`成功（456件）。
+- `npm run build`成功。Next.js 16.2.4のproduction build、TypeScript検査、77ページ生成を完了した。
+- `npm run build:sdk`成功。SDK Portalのproduction build、TypeScript検査、25ルート生成を完了した。
+- 実装commit `2ad001765049c6e18dead8ce1d6040beddb7550c`を`develop`へforceなしでfast-forwardし、GitHub上のtreeがローカル検証済みtreeと一致することを確認した。
+- 本体devのDeployment `dpl_3s5x4kvCdBkzWWPA8LhwZtN2vLXW`とSDK PortalのDeployment `dpl_7j3DeHvLNz2jCeUpG5iCMtsnAUNV`が同じ実装commitで`READY`となった。
+- `sdk-dev.game-fields.com/sdk-examples/word-wolf`のiframeが`dev.game-fields.com/sdk-examples/word-wolf`を参照し、遷移先で現行UIの「ワードウルフ・ラウンジ」が表示されることを確認した。旧Mock UIの「SDK共通ルーム」は存在しなかった。
+- 両Deploymentのerror・fatalログと集約Runtime Errorsはいずれも0件だった。
+
+### 未対応・保留
+
+- SDK基本セットへの物理移動は次段階。現時点では現行ワードウルフをSDK-devの差分検出用基準として確立した段階である。
+- クラウドブラウザにログイン済みセッションがなかったため、認証が必要な部屋作成とDEBUG完走の実操作は未確認。ゲスト状態で現行UIへの置換と旧Mock UIの除去までは確認済み。
+
+## 2026-07-24 — SDK基本セットとAppSetによるゲーム生成境界
+
+### 利用者からの要望
+
+- SDK-devの現行ワードウルフを受け入れ基準にしたうえで、ワードウルフ固有部分をアプリセット、それ以外をSDK基本セットとして、新しいゲームを作れる仕組みにする。
+- 制作者がRoom、参加・退出、revision、共通View等をゲームごとに再実装せず、ゲーム固有のルール・state・Command・表示だけを実装できる形にする。
+
+### 判断
+
+- 現行`WordWolfGame`を直接表示するSDK-dev基準画面は変更せず、今後の共通部分抽出で機能差を検出する受け入れ基準として維持する。
+- SDK基本セットがRoom、ホスト、参加者、設定、revision、参加・退出・設定変更・中断・再戦、安全な共通Viewを所有する。
+- ゲーム側は`GameSdkOnlineRoomAppSet`として、ゲーム固有の初期state、Command遷移、再戦時reset、閲覧者別AppViewを登録する。
+- 既存の低水準`defineGameServerModule`は互換性のため残し、新規Online Roomゲームと外部starterは基本セットとAppSetの合成APIを標準経路にする。
+- 内部player IDは保存stateとサーバー判定だけに使い、基本セットの公開Viewでは安定したseatと表示名へ変換する。
+
+### 実施結果
+
+- 公開SDKへ`GameSdkOnlineRoom`、共通Create／Command／View、`defineGameSdkOnlineRoomAppSet`、`createGameSdkOnlineRoomModule`を追加した。
+- SDK基本セットへ共通Room生成、lifecycle Command、revision更新、参加者・host権限、安全な共通player Viewを集約した。
+- `games/wordwolf-sdk`を、Room lifecycleを持たずワードウルフ固有のお題・役職・ヒント・投票・逆転回答だけを持つAppSetへ変更した。
+- Redis・認証・CAS・HTTP・Realtimeを通るcount-up fixtureもAppSet合成へ移し、新境界がMock専用ではないことを回帰テストへ固定した。
+- 外部starterへ`src/app-set.ts`を追加し、`server-module.ts`はSDK基本セットとの合成だけを行う形にした。配布ZIP、提出ZIP、境界検査もAppSetを必須にした。
+- 内部`npm run create-game`もcontracts、AppSet、合成server module、契約テストを生成するよう変更した。
+- SDK Portal、SDK package資料、外部package資料、生成手順、チェックリスト、引き継ぎ資料を新しい二層構成へ更新した。
+
+### 検証
+
+- `npm run lint`成功。
+- `npm test`成功（456件）。
+- `npm run check:sdk`成功。
+- `npm run build:sdk-package`成功。
+- `npm run test:sdk-starter`成功。外部install、型検査、契約テスト、1ゲーム完走、提出ZIPまで確認した。
+- `npm run build`成功。Next.js production build、TypeScript検査、77ページ生成を完了した。
+- `npm run build:sdk`成功。SDK Portalのproduction buildと全ルート生成を完了した。
+- `git diff --check`成功。
+
+### 未対応・保留
+
+- 現行`WordWolfGame`自体の共通UI、設定画面、時間管理、DEBUG、結果導線はまだ物理的にSDK基本セットへ移していない。基準画面との同等性を保ちながら順次抽出する。
+- 今回のAppSet化対象である`games/wordwolf-sdk`はserver契約fixtureであり、現行ワードウルフ製品UIのSDK移植完了を意味しない。
+- Portal上の対話型ゲーム作成UI、提出・審査画面、npm registryへのSDK初回公開は未実装。
+- この作業単位ではdev／本番Deploymentと複数実アカウントによる実操作を行っていない。
+
+## 2026-07-24 — 全必須から始める共通モジュールprofile
+
+### 利用者からの要望
+
+- 直前工程で本体へ切り出した共通モジュールを、SDK側で別実装せずAppSetから利用する。
+- 再利用候補はすべて物理的にモジュール化する。
+- 制作AIが安易に未採用へしないよう、最初のモックは全モジュール必須で開始する。
+- ゲームに合わない場合だけ、SDK-dev上で人間が意図的に必須解除できるようにする。
+- まず全必須のまま複数ゲームへ適用し、どこまで必須で成り立つかを検証する。
+
+### 判断
+
+- 共通module profileは新しいRoom・認証・UI実装ではなく、既存の`online-room-route-factory`、`online-room-store-runtime`、`@game-fields/game-runtime`、共通UI、純粋domain部品を採用するレシピとする。
+- profileは初回mock発行時に全件`required`でPlatformが作成する。AppSet、mock metadata、manifest、制作AIは採否を宣言しない。
+- 管理トークンを使うmock発行とMCPにはprofile変更手段を与えない。MCPは確定profileの参照だけを提供する。
+- SDK-devへ署名済みアカウントでログインした環境所有者だけが、Platform固定以外を理由付きで解除できる。mock再発行では既存の人間レビューを上書きしない。
+- 認証、アカウント、最終認可、保存、観測、共通ナビ、プレイヤーメニューはPlatform固定とし、人間でも解除できない。
+
+### 実施結果
+
+- `@game-fields/game-sdk/modules`へ38件の共通module catalogと、全必須profileの生成・正規化・人間レビュー更新契約を追加した。
+- 提出完了、投票、フェーズ・ラウンド・手番、役職・チーム、秘密情報のseat変換、標準結果を小さな純粋moduleへ物理分割した。
+- WordWolf、Tahoiya、Word Scale、Word Sonar、Word Out、Code Intercept、Northern Branch、Daifugoの8オンラインゲームを同じ純粋moduleへ接続した。
+- SDK DBへ`module_policy`を追加し、RESTとMCPの初回mock発行で全必須profileを保存するようにした。競合更新時はprofileを更新せず、人間レビューを維持する。
+- SDK Portalへ所有者専用の「共通モジュール」画面を追加した。全38件の状態、Platform固定、解除理由、全必須への復帰を表示し、理由付き更新だけを許可する。
+- MCPへ`get_game_module_requirements`を追加し、`editableByAi: false`を返す。変更toolは追加していない。
+- starterのmock検査で`modules`、`moduleProfile`、`disabledModules`、`optionalModules`を拒否し、AIが採否を埋め込めないようにした。
+- starter、SDK reference、外部package資料、新規ゲーム手順、引き継ぎを全必須開始と人間レビューの仕様へ更新した。
+
+### 検証
+
+- module profile、所有者専用更新境界、初回mock発行、8ゲームの共通module採用を対象とする追加テスト15件が成功した。
+- `npm run lint`成功。公開SDKの依存境界はサブディレクトリを含む14ファイルを検査した。
+- `npm test`成功（471件）。
+- `npm run test:sdk-package`成功。外部fixtureへのinstall、6つの公開export、全38件必須profileを確認した。
+- `npm run test:sdk-starter`成功。入口、公開Git snapshot、ZIP展開、同梱SDK install、型検査、契約テスト、1ゲーム完走、提出ZIPまで確認した。
+- `npm run build`成功。Next.js production build、TypeScript検査、77ページ生成を完了した。
+- `npm run build:sdk`成功。SDK Portalのproduction build、TypeScript検査、新しい所有者専用module APIを含む全ルート生成を完了した。
+- `git diff --check`成功。
+
+### 未対応・保留
+
+- 全38件を全ゲームが実際に利用できることを示したわけではない。今回の初期profileで不要と判断されたmoduleと解除理由を蓄積し、必須化できる最大集合を次段階で確定する。
+- SDK-dev実環境での所有者ログイン、理由付き解除、再発行後の維持は未確認。
+- dev／本番へのpushとDeploymentはこの作業単位では行わない。
+
+## 2026-07-24 — DownloadMe ver7と人間専用module分類
+
+### 利用者からの要望
+
+- 最新DownloadMeだけを渡した制作GPTが、公開starter取得、モック、AppSet実装、検査、提出ZIPまで進めるver7を作る。
+- moduleは将来「必須・解除可・任意」の三段階へ分類できるようにする。
+- ただし制作GPTへ解除可能性を先に教えると共通moduleを使わない危険があるため、初回は38件すべて必須という情報だけを渡す。
+- SDKを実際に確認して不満がある人間だけが、SDK-devの所有者画面で解除可moduleを任意へ変更できればよい。
+- moduleカスタマイズは将来の課金要素にできる余地を残す。
+
+### 判断
+
+- 三段階分類と変更UIはSDK Portal内部へ閉じ、DownloadMe、starter資料、公開SDK catalog、MCPへ解除可能性を露出しない。
+- 新規mockは従来どおり38件すべて`required`で保存する。制作GPTはモック承認後も、MCPが返す確定済み`requiredModuleIds`だけを正本とする。
+- MCP `get_game_module_requirements`からprofile全体と三段階分類を除き、slug、gameId、`requiredModuleIds`、`editableByAi: false`だけを返す。
+- Portalの所有者向け画面では、Platform固定7件を「必須」、残りの現在使用中を「解除可」、人間が理由付きで外した項目を「任意」と表示する。
+- module変更は所有者認証に加え、server-onlyの`getCreatorModuleCustomizationAccess`を通す。Developer Previewでは所有者へ含めるが、将来はこの判定だけを購入entitlementへ差し替える。
+- DownloadMeと公開starterの取り違えを防ぐため、starter manifestへ`downloadMeVersion: 7`を追加し、ver7入口が取得直後に一致を検査する。
+
+### 実施結果
+
+- SDK Portalの配布リンク、Content-Disposition、同期scriptを`GameFieldsDownloadMe-ver7.md`へ更新し、development用ver7実体を生成した。
+- 制作GPT向け文書を全必須契約へ統一し、解除可・任意・人間向け変更方式を含めない回帰検査を追加した。
+- 公開SDK catalogから`humanReviewable`を除去し、Platform固定判定を公開catalogへ載せない形へ変更した。
+- 所有者画面へ必須・解除可・任意の件数と各module状態を表示し、解除理由を保存する。カスタマイズ権限がない場合はUIとAPIの双方で変更を拒否する。
+- entitlement判定をclient bundleから分離し、`server-only`境界へ置いた。未許可時の更新APIは`402 customization_not_available`を返す。
+- `sdk-starter`生成物へ`downloadMeVersion: 7`を含め、旧starterではver7制作を開始できないようにした。
+
+### 検証
+
+- `npm run lint`成功。
+- `npm test`成功（472件）。
+- `npm run test:sdk-package`成功。空の外部fixtureへのinstallと全38件必須profileを確認した。
+- `npm run test:sdk-starter`成功。ver7入口、公開Git用snapshot、ZIP展開、同梱SDK install、型検査、契約テスト、1ゲーム完走、提出ZIPまで確認した。
+- `npm run build`成功。Next.js production build、TypeScript検査、77ページ生成を完了した。
+- `npm run build:sdk`成功。SDK Portalのproduction build、TypeScript検査、14ページ生成を完了した。
+- `git diff --check`成功。
+- 実装treeをcommit `571f0e16e5e07799bd55ee85ca11954c75ab2bdd`として`develop`へforceなしで反映した。SDK PortalのDeployment `dpl_9yZJhUsE9wDMa4ygZXhzbjw6kwjK`、本体devのDeployment `dpl_4toZQemRanHwAc66FeRhXGZheyvV`、preview devのDeployment `dpl_CJuf6t1XF2mgYWNSdtUwqL59HsRp`が同じcommitで`READY`となった。
+- 検証済みstarter snapshot全32ファイルをcommit `d673e1cd34952b73f0f50a1fadc99e05c2067ce1`として`sdk-starter`へforceなしで反映した。公開branchで`downloadMeVersion: 7`、`START_HERE.md`、`src/app-set.ts`を確認した。
+- `https://sdk-dev.game-fields.com/GameFieldsDownloadMe-ver7.md`を実際に取得し、`DownloadMe: ver7`、SDK handshake v1、development接続先が公開Deploymentから返ることを確認した。`https://dev.game-fields.com`もHTTP 307で正規の`/ja`へ遷移することを確認した。
+
+### 未対応・保留
+
+- 実際の決済、商品plan、価格、購入・返金・権利復元は未実装。今回追加したのはserver側entitlement差し替え境界までである。
+
+## 2026-07-24 — 旧gameapp-devを更新へ案内するDownloadMe ver8
+
+### 利用者からの要望
+
+- `gameapp-dev`が更新前で`get_sdk_handshake`を利用できない場合、原因だけを報告して止まるのではなく、プラグイン更新を利用者へ案内する。
+- 実機ではプラグイン更新済みなのに旧`GameFieldsDownloadMe-ver7`が使われていた。DownloadMeを改版したなら、利用者が取得する入口もver8へ確実に切り替える。
+- 更新済みプラグインで`get_sdk_handshake`は呼べたが、制作GPTが公開SDK全体のcapability enum 8件をPortalへ要求し、未提供4件で`accepted=false`になった。この誤要求を防ぐ。
+
+### 判断
+
+- Game Fields toolがまったくない未接続状態と、旧`gameapp-dev`のtoolは見えるが`get_sdk_handshake`だけがない更新前状態を分ける。
+- 更新前状態ではURL名やゲーム内容を質問せず、`gameapp-dev`の更新、新しいチャットでの再選択、同じDownloadMeの再添付だけを定型案内して停止する。
+- 更新前のtool一覧を持つ既存チャットは、プラグイン更新後もその場で新toolを取得できない可能性があるため、新しいチャットを必須案内に含める。
+- 版付き入口を上書きせず、入口と公開starterの`downloadMeVersion`を同時に8へ上げる。
+- `get_sdk_handshake`が存在する場合はプラグイン旧版と判定しない。Portal control planeが要求する4件と、公開SDK型に含まれるgame Runtime向けcapability候補を分離する。
+- MCP tool schemaの`requiredCapabilities` enumはPortal descriptorと同じ`SDK_PORTAL_CAPABILITIES`を共用する。DownloadMeにも4件をそのまま送り、別surface向け候補を追加しないよう明記する。
+- 旧入口を再利用しても古い文書を取得し続けないよう、過去のDownloadMe URLは現行ver8へ一時redirectする。
+
+### 実施結果
+
+- `GameFieldsDownloadMe-ver8.md`の正本へ、更新前pluginの判定条件と利用者向け定型文を追加した。
+- SDK Portalの配布リンク、Content-Disposition、同期scriptをver8へ更新した。
+- MCP initialize instructionsにも同じ更新案内を追加し、接続クライアント側からも方針を取得できるようにした。
+- starter manifest、`START_HERE.md`、検査scriptを`downloadMeVersion: 8`へそろえた。
+- 現行資料と回帰テストをver8へ更新した。
+- SDK Portalのhandshake descriptorとMCP tool schemaで4件の`SDK_PORTAL_CAPABILITIES`を共用し、MCPから未提供の`submission-upload`、`persistent-rooms`、`room-realtime`、`common-shell`を要求候補として出さないようにした。
+- ver8へ、記載された4件をそのまま送り、別surface向け候補を追加しない指示を追加した。
+- `DownloadMe.md`、`GameFieldsDownloadMe.md`、`GameFieldsDownloadMe-ver1.md`〜`ver7.md`から`GameFieldsDownloadMe-ver8.md`への一時redirectをSDK Portalへ追加した。
+
+### 検証
+
+- SDK OAuth／MCP／DownloadMeの対象テスト6件が成功した。
+- 更新済み`gameapp-dev`の実接続で、Portalの4 capabilityだけを要求したhandshakeが`accepted: true`、`problems: []`になることを確認した。
+- `npm run test:sdk-starter`成功。入口、公開Git snapshot、ZIP展開、同梱SDK install、型検査、契約テスト、1ゲーム完走、提出ZIPまで確認した。
+- `npm run lint`成功。
+- `npm test`成功（472件）。
+- `npm run build`成功。既存`.next`生成キャッシュによる初回`ENOTEMPTY`後、キャッシュを退避したクリーンbuildで77ページ生成を完了した。
+- `npm run build:sdk`成功。SDK Portalのproduction buildと14ページ生成を完了した。
+- `git diff --check`成功。
+- 検証済みtreeをcommit `d0b660c67cb2ecdc3f7e66b3eeb66f69e2db92c0`として`develop`へforceなしで反映した。SDK Portal `dpl_6HZcuNXeppXw7wVgKknyKC5VTfX7`、本体dev `dpl_M3Ddn7uPLiJ17rtbbRj5HhrcyqwH`、preview dev `dpl_29f7w8UefetxpFg9yGbMdyMEcU3i`が同commitで`READY`となった。
+- 公開starterの生成済みsnapshotをcommit `90ccd1f837ca3acce09c1aaedee45c5ead67ad41`として`sdk-starter`へforceなしで反映し、`starter-manifest.json`と`START_HERE.md`の`downloadMeVersion: 8`を公開branchから確認した。
+- `https://sdk-dev.game-fields.com/GameFieldsDownloadMe-ver8.md`がHTTP 200、`DownloadMe: ver8`、`Content-Disposition: GameFieldsDownloadMe-ver8.md`を返すことを確認した。旧`GameFieldsDownloadMe-ver7.md`は現行ver8へHTTP 307で転送される。
+- 公開`/.well-known/game-fields-sdk`がPortal用4 capabilityだけを返し、更新済み`gameapp-dev`から同4件を要求したhandshakeが`accepted: true`、`problems: []`になることを実機確認した。
+
+### 未対応・保留
+
+- 更新前プラグインを保持したままの既存チャットでは、新しいtool schemaが反映されない可能性がある。`get_sdk_handshake`自体がない場合だけ、ver8の案内どおりプラグイン更新後に新しいチャットで再試験する。
+
+## 2026-07-24 — 遅延tool検索を必須にするDownloadMe ver9
+
+### 利用者からの要望
+
+- `GameFieldsDownloadMe-ver8.md`と更新済み`gameapp-dev`を新しいWorkチャットで選択しても、制作GPTが`get_sdk_handshake`を見つけず、プラグイン旧版と誤案内して停止する問題を直す。
+
+### 判断
+
+- WorkのApp toolは必要になるまで遅延読み込みされるため、最初のtool一覧に名前がないことを、未接続または旧版の根拠にしない。
+- 制作GPTは旧版判定の前に、tool検索・発見機能で`gameapp-dev get_sdk_handshake Game Fields SDK接続互換性`を明示検索し、見つかったtoolを現在のチャットへ読み込む。
+- 明示的な検索後も、ほかの`gameapp-dev` toolだけが見つかり`get_sdk_handshake`がない場合に限って、旧版更新案内を表示する。
+- 入口の実行契約が変わるためver8を上書きせず、DownloadMeと公開starterの`downloadMeVersion`を9へ上げる。旧ver1〜8 URLはver9へ一時redirectする。
+
+### 実施結果
+
+- `sdk/entry/START_GAME_FIELDS.md`の初期接続確認と制作開始手順へ、旧版判定前の明示的tool検索を追加した。
+- MCP initialize instructionsにも同じ検索語と判定順を追加した。
+- SDK Portalの配布リンク、Content-Disposition、同期scriptを`GameFieldsDownloadMe-ver9.md`へ更新した。
+- starter manifest、`START_HERE.md`、スターター検査、SDK Portal回帰テスト、現行資料をver9へそろえた。
+- `DownloadMe.md`、`GameFieldsDownloadMe.md`、`GameFieldsDownloadMe-ver1.md`〜`ver8.md`からver9への一時redirectを追加した。
+
+### 検証
+
+- 更新済み`gameapp-dev`をtool検索して`get_sdk_handshake`を取得し、Portal capability 4件の実handshakeが`accepted: true`、`problems: []`になることを確認した。
+- `npm run test:sdk-starter`成功。ver9入口、公開Git snapshot、ZIP展開、同梱SDK install、型検査、契約テスト、1ゲーム完走、提出ZIPを確認した。
+- `npm run lint`成功。
+- `npm test`成功（472件）。
+- `npm run build`成功。Next.js production build、TypeScript検査、77ページ生成を完了した。
+- `npm run build:sdk`成功。SDK Portalのproduction build、TypeScript検査、14ページ生成を完了した。
+- SDK Portal build成果物で旧DownloadMe 10 URLがver9へ307 redirectされることを確認した。
+- `git diff --check`成功。
+- 検証済みtreeをcommit `02ea8684589697c4d0c1153d792a392c5c174e6b`として`develop`へforceなしで反映した。SDK Portal `dpl_7AAtPjzrZWooU4bGnepUp5UsQTxu`、本体dev `dpl_FXcdkLo6MuiDKv9QyLMaMj5UpmRr`、preview dev `dpl_2bL5Y12tbvRSb4EKH23iioabuvex`が同commitで`READY`となり、それぞれの開発用aliasへ割り当てられた。
+- 公開starterの生成済みsnapshot全32ファイルをcommit `389cb31924d78964e3393e0bab7c845519d55b9b`として`sdk-starter`へforceなしで反映し、公開branchの`starter-manifest.json`が`downloadMeVersion: 9`であることを確認した。
+- `https://sdk-dev.game-fields.com/GameFieldsDownloadMe-ver9.md`がHTTP 200、`DownloadMe: ver9`、`Content-Disposition: GameFieldsDownloadMe-ver9.md`を返すことを確認した。旧`GameFieldsDownloadMe-ver8.md`は現行ver9へHTTP 307で転送される。
+- 公開`/.well-known/game-fields-sdk`がdevelopment環境とPortal用4 capabilityを返すことを確認した。
+- 上記3 Deploymentのerror・fatalログはいずれも0件だった。
+
+### 関連コミット
+
+- `02ea868` — DownloadMe ver9の実装を`develop`へ反映。
+- `389cb31` — ver9の公開starter snapshotを`sdk-starter`へ反映。
+
+### 未対応・保留
+
+- 新しいWorkチャットで更新済み`gameapp-dev`と公開ver9を選び、制作GPTが遅延tool検索からhandshake、starter取得へ自律的に進む最終実機確認は未実施。
+
+## 2026-07-24 — SDK-dev必須モジュールを実画面へ合成
+
+### 利用者からの要望
+
+- 制作GPTがゲーム固有slotを作るところまではいったん許容するが、全38件を必須と判定しているSDK-dev確認画面にRoomロビー、参加者、設定、DEBUG、結果等の共通モジュール実体がない問題を直す。
+- 必須項目は制作側へ再実装させず、SDK-devの確認画面側が必ず用意した完成形として表示・操作できるようにする。
+- 直前に`publish_mock`で正しい5ファイルを送っても許可ファイル一覧が空として拒否された保存契約の不一致も解消する。
+
+### 判断
+
+- `@game-fields/game-sdk/modules`のcatalogは採用方針であり、件数を表示するだけでは実装済みとみなさない。
+- SDK-devはcatalogとは別の実装レジストリで、全module IDを具体的な本体共通部品、SDK helper、または隔離Preview adapterへ解決する。必須IDに割当がなければ確認画面を完成扱いにしない。
+- 画面遷移は`部屋作成・参加 → Roomロビー → プレイ → 共通結果`とし、ゲーム固有HTMLは外側Shell内のiframe slotへ限定する。
+- ロビーからプレイ中への遷移では同じiframe要素を保持し、外側の共通UI切替でゲーム固有状態を初期化しない。
+- 認証、永続化、観測等は隔離Preview上の確認用adapterであり、本体統合時の署名済みsession、サーバー認可、Redis永続化を代用しない。
+
+### 実施結果
+
+- `SdkPreviewGameShell`へ部屋作成・コード参加・参加可能な部屋、参加者一覧、ホスト開始条件、最大人数・ラウンド・時間設定、共通設定要約、DEBUGダミー管理、閲覧視点、フェーズ切替、revision、時間表示、中断、共通結果、再戦・解散、戦績・rating・リプレイ投影、結果共有を追加した。
+- ゲーム固有iframeは共通Room Shell内のslotとして1つだけ描画し、ロビーとプレイ中で保持する。
+- `sdk-preview-module-registry.ts`を追加し、全38 IDへ実体sourceと確認surfaceを割り当てた。共通モジュール確認画面から進行helper、コンテンツ供給、LLM通信バイタル、トランプ、描画を操作確認できる。
+- `GameFieldsPreset`へ外側Room状態を安全に反映する`room:hydrate`を追加し、親iframeから受理するCommandを明示的な許可リストに限定した。
+- MCPの`publish_mock.files`公開schemaがpath-to-content map、保存層が配列だけを受理していた不一致を、保存境界で両形式を正規化して解消した。文字列以外の本文、パストラバーサル、重複、必須ファイル不足は引き続き拒否する。
+- 現行仕様を`DEVELOPMENT_HANDOFF.md`と`EXTERNAL_GAME_PACKAGE.md`へ反映した。
+
+### 検証
+
+- `npm run lint`成功。
+- `npm test`成功（475件）。
+- 全module IDと実装レジストリの完全一致、必須解除時の合成除外、共通4面、共通部品、iframe単一保持、`room:hydrate`、MCP map形式保存を回帰テストへ追加した。
+- `npm run build`成功。Next.js production build、TypeScript検査、77ページ生成を完了した。
+- `npm run build:sdk`成功。SDK Portalのproduction build、TypeScript検査、14ページ生成を完了した。
+- `npm run build:sdk-preview`成功。隔離Previewのproduction build、TypeScript検査、5ページ生成を完了した。
+- `git diff --check`成功。
+- ローカルNext.jsは`127.0.0.1`固定で起動できた。画面確認用`agent-browser`は環境に未導入だったため一時CLIを取得したが、Chrome取得先の証明書が実行環境で`UnknownIssuer`となり、実ブラウザ確認は実施できなかった。アプリのbuild失敗とは区別して保留する。
+
+### 未対応・保留
+
+- 検証済みtreeをcommit `30023635d9e016a249342ed9b65bfc5f83d0bcda`として`develop`へforceなしで反映した。SDK Portal `dpl_EqoK4Gi3DZkD8mChoar2KgtMhWP7`、本体dev `dpl_44YMskXj8mWxM3y9BvQ7abusLDLr`、preview dev `dpl_AwUZ2qAy4mKsHsMWQYAk6jYysxP1`が同commitで`READY`となり、各開発用aliasへ割り当てられた。
+- 公開`https://sdk-dev.game-fields.com/test10-1/games/janken-classic`を実ブラウザで確認し、共通入室画面、部屋作成、参加者・設定ロビー、DEBUGダミー追加、プレイ中、共通結果、部屋へ戻る、部屋解散まで操作できた。
+- `GameFieldsPreset`の外側bridgeは保存済みじゃんけんiframeへ`playing`を反映し、`data-gf-phase=playing`になったことを確認した。一方、保存済み`mock.js`は`DOMContentLoaded`へだけ起動処理を登録しており、遅延取得時にイベントを取り逃してゲームadapterが未登録となるため、固有じゃんけん操作は開始前表示のまま停止した。SDK共通Shellの不具合とは分離し、制作物の起動契約検査として残す。
+- `sdk-starter`と本番`main`、本番SDKは未変更。
+
+## 2026-07-24 — SDK隔離asset読込・広告枠・DEBUGフェーズ表示の修正
+
+### 利用者からの要望
+
+- SDK-devの`ADVERTISEMENT SLOT`をゲーム制作側から編集できない共通所有にし、広告配信がない場合は枠ごと完全に非表示にする。
+- 共通接続が全件グリーンに見える一方で、保存済みじゃんけんのグー・チョキ・パーを選べない原因がどの層にあるか特定して直す。
+- DEBUG TOOLS内に理由なく表示される`lobby / playing / result`の3ボタンをなくす。
+
+### 判断
+
+- 保存済みじゃんけんのHTML、CSS、JavaScriptをprivate mock Gitから確認した。固有`mock.js`には`registerGame`、`start`、手の選択処理が存在するため、ゲームロジック不足ではない。
+- 隔離iframeは`allow-same-origin`を付けないopaque originである。入口`index.html`はpath限定HttpOnly Cookieで取得できるが、相対参照の`styles.css`と`mock.js`にはCookieが送られず403となる。このため素のHTMLだけが表示され、adapter未登録のまま外側Shellだけが`playing`へ進んでいた。
+- 原因層はゲーム固有ロジックでも共通Room Shellでもなく、`apps/sdk-preview`の静的asset認証境界である。安全性を下げる`allow-same-origin`追加ではなく、同一制作者・ゲーム・commit・期限だけを読めるasset tokenで解消する。
+- SDK-dev独自の`PreviewAdSlot`は共通広告制御を迂回していたため廃止し、本体共通`GameAdSlot`へ統一する。広告OFF、進行中、DEBUG中はDOMごと描画しない。
+- フェーズ確認は公式Lifecycle導線で行い、DEBUG内の無条件フェーズ遷移ボタンは撤去する。
+
+### 実施結果
+
+- 認証済みPreview HTMLへ、同一scopeの短時間HMAC asset token付き`base` URLを注入した。CSS、JavaScript、画像、フォント等の相対参照はそのread-only経路へ解決する。
+- asset tokenは署名、期限、制作者slug、ゲームID、確定commitを検証し、別ゲーム・別revision・期限切れ・改ざんを拒否する。iframeの`allow-same-origin`禁止、外部通信禁止、フォーム禁止は維持した。
+- `GameFieldsPreset`が`gameAdapterReady`を外側Shellへ通知するようにした。adapter未登録ならゲーム開始を拒否し、固有Runtime未接続を画面と安全な操作ログへ明示する。
+- SDK-devの常時表示`ADVERTISEMENT SLOT`を削除し、外側Shellの共通`GameAdSlot`へ統一した。ゲームpackageとiframeから表示条件を変更できない。
+- DEBUG TOOLSの`lobby / playing / result`直行ボタンを削除した。ダミー追加、閲覧視点、自動進行、中断は維持した。
+- 実装レジストリの広告moduleも`GameAdSlot`実体へ更新した。
+
+### 検証
+
+- `git diff --check`成功。
+- `npm test`成功（476件）。
+- asset tokenの正しいscope、別ゲーム拒否、期限切れ拒否、改ざん拒否、asset base注入、adapter接続状態、広告独自枠とDEBUGフェーズボタンの不在を回帰テストへ追加した。
+- `npm run lint`成功。
+- `npm run build`成功。Next.js production build、TypeScript検査、77ページ生成を完了した。
+- `npm run build:sdk`成功。SDK Portalのproduction build、TypeScript検査、14ページ生成を完了した。
+- `npm run build:sdk-preview`成功。隔離Previewのproduction build、TypeScript検査、5ページ生成を完了した。
+
+### 未対応・保留
+
+- 検証済みtreeをcommit `cb19399d851d18568b4add6aa0c6ae08826274b8`として`develop`へforceなしで反映した。本体dev `dpl_B2hj1SuqA31wadpPkg9i2DZJeuSe`、SDK-dev `dpl_6dKhWqSg8wPvyHCE2RseP8rjQgas`、隔離Preview dev `dpl_ER1XpKHJV6QY4oThkmL2znMZb1UM`が同commitで`READY`となり、各開発用aliasへ割り当てられた。
+- 公開`https://sdk-dev.game-fields.com/test10-1/games/janken-classic`を実ブラウザで確認した。入室画面とRoomロビーに広告枠は描画されず、DEBUG TOOLSにも`lobby / playing / result`直行ボタンは存在しない。
+- 保存済みじゃんけんはCSS適用と`ゲーム固有Runtime接続済み`を確認した。ダミー参加者追加、共通開始、プレイ中への遷移後に「パー」を選択し、固有画面が`手を送信しています…`へ遷移するところまで操作できた。プレイ中にも広告DOMは存在しない。
+- 上記3 deploymentを対象に直近30分の`error`・`fatal`ログを確認し、該当ログは0件だった。
+- `main`、本番SDK、公開`sdk-starter`は変更対象外。
+
+## 2026-07-24 — SDK-devプレイ中ゲーム領域の列配置修正
+
+### 利用者からの要望
+
+- Roomロビーでは正しい位置に表示される一方、プレイ開始後だけゲーム固有領域が左側の細い列へ押し込まれる問題を直す。
+- 制作クライアントへの指示ではなく、SDK-dev共通Shellの責任範囲として修正する。
+
+### 判断
+
+- プレイ中はゲーム固有領域を先頭、Room情報を末尾へ並べ替えているため、列幅も`可変幅 / 260px`の順にする。
+- ゲームpackageは隔離iframe内から親Shellのグリッドを変更できず、制作側を修正対象にしない。
+- ロビーの`340px / 可変幅`配置は現状どおり維持する。
+
+### 実施結果
+
+- `SdkPreviewGameShell`のプレイ中グリッドを`lg:grid-cols-[minmax(0,1fr)_260px]`へ変更した。
+- ゲーム固有iframeが左の可変幅列、Room参加者・設定が右の260px列へ配置されるよう、既存の表示順と列幅を一致させた。
+- 正しい列定義の存在と、誤った`260px / 可変幅`定義の不在をSDK Preview回帰テストへ追加した。
+
+### 検証
+
+- SDK Preview対象テスト9件成功。
+- `npm run lint`成功。
+- `npm test`成功（476件）。
+- `npm run build`成功。Next.js production build、TypeScript検査、77ページ生成を完了した。
+- `npm run build:sdk`成功。SDK Portalのproduction build、TypeScript検査、14ページ生成を完了した。
+- `npm run build:sdk-preview`成功。隔離Previewのproduction build、TypeScript検査、5ページ生成を完了した。
+- `git diff --check`成功。
+
+### 未対応・保留
+
+- 検証済みtreeをcommit `006099a2beaaf2129ddb9101a75835f8ca9efa44`として`develop`へforceなしで反映した。本体dev `dpl_GjwMJPY3M9CkbFWaRGtpstVJibAr`、SDK-dev `dpl_FX5AuxBioiz5VAQmHPjuHcaC5TuG`、隔離Preview dev `dpl_AGog8M9EXEgtuSqc2dr2CyCmrJin`が同commitで`READY`となった。
+- 公開`https://sdk-dev.game-fields.com/test10-1/games/janken-classic`を実ブラウザで確認した。共通ロビーからダミー参加者を追加してプレイへ進み、幅1152pxのプレイ中グリッドが`840px / 260px`として計算されることを確認した。
+- ゲーム固有領域は左840px、Room情報は右260px、固有iframeは838pxで描画され、ゲーム領域が260px列へ縮退しないことを確認した。
+- 上記3 deploymentを対象に直近30分の`error`・`fatal`ログを確認し、該当ログは0件だった。ブラウザ側では検証用Chrome拡張由来のmetadata送信エラーだけを確認し、対象ページ由来のエラーはなかった。
+- `main`、本番SDK、公開`sdk-starter`は変更対象外。
+
+## 2026-07-24 — SDK-dev閲覧視点の常設選択UI
+
+### 利用者からの要望
+
+- DEBUG TOOLSを折りたたんだ後も閲覧視点だけは表示し、ゲーム画面を操作しながら切り替えられるようにする。
+- 閲覧視点のプルダウンをやめ、参加者・観戦者を直接選ぶ選択式UIへ変更する。
+
+### 判断
+
+- 閲覧視点はSDK-dev外側Shellが所有する共通デバッグ機能であり、隔離iframe内のゲームpackageは変更しない。
+- 共通`DebugToolWindow`へ任意の固定領域を設け、最小化時は通常本文だけを隠して固定領域を残す。固定領域を渡さない既存ゲームの表示は変更しない。
+- SDK-devの閲覧視点は、現在値を`aria-pressed`で示す参加者・観戦者ボタン群とする。ダミー追加・削除時は現在の参加者配列から選択肢を再構成する。
+
+### 実施結果
+
+- `DebugToolWindow`へ`persistentContent`を追加し、最小化時の高さをタイトルバーと固定領域の実高に合わせた。
+- `SdkPreviewGameShell`の閲覧視点`select`を削除し、選択中をシアン表示するボタン群へ置き換えた。
+- 閲覧視点ボタン群を固定領域へ接続し、DEBUG本文を最小化しても表示と操作を維持するようにした。
+- 現行仕様を`DEVELOPMENT_HANDOFF.md`、`UI_ARCHITECTURE.md`、`KNOWN_ISSUES.md`へ反映した。
+
+### 検証
+
+- DEBUG／SDK Preview対象テスト16件成功。
+- `npm run lint`成功。
+- `npm test`成功（476件）。
+- `npm run build`成功。Next.js production build、TypeScript検査、77ページ生成を完了した。
+- `npm run build:sdk`成功。SDK Portalのproduction build、TypeScript検査、14ページ生成を完了した。
+- `npm run build:sdk-preview`成功。隔離Previewのproduction build、TypeScript検査、5ページ生成を完了した。
+- `git diff --check`成功。
+
+### 未対応・保留
+
+- 検証済みtreeをcommit `106d75770471d52a1cd71118fb18fc76158ca7d4`として`develop`へforceなしで反映した。本体dev `dpl_2r2Et5ox5L4ZMde9CmAr3sybry3C`、SDK-dev `dpl_AjAGpzTwhGt539NzkafPNDgmjiFE`、隔離Preview dev `dpl_3zsMtSTahMbsnpCVqdMnHrowow46`が同commitで`READY`となった。
+- 公開`https://sdk-dev.game-fields.com/test10-1/games/janken-classic`を実ブラウザで確認した。閲覧視点は旧`select`が0件、直接選択ボタンが表示され、DEBUG TOOLSを最小化した後も常設領域が表示された。
+- 最小化したまま「観戦者」を選択し、`aria-pressed`が「あなた」から「観戦者」へ切り替わることを確認した。
+- 上記3 deploymentを対象に直近30分の`error`・`fatal`ログを確認し、該当ログは0件だった。ブラウザ側では検証用Chrome拡張由来のmetadata送信エラーだけを確認し、対象ページ由来のエラーはなかった。
+- `main`、本番SDK、公開`sdk-starter`は変更対象外。
+
+## 2026-07-24 — SDK共通モジュール棚卸しと公開ライブラリ化
+
+### 利用者からの要望
+
+- ワードDB、トランプ等を制作クライアントへどう伝えているかを踏まえ、お絵描きUIを含む共通機能を棚卸しする。
+- 外部ゲームから再利用できる部分をライブラリ化し、公開まで進める。
+
+### 判断
+
+- 全38moduleをPlatform固定7件、共通Shell16件、純粋進行helper11件、再利用resource 4件に分ける。
+- 認証、保存、認可、共通Shell、DEBUG、広告はPlatform所有のまま外部packageへ公開しない。
+- ワードDBとLLMはDB、provider、APIキーを公開せず、型付きresourceをRuntime contextへ注入する契約だけを公開する。
+- トランプはカード型、デッキ操作、秘密手札投影、React UIを公開する。
+- 描画はstroke、正規化、機能preset、Canvas、ツールバー、レイヤーパネルを公開し、Room同期、保存、最終認可はPlatform adapterへ残す。
+- 公開packageはMITとし、Game Fieldsへの提出、審査、サービス利用条件はPlatform側の規約と管理ゲートへ分離する。
+
+### 実施結果
+
+- `@game-fields/game-sdk`をpublic packageへ変更し、`content-source`、`llm`、`resources`、`playing-cards`、`playing-cards-react`、`drawing`、`drawing-react`のsubpath exportを追加した。
+- `DrawingCanvas`、`DrawingToolbar`、`DrawingLayerPanel`をReact peerだけで動く共通UIとして実装し、マウス、タッチ、ペン、塗りつぶし、スポイト、パン、undo／redo用callback、zoom、レイヤー表示を公開した。
+- Game Fields本体のトランプ・描画実装を公開package経由へ切り替え、内部実装と外部SDKの二重管理を解消した。
+- Runtime、Mock Runtime、内部Platform Runtimeへ`GameSdkPlatformResources`を追加し、AppSetの作成・Command・Viewへresourceを注入できるようにした。
+- 機械可読module catalogへ`delivery`、`packageExports`、`publicApis`、`usage`を追加し、MCP `get_game_module_requirements`がIDだけでなく利用契約も返すようにした。
+- 棚卸し正本`docs/SDK_MODULE_INVENTORY.md`、MIT License、公開README、外部fixture検査、publish dry-run、main限定の手動GitHub Actions workflowを追加した。
+
+### 検証
+
+- 公開packageのTypeScript build、pack、空の外部fixtureへのinstall、Runtime・resource・React UI import検査に成功した。
+- `npm publish --dry-run`に成功し、87ファイル、約65.7KBのpublic tarballとして解決された。
+- SDK starterの入口、公開Git snapshot、ZIP、同梱SDK install、型検査、契約テスト、完走デモ、提出ZIP検査に成功した。
+- `npm test`成功（481件）。
+- `npm run lint`成功。公開SDK 21ソース、内部Runtime、実証ゲーム、SDKワードウルフ、スターターの依存境界を確認した。
+- 本体、SDK Portal、隔離Previewのproduction buildに成功した。
+- `develop`反映後、本体dev `dpl_7X9tcohVf8tW7fVkaWDhFRucTs2M`、SDK-dev `dpl_2iZECrY1euzRJf2yJiwzjYNrWuQ7`、隔離Preview dev `dpl_7uHdsghna7K2W5XgEhRSirk72LZ6`が対象commitで`READY`となり、各開発用aliasへ切り替わった。
+- 公開`/dev/playing-cards`で表向き手札、他参加者の秘密手札枚数、カード選択を実操作した。ブラウザ側の対象ページ由来error／warningは0件だった。
+- 3 deploymentのbuild errorと、直近30分のruntime `error`／`fatal`は0件だった。
+
+### 関連コミット
+
+- `80a863817805546fedb8c3b4f52a55d60a079a7a` — `Publish reusable Game SDK resources`
+
+### 未対応・保留
+
+- npm registryへの実publishには、npm側の`@game-fields` scope所有権と、GitHub Environment `npm-public`の承認者、対象package限定`NPM_TOKEN`が必要である。現在の実行環境はnpm未認証のため、registryは未変更。
+- workflowは`main`からの手動実行だけを許可する。developでの実機確認と外部設定完了後にmainへ反映し、`@game-fields/game-sdk@0.1.0`を初回publishする。
+- `main`、本番SDK、npm registryは変更していない。
+
+## 2026-07-24 — Game SDK初回npm公開の外部設定
+
+### 利用者からの要望
+
+- `@game-fields/game-sdk@0.1.0`をnpmへ初回公開するためのnpm・GitHub設定を完了し、公開作業を再開する。
+
+### 判断
+
+- 公開資格は`@game-fields` scopeへのread/writeだけを許可した7日間のgranular tokenとし、GitHubの`npm-public` Environment Secret `NPM_TOKEN`からだけ利用する。
+- workflowは`main`からの手動実行に限定し、required reviewerの承認後だけnpm publishへ進める。
+- 初回公開後は短期tokenを失効し、GitHub Actions OIDCを使うTrusted Publishingへ移行する。
+
+### 実施結果
+
+- npm Organization `@game-fields`を作成し、所有者アカウントの2FAを有効化した。
+- 初回公開用の7日間tokenを発行し、`@game-fields` scopeをread/write、Organization管理権限をnoneに限定した。
+- GitHub Environment `npm-public`へ`main`限定branch rule、required reviewer、Environment Secret `NPM_TOKEN`を設定した。
+- 検証済み`develop`をGitHub `main`へforceなしでfast-forwardし、本体とSDK Portalの本番デプロイを開始した。
+
+### 検証
+
+- npm registryで`@game-fields/game-sdk@0.1.0`が未登録であることを確認した。
+- tokenの秘密値はGit、文書、チャットへ記録していない。
+- `npm run lint`、`npm test`（481件）、`npm run build`（77ページ）に成功した。
+- `main` commit `72a735e6575055296b56f068d55ae9c67f8de0fa`の本体deployment `dpl_12LkKNj9EQ1JdK6xvkBv6X6SkSzM`とSDK Portal deployment `dpl_8mPgws9kC5zAH2S5FzKYSmM9Vcz3`が`READY`となり、`game-fields.com`／`www.game-fields.com`と`sdk.game-fields.com`へalias切替された。
+- 両deploymentのbuild errorは0件、直近30分のruntime `error`／`fatal`は0件だった。
+
+### 未対応・保留
+
+- `Publish Game SDK` workflowをversion `0.1.0`、confirm `publish-game-sdk`で手動実行する。
+- required reviewerの承認、workflow成功、npm registryからのpackument取得を確認する。
+- 初回公開成功後に短期tokenを失効し、Trusted Publishing設定へ移行する。
+
+## 2026-07-24 — SDK単語DB実配線とプレイ領域の広幅化
+
+### 利用者からの要望
+
+- 公開契約だけ用意されていたSDKの単語DB導線を、実際の共通DB読取へ接続する。
+- SDK-devでゲーム領域が狭く見える原因がiframeかを確認し、共通側で直せる場合は修正する。
+
+### 判断
+
+- SDKゲームはDB接続やテーブルを受け取らず、Platform内の読取専用`content-source` adapterを`context.resources`へ注入する。
+- 一般語はアプリDBの審査済み`standard-game`プール、難読語・ワードペア・語釈は共通語彙DBのactiveデータを正本とする。
+- 外部へ返すword／pair IDはDB IDを契約にせず、本体秘密値から導出した鍵で認証付き暗号化したopaque IDにする。
+- 未審査iframeへDB接続またはresource APIを渡さない。SDK-dev外側のmodule labだけが、認証・レート制限付きsample APIで実DB接続を確認する。
+- SDK Portal最外層iframeとゲーム側CSSはどちらも幅100%／最大1320pxまで利用できた。直接の幅制限は本体Shellの`max-w-6xl`と右260px列だったため、プレイ中だけ最大1600px、ゲーム可変幅／Room情報280pxへ変更する。
+
+### 実施結果
+
+- `lib/game-sdk-content-source.ts`を追加し、`general-words`、`rare-words`、`word-pairs`、語釈取得を一つのPlatform adapterへ実装した。
+- 一般語の既存難易度比率、難読語のZipf帯、ワードペア距離をSDKの`easy / normal / hard`へ投影した。
+- DB IDを露出しない認証付き暗号化・改ざん検査付きopaque IDと、除外ID・除外表記・件数上限を実装した。
+- 静的審査登録済み`wordwolf-sdk`へadapterを注入し、作成入力にお題がない場合は審査済みワードペアを取得するようにした。手動topicを渡す既存fixture互換は維持した。
+- `/api/sdk-preview/content-sample`を追加し、SDK-dev module labの固定3語を実DBからの1語取得へ置き換えた。
+- プレイ中Shellを`max-w-[1600px]`、`minmax(0,1fr) / 280px`へ広げた。ロビーの既存幅は変更していない。
+- 現行仕様を`DEVELOPMENT_HANDOFF.md`、`SDK_MODULE_INVENTORY.md`、`EXTERNAL_GAME_PACKAGE.md`、`ENVIRONMENT_VARIABLES.md`へ反映した。新しい外部環境変数は追加していない。
+
+### 検証
+
+- npm registryから`@game-fields/game-sdk@0.1.0`のpackage metadataと公開tarball URLを取得し、初回publish済みであることを再確認した。
+- Content Source、SDK WordWolf、SDK Previewの対象テスト13件成功。
+- `npm run lint`成功。環境変数台帳60キー、9ゲーム共通要件、SDK依存境界を確認した。
+- `npm test`成功（484件）。
+- `npm run build`成功。Next.js production build、TypeScript検査、77ページ生成を完了した。
+- `npm run build:sdk`成功。SDK Portalのproduction build、TypeScript検査、14ページ生成を完了した。
+- `npm run build:sdk-preview`成功。隔離Previewのproduction build、TypeScript検査、5ページ生成を完了した。
+- `git diff --check`成功。
+
+### 未対応・保留
+
+- 検証済みtreeをcommit `1d9d1ac5718c7f8b616764de364ec9090a67badb`として`develop`へforceなしで反映した。本体dev `dpl_BEWRLij9pAq7wM8FbNPeoV5Q11Ye`、SDK-dev `dpl_BCWa7cPmd6UydRtBXpHUTFpXhVpf`、隔離Preview dev `dpl_FH2h4GRKXMnM1CHQdQwZqsi6qipx`が同commitで`READY`となり、各開発用aliasへ切り替わった。
+- 公開SDK-devから読み込まれる本体devのHTMLとJavaScript bundleを確認し、`max-w-[1600px]`、`lg:grid-cols-[minmax(0,1fr)_280px]`、`/api/sdk-preview/content-sample`、`read-only PostgreSQL content-source adapter`が対象deploymentに含まれることを確認した。旧1920px表示時のゲーム列840px相当は約1268pxまで拡張される。
+- sample APIは未ログイン要求を401 `Login required`で拒否し、匿名利用者へDB候補を返さないことを確認した。この実行環境には署名済み利用者Cookieがないため、認証後の実DB候補本文の取得だけは利用者画面で「共通モジュール実体を確認」→「素材を取得」を押して確認する。
+- 3 deploymentのbuild errorと、直近30分のruntime `error`／`fatal`は0件だった。
+- `main`、本番SDK、npm package versionはこの変更では更新していない。
+
+## 2026-07-24 — SDKゲームの共通AI API実配線
+
+### 利用者からの要望
+
+- SDKゲームからGame Fields管理のAI APIを実際に呼べる導線を作る。
+- client側はAI事業者やAPIキーを持たず、呼び出す操作と送る内容だけを渡す形にする。
+
+### 判断
+
+- 本体採用後はbrowserがゲームCommandと入力値だけを送り、審査済みserver AppSetがtaskとpromptを組み立ててPlatform注入`context.resources.llm`を呼ぶ。
+- provider、APIキー、接続先、model、持込／Game Fields課金、fallbackは共通`lib/game-llm.ts`の内側へ閉じる。
+- 未審査Previewはserver AppSetが未接続のため、公式`GameFieldsPreset.resources.llm.generate`だけをopaque-origin iframeへ注入し、外側Shellからログイン必須の本体APIへpostMessage中継する。
+- Previewではhigh qualityを許可せず、保存済みゲーム、`llm`必須profile、利用者別レート制限、request上限を本体で再検証する。
+- SDK Portal／隔離Preview ProjectへLLM providerのAPIキーやDB変数を追加せず、既存の本体dev／productionだけが共通AI gatewayを実行する。
+
+### 実施結果
+
+- `lib/game-sdk-llm-gateway.ts`を追加し、公開LLM request検証、共通gateway呼出、生成meta、prompt非記録Telemetry、実生成単位の利用者別レート制限を実装した。
+- 静的審査登録済みSDK server moduleへ`context.resources.llm`を注入し、Room APIで429と`Retry-After`を返せるようにした。
+- `/api/sdk-preview/llm`を追加し、署名済みプレイヤー認証、保存済みruntime取得、module profile検査、standard quality限定、レート制限を適用した。
+- 隔離Runtimeへ`GameFieldsPreset.resources.llm.generate`とrequest／response bridgeを追加した。iframeへprovider APIキー、接続先、model選択、課金情報は渡さない。
+- SDK-dev module labの疑似待機を実AI接続テストへ置き換え、共通プレイヤーメニューから持込API／Game Fields提供枠を接続できるようにした。
+- 公開requestをprompt 20,000文字、JSON schema 32,000文字、timeout 45秒へ制限し、Previewでは送信前とサーバー内の両方で正規化する。
+- 公開SDK README、DownloadMeスターターの要件・仕様・Mockガイド・API・module catalog、正本文書、環境変数台帳へ利用方法と秘密値境界を反映した。新しい外部環境変数は追加していない。
+
+### 検証
+
+- LLM adapter、公開request、Room 429、Preview bridgeを含む`npm test`成功（487件）。
+- `npm run lint`成功。環境変数台帳60キー、9ゲーム共通要件、SDK依存境界を確認した。
+- `npm run test:sdk-package`成功。公開tarballを空の外部fixtureへinstallし、Runtime・resource・React UIの公開exportを確認した。
+- `npm run test:sdk-starter`成功。入口、公開Git snapshot、ZIP、同梱SDK install、型検査、契約テスト、完走デモ、提出ZIPを確認した。
+- `npm run build`成功。Next.js production build、TypeScript検査、77ページ生成を完了した。
+- `npm run build:sdk`成功。SDK Portalのproduction build、TypeScript検査、14ページ生成を完了した。
+- `npm run build:sdk-preview`成功。隔離Previewのproduction build、TypeScript検査、5ページ生成を完了した。
+- `git diff --check`成功。
+
+### 未対応・保留
+
+- この実行環境には利用者の署名済みCookieと持込API設定がないため、ログイン後の実回答取得はSDK-dev module labの「AI APIを実際に呼ぶ」で目視確認する。
+- `main`、本番SDK、npm package versionはこの変更では更新しない。
+
+### develop反映・既存ゲーム接続確認
+
+- 検証済みtreeをGitHub commit `af27a5f69634dc51f1c168e8398e50b9268cb635`として`develop`へforceなしで反映した。
+- 本体dev deployment `dpl_G8JU83ynG5jvSM2NTFqeEPvcN8Rv`、SDK-dev `dpl_FTtrDu1ZBxDvhuAxh35zVAQAobWm`、隔離Preview dev `dpl_4U4jLr1ZRmjf3cuZxWLoq2Lp7hFj`が対象commitで`READY`となり、`dev.game-fields.com`、`sdk-dev.game-fields.com`、`preview-dev.game-fields.com`のaliasが切り替わった。
+- 3 deploymentのbuild errorと直近30分のruntime errorは0件だった。
+- `/api/sdk-preview/llm`への未ログインPOSTが401となり、匿名利用者がAI gatewayを実行できないことを確認した。
+- 本人所有の`test10-1`環境にある「AIことば当て（仮）」を更新し、5段階判定はtask `akinator-five-verdict`、近さスコアはtask `akinator-distance-score`で`GameFieldsPreset.resources.llm.generate`を呼ぶようにした。provider直結、APIキー、直接`fetch`、固定判定fallbackは含めない。
+- AI生成失敗時は入力と手番を保持し、ターンを消費せず再試行できる。最終回答だけは従来どおり秘密語との厳密一致で判定する。
+- 保存revisionは`7cc0489239092df8fa55ed7ed559c3d2d8ae04d7`。revision指定で`mock.js`を読み戻し、検証済み本文との完全一致、共通bridge markerあり、旧固定判定と直接network callなしを確認した。
+- この実行環境には利用者の署名済みCookieと持込API設定がないため、実providerからの回答本文だけはログイン済み画面で1回質問して目視確認する。
+
+## 2026-07-24 — SDK Previewの可変高さと手番タイマー契約
+
+### 利用者からの要望
+
+- SDK-devのゲーム内だけに縦スクロールが発生し、下部まで自然に到達できない表示を修正する。
+- 時間の締切・リセットは共通moduleが管理し、ゲーム制作者は時間を表示する場所だけを決められるようにする。
+- 手番が正常終了したら次の手番時間へリセットし、入力失敗やAI生成失敗ではリセットしない。
+
+### 判断
+
+- 固定620px／最小680pxのiframeを廃止し、隔離Preview Runtimeが実コンテンツ高を親Shellへ通知してiframe高を追従させる。縦スクロールは外側ページへ一本化する。
+- 本番採用後の締切はserver AppSetの保存Roomを正本とし、accept済みCommandが返す`timer: "reset"`だけが新しい締切を作る。browser入力から直接締切を変更させない。
+- Previewでは同じ制作者体験を提供するためPreset Runtimeがtimer stateを持つ。表示先はゲームHTML内の`data-gf-timer`要素とし、共通Shellに固定表示しない。
+- 「AIことば当て（仮）」は既存の`advanceTurn()`だけを手番完了点とし、成功後に`timer:turn-complete`を送る。AIエラーと入力検証エラーは`advanceTurn()`へ到達しないため時間を維持する。
+
+### 実施結果
+
+- 隔離Runtimeへ`ResizeObserver`／`MutationObserver`による実高計測と`game-fields:frame-size`通知を追加し、親Shellを最大12,000pxの可変iframe高へ変更した。
+- 公開SDK Roomへ`timer`保存状態、設定からの秒数解決、accept済みtransitionの`preserve / reset / stop`を追加した。開始時は自動開始し、結果・中止・再戦では停止する。
+- Preview Presetへ`timer:sync`、`timer:turn-complete`、`timer:expired`、`onTimeExpired`と`data-gf-timer`描画を追加した。
+- 共通Shellの固定`GamePhaseTimer`を削除し、ゲーム制作者がHTML上の任意位置へ時間表示を配置できるようにした。
+- DownloadMeスターター、公開SDK README、module catalog、Mockガイド、外部package正本へ時間管理と表示責務を記載した。
+- 本人所有の`test10-1 / ai-word-guess`を更新し、表示位置、成功時リセット、時間切れ時の手番進行を接続した。保存revisionは`a9e79de4497fb7bb0db446b1d8c28f8a458b022f`。
+- 暗号化opaque IDの改ざんテストが偶然同じ末尾文字を選ぶ可能性を除き、必ず異なる文字へ変更する安定した検査へ修正した。
+
+### 検証
+
+- `npm test`成功（488件）。
+- `npm run lint`成功。環境変数台帳60キー、9ゲーム共通要件、SDK依存境界を確認した。
+- `npm run test:sdk-package`成功。公開tarballの外部fixture installと公開exportを確認した。
+- `npm run test:sdk-starter`成功。入口、snapshot、ZIP、同梱SDK install、型検査、契約テスト、完走デモを確認した。
+- `npm run build`成功。Next.js production build、TypeScript検査、77ページ生成を完了した。
+- `npm run build:sdk`成功。SDK Portalのproduction build、TypeScript検査、14ページ生成を完了した。
+- `npm run build:sdk-preview`成功。隔離Previewのproduction build、TypeScript検査、5ページ生成を完了した。
+- `git diff --check`成功。
+
+### 未対応・保留
+
+- `develop`反映後に本体dev、SDK-dev、隔離Preview devのREADYと公開画面の可変高さ・timer contractを確認する。
+- `main`、本番SDK、npm package versionはこの変更では更新しない。
+
+## 2026-07-24 — 制作者別の合言葉付き本番広場構想
+
+### 利用者からの要望
+
+- 将来、`game-fields.com/<制作者slug>/ja`等の個人ページを本体`main`側に用意し、合言葉必須で制作者のアプリを友人等と遊べるようにしたい。
+
+### 判断
+
+- SDK Previewをそのまま本番公開せず、運営審査済み・固定revisionのゲームだけをGame Fields本体の共通Roomへ登録する「制作者別広場」として扱う。
+- 合言葉は制作者別ページの閲覧・起動権限に限定し、Room内のactor本人確認は通常のGame Fieldsアカウントを正本とする。
+- 制作者ごとに個別のhash済み合言葉とscope付きHttpOnly Cookieを使い、既存の共通`PRIVATE_GAME_ACCESS_KEY`は使い回さない。
+- URLは`/<creator-slug>/<locale>`を候補として残す。現在の正規URLが`/<locale>/...`であるため、実装時に正規形またはalias転送のどちらにするか決める。
+
+### 実施結果
+
+- `docs/PLATFORM_VISION.md`へ、権限境界、審査済みゲーム限定、共通module再利用、URLと言語の保留点を将来構想として追加した。
+
+### 未対応・保留
+
+- 本番Route、制作者別合言葉管理、公開申請・審査UI、正規URL形は未実装。
+- 今回は`develop`のSDK Preview可変高さ・timer修正だけを公開し、`main`と本番挙動は変更しない。
+
+## 2026-07-24 — SDK Previewの1人開始と利用者向けSDK広場方針
+
+### 利用者からの要望
+
+- SDKゲームの共通開始人数をゲーム別に保存せず、全体で`minimumPlayers: 1`へ変更する。
+- 将来の制作者別ページはGame Fields本体へ混在させず、SDK側から制作者の利用者が遊べる画面として分離する。
+
+### 判断
+
+- SDK Preview Shellの共通開始条件を1人へ固定し、ホスト1人だけでもゲーム固有Runtimeを開始できるようにする。
+- 新規SDKスターターのmanifestと仕様初期値も1人へ揃える。複数人が必要なゲーム固有ルールはAppSet内で追加検証できるが、共通Preview Shellは2人待ちに戻さない。
+- SDK側の制作者向け編集・module確認・DEBUG画面と、制作者の利用者向けプレイ専用画面を分離する。利用者画面は審査済み固定revisionだけを本体の認証・Room・AI・DB Runtimeへ接続し、未審査Previewや管理機能を公開しない。
+
+### 実施結果
+
+- `SdkPreviewGameShell`の開始ガードを`SDK_PREVIEW_MINIMUM_PLAYERS = 1`へ変更し、設定概要にも最小1人を表示した。
+- スターターmanifestと`GAME_SPEC.md`の初期値を1人へ変更し、Mockガイド、SDK API、DownloadMeへ共通開始条件を記載した。
+- スターター契約テストへ、ホスト1人だけでRoomを`playing`へ遷移できる検査を追加した。
+- `PLATFORM_VISION.md`の将来構想を、SDK側の制作者向け画面と利用者向けプレイ画面を分離する方針へ更新した。
+
+### 検証
+
+- `npm run lint`成功。環境変数台帳60キー、9ゲーム共通要件、SDK依存境界を確認した。
+- `npm test`成功（488件）。
+- `npm run test:sdk-package`成功。公開tarballの外部fixture installと公開exportを確認した。
+- `npm run test:sdk-starter`成功。1人開始契約を含むスターター、公開Git snapshot、ZIP、型検査、完走デモ、提出ZIPを確認した。
+- `npm run build`成功。本体77ページを生成した。
+- `npm run build:sdk`成功。SDK Portal 14ページを生成した。
+- `npm run build:sdk-preview`成功。隔離Preview 5ページを生成した。
+- `git diff --check`成功。
+
+### 未対応・保留
+
+- SDK側の利用者専用Route、合言葉管理、公開申請・審査UIは将来実装とし、今回は構想の正本化だけを行う。
+- `main`、本番SDK、npm package versionはこの変更では更新しない。
+
+### develop反映・公開確認
+
+- 検証済みtreeをGitHub commit `87b5116ecadfa7b391177955e6dcaa54a34ce26b`として`develop`へforceなしで反映した。
+- 本体dev deployment `dpl_X2nWg8boFFe7HgUzvc9mfGVxwc5Q`、SDK-dev `dpl_DG3SCDpPtTWSt8cqmsmFdEJZaFTe`、隔離Preview dev `dpl_6Xd8a3CbQbqefNH3z2h7e8K43iHc`が同commitで`READY`となり、各開発用aliasへ切り替わった。
+- 公開本体bundleから`minimumPlayers: 1`、`game-fields:frame-size`、`timer:turn-complete`を確認し、旧「開始には2人以上必要です」文言がないことを確認した。
+- 公開中の`test10-1 / ai-word-guess`へ隔離Runtimeを通して接続し、ゲームHTMLに`data-gf-timer`、可変高通知、手番完了通知が同時に含まれることを確認した。SDKゲームURLとDownloadMeはHTTP 200で、DownloadMeにも`minimumPlayers: 1`が反映されている。
+- 3 deploymentのerrors-only build logは0件、直近30分のruntime errorは0件だった。
+
+## 2026-07-24 — SDKモックのWord DB bridgeと難易度契約
+
+### 利用者からの要望
+
+- SDKゲームのモックからGame FieldsのWord DBを実際に参照できるようにする。
+- AIがモック内へ初期単語DBや固定fallbackを作ろうとした場合は、共通Word DBへ接続する制作導線へ誘導する。
+- Word DBのrequest／responseフィールドを説明し、`easy`（簡単）／`normal`（普通）／`hard`（難しい）をクライアント設定から指定・参照できるようにする。
+
+### 判断
+
+- 未審査iframeへDB接続、接続文字列、テーブル名、内部IDを渡さない。隔離Runtimeへ`GameFieldsPreset.resources.contentSource`だけを注入し、外側Shellが認証済み本体dev APIへpostMessage中継する。
+- 保存済みゲームと`content-source`必須profileを本体APIで再検証し、`drawWords`、`drawWordPairs`、`findDefinitions`以外は受け付けない。
+- 難易度はクライアントがrequestへ指定する。一般語の抽選は既存の重み付き難易度契約を維持するため、ゲームは返却itemの実際の`difficulty`も参照する。
+- `id`は既出除外と語釈参照用のopaque ID、`surface`は表示語、`reading`は任意の読み、`difficulty`は返却itemの実tier、`tags`は公開分類と説明する。DBの内部識別子として解析させない。
+- Word DB利用宣言があるモックでは固定の初期・seed・fallback単語DBを静的検査で拒否し、取得失敗時は偽データへ切り替えず手番を消費しない再試行エラーとする。
+
+### 実施結果
+
+- 隔離Preview Runtimeへ`contentSource.drawWords`、`drawWordPairs`、`findDefinitions`とrequest／response bridgeを追加した。
+- `/api/sdk-preview/content-source`を追加し、署名済みプレイヤー認証、利用者別読取レート制限、保存済みruntime、module profile、operation、公開requestの再検証を実装した。
+- SDK-dev module labへ難易度selectを追加し、選択した難易度と返却itemの実際の難易度を同時に表示するようにした。旧固定sample APIは互換用に残すが、共通Shellからは新bridgeを使用する。
+- 公開SDK型の全フィールドへ用途説明を追加し、不正な難易度文字列を`normal`へ黙って丸めず`GAME_SDK_CONTENT_INVALID_DIFFICULTY`で拒否するようにした。
+- DownloadMeスターターのAGENTS、要件、ゲーム仕様、Mockガイド、SDK API、module catalog、mock READMEへ、Word DB利用宣言、フィールド、難易度、Preview／本実装の利用例、秘密値境界を追加した。
+- `check:mock`へWord DB利用時の共通bridge、難易度、公開API呼出を要求する検査と、初期・seed・fallback単語DB識別子の拒否を追加した。
+- 本人所有の`test10-1 / ai-word-guess`用に、固定秘密語を削除し、開始時に選択pool・難易度で`drawWords`し、opaque IDで`findDefinitions`するモック更新を準備した。返却`surface / reading / difficulty / tags`だけをゲームとAI判定へ使い、取得失敗時は開始前のまま再取得する。
+- 現行仕様を`DEVELOPMENT_HANDOFF.md`、`ENVIRONMENT_VARIABLES.md`、`EXTERNAL_GAME_PACKAGE.md`、`SDK_MODULE_INVENTORY.md`へ反映した。新しい外部環境変数は追加していない。
+
+### 検証
+
+- Content Source、公開resource、SDK Preview bridgeの対象テスト16件成功。
+- `npm run lint`成功。環境変数台帳60キー、9ゲーム共通要件、SDK依存境界を確認した。
+- `npm test`成功（489件）。
+- `npm run test:sdk-package`成功。公開tarballの外部fixture install、Runtime、resource、React UIの公開exportを確認した。
+- `npm run test:sdk-starter`成功。入口、snapshot、ZIP、同梱SDK install、型検査、契約テスト、完走デモ、提出ZIPを確認した。
+- `npm run build`成功。本体77ページと新しいcontent-source APIを生成した。
+- `npm run build:sdk`成功。SDK Portal 14ページを生成した。
+- `npm run build:sdk-preview`成功。隔離Preview 5ページを生成した。
+- `git diff --check`成功。
+- 更新予定の`ai-word-guess`モックはJavaScript構文、共通bridge、難易度指定、公開API呼出、固定秘密語・ローカル単語DB・直接network callなしを確認した。
+
+### 未対応・保留
+
+- この実行環境には署名済み利用者Cookieがないため、実Word DBの返却本文はログイン済みゲーム画面で開始操作を行って確認する。
+- `main`、本番SDK、npm package versionはこの変更では更新しない。
+
+### develop反映・公開確認
+
+- 検証済みtreeをGitHub commit `6e2b1e84e2d4d4accfaf16a53d1b2be833e2b413`として`develop`へforceなしで反映した。
+- 本体dev deployment `dpl_HxD6voBZi9EQZXtSqHFefapAsmuT`、SDK-dev `dpl_5gu5hv52iwMCdyJN7h92EoTznqtq`、隔離Preview dev `dpl_CbZWYpMjxMv9WvEMfJDf3YfiNDp8`が同commitで`READY`となり、各開発用aliasへ切り替わった。
+- 公開本体bundleから`content-source` bridge、`drawWords / drawWordPairs / findDefinitions`、module profile拒否、`easy / normal / hard`の3難易度を確認した。
+- `/api/sdk-preview/content-source`への未ログインPOSTは401 `PLAYER_AUTH_REQUIRED`となり、匿名利用者へDB候補を返さなかった。
+- 本人所有の`test10-1 / ai-word-guess`をWord DB版へ保存した。revisionは`efd26591bb9594bc3a36af3bb738e2ecc81c751e`。
+- revision指定で4ファイルを読み戻し、HTML／JavaScriptは検証済み本文とblob SHAが完全一致し、CSS／metadataは旧revisionと同一だった。固定秘密語、ローカル単語DB、直接network callはなく、Word DB取得、語釈参照、3難易度、`timer:turn-complete`を確認した。
+- 隔離Previewが実配信した`mock.js`も保存revisionの本文と完全一致した。
+- 3 deploymentのerrors-only build logは0件、直近30分のruntime errorは0件だった。
+
+## 2026-07-24 — SDK Word DB版のブラウザE2E再確認
+
+### 作業目的
+
+- `test10-1 / ai-word-guess`を最新の本体devで開き、1人開始、隔離iframe、難易度UI、Word DB取得の実動作を確認する。
+
+### 実施結果
+
+- 修正前bundleを保持した既存タブでは旧「開始には2人以上必要」表示が残っていたが、最新デプロイへreload後は1人部屋の設定欄に「最小人数 1人」と表示され、ホスト1人でプレイ中へ遷移した。
+- 隔離iframe内のゲーム固有画面が読み込まれ、出題語彙の標準／レアと、Word DB難易度の簡単／普通／難しいを選択できることを確認した。
+- Word DB取得要求は固定fallbackへ切り替わらず、401時に手番入力を無効のまま「Word DBから再取得する」を表示した。
+- Preview外枠のプレイヤーメニューは「認証済みセッション」と固定表示するが、今回のCloud Browserには本体の署名済みプレイヤーCookieがなく、`/api/sdk-preview/content-source`は`PLAYER_AUTH_REQUIRED`として拒否した。外枠の確認用identity表示は本体プレイヤー認証の証明ではない。
 
 ### 検証
 
@@ -2870,3 +4594,9 @@ Total output lines: 4596
 - 提出候補、正式提出主体、AIの所有者境界、提出後の運営審査、未提出ゲームの保存を
   初期Helpとして登録した。
 - lint、全538テスト、SDK Portal production buildに成功した。
+
+## 2026-07-26 SDK FAQのlint必須化
+
+- 要望: 制作者向けFAQ基盤が将来の変更で欠落・切断されても検知できるよう、lint対象へ含める。
+- 実装: `scripts/check-sdk-help.mjs` を追加し、Help正本の空配列、必須FAQ IDの欠落、ID・検索語の重複、不完全な質問・回答、存在しない関連MCPツール、`/help`画面または`search_sdk_help`との接続切れをエラーにした。
+- 運用: ルートの `npm run lint` から `check:sdk-help` を実行する。SDKの提出・権限・審査・未提出ゲーム保存に関する必須FAQを削除する変更はlintを通過しない。
