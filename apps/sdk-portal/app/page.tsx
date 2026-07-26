@@ -97,7 +97,7 @@ export default async function Home() {
               <span aria-hidden="true">↓</span>
             </a>
             <a className="primary-action" href="#foundation">
-              SDKの構成を見る
+              つくる流れを見る
               <span aria-hidden="true">→</span>
             </a>
             <a className="secondary-action" href="#status">
