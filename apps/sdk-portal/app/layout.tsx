@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import release from "../../../config/app-release.json";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -16,7 +17,12 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="ja">
-      <body>{children}</body>
+      <body style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+        <div style={{ flex: 1 }}>{children}</div>
+        <footer style={{ padding: "12px 20px", textAlign: "right", fontSize: 11, opacity: 0.6 }}>
+          Game Fields SDK v{release.version}
+        </footer>
+      </body>
     </html>
   );
 }
