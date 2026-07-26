@@ -5437,7 +5437,12 @@
 - `npm test`に成功し、全590テストが通過した。
 - `npm run lint`に成功した。
 - `npm run build`に成功し、全78ルートを生成した。
+- GitHubの`develop`へcommit `44f0ad3`で非force公開し、検証済みtree
+  `e13f243`との一致を確認した。
+- `app-games-dev` Deployment `dpl_9JxESXspH4vbChdQc8gwtsfuxxC9`はREADYとなり、
+  `dev.game-fields.com`へaliasされた。errors-only build logに失敗はない。
 
 ### 未対応・保留
 
-- `develop`への公開と、dev実画面での管理者メール受信確認。
+- dev実画面から報告の「管理者通知を再送」を実行し、画面の送信結果と実メール受信を
+  照合する。
