@@ -160,7 +160,7 @@ export async function POST(request: Request) {
 
     return Response.json({ error: "INVALID_REQUEST" }, { status: 400 });
   } catch (error) {
-    telemetry.responseError("auth.access", error, 400, { action: "site-admin-passkey", stage });
+    telemetry.responseError("auth.access", error, 400, { action: `site-admin-passkey:${stage}` });
     return errorResponse(error, stage);
   }
 }
