@@ -88,7 +88,7 @@ export default async function Home() {
           <p className="eyebrow">アイデアを、動くゲームへ</p>
           <h1>
             思いつきを、遊べるゲームに。
-            <span>安全な公開は、Game Fieldsにおまかせ。</span>
+            <span>安全な公開は、おまかせください。</span>
           </h1>
           <p className="hero-description">
             ChatGPTに作りたいゲームを伝えるだけで、AIが画面づくり・動作確認・保存まで進めます。最初の試作は10〜20分が目安。本番のデータや管理画面に触れることはありません。
