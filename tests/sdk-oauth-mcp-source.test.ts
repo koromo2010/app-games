@@ -38,6 +38,9 @@ test("SDK MCP challenges unauthenticated callers and scopes mock publication", (
   assert.match(mcp, /immutableAppSet: true/);
   assert.match(mcp, /name: "get_sdk_handshake"/);
   assert.match(mcp, /name === "get_sdk_handshake"/);
+  assert.match(mcp, /name: "search_sdk_help"/);
+  assert.match(mcp, /name === "search_sdk_help"/);
+  assert.match(mcp, /searchSdkHelp\(query, limit\)/);
   assert.doesNotMatch(mcp, /enum: \[\.\.\.SDK_PORTAL_CAPABILITIES\]/);
   assert.match(mcp, /固定enumではなく/);
   assert.match(mcp, /CAPABILITY_UNAVAILABLE/);
@@ -67,6 +70,18 @@ test("SDK MCP challenges unauthenticated callers and scopes mock publication", (
   assert.match(mcp, /parseSdkMockPreviewManifest\(gameId, args\.files\)/);
   assert.match(mcp, /manifest = EXCLUDED\.manifest/);
   assert.match(mcp, /creatorUrl, gameUrl, previewUrl: gameUrl/);
+});
+
+test("SDK Help uses one source for the creator UI and AI answers", () => {
+  const help = read("apps/sdk-portal/lib/sdk-help.ts");
+  const helpPage = read("apps/sdk-portal/app/help/page.tsx");
+  const dashboard = read("apps/sdk-portal/app/dashboard/page.tsx");
+  assert.match(help, /package-candidate-and-formal-submission/);
+  assert.match(help, /publish_game_packageで「提出候補」/);
+  assert.match(help, /これは正式提出ではありません/);
+  assert.match(help, /制作者本人がSDKのマイゲーム画面/);
+  assert.match(helpPage, /SDK_HELP_ENTRIES\.map/);
+  assert.match(dashboard, /href="\/help"/);
 });
 
 test("SDK Portal persists app-declared settings and exposes them to preview", () => {
