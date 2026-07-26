@@ -23,6 +23,7 @@ export async function siteAdminRegistrationOptions(email: string) {
     timeout: 120_000,
     excludeCredentials: existing.map((passkey) => ({ id: passkey.credentialId })),
     authenticatorSelection: { residentKey: "preferred", userVerification: "required" },
+    preferredAuthenticatorType: "localDevice",
   });
 }
 
@@ -34,11 +35,11 @@ export async function siteAdminAuthenticationOptions(email: string) {
     rpID,
     timeout: 120_000,
     userVerification: "required",
-    // Do not pin saved transport hints here. Chrome/Windows may use a different
-    // available provider on a later authentication (Windows Hello, Google
-    // Password Manager, hybrid phone flow, etc.). The credential ID is enough;
-    // letting the browser select the transport avoids false NotAllowedError loops.
-    allowCredentials: passkeys.map((passkey) => ({ id: passkey.credentialId })),
+    // Registration requests a discoverable credential. Leaving this list empty lets
+    // Windows/Chrome present the locally available or synced passkey chooser instead
+    // of assuming a USB security key from a credential-descriptor transport path.
+    // Verification below still binds the returned credential ID to this admin email.
+    allowCredentials: [],
   });
 }
 
