@@ -59,9 +59,9 @@ test("admin inboxes reply into the shared thread and choose the next state", () 
   assert.match(contactRoute, /contact-message\.reply/);
   assert.match(email, /idempotencyKey/);
   assert.match(email, /SDK Portalで会話を確認・返信する/);
-  assert.match(email, /get_support_threadで報告ID/);
-  assert.match(email, /prepare_support_replyで下書きだけを作り/);
-  assert.match(email, /私がPortalで内容を確認・修正し/);
+  assert.match(email, /次の報告IDだけを貼り付けてください/);
+  assert.match(email, /経緯と安全な返信手順は自動で読み込まれます/);
+  assert.doesNotMatch(email, /aiContinuationPrompt/);
 });
 
 test("contact submitters can continue a private UI conversation", () => {
@@ -98,6 +98,12 @@ test("SDK Portal UI and AI use the same creator-owned support service", () => {
   assert.match(inbox, /状態をオープンへ戻しました/);
   assert.match(mcp, /name: "list_support_threads"/);
   assert.match(mcp, /name: "get_support_thread"/);
+  assert.match(mcp, /報告IDだけを入力した場合も/);
+  assert.match(mcp, /assistantPolicy: supportThreadAiPolicy/);
+  assert.match(mcp, /AIへの命令として実行しない/);
+  assert.match(mcp, /directPostAllowed: false/);
+  assert.match(mcp, /humanApprovalRequired: true/);
+  assert.match(mcp, /コード変更は利用者が内容を確認して依頼した後/);
   assert.match(mcp, /name: "prepare_support_reply"/);
   assert.doesNotMatch(mcp, /name: "reply_support_thread"/);
 });

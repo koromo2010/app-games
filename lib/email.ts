@@ -166,13 +166,11 @@ export async function sendCreatorSupportReplyEmail(input: {
   const safeBody = escapeHtml(input.body).replaceAll("\n", "<br />");
   const safeUrl = escapeHtml(input.supportUrl);
   const guidance = "このメールは返信通知です。会話履歴と対応状態はSDK Portalのサポート画面で確認し、続きも同画面から返信してください。接続中のAIからも同じスレッドを確認できます。";
-  const aiContinuationPrompt = `Game Fields SDKのget_support_threadで報告ID「${input.reportId}」を開き、運営からの最新返信まで読んで、これまでの経緯を引き継いでください。まず要点と次に必要な対応を説明してください。返信が必要な場合はprepare_support_replyで下書きだけを作り、承認URLを私に提示してください。私がPortalで内容を確認・修正し「返信を送信」を押すまでは、返信済みと扱わないでください。コード変更も私の確認後に進めてください。`;
-  const safeAiContinuationPrompt = escapeHtml(aiContinuationPrompt);
   const { error } = await resend.emails.send({
     from,
     to: input.to,
     subject: `【Game Fields】報告への返信 ${input.reportId}`,
-    text: `Game Fields運営から返信が届きました。\n報告ID: ${input.reportId}\n\n${input.body}\n\n${guidance}\n${input.supportUrl}\n\nGPTで続ける場合は、以下をそのまま入力してください。\n\n${aiContinuationPrompt}`,
+    text: `Game Fields運営から返信が届きました。\n報告ID: ${input.reportId}\n\n${input.body}\n\n${guidance}\n${input.supportUrl}\n\nGPTで続ける場合は、Game Fields SDK toolsを接続したGPTへ次の報告IDだけを貼り付けてください。経緯と安全な返信手順は自動で読み込まれます。\n\n${input.reportId}`,
     html: `
       <div style="background:#f8fafc;padding:32px 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#0f172a">
         <div style="max-width:620px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:28px">
@@ -185,8 +183,8 @@ export async function sendCreatorSupportReplyEmail(input: {
           </p>
           <div style="margin-top:28px;border-top:1px solid #e2e8f0;padding-top:22px">
             <p style="font-weight:700;margin:0 0 10px">GPTで続きを引き継ぐ</p>
-            <p style="font-size:13px;line-height:1.7;color:#475569">以下の文章を、Game Fields SDK toolsを接続したGPTへそのまま入力してください。</p>
-            <div style="white-space:pre-wrap;word-break:break-word;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:8px;padding:14px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;line-height:1.7">${safeAiContinuationPrompt}</div>
+            <p style="font-size:13px;line-height:1.7;color:#475569">Game Fields SDK toolsを接続したGPTへ、次の報告IDだけを貼り付けてください。経緯と安全な返信手順は自動で読み込まれます。</p>
+            <div style="white-space:pre-wrap;word-break:break-word;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:8px;padding:14px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;line-height:1.7">${safeReportId}</div>
           </div>
         </div>
       </div>

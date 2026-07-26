@@ -5160,3 +5160,36 @@
 - 変更はローカルcommitまでとし、`develop`へのpushとdev Deployment確認は未実施。
 - dev公開後、MCPで返信下書きを作成し、Portalで承認してスレッドが`open`へ戻る実画面E2Eを
   実施する。
+
+## 2026-07-26 — GPTへのsupport引継ぎを報告IDだけに簡素化
+
+### 利用者からの要望
+
+- 運営返信メールからGPTへ貼る内容は報告IDだけにし、経緯の読込や返信時の人間承認などの
+  指示はサーバー側で持たせたい。
+
+### 判断
+
+- メールへAI向けの長い命令文を複製せず、報告IDを会話の引継ぎキーとして表示する。
+- MCPの`get_support_thread`を、`report_...`形式のIDだけが入力された場合にも呼ぶtoolとして
+  宣言する。
+- 取得結果へAI進行規則を含め、最新返信までの要約、次の対応の説明、直接返信禁止、
+  `prepare_support_reply`による下書きとPortal承認、コード変更前の利用者確認を
+  サーバー側で一元管理する。
+
+### 実施結果
+
+- SDK制作者への返信メールのGPT欄を報告IDだけの表示へ変更した。
+- `get_support_thread`のtool説明と応答へ`assistantPolicy`を追加した。
+- メール、MCP、現行仕様、引き継ぎ資料の回帰契約を更新した。
+
+### 検証
+
+- `npm test`に成功し、全585テストが通過した。
+- `npm run verify`に成功した。
+- 本体`npm run build`に成功し、78ルートを生成した。
+- SDK Portal`npm run build:sdk`に成功し、MCPを含む15ページを生成した。
+
+### 未対応・保留
+
+- `develop`へのpushとdev環境での実メール・GPT引継ぎE2Eは未実施。
