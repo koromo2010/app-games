@@ -2,6 +2,7 @@
 
 import { ensureSiteAdminStepUp } from "@/lib/site-admin-passkey-client";
 import { useCallback, useEffect, useState } from "react";
+import { AppReleaseManagementPanel } from "./AppReleaseManagementPanel";
 
 type SdkCandidate = {
   creatorSlug: string;
@@ -352,6 +353,8 @@ export function ReleaseManagementPanel({
           </div>
         )}
       </section>
+
+      {!isPreview && <AppReleaseManagementPanel onAuthExpired={onAuthExpired} />}
 
       <section className="rounded-2xl border border-white/10 bg-white/[0.05] p-5">
         <p className="text-xs font-black uppercase tracking-[0.16em] text-violet-300">develop → main</p>
