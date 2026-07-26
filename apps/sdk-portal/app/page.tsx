@@ -1,4 +1,5 @@
 import portalPackage from "../package.json";
+import platformRelease from "../../../config/platform-release.json";
 import Link from "next/link";
 import { getSdkAccountSession } from "@/lib/account-session";
 import { AccountMenu } from "./account-menu";
@@ -61,6 +62,10 @@ const firstBuildGuide = [
   },
 ];
 
+const downloadMeVersion = platformRelease.downloadMeVersion;
+const downloadMeFileName = `GameFieldsDownloadMe-ver${downloadMeVersion}.md`;
+const downloadMeHref = `/${downloadMeFileName}`;
+
 export default async function Home() {
   const platformVersion = portalPackage.version;
   const account = await getSdkAccountSession().catch(() => null);
@@ -101,8 +106,8 @@ export default async function Home() {
             SDK基本セットへゲーム固有のAppSetだけを登録し、作成・検証・提出するための開発基盤です。
           </p>
           <div className="hero-actions">
-            <a className="primary-action" href="/GameFieldsDownloadMe-ver15.md" download>
-              GameFieldsDownloadMe-ver15
+            <a className="primary-action" href={downloadMeHref} download>
+              GameFieldsDownloadMe-ver{downloadMeVersion}
               <span aria-hidden="true">↓</span>
             </a>
             <a className="primary-action" href="#foundation">
@@ -193,7 +198,7 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
             </p>
             <p>
               <strong>プラグイン更新後は、必ず新しいチャットを作成してください。</strong>
-              既存チャットへ読み込まれたtool schemaは更新されないため、古いチャットへ最新版を追加しても制作を再開できません。新しいチャットで`gameapp-dev`を選択し、ver15だけを添付します。
+              既存チャットへ読み込まれたtool schemaは更新されないため、古いチャットへ最新版を追加しても制作を再開できません。新しいチャットで`gameapp-dev`を選択し、ver{downloadMeVersion}だけを添付します。
             </p>
             <p>
               保存済みの制作者環境とゲームはアカウントに紐づいているため、新しいチャットから自動的に再取得できます。作り直しや新しいURLの予約は不要です。
@@ -204,11 +209,11 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
           </div>
         </aside>
         <p className="start-note">
-          制作開始時は必ず新しいチャットを使います。ver15のhandshakeが成功して制作が始まった後は、URLが案内されるまでそのチャットを継続してください。エラーなどで保存できなかった場合は、AIが未完了であることと次の対応を案内します。
+          制作開始時は必ず新しいチャットを使います。ver{downloadMeVersion}のhandshakeが成功して制作が始まった後は、URLが案内されるまでそのチャットを継続してください。エラーなどで保存できなかった場合は、AIが未完了であることと次の対応を案内します。
         </p>
         <div className="hero-actions">
-          <a className="primary-action" href="/GameFieldsDownloadMe-ver15.md" download>
-            GameFieldsDownloadMe-ver15.mdを取得
+          <a className="primary-action" href={downloadMeHref} download>
+            {downloadMeFileName}を取得
             <span aria-hidden="true">↓</span>
           </a>
           <Link className="secondary-action" href="/demo">

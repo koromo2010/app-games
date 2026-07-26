@@ -18,6 +18,7 @@ export const SDK_PORTAL_CAPABILITIES = [
   "hash-pinned-promotion",
   "support-threads",
   "human-approved-reporting",
+  "human-approved-support-replies",
 ] as const;
 
 export function sdkPortalEnvironment(base: string) {

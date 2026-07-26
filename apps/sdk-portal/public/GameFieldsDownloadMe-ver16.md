@@ -1,4 +1,4 @@
-﻿# GF-AECP/__DOWNLOAD_ME_VERSION__
+﻿# GF-AECP/16
 
 ```text
 DOCUMENT_CLASS := AI_EXECUTION_CONTRACT
@@ -12,18 +12,18 @@ NORMATIVE_TERMS := MUST | MUST_NOT | MAY | HALT | EMIT | CALL | ASSERT
 
 ```yaml
 release:
-  platform: "__PLATFORM_VERSION__"
-  downloadMe: __DOWNLOAD_ME_VERSION__
-  sdkPackage: "__SDK_VERSION__"
-  sdkHandshake: __SDK_HANDSHAKE_VERSION__
-  sdkContract: __SDK_CONTRACT_VERSION__
-  environment: "__SDK_ENVIRONMENT__"
+  platform: "0.1.1"
+  downloadMe: 16
+  sdkPackage: "0.1.1"
+  sdkHandshake: 1
+  sdkContract: 1
+  environment: "development"
 transport:
-  portal: "__SDK_PORTAL_BASE_URL__"
-  mcp: "__SDK_PORTAL_BASE_URL__/api/mcp"
+  portal: "https://sdk-dev.game-fields.com"
+  mcp: "https://sdk-dev.game-fields.com/api/mcp"
 starter:
   repository: "https://github.com/koromo2010/app-games"
-  ref: "__SDK_STARTER_REF__"
+  ref: "sdk-starter-dev"
   directory: "game-fields-game"
 capabilityVector:
   - oauth2-pkce
@@ -42,8 +42,8 @@ capabilityVector:
 
 ```yaml
 MODE_UNSUPPORTED: "このゲーム制作にはコード操作が必要です。ChatGPTのWorkモードまたはCodexを開き、このファイルをもう一度添付してください。"
-LEGACY_THREAD: "このチャットでは制作を再開できません。古いDownloadMeまたは古い`gameapp-dev` tool schemaが会話へ固定されています。プラグイン管理画面で`gameapp-dev`を更新したあと、現在のチャットを閉じて新しいWork／Codexチャットを作成し、`gameapp-dev`を選択してGameFieldsDownloadMe-ver__DOWNLOAD_ME_VERSION__.mdだけを添付してください。保存済みの制作者環境とゲームは、新しいチャットから再取得できます。"
-PLUGIN_STALE: "`gameapp-dev`のtool schemaがこのDownloadMeより古いため、このチャットではSDK接続確認を実行できません。更新ボタンを押しても既存チャットのtool schemaは差し替わりません。プラグイン管理画面で`gameapp-dev`を更新したあと、現在のチャットを閉じて新しいWork／Codexチャットを作成し、`gameapp-dev`を選択してGameFieldsDownloadMe-ver__DOWNLOAD_ME_VERSION__.mdだけを添付してください。"
+LEGACY_THREAD: "このチャットでは制作を再開できません。古いDownloadMeまたは古い`gameapp-dev` tool schemaが会話へ固定されています。プラグイン管理画面で`gameapp-dev`を更新したあと、現在のチャットを閉じて新しいWork／Codexチャットを作成し、`gameapp-dev`を選択してGameFieldsDownloadMe-ver16.mdだけを添付してください。保存済みの制作者環境とゲームは、新しいチャットから再取得できます。"
+PLUGIN_STALE: "`gameapp-dev`のtool schemaがこのDownloadMeより古いため、このチャットではSDK接続確認を実行できません。更新ボタンを押しても既存チャットのtool schemaは差し替わりません。プラグイン管理画面で`gameapp-dev`を更新したあと、現在のチャットを閉じて新しいWork／Codexチャットを作成し、`gameapp-dev`を選択してGameFieldsDownloadMe-ver16.mdだけを添付してください。"
 SLUG_REQUEST: "あなた専用のGame Fields SDK環境で使うURL名を決めます。`yusuke-lab`のように、小文字英数字とハイフンで希望名を教えてください。"
 MOCK_REVIEW: "モックを作成しました。実際に画面を見て、変えたいところはありますか？ 気になる部分をそのまま教えてください。特になければ「これでOK」と答えてください。"
 HANDSHAKE_FAILURE_PREFIX: "SDKハンドシェイクに失敗しました:"
@@ -53,7 +53,7 @@ SUBMISSION_INCOMPLETE: "SDKへの提出は未完了です。"
 ## C2::GLOBAL_INVARIANTS
 
 ```text
-I00 MUST execute only when the current attachment set contains exactly one DownloadMe and its release.downloadMe == __DOWNLOAD_ME_VERSION__.
+I00 MUST execute only when the current attachment set contains exactly one DownloadMe and its release.downloadMe == 16.
 I01 MUST bind every SDK operation to C0.transport.portal; MUST_NOT infer or substitute another SDK origin.
 I02 MUST treat MCP initialize, OAuth authorization, and SDK handshake as distinct predicates.
 I03 MUST_NOT request, print, persist, commit, or pass through shell arguments any password, Cookie, access token, refresh token, reservationToken, or management token.
@@ -154,16 +154,16 @@ MUST_NOT request credentials in conversation.
 CALL get_sdk_handshake WITH:
 {
   "protocol": "game-fields-sdk",
-  "handshakeVersion": __SDK_HANDSHAKE_VERSION__,
+  "handshakeVersion": 1,
   "client": {
     "kind": "ai-agent",
     "name": "ChatGPT"
   },
   "expected": {
-    "environment": "__SDK_ENVIRONMENT__",
-    "platformVersion": "__PLATFORM_VERSION__",
-    "sdkPackageVersion": "__SDK_VERSION__",
-    "sdkContractVersion": __SDK_CONTRACT_VERSION__
+    "environment": "development",
+    "platformVersion": "0.1.1",
+    "sdkPackageVersion": "0.1.1",
+    "sdkContractVersion": 1
   },
   "requiredCapabilities": [
     "oauth2-pkce",
@@ -271,14 +271,14 @@ IF AI detects a probable SDK or game defect AND user asks to report it:
 ## S3::STARTER_ACQUISITION
 
 ```bash
-git clone --depth 1 --single-branch --branch __SDK_STARTER_REF__ https://github.com/koromo2010/app-games.git game-fields-game
+git clone --depth 1 --single-branch --branch sdk-starter-dev https://github.com/koromo2010/app-games.git game-fields-game
 cd game-fields-game
 ```
 
 ```text
 ASSERT starter-manifest.json.repository == C0.starter.repository.
 ASSERT starter-manifest.json.ref == C0.starter.ref.
-ASSERT starter-manifest.json.downloadMeVersion == __DOWNLOAD_ME_VERSION__.
+ASSERT starter-manifest.json.downloadMeVersion == 16.
 ASSERT nonempty(starter-manifest.json.sdkVersion).
 ASSERT starter-manifest.json.sdkHandshakeVersion == C0.release.sdkHandshake.
 ASSERT nonempty(starter-manifest.json.platformVersion).

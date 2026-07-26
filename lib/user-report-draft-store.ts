@@ -1,5 +1,6 @@
 import { redisCommand } from "@/lib/redis-store";
 import {
+  appendUserReportMessage,
   loadUserReport,
   saveUserReport,
   type UserReport,
@@ -17,7 +18,18 @@ export type UserReportDraft = {
   expiresAt: number;
 };
 
+export type UserReportReplyDraft = {
+  id: string;
+  playerId: string;
+  reportId: string;
+  message: string;
+  createdAt: number;
+  expiresAt: number;
+  approvedAt?: number;
+};
+
 const draftKeyPrefix = "user-report-draft:v1:";
+const replyDraftKeyPrefix = "user-report-reply-draft:v1:";
 const draftRetentionSeconds = 7 * 24 * 60 * 60;
 const requestIdPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -46,6 +58,36 @@ function parseDraft(value: string | null) {
 
 function draftKey(draftId: string) {
   return `${draftKeyPrefix}${draftId}`;
+}
+
+function parseReplyDraft(value: string | null) {
+  if (!value) return null;
+  try {
+    const input = JSON.parse(value) as Partial<UserReportReplyDraft>;
+    if (
+      typeof input.id !== "string"
+      || !/^reply_draft_[0-9a-f-]{36}$/i.test(input.id)
+      || typeof input.playerId !== "string"
+      || !input.playerId
+      || typeof input.reportId !== "string"
+      || !/^report_[0-9a-f-]{36}$/i.test(input.reportId)
+      || typeof input.message !== "string"
+      || !input.message
+      || !Number.isFinite(input.createdAt)
+      || !Number.isFinite(input.expiresAt)
+      || (
+        input.approvedAt !== undefined
+        && !Number.isFinite(input.approvedAt)
+      )
+    ) return null;
+    return input as UserReportReplyDraft;
+  } catch {
+    return null;
+  }
+}
+
+function replyDraftKey(draftId: string) {
+  return `${replyDraftKeyPrefix}${draftId}`;
 }
 
 function reportIdForDraft(draftId: string) {
@@ -138,26 +180,122 @@ export async function approveUserReportDraft(input: {
   return report;
 }
 
-export async function deleteUserReportDraftsForPlayer(playerId: string) {
-  let cursor = "0";
-  let deleted = 0;
-  do {
-    const page = await redisCommand<[string, string[]]>([
-      "SCAN",
-      cursor,
-      "MATCH",
-      `${draftKeyPrefix}*`,
-      "COUNT",
-      "100",
+export async function saveUserReportReplyDraft(input: {
+  playerId: string;
+  reportId: string;
+  requestId: string;
+  message: string;
+}) {
+  if (!requestIdPattern.test(input.requestId)) {
+    throw new Error("USER_REPORT_REPLY_DRAFT_REQUEST_ID_INVALID");
+  }
+  const report = await loadUserReport(input.reportId);
+  if (!report || report.playerId !== input.playerId) {
+    throw new Error("USER_REPORT_NOT_FOUND");
+  }
+  const now = Date.now();
+  const draft: UserReportReplyDraft = {
+    id: `reply_draft_${input.requestId.toLowerCase()}`,
+    playerId: input.playerId,
+    reportId: input.reportId,
+    message: input.message,
+    createdAt: now,
+    expiresAt: now + draftRetentionSeconds * 1_000,
+  };
+  const inserted = await redisCommand<"OK" | null>([
+    "SET",
+    replyDraftKey(draft.id),
+    JSON.stringify(draft),
+    "EX",
+    String(draftRetentionSeconds),
+    "NX",
+  ]);
+  if (inserted === "OK") return draft;
+  const existing = await loadUserReportReplyDraft(draft.id, input.playerId);
+  if (
+    !existing
+    || existing.reportId !== input.reportId
+  ) {
+    throw new Error("USER_REPORT_REPLY_DRAFT_CONFLICT");
+  }
+  return existing;
+}
+
+export async function loadUserReportReplyDraft(
+  draftId: string,
+  playerId: string,
+) {
+  if (!/^reply_draft_[0-9a-f-]{36}$/i.test(draftId)) return null;
+  const draft = parseReplyDraft(
+    await redisCommand<string | null>(["GET", replyDraftKey(draftId)]),
+  );
+  return draft?.playerId === playerId ? draft : null;
+}
+
+export async function approveUserReportReplyDraft(input: {
+  draftId: string;
+  playerId: string;
+  message: string;
+}) {
+  const draft = await loadUserReportReplyDraft(
+    input.draftId,
+    input.playerId,
+  );
+  if (!draft) throw new Error("USER_REPORT_REPLY_DRAFT_NOT_FOUND");
+  const result = await appendUserReportMessage({
+    reportId: draft.reportId,
+    playerId: input.playerId,
+    requestId: `approved-${draft.id.slice("reply_draft_".length)}`,
+    author: "requester",
+    body: input.message,
+    status: "open",
+  });
+  if (!draft.approvedAt || draft.message !== result.message.body) {
+    const approvedDraft: UserReportReplyDraft = {
+      ...draft,
+      message: result.message.body,
+      approvedAt: Date.now(),
+    };
+    const remainingRetentionSeconds = Math.max(
+      1,
+      Math.ceil((draft.expiresAt - Date.now()) / 1_000),
+    );
+    await redisCommand<"OK">([
+      "SET",
+      replyDraftKey(draft.id),
+      JSON.stringify(approvedDraft),
+      "EX",
+      String(remainingRetentionSeconds),
     ]);
-    cursor = page[0];
-    for (const key of page[1]) {
-      const draft = parseDraft(
-        await redisCommand<string | null>(["GET", key]),
-      );
-      if (draft?.playerId !== playerId) continue;
-      deleted += await redisCommand<number>(["DEL", key]);
-    }
-  } while (cursor !== "0");
+  }
+  return result.report;
+}
+
+export async function deleteUserReportDraftsForPlayer(playerId: string) {
+  let deleted = 0;
+  for (const input of [
+    { prefix: draftKeyPrefix, parse: parseDraft },
+    { prefix: replyDraftKeyPrefix, parse: parseReplyDraft },
+  ]) {
+    let cursor = "0";
+    do {
+      const page = await redisCommand<[string, string[]]>([
+        "SCAN",
+        cursor,
+        "MATCH",
+        `${input.prefix}*`,
+        "COUNT",
+        "100",
+      ]);
+      cursor = page[0];
+      for (const key of page[1]) {
+        const draft = input.parse(
+          await redisCommand<string | null>(["GET", key]),
+        );
+        if (draft?.playerId !== playerId) continue;
+        deleted += await redisCommand<number>(["DEL", key]);
+      }
+    } while (cursor !== "0");
+  }
   return deleted;
 }

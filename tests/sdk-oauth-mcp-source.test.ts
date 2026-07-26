@@ -108,15 +108,25 @@ test("SDK Portal distributes the current DownloadMe revision", () => {
   const page = read("apps/sdk-portal/app/page.tsx");
   const nextConfig = read("apps/sdk-portal/next.config.ts");
   const syncScript = read("apps/sdk-portal/scripts/sync-download.mjs");
+  const release = JSON.parse(read("config/platform-release.json")) as {
+    downloadMeVersion: number;
+  };
+  const downloadPath =
+    `apps/sdk-portal/public/GameFieldsDownloadMe-ver${release.downloadMeVersion}.md`;
 
-  for (const source of [page, nextConfig, syncScript]) {
-    assert.match(source, /GameFieldsDownloadMe-ver15\.md/);
-    assert.doesNotMatch(source, /GameFieldsDownloadMe-ver[2345678]\.md/);
-  }
-  const download = read("apps/sdk-portal/public/GameFieldsDownloadMe-ver15.md");
-  assert.match(download, /# GF-AECP\/15/);
+  assert.match(page, /platformRelease\.downloadMeVersion/);
+  assert.match(nextConfig, /platformRelease\.downloadMeVersion/);
+  assert.match(syncScript, /release\.downloadMeVersion/);
+  const download = read(downloadPath);
+  assert.match(
+    download,
+    new RegExp(`# GF-AECP/${release.downloadMeVersion}`),
+  );
   assert.match(download, /HUMAN_DOCUMENTATION := false/);
-  assert.match(download, /downloadMeVersion == 15/);
+  assert.match(
+    download,
+    new RegExp(`downloadMeVersion == ${release.downloadMeVersion}`),
+  );
   assert.match(download, /IF surface == Work AND get_sdk_handshake not_loaded/);
   assert.match(download, /WORK_DISCOVERY_QUERY := "gameapp-dev get_sdk_handshake Game Fields SDK接続互換性"/);
   assert.match(download, /CALL tool検索\(WORK_DISCOVERY_QUERY\)/);
@@ -126,7 +136,12 @@ test("SDK Portal distributes the current DownloadMe revision", () => {
   assert.match(download, /現在のチャットを閉じて新しいWork／Codexチャットを作成/);
   assert.match(download, /更新ボタンを押しても既存チャットのtool schemaは差し替わりません/);
   assert.match(download, /schema_accepts_all\(C0\.capabilityVector\)/);
-  assert.match(download, /GameFieldsDownloadMe-ver15\.mdだけを添付/);
+  assert.match(
+    download,
+    new RegExp(
+      `GameFieldsDownloadMe-ver${release.downloadMeVersion}\\.mdだけを添付`,
+    ),
+  );
   assert.match(download, /bilingual standardResult\.presentation\.reason/);
   assert.match(download, /保存済みの制作者環境とゲームは、新しいチャットから再取得できます/);
   assert.match(download, /capabilityVector:/);

@@ -14,9 +14,9 @@ export const SDK_HELP_ENTRIES: readonly SdkHelpEntry[] = [
     title: "報告後の運営とのやりとり",
     question: "送った不具合報告へ返信したり、運営からの回答を確認できますか？",
     answer:
-      "はい。SDK Portalのサポート画面、またはlist_support_threads・get_support_thread・reply_support_threadを使い、本人の報告だけを確認・追記できます。運営が返信すると「あなたの返信待ち」、制作者が追記すると「オープン」へ戻ります。",
+      "はい。SDK Portalのサポート画面から本人が直接返信できます。AIはlist_support_threads・get_support_threadで本人の報告だけを確認し、prepare_support_replyで返信下書きを作れますが、その時点では投稿されません。返されたapprovalUrlを制作者本人が開き、内容を確認・必要なら修正して「返信を送信」を押した場合だけ投稿され、状態が「オープン」へ戻ります。",
     keywords: ["報告", "不具合", "返信", "やりとり", "状態", "オープン", "サポート"],
-    relatedToolNames: ["list_support_threads", "get_support_thread", "reply_support_thread"],
+    relatedToolNames: ["list_support_threads", "get_support_thread", "prepare_support_reply"],
   },
   {
     id: "human-approved-ai-reporting",

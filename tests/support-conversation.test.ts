@@ -60,7 +60,8 @@ test("admin inboxes reply into the shared thread and choose the next state", () 
   assert.match(email, /idempotencyKey/);
   assert.match(email, /SDK Portalで会話を確認・返信する/);
   assert.match(email, /get_support_threadで報告ID/);
-  assert.match(email, /変更やスレッドへの返信は私の確認後/);
+  assert.match(email, /prepare_support_replyで下書きだけを作り/);
+  assert.match(email, /私がPortalで内容を確認・修正し/);
 });
 
 test("contact submitters can continue a private UI conversation", () => {
@@ -97,10 +98,11 @@ test("SDK Portal UI and AI use the same creator-owned support service", () => {
   assert.match(inbox, /状態をオープンへ戻しました/);
   assert.match(mcp, /name: "list_support_threads"/);
   assert.match(mcp, /name: "get_support_thread"/);
-  assert.match(mcp, /name: "reply_support_thread"/);
+  assert.match(mcp, /name: "prepare_support_reply"/);
+  assert.doesNotMatch(mcp, /name: "reply_support_thread"/);
 });
 
-test("AI can only prepare a report draft and human approval performs submission", () => {
+test("AI report and reply drafts both require human approval", () => {
   const mcp = read("apps/sdk-portal/app/api/mcp/route.ts");
   const draftStore = read("lib/user-report-draft-store.ts");
   const approval = read(
@@ -109,15 +111,28 @@ test("AI can only prepare a report draft and human approval performs submission"
   const approvalRoute = read(
     "apps/sdk-portal/app/api/support/drafts/[draftId]/route.ts",
   );
+  const replyApproval = read(
+    "apps/sdk-portal/app/support/replies/[draftId]/SupportReplyApproval.tsx",
+  );
+  const replyApprovalRoute = read(
+    "apps/sdk-portal/app/api/support/replies/[draftId]/route.ts",
+  );
 
   assert.match(mcp, /name: "prepare_support_report"/);
+  assert.match(mcp, /name: "prepare_support_reply"/);
   assert.match(mcp, /submitted: false/);
+  assert.match(mcp, /replied: false/);
   assert.match(mcp, /humanApprovalRequired: true/);
   assert.match(mcp, /approvalUrl/);
   assert.doesNotMatch(mcp, /name: "submit_support_report"/);
+  assert.doesNotMatch(mcp, /name: "reply_support_thread"/);
   assert.match(draftStore, /draftRetentionSeconds = 7/);
   assert.match(draftStore, /approveUserReportDraft/);
+  assert.match(draftStore, /approveUserReportReplyDraft/);
   assert.match(approval, /HUMAN APPROVAL REQUIRED/);
   assert.match(approval, /内容を確認し、報告を送信/);
   assert.match(approvalRoute, /approveCreatorSupportDraft/);
+  assert.match(replyApproval, /HUMAN APPROVAL REQUIRED/);
+  assert.match(replyApproval, /内容を確認し、返信を送信/);
+  assert.match(replyApprovalRoute, /approveCreatorSupportReplyDraft/);
 });

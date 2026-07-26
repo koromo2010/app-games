@@ -39,6 +39,16 @@ export type CreatorSupportDraft = {
   expiresAt: number;
 };
 
+export type CreatorSupportReplyDraft = {
+  id: string;
+  playerId: string;
+  reportId: string;
+  message: string;
+  createdAt: number;
+  expiresAt: number;
+  approvedAt?: number;
+};
+
 function appBaseUrl() {
   return process.env.GAME_FIELDS_APP_BASE_URL?.replace(/\/$/, "")
     ?? (
@@ -123,6 +133,20 @@ export async function prepareCreatorSupportDraft(input: {
   return data.draft;
 }
 
+export async function prepareCreatorSupportReplyDraft(input: {
+  playerId: string;
+  reportId: string;
+  requestId: string;
+  message: string;
+}) {
+  const data = await supportRequest<{ draft: CreatorSupportReplyDraft }>(
+    "POST",
+    "/api/internal/sdk-support",
+    { action: "create-reply-draft", ...input },
+  );
+  return data.draft;
+}
+
 export async function loadCreatorSupportDraft(
   playerId: string,
   draftId: string,
@@ -149,6 +173,41 @@ export async function approveCreatorSupportDraft(input: {
     "POST",
     "/api/internal/sdk-support",
     { action: "approve-draft", ...input },
+  );
+  return data.report;
+}
+
+export async function loadCreatorSupportReplyDraft(
+  playerId: string,
+  replyDraftId: string,
+) {
+  const query = new URLSearchParams({ playerId, replyDraftId });
+  return supportRequest<
+    | {
+      state: "draft";
+      draft: CreatorSupportReplyDraft;
+      report: CreatorSupportReport;
+    }
+    | {
+      state: "approved";
+      draft: CreatorSupportReplyDraft;
+      report: CreatorSupportReport;
+    }
+  >(
+    "GET",
+    `/api/internal/sdk-support?${query.toString()}`,
+  );
+}
+
+export async function approveCreatorSupportReplyDraft(input: {
+  playerId: string;
+  replyDraftId: string;
+  message: string;
+}) {
+  const data = await supportRequest<{ report: CreatorSupportReport }>(
+    "POST",
+    "/api/internal/sdk-support",
+    { action: "approve-reply-draft", ...input },
   );
   return data.report;
 }

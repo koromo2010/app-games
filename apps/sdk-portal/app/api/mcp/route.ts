@@ -22,7 +22,7 @@ import {
   listCreatorSupportReports,
   loadCreatorSupportReport,
   prepareCreatorSupportDraft,
-  replyToCreatorSupportReport,
+  prepareCreatorSupportReplyDraft,
 } from "@/lib/support-api";
 import platformRelease from "../../../../../config/platform-release.json";
 import {
@@ -57,7 +57,7 @@ const tools = [
   { name: "list_creator_environments", title: "自分のSDK環境一覧", description: "ログイン中のGame Fieldsアカウントに紐づく既存の制作者環境を一覧表示します。新規URLを予約する前に必ず呼び出してください。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: {}, additionalProperties: false } },
   { name: "list_support_threads", title: "自分の報告スレッド一覧", description: "ログイン中の制作者本人が送った不具合報告・改善要望と、運営との会話状態を一覧表示します。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { status: { type: "string", enum: ["open", "in-progress", "waiting-user", "resolved", "closed"] } }, additionalProperties: false } },
   { name: "get_support_thread", title: "報告スレッドの確認", description: "本人の報告スレッド1件について、最初の報告、運営返信、本人追記、現在の状態を取得します。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { reportId: { type: "string", pattern: "^report_[0-9a-fA-F-]{36}$" } }, required: ["reportId"], additionalProperties: false } },
-  { name: "reply_support_thread", title: "報告スレッドへ追記", description: "本人の既存報告へ追記し、状態をオープンへ戻します。利用者が送信内容を明示した場合だけ使用してください。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { reportId: { type: "string", pattern: "^report_[0-9a-fA-F-]{36}$" }, requestId: { type: "string", format: "uuid", description: "再試行時も同じ値を使う一意ID" }, message: { type: "string", minLength: 1, maxLength: 3000 } }, required: ["reportId", "requestId", "message"], additionalProperties: false } },
+  { name: "prepare_support_reply", title: "人間承認用の返信下書き", description: "AIが本人の既存報告への返信下書きを作り、人間がPortalで確認・修正して明示承認するURLを返します。このtoolだけでは投稿されず、状態も変わりません。replied=falseを確認し、必ずapprovalUrlを利用者へ提示してください。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { reportId: { type: "string", pattern: "^report_[0-9a-fA-F-]{36}$" }, requestId: { type: "string", format: "uuid", description: "再試行時も同じ値を使う一意ID" }, message: { type: "string", minLength: 1, maxLength: 3000 } }, required: ["reportId", "requestId", "message"], additionalProperties: false } },
   { name: "prepare_support_report", title: "人間承認用の報告下書き", description: "AIが不具合報告・改善要望の下書きを作り、人間がPortalで確認・修正して明示承認するURLを返します。このtoolだけでは運営へ送信されません。submitted=falseを確認し、必ずapprovalUrlを利用者へ提示してください。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { requestId: { type: "string", format: "uuid", description: "再試行時も同じ値を使う一意ID" }, type: { type: "string", enum: ["bug", "request"] }, summary: { type: "string", minLength: 1, maxLength: 120 }, details: { type: "string", maxLength: 1200 }, page: { type: "string", maxLength: 200 } }, required: ["requestId", "type", "summary", "details", "page"], additionalProperties: false } },
   { name: "check_creator_url", title: "制作者URLの空き確認", description: "Game Fields SDKの制作者URL名が利用可能か確認します。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "確認する制作者URL名" } }, required: ["slug"], additionalProperties: false } },
   { name: "reserve_creator_url", title: "制作者URLの予約", description: "ログイン中のGame Fieldsアカウント用に制作者URLを7日間予約します。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "予約する制作者URL名" }, displayName: { type: "string", description: "制作者の表示名" } }, required: ["slug", "displayName"], additionalProperties: false } },
@@ -114,7 +114,7 @@ async function callTool(name: string, args: Record<string, unknown>, playerId: s
       report: await loadCreatorSupportReport(playerId, reportId),
     });
   }
-  if (name === "reply_support_thread") {
+  if (name === "prepare_support_reply") {
     const reportId = typeof args.reportId === "string"
       ? args.reportId.trim()
       : "";
@@ -127,13 +127,19 @@ async function callTool(name: string, args: Record<string, unknown>, playerId: s
     if (!/^report_[0-9a-f-]{36}$/i.test(reportId) || !requestId || !message) {
       throw new Error("報告への追記内容が不正です。");
     }
-    const report = await replyToCreatorSupportReport({
+    const draft = await prepareCreatorSupportReplyDraft({
       playerId,
       reportId,
       requestId,
       message,
     });
-    return textResult({ replied: true, report });
+    return textResult({
+      replied: false,
+      humanApprovalRequired: true,
+      draft,
+      approvalUrl: `${origin}/support/replies/${draft.id}`,
+      instruction: "この返信下書きはまだ投稿されておらず、状態も変わっていません。利用者へapprovalUrlを提示し、本人が内容を確認して送信するまで返信済みと扱わないでください。",
+    });
   }
   if (name === "prepare_support_report") {
     const requestId = typeof args.requestId === "string"

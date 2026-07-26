@@ -23,7 +23,7 @@ Game Fields SDKへ接続するAI、スターター、browser Runtimeは、制作
 
 公開の`GET /.well-known/game-fields-sdk`は認証前のdiscoveryに利用できる。`POST /.well-known/game-fields-sdk`と`get_sdk_handshake`は同じ純粋な互換判定を使う。ハンドシェイク自体は認証sessionや権限を発行せず、OAuth、署名Cookie、Room actor解決の代わりにはならない。
 
-Portalの`get_sdk_handshake`へ送る`requiredCapabilities`はDownloadMe記載の4件だけとする。公開SDK全体のcapability型にはgame Runtime向けの`persistent-rooms`、`room-realtime`、`common-shell`等も含まれるが、Portal control planeのhandshakeへenum候補を一括送信しない。MCP tool schemaのenumとPortal descriptorは`SDK_PORTAL_CAPABILITIES`を共用し、DownloadMeとの不一致を回帰テストで拒否する。
+Portalの`get_sdk_handshake`へ送る`requiredCapabilities`はDownloadMe記載のPortal control plane機能だけとする。公開SDK全体のcapability型にはgame Runtime向けの`persistent-rooms`、`room-realtime`、`common-shell`等も含まれるが、Portal handshakeへ一括送信しない。MCP tool schemaは将来のcapability名も送れる文字列契約とし、提供可否はPortal descriptorの`SDK_PORTAL_CAPABILITIES`から`CAPABILITY_UNAVAILABLE`で返す。DownloadMeとPortal descriptorの不一致は回帰テストで拒否する。
 
 ## Request v1
 
@@ -45,7 +45,13 @@ Portalの`get_sdk_handshake`へ送る`requiredCapabilities`はDownloadMe記載�
     "oauth2-pkce",
     "creator-environments",
     "starter-download",
-    "mock-publish"
+    "mock-publish",
+    "game-package-publish",
+    "formal-room-preview",
+    "hash-pinned-promotion",
+    "support-threads",
+    "human-approved-reporting",
+    "human-approved-support-replies"
   ]
 }
 ```
@@ -71,7 +77,13 @@ Portalの`get_sdk_handshake`へ送る`requiredCapabilities`はDownloadMe記載�
     "oauth2-pkce",
     "creator-environments",
     "starter-download",
-    "mock-publish"
+    "mock-publish",
+    "game-package-publish",
+    "formal-room-preview",
+    "hash-pinned-promotion",
+    "support-threads",
+    "human-approved-reporting",
+    "human-approved-support-replies"
   ],
   "endpoints": {
     "portal": "https://sdk-dev.game-fields.com",

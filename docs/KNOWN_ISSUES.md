@@ -548,9 +548,11 @@ Redisへ本文と新着索引を保存していたが、管理画面に一覧も
 問い合わせ者の追記は`open`へ戻る。返信・状態・メール配送結果はCAS更新し、同時操作で
 新しいメッセージを巻き戻さない。
 
-SDK Portalの`/support`とOAuth MCPへ、本人所有reportだけの一覧・詳細・追記を追加した。
-AIの新規報告は`prepare_support_report`で7日間の下書きを作るだけで、Portalの
-本人確認済み承認画面から内容を確認・修正して送信するまで運営受信箱へ入らない。
+SDK Portalの`/support`へ本人所有reportだけの一覧・詳細・追記を追加した。OAuth MCPは
+同じ本人所有reportを一覧・詳細確認できる。AIの新規報告は`prepare_support_report`、
+既存reportへの返信は`prepare_support_reply`で7日間の下書きを作るだけで、Portalの
+本人確認済み承認画面から内容を確認・修正して送信するまで運営受信箱、会話履歴、
+対応状態を変更しない。AI用の直接投稿toolは提供しない。
 公開問い合わせは受付メールと秘密付き専用ページから履歴確認・追記できる。秘密値は
 URL fragmentで配布し、通常のページ要求とreferrerへ送らない。会話・AI下書きは既存の
 保持期限とアカウント削除へ含める。

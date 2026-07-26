@@ -5112,3 +5112,51 @@
 ### 未対応・保留
 
 - dev公開後、確認済みメールを持つSDK制作者への実メール配送とPortal遷移を実機確認する。
+
+## 2026-07-26 — AIによるsupport返信も人間承認を必須化
+
+### 利用者からの要望
+
+- GPTプラグインから既存の報告スレッドへ返信する場合も、新規報告と同様に人間承認を
+  必須にする。
+- 運営返信メールからGPTへ引き継ぐ文章にも、返信下書きとPortal承認の手順を明示する。
+
+### 判断
+
+- Portal画面で本人が直接入力する返信は、その操作自体が人間の明示送信なので従来どおり
+  即時投稿する。
+- OAuth MCPからは直接返信toolを提供せず、`prepare_support_reply`で7日間の下書きだけを
+  作る。本人がPortalの承認画面で内容を確認・修正して送信した場合だけ会話へ追加し、
+  状態を`open`へ戻す。
+- 下書き作成時は会話履歴・状態・通知を変更しない。承認は安定request IDで冪等化し、
+  同じ承認要求の再試行で返信を重複させない。
+- MCP tool schemaとAI実行契約が変わるためDownloadMeをver16へ上げ、
+  `human-approved-support-replies` capabilityで古いPortal／チャットを互換成功させない。
+
+### 実施結果
+
+- MCPの`reply_support_thread`を廃止し、`replied: false`、`humanApprovalRequired: true`、
+  `approvalUrl`を返す`prepare_support_reply`へ置き換えた。
+- 本体へ本人所有reportだけに紐づく返信下書き保存・取得・承認APIを追加し、アカウント
+  削除時の従属データ削除にも含めた。
+- SDK Portalへ`/support/replies/[draftId]`と対応APIを追加した。承認画面は対象スレッドと
+  返信本文を表示し、本人が本文を修正して「返信を送信」を押すまで投稿しない。
+- 運営返信メールのGPT貼り付け文を、`get_support_thread`で経緯確認後、
+  `prepare_support_reply`で下書きを作り、本人へ承認URLを提示する手順へ更新した。
+- DownloadMe生成・Portal配布・Starter検査の版番号をリリース台帳から導出するようにし、
+  development入口をver16へ更新した。ver15は旧版として保持する。
+
+### 検証
+
+- `npm run verify`に成功した。
+- `npm test`に成功し、全585テストが通過した。
+- 本体`npm run build`に成功し、78ルートを生成した。
+- SDK Portal`npm run build:sdk`に成功し、返信承認画面・APIを含む15ページを生成した。
+- `npm run test:sdk-starter`でver16入口、公開Git用snapshot、ZIP展開、同梱SDK install、
+  型検査、契約テスト、1ゲーム完走、提出ZIPを確認した。
+
+### 未対応・保留
+
+- 変更はローカルcommitまでとし、`develop`へのpushとdev Deployment確認は未実施。
+- dev公開後、MCPで返信下書きを作成し、Portalで承認してスレッドが`open`へ戻る実画面E2Eを
+  実施する。

@@ -156,7 +156,7 @@ try {
     }
   }
   const starterManifest = JSON.parse(readFileSync(join(starterRoot, "starter-manifest.json"), "utf8"));
-  if (starterManifest.downloadMeVersion !== 15
+  if (starterManifest.downloadMeVersion !== platformRelease.downloadMeVersion
     || starterManifest.repository !== "https://github.com/koromo2010/app-games"
     || starterManifest.ref !== platformRelease.starterRef
     || starterManifest.sdkVersion !== platformRelease.sdkPackageVersion
@@ -292,20 +292,25 @@ try {
   if (!entryTemplate.includes("__SDK_STARTER_REF__")) {
     throw new Error("Entry guide must receive its starter ref from the release ledger.");
   }
-  const entryGuide = entryTemplate.replaceAll(
-    "__SDK_STARTER_REF__",
-    platformRelease.starterRef,
-  );
+  const entryGuide = entryTemplate
+    .replaceAll(
+      "__SDK_STARTER_REF__",
+      platformRelease.starterRef,
+    )
+    .replaceAll(
+      "__DOWNLOAD_ME_VERSION__",
+      String(platformRelease.downloadMeVersion),
+    );
   if (entryGuide.charCodeAt(0) !== 0xfeff) {
     throw new Error("Entry guide must start with a UTF-8 BOM to prevent mojibake in browser downloads.");
   }
   for (const requiredText of [
-    "# GF-AECP/15",
+    `# GF-AECP/${platformRelease.downloadMeVersion}`,
     "HUMAN_DOCUMENTATION := false",
     `--branch ${platformRelease.starterRef}`,
     "https://github.com/koromo2010/app-games.git",
     "starter-manifest.json",
-    "downloadMeVersion == 15",
+    `downloadMeVersion == ${platformRelease.downloadMeVersion}`,
     "schema_accepts_all(C0.capabilityVector)",
     "更新ボタンを押しても既存チャットのtool schemaは差し替わりません",
     "get_sdk_handshake",

@@ -1,11 +1,14 @@
 import type { NextConfig } from "next";
+import platformRelease from "../../config/platform-release.json";
 
-const currentDownloadMePath = "/GameFieldsDownloadMe-ver15.md";
+const currentDownloadMeFileName =
+  `GameFieldsDownloadMe-ver${platformRelease.downloadMeVersion}.md`;
+const currentDownloadMePath = `/${currentDownloadMeFileName}`;
 const legacyDownloadMePaths = [
   "/DownloadMe.md",
   "/GameFieldsDownloadMe.md",
   ...Array.from(
-    { length: 14 },
+    { length: platformRelease.downloadMeVersion - 1 },
     (_, index) => `/GameFieldsDownloadMe-ver${index + 1}.md`,
   ),
 ];
@@ -27,7 +30,7 @@ const nextConfig: NextConfig = {
         headers: [
           {
             key: "Content-Disposition",
-            value: 'attachment; filename="GameFieldsDownloadMe-ver15.md"',
+            value: `attachment; filename="${currentDownloadMeFileName}"`,
           },
           {
             key: "Content-Type",

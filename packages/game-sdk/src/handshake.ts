@@ -11,6 +11,7 @@ export const GAME_FIELDS_SDK_CAPABILITIES = [
   "hash-pinned-promotion",
   "support-threads",
   "human-approved-reporting",
+  "human-approved-support-replies",
   "submission-upload",
   "persistent-rooms",
   "room-realtime",

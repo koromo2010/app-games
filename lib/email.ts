@@ -166,7 +166,7 @@ export async function sendCreatorSupportReplyEmail(input: {
   const safeBody = escapeHtml(input.body).replaceAll("\n", "<br />");
   const safeUrl = escapeHtml(input.supportUrl);
   const guidance = "このメールは返信通知です。会話履歴と対応状態はSDK Portalのサポート画面で確認し、続きも同画面から返信してください。接続中のAIからも同じスレッドを確認できます。";
-  const aiContinuationPrompt = `Game Fields SDKのget_support_threadで報告ID「${input.reportId}」を開き、運営からの最新返信まで読んで、これまでの経緯を引き継いでください。まず要点と次に必要な対応を説明し、変更やスレッドへの返信は私の確認後に進めてください。`;
+  const aiContinuationPrompt = `Game Fields SDKのget_support_threadで報告ID「${input.reportId}」を開き、運営からの最新返信まで読んで、これまでの経緯を引き継いでください。まず要点と次に必要な対応を説明してください。返信が必要な場合はprepare_support_replyで下書きだけを作り、承認URLを私に提示してください。私がPortalで内容を確認・修正し「返信を送信」を押すまでは、返信済みと扱わないでください。コード変更も私の確認後に進めてください。`;
   const safeAiContinuationPrompt = escapeHtml(aiContinuationPrompt);
   const { error } = await resend.emails.send({
     from,
