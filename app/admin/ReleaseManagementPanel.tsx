@@ -80,10 +80,14 @@ export function ReleaseManagementPanel({
   const [isLoading, setIsLoading] = useState(true);
   const [activeAction, setActiveAction] = useState("");
   const [message, setMessage] = useState("");
+  const [sdkLoadError, setSdkLoadError] = useState("");
+  const [devLoadError, setDevLoadError] = useState("");
 
   const load = useCallback(async () => {
     setIsLoading(true);
     setMessage("");
+    setSdkLoadError("");
+    setDevLoadError("");
     try {
       const [sdkResponse, devResponse] = await Promise.all([
         fetch("/api/admin/sdk-promotions", { cache: "no-store" }),
@@ -100,18 +104,28 @@ export function ReleaseManagementPanel({
       const devPayload = await devResponse.json().catch(() => null) as (
         DevRelease & { error?: string }
       ) | null;
-      if (!sdkResponse.ok || !Array.isArray(sdkPayload?.games)) {
-        throw new Error(sdkPayload?.error || "SDK_PROMOTIONS_LOAD_FAILED");
+      if (sdkResponse.ok && Array.isArray(sdkPayload?.games)) {
+        setSdkGames(sdkPayload.games);
+        setPublicIds(Object.fromEntries(sdkPayload.games.map((game) => [
+          `${game.creatorSlug}/${game.gameId}`,
+          game.publicGameId || game.gameId,
+        ])));
+      } else {
+        setSdkGames([]);
+        setSdkLoadError(messageFor(
+          sdkPayload?.error,
+          "SDK提出候補を読み込めませんでした。",
+        ));
       }
-      if (!devResponse.ok || !devPayload?.repository) {
-        throw new Error(devPayload?.error || "GITHUB_RELEASE_LOAD_FAILED");
+      if (devResponse.ok && devPayload?.repository) {
+        setDevRelease(devPayload);
+      } else {
+        setDevRelease(null);
+        setDevLoadError(messageFor(
+          devPayload?.error,
+          "developとmainの差分を読み込めませんでした。",
+        ));
       }
-      setSdkGames(sdkPayload.games);
-      setPublicIds(Object.fromEntries(sdkPayload.games.map((game) => [
-        `${game.creatorSlug}/${game.gameId}`,
-        game.publicGameId || game.gameId,
-      ])));
-      setDevRelease(devPayload);
     } catch (error) {
       setMessage(messageFor(
         error instanceof Error ? error.message : "",
@@ -238,7 +252,11 @@ export function ReleaseManagementPanel({
           <h3 className="mt-1 text-xl font-black">SDK作品採用</h3>
           <p className="mt-2 text-sm text-slate-400">運営審査後、CandidateのAppSetとhashを変更せず本番へ採用します。devは経由しません。</p>
         </div>
-        {sdkGames.length === 0 ? (
+        {sdkLoadError ? (
+          <div className="px-5 py-6">
+            <p className="rounded-xl border border-rose-300/25 bg-rose-300/10 px-4 py-3 text-sm font-bold text-rose-100">{sdkLoadError}</p>
+          </div>
+        ) : sdkGames.length === 0 ? (
           <p className="px-5 py-8 text-sm text-slate-400">正式提出済みのSDK作品はありません。</p>
         ) : (
           <div className="divide-y divide-white/10">
@@ -280,6 +298,9 @@ export function ReleaseManagementPanel({
         <p className="text-xs font-black uppercase tracking-[0.16em] text-violet-300">develop → main</p>
         <h3 className="mt-1 text-xl font-black">dev反映</h3>
         <p className="mt-2 text-sm text-slate-400">本体の検証済みdevelopをmainへfast-forwardします。SDK作品の状態には触れません。</p>
+        {devLoadError && (
+          <p className="mt-5 rounded-xl border border-rose-300/25 bg-rose-300/10 px-4 py-3 text-sm font-bold text-rose-100">{devLoadError}</p>
+        )}
         {devRelease && (
           <div className="mt-5 grid gap-4 rounded-xl border border-white/10 bg-black/20 p-4 md:grid-cols-[1fr_auto] md:items-center">
             <div>
