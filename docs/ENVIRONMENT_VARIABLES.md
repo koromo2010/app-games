@@ -54,8 +54,8 @@
 | `REDIS_REQUEST_TIMEOUT_MS` | 配置未監査 |
 | `SDK_PORTAL_BASE_URL` | 配置未監査 |
 | `SDK_PORTAL_CHANNEL` | 配置未監査 |
-| `SDK_REDIS_REST_TOKEN` | SDK環境の配置未監査 |
-| `SDK_REDIS_REST_URL` | SDK環境の配置未監査 |
+| `SDK_REDIS_REST_TOKEN` | `app-games-sdk-dev` Productionへ登録済み。本番SDKへのLinkを依頼中 |
+| `SDK_REDIS_REST_URL` | `app-games-sdk-dev` Productionへ登録済み。本番SDKへのLinkを依頼中 |
 | `SITE_ADMIN_BREAK_GLASS_ENABLED` | `app-games-dev` Productionへ2026-07-26一時登録・再デプロイ・復旧ログイン確認済み。MFA再登録完了後に削除必須 |
 | `SITE_ADMIN_PASSWORD` | `app-games-dev` Productionへ2026-07-26登録・再デプロイ・マスターパスワード認証確認済み。Sensitive |
 | `SITE_ADMIN_WEBAUTHN_ORIGIN` | `app-games-dev` Productionへ`https://dev.game-fields.com`を登録待ち |
@@ -74,9 +74,9 @@ Vercel／Next.jsが実行時に提供するSystem Variableとして、`NODE_ENV`
 | SDK Production | `app-games-sdk` | `main` | `https://sdk.game-fields.com` | 外部開発者・安定版Developer Portal |
 | SDK Development | `app-games-sdk-dev` | `develop` | `https://sdk-dev.game-fields.com` | 次版SDK・制作者プレビュー管理 |
 | Mock Preview Development | `app-games-preview-dev` | `develop` | `https://preview-dev.game-fields.com` | 未審査モックの隔離実行 |
-| Mock Preview Production | `app-games-sdk-preview` | `main`へ切替待ち | `https://preview.game-fields.com` | 安定版SDKの隔離実行 |
+| Mock Preview Production | `app-games-sdk-preview` | `main` | `https://preview.game-fields.com` | 安定版SDKの隔離実行 |
 
-`apps/sdk-portal`は本番`app-games-sdk`と開発`app-games-sdk-dev`へ分け、本体とは別のSDK専用Neon・Redisを使う。隔離実行コードは`apps/sdk-preview`に置き、Portal、本体、devとは別のVercel Projectへ配置する。preview実行ProjectにはDB、Redis、Blob、管理者秘密情報、Git書込権限を与えず、developmentは`koromo2010/game-fields-sdk-mocks-dev`、productionは`koromo2010/game-fields-sdk-mocks`に対する読取専用資格だけを持たせる。
+`apps/sdk-portal`は本番`app-games-sdk`と開発`app-games-sdk-dev`へ分け、PostgreSQLは環境別のSDK専用Neonを使う。Redisは無料枠を増やさず既存`sdk-dev-redis`をSDK Portal間だけで共用し、予約キーを本番`sdk:production:`、開発`sdk:development:`へ分離する。本体ゲーム用Redisとは共有しない。隔離実行コードは`apps/sdk-preview`に置き、Portal、本体、devとは別のVercel Projectへ配置する。preview実行ProjectにはDB、Redis、Blob、管理者秘密情報、Git書込権限を与えず、developmentは`koromo2010/game-fields-sdk-mocks-dev`、productionは`koromo2010/game-fields-sdk-mocks`に対する読取専用資格だけを持たせる。
 
 `app-games-dev`は`main`へ入れる本体コードの検証用コピーである。SDK作品は
 SDK Portalのcandidateから運営審査を経てmain採用カタログへ直接反映し、
@@ -97,7 +97,7 @@ VercelのIgnored Build StepはProjectごとに次を設定済み。
 - `app-games-sdk`: `if [ "$VERCEL_GIT_COMMIT_REF" != "main" ] && [ "$VERCEL_GIT_COMMIT_REF" != "develop" ]; then exit 0; else exit 1; fi`
 - `app-games-sdk-dev`: `if [ "$VERCEL_GIT_COMMIT_REF" != "develop" ]; then exit 0; else exit 1; fi`
 - `app-games-preview-dev`: Production Branchは`develop`へ変更済み。Ignored Build Stepは未確認。設定値は `if [ "$VERCEL_GIT_COMMIT_REF" != "develop" ]; then exit 0; else exit 1; fi`
-- `app-games-sdk-preview`: 2026-07-26作成済み。Root Directoryは`apps/sdk-preview`、Node.jsは24.x。Production Branchは`main`へ切替待ち。Ignored Build Stepは未確認。設定値は `if [ "$VERCEL_GIT_COMMIT_REF" != "main" ]; then exit 0; else exit 1; fi`
+- `app-games-sdk-preview`: 2026-07-26作成済み。Root Directoryは`apps/sdk-preview`、Node.jsは24.x、Production Branchは`main`。Ignored Build Stepは未確認。設定値は `if [ "$VERCEL_GIT_COMMIT_REF" != "main" ]; then exit 0; else exit 1; fi`
 
 VercelではIgnored Build Stepの終了コード`0`がスキップ、`1`がビルド実行を意味する。
 公開Starter branchではProject設定の欠落やRoot Directory先行検査にも耐えるため、
@@ -234,9 +234,11 @@ Sensitive設定済みの互換変数をVercel上で複製できない移行期�
 
 | キー | Production | Development | SDK | Sensitive | 用途 |
 | --- | --- | --- | --- | --- | --- |
-| `APP_REDIS_URL` | 本番Redis | 開発Redis | SDK名前空間または専用Redis | Yes | Redis接続文字列正本候補 |
-| `UPSTASH_REDIS_REST_URL` | 本番 | 開発 | SDK専用または分離名前空間 | Yes | Upstash REST URL |
-| `UPSTASH_REDIS_REST_TOKEN` | 本番 | 開発 | SDK専用 | Yes | Upstash REST Token |
+| `APP_REDIS_URL` | 本番Redis | 開発Redis | SDKでは未使用 | Yes | Redis接続文字列正本候補 |
+| `UPSTASH_REDIS_REST_URL` | 本番 | 開発 | 互換読取のみ | Yes | Upstash REST URL |
+| `UPSTASH_REDIS_REST_TOKEN` | 本番 | 開発 | 互換読取のみ | Yes | Upstash REST Token |
+| `SDK_REDIS_REST_URL` | 不要 | 不要 | `sdk-dev-redis`をSDK本番・開発Portalだけで共用 | Yes | SDK予約registry専用REST URL |
+| `SDK_REDIS_REST_TOKEN` | 不要 | 不要 | `sdk-dev-redis`をSDK本番・開発Portalだけで共用 | Yes | SDK予約registry専用REST Token |
 
 互換変数として残っている可能性があるもの:
 
@@ -246,7 +248,7 @@ Sensitive設定済みの互換変数をVercel上で複製できない移行期�
 - `KV_REST_API_TOKEN`
 - `KV_REST_API_READ_ONLY_TOKEN`
 
-開発本体は共有Free Redisの`DEV_REDIS_KV_REST_API_URL` / `DEV_REDIS_KV_REST_API_TOKEN`を旧Redis変数より優先し、Redisアクセス層で全キーへ`app-dev:`を付ける。SDK Portalは`apps/sdk-portal/lib/instance-registry.ts`の`sdk:`キーを使うため、同じRedis内でも論理分離する。`DEV_REDIS_REDIS_URL`はREST資格が利用できない場合のsocket fallbackである。
+開発本体は共有Free Redisの`DEV_REDIS_KV_REST_API_URL` / `DEV_REDIS_KV_REST_API_TOKEN`を旧Redis変数より優先し、Redisアクセス層で全キーへ`app-dev:`を付ける。SDK Portalは`apps/sdk-portal/lib/instance-registry-namespace.ts`で、`main`を`sdk:production:preview-instance:v1:`、`develop`を`sdk:development:preview-instance:v1:`へ分離する。`develop`は切替前の7日予約を保護するため旧`sdk:preview-instance:v1:`も一時的に読み、本番は読まない。Vercelのその他Production branchでは名前空間を解決せずfail-closedにする。`DEV_REDIS_REDIS_URL`はREST資格が利用できない場合のsocket fallbackである。
 
 ### SDK mock Git・隔離Preview
 
@@ -306,16 +308,19 @@ SDK `llm` adapter、module lab、Preview中継API `/api/sdk-preview/llm`も本�
 | `SDK_MOCK_GITHUB_REPOSITORY` | `koromo2010/game-fields-sdk-mocks` | 同じprivate repository | Production | 両Projectへ登録・再デプロイ済み |
 | `SDK_MOCK_GITHUB_WRITE_TOKEN` | Project Variable、Sensitive | 設定禁止・未設定 | Production | 対象repositoryのContents read/writeだけ。90日期限 |
 | `SDK_MOCK_GITHUB_READ_TOKEN` | 設定禁止・未設定 | Project Variable、Sensitive | Production | 対象repositoryのContents read-onlyだけ。90日期限 |
+| `SDK_DATABASE_URL` | `app-games-sdk-neon`をIntegrationでLink、Sensitive | 設定禁止・未設定 | Production | 正しい変数名で登録後にmain Deployment作成済み。schema version 4確認待ち |
+| `SDK_REDIS_REST_URL` | `sdk-dev-redis`のLink依頼中、Sensitive | 設定禁止・未設定 | Production | コード側の本番・開発prefix分離後にLinkする |
+| `SDK_REDIS_REST_TOKEN` | `sdk-dev-redis`のLink依頼中、Sensitive | 設定禁止・未設定 | Production | コード側の本番・開発prefix分離後にLinkする |
 
 | 対象 | 現在状態 | 次の確認 |
 | --- | --- | --- |
 | private package Git | `koromo2010/game-fields-sdk-mocks`をPrivateで作成済み。Portal書込資格とPreview読取資格を分離 | 本番package保存後に専用branch・commit・読取を実機確認 |
-| Portal Vercel Project | `app-games-sdk`、Root Directory `apps/sdk-portal`。2026-07-26時点のProduction Deploymentは`e751008f`・`develop`でREADY | SDK DB healthが`schemaVersion: 4`を返すことを確認後、Production Branchを`main`へ切替 |
-| Preview Vercel Project | `app-games-sdk-preview`、Root Directory `apps/sdk-preview`、Node.js 24.x。production専用の署名鍵・Git読取資格だけを登録し再デプロイ済み | Production Branchを`main`へ切替し、main同期後のDeploymentを確認 |
+| Portal Vercel Project | `app-games-sdk`、Root Directory `apps/sdk-portal`、Production Branch `main`。`main@0e7889c`のDeploymentがREADY。`app-games-sdk-neon`はProductionだけへLink済み | RedisをLinkし、develop統合後のbuild migrationで`schemaVersion: 4`を確認 |
+| Preview Vercel Project | `app-games-sdk-preview`、Root Directory `apps/sdk-preview`、Node.js 24.x、Production Branch `main`。production専用の署名鍵・Git読取資格だけを登録し再デプロイ済み | main同期後のDeploymentを確認 |
 | Preview domain | `preview.game-fields.com`割当済み・Valid Configuration | `/health`とPortal発行grantからのpackage読取を実機確認 |
 
 本番PreviewにはSDK DB、Redis、Blob、管理者資格、語彙DB、LLM資格、Git書込資格を追加しない。
-`app-games-sdk`と`app-games-sdk-preview`の`Production Branch`はmain同期直前に同時に`main`へ揃える。
+`app-games-sdk`と`app-games-sdk-preview`の`Production Branch`は`main`へ統一済み。
 
 ### Vercel Blob
 

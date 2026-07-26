@@ -101,10 +101,49 @@
       "environment": "Production",
       "sensitive": false,
       "operation": "set",
+      "status": "redeployed",
+      "redeployRequired": true,
+      "temporary": false,
+      "note": "両Projectをmainへ変更済み。main同期後の本番機能確認は未完了。"
+    },
+    {
+      "id": "2026-07-26-sdk-production-database-link",
+      "key": "SDK_DATABASE_URL",
+      "project": "app-games-sdk",
+      "branch": "main",
+      "environment": "Production",
+      "sensitive": true,
+      "operation": "link",
+      "status": "redeployed",
+      "redeployRequired": true,
+      "temporary": false,
+      "note": "本番SDK専用app-games-sdk-neonをProductionだけへLink済み。schema version 4の確認は未完了。"
+    },
+    {
+      "id": "2026-07-26-sdk-production-redis-url-link",
+      "key": "SDK_REDIS_REST_URL",
+      "project": "app-games-sdk",
+      "branch": "main",
+      "environment": "Production",
+      "sensitive": true,
+      "operation": "link",
       "status": "requested",
       "redeployRequired": true,
       "temporary": false,
-      "note": "SDK DB health version 4確認後、main同期直前に両Projectをmainへ揃える。"
+      "note": "既存sdk-dev-redisをSDK Portal間だけで共用し、mainはsdk:production、developはsdk:development名前空間を使う。"
+    },
+    {
+      "id": "2026-07-26-sdk-production-redis-token-link",
+      "key": "SDK_REDIS_REST_TOKEN",
+      "project": "app-games-sdk",
+      "branch": "main",
+      "environment": "Production",
+      "sensitive": true,
+      "operation": "link",
+      "status": "requested",
+      "redeployRequired": true,
+      "temporary": false,
+      "note": "既存sdk-dev-redisをSDK Portal間だけで共用し、mainはsdk:production、developはsdk:development名前空間を使う。"
     }
   ]
 }

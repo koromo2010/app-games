@@ -1,4 +1,8 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import {
+  sdkInstanceRegistryKey,
+  sdkInstanceRegistryReadKeys,
+} from "@/lib/instance-registry-namespace";
 import { ensureSdkSchema, sdkSql } from "@/lib/sdk-postgres";
 import {
   normalizeGameSdkModuleProfile,
@@ -33,8 +37,6 @@ async function command(parts: readonly string[]) {
   return response.json() as Promise<{ result: unknown }>;
 }
 
-const keyFor = (slug: string) => `sdk:preview-instance:v1:${slug}`;
-
 function tokenHash(value: string) {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -55,14 +57,14 @@ async function registeredCreator(slug: string) {
 
 export async function instanceSlugAvailable(slug: string) {
   if (await registeredCreator(slug)) return false;
-  const response = await command(["EXISTS", keyFor(slug)]);
+  const response = await command(["EXISTS", ...sdkInstanceRegistryReadKeys(slug)]);
   return Number(response.result) === 0;
 }
 
 export async function reserveInstanceSlug(slug: string, displayName: string, ownerPlayerId?: string | null) {
   const reservationToken = randomBytes(24).toString("base64url");
   const value = JSON.stringify({ slug, displayName: displayName.slice(0, 80), status: "reserved", reservationToken, ownerPlayerId: ownerPlayerId ?? null, createdAt: new Date().toISOString() });
-  const response = await command(["SET", keyFor(slug), value, "NX", "EX", String(7 * 24 * 60 * 60)]);
+  const response = await command(["SET", sdkInstanceRegistryKey(slug), value, "NX", "EX", String(7 * 24 * 60 * 60)]);
   if (response.result !== "OK") return null;
   const baseUrl = process.env.SDK_PORTAL_BASE_URL?.replace(/\/$/, "")
     ?? (process.env.VERCEL_GIT_COMMIT_REF === "main" ? "https://sdk.game-fields.com" : "https://sdk-dev.game-fields.com");
@@ -70,9 +72,18 @@ export async function reserveInstanceSlug(slug: string, displayName: string, own
 }
 
 export async function finalizeInstanceSlug(slug: string, reservationToken: string, ownerPlayerId?: string | null) {
-  const reservation = await command(["GET", keyFor(slug)]);
-  if (typeof reservation.result !== "string") return null;
-  const value = JSON.parse(reservation.result) as { displayName?: unknown; reservationToken?: unknown; ownerPlayerId?: unknown };
+  let reservationKey: string | undefined;
+  let reservationValue: string | undefined;
+  for (const key of sdkInstanceRegistryReadKeys(slug)) {
+    const reservation = await command(["GET", key]);
+    if (typeof reservation.result === "string") {
+      reservationKey = key;
+      reservationValue = reservation.result;
+      break;
+    }
+  }
+  if (!reservationKey || !reservationValue) return null;
+  const value = JSON.parse(reservationValue) as { displayName?: unknown; reservationToken?: unknown; ownerPlayerId?: unknown };
   if (typeof value.reservationToken !== "string" || !safeTokenMatch(reservationToken, tokenHash(value.reservationToken))) return null;
   if (typeof value.ownerPlayerId === "string" && value.ownerPlayerId !== ownerPlayerId) return null;
   await ensureSdkSchema();
@@ -85,7 +96,7 @@ export async function finalizeInstanceSlug(slug: string, reservationToken: strin
   `;
   const creator = Array.isArray(rows) ? rows[0] : undefined;
   if (!creator) return null;
-  await command(["DEL", keyFor(slug)]);
+  await command(["DEL", reservationKey]);
   return { creator, managementToken };
 }
 
