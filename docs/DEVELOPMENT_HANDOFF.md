@@ -49,7 +49,7 @@
 | 共通LLM経路 | `lib/game-llm.ts`, `lib/llm-model.ts`, `lib/gemini.ts`, `lib/groq.ts` |
 | 有料API切替 | `lib/llm-access.ts`, `app/api/llm-access/route.ts`, `app/components/PaidLlmAccessButton.tsx` |
 | 共通フィードバック/RAG | `lib/game-feedback-store.ts`, `lib/game-ai-types.ts`, `app/api/game-feedback/route.ts`, `app/components/GameFeedbackPanel.tsx` |
-| 改善要望・バグ報告 | `app/components/UserReportButton.tsx`, `app/api/user-reports/route.ts`, `lib/user-report-store.ts`, `lib/user-report-draft-store.ts`, `app/admin/AdminUserReportsPanel.tsx`, `app/api/admin/user-reports/route.ts`, `app/api/internal/sdk-support/route.ts`, `apps/sdk-portal/app/support`, `apps/sdk-portal/lib/support-api.ts` |
+| 改善要望・バグ報告 | `app/components/UserReportButton.tsx`, `lib/user-report-form-draft.ts`, `app/api/user-reports/route.ts`, `lib/user-report-store.ts`, `lib/user-report-draft-store.ts`, `app/admin/AdminUserReportsPanel.tsx`, `app/api/admin/user-reports/route.ts`, `app/api/internal/sdk-support/route.ts`, `apps/sdk-portal/app/support`, `apps/sdk-portal/lib/support-api.ts` |
 | お問い合わせ受信箱 | `app/contact/ContactForm.tsx`, `app/contact/thread`, `app/api/contact/route.ts`, `app/api/contact-thread/route.ts`, `lib/contact-store.ts`, `app/admin/AdminContactMessagesPanel.tsx`, `app/api/admin/contact-messages/route.ts` |
 | アカウント従属データ削除 | `lib/player-data-deletion.ts`, `lib/user-report-store.ts`, `lib/game-feedback-store.ts`, `lib/room-defaults-store.ts`, 各ゲーム語履歴store |
 | 共通部屋設定 | `lib/room-defaults-store.ts`, `lib/game-room-defaults-client.ts`, `app/components/RoomConfigSummary.tsx` |
@@ -77,6 +77,8 @@
 | キャンバス | `app/canvas/CanvasGame.tsx`, `app/canvas/canvas-room-api-client.ts`, `app/canvas/canvas-lobby-board-api-client.ts`, `app/canvas/use-canvas-sync.ts`, `app/canvas/use-canvas-stroke-queue.ts`, `lib/canvas-sync-policy.ts`, `app/components/DrawingCanvas.tsx`, `lib/drawing-canvas.ts`（非公開の描画UI試作。共同部屋・広場のHTTP通信、同期時計、ポインター描画送信は画面から分離。GETはETag、途中線は間引き。広場は初回取得後、キャンバス操作から30秒だけ同期し、共同部屋は継続同期） |
 | たほい屋の問題再利用 | `lib/tahoiya-topic-catalog.ts`, `app/api/tahoiya/topic/route.ts` |
 | お題候補DB・経験履歴の目標設計 | `docs/TOPIC_HISTORY_DATABASE.md` |
+
+本体の改善・バグ報告フォームは、種別・概要・詳細を送信成功まで同じタブの`sessionStorage`へ一時保存する。ゲーム進行で共通ヘッダーが再描画された場合や同じタブを再読込した場合は復元し、送信成功後の空フォーム保存またはタブ終了で破棄する。Storageが利用できないブラウザでも報告送信自体は継続する。
 
 報告への運営返信は本体Redisの会話履歴を先に保存し、送信者に確認済みの復旧用メールがある場合だけResendで通知する。通知メールには返信本文、環境別SDK Portalの該当スレッド導線、GPTへ貼る報告IDだけを載せ、メール自体を返信先・会話の正本にしない。MCPの`get_support_thread`は、利用者が報告IDだけを入力した場合にも呼ぶ規則と、最新返信までの要約、次の対応の説明、変更・返信前の確認を`assistantPolicy`として返す。返信が必要な場合も`prepare_support_reply`で7日間の下書きだけを作り、Portalで本人が確認・修正して送信するまで会話履歴と状態を変更しない。AI用の直接返信toolは提供しない。Portalの人間用`/support/new`は不具合報告・改善要望・要約・詳細・対象ページを入力し、「内容を確認し、報告を送信」を押した場合だけ、認証済み本人の新規スレッドを直接作る。request IDから報告IDを決めることで同じ送信の再試行を冪等化する。メール未登録・未確認・配送失敗でもPortal履歴と状態更新は保持し、管理画面の各メッセージへ配送状態を表示する。`/support?thread=<reportId>`は本人認証後に対象スレッドを展開し、未ログイン時もaccount link後のreturnToを維持する。
 
