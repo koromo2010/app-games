@@ -416,7 +416,7 @@ test("shared GameFrame owns the top banner and phase-specific common modules", (
     shell.indexOf("if (!room)"),
   );
   assert.doesNotMatch(resultShareSource, /ranking\.displayName/);
-  assert.match(runtimeCatalog, /g\.module_policy AS "modulePolicy"/);
+  assert.match(runtimeCatalog, /r\.module_policy AS "modulePolicy"/);
   assert.match(runtimeCatalog, /moduleProfile: normalizeGameSdkModuleProfile\(modulePolicy\)/);
 });
 
