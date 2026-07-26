@@ -21,10 +21,14 @@ function requireMain() {
   ) throw new Error("APP_RELEASE_MAIN_ONLY");
 }
 
-function endpoint(base: string, lineageId?: string) {
+function releaseEndpoint(base: string, lineageId?: string) {
   return `${base}/api/internal/app-releases${
     lineageId ? `?lineageId=${encodeURIComponent(lineageId)}` : ""
   }`;
+}
+
+function developmentCatalogEndpoint() {
+  return `${sdkDevelopmentInternalBaseUrl()}/api/runtime-catalog?channel=development`;
 }
 
 async function call(url: string, init?: RequestInit) {
@@ -41,6 +45,32 @@ async function call(url: string, init?: RequestInit) {
   return { response, payload };
 }
 
+function developmentReleases(payload: unknown) {
+  if (!payload || typeof payload !== "object") return [];
+  const games = (payload as { games?: unknown }).games;
+  if (!Array.isArray(games)) return [];
+  return games.map((game) => {
+    const item = game as Record<string, unknown>;
+    return {
+      id: `development:${String(item.lineageId ?? item.id ?? "unknown")}`,
+      lineageId: item.lineageId,
+      publicGameId: item.id,
+      sourceCreatorSlug: item.sourceCreatorSlug,
+      sourceGameId: item.sourceGameId,
+      title: item.title,
+      description: item.description,
+      revision: item.revision,
+      packageRootSha256: item.packageRootSha256,
+      serverBundleSha256: item.serverBundleSha256,
+      appSetSourceSha256: item.appSetSourceSha256,
+      manifest: item.manifest,
+      modulePolicy: item.modulePolicy,
+      releaseKind: "promotion",
+      releasedAt: item.releasedAt,
+    };
+  });
+}
+
 function routeError(error: unknown) {
   if (error instanceof Error && error.message === "APP_RELEASE_MAIN_ONLY") {
     return Response.json({ error: error.message }, { status: 403 });
@@ -55,15 +85,15 @@ export async function GET(request: Request) {
     requireMain();
     const lineageId = new URL(request.url).searchParams.get("lineageId") ?? undefined;
     const [development, main] = await Promise.all([
-      call(endpoint(sdkDevelopmentInternalBaseUrl())),
-      call(endpoint(sdkPromotionInternalBaseUrl(), lineageId)),
+      call(developmentCatalogEndpoint()),
+      call(releaseEndpoint(sdkPromotionInternalBaseUrl(), lineageId)),
     ]);
     if (!development.response.ok || !main.response.ok) {
       const failed = !development.response.ok ? development : main;
       return Response.json(failed.payload, { status: failed.response.status });
     }
     return Response.json({
-      development: development.payload,
+      development: { releases: developmentReleases(development.payload) },
       main: main.payload,
     }, { headers: { "Cache-Control": "private, no-store" } });
   } catch (error) {
@@ -81,7 +111,7 @@ export async function POST(request: Request) {
     if (body?.action !== "promote" && body?.action !== "rollback") {
       return Response.json({ error: "APP_RELEASE_INPUT_INVALID" }, { status: 400 });
     }
-    const url = endpoint(sdkPromotionInternalBaseUrl());
+    const url = releaseEndpoint(sdkPromotionInternalBaseUrl());
     const result = await call(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
