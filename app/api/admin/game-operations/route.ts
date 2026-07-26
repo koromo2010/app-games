@@ -22,27 +22,13 @@ export async function GET() {
   try {
     await requireSiteAdminSession();
     const games = await sdkGames();
-    const stored = await loadGameOperations({ fresh: true });
+    const operations = await loadGameOperations({ fresh: true }, games);
     const activeIds = new Set([
       ...registry.map((game) => game.id),
       ...games.map((game) => game.id),
     ]);
-    const activeStored = stored.filter((operation) => activeIds.has(operation.gameId));
-    const byId = new Map(activeStored.map((operation) => [operation.gameId, operation]));
-    const operations = [
-      ...activeStored,
-      ...games
-        .filter((game) => !byId.has(game.id))
-        .map((game) => ({
-          gameId: game.id,
-          publication: "public" as const,
-          maintenance: false,
-          message: "",
-          updatedAt: null,
-        })),
-    ];
     return Response.json({
-      operations,
+      operations: operations.filter((operation) => activeIds.has(operation.gameId)),
       games: games.map((game) => ({ id: game.id, title: game.title, private: false })),
     });
   } catch (error) {
@@ -60,7 +46,7 @@ export async function PATCH(request: Request) {
     const games = await sdkGames();
     const validationError = validateGameOperationsInput(body.operations, games);
     if (validationError) return Response.json({ error: validationError }, { status: 400 });
-    const before = await loadGameOperations({ fresh: true });
+    const before = await loadGameOperations({ fresh: true }, games);
     const operations = await saveGameOperations(
       body.operations as Parameters<typeof saveGameOperations>[0],
       games,
