@@ -183,6 +183,23 @@ export async function promoteGamePackage(input: PromoteGamePackageInput) {
     WHERE c.slug = ${creatorSlug} AND g.game_id = ${gameId}
     ON CONFLICT (game_id, channel, revision) DO NOTHING
   `;
+  await sdkSql().transaction([
+    sdkSql()`UPDATE sdk_app_releases
+             SET is_current = FALSE
+             WHERE lineage_id = ${`${creatorSlug}/${gameId}`} AND is_current`,
+    sdkSql()`INSERT INTO sdk_app_releases (
+      lineage_id, public_game_id, source_creator_slug, source_game_id,
+      title, description, revision, package_root_sha256, server_bundle_sha256,
+      app_set_source_sha256, manifest, module_policy, source_environment,
+      release_kind
+    )
+    SELECT ${`${creatorSlug}/${gameId}`}, ${publicGameId}, c.slug, g.game_id,
+           g.title, g.description, ${revision}, ${packageRootSha256},
+           ${bundleSha256}, ${appSetSha256}, ${manifestJson}::jsonb,
+           g.module_policy, ${input.target}, 'promotion'
+    FROM sdk_games g JOIN sdk_creators c ON c.id = g.creator_id
+    WHERE c.slug = ${creatorSlug} AND g.game_id = ${gameId}`,
+  ]);
   return {
     promoted: true as const,
     target: input.target,
