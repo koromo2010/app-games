@@ -14,7 +14,7 @@ const foundations = [
     number: "02",
     title: "Validate safely",
     description:
-      "Mock Runtimeと契約テストで、権限・秘密情報・同時更新の境界を提出前に確認します。",
+      "本番と同じ挙動を再現する確認用Runtimeを使い、権限・秘密情報の扱いや同時更新時の動作を提出前にチェックします。",
   },
   {
     number: "03",
@@ -25,15 +25,15 @@ const foundations = [
 ];
 
 const available = [
-  "SDK基本セットとゲーム固有AppSetの合成",
-  "Room作成・参加・設定・revisionの共通実装",
-  "Platformと同じリリース版の@game-fields/game-sdk",
-  "認証済みactorを受け取るCommand契約",
-  "保存Roomと閲覧者別RoomViewの分離",
-  "revision不一致を拒否するRuntime契約",
-  "DB・Redis不要のメモリMock Runtime",
-  "tarballの外部install・export検査",
-  "本体統合用adapterの認証・Redis CAS実証",
+  "SDK基本セットの上にゲーム固有のルールや画面を組み込める",
+  "Room(対戦・協力プレイ用の部屋)の作成・参加・設定を標準機能として利用できる",
+  "本体Game Fieldsと同じバージョンのSDKで動作確認できる",
+  "認証済みの操作だけを受け付ける仕組みがあり、なりすましを防げる",
+  "保存データとプレイヤーごとの見え方を安全に分け、情報漏れを防げる",
+  "古いデータのまま上書きしてしまう事故を防ぐ仕組みがある",
+  "本番のデータベースやRedisがなくても、手元だけで動作確認できる",
+  "作ったSDKパッケージを外部にインストールして最終確認できる",
+  "本番環境との接続部分もあらかじめ検証済み",
 ];
 
 const reviewFlow = [
@@ -97,15 +97,14 @@ export default async function Home() {
             <span>公開の安全性は、プラットフォームが守る。</span>
           </h1>
           <p className="hero-description">
-            Game Fields SDKは、外部開発者が本番データや管理機能へ触れずに、
-            SDK基本セットへゲーム固有のAppSetだけを登録し、作成・検証・提出するための開発基盤です。
+            Game Fields SDKは、外部の開発者が本番データや管理機能に触れずに、ゲームを作って提出できる開発基盤です。
           </p>
           <aside className="required-environment" aria-labelledby="before-download-title">
             <span className="required-environment-label">ダウンロード前に確認</span>
             <div>
               <h3 id="before-download-title">ChatGPTの有料プランと「gameapp-dev」プラグインが必要です</h3>
               <p>
-                DownloadMeを使った制作には、ChatGPTの有料プラン（Plus・Pro・Team等）でCodexまたはWorkが使えることと、「gameapp-dev」プラグインの導入が前提です。用意ができてから下のDownloadMeを取得してください。
+                DownloadMeを使った制作には、ChatGPTの有料プラン（Plus・Pro・Team等）でCodexまたはWorkが利用できることと、「gameapp-dev」プラグインが導入済みであることが前提です。準備ができてから、下のDownloadMeを取得してください。
               </p>
               <p>
                 ChatGPTの利用料金はご自身のアカウントでの契約・お支払いとなります。Game Fieldsが利用料を負担することはありません。
@@ -172,16 +171,16 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
       <section className="start section" id="start">
         <div className="section-heading">
           <p className="eyebrow">START A PREVIEW INSTANCE</p>
-          <h2>自分専用のGame Fieldsで試す</h2>
+          <h2>自分専用の確認環境で試す</h2>
           <p>
-            制作者ごとの専用URLにSDK基本セットの広場と部屋を用意します。新しいゲームはAppSetとして同じ広場へ追加され、本番と同じ導線で検証できます。
+            制作者ごとに専用のURLを用意します。作ったゲームはそこに追加され、本番と同じ流れで動作を確認できます。
           </p>
         </div>
         <aside className="required-environment" aria-labelledby="account-link-title">
           <span className="required-environment-label">アカウント接続</span>
           <div>
             <h3 id="account-link-title">{linked ? `${account?.playerName || "Game Fieldsアカウント"}へ接続済みです` : "先にGame Fieldsアカウントを接続してください"}</h3>
-            <p>表のGame Fieldsと同じアカウントへ制作物を紐づけます。パスワードや表サイトのログインCookieをSDKやChatGPTへ渡すことはありません。</p>
+            <p>Game Fields本体と同じアカウントに制作物を紐づけます。パスワードやログイン情報をSDKやChatGPTへ渡すことはありません。</p>
             {!linked && <Link className="secondary-action" href="/api/account-link/start">Game Fieldsでログインして接続</Link>}
           </div>
         </aside>
@@ -197,18 +196,18 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
           ))}
         </div>
         <aside className="required-environment" aria-labelledby="required-environment-title">
-          <span className="required-environment-label">ご利用前に確認</span>
+          <span className="required-environment-label">利用時の注意</span>
           <div>
-            <h3 id="required-environment-title">ゲーム制作にはChatGPTのCodexまたはWorkが必要です</h3>
+            <h3 id="required-environment-title">ダウンロードしたファイルは、そのままCodex/Workのチャットへ添付してください</h3>
             <p>
-              ダウンロードしたファイルは、CodexまたはWorkのチャットへ添付してください。ゲームのコード取得・複数ファイルの編集・動作検査・SDKへの保存とURL発行を行うため、通常のChatGPTチャットだけでは制作を完了できません。
+              ゲームのコード取得・複数ファイルの編集・動作検査・SDKへの保存とURL発行を行うため、通常のChatGPTチャットだけでは制作を完了できません。CodexまたはWorkのチャットで進めてください。
             </p>
             <p>
               DownloadMeはAIが読む実行契約です。人間向けの説明書ではないため、内容を読んだり編集したりせず、そのままチャットへ添付してください。
             </p>
             <p>
-              <strong>プラグイン更新後は、必ず新しいチャットを作成してください。</strong>
-              既存チャットへ読み込まれたtool schemaは更新されないため、古いチャットへ最新版を追加しても制作を再開できません。新しいチャットで`gameapp-dev`を選択し、ver15だけを添付します。
+              <strong>プラグインが更新された後は、必ず新しいチャットを作成してください。</strong>
+              古いチャットのまま最新版のファイルを送っても、更新前の内容のまま動いてしまい、制作を正しく再開できません。新しいチャットで`gameapp-dev`を選択し、最新版のDownloadMeだけを添付してください。
             </p>
             <p>
               保存済みの制作者環境とゲームはアカウントに紐づいているため、新しいチャットから自動的に再取得できます。作り直しや新しいURLの予約は不要です。
@@ -219,7 +218,7 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
           </div>
         </aside>
         <p className="start-note">
-          制作開始時は必ず新しいチャットを使います。ver15のhandshakeが成功して制作が始まった後は、URLが案内されるまでそのチャットを継続してください。エラーなどで保存できなかった場合は、AIが未完了であることと次の対応を案内します。
+          制作開始時は必ず新しいチャットを使ってください。接続が成功して制作が始まった後は、URLが案内されるまで同じチャットを続けてください。エラーで保存できなかった場合は、AIが未完了であることと次にすべきことを案内します。
         </p>
         <div className="hero-actions">
           <a className="primary-action" href="/GameFieldsDownloadMe-ver15.md" download>
@@ -263,13 +262,13 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
           <article>
             <h2>作れるもの</h2>
             <p>
-              SDK基本セットの上に、ゲーム固有のルール・画面・進行ロジックをAppSetとして実装できます。Room作成・参加・設定・revision管理など、対戦や協力プレイに必要な共通機能はSDKが提供するため、ゲーム内容の作り込みに専念できます。
+              SDK基本セットの上に、ゲーム固有のルール・画面・進行ロジックを組み込めます。Room作成・参加・設定・データ管理など、対戦や協力プレイに必要な共通機能はSDKが提供するため、ゲーム内容そのものの作り込みに専念できます。
             </p>
           </article>
           <article>
             <h2>作れないもの</h2>
             <p>
-              本番データベース・Redis・Blobストレージへの直接アクセス、独自の認証・決済・課金機能の実装、Game Fields本体やVercel本番環境への直接デプロイはできません。これらはGame Fields側が管理し、外部開発者に権限を渡すことはありません。必要な機能がSDKにない場合は、AIがSDK_REQUESTS.mdへ記録し、審査チームへ共有します。
+              本番データベース・Redis・Blobストレージへの直接アクセス、独自の認証・決済・課金機能の実装、Game Fields本体やVercel本番環境への直接デプロイはできません。これらはGame Fields側が管理し、外部開発者に権限を渡すことはありません。必要な機能がSDKにない場合は、AIがその内容を記録し、審査チームへ共有します。
             </p>
           </article>
         </div>
@@ -278,10 +277,10 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
       <section className="status section" id="status">
         <div className="status-panel">
           <div>
-            <p className="eyebrow">SDK V1 FOUNDATION</p>
-            <h2>基本セットからAppSetを作るpackage境界まで完成</h2>
+            <p className="eyebrow">CURRENT STATUS</p>
+            <h2>いま使える機能と、これから追加される機能</h2>
             <p className="status-copy">
-              独立packageのbuild・pack・外部install、AppSet合成、本体側adapterの認証・Redis CASは検証済みです。npm registryへの初回公開、チュートリアル、提出画面は審査ゲートを整えてから追加します。
+              SDK基本セットを使ったゲームの制作・検証は今すぐ行えます。npm registryでの一般公開、チュートリアル、提出画面は準備中で、審査の仕組みが整い次第追加します。
             </p>
           </div>
           <ul>
@@ -298,9 +297,9 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
       <section className="review section" id="review">
         <div className="section-heading">
           <p className="eyebrow">MANAGED RELEASE GATE</p>
-          <h2>無審査でmainへ届く経路は作らない</h2>
+          <h2>すべての提出物は審査を経てから公開されます</h2>
           <p>
-            検査の一部は将来AIへ拡張できますが、すべての提出物は最低1つのGame Fields管理ゲートを通ります。
+            自動検査に加えて、Game Fieldsによる審査を必ず経てから本番へ反映されます。検査の一部は今後AIによる自動化を広げていく予定です。
           </p>
         </div>
         <ol className="review-flow">
