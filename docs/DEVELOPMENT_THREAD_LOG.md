@@ -5387,3 +5387,27 @@
 
 - develop公開後、実画面で入力中にゲームを進行させ、フォーム再表示時の復元と
   送信成功後の消去を確認する。
+
+
+## 2026-07-26 — 改善・バグ報告フォーム入力保持のdevelop公開
+
+### 実施結果
+
+- 改善・バグ報告フォームの入力保持を`develop`へfast-forwardで公開した。
+- GitHub上のcommitは`90251f7`。内容tree `a2e2be5`は全テスト・lint・buildを
+  通したローカルcommit `a23704e`と一致する。
+- `app-games-dev`は対象commitを認識し、`dev.game-fields.com`へaliasされた。
+
+### 検証
+
+- Deployment `dpl_AUBJzVsvWPrgDy5awDvFv9eTXj1m`はREADY。
+- `npm test`で全589テスト、`npm run lint`、`npm run build`が成功済み。
+
+### 関連コミット
+
+- `90251f7` — 改善・バグ報告フォームの同一タブ内下書き保存を追加。
+
+### 未対応・保留
+
+- 実画面で入力中にゲームを進行させ、フォーム再表示時の復元と送信成功後の消去を
+  確認する。
