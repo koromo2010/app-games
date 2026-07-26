@@ -5,11 +5,18 @@ import {
   sendOperationsAlertEmail,
 } from "@/lib/email";
 import { createContactThreadToken } from "@/lib/contact-thread-access";
+import {
+  createRequestTelemetry,
+  observabilityErrorCode,
+} from "@/lib/observability";
 import { getAuthenticatedPlayerId } from "@/lib/player-auth";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 
 const clean = (value: unknown, length: number) => typeof value === "string" ? value.trim().slice(0, length) : "";
 export async function POST(request: Request) {
+  const telemetry = createRequestTelemetry(request, "/api/contact", {
+    operation: "contact-submit",
+  });
   const limited = await rateLimitResponseFor(request, rateLimitPolicies.feedback);
   if (limited) return limited;
   let body: Record<string, unknown>;
@@ -31,23 +38,59 @@ export async function POST(request: Request) {
       id: contact.id,
       access: createContactThreadToken(contact.id),
     }).toString();
-    const [notificationStatus] = await Promise.all([
+    const [notification] = await Promise.all([
       sendOperationsAlertEmail({
         audience: "contacts",
         replyTo: email,
         subject: `【GAME FIELDS】お問い合わせ ${category}`,
         lines: [`ID: ${contact.id}`, `Name: ${name || "未入力"}`, `Email: ${email}`, "", message],
-      }).then(() => "sent" as const).catch(() => "failed" as const),
+        idempotencyKey: `contact-admin-notification-${contact.id}`,
+      }).then(() => ({
+        status: "sent" as const,
+        errorCode: null,
+      })).catch((error) => {
+        telemetry.failure("contact.admin-notification", error, 502, {
+          action: "initial",
+          channel: "email",
+        });
+        return {
+          status: "failed" as const,
+          errorCode: observabilityErrorCode(error),
+        };
+      }),
       sendContactReceiptEmail({
         to: email,
         contactId: contact.id,
         threadUrl: threadUrl.toString(),
-      }).catch(() => undefined),
+      }).catch((error) => {
+        telemetry.failure("contact.requester-receipt", error, 502, {
+          action: "initial",
+          channel: "email",
+        });
+      }),
     ]);
-    await updateContactNotificationStatus(contact.id, notificationStatus).catch(() => undefined);
+    await updateContactNotificationStatus(
+      contact.id,
+      notification.status,
+      notification.errorCode,
+    ).catch((error) => {
+      telemetry.failure("contact.notification-status", error, 503, {
+        action: notification.status,
+      });
+    });
+    telemetry.success("contact.submit", {
+      action: notification.status,
+      channel: "email",
+    });
     return Response.json(
       { contact, thread: { url: threadUrl.toString() } },
       { status: 201 },
     );
-  } catch { return Response.json({ error: "Contact could not be saved" }, { status: 503 }); }
+  } catch (error) {
+    telemetry.failure("contact.submit", error, 503);
+    return Response.json(
+      { error: "Contact could not be saved" },
+      { status: 503 },
+    );
+  }
 }

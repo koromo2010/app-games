@@ -1,9 +1,14 @@
 import {
   appendContactThreadMessage,
   loadContactMessage,
+  updateContactNotificationStatus,
 } from "@/lib/contact-store";
 import { verifyContactThreadToken } from "@/lib/contact-thread-access";
 import { sendOperationsAlertEmail } from "@/lib/email";
+import {
+  createRequestTelemetry,
+  observabilityErrorCode,
+} from "@/lib/observability";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
@@ -64,6 +69,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const telemetry = createRequestTelemetry(request, "/api/contact-thread", {
+    operation: "contact-thread-reply",
+  });
   const limited = await rateLimitResponseFor(
     request,
     rateLimitPolicies.feedback,
@@ -103,23 +111,48 @@ export async function POST(request: Request) {
       status: "open",
     });
     if (result.inserted) {
-      await sendOperationsAlertEmail({
-        audience: "contacts",
-        replyTo: contact.email,
-        subject: `【GAME FIELDS】お問い合わせ追記 ${contact.id}`,
-        lines: [
-          `ID: ${contact.id}`,
-          `Email: ${contact.email}`,
-          "",
-          message,
-        ],
-      }).catch(() => undefined);
+      let notificationStatus: "sent" | "failed" = "sent";
+      let notificationErrorCode: string | null = null;
+      try {
+        await sendOperationsAlertEmail({
+          audience: "contacts",
+          replyTo: contact.email,
+          subject: `【GAME FIELDS】お問い合わせ追記 ${contact.id}`,
+          lines: [
+            `ID: ${contact.id}`,
+            `Email: ${contact.email}`,
+            "",
+            message,
+          ],
+          idempotencyKey: `contact-admin-followup-${result.message.id}`,
+        });
+      } catch (error) {
+        notificationStatus = "failed";
+        notificationErrorCode = observabilityErrorCode(error);
+        telemetry.failure("contact.admin-notification", error, 502, {
+          action: "requester-followup",
+          channel: "email",
+        });
+      }
+      await updateContactNotificationStatus(
+        contact.id,
+        notificationStatus,
+        notificationErrorCode,
+      ).catch((error) => {
+        telemetry.failure("contact.notification-status", error, 503, {
+          action: notificationStatus,
+        });
+      });
     }
+    telemetry.success("contact.thread-reply", {
+      action: result.inserted ? "inserted" : "duplicate",
+    });
     return Response.json(
       { contact: publicContact(result.contact) },
       { status: result.inserted ? 201 : 200 },
     );
-  } catch {
+  } catch (error) {
+    telemetry.failure("contact.thread-reply", error, 503);
     return Response.json(
       { error: "CONTACT_THREAD_REPLY_FAILED" },
       { status: 503 },

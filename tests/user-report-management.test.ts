@@ -65,6 +65,8 @@ test("legacy contact messages remain readable and notification failures remain v
   });
   assert.equal(contact?.status, "open");
   assert.equal(contact?.notificationStatus, "unknown");
+  assert.equal(contact?.notificationErrorCode, null);
+  assert.equal(contact?.notificationAttemptedAt, null);
   assert.deepEqual(contact?.messages, []);
   assert.equal(isContactStatus("resolved"), true);
   assert.equal(isContactStatus("waiting-user"), true);
@@ -81,11 +83,19 @@ test("admin has an authenticated contact inbox independent of notification email
   assert.match(shell, /\['contacts', 'お問い合わせ'\]/);
   assert.match(shell, /AdminContactMessagesPanel/);
   assert.match(panel, /通知メールが失敗しても、ここには保存されます/);
+  assert.match(panel, /管理者通知を再送/);
+  assert.match(panel, /notificationErrorCode/);
   assert.match(route, /requireFullSiteAdminSession/);
   assert.match(route, /requireRecentSiteAdminMfa/);
+  assert.match(route, /export async function PUT/);
+  assert.match(route, /contact-message\.notification-retry/);
+  assert.match(route, /updateContactNotificationStatus/);
   assert.match(publicRoute, /updateContactNotificationStatus/);
   assert.match(publicRoute, /"failed" as const/);
+  assert.match(publicRoute, /contact\.admin-notification/);
+  assert.match(publicRoute, /observabilityErrorCode/);
   assert.match(store, /contactRetentionSeconds/);
+  assert.match(store, /notificationErrorCode/);
   assert.match(store, /redis\.call\('DEL',prefix\.\.id\)/);
 });
 

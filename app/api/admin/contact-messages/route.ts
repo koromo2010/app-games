@@ -2,12 +2,20 @@ import { isContactStatus } from "@/lib/contact-core";
 import {
   appendContactThreadMessage,
   listContactMessages,
+  loadContactMessage,
+  updateContactNotificationStatus,
   updateContactMessageStatus,
   updateContactThreadMessageDelivery,
 } from "@/lib/contact-store";
 import { createContactThreadToken } from "@/lib/contact-thread-access";
-import { sendSupportReplyEmail } from "@/lib/email";
-import { createRequestTelemetry } from "@/lib/observability";
+import {
+  sendOperationsAlertEmail,
+  sendSupportReplyEmail,
+} from "@/lib/email";
+import {
+  createRequestTelemetry,
+  observabilityErrorCode,
+} from "@/lib/observability";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 import {
   requireFullSiteAdminSession,
@@ -124,6 +132,106 @@ export async function POST(request: Request) {
     telemetry.failure("contact-message.reply", error, 500);
     return Response.json(
       { error: "CONTACT_MESSAGE_REPLY_FAILED" },
+      { status: 500 },
+    );
+  }
+}
+
+export async function PUT(request: Request) {
+  const telemetry = createRequestTelemetry(
+    request,
+    "/api/admin/contact-messages",
+    { operation: "contact-admin-notification-retry" },
+  );
+  const limited = await rateLimitResponseFor(
+    request,
+    rateLimitPolicies.profileMutation,
+  );
+  if (limited) return limited;
+  try {
+    const session = await requireRecentSiteAdminMfa();
+    const body = await request.json().catch(() => null) as {
+      contactId?: unknown;
+      requestId?: unknown;
+    } | null;
+    const contactId = typeof body?.contactId === "string"
+      ? body.contactId
+      : "";
+    const requestId = typeof body?.requestId === "string"
+      ? body.requestId.trim().slice(0, 120)
+      : "";
+    if (!contactId || !requestId) {
+      return Response.json(
+        { error: "CONTACT_NOTIFICATION_RETRY_INVALID" },
+        { status: 400 },
+      );
+    }
+    const existing = await loadContactMessage(contactId);
+    if (!existing) {
+      return Response.json(
+        { error: "CONTACT_MESSAGE_NOT_FOUND" },
+        { status: 404 },
+      );
+    }
+    const latestRequesterMessage = existing.messages
+      .findLast((message) => message.author === "requester");
+    const notificationBody = latestRequesterMessage?.body ?? existing.message;
+    let deliveryStatus: "sent" | "failed" = "sent";
+    let errorCode: string | null = null;
+    try {
+      await sendOperationsAlertEmail({
+        audience: "contacts",
+        replyTo: existing.email,
+        subject: `【GAME FIELDS】お問い合わせ ${existing.category}`,
+        lines: [
+          `ID: ${existing.id}`,
+          `Name: ${existing.name || "未入力"}`,
+          `Email: ${existing.email}`,
+          "",
+          notificationBody,
+        ],
+        idempotencyKey: `contact-admin-retry-${existing.id}-${requestId}`,
+      });
+    } catch (error) {
+      deliveryStatus = "failed";
+      errorCode = observabilityErrorCode(error);
+      telemetry.failure("contact.admin-notification", error, 502, {
+        action: "retry",
+        channel: "email",
+      });
+    }
+    const contact = await updateContactNotificationStatus(
+      existing.id,
+      deliveryStatus,
+      errorCode,
+    );
+    await appendSiteAdminAuditLog(
+      request,
+      session,
+      "contact-message.notification-retry",
+      contact.id,
+      null,
+      {
+        deliveryStatus,
+        errorCode,
+      },
+    );
+    if (deliveryStatus === "sent") {
+      telemetry.success("contact.admin-notification", {
+        action: "retry",
+        channel: "email",
+      });
+    }
+    return Response.json({ contact, deliveryStatus, errorCode });
+  } catch (error) {
+    const auth = siteAdminAuthorizationError(error);
+    if (auth) return auth;
+    telemetry.failure("contact.admin-notification", error, 500, {
+      action: "retry",
+      channel: "email",
+    });
+    return Response.json(
+      { error: "CONTACT_NOTIFICATION_RETRY_FAILED" },
       { status: 500 },
     );
   }

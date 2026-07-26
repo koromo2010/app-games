@@ -24,6 +24,18 @@ const categoryLabels: Record<ContactCategory, string> = {
   bug: "不具合",
 };
 
+const notificationErrorLabels: Record<string, string> = {
+  EMAIL_SERVICE_NOT_CONFIGURED: "メール送信サービスが設定されていません",
+  OPERATIONS_EMAIL_RECIPIENT_LOOKUP_FAILED: "管理者メールの取得に失敗しました",
+  OPERATIONS_EMAIL_RECIPIENTS_NOT_CONFIGURED: "受信対象の管理者が見つかりません",
+  EMAIL_PROVIDER_AUTH_FAILED: "メール送信サービスの認証に失敗しました",
+  EMAIL_SENDER_NOT_VERIFIED: "送信元ドメインが未確認です",
+  EMAIL_RECIPIENT_RESTRICTED: "宛先が送信制限の対象です",
+  EMAIL_DELIVERY_QUOTA_EXCEEDED: "メール送信上限に達しました",
+  EMAIL_DELIVERY_RATE_LIMITED: "メール送信が一時的に制限されています",
+  EMAIL_SEND_FAILED: "メールサービスが送信を受理しませんでした",
+};
+
 type ContactFilter = "all" | ContactStatus;
 
 export function AdminContactMessagesPanel({ onAuthExpired }: { onAuthExpired: () => void }) {
@@ -97,6 +109,57 @@ export function AdminContactMessagesPanel({ onAuthExpired }: { onAuthExpired: ()
     } catch (error) {
       if (error instanceof Error && error.message === "ADMIN_AUTH_REQUIRED") onAuthExpired();
       setMessage("対応状態を更新できませんでした。");
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const retryNotification = async (contact: ContactMessage) => {
+    if (savingId) return;
+    setSavingId(contact.id);
+    setMessage("");
+    try {
+      await ensureSiteAdminStepUp();
+      const response = await fetch("/api/admin/contact-messages", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contactId: contact.id,
+          requestId: crypto.randomUUID(),
+        }),
+      });
+      const data = await response.json().catch(() => null) as {
+        contact?: ContactMessage;
+        deliveryStatus?: "sent" | "failed";
+        errorCode?: string | null;
+        error?: string;
+      } | null;
+      if (response.status === 401) {
+        onAuthExpired();
+        return;
+      }
+      if (!response.ok || !data?.contact) {
+        throw new Error(data?.error || "NOTIFICATION_RETRY_FAILED");
+      }
+      setContacts((current) => current.map((entry) => (
+        entry.id === data.contact!.id ? data.contact! : entry
+      )));
+      if (data.deliveryStatus === "sent") {
+        setMessage(`「${contact.id}」の管理者通知を再送しました。`);
+      } else {
+        const reason = data.errorCode
+          ? notificationErrorLabels[data.errorCode] ?? data.errorCode
+          : "原因不明";
+        setMessage(`管理者通知の再送に失敗しました：${reason}`);
+      }
+    } catch (error) {
+      if (
+        error instanceof Error
+        && error.message === "ADMIN_AUTH_REQUIRED"
+      ) {
+        onAuthExpired();
+      }
+      setMessage("管理者通知を再送できませんでした。");
     } finally {
       setSavingId(null);
     }
@@ -195,7 +258,14 @@ export function AdminContactMessagesPanel({ onAuthExpired }: { onAuthExpired: ()
                   {entry.author === "admin" && entry.deliveryStatus === "failed" && <p className="mt-2 text-xs font-bold text-amber-200">メール送信失敗</p>}
                 </article>)}
               </div>
-              <p className="text-xs text-slate-500">お問い合わせID: {contact.id} ／ 通知: {contact.notificationStatus}</p>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="text-xs text-slate-500">
+                  <p>お問い合わせID: {contact.id} ／ 管理者通知: {contact.notificationStatus}</p>
+                  {contact.notificationAttemptedAt && <p className="mt-1">最終試行: {new Intl.DateTimeFormat("ja-JP", { dateStyle: "medium", timeStyle: "short" }).format(new Date(contact.notificationAttemptedAt))}</p>}
+                  {contact.notificationErrorCode && <p className="mt-1 font-bold text-amber-200">失敗理由: {notificationErrorLabels[contact.notificationErrorCode] ?? contact.notificationErrorCode} <span className="font-mono font-normal text-amber-100/70">({contact.notificationErrorCode})</span></p>}
+                </div>
+                <button type="button" disabled={savingId !== null} onClick={() => void retryNotification(contact)} className="rounded-lg border border-amber-300/40 px-3 py-2 text-xs font-bold text-amber-100 hover:bg-amber-300/10 disabled:opacity-40">{savingId === contact.id ? "再送中…" : "管理者通知を再送"}</button>
+              </div>
               <div className="flex flex-wrap gap-2" aria-label="対応状態を変更">
                 {contactStatuses.map((status) => <button key={status} type="button" disabled={savingId !== null || contact.status === status} onClick={() => void updateStatus(contact, status)} className="rounded-lg border border-white/15 px-3 py-2 text-xs font-bold text-slate-200 hover:bg-white/10 disabled:opacity-40">{statusLabels[status]}</button>)}
               </div>

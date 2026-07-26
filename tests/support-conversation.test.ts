@@ -66,13 +66,21 @@ test("admin inboxes reply into the shared thread and choose the next state", () 
 
 test("contact submitters can continue a private UI conversation", () => {
   const publicRoute = read("app/api/contact-thread/route.ts");
+  const submitRoute = read("app/api/contact/route.ts");
   const access = read("lib/contact-thread-access.ts");
   const thread = read("app/contact/thread/ContactThread.tsx");
   const form = read("app/contact/ContactForm.tsx");
+  const email = read("lib/email.ts");
 
   assert.match(publicRoute, /verifyContactThreadToken/);
   assert.match(publicRoute, /author: "requester"/);
   assert.match(publicRoute, /status: "open"/);
+  assert.match(publicRoute, /contact-admin-followup-/);
+  assert.match(publicRoute, /updateContactNotificationStatus/);
+  assert.match(submitRoute, /contact-admin-notification-/);
+  assert.match(email, /OPERATIONS_EMAIL_RECIPIENT_LOOKUP_FAILED/);
+  assert.match(email, /OPERATIONS_EMAIL_RECIPIENTS_NOT_CONFIGURED/);
+  assert.match(email, /idempotencyKey/);
   assert.match(access, /createHmac/);
   assert.match(access, /timingSafeEqual/);
   assert.match(thread, /追記を送信/);

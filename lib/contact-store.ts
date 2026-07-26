@@ -42,6 +42,8 @@ export async function saveContactMessage(input: {
     playerId: input.playerId?.trim() || null,
     status: "open",
     notificationStatus: "pending",
+    notificationErrorCode: null,
+    notificationAttemptedAt: null,
     messages: [],
     createdAt: now,
     updatedAt: now,
@@ -115,10 +117,13 @@ export async function updateContactMessageStatus(contactId: string, status: Cont
 export async function updateContactNotificationStatus(
   contactId: string,
   notificationStatus: ContactNotificationStatus,
+  notificationErrorCode: string | null = null,
 ) {
   return updateContactMessage(contactId, (current) => ({
     ...current,
     notificationStatus,
+    notificationErrorCode,
+    notificationAttemptedAt: Date.now(),
     updatedAt: Date.now(),
   }));
 }

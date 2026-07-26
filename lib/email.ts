@@ -85,32 +85,55 @@ export async function sendRecoveryEmailVerificationEmail(input: {
 
 async function operationsEmailRecipients(kind: SiteAdminNotificationKind) {
   let registered: string[] = [];
+  let lookupError: unknown = null;
   try {
     registered = await listSiteAdminNotificationEmails(kind);
-  } catch {
+  } catch (error) {
+    lookupError = error;
     // Environment-configured recipients remain available during a database outage.
   }
-  return mergeOperationsEmailRecipients(process.env.OPERATIONS_ALERT_EMAIL, registered);
+  const recipients = mergeOperationsEmailRecipients(
+    process.env.OPERATIONS_ALERT_EMAIL,
+    registered,
+  );
+  if (recipients.length === 0 && lookupError) {
+    throw new Error("OPERATIONS_EMAIL_RECIPIENT_LOOKUP_FAILED");
+  }
+  return recipients;
 }
 
-export async function sendOperationsAlertEmail(input: { subject: string; lines: string[]; audience?: SiteAdminNotificationKind; replyTo?: string }) {
+export async function sendOperationsAlertEmail(input: {
+  subject: string;
+  lines: string[];
+  audience?: SiteAdminNotificationKind;
+  replyTo?: string;
+  idempotencyKey?: string;
+}) {
   const apiKey = sharedEnvironmentVariable("RESEND_API_KEY");
+  if (!apiKey) throw new Error("EMAIL_SERVICE_NOT_CONFIGURED");
   const recipients = await operationsEmailRecipients(input.audience ?? "alerts");
-  if (!apiKey || recipients.length === 0) throw new Error("OPERATIONS_EMAIL_NOT_CONFIGURED");
+  if (recipients.length === 0) {
+    throw new Error("OPERATIONS_EMAIL_RECIPIENTS_NOT_CONFIGURED");
+  }
   const resend = new Resend(apiKey);
   const from = process.env.EMAIL_FROM?.trim() || "Game Fields <noreply@game-fields.com>";
   const text = input.lines.join("\n");
   const html = `<div style="font-family:sans-serif;line-height:1.7"><h1>${escapeHtml(input.subject)}</h1>${input.lines.map((line) => `<p>${escapeHtml(line)}</p>`).join("")}</div>`;
-  const results = await Promise.all(recipients.map((to) => resend.emails.send({
-    from,
-    to,
-    replyTo: input.replyTo,
-    subject: input.subject,
-    text,
-    html,
-  })));
+  const baseIdempotencyKey = input.idempotencyKey?.trim().slice(0, 220);
+  const results = await Promise.all(recipients.map((to, index) =>
+    resend.emails.send({
+      from,
+      to,
+      replyTo: input.replyTo,
+      subject: input.subject,
+      text,
+      html,
+    }, baseIdempotencyKey
+      ? { idempotencyKey: `${baseIdempotencyKey}-${index}` }
+      : undefined)));
   const firstError = results.find(({ error }) => error)?.error;
   if (firstError) throw emailDeliveryError(firstError);
+  return { recipientCount: recipients.length };
 }
 
 export async function sendSupportReplyEmail(input: {
