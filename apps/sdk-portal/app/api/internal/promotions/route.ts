@@ -153,6 +153,8 @@ export async function DELETE(request: Request) {
 
   try {
     await ensureSdkSchema();
+    await sdkSql()`UPDATE sdk_app_releases SET is_current = FALSE
+                   WHERE lineage_id = ${`${creatorSlug}/${gameId}`} AND is_current`;
     const rows = await sdkSql()`
       UPDATE sdk_games g
       SET stable_revision = NULL,
