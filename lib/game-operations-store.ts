@@ -8,17 +8,26 @@ const cacheDurationMs = 15_000;
 const caches = new Map<AppEnvironment, { operations: GameOperation[]; expiresAt: number }>();
 const pendingLoads = new Map<AppEnvironment, Promise<GameOperation[]>>();
 
+type AdditionalGame = { id: string; private?: boolean };
+
 export function gameOperationsKey(environment = expectedAppEnvironment()) {
   return `site-game-operations:v3:${environment}`;
 }
 
-export async function loadGameOperations(options: { fresh?: boolean } = {}) {
+export async function loadGameOperations(
+  options: { fresh?: boolean } = {},
+  additionalGames: AdditionalGame[] = [],
+) {
   const environment = expectedAppEnvironment();
   const cache = caches.get(environment);
   const pendingLoad = pendingLoads.get(environment);
-  if (!options.fresh && cache && cache.expiresAt > Date.now()) return cache.operations;
-  if (!options.fresh && pendingLoad) return pendingLoad;
-  if (!getRedisConfig()) return defaultGameOperations();
+  if (!options.fresh && cache && cache.expiresAt > Date.now()) {
+    return normalizeGameOperations(cache.operations, additionalGames);
+  }
+  if (!options.fresh && pendingLoad) {
+    return normalizeGameOperations(await pendingLoad, additionalGames);
+  }
+  if (!getRedisConfig()) return defaultGameOperations(additionalGames);
 
   const request = (async () => {
     const scopedKey = gameOperationsKey(environment);
@@ -30,12 +39,12 @@ export async function loadGameOperations(options: { fresh?: boolean } = {}) {
       ? null
       : await redisCommand<string | null>(["GET", legacyGameOperationsKey]);
     const operations = stored
-      ? normalizeGameOperations(JSON.parse(stored))
+      ? normalizeGameOperations(JSON.parse(stored), additionalGames)
       : unscopedStored
-        ? normalizeGameOperations(JSON.parse(unscopedStored))
+        ? normalizeGameOperations(JSON.parse(unscopedStored), additionalGames)
         : legacyStored
-          ? migrateLegacyGameOperations(JSON.parse(legacyStored))
-          : defaultGameOperations();
+          ? normalizeGameOperations(migrateLegacyGameOperations(JSON.parse(legacyStored)), additionalGames)
+          : defaultGameOperations(additionalGames);
     if (!stored && (unscopedStored || legacyStored)) {
       await redisCommand<"OK">(["SET", scopedKey, JSON.stringify(operations)]);
     }
@@ -46,7 +55,10 @@ export async function loadGameOperations(options: { fresh?: boolean } = {}) {
   try {
     return await request;
   } catch {
-    return caches.get(environment)?.operations ?? defaultGameOperations();
+    return normalizeGameOperations(
+      caches.get(environment)?.operations ?? defaultGameOperations(additionalGames),
+      additionalGames,
+    );
   } finally {
     if (pendingLoads.get(environment) === request) pendingLoads.delete(environment);
   }
@@ -58,7 +70,7 @@ export async function loadGameOperation(gameId: string) {
 
 export async function saveGameOperations(
   value: GameOperation[],
-  additionalGames: Array<{ id: string; private?: boolean }> = [],
+  additionalGames: AdditionalGame[] = [],
 ) {
   if (!getRedisConfig()) throw new Error("SITE_SETTINGS_STORE_NOT_CONFIGURED");
   const environment = expectedAppEnvironment();
