@@ -32,39 +32,29 @@ export async function GET(
   await ensureSdkSchema();
   const rows = requestedRevision
     ? await sdkSql()`
-        SELECT c.slug AS "creatorSlug", g.game_id AS "sourceGameId",
-               g.public_game_id AS "gameId", g.title,
-               r.revision,
+        SELECT r.source_creator_slug AS "creatorSlug",
+               r.source_game_id AS "sourceGameId",
+               r.public_game_id AS "gameId", r.title, r.revision,
                r.package_root_sha256 AS "packageRootSha256",
                r.server_bundle_sha256 AS "serverBundleSha256",
                r.app_set_source_sha256 AS "appSetSourceSha256",
-               r.manifest,
-               g.module_policy AS "modulePolicy"
-        FROM sdk_games g
-        JOIN sdk_creators c ON c.id = g.creator_id
-        JOIN sdk_game_package_revisions r ON r.game_id = g.id
-        JOIN sdk_game_channel_history h
-          ON h.game_id = g.id
-         AND h.revision = r.revision
-         AND h.channel = 'stable'
-        WHERE g.public_game_id = ${gameId}
+               r.manifest, r.module_policy AS "modulePolicy"
+        FROM sdk_app_releases r
+        WHERE r.public_game_id = ${gameId}
           AND r.revision = ${requestedRevision}
         LIMIT 1
       `
     : await sdkSql()`
-        SELECT c.slug AS "creatorSlug", g.game_id AS "sourceGameId",
-               g.public_game_id AS "gameId", g.title,
-               g.stable_revision AS revision,
-               g.stable_root_sha256 AS "packageRootSha256",
-               g.stable_bundle_sha256 AS "serverBundleSha256",
-               g.stable_app_set_sha256 AS "appSetSourceSha256",
-               g.stable_manifest AS manifest,
-               g.module_policy AS "modulePolicy"
-        FROM sdk_games g
-        JOIN sdk_creators c ON c.id = g.creator_id
-        WHERE g.public_game_id = ${gameId}
-          AND g.deleted_at IS NULL
-          AND g.stable_revision IS NOT NULL
+        SELECT r.source_creator_slug AS "creatorSlug",
+               r.source_game_id AS "sourceGameId",
+               r.public_game_id AS "gameId", r.title, r.revision,
+               r.package_root_sha256 AS "packageRootSha256",
+               r.server_bundle_sha256 AS "serverBundleSha256",
+               r.app_set_source_sha256 AS "appSetSourceSha256",
+               r.manifest, r.module_policy AS "modulePolicy"
+        FROM sdk_app_releases r
+        WHERE r.public_game_id = ${gameId}
+          AND r.is_current
         LIMIT 1
       `;
   const game = Array.isArray(rows) ? rows[0] as {
