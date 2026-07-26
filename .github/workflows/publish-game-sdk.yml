@@ -42,7 +42,7 @@ jobs:
         run: |
           node -e "const pkg=require('./packages/game-sdk/package.json'); const release=require('./config/platform-release.json'); if(pkg.version!==process.env.REQUESTED_VERSION||release.sdkPackageVersion!==pkg.version){throw new Error('SDK version does not match workflow input or platform release')}"
 
-      - run: npm run lint
+      - run: npm run verify
       - run: npm run test:sdk-package
       - run: npm publish --workspace @game-fields/game-sdk --access public --provenance
         env:

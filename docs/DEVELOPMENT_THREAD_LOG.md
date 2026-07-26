@@ -4648,3 +4648,22 @@
 - 修正をdevelopへ反映し、`app-games-sdk-dev`のDeploymentと既存予約slugへの影響を確認する。
 - `main`固有4コミットをdevelopへ統合してからmainへfast-forwardし、migration 001〜004、`/api/health`、handshake、OAuth、catalog、Runnerを確認する。
 - 名前空間対応を含むmain DeploymentがREADYになった後、`sdk-dev-redis`を`app-games-sdk / Production`へLinkし、再デプロイ後にURL空き確認を実機確認する。
+
+## 2026-07-26 — main固有lint分離のdevelop統合
+
+### 判断
+
+- `main`固有のPR #54は`lint`をESLint単体、`verify`を全検査gateへ分ける変更で、develop側に追加済みのSDK Help・migration検査も失わず統合する。
+- 本体コードのmain反映をfast-forward限定に戻すため、mainをdevelopへ先にmergeし、分岐を解消する。
+
+### 実施結果
+
+- `.github/workflows/publish-game-sdk.yml`はmain側の`npm run verify`呼出しを採用した。
+- `package.json`の競合は、`lint = eslint`、`verify = versions + env ledger + games + SDK boundaries + SDK Help + SDK migrations + lint`として解決した。
+
+### 検証
+
+- 統合後の`npm run verify`、全549テスト、`npm run build`、`npm run build:sdk`に成功した。
+- 本体buildの初回だけ並行実行中の`.next`整理で`ENOTEMPTY`になったが、単独再実行では正常完了し、コード・型エラーではないことを確認した。
+- Redis名前空間変更を含む`develop@53d0e3a`の`app-games-sdk-dev` Production DeploymentがREADYになった。
+- `https://sdk-dev.game-fields.com/api/health`は`status: ok`、`schemaVersion: 4`を返し、`/api/instances/check`も正常応答した。
