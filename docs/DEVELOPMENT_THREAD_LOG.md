@@ -5580,3 +5580,75 @@
   増えないことと実メール受信を照合する。
 - 複数管理者宛て通知の部分成功管理、運用警告メールの再試行、通知先用途の分離は
   今回の優先修正範囲外として別途扱う。
+
+## 2026-07-27 — メール信頼性修正のdevelop公開
+
+### 実施結果
+
+- メール経路の部分失敗修正、返信メールだけの再送、利用者送信の冪等化を
+  GitHubの`develop`へ非forceで公開した。
+- GitHub上の機能commitは`b5c17b1309b063523c5a887e2d4bd23110ef14fd`。
+  内容tree `26104f94ff2269c643d0622d25d2dbbdd761d8a8`は、最新`develop`統合後に
+  全600テスト・lint・production buildを通したローカルtreeと一致する。
+- `app-games-dev`は対象commitを認識し、`dev.game-fields.com`へaliasされた。
+
+### 検証
+
+- Deployment `dpl_7emRoASVUMsqnCkzWHRaBr83rpUr`は`READY`。
+- errors-only build logに失敗はなく、直近1時間のRuntime Errorは0件。
+
+### 関連コミット
+
+- `b5c17b1` — メール送信の部分失敗と通信再試行を冪等化。
+
+### 未対応・保留
+
+- dev管理画面から失敗済み返信メールだけを再送し、会話件数が増えないことと
+  実メール受信を照合する。
+
+## 2026-07-27 — スカル正式PreviewのRoom Runtime接続障害
+
+### 利用者からの報告
+
+- 2026-07-27 07:03 JSTごろ、`moi-dev`のスカル正式Previewで「部屋を作る」を押すと、
+  ゲーム実行サーバーへ接続できない旨が表示され、Roomを作成できなかった。
+- 正式PreviewからRoom Runtimeへの接続、Room作成APIの失敗原因、再試行復旧、
+  スカル固有ではない共通Platform障害の有無を確認する。
+
+### 調査結果
+
+- 07:03:22 JSTの本体Runtime Logで
+  `POST /api/sdk-preview/moi-lab/games/skull/rooms`が503、
+  `GAME_SDK_REMOTE_RUNNER_UNAVAILABLE`を返した。
+- 直前のSDK Portal
+  `GET /api/preview-runtime/moi-lab/skull`は200で新しいserver grantを発行したが、
+  直後のSDK Preview
+  `POST /server/moi-lab/skull/12d4a36b8178d5c349c82512b61769c21145cf26`は403だった。
+- 一つ前のPreview Deploymentでは同じrouteが24時間で696件すべて200だった。
+  新しいDeploymentではRoom作成由来の4件がすべて403であり、AppSetやスカル固有処理へ
+  到達する前の共通server grant検証で失敗した配備回帰と判断した。
+- 既存ログはgrant拒否を一律403としており、signature、environment、instance、game、
+  revisionのどの不一致かは判別できなかった。
+
+### 実施結果
+
+- SDK Previewのgrant拒否を、token・秘密値・利用者情報を含めず、安全な理由別の
+  `sdk.preview-runner-auth`イベントへ記録する。
+- SDK Portalの`/api/health`から対応Previewへ固定scopeの短命署名probeを送り、
+  DBだけでなくPortal／Preview間の署名・環境一致も検査する。
+- remote runnerはネットワーク例外と408／502／503／504だけを1回再試行する。
+  401／403は再試行せず`GAME_SDK_REMOTE_RUNNER_AUTH_FAILED`へ分け、画面でも
+  一時障害と設定不整合を区別する。
+
+### 検証
+
+- 関連回帰テスト12件に成功した。
+- `npm test`に成功し、全605テストが通過した。
+- `npm run lint`に成功した。
+- `npm run build`、`npm run build:sdk`、`npm run build:sdk-preview`に成功した。
+
+### 未対応・保留
+
+- `develop`へ反映し、本体・SDK Portal・SDK PreviewのDeploymentをREADYまで確認する。
+- `sdk-dev.game-fields.com/api/health`の署名probe成功と、正式PreviewからのRoom作成成功を
+  Runtime Logで照合する。
