@@ -39,6 +39,13 @@ export function sdkPortalInternalBaseUrl(
     );
 }
 
+export function sdkPromotionInternalBaseUrl(
+  env: NodeJS.ProcessEnv = process.env,
+) {
+  return env.SDK_PROMOTION_INTERNAL_URL?.replace(/\/$/, "")
+    ?? "https://sdk.game-fields.com";
+}
+
 export function sdkPreviewRuntimeBaseUrl(
   env: NodeJS.ProcessEnv = process.env,
 ) {
