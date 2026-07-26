@@ -57,6 +57,7 @@ export type StoredRoomDefaults = StoredWordWolfRoomDefaults | StoredTahoiyaRoomD
 
 const roomDefaultsKeyPrefix = "room-defaults:";
 const lobbyRounds = [1, 2, 3, 4];
+const roomDefaultsTtlSeconds = 2 * 365 * 24 * 60 * 60;
 
 function roomDefaultsKey(game: RoomDefaultsGame, playerId: string) {
   return `${roomDefaultsKeyPrefix}${game}:${playerId}`;
@@ -164,6 +165,22 @@ export async function saveStoredRoomDefaults(gameInput: unknown, playerIdInput: 
   if (!game || !playerId) throw new Error("INVALID_ROOM_DEFAULTS");
 
   const defaults = normalizeStoredRoomDefaults(game, defaultsInput);
-  await redisCommand<"OK">(["SET", roomDefaultsKey(game, playerId), JSON.stringify(defaults)]);
+  await redisCommand<"OK">([
+    "SET",
+    roomDefaultsKey(game, playerId),
+    JSON.stringify(defaults),
+    "EX",
+    String(roomDefaultsTtlSeconds),
+  ]);
   return defaults;
+}
+
+export async function deleteStoredRoomDefaults(playerIdInput: string) {
+  const playerId = playerIdInput.trim();
+  if (!playerId) return 0;
+  return await redisCommand<number>([
+    "DEL",
+    ...(["wordwolf", "tahoiya", "hodoai-talk", "kotoba-senpuku"] as const)
+      .map((game) => roomDefaultsKey(game, playerId)),
+  ]);
 }

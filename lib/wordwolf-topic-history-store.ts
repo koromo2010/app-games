@@ -22,6 +22,15 @@ function pairKey(playerId: string) {
   return `${keyPrefix}:pair:${playerId}`;
 }
 
+export function wordWolfHistoryKeysForPlayer(playerIdInput: string, now = Date.now()) {
+  const playerId = playerIdInput.trim();
+  if (!playerId) return [];
+  return [
+    pairKey(playerId),
+    ...Array.from({ length: 4 }, (_, offset) => dailyKey(playerId, now - offset * 24 * 60 * 60 * 1000)),
+  ];
+}
+
 export function getWordWolfPairCooldownDays() {
   const configured = Number(process.env.WORDWOLF_PAIR_COOLDOWN_DAYS);
   const fallback = Number.isFinite(configured) && configured >= 1 && configured <= 3650
@@ -69,8 +78,14 @@ export async function rememberWordWolfTopicHistory(
     ["ZADD", pairKey(id), now, pairId],
     // 期限切れペアは物理削除し、DBを際限なく増やさない。
     ["ZREMRANGEBYSCORE", pairKey(id), "-inf", now - getWordWolfPairCooldownDays() * 86400000],
+    ["EXPIRE", pairKey(id), (getWordWolfPairCooldownDays() + 3) * 86400],
   ]);
   await redisPipeline<unknown[]>(commands);
+}
+
+export async function deleteWordWolfTopicHistory(playerId: string, now = Date.now()) {
+  const keys = wordWolfHistoryKeysForPlayer(playerId, now);
+  return keys.length ? await redisCommand<number>(["DEL", ...keys]) : 0;
 }
 
 /** 運営・移行ツールから、指定ペアの禁則を即時解除するための入口。 */

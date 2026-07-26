@@ -14,6 +14,7 @@ export function UserReportButton({ variant = "banner" }: { variant?: "banner" | 
   const [details, setDetails] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [lastReportId, setLastReportId] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -35,9 +36,11 @@ export function UserReportButton({ variant = "banner" }: { variant?: "banner" | 
         body: JSON.stringify({ type, summary, details, page: window.location.pathname }),
       });
       if (!response.ok) throw new Error("REPORT_SAVE_FAILED");
+      const data = await response.json() as { report?: { id?: string } };
       setSummary("");
       setDetails("");
-      setMessage(en ? "Sent. Thank you for your feedback." : "送信しました。ありがとうございます。");
+      setLastReportId(data.report?.id ?? "");
+      setMessage(en ? "Sent. Thank you for your feedback." : "送信しました。管理者が確認します。");
     } catch {
       setMessage(en ? "Could not send the report. Please try again later." : "送信できませんでした。時間をおいてお試しください。");
     } finally {
@@ -49,7 +52,7 @@ export function UserReportButton({ variant = "banner" }: { variant?: "banner" | 
     <>
       <button
         type="button"
-        onClick={() => { setOpen(true); setMessage(""); }}
+        onClick={() => { setOpen(true); setMessage(""); setLastReportId(""); }}
         className={variant === "menu" ? "rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50" : "rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-white/10"}
       >
         {en ? "Feedback & bug report" : "改善・バグ報告"}
@@ -68,6 +71,7 @@ export function UserReportButton({ variant = "banner" }: { variant?: "banner" | 
             <label className="mt-4 block text-sm font-bold">{en ? "Details" : "詳しい内容"}<textarea value={details} onChange={(event) => setDetails(event.target.value)} maxLength={1200} placeholder={en ? "Steps, expected behavior, and what actually happened" : "操作手順、期待した動作、実際に起きたことなど"} className="mt-2 min-h-28 w-full rounded-lg border border-slate-300 px-3 py-2 font-normal outline-none focus:border-cyan-600" /></label>
             <p className="mt-2 text-xs text-slate-500">{en ? "The current page is attached automatically. Do not include passwords or API keys." : "現在のページ情報は自動で添付されます。パスワードやAPIキーは書かないでください。"}</p>
             {message && <p className="mt-3 rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold" role="status">{message}</p>}
+            {lastReportId && <p className="mt-2 break-all text-xs text-slate-500">{en ? "Receipt ID" : "受付ID"}: {lastReportId}</p>}
             <button type="button" disabled={isSaving || !summary.trim()} onClick={() => void submit()} className="mt-4 w-full rounded-lg bg-cyan-600 px-4 py-3 font-black text-white transition hover:bg-cyan-500 disabled:opacity-40">{isSaving ? (en ? "Sending..." : "送信中...") : (en ? "Send" : "送信する")}</button>
           </div>
         </div>

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { redisPipeline } from "./redis-store.ts";
+import { redisCommand, redisPipeline } from "./redis-store.ts";
 import {
   isTahoiyaHistoryTopicId,
   normalizeTahoiyaHistoryTopicIds,
@@ -36,6 +36,12 @@ export function tahoiyaHistoryKeysForPlayer(playerId: string) {
   return normalizedPlayerId
     ? [historyKey(normalizedPlayerId), deviceBridgeHistoryKey(normalizedPlayerId)]
     : [];
+}
+
+export async function deleteTahoiyaTopicHistory(playerId: string) {
+  const keys = tahoiyaHistoryKeysForPlayer(playerId);
+  if (!keys.length) return 0;
+  return await redisCommand<number>(["DEL", ...keys]);
 }
 
 export async function filterUnexperiencedTahoiyaWords<T extends { word: string }>(

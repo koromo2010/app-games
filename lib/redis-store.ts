@@ -28,6 +28,7 @@ const retryableRedisStatuses = new Set([429, 500, 502, 503, 504]);
 const redisReadCommands = new Set([
   "EXISTS",
   "GET",
+  "LRANGE",
   "DBSIZE",
   "INFO",
   "HGET",
@@ -120,7 +121,7 @@ function prefixRedisKey(value: unknown, prefix: string) {
 
 const singleKeyCommands = new Set([
   "DECR", "EXPIRE", "GET", "HDEL", "HGET", "HGETALL", "HINCRBY", "HKEYS", "HLEN", "HMGET", "HSCAN",
-  "HSET", "HVALS", "INCR", "INCRBY", "LLEN", "LPUSH", "LRANGE", "LTRIM", "RPUSH", "SADD", "SCARD",
+  "HSET", "HVALS", "INCR", "INCRBY", "LLEN", "LPUSH", "LRANGE", "LREM", "LTRIM", "RPUSH", "SADD", "SCARD",
   "SISMEMBER", "SMEMBERS", "SMISMEMBER", "SREM", "SSCAN", "SET", "TTL", "ZADD", "ZCARD", "ZINCRBY",
   "ZMSCORE", "ZRANGE", "ZREM", "ZREVRANGE", "ZSCORE",
 ]);

@@ -18,8 +18,10 @@ SDK公開後のデータは、用途ごとに正本、保持期間、削除方�
 | Room、Command receipt、result outbox | 環境別Redis | 最終更新から6時間 | TTLまたはhost解散。終了後の再実行に使わない |
 | effect journal | 環境別Redis | 6時間 | TTL。`pending`消失後も同じeffectを自動再課金しない |
 | SDK feedback対象artifact | 環境別Redis | Roomと同じ6時間 | LLM成功結果だけをRoomごと最大8件保存。promptは保存せず、Room TTLで消去 |
-| player feedback | 環境別Redis | taskごと直近500件 | 本人単位で同じartifactへの評価を上書き。AI生成時はuntrustedな参考例としてのみ利用 |
+| player feedback | 環境別Redis | taskごと直近500件 | 本人単位で同じartifactへの評価を上書き。索引外本文は同時削除し、account削除時は本人recordを本文・task索引から削除。AI生成時はuntrustedな参考例としてのみ利用 |
 | player別settings既定値 | 環境別Redis | 最終更新から2年 | TTL。Room開始後のsnapshotはRoom側の寿命に従う |
+| 改善・バグ報告 | 環境別Redis | 最終更新から180日、最大1,000件 | account削除時に本人の本文と索引を削除 |
+| お問い合わせ | 環境別Redis | 最終更新から365日、最大1,000件 | 管理受信箱の状態更新で期限延長。索引外本文は同時削除 |
 | replay | 環境別Redis | 既定30日 | TTL。お気に入り制御はreplay policyに従う |
 | 戦績・rating | Platform PostgreSQL／Redis | サービス提供中 | account削除時にplayer別結果とrating fieldを削除 |
 | Package Revision | SDK PostgreSQL | 公開・監査に必要な期間 | 通常は物理更新・上書き禁止 |

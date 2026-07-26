@@ -160,21 +160,14 @@ export async function updatePostgresPlayerAccountProfile(
   `;
 }
 
-export async function deleteExpiredPostgresPlayerAccounts(cutoff: number) {
+export async function listExpiredPostgresPlayerAccountIds(cutoff: number) {
   await ensurePlayerAccountSchema();
-  const sql = getPostgresClient();
-  const deleted = await sql`
-    WITH expired AS (
-      DELETE FROM player_accounts
-      WHERE email IS NULL AND updated_at <= ${cutoff}
-      RETURNING player_id
-    ), deleted_results AS (
-      DELETE FROM player_game_results
-      WHERE player_id IN (SELECT player_id FROM expired)
-    )
-    SELECT COUNT(*)::int AS count FROM expired
-  ` as Array<{ count: number }>;
-  return Number(deleted[0]?.count ?? 0);
+  const rows = await getPostgresClient()`
+    SELECT player_id FROM player_accounts
+    WHERE email IS NULL AND updated_at <= ${cutoff}
+    ORDER BY updated_at ASC
+  ` as Array<{ player_id: string }>;
+  return rows.map((row) => row.player_id);
 }
 
 export async function deletePostgresPlayerAccount(playerId: string) {

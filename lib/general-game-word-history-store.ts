@@ -28,6 +28,16 @@ export function generalGameWordDailyHistoryKey(
   return `${keyPrefix}:${game}:daily:${generalGameWordHistoryTokyoDay(now)}:${playerId}`;
 }
 
+export function generalGameWordHistoryKeysForPlayer(playerIdInput: string, now = Date.now()) {
+  const playerId = playerIdInput.trim();
+  if (!playerId) return [];
+  return (["nigoichi", "code-intercept"] as const).flatMap((game) =>
+    Array.from({ length: 4 }, (_, offset) =>
+      generalGameWordDailyHistoryKey(game, playerId, now - offset * 24 * 60 * 60 * 1000)
+    ),
+  );
+}
+
 export async function loadTodaysGeneralGameWordHistory(
   game: GeneralGameWordHistoryGame,
   playerIds: readonly string[],
@@ -93,4 +103,9 @@ export async function rememberGeneralGameWordHistory(input: {
     String(dayKeyTtlSeconds),
     ...words,
   ]);
+}
+
+export async function deleteGeneralGameWordHistory(playerId: string, now = Date.now()) {
+  const keys = generalGameWordHistoryKeysForPlayer(playerId, now);
+  return keys.length ? await redisCommand<number>(["DEL", ...keys]) : 0;
 }

@@ -15,7 +15,7 @@ import {
   loadPostgresPlayerAccountByPlayerId,
   savePostgresPlayerAccount,
   updatePostgresPlayerAccountProfile,
-  deleteExpiredPostgresPlayerAccounts,
+  listExpiredPostgresPlayerAccountIds,
   deletePostgresPlayerAccount,
 } from "@/lib/player-account-postgres-store";
 import { usesStrictAppDatabase } from "@/lib/player-account-environment";
@@ -23,7 +23,6 @@ import { hasPlayerAccountEmailOwnerConflict } from "@/lib/player-account-migrati
 import { legalConsentIsCurrent } from "@/lib/legal";
 import { unverifiedAccountIsExpired, unverifiedPlayerAccountRetentionMs } from "@/lib/player-account-retention";
 import { deletePlayerDependentData } from "@/lib/player-data-deletion";
-import { tahoiyaHistoryKeysForPlayer } from "@/lib/tahoiya-topic-history-store";
 import { normalizeAppLocale, type AppLocale } from "@/lib/app-locale";
 import { ensurePlayerAccountSession } from "@/lib/player-account-session";
 import {
@@ -395,7 +394,15 @@ export async function changePlayerAccountPassword(
 export async function deleteExpiredUnverifiedPlayerAccounts(now = Date.now()) {
   const cutoff = now - unverifiedPlayerAccountRetentionMs;
   let postgresDeleted = 0;
-  if (isPostgresConfigured()) postgresDeleted = await deleteExpiredPostgresPlayerAccounts(cutoff);
+  const cleanedPlayerIds = new Set<string>();
+  if (isPostgresConfigured()) {
+    const expiredPlayerIds = await listExpiredPostgresPlayerAccountIds(cutoff);
+    for (const playerId of expiredPlayerIds) {
+      await deletePlayerDependentData(playerId);
+      cleanedPlayerIds.add(playerId);
+      if (await deletePostgresPlayerAccount(playerId)) postgresDeleted += 1;
+    }
+  }
 
   let cursor = "0";
   let redisDeleted = 0;
@@ -408,7 +415,16 @@ export async function deleteExpiredUnverifiedPlayerAccounts(now = Date.now()) {
       try {
         const account = normalizeAccount(JSON.parse(raw));
         if (!account || !unverifiedAccountIsExpired(account, now)) continue;
-        await redisCommand<number>(["DEL", key, `player:${account.playerId}`]);
+        if (!cleanedPlayerIds.has(account.playerId)) {
+          await deletePlayerDependentData(account.playerId);
+          cleanedPlayerIds.add(account.playerId);
+        }
+        await redisCommand<number>([
+          "DEL",
+          key,
+          `player:${account.playerId}`,
+          ...(account.email ? [playerAccountEmailKey(account.email)] : []),
+        ]);
         redisDeleted += 1;
       } catch {
         // Malformed legacy records are left in place for manual inspection.
@@ -561,7 +577,7 @@ export async function deletePlayerAccount(input: PlayerAccountAuthInput, authent
   }
 
   await deletePlayerDependentData(account.playerId);
-  const keys = [accountKey(account.loginName), `player:${account.playerId}`, ...tahoiyaHistoryKeysForPlayer(account.playerId)];
+  const keys = [accountKey(account.loginName), `player:${account.playerId}`];
   if (account.email) keys.push(playerAccountEmailKey(account.email));
   await redisCommand<number>(["DEL", ...keys]);
   if (isPostgresConfigured()) await deletePostgresPlayerAccount(account.playerId);

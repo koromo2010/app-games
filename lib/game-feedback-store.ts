@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { GameFeedbackRating, GameFeedbackRecord, GameGenerationMeta } from "@/lib/game-ai-types";
 import { normalizeGameGenerationMeta } from "@/lib/game-ai-types";
-import { redisCommand } from "@/lib/redis-store";
+import { redisCommand, redisPipeline } from "@/lib/redis-store";
 import { feedbackAdjustmentFromCounts } from "@/lib/word-selection-protocol";
 
 const feedbackItemPrefix = "game-feedback:item:";
@@ -104,15 +104,50 @@ export async function saveGameFeedback(input: SaveGameFeedbackInput) {
 
   await redisCommand<unknown>([
     "EVAL",
-    "redis.call('SET', KEYS[1], ARGV[1]); redis.call('LREM', KEYS[2], 0, ARGV[2]); redis.call('LPUSH', KEYS[2], ARGV[2]); redis.call('LTRIM', KEYS[2], 0, ARGV[3]); return 1",
+    "redis.call('SET',KEYS[1],ARGV[1]); redis.call('LREM',KEYS[2],0,ARGV[2]); redis.call('LPUSH',KEYS[2],ARGV[2]); local removed=redis.call('LRANGE',KEYS[2],ARGV[3],-1); redis.call('LTRIM',KEYS[2],0,ARGV[4]); local prefix=string.sub(KEYS[1],1,string.len(KEYS[1])-string.len(ARGV[2])); for _,id in ipairs(removed) do redis.call('DEL',prefix..id) end; return 1",
     "2",
     itemKey(id),
     indexKey,
     JSON.stringify(record),
     id,
+    String(maxTaskFeedbackItems),
     String(maxTaskFeedbackItems - 1),
   ]);
   return record;
+}
+
+export async function deletePlayerGameFeedbackData(playerIdInput: string) {
+  const playerId = playerIdInput.trim();
+  if (!playerId) return 0;
+  let cursor = "0";
+  let deleted = 0;
+  do {
+    const result = await redisCommand<[string | number, string[]]>([
+      "SCAN",
+      cursor,
+      "MATCH",
+      `${feedbackItemPrefix}*`,
+      "COUNT",
+      "200",
+    ]);
+    cursor = String(result[0]);
+    const keys = result[1] ?? [];
+    if (!keys.length) continue;
+    const values = await redisCommand<Array<string | null>>(["MGET", ...keys]);
+    const targets = values.flatMap((value, index) => {
+      const record = parseFeedbackRecord(value);
+      return record?.playerId === playerId
+        ? [{ key: keys[index]!, record }]
+        : [];
+    });
+    if (!targets.length) continue;
+    await redisPipeline<unknown[]>(targets.flatMap(({ key, record }) => [
+      ["DEL", key],
+      ["LREM", taskKey(record.game, record.task), "0", record.id],
+    ]));
+    deleted += targets.length;
+  } while (cursor !== "0");
+  return deleted;
 }
 
 export type RetrieveGameFeedbackInput = {
