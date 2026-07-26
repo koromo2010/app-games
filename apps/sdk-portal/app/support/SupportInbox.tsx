@@ -31,9 +31,11 @@ function formatDate(value: number) {
 export function SupportInbox({
   initialReports,
   initialLoadFailed,
+  initialThreadId,
 }: {
   initialReports: CreatorSupportReport[];
   initialLoadFailed: boolean;
+  initialThreadId: string | null;
 }) {
   const [reports, setReports] = useState(initialReports);
   const [filter, setFilter] = useState<Filter>("all");
@@ -132,7 +134,12 @@ export function SupportInbox({
     {notice && <p className="support-notice" role="status">{notice}</p>}
 
     <div className="support-list">
-      {visibleReports.map((report) => <details className="support-thread" key={report.id}>
+      {visibleReports.map((report) => <details
+        className="support-thread"
+        id={`support-${report.id}`}
+        key={report.id}
+        open={report.id === initialThreadId ? true : undefined}
+      >
         <summary>
           <div>
             <span className={`support-type support-type--${report.type}`}>{typeLabels[report.type]}</span>

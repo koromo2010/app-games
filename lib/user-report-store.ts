@@ -132,14 +132,17 @@ export async function deleteUserReportsForPlayer(playerIdInput: string) {
   ]);
 }
 
-export async function updateUserReportStatus(reportId: string, status: UserReportStatus) {
+async function updateUserReport(
+  reportId: string,
+  update: (current: UserReport) => UserReport,
+) {
   if (!/^report_[0-9a-f-]{36}$/i.test(reportId)) throw new Error("USER_REPORT_NOT_FOUND");
   const key = `${userReportKeyPrefix}${reportId}`;
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const raw = await redisCommand<string | null>(["GET", key]);
     const current = parseStoredUserReport(raw);
     if (!raw || !current) throw new Error("USER_REPORT_NOT_FOUND");
-    const updated: UserReport = { ...current, status, updatedAt: Date.now() };
+    const updated = update(current);
     const saved = await redisCommand<number>([
       "EVAL",
       "if redis.call('GET',KEYS[1])==ARGV[1] then redis.call('SET',KEYS[1],ARGV[2],'EX',ARGV[3]); return 1 end return 0",
@@ -152,6 +155,17 @@ export async function updateUserReportStatus(reportId: string, status: UserRepor
     if (saved === 1) return updated;
   }
   throw new Error("USER_REPORT_CONFLICT");
+}
+
+export async function updateUserReportStatus(
+  reportId: string,
+  status: UserReportStatus,
+) {
+  return updateUserReport(reportId, (current) => ({
+    ...current,
+    status,
+    updatedAt: Date.now(),
+  }));
 }
 
 export async function appendUserReportMessage(input: {
@@ -205,4 +219,18 @@ export async function appendUserReportMessage(input: {
     if (saved === 1) return { report: updated, message, inserted: true };
   }
   throw new Error("USER_REPORT_CONFLICT");
+}
+
+export async function updateUserReportMessageDelivery(
+  reportId: string,
+  messageId: string,
+  deliveryStatus: SupportReplyDeliveryStatus,
+) {
+  return updateUserReport(reportId, (current) => ({
+    ...current,
+    messages: current.messages.map((message) => message.id === messageId
+      ? { ...message, deliveryStatus }
+      : message),
+    updatedAt: Date.now(),
+  }));
 }

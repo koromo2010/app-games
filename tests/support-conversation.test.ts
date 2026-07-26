@@ -50,10 +50,17 @@ test("admin inboxes reply into the shared thread and choose the next state", () 
   }
   assert.match(reportRoute, /appendUserReportMessage/);
   assert.match(reportRoute, /user-report\.reply/);
+  assert.match(reportRoute, /sendCreatorSupportReplyEmail/);
+  assert.match(reportRoute, /loadVerifiedPlayerEmailByPlayerId/);
+  assert.match(reportRoute, /sdkSupportThreadUrl/);
+  assert.match(reportPanel, /確認済みメールにも通知/);
   assert.match(contactRoute, /appendContactThreadMessage/);
   assert.match(contactRoute, /sendSupportReplyEmail/);
   assert.match(contactRoute, /contact-message\.reply/);
   assert.match(email, /idempotencyKey/);
+  assert.match(email, /SDK Portalで会話を確認・返信する/);
+  assert.match(email, /get_support_threadで報告ID/);
+  assert.match(email, /変更やスレッドへの返信は私の確認後/);
 });
 
 test("contact submitters can continue a private UI conversation", () => {
@@ -85,6 +92,8 @@ test("SDK Portal UI and AI use the same creator-owned support service", () => {
   assert.match(portalApi, /listCreatorSupportReports/);
   assert.match(portalApi, /replyToCreatorSupportReport/);
   assert.match(page, /SupportInbox/);
+  assert.match(page, /requestedThread/);
+  assert.match(inbox, /open=\{report\.id === initialThreadId/);
   assert.match(inbox, /状態をオープンへ戻しました/);
   assert.match(mcp, /name: "list_support_threads"/);
   assert.match(mcp, /name: "get_support_thread"/);

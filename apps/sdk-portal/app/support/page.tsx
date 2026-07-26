@@ -7,9 +7,25 @@ import { SupportInbox } from "./SupportInbox";
 
 export const dynamic = "force-dynamic";
 
-export default async function CreatorSupportPage() {
+export default async function CreatorSupportPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ thread?: string | string[] }>;
+}) {
+  const query = await searchParams;
+  const requestedThread = typeof query.thread === "string"
+    && /^report_[0-9a-f-]{36}$/i.test(query.thread)
+    ? query.thread
+    : null;
+  const returnTo = requestedThread
+    ? `/support?thread=${encodeURIComponent(requestedThread)}`
+    : "/support";
   const account = await getSdkAccountSession().catch(() => null);
-  if (!account) redirect("/api/account-link/start?returnTo=%2Fsupport");
+  if (!account) {
+    redirect(
+      `/api/account-link/start?returnTo=${encodeURIComponent(returnTo)}`,
+    );
+  }
   const initialReports = await listCreatorSupportReports(account.playerId)
     .catch(() => null);
 
@@ -29,6 +45,7 @@ export default async function CreatorSupportPage() {
     <SupportInbox
       initialReports={initialReports ?? []}
       initialLoadFailed={initialReports === null}
+      initialThreadId={requestedThread}
     />
   </main>;
 }

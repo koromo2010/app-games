@@ -605,6 +605,40 @@ export async function loadPlayerAccountByEmail(email: string) {
   return legacy && playerAccountHasVerifiedEmail(legacy) ? legacy : null;
 }
 
+export async function loadVerifiedPlayerEmailByPlayerId(
+  playerIdInput: string,
+) {
+  const playerId = playerIdInput.trim();
+  if (!playerId) return null;
+  if (isPostgresConfigured()) {
+    try {
+      const stored = await loadPostgresPlayerAccountByPlayerId(playerId);
+      const account = stored ? normalizeAccount(stored) : null;
+      if (account?.playerId === playerId) {
+        return playerAccountHasVerifiedEmail(account) ? account.email : null;
+      }
+      if (usesStrictAppDatabase()) return null;
+    } catch (error) {
+      if (usesStrictAppDatabase()) throw error;
+    }
+  }
+
+  const session = await loadStoredPlayerSession(playerId);
+  if (!session) return null;
+  const legacy = await loadRedisAccount(session.name);
+  if (
+    !legacy
+    || legacy.playerId !== playerId
+    || !playerAccountHasVerifiedEmail(legacy)
+  ) {
+    return null;
+  }
+  if (isPostgresConfigured()) {
+    await savePostgresPlayerAccount(legacy).catch(() => undefined);
+  }
+  return legacy.email;
+}
+
 export async function resetPlayerAccountPassword(loginName: string, password: string) {
   if (!isValidPlayerPassword(password)) {
     throw new Error("PLAYER_ACCOUNT_PASSWORD_INVALID");

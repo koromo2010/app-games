@@ -150,6 +150,53 @@ export async function sendSupportReplyEmail(input: {
   if (error) throw emailDeliveryError(error);
 }
 
+export async function sendCreatorSupportReplyEmail(input: {
+  to: string;
+  reportId: string;
+  body: string;
+  supportUrl: string;
+  idempotencyKey: string;
+}) {
+  const apiKey = sharedEnvironmentVariable("RESEND_API_KEY");
+  if (!apiKey) throw new Error("EMAIL_SERVICE_NOT_CONFIGURED");
+  const resend = new Resend(apiKey);
+  const from = process.env.EMAIL_FROM?.trim()
+    || "Game Fields <noreply@game-fields.com>";
+  const safeReportId = escapeHtml(input.reportId);
+  const safeBody = escapeHtml(input.body).replaceAll("\n", "<br />");
+  const safeUrl = escapeHtml(input.supportUrl);
+  const guidance = "このメールは返信通知です。会話履歴と対応状態はSDK Portalのサポート画面で確認し、続きも同画面から返信してください。接続中のAIからも同じスレッドを確認できます。";
+  const aiContinuationPrompt = `Game Fields SDKのget_support_threadで報告ID「${input.reportId}」を開き、運営からの最新返信まで読んで、これまでの経緯を引き継いでください。まず要点と次に必要な対応を説明し、変更やスレッドへの返信は私の確認後に進めてください。`;
+  const safeAiContinuationPrompt = escapeHtml(aiContinuationPrompt);
+  const { error } = await resend.emails.send({
+    from,
+    to: input.to,
+    subject: `【Game Fields】報告への返信 ${input.reportId}`,
+    text: `Game Fields運営から返信が届きました。\n報告ID: ${input.reportId}\n\n${input.body}\n\n${guidance}\n${input.supportUrl}\n\nGPTで続ける場合は、以下をそのまま入力してください。\n\n${aiContinuationPrompt}`,
+    html: `
+      <div style="background:#f8fafc;padding:32px 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#0f172a">
+        <div style="max-width:620px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:28px">
+          <h1 style="font-size:21px;margin:0 0 20px">Game Fields運営から返信が届きました</h1>
+          <p style="font-size:13px;color:#64748b">報告ID: <strong>${safeReportId}</strong></p>
+          <p style="line-height:1.8">${safeBody}</p>
+          <p style="line-height:1.8;color:#475569">${escapeHtml(guidance)}</p>
+          <p style="margin:28px 0 12px">
+            <a href="${safeUrl}" style="display:inline-block;background:#0e7490;color:#fff;text-decoration:none;font-weight:700;padding:12px 20px;border-radius:8px">SDK Portalで会話を確認・返信する</a>
+          </p>
+          <div style="margin-top:28px;border-top:1px solid #e2e8f0;padding-top:22px">
+            <p style="font-weight:700;margin:0 0 10px">GPTで続きを引き継ぐ</p>
+            <p style="font-size:13px;line-height:1.7;color:#475569">以下の文章を、Game Fields SDK toolsを接続したGPTへそのまま入力してください。</p>
+            <div style="white-space:pre-wrap;word-break:break-word;background:#f1f5f9;border:1px solid #cbd5e1;border-radius:8px;padding:14px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:13px;line-height:1.7">${safeAiContinuationPrompt}</div>
+          </div>
+        </div>
+      </div>
+    `,
+  }, {
+    idempotencyKey: input.idempotencyKey,
+  });
+  if (error) throw emailDeliveryError(error);
+}
+
 export async function sendContactReceiptEmail(input: {
   to: string;
   contactId: string;

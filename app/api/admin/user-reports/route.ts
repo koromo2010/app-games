@@ -3,9 +3,13 @@ import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 import {
   appendUserReportMessage,
   listUserReports,
+  updateUserReportMessageDelivery,
   updateUserReportStatus,
 } from "@/lib/user-report-store";
+import { sendCreatorSupportReplyEmail } from "@/lib/email";
 import { isUserReportStatus } from "@/lib/user-report-core";
+import { loadVerifiedPlayerEmailByPlayerId } from "@/lib/player-account-store";
+import { sdkSupportThreadUrl } from "@/lib/sdk-support-url";
 import {
   requireFullSiteAdminSession,
   requireRecentSiteAdminMfa,
@@ -71,24 +75,55 @@ export async function POST(request: Request) {
       author: "admin",
       body: message,
       status,
+      deliveryStatus: "pending",
     });
+    let deliveryStatus = result.message.deliveryStatus;
+    if (
+      result.inserted
+      || deliveryStatus === "pending"
+      || deliveryStatus === "failed"
+    ) {
+      let recipient: string | null = null;
+      try {
+        recipient = await loadVerifiedPlayerEmailByPlayerId(
+          result.report.playerId,
+        );
+        deliveryStatus = recipient
+          ? await sendCreatorSupportReplyEmail({
+            to: recipient,
+            reportId: result.report.id,
+            body: message,
+            supportUrl: sdkSupportThreadUrl(request.url, result.report.id),
+            idempotencyKey: `user-report-reply-${result.message.id}`,
+          }).then(() => "sent" as const).catch(() => "failed" as const)
+          : "not-required";
+      } catch {
+        deliveryStatus = "failed";
+      }
+    }
+    const report = await updateUserReportMessageDelivery(
+      result.report.id,
+      result.message.id,
+      deliveryStatus,
+    );
     await appendSiteAdminAuditLog(
       request,
       session,
       "user-report.reply",
-      result.report.id,
+      report.id,
       null,
       {
         messageId: result.message.id,
-        status: result.report.status,
+        status: report.status,
+        deliveryStatus,
         inserted: result.inserted,
       },
     );
     telemetry.success("user-report.reply", {
-      action: result.report.status,
+      action: report.status,
     });
     return Response.json(
-      { report: result.report },
+      { report, deliveryStatus },
       { status: result.inserted ? 201 : 200 },
     );
   } catch (error) {

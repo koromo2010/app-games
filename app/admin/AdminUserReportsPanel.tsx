@@ -122,6 +122,7 @@ export function AdminUserReportsPanel({ onAuthExpired }: { onAuthExpired: () => 
       });
       const data = await response.json().catch(() => null) as {
         report?: UserReport;
+        deliveryStatus?: "sent" | "failed" | "not-required";
         error?: string;
       } | null;
       if (response.status === 401) {
@@ -135,7 +136,11 @@ export function AdminUserReportsPanel({ onAuthExpired }: { onAuthExpired: () => 
         entry.id === data.report!.id ? data.report! : entry
       )));
       setDrafts((current) => ({ ...current, [report.id]: "" }));
-      setMessage(`「${report.summary}」へ返信しました。`);
+      setMessage(data.deliveryStatus === "failed"
+        ? "返信はPortalへ保存しましたが、メール通知に失敗しました。"
+        : data.deliveryStatus === "not-required"
+          ? "返信はPortalへ保存しました。確認済みメールがないため、メール通知は送っていません。"
+          : `「${report.summary}」へ返信し、メールでも通知しました。`);
     } catch (error) {
       if (error instanceof Error && error.message === "ADMIN_AUTH_REQUIRED") {
         onAuthExpired();
@@ -192,6 +197,8 @@ export function AdminUserReportsPanel({ onAuthExpired }: { onAuthExpired: () => 
                 {report.messages.map((entry) => <article key={entry.id} className={`max-w-[90%] rounded-lg p-3 ${entry.author === "admin" ? "mr-auto border border-white/10 bg-white/[0.04]" : "ml-auto bg-cyan-300/10"}`}>
                   <div className="flex justify-between gap-3 text-xs font-bold text-slate-400"><span>{entry.author === "admin" ? "運営" : "報告者"}</span><time>{new Intl.DateTimeFormat("ja-JP", { dateStyle: "short", timeStyle: "short" }).format(new Date(entry.createdAt))}</time></div>
                   <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-slate-200">{entry.body}</p>
+                  {entry.author === "admin" && entry.deliveryStatus === "failed" && <p className="mt-2 text-xs font-bold text-amber-200">メール通知失敗</p>}
+                  {entry.author === "admin" && entry.deliveryStatus === "not-required" && <p className="mt-2 text-xs text-slate-500">確認済みメールなし・Portalのみ</p>}
                 </article>)}
               </div>
               <p className="text-xs text-slate-500">報告ID: {report.id} ／ プレイヤーID: {report.playerId}</p>
@@ -202,7 +209,7 @@ export function AdminUserReportsPanel({ onAuthExpired }: { onAuthExpired: () => 
                 event.preventDefault();
                 void sendReply(report);
               }}>
-                <label className="block text-xs font-bold text-slate-400">返信
+                <label className="block text-xs font-bold text-slate-400">返信（SDK Portalへ保存し、確認済みメールにも通知）
                   <textarea value={drafts[report.id] ?? ""} onChange={(event) => setDrafts((current) => ({ ...current, [report.id]: event.target.value }))} maxLength={3000} className="mt-2 min-h-28 w-full rounded-lg border border-white/15 bg-slate-950/70 px-3 py-2 text-sm font-normal text-white" placeholder="確認結果や追加で必要な情報を入力" />
                 </label>
                 <div className="flex flex-wrap items-end justify-between gap-3">
