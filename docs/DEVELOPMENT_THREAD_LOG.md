@@ -5481,8 +5481,12 @@
 - `npm test`に成功し、全590テストが通過した。
 - `npm run lint`に成功した。
 - `npm run build`に成功し、全78ルートを生成した。
+- 機能コミット`111f6f08226c18562fc6b3ac2aa68ba36a886094`を`develop`へ
+  fast-forward反映した。
+- Vercel Deployment `dpl_FizfRR15bvcwMFykMYSRvTmhYW1E`が`READY`となり、
+  `dev.game-fields.com`へ反映された。errors-only build logにもエラーはなかった。
 
 ### 未対応・保留
 
-- `develop`公開後、返信が追加パスキーなしで保存・通知されることと、パスキーを残した
-  操作でdev登録済みCredentialだけが選ばれることを実機確認する。
+- 管理者の実ブラウザから返信を送信し、追加パスキーなしでの保存と実メール受信を照合する。
+- パスキーを維持した操作で、dev登録済みCredentialだけが候補になることを実機確認する。
