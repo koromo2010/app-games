@@ -455,6 +455,7 @@ ChatGPT Workではスレッドごとに作業環境が新しくなり、前ス�
 - 本体コードの`dev → main`は別の管理カードで扱う。GitHubのmain/develop両SHAを再確認し、developがmainに対してfast-forward可能なときだけ`force: false`でmain refを更新する。`dev`はmainの検証環境であり、SDK packageの中間channelではない。
 - 採用済みアプリの`dev app → main app`は`lineageId = creatorSlug/sourceGameId`で同じ作品系統を特定し、devの固定revision・package root・server bundle・AppSet・manifest・module policyをmainの`sdk_app_releases`へ新しいリリースとして追加する。既存main版の`publicGameId`はdev値で上書きせず維持する。ロールバックは過去行を現在ポインタへ戻す破壊的更新ではなく、選択版を複製した`rollback`リリースを追加する。他アプリ、本体コード、進行中Roomは変更せず、新規Roomだけが新しい現在版を解決する。
 - SDK DB migration 004以後は環境別の`sdk_app_releases`がアプリカタログとリリース履歴の正本である。`sdk_games.stable_*`は提出・同環境採用の互換情報として残すが、正式Runtime catalogは現在の`sdk_app_releases`を読む。
+- 2026-07-26に本番隔離Preview Project `app-games-sdk-preview`と`preview.game-fields.com`を作成し、本番専用署名鍵、private package Git `koromo2010/game-fields-sdk-mocks`、Portal専用write token、Preview専用read tokenを分離して登録・再デプロイした。Production Branchはmain同期直前に`app-games-sdk`とともに`main`へ切り替える。SDK本番DBは`GET https://sdk.game-fields.com/api/health`の`schemaVersion: 4`確認を同期前の必須条件とする。
 - package Git保存は対象subtreeを完全置換し、前revisionだけにあったassetを新commitへ残さない。server bundleは提出時にも1 MiB上限を検査する。昇格処理は検査後のUPDATEへ元revisionと2つのhashを条件として付け、再提出または別昇格と競合した場合はコピーせず409で停止する。
 - `SDK_PREVIEW_SIGNING_SECRET`はPortalと対応previewだけで環境別に共有する。Portalだけに`SDK_MOCK_GITHUB_WRITE_TOKEN`、previewだけに別の`SDK_MOCK_GITHUB_READ_TOKEN`を設定し、どちらも専用非公開repo以外へ権限を与えない。変数配置は`docs/ENVIRONMENT_VARIABLES.md`を正本とする。
 
