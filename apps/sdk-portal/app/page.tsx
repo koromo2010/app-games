@@ -6,21 +6,21 @@ import { AccountMenu } from "./account-menu";
 const foundations = [
   {
     number: "01",
-    title: "Build locally",
+    title: "ローカルで作る",
     description:
       "本番のデータやアカウント情報にはさわらず、自分のパソコンの中でゲームのルールや画面を作ります。",
   },
   {
     number: "02",
-    title: "Validate safely",
+    title: "安全に確認する",
     description:
-      "本番と同じ動きをする確認用の仕組みを使って、提出する前に安全かどうかをチェックします。",
+      "本番と同じ動きをする確認用の仕組みを使って、公開する前に安全かどうかをチェックします。",
   },
   {
     number: "03",
-    title: "Submit for review",
+    title: "確認を経て公開",
     description:
-      "完成したゲームはGame Fieldsに提出します。外部の開発者に本番環境の権限を渡すことはありません。",
+      "完成したゲームは、Game Fieldsによる確認を経てから公開されます（提出の仕組みは現在準備中です）。外部の開発者に本番環境の権限が渡ることはありません。",
   },
 ];
 
