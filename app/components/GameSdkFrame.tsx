@@ -473,6 +473,11 @@ export function GameSdkFrame({
         rules={rules}
         backHref={backHref}
         backLabel={creatorSlug ? "制作者ページへ" : "ゲーム広場へ戻る"}
+        debugRoom={common?.permissions.canDebug ? {
+          code: room.code,
+          revision: room.revision,
+          phase: room.phase,
+        } : null}
       >
         {common?.permissions.canAbort && room.phase === "playing" && (
           <button
