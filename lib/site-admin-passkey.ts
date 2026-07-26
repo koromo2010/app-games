@@ -21,7 +21,7 @@ export async function siteAdminRegistrationOptions(email: string) {
     userID: new Uint8Array(createHash("sha256").update(`site-admin:${email}`).digest()),
     attestationType: "none",
     timeout: 120_000,
-    excludeCredentials: existing.map((passkey) => ({ id: passkey.credentialId, transports: passkey.credential.transports })),
+    excludeCredentials: existing.map((passkey) => ({ id: passkey.credentialId })),
     authenticatorSelection: { residentKey: "preferred", userVerification: "required" },
   });
 }
@@ -34,7 +34,11 @@ export async function siteAdminAuthenticationOptions(email: string) {
     rpID,
     timeout: 120_000,
     userVerification: "required",
-    allowCredentials: passkeys.map((passkey) => ({ id: passkey.credentialId, transports: passkey.credential.transports })),
+    // Do not pin saved transport hints here. Chrome/Windows may use a different
+    // available provider on a later authentication (Windows Hello, Google
+    // Password Manager, hybrid phone flow, etc.). The credential ID is enough;
+    // letting the browser select the transport avoids false NotAllowedError loops.
+    allowCredentials: passkeys.map((passkey) => ({ id: passkey.credentialId })),
   });
 }
 
