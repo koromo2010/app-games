@@ -45,6 +45,13 @@ async function call(url: string, init?: RequestInit) {
   return { response, payload };
 }
 
+function errorCode(result: Awaited<ReturnType<typeof call>>) {
+  const payload = result.payload as { error?: unknown } | null;
+  return typeof payload?.error === "string"
+    ? payload.error
+    : `HTTP_${result.response.status}`;
+}
+
 function developmentReleases(payload: unknown) {
   if (!payload || typeof payload !== "object") return [];
   const games = (payload as { games?: unknown }).games;
@@ -88,14 +95,20 @@ export async function GET(request: Request) {
       call(developmentCatalogEndpoint()),
       call(releaseEndpoint(sdkPromotionInternalBaseUrl(), lineageId)),
     ]);
-    if (!development.response.ok || !main.response.ok) {
-      const failed = !development.response.ok ? development : main;
-      return Response.json(failed.payload, { status: failed.response.status });
-    }
-    return Response.json({
-      development: { releases: developmentReleases(development.payload) },
-      main: main.payload,
-    }, { headers: { "Cache-Control": "private, no-store" } });
+    const developmentOk = development.response.ok;
+    const mainOk = main.response.ok;
+    const body = {
+      development: developmentOk
+        ? { releases: developmentReleases(development.payload) }
+        : { releases: [], error: errorCode(development) },
+      main: mainOk
+        ? main.payload
+        : { releases: [], history: [], error: errorCode(main) },
+    };
+    return Response.json(body, {
+      status: developmentOk || mainOk ? 200 : 503,
+      headers: { "Cache-Control": "private, no-store" },
+    });
   } catch (error) {
     return routeError(error);
   }
