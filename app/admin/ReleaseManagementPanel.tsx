@@ -40,7 +40,8 @@ const errors: Record<string, string> = {
   promotion_expected_source_changed: "提出物が更新されています。再読み込みしてから審査してください。",
   promotion_source_changed: "採用処理中に提出物が更新されました。",
   public_game_id_conflict: "その本番ゲームIDはすでに使われています。",
-  SDK_PROMOTION_MAIN_ONLY: "SDK作品のmain採用はdevまたはmainの運営管理画面で利用できます。",
+  SDK_PROMOTION_MAIN_ONLY: "SDK作品の採用は対応するdevまたはmainの運営管理画面で利用できます。",
+  SDK_PROMOTION_TARGET_MISMATCH: "この管理画面と昇格先が一致しません。状態を再読み込みしてください。",
   GITHUB_RELEASE_TOKEN_NOT_CONFIGURED: "dev→main用のGitHub資格が本番環境にまだ設定されていません。",
   GITHUB_RELEASE_SOURCE_CHANGED: "mainまたはdevelopが更新されています。差分を再読込してください。",
   GITHUB_RELEASE_NOT_FAST_FORWARD: "developを安全にそのままmainへ進められない状態です。GitHubで分岐を解消してください。",
@@ -74,6 +75,10 @@ export function ReleaseManagementPanel({
   onAuthExpired: () => void;
 }) {
   const isPreview = mode === "preview";
+  const sdkSource = isPreview ? "SDK-dev" : "SDK";
+  const sdkTarget = isPreview ? "development" : "main";
+  const sdkTargetLabel = isPreview ? "dev" : "main";
+  const sdkRouteLabel = `${sdkSource}→${sdkTargetLabel}`;
   const [sdkGames, setSdkGames] = useState<SdkCandidate[]>([]);
   const [publicIds, setPublicIds] = useState<Record<string, string>>({});
   const [devRelease, setDevRelease] = useState<DevRelease | null>(null);
@@ -151,10 +156,10 @@ export function ReleaseManagementPanel({
       || !game.packageAppSetSha256
       || !/^[a-z][a-z0-9-]{1,63}$/.test(publicGameId)
     ) {
-      setMessage("提出物のhashまたは本番ゲームIDを確認してください。");
+      setMessage(`提出物のhashまたは${sdkTargetLabel}用ゲームIDを確認してください。`);
       return;
     }
-    if (!window.confirm(`${game.title} をSDKからmainへ採用しますか？\nCandidateの同一revision・hashを本番カタログへ固定します。`)) return;
+    if (!window.confirm(`${game.title} を${sdkRouteLabel}で採用しますか？\nCandidateの同一revision・hashを${sdkTargetLabel}カタログへ固定します。`)) return;
     setActiveAction(`sdk:${key}`);
     setMessage("");
     try {
@@ -163,7 +168,7 @@ export function ReleaseManagementPanel({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          target: "main",
+          target: sdkTarget,
           creatorSlug: game.creatorSlug,
           gameId: game.gameId,
           publicGameId,
@@ -178,7 +183,7 @@ export function ReleaseManagementPanel({
       } | null;
       if (!response.ok) throw new Error(payload?.error || "SDK_PROMOTION_FAILED");
       await load();
-      setMessage(`${game.title} をmain採用カタログへ反映しました。`);
+      setMessage(`${game.title} を${sdkTargetLabel}採用カタログへ反映しました。`);
     } catch (error) {
       if (error instanceof Error && error.message === "ADMIN_AUTH_REQUIRED") {
         onAuthExpired();
@@ -186,7 +191,7 @@ export function ReleaseManagementPanel({
       }
       setMessage(messageFor(
         error instanceof Error ? error.message : "",
-        "SDK作品をmainへ採用できませんでした。",
+        `SDK作品を${sdkTargetLabel}へ採用できませんでした。`,
       ));
     } finally {
       setActiveAction("");
@@ -242,15 +247,15 @@ export function ReleaseManagementPanel({
         <p className="mt-2 text-sm leading-6 text-slate-400">SDK作品の採用と、本体developの反映は互いに独立した経路です。</p>
       </header>
 
-      {isPreview && <p className="rounded-xl border border-amber-300/30 bg-amber-300/10 px-4 py-3 text-sm font-bold leading-6 text-amber-100">dev管理画面です。SDK→mainはここから実行できます。develop→mainはmain管理画面で実行します。</p>}
+      {isPreview && <p className="rounded-xl border border-amber-300/30 bg-amber-300/10 px-4 py-3 text-sm font-bold leading-6 text-amber-100">dev管理画面です。SDK-dev→devの採用検証をここで実行できます。SDK→mainとdev→mainはmain管理画面で実行します。</p>}
 
       {message && <p role="status" className="rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-4 py-3 text-sm leading-6 text-cyan-50">{message}</p>}
 
       <section className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.05]">
         <div className="border-b border-white/10 px-5 py-5">
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-300">SDK → main</p>
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-emerald-300">{sdkSource} → {sdkTargetLabel}</p>
           <h3 className="mt-1 text-xl font-black">SDK作品採用</h3>
-          <p className="mt-2 text-sm text-slate-400">運営審査後、CandidateのAppSetとhashを変更せず本番へ採用します。devは経由しません。</p>
+          <p className="mt-2 text-sm text-slate-400">運営審査後、CandidateのAppSetとhashを変更せず{sdkTargetLabel}へ採用します。{isPreview ? "本番SDK・mainには影響しません。" : "devは経由しません。"}</p>
         </div>
         {sdkLoadError ? (
           <div className="px-5 py-6">
@@ -274,18 +279,18 @@ export function ReleaseManagementPanel({
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <h4 className="text-lg font-black">{game.title}</h4>
-                      <span className={`rounded-full px-2 py-1 text-[11px] font-black ${current ? "bg-emerald-300 text-emerald-950" : "bg-amber-300 text-amber-950"}`}>{current ? "main採用済み" : game.stableRevision ? "更新あり" : "未採用"}</span>
+                      <span className={`rounded-full px-2 py-1 text-[11px] font-black ${current ? "bg-emerald-300 text-emerald-950" : "bg-amber-300 text-amber-950"}`}>{current ? `${sdkTargetLabel}採用済み` : game.stableRevision ? "更新あり" : "未採用"}</span>
                     </div>
                     <p className="mt-1 font-mono text-xs text-slate-500">{game.creatorSlug}/{game.gameId}</p>
-                    <p className="mt-2 text-xs text-slate-400">Candidate {shortSha(game.packageRevision)} / main {shortSha(game.stableRevision)}</p>
+                    <p className="mt-2 text-xs text-slate-400">Candidate {shortSha(game.packageRevision)} / {sdkTargetLabel} {shortSha(game.stableRevision)}</p>
                   </div>
                   <label className="block text-xs font-bold text-slate-300">
-                    mainで使うゲームID
+                    {sdkTargetLabel}で使うゲームID
                     <input value={publicIds[key] ?? ""} disabled={current || activeAction === `sdk:${key}`} onChange={(event) => setPublicIds((values) => ({ ...values, [key]: event.target.value }))} className="mt-1 w-full rounded-lg border border-white/15 bg-black/25 px-3 py-2 font-mono text-sm text-white outline-none focus:border-cyan-300 disabled:opacity-50" />
                   </label>
                   <div className="flex gap-2 lg:justify-end">
                     {game.reviewUrl && <a href={game.reviewUrl} target="_blank" rel="noreferrer" className="rounded-lg border border-white/15 px-4 py-2 text-sm font-bold hover:bg-white/10">レビュー</a>}
-                    <button type="button" disabled={current || !complete || activeAction === `sdk:${key}`} onClick={() => void promoteSdkGame(game)} className="rounded-lg bg-emerald-300 px-4 py-2 text-sm font-black text-emerald-950 disabled:cursor-not-allowed disabled:opacity-40">{activeAction === `sdk:${key}` ? "採用中…" : current ? "採用済み" : "SDK→main"}</button>
+                    <button type="button" disabled={current || !complete || activeAction === `sdk:${key}`} onClick={() => void promoteSdkGame(game)} className="rounded-lg bg-emerald-300 px-4 py-2 text-sm font-black text-emerald-950 disabled:cursor-not-allowed disabled:opacity-40">{activeAction === `sdk:${key}` ? "採用中…" : current ? "採用済み" : sdkRouteLabel}</button>
                   </div>
                 </article>
               );

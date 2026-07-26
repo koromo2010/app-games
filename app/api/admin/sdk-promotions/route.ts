@@ -15,6 +15,10 @@ function internalUrl() {
   return `${sdkPromotionInternalBaseUrl()}/api/internal/promotions`;
 }
 
+function promotionTarget() {
+  return expectedAppEnvironment() === "production" ? "main" : "development";
+}
+
 function requirePromotionReadEnvironment() {
   const environment = expectedAppEnvironment();
   const branch = process.env.VERCEL_GIT_COMMIT_REF;
@@ -106,6 +110,17 @@ export async function POST(request: Request) {
     const session = await requireRecentSiteAdminMfa();
     requirePromotionAdminEnvironment();
     const body = await request.json().catch(() => null);
+    if (
+      !body
+      || typeof body !== "object"
+      || !("target" in body)
+      || body.target !== promotionTarget()
+    ) {
+      return Response.json(
+        { error: "SDK_PROMOTION_TARGET_MISMATCH" },
+        { status: 400 },
+      );
+    }
     const url = internalUrl();
     const response = await fetch(url, {
       method: "POST",

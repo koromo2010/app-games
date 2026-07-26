@@ -19,6 +19,7 @@ export type PromoteGamePackageInput = {
   creatorSlug: string;
   gameId: string;
   publicGameId: string;
+  target: "development" | "main";
   expectedSource?: ExpectedGamePackageSource;
 };
 
@@ -183,7 +184,7 @@ export async function promoteGamePackage(input: PromoteGamePackageInput) {
   `;
   return {
     promoted: true as const,
-    target: "main" as const,
+    target: input.target,
     creatorSlug,
     gameId,
     ...(promoted as {

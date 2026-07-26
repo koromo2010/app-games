@@ -26,6 +26,12 @@ function authorize(request: Request, options?: { readOnly?: boolean }) {
   }
 }
 
+function expectedPromotionTarget() {
+  return process.env.VERCEL_GIT_COMMIT_REF === "main"
+    ? "main"
+    : "development";
+}
+
 export async function GET(request: Request) {
   const denied = authorize(request, { readOnly: true });
   if (denied) return denied;
@@ -77,10 +83,11 @@ export async function POST(request: Request) {
     ? body.publicGameId.trim().toLowerCase()
     : "";
   const target = body?.target;
+  const expectedTarget = expectedPromotionTarget();
   if (
     !GAME_PATTERN.test(gameId)
     || !GAME_PATTERN.test(publicGameId)
-    || target !== "main"
+    || target !== expectedTarget
   ) {
     return Response.json({ error: "promotion_input_invalid" }, { status: 400 });
   }
@@ -90,6 +97,7 @@ export async function POST(request: Request) {
       creatorSlug,
       gameId,
       publicGameId,
+      target: expectedTarget,
       expectedSource: {
         revision: typeof body?.expectedRevision === "string"
           ? body.expectedRevision
@@ -134,10 +142,11 @@ export async function DELETE(request: Request) {
     ? body.gameId.trim().toLowerCase()
     : "";
   const target = body?.target;
+  const expectedTarget = expectedPromotionTarget();
   if (
     !GAME_PATTERN.test(creatorSlug)
     || !GAME_PATTERN.test(gameId)
-    || target !== "main"
+    || target !== expectedTarget
   ) {
     return Response.json({ error: "promotion_input_invalid" }, { status: 400 });
   }
@@ -167,7 +176,7 @@ export async function DELETE(request: Request) {
       unpublished: true,
       creatorSlug,
       gameId,
-      target,
+      target: expectedTarget,
     });
   } catch {
     return Response.json({ error: "unpublish_failed" }, { status: 503 });

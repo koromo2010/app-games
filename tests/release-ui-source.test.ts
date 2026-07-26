@@ -19,7 +19,7 @@ test("lobby keeps card UI and adds a persisted accessible list view", () => {
   assert.match(source, /GameEntryAction/);
 });
 
-test("admin exposes independent SDK to main and dev to main paths", () => {
+test("admin exposes environment-paired SDK adoption and independent dev to main", () => {
   const panel = read("app/admin/ReleaseManagementPanel.tsx");
   const page = read("app/admin/page.tsx");
   const sdkRoute = read("app/api/admin/sdk-promotions/route.ts");
@@ -30,12 +30,14 @@ test("admin exposes independent SDK to main and dev to main paths", () => {
   const mcp = read("apps/sdk-portal/app/api/mcp/route.ts");
 
   assert.match(panel, /SDK作品採用/);
+  assert.match(panel, /SDK-dev→dev/);
   assert.match(panel, /SDK→main/);
   assert.match(panel, /dev反映/);
   assert.match(panel, /dev→main/);
   assert.match(page, /releaseManagementMode/);
   assert.match(page, /"preview"/);
-  assert.match(panel, /SDK→mainはここから実行できます/);
+  assert.match(panel, /SDK-dev→devの採用検証をここで実行できます/);
+  assert.match(panel, /const sdkTarget = isPreview \? "development" : "main"/);
   assert.match(panel, /isPreview \|\|/);
   assert.doesNotMatch(panel, /disabled=\{isPreview \|\| current \|\| !complete/);
   assert.match(panel, /sdkLoadError/);
@@ -43,6 +45,7 @@ test("admin exposes independent SDK to main and dev to main paths", () => {
   assert.match(sdkRoute, /requirePromotionReadEnvironment/);
   assert.match(sdkRoute, /requirePromotionAdminEnvironment/);
   assert.match(sdkRoute, /sdkPromotionInternalBaseUrl/);
+  assert.match(sdkRoute, /body\.target !== promotionTarget\(\)/);
   assert.match(devRoute, /requireReleaseReadEnvironment/);
   assert.match(sdkRoute, /sdk-game\.promote/);
   assert.match(sdkRoute, /SDK_PROMOTION_MAIN_ONLY/);
@@ -50,7 +53,8 @@ test("admin exposes independent SDK to main and dev to main paths", () => {
   assert.match(devRoute, /confirmation !== "dev→main"/);
   assert.match(portalRoute, /readOnly && branch === "develop"/);
   assert.match(portalRoute, /authorize\(request, \{ readOnly: true \}\)/);
-  assert.match(portalRoute, /target !== "main"/);
+  assert.match(portalRoute, /const expectedTarget = expectedPromotionTarget\(\)/);
+  assert.match(portalRoute, /target !== expectedTarget/);
   assert.match(portalRoute, /branch !== "main"/);
   assert.doesNotMatch(mcp, /promote_game_package_to_development/);
 });

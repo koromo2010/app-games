@@ -43,7 +43,11 @@ export function sdkPromotionInternalBaseUrl(
   env: NodeJS.ProcessEnv = process.env,
 ) {
   return env.SDK_PROMOTION_INTERNAL_URL?.replace(/\/$/, "")
-    ?? "https://sdk.game-fields.com";
+    ?? (
+      env.VERCEL_GIT_COMMIT_REF === "main"
+        ? "https://sdk.game-fields.com"
+        : "https://sdk-dev.game-fields.com"
+    );
 }
 
 export function sdkPreviewRuntimeBaseUrl(
