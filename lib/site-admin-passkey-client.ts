@@ -21,6 +21,11 @@ function diagnosticError(data: PasskeyResponse | null, fallback: string) {
   return context ? `${code}\n[${context}]` : code;
 }
 
+function stagedError(stage: string, error: unknown) {
+  const detail = error instanceof Error ? error.message : String(error);
+  return new Error(`${stage}\n${detail}`);
+}
+
 function isCancelledWebAuthn(error: unknown) {
   return error instanceof Error
     && (error.name === "NotAllowedError" || error.name === "AbortError");
@@ -47,13 +52,19 @@ async function useRecoveryCodeForStepUp() {
 }
 
 export async function ensureSiteAdminStepUp() {
-  const begin = await fetch("/api/admin/passkeys", {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "begin-step-up" }),
-  });
+  let begin: Response;
+  try {
+    begin = await fetch("/api/admin/passkeys", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "begin-step-up" }),
+    });
+  } catch (error) {
+    throw stagedError("STEP_UP_BEGIN_FETCH", error);
+  }
+
   const beginData = await responseJson(begin);
-  if (!begin.ok) throw new Error(diagnosticError(beginData, "ADMIN_STEP_UP_FAILED"));
+  if (!begin.ok) throw new Error(`STEP_UP_BEGIN\n${diagnosticError(beginData, "ADMIN_STEP_UP_FAILED")}`);
   if (beginData?.verified) return;
-  if (!beginData?.options) throw new Error(diagnosticError(beginData, "ADMIN_STEP_UP_FAILED"));
+  if (!beginData?.options) throw new Error(`STEP_UP_BEGIN_OPTIONS\n${diagnosticError(beginData, "ADMIN_STEP_UP_FAILED")}`);
 
   let credential;
   try {
@@ -61,16 +72,24 @@ export async function ensureSiteAdminStepUp() {
       optionsJSON: beginData.options as PublicKeyCredentialRequestOptionsJSON,
     });
   } catch (error) {
-    if (!isCancelledWebAuthn(error)) throw error;
+    if (!isCancelledWebAuthn(error)) throw stagedError("STEP_UP_BROWSER", error);
     await useRecoveryCodeForStepUp();
     return;
   }
 
-  const verify = await fetch("/api/admin/passkeys", {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "verify-authentication", response: credential }),
-  });
+  let verify: Response;
+  try {
+    verify = await fetch("/api/admin/passkeys", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "verify-authentication", response: credential }),
+    });
+  } catch (error) {
+    throw stagedError("STEP_UP_VERIFY_FETCH", error);
+  }
+
   const verifyData = await responseJson(verify);
-  if (!verify.ok || !verifyData?.verified) throw new Error(diagnosticError(verifyData, "ADMIN_STEP_UP_FAILED"));
+  if (!verify.ok || !verifyData?.verified) {
+    throw new Error(`STEP_UP_VERIFY\n${diagnosticError(verifyData, "ADMIN_STEP_UP_FAILED")}`);
+  }
 }
 
 export async function addSiteAdminPasskey() {
