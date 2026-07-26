@@ -1,9 +1,10 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const root = process.cwd();
 const readJson = (path) => JSON.parse(readFileSync(join(root, path), "utf8"));
 const release = readJson("config/platform-release.json");
+const publishedRelease = readJson("apps/sdk-portal/public/platform-release.json");
 const packages = [
   ["package.json", readJson("package.json")],
   ["packages/game-sdk/package.json", readJson("packages/game-sdk/package.json")],
@@ -20,6 +21,9 @@ if (!/^\d+\.\d+\.\d+$/.test(release.platformVersion)) {
 if (release.sdkPackageVersion !== release.platformVersion) {
   failures.push("sdkPackageVersion must match platformVersion for the current release train.");
 }
+if (!Number.isInteger(release.downloadMeVersion) || release.downloadMeVersion < 1) {
+  failures.push("downloadMeVersion must be a positive integer.");
+}
 if (!Number.isInteger(release.sdkContractVersion) || release.sdkContractVersion < 1) {
   failures.push("sdkContractVersion must be a positive integer.");
 }
@@ -34,6 +38,25 @@ if (release.channel === "developer-preview" && release.starterRef !== "sdk-start
 }
 if (release.channel === "stable" && release.starterRef !== "sdk-starter") {
   failures.push("stable releases must use sdk-starter.");
+}
+
+for (const [key, value] of Object.entries(release)) {
+  if (JSON.stringify(publishedRelease[key]) !== JSON.stringify(value)) {
+    failures.push(`apps/sdk-portal/public/platform-release.json: ${key} does not match config/platform-release.json.`);
+  }
+}
+
+const downloadMePath = `apps/sdk-portal/public/GameFieldsDownloadMe-ver${release.downloadMeVersion}.md`;
+if (!existsSync(join(root, downloadMePath))) {
+  failures.push(`${downloadMePath} is missing for the configured downloadMeVersion.`);
+}
+
+const starterManifestTemplate = readFileSync(
+  join(root, "sdk/starter-template/starter-manifest.json"),
+  "utf8",
+);
+if (!starterManifestTemplate.includes('"downloadMeVersion": __DOWNLOAD_ME_VERSION__')) {
+  failures.push("sdk/starter-template/starter-manifest.json must derive downloadMeVersion from platform release metadata.");
 }
 
 for (const [path, packageJson] of packages) {
@@ -88,4 +111,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(`[platform-release] Platform v${release.platformVersion}, SDK contract v${release.sdkContractVersion}, room schema v${release.roomSchemaVersion}`);
+console.log(`[platform-release] Platform v${release.platformVersion}, DownloadMe v${release.downloadMeVersion}, SDK contract v${release.sdkContractVersion}, room schema v${release.roomSchemaVersion}`);
