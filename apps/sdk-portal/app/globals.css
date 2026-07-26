@@ -193,6 +193,16 @@ nav a:focus-visible {
   color: var(--accent);
 }
 
+.nav-toc-label {
+  padding: 4px 9px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  border-radius: var(--radius-control);
+  color: var(--accent);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
 .preview-badge {
   justify-self: end;
   border: 1px solid rgba(143, 224, 201, 0.22);

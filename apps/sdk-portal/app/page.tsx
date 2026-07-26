@@ -69,11 +69,13 @@ export default async function Home() {
             Game Fields <strong>SDK</strong>
           </span>
         </a>
-        <nav aria-label="主要ナビゲーション">
+        <nav aria-label="目次">
+          <span className="nav-toc-label" aria-hidden="true">目次</span>
           {linked && <Link href="/dashboard">マイゲーム</Link>}
-          <a href="#start">スタート</a>
-          <a href="#foundation">しくみ</a>
-          <a href="#status">状況</a>
+          <a href="#start">はじめかた</a>
+          <a href="#foundation">つくる流れ</a>
+          <a href="#scope">できること</a>
+          <a href="#status">対応状況</a>
         </nav>
         <div className="header-account-area">
           <span className="preview-badge">開発者向け先行公開 · v{platformVersion}</span>
