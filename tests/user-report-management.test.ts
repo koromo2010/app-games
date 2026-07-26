@@ -25,11 +25,13 @@ test("legacy user reports remain readable as open reports", () => {
   });
   assert.equal(report?.status, "open");
   assert.equal(report?.updatedAt, 1234);
+  assert.deepEqual(report?.messages, []);
 });
 
 test("user report status accepts only the management workflow", () => {
   assert.equal(isUserReportStatus("open"), true);
   assert.equal(isUserReportStatus("in-progress"), true);
+  assert.equal(isUserReportStatus("waiting-user"), true);
   assert.equal(isUserReportStatus("resolved"), true);
   assert.equal(isUserReportStatus("deleted"), false);
 });
@@ -63,7 +65,9 @@ test("legacy contact messages remain readable and notification failures remain v
   });
   assert.equal(contact?.status, "open");
   assert.equal(contact?.notificationStatus, "unknown");
+  assert.deepEqual(contact?.messages, []);
   assert.equal(isContactStatus("resolved"), true);
+  assert.equal(isContactStatus("waiting-user"), true);
   assert.equal(isContactStatus("deleted"), false);
 });
 
@@ -92,6 +96,7 @@ test("account deletion covers reports, feedback, defaults, and word histories", 
   const wordwolf = read("lib/wordwolf-topic-history-store.ts");
 
   assert.match(deletion, /deleteUserReportsForPlayer/);
+  assert.match(deletion, /deleteUserReportDraftsForPlayer/);
   assert.match(deletion, /deletePlayerGameFeedbackData/);
   assert.match(deletion, /deleteStoredRoomDefaults/);
   assert.match(deletion, /deleteWordWolfTopicHistory/);

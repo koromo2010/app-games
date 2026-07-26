@@ -10,6 +10,24 @@ export type SdkHelpEntry = {
 /** SDK画面と制作AIの回答で共有するHelp正本。 */
 export const SDK_HELP_ENTRIES: readonly SdkHelpEntry[] = [
   {
+    id: "support-conversations",
+    title: "報告後の運営とのやりとり",
+    question: "送った不具合報告へ返信したり、運営からの回答を確認できますか？",
+    answer:
+      "はい。SDK Portalのサポート画面、またはlist_support_threads・get_support_thread・reply_support_threadを使い、本人の報告だけを確認・追記できます。運営が返信すると「あなたの返信待ち」、制作者が追記すると「オープン」へ戻ります。",
+    keywords: ["報告", "不具合", "返信", "やりとり", "状態", "オープン", "サポート"],
+    relatedToolNames: ["list_support_threads", "get_support_thread", "reply_support_thread"],
+  },
+  {
+    id: "human-approved-ai-reporting",
+    title: "AIによる報告下書きと人間承認",
+    question: "AIから不具合報告を送れますか？",
+    answer:
+      "AIはprepare_support_reportで報告下書きを作れますが、その時点では送信されません。返されたapprovalUrlを制作者本人が開き、内容を確認・必要なら修正して「報告を送信」を押した場合だけ正式な報告になります。AIだけで人間承認を省略するtoolはありません。",
+    keywords: ["AI", "不具合報告", "下書き", "同意", "承認", "prepare_support_report"],
+    relatedToolNames: ["prepare_support_report"],
+  },
+  {
     id: "package-candidate-and-formal-submission",
     title: "提出候補の準備と正式提出",
     question: "AIはゲームを正式提出できますか？",

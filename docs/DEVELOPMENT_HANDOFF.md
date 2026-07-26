@@ -49,8 +49,8 @@
 | 共通LLM経路 | `lib/game-llm.ts`, `lib/llm-model.ts`, `lib/gemini.ts`, `lib/groq.ts` |
 | 有料API切替 | `lib/llm-access.ts`, `app/api/llm-access/route.ts`, `app/components/PaidLlmAccessButton.tsx` |
 | 共通フィードバック/RAG | `lib/game-feedback-store.ts`, `lib/game-ai-types.ts`, `app/api/game-feedback/route.ts`, `app/components/GameFeedbackPanel.tsx` |
-| 改善要望・バグ報告 | `app/components/UserReportButton.tsx`, `app/api/user-reports/route.ts`, `lib/user-report-store.ts`, `app/admin/AdminUserReportsPanel.tsx`, `app/api/admin/user-reports/route.ts` |
-| お問い合わせ受信箱 | `app/contact/ContactForm.tsx`, `app/api/contact/route.ts`, `lib/contact-store.ts`, `app/admin/AdminContactMessagesPanel.tsx`, `app/api/admin/contact-messages/route.ts` |
+| 改善要望・バグ報告 | `app/components/UserReportButton.tsx`, `app/api/user-reports/route.ts`, `lib/user-report-store.ts`, `lib/user-report-draft-store.ts`, `app/admin/AdminUserReportsPanel.tsx`, `app/api/admin/user-reports/route.ts`, `app/api/internal/sdk-support/route.ts`, `apps/sdk-portal/app/support`, `apps/sdk-portal/lib/support-api.ts` |
+| お問い合わせ受信箱 | `app/contact/ContactForm.tsx`, `app/contact/thread`, `app/api/contact/route.ts`, `app/api/contact-thread/route.ts`, `lib/contact-store.ts`, `app/admin/AdminContactMessagesPanel.tsx`, `app/api/admin/contact-messages/route.ts` |
 | アカウント従属データ削除 | `lib/player-data-deletion.ts`, `lib/user-report-store.ts`, `lib/game-feedback-store.ts`, `lib/room-defaults-store.ts`, 各ゲーム語履歴store |
 | 共通部屋設定 | `lib/room-defaults-store.ts`, `lib/game-room-defaults-client.ts`, `app/components/RoomConfigSummary.tsx` |
 | 共通トランプ基盤 | `lib/playing-cards.ts`, `lib/playing-card-presentation.ts`, `app/components/PlayingCard.tsx`, `app/components/PlayingCardHand.tsx`, `app/components/PlayingCardBackStack.tsx` |

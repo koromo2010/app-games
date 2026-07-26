@@ -9,6 +9,8 @@ export const GAME_FIELDS_SDK_CAPABILITIES = [
   "game-package-publish",
   "formal-room-preview",
   "hash-pinned-promotion",
+  "support-threads",
+  "human-approved-reporting",
   "submission-upload",
   "persistent-rooms",
   "room-realtime",

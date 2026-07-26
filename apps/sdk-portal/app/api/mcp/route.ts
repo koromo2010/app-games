@@ -18,6 +18,12 @@ import {
 } from "@/lib/sdk-handshake";
 import { ensureSdkSchema, sdkSql } from "@/lib/sdk-postgres";
 import { searchSdkHelp } from "@/lib/sdk-help";
+import {
+  listCreatorSupportReports,
+  loadCreatorSupportReport,
+  prepareCreatorSupportDraft,
+  replyToCreatorSupportReport,
+} from "@/lib/support-api";
 import platformRelease from "../../../../../config/platform-release.json";
 import {
   GAME_SDK_MODULE_CATALOG,
@@ -49,6 +55,10 @@ const tools = [
   { name: "get_sdk_handshake", title: "SDK接続互換性の確認", description: "制作を始める前に、接続先環境、Platform・SDK契約版、DownloadMe記載の必要機能だけを送って互換性を確認します。requiredCapabilitiesは将来の機能名も送信でき、未提供の機能は応答のCAPABILITY_UNAVAILABLEで判定します。accepted=trueになるまで他のSDK toolを使わないでください。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { protocol: { type: "string", const: "game-fields-sdk" }, handshakeVersion: { type: "integer", minimum: 1 }, client: { type: "object", properties: { kind: { type: "string", enum: ["ai-agent", "starter-cli", "browser-runtime", "platform"] }, name: { type: "string" }, version: { type: "string" } }, required: ["kind"], additionalProperties: false }, expected: { type: "object", properties: { environment: { type: "string", enum: ["development", "production"] }, platformVersion: { type: "string" }, sdkPackageVersion: { type: "string" }, sdkContractVersion: { type: "integer", minimum: 1 } }, required: ["environment", "platformVersion", "sdkPackageVersion", "sdkContractVersion"], additionalProperties: false }, requiredCapabilities: { type: "array", description: "添付されたDownloadMeのrequiredCapabilitiesをそのまま指定します。固定enumではなく、Portal未提供名はhandshake応答で拒否します。", items: { type: "string", minLength: 1, maxLength: 64, pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" }, maxItems: 64, uniqueItems: true } }, required: ["protocol", "handshakeVersion", "client", "expected", "requiredCapabilities"], additionalProperties: false } },
   { name: "search_sdk_help", title: "SDK Help検索", description: "制作・保存・提出・審査・権限に関するSDKの正本Helpを検索します。利用者から仕様について質問されたときは、推測で答える前に使用してください。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { query: { type: "string", description: "利用者の質問または検索語", minLength: 1, maxLength: 500 }, limit: { type: "integer", minimum: 1, maximum: 10 } }, required: ["query"], additionalProperties: false } },
   { name: "list_creator_environments", title: "自分のSDK環境一覧", description: "ログイン中のGame Fieldsアカウントに紐づく既存の制作者環境を一覧表示します。新規URLを予約する前に必ず呼び出してください。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: {}, additionalProperties: false } },
+  { name: "list_support_threads", title: "自分の報告スレッド一覧", description: "ログイン中の制作者本人が送った不具合報告・改善要望と、運営との会話状態を一覧表示します。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { status: { type: "string", enum: ["open", "in-progress", "waiting-user", "resolved", "closed"] } }, additionalProperties: false } },
+  { name: "get_support_thread", title: "報告スレッドの確認", description: "本人の報告スレッド1件について、最初の報告、運営返信、本人追記、現在の状態を取得します。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { reportId: { type: "string", pattern: "^report_[0-9a-fA-F-]{36}$" } }, required: ["reportId"], additionalProperties: false } },
+  { name: "reply_support_thread", title: "報告スレッドへ追記", description: "本人の既存報告へ追記し、状態をオープンへ戻します。利用者が送信内容を明示した場合だけ使用してください。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { reportId: { type: "string", pattern: "^report_[0-9a-fA-F-]{36}$" }, requestId: { type: "string", format: "uuid", description: "再試行時も同じ値を使う一意ID" }, message: { type: "string", minLength: 1, maxLength: 3000 } }, required: ["reportId", "requestId", "message"], additionalProperties: false } },
+  { name: "prepare_support_report", title: "人間承認用の報告下書き", description: "AIが不具合報告・改善要望の下書きを作り、人間がPortalで確認・修正して明示承認するURLを返します。このtoolだけでは運営へ送信されません。submitted=falseを確認し、必ずapprovalUrlを利用者へ提示してください。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { requestId: { type: "string", format: "uuid", description: "再試行時も同じ値を使う一意ID" }, type: { type: "string", enum: ["bug", "request"] }, summary: { type: "string", minLength: 1, maxLength: 120 }, details: { type: "string", maxLength: 1200 }, page: { type: "string", maxLength: 200 } }, required: ["requestId", "type", "summary", "details", "page"], additionalProperties: false } },
   { name: "check_creator_url", title: "制作者URLの空き確認", description: "Game Fields SDKの制作者URL名が利用可能か確認します。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "確認する制作者URL名" } }, required: ["slug"], additionalProperties: false } },
   { name: "reserve_creator_url", title: "制作者URLの予約", description: "ログイン中のGame Fieldsアカウント用に制作者URLを7日間予約します。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "予約する制作者URL名" }, displayName: { type: "string", description: "制作者の表示名" } }, required: ["slug", "displayName"], additionalProperties: false } },
   { name: "finalize_creator_url", title: "制作者URLの確定", description: "予約トークンを使い、制作者URLをログイン中のアカウントへ正式登録します。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "確定する制作者URL名" }, reservationToken: { type: "string", description: "予約時に発行されたトークン" } }, required: ["slug", "reservationToken"], additionalProperties: false } },
@@ -83,6 +93,81 @@ async function callTool(name: string, args: Record<string, unknown>, playerId: s
         url: `${portalBaseUrl(origin)}/${environment.slug}`,
       })),
       count: environments.length,
+    });
+  }
+  if (name === "list_support_threads") {
+    const requestedStatus = typeof args.status === "string" ? args.status : "";
+    const reports = await listCreatorSupportReports(playerId);
+    const filtered = requestedStatus
+      ? reports.filter((report) => report.status === requestedStatus)
+      : reports;
+    return textResult({ reports: filtered, count: filtered.length });
+  }
+  if (name === "get_support_thread") {
+    const reportId = typeof args.reportId === "string"
+      ? args.reportId.trim()
+      : "";
+    if (!/^report_[0-9a-f-]{36}$/i.test(reportId)) {
+      throw new Error("報告IDが不正です。");
+    }
+    return textResult({
+      report: await loadCreatorSupportReport(playerId, reportId),
+    });
+  }
+  if (name === "reply_support_thread") {
+    const reportId = typeof args.reportId === "string"
+      ? args.reportId.trim()
+      : "";
+    const requestId = typeof args.requestId === "string"
+      ? args.requestId.trim()
+      : "";
+    const message = typeof args.message === "string"
+      ? args.message.trim().slice(0, 3_000)
+      : "";
+    if (!/^report_[0-9a-f-]{36}$/i.test(reportId) || !requestId || !message) {
+      throw new Error("報告への追記内容が不正です。");
+    }
+    const report = await replyToCreatorSupportReport({
+      playerId,
+      reportId,
+      requestId,
+      message,
+    });
+    return textResult({ replied: true, report });
+  }
+  if (name === "prepare_support_report") {
+    const requestId = typeof args.requestId === "string"
+      ? args.requestId.trim()
+      : "";
+    const type = args.type === "bug" || args.type === "request"
+      ? args.type
+      : null;
+    const summary = typeof args.summary === "string"
+      ? args.summary.trim().slice(0, 120)
+      : "";
+    const details = typeof args.details === "string"
+      ? args.details.trim().slice(0, 1_200)
+      : "";
+    const page = typeof args.page === "string"
+      ? args.page.trim().slice(0, 200)
+      : "";
+    if (!requestId || !type || !summary) {
+      throw new Error("報告下書きの内容が不正です。");
+    }
+    const draft = await prepareCreatorSupportDraft({
+      playerId,
+      requestId,
+      type,
+      summary,
+      details,
+      page,
+    });
+    return textResult({
+      submitted: false,
+      humanApprovalRequired: true,
+      draft,
+      approvalUrl: `${origin}/support/drafts/${draft.id}`,
+      instruction: "この下書きはまだ運営へ送信されていません。利用者へapprovalUrlを提示し、本人が内容を確認して送信するまで対応済みと扱わないでください。",
     });
   }
   const slug = normalizeInstanceSlug(typeof args.slug === "string" ? args.slug : "");

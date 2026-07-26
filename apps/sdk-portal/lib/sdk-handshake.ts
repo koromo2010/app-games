@@ -16,6 +16,8 @@ export const SDK_PORTAL_CAPABILITIES = [
   "game-package-publish",
   "formal-room-preview",
   "hash-pinned-promotion",
+  "support-threads",
+  "human-approved-reporting",
 ] as const;
 
 export function sdkPortalEnvironment(base: string) {

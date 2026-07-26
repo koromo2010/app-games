@@ -112,3 +112,76 @@ export async function sendOperationsAlertEmail(input: { subject: string; lines: 
   const firstError = results.find(({ error }) => error)?.error;
   if (firstError) throw emailDeliveryError(firstError);
 }
+
+export async function sendSupportReplyEmail(input: {
+  to: string;
+  subject: string;
+  body: string;
+  threadUrl: string;
+  idempotencyKey: string;
+}) {
+  const apiKey = sharedEnvironmentVariable("RESEND_API_KEY");
+  if (!apiKey) throw new Error("EMAIL_SERVICE_NOT_CONFIGURED");
+  const resend = new Resend(apiKey);
+  const from = process.env.EMAIL_FROM?.trim()
+    || "Game Fields <noreply@game-fields.com>";
+  const safeBody = escapeHtml(input.body).replaceAll("\n", "<br />");
+  const safeUrl = escapeHtml(input.threadUrl);
+  const { error } = await resend.emails.send({
+    from,
+    to: input.to,
+    subject: input.subject,
+    text: `${input.body}\n\n続けて返信する場合は、以下の専用ページを開いてください。\n${input.threadUrl}`,
+    html: `
+      <div style="background:#f8fafc;padding:32px 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#0f172a">
+        <div style="max-width:620px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:28px">
+          <h1 style="font-size:21px;margin:0 0 20px">Game Fieldsから返信が届きました</h1>
+          <p style="line-height:1.8">${safeBody}</p>
+          <p style="margin:28px 0 12px">
+            <a href="${safeUrl}" style="display:inline-block;background:#0e7490;color:#fff;text-decoration:none;font-weight:700;padding:12px 20px;border-radius:8px">会話を確認・返信する</a>
+          </p>
+          <p style="font-size:12px;line-height:1.7;color:#64748b">この専用URLはお問い合わせ内容を表示します。第三者へ転送しないでください。</p>
+        </div>
+      </div>
+    `,
+  }, {
+    idempotencyKey: input.idempotencyKey,
+  });
+  if (error) throw emailDeliveryError(error);
+}
+
+export async function sendContactReceiptEmail(input: {
+  to: string;
+  contactId: string;
+  threadUrl: string;
+}) {
+  const apiKey = sharedEnvironmentVariable("RESEND_API_KEY");
+  if (!apiKey) throw new Error("EMAIL_SERVICE_NOT_CONFIGURED");
+  const resend = new Resend(apiKey);
+  const from = process.env.EMAIL_FROM?.trim()
+    || "Game Fields <noreply@game-fields.com>";
+  const safeId = escapeHtml(input.contactId);
+  const safeUrl = escapeHtml(input.threadUrl);
+  const { error } = await resend.emails.send({
+    from,
+    to: input.to,
+    subject: `【Game Fields】お問い合わせを受け付けました ${input.contactId}`,
+    text: `お問い合わせを受け付けました。\n受付ID: ${input.contactId}\n\n以下の専用ページで返信の確認と追記ができます。\n${input.threadUrl}`,
+    html: `
+      <div style="background:#f8fafc;padding:32px 16px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#0f172a">
+        <div style="max-width:620px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:28px">
+          <h1 style="font-size:21px;margin:0 0 20px">お問い合わせを受け付けました</h1>
+          <p>受付ID: <strong>${safeId}</strong></p>
+          <p style="line-height:1.8">運営からの返信確認や追加情報の送信は、以下の専用ページをご利用ください。</p>
+          <p style="margin:28px 0 12px">
+            <a href="${safeUrl}" style="display:inline-block;background:#0e7490;color:#fff;text-decoration:none;font-weight:700;padding:12px 20px;border-radius:8px">お問い合わせ履歴を開く</a>
+          </p>
+          <p style="font-size:12px;line-height:1.7;color:#64748b">この専用URLはお問い合わせ内容を表示します。第三者へ転送しないでください。</p>
+        </div>
+      </div>
+    `,
+  }, {
+    idempotencyKey: `contact-receipt-${input.contactId}`,
+  });
+  if (error) throw emailDeliveryError(error);
+}

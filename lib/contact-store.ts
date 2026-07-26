@@ -1,6 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { redisCommand } from "@/lib/redis-store";
 import {
+  type SupportReplyDeliveryStatus,
+  type SupportThreadAuthor,
+} from "@/lib/support-thread-core";
+import {
   normalizeStoredContactMessage,
   type ContactCategory,
   type ContactMessage,
@@ -24,13 +28,21 @@ function parseStoredContactMessage(value: string | null) {
   }
 }
 
-export async function saveContactMessage(input: { category: ContactCategory; name: string; email: string; message: string }) {
+export async function saveContactMessage(input: {
+  category: ContactCategory;
+  name: string;
+  email: string;
+  message: string;
+  playerId?: string | null;
+}) {
   const now = Date.now();
   const contact: ContactMessage = {
     id: `contact_${randomUUID()}`,
     ...input,
+    playerId: input.playerId?.trim() || null,
     status: "open",
     notificationStatus: "pending",
+    messages: [],
     createdAt: now,
     updatedAt: now,
   };
@@ -47,6 +59,13 @@ export async function saveContactMessage(input: { category: ContactCategory; nam
     String(contactMaximumCount - 1),
   ]);
   return { id: contact.id, createdAt: contact.createdAt };
+}
+
+export async function loadContactMessage(contactId: string) {
+  if (!/^contact_[0-9a-f-]{36}$/i.test(contactId)) return null;
+  return parseStoredContactMessage(
+    await redisCommand<string | null>(["GET", `${contactKeyPrefix}${contactId}`]),
+  );
 }
 
 export async function listContactMessages(limit = 100) {
@@ -66,11 +85,23 @@ async function updateContactMessage(
 ) {
   if (!/^contact_[0-9a-f-]{36}$/i.test(contactId)) throw new Error("CONTACT_MESSAGE_NOT_FOUND");
   const key = `${contactKeyPrefix}${contactId}`;
-  const current = parseStoredContactMessage(await redisCommand<string | null>(["GET", key]));
-  if (!current) throw new Error("CONTACT_MESSAGE_NOT_FOUND");
-  const updated = update(current);
-  await redisCommand<string>(["SET", key, JSON.stringify(updated), "EX", String(contactRetentionSeconds)]);
-  return updated;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const raw = await redisCommand<string | null>(["GET", key]);
+    const current = parseStoredContactMessage(raw);
+    if (!raw || !current) throw new Error("CONTACT_MESSAGE_NOT_FOUND");
+    const updated = update(current);
+    const saved = await redisCommand<number>([
+      "EVAL",
+      "if redis.call('GET',KEYS[1])==ARGV[1] then redis.call('SET',KEYS[1],ARGV[2],'EX',ARGV[3]); return 1 end return 0",
+      "1",
+      key,
+      raw,
+      JSON.stringify(updated),
+      String(contactRetentionSeconds),
+    ]);
+    if (saved === 1) return updated;
+  }
+  throw new Error("CONTACT_MESSAGE_CONFLICT");
 }
 
 export async function updateContactMessageStatus(contactId: string, status: ContactStatus) {
@@ -88,6 +119,69 @@ export async function updateContactNotificationStatus(
   return updateContactMessage(contactId, (current) => ({
     ...current,
     notificationStatus,
+    updatedAt: Date.now(),
+  }));
+}
+
+export async function appendContactThreadMessage(input: {
+  contactId: string;
+  requestId: string;
+  author: SupportThreadAuthor;
+  body: string;
+  status: ContactStatus;
+  deliveryStatus?: SupportReplyDeliveryStatus;
+}) {
+  if (!/^contact_[0-9a-f-]{36}$/i.test(input.contactId)) {
+    throw new Error("CONTACT_MESSAGE_NOT_FOUND");
+  }
+  const key = `${contactKeyPrefix}${input.contactId}`;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const raw = await redisCommand<string | null>(["GET", key]);
+    const current = parseStoredContactMessage(raw);
+    if (!raw || !current) throw new Error("CONTACT_MESSAGE_NOT_FOUND");
+    const existing = current.messages.find(
+      (message) => message.requestId === input.requestId,
+    );
+    if (existing) return { contact: current, message: existing, inserted: false };
+    const now = Date.now();
+    const message = {
+      id: `message_${randomUUID()}`,
+      requestId: input.requestId,
+      author: input.author,
+      body: input.body,
+      createdAt: now,
+      deliveryStatus: input.deliveryStatus ?? "not-required",
+    } as const;
+    const updated: ContactMessage = {
+      ...current,
+      status: input.status,
+      messages: [...current.messages, message],
+      updatedAt: now,
+    };
+    const saved = await redisCommand<number>([
+      "EVAL",
+      "if redis.call('GET',KEYS[1])==ARGV[1] then redis.call('SET',KEYS[1],ARGV[2],'EX',ARGV[3]); return 1 end return 0",
+      "1",
+      key,
+      raw,
+      JSON.stringify(updated),
+      String(contactRetentionSeconds),
+    ]);
+    if (saved === 1) return { contact: updated, message, inserted: true };
+  }
+  throw new Error("CONTACT_MESSAGE_CONFLICT");
+}
+
+export async function updateContactThreadMessageDelivery(
+  contactId: string,
+  messageId: string,
+  deliveryStatus: SupportReplyDeliveryStatus,
+) {
+  return updateContactMessage(contactId, (current) => ({
+    ...current,
+    messages: current.messages.map((message) => message.id === messageId
+      ? { ...message, deliveryStatus }
+      : message),
     updatedAt: Date.now(),
   }));
 }

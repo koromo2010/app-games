@@ -1,7 +1,15 @@
+import {
+  isSupportThreadStatus,
+  normalizeSupportThreadMessages,
+  supportThreadStatuses,
+  type SupportThreadMessage,
+  type SupportThreadStatus,
+} from "./support-thread-core.ts";
+
 export const contactCategories = ["general", "privacy", "account", "bug"] as const;
 export type ContactCategory = (typeof contactCategories)[number];
-export const contactStatuses = ["open", "in-progress", "resolved", "closed"] as const;
-export type ContactStatus = (typeof contactStatuses)[number];
+export const contactStatuses = supportThreadStatuses;
+export type ContactStatus = SupportThreadStatus;
 export const contactNotificationStatuses = ["pending", "sent", "failed", "unknown"] as const;
 export type ContactNotificationStatus = (typeof contactNotificationStatuses)[number];
 
@@ -11,8 +19,10 @@ export type ContactMessage = {
   name: string;
   email: string;
   message: string;
+  playerId: string | null;
   status: ContactStatus;
   notificationStatus: ContactNotificationStatus;
+  messages: SupportThreadMessage[];
   createdAt: number;
   updatedAt: number;
 };
@@ -22,7 +32,7 @@ export function isContactCategory(value: unknown): value is ContactCategory {
 }
 
 export function isContactStatus(value: unknown): value is ContactStatus {
-  return typeof value === "string" && contactStatuses.includes(value as ContactStatus);
+  return isSupportThreadStatus(value);
 }
 
 export function isContactNotificationStatus(value: unknown): value is ContactNotificationStatus {
@@ -48,8 +58,12 @@ export function normalizeStoredContactMessage(value: unknown): ContactMessage | 
     name: input.name,
     email: input.email,
     message: input.message,
+    playerId: typeof input.playerId === "string" && input.playerId
+      ? input.playerId
+      : null,
     status: isContactStatus(input.status) ? input.status : "open",
     notificationStatus: isContactNotificationStatus(input.notificationStatus) ? input.notificationStatus : "unknown",
+    messages: normalizeSupportThreadMessages(input.messages),
     createdAt,
     updatedAt: Number.isFinite(input.updatedAt) ? Number(input.updatedAt) : createdAt,
   };

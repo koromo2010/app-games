@@ -1,6 +1,14 @@
+import {
+  isSupportThreadStatus,
+  normalizeSupportThreadMessages,
+  supportThreadStatuses,
+  type SupportThreadMessage,
+  type SupportThreadStatus,
+} from "./support-thread-core.ts";
+
 export type UserReportType = "bug" | "request";
-export const userReportStatuses = ["open", "in-progress", "resolved", "closed"] as const;
-export type UserReportStatus = (typeof userReportStatuses)[number];
+export const userReportStatuses = supportThreadStatuses;
+export type UserReportStatus = SupportThreadStatus;
 
 export type UserReport = {
   id: string;
@@ -10,6 +18,7 @@ export type UserReport = {
   page: string;
   playerId: string;
   status: UserReportStatus;
+  messages: SupportThreadMessage[];
   createdAt: number;
   updatedAt: number;
 };
@@ -19,7 +28,7 @@ function isUserReportType(value: unknown): value is UserReportType {
 }
 
 export function isUserReportStatus(value: unknown): value is UserReportStatus {
-  return typeof value === "string" && userReportStatuses.includes(value as UserReportStatus);
+  return isSupportThreadStatus(value);
 }
 
 export function normalizeStoredUserReport(value: unknown): UserReport | null {
@@ -44,6 +53,7 @@ export function normalizeStoredUserReport(value: unknown): UserReport | null {
     page: input.page,
     playerId: input.playerId,
     status: isUserReportStatus(input.status) ? input.status : "open",
+    messages: normalizeSupportThreadMessages(input.messages),
     createdAt,
     updatedAt: Number.isFinite(input.updatedAt) ? Number(input.updatedAt) : createdAt,
   };

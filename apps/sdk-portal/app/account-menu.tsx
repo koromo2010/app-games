@@ -30,6 +30,7 @@ export async function AccountMenu() {
           <strong>{account.playerName ? `${account.playerName} と連携済み` : "連携済み（表示名は再連携後に表示）"}</strong>
         </div>
         <Link href="/dashboard">マイゲーム</Link>
+        <Link href="/support">サポート・報告</Link>
         <Link href="/api/account-link/start">本体アカウントを再連携</Link>
         <form action="/api/account-link/logout" method="post">
           <button type="submit">ログアウト</button>

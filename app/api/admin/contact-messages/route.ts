@@ -1,5 +1,12 @@
 import { isContactStatus } from "@/lib/contact-core";
-import { listContactMessages, updateContactMessageStatus } from "@/lib/contact-store";
+import {
+  appendContactThreadMessage,
+  listContactMessages,
+  updateContactMessageStatus,
+  updateContactThreadMessageDelivery,
+} from "@/lib/contact-store";
+import { createContactThreadToken } from "@/lib/contact-thread-access";
+import { sendSupportReplyEmail } from "@/lib/email";
 import { createRequestTelemetry } from "@/lib/observability";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 import {
@@ -22,6 +29,103 @@ export async function GET() {
   } catch (error) {
     return siteAdminAuthorizationError(error)
       ?? Response.json({ error: "CONTACT_MESSAGES_LOAD_FAILED" }, { status: 500 });
+  }
+}
+
+export async function POST(request: Request) {
+  const telemetry = createRequestTelemetry(
+    request,
+    "/api/admin/contact-messages",
+    { operation: "contact-message-reply" },
+  );
+  const limited = await rateLimitResponseFor(
+    request,
+    rateLimitPolicies.profileMutation,
+  );
+  if (limited) return limited;
+  try {
+    const session = await requireRecentSiteAdminMfa();
+    const body = await request.json().catch(() => null) as {
+      contactId?: unknown;
+      requestId?: unknown;
+      message?: unknown;
+      status?: unknown;
+    } | null;
+    const message = typeof body?.message === "string"
+      ? body.message.trim().slice(0, 3_000)
+      : "";
+    const requestId = typeof body?.requestId === "string"
+      ? body.requestId.trim().slice(0, 120)
+      : "";
+    const status = isContactStatus(body?.status)
+      ? body.status
+      : "waiting-user";
+    if (
+      typeof body?.contactId !== "string"
+      || !requestId
+      || !message
+    ) {
+      return Response.json(
+        { error: "CONTACT_MESSAGE_REPLY_INVALID" },
+        { status: 400 },
+      );
+    }
+    const result = await appendContactThreadMessage({
+      contactId: body.contactId,
+      requestId,
+      author: "admin",
+      body: message,
+      status,
+      deliveryStatus: "pending",
+    });
+    const threadUrl = new URL("/contact/thread", request.url);
+    threadUrl.hash = new URLSearchParams({
+      id: result.contact.id,
+      access: createContactThreadToken(result.contact.id),
+    }).toString();
+    const deliveryStatus = await sendSupportReplyEmail({
+      to: result.contact.email,
+      subject: `【Game Fields】お問い合わせへの返信 ${result.contact.id}`,
+      body: message,
+      threadUrl: threadUrl.toString(),
+      idempotencyKey: `contact-reply-${result.message.id}`,
+    }).then(() => "sent" as const).catch(() => "failed" as const);
+    const contact = await updateContactThreadMessageDelivery(
+      result.contact.id,
+      result.message.id,
+      deliveryStatus,
+    );
+    await appendSiteAdminAuditLog(
+      request,
+      session,
+      "contact-message.reply",
+      contact.id,
+      null,
+      {
+        messageId: result.message.id,
+        status: contact.status,
+        deliveryStatus,
+        inserted: result.inserted,
+      },
+    );
+    telemetry.success("contact-message.reply", {
+      action: contact.status,
+    });
+    return Response.json(
+      { contact, deliveryStatus },
+      { status: result.inserted ? 201 : 200 },
+    );
+  } catch (error) {
+    const auth = siteAdminAuthorizationError(error);
+    if (auth) return auth;
+    if (error instanceof Error && error.message === "CONTACT_MESSAGE_NOT_FOUND") {
+      return Response.json({ error: error.message }, { status: 404 });
+    }
+    telemetry.failure("contact-message.reply", error, 500);
+    return Response.json(
+      { error: "CONTACT_MESSAGE_REPLY_FAILED" },
+      { status: 500 },
+    );
   }
 }
 

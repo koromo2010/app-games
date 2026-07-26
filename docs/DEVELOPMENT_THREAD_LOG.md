@@ -4962,3 +4962,70 @@
 ### 未対応・保留
 
 - 管理画面の「報告」タブで当日recordが描画されることは、管理者ブラウザで確認する。
+
+### 報告内容そのものの追加確認
+
+- 報告時点の旧Deployment `15cc680`では、Skull RoomへのDEBUG追加Commandが3回とも
+  HTTP成功し、lobby revisionが`1 → 2 → 3 → 4`へ進んでいた。ダミー追加の保存失敗ではなく、
+  保存後の新しいRoom表示がクライアント側で保持されない経路だった。
+- 後続修正`ae0b792`は、Command、iframe、watcher、timerから遅着した古いRoom応答を
+  `attachLatestRoom`で拒否し、新しいrevisionを巻き戻さない。報告後の同Deploymentでは
+  Skullのplaying Commandがrevision 34〜40まで進み、stale revisionの409と混在しても
+  最新rev 40のlobbyへ戻ったことをRuntime Logで確認した。
+- `online-room-client-state`、正式Preview creator限定DEBUG契約、SDK HTTP Runtimeの
+  18テストも通過した。従って報告原因に対応する実装は`ae0b792`で反映済みと判断する。
+- Cloud Browserでは通常テストアカウントでRoom `81PW`の作成・プレイヤー表示まで確認した。
+  このアカウントは`moi-lab`所有者ではないため、creator限定DEBUGボタンを押す最終E2Eは
+  未確認として残す。
+
+## 2026-07-26 — 報告・お問い合わせの双方向会話と人間承認付きAI報告
+
+### 利用者からの要望
+
+- 運営受信箱から報告・お問い合わせへ返信し、やりとりに応じてオープン等の状態を
+  管理できるようにする。
+- SDK制作者側もPortal UIとAIから同じ会話を確認・追記できるようにする。
+- AIが不具合報告を作れるようにするが、人間の同意なしで正式送信させない。
+
+### 判断
+
+- 報告・問い合わせへ共通状態`open`、`in-progress`、`waiting-user`、`resolved`、
+  `closed`とappend-onlyの会話履歴を持たせる。
+- 運営返信は既定で`waiting-user`、送信者追記は`open`へ戻す。状態と会話の同時更新は
+  Redis CASで保護し、遅い更新によるメッセージ消失を防ぐ。
+- SDK PortalとAI toolは、本体Redisを直接参照せず、既存`SDK_ACCOUNT_LINK_SECRET`の
+  method・path・時刻署名付き内部APIを通す。player IDで本人のreportだけに制限する。
+- AIの新規報告は7日間の下書きだけを作り、本人がPortalで確認・修正して明示承認した時に
+  安定したreport IDで冪等保存する。AI用の直接submit toolは作らない。
+- 公開問い合わせは認証アカウントを必須にできないため、HMAC付き専用URLと受付メールで
+  本人側UIを提供する。秘密値はURL fragmentへ置き、ページrequestとreferrerに含めない。
+
+### 実施結果
+
+- `/admin`の「報告」「お問い合わせ」へ会話履歴、返信欄、返信後状態選択を追加した。
+  full管理者の直近MFAを必須とし、監査ログには本文を複製せずmessage IDと状態だけを残す。
+- お問い合わせ返信はResend idempotency key付きで送信し、メール失敗時も会話を保存する。
+  新規受付メールと`/contact/thread`から、問い合わせ者が履歴確認・追記できる。
+- SDK Portalへ`/support`と人間承認画面を追加した。OAuth MCPへ
+  `list_support_threads`、`get_support_thread`、`reply_support_thread`、
+  `prepare_support_report`を追加し、Portal UIと同じ本体データを利用する。
+- Handshake capabilityへ`support-threads`と`human-approved-reporting`を追加し、
+  SDK HelpとDownloadMe正本へ承認条件を明記した。
+- 会話は報告180日・問い合わせ365日の既存保持期限に従う。AI下書きは7日で失効し、
+  報告・下書きともアカウント削除の従属データへ含めた。
+
+### 検証
+
+- `npm test`に成功し、全582テストが通過した。
+- `npm run verify`、`npm run lint`、本体`npm run build`、SDK Portal
+  `npm run build:sdk`に成功した。
+- `npm run test:sdk-starter`で入口、公開Git snapshot、ZIP展開、同梱SDK install、
+  型検査、契約テスト、1ゲーム完走、提出ZIPを確認した。
+- SDK Portal buildで`/support`、`/support/drafts/[draftId]`、対応APIが生成され、
+  本体buildで`/api/contact-thread`、`/contact/thread`、`/api/internal/sdk-support`が
+  生成された。
+
+### 未対応・保留
+
+- devへのcommit反映と、本体dev・SDK Portal dev双方のDeployment／Runtime Error確認。
+- full管理者、SDK制作者、公開問い合わせ者の3セッションを使う公開後の実画面E2E。

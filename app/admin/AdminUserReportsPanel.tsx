@@ -10,8 +10,9 @@ import {
 } from "@/lib/user-report-core";
 
 const statusLabels: Record<UserReportStatus, string> = {
-  open: "未対応",
+  open: "オープン",
   "in-progress": "確認中",
+  "waiting-user": "ユーザー返信待ち",
   resolved: "対応済み",
   closed: "見送り・終了",
 };
@@ -28,6 +29,8 @@ export function AdminUserReportsPanel({ onAuthExpired }: { onAuthExpired: () => 
   const [filter, setFilter] = useState<ReportFilter>("open");
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [replyStatuses, setReplyStatuses] = useState<Record<string, UserReportStatus>>({});
   const [message, setMessage] = useState("");
 
   const load = useCallback(async (signal?: AbortSignal) => {
@@ -100,6 +103,49 @@ export function AdminUserReportsPanel({ onAuthExpired }: { onAuthExpired: () => 
     }
   };
 
+  const sendReply = async (report: UserReport) => {
+    const reply = drafts[report.id]?.trim() ?? "";
+    if (!reply || savingId) return;
+    setSavingId(report.id);
+    setMessage("");
+    try {
+      await ensureSiteAdminStepUp();
+      const response = await fetch("/api/admin/user-reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reportId: report.id,
+          requestId: crypto.randomUUID(),
+          message: reply,
+          status: replyStatuses[report.id] ?? "waiting-user",
+        }),
+      });
+      const data = await response.json().catch(() => null) as {
+        report?: UserReport;
+        error?: string;
+      } | null;
+      if (response.status === 401) {
+        onAuthExpired();
+        return;
+      }
+      if (!response.ok || !data?.report) {
+        throw new Error(data?.error || "REPLY_FAILED");
+      }
+      setReports((current) => current.map((entry) => (
+        entry.id === data.report!.id ? data.report! : entry
+      )));
+      setDrafts((current) => ({ ...current, [report.id]: "" }));
+      setMessage(`「${report.summary}」へ返信しました。`);
+    } catch (error) {
+      if (error instanceof Error && error.message === "ADMIN_AUTH_REQUIRED") {
+        onAuthExpired();
+      }
+      setMessage("返信を送信できませんでした。");
+    } finally {
+      setSavingId(null);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-6xl space-y-5 px-4 py-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -137,10 +183,37 @@ export function AdminUserReportsPanel({ onAuthExpired }: { onAuthExpired: () => 
                 <p className="text-xs font-bold text-slate-500">詳しい内容</p>
                 <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-6 text-slate-200">{report.details || "詳しい内容はありません。"}</p>
               </div>
+              <div className="space-y-2 rounded-xl bg-slate-950/45 p-3">
+                <p className="text-xs font-bold text-slate-500">やりとり</p>
+                <article className="ml-auto max-w-[90%] rounded-lg bg-cyan-300/10 p-3">
+                  <div className="flex justify-between gap-3 text-xs font-bold text-cyan-100"><span>報告者</span><time>{new Intl.DateTimeFormat("ja-JP", { dateStyle: "short", timeStyle: "short" }).format(new Date(report.createdAt))}</time></div>
+                  <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-slate-200">{report.details || report.summary}</p>
+                </article>
+                {report.messages.map((entry) => <article key={entry.id} className={`max-w-[90%] rounded-lg p-3 ${entry.author === "admin" ? "mr-auto border border-white/10 bg-white/[0.04]" : "ml-auto bg-cyan-300/10"}`}>
+                  <div className="flex justify-between gap-3 text-xs font-bold text-slate-400"><span>{entry.author === "admin" ? "運営" : "報告者"}</span><time>{new Intl.DateTimeFormat("ja-JP", { dateStyle: "short", timeStyle: "short" }).format(new Date(entry.createdAt))}</time></div>
+                  <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-slate-200">{entry.body}</p>
+                </article>)}
+              </div>
               <p className="text-xs text-slate-500">報告ID: {report.id} ／ プレイヤーID: {report.playerId}</p>
               <div className="flex flex-wrap gap-2" aria-label="対応状態を変更">
                 {userReportStatuses.map((status) => <button key={status} type="button" disabled={savingId !== null || report.status === status} onClick={() => void updateStatus(report, status)} className="rounded-lg border border-white/15 px-3 py-2 text-xs font-bold text-slate-200 hover:bg-white/10 disabled:opacity-40">{statusLabels[status]}</button>)}
               </div>
+              <form className="space-y-3 border-t border-white/10 pt-4" onSubmit={(event) => {
+                event.preventDefault();
+                void sendReply(report);
+              }}>
+                <label className="block text-xs font-bold text-slate-400">返信
+                  <textarea value={drafts[report.id] ?? ""} onChange={(event) => setDrafts((current) => ({ ...current, [report.id]: event.target.value }))} maxLength={3000} className="mt-2 min-h-28 w-full rounded-lg border border-white/15 bg-slate-950/70 px-3 py-2 text-sm font-normal text-white" placeholder="確認結果や追加で必要な情報を入力" />
+                </label>
+                <div className="flex flex-wrap items-end justify-between gap-3">
+                  <label className="text-xs font-bold text-slate-400">返信後の状態
+                    <select value={replyStatuses[report.id] ?? "waiting-user"} onChange={(event) => setReplyStatuses((current) => ({ ...current, [report.id]: event.target.value as UserReportStatus }))} className="mt-1 block rounded-lg border border-white/15 bg-slate-900 px-3 py-2 text-sm text-white">
+                      {userReportStatuses.map((status) => <option key={status} value={status}>{statusLabels[status]}</option>)}
+                    </select>
+                  </label>
+                  <button type="submit" disabled={savingId !== null || !(drafts[report.id]?.trim())} className="rounded-lg bg-cyan-300 px-4 py-2 text-sm font-black text-slate-950 disabled:opacity-40">{savingId === report.id ? "送信中…" : "返信を送信"}</button>
+                </div>
+              </form>
             </div>
           </details>
         ))}

@@ -33,6 +33,8 @@ capabilityVector:
   - game-package-publish
   - formal-room-preview
   - hash-pinned-promotion
+  - support-threads
+  - human-approved-reporting
 ```
 
 ## C1::OUTPUT_LITERALS
@@ -67,6 +69,7 @@ I13 MUST_NOT report package preparation complete unless P_SUBMISSION_READY is tr
 I14 MUST preserve submitted AppSet source and package hashes through preview/review/promotion; source changes require a new revision and a full rerun.
 I15 MUST use returned URLs; MUST_NOT synthesize SDK URLs.
 I16 MUST define bilingual standardResult.presentation.reason, no more than 3 share-safe highlights, and a participant-safe playLog for every result transition; MUST_NOT expose machine reason codes, prompts, internal IDs, undisclosed secrets, or non-consenting participant names as human-facing result text.
+I17 MUST_NOT submit a new support report directly; prepare_support_report creates a draft only, and the human creator MUST review and approve it in Portal.
 ```
 
 ## P0::TERMINAL_PREDICATES
@@ -168,7 +171,9 @@ CALL get_sdk_handshake WITH:
     "mock-publish",
     "game-package-publish",
     "formal-room-preview",
-    "hash-pinned-promotion"
+    "hash-pinned-promotion",
+    "support-threads",
+    "human-approved-reporting"
   ]
 }
 
@@ -232,6 +237,28 @@ SELECT finalized.slug.
 
 CREATOR_URL_CARDINALITY := one URL per creator, not one URL per game.
 GOTO S3.
+```
+
+## O0::SUPPORT_OPERATIONS
+
+```text
+IF user asks to inspect existing reports:
+  CALL list_support_threads.
+  CALL get_support_thread only for the selected reportId.
+
+IF user asks to reply to an existing report:
+  ASSERT the exact reply body was provided or confirmed by the user.
+  CALL reply_support_thread with a stable UUID requestId.
+  ASSERT replied == true.
+
+IF AI detects a probable SDK or game defect AND user asks to report it:
+  CALL prepare_support_report with a stable UUID requestId and the observed evidence.
+  ASSERT submitted == false.
+  ASSERT humanApprovalRequired == true.
+  ASSERT approvalUrl is URL.
+  EMIT approvalUrl.
+  EMIT "この下書きはまだ送信されていません。内容を確認し、同意する場合だけPortalから送信してください。"
+  MUST_NOT claim the report was submitted before the human approval action.
 ```
 
 ## S3::STARTER_ACQUISITION

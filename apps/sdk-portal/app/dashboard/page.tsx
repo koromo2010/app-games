@@ -42,6 +42,7 @@ export default async function CreatorDashboard() {
       </Link>
       <nav aria-label="制作者メニュー">
         <Link className="dashboard-nav-active" href="/dashboard">マイゲーム</Link>
+        <Link href="/support">サポート</Link>
         <Link href="/#start">新しく作る</Link>
         <Link href="/#review">提出について</Link>
         <Link href="/help">Help</Link>

@@ -8,6 +8,7 @@ import { sdkServiceHeaders } from "./sdk-service-auth.ts";
 import { sdkPortalInternalBaseUrl } from "./sdk-preview-runtime-source.ts";
 import { deleteTahoiyaTopicHistory } from "./tahoiya-topic-history-store.ts";
 import { deleteUserReportsForPlayer } from "./user-report-store.ts";
+import { deleteUserReportDraftsForPlayer } from "./user-report-draft-store.ts";
 import { deleteWordWolfTopicHistory } from "./wordwolf-topic-history-store.ts";
 
 async function revokeSdkAccount(playerId: string) {
@@ -37,5 +38,6 @@ export async function deletePlayerDependentData(playerId: string) {
     deleteGeneralGameWordHistory(playerId),
     deletePlayerGameFeedbackData(playerId),
     deleteUserReportsForPlayer(playerId),
+    deleteUserReportDraftsForPlayer(playerId),
   ]);
 }

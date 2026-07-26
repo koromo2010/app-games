@@ -42,6 +42,7 @@ export default async function PreviewInstancePage({ params }: {
     {isOwner && (
       <nav className="creator-preview-actions" aria-label="制作者用メニュー">
         <span>CREATOR</span>
+        <Link href="/support">サポート</Link>
         <Link href="/dashboard">マイゲーム・編集</Link>
       </nav>
     )}
