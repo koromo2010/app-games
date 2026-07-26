@@ -21,11 +21,11 @@ function errorResponse(error: unknown, stage: string) {
   const auth = siteAdminAuthorizationError(error);
   if (auth) return auth;
   const code = error instanceof Error ? error.message : "SITE_ADMIN_PASSKEY_FAILED";
-  if (code === "SITE_ADMIN_ACCOUNTS_STORE_NOT_CONFIGURED") return Response.json({ error: code, stage }, { status: 503 });
-  if (code === "SITE_ADMIN_PASSKEY_LIMIT_REACHED") return Response.json({ error: code, stage }, { status: 409 });
-  if (code === "SITE_ADMIN_CHALLENGE_INVALID") return Response.json({ error: "SITE_ADMIN_CHALLENGE_EXPIRED", detail: code, stage }, { status: 400 });
-  if (code === "SITE_ADMIN_PASSKEY_NOT_FOUND") return Response.json({ error: "SITE_ADMIN_PASSKEY_VERIFICATION_FAILED", detail: code, stage }, { status: 400 });
-  return Response.json({ error: "SITE_ADMIN_PASSKEY_VERIFICATION_FAILED", detail: code, stage }, { status: 400 });
+  const diagnostic = (base: string) => `${base} [${stage} / ${code}]`;
+  if (code === "SITE_ADMIN_ACCOUNTS_STORE_NOT_CONFIGURED") return Response.json({ error: diagnostic(code), stage, detail: code }, { status: 503 });
+  if (code === "SITE_ADMIN_PASSKEY_LIMIT_REACHED") return Response.json({ error: diagnostic(code), stage, detail: code }, { status: 409 });
+  if (code === "SITE_ADMIN_CHALLENGE_INVALID") return Response.json({ error: diagnostic("SITE_ADMIN_CHALLENGE_EXPIRED"), detail: code, stage }, { status: 400 });
+  return Response.json({ error: diagnostic("SITE_ADMIN_PASSKEY_VERIFICATION_FAILED"), detail: code, stage }, { status: 400 });
 }
 
 export async function POST(request: Request) {
