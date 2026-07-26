@@ -17,39 +17,29 @@ import {
 } from "./GameTopMenu";
 import { AppLink as Link } from "./AppLink";
 
+export type GameSdkDebugRoom = {
+  code: string;
+  revision: number;
+  phase: string;
+};
+
 type Props = {
   eyebrow: string;
   title: string;
   rules: readonly string[];
   backHref: string;
   backLabel: string;
+  debugRoom?: GameSdkDebugRoom | null;
   children?: ReactNode;
 };
-
-type ActiveDebugRoom = {
-  code: string;
-  revision: number;
-  phase: string;
-};
-
-function activeRoomEndpoint(pathname: string) {
-  const preview = pathname.match(/^\/sdk-preview\/([^/]+)\/games\/([^/]+)/);
-  if (preview) {
-    return `/api/sdk-preview/${encodeURIComponent(preview[1]!)}\/games\/${encodeURIComponent(preview[2]!)}\/rooms?active=1`;
-  }
-  const approved = pathname.match(/^\/sdk-games\/([^/]+)/);
-  if (approved) {
-    return `/api/game-sdk/${encodeURIComponent(approved[1]!)}\/rooms?active=1`;
-  }
-  return null;
-}
 
 /**
  * Platform-owned header for reviewed SDK games.
  *
  * The game package supplies title/rules through its immutable manifest, while
  * navigation, AI activity, rules presentation and the player menu stay outside
- * the sandboxed package.
+ * the sandboxed package. Room permissions are resolved by GameSdkFrame and
+ * passed in directly; this component never fetches or recalculates them.
  */
 export function GameSdkShellHeader({
   eyebrow,
@@ -57,11 +47,11 @@ export function GameSdkShellHeader({
   rules,
   backHref,
   backLabel,
+  debugRoom = null,
   children,
 }: Props) {
   const [rulesOpen, setRulesOpen] = useState(false);
   const [session, setSession] = useState<PlayerSession | null>(null);
-  const [debugRoom, setDebugRoom] = useState<ActiveDebugRoom | null>(null);
   const [debugOpen, setDebugOpen] = useState(false);
 
   useEffect(() => {
@@ -74,61 +64,8 @@ export function GameSdkShellHeader({
   }, []);
 
   useEffect(() => {
-    const endpoint = activeRoomEndpoint(window.location.pathname);
-    if (!endpoint) {
-      setDebugRoom(null);
-      return;
-    }
-    let active = true;
-    const refresh = async () => {
-      try {
-        const response = await fetch(endpoint, {
-          cache: "no-store",
-          credentials: "same-origin",
-        });
-        if (!response.ok) {
-          if (active) setDebugRoom(null);
-          return;
-        }
-        const payload = await response.json() as {
-          room?: {
-            code?: unknown;
-            revision?: unknown;
-            phase?: unknown;
-            view?: { common?: { permissions?: { canDebug?: unknown } } };
-          } | null;
-        };
-        const room = payload.room;
-        const canDebug = room?.view?.common?.permissions?.canDebug === true;
-        if (
-          active
-          && canDebug
-          && typeof room?.code === "string"
-          && Number.isSafeInteger(room.revision)
-          && typeof room.phase === "string"
-        ) {
-          setDebugRoom({
-            code: room.code,
-            revision: Number(room.revision),
-            phase: room.phase,
-          });
-        } else if (active) {
-          setDebugRoom(null);
-          setDebugOpen(false);
-        }
-      } catch {
-        if (active) setDebugRoom(null);
-      }
-    };
-    void refresh();
-    const interval = window.setInterval(() => void refresh(), 2_000);
-    window.addEventListener("focus", refresh);
-    return () => {
-      active = false;
-      window.clearInterval(interval);
-      window.removeEventListener("focus", refresh);
-    };
-  }, []);
+    if (!debugRoom) setDebugOpen(false);
+  }, [debugRoom]);
 
   return (
     <>
