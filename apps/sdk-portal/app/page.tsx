@@ -36,8 +36,6 @@ const available = [
   "本番環境とつなぐ部分も、あらかじめ確認済み",
 ];
 
-const reviewFlow = ["提出", "自動チェック", "Game Fieldsの確認", "本番への反映"];
-
 const firstBuildGuide = [
   {
     title: "最初のモックは10〜20分が目安",
@@ -76,7 +74,6 @@ export default async function Home() {
           <a href="#start">Start</a>
           <a href="#foundation">Foundation</a>
           <a href="#status">Status</a>
-          <a href="#review">Review gate</a>
         </nav>
         <div className="header-account-area">
           <span className="preview-badge">Developer preview · v{platformVersion}</span>
@@ -287,24 +284,6 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
             ))}
           </ul>
         </div>
-      </section>
-
-      <section className="review section" id="review">
-        <div className="section-heading">
-          <p className="eyebrow">MANAGED RELEASE GATE</p>
-          <h2>提出したものは、必ず確認してから公開します</h2>
-          <p>
-            自動チェックに加えて、Game Fieldsの人による確認も必ず行ってから、本番に反映します。この確認は、これから少しずつAIにも手伝ってもらう予定です。
-          </p>
-        </div>
-        <ol className="review-flow">
-          {reviewFlow.map((item, index) => (
-            <li key={item}>
-              <span>{String(index + 1).padStart(2, "0")}</span>
-              <strong>{item}</strong>
-            </li>
-          ))}
-        </ol>
       </section>
 
       <footer>
