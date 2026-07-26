@@ -7,13 +7,12 @@ const source = readFileSync(
   "utf8",
 );
 
-test("admin passkey authentication lets the browser choose the available transport", () => {
-  assert.match(
-    source,
-    /allowCredentials:\s*passkeys\.map\(\(passkey\) => \(\{ id: passkey\.credentialId \}\)\)/,
-  );
+test("admin passkey authentication uses discoverable local credentials", () => {
+  assert.match(source, /preferredAuthenticatorType:\s*"localDevice"/);
+  assert.match(source, /allowCredentials:\s*\[\]/);
   assert.doesNotMatch(
     source,
     /allowCredentials:[\s\S]*transports:\s*passkey\.credential\.transports/,
   );
+  assert.match(source, /passkey\.email !== email/);
 });
