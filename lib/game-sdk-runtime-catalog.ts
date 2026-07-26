@@ -23,6 +23,7 @@ import { createGameSdkRemoteServerModule } from "./game-sdk-remote-module.ts";
 import { createRemoteGameSdkRuntimeContract } from "./game-sdk-runtime-contract.ts";
 import { createRedisGameSdkEffectJournal } from "./game-sdk-effect-journal.ts";
 import { createRedisGameSdkFeedbackCapture } from "./game-sdk-feedback-store.ts";
+import { gameSdkPlatformResourcePolicy } from "./game-sdk-platform-resource-policy.ts";
 import type {
   ApprovedGameSdkRegistration,
   ApprovedGameSdkRoomAdapter,
@@ -74,6 +75,7 @@ type RuntimeCatalogListPayload = {
     serverBundleSha256: string;
     appSetSourceSha256: string;
     manifest: GameSdkManifest;
+    modulePolicy: unknown;
   }>;
 };
 
@@ -103,6 +105,9 @@ function validCatalogListPayload(
       || !/^[a-f0-9]{64}$/.test(game.packageRootSha256)
       || !/^[a-f0-9]{64}$/.test(game.serverBundleSha256)
       || !/^[a-f0-9]{64}$/.test(game.appSetSourceSha256)
+      || !game.modulePolicy
+      || typeof game.modulePolicy !== "object"
+      || Array.isArray(game.modulePolicy)
     ) return false;
     try {
       assertGameManifest(game.manifest);
@@ -127,23 +132,28 @@ export async function loadApprovedGameSdkCatalog(
   if (!validCatalogListPayload(payload, channel)) {
     throw new Error("GAME_SDK_RUNTIME_CATALOG_INVALID");
   }
-  return payload.games.map((game) => ({
-    id: game.id,
-    title: game.manifest.title.ja,
-    englishTitle: game.manifest.title.en,
-    visual: "/game-visuals/sdk-game-placeholder.svg",
-    tags: [catalogTag(game.manifest)],
-    href: `/sdk-games/${game.id}`,
-    players: game.manifest.minimumPlayers === game.manifest.maximumPlayers
-      ? String(game.manifest.minimumPlayers)
-      : `${game.manifest.minimumPlayers}–${game.manifest.maximumPlayers}`,
-    time: "未計測",
-    summary: game.description.trim().slice(0, 240)
-      || game.manifest.title.ja,
-    accent: "from-cyan-300 via-emerald-200 to-amber-200",
-    private: false,
-    stats: "account",
-  }));
+  return payload.games.map((game) => {
+    const moduleProfile = normalizeGameSdkModuleProfile(game.modulePolicy);
+    return {
+      id: game.id,
+      title: game.manifest.title.ja,
+      englishTitle: game.manifest.title.en,
+      visual: "/game-visuals/sdk-game-placeholder.svg",
+      tags: [catalogTag(game.manifest)],
+      href: `/sdk-games/${game.id}`,
+      players: game.manifest.minimumPlayers === game.manifest.maximumPlayers
+        ? String(game.manifest.minimumPlayers)
+        : `${game.manifest.minimumPlayers}–${game.manifest.maximumPlayers}`,
+      time: "未計測",
+      summary: game.description.trim().slice(0, 240)
+        || game.manifest.title.ja,
+      accent: "from-cyan-300 via-emerald-200 to-amber-200",
+      private: false,
+      stats: moduleProfile.stats.mode === "required"
+        ? "account"
+        : "local-disabled",
+    };
+  });
 }
 
 function validCatalogPayload(
@@ -224,7 +234,10 @@ async function loadRuntimeCatalogPayload(
 }
 
 function remoteModule(payload: RuntimeCatalogPayload, runtimeId: string) {
-  const feedbackRequired = payload.moduleProfile.feedback.mode === "required";
+  const resourcePolicy = gameSdkPlatformResourcePolicy(
+    payload.manifest,
+    payload.moduleProfile,
+  );
   return createGameSdkRemoteServerModule({
     manifest: payload.manifest,
     runtimeId,
@@ -233,7 +246,7 @@ function remoteModule(payload: RuntimeCatalogPayload, runtimeId: string) {
     serverRuntimeUrl: payload.serverRuntimeUrl,
     serverRuntimeToken: payload.serverRuntimeToken,
     effectJournal: createRedisGameSdkEffectJournal(),
-    ...(feedbackRequired && payload.manifest.usesLlm ? {
+    ...(resourcePolicy.feedback ? {
       feedbackCapture: createRedisGameSdkFeedbackCapture(payload.gameId),
     } : {}),
   });
@@ -243,18 +256,27 @@ function runtimeResources(
   gameId: string,
   request: Request,
   playerId: string,
+  payload: Pick<RuntimeCatalogPayload, "manifest" | "moduleProfile">,
 ) {
+  const resourcePolicy = gameSdkPlatformResourcePolicy(
+    payload.manifest,
+    payload.moduleProfile,
+  );
   return {
-    contentSource: createGameFieldsSdkContentSource(),
-    llm: createGameFieldsSdkLlmGateway({
-      gameId,
-      allowHighQuality: false,
-      beforeGenerate: () => enforceGameSdkLlmRateLimit(
-        request,
-        playerId,
+    ...(resourcePolicy.contentSource ? {
+      contentSource: createGameFieldsSdkContentSource(),
+    } : {}),
+    ...(resourcePolicy.llm ? {
+      llm: createGameFieldsSdkLlmGateway({
         gameId,
-      ),
-    }),
+        allowHighQuality: false,
+        beforeGenerate: () => enforceGameSdkLlmRateLimit(
+          request,
+          playerId,
+          gameId,
+        ),
+      }),
+    } : {}),
   };
 }
 
@@ -292,6 +314,9 @@ export async function loadApprovedGameSdkRuntimeRegistration(
   const payload = await loadRuntimeCatalogPayload(gameId, channel, env);
   if (!payload) return null;
   const currentModule = remoteModule(payload, gameId);
+  const moduleRequired = (id: keyof GameSdkModuleProfile) => (
+    payload.moduleProfile[id].mode === "required"
+  );
   const currentContract = createRemoteGameSdkRuntimeContract({
     revision: payload.revision,
     packageRootSha256: payload.packageRootSha256,
@@ -306,11 +331,16 @@ export async function loadApprovedGameSdkRuntimeRegistration(
     packageRootSha256: payload.packageRootSha256,
     serverBundleSha256: payload.serverBundleSha256,
     appSetSourceSha256: payload.appSetSourceSha256,
-    supportsDebug: payload.manifest.supportsDebug,
-    supportsSpectators: payload.manifest.supportsSpectators,
-    supportsReplay: payload.manifest.supportsReplay,
-    supportsRating: payload.manifest.supportsRating,
-    usesLlm: payload.manifest.usesLlm,
+    supportsDebug: payload.manifest.supportsDebug
+      && moduleRequired("debug"),
+    supportsSpectators: payload.manifest.supportsSpectators
+      && moduleRequired("spectators"),
+    supportsReplay: payload.manifest.supportsReplay
+      && moduleRequired("replay"),
+    supportsRating: payload.manifest.supportsRating
+      && moduleRequired("rating"),
+    usesLlm: payload.manifest.usesLlm
+      && moduleRequired("llm"),
     moduleProfile: payload.moduleProfile,
     settings: payload.manifest.settings ?? [],
     rules: (payload.manifest.rules ?? []).map((rule) => rule.ja),
@@ -336,12 +366,24 @@ export async function loadApprovedGameSdkRuntimeRegistration(
               revision: pinned.revision,
               packageRootSha256: pinned.packageRootSha256,
             }),
-            resources: runtimeResources(gameId, adapterRequest, playerId),
+            moduleProfile: pinned.moduleProfile,
+            resources: runtimeResources(
+              gameId,
+              adapterRequest,
+              playerId,
+              pinned,
+            ),
             onResultConfirmed: resultPersistence(gameId, pinned),
           };
         },
         resolveIdentity,
-        resources: runtimeResources(gameId, adapterRequest, playerId),
+        moduleProfile: payload.moduleProfile,
+        resources: runtimeResources(
+          gameId,
+          adapterRequest,
+          playerId,
+          payload,
+        ),
         onResultConfirmed: resultPersistence(gameId, payload),
       }) as unknown as ApprovedGameSdkRoomAdapter;
     },

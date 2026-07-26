@@ -1,5 +1,9 @@
 import { createGameSdkOnlineRoomHttpHandlers } from "@/lib/game-sdk-online-room-http";
 import { createAuthenticatedGameSdkPlatformAdapter } from "@/lib/game-sdk-platform-adapter";
+import {
+  gameSdkModuleIsRequired,
+  normalizeGameSdkModuleProfile,
+} from "@game-fields/game-sdk/modules";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 import {
   getSdkPreviewAccountPlayerId,
@@ -64,10 +68,18 @@ async function handle(request: Request, context: RouteContext, method: Method) {
     const identity = {
       playerId: session.id,
       displayName: session.name?.trim() || "SDK Player",
-      debugAccess: creatorPlayerId === session.id,
+      debugAccess: creatorPlayerId === session.id
+        && gameSdkModuleIsRequired(
+          normalizeGameSdkModuleProfile(runtime.definition.modulePolicy),
+          "debug",
+        ),
     };
+    const moduleProfile = normalizeGameSdkModuleProfile(
+      runtime.definition.modulePolicy,
+    );
     const adapter = createAuthenticatedGameSdkPlatformAdapter({
       module: runtime.module,
+      moduleProfile,
       environment: "candidate-preview",
       roomScopeId: runtime.roomScopeId,
       runtimeContract: runtime.runtimeContract,
@@ -83,6 +95,9 @@ async function handle(request: Request, context: RouteContext, method: Method) {
         return {
           module: pinned.module,
           runtimeContract: pinned.runtimeContract,
+          moduleProfile: normalizeGameSdkModuleProfile(
+            pinned.definition.modulePolicy,
+          ),
           resources: pinned.resources,
         };
       },

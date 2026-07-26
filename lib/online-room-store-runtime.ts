@@ -245,6 +245,7 @@ export function createPlatformOnlineRoomStoreRuntime<
           roomIndexKey,
           activeRoomKeys,
           conflictError: errors.conflict,
+          activeRoomConflictError: errors.playerActive,
         });
         return room;
       } catch (error) {

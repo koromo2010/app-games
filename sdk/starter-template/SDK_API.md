@@ -83,7 +83,7 @@ settings: [
 
 `defaultSettings`は宣言した全項目と同じキーを持ち、各値を`defaultValue`と一致させます。共通画面で変更された値はRoom設定として保存・同期され、クライアントでは`GameFieldsRoom`の`view.common.settings`、AppSetでは`room.settings`から参照します。iframe内へ同じ設定UIを重複配置しません。
 
-正式Runtimeでは、利用者が現在の宣言済み設定をゲーム別の個人既定値として保存できます。Platformはmanifestにないキー、型違い、未宣言のselect値を保存しません。
+正式Runtimeでは、利用者が現在の宣言済み設定をゲーム別の個人既定値として保存できます。Room作成と`room/update-settings`の両方で、Platformはmanifestにないキーを除去し、型違い・未宣言のselect値を安全な既定値へ戻し、数値を宣言範囲へ収めます。この最終検査はAppSetの`normalizeSettings`後にも実行されます。
 
 ## SDK基本セット + AppSet
 
@@ -380,9 +380,9 @@ const watch = runtime.watchRoom(room.code, {
 watch.close();
 ```
 
-`dissolveRoom(code)`はhostがロビーまたは結果後に使い、`dissolveHostedRooms()`は同じ条件でhost所有Roomを整理します。`watchRoom`のWebSocket通知はゲームID、部屋コード、revision、時刻だけを運び、Room状態や秘密情報を運びません。接続不能時はポーリングへフォールバックします。
+`dissolveRoom(code)`はhostがロビーまたは結果後に使い、`dissolveHostedRooms()`は同じ条件でhost所有Roomを整理します。結果Roomでは戦績・rating・playbackのresult outboxを完了してからRoomを削除し、保存が処理中ならRoomを保持して再試行可能なエラーを返します。`watchRoom`のWebSocket通知はゲームID、部屋コード、revision、時刻だけを運び、Room状態や秘密情報を運びません。接続不能時はポーリングへフォールバックします。
 
-Client Runtimeへactor ID、表示名、debug資格を渡す引数はありません。Game Fieldsが同一originの署名済みHttpOnly Cookieから本人を解決し、server moduleの`context.actor`へ注入します。404のRoom取得は`null`、認証・競合・入力拒否はstatusと安全なcodeを持つ`GameSdkHttpClientRuntimeError`になります。
+Client Runtimeへactor ID、表示名、debug資格を渡す引数はありません。Game Fieldsが同一originの署名済みHttpOnly Cookieから本人を解決し、server moduleの`context.actor`へ注入します。非参加者は参加用のlobby Viewだけを匿名で取得でき、playing／resultのViewと`room/join`以外のCommandは拒否されます。404のRoom取得は`null`、認証・競合・入力拒否はstatusと安全なcodeを持つ`GameSdkHttpClientRuntimeError`になります。
 
 PreviewはこのRoom APIへ接続し、candidate packageのAppSetを隔離server runnerで実行します。未審査コードへDB、Redis、認証Cookie、環境変数、外部networkは渡しません。AppSetが要求できる外部処理は、SDK protocolで宣言されたPlatform resource effectだけです。
 

@@ -4811,3 +4811,55 @@
 ### 関連コミット
 
 - `59a8c95` — 正式Packageの共通DEBUG操作と旧bundle互換を実装。
+
+## 2026-07-26 — SDK正式Package lifecycleの拡張監査
+
+### 利用者からの要望
+
+- 追加の問い合わせを待たず、直前のDEBUG検査より範囲を広げて同系統の不具合を
+  先行確認・修正する。
+- Shell表示だけで完了とせず、正式Packageの実行経路全体を確認する。
+
+### 判断
+
+- `宣言 → 権限 → UI → Command → Runtime → Redis保存／索引 → 後処理 →
+  旧Package互換`を、Room作成・参加・復帰・退出・解散・開始・進行・結果・再戦・観戦・
+  DEBUG・設定・戦績・replay・広告・LLMについて突合する。
+- module名やソース文字列の存在だけではなく、遅着応答、同時Room移動、非参加者操作、
+  結果保存失敗を実際に起こす縦断テストを合格条件にする。
+- 結果確定直後の解散は、戦績・rating・playbackのoutbox完了前にRoomを削除しない。
+  保存処理中ならRoomを残し、完了後に再試行できる状態を正とする。
+
+### 実施結果
+
+- watcher、Command、iframe bridge、timer、復帰の全応答をrevision単調増加処理へ統合し、
+  遅いHTTP応答で新しいRoom表示を巻き戻さないようにした。
+- 募集中Room一覧へ直接参加操作を追加した。
+- Redis CASは、参加者が結果後に別Roomへ移った場合、旧Roomの再戦や更新で新しい
+  active room索引を上書きしない。新規Room作成時の索引競合も同じLua内で拒否し、
+  ダミー参加者にはactive索引を作らない。
+- 非参加者は参加前のlobby Viewだけを匿名で取得でき、playing／result Viewと
+  `room/join`以外のCommandをPlatform Runtimeで拒否する。`room/abort`はplayingだけに
+  制限した。
+- Room作成と`room/update-settings`でmanifest宣言を最終境界にし、未知キー、型違い、
+  未宣言select値、範囲外数値をAppSet normalizer前後で正規化する。
+- module profileを認証adapter、正式／candidate Runtime resource、動的catalogへ接続し、
+  無効なonline-room、設定、DEBUG、timer、再戦、解散、LLM、content source、feedback、
+  観戦、戦績系capabilityをUIだけでなくサーバー側でも無効化した。
+- 結果Room解散前にresult outboxを同期確認し、未完了なら保存を実行する。別処理が
+  保存中なら409相当でRoomを保持し、保存失敗時にも削除しない。
+
+### 検証
+
+- `npm test`に成功し、全570テストが通過した。
+- 遅着revision、旧Room再戦後のactive索引、非参加者View／Command、module無効Command、
+  manifest設定正規化、resource gate、result outbox解散競合を回帰テストへ追加した。
+- `npm run test:sdk-starter`で同梱SDK install、型検査、契約テスト、1ゲーム完走、
+  提出ZIPを確認した。
+- `npm run verify`、`npm run lint`、`npm run build`に成功した。
+
+### 未対応・保留
+
+- developへの反映、対象DeploymentのREADY、公開後Runtime Error確認は公開工程で行う。
+- 制作者アカウントを使うcandidate／昇格Packageの認証付き実機E2Eは、
+  対象アカウント側で確認する。

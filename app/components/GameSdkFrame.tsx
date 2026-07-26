@@ -31,6 +31,7 @@ import {
   gameSdkResultPlayLog,
   gameSdkResultReasonText,
 } from "@/lib/game-sdk-result-presentation";
+import { preferLatestOnlineRoom } from "@/lib/online-room-client-state";
 import {
   roomUpdateIsOlder,
   roomUpdateIsUnchanged,
@@ -334,6 +335,14 @@ export function GameSdkFrame({
     });
   }, [acceptIncomingRoom, commitRoom, runtime]);
 
+  const attachLatestRoom = useCallback((next: PackageRoom) => {
+    const current = roomRef.current;
+    const accepted = preferLatestOnlineRoom(current, next);
+    if (accepted === current) return current;
+    attachRoom(accepted);
+    return accepted;
+  }, [attachRoom]);
+
   const refreshRooms = useCallback(async () => {
     try {
       const page = await runtime.listRooms();
@@ -370,8 +379,7 @@ export function GameSdkFrame({
     setMessage("");
     try {
       const next = await operation();
-      attachRoom(next);
-      return next;
+      return attachLatestRoom(next);
     } catch (error) {
       if (
         error instanceof GameSdkHttpClientRuntimeError
@@ -394,14 +402,15 @@ export function GameSdkFrame({
         && error.code === "STALE_REVISION"
         && roomRef.current
       ) {
-        attachRoom(await runtime.readRoom(roomRef.current.code));
+        const latest = await runtime.readRoom(roomRef.current.code);
+        if (latest) attachLatestRoom(latest);
       }
       return null;
     } finally {
       pendingActionRef.current = false;
       setPending(false);
     }
-  }, [attachRoom, runtime]);
+  }, [attachLatestRoom, attachRoom, runtime]);
 
   const send = useCallback(async (command: SafeCommand) => {
     const current = roomRef.current;
@@ -410,7 +419,9 @@ export function GameSdkFrame({
       expectedRevision: current.revision,
       command,
     })).room;
-    return usesLlm && moduleRequired("ai-activity")
+    return usesLlm
+      && moduleRequired("llm")
+      && moduleRequired("ai-activity")
       ? withAiActivity("SDKゲームのAI処理", operation)
       : operation();
   }, [moduleRequired, runtime, usesLlm]);
@@ -468,7 +479,9 @@ export function GameSdkFrame({
       }
       throw new Error("DEBUG_AUTO_PROGRESS_LIMIT");
     };
-    return usesLlm && moduleRequired("ai-activity")
+    return usesLlm
+      && moduleRequired("llm")
+      && moduleRequired("ai-activity")
       ? withAiActivity("SDKゲームのDEBUG自動進行", perform)
       : perform();
   }, [moduleRequired, runtime, usesLlm]);
@@ -523,11 +536,11 @@ export function GameSdkFrame({
         || typeof payload.command.type !== "string"
       ) return;
       void send(payload.command).then((next) => {
-        attachRoom(next);
+        const accepted = attachLatestRoom(next);
         iframeRef.current?.contentWindow?.postMessage({
           type: "game-fields:room-command-result",
           requestId: payload.requestId,
-          room: next,
+          room: accepted,
         }, "*");
       }).catch((error) => {
         iframeRef.current?.contentWindow?.postMessage({
@@ -541,7 +554,7 @@ export function GameSdkFrame({
     };
     window.addEventListener("message", listener);
     return () => window.removeEventListener("message", listener);
-  }, [attachRoom, postRoom, send]);
+  }, [attachLatestRoom, postRoom, send]);
 
   useEffect(() => {
     if (expiryRef.current !== null) window.clearTimeout(expiryRef.current);
@@ -557,12 +570,12 @@ export function GameSdkFrame({
       void send({
         type: "room/expire-timer",
         turnSequence: timer.turnSequence,
-      }).then(attachRoom).catch(() => undefined);
+      }).then(attachLatestRoom).catch(() => undefined);
     }, Math.max(0, timer.deadlineAt + 1_500 - Date.now()));
     return () => {
       if (expiryRef.current !== null) window.clearTimeout(expiryRef.current);
     };
-  }, [attachRoom, moduleRequired, room, send]);
+  }, [attachLatestRoom, moduleRequired, room, send]);
 
   useEffect(() => {
     const timer = room?.view.common.timer;
@@ -604,18 +617,27 @@ export function GameSdkFrame({
         selfSeat === undefined
         || !latestRoom.view.common.pendingLobbyReturnSeats.includes(selfSeat)
       ) {
-        attachRoom(latestRoom);
+        attachLatestRoom(latestRoom);
         return;
       }
       const confirmed = await runtime.sendCommand(latestRoom.code, {
         expectedRevision: latestRoom.revision,
         command: { type: "room/confirm-lobby-return" },
       });
-      attachRoom(confirmed.room);
+      attachLatestRoom(confirmed.room);
     } catch {
       setMessage("部屋へ戻れる状態を確認できませんでした。");
     }
-  }, [attachRoom, isRoomDissolved, runtime]);
+  }, [attachLatestRoom, isRoomDissolved, runtime]);
+
+  const joinRoomByCode = useCallback((code: string) => run(async () => {
+    const target = await runtime.readRoom(code);
+    if (!target) throw new Error("ROOM_NOT_FOUND");
+    return (await runtime.sendCommand(target.code, {
+      expectedRevision: target.revision,
+      command: { type: "room/join" },
+    })).room;
+  }), [run, runtime]);
 
   const dissolveRoom = useCallback(async () => {
     const current = roomRef.current;
@@ -722,6 +744,18 @@ export function GameSdkFrame({
     : `/api/game-sdk/${gameId}/feedback`;
 
   if (!room) {
+    if (!moduleRequired("online-room")) {
+      return (
+        <main className={`min-h-screen bg-slate-100 px-4 py-8 text-slate-900 ${gameTopBannerOffsetClass}`}>
+          <section className={`${panel} mx-auto max-w-2xl`}>
+            <h2 className="text-xl font-black">オンラインRoomは無効です</h2>
+            <p className="mt-2 text-sm text-slate-600">
+              このPackageではonline-room moduleが無効化されています。
+            </p>
+          </section>
+        </main>
+      );
+    }
     return (
       <main className={`min-h-screen bg-slate-950 px-4 py-10 text-white ${gameTopBannerOffsetClass}`}>
         <GameSdkShellHeader
@@ -770,14 +804,7 @@ export function GameSdkFrame({
                 type="button"
                 className={secondary}
                 disabled={pending || joinCode.length < 4}
-                onClick={() => void run(async () => {
-                  const target = await runtime.readRoom(joinCode);
-                  if (!target) throw new Error("ROOM_NOT_FOUND");
-                  return (await runtime.sendCommand(target.code, {
-                    expectedRevision: target.revision,
-                    command: { type: "room/join" },
-                  })).room;
-                })}
+                onClick={() => void joinRoomByCode(joinCode)}
               >
                 参加
               </button>
@@ -794,9 +821,21 @@ export function GameSdkFrame({
             ) : (
               <ul className="mt-4 space-y-2">
                 {rooms.map((candidate) => (
-                  <li key={candidate.code} className="flex justify-between rounded-lg bg-slate-100 p-3">
-                    <strong className="font-mono">{candidate.code}</strong>
-                    <span>{candidate.playerCount}/{candidate.maximumPlayers}人</span>
+                  <li key={candidate.code} className="flex items-center justify-between gap-3 rounded-lg bg-slate-100 p-3">
+                    <div>
+                      <strong className="font-mono">{candidate.code}</strong>
+                      <span className="ml-3 text-sm text-slate-600">
+                        {candidate.playerCount}/{candidate.maximumPlayers}人
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className={secondary}
+                      disabled={pending}
+                      onClick={() => void joinRoomByCode(candidate.code)}
+                    >
+                      参加
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -1126,6 +1165,7 @@ export function GameSdkFrame({
           )}
           {room.phase === "result"
             && usesLlm
+            && moduleRequired("llm")
             && moduleRequired("feedback") && (
             <GameSdkFeedbackPanel
               endpoint={feedbackEndpoint}

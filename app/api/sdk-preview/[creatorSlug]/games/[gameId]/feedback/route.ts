@@ -28,12 +28,14 @@ export async function GET(request: Request, context: RouteContext) {
       request,
       playerId: session.id,
     });
+    const moduleProfile = runtime?.definition
+      ? normalizeGameSdkModuleProfile(runtime.definition.modulePolicy)
+      : null;
     if (
       !runtime
       || !runtime.definition.manifest?.usesLlm
-      || normalizeGameSdkModuleProfile(
-        runtime.definition.modulePolicy,
-      ).feedback.mode !== "required"
+      || moduleProfile?.llm.mode !== "required"
+      || moduleProfile.feedback.mode !== "required"
     ) {
       return Response.json({ artifacts: [] }, {
         headers: { "Cache-Control": "private, no-store" },
@@ -51,6 +53,7 @@ export async function GET(request: Request, context: RouteContext) {
     };
     const adapter = createAuthenticatedGameSdkPlatformAdapter({
       module: runtime.module,
+      moduleProfile: moduleProfile ?? undefined,
       environment: "candidate-preview",
       roomScopeId: runtime.roomScopeId,
       runtimeContract: runtime.runtimeContract,
@@ -66,6 +69,9 @@ export async function GET(request: Request, context: RouteContext) {
         return {
           module: pinned.module,
           runtimeContract: pinned.runtimeContract,
+          moduleProfile: normalizeGameSdkModuleProfile(
+            pinned.definition.modulePolicy,
+          ),
           resources: pinned.resources,
         };
       },

@@ -14,7 +14,7 @@ export async function compareAndSetOnlineRoom<Room extends { code: string }>(
   const keys = [roomKey(room.code), ...new Set(activeRoomKeys.filter(Boolean))];
   return redisCommand<number>([
     "EVAL",
-    "local raw=redis.call('GET',KEYS[1]); if not raw then return -1 end; local current=cjson.decode(raw); if tonumber(current.revision or 0)~=tonumber(ARGV[1]) then return 0 end; redis.call('SET',KEYS[1],ARGV[2],'EX',ARGV[3]); for i=2,#KEYS do redis.call('SET',KEYS[i],ARGV[4],'EX',ARGV[3]) end; return 1",
+    "local raw=redis.call('GET',KEYS[1]); if not raw then return -1 end; local current=cjson.decode(raw); if tonumber(current.revision or 0)~=tonumber(ARGV[1]) then return 0 end; redis.call('SET',KEYS[1],ARGV[2],'EX',ARGV[3]); for i=2,#KEYS do local active=redis.call('GET',KEYS[i]); if not active or string.upper(active)==string.upper(ARGV[4]) then redis.call('SET',KEYS[i],ARGV[4],'EX',ARGV[3]) end end; return 1",
     String(keys.length),
     ...keys,
     String(expectedRevision),
@@ -29,18 +29,22 @@ export async function createIndexedOnlineRoom<Room extends { code: string }>(roo
   roomIndexKey: string;
   activeRoomKeys?: (room: Room) => string[];
   conflictError: string;
+  activeRoomConflictError?: string;
 }) {
   const activeRoomKeys = [...new Set(options.activeRoomKeys?.(room).filter(Boolean) ?? [])];
   const keys = [options.roomKey(room.code), options.roomIndexKey, ...activeRoomKeys];
   const saved = await redisCommand<number>([
     "EVAL",
-    "if redis.call('EXISTS',KEYS[1])==1 then return 0 end; redis.call('SET',KEYS[1],ARGV[1],'EX',ARGV[2]); redis.call('SADD',KEYS[2],ARGV[3]); for i=3,#KEYS do redis.call('SET',KEYS[i],ARGV[3],'EX',ARGV[2]) end; return 1",
+    "if redis.call('EXISTS',KEYS[1])==1 then return 0 end; for i=3,#KEYS do local active=redis.call('GET',KEYS[i]); if active and string.upper(active)~=string.upper(ARGV[3]) then return -1 end end; redis.call('SET',KEYS[1],ARGV[1],'EX',ARGV[2]); redis.call('SADD',KEYS[2],ARGV[3]); for i=3,#KEYS do redis.call('SET',KEYS[i],ARGV[3],'EX',ARGV[2]) end; return 1",
     String(keys.length),
     ...keys,
     JSON.stringify(room),
     multiplayerRoomExpiryArgs()[1],
     room.code,
   ]);
+  if (saved === -1) {
+    throw new Error(options.activeRoomConflictError ?? options.conflictError);
+  }
   if (saved !== 1) throw new Error(options.conflictError);
 }
 

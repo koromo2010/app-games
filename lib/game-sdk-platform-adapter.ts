@@ -10,6 +10,11 @@ import type {
   GameSdkPlatformResources,
 } from "@game-fields/game-sdk/resources";
 import {
+  gameSdkModuleIsRequired,
+  type GameSdkModuleId,
+  type GameSdkModuleProfile,
+} from "@game-fields/game-sdk/modules";
+import {
   createGameFieldsPlatformRuntime,
   GameFieldsPlatformRuntimeError,
   gameFieldsPlatformRuntimeContractsEqual,
@@ -50,6 +55,7 @@ export type GameSdkPlatformRuntimeDefinition<
   module: GameSdkServerModule<TRoom, TCreateInput, TCommand, TRoomView>;
   runtimeContract: Readonly<GameFieldsPlatformRuntimeContract>;
   resources?: Readonly<GameSdkPlatformResources>;
+  moduleProfile?: Readonly<GameSdkModuleProfile>;
   onRoomSaved?: (
     previous: Readonly<GameFieldsPlatformRoomRecord<TRoom>>,
     next: Readonly<GameFieldsPlatformRoomRecord<TRoom>>,
@@ -72,6 +78,7 @@ type AuthenticatedPlatformAdapterOptions<
   now?: () => number;
   createRequestId?: () => string;
   resources?: Readonly<GameSdkPlatformResources>;
+  moduleProfile?: Readonly<GameSdkModuleProfile>;
   roomScopeId?: string;
   environment?: GameFieldsEnvironment;
   runtimeContract?: Readonly<GameFieldsPlatformRuntimeContract>;
@@ -148,6 +155,7 @@ export function createAuthenticatedGameSdkPlatformAdapter<
   now,
   createRequestId,
   resources,
+  moduleProfile,
   roomScopeId,
   environment,
   runtimeContract,
@@ -166,6 +174,7 @@ export function createAuthenticatedGameSdkPlatformAdapter<
   const currentDefinition = {
     module,
     resources,
+    moduleProfile,
     onRoomSaved,
     onResultConfirmed,
     ...(runtimeContract ? { runtimeContract } : {}),
@@ -232,11 +241,39 @@ export function createAuthenticatedGameSdkPlatformAdapter<
     return resolved;
   };
 
-  const runtimeForCode = async (code: string) => {
-    if (!roomStore || !runtimeContract) return createRuntime(currentDefinition);
-    const record = await roomStore.load(code);
-    if (!record) return createRuntime(currentDefinition);
-    return createRuntime(await definitionForRecord(record));
+  const commandModule = (type: string): GameSdkModuleId | null => {
+    if (type === "room/join" || type === "room/leave") return "online-room";
+    if (type === "room/update-settings") return "room-settings";
+    if (type.startsWith("room/debug-")) return "debug";
+    if (
+      type === "room/expire-timer"
+      || type === "room/recover-timeout"
+    ) return "timer";
+    if (
+      type === "room/rematch"
+      || type === "room/confirm-lobby-return"
+    ) return "rematch";
+    return null;
+  };
+
+  const assertModuleEnabled = (
+    definition: typeof currentDefinition | GameSdkPlatformRuntimeDefinition<
+      TRoom,
+      TCreateInput,
+      TCommand,
+      TRoomView
+    >,
+    moduleId: GameSdkModuleId,
+  ) => {
+    if (
+      definition.moduleProfile
+      && !gameSdkModuleIsRequired(definition.moduleProfile, moduleId)
+    ) {
+      throw new GameFieldsPlatformRuntimeError(
+        "GAME_SDK_MODULE_DISABLED",
+        403,
+      );
+    }
   };
 
   const safeResultErrorCode = (error: unknown) => {
@@ -245,6 +282,74 @@ export function createAuthenticatedGameSdkPlatformAdapter<
       ? code
       : "GAME_SDK_RESULT_PERSISTENCE_FAILED";
   };
+
+  async function persistResultOutboxEntry(
+    record: GameFieldsPlatformRoomRecord<TRoom>,
+    entry: GameFieldsPlatformResultOutboxEntry,
+    definition: typeof currentDefinition | GameSdkPlatformRuntimeDefinition<
+      TRoom,
+      TCreateInput,
+      TCommand,
+      TRoomView
+    >,
+  ) {
+    if (!roomStore || !definition.onResultConfirmed) return;
+    const claimed = await roomStore.claimResultOutbox(
+      record.code,
+      entry.eventId,
+      Date.now(),
+    );
+    const claimedEntry = claimed?.resultOutbox.find(
+      (item) => item.eventId === entry.eventId,
+    );
+    if (!claimedEntry) return;
+    emitObservabilityEvent("info", "game-sdk.result-outbox", {
+      game: `sdk:${roomScope}`,
+      operation: "persist-result",
+      roomRef: observabilityRef("room", record.code),
+      eventRef: observabilityRef("event", entry.eventId),
+      revision: entry.snapshot.resultRevision,
+      attempt: claimedEntry.attempts,
+      outcome: "started",
+    });
+    try {
+      await definition.onResultConfirmed(claimedEntry);
+      const completed = await roomStore.completeResultOutbox(
+        record.code,
+        entry.eventId,
+        Date.now(),
+      );
+      if (!completed) throw new Error("GAME_SDK_RESULT_OUTBOX_CONFLICT");
+      emitObservabilityEvent("info", "game-sdk.result-outbox", {
+        game: `sdk:${roomScope}`,
+        operation: "persist-result",
+        roomRef: observabilityRef("room", record.code),
+        eventRef: observabilityRef("event", entry.eventId),
+        revision: entry.snapshot.resultRevision,
+        attempt: claimedEntry.attempts,
+        outcome: "success",
+      });
+    } catch (error) {
+      const code = safeResultErrorCode(error);
+      await roomStore.retryResultOutbox(
+        record.code,
+        entry.eventId,
+        Date.now(),
+        code,
+      );
+      emitObservabilityEvent("error", "game-sdk.result-outbox", {
+        game: `sdk:${roomScope}`,
+        operation: "persist-result",
+        roomRef: observabilityRef("room", record.code),
+        eventRef: observabilityRef("event", entry.eventId),
+        revision: entry.snapshot.resultRevision,
+        attempt: claimedEntry.attempts,
+        outcome: "failed",
+        errorCode: code,
+      });
+      throw new Error(code);
+    }
+  }
 
   async function scheduleResultOutbox(
     record: GameFieldsPlatformRoomRecord<TRoom>,
@@ -264,69 +369,41 @@ export function createAuthenticatedGameSdkPlatformAdapter<
     if (!definition.onResultConfirmed) return;
     await Promise.all(pending.map((entry) => schedulePostResponseWork(
       `game-sdk-result:${roomScope}:${record.code}:${entry.eventId}`,
-      async () => {
-        const claimed = await roomStore.claimResultOutbox(
-          record.code,
-          entry.eventId,
-          Date.now(),
-        );
-        const claimedEntry = claimed?.resultOutbox.find(
-          (item) => item.eventId === entry.eventId,
-        );
-        if (!claimedEntry) return;
-        emitObservabilityEvent("info", "game-sdk.result-outbox", {
-          game: `sdk:${roomScope}`,
-          operation: "persist-result",
-          roomRef: observabilityRef("room", record.code),
-          eventRef: observabilityRef("event", entry.eventId),
-          revision: entry.snapshot.resultRevision,
-          attempt: claimedEntry.attempts,
-          outcome: "started",
-        });
-        try {
-          await definition.onResultConfirmed!(claimedEntry);
-          const completed = await roomStore.completeResultOutbox(
-            record.code,
-            entry.eventId,
-            Date.now(),
-          );
-          if (!completed) throw new Error("GAME_SDK_RESULT_OUTBOX_CONFLICT");
-          emitObservabilityEvent("info", "game-sdk.result-outbox", {
-            game: `sdk:${roomScope}`,
-            operation: "persist-result",
-            roomRef: observabilityRef("room", record.code),
-            eventRef: observabilityRef("event", entry.eventId),
-            revision: entry.snapshot.resultRevision,
-            attempt: claimedEntry.attempts,
-            outcome: "success",
-          });
-        } catch (error) {
-          const code = safeResultErrorCode(error);
-          await roomStore.retryResultOutbox(
-            record.code,
-            entry.eventId,
-            Date.now(),
-            code,
-          );
-          emitObservabilityEvent("error", "game-sdk.result-outbox", {
-            game: `sdk:${roomScope}`,
-            operation: "persist-result",
-            roomRef: observabilityRef("room", record.code),
-            eventRef: observabilityRef("event", entry.eventId),
-            revision: entry.snapshot.resultRevision,
-            attempt: claimedEntry.attempts,
-            outcome: "failed",
-            errorCode: code,
-          });
-          throw new Error(code);
-        }
-      },
+      () => persistResultOutboxEntry(record, entry, definition),
     )));
+  }
+
+  async function flushResultOutboxBeforeDissolution(
+    record: GameFieldsPlatformRoomRecord<TRoom>,
+    definition: typeof currentDefinition | GameSdkPlatformRuntimeDefinition<
+      TRoom,
+      TCreateInput,
+      TCommand,
+      TRoomView
+    >,
+  ) {
+    if (!roomStore || !definition.onResultConfirmed) return;
+    const pending = record.resultOutbox.filter(
+      (entry) => entry.status !== "completed",
+    );
+    await Promise.all(pending.map(
+      (entry) => persistResultOutboxEntry(record, entry, definition),
+    ));
+    const latest = await roomStore.load(record.code);
+    if (
+      latest?.resultOutbox.some((entry) => entry.status !== "completed")
+    ) {
+      throw new GameFieldsPlatformRuntimeError(
+        "GAME_SDK_RESULT_PERSISTENCE_PENDING",
+        409,
+      );
+    }
   }
 
   return {
     async createRoom({ roomCode, create, requestId }) {
       const identity = await resolveIdentity();
+      assertModuleEnabled(currentDefinition, "online-room");
       const normalizedCode = normalizeGameSdkPlatformRoomCode(roomCode);
       const claim = roomStore
         ? await roomStore.claimActiveRoom(identity.playerId, normalizedCode)
@@ -338,10 +415,12 @@ export function createAuthenticatedGameSdkPlatformAdapter<
           requestId,
           identity,
         });
-        const record = roomStore ? await roomStore.load(normalizedCode) : null;
-        if (record) {
-          await roomStore!.publishRevision(record);
-          await scheduleResultOutbox(record);
+        const savedRecord = roomStore
+          ? await roomStore.load(normalizedCode)
+          : null;
+        if (savedRecord) {
+          await roomStore!.publishRevision(savedRecord);
+          await scheduleResultOutbox(savedRecord);
         }
         return room;
       } catch (error) {
@@ -353,7 +432,14 @@ export function createAuthenticatedGameSdkPlatformAdapter<
     async readRoom(code) {
       const identity = await resolveIdentity();
       const normalizedCode = normalizeGameSdkPlatformRoomCode(code);
-      const runtime = await runtimeForCode(normalizedCode);
+      const storedRecord = roomStore
+        ? await roomStore.load(normalizedCode)
+        : null;
+      const definition = storedRecord
+        ? await definitionForRecord(storedRecord)
+        : currentDefinition;
+      assertModuleEnabled(definition, "online-room");
+      const runtime = createRuntime(definition);
       const room = await runtime.readRoom({
         code: normalizedCode,
         identity,
@@ -375,6 +461,8 @@ export function createAuthenticatedGameSdkPlatformAdapter<
       const normalizedCode = normalizeGameSdkPlatformRoomCode(code);
       const record = await roomStore.load(normalizedCode);
       if (!record) return null;
+      const definition = await definitionForRecord(record);
+      assertModuleEnabled(definition, "debug");
       if (record.hostPlayerId !== identity.playerId) {
         throw new GameFieldsPlatformRuntimeError(
           "DEBUG_ACCESS_REQUIRED",
@@ -404,7 +492,7 @@ export function createAuthenticatedGameSdkPlatformAdapter<
           400,
         );
       }
-      const runtime = createRuntime(await definitionForRecord(record));
+      const runtime = createRuntime(definition);
       const room = await runtime.readRoom({
         code: normalizedCode,
         identity,
@@ -429,7 +517,9 @@ export function createAuthenticatedGameSdkPlatformAdapter<
       if (!roomStore) throw new Error("GAME_SDK_LIFECYCLE_UNAVAILABLE");
       const record = await roomStore.loadActiveRoom(identity.playerId);
       if (!record) return null;
-      const runtime = createRuntime(await definitionForRecord(record));
+      const definition = await definitionForRecord(record);
+      assertModuleEnabled(definition, "online-room");
+      const runtime = createRuntime(definition);
       const room = await runtime.readRoom({ code: record.code, identity });
       await scheduleResultOutbox(record);
       return room;
@@ -438,6 +528,7 @@ export function createAuthenticatedGameSdkPlatformAdapter<
     async listRooms(cursor) {
       await resolveIdentity();
       if (!roomStore) throw new Error("GAME_SDK_LIFECYCLE_UNAVAILABLE");
+      assertModuleEnabled(currentDefinition, "online-room");
       return roomStore.listRooms(cursor, module.manifest.maximumPlayers);
     },
 
@@ -449,7 +540,13 @@ export function createAuthenticatedGameSdkPlatformAdapter<
         ? await roomStore.claimActiveRoom(identity.playerId, normalizedCode)
         : null;
       try {
-        const runtime = await runtimeForCode(normalizedCode);
+        const record = roomStore ? await roomStore.load(normalizedCode) : null;
+        const definition = record
+          ? await definitionForRecord(record)
+          : currentDefinition;
+        const requiredModule = commandModule(lifecycleType);
+        if (requiredModule) assertModuleEnabled(definition, requiredModule);
+        const runtime = createRuntime(definition);
         const result = await runtime.sendCommand({
           code: normalizedCode,
           envelope,
@@ -458,10 +555,12 @@ export function createAuthenticatedGameSdkPlatformAdapter<
         if (roomStore && lifecycleType === "room/leave") {
           await roomStore.releaseActiveRoom(identity.playerId, normalizedCode);
         }
-        const record = roomStore ? await roomStore.load(normalizedCode) : null;
-        if (record) {
-          await roomStore!.publishRevision(record);
-          await scheduleResultOutbox(record);
+        const savedRecord = roomStore
+          ? await roomStore.load(normalizedCode)
+          : null;
+        if (savedRecord) {
+          await roomStore!.publishRevision(savedRecord);
+          await scheduleResultOutbox(savedRecord);
         }
         return result;
       } catch (error) {
@@ -473,8 +572,15 @@ export function createAuthenticatedGameSdkPlatformAdapter<
     async dissolveRoom(code) {
       const identity = await resolveIdentity();
       if (!roomStore) throw new Error("GAME_SDK_LIFECYCLE_UNAVAILABLE");
+      const normalizedCode = normalizeGameSdkPlatformRoomCode(code);
+      const current = await roomStore.load(normalizedCode);
+      if (current) {
+        const definition = await definitionForRecord(current);
+        assertModuleEnabled(definition, "dissolution");
+        await flushResultOutboxBeforeDissolution(current, definition);
+      }
       const record = await roomStore.dissolveRoom(
-        normalizeGameSdkPlatformRoomCode(code),
+        normalizedCode,
         identity.playerId,
       );
       if (record) await roomStore.publishRevision(record, record.revision + 1);
@@ -484,7 +590,14 @@ export function createAuthenticatedGameSdkPlatformAdapter<
     async dissolveHostedRooms() {
       const identity = await resolveIdentity();
       if (!roomStore) throw new Error("GAME_SDK_LIFECYCLE_UNAVAILABLE");
-      const records = await roomStore.dissolveHostedRooms(identity.playerId);
+      const records = await roomStore.dissolveHostedRooms(
+        identity.playerId,
+        async (record) => {
+          const definition = await definitionForRecord(record);
+          assertModuleEnabled(definition, "dissolution");
+          await flushResultOutboxBeforeDissolution(record, definition);
+        },
+      );
       await Promise.all(records.map(
         (record) => roomStore.publishRevision(record, record.revision + 1),
       ));

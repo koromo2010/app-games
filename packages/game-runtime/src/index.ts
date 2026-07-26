@@ -113,6 +113,9 @@ export type GameFieldsPlatformRuntimeErrorCode =
   | "INVALID_STORED_ROOM"
   | "ROOM_RUNTIME_MISMATCH"
   | "COMMAND_ID_CONFLICT"
+  | "PLAYER_NOT_IN_ROOM"
+  | "GAME_SDK_MODULE_DISABLED"
+  | "GAME_SDK_RESULT_PERSISTENCE_PENDING"
   | "DEBUG_ACCESS_REQUIRED"
   | "DEBUG_VIEWER_INVALID"
   | "DEBUG_AUTO_PROGRESS_UNSUPPORTED"
@@ -364,6 +367,18 @@ function trustedActor(
   };
 }
 
+function storedRoomHasPlayer(
+  room: Readonly<GameSdkStoredRoom>,
+  playerId: string,
+) {
+  if (!("players" in room) || !Array.isArray(room.players)) return false;
+  return room.players.some((player) => (
+    player
+    && typeof player === "object"
+    && (player as { id?: unknown }).id === playerId
+  ));
+}
+
 function assertStoredRecord<TRoom extends GameSdkStoredRoom>(
   record: GameFieldsPlatformRoomRecord<TRoom>,
   gameId: string,
@@ -515,6 +530,7 @@ export function createGameFieldsPlatformRuntime<
       if (!record) return null;
       assertStoredRecord(record, module.manifest.id, code, runtimeContract);
       const actor = trustedActor(identity, record.hostPlayerId);
+      const isMember = storedRoomHasPlayer(record.room, actor.playerId);
       if (debugViewer) {
         if (
           !module.manifest.supportsDebug
@@ -549,7 +565,22 @@ export function createGameFieldsPlatformRuntime<
           );
         }
       }
-      return await present(record.room, actor, now(), debugViewer);
+      if (!debugViewer && !isMember && record.phase !== "lobby") {
+        throw new GameFieldsPlatformRuntimeError(
+          "PLAYER_NOT_IN_ROOM",
+          403,
+        );
+      }
+      const viewer = debugViewer ?? (
+        isMember
+          ? gameSdkViewerFromActor(actor)
+          : {
+              playerId: null,
+              role: "anonymous" as const,
+              debugAccess: false,
+            }
+      );
+      return await present(record.room, actor, now(), viewer);
     },
 
     async sendCommand({ code, envelope, identity }) {
@@ -558,6 +589,15 @@ export function createGameFieldsPlatformRuntime<
       assertStoredRecord(record, module.manifest.id, code, runtimeContract);
       const timestamp = now();
       const actor = trustedActor(identity, record.hostPlayerId);
+      if (
+        envelope.command.type !== "room/join"
+        && !storedRoomHasPlayer(record.room, actor.playerId)
+      ) {
+        throw new GameFieldsPlatformRuntimeError(
+          "PLAYER_NOT_IN_ROOM",
+          403,
+        );
+      }
       const commandId = envelope.commandId?.trim() || createRequestId();
       if (!commandIdPattern.test(commandId)) {
         throw new GameFieldsPlatformRuntimeError("COMMAND_ID_CONFLICT", 409);

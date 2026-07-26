@@ -5,6 +5,10 @@ import {
   type GameFieldsAuthenticatedIdentity,
 } from "@game-fields/game-runtime";
 import {
+  createInitialGameSdkModuleProfile,
+  updateGameSdkModuleProfile,
+} from "@game-fields/game-sdk/modules";
+import {
   createAuthenticatedGameSdkPlatformAdapter,
   createRedisGameSdkPlatformPersistence,
   gameSdkPlatformRoomKey,
@@ -99,6 +103,11 @@ const player: GameFieldsAuthenticatedIdentity = {
   displayName: "Player",
   debugAccess: false,
 };
+const outsider: GameFieldsAuthenticatedIdentity = {
+  playerId: "outsider-account",
+  displayName: "Outsider",
+  debugAccess: false,
+};
 
 test("platform adapterは認証identityを注入し、Redis CASで小規模ゲームを進行する", async () => {
   const harness = installRedisHarness();
@@ -181,6 +190,28 @@ test("platform adapterは認証identityを注入し、Redis CASで小規模ゲ�
     assert.equal(started.room.phase, "playing");
     assert.equal(started.revision, 3);
 
+    identity = outsider;
+    await assert.rejects(
+      () => adapter.readRoom("RACE"),
+      (error: unknown) => (
+        error instanceof GameFieldsPlatformRuntimeError
+        && error.code === "PLAYER_NOT_IN_ROOM"
+      ),
+    );
+    await assert.rejects(
+      () => adapter.sendCommand({
+        code: "RACE",
+        envelope: {
+          expectedRevision: started.revision,
+          command: { type: "room/expire-timer", turnSequence: 1 },
+        },
+      }),
+      (error: unknown) => (
+        error instanceof GameFieldsPlatformRuntimeError
+        && error.code === "PLAYER_NOT_IN_ROOM"
+      ),
+    );
+
     harness.waitForConcurrentReadsAtRevision(3);
     identity = host;
     const first = adapter.sendCommand({
@@ -251,6 +282,54 @@ test("platform adapterのAPIはactorを受け取らず、認証失敗時は永�
     /PLAYER_AUTH_REQUIRED/,
   );
   assert.equal(persistenceCalls, 0);
+});
+
+test("disabled module commands are rejected at the authenticated adapter boundary", async () => {
+  const harness = installRedisHarness();
+  const moduleProfile = updateGameSdkModuleProfile(
+    createInitialGameSdkModuleProfile(),
+    {
+      "room-settings": {
+        mode: "disabled",
+        reason: "This game has no editable Room settings.",
+      },
+    },
+  );
+  const adapter = createAuthenticatedGameSdkPlatformAdapter({
+    module: sdkCountUpServerModule,
+    moduleProfile,
+    persistence: createRedisGameSdkPlatformPersistence<SdkCountUpRoom>(
+      sdkCountUpServerModule.manifest.id,
+    ),
+    resolveIdentity: async () => host,
+    now: () => 1_000,
+    createRequestId: () => "request-module-gate",
+  });
+
+  try {
+    const room = await adapter.createRoom({
+      roomCode: "GATE",
+      create: { settings: { target: 3 }, app: {} },
+    });
+    await assert.rejects(
+      () => adapter.sendCommand({
+        code: room.code,
+        envelope: {
+          expectedRevision: room.revision,
+          command: {
+            type: "room/update-settings",
+            settings: { target: 8 },
+          },
+        },
+      }),
+      (error: unknown) => (
+        error instanceof GameFieldsPlatformRuntimeError
+        && error.code === "GAME_SDK_MODULE_DISABLED"
+      ),
+    );
+  } finally {
+    harness.restore();
+  }
 });
 
 test("platform room codeは固定長の英数字へ正規化する", () => {

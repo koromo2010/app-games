@@ -120,7 +120,7 @@ settings: [
 ]
 ```
 
-`defaultSettings` must contain exactly the same keys and values as each declaration's `defaultValue`. The shared screen saves the selected values to room settings and exposes the same values to the app.
+`defaultSettings` must contain exactly the same keys and values as each declaration's `defaultValue`. The shared screen saves the selected values to room settings and exposes the same values to the app. Room creation and `room/update-settings` both apply the manifest as the final boundary: unknown keys are removed, invalid select values and types fall back safely, and numeric values are clamped before and after the optional AppSet normalizer.
 
 ## Turn timer
 
@@ -188,6 +188,8 @@ DEBUG操作を既存の`room/expire-timer`へ変換するため、AppSetの再�
 仮順位や仮得点を生成しません。
 
 Platform Shellはmanifestのルールを共通トップバナーから全phaseで開けるようにし、部屋設定はロビーだけに表示します。playingでは共通サイド欄を隠してゲーム領域を全幅にし、中断だけをトップバナーへ置きます。resultでは採用済みmodule profileに従って標準結果、再戦、本人履歴、匿名共有、LLM生成物へのfeedbackを合成します。AppSetやclientへこれらの外枠を複製しません。
+
+結果Roomを解散するときは、Platformが戦績・rating・playbackのresult outboxを先に完了します。保存が処理中または失敗中ならRoomを削除せず、安全なエラーで再試行を求めます。
 
 ```ts
 standardResult: defineGameSdkStandardResult({

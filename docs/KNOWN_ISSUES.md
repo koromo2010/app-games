@@ -482,3 +482,25 @@ Commandを旧Runtimeの`room/expire-timer`へ変換する互換bridgeを追加�
 連続放置状態を増やさず、時間切れ再現だけが通常のtimeout状態を更新する。Shell、HTTP、
 Client Runtime、Platform adapter、旧bundle互換を縦断テストへ固定し、配布Starterも
 全DEBUG Commandと表示項目を列挙しなければ検査に失敗するようにした。
+
+## 2026-07-26 SDK正式Packageのライフサイクル監査が表示導線に偏っている
+
+状態: 修正実装済み・dev公開待ち（2026-07-26、競合・認可・保存順序の回帰テストあり）
+
+DEBUG対応後に正式Packageの検査範囲をShell表示からRoom lifecycle全体へ広げたところ、
+遅着したHTTP Command／timer応答がwatcherで取得済みの新revisionを巻き戻す経路、
+結果後に別Roomへ移った参加者のactive索引を旧Roomの再戦が奪う経路、非参加者が
+playing／result Viewや共通timer Commandへ到達できる経路が残っていた。Room一覧にも
+表示中の候補から直接参加する操作がなく、コードの再入力が必要だった。
+
+共通Shellはwatcherと全直接応答を同じrevision単調増加処理へ統合し、一覧へ参加操作を
+追加した。Redis CASはactive索引が別Roomを指している場合に上書きせず、Room作成時の
+索引競合も原子的に拒否する。ダミー参加者はactive索引を持たない。Platform Runtimeは
+非参加者へ参加前のlobby Viewだけを匿名で返し、join以外のCommandとplaying／result Viewを
+拒否する。`room/abort`もplayingだけに制限した。
+
+あわせて、manifest設定をRoom作成・更新の最終境界で型・選択肢・数値範囲・宣言キーへ
+正規化した。module profileで無効なDEBUG、timer、設定、再戦、解散と、LLM／content
+resource、feedback、観戦、戦績系capabilityはUIだけでなく認証adapterでも拒否する。
+結果Roomはresult outboxを完了してから解散し、戦績・rating・playback保存が処理中または
+失敗中ならRoomを保持する。

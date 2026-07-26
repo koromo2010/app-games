@@ -36,11 +36,19 @@ function memoryRoomStore(): GameSdkPlatformRoomStore<SdkCountUpRoom> {
   const clone = <T>(value: T) => structuredClone(value);
   const playerIds = (record: GameFieldsPlatformRoomRecord<SdkCountUpRoom>) =>
     record.room.players.map((roomPlayer) => roomPlayer.id);
+  const activePlayerIds = (
+    record: GameFieldsPlatformRoomRecord<SdkCountUpRoom>,
+  ) => record.room.players
+    .filter((roomPlayer) => roomPlayer.isDummy !== true)
+    .map((roomPlayer) => roomPlayer.id);
   const store: GameSdkPlatformRoomStore<SdkCountUpRoom> = {
     async create(record) {
       if (rooms.has(record.code)) return "exists";
       rooms.set(record.code, clone(record));
-      for (const playerId of playerIds(record)) activeRooms.set(playerId, record.code);
+      for (const playerId of activePlayerIds(record)) {
+        const active = activeRooms.get(playerId);
+        if (!active || active === record.code) activeRooms.set(playerId, record.code);
+      }
       return "created";
     },
     async load(code) {
@@ -52,7 +60,10 @@ function memoryRoomStore(): GameSdkPlatformRoomStore<SdkCountUpRoom> {
       if (!current) return "missing";
       if (current.revision !== expectedRevision) return "conflict";
       rooms.set(record.code, clone(record));
-      for (const playerId of playerIds(record)) activeRooms.set(playerId, record.code);
+      for (const playerId of activePlayerIds(record)) {
+        const active = activeRooms.get(playerId);
+        if (!active || active === record.code) activeRooms.set(playerId, record.code);
+      }
       return "saved";
     },
     async claimResultOutbox(code, eventId, now) {
@@ -162,12 +173,15 @@ function memoryRoomStore(): GameSdkPlatformRoomStore<SdkCountUpRoom> {
       }
       return clone(record);
     },
-    async dissolveHostedRooms(actorId) {
+    async dissolveHostedRooms(actorId, beforeDissolve) {
       const targets = [...rooms.values()].filter((record) => record.hostPlayerId === actorId);
       if (targets.some((record) => record.phase !== "lobby" && record.phase !== "result")) {
         throw new Error("GAME_IN_PROGRESS");
       }
-      for (const record of targets) await store.dissolveRoom(record.code, actorId);
+      for (const record of targets) {
+        await beforeDissolve?.(clone(record));
+        await store.dissolveRoom(record.code, actorId);
+      }
       return clone(targets);
     },
     async publishRevision() {},
@@ -396,6 +410,16 @@ test("SDK HTTP Client Runtimeはactorを送らず認証adapterと永続Runtime�
   });
   assert.equal(nextRoom.code, "NEXT");
   assert.equal((await runtime.readActiveRoom())?.code, "NEXT");
+  room = (await runtime.sendCommand("RACE", {
+    expectedRevision: room.revision,
+    command: { type: "room/rematch" },
+  })).room;
+  assert.equal(room.phase, "lobby");
+  assert.equal(
+    (await runtime.readActiveRoom())?.code,
+    "NEXT",
+    "rematching an old result must not steal the newer active-room index",
+  );
   assert.equal(await runtime.dissolveRoom("RACE"), true);
   assert.equal(await runtime.readRoom("RACE"), null);
   assert.equal((await runtime.readActiveRoom())?.code, "NEXT");
@@ -568,6 +592,71 @@ test("result outboxは保存失敗をconfirmedへ戻し、次のreadで同じeve
   assert.equal(recovered?.phase, "result");
   const completed = await store.load(room.code);
   assert.equal(completed?.resultOutbox[0]?.status, "completed");
+  assert.equal(observedEvents.length, 2);
+  assert.equal(observedEvents[0], observedEvents[1]);
+});
+
+test("result room dissolution flushes pending result persistence before deletion", async () => {
+  let identity = host;
+  const store = memoryRoomStore();
+  const observedEvents: string[] = [];
+  let failures = 1;
+  const adapter = createAuthenticatedGameSdkPlatformAdapter({
+    module: sdkCountUpServerModule,
+    roomStore: store,
+    resolveIdentity: async () => identity,
+    now: (() => {
+      let value = 4_000;
+      return () => ++value;
+    })(),
+    onResultConfirmed: async (result) => {
+      observedEvents.push(result.eventId);
+      if (failures-- > 0) throw new Error("RESULT_STORE_TEMPORARY");
+    },
+  });
+
+  let room = await adapter.createRoom({
+    roomCode: "SAFE",
+    create: { settings: { target: 2 }, app: {} },
+  });
+  identity = player;
+  room = (await adapter.sendCommand({
+    code: room.code,
+    envelope: {
+      commandId: "safe-join-command",
+      expectedRevision: room.revision,
+      command: { type: "room/join" },
+    },
+  })).room;
+  identity = host;
+  for (const [commandId, command] of [
+    ["safe-start-command", { type: "game/start" }],
+    ["safe-count-command1", { type: "game/count-up" }],
+  ] as const) {
+    room = (await adapter.sendCommand({
+      code: room.code,
+      envelope: {
+        commandId,
+        expectedRevision: room.revision,
+        command,
+      },
+    })).room;
+  }
+  await assert.rejects(
+    () => adapter.sendCommand({
+      code: room.code,
+      envelope: {
+        commandId: "safe-count-command2",
+        expectedRevision: room.revision,
+        command: { type: "game/count-up" },
+      },
+    }),
+    /RESULT_STORE_TEMPORARY/,
+  );
+  assert.equal((await store.load(room.code))?.phase, "result");
+
+  assert.equal(await adapter.dissolveRoom(room.code), true);
+  assert.equal(await store.load(room.code), null);
   assert.equal(observedEvents.length, 2);
   assert.equal(observedEvents[0], observedEvents[1]);
 });

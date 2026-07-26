@@ -22,6 +22,9 @@ import {
 import {
   loadSdkPreviewRuntimeDefinition,
 } from "../lib/sdk-preview-runtime-source.ts";
+import {
+  gameSdkPlatformResourcePolicy,
+} from "../lib/game-sdk-platform-resource-policy.ts";
 
 test("SDK preview source keeps every asset inside its mock directory", () => {
   assert.equal(normalizePreviewAssetPath([]), "index.html");
@@ -126,6 +129,43 @@ test("SDK package runtime accepts only its configured isolated origin and exact 
     })) as typeof fetch,
     env,
   ), /SDK_PREVIEW_PACKAGE_RUNTIME_INVALID/);
+});
+
+test("SDK package runtime injects only resources enabled by the reviewed module profile", () => {
+  const manifest = { usesLlm: true };
+  const initial = createInitialGameSdkModuleProfile();
+  const modulePolicy = updateGameSdkModuleProfile(initial, {
+    "content-source": {
+      mode: "disabled",
+      reason: "This package has no word source.",
+    },
+    llm: {
+      mode: "disabled",
+      reason: "This package does not call the LLM gateway.",
+    },
+    feedback: {
+      mode: "disabled",
+      reason: "There are no generated artifacts.",
+    },
+  });
+  assert.deepEqual(
+    gameSdkPlatformResourcePolicy(manifest, modulePolicy),
+    {
+      moduleProfile: modulePolicy,
+      contentSource: false,
+      llm: false,
+      feedback: false,
+    },
+  );
+  assert.deepEqual(
+    gameSdkPlatformResourcePolicy(manifest, initial),
+    {
+      moduleProfile: initial,
+      contentSource: true,
+      llm: true,
+      feedback: true,
+    },
+  );
 });
 
 test("SDK preview injects one platform preset runtime into mock HTML", () => {

@@ -50,7 +50,12 @@ export type GameSdkPlatformRoomStore<TRoom extends GameSdkStoredRoom> =
       code: string,
       actorId: string,
     ): Promise<GameFieldsPlatformRoomRecord<TRoom> | null>;
-    dissolveHostedRooms(actorId: string): Promise<GameFieldsPlatformRoomRecord<TRoom>[]>;
+    dissolveHostedRooms(
+      actorId: string,
+      beforeDissolve?: (
+        record: GameFieldsPlatformRoomRecord<TRoom>,
+      ) => Promise<void>,
+    ): Promise<GameFieldsPlatformRoomRecord<TRoom>[]>;
     publishRevision(record: GameFieldsPlatformRoomRecord<TRoom>, revision?: number): Promise<void>;
     claimResultOutbox(
       code: string,
@@ -116,6 +121,24 @@ function roomPlayerIds<TRoom extends GameSdkStoredRoom>(
       player && typeof player === "object" && typeof (player as { id?: unknown }).id === "string"
         ? (player as { id: string }).id.trim()
         : ""
+    ))
+    .filter(Boolean);
+  return [...new Set([record.hostPlayerId, ...ids])];
+}
+
+function roomActivePlayerIds<TRoom extends GameSdkStoredRoom>(
+  record: GameFieldsPlatformRoomRecord<TRoom>,
+) {
+  const players = (record.room as { players?: unknown }).players;
+  if (!Array.isArray(players)) return [record.hostPlayerId];
+  const ids = players
+    .flatMap((player) => (
+      player
+      && typeof player === "object"
+      && (player as { isDummy?: unknown }).isDummy !== true
+      && typeof (player as { id?: unknown }).id === "string"
+        ? [(player as { id: string }).id.trim()]
+        : []
     ))
     .filter(Boolean);
   return [...new Set([record.hostPlayerId, ...ids])];
@@ -209,8 +232,9 @@ export function createRedisGameSdkPlatformRoomStore<TRoom extends GameSdkStoredR
         await createIndexedOnlineRoom(record, {
           roomKey,
           roomIndexKey: indexKey,
-          activeRoomKeys: (created) => roomPlayerIds(created).map(activeKey),
+          activeRoomKeys: (created) => roomActivePlayerIds(created).map(activeKey),
           conflictError: platformRoomCreateConflict,
+          activeRoomConflictError: "PLAYER_ACTIVE_ROOM",
         });
         return "created";
       } catch (error) {
@@ -235,7 +259,7 @@ export function createRedisGameSdkPlatformRoomStore<TRoom extends GameSdkStoredR
         expectedRevision,
         record,
         roomKey,
-        roomPlayerIds(record).map(activeKey),
+        roomActivePlayerIds(record).map(activeKey),
       );
       if (result === 1) return "saved";
       if (result === -1) return "missing";
@@ -414,9 +438,10 @@ export function createRedisGameSdkPlatformRoomStore<TRoom extends GameSdkStoredR
       return record;
     },
 
-    async dissolveHostedRooms(actorId) {
+    async dissolveHostedRooms(actorId, beforeDissolve) {
       const active = await store.loadActiveRoom(actorId);
       if (active?.hostPlayerId === actorId) {
+        await beforeDissolve?.(active);
         const dissolved = await store.dissolveRoom(active.code, actorId);
         return dissolved ? [dissolved] : [];
       }
@@ -430,7 +455,10 @@ export function createRedisGameSdkPlatformRoomStore<TRoom extends GameSdkStoredR
       if (targets.some((record) => record.phase !== "lobby" && record.phase !== "result")) {
         throw new Error("GAME_IN_PROGRESS");
       }
-      await Promise.all(targets.map(deleteStorage));
+      await Promise.all(targets.map(async (record) => {
+        await beforeDissolve?.(record);
+        await deleteStorage(record);
+      }));
       return targets;
     },
 

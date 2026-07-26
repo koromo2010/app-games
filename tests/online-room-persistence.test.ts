@@ -33,12 +33,45 @@ test("部屋CASと新規作成は共通Redis契約を使う", async () => {
       conflictError: "ROOM_CONFLICT",
     });
     assert.equal(commands[0]?.[0], "EVAL");
+    assert.match(String(commands[0]?.[1]), /if not active or string\.upper\(active\)==string\.upper\(ARGV\[4\]\)/);
     assert.deepEqual(commands[0]?.slice(2, 6), ["3", "game:room:AB12", ...activeRoomKeys]);
     assert.equal(commands[0]?.at(-1), "AB12");
     assert.equal(commands.length, 2);
+    assert.match(String(commands[1]?.[1]), /return -1/);
     assert.deepEqual(commands[1]?.slice(2, 7), ["4", "game:room:AB12", "game:rooms", ...activeRoomKeys]);
     assert.equal(commands[1]?.at(-3), JSON.stringify(room));
     assert.equal(commands[1]?.at(-1), "AB12");
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalUrl === undefined) delete process.env.UPSTASH_REDIS_REST_URL;
+    else process.env.UPSTASH_REDIS_REST_URL = originalUrl;
+    if (originalToken === undefined) delete process.env.UPSTASH_REDIS_REST_TOKEN;
+    else process.env.UPSTASH_REDIS_REST_TOKEN = originalToken;
+  }
+});
+
+test("new room creation preserves an existing active-room claim", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalUrl = process.env.UPSTASH_REDIS_REST_URL;
+  const originalToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+  process.env.UPSTASH_REDIS_REST_URL = "https://redis.example.test";
+  process.env.UPSTASH_REDIS_REST_TOKEN = "test-token";
+  globalThis.fetch = async () => new Response(
+    JSON.stringify({ result: -1 }),
+    { status: 200 },
+  );
+
+  try {
+    await assert.rejects(
+      createIndexedOnlineRoom({ code: "NEW1", revision: 1 }, {
+        roomKey: (code) => `game:room:${code}`,
+        roomIndexKey: "game:rooms",
+        activeRoomKeys: () => ["game:active:player-1"],
+        conflictError: "ROOM_CONFLICT",
+        activeRoomConflictError: "PLAYER_ACTIVE_ROOM",
+      }),
+      /PLAYER_ACTIVE_ROOM/,
+    );
   } finally {
     globalThis.fetch = originalFetch;
     if (originalUrl === undefined) delete process.env.UPSTASH_REDIS_REST_URL;

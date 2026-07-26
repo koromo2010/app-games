@@ -126,6 +126,8 @@ Previewとローカル開発ではrevision通知だけをWebSocketで受け、�
 
 SDK採用ゲームは `@game-fields/game-sdk/client-runtime` を利用する。SDKクライアントはactor identityを送らず、署名付きプレイヤーセッションを正本とする。
 
+正式Package Shellはwatcher・HTTP Command・timerの応答をrevision順に統合し、遅着した応答で表示を巻き戻さない。Roomのactive索引は、参加者が結果後に別Roomへ移った場合に旧Roomの再戦で上書きしない。非参加者は参加前のlobby View以外を取得・操作できず、無効化されたmoduleのCommandとPlatform resourceもサーバー境界で拒否する。結果Roomの解散前にはresult outboxを完了し、戦績・rating・playbackを失う状態ではRoomを削除しない。
+
 ## 広告枠の現状
 
 `app/components/GameAdSlot.tsx` にプロバイダー非依存の枠がある。広告表示は初期状態で無効。

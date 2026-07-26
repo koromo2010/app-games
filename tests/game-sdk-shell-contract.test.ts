@@ -93,7 +93,10 @@ test("reviewed SDK shell consumes manifest capabilities passed by Preview", () =
   }
 
   assert.match(frame, /supportsReplay && moduleRequired\("replay"\)/);
-  assert.match(frame, /usesLlm && moduleRequired\("ai-activity"\)/);
+  assert.match(
+    frame,
+    /usesLlm[\s\S]*?moduleRequired\("llm"\)[\s\S]*?moduleRequired\("ai-activity"\)/,
+  );
   assert.match(frame, /withAiActivity\(/);
   assert.match(previewPage, /moduleProfile=\{normalizeGameSdkModuleProfile\(game\.modulePolicy\)\}/);
   assert.match(previewPage, /rules=\{\(game\.manifest\.rules \?\? \[\]\)\.map/);
@@ -102,6 +105,10 @@ test("reviewed SDK shell consumes manifest capabilities passed by Preview", () =
 test("formal Preview grants DEBUG only to the linked creator identity", () => {
   assert.match(previewRoomRoute, /getSdkPreviewAccountPlayerId\(creatorSlug\)/);
   assert.match(previewRoomRoute, /debugAccess: creatorPlayerId === session\.id/);
+  assert.match(
+    previewRoomRoute,
+    /gameSdkModuleIsRequired\([\s\S]*?"debug"/,
+  );
   assert.doesNotMatch(previewRoomRoute, /debugAccess:\s*true/);
 
   assert.match(platformAdapter, /module\.manifest\.supportsDebug/);
@@ -160,6 +167,7 @@ test("every shared Shell module has executable evidence in the formal package pa
     "online-room": [
       [frame, /type: "room\/join"/],
       [frame, /type: "room\/leave"/],
+      [frame, /joinRoomByCode\(candidate\.code\)/],
       [frame, /confirmRoomLeave\(\)/],
       [frame, /useGameSdkActiveRoomRestore/],
       [lifecycleActions, /onLeave/],
@@ -167,6 +175,8 @@ test("every shared Shell module has executable evidence in the formal package pa
     "room-sync": [
       [frame, /runtime\.watchRoom/],
       [frame, /roomUpdateIsOlder/],
+      [frame, /preferLatestOnlineRoom/],
+      [frame, /attachLatestRoom/],
     ],
     "room-settings": [
       [frame, /moduleRequired\("room-settings"\)/],

@@ -1,4 +1,8 @@
+import {
+  gameSdkSettingOptionValue,
+} from "./index.js";
 import type {
+  GameSdkSettingDefinition,
   GameSdkCommandEnvelope,
   GameSdkCommandResult,
   GameSdkManifest,
@@ -207,7 +211,10 @@ export function applyGameSdkRoomLifecycleCommand<
     minimumPlayers: number;
     maximumPlayers: number;
     supportsDebug?: boolean;
-    normalizeSettings?: (settings: TSettings) => TSettings;
+    normalizeSettings?: (
+      settings: TSettings,
+      previous: Readonly<TSettings>,
+    ) => TSettings;
     resetGame: (room: Readonly<TRoom>) => Omit<Partial<TRoom>, "code" | "revision">;
   },
 ): GameSdkRoomLifecycleResult<TRoom> {
@@ -318,11 +325,16 @@ export function applyGameSdkRoomLifecycleCommand<
       : {};
     const settings = { ...room.settings, ...patch } as TSettings;
     return { handled: true, room: advanceGameSdkRoom(room, {
-      settings: options.normalizeSettings ? options.normalizeSettings(settings) : settings,
+      settings: options.normalizeSettings
+        ? options.normalizeSettings(settings, room.settings)
+        : settings,
     } as Partial<TRoom>) };
   }
   if (command.type === "room/abort" || command.type === "room/rematch") {
     if (context.actor.playerId !== room.hostPlayerId) throw new Error("HOST_REQUIRED");
+    if (command.type === "room/abort" && room.phase !== "playing") {
+      throw new Error("INVALID_PHASE");
+    }
     if (command.type === "room/rematch" && room.phase !== "result") throw new Error("RESULT_REQUIRED");
     return { handled: true, room: advanceGameSdkRoom(room, {
       ...options.resetGame(room),
@@ -466,6 +478,56 @@ function normalizeAppSetPhase(phase: string) {
   return normalized;
 }
 
+function normalizeDeclaredGameSdkSettings<TSettings extends Record<string, unknown>>(
+  input: unknown,
+  fallback: Readonly<TSettings>,
+  definitions: readonly GameSdkSettingDefinition[],
+) {
+  const source = input && typeof input === "object" && !Array.isArray(input)
+    ? input as Record<string, unknown>
+    : {};
+  const normalized: Record<string, unknown> = {};
+  for (const definition of definitions) {
+    const fallbackValue = fallback[definition.key] ?? definition.defaultValue;
+    const value = source[definition.key];
+    if (definition.type === "boolean") {
+      normalized[definition.key] = typeof value === "boolean"
+        ? value
+        : fallbackValue;
+      continue;
+    }
+    if (definition.type === "text") {
+      const text = typeof value === "string"
+        ? value.trim().slice(0, 200)
+        : "";
+      normalized[definition.key] = text || definition.required !== true
+        ? text
+        : fallbackValue;
+      continue;
+    }
+    if (definition.type === "number") {
+      normalized[definition.key] = typeof value === "number"
+        && Number.isFinite(value)
+        ? Math.min(
+            definition.maximum ?? value,
+            Math.max(definition.minimum ?? value, value),
+          )
+        : fallbackValue;
+      continue;
+    }
+    const option = definition.options?.find(
+      (candidate) => Object.is(
+        gameSdkSettingOptionValue(candidate),
+        value,
+      ),
+    );
+    normalized[definition.key] = option
+      ? gameSdkSettingOptionValue(option)
+      : fallbackValue;
+  }
+  return normalized as TSettings;
+}
+
 function normalizeGameSdkTimerDuration(value: number) {
   if (!Number.isFinite(value)) return 0;
   return Math.min(3600, Math.max(0, Math.floor(value)));
@@ -577,9 +639,25 @@ export function createGameSdkOnlineRoomModule<
     throw new Error("Game SDK online AppSet requires an online-room manifest.");
   }
 
-  const normalizeSettings = (settings: TSettings) => (
-    appSet.normalizeSettings ? appSet.normalizeSettings(settings) : settings
-  );
+  const settingDefinitions = manifest.settings ?? [];
+  const normalizeSettings = (
+    settings: unknown,
+    previous: Readonly<TSettings> = appSet.defaultSettings,
+  ): TSettings => {
+    const declared = normalizeDeclaredGameSdkSettings<TSettings>(
+      settings,
+      previous,
+      settingDefinitions,
+    );
+    const appNormalized = appSet.normalizeSettings
+      ? appSet.normalizeSettings(declared)
+      : declared;
+    return normalizeDeclaredGameSdkSettings<TSettings>(
+      appNormalized,
+      declared,
+      settingDefinitions,
+    );
+  };
   const timerDurationSeconds = (settings: Readonly<TSettings>) => (
     appSet.timer
       ? normalizeGameSdkTimerDuration(appSet.timer.durationSeconds(settings))
@@ -595,12 +673,15 @@ export function createGameSdkOnlineRoomModule<
     manifest,
 
     async createRoom(input, context) {
+      const createInput = input && typeof input === "object"
+        ? input
+        : {} as GameSdkOnlineRoomCreateInput<TSettings, TAppInput>;
       const settings = normalizeSettings({
         ...appSet.defaultSettings,
-        ...(input.settings ?? {}),
-      });
+        ...(createInput.settings ?? {}),
+      } as TSettings, appSet.defaultSettings);
       const app = await appSet.createAppState(
-        input.app,
+        createInput.app,
         { ...context, resources: { ...resources, ...context.resources } },
         settings,
       ) as TAppState;
@@ -766,7 +847,10 @@ export function createGameSdkOnlineRoomModule<
           ...(standardResult ? { standardResult } : {}),
         });
       }
-      const lifecycle = applyGameSdkRoomLifecycleCommand(room, command, context, {
+      const lifecycle = applyGameSdkRoomLifecycleCommand<
+        TSettings,
+        GameSdkOnlineRoom<TSettings, TAppState>
+      >(room, command, context, {
         minimumPlayers: context.actor.debugAccess
           ? manifest.previewMinimumPlayers ?? manifest.minimumPlayers
           : manifest.minimumPlayers,
@@ -1020,7 +1104,7 @@ export function createGameSdkOnlineRoomModule<
               && presented.canStartGame !== false
             ),
             canEditRoomSettings: isHost && room.phase === "lobby",
-            canAbort: isHost && room.phase !== "lobby",
+            canAbort: isHost && room.phase === "playing",
             canDebug: (
               manifest.supportsDebug
               && context.viewer.debugAccess

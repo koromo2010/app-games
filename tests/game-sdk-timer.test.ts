@@ -195,6 +195,58 @@ test("SDK basic timer resets only after an accepted turn Command", async () => {
     deadlineAt: null,
     turnSequence: 2,
   });
+  await assert.rejects(
+    runtime.sendCommand({
+      code: "TIME",
+      envelope: {
+        expectedRevision: finished.revision,
+        command: { type: "room/abort" },
+      },
+      actor: host,
+    }),
+    /INVALID_PHASE/,
+  );
+});
+
+test("SDK settings boundary rejects unknown and undeclared values", async () => {
+  const runtime = createGameSdkMockRuntime({
+    module: createGameSdkOnlineRoomModule(appSet),
+    now: () => 1_000,
+  });
+  const created = await runtime.createRoom({
+    roomCode: "SETS",
+    create: {
+      settings: {
+        timeLimitSeconds: 999,
+        injected: "must-not-persist",
+      } as unknown as { timeLimitSeconds: number },
+      app: {},
+    },
+    actor: host,
+  });
+  assert.deepEqual(
+    runtime.inspectStoredRoom("SETS")?.settings,
+    { timeLimitSeconds: 30 },
+  );
+
+  await runtime.sendCommand({
+    code: "SETS",
+    envelope: {
+      expectedRevision: created.revision,
+      command: {
+        type: "room/update-settings",
+        settings: {
+          timeLimitSeconds: 60,
+          injected: "must-not-persist",
+        } as unknown as { timeLimitSeconds: number },
+      },
+    },
+    actor: host,
+  });
+  assert.deepEqual(
+    runtime.inspectStoredRoom("SETS")?.settings,
+    { timeLimitSeconds: 60 },
+  );
 });
 
 test("SDK timer expires on the server, applies grace and requires explicit recovery", async () => {
