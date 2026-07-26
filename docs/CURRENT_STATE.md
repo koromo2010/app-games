@@ -38,6 +38,16 @@ App Games / Game Fields は Next.js で構築したオンラインゲーム基�
 
 管理画面では、サイト名、検索用タイトル・説明候補、favicon、管理者メールなどを管理する。管理セッションは署名付きHttpOnly Cookieで保持する。
 
+### SDKアプリの昇格と復元
+
+devとmainの採用済みSDKアプリ情報は環境別DBに分離する。管理画面には次の独立した経路がある。
+
+- `SDK-dev → dev`／`SDK → main`: 外部提出candidateを対応環境へ採用
+- `dev app → main app`: devで検証済みの固定revisionをアプリ単位でmainへ新規登録または更新
+- `develop → main`: 本体Git branch全体のfast-forward
+
+アプリ更新時はmainのゲームID・URL・公開設定を維持する。各更新前の版は`sdk_app_releases`へ追加専用履歴として残り、管理画面から過去版を選んでアプリ単位で復元できる。復元自体も新しい`rollback`リリースとして記録し、本体や他アプリ、既存Roomは巻き戻さない。
+
 ## 共通LLMゲートウェイ
 
 ゲームからAIプロバイダーを利用する処理は `lib/game-llm.ts` を経由する。ゲーム固有ルートからOpenAI、Gemini、Groqを直接呼ばない。
