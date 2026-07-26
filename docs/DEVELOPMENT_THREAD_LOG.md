@@ -4914,10 +4914,17 @@
 - `npm run lint`に成功した。
 - `npm test`に成功し、全577テストが通過した。
 - `npm run build`に成功し、管理受信箱APIを含むproduction buildが完了した。
+- `1897a73`をdevelopへ反映し、`app-games-dev`の対象Deployment
+  `dpl_3oH7GGbWCokVZDHWgN8aCdTVB1tf`がREADYになった。
+- 対象Deploymentは`dev.game-fields.com`へaliasされ、公開後のerror／fatal Runtime Logは
+  0件だった。
 
 ### 未対応・保留
 
-- develop公開後、管理者アカウントで既存報告・問い合わせの表示と対応状態変更を
-  実機確認する。
+- 管理者アカウントで既存報告・問い合わせの表示と対応状態変更を実機確認する。
 - 今回の監査範囲は受信データとアカウント従属データであり、外部制作者アカウントを
   使う正式Packageの認証付き実機E2Eは前項どおり別途必要である。
+
+### 関連コミット
+
+- `1897a73` — 運営受信箱、受付ID、保持期限、アカウント従属データ削除を実装。
