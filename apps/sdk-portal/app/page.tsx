@@ -6,41 +6,34 @@ import { AccountMenu } from "./account-menu";
 const foundations = [
   {
     number: "01",
-    title: "Build locally",
+    title: "ローカルで作る",
     description:
-      "本番DBやアカウント情報に触れず、ゲーム固有のルールと画面をローカルで組み立てます。",
+      "本番のデータやアカウント情報にはさわらず、自分のパソコンの中でゲームのルールや画面を作ります。",
   },
   {
     number: "02",
-    title: "Validate safely",
+    title: "安全に確認する",
     description:
-      "Mock Runtimeと契約テストで、権限・秘密情報・同時更新の境界を提出前に確認します。",
+      "本番と同じ動きをする確認用の仕組みを使って、公開する前に安全かどうかをチェックします。",
   },
   {
     number: "03",
-    title: "Submit for review",
+    title: "確認を経て公開",
     description:
-      "完成したゲームをGame Fieldsへ提出します。外部開発者に本番環境の権限は渡しません。",
+      "完成したゲームは、Game Fieldsによる確認を経てから公開されます（提出の仕組みは現在準備中です）。外部の開発者に本番環境の権限が渡ることはありません。",
   },
 ];
 
 const available = [
-  "SDK基本セットとゲーム固有AppSetの合成",
-  "Room作成・参加・設定・revisionの共通実装",
-  "Platformと同じリリース版の@game-fields/game-sdk",
-  "認証済みactorを受け取るCommand契約",
-  "保存Roomと閲覧者別RoomViewの分離",
-  "revision不一致を拒否するRuntime契約",
-  "DB・Redis不要のメモリMock Runtime",
-  "tarballの外部install・export検査",
-  "本体統合用adapterの認証・Redis CAS実証",
-];
-
-const reviewFlow = [
-  "Package submission",
-  "Automated checks",
-  "Game Fields review",
-  "Main adoption",
+  "SDKを使って、そのゲームだけのルールや画面を作れる",
+  "対戦や協力プレイをする「部屋」を作ったり、参加したり、設定したりできる",
+  "本物のGame Fieldsと同じSDKで、動きを確認できる",
+  "本人だと確認された操作しか受け付けないので、なりすましを防げる",
+  "保存したデータとプレイヤーごとの画面を安全に分けて、情報が漏れないようにできる",
+  "古いデータのまま間違って上書きしてしまう事故を防げる",
+  "本番のデータベースがなくても、自分のパソコンだけで動作を確認できる",
+  "作ったものを外部に取り込んで、最後の確認ができる",
+  "本番環境とつなぐ部分も、あらかじめ確認済み",
 ];
 
 const firstBuildGuide = [
@@ -76,29 +69,29 @@ export default async function Home() {
             Game Fields <strong>SDK</strong>
           </span>
         </a>
-        <nav aria-label="主要ナビゲーション">
+        <nav aria-label="目次">
+          <span className="nav-toc-label" aria-hidden="true">目次</span>
           {linked && <Link href="/dashboard">マイゲーム</Link>}
-          <a href="#start">Start</a>
-          <a href="#foundation">Foundation</a>
-          <a href="#status">Status</a>
-          <a href="#review">Review gate</a>
+          <a href="#start">はじめかた</a>
+          <a href="#foundation">つくる流れ</a>
+          <a href="#scope">できること</a>
+          <a href="#status">対応状況</a>
         </nav>
         <div className="header-account-area">
-          <span className="preview-badge">Developer preview · v{platformVersion}</span>
+          <span className="preview-badge">開発者向け先行公開 · v{platformVersion}</span>
           <AccountMenu />
         </div>
       </header>
 
       <section className="hero" id="top">
         <div className="hero-copy">
-          <p className="eyebrow">GAME DEVELOPMENT, WITHOUT PLATFORM ACCESS</p>
+          <p className="eyebrow">アイデアを、動くゲームへ</p>
           <h1>
-            ゲームの面白さに集中する。
-            <span>公開の安全性は、プラットフォームが守る。</span>
+            思いつきを、遊べるゲームに。
+            <span>安全な公開は、おまかせください。</span>
           </h1>
           <p className="hero-description">
-            Game Fields SDKは、外部開発者が本番データや管理機能へ触れずに、
-            SDK基本セットへゲーム固有のAppSetだけを登録し、作成・検証・提出するための開発基盤です。
+            ChatGPTに作りたいゲームを伝えるだけで、AIが画面づくり・動作確認・保存まで進めます。最初の試作は10〜20分が目安。本番のデータや管理画面に触れることはありません。
           </p>
           <div className="hero-actions">
             <a className="primary-action" href="/GameFieldsDownloadMe-ver15.md" download>
@@ -113,6 +106,9 @@ export default async function Home() {
               現在の準備状況
             </a>
           </div>
+          <p className="hero-requirement-note">
+            ChatGPTの有料プラン（Codex・Work）と「gameapp-dev」プラグインが必要です。利用料はご自身の負担となります。取得・使用した時点で<Link href="/terms">利用規約</Link>に同意したものとして扱います。
+          </p>
         </div>
 
         <div className="contract-card" aria-label="SDK契約の概要">
@@ -147,26 +143,26 @@ export default async function Home() {
 createGameSdkOnlineRoomModule(appSet)`}</code>
           </pre>
           <div className="contract-card__footer">
-            <span>SDK basic set</span>
-            <span>game AppSet</span>
-            <span>safe composition</span>
+            <span>SDK基本セット</span>
+            <span>ゲームAppSet</span>
+            <span>安全な組み合わせ</span>
           </div>
         </div>
       </section>
 
       <section className="start section" id="start">
         <div className="section-heading">
-          <p className="eyebrow">START A PREVIEW INSTANCE</p>
-          <h2>自分専用のGame Fieldsで試す</h2>
+          <p className="eyebrow">お試し環境で確認</p>
+          <h2>自分専用のお試し環境で遊んでみる</h2>
           <p>
-            制作者ごとの専用URLにSDK基本セットの広場と部屋を用意します。新しいゲームはAppSetとして同じ広場へ追加され、本番と同じ導線で検証できます。
+            あなた専用のURLを1つ用意します。作ったゲームはそこに追加され、本番と同じように動くかを確認できます。
           </p>
         </div>
         <aside className="required-environment" aria-labelledby="account-link-title">
           <span className="required-environment-label">アカウント接続</span>
           <div>
             <h3 id="account-link-title">{linked ? `${account?.playerName || "Game Fieldsアカウント"}へ接続済みです` : "先にGame Fieldsアカウントを接続してください"}</h3>
-            <p>表のGame Fieldsと同じアカウントへ制作物を紐づけます。パスワードや表サイトのログインCookieをSDKやChatGPTへ渡すことはありません。</p>
+            <p>作ったゲームは、あなたのGame Fieldsアカウントに結びつけます。パスワードなどのログイン情報をSDKやChatGPTに渡すことはありません。</p>
             {!linked && <Link className="secondary-action" href="/api/account-link/start">Game Fieldsでログインして接続</Link>}
           </div>
         </aside>
@@ -182,29 +178,23 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
           ))}
         </div>
         <aside className="required-environment" aria-labelledby="required-environment-title">
-          <span className="required-environment-label">ご利用前に確認</span>
+          <span className="required-environment-label">利用時の注意</span>
           <div>
-            <h3 id="required-environment-title">ゲーム制作にはChatGPTのCodexまたはWorkが必要です</h3>
+            <h3 id="required-environment-title">ダウンロードしたファイルは、Codex(またはWork)のチャットにそのまま貼り付けてください</h3>
             <p>
-              ダウンロードしたファイルは、CodexまたはWorkのチャットへ添付してください。ゲームのコード取得・複数ファイルの編集・動作検査・SDKへの保存とURL発行を行うため、通常のChatGPTチャットだけでは制作を完了できません。
+              DownloadMeはAIに読ませる実行用ファイルです。中身を読んだり書き換えたりせず、そのままCodexまたはWorkのチャットに貼り付けてください。ふつうのChatGPTチャットでは制作を進められません。
             </p>
             <p>
-              DownloadMeはAIが読む実行契約です。人間向けの説明書ではないため、内容を読んだり編集したりせず、そのままチャットへ添付してください。
+              <strong>プラグインが新しくなったときは、必ず新しいチャットを作り直してください。</strong>
+              古いチャットのままだと動きが古いままになり、うまく続きが作れません。
             </p>
             <p>
-              <strong>プラグイン更新後は、必ず新しいチャットを作成してください。</strong>
-              既存チャットへ読み込まれたtool schemaは更新されないため、古いチャットへ最新版を追加しても制作を再開できません。新しいチャットで`gameapp-dev`を選択し、ver15だけを添付します。
-            </p>
-            <p>
-              保存済みの制作者環境とゲームはアカウントに紐づいているため、新しいチャットから自動的に再取得できます。作り直しや新しいURLの予約は不要です。
-            </p>
-            <p>
-              通常チャットでHTMLファイルだけが作られた場合、それはGame Fields SDKへ保存された完成版ではありません。CodexまたはWorkの新しいチャットへ切り替え、最新版ファイルとゲームの希望を送ってください。
+              作りかけのゲームはアカウントに保存されているので、新しいチャットを開けば自動的に続きから始められます。作り直しの必要はありません。ふつうのチャットでHTMLファイルだけが出てきた場合は、まだ完成版ではないので、CodexまたはWorkの新しいチャットに切り替えてください。
             </p>
           </div>
         </aside>
         <p className="start-note">
-          制作開始時は必ず新しいチャットを使います。ver15のhandshakeが成功して制作が始まった後は、URLが案内されるまでそのチャットを継続してください。エラーなどで保存できなかった場合は、AIが未完了であることと次の対応を案内します。
+          作り始めるときは、必ず新しいチャットを使ってください。うまくつながって制作が始まったら、URLが届くまで同じチャットのまま続けてください。もし保存でエラーが起きたときは、AIが「まだ終わっていないこと」と「次にやること」を教えてくれます。
         </p>
         <div className="hero-actions">
           <a className="primary-action" href="/GameFieldsDownloadMe-ver15.md" download>
@@ -219,10 +209,10 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
 
       <section className="foundation section" id="foundation">
         <div className="section-heading">
-          <p className="eyebrow">THE DEVELOPMENT BOUNDARY</p>
-          <h2>作る自由と、公開権限を分ける</h2>
+          <p className="eyebrow">開発の考え方</p>
+          <h2>自由に作れる。でも、公開は必ずチェックする。</h2>
           <p>
-            SDKは一般に利用できるようにしつつ、Game Fields本体への公開は必ず管理下のゲートを通します。
+            SDKは誰でも使えるようにします。でも、Game Fields本体で公開する前には、必ずチェックを行います。
           </p>
         </div>
         <div className="foundation-grid">
@@ -236,13 +226,37 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
         </div>
       </section>
 
+      <section className="section" id="scope">
+        <div className="section-heading">
+          <p className="eyebrow">できること・できないこと</p>
+          <h2>SDKで作れるもの・作れないもの</h2>
+          <p>
+            外部の人が作れる範囲と、Game Fieldsが管理する範囲を分けています。作り始める前に確認してください。
+          </p>
+        </div>
+        <div className="sdk-help-list">
+          <article>
+            <h2>作れるもの</h2>
+            <p>
+              SDKを使えば、そのゲームだけのルールや画面、進み方を作れます。対戦や協力プレイに必要な部屋作り・参加・設定などの共通の仕組みはSDKが用意しているので、あなたはゲームの中身を作ることだけに集中できます。
+            </p>
+          </article>
+          <article>
+            <h2>作れないもの</h2>
+            <p>
+              本番のデータベースやファイル保存の仕組みに直接さわることはできません。自分でログイン機能や課金機能を作ったり、Game Fields本体やVercelの本番環境に直接公開したりすることもできません。これらはすべてGame Fields側が管理しています。もし足りない機能があれば、AIがその内容を記録して、審査チームに伝えます。
+            </p>
+          </article>
+        </div>
+      </section>
+
       <section className="status section" id="status">
         <div className="status-panel">
           <div>
-            <p className="eyebrow">SDK V1 FOUNDATION</p>
-            <h2>基本セットからAppSetを作るpackage境界まで完成</h2>
+            <p className="eyebrow">いまの状況</p>
+            <h2>今できること、これから増えること</h2>
             <p className="status-copy">
-              独立packageのbuild・pack・外部install、AppSet合成、本体側adapterの認証・Redis CASは検証済みです。npm registryへの初回公開、チュートリアル、提出画面は審査ゲートを整えてから追加します。
+              SDKを使ったゲーム作りと動作確認は、今すぐ始められます。誰でもダウンロードできるようにする公開や、使い方の説明、提出画面はまだ準備中です。審査の仕組みが整い次第、追加します。
             </p>
           </div>
           <ul>
@@ -256,24 +270,6 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
         </div>
       </section>
 
-      <section className="review section" id="review">
-        <div className="section-heading">
-          <p className="eyebrow">MANAGED RELEASE GATE</p>
-          <h2>無審査でmainへ届く経路は作らない</h2>
-          <p>
-            検査の一部は将来AIへ拡張できますが、すべての提出物は最低1つのGame Fields管理ゲートを通ります。
-          </p>
-        </div>
-        <ol className="review-flow">
-          {reviewFlow.map((item, index) => (
-            <li key={item}>
-              <span>{String(index + 1).padStart(2, "0")}</span>
-              <strong>{item}</strong>
-            </li>
-          ))}
-        </ol>
-      </section>
-
       <footer>
         <div className="brand">
           <span className="brand-mark" aria-hidden="true">
@@ -281,7 +277,7 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
           </span>
           <span>Game Fields SDK</span>
         </div>
-        <p>Platform v{platformVersion} · Build the game. Submit the package. Release through the gate.</p>
+        <p>Platform v{platformVersion} · ゲームを作って、届けよう。 · <Link href="/terms">利用規約</Link></p>
       </footer>
     </main>
   );
