@@ -40,6 +40,71 @@
       "redeployRequired": true,
       "temporary": false,
       "note": "devのWebAuthn Originを明示し、再デプロイ後にパスキー登録を確認する。"
+    },
+    {
+      "id": "2026-07-26-sdk-production-signing-secret",
+      "key": "SDK_PREVIEW_SIGNING_SECRET",
+      "project": "app-games-sdk,app-games-sdk-preview",
+      "branch": "developからmainへ切替待ち",
+      "environment": "Production",
+      "sensitive": true,
+      "operation": "set",
+      "status": "redeployed",
+      "redeployRequired": true,
+      "temporary": false,
+      "note": "production専用値を両Projectへ個別登録。development用Shared値とは分離。"
+    },
+    {
+      "id": "2026-07-26-sdk-production-package-repository",
+      "key": "SDK_MOCK_GITHUB_REPOSITORY",
+      "project": "app-games-sdk,app-games-sdk-preview",
+      "branch": "developからmainへ切替待ち",
+      "environment": "Production",
+      "sensitive": false,
+      "operation": "set",
+      "status": "redeployed",
+      "redeployRequired": true,
+      "temporary": false,
+      "note": "production専用private repositoryを両Projectへ登録。"
+    },
+    {
+      "id": "2026-07-26-sdk-production-package-write-token",
+      "key": "SDK_MOCK_GITHUB_WRITE_TOKEN",
+      "project": "app-games-sdk",
+      "branch": "developからmainへ切替待ち",
+      "environment": "Production",
+      "sensitive": true,
+      "operation": "set",
+      "status": "redeployed",
+      "redeployRequired": true,
+      "temporary": false,
+      "note": "production package repositoryのContents read/writeだけ。90日期限。"
+    },
+    {
+      "id": "2026-07-26-sdk-production-package-read-token",
+      "key": "SDK_MOCK_GITHUB_READ_TOKEN",
+      "project": "app-games-sdk-preview",
+      "branch": "mainへ切替待ち",
+      "environment": "Production",
+      "sensitive": true,
+      "operation": "set",
+      "status": "redeployed",
+      "redeployRequired": true,
+      "temporary": false,
+      "note": "production package repositoryのContents read-onlyだけ。90日期限。"
+    },
+    {
+      "id": "2026-07-26-sdk-production-branch",
+      "key": "Production Branch",
+      "project": "app-games-sdk,app-games-sdk-preview",
+      "branch": "main",
+      "environment": "Production",
+      "sensitive": false,
+      "operation": "set",
+      "status": "requested",
+      "redeployRequired": true,
+      "temporary": false,
+      "note": "SDK DB health version 4確認後、main同期直前に両Projectをmainへ揃える。"
     }
   ]
 }
