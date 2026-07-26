@@ -76,14 +76,14 @@ export default async function Home() {
           <a href="#status">Status</a>
         </nav>
         <div className="header-account-area">
-          <span className="preview-badge">Developer preview · v{platformVersion}</span>
+          <span className="preview-badge">開発者向け先行公開 · v{platformVersion}</span>
           <AccountMenu />
         </div>
       </header>
 
       <section className="hero" id="top">
         <div className="hero-copy">
-          <p className="eyebrow">GAME DEVELOPMENT, WITHOUT PLATFORM ACCESS</p>
+          <p className="eyebrow">本番環境にさわらずにゲーム開発</p>
           <h1>
             ゲームを面白くすることだけ考えよう。
             <span>安全に届ける仕組みは、Game Fieldsが用意します。</span>
