@@ -87,11 +87,11 @@ export default async function Home() {
         <div className="hero-copy">
           <p className="eyebrow">アイデアを、動くゲームへ</p>
           <h1>
-            最初の試作は、10〜20分でできあがる。
-            <span>そこから先の安全な届け方は、Game Fieldsが引き受けます。</span>
+            思いつきを、遊べるゲームに。
+            <span>安全な公開は、Game Fieldsにおまかせ。</span>
           </h1>
           <p className="hero-description">
-            Game Fields SDKは、ChatGPTに作りたいゲームを伝えるだけで、画面づくり・動作確認・SDKへの保存までAIが進めてくれる開発基盤です。本番のデータや管理画面に触れることなく、思いついたゲームをすぐに動くカタチにできます。
+            ChatGPTに作りたいゲームを伝えるだけで、AIが画面づくり・動作確認・保存まで進めます。最初の試作は10〜20分が目安。本番のデータや管理画面に触れることはありません。
           </p>
           <div className="hero-actions">
             <a className="primary-action" href="/GameFieldsDownloadMe-ver15.md" download>
