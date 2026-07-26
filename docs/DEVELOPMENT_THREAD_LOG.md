@@ -5330,3 +5330,28 @@
 - `develop`へのpushとdev Deployment確認は未実施。
 - dev公開後、管理画面から未達問い合わせを再送し、画面に表示される成功または失敗理由と
   実メール受信を照合する。
+
+## 2026-07-26 — 問い合わせ通知診断・再送機能のdevelop公開
+
+### 実施結果
+
+- 問い合わせ通知の失敗理由、最終試行日時、管理画面からの再送を`develop`へ
+  fast-forwardで公開した。
+- GitHub上のcommitは`fc6c7d6`。内容tree `611dbac`は全テスト・lint・buildを通した
+  ローカルcommit `8c9a569`と一致する。
+- `app-games-dev`は対象commitを認識し、`dev.game-fields.com`へaliasされた。
+
+### 検証
+
+- 本体dev Deployment `dpl_6fBkpFp7cYgPqy3NVoTb3PEocBVn`はREADY。
+- errors-only build logに失敗はなく、問い合わせ関連APIのRuntime Errorと
+  error／fatal Runtime Logは0件。
+
+### 関連コミット
+
+- `fc6c7d6` — 問い合わせ通知の失敗診断と管理画面からの再送を追加。
+
+### 未対応・保留
+
+- 管理画面の「お問い合わせ」で未達問い合わせを開き、「管理者通知を再送」を実行して、
+  画面の成功または安全な失敗理由と実メール受信を照合する。
