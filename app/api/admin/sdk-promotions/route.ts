@@ -4,7 +4,7 @@ import {
   siteAdminAuthorizationError,
 } from "@/lib/site-admin-auth";
 import { appendSiteAdminAuditLog } from "@/lib/site-admin-passkey-store";
-import { sdkPortalInternalBaseUrl } from "@/lib/sdk-preview-runtime-source";
+import { sdkPromotionInternalBaseUrl } from "@/lib/sdk-preview-runtime-source";
 import { sdkServiceHeaders } from "@/lib/sdk-service-auth";
 import { expectedAppEnvironment } from "@/lib/storage-environment-guard";
 
@@ -12,7 +12,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 function internalUrl() {
-  return `${sdkPortalInternalBaseUrl()}/api/internal/promotions`;
+  return `${sdkPromotionInternalBaseUrl()}/api/internal/promotions`;
 }
 
 function requirePromotionReadEnvironment() {
@@ -28,11 +28,13 @@ function requirePromotionReadEnvironment() {
   }
 }
 
-function requireMainEnvironment() {
-  if (
-    expectedAppEnvironment() !== "production"
-    || process.env.VERCEL_GIT_COMMIT_REF !== "main"
-  ) {
+function requirePromotionAdminEnvironment() {
+  const environment = expectedAppEnvironment();
+  const branch = process.env.VERCEL_GIT_COMMIT_REF;
+  if (!(
+    (environment === "production" && branch === "main")
+    || (environment === "development" && branch === "develop")
+  )) {
     throw new Error("SDK_PROMOTION_MAIN_ONLY");
   }
 }
@@ -64,7 +66,7 @@ export async function GET() {
       cache: "no-store",
     });
     const payload = await proxyPayload(response);
-    const portalBaseUrl = sdkPortalInternalBaseUrl();
+    const portalBaseUrl = sdkPromotionInternalBaseUrl();
     const enriched = response.ok
       && payload
       && typeof payload === "object"
@@ -102,7 +104,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const session = await requireRecentSiteAdminMfa();
-    requireMainEnvironment();
+    requirePromotionAdminEnvironment();
     const body = await request.json().catch(() => null);
     const url = internalUrl();
     const response = await fetch(url, {
