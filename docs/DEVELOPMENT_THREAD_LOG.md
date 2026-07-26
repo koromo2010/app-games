@@ -4800,9 +4800,14 @@
 - 配布Starterの生成、同梱SDK install、型検査、契約テスト、1ゲーム完走、提出ZIPを
   `npm run test:sdk-starter`で確認した。
 - `npm run lint`と`npm run build`に成功した。
+- `59a8c95`をdevelopへ反映し、`app-games-dev`の対象DeploymentがREADYになった。
+- 対象Deploymentとdev全体の直近30分のVercel Runtime Errorは0件だった。
 
 ### 未対応・保留
 
 - 対象の制作者アカウント認証はこの作業環境にないため、報告対象Roomでの実機操作は
   未確認である。develop公開後にhostでダミー追加、開始、結果までの自動進行を確認する。
-- develop反映と対象DeploymentのREADY確認、公開後Runtime Error確認は未実施である。
+
+### 関連コミット
+
+- `59a8c95` — 正式Packageの共通DEBUG操作と旧bundle互換を実装。
