@@ -226,6 +226,7 @@ for (const token of [
   "packageAppSetSha256",
   "stableRevision",
   "verifyPortableManifest",
+  "jsonValuesEqual",
   "expectedSource",
   "promotion_source_changed",
 ]) {

@@ -9,6 +9,7 @@ import {
   type ExpectedGamePackageSource,
   type GamePackagePromotionTarget,
 } from "./game-package-promotion";
+import { jsonValuesEqual } from "./canonical-json";
 import { ensureSdkSchema, sdkSql } from "./sdk-postgres";
 
 const IDENTIFIER_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?$/;
@@ -84,7 +85,7 @@ async function verifyPortableManifest(target: {
   if (
     !response.ok
     || payload?.ok !== true
-    || JSON.stringify(payload.value) !== JSON.stringify(target.manifest)
+    || !jsonValuesEqual(payload.value, target.manifest)
   ) {
     throw new GamePackagePromotionError(
       "GAME_SDK_PACKAGE_RUNTIME_MANIFEST_MISMATCH",
