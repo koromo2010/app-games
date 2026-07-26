@@ -5237,3 +5237,51 @@
 - 変更はローカルcommitまでとし、`develop`へのpushとdev Deployment確認は未実施。
 - dev公開後、本体ヘッダーからお問い合わせへの遷移と、SDK制作者本人による新規報告作成・
   スレッド表示を実画面で確認する。
+
+## 2026-07-26 — support通知・承認・新規導線のdevelop公開
+
+### 利用者からの要望
+
+- support返信通知、GPTへの報告ID引継ぎ、人間承認必須のAI返信、本体お問い合わせ導線、
+  SDK Portalの新規報告導線をまとめて`develop`へpushする。
+
+### 判断
+
+- ローカルの検証済み4コミットだけを対象とし、共有`develop`が既知の先端
+  `85c79bb`から動いていないことを再確認してから非forceでfast-forwardする。
+- GitHub CLI資格がないため、接続済みGitHub経路で各commitのblobとtreeを再構成し、
+  4段階すべてのtree SHAがローカルと一致した場合だけbranch refを更新する。
+- 自動DeploymentはGit commit `90973bd`に固定して追跡し、本体devとSDK Portal devの
+  READY、独自ドメインalias、build error、Runtime Errorを確認する。
+
+### 実施結果
+
+- support返信メール通知、Portal直リンク、報告IDだけによるGPT引継ぎ、AI返信の
+  下書き・人間承認、トップヘッダーのお問い合わせ、SDK Portalの新規報告作成を
+  `develop`へ反映した。
+- GitHub上の最終commitは`90973bd`。内容tree `2c7e018`はローカル`430ce07`と一致した。
+- `app-games-dev`と`app-games-sdk-dev`は同じcommitを認識し、それぞれ
+  `dev.game-fields.com`と`sdk-dev.game-fields.com`へaliasされた。
+
+### 検証
+
+- 公開前の最終treeで全586テスト、lint、verify、本体・SDK Portal production buildに
+  成功済み。
+- 本体dev Deployment `dpl_Dick9aiPAwFZtu5BsEMXwwwxi4s5`はREADY。
+- SDK Portal dev Deployment `dpl_5UBK7BacjcWR4pTy6MrF3U1pjsbv`はREADY。
+- 両Deploymentのerrors-only build logに失敗はなく、error／fatal Runtime Logは0件。
+- Vercel ConnectorのURL取得は両custom domainでshareable URLを生成できず、実ページ本文の
+  取得確認は行っていない。
+
+### 関連コミット
+
+- `efec320` — SDK制作者へのsupport返信メール通知を追加。
+- `8f7c1c5` — AIの既存スレッド返信もPortalでの人間承認を必須化。
+- `ae6de2c` — GPTへの引継ぎ入力を報告IDだけへ簡素化。
+- `430ce07` — 本体お問い合わせとSDK新規報告の常設導線を追加。
+- `90973bd` — 上記4コミットと同一treeを持つ公開済みGitHub先端。
+
+### 未対応・保留
+
+- 本体ヘッダーからお問い合わせへの遷移、SDK制作者本人の新規報告、通知メール、
+  報告IDだけを使うGPT引継ぎ、返信下書き承認を実画面E2Eで確認する。
