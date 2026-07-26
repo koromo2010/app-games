@@ -810,6 +810,10 @@ footer p {
 .creator-environments a { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 20px; border: 1px solid var(--line); background: var(--surface); }
 .creator-environments a > span:first-child { display: flex; flex-direction: column; gap: 3px; }
 .creator-environments small,.creator-environments a > span:last-child { color: var(--muted); font-size: .72rem; }
+.sdk-help-list { display: grid; gap: 16px; max-width: 900px; }
+.sdk-help-list article { padding: 28px; border: 1px solid var(--line); background: var(--surface); }
+.sdk-help-list h2 { margin: 8px 0 12px; font-size: 1.35rem; }
+.sdk-help-list article > p:last-child { margin: 0; color: var(--muted); line-height: 1.85; }
 
 @media (max-width: 900px) {
   .dashboard-header { grid-template-columns: 1fr auto; }
