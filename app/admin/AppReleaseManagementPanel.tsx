@@ -23,8 +23,8 @@ type Release = {
 };
 
 type Payload = {
-  development?: { releases?: Release[] };
-  main?: { releases?: Release[]; history?: Release[] };
+  development?: { releases?: Release[]; error?: string };
+  main?: { releases?: Release[]; history?: Release[]; error?: string };
   error?: string;
 };
 
@@ -41,16 +41,22 @@ export function AppReleaseManagementPanel({
   const [selected, setSelected] = useState("");
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
+  const [developmentError, setDevelopmentError] = useState("");
+  const [mainError, setMainError] = useState("");
 
   const load = useCallback(async (lineageId?: string) => {
     const response = await fetch(`/api/admin/app-releases${
       lineageId ? `?lineageId=${encodeURIComponent(lineageId)}` : ""
     }`, { cache: "no-store" });
     const payload = await response.json().catch(() => null) as Payload | null;
-    if (!response.ok) throw new Error(payload?.error || "APP_RELEASE_LOAD_FAILED");
+    if (!response.ok && !payload?.development && !payload?.main) {
+      throw new Error(payload?.error || "APP_RELEASE_LOAD_FAILED");
+    }
     setDev(payload?.development?.releases ?? []);
     setMain(payload?.main?.releases ?? []);
     setHistory(payload?.main?.history ?? []);
+    setDevelopmentError(payload?.development?.error ?? "");
+    setMainError(payload?.main?.error ?? "");
   }, []);
 
   useEffect(() => {
@@ -107,11 +113,21 @@ export function AppReleaseManagementPanel({
       <div className="border-b border-white/10 px-5 py-5">
         <p className="text-xs font-black uppercase tracking-[0.16em] text-cyan-300">dev app → main app</p>
         <h3 className="mt-1 text-xl font-black">アプリ昇格・ロールバック</h3>
-        <p className="mt-2 text-sm leading-6 text-slate-400">devで検証したアプリ版だけをmainへ反映します。mainのゲームID・URL・公開設定は維持され、本体コードや他アプリには触れません。</p>
+        <p className="mt-2 text-sm leading-6 text-slate-400">devで採用済みのアプリ版だけをmainへ反映します。mainのゲームID・URL・公開設定は維持され、本体コードや他アプリには触れません。</p>
       </div>
       {message && <p role="status" className="m-5 whitespace-pre-line rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-4 py-3 text-sm text-cyan-50">{message}</p>}
+      {developmentError && (
+        <p role="alert" className="m-5 rounded-xl border border-rose-300/30 bg-rose-300/10 px-4 py-3 text-sm text-rose-100">
+          dev採用アプリを取得できませんでした（{developmentError}）。
+        </p>
+      )}
+      {mainError && (
+        <p role="alert" className="m-5 rounded-xl border border-amber-300/30 bg-amber-300/10 px-4 py-3 text-sm text-amber-100">
+          main現在版との比較を取得できませんでした（{mainError}）。一覧は確認できますが、復旧するまで昇格操作はできません。
+        </p>
+      )}
       {dev.length === 0 ? (
-        <p className="px-5 py-8 text-sm text-slate-400">devで採用済みのアプリはありません。</p>
+        <p className="px-5 py-8 text-sm text-slate-400">{developmentError ? "dev採用アプリの取得待ちです。" : "devで採用済みのアプリはありません。"}</p>
       ) : (
         <div className="divide-y divide-white/10">
           {dev.map((release) => {
@@ -124,22 +140,22 @@ export function AppReleaseManagementPanel({
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
                     <h4 className="font-black">{release.title}</h4>
-                    <span className="rounded-full bg-cyan-300/15 px-2 py-1 text-[11px] font-black text-cyan-100">{current ? "main登録済み" : "新規"}</span>
+                    <span className="rounded-full bg-cyan-300/15 px-2 py-1 text-[11px] font-black text-cyan-100">{current ? "main登録済み" : "dev採用済み"}</span>
                   </div>
                   <p className="mt-1 font-mono text-xs text-slate-500">{release.lineageId} / {release.publicGameId}</p>
-                  <p className="mt-2 text-xs text-slate-400">dev {short(release.revision)} → main {current ? short(current.revision) : "未登録"}</p>
+                  <p className="mt-2 text-xs text-slate-400">dev {short(release.revision)} → main {mainError ? "確認不可" : current ? short(current.revision) : "未登録"}</p>
                 </div>
                 <div className="flex flex-wrap gap-2 lg:justify-end">
                   {current && <button type="button" onClick={() => void selectHistory(release.lineageId)} className="rounded-lg border border-white/15 px-4 py-2 text-sm font-bold hover:bg-white/10">履歴・復元</button>}
                   <button
                     type="button"
-                    disabled={unchanged || Boolean(busy)}
+                    disabled={unchanged || Boolean(busy) || Boolean(mainError)}
                     onClick={() => {
                       if (!window.confirm(`${release.title} のdev版 ${short(release.revision)} でmainを${current ? "更新" : "新規登録"}しますか？`)) return;
                       void act({ action: "promote", snapshot: release, lineageId: release.lineageId }, `${release.title}をmainへ反映しました。`);
                     }}
                     className="rounded-lg bg-cyan-300 px-4 py-2 text-sm font-black text-slate-950 disabled:opacity-40"
-                  >{unchanged ? "main反映済み" : busy ? "処理中…" : action}</button>
+                  >{mainError ? "main確認待ち" : unchanged ? "main反映済み" : busy ? "処理中…" : action}</button>
                 </div>
               </article>
             );
