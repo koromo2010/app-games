@@ -143,6 +143,9 @@ function errorMessage(error: unknown) {
     if (error.code === "DEBUG_AUTO_PROGRESS_LIMIT") {
       return "自動進行の安全上限に達しました。現在の状態から操作を確認してください。";
     }
+    if (error.code === "GAME_SDK_REMOTE_RUNNER_UNAVAILABLE") {
+      return "ゲーム実行サーバーへ接続できません。少し待ってから、もう一度お試しください。";
+    }
     return `操作を完了できませんでした（${error.code}）。`;
   }
   if (

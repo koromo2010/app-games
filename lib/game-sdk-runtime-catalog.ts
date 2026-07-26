@@ -34,6 +34,9 @@ import {
 } from "./sdk-preview-runtime-source.ts";
 import { sdkServiceHeaders } from "./sdk-service-auth.ts";
 import { expectedAppEnvironment } from "./storage-environment-guard.ts";
+import {
+  resolveApprovedSdkGamePresentation,
+} from "../config/sdk-game-presentations.ts";
 
 type RuntimeCatalogChannel = "development" | "main";
 
@@ -134,11 +137,15 @@ export async function loadApprovedGameSdkCatalog(
   }
   return payload.games.map((game) => {
     const moduleProfile = normalizeGameSdkModuleProfile(game.modulePolicy);
+    const presentation = resolveApprovedSdkGamePresentation({
+      gameId: game.id,
+      fallbackTitle: game.manifest.title,
+    });
     return {
       id: game.id,
-      title: game.manifest.title.ja,
-      englishTitle: game.manifest.title.en,
-      visual: "/game-visuals/sdk-game-placeholder.svg",
+      title: presentation.title.ja,
+      englishTitle: presentation.title.en,
+      visual: presentation.visual,
       tags: [catalogTag(game.manifest)],
       href: `/sdk-games/${game.id}`,
       players: game.manifest.minimumPlayers === game.manifest.maximumPlayers
@@ -146,7 +153,7 @@ export async function loadApprovedGameSdkCatalog(
         : `${game.manifest.minimumPlayers}–${game.manifest.maximumPlayers}`,
       time: "未計測",
       summary: game.description.trim().slice(0, 240)
-        || game.manifest.title.ja,
+        || presentation.title.ja,
       accent: "from-cyan-300 via-emerald-200 to-amber-200",
       private: false,
       stats: moduleProfile.stats.mode === "required"
@@ -284,6 +291,10 @@ function resultPersistence(
   gameId: string,
   payload: RuntimeCatalogPayload,
 ) {
+  const presentation = resolveApprovedSdkGamePresentation({
+    gameId,
+    fallbackTitle: payload.manifest.title,
+  });
   const moduleRequired = (id: keyof GameSdkModuleProfile) => (
     payload.moduleProfile[id].mode === "required"
   );
@@ -293,7 +304,7 @@ function resultPersistence(
     );
     await persistApprovedGameSdkResultEvent({
       gameType: `sdk:${gameId}`,
-      title: payload.manifest.title.ja,
+      title: presentation.title.ja,
       supportsStats: moduleRequired("stats"),
       supportsRating: payload.manifest.supportsRating
         && moduleRequired("rating"),
@@ -313,6 +324,10 @@ export async function loadApprovedGameSdkRuntimeRegistration(
   const channel = deploymentChannel(env);
   const payload = await loadRuntimeCatalogPayload(gameId, channel, env);
   if (!payload) return null;
+  const presentation = resolveApprovedSdkGamePresentation({
+    gameId,
+    fallbackTitle: payload.manifest.title,
+  });
   const currentModule = remoteModule(payload, gameId);
   const moduleRequired = (id: keyof GameSdkModuleProfile) => (
     payload.moduleProfile[id].mode === "required"
@@ -323,7 +338,7 @@ export async function loadApprovedGameSdkRuntimeRegistration(
   });
   return {
     id: gameId,
-    title: payload.manifest.title.ja,
+    title: presentation.title.ja,
     clientKind: "iframe-package",
     clientRuntimeUrl: payload.clientRuntimeUrl,
     deployment: "main",

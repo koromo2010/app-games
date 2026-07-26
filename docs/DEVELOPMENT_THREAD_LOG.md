@@ -5490,3 +5490,50 @@
 
 - 管理者の実ブラウザから返信を送信し、追加パスキーなしでの保存と実メール受信を照合する。
 - パスキーを維持した操作で、dev登録済みCredentialだけが候補になることを実機確認する。
+
+## 2026-07-27 — 「コトバに迫れ」公開表示と正式Room起動障害
+
+### 利用者からの要望
+
+- `ai-word-guess`の公開名を「コトバに迫れ」へ変更する。
+- 広場カードの汎用placeholderを作品専用画像へ置き換える。
+- 正式画面でRoom作成直後に`GAME_SDK_COMMAND_REJECTED`となる障害を解消する。
+
+### 判断
+
+- 採用済みAppSetとmanifestは改変せず、公開後の表示名と画像を
+  `publicGameId`別のPlatform presentationとして解決する。
+- 2026-07-27 15:18 JST前後の本番Runtime Logでは、本体Room APIの真の失敗コードは
+  `GAME_SDK_REMOTE_RUNNER_UNAVAILABLE`で、SDK Previewのportable server routeが403を
+  返していた。ゲーム固有ロジックではなく、main package runtime grantの環境選択と
+  Preview deployment世代のずれを起点とする実行基盤障害として扱う。
+- `main` channelのgrantは発行元Portalのbranchに依存せずproduction environmentと
+  `preview.game-fields.com`を使う。Previewのhealth routeも変更し、次のmain buildを
+  対象プロジェクトへ確実に発生させる。
+- Remote runner停止は競合ではなく一時利用不能なので、共通HTTP分類を503へ変更し、
+  利用者には再試行可能な日本語メッセージを表示する。
+
+### 実施結果
+
+- `config/sdk-game-presentations.ts`へ「コトバに迫れ」、
+  `Close in on the Word`、専用1200×500 WebP画像を追加し、広場・Room・結果・戦績・
+  replayが同じ表示名を使うようcatalog解決を統一した。
+- main／development／candidate-previewごとにruntime grantのenvironmentと固定originを
+  選ぶようSDK Portalを修正した。
+- SDK Previewのhealth応答へchannelとgrant versionを追加した。
+- Remote runner停止の503分類、画面メッセージ、presentationとgrant境界の回帰テストを
+  追加した。
+
+### 検証
+
+- `git diff --check`に成功した。
+- `npm test`に成功し、全594テストが通過した。
+- `npm run lint`に成功した。
+- `npm run build`、`npm run build:sdk`、`npm run build:sdk-preview`に成功した。
+- `npm run verify`に成功した。
+
+### 未対応・保留
+
+- develop公開後に本体・SDK Preview deploymentがREADYであることを確認する。
+- main反映後、正式画面からRoomを作成し、Preview server routeの403が解消したことを
+  Runtime Logと画面の両方で確認する。
