@@ -14,6 +14,22 @@ import { expectedAppEnvironment } from "@/lib/storage-environment-guard";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+type UpstreamSource = "development-runtime-catalog" | "main-release-store";
+
+type UpstreamDiagnostic = {
+  source: UpstreamSource;
+  endpoint: string;
+  status: number | null;
+  code: string;
+  cause?: string;
+};
+
+type UpstreamResult = {
+  response: Response | null;
+  payload: unknown;
+  diagnostic: UpstreamDiagnostic;
+};
+
 function requireMain() {
   if (
     expectedAppEnvironment() !== "production"
@@ -31,25 +47,65 @@ function developmentCatalogEndpoint() {
   return `${sdkDevelopmentInternalBaseUrl()}/api/runtime-catalog?channel=development`;
 }
 
-async function call(url: string, init?: RequestInit) {
-  const method = init?.method ?? "GET";
-  const response = await fetch(url, {
-    ...init,
-    headers: {
-      ...sdkServiceHeaders(method, url),
-      ...(init?.headers ?? {}),
-    },
-    cache: "no-store",
-  });
-  const payload = await response.json().catch(() => ({ error: "APP_RELEASE_INVALID_RESPONSE" }));
-  return { response, payload };
+function displayEndpoint(url: string) {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.origin}${parsed.pathname}${parsed.search}`;
+  } catch {
+    return "INVALID_UPSTREAM_URL";
+  }
 }
 
-function errorCode(result: Awaited<ReturnType<typeof call>>) {
-  const payload = result.payload as { error?: unknown } | null;
-  return typeof payload?.error === "string"
-    ? payload.error
-    : `HTTP_${result.response.status}`;
+function payloadError(payload: unknown, status: number) {
+  if (payload && typeof payload === "object" && "error" in payload) {
+    const error = (payload as { error?: unknown }).error;
+    if (typeof error === "string" && error) return error;
+  }
+  return `HTTP_${status}`;
+}
+
+async function call(source: UpstreamSource, url: string, init?: RequestInit): Promise<UpstreamResult> {
+  const method = init?.method ?? "GET";
+  try {
+    const response = await fetch(url, {
+      ...init,
+      headers: {
+        ...sdkServiceHeaders(method, url),
+        ...(init?.headers ?? {}),
+      },
+      cache: "no-store",
+    });
+    const payload = await response.json().catch(() => ({ error: "APP_RELEASE_INVALID_RESPONSE" }));
+    return {
+      response,
+      payload,
+      diagnostic: {
+        source,
+        endpoint: displayEndpoint(url),
+        status: response.status,
+        code: payloadError(payload, response.status),
+      },
+    };
+  } catch (error) {
+    const cause = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+    console.error("[app-releases] upstream request failed", {
+      source,
+      endpoint: displayEndpoint(url),
+      method,
+      cause,
+    });
+    return {
+      response: null,
+      payload: { error: "APP_RELEASE_UPSTREAM_FETCH_FAILED" },
+      diagnostic: {
+        source,
+        endpoint: displayEndpoint(url),
+        status: null,
+        code: "APP_RELEASE_UPSTREAM_FETCH_FAILED",
+        cause,
+      },
+    };
+  }
 }
 
 function developmentReleases(payload: unknown) {
@@ -82,8 +138,20 @@ function routeError(error: unknown) {
   if (error instanceof Error && error.message === "APP_RELEASE_MAIN_ONLY") {
     return Response.json({ error: error.message }, { status: 403 });
   }
-  return siteAdminAuthorizationError(error)
-    ?? Response.json({ error: "APP_RELEASE_FAILED" }, { status: 503 });
+  const auth = siteAdminAuthorizationError(error);
+  if (auth) return auth;
+  const cause = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+  console.error("[app-releases] route failed", { cause });
+  return Response.json({
+    error: "APP_RELEASE_FAILED",
+    diagnostic: {
+      source: "main-release-store",
+      endpoint: "/api/admin/app-releases",
+      status: null,
+      code: "APP_RELEASE_FAILED",
+      cause,
+    },
+  }, { status: 503 });
 }
 
 export async function GET(request: Request) {
@@ -92,20 +160,19 @@ export async function GET(request: Request) {
     requireMain();
     const lineageId = new URL(request.url).searchParams.get("lineageId") ?? undefined;
     const [development, main] = await Promise.all([
-      call(developmentCatalogEndpoint()),
-      call(releaseEndpoint(sdkPromotionInternalBaseUrl(), lineageId)),
+      call("development-runtime-catalog", developmentCatalogEndpoint()),
+      call("main-release-store", releaseEndpoint(sdkPromotionInternalBaseUrl(), lineageId)),
     ]);
-    const developmentOk = development.response.ok;
-    const mainOk = main.response.ok;
-    const body = {
+    const developmentOk = development.response?.ok === true;
+    const mainOk = main.response?.ok === true;
+    return Response.json({
       development: developmentOk
         ? { releases: developmentReleases(development.payload) }
-        : { releases: [], error: errorCode(development) },
+        : { releases: [], error: development.diagnostic },
       main: mainOk
         ? main.payload
-        : { releases: [], history: [], error: errorCode(main) },
-    };
-    return Response.json(body, {
+        : { releases: [], history: [], error: main.diagnostic },
+    }, {
       status: developmentOk || mainOk ? 200 : 503,
       headers: { "Cache-Control": "private, no-store" },
     });
@@ -125,11 +192,14 @@ export async function POST(request: Request) {
       return Response.json({ error: "APP_RELEASE_INPUT_INVALID" }, { status: 400 });
     }
     const url = releaseEndpoint(sdkPromotionInternalBaseUrl());
-    const result = await call(url, {
+    const result = await call("main-release-store", url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
+    if (!result.response) {
+      return Response.json({ error: result.diagnostic.code, diagnostic: result.diagnostic }, { status: 503 });
+    }
     if (result.response.ok) {
       await appendSiteAdminAuditLog(
         request,
@@ -140,7 +210,10 @@ export async function POST(request: Request) {
         { releaseId: typeof body.releaseId === "string" ? body.releaseId : null },
       );
     }
-    return Response.json(result.payload, { status: result.response.status });
+    return Response.json(
+      result.response.ok ? result.payload : { error: result.diagnostic.code, diagnostic: result.diagnostic },
+      { status: result.response.status },
+    );
   } catch (error) {
     return routeError(error);
   }
