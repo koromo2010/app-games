@@ -35,11 +35,14 @@ test("admin exposes independent SDK to main and dev to main paths", () => {
   assert.match(panel, /dev→main/);
   assert.match(page, /releaseManagementMode/);
   assert.match(page, /"preview"/);
-  assert.match(panel, /dev試作表示です/);
+  assert.match(panel, /SDK→mainはここから実行できます/);
   assert.match(panel, /isPreview \|\|/);
+  assert.doesNotMatch(panel, /disabled=\{isPreview \|\| current \|\| !complete/);
   assert.match(panel, /sdkLoadError/);
   assert.match(panel, /devLoadError/);
   assert.match(sdkRoute, /requirePromotionReadEnvironment/);
+  assert.match(sdkRoute, /requirePromotionAdminEnvironment/);
+  assert.match(sdkRoute, /sdkPromotionInternalBaseUrl/);
   assert.match(devRoute, /requireReleaseReadEnvironment/);
   assert.match(sdkRoute, /sdk-game\.promote/);
   assert.match(sdkRoute, /SDK_PROMOTION_MAIN_ONLY/);
