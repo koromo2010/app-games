@@ -5446,3 +5446,43 @@
 
 - dev実画面から報告の「管理者通知を再送」を実行し、画面の送信結果と実メール受信を
   照合する。
+
+## 2026-07-27 — 運営返信のパスキー要求と無反応を修正
+
+### 利用者からの要望
+
+- 問い合わせ・報告への通常返信ではパスキー再確認を不要にする。
+- パスキーを外すだけでなく、承認後に処理が進まなかった原因も確認する。
+
+### 判断
+
+- 運営返信は既存のfull管理者セッションと監査ログで保護し、追加のstep-upは外す。
+- 対応状態変更、管理者通知再送、昇格、重要設定等の高影響操作は直近MFAを維持する。
+- mainとdevは親RP IDを共有するが管理者DBは別であるため、認証候補を現在環境へ
+  登録済みのCredential IDに限定する。transport hintは固定しない。
+- Vercelの`develop` branchでは、System Variableからdev WebAuthn Originを決定し、
+  追加のProject Variableを不要にする。
+
+### 実施結果
+
+- Vercelの`app-games-dev`実行ログで、パスキー選択後の
+  `POST /api/admin/passkeys`が`SITE_ADMIN_PASSKEY_NOT_FOUND`で400になったことを確認した。
+- 問い合わせ・報告の返信POSTを`requireFullSiteAdminSession`へ変更し、クライアントの
+  返信処理から`ensureSiteAdminStepUp`を外した。
+- 返信の成功・失敗を操作中フォームの直上へ表示し、失敗時も入力を保持する。
+- 同じ返信の再試行はrequest IDを維持し、保存後に応答だけ失われた場合の二重登録・
+  二重通知を防ぐ。
+- `SITE_ADMIN_WEBAUTHN_ORIGIN`追加依頼は、branch別の安全なコード既定へ変更したため
+  取消済みとした。
+
+### 検証
+
+- パスキー・問い合わせ・報告関連の回帰テスト22件に成功した。
+- `npm test`に成功し、全590テストが通過した。
+- `npm run lint`に成功した。
+- `npm run build`に成功し、全78ルートを生成した。
+
+### 未対応・保留
+
+- `develop`公開後、返信が追加パスキーなしで保存・通知されることと、パスキーを残した
+  操作でdev登録済みCredentialだけが選ばれることを実機確認する。

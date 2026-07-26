@@ -46,6 +46,13 @@ test("site admin passkeys accept both production origins", () => {
     rpID: "game-fields.com",
     origin: ["https://game-fields.com", "https://www.game-fields.com"],
   });
+  assert.deepEqual(siteAdminWebAuthnConfiguration({
+    NODE_ENV: "production",
+    VERCEL_GIT_COMMIT_REF: "develop",
+  }), {
+    rpID: "game-fields.com",
+    origin: "https://dev.game-fields.com",
+  });
   assert.deepEqual(siteAdminWebAuthnConfiguration({ NODE_ENV: "production", SITE_ADMIN_WEBAUTHN_ORIGIN: "https://admin.example.com, https://backup.example.com" }).origin, [
     "https://admin.example.com",
     "https://backup.example.com",

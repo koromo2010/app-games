@@ -47,7 +47,7 @@ export async function POST(request: Request) {
   );
   if (limited) return limited;
   try {
-    const session = await requireRecentSiteAdminMfa();
+    const session = await requireFullSiteAdminSession();
     const body = await request.json().catch(() => null) as {
       reportId?: unknown;
       requestId?: unknown;

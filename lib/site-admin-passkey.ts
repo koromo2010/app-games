@@ -35,11 +35,13 @@ export async function siteAdminAuthenticationOptions(email: string) {
     rpID,
     timeout: 120_000,
     userVerification: "required",
-    // Registration requests a discoverable credential. Leaving this list empty lets
-    // Windows/Chrome present the locally available or synced passkey chooser instead
-    // of assuming a USB security key from a credential-descriptor transport path.
-    // Verification below still binds the returned credential ID to this admin email.
-    allowCredentials: [],
+    // Restrict the chooser to credentials registered in this environment's admin DB.
+    // Do not pin saved transport hints: Chrome/Windows may use a different available
+    // provider later, but must not return a passkey registered only in another
+    // Game Fields environment that shares the same parent RP ID.
+    allowCredentials: passkeys.map((passkey) => ({
+      id: passkey.credentialId,
+    })),
   });
 }
 

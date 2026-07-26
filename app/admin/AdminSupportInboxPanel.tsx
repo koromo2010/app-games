@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { adminNotificationErrorLabels } from "@/lib/admin-notification-labels";
 import {
   contactStatuses,
@@ -38,6 +38,10 @@ type SupportFilter = "all" | UserReportStatus;
 type SupportItem =
   | { kind: "report"; report: UserReport }
   | { kind: "contact"; contact: ContactMessage };
+type ReplyMessage = {
+  tone: "success" | "error";
+  text: string;
+};
 
 function recordFor(item: SupportItem) {
   return item.kind === "report" ? item.report : item.contact;
@@ -94,6 +98,10 @@ export function AdminSupportInboxPanel({
   const [replyStatuses, setReplyStatuses] = useState<
     Record<string, UserReportStatus>
   >({});
+  const [replyMessages, setReplyMessages] = useState<
+    Record<string, ReplyMessage>
+  >({});
+  const replyRequestIds = useRef<Record<string, string>>({});
   const [message, setMessage] = useState("");
 
   const load = useCallback(async (signal?: AbortSignal) => {
@@ -278,8 +286,15 @@ export function AdminSupportInboxPanel({
     if (!reply || savingId) return;
     setSavingId(record.id);
     setMessage("");
+    setReplyMessages((current) => {
+      const next = { ...current };
+      delete next[record.id];
+      return next;
+    });
     try {
-      await ensureSiteAdminStepUp();
+      const requestId = replyRequestIds.current[record.id]
+        ?? crypto.randomUUID();
+      replyRequestIds.current[record.id] = requestId;
       const response = await fetch(
         item.kind === "report"
           ? "/api/admin/user-reports"
@@ -290,13 +305,13 @@ export function AdminSupportInboxPanel({
           body: JSON.stringify(item.kind === "report"
             ? {
               reportId: record.id,
-              requestId: crypto.randomUUID(),
+              requestId,
               message: reply,
               status: replyStatuses[record.id] ?? "waiting-user",
             }
             : {
               contactId: record.id,
-              requestId: crypto.randomUUID(),
+              requestId,
               message: reply,
               status: replyStatuses[record.id] ?? "waiting-user",
             }),
@@ -320,11 +335,18 @@ export function AdminSupportInboxPanel({
       }
       setItems((current) => replaceItem(current, updated));
       setDrafts((current) => ({ ...current, [record.id]: "" }));
-      setMessage(data?.deliveryStatus === "failed"
-        ? "返信は保存しましたが、メール通知に失敗しました。"
-        : data?.deliveryStatus === "not-required"
-          ? "返信は保存しました。確認済みメールがないため、メール通知は送っていません。"
-          : `「${itemSummary(item)}」へ返信し、メールでも通知しました。`);
+      delete replyRequestIds.current[record.id];
+      setReplyMessages((current) => ({
+        ...current,
+        [record.id]: {
+          tone: "success",
+          text: data?.deliveryStatus === "failed"
+            ? "返信は保存しましたが、メール通知に失敗しました。"
+            : data?.deliveryStatus === "not-required"
+              ? "返信は保存しました。確認済みメールがないため、メール通知は送っていません。"
+              : `「${itemSummary(item)}」へ返信し、メールでも通知しました。`,
+        },
+      }));
     } catch (error) {
       if (
         error instanceof Error
@@ -332,7 +354,13 @@ export function AdminSupportInboxPanel({
       ) {
         onAuthExpired();
       }
-      setMessage("返信を送信できませんでした。");
+      setReplyMessages((current) => ({
+        ...current,
+        [record.id]: {
+          tone: "error",
+          text: "返信を送信できませんでした。入力内容は残っています。もう一度お試しください。",
+        },
+      }));
     } finally {
       setSavingId(null);
     }
@@ -556,6 +584,18 @@ export function AdminSupportInboxPanel({
                     void sendReply(item);
                   }}
                 >
+                  {replyMessages[record.id] && (
+                    <p
+                      role="status"
+                      className={`rounded-lg border px-3 py-2 text-sm ${
+                        replyMessages[record.id].tone === "error"
+                          ? "border-rose-300/30 bg-rose-300/10 text-rose-100"
+                          : "border-emerald-300/30 bg-emerald-300/10 text-emerald-100"
+                      }`}
+                    >
+                      {replyMessages[record.id].text}
+                    </p>
+                  )}
                   <label className="block text-xs font-bold text-slate-400">
                     返信（会話履歴へ保存し、登録メールにも通知）
                     <textarea

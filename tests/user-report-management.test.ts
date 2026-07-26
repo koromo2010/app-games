@@ -52,11 +52,30 @@ test("admin has one authenticated inbox for reports and contacts", () => {
   assert.doesNotMatch(shell, /\['contacts', 'お問い合わせ'\]/);
   assert.match(panel, /問い合わせ・報告/);
   assert.match(panel, /ensureSiteAdminStepUp/);
+  const replyHandler = panel.slice(
+    panel.indexOf("const sendReply"),
+    panel.indexOf("\n\n  return (", panel.indexOf("const sendReply")),
+  );
+  assert.doesNotMatch(replyHandler, /ensureSiteAdminStepUp/);
+  assert.match(replyHandler, /replyRequestIds/);
+  assert.match(replyHandler, /入力内容は残っています/);
   assert.match(panel, /\/api\/admin\/user-reports/);
   assert.match(panel, /\/api\/admin\/contact-messages/);
   assert.match(panel, /管理者通知を再送/);
   assert.match(reportRoute, /requireFullSiteAdminSession/);
   assert.match(reportRoute, /requireRecentSiteAdminMfa/);
+  const reportReplyRoute = reportRoute.slice(
+    reportRoute.indexOf("export async function POST"),
+    reportRoute.indexOf("export async function PUT"),
+  );
+  const contactReplyRoute = contactRoute.slice(
+    contactRoute.indexOf("export async function POST"),
+    contactRoute.indexOf("export async function PUT"),
+  );
+  for (const replyRoute of [reportReplyRoute, contactReplyRoute]) {
+    assert.match(replyRoute, /requireFullSiteAdminSession/);
+    assert.doesNotMatch(replyRoute, /requireRecentSiteAdminMfa/);
+  }
   assert.match(reportRoute, /export async function PUT/);
   assert.match(reportRoute, /user-report\.notification-retry/);
   assert.match(reportRoute, /appendSiteAdminAuditLog/);
