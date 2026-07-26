@@ -82,20 +82,31 @@ test("contact submitters can continue a private UI conversation", () => {
 test("SDK Portal UI and AI use the same creator-owned support service", () => {
   const rootRoute = read("app/api/internal/sdk-support/route.ts");
   const portalApi = read("apps/sdk-portal/lib/support-api.ts");
+  const portalRoute = read("apps/sdk-portal/app/api/support/route.ts");
   const page = read("apps/sdk-portal/app/support/page.tsx");
   const inbox = read("apps/sdk-portal/app/support/SupportInbox.tsx");
+  const newReport = read(
+    "apps/sdk-portal/app/support/new/NewSupportReportForm.tsx",
+  );
   const mcp = read("apps/sdk-portal/app/api/mcp/route.ts");
 
   assert.match(rootRoute, /requireSdkServiceRequest/);
   assert.match(rootRoute, /playerId/);
   assert.match(rootRoute, /appendUserReportMessage/);
+  assert.match(rootRoute, /action === "create-report"/);
+  assert.match(rootRoute, /saveUserReport/);
   assert.match(portalApi, /sdkServiceHeaders/);
   assert.match(portalApi, /listCreatorSupportReports/);
   assert.match(portalApi, /replyToCreatorSupportReport/);
+  assert.match(portalApi, /createCreatorSupportReport/);
+  assert.match(portalRoute, /createCreatorSupportReport/);
   assert.match(page, /SupportInbox/);
   assert.match(page, /requestedThread/);
   assert.match(inbox, /open=\{report\.id === initialThreadId/);
   assert.match(inbox, /状態をオープンへ戻しました/);
+  assert.match(inbox, /href="\/support\/new"/);
+  assert.match(newReport, /action: "create-report"/);
+  assert.match(newReport, /内容を確認し、報告を送信/);
   assert.match(mcp, /name: "list_support_threads"/);
   assert.match(mcp, /name: "get_support_thread"/);
   assert.match(mcp, /報告IDだけを入力した場合も/);

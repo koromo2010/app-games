@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import type {
   CreatorSupportReport,
@@ -109,9 +110,14 @@ export function SupportInbox({
         <h1>サポート</h1>
         <p>ゲーム画面から送った報告と、運営からの返信を同じスレッドで確認できます。追記すると状態は自動でオープンに戻ります。</p>
       </div>
-      <button className="secondary-action" type="button" disabled={loading} onClick={() => void reload()}>
-        {loading ? "読込中…" : "再読み込み"}
-      </button>
+      <div className="support-heading-actions">
+        <Link className="primary-action" href="/support/new">
+          新規報告を作成 <span aria-hidden="true">＋</span>
+        </Link>
+        <button className="secondary-action" type="button" disabled={loading} onClick={() => void reload()}>
+          {loading ? "読込中…" : "再読み込み"}
+        </button>
+      </div>
     </div>
 
     <div className="support-filters" role="tablist" aria-label="報告の状態">
@@ -191,7 +197,8 @@ export function SupportInbox({
       {!visibleReports.length && <div className="dashboard-empty">
         <p className="eyebrow">NO SUPPORT THREADS</p>
         <h2>この状態の報告はありません</h2>
-        <p>ゲーム画面の「改善・バグ報告」から送ると、ここに表示されます。</p>
+        <p>ゲーム画面からだけでなく、このサポート画面からも不具合や改善要望を送れます。</p>
+        <Link className="primary-action" href="/support/new">新規報告を作成 <span aria-hidden="true">→</span></Link>
       </div>}
     </div>
   </section>;

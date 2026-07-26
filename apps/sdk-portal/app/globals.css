@@ -816,6 +816,8 @@ footer p {
 .sdk-help-list article > p:last-child { margin: 0; color: var(--muted); line-height: 1.85; }
 .support-main { width: min(1060px, calc(100% - 40px)); margin: 0 auto; padding: 76px 0 120px; }
 .support-heading button { flex: 0 0 auto; color: var(--ink); cursor: pointer; }
+.support-heading-actions { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+.support-heading-actions .primary-action,.support-heading-actions .secondary-action { padding: 11px 15px; }
 .support-filters { display: flex; gap: 8px; margin-bottom: 18px; overflow-x: auto; }
 .support-filters button { padding: 9px 12px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); cursor: pointer; font-size: .72rem; font-weight: 800; white-space: nowrap; }
 .support-filters button[aria-selected="true"] { border-color: var(--accent); background: var(--accent); color: #07100c; }
@@ -853,6 +855,7 @@ footer p {
 .support-approval label { display: grid; gap: 8px; font-size: .76rem; font-weight: 800; }
 .support-approval input,.support-approval select,.support-approval textarea { width: 100%; padding: 12px 13px; border: 1px solid var(--line); background: #07100c; color: var(--ink); font: inherit; }
 .support-approval textarea { min-height: 190px; resize: vertical; line-height: 1.7; }
+.support-form-hint { margin: -6px 0 0; color: var(--muted); font-size: .68rem; line-height: 1.6; }
 .support-approval-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding-top: 6px; }
 .support-approval-actions button { padding: 11px 16px; border: 1px solid var(--accent); background: var(--accent); color: #07100c; cursor: pointer; font: inherit; font-size: .76rem; font-weight: 900; }
 .support-approval-actions button.secondary-action { background: transparent; color: var(--muted); }
@@ -876,6 +879,8 @@ footer p {
   .creator-game-card { padding: 20px; }
   .creator-game-card__meta { align-items: flex-start; flex-direction: column; }
   .dashboard-empty { padding: 42px 20px; }
+  .support-heading-actions { width: 100%; align-items: stretch; flex-direction: column; }
+  .support-heading-actions .primary-action,.support-heading-actions .secondary-action { justify-content: center; text-align: center; }
   .support-thread > summary { align-items: flex-start; flex-direction: column; }
   .support-message { width: 100%; }
   .support-reply > div { align-items: stretch; flex-direction: column; }

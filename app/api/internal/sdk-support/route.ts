@@ -2,6 +2,7 @@ import {
   appendUserReportMessage,
   listUserReportsForPlayer,
   loadUserReport,
+  saveUserReport,
 } from "@/lib/user-report-store";
 import { requireSdkServiceRequest } from "@/lib/sdk-service-auth";
 import {
@@ -145,6 +146,67 @@ export async function POST(request: Request) {
     { playerId },
   );
   if (limited) return limited;
+  if (action === "create-report") {
+    const requestId = typeof body?.requestId === "string"
+      ? body.requestId.trim().toLowerCase()
+      : "";
+    const type = body?.type === "bug" || body?.type === "request"
+      ? body.type
+      : null;
+    const summary = typeof body?.summary === "string"
+      ? body.summary.trim().slice(0, 120)
+      : "";
+    const details = typeof body?.details === "string"
+      ? body.details.trim().slice(0, 1_200)
+      : "";
+    const page = typeof body?.page === "string"
+      ? body.page.trim().slice(0, 200)
+      : "";
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+        .test(requestId)
+      || !type
+      || !summary
+    ) {
+      return Response.json(
+        { error: "support_report_invalid" },
+        { status: 400 },
+      );
+    }
+    try {
+      const saved = await saveUserReport({
+        playerId,
+        type,
+        summary,
+        details,
+        page,
+      }, {
+        reportId: `report_${requestId}`,
+      });
+      const report = await loadUserReport(saved.id);
+      if (!report || report.playerId !== playerId) {
+        throw new Error("USER_REPORT_SAVE_FAILED");
+      }
+      return Response.json(
+        { report },
+        { status: saved.inserted ? 201 : 200 },
+      );
+    } catch (error) {
+      if (
+        error instanceof Error
+        && error.message === "USER_REPORT_ID_CONFLICT"
+      ) {
+        return Response.json(
+          { error: "support_report_conflict" },
+          { status: 409 },
+        );
+      }
+      return Response.json(
+        { error: "support_report_unavailable" },
+        { status: 503 },
+      );
+    }
+  }
   if (action === "create-draft") {
     const requestId = typeof body?.requestId === "string"
       ? body.requestId.trim()

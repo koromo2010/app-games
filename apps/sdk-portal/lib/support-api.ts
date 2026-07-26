@@ -117,6 +117,22 @@ export async function replyToCreatorSupportReport(input: {
   return data.report;
 }
 
+export async function createCreatorSupportReport(input: {
+  playerId: string;
+  requestId: string;
+  type: "bug" | "request";
+  summary: string;
+  details: string;
+  page: string;
+}) {
+  const data = await supportRequest<{ report: CreatorSupportReport }>(
+    "POST",
+    "/api/internal/sdk-support",
+    { action: "create-report", ...input },
+  );
+  return data.report;
+}
+
 export async function prepareCreatorSupportDraft(input: {
   playerId: string;
   requestId: string;

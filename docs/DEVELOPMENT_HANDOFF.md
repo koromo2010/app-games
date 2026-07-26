@@ -29,7 +29,7 @@
 ## ブランド・法務ページ
 
 - 正式ブランドは `GAME FIELDS`、小さい日本語表記は「ゲームフィールド」。ゲーム選択画面は「広場」、各ゲームの部屋募集・待機画面は「ロビー」と呼ぶ。
-- 共通フッターから `/terms`、`/privacy`、`/contact` へ導線を持つ。現行TC・PPバージョンは `lib/legal.ts` を正本とする。
+- 共通フッターから `/terms`、`/privacy`、`/contact` へ導線を持つ。広場はゲーム一覧の高さにかかわらず見つけられるよう、`LobbyHeader`にも`/contact`を常設する。現行TC・PPバージョンは `lib/legal.ts` を正本とする。
 - 新規アカウント作成はTC・PPへの明示同意を必須とし、APIでもバージョンを検証する。同意バージョンと日時はアカウントへ保存する。
 - 独自の有料機能を導入するときは、料金ページ、申込み直前表示、解約・返金条件、利用規約改定、必要な特定商取引法表示を同時に追加する。
 
@@ -78,7 +78,7 @@
 | たほい屋の問題再利用 | `lib/tahoiya-topic-catalog.ts`, `app/api/tahoiya/topic/route.ts` |
 | お題候補DB・経験履歴の目標設計 | `docs/TOPIC_HISTORY_DATABASE.md` |
 
-報告への運営返信は本体Redisの会話履歴を先に保存し、送信者に確認済みの復旧用メールがある場合だけResendで通知する。通知メールには返信本文、環境別SDK Portalの該当スレッド導線、GPTへ貼る報告IDだけを載せ、メール自体を返信先・会話の正本にしない。MCPの`get_support_thread`は、利用者が報告IDだけを入力した場合にも呼ぶ規則と、最新返信までの要約、次の対応の説明、変更・返信前の確認を`assistantPolicy`として返す。返信が必要な場合も`prepare_support_reply`で7日間の下書きだけを作り、Portalで本人が確認・修正して送信するまで会話履歴と状態を変更しない。AI用の直接返信toolは提供しない。メール未登録・未確認・配送失敗でもPortal履歴と状態更新は保持し、管理画面の各メッセージへ配送状態を表示する。`/support?thread=<reportId>`は本人認証後に対象スレッドを展開し、未ログイン時もaccount link後のreturnToを維持する。
+報告への運営返信は本体Redisの会話履歴を先に保存し、送信者に確認済みの復旧用メールがある場合だけResendで通知する。通知メールには返信本文、環境別SDK Portalの該当スレッド導線、GPTへ貼る報告IDだけを載せ、メール自体を返信先・会話の正本にしない。MCPの`get_support_thread`は、利用者が報告IDだけを入力した場合にも呼ぶ規則と、最新返信までの要約、次の対応の説明、変更・返信前の確認を`assistantPolicy`として返す。返信が必要な場合も`prepare_support_reply`で7日間の下書きだけを作り、Portalで本人が確認・修正して送信するまで会話履歴と状態を変更しない。AI用の直接返信toolは提供しない。Portalの人間用`/support/new`は不具合報告・改善要望・要約・詳細・対象ページを入力し、「内容を確認し、報告を送信」を押した場合だけ、認証済み本人の新規スレッドを直接作る。request IDから報告IDを決めることで同じ送信の再試行を冪等化する。メール未登録・未確認・配送失敗でもPortal履歴と状態更新は保持し、管理画面の各メッセージへ配送状態を表示する。`/support?thread=<reportId>`は本人認証後に対象スレッドを展開し、未ログイン時もaccount link後のreturnToを維持する。
 
 SDK v1は、manifest、Game→Controller→LayoutのUI三層、認証済みID・表示名をactorとして注入するserver module、閲覧者別RoomView、revision付きCommand、DB不要のMock Runtimeまでを提供する。新規online-roomゲームは`defineGameSdkOnlineRoomAppSet`へゲーム固有state・Command・Viewだけを登録し、`createGameSdkOnlineRoomModule`で既存のSDK基本セットと合成する。基本セットはRoom作成、ホスト、参加・退出、設定、revision、共通permissions、内部player IDを除いたseat形式の共通View、中断・再戦を所有する。共通module catalogは`@game-fields/game-sdk/modules`を正本とし、新規mockは全39件必須で開始する。制作AIと管理トークンはprofileを変更できず、初回は全39件必須とだけ認識する。モック承認後のMCPは確定済み`requiredModuleIds`に加え、各moduleの`delivery`、`packageExports`、`publicApis`、`usage`を`requiredModules`として返す。必須・解除可・任意の内部分類はSDK Portalの所有者画面へ閉じる。profileは本体の`online-room-route-factory`、`online-room-store-runtime`、`@game-fields/game-runtime`、共通UIと純粋domain部品の採用レシピであり、SDK側へ同等基盤を複製しない。SDK-devはcatalogとは別の実装レジストリで全IDを本体共通部品、SDK helper、またはPreview adapterへ解決し、必須IDに割当がない状態を自動テストで拒否する。ゲーム側のCreate/Commandへactor IDや表示名を本人情報として入れず、保存Roomをクライアントへ直接返さない。接続前互換性は`packages/game-sdk/src/handshake.ts`を正本とし、環境、Platform／package release、contract schema、必須capabilityを`/.well-known/game-fields-sdk`またはMCP `get_sdk_handshake`で合意する。MCP `initialize`、OAuth、SDK handshakeはそれぞれtransport、本人認証、互換性確認を担当し、代用しない。`npm run check:sdk`は公開SDK、内部Runtime core、実証ゲームの依存境界を検査し、`npm run lint`から必ず実行される。
 
