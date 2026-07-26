@@ -37,13 +37,17 @@ test("admin exposes independent SDK to main and dev to main paths", () => {
   assert.match(page, /"preview"/);
   assert.match(panel, /dev試作表示です/);
   assert.match(panel, /isPreview \|\|/);
+  assert.match(panel, /sdkLoadError/);
+  assert.match(panel, /devLoadError/);
   assert.match(sdkRoute, /requirePromotionReadEnvironment/);
   assert.match(devRoute, /requireReleaseReadEnvironment/);
   assert.match(sdkRoute, /sdk-game\.promote/);
   assert.match(sdkRoute, /SDK_PROMOTION_MAIN_ONLY/);
   assert.match(devRoute, /code\.promote-develop-to-main/);
   assert.match(devRoute, /confirmation !== "dev→main"/);
+  assert.match(portalRoute, /readOnly && branch === "develop"/);
+  assert.match(portalRoute, /authorize\(request, \{ readOnly: true \}\)/);
   assert.match(portalRoute, /target !== "main"/);
-  assert.match(portalRoute, /VERCEL_GIT_COMMIT_REF !== "main"/);
+  assert.match(portalRoute, /branch !== "main"/);
   assert.doesNotMatch(mcp, /promote_game_package_to_development/);
 });
