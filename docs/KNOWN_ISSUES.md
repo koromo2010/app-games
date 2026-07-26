@@ -485,7 +485,7 @@ Client Runtime、Platform adapter、旧bundle互換を縦断テストへ固定�
 
 ## 2026-07-26 SDK正式Packageのライフサイクル監査が表示導線に偏っている
 
-状態: 修正実装済み・dev公開待ち（2026-07-26、競合・認可・保存順序の回帰テストあり）
+状態: 修正済み・dev公開済み（2026-07-26、競合・認可・保存順序の回帰テストあり）
 
 DEBUG対応後に正式Packageの検査範囲をShell表示からRoom lifecycle全体へ広げたところ、
 遅着したHTTP Command／timer応答がwatcherで取得済みの新revisionを巻き戻す経路、

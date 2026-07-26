@@ -4857,9 +4857,16 @@
 - `npm run test:sdk-starter`で同梱SDK install、型検査、契約テスト、1ゲーム完走、
   提出ZIPを確認した。
 - `npm run verify`、`npm run lint`、`npm run build`に成功した。
+- `ae0b792`をdevelopへ反映し、`app-games-dev`の対象Deployment
+  `dpl_Ajmwuvv16wkXBAyh8qgXfqMcVDqy`がREADYになった。
+- 対象Deploymentは`dev.game-fields.com`へaliasされ、公開後のerror／fatal Runtime Logは
+  0件だった。
 
 ### 未対応・保留
 
-- developへの反映、対象DeploymentのREADY、公開後Runtime Error確認は公開工程で行う。
 - 制作者アカウントを使うcandidate／昇格Packageの認証付き実機E2Eは、
   対象アカウント側で確認する。
+
+### 関連コミット
+
+- `ae0b792` — 正式Package lifecycleの競合・認可・module gate・結果保存順序を強化。
