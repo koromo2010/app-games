@@ -15,6 +15,7 @@ import {
 import { loadAndReconcileStoredTahoiyaRoom } from "./tahoiya-room-store.ts";
 import { loadStoredWordWolfRoom } from "./wordwolf-room-store.ts";
 import { approvedGameSdkRegistration } from "./game-sdk-server-registry.ts";
+import { loadApprovedGameSdkRuntimeRegistration } from "./game-sdk-runtime-catalog.ts";
 import { createRedisGameSdkPlatformRoomStore } from "./game-sdk-platform-room-store.ts";
 
 export type SpectatorSourceRoom = {
@@ -27,6 +28,7 @@ export type SpectatorSourceRoom = {
   revision: number;
   createdAt: number;
   updatedAt: number;
+  gameTitle?: string;
   [key: string]: unknown;
 };
 
@@ -44,11 +46,7 @@ const loaders: Record<OnlineRoomRealtimeGame, Loader> = {
 };
 
 export function parseOnlineRoomSpectatorGame(value: unknown): OnlineRoomRealtimeGame | null {
-  const game = normalizeOnlineRoomRealtimeGame(value);
-  if (!game) return null;
-  if (!game.startsWith("sdk:")) return game;
-  const registration = approvedGameSdkRegistration(game.slice(4));
-  return registration?.supportsSpectators ? game : null;
+  return normalizeOnlineRoomRealtimeGame(value);
 }
 
 export async function loadOnlineRoomForSpectator(
@@ -57,7 +55,8 @@ export async function loadOnlineRoomForSpectator(
 ): Promise<SpectatorSourceRoom | null> {
   if (game.startsWith("sdk:")) {
     const gameId = game.slice(4);
-    const registration = approvedGameSdkRegistration(gameId);
+    const registration = approvedGameSdkRegistration(gameId)
+      ?? await loadApprovedGameSdkRuntimeRegistration(gameId);
     if (!registration?.supportsSpectators) return null;
     const record = await createRedisGameSdkPlatformRoomStore<{
       code: string;
@@ -91,6 +90,7 @@ export async function loadOnlineRoomForSpectator(
       passphrase: "",
       phase: record.phase,
       players: record.room.players,
+      gameTitle: registration.title,
       timer: record.room.timer,
       standardResult: record.room.standardResult,
       revision: record.revision,
@@ -103,8 +103,6 @@ export async function loadOnlineRoomForSpectator(
 
 export function onlineRoomSpectatorSnapshot(game: OnlineRoomRealtimeGame, room: SpectatorSourceRoom) {
   if (game.startsWith("sdk:")) {
-    const gameId = game.slice(4);
-    const registration = approvedGameSdkRegistration(gameId);
     const timer = room.timer && typeof room.timer === "object"
       ? room.timer as { durationSeconds?: unknown; deadlineAt?: unknown }
       : null;
@@ -129,7 +127,7 @@ export function onlineRoomSpectatorSnapshot(game: OnlineRoomRealtimeGame, room: 
     );
     return {
       game,
-      gameTitle: registration?.title ?? "SDKゲーム",
+      gameTitle: room.gameTitle ?? "SDKゲーム",
       code: room.code,
       phase: room.phase,
       phaseLabel: room.phase === "lobby"

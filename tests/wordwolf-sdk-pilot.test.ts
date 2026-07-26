@@ -48,6 +48,42 @@ test("SDK formal room DEBUG can add and remove lobby-only dummies", async () => 
     actor: debugHost,
   })).room;
   assert.equal(snapshot.view.common.players.length, 1);
+  snapshot = (await runtime.sendCommand({
+    code: "DBUG",
+    envelope: {
+      expectedRevision: snapshot.revision,
+      command: { type: "room/debug-add-dummy" },
+    },
+    actor: debugHost,
+  })).room;
+  snapshot = (await runtime.sendCommand({
+    code: "DBUG",
+    envelope: {
+      expectedRevision: snapshot.revision,
+      command: { type: "room/debug-add-dummy" },
+    },
+    actor: debugHost,
+  })).room;
+  snapshot = (await runtime.sendCommand({
+    code: "DBUG",
+    envelope: {
+      expectedRevision: snapshot.revision,
+      command: { type: "wordwolf/start" },
+    },
+    actor: debugHost,
+  })).room;
+  assert.equal(snapshot.view.common.permissions.canDebug, true);
+  await assert.rejects(
+    runtime.sendCommand({
+      code: "DBUG",
+      envelope: {
+        expectedRevision: snapshot.revision,
+        command: { type: "room/debug-add-dummy" },
+      },
+      actor: debugHost,
+    }),
+    /DEBUG_LOBBY_ONLY/,
+  );
   await assert.rejects(
     runtime.sendCommand({
       code: "DBUG",

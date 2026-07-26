@@ -964,7 +964,6 @@ export function createGameSdkOnlineRoomModule<
               manifest.supportsDebug
               && context.viewer.debugAccess
               && isHost
-              && room.phase === "lobby"
             ),
             canSeeSecret: Boolean(presented.canSeeSecret),
           },

@@ -282,6 +282,20 @@ test("SDK HTTP Client Runtimeはactorを送らず認証adapterと永続Runtime�
     ["Host", "Player"],
   );
   assert.equal(JSON.stringify(room).includes("forged-account"), false);
+  assert.equal((await runtime.readActiveRoom())?.code, "RACE");
+  room = (await runtime.sendCommand("RACE", {
+    expectedRevision: room.revision,
+    command: { type: "room/leave" },
+  })).room;
+  assert.deepEqual(
+    room.view.common.players.map((roomPlayer) => roomPlayer.displayName),
+    ["Host"],
+  );
+  assert.equal(await runtime.readActiveRoom(), null);
+  room = (await runtime.sendCommand("RACE", {
+    expectedRevision: room.revision,
+    command: { type: "room/join" },
+  })).room;
 
   identity = host;
   room = (await runtime.sendCommand("RACE", {

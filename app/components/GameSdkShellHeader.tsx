@@ -6,6 +6,7 @@ import {
   readPlayerSession,
   type PlayerSession,
 } from "@/lib/player-session";
+import { DebugParticipantControls } from "./DebugParticipantControls";
 import { DebugToolWindow } from "./DebugToolWindow";
 import { GamePlayerMenu } from "./GamePlayerMenu";
 import { GameRulesDialog } from "./GameRulesDialog";
@@ -19,6 +20,16 @@ import { AppLink as Link } from "./AppLink";
 
 export type GameSdkDebugRoom = {
   code: string;
+  disabled: boolean;
+  isSubmitting: boolean;
+  maximumPlayers: number;
+  onAddDummy: () => void | Promise<void>;
+  onRemoveDummy: (seat: number) => void | Promise<void>;
+  players: Array<{
+    displayName: string;
+    isDummy: boolean;
+    seat: number;
+  }>;
   revision: number;
   phase: string;
 };
@@ -130,6 +141,24 @@ export function GameSdkShellHeader({
             <p className="text-xs leading-5 text-slate-600">
               署名済みセッション、PackageのsupportsDebug、Room Viewのpermissions.canDebugがすべて有効です。
             </p>
+            <DebugParticipantControls
+              participants={debugRoom.players.flatMap((player) => (
+                player.isDummy
+                  ? [{
+                      id: String(player.seat),
+                      name: player.displayName,
+                    }]
+                  : []
+              ))}
+              disabled={debugRoom.disabled}
+              addDisabled={debugRoom.players.length >= debugRoom.maximumPlayers}
+              isSubmitting={debugRoom.isSubmitting}
+              onAdd={debugRoom.onAddDummy}
+              onRemove={(seat) => debugRoom.onRemoveDummy(Number(seat))}
+              run={async (action) => {
+                await action();
+              }}
+            />
           </div>
         </DebugToolWindow>
       )}

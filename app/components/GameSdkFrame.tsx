@@ -14,9 +14,11 @@ import {
   createGameSdkHttpClientRuntime,
   GameSdkHttpClientRuntimeError,
 } from "@game-fields/game-sdk/client-runtime";
+import { GameAdSlot } from "@/app/components/GameAdSlot";
 import { GameSdkShellHeader } from "@/app/components/GameSdkShellHeader";
 import { GameSdkFeedbackPanel } from "@/app/components/GameSdkFeedbackPanel";
 import { OnlineRoomLifecycleActions } from "@/app/components/OnlineRoomLifecycleActions";
+import { confirmRoomLeave } from "@/app/components/room-navigation-confirmation";
 import { useAppLocale } from "@/app/components/AppLocaleProvider";
 import { gameTopBannerOffsetClass } from "@/app/components/GameTopBanner";
 import { GameResultShareButton } from "@/app/components/GameResultShareButton";
@@ -52,6 +54,7 @@ type CommonView = {
     isHost: boolean;
     isSelf: boolean;
     isDummy: boolean;
+    reducedTime: boolean;
   }>;
   settings: Record<string, GameSdkSettingValue>;
   pendingLobbyReturnSeats: number[];
@@ -65,8 +68,11 @@ type CommonView = {
     canDebug: boolean;
   };
   timer?: {
+    durationSeconds: number;
+    startedAt: number | null;
     deadlineAt: number | null;
     turnSequence: number;
+    ownerSeat?: number | null;
   };
   standardResult?: {
     winnerSeats: number[];
@@ -106,6 +112,7 @@ type Props = {
   rules: readonly string[];
   moduleProfile: GameSdkModuleProfile;
   supportsReplay: boolean;
+  supportsSpectators: boolean;
   usesLlm: boolean;
 };
 
@@ -150,6 +157,7 @@ export function GameSdkFrame({
   rules,
   moduleProfile,
   supportsReplay,
+  supportsSpectators,
   usesLlm,
 }: Props) {
   const { locale } = useAppLocale();
@@ -179,11 +187,36 @@ export function GameSdkFrame({
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState("");
   const [frameHeight, setFrameHeight] = useState(720);
+  const [clockNow, setClockNow] = useState<number | null>(null);
   const [canReturnToRoom, setCanReturnToRoom] = useState(false);
   const [isRoomDissolved, setIsRoomDissolved] = useState(false);
+  const [playerDefaults, setPlayerDefaults] = useState<
+    Record<string, GameSdkSettingValue>
+  >({});
   const moduleRequired = useCallback((id: GameSdkModuleId) => (
     moduleProfile[id].mode === "required"
   ), [moduleProfile]);
+  const defaultsEndpoint = creatorSlug
+    ? `/api/sdk-preview/${creatorSlug}/games/${gameId}/defaults`
+    : `/api/game-sdk/${gameId}/defaults`;
+
+  useEffect(() => {
+    if (!moduleRequired("room-settings")) return;
+    let active = true;
+    void fetch(defaultsEndpoint, {
+      cache: "no-store",
+      credentials: "same-origin",
+    }).then(async (response) => {
+      if (!response.ok) return;
+      const body = await response.json() as {
+        settings?: Record<string, GameSdkSettingValue>;
+      };
+      if (active) setPlayerDefaults(body.settings ?? {});
+    }).catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [defaultsEndpoint, moduleRequired]);
 
   const postRoom = useCallback((next: PackageRoom | null) => {
     iframeRef.current?.contentWindow?.postMessage({
@@ -377,7 +410,12 @@ export function GameSdkFrame({
     if (expiryRef.current !== null) window.clearTimeout(expiryRef.current);
     expiryRef.current = null;
     const timer = room?.view.common.timer;
-    if (!room || room.phase === "result" || !timer?.deadlineAt) return;
+    if (
+      !moduleRequired("timer")
+      || !room
+      || room.phase === "result"
+      || !timer?.deadlineAt
+    ) return;
     expiryRef.current = window.setTimeout(() => {
       void send({
         type: "room/expire-timer",
@@ -387,7 +425,24 @@ export function GameSdkFrame({
     return () => {
       if (expiryRef.current !== null) window.clearTimeout(expiryRef.current);
     };
-  }, [attachRoom, room, send]);
+  }, [attachRoom, moduleRequired, room, send]);
+
+  useEffect(() => {
+    const timer = room?.view.common.timer;
+    if (
+      !moduleRequired("timer")
+      || room?.phase === "lobby"
+      || room?.phase === "result"
+      || !timer
+    ) return;
+    const update = () => setClockNow(Date.now());
+    const initialUpdate = window.setTimeout(update, 0);
+    const interval = window.setInterval(update, 250);
+    return () => {
+      window.clearTimeout(initialUpdate);
+      window.clearInterval(interval);
+    };
+  }, [moduleRequired, room?.phase, room?.view.common.timer]);
 
   const returnToRoom = useCallback(async () => {
     const pendingLobbyRoom = pendingLobbyRoomRef.current;
@@ -460,13 +515,47 @@ export function GameSdkFrame({
     }
   }, [attachRoom, moduleRequired, refreshRooms, runtime]);
 
-  const defaultSettings = Object.fromEntries(
+  const leaveRoom = useCallback(async () => {
+    const current = roomRef.current;
+    if (
+      !current
+      || current.phase !== "lobby"
+      || current.view.common.isHost
+      || pendingActionRef.current
+      || !moduleRequired("online-room")
+      || !confirmRoomLeave()
+    ) return;
+    pendingActionRef.current = true;
+    setPending(true);
+    setMessage("");
+    try {
+      await runtime.sendCommand(current.code, {
+        expectedRevision: current.revision,
+        command: { type: "room/leave" },
+      });
+      attachRoom(null);
+      setMessage("部屋から退出しました。別の部屋へ参加できます。");
+      await refreshRooms();
+    } catch (error) {
+      setMessage(errorMessage(error));
+    } finally {
+      pendingActionRef.current = false;
+      setPending(false);
+    }
+  }, [attachRoom, moduleRequired, refreshRooms, runtime]);
+
+  const defaultSettings = useMemo(() => Object.fromEntries(
     settingDefinitions.map((definition) => [
       definition.key,
-      definition.defaultValue,
+      playerDefaults[definition.key] ?? definition.defaultValue,
     ]),
-  );
+  ), [playerDefaults, settingDefinitions]);
   const common = room?.view.common;
+  const self = common?.players.find((player) => player.isSelf);
+  const timer = common?.timer;
+  const remainingSeconds = timer?.deadlineAt && clockNow !== null
+    ? Math.max(0, Math.ceil((timer.deadlineAt - clockNow) / 1000))
+    : null;
   const standardResult = common?.standardResult;
   const resultReason = standardResult
     ? gameSdkResultReasonText(standardResult, locale)
@@ -578,6 +667,9 @@ export function GameSdkFrame({
           </div>
         </section>
         )}
+        {moduleRequired("ads") && (
+          <GameAdSlot gameId={gameId} surface="game-entry" />
+        )}
       </main>
     );
   }
@@ -590,12 +682,38 @@ export function GameSdkFrame({
         rules={rules}
         backHref={backHref}
         backLabel={creatorSlug ? "制作者ページへ" : "ゲーム広場へ戻る"}
-        debugRoom={common?.permissions.canDebug ? {
+        debugRoom={moduleRequired("debug") && common?.permissions.canDebug ? {
           code: room.code,
+          disabled: room.phase !== "lobby",
+          isSubmitting: pending,
+          maximumPlayers: common.maximumPlayers,
+          onAddDummy: async () => {
+            await run(() => send({
+              type: "room/debug-add-dummy",
+            }));
+          },
+          onRemoveDummy: async (seat) => {
+            await run(() => send({
+              type: "room/debug-remove-dummy",
+              seat,
+            }));
+          },
+          players: common.players,
           revision: room.revision,
           phase: room.phase,
         } : null}
       >
+        {!creatorSlug
+          && supportsSpectators
+          && moduleRequired("spectators")
+          && common?.isHost && (
+          <Link
+            href={`/spectate/${encodeURIComponent(`sdk:${gameId}`)}/${room.code}`}
+            className={gameTopBannerActionClass}
+          >
+            観戦・共有
+          </Link>
+        )}
         {common?.permissions.canAbort && room.phase === "playing" && (
           <button
             type="button"
@@ -682,6 +800,7 @@ export function GameSdkFrame({
               }
               isRoomDissolved={isRoomDissolved}
               onReturnToRoom={room.phase === "result"
+                && moduleRequired("rematch")
                 ? common?.isHost
                   ? () => run(() => send({ type: "room/rematch" }))
                   : returnToRoom
@@ -690,10 +809,15 @@ export function GameSdkFrame({
                 && (room.phase === "lobby" || room.phase === "result")
                 ? dissolveRoom
                 : undefined}
+              onLeave={moduleRequired("online-room")
+                && room.phase === "lobby"
+                && common?.isHost === false
+                ? leaveRoom
+                : undefined}
               returnHref={backHref}
             />
           </div>
-          {room.phase === "lobby" && (
+          {room.phase === "lobby" && moduleRequired("room-settings") && (
             <div className={panel}>
               <h2 className="text-lg font-black">部屋設定</h2>
               <div className="mt-3 space-y-3">
@@ -785,6 +909,30 @@ export function GameSdkFrame({
                   );
                 })}
               </div>
+              {common?.permissions.canEditRoomSettings && (
+                <button
+                  type="button"
+                  className={`${secondary} mt-4 w-full`}
+                  disabled={pending}
+                  onClick={() => void fetch(defaultsEndpoint, {
+                    method: "PUT",
+                    credentials: "same-origin",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ settings: common.settings }),
+                  }).then(async (response) => {
+                    if (!response.ok) throw new Error("DEFAULT_SAVE_FAILED");
+                    const body = await response.json() as {
+                      settings: Record<string, GameSdkSettingValue>;
+                    };
+                    setPlayerDefaults(body.settings);
+                    setMessage("この設定を次回の既定値に保存しました。");
+                  }).catch(() => {
+                    setMessage("既定値を保存できませんでした。");
+                  })}
+                >
+                  この設定を次回の既定値にする
+                </button>
+              )}
             </div>
           )}
           {room.phase === "result" && supportsReplay && moduleRequired("replay") && (
@@ -824,6 +972,33 @@ export function GameSdkFrame({
         <div className={`min-w-0 overflow-hidden ${
           room.phase === "result" ? "order-1 lg:order-2" : "order-2"
         }`}>
+          {room.phase !== "lobby"
+            && room.phase !== "result"
+            && moduleRequired("timer")
+            && timer && (
+            <div
+              className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-cyan-300/30 bg-cyan-300/10 px-4 py-3"
+              role="timer"
+              aria-live="polite"
+            >
+              <strong>残り時間</strong>
+              <span className="font-mono text-xl font-black">
+                {remainingSeconds === null ? "制限なし" : `${remainingSeconds}秒`}
+              </span>
+              {self?.reducedTime && (
+                <button
+                  type="button"
+                  className={gameTopBannerActionClass}
+                  disabled={pending}
+                  onClick={() => void run(() => send({
+                    type: "room/recover-timeout",
+                  }))}
+                >
+                  復帰して通常時間へ戻す
+                </button>
+              )}
+            </div>
+          )}
           <iframe
             ref={iframeRef}
             src={runtimeUrl}
@@ -835,6 +1010,17 @@ export function GameSdkFrame({
           />
         </div>
       </section>
+      {moduleRequired("ads") && (
+        <GameAdSlot
+          gameId={gameId}
+          surface={room.phase === "lobby"
+            ? "room-lobby"
+            : room.phase === "result"
+              ? "result"
+              : null}
+          disabled={common?.permissions.canDebug === true}
+        />
+      )}
     </main>
   );
 }

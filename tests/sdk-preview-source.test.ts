@@ -386,7 +386,7 @@ test("shared GameFrame owns the top banner and phase-specific common modules", (
   assert.match(shell, /GameSdkShellHeader/);
   assert.match(shell, /room\.phase !== "playing" && \(\s*<aside/);
   assert.match(shell, /room\.phase === "playing"\s*\? "mx-auto max-w-7xl"/);
-  assert.match(shell, /room\.phase === "lobby" && \(\s*<div className=\{panel\}>\s*<h2 className="text-lg font-black">部屋設定/);
+  assert.match(shell, /room\.phase === "lobby" && moduleRequired\("room-settings"\) && \(\s*<div className=\{panel\}>\s*<h2 className="text-lg font-black">部屋設定/);
   assert.match(shell, /moduleRequired\("replay"\)/);
   assert.match(shell, /moduleRequired\("result-share"\)/);
   assert.match(shell, /moduleRequired\("feedback"\)/);

@@ -440,3 +440,23 @@ candidate Previewと昇格後で共有する`GameSdkFrame`へ移行したPackage
 moduleが必須でない場合にも表示しない。Shell接続、確認、Runtime呼出し、一覧再取得を
 契約テストへ追加し、既存のSDK HTTP縦断テストでRoom本体・参加者active room索引の
 整理と、別の現行active roomを誤って消さないことを継続検査する。
+
+## 2026-07-26 SDK正式Package Shellの必須module監査が旧Preview経路だけで通過する
+
+状態: 修正実装済み・dev反映待ち（2026-07-26、全Shell module回帰テストあり）
+
+解散導線の欠落を受けて必須moduleを再監査したところ、既存の
+「全moduleに実装定義がある」テストは旧Preview Shellのregistryを確認しており、
+candidateと昇格後で共有する正式Package経路`GameSdkFrame`の実装を検査していなかった。
+このためmodule名とRuntime Commandが存在していても、ShellのUI接続が移行されていない
+回帰を検出できなかった。
+
+正式Package経路では、非hostのロビー退出、進行タイマーの表示と時間切れ復旧、
+共通DEBUGでのダミー参加者操作、Room設定のプレイヤー別既定値、非プレイ面の広告枠、
+動的に昇格したPackageの観戦導線が同じ理由で不足していた。各機能を
+module profileとRoom View permissionでgateして共通Shellへ接続し、退出時の参加者削除と
+active room索引解放、DEBUG操作のロビー限定認可もHTTP／Runtime縦断テストで固定した。
+
+新しい契約テストはShell groupのcatalog全17件と実装証拠の対応を完全一致で検査する。
+module追加時は証拠定義の追加が必須になり、各既存moduleも正式PackageのUI、Command、
+Runtimeまたは公開経路の接続が消えると失敗する。

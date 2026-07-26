@@ -4712,3 +4712,46 @@
 ### 関連コミット
 
 - `179959b` — SDK正式Package Roomの共通解散導線を復旧。
+
+## 2026-07-26 — SDK正式Package Shellの必須module再監査
+
+### 利用者からの要望
+
+- 解散導線が直前の確認で漏れていた事実を踏まえ、同じ移行漏れがほかの共通moduleにも
+  ないか、一覧登録ではなく正式Packageの実行経路まで確認する。
+
+### 判断
+
+- 既存の全module検査は旧Preview Shellのregistryを対象としており、candidateと
+  昇格後で共有する`GameSdkFrame`を検査していなかったため、今回の欠落を検出できなかった。
+- Shell group全17moduleについて、module profile、Room View、UI、Command、Runtime、
+  後処理の接続を個別に確認し、catalogとの完全一致を契約テストにする。
+- unpublished candidateの公開観戦は許可せず、観戦導線は昇格後Packageだけを
+  manifest capabilityと`spectators` moduleで有効にする。
+
+### 実施結果
+
+- 非hostがロビーから確認付きで退出できる導線を追加し、`room/leave`後にRoom監視を
+  終了して一覧とactive room状態を更新するようにした。
+- timer moduleへ進行中の残り時間表示、サーバー期限Command、本人の連続時間切れを
+  解除する復旧Commandを接続した。
+- 共通DEBUGウィンドウへダミー参加者の追加・削除を接続し、playing／resultでも
+  状態確認できるようにした。変更Command自体は引き続きhostのlobbyだけに制限する。
+- room-settings moduleへプレイヤー別既定値の読込・保存を追加し、candidateでは
+  制作者・Package単位の認証scopeへ分離した。
+- entry／roomの非プレイ面へ広告slotを接続し、動的に昇格したPackageも観戦registryで
+  解決できるようにした。
+- result、rematch、dissolutionを独立したmodule gateへ揃え、復帰操作がない結果画面でも
+  解散など利用可能な共通操作を失わないようにした。
+
+### 検証
+
+- 正式Package Shellの対象テスト33件に成功した。
+- `npm test`に成功し、全562テストが通過した。
+- Shell group全17moduleと実装証拠の完全一致、非host退出とactive room索引解放、
+  DEBUGのphase別表示・認可、candidate既定値の認証scopeを回帰テストへ追加した。
+
+### 未対応・保留
+
+- develop公開後、制作者アカウントで退出、既定値、タイマー復旧、DEBUGダミー操作を
+  candidate Preview上で実機確認する。

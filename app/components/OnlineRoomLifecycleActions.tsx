@@ -13,6 +13,7 @@ type OnlineRoomLifecycleActionsProps = {
   isRoomDissolved?: boolean;
   lobbyDissolveClassName?: string;
   onDissolve?: () => unknown | Promise<unknown>;
+  onLeave?: () => unknown | Promise<unknown>;
   onReturnToRoom?: () => unknown | Promise<unknown>;
   returnHref?: string;
 };
@@ -25,6 +26,7 @@ export function OnlineRoomLifecycleActions({
   isRoomDissolved = false,
   lobbyDissolveClassName = "rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 font-black text-rose-800 transition hover:bg-rose-100 disabled:opacity-50",
   onDissolve,
+  onLeave,
   onReturnToRoom,
   returnHref,
 }: OnlineRoomLifecycleActionsProps) {
@@ -33,20 +35,20 @@ export function OnlineRoomLifecycleActions({
   if (surface === "playing") return null;
 
   if (surface === "lobby") {
-    if (!isHost || !onDissolve) return null;
+    const action = isHost ? onDissolve : onLeave;
+    if (!action) return null;
     return (
       <button
         type="button"
         disabled={disabled}
-        onClick={() => void onDissolve()}
+        onClick={() => void action()}
         className={lobbyDissolveClassName}
       >
-        {t("game.dissolve")}
+        {isHost ? t("game.dissolve") : t("game.leave")}
       </button>
     );
   }
 
-  if (!onReturnToRoom) return null;
   return (
     <RoomResultActions
       canReturnToRoom={canReturnToRoom}

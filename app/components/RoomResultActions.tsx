@@ -13,7 +13,7 @@ type RoomResultActionsProps = {
   isHost: boolean;
   isRoomDissolved?: boolean;
   onDissolve?: () => unknown | Promise<unknown>;
-  onReturnToRoom: () => unknown | Promise<unknown>;
+  onReturnToRoom?: () => unknown | Promise<unknown>;
   returnHref?: string;
 };
 
@@ -58,14 +58,16 @@ export function RoomResultActions({
 
   return (
     <div className="mt-5 grid gap-3 sm:grid-cols-2">
-      <button
-        type="button"
-        disabled={disabled || isPending || !canReturnToRoom || isRoomDissolved}
-        onClick={() => void runPendingAction("room", onReturnToRoom)}
-        className="rounded-xl border border-cyan-200 bg-cyan-300 px-5 py-4 text-lg font-black text-slate-950 shadow-lg shadow-cyan-950/20 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-200 disabled:text-slate-500 disabled:opacity-70 sm:col-span-2"
-      >
-        {pendingAction === "room" ? pendingLabel(t("game.returning")) : isRoomDissolved ? t("game.returnUnavailable") : canReturnToRoom ? t("game.returnRoom") : t("game.waitHostReturn")}
-      </button>
+      {onReturnToRoom && (
+        <button
+          type="button"
+          disabled={disabled || isPending || !canReturnToRoom || isRoomDissolved}
+          onClick={() => void runPendingAction("room", onReturnToRoom)}
+          className="rounded-xl border border-cyan-200 bg-cyan-300 px-5 py-4 text-lg font-black text-slate-950 shadow-lg shadow-cyan-950/20 transition hover:bg-cyan-200 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-200 disabled:text-slate-500 disabled:opacity-70 sm:col-span-2"
+        >
+          {pendingAction === "room" ? pendingLabel(t("game.returning")) : isRoomDissolved ? t("game.returnUnavailable") : canReturnToRoom ? t("game.returnRoom") : t("game.waitHostReturn")}
+        </button>
+      )}
       <button
         type="button"
         disabled={isPending}

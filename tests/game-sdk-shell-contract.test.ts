@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { GAME_SDK_MODULE_CATALOG } from "@game-fields/game-sdk/modules";
 
 function source(path: string) {
   return readFileSync(path, "utf8");
@@ -15,7 +16,13 @@ const header = source("app/components/GameSdkShellHeader.tsx");
 const previewPage = source("app/sdk-preview/[creatorSlug]/games/[gameId]/page.tsx");
 const approvedPage = source("app/sdk-games/[gameId]/page.tsx");
 const previewRoomRoute = source("app/api/sdk-preview/[creatorSlug]/games/[gameId]/rooms/route.ts");
+const previewDefaultsRoute = source("app/api/sdk-preview/[creatorSlug]/games/[gameId]/defaults/route.ts");
 const platformAdapter = source("lib/game-sdk-platform-adapter.ts");
+const runtimeCatalog = source("lib/game-sdk-runtime-catalog.ts");
+const sdkRuntime = source("packages/game-sdk/src/runtime.ts");
+const lifecycleActions = source("app/components/OnlineRoomLifecycleActions.tsx");
+const resultActions = source("app/components/RoomResultActions.tsx");
+const spectatorRegistry = source("lib/online-room-spectator-registry.ts");
 
 test("reviewed SDK shell consumes every Room View permission it declares", () => {
   for (const permission of [
@@ -31,9 +38,13 @@ test("reviewed SDK shell consumes every Room View permission it declares", () =>
     );
   }
 
-  assert.match(frame, /debugRoom=\{common\?\.permissions\.canDebug \? \{/);
+  assert.match(
+    frame,
+    /debugRoom=\{moduleRequired\("debug"\) && common\?\.permissions\.canDebug \? \{/,
+  );
   assert.match(header, /debugRoom\?: GameSdkDebugRoom \| null/);
   assert.match(header, /DEBUG · ON/);
+  assert.match(header, /DebugParticipantControls/);
 });
 
 test("SDK header receives Room View state and never fetches it independently", () => {
@@ -46,7 +57,7 @@ test("SDK header receives Room View state and never fetches it independently", (
 });
 
 test("reviewed SDK shell consumes manifest capabilities passed by Preview", () => {
-  for (const prop of ["supportsReplay", "usesLlm"]) {
+  for (const prop of ["supportsReplay", "supportsSpectators", "usesLlm"]) {
     assert.match(
       previewPage,
       new RegExp(`${escaped(prop)}=\\{game\\.manifest\\.${escaped(prop)}\\}`),
@@ -108,4 +119,110 @@ test("shared package frame exposes Platform-owned Room dissolution in lobby and 
   assert.match(frame, /await refreshRooms\(\)/);
   assert.match(frame, /setIsRoomDissolved\(true\)/);
   assert.match(frame, /setMessage\("部屋を解散しました。新しい部屋を作成できます。"\)/);
+});
+
+test("every shared Shell module has executable evidence in the formal package path", () => {
+  const shellModuleIds = GAME_SDK_MODULE_CATALOG
+    .filter((definition) => definition.group === "shell")
+    .map((definition) => definition.id);
+  const evidence: Record<string, Array<[string, RegExp]>> = {
+    "common-shell": [
+      [frame, /<GameSdkShellHeader/],
+      [header, /<GameTopBanner/],
+    ],
+    "online-room": [
+      [frame, /type: "room\/join"/],
+      [frame, /type: "room\/leave"/],
+      [frame, /confirmRoomLeave\(\)/],
+      [frame, /useGameSdkActiveRoomRestore/],
+      [lifecycleActions, /onLeave/],
+    ],
+    "room-sync": [
+      [frame, /runtime\.watchRoom/],
+      [frame, /roomUpdateIsOlder/],
+    ],
+    "room-settings": [
+      [frame, /moduleRequired\("room-settings"\)/],
+      [frame, /type: "room\/update-settings"/],
+      [frame, /この設定を次回の既定値にする/],
+      [previewDefaultsRoute, /saveGameSdkPlayerDefaults/],
+    ],
+    debug: [
+      [frame, /moduleRequired\("debug"\)/],
+      [frame, /room\/debug-add-dummy/],
+      [frame, /room\/debug-remove-dummy/],
+      [header, /DebugParticipantControls/],
+      [sdkRuntime, /canDebug:[\s\S]*manifest\.supportsDebug[\s\S]*context\.viewer\.debugAccess[\s\S]*isHost/],
+    ],
+    timer: [
+      [frame, /moduleRequired\("timer"\)/],
+      [frame, /room\/expire-timer/],
+      [frame, /room\/recover-timeout/],
+      [frame, /role="timer"/],
+    ],
+    result: [
+      [frame, /moduleRequired\("result"\)/],
+      [frame, /standardResult\.rankings\.map/],
+    ],
+    rematch: [
+      [frame, /moduleRequired\("rematch"\)/],
+      [frame, /type: "room\/rematch"/],
+      [resultActions, /onReturnToRoom\?/],
+    ],
+    dissolution: [
+      [frame, /moduleRequired\("dissolution"\)/],
+      [frame, /runtime\.dissolveRoom/],
+      [lifecycleActions, /onDissolve/],
+    ],
+    stats: [
+      [runtimeCatalog, /supportsStats: moduleRequired\("stats"\)/],
+    ],
+    rating: [
+      [runtimeCatalog, /moduleRequired\("rating"\)/],
+    ],
+    replay: [
+      [frame, /moduleRequired\("replay"\)/],
+      [runtimeCatalog, /moduleRequired\("replay"\)/],
+    ],
+    "result-share": [
+      [frame, /moduleRequired\("result-share"\)/],
+      [frame, /<GameResultShareButton/],
+    ],
+    feedback: [
+      [frame, /moduleRequired\("feedback"\)/],
+      [frame, /<GameSdkFeedbackPanel/],
+    ],
+    spectators: [
+      [frame, /moduleRequired\("spectators"\)/],
+      [frame, /supportsSpectators/],
+      [spectatorRegistry, /loadApprovedGameSdkRuntimeRegistration/],
+    ],
+    "ai-activity": [
+      [frame, /moduleRequired\("ai-activity"\)/],
+      [frame, /withAiActivity/],
+    ],
+    ads: [
+      [frame, /moduleRequired\("ads"\)/],
+      [frame, /<GameAdSlot/],
+    ],
+  };
+
+  assert.deepEqual(Object.keys(evidence), shellModuleIds);
+  for (const moduleId of shellModuleIds) {
+    for (const [implementationSource, pattern] of evidence[moduleId] ?? []) {
+      assert.match(
+        implementationSource,
+        pattern,
+        `${moduleId} must stay connected in the formal package path`,
+      );
+    }
+  }
+});
+
+test("candidate package settings defaults use authenticated creator scope", () => {
+  assert.match(previewDefaultsRoute, /requireSdkPreviewAuthenticatedPlayer/);
+  assert.match(previewDefaultsRoute, /sdkPreviewPackageRuntimeId/);
+  assert.match(previewDefaultsRoute, /gameSdkModuleIsRequired\(definition\.modulePolicy, "room-settings"\)/);
+  assert.match(previewDefaultsRoute, /loadGameSdkPlayerDefaults/);
+  assert.match(previewDefaultsRoute, /saveGameSdkPlayerDefaults/);
 });
