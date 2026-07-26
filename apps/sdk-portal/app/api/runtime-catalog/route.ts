@@ -21,11 +21,19 @@ export async function GET(request: Request) {
   }
   await ensureSdkSchema();
   const games = await sdkSql()`
-    SELECT r.public_game_id AS id, r.description, r.revision,
+    SELECT r.public_game_id AS id,
+           r.lineage_id AS "lineageId",
+           r.source_creator_slug AS "sourceCreatorSlug",
+           r.source_game_id AS "sourceGameId",
+           r.title,
+           r.description,
+           r.revision,
            r.package_root_sha256 AS "packageRootSha256",
            r.server_bundle_sha256 AS "serverBundleSha256",
            r.app_set_source_sha256 AS "appSetSourceSha256",
-           r.manifest
+           r.manifest,
+           r.module_policy AS "modulePolicy",
+           r.released_at AS "releasedAt"
     FROM sdk_app_releases r
     WHERE r.is_current
     ORDER BY r.released_at DESC
