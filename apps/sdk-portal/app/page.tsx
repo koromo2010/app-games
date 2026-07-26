@@ -100,6 +100,21 @@ export default async function Home() {
             Game Fields SDKは、外部開発者が本番データや管理機能へ触れずに、
             SDK基本セットへゲーム固有のAppSetだけを登録し、作成・検証・提出するための開発基盤です。
           </p>
+          <aside className="required-environment" aria-labelledby="before-download-title">
+            <span className="required-environment-label">ダウンロード前に確認</span>
+            <div>
+              <h3 id="before-download-title">ChatGPTの有料プランと「gameapp-dev」プラグインが必要です</h3>
+              <p>
+                DownloadMeを使った制作には、ChatGPTの有料プラン（Plus・Pro・Team等）でCodexまたはWorkが使えることと、「gameapp-dev」プラグインの導入が前提です。用意ができてから下のDownloadMeを取得してください。
+              </p>
+              <p>
+                ChatGPTの利用料金はご自身のアカウントでの契約・お支払いとなります。Game Fieldsが利用料を負担することはありません。
+              </p>
+              <p>
+                制作を始める前に<Link href="/terms">利用規約</Link>をご確認ください。DownloadMeを取得・使用した時点で、利用規約に同意したものとして扱います。
+              </p>
+            </div>
+          </aside>
           <div className="hero-actions">
             <a className="primary-action" href="/GameFieldsDownloadMe-ver15.md" download>
               GameFieldsDownloadMe-ver15
@@ -236,6 +251,30 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
         </div>
       </section>
 
+      <section className="section" id="scope">
+        <div className="section-heading">
+          <p className="eyebrow">WHAT YOU CAN BUILD</p>
+          <h2>SDKで作れるもの・作れないもの</h2>
+          <p>
+            外部開発者が担当できる範囲と、Game Fields側が管理する範囲を分けています。着手前に必ずご確認ください。
+          </p>
+        </div>
+        <div className="sdk-help-list">
+          <article>
+            <h2>作れるもの</h2>
+            <p>
+              SDK基本セットの上に、ゲーム固有のルール・画面・進行ロジックをAppSetとして実装できます。Room作成・参加・設定・revision管理など、対戦や協力プレイに必要な共通機能はSDKが提供するため、ゲーム内容の作り込みに専念できます。
+            </p>
+          </article>
+          <article>
+            <h2>作れないもの</h2>
+            <p>
+              本番データベース・Redis・Blobストレージへの直接アクセス、独自の認証・決済・課金機能の実装、Game Fields本体やVercel本番環境への直接デプロイはできません。これらはGame Fields側が管理し、外部開発者に権限を渡すことはありません。必要な機能がSDKにない場合は、AIがSDK_REQUESTS.mdへ記録し、審査チームへ共有します。
+            </p>
+          </article>
+        </div>
+      </section>
+
       <section className="status section" id="status">
         <div className="status-panel">
           <div>
@@ -281,7 +320,7 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
           </span>
           <span>Game Fields SDK</span>
         </div>
-        <p>Platform v{platformVersion} · Build the game. Submit the package. Release through the gate.</p>
+        <p>Platform v{platformVersion} · Build the game. Submit the package. Release through the gate. · <Link href="/terms">利用規約</Link></p>
       </footer>
     </main>
   );
