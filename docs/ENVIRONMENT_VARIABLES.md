@@ -73,10 +73,10 @@ Vercel／Next.jsが実行時に提供するSystem Variableとして、`NODE_ENV`
 | Development | `app-games-dev` | `develop` | `https://dev.game-fields.com` | 内部開発・検証 |
 | SDK Production | `app-games-sdk` | `main` | `https://sdk.game-fields.com` | 外部開発者・安定版Developer Portal |
 | SDK Development | `app-games-sdk-dev` | `develop` | `https://sdk-dev.game-fields.com` | 次版SDK・制作者プレビュー管理 |
-| Mock Preview Development | `app-games-preview-dev` | `develop` | `https://preview-dev.game-fields.com`（割当待ち） | 未審査モックの隔離実行 |
-| Mock Preview Production | 将来別Project | `main` | `https://preview.game-fields.com`（予定） | 安定版SDKの隔離実行 |
+| Mock Preview Development | `app-games-preview-dev` | `develop` | `https://preview-dev.game-fields.com` | 未審査モックの隔離実行 |
+| Mock Preview Production | `app-games-sdk-preview` | `main`へ切替待ち | `https://preview.game-fields.com` | 安定版SDKの隔離実行 |
 
-`apps/sdk-portal`は本番`app-games-sdk`と開発`app-games-sdk-dev`へ分け、本体とは別のSDK専用Neon・Redisを使う。隔離実行コードは`apps/sdk-preview`に置き、Portal、本体、devとは別のVercel Projectへ配置する。preview実行ProjectにはDB、Redis、Blob、管理者秘密情報、Git書込権限を与えず、専用の非公開mock Gitリポジトリ`koromo2010/game-fields-sdk-mocks-dev`に対する読取専用資格だけを持たせる。
+`apps/sdk-portal`は本番`app-games-sdk`と開発`app-games-sdk-dev`へ分け、本体とは別のSDK専用Neon・Redisを使う。隔離実行コードは`apps/sdk-preview`に置き、Portal、本体、devとは別のVercel Projectへ配置する。preview実行ProjectにはDB、Redis、Blob、管理者秘密情報、Git書込権限を与えず、developmentは`koromo2010/game-fields-sdk-mocks-dev`、productionは`koromo2010/game-fields-sdk-mocks`に対する読取専用資格だけを持たせる。
 
 `app-games-dev`は`main`へ入れる本体コードの検証用コピーである。SDK作品は
 SDK Portalのcandidateから運営審査を経てmain採用カタログへ直接反映し、
@@ -97,6 +97,7 @@ VercelのIgnored Build StepはProjectごとに次を設定済み。
 - `app-games-sdk`: `if [ "$VERCEL_GIT_COMMIT_REF" != "main" ] && [ "$VERCEL_GIT_COMMIT_REF" != "develop" ]; then exit 0; else exit 1; fi`
 - `app-games-sdk-dev`: `if [ "$VERCEL_GIT_COMMIT_REF" != "develop" ]; then exit 0; else exit 1; fi`
 - `app-games-preview-dev`: Production Branchは`develop`へ変更済み。Ignored Build Stepは未確認。設定値は `if [ "$VERCEL_GIT_COMMIT_REF" != "develop" ]; then exit 0; else exit 1; fi`
+- `app-games-sdk-preview`: 2026-07-26作成済み。Root Directoryは`apps/sdk-preview`、Node.jsは24.x。Production Branchは`main`へ切替待ち。Ignored Build Stepは未確認。設定値は `if [ "$VERCEL_GIT_COMMIT_REF" != "main" ]; then exit 0; else exit 1; fi`
 
 VercelではIgnored Build Stepの終了コード`0`がスキップ、`1`がビルド実行を意味する。
 公開Starter branchではProject設定の欠落やRoot Directory先行検査にも耐えるため、
@@ -296,6 +297,25 @@ SDK `llm` adapter、module lab、Preview中継API `/api/sdk-preview/llm`も本�
 | Preview Vercel Project | `app-games-preview-dev`、Root Directory `apps/sdk-preview`、Production Branch `develop` | Tailwind依存修正コミット`dfdab59`のProduction DeploymentがREADY |
 | Preview domain | `preview-dev.game-fields.com`割当済み・Valid Configuration。`/health`が200で隔離preview serviceを返す | Portalからのmock保存・iframe表示確認 |
 | 不要Project候補 | `app-games-sdk-portal`が作成途中に増加。custom domainなし | 使用予定がないことを再確認後に削除判断 |
+
+#### SDK Production 現在配置（2026-07-26確認）
+
+| キー | `app-games-sdk` | `app-games-sdk-preview` | Vercel対象 | 状態 |
+| --- | --- | --- | --- | --- |
+| `SDK_PREVIEW_SIGNING_SECRET` | Project Variable、Sensitive | 同じproduction専用値のProject Variable、Sensitive | Production | 両Projectへ登録後に再デプロイ済み。development用Shared値とは分離 |
+| `SDK_MOCK_GITHUB_REPOSITORY` | `koromo2010/game-fields-sdk-mocks` | 同じprivate repository | Production | 両Projectへ登録・再デプロイ済み |
+| `SDK_MOCK_GITHUB_WRITE_TOKEN` | Project Variable、Sensitive | 設定禁止・未設定 | Production | 対象repositoryのContents read/writeだけ。90日期限 |
+| `SDK_MOCK_GITHUB_READ_TOKEN` | 設定禁止・未設定 | Project Variable、Sensitive | Production | 対象repositoryのContents read-onlyだけ。90日期限 |
+
+| 対象 | 現在状態 | 次の確認 |
+| --- | --- | --- |
+| private package Git | `koromo2010/game-fields-sdk-mocks`をPrivateで作成済み。Portal書込資格とPreview読取資格を分離 | 本番package保存後に専用branch・commit・読取を実機確認 |
+| Portal Vercel Project | `app-games-sdk`、Root Directory `apps/sdk-portal`。2026-07-26時点のProduction Deploymentは`e751008f`・`develop`でREADY | SDK DB healthが`schemaVersion: 4`を返すことを確認後、Production Branchを`main`へ切替 |
+| Preview Vercel Project | `app-games-sdk-preview`、Root Directory `apps/sdk-preview`、Node.js 24.x。production専用の署名鍵・Git読取資格だけを登録し再デプロイ済み | Production Branchを`main`へ切替し、main同期後のDeploymentを確認 |
+| Preview domain | `preview.game-fields.com`割当済み・Valid Configuration | `/health`とPortal発行grantからのpackage読取を実機確認 |
+
+本番PreviewにはSDK DB、Redis、Blob、管理者資格、語彙DB、LLM資格、Git書込資格を追加しない。
+`app-games-sdk`と`app-games-sdk-preview`の`Production Branch`はmain同期直前に同時に`main`へ揃える。
 
 ### Vercel Blob
 
