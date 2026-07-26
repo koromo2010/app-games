@@ -21,18 +21,14 @@ export async function GET(request: Request) {
   }
   await ensureSdkSchema();
   const games = await sdkSql()`
-    SELECT g.public_game_id AS id, g.description,
-           g.stable_revision AS revision,
-           g.stable_root_sha256 AS "packageRootSha256",
-           g.stable_bundle_sha256 AS "serverBundleSha256",
-           g.stable_app_set_sha256 AS "appSetSourceSha256",
-           g.stable_manifest AS manifest
-    FROM sdk_games g
-    WHERE g.public_game_id IS NOT NULL
-      AND g.deleted_at IS NULL
-      AND g.stable_revision IS NOT NULL
-      AND g.stable_manifest IS NOT NULL
-    ORDER BY g.updated_at DESC
+    SELECT r.public_game_id AS id, r.description, r.revision,
+           r.package_root_sha256 AS "packageRootSha256",
+           r.server_bundle_sha256 AS "serverBundleSha256",
+           r.app_set_source_sha256 AS "appSetSourceSha256",
+           r.manifest
+    FROM sdk_app_releases r
+    WHERE r.is_current
+    ORDER BY r.released_at DESC
     LIMIT 100
   `;
   return Response.json({ channel, games }, {
