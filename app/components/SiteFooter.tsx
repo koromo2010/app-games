@@ -1,6 +1,7 @@
 "use client";
 
 import { AppLink as Link } from "@/app/components/AppLink";
+import release from "@/config/app-release.json";
 import { useAppLocale } from "./AppLocaleProvider";
 
 export function SiteFooter({ siteName = "GAME FIELDS" }: { siteName?: string }) {
@@ -13,7 +14,10 @@ export function SiteFooter({ siteName = "GAME FIELDS" }: { siteName?: string }) 
         <Link href="/privacy" className="hover:text-cyan-300">{t("footer.privacy")}</Link>
         <Link href="/contact" className="hover:text-cyan-300">{t("footer.contact")}</Link>
       </nav>
-      <p className="text-[11px] text-slate-600">© {new Date().getFullYear()} {siteName}</p>
+      <div className="text-right text-[11px] text-slate-600">
+        <p>v{release.version}</p>
+        <p>© {new Date().getFullYear()} {siteName}</p>
+      </div>
     </div>
   </footer>;
 }
