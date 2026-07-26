@@ -138,6 +138,9 @@ export function gameSdkOnlineRoomErrorResponse(error: unknown) {
   if (code === "GAME_SDK_HTTP_BODY_TOO_LARGE") {
     return json({ error: code }, 413);
   }
+  if (code.startsWith("SERVER_RUNTIME_")) {
+    return json({ error: "GAME_SDK_REMOTE_RUNNER_UNAVAILABLE" }, 503);
+  }
   if (unavailableCodes.has(code)) return json({ error: code }, 503);
   if (forbiddenCodes.has(code)) return json({ error: code }, 403);
   if (conflictCodes.has(code)) return json({ error: code }, 409);

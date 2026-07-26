@@ -4716,3 +4716,36 @@
 - 現在のmainへ最小hotfixを非forceで反映し、本番3プロジェクトのDeploymentを確認する。
 - 本番反映後、正式画面からRoomを作成し、Preview server routeの403が解消したことを
   Runtime Logと画面の両方で確認する。
+## 2026-07-27 — 本番SDK Roomの403再発と通知失敗の観測修正
+
+### 利用者からの要望
+
+- 本番の「コトバに迫れ」で正式Roomを作成しても、前回修正後もゲーム実行サーバーへ接続できない。
+- 問い合わせ通知が届かなかった問題と同じ原因の可能性を確認したい。
+
+### 判断
+
+- 本番ログでは本体Room APIが503、隔離Previewのserver runnerが同時刻に403を返していた。両Deploymentは同じmain commitで、grantの固定scopeも一致するため、個別Projectへ登録した署名秘密値の一致を前提とする設計を原因と判断した。
+- 秘密値を再度手作業で揃えるだけでは再発するため、Portal発行grantはPortal自身で検証し、Preview側は固定Portalへ検証を委譲する。Previewの秘密値は内部asset tokenだけに限定する。
+- 問い合わせAPIは通知メール失敗を握り潰していたため、保存と通知の結果を別々の安全な構造化イベントへ記録する。
+
+### 実施結果
+
+- Portalへ`/api/preview-token/verify`を追加し、client／server grantの検証を発行元へ集約した。
+- Previewのopen、package-open、初回asset、server runnerをPortal検証へ接続した。
+- server runnerの安全な拒否コードを本体Telemetryへ運び、利用者向けには503へ正規化した。
+- 問い合わせ保存を`contact.create`、運用通知を`contact.notification`として記録するよう変更した。
+- 環境変数台帳の「両Projectで同じ値を確認済み」という誤記録を撤回した。
+
+### 検証
+
+- `npm test`は全567件成功した。
+- 変更対象のlint、環境変数台帳検査、runtime package buildは成功した。
+- `npm run build`、`npm run build:sdk`、`npm run build:sdk-preview`は成功した。
+- main全体の`npm run lint`は今回未変更の`GameSdkShellHeader.tsx`と
+  `site-admin-passkey-client.ts`に残る既存2件のlint違反だけで失敗した。
+
+### 未対応・保留
+
+- mainへ反映して本体、SDK Portal、SDK PreviewのDeploymentを確認し、正式Room作成を再試行する。
+- 次回の問い合わせ投稿で`contact.notification`の成功または安全な失敗コードを確認する。

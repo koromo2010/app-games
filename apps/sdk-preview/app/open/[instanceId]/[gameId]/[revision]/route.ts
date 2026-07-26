@@ -1,6 +1,6 @@
-import { verifySdkPreviewToken } from "@game-fields/sdk-preview-auth";
 import { NextResponse, type NextRequest } from "next/server";
-import { previewCookieName, previewCookiePath, previewSigningSecret } from "@/lib/preview-security";
+import { verifyPortalPreviewGrant } from "@/lib/preview-grant-verifier";
+import { previewCookieName, previewCookiePath } from "@/lib/preview-security";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +12,7 @@ export async function GET(
   const token = request.nextUrl.searchParams.get("token") ?? "";
   let grant;
   try {
-    grant = verifySdkPreviewToken(token, previewSigningSecret());
+    grant = await verifyPortalPreviewGrant(token);
   } catch {
     return new Response("Preview runtime is not configured.", { status: 503 });
   }

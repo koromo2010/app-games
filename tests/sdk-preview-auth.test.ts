@@ -9,6 +9,9 @@ import {
 import {
   createPackageRuntimeAccess,
 } from "../apps/sdk-portal/lib/preview-links.ts";
+import {
+  verifyPortalPreviewGrant,
+} from "../apps/sdk-preview/lib/preview-grant-verifier.ts";
 
 const secret = "sdk-preview-test-secret-with-at-least-32-bytes";
 const grant = {
@@ -125,6 +128,59 @@ test("SDK preview token binds client and server audiences with a bundle hash", (
   assert.deepEqual(
     verifySdkPreviewToken(createSdkPreviewToken(clientGrant, secret), secret, 1_999),
     clientGrant,
+  );
+});
+
+test("isolated preview delegates grant verification to the issuing portal", async () => {
+  const portalSecret = "portal-only-signing-secret-with-at-least-32-bytes";
+  const previewLocalSecret = "different-preview-local-secret-over-32-bytes";
+  const mainGrant = {
+    ...grant,
+    environment: "production" as const,
+    channel: "main" as const,
+    expiresAt: 20_000,
+  };
+  const token = createSdkPreviewToken(mainGrant, portalSecret);
+  const verified = await verifyPortalPreviewGrant(token, {
+    env: {
+      VERCEL_GIT_COMMIT_REF: "main",
+      SDK_PREVIEW_SIGNING_SECRET: previewLocalSecret,
+    },
+    now: 10_000,
+    fetchVerifier: async (_url, init) => {
+      const request = JSON.parse(String(init?.body)) as { token?: unknown };
+      const remoteGrant = typeof request.token === "string"
+        ? verifySdkPreviewToken(request.token, portalSecret, 10_000)
+        : null;
+      return remoteGrant
+        ? Response.json({ grant: remoteGrant })
+        : Response.json({ error: "PREVIEW_TOKEN_INVALID" }, { status: 403 });
+    },
+  });
+
+  assert.deepEqual(verified, mainGrant);
+});
+
+test("isolated preview rejects invalid portal responses and unavailable verifier", async () => {
+  assert.equal(await verifyPortalPreviewGrant("invalid-token", {
+    fetchVerifier: async () => Response.json(
+      { error: "PREVIEW_TOKEN_INVALID" },
+      { status: 403 },
+    ),
+  }), null);
+  await assert.rejects(
+    verifyPortalPreviewGrant("token.with-signature", {
+      fetchVerifier: async () => Response.json({ grant: { version: 3 } }),
+    }),
+    /SDK_PREVIEW_GRANT_VERIFIER_INVALID/,
+  );
+  await assert.rejects(
+    verifyPortalPreviewGrant("token.with-signature", {
+      fetchVerifier: async () => {
+        throw new Error("network detail must not escape");
+      },
+    }),
+    /SDK_PREVIEW_GRANT_VERIFIER_UNAVAILABLE/,
   );
 });
 

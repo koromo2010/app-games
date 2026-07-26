@@ -75,6 +75,18 @@ function parseRunnerResponse(value: unknown): GameSdkPortableServerResponse {
   return value as GameSdkPortableServerResponse;
 }
 
+function safeRunnerErrorCode(text: string) {
+  try {
+    const value = JSON.parse(text) as { error?: unknown };
+    return typeof value.error === "string"
+      && /^SERVER_RUNTIME_[A-Z0-9_]{2,63}$/.test(value.error)
+      ? value.error
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export function createGameSdkRemoteServerModule(
   definition: GameSdkRemoteBundleDefinition,
   fetchRunner: typeof fetch = fetch,
@@ -108,7 +120,12 @@ export function createGameSdkRemoteServerModule(
       if (Buffer.byteLength(text, "utf8") > MAX_RUNNER_RESPONSE_BYTES) {
         throw new Error("GAME_SDK_REMOTE_RESPONSE_TOO_LARGE");
       }
-      if (!response.ok) throw new Error("GAME_SDK_REMOTE_RUNNER_UNAVAILABLE");
+      if (!response.ok) {
+        throw new Error(
+          safeRunnerErrorCode(text)
+          ?? "GAME_SDK_REMOTE_RUNNER_UNAVAILABLE",
+        );
+      }
       let payload: unknown;
       try {
         payload = JSON.parse(text);

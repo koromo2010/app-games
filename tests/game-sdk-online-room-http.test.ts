@@ -14,3 +14,14 @@ test("remote runner outages are reported as unavailable instead of command confl
     error: "GAME_SDK_REMOTE_RUNNER_UNAVAILABLE",
   });
 });
+
+test("remote runner authentication details stay internal while returning unavailable", async () => {
+  const response = gameSdkOnlineRoomErrorResponse(
+    new Error("SERVER_RUNTIME_TOKEN_INVALID"),
+  );
+
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), {
+    error: "GAME_SDK_REMOTE_RUNNER_UNAVAILABLE",
+  });
+});

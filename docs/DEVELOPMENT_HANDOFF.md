@@ -458,7 +458,7 @@ ChatGPT Workではスレッドごとに作業環境が新しくなり、前ス�
 - SDK DB migration 004以後は環境別の`sdk_app_releases`がアプリカタログとリリース履歴の正本である。`sdk_games.stable_*`は提出・同環境採用の互換情報として残すが、正式Runtime catalogは現在の`sdk_app_releases`を読む。
 - 2026-07-26に本番隔離Preview Project `app-games-sdk-preview`と`preview.game-fields.com`を作成し、本番専用署名鍵、private package Git `koromo2010/game-fields-sdk-mocks`、Portal専用write token、Preview専用read tokenを分離して登録・再デプロイした。`app-games-sdk`と`app-games-sdk-preview`のProduction Branchは`main`へ統一済み。本番SDK専用`app-games-sdk-neon`もPortalのProductionだけへLink済みで、Redis Link、developとmainの分岐統合、build migration後に`GET https://sdk.game-fields.com/api/health`の`schemaVersion: 4`を確認する。
 - package Git保存は対象subtreeを完全置換し、前revisionだけにあったassetを新commitへ残さない。server bundleは提出時にも1 MiB上限を検査する。昇格処理は検査後のUPDATEへ元revisionと2つのhashを条件として付け、再提出または別昇格と競合した場合はコピーせず409で停止する。
-- `SDK_PREVIEW_SIGNING_SECRET`はPortalと対応previewだけで環境別に共有する。Portalだけに`SDK_MOCK_GITHUB_WRITE_TOKEN`、previewだけに別の`SDK_MOCK_GITHUB_READ_TOKEN`を設定し、どちらも専用非公開repo以外へ権限を与えない。変数配置は`docs/ENVIRONMENT_VARIABLES.md`を正本とする。
+- `SDK_PREVIEW_SIGNING_SECRET`はPortalでpackage client／server grantを署名し、Portal自身の`/api/preview-token/verify`で検証する。Previewは固定された対応Portalへtoken本文をPOSTして検証し、cross-projectで秘密値が同一であることをRuntime前提にしない。Preview側の既存値は認証済みHTMLから同一revision assetを読む短命tokenの署名だけに使用する。Portalだけに`SDK_MOCK_GITHUB_WRITE_TOKEN`、previewだけに別の`SDK_MOCK_GITHUB_READ_TOKEN`を設定し、どちらも専用非公開repo以外へ権限を与えない。変数配置は`docs/ENVIRONMENT_VARIABLES.md`を正本とする。
 
 ### 承認済みSDKゲームの正式Runtime
 

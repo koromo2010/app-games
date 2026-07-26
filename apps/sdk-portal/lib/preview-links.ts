@@ -8,7 +8,7 @@ type PreviewEnvironment = "production" | "development";
 type RuntimeChannel = "candidate-preview" | "development" | "main";
 
 function previewSigningSecret() {
-  const secret = process.env.SDK_PREVIEW_SIGNING_SECRET ?? "";
+  const secret = process.env.SDK_PREVIEW_SIGNING_SECRET?.trim() ?? "";
   if (!secret) throw new Error("SDK preview signing is not configured.");
   return secret;
 }

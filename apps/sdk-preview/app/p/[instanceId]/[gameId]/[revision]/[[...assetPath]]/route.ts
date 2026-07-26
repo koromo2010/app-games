@@ -1,12 +1,12 @@
-import { verifySdkPreviewToken } from "@game-fields/sdk-preview-auth";
+import type { SdkPreviewGrant } from "@game-fields/sdk-preview-auth";
 import { cookies } from "next/headers";
 import { fetchPreviewAsset, normalizePreviewAssetPath, previewContentType } from "@/lib/preview-source";
+import { verifyPortalPreviewGrant } from "@/lib/preview-grant-verifier";
 import {
   createPreviewAssetToken,
   previewAssetBasePath,
   previewContentSecurityPolicy,
   previewCookieName,
-  previewSigningSecret,
   verifyPreviewAssetToken,
 } from "@/lib/preview-security";
 import { GAME_FIELDS_PRESET_ASSET, gameFieldsPresetRuntimeSource, injectGameFieldsPreset } from "@/lib/preset-runtime";
@@ -23,7 +23,7 @@ export async function GET(
   const usesAssetToken = requestedParts[0] === "a";
   let assetToken = usesAssetToken ? requestedParts[1] ?? "" : "";
   const assetParts = usesAssetToken ? requestedParts.slice(2) : requestedParts;
-  let grant: ReturnType<typeof verifySdkPreviewToken> = null;
+  let grant: SdkPreviewGrant | null = null;
 
   if (usesAssetToken) {
     try {
@@ -36,7 +36,7 @@ export async function GET(
   } else {
     const token = (await cookies()).get(previewCookieName(scope))?.value ?? "";
     try {
-      grant = verifySdkPreviewToken(token, previewSigningSecret());
+      grant = await verifyPortalPreviewGrant(token);
     } catch {
       return new Response("Preview runtime is not configured.", { status: 503 });
     }

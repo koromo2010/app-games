@@ -1,4 +1,4 @@
-import { verifySdkPreviewToken } from "@game-fields/sdk-preview-auth";
+import type { SdkPreviewGrant } from "@game-fields/sdk-preview-auth";
 import { cookies } from "next/headers";
 import {
   fetchPreviewAsset,
@@ -6,12 +6,12 @@ import {
   previewContentType,
 } from "@/lib/preview-source";
 import { injectGameFieldsPackageClient } from "@/lib/package-client-runtime";
+import { verifyPortalPreviewGrant } from "@/lib/preview-grant-verifier";
 import {
   createPreviewAssetToken,
   packageAssetBasePath,
   packageCookieName,
   previewContentSecurityPolicy,
-  previewSigningSecret,
   verifyPreviewAssetToken,
 } from "@/lib/preview-security";
 
@@ -31,7 +31,7 @@ export async function GET(
   const usesAssetToken = requestedParts[0] === "a";
   let assetToken = usesAssetToken ? requestedParts[1] ?? "" : "";
   const assetParts = usesAssetToken ? requestedParts.slice(2) : requestedParts;
-  let grant: ReturnType<typeof verifySdkPreviewToken> = null;
+  let grant: SdkPreviewGrant | null = null;
 
   if (usesAssetToken) {
     try {
@@ -44,7 +44,7 @@ export async function GET(
   } else {
     const token = (await cookies()).get(packageCookieName(scope))?.value ?? "";
     try {
-      grant = verifySdkPreviewToken(token, previewSigningSecret());
+      grant = await verifyPortalPreviewGrant(token);
     } catch {
       return new Response("Package runtime is not configured.", { status: 503 });
     }

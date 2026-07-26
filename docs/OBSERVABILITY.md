@@ -49,6 +49,7 @@ GETポーリングの成功と通常の401/403/404は量とノイズが多いた
 | `settings.save` | 部屋設定既定値の保存結果。設定本文は記録しない |
 | `room.read` / `stats.read` / `settings.read` | 読み取り時の5xxのみ。成功ポーリングは記録しない |
 | `replay.record` / `replay.favorite` | プレイバック保存・お気に入り変更。説明本文は記録しない |
+| `contact.create` / `contact.notification` | 問い合わせ保存と運用通知メールを分離して記録。氏名、メール、本文、送信事業者の生エラーは記録しない |
 
 ## ログへ入れない情報
 

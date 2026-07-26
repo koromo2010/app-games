@@ -49,10 +49,10 @@
       "environment": "Production",
       "sensitive": true,
       "operation": "set",
-      "status": "redeployed",
+      "status": "cancelled",
       "redeployRequired": true,
       "temporary": false,
-      "note": "production専用値を両Projectへ個別登録。development用Shared値とは分離。"
+      "note": "両Projectで同一値との記録に反して本番grant検証が403になった。cross-project同値依存を廃止し、Portalはgrant署名・検証、Preview側の既存値はasset署名だけへ限定する。"
     },
     {
       "id": "2026-07-26-sdk-production-package-repository",

@@ -1,8 +1,7 @@
-import { verifySdkPreviewToken } from "@game-fields/sdk-preview-auth";
 import { createHash } from "node:crypto";
 import type { GameSdkPortableServerRequest } from "@game-fields/game-sdk/portable-server";
 import { fetchPreviewAsset } from "@/lib/preview-source";
-import { previewSigningSecret } from "@/lib/preview-security";
+import { verifyPortalPreviewGrant } from "@/lib/preview-grant-verifier";
 import {
   GameSdkPortableRunnerError,
   runGameSdkPortableServer,
@@ -26,24 +25,46 @@ export async function POST(
   const params = await context.params;
   let grant;
   try {
-    grant = verifySdkPreviewToken(bearerToken(request), previewSigningSecret());
+    grant = await verifyPortalPreviewGrant(bearerToken(request));
   } catch {
     return Response.json({ error: "SERVER_RUNTIME_NOT_CONFIGURED" }, { status: 503 });
   }
+  if (!grant) {
+    return Response.json(
+      { error: "SERVER_RUNTIME_TOKEN_INVALID" },
+      { status: 403 },
+    );
+  }
   if (
-    !grant
-    || grant.audience !== "package-server"
+    grant.audience !== "package-server"
     || grant.role !== "runner"
-    || grant.environment !== (
+  ) {
+    return Response.json(
+      { error: "SERVER_RUNTIME_GRANT_ROLE_INVALID" },
+      { status: 403 },
+    );
+  }
+  if (
+    grant.environment !== (
       process.env.VERCEL_GIT_COMMIT_REF === "main"
         ? "production"
         : "development"
     )
-    || grant.instanceId !== params.instanceId
+  ) {
+    return Response.json(
+      { error: "SERVER_RUNTIME_GRANT_ENVIRONMENT_INVALID" },
+      { status: 403 },
+    );
+  }
+  if (
+    grant.instanceId !== params.instanceId
     || grant.gameId !== params.gameId
     || grant.revision !== params.revision
   ) {
-    return Response.json({ error: "SERVER_RUNTIME_FORBIDDEN" }, { status: 403 });
+    return Response.json(
+      { error: "SERVER_RUNTIME_GRANT_SCOPE_INVALID" },
+      { status: 403 },
+    );
   }
 
   const declaredLength = Number(request.headers.get("content-length") ?? 0);
