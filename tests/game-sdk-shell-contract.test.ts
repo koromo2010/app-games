@@ -22,6 +22,7 @@ test("reviewed SDK shell consumes every Room View permission it declares", () =>
     "canStartGame",
     "canEditRoomSettings",
     "canAbort",
+    "canDebug",
   ]) {
     assert.match(
       frame,
@@ -30,12 +31,18 @@ test("reviewed SDK shell consumes every Room View permission it declares", () =>
     );
   }
 
-  assert.match(
-    header,
-    /permissions\?\.canDebug === true/,
-    "canDebug must control the shared DEBUG entry point",
-  );
+  assert.match(frame, /debugRoom=\{common\?\.permissions\.canDebug \? \{/);
+  assert.match(header, /debugRoom\?: GameSdkDebugRoom \| null/);
   assert.match(header, /DEBUG · ON/);
+});
+
+test("SDK header receives Room View state and never fetches it independently", () => {
+  assert.match(frame, /code: room\.code,[\s\S]*revision: room\.revision,[\s\S]*phase: room\.phase/);
+  assert.doesNotMatch(header, /fetch\(/);
+  assert.doesNotMatch(header, /activeRoomEndpoint/);
+  assert.doesNotMatch(header, /window\.location\.pathname/);
+  assert.doesNotMatch(header, /setInterval/);
+  assert.doesNotMatch(header, /\/rooms\?active=1/);
 });
 
 test("reviewed SDK shell consumes manifest capabilities passed by Preview", () => {
@@ -68,6 +75,7 @@ test("module profile and Room View remain the only shell feature gates", () => {
   assert.match(frame, /common\?\.permissions\.canStartGame/);
   assert.match(frame, /common\?\.permissions\.canEditRoomSettings/);
   assert.match(frame, /common\?\.permissions\.canAbort/);
+  assert.match(frame, /common\?\.permissions\.canDebug/);
 
   assert.doesNotMatch(
     frame,
