@@ -6,6 +6,7 @@ import { defaultGameOperations, gameOperationFor, gameOperationMessageMaxLength,
 import { ensureSiteAdminStepUp } from "@/lib/site-admin-passkey-client";
 
 const publicationLabels: Record<GamePublication, string> = { public: "一般公開", private: "プライベート公開", hidden: "非表示" };
+type ListedGame = { id: string; title: string; private?: boolean; source?: "sdk" };
 
 export function GameOperationsPanel({ onAuthExpired }: { onAuthExpired: () => void }) {
   const [operations, setOperations] = useState<GameOperation[]>(defaultGameOperations());
@@ -13,15 +14,21 @@ export function GameOperationsPanel({ onAuthExpired }: { onAuthExpired: () => vo
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [sdkGames, setSdkGames] = useState<ListedGame[]>([]);
 
   const load = useCallback(async () => {
     try {
       const response = await fetch("/api/admin/game-operations", { cache: "no-store" });
-      const data = await response.json().catch(() => null) as { operations?: GameOperation[]; error?: string } | null;
+      const data = await response.json().catch(() => null) as {
+        operations?: GameOperation[];
+        games?: ListedGame[];
+        error?: string;
+      } | null;
       if (response.status === 401) { onAuthExpired(); return; }
       if (!response.ok || !data?.operations) throw new Error(data?.error || "LOAD_FAILED");
       setOperations(data.operations);
       setSavedOperations(data.operations);
+      setSdkGames((data.games ?? []).map((game) => ({ ...game, source: "sdk" })));
       setMessage("");
     } catch {
       setMessage("ゲームの公開状態を読み込めませんでした。");
@@ -73,11 +80,11 @@ export function GameOperationsPanel({ onAuthExpired }: { onAuthExpired: () => vo
       {message && <p role="status" className="rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-4 py-3 text-sm text-cyan-50">{message}</p>}
       {isLoading ? <p className="py-12 text-center text-sm text-cyan-200 animate-pulse">公開状態を読み込み中…</p> : (
         <div className="space-y-3">
-          {registry.map((game) => {
+          {[...registry, ...sdkGames].map((game) => {
             const operation = gameOperationFor(operations, game.id);
             return (
               <section key={game.id} className="grid gap-4 rounded-2xl border border-white/10 bg-white/[0.05] p-4 md:grid-cols-[minmax(170px,1fr)_210px_180px_2fr]">
-                <div><h3 className="font-black">{game.title}</h3><p className="mt-1 font-mono text-xs text-slate-500">{game.id}</p>{game.private && <p className="mt-2 text-xs font-bold text-violet-300">登録時Private</p>}</div>
+                <div><h3 className="font-black">{game.title}</h3><p className="mt-1 font-mono text-xs text-slate-500">{game.id}</p>{"source" in game && game.source === "sdk" && <p className="mt-2 text-xs font-bold text-cyan-300">SDK採用作品</p>}{game.private && <p className="mt-2 text-xs font-bold text-violet-300">登録時Private</p>}</div>
                 <label className="text-sm font-bold text-slate-300">公開範囲
                   <select value={operation.publication} onChange={(event) => { const publication = event.target.value as GamePublication; change(game.id, { publication, ...(publication === "hidden" ? { maintenance: false } : {}) }); }} className="mt-2 w-full rounded-lg border border-white/15 bg-slate-900 px-3 py-2.5 text-white">
                     <option value="public">一般公開</option>

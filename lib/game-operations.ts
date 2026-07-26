@@ -11,23 +11,50 @@ export type GameOperation = {
   updatedAt: number | null;
 };
 
+export type GameOperationDefinition = {
+  id: string;
+  private?: boolean;
+};
+
 export const gameOperationMessageMaxLength = 120;
 
 const registeredIds = new Set(registry.map((game) => game.id));
+const dynamicGameIdPattern = /^[a-z][a-z0-9-]{1,63}$/;
 
-export function defaultGameOperations(): GameOperation[] {
-  return registry.map((game) => ({ gameId: game.id, publication: game.private ? "private" : "public", maintenance: false, message: "", updatedAt: null }));
+export function defaultGameOperations(
+  additionalGames: GameOperationDefinition[] = [],
+): GameOperation[] {
+  const definitions = [
+    ...registry,
+    ...additionalGames.filter((game) => !registeredIds.has(game.id)),
+  ];
+  return definitions.map((game) => ({
+    gameId: game.id,
+    publication: game.private ? "private" : "public",
+    maintenance: false,
+    message: "",
+    updatedAt: null,
+  }));
 }
 
-export function normalizeGameOperations(value: unknown): GameOperation[] {
+export function normalizeGameOperations(
+  value: unknown,
+  additionalGames: GameOperationDefinition[] = [],
+): GameOperation[] {
   const items = Array.isArray(value) ? value : [];
   const byId = new Map<string, Partial<GameOperation>>();
   for (const item of items) {
     if (!item || typeof item !== "object") continue;
     const input = item as Partial<GameOperation>;
-    if (typeof input.gameId === "string" && registeredIds.has(input.gameId)) byId.set(input.gameId, input);
+    if (
+      typeof input.gameId === "string"
+      && (registeredIds.has(input.gameId) || dynamicGameIdPattern.test(input.gameId))
+    ) byId.set(input.gameId, input);
   }
-  return defaultGameOperations().map((fallback) => {
+  const dynamicStoredGames = [...byId.keys()]
+    .filter((id) => !registeredIds.has(id))
+    .map((id) => ({ id }));
+  return defaultGameOperations([...dynamicStoredGames, ...additionalGames]).map((fallback) => {
     const input = byId.get(fallback.gameId);
     const publication = normalizeGamePublication(input?.publication, fallback.publication);
     const message = typeof input?.message === "string"
@@ -64,13 +91,20 @@ export function migrateLegacyGameOperations(value: unknown): GameOperation[] {
   });
 }
 
-export function validateGameOperationsInput(value: unknown) {
-  if (!Array.isArray(value) || value.length !== registry.length) return "INVALID_GAME_OPERATIONS";
+export function validateGameOperationsInput(
+  value: unknown,
+  additionalGames: GameOperationDefinition[] = [],
+) {
+  const allowedIds = new Set([
+    ...registeredIds,
+    ...additionalGames.map((game) => game.id),
+  ]);
+  if (!Array.isArray(value) || value.length !== allowedIds.size) return "INVALID_GAME_OPERATIONS";
   const ids = new Set<string>();
   for (const item of value) {
     if (!item || typeof item !== "object") return "INVALID_GAME_OPERATIONS";
     const input = item as Partial<GameOperation>;
-    if (typeof input.gameId !== "string" || !registeredIds.has(input.gameId) || ids.has(input.gameId)) return "INVALID_GAME_OPERATIONS";
+    if (typeof input.gameId !== "string" || !allowedIds.has(input.gameId) || ids.has(input.gameId)) return "INVALID_GAME_OPERATIONS";
     if (input.publication !== "public" && input.publication !== "private" && input.publication !== "hidden") return "INVALID_GAME_OPERATIONS";
     if (typeof input.maintenance !== "boolean") return "INVALID_GAME_OPERATIONS";
     if (typeof input.message !== "string" || input.message.replace(/\s+/g, " ").trim().length > gameOperationMessageMaxLength) return "INVALID_GAME_OPERATIONS";

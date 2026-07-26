@@ -65,3 +65,18 @@ test("admin exposes environment-paired SDK adoption and independent dev to main"
   assert.doesNotMatch(portalRoute, /promotion_main_only/);
   assert.doesNotMatch(mcp, /promote_game_package_to_development/);
 });
+
+test("admin publication management includes adopted SDK games", () => {
+  const panel = read("app/admin/GameOperationsPanel.tsx");
+  const route = read("app/api/admin/game-operations/route.ts");
+  const operations = read("lib/game-operations.ts");
+  const store = read("lib/game-operations-store.ts");
+
+  assert.match(panel, /\[\.\.\.registry, \.\.\.sdkGames\]/);
+  assert.match(panel, /SDK採用作品/);
+  assert.match(route, /loadApprovedGameSdkCatalog/);
+  assert.match(route, /games: games\.map/);
+  assert.match(route, /validateGameOperationsInput\(body\.operations, games\)/);
+  assert.match(operations, /additionalGames: GameOperationDefinition\[\]/);
+  assert.match(store, /normalizeGameOperations\(value, additionalGames\)/);
+});

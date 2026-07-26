@@ -5,8 +5,14 @@ import { createRequestTelemetry } from "@/lib/observability";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 import { requireRecentSiteAdminMfa, requireSiteAdminSession, siteAdminAuthorizationError } from "@/lib/site-admin-auth";
 import { appendSiteAdminAuditLog } from "@/lib/site-admin-passkey-store";
+import { loadApprovedGameSdkCatalog } from "@/lib/game-sdk-runtime-catalog";
+import registry from "@/config/game-registry.json";
 
 export const dynamic = "force-dynamic";
+
+async function sdkGames() {
+  return loadApprovedGameSdkCatalog();
+}
 
 function authError(error: unknown) {
   return siteAdminAuthorizationError(error);
@@ -15,7 +21,30 @@ function authError(error: unknown) {
 export async function GET() {
   try {
     await requireSiteAdminSession();
-    return Response.json({ operations: await loadGameOperations({ fresh: true }) });
+    const games = await sdkGames();
+    const stored = await loadGameOperations({ fresh: true });
+    const activeIds = new Set([
+      ...registry.map((game) => game.id),
+      ...games.map((game) => game.id),
+    ]);
+    const activeStored = stored.filter((operation) => activeIds.has(operation.gameId));
+    const byId = new Map(activeStored.map((operation) => [operation.gameId, operation]));
+    const operations = [
+      ...activeStored,
+      ...games
+        .filter((game) => !byId.has(game.id))
+        .map((game) => ({
+          gameId: game.id,
+          publication: "public" as const,
+          maintenance: false,
+          message: "",
+          updatedAt: null,
+        })),
+    ];
+    return Response.json({
+      operations,
+      games: games.map((game) => ({ id: game.id, title: game.title, private: false })),
+    });
   } catch (error) {
     return authError(error) ?? Response.json({ error: "GAME_OPERATIONS_LOAD_FAILED" }, { status: 500 });
   }
@@ -28,10 +57,14 @@ export async function PATCH(request: Request) {
   try {
     const session = await requireRecentSiteAdminMfa();
     const body = await request.json() as { operations?: unknown };
-    const validationError = validateGameOperationsInput(body.operations);
+    const games = await sdkGames();
+    const validationError = validateGameOperationsInput(body.operations, games);
     if (validationError) return Response.json({ error: validationError }, { status: 400 });
     const before = await loadGameOperations({ fresh: true });
-    const operations = await saveGameOperations(body.operations as Parameters<typeof saveGameOperations>[0]);
+    const operations = await saveGameOperations(
+      body.operations as Parameters<typeof saveGameOperations>[0],
+      games,
+    );
     revalidatePath("/");
     revalidatePath("/games");
     await appendSiteAdminAuditLog(request, session, "game-operations.update", "game-operations", before, operations);

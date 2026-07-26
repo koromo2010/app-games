@@ -35,10 +35,14 @@ export async function loadGameOperation(gameId: string) {
   return gameOperationFor(await loadGameOperations(), gameId);
 }
 
-export async function saveGameOperations(value: GameOperation[]) {
+export async function saveGameOperations(
+  value: GameOperation[],
+  additionalGames: Array<{ id: string; private?: boolean }> = [],
+) {
   if (!getRedisConfig()) throw new Error("SITE_SETTINGS_STORE_NOT_CONFIGURED");
   const now = Date.now();
-  const operations = normalizeGameOperations(value).map((operation) => ({ ...operation, updatedAt: now }));
+  const operations = normalizeGameOperations(value, additionalGames)
+    .map((operation) => ({ ...operation, updatedAt: now }));
   await redisCommand<"OK">(["SET", gameOperationsKey, JSON.stringify(operations)]);
   cache = { operations, expiresAt: now + cacheDurationMs };
   return operations;
