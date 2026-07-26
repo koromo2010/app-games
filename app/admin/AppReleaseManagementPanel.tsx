@@ -22,13 +22,35 @@ type Release = {
   isCurrent?: boolean;
 };
 
+type UpstreamDiagnostic = {
+  source?: string;
+  endpoint?: string;
+  status?: number | null;
+  code?: string;
+  cause?: string;
+};
+
 type Payload = {
-  development?: { releases?: Release[]; error?: string };
-  main?: { releases?: Release[]; history?: Release[]; error?: string };
+  development?: { releases?: Release[]; error?: string | UpstreamDiagnostic };
+  main?: { releases?: Release[]; history?: Release[]; error?: string | UpstreamDiagnostic };
   error?: string;
+  diagnostic?: UpstreamDiagnostic;
 };
 
 const short = (value: string) => value.slice(0, 8);
+
+function diagnosticText(error: string | UpstreamDiagnostic | undefined) {
+  if (!error) return "";
+  if (typeof error === "string") return error;
+  const status = typeof error.status === "number" ? `HTTP ${error.status}` : "通信失敗";
+  return [
+    `原因: ${error.code || "UNKNOWN"}`,
+    `接続先: ${error.endpoint || "不明"}`,
+    `状態: ${status}`,
+    error.source ? `系統: ${error.source}` : "",
+    error.cause ? `通信例外: ${error.cause}` : "",
+  ].filter(Boolean).join("\n");
+}
 
 export function AppReleaseManagementPanel({
   onAuthExpired,
@@ -50,19 +72,19 @@ export function AppReleaseManagementPanel({
     }`, { cache: "no-store" });
     const payload = await response.json().catch(() => null) as Payload | null;
     if (!response.ok && !payload?.development && !payload?.main) {
-      throw new Error(payload?.error || "APP_RELEASE_LOAD_FAILED");
+      throw new Error(diagnosticText(payload?.diagnostic) || payload?.error || "APP_RELEASE_LOAD_FAILED");
     }
     setDev(payload?.development?.releases ?? []);
     setMain(payload?.main?.releases ?? []);
     setHistory(payload?.main?.history ?? []);
-    setDevelopmentError(payload?.development?.error ?? "");
-    setMainError(payload?.main?.error ?? "");
+    setDevelopmentError(diagnosticText(payload?.development?.error));
+    setMainError(diagnosticText(payload?.main?.error));
   }, []);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void load().catch((error) => setMessage(
-        `アプリ昇格情報を読み込めませんでした（${error instanceof Error ? error.message : "UNKNOWN"}）。`,
+        `アプリ昇格情報を読み込めませんでした。\n${error instanceof Error ? error.message : "UNKNOWN"}`,
       ));
     }, 0);
     return () => window.clearTimeout(timer);
@@ -79,7 +101,7 @@ export function AppReleaseManagementPanel({
     try {
       await load(lineageId);
     } catch (error) {
-      setMessage(`履歴を読み込めませんでした（${error instanceof Error ? error.message : "UNKNOWN"}）。`);
+      setMessage(`履歴を読み込めませんでした。\n${error instanceof Error ? error.message : "UNKNOWN"}`);
     }
   };
 
@@ -93,8 +115,10 @@ export function AppReleaseManagementPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const payload = await response.json().catch(() => null) as { error?: string } | null;
-      if (!response.ok) throw new Error(payload?.error || "APP_RELEASE_FAILED");
+      const payload = await response.json().catch(() => null) as Payload | null;
+      if (!response.ok) {
+        throw new Error(diagnosticText(payload?.diagnostic) || payload?.error || "APP_RELEASE_FAILED");
+      }
       await load(selected || undefined);
       setMessage(label);
     } catch (error) {
@@ -102,7 +126,7 @@ export function AppReleaseManagementPanel({
         onAuthExpired();
         return;
       }
-      setMessage(`${label}に失敗しました（${error instanceof Error ? error.message : "UNKNOWN"}）。`);
+      setMessage(`${label}に失敗しました。\n${error instanceof Error ? error.message : "UNKNOWN"}`);
     } finally {
       setBusy("");
     }
@@ -117,13 +141,13 @@ export function AppReleaseManagementPanel({
       </div>
       {message && <p role="status" className="m-5 whitespace-pre-line rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-4 py-3 text-sm text-cyan-50">{message}</p>}
       {developmentError && (
-        <p role="alert" className="m-5 rounded-xl border border-rose-300/30 bg-rose-300/10 px-4 py-3 text-sm text-rose-100">
-          dev採用アプリを取得できませんでした（{developmentError}）。
+        <p role="alert" className="m-5 whitespace-pre-line rounded-xl border border-rose-300/30 bg-rose-300/10 px-4 py-3 text-sm text-rose-100">
+          dev採用アプリを取得できませんでした。{`\n${developmentError}`}
         </p>
       )}
       {mainError && (
-        <p role="alert" className="m-5 rounded-xl border border-amber-300/30 bg-amber-300/10 px-4 py-3 text-sm text-amber-100">
-          main現在版との比較を取得できませんでした（{mainError}）。一覧は確認できますが、復旧するまで昇格操作はできません。
+        <p role="alert" className="m-5 whitespace-pre-line rounded-xl border border-amber-300/30 bg-amber-300/10 px-4 py-3 text-sm text-amber-100">
+          main現在版との比較を取得できませんでした。一覧は確認できますが、復旧するまで昇格操作はできません。{`\n${mainError}`}
         </p>
       )}
       {dev.length === 0 ? (
