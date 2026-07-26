@@ -114,10 +114,17 @@ test("main can promote one adopted dev app and append-only rollback it", () => {
   assert.match(panel, /dev採用済み/);
   assert.match(panel, /main確認待ち/);
   assert.match(panel, /この版へ復元/);
+  assert.match(panel, /diagnosticText/);
+  assert.match(panel, /接続先:/);
+  assert.match(panel, /通信例外:/);
   assert.match(adminRoute, /developmentCatalogEndpoint/);
   assert.match(adminRoute, /\/api\/runtime-catalog\?channel=development/);
   assert.match(adminRoute, /developmentReleases/);
   assert.match(adminRoute, /developmentOk \|\| mainOk/);
+  assert.match(adminRoute, /development-runtime-catalog/);
+  assert.match(adminRoute, /main-release-store/);
+  assert.match(adminRoute, /APP_RELEASE_UPSTREAM_FETCH_FAILED/);
+  assert.match(adminRoute, /\[app-releases\] upstream request failed/);
   assert.match(adminRoute, /sdk-app\.promote-dev-to-main/);
   assert.match(adminRoute, /sdk-app\.rollback/);
   assert.match(portalRoute, /process\.env\.VERCEL_GIT_COMMIT_REF !== "main"/);
