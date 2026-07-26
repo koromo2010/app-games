@@ -49,11 +49,93 @@ export async function POST(request: Request) {
   try {
     const session = await requireFullSiteAdminSession();
     const body = await request.json().catch(() => null) as {
+      action?: unknown;
       reportId?: unknown;
+      messageId?: unknown;
       requestId?: unknown;
       message?: unknown;
       status?: unknown;
     } | null;
+    if (body?.action === "retry-email") {
+      const reportId = typeof body.reportId === "string"
+        ? body.reportId
+        : "";
+      const messageId = typeof body.messageId === "string"
+        ? body.messageId
+        : "";
+      const retryRequestId = typeof body.requestId === "string"
+        ? body.requestId.trim().slice(0, 120)
+        : "";
+      if (!reportId || !messageId || !retryRequestId) {
+        return Response.json(
+          { error: "USER_REPORT_REPLY_EMAIL_RETRY_INVALID" },
+          { status: 400 },
+        );
+      }
+      const existing = await loadUserReport(reportId);
+      const existingMessage = existing?.messages.find(
+        (entry) => entry.id === messageId && entry.author === "admin",
+      );
+      if (!existing || !existingMessage) {
+        return Response.json(
+          { error: "USER_REPORT_REPLY_MESSAGE_NOT_FOUND" },
+          { status: 404 },
+        );
+      }
+      if (
+        existingMessage.deliveryStatus !== "failed"
+        && existingMessage.deliveryStatus !== "pending"
+      ) {
+        return Response.json(
+          { error: "USER_REPORT_REPLY_EMAIL_NOT_RETRYABLE" },
+          { status: 409 },
+        );
+      }
+      await updateUserReportMessageDelivery(
+        existing.id,
+        existingMessage.id,
+        "pending",
+      );
+      let deliveryStatus: "sent" | "failed" | "not-required";
+      try {
+        const recipient = await loadVerifiedPlayerEmailByPlayerId(
+          existing.playerId,
+        );
+        deliveryStatus = recipient
+          ? await sendCreatorSupportReplyEmail({
+            to: recipient,
+            reportId: existing.id,
+            body: existingMessage.body,
+            supportUrl: sdkSupportThreadUrl(request.url, existing.id),
+            idempotencyKey: `user-report-reply-${existingMessage.id}`,
+          }).then(() => "sent" as const).catch(() => "failed" as const)
+          : "not-required";
+      } catch {
+        deliveryStatus = "failed";
+      }
+      const report = await updateUserReportMessageDelivery(
+        existing.id,
+        existingMessage.id,
+        deliveryStatus,
+      );
+      await appendSiteAdminAuditLog(
+        request,
+        session,
+        "user-report.reply-email-retry",
+        report.id,
+        null,
+        {
+          messageId: existingMessage.id,
+          deliveryStatus,
+          retryRequestId,
+        },
+      );
+      telemetry.success("user-report.reply-email", {
+        action: deliveryStatus,
+        channel: "email",
+      });
+      return Response.json({ report, deliveryStatus });
+    }
     const message = typeof body?.message === "string"
       ? body.message.trim().slice(0, 3_000)
       : "";

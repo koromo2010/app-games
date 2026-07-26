@@ -268,7 +268,7 @@ export async function approveUserReportReplyDraft(input: {
       String(remainingRetentionSeconds),
     ]);
   }
-  return result.report;
+  return result;
 }
 
 export async function deleteUserReportDraftsForPlayer(playerId: string) {

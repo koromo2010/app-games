@@ -54,6 +54,21 @@ test("empty report form removes the sent draft", () => {
   assert.equal(loadUserReportFormDraft(storage), null);
 });
 
+test("a submitted report keeps its request ID across a component remount", () => {
+  const storage = new MemoryStorage();
+  saveUserReportFormDraft({
+    type: "bug",
+    summary: "送信結果が不明",
+    details: "同じ操作として再試行する",
+    requestId: "11111111-1111-4111-8111-111111111111",
+  }, storage);
+
+  assert.equal(
+    loadUserReportFormDraft(storage)?.requestId,
+    "11111111-1111-4111-8111-111111111111",
+  );
+});
+
 test("invalid or oversized report drafts are rejected or bounded", () => {
   const storage = new MemoryStorage();
   storage.setItem(userReportFormDraftStorageKey, "{");

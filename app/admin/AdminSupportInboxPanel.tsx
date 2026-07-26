@@ -366,6 +366,83 @@ export function AdminSupportInboxPanel({
     }
   };
 
+  const retryReplyEmail = async (
+    item: SupportItem,
+    messageId: string,
+  ) => {
+    const record = recordFor(item);
+    if (savingId) return;
+    setSavingId(record.id);
+    setReplyMessages((current) => {
+      const next = { ...current };
+      delete next[record.id];
+      return next;
+    });
+    try {
+      const response = await fetch(
+        item.kind === "report"
+          ? "/api/admin/user-reports"
+          : "/api/admin/contact-messages",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(item.kind === "report"
+            ? {
+              action: "retry-email",
+              reportId: record.id,
+              messageId,
+              requestId: crypto.randomUUID(),
+            }
+            : {
+              action: "retry-email",
+              contactId: record.id,
+              messageId,
+              requestId: crypto.randomUUID(),
+            }),
+        },
+      );
+      const data = await response.json().catch(() => null) as {
+        report?: UserReport;
+        contact?: ContactMessage;
+        deliveryStatus?: "sent" | "failed" | "not-required";
+        error?: string;
+      } | null;
+      if (response.status === 401) {
+        onAuthExpired();
+        return;
+      }
+      const updated = item.kind === "report"
+        ? data?.report && { kind: "report" as const, report: data.report }
+        : data?.contact && { kind: "contact" as const, contact: data.contact };
+      if (!response.ok || !updated) {
+        throw new Error(data?.error || "REPLY_EMAIL_RETRY_FAILED");
+      }
+      const deliveryStatus = data?.deliveryStatus;
+      setItems((current) => replaceItem(current, updated));
+      setReplyMessages((current) => ({
+        ...current,
+        [record.id]: {
+          tone: deliveryStatus === "failed" ? "error" : "success",
+          text: deliveryStatus === "sent"
+            ? "保存済みの返信メールだけを再送しました。会話履歴は増えていません。"
+            : deliveryStatus === "not-required"
+              ? "確認済みメールがないため、会話履歴のみ維持しています。"
+              : "返信メールの再送に失敗しました。会話履歴は保持されています。",
+        },
+      }));
+    } catch {
+      setReplyMessages((current) => ({
+        ...current,
+        [record.id]: {
+          tone: "error",
+          text: "返信メールを再送できませんでした。会話履歴は保持されています。",
+        },
+      }));
+    } finally {
+      setSavingId(null);
+    }
+  };
+
   return (
     <div className="mx-auto max-w-6xl space-y-5 px-4 py-8">
       <div className="flex flex-wrap items-end justify-between gap-4">
@@ -510,10 +587,30 @@ export function AdminSupportInboxPanel({
                         {entry.body}
                       </p>
                       {entry.author === "admin"
-                        && entry.deliveryStatus === "failed" && (
-                        <p className="mt-2 text-xs font-bold text-amber-200">
-                          メール通知失敗
-                        </p>
+                        && (
+                          entry.deliveryStatus === "failed"
+                          || entry.deliveryStatus === "pending"
+                        ) && (
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <p className="text-xs font-bold text-amber-200">
+                            {entry.deliveryStatus === "failed"
+                              ? "メール通知失敗"
+                              : "メール通知状態が未確定"}
+                          </p>
+                          <button
+                            type="button"
+                            disabled={savingId !== null}
+                            onClick={() => void retryReplyEmail(
+                              item,
+                              entry.id,
+                            )}
+                            className="rounded-md border border-amber-300/40 px-2 py-1 text-xs font-bold text-amber-100 hover:bg-amber-300/10 disabled:opacity-40"
+                          >
+                            {savingId === record.id
+                              ? "再送中…"
+                              : "返信メールだけ再送"}
+                          </button>
+                        </div>
                       )}
                       {entry.author === "admin"
                         && entry.deliveryStatus === "not-required" && (

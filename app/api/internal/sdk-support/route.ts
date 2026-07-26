@@ -361,15 +361,16 @@ export async function POST(request: Request) {
       );
     }
     try {
-      let report = await approveUserReportReplyDraft({
+      const result = await approveUserReportReplyDraft({
         draftId: replyDraftId,
         playerId,
         message,
       });
-      if (report.notificationStatus !== "sent") {
+      let report = result.report;
+      if (result.inserted || report.notificationStatus !== "sent") {
         report = (await deliverUserReportAdminNotification(report, {
-          idempotencyKey: `user-report-admin-followup-${replyDraftId}`,
-          body: message,
+          idempotencyKey: `user-report-admin-followup-${result.message.id}`,
+          body: result.message.body,
         })).report;
       }
       return Response.json({ report }, { status: 201 });

@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 import type { ContactCategory, ContactStatus } from "@/lib/contact-core";
 import type { SupportThreadMessage } from "@/lib/support-thread-core";
 
@@ -52,6 +58,7 @@ export function ContactThread({
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const requestIdRef = useRef<string | null>(null);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     if (!credentials.contactId || !credentials.accessToken) {
@@ -101,13 +108,14 @@ export function ContactThread({
     setSaving(true);
     setNotice("");
     try {
+      requestIdRef.current ??= crypto.randomUUID();
       const response = await fetch("/api/contact-thread", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contactId: credentials.contactId,
           accessToken: credentials.accessToken,
-          requestId: crypto.randomUUID(),
+          requestId: requestIdRef.current,
           message: body,
         }),
       });
@@ -115,6 +123,7 @@ export function ContactThread({
         contact?: PublicContact;
       } | null;
       if (!response.ok || !data?.contact) throw new Error("REPLY_FAILED");
+      requestIdRef.current = null;
       setContact(data.contact);
       setMessage("");
       setNotice("追記を送信し、状態をオープンへ戻しました。");
@@ -148,7 +157,7 @@ export function ContactThread({
       </div>
       <form className="space-y-3 border-t border-slate-200 pt-5" onSubmit={submit}>
         <label className="block text-sm font-black">追記・返信
-          <textarea className="mt-2 min-h-32 w-full rounded-lg border border-slate-300 px-3 py-2 font-normal" maxLength={3_000} value={message} onChange={(event) => setMessage(event.target.value)} />
+          <textarea className="mt-2 min-h-32 w-full rounded-lg border border-slate-300 px-3 py-2 font-normal" maxLength={3_000} value={message} onChange={(event) => { requestIdRef.current = null; setMessage(event.target.value); }} />
         </label>
         <button type="submit" disabled={saving || !message.trim()} className="rounded-lg bg-cyan-700 px-5 py-3 font-black text-white disabled:opacity-40">{saving ? "送信中…" : "追記を送信"}</button>
       </form>

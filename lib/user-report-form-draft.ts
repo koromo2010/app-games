@@ -4,6 +4,7 @@ export type UserReportFormDraft = {
   type: UserReportFormType;
   summary: string;
   details: string;
+  requestId?: string;
 };
 
 type DraftStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
@@ -34,6 +35,11 @@ function normalizeUserReportFormDraft(
     type: input.type,
     summary: input.summary.slice(0, 120),
     details: input.details.slice(0, 1_200),
+    ...(typeof input.requestId === "string"
+      && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+        .test(input.requestId)
+      ? { requestId: input.requestId.toLowerCase() }
+      : {}),
   };
 }
 

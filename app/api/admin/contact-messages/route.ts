@@ -54,11 +54,88 @@ export async function POST(request: Request) {
   try {
     const session = await requireFullSiteAdminSession();
     const body = await request.json().catch(() => null) as {
+      action?: unknown;
       contactId?: unknown;
+      messageId?: unknown;
       requestId?: unknown;
       message?: unknown;
       status?: unknown;
     } | null;
+    if (body?.action === "retry-email") {
+      const contactId = typeof body.contactId === "string"
+        ? body.contactId
+        : "";
+      const messageId = typeof body.messageId === "string"
+        ? body.messageId
+        : "";
+      const retryRequestId = typeof body.requestId === "string"
+        ? body.requestId.trim().slice(0, 120)
+        : "";
+      if (!contactId || !messageId || !retryRequestId) {
+        return Response.json(
+          { error: "CONTACT_REPLY_EMAIL_RETRY_INVALID" },
+          { status: 400 },
+        );
+      }
+      const existing = await loadContactMessage(contactId);
+      const existingMessage = existing?.messages.find(
+        (entry) => entry.id === messageId && entry.author === "admin",
+      );
+      if (!existing || !existingMessage) {
+        return Response.json(
+          { error: "CONTACT_REPLY_MESSAGE_NOT_FOUND" },
+          { status: 404 },
+        );
+      }
+      if (
+        existingMessage.deliveryStatus !== "failed"
+        && existingMessage.deliveryStatus !== "pending"
+      ) {
+        return Response.json(
+          { error: "CONTACT_REPLY_EMAIL_NOT_RETRYABLE" },
+          { status: 409 },
+        );
+      }
+      await updateContactThreadMessageDelivery(
+        existing.id,
+        existingMessage.id,
+        "pending",
+      );
+      const threadUrl = new URL("/contact/thread", request.url);
+      threadUrl.hash = new URLSearchParams({
+        id: existing.id,
+        access: createContactThreadToken(existing.id),
+      }).toString();
+      const deliveryStatus = await sendSupportReplyEmail({
+        to: existing.email,
+        subject: `【Game Fields】お問い合わせへの返信 ${existing.id}`,
+        body: existingMessage.body,
+        threadUrl: threadUrl.toString(),
+        idempotencyKey: `contact-reply-${existingMessage.id}`,
+      }).then(() => "sent" as const).catch(() => "failed" as const);
+      const contact = await updateContactThreadMessageDelivery(
+        existing.id,
+        existingMessage.id,
+        deliveryStatus,
+      );
+      await appendSiteAdminAuditLog(
+        request,
+        session,
+        "contact-message.reply-email-retry",
+        contact.id,
+        null,
+        {
+          messageId: existingMessage.id,
+          deliveryStatus,
+          retryRequestId,
+        },
+      );
+      telemetry.success("contact-message.reply-email", {
+        action: deliveryStatus,
+        channel: "email",
+      });
+      return Response.json({ contact, deliveryStatus });
+    }
     const message = typeof body?.message === "string"
       ? body.message.trim().slice(0, 3_000)
       : "";
@@ -91,13 +168,20 @@ export async function POST(request: Request) {
       id: result.contact.id,
       access: createContactThreadToken(result.contact.id),
     }).toString();
-    const deliveryStatus = await sendSupportReplyEmail({
-      to: result.contact.email,
-      subject: `【Game Fields】お問い合わせへの返信 ${result.contact.id}`,
-      body: message,
-      threadUrl: threadUrl.toString(),
-      idempotencyKey: `contact-reply-${result.message.id}`,
-    }).then(() => "sent" as const).catch(() => "failed" as const);
+    let deliveryStatus = result.message.deliveryStatus;
+    if (
+      result.inserted
+      || deliveryStatus === "pending"
+      || deliveryStatus === "failed"
+    ) {
+      deliveryStatus = await sendSupportReplyEmail({
+        to: result.contact.email,
+        subject: `【Game Fields】お問い合わせへの返信 ${result.contact.id}`,
+        body: result.message.body,
+        threadUrl: threadUrl.toString(),
+        idempotencyKey: `contact-reply-${result.message.id}`,
+      }).then(() => "sent" as const).catch(() => "failed" as const);
+    }
     const contact = await updateContactThreadMessageDelivery(
       result.contact.id,
       result.message.id,

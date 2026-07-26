@@ -33,10 +33,11 @@ export async function requestPlayerPasswordReset(emailInput: string, requestOrig
 
   const email = normalizeEmail(emailInput);
   const limitKey = `${requestLimitKeyPrefix}${digest(email)}`;
+  const attemptId = randomBytes(16).toString("hex");
   const allowed = await redisCommand<"OK" | null>([
     "SET",
     limitKey,
-    "1",
+    attemptId,
     "NX",
     "EX",
     requestLimitSeconds.toString(),
@@ -64,7 +65,20 @@ export async function requestPlayerPasswordReset(emailInput: string, requestOrig
       resetUrl,
     });
   } catch (error) {
-    await redisCommand<number>(["DEL", tokenKey]).catch(() => undefined);
+    await redisCommand<number>([
+      "EVAL",
+      `
+        redis.call("DEL", KEYS[1])
+        if redis.call("GET", KEYS[2]) == ARGV[1] then
+          redis.call("DEL", KEYS[2])
+        end
+        return 1
+      `,
+      "2",
+      tokenKey,
+      limitKey,
+      attemptId,
+    ]).catch(() => undefined);
     throw error;
   }
 }

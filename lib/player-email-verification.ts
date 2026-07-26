@@ -63,13 +63,11 @@ async function sendPreparedPlayerEmailVerification(
     `
       redis.call("SET", KEYS[1], ARGV[1], "EX", ARGV[3])
       redis.call("SET", KEYS[2], ARGV[2], "EX", ARGV[3])
-      if KEYS[3] ~= KEYS[1] then redis.call("DEL", KEYS[3]) end
       return 1
     `,
-    "3",
+    "2",
     tokenKey,
     playerPendingKey,
-    previousTokenKey,
     JSON.stringify(payload),
     tokenDigest,
     verificationTtlSeconds.toString(),
@@ -87,18 +85,47 @@ async function sendPreparedPlayerEmailVerification(
       "EVAL",
       `
         if redis.call("GET", KEYS[2]) == ARGV[1] then
-          redis.call("DEL", KEYS[1], KEYS[2])
+          if ARGV[2] ~= "" and redis.call("EXISTS", KEYS[3]) == 1 then
+            local previousTtl = redis.call("TTL", KEYS[3])
+            if previousTtl > 0 then
+              redis.call("SET", KEYS[2], ARGV[2], "EX", previousTtl)
+            else
+              redis.call("DEL", KEYS[2])
+            end
+          else
+            redis.call("DEL", KEYS[2])
+          end
+          redis.call("DEL", KEYS[1])
           return 1
         end
         return 0
       `,
-      "2",
+      "3",
       tokenKey,
       playerPendingKey,
+      previousTokenKey,
       tokenDigest,
+      previousDigest ?? "",
     ]).catch(() => undefined);
     throw error;
   }
+
+  await redisCommand<number>([
+    "EVAL",
+    `
+      if redis.call("GET", KEYS[2]) ~= ARGV[1] then return 0 end
+      if ARGV[2] ~= "" and KEYS[3] ~= KEYS[1] then
+        redis.call("DEL", KEYS[3])
+      end
+      return 1
+    `,
+    "3",
+    tokenKey,
+    playerPendingKey,
+    previousTokenKey,
+    tokenDigest,
+    previousDigest ?? "",
+  ]);
 
   return { session: prepared.session, pending: true };
 }

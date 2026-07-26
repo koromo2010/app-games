@@ -110,7 +110,7 @@ export async function POST(request: Request) {
       body: message,
       status: "open",
     });
-    if (result.inserted) {
+    if (result.inserted || result.contact.notificationStatus !== "sent") {
       let notificationStatus: "sent" | "failed" = "sent";
       let notificationErrorCode: string | null = null;
       try {

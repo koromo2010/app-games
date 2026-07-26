@@ -1,5 +1,9 @@
 import { isContactCategory } from "@/lib/contact-core";
-import { saveContactMessage, updateContactNotificationStatus } from "@/lib/contact-store";
+import {
+  loadContactMessage,
+  saveContactMessage,
+  updateContactNotificationStatus,
+} from "@/lib/contact-store";
 import {
   sendContactReceiptEmail,
   sendOperationsAlertEmail,
@@ -23,43 +27,68 @@ export async function POST(request: Request) {
   try { body = await request.json() as Record<string, unknown>; } catch { return Response.json({ error: "Invalid request" }, { status: 400 }); }
   const category = isContactCategory(body.category) ? body.category : null;
   const name = clean(body.name, 80); const email = clean(body.email, 254); const message = clean(body.message, 3000);
-  if (!category || !email || !message || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return Response.json({ error: "Required fields are missing" }, { status: 400 });
+  const requestId = clean(body.requestId, 36).toLowerCase();
+  if (
+    !category
+    || !email
+    || !message
+    || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+    || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+      .test(requestId)
+  ) return Response.json({ error: "Required fields are missing" }, { status: 400 });
   try {
     const playerId = await getAuthenticatedPlayerId().catch(() => null);
-    const contact = await saveContactMessage({
+    const saved = await saveContactMessage({
       category,
       name,
       email: email.toLocaleLowerCase("en-US"),
       message,
       playerId,
+    }, {
+      contactId: `contact_${requestId}`,
     });
+    const contact = await loadContactMessage(saved.id);
+    if (!contact) throw new Error("CONTACT_MESSAGE_SAVE_FAILED");
     const threadUrl = new URL("/contact/thread", request.url);
     threadUrl.hash = new URLSearchParams({
       id: contact.id,
       access: createContactThreadToken(contact.id),
     }).toString();
+    const shouldNotify = saved.inserted
+      || contact.notificationStatus !== "sent";
     const [notification] = await Promise.all([
-      sendOperationsAlertEmail({
-        audience: "contacts",
-        replyTo: email,
-        subject: `【GAME FIELDS】お問い合わせ ${category}`,
-        lines: [`ID: ${contact.id}`, `Name: ${name || "未入力"}`, `Email: ${email}`, "", message],
-        idempotencyKey: `contact-admin-notification-${contact.id}`,
-      }).then(() => ({
-        status: "sent" as const,
-        errorCode: null,
-      })).catch((error) => {
-        telemetry.failure("contact.admin-notification", error, 502, {
-          action: "initial",
-          channel: "email",
-        });
-        return {
-          status: "failed" as const,
-          errorCode: observabilityErrorCode(error),
-        };
-      }),
+      shouldNotify
+        ? sendOperationsAlertEmail({
+          audience: "contacts",
+          replyTo: contact.email,
+          subject: `【GAME FIELDS】お問い合わせ ${contact.category}`,
+          lines: [
+            `ID: ${contact.id}`,
+            `Name: ${contact.name || "未入力"}`,
+            `Email: ${contact.email}`,
+            "",
+            contact.message,
+          ],
+          idempotencyKey: `contact-admin-notification-${contact.id}`,
+        }).then(() => ({
+          status: "sent" as const,
+          errorCode: null,
+        })).catch((error) => {
+          telemetry.failure("contact.admin-notification", error, 502, {
+            action: "initial",
+            channel: "email",
+          });
+          return {
+            status: "failed" as const,
+            errorCode: observabilityErrorCode(error),
+          };
+        })
+        : Promise.resolve({
+          status: "sent" as const,
+          errorCode: null,
+        }),
       sendContactReceiptEmail({
-        to: email,
+        to: contact.email,
         contactId: contact.id,
         threadUrl: threadUrl.toString(),
       }).catch((error) => {
@@ -69,24 +98,40 @@ export async function POST(request: Request) {
         });
       }),
     ]);
-    await updateContactNotificationStatus(
-      contact.id,
-      notification.status,
-      notification.errorCode,
-    ).catch((error) => {
-      telemetry.failure("contact.notification-status", error, 503, {
-        action: notification.status,
+    let responseContact = contact;
+    if (shouldNotify) {
+      responseContact = await updateContactNotificationStatus(
+        contact.id,
+        notification.status,
+        notification.errorCode,
+      ).catch((error) => {
+        telemetry.failure("contact.notification-status", error, 503, {
+          action: notification.status,
+        });
+        return contact;
       });
-    });
+    }
     telemetry.success("contact.submit", {
       action: notification.status,
       channel: "email",
     });
     return Response.json(
-      { contact, thread: { url: threadUrl.toString() } },
-      { status: 201 },
+      { contact: responseContact, thread: { url: threadUrl.toString() } },
+      { status: saved.inserted ? 201 : 200 },
     );
   } catch (error) {
+    if (
+      error instanceof Error
+      && error.message === "CONTACT_MESSAGE_ID_CONFLICT"
+    ) {
+      telemetry.reject("contact.submit", 409, {
+        errorCode: "CONTACT_MESSAGE_ID_CONFLICT",
+      });
+      return Response.json(
+        { error: "Contact request conflict" },
+        { status: 409 },
+      );
+    }
     telemetry.failure("contact.submit", error, 503);
     return Response.json(
       { error: "Contact could not be saved" },

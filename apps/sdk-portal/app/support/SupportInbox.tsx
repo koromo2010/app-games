@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type {
   CreatorSupportReport,
   CreatorSupportStatus,
@@ -46,6 +46,7 @@ export function SupportInbox({
   const [notice, setNotice] = useState(
     initialLoadFailed ? "報告一覧を読み込めませんでした。" : "",
   );
+  const replyRequestIds = useRef<Record<string, string>>({});
 
   const visibleReports = useMemo(
     () => filter === "all"
@@ -78,12 +79,15 @@ export function SupportInbox({
     setSavingId(report.id);
     setNotice("");
     try {
+      const requestId = replyRequestIds.current[report.id]
+        ?? crypto.randomUUID();
+      replyRequestIds.current[report.id] = requestId;
       const response = await fetch("/api/support", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           reportId: report.id,
-          requestId: crypto.randomUUID(),
+          requestId,
           message,
         }),
       });
@@ -91,6 +95,7 @@ export function SupportInbox({
         report?: CreatorSupportReport;
       } | null;
       if (!response.ok || !data?.report) throw new Error("REPLY_FAILED");
+      delete replyRequestIds.current[report.id];
       setReports((current) => current.map((entry) => (
         entry.id === data.report!.id ? data.report! : entry
       )));
@@ -180,10 +185,13 @@ export function SupportInbox({
             id={`reply-${report.id}`}
             maxLength={3_000}
             value={drafts[report.id] ?? ""}
-            onChange={(event) => setDrafts((current) => ({
-              ...current,
-              [report.id]: event.target.value,
-            }))}
+            onChange={(event) => {
+              delete replyRequestIds.current[report.id];
+              setDrafts((current) => ({
+                ...current,
+                [report.id]: event.target.value,
+              }));
+            }}
             placeholder="確認結果や再現手順などを入力してください"
           />
           <div>

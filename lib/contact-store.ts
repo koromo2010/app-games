@@ -34,10 +34,14 @@ export async function saveContactMessage(input: {
   email: string;
   message: string;
   playerId?: string | null;
-}) {
+}, options: { contactId?: string } = {}) {
   const now = Date.now();
+  const contactId = options.contactId ?? `contact_${randomUUID()}`;
+  if (!/^contact_[0-9a-f-]{36}$/i.test(contactId)) {
+    throw new Error("CONTACT_MESSAGE_ID_INVALID");
+  }
   const contact: ContactMessage = {
-    id: `contact_${randomUUID()}`,
+    id: contactId,
     ...input,
     playerId: input.playerId?.trim() || null,
     status: "open",
@@ -48,9 +52,9 @@ export async function saveContactMessage(input: {
     createdAt: now,
     updatedAt: now,
   };
-  await redisCommand<number>([
+  const inserted = await redisCommand<number>([
     "EVAL",
-    "redis.call('SET',KEYS[1],ARGV[1],'EX',ARGV[3]); redis.call('LPUSH',KEYS[2],ARGV[2]); local removed=redis.call('LRANGE',KEYS[2],ARGV[4],-1); redis.call('LTRIM',KEYS[2],0,ARGV[5]); local prefix=string.sub(KEYS[1],1,string.len(KEYS[1])-string.len(ARGV[2])); for _,id in ipairs(removed) do redis.call('DEL',prefix..id) end; return 1",
+    "if redis.call('EXISTS',KEYS[1])==1 then return 0 end; redis.call('SET',KEYS[1],ARGV[1],'EX',ARGV[3]); redis.call('LPUSH',KEYS[2],ARGV[2]); local removed=redis.call('LRANGE',KEYS[2],ARGV[4],-1); redis.call('LTRIM',KEYS[2],0,ARGV[5]); local prefix=string.sub(KEYS[1],1,string.len(KEYS[1])-string.len(ARGV[2])); for _,id in ipairs(removed) do redis.call('DEL',prefix..id) end; return 1",
     "2",
     `${contactKeyPrefix}${contact.id}`,
     contactIndexKey,
@@ -60,7 +64,25 @@ export async function saveContactMessage(input: {
     String(contactMaximumCount),
     String(contactMaximumCount - 1),
   ]);
-  return { id: contact.id, createdAt: contact.createdAt };
+  if (inserted === 0) {
+    const existing = await loadContactMessage(contact.id);
+    if (
+      !existing
+      || existing.category !== contact.category
+      || existing.name !== contact.name
+      || existing.email !== contact.email
+      || existing.message !== contact.message
+      || existing.playerId !== contact.playerId
+    ) {
+      throw new Error("CONTACT_MESSAGE_ID_CONFLICT");
+    }
+    return {
+      id: existing.id,
+      createdAt: existing.createdAt,
+      inserted: false,
+    };
+  }
+  return { id: contact.id, createdAt: contact.createdAt, inserted: true };
 }
 
 export async function loadContactMessage(contactId: string) {
@@ -160,6 +182,13 @@ export async function appendContactThreadMessage(input: {
     const updated: ContactMessage = {
       ...current,
       status: input.status,
+      ...(input.author === "requester"
+        ? {
+          notificationStatus: "pending" as const,
+          notificationErrorCode: null,
+          notificationAttemptedAt: null,
+        }
+        : {}),
       messages: [...current.messages, message],
       updatedAt: now,
     };
