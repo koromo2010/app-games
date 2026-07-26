@@ -8,6 +8,7 @@ import {
 } from "../packages/sdk-preview-auth/src/index.ts";
 import {
   createPackageRuntimeAccess,
+  createPreviewSigningProbe,
 } from "../apps/sdk-portal/lib/preview-links.ts";
 
 const secret = "sdk-preview-test-secret-with-at-least-32-bytes";
@@ -86,6 +87,32 @@ test("main runtime access stays production-scoped when requested from develop", 
     );
     assert.equal(runtimeGrant?.environment, "production");
     assert.equal(runtimeGrant?.channel, "main");
+  } finally {
+    if (previousSecret === undefined) delete process.env.SDK_PREVIEW_SIGNING_SECRET;
+    else process.env.SDK_PREVIEW_SIGNING_SECRET = previousSecret;
+    if (previousRef === undefined) delete process.env.VERCEL_GIT_COMMIT_REF;
+    else process.env.VERCEL_GIT_COMMIT_REF = previousRef;
+    if (previousBaseUrl === undefined) delete process.env.SDK_PREVIEW_BASE_URL;
+    else process.env.SDK_PREVIEW_BASE_URL = previousBaseUrl;
+  }
+});
+
+test("SDK Portal signing probe is short-lived and scoped to the matching preview", () => {
+  const previousSecret = process.env.SDK_PREVIEW_SIGNING_SECRET;
+  const previousRef = process.env.VERCEL_GIT_COMMIT_REF;
+  const previousBaseUrl = process.env.SDK_PREVIEW_BASE_URL;
+  process.env.SDK_PREVIEW_SIGNING_SECRET = secret;
+  process.env.VERCEL_GIT_COMMIT_REF = "develop";
+  process.env.SDK_PREVIEW_BASE_URL = "https://preview-dev.example";
+  try {
+    const probe = createPreviewSigningProbe(1_000);
+    assert.equal(probe.url, "https://preview-dev.example/health/auth");
+    assert.equal(probe.expiresAt, 61_000);
+    const runtimeGrant = verifySdkPreviewToken(probe.token, secret, 1_001);
+    assert.equal(runtimeGrant?.audience, "package-server");
+    assert.equal(runtimeGrant?.environment, "development");
+    assert.equal(runtimeGrant?.channel, "candidate-preview");
+    assert.equal(runtimeGrant?.instanceId, "health-check");
   } finally {
     if (previousSecret === undefined) delete process.env.SDK_PREVIEW_SIGNING_SECRET;
     else process.env.SDK_PREVIEW_SIGNING_SECRET = previousSecret;

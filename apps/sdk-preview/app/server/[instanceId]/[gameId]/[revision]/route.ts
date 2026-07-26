@@ -7,6 +7,10 @@ import {
   GameSdkPortableRunnerError,
   runGameSdkPortableServer,
 } from "@/lib/server-runner";
+import {
+  logServerRuntimeAuthFailure,
+  serverRuntimeAuthFailure,
+} from "@/lib/server-runtime-auth";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -30,19 +34,18 @@ export async function POST(
   } catch {
     return Response.json({ error: "SERVER_RUNTIME_NOT_CONFIGURED" }, { status: 503 });
   }
-  if (
-    !grant
-    || grant.audience !== "package-server"
-    || grant.role !== "runner"
-    || grant.environment !== (
+  const authFailure = serverRuntimeAuthFailure(grant, {
+    environment: (
       process.env.VERCEL_GIT_COMMIT_REF === "main"
         ? "production"
         : "development"
-    )
-    || grant.instanceId !== params.instanceId
-    || grant.gameId !== params.gameId
-    || grant.revision !== params.revision
-  ) {
+    ),
+    instanceId: params.instanceId,
+    gameId: params.gameId,
+    revision: params.revision,
+  });
+  if (authFailure || !grant) {
+    logServerRuntimeAuthFailure(authFailure ?? "TOKEN_INVALID", "invoke");
     return Response.json({ error: "SERVER_RUNTIME_FORBIDDEN" }, { status: 403 });
   }
 

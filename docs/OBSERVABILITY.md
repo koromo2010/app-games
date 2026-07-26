@@ -49,6 +49,8 @@ GETポーリングの成功と通常の401/403/404は量とノイズが多いた
 | `settings.save` | 部屋設定既定値の保存結果。設定本文は記録しない |
 | `room.read` / `stats.read` / `settings.read` | 読み取り時の5xxのみ。成功ポーリングは記録しない |
 | `replay.record` / `replay.favorite` | プレイバック保存・お気に入り変更。説明本文は記録しない |
+| `game-sdk.preview-room` | 正式Preview Roomの作成・Command・Runtime接続結果 |
+| `sdk.preview-runner-auth` | SDK Previewのserver grant拒否理由。token・秘密値・利用者IDは記録しない |
 
 ## ログへ入れない情報
 
@@ -80,6 +82,11 @@ GETポーリングの成功と通常の401/403/404は量とノイズが多いた
 5. `outcome=conflict`、`rejected`、`failed` と `errorCode` を確認する。
 6. タイマー問題は同じ `roomRef` の `timer.expire` と通常Commandの順序を見る。
 7. 勝敗・レート問題は部屋の結果Commandと `stats.record` の `eventRef` を照合する。
+8. 正式PreviewのRoom作成問題は、本体の`game-sdk.preview-room`、Portalの
+   `/api/preview-runtime/<creator>/<game>`、Previewのserver routeを同じ時刻・revisionで
+   照合する。Previewの403は`event=sdk.preview-runner-auth`の安全な理由を確認する。
+9. SDK Portalの`/api/health`が`SDK_PREVIEW_SIGNING_MISMATCH`ならゲーム固有障害として
+   扱わず、対応するPortal／Preview Projectのbranch、署名鍵、environmentを確認する。
 
 利用者から報告を受ける場合は、合言葉やお題を聞かず「発生日時・ゲーム・部屋操作・表示されたエラー」だけを確認する。
 

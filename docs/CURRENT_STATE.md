@@ -54,6 +54,12 @@ devとmainの採用済みSDKアプリ情報は環境別DBに分離する。管�
 
 採用済みSDKゲームのAppSetとmanifestは不変のまま保持し、公開後に調整する表示名と広場カード画像は`config/sdk-game-presentations.ts`で管理する。現行の`ai-word-guess`は公開名「コトバに迫れ」と専用カード画像を使用する。
 
+正式PreviewのRoom作成は、SDK Portalが発行する短命なserver grantを使って
+SDK Previewのportable serverを呼ぶ。Portalの`/api/health`はDB schemaに加えて、
+対応Previewとの署名・環境scope一致を固定probeで確認する。実行時はネットワーク例外と
+408／502／503／504だけを1回再試行し、401／403の認証不整合は再試行で隠さず
+`GAME_SDK_REMOTE_RUNNER_AUTH_FAILED`として区別する。
+
 ## 共通LLMゲートウェイ
 
 ゲームからAIプロバイダーを利用する処理は `lib/game-llm.ts` を経由する。ゲーム固有ルートからOpenAI、Gemini、Groqを直接呼ばない。

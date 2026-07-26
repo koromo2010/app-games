@@ -21,6 +21,8 @@ import type { GameSdkFeedbackCapture } from "./game-sdk-feedback-store.ts";
 
 const MAX_RESOURCE_EFFECTS = 8;
 const MAX_RUNNER_RESPONSE_BYTES = 1024 * 1024;
+const TRANSIENT_RUNNER_STATUSES = new Set([408, 502, 503, 504]);
+const RUNNER_FETCH_ATTEMPTS = 2;
 
 export type GameSdkRemoteBundleDefinition = {
   manifest: GameSdkManifest;
@@ -75,6 +77,41 @@ function parseRunnerResponse(value: unknown): GameSdkPortableServerResponse {
   return value as GameSdkPortableServerResponse;
 }
 
+async function fetchRunnerResponse(
+  definition: Pick<
+    GameSdkRemoteBundleDefinition,
+    "serverRuntimeToken" | "serverRuntimeUrl"
+  >,
+  request: GameSdkPortableServerRequest,
+  fetchRunner: typeof fetch,
+) {
+  for (let attempt = 0; attempt < RUNNER_FETCH_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetchRunner(definition.serverRuntimeUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${definition.serverRuntimeToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(request),
+        cache: "no-store",
+      });
+      if (
+        attempt + 1 < RUNNER_FETCH_ATTEMPTS
+        && TRANSIENT_RUNNER_STATUSES.has(response.status)
+      ) {
+        continue;
+      }
+      return response;
+    } catch {
+      if (attempt + 1 >= RUNNER_FETCH_ATTEMPTS) {
+        throw new Error("GAME_SDK_REMOTE_RUNNER_UNAVAILABLE");
+      }
+    }
+  }
+  throw new Error("GAME_SDK_REMOTE_RUNNER_UNAVAILABLE");
+}
+
 export function createGameSdkRemoteServerModule(
   definition: GameSdkRemoteBundleDefinition,
   fetchRunner: typeof fetch = fetch,
@@ -91,15 +128,11 @@ export function createGameSdkRemoteServerModule(
         invocation,
         effects,
       };
-      const response = await fetchRunner(definition.serverRuntimeUrl, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${definition.serverRuntimeToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(request),
-        cache: "no-store",
-      });
+      const response = await fetchRunnerResponse(
+        definition,
+        request,
+        fetchRunner,
+      );
       const declaredLength = Number(response.headers.get("content-length") ?? 0);
       if (declaredLength > MAX_RUNNER_RESPONSE_BYTES) {
         throw new Error("GAME_SDK_REMOTE_RESPONSE_TOO_LARGE");
@@ -107,6 +140,9 @@ export function createGameSdkRemoteServerModule(
       const text = await response.text();
       if (Buffer.byteLength(text, "utf8") > MAX_RUNNER_RESPONSE_BYTES) {
         throw new Error("GAME_SDK_REMOTE_RESPONSE_TOO_LARGE");
+      }
+      if (response.status === 401 || response.status === 403) {
+        throw new Error("GAME_SDK_REMOTE_RUNNER_AUTH_FAILED");
       }
       if (!response.ok) throw new Error("GAME_SDK_REMOTE_RUNNER_UNAVAILABLE");
       let payload: unknown;

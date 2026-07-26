@@ -631,3 +631,24 @@ AI承認追記は新しいメッセージのinsert結果で通知を判定する
 新しい配送成功まで以前のリンクを残し、失敗時は以前のpending tokenへ戻す。利用者向け
 各フォームは送信成功までrequest IDを保持し、serverはrequest IDからrecord／message IDを
 決定して同一操作の再試行を冪等化する。
+
+## 2026-07-27 SDK正式Previewの新しい配備だけserver grantが403になる
+
+状態: 修正実装済み（2026-07-27、回帰テスト・lint・3 Project buildあり、dev配備確認待ち）
+
+`moi-dev`の正式PreviewでスカルのRoom作成を行うと、本体
+`POST /api/sdk-preview/moi-lab/games/skull/rooms`が503
+`GAME_SDK_REMOTE_RUNNER_UNAVAILABLE`を返した。同時刻のSDK Portalによる
+`GET /api/preview-runtime/moi-lab/skull`は200で新しいgrantを発行していたが、直後の
+SDK Preview `POST /server/moi-lab/skull/<revision>`は403だった。
+
+一つ前のSDK Preview Deploymentでは同じスカルrevisionのserver routeが24時間で
+696件すべて200だったのに対し、新しいDeploymentでは4件すべて403だった。AppSetや
+スカル固有処理へ到達する前のserver grant検証で失敗しており、共通Platformの
+配備世代・署名またはscope不整合である。従来は403を一律に返し、signature、
+environment、instance、game、revisionのどこが不一致かをログから判別できなかった。
+
+SDK Previewはgrant拒否を安全な理由別の構造化ログへ記録する。SDK Portalのhealthは
+対応Previewへ固定scopeの署名probeを送り、Room作成前にPortal／Previewの署名・環境一致を
+検出する。本体remote runnerはネットワーク例外と408／502／503／504だけを1回再試行し、
+401／403は専用の`GAME_SDK_REMOTE_RUNNER_AUTH_FAILED`として利用者表示と運用調査を分ける。

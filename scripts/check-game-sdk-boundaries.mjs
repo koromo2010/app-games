@@ -31,6 +31,10 @@ const packageServerRouteFile = join(
   root,
   "apps/sdk-preview/app/server/[instanceId]/[gameId]/[revision]/route.ts",
 );
+const packageServerAuthFile = join(
+  root,
+  "apps/sdk-preview/lib/server-runtime-auth.ts",
+);
 const packageAssetRouteFile = join(
   root,
   "apps/sdk-preview/app/package/[instanceId]/[gameId]/[revision]/[[...assetPath]]/route.ts",
@@ -165,13 +169,24 @@ for (const token of [
 }
 const packageServerRouteSource = readFileSync(packageServerRouteFile, "utf8");
 for (const token of [
-  'grant.audience !== "package-server"',
+  "serverRuntimeAuthFailure",
   "grant.bundleSha256",
   "SERVER_RUNTIME_BUNDLE_HASH_MISMATCH",
   'assetPath: "server.bundle.js"',
 ]) {
   if (!packageServerRouteSource.includes(token)) {
     failures.push(`${relative(root, packageServerRouteFile)}: hash固定server実行境界 ${token} がありません。`);
+  }
+}
+const packageServerAuthSource = readFileSync(packageServerAuthFile, "utf8");
+for (const token of [
+  'grant.audience !== "package-server"',
+  'grant.role !== "runner"',
+  "grant.environment !== scope.environment",
+  "grant.revision !== scope.revision",
+]) {
+  if (!packageServerAuthSource.includes(token)) {
+    failures.push(`${relative(root, packageServerAuthFile)}: server grant検証境界 ${token} がありません。`);
   }
 }
 const packageAssetRouteSource = readFileSync(packageAssetRouteFile, "utf8");
