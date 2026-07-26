@@ -53,6 +53,7 @@ try {
   const replacements = new Map([
     ["__SDK_VERSION__", version],
     ["__PLATFORM_VERSION__", platformRelease.platformVersion],
+    ["__DOWNLOAD_ME_VERSION__", String(platformRelease.downloadMeVersion)],
     ["__SDK_HANDSHAKE_VERSION__", String(platformRelease.sdkHandshakeVersion)],
     ["__SDK_CONTRACT_VERSION__", String(platformRelease.sdkContractVersion)],
     ["__STARTER_REF__", platformRelease.starterRef],
@@ -73,7 +74,7 @@ try {
 
   const size = statSync(outputPath).size;
   console.log(`[game-sdk-starter] ${outputPath}`);
-  console.log(`[game-sdk-starter] SDK v${version}, ${entries.length} files, ${size} bytes`);
+  console.log(`[game-sdk-starter] SDK v${version}, DownloadMe v${platformRelease.downloadMeVersion}, ${entries.length} files, ${size} bytes`);
 } finally {
   rmSync(temporaryDirectory, { recursive: true, force: true });
 }
