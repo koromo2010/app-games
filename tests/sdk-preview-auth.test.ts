@@ -226,6 +226,18 @@ test("isolated preview obtains only a cacheable public key during key rollout", 
   assert.equal(fetchCount, 1);
 });
 
+test("production preview uses its pinned public key without runtime discovery", async () => {
+  let fetchCount = 0;
+  assert.equal(await verifyPortalPreviewGrant("invalid-token", {
+    env: { VERCEL_GIT_COMMIT_REF: "main" },
+    fetchPublicKey: async () => {
+      fetchCount += 1;
+      throw new Error("production must not fetch the Portal public key");
+    },
+  }), null);
+  assert.equal(fetchCount, 0);
+});
+
 test("isolated preview rejects invalid public keys and unavailable key discovery", async () => {
   resetPreviewPublicKeyCacheForTests();
   assert.equal(await verifyPortalPreviewGrant("invalid-token", {

@@ -304,7 +304,7 @@ SDK `llm` adapter、module lab、Preview中継API `/api/sdk-preview/llm`も本�
 
 | キー | `app-games-sdk` | `app-games-sdk-preview` | Vercel対象 | 状態 |
 | --- | --- | --- | --- | --- |
-| `SDK_PREVIEW_SIGNING_SECRET` | Project Variable、Sensitive。Ed25519秘密鍵導出とgrant署名 | Project Variable、Sensitive。Preview内Cookie／asset署名だけ | Production | 2026-07-27の本番403で同一値との記録を撤回。Ed25519公開鍵検証へ移行し、cross-project同値依存と汎用検証APIを廃止。公開鍵固定後の再デプロイ・実機確認待ち |
+| `SDK_PREVIEW_SIGNING_SECRET` | Project Variable、Sensitive。Ed25519秘密鍵導出とgrant署名 | Project Variable、Sensitive。Preview内Cookie／asset署名だけ | Production | 2026-07-27の本番403で同一値との記録を撤回。Ed25519公開鍵検証へ移行し、cross-project同値依存と汎用検証APIを廃止。本番公開鍵はPortalの第1段階Deploymentから取得してコードへ固定済み。第2段階再デプロイ・実機確認待ち |
 | `SDK_MOCK_GITHUB_REPOSITORY` | `koromo2010/game-fields-sdk-mocks` | 同じprivate repository | Production | 両Projectへ登録・再デプロイ済み |
 | `SDK_MOCK_GITHUB_WRITE_TOKEN` | Project Variable、Sensitive | 設定禁止・未設定 | Production | 対象repositoryのContents read/writeだけ。90日期限 |
 | `SDK_MOCK_GITHUB_READ_TOKEN` | 設定禁止・未設定 | Project Variable、Sensitive | Production | 対象repositoryのContents read-onlyだけ。90日期限 |
@@ -317,7 +317,7 @@ SDK `llm` adapter、module lab、Preview中継API `/api/sdk-preview/llm`も本�
 | private package Git | `koromo2010/game-fields-sdk-mocks`をPrivateで作成済み。Portal書込資格とPreview読取資格を分離 | 本番package保存後に専用branch・commit・読取を実機確認 |
 | Portal Vercel Project | `app-games-sdk`、Root Directory `apps/sdk-portal`、Production Branch `main`。`main@0e7889c`のDeploymentがREADY。`app-games-sdk-neon`はProductionだけへLink済み | RedisをLinkし、develop統合後のbuild migrationで`schemaVersion: 4`を確認 |
 | Preview Vercel Project | `app-games-sdk-preview`、Root Directory `apps/sdk-preview`、Node.js 24.x、Production Branch `main`。production専用のasset署名鍵・Git読取資格だけを登録 | Portal grant検証委譲版を再デプロイし、正式Room作成を実機確認 |
-| Preview domain | `preview.game-fields.com`割当済み・Valid Configuration。本番Room作成時に旧cross-project HMAC検証が403を返すことを確認 | Ed25519公開鍵固定後に`/health`、fragment交換、package client、server runnerを実機確認 |
+| Preview domain | `preview.game-fields.com`割当済み・Valid Configuration。第1段階Deploymentで`grantVersion: 4`／`grantVerification: ed25519`を確認し、本番公開鍵をコードへ固定済み | 第2段階Deployment後に`/health`、fragment交換、package client、server runnerを実機確認 |
 
 本番PreviewにはSDK DB、Redis、Blob、管理者資格、語彙DB、LLM資格、Git書込資格を追加しない。
 `app-games-sdk`と`app-games-sdk-preview`の`Production Branch`は`main`へ統一済み。

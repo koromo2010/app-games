@@ -4776,8 +4776,14 @@
 - 変更ファイルのESLint、本体・SDK Portal・SDK Previewのproduction buildに成功した。
 - `verify`のversions、環境台帳、ゲーム標準、SDK境界、SDK Help、migration、Shell契約は成功した。
 - 全体ESLintだけは今回未変更の`GameSdkShellHeader.tsx`と`site-admin-passkey-client.ts`に残る既知2件で失敗した。
+- 第1段階を`main@696760f`へ非force反映し、本番PortalとPreviewの対象Deploymentが
+  READYになった。`sdk.game-fields.com/.well-known/sdk-preview-public-key`は
+  production用Ed25519公開鍵、`preview.game-fields.com/health`は
+  `grantVersion: 4`、`grantVerification: ed25519`を返した。
+- 本番Portalから取得した公開鍵をPreviewのproduction設定へ固定し、productionでは
+  公開鍵取得fetchが一度も呼ばれない回帰テストを追加した。
 
 ### 未対応・保留
 
-- 第1段階をmainへ反映し、Portalのproduction公開鍵を取得する。
-- 取得した公開鍵をPreviewへ固定して再検証・再公開し、本番Room作成を実機確認する。
+- 公開鍵固定を第2段階としてmainへ反映し、本番3プロジェクトのDeploymentを確認する。
+- 本番の正式画面からRoomを作成し、fragment交換とportable server runnerを実機確認する。

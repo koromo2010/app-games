@@ -9,7 +9,7 @@ const PUBLIC_KEY_TIMEOUT_MS = 2_000;
 
 type PreviewEnvironment = "production" | "development";
 const pinnedPreviewPublicKeys = {
-  production: "",
+  production: "MCowBQYDK2VwAyEAAV6Uwh-eEJ9e2aIlzFtjKsuxT1INe-6kwrbAu3lFOYE",
   development: "",
 } as const;
 

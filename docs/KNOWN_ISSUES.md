@@ -6,7 +6,7 @@
 
 ## 2026-07-27 SDK本番の正式Room作成がPreviewの403で失敗する
 
-状態: セキュリティ再修正実装済み・公開鍵固定／本番再デプロイ／実機確認待ち（2026-07-27、回帰テスト追加）
+状態: セキュリティ再修正実装済み・本番公開鍵取得／コード固定済み・第2段階配備／実機確認待ち（2026-07-27、回帰テスト追加）
 
 `game-fields.com`の`POST /api/game-sdk/ai-word-guess/rooms`は503
 `GAME_SDK_REMOTE_RUNNER_UNAVAILABLE`、同時刻の`preview.game-fields.com`は
