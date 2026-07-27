@@ -9,6 +9,15 @@ type PasskeyResponse = {
   stage?: string;
   verified?: boolean;
   options?: unknown;
+  session?: SiteAdminPublicSession;
+};
+
+export type SiteAdminPublicSession = {
+  scope: "full" | "recovery";
+  method: "passkey" | "recovery-code" | "master";
+  email: string | null;
+  expiresAt: number;
+  mfaAt: number | null;
 };
 
 async function responseJson(response: Response) {
@@ -49,6 +58,10 @@ async function verifyRecoveryCodeForStepUp() {
   if (!response.ok || !data?.verified) {
     throw new Error(diagnosticError(data, "ADMIN_RECOVERY_CODE_STEP_UP_FAILED"));
   }
+  if (!data.session || data.session.scope !== "full" || data.session.method !== "recovery-code") {
+    throw new Error("ADMIN_RECOVERY_CODE_STEP_UP_FAILED");
+  }
+  return data.session;
 }
 
 export async function ensureSiteAdminStepUp() {
@@ -63,7 +76,7 @@ export async function ensureSiteAdminStepUp() {
 
   const beginData = await responseJson(begin);
   if (!begin.ok) throw new Error(`STEP_UP_BEGIN\n${diagnosticError(beginData, "ADMIN_STEP_UP_FAILED")}`);
-  if (beginData?.verified) return;
+  if (beginData?.verified) return null;
   if (!beginData?.options) throw new Error(`STEP_UP_BEGIN_OPTIONS\n${diagnosticError(beginData, "ADMIN_STEP_UP_FAILED")}`);
 
   let credential;
@@ -73,8 +86,7 @@ export async function ensureSiteAdminStepUp() {
     });
   } catch (error) {
     if (!isCancelledWebAuthn(error)) throw stagedError("STEP_UP_BROWSER", error);
-    await verifyRecoveryCodeForStepUp();
-    return;
+    return await verifyRecoveryCodeForStepUp();
   }
 
   let verify: Response;
@@ -90,6 +102,7 @@ export async function ensureSiteAdminStepUp() {
   if (!verify.ok || !verifyData?.verified) {
     throw new Error(`STEP_UP_VERIFY\n${diagnosticError(verifyData, "ADMIN_STEP_UP_FAILED")}`);
   }
+  return verifyData.session ?? null;
 }
 
 export async function addSiteAdminPasskey() {

@@ -228,7 +228,12 @@ export function SiteAdminPanel({ showPreviewVocabularyMigrations, releaseManagem
         showPreviewMigrations={showPreviewVocabularyMigrations}
       />}
       {section === "hyperparameters" && <AdminHyperparametersPanel onAuthExpired={authExpired} />}
-      {section === "accounts" && <AdminAccountsPanel onAuthExpired={authExpired} recoveryMode={session?.scope === "recovery"} currentEmail={session?.email ?? null} />}
+      {section === "accounts" && <AdminAccountsPanel
+        onAuthExpired={authExpired}
+        onRecoveryCodeSessionEstablished={() => setSession((current) => current ? { ...current, method: "recovery-code", mfaAt: Date.now() } : current)}
+        recoveryMode={session?.scope === "recovery"}
+        currentEmail={session?.email ?? null}
+      />}
       {section === "audit" && <AdminAuditPanel onAuthExpired={authExpired} />}
       {section === "site-settings" &&
       <form onSubmit={save} className="mx-auto grid max-w-6xl gap-6 px-4 py-8 lg:grid-cols-[minmax(0,1fr)_380px]">
