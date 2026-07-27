@@ -22,8 +22,11 @@ export async function siteAdminRegistrationOptions(email: string) {
     attestationType: "none",
     timeout: 120_000,
     excludeCredentials: existing.map((passkey) => ({ id: passkey.credentialId })),
-    authenticatorSelection: { residentKey: "required", userVerification: "required" },
-    preferredAuthenticatorType: "localDevice",
+    authenticatorSelection: {
+      authenticatorAttachment: "platform",
+      residentKey: "required",
+      userVerification: "required",
+    },
   });
 }
 

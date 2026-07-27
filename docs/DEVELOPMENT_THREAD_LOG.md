@@ -4928,3 +4928,32 @@
 - 修正commitをmainへ非force反映し、本体、SDK Portal、SDK Previewの
   Production Deploymentと公開healthを確認する。
 - 本番管理画面から「コトバに迫れ」を再昇格し、package commitと正式Room作成を確認する。
+## 2026-07-27 — 管理者パスキー登録を端末内認証器へ限定
+
+### 利用者からの要望
+
+- 本番の管理者パスキー再登録で、Windows Helloではなくセキュリティキーの登録画面へ誘導される問題を解消する。
+
+### 判断
+
+- `preferredAuthenticatorType: "localDevice"`はブラウザへの推奨にすぎず、別の認証器を選択できる。SimpleWebAuthnでは同指定が`authenticatorSelection.authenticatorAttachment`を上書きするため、Windows Hello等の端末内認証器を必須にはできていなかった。
+- 管理者パスキーの登録は`authenticatorAttachment: "platform"`へ限定し、discoverable credentialと本人確認の必須条件は維持する。
+- 既存パスキーの認証optionsは変更せず、登録済みcredential IDの指定とtransport hintを渡さない現在の互換処理を維持する。
+
+### 実施結果
+
+- 管理者パスキー登録optionsから推奨hintを除き、端末内platform authenticatorを必須化した。
+- 現行管理者MFA仕様と回帰テストを更新した。
+
+### 検証
+
+- 管理者パスキー登録・認証と復旧コードstep-upの対象4テストに成功した。
+- SimpleWebAuthn 13.3.2の実出力で`authenticatorAttachment: "platform"`、`residentKey: "required"`、`userVerification: "required"`が保持され、`hints`が空になることを確認した。
+- `npm run verify`に成功し、環境台帳、SDK境界、migration、Shell契約、lintを含む静的gateを通過した。
+- `npm test`に成功し、全585テストが通過した。
+- `npm run build`に成功し、本体production build、TypeScript検査、77ページ生成を完了した。
+
+### 未対応・保留
+
+- 変更はローカルのみで、mainへの反映と本番Deployment確認は未実施。
+- 本番反映後、Windows端末の再登録でWindows HelloのPIN・指紋・顔認証へ進むことを実機確認する。

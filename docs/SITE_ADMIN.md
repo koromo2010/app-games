@@ -6,7 +6,7 @@
 
 - サーバー環境変数 `SITE_ADMIN_PASSWORD` を推奨し、未設定時だけ既存の `DEBUG_MODE_PASSWORD` を互換利用する。
 - WebAuthnは環境ごとに`SITE_ADMIN_WEBAUTHN_ORIGIN`を設定する。本番は`https://game-fields.com`、devは`https://dev.game-fields.com`とし、複数許可する場合はカンマ区切りにする。`SITE_ADMIN_WEBAUTHN_RP_ID`は通常設定せず、既定の`game-fields.com`を使う。
-- 新規パスキーは端末内platform authenticatorかつdiscoverable credentialを必須にする。認証時は管理者DBへ登録済みのcredential IDを指定するが、保存済みtransport hintは渡さない。これにより既存の非discoverableなWindows Helloも選択でき、古い`usb`／`hybrid` hintによる外付けセキュリティキーへの誤誘導を防ぐ。
+- 新規パスキーは`authenticatorAttachment: "platform"`により端末内platform authenticatorを必須とし、discoverable credentialと本人確認も必須にする。候補を優先するだけのWebAuthn hintは使わず、外付けセキュリティキーや別端末を登録候補にしない。認証時は管理者DBへ登録済みのcredential IDを指定するが、保存済みtransport hintは渡さない。これにより既存の非discoverableなWindows Helloも選択でき、古い`usb`／`hybrid` hintによる外付けセキュリティキーへの誤誘導を防ぐ。
 - プレイヤーログイン、非公開ゲームキーとは共有しない。管理画面CookieはプレイヤーCookieと分離するが、登録済み管理者メールとプレイヤーの所有確認済み復旧メールが一致すると、そのプレイヤーへデバッグ資格を自動付与する。未確認メールは一致しても権限判定に使わない。
 - 成功時は署名付きHttpOnly Cookie `game-fields-site-admin` を発行する。
 - CookieはSameSite=Strict、本番Secure、全パス有効、12時間で失効する。
