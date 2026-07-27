@@ -5,7 +5,7 @@ import {
   revokePlayerDebugAccess,
 } from "@/lib/player-debug-access-admin-store";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
-import { requireRecentSiteAdminMfa, requireSiteAdminSession, siteAdminAuthorizationError } from "@/lib/site-admin-auth";
+import { requireFullSiteAdminSession, requireRecentSiteAdminMfa, siteAdminAuthorizationError } from "@/lib/site-admin-auth";
 import { appendSiteAdminAuditLog } from "@/lib/site-admin-passkey-store";
 
 export const runtime = "nodejs";
@@ -22,7 +22,7 @@ function errorResponse(error: unknown) {
 
 export async function GET(request: Request) {
   try {
-    await requireSiteAdminSession();
+    await requireFullSiteAdminSession();
     const search = new URL(request.url).searchParams.get("q") ?? "";
     return Response.json({ players: await listPlayerDebugAccessCandidates(search) }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {

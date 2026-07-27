@@ -670,3 +670,24 @@ Team Shared Variableを再Linkして再デプロイし、Portal healthの200、
 
 初回投稿は「内容」に一度だけ表示し、「返信・追記」は保存済み追加メッセージがある場合
 だけ表示する。会話データ、メール本文、SDK Portalと問い合わせ者向け会話画面は変更しない。
+## 2026-07-27 管理者パスキーの登録方針と復旧権限が不整合
+
+状態: 修正済み・dev実機確認待ち（2026-07-27、登録・認証・復旧scope回帰テストあり）
+
+管理者パスキーは端末内認証器を要件としていたが、登録optionsは
+`preferredAuthenticatorType: "localDevice"`という推奨だけで、
+`authenticatorAttachment: "platform"`を強制していなかった。このためUSBキーとして
+登録された資格情報を、後から認証側だけ`internal`へ限定すると、Windows Helloに
+一致する資格情報がなくログインできなかった。
+
+さらに、緊急用のbreak-glass復旧画面は「設定変更不可」と表示していたが、
+管理者アカウント保存・削除APIは`recovery` scopeのとき直近MFA検査を省略しており、
+マスターパスワードだけで管理者追加、パスワード更新、削除ができた。画面から隠れた
+通常管理APIの一部も`recovery` scopeで読取可能だった。
+
+新規登録はplatform attachment、discoverable credential、user verification、
+`internal` transportをすべて必須にした。復旧コード利用後はWindows Hello再登録へ
+誘導し、登録成功後に通常セッションへ切り替える。端末内パスキーが残る場合だけ、
+古い外部キー登録を削除できる。break-glassは管理者一覧、ダッシュボード、監査ログの
+読取とMFAリセットだけに制限し、管理者追加・更新・削除と通常管理APIをサーバー側で
+拒否する。

@@ -1,6 +1,6 @@
 import { loadAdminHyperparameterCatalog } from "@/lib/admin-hyperparameters";
 import { appendSiteAdminAuditLog } from "@/lib/site-admin-passkey-store";
-import { isSiteAdminConfigurationError, requireRecentSiteAdminMfa, requireSiteAdminSession, siteAdminAuthorizationError } from "@/lib/site-admin-auth";
+import { isSiteAdminConfigurationError, requireFullSiteAdminSession, requireRecentSiteAdminMfa, siteAdminAuthorizationError } from "@/lib/site-admin-auth";
 import { validateRuntimeHyperparameterPatch } from "@/lib/runtime-hyperparameters-core";
 import { loadRuntimeHyperparameterOverrides, saveRuntimeHyperparameterOverrides } from "@/lib/runtime-hyperparameters-store";
 
@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 
 export async function GET() {
   try {
-    await requireSiteAdminSession();
+    await requireFullSiteAdminSession();
     await loadRuntimeHyperparameterOverrides({ fresh: true });
     return Response.json(
       { catalog: loadAdminHyperparameterCatalog() },

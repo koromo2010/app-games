@@ -13,7 +13,14 @@ import { isRecentSiteAdminMfa, siteAdminSessionMaxAgeSeconds, type SiteAdminSess
 import { createRequestTelemetry } from "@/lib/observability";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 import { siteAdminAuthenticationOptions, siteAdminRegistrationOptions, verifySiteAdminAuthentication, verifySiteAdminRegistration } from "@/lib/site-admin-passkey";
-import { appendSiteAdminAuditLog, consumeSiteAdminRecoveryCode, replaceSiteAdminRecoveryCodes, saveSiteAdminPasskey, updateSiteAdminPasskeyCounter } from "@/lib/site-admin-passkey-store";
+import {
+  appendSiteAdminAuditLog,
+  consumeSiteAdminRecoveryCode,
+  removeIncompatibleSiteAdminPasskeys,
+  replaceSiteAdminRecoveryCodes,
+  saveSiteAdminPasskey,
+  updateSiteAdminPasskeyCounter,
+} from "@/lib/site-admin-passkey-store";
 
 export const runtime = "nodejs";
 
@@ -23,6 +30,7 @@ function errorResponse(error: unknown) {
   const code = error instanceof Error ? error.message : "SITE_ADMIN_PASSKEY_FAILED";
   if (code === "SITE_ADMIN_ACCOUNTS_STORE_NOT_CONFIGURED") return Response.json({ error: code }, { status: 503 });
   if (code === "SITE_ADMIN_PASSKEY_LIMIT_REACHED") return Response.json({ error: code }, { status: 409 });
+  if (code === "SITE_ADMIN_PLATFORM_PASSKEY_REQUIRED") return Response.json({ error: code }, { status: 400 });
   if (code === "SITE_ADMIN_CHALLENGE_INVALID") return Response.json({ error: "SITE_ADMIN_CHALLENGE_EXPIRED" }, { status: 400 });
   if (code === "SITE_ADMIN_PASSKEY_NOT_FOUND") return Response.json({ error: "SITE_ADMIN_PASSKEY_VERIFICATION_FAILED" }, { status: 400 });
   return Response.json({ error: "SITE_ADMIN_PASSKEY_VERIFICATION_FAILED" }, { status: 400 });
@@ -62,6 +70,22 @@ export async function POST(request: Request) {
       const recoveryCodes = await replaceSiteAdminRecoveryCodes(session.email);
       await appendSiteAdminAuditLog(request, session, "admin.recovery-codes-regenerate", session.email);
       return Response.json({ recoveryCodes });
+    }
+
+    if (action === "remove-incompatible-passkeys") {
+      const session = await requireFullSiteAdminSession();
+      if (!isRecentSiteAdminMfa(session)) throw new Error("SITE_ADMIN_STEP_UP_REQUIRED");
+      if (!session.email) throw new Error("SITE_ADMIN_AUTH_REQUIRED");
+      const removedCount = await removeIncompatibleSiteAdminPasskeys(session.email);
+      await appendSiteAdminAuditLog(
+        request,
+        session,
+        "admin.incompatible-passkeys-remove",
+        session.email,
+        undefined,
+        { removedCount },
+      );
+      return Response.json({ removedCount });
     }
 
     const challenge = await readSiteAdminChallenge();
@@ -106,7 +130,13 @@ export async function POST(request: Request) {
         await setSiteAdminCookie({ scope: "full", method: "passkey", email: challenge.email });
         session = { version: 2, scope: "full", method: "passkey", email: challenge.email, authenticatedAt: now, mfaAt: now, expiresAt: now + siteAdminSessionMaxAgeSeconds * 1_000 };
       } else {
-        session = await requireFullSiteAdminSession();
+        const current = await requireFullSiteAdminSession();
+        if (current.method === "recovery-code") {
+          await setSiteAdminCookie({ scope: "full", method: "passkey", email: challenge.email });
+          session = { version: 2, scope: "full", method: "passkey", email: challenge.email, authenticatedAt: now, mfaAt: now, expiresAt: now + siteAdminSessionMaxAgeSeconds * 1_000 };
+        } else {
+          session = current;
+        }
       }
       await clearSiteAdminChallengeCookie();
       await appendSiteAdminAuditLog(request, session, challenge.purpose === "enroll" ? "admin.passkey-enroll" : "admin.passkey-add", challenge.email);

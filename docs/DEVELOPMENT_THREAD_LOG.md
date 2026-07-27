@@ -5762,3 +5762,53 @@
 - 対象Deploymentのerror／fatal Runtime Logは0件だった。
 - devのWindows実機で、USBキー画面ではなくWindows Helloへ進むことを確認する。
 - dev実機成功後に同じ認証transport修正をmainへ反映する。
+
+## 2026-07-27 — 管理者パスキー登録・復旧・break-glass権限の再設計
+
+### 利用者からの要望
+
+- 復旧コードで今回は管理画面へ戻れたが、認証で同様の問題が起きると運用への影響が
+  大きいため、登録、通常認証、復旧、重要操作の承認境界を通しで見直す。
+
+### 調査結果と判断
+
+- 登録optionsは`preferredAuthenticatorType: "localDevice"`という推奨だけで、
+  `authenticatorAttachment: "platform"`を強制していなかった。USBキーとして登録した
+  資格情報を認証側だけ`internal`へ限定したことが、登録と認証の不整合だった。
+- 復旧コードの利用後は通常管理画面へ戻るだけで、新しい端末内パスキーの登録へ
+  誘導していなかった。
+- break-glass画面は「設定変更不可」と表示していたが、管理者アカウントの保存・削除APIが
+  `recovery` scopeで直近MFAを省略し、管理者追加、パスワード更新、削除を許していた。
+  画面から隠れた通常管理APIにも`recovery` scopeで読める経路が残っていた。
+- 一時変数`SITE_ADMIN_BREAK_GLASS_ENABLED`の削除依頼は、実際の削除・再デプロイが
+  未完了なのに機械台帳だけ未定義の`completed`となり、環境台帳検査を失敗させていた。
+
+### 実施結果
+
+- 新規登録はplatform attachment、discoverable credential、user verification、
+  `internal` transportを必須にし、USB、別端末、種別不明の登録をサーバーでも拒否する。
+- 復旧コードでログインした場合は管理者アカウント画面へ直接誘導し、Windows Helloの
+  登録確認が成功した時点で通常のパスキーセッションへ切り替える。
+- 管理者一覧へ端末内、外部、種別不明のパスキー件数を表示する。端末内パスキーが
+  1件以上残る場合だけ、既知の外部キー登録を削除できる。
+- break-glassの管理者保存・削除を直近MFA必須へ変更し、復旧画面からも操作を除いた。
+  通常管理データの読取APIはfull scopeを必須にし、`recovery` scopeは管理者一覧、
+  ダッシュボード、監査ログの読取とMFAリセットだけに限定した。
+- break-glass削除依頼を実態どおり`requested`へ戻した。変数自体の削除はまだ行っていない。
+
+### 検証
+
+- 管理者パスキーと復旧scopeの新規回帰テスト7件に成功した。
+- `npm test`に成功し、全612テストが通過した。
+- `npm run verify`に成功し、環境台帳、9ゲーム共通要件、SDK境界、migration、
+  Shell契約、lintを確認した。
+- `npm run build`に成功し、production buildの全78ルートが生成された。
+
+### 未対応・保留
+
+- `develop`へ反映し、`app-games-dev`を`READY`まで確認する。
+- dev実機で復旧コードログインからWindows Helloを追加し、次の通常ログインが
+  Windows Helloへ進むことを確認する。
+- 実機確認後、`SITE_ADMIN_BREAK_GLASS_ENABLED`を`app-games-dev` Productionから削除し、
+  再デプロイしてマスターパスワードが通常時に拒否されることを確認する。
+- dev実機成功後に同じ修正をmainへ反映する。

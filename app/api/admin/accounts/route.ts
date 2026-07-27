@@ -31,8 +31,7 @@ export async function POST(request: Request) {
   const limited = await rateLimitResponseFor(request, rateLimitPolicies.profileMutation);
   if (limited) return limited;
   try {
-    const session = await requireSiteAdminSession();
-    if (session.scope === "full") await requireRecentSiteAdminMfa();
+    const session = await requireRecentSiteAdminMfa();
     const body = await request.json() as { email?: unknown; password?: unknown; receiveAlerts?: unknown; receiveContacts?: unknown };
     const email = typeof body.email === "string" ? body.email : "";
     const password = typeof body.password === "string" ? body.password : "";
@@ -86,8 +85,7 @@ export async function DELETE(request: Request) {
   const limited = await rateLimitResponseFor(request, rateLimitPolicies.profileMutation);
   if (limited) return limited;
   try {
-    const session = await requireSiteAdminSession();
-    if (session.scope === "full") await requireRecentSiteAdminMfa();
+    const session = await requireRecentSiteAdminMfa();
     const body = await request.json() as { email?: unknown };
     const email = typeof body.email === "string" ? body.email : "";
     const before = (await listSiteAdminAccounts()).find((entry) => entry.email === email.trim().toLocaleLowerCase("en-US")) ?? null;

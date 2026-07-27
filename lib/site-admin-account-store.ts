@@ -19,6 +19,9 @@ export type SiteAdminAccountSummary = {
   createdAt: number;
   updatedAt: number;
   passkeyCount: number;
+  platformPasskeyCount: number;
+  externalPasskeyCount: number;
+  unknownPasskeyCount: number;
   unusedRecoveryCodeCount: number;
 };
 
@@ -43,6 +46,9 @@ function requireStore() {
 
 type SiteAdminAccountSummaryRow = Pick<SiteAdminAccountRow, "email" | "receive_alerts" | "receive_contacts" | "created_at" | "updated_at"> & {
   passkey_count?: string | number;
+  platform_passkey_count?: string | number;
+  external_passkey_count?: string | number;
+  unknown_passkey_count?: string | number;
   recovery_code_count?: string | number;
   matching_player_name?: string | null;
   debug_access_enabled?: boolean;
@@ -58,6 +64,9 @@ function summary(row: SiteAdminAccountSummaryRow): SiteAdminAccountSummary {
     createdAt: Number(row.created_at),
     updatedAt: Number(row.updated_at),
     passkeyCount: Number(row.passkey_count ?? 0),
+    platformPasskeyCount: Number(row.platform_passkey_count ?? 0),
+    externalPasskeyCount: Number(row.external_passkey_count ?? 0),
+    unknownPasskeyCount: Number(row.unknown_passkey_count ?? 0),
     unusedRecoveryCodeCount: Number(row.recovery_code_count ?? 0),
   };
 }
@@ -68,6 +77,16 @@ export async function listSiteAdminAccounts() {
   const rows = await getPostgresClient()`
     SELECT a.email, a.receive_alerts, a.receive_contacts, a.created_at, a.updated_at,
       (SELECT COUNT(*)::int FROM site_admin_passkeys p WHERE p.admin_email = a.email) AS passkey_count,
+      (SELECT COUNT(*)::int FROM site_admin_passkeys p
+        WHERE p.admin_email = a.email
+          AND p.transports @> '["internal"]'::jsonb) AS platform_passkey_count,
+      (SELECT COUNT(*)::int FROM site_admin_passkeys p
+        WHERE p.admin_email = a.email
+          AND jsonb_array_length(p.transports) > 0
+          AND NOT (p.transports @> '["internal"]'::jsonb)) AS external_passkey_count,
+      (SELECT COUNT(*)::int FROM site_admin_passkeys p
+        WHERE p.admin_email = a.email
+          AND jsonb_array_length(p.transports) = 0) AS unknown_passkey_count,
       (SELECT COUNT(*)::int FROM site_admin_recovery_codes r WHERE r.admin_email = a.email AND r.used_at IS NULL) AS recovery_code_count,
       player.display_name AS matching_player_name,
       (player.player_id IS NOT NULL) AS debug_access_enabled

@@ -8,6 +8,7 @@ import {
   type RegistrationResponseJSON,
 } from "@simplewebauthn/server";
 import { siteAdminWebAuthnConfiguration } from "@/lib/site-admin-passkey-core";
+import { assertSiteAdminPlatformPasskeyRegistration } from "@/lib/site-admin-passkey-policy";
 import { listSiteAdminPasskeys, findSiteAdminPasskey } from "@/lib/site-admin-passkey-store";
 
 export async function siteAdminRegistrationOptions(email: string) {
@@ -22,7 +23,11 @@ export async function siteAdminRegistrationOptions(email: string) {
     attestationType: "none",
     timeout: 120_000,
     excludeCredentials: existing.map((passkey) => ({ id: passkey.credentialId })),
-    authenticatorSelection: { residentKey: "required", userVerification: "required" },
+    authenticatorSelection: {
+      authenticatorAttachment: "platform",
+      residentKey: "required",
+      userVerification: "required",
+    },
     preferredAuthenticatorType: "localDevice",
   });
 }
@@ -47,7 +52,20 @@ export async function siteAdminAuthenticationOptions(email: string) {
 
 export async function verifySiteAdminRegistration(response: RegistrationResponseJSON, expectedChallenge: string) {
   const { rpID, origin } = siteAdminWebAuthnConfiguration(process.env);
-  return verifyRegistrationResponse({ response, expectedChallenge, expectedOrigin: origin, expectedRPID: rpID, requireUserVerification: true });
+  const verification = await verifyRegistrationResponse({
+    response,
+    expectedChallenge,
+    expectedOrigin: origin,
+    expectedRPID: rpID,
+    requireUserVerification: true,
+  });
+  if (verification.verified) {
+    assertSiteAdminPlatformPasskeyRegistration({
+      authenticatorAttachment: response.authenticatorAttachment,
+      transports: verification.registrationInfo.credential.transports,
+    });
+  }
+  return verification;
 }
 
 export async function verifySiteAdminAuthentication(response: AuthenticationResponseJSON, expectedChallenge: string, email: string) {

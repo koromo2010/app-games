@@ -11,8 +11,9 @@ test("admin passkey registration requires a discoverable local credential", () =
   assert.match(source, /preferredAuthenticatorType:\s*"localDevice"/);
   assert.match(
     source,
-    /authenticatorSelection:\s*\{\s*residentKey:\s*"required",\s*userVerification:\s*"required"\s*\}/,
+    /authenticatorSelection:\s*\{[\s\S]*authenticatorAttachment:\s*"platform"[\s\S]*residentKey:\s*"required"[\s\S]*userVerification:\s*"required"/,
   );
+  assert.match(source, /assertSiteAdminPlatformPasskeyRegistration/);
 });
 
 test("admin passkey authentication uses registered credentials through Windows Hello", () => {

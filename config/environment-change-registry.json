@@ -23,7 +23,7 @@
       "environment": "Production",
       "sensitive": false,
       "operation": "remove",
-      "status": "completed",
+      "status": "requested",
       "redeployRequired": true,
       "temporary": true,
       "note": "MFA再登録と通常ログイン確認後に削除し、再デプロイする。"

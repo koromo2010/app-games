@@ -1,6 +1,6 @@
 import { createRequestTelemetry } from "@/lib/observability";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
-import { requireRecentSiteAdminMfa, requireSiteAdminSession, siteAdminAuthorizationError } from "@/lib/site-admin-auth";
+import { requireFullSiteAdminSession, requireRecentSiteAdminMfa, siteAdminAuthorizationError } from "@/lib/site-admin-auth";
 import { appendSiteAdminAuditLog } from "@/lib/site-admin-passkey-store";
 import { listVocabularyDrafts, reviewVocabularyDraft } from "@/lib/vocabulary-admin-store";
 
@@ -19,7 +19,7 @@ function safeVocabularyError(error: unknown, fallback: string) {
 
 export async function GET() {
   try {
-    await requireSiteAdminSession();
+    await requireFullSiteAdminSession();
     return Response.json({ drafts: await listVocabularyDrafts() });
   } catch (error) {
     return siteAdminAuthorizationError(error)

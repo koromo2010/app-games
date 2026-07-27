@@ -29,6 +29,7 @@ const messages: Record<string, string> = {
   INVALID_RECOVERY_CODE: "復旧コードが違うか、すでに使用されています。",
   SITE_ADMIN_CHALLENGE_EXPIRED: "本人確認の有効期限が切れました。パスワードからもう一度ログインしてください。",
   SITE_ADMIN_PASSKEY_VERIFICATION_FAILED: "パスキーを確認できませんでした。もう一度お試しください。",
+  SITE_ADMIN_PLATFORM_PASSKEY_REQUIRED: "Windows Helloなど、この端末内のパスキーを選んでください。USBキーや別端末は登録できません。",
   SITE_SETTINGS_STORE_NOT_CONFIGURED: "サイト設定の保存先が設定されていません。",
   INVALID_TEXT: "未入力の項目、または文字数を超えている項目があります。",
   INVALID_ICON_URL: "アイコン画像を確認してください。",
@@ -67,7 +68,7 @@ export function SiteAdminPanel({ showPreviewVocabularyMigrations, releaseManagem
     const controller = new AbortController();
     void fetch("/api/admin/site-settings", { cache: "no-store", signal: controller.signal }).then(async (response) => {
       const data = await response.json().catch(() => null) as { settings?: SiteSettings; session?: AdminSession; error?: string } | null;
-      if (response.ok && data?.settings && data.session) { setSettings(data.settings); setSession(data.session); setSection(data.session.scope === "recovery" ? "accounts" : "dashboard"); setScreen("settings"); return; }
+      if (response.ok && data?.settings && data.session) { setSettings(data.settings); setSession(data.session); setSection(data.session.scope === "recovery" || data.session.method === "recovery-code" ? "accounts" : "dashboard"); setScreen("settings"); return; }
       setScreen("login");
       if (response.status !== 401 && data?.error) setMessage(errorMessage(data.error, "管理画面を読み込めませんでした。"));
     }).catch((error) => {
@@ -104,7 +105,7 @@ export function SiteAdminPanel({ showPreviewVocabularyMigrations, releaseManagem
     const response = await fetch("/api/admin/site-settings", { cache: "no-store" });
     const data = await response.json().catch(() => null) as { settings?: SiteSettings; session?: AdminSession; error?: string } | null;
     if (!response.ok || !data?.settings || !data.session) throw new Error(data?.error || "ADMIN_LOGIN_FAILED");
-    setSettings(data.settings); setSession(data.session); setEmail(""); setRecoveryCode(""); setSection("dashboard"); setScreen("settings");
+    setSettings(data.settings); setSession(data.session); setEmail(""); setRecoveryCode(""); setSection(data.session.method === "recovery-code" ? "accounts" : "dashboard"); setScreen("settings");
   };
 
   const completePasskey = async () => {
@@ -203,7 +204,7 @@ export function SiteAdminPanel({ showPreviewVocabularyMigrations, releaseManagem
       <section className="w-full max-w-md rounded-2xl border border-white/10 bg-slate-900/90 p-6 shadow-2xl">
         <p className="text-xs font-bold uppercase tracking-[0.22em] text-cyan-300">Two-factor authentication</p>
         <h1 className="mt-2 text-2xl font-black">{mfaMode === "enroll" ? "パスキーを登録" : "パスキーで本人確認"}</h1>
-        <p className="mt-3 text-sm leading-6 text-slate-300">{mfaMode === "enroll" ? "この管理者にはパスキーがありません。Windows Hello、スマートフォン、またはセキュリティキーを登録してください。" : "端末のPIN・指紋・顔認証などを使ってログインを完了します。"}</p>
+        <p className="mt-3 text-sm leading-6 text-slate-300">{mfaMode === "enroll" ? "この管理者には端末内パスキーがありません。このPCのWindows Hello（PIN・指紋・顔認証）を登録してください。USBキーや別端末は登録できません。" : "このPCのWindows Hello（PIN・指紋・顔認証）を使ってログインを完了します。"}</p>
         <button type="button" onClick={() => void completePasskey()} disabled={isSaving} className="mt-6 w-full rounded-xl bg-cyan-300 px-4 py-3 font-black text-slate-950 hover:bg-cyan-200 disabled:opacity-40">{isSaving ? "確認中…" : mfaMode === "enroll" ? "パスキーを登録する" : "パスキーで続ける"}</button>
         {mfaMode === "login" && <form onSubmit={useRecoveryCode} className="mt-6 border-t border-white/10 pt-5"><label className="block text-sm font-bold text-slate-200">パスキーを使えない場合<input value={recoveryCode} onChange={(event) => setRecoveryCode(event.target.value)} placeholder="復旧コード" autoComplete="one-time-code" className="mt-2 w-full rounded-xl border border-white/15 bg-black/25 px-4 py-3 font-mono text-white outline-none focus:border-cyan-300" /></label><button type="submit" disabled={!recoveryCode.trim() || isSaving} className="mt-3 w-full rounded-xl border border-white/15 px-4 py-3 text-sm font-bold hover:bg-white/10 disabled:opacity-40">復旧コードでログイン</button></form>}
         {message && <p role="alert" className="mt-4 rounded-lg border border-amber-300/30 bg-amber-300/10 px-3 py-2 text-sm text-amber-100">{message}</p>}
@@ -220,6 +221,7 @@ export function SiteAdminPanel({ showPreviewVocabularyMigrations, releaseManagem
     <main className="min-h-screen bg-slate-950 text-white">
       <header className="border-b border-white/10 bg-slate-900/90"><div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4"><div><p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-300">Game Fields Admin</p><h1 className="text-2xl font-black">サイト管理</h1></div><div className="flex gap-2"><Link href="/games" className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold hover:bg-white/10">サイトを見る</Link><button type="button" onClick={() => void logout()} className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold text-slate-300 hover:bg-white/10">ログアウト</button></div></div></header>
       {session?.scope === "recovery" && <div className="border-b border-amber-300/20 bg-amber-300/10 px-4 py-3 text-center text-sm font-bold text-amber-100">復旧モード：15分間、管理者アカウントの復旧と診断だけを行えます。設定変更はできません。</div>}
+      {session?.scope === "full" && session.method === "recovery-code" && <div className="border-b border-amber-300/20 bg-amber-300/10 px-4 py-3 text-center text-sm font-bold text-amber-100">復旧コードでログイン中です。管理者アカウントから、このPCのWindows Helloを登録してください。</div>}
       <nav className="border-b border-white/10 bg-slate-900/60" aria-label="管理画面メニュー"><div className="mx-auto flex max-w-6xl gap-1 overflow-x-auto px-4 py-2">{([['dashboard', 'ダッシュボード'], ['support', '問い合わせ・報告'], ...(releaseManagementMode ? [['releases', '昇格管理'] as const] : []), ['site-settings', 'サイト設定'], ['games', 'ゲーム公開管理'], ['vocabulary', '単語候補'], ['hyperparameters', 'ハイパラ管理'], ['accounts', '管理者アカウント'], ['audit', '監査ログ']] as const).filter(([value]) => session?.scope === "full" || value === "dashboard" || value === "accounts" || value === "audit").map(([value, label]) => <button key={value} type="button" aria-current={section === value ? "page" : undefined} onClick={() => setSection(value)} className={`whitespace-nowrap rounded-lg px-4 py-2 text-sm font-bold transition ${section === value ? "bg-cyan-300 text-slate-950" : "text-slate-300 hover:bg-white/10 hover:text-white"}`}>{label}</button>)}</div></nav>
       {section === "dashboard" && <AdminDashboard onAuthExpired={authExpired} />}
       {section === "support" && <AdminSupportInboxPanel onAuthExpired={authExpired} />}
@@ -230,7 +232,13 @@ export function SiteAdminPanel({ showPreviewVocabularyMigrations, releaseManagem
         showPreviewMigrations={showPreviewVocabularyMigrations}
       />}
       {section === "hyperparameters" && <AdminHyperparametersPanel onAuthExpired={authExpired} />}
-      {section === "accounts" && <AdminAccountsPanel onAuthExpired={authExpired} recoveryMode={session?.scope === "recovery"} currentEmail={session?.email ?? null} />}
+      {section === "accounts" && <AdminAccountsPanel
+        onAuthExpired={authExpired}
+        onPasskeySessionEstablished={() => setSession((current) => current ? { ...current, method: "passkey", mfaAt: Date.now() } : current)}
+        recoveryMode={session?.scope === "recovery"}
+        recoveryLogin={session?.method === "recovery-code"}
+        currentEmail={session?.email ?? null}
+      />}
       {section === "audit" && <AdminAuditPanel onAuthExpired={authExpired} />}
       {section === "site-settings" &&
       <form onSubmit={save} className="mx-auto grid max-w-6xl gap-6 px-4 py-8 lg:grid-cols-[minmax(0,1fr)_380px]">

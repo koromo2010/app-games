@@ -1,6 +1,6 @@
 import {
   requireRecentSiteAdminMfa,
-  requireSiteAdminSession,
+  requireFullSiteAdminSession,
   siteAdminAuthorizationError,
 } from "@/lib/site-admin-auth";
 import { appendSiteAdminAuditLog } from "@/lib/site-admin-passkey-store";
@@ -156,7 +156,7 @@ function routeError(error: unknown) {
 
 export async function GET(request: Request) {
   try {
-    await requireSiteAdminSession();
+    await requireFullSiteAdminSession();
     requireMain();
     const lineageId = new URL(request.url).searchParams.get("lineageId") ?? undefined;
     const [development, main] = await Promise.all([

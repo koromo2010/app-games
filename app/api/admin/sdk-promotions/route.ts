@@ -1,6 +1,6 @@
 import {
   requireRecentSiteAdminMfa,
-  requireSiteAdminSession,
+  requireFullSiteAdminSession,
   siteAdminAuthorizationError,
 } from "@/lib/site-admin-auth";
 import { appendSiteAdminAuditLog } from "@/lib/site-admin-passkey-store";
@@ -62,7 +62,7 @@ async function proxyPayload(response: Response): Promise<unknown> {
 
 export async function GET() {
   try {
-    await requireSiteAdminSession();
+    await requireFullSiteAdminSession();
     requirePromotionReadEnvironment();
     const url = internalUrl();
     const response = await fetch(url, {
