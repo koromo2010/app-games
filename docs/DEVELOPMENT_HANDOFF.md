@@ -12,6 +12,7 @@
 - SDK packageは候補Previewとmainで同じ`GameSdkFrame → AppSet`を使う。SDK専用の白枠を持たない。
 - 昇格経路は、外部提出物の`SDK-dev → dev`／`SDK → main`、検証済みアプリ版の`dev app → main app`、本体コードの`develop → main`を別操作として扱う。
 - `dev app → main app`はアプリ単位の更新経路であり、本体Git branchを動かさない。既存mainアプリのID・URL・公開設定を維持してrevisionを更新し、過去版は追加専用履歴からアプリ単位で復元できる。
+- 管理者パスキーは、通常のfull管理者が直近MFA後に自分だけを「パスキー初期化」できる。他管理者のMFAリセットはbreak-glass復旧モードだけに許可し、通常管理操作を復旧scopeへ広げない。
 
 ## アカウント言語と言語依存ルーム
 

@@ -40,6 +40,8 @@ App Games / Game Fields は Next.js で構築したオンラインゲーム基�
 
 管理者パスキーは端末内platform authenticator、discoverable credential、本人確認を登録・認証の両方で必須にする。復旧コードでログインした場合はWindows Helloの再登録へ誘導し、登録成功後に通常セッションへ切り替える。break-glass復旧モードはMFAリセットと読取診断に限定し、管理者追加・更新・削除を含む通常管理操作をAPI側でも拒否する。
 
+通常のfull管理者は、直近MFAを再確認したうえで自分自身のパスキーと復旧コードだけを初期化できる。他の管理者のMFAリセットはbreak-glass復旧モードに限定する。
+
 管理者パスキーはmainとdevでRP IDを分離し、mainは`game-fields.com`、devは`dev.game-fields.com`を使う。管理者DBだけでなく端末側の資格情報名前空間も分け、片方での再登録が他方の資格情報を置換・混在させない。
 
 SDK制作者はPortalの`/support`から本人の報告を一覧・閲覧・追記でき、`/support/new`から不具合報告または改善要望を直接作成できる。人間がフォーム内容を確認して送信する操作を承認とし、送信後は同じ会話一覧へ戻る。OAuth MCPのAIは`list_support_threads`と`get_support_thread`で本人の報告だけを参照する。AIによる新規報告は`prepare_support_report`、既存スレッドへの返信は`prepare_support_reply`で7日間の下書きだけを作成し、制作者本人がPortalの各承認画面で内容を確認・修正して送信した場合だけ保存される。AIだけで新規報告または返信を直接投稿するtoolは提供しない。

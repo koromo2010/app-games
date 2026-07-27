@@ -35,7 +35,22 @@ test("break-glass sessions cannot create, update, or delete admin accounts", () 
   assert.doesNotMatch(post, /session\.scope === "full"/);
   assert.match(deleteHandler, /const session = await requireRecentSiteAdminMfa\(\)/);
   assert.doesNotMatch(deleteHandler, /session\.scope === "full"/);
-  assert.match(source, /body\.action === "reset-mfa"[\s\S]*session\.scope !== "recovery"/);
+  assert.match(source, /body\.action === "reset-mfa"[\s\S]*resettingOwnAccount = session\.scope === "full" && session\.email === email/);
+  assert.match(source, /session\.scope !== "recovery" && !resettingOwnAccount/);
+  assert.match(source, /resettingOwnAccount \? await requireRecentSiteAdminMfa\(\) : session/);
+});
+
+test("full administrators can only reset their own passkeys after recent MFA", () => {
+  const route = read("app/api/admin/accounts/route.ts");
+  const panel = read("app/admin/AdminAccountsPanel.tsx");
+  assert.match(route, /resettingOwnAccount = session\.scope === "full" && session\.email === email/);
+  assert.match(route, /resettingOwnAccount \? await requireRecentSiteAdminMfa\(\) : session/);
+  assert.match(route, /resetOwnAccount: resettingOwnAccount/);
+  assert.match(panel, /if \(!recoveryMode\) await ensureSiteAdminStepUp\(\)/);
+  assert.match(panel, /!recoveryMode && currentEmail === account\.email && account\.passkeyCount > 0/);
+  assert.match(panel, /パスキー初期化/);
+  assert.match(panel, /recoveryMode && account\.passkeyCount > 0/);
+  assert.match(panel, /MFAを再設定/);
 });
 
 test("recovery-code repair promotes the session only after a platform passkey is added", () => {
