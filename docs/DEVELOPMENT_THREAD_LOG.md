@@ -4825,11 +4825,20 @@
 - artifactコピー成功、hash不一致時の本番Git未書込み、service認証probeの単体テストに成功した。
 - `npm run verify`、全574テスト、`npm run build`、`npm run build:sdk`、
   `npm run build:sdk-preview`に成功した。
+- dev artifact sourceは`develop@b4f0cf9`として`app-games-sdk-dev`へ配備し、
+  Deployment `dpl_68u8WJ8eXowA5x5bQBFBE9GWtzjo`が`READY`となった。
+- mainの機能修正`0ba2530`と旧Release修復判定`9f94a90`を非forceで反映した。
+  最終コミット`9f94a90`の本体`dpl_AFdp4ZkDzAtTrQCk9KAHqFHrKc2U`、
+  SDK Portal`dpl_3nuACJoKQFL89xbQBjFrW6dWjogY`、
+  SDK Preview`dpl_4PUfK4bKmJkZFEdUmew4Xvdo1YdT`はすべて`READY`で、
+  errors-only build logに失敗はない。
+- 公開healthはSDK schema version 5、dev artifact source往復`ok`、
+  本番Previewの`grantVersion: 4`／`grantVerification: ed25519`を返した。
+  最終3 Deploymentのerror／fatal Runtime logは0件だった。
 
 ### 未対応・保留
 
-- dev Portalのartifact sourceを先に配備し、main Portalのhealthで認証往復を確認する。
-- mainへ非force反映し、本体・SDK Portal・SDK PreviewのDeploymentと
-  SDK schema version 5を確認する。
 - 旧方式で登録済みの「コトバに迫れ」を管理画面から同じdev版で再昇格し、
   main package Gitへの保存、正式Room作成、`SERVER_RUNTIME_BUNDLE_NOT_FOUND`消失を確認する。
+  管理画面操作には直近の管理者MFAが必要であり、Cloud Browser接続がタイムアウトしたため、
+  認証を迂回した直接書込みは行っていない。

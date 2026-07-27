@@ -309,14 +309,14 @@ SDK `llm` adapter、module lab、Preview中継API `/api/sdk-preview/llm`も本�
 | `SDK_MOCK_GITHUB_REPOSITORY` | `koromo2010/game-fields-sdk-mocks` | 同じprivate repository | Production | 両Projectへ登録・再デプロイ済み |
 | `SDK_MOCK_GITHUB_WRITE_TOKEN` | Project Variable、Sensitive | 設定禁止・未設定 | Production | 対象repositoryのContents read/writeだけ。90日期限 |
 | `SDK_MOCK_GITHUB_READ_TOKEN` | 設定禁止・未設定 | Project Variable、Sensitive | Production | 対象repositoryのContents read-onlyだけ。90日期限 |
-| `SDK_DATABASE_URL` | `app-games-sdk-neon`をIntegrationでLink、Sensitive | 設定禁止・未設定 | Production | 正しい変数名で登録後にmain Deployment作成済み。schema version 4確認待ち |
+| `SDK_DATABASE_URL` | `app-games-sdk-neon`をIntegrationでLink、Sensitive | 設定禁止・未設定 | Production | main Deployment反映済み。2026-07-27にschema version 5を確認 |
 | `SDK_REDIS_REST_URL` | `sdk-dev-redis`のLink依頼中、Sensitive | 設定禁止・未設定 | Production | コード側の本番・開発prefix分離後にLinkする |
 | `SDK_REDIS_REST_TOKEN` | `sdk-dev-redis`のLink依頼中、Sensitive | 設定禁止・未設定 | Production | コード側の本番・開発prefix分離後にLinkする |
 
 | 対象 | 現在状態 | 次の確認 |
 | --- | --- | --- |
 | private package Git | `koromo2010/game-fields-sdk-mocks`をPrivateで作成済み。Portal書込資格とPreview読取資格を分離 | 本番package保存後に専用branch・commit・読取を実機確認 |
-| Portal Vercel Project | `app-games-sdk`、Root Directory `apps/sdk-portal`、Production Branch `main`。`main@0e7889c`のDeploymentがREADY。`app-games-sdk-neon`はProductionだけへLink済み | RedisをLinkし、develop統合後のbuild migrationで`schemaVersion: 4`を確認 |
+| Portal Vercel Project | `app-games-sdk`、Root Directory `apps/sdk-portal`、Production Branch `main`。`main@9f94a90`のDeploymentがREADY。`app-games-sdk-neon`はProductionだけへLink済みで、`schemaVersion: 5`とdev artifact source往復`ok`を確認済み | RedisをLinkする |
 | Preview Vercel Project | `app-games-sdk-preview`、Root Directory `apps/sdk-preview`、Node.js 24.x、Production Branch `main`。production専用のasset署名鍵・Git読取資格だけを登録 | Portal grant検証委譲版を再デプロイし、正式Room作成を実機確認 |
 | Preview domain | `preview.game-fields.com`割当済み・Valid Configuration。第1段階Deploymentで`grantVersion: 4`／`grantVerification: ed25519`を確認し、本番公開鍵をコードへ固定済み | 第2段階Deployment後に`/health`、fragment交換、package client、server runnerを実機確認 |
 
