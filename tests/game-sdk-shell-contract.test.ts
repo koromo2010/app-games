@@ -15,6 +15,12 @@ const frame = source("app/components/GameSdkFrame.tsx");
 const header = source("app/components/GameSdkShellHeader.tsx");
 const previewPage = source("app/sdk-preview/[creatorSlug]/games/[gameId]/page.tsx");
 const approvedPage = source("app/sdk-games/[gameId]/page.tsx");
+const previewClientRuntimeRoute = source(
+  "app/api/sdk-preview/[creatorSlug]/games/[gameId]/client-runtime/route.ts",
+);
+const approvedClientRuntimeRoute = source(
+  "app/api/game-sdk/[gameId]/client-runtime/route.ts",
+);
 const previewRoomRoute = source("app/api/sdk-preview/[creatorSlug]/games/[gameId]/rooms/route.ts");
 const previewDefaultsRoute = source("app/api/sdk-preview/[creatorSlug]/games/[gameId]/defaults/route.ts");
 const platformAdapter = source("lib/game-sdk-platform-adapter.ts");
@@ -148,6 +154,50 @@ test("formal Preview packages and promoted packages share GameSdkFrame", () => {
     approvedPage,
     /registration\.clientKind === "iframe-package"[\s\S]*?<GameSdkFrame/,
   );
+});
+
+test("formal package client grants are minted when the iframe actually navigates", () => {
+  assert.match(
+    previewPage,
+    /runtimeUrl=\{`\/api\/sdk-preview\/\$\{encodeURIComponent\([\s\S]*?client-runtime\?revision=/,
+  );
+  assert.match(
+    approvedPage,
+    /runtimeUrl=\{`\/api\/game-sdk\/\$\{encodeURIComponent\([\s\S]*?client-runtime\?revision=/,
+  );
+  assert.doesNotMatch(
+    approvedPage,
+    /runtimeUrl=\{registration\.clientRuntimeUrl\}/,
+  );
+
+  assert.match(
+    previewClientRuntimeRoute,
+    /requireSdkPreviewAuthenticatedPlayer\(creatorSlug\)/,
+  );
+  assert.match(
+    previewClientRuntimeRoute,
+    /loadSdkPreviewRuntimeDefinition\([\s\S]*?revision/,
+  );
+  assert.match(
+    approvedClientRuntimeRoute,
+    /requireAuthenticatedPlayer\(\)/,
+  );
+  assert.match(
+    approvedClientRuntimeRoute,
+    /loadApprovedGameSdkRuntimeRegistration\([\s\S]*?revision/,
+  );
+  for (const route of [
+    previewClientRuntimeRoute,
+    approvedClientRuntimeRoute,
+  ]) {
+    assert.match(route, /status: 307/);
+    assert.match(
+      route,
+      /Location: (?:definition\.runtimeUrl|registration\.clientRuntimeUrl)/,
+    );
+    assert.match(route, /"Cache-Control": "private, no-store"/);
+    assert.match(route, /"Referrer-Policy": "no-referrer"/);
+  }
 });
 
 test("shared package frame exposes Platform-owned Room dissolution in lobby and result", () => {

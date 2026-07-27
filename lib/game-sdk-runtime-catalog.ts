@@ -318,11 +318,18 @@ function resultPersistence(
 export async function loadApprovedGameSdkRuntimeRegistration(
   gameIdInput: string,
   env: NodeJS.ProcessEnv = process.env,
+  revision?: string,
 ): Promise<ApprovedGameSdkRegistration | null> {
   const gameId = gameIdInput.trim().toLowerCase();
   if (!/^[a-z][a-z0-9-]{1,63}$/.test(gameId)) return null;
+  if (revision && !/^[a-f0-9]{40}$/.test(revision)) return null;
   const channel = deploymentChannel(env);
-  const payload = await loadRuntimeCatalogPayload(gameId, channel, env);
+  const payload = await loadRuntimeCatalogPayload(
+    gameId,
+    channel,
+    env,
+    revision,
+  );
   if (!payload) return null;
   const presentation = resolveApprovedSdkGamePresentation({
     gameId,

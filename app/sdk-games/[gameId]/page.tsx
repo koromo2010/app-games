@@ -15,14 +15,22 @@ export default async function ApprovedSdkGamePage({
   const registration = approvedGameSdkRegistration(gameId)
     ?? await loadApprovedGameSdkRuntimeRegistration(gameId);
   if (!registration) notFound();
-  if (registration.clientKind === "iframe-package" && registration.clientRuntimeUrl) {
+  if (
+    registration.clientKind === "iframe-package"
+    && registration.clientRuntimeUrl
+    && registration.revision
+  ) {
     return (
       <GameSdkFrame
         backHref="/games"
         endpoint={`/api/game-sdk/${registration.id}/rooms`}
         gameId={registration.id}
         runtimeId={registration.id}
-        runtimeUrl={registration.clientRuntimeUrl}
+        runtimeUrl={`/api/game-sdk/${encodeURIComponent(
+          registration.id,
+        )}/client-runtime?revision=${encodeURIComponent(
+          registration.revision,
+        )}`}
         title={registration.title}
         settingDefinitions={registration.settings}
         rules={registration.rules}

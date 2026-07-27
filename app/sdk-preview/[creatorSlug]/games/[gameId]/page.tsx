@@ -34,7 +34,11 @@ export default async function SdkGamePage({ params }: { params: Promise<{ creato
             creatorSlug,
             gameId,
           )}
-          runtimeUrl={game.runtimeUrl}
+          runtimeUrl={`/api/sdk-preview/${encodeURIComponent(
+            creatorSlug,
+          )}/games/${encodeURIComponent(
+            gameId,
+          )}/client-runtime?revision=${encodeURIComponent(game.revision)}`}
           title={game.title}
           settingDefinitions={game.settings}
           rules={(game.manifest.rules ?? []).map((rule) => rule.ja)}
