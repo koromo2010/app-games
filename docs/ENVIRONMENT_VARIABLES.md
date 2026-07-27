@@ -56,7 +56,7 @@
 | `SDK_PORTAL_CHANNEL` | 配置未監査 |
 | `SDK_REDIS_REST_TOKEN` | `app-games-sdk-dev` Productionへ登録済み。本番SDKへのLinkを依頼中 |
 | `SDK_REDIS_REST_URL` | `app-games-sdk-dev` Productionへ登録済み。本番SDKへのLinkを依頼中 |
-| `SITE_ADMIN_BREAK_GLASS_ENABLED` | `app-games-dev` Productionへ2026-07-26一時登録・再デプロイ・復旧ログイン確認済み。MFA再登録完了後に削除必須 |
+| `SITE_ADMIN_BREAK_GLASS_ENABLED` | `app-games-dev` Productionへ2026-07-26一時登録済み。本番`app-games` Productionでも一時有効化し、2026-07-27にパスキー初期化・復旧コードログイン・Windows Hello再登録を実機確認済み。本番側は削除依頼登録済みで、削除後の再デプロイ・通常ログイン確認待ち |
 | `SITE_ADMIN_PASSWORD` | `app-games-dev` Productionへ2026-07-26登録・再デプロイ・マスターパスワード認証確認済み。Sensitive |
 | `SITE_ADMIN_WEBAUTHN_ORIGIN` | 未登録。コード既定でmainは本番origin、developは`https://dev.game-fields.com`を使用 |
 | `SITE_ADMIN_WEBAUTHN_RP_ID` | 未登録。コード既定でmainは`game-fields.com`、developは`dev.game-fields.com`を使用 |
