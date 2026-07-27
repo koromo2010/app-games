@@ -25,7 +25,7 @@ import {
   shouldKeepRoomResultAfterDissolve,
 } from "@/lib/room-result-return";
 import { useGameSdkActiveRoomRestore } from "@/app/hooks/use-game-sdk-active-room-restore";
-import Link from "next/link";
+import { AppLink as Link } from "@/app/components/AppLink";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type WordWolfRoomView = GameSdkOnlineRoomView<
@@ -359,7 +359,7 @@ export function ApprovedSdkGameShell({
     return (
       <main className={`min-h-screen bg-slate-950 px-4 py-10 text-white ${gameTopBannerOffsetClass}`}>
         <GameTopBanner eyebrow="SDK GAME" title={title}>
-          <Link href="/games" className={secondaryClass}>ゲーム一覧へ</Link>
+          <Link href="/games" className={secondaryClass}>広場へ戻る</Link>
         </GameTopBanner>
         {isRestoringRoom ? (
           <section className="mx-auto max-w-5xl">
@@ -454,7 +454,7 @@ export function ApprovedSdkGameShell({
             観戦・共有
           </Link>
         )}
-        <Link href="/games" className={secondaryClass}>ゲーム一覧へ</Link>
+        <Link href="/games" className={secondaryClass}>広場へ戻る</Link>
       </GameTopBanner>
       <section className="mx-auto grid max-w-6xl gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
         <aside className="space-y-4">
