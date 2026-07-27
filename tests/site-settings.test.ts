@@ -41,7 +41,7 @@ test("site admin tokens are signed and expire", () => {
   assert.equal(parseSiteAdminChallengeToken(challenge, "test-secret", now + 6 * 60_000), null);
 });
 
-test("site admin passkeys accept both production origins", () => {
+test("site admin passkeys isolate production and development relying parties", () => {
   assert.deepEqual(siteAdminWebAuthnConfiguration({ NODE_ENV: "production" }), {
     rpID: "game-fields.com",
     origin: ["https://game-fields.com", "https://www.game-fields.com"],
@@ -50,13 +50,59 @@ test("site admin passkeys accept both production origins", () => {
     NODE_ENV: "production",
     VERCEL_GIT_COMMIT_REF: "develop",
   }), {
-    rpID: "game-fields.com",
+    rpID: "dev.game-fields.com",
     origin: "https://dev.game-fields.com",
   });
-  assert.deepEqual(siteAdminWebAuthnConfiguration({ NODE_ENV: "production", SITE_ADMIN_WEBAUTHN_ORIGIN: "https://admin.example.com, https://backup.example.com" }).origin, [
-    "https://admin.example.com",
-    "https://backup.example.com",
-  ]);
+  assert.deepEqual(siteAdminWebAuthnConfiguration({
+    NODE_ENV: "production",
+    VERCEL_PROJECT_NAME: "app-games-dev",
+  }), {
+    rpID: "dev.game-fields.com",
+    origin: "https://dev.game-fields.com",
+  });
+  assert.deepEqual(siteAdminWebAuthnConfiguration({
+    NODE_ENV: "production",
+    GAME_FIELDS_ENV: "development",
+  }), {
+    rpID: "dev.game-fields.com",
+    origin: "https://dev.game-fields.com",
+  });
+});
+
+test("site admin passkeys reject shared or mismatched development relying parties", () => {
+  assert.throws(
+    () => siteAdminWebAuthnConfiguration({
+      NODE_ENV: "production",
+      GAME_FIELDS_ENV: "production",
+      VERCEL_PROJECT_NAME: "app-games-dev",
+      VERCEL_GIT_COMMIT_REF: "develop",
+    }),
+    /SITE_ADMIN_WEBAUTHN_ENVIRONMENT_CONFLICT/,
+  );
+  assert.throws(
+    () => siteAdminWebAuthnConfiguration({
+      NODE_ENV: "production",
+      VERCEL_GIT_COMMIT_REF: "develop",
+      SITE_ADMIN_WEBAUTHN_RP_ID: "game-fields.com",
+    }),
+    /SITE_ADMIN_WEBAUTHN_RP_ID_UNSAFE_SHARED/,
+  );
+  assert.throws(
+    () => siteAdminWebAuthnConfiguration({
+      NODE_ENV: "production",
+      SITE_ADMIN_WEBAUTHN_RP_ID: "admin.example.com",
+      SITE_ADMIN_WEBAUTHN_ORIGIN: "https://unrelated.example.net",
+    }),
+    /SITE_ADMIN_WEBAUTHN_ORIGIN_RP_ID_MISMATCH/,
+  );
+  assert.deepEqual(siteAdminWebAuthnConfiguration({
+    NODE_ENV: "production",
+    SITE_ADMIN_WEBAUTHN_RP_ID: "example.com",
+    SITE_ADMIN_WEBAUTHN_ORIGIN: "https://admin.example.com, https://backup.example.com",
+  }), {
+    rpID: "example.com",
+    origin: ["https://admin.example.com", "https://backup.example.com"],
+  });
 });
 
 test("runtime hyperparameters validate ranges and can return to defaults", () => {

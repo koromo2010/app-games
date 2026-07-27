@@ -5815,3 +5815,48 @@
 - 実機確認後、`SITE_ADMIN_BREAK_GLASS_ENABLED`を`app-games-dev` Productionから削除し、
   再デプロイしてマスターパスワードが通常時に拒否されることを確認する。
 - dev実機成功後に同じ修正をmainへ反映する。
+
+## 2026-07-27 — mainとdevの管理者パスキーRP IDを分離
+
+### 利用者からの報告
+
+- `dev.game-fields.com`でパスキーを追加したのに、ブラウザが
+  `game-fields.com`へログインするパスキーとして作成しようとしていた。
+- devとmainを行き来したことが、USBキーへの誘導、端末内パスキーが見つからない、
+  再登録等の一連の不整合を起こした可能性を確認する。
+
+### 調査結果と判断
+
+- 最新developはOriginをmainとdevで分けていたが、RP IDは両方とも
+  `game-fields.com`だった。管理者DBが環境別でも、端末側では同じパスキー名前空間と
+  同じメール由来user handleを使用していた。
+- 環境DBのCredential IDだけを`allowCredentials`へ返す対処は、別環境のcredentialを
+  サーバーが受理することは防ぐが、端末側でmain／dev資格情報が置換または混在することを
+  防げない。前回の親RP ID共有設計を不十分として訂正する。
+- mainはRP ID `game-fields.com`、devはRP ID `dev.game-fields.com`へ分離する。
+  直前に追加したplatform authenticator、discoverable credential、`internal` transport、
+  復旧scope制限はそのまま維持する。
+
+### 実施結果
+
+- `GAME_FIELDS_ENV`、Vercel Project名、Git branchからdevを判定し、
+  devの既定RP IDを`dev.game-fields.com`へ変更した。
+- 環境シグナルが矛盾する場合、devへ親RP ID `game-fields.com`を手動指定した場合、
+  OriginがRP IDの同一hostまたはsubdomainでない場合はfail closedで拒否する。
+- 現行仕様、環境台帳、既知課題へRP ID分離と一度限りのdev再登録条件を反映した。
+
+### 検証
+
+- 最新`develop@b626172`へ統合後、`npm test`に成功し、全613テストが通過した。
+- `npm run verify`に成功し、環境台帳、9ゲーム共通要件、SDK境界、migration、
+  Shell契約、lintを確認した。
+- `npm run build`に成功し、production buildの全78ルートが生成された。
+
+### 未対応・保留
+
+- `develop`へ非force反映し、`app-games-dev`の対象Deploymentを`READY`まで確認する。
+- 新しいRP IDでは旧dev資格情報を利用できないため、devで既存MFAを一度リセットし、
+  表示が`dev.game-fields.com`であることを確認してパスキーを再登録する。
+- devをログアウトして通常ログインを確認した後、mainにも通常ログインできるか別に確認する。
+  mainが旧credential不一致ならmain側だけ復旧し、`game-fields.com`用を再登録する。
+- 両環境の通常ログイン成功後に一時break-glass変数を削除・再デプロイする。

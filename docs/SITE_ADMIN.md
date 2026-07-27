@@ -5,8 +5,9 @@
 ## 認証
 
 - サーバー環境変数 `SITE_ADMIN_PASSWORD` を推奨し、未設定時だけ既存の `DEBUG_MODE_PASSWORD` を互換利用する。
-- WebAuthn OriginはVercelのGit branchから決定し、`main`は`https://game-fields.com`と`https://www.game-fields.com`、`develop`は`https://dev.game-fields.com`を許可する。独自管理originを使う場合だけ`SITE_ADMIN_WEBAUTHN_ORIGIN`をカンマ区切りで上書きする。`SITE_ADMIN_WEBAUTHN_RP_ID`は通常設定せず、既定の`game-fields.com`を使う。
-- 新規パスキーは`authenticatorAttachment: "platform"`、`residentKey: "required"`、`userVerification: "required"`を指定し、端末内platform authenticatorかつdiscoverable credentialを必須にする。登録応答も`internal` transportであることを検査し、USBキー、別端末、種別不明の登録を拒否する。認証候補は現在の環境DBへ登録済みのCredential IDだけに制限し、transportを`internal`へ限定する。親RP IDを共有するmainとdevで別環境のパスキーが選ばれることと、Windowsが外付けUSBセキュリティキーを先に要求することを防ぐ。
+- WebAuthnのOriginとRP IDは環境ごとに分離する。`main`はOrigin `https://game-fields.com`／`https://www.game-fields.com`とRP ID `game-fields.com`、`develop`はOrigin `https://dev.game-fields.com`とRP ID `dev.game-fields.com`を使う。これにより、端末側でもmainとdevを別のパスキー名前空間として扱う。
+- 独自管理originを使う場合だけ`SITE_ADMIN_WEBAUTHN_ORIGIN`と`SITE_ADMIN_WEBAUTHN_RP_ID`を組で上書きする。OriginがRP IDの同一hostまたはsubdomainでなければ起動時に拒否し、developへ親RP ID `game-fields.com`を指定する設定も拒否する。
+- 新規パスキーは`authenticatorAttachment: "platform"`、`residentKey: "required"`、`userVerification: "required"`を指定し、端末内platform authenticatorかつdiscoverable credentialを必須にする。登録応答も`internal` transportであることを検査し、USBキー、別端末、種別不明の登録を拒否する。認証候補は現在の環境DBへ登録済みのCredential IDだけに制限し、transportを`internal`へ限定する。RP ID分離後も、DB内の未登録Credentialを認証候補にしない境界を維持する。
 - プレイヤーログイン、非公開ゲームキーとは共有しない。管理画面CookieはプレイヤーCookieと分離するが、登録済み管理者メールとプレイヤーの所有確認済み復旧メールが一致すると、そのプレイヤーへデバッグ資格を自動付与する。未確認メールは一致しても権限判定に使わない。
 - 成功時は署名付きHttpOnly Cookie `game-fields-site-admin` を発行する。
 - CookieはSameSite=Strict、本番Secure、全パス有効、12時間で失効する。

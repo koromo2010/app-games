@@ -614,6 +614,24 @@ commit `44f0ad3`を`develop`へ公開し、`app-games-dev` Deployment `dpl_9JxES
 固定しない。Vercelの`develop` branchではdev Originをコードから選ぶ。返信結果は
 操作中フォームの直上へ表示し、曖昧な通信失敗の再試行では同じrequest IDを再利用する。
 
+## 2026-07-27 mainとdevのパスキーが同じRP IDへ登録される
+
+状態: コード修正済み（dev配備・資格情報の再登録・通常ログイン確認待ち）
+
+前項では、mainとdevが同じRP ID `game-fields.com`を使いながらDBだけを分離する設計を
+維持し、`allowCredentials`を環境DBのCredential IDへ絞ることで対処していた。
+しかしRP IDは端末側のパスキー名前空間であり、同じメール由来のuser handleも共通だった
+ため、devでの再登録が端末上のmain用資格情報を置換または混在させる余地が残った。
+DB側に別々の古いCredential IDが残ると、USBキーへの誘導、端末内パスキーが見つからない、
+`SITE_ADMIN_PASSKEY_NOT_FOUND`等の不整合につながる。
+
+mainはRP ID `game-fields.com`、devはRP ID `dev.game-fields.com`へ分離する。
+develop判定は`GAME_FIELDS_ENV`、Vercel Project名、Git branchの順に利用でき、
+devへ親RP ID `game-fields.com`を手動指定した場合はfail closedで拒否する。
+設定したOriginがRP IDの同一hostまたはsubdomainでない場合も拒否する。
+旧devパスキーは新RP IDでは利用できないため、dev配備後にMFAを一度リセットし、
+`dev.game-fields.com`用パスキーを再登録して通常ログインを確認する。
+
 ## 2026-07-27 メール送信の部分失敗と通信再試行でリンク・会話が不整合になる
 
 状態: 修正済み（2026-07-27、回帰テスト・lint・buildあり）
