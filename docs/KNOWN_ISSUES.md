@@ -859,3 +859,18 @@ asset URLは1時間bucket内で決定的とし、同じrevision・pathの再読�
 browser／Vercel CDNのcache期間はtoken期限以下、`stale-while-revalidate`なしとし、
 異なるtokenの応答を共有しない。実配備ではPOST 200、JS/CSS 200、iframe描画、
 Console、再読込、改ざん・別revision・期限切れ403に加え、`x-vercel-cache`も確認する。
+
+### 旧asset token受理の退役条件
+
+旧JSON形式asset tokenの受理は恒久仕様にしない。新形式を段階配備するため一時的に
+旧形式を受理する場合でも、Portal／本体／Preview Runtimeの全aliasが新形式発行版へ
+切り替わった時刻を記録し、旧形式の最大有効期限を過ぎ、新形式だけが実際のNetworkで
+発行・取得されていることを確認した後、旧形式のverify分岐とtest fixtureを同じ変更で
+削除する。削除後は旧形式tokenが403、新形式の正規tokenだけが200になる回帰テストを
+必須とする。
+
+今回のCookieなし実装はasset tokenを`v2.<expiry>.<signature>`だけに限定しており、
+旧JSON形式を受理する分岐・fixtureは含まない。旧形式は入口grantの残存期限をそのまま
+使うため最大60秒であり、Preview dev aliasが`647d598`へ切り替わった
+2026-07-27 14:22:15 JSTから60秒後を失効確認時刻とする。実ブラウザでv2 asset取得を
+確認するまでは、この退役確認も完了扱いにしない。
