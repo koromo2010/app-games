@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { normalizePreviewAssetPath, previewContentType } from "../apps/sdk-preview/lib/preview-source.ts";
@@ -8,6 +9,7 @@ import {
   previewAssetCacheHeaders,
   previewAssetPath,
   previewContentSecurityPolicy,
+  resolvePreviewChildAssetToken,
   verifyPreviewAssetToken,
 } from "../apps/sdk-preview/lib/preview-security.ts";
 import { gameFieldsPresetRuntimeSource, injectGameFieldsPreset } from "../apps/sdk-preview/lib/preset-runtime.ts";
@@ -32,6 +34,27 @@ import {
 import {
   gameSdkPlatformResourcePolicy,
 } from "../lib/game-sdk-platform-resource-policy.ts";
+
+function createLegacyPreviewAssetTokenForTest(
+  scope: {
+    instanceId: string;
+    gameId: string;
+    revision: string;
+  },
+  expiresAt: number,
+  secret: string,
+) {
+  const payload = Buffer.from(JSON.stringify({
+    audience: "game-fields-preview-assets",
+    version: 1,
+    ...scope,
+    expiresAt,
+  }), "utf8").toString("base64url");
+  const signature = createHmac("sha256", secret)
+    .update(`game-fields-preview-assets:${payload}`)
+    .digest("base64url");
+  return `${payload}.${signature}`;
+}
 
 test("SDK preview source keeps every asset inside its mock directory", () => {
   assert.equal(normalizePreviewAssetPath([]), "index.html");
@@ -571,8 +594,9 @@ test("SDK preview grants each opaque-origin subresource one path-scoped determin
       now,
       secret,
     ),
-    { expiresAt: capability.expiresAt },
+    { expiresAt: capability.expiresAt, version: "v2" },
   );
+  assert.match(capability.token, /^v2\./);
   assert.equal(
     verifyPreviewAssetToken(
       capability.token,
@@ -667,7 +691,7 @@ test("SDK preview grants each opaque-origin subresource one path-scoped determin
       now + 60_001,
       secret,
     ),
-    { expiresAt: packageCapability.expiresAt },
+    { expiresAt: packageCapability.expiresAt, version: "v2" },
   );
   assert.equal(
     packageAssetPath(scope, "styles.css", packageCapability.token),
@@ -677,6 +701,101 @@ test("SDK preview grants each opaque-origin subresource one path-scoped determin
   assert.match(cacheHeaders["Cache-Control"], /^public, max-age=\d+, must-revalidate, immutable$/);
   assert.match(cacheHeaders["Vercel-CDN-Cache-Control"], /^public, max-age=\d+, must-revalidate$/);
   assert.doesNotMatch(JSON.stringify(cacheHeaders), /stale-while-revalidate|Vary/i);
+});
+
+test("SDK preview temporarily accepts legacy revision-wide v1 asset capabilities", () => {
+  const scope = {
+    instanceId: "creator-lab",
+    gameId: "sample-game",
+    revision: "a".repeat(40),
+  };
+  const secret = "test-preview-signing-secret";
+  const now = Date.now();
+  const expiresAt = now + 8 * 60 * 60 * 1000;
+  const token = createLegacyPreviewAssetTokenForTest(
+    scope,
+    expiresAt,
+    secret,
+  );
+
+  assert.deepEqual(
+    verifyPreviewAssetToken(
+      token,
+      { ...scope, sourceKind: "package", assetPath: "styles/main.css" },
+      now,
+      secret,
+    ),
+    { expiresAt, version: "v1" },
+  );
+  assert.equal(
+    resolvePreviewChildAssetToken(
+      token,
+      { expiresAt, version: "v1" },
+      {
+        ...scope,
+        sourceKind: "package",
+        assetPath: "images/card.png",
+      },
+      now,
+      secret,
+    ),
+    token,
+  );
+  assert.deepEqual(
+    verifyPreviewAssetToken(
+      token,
+      { ...scope, sourceKind: "package", assetPath: "images/card.png" },
+      now,
+      secret,
+    ),
+    { expiresAt, version: "v1" },
+  );
+  assert.equal(
+    verifyPreviewAssetToken(
+      token,
+      {
+        ...scope,
+        gameId: "other-game",
+        sourceKind: "package",
+        assetPath: "styles/main.css",
+      },
+      now,
+      secret,
+    ),
+    null,
+  );
+  assert.equal(
+    verifyPreviewAssetToken(
+      token,
+      {
+        ...scope,
+        revision: "b".repeat(40),
+        sourceKind: "package",
+        assetPath: "styles/main.css",
+      },
+      now,
+      secret,
+    ),
+    null,
+  );
+  assert.equal(
+    verifyPreviewAssetToken(
+      token,
+      { ...scope, sourceKind: "package", assetPath: "styles/main.css" },
+      expiresAt,
+      secret,
+    ),
+    null,
+  );
+  assert.equal(
+    verifyPreviewAssetToken(
+      `${token}x`,
+      { ...scope, sourceKind: "package", assetPath: "styles/main.css" },
+      now,
+      secret,
+    ),
+    null,
+  );
 });
 
 test("SDK preview rewrites HTML, CSS, and module references to exact signed asset paths", () => {

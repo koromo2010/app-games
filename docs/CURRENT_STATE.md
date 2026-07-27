@@ -64,6 +64,11 @@ devとmainの採用済みSDKアプリ情報は環境別DBに分離する。管�
 
 SDK Portalはpackage client／server grantをEd25519で署名する。portable server grantは隔離Previewが固定した公開鍵だけでローカル検証し、Portalの検証APIやcross-project共通秘密値へ依存しない。ブラウザ入口は60秒のclient交換grantをURL fragmentへ渡し、fragmentを履歴から即時消去してform POSTする。Previewはgrant検証後のPOST応答で直接HTML骨格を返し、Cookieや303遷移を使わない。JS、CSS、画像、font、mediaとPlatform bridgeは外部assetのまま、同一source kind・制作者・ゲーム・固定revision・正規化済みasset path・期限へ限定したHMAC URLで取得する。Preview側の秘密値はこのpath単位asset tokenだけに使用する。
 
+2026-07-27の段階移行中は、developの発行器はpath単位v2だけを発行し、
+共有verifierだけが旧revision単位v1とv2を一時的に受理する。旧v1の最長有効期間と
+実Network確認が完了するまでの互換層であり、恒久契約ではない。退役条件とmainでの
+配備順は`KNOWN_ISSUES.md`を正本とする。
+
 SDK作品とdev採用アプリの承認・却下・復元は5〜500文字の判断理由を必須とし、
 対象revision・3種のpackage hash・実行管理者・日時を`sdk_release_decisions`へ
 追加専用で保存する。採用・復元では現在版更新、新release、決定履歴を一つの

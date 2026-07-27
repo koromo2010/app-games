@@ -2,10 +2,12 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import type { SdkPreviewGrant } from "@game-fields/sdk-preview-auth";
 
 const PREVIEW_ASSET_TOKEN_AUDIENCE = "game-fields-preview-assets";
+const PREVIEW_ASSET_TOKEN_LEGACY_VERSION = 1;
 const PREVIEW_ASSET_TOKEN_VERSION = "v2";
 const PREVIEW_ASSET_TOKEN_BUCKET_MS = 60 * 60 * 1000;
 const PREVIEW_ASSET_TOKEN_LIFETIME_MS = 2 * PREVIEW_ASSET_TOKEN_BUCKET_MS;
-const MAX_LOCAL_TOKEN_LENGTH = 256;
+const MAX_V2_TOKEN_LENGTH = 256;
+const MAX_LEGACY_TOKEN_LENGTH = 2_048;
 
 export type PreviewAssetIdentity = Pick<
   SdkPreviewGrant,
@@ -18,6 +20,12 @@ export type PreviewAssetScope = PreviewAssetIdentity & {
 };
 export type VerifiedPreviewAssetToken = {
   expiresAt: number;
+  version: "v1" | "v2";
+};
+type LegacyPreviewAssetTokenPayload = PreviewAssetIdentity & {
+  audience: typeof PREVIEW_ASSET_TOKEN_AUDIENCE;
+  expiresAt: number;
+  version: typeof PREVIEW_ASSET_TOKEN_LEGACY_VERSION;
 };
 
 export function previewSigningSecret() {
@@ -42,6 +50,12 @@ function previewAssetSignature(
       scope.assetPath,
       expiresAt,
     ]))
+    .digest();
+}
+
+function legacyPreviewAssetSignature(payload: string, secret: string) {
+  return createHmac("sha256", secret)
+    .update(`${PREVIEW_ASSET_TOKEN_AUDIENCE}:${payload}`)
     .digest();
 }
 
@@ -123,13 +137,68 @@ export function createPreviewAssetTokenForScope(
   return scopedAssetToken(scope, expiresAt, now, secret);
 }
 
+/**
+ * Legacy v1 capabilities are revision-wide and must remain unchanged while
+ * rewriting their CSS/module child references. New v2 capabilities keep the
+ * path-scoped child-token contract.
+ */
+export function resolvePreviewChildAssetToken(
+  token: string,
+  capability: VerifiedPreviewAssetToken,
+  childScope: PreviewAssetScope,
+  now = Date.now(),
+  secret = previewSigningSecret(),
+) {
+  return capability.version === "v1"
+    ? token
+    : createPreviewAssetTokenForScope(
+        childScope,
+        capability.expiresAt,
+        now,
+        secret,
+      );
+}
+
 export function verifyPreviewAssetToken(
   token: string,
   scope: PreviewAssetScope,
   now = Date.now(),
   secret = previewSigningSecret(),
 ): VerifiedPreviewAssetToken | null {
-  if (!token || token.length > MAX_LOCAL_TOKEN_LENGTH) return null;
+  if (!token) return null;
+  if (!token.startsWith(`${PREVIEW_ASSET_TOKEN_VERSION}.`)) {
+    if (token.length > MAX_LEGACY_TOKEN_LENGTH) return null;
+    const [payload, encodedSignature, extra] = token.split(".");
+    if (!payload || !encodedSignature || extra) return null;
+
+    let actualSignature: Buffer;
+    let parsed: LegacyPreviewAssetTokenPayload;
+    try {
+      actualSignature = Buffer.from(encodedSignature, "base64url");
+      parsed = JSON.parse(
+        Buffer.from(payload, "base64url").toString("utf8"),
+      ) as LegacyPreviewAssetTokenPayload;
+    } catch {
+      return null;
+    }
+    const expectedSignature = legacyPreviewAssetSignature(payload, secret);
+    if (
+      actualSignature.length !== expectedSignature.length
+      || !timingSafeEqual(actualSignature, expectedSignature)
+    ) {
+      return null;
+    }
+    return parsed.audience === PREVIEW_ASSET_TOKEN_AUDIENCE
+      && parsed.version === PREVIEW_ASSET_TOKEN_LEGACY_VERSION
+      && parsed.instanceId === scope.instanceId
+      && parsed.gameId === scope.gameId
+      && parsed.revision === scope.revision
+      && Number.isSafeInteger(parsed.expiresAt)
+      && parsed.expiresAt > now
+      ? { expiresAt: parsed.expiresAt, version: "v1" }
+      : null;
+  }
+  if (token.length > MAX_V2_TOKEN_LENGTH) return null;
   const [version, encodedExpiry, encodedSignature, extra] = token.split(".");
   if (
     version !== PREVIEW_ASSET_TOKEN_VERSION
@@ -156,7 +225,7 @@ export function verifyPreviewAssetToken(
   ) {
     return null;
   }
-  return { expiresAt };
+  return { expiresAt, version: "v2" };
 }
 
 function encodedAssetPath(assetPath: string) {

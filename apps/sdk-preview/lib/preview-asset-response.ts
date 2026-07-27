@@ -13,10 +13,10 @@ import {
   rewritePreviewJavaScriptAssetUrls,
 } from "@/lib/preview-asset-rewriter";
 import {
-  createPreviewAssetTokenForScope,
   packageAssetPath,
   previewAssetCacheHeaders,
   previewAssetPath,
+  resolvePreviewChildAssetToken,
   type PreviewAssetIdentity,
   type PreviewAssetSourceKind,
   verifyPreviewAssetToken,
@@ -90,11 +90,15 @@ export async function renderAuthorizedPreviewAsset({
     if (!isBrowserReadablePreviewAsset(sourceKind, childAssetPath)) {
       throw new PreviewAssetReferenceError();
     }
-    const token = createPreviewAssetTokenForScope({
-      ...scope,
-      sourceKind,
-      assetPath: childAssetPath,
-    }, capability.expiresAt);
+    const token = resolvePreviewChildAssetToken(
+      assetToken,
+      capability,
+      {
+        ...scope,
+        sourceKind,
+        assetPath: childAssetPath,
+      },
+    );
     const path = sourceKind === "package"
       ? packageAssetPath(scope, childAssetPath, token)
       : previewAssetPath(scope, childAssetPath, token);

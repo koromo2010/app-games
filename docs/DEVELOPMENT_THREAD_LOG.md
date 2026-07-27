@@ -6222,3 +6222,52 @@
   旧v1 verifier／fixtureを削除する。
 - mainではverifier両対応、v2発行、8時間待機、v1削除を別配備で行う。
 - 実スカルのiframe描画とasset／cache／拒否境界の確認完了までmainへ反映しない。
+
+## 2026-07-27 — developのv1＋v2 asset verifierを復元
+
+### 利用者からの要望
+
+- 近接事故のステップ1として、developの共有asset verifierへ旧v1と新v2の
+  両対応を復元し、devの互換切断状態を解消する。
+- 復元後は、v2-only発行、8時間待機、実Network確認、v1分岐削除、
+  mainでの同手順反復を順番どおり次工程へ残す。
+
+### 判断
+
+- 現行`createPreviewAssetToken`は変更せず、引き続きpath-scoped v2だけを発行する。
+- `verifyPreviewAssetToken`だけへ旧v1 JSON／HMAC形式を一時復元する。
+- 旧v1はpath／source kind claimを持たないため、元のrevision単位の認可境界を
+  そのまま再現する。v1で取得したCSS／moduleの子asset URLは同じv1 tokenを
+  引き継ぎ、8時間expiryをv2の2時間上限へ誤適用して502にしない。
+- v1互換コードとfixtureは恒久仕様にせず、devとmainで別々に最大TTL排出と
+  実Network確認を終えた後だけ削除する。
+
+### 実施結果
+
+- verifierは`v2.<expiry>.<signature>`を先に厳密検証し、それ以外は長さ制限、
+  HMAC、audience、version、instance、game、revision、expiryを満たす旧v1だけを
+  受理する。
+- v2要求の子assetは従来どおりpath別v2 token、v1要求の子assetは同じv1 tokenを
+  使用する。
+- 現行発行器が`v2.`だけを生成すること、旧v1正常token、改ざん、期限切れ、
+  game／revision不一致、v2のpath／source不一致を回帰fixtureへ追加した。
+
+### 検証
+
+- 対象19テスト成功。
+- 全630テスト成功。
+- `npm run verify`成功。
+- SDK Preview production build成功。
+- 本体78 routeのproduction build成功。
+
+### 未対応・保留
+
+- 検証済み変更を`develop`へ非force反映し、3 dev Projectの対象SHAが
+  `READY`になることを確認する。
+- `preview-dev`のalias切替後にv1正常tokenが200、v2正常tokenが200、
+  否定系が403となることを実配備で確認する。
+- v2-only発行を実Networkで確認する。最後の旧v1発行可能時刻
+  2026-07-27 14:22:15 JSTから最低8時間後の同日22:22:15 JSTまでは
+  v1 verifier／fixtureを削除しない。
+- devのv1退役後、mainではverifier両対応、v2-only発行、8時間待機、
+  v1削除を別配備として反復する。

@@ -69,7 +69,7 @@ Preview側の秘密値はpath単位asset tokenだけに使い、両Projectの
 
 ## 2026-07-27 Preview共有asset token検証器を段階配備なしでv2-onlyへ切り替えた
 
-状態: 未修正・developでv1＋v2両対応検証器の復元待ち／main反映禁止
+状態: ステップ1修正実装済み・develop配備待ち／main反映禁止
 
 Cookieなしの直接HTML方式をdevへ配備した際、スカルを含む正式Packageとmockが共有する
 `createPreviewAssetToken`／`verifyPreviewAssetToken`を、旧v1 JSON形式から
@@ -96,6 +96,13 @@ path-scoped v2形式へ発行側・検証側同時に置き換えた。検証側
 失敗した証拠は現時点ではない。ただしasset token拒否専用の構造化イベントはなく、
 これは「観測上の実害なし」であって互換切断が安全だったことの証明ではない。
 本番`preview.game-fields.com`と`main`は旧v1のままで、この近接事故の直接影響外である。
+
+2026-07-27 15:01 JSTに、共有verifierへ旧v1 JSON形式とpath-scoped v2形式の
+両方を検証する分岐を復元した。旧v1は元のclaimどおりrevision単位で検証し、
+CSS／module内の子asset参照にも同じv1 tokenを引き継ぐ。現行発行器は変更せず、
+v2だけを発行する。v1／v2正常token、改ざん、期限切れ、game／revision／
+path／source不一致を自動テストで固定した。これはローカル実装と検証の完了であり、
+`preview-dev`への配備確認前は互換切断の解消完了と扱わない。
 
 devの復旧・退役条件:
 
