@@ -890,7 +890,7 @@ break-glass復旧scopeを制限した際、管理者一覧の初期化ボタン�
 
 ## 2026-07-27 パスキー初期化の復旧コードが必ず拒否される
 
-状態: コード修正済み（2026-07-27、回帰テスト・verify・全テスト・build成功、dev配備と実機再確認待ち）
+状態: 修正・dev配備済み（2026-07-27、回帰テスト・verify・全テスト・build成功、実機再確認待ち）
 
 通常full管理者が自分の「パスキー初期化」を実行し、Windows Helloを利用できない場合、
 クライアントは復旧コードによるstep-upを提示していた。しかし`begin-step-up`は
@@ -906,6 +906,12 @@ dev実行ログでも、同じ操作の`begin-step-up` 200直後に復旧コー�
 画面もセッション変更を即時反映し、初期化成功後に同じ管理者アカウント欄から
 Windows Hello登録へ進める。別管理者、匿名状態、break-glass recovery scopeには
 この経路を許可しない。無効コードとchallenge期限切れは具体的な表示へ分ける。
+
+修正commit `444ec16`をforceなしでdevelopへ反映し、本体dev
+`dpl_8WMj9R8vkjmoPPGY4ThfrXL6Q4dg`、SDK Portal dev
+`dpl_Ar2yAhLEBnYiCzCueJLoaDEvVFA4`、Preview Runtime dev
+`dpl_96oWgQXG9NcBWaNWNmhtQruDydWV`がすべて`READY`となった。
+残る確認は本人端末での初期化成功、Windows Hello登録、通常ログインである。
 
 ## 2026-07-27 昇格操作に判断理由と実行者の一貫した履歴がない
 

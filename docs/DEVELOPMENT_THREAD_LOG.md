@@ -2741,8 +2741,16 @@ Total output lines: 6329
 
 - 管理者認証境界の対象回帰テストに成功した。
 - `npm run verify`、全636テスト、78 routeの`npm run build`に成功した。
+- 修正commit `444ec16`をforceなしで`develop`へ反映した。
+- 本体dev `dpl_8WMj9R8vkjmoPPGY4ThfrXL6Q4dg`、SDK Portal dev
+  `dpl_Ar2yAhLEBnYiCzCueJLoaDEvVFA4`、Preview Runtime dev
+  `dpl_96oWgQXG9NcBWaNWNmhtQruDydWV`がすべて`READY`となり、
+  `dev.game-fields.com`を含む各aliasへ反映された。
+
+### 関連コミット
+
+- `444ec16` — `Fix recovery-code admin step-up`
 
 ### 未対応・保留
 
-- remote `develop`への反映、`app-games-dev`のREADY、本人端末での
-  「初期化→復旧コード→Windows Hello再登録→通常ログイン」の実機確認。
+- 本人端末での「初期化→復旧コード→Windows Hello再登録→通常ログイン」の実機確認。
