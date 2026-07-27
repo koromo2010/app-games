@@ -22,7 +22,7 @@ export async function siteAdminRegistrationOptions(email: string) {
     attestationType: "none",
     timeout: 120_000,
     excludeCredentials: existing.map((passkey) => ({ id: passkey.credentialId })),
-    authenticatorSelection: { residentKey: "preferred", userVerification: "required" },
+    authenticatorSelection: { residentKey: "required", userVerification: "required" },
     preferredAuthenticatorType: "localDevice",
   });
 }
@@ -35,12 +35,12 @@ export async function siteAdminAuthenticationOptions(email: string) {
     rpID,
     timeout: 120_000,
     userVerification: "required",
-    // Restrict the chooser to credentials registered in this environment's admin DB.
-    // Do not pin saved transport hints: Chrome/Windows may use a different available
-    // provider later, but must not return a passkey registered only in another
-    // Game Fields environment that shares the same parent RP ID.
+    // Restrict the chooser to credentials registered in this environment's admin DB
+    // and to the platform authenticator. Omitting transports still lets Windows choose
+    // an external USB security key before Windows Hello on some devices.
     allowCredentials: passkeys.map((passkey) => ({
       id: passkey.credentialId,
+      transports: ["internal"],
     })),
   });
 }

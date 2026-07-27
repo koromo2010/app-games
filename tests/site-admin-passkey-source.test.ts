@@ -7,15 +7,23 @@ const source = readFileSync(
   "utf8",
 );
 
-test("admin passkey authentication uses only credentials registered in this environment", () => {
+test("admin passkey registration requires a discoverable local credential", () => {
   assert.match(source, /preferredAuthenticatorType:\s*"localDevice"/);
+  assert.match(
+    source,
+    /authenticatorSelection:\s*\{\s*residentKey:\s*"required",\s*userVerification:\s*"required"\s*\}/,
+  );
+});
+
+test("admin passkey authentication uses registered credentials through Windows Hello", () => {
   assert.match(
     source,
     /allowCredentials:\s*passkeys\.map[\s\S]*id:\s*passkey\.credentialId/,
   );
-  assert.doesNotMatch(
+  assert.match(
     source,
-    /allowCredentials:[\s\S]*transports:\s*passkey\.credential\.transports/,
+    /allowCredentials:[\s\S]*transports:\s*\["internal"\]/,
   );
+  assert.doesNotMatch(source, /transports:\s*passkey\.credential\.transports/);
   assert.match(source, /passkey\.email !== email/);
 });

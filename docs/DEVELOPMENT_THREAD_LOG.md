@@ -5721,3 +5721,40 @@
 
 - `develop`へ非force反映し、`app-games-sdk-dev` DeploymentをREADYまで確認する。
 - main Portalのartifact source healthから、環境間service認証の実往復を確認する。
+
+## 2026-07-27 — dev管理者パスキーのUSBキー誤誘導を再調査
+
+### 利用者からの要望
+
+- 修正後もdev管理画面のパスキー認証がWindows Helloではなく、外付け
+  セキュリティキーをUSBポートへ挿す画面を表示する問題を解消する。
+
+### 調査結果と判断
+
+- `app-games-dev`は`develop`の`b4f0cf94a5d17c11fc1097c4c01d4b602edb5107`が
+  `READY`であり、利用者の直近ログイン試行も同Deploymentへ到達していた。
+- 管理パスワード認証は成功し、パスキー検証POSTより前のブラウザ認証画面で
+  停止していたため、未デプロイ、サーバー例外、古いaliasは原因ではない。
+- Credential IDだけを指定してtransportを省略しても、対象Windows環境では
+  外付けsecurity keyが選ばれた。従来の「transportを省けばWindows Helloへ進む」
+  という判断を訂正する。
+- 管理者パスキーは端末内platform authenticatorを正式要件としているため、
+  登録済みCredential IDを維持したまま認証transportを`internal`へ限定する。
+
+### 実施結果
+
+- 認証optionsの各`allowCredentials`へ`transports: ["internal"]`を明示した。
+- devの新規登録もdiscoverable credential必須へ統一した。
+- 現行認証仕様と回帰テストを更新した。
+
+### 検証
+
+- 管理者パスキー回帰テスト2件に成功した。
+- `npm run lint`に成功した。
+- `npm test`に成功し、全607テストが通過した。
+- `npm run build`に成功した。
+
+### 未対応・保留
+
+- `develop`へ反映し、`app-games-dev`を再デプロイしてWindows実機で確認する。
+- dev実機成功後に同じ認証transport修正をmainへ反映する。

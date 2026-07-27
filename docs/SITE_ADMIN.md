@@ -6,7 +6,7 @@
 
 - サーバー環境変数 `SITE_ADMIN_PASSWORD` を推奨し、未設定時だけ既存の `DEBUG_MODE_PASSWORD` を互換利用する。
 - WebAuthn OriginはVercelのGit branchから決定し、`main`は`https://game-fields.com`と`https://www.game-fields.com`、`develop`は`https://dev.game-fields.com`を許可する。独自管理originを使う場合だけ`SITE_ADMIN_WEBAUTHN_ORIGIN`をカンマ区切りで上書きする。`SITE_ADMIN_WEBAUTHN_RP_ID`は通常設定せず、既定の`game-fields.com`を使う。
-- パスキー候補は現在の環境DBへ登録済みのCredential IDだけに制限し、保存済みtransport hintは固定しない。親RP IDを共有するmainとdevで、別環境のパスキーが選ばれて`SITE_ADMIN_PASSKEY_NOT_FOUND`になることを防ぐ。
+- 新規パスキーは端末内platform authenticatorかつdiscoverable credentialを必須にする。認証候補は現在の環境DBへ登録済みのCredential IDだけに制限し、transportを`internal`へ限定する。親RP IDを共有するmainとdevで別環境のパスキーが選ばれることと、Windowsが外付けUSBセキュリティキーを先に要求することを防ぐ。
 - プレイヤーログイン、非公開ゲームキーとは共有しない。管理画面CookieはプレイヤーCookieと分離するが、登録済み管理者メールとプレイヤーの所有確認済み復旧メールが一致すると、そのプレイヤーへデバッグ資格を自動付与する。未確認メールは一致しても権限判定に使わない。
 - 成功時は署名付きHttpOnly Cookie `game-fields-site-admin` を発行する。
 - CookieはSameSite=Strict、本番Secure、全パス有効、12時間で失効する。
