@@ -5806,7 +5806,10 @@
 
 ### 未対応・保留
 
-- `develop`へ反映し、`app-games-dev`を`READY`まで確認する。
+- GitHub `develop`へ`883c98d5d869d3d3429c60baa7841ee60ed78de6`を非forceで反映した。
+- `app-games-dev` Deployment `dpl_5ipZt2G9roaCwsovHqZ5Kc3PUFJ7`は`READY`で、
+  `dev.game-fields.com`のaliasが同Deploymentへ切り替わった。
+- errors-only build logに失敗はなく、公開後のerror／fatal Runtime Logは0件だった。
 - dev実機で復旧コードログインからWindows Helloを追加し、次の通常ログインが
   Windows Helloへ進むことを確認する。
 - 実機確認後、`SITE_ADMIN_BREAK_GLASS_ENABLED`を`app-games-dev` Productionから削除し、
