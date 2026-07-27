@@ -322,183 +322,493 @@ export function ApprovedSdkGameShell({
         pendingLobbyRoomRef.current = null;
         setCanReturnToRoom(false);
         setIsRoomDissolved(true);
-        setMessage("éƒ¨å±‹ãŒè§£æ•£ã•ã‚ŒãµÓ­öÒÚ$z{-®éÜj×¢¢ó¢Ş‡
-H(€ÁÉ•Á…É•}ÍÕÁÁ½ÉÑ}É•Á½ÉÑƒ»–ş¦‚#–—–*o£_›
-×óCóŸ
-š’s¢¢óg
-/(´ƒ–B3’âï–7fëïÚk–‚Ç»–>¿¢÷šŸ3
-/–‚Ó–B#½•Ñ}ÍÕÁÁ½ÉÑ}Ñ¡É•…‘ƒ/
-$(€ÁÉ•Á…É•}ÍÕÁÁ½ÉÑ}É•Á±åƒã¦ËÿšZÃ¢š?–‚Ç–F+
-Kšš¶‹g
-/(´ƒš^‹–¶c#ã–në–ºkW
-3}½İ¹±½…‘5—£–2ë–"—g
-/
-Ù•ÈÄßãšnÓšZÃg
-/((ŒŒŒƒ–ºšZ÷ÖCšzp((´½İ¹±½…‘5—¹ÍÕÁÁ½ÉÓš&/¦‚ã–£’îÛŸ–B#¦Z‹¦–g¢s»¢¦ÏÒÃ–>[–ú_š^‹–¶c
-ç³'ã»¢şS’ş‡
-K¢ş÷–*ƒ_(´5C¹ÁÉ•Á…É•}ÍÕÁÁ½ÉÑ}É•Á½ÉÑƒá¡•­•‘I•Á½ÉÑ%‘Íƒ
-K¢ş÷–*ƒ_>û–r£»šr³’êëš&šr%É•Á½ÉĞ%(€ƒ–£’îÛ£’â¢Ó_«šZÃ¢š?’â/šnã7
-Kš.K–B›g
-/
-#¯_(´M,!•±Ã>û¢†3’îWšc–òW7Úg;š^‹~—’ê/¢Æ‡
-K–B3c––GÒãšnÓšZÃ_(´ƒš^‹¯’ös
-'
-3¦7¢’É•Á½ÉÓ¿¢«–.WÖÇ–B#ok–
-ç³'ã–ş¢š––ºç
-K¢ş÷¢¢c_–ú3¯¦7¢’–Ó
-H(€ƒÖ’êg
-/šZç¦w£_((ŒŒŒƒš’s¢¢ğ((´ÍÕÁÁ½ÉÓ––GÒ
-ç Û’îÛ¹Á´ÉÕ¸Ù•É¥™åƒ– ØÌß
-ç#¯š"C–*_(´ƒšr³’öMÁÉ½‘ÕÑ¥½¸‰Õ¥±“¡M,A½ÉÑ…°ÁÉ½‘ÕÑ¥½¸‰Õ¥±“¯š"C–*_(´ƒ’ş»š¶½µµ¥Ğ€İ…˜àÀØÅƒ
-I™½É—«_‘•Ù•±½Áƒã–>7šbƒ_(´M,A½ÉÑ…°‘•Ø•Á±½åµ•¹Ğ‘Á±|İÍ¥èİLİ¡‘-])¥éAaáMåÅa©U•™áƒ1Ieƒ£«((ŒŒŒƒ¦Z‹¦
-Ï ((´€İ…˜àÀØÅ€ƒŠPAÉ•Ù•¹Ğ‘ÕÁ±¥…Ñ”$ÍÕÁÁ½ÉĞÉ•Á½ÉÑÍ€((ŒŒŒƒšr«–¾û–şsï’şwVd((´Ù•ÈÄß
-K’öÿšZÃ¢š='#Ÿš^‹–¶cš†#’îÛ1ÁÉ•Á…É•}ÍÕÁÁ½ÉÑ}É•Á±åƒã¦Ë
-–ºš¦Šë¢ª7(´ƒRï–?ŸŠë¢ª7_¦7¢’É•Á½ÉÓ£–É•Á½ÉÓ»––ºçšVÓB((ŒŒ€ÈÀÈØ´ÀÜ´ÈÜƒŠPƒ–ê–‚Ó»
-Ëóƒ+šÂ_¯–—
-(((ŒŒŒƒ–"§R£¢/
-'»¢ššrl((´ƒ
-¯ó'¢†£’ëŸ¿–>Ï’â+Â‡šbO’â¢šŸŸ¿¢†3»–>Ï–Ó¯šb
-Kö»7
-Ëóƒ
-K+šÂ_¯–—
-+fï¦2ËŸ7
-/
-#¯g
-/(´ƒ–ê–‚Ó¿+šÂ_¯–—
-+
-Ëóƒ
-KW
-§¯#Ÿ’â+¯’â›ç
-/((ŒŒŒƒ–"“šZ´((´ƒš^‹–¶c»
-¯ó'¾ò?Â‡šbO’â¢šŸ¢†£’ë¢¢·–ºk£–B3c?šr«·
-Ã
-“ÏŸ
-’öÿ#
-/®¿šr¯¢¢·–ºk£_˜(€±½…±MÑ½É…•ƒã’şw–¶cg
-/	µ¥É…Ñ¥½»
-šr³V«JÃ–Š–’'šVÃ¿¢ş÷–*ƒ_«(´ƒšb¿
-Ëóƒ¦ßï«Ï
-¿»–’[ã.³®/_s
-ÿÏ£_›ö»7šb»šN7’ösŸ
-Ëóƒã¦ßï_«(´ƒ+šÂ_¯–—
-+ú“£¦k–âãú“»–¦£Ÿ¿š’sÒ‹–ú3
-fï¦2ËÂÿRÇšv—»nã–¾û¦‚
-KÚ·š2g
-/((ŒŒŒƒ–ºšZ÷ÖCšzp((´ƒ
-¯ó'–>Ï’â+£Â‡šbO’â¢šŸ–>Ï®¿ãfï¦2Ë*Ûš/3–"/
-/šbs
-ÿÏ
-K¢ş÷–*ƒ_(´ƒ+šÂ_¯–—
-+
-Kš’sÒ‹ÖCšzs
-K–B¯
-’â¢šŸ»–#¦‚·ã–º'–ºk
-÷ó#_–"—
-ÿ[Ÿ»–’'šnÓ
-–B3šrg
-/(´ƒš^—šr³¢ª{¾ò?¢.Ç¢ª{»šN7’ös§g¯¡…É¥„µÁÉ•ÍÍ•‘ƒ
-K¢ş÷–*ƒ_((ŒŒŒƒš’s¢¢ğ((´ƒ+šÂ_¯–—
-)%»š¶¢š?–2[–+
-3’şw–¶c–“»‡¢š[–º'–ºk
-÷ó#»¢«–.W
-ç#
-K¢ş÷–*ƒ_(´¹Á´ÉÕ¸±¥¹Ñƒ– ØĞÃ
-ç#ÜàÉ½ÕÑ—¹¹Á´ÉÕ¸‰Õ¥±‘ƒ¯š"C–*_((ŒŒŒƒšr«–¾û–şsï’şwVd((´ƒ
-‹
-¯
-›Ï#¦ZOï®¿šr¯¦ZO–B3šr¿’î+–n{»¾–nË–’[–ş¢š¯«–‚Ó–B#¿
-‹
-¯
-›Ï#¢¢·–ºiA'£_˜(€ƒ–"—¦S–Â;–—g
-/((ŒŒ€ÈÀÈØ´ÀÜ´ÈÜƒŠPM/
-Ëóƒ§
-›Ï
-ã/
-'–ê–‚Óã»nÓš:—–Â;Şh((ŒŒŒƒ–"§R£¢/
-'»¢ššrl((´ƒ
-Ëóƒ§
-›Ï
-ã¯
-/£7–ê–‚ÓàÇ
-¿«
-¿Ÿš"ï
-3
-/
-#¯g
-/(´ƒš"ï
-+–#»–FóÃ¿3·Oó7Ÿ¿«?3–ê–‚Ó7£g
-/((ŒŒŒƒ–"“šZ´((´ƒ3·Oó7¿’ösš"Cšâ#ıI½½·»
-Ëóƒ¦Z/–/–&7*Ûš/3–ê–‚Ó7¿
-Ëóƒ¦ãš*{Rï¦v‹£_›–2ë–"—g
-/(´ƒšbš‚óšâ#ıM/
-Ëóƒ»§
-›Ï
-ãŸ¿‡/—ó–Ÿ¿«?#_Có»nÓš:—šN7’ös£_›¢†£’ëg
-/((ŒŒŒƒ–ºšZ÷ÖCšzp((´ƒš^‹–¶c¹€½…µ•ÍƒnÓš:—«Ï
-¿
-K3
-Ëóƒ’â¢šŸã7/
-'3–ê–‚Óãš"ï
-/7ãÖÇ’â_(´ƒ–¦£¦ßï
-K–Ç¦iÁÁ1¥¹­ƒãš>#>û–r£»¢†£’ë¢¢¢ª{
-KÚ·š2g
-/((ŒŒŒƒš’s¢¢ğ((´ƒ§
-›Ï
-ã»#_Có¯3–ê–‚Óãš"ï
-/73nÓš:—–¶c–r£_š^Ÿ¢†£¢¢c3šº/
-'«O£
-H(€Í½ÕÉ—––GÒ
-ç#ã¢ş÷–*ƒ_(´¹Á´ÉÕ¸±¥¹Ñƒ– ØĞÃ
-ç#ÜàÉ½ÕÑ—¹¹Á´ÉÕ¸‰Õ¥±‘ƒ¯š"C–*_((ŒŒ€ÈÀÈØ´ÀÜ´ÈÜƒŠPM/§
-›Ï
-ãcó»–Ç¦k––GÒ–2X((ŒŒŒƒ–"§R£¢/
-'»¢ššrl((´ƒšbš‚óšâ#ıM/
-ËóƒŸ3–ê–‚Óãš"ï
-/73¢†£’ëW
-3«/(´ƒ–¾û¢Æ‡Rï¦v‹ƒGãs
-ÿÏ
-K¢ÚÏg–¾û–›fšÎWŸ¿«?‹
-ã—ó¯–2[
-K–«–#g
-/((ŒŒŒƒ–"“šZ´((´ƒ–&7–n{¿š^ÁÁÉ½Ù•‘M‘­…µ•M¡•±±ƒƒGãnÓš:—«Ï
-¿
-K¢ş÷–*ƒ_–º¦jo¹¥™É…µ”Á…­…—3’öÿ(€…µ•M‘­É…µ”ƒŠH…µ•M‘­M¡•±±!•…‘•ÉƒÖ3¢Ş¿ã––GÒ3–Æ+›«/(´M,M¡•±³S£»«Ï
-¿nÓšnã7
-K–îš¶‹_–Ç¦i…µ•M‘­M¡•±±!•…‘•Éƒã¢†£’ë¦v‹
-Kšâ‡g(´ÍÕÉ™…”ô‰±½Õ¹”‰ƒŸ¿–Ç¦kcó¢«¢ê¯3nÓš:—š"ï
-+–Â;Şk
-K¢†£’ë_I½½·–Ÿ¼(€ƒš"ï
-+–Â;Şk
-K–Ç¦k‡/—óãö»?((ŒŒŒƒ–ºšZ÷ÖCšzp((´AÉ•Ù¥•ßš:‡R£šâ#ı¥™É…µ”Á…­…—š^İ½É‘İ½±˜±¥•¹Ó
-K–B3`(€…µ•M‘­M¡•±±!•…‘•Éƒ––GÒãÖÇ–B#_(´ƒš^M¡•±³/
-'–/–"•…µ•Q½Á	…¹¹•Éƒ£3–ê–‚Óãš"ï
-/7»nÓšnã7
-K–&+¦f“_(´ƒš:‡R£šâ#ÿ
-Ëóƒ»¢†£’ë–B7
-K3–ê–‚Óãš"ï
-/7¯ÖÇ’â_–"Û’ös¢AÉ•Ù¥•ßŸ¿–B3c–Ç¦k––GÒ/
-$(€ƒ3–"Û’ös¢kó
-ãã7
-K¢†£’ëg
-/((ŒŒŒƒš’s¢¢ğ((´ƒ–Ç¦kcó3§
-›Ï
-ã¦v‹»nÓš:—–Â;Şk
-Kš&šr'_š^M¡•±³¯–/–"—có3š"ï
-'«O£
-H(€Í½ÕÉ—––GÒ
-ç#ã¢ş÷–*ƒ_(´ƒš^ŸÖ3¢Ş¿
-K’öÿfï¦2Ëšâ#ÿ
-Ëóƒ1İ½É‘İ½±˜µÍ‘­ƒŸ
-/O£
-Kfï¦2ËÂÿ/
-'Šë¢ª7_(€ƒ§
-›Ï
-ã¾ò=I½½·»+O¦7ö»¢šÏš"›¯ó¯_³
-““ó‡/—ó’şwš2
-K–n{–âÃ
-ç#ã¢ş÷–*ƒ_(´İ½É‘İ½±˜µÍ‘­ƒ¹I½½·’ösš"C–>–*ƒ_³
-“ÖCšzs–7š"›–£–N‡–ú§–âÃ»š^‹–¶c
-ç#
-K–7–º¢†3_(´¹Á´ÉÕ¸±¥¹Ñƒ– ØĞË
-ç#ÜàÉ½ÕÑ—¹¹Á´ÉÕ¸‰Õ¥±‘ƒ¯š"C–*_((ŒŒŒƒšr«–¾û–şsï’şwVd((´‘•Û¦7–
-g–ú3»–ºRï¦v‹Šë¢ª7
+        setMessage("éƒ¨å±‹ãŒè§£æ•£ã•ã‚ŒãŸã‹ã€å‚åŠ æƒ…å ±ãŒå¤‰æ›´ã•ã‚Œã¦ã„ã¾ã™ã€‚");
+        return;
+      }
+      const selfSeat = latestRoom.view.common.players.find(
+        (player) => player.isSelf,
+      )?.seat;
+      if (
+        selfSeat === undefined
+        || !latestRoom.view.common.pendingLobbyReturnSeats.includes(selfSeat)
+      ) {
+        attachRoom(latestRoom);
+        return;
+      }
+      const confirmed = await runtime.sendCommand(latestRoom.code, {
+        expectedRevision: latestRoom.revision,
+        command: { type: "room/confirm-lobby-return" },
+      });
+      attachRoom(confirmed.room);
+    } catch {
+      setMessage("éƒ¨å±‹ã¸æˆ»ã‚Œã‚‹çŠ¶æ…‹ã‚’ç¢ºèªã§ãã¾ã›ã‚“ã§ã—ãŸã€‚");
+    }
+  }, [attachRoom, isRoomDissolved, runtime]);
+
+  const common = room?.view.common;
+  const commonSettings = common?.settings as
+    | Record<string, GameSdkSettingValue>
+    | undefined;
+  const app = room?.view.app;
+  const self = common?.players.find((player) => player.isSelf);
+  const timer = common?.timer;
+  const remainingSeconds = timer?.deadlineAt && clockNow !== null
+    ? Math.max(0, Math.ceil((timer.deadlineAt - clockNow) / 1000))
+    : null;
+
+  if (!room) {
+    return (
+      <main className={`min-h-screen bg-slate-950 px-4 py-10 text-white ${gameTopBannerOffsetClass}`}>
+        <GameSdkShellHeader
+          eyebrow="SDK GAME"
+          title={title}
+          rules={rules}
+          backHref="/games"
+          backLabel="åºƒå ´ã¸æˆ»ã‚‹"
+          surface="lounge"
+        />
+        {isRestoringRoom ? (
+          <section className="mx-auto max-w-5xl">
+            <div className={panelClass}>
+              <h2 className="text-2xl font-black">å‰ã®éƒ¨å±‹ã‚’ç¢ºèªä¸­</h2>
+              <p className="mt-2 text-sm text-slate-600">
+                å‚åŠ ä¸­ã®éƒ¨å±‹ãŒã‚ã‚Œã°ã€ãã®ã¾ã¾å¾©å¸°ã—ã¾ã™ã€‚
+              </p>
+            </div>
+          </section>
+        ) : (
+        <section className="mx-auto grid max-w-5xl gap-5 lg:grid-cols-2">
+          <div className={panelClass}>
+            <h2 className="text-2xl font-black">æ–°ã—ã„éƒ¨å±‹</h2>
+            <p className="mt-2 text-sm text-slate-600">
+              èªè¨¼ãƒ»ä¿å­˜ãƒ»åŒæœŸã¯Game Fieldsã®æ­£å¼Room Runtimeã‚’ä½¿ç”¨ã—ã¾ã™ã€‚
+            </p>
+            <button
+              type="button"
+              className={`${primaryClass} mt-5 w-full`}
+              disabled={pending}
+              onClick={() => void run(() => runtime.createRoom({
+                roomCode: randomRoomCode(),
+                create: {
+                  settings: playerDefaults,
+                  app: {},
+                },
+              }))}
+            >
+              éƒ¨å±‹ã‚’ä½œã‚‹
+            </button>
+            <div className="mt-5 grid gap-2 sm:grid-cols-[1fr_auto]">
+              <input
+                value={joinCode}
+                maxLength={4}
+                onChange={(event) => setJoinCode(event.target.value.toUpperCase())}
+                className="rounded-xl border border-slate-300 px-4 py-3 font-mono font-black"
+                placeholder="éƒ¨å±‹ã‚³ãƒ¼ãƒ‰"
+              />
+              <button
+                type="button"
+                className={secondaryClass}
+                disabled={pending || joinCode.trim().length !== 4}
+                onClick={() => void run(async () => {
+                  const current = await runtime.readRoom(joinCode);
+                  if (!current) throw new Error("ROOM_NOT_FOUND");
+                  return (await runtime.sendCommand(current.code, {
+                    expectedRevision: current.revision,
+                    command: { type: "room/join" },
+                  })).room;
+                })}
+              >
+                å‚åŠ 
+              </button>
+            </div>
+            {message && <p className="mt-3 text-sm font-bold text-rose-700">{message}</p>}
+          </div>
+          <div className={panelClass}>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-2xl font-black">å‚åŠ ã§ãã‚‹éƒ¨å±‹</h2>
+              <button type="button" className={secondaryClass} onClick={() => void refreshRooms()}>
+                æ›´æ–°
+              </button>
+            </div>
+            {rooms.length === 0 ? (
+              <p className="mt-4 text-sm text-slate-500">ç¾åœ¨ã€å‹Ÿé›†ä¸­ã®éƒ¨å±‹ã¯ã‚ã‚Šã¾ã›ã‚“ã€‚</p>
+            ) : (
+              <ul className="mt-4 space-y-2">
+                {rooms.map((candidate) => (
+                  <li key={candidate.code} className="flex items-center justify-between rounded-lg bg-slate-100 p-3">
+                    <span className="font-mono font-black">{candidate.code}</span>
+                    <span>{candidate.playerCount}/{candidate.maximumPlayers}äºº</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+        )}
+      </main>
+    );
+  }
+
+  return (
+    <main className={`min-h-screen bg-slate-950 px-4 py-8 text-white ${gameTopBannerOffsetClass}`}>
+      <GameSdkShellHeader
+        eyebrow={`ROOM ${room.code}`}
+        title={title}
+        rules={rules}
+        backHref="/games"
+        backLabel="åºƒå ´ã¸æˆ»ã‚‹"
+        surface={
+          room.phase === "lobby"
+            ? "lobby"
+            : room.phase === "result"
+              ? "result"
+              : "playing"
+        }
+      >
+        {common?.isHost && (
+          <Link
+            href={`/spectate/${encodeURIComponent(`sdk:${gameId}`)}/${room.code}`}
+            className={secondaryClass}
+          >
+            è¦³æˆ¦ãƒ»å…±æœ‰
+          </Link>
+        )}
+      </GameSdkShellHeader>
+      <section className="mx-auto grid max-w-6xl gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
+        <aside className="space-y-4">
+          <div className={panelClass}>
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-black">{room.phase === "lobby" ? "ã‚²ãƒ¼ãƒ é–‹å§‹å‰" : room.phase === "result" ? "çµæœ" : "ãƒ—ãƒ¬ã‚¤ä¸­"}</h2>
+              <span className="font-mono text-xs">rev {room.revision}</span>
+            </div>
+            <ul className="mt-4 space-y-2">
+              {common?.players.map((player) => (
+                <li key={player.seat} className="flex justify-between rounded-lg bg-slate-100 p-3 text-sm">
+                  <strong>SEAT {player.seat + 1} Â· {player.displayName}{player.isSelf ? "ï¼ˆã‚ãªãŸï¼‰" : ""}</strong>
+                  <span>
+                    {common.pendingLobbyReturnSeats.includes(player.seat)
+                      ? "å¾©å¸°å¾…ã¡"
+                      : player.reducedTime
+                      ? "5ç§’åˆ¶é™"
+                      : player.isDummy
+                        ? "DUMMY"
+                        : player.isHost
+                          ? "HOST"
+                          : ""}
+                  </span>
+                  {common.permissions.canDebug && player.isDummy && (
+                    <button
+                      type="button"
+                      className="text-xs font-bold text-rose-700 underline"
+                      onClick={() => void run(() => send({
+                        type: "room/debug-remove-dummy",
+                        seat: player.seat,
+                      }))}
+                    >
+                      å‰Šé™¤
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+            {common?.permissions.canDebug && (
+              <button
+                type="button"
+                className={`${secondaryClass} mt-4 w-full`}
+                disabled={pending || common.players.length >= common.maximumPlayers}
+                onClick={() => void run(() => send({
+                  type: "room/debug-add-dummy",
+                }))}
+              >
+                DEBUG: ãƒ€ãƒŸãƒ¼ã‚’è¿½åŠ 
+              </button>
+            )}
+            {self?.reducedTime && (
+              <button
+                type="button"
+                className={`${primaryClass} mt-4 w-full`}
+                onClick={() => void run(() => send({ type: "room/recover-timeout" }))}
+              >
+                å¾©å¸°ã—ã¦é€šå¸¸æ™‚é–“ã¸æˆ»ã™
+              </button>
+            )}
+          </div>
+          <div className={panelClass}>
+            <RoomConfigSummary
+              title="ç¾åœ¨ã®éƒ¨å±‹è¨­å®š"
+              items={settingDefinitions.map((definition) => ({
+                label: definition.label.ja,
+                value: String(
+                  commonSettings?.[definition.key]
+                    ?? definition.defaultValue,
+                ),
+              }))}
+            />
+            {common?.permissions.canEditRoomSettings && (
+              <div className="mt-4 space-y-3 border-t border-slate-200 pt-4">
+                {settingDefinitions.map((definition) => {
+                  const value = commonSettings?.[definition.key]
+                    ?? definition.defaultValue;
+                  if (definition.type === "boolean") {
+                    return (
+                      <label key={definition.key} className="flex items-center justify-between gap-3 text-sm font-bold">
+                        {definition.label.ja}
+                        <input
+                          type="checkbox"
+                          checked={value === true}
+                          onChange={(event) => void run(() => send({
+                            type: "room/update-settings",
+                            settings: {
+                              [definition.key]: event.target.checked,
+                            },
+                          } as WordWolfSdkCommand))}
+                        />
+                      </label>
+                    );
+                  }
+                  if (definition.type === "select" && definition.options) {
+                    return (
+                      <label key={definition.key} className="block text-sm font-bold">
+                        {definition.label.ja}
+                        <select
+                          className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2"
+                          value={String(value)}
+                          onChange={(event) => {
+                            const selected = definition.options?.find(
+                              (option) => String(gameSdkSettingOptionValue(option))
+                                === event.target.value,
+                            );
+                            if (!selected) return;
+                            void run(() => send({
+                              type: "room/update-settings",
+                              settings: {
+                                [definition.key]: gameSdkSettingOptionValue(selected),
+                              },
+                            } as WordWolfSdkCommand));
+                          }}
+                        >
+                          {definition.options.map((option) => {
+                            const optionValue = gameSdkSettingOptionValue(option);
+                            const label = typeof option === "object"
+                              ? option.label.ja
+                              : `${optionValue}${definition.unit?.ja ?? ""}`;
+                            return (
+                              <option key={String(optionValue)} value={String(optionValue)}>
+                                {label}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </label>
+                    );
+                  }
+                  return (
+                    <label key={definition.key} className="block text-sm font-bold">
+                      {definition.label.ja}
+                      <input
+                        className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+                        type={definition.type === "number" ? "number" : "text"}
+                        value={String(value)}
+                        min={definition.minimum}
+                        max={definition.maximum}
+                        onChange={(event) => {
+                          const nextValue = definition.type === "number"
+                            ? Number(event.target.value)
+                            : event.target.value;
+                          if (
+                            definition.type === "number"
+                            && !Number.isFinite(nextValue)
+                          ) return;
+                          void run(() => send({
+                            type: "room/update-settings",
+                            settings: {
+                              [definition.key]: nextValue,
+                            },
+                          } as WordWolfSdkCommand));
+                        }}
+                      />
+                    </label>
+                  );
+                })}
+                <button
+                  type="button"
+                  className={`${secondaryClass} w-full`}
+                  onClick={() => void fetch(
+                    `/api/game-sdk/${gameId}/defaults`,
+                    {
+                      method: "PUT",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ settings: commonSettings }),
+                    },
+                  ).then(async (response) => {
+                    if (!response.ok) throw new Error("DEFAULT_SAVE_FAILED");
+                    const body = await response.json() as {
+                      settings: Record<string, GameSdkSettingValue>;
+                    };
+                    setPlayerDefaults(body.settings);
+                    setMessage("ã“ã®è¨­å®šã‚’æ¬¡å›ã®æ—¢å®šå€¤ã«ä¿å­˜ã—ã¾ã—ãŸã€‚");
+                  }).catch(() => {
+                    setMessage("æ—¢å®šå€¤ã‚’ä¿å­˜ã§ãã¾ã›ã‚“ã§ã—ãŸã€‚");
+                  })}
+                >
+                  ã“ã®è¨­å®šã‚’æ¬¡å›ã®æ—¢å®šå€¤ã«ã™ã‚‹
+                </button>
+              </div>
+            )}
+          </div>
+          {rules.length > 0 && (
+            <div className={panelClass}>
+              <h2 className="text-lg font-black">ãƒ«ãƒ¼ãƒ«</h2>
+              <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-slate-700">
+                {rules.map((rule) => <li key={rule}>{rule}</li>)}
+              </ol>
+            </div>
+          )}
+          <OnlineRoomLifecycleActions
+            surface={room.phase === "result" ? "result" : room.phase === "lobby" ? "lobby" : "playing"}
+            isHost={common?.isHost === true}
+            disabled={pending}
+            canReturnToRoom={
+              room.phase === "result"
+              && (common?.isHost === true || canReturnToRoom)
+            }
+            isRoomDissolved={isRoomDissolved}
+            onReturnToRoom={room.phase === "result"
+              ? common?.isHost
+                ? () => run(() => send({ type: "room/rematch" }))
+                : returnToRoom
+              : undefined}
+            onDissolve={room.phase === "lobby" || room.phase === "result"
+              ? async () => {
+                  if (pendingActionRef.current) return;
+                  pendingActionRef.current = true;
+                  setPending(true);
+                  try {
+                    await runtime.dissolveRoom(room.code);
+                    if (room.phase === "result") {
+                      watchRef.current?.close();
+                      watchRef.current = null;
+                      pendingLobbyRoomRef.current = null;
+                      setCanReturnToRoom(false);
+                      setIsRoomDissolved(true);
+                    } else {
+                      attachRoom(null);
+                    }
+                    await refreshRooms();
+                  } catch (error) {
+                    setMessage(runtimeErrorMessage(error));
+                  } finally {
+                    pendingActionRef.current = false;
+                    setPending(false);
+                  }
+                }
+              : undefined}
+            returnHref="/games"
+          />
+        </aside>
+
+        <section className={panelClass}>
+          {timer && (
+            <div className="mb-5 flex items-center justify-between rounded-lg bg-slate-950 px-4 py-3 text-white">
+              <strong>æ®‹ã‚Šæ™‚é–“</strong>
+              <span className="font-mono text-xl font-black">
+                {remainingSeconds === null ? "åˆ¶é™ãªã—" : `${remainingSeconds}ç§’`}
+              </span>
+            </div>
+          )}
+          {room.phase === "lobby" && (
+            <>
+              <button
+                type="button"
+                className={`${primaryClass} w-full`}
+                disabled={!common?.permissions.canStartGame || pending}
+                onClick={() => void run(() => send({ type: "wordwolf/start" }))}
+              >
+                ã“ã®ãƒ¡ãƒ³ãƒãƒ¼ã§é–‹å§‹
+              </button>
+              {common && common.pendingLobbyReturnSeats.length > 0 && (
+                <p className="mt-3 text-center text-sm font-bold text-amber-700">
+                  å‚åŠ è€…ã®å¾©å¸°ã‚’å¾…ã£ã¦ã„ã¾ã™ï¼ˆæ®‹ã‚Š
+                  {common.pendingLobbyReturnSeats.length}äººï¼‰
+                </p>
+              )}
+            </>
+          )}
+          {app?.myWord && (
+            <div className="rounded-xl bg-cyan-50 p-5 text-center">
+              <p className="text-xs font-bold text-cyan-700">ã‚ãªãŸã®ãŠé¡Œ</p>
+              <strong className="mt-2 block text-3xl">{app.myWord}</strong>
+            </div>
+          )}
+          {app?.actions.canSubmitClue && (
+            <form className="mt-5 flex gap-2" onSubmit={(event) => {
+              event.preventDefault();
+              void run(() => send({ type: "wordwolf/submit-clue", text: clue }))
+                .then((succeeded) => {
+                  if (succeeded) setClue("");
+                });
+            }}>
+              <input value={clue} onChange={(event) => setClue(event.target.value)} className="min-w-0 flex-1 rounded-xl border border-slate-300 px-4 py-3" placeholder="ãƒ’ãƒ³ãƒˆ" />
+              <button className={primaryClass} disabled={!clue.trim() || pending}>é€ä¿¡</button>
+            </form>
+          )}
+          {app?.actions.canVote && (
+            <div className="mt-5">
+              <h3 className="font-black">æ€ªã—ã„äººã¸æŠ•ç¥¨</h3>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {common?.players.map((player) => (
+                  <button
+                    key={player.seat}
+                    type="button"
+                    className={secondaryClass}
+                    onClick={() => void run(() => send({
+                      type: "wordwolf/vote",
+                      targetSeat: player.seat,
+                    }))}
+                  >
+                    SEAT {player.seat + 1}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {app?.actions.canGuess && (
+            <form className="mt-5 flex gap-2" onSubmit={(event) => {
+              event.preventDefault();
+              void run(() => send({ type: "wordwolf/guess", answer: guess }))
+                .then((succeeded) => {
+                  if (succeeded) setGuess("");
+                });
+            }}>
+              <input value={guess} onChange={(event) => setGuess(event.target.value)} className="min-w-0 flex-1 rounded-xl border border-slate-300 px-4 py-3" placeholder="æ‘äººã®ãŠé¡Œã‚’å›ç­”" />
+              <button className={primaryClass} disabled={!guess.trim() || pending}>å›ç­”</button>
+            </form>
+          )}
+          {app && app.clues.length > 0 && (
+            <ol className="mt-6 space-y-2">
+              {app.clues.map((item, index) => (
+                <li key={`${item.seat}-${item.round}-${index}`} className="rounded-lg bg-slate-100 p-3">
+                  SEAT {item.seat + 1} Â· {item.text}
+                </li>
+              ))}
+            </ol>
+          )}
+          {common?.standardResult && (
+            <div className="mt-6">
+              <h3 className="text-2xl font-black">ã‚²ãƒ¼ãƒ çµ‚äº†</h3>
+              <ol className="mt-4 space-y-2">
+                {common.standardResult.rankings.map((ranking) => (
+                  <li key={ranking.seat} className="flex justify-between rounded-lg bg-slate-100 p-3">
+                    <strong>{ranking.rank}ä½ Â· {ranking.displayName}</strong>
+                    <span>{ranking.score}ç‚¹</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+          {message && <p className="mt-4 text-sm font-bold text-rose-700">{message}</p>}
+        </section>
+      </section>
+    </main>
+  );
+}
