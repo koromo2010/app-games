@@ -4874,8 +4874,13 @@
 - `npm run verify`に成功し、環境台帳、SDK境界、migration、lintを含む静的gateを通過した。
 - `npm test`に成功し、全575テストが通過した。
 - `npm run build`に成功し、本体production buildとTypeScript検査が完了した。
+- main`32c7f8c`へ非force反映した。本体
+  `dpl_79uMHWHsPHznsUwmZT8QHx1F3qSs`、SDK Portal
+  `dpl_779pK4AfG6EPk8EDJEVwa2VqLvVo`、SDK Preview
+  `dpl_5XhaKgsouBXcGz7zvJKdKohnXdbm`はすべて`READY`となった。
+- 本体Deploymentのerrors-only build logに失敗はなく、公開後の同Deploymentの
+  error／fatal Runtime logは0件だった。
 
 ### 未対応・保留
 
-- mainへの反映と本番Deploymentの完了を確認する。
 - 本番反映後、Windows端末で既存パスキーがPIN・指紋・顔認証へ進むことを実機確認する。
