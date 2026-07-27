@@ -5854,7 +5854,10 @@
 
 ### 未対応・保留
 
-- `develop`へ非force反映し、`app-games-dev`の対象Deploymentを`READY`まで確認する。
+- GitHub `develop`へ`6356d4b885d703b60ae1ba3606165780b29c3524`を非forceで反映した。
+- `app-games-dev` Deployment `dpl_BhKG9wbSbvBPAx3MYbLPu98ucKx3`は`READY`で、
+  `dev.game-fields.com`のaliasが同Deploymentへ切り替わった。
+- errors-only build logに失敗はなく、公開後のerror／fatal Runtime Logは0件だった。
 - 新しいRP IDでは旧dev資格情報を利用できないため、devで既存MFAを一度リセットし、
   表示が`dev.game-fields.com`であることを確認してパスキーを再登録する。
 - devをログアウトして通常ログインを確認した後、mainにも通常ログインできるか別に確認する。
