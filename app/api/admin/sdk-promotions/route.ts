@@ -121,6 +121,19 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+    if (
+      !("action" in body)
+      || (body.action !== "approve" && body.action !== "reject")
+      || !("reason" in body)
+      || typeof body.reason !== "string"
+      || body.reason.trim().length < 5
+      || body.reason.trim().length > 500
+    ) {
+      return Response.json(
+        { error: "SDK_PROMOTION_INPUT_INVALID" },
+        { status: 400 },
+      );
+    }
     const url = internalUrl();
     const response = await fetch(url, {
       method: "POST",
@@ -128,7 +141,11 @@ export async function POST(request: Request) {
         ...sdkServiceHeaders("POST", url),
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        ...body,
+        reason: body.reason.trim(),
+        actorRef: session.email,
+      }),
       cache: "no-store",
     });
     const payload = await proxyPayload(response);
@@ -136,12 +153,19 @@ export async function POST(request: Request) {
       await appendSiteAdminAuditLog(
         request,
         session,
-        "sdk-game.promote",
-        payload && typeof payload === "object" && "publicGameId" in payload
-          ? String(payload.publicGameId)
+        body.action === "approve" ? "sdk-game.approve" : "sdk-game.reject",
+        "creatorSlug" in body && "gameId" in body
+          ? `${String(body.creatorSlug)}/${String(body.gameId)}`
           : "sdk-game",
         null,
-        payload,
+        {
+          ...(
+            payload && typeof payload === "object"
+              ? payload
+              : { result: payload }
+          ),
+          reason: body.reason.trim(),
+        },
       );
     }
     return Response.json(payload, {

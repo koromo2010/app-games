@@ -190,6 +190,19 @@ async function backfillImmutablePackages(sql) {
 
 const hooks = new Map([[3, backfillImmutablePackages]]);
 
+// Production applied the cross-environment artifact migration as version 005
+// before the development branch assigned 005 to release decisions and moved the
+// artifact migration to 006. Keep that one known ledger entry readable while a
+// forward-only reconciliation migration makes both databases structurally equal.
+const acceptedLegacyMigrationEntries = new Map([
+  [5, new Map([
+    [
+      "005_cross_environment_package_artifacts.sql",
+      "ef3f71bcb5ef919b392aa69fdbd0577580dcb1fab16bfeaa6514225f4d7487e7",
+    ],
+  ])],
+]);
+
 function loadMigrations() {
   const migrations = readdirSync(migrationDirectory)
     .filter((name) => /^\d{3}_[a-z0-9_]+\.sql$/.test(name))
@@ -247,7 +260,12 @@ function verifyAppliedChecksums() {
         `Database has unknown SDK migration ${row.version} (${row.name}).`,
       );
     }
-    if (migration.name !== row.name || migration.checksum !== row.checksum) {
+    const isCanonical = migration.name === row.name
+      && migration.checksum === row.checksum;
+    const isAcceptedLegacy = acceptedLegacyMigrationEntries
+      .get(row.version)
+      ?.get(row.name) === row.checksum;
+    if (!isCanonical && !isAcceptedLegacy) {
       throw new Error(
         `SDK migration ${row.version} checksum does not match ${migration.name}.`,
       );

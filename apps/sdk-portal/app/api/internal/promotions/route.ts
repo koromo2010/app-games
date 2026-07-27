@@ -3,6 +3,7 @@ import { ensureSdkSchema, sdkSql } from "@/lib/sdk-postgres";
 import {
   promoteGamePackage,
   promotionErrorResponse,
+  rejectGamePackage,
 } from "@/lib/game-package-promotion-service";
 
 export const dynamic = "force-dynamic";
@@ -26,7 +27,7 @@ function authorize(request: Request) {
   }
 }
 
-function expectedPromotionTarget() {
+function expectedPromotionTarget(): "main" | "development" {
   return process.env.VERCEL_GIT_COMMIT_REF === "main"
     ? "main"
     : "development";
@@ -47,9 +48,23 @@ export async function GET(request: Request) {
            g.stable_root_sha256 AS "stableRootSha256",
            g.stable_bundle_sha256 AS "stableBundleSha256",
            g.stable_app_set_sha256 AS "stableAppSetSha256",
-           g.updated_at AS "updatedAt"
+           g.updated_at AS "updatedAt",
+           latest_decision.action AS "decisionAction",
+           latest_decision.reason AS "decisionReason",
+           latest_decision.actor_ref AS "decisionActor",
+           latest_decision.decided_at AS "decisionAt",
+           latest_decision.revision AS "decisionRevision"
     FROM sdk_games g
     JOIN sdk_creators c ON c.id = g.creator_id
+    LEFT JOIN LATERAL (
+      SELECT action, reason, actor_ref, decided_at, revision
+      FROM sdk_release_decisions
+      WHERE lineage_id = c.slug || '/' || g.game_id
+        AND route = 'sdk-candidate'
+        AND revision = g.package_revision
+      ORDER BY decided_at DESC
+      LIMIT 1
+    ) latest_decision ON TRUE
     WHERE g.package_revision IS NOT NULL
       AND g.deleted_at IS NULL
     ORDER BY g.updated_at DESC
@@ -64,6 +79,7 @@ export async function POST(request: Request) {
   const denied = authorize(request);
   if (denied) return denied;
   const body = await request.json().catch(() => null) as {
+    action?: unknown;
     creatorSlug?: unknown;
     gameId?: unknown;
     publicGameId?: unknown;
@@ -72,6 +88,8 @@ export async function POST(request: Request) {
     expectedPackageRootSha256?: unknown;
     expectedServerBundleSha256?: unknown;
     expectedAppSetSourceSha256?: unknown;
+    reason?: unknown;
+    actorRef?: unknown;
   } | null;
   const creatorSlug = typeof body?.creatorSlug === "string"
     ? body.creatorSlug.trim().toLowerCase()
@@ -82,21 +100,22 @@ export async function POST(request: Request) {
   const publicGameId = typeof body?.publicGameId === "string"
     ? body.publicGameId.trim().toLowerCase()
     : "";
+  const action = body?.action;
   const target = body?.target;
   const expectedTarget = expectedPromotionTarget();
   if (
     !GAME_PATTERN.test(gameId)
-    || !GAME_PATTERN.test(publicGameId)
+    || (action === "approve" && !GAME_PATTERN.test(publicGameId))
+    || (action !== "approve" && action !== "reject")
     || target !== expectedTarget
   ) {
     return Response.json({ error: "promotion_input_invalid" }, { status: 400 });
   }
 
   try {
-    return Response.json(await promoteGamePackage({
+    const common = {
       creatorSlug,
       gameId,
-      publicGameId,
       target: expectedTarget,
       expectedSource: {
         revision: typeof body?.expectedRevision === "string"
@@ -115,7 +134,14 @@ export async function POST(request: Request) {
             ? body.expectedAppSetSourceSha256
             : "",
       },
-    }));
+      decision: {
+        reason: typeof body?.reason === "string" ? body.reason : "",
+        actorRef: typeof body?.actorRef === "string" ? body.actorRef : "",
+      },
+    };
+    return Response.json(action === "approve"
+      ? await promoteGamePackage({ ...common, publicGameId })
+      : await rejectGamePackage(common));
   } catch (error) {
     return promotionErrorResponse(error);
   }

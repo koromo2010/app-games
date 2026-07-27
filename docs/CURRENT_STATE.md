@@ -50,6 +50,12 @@ devとmainの採用済みSDKアプリ情報は環境別DBに分離する。管�
 
 各更新前の版は`sdk_app_releases`へ追加専用履歴として残り、管理画面から過去版を選んでアプリ単位で復元できる。migration 005で元dev SHAと本番実行SHAが同じままbackfillされた旧Releaseは未移送と判定し、同じdev版でも修復昇格を許可する。dev由来の過去版は元commitからpackage実体を再移送する。復元自体も新しい`rollback`リリースとして記録し、本体や他アプリ、既存Roomは巻き戻さない。
 
+SDK作品とdev採用アプリの承認・却下・復元は5〜500文字の判断理由を必須とし、
+対象revision・3種のpackage hash・実行管理者・日時を`sdk_release_decisions`へ
+追加専用で保存する。採用・復元では現在版更新、新release、決定履歴を一つの
+transactionで確定し、途中失敗時に採用ポインタだけを残さない。却下は対象版を
+削除せず、同じrevisionへの運営判断として履歴化する。
+
 採用済みSDKゲームのAppSetとmanifestは不変のまま保持し、公開後に調整する表示名と広場カード画像は`config/sdk-game-presentations.ts`で管理する。現行の`ai-word-guess`は公開名「コトバに迫れ」と専用カード画像を使用する。
 
 SDK Portalはpackage client／server grantをEd25519で署名する。portable server grantは隔離Previewが固定した公開鍵だけでローカル検証し、Portalの検証APIやcross-project共通秘密値へ依存しない。ブラウザ入口は60秒のclient交換grantをURL fragmentへ渡し、fragmentを履歴から即時消去してPOSTした後、Preview自身の8時間・HttpOnly・Path限定Cookieへ交換する。Preview側の秘密値はこのローカルCookieと同一revision asset tokenだけに使用する。

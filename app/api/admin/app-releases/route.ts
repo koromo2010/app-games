@@ -187,16 +187,31 @@ export async function POST(request: Request) {
     const session = await requireRecentSiteAdminMfa();
     requireMain();
     const body = await request.json().catch(() => null) as {
-      action?: unknown; snapshot?: unknown; lineageId?: unknown; releaseId?: unknown;
+      action?: unknown;
+      snapshot?: unknown;
+      lineageId?: unknown;
+      releaseId?: unknown;
+      reason?: unknown;
     } | null;
-    if (body?.action !== "promote" && body?.action !== "rollback") {
+    if (
+      (body?.action !== "promote"
+        && body?.action !== "reject"
+        && body?.action !== "rollback")
+      || typeof body.reason !== "string"
+      || body.reason.trim().length < 5
+      || body.reason.trim().length > 500
+    ) {
       return Response.json({ error: "APP_RELEASE_INPUT_INVALID" }, { status: 400 });
     }
     const url = releaseEndpoint(sdkPromotionInternalBaseUrl());
     const result = await call("main-release-store", url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        ...body,
+        reason: body.reason.trim(),
+        actorRef: session.email,
+      }),
     });
     if (!result.response) {
       return Response.json({ error: result.diagnostic.code, diagnostic: result.diagnostic }, { status: 503 });
@@ -205,10 +220,19 @@ export async function POST(request: Request) {
       await appendSiteAdminAuditLog(
         request,
         session,
-        body.action === "promote" ? "sdk-app.promote-dev-to-main" : "sdk-app.rollback",
+        body.action === "promote"
+          ? "sdk-app.approve-dev-to-main"
+          : body.action === "reject"
+            ? "sdk-app.reject-dev-to-main"
+            : "sdk-app.rollback",
         typeof body.lineageId === "string" ? body.lineageId : "sdk-app",
         null,
-        { releaseId: typeof body.releaseId === "string" ? body.releaseId : null },
+        {
+          reason: body.reason.trim(),
+          requestedReleaseId:
+            typeof body.releaseId === "string" ? body.releaseId : null,
+          result: result.payload,
+        },
       );
     }
     return Response.json(

@@ -20,6 +20,11 @@ type SdkCandidate = {
   stableAppSetSha256: string | null;
   updatedAt: string | null;
   reviewUrl: string | null;
+  decisionAction: "approve" | "reject" | null;
+  decisionReason: string | null;
+  decisionActor: string | null;
+  decisionAt: string | null;
+  decisionRevision: string | null;
 };
 
 type DevRelease = {
@@ -43,6 +48,8 @@ const errors: Record<string, string> = {
   public_game_id_conflict: "その本番ゲームIDはすでに使われています。",
   SDK_PROMOTION_MAIN_ONLY: "SDK作品の採用は対応するdevまたはmainの運営管理画面で利用できます。",
   SDK_PROMOTION_TARGET_MISMATCH: "この管理画面と昇格先が一致しません。状態を再読み込みしてください。",
+  SDK_PROMOTION_INPUT_INVALID: "承認操作、理由、または対象環境が不正です。",
+  promotion_decision_invalid: "理由は5〜500文字で入力してください。",
   GITHUB_RELEASE_TOKEN_NOT_CONFIGURED: "dev→main用のGitHub資格が本番環境にまだ設定されていません。",
   GITHUB_RELEASE_SOURCE_CHANGED: "mainまたはdevelopが更新されています。差分を再読込してください。",
   GITHUB_RELEASE_NOT_FAST_FORWARD: "developを安全にそのままmainへ進められない状態です。GitHubで分岐を解消してください。",
@@ -56,6 +63,7 @@ const sdkPromotionActions: Record<string, string> = {
   promotion_source_changed: "状態を再読込し、更新後の提出物をレビューしてください。",
   public_game_id_conflict: "別のゲームIDへ変更するか、既存カタログの割当を確認してください。",
   promotion_input_invalid: "ゲームIDと提出物のrevision・hashを確認してください。",
+  promotion_decision_invalid: "判断理由を5〜500文字で入力してください。",
   promotion_target_not_found: "作品が削除・移動されていないか確認し、状態を再読込してください。",
   promotion_environment_not_supported: "SDK Portalのデプロイ元ブランチと対象環境を確認してください。",
   forbidden: "本体とSDK Portalの内部認証設定が一致しているか確認してください。",
@@ -124,12 +132,14 @@ export function ReleaseManagementPanel({
   const sdkRouteLabel = `${sdkSource}→${sdkTargetLabel}`;
   const [sdkGames, setSdkGames] = useState<SdkCandidate[]>([]);
   const [publicIds, setPublicIds] = useState<Record<string, string>>({});
+  const [sdkReasons, setSdkReasons] = useState<Record<string, string>>({});
   const [devRelease, setDevRelease] = useState<DevRelease | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeAction, setActiveAction] = useState("");
   const [message, setMessage] = useState("");
   const [sdkLoadError, setSdkLoadError] = useState("");
   const [devLoadError, setDevLoadError] = useState("");
+  const [devReason, setDevReason] = useState("");
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -191,21 +201,28 @@ export function ReleaseManagementPanel({
     return () => window.clearTimeout(timer);
   }, [load]);
 
-  const promoteSdkGame = async (game: SdkCandidate) => {
+  const decideSdkGame = async (
+    game: SdkCandidate,
+    action: "approve" | "reject",
+  ) => {
     const key = `${game.creatorSlug}/${game.gameId}`;
     const publicGameId = publicIds[key]?.trim().toLowerCase() ?? "";
+    const reason = sdkReasons[key]?.trim() ?? "";
     if (
       !game.packageRevision
       || !game.packageRootSha256
       || !game.packageBundleSha256
       || !game.packageAppSetSha256
-      || !/^[a-z][a-z0-9-]{1,63}$/.test(publicGameId)
+      || (action === "approve" && !/^[a-z][a-z0-9-]{1,63}$/.test(publicGameId))
+      || reason.length < 5
+      || reason.length > 500
     ) {
-      setMessage(`提出物のhashまたは${sdkTargetLabel}用ゲームIDを確認してください。`);
+      setMessage(`提出物のhash、${sdkTargetLabel}用ゲームID、5〜500文字の判断理由を確認してください。`);
       return;
     }
-    if (!window.confirm(`${game.title} を${sdkRouteLabel}で採用しますか？\nCandidateの同一revision・hashを${sdkTargetLabel}カタログへ固定します。`)) return;
-    setActiveAction(`sdk:${key}`);
+    const actionLabel = action === "approve" ? "採用" : "却下";
+    if (!window.confirm(`${game.title} の ${shortSha(game.packageRevision)} を${actionLabel}しますか？\n判断理由と実行者を履歴へ保存します。`)) return;
+    setActiveAction(`sdk:${action}:${key}`);
     setMessage("");
     try {
       await ensureSiteAdminStepUp();
@@ -213,6 +230,7 @@ export function ReleaseManagementPanel({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          action,
           target: sdkTarget,
           creatorSlug: game.creatorSlug,
           gameId: game.gameId,
@@ -221,6 +239,7 @@ export function ReleaseManagementPanel({
           expectedPackageRootSha256: game.packageRootSha256,
           expectedServerBundleSha256: game.packageBundleSha256,
           expectedAppSetSourceSha256: game.packageAppSetSha256,
+          reason,
         }),
       });
       const payload = await response.json().catch(() => null) as {
@@ -230,13 +249,16 @@ export function ReleaseManagementPanel({
         setMessage(sdkFailureMessage({
           code: payload?.error || "SDK_PROMOTION_FAILED",
           status: response.status,
-          action: `SDK作品を${sdkTargetLabel}へ採用できませんでした。`,
-          fallback: `${sdkSource}側で採用処理が完了しませんでした。`,
+          action: `SDK作品を${actionLabel}できませんでした。`,
+          fallback: `${sdkSource}側で判断を保存できませんでした。`,
         }));
         return;
       }
       await load();
-      setMessage(`${game.title} を${sdkTargetLabel}採用カタログへ反映しました。`);
+      setSdkReasons((values) => ({ ...values, [key]: "" }));
+      setMessage(action === "approve"
+        ? `${game.title} を${sdkTargetLabel}採用カタログへ反映しました。`
+        : `${game.title} の現在のCandidateを却下し、理由を履歴へ保存しました。`);
     } catch (error) {
       if (error instanceof Error && error.message === "ADMIN_AUTH_REQUIRED") {
         onAuthExpired();
@@ -245,8 +267,8 @@ export function ReleaseManagementPanel({
       const code = error instanceof Error ? error.message : "";
       setMessage(sdkFailureMessage({
         code,
-        action: `SDK作品を${sdkTargetLabel}へ採用できませんでした。`,
-        fallback: "管理画面から採用APIへ接続できませんでした。",
+        action: `SDK作品を${actionLabel}できませんでした。`,
+        fallback: "管理画面から承認APIへ接続できませんでした。",
       }));
     } finally {
       setActiveAction("");
@@ -255,6 +277,11 @@ export function ReleaseManagementPanel({
 
   const promoteDev = async () => {
     if (!devRelease?.canPromote || !devRelease.writeConfigured) return;
+    const reason = devReason.trim();
+    if (reason.length < 5 || reason.length > 500) {
+      setMessage("develop→mainの反映理由を5〜500文字で入力してください。");
+      return;
+    }
     if (!window.confirm(`developの${devRelease.aheadBy}コミットをmainへ反映しますか？\nmainはdevelopの現在commitへfast-forwardされます。`)) return;
     setActiveAction("dev:main");
     setMessage("");
@@ -267,6 +294,7 @@ export function ReleaseManagementPanel({
           confirmation: "dev→main",
           expectedMainSha: devRelease.mainSha,
           expectedDevelopSha: devRelease.developSha,
+          reason,
         }),
       });
       const payload = await response.json().catch(() => null) as {
@@ -275,6 +303,7 @@ export function ReleaseManagementPanel({
       } | null;
       if (!response.ok) throw new Error(payload?.error || "GITHUB_RELEASE_FAILED");
       await load();
+      setDevReason("");
       setMessage(`developをmainへ反映しました（${shortSha(payload?.mainSha ?? null)}）。`);
     } catch (error) {
       if (error instanceof Error && error.message === "ADMIN_AUTH_REQUIRED") {
@@ -330,7 +359,7 @@ export function ReleaseManagementPanel({
                 && game.packageAppSetSha256,
               );
               return (
-                <article key={key} className="grid gap-4 px-5 py-5 lg:grid-cols-[minmax(0,1fr)_220px_auto] lg:items-center">
+                <article key={key} className="grid gap-4 px-5 py-5 lg:grid-cols-[minmax(0,1fr)_220px_minmax(220px,1fr)_auto] lg:items-end">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <h4 className="text-lg font-black">{game.title}</h4>
@@ -338,14 +367,34 @@ export function ReleaseManagementPanel({
                     </div>
                     <p className="mt-1 font-mono text-xs text-slate-500">{game.creatorSlug}/{game.gameId}</p>
                     <p className="mt-2 text-xs text-slate-400">Candidate {shortSha(game.packageRevision)} / {sdkTargetLabel} {shortSha(game.stableRevision)}</p>
+                    {game.decisionRevision === game.packageRevision && game.decisionAction && (
+                      <p className={`mt-2 text-xs font-bold ${game.decisionAction === "reject" ? "text-rose-200" : "text-emerald-200"}`}>
+                        直近判断: {game.decisionAction === "reject" ? "却下" : "承認"}
+                        {game.decisionAt ? `・${new Date(game.decisionAt).toLocaleString("ja-JP")}` : ""}
+                        {game.decisionActor ? `・${game.decisionActor}` : ""}
+                        {game.decisionReason ? ` — ${game.decisionReason}` : ""}
+                      </p>
+                    )}
                   </div>
                   <label className="block text-xs font-bold text-slate-300">
                     {sdkTargetLabel}で使うゲームID
-                    <input value={publicIds[key] ?? ""} disabled={current || activeAction === `sdk:${key}`} onChange={(event) => setPublicIds((values) => ({ ...values, [key]: event.target.value }))} className="mt-1 w-full rounded-lg border border-white/15 bg-black/25 px-3 py-2 font-mono text-sm text-white outline-none focus:border-cyan-300 disabled:opacity-50" />
+                    <input value={publicIds[key] ?? ""} disabled={current || activeAction.startsWith("sdk:")} onChange={(event) => setPublicIds((values) => ({ ...values, [key]: event.target.value }))} className="mt-1 w-full rounded-lg border border-white/15 bg-black/25 px-3 py-2 font-mono text-sm text-white outline-none focus:border-cyan-300 disabled:opacity-50" />
                   </label>
-                  <div className="flex gap-2 lg:justify-end">
+                  <label className="block text-xs font-bold text-slate-300">
+                    判断理由（必須）
+                    <textarea
+                      value={sdkReasons[key] ?? ""}
+                      maxLength={500}
+                      disabled={current || activeAction.startsWith("sdk:")}
+                      onChange={(event) => setSdkReasons((values) => ({ ...values, [key]: event.target.value }))}
+                      placeholder="採用・却下の根拠を5〜500文字で記録"
+                      className="mt-1 min-h-20 w-full rounded-lg border border-white/15 bg-black/25 px-3 py-2 text-sm text-white outline-none focus:border-cyan-300 disabled:opacity-50"
+                    />
+                  </label>
+                  <div className="flex flex-wrap gap-2 lg:justify-end">
                     {game.reviewUrl && <a href={game.reviewUrl} target="_blank" rel="noreferrer" className="rounded-lg border border-white/15 px-4 py-2 text-sm font-bold hover:bg-white/10">レビュー</a>}
-                    <button type="button" disabled={current || !complete || activeAction === `sdk:${key}`} onClick={() => void promoteSdkGame(game)} className="rounded-lg bg-emerald-300 px-4 py-2 text-sm font-black text-emerald-950 disabled:cursor-not-allowed disabled:opacity-40">{activeAction === `sdk:${key}` ? "採用中…" : current ? "採用済み" : sdkRouteLabel}</button>
+                    <button type="button" disabled={current || !complete || Boolean(activeAction)} onClick={() => void decideSdkGame(game, "reject")} className="rounded-lg border border-rose-300/50 px-4 py-2 text-sm font-black text-rose-100 disabled:cursor-not-allowed disabled:opacity-40">{activeAction === `sdk:reject:${key}` ? "却下中…" : "却下"}</button>
+                    <button type="button" disabled={current || !complete || Boolean(activeAction)} onClick={() => void decideSdkGame(game, "approve")} className="rounded-lg bg-emerald-300 px-4 py-2 text-sm font-black text-emerald-950 disabled:cursor-not-allowed disabled:opacity-40">{activeAction === `sdk:approve:${key}` ? "採用中…" : current ? "採用済み" : sdkRouteLabel}</button>
                   </div>
                 </article>
               );
@@ -370,6 +419,18 @@ export function ReleaseManagementPanel({
               <p className="mt-2 font-bold">{devRelease.compareStatus === "identical" ? "差分なし" : `developが${devRelease.aheadBy}コミット先行・${devRelease.behindBy}コミット遅延`}</p>
               {!devRelease.writeConfigured && <p className="mt-2 text-xs font-bold text-amber-200">読取確認は可能ですが、反映用GitHub資格は未設定です。</p>}
               {devRelease.compareStatus === "diverged" && <p className="mt-2 text-xs font-bold text-rose-200">ブランチが分岐しているため、GitHubで解消するまで自動反映しません。</p>}
+              {!isPreview && (
+                <label className="mt-4 block text-xs font-bold text-slate-300">
+                  反映理由（必須）
+                  <textarea
+                    value={devReason}
+                    maxLength={500}
+                    onChange={(event) => setDevReason(event.target.value)}
+                    placeholder="検証内容とmainへ反映する理由を5〜500文字で記録"
+                    className="mt-1 min-h-20 w-full rounded-lg border border-white/15 bg-black/25 px-3 py-2 text-sm text-white outline-none focus:border-violet-300"
+                  />
+                </label>
+              )}
             </div>
             <div className="flex gap-2">
               <a href={devRelease.compareUrl} target="_blank" rel="noreferrer" className="rounded-lg border border-white/15 px-4 py-2 text-sm font-bold hover:bg-white/10">差分</a>

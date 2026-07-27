@@ -63,11 +63,15 @@ export async function POST(request: Request) {
       confirmation?: unknown;
       expectedMainSha?: unknown;
       expectedDevelopSha?: unknown;
+      reason?: unknown;
     } | null;
     if (
       body?.confirmation !== "dev→main"
       || typeof body.expectedMainSha !== "string"
       || typeof body.expectedDevelopSha !== "string"
+      || typeof body.reason !== "string"
+      || body.reason.trim().length < 5
+      || body.reason.trim().length > 500
     ) {
       throw new GitHubReleaseError("GITHUB_RELEASE_INPUT_INVALID", 400);
     }
@@ -81,7 +85,11 @@ export async function POST(request: Request) {
       "code.promote-develop-to-main",
       result.repository,
       { mainSha: result.previousMainSha },
-      { mainSha: result.mainSha },
+      {
+        mainSha: result.mainSha,
+        developSha: body.expectedDevelopSha,
+        reason: body.reason.trim(),
+      },
     );
     return Response.json(result, {
       headers: { "Cache-Control": "private, no-store" },

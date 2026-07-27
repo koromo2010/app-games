@@ -43,6 +43,10 @@ test("admin exposes environment-paired SDK adoption and independent dev to main"
   assert.match(panel, /sdkLoadError/);
   assert.match(panel, /devLoadError/);
   assert.match(panel, /sdkFailureMessage/);
+  assert.match(panel, /判断理由（必須）/);
+  assert.match(panel, /decideSdkGame\(game, "reject"\)/);
+  assert.match(panel, /action,/);
+  assert.match(panel, /reason,/);
   assert.match(panel, /識別情報: \$\{statusLabel\} \/ \$\{safeCode\}/);
   assert.match(panel, /次の操作:/);
   assert.match(panel, /whitespace-pre-line/);
@@ -51,10 +55,14 @@ test("admin exposes environment-paired SDK adoption and independent dev to main"
   assert.match(sdkRoute, /sdkPromotionInternalBaseUrl/);
   assert.match(sdkRoute, /body\.target !== promotionTarget\(\)/);
   assert.match(devRoute, /requireReleaseReadEnvironment/);
-  assert.match(sdkRoute, /sdk-game\.promote/);
+  assert.match(sdkRoute, /sdk-game\.approve/);
+  assert.match(sdkRoute, /sdk-game\.reject/);
+  assert.match(sdkRoute, /reason\.trim\(\)/);
+  assert.match(sdkRoute, /actorRef: session\.email/);
   assert.match(sdkRoute, /SDK_PROMOTION_MAIN_ONLY/);
   assert.match(devRoute, /code\.promote-develop-to-main/);
   assert.match(devRoute, /confirmation !== "dev→main"/);
+  assert.match(devRoute, /body\.reason\.trim\(\)/);
   assert.match(
     portalRoute,
     /branch !== "main" && branch !== "develop"/,
@@ -105,17 +113,9 @@ test("main can promote one adopted dev app and append-only rollback it", () => {
   );
   const store = read("apps/sdk-portal/lib/app-release-store.ts");
   const migration = read("db/sdk/004_app_release_history.sql");
-  const artifactMigration = read(
-    "db/sdk/005_cross_environment_package_artifacts.sql",
-  );
-  const artifactTransfer = read(
-    "apps/sdk-portal/lib/app-release-artifact-transfer.ts",
-  );
-  const artifactRoute = read(
-    "apps/sdk-portal/app/api/internal/package-artifacts/[instanceId]/[gameId]/[revision]/route.ts",
-  );
-  const artifactHealth = read(
-    "apps/sdk-portal/app/api/health/app-release-artifacts/route.ts",
+  const decisionsMigration = read("db/sdk/005_release_decisions.sql");
+  const promotionService = read(
+    "apps/sdk-portal/lib/game-package-promotion-service.ts",
   );
   const runtimeList = read("apps/sdk-portal/app/api/runtime-catalog/route.ts");
   const runtimeGame = read(
@@ -137,34 +137,53 @@ test("main can promote one adopted dev app and append-only rollback it", () => {
   assert.match(adminRoute, /main-release-store/);
   assert.match(adminRoute, /APP_RELEASE_UPSTREAM_FETCH_FAILED/);
   assert.match(adminRoute, /\[app-releases\] upstream request failed/);
-  assert.match(adminRoute, /sdk-app\.promote-dev-to-main/);
+  assert.match(adminRoute, /sdk-app\.approve-dev-to-main/);
+  assert.match(adminRoute, /sdk-app\.reject-dev-to-main/);
   assert.match(adminRoute, /sdk-app\.rollback/);
+  assert.match(adminRoute, /actorRef: session\.email/);
+  assert.match(panel, /判断理由（必須）/);
+  assert.match(panel, /action: "reject"/);
+  assert.match(panel, /復元理由を5〜500文字で入力/);
   assert.match(portalRoute, /process\.env\.VERCEL_GIT_COMMIT_REF !== "main"/);
+  assert.match(portalRoute, /rejectAppRelease/);
+  assert.match(portalRoute, /listAppReleaseDecisions/);
   assert.match(store, /release_kind/);
   assert.match(store, /'rollback'/);
-  assert.match(store, /currentPublicGameId/);
-  assert.match(store, /transferArtifact\(snapshot\)/);
-  assert.match(store, /AS "artifactTransferred"/);
-  assert.ok(
-    store.indexOf("transferArtifact(snapshot)")
-      < store.indexOf("sdkSql().transaction"),
-  );
+  assert.match(store, /current_release\.public_game_id/);
+  assert.match(store, /sdk_release_decisions/);
+  assert.match(store, /'dev-app', 'approve'/);
+  assert.match(store, /'dev-app', 'reject'/);
   assert.match(migration, /WHERE is_current/);
   assert.match(migration, /restored_from UUID REFERENCES sdk_app_releases/);
-  assert.match(artifactMigration, /ADD COLUMN IF NOT EXISTS source_revision/);
-  assert.match(artifactMigration, /SET source_revision = revision/);
-  assert.match(artifactTransfer, /APP_RELEASE_ARTIFACT_HASH_MISMATCH/);
-  assert.match(artifactTransfer, /saveGamePackageFilesToGit/);
-  assert.match(artifactRoute, /VERCEL_GIT_COMMIT_REF !== "develop"/);
-  assert.match(artifactRoute, /requireSdkServiceRequest/);
-  assert.match(artifactHealth, /probeDevelopmentPackageArtifactSource/);
-  assert.match(artifactHealth, /probeGamePackageGitWriteTarget/);
-  assert.match(artifactHealth, /developmentSource: "ok"/);
-  assert.match(artifactHealth, /mainTarget: "ok"/);
+  assert.match(decisionsMigration, /CREATE TABLE IF NOT EXISTS sdk_release_decisions/);
+  assert.match(decisionsMigration, /action IN \('approve', 'reject', 'rollback'\)/);
+  assert.match(decisionsMigration, /actor_ref VARCHAR\(320\) NOT NULL/);
+  assert.match(promotionService, /WITH source AS/);
+  assert.match(promotionService, /new_release AS/);
+  assert.match(promotionService, /decision AS/);
+  assert.match(promotionService, /rejectGamePackage/);
   assert.match(runtimeList, /lineage_id AS "lineageId"/);
   assert.match(runtimeList, /source_revision AS "sourceRevision"/);
   assert.match(runtimeList, /module_policy AS "modulePolicy"/);
   assert.match(runtimeGame, /FROM sdk_app_releases r/);
   assert.match(panel, /current\?\.artifactTransferred !== false/);
   assert.match(panel, /本番package実体の再移送が必要です/);
+});
+
+test("development exposes only authenticated immutable package artifacts", () => {
+  const indexRoute = read(
+    "apps/sdk-portal/app/api/internal/package-artifacts/route.ts",
+  );
+  const artifactRoute = read(
+    "apps/sdk-portal/app/api/internal/package-artifacts/[instanceId]/[gameId]/[revision]/route.ts",
+  );
+  const gitStore = read("apps/sdk-portal/lib/mock-git-store.ts");
+
+  assert.match(indexRoute, /requireSdkServiceRequest/);
+  assert.match(indexRoute, /VERCEL_GIT_COMMIT_REF !== "develop"/);
+  assert.match(artifactRoute, /requireSdkServiceRequest/);
+  assert.match(artifactRoute, /listGamePackageFilesAtRevision/);
+  assert.match(artifactRoute, /readGamePackageFileAtRevision/);
+  assert.match(gitStore, /REVISION_PATTERN/);
+  assert.match(gitStore, /packages\/\$\{input\.instanceId\}\/\$\{input\.gameId\}\/bundle/);
 });
