@@ -46,6 +46,140 @@ export {
 
 type IdentityResolver = () => Promise<GameFieldsAuthenticatedIdentity>;
 
+type PlatformDebugProxyCommand = {
+  type: "room/debug-act-as-dummy";
+  seat: number;
+  command: {
+    type: string;
+    [key: string]: unknown;
+  };
+};
+
+type PlatformCommonRoomView = {
+  common?: {
+    players?: Array<Record<string, unknown>>;
+    permissions?: Record<string, unknown>;
+  };
+};
+
+function objectRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+function platformDebugProxyCommand(
+  value: unknown,
+): PlatformDebugProxyCommand | null {
+  const command = objectRecord(value);
+  if (command?.type !== "room/debug-act-as-dummy") return null;
+  const inner = objectRecord(command.command);
+  if (
+    !Number.isSafeInteger(command.seat)
+    || Number(command.seat) < 0
+    || typeof inner?.type !== "string"
+    || !inner.type.trim()
+    || inner.type.startsWith("room/")
+  ) {
+    throw new GameFieldsPlatformRuntimeError(
+      "GAME_SDK_INVALID_DEBUG_COMMAND",
+      400,
+    );
+  }
+  return {
+    type: "room/debug-act-as-dummy",
+    seat: Number(command.seat),
+    command: inner as PlatformDebugProxyCommand["command"],
+  };
+}
+
+function storedPlayers(room: Readonly<GameSdkStoredRoom>) {
+  const value = "players" in room
+    ? (room as GameSdkStoredRoom & { players?: unknown }).players
+    : null;
+  return Array.isArray(value)
+    ? value as Array<{
+        connected?: unknown;
+        displayName?: unknown;
+        id?: unknown;
+        isDummy?: unknown;
+      }>
+    : [];
+}
+
+function definitionRequiresDebug(
+  definition: {
+    module: {
+      manifest: {
+        supportsDebug: boolean;
+      };
+    };
+    moduleProfile?: Readonly<GameSdkModuleProfile>;
+  },
+) {
+  return (
+    definition.module.manifest.supportsDebug
+    && (
+      !definition.moduleProfile
+      || gameSdkModuleIsRequired(definition.moduleProfile, "debug")
+    )
+  );
+}
+
+function withPlatformDebugView<TRoomView>(
+  snapshot: GameSdkRoomSnapshot<TRoomView> | null,
+  input: {
+    allowed: boolean;
+    storedRoom: Readonly<GameSdkStoredRoom> | null;
+  },
+) {
+  if (!snapshot) return snapshot;
+  const view = objectRecord(snapshot.view) as PlatformCommonRoomView | null;
+  const common = objectRecord(view?.common);
+  const permissions = objectRecord(common?.permissions);
+  if (!view || !common || !permissions) return snapshot;
+  const players = storedPlayers(input.storedRoom ?? {
+    code: snapshot.code,
+    revision: snapshot.revision,
+    phase: snapshot.phase,
+  });
+  const presentedPlayers = Array.isArray(common.players)
+    ? common.players.map((player, seat) => ({
+        ...player,
+        connected: players[seat]?.connected !== false,
+        isDummy: players[seat]?.isDummy === true,
+      }))
+    : common.players;
+  const timer = input.storedRoom
+    && "timer" in input.storedRoom
+    && objectRecord(
+      (input.storedRoom as GameSdkStoredRoom & { timer?: unknown }).timer,
+    );
+  const canAutoProgress = Boolean(
+    input.allowed
+    && snapshot.phase !== "lobby"
+    && snapshot.phase !== "result"
+    && timer
+    && Number.isSafeInteger(timer.turnSequence),
+  );
+  return {
+    ...snapshot,
+    view: {
+      ...view,
+      common: {
+        ...common,
+        ...(presentedPlayers ? { players: presentedPlayers } : {}),
+        permissions: {
+          ...permissions,
+          canDebug: input.allowed,
+          canDebugActAsDummy: input.allowed && snapshot.phase === "playing",
+          canDebugAutoProgress: canAutoProgress,
+        },
+      },
+    },
+  } as GameSdkRoomSnapshot<TRoomView>;
+}
+
 export type GameSdkPlatformRuntimeDefinition<
   TRoom extends GameSdkStoredRoom,
   TCreateInput,
@@ -179,6 +313,26 @@ export function createAuthenticatedGameSdkPlatformAdapter<
     onResultConfirmed,
     ...(runtimeContract ? { runtimeContract } : {}),
   };
+
+  const presentPlatformDebugView = (
+    snapshot: GameSdkRoomSnapshot<TRoomView> | null,
+    identity: Readonly<GameFieldsAuthenticatedIdentity>,
+    definition: typeof currentDefinition | GameSdkPlatformRuntimeDefinition<
+      TRoom,
+      TCreateInput,
+      TCommand,
+      TRoomView
+    >,
+    record: Readonly<GameFieldsPlatformRoomRecord<TRoom>> | null,
+  ) => withPlatformDebugView(snapshot, {
+    allowed: Boolean(
+      record
+      && identity.debugAccess
+      && identity.playerId === record.hostPlayerId
+      && definitionRequiresDebug(definition)
+    ),
+    storedRoom: record?.room ?? null,
+  });
 
   const createRuntime = (
     definition: typeof currentDefinition | GameSdkPlatformRuntimeDefinition<
@@ -422,7 +576,13 @@ export function createAuthenticatedGameSdkPlatformAdapter<
           await roomStore!.publishRevision(savedRecord);
           await scheduleResultOutbox(savedRecord);
         }
-        return room;
+        const record = savedRecord ?? await persistence.load(normalizedCode);
+        return presentPlatformDebugView(
+          room,
+          identity,
+          currentDefinition,
+          record,
+        )!;
       } catch (error) {
         if (claim) await roomStore!.rollbackActiveRoomClaim(claim);
         throw error;
@@ -432,9 +592,7 @@ export function createAuthenticatedGameSdkPlatformAdapter<
     async readRoom(code) {
       const identity = await resolveIdentity();
       const normalizedCode = normalizeGameSdkPlatformRoomCode(code);
-      const storedRecord = roomStore
-        ? await roomStore.load(normalizedCode)
-        : null;
+      const storedRecord = await persistence.load(normalizedCode);
       const definition = storedRecord
         ? await definitionForRecord(storedRecord)
         : currentDefinition;
@@ -444,9 +602,9 @@ export function createAuthenticatedGameSdkPlatformAdapter<
         code: normalizedCode,
         identity,
       });
-      const record = roomStore ? await roomStore.load(normalizedCode) : null;
+      const record = await persistence.load(normalizedCode);
       if (record) await scheduleResultOutbox(record);
-      return room;
+      return presentPlatformDebugView(room, identity, definition, record);
     },
 
     async readRoomAsDebugViewer(code, viewer) {
@@ -509,7 +667,7 @@ export function createAuthenticatedGameSdkPlatformAdapter<
             },
       });
       await scheduleResultOutbox(record);
-      return room;
+      return presentPlatformDebugView(room, identity, definition, record);
     },
 
     async readActiveRoom() {
@@ -522,7 +680,7 @@ export function createAuthenticatedGameSdkPlatformAdapter<
       const runtime = createRuntime(definition);
       const room = await runtime.readRoom({ code: record.code, identity });
       await scheduleResultOutbox(record);
-      return room;
+      return presentPlatformDebugView(room, identity, definition, record);
     },
 
     async listRooms(cursor) {
@@ -540,17 +698,58 @@ export function createAuthenticatedGameSdkPlatformAdapter<
         ? await roomStore.claimActiveRoom(identity.playerId, normalizedCode)
         : null;
       try {
-        const record = roomStore ? await roomStore.load(normalizedCode) : null;
+        const record = await persistence.load(normalizedCode);
         const definition = record
           ? await definitionForRecord(record)
           : currentDefinition;
         const requiredModule = commandModule(lifecycleType);
         if (requiredModule) assertModuleEnabled(definition, requiredModule);
         const runtime = createRuntime(definition);
+        const debugProxy = platformDebugProxyCommand(envelope.command);
+        let runtimeIdentity = identity;
+        let runtimeEnvelope = envelope;
+        if (debugProxy) {
+          if (!record) {
+            throw new GameFieldsPlatformRuntimeError("ROOM_NOT_FOUND", 404);
+          }
+          if (
+            record.phase !== "playing"
+            || !identity.debugAccess
+            || identity.playerId !== record.hostPlayerId
+            || !definitionRequiresDebug(definition)
+          ) {
+            throw new GameFieldsPlatformRuntimeError(
+              record.phase === "playing"
+                ? "DEBUG_ACCESS_REQUIRED"
+                : "DEBUG_PROGRESS_PHASE_REQUIRED",
+              record.phase === "playing" ? 403 : 409,
+            );
+          }
+          const target = storedPlayers(record.room)[debugProxy.seat];
+          if (
+            target?.isDummy !== true
+            || typeof target.id !== "string"
+            || typeof target.displayName !== "string"
+          ) {
+            throw new GameFieldsPlatformRuntimeError(
+              "DEBUG_DUMMY_REQUIRED",
+              409,
+            );
+          }
+          runtimeIdentity = {
+            playerId: target.id,
+            displayName: target.displayName,
+            debugAccess: false,
+          };
+          runtimeEnvelope = {
+            ...envelope,
+            command: debugProxy.command as TCommand,
+          };
+        }
         const result = await runtime.sendCommand({
           code: normalizedCode,
-          envelope,
-          identity,
+          envelope: runtimeEnvelope,
+          identity: runtimeIdentity,
         });
         if (roomStore && lifecycleType === "room/leave") {
           await roomStore.releaseActiveRoom(identity.playerId, normalizedCode);
@@ -562,7 +761,23 @@ export function createAuthenticatedGameSdkPlatformAdapter<
           await roomStore!.publishRevision(savedRecord);
           await scheduleResultOutbox(savedRecord);
         }
-        return result;
+        const latestRecord = savedRecord
+          ?? await persistence.load(normalizedCode);
+        const hostRoom = debugProxy
+          ? await runtime.readRoom({
+              code: normalizedCode,
+              identity,
+            })
+          : result.room;
+        return {
+          ...result,
+          room: presentPlatformDebugView(
+            hostRoom,
+            identity,
+            definition,
+            latestRecord,
+          )!,
+        };
       } catch (error) {
         if (claim) await roomStore!.rollbackActiveRoomClaim(claim);
         throw error;

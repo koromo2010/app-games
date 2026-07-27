@@ -491,10 +491,14 @@ turn sequence、graceをRuntimeで検証する。連続時間切れと5秒短縮
 明示復帰も共通stateで管理する。観戦は既存の署名grantへ接続し、SDK用
 snapshotは匿名席、phase、共通timer、確定結果だけを許可する。DEBUGは
 権限付きhostへ、lobbyでのダミー追加・削除、読取専用の参加者／観戦者View切替、
-AppSetの`expireAppTurn`を使う1手・次状態・結果までの安全な自動進行、
-時間切れ・切断・入力拒否の再現を提供する。閲覧視点をCommand actorには使わず、
-ゲーム固有stateのphase文字列も直接書き換えない。固定済みの旧package bundleには
-Platform Runtimeが新しいDEBUG Commandを既存の`room/expire-timer`へ変換する。
+playing中のダミー操作対象、AppSetの`expireAppTurn`を使う1手・次状態・結果までの
+安全な自動進行、時間切れ・切断・入力拒否の再現を提供する。閲覧視点と操作対象は
+別の状態とし、ダミー操作対象を選んだ場合だけゲーム固有Commandをその参加者identityで
+通常のDomainへ通す。`room/*`共通Commandの代理実行とゲーム固有stateのphase文字列の
+直接書換えは拒否する。DEBUG権限とダミー属性はPlatformが署名済みhostセッション、
+保存Room、module profileから最終確定し、固定済みの旧package bundleの表示値へ依存しない。
+旧package bundleにはPlatform Runtimeが新しい自動進行Commandを既存の
+`room/expire-timer`へ変換する。
 進行中断は既存の`room/abort`を使う。manifestの
 `settings`と`rules`を正式Shellへ描画し、宣言済み設定だけをアカウント別
 既定値として保存する。結果後にhostがRoomをlobbyへ戻しても、ほかの参加者は

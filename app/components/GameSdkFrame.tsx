@@ -68,6 +68,8 @@ type CommonView = {
     canEditRoomSettings: boolean;
     canAbort: boolean;
     canDebug: boolean;
+    canDebugActAsDummy?: boolean;
+    canDebugAutoProgress?: boolean;
   };
   timer?: {
     durationSeconds: number;
@@ -206,6 +208,7 @@ export function GameSdkFrame({
   const pendingLobbyRoomRef = useRef<PackageRoom | null>(null);
   const roomRef = useRef<PackageRoom | null>(null);
   const debugViewerRef = useRef<DebugViewer>("self");
+  const debugActorSeatRef = useRef<number | null>(null);
   const expiryRef = useRef<number | null>(null);
   const [room, setRoom] = useState<PackageRoom | null>(null);
   const [rooms, setRooms] = useState<Array<{
@@ -221,6 +224,7 @@ export function GameSdkFrame({
   const [canReturnToRoom, setCanReturnToRoom] = useState(false);
   const [isRoomDissolved, setIsRoomDissolved] = useState(false);
   const [debugViewer, setDebugViewer] = useState<DebugViewer>("self");
+  const [debugActorSeat, setDebugActorSeat] = useState<number | null>(null);
   const [playerDefaults, setPlayerDefaults] = useState<
     Record<string, GameSdkSettingValue>
   >({});
@@ -280,6 +284,10 @@ export function GameSdkFrame({
   }, [postRoomSnapshot, runtime]);
 
   const commitRoom = useCallback((next: PackageRoom | null) => {
+    if (next?.phase !== "playing" && debugActorSeatRef.current !== null) {
+      debugActorSeatRef.current = null;
+      setDebugActorSeat(null);
+    }
     roomRef.current = next;
     setRoom(next);
     postRoom(next);
@@ -329,6 +337,8 @@ export function GameSdkFrame({
     if (!next || (previousCode && previousCode !== next.code)) {
       debugViewerRef.current = "self";
       setDebugViewer("self");
+      debugActorSeatRef.current = null;
+      setDebugActorSeat(null);
     }
     commitRoom(next);
     pendingLobbyRoomRef.current = null;
@@ -432,11 +442,37 @@ export function GameSdkFrame({
       : operation();
   }, [moduleRequired, runtime, usesLlm]);
 
+  const sendPackageCommand = useCallback((command: SafeCommand) => {
+    const actorSeat = debugActorSeatRef.current;
+    return send(
+      actorSeat !== null && !command.type.startsWith("room/")
+        ? {
+            type: "room/debug-act-as-dummy",
+            seat: actorSeat,
+            command,
+          }
+        : command,
+    );
+  }, [send]);
+
   const selectDebugViewer = useCallback((viewer: DebugViewer) => {
     debugViewerRef.current = viewer;
     setDebugViewer(viewer);
     postRoom(roomRef.current);
   }, [postRoom]);
+
+  const selectDebugActor = useCallback((seat: number | null) => {
+    if (seat !== null) {
+      const target = roomRef.current?.view.common.players[seat];
+      if (!target?.isDummy) {
+        setMessage("操作対象にはダミープレイヤーだけを選択できます。");
+        return;
+      }
+    }
+    debugActorSeatRef.current = seat;
+    setDebugActorSeat(seat);
+    selectDebugViewer(seat ?? "self");
+  }, [selectDebugViewer]);
 
   const autoProgressDebug = useCallback(async (
     target: DebugAutoProgressTarget,
@@ -541,12 +577,30 @@ export function GameSdkFrame({
         || typeof payload.command !== "object"
         || typeof payload.command.type !== "string"
       ) return;
-      void send(payload.command).then((next) => {
+      void sendPackageCommand(payload.command).then(async (next) => {
         const accepted = attachLatestRoom(next);
+        const viewer = debugViewerRef.current;
+        let responseRoom = accepted;
+        if (viewer !== "self") {
+          try {
+            responseRoom = await runtime.readRoomAsDebugViewer(
+              accepted.code,
+              viewer,
+            ) ?? accepted;
+          } catch {
+            if (debugViewerRef.current === viewer) {
+              debugViewerRef.current = "self";
+              setDebugViewer("self");
+              setMessage(
+                "選択した閲覧視点を取得できないため、本人視点へ戻しました。",
+              );
+            }
+          }
+        }
         iframeRef.current?.contentWindow?.postMessage({
           type: "game-fields:room-command-result",
           requestId: payload.requestId,
-          room: accepted,
+          room: responseRoom,
         }, "*");
       }).catch((error) => {
         iframeRef.current?.contentWindow?.postMessage({
@@ -560,7 +614,7 @@ export function GameSdkFrame({
     };
     window.addEventListener("message", listener);
     return () => window.removeEventListener("message", listener);
-  }, [attachLatestRoom, postRoom, send]);
+  }, [attachLatestRoom, postRoom, runtime, sendPackageCommand]);
 
   useEffect(() => {
     if (expiryRef.current !== null) window.clearTimeout(expiryRef.current);
@@ -866,17 +920,15 @@ export function GameSdkFrame({
         backLabel={creatorSlug ? "制作者ページへ" : "ゲーム広場へ戻る"}
         debugRoom={moduleRequired("debug") && common?.permissions.canDebug ? {
           appPhase: appPhase(room),
-          canAutoProgress: (
-            room.phase !== "lobby"
-            && room.phase !== "result"
-            && Boolean(common.timer)
-          ),
+          canActAsDummy: common.permissions.canDebugActAsDummy === true,
+          canAutoProgress: common.permissions.canDebugAutoProgress === true,
           canUseSpectatorView: (
             supportsSpectators
             && moduleRequired("spectators")
           ),
           code: room.code,
           disabled: room.phase !== "lobby",
+          selectedActorSeat: debugActorSeat,
           selectedViewer: debugViewer,
           isSubmitting: pending,
           maximumPlayers: common.maximumPlayers,
@@ -894,6 +946,7 @@ export function GameSdkFrame({
           onAutoProgress: async (target) => {
             await run(() => autoProgressDebug(target));
           },
+          onSelectActor: selectDebugActor,
           onSelectViewer: selectDebugViewer,
           onSetConnected: async (seat, connected) => {
             await run(() => send({

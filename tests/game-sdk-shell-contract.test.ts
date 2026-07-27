@@ -33,6 +33,8 @@ test("reviewed SDK shell consumes every Room View permission it declares", () =>
     "canEditRoomSettings",
     "canAbort",
     "canDebug",
+    "canDebugActAsDummy",
+    "canDebugAutoProgress",
   ]) {
     assert.match(
       frame,
@@ -50,6 +52,8 @@ test("reviewed SDK shell consumes every Room View permission it declares", () =>
   assert.match(header, /DebugParticipantControls/);
   for (const marker of [
     "閲覧視点",
+    "操作対象",
+    "playing中は、選択したダミーとしてゲーム内の合法手を送信できます。",
     "1手だけ自動進行",
     "次の主要状態まで進める",
     "結果まで自動進行",
@@ -69,6 +73,11 @@ test("reviewed SDK shell consumes every Room View permission it declares", () =>
     assert.match(sdkRuntime, new RegExp(command.replace("/", "\\/")));
   }
   assert.match(frame, /readRoomAsDebugViewer/);
+  assert.match(frame, /room\/debug-act-as-dummy/);
+  assert.match(platformAdapter, /platformDebugProxyCommand/);
+  assert.match(platformAdapter, /target\?\.isDummy !== true/);
+  assert.match(platformAdapter, /inner\.type\.startsWith\("room\/"\)/);
+  assert.match(platformAdapter, /canDebug: input\.allowed/);
   assert.match(sdkClientRuntime, /readRoomAsDebugViewer/);
   assert.match(platformRuntime, /debugViewer/);
   assert.match(roomHttp, /debugViewer/);
@@ -192,11 +201,15 @@ test("every shared Shell module has executable evidence in the formal package pa
       [frame, /room\/debug-simulate-timeout/],
       [frame, /room\/debug-set-connected/],
       [frame, /room\/debug-simulate-input-error/],
+      [frame, /room\/debug-act-as-dummy/],
       [header, /DebugParticipantControls/],
       [header, /閲覧視点/],
+      [header, /操作対象/],
       [header, /次の主要状態まで進める/],
       [sdkClientRuntime, /readRoomAsDebugViewer/],
       [platformRuntime, /debugViewer/],
+      [platformAdapter, /platformDebugProxyCommand/],
+      [platformAdapter, /canDebugActAsDummy/],
       [sdkRuntime, /canDebug:[\s\S]*manifest\.supportsDebug[\s\S]*context\.viewer\.debugAccess[\s\S]*isHost/],
     ],
     timer: [

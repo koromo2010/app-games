@@ -24,10 +24,12 @@ import { AppLink as Link } from "./AppLink";
 
 export type GameSdkDebugRoom = {
   appPhase: string | null;
+  canActAsDummy: boolean;
   canAutoProgress: boolean;
   canUseSpectatorView: boolean;
   code: string;
   disabled: boolean;
+  selectedActorSeat: number | null;
   selectedViewer: "self" | "spectator" | number;
   isSubmitting: boolean;
   maximumPlayers: number;
@@ -36,6 +38,9 @@ export type GameSdkDebugRoom = {
     target: "step" | "phase" | "result",
   ) => void | Promise<void>;
   onRemoveDummy: (seat: number) => void | Promise<void>;
+  onSelectActor: (
+    seat: number | null,
+  ) => void | Promise<void>;
   onSelectViewer: (
     viewer: "self" | "spectator" | number,
   ) => void | Promise<void>;
@@ -110,7 +115,7 @@ export function GameSdkShellHeader({
           onClick={() => void debugRoom.onSelectViewer("self")}
           className="rounded border border-cyan-300 bg-white px-2 py-1 text-[10px] font-bold text-cyan-950 aria-pressed:bg-cyan-200"
         >
-          本人
+          HOST（本人）
         </button>
         {debugRoom.players.map((player) => (
           <button
@@ -118,9 +123,10 @@ export function GameSdkShellHeader({
             type="button"
             aria-pressed={debugRoom.selectedViewer === player.seat}
             onClick={() => void debugRoom.onSelectViewer(player.seat)}
-            className="rounded border border-cyan-300 bg-white px-2 py-1 text-[10px] font-bold text-cyan-950 aria-pressed:bg-cyan-200"
-          >
-            SEAT {player.seat + 1}
+          className="rounded border border-cyan-300 bg-white px-2 py-1 text-[10px] font-bold text-cyan-950 aria-pressed:bg-cyan-200"
+        >
+            SEAT {player.seat + 1} · {player.displayName}
+            {player.isDummy ? "（ダミー）" : ""}
           </button>
         ))}
         {debugRoom.canUseSpectatorView && (
@@ -134,6 +140,44 @@ export function GameSdkShellHeader({
           </button>
         )}
       </div>
+    </section>
+  ) : null;
+
+  const debugActorControls = debugRoom ? (
+    <section className="mt-2 border-t border-cyan-200 pt-2">
+      <p className="text-[10px] font-black uppercase tracking-[.12em] text-cyan-800">
+        操作対象
+      </p>
+      <div className="mt-1.5 flex flex-wrap gap-1">
+        <button
+          type="button"
+          aria-pressed={debugRoom.selectedActorSeat === null}
+          disabled={debugRoom.isSubmitting}
+          onClick={() => void debugRoom.onSelectActor(null)}
+          className="rounded border border-cyan-300 bg-white px-2 py-1 text-[10px] font-bold text-cyan-950 disabled:opacity-40 aria-pressed:bg-cyan-200"
+        >
+          HOST
+        </button>
+        {debugRoom.players.flatMap((player) => (
+          player.isDummy
+            ? [(
+                <button
+                  key={player.seat}
+                  type="button"
+                  aria-pressed={debugRoom.selectedActorSeat === player.seat}
+                  disabled={!debugRoom.canActAsDummy || debugRoom.isSubmitting}
+                  onClick={() => void debugRoom.onSelectActor(player.seat)}
+                  className="rounded border border-cyan-300 bg-white px-2 py-1 text-[10px] font-bold text-cyan-950 disabled:opacity-40 aria-pressed:bg-cyan-200"
+                >
+                  SEAT {player.seat + 1} · {player.displayName}
+                </button>
+              )]
+            : []
+        ))}
+      </div>
+      <p className="mt-1 text-[10px] leading-4 text-cyan-800">
+        playing中は、選択したダミーとしてゲーム内の合法手を送信できます。
+      </p>
     </section>
   ) : null;
 
@@ -184,6 +228,7 @@ export function GameSdkShellHeader({
             <div className="text-xs font-bold text-cyan-950">
               <div>Room {debugRoom.code} · rev {debugRoom.revision}</div>
               {debugViewerControls}
+              {debugActorControls}
             </div>
           )}
         >
@@ -203,7 +248,7 @@ export function GameSdkShellHeader({
               <dd className="font-black">{debugRoom.phase}</dd>
             </dl>
             <p className="text-xs leading-5 text-slate-600">
-              署名済みセッション、PackageのsupportsDebug、Room Viewのpermissions.canDebugがすべて有効です。
+              署名済みセッション、PackageのsupportsDebug、Platformが確定したDEBUG権限がすべて有効です。
             </p>
             <DebugParticipantControls
               participants={debugRoom.players.flatMap((player) => (

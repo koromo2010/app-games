@@ -743,3 +743,21 @@ AppSet hash、理由、実行管理者、日時、対応releaseを保存する�
 AIによる問い合わせ・報告は引き続き下書き作成までに限定し、本人がPortalで
 確認・修正・送信するまで保存しない。管理者認証障害時はbreak-glassで通常承認を
 直接実行せず、MFAを復旧してfull sessionへ戻してから承認する境界を維持する。
+
+## 2026-07-27 SDK正式Packageのplaying中にDEBUGとダミー操作が消える
+
+状態: 修正済み（2026-07-27、Platform／HTTP／Shell回帰テストあり、dev配備待ち）
+
+正式PreviewのスカルでDEBUGダミーを追加して開始すると、共通ヘッダーのDEBUGボタンが
+消え、ダミー手番でゲームを進められなかった。共通ShellはDEBUG表示をPackageが返す
+`permissions.canDebug`だけで判定していたため、固定済みの旧revisionやplaying Viewが
+古い値を返すと、署名済みhostセッションに権限があってもDEBUG全体が隠れた。
+また既存の「閲覧視点」は読取Viewだけを切り替え、iframeからのゲームCommandは常に
+host identityで送っていたため、ダミー視点を選んでもダミーの合法手にはならなかった。
+
+Platform adapterが署名済みセッション、保存Roomのhost、manifestとmodule profileから
+DEBUG権限を最終確定し、保存Roomからダミー属性と接続状態もRoom Viewへ復元する。
+共通DEBUG固定領域には「閲覧視点」と別に「操作対象」を追加し、playing中に選んだ
+ダミーのidentityでゲーム固有Commandだけを通常Domainへ通す。対象がダミーでない場合、
+権限のないhost、playing以外、内側の`room/*`共通Commandはサーバーで拒否する。
+自動進行は従来どおりPackageの時間切れ遷移を使い、結果画面までDEBUG表示を維持する。

@@ -134,7 +134,7 @@ SDK Previewのportable serverを呼ぶ。Portalの`/api/health`はDB schemaに�
 
 ## デバッグモード
 
-ホスト用の共通デバッグウィンドウでは、ダミー参加者、読取専用の閲覧視点、安全な主要状態進行、時間切れ・切断・入力拒否の再現、自動進行、リプレイ記録、ゲーム中断などを扱う。ゲーム固有stateのphase文字列は直接書き換えない。
+ホスト用の共通デバッグウィンドウでは、ダミー参加者、読取専用の閲覧視点、playing中のダミー操作対象、安全な主要状態進行、時間切れ・切断・入力拒否の再現、自動進行、リプレイ記録、ゲーム中断などを扱う。閲覧視点と操作対象は別の状態であり、ダミー代理操作はゲーム固有Commandだけを通常のDomainへ通す。`room/*`共通Commandの代理実行とゲーム固有stateのphase文字列の直接書換えは許可しない。
 
 PCでは移動・サイズ変更・最小化が可能で、外側を押すと操作を消費せず最小化する。小画面では画面内に固定する。
 
@@ -150,7 +150,7 @@ Previewとローカル開発ではrevision通知だけをWebSocketで受け、�
 
 SDK採用ゲームは `@game-fields/game-sdk/client-runtime` を利用する。SDKクライアントはactor identityを送らず、署名付きプレイヤーセッションを正本とする。
 
-正式Package Shellはwatcher・HTTP Command・timerの応答をrevision順に統合し、遅着した応答で表示を巻き戻さない。Roomのactive索引は、参加者が結果後に別Roomへ移った場合に旧Roomの再戦で上書きしない。非参加者は参加前のlobby View以外を取得・操作できず、無効化されたmoduleのCommandとPlatform resourceもサーバー境界で拒否する。結果Roomの解散前にはresult outboxを完了し、戦績・rating・playbackを失う状態ではRoomを削除しない。
+正式Package Shellはwatcher・HTTP Command・timerの応答をrevision順に統合し、遅着した応答で表示を巻き戻さない。Roomのactive索引は、参加者が結果後に別Roomへ移った場合に旧Roomの再戦で上書きしない。非参加者は参加前のlobby View以外を取得・操作できず、無効化されたmoduleのCommandとPlatform resourceもサーバー境界で拒否する。DEBUG権限とダミー属性は署名済みセッション・保存Room・module profileからPlatformが最終確定し、固定済みの旧Packageが返す表示値へ依存しない。結果Roomの解散前にはresult outboxを完了し、戦績・rating・playbackを失う状態ではRoomを削除しない。
 
 ## 広告枠の現状
 

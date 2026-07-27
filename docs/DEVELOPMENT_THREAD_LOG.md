@@ -5947,3 +5947,55 @@
 - `app-games-sdk-dev`のbuild migration後、`/api/health`が`schemaVersion: 5`であること、
   dev管理画面で承認・却下・履歴・復元が動くことを実機確認する。
 - main反映時は`app-games-sdk`でもmigration 005と同じ実機確認を行う。
+
+## 2026-07-27 — SDK正式PackageのDEBUGとダミー操作をplaying中も維持
+
+### 利用者からの報告
+
+- スカル正式PreviewでDEBUGダミーを2人追加してゲームを開始すると、共通ヘッダーから
+  DEBUGボタンが消え、ダミー手番でゲーム固有操作もできず進行不能になる。
+- `supportsDebug=true`かつDEBUG利用資格を持つHOSTはplaying／resultでもDEBUGを使え、
+  各ダミーの視点切替、ダミーとしての合法手、または安全な自動進行を実行できるようにする。
+- ゲーム固有UIではなくPlatform共通Shellで修正する。
+
+### 調査結果と判断
+
+- 正式Package ShellはDEBUG表示をPackageが返す`permissions.canDebug`へ依存していた。
+  固定済みの旧revisionやplaying Viewが古い値を返すと、署名済みhostセッションに
+  DEBUG権限があっても共通DEBUG全体が隠れる。
+- 既存の「閲覧視点」は`readRoomAsDebugViewer`による読取Viewだけを切り替え、
+  iframeのゲームCommandは常にhost identityで送っていた。ダミー視点を選んでも
+  ダミーの合法手にはならない。
+- DEBUG権限とダミー属性は、署名済みセッション、保存Room、manifest、module profileから
+  Platform adapterが最終確定する。閲覧視点と操作対象は別の状態として扱う。
+- 代理操作はplaying中のダミーとゲーム固有Commandだけを許可し、`room/*`共通Command、
+  hostや通常参加者の指定、権限なし操作、playing以外はサーバー側で拒否する。
+
+### 実施結果
+
+- Platform Room Viewへ`canDebug`、`canDebugActAsDummy`、
+  `canDebugAutoProgress`を確定値として投影し、保存Roomから`isDummy`と接続状態を復元した。
+- 共通DEBUG固定領域へ「閲覧視点」と別に「操作対象」を追加した。ダミーを選ぶと
+  初期表示を同じダミー視点へ切り替え、その後は閲覧視点を独立して変更できる。
+- iframeのゲーム固有Commandは、操作対象ダミーを選択中だけ
+  `room/debug-act-as-dummy`で包み、Platformが検証後に通常Domainへ対象identityで渡す。
+  Command結果も選択中の閲覧Viewでiframeへ返す。
+- lobbyを出てもDEBUG表示を維持し、resultでは操作対象だけをHOSTへ戻す。
+  自動進行、時間切れ、切断、入力拒否の既存DEBUG操作は維持する。
+
+### 検証
+
+- 旧Packageがplaying中に`canDebug=false`と誤ったダミー属性を返すfixtureでも、
+  Platformが正しい表示権限とダミーを復元するHTTP縦断テストを追加した。
+- ダミー代理の合法手が対象seatとして適用され、host指定、`room/*`代理、
+  DEBUG権限なし操作が拒否されることを確認した。
+- 最新`develop@57df5bf`へ統合後、`npm test`に成功し、全616テストが通過した。
+- `npm run verify`に成功し、環境台帳、9ゲーム共通要件、SDK境界、migration、
+  Shell契約、lintを確認した。
+- `npm run build`に成功し、production buildの全78ルートが生成された。
+
+### 未対応・保留
+
+- GitHub `develop`への反映と`app-games-dev`のDeployment確認を行う。
+- devのスカル正式Previewで、ダミー2人追加、開始、ダミー視点／操作対象切替、
+  ダミーの合法手、自動進行、resultまでのDEBUG維持を実機確認する。

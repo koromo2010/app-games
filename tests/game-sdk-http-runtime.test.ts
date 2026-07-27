@@ -434,6 +434,26 @@ test("Platform DEBUG bridge keeps pinned package bundles compatible", async () =
   let identity = debugHost;
   const legacyModule = {
     ...sdkCountUpServerModule,
+    async presentRoom(
+      room: Readonly<SdkCountUpRoom>,
+      context: Parameters<typeof sdkCountUpServerModule.presentRoom>[1],
+    ) {
+      const presented = await sdkCountUpServerModule.presentRoom(room, context);
+      return {
+        ...presented,
+        common: {
+          ...presented.common,
+          players: presented.common.players.map((roomPlayer) => ({
+            ...roomPlayer,
+            isDummy: false,
+          })),
+          permissions: {
+            ...presented.common.permissions,
+            canDebug: false,
+          },
+        },
+      };
+    },
     applyCommand(
       room: SdkCountUpRoom,
       command: SdkCountUpCommand,
@@ -443,6 +463,7 @@ test("Platform DEBUG bridge keeps pinned package bundles compatible", async () =
       assert.notEqual(command.type, "room/debug-simulate-timeout");
       assert.notEqual(command.type, "room/debug-set-connected");
       assert.notEqual(command.type, "room/debug-simulate-input-error");
+      assert.notEqual(command.type, "room/debug-act-as-dummy");
       return sdkCountUpServerModule.applyCommand(room, command, context);
     },
   };
@@ -474,24 +495,92 @@ test("Platform DEBUG bridge keeps pinned package bundles compatible", async () =
 
   let room = await runtime.createRoom({
     roomCode: "OLD1",
-    create: { settings: { target: 2 }, app: {} },
+    create: { settings: { target: 3 }, app: {} },
   });
-  identity = player;
   room = (await runtime.sendCommand(room.code, {
     expectedRevision: room.revision,
-    command: { type: "room/join" },
+    command: { type: "room/debug-add-dummy" },
   })).room;
-  identity = debugHost;
   room = (await runtime.sendCommand(room.code, {
     expectedRevision: room.revision,
     command: { type: "game/start" },
   })).room;
+  assert.equal(room.view.common.permissions.canDebug, true);
+  assert.equal(room.view.common.players[1]?.isDummy, true);
+  assert.equal(
+    (
+      room.view.common.permissions as typeof room.view.common.permissions & {
+        canDebugActAsDummy?: boolean;
+        canDebugAutoProgress?: boolean;
+      }
+    ).canDebugActAsDummy,
+    true,
+  );
+
+  room = (await runtime.sendCommand(room.code, {
+    expectedRevision: room.revision,
+    command: {
+      type: "room/debug-act-as-dummy",
+      seat: 1,
+      command: { type: "game/count-up" },
+    } as unknown as SdkCountUpCommand,
+  })).room;
+  assert.equal(room.view.app.count, 1);
+  assert.equal(room.view.app.lastActorSeat, 1);
+
+  await assert.rejects(
+    () => runtime.sendCommand(room.code, {
+      expectedRevision: room.revision,
+      command: {
+        type: "room/debug-act-as-dummy",
+        seat: 0,
+        command: { type: "game/count-up" },
+      } as unknown as SdkCountUpCommand,
+    }),
+    (error: unknown) => (
+      error instanceof GameSdkHttpClientRuntimeError
+      && error.status === 409
+      && error.code === "DEBUG_DUMMY_REQUIRED"
+    ),
+  );
+  await assert.rejects(
+    () => runtime.sendCommand(room.code, {
+      expectedRevision: room.revision,
+      command: {
+        type: "room/debug-act-as-dummy",
+        seat: 1,
+        command: { type: "room/leave" },
+      } as unknown as SdkCountUpCommand,
+    }),
+    (error: unknown) => (
+      error instanceof GameSdkHttpClientRuntimeError
+      && error.status === 400
+      && error.code === "GAME_SDK_INVALID_DEBUG_COMMAND"
+    ),
+  );
+  identity = player;
+  await assert.rejects(
+    () => runtime.sendCommand(room.code, {
+      expectedRevision: room.revision,
+      command: {
+        type: "room/debug-act-as-dummy",
+        seat: 1,
+        command: { type: "game/count-up" },
+      } as unknown as SdkCountUpCommand,
+    }),
+    (error: unknown) => (
+      error instanceof GameSdkHttpClientRuntimeError
+      && error.status === 403
+      && error.code === "DEBUG_ACCESS_REQUIRED"
+    ),
+  );
+  identity = debugHost;
 
   room = (await runtime.sendCommand(room.code, {
     expectedRevision: room.revision,
     command: { type: "room/debug-auto-progress" },
   })).room;
-  assert.equal(room.view.app.count, 1);
+  assert.equal(room.view.app.count, 2);
   assert.equal(room.view.common.players[0]?.reducedTime, false);
 
   const revisionBeforeRejection = room.revision;
