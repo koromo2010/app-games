@@ -826,7 +826,7 @@ DEBUG権限を最終確定し、保存Roomからダミー属性と接続状態�
 
 ## 2026-07-27 SDK正式Packageの交換ページ後にゲームが表示されない
 
-状態: 修正・ローカル検証済み（2026-07-27、dev配備／実機確認待ち）
+状態: 二段目のCookie修正・ローカル検証済み（2026-07-27、dev再配備／実機確認待ち）
 
 Project間のcommitが揃って正式Previewページを開けるようになった後も、
 ゲーム固有領域には「ゲームを開けませんでした」とだけ表示された。本体dev、
@@ -842,3 +842,14 @@ fragmentは従来どおり履歴から即時消去し、単一・4KB以下の
 `application/x-www-form-urlencoded`本文でPOSTする。Previewはgrant検証後に
 Path限定HttpOnly Cookieを設定して303でPackageへ遷移する。Package本体のCSPは
 引き続き`form-action 'none'`であり、iframeへ`allow-same-origin`は追加しない。
+
+最初のdev配備後、交換POSTは303になったが、直後の
+`GET /package/<creator>/<game>/<revision>/index.html`が403
+`Package session is invalid or expired.`になった。SDK Portalをtop-level siteとする
+二段iframe内のPreviewはthird-party contextである一方、交換Cookieが
+`SameSite=Strict`だったため、ブラウザが303後のPackage GETへCookieを送っていなかった。
+
+HTTPSの入口Cookieを`SameSite=None; Secure; Partitioned`へ変更し、SDK Portalの
+top-level siteごとのpartitionへ隔離する。HttpOnly、制作者・ゲーム・revision別Path、
+8時間期限、署名検証は維持する。ローカルHTTPだけは`SameSite=Lax`かつ非partitionedとし、
+本番のcross-site Cookie条件と混同しない。旧mock入口も同じ交換契約へ統一した。

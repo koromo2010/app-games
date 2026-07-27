@@ -17,6 +17,7 @@ import {
 } from "../apps/sdk-preview/lib/preview-grant-verifier.ts";
 import {
   createPreviewClientSessionToken,
+  previewEmbeddedSessionCookieOptions,
   previewExchangeContentSecurityPolicy,
   verifyPreviewClientSessionToken,
 } from "../apps/sdk-preview/lib/preview-security.ts";
@@ -352,7 +353,8 @@ test("client grants use a sandbox-safe fragment form exchange and never query cr
     assert.match(source, /createPreviewClientSessionToken/);
     assert.match(source, /NextResponse\.redirect\(destination, 303\)/);
     assert.match(source, /httpOnly: true/);
-    assert.match(source, /sameSite: "strict"/);
+    assert.match(source, /previewEmbeddedSessionCookieOptions\(request\.url\)/);
+    assert.doesNotMatch(source, /sameSite: "strict"/);
   }
   assert.equal(
     existsSync("apps/sdk-portal/app/api/preview-token/verify/route.ts"),
@@ -365,6 +367,25 @@ test("preview exchange permits only its exact form target and keeps fetch disabl
   assert.match(csp, /form-action https:\/\/preview\.example/);
   assert.match(csp, /connect-src 'none'/);
   assert.doesNotMatch(csp, /allow-same-origin/);
+});
+
+test("embedded preview sessions use top-level partitioned cookies over HTTPS", () => {
+  assert.deepEqual(
+    previewEmbeddedSessionCookieOptions("https://preview-dev.game-fields.com/package-open/example"),
+    {
+      secure: true,
+      sameSite: "none",
+      partitioned: true,
+    },
+  );
+  assert.deepEqual(
+    previewEmbeddedSessionCookieOptions("http://localhost:3002/open/example"),
+    {
+      secure: false,
+      sameSite: "lax",
+      partitioned: false,
+    },
+  );
 });
 
 test("SDK service authorization binds method and path within a short window", () => {

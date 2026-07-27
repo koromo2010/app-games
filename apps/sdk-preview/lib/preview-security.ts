@@ -47,6 +47,23 @@ export function packageCookiePath(grant: Pick<SdkPreviewGrant, "instanceId" | "g
   return `/package/${grant.instanceId}/${grant.gameId}/${grant.revision}/`;
 }
 
+/**
+ * The preview runtime is embedded below a different top-level site, so its
+ * scoped session cookie must be usable as a third-party cookie. Partitioning
+ * keeps that cookie isolated to the SDK Portal that opened the preview.
+ *
+ * Plain HTTP is supported only for local development. Partitioned cookies
+ * require Secure, and localhost does not need cross-site cookie semantics.
+ */
+export function previewEmbeddedSessionCookieOptions(requestUrl: string) {
+  const secure = new URL(requestUrl).protocol === "https:";
+  return {
+    secure,
+    sameSite: secure ? ("none" as const) : ("lax" as const),
+    partitioned: secure,
+  };
+}
+
 function previewAssetSignature(payload: string, secret: string) {
   return createHmac("sha256", secret)
     .update(`${PREVIEW_ASSET_TOKEN_AUDIENCE}:${payload}`)

@@ -8,6 +8,7 @@ import {
   createPreviewClientSessionToken,
   packageCookieName,
   packageCookiePath,
+  previewEmbeddedSessionCookieOptions,
 } from "@/lib/preview-security";
 
 export const dynamic = "force-dynamic";
@@ -54,8 +55,7 @@ export async function POST(
     name: packageCookieName(grant),
     value: session.token,
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
+    ...previewEmbeddedSessionCookieOptions(request.url),
     path: packageCookiePath(grant),
     maxAge: Math.max(1, Math.floor((session.expiresAt - Date.now()) / 1000)),
   });

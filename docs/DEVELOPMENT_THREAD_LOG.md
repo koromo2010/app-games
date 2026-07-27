@@ -6112,3 +6112,42 @@
   `dpl_39VDPJH6sKLi4SE43KM3CJ1tmbgq`も`READY`となった。
 - 3 Deploymentともerrors-only build logに失敗はなく、公開後の
   error／fatal Runtime Logは0件だった。
+
+## 2026-07-27 — 正式Package交換後のpartitioned sessionを修正
+
+### 利用者からの報告
+
+- フォーム交換修正版をdevへ配備して再読込しても、スカルのゲーム固有領域が空のままで、
+  画面上部に`Package session is invalid or expired.`と表示された。
+
+### 調査結果と判断
+
+- `app-games-preview-dev@b627fd7`のRuntime Logでは、同じrevisionについて
+  `GET package-open = 200`、`POST package-open = 303`、
+  直後の`GET package/.../index.html = 403`が繰り返されていた。
+- fragmentからform POSTへの交換は成功しており、失敗点は303後のPackage GETだった。
+- Previewは`SDK Portal → 本体dev → Preview`の二段iframe内にあるthird-party contextだが、
+  交換Cookieは`SameSite=Strict`だった。このためブラウザがCookieを送らず、
+  Runtimeはセッションなしとして403を返していた。
+- `allow-same-origin`を追加せず、HTTPSのCookieをCHIPSのpartitioned Cookieへ変更する。
+  top-levelのSDK Portalごとに分離し、別サイトへ同じCookieを共有しない。
+
+### 実施結果
+
+- 正式Packageと旧mockの交換Cookieを、HTTPS時は
+  `HttpOnly; Secure; SameSite=None; Partitioned`へ変更した。
+- 制作者・ゲーム・revision別Path、8時間期限、ローカル署名検証を維持した。
+- ローカルHTTPでは`SameSite=Lax`、非partitionedとして開発起動を維持した。
+- Package iframeの`allow-same-origin`は追加せず、Package本体の
+  `form-action 'none'`も維持した。
+
+### 検証
+
+- HTTPSとローカルHTTPのCookie属性、両交換Routeの共通helper利用、
+  `SameSite=Strict`の再混入拒否を回帰テストへ追加した。
+- SDK Preview認証・source対象31テストが成功した。
+
+### 未対応・保留
+
+- 全テスト、verify、SDK Preview／本体production buildを実行する。
+- `develop`へ反映後、同じスカルURLでPackage index 200とゲームUI表示を実機確認する。

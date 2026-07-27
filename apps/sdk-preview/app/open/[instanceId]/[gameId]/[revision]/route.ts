@@ -6,6 +6,7 @@ import {
 } from "@/lib/preview-exchange";
 import {
   createPreviewClientSessionToken,
+  previewEmbeddedSessionCookieOptions,
   previewCookieName,
   previewCookiePath,
 } from "@/lib/preview-security";
@@ -52,8 +53,7 @@ export async function POST(
     name: previewCookieName(grant),
     value: session.token,
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
+    ...previewEmbeddedSessionCookieOptions(request.url),
     path: previewCookiePath(grant),
     maxAge: Math.max(1, Math.floor((session.expiresAt - Date.now()) / 1000)),
   });
