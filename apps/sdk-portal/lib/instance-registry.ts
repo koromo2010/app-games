@@ -144,18 +144,20 @@ export async function listAccountGames(ownerPlayerId: string) {
            g.updated_at AS "updatedAt",
            (g.mock_revision IS NOT NULL) AS "mockAvailable",
            (g.package_revision IS NOT NULL) AS "packageAvailable",
-           (
-             SELECT candidate.revision
-             FROM sdk_game_package_revisions candidate
-             WHERE candidate.game_id = g.id
-             ORDER BY candidate.created_at DESC
-             LIMIT 1
-           ) IS DISTINCT FROM g.package_revision AS "packageCandidateAvailable",
+           candidate.revision AS "packageCandidateRevision",
+           candidate.revision IS DISTINCT FROM g.package_revision AS "packageCandidateAvailable",
            (g.development_revision IS NOT NULL) AS "developmentAvailable",
            (g.stable_revision IS NOT NULL) AS "stableAvailable",
            g.public_game_id AS "publicGameId"
     FROM sdk_games g
     JOIN sdk_creators c ON c.id = g.creator_id
+    LEFT JOIN LATERAL (
+      SELECT revision
+      FROM sdk_game_package_revisions
+      WHERE game_id = g.id
+      ORDER BY created_at DESC
+      LIMIT 1
+    ) candidate ON TRUE
     WHERE c.owner_player_id = ${ownerPlayerId}
       AND c.deleted_at IS NULL
       AND g.deleted_at IS NULL
@@ -171,6 +173,7 @@ export async function listAccountGames(ownerPlayerId: string) {
     updatedAt: string;
     mockAvailable: boolean;
     packageAvailable: boolean;
+    packageCandidateRevision: string | null;
     packageCandidateAvailable: boolean;
     developmentAvailable: boolean;
     stableAvailable: boolean;

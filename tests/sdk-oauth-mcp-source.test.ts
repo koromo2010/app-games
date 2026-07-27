@@ -20,6 +20,8 @@ test("SDK MCP challenges unauthenticated callers and scopes mock publication", (
   const packageStore = read("apps/sdk-portal/lib/game-package-store.ts");
   const dashboardSubmit = read("apps/sdk-portal/app/api/dashboard/games/[instanceId]/[gameId]/submit/route.ts");
   const dashboard = read("apps/sdk-portal/app/dashboard/page.tsx");
+  const instanceRegistry = read("apps/sdk-portal/lib/instance-registry.ts");
+  const submitButton = read("apps/sdk-portal/app/dashboard/SubmitGameButton.tsx");
   assert.match(mcp, /WWW-Authenticate/);
   assert.match(mcp, /oauth-protected-resource/);
   assert.match(mcp, /name === "publish_mock"/);
@@ -35,6 +37,17 @@ test("SDK MCP challenges unauthenticated callers and scopes mock publication", (
   assert.match(dashboardSubmit, /authenticateCreatorOwner/);
   assert.match(dashboardSubmit, /r\.revision IS DISTINCT FROM g\.package_revision/);
   assert.match(dashboard, /<SubmitGameButton/);
+  assert.match(dashboard, /game\.packageCandidateAvailable &&/);
+  assert.doesNotMatch(dashboard, /!game\.packageAvailable && game\.packageCandidateAvailable/);
+  assert.match(dashboard, /isUpdate=\{game\.packageAvailable\}/);
+  assert.match(dashboard, /packageRevision:/);
+  assert.match(dashboard, /ready-for-submission/);
+  assert.match(
+    dashboard,
+    /href=\{`\/\$\{game\.creatorSlug\}\/games\/\$\{game\.gameId\}`\}>制作環境/,
+  );
+  assert.match(instanceRegistry, /candidate\.revision AS "packageCandidateRevision"/);
+  assert.match(submitButton, /更新版を正式提出/);
   assert.match(mcp, /immutableAppSet: true/);
   assert.match(mcp, /name: "get_sdk_handshake"/);
   assert.match(mcp, /name === "get_sdk_handshake"/);

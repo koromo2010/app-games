@@ -82,13 +82,20 @@ export default async function CreatorDashboard() {
             <div className="creator-game-card__actions">
               <Link className="primary-action" href={gameHref(game)}>ゲームを開く <span aria-hidden="true">→</span></Link>
               <Link className="secondary-action" href={`/${game.creatorSlug}/games/${game.gameId}`}>共通モジュール設定</Link>
-              <Link className="secondary-action" href={`/${game.creatorSlug}`}>制作環境</Link>
-              {!game.packageAvailable && game.packageCandidateAvailable && (
-                <SubmitGameButton instanceId={game.creatorSlug} gameId={game.gameId} />
+              <Link className="secondary-action" href={`/${game.creatorSlug}/games/${game.gameId}`}>制作環境</Link>
+              {game.packageCandidateAvailable && (
+                <SubmitGameButton
+                  instanceId={game.creatorSlug}
+                  gameId={game.gameId}
+                  isUpdate={game.packageAvailable}
+                />
               )}
             </div>
             {!game.packageAvailable && !game.packageCandidateAvailable && <p className="submission-hint">正式提出データはまだ準備されていません。制作を完了すると、ここに正式提出ボタンが表示されます。</p>}
-            {!game.packageAvailable && game.packageCandidateAvailable && <p className="submission-hint">検査済みの提出データがあります。内容を確認して、この画面から正式提出してください。</p>}
+            {game.packageCandidateAvailable && <p className="submission-hint">
+              検査済みの{game.packageAvailable ? "更新版" : "提出データ"}があります。
+              packageRevision: <code>{game.packageCandidateRevision}</code> · ready-for-submission
+            </p>}
           </article>;
         })}
       </div> : <section className="dashboard-empty">

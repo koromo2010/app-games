@@ -977,3 +977,18 @@ Console、再読込、改ざん・別revision・期限切れ403に加え、`x-ve
 sessionの`expiresAt`を引き継いでいたため、60秒の入口grant失効では退役条件を満たさない。
 段階配備を経ずに共有verifierをv2-onlyへ切り替えた近接事故と、正しい復旧・退役条件は
 本書の「Preview共有asset token検証器を段階配備なしでv2-onlyへ切り替えた」を正本とする。
+## 2026-07-27 Creator Dashboardで更新版の正式提出操作が表示されない
+
+状態: 修正実装済み・dev配備待ち／moi-dev本人の実機確認待ち（2026-07-27、回帰テストあり）
+
+制作者`moi-dev`の環境`moi-lab`で、既に正式提出済みのスカルへ新しいpackage candidateを
+保存しても、「更新版を正式提出」する操作がCreator Dashboardへ表示されなかった。
+候補検出SQLは最新revisionと現在の`package_revision`の差を正しく検出していたが、
+表示側が`package_revision`未設定の初回提出だけにボタンを限定していたため、
+一度でも正式提出したゲームでは新候補を常に隠していた。
+
+Dashboardは初回・更新を問わず新candidateがあれば提出操作を表示し、更新時は
+「更新版を正式提出」と明示する。候補の`packageRevision`と
+`ready-for-submission`もカード上へ表示する。「制作環境」は制作者環境全体のロビーではなく、
+カードの`gameId`を含む既存ゲーム別制作画面へ遷移する。revision保存、所有者認可、
+正式提出APIは既存機構をそのまま使い、新しい権限や提出経路は追加しない。

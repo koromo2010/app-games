@@ -2670,3 +2670,38 @@ Total output lines: 6329
   `https://dev.game-fields.com`を選ぶコードが配備済みで、分離・fail-closed回帰テストも
   成功している。Windows Hello上の旧dev資格情報リセット、再登録、通常ログインは
   platform authenticatorを持つ本人端末が必要なため未確認である。
+## 2026-07-27 — Creator Dashboardの更新版正式提出導線
+
+### 利用者からの要望
+
+- `moi-dev`のCreator Dashboardでスカルの「制作環境」を押すと制作者ロビーへ戻り、
+  保存済み更新候補と正式提出操作を確認できない問い合わせを調査・修正する。
+- 対象候補は`ready-for-submission`のpackage revisionで、初回提出ではなく更新版である。
+
+### 判断
+
+- revision保存、所有者認可、正式提出API、ゲーム別制作画面は既に存在するため再実装しない。
+- 原因はリンクの`gameId`欠落だけでなく、Dashboardが正式提出済みゲームの新candidateを
+  表示対象から除外していた条件にある。
+- 初回提出と更新提出を同じcandidate検出結果から扱い、更新時だけ文言を明示的に変える。
+
+### 実施結果
+
+- 最新candidate revisionをDashboard取得結果へ追加し、カード上へ
+  `packageRevision`と`ready-for-submission`を表示した。
+- 過去版が正式提出済みでも新candidateがあれば「更新版を正式提出」を表示する。
+- 「制作環境」を`/<creatorSlug>/games/<gameId>`へ変更した。
+- 既存の所有者認可と正式提出APIを維持し、新しい権限・DB・提出経路は追加していない。
+
+### 検証
+
+- `tests/sdk-oauth-mcp-source.test.ts`へ、更新candidateの表示条件、更新版ラベル、
+  candidate revision表示、gameIdを含む制作環境リンクの回帰検査を追加した。
+- `npm run build:runtime-packages`後の`npm run verify`、全635テスト、
+  本体production build、SDK Portal production buildに成功した。
+- dev配備後の`moi-dev`本人による表示・提出前確認は未実施。
+
+### 未対応・保留
+
+- dev配備後、`moi-dev`本人にスカルの更新revision表示、制作環境遷移、
+  「更新版を正式提出」ボタン表示を確認してもらう。
