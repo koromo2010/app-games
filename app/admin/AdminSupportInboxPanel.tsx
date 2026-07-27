@@ -547,80 +547,70 @@ export function AdminSupportInboxPanel({
                     {initialBody(item)}
                   </p>
                 </div>
-                <div className="space-y-2 rounded-xl bg-slate-950/45 p-3">
-                  <p className="text-xs font-bold text-slate-500">やりとり</p>
-                  <article className="ml-auto max-w-[90%] rounded-lg bg-cyan-300/10 p-3">
-                    <div className="flex justify-between gap-3 text-xs font-bold text-cyan-100">
-                      <span>{author}</span>
-                      <time>
-                        {new Intl.DateTimeFormat("ja-JP", {
-                          dateStyle: "short",
-                          timeStyle: "short",
-                        }).format(new Date(record.createdAt))}
-                      </time>
-                    </div>
-                    <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-slate-200">
-                      {initialBody(item)}
+                {record.messages.length > 0 && (
+                  <div className="space-y-2 rounded-xl bg-slate-950/45 p-3">
+                    <p className="text-xs font-bold text-slate-500">
+                      返信・追記
                     </p>
-                  </article>
-                  {record.messages.map((entry) => (
-                    <article
-                      key={entry.id}
-                      className={`max-w-[90%] rounded-lg p-3 ${
-                        entry.author === "admin"
-                          ? "mr-auto border border-white/10 bg-white/[0.04]"
-                          : "ml-auto bg-cyan-300/10"
-                      }`}
-                    >
-                      <div className="flex justify-between gap-3 text-xs font-bold text-slate-400">
-                        <span>
-                          {entry.author === "admin" ? "運営" : author}
-                        </span>
-                        <time>
-                          {new Intl.DateTimeFormat("ja-JP", {
-                            dateStyle: "short",
-                            timeStyle: "short",
-                          }).format(new Date(entry.createdAt))}
-                        </time>
-                      </div>
-                      <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-slate-200">
-                        {entry.body}
-                      </p>
-                      {entry.author === "admin"
-                        && (
-                          entry.deliveryStatus === "failed"
-                          || entry.deliveryStatus === "pending"
-                        ) && (
-                        <div className="mt-2 flex flex-wrap items-center gap-2">
-                          <p className="text-xs font-bold text-amber-200">
-                            {entry.deliveryStatus === "failed"
-                              ? "メール通知失敗"
-                              : "メール通知状態が未確定"}
-                          </p>
-                          <button
-                            type="button"
-                            disabled={savingId !== null}
-                            onClick={() => void retryReplyEmail(
-                              item,
-                              entry.id,
-                            )}
-                            className="rounded-md border border-amber-300/40 px-2 py-1 text-xs font-bold text-amber-100 hover:bg-amber-300/10 disabled:opacity-40"
-                          >
-                            {savingId === record.id
-                              ? "再送中…"
-                              : "返信メールだけ再送"}
-                          </button>
+                    {record.messages.map((entry) => (
+                      <article
+                        key={entry.id}
+                        className={`max-w-[90%] rounded-lg p-3 ${
+                          entry.author === "admin"
+                            ? "mr-auto border border-white/10 bg-white/[0.04]"
+                            : "ml-auto bg-cyan-300/10"
+                        }`}
+                      >
+                        <div className="flex justify-between gap-3 text-xs font-bold text-slate-400">
+                          <span>
+                            {entry.author === "admin" ? "運営" : author}
+                          </span>
+                          <time>
+                            {new Intl.DateTimeFormat("ja-JP", {
+                              dateStyle: "short",
+                              timeStyle: "short",
+                            }).format(new Date(entry.createdAt))}
+                          </time>
                         </div>
-                      )}
-                      {entry.author === "admin"
-                        && entry.deliveryStatus === "not-required" && (
-                        <p className="mt-2 text-xs text-slate-500">
-                          確認済みメールなし・会話画面のみ
+                        <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-slate-200">
+                          {entry.body}
                         </p>
-                      )}
-                    </article>
-                  ))}
-                </div>
+                        {entry.author === "admin"
+                          && (
+                            entry.deliveryStatus === "failed"
+                            || entry.deliveryStatus === "pending"
+                          ) && (
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <p className="text-xs font-bold text-amber-200">
+                              {entry.deliveryStatus === "failed"
+                                ? "メール通知失敗"
+                                : "メール通知状態が未確定"}
+                            </p>
+                            <button
+                              type="button"
+                              disabled={savingId !== null}
+                              onClick={() => void retryReplyEmail(
+                                item,
+                                entry.id,
+                              )}
+                              className="rounded-md border border-amber-300/40 px-2 py-1 text-xs font-bold text-amber-100 hover:bg-amber-300/10 disabled:opacity-40"
+                            >
+                              {savingId === record.id
+                                ? "再送中…"
+                                : "返信メールだけ再送"}
+                            </button>
+                          </div>
+                        )}
+                        {entry.author === "admin"
+                          && entry.deliveryStatus === "not-required" && (
+                          <p className="mt-2 text-xs text-slate-500">
+                            確認済みメールなし・会話画面のみ
+                          </p>
+                        )}
+                      </article>
+                    ))}
+                  </div>
+                )}
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="text-xs text-slate-500">
                     <p>

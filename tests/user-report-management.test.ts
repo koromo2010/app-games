@@ -62,6 +62,13 @@ test("admin has one authenticated inbox for reports and contacts", () => {
   assert.match(panel, /\/api\/admin\/user-reports/);
   assert.match(panel, /\/api\/admin\/contact-messages/);
   assert.match(panel, /管理者通知を再送/);
+  assert.equal(
+    panel.match(/\{initialBody\(item\)\}/g)?.length,
+    1,
+    "the initial submission should only appear in the content section",
+  );
+  assert.match(panel, /record\.messages\.length > 0/);
+  assert.match(panel, /返信・追記/);
   assert.match(reportRoute, /requireFullSiteAdminSession/);
   assert.match(reportRoute, /requireRecentSiteAdminMfa/);
   const reportReplyRoute = reportRoute.slice(
