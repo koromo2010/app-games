@@ -6,7 +6,7 @@
 
 ## 2026-07-27 dev app → main appでRuntime Bundle実体が移送されない
 
-状態: 修正実装・本番配備済み／既存リリース再昇格確認待ち（2026-07-27、migration 005・回帰テスト追加）
+状態: package移送と空Git初期化の修正実装・本番package Git初期化済み／既存リリース再昇格確認待ち（2026-07-27、migration 005・回帰テスト追加）
 
 旧昇格処理はdevのrevision、hash、manifest等のDB snapshotだけをmainの
 `sdk_app_releases`へ保存し、dev専用package Gitの`server.bundle.js`等をmain専用
@@ -25,6 +25,18 @@ SDK schema version 5、dev artifact source往復`ok`、最終Deploymentの
 error／fatal Runtime log 0件を確認した。残るのは旧方式で登録済み
 「コトバに迫れ」を管理画面の直近MFA付き操作で同じdev版から再昇格し、
 実体移送と正式Room作成を確認する作業である。
+
+再昇格の初回試行では、dev package取得、全ファイル検査、hash照合までは成功したが、
+main package Git書込みが503になった。診断追加後にGitHub正本を確認すると、
+`koromo2010/game-fields-sdk-mocks`は権限付きtokenからrepository metadataを読める一方、
+branchが1本もない空repositoryだった。従来のhealthはrepositoryの`permissions.push`だけを
+見て`mainTarget: ok`と誤判定し、保存処理は存在しないdefault branchを基点に
+`sdk-previews`を作ろうとして停止していた。
+
+本番repositoryには管理用`.game-fields-storage`だけを持つ`main`初期commitと
+`sdk-previews` branchを作成した。保存処理は、将来同じ空repositoryへ接続した場合も
+Contents APIで最初のcommitを作成してから保存branchを作る。healthは書込権限だけでなく
+保存branchまたはdefault branchのref読取まで確認し、空repositoryを成功扱いしない。
 
 ## 2026-07-27 SDK本番の正式Room作成がPreviewの403で失敗する
 

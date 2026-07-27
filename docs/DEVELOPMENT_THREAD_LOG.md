@@ -4884,3 +4884,47 @@
 ### 未対応・保留
 
 - 本番反映後、Windows端末で既存パスキーがPIN・指紋・顔認証へ進むことを実機確認する。
+
+## 2026-07-27 — 本番SDK package Gitの空repository復旧
+
+### 利用者からの要望
+
+- `dev app → main app`更新時の`APP_RELEASE_ARTIFACT_TARGET_WRITE_FAILED`を調査し、
+  本番へ反映して復旧する。
+
+### 根本原因と判断
+
+- dev packageの取得、全ファイル検査、hash照合までは成功し、最後のmain package Git
+  保存だけが503になっていた。
+- 診断commit`c811e11`を本番へ出し、SDK Portal、SDK Preview、本体の3 Deploymentが
+  READYになった。healthではrepository存在とpush権限が確認できたが、GitHub正本の
+  branch一覧は空だった。
+- 保存先`koromo2010/game-fields-sdk-mocks`はbranchが1本もない空repositoryである。
+  Git References APIは空repositoryへ最初のrefを作れないため、default branchが必ず
+  存在するという従来実装の前提が誤りだった。
+- 手動seedだけでは次の環境で再発するため、Contents APIで管理用の最初のcommitを作り、
+  そのcommitから保存branchを非force作成する処理を共通Git保存境界へ追加する。
+
+### 実施結果
+
+- 本番private package Gitへ管理用`.game-fields-storage`だけを持つ`main`初期commit
+  `4ab0e01`を作成し、同commitから`sdk-previews` branchを作成した。
+- PortalのGit保存処理へ空repository初期化、競合時の再読取、保存branch作成を追加した。
+- healthのmain target probeをrepository metadataだけでなく、保存branchまたは
+  default branchのrefまで読むように変更した。
+- GitHub API失敗のoperation分類で、更新用の複数形`/git/refs/heads/*`も
+  `update-ref`として記録するよう修正した。
+
+### 検証
+
+- 空repositoryのhealth拒否と、初期commit、保存branch、package commit、
+  非force ref更新までの回帰テストに成功した。
+- `npm run verify`、全579テスト、全体lintに成功した。
+- `npm run build`、`npm run build:sdk`、`npm run build:sdk-preview`の
+  3 production buildに成功した。
+
+### 未対応・保留
+
+- 修正commitをmainへ非force反映し、本体、SDK Portal、SDK Previewの
+  Production Deploymentと公開healthを確認する。
+- 本番管理画面から「コトバに迫れ」を再昇格し、package commitと正式Room作成を確認する。

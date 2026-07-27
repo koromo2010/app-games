@@ -9,6 +9,7 @@ import {
   GamePackageGitTargetError,
   prepareGamePackageUploadFiles,
   probeGamePackageGitWriteTarget,
+  saveGamePackageFilesToGit,
   type MockUploadFile,
   type PreparedUploadFile,
 } from "../apps/sdk-portal/lib/mock-git-store.ts";
@@ -198,10 +199,23 @@ test("main can probe the authenticated development artifact source", async () =>
 
 test("main target probe verifies repository identity and push permission", async () => {
   let authorization = "";
+  const requests: string[] = [];
   await probeGamePackageGitWriteTarget({
-    fetchRuntime: (async (_input, init) => {
+    fetchRuntime: (async (input, init) => {
       authorization = new Headers(init?.headers).get("Authorization") ?? "";
+      const url = new URL(
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.href
+            : input.url,
+      );
+      requests.push(url.pathname);
+      if (url.pathname.endsWith("/git/ref/heads/sdk-previews")) {
+        return Response.json({ object: { sha: "a".repeat(40) } });
+      }
       return Response.json({
+        default_branch: "main",
         full_name: "koromo2010/game-fields-sdk-mocks",
         permissions: { push: true },
       });
@@ -212,6 +226,10 @@ test("main target probe verifies repository identity and push permission", async
     },
   });
   assert.equal(authorization, "Bearer test-secret");
+  assert.deepEqual(requests, [
+    "/repos/koromo2010/game-fields-sdk-mocks",
+    "/repos/koromo2010/game-fields-sdk-mocks/git/ref/heads/sdk-previews",
+  ]);
 });
 
 test("main target probe reports inaccessible repository without exposing credentials", async () => {
@@ -232,6 +250,156 @@ test("main target probe reports inaccessible repository without exposing credent
       && !error.message.includes("test-secret")
     ),
   );
+});
+
+test("main target probe reports an empty repository before package transfer", async () => {
+  await assert.rejects(
+    probeGamePackageGitWriteTarget({
+      fetchRuntime: (async (input) => {
+        const url = new URL(
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.href
+              : input.url,
+        );
+        if (url.pathname.endsWith("/git/ref/heads/sdk-previews")) {
+          return Response.json(
+            { message: "Git Repository is empty." },
+            { status: 409 },
+          );
+        }
+        return Response.json({
+          default_branch: "main",
+          full_name: "koromo2010/game-fields-sdk-mocks",
+          permissions: { push: true },
+        });
+      }) as typeof fetch,
+      env: {
+        SDK_MOCK_GITHUB_REPOSITORY: "koromo2010/game-fields-sdk-mocks",
+        SDK_MOCK_GITHUB_WRITE_TOKEN: "test-secret",
+      },
+    }),
+    (error) => (
+      error instanceof GamePackageGitTargetError
+      && error.code === "SDK_PACKAGE_GIT_REPOSITORY_EMPTY_READ_REF"
+    ),
+  );
+});
+
+test("package transfer initializes an empty repository before creating its storage branch", async () => {
+  const { files } = packageFixture();
+  const initCommit = "1".repeat(40);
+  const releaseCommit = "2".repeat(40);
+  const requests: Array<{ method: string; path: string; body: unknown }> = [];
+  let blobIndex = 0;
+  let treeIndex = 0;
+
+  const revision = await saveGamePackageFilesToGit({
+    instanceId: "moi-lab",
+    gameId: "portable-fixture",
+    files,
+  }, {
+    env: {
+      SDK_MOCK_GITHUB_REPOSITORY: "koromo2010/game-fields-sdk-mocks",
+      SDK_MOCK_GITHUB_WRITE_TOKEN: "test-secret",
+    },
+    fetchRuntime: (async (input, init) => {
+      const url = new URL(
+        typeof input === "string"
+          ? input
+          : input instanceof URL
+            ? input.href
+            : input.url,
+      );
+      const method = init?.method ?? "GET";
+      const body = typeof init?.body === "string"
+        ? JSON.parse(init.body)
+        : null;
+      requests.push({ method, path: url.pathname, body });
+
+      if (
+        method === "GET"
+        && url.pathname.endsWith("/git/ref/heads/sdk-previews")
+      ) {
+        return Response.json(
+          { message: "Git Repository is empty." },
+          { status: 409 },
+        );
+      }
+      if (
+        method === "GET"
+        && url.pathname === "/repos/koromo2010/game-fields-sdk-mocks"
+      ) {
+        return Response.json({ default_branch: "main" });
+      }
+      if (
+        method === "GET"
+        && url.pathname.endsWith("/git/ref/heads/main")
+      ) {
+        return Response.json(
+          { message: "Git Repository is empty." },
+          { status: 409 },
+        );
+      }
+      if (
+        method === "PUT"
+        && url.pathname.endsWith("/contents/.game-fields-storage")
+      ) {
+        return Response.json({ commit: { sha: initCommit } }, { status: 201 });
+      }
+      if (method === "POST" && url.pathname.endsWith("/git/refs")) {
+        return Response.json({ object: { sha: initCommit } }, { status: 201 });
+      }
+      if (
+        method === "GET"
+        && url.pathname.endsWith(`/git/commits/${initCommit}`)
+      ) {
+        return Response.json({ tree: { sha: "parent-tree" } });
+      }
+      if (method === "POST" && url.pathname.endsWith("/git/blobs")) {
+        blobIndex += 1;
+        return Response.json({ sha: `blob-${blobIndex}` }, { status: 201 });
+      }
+      if (method === "POST" && url.pathname.endsWith("/git/trees")) {
+        treeIndex += 1;
+        return Response.json(
+          { sha: treeIndex === 1 ? "package-tree" : "release-tree" },
+          { status: 201 },
+        );
+      }
+      if (method === "POST" && url.pathname.endsWith("/git/commits")) {
+        return Response.json({ sha: releaseCommit }, { status: 201 });
+      }
+      if (
+        method === "PATCH"
+        && url.pathname.endsWith("/git/refs/heads/sdk-previews")
+      ) {
+        return Response.json({ object: { sha: releaseCommit } });
+      }
+      return Response.json({ message: "Unexpected request" }, { status: 500 });
+    }) as typeof fetch,
+  });
+
+  assert.equal(revision, releaseCommit);
+  const initialization = requests.find((request) => (
+    request.method === "PUT"
+    && request.path.endsWith("/contents/.game-fields-storage")
+  ));
+  assert.deepEqual(initialization?.body, {
+    message: "Initialize Game Fields SDK package storage",
+    content: Buffer.from(
+      "Game Fields SDK package storage. Managed automatically.\n",
+      "utf8",
+    ).toString("base64"),
+    branch: "main",
+  });
+  assert.ok(requests.some((request) => (
+    request.method === "POST"
+    && request.path.endsWith("/git/refs")
+    && (request.body as { ref?: string } | null)?.ref
+      === "refs/heads/sdk-previews"
+  )));
 });
 
 test("dev to main promotion rejects changed artifacts before target Git write", async () => {

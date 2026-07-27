@@ -231,12 +231,16 @@ export function prepareGamePackageUploadFiles(value: unknown) {
 function githubOperation(path: string, method: string) {
   if (!path) return "repository";
   if (path.startsWith("/git/ref/heads/")) return method === "PATCH" ? "update-ref" : "read-ref";
+  if (path.startsWith("/git/refs/heads/")) return method === "PATCH" ? "update-ref" : "read-ref";
   if (path === "/git/refs") return "create-ref";
   if (path.startsWith("/git/commits/")) return "read-commit";
   if (path === "/git/commits") return "create-commit";
   if (path === "/git/blobs") return "create-blob";
   if (path.startsWith("/git/trees/")) return "read-tree";
   if (path === "/git/trees") return "create-tree";
+  if (path === "/contents/.game-fields-storage" && method === "PUT") {
+    return "initialize-repository";
+  }
   if (path.startsWith("/contents/")) return "read-content";
   return `${method.toLowerCase()}-request`;
 }
@@ -275,6 +279,8 @@ function packageGitTargetCode(error: unknown) {
       ? "WRITE_FORBIDDEN"
       : error.status === 404
         ? "REPOSITORY_NOT_ACCESSIBLE"
+        : error.status === 409 && error.operation === "read-ref"
+          ? "REPOSITORY_EMPTY"
         : error.status === 429
           ? "RATE_LIMITED"
           : `HTTP_${error.status}`;
@@ -298,6 +304,7 @@ export async function probeGamePackageGitWriteTarget(
   const config = mockGitConfig(dependencies.env);
   try {
     const repository = await githubApi<{
+      default_branch?: unknown;
       full_name?: unknown;
       permissions?: { push?: unknown };
     }>(
@@ -312,6 +319,26 @@ export async function probeGamePackageGitWriteTarget(
     ) {
       throw new GamePackageGitTargetError(
         "SDK_PACKAGE_GIT_WRITE_PERMISSION_MISSING",
+      );
+    }
+    const defaultBranch = typeof repository.default_branch === "string"
+      && BRANCH_PATTERN.test(repository.default_branch)
+      ? repository.default_branch
+      : "main";
+    try {
+      await githubApi(
+        config,
+        `/git/ref/heads/${config.branch}`,
+        undefined,
+        dependencies.fetchRuntime ?? fetch,
+      );
+    } catch (error) {
+      if (!(error instanceof GitHubApiError) || error.status !== 404) throw error;
+      await githubApi(
+        config,
+        `/git/ref/heads/${defaultBranch}`,
+        undefined,
+        dependencies.fetchRuntime ?? fetch,
       );
     }
   } catch (error) {
@@ -449,24 +476,109 @@ export function gamePackageUploadFileFromBytes(
   };
 }
 
-async function ensureBranch(config: ReturnType<typeof mockGitConfig>) {
+async function initializeEmptyRepository(
+  config: ReturnType<typeof mockGitConfig>,
+  defaultBranch: string,
+  fetchRuntime: typeof fetch,
+) {
   try {
-    const ref = await githubApi<{ object: { sha: string } }>(config, `/git/ref/heads/${config.branch}`);
+    const initialized = await githubApi<{ commit: { sha: string } }>(
+      config,
+      "/contents/.game-fields-storage",
+      {
+        method: "PUT",
+        body: JSON.stringify({
+          message: "Initialize Game Fields SDK package storage",
+          content: Buffer.from(
+            "Game Fields SDK package storage. Managed automatically.\n",
+            "utf8",
+          ).toString("base64"),
+          branch: defaultBranch,
+        }),
+      },
+      fetchRuntime,
+    );
+    return initialized.commit.sha;
+  } catch (error) {
+    if (
+      !(error instanceof GitHubApiError)
+      || (error.status !== 409 && error.status !== 422)
+    ) {
+      throw error;
+    }
+    const ref = await githubApi<{ object: { sha: string } }>(
+      config,
+      `/git/ref/heads/${defaultBranch}`,
+      undefined,
+      fetchRuntime,
+    );
+    return ref.object.sha;
+  }
+}
+
+async function ensureBranch(
+  config: ReturnType<typeof mockGitConfig>,
+  fetchRuntime: typeof fetch,
+) {
+  try {
+    const ref = await githubApi<{ object: { sha: string } }>(
+      config,
+      `/git/ref/heads/${config.branch}`,
+      undefined,
+      fetchRuntime,
+    );
     return ref.object.sha;
   } catch (error) {
-    if (!(error instanceof GitHubApiError) || error.status !== 404) throw error;
+    if (
+      !(error instanceof GitHubApiError)
+      || (error.status !== 404 && error.status !== 409)
+    ) {
+      throw error;
+    }
   }
-  const repository = await githubApi<{ default_branch: string }>(config, "");
-  const base = await githubApi<{ object: { sha: string } }>(config, `/git/ref/heads/${repository.default_branch}`);
+  const repository = await githubApi<{ default_branch: string }>(
+    config,
+    "",
+    undefined,
+    fetchRuntime,
+  );
+  let baseSha: string;
+  try {
+    const base = await githubApi<{ object: { sha: string } }>(
+      config,
+      `/git/ref/heads/${repository.default_branch}`,
+      undefined,
+      fetchRuntime,
+    );
+    baseSha = base.object.sha;
+  } catch (error) {
+    if (
+      !(error instanceof GitHubApiError)
+      || (error.status !== 404 && error.status !== 409)
+    ) {
+      throw error;
+    }
+    baseSha = await initializeEmptyRepository(
+      config,
+      repository.default_branch,
+      fetchRuntime,
+    );
+  }
+  if (config.branch === repository.default_branch) return baseSha;
   try {
     await githubApi(config, "/git/refs", {
       method: "POST",
-      body: JSON.stringify({ ref: `refs/heads/${config.branch}`, sha: base.object.sha }),
-    });
-    return base.object.sha;
+      body: JSON.stringify({ ref: `refs/heads/${config.branch}`, sha: baseSha }),
+    }, fetchRuntime);
+    return baseSha;
   } catch (error) {
     if (!(error instanceof GitHubApiError) || error.status !== 422) throw error;
-    const ref = await githubApi<{ object: { sha: string } }>(config, `/git/ref/heads/${config.branch}`);
+    const ref = await githubApi<{ object: { sha: string } }>(
+      config,
+      `/git/ref/heads/${config.branch}`,
+      undefined,
+      fetchRuntime,
+    );
     return ref.object.sha;
   }
 }
@@ -477,19 +589,27 @@ async function saveFilesToGit(input: {
   files: readonly PreparedUploadFile[];
   prefix: string;
   message: string;
+  env?: NodeJS.ProcessEnv;
+  fetchRuntime?: typeof fetch;
 }) {
   if (!INSTANCE_PATTERN.test(input.instanceId) || !GAME_PATTERN.test(input.gameId)) {
     throw new Error("SDK mock storage scope is invalid.");
   }
-  const config = mockGitConfig();
+  const config = mockGitConfig(input.env);
+  const fetchRuntime = input.fetchRuntime ?? fetch;
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const parentSha = await ensureBranch(config);
-    const parent = await githubApi<{ tree: { sha: string } }>(config, `/git/commits/${parentSha}`);
+    const parentSha = await ensureBranch(config, fetchRuntime);
+    const parent = await githubApi<{ tree: { sha: string } }>(
+      config,
+      `/git/commits/${parentSha}`,
+      undefined,
+      fetchRuntime,
+    );
     const blobs = await Promise.all(input.files.map((file) => githubApi<{ sha: string }>(config, "/git/blobs", {
       method: "POST",
       body: JSON.stringify({ content: file.content, encoding: file.encoding }),
-    })));
+    }, fetchRuntime)));
     const packageTree = await githubApi<{ sha: string }>(config, "/git/trees", {
       method: "POST",
       body: JSON.stringify({
@@ -500,7 +620,7 @@ async function saveFilesToGit(input: {
           sha: blobs[index].sha,
         })),
       }),
-    });
+    }, fetchRuntime);
     const tree = await githubApi<{ sha: string }>(config, "/git/trees", {
       method: "POST",
       body: JSON.stringify({
@@ -512,7 +632,7 @@ async function saveFilesToGit(input: {
           sha: packageTree.sha,
         }],
       }),
-    });
+    }, fetchRuntime);
     const commit = await githubApi<{ sha: string }>(config, "/git/commits", {
       method: "POST",
       body: JSON.stringify({
@@ -520,12 +640,12 @@ async function saveFilesToGit(input: {
         tree: tree.sha,
         parents: [parentSha],
       }),
-    });
+    }, fetchRuntime);
     try {
       await githubApi(config, `/git/refs/heads/${config.branch}`, {
         method: "PATCH",
         body: JSON.stringify({ sha: commit.sha, force: false }),
-      });
+      }, fetchRuntime);
       return commit.sha;
     } catch (error) {
       if (!(error instanceof GitHubApiError) || error.status !== 422 || attempt === 2) throw error;
@@ -538,13 +658,17 @@ export async function saveMockFilesToGit(input: {
   instanceId: string;
   gameId: string;
   files: unknown;
-}) {
+}, dependencies: {
+  env?: NodeJS.ProcessEnv;
+  fetchRuntime?: typeof fetch;
+} = {}) {
   return saveFilesToGit({
     instanceId: input.instanceId,
     gameId: input.gameId,
     files: prepareMockUploadFiles(input.files),
     prefix: `previews/${input.instanceId}/${input.gameId}/mock`,
     message: `Update SDK mock ${input.instanceId}/${input.gameId}`,
+    ...dependencies,
   });
 }
 
@@ -552,12 +676,16 @@ export async function saveGamePackageFilesToGit(input: {
   instanceId: string;
   gameId: string;
   files: unknown;
-}) {
+}, dependencies: {
+  env?: NodeJS.ProcessEnv;
+  fetchRuntime?: typeof fetch;
+} = {}) {
   return saveFilesToGit({
     instanceId: input.instanceId,
     gameId: input.gameId,
     files: prepareGamePackageUploadFiles(input.files),
     prefix: `packages/${input.instanceId}/${input.gameId}/bundle`,
     message: `Update SDK game package ${input.instanceId}/${input.gameId}`,
+    ...dependencies,
   });
 }

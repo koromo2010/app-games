@@ -315,7 +315,7 @@ SDK `llm` adapter、module lab、Preview中継API `/api/sdk-preview/llm`も本�
 
 | 対象 | 現在状態 | 次の確認 |
 | --- | --- | --- |
-| private package Git | `koromo2010/game-fields-sdk-mocks`をPrivateで作成済み。Portal書込資格とPreview読取資格を分離 | 本番package保存後に専用branch・commit・読取を実機確認 |
+| private package Git | `koromo2010/game-fields-sdk-mocks`をPrivateで作成済み。Portal書込資格とPreview読取資格を分離。2026-07-27に空repositoryだったことを確認し、管理用`.game-fields-storage`を持つ`main`と保存用`sdk-previews` branchを初期化済み | 管理画面の再昇格でpackage commit、Portal書込資格、Preview読取を実機確認 |
 | Portal Vercel Project | `app-games-sdk`、Root Directory `apps/sdk-portal`、Production Branch `main`。`main@9f94a90`のDeploymentがREADY。`app-games-sdk-neon`はProductionだけへLink済みで、`schemaVersion: 5`とdev artifact source往復`ok`を確認済み | RedisをLinkする |
 | Preview Vercel Project | `app-games-sdk-preview`、Root Directory `apps/sdk-preview`、Node.js 24.x、Production Branch `main`。production専用のasset署名鍵・Git読取資格だけを登録 | Portal grant検証委譲版を再デプロイし、正式Room作成を実機確認 |
 | Preview domain | `preview.game-fields.com`割当済み・Valid Configuration。第1段階Deploymentで`grantVersion: 4`／`grantVerification: ed25519`を確認し、本番公開鍵をコードへ固定済み | 第2段階Deployment後に`/health`、fragment交換、package client、server runnerを実機確認 |
