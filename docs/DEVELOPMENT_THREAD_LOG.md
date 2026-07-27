@@ -2969,3 +2969,31 @@ Total output lines: 6329
 
 - 本番`app-games` Productionから`SITE_ADMIN_BREAK_GLASS_ENABLED`を削除する。
 - 削除後に再デプロイし、通常パスキーで管理画面へログインできることと、マスターパスワードによるbreak-glass復旧が無効であることを確認する。
+
+## 2026-07-27 — develop→main昇格時の全Vercel Project確認をルール化
+
+### 利用者からの要望
+
+- develop→mainの同期・反映では、本体だけでなくSDK Portal・SDK Previewを含む全Vercel Projectを対象として明示的に確認する。
+- Project名・ドメイン・ブランチを都度書き出し、漏れの確認後に昇格を開始する。
+
+### 判断
+
+- ルート`README.md`と`AGENTS.md`の最優先ルールへ同一内容を追加する。
+- 将来Projectが増減しても固定一覧だけで判断しないよう、昇格時点のVercel構成と`docs/ENVIRONMENT_VARIABLES.md`の照合を必須にする。
+- 昇格対象外のProjectも一覧へ残し、対象外の理由を明記する。
+
+### 実施結果
+
+- 昇格前のProject名・ドメイン・対象ブランチ・昇格対象可否・理由の一覧化を必須化した。
+- 一覧の漏れ確認が終わるまで昇格を開始しない条件を追加した。
+- 反映後は昇格対象の全Projectで、対象commitとDeploymentの`READY`を確認する条件を追加した。
+
+### 検証
+
+- READMEとAGENTSの追加規則文が同一であることを確認する。
+- Markdown差分と現在のVercel Project台帳を照合する。
+
+### 未対応・保留
+
+- なし。

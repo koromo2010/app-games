@@ -6,6 +6,8 @@
 
 小さい修正依頼でも、まず共通化・モジュール化できないか検討してから着手する。本番反映時は、devの該当実装をそのまま昇格させ、症状だけを個別に本番で再実装しない。いずれも「その場しのぎ」を避け、devとmainの実装一致を最終確認条件とする。
 
+develop→mainの同期・反映を行う際は、本体コードだけでなくSDK Portal・SDK Previewを含む全Vercel Projectを対象として明示的に確認する。昇格前に、その時点のVercel構成と`docs/ENVIRONMENT_VARIABLES.md`を照合し、Project名・ドメイン・対象ブランチ・昇格対象か否かとその理由を一覧化する。漏れがないことを確認するまで昇格作業を開始せず、反映後は昇格対象の全Projectで対象commitとDeploymentの`READY`を確認する。
+
 ## Project identity
 
 - このプロジェクトは `app-games`。`paper-ai-app` とは完全に別のアプリとして扱う。
