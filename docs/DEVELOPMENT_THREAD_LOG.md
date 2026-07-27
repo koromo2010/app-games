@@ -6100,3 +6100,15 @@
 
 - `develop`へ反映後、スカル正式Previewで`package-open`のPOST 303、
   Package index 200、ゲーム固有UI表示を実機確認する。
+
+### 公開結果
+
+- 検証済みtree `ba0c225`をGitHub commit `f0b0a8f`として`develop`へ
+  non-force fast-forwardした。`main`は変更していない。
+- `app-games-dev` Deployment `dpl_ED54tb19UhzxfhUoewdrCWMME8su`は`READY`となり、
+  `dev.game-fields.com`のaliasが同Deploymentへ切り替わった。
+- 同じcommitで作成された`app-games-sdk-dev`
+  `dpl_CGTbQCzUPdRHJWGuHDtRkQJTHk9a`と`app-games-preview-dev`
+  `dpl_39VDPJH6sKLi4SE43KM3CJ1tmbgq`も`READY`となった。
+- 3 Deploymentともerrors-only build logに失敗はなく、公開後の
+  error／fatal Runtime Logは0件だった。
