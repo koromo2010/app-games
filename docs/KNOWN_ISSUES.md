@@ -69,7 +69,7 @@ Preview側の秘密値はpath単位asset tokenだけに使い、両Projectの
 
 ## 2026-07-27 Preview共有asset token検証器を段階配備なしでv2-onlyへ切り替えた
 
-状態: ステップ1修正実装済み・develop配備待ち／main反映禁止
+状態: ステップ1コード・develop配備済み／実Network確認待ち／main反映禁止
 
 Cookieなしの直接HTML方式をdevへ配備した際、スカルを含む正式Packageとmockが共有する
 `createPreviewAssetToken`／`verifyPreviewAssetToken`を、旧v1 JSON形式から
@@ -104,10 +104,22 @@ v2だけを発行する。v1／v2正常token、改ざん、期限切れ、game�
 path／source不一致を自動テストで固定した。これはローカル実装と検証の完了であり、
 `preview-dev`への配備確認前は互換切断の解消完了と扱わない。
 
+同修正は、更新直前までremote `develop`が`f62963d`から動いていないことを
+再確認したうえで、forceなしのfast-forwardとして`9c93b8f`へ反映した。
+2026-07-27 15:05:23 JSTに本体SDK dev、15:06:09 JSTにPreview Runtime dev、
+15:07:15 JSTに本体devが同commitで`READY`となり、3件ともbuild errorは0、
+対象DeploymentのRuntime Logにもerror／fatalは観測されていない。
+ただしクラウドブラウザのCDP接続は画面遷移後のtab取得時にrecoveryを繰り返し、
+旧v1由来asset要求と新v2発行を実Networkで確認できていない。このため、
+`v1由来要求が502にならず子assetまで継続動作すること`と
+`現行発行器がv2を発行し取得が成功すること`の両方を実Networkで確認するまでは、
+3 Projectが`READY`でもステップ1およびdevの互換切断解消を完了扱いにしない。
+
 devの復旧・退役条件:
 
 1. 旧v1と新v2をともに検証できる共有verifierを先に`preview-dev`へ配備し、
    v1正常token、v2正常token、改ざん・期限切れ・scope違いの拒否をfixtureで固定する。
+   実Networkでv1由来要求が502にならず、子assetまで継続動作することも確認する。
 2. 発行器はv2-onlyのまま維持し、実Networkでv2だけが発行・取得されることを確認する。
 3. 旧v1を最後に発行し得た全dev aliasの切替時刻から最低8時間経過し、
    旧v1利用が残っていないことを確認した後だけv1 verifierとfixtureを削除する。

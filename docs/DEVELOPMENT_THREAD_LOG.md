@@ -6262,10 +6262,18 @@
 
 ### 未対応・保留
 
-- 検証済み変更を`develop`へ非force反映し、3 dev Projectの対象SHAが
-  `READY`になることを確認する。
+- remote `develop`が`f62963d`から動いていないことを更新直前にも確認し、
+  GitHub commit `9c93b8f`へforceなしでfast-forwardした。
+- Preview Runtime devは2026-07-27 15:06:09 JST、本体SDK devは15:05:23 JST、
+  本体devは15:07:15 JSTに同commitで`READY`となった。3件ともbuild errorは0で、
+  対象DeploymentのRuntime Logにもerror／fatalは観測されていない。
+- ただしクラウドブラウザは画面遷移後のtab取得時にCDP recoveryを繰り返し、
+  v1由来要求とv2発行の実Network確認を実施できなかった。HTTP疎通、build、
+  Runtime Logを代用せず、ステップ1は未完了のままとする。
 - `preview-dev`のalias切替後にv1正常tokenが200、v2正常tokenが200、
-  否定系が403となることを実配備で確認する。
+  否定系が403となることを実配備で確認する。特にv1由来のCSS／module子assetが
+  502にならず継続動作することと、v2-only発行が従来どおり動くことの両方を
+  実Networkで確認するまでは、3 Projectが`READY`でもステップ1完了としない。
 - v2-only発行を実Networkで確認する。最後の旧v1発行可能時刻
   2026-07-27 14:22:15 JSTから最低8時間後の同日22:22:15 JSTまでは
   v1 verifier／fixtureを削除しない。
