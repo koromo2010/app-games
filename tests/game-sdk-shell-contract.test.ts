@@ -234,6 +234,8 @@ test("every shared Shell module has executable evidence in the formal package pa
     "common-shell": [
       [frame, /<GameSdkShellHeader/],
       [header, /<GameTopBanner/],
+      [header, /navigation\.showDirectBack/],
+      [header, /data-sdk-lounge-back/],
     ],
     "online-room": [
       [frame, /type: "room\/join"/],

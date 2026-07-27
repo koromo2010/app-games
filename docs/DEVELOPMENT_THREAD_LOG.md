@@ -2848,3 +2848,39 @@ Total output lines: 6329
 - ラウンジのトップバーに「広場へ戻る」が直接存在し、旧表記が残らないことを
   source契約テストへ追加した。
 - `npm run lint`、全640テスト、78 routeの`npm run build`に成功した。
+
+## 2026-07-27 — SDKラウンジヘッダーの共通契約化
+
+### 利用者からの要望
+
+- 昇格済みSDKゲームで「広場へ戻る」が表示されなかった。
+- 対象画面だけへボタンを足す対処療法ではなく、モジュール化を優先する。
+
+### 判断
+
+- 前回は旧`ApprovedSdkGameShell`だけへ直接リンクを追加し、実際のiframe packageが使う
+  `GameSdkFrame → GameSdkShellHeader`経路へ契約が届いていなかった。
+- SDK Shellごとのリンク直書きを廃止し、共通`GameSdkShellHeader`へ表示面を渡す。
+- `surface="lounge"`では共通ヘッダー自身が直接戻り導線を表示し、Room内では
+  戻り導線を共通メニューへ置く。
+
+### 実施結果
+
+- Preview、採用済みiframe package、旧wordwolf clientを同じ
+  `GameSdkShellHeader`契約へ統合した。
+- 旧Shellから個別`GameTopBanner`と「広場へ戻る」の直書きを削除した。
+- 採用済みゲームの表示名を「広場へ戻る」に統一し、制作者Previewでは同じ共通契約から
+  「制作者ページへ」を表示する。
+
+### 検証
+
+- 共通ヘッダーがラウンジ面の直接導線を所有し、旧Shellに個別ヘッダーが戻らないことを
+  source契約テストへ追加した。
+- 旧経路を使う登録済みゲームが`wordwolf-sdk`であることを登録簿から確認し、
+  ラウンジ／Roomのナビ配置、観戦、ルール、プレイヤーメニュー保持を回帰テストへ追加した。
+- `wordwolf-sdk`のRoom作成、参加、プレイ、結果、再戦、全員復帰の既存テストを再実行した。
+- `npm run lint`、全642テスト、78 routeの`npm run build`に成功した。
+
+### 未対応・保留
+
+- dev配備後の実画面確認。

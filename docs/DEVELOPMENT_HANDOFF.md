@@ -513,8 +513,11 @@ formal package Shellは共通`useGameSdkActiveRoomRestore`で初回active Room�
 進行中かつ本人が参加中のRoomだけを移動拒否し、result、期限切れ、欠損、非参加Roomの
 索引は新規Room確保時または復元時に安全に置き換え・解除する。旧result Roomの再戦や
 遅着したCommand応答は、別Roomへ移ったactive索引や新しいrevisionを上書きしない。
-正式Shellのゲームラウンジでは、トップバーに「広場へ戻る」を常設し、メニューを
-開かず1クリックで`/games`へ戻れるようにする。「ロビー」は作成済みRoomの開始前状態だけを指す。
+正式Shellのゲームラウンジでは、Preview・採用済みiframe package・旧wordwolf clientの
+全経路を共通`GameSdkShellHeader`へ集約する。各Shellは`surface="lounge"`を渡し、
+共通ヘッダー自身がトップバーへ戻る直接操作を常設する。個別Shellへ戻るリンクを
+直書きしない。採用済みゲームはメニューを開かず1クリックで`/games`へ戻り、
+制作者Previewは同じ契約で制作者ページへ戻る。「ロビー」は作成済みRoomの開始前状態だけを指す。
 非参加者へは参加前のlobby Viewだけを匿名で返し、playing／result Viewとjoin以外の
 Commandを拒否する。manifest設定はRoom作成・更新の両方で最終正規化し、module profileで
 無効なCommandとPlatform resourceはサーバー境界でも拒否する。結果Roomの解散前には

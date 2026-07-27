@@ -21,6 +21,10 @@ import {
   gameTopMenuItemClass,
 } from "./GameTopMenu";
 import { AppLink as Link } from "./AppLink";
+import {
+  gameSdkShellNavigationPlacement,
+  type GameSdkShellSurface,
+} from "@/lib/game-sdk-shell-navigation";
 
 export type GameSdkDebugRoom = {
   appPhase: string | null;
@@ -69,6 +73,7 @@ type Props = {
   rules: readonly string[];
   backHref: string;
   backLabel: string;
+  surface: GameSdkShellSurface;
   debugRoom?: GameSdkDebugRoom | null;
   children?: ReactNode;
 };
@@ -80,6 +85,8 @@ type Props = {
  * navigation, AI activity, rules presentation and the player menu stay outside
  * the sandboxed package. Room permissions are resolved by GameSdkFrame and
  * passed in directly; this component never fetches or recalculates them.
+ * The shell surface owns navigation placement: lounge navigation is always a
+ * direct top-banner action, while room navigation stays in the shared menu.
  */
 export function GameSdkShellHeader({
   eyebrow,
@@ -87,12 +94,14 @@ export function GameSdkShellHeader({
   rules,
   backHref,
   backLabel,
+  surface,
   debugRoom = null,
   children,
 }: Props) {
   const [rulesOpen, setRulesOpen] = useState(false);
   const [session, setSession] = useState<PlayerSession | null>(null);
   const [debugOpenRoomCode, setDebugOpenRoomCode] = useState<string | null>(null);
+  const navigation = gameSdkShellNavigationPlacement(surface);
 
   useEffect(() => {
     const refresh = () => setSession(readPlayerSession());
@@ -185,6 +194,15 @@ export function GameSdkShellHeader({
     <>
       <GameTopBanner eyebrow={eyebrow} title={title}>
         {children}
+        {navigation.showDirectBack && (
+          <Link
+            href={backHref}
+            className={gameTopBannerActionClass}
+            data-sdk-lounge-back
+          >
+            {backLabel}
+          </Link>
+        )}
         {debugRoom && (
           <button
             type="button"
@@ -203,15 +221,17 @@ export function GameSdkShellHeader({
             ルール
           </button>
         )}
-        <GameTopMenu>
-          <Link
-            href={backHref}
-            data-menu-close="true"
-            className={gameTopMenuItemClass}
-          >
-            {backLabel}
-          </Link>
-        </GameTopMenu>
+        {navigation.showMenuBack && (
+          <GameTopMenu>
+            <Link
+              href={backHref}
+              data-menu-close="true"
+              className={gameTopMenuItemClass}
+            >
+              {backLabel}
+            </Link>
+          </GameTopMenu>
+        )}
         <GamePlayerMenu
           id={session?.id}
           name={session?.name || "プレイヤー"}

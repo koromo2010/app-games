@@ -469,11 +469,20 @@ test("shared GameFrame owns the top banner and phase-specific common modules", (
   assert.match(header, /GameTopBanner/);
   assert.match(header, /GameRulesDialog/);
   assert.match(header, /GamePlayerMenu/);
+  assert.match(
+    header,
+    /navigation\.showDirectBack[\s\S]*?data-sdk-lounge-back/,
+  );
+  assert.match(
+    header,
+    /navigation\.showMenuBack[\s\S]*?<GameTopMenu>/,
+  );
   assert.match(shell, /GameSdkShellHeader/);
   assert.match(
     approvedShell,
-    /if \(!room\)[\s\S]*?<GameTopBanner eyebrow="SDK GAME" title=\{title\}>[\s\S]*?<Link href="\/games" className=\{secondaryClass\}>広場へ戻る<\/Link>/,
+    /if \(!room\)[\s\S]*?<GameSdkShellHeader[\s\S]*?backHref="\/games"[\s\S]*?backLabel="広場へ戻る"[\s\S]*?surface="lounge"/,
   );
+  assert.doesNotMatch(approvedShell, /<GameTopBanner/);
   assert.doesNotMatch(approvedShell, /ゲーム一覧へ/);
   assert.match(shell, /room\.phase !== "playing" && \(\s*<aside/);
   assert.match(shell, /room\.phase === "playing"\s*\? "mx-auto max-w-7xl"/);

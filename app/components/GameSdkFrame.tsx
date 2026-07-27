@@ -856,7 +856,8 @@ export function GameSdkFrame({
           title={title}
           rules={rules}
           backHref={backHref}
-          backLabel={creatorSlug ? "制作者ページへ" : "ゲーム広場へ戻る"}
+          backLabel={creatorSlug ? "制作者ページへ" : "広場へ戻る"}
+          surface="lounge"
         />
         {isRestoringRoom ? (
           <section className="mx-auto max-w-5xl">
@@ -950,7 +951,14 @@ export function GameSdkFrame({
         title={title}
         rules={rules}
         backHref={backHref}
-        backLabel={creatorSlug ? "制作者ページへ" : "ゲーム広場へ戻る"}
+        backLabel={creatorSlug ? "制作者ページへ" : "広場へ戻る"}
+        surface={
+          room.phase === "lobby"
+            ? "lobby"
+            : room.phase === "result"
+              ? "result"
+              : "playing"
+        }
         debugRoom={moduleRequired("debug") && common?.permissions.canDebug ? {
           appPhase: appPhase(room),
           canActAsDummy: common.permissions.canDebugActAsDummy === true,
