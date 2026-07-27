@@ -823,3 +823,22 @@ DEBUG権限を最終確定し、保存Roomからダミー属性と接続状態�
 ダミーのidentityでゲーム固有Commandだけを通常Domainへ通す。対象がダミーでない場合、
 権限のないhost、playing以外、内側の`room/*`共通Commandはサーバーで拒否する。
 自動進行は従来どおりPackageの時間切れ遷移を使い、結果画面までDEBUG表示を維持する。
+
+## 2026-07-27 SDK正式Packageの交換ページ後にゲームが表示されない
+
+状態: 修正・ローカル検証済み（2026-07-27、dev配備／実機確認待ち）
+
+Project間のcommitが揃って正式Previewページを開けるようになった後も、
+ゲーム固有領域には「ゲームを開けませんでした」とだけ表示された。本体dev、
+SDK Portal、Preview runnerのRuntime LogではRoom読取、Command、server runnerが
+すべて200だった一方、`package-open`はGET 200の後に必要な交換POSTが1件もなかった。
+
+正式Package iframeは`allow-same-origin`を付けずopaque originとして隔離している。
+交換ページはURL fragmentの60秒grantを`fetch()`で同じURLへPOSTしようとしていたが、
+opaque originのブラウザ境界で送信前に拒否され、catchの失敗文だけを表示していた。
+
+隔離を弱めず、交換ページだけ`allow-forms`と自originへの`form-action`を許可した。
+fragmentは従来どおり履歴から即時消去し、単一・4KB以下の
+`application/x-www-form-urlencoded`本文でPOSTする。Previewはgrant検証後に
+Path限定HttpOnly Cookieを設定して303でPackageへ遷移する。Package本体のCSPは
+引き続き`form-action 'none'`であり、iframeへ`allow-same-origin`は追加しない。

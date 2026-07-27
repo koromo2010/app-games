@@ -17,6 +17,7 @@ import {
 } from "../apps/sdk-preview/lib/preview-grant-verifier.ts";
 import {
   createPreviewClientSessionToken,
+  previewExchangeContentSecurityPolicy,
   verifyPreviewClientSessionToken,
 } from "../apps/sdk-preview/lib/preview-security.ts";
 
@@ -311,7 +312,7 @@ test("short client exchange grants become scoped local HttpOnly session values",
   );
 });
 
-test("client grants use a fragment POST exchange and never query credentials", () => {
+test("client grants use a sandbox-safe fragment form exchange and never query credentials", () => {
   const exchangeSource = readFileSync(
     "apps/sdk-preview/lib/preview-exchange.ts",
     "utf8",
@@ -321,10 +322,27 @@ test("client grants use a fragment POST exchange and never query credentials", (
     exchangeSource,
     /history\.replaceState\(null, "", location\.pathname\)/,
   );
-  assert.match(exchangeSource, /method: "POST"/);
-  assert.match(exchangeSource, /redirect: "error"/);
+  assert.match(exchangeSource, /form\.method = "POST"/);
+  assert.match(exchangeSource, /form\.action = location\.href/);
+  assert.match(exchangeSource, /form\.enctype = "application\/x-www-form-urlencoded"/);
+  assert.match(exchangeSource, /form\.submit\(\)/);
+  assert.doesNotMatch(exchangeSource, /\bfetch\(/);
+  assert.match(exchangeSource, /contentType !== "application\/x-www-form-urlencoded"/);
+  assert.match(exchangeSource, /payload\.getAll\("token"\)/);
+  assert.match(exchangeSource, /MAX_EXCHANGE_REQUEST_BYTES/);
   assert.match(exchangeSource, /"Referrer-Policy": "no-referrer"/);
   assert.doesNotMatch(exchangeSource, /document\.cookie/);
+  for (const path of [
+    "app/components/GameSdkFrame.tsx",
+    "app/sdk-preview/[creatorSlug]/games/[gameId]/SdkPreviewGameShell.tsx",
+  ]) {
+    const source = readFileSync(path, "utf8");
+    assert.match(
+      source,
+      /sandbox="allow-scripts allow-forms allow-modals allow-pointer-lock"/,
+    );
+    assert.doesNotMatch(source, /sandbox="[^"]*allow-same-origin/);
+  }
   for (const path of [
     "apps/sdk-preview/app/open/[instanceId]/[gameId]/[revision]/route.ts",
     "apps/sdk-preview/app/package-open/[instanceId]/[gameId]/[revision]/route.ts",
@@ -332,6 +350,7 @@ test("client grants use a fragment POST exchange and never query credentials", (
     const source = readFileSync(path, "utf8");
     assert.doesNotMatch(source, /searchParams\.get\(["']token["']\)/);
     assert.match(source, /createPreviewClientSessionToken/);
+    assert.match(source, /NextResponse\.redirect\(destination, 303\)/);
     assert.match(source, /httpOnly: true/);
     assert.match(source, /sameSite: "strict"/);
   }
@@ -339,6 +358,13 @@ test("client grants use a fragment POST exchange and never query credentials", (
     existsSync("apps/sdk-portal/app/api/preview-token/verify/route.ts"),
     false,
   );
+});
+
+test("preview exchange permits only its exact form target and keeps fetch disabled", () => {
+  const csp = previewExchangeContentSecurityPolicy("https://preview.example");
+  assert.match(csp, /form-action https:\/\/preview\.example/);
+  assert.match(csp, /connect-src 'none'/);
+  assert.doesNotMatch(csp, /allow-same-origin/);
 });
 
 test("SDK service authorization binds method and path within a short window", () => {

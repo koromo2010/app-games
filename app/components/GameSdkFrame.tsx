@@ -1268,7 +1268,7 @@ export function GameSdkFrame({
             ref={iframeRef}
             src={runtimeUrl}
             title={`${title} game package`}
-            sandbox="allow-scripts allow-modals allow-pointer-lock"
+            sandbox="allow-scripts allow-forms allow-modals allow-pointer-lock"
             className="block w-full border-0"
             style={{ height: frameHeight }}
             onLoad={() => postRoom(roomRef.current)}

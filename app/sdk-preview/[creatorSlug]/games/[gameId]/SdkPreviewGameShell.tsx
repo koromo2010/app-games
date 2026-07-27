@@ -1052,7 +1052,7 @@ export function SdkPreviewGameShell({
                 style={{ height: `${frameHeight}px` }}
                 src={runtimeUrl}
                 title={`${title}のゲーム固有領域`}
-                sandbox="allow-scripts allow-modals allow-pointer-lock"
+                sandbox="allow-scripts allow-forms allow-modals allow-pointer-lock"
                 referrerPolicy="no-referrer"
                 allow="fullscreen"
                 onLoad={() => hydrateFrame()}

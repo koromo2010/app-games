@@ -24,31 +24,32 @@ const exchangePage = `<!doctype html>
         status.textContent = "このゲームリンクは無効です。";
         return;
       }
-      fetch(location.pathname, {
-        method: "POST",
-        credentials: "same-origin",
-        redirect: "error",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token }),
-      }).then(async (response) => {
-        const payload = await response.json().catch(() => null);
-        if (!response.ok || !payload || typeof payload.destination !== "string") {
-          throw new Error("exchange failed");
-        }
-        location.replace(payload.destination);
-      }).catch(() => {
+      try {
+        const form = document.createElement("form");
+        form.method = "POST";
+        form.action = location.href;
+        form.enctype = "application/x-www-form-urlencoded";
+        const input = document.createElement("input");
+        input.type = "hidden";
+        input.name = "token";
+        input.value = token;
+        form.appendChild(input);
+        document.body.appendChild(form);
+        form.submit();
+      } catch {
         status.textContent = "ゲームを開けませんでした。ページを戻って、もう一度お試しください。";
-      });
+      }
     })();
   </script>
 </body>
 </html>`;
 
-export function previewExchangePageResponse() {
+export function previewExchangePageResponse(requestUrl: string) {
+  const exchangeOrigin = new URL(requestUrl).origin;
   return new Response(exchangePage, {
     headers: {
       "Cache-Control": "private, no-store",
-      "Content-Security-Policy": previewExchangeContentSecurityPolicy(),
+      "Content-Security-Policy": previewExchangeContentSecurityPolicy(exchangeOrigin),
       "Content-Type": "text/html; charset=utf-8",
       "Referrer-Policy": "no-referrer",
       "X-Content-Type-Options": "nosniff",
@@ -72,8 +73,15 @@ export async function readPreviewExchangeToken(request: Request) {
     if (new TextEncoder().encode(body).byteLength > MAX_EXCHANGE_REQUEST_BYTES) {
       return null;
     }
-    const payload = JSON.parse(body) as { token?: unknown };
-    return typeof payload.token === "string" ? payload.token : null;
+    const contentType = request.headers
+      .get("content-type")
+      ?.split(";", 1)[0]
+      ?.trim()
+      .toLowerCase();
+    if (contentType !== "application/x-www-form-urlencoded") return null;
+    const payload = new URLSearchParams(body);
+    const tokens = payload.getAll("token");
+    return tokens.length === 1 && tokens[0] ? tokens[0] : null;
   } catch {
     return null;
   }

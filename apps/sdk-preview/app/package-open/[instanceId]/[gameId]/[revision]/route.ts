@@ -18,7 +18,7 @@ export async function GET(
   if (request.nextUrl.search) {
     return new Response("Query credentials are not accepted.", { status: 400 });
   }
-  return previewExchangePageResponse();
+  return previewExchangePageResponse(request.url);
 }
 
 export async function POST(
@@ -47,8 +47,9 @@ export async function POST(
   }
 
   const session = createPreviewClientSessionToken(grant);
-  const destination = `${packageCookiePath(grant)}index.html`;
-  const response = NextResponse.json({ destination });
+  const destination = new URL(`${packageCookiePath(grant)}index.html`, request.url);
+  destination.search = "";
+  const response = NextResponse.redirect(destination, 303);
   response.cookies.set({
     name: packageCookieName(grant),
     value: session.token,

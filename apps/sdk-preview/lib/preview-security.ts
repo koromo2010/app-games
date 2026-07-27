@@ -222,14 +222,24 @@ export function configuredFrameAncestors() {
   return defaults;
 }
 
-export function previewExchangeContentSecurityPolicy() {
+export function previewExchangeContentSecurityPolicy(exchangeOrigin?: string) {
   const ancestors = configuredFrameAncestors();
+  const explicitExchangeOrigin = exchangeOrigin
+    && (
+      /^https:\/\/[a-z0-9.-]+(?::\d+)?$/i.test(exchangeOrigin)
+      || (
+        process.env.NODE_ENV !== "production"
+        && /^http:\/\/localhost:\d+$/.test(exchangeOrigin)
+      )
+    )
+    ? exchangeOrigin
+    : null;
   return [
     "default-src 'none'",
     "base-uri 'none'",
     "object-src 'none'",
-    "form-action 'none'",
-    "connect-src 'self'",
+    `form-action ${explicitExchangeOrigin ?? "'none'"}`,
+    "connect-src 'none'",
     "script-src 'unsafe-inline'",
     `frame-ancestors ${ancestors.length > 0 ? ancestors.join(" ") : "'none'"}`,
   ].join("; ");

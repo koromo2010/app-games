@@ -6059,3 +6059,44 @@
   `dpl_HKxDgrvYwEtoSYSgM8VX9jBMhKhA`も`READY`となった。
 - 3 Deploymentともerrors-only build logに失敗はなく、公開後の
   error／fatal Runtime Logは0件だった。
+
+## 2026-07-27 — opaque-origin正式Packageのclient grant交換を修正
+
+### 利用者からの報告
+
+- スカル正式PreviewのページとRoom操作は開くが、ゲーム固有領域に
+  「ゲームを開けませんでした」と表示され、ゲームUIが描画されない。
+
+### 調査結果と判断
+
+- 本体devのRoom GET／PATCH、Preview runner、Package取得はすべて200だった。
+- `package-open`はGET 200の後に交換POSTがなく、失敗文は
+  `apps/sdk-preview/lib/preview-exchange.ts`だけが生成していた。
+- 正式Package iframeは`allow-same-origin`なしのopaque originであり、
+  fragment grantを送る`fetch()`がブラウザ境界で送信前に拒否されていた。
+- `allow-same-origin`追加はPackage隔離を弱めるため採用しない。交換ページだけ
+  form navigationを許可し、Package本体ではCSPによりformを再び禁止する。
+
+### 実施結果
+
+- fragmentを履歴から消去した後、単一・4KB以下のURL encoded form本文として
+  grantをPOSTするよう変更した。
+- PreviewはEd25519 grant検証後に8時間・HttpOnly・Path限定Cookieを設定し、
+  JSON応答ではなく303でPackage indexへ遷移する。
+- 交換ページCSPは自originへの`form-action`だけを許可し、`connect-src`を禁止した。
+- 正式Package iframeへ`allow-forms`を追加したが、`allow-same-origin`は追加していない。
+  Package本体のCSP `form-action 'none'`も維持した。
+
+### 検証
+
+- fragment、form POST、query token拒否、単一token、本文上限、303、
+  HttpOnly Cookie、sandboxを固定する回帰テストを追加した。
+- `npm test`に成功し、全629テストが通過した。
+- `npm run verify`、`git diff --check`に成功した。
+- `npm run build:sdk-preview`と`npm run build`のTurbopack production buildに成功し、
+  SDK Preview全Routeと本体78ルートを生成した。
+
+### 未対応・保留
+
+- `develop`へ反映後、スカル正式Previewで`package-open`のPOST 303、
+  Package index 200、ゲーム固有UI表示を実機確認する。
