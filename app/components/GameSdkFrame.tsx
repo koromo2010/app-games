@@ -22,10 +22,13 @@ import { confirmRoomLeave } from "@/app/components/room-navigation-confirmation"
 import { useAppLocale } from "@/app/components/AppLocaleProvider";
 import { gameTopBannerOffsetClass } from "@/app/components/GameTopBanner";
 import { GameResultShareButton } from "@/app/components/GameResultShareButton";
+import { PlayerAuthGate } from "@/app/components/PlayerAuthGate";
 import { AppLink as Link } from "@/app/components/AppLink";
 import { gameTopBannerActionClass } from "@/app/components/GameTopMenu";
 import { useGameSdkActiveRoomRestore } from "@/app/hooks/use-game-sdk-active-room-restore";
+import { useSdkPreviewSessionRequired } from "@/app/sdk-preview/SdkPreviewSessionGate";
 import { withAiActivity } from "@/lib/ai-activity-client";
+import { clearPlayerSession } from "@/lib/player-session";
 import {
   gameSdkResultHighlights,
   gameSdkResultPlayLog,
@@ -135,9 +138,13 @@ function randomRoomCode() {
   return values[0]!.toString(36).toUpperCase().padStart(4, "0").slice(-4);
 }
 
-function errorMessage(error: unknown) {
+function errorMessage(error: unknown, preview: boolean) {
   if (error instanceof GameSdkHttpClientRuntimeError) {
-    if (error.status === 401) return "Preview認証を更新してください。";
+    if (error.status === 401) {
+      return preview
+        ? "SDK PortalからPreview認証を更新してください。"
+        : "ログイン状態の有効期限が切れました。ログインし直してください。";
+    }
     if (error.code === "STALE_REVISION") return "部屋を最新状態へ更新しました。";
     if (error.code === "DEBUG_AUTO_PROGRESS_UNSUPPORTED") {
       return "このPackageには安全な自動進行処理がありません。";
@@ -192,6 +199,8 @@ export function GameSdkFrame({
   usesLlm,
 }: Props) {
   const { locale } = useAppLocale();
+  const requirePreviewSession = useSdkPreviewSessionRequired();
+  const [playerAuthRequired, setPlayerAuthRequired] = useState(false);
   const endpoint = endpointInput
     ?? `/api/sdk-preview/${creatorSlug}/games/${gameId}/rooms`;
   const runtime = useMemo(() => createGameSdkHttpClientRuntime<
@@ -231,6 +240,20 @@ export function GameSdkFrame({
   const moduleRequired = useCallback((id: GameSdkModuleId) => (
     moduleProfile[id].mode === "required"
   ), [moduleProfile]);
+  const handleRuntimeError = useCallback((error: unknown) => {
+    if (
+      error instanceof GameSdkHttpClientRuntimeError
+      && error.status === 401
+    ) {
+      if (creatorSlug) {
+        requirePreviewSession();
+      } else {
+        clearPlayerSession();
+        setPlayerAuthRequired(true);
+      }
+    }
+    setMessage(errorMessage(error, Boolean(creatorSlug)));
+  }, [creatorSlug, requirePreviewSession]);
   const defaultsEndpoint = creatorSlug
     ? `/api/sdk-preview/${creatorSlug}/games/${gameId}/defaults`
     : `/api/game-sdk/${gameId}/defaults`;
@@ -347,9 +370,9 @@ export function GameSdkFrame({
     if (!next) return;
     watchRef.current = runtime.watchRoom(next.code, {
       onRoom: acceptIncomingRoom,
-      onError: (error) => setMessage(errorMessage(error)),
+      onError: handleRuntimeError,
     });
-  }, [acceptIncomingRoom, commitRoom, runtime]);
+  }, [acceptIncomingRoom, commitRoom, handleRuntimeError, runtime]);
 
   const attachLatestRoom = useCallback((next: PackageRoom) => {
     const current = roomRef.current;
@@ -364,17 +387,17 @@ export function GameSdkFrame({
       const page = await runtime.listRooms();
       setRooms(page.rooms);
     } catch (error) {
-      setMessage(errorMessage(error));
+      handleRuntimeError(error);
     }
-  }, [runtime]);
+  }, [handleRuntimeError, runtime]);
 
   const loadActiveRoom = useCallback(
     () => runtime.readActiveRoom(),
     [runtime],
   );
   const handleRestoreError = useCallback((error: unknown) => {
-    setMessage(errorMessage(error));
-  }, []);
+    handleRuntimeError(error);
+  }, [handleRuntimeError]);
   const isRestoringRoom = useGameSdkActiveRoomRestore({
     loadActiveRoom,
     onRoom: attachRoom,
@@ -412,7 +435,7 @@ export function GameSdkFrame({
           // Fall through to the original lifecycle error.
         }
       }
-      setMessage(errorMessage(error));
+      handleRuntimeError(error);
       if (
         error instanceof GameSdkHttpClientRuntimeError
         && error.code === "STALE_REVISION"
@@ -426,7 +449,7 @@ export function GameSdkFrame({
       pendingActionRef.current = false;
       setPending(false);
     }
-  }, [attachLatestRoom, attachRoom, runtime]);
+  }, [attachLatestRoom, attachRoom, handleRuntimeError, runtime]);
 
   const send = useCallback(async (command: SafeCommand) => {
     const current = roomRef.current;
@@ -547,13 +570,13 @@ export function GameSdkFrame({
       ) {
         setMessage("不正入力がRoomを変更せず拒否されることを確認しました。");
       } else {
-        setMessage(errorMessage(error));
+        handleRuntimeError(error);
       }
     } finally {
       pendingActionRef.current = false;
       setPending(false);
     }
-  }, [runtime]);
+  }, [handleRuntimeError, runtime]);
 
   useEffect(() => {
     const listener = (event: MessageEvent) => {
@@ -727,12 +750,12 @@ export function GameSdkFrame({
       }
       await refreshRooms();
     } catch (error) {
-      setMessage(errorMessage(error));
+      handleRuntimeError(error);
     } finally {
       pendingActionRef.current = false;
       setPending(false);
     }
-  }, [attachRoom, moduleRequired, refreshRooms, runtime]);
+  }, [attachRoom, handleRuntimeError, moduleRequired, refreshRooms, runtime]);
 
   const leaveRoom = useCallback(async () => {
     const current = roomRef.current;
@@ -756,12 +779,12 @@ export function GameSdkFrame({
       setMessage("部屋から退出しました。別の部屋へ参加できます。");
       await refreshRooms();
     } catch (error) {
-      setMessage(errorMessage(error));
+      handleRuntimeError(error);
     } finally {
       pendingActionRef.current = false;
       setPending(false);
     }
-  }, [attachRoom, moduleRequired, refreshRooms, runtime]);
+  }, [attachRoom, handleRuntimeError, moduleRequired, refreshRooms, runtime]);
 
   const defaultSettings = useMemo(() => Object.fromEntries(
     settingDefinitions.map((definition) => [
@@ -802,6 +825,16 @@ export function GameSdkFrame({
   const feedbackEndpoint = creatorSlug
     ? `/api/sdk-preview/${creatorSlug}/games/${gameId}/feedback`
     : `/api/game-sdk/${gameId}/feedback`;
+
+  if (playerAuthRequired) {
+    return <PlayerAuthGate
+      title={title}
+      onAuthenticated={() => {
+        setPlayerAuthRequired(false);
+        void refreshRooms();
+      }}
+    />;
+  }
 
   if (!room) {
     if (!moduleRequired("online-room")) {

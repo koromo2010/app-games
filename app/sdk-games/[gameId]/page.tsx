@@ -2,7 +2,9 @@ import { notFound } from "next/navigation";
 import { approvedGameSdkRegistration } from "@/lib/game-sdk-server-registry";
 import { ApprovedSdkGameShell } from "./ApprovedSdkGameShell";
 import { GameSdkFrame } from "@/app/components/GameSdkFrame";
+import { PlayerAuthGate } from "@/app/components/PlayerAuthGate";
 import { loadApprovedGameSdkRuntimeRegistration } from "@/lib/game-sdk-runtime-catalog";
+import { getAuthenticatedPlayer } from "@/lib/player-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +17,9 @@ export default async function ApprovedSdkGamePage({
   const registration = approvedGameSdkRegistration(gameId)
     ?? await loadApprovedGameSdkRuntimeRegistration(gameId);
   if (!registration) notFound();
+  if (!(await getAuthenticatedPlayer())) {
+    return <PlayerAuthGate title={registration.title} />;
+  }
   if (
     registration.clientKind === "iframe-package"
     && registration.clientRuntimeUrl

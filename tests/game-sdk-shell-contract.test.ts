@@ -130,6 +130,18 @@ test("formal Preview grants DEBUG only to the linked creator identity", () => {
   assert.match(platformAdapter, /debugAccess: supportsDebug \? await playerHasDebugAccess/);
 });
 
+test("promoted SDK games reject stale player sessions before rendering a lounge", () => {
+  assert.match(approvedPage, /getAuthenticatedPlayer/);
+  assert.match(
+    approvedPage,
+    /if \(!\(await getAuthenticatedPlayer\(\)\)\) \{\s*return <PlayerAuthGate/,
+  );
+  assert.match(frame, /playerAuthRequired[\s\S]*?<PlayerAuthGate/);
+  assert.match(frame, /clearPlayerSession\(\)/);
+  assert.match(frame, /if \(creatorSlug\) \{\s*requirePreviewSession\(\)/);
+  assert.doesNotMatch(frame, /return "Preview認証を更新してください。"/);
+});
+
 test("module profile and Room View remain the only shell feature gates", () => {
   assert.match(frame, /moduleProfile\[id\]\.mode === "required"/);
   assert.match(frame, /common\?\.permissions\.canStartGame/);
