@@ -6178,3 +6178,47 @@
   Consoleエラーなし、再読込、改ざん・別revision・期限切れ403、
   browser／Vercel CDN cache keyを確認する。
 - 上記完了までは修正完了、main反映として扱わない。
+
+## 2026-07-27 — 共有asset tokenの非互換切替を近接事故として記録
+
+### 利用者からの要望
+
+- `KNOWN_ISSUES.md`の「旧v1 asset tokenは60秒で失効」という誤記を訂正する。
+- 段階配備なしに共有検証器をv2-onlyへ切り替えかけたこと自体を、
+  次のスレッド・セッションへ残す近接事故として記録する。
+- `preview-dev.game-fields.com`で旧v1 token利用者への実害が出たか確認する。
+
+### 調査結果と判断
+
+- 60秒なのはPortalのclient entry grantであり、旧v1 asset tokenではない。
+- 直接HTML化直前の旧v1 asset tokenは、8時間のPreview client session Cookieの
+  `expiresAt`を継承する正式Package／mock共有HMAC tokenだった。
+- `647d598`は共有発行器と共有検証器を同時にv2-onlyへ置換し、
+  `検証器のv1＋v2対応 → v2発行 → 最大TTL待機 → v1削除`を経ていなかった。
+- devは2026-07-27 14:22:15 JSTからv2-onlyであり、切替直前の旧v1は
+  最長で同日22:22:15 JSTまで有効になり得る。mainと本番Previewは旧v1のままである。
+- この状態は既存iframeの未取得・再取得assetを403にし得るため、
+  devであっても互換検証器の復元まで放置してよい状態ではない。
+
+### 影響確認
+
+- 2026-07-27 14:45 JSTに、`app-games-preview-dev`の機能Deployment
+  `647d598`と後続文書Deployment `fd256cc`をVercelで確認した。
+- 両Deploymentにasset系403は記録されておらず、観測された呼出しはスカルの
+  server routeに対する200だけだった。実際の利用者失敗は現時点で観測されていない。
+- asset token拒否専用の構造化イベントはないため、「実害なし」ではなく
+  「観測上の実害なし」とする。互換切断リスクと復旧優先度は変わらない。
+
+### 文書更新
+
+- `docs/KNOWN_ISSUES.md`へ近接事故を独立項目として追加した。
+- 旧v1最大寿命を約8時間へ訂正し、devの危険時間帯、main反映禁止、
+  dev／mainそれぞれの段階配備と退役条件を明記した。
+
+### 未対応・保留
+
+- developへ旧v1＋新v2の両対応verifierと回帰fixtureを復元する。
+- v2-only発行と実Networkを確認し、最後のv1発行可能時刻から最低8時間後に
+  旧v1 verifier／fixtureを削除する。
+- mainではverifier両対応、v2発行、8時間待機、v1削除を別配備で行う。
+- 実スカルのiframe描画とasset／cache／拒否境界の確認完了までmainへ反映しない。

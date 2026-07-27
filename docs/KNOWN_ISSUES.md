@@ -67,6 +67,55 @@ Preview側の秘密値はpath単位asset tokenだけに使い、両Projectの
 握り潰されることも確認した。問い合わせ保存と通知送信を別イベントへ分け、
 通知失敗は個人情報や事業者の生エラーを含めず`contact.notification`へ記録する。
 
+## 2026-07-27 Preview共有asset token検証器を段階配備なしでv2-onlyへ切り替えた
+
+状態: 未修正・developでv1＋v2両対応検証器の復元待ち／main反映禁止
+
+Cookieなしの直接HTML方式をdevへ配備した際、スカルを含む正式Packageとmockが共有する
+`createPreviewAssetToken`／`verifyPreviewAssetToken`を、旧v1 JSON形式から
+path-scoped v2形式へ発行側・検証側同時に置き換えた。検証側を先にv1＋v2両対応へし、
+発行側をv2へ切り替え、旧v1の最大寿命経過後に互換分岐を削除する段階配備を経ていない。
+共有検証器のclaimや形式を変える際に、現行利用者のtoken系列と最大寿命を特定せず、
+新実装内の60秒client entry grantと旧asset tokenを混同したことが原因である。
+
+旧v1 asset tokenは試作用tokenではない。直接HTML化直前の実装では、60秒の入口grantを
+8時間のPreview client session Cookieへ交換し、そこから発行した旧v1 asset tokenへ
+同sessionの`expiresAt`を引き継いでいた。このため最大寿命は約8時間であり、
+「60秒経過で旧形式は失効した」という以前の記録は誤りである。
+
+`preview-dev.game-fields.com`は2026-07-27 14:22:15 JSTに
+`647d598`へ切り替わって以降v2-onlyであり、切替直前に発行された旧v1は最長で
+同日22:22:15 JSTまで有効になり得る。既存iframeが保持する旧v1 asset URLで
+未取得assetや再取得を行うと403になり得るほか、旧Cookie経路の最終URLをそのまま
+再読み込みしても新routeではtokenなしとして拒否される。PortalからPreviewを開き直せば
+新しいv2経路へ移れるが、実機確認中の作業を中断させる互換障害である。
+
+2026-07-27 14:45 JST時点で、v2-only機能Deployment `647d598`と後続文書Deployment
+`fd256cc`のVercel Runtime Logにはasset系403はなく、記録された呼出しは
+スカルのserver routeに対する200だけだった。したがって実際に旧v1を保持した利用者が
+失敗した証拠は現時点ではない。ただしasset token拒否専用の構造化イベントはなく、
+これは「観測上の実害なし」であって互換切断が安全だったことの証明ではない。
+本番`preview.game-fields.com`と`main`は旧v1のままで、この近接事故の直接影響外である。
+
+devの復旧・退役条件:
+
+1. 旧v1と新v2をともに検証できる共有verifierを先に`preview-dev`へ配備し、
+   v1正常token、v2正常token、改ざん・期限切れ・scope違いの拒否をfixtureで固定する。
+2. 発行器はv2-onlyのまま維持し、実Networkでv2だけが発行・取得されることを確認する。
+3. 旧v1を最後に発行し得た全dev aliasの切替時刻から最低8時間経過し、
+   旧v1利用が残っていないことを確認した後だけv1 verifierとfixtureを削除する。
+4. 削除後は旧v1が403、新v2が200になる回帰テストと実dev確認を行う。
+
+mainではdevの結果をそのまま一括反映しない。まず本番verifierだけをv1＋v2対応にし、
+次の配備で発行器をv2-onlyへ切り替え、全本番aliasの切替時刻から最低8時間待って
+旧v1利用がないことを確認し、最後の配備でv1互換を削除する。各段階で
+`GET package-open 200 → form POST 200 → JS/CSS 200 → iframe描画`と拒否境界を確認する。
+
+再発防止として、共有のtoken・Cookie・grant形式またはclaimを非互換変更する場合は、
+実装前に全発行器、全検証器、全呼出し元、最大TTL、稼働aliasを一覧化し、
+`検証器の双方対応 → 新形式発行 → 最大TTL待機 → 旧形式削除`を配備計画と
+回帰fixtureへ明記する。devで影響が小さいことは段階配備を省く理由にしない。
+
 ## 最優先: 本人確認と秘密情報
 
 ### 1. APIがログインした本人を確定できない
@@ -870,7 +919,7 @@ Console、再読込、改ざん・別revision・期限切れ403に加え、`x-ve
 必須とする。
 
 今回のCookieなし実装はasset tokenを`v2.<expiry>.<signature>`だけに限定しており、
-旧JSON形式を受理する分岐・fixtureは含まない。旧形式は入口grantの残存期限をそのまま
-使うため最大60秒であり、Preview dev aliasが`647d598`へ切り替わった
-2026-07-27 14:22:15 JSTから60秒後を失効確認時刻とする。実ブラウザでv2 asset取得を
-確認するまでは、この退役確認も完了扱いにしない。
+旧JSON形式を受理する分岐・fixtureは含まない。しかし旧形式は8時間のPreview client
+sessionの`expiresAt`を引き継いでいたため、60秒の入口grant失効では退役条件を満たさない。
+段階配備を経ずに共有verifierをv2-onlyへ切り替えた近接事故と、正しい復旧・退役条件は
+本書の「Preview共有asset token検証器を段階配備なしでv2-onlyへ切り替えた」を正本とする。
