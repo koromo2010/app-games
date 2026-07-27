@@ -1,4 +1,5 @@
 import {
+  createSdkServiceAuthorization,
   verifySdkServiceAuthorization,
 } from "@game-fields/sdk-preview-auth";
 
@@ -17,4 +18,14 @@ export function requireSdkServiceRequest(request: Request) {
   }, serviceSecret())) {
     throw new Error("SDK_SERVICE_AUTH_REQUIRED");
   }
+}
+
+export function sdkServiceHeaders(method: string, url: string) {
+  const target = new URL(url);
+  return {
+    "X-Game-Fields-SDK-Service": createSdkServiceAuthorization({
+      method,
+      path: `${target.pathname}${target.search}`,
+    }, serviceSecret()),
+  };
 }

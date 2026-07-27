@@ -63,10 +63,6 @@ export function GameSdkShellHeader({
     };
   }, []);
 
-  useEffect(() => {
-    if (!debugRoom) setDebugOpen(false);
-  }, [debugRoom]);
-
   return (
     <>
       <GameTopBanner eyebrow={eyebrow} title={title}>

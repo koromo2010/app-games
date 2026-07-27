@@ -2,6 +2,7 @@ const REPOSITORY_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const BRANCH_PATTERN = /^[A-Za-z0-9._-]{1,100}$/;
 const INSTANCE_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])?$/;
 const GAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?$/;
+const REVISION_PATTERN = /^[a-f0-9]{40}$/;
 const SAFE_SEGMENT_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._@()+, -]*$/;
 const ALLOWED_EXTENSIONS = new Set([
   ".html", ".css", ".js", ".mjs", ".json", ".txt", ".svg", ".png", ".jpg", ".jpeg",
@@ -31,6 +32,11 @@ export type MockUploadFile = {
 
 export type PreparedUploadFile = Required<MockUploadFile> & { bytes: number };
 type MockUploadFileMap = Record<string, string>;
+
+export type GamePackageGitFile = {
+  path: string;
+  bytes: number;
+};
 
 class GitHubApiError extends Error {
   readonly status: number;
@@ -224,6 +230,135 @@ async function githubApi<T>(config: ReturnType<typeof mockGitConfig>, path: stri
   });
   if (!response.ok) throw new GitHubApiError(response.status);
   return response.json() as Promise<T>;
+}
+
+function assertGamePackageGitScope(input: {
+  instanceId: string;
+  gameId: string;
+  revision: string;
+}) {
+  if (
+    !INSTANCE_PATTERN.test(input.instanceId)
+    || !GAME_PATTERN.test(input.gameId)
+    || !REVISION_PATTERN.test(input.revision)
+  ) {
+    throw new Error("SDK game package Git scope is invalid.");
+  }
+}
+
+export async function listGamePackageFilesAtRevision(input: {
+  instanceId: string;
+  gameId: string;
+  revision: string;
+}): Promise<GamePackageGitFile[]> {
+  assertGamePackageGitScope(input);
+  const config = mockGitConfig();
+  const commit = await githubApi<{ tree: { sha: string } }>(
+    config,
+    `/git/commits/${input.revision}`,
+  );
+  const tree = await githubApi<{
+    truncated?: boolean;
+    tree?: Array<{
+      path?: string;
+      mode?: string;
+      type?: string;
+      size?: number;
+    }>;
+  }>(config, `/git/trees/${commit.tree.sha}?recursive=1`);
+  if (tree.truncated || !Array.isArray(tree.tree)) {
+    throw new Error("SDK game package Git tree is unavailable.");
+  }
+  const prefix = `packages/${input.instanceId}/${input.gameId}/bundle/`;
+  const files = tree.tree
+    .filter((entry) => entry.type === "blob" && entry.path?.startsWith(prefix))
+    .map((entry): GamePackageGitFile => ({
+      path: entry.path!.slice(prefix.length),
+      bytes: Number(entry.size),
+    }))
+    .sort((left, right) => left.path.localeCompare(right.path));
+  if (
+    files.length === 0
+    || files.length > 128
+    || files.some((file) => (
+      !safeRelativePath(file.path)
+      || !fileExtension(file.path)
+      || !Number.isSafeInteger(file.bytes)
+      || file.bytes < 0
+      || file.bytes > MAX_FILE_BYTES
+    ))
+    || new Set(files.map((file) => file.path)).size !== files.length
+    || files.reduce((total, file) => total + file.bytes, 0) > MAX_TOTAL_BYTES
+  ) {
+    throw new Error("SDK game package Git tree is invalid.");
+  }
+  for (const required of REQUIRED_PACKAGE_FILES) {
+    if (!files.some((file) => file.path === required)) {
+      throw new Error(`Game package upload is missing ${required}.`);
+    }
+  }
+  return files;
+}
+
+export async function readGamePackageFileAtRevision(input: {
+  instanceId: string;
+  gameId: string;
+  revision: string;
+  path: string;
+}) {
+  assertGamePackageGitScope(input);
+  if (!safeRelativePath(input.path) || !fileExtension(input.path)) {
+    throw new Error("SDK game package Git path is invalid.");
+  }
+  const config = mockGitConfig();
+  const repositoryPath = `packages/${input.instanceId}/${input.gameId}/bundle/${input.path}`;
+  const encodedPath = repositoryPath.split("/").map(encodeURIComponent).join("/");
+  const response = await fetch(
+    `https://api.github.com/repos/${config.repository}/contents/${encodedPath}?ref=${input.revision}`,
+    {
+      headers: {
+        Accept: "application/vnd.github.raw+json",
+        Authorization: `Bearer ${config.token}`,
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "game-fields-sdk-portal",
+      },
+      cache: "no-store",
+      redirect: "error",
+    },
+  );
+  if (response.status === 404) return null;
+  if (!response.ok) throw new GitHubApiError(response.status);
+  const declaredLength = Number(response.headers.get("content-length") ?? 0);
+  if (declaredLength > MAX_FILE_BYTES) {
+    throw new Error("SDK game package Git file is too large.");
+  }
+  const content = Buffer.from(await response.arrayBuffer());
+  if (content.byteLength > MAX_FILE_BYTES) {
+    throw new Error("SDK game package Git file is too large.");
+  }
+  return content;
+}
+
+export function gamePackageUploadFileFromBytes(
+  path: string,
+  content: Uint8Array,
+): MockUploadFile {
+  const extension = fileExtension(path);
+  if (!safeRelativePath(path) || !extension) {
+    throw new Error("SDK game package Git path is invalid.");
+  }
+  if (TEXT_EXTENSIONS.has(extension)) {
+    return {
+      path,
+      content: new TextDecoder("utf-8", { fatal: true }).decode(content),
+      encoding: "utf-8",
+    };
+  }
+  return {
+    path,
+    content: Buffer.from(content).toString("base64"),
+    encoding: "base64",
+  };
 }
 
 async function ensureBranch(config: ReturnType<typeof mockGitConfig>) {

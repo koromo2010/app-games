@@ -264,6 +264,7 @@ Sensitive設定済みの互換変数をVercel上で複製できない移行期�
 | `SDK_MOCK_GITHUB_WRITE_TOKEN` | 必須・Contents read/writeだけ | 絶対に設定しない | Yes | 制作者slug/game配下への自動commit |
 | `SDK_MOCK_GITHUB_READ_TOKEN` | 絶対に設定しない | 必須・Contents readだけ | Yes | 確定commitのasset取得 |
 | `SDK_ACCOUNT_LINK_SECRET` | Game Fields本体と同じ環境値 | 不要 | Yes | 表アカウントからSDKへ渡す60秒の署名コード、SDKブラウザセッション、Portalから本体Previewへ戻すcreator限定60秒コードの署名。本体は最後のコードを`/api/sdk-preview`限定・8時間のHttpOnly Cookieへ交換し、通常プレイヤー権限へ昇格しない。OAuth access／refresh tokenはSDK PostgreSQLへハッシュ保存し、この値をtokenとして流用しない。32文字以上 |
+| `SDK_DEVELOPMENT_INTERNAL_URL` | main Portalだけ任意。既定`https://sdk-dev.game-fields.com` | 不要 | No | `dev app → main app`でdevの固定package artifactをservice認証付き取得する接続先 |
 | `GAME_FIELDS_APP_BASE_URL` | 対応する本体URL | 不要 | No | SDK Portalが共通アカウント認証へ遷移する接続先 |
 | `GAME_FIELDS_PREVIEW_APP_URL` | 対応する本体URL | 不要 | No | 制作者URLで本体のログイン・広場・固定カードUIを全画面表示する接続先。未設定時はbranch別の公式URL |
 

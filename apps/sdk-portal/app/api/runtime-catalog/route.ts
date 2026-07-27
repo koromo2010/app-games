@@ -28,6 +28,7 @@ export async function GET(request: Request) {
            r.title,
            r.description,
            r.revision,
+           r.source_revision AS "sourceRevision",
            r.package_root_sha256 AS "packageRootSha256",
            r.server_bundle_sha256 AS "serverBundleSha256",
            r.app_set_source_sha256 AS "appSetSourceSha256",

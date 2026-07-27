@@ -11,7 +11,7 @@
 - 広場のゲーム一覧はカード／簡易一覧を切り替え、`localStorage`へ選択を保存する。簡易一覧も公開状態、タグ、参加中Room、入室／復帰を維持する。
 - SDK packageは候補Previewとmainで同じ`GameSdkFrame → AppSet`を使う。SDK専用の白枠を持たない。
 - 昇格経路は、外部提出物の`SDK-dev → dev`／`SDK → main`、検証済みアプリ版の`dev app → main app`、本体コードの`develop → main`を別操作として扱う。
-- `dev app → main app`はアプリ単位の更新経路であり、本体Git branchを動かさない。既存mainアプリのID・URL・公開設定を維持してrevisionを更新し、過去版は追加専用履歴からアプリ単位で復元できる。
+- `dev app → main app`はアプリ単位の更新経路であり、本体Git branchを動かさない。dev package Gitの固定commitをmain package Gitへhash検証付きで複製し、本番Runtime確認後だけ現在版を切り替える。既存mainアプリのID・URL・公開設定を維持し、過去版は追加専用履歴からアプリ単位で復元できる。
 
 ## アカウント言語と言語依存ルーム
 
@@ -454,8 +454,8 @@ ChatGPT Workではスレッドごとに作業環境が新しくなり、前ス�
 - 採用済みPackageのAppSetとmanifestを改変せず公開表示だけ更新する場合は、`config/sdk-game-presentations.ts`の`publicGameId`別presentationを使う。表示名、英語名、広場画像の選択を汎用catalog解決へ渡し、Room Shell、結果・戦績・replayにも同じ表示名を使う。`ai-word-guess`の現行公開名は「コトバに迫れ」。
 - 制作者向けOAuth MCPはgame package保存までを公開し、SDKからdevまたはmainへ昇格するtoolを公開しない。運営管理画面は本体管理者セッション＋直近MFAから署名済み内部APIを呼び、採用対象のrevision、package root、server bundle、AppSet原文の全hashを必須入力として照合する。Candidateが再提出等で変わっていれば採用せず409相当で停止する。
 - 本体コードの`dev → main`は別の管理カードで扱う。GitHubのmain/develop両SHAを再確認し、developがmainに対してfast-forward可能なときだけ`force: false`でmain refを更新する。`dev`はmainの検証環境であり、SDK packageの中間channelではない。
-- 採用済みアプリの`dev app → main app`は`lineageId = creatorSlug/sourceGameId`で同じ作品系統を特定し、devの固定revision・package root・server bundle・AppSet・manifest・module policyをmainの`sdk_app_releases`へ新しいリリースとして追加する。既存main版の`publicGameId`はdev値で上書きせず維持する。ロールバックは過去行を現在ポインタへ戻す破壊的更新ではなく、選択版を複製した`rollback`リリースを追加する。他アプリ、本体コード、進行中Roomは変更せず、新規Roomだけが新しい現在版を解決する。
-- SDK DB migration 004以後は環境別の`sdk_app_releases`がアプリカタログとリリース履歴の正本である。`sdk_games.stable_*`は提出・同環境採用の互換情報として残すが、正式Runtime catalogは現在の`sdk_app_releases`を読む。
+- 採用済みアプリの`dev app → main app`は`lineageId = creatorSlug/sourceGameId`で同じ作品系統を特定する。dev Portalの固定commitからpackage全ファイルをservice認証付きで取得し、package root・server bundle・AppSet原文・manifestを再検証してmain package Gitへ完全置換保存する。main側の新しいGit commitを本番Previewで起動確認した後だけ、mainの`sdk_app_releases`へ新しいリリースとして追加する。`source_revision`にdev commit、`revision`にmain commitを保持し、既存main版の`publicGameId`はdev値で上書きしない。ロールバックは過去行を現在ポインタへ戻す破壊的更新ではなく、dev由来版ならpackageを再移送したうえで`rollback`リリースを追加する。他アプリ、本体コード、進行中Roomは変更せず、新規Roomだけが新しい現在版を解決する。
+- SDK DB migration 004以後は環境別の`sdk_app_releases`がアプリカタログとリリース履歴の正本である。migration 005は環境をまたぐ昇格の元commitと実行先commitを分離する。`sdk_games.stable_*`は提出・同環境採用の互換情報として残すが、正式Runtime catalogは現在の`sdk_app_releases`を読む。
 - 2026-07-26に本番隔離Preview Project `app-games-sdk-preview`と`preview.game-fields.com`を作成し、本番専用署名鍵、private package Git `koromo2010/game-fields-sdk-mocks`、Portal専用write token、Preview専用read tokenを分離して登録・再デプロイした。`app-games-sdk`と`app-games-sdk-preview`のProduction Branchは`main`へ統一済み。本番SDK専用`app-games-sdk-neon`もPortalのProductionだけへLink済みで、Redis Link、developとmainの分岐統合、build migration後に`GET https://sdk.game-fields.com/api/health`の`schemaVersion: 4`を確認する。
 - package Git保存は対象subtreeを完全置換し、前revisionだけにあったassetを新commitへ残さない。server bundleは提出時にも1 MiB上限を検査する。昇格処理は検査後のUPDATEへ元revisionと2つのhashを条件として付け、再提出または別昇格と競合した場合はコピーせず409で停止する。
 - `SDK_PREVIEW_SIGNING_SECRET`はPortalではEd25519秘密鍵の導出とpackage client／server grant署名、Previewでは交換後のローカルCookieと同一revision asset tokenのHMAC署名にだけ使う。両Projectの値は一致させない。Previewはproductionで固定したPortal公開鍵を使ってgrantをローカル検証し、汎用の`/api/preview-token/verify`を持たない。Portalの`/.well-known/sdk-preview-public-key`は段階公開と鍵ローテーション時の公開鍵取得用であり、通常のproduction Room実行は同endpointへ依存しない。Portalだけに`SDK_MOCK_GITHUB_WRITE_TOKEN`、previewだけに別の`SDK_MOCK_GITHUB_READ_TOKEN`を設定し、どちらも専用非公開repo以外へ権限を与えない。変数配置は`docs/ENVIRONMENT_VARIABLES.md`を正本とする。

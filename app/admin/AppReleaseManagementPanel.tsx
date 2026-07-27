@@ -12,6 +12,7 @@ type Release = {
   title: string;
   description: string;
   revision: string;
+  sourceRevision?: string;
   packageRootSha256: string;
   serverBundleSha256: string;
   appSetSourceSha256: string;
@@ -156,8 +157,9 @@ export function AppReleaseManagementPanel({
         <div className="divide-y divide-white/10">
           {dev.map((release) => {
             const current = mainByLineage.get(release.lineageId);
-            const unchanged = current?.revision === release.revision
-              && current.packageRootSha256 === release.packageRootSha256;
+            const unchanged = current?.packageRootSha256 === release.packageRootSha256
+              && current.serverBundleSha256 === release.serverBundleSha256
+              && current.appSetSourceSha256 === release.appSetSourceSha256;
             const action = current ? "既存mainアプリを更新" : "mainへ新規登録";
             return (
               <article key={release.lineageId} className="grid gap-4 px-5 py-5 lg:grid-cols-[1fr_auto] lg:items-center">

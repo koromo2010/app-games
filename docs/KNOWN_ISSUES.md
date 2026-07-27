@@ -4,6 +4,23 @@
 
 この文書は、再調査を減らし、次に直す範囲を選びやすくするための監査記録である。将来構想ではなく、現在のコードで確認できた事実を記録する。状態が「修正済み」の項目は、同じ問題を再導入しないための回帰確認点として残す。
 
+## 2026-07-27 dev app → main appでRuntime Bundle実体が移送されない
+
+状態: 修正実装済み・本番配備／既存リリース再昇格確認待ち（2026-07-27、migration 005・回帰テスト追加）
+
+旧昇格処理はdevのrevision、hash、manifest等のDB snapshotだけをmainの
+`sdk_app_releases`へ保存し、dev専用package Gitの`server.bundle.js`等をmain専用
+package Gitへ移していなかった。本番Previewはmain package Gitを読むため、grant検証を
+通過した後に`SERVER_RUNTIME_BUNDLE_NOT_FOUND`となった。
+
+修正後はdev Portalから固定revisionのpackage全ファイルをservice認証付きで取得し、
+main Portalでpackage root、server bundle、AppSet原文、manifestを再検証する。検証済み
+ファイルをmain package Gitへ完全置換保存し、そのmain commitを本番Previewのmanifest
+呼出しで確認してからDBの現在リリースを切り替える。migration 005の
+`source_revision`はdev commit、従来の`revision`はmain実行commitを保持する。
+artifact取得、hash検証、main Git保存、本番Runtime確認のいずれかが失敗した場合は
+現在リリースを変更しない。dev由来のrollbackも同じ再移送を行う。
+
 ## 2026-07-27 SDK本番の正式Room作成がPreviewの403で失敗する
 
 状態: セキュリティ再修正実装済み・本番公開鍵取得／コード固定済み・第2段階配備／実機確認待ち（2026-07-27、回帰テスト追加）

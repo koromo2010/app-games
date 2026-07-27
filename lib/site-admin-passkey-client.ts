@@ -31,7 +31,7 @@ function isCancelledWebAuthn(error: unknown) {
     && (error.name === "NotAllowedError" || error.name === "AbortError");
 }
 
-async function useRecoveryCodeForStepUp() {
+async function verifyRecoveryCodeForStepUp() {
   const accepted = window.confirm(
     "パスキー認証を完了できませんでした。復旧コードを使って本人確認しますか？\n復旧コードは使用すると無効になります。",
   );
@@ -73,7 +73,7 @@ export async function ensureSiteAdminStepUp() {
     });
   } catch (error) {
     if (!isCancelledWebAuthn(error)) throw stagedError("STEP_UP_BROWSER", error);
-    await useRecoveryCodeForStepUp();
+    await verifyRecoveryCodeForStepUp();
     return;
   }
 

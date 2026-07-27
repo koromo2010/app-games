@@ -2,6 +2,10 @@ import { createPackageRuntimeAccess } from "./preview-links";
 import { jsonValuesEqual } from "./canonical-json";
 import { ensureSdkSchema, sdkSql } from "./sdk-postgres";
 import { GAME_SDK_PORTABLE_SERVER_PROTOCOL_VERSION } from "@game-fields/game-sdk/portable-server";
+import {
+  AppReleaseArtifactTransferError,
+  transferDevelopmentPackageArtifact,
+} from "./app-release-artifact-transfer";
 
 const ID = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 const REVISION = /^[a-f0-9]{40}$/;
@@ -15,6 +19,7 @@ export type AppReleaseSnapshot = {
   title: string;
   description: string;
   revision: string;
+  sourceRevision?: string;
   packageRootSha256: string;
   serverBundleSha256: string;
   appSetSourceSha256: string;
@@ -43,19 +48,26 @@ function validSnapshot(value: unknown): value is AppReleaseSnapshot {
     && typeof item.title === "string" && item.title.length > 0 && item.title.length <= 120
     && typeof item.description === "string" && item.description.length <= 500
     && typeof item.revision === "string" && REVISION.test(item.revision)
+    && (
+      item.sourceRevision === undefined
+      || (typeof item.sourceRevision === "string" && REVISION.test(item.sourceRevision))
+    )
     && typeof item.packageRootSha256 === "string" && SHA.test(item.packageRootSha256)
     && typeof item.serverBundleSha256 === "string" && SHA.test(item.serverBundleSha256)
     && typeof item.appSetSourceSha256 === "string" && SHA.test(item.appSetSourceSha256)
     && Boolean(item.manifest) && typeof item.modulePolicy === "object";
 }
 
-async function verifyRuntime(snapshot: AppReleaseSnapshot) {
+async function verifyRuntime(
+  snapshot: AppReleaseSnapshot,
+  revision = snapshot.revision,
+) {
   const access = createPackageRuntimeAccess({
     instanceId: snapshot.sourceCreatorSlug,
     gameId: snapshot.sourceGameId,
-    revision: snapshot.revision,
+    revision,
     serverBundleSha256: snapshot.serverBundleSha256,
-    channel: "development",
+    channel: "main",
   });
   const response = await fetch(access.serverRuntimeUrl, {
     method: "POST",
@@ -99,12 +111,32 @@ async function verifyRuntime(snapshot: AppReleaseSnapshot) {
   }
 }
 
+async function transferArtifact(snapshot: AppReleaseSnapshot) {
+  try {
+    return await transferDevelopmentPackageArtifact({
+      sourceCreatorSlug: snapshot.sourceCreatorSlug,
+      sourceGameId: snapshot.sourceGameId,
+      revision: snapshot.sourceRevision ?? snapshot.revision,
+      packageRootSha256: snapshot.packageRootSha256,
+      serverBundleSha256: snapshot.serverBundleSha256,
+      appSetSourceSha256: snapshot.appSetSourceSha256,
+      manifest: snapshot.manifest,
+    });
+  } catch (error) {
+    if (error instanceof AppReleaseArtifactTransferError) {
+      throw new AppReleaseError(error.code, error.status, error.detail);
+    }
+    throw error;
+  }
+}
+
 export async function listCurrentAppReleases() {
   await ensureSdkSchema();
   return sdkSql()`
     SELECT id, lineage_id AS "lineageId", public_game_id AS "publicGameId",
            source_creator_slug AS "sourceCreatorSlug",
            source_game_id AS "sourceGameId", title, description, revision,
+           source_revision AS "sourceRevision",
            package_root_sha256 AS "packageRootSha256",
            server_bundle_sha256 AS "serverBundleSha256",
            app_set_source_sha256 AS "appSetSourceSha256",
@@ -122,7 +154,8 @@ export async function listAppReleaseHistory(lineageId?: string) {
   return lineageId
     ? sdkSql()`
         SELECT id, lineage_id AS "lineageId", public_game_id AS "publicGameId",
-               title, revision, package_root_sha256 AS "packageRootSha256",
+               title, revision, source_revision AS "sourceRevision",
+               package_root_sha256 AS "packageRootSha256",
                source_environment AS "sourceEnvironment",
                release_kind AS "releaseKind", restored_from AS "restoredFrom",
                released_at AS "releasedAt", is_current AS "isCurrent"
@@ -137,7 +170,6 @@ export async function promoteAppRelease(snapshotValue: unknown) {
     throw new AppReleaseError("APP_RELEASE_INPUT_INVALID", 400);
   }
   const snapshot = snapshotValue;
-  await verifyRuntime(snapshot);
   await ensureSdkSchema();
   const currentRows = await sdkSql()`
     SELECT public_game_id AS "publicGameId"
@@ -149,6 +181,8 @@ export async function promoteAppRelease(snapshotValue: unknown) {
     ? currentRows[0] as { publicGameId?: string } | undefined
     : undefined;
   const publicGameId = current?.publicGameId ?? snapshot.publicGameId;
+  const artifact = await transferArtifact(snapshot);
+  await verifyRuntime(snapshot, artifact.revision);
   const manifest = JSON.stringify(snapshot.manifest);
   const modulePolicy = JSON.stringify(snapshot.modulePolicy);
   const rows = await sdkSql().transaction([
@@ -156,18 +190,21 @@ export async function promoteAppRelease(snapshotValue: unknown) {
              WHERE lineage_id = ${snapshot.lineageId} AND is_current`,
     sdkSql()`INSERT INTO sdk_app_releases (
       lineage_id, public_game_id, source_creator_slug, source_game_id,
-      title, description, revision, package_root_sha256, server_bundle_sha256,
+      title, description, revision, source_revision,
+      package_root_sha256, server_bundle_sha256,
       app_set_source_sha256, manifest, module_policy, source_environment,
       release_kind
     ) VALUES (
       ${snapshot.lineageId}, ${publicGameId},
       ${snapshot.sourceCreatorSlug}, ${snapshot.sourceGameId},
-      ${snapshot.title}, ${snapshot.description}, ${snapshot.revision},
+      ${snapshot.title}, ${snapshot.description}, ${artifact.revision},
+      ${artifact.sourceRevision},
       ${snapshot.packageRootSha256}, ${snapshot.serverBundleSha256},
       ${snapshot.appSetSourceSha256}, ${manifest}::jsonb,
       ${modulePolicy}::jsonb, 'development', 'promotion'
     ) RETURNING id, lineage_id AS "lineageId", public_game_id AS "publicGameId",
-                revision, released_at AS "releasedAt"`,
+                revision, source_revision AS "sourceRevision",
+                released_at AS "releasedAt"`,
   ]);
   return Array.isArray(rows) && Array.isArray(rows[1]) ? rows[1][0] : null;
 }
@@ -178,11 +215,26 @@ export async function rollbackAppRelease(lineageId: string, releaseId: string) {
   }
   await ensureSdkSchema();
   const sourceRows = await sdkSql()`
-    SELECT * FROM sdk_app_releases
+    SELECT id, lineage_id AS "lineageId", public_game_id AS "publicGameId",
+           source_creator_slug AS "sourceCreatorSlug",
+           source_game_id AS "sourceGameId", title, description, revision,
+           source_revision AS "sourceRevision",
+           package_root_sha256 AS "packageRootSha256",
+           server_bundle_sha256 AS "serverBundleSha256",
+           app_set_source_sha256 AS "appSetSourceSha256",
+           manifest, module_policy AS "modulePolicy",
+           source_environment AS "sourceEnvironment"
+    FROM sdk_app_releases
     WHERE id = ${releaseId} AND lineage_id = ${lineageId} LIMIT 1
   `;
   const source = Array.isArray(sourceRows)
-    ? sourceRows[0] as Record<string, unknown> | undefined
+    ? sourceRows[0] as (
+        AppReleaseSnapshot & {
+          id: string;
+          sourceRevision: string;
+          sourceEnvironment: "development" | "main" | "legacy";
+        }
+      ) | undefined
     : undefined;
   if (!source) throw new AppReleaseError("APP_RELEASE_NOT_FOUND", 404);
   const currentRows = await sdkSql()`
@@ -198,21 +250,36 @@ export async function rollbackAppRelease(lineageId: string, releaseId: string) {
   if (!currentPublicGameId) {
     throw new AppReleaseError("APP_RELEASE_CURRENT_NOT_FOUND", 409);
   }
+  const artifact = source.sourceEnvironment === "development"
+    ? await transferArtifact(source)
+    : {
+        revision: source.revision,
+        sourceRevision: source.sourceRevision,
+      };
+  await verifyRuntime(source, artifact.revision);
+  const manifest = JSON.stringify(source.manifest);
+  const modulePolicy = JSON.stringify(source.modulePolicy);
   const rows = await sdkSql().transaction([
     sdkSql()`UPDATE sdk_app_releases SET is_current = FALSE
              WHERE lineage_id = ${lineageId} AND is_current`,
     sdkSql()`INSERT INTO sdk_app_releases (
       lineage_id, public_game_id, source_creator_slug, source_game_id,
-      title, description, revision, package_root_sha256, server_bundle_sha256,
+      title, description, revision, source_revision,
+      package_root_sha256, server_bundle_sha256,
       app_set_source_sha256, manifest, module_policy, source_environment,
       release_kind, restored_from
-    ) SELECT lineage_id, ${currentPublicGameId}, source_creator_slug, source_game_id,
-      title, description, revision, package_root_sha256, server_bundle_sha256,
-      app_set_source_sha256, manifest, module_policy, source_environment,
-      'rollback', id
-    FROM sdk_app_releases WHERE id = ${releaseId}
+    ) VALUES (
+      ${source.lineageId}, ${currentPublicGameId},
+      ${source.sourceCreatorSlug}, ${source.sourceGameId},
+      ${source.title}, ${source.description}, ${artifact.revision},
+      ${artifact.sourceRevision}, ${source.packageRootSha256},
+      ${source.serverBundleSha256}, ${source.appSetSourceSha256},
+      ${manifest}::jsonb, ${modulePolicy}::jsonb,
+      ${source.sourceEnvironment}, 'rollback', ${source.id}
+    )
     RETURNING id, lineage_id AS "lineageId", public_game_id AS "publicGameId",
-              revision, released_at AS "releasedAt"`,
+              revision, source_revision AS "sourceRevision",
+              released_at AS "releasedAt"`,
   ]);
   return Array.isArray(rows) && Array.isArray(rows[1]) ? rows[1][0] : null;
 }

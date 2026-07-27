@@ -105,6 +105,18 @@ test("main can promote one adopted dev app and append-only rollback it", () => {
   );
   const store = read("apps/sdk-portal/lib/app-release-store.ts");
   const migration = read("db/sdk/004_app_release_history.sql");
+  const artifactMigration = read(
+    "db/sdk/005_cross_environment_package_artifacts.sql",
+  );
+  const artifactTransfer = read(
+    "apps/sdk-portal/lib/app-release-artifact-transfer.ts",
+  );
+  const artifactRoute = read(
+    "apps/sdk-portal/app/api/internal/package-artifacts/[instanceId]/[gameId]/[revision]/route.ts",
+  );
+  const artifactHealth = read(
+    "apps/sdk-portal/app/api/health/app-release-artifacts/route.ts",
+  );
   const runtimeList = read("apps/sdk-portal/app/api/runtime-catalog/route.ts");
   const runtimeGame = read(
     "apps/sdk-portal/app/api/runtime-catalog/[gameId]/route.ts",
@@ -131,9 +143,23 @@ test("main can promote one adopted dev app and append-only rollback it", () => {
   assert.match(store, /release_kind/);
   assert.match(store, /'rollback'/);
   assert.match(store, /currentPublicGameId/);
+  assert.match(store, /transferArtifact\(snapshot\)/);
+  assert.ok(
+    store.indexOf("transferArtifact(snapshot)")
+      < store.indexOf("sdkSql().transaction"),
+  );
   assert.match(migration, /WHERE is_current/);
   assert.match(migration, /restored_from UUID REFERENCES sdk_app_releases/);
+  assert.match(artifactMigration, /ADD COLUMN IF NOT EXISTS source_revision/);
+  assert.match(artifactMigration, /SET source_revision = revision/);
+  assert.match(artifactTransfer, /APP_RELEASE_ARTIFACT_HASH_MISMATCH/);
+  assert.match(artifactTransfer, /saveGamePackageFilesToGit/);
+  assert.match(artifactRoute, /VERCEL_GIT_COMMIT_REF !== "develop"/);
+  assert.match(artifactRoute, /requireSdkServiceRequest/);
+  assert.match(artifactHealth, /probeDevelopmentPackageArtifactSource/);
+  assert.match(artifactHealth, /developmentSource: "ok"/);
   assert.match(runtimeList, /lineage_id AS "lineageId"/);
+  assert.match(runtimeList, /source_revision AS "sourceRevision"/);
   assert.match(runtimeList, /module_policy AS "modulePolicy"/);
   assert.match(runtimeGame, /FROM sdk_app_releases r/);
 });

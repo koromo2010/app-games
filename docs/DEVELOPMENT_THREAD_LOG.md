@@ -4787,3 +4787,47 @@
 
 - 公開鍵固定を第2段階としてmainへ反映し、本番3プロジェクトのDeploymentを確認する。
 - 本番の正式画面からRoomを作成し、fragment交換とportable server runnerを実機確認する。
+
+## 2026-07-27 — dev app → main appのRuntime Bundle移送
+
+### 利用者からの要望
+
+- devで復旧したSDK正式Roomについて、main昇格後に
+  `SERVER_RUNTIME_BUNDLE_NOT_FOUND`となる致命的な欠落をmainにも修正する。
+
+### 根本原因と判断
+
+- 旧`dev app → main app`はdevのrevision・hash・manifest等のDB snapshotだけを
+  mainの`sdk_app_releases`へ保存し、環境別private package Git間で
+  `server.bundle.js`を含むpackage実体を移していなかった。
+- Git commit SHAはrepository固有なので同一revisionを偽装せず、devの元commitを
+  `source_revision`、main package Gitへ保存した実行commitを`revision`として分離する。
+- package全ファイルの取得、3つのhashとmanifestの再検証、main Git保存、本番Previewの
+  manifest実行確認をDB切替より先に完了させ、途中失敗では現在リリースを維持する。
+
+### 実施結果
+
+- dev Portalへservice認証済み・固定revision・package配下限定のartifact読取APIを追加した。
+- main Portalへartifact移送・完全置換保存・hash／manifest検証を追加し、
+  dev由来rollbackでも同じ再移送を行うようにした。
+- migration 005で`sdk_app_releases.source_revision`を追加し、既存行は現在の
+  `revision`で冪等backfillする。
+- 管理画面の反映済み判定をrepository間のcommit SHAではなくpackage root、
+  server bundle、AppSet原文の3 hash一致へ変更した。
+- main Portalからdev artifact sourceのservice認証往復を確認する
+  `/api/health/app-release-artifacts`を追加した。
+- 最新mainに残っていた既知lint違反2件も、DEBUG表示の権限条件を維持したまま解消した。
+
+### 検証
+
+- artifactコピー成功、hash不一致時の本番Git未書込み、service認証probeの単体テストに成功した。
+- `npm run verify`、全574テスト、`npm run build`、`npm run build:sdk`、
+  `npm run build:sdk-preview`に成功した。
+
+### 未対応・保留
+
+- dev Portalのartifact sourceを先に配備し、main Portalのhealthで認証往復を確認する。
+- mainへ非force反映し、本体・SDK Portal・SDK PreviewのDeploymentと
+  SDK schema version 5を確認する。
+- 旧方式で登録済みの「コトバに迫れ」を管理画面から同じdev版で再昇格し、
+  main package Gitへの保存、正式Room作成、`SERVER_RUNTIME_BUNDLE_NOT_FOUND`消失を確認する。

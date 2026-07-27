@@ -13,7 +13,7 @@ SDK PortalのPostgreSQL schemaは、`db/sdk/NNN_name.sql`と
   expand → data移行 → 利用停止確認 → contractの順で別migrationへ分割する。
 - Runtime rollbackを可能にするため、加算schemaは旧コードからも読める形で先に適用する。
 
-現在の必須versionは`4`である。
+現在の必須versionは`5`である。
 
 | Version | 内容 |
 | --- | --- |
@@ -21,11 +21,14 @@ SDK PortalのPostgreSQL schemaは、`db/sdk/NNN_name.sql`と
 | `002` | 所有者、Package pointer、OAuth client・code・grant |
 | `003` | 不変Package revision、Root Hash、Channel履歴、tombstone |
 | `004` | 環境別アプリカタログ、リリース履歴、dev revisionのmain採用・更新・復元 |
+| `005` | devの元revisionとmain package Gitの実行revisionを分離する監査列 |
 
 `003`は旧pointerにRoot Hashがない行だけをcanonical hashで補完し、
 Revision台帳とChannel履歴へ冪等登録する。`004`は既存stable packageを
 環境別の初回リリースへ冪等backfillし、以後の正式Runtime catalogを
-`sdk_app_releases`の現在リリースから構成する。
+`sdk_app_releases`の現在リリースから構成する。`005`は既存行の
+`source_revision`を現在の`revision`で補い、以後のcross-environment昇格で
+元commitと実行先commitを別々に記録する。
 
 ## コマンド
 
@@ -50,7 +53,7 @@ npm run sdk:migrate:check
 4. backward-compatibleなmigrationをDeploymentより先に`npm run sdk:migrate`で適用する。
 5. `npm run sdk:migrate:check`を通し、`sdk_schema_migrations`の最新versionを確認する。
 6. 対象commitを`develop`へ反映し、SDK Portal Deploymentを確認する。
-7. `GET /api/health`が`schemaVersion: 4`を返すことを確認する。
+7. `GET /api/health`が`schemaVersion: 5`を返すことを確認する。
 8. handshake、OAuth、catalog、Package提出、Runtime catalogをsmoke testする。
 9. 適用・Deployment・実機確認をそれぞれ環境台帳へ記録する。
 
@@ -61,7 +64,7 @@ migration失敗時はbuildも失敗し、新Runtimeを公開しない。
 
 ## Backup／rollback
 
-現在の`001`〜`004`は加算的なので、コードだけのrollbackでは追加column・tableを残す。
+現在の`001`〜`005`は加算的なので、コードだけのrollbackでは追加column・tableを残す。
 利用中columnを消すdown migrationは作らない。
 
 データ破損や誤接続が発生した場合は書込みを止め、適用前に作成したNeon branch／snapshotを
