@@ -145,7 +145,14 @@ export async function POST(request: Request) {
     }
 
     if (action === "use-recovery-code") {
-      if (challenge.purpose !== "login" || typeof body.recoveryCode !== "string") throw new Error("SITE_ADMIN_CHALLENGE_INVALID");
+      if (
+        (challenge.purpose !== "login" && challenge.purpose !== "step-up")
+        || typeof body.recoveryCode !== "string"
+      ) throw new Error("SITE_ADMIN_CHALLENGE_INVALID");
+      if (challenge.purpose === "step-up") {
+        const current = await requireFullSiteAdminSession();
+        if (!current.email || current.email !== challenge.email) throw new Error("SITE_ADMIN_CHALLENGE_INVALID");
+      }
       if (!(await consumeSiteAdminRecoveryCode(challenge.email, body.recoveryCode))) {
         telemetry.reject("auth.access", 401, { action: "recovery-code", errorCode: "INVALID_RECOVERY_CODE" });
         return Response.json({ error: "INVALID_RECOVERY_CODE" }, { status: 401 });
@@ -154,8 +161,9 @@ export async function POST(request: Request) {
       await clearSiteAdminChallengeCookie();
       const now = Date.now();
       const session: SiteAdminSessionPayload = { version: 2, scope: "full", method: "recovery-code", email: challenge.email, authenticatedAt: now, mfaAt: now, expiresAt: now + siteAdminSessionMaxAgeSeconds * 1_000 };
-      await appendSiteAdminAuditLog(request, session, "admin.recovery-code-login", "site-admin");
-      telemetry.success("auth.access", { action: "recovery-code" });
+      const auditAction = challenge.purpose === "login" ? "admin.recovery-code-login" : "admin.recovery-code-step-up";
+      await appendSiteAdminAuditLog(request, session, auditAction, "site-admin");
+      telemetry.success("auth.access", { action: challenge.purpose === "login" ? "recovery-code" : "recovery-code-step-up" });
       return Response.json({ verified: true, session: publicSiteAdminSession(session) });
     }
 

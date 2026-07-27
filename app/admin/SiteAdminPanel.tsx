@@ -235,6 +235,7 @@ export function SiteAdminPanel({ showPreviewVocabularyMigrations, releaseManagem
       {section === "accounts" && <AdminAccountsPanel
         onAuthExpired={authExpired}
         onPasskeySessionEstablished={() => setSession((current) => current ? { ...current, method: "passkey", mfaAt: Date.now() } : current)}
+        onRecoveryCodeSessionEstablished={() => setSession((current) => current ? { ...current, method: "recovery-code", mfaAt: Date.now() } : current)}
         recoveryMode={session?.scope === "recovery"}
         recoveryLogin={session?.method === "recovery-code"}
         currentEmail={session?.email ?? null}

@@ -34,6 +34,8 @@ const accountMessages: Record<string, string> = {
   SITE_ADMIN_PASSKEY_CLEANUP_FAILED: "古い外部キー登録を削除できませんでした。",
   SITE_ADMIN_MFA_RESET_FAILED: "パスキーを初期化できませんでした。",
   SITE_ADMIN_RECOVERY_REQUIRED: "他の管理者のパスキー初期化は復旧モードでのみ実行できます。",
+  INVALID_RECOVERY_CODE: "復旧コードが違うか、すでに使用されています。",
+  SITE_ADMIN_CHALLENGE_EXPIRED: "本人確認の有効期限が切れました。もう一度パスキー初期化を実行してください。",
   SITE_ADMIN_SUBSCRIPTIONS_SAVE_FAILED: "メール通知の設定を保存できませんでした。",
   SITE_ADMIN_ACCOUNT_NOT_FOUND: "対象の管理者アカウントが見つかりません。",
 };
@@ -46,9 +48,10 @@ function formatDate(timestamp: number) {
   return new Intl.DateTimeFormat("ja-JP", { dateStyle: "medium", timeStyle: "short" }).format(new Date(timestamp));
 }
 
-export function AdminAccountsPanel({ onAuthExpired, onPasskeySessionEstablished, recoveryMode, recoveryLogin, currentEmail }: {
+export function AdminAccountsPanel({ onAuthExpired, onPasskeySessionEstablished, onRecoveryCodeSessionEstablished, recoveryMode, recoveryLogin, currentEmail }: {
   onAuthExpired: () => void;
   onPasskeySessionEstablished: () => void;
+  onRecoveryCodeSessionEstablished: () => void;
   recoveryMode: boolean;
   recoveryLogin: boolean;
   currentEmail: string | null;
@@ -197,7 +200,8 @@ export function AdminAccountsPanel({ onAuthExpired, onPasskeySessionEstablished,
     if (resettingMfaEmail || !window.confirm(`${targetEmail} のパスキーと復旧コードをすべて無効にしますか？\n次回のメールログイン時に、新しいパスキーの登録が必要になります。`)) return;
     setResettingMfaEmail(targetEmail); setMessage("");
     try {
-      if (!recoveryMode) await ensureSiteAdminStepUp();
+      const stepUpSession = !recoveryMode ? await ensureSiteAdminStepUp() : null;
+      if (stepUpSession?.method === "recovery-code") onRecoveryCodeSessionEstablished();
       const response = await fetch("/api/admin/accounts", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -209,7 +213,9 @@ export function AdminAccountsPanel({ onAuthExpired, onPasskeySessionEstablished,
       setAccounts(data.accounts);
       setMessage(recoveryMode
         ? "MFAをリセットしました。復旧モードを無効化した後、メールとパスワードでログインし、新しいパスキーを登録してください。"
-        : "パスキーを初期化しました。一度ログアウトし、メールとパスワードでログインし直して新しいパスキーを登録してください。");
+        : stepUpSession?.method === "recovery-code"
+          ? "パスキーを初期化しました。続けて、このPCのWindows Helloを登録して復旧を完了してください。"
+          : "パスキーを初期化しました。一度ログアウトし、メールとパスワードでログインし直して新しいパスキーを登録してください。");
     } catch (error) {
       const code = error instanceof Error ? error.message : undefined;
       setMessage(messageFor(code, recoveryMode ? "MFAをリセットできませんでした。" : "パスキーを初期化できませんでした。"));

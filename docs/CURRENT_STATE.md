@@ -41,6 +41,7 @@ App Games / Game Fields は Next.js で構築したオンラインゲーム基�
 管理者パスキーは端末内platform authenticator、discoverable credential、本人確認を登録・認証の両方で必須にする。復旧コードでログインした場合はWindows Helloの再登録へ誘導し、登録成功後に通常セッションへ切り替える。break-glass復旧モードはMFAリセットと読取診断に限定し、管理者追加・更新・削除を含む通常管理操作をAPI側でも拒否する。
 
 通常のfull管理者は、直近MFAを再確認したうえで自分自身のパスキーと復旧コードだけを初期化できる。他の管理者のMFAリセットはbreak-glass復旧モードに限定する。
+パスキーを利用できない場合は、既存fullセッションとstep-up challengeの管理者メールが一致するときだけ未使用復旧コードを直近MFAとして利用できる。成功後は復旧コードセッションへ切り替え、同じ画面でWindows Hello再登録へ誘導する。
 
 管理者パスキーはmainとdevでRP IDを分離し、mainは`game-fields.com`、devは`dev.game-fields.com`を使う。管理者DBだけでなく端末側の資格情報名前空間も分け、片方での再登録が他方の資格情報を置換・混在させない。
 

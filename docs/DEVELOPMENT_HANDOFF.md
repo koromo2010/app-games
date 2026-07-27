@@ -84,6 +84,7 @@
 管理画面は改善要望・バグ報告と公開問い合わせを別タブにせず、`AdminSupportInboxPanel`の一つの「問い合わせ・報告」受信箱へ作成日時順で混在表示する。初回投稿は「内容」に一度だけ表示し、会話欄は実際の返信・追記がある場合だけ追加メッセージを表示する。状態フィルター、会話、返信、管理者通知の送信状態・安全な失敗理由・再送は共通操作とする。運営返信はfull管理者セッションと監査ログを必須とするが、追加のパスキー再確認は求めない。対応状態変更と管理者通知再送は直近MFAを維持する。返信結果は操作中のフォーム直上へ表示し、通信結果が曖昧な再試行では同じrequest IDを再利用する。利用者向け返信メールが失敗した場合は保存済みメッセージ本文と同じResend冪等キーでメールだけを再送し、会話履歴を追加しない。管理者アカウントの既存`receive_contacts`列は「問い合わせ・報告を受け取る」購読を表し、公開問い合わせだけでなく、本体ゲーム・SDK Portalからの新規報告と問い合わせ者・報告者の追記も同じ宛先へ送る。
 
 管理者WebAuthnは端末内platform authenticatorだけを登録対象にし、登録optionsの`authenticatorAttachment: "platform"`と登録応答の`internal` transportを両方検査する。認証も登録済みCredential IDを`internal`へ限定する。復旧コードでログインした場合は管理者アカウント画面へ直接誘導し、新しいWindows Hello登録後に通常のパスキーセッションへ切り替える。break-glassの`recovery` scopeは管理者一覧、ダッシュボード、監査ログの読取とMFAリセットだけを許可し、管理者追加・更新・削除および通常の管理APIをサーバー側で拒否する。
+通常操作のstep-upでパスキーを利用できない場合は、署名済みfullセッションの管理者メールとstep-up challengeのメールが一致するときだけ未使用復旧コードを受理する。照合はコード消費前に行い、成功後は`method: "recovery-code"`のfullセッションへ切り替えてWindows Hello再登録を表示する。ログインchallenge以外からの匿名利用、別管理者、break-glass scopeには拡張しない。
 
 管理者WebAuthnはmainのRP ID `game-fields.com`とdevのRP ID `dev.game-fields.com`を分離する。Originだけを分けて親RP IDを共有してはならない。devへ`game-fields.com`を手動指定した場合と、Origin／RP IDのhost境界が一致しない場合はfail closedで拒否する。
 

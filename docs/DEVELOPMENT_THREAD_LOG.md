@@ -2712,3 +2712,37 @@ Total output lines: 6329
 
 - dev配備後、`moi-dev`本人にスカルの更新revision表示、制作環境遷移、
   「更新版を正式提出」ボタン表示を確認してもらう。
+
+## 2026-07-27 — 管理者パスキー初期化の復旧コードstep-up
+
+### 利用者からの要望
+
+- dev管理画面で自分のパスキーを初期化し、復旧コードを入力しても無反応に近い失敗表示で
+  管理者アカウント画面へ戻る事象を修正する。
+
+### 判断
+
+- 復旧コードを通常full管理者のstep-upに利用できる既存クライアント意図を維持する。
+- step-upでは署名済みfullセッションとchallengeの管理者メールをコード消費前に照合し、
+  匿名ログイン、別管理者、break-glass scopeへ権限を広げない。
+- 成功後は復旧コードセッションを画面へ即時反映し、同じ画面でWindows Hello再登録へ進める。
+
+### 実施結果
+
+- dev runtime logで`begin-step-up` 200直後の復旧コード要求が
+  `SITE_ADMIN_CHALLENGE_INVALID` 400になることを確認した。
+- 原因はstep-up challengeを発行しながら復旧コードAPIがlogin challengeだけを許可していた
+  目的不一致だった。失敗はコード消費前であり、入力済みコードは未使用である。
+- step-up challenge、fullセッション、同一メールを検証した後だけ復旧コードを消費し、
+  `method: recovery-code`のfullセッションへ更新するよう修正した。
+- 無効コードとchallenge期限切れの管理画面メッセージを具体化した。
+
+### 検証
+
+- 管理者認証境界の対象回帰テストに成功した。
+- `npm run verify`、全636テスト、78 routeの`npm run build`に成功した。
+
+### 未対応・保留
+
+- remote `develop`への反映、`app-games-dev`のREADY、本人端末での
+  「初期化→復旧コード→Windows Hello再登録→通常ログイン」の実機確認。
