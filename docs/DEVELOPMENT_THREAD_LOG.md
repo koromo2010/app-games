@@ -5756,5 +5756,9 @@
 
 ### 未対応・保留
 
-- `develop`へ反映し、`app-games-dev`を再デプロイしてWindows実機で確認する。
+- GitHub `develop`へ`eb4c4db6e24795dfd371201e3663275a49c1715a`を非forceで反映した。
+- `app-games-dev` Deployment `dpl_6zhmNABLmbbGQo8AVnrPwUBt2ZMK`は`READY`で、
+  `dev.game-fields.com`のaliasが同Deploymentへ切り替わった。
+- 対象Deploymentのerror／fatal Runtime Logは0件だった。
+- devのWindows実機で、USBキー画面ではなくWindows Helloへ進むことを確認する。
 - dev実機成功後に同じ認証transport修正をmainへ反映する。
