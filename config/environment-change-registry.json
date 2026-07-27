@@ -157,6 +157,32 @@
       "redeployRequired": true,
       "temporary": false,
       "note": "既存sdk-dev-redisをSDK Portal間だけで共用し、mainはsdk:production、developはsdk:development名前空間を使う。"
+    },
+    {
+      "id": "2026-07-27-app-games-dev-sdk-portal-internal-url",
+      "key": "SDK_PORTAL_INTERNAL_URL",
+      "project": "app-games-dev",
+      "branch": "develop",
+      "environment": "Production",
+      "sensitive": false,
+      "operation": "set",
+      "status": "requested",
+      "redeployRequired": true,
+      "temporary": false,
+      "note": "制作者広場のcatalog、所有者確認、SDKダッシュボード導線をhttps://sdk-dev.game-fields.comへ固定する。登録、再デプロイ、moi-dev所有者表示、非所有者非表示、SSO到達の確認待ち。"
+    },
+    {
+      "id": "2026-07-27-app-games-production-sdk-portal-internal-url",
+      "key": "SDK_PORTAL_INTERNAL_URL",
+      "project": "app-games",
+      "branch": "main",
+      "environment": "Production",
+      "sensitive": false,
+      "operation": "set",
+      "status": "requested",
+      "redeployRequired": true,
+      "temporary": false,
+      "note": "本番の制作者広場とSDKダッシュボード導線をhttps://sdk.game-fields.comへ固定する。developでの回帰・実機確認後に登録、再デプロイ、本番SSO到達を確認する。"
     }
   ]
 }

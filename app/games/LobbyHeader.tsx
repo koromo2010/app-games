@@ -7,7 +7,7 @@ import { PaidLlmAccessButton } from "../components/PaidLlmAccessButton";
 import { LobbyAccountMenu } from "./LobbyAccountMenu";
 import { useAppLocale } from "@/app/components/AppLocaleProvider";
 
-type Props = { siteName: string; name: string; avatarColor: string; avatarImage: string | null; isLoggedIn: boolean; isInfoOpen: boolean; isAvatarSaving: boolean; isAvatarDragging: boolean; onOpenInfo: () => void; onOpenMyPage: () => void; onColorChange: (color: string) => void; onImageChange: (image: string) => void; onFile: (file?: File) => void; onDrop: (event: DragEvent<HTMLElement>) => void; onDraggingChange: (dragging: boolean) => void };
+type Props = { siteName: string; name: string; avatarColor: string; avatarImage: string | null; isLoggedIn: boolean; isInfoOpen: boolean; isAvatarSaving: boolean; isAvatarDragging: boolean; sdkDashboardHref?: string; onOpenInfo: () => void; onOpenMyPage: () => void; onColorChange: (color: string) => void; onImageChange: (image: string) => void; onFile: (file?: File) => void; onDrop: (event: DragEvent<HTMLElement>) => void; onDraggingChange: (dragging: boolean) => void };
 
 export function LobbyHeader(props: Props) {
   const { t } = useAppLocale();
@@ -15,6 +15,6 @@ export function LobbyHeader(props: Props) {
     {props.isLoggedIn && <button type="button" aria-expanded={props.isInfoOpen} aria-controls="lobby-account-panel" onClick={props.onOpenInfo} className="flex items-center gap-2 rounded-lg border border-white/15 bg-white/10 px-3 py-2 text-sm font-bold text-white transition hover:border-cyan-200/60 hover:bg-white/20 lg:hidden"><span aria-hidden="true">☰</span>{t("site.info")}</button>}
     <Link href="/contact" className="rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-sm font-bold text-slate-100 transition hover:border-cyan-200/60 hover:bg-white/15 hover:text-cyan-100">{t("footer.contact")}</Link>
     <PaidLlmAccessButton />
-    <LobbyAccountMenu name={props.name} color={props.avatarColor} image={props.avatarImage} isLoggedIn={props.isLoggedIn} isSaving={props.isAvatarSaving} isDragging={props.isAvatarDragging} onColorChange={props.onColorChange} onImageChange={props.onImageChange} onFile={props.onFile} onDrop={props.onDrop} onDraggingChange={props.onDraggingChange} onOpenMyPage={props.onOpenMyPage} onOpenInfo={props.onOpenInfo} />
+    <LobbyAccountMenu name={props.name} color={props.avatarColor} image={props.avatarImage} isLoggedIn={props.isLoggedIn} isSaving={props.isAvatarSaving} isDragging={props.isAvatarDragging} sdkDashboardHref={props.sdkDashboardHref} onColorChange={props.onColorChange} onImageChange={props.onImageChange} onFile={props.onFile} onDrop={props.onDrop} onDraggingChange={props.onDraggingChange} onOpenMyPage={props.onOpenMyPage} onOpenInfo={props.onOpenInfo} />
   </div></div></div></section>;
 }

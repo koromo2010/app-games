@@ -4,17 +4,13 @@ import { loadSiteSettings } from "@/lib/site-settings-store";
 import { GameLobby } from "@/app/games/GameLobby";
 import { sdkGamesForCatalog, type SdkGameDescriptor } from "@/app/games/sdk-game-catalog";
 import { SdkPreviewSessionGate } from "@/app/sdk-preview/SdkPreviewSessionGate";
+import { sdkPortalInternalBaseUrl } from "@/lib/sdk-dashboard-navigation";
 
 export const dynamic = "force-dynamic";
 const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])?$/;
 
-function sdkPortalBaseUrl() {
-  return process.env.SDK_PORTAL_INTERNAL_URL?.replace(/\/$/, "")
-    ?? (process.env.VERCEL_GIT_COMMIT_REF === "main" ? "https://sdk.game-fields.com" : "https://sdk-dev.game-fields.com");
-}
-
 async function loadSdkGames(creatorSlug: string) {
-  const response = await fetch(`${sdkPortalBaseUrl()}/api/preview-catalog/${creatorSlug}`, { cache: "no-store" });
+  const response = await fetch(`${sdkPortalInternalBaseUrl()}/api/preview-catalog/${creatorSlug}`, { cache: "no-store" });
   if (response.status === 404) return null;
   if (!response.ok) throw new Error("SDK preview catalog is unavailable.");
   const payload = await response.json() as { games?: SdkGameDescriptor[] };
@@ -41,13 +37,15 @@ export default async function SdkCreatorLobbyPage({ params }: { params: Promise<
   return (
     <SdkPreviewSessionGate
       creatorSlug={creatorSlug}
-      portalHref={`${sdkPortalBaseUrl()}/${creatorSlug}`}
+      portalHref={`${sdkPortalInternalBaseUrl()}/${creatorSlug}`}
     >
       <GameLobby
         siteName={settings.siteName}
         gameOperations={[...operations, ...creatorOperations]}
         additionalGames={creatorGames}
         includeBuiltInGames={false}
+        sdkCreatorSlug={creatorSlug}
+        sdkDashboardHref={`${sdkPortalInternalBaseUrl()}/dashboard`}
       />
     </SdkPreviewSessionGate>
   );

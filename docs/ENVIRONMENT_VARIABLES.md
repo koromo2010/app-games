@@ -168,6 +168,7 @@ Shared化候補:
 | `REDIS_ENV` | `production` | `development` | `sdk` | No | Redis誤接続防止 |
 | `BLOB_ENV` | `production` | `development` | `sdk` | No | Blob誤接続防止 |
 | `APP_BASE_URL` | `https://game-fields.com` | `https://dev.game-fields.com` | `https://sdk.game-fields.com` | No | 絶対URL・メールリンク等 |
+| `SDK_PORTAL_INTERNAL_URL` | `https://sdk.game-fields.com` | `https://sdk-dev.game-fields.com` | 不要 | No | 本体が制作者catalog、既存所有者判定、SDKダッシュボード導線へ使うPortal接続先。branch fallbackはローカル互換用で、Vercelでは明示登録する |
 
 ### PostgreSQL / Neon
 
@@ -219,7 +220,7 @@ Sensitive設定済みの互換変数をVercel上で複製できない移行期�
 | `DEV_REDIS_KV_REST_API_URL` | Production | Yes | Integrationによる登録を画面確認済み。`0773a78`で再デプロイ後、アカウントAPIのレート制限処理が通ることを確認済み | `DEV_REDIS_KV_REST_API_TOKEN`と対で優先利用 |
 | `DEV_REDIS_KV_REST_API_TOKEN` | Production | Yes | Integrationによる登録を画面確認済み。`0773a78`で再デプロイ後、実機接続確認済み | `app-dev:`名前空間でのみ書込。SDK側との論理分離を継続監視 |
 | `DEV_REDIS_KV_REST_API_READ_ONLY_TOKEN` | Production | Yes | Integrationによる登録を画面確認済み | 現行サーバーコードでは未使用 |
-| `SDK_PORTAL_INTERNAL_URL` | Production | No | 未登録。developコード既定値`https://sdk-dev.game-fields.com`を使用 | 本体が制作者別ゲーム定義と隔離実行URLをSDK Portalから読む。独自接続先が必要な場合だけ設定 |
+| `SDK_PORTAL_INTERNAL_URL` | Production | No | 未登録。`config/environment-change-registry.json`へ`https://sdk-dev.game-fields.com`の登録をrequestedとして記録。現在はdevelopコードfallbackを使用 | `app-games-dev`へ登録し、再デプロイ後にcatalog、`owner_player_id`判定、moi-devのSDKダッシュボードSSO到達、非所有者非表示を確認 |
 | `SDK_PROMOTION_INTERNAL_URL` | Production / Preview | No | 未登録時は`https://sdk.game-fields.com` | dev・main両方の運営管理画面から、SDK本番の正式提出候補をmain採用する内部接続先 |
 | `SITE_ADMIN_PASSWORD` | Production | Yes | Project Variable登録・再デプロイ済み。マスターパスワードで復旧ログインを実機確認済み | 秘密値を安全な保管先で管理。Gitへ値を保存しない |
 | `SITE_ADMIN_BREAK_GLASS_ENABLED` | Production | No | `true`を一時登録・再デプロイし、MFAリセットを実機確認済み | WebAuthn再登録と通常ログイン確認後、変数を削除して再デプロイ |

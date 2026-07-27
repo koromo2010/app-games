@@ -23,9 +23,10 @@ import { LobbyHeader } from "./LobbyHeader";
 import { LobbyInfoDrawer } from "./LobbyInfoDrawer";
 import { LobbyPrivateAccessControl } from "./LobbyPrivateAccessControl";
 import { useAppLocale } from "@/app/components/AppLocaleProvider";
+import { sdkDashboardHrefForAccess } from "@/lib/sdk-dashboard-navigation";
 
 
-export function GameLobby({ siteName = "GAME FIELDS", gameOperations, durationEstimates = {}, additionalGames = [], includeBuiltInGames = true }: { siteName?: string; gameOperations: GameOperation[]; durationEstimates?: Partial<Record<GameDurationGameId, GameDurationEstimate>>; additionalGames?: GameCatalogEntry[]; includeBuiltInGames?: boolean }) {
+export function GameLobby({ siteName = "GAME FIELDS", gameOperations, durationEstimates = {}, additionalGames = [], includeBuiltInGames = true, sdkCreatorSlug, sdkDashboardHref }: { siteName?: string; gameOperations: GameOperation[]; durationEstimates?: Partial<Record<GameDurationGameId, GameDurationEstimate>>; additionalGames?: GameCatalogEntry[]; includeBuiltInGames?: boolean; sdkCreatorSlug?: string; sdkDashboardHref?: string }) {
   const { locale, t } = useAppLocale();
   const sdkLoginRequired = useSearchParams().get("sdkLoginRequired") === "1";
   const [password, setPassword] = useState("");
@@ -37,6 +38,11 @@ export function GameLobby({ siteName = "GAME FIELDS", gameOperations, durationEs
   const [legalAccepted, setLegalAccepted] = useState(false);
   const [isMobileInfoOpen, setIsMobileInfoOpen] = useState(sdkLoginRequired);
   const [isMyPageOpen, setIsMyPageOpen] = useState(false);
+  const [sdkOwnership, setSdkOwnership] = useState<{
+    creatorSlug: string;
+    playerId: string;
+    owner: boolean;
+  } | null>(null);
   const { name, setName, playerId, avatarColor, setAvatarColor, avatarImage, setAvatarImage, isLoggedIn,
     hasRecoveryEmail, applySession, logout } = useLobbySession(setMessage);
   const { accessKey: privateAccessKey, setAccessKey: setPrivateAccessKey, isUnlocked: privateUnlocked,
@@ -49,6 +55,37 @@ export function GameLobby({ siteName = "GAME FIELDS", gameOperations, durationEs
     const timer = window.setTimeout(() => void loadStats(playerId, "all"), 250);
     return () => window.clearTimeout(timer);
   }, [isLoggedIn, isMobileInfoOpen, isStatsLoading, loadStats, playerId, stats]);
+  useEffect(() => {
+    let cancelled = false;
+    if (!isLoggedIn || !playerId || !sdkCreatorSlug || !sdkDashboardHref) return;
+    void fetch(`/api/sdk-preview/${encodeURIComponent(sdkCreatorSlug)}/owner`, {
+      credentials: "same-origin",
+      cache: "no-store",
+    })
+      .then(async (response) => response.ok
+        ? (await response.json() as { owner?: unknown }).owner === true
+        : false)
+      .then((owner) => {
+        if (!cancelled) setSdkOwnership({ creatorSlug: sdkCreatorSlug, playerId, owner });
+      })
+      .catch(() => {
+        if (!cancelled) setSdkOwnership({ creatorSlug: sdkCreatorSlug, playerId, owner: false });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoggedIn, playerId, sdkCreatorSlug, sdkDashboardHref]);
+  const isCurrentSdkCreatorOwner = Boolean(
+    sdkOwnership
+    && sdkOwnership.creatorSlug === sdkCreatorSlug
+    && sdkOwnership.playerId === playerId
+    && sdkOwnership.owner,
+  );
+  const visibleSdkDashboardHref = sdkDashboardHrefForAccess({
+    href: sdkDashboardHref,
+    isLoggedIn,
+    isCreatorOwner: isCurrentSdkCreatorOwner,
+  });
 
   const { isSaving, isRequestingReset, submitAccount, requestPasswordReset } = useLobbyAuthActions({
     name, password, email, resetEmail, authMode, legalAccepted, avatarColor, avatarImage,
@@ -86,6 +123,7 @@ export function GameLobby({ siteName = "GAME FIELDS", gameOperations, durationEs
     <main className="min-h-screen bg-slate-950 text-slate-950">
       <LobbyHeader siteName={siteName} name={name} avatarColor={avatarColor} avatarImage={avatarImage} isLoggedIn={isLoggedIn}
         isInfoOpen={isMobileInfoOpen} isAvatarSaving={isAvatarSaving} isAvatarDragging={isAvatarDragging}
+        sdkDashboardHref={visibleSdkDashboardHref}
         onOpenInfo={() => setIsMobileInfoOpen(true)} onOpenMyPage={() => setIsMyPageOpen(true)}
         onColorChange={(color) => void updateAvatar(color, avatarImage)} onImageChange={(image) => void updateAvatar(avatarColor, image)}
         onFile={(file) => void uploadAvatar(file)} onDrop={dropAvatar} onDraggingChange={setIsAvatarDragging}
