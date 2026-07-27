@@ -979,7 +979,7 @@ sessionの`expiresAt`を引き継いでいたため、60秒の入口grant失効�
 本書の「Preview共有asset token検証器を段階配備なしでv2-onlyへ切り替えた」を正本とする。
 ## 2026-07-27 Creator Dashboardで更新版の正式提出操作が表示されない
 
-状態: 修正実装済み・dev配備待ち／moi-dev本人の実機確認待ち（2026-07-27、回帰テストあり）
+状態: 修正・dev配備済み／moi-dev本人の実機確認待ち（2026-07-27、回帰テストあり）
 
 制作者`moi-dev`の環境`moi-lab`で、既に正式提出済みのスカルへ新しいpackage candidateを
 保存しても、「更新版を正式提出」する操作がCreator Dashboardへ表示されなかった。

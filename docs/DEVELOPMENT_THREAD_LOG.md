@@ -2699,7 +2699,14 @@ Total output lines: 6329
   candidate revision表示、gameIdを含む制作環境リンクの回帰検査を追加した。
 - `npm run build:runtime-packages`後の`npm run verify`、全635テスト、
   本体production build、SDK Portal production buildに成功した。
+- `c5a8707`をforceなしで`develop`へ反映し、`app-games-sdk-dev` Deployment
+  `dpl_HiMo7njq2srxybUnDHQUeYUfwtcV`の`READY`と`sdk-dev.game-fields.com`への
+  alias反映を確認した。
 - dev配備後の`moi-dev`本人による表示・提出前確認は未実施。
+
+### 関連コミット
+
+- `c5a8707` — `Fix SDK update submission dashboard`
 
 ### 未対応・保留
 
