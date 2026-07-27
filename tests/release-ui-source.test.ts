@@ -158,7 +158,9 @@ test("main can promote one adopted dev app and append-only rollback it", () => {
   assert.match(artifactRoute, /VERCEL_GIT_COMMIT_REF !== "develop"/);
   assert.match(artifactRoute, /requireSdkServiceRequest/);
   assert.match(artifactHealth, /probeDevelopmentPackageArtifactSource/);
+  assert.match(artifactHealth, /probeGamePackageGitWriteTarget/);
   assert.match(artifactHealth, /developmentSource: "ok"/);
+  assert.match(artifactHealth, /mainTarget: "ok"/);
   assert.match(runtimeList, /lineage_id AS "lineageId"/);
   assert.match(runtimeList, /source_revision AS "sourceRevision"/);
   assert.match(runtimeList, /module_policy AS "modulePolicy"/);

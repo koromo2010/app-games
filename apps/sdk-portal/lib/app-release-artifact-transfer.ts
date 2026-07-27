@@ -2,6 +2,7 @@ import { jsonValuesEqual } from "./canonical-json";
 import { parseGameFieldsPackageManifest } from "./game-package-manifest";
 import {
   gamePackageUploadFileFromBytes,
+  gamePackageGitWriteFailureDiagnostic,
   prepareGamePackageUploadFiles,
   saveGamePackageFilesToGit,
   type GamePackageGitFile,
@@ -264,10 +265,17 @@ export async function transferDevelopmentPackageArtifact(
       gameId: snapshot.sourceGameId,
       files: prepared,
     });
-  } catch {
+  } catch (error) {
+    const diagnostic = gamePackageGitWriteFailureDiagnostic(error);
+    console.error("[app-release-artifact-transfer] target write failed", {
+      code: diagnostic.code,
+      status: diagnostic.status,
+      operation: diagnostic.operation,
+    });
     throw new AppReleaseArtifactTransferError(
       "APP_RELEASE_ARTIFACT_TARGET_WRITE_FAILED",
       503,
+      diagnostic.code,
     );
   }
   if (!REVISION_PATTERN.test(revision)) {

@@ -6,7 +6,9 @@ import {
   parseGameFieldsPackageManifest,
 } from "../apps/sdk-portal/lib/game-package-manifest.ts";
 import {
+  GamePackageGitTargetError,
   prepareGamePackageUploadFiles,
+  probeGamePackageGitWriteTarget,
   type MockUploadFile,
   type PreparedUploadFile,
 } from "../apps/sdk-portal/lib/mock-git-store.ts";
@@ -191,6 +193,44 @@ test("main can probe the authenticated development artifact source", async () =>
   assert.equal(
     signedUrl,
     "https://sdk-dev.example.test/api/internal/package-artifacts",
+  );
+});
+
+test("main target probe verifies repository identity and push permission", async () => {
+  let authorization = "";
+  await probeGamePackageGitWriteTarget({
+    fetchRuntime: (async (_input, init) => {
+      authorization = new Headers(init?.headers).get("Authorization") ?? "";
+      return Response.json({
+        full_name: "koromo2010/game-fields-sdk-mocks",
+        permissions: { push: true },
+      });
+    }) as typeof fetch,
+    env: {
+      SDK_MOCK_GITHUB_REPOSITORY: "koromo2010/game-fields-sdk-mocks",
+      SDK_MOCK_GITHUB_WRITE_TOKEN: "test-secret",
+    },
+  });
+  assert.equal(authorization, "Bearer test-secret");
+});
+
+test("main target probe reports inaccessible repository without exposing credentials", async () => {
+  await assert.rejects(
+    probeGamePackageGitWriteTarget({
+      fetchRuntime: (async () => Response.json(
+        { message: "Not Found" },
+        { status: 404 },
+      )) as typeof fetch,
+      env: {
+        SDK_MOCK_GITHUB_REPOSITORY: "koromo2010/game-fields-sdk-mocks",
+        SDK_MOCK_GITHUB_WRITE_TOKEN: "test-secret",
+      },
+    }),
+    (error) => (
+      error instanceof GamePackageGitTargetError
+      && error.code === "SDK_PACKAGE_GIT_REPOSITORY_NOT_ACCESSIBLE_REPOSITORY"
+      && !error.message.includes("test-secret")
+    ),
   );
 });
 

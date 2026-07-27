@@ -40,24 +40,37 @@ export type GamePackageGitFile = {
 
 class GitHubApiError extends Error {
   readonly status: number;
+  readonly operation: string;
 
-  constructor(status: number) {
+  constructor(status: number, operation: string) {
     super("SDK mock Git request failed.");
     this.status = status;
+    this.operation = operation;
   }
 }
 
-function mockGitConfig() {
-  const repository = process.env.SDK_MOCK_GITHUB_REPOSITORY ?? "";
-  const branch = process.env.SDK_MOCK_GITHUB_BRANCH?.trim() || "sdk-previews";
-  const token = process.env.SDK_MOCK_GITHUB_WRITE_TOKEN ?? "";
+export class GamePackageGitTargetError extends Error {
+  readonly code: string;
+
+  constructor(code: string) {
+    super(code);
+    this.code = code;
+  }
+}
+
+function mockGitConfig(env: NodeJS.ProcessEnv = process.env) {
+  const repository = env.SDK_MOCK_GITHUB_REPOSITORY ?? "";
+  const branch = env.SDK_MOCK_GITHUB_BRANCH?.trim() || "sdk-previews";
+  const token = env.SDK_MOCK_GITHUB_WRITE_TOKEN ?? "";
   const missing = [
     !REPOSITORY_PATTERN.test(repository) ? "SDK_MOCK_GITHUB_REPOSITORY" : "",
     !BRANCH_PATTERN.test(branch) ? "SDK_MOCK_GITHUB_BRANCH" : "",
     !token ? "SDK_MOCK_GITHUB_WRITE_TOKEN" : "",
   ].filter(Boolean);
   if (missing.length > 0) {
-    throw new Error(`SDK mock Git storage is not configured (${missing.join(", ")}).`);
+    throw new GamePackageGitTargetError(
+      `SDK_PACKAGE_GIT_CONFIG_INVALID_${missing.join("_AND_")}`,
+    );
   }
   return { repository, branch, token };
 }
@@ -215,8 +228,27 @@ export function prepareGamePackageUploadFiles(value: unknown) {
   });
 }
 
-async function githubApi<T>(config: ReturnType<typeof mockGitConfig>, path: string, init?: RequestInit) {
-  const response = await fetch(`https://api.github.com/repos/${config.repository}${path}`, {
+function githubOperation(path: string, method: string) {
+  if (!path) return "repository";
+  if (path.startsWith("/git/ref/heads/")) return method === "PATCH" ? "update-ref" : "read-ref";
+  if (path === "/git/refs") return "create-ref";
+  if (path.startsWith("/git/commits/")) return "read-commit";
+  if (path === "/git/commits") return "create-commit";
+  if (path === "/git/blobs") return "create-blob";
+  if (path.startsWith("/git/trees/")) return "read-tree";
+  if (path === "/git/trees") return "create-tree";
+  if (path.startsWith("/contents/")) return "read-content";
+  return `${method.toLowerCase()}-request`;
+}
+
+async function githubApi<T>(
+  config: ReturnType<typeof mockGitConfig>,
+  path: string,
+  init?: RequestInit,
+  fetchRuntime: typeof fetch = fetch,
+) {
+  const method = init?.method ?? "GET";
+  const response = await fetchRuntime(`https://api.github.com/repos/${config.repository}${path}`, {
     ...init,
     headers: {
       Accept: "application/vnd.github+json",
@@ -228,8 +260,64 @@ async function githubApi<T>(config: ReturnType<typeof mockGitConfig>, path: stri
     },
     cache: "no-store",
   });
-  if (!response.ok) throw new GitHubApiError(response.status);
+  if (!response.ok) {
+    throw new GitHubApiError(response.status, githubOperation(path, method));
+  }
   return response.json() as Promise<T>;
+}
+
+function packageGitTargetCode(error: unknown) {
+  if (error instanceof GamePackageGitTargetError) return error.code;
+  if (!(error instanceof GitHubApiError)) return "SDK_PACKAGE_GIT_WRITE_FAILED";
+  const reason = error.status === 401
+    ? "AUTH_INVALID"
+    : error.status === 403
+      ? "WRITE_FORBIDDEN"
+      : error.status === 404
+        ? "REPOSITORY_NOT_ACCESSIBLE"
+        : error.status === 429
+          ? "RATE_LIMITED"
+          : `HTTP_${error.status}`;
+  return `SDK_PACKAGE_GIT_${reason}_${error.operation.toUpperCase().replaceAll("-", "_")}`;
+}
+
+export function gamePackageGitWriteFailureDiagnostic(error: unknown) {
+  return {
+    code: packageGitTargetCode(error),
+    status: error instanceof GitHubApiError ? error.status : null,
+    operation: error instanceof GitHubApiError ? error.operation : null,
+  };
+}
+
+export async function probeGamePackageGitWriteTarget(
+  dependencies: {
+    fetchRuntime?: typeof fetch;
+    env?: NodeJS.ProcessEnv;
+  } = {},
+) {
+  const config = mockGitConfig(dependencies.env);
+  try {
+    const repository = await githubApi<{
+      full_name?: unknown;
+      permissions?: { push?: unknown };
+    }>(
+      config,
+      "",
+      undefined,
+      dependencies.fetchRuntime ?? fetch,
+    );
+    if (
+      repository.full_name !== config.repository
+      || repository.permissions?.push !== true
+    ) {
+      throw new GamePackageGitTargetError(
+        "SDK_PACKAGE_GIT_WRITE_PERMISSION_MISSING",
+      );
+    }
+  } catch (error) {
+    if (error instanceof GamePackageGitTargetError) throw error;
+    throw new GamePackageGitTargetError(packageGitTargetCode(error));
+  }
 }
 
 function assertGamePackageGitScope(input: {
@@ -327,7 +415,7 @@ export async function readGamePackageFileAtRevision(input: {
     },
   );
   if (response.status === 404) return null;
-  if (!response.ok) throw new GitHubApiError(response.status);
+  if (!response.ok) throw new GitHubApiError(response.status, "read-content");
   const declaredLength = Number(response.headers.get("content-length") ?? 0);
   if (declaredLength > MAX_FILE_BYTES) {
     throw new Error("SDK game package Git file is too large.");
