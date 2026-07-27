@@ -144,6 +144,10 @@ test("AI report and reply drafts both require human approval", () => {
 
   assert.match(mcp, /name: "prepare_support_report"/);
   assert.match(mcp, /name: "prepare_support_reply"/);
+  assert.match(mcp, /checkedReportIds/);
+  assert.match(mcp, /list_support_threadsをstatus指定なしで/);
+  assert.match(mcp, /currentReportIds/);
+  assert.match(mcp, /prepare_support_replyを使ってください/);
   assert.match(mcp, /submitted: false/);
   assert.match(mcp, /replied: false/);
   assert.match(mcp, /humanApprovalRequired: true/);
@@ -159,4 +163,20 @@ test("AI report and reply drafts both require human approval", () => {
   assert.match(replyApproval, /HUMAN APPROVAL REQUIRED/);
   assert.match(replyApproval, /内容を確認し、返信を送信/);
   assert.match(replyApprovalRoute, /approveCreatorSupportReplyDraft/);
+});
+
+test("DownloadMe requires duplicate lookup before an AI creates a report", () => {
+  const instructions = read("sdk/entry/START_GAME_FIELDS.md");
+
+  assert.match(
+    instructions,
+    /IF AI detects a probable SDK or game defect AND user asks to report it:[\s\S]*CALL list_support_threads without a status filter/,
+  );
+  assert.match(instructions, /COMPARE the defect, game, page, symptom/);
+  assert.match(
+    instructions,
+    /IF any thread may describe the same defect, recurrence, or follow-up:[\s\S]*CALL prepare_support_reply/,
+  );
+  assert.match(instructions, /checkedReportIds containing every reportId/);
+  assert.match(instructions, /MUST_NOT create a new support report/);
 });

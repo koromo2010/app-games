@@ -45,7 +45,7 @@ App Games / Game Fields は Next.js で構築したオンラインゲーム基�
 
 管理者パスキーはmainとdevでRP IDを分離し、mainは`game-fields.com`、devは`dev.game-fields.com`を使う。管理者DBだけでなく端末側の資格情報名前空間も分け、片方での再登録が他方の資格情報を置換・混在させない。
 
-SDK制作者はPortalの`/support`から本人の報告を一覧・閲覧・追記でき、`/support/new`から不具合報告または改善要望を直接作成できる。人間がフォーム内容を確認して送信する操作を承認とし、送信後は同じ会話一覧へ戻る。OAuth MCPのAIは`list_support_threads`と`get_support_thread`で本人の報告だけを参照する。AIによる新規報告は`prepare_support_report`、既存スレッドへの返信は`prepare_support_reply`で7日間の下書きだけを作成し、制作者本人がPortalの各承認画面で内容を確認・修正して送信した場合だけ保存される。AIだけで新規報告または返信を直接投稿するtoolは提供しない。
+SDK制作者はPortalの`/support`から本人の報告を一覧・閲覧・追記でき、`/support/new`から不具合報告または改善要望を直接作成できる。人間がフォーム内容を確認して送信する操作を承認とし、送信後は同じ会話一覧へ戻る。OAuth MCPのAIは`list_support_threads`と`get_support_thread`で本人の報告だけを参照する。AIが新規報告を作る前は、status指定なしの`list_support_threads`で本人の既存報告を全件照合し、同じゲーム・ページ・症状、再発または続報の可能性があれば`get_support_thread`と`prepare_support_reply`を使う。関連報告がない場合だけ、取得した全report IDを`checkedReportIds`として`prepare_support_report`へ渡せる。サーバー上の現在一覧と一致しなければ新規下書きは拒否される。新規・返信とも7日間の下書きだけを作成し、制作者本人がPortalの各承認画面で内容を確認・修正して送信した場合だけ保存される。AIだけで新規報告または返信を直接投稿するtoolは提供しない。
 
 報告への運営返信は、確認済みの復旧用メールがある送信者へ通知する。メールは会話の正本にせず、返信本文、該当スレッドを開くSDK Portal導線、別のGPTチャットへ貼り付ける報告IDだけを載せる。GPTが報告IDだけを受け取ったときに`get_support_thread`を呼ぶ規則と、最新返信までの要約、返信は`prepare_support_reply`の下書きだけ、Portalで人間が承認するまで未投稿、コード変更は確認後という進行規則はMCPサーバーが取得結果とともに返す。新規報告と報告者の追記は、公開問い合わせと同じ管理者購読先へ通知する。AI下書きの承認投稿も新しい追記メッセージ単位で通知し、以前のスレッド通知済み状態だけを理由に省略しない。メール未登録・未確認・配送失敗でもPortalの会話履歴は保持し、管理画面に配送状態を表示する。
 

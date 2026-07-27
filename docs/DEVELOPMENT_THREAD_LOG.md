@@ -2754,3 +2754,39 @@ Total output lines: 6329
 ### 未対応・保留
 
 - 本人端末での「初期化→復旧コード→Windows Hello再登録→通常ログイン」の実機確認。
+
+## 2026-07-27 — AI報告の既存スレッド照合を必須化
+
+### 利用者からの要望
+
+- AIが「以前にも報告」と本文へ書いた同一事象を、元の問い合わせへの返信ではなく
+  別report IDの新規バグ報告として作成したため、同じ件は既存スレッドへ追記させる。
+
+### 判断
+
+- `prepare_support_reply`の存在だけではAIのtool選択を保証できない。
+- AIによる新規報告の前に本人の全報告一覧を取得させ、その一覧を確認した証跡を
+  `prepare_support_report`の必須入力としてサーバーでも検証する。
+- 同一・再発・続報の可能性がある場合は`get_support_thread`から
+  `prepare_support_reply`へ進み、新規報告を禁止する。
+- 既存チャットへ固定されたDownloadMeと区別するためver17へ更新する。
+
+### 実施結果
+
+- DownloadMeのsupport手順へ全件照合、関連候補の詳細取得、既存スレッドへの返信を追加した。
+- MCPの`prepare_support_report`へ`checkedReportIds`を追加し、現在の本人所有report ID
+  全件と一致しない新規下書きを拒否するようにした。
+- SDK Help、現行仕様、引き継ぎ、既知事象を同じ契約へ更新した。
+- 既に作られた重複reportは自動統合せず、元スレッドへ必要内容を追記した後に重複側を
+  終了する方針とした。
+
+### 検証
+
+- support契約テスト6件、`npm run verify`、全637テストに成功した。
+- 本体production buildとSDK Portal production buildに成功した。
+
+### 未対応・保留
+
+- develop反映とdev配備。
+- ver17を使う新規AIチャットで、既存案件が`prepare_support_reply`へ進む実機確認。
+- 画像で確認した重複reportと元reportの内容整理。

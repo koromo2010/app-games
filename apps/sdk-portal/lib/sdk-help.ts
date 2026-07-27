@@ -23,9 +23,9 @@ export const SDK_HELP_ENTRIES: readonly SdkHelpEntry[] = [
     title: "AIによる報告下書きと人間承認",
     question: "AIから不具合報告を送れますか？",
     answer:
-      "AIはprepare_support_reportで報告下書きを作れますが、その時点では送信されません。返されたapprovalUrlを制作者本人が開き、内容を確認・必要なら修正して「報告を送信」を押した場合だけ正式な報告になります。AIだけで人間承認を省略するtoolはありません。",
+      "AIは新規報告の前にlist_support_threadsで本人の既存報告を全件確認します。同じゲーム・ページ・症状、再発または続報の可能性があればget_support_threadで確認し、prepare_support_replyで元スレッドへの返信下書きを作ります。関連報告がない場合だけ、全reportIdをcheckedReportIdsとしてprepare_support_reportへ渡せます。どちらもapprovalUrlを制作者本人が開き、内容を確認・必要なら修正して送信した場合だけ正式に記録されます。",
     keywords: ["AI", "不具合報告", "下書き", "同意", "承認", "prepare_support_report"],
-    relatedToolNames: ["prepare_support_report"],
+    relatedToolNames: ["list_support_threads", "get_support_thread", "prepare_support_reply", "prepare_support_report"],
   },
   {
     id: "package-candidate-and-formal-submission",
