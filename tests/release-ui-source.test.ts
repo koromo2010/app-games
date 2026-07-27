@@ -5,11 +5,18 @@ import test from "node:test";
 const read = (path: string) =>
   readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
-test("lobby keeps card UI and adds a persisted accessible list view", () => {
+test("lobby keeps card and list views with persisted accessible favorites", () => {
   const source = read("app/games/LobbyGameGrid.tsx");
+  const favorites = read("app/games/lobby-game-favorites.ts");
   assert.match(source, /LobbyGameCard/);
   assert.match(source, /LobbyGameListRow/);
   assert.match(source, /game-fields:lobby-game-view-mode/);
+  assert.match(favorites, /game-fields:lobby-favorite-games/);
+  assert.match(source, /sortGamesByFavorite/);
+  assert.match(source, /FavoriteButton/);
+  assert.match(source, /aria-pressed=\{favorite\}/);
+  assert.match(source, /games\.addFavorite/);
+  assert.match(source, /games\.removeFavorite/);
   assert.match(source, /localStorage\.getItem/);
   assert.match(source, /localStorage\.setItem/);
   assert.match(source, /aria-pressed=\{viewMode === "cards"\}/);

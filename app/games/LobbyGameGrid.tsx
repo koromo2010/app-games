@@ -15,6 +15,13 @@ import { isGameLocaleAvailable, isGameUiLocaleAvailable } from "@/lib/game-langu
 import type { GameOperation } from "@/lib/game-operations";
 import { gameOperationFor } from "@/lib/game-operations";
 import type { LocalizedGameCatalogEntry } from "./game-catalog";
+import {
+  parseFavoriteGameIds,
+  readFavoriteGameIds,
+  saveFavoriteGameIds,
+  sortGamesByFavorite,
+  subscribeFavoriteGameIds,
+} from "./lobby-game-favorites";
 
 type ActiveRoom = { code: string; phase: string; players: { id: string; name: string }[]; updatedAt: number };
 type Props = { games: LocalizedGameCatalogEntry[]; operations: GameOperation[]; activeRooms: Record<string, ActiveRoom>; isLoggedIn: boolean; locale: AppLocale; onLoginRequired: () => void; onRememberWordWolf: () => void };
@@ -54,7 +61,19 @@ export function LobbyGameGrid({ games, operations, activeRooms, isLoggedIn, loca
     readViewMode,
     () => "cards",
   );
-  const filteredGames = useMemo(() => filterGamesBySearch(games, searchQuery), [games, searchQuery]);
+  const favoriteGameIdsSnapshot = useSyncExternalStore(
+    subscribeFavoriteGameIds,
+    readFavoriteGameIds,
+    () => "[]",
+  );
+  const favoriteGameIds = useMemo(
+    () => new Set(parseFavoriteGameIds(favoriteGameIdsSnapshot)),
+    [favoriteGameIdsSnapshot],
+  );
+  const filteredGames = useMemo(
+    () => sortGamesByFavorite(filterGamesBySearch(games, searchQuery), favoriteGameIds),
+    [favoriteGameIds, games, searchQuery],
+  );
 
   const selectViewMode = (next: ViewMode) => {
     fallbackViewMode = next;
@@ -64,6 +83,13 @@ export function LobbyGameGrid({ games, operations, activeRooms, isLoggedIn, loca
       // Storage may be unavailable in privacy-restricted browsers.
     }
     window.dispatchEvent(new Event(viewModeChangeEvent));
+  };
+
+  const toggleFavorite = (gameId: string) => {
+    const next = new Set(favoriteGameIds);
+    if (next.has(gameId)) next.delete(gameId);
+    else next.add(gameId);
+    saveFavoriteGameIds(next);
   };
 
   return <div className={`${isLoggedIn ? "order-1" : "order-2"} min-w-0 lg:order-2 lg:col-start-2 lg:row-start-1`}>
@@ -91,13 +117,13 @@ export function LobbyGameGrid({ games, operations, activeRooms, isLoggedIn, loca
       {searchQuery.trim() && <p className="mt-2 text-xs text-slate-300">{t("games.searchResults", { count: filteredGames.length })}</p>}
     </div>
     {filteredGames.length > 0 ? viewMode === "cards"
-      ? <div className="grid grid-cols-1 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(210px,230px))] sm:justify-start">{filteredGames.map((game) => <LobbyGameCard key={game.id} game={game} operation={gameOperationFor(operations, game.id)} activeRoom={activeRooms[game.id]} isLoggedIn={isLoggedIn} locale={locale} onLoginRequired={onLoginRequired} onRememberWordWolf={onRememberWordWolf} />)}</div>
-      : <div className="overflow-hidden rounded-xl border border-white/10 bg-white/[0.06]">{filteredGames.map((game) => <LobbyGameListRow key={game.id} game={game} operation={gameOperationFor(operations, game.id)} activeRoom={activeRooms[game.id]} isLoggedIn={isLoggedIn} locale={locale} onLoginRequired={onLoginRequired} onRememberWordWolf={onRememberWordWolf} />)}</div>
+      ? <div className="grid grid-cols-1 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(210px,230px))] sm:justify-start">{filteredGames.map((game) => <LobbyGameCard key={game.id} game={game} operation={gameOperationFor(operations, game.id)} activeRoom={activeRooms[game.id]} isLoggedIn={isLoggedIn} locale={locale} favorite={favoriteGameIds.has(game.id)} onToggleFavorite={() => toggleFavorite(game.id)} onLoginRequired={onLoginRequired} onRememberWordWolf={onRememberWordWolf} />)}</div>
+      : <div className="overflow-hidden rounded-xl border border-white/10 bg-white/[0.06]">{filteredGames.map((game) => <LobbyGameListRow key={game.id} game={game} operation={gameOperationFor(operations, game.id)} activeRoom={activeRooms[game.id]} isLoggedIn={isLoggedIn} locale={locale} favorite={favoriteGameIds.has(game.id)} onToggleFavorite={() => toggleFavorite(game.id)} onLoginRequired={onLoginRequired} onRememberWordWolf={onRememberWordWolf} />)}</div>
       : <div className="rounded-lg border border-dashed border-white/20 bg-white/[0.06] px-5 py-8 text-center text-white"><p className="font-bold">{t("games.noResults")}</p><p className="mt-1 text-sm text-slate-400">{t("games.noResultsHelp")}</p><button type="button" onClick={() => setSearchQuery("")} className="mt-4 rounded-lg border border-white/20 px-4 py-2 text-sm font-bold hover:bg-white/10">{t("games.clearSearch")}</button></div>}
   </div>;
 }
 
-function LobbyGameCard({ game, operation, activeRoom, isLoggedIn, locale, onLoginRequired, onRememberWordWolf }: { game: LocalizedGameCatalogEntry; operation: GameOperation; activeRoom?: ActiveRoom; isLoggedIn: boolean; locale: AppLocale; onLoginRequired: () => void; onRememberWordWolf: () => void }) {
+function LobbyGameCard({ game, operation, activeRoom, isLoggedIn, locale, favorite, onToggleFavorite, onLoginRequired, onRememberWordWolf }: { game: LocalizedGameCatalogEntry; operation: GameOperation; activeRoom?: ActiveRoom; isLoggedIn: boolean; locale: AppLocale; favorite: boolean; onToggleFavorite: () => void; onLoginRequired: () => void; onRememberWordWolf: () => void }) {
   const { t } = useAppLocale();
   const localeAvailable = isGameLocaleAvailable(game.id, locale);
   const uiLocaleAvailable = isGameUiLocaleAvailable(game.id, locale);
@@ -116,11 +142,18 @@ function LobbyGameCard({ game, operation, activeRoom, isLoggedIn, locale, onLogi
     <div className={`mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t pt-2 text-xs ${active ? "border-white/15 text-slate-200" : "border-slate-200 text-slate-600"}`}><p><span className={active ? "text-cyan-200" : "text-slate-400"}>{t("games.players")}</span> <strong>{game.players}</strong></p><p title={game.timeSampleCount ? t("games.actualEstimateTitle", { count: game.timeSampleCount }) : t("games.initialEstimateTitle")}><span className={active ? "text-cyan-200" : "text-slate-400"}>{game.timeSampleCount ? t("games.actualEstimate") : t("games.estimate")}</span> <strong>{game.time}</strong></p></div>
     <div className="mt-3">{maintenance || unavailable ? <span className="inline-flex rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800">{t("games.unavailable")}</span> : game.href ? <span className={`inline-flex rounded-md px-3 py-1.5 text-xs font-bold shadow-sm ${active ? "bg-amber-300 text-amber-950" : isLoggedIn ? "bg-cyan-600 text-white" : "bg-slate-200 text-slate-500"}`}>{active ? t("games.return") : isLoggedIn ? t("games.play") : t("games.loginToPlay")}</span> : <span className="inline-flex rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-400">{t("games.comingSoon")}</span>}</div>
   </article>;
-  if (!game.href || maintenance || unavailable) return <div className="block opacity-80">{card}</div>;
-  return isLoggedIn ? <Link href={game.href} onClick={game.id === "wordwolf" && active ? onRememberWordWolf : undefined} className="block">{card}</Link> : <button type="button" onClick={onLoginRequired} className="block text-left">{card}</button>;
+  const entry = !game.href || maintenance || unavailable
+    ? <div className="block h-full opacity-80">{card}</div>
+    : isLoggedIn
+      ? <Link href={game.href} onClick={game.id === "wordwolf" && active ? onRememberWordWolf : undefined} className="block h-full">{card}</Link>
+      : <button type="button" onClick={onLoginRequired} className="block h-full w-full text-left">{card}</button>;
+  return <div className="relative h-full">
+    {entry}
+    <FavoriteButton gameTitle={game.title} favorite={favorite} onToggle={onToggleFavorite} variant="card" />
+  </div>;
 }
 
-function LobbyGameListRow({ game, operation, activeRoom, isLoggedIn, locale, onLoginRequired, onRememberWordWolf }: { game: LocalizedGameCatalogEntry; operation: GameOperation; activeRoom?: ActiveRoom; isLoggedIn: boolean; locale: AppLocale; onLoginRequired: () => void; onRememberWordWolf: () => void }) {
+function LobbyGameListRow({ game, operation, activeRoom, isLoggedIn, locale, favorite, onToggleFavorite, onLoginRequired, onRememberWordWolf }: { game: LocalizedGameCatalogEntry; operation: GameOperation; activeRoom?: ActiveRoom; isLoggedIn: boolean; locale: AppLocale; favorite: boolean; onToggleFavorite: () => void; onLoginRequired: () => void; onRememberWordWolf: () => void }) {
   const { t } = useAppLocale();
   const localeAvailable = isGameLocaleAvailable(game.id, locale);
   const uiLocaleAvailable = isGameUiLocaleAvailable(game.id, locale);
@@ -136,7 +169,7 @@ function LobbyGameListRow({ game, operation, activeRoom, isLoggedIn, locale, onL
         ? isLoggedIn ? t("games.play") : t("games.loginToPlay")
         : t("games.comingSoon");
   const row = (
-    <article className={`flex min-h-16 items-center gap-3 border-b border-white/10 px-3 py-3 text-white transition last:border-b-0 sm:px-4 ${active ? "bg-cyan-300/10 ring-1 ring-inset ring-cyan-300/40" : "hover:bg-white/[0.06]"} ${maintenance || unavailable ? "opacity-75" : ""}`}>
+    <article className={`flex min-h-16 items-center gap-3 px-3 py-3 pr-14 text-white transition sm:px-4 sm:pr-14 ${active ? "bg-cyan-300/10 ring-1 ring-inset ring-cyan-300/40" : "hover:bg-white/[0.06]"} ${maintenance || unavailable ? "opacity-75" : ""}`}>
       <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${active ? "bg-cyan-300 shadow-[0_0_12px_rgba(103,232,249,.9)]" : maintenance || unavailable ? "bg-amber-300" : game.href ? "bg-emerald-300" : "bg-slate-500"}`} aria-hidden="true" />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1.5">
@@ -155,7 +188,24 @@ function LobbyGameListRow({ game, operation, activeRoom, isLoggedIn, locale, onL
       </span>
     </article>
   );
-  return <GameEntryAction game={game} active={active} disabled={maintenance || unavailable} isLoggedIn={isLoggedIn} onLoginRequired={onLoginRequired} onRememberWordWolf={onRememberWordWolf}>{row}</GameEntryAction>;
+  return <div className="relative border-b border-white/10 last:border-b-0">
+    <GameEntryAction game={game} active={active} disabled={maintenance || unavailable} isLoggedIn={isLoggedIn} onLoginRequired={onLoginRequired} onRememberWordWolf={onRememberWordWolf}>{row}</GameEntryAction>
+    <FavoriteButton gameTitle={game.title} favorite={favorite} onToggle={onToggleFavorite} variant="list" />
+  </div>;
+}
+
+function FavoriteButton({ gameTitle, favorite, onToggle, variant }: { gameTitle: string; favorite: boolean; onToggle: () => void; variant: "card" | "list" }) {
+  const { t } = useAppLocale();
+  return <button
+    type="button"
+    aria-pressed={favorite}
+    aria-label={t(favorite ? "games.removeFavorite" : "games.addFavorite", { title: gameTitle })}
+    title={t(favorite ? "games.removeFavorite" : "games.addFavorite", { title: gameTitle })}
+    onClick={onToggle}
+    className={`z-10 grid h-9 w-9 place-items-center rounded-full border text-xl leading-none shadow-md transition hover:scale-105 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 ${variant === "card" ? "absolute right-5 top-5" : "absolute right-3 top-1/2 -translate-y-1/2"} ${favorite ? "border-amber-300 bg-amber-300 text-amber-950" : "border-white/40 bg-slate-950/70 text-white hover:bg-slate-900"}`}
+  >
+    <span aria-hidden="true">{favorite ? "★" : "☆"}</span>
+  </button>;
 }
 
 function GameEntryAction({ game, active, disabled, isLoggedIn, onLoginRequired, onRememberWordWolf, children }: { game: LocalizedGameCatalogEntry; active: boolean; disabled: boolean; isLoggedIn: boolean; onLoginRequired: () => void; onRememberWordWolf: () => void; children: ReactNode }) {
