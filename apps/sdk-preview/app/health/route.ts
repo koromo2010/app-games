@@ -6,7 +6,8 @@ export function GET() {
       channel: process.env.VERCEL_GIT_COMMIT_REF === "main"
         ? "main"
         : "development",
-      grantVersion: 3,
+      grantVersion: 4,
+      grantVerification: "ed25519",
     },
     { headers: { "Cache-Control": "no-store" } },
   );

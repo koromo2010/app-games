@@ -1,4 +1,3 @@
-import type { SdkPreviewGrant } from "@game-fields/sdk-preview-auth";
 import { cookies } from "next/headers";
 import {
   fetchPreviewAsset,
@@ -6,12 +5,13 @@ import {
   previewContentType,
 } from "@/lib/preview-source";
 import { injectGameFieldsPackageClient } from "@/lib/package-client-runtime";
-import { verifyPortalPreviewGrant } from "@/lib/preview-grant-verifier";
 import {
   createPreviewAssetToken,
   packageAssetBasePath,
   packageCookieName,
   previewContentSecurityPolicy,
+  type PreviewClientSession,
+  verifyPreviewClientSessionToken,
   verifyPreviewAssetToken,
 } from "@/lib/preview-security";
 
@@ -31,7 +31,7 @@ export async function GET(
   const usesAssetToken = requestedParts[0] === "a";
   let assetToken = usesAssetToken ? requestedParts[1] ?? "" : "";
   const assetParts = usesAssetToken ? requestedParts.slice(2) : requestedParts;
-  let grant: SdkPreviewGrant | null = null;
+  let grant: PreviewClientSession | null = null;
 
   if (usesAssetToken) {
     try {
@@ -43,14 +43,15 @@ export async function GET(
     }
   } else {
     const token = (await cookies()).get(packageCookieName(scope))?.value ?? "";
-    try {
-      grant = await verifyPortalPreviewGrant(token);
-    } catch {
-      return new Response("Package runtime is not configured.", { status: 503 });
-    }
+    grant = verifyPreviewClientSessionToken(token);
     if (
       !grant
       || grant.audience !== "package-client"
+      || grant.environment !== (
+        process.env.VERCEL_GIT_COMMIT_REF === "main"
+          ? "production"
+          : "development"
+      )
       || grant.instanceId !== params.instanceId
       || grant.gameId !== params.gameId
       || grant.revision !== params.revision

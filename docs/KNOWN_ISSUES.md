@@ -6,7 +6,7 @@
 
 ## 2026-07-27 SDK本番の正式Room作成がPreviewの403で失敗する
 
-状態: 修正実装済み・本番再デプロイ／実機確認待ち（2026-07-27、回帰テスト追加）
+状態: セキュリティ再修正実装済み・公開鍵固定／本番再デプロイ／実機確認待ち（2026-07-27、回帰テスト追加）
 
 `game-fields.com`の`POST /api/game-sdk/ai-word-guess/rooms`は503
 `GAME_SDK_REMOTE_RUNNER_UNAVAILABLE`、同時刻の`preview.game-fields.com`は
@@ -15,11 +15,18 @@ server runner入口で403を返した。PortalとPreviewは同じmain commitだ�
 同一値として扱ったcross-project HMAC検証が原因だった。環境台帳は「同じ値」と
 記録していたが、存在・再デプロイだけを確認し、実際のgrant往復を確認していなかった。
 
-Portal発行grantの検証をPortal自身の固定APIへ移し、Previewはtokenを本文で渡して
-有効なgrantだけを受け取る。Preview側の秘密値は同一revisionのasset tokenへ限定し、
-両Projectの秘密値一致を正式Room起動の前提から外す。server runnerの拒否理由は
-安全な機械コードで本体Telemetryまで運び、利用者レスポンスでは引き続き一時障害へ
-正規化する。
+当初はPortal発行grantの検証をPortal自身の公開APIへ移したが、これは正式公開の
+完了条件を満たさない。client tokenがURL queryに8時間残り、Previewの全検証が
+公開APIの可用性へ依存するためである。
+
+再修正では、Portal値からEd25519秘密鍵を導出してclient／server grantへ署名し、
+Previewは固定した公開鍵だけでローカル検証する。汎用検証APIは削除する。client入口は
+60秒grantをURL fragmentへ置き、交換ページがfragmentを履歴から即時消去してPOSTした
+後だけ、Preview自身の8時間・HttpOnly・Path限定Cookieへ交換する。server grantは
+10分、audience・environment・channel・revision・bundle hashを従来どおり固定する。
+Preview側の秘密値はローカルCookieと同一revision asset tokenだけに使い、両Projectの
+秘密値一致を正式Room起動の前提から外す。server runnerの拒否理由は安全な機械コードで
+本体Telemetryまで運び、利用者レスポンスでは引き続き一時障害へ正規化する。
 
 同時監査で、問い合わせ通知メールの失敗が`.catch(() => undefined)`で完全に
 握り潰されることも確認した。問い合わせ保存と通知送信を別イベントへ分け、

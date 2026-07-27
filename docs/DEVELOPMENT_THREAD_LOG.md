@@ -4749,3 +4749,35 @@
 
 - mainへ反映して本体、SDK Portal、SDK PreviewのDeploymentを確認し、正式Room作成を再試行する。
 - 次回の問い合わせ投稿で`contact.notification`の成功または安全な失敗コードを確認する。
+
+## 2026-07-27 — 正式Room grantのEd25519化とURL token撤去
+
+### 利用者からの要望
+
+- 正式公開中のSDK Room認証を「限定運用なら許容」ではなく、一般公開できる安全境界まで修正する。
+
+### 判断
+
+- Portalの公開検証APIへ全Preview requestを同期依存させる中間修正は完了扱いにしない。
+- PortalだけがEd25519署名鍵を持ち、Previewは公開鍵だけを固定してserver grantをローカル検証する。
+- client入口の8時間tokenをURL queryへ載せない。60秒の交換grantをfragmentへ渡し、履歴から即時消去してPOSTした後だけPreviewローカルのHttpOnly Cookieへ交換する。
+
+### 実施結果
+
+- grant schemaをv4へ上げ、Portalの既存秘密値からEd25519秘密鍵を用途分離して導出する署名と公開鍵exportを追加した。
+- Previewの汎用`/api/preview-token/verify`依存を削除し、公開鍵検証へ変更した。
+- client runtime URLを`?token=`から`#token=`へ変更し、60秒で失効する交換ページと8時間・SameSite Strict・Path限定のPreviewローカルCookieを追加した。
+- server grantは10分、audience・environment・channel・revision・bundle SHA-256固定を維持した。
+- 段階公開でPortal公開鍵を取得する`/.well-known/sdk-preview-public-key`を追加した。productionへ公開鍵を固定した後はRoom実行時に同endpointへ依存しない。
+
+### 検証
+
+- 全570テストに成功した。
+- 変更ファイルのESLint、本体・SDK Portal・SDK Previewのproduction buildに成功した。
+- `verify`のversions、環境台帳、ゲーム標準、SDK境界、SDK Help、migration、Shell契約は成功した。
+- 全体ESLintだけは今回未変更の`GameSdkShellHeader.tsx`と`site-admin-passkey-client.ts`に残る既知2件で失敗した。
+
+### 未対応・保留
+
+- 第1段階をmainへ反映し、Portalのproduction公開鍵を取得する。
+- 取得した公開鍵をPreviewへ固定して再検証・再公開し、本番Room作成を実機確認する。

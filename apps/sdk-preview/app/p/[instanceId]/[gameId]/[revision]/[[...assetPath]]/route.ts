@@ -1,12 +1,12 @@
-import type { SdkPreviewGrant } from "@game-fields/sdk-preview-auth";
 import { cookies } from "next/headers";
 import { fetchPreviewAsset, normalizePreviewAssetPath, previewContentType } from "@/lib/preview-source";
-import { verifyPortalPreviewGrant } from "@/lib/preview-grant-verifier";
 import {
   createPreviewAssetToken,
   previewAssetBasePath,
   previewContentSecurityPolicy,
   previewCookieName,
+  type PreviewClientSession,
+  verifyPreviewClientSessionToken,
   verifyPreviewAssetToken,
 } from "@/lib/preview-security";
 import { GAME_FIELDS_PRESET_ASSET, gameFieldsPresetRuntimeSource, injectGameFieldsPreset } from "@/lib/preset-runtime";
@@ -23,7 +23,7 @@ export async function GET(
   const usesAssetToken = requestedParts[0] === "a";
   let assetToken = usesAssetToken ? requestedParts[1] ?? "" : "";
   const assetParts = usesAssetToken ? requestedParts.slice(2) : requestedParts;
-  let grant: SdkPreviewGrant | null = null;
+  let grant: PreviewClientSession | null = null;
 
   if (usesAssetToken) {
     try {
@@ -35,13 +35,14 @@ export async function GET(
     }
   } else {
     const token = (await cookies()).get(previewCookieName(scope))?.value ?? "";
-    try {
-      grant = await verifyPortalPreviewGrant(token);
-    } catch {
-      return new Response("Preview runtime is not configured.", { status: 503 });
-    }
+    grant = verifyPreviewClientSessionToken(token);
     if (!grant
       || grant.audience !== "mock-client"
+      || grant.environment !== (
+        process.env.VERCEL_GIT_COMMIT_REF === "main"
+          ? "production"
+          : "development"
+      )
       || grant.instanceId !== params.instanceId
       || grant.gameId !== params.gameId
       || grant.revision !== params.revision) {

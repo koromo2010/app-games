@@ -50,7 +50,7 @@ devとmainの採用済みSDKアプリ情報は環境別DBに分離する。管�
 
 採用済みSDKゲームのAppSetとmanifestは不変のまま保持し、公開後に調整する表示名と広場カード画像は`config/sdk-game-presentations.ts`で管理する。現行の`ai-word-guess`は公開名「コトバに迫れ」と専用カード画像を使用する。
 
-SDK Portalが発行するpackage client／server grantはPortal自身の固定検証APIで検証する。隔離Previewへcross-project共通HMAC値を配布することを正式Room起動の前提にせず、Preview側の署名値は認証後の同一revision asset tokenだけに使用する。
+SDK Portalはpackage client／server grantをEd25519で署名する。portable server grantは隔離Previewが固定した公開鍵だけでローカル検証し、Portalの検証APIやcross-project共通秘密値へ依存しない。ブラウザ入口は60秒のclient交換grantをURL fragmentへ渡し、fragmentを履歴から即時消去してPOSTした後、Preview自身の8時間・HttpOnly・Path限定Cookieへ交換する。Preview側の秘密値はこのローカルCookieと同一revision asset tokenだけに使用する。
 
 ## 共通LLMゲートウェイ
 

@@ -1,15 +1,28 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import {
+  createHash,
+  createHmac,
+  createPrivateKey,
+  createPublicKey,
+  sign,
+  timingSafeEqual,
+  verify,
+} from "node:crypto";
 
 const INSTANCE_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])?$/;
 const GAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?$/;
 const REVISION_PATTERN = /^[a-f0-9]{40}$/;
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
 const MINIMUM_SECRET_LENGTH = 32;
+const SDK_PREVIEW_TOKEN_PREFIX = "gfsp4";
+const ED25519_PKCS8_SEED_PREFIX = Buffer.from(
+  "302e020100300506032b657004220420",
+  "hex",
+);
 const SDK_SERVICE_AUTH_VERSION = 1;
 const SDK_SERVICE_AUTH_MAX_AGE_MS = 60_000;
 
 export type SdkPreviewGrant = {
-  version: 3;
+  version: 4;
   audience: "mock-client" | "package-client" | "package-server";
   environment: "production" | "development";
   channel: "candidate-preview" | "development" | "main";
@@ -30,7 +43,7 @@ function assertSecret(secret: string) {
 export function isSdkPreviewGrant(value: unknown): value is SdkPreviewGrant {
   if (!value || typeof value !== "object") return false;
   const grant = value as Partial<SdkPreviewGrant>;
-  return grant.version === 3
+  return grant.version === 4
     && (
       grant.audience === "mock-client"
       || grant.audience === "package-client"
@@ -70,30 +83,75 @@ export function isSdkPreviewGrant(value: unknown): value is SdkPreviewGrant {
     && Number(grant.expiresAt) > 0;
 }
 
-function signatureFor(encodedPayload: string, secret: string) {
-  return createHmac("sha256", secret).update(encodedPayload).digest("base64url");
+function sdkPreviewPrivateKey(secret: string) {
+  assertSecret(secret);
+  const seed = createHash("sha256")
+    .update("game-fields-sdk-preview-grant:ed25519:v4\0", "utf8")
+    .update(secret, "utf8")
+    .digest();
+  return createPrivateKey({
+    key: Buffer.concat([ED25519_PKCS8_SEED_PREFIX, seed]),
+    format: "der",
+    type: "pkcs8",
+  });
+}
+
+export function sdkPreviewPublicKey(secret: string) {
+  return createPublicKey(sdkPreviewPrivateKey(secret))
+    .export({ format: "der", type: "spki" })
+    .toString("base64url");
 }
 
 export function createSdkPreviewToken(grant: SdkPreviewGrant, secret: string) {
-  assertSecret(secret);
   if (!isSdkPreviewGrant(grant)) throw new Error("SDK preview grant is invalid.");
   const encodedPayload = Buffer.from(JSON.stringify(grant), "utf8").toString("base64url");
-  return `${encodedPayload}.${signatureFor(encodedPayload, secret)}`;
+  const signedMessage = `${SDK_PREVIEW_TOKEN_PREFIX}.${encodedPayload}`;
+  const signature = sign(
+    null,
+    Buffer.from(signedMessage, "utf8"),
+    sdkPreviewPrivateKey(secret),
+  ).toString("base64url");
+  return `${signedMessage}.${signature}`;
 }
 
-export function verifySdkPreviewToken(token: string, secret: string, now = Date.now()) {
-  assertSecret(secret);
-  const [encodedPayload, suppliedSignature, extra] = token.split(".");
-  if (!encodedPayload || !suppliedSignature || extra) return null;
+export function verifySdkPreviewToken(
+  token: string,
+  encodedPublicKey: string,
+  now = Date.now(),
+) {
+  const [prefix, encodedPayload, encodedSignature, extra] = token.split(".");
+  if (
+    prefix !== SDK_PREVIEW_TOKEN_PREFIX
+    || !encodedPayload
+    || !encodedSignature
+    || extra
+  ) {
+    return null;
+  }
 
-  const expected = Buffer.from(signatureFor(encodedPayload, secret), "base64url");
-  let supplied: Buffer;
+  let publicKey: ReturnType<typeof createPublicKey>;
+  let suppliedSignature: Buffer;
   try {
-    supplied = Buffer.from(suppliedSignature, "base64url");
+    publicKey = createPublicKey({
+      key: Buffer.from(encodedPublicKey, "base64url"),
+      format: "der",
+      type: "spki",
+    });
+    suppliedSignature = Buffer.from(encodedSignature, "base64url");
   } catch {
     return null;
   }
-  if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) return null;
+  if (
+    suppliedSignature.length !== 64
+    || !verify(
+      null,
+      Buffer.from(`${prefix}.${encodedPayload}`, "utf8"),
+      publicKey,
+      suppliedSignature,
+    )
+  ) {
+    return null;
+  }
 
   try {
     const parsed = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8")) as unknown;

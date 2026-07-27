@@ -1,6 +1,6 @@
 # 環境変数管理台帳
 
-最終更新: 2026-07-26
+最終更新: 2026-07-27
 
 現在配置はこの文書、追加・変更・削除の進行中依頼は`config/environment-change-registry.json`を正本とする。実値、接続文字列、APIキー、パスワードはGitへ保存しない。Vercel、Neon、Upstash、Blob、各API提供元だけで管理する。
 
@@ -256,7 +256,7 @@ Sensitive設定済みの互換変数をVercel上で複製できない移行期�
 
 | キー | SDK Portal | Isolated Preview | Sensitive | 用途 |
 | --- | --- | --- | --- | --- |
-| `SDK_PREVIEW_SIGNING_SECRET` | 必須・環境別。grantを署名し、Portal内の検証APIで検証 | Preview内asset tokenの署名専用。Portalと同じ値でなくてよい | Yes | Portal発行grantは固定Portalの検証APIへ照会する。Preview側の値は認証済みHTMLが発行する同一revision asset tokenだけに使用。いずれも32byte以上 |
+| `SDK_PREVIEW_SIGNING_SECRET` | 必須・環境別。Ed25519秘密鍵を導出してclient／server grantを署名 | 交換後のローカルCookieと同一revision asset tokenのHMAC署名専用。Portalと同じ値にしない | Yes | Previewは固定したPortal公開鍵だけでgrantをローカル検証する。公開鍵は秘密情報ではなくコードへ固定し、通常実行時にPortalへ照会しない。いずれの秘密値も32byte以上 |
 | `SDK_PREVIEW_BASE_URL` | `https://preview-dev.game-fields.com`または本番preview | 不要 | No | Portalがiframe実行URLを組み立てる |
 | `SDK_PREVIEW_FRAME_ANCESTORS` | 不要 | 対応するSDK Portal originだけ | No | CSP `frame-ancestors`の許可元 |
 | `SDK_MOCK_GITHUB_REPOSITORY` | 専用非公開`owner/repo` | 同じリポジトリ | No | モックGit正本。`app-games`を使わない |
@@ -279,7 +279,7 @@ SDK `llm` adapter、module lab、Preview中継API `/api/sdk-preview/llm`も本�
 
 | キー | `app-games-sdk-dev` | `app-games-preview-dev` | Vercel対象 | 状態 |
 | --- | --- | --- | --- | --- |
-| `SDK_PREVIEW_SIGNING_SECRET` | Team SharedをLink | Team SharedをLink | Production | 既存Linkは維持するが、Portal grantの検証はPortalへ委譲し、cross-projectの値一致をRuntime前提にしない |
+| `SDK_PREVIEW_SIGNING_SECRET` | Team SharedをLink | Team SharedをLink | Production | 既存Linkを各Projectの別用途に限定する。PortalはEd25519署名、PreviewはローカルCookie／asset署名。値一致をRuntime前提にしない |
 | `SDK_PREVIEW_BASE_URL` | 未登録。コード既定値`https://preview-dev.game-fields.com`を使用 | 不要 | Production | previewドメイン割当・Valid Configuration確認済み |
 | `SDK_PREVIEW_FRAME_ANCESTORS` | 不要 | 未登録。`develop`時のコード既定値として外枠`https://sdk-dev.game-fields.com`と、ゲーム固有iframeの直近親`https://dev.game-fields.com`を許可 | Production | 本体UI共用後の二段iframeに対応。明示設定する場合も両originが必要 |
 | `SDK_MOCK_GITHUB_REPOSITORY` | Project Variable登録済み。値はdev専用private repository | Project Variable登録済み | Production | 追加後Deployment作成済み、保存成功を実機確認済み |
@@ -304,7 +304,7 @@ SDK `llm` adapter、module lab、Preview中継API `/api/sdk-preview/llm`も本�
 
 | キー | `app-games-sdk` | `app-games-sdk-preview` | Vercel対象 | 状態 |
 | --- | --- | --- | --- | --- |
-| `SDK_PREVIEW_SIGNING_SECRET` | Project Variable、Sensitive。Portal grantの署名・検証 | Project Variable、Sensitive。Preview内asset署名だけ | Production | 2026-07-27の本番403で同一値との記録を撤回。コード上のcross-project同値依存を廃止し、再デプロイ・実機確認待ち |
+| `SDK_PREVIEW_SIGNING_SECRET` | Project Variable、Sensitive。Ed25519秘密鍵導出とgrant署名 | Project Variable、Sensitive。Preview内Cookie／asset署名だけ | Production | 2026-07-27の本番403で同一値との記録を撤回。Ed25519公開鍵検証へ移行し、cross-project同値依存と汎用検証APIを廃止。公開鍵固定後の再デプロイ・実機確認待ち |
 | `SDK_MOCK_GITHUB_REPOSITORY` | `koromo2010/game-fields-sdk-mocks` | 同じprivate repository | Production | 両Projectへ登録・再デプロイ済み |
 | `SDK_MOCK_GITHUB_WRITE_TOKEN` | Project Variable、Sensitive | 設定禁止・未設定 | Production | 対象repositoryのContents read/writeだけ。90日期限 |
 | `SDK_MOCK_GITHUB_READ_TOKEN` | 設定禁止・未設定 | Project Variable、Sensitive | Production | 対象repositoryのContents read-onlyだけ。90日期限 |
@@ -317,7 +317,7 @@ SDK `llm` adapter、module lab、Preview中継API `/api/sdk-preview/llm`も本�
 | private package Git | `koromo2010/game-fields-sdk-mocks`をPrivateで作成済み。Portal書込資格とPreview読取資格を分離 | 本番package保存後に専用branch・commit・読取を実機確認 |
 | Portal Vercel Project | `app-games-sdk`、Root Directory `apps/sdk-portal`、Production Branch `main`。`main@0e7889c`のDeploymentがREADY。`app-games-sdk-neon`はProductionだけへLink済み | RedisをLinkし、develop統合後のbuild migrationで`schemaVersion: 4`を確認 |
 | Preview Vercel Project | `app-games-sdk-preview`、Root Directory `apps/sdk-preview`、Node.js 24.x、Production Branch `main`。production専用のasset署名鍵・Git読取資格だけを登録 | Portal grant検証委譲版を再デプロイし、正式Room作成を実機確認 |
-| Preview domain | `preview.game-fields.com`割当済み・Valid Configuration。本番Room作成時に旧cross-project HMAC検証が403を返すことを確認 | Portal検証委譲後に`/health`、package client、server runnerを実機確認 |
+| Preview domain | `preview.game-fields.com`割当済み・Valid Configuration。本番Room作成時に旧cross-project HMAC検証が403を返すことを確認 | Ed25519公開鍵固定後に`/health`、fragment交換、package client、server runnerを実機確認 |
 
 本番PreviewにはSDK DB、Redis、Blob、管理者資格、語彙DB、LLM資格、Git書込資格を追加しない。
 `app-games-sdk`と`app-games-sdk-preview`の`Production Branch`は`main`へ統一済み。
