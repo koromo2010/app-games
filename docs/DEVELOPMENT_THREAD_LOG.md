@@ -2594,3 +2594,79 @@ Total output lines: 6329
   本人によるリンク表示、クリック、既存SSO、`sdk-dev.game-fields.com/dashboard`到達の
   実機確認だけを未完了として残す。
 - `main`側の環境変数登録・デプロイは今回の対象外であり、未変更。
+
+## 2026-07-27 — bbb7efd基準のv2／CHIPS再確認とclient grant発行時点修正
+
+### 利用者からの要望
+
+- `develop`の基準を`f62963d`から`bbb7efd`へ更新し、以後の検証を新基準で行う。
+- browser recoveryを解消して、現行発行器のv2 token発行・取得を実Networkで再確認する。
+  `/health`の200を成功証拠にしない。
+- 正規署名済みv1 tokenがない状態でのテスト用secret追試は止め、正規tokenを取得できる
+  見込みだけ判断する。
+- ステップ1、opaque-origin／CHIPSブラウザ最終ゲート、SDKダッシュボード導線、
+  `SDK_ACCOUNT_LINK_SECRET`、管理者パスキーRP ID分離の状態を同じ基準で再確認する。
+
+### 基準と配備確認
+
+- remote `develop`は`bbb7efd`の後に文書だけの4 commitがあり、作業開始時の先端は
+  `5a9a670`だった。`bbb7efd..5a9a670`に挙動変更がないことを確認し、
+  SDKダッシュボード復旧の挙動基準は`bbb7efd`のまま、検証対象Deploymentは
+  現行先端として扱った。
+- 作業中のremote先端を更新直前にも再取得し、`5a9a670`から動いていないことを確認した。
+- client grant発行時点修正をGitHub commit `a1437ca`としてforceなしでdevelopへ反映した。
+- 本体dev `dpl_AY3DJNxEYLVvHMusS3UyYUmaCR3T`、SDK Portal dev
+  `dpl_HoFuQekzsQ3jHBurDYAcKDSS9PHM`、Preview Runtime dev
+  `dpl_Gj5p3RiwcYiUrEuW2YSRhSz3d9Jc`が同commitで`READY`となり、
+  errors-only build logはいずれも完了行だけでbuild error 0だった。
+
+### v2／opaque-originブラウザ検証
+
+- SDK Portalにログイン済みの非所有者`test1`から`moi-lab`のスカルを開き、
+  公開Room `XK06`へ`SDK Player`として参加した。
+- 実ChromeのNetworkで`GET package-open = 200`、client grant交換
+  `POST package-open = 200`、path単位v2で`package-room.js`、`styles.css`、
+  `mock.js`がすべて200となることを確認した。token本文・署名値は記録しない。
+- nested iframeは`allow-same-origin`なしのsandboxを維持し、スカルのゲーム面、
+  手札、Room Viewを実際に描画した。`/health`の200は証拠に使っていない。
+- これにより現行v2の発行・取得と、Cookie／CHIPSへ依存しないopaque-originの
+  ブラウザ最終ゲートは完了した。
+
+### v1判断
+
+- リポジトリ上の旧v1 fixtureは固定の正規署名済みtokenではなく、
+  テスト用secretで実行時生成するものだった。devへ送れば署名不一致403になるだけである。
+- リポジトリ、共有ブラウザとも正規署名済みv1 tokenを保持しておらず、
+  現行発行器はv2-onlyである。切替前から開いていた実sessionも確認できなかった。
+- したがって正規v1を非侵襲に追加取得できる現実的な見込みはない。旧発行器Deploymentや
+  本番secretを意図的に再利用する追試は行わず、v1由来子asset継続だけ証拠不足として
+  保留する。ステップ1全体は完了扱いにしない。
+
+### client grant待機失効と修正
+
+- ページ表示後にRoom参加まで約60秒待つと、Server Component render時に発行済みだった
+  client grantが失効し、`GET package-open = 200`の後の
+  `POST package-open = 403`でゲーム領域が空白になることを実Networkで確認した。
+- Previewと採用済みPackageの両方で、iframeのsrcを同一origin認証済み
+  `client-runtime` routeへ変更した。routeは固定revisionを再検証し、
+  iframeがnavigateする時点で新しいruntime URLを取得して307する。
+- `npm run verify`、全635テスト、変更ファイルlint、本体78 routeの
+  `npm run build`に成功した。
+- 配備後の60秒超再確認のためRoom退出を押したところ、確認ダイアログを契機に
+  クラウドChromeがbrowser recoveryへ入り、新規タブでもDOM取得が回復しなかった。
+  修正後実機再確認はv2／opaque-origin成功と分けて未完了とする。
+
+### SDKダッシュボード、秘密値、パスキー
+
+- 非所有者`test1`のアカウントメニューにSDKダッシュボード導線が表示されないことを
+  実Chromeで再確認した。
+- SDK Portalが現在発行した`test1`のcreator限定Preview linkを、本体developの
+  `POST /api/sdk-preview/session`が200で交換した。これは両Projectの
+  `SDK_ACCOUNT_LINK_SECRET`が同一dev値で、登録後Deploymentへ反映された実Network証拠で
+  あり、秘密値本文は確認・記録していない。
+- moi-dev所有者のリンク表示、クリック、account-link SSO、Portal `/dashboard`到達は、
+  本人資格情報がないため未確認である。
+- 管理者パスキーはdevelopの既定RP ID `dev.game-fields.com`とOrigin
+  `https://dev.game-fields.com`を選ぶコードが配備済みで、分離・fail-closed回帰テストも
+  成功している。Windows Hello上の旧dev資格情報リセット、再登録、通常ログインは
+  platform authenticatorを持つ本人端末が必要なため未確認である。

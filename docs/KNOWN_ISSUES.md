@@ -69,7 +69,7 @@ Preview側の秘密値はpath単位asset tokenだけに使い、両Projectの
 
 ## 2026-07-27 Preview共有asset token検証器を段階配備なしでv2-onlyへ切り替えた
 
-状態: ステップ1コード・develop配備済み／実Network確認待ち／main反映禁止
+状態: ステップ1コード・develop配備済み／v2実Network確認済み・v1正規token不在で保留／main反映禁止
 
 Cookieなしの直接HTML方式をdevへ配備した際、スカルを含む正式Packageとmockが共有する
 `createPreviewAssetToken`／`verifyPreviewAssetToken`を、旧v1 JSON形式から
@@ -109,11 +109,21 @@ path／source不一致を自動テストで固定した。これはローカル�
 2026-07-27 15:05:23 JSTに本体SDK dev、15:06:09 JSTにPreview Runtime dev、
 15:07:15 JSTに本体devが同commitで`READY`となり、3件ともbuild errorは0、
 対象DeploymentのRuntime Logにもerror／fatalは観測されていない。
-ただしクラウドブラウザのCDP接続は画面遷移後のtab取得時にrecoveryを繰り返し、
-旧v1由来asset要求と新v2発行を実Networkで確認できていない。このため、
-`v1由来要求が502にならず子assetまで継続動作すること`と
-`現行発行器がv2を発行し取得が成功すること`の両方を実Networkで確認するまでは、
-3 Projectが`READY`でもステップ1およびdevの互換切断解消を完了扱いにしない。
+クラウドブラウザのCDP recovery解消後、2026-07-27 17:03 JSTに
+`test1`の正式Previewからスカルへ参加し、`GET package-open = 200`、
+grant交換`POST package-open = 200`、現行発行器が作ったpath単位v2で
+`package-room.js`、`styles.css`、`mock.js`をすべて200取得し、
+`allow-same-origin`なしの実Chrome iframeへゲーム画面とRoom Viewが描画されることを
+確認した。`/health`の200はこの成功証拠に含めていない。これによりv2発行・取得と
+opaque-originブラウザ最終ゲートは完了した。
+
+一方、リポジトリの旧v1 fixtureは固定の正規署名済みtokenではなく、
+テスト用secretから実行時生成するため、devへ送っても署名不一致の403にしかならない。
+リポジトリと共有ブラウザに正規署名済みv1 tokenはなく、現行発行器もv2-onlyである。
+正規v1を非侵襲に取得できる見込みは、切替前から開いた実sessionが残る場合に限られるが、
+該当sessionは確認できなかった。旧発行器または本番secretを意図的に再利用する追試は
+行わない。このため`v1由来要求が502にならず子assetまで継続動作すること`だけを
+証拠不足として保留し、ステップ1全体は完了扱いにしない。
 
 devの復旧・退役条件:
 
@@ -134,6 +144,31 @@ mainではdevの結果をそのまま一括反映しない。まず本番verifie
 実装前に全発行器、全検証器、全呼出し元、最大TTL、稼働aliasを一覧化し、
 `検証器の双方対応 → 新形式発行 → 最大TTL待機 → 旧形式削除`を配備計画と
 回帰fixtureへ明記する。devで影響が小さいことは段階配備を省く理由にしない。
+
+## 2026-07-27 Room参加前の待機でpackage client grantが失効する
+
+状態: 修正実装・dev配備済み／ローカル契約テスト・production build成功／60秒超実機再確認はbrowser recoveryで保留
+
+正式PreviewページのServer Componentは表示時に60秒のclient grantを含む
+`runtimeUrl`を取得していたが、`GameSdkFrame`がゲームiframeをmountするのはRoom作成・
+参加後だった。このため制作者がロビーで約60秒以上待ってからRoomへ参加すると、
+`GET package-open`は交換ページを返す一方、grant交換`POST package-open`が403となり、
+ゲーム固有領域が空白になった。ページreloadでRoomが即時復元される場合は新しいgrantを
+すぐ交換できたため、通常のv2発行・取得確認自体はreload後に成功している。
+
+修正では、Previewと採用済みPackageの`runtimeUrl`を、同一originの認証済み
+`client-runtime` routeへ変更する。routeはpageで固定した40桁revisionを再検証し、
+iframeが実際にnavigateした時点でPortalから新しいruntime definitionを取得して、
+307で短命grant付きPreview URLへ遷移する。認証、rate limit、revision一致、
+`private, no-store`、`no-referrer`を維持し、v1／v2のasset verifierは変更しない。
+
+修正commit `a1437ca`はdevelopへforceなしで反映し、本体dev
+`dpl_AY3DJNxEYLVvHMusS3UyYUmaCR3T`、SDK Portal dev
+`dpl_HoFuQekzsQ3jHBurDYAcKDSS9PHM`、Preview Runtime dev
+`dpl_Gj5p3RiwcYiUrEuW2YSRhSz3d9Jc`がすべて`READY`、build error 0となった。
+ただしRoom退出確認ダイアログを契機にクラウドChromeがbrowser recoveryへ入り、
+新規タブでもDOM取得が回復しなかったため、配備後に60秒超待ってから参加する再現確認は
+未完了である。前項のv2発行・取得とopaque-origin描画成功とは分けて保留する。
 
 ## 最優先: 本人確認と秘密情報
 

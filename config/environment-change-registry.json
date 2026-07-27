@@ -159,6 +159,19 @@
                   "note": "既存sdk-dev-redisをSDK Portal間だけで共用し、mainはsdk:production、developはsdk:development名前空間を使う。"
           },
           {
+                  "id": "2026-07-27-app-games-dev-sdk-account-link-secret",
+                  "key": "SDK_ACCOUNT_LINK_SECRET",
+                  "project": "app-games-dev,app-games-sdk-dev",
+                  "branch": "develop",
+                  "environment": "Production",
+                  "sensitive": true,
+                  "operation": "set",
+                  "status": "verified",
+                  "redeployRequired": true,
+                  "temporary": false,
+                  "note": "両Projectへ同一のdev専用値をSensitive登録済み。2026-07-27にVercel画面でapp-games-dev側の登録を確認し、SDK Portalがtest1向けに発行したcreator限定Preview linkを現行app-games-devのPOST /api/sdk-preview/sessionが200で交換したため、同値と再デプロイ反映を実Networkで確認した。moi-dev本人による表アカウントからSDK Portal /dashboardへの所有者SSOは別途未確認。"
+          },
+          {
                   "id": "2026-07-27-app-games-dev-sdk-portal-internal-url",
                   "key": "SDK_PORTAL_INTERNAL_URL",
                   "project": "app-games-dev",

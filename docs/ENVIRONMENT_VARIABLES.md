@@ -209,7 +209,7 @@ Sensitive設定済みの互換変数をVercel上で複製できない移行期�
 | キー／リソース | Vercel対象 | Sensitive | 現在状態 | 次の対応 |
 | --- | --- | --- | --- | --- |
 | `PLAYER_SESSION_SECRET` | Production | Yes | Project Variableの登録を画面確認済み・追加後の再デプロイ済み。未設定エラーの解消を実行ログで確認済み | DB・Redis復旧後に登録・ログインを実機確認 |
-| `SDK_ACCOUNT_LINK_SECRET` | Production | Yes | Project Variableへの追加申告済み。最新の一覧画面による再確認は未実施 | 本体とSDK Portalで同一のdev専用値であること、再デプロイ後のSSOを確認 |
+| `SDK_ACCOUNT_LINK_SECRET` | Production | Yes | 2026-07-27、Project VariableのSensitive登録をVercel画面で確認。現行Deployment上でSDK Portalが発行した`test1`のcreator限定Preview linkを本体`POST /api/sdk-preview/session`が200で交換し、両Projectのdev専用値一致と再デプロイ反映を実Networkで確認済み | moi-dev本人で表アカウント→SDK Portal `/dashboard`の所有者SSOを確認 |
 | `LEGACY_WORD_DATABASE_URL` | Production | Yes | Project Variable登録済み。旧347行→346語、不足27語同期、分類適用、回帰確認まで完了。一時build hookは撤去済み | Project Variableを削除し、旧2表の一時`SELECT`とschema `USAGE`をrevokeした後、通常commitを再デプロイ |
 | 既存`DATABASE_URL` | Production | Yes | Project Variableの存在を画面確認済み。接続先の正当性は未確認で、現行APIではPostgreSQL接続エラー | 削除せず保持。新Neonをコード側で明示選択後に廃止判断 |
 | `app-games-dev-neon` | Production | Integration管理 | Singapore、Authなし、Freeで作成し`app-games-dev`へ接続済み。`0773a78`の再デプロイ後、アカウント照会でschema自動適用と接続を確認済み | 新規登録・ログインの画面実機確認 |
@@ -289,7 +289,7 @@ SDK `llm` adapter、module lab、Preview中継API `/api/sdk-preview/llm`も本�
 | `SDK_MOCK_GITHUB_BRANCH` | 未登録。コード既定値`sdk-previews`を使用 | 不要 | Production | 初回mock保存時にbranchを自動作成 |
 | `SDK_MOCK_GITHUB_WRITE_TOKEN` | Project Variable、Sensitive登録済み | 設定禁止・未設定 | Production | 専用private repoのContents read/writeだけ。保存成功を実機確認済み |
 | `SDK_MOCK_GITHUB_READ_TOKEN` | 設定禁止・未設定 | Project Variable、Sensitive登録済み | Production | 専用private repoのContents read-onlyだけ |
-| `SDK_ACCOUNT_LINK_SECRET` | Project Variable、Sensitive登録を画面確認済み | 設定禁止・未登録 | Production | 本体develop側への追加申告済み。両者が同一のdev専用値であることとSSO実機確認は未完了 |
+| `SDK_ACCOUNT_LINK_SECRET` | Project Variable、Sensitive登録を画面確認済み | 設定禁止・未登録 | Production | 2026-07-27、Portal発行の`test1` creator限定Preview linkを本体`POST /api/sdk-preview/session`が200で交換し、本体developとの同値・再デプロイ反映を実Networkで確認済み。moi-dev本人による表アカウント→Portal `/dashboard`の所有者SSOだけ未確認 |
 | `GAME_FIELDS_APP_BASE_URL` | Project Variable登録を画面確認済み（`https://dev.game-fields.com`） | 不要 | Production | 追加後のSDK Portal再デプロイ済み。表アカウント側DB復旧後にSSO実機確認 |
 | `GAME_FIELDS_PREVIEW_APP_URL` | 未登録。developコード既定値`https://dev.game-fields.com`を使用 | 不要 | Production | 本体UI共用の制作者URLを実機確認後、必要な場合だけ明示設定 |
 
