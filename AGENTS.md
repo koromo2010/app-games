@@ -2,6 +2,10 @@
 
 このリポジトリを編集するAI・開発者は、作業開始時に `docs/README.md` の読書順に従い、`README.md` と `docs/DEVELOPMENT_HANDOFF.md` を読むこと。Vercel、環境変数、DB、Redis、Blob、DNS、GitHub権限、外部API設定を扱う場合は、説明や操作案内を始める前に現在の対象ブランチの `docs/ENVIRONMENT_VARIABLES.md` も必ず読むこと。バグ修正・認証・マルチプレイ進行を変更する場合は `docs/KNOWN_ISSUES.md` も確認すること。新規ゲームの追加・ゲーム仕様の変更時は、さらに `config/game-registry.json` と `docs/NEW_GAME_CHECKLIST.md` を必ず確認すること。会話スレッド内の記憶や `docs/DEVELOPMENT_THREAD_LOG.md` を正本にしない。開発上の要望・判断・調査結果・実装・外部設定・公開・保留事項が生じた作業単位は、利用者から明示的な保存依頼がなくても、終了前に `docs/DEVELOPMENT_LOGGING.md` に従って `docs/DEVELOPMENT_THREAD_LOG.md` へ必ず追記する。お題DB、既出判定、問題再利用を変更する場合は `docs/TOPIC_HISTORY_DATABASE.md` も先に読むこと。
 
+## Highest-priority development rule
+
+小さい修正依頼でも、まず共通化・モジュール化できないか検討してから着手する。本番反映時は、devの該当実装をそのまま昇格させ、症状だけを個別に本番で再実装しない。いずれも「その場しのぎ」を避け、devとmainの実装一致を最終確認条件とする。
+
 ## Project identity
 
 - このプロジェクトは `app-games`。`paper-ai-app` とは完全に別のアプリとして扱う。
