@@ -20,6 +20,22 @@ type Release = {
   releaseKind: "promotion" | "rollback" | "legacy";
   releasedAt: string;
   isCurrent?: boolean;
+  decisionAction?: "approve" | "reject" | "rollback";
+  decisionReason?: string;
+  decisionActor?: string;
+  decisionAt?: string;
+};
+
+type Decision = {
+  id: string;
+  lineageId: string;
+  action: "approve" | "reject" | "rollback";
+  revision: string;
+  packageRootSha256: string;
+  reason: string;
+  actorRef: string;
+  releaseId: string | null;
+  decidedAt: string;
 };
 
 type UpstreamDiagnostic = {
@@ -32,7 +48,12 @@ type UpstreamDiagnostic = {
 
 type Payload = {
   development?: { releases?: Release[]; error?: string | UpstreamDiagnostic };
-  main?: { releases?: Release[]; history?: Release[]; error?: string | UpstreamDiagnostic };
+  main?: {
+    releases?: Release[];
+    history?: Release[];
+    decisions?: Decision[];
+    error?: string | UpstreamDiagnostic;
+  };
   error?: string;
   diagnostic?: UpstreamDiagnostic;
 };
@@ -60,6 +81,9 @@ export function AppReleaseManagementPanel({
   const [dev, setDev] = useState<Release[]>([]);
   const [main, setMain] = useState<Release[]>([]);
   const [history, setHistory] = useState<Release[]>([]);
+  const [decisions, setDecisions] = useState<Decision[]>([]);
+  const [reasons, setReasons] = useState<Record<string, string>>({});
+  const [rollbackReasons, setRollbackReasons] = useState<Record<string, string>>({});
   const [selected, setSelected] = useState("");
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
@@ -77,6 +101,7 @@ export function AppReleaseManagementPanel({
     setDev(payload?.development?.releases ?? []);
     setMain(payload?.main?.releases ?? []);
     setHistory(payload?.main?.history ?? []);
+    setDecisions(payload?.main?.decisions ?? []);
     setDevelopmentError(diagnosticText(payload?.development?.error));
     setMainError(diagnosticText(payload?.main?.error));
   }, []);
@@ -94,6 +119,14 @@ export function AppReleaseManagementPanel({
     () => new Map(main.map((release) => [release.lineageId, release])),
     [main],
   );
+  const latestDecisionByRevision = useMemo(() => {
+    const result = new Map<string, Decision>();
+    for (const decision of decisions) {
+      const key = `${decision.lineageId}:${decision.revision}`;
+      if (!result.has(key)) result.set(key, decision);
+    }
+    return result;
+  }, [decisions]);
 
   const selectHistory = async (lineageId: string) => {
     setSelected(lineageId);
@@ -156,11 +189,15 @@ export function AppReleaseManagementPanel({
         <div className="divide-y divide-white/10">
           {dev.map((release) => {
             const current = mainByLineage.get(release.lineageId);
+            const latestDecision = latestDecisionByRevision.get(
+              `${release.lineageId}:${release.revision}`,
+            );
             const unchanged = current?.revision === release.revision
               && current.packageRootSha256 === release.packageRootSha256;
             const action = current ? "既存mainアプリを更新" : "mainへ新規登録";
+            const reason = reasons[release.lineageId]?.trim() ?? "";
             return (
-              <article key={release.lineageId} className="grid gap-4 px-5 py-5 lg:grid-cols-[1fr_auto] lg:items-center">
+              <article key={release.lineageId} className="grid gap-4 px-5 py-5 lg:grid-cols-[minmax(0,1fr)_minmax(260px,1fr)_auto] lg:items-end">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
                     <h4 className="font-black">{release.title}</h4>
@@ -168,15 +205,63 @@ export function AppReleaseManagementPanel({
                   </div>
                   <p className="mt-1 font-mono text-xs text-slate-500">{release.lineageId} / {release.publicGameId}</p>
                   <p className="mt-2 text-xs text-slate-400">dev {short(release.revision)} → main {mainError ? "確認不可" : current ? short(current.revision) : "未登録"}</p>
+                  {latestDecision && (
+                    <p className={`mt-2 text-xs font-bold ${latestDecision.action === "reject" ? "text-rose-200" : "text-cyan-200"}`}>
+                      直近判断: {latestDecision.action === "reject" ? "却下" : latestDecision.action === "approve" ? "承認" : "復元"}
+                      ・{new Date(latestDecision.decidedAt).toLocaleString("ja-JP")}
+                      ・{latestDecision.actorRef} — {latestDecision.reason}
+                    </p>
+                  )}
                 </div>
+                <label className="block text-xs font-bold text-slate-300">
+                  判断理由（必須）
+                  <textarea
+                    value={reasons[release.lineageId] ?? ""}
+                    maxLength={500}
+                    disabled={unchanged || Boolean(busy) || Boolean(mainError)}
+                    onChange={(event) => setReasons((values) => ({
+                      ...values,
+                      [release.lineageId]: event.target.value,
+                    }))}
+                    placeholder="承認・却下の根拠を5〜500文字で記録"
+                    className="mt-1 min-h-20 w-full rounded-lg border border-white/15 bg-black/25 px-3 py-2 text-sm text-white outline-none focus:border-cyan-300 disabled:opacity-50"
+                  />
+                </label>
                 <div className="flex flex-wrap gap-2 lg:justify-end">
                   {current && <button type="button" onClick={() => void selectHistory(release.lineageId)} className="rounded-lg border border-white/15 px-4 py-2 text-sm font-bold hover:bg-white/10">履歴・復元</button>}
                   <button
                     type="button"
                     disabled={unchanged || Boolean(busy) || Boolean(mainError)}
                     onClick={() => {
+                      if (reason.length < 5 || reason.length > 500) {
+                        setMessage("判断理由を5〜500文字で入力してください。");
+                        return;
+                      }
+                      if (!window.confirm(`${release.title} のdev版 ${short(release.revision)} をmain採用候補として却下しますか？`)) return;
+                      void act({
+                        action: "reject",
+                        snapshot: release,
+                        lineageId: release.lineageId,
+                        reason,
+                      }, `${release.title}のdev版を却下し、理由を保存しました。`);
+                    }}
+                    className="rounded-lg border border-rose-300/50 px-4 py-2 text-sm font-black text-rose-100 disabled:opacity-40"
+                  >却下</button>
+                  <button
+                    type="button"
+                    disabled={unchanged || Boolean(busy) || Boolean(mainError)}
+                    onClick={() => {
+                      if (reason.length < 5 || reason.length > 500) {
+                        setMessage("判断理由を5〜500文字で入力してください。");
+                        return;
+                      }
                       if (!window.confirm(`${release.title} のdev版 ${short(release.revision)} でmainを${current ? "更新" : "新規登録"}しますか？`)) return;
-                      void act({ action: "promote", snapshot: release, lineageId: release.lineageId }, `${release.title}をmainへ反映しました。`);
+                      void act({
+                        action: "promote",
+                        snapshot: release,
+                        lineageId: release.lineageId,
+                        reason,
+                      }, `${release.title}をmainへ反映しました。`);
                     }}
                     className="rounded-lg bg-cyan-300 px-4 py-2 text-sm font-black text-slate-950 disabled:opacity-40"
                   >{mainError ? "main確認待ち" : unchanged ? "main反映済み" : busy ? "処理中…" : action}</button>
@@ -198,13 +283,42 @@ export function AppReleaseManagementPanel({
                 <div>
                   <p className="font-mono text-xs">{short(release.revision)} <span className="ml-2 text-slate-500">{release.releaseKind}</span></p>
                   <p className="mt-1 text-xs text-slate-500">{new Date(release.releasedAt).toLocaleString("ja-JP")}</p>
+                  {release.decisionReason && (
+                    <p className="mt-1 text-xs text-slate-300">
+                      {release.decisionActor} — {release.decisionReason}
+                    </p>
+                  )}
+                  {!release.isCurrent && (
+                    <textarea
+                      value={rollbackReasons[release.id] ?? ""}
+                      maxLength={500}
+                      disabled={Boolean(busy)}
+                      onChange={(event) => setRollbackReasons((values) => ({
+                        ...values,
+                        [release.id]: event.target.value,
+                      }))}
+                      placeholder="復元理由を5〜500文字で入力"
+                      aria-label={`${short(release.revision)}への復元理由`}
+                      className="mt-2 min-h-16 w-full rounded-lg border border-white/15 bg-black/25 px-3 py-2 text-xs text-white outline-none focus:border-amber-300 disabled:opacity-50"
+                    />
+                  )}
                 </div>
                 <button
                   type="button"
                   disabled={release.isCurrent || Boolean(busy)}
                   onClick={() => {
+                    const reason = rollbackReasons[release.id]?.trim() ?? "";
+                    if (reason.length < 5 || reason.length > 500) {
+                      setMessage("復元理由を5〜500文字で入力してください。");
+                      return;
+                    }
                     if (!window.confirm(`${short(release.revision)}へアプリだけを復元しますか？現在版も履歴に残ります。`)) return;
-                    void act({ action: "rollback", lineageId: selected, releaseId: release.id }, `${release.title}を${short(release.revision)}へ復元しました。`);
+                    void act({
+                      action: "rollback",
+                      lineageId: selected,
+                      releaseId: release.id,
+                      reason,
+                    }, `${release.title}を${short(release.revision)}へ復元しました。`);
                   }}
                   className="rounded-lg border border-amber-300/40 px-3 py-2 text-sm font-black text-amber-100 disabled:opacity-40"
                 >{release.isCurrent ? "現在版" : "この版へ復元"}</button>

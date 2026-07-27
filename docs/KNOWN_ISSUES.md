@@ -721,3 +721,25 @@ break-glass復旧scopeを制限した際、管理者一覧の初期化ボタン�
 通常のfull管理者には自分自身の「パスキー初期化」を再表示し、実行前に直近MFAを
 クライアントとAPIの両方で必須にする。他の管理者を通常セッションから初期化する操作は
 引き続き拒否し、break-glassの「MFAを再設定」と通常管理APIの制限は維持する。
+
+## 2026-07-27 昇格操作に判断理由と実行者の一貫した履歴がない
+
+状態: 修正済み（2026-07-27、回帰テストあり。migration 005の環境適用待ち）
+
+`SDK-dev → dev`、`SDK → main`、`dev app → main app`、アプリ復元、
+`develop → main`の操作経路は存在したが、SDK DBのリリース履歴には判断理由と
+実行者がなく、却下を追加専用で記録する経路もなかった。SDK candidate採用では
+`sdk_games`のstable pointer更新、channel履歴、新release追加が別query／transactionに
+分かれ、後段失敗時に採用状態と履歴が食い違う余地もあった。
+
+migration 005で`sdk_release_decisions`を追加し、SDK candidateとdev appの
+承認・却下・復元について、対象revision、package root、server bundle、
+AppSet hash、理由、実行管理者、日時、対応releaseを保存する。採用・復元は
+現在版更新、新release、決定履歴を同じtransactionで確定する。管理画面は
+理由を5〜500文字で必須入力し、対象版の直近判断とリリース履歴を表示する。
+`develop → main`も理由を必須とし、main/develop SHA、実行者、日時とともに
+既存の管理者監査ログへ保存する。
+
+AIによる問い合わせ・報告は引き続き下書き作成までに限定し、本人がPortalで
+確認・修正・送信するまで保存しない。管理者認証障害時はbreak-glassで通常承認を
+直接実行せず、MFAを復旧してfull sessionへ戻してから承認する境界を維持する。

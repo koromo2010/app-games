@@ -43,6 +43,10 @@ test("admin exposes environment-paired SDK adoption and independent dev to main"
   assert.match(panel, /sdkLoadError/);
   assert.match(panel, /devLoadError/);
   assert.match(panel, /sdkFailureMessage/);
+  assert.match(panel, /判断理由（必須）/);
+  assert.match(panel, /decideSdkGame\(game, "reject"\)/);
+  assert.match(panel, /action,/);
+  assert.match(panel, /reason,/);
   assert.match(panel, /識別情報: \$\{statusLabel\} \/ \$\{safeCode\}/);
   assert.match(panel, /次の操作:/);
   assert.match(panel, /whitespace-pre-line/);
@@ -51,10 +55,14 @@ test("admin exposes environment-paired SDK adoption and independent dev to main"
   assert.match(sdkRoute, /sdkPromotionInternalBaseUrl/);
   assert.match(sdkRoute, /body\.target !== promotionTarget\(\)/);
   assert.match(devRoute, /requireReleaseReadEnvironment/);
-  assert.match(sdkRoute, /sdk-game\.promote/);
+  assert.match(sdkRoute, /sdk-game\.approve/);
+  assert.match(sdkRoute, /sdk-game\.reject/);
+  assert.match(sdkRoute, /reason\.trim\(\)/);
+  assert.match(sdkRoute, /actorRef: session\.email/);
   assert.match(sdkRoute, /SDK_PROMOTION_MAIN_ONLY/);
   assert.match(devRoute, /code\.promote-develop-to-main/);
   assert.match(devRoute, /confirmation !== "dev→main"/);
+  assert.match(devRoute, /body\.reason\.trim\(\)/);
   assert.match(
     portalRoute,
     /branch !== "main" && branch !== "develop"/,
@@ -105,6 +113,10 @@ test("main can promote one adopted dev app and append-only rollback it", () => {
   );
   const store = read("apps/sdk-portal/lib/app-release-store.ts");
   const migration = read("db/sdk/004_app_release_history.sql");
+  const decisionsMigration = read("db/sdk/005_release_decisions.sql");
+  const promotionService = read(
+    "apps/sdk-portal/lib/game-package-promotion-service.ts",
+  );
   const runtimeList = read("apps/sdk-portal/app/api/runtime-catalog/route.ts");
   const runtimeGame = read(
     "apps/sdk-portal/app/api/runtime-catalog/[gameId]/route.ts",
@@ -125,14 +137,31 @@ test("main can promote one adopted dev app and append-only rollback it", () => {
   assert.match(adminRoute, /main-release-store/);
   assert.match(adminRoute, /APP_RELEASE_UPSTREAM_FETCH_FAILED/);
   assert.match(adminRoute, /\[app-releases\] upstream request failed/);
-  assert.match(adminRoute, /sdk-app\.promote-dev-to-main/);
+  assert.match(adminRoute, /sdk-app\.approve-dev-to-main/);
+  assert.match(adminRoute, /sdk-app\.reject-dev-to-main/);
   assert.match(adminRoute, /sdk-app\.rollback/);
+  assert.match(adminRoute, /actorRef: session\.email/);
+  assert.match(panel, /判断理由（必須）/);
+  assert.match(panel, /action: "reject"/);
+  assert.match(panel, /復元理由を5〜500文字で入力/);
   assert.match(portalRoute, /process\.env\.VERCEL_GIT_COMMIT_REF !== "main"/);
+  assert.match(portalRoute, /rejectAppRelease/);
+  assert.match(portalRoute, /listAppReleaseDecisions/);
   assert.match(store, /release_kind/);
   assert.match(store, /'rollback'/);
-  assert.match(store, /currentPublicGameId/);
+  assert.match(store, /current_release\.public_game_id/);
+  assert.match(store, /sdk_release_decisions/);
+  assert.match(store, /'dev-app', 'approve'/);
+  assert.match(store, /'dev-app', 'reject'/);
   assert.match(migration, /WHERE is_current/);
   assert.match(migration, /restored_from UUID REFERENCES sdk_app_releases/);
+  assert.match(decisionsMigration, /CREATE TABLE IF NOT EXISTS sdk_release_decisions/);
+  assert.match(decisionsMigration, /action IN \('approve', 'reject', 'rollback'\)/);
+  assert.match(decisionsMigration, /actor_ref VARCHAR\(320\) NOT NULL/);
+  assert.match(promotionService, /WITH source AS/);
+  assert.match(promotionService, /new_release AS/);
+  assert.match(promotionService, /decision AS/);
+  assert.match(promotionService, /rejectGamePackage/);
   assert.match(runtimeList, /lineage_id AS "lineageId"/);
   assert.match(runtimeList, /module_policy AS "modulePolicy"/);
   assert.match(runtimeGame, /FROM sdk_app_releases r/);

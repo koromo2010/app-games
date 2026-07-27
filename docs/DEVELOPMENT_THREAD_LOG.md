@@ -5901,3 +5901,49 @@
   `dev.game-fields.com`のaliasが同Deploymentへ切り替わった。
 - errors-only build logに失敗はなく、公開後のerror／fatal Runtime Logは0件だった。
 - dev管理画面の通常ログインで本人行に「パスキー初期化」が表示されることを実機確認する。
+
+## 2026-07-27 — 承認・昇格の判断履歴を統一
+
+### 利用者からの要望
+
+- 承認周りの修正をタスク化し、依存順に実装する。
+- SDK作品の環境別採用、dev appのmain昇格、本体developのmain反映、
+  理由・対象版・実行者・日時の履歴、アプリ単位復元、人間承認、認証復旧を整理する。
+
+### 判断
+
+- 3本の昇格経路、main管理画面、アプリ単位ロールバック、AI下書きの人間承認、
+  break-glassからのMFA復旧は既に実装済みだったため、作り直さず不足だけを補う。
+- SDK／dev appの運営判断はSDK環境別DBの`sdk_release_decisions`を正本とする。
+  本体`develop → main`はSDK DBへ依存させず、既存の管理者監査ログを正本とする。
+- break-glassから本番承認を直接許可せず、MFA修復後のfull sessionと直近MFAを
+  承認の前提にする。認証と承認の権限境界を混ぜない。
+
+### 実施結果
+
+- migration 005を追加し、`sdk-candidate`／`dev-app`の
+  `approve`／`reject`／`rollback`、理由、実行者、対象revisionとhash、日時、
+  対応release IDを追加専用で保存するようにした。
+- SDK candidate採用を、stable pointer、channel履歴、現在release解除、
+  新release、承認履歴まで一つのdata-modifying CTEへ統合した。
+- SDK candidateとdev appへ理由必須の承認・却下UIを追加し、
+  アプリ復元と`develop → main`にも理由を必須化した。
+- 履歴画面へ判断理由、実行者、日時を表示した。
+- AI報告の人間承認と、break-glassをMFA修復へ限定する既存境界は維持した。
+
+### 検証
+
+- `npm run check:sdk-migrations`で5件の連番migrationとRuntime version 5を確認した。
+- `npm run lint`と`npm run verify`に成功し、環境台帳、9ゲーム共通要件、
+  SDK境界、SDK Help、migration、Shell契約を確認した。
+- `npm test`に成功し、昇格UI、AI下書きの人間承認、
+  通常／break-glass管理者認可を含む全616テストが通過した。
+- `npm run build`に成功し、production buildの全78ルートが生成された。
+- `npm run build:sdk`に成功し、SDK Portalの型検査とproduction buildを確認した。
+- `git diff --check`に成功した。
+
+### 未対応・保留
+
+- `app-games-sdk-dev`のbuild migration後、`/api/health`が`schemaVersion: 5`であること、
+  dev管理画面で承認・却下・履歴・復元が動くことを実機確認する。
+- main反映時は`app-games-sdk`でもmigration 005と同じ実機確認を行う。

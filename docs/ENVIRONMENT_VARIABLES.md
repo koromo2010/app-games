@@ -1,6 +1,6 @@
 # 環境変数管理台帳
 
-最終更新: 2026-07-26
+最終更新: 2026-07-27
 
 現在配置はこの文書、追加・変更・削除の進行中依頼は`config/environment-change-registry.json`を正本とする。実値、接続文字列、APIキー、パスワードはGitへ保存しない。Vercel、Neon、Upstash、Blob、各API提供元だけで管理する。
 
@@ -280,6 +280,7 @@ SDK `llm` adapter、module lab、Preview中継API `/api/sdk-preview/llm`も本�
 | キー | `app-games-sdk-dev` | `app-games-preview-dev` | Vercel対象 | 状態 |
 | --- | --- | --- | --- | --- |
 | `SDK_PREVIEW_SIGNING_SECRET` | development用Team Sharedを再Link済み | 同じdevelopment用Team Sharedを再Link済み | Production | 2026-07-27に両Projectを再デプロイし、Portal `/api/health`の`previewSigning: ok`を確認済み |
+| `SDK_DATABASE_URL` | SDK development専用NeonをLink済み、Sensitive | 設定禁止・未設定 | Production | migration 005追加。develop公開時のbuild migrationと`/api/health`の`schemaVersion: 5`確認待ち |
 | `SDK_PREVIEW_BASE_URL` | 未登録。コード既定値`https://preview-dev.game-fields.com`を使用 | 不要 | Production | previewドメイン割当・Valid Configuration確認済み |
 | `SDK_PREVIEW_FRAME_ANCESTORS` | 不要 | 未登録。`develop`時のコード既定値として外枠`https://sdk-dev.game-fields.com`と、ゲーム固有iframeの直近親`https://dev.game-fields.com`を許可 | Production | 本体UI共用後の二段iframeに対応。明示設定する場合も両originが必要 |
 | `SDK_MOCK_GITHUB_REPOSITORY` | Project Variable登録済み。値はdev専用private repository | Project Variable登録済み | Production | 追加後Deployment作成済み、保存成功を実機確認済み |
@@ -308,14 +309,14 @@ SDK `llm` adapter、module lab、Preview中継API `/api/sdk-preview/llm`も本�
 | `SDK_MOCK_GITHUB_REPOSITORY` | `koromo2010/game-fields-sdk-mocks` | 同じprivate repository | Production | 両Projectへ登録・再デプロイ済み |
 | `SDK_MOCK_GITHUB_WRITE_TOKEN` | Project Variable、Sensitive | 設定禁止・未設定 | Production | 対象repositoryのContents read/writeだけ。90日期限 |
 | `SDK_MOCK_GITHUB_READ_TOKEN` | 設定禁止・未設定 | Project Variable、Sensitive | Production | 対象repositoryのContents read-onlyだけ。90日期限 |
-| `SDK_DATABASE_URL` | `app-games-sdk-neon`をIntegrationでLink、Sensitive | 設定禁止・未設定 | Production | 正しい変数名で登録後にmain Deployment作成済み。schema version 4確認待ち |
+| `SDK_DATABASE_URL` | `app-games-sdk-neon`をIntegrationでLink、Sensitive | 設定禁止・未設定 | Production | 正しい変数名で登録後にmain Deployment作成済み。main反映時のmigration 005と`schemaVersion: 5`確認待ち |
 | `SDK_REDIS_REST_URL` | `sdk-dev-redis`のLink依頼中、Sensitive | 設定禁止・未設定 | Production | コード側の本番・開発prefix分離後にLinkする |
 | `SDK_REDIS_REST_TOKEN` | `sdk-dev-redis`のLink依頼中、Sensitive | 設定禁止・未設定 | Production | コード側の本番・開発prefix分離後にLinkする |
 
 | 対象 | 現在状態 | 次の確認 |
 | --- | --- | --- |
 | private package Git | `koromo2010/game-fields-sdk-mocks`をPrivateで作成済み。Portal書込資格とPreview読取資格を分離 | 本番package保存後に専用branch・commit・読取を実機確認 |
-| Portal Vercel Project | `app-games-sdk`、Root Directory `apps/sdk-portal`、Production Branch `main`。`main@0e7889c`のDeploymentがREADY。`app-games-sdk-neon`はProductionだけへLink済み | RedisをLinkし、develop統合後のbuild migrationで`schemaVersion: 4`を確認 |
+| Portal Vercel Project | `app-games-sdk`、Root Directory `apps/sdk-portal`、Production Branch `main`。`main@0e7889c`のDeploymentがREADY。`app-games-sdk-neon`はProductionだけへLink済み | RedisをLinkし、develop統合後のbuild migrationで`schemaVersion: 5`を確認 |
 | Preview Vercel Project | `app-games-sdk-preview`、Root Directory `apps/sdk-preview`、Node.js 24.x、Production Branch `main`。production専用の署名鍵・Git読取資格だけを登録し再デプロイ済み | main同期後のDeploymentを確認 |
 | Preview domain | `preview.game-fields.com`割当済み・Valid Configuration | `/health`とPortal発行grantからのpackage読取を実機確認 |
 

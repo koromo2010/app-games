@@ -12,6 +12,7 @@
 - SDK packageは候補Previewとmainで同じ`GameSdkFrame → AppSet`を使う。SDK専用の白枠を持たない。
 - 昇格経路は、外部提出物の`SDK-dev → dev`／`SDK → main`、検証済みアプリ版の`dev app → main app`、本体コードの`develop → main`を別操作として扱う。
 - `dev app → main app`はアプリ単位の更新経路であり、本体Git branchを動かさない。既存mainアプリのID・URL・公開設定を維持してrevisionを更新し、過去版は追加専用履歴からアプリ単位で復元できる。
+- SDK candidateとdev appの採用・却下・復元は理由を必須にし、対象revision・hash・実行者・日時を追加専用の決定履歴へ保存する。採用・復元はrelease更新と判断履歴を同じtransactionで確定する。
 - 管理者パスキーは、通常のfull管理者が直近MFA後に自分だけを「パスキー初期化」できる。他管理者のMFAリセットはbreak-glass復旧モードだけに許可し、通常管理操作を復旧scopeへ広げない。
 
 ## アカウント言語と言語依存ルーム
@@ -470,7 +471,8 @@ ChatGPT Workではスレッドごとに作業環境が新しくなり、前ス�
 - 本体コードの`dev → main`は別の管理カードで扱う。GitHubのmain/develop両SHAを再確認し、developがmainに対してfast-forward可能なときだけ`force: false`でmain refを更新する。`dev`はmainの検証環境であり、SDK packageの中間channelではない。
 - 採用済みアプリの`dev app → main app`は`lineageId = creatorSlug/sourceGameId`で同じ作品系統を特定し、devの固定revision・package root・server bundle・AppSet・manifest・module policyをmainの`sdk_app_releases`へ新しいリリースとして追加する。既存main版の`publicGameId`はdev値で上書きせず維持する。ロールバックは過去行を現在ポインタへ戻す破壊的更新ではなく、選択版を複製した`rollback`リリースを追加する。他アプリ、本体コード、進行中Roomは変更せず、新規Roomだけが新しい現在版を解決する。
 - SDK DB migration 004以後は環境別の`sdk_app_releases`がアプリカタログとリリース履歴の正本である。`sdk_games.stable_*`は提出・同環境採用の互換情報として残すが、正式Runtime catalogは現在の`sdk_app_releases`を読む。
-- 2026-07-26に本番隔離Preview Project `app-games-sdk-preview`と`preview.game-fields.com`を作成し、本番専用署名鍵、private package Git `koromo2010/game-fields-sdk-mocks`、Portal専用write token、Preview専用read tokenを分離して登録・再デプロイした。`app-games-sdk`と`app-games-sdk-preview`のProduction Branchは`main`へ統一済み。本番SDK専用`app-games-sdk-neon`もPortalのProductionだけへLink済みで、Redis Link、developとmainの分岐統合、build migration後に`GET https://sdk.game-fields.com/api/health`の`schemaVersion: 4`を確認する。
+- SDK DB migration 005以後は`sdk_release_decisions`を運営判断の正本とする。`sdk-candidate`と`dev-app`を分け、`approve`／`reject`／`rollback`、理由、実行管理者、対象revisionとhash、対応release IDを追加専用で保存する。採用・復元は現在版更新、新release、決定履歴を単一transactionで確定し、却下はpackageや過去releaseを削除しない。
+- 2026-07-26に本番隔離Preview Project `app-games-sdk-preview`と`preview.game-fields.com`を作成し、本番専用署名鍵、private package Git `koromo2010/game-fields-sdk-mocks`、Portal専用write token、Preview専用read tokenを分離して登録・再デプロイした。`app-games-sdk`と`app-games-sdk-preview`のProduction Branchは`main`へ統一済み。本番SDK専用`app-games-sdk-neon`もPortalのProductionだけへLink済みで、Redis Link、developとmainの分岐統合、build migration後に`GET https://sdk.game-fields.com/api/health`の`schemaVersion: 5`を確認する。
 - package Git保存は対象subtreeを完全置換し、前revisionだけにあったassetを新commitへ残さない。server bundleは提出時にも1 MiB上限を検査する。昇格処理は検査後のUPDATEへ元revisionと2つのhashを条件として付け、再提出または別昇格と競合した場合はコピーせず409で停止する。
 - `SDK_PREVIEW_SIGNING_SECRET`はPortalと対応previewだけで環境別に共有する。Portalだけに`SDK_MOCK_GITHUB_WRITE_TOKEN`、previewだけに別の`SDK_MOCK_GITHUB_READ_TOKEN`を設定し、どちらも専用非公開repo以外へ権限を与えない。変数配置は`docs/ENVIRONMENT_VARIABLES.md`を正本とする。
 

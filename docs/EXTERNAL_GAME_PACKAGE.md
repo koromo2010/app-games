@@ -101,10 +101,13 @@ Room API、Redis CAS、再接続、閲覧者別Viewで実行する。
 DB、Redis、Cookie、environment、network、filesystem、Platform adapterへ
 直接到達しない。browser clientへ公開するのはRoom Viewの購読とCommand送信だけである。
 
-SDK作品の採用はcandidateから`main`採用カタログへ、revision、server bundle
-SHA-256、AppSet原文SHA-256、manifestをそのままコピーする。採用時の再build、
-変換、AppSet補正は禁止する。ゲーム固有の不足はAppSet revisionを直して再提出し、
-SDK共通契約の不足はSDKの説明、生成物、bridgeへ汎用的に追加する。
+SDK作品の採用は`SDK-dev → dev`または`SDK → main`の対応する環境対だけで行い、
+candidateからrevision、server bundle SHA-256、AppSet原文SHA-256、manifestを
+そのままコピーする。採用時の再build、変換、AppSet補正は禁止する。
+承認・却下は理由、実行者、対象revisionとhash、日時を追加専用の決定履歴へ保存し、
+採用時はrelease更新と同じtransactionで確定する。ゲーム固有の不足はAppSet
+revisionを直して再提出し、SDK共通契約の不足はSDKの説明、生成物、bridgeへ
+汎用的に追加する。
 
 本体コードの`dev → main`はこれとは独立した管理経路である。`dev`は`main`の
 検証用コピーであり、SDK提出物の中間channelや採用ステージとして使用しない。
