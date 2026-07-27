@@ -746,7 +746,7 @@ AIによる問い合わせ・報告は引き続き下書き作成までに限定
 
 ## 2026-07-27 SDK正式Packageのplaying中にDEBUGとダミー操作が消える
 
-状態: 修正済み（2026-07-27、Platform／HTTP／Shell回帰テストあり、dev配備待ち）
+状態: 修正・dev配備済み（2026-07-27、Platform／HTTP／Shell回帰テストあり、実機確認待ち）
 
 正式PreviewのスカルでDEBUGダミーを追加して開始すると、共通ヘッダーのDEBUGボタンが
 消え、ダミー手番でゲームを進められなかった。共通ShellはDEBUG表示をPackageが返す

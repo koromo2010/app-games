@@ -5996,6 +5996,17 @@
 
 ### 未対応・保留
 
-- GitHub `develop`への反映と`app-games-dev`のDeployment確認を行う。
 - devのスカル正式Previewで、ダミー2人追加、開始、ダミー視点／操作対象切替、
   ダミーの合法手、自動進行、resultまでのDEBUG維持を実機確認する。
+
+### 公開結果
+
+- 検証済みtree `9ccf88a`をGitHub commit `fa96c65`として`develop`へ
+  non-force fast-forwardした。`main`は変更していない。
+- `app-games-dev` Deployment `dpl_9JEdwKU5xvXCqmqaLDiBXdGR8FTH`は`READY`となり、
+  `dev.game-fields.com`のaliasが同Deploymentへ切り替わった。
+- 同じcommitで作成された`app-games-sdk-dev`
+  `dpl_9Pn2LbSYK2Hc8WZ2WQKGTXxmfcvz`と`app-games-preview-dev`
+  `dpl_HKxDgrvYwEtoSYSgM8VX9jBMhKhA`も`READY`となった。
+- 3 Deploymentともerrors-only build logに失敗はなく、公開後の
+  error／fatal Runtime Logは0件だった。
