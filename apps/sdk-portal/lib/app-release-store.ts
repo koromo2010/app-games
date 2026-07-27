@@ -142,6 +142,10 @@ export async function listCurrentAppReleases() {
            app_set_source_sha256 AS "appSetSourceSha256",
            manifest, module_policy AS "modulePolicy",
            source_environment AS "sourceEnvironment",
+           (
+             source_environment <> 'development'
+             OR revision <> source_revision
+           ) AS "artifactTransferred",
            release_kind AS "releaseKind", restored_from AS "restoredFrom",
            released_at AS "releasedAt"
     FROM sdk_app_releases WHERE is_current

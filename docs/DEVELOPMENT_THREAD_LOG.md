@@ -4814,6 +4814,8 @@
   `revision`で冪等backfillする。
 - 管理画面の反映済み判定をrepository間のcommit SHAではなくpackage root、
   server bundle、AppSet原文の3 hash一致へ変更した。
+- migration 005で元dev SHAと本番SHAが同じままbackfillされた旧Releaseは
+  `artifactTransferred: false`として同じdev版の修復昇格を許可する。
 - main Portalからdev artifact sourceのservice認証往復を確認する
   `/api/health/app-release-artifacts`を追加した。
 - 最新mainに残っていた既知lint違反2件も、DEBUG表示の権限条件を維持したまま解消した。

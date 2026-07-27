@@ -48,7 +48,7 @@ devとmainの採用済みSDKアプリ情報は環境別DBに分離する。管�
 
 アプリ更新時はmainのゲームID・URL・公開設定を維持する。devとmainのpackage Gitは別リポジトリなので、昇格はdevの固定commitからpackage全ファイルを読み、3つのhashとmanifestを再検証してmain package Gitへ新しいcommitとして保存する。本番Previewでそのcommitのmanifestを起動確認してから`sdk_app_releases`の現在版を切り替える。`source_revision`はdevの元commit、`revision`はmainの実体commitを示す。
 
-各更新前の版は`sdk_app_releases`へ追加専用履歴として残り、管理画面から過去版を選んでアプリ単位で復元できる。dev由来の過去版は元commitからpackage実体を再移送する。復元自体も新しい`rollback`リリースとして記録し、本体や他アプリ、既存Roomは巻き戻さない。
+各更新前の版は`sdk_app_releases`へ追加専用履歴として残り、管理画面から過去版を選んでアプリ単位で復元できる。migration 005で元dev SHAと本番実行SHAが同じままbackfillされた旧Releaseは未移送と判定し、同じdev版でも修復昇格を許可する。dev由来の過去版は元commitからpackage実体を再移送する。復元自体も新しい`rollback`リリースとして記録し、本体や他アプリ、既存Roomは巻き戻さない。
 
 採用済みSDKゲームのAppSetとmanifestは不変のまま保持し、公開後に調整する表示名と広場カード画像は`config/sdk-game-presentations.ts`で管理する。現行の`ai-word-guess`は公開名「コトバに迫れ」と専用カード画像を使用する。
 

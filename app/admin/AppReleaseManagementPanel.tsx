@@ -13,6 +13,7 @@ type Release = {
   description: string;
   revision: string;
   sourceRevision?: string;
+  artifactTransferred?: boolean;
   packageRootSha256: string;
   serverBundleSha256: string;
   appSetSourceSha256: string;
@@ -157,7 +158,8 @@ export function AppReleaseManagementPanel({
         <div className="divide-y divide-white/10">
           {dev.map((release) => {
             const current = mainByLineage.get(release.lineageId);
-            const unchanged = current?.packageRootSha256 === release.packageRootSha256
+            const unchanged = current?.artifactTransferred !== false
+              && current?.packageRootSha256 === release.packageRootSha256
               && current.serverBundleSha256 === release.serverBundleSha256
               && current.appSetSourceSha256 === release.appSetSourceSha256;
             const action = current ? "既存mainアプリを更新" : "mainへ新規登録";
@@ -170,6 +172,9 @@ export function AppReleaseManagementPanel({
                   </div>
                   <p className="mt-1 font-mono text-xs text-slate-500">{release.lineageId} / {release.publicGameId}</p>
                   <p className="mt-2 text-xs text-slate-400">dev {short(release.revision)} → main {mainError ? "確認不可" : current ? short(current.revision) : "未登録"}</p>
+                  {current?.artifactTransferred === false && (
+                    <p className="mt-1 text-xs font-bold text-amber-200">本番package実体の再移送が必要です。</p>
+                  )}
                 </div>
                 <div className="flex flex-wrap gap-2 lg:justify-end">
                   {current && <button type="button" onClick={() => void selectHistory(release.lineageId)} className="rounded-lg border border-white/15 px-4 py-2 text-sm font-bold hover:bg-white/10">履歴・復元</button>}

@@ -144,6 +144,7 @@ test("main can promote one adopted dev app and append-only rollback it", () => {
   assert.match(store, /'rollback'/);
   assert.match(store, /currentPublicGameId/);
   assert.match(store, /transferArtifact\(snapshot\)/);
+  assert.match(store, /AS "artifactTransferred"/);
   assert.ok(
     store.indexOf("transferArtifact(snapshot)")
       < store.indexOf("sdkSql().transaction"),
@@ -162,4 +163,6 @@ test("main can promote one adopted dev app and append-only rollback it", () => {
   assert.match(runtimeList, /source_revision AS "sourceRevision"/);
   assert.match(runtimeList, /module_policy AS "modulePolicy"/);
   assert.match(runtimeGame, /FROM sdk_app_releases r/);
+  assert.match(panel, /current\?\.artifactTransferred !== false/);
+  assert.match(panel, /本番package実体の再移送が必要です/);
 });
