@@ -5696,3 +5696,28 @@
 ### 未対応・保留
 
 - 既存の問い合わせ・報告を管理画面で開き、初回本文が一度だけ表示されることを実機確認する。
+
+## 2026-07-27 — main昇格用のdev package artifact読取境界
+
+### 利用者からの要望
+
+- `dev app → main app`でRuntime Bundle実体が本番package Gitへ移らず、
+  `SERVER_RUNTIME_BUNDLE_NOT_FOUND`となる致命的な問題をmainまで修正する。
+
+### 判断・実施結果
+
+- main側がdevの固定packageをhash検証付きで複製できるよう、dev Portalへ
+  service認証必須のartifact読取APIを追加した。
+- 読取対象は制作者slug、game ID、40文字commit SHA、package bundle配下の安全な
+  相対pathに限定する。ファイル数、単体・合計サイズ、必須packageファイルも検査する。
+- package一覧と各ファイルは確定commitからだけ読み、DB、別game、Git書込操作を公開しない。
+
+### 検証
+
+- 追加routeの認証・develop限定・固定revision境界を静的テストへ追加した。
+- `npm run lint`、SDK Portal production build、関連6テストに成功した。
+
+### 未対応・保留
+
+- `develop`へ非force反映し、`app-games-sdk-dev` DeploymentをREADYまで確認する。
+- main Portalのartifact source healthから、環境間service認証の実往復を確認する。

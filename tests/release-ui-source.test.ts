@@ -137,3 +137,21 @@ test("main can promote one adopted dev app and append-only rollback it", () => {
   assert.match(runtimeList, /module_policy AS "modulePolicy"/);
   assert.match(runtimeGame, /FROM sdk_app_releases r/);
 });
+
+test("development exposes only authenticated immutable package artifacts", () => {
+  const indexRoute = read(
+    "apps/sdk-portal/app/api/internal/package-artifacts/route.ts",
+  );
+  const artifactRoute = read(
+    "apps/sdk-portal/app/api/internal/package-artifacts/[instanceId]/[gameId]/[revision]/route.ts",
+  );
+  const gitStore = read("apps/sdk-portal/lib/mock-git-store.ts");
+
+  assert.match(indexRoute, /requireSdkServiceRequest/);
+  assert.match(indexRoute, /VERCEL_GIT_COMMIT_REF !== "develop"/);
+  assert.match(artifactRoute, /requireSdkServiceRequest/);
+  assert.match(artifactRoute, /listGamePackageFilesAtRevision/);
+  assert.match(artifactRoute, /readGamePackageFileAtRevision/);
+  assert.match(gitStore, /REVISION_PATTERN/);
+  assert.match(gitStore, /packages\/\$\{input\.instanceId\}\/\$\{input\.gameId\}\/bundle/);
+});
