@@ -2561,3 +2561,36 @@ Total output lines: 6329
 - commit、push、実デプロイ後の`moi-lab`画面確認は未実施。
 - 実機では`moi-dev`の表示とSDK Portal `/dashboard`へのSSO到達、非所有者ログインの非表示、
   developが`sdk-dev.game-fields.com`、mainが`sdk.game-fields.com`を指すことを確認する。
+
+## 2026-07-27 — SDK Portal接続先のdev登録と実機確認状況
+
+### 利用者からの要望
+
+- `app-games-dev`へ`SDK_PORTAL_INTERNAL_URL`を実登録し、再デプロイ後の導線を確認する。
+- 台帳を登録依頼のままにせず、Vercelの実態と一致させる。
+
+### 実施結果
+
+- `app-games-dev`のProduction Variableへ`SDK_PORTAL_INTERNAL_URL`を登録した。
+- 実装コミット`bbb7efd`の再デプロイが`READY`となり、`dev.game-fields.com`へ
+  aliasが反映されたことを確認した。
+- 非所有者`test1`で`moi-lab`を開き、アカウントメニューに
+  「SDKダッシュボード」が表示されないことを実ブラウザで確認した。
+- 先行する環境変数台帳と変更registryには非所有者確認も未実施と記録されていたため、
+  非所有者側は実機確認済み、所有者側だけ未確認となるよう訂正した。
+
+### 検証
+
+- 所有者・非所有者・未ログインの分岐は自動回帰テスト済み。
+- 外部設定は登録済み、対象Deploymentは再デプロイ済み、非所有者側は実機確認済み。
+- `npm run check:env-ledger`、`npm run lint`、全634テストに成功した。
+- production buildは隔離worktree外を向く共有依存symlinkをTurbopackが拒否したため
+  この文書訂正では再確認できていない。実装コミット`bbb7efd`では本体とSDK Portalの
+  production buildに成功済みで、今回の差分は台帳・registry・開発ログだけである。
+
+### 未対応・保留
+
+- `moi-dev`は外部クライアント本人のアカウントであり、運営側は資格情報を保有していない。
+  本人によるリンク表示、クリック、既存SSO、`sdk-dev.game-fields.com/dashboard`到達の
+  実機確認だけを未完了として残す。
+- `main`側の環境変数登録・デプロイは今回の対象外であり、未変更。
