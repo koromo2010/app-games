@@ -29,6 +29,19 @@
                   "note": "MFA再登録と通常ログイン確認後に削除し、再デプロイする。"
           },
           {
+                  "id": "2026-07-27-app-games-production-break-glass",
+                  "key": "SITE_ADMIN_BREAK_GLASS_ENABLED",
+                  "project": "app-games",
+                  "branch": "main",
+                  "environment": "Production",
+                  "sensitive": false,
+                  "operation": "remove",
+                  "status": "requested",
+                  "redeployRequired": true,
+                  "temporary": true,
+                  "note": "本番の管理者パスキー初期化・復旧コードログイン・Windows Hello再登録を実機確認済み。変数を削除して再デプロイし、通常パスキーログインとbreak-glass無効化を確認する。"
+          },
+          {
                   "id": "2026-07-26-app-games-dev-webauthn-origin",
                   "key": "SITE_ADMIN_WEBAUTHN_ORIGIN",
                   "project": "app-games-dev",

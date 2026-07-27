@@ -2943,3 +2943,29 @@ Total output lines: 6329
 ### 未対応・保留
 
 - なし。
+
+## 2026-07-27 — 本番管理者パスキー復旧とbreak-glass削除準備
+
+### 利用者からの要望
+
+- 本番管理者パスキーがdevと同じWindows Hello構成になったことを確認し、通常運用へ戻して次の移行作業へ進む。
+
+### 判断
+
+- 管理画面の表示が`Windows Hello等 1件`、`外部キー 0件`、`種別不明 0件`、未使用復旧コード10件になったため、本番の初期化・復旧コードログイン・端末内パスキー再登録は成功扱いとする。
+- 一時的な`SITE_ADMIN_BREAK_GLASS_ENABLED`を残したまま次工程へ進めず、本番`app-games` Productionから削除し、再デプロイ後の通常パスキーログインを最終ゲートにする。
+- 外部設定変更前に、削除依頼を環境変数変更マスターへ登録する。
+
+### 実施結果
+
+- `config/environment-change-registry.json`へ本番`app-games` Productionの`SITE_ADMIN_BREAK_GLASS_ENABLED`削除依頼を`requested`として追加した。
+- `docs/ENVIRONMENT_VARIABLES.md`へ、本番のWindows Hello再登録確認と削除待ちの現在状態を反映した。
+
+### 検証
+
+- 本番管理画面の利用者提示画像で、Windows Hello等1件、外部キー0件、種別不明0件、未使用復旧コード10件を確認した。
+
+### 未対応・保留
+
+- 本番`app-games` Productionから`SITE_ADMIN_BREAK_GLASS_ENABLED`を削除する。
+- 削除後に再デプロイし、通常パスキーで管理画面へログインできることと、マスターパスワードによるbreak-glass復旧が無効であることを確認する。
