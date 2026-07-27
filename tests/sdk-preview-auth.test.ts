@@ -16,9 +16,7 @@ import {
   verifyPortalPreviewGrant,
 } from "../apps/sdk-preview/lib/preview-grant-verifier.ts";
 import {
-  createPreviewClientSessionToken,
   previewExchangeContentSecurityPolicy,
-  verifyPreviewClientSessionToken,
 } from "../apps/sdk-preview/lib/preview-security.ts";
 
 const secret = "sdk-preview-test-secret-with-at-least-32-bytes";
@@ -268,50 +266,6 @@ test("isolated preview rejects invalid public keys and unavailable key discovery
   );
 });
 
-test("short client exchange grants become scoped local HttpOnly session values", () => {
-  const clientGrant = {
-    version: 4 as const,
-    audience: "package-client" as const,
-    environment: "production" as const,
-    channel: "main" as const,
-    role: "client" as const,
-    instanceId: grant.instanceId,
-    gameId: grant.gameId,
-    revision: grant.revision,
-    expiresAt: 61_000,
-  };
-  const localSecret = "preview-local-session-secret-with-at-least-32-bytes";
-  const session = createPreviewClientSessionToken(
-    clientGrant,
-    1_000,
-    localSecret,
-  );
-  const verified = verifyPreviewClientSessionToken(
-    session.token,
-    1_001,
-    localSecret,
-  );
-  assert.equal(verified?.audience, "package-client");
-  assert.equal(verified?.environment, "production");
-  assert.equal(verified?.expiresAt, 1_000 + 8 * 60 * 60 * 1_000);
-  assert.equal(
-    verifyPreviewClientSessionToken(
-      session.token,
-      verified!.expiresAt,
-      localSecret,
-    ),
-    null,
-  );
-  assert.equal(
-    verifyPreviewClientSessionToken(
-      session.token,
-      1_001,
-      "wrong-preview-local-secret-with-at-least-32-bytes",
-    ),
-    null,
-  );
-});
-
 test("client grants use a sandbox-safe fragment form exchange and never query credentials", () => {
   const exchangeSource = readFileSync(
     "apps/sdk-preview/lib/preview-exchange.ts",
@@ -323,9 +277,10 @@ test("client grants use a sandbox-safe fragment form exchange and never query cr
     /history\.replaceState\(null, "", location\.pathname\)/,
   );
   assert.match(exchangeSource, /form\.method = "POST"/);
-  assert.match(exchangeSource, /form\.action = location\.href/);
+  assert.match(exchangeSource, /form\.action = location\.origin \+ location\.pathname/);
   assert.match(exchangeSource, /form\.enctype = "application\/x-www-form-urlencoded"/);
   assert.match(exchangeSource, /form\.submit\(\)/);
+  assert.match(exchangeSource, /createHash\("sha256"\)/);
   assert.doesNotMatch(exchangeSource, /\bfetch\(/);
   assert.match(exchangeSource, /contentType !== "application\/x-www-form-urlencoded"/);
   assert.match(exchangeSource, /payload\.getAll\("token"\)/);
@@ -349,11 +304,22 @@ test("client grants use a sandbox-safe fragment form exchange and never query cr
   ]) {
     const source = readFileSync(path, "utf8");
     assert.doesNotMatch(source, /searchParams\.get\(["']token["']\)/);
-    assert.match(source, /createPreviewClientSessionToken/);
-    assert.match(source, /NextResponse\.redirect\(destination, 303\)/);
-    assert.match(source, /httpOnly: true/);
-    assert.match(source, /sameSite: "strict"/);
+    assert.match(source, /renderAuthorizedPreviewDocument/);
+    assert.doesNotMatch(source, /\bcookies?\b/i);
+    assert.doesNotMatch(source, /NextResponse\.redirect/);
+    assert.doesNotMatch(source, /Set-Cookie/i);
   }
+  const documentSource = readFileSync(
+    "apps/sdk-preview/lib/preview-document.ts",
+    "utf8",
+  );
+  assert.match(documentSource, /fetchPreviewAsset/);
+  assert.match(documentSource, /createPreviewAssetToken/);
+  assert.match(documentSource, /injectGameFieldsPackageClient/);
+  assert.match(documentSource, /injectGameFieldsPreset/);
+  assert.match(documentSource, /new Response\(responseContent/);
+  assert.doesNotMatch(documentSource, /\bcookies?\b/i);
+  assert.doesNotMatch(documentSource, /Set-Cookie/i);
   assert.equal(
     existsSync("apps/sdk-portal/app/api/preview-token/verify/route.ts"),
     false,
@@ -361,9 +327,14 @@ test("client grants use a sandbox-safe fragment form exchange and never query cr
 });
 
 test("preview exchange permits only its exact form target and keeps fetch disabled", () => {
-  const csp = previewExchangeContentSecurityPolicy("https://preview.example");
+  const csp = previewExchangeContentSecurityPolicy(
+    "https://preview.example",
+    "sha256-dGVzdA==",
+  );
   assert.match(csp, /form-action https:\/\/preview\.example/);
   assert.match(csp, /connect-src 'none'/);
+  assert.match(csp, /script-src 'sha256-dGVzdA=='/);
+  assert.doesNotMatch(csp, /unsafe-inline/);
   assert.doesNotMatch(csp, /allow-same-origin/);
 });
 

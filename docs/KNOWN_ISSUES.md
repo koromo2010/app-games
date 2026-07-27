@@ -55,10 +55,11 @@ server runner入口で403を返した。PortalとPreviewは同じmain commitだ�
 
 再修正では、Portal値からEd25519秘密鍵を導出してclient／server grantへ署名し、
 Previewは固定した公開鍵だけでローカル検証する。汎用検証APIは削除する。client入口は
-60秒grantをURL fragmentへ置き、交換ページがfragmentを履歴から即時消去してPOSTした
-後だけ、Preview自身の8時間・HttpOnly・Path限定Cookieへ交換する。server grantは
+60秒grantをURL fragmentへ置き、交換ページがfragmentを履歴から即時消去してPOSTする。
+PreviewはPOST応答でHTML骨格を直接返し、Cookieや303遷移を使わない。外部assetは
+source kind・revision・正規化済みpath・期限へ限定したHMAC URLで読む。server grantは
 10分、audience・environment・channel・revision・bundle hashを従来どおり固定する。
-Preview側の秘密値はローカルCookieと同一revision asset tokenだけに使い、両Projectの
+Preview側の秘密値はpath単位asset tokenだけに使い、両Projectの
 秘密値一致を正式Room起動の前提から外す。server runnerの拒否理由は安全な機械コードで
 本体Telemetryまで運び、利用者レスポンスでは引き続き一時障害へ正規化する。
 
@@ -826,7 +827,7 @@ DEBUG権限を最終確定し、保存Roomからダミー属性と接続状態�
 
 ## 2026-07-27 SDK正式Packageの交換ページ後にゲームが表示されない
 
-状態: 修正・ローカル検証済み（2026-07-27、dev配備／実機確認待ち）
+状態: Cookieなし方式を実装・ローカル対象検証済み（2026-07-27、dev配備／iframe実描画確認待ち）
 
 Project間のcommitが揃って正式Previewページを開けるようになった後も、
 ゲーム固有領域には「ゲームを開けませんでした」とだけ表示された。本体dev、
@@ -839,6 +840,22 @@ opaque originのブラウザ境界で送信前に拒否され、catchの失敗�
 
 隔離を弱めず、交換ページだけ`allow-forms`と自originへの`form-action`を許可した。
 fragmentは従来どおり履歴から即時消去し、単一・4KB以下の
-`application/x-www-form-urlencoded`本文でPOSTする。Previewはgrant検証後に
-Path限定HttpOnly Cookieを設定して303でPackageへ遷移する。Package本体のCSPは
-引き続き`form-action 'none'`であり、iframeへ`allow-same-origin`は追加しない。
+`application/x-www-form-urlencoded`本文でPOSTする。このform POST自体は通ったが、
+Strict Cookieは第三者iframe内の303後GETへ送られず、
+`GET package/.../index.html = 403`となった。CHIPS案は応急検証として
+`experiment/chips-cookie-partitioning`へ保管し、merge・deployしない。
+
+本修正はCookieと303を廃止し、grant検証済みPOST応答でHTML骨格を直接返す。
+JS、CSS、画像とPlatform bridgeはインライン化せず、既存HMAC asset tokenを
+source kind・制作者・ゲーム・固定revision・正規化済みasset path・期限へ拡張して
+外部取得する。HTML、CSS、静的module参照は各path専用URLへ書き換え、
+別path、別revision、server bundle、manifest、`source/`へ転用できない。
+iframeへ`allow-same-origin`は追加せず、package CSPは自originへの
+`form-action`、許可済み`frame-ancestors`、`connect-src 'none'`を維持し、
+inline script/styleと`unsafe-inline`を許可しない。
+
+asset URLは1時間bucket内で決定的とし、同じrevision・pathの再読込で毎回cache keyを
+変えない。署名はqueryでなくpathへ含め、query付きasset要求を拒否する。
+browser／Vercel CDNのcache期間はtoken期限以下、`stale-while-revalidate`なしとし、
+異なるtokenの応答を共有しない。実配備ではPOST 200、JS/CSS 200、iframe描画、
+Console、再読込、改ざん・別revision・期限切れ403に加え、`x-vercel-cache`も確認する。

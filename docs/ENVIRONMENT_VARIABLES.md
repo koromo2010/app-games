@@ -256,7 +256,7 @@ Sensitive設定済みの互換変数をVercel上で複製できない移行期�
 
 | キー | SDK Portal | Isolated Preview | Sensitive | 用途 |
 | --- | --- | --- | --- | --- |
-| `SDK_PREVIEW_SIGNING_SECRET` | 必須・環境別。Ed25519秘密鍵を導出してclient／server grantを署名 | 交換後のローカルCookieと同一revision asset tokenのHMAC署名専用。Portalと同じ値にしない | Yes | Previewは固定したPortal公開鍵だけでgrantをローカル検証する。公開鍵は秘密情報ではなくコードへ固定し、通常実行時にPortalへ照会しない。いずれの秘密値も32byte以上 |
+| `SDK_PREVIEW_SIGNING_SECRET` | 必須・環境別。Ed25519秘密鍵を導出してclient／server grantを署名 | 固定revision・正規化済みasset path・期限へ限定したasset tokenのHMAC署名専用。Cookieには使わず、Portalと同じ値にしない | Yes | Previewは固定したPortal公開鍵だけでgrantをローカル検証する。公開鍵は秘密情報ではなくコードへ固定し、通常実行時にPortalへ照会しない。いずれの秘密値も32byte以上 |
 | `SDK_PREVIEW_BASE_URL` | `https://preview-dev.game-fields.com`または本番preview | 不要 | No | Portalがiframe実行URLを組み立てる |
 | `SDK_PREVIEW_FRAME_ANCESTORS` | 不要 | 対応するSDK Portal originだけ | No | CSP `frame-ancestors`の許可元 |
 | `SDK_MOCK_GITHUB_REPOSITORY` | 専用非公開`owner/repo` | 同じリポジトリ | No | モックGit正本。`app-games`を使わない |
@@ -306,7 +306,7 @@ SDK `llm` adapter、module lab、Preview中継API `/api/sdk-preview/llm`も本�
 
 | キー | `app-games-sdk` | `app-games-sdk-preview` | Vercel対象 | 状態 |
 | --- | --- | --- | --- | --- |
-| `SDK_PREVIEW_SIGNING_SECRET` | Project Variable、Sensitive。Ed25519秘密鍵導出とgrant署名 | Project Variable、Sensitive。Preview内Cookie／asset署名だけ | Production | 2026-07-27の本番403で同一値との記録を撤回。Ed25519公開鍵検証へ移行し、cross-project同値依存と汎用検証APIを廃止。本番公開鍵はPortalの第1段階Deploymentから取得してコードへ固定済み。第2段階再デプロイ・実機確認待ち |
+| `SDK_PREVIEW_SIGNING_SECRET` | Project Variable、Sensitive。Ed25519秘密鍵導出とgrant署名 | Project Variable、Sensitive。固定revision／asset pathのHMAC署名だけ | Production | 2026-07-27の本番403で同一値との記録を撤回。Ed25519公開鍵検証へ移行し、cross-project同値依存、汎用検証API、Preview Cookieを廃止。本番公開鍵はPortalの第1段階Deploymentから取得してコードへ固定済み。第2段階再デプロイ・実機確認待ち |
 | `SDK_MOCK_GITHUB_REPOSITORY` | `koromo2010/game-fields-sdk-mocks` | 同じprivate repository | Production | 両Projectへ登録・再デプロイ済み |
 | `SDK_MOCK_GITHUB_WRITE_TOKEN` | Project Variable、Sensitive | 設定禁止・未設定 | Production | 対象repositoryのContents read/writeだけ。90日期限 |
 | `SDK_MOCK_GITHUB_READ_TOKEN` | 設定禁止・未設定 | Project Variable、Sensitive | Production | 対象repositoryのContents read-onlyだけ。90日期限 |

@@ -6112,3 +6112,69 @@
   `dpl_39VDPJH6sKLi4SE43KM3CJ1tmbgq`も`READY`となった。
 - 3 Deploymentともerrors-only build logに失敗はなく、公開後の
   error／fatal Runtime Logは0件だった。
+
+## 2026-07-27 — 正式Package入口をCookieなしの直接HTML応答へ変更
+
+### 利用者からの要望
+
+- CHIPS差分を再利用可能な検証branchへ退避し、merge、deploy、main反映しない。
+- `package-open`のform POST応答でHTML骨格を直接返し、JS／CSSを一括inline化しない。
+- 既存HMAC asset tokenを優先して再利用し、固定revision・asset path・期限へ
+  認可を限定する。
+- `allow-same-origin`なし、限定CSP、QuickJS WASM、実行直前bundle hash照合、
+  Cookie非依存、`unsafe-inline`非追加を維持する。
+- 実devでGET 200、POST 200、JS／CSS 200、iframe描画、Console、再読込、
+  改ざん・別revision・期限切れ403、CDN／browser cacheを確認する。
+
+### CHIPS退避
+
+- CHIPS検証tree `dd1d8b2`をremote branch
+  `experiment/chips-cookie-partitioning`のcommit `63854a2`へ保管した。
+- 同branchは`develop`／`main`へmergeせず、Vercel deploymentにも使用しない。
+- Cookieなし実装は別branch／clean worktreeで`develop@b627fd7`から開始した。
+
+### 設計判断
+
+- 現行asset tokenは制作者、ゲーム、revision、期限までをHMAC署名していたが、
+  asset pathをclaimへ含めず、同revision内の別assetへ転用できた。
+- 新しいsession方式は作らず、既存HMACをsource kind、制作者、ゲーム、
+  revision、正規化済みasset path、期限へ拡張する。
+- tokenはqueryではなくURL pathへ含める。HTML、CSS、静的module参照を各path専用URLへ
+  書き換え、`server.bundle.js`、manifest、`source/`、別path、別revisionを拒否する。
+- HTML骨格だけをPOST 200で返す。Platform room bridgeも外部の仮想JS assetとし、
+  package HTMLへinline script/styleや`unsafe-inline`を追加しない。
+- asset tokenは1時間bucket内で決定的、1〜2時間有効とする。子assetは親tokenと
+  同じexpiryを継承し、同じ署名URLの応答本文を不変にする。
+- browser、downstream CDN、Vercel CDNのcache期間をtoken残存期限以下に揃え、
+  `stale-while-revalidate`を使わない。署名をcache keyのpathへ含め、queryを拒否する。
+
+### 実施結果
+
+- `package-open`／legacy `open`はgrant検証後にCookie／303を使わず、
+  固定revisionの`index.html`へ署名asset URLと外部Platform bridgeを組み込んで
+  直接返すよう変更した。
+- asset routeはpath単位tokenを検証し、CSSの`url()`／`@import`と
+  JavaScriptの静的／dynamic importを子asset用tokenへ書き換える。
+- 交換ページの固定inline scriptはSHA-256 hash CSPへ変更し、
+  package文書CSPは`unsafe-inline`なし、自Preview originへの`form-action`、
+  許可済み`frame-ancestors`、`connect-src 'none'`とした。
+- iframeの`sandbox`は`allow-same-origin`なしを維持した。
+- AppSet runnerは従来どおり、1呼出しごとの新規QuickJS WASM module／context、
+  bundle 1 MiB、memory 32 MiB、stack 1 MiB、750 ms上限を使う。
+  server routeは実行直前に取得bundleのSHA-256をgrant登録hashと再照合する。
+
+### ローカル検証
+
+- client grant、CookieなしPOST、sandbox、CSP hash、path／revision／source kind／期限、
+  決定的cache key、HTML／CSS／module書換えの対象30テストが成功した。
+- `npm run build:sdk-preview`に成功し、全Preview RouteのTypeScript検査と
+  Turbopack production buildが完了した。
+
+### 未対応・完了ゲート
+
+- 全テスト、`verify`、SDK Portal／Preview／本体production buildを通す。
+- `develop`の3 dev Projectを同じcommitで`READY`にする。
+- 実スカルで`package-open GET 200 → form POST 200 → JS/CSS 200 → iframe描画`、
+  Consoleエラーなし、再読込、改ざん・別revision・期限切れ403、
+  browser／Vercel CDN cache keyを確認する。
+- 上記完了までは修正完了、main反映として扱わない。

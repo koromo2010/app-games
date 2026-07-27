@@ -535,26 +535,13 @@ function escapeHtmlAttribute(value: string) {
     .replaceAll(">", "&gt;");
 }
 
-export function injectGameFieldsPreset(html: string, assetBaseHref?: string) {
+export function injectGameFieldsPreset(html: string, runtimeSrc: string) {
   // Game code is expected to reference `window.GameFieldsPreset` when it
   // registers its adapter. That reference does not mean the platform runtime
   // has already been loaded. Only our injected script marker is authoritative.
-  let output = html;
-  if (
-    assetBaseHref
-    && !/<base\b[^>]*\bdata-game-fields-asset-base(?:\s|=|>)/i.test(output)
-  ) {
-    const base = `<base data-game-fields-asset-base href="${escapeHtmlAttribute(assetBaseHref)}">`;
-    output = /<head\b[^>]*>/i.test(output)
-      ? output.replace(/<head\b[^>]*>/i, (head) => `${head}${base}`)
-      : `${base}${output}`;
-  }
-  if (/<script\b[^>]*\bdata-game-fields-preset(?:\s|=|>)/i.test(output)) return output;
-  // The preview document deliberately runs in a sandboxed opaque origin
-  // (`allow-same-origin` is not granted). An external preset.js request cannot
-  // rely on the scoped preview cookie in that context. Inject the trusted
-  // platform runtime inline so isolation remains strict and no authenticated
-  // subresource request is required.
-  const script = `<script data-game-fields-preset>${gameFieldsPresetRuntimeSource()}</script>`;
-  return /<\/head\s*>/i.test(output) ? output.replace(/<\/head\s*>/i, `${script}</head>`) : `${script}${output}`;
+  if (/<script\b[^>]*\bdata-game-fields-preset(?:\s|=|>)/i.test(html)) return html;
+  const script = `<script data-game-fields-preset src="${escapeHtmlAttribute(runtimeSrc)}"></script>`;
+  return /<\/head\s*>/i.test(html)
+    ? html.replace(/<\/head\s*>/i, `${script}</head>`)
+    : `${script}${html}`;
 }

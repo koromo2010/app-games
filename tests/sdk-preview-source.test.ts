@@ -4,12 +4,19 @@ import test from "node:test";
 import { normalizePreviewAssetPath, previewContentType } from "../apps/sdk-preview/lib/preview-source.ts";
 import {
   createPreviewAssetToken,
-  previewAssetBasePath,
+  packageAssetPath,
+  previewAssetCacheHeaders,
+  previewAssetPath,
   previewContentSecurityPolicy,
-  previewCookiePath,
   verifyPreviewAssetToken,
 } from "../apps/sdk-preview/lib/preview-security.ts";
 import { gameFieldsPresetRuntimeSource, injectGameFieldsPreset } from "../apps/sdk-preview/lib/preset-runtime.ts";
+import {
+  PreviewAssetReferenceError,
+  rewritePreviewCssAssetUrls,
+  rewritePreviewHtmlAssetUrls,
+  rewritePreviewJavaScriptAssetUrls,
+} from "../apps/sdk-preview/lib/preview-asset-rewriter.ts";
 import {
   GAME_SDK_MODULE_IDS,
   createInitialGameSdkModuleProfile,
@@ -183,15 +190,17 @@ test("SDK package runtime injects only resources enabled by the reviewed module 
 });
 
 test("SDK preview injects one platform preset runtime into mock HTML", () => {
+  const runtimeUrl = "/p/creator/sample/revision/a/token/game-fields/preset.js";
   const html = injectGameFieldsPreset(
     "<!doctype html><html><head><title>Game</title></head><body></body></html>",
-    "/p/creator/sample/revision/a/token/",
+    runtimeUrl,
   );
-  assert.match(html, /<head><base data-game-fields-asset-base href="\/p\/creator\/sample\/revision\/a\/token\/">/);
-  assert.match(html, /<script data-game-fields-preset>\(\(\) => \{/);
-  assert.match(html, /window\.GameFieldsPreset = Object\.freeze/);
-  assert.match(html, /<\/script><\/head>/);
-  assert.equal(injectGameFieldsPreset(html), html);
+  assert.match(
+    html,
+    /<script data-game-fields-preset src="\/p\/creator\/sample\/revision\/a\/token\/game-fields\/preset\.js"><\/script><\/head>/,
+  );
+  assert.doesNotMatch(html, /<base\b|window\.GameFieldsPreset = Object\.freeze/);
+  assert.equal(injectGameFieldsPreset(html, runtimeUrl), html);
   const source = gameFieldsPresetRuntimeSource();
   assert.doesNotThrow(() => new Function(source));
   assert.match(source, /window\.GameFieldsPreset/);
@@ -499,15 +508,15 @@ test("SDK feedback artifacts stay behind result-room membership", () => {
   assert.doesNotMatch(store, /prompt:/);
 });
 
-test("SDK preview injects the runtime when game code references the preset API", () => {
-  const gameHtml = `<!doctype html><html><head><script>
-    window.addEventListener("DOMContentLoaded", () => {
-      window.GameFieldsPreset?.registerGame({ start() {} });
-    });
-  </script></head><body></body></html>`;
-
-  const injected = injectGameFieldsPreset(gameHtml);
-  assert.match(injected, /<script data-game-fields-preset>\(\(\) => \{/);
+test("SDK preview injects its platform runtime as an external signed asset", () => {
+  const gameHtml = "<!doctype html><html><head></head><body></body></html>";
+  const runtimeUrl = "https://preview.example/signed/preset.js";
+  const injected = injectGameFieldsPreset(gameHtml, runtimeUrl);
+  assert.match(
+    injected,
+    /<script data-game-fields-preset src="https:\/\/preview\.example\/signed\/preset\.js"><\/script>/,
+  );
+  assert.doesNotMatch(injected, /data-game-fields-preset>\(\(\) =>/);
   assert.equal(injected.match(/data-game-fields-preset/g)?.length, 1);
 });
 
@@ -517,22 +526,20 @@ test("SDK preview source returns strict content types", () => {
   assert.equal(previewContentType("unknown.bin"), "application/octet-stream");
 });
 
-test("SDK preview content stays sandboxed and scopes its session cookie to one revision", () => {
-  const policy = previewContentSecurityPolicy();
+test("SDK preview content stays sandboxed while explicit-origin assets remain loadable", () => {
+  const policy = previewContentSecurityPolicy("https://preview.example");
   assert.match(policy, /connect-src 'none'/);
-  assert.match(policy, /form-action 'none'/);
-  assert.match(policy, /sandbox allow-scripts/);
+  assert.match(policy, /form-action https:\/\/preview\.example/);
+  assert.match(policy, /sandbox allow-scripts allow-forms/);
   assert.doesNotMatch(policy, /allow-same-origin/);
-  assert.match(policy, /base-uri 'self'/);
+  assert.match(policy, /base-uri 'none'/);
+  assert.match(policy, /script-src https:\/\/preview\.example/);
+  assert.match(policy, /style-src https:\/\/preview\.example/);
+  assert.doesNotMatch(policy, /unsafe-inline/);
   assert.match(policy, /frame-ancestors https:\/\/sdk-dev\.game-fields\.com https:\/\/dev\.game-fields\.com/);
-  assert.equal(previewCookiePath({
-    instanceId: "creator-lab",
-    gameId: "sample-game",
-    revision: "a".repeat(40),
-  }), `/p/creator-lab/sample-game/${"a".repeat(40)}/`);
 });
 
-test("SDK preview grants opaque-origin subresources read-only access to one revision", () => {
+test("SDK preview grants each opaque-origin subresource one path-scoped deterministic capability", () => {
   const scope = {
     instanceId: "creator-lab",
     gameId: "sample-game",
@@ -540,20 +547,185 @@ test("SDK preview grants opaque-origin subresources read-only access to one revi
   };
   const secret = "test-preview-signing-secret";
   const now = Date.now();
-  const token = createPreviewAssetToken(
-    { ...scope, expiresAt: now + 60_000 },
+  const mockGrant = {
+    version: 4 as const,
+    audience: "mock-client" as const,
+    environment: "development" as const,
+    channel: "candidate-preview" as const,
+    role: "client" as const,
+    ...scope,
+    expiresAt: now + 60_000,
+  };
+  const capability = createPreviewAssetToken(
+    mockGrant,
+    "mock",
+    "styles.css",
+    now,
     secret,
   );
 
-  assert.equal(verifyPreviewAssetToken(token, scope, now, secret), true);
-  assert.equal(
-    verifyPreviewAssetToken(token, { ...scope, gameId: "other-game" }, now, secret),
-    false,
+  assert.deepEqual(
+    verifyPreviewAssetToken(
+      capability.token,
+      { ...scope, sourceKind: "mock", assetPath: "styles.css" },
+      now,
+      secret,
+    ),
+    { expiresAt: capability.expiresAt },
   );
-  assert.equal(verifyPreviewAssetToken(token, scope, now + 60_001, secret), false);
-  assert.equal(verifyPreviewAssetToken(`${token}x`, scope, now, secret), false);
   assert.equal(
-    previewAssetBasePath(scope, token),
-    `/p/${scope.instanceId}/${scope.gameId}/${scope.revision}/a/${token}/`,
+    verifyPreviewAssetToken(
+      capability.token,
+      { ...scope, sourceKind: "package", assetPath: "styles.css" },
+      now,
+      secret,
+    ),
+    null,
+  );
+  assert.equal(
+    verifyPreviewAssetToken(
+      capability.token,
+      {
+        ...scope,
+        gameId: "other-game",
+        sourceKind: "mock",
+        assetPath: "styles.css",
+      },
+      now,
+      secret,
+    ),
+    null,
+  );
+  assert.equal(
+    verifyPreviewAssetToken(
+      capability.token,
+      {
+        ...scope,
+        revision: "b".repeat(40),
+        sourceKind: "mock",
+        assetPath: "styles.css",
+      },
+      now,
+      secret,
+    ),
+    null,
+  );
+  assert.equal(
+    verifyPreviewAssetToken(
+      capability.token,
+      { ...scope, sourceKind: "mock", assetPath: "mock.js" },
+      now,
+      secret,
+    ),
+    null,
+  );
+  assert.equal(
+    verifyPreviewAssetToken(
+      capability.token,
+      { ...scope, sourceKind: "mock", assetPath: "styles.css" },
+      capability.expiresAt,
+      secret,
+    ),
+    null,
+  );
+  assert.equal(
+    previewAssetPath(scope, "styles.css", capability.token),
+    `/p/${scope.instanceId}/${scope.gameId}/${scope.revision}/a/${capability.token}/styles.css`,
+  );
+  assert.equal(
+    createPreviewAssetToken(
+      mockGrant,
+      "mock",
+      "styles.css",
+      now + 1,
+      secret,
+    ).token,
+    capability.token,
+  );
+  assert.notEqual(
+    createPreviewAssetToken(
+      mockGrant,
+      "mock",
+      "mock.js",
+      now,
+      secret,
+    ).token,
+    capability.token,
+  );
+
+  const packageCapability = createPreviewAssetToken(
+    { ...mockGrant, audience: "package-client" },
+    "package",
+    "styles.css",
+    now,
+    secret,
+  );
+  assert.deepEqual(
+    verifyPreviewAssetToken(
+      packageCapability.token,
+      { ...scope, sourceKind: "package", assetPath: "styles.css" },
+      now + 60_001,
+      secret,
+    ),
+    { expiresAt: packageCapability.expiresAt },
+  );
+  assert.equal(
+    packageAssetPath(scope, "styles.css", packageCapability.token),
+    `/package/${scope.instanceId}/${scope.gameId}/${scope.revision}/a/${packageCapability.token}/styles.css`,
+  );
+  const cacheHeaders = previewAssetCacheHeaders(capability.expiresAt, now);
+  assert.match(cacheHeaders["Cache-Control"], /^public, max-age=\d+, must-revalidate, immutable$/);
+  assert.match(cacheHeaders["Vercel-CDN-Cache-Control"], /^public, max-age=\d+, must-revalidate$/);
+  assert.doesNotMatch(JSON.stringify(cacheHeaders), /stale-while-revalidate|Vary/i);
+});
+
+test("SDK preview rewrites HTML, CSS, and module references to exact signed asset paths", () => {
+  const signed = (assetPath: string) => `https://preview.example/signed/${assetPath}`;
+  const html = rewritePreviewHtmlAssetUrls(
+    `<!doctype html><html><head>
+      <link rel="stylesheet" href="./styles/main.css">
+    </head><body>
+      <img src="./images/card.png" alt="">
+      <script type="module" src="./client/main.js"></script>
+    </body></html>`,
+    "index.html",
+    signed,
+  );
+  assert.match(html, /signed\/styles\/main\.css/);
+  assert.match(html, /signed\/images\/card\.png/);
+  assert.match(html, /signed\/client\/main\.js/);
+
+  const css = rewritePreviewCssAssetUrls(
+    `@import "./theme.css"; .card{background:url("../images/card.png#front")}`,
+    "styles/main.css",
+    signed,
+  );
+  assert.match(css, /signed\/styles\/theme\.css/);
+  assert.match(css, /signed\/images\/card\.png#front/);
+
+  const script = rewritePreviewJavaScriptAssetUrls(
+    `import { render } from "./render.js"; export { setup } from "../setup.js"; import("./lazy.js");`,
+    "client/main.js",
+    signed,
+  );
+  assert.match(script, /signed\/client\/render\.js/);
+  assert.match(script, /signed\/setup\.js/);
+  assert.match(script, /signed\/client\/lazy\.js/);
+
+  assert.throws(
+    () => rewritePreviewHtmlAssetUrls(
+      "<script>window.bad = true</script>",
+      "index.html",
+      signed,
+    ),
+    PreviewAssetReferenceError,
+  );
+  assert.throws(
+    () => rewritePreviewHtmlAssetUrls(
+      '<script src="./client.js?v=1"></script>',
+      "index.html",
+      signed,
+    ),
+    PreviewAssetReferenceError,
   );
 });

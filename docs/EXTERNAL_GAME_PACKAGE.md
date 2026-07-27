@@ -132,7 +132,7 @@ Pro版ChatGPTで運営者本人が外部利用者と同じ流れを試すため�
 
 正式clientは`GameFieldsRoom.subscribe`で閲覧者別Viewを受け、`GameFieldsRoom.send`でCommandを送る。参加者、設定、phase、revision、timer、結果の正本はRoom Runtimeで、clientはローカルadapterを登録しない。正式Previewとstableは同じclient assetとAppSetを使用する。
 
-隔離iframeは`allow-same-origin`を付けないため、HTML用HttpOnly Cookieだけでは`styles.css`、`mock.js`、画像等の相対subresourceを取得できない。認証済みHTMLへ、同一制作者・ゲーム・確定commit・期限に限定した読取専用HMAC asset tokenの`base` URLを先頭注入し、相対assetをその経路へ解決する。これによりopaque-origin隔離を維持したまま固有CSS・JavaScriptを読み込み、asset tokenを入口sessionや別revisionへ転用させない。
+隔離iframeは`allow-same-origin`を付けない。60秒client grantはfragmentから自originへのform POSTだけに使い、PreviewはCookieや303遷移を介さずPOST応答でHTML骨格を直接返す。`styles.css`、`mock.js`、画像、font、mediaとPlatform bridgeは外部assetのまま、HTML、CSS、静的module参照を各assetの署名URLへ書き換える。署名は同一source kind・制作者・ゲーム・確定commit・正規化済みasset path・期限へ限定し、別path、別revision、server bundle、manifest、`source/`へ転用できない。`Referrer-Policy: no-referrer`、query拒否、外部通信禁止、限定`frame-ancestors`を併用し、package文書へinline script/styleや`unsafe-inline`を追加しない。
 
 広告は外側Shellの共通`GameAdSlot`だけが所有する。広告モードOFF、進行中、DEBUG中はDOMごと描画せず、ゲーム固有packageと隔離iframeから広告枠の内容・表示条件を変更できない。
 

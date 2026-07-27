@@ -39,6 +39,26 @@ const packageAssetRouteFile = join(
   root,
   "apps/sdk-preview/app/package/[instanceId]/[gameId]/[revision]/[[...assetPath]]/route.ts",
 );
+const packageOpenRouteFile = join(
+  root,
+  "apps/sdk-preview/app/package-open/[instanceId]/[gameId]/[revision]/route.ts",
+);
+const previewAssetResponseFile = join(
+  root,
+  "apps/sdk-preview/lib/preview-asset-response.ts",
+);
+const previewAssetRewriterFile = join(
+  root,
+  "apps/sdk-preview/lib/preview-asset-rewriter.ts",
+);
+const previewDocumentFile = join(
+  root,
+  "apps/sdk-preview/lib/preview-document.ts",
+);
+const previewSecurityFile = join(
+  root,
+  "apps/sdk-preview/lib/preview-security.ts",
+);
 const previewLinksFile = join(root, "apps/sdk-portal/lib/preview-links.ts");
 const packageManifestFile = join(root, "apps/sdk-portal/lib/game-package-manifest.ts");
 const packageGitStoreFile = join(root, "apps/sdk-portal/lib/mock-git-store.ts");
@@ -189,15 +209,24 @@ for (const token of [
     failures.push(`${relative(root, packageServerAuthFile)}: server grant検証境界 ${token} がありません。`);
   }
 }
-const packageAssetRouteSource = readFileSync(packageAssetRouteFile, "utf8");
+const packageAssetBoundarySource = [
+  readFileSync(packageAssetRouteFile, "utf8"),
+  readFileSync(packageOpenRouteFile, "utf8"),
+  readFileSync(previewAssetResponseFile, "utf8"),
+  readFileSync(previewAssetRewriterFile, "utf8"),
+  readFileSync(previewDocumentFile, "utf8"),
+  readFileSync(previewSecurityFile, "utf8"),
+].join("\n");
 for (const token of [
-  'grant.audience !== "package-client"',
+  '"package-client"',
+  'sourceKind: "package"',
+  "verifyPreviewAssetToken",
   'assetPath === "server.bundle.js"',
   'assetPath === "game-fields-package.json"',
   'assetPath.startsWith("source/")',
 ]) {
-  if (!packageAssetRouteSource.includes(token)) {
-    failures.push(`${relative(root, packageAssetRouteFile)}: client/server package分離境界 ${token} がありません。`);
+  if (!packageAssetBoundarySource.includes(token)) {
+    failures.push(`apps/sdk-preview: client/server package分離境界 ${token} がありません。`);
   }
 }
 const previewLinksSource = readFileSync(previewLinksFile, "utf8");

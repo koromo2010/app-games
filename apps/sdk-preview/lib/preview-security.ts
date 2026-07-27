@@ -1,27 +1,23 @@
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import type { SdkPreviewGrant } from "@game-fields/sdk-preview-auth";
 
 const PREVIEW_ASSET_TOKEN_AUDIENCE = "game-fields-preview-assets";
-const PREVIEW_ASSET_TOKEN_VERSION = 1;
-const PREVIEW_CLIENT_SESSION_AUDIENCE = "game-fields-preview-client-session";
-const PREVIEW_CLIENT_SESSION_VERSION = 1;
-const PREVIEW_CLIENT_SESSION_LIFETIME_MS = 8 * 60 * 60 * 1000;
-const MAX_LOCAL_TOKEN_LENGTH = 2_048;
+const PREVIEW_ASSET_TOKEN_VERSION = "v2";
+const PREVIEW_ASSET_TOKEN_BUCKET_MS = 60 * 60 * 1000;
+const PREVIEW_ASSET_TOKEN_LIFETIME_MS = 2 * PREVIEW_ASSET_TOKEN_BUCKET_MS;
+const MAX_LOCAL_TOKEN_LENGTH = 256;
 
-type PreviewAssetScope = Pick<SdkPreviewGrant, "instanceId" | "gameId" | "revision">;
-type PreviewAssetTokenPayload = PreviewAssetScope & {
-  audience: typeof PREVIEW_ASSET_TOKEN_AUDIENCE;
-  expiresAt: number;
-  version: typeof PREVIEW_ASSET_TOKEN_VERSION;
-};
-export type PreviewClientSession = PreviewAssetScope & Pick<
+export type PreviewAssetIdentity = Pick<
   SdkPreviewGrant,
-  "channel" | "environment"
-> & {
-  audience: "mock-client" | "package-client";
+  "instanceId" | "gameId" | "revision"
+>;
+export type PreviewAssetSourceKind = "mock" | "package";
+export type PreviewAssetScope = PreviewAssetIdentity & {
+  sourceKind: PreviewAssetSourceKind;
+  assetPath: string;
+};
+export type VerifiedPreviewAssetToken = {
   expiresAt: number;
-  tokenAudience: typeof PREVIEW_CLIENT_SESSION_AUDIENCE;
-  version: typeof PREVIEW_CLIENT_SESSION_VERSION;
 };
 
 export function previewSigningSecret() {
@@ -30,138 +26,101 @@ export function previewSigningSecret() {
   return secret;
 }
 
-export function previewCookieName(grant: Pick<SdkPreviewGrant, "instanceId" | "gameId" | "revision">) {
-  const scope = `${grant.instanceId}/${grant.gameId}/${grant.revision}`;
-  return `game_fields_preview_${createHash("sha256").update(scope).digest("hex").slice(0, 20)}`;
-}
-
-export function previewCookiePath(grant: Pick<SdkPreviewGrant, "instanceId" | "gameId" | "revision">) {
-  return `/p/${grant.instanceId}/${grant.gameId}/${grant.revision}/`;
-}
-
-export function packageCookieName(grant: Pick<SdkPreviewGrant, "instanceId" | "gameId" | "revision">) {
-  return `${previewCookieName(grant)}_package`;
-}
-
-export function packageCookiePath(grant: Pick<SdkPreviewGrant, "instanceId" | "gameId" | "revision">) {
-  return `/package/${grant.instanceId}/${grant.gameId}/${grant.revision}/`;
-}
-
-function previewAssetSignature(payload: string, secret: string) {
+function previewAssetSignature(
+  scope: PreviewAssetScope,
+  expiresAt: number,
+  secret: string,
+) {
   return createHmac("sha256", secret)
-    .update(`${PREVIEW_ASSET_TOKEN_AUDIENCE}:${payload}`)
+    .update(JSON.stringify([
+      PREVIEW_ASSET_TOKEN_AUDIENCE,
+      PREVIEW_ASSET_TOKEN_VERSION,
+      scope.sourceKind,
+      scope.instanceId,
+      scope.gameId,
+      scope.revision,
+      scope.assetPath,
+      expiresAt,
+    ]))
     .digest();
 }
 
-function previewClientSessionSignature(payload: string, secret: string) {
-  return createHmac("sha256", secret)
-    .update(`${PREVIEW_CLIENT_SESSION_AUDIENCE}:${payload}`)
-    .digest();
+function scopedAssetToken(
+  scope: PreviewAssetScope,
+  expiresAt: number,
+  now: number,
+  secret: string,
+) {
+  const maximumExpiry = (
+    Math.floor(now / PREVIEW_ASSET_TOKEN_BUCKET_MS)
+    * PREVIEW_ASSET_TOKEN_BUCKET_MS
+    + PREVIEW_ASSET_TOKEN_LIFETIME_MS
+  );
+  if (
+    !scope.assetPath
+    || scope.assetPath.length > 500
+    || !Number.isSafeInteger(expiresAt)
+    || expiresAt <= now
+    || expiresAt > maximumExpiry
+  ) {
+    throw new Error("SDK preview asset scope is invalid.");
+  }
+  const encodedExpiry = expiresAt.toString(36);
+  const signature = previewAssetSignature(scope, expiresAt, secret)
+    .toString("base64url");
+  return `${PREVIEW_ASSET_TOKEN_VERSION}.${encodedExpiry}.${signature}`;
 }
 
-export function createPreviewClientSessionToken(
+/**
+ * Creates a deterministic capability for one browser-readable asset. Tokens
+ * issued within the same hour use the same expiry bucket so immutable revision
+ * assets keep a stable cache key instead of missing on every iframe reload.
+ */
+export function createPreviewAssetToken(
   grant: SdkPreviewGrant,
+  sourceKind: PreviewAssetSourceKind,
+  assetPath: string,
   now = Date.now(),
   secret = previewSigningSecret(),
 ) {
+  const expectedAudience = sourceKind === "package"
+    ? "package-client"
+    : "mock-client";
   if (
     grant.role !== "client"
-    || (grant.audience !== "mock-client" && grant.audience !== "package-client")
+    || grant.audience !== expectedAudience
     || grant.expiresAt <= now
   ) {
     throw new Error("SDK preview client grant is invalid.");
   }
-  const session = {
-    audience: grant.audience,
-    tokenAudience: PREVIEW_CLIENT_SESSION_AUDIENCE,
-    version: PREVIEW_CLIENT_SESSION_VERSION,
-    environment: grant.environment,
-    channel: grant.channel,
-    instanceId: grant.instanceId,
-    gameId: grant.gameId,
-    revision: grant.revision,
-    expiresAt: now + PREVIEW_CLIENT_SESSION_LIFETIME_MS,
-  } satisfies PreviewClientSession;
-  const payload = Buffer.from(JSON.stringify(session), "utf8").toString("base64url");
+  const expiresAt = (
+    Math.floor(now / PREVIEW_ASSET_TOKEN_BUCKET_MS)
+    * PREVIEW_ASSET_TOKEN_BUCKET_MS
+    + PREVIEW_ASSET_TOKEN_LIFETIME_MS
+  );
   return {
-    expiresAt: session.expiresAt,
-    token: `${payload}.${previewClientSessionSignature(payload, secret).toString("base64url")}`,
+    expiresAt,
+    token: scopedAssetToken({
+      sourceKind,
+      instanceId: grant.instanceId,
+      gameId: grant.gameId,
+      revision: grant.revision,
+      assetPath,
+    }, expiresAt, now, secret),
   };
 }
 
-export function verifyPreviewClientSessionToken(
-  token: string,
+/**
+ * Creates a child asset capability with the parent token's expiry. This keeps
+ * rewritten CSS and module responses byte-stable for one signed cache key.
+ */
+export function createPreviewAssetTokenForScope(
+  scope: PreviewAssetScope,
+  expiresAt: number,
   now = Date.now(),
   secret = previewSigningSecret(),
-): PreviewClientSession | null {
-  if (!token || token.length > MAX_LOCAL_TOKEN_LENGTH) return null;
-  const [payload, encodedSignature, extra] = token.split(".");
-  if (!payload || !encodedSignature || extra) return null;
-
-  let suppliedSignature: Buffer;
-  let parsed: PreviewClientSession;
-  try {
-    suppliedSignature = Buffer.from(encodedSignature, "base64url");
-    parsed = JSON.parse(
-      Buffer.from(payload, "base64url").toString("utf8"),
-    ) as PreviewClientSession;
-  } catch {
-    return null;
-  }
-  const expectedSignature = previewClientSessionSignature(payload, secret);
-  if (
-    suppliedSignature.length !== expectedSignature.length
-    || !timingSafeEqual(suppliedSignature, expectedSignature)
-  ) {
-    return null;
-  }
-  return parsed.tokenAudience === PREVIEW_CLIENT_SESSION_AUDIENCE
-    && parsed.version === PREVIEW_CLIENT_SESSION_VERSION
-    && (parsed.audience === "mock-client" || parsed.audience === "package-client")
-    && (parsed.environment === "production" || parsed.environment === "development")
-    && (
-      parsed.channel === "candidate-preview"
-      || parsed.channel === "development"
-      || parsed.channel === "main"
-    )
-    && (
-      parsed.channel === "candidate-preview"
-      || (
-        parsed.channel === "development"
-        && parsed.environment === "development"
-      )
-      || (
-        parsed.channel === "main"
-        && parsed.environment === "production"
-      )
-    )
-    && typeof parsed.instanceId === "string"
-    && typeof parsed.gameId === "string"
-    && typeof parsed.revision === "string"
-    && Number.isSafeInteger(parsed.expiresAt)
-    && parsed.expiresAt > now
-    ? parsed
-    : null;
-}
-
-/**
- * Sandboxed mocks intentionally have an opaque origin, so their subresource
- * requests cannot rely on the scoped HttpOnly preview cookie. This token grants
- * read-only access to assets from exactly one already-authorized revision.
- */
-export function createPreviewAssetToken(
-  grant: PreviewAssetScope & Pick<SdkPreviewGrant, "expiresAt">,
-  secret = previewSigningSecret(),
 ) {
-  const payload = Buffer.from(JSON.stringify({
-    audience: PREVIEW_ASSET_TOKEN_AUDIENCE,
-    version: PREVIEW_ASSET_TOKEN_VERSION,
-    instanceId: grant.instanceId,
-    gameId: grant.gameId,
-    revision: grant.revision,
-    expiresAt: grant.expiresAt,
-  } satisfies PreviewAssetTokenPayload)).toString("base64url");
-  return `${payload}.${previewAssetSignature(payload, secret).toString("base64url")}`;
+  return scopedAssetToken(scope, expiresAt, now, secret);
 }
 
 export function verifyPreviewAssetToken(
@@ -169,43 +128,65 @@ export function verifyPreviewAssetToken(
   scope: PreviewAssetScope,
   now = Date.now(),
   secret = previewSigningSecret(),
-) {
-  if (!token || token.length > 2_048) return false;
-  const [payload, encodedSignature, extra] = token.split(".");
-  if (!payload || !encodedSignature || extra) return false;
-
-  let actualSignature: Buffer;
-  let parsed: PreviewAssetTokenPayload;
-  try {
-    actualSignature = Buffer.from(encodedSignature, "base64url");
-    parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as PreviewAssetTokenPayload;
-  } catch {
-    return false;
+): VerifiedPreviewAssetToken | null {
+  if (!token || token.length > MAX_LOCAL_TOKEN_LENGTH) return null;
+  const [version, encodedExpiry, encodedSignature, extra] = token.split(".");
+  if (
+    version !== PREVIEW_ASSET_TOKEN_VERSION
+    || !encodedExpiry
+    || !encodedSignature
+    || extra
+  ) {
+    return null;
   }
 
-  const expectedSignature = previewAssetSignature(payload, secret);
+  const expiresAt = Number.parseInt(encodedExpiry, 36);
+  if (!Number.isSafeInteger(expiresAt) || expiresAt <= now) return null;
+
+  let actualSignature: Buffer;
+  try {
+    actualSignature = Buffer.from(encodedSignature, "base64url");
+  } catch {
+    return null;
+  }
+  const expectedSignature = previewAssetSignature(scope, expiresAt, secret);
   if (
     actualSignature.length !== expectedSignature.length
     || !timingSafeEqual(actualSignature, expectedSignature)
   ) {
-    return false;
+    return null;
   }
-
-  return parsed.audience === PREVIEW_ASSET_TOKEN_AUDIENCE
-    && parsed.version === PREVIEW_ASSET_TOKEN_VERSION
-    && parsed.instanceId === scope.instanceId
-    && parsed.gameId === scope.gameId
-    && parsed.revision === scope.revision
-    && Number.isSafeInteger(parsed.expiresAt)
-    && parsed.expiresAt > now;
+  return { expiresAt };
 }
 
-export function previewAssetBasePath(scope: PreviewAssetScope, token: string) {
-  return `${previewCookiePath(scope)}a/${encodeURIComponent(token)}/`;
+function encodedAssetPath(assetPath: string) {
+  return assetPath.split("/").map(encodeURIComponent).join("/");
 }
 
-export function packageAssetBasePath(scope: PreviewAssetScope, token: string) {
-  return `${packageCookiePath(scope)}a/${encodeURIComponent(token)}/`;
+export function previewAssetPath(
+  scope: PreviewAssetIdentity,
+  assetPath: string,
+  token: string,
+) {
+  return `/p/${scope.instanceId}/${scope.gameId}/${scope.revision}/a/${encodeURIComponent(token)}/${encodedAssetPath(assetPath)}`;
+}
+
+export function packageAssetPath(
+  scope: PreviewAssetIdentity,
+  assetPath: string,
+  token: string,
+) {
+  return `/package/${scope.instanceId}/${scope.gameId}/${scope.revision}/a/${encodeURIComponent(token)}/${encodedAssetPath(assetPath)}`;
+}
+
+export function previewAssetCacheHeaders(expiresAt: number, now = Date.now()) {
+  const maxAge = Math.max(0, Math.floor((expiresAt - now) / 1000));
+  const sharedPolicy = `public, max-age=${maxAge}, must-revalidate`;
+  return {
+    "Cache-Control": `${sharedPolicy}, immutable`,
+    "CDN-Cache-Control": sharedPolicy,
+    "Vercel-CDN-Cache-Control": sharedPolicy,
+  };
 }
 
 export function configuredFrameAncestors() {
@@ -222,51 +203,57 @@ export function configuredFrameAncestors() {
   return defaults;
 }
 
-export function previewExchangeContentSecurityPolicy(exchangeOrigin?: string) {
+function configuredPreviewOrigin(value?: string) {
+  if (value && /^https:\/\/[a-z0-9.-]+(?::\d+)?$/i.test(value)) return value;
+  if (
+    value
+    && process.env.NODE_ENV !== "production"
+    && /^http:\/\/localhost:\d+$/.test(value)
+  ) {
+    return value;
+  }
+  return null;
+}
+
+export function previewExchangeContentSecurityPolicy(
+  exchangeOrigin?: string,
+  scriptHash?: string,
+) {
   const ancestors = configuredFrameAncestors();
-  const explicitExchangeOrigin = exchangeOrigin
-    && (
-      /^https:\/\/[a-z0-9.-]+(?::\d+)?$/i.test(exchangeOrigin)
-      || (
-        process.env.NODE_ENV !== "production"
-        && /^http:\/\/localhost:\d+$/.test(exchangeOrigin)
-      )
-    )
-    ? exchangeOrigin
-    : null;
+  const explicitExchangeOrigin = configuredPreviewOrigin(exchangeOrigin);
+  const explicitScriptHash = scriptHash
+    && /^sha256-[A-Za-z0-9+/=]+$/.test(scriptHash)
+    ? `'${scriptHash}'`
+    : "'none'";
   return [
     "default-src 'none'",
     "base-uri 'none'",
     "object-src 'none'",
     `form-action ${explicitExchangeOrigin ?? "'none'"}`,
     "connect-src 'none'",
-    "script-src 'unsafe-inline'",
+    `script-src ${explicitScriptHash}`,
     `frame-ancestors ${ancestors.length > 0 ? ancestors.join(" ") : "'none'"}`,
   ].join("; ");
 }
 
 export function previewContentSecurityPolicy(assetOrigin?: string) {
   const ancestors = configuredFrameAncestors();
-  const explicitAssetOrigin = assetOrigin && /^https:\/\/[a-z0-9.-]+(?::\d+)?$/i.test(assetOrigin)
-    ? assetOrigin
-    : assetOrigin && process.env.NODE_ENV !== "production" && /^http:\/\/localhost:\d+$/.test(assetOrigin)
-      ? assetOrigin
-      : null;
-  const assetSources = ["'self'", explicitAssetOrigin].filter(Boolean).join(" ");
+  const explicitAssetOrigin = configuredPreviewOrigin(assetOrigin);
+  const assetSource = explicitAssetOrigin ?? "'none'";
   return [
     "default-src 'none'",
-    "base-uri 'self'",
+    "base-uri 'none'",
     "object-src 'none'",
-    "form-action 'none'",
+    `form-action ${assetSource}`,
     "connect-src 'none'",
-    `script-src ${assetSources} 'unsafe-inline'`,
-    `style-src ${assetSources} 'unsafe-inline'`,
-    `img-src ${assetSources} data: blob:`,
-    `font-src ${assetSources} data:`,
-    `media-src ${assetSources} blob:`,
+    `script-src ${assetSource}`,
+    `style-src ${assetSource}`,
+    `img-src ${assetSource} data: blob:`,
+    `font-src ${assetSource} data:`,
+    `media-src ${assetSource} blob:`,
     "worker-src 'none'",
     "child-src 'none'",
     `frame-ancestors ${ancestors.length > 0 ? ancestors.join(" ") : "'none'"}`,
-    "sandbox allow-scripts allow-modals allow-pointer-lock",
+    "sandbox allow-scripts allow-forms allow-modals allow-pointer-lock",
   ].join("; ");
 }

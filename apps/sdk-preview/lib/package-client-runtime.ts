@@ -160,20 +160,13 @@ function escapeHtmlAttribute(value: string) {
 
 export function injectGameFieldsPackageClient(
   html: string,
-  assetBaseHref: string,
+  runtimeSrc: string,
 ) {
-  let output = html;
-  if (!/<base\b[^>]*\bdata-game-fields-asset-base(?:\s|=|>)/i.test(output)) {
-    const base = `<base data-game-fields-asset-base href="${escapeHtmlAttribute(assetBaseHref)}">`;
-    output = /<head\b[^>]*>/i.test(output)
-      ? output.replace(/<head\b[^>]*>/i, (head) => `${head}${base}`)
-      : `${base}${output}`;
+  if (/<script\b[^>]*\bdata-game-fields-package-room(?:\s|=|>)/i.test(html)) {
+    return html;
   }
-  if (/<script\b[^>]*\bdata-game-fields-package-room(?:\s|=|>)/i.test(output)) {
-    return output;
-  }
-  const script = `<script data-game-fields-package-room>${gameFieldsPackageClientRuntimeSource()}</script>`;
-  return /<\/head\s*>/i.test(output)
-    ? output.replace(/<\/head\s*>/i, `${script}</head>`)
-    : `${script}${output}`;
+  const script = `<script data-game-fields-package-room src="${escapeHtmlAttribute(runtimeSrc)}"></script>`;
+  return /<\/head\s*>/i.test(html)
+    ? html.replace(/<\/head\s*>/i, `${script}</head>`)
+    : `${script}${html}`;
 }
