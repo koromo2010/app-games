@@ -279,7 +279,7 @@ SDK `llm` adapter、module lab、Preview中継API `/api/sdk-preview/llm`も本�
 
 | キー | `app-games-sdk-dev` | `app-games-preview-dev` | Vercel対象 | 状態 |
 | --- | --- | --- | --- | --- |
-| `SDK_PREVIEW_SIGNING_SECRET` | Team Sharedを再Link依頼中 | 同じdevelopment用Team Sharedを再Link依頼中 | Production | 2026-07-27のPortal署名probeがPreviewで`TOKEN_INVALID`。両Projectの同一値再Linkと再デプロイ後、`/api/health`の`previewSigning: ok`を確認する |
+| `SDK_PREVIEW_SIGNING_SECRET` | development用Team Sharedを再Link済み | 同じdevelopment用Team Sharedを再Link済み | Production | 2026-07-27に両Projectを再デプロイし、Portal `/api/health`の`previewSigning: ok`を確認済み |
 | `SDK_PREVIEW_BASE_URL` | 未登録。コード既定値`https://preview-dev.game-fields.com`を使用 | 不要 | Production | previewドメイン割当・Valid Configuration確認済み |
 | `SDK_PREVIEW_FRAME_ANCESTORS` | 不要 | 未登録。`develop`時のコード既定値として外枠`https://sdk-dev.game-fields.com`と、ゲーム固有iframeの直近親`https://dev.game-fields.com`を許可 | Production | 本体UI共用後の二段iframeに対応。明示設定する場合も両originが必要 |
 | `SDK_MOCK_GITHUB_REPOSITORY` | Project Variable登録済み。値はdev専用private repository | Project Variable登録済み | Production | 追加後Deployment作成済み、保存成功を実機確認済み |

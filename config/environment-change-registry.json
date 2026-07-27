@@ -23,7 +23,7 @@
       "environment": "Production",
       "sensitive": false,
       "operation": "remove",
-      "status": "requested",
+      "status": "completed",
       "redeployRequired": true,
       "temporary": true,
       "note": "MFA再登録と通常ログイン確認後に削除し、再デプロイする。"
@@ -52,7 +52,7 @@
       "status": "requested",
       "redeployRequired": true,
       "temporary": false,
-      "note": "Portal health probeがPreviewでTOKEN_INVALIDとなった。両Projectへ同じdevelopment用Team Shared Variableを再Linkし、両方を再デプロイする。値はGitやログへ保存しない。"
+      "note": "両Projectへ同じdevelopment用Team Shared Variableを再Linkして再デプロイ済み。2026-07-27にPortal /api/healthのpreviewSigning=okを確認した。値はGitやログへ保存しない。"
     },
     {
       "id": "2026-07-26-sdk-production-signing-secret",

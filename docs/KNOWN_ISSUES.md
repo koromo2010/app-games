@@ -634,7 +634,8 @@ AI承認追記は新しいメッセージのinsert結果で通知を判定する
 
 ## 2026-07-27 SDK正式Previewの新しい配備だけserver grantが403になる
 
-状態: コード修正・dev配備済み（2026-07-27、development署名鍵の再Link・再デプロイ待ち）
+状態: コード修正・development署名鍵再Link・dev再配備済み
+（2026-07-27、正式PreviewからのRoom作成再確認待ち）
 
 `moi-dev`の正式PreviewでスカルのRoom作成を行うと、本体
 `POST /api/sdk-preview/moi-lab/games/skull/rooms`が503
@@ -653,14 +654,15 @@ SDK Previewはgrant拒否を安全な理由別の構造化ログへ記録する�
 検出する。本体remote runnerはネットワーク例外と408／502／503／504だけを1回再試行し、
 401／403は専用の`GAME_SDK_REMOTE_RUNNER_AUTH_FAILED`として利用者表示と運用調査を分ける。
 
-修正配備後のPortal healthは503`SDK_PREVIEW_SIGNING_MISMATCH`、Previewの安全な理由は
+修正配備後のPortal healthは当初503`SDK_PREVIEW_SIGNING_MISMATCH`、Previewの安全な理由は
 `TOKEN_INVALID`だったため、両Projectのdevelopment用`SDK_PREVIEW_SIGNING_SECRET`が
 一致していないことまで確定した。`app-games-sdk-dev`と`app-games-preview-dev`へ同じ
-Team Shared Variableを再Linkし、両方を再デプロイする外部設定変更を依頼中である。
+Team Shared Variableを再Linkして再デプロイし、Portal healthの200、
+`status: ok`、`previewSigning: ok`を確認した。
 
 ## 2026-07-27 管理画面で問い合わせ・報告の初回本文が二重表示される
 
-状態: 修正済み（2026-07-27、回帰テストあり）
+状態: 修正・dev配備済み（2026-07-27、回帰テストあり）
 
 統合した管理受信箱は、初回投稿を上部の「内容」に表示したうえで、同じ本文を
 「やりとり」の先頭メッセージとしてもう一度手動描画していた。保存データや

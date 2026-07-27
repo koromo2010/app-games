@@ -5659,10 +5659,12 @@
   `SDK_PREVIEW_SIGNING_MISMATCH`を返し、Previewの`event=sdk.preview-runner-auth`は
   `TOKEN_INVALID`だった。Portal／Previewのdevelopment署名鍵不一致と確定した。
 - `app-games-sdk-dev`と`app-games-preview-dev`へ同じdevelopment用
-  `SDK_PREVIEW_SIGNING_SECRET` Team Shared Variableを再Linkし、両方を再デプロイする
-  外部設定変更を`config/environment-change-registry.json`へ`requested`で登録した。
-- 再Link後にPortal healthの`previewSigning: ok`と、正式PreviewからのRoom作成成功を
-  Runtime Logで照合する。
+  `SDK_PREVIEW_SIGNING_SECRET` Team Shared Variableを再Linkし、両方を再デプロイした。
+- Portal `dpl_DosUjeBU2vLkd7TJfCTJQKkipNoN`とPreview
+  `dpl_8K9NCz2pb6ReEypH1zoddBm29jWQ`は`READY`で、errors-only build logに失敗はない。
+- `https://sdk-dev.game-fields.com/api/health`が200を返し、
+  `status: ok`と`previewSigning: ok`を確認した。
+- 正式PreviewからのRoom作成成功は、次回の実機操作時にRuntime Logで照合する。
 
 ## 2026-07-27 — 管理受信箱の初回本文重複表示を解消
 
@@ -5686,8 +5688,11 @@
 ### 検証
 
 - 初回本文の描画が一箇所だけであることと、追加メッセージの条件表示を回帰テストへ追加した。
+- 最新`develop`統合後に全605テスト、lint、production build（78ルート）へ成功した。
+- GitHub `develop`へcommit`ba25b1107048341740183ec355f7f99392aa2467`を非forceで反映した。
+- 本体dev Deployment `dpl_G2fb5K245GdqM2C81xMWEhHSaVvT`は`READY`で、
+  errors-only build logに失敗はなかった。
 
 ### 未対応・保留
 
-- dev公開後、既存の問い合わせ・報告を管理画面で開き、初回本文が一度だけ表示されることを
-  実機確認する。
+- 既存の問い合わせ・報告を管理画面で開き、初回本文が一度だけ表示されることを実機確認する。
