@@ -2784,9 +2784,14 @@ Total output lines: 6329
 
 - support契約テスト6件、`npm run verify`、全637テストに成功した。
 - 本体production buildとSDK Portal production buildに成功した。
+- 修正commit `7af8061`をforceなしで`develop`へ反映した。
+- SDK Portal dev Deployment `dpl_7siz7S7hcdKWJiEzPXxSyqXjUefx`が`READY`となった。
+
+### 関連コミット
+
+- `7af8061` — `Prevent duplicate AI support reports`
 
 ### 未対応・保留
 
-- develop反映とdev配備。
 - ver17を使う新規AIチャットで、既存案件が`prepare_support_reply`へ進む実機確認。
 - 画像で確認した重複reportと元reportの内容整理。

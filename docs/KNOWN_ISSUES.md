@@ -725,7 +725,7 @@ URL fragmentで配布し、通常のページ要求とreferrerへ送らない。
 
 ## 2026-07-27 AIが再発報告を既存スレッドへの返信ではなく新規作成する
 
-状態: 修正実装済み（回帰テストあり、dev配備・実AI確認待ち）
+状態: 修正・dev配備済み（回帰テストあり、実AI確認待ち）
 
 `prepare_support_reply`は提供されていたが、AIが`prepare_support_report`を呼ぶ前に
 本人の既存スレッドを照合する契約がなかった。そのため、報告本文へ「以前にも報告」と
@@ -736,6 +736,9 @@ URL fragmentで配布し、通常のページ要求とreferrerへ送らない。
 `prepare_support_reply`を使う。`prepare_support_report`は、直前の一覧に含まれた
 全report IDを`checkedReportIds`として要求し、サーバー上の現在一覧と一致しない呼出しを
 拒否する。DownloadMeをver17へ更新し、既存照合を飛ばす古い会話と区別する。
+
+修正commit `7af8061`をforceなしで`develop`へ反映し、SDK Portal dev Deployment
+`dpl_7siz7S7hcdKWJiEzPXxSyqXjUefx`の`READY`を確認した。
 
 既に作成された重複reportは自動統合しない。元スレッドを特定して必要な内容を追記した後、
 重複側を「見送り・終了」にする。
