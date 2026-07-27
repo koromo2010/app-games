@@ -4842,3 +4842,40 @@
   main package Gitへの保存、正式Room作成、`SERVER_RUNTIME_BUNDLE_NOT_FOUND`消失を確認する。
   管理画面操作には直近の管理者MFAが必要であり、Cloud Browser接続がタイムアウトしたため、
   認証を迂回した直接書込みは行っていない。
+
+## 2026-07-27 — main管理者パスキーのUSBキー誤誘導再発
+
+### 利用者からの要望
+
+- `game-fields.com`の管理者パスキー認証がWindows Helloではなく、外付け
+  セキュリティキーをUSBポートへ挿す画面を再び表示する問題を解消する。
+
+### 根本原因と判断
+
+- mainは認証optionsの`allowCredentials`を空にしてdiscoverable credentialの自動選択へ
+  任せていた。既存のWindows Hello credentialが非discoverableの場合は端末側で特定できず、
+  Windowsが外付けセキュリティキーへフォールバックしていた。
+- developには登録済みcredential IDを指定し、保存済みtransport hintだけを省く修正が
+  先行していたが、mainのSDK Runtime Bundle修正には含まれていなかった。
+- 既存credentialはID指定で利用可能にし、新規登録はlocal deviceかつ
+  discoverable credentialを必須にする。
+
+### 実施結果
+
+- mainの認証optionsを、対象管理者に登録済みのcredential ID一覧を返す方式へ変更した。
+- `usb`／`hybrid`等の保存済みtransport hintは認証optionsへ含めない。
+- 新規登録の`residentKey`を`required`へ変更し、今後は空の
+  `allowCredentials`でも見つけられるcredentialだけを登録する。
+- 現行管理者MFA仕様書と回帰テストを更新した。
+
+### 検証
+
+- 管理者パスキー回帰テスト2件に成功した。
+- `npm run verify`に成功し、環境台帳、SDK境界、migration、lintを含む静的gateを通過した。
+- `npm test`に成功し、全575テストが通過した。
+- `npm run build`に成功し、本体production buildとTypeScript検査が完了した。
+
+### 未対応・保留
+
+- mainへの反映と本番Deploymentの完了を確認する。
+- 本番反映後、Windows端末で既存パスキーがPIN・指紋・顔認証へ進むことを実機確認する。

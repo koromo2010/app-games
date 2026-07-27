@@ -22,7 +22,7 @@ export async function siteAdminRegistrationOptions(email: string) {
     attestationType: "none",
     timeout: 120_000,
     excludeCredentials: existing.map((passkey) => ({ id: passkey.credentialId })),
-    authenticatorSelection: { residentKey: "preferred", userVerification: "required" },
+    authenticatorSelection: { residentKey: "required", userVerification: "required" },
     preferredAuthenticatorType: "localDevice",
   });
 }
@@ -35,11 +35,13 @@ export async function siteAdminAuthenticationOptions(email: string) {
     rpID,
     timeout: 120_000,
     userVerification: "required",
-    // Registration requests a discoverable credential. Leaving this list empty lets
-    // Windows/Chrome present the locally available or synced passkey chooser instead
-    // of assuming a USB security key from a credential-descriptor transport path.
-    // Verification below still binds the returned credential ID to this admin email.
-    allowCredentials: [],
+    // Identify the credentials registered for this admin so an older, non-discoverable
+    // Windows Hello credential can still be selected. Saved transport hints are
+    // intentionally omitted: stale "usb"/"hybrid" hints can make Windows ask for an
+    // external security key instead of using the local platform authenticator.
+    allowCredentials: passkeys.map((passkey) => ({
+      id: passkey.credentialId,
+    })),
   });
 }
 
