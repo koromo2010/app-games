@@ -5948,6 +5948,55 @@
   dev管理画面で承認・却下・履歴・復元が動くことを実機確認する。
 - main反映時は`app-games-sdk`でもmigration 005と同じ実機確認を行う。
 
+## 2026-07-27 — main／develop統合と昇格経路の整合
+
+### 利用者からの要望
+
+- 承認周りの残タスクを立て、進行を壊さない順番で続行する。
+
+### 調査結果と判断
+
+- GitHubの`develop`は`main`に対して53コミット先行・30コミット遅延しており、
+  双方に必要な修正が存在していた。単純な上書きではどちらかの変更を失うため、
+  両履歴を保持するmergeとして統合する。
+- `develop`の承認判断履歴と`main`の環境間package artifact移送が、どちらも
+  migration 005を使用していた。承認判断履歴を005のまま維持し、
+  artifact移送を006へ繰り下げ、Runtime required versionを6へ更新する。
+- 管理者認証と共通Game SDK frameは`develop`の新しい実装を優先し、
+  package artifact移送とEd25519 Preview認証は`main`の新しい実装を優先する。
+
+### 実施結果
+
+- dev appの承認時にdevelopment SDK DBからmain SDK DBへ不変package artifactを
+  移送し、移送後のrevision／hashを検証してからreleaseと判断履歴を
+  同一トランザクションで更新するよう統合した。
+- rollbackも対象artifactを確認・必要時に再移送してから、releaseと判断履歴を
+  同一トランザクションで追加する。
+- release履歴へsource revisionとartifact移送状態を追加し、同じdev版でも
+  本番artifactが欠ける場合は再承認による修復を案内する。
+- Preview runtime URLの認証情報をqueryではなくfragmentで受け渡し、
+  SDK Preview側でEd25519署名を検証するmain側の修正をdevelopへ統合した。
+- migrationを`005_release_decisions.sql`、
+  `006_cross_environment_package_artifacts.sql`の連番へ整理した。
+
+### 検証
+
+- `npm test`に成功し、承認履歴、artifact移送、Preview署名検証を含む
+  全628テストが通過した。
+- `npm run lint`、`npm run verify`に成功し、環境台帳、9ゲーム共通要件、
+  SDK境界、SDK Help、6件の連番migration、Shell契約を確認した。
+- `npm run build`、`npm run build:sdk`、`npm run build:sdk-preview`に成功した。
+- `git diff --check`に成功した。
+
+### 未対応・保留
+
+- クラウドブラウザがtab一覧取得でtimeoutしたため、dev管理画面での
+  承認・却下・履歴・復元の実操作確認は未完了。
+- `develop`へ統合commitを反映し、app／SDK Portalの`READY`、
+  SDK healthの`schemaVersion: 6`、公開後runtime errorを確認する。
+- 上記実操作確認後に`main`をfast-forwardし、本番SDK DBのmigration 006と
+  本番4 projectの配備状態を確認する。
+
 ## 2026-07-27 — SDK正式PackageのDEBUGとダミー操作をplaying中も維持
 
 ### 利用者からの報告

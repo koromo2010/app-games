@@ -3,6 +3,10 @@ import type { SdkPreviewGrant } from "@game-fields/sdk-preview-auth";
 
 const PREVIEW_ASSET_TOKEN_AUDIENCE = "game-fields-preview-assets";
 const PREVIEW_ASSET_TOKEN_VERSION = 1;
+const PREVIEW_CLIENT_SESSION_AUDIENCE = "game-fields-preview-client-session";
+const PREVIEW_CLIENT_SESSION_VERSION = 1;
+const PREVIEW_CLIENT_SESSION_LIFETIME_MS = 8 * 60 * 60 * 1000;
+const MAX_LOCAL_TOKEN_LENGTH = 2_048;
 
 type PreviewAssetScope = Pick<SdkPreviewGrant, "instanceId" | "gameId" | "revision">;
 type PreviewAssetTokenPayload = PreviewAssetScope & {
@@ -10,9 +14,18 @@ type PreviewAssetTokenPayload = PreviewAssetScope & {
   expiresAt: number;
   version: typeof PREVIEW_ASSET_TOKEN_VERSION;
 };
+export type PreviewClientSession = PreviewAssetScope & Pick<
+  SdkPreviewGrant,
+  "channel" | "environment"
+> & {
+  audience: "mock-client" | "package-client";
+  expiresAt: number;
+  tokenAudience: typeof PREVIEW_CLIENT_SESSION_AUDIENCE;
+  version: typeof PREVIEW_CLIENT_SESSION_VERSION;
+};
 
 export function previewSigningSecret() {
-  const secret = process.env.SDK_PREVIEW_SIGNING_SECRET ?? "";
+  const secret = process.env.SDK_PREVIEW_SIGNING_SECRET?.trim() ?? "";
   if (!secret) throw new Error("SDK preview signing is not configured.");
   return secret;
 }
@@ -38,6 +51,97 @@ function previewAssetSignature(payload: string, secret: string) {
   return createHmac("sha256", secret)
     .update(`${PREVIEW_ASSET_TOKEN_AUDIENCE}:${payload}`)
     .digest();
+}
+
+function previewClientSessionSignature(payload: string, secret: string) {
+  return createHmac("sha256", secret)
+    .update(`${PREVIEW_CLIENT_SESSION_AUDIENCE}:${payload}`)
+    .digest();
+}
+
+export function createPreviewClientSessionToken(
+  grant: SdkPreviewGrant,
+  now = Date.now(),
+  secret = previewSigningSecret(),
+) {
+  if (
+    grant.role !== "client"
+    || (grant.audience !== "mock-client" && grant.audience !== "package-client")
+    || grant.expiresAt <= now
+  ) {
+    throw new Error("SDK preview client grant is invalid.");
+  }
+  const session = {
+    audience: grant.audience,
+    tokenAudience: PREVIEW_CLIENT_SESSION_AUDIENCE,
+    version: PREVIEW_CLIENT_SESSION_VERSION,
+    environment: grant.environment,
+    channel: grant.channel,
+    instanceId: grant.instanceId,
+    gameId: grant.gameId,
+    revision: grant.revision,
+    expiresAt: now + PREVIEW_CLIENT_SESSION_LIFETIME_MS,
+  } satisfies PreviewClientSession;
+  const payload = Buffer.from(JSON.stringify(session), "utf8").toString("base64url");
+  return {
+    expiresAt: session.expiresAt,
+    token: `${payload}.${previewClientSessionSignature(payload, secret).toString("base64url")}`,
+  };
+}
+
+export function verifyPreviewClientSessionToken(
+  token: string,
+  now = Date.now(),
+  secret = previewSigningSecret(),
+): PreviewClientSession | null {
+  if (!token || token.length > MAX_LOCAL_TOKEN_LENGTH) return null;
+  const [payload, encodedSignature, extra] = token.split(".");
+  if (!payload || !encodedSignature || extra) return null;
+
+  let suppliedSignature: Buffer;
+  let parsed: PreviewClientSession;
+  try {
+    suppliedSignature = Buffer.from(encodedSignature, "base64url");
+    parsed = JSON.parse(
+      Buffer.from(payload, "base64url").toString("utf8"),
+    ) as PreviewClientSession;
+  } catch {
+    return null;
+  }
+  const expectedSignature = previewClientSessionSignature(payload, secret);
+  if (
+    suppliedSignature.length !== expectedSignature.length
+    || !timingSafeEqual(suppliedSignature, expectedSignature)
+  ) {
+    return null;
+  }
+  return parsed.tokenAudience === PREVIEW_CLIENT_SESSION_AUDIENCE
+    && parsed.version === PREVIEW_CLIENT_SESSION_VERSION
+    && (parsed.audience === "mock-client" || parsed.audience === "package-client")
+    && (parsed.environment === "production" || parsed.environment === "development")
+    && (
+      parsed.channel === "candidate-preview"
+      || parsed.channel === "development"
+      || parsed.channel === "main"
+    )
+    && (
+      parsed.channel === "candidate-preview"
+      || (
+        parsed.channel === "development"
+        && parsed.environment === "development"
+      )
+      || (
+        parsed.channel === "main"
+        && parsed.environment === "production"
+      )
+    )
+    && typeof parsed.instanceId === "string"
+    && typeof parsed.gameId === "string"
+    && typeof parsed.revision === "string"
+    && Number.isSafeInteger(parsed.expiresAt)
+    && parsed.expiresAt > now
+    ? parsed
+    : null;
 }
 
 /**
@@ -104,7 +208,7 @@ export function packageAssetBasePath(scope: PreviewAssetScope, token: string) {
   return `${packageCookiePath(scope)}a/${encodeURIComponent(token)}/`;
 }
 
-function configuredFrameAncestors() {
+export function configuredFrameAncestors() {
   const configured = process.env.SDK_PREVIEW_FRAME_ANCESTORS?.trim();
   if (configured) {
     return configured
@@ -116,6 +220,19 @@ function configuredFrameAncestors() {
     : ["https://sdk-dev.game-fields.com", "https://dev.game-fields.com"];
   if (process.env.NODE_ENV !== "production") defaults.push("http://localhost:3001");
   return defaults;
+}
+
+export function previewExchangeContentSecurityPolicy() {
+  const ancestors = configuredFrameAncestors();
+  return [
+    "default-src 'none'",
+    "base-uri 'none'",
+    "object-src 'none'",
+    "form-action 'none'",
+    "connect-src 'self'",
+    "script-src 'unsafe-inline'",
+    `frame-ancestors ${ancestors.length > 0 ? ancestors.join(" ") : "'none'"}`,
+  ].join("; ");
 }
 
 export function previewContentSecurityPolicy(assetOrigin?: string) {

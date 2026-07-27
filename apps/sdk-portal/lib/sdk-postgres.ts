@@ -3,7 +3,7 @@ import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 let client: NeonQueryFunction<boolean, boolean> | null = null;
 let initialized: Promise<void> | null = null;
 
-export const SDK_SCHEMA_VERSION = 5;
+export const SDK_SCHEMA_VERSION = 6;
 
 function databaseUrl() {
   const url = process.env.SDK_DATABASE_URL

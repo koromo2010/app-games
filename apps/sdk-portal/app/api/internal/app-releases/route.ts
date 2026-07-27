@@ -23,9 +23,21 @@ function authorize(request: Request) {
 
 function errorResponse(error: unknown) {
   if (error instanceof AppReleaseError) {
-    return Response.json({ error: error.code }, { status: error.status });
+    return Response.json({
+      error: error.detail ? `${error.code}:${error.detail}` : error.code,
+      code: error.code,
+      detail: error.detail,
+    }, { status: error.status });
   }
-  return Response.json({ error: "APP_RELEASE_FAILED" }, { status: 503 });
+  const detail = error instanceof Error
+    ? `${error.name}: ${error.message}`
+    : String(error);
+  console.error("[internal-app-releases] unhandled failure", { detail });
+  return Response.json({
+    error: `APP_RELEASE_FAILED:${detail}`,
+    code: "APP_RELEASE_FAILED",
+    detail,
+  }, { status: 503 });
 }
 
 export async function GET(request: Request) {

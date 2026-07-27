@@ -1,8 +1,7 @@
-import { verifySdkPreviewToken } from "@game-fields/sdk-preview-auth";
 import { createHash } from "node:crypto";
 import type { GameSdkPortableServerRequest } from "@game-fields/game-sdk/portable-server";
 import { fetchPreviewAsset } from "@/lib/preview-source";
-import { previewSigningSecret } from "@/lib/preview-security";
+import { verifyPortalPreviewGrant } from "@/lib/preview-grant-verifier";
 import {
   GameSdkPortableRunnerError,
   runGameSdkPortableServer,
@@ -30,7 +29,7 @@ export async function POST(
   const params = await context.params;
   let grant;
   try {
-    grant = verifySdkPreviewToken(bearerToken(request), previewSigningSecret());
+    grant = await verifyPortalPreviewGrant(bearerToken(request));
   } catch {
     return Response.json({ error: "SERVER_RUNTIME_NOT_CONFIGURED" }, { status: 503 });
   }
@@ -45,8 +44,16 @@ export async function POST(
     revision: params.revision,
   });
   if (authFailure || !grant) {
-    logServerRuntimeAuthFailure(authFailure ?? "TOKEN_INVALID", "invoke");
-    return Response.json({ error: "SERVER_RUNTIME_FORBIDDEN" }, { status: 403 });
+    const failure = authFailure ?? "TOKEN_INVALID";
+    logServerRuntimeAuthFailure(failure, "invoke");
+    const error = failure === "TOKEN_INVALID"
+      ? "SERVER_RUNTIME_TOKEN_INVALID"
+      : failure === "AUDIENCE_INVALID" || failure === "ROLE_INVALID"
+        ? "SERVER_RUNTIME_GRANT_ROLE_INVALID"
+        : failure === "ENVIRONMENT_MISMATCH"
+          ? "SERVER_RUNTIME_GRANT_ENVIRONMENT_INVALID"
+          : "SERVER_RUNTIME_GRANT_SCOPE_INVALID";
+    return Response.json({ error }, { status: 403 });
   }
 
   const declaredLength = Number(request.headers.get("content-length") ?? 0);

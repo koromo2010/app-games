@@ -12,6 +12,8 @@ type Release = {
   title: string;
   description: string;
   revision: string;
+  sourceRevision?: string;
+  artifactTransferred?: boolean;
   packageRootSha256: string;
   serverBundleSha256: string;
   appSetSourceSha256: string;
@@ -192,8 +194,11 @@ export function AppReleaseManagementPanel({
             const latestDecision = latestDecisionByRevision.get(
               `${release.lineageId}:${release.revision}`,
             );
-            const unchanged = current?.revision === release.revision
-              && current.packageRootSha256 === release.packageRootSha256;
+            const sameSourceRevision = (current?.sourceRevision ?? current?.revision) === release.revision;
+            const samePackage = current?.packageRootSha256 === release.packageRootSha256;
+            const unchanged = sameSourceRevision
+              && samePackage
+              && current?.artifactTransferred !== false;
             const action = current ? "既存mainアプリを更新" : "mainへ新規登録";
             const reason = reasons[release.lineageId]?.trim() ?? "";
             return (
@@ -205,6 +210,11 @@ export function AppReleaseManagementPanel({
                   </div>
                   <p className="mt-1 font-mono text-xs text-slate-500">{release.lineageId} / {release.publicGameId}</p>
                   <p className="mt-2 text-xs text-slate-400">dev {short(release.revision)} → main {mainError ? "確認不可" : current ? short(current.revision) : "未登録"}</p>
+                  {current && sameSourceRevision && samePackage && current.artifactTransferred === false && (
+                    <p className="mt-2 text-xs font-bold text-amber-200">
+                      本番package実体の再移送が必要です。同じdev版を再承認してください。
+                    </p>
+                  )}
                   {latestDecision && (
                     <p className={`mt-2 text-xs font-bold ${latestDecision.action === "reject" ? "text-rose-200" : "text-cyan-200"}`}>
                       直近判断: {latestDecision.action === "reject" ? "却下" : latestDecision.action === "approve" ? "承認" : "復元"}

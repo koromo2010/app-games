@@ -199,7 +199,7 @@ function validCatalogPayload(
     !isSdkPreviewRuntimeUrl(
       item.clientRuntimeUrl,
       `/package-open/${item.creatorSlug}/${item.sourceGameId}/${item.revision}`,
-      { allowTokenQuery: true, env },
+      { allowTokenFragment: true, env },
     )
     || !isSdkPreviewRuntimeUrl(
       item.serverRuntimeUrl,

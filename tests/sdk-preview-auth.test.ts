@@ -1,19 +1,28 @@
 import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 import {
   createSdkPreviewToken,
   createSdkServiceAuthorization,
+  sdkPreviewPublicKey,
   verifySdkPreviewToken,
   verifySdkServiceAuthorization,
 } from "../packages/sdk-preview-auth/src/index.ts";
 import {
   createPackageRuntimeAccess,
-  createPreviewSigningProbe,
 } from "../apps/sdk-portal/lib/preview-links.ts";
+import {
+  resetPreviewPublicKeyCacheForTests,
+  verifyPortalPreviewGrant,
+} from "../apps/sdk-preview/lib/preview-grant-verifier.ts";
+import {
+  createPreviewClientSessionToken,
+  verifyPreviewClientSessionToken,
+} from "../apps/sdk-preview/lib/preview-security.ts";
 
 const secret = "sdk-preview-test-secret-with-at-least-32-bytes";
 const grant = {
-  version: 3 as const,
+  version: 4 as const,
   audience: "package-server" as const,
   environment: "development" as const,
   channel: "development" as const,
@@ -26,19 +35,36 @@ const grant = {
 };
 
 test("SDK preview token accepts only the signed immutable scope before expiry", () => {
+  const publicKey = sdkPreviewPublicKey(secret);
   const token = createSdkPreviewToken(grant, secret);
-  assert.deepEqual(verifySdkPreviewToken(token, secret, 1_999), grant);
-  assert.equal(verifySdkPreviewToken(token, secret, 2_000), null);
+  assert.deepEqual(verifySdkPreviewToken(token, publicKey, 1_999), grant);
+  assert.equal(verifySdkPreviewToken(token, publicKey, 2_000), null);
   const replacement = token.endsWith("a") ? "b" : "a";
-  assert.equal(verifySdkPreviewToken(`${token.slice(0, -1)}${replacement}`, secret, 1_000), null);
+  assert.equal(
+    verifySdkPreviewToken(
+      `${token.slice(0, -1)}${replacement}`,
+      publicKey,
+      1_000,
+    ),
+    null,
+  );
+  assert.equal(
+    verifySdkPreviewToken(
+      token,
+      sdkPreviewPublicKey("another-signing-secret-with-at-least-32-bytes"),
+      1_000,
+    ),
+    null,
+  );
 });
 
 test("SDK preview token keeps adopted development and main channels distinct", () => {
+  const publicKey = sdkPreviewPublicKey(secret);
   const developmentGrant = { ...grant, channel: "development" as const };
   assert.deepEqual(
     verifySdkPreviewToken(
       createSdkPreviewToken(developmentGrant, secret),
-      secret,
+      publicKey,
       1_999,
     ),
     developmentGrant,
@@ -58,7 +84,11 @@ test("SDK preview token keeps adopted development and main channels distinct", (
     channel: "main" as const,
   };
   assert.deepEqual(
-    verifySdkPreviewToken(createSdkPreviewToken(mainGrant, secret), secret, 1_999),
+    verifySdkPreviewToken(
+      createSdkPreviewToken(mainGrant, secret),
+      publicKey,
+      1_999,
+    ),
     mainGrant,
   );
 });
@@ -82,37 +112,21 @@ test("main runtime access stays production-scoped when requested from develop", 
     assert.match(access.serverRuntimeUrl, /^https:\/\/preview\.game-fields\.com\//);
     const runtimeGrant = verifySdkPreviewToken(
       access.serverRuntimeToken,
-      secret,
+      sdkPreviewPublicKey(secret),
       1_001,
     );
     assert.equal(runtimeGrant?.environment, "production");
     assert.equal(runtimeGrant?.channel, "main");
-  } finally {
-    if (previousSecret === undefined) delete process.env.SDK_PREVIEW_SIGNING_SECRET;
-    else process.env.SDK_PREVIEW_SIGNING_SECRET = previousSecret;
-    if (previousRef === undefined) delete process.env.VERCEL_GIT_COMMIT_REF;
-    else process.env.VERCEL_GIT_COMMIT_REF = previousRef;
-    if (previousBaseUrl === undefined) delete process.env.SDK_PREVIEW_BASE_URL;
-    else process.env.SDK_PREVIEW_BASE_URL = previousBaseUrl;
-  }
-});
-
-test("SDK Portal signing probe is short-lived and scoped to the matching preview", () => {
-  const previousSecret = process.env.SDK_PREVIEW_SIGNING_SECRET;
-  const previousRef = process.env.VERCEL_GIT_COMMIT_REF;
-  const previousBaseUrl = process.env.SDK_PREVIEW_BASE_URL;
-  process.env.SDK_PREVIEW_SIGNING_SECRET = secret;
-  process.env.VERCEL_GIT_COMMIT_REF = "develop";
-  process.env.SDK_PREVIEW_BASE_URL = "https://preview-dev.example";
-  try {
-    const probe = createPreviewSigningProbe(1_000);
-    assert.equal(probe.url, "https://preview-dev.example/health/auth");
-    assert.equal(probe.expiresAt, 61_000);
-    const runtimeGrant = verifySdkPreviewToken(probe.token, secret, 1_001);
-    assert.equal(runtimeGrant?.audience, "package-server");
-    assert.equal(runtimeGrant?.environment, "development");
-    assert.equal(runtimeGrant?.channel, "candidate-preview");
-    assert.equal(runtimeGrant?.instanceId, "health-check");
+    assert.doesNotMatch(access.clientRuntimeUrl, /\?token=/);
+    assert.match(access.clientRuntimeUrl, /#token=gfsp4\./);
+    const clientToken = new URL(access.clientRuntimeUrl).hash.slice("#token=".length);
+    const clientGrant = verifySdkPreviewToken(
+      decodeURIComponent(clientToken),
+      sdkPreviewPublicKey(secret),
+      1_001,
+    );
+    assert.equal(clientGrant?.expiresAt, 61_000);
+    assert.equal(runtimeGrant?.expiresAt, 601_000);
   } finally {
     if (previousSecret === undefined) delete process.env.SDK_PREVIEW_SIGNING_SECRET;
     else process.env.SDK_PREVIEW_SIGNING_SECRET = previousSecret;
@@ -139,7 +153,7 @@ test("SDK preview token binds client and server audiences with a bundle hash", (
     role: "client",
   }, secret));
   const clientGrant = {
-    version: 3 as const,
+    version: 4 as const,
     audience: "package-client" as const,
     environment: "development" as const,
     channel: "candidate-preview" as const,
@@ -150,8 +164,180 @@ test("SDK preview token binds client and server audiences with a bundle hash", (
     expiresAt: grant.expiresAt,
   };
   assert.deepEqual(
-    verifySdkPreviewToken(createSdkPreviewToken(clientGrant, secret), secret, 1_999),
+    verifySdkPreviewToken(
+      createSdkPreviewToken(clientGrant, secret),
+      sdkPreviewPublicKey(secret),
+      1_999,
+    ),
     clientGrant,
+  );
+});
+
+test("isolated preview verifies the issuer with only its Ed25519 public key", async () => {
+  const portalSecret = "portal-only-signing-secret-with-at-least-32-bytes";
+  const previewLocalSecret = "different-preview-local-secret-over-32-bytes";
+  const mainGrant = {
+    ...grant,
+    environment: "production" as const,
+    channel: "main" as const,
+    expiresAt: 20_000,
+  };
+  const token = createSdkPreviewToken(mainGrant, portalSecret);
+  const verified = await verifyPortalPreviewGrant(token, {
+    env: {
+      VERCEL_GIT_COMMIT_REF: "main",
+      SDK_PREVIEW_SIGNING_SECRET: previewLocalSecret,
+    },
+    now: 10_000,
+    publicKey: sdkPreviewPublicKey(portalSecret),
+  });
+
+  assert.deepEqual(verified, mainGrant);
+});
+
+test("isolated preview obtains only a cacheable public key during key rollout", async () => {
+  resetPreviewPublicKeyCacheForTests();
+  const portalSecret = "portal-rollout-secret-with-at-least-32-bytes";
+  const publicKey = sdkPreviewPublicKey(portalSecret);
+  const token = createSdkPreviewToken({
+    ...grant,
+    expiresAt: 20_000,
+  }, portalSecret);
+  let fetchCount = 0;
+  const fetchPublicKey = async () => {
+    fetchCount += 1;
+    return Response.json({
+      algorithm: "Ed25519",
+      environment: "development",
+      publicKey,
+      version: 4,
+    });
+  };
+  assert.deepEqual(await verifyPortalPreviewGrant(token, {
+    env: { VERCEL_GIT_COMMIT_REF: "develop" },
+    fetchPublicKey,
+    now: 10_000,
+  }), { ...grant, expiresAt: 20_000 });
+  assert.deepEqual(await verifyPortalPreviewGrant(token, {
+    env: { VERCEL_GIT_COMMIT_REF: "develop" },
+    fetchPublicKey,
+    now: 10_000,
+  }), { ...grant, expiresAt: 20_000 });
+  assert.equal(fetchCount, 1);
+});
+
+test("production preview uses its pinned public key without runtime discovery", async () => {
+  let fetchCount = 0;
+  assert.equal(await verifyPortalPreviewGrant("invalid-token", {
+    env: { VERCEL_GIT_COMMIT_REF: "main" },
+    fetchPublicKey: async () => {
+      fetchCount += 1;
+      throw new Error("production must not fetch the Portal public key");
+    },
+  }), null);
+  assert.equal(fetchCount, 0);
+});
+
+test("isolated preview rejects invalid public keys and unavailable key discovery", async () => {
+  resetPreviewPublicKeyCacheForTests();
+  assert.equal(await verifyPortalPreviewGrant("invalid-token", {
+    publicKey: sdkPreviewPublicKey(secret),
+  }), null);
+  await assert.rejects(
+    verifyPortalPreviewGrant("token.with-signature", {
+      env: { VERCEL_GIT_COMMIT_REF: "develop" },
+      fetchPublicKey: async () => Response.json({
+        algorithm: "Ed25519",
+        environment: "development",
+        publicKey: "invalid",
+        version: 4,
+      }),
+    }),
+    /SDK_PREVIEW_PUBLIC_KEY_INVALID/,
+  );
+  resetPreviewPublicKeyCacheForTests();
+  await assert.rejects(
+    verifyPortalPreviewGrant("token.with-signature", {
+      env: { VERCEL_GIT_COMMIT_REF: "develop" },
+      fetchPublicKey: async () => {
+        throw new Error("network detail must not escape");
+      },
+    }),
+    /SDK_PREVIEW_PUBLIC_KEY_UNAVAILABLE/,
+  );
+});
+
+test("short client exchange grants become scoped local HttpOnly session values", () => {
+  const clientGrant = {
+    version: 4 as const,
+    audience: "package-client" as const,
+    environment: "production" as const,
+    channel: "main" as const,
+    role: "client" as const,
+    instanceId: grant.instanceId,
+    gameId: grant.gameId,
+    revision: grant.revision,
+    expiresAt: 61_000,
+  };
+  const localSecret = "preview-local-session-secret-with-at-least-32-bytes";
+  const session = createPreviewClientSessionToken(
+    clientGrant,
+    1_000,
+    localSecret,
+  );
+  const verified = verifyPreviewClientSessionToken(
+    session.token,
+    1_001,
+    localSecret,
+  );
+  assert.equal(verified?.audience, "package-client");
+  assert.equal(verified?.environment, "production");
+  assert.equal(verified?.expiresAt, 1_000 + 8 * 60 * 60 * 1_000);
+  assert.equal(
+    verifyPreviewClientSessionToken(
+      session.token,
+      verified!.expiresAt,
+      localSecret,
+    ),
+    null,
+  );
+  assert.equal(
+    verifyPreviewClientSessionToken(
+      session.token,
+      1_001,
+      "wrong-preview-local-secret-with-at-least-32-bytes",
+    ),
+    null,
+  );
+});
+
+test("client grants use a fragment POST exchange and never query credentials", () => {
+  const exchangeSource = readFileSync(
+    "apps/sdk-preview/lib/preview-exchange.ts",
+    "utf8",
+  );
+  assert.match(exchangeSource, /location\.hash/);
+  assert.match(
+    exchangeSource,
+    /history\.replaceState\(null, "", location\.pathname\)/,
+  );
+  assert.match(exchangeSource, /method: "POST"/);
+  assert.match(exchangeSource, /redirect: "error"/);
+  assert.match(exchangeSource, /"Referrer-Policy": "no-referrer"/);
+  assert.doesNotMatch(exchangeSource, /document\.cookie/);
+  for (const path of [
+    "apps/sdk-preview/app/open/[instanceId]/[gameId]/[revision]/route.ts",
+    "apps/sdk-preview/app/package-open/[instanceId]/[gameId]/[revision]/route.ts",
+  ]) {
+    const source = readFileSync(path, "utf8");
+    assert.doesNotMatch(source, /searchParams\.get\(["']token["']\)/);
+    assert.match(source, /createPreviewClientSessionToken/);
+    assert.match(source, /httpOnly: true/);
+    assert.match(source, /sameSite: "strict"/);
+  }
+  assert.equal(
+    existsSync("apps/sdk-portal/app/api/preview-token/verify/route.ts"),
+    false,
   );
 });
 

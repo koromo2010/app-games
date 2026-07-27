@@ -4,7 +4,7 @@ SDK公開後のデータは、用途ごとに正本、保持期間、削除方�
 
 ## 原則
 
-- Package Revisionは不変とし、同じRevisionの内容を更新しない。
+- Package Revisionは各package Git内で不変とし、同じRevisionの内容を更新しない。環境をまたぐ昇格ではcontent hashを維持した別commitを作り、元Revisionを監査用に保持する。
 - main採用カタログはRevisionへの可変pointerであり、公開停止ではpointerだけを外す。
 - Roomは開始時のRuntime契約とsettings snapshotを保持する。Packageの公開停止後も、開始済みRoomは固定済みRevisionで終了できる。
 - Browserから送られたplayer IDや削除対象は信用せず、Platformが認証情報から主体を解決する。
@@ -24,7 +24,7 @@ SDK公開後のデータは、用途ごとに正本、保持期間、削除方�
 | お問い合わせ | 環境別Redis | 最終更新から365日、最大1,000件 | 管理受信箱の状態更新で期限延長。索引外本文は同時削除 |
 | replay | 環境別Redis | 既定30日 | TTL。お気に入り制御はreplay policyに従う |
 | 戦績・rating | Platform PostgreSQL／Redis | サービス提供中 | account削除時にplayer別結果とrating fieldを削除 |
-| Package Revision | SDK PostgreSQL | 公開・監査に必要な期間 | 通常は物理更新・上書き禁止 |
+| Package Revision | 環境別package GitとSDK PostgreSQL | 公開・監査に必要な期間 | 通常は物理更新・上書き禁止。cross-environment昇格は元`source_revision`と実行先`revision`を両方保持 |
 | main catalog pointer | SDK PostgreSQL | 公開中 | unpublishで即時解除。履歴とRevisionは残す |
 | game catalog record | SDK PostgreSQL | 制作者が保持する間 | DELETEで`tombstone`。新規Preview／catalogから即時除外 |
 | channel history | SDK PostgreSQL | 監査に必要な期間 | append-only。通常のunpublish／game削除では消さない |

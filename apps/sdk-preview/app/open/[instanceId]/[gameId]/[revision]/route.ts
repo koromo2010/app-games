@@ -1,18 +1,38 @@
-import { verifySdkPreviewToken } from "@game-fields/sdk-preview-auth";
 import { NextResponse, type NextRequest } from "next/server";
-import { previewCookieName, previewCookiePath, previewSigningSecret } from "@/lib/preview-security";
+import { verifyPortalPreviewGrant } from "@/lib/preview-grant-verifier";
+import {
+  previewExchangePageResponse,
+  readPreviewExchangeToken,
+} from "@/lib/preview-exchange";
+import {
+  createPreviewClientSessionToken,
+  previewCookieName,
+  previewCookiePath,
+} from "@/lib/preview-security";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(
   request: NextRequest,
+) {
+  if (request.nextUrl.search) {
+    return new Response("Query credentials are not accepted.", { status: 400 });
+  }
+  return previewExchangePageResponse();
+}
+
+export async function POST(
+  request: NextRequest,
   context: { params: Promise<{ instanceId: string; gameId: string; revision: string }> },
 ) {
   const params = await context.params;
-  const token = request.nextUrl.searchParams.get("token") ?? "";
+  const token = await readPreviewExchangeToken(request);
+  if (!token) {
+    return Response.json({ error: "PREVIEW_EXCHANGE_INVALID" }, { status: 400 });
+  }
   let grant;
   try {
-    grant = verifySdkPreviewToken(token, previewSigningSecret());
+    grant = await verifyPortalPreviewGrant(token);
   } catch {
     return new Response("Preview runtime is not configured.", { status: 503 });
   }
@@ -24,17 +44,17 @@ export async function GET(
     return new Response("Preview link is invalid or expired.", { status: 403 });
   }
 
-  const destination = new URL(`${previewCookiePath(grant)}index.html`, request.url);
-  destination.search = "";
-  const response = NextResponse.redirect(destination, 307);
+  const session = createPreviewClientSessionToken(grant);
+  const destination = `${previewCookiePath(grant)}index.html`;
+  const response = NextResponse.json({ destination });
   response.cookies.set({
     name: previewCookieName(grant),
-    value: token,
+    value: session.token,
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "strict",
     path: previewCookiePath(grant),
-    maxAge: Math.max(1, Math.floor((grant.expiresAt - Date.now()) / 1000)),
+    maxAge: Math.max(1, Math.floor((session.expiresAt - Date.now()) / 1000)),
   });
   response.headers.set("Cache-Control", "private, no-store");
   response.headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");

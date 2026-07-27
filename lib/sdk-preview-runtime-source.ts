@@ -72,7 +72,7 @@ export function isSdkPreviewRuntimeUrl(
   value: unknown,
   expectedPath: string,
   options?: {
-    allowTokenQuery?: boolean;
+    allowTokenFragment?: boolean;
     env?: NodeJS.ProcessEnv;
   },
 ) {
@@ -85,13 +85,18 @@ export function isSdkPreviewRuntimeUrl(
       || actual.pathname !== expectedPath
       || actual.username
       || actual.password
-      || actual.hash
     ) return false;
-    if (!options?.allowTokenQuery) return actual.search === "";
-    const entries = [...actual.searchParams.entries()];
+    if (!options?.allowTokenFragment) {
+      return actual.search === "" && actual.hash === "";
+    }
+    if (actual.search) return false;
+    const entries = [
+      ...new URLSearchParams(actual.hash.replace(/^#/, "")).entries(),
+    ];
     return entries.length === 1
       && entries[0]?.[0] === "token"
-      && Boolean(entries[0]?.[1]);
+      && Boolean(entries[0]?.[1])
+      && entries[0]![1].length <= 2_048;
   } catch {
     return false;
   }
@@ -154,7 +159,7 @@ export async function loadSdkPreviewRuntimeDefinition(
       !isSdkPreviewRuntimeUrl(
         payload.runtimeUrl,
         `/package-open/${creatorSlug}/${gameId}/${payload.revision}`,
-        { allowTokenQuery: true, env },
+        { allowTokenFragment: true, env },
       )
       || !isSdkPreviewRuntimeUrl(
         payload.serverRuntimeUrl,

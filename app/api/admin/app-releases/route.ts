@@ -123,6 +123,7 @@ function developmentReleases(payload: unknown) {
       title: item.title,
       description: item.description,
       revision: item.revision,
+      sourceRevision: item.sourceRevision ?? item.revision,
       packageRootSha256: item.packageRootSha256,
       serverBundleSha256: item.serverBundleSha256,
       appSetSourceSha256: item.appSetSourceSha256,

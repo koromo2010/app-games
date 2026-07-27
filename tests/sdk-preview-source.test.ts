@@ -103,7 +103,7 @@ test("SDK package runtime accepts only its configured isolated origin and exact 
   const validPayload = {
     title: "サンプル",
     runtimeKind: "package",
-    runtimeUrl: `https://preview.example/package-open/creator-lab/sample-game/${revision}?token=client`,
+    runtimeUrl: `https://preview.example/package-open/creator-lab/sample-game/${revision}#token=client`,
     revision,
     manifest,
     serverRuntimeUrl: `https://preview.example/server/creator-lab/sample-game/${revision}`,
@@ -129,6 +129,20 @@ test("SDK package runtime accepts only its configured isolated origin and exact 
     })) as typeof fetch,
     env,
   ), /SDK_PREVIEW_PACKAGE_RUNTIME_INVALID/);
+  for (const runtimeUrl of [
+    `https://preview.example/package-open/creator-lab/sample-game/${revision}?token=client`,
+    `https://preview.example/package-open/creator-lab/sample-game/${revision}#token=client&extra=value`,
+  ]) {
+    await assert.rejects(() => loadSdkPreviewRuntimeDefinition(
+      "creator-lab",
+      "sample-game",
+      (async () => Response.json({
+        ...validPayload,
+        runtimeUrl,
+      })) as typeof fetch,
+      env,
+    ), /SDK_PREVIEW_PACKAGE_RUNTIME_INVALID/);
+  }
 });
 
 test("SDK package runtime injects only resources enabled by the reviewed module profile", () => {
