@@ -2884,3 +2884,38 @@ Total output lines: 6329
 ### 未対応・保留
 
 - dev配備後の実画面確認。
+
+## 2026-07-27 — SDK LLMのGemini構造化出力契約を復元
+
+### 利用者からの要望
+
+- 「コトバに迫れ」でAIへ質問すると、画面内とtoastの両方に
+  `GAME_SDK_COMMAND_REJECTED`が表示される障害を解消する。
+
+### 判断
+
+- dev Runtime LogではRoom APIが409 `LLM_INVALID_RESPONSE`、Gemini provider自体は
+  成功していたため、Room認証・package revision・Preview通信の障害ではない。
+- 審査済みAppSetは5段階判定の`responseJsonSchema`を要求済みであり、固定AppSetを
+  個別修正せず、共通LLM経路の契約漏れを直す。
+- providerがschema外の応答を返した場合もゲーム固有処理で拒否するだけにせず、
+  共通層で不採用として次providerへfallbackする。
+
+### 実施結果
+
+- Gemini Generate Contentの`generationConfig`へ要求された
+  `responseJsonSchema`を転送するようにした。
+- 共通JSON Schema照合器を追加し、provider応答を成功記録する前に検証するようにした。
+- enum外値、余分なproperty、Markdown fence付きJSONを不適合として扱う回帰テストを
+  追加した。
+- SDK LLM gatewayのfixtureをschema準拠応答へ直し、schema転送契約を固定した。
+
+### 検証
+
+- 対象6テスト、変更ファイルlint、`git diff --check`に成功した。
+- 結合前の全642テストと、最新`develop`結合後の全644テストに成功した。
+- `npm run verify`と、本体・SDK Portal・SDK Previewのproduction buildに成功した。
+
+### 未対応・保留
+
+- `develop`反映後の3 dev Deployment READY確認と、認証済み利用者による実機再質問。

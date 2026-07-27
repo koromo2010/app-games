@@ -1,5 +1,6 @@
 import { hasGeminiApiKey, generateGeminiText } from "@/lib/gemini";
 import { hasGroqApiKey, generateGroqText } from "@/lib/groq";
+import { gameLlmTextMatchesJsonSchema } from "@/lib/game-llm-json-schema";
 import { getPaidLlmAccessSource, getPersonalLlmAccess } from "@/lib/llm-access";
 import { freeGroqLlmModel, freeLlmModel, paidLlmModel } from "@/lib/llm-model";
 import { emitObservabilityEvent, observabilityErrorCode } from "@/lib/observability";
@@ -108,7 +109,12 @@ async function callProvider(
   }
   if (provider === "gemini") {
     return {
-      text: await generateGeminiText(prompt, { quality, apiKey: personalApiKey, timeoutMs }),
+      text: await generateGeminiText(prompt, {
+        quality,
+        apiKey: personalApiKey,
+        timeoutMs,
+        responseJsonSchema,
+      }),
       model: freeLlmModel,
       mode: personalApiKey ? "personal" as const : "free" as const,
       billingSource: personalApiKey ? "personal" as const : undefined,
@@ -135,6 +141,14 @@ export async function generateGameLlmText(
     attemptedProviders.push(provider);
     try {
       const generated = await callProvider(provider, prompt, quality, mode, options.timeoutMs, options.responseJsonSchema);
+      if (
+        !gameLlmTextMatchesJsonSchema(
+          generated.text,
+          options.responseJsonSchema,
+        )
+      ) {
+        throw new Error("GAME_LLM_STRUCTURED_OUTPUT_INVALID");
+      }
       emitObservabilityEvent("info", "ai.provider", {
         operation: "llm-gateway",
         provider,

@@ -194,6 +194,8 @@ Neon Postgres、Upstash Redis、Vercel Blobの容量は `vercel.json` の日次C
 
 プロバイダー間のフォールバックは共通ゲートウェイだけで行う。ゲームAPI側で同じ連鎖を重ねて、APIリトライ回数を増やさない。品質重視処理は `quality: "high"` を指定できる。生成元、モデル、personal/paid/free/local、prompt version、校閲元、RAG参照IDを `GameGenerationMeta` に保存する。
 
+`responseJsonSchema`を指定した生成は、共通ゲートウェイが対応providerの構造化出力設定へschema本体を転送し、返却JSONを同じschemaで照合してから成功扱いにする。schema不適合はゲーム固有AppSetへ渡さずprovider失敗として次候補へfallbackし、全候補が失敗した場合だけ共通の利用不能応答へ正規化する。SDKゲームもこの経路を使い、審査済みAppSetの個別緩和でprovider出力揺れを吸収しない。
+
 ### 有料APIと将来の課金
 
 利用者持込APIとGame Fields提供の有料OpenAIを次の2経路に分離する。

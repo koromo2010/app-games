@@ -1,5 +1,6 @@
-import { freeLlmModel } from "@/lib/llm-model";
-import { sharedEnvironmentVariable } from "@/lib/shared-environment";
+import type { GameLlmJsonSchema } from "./game-llm.ts";
+import { freeLlmModel } from "./llm-model.ts";
+import { sharedEnvironmentVariable } from "./shared-environment.ts";
 
 type GeminiPart = {
   text?: string;
@@ -23,7 +24,12 @@ export function hasGeminiApiKey() {
 
 export async function generateGeminiText(
   prompt: string,
-  options: { quality?: "standard" | "high"; timeoutMs?: number; apiKey?: string } = {},
+  options: {
+    quality?: "standard" | "high";
+    timeoutMs?: number;
+    apiKey?: string;
+    responseJsonSchema?: GameLlmJsonSchema;
+  } = {},
 ) {
   const apiKey = options.apiKey?.trim() || sharedEnvironmentVariable("GEMINI_API_KEY");
   if (!apiKey) throw new Error("GEMINI_API_KEY is not configured.");
@@ -41,6 +47,9 @@ export async function generateGeminiText(
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         generationConfig: {
           responseMimeType: "application/json",
+          ...(options.responseJsonSchema
+            ? { responseJsonSchema: options.responseJsonSchema.schema }
+            : {}),
           maxOutputTokens: quality === "high" ? 8192 : 2048,
           thinkingConfig: { thinkingLevel: quality === "high" ? "high" : "minimal" },
         },

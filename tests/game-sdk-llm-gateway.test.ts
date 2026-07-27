@@ -11,6 +11,7 @@ test("SDK LLM adapter keeps provider selection behind Game Fields", async () => 
     prompt?: string;
     mode?: string;
     quality?: string;
+    responseJsonSchema?: unknown;
   } = {};
   const times = [1_000, 1_125];
   const gateway = createGameFieldsSdkLlmGateway({
@@ -24,8 +25,9 @@ test("SDK LLM adapter keeps provider selection behind Game Fields", async () => 
       received.prompt = prompt;
       received.mode = mode;
       received.quality = options?.quality;
+      received.responseJsonSchema = options?.responseJsonSchema;
       return {
-        text: "はい",
+        text: "{\"answer\":\"はい\"}",
         provider: "gemini" as const,
         model: "fixture-model",
         mode: "free" as const,
@@ -56,8 +58,18 @@ test("SDK LLM adapter keeps provider selection behind Game Fields", async () => 
     prompt: "質問に答えてください。",
     mode: "free",
     quality: "high",
+    responseJsonSchema: {
+      name: "answer",
+      schema: {
+        type: "object",
+        properties: { answer: { type: "string" } },
+        required: ["answer"],
+        additionalProperties: false,
+      },
+      strict: true,
+    },
   });
-  assert.equal(response.text, "はい");
+  assert.equal(response.text, "{\"answer\":\"はい\"}");
   assert.deepEqual(response.generation, {
     provider: "gemini",
     model: "fixture-model",

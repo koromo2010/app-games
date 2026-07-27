@@ -4,6 +4,26 @@
 
 この文書は、再調査を減らし、次に直す範囲を選びやすくするための監査記録である。将来構想ではなく、現在のコードで確認できた事実を記録する。状態が「修正済み」の項目は、同じ問題を再導入しないための回帰確認点として残す。
 
+## 2026-07-27 SDK LLMのJSON SchemaがGeminiへ渡らずCommandを拒否する
+
+状態: 共通基盤修正・回帰テスト済み／dev配備と実機再確認待ち（2026-07-27）
+
+「コトバに迫れ」で質問すると、Geminiの生成自体は成功しているにもかかわらず、
+Room APIが409 `LLM_INVALID_RESPONSE`となり、画面には
+`GAME_SDK_COMMAND_REJECTED`が表示された。2026-07-27 11:31:25 UTCのdev Runtime Logでは、
+SDK Portalのprovider呼出しは`gemini-3.5-flash`で成功し、同じCommandだけが
+構造化応答の検証で拒否されていた。
+
+審査済みAppSetは5段階判定をenumで固定した`responseJsonSchema`を正しく要求していたが、
+共通Geminiアダプターは`responseMimeType: application/json`だけを送り、schema本体を
+Generate Content APIへ渡していなかった。自由な日本語判定が返るとゲーム側の
+AppSet検証で拒否されるため、ゲーム個別ではなく共通基盤の契約漏れが原因だった。
+
+修正後は共通LLMゲートウェイからGeminiへ`responseJsonSchema`を転送し、providerが返した
+JSONを共通層でもschema照合する。不適合応答は成功Telemetryへ記録せず、次のproviderへ
+fallbackする。全providerが不適合または失敗した場合だけ既存の
+`GAME_LLM_UNAVAILABLE`として扱う。審査済みAppSetとゲームpackageは変更しない。
+
 ## 2026-07-27 dev app → main appでRuntime Bundle実体が移送されない
 
 状態: package移送と空Git初期化の修正実装・本番package Git初期化済み／既存リリース再昇格確認待ち（2026-07-27、migration 006・回帰テスト追加）
