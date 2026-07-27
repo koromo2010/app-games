@@ -5896,6 +5896,8 @@
 
 ### 未対応・保留
 
-- `develop`へ非force反映し、`app-games-dev`のDeployment、dev alias、
-  build error、公開後のerror／fatal Runtime Logを確認する。
+- GitHub `develop`へ`4d0925ddee60ceac057fd77ee4f2e8e492200b98`を非forceで反映した。
+- `app-games-dev` Deployment `dpl_DXXsECbraDEjTtyAvhrZUCZoJmRh`は`READY`で、
+  `dev.game-fields.com`のaliasが同Deploymentへ切り替わった。
+- errors-only build logに失敗はなく、公開後のerror／fatal Runtime Logは0件だった。
 - dev管理画面の通常ログインで本人行に「パスキー初期化」が表示されることを実機確認する。
