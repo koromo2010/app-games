@@ -1,6 +1,6 @@
 import {
   requireRecentSiteAdminMfa,
-  requireSiteAdminSession,
+  requireFullSiteAdminSession,
   siteAdminAuthorizationError,
 } from "@/lib/site-admin-auth";
 import { appendSiteAdminAuditLog } from "@/lib/site-admin-passkey-store";
@@ -45,7 +45,7 @@ function requireMainEnvironment() {
 
 export async function GET() {
   try {
-    await requireSiteAdminSession();
+    await requireFullSiteAdminSession();
     requireReleaseReadEnvironment();
     return Response.json(await loadDevMainReleaseStatus(), {
       headers: { "Cache-Control": "private, no-store" },

@@ -6,7 +6,7 @@
 
 ## 2026-07-27 dev app → main appでRuntime Bundle実体が移送されない
 
-状態: package移送と空Git初期化の修正実装・本番package Git初期化済み／既存リリース再昇格確認待ち（2026-07-27、migration 005・回帰テスト追加）
+状態: package移送と空Git初期化の修正実装・本番package Git初期化済み／既存リリース再昇格確認待ち（2026-07-27、migration 006・回帰テスト追加）
 
 旧昇格処理はdevのrevision、hash、manifest等のDB snapshotだけをmainの
 `sdk_app_releases`へ保存し、dev専用package Gitの`server.bundle.js`等をmain専用
@@ -16,12 +16,12 @@ package Gitへ移していなかった。本番Previewはmain package Gitを読�
 修正後はdev Portalから固定revisionのpackage全ファイルをservice認証付きで取得し、
 main Portalでpackage root、server bundle、AppSet原文、manifestを再検証する。検証済み
 ファイルをmain package Gitへ完全置換保存し、そのmain commitを本番Previewのmanifest
-呼出しで確認してからDBの現在リリースを切り替える。migration 005の
+呼出しで確認してからDBの現在リリースを切り替える。migration 006の
 `source_revision`はdev commit、従来の`revision`はmain実行commitを保持する。
 artifact取得、hash検証、main Git保存、本番Runtime確認のいずれかが失敗した場合は
 現在リリースを変更しない。dev由来のrollbackも同じ再移送を行う。
 main`9f94a90`の本体・SDK Portal・SDK Previewはすべて`READY`で、
-SDK schema version 5、dev artifact source往復`ok`、最終Deploymentの
+SDK schema version 7、dev artifact source往復`ok`、最終Deploymentの
 error／fatal Runtime log 0件を確認した。残るのは旧方式で登録済み
 「コトバに迫れ」を管理画面の直近MFA付き操作で同じdev版から再昇格し、
 実体移送と正式Room作成を確認する作業である。

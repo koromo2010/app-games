@@ -4957,3 +4957,36 @@
 
 - 変更はローカルのみで、mainへの反映と本番Deployment確認は未実施。
 - 本番反映後、Windows端末の再登録でWindows HelloのPIN・指紋・顔認証へ進むことを実機確認する。
+
+## 2026-07-27 — パスキー一式のmain再移植と先行反映機能の再監査
+
+### 利用者からの要望
+
+- developの管理者パスキー関連コミットを部分選択せず、機能一式としてmainへ移植し直す。
+- 先行反映した承認機能`1a94849`とSDK DB migration 006・007にも部分移植漏れがないか、dev/mainを機能単位で再照合する。
+
+### 判断
+
+- 前回mainへ先行反映したpurpose修正とplatform指定だけでは、developにある認証元統一、端末内資格の分類・拒否・外部キー削除、RP ID分離、初期化復旧UI、復旧コード後の通常セッション復帰が揃わない。
+- develop固有の問い合わせ受信箱等は今回の対象へ混ぜず、パスキーの最終契約を構成する実装・テスト・文書だけをmainへ統合する。
+- 承認機能はコミットの存在ではなく、UI、管理API、Portal transaction、判断履歴、migration runner、回帰テストのblob一致で判定する。
+
+### 実施結果
+
+- developのパスキー連続変更をmainへ再統合し、端末内`internal`資格だけの登録・認証、外部キー分類と削除、通常管理者の自己初期化、復旧コードstep-up、Windows Hello再登録後の通常セッション化、main/dev RP ID分離を揃えた。
+- 承認機能の主要17ファイルとmigration 005・006・007、migration runner、判断理由検証、lineageテストがdevelopと同一blobであることを確認した。
+- `tests/release-ui-source.test.ts`の差分はdevelopで後から追加された広場お気に入り検査だけであり、承認・昇格に関する検査本体には差分がないことを確認した。
+- SDK本番DBでmigration 006・007とschema version 7が確認済みであることを環境台帳と現行資料へ反映した。
+
+### 検証
+
+- パスキー・承認・migrationの対象29テストに成功した。
+- `npm run lint`に成功した。
+- `npm test`に成功し、全593テストが通過した。
+- `npm run build`に成功し、本体production build、TypeScript検査、77ページ生成を完了した。
+- React品質確認では、新しい条件付きhookや同期用effectはなく、復旧成功時の既存親session更新、AbortController cleanup、native button、安定したメールkeyを維持していることを確認した。
+
+### 未対応・保留
+
+- main反映後のVercel本番`READY`確認。
+- 本番Windows端末で、パスキー初期化、復旧コード、Windows Hello再登録、通常ログインを一連で実機確認する。

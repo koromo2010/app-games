@@ -35,7 +35,7 @@ test("recovery-code step-up returns and validates the new full session", () => {
     clientSource,
     /data\.session\.scope !== "full" \|\| data\.session\.method !== "recovery-code"/,
   );
-  assert.match(clientSource, /return await verifyRecoveryCodeForStepUp\(\)/);
+  assert.match(clientSource, /return await completeStepUpWithRecoveryCode\(\)/);
   assert.match(accountsSource, /stepUpSession\?\.method === "recovery-code"/);
   assert.match(accountsSource, /onRecoveryCodeSessionEstablished\(\)/);
 });

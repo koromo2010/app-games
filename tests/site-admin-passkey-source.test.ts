@@ -8,21 +8,23 @@ const source = readFileSync(
 );
 
 test("admin passkey registration requires a discoverable local credential", () => {
-  const selection = source.match(/authenticatorSelection:\s*\{([\s\S]*?)\n\s*\},/)?.[1] ?? "";
-  assert.match(selection, /authenticatorAttachment:\s*"platform"/);
-  assert.match(selection, /residentKey:\s*"required"/);
-  assert.match(selection, /userVerification:\s*"required"/);
-  assert.doesNotMatch(source, /preferredAuthenticatorType/);
+  assert.match(source, /preferredAuthenticatorType:\s*"localDevice"/);
+  assert.match(
+    source,
+    /authenticatorSelection:\s*\{[\s\S]*authenticatorAttachment:\s*"platform"[\s\S]*residentKey:\s*"required"[\s\S]*userVerification:\s*"required"/,
+  );
+  assert.match(source, /assertSiteAdminPlatformPasskeyRegistration/);
 });
 
-test("admin passkey authentication identifies credentials without pinning USB transport", () => {
+test("admin passkey authentication uses registered credentials through Windows Hello", () => {
   assert.match(
     source,
     /allowCredentials:\s*passkeys\.map[\s\S]*id:\s*passkey\.credentialId/,
   );
-  assert.doesNotMatch(
+  assert.match(
     source,
-    /allowCredentials:[\s\S]*transports:\s*passkey\.credential\.transports/,
+    /allowCredentials:[\s\S]*transports:\s*\["internal"\]/,
   );
+  assert.doesNotMatch(source, /transports:\s*passkey\.credential\.transports/);
   assert.match(source, /passkey\.email !== email/);
 });

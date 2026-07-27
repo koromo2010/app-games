@@ -1,7 +1,7 @@
 import { appendSiteAdminAuditLog } from "@/lib/site-admin-passkey-store";
 import {
   requireRecentSiteAdminMfa,
-  requireSiteAdminSession,
+  requireFullSiteAdminSession,
   siteAdminAuthorizationError,
 } from "@/lib/site-admin-auth";
 import {
@@ -27,7 +27,7 @@ function safeError(error: unknown, fallback: string) {
 
 export async function GET() {
   try {
-    await requireSiteAdminSession();
+    await requireFullSiteAdminSession();
     return Response.json({ stats: await inspectTahoiyaDecoyCandidateStats() });
   } catch (error) {
     return siteAdminAuthorizationError(error)

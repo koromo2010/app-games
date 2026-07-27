@@ -92,6 +92,29 @@ export async function updateSiteAdminPasskeyCounter(credentialId: string, counte
   `;
 }
 
+export async function removeIncompatibleSiteAdminPasskeys(email: string) {
+  requireStore(); await ensurePostgresSchema();
+  const rows = await getPostgresClient()`
+    WITH platform_passkey AS (
+      SELECT 1
+      FROM site_admin_passkeys
+      WHERE admin_email = ${email}
+        AND transports @> '["internal"]'::jsonb
+      LIMIT 1
+    ),
+    removed AS (
+      DELETE FROM site_admin_passkeys
+      WHERE admin_email = ${email}
+        AND jsonb_array_length(transports) > 0
+        AND NOT (transports @> '["internal"]'::jsonb)
+        AND EXISTS (SELECT 1 FROM platform_passkey)
+      RETURNING credential_id
+    )
+    SELECT COUNT(*)::int AS count FROM removed
+  ` as Array<{ count: string | number }>;
+  return Number(rows[0]?.count ?? 0);
+}
+
 function recoverySecret() {
   return process.env.PLAYER_SESSION_SECRET || process.env.LLM_SESSION_SECRET || process.env.SITE_ADMIN_PASSWORD || "local-site-admin-recovery-secret";
 }

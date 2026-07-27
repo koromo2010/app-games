@@ -8,6 +8,7 @@ import {
   type RegistrationResponseJSON,
 } from "@simplewebauthn/server";
 import { siteAdminWebAuthnConfiguration } from "@/lib/site-admin-passkey-core";
+import { assertSiteAdminPlatformPasskeyRegistration } from "@/lib/site-admin-passkey-policy";
 import { listSiteAdminPasskeys, findSiteAdminPasskey } from "@/lib/site-admin-passkey-store";
 
 export async function siteAdminRegistrationOptions(email: string) {
@@ -27,6 +28,7 @@ export async function siteAdminRegistrationOptions(email: string) {
       residentKey: "required",
       userVerification: "required",
     },
+    preferredAuthenticatorType: "localDevice",
   });
 }
 
@@ -38,19 +40,32 @@ export async function siteAdminAuthenticationOptions(email: string) {
     rpID,
     timeout: 120_000,
     userVerification: "required",
-    // Identify the credentials registered for this admin so an older, non-discoverable
-    // Windows Hello credential can still be selected. Saved transport hints are
-    // intentionally omitted: stale "usb"/"hybrid" hints can make Windows ask for an
-    // external security key instead of using the local platform authenticator.
+    // Restrict the chooser to credentials registered in this environment's admin DB
+    // and to the platform authenticator. Omitting transports still lets Windows choose
+    // an external USB security key before Windows Hello on some devices.
     allowCredentials: passkeys.map((passkey) => ({
       id: passkey.credentialId,
+      transports: ["internal"],
     })),
   });
 }
 
 export async function verifySiteAdminRegistration(response: RegistrationResponseJSON, expectedChallenge: string) {
   const { rpID, origin } = siteAdminWebAuthnConfiguration(process.env);
-  return verifyRegistrationResponse({ response, expectedChallenge, expectedOrigin: origin, expectedRPID: rpID, requireUserVerification: true });
+  const verification = await verifyRegistrationResponse({
+    response,
+    expectedChallenge,
+    expectedOrigin: origin,
+    expectedRPID: rpID,
+    requireUserVerification: true,
+  });
+  if (verification.verified) {
+    assertSiteAdminPlatformPasskeyRegistration({
+      authenticatorAttachment: response.authenticatorAttachment,
+      transports: verification.registrationInfo.credential.transports,
+    });
+  }
+  return verification;
 }
 
 export async function verifySiteAdminAuthentication(response: AuthenticationResponseJSON, expectedChallenge: string, email: string) {

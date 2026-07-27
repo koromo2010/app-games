@@ -38,6 +38,12 @@ App Games / Game Fields は Next.js で構築したオンラインゲーム基�
 
 管理画面では、サイト名、検索用タイトル・説明候補、favicon、管理者メールなどを管理する。管理セッションは署名付きHttpOnly Cookieで保持する。
 
+管理者パスキーは端末内platform authenticator、discoverable credential、本人確認を登録・認証の両方で必須にする。登録応答の`internal` transportもサーバー側で検査し、USBキー・別端末・種別不明の登録を拒否する。復旧コードでログインした場合はWindows Helloの再登録へ誘導し、登録成功後に通常のパスキーセッションへ切り替える。
+
+通常のfull管理者は、直近MFAを再確認したうえで自分自身のパスキーと復旧コードだけを初期化できる。他の管理者のMFAリセットはbreak-glass復旧モードに限定する。パスキーを利用できないstep-upでは、現在のfull管理者セッションとchallengeのメールが一致するときだけ未使用復旧コードを受理する。
+
+管理者パスキーはmainとdevでRP IDを分離し、mainは`game-fields.com`、devは`dev.game-fields.com`を使う。管理者DBだけでなく端末側の資格情報名前空間も分ける。
+
 ### SDKアプリの昇格と復元
 
 devとmainの採用済みSDKアプリ情報は環境別DBに分離する。管理画面には次の独立した経路がある。
@@ -48,7 +54,7 @@ devとmainの採用済みSDKアプリ情報は環境別DBに分離する。管�
 
 アプリ更新時はmainのゲームID・URL・公開設定を維持する。devとmainのpackage Gitは別リポジトリなので、昇格はdevの固定commitからpackage全ファイルを読み、3つのhashとmanifestを再検証してmain package Gitへ新しいcommitとして保存する。本番Previewでそのcommitのmanifestを起動確認してから`sdk_app_releases`の現在版を切り替える。`source_revision`はdevの元commit、`revision`はmainの実体commitを示す。
 
-各更新前の版は`sdk_app_releases`へ追加専用履歴として残り、管理画面から過去版を選んでアプリ単位で復元できる。migration 005で元dev SHAと本番実行SHAが同じままbackfillされた旧Releaseは未移送と判定し、同じdev版でも修復昇格を許可する。dev由来の過去版は元commitからpackage実体を再移送する。復元自体も新しい`rollback`リリースとして記録し、本体や他アプリ、既存Roomは巻き戻さない。
+各更新前の版は`sdk_app_releases`へ追加専用履歴として残り、管理画面から過去版を選んでアプリ単位で復元できる。migration 006で元dev SHAと本番実行SHAが同じままbackfillされた旧Releaseは未移送と判定し、同じdev版でも修復昇格を許可する。dev由来の過去版は元commitからpackage実体を再移送する。復元自体も新しい`rollback`リリースとして記録し、本体や他アプリ、既存Roomは巻き戻さない。
 
 SDK作品とdev採用アプリの承認・却下・復元は5〜500文字の判断理由を必須とし、
 対象revision・3種のpackage hash・実行管理者・日時を`sdk_release_decisions`へ

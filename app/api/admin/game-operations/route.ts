@@ -3,7 +3,7 @@ import { validateGameOperationsInput } from "@/lib/game-operations";
 import { loadGameOperations, saveGameOperations } from "@/lib/game-operations-store";
 import { createRequestTelemetry } from "@/lib/observability";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
-import { requireRecentSiteAdminMfa, requireSiteAdminSession, siteAdminAuthorizationError } from "@/lib/site-admin-auth";
+import { requireFullSiteAdminSession, requireRecentSiteAdminMfa, siteAdminAuthorizationError } from "@/lib/site-admin-auth";
 import { appendSiteAdminAuditLog } from "@/lib/site-admin-passkey-store";
 import { loadApprovedGameSdkCatalog } from "@/lib/game-sdk-runtime-catalog";
 import registry from "@/config/game-registry.json";
@@ -20,7 +20,7 @@ function authError(error: unknown) {
 
 export async function GET() {
   try {
-    await requireSiteAdminSession();
+    await requireFullSiteAdminSession();
     const games = await sdkGames();
     const operations = await loadGameOperations({ fresh: true }, games);
     const activeIds = new Set([

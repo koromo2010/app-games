@@ -5,15 +5,18 @@
 ## 認証
 
 - サーバー環境変数 `SITE_ADMIN_PASSWORD` を推奨し、未設定時だけ既存の `DEBUG_MODE_PASSWORD` を互換利用する。
-- WebAuthnは環境ごとに`SITE_ADMIN_WEBAUTHN_ORIGIN`を設定する。本番は`https://game-fields.com`、devは`https://dev.game-fields.com`とし、複数許可する場合はカンマ区切りにする。`SITE_ADMIN_WEBAUTHN_RP_ID`は通常設定せず、既定の`game-fields.com`を使う。
-- 新規パスキーは`authenticatorAttachment: "platform"`により端末内platform authenticatorを必須とし、discoverable credentialと本人確認も必須にする。候補を優先するだけのWebAuthn hintは使わず、外付けセキュリティキーや別端末を登録候補にしない。認証時は管理者DBへ登録済みのcredential IDを指定するが、保存済みtransport hintは渡さない。これにより既存の非discoverableなWindows Helloも選択でき、古い`usb`／`hybrid` hintによる外付けセキュリティキーへの誤誘導を防ぐ。
+- WebAuthnのOriginとRP IDは環境ごとに分離する。`main`はOrigin `https://game-fields.com`／`https://www.game-fields.com`とRP ID `game-fields.com`、`develop`はOrigin `https://dev.game-fields.com`とRP ID `dev.game-fields.com`を使う。
+- 独自管理originを使う場合だけ`SITE_ADMIN_WEBAUTHN_ORIGIN`と`SITE_ADMIN_WEBAUTHN_RP_ID`を組で上書きする。OriginがRP IDの同一hostまたはsubdomainでなければ拒否し、developへ親RP ID `game-fields.com`を指定する設定も拒否する。
+- 新規パスキーは`authenticatorAttachment: "platform"`、`residentKey: "required"`、`userVerification: "required"`を指定し、登録応答も`internal` transportであることを検査する。USBキー、別端末、種別不明の登録を拒否する。認証候補は現在の環境DBへ登録済みの`internal` credentialだけに制限する。
 - プレイヤーログイン、非公開ゲームキーとは共有しない。管理画面CookieはプレイヤーCookieと分離するが、登録済み管理者メールとプレイヤーの所有確認済み復旧メールが一致すると、そのプレイヤーへデバッグ資格を自動付与する。未確認メールは一致しても権限判定に使わない。
 - 成功時は署名付きHttpOnly Cookie `game-fields-site-admin` を発行する。
 - CookieはSameSite=Strict、本番Secure、全パス有効、12時間で失効する。
 - ログイン試行、設定保存、画像アップロードは共通レート制限を通す。
 - 管理者アカウント一覧には、同じメールのプレイヤーが存在するかと、デバッグ資格の付与状態を表示する。加えて、メール未登録を含むプレイヤーを名前で検索し、プレイヤーID単位でデバッグ資格を個別付与・解除できる。変更には直近5分以内のMFA再確認を必須とし、監査ログへ記録する。プレイヤー側からの自己付与APIは提供しない。
+- 通常のfull管理者は、直近5分以内のMFA再確認後に、自分自身の「パスキー初期化」を実行できる。対象のパスキーと復旧コードを無効化するが、管理者アカウント、パスワード、通知設定は保持する。通常セッションから他の管理者を初期化することはできない。
 - パスキーを失い復旧コードも使えない場合は、Vercelで一時的に復旧モードを有効化し、マスターパスワードで入った管理者アカウント画面から対象メールの「MFAを再設定」を実行する。対象の全パスキーと旧復旧コードを無効化し、監査ログへ記録する。復旧モードを無効化した後、対象管理者はメールとパスワードでログインし、新しいパスキーと復旧コードを登録する。
 - 復旧モードは対象Projectの`SITE_ADMIN_BREAK_GLASS_ENABLED=true`で有効化する。復旧完了後は変数を削除し、再デプロイして無効化する。恒常設定にしない。
+- 復旧コードでログインした場合は管理者アカウント画面へ誘導し、この端末のWindows Hello登録を優先表示する。登録成功後は通常のパスキーセッションへ切り替える。端末内パスキーが1件以上ある場合だけ、同じ管理者に残った外部キー登録を削除できる。
 - プレイヤーの復旧用メール登録・変更申請はマイページに集約し、確認メール内の明示承認後だけ確定する。ゲームカタログのログイン済みアカウント欄には表示しない。
 
 ## 保存と反映

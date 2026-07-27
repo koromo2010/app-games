@@ -58,8 +58,8 @@
 | `SDK_REDIS_REST_URL` | `app-games-sdk-dev` Productionへ登録済み。本番SDKへのLinkを依頼中 |
 | `SITE_ADMIN_BREAK_GLASS_ENABLED` | `app-games-dev` Productionへ2026-07-26一時登録・再デプロイ・復旧ログイン確認済み。MFA再登録完了後に削除必須 |
 | `SITE_ADMIN_PASSWORD` | `app-games-dev` Productionへ2026-07-26登録・再デプロイ・マスターパスワード認証確認済み。Sensitive |
-| `SITE_ADMIN_WEBAUTHN_ORIGIN` | `app-games-dev` Productionへ`https://dev.game-fields.com`を登録待ち |
-| `SITE_ADMIN_WEBAUTHN_RP_ID` | 未登録。既定`game-fields.com`を使用 |
+| `SITE_ADMIN_WEBAUTHN_ORIGIN` | 未登録。コード既定でmainは本番origin、developは`https://dev.game-fields.com`を使用 |
+| `SITE_ADMIN_WEBAUTHN_RP_ID` | 未登録。コード既定でmainは`game-fields.com`、developは`dev.game-fields.com`を使用 |
 | `STORAGE_ALERT_THRESHOLD_PERCENT` | 配置未監査 |
 | `WORDWOLF_PAIR_COOLDOWN_DAYS` | 配置未監査 |
 
@@ -223,8 +223,8 @@ Sensitive設定済みの互換変数をVercel上で複製できない移行期�
 | `SDK_PROMOTION_INTERNAL_URL` | Production / Preview | No | 未登録時は`https://sdk.game-fields.com` | dev・main両方の運営管理画面から、SDK本番の正式提出候補をmain採用する内部接続先 |
 | `SITE_ADMIN_PASSWORD` | Production | Yes | Project Variable登録・再デプロイ済み。マスターパスワードで復旧ログインを実機確認済み | 秘密値を安全な保管先で管理。Gitへ値を保存しない |
 | `SITE_ADMIN_BREAK_GLASS_ENABLED` | Production | No | `true`を一時登録・再デプロイし、MFAリセットを実機確認済み | WebAuthn再登録と通常ログイン確認後、変数を削除して再デプロイ |
-| `SITE_ADMIN_WEBAUTHN_ORIGIN` | Production | No | 未登録。devでのパスキー登録はOrigin不一致によりサーバー検証失敗 | `https://dev.game-fields.com`を登録し、再デプロイ後にパスキー登録を再確認 |
-| `SITE_ADMIN_WEBAUTHN_RP_ID` | Production | No | 未登録。コード既定値`game-fields.com`を使用 | 追加不要。ProductionとDevelopmentのパスキーを親domain配下で扱う |
+| `SITE_ADMIN_WEBAUTHN_ORIGIN` | Production | No | 未登録。`VERCEL_GIT_COMMIT_REF=develop`から`https://dev.game-fields.com`を選ぶコード既定へ変更 | Project Variable追加は不要。変更後Deploymentでパスキー認証を実機確認 |
+| `SITE_ADMIN_WEBAUTHN_RP_ID` | Production | No | 未登録。コード既定値`dev.game-fields.com`を使用 | 追加不要。旧`game-fields.com`資格情報をMFA再設定で削除し、dev専用パスキーを再登録して通常ログインを確認 |
 
 `NEON_DATABASE_*`は既存`DATABASE_URL`と衝突させず新Neonを識別するためのIntegration接頭辞である。コードは`APP_DATABASE_URL`、`NEON_DATABASE_URL`、旧`DATABASE_URL`の順で選ぶ。2026-07-22に`0773a78`のProduction DeploymentがREADYとなり、存在しない資格で`POST /api/player-account`を実行して`401 INVALID_CREDENTIALS`を確認した。この経路はRedisレート制限とPostgreSQLの`ensurePostgresSchema`・アカウント照会を通るため、開発Redis接続と開発Neonへのschema自動適用・接続は確認済みである。新規登録・ログインのブラウザ実機確認は別途行う。
 
@@ -309,14 +309,14 @@ SDK `llm` adapter、module lab、Preview中継API `/api/sdk-preview/llm`も本�
 | `SDK_MOCK_GITHUB_REPOSITORY` | `koromo2010/game-fields-sdk-mocks` | 同じprivate repository | Production | 両Projectへ登録・再デプロイ済み |
 | `SDK_MOCK_GITHUB_WRITE_TOKEN` | Project Variable、Sensitive | 設定禁止・未設定 | Production | 対象repositoryのContents read/writeだけ。90日期限 |
 | `SDK_MOCK_GITHUB_READ_TOKEN` | 設定禁止・未設定 | Project Variable、Sensitive | Production | 対象repositoryのContents read-onlyだけ。90日期限 |
-| `SDK_DATABASE_URL` | `app-games-sdk-neon`をIntegrationでLink、Sensitive | 設定禁止・未設定 | Production | main Deployment反映済み。2026-07-27にschema version 5を確認 |
+| `SDK_DATABASE_URL` | `app-games-sdk-neon`をIntegrationでLink、Sensitive | 設定禁止・未設定 | Production | main Deployment反映済み。2026-07-27にmigration 006・007適用、schema version 7を確認 |
 | `SDK_REDIS_REST_URL` | `sdk-dev-redis`のLink依頼中、Sensitive | 設定禁止・未設定 | Production | コード側の本番・開発prefix分離後にLinkする |
 | `SDK_REDIS_REST_TOKEN` | `sdk-dev-redis`のLink依頼中、Sensitive | 設定禁止・未設定 | Production | コード側の本番・開発prefix分離後にLinkする |
 
 | 対象 | 現在状態 | 次の確認 |
 | --- | --- | --- |
 | private package Git | `koromo2010/game-fields-sdk-mocks`をPrivateで作成済み。Portal書込資格とPreview読取資格を分離。2026-07-27に空repositoryだったことを確認し、管理用`.game-fields-storage`を持つ`main`と保存用`sdk-previews` branchを初期化済み | 管理画面の再昇格でpackage commit、Portal書込資格、Preview読取を実機確認 |
-| Portal Vercel Project | `app-games-sdk`、Root Directory `apps/sdk-portal`、Production Branch `main`。`main@9f94a90`のDeploymentがREADY。`app-games-sdk-neon`はProductionだけへLink済みで、`schemaVersion: 5`とdev artifact source往復`ok`を確認済み | RedisをLinkする |
+| Portal Vercel Project | `app-games-sdk`、Root Directory `apps/sdk-portal`、Production Branch `main`。承認機能反映後のDeploymentがREADY。`app-games-sdk-neon`はProductionだけへLink済みで、migration 006・007適用と`schemaVersion: 7`を確認済み | RedisをLinkする |
 | Preview Vercel Project | `app-games-sdk-preview`、Root Directory `apps/sdk-preview`、Node.js 24.x、Production Branch `main`。production専用のasset署名鍵・Git読取資格だけを登録 | Portal grant検証委譲版を再デプロイし、正式Room作成を実機確認 |
 | Preview domain | `preview.game-fields.com`割当済み・Valid Configuration。第1段階Deploymentで`grantVersion: 4`／`grantVerification: ed25519`を確認し、本番公開鍵をコードへ固定済み | 第2段階Deployment後に`/health`、fragment交換、package client、server runnerを実機確認 |
 

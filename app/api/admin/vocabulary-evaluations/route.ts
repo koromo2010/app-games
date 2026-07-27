@@ -1,6 +1,6 @@
 import { createRequestTelemetry } from "@/lib/observability";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
-import { requireRecentSiteAdminMfa, requireSiteAdminSession, siteAdminAuthorizationError } from "@/lib/site-admin-auth";
+import { requireFullSiteAdminSession, requireRecentSiteAdminMfa, siteAdminAuthorizationError } from "@/lib/site-admin-auth";
 import { appendSiteAdminAuditLog } from "@/lib/site-admin-passkey-store";
 import {
   adoptVocabularyEvaluationWordForTahoiya,
@@ -32,7 +32,7 @@ function voterFor(email: string | null) {
 
 export async function GET() {
   try {
-    const session = await requireSiteAdminSession();
+    const session = await requireFullSiteAdminSession();
     return Response.json(await listVocabularyWordGameEvaluations(voterFor(session.email)), {
       headers: { "Cache-Control": "no-store" },
     });

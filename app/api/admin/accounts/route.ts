@@ -31,8 +31,7 @@ export async function POST(request: Request) {
   const limited = await rateLimitResponseFor(request, rateLimitPolicies.profileMutation);
   if (limited) return limited;
   try {
-    const session = await requireSiteAdminSession();
-    if (session.scope === "full") await requireRecentSiteAdminMfa();
+    const session = await requireRecentSiteAdminMfa();
     const body = await request.json() as { email?: unknown; password?: unknown; receiveAlerts?: unknown; receiveContacts?: unknown };
     const email = typeof body.email === "string" ? body.email : "";
     const password = typeof body.password === "string" ? body.password : "";
@@ -61,17 +60,18 @@ export async function PATCH(request: Request) {
     if (body.action === "reset-mfa") {
       const resettingOwnAccount = session.scope === "full" && session.email === email;
       if (session.scope !== "recovery" && !resettingOwnAccount) throw new Error("SITE_ADMIN_RECOVERY_REQUIRED");
+      const authorizedSession = resettingOwnAccount ? await requireRecentSiteAdminMfa() : session;
       const result = await resetSiteAdminMfa(email);
       const accounts = await listSiteAdminAccounts();
-      await appendSiteAdminAuditLog(request, session, "admin-account.mfa-reset", result.email, { passkeyCount: result.removedPasskeyCount }, { passkeyCount: 0 });
+      await appendSiteAdminAuditLog(request, authorizedSession, "admin-account.mfa-reset", result.email, { passkeyCount: result.removedPasskeyCount }, { passkeyCount: 0 });
       telemetry.success("auth.access", { action: "site-admin-mfa-reset" });
       return Response.json({ accounts, resetOwnAccount: resettingOwnAccount });
     }
     await requireRecentSiteAdminMfa();
-    const before = (await listSiteAdminAccounts()).find((entry) => entry.email === email) ?? null;
+    const before = (await listSiteAdminAccounts()).find((entry) => entry.email === email.trim().toLocaleLowerCase("en-US")) ?? null;
     await updateSiteAdminAccountSubscriptions(email, { receiveAlerts: body.receiveAlerts === true, receiveContacts: body.receiveContacts === true });
     const accounts = await listSiteAdminAccounts();
-    await appendSiteAdminAuditLog(request, session, "admin-account.subscriptions", email, before, accounts.find((entry) => entry.email === email) ?? null);
+    await appendSiteAdminAuditLog(request, session, "admin-account.subscriptions", email.trim().toLocaleLowerCase("en-US"), before, accounts.find((entry) => entry.email === email.trim().toLocaleLowerCase("en-US")) ?? null);
     telemetry.success("auth.access", { action: "site-admin-subscriptions-update" });
     return Response.json({ accounts });
   } catch (error) {
@@ -87,8 +87,7 @@ export async function DELETE(request: Request) {
   const limited = await rateLimitResponseFor(request, rateLimitPolicies.profileMutation);
   if (limited) return limited;
   try {
-    const session = await requireSiteAdminSession();
-    if (session.scope === "full") await requireRecentSiteAdminMfa();
+    const session = await requireRecentSiteAdminMfa();
     const body = await request.json() as { email?: unknown };
     const email = typeof body.email === "string" ? body.email : "";
     const before = (await listSiteAdminAccounts()).find((entry) => entry.email === email.trim().toLocaleLowerCase("en-US")) ?? null;
