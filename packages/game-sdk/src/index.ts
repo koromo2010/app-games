@@ -208,7 +208,7 @@ export function parseGameSdkSettingDefinitions(
       throw new Error(`Game SDK setting ${key} minimum exceeds maximum.`);
     }
 
-    const parsedOptions = candidate.options === undefined
+    let parsedOptions = candidate.options === undefined
       ? undefined
       : (
           Array.isArray(candidate.options)
@@ -221,6 +221,20 @@ export function parseGameSdkSettingDefinitions(
           })();
     if (type === "select" && !parsedOptions) {
       throw new Error(`Game SDK select setting ${key} requires options.`);
+    }
+    if (
+      platformRole === "time-limit"
+      && type === "select"
+      && parsedOptions
+      && !parsedOptions.some((option) => Object.is(gameSdkSettingOptionValue(option), 0))
+    ) {
+      if (parsedOptions.length >= 64) {
+        throw new Error("Game SDK time-limit select requires room for the no-limit option.");
+      }
+      parsedOptions = [{
+        value: 0,
+        label: { ja: "制限なし", en: "No limit" },
+      }, ...parsedOptions];
     }
     if (parsedOptions) {
       const optionValues = parsedOptions.map(gameSdkSettingOptionValue);

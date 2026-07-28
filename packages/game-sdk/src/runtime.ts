@@ -904,16 +904,18 @@ export function createGameSdkOnlineRoomModule<
             required: lifecycleLobbyReturn.required,
             confirmedPlayerIds,
           },
-          playerTimeouts: {
-            ...timeoutDefaults,
-            statuses: Object.fromEntries(
-              lifecycle.room.players.map((player) => [
-                player.id,
-                currentPlayerTimeouts.statuses[player.id]
-                  ?? timeoutDefaults.statuses[player.id]!,
-              ]),
-            ),
-          },
+          playerTimeouts: command.type === "room/rematch"
+            ? timeoutDefaults
+            : {
+                ...timeoutDefaults,
+                statuses: Object.fromEntries(
+                  lifecycle.room.players.map((player) => [
+                    player.id,
+                    currentPlayerTimeouts.statuses[player.id]
+                      ?? timeoutDefaults.statuses[player.id]!,
+                  ]),
+                ),
+              },
         };
         if (!appSet.timer || !lifecycleRoom.timer) return lifecycleRoom;
         const shouldStop = (
@@ -958,10 +960,15 @@ export function createGameSdkOnlineRoomModule<
       if (nextPhase !== "result" && transition.standardResult) {
         throw new Error("RESULT_PHASE_REQUIRED");
       }
-      const playerTimeouts = recordGameSdkPlayerActivity(
-        currentPlayerTimeouts,
-        context.actor.playerId,
-      );
+      const startsNewGame = room.phase === "lobby" && nextPhase !== "lobby";
+      const playerTimeouts = startsNewGame
+        ? createGameSdkPlayerTimeoutState(
+            room.players.map((player) => player.id),
+          )
+        : recordGameSdkPlayerActivity(
+            currentPlayerTimeouts,
+            context.actor.playerId,
+          );
       const timerOwnerPlayerId =
         transition.timerOwnerPlayerId ?? context.actor.playerId;
       const timerAction = (
