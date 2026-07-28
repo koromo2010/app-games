@@ -8,6 +8,13 @@ export type GameSdkRoomWatchStatus =
   | "polling"
   | "closed";
 
+export type GameSdkRoomReadSource =
+  | "direct"
+  | "watch-initial"
+  | "watch-polling"
+  | "watch-reconciliation"
+  | "watch-websocket";
+
 export type GameSdkRoomWatchObserver<TRoomView> = {
   onRoom(room: GameSdkRoomSnapshot<TRoomView> | null): void;
   onError?(error: unknown): void;
@@ -34,7 +41,10 @@ type RoomWatcherOptions<TRoomView> = {
   endpoint: string;
   realtimeEndpoint: string;
   fetcher: Fetcher;
-  readRoom: (code: string) => Promise<GameSdkRoomSnapshot<TRoomView> | null>;
+  readRoom: (
+    code: string,
+    source: GameSdkRoomReadSource,
+  ) => Promise<GameSdkRoomSnapshot<TRoomView> | null>;
   observer: GameSdkRoomWatchObserver<TRoomView>;
   pollingInterval: number;
   reconciliationInterval: number;
@@ -102,10 +112,10 @@ export function createGameSdkRoomWatcher<TRoomView>({
     if (!closed || status === "closed") observer.onStatus?.(status);
   };
 
-  const refresh = () => {
+  const refresh = (source: GameSdkRoomReadSource) => {
     if (closed) return Promise.resolve();
     if (refreshPromise) return refreshPromise;
-    refreshPromise = readRoom(normalizedCode)
+    refreshPromise = readRoom(normalizedCode, source)
       .then((room) => {
         if (closed) return;
         lastRevision = room?.revision ?? lastRevision;
@@ -123,7 +133,10 @@ export function createGameSdkRoomWatcher<TRoomView>({
   const startPolling = () => {
     if (closed || pollingTimer) return;
     setStatus("polling");
-    pollingTimer = setInterval(() => void refresh(), pollingInterval);
+    pollingTimer = setInterval(
+      () => void refresh("watch-polling"),
+      pollingInterval,
+    );
   };
 
   const stopPolling = () => {
@@ -134,13 +147,16 @@ export function createGameSdkRoomWatcher<TRoomView>({
 
   const startReconciliation = () => {
     if (closed || reconciliationTimer) return;
-    reconciliationTimer = setInterval(() => void refresh(), reconciliationInterval);
+    reconciliationTimer = setInterval(
+      () => void refresh("watch-reconciliation"),
+      reconciliationInterval,
+    );
   };
 
   const connect = async () => {
     if (closed || connecting) return;
     connecting = true;
-    await refresh();
+    await refresh("watch-initial");
     if (closed || !webSocketFactory) {
       connecting = false;
       startPolling();
@@ -184,7 +200,9 @@ export function createGameSdkRoomWatcher<TRoomView>({
           realtimeGame,
           normalizedCode,
         );
-        if (revision !== null && revision > lastRevision) void refresh();
+        if (revision !== null && revision > lastRevision) {
+          void refresh("watch-websocket");
+        }
       } catch {
         // Invalid revision frames never become application state.
       }
