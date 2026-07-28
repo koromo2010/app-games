@@ -6,13 +6,18 @@ on:
       - develop
     paths:
       - .github/workflows/main-promotion-gate-once.yml
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "**"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: main-promotion-gate
+  group: main-promotion-gate-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: false
 
 jobs:
