@@ -35,12 +35,27 @@ export function gameSdkDebugTargetViewer(
   return target.mode;
 }
 
+/**
+ * Returns the actor seat that is safe to use for command dispatch.
+ * A switching target is intentionally not executable yet.
+ */
 export function gameSdkDebugTargetActorSeat(
   state: Readonly<GameSdkDebugControlState>,
 ): number | null {
   return state.status === "ready" && state.target.mode === "dummy"
     ? state.target.seat
     : null;
+}
+
+/**
+ * Returns the actor seat selected in the DEBUG UI, even while its viewer
+ * snapshot is still switching. This is display-only; command dispatch must
+ * continue to use gameSdkDebugControlCanSend/gameSdkDebugTargetActorSeat.
+ */
+export function gameSdkDebugSelectedActorSeat(
+  state: Readonly<GameSdkDebugControlState>,
+): number | null {
+  return state.target.mode === "dummy" ? state.target.seat : null;
 }
 
 export function beginGameSdkDebugControlSwitch(
