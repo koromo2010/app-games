@@ -18,6 +18,9 @@ const stringFieldNames = [
   "provider",
   "model",
   "billingSource",
+  "tokenVersion",
+  "sourceKind",
+  "assetPath",
   "errorCode",
   "databaseCode",
 ] as const;
