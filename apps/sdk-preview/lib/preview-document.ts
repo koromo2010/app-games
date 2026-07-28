@@ -12,6 +12,7 @@ import {
   PreviewAssetReferenceError,
   rewritePreviewHtmlAssetUrls,
 } from "@/lib/preview-asset-rewriter";
+import { recordPreviewAssetTokenEvent } from "@/lib/preview-asset-token-observability";
 import {
   createPreviewAssetToken,
   packageAssetPath,
@@ -53,7 +54,9 @@ export async function renderAuthorizedPreviewDocument({
     gameId: grant.gameId,
     revision: grant.revision,
   };
-  const origin = new URL(requestUrl).origin;
+  const parsedRequestUrl = new URL(requestUrl);
+  const origin = parsedRequestUrl.origin;
+  const telemetryContext = { route: parsedRequestUrl.pathname, method: "GET" };
   const runtimeAssetPath = sourceKind === "package"
     ? GAME_FIELDS_PACKAGE_CLIENT_ASSET
     : GAME_FIELDS_PRESET_ASSET;
@@ -64,7 +67,28 @@ export async function renderAuthorizedPreviewDocument({
       sourceKind,
       runtimeAssetPath,
     );
+    recordPreviewAssetTokenEvent({
+      action: "issue",
+      version: "v2",
+      outcome: "success",
+      sourceKind,
+      gameId: grant.gameId,
+      revision: Number(grant.revision),
+      assetPath: runtimeAssetPath,
+      context: telemetryContext,
+    });
   } catch {
+    recordPreviewAssetTokenEvent({
+      action: "issue",
+      version: "v2",
+      outcome: "failed",
+      sourceKind,
+      gameId: grant.gameId,
+      revision: Number(grant.revision),
+      assetPath: runtimeAssetPath,
+      errorCode: "PREVIEW_ASSET_TOKEN_ISSUE_FAILED",
+      context: telemetryContext,
+    });
     return new Response("Preview link is invalid or expired.", { status: 403 });
   }
   const signedAssetUrl = (assetPath: string) => {
@@ -74,6 +98,18 @@ export async function renderAuthorizedPreviewDocument({
     const capability = assetPath === runtimeAssetPath
       ? runtimeCapability
       : createPreviewAssetToken(grant, sourceKind, assetPath);
+    if (assetPath !== runtimeAssetPath) {
+      recordPreviewAssetTokenEvent({
+        action: "issue",
+        version: "v2",
+        outcome: "success",
+        sourceKind,
+        gameId: grant.gameId,
+        revision: Number(grant.revision),
+        assetPath,
+        context: telemetryContext,
+      });
+    }
     const path = sourceKind === "package"
       ? packageAssetPath(scope, assetPath, capability.token)
       : previewAssetPath(scope, assetPath, capability.token);
