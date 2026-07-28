@@ -3,6 +3,7 @@ export type GameSdkDebugViewer = "self" | "spectator" | number;
 export type GameSdkDebugControlTarget =
   | { mode: "self" }
   | { mode: "spectator" }
+  | { mode: "viewer"; seat: number }
   | { mode: "dummy"; seat: number };
 
 export type GameSdkDebugControlState = {
@@ -20,7 +21,7 @@ export const INITIAL_GAME_SDK_DEBUG_CONTROL_STATE: GameSdkDebugControlState = {
 export function gameSdkDebugTargetViewer(
   target: GameSdkDebugControlTarget,
 ): GameSdkDebugViewer {
-  if (target.mode === "dummy") return target.seat;
+  if (target.mode === "dummy" || target.mode === "viewer") return target.seat;
   return target.mode;
 }
 
