@@ -1,6 +1,6 @@
-import { emitObservabilityEvent } from "../../../lib/observability/logger.ts";
-import { redisPipeline } from "../../../lib/redis-store.ts";
-import type { ObservabilityOutcome } from "../../../lib/observability/types.ts";
+import { emitObservabilityEvent } from "../../../lib/observability/logger";
+import { redisPipeline } from "../../../lib/redis-store";
+import type { ObservabilityOutcome } from "../../../lib/observability/types";
 import type { PreviewAssetSourceKind } from "./preview-security";
 
 export type PreviewAssetTokenVersion = "v1" | "v2" | "unknown";
