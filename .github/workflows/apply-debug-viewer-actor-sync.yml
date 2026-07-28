@@ -1,0 +1,29 @@
+name: Apply DEBUG viewer actor sync
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - scripts/apply-debug-viewer-actor-sync.mjs
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/apply-debug-viewer-actor-sync.mjs
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/components/GameSdkFrame.tsx app/components/GameSdkShellHeader.tsx
+          git commit -m "Sync DEBUG viewer and actor target"
+          git push origin develop
