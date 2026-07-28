@@ -6,6 +6,9 @@ on:
       - develop
     paths:
       - .github/workflows/main-promotion-gate-once.yml
+      - config/platform-release.json
+      - apps/sdk-portal/public/platform-release.json
+      - packages/game-sdk/src/index.ts
   pull_request:
     branches:
       - main
@@ -14,7 +17,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: main-promotion-gate-${{ github.event.pull_request.number || github.ref }}
@@ -31,16 +34,49 @@ jobs:
           ref: develop
           fetch-depth: 0
 
+      - name: Synchronize platform release metadata
+        id: sync_release
+        shell: bash
+        run: |
+          cp config/platform-release.json apps/sdk-portal/public/platform-release.json
+          node - <<'NODE'
+          const fs = require('fs');
+          const release = JSON.parse(fs.readFileSync('config/platform-release.json', 'utf8'));
+          const path = 'packages/game-sdk/src/index.ts';
+          const source = fs.readFileSync(path, 'utf8');
+          const next = source.replace(
+            /export const GAME_SDK_VERSION = \d+ as const;/,
+            `export const GAME_SDK_VERSION = ${release.sdkContractVersion} as const;`,
+          );
+          if (next === source && !source.includes(`GAME_SDK_VERSION = ${release.sdkContractVersion} as const`)) {
+            throw new Error('GAME_SDK_VERSION declaration was not found');
+          }
+          fs.writeFileSync(path, next);
+          NODE
+          if git diff --quiet; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add apps/sdk-portal/public/platform-release.json packages/game-sdk/src/index.ts
+            git commit -m "Synchronize SDK contract release metadata"
+            git push origin HEAD:develop
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up Node.js
+        if: steps.sync_release.outputs.changed != 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
 
       - name: Install dependencies
+        if: steps.sync_release.outputs.changed != 'true'
         run: npm ci
 
       - name: Run promotion gate with full verification
+        if: steps.sync_release.outputs.changed != 'true'
         shell: bash
         run: |
           set -o pipefail
