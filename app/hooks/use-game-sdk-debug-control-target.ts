@@ -4,15 +4,19 @@ import { useCallback, useRef, useState } from "react";
 import {
   INITIAL_GAME_SDK_DEBUG_CONTROL_STATE,
   beginGameSdkDebugControlSwitch,
+  beginGameSdkDebugViewerRequest,
   completeGameSdkDebugControlSwitch,
+  completeGameSdkDebugViewerRequest,
   gameSdkDebugControlCanSend,
   gameSdkDebugTargetActorSeat,
   gameSdkDebugTargetViewer,
+  gameSdkDebugViewerRequestIsCurrent,
   resetGameSdkDebugControl,
   wrapGameSdkDebugCommand,
   type GameSdkDebugControlState,
   type GameSdkDebugControlTarget,
   type GameSdkDebugViewer,
+  type GameSdkDebugViewerRequest,
 } from "@/lib/game-sdk-debug-control-target";
 
 type RoomIdentity = {
@@ -39,6 +43,8 @@ export function useGameSdkDebugControlTarget<TRoom extends RoomIdentity>({
   const stateRef = useRef<GameSdkDebugControlState>(
     INITIAL_GAME_SDK_DEBUG_CONTROL_STATE,
   );
+  const inFlightRef = useRef<GameSdkDebugViewerRequest | null>(null);
+  const requestSequenceRef = useRef(0);
   const [state, setState] = useState<GameSdkDebugControlState>(
     INITIAL_GAME_SDK_DEBUG_CONTROL_STATE,
   );
@@ -51,6 +57,7 @@ export function useGameSdkDebugControlTarget<TRoom extends RoomIdentity>({
 
   const reset = useCallback(() => {
     const next = commit(resetGameSdkDebugControl(stateRef.current));
+    inFlightRef.current = null;
     postRoomSnapshot(getRoom());
     return next;
   }, [commit, getRoom, postRoomSnapshot]);
@@ -62,8 +69,25 @@ export function useGameSdkDebugControlTarget<TRoom extends RoomIdentity>({
       postRoomSnapshot(room);
       return;
     }
+
     const generation = current.generation;
+    requestSequenceRef.current += 1;
+    const acquisition = beginGameSdkDebugViewerRequest(
+      inFlightRef.current,
+      generation,
+      requestSequenceRef.current,
+    );
+    if (!acquisition.started) return;
+
+    const request = acquisition.request;
+    inFlightRef.current = request;
     void readRoomAsDebugViewer(room.code, viewer).then((debugRoom) => {
+      if (!gameSdkDebugViewerRequestIsCurrent(inFlightRef.current, request)) return;
+      inFlightRef.current = completeGameSdkDebugViewerRequest(
+        inFlightRef.current,
+        request,
+      );
+
       const latest = stateRef.current;
       const latestRoom = getRoom();
       if (
@@ -75,6 +99,11 @@ export function useGameSdkDebugControlTarget<TRoom extends RoomIdentity>({
       commit(completeGameSdkDebugControlSwitch(latest, generation));
       postRoomSnapshot(debugRoom);
     }).catch(() => {
+      if (!gameSdkDebugViewerRequestIsCurrent(inFlightRef.current, request)) return;
+      inFlightRef.current = completeGameSdkDebugViewerRequest(
+        inFlightRef.current,
+        request,
+      );
       if (stateRef.current.generation !== generation) return;
       commit(resetGameSdkDebugControl(stateRef.current));
       postRoomSnapshot(getRoom());
@@ -86,6 +115,7 @@ export function useGameSdkDebugControlTarget<TRoom extends RoomIdentity>({
     const room = getRoom();
     const next = commit(beginGameSdkDebugControlSwitch(stateRef.current, target));
     if (target.mode === "self") {
+      inFlightRef.current = null;
       postRoomSnapshot(room);
       return next;
     }
