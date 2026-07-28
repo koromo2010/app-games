@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 
 const execute = process.argv.includes("--execute");
+const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const manifest = JSON.parse(readFileSync(new URL("../config/main-promotion-projects.json", import.meta.url), "utf8"));
 const requiredProjects = [
   "app-games",
@@ -81,11 +82,11 @@ const report = {
 
 if (execute) {
   for (const [command, args] of [
-    ["npm", ["run", "verify"]],
-    ["npm", ["test"]],
-    ["npm", ["run", "build"]],
-    ["npm", ["run", "build:sdk"]],
-    ["npm", ["run", "build:sdk-preview"]]
+    [npmCommand, ["run", "verify"]],
+    [npmCommand, ["test"]],
+    [npmCommand, ["run", "build"]],
+    [npmCommand, ["run", "build:sdk"]],
+    [npmCommand, ["run", "build:sdk-preview"]]
   ]) run(command, args, { inherit: true });
 }
 
