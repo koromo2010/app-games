@@ -43,3 +43,5 @@ jobs:
           git add app/components/GameSdkFrame.tsx app/components/GameSdkShellHeader.tsx app/hooks/use-game-sdk-debug-control-target.ts lib/game-sdk-debug-control-target.ts tests/game-sdk-debug-control-target.test.ts
           git commit -m "Add SDK DEBUG auto-follow"
           git push origin HEAD:develop
+
+# Manual trigger: 2026-07-29 auto-follow implementation.
