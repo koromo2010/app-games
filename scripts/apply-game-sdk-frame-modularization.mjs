@@ -42,3 +42,5 @@ fs.writeFileSync(authPath, auth);
 
 const contractPath = "tests/game-sdk-shell-registry.test.ts";
 fs.writeFileSync(contractPath, `import assert from "node:assert/strict";\nimport test from "node:test";\nimport { GAME_SDK_MODULE_CATALOG } from "@game-fields/game-sdk/modules";\nimport { assertCompleteShellRegistry, shellModuleIds } from "../app/components/game-sdk/game-sdk-shell-module-registry.ts";\n\ntest("shell module ids remain catalog-driven and ordered", () => {\n  assert.deepEqual(\n    shellModuleIds(),\n    GAME_SDK_MODULE_CATALOG.filter((definition) => definition.group === "shell").map((definition) => definition.id),\n  );\n});\n\ntest("shell registry rejects missing and non-executable implementations", () => {\n  assert.throws(() => assertCompleteShellRegistry({}), /GAME_SDK_SHELL_REGISTRY_INCOMPLETE/);\n});\n`);
+
+// workflow trigger: 2026-07-29T00:00:00+09:00
