@@ -59,14 +59,6 @@ async function handle(request: Request, context: RouteContext, method: Method) {
 
   try {
     const session = await requireAuthenticatedPlayer();
-    if (method === "GET") {
-      const limited = await rateLimitResponseFor(
-        request,
-        rateLimitPolicies.sdkRuntimeRead,
-        { playerId: session.id },
-      );
-      if (limited) return limited;
-    }
     const identity = {
       playerId: session.id,
       displayName: session.name,
@@ -74,6 +66,16 @@ async function handle(request: Request, context: RouteContext, method: Method) {
         ? await playerHasDebugAccess(session.id)
         : false,
     };
+    if (method === "GET") {
+      const limited = await rateLimitResponseFor(
+        request,
+        identity.debugAccess
+          ? rateLimitPolicies.sdkRuntimeReadDebug
+          : rateLimitPolicies.sdkRuntimeRead,
+        { playerId: session.id },
+      );
+      if (limited) return limited;
+    }
     const actorRef = telemetry.actorRef(session.id);
     let observed = false;
     const handlers = createGameSdkOnlineRoomHttpHandlers({
@@ -85,7 +87,9 @@ async function handle(request: Request, context: RouteContext, method: Method) {
       beforeMutation: (mutationRequest, _operation, roomCode) => (
         rateLimitResponseFor(
           mutationRequest,
-          rateLimitPolicies.sdkRoomMutation,
+          identity.debugAccess
+            ? rateLimitPolicies.sdkRoomMutationDebug
+            : rateLimitPolicies.sdkRoomMutation,
           {
             playerId: session.id,
             packageId: gameId,
