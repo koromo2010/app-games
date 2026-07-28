@@ -1,4 +1,4 @@
-export const GAME_SDK_VERSION = 1 as const;
+export const GAME_SDK_VERSION = 2 as const;
 
 export type GameSdkLocale = "ja" | "en";
 export type GameSdkPlayMode = "online-room" | "local-pass-and-play";
