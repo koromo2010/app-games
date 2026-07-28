@@ -48,6 +48,17 @@ async function importBatch() {
   const raw = await fs.readFile(inputPath, "utf8");
   const parsed = parseAiWordBatchInput(JSON.parse(raw));
   const checksum = createHash("sha256").update(raw).digest("hex");
+  if (process.argv.includes("--validate-only")) {
+    console.log(JSON.stringify({
+      batchKey: parsed.batch.batchKey,
+      categoryCount: parsed.categoryKeys.length,
+      acceptedCount: parsed.accepted.length,
+      invalidCount: parsed.rejected.length,
+      rejected: parsed.rejected,
+      checksum,
+    }, null, 2));
+    return;
+  }
 
   await ensureWordMasterSchema();
   await seedCategories();

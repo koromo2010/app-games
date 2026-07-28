@@ -28,7 +28,10 @@ pair_filter = load_script(
 
 class SudachiSynonymAdapterTest(unittest.TestCase):
     def test_coverage_query_excludes_sensitive_words(self) -> None:
-        self.assertIn("content_safety_status <> 'exclude'", adapter.CANDIDATE_QUERY)
+        self.assertIn(
+            "content_safety_status NOT IN ('review', 'exclude')",
+            adapter.CANDIDATE_QUERY,
+        )
 
     def test_manifest_pins_source_integrity_and_license(self) -> None:
         manifest = adapter.load_manifest(

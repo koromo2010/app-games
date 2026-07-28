@@ -359,21 +359,24 @@ def import_rows(connection: psycopg.Connection[Any], args: argparse.Namespace) -
               content_safety_status = CASE
                 WHEN EXCLUDED.content_safety_status = 'exclude'
                   THEN EXCLUDED.content_safety_status
-                WHEN words.content_safety_policy_version LIKE 'llm-%%'
+                WHEN words.content_safety_status IN ('clean', 'review', 'exclude')
+                  AND words.content_safety_policy_version <> ''
                   THEN words.content_safety_status
                 ELSE EXCLUDED.content_safety_status
               END,
               content_safety_flags = CASE
                 WHEN EXCLUDED.content_safety_status = 'exclude'
                   THEN EXCLUDED.content_safety_flags
-                WHEN words.content_safety_policy_version LIKE 'llm-%%'
+                WHEN words.content_safety_status IN ('clean', 'review', 'exclude')
+                  AND words.content_safety_policy_version <> ''
                   THEN words.content_safety_flags
                 ELSE EXCLUDED.content_safety_flags
               END,
               content_safety_policy_version = CASE
                 WHEN EXCLUDED.content_safety_status = 'exclude'
                   THEN EXCLUDED.content_safety_policy_version
-                WHEN words.content_safety_policy_version LIKE 'llm-%%'
+                WHEN words.content_safety_status IN ('clean', 'review', 'exclude')
+                  AND words.content_safety_policy_version <> ''
                   THEN words.content_safety_policy_version
                 ELSE EXCLUDED.content_safety_policy_version
               END,

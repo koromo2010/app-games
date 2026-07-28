@@ -144,7 +144,17 @@ normalized_form,part_of_speech_details,proper_noun_status,proper_noun_type
 
 完全一致リストにない語は安全と断定せず `unreviewed` とする。将来のワードウルフ相方生成では、最初の単語がセンシティブかの判定と、安全な相方の生成を同じLLMリクエストで行う。応答は `decision`、`safetyFlags`、`partner` の構造化形式とし、`reject` の場合は相方を生成せず、最初の単語へ `llm-*` 版の判定を保存して次回以降の抽出から外す。`accept` の場合だけ安全な相方を返すため、存在しない却下相方をDBへ保存する専用管理は作らない。
 
-辞書の再取込では決定的な `exclude` を常に優先する一方、既に保存した `llm-*` 判定は、より新しい決定的除外に該当しない限り維持する。本番カタログ同期も `content_safety_status = exclude` を対象外にする。
+辞書の再取込では決定的な `exclude` を常に優先する一方、既に保存した判定済みの `clean`、`review`、`exclude` は、より新しい決定的除外に該当しない限り維持する。本番カタログ同期と各辞書アダプタは `review` と `exclude` を対象外にする。
+
+## AI生成候補のステージング
+
+複数バッチで語彙を生成するときは、全バッチがそろうまで既存候補や `words` との比較を行わず、`ai_word_staged_candidates` に原案を保持する。原本JSON、CSV、DBダンプは `.word-master-local/` にだけ置き、Gitには追加しない。
+
+全バッチ完了後に `word-db:ai-stage-compare:local` で生成内重複、既存AI候補、既存 `words`、表記一致・読み不一致をまとめて確認する。読みが異なるものは同一語へ自動統合しない。確認後は `npm run word-db:ai-stage-finalize:local -- --prefix=<batch-prefix>` で候補を確定する。
+
+確定時は、生成内の同一表記を最初の出現へ統合し、既存AI候補と表記・読みが一致すれば既存候補を再利用する。各ステージング行と採用候補の対応は `ai_word_staging_resolutions` に保存する。この段階では恒久 `word_master_id` を発行せず、品質審査、センシティブ審査、難易度分類の完了後にだけ既存IDの再利用または新規IDの採番を行う。
+
+正式昇格前の既存ID対応は `ai_word_candidate_match_resolutions` に保存する。同じ表記・読みの利用可能な `words` が一意な場合だけ既存IDを再利用する。ただし、人名断片と人物固有名詞は一般語の再利用先にしない。0件は新規語、複数件は語義を自動決定せず `ambiguous_new_lexeme` として新規語にする。昇格の `--dry-run` で再利用数・新規数を確認してから恒久IDを発行し、新規語は昇格後ただちに品詞・語形・固有名詞・人名・品質・安全の各情報を監査履歴付きで補完する。旧昇格結果で人名断片へ誤対応していた一般語は、旧IDを削除せず、新しい一般語IDへの付替えを `ai_word_promotion_repairs` に記録する。
 
 
 ## 初期ゲーム分類
@@ -203,7 +213,20 @@ PostgreSQLへ切り替える時点で、`TAHOIYA_WORD_COOLDOWN_DAYS`（既定90�
 
 2026-07-16 に、ローカルで審査した候補だけを本番 Neon の `shared_word_catalog` へ初回同期した。初回結果は `active = true` が197,040件、全体も197,040件、非アクティブ化0件。本番DB全体は同期後51,273,728 bytesだった。
 
-同期対象は `active = true`、`form_status <> 'inflected'`、`is_name_fragment = false`、`surface_quality_status = 'clean'`、`content_safety_status <> 'exclude'` をすべて満たすローカル `words` 行とする。
+同期対象は `active = true`、`form_status <> 'inflected'`、`is_name_fragment = false`、`surface_quality_status = 'clean'`、`content_safety_status NOT IN ('review', 'exclude')` をすべて満たすローカル `words` 行とする。
+
+2026-07-28 に、品質・安全・難易度審査を完了したAI一般語4,038語を
+`scripts/publish-ai-general-word-pool.py` の差分同期で追加・更新した。
+内訳はeasy 1,503語、normal 1,702語、hard 833語で、
+`shared_word_pool_evaluations.pool_key = ai-general` に所属と難易度を保存した。
+安全性が `review` の「下着」1語は同期対象外とした。
+同期後の `shared_word_catalog.active = true` は200,917語だった。
+
+AI一般語のうち1,659語はローカルの実測Zipfを本番投影にも使い、
+未測定2,379語は選択中心のeasy=6.0、normal=5.0、hard=4.0を
+本番表示用Zipfとして投影する。ローカル `words.zipf_frequency` は書き換えず、
+投影の別は `evaluation_flags` の `zipf_measured` / `zipf_projected` に残す。
+差分同期は既存カタログ全体を非アクティブ化せず、`ai-general` プールだけを更新する。
 
 本番へ置くゲーム向けの主フィールドは `word_master_id`、`surface`、`reading`、`zipf_frequency`、`active` の5つ。同期管理用に `catalog_policy_version`、`last_seen_sync_id`、作成・更新日時も保持する。`normalized_form`、辞書原本、正規化CSV、ローカル判定理由、DBダンプは本番へ送らない。
 
@@ -230,7 +253,7 @@ PostgreSQLへ切り替える時点で、`TAHOIYA_WORD_COOLDOWN_DAYS`（既定90�
 
 ゲーム別の難易度や「秘境」「魔境」は本番カタログへ固定保存せず、ゲーム側が `zipf_frequency` から導出する。たほいやの説明文は別テーブルで、既存説明を優先し、未作成の語は初回利用時に生成・保存する。
 
-差分同期は `scripts/upload-shared-word-catalog.py` を使う。全候補へ同期IDを付けた後に、今回の同期に現れなかった既存行だけを非アクティブ化する。Vercel連携でSensitive指定されたNeon URLはCLIでも値を取得できないため、初回同期は公開鍵署名で保護した一時プレビューFunctionから実行し、完了後にFunction、プレビュー、秘密鍵を削除した。恒久的な無認証アップロードAPIは置かない。
+全体差分同期は `scripts/upload-shared-word-catalog.py`、審査済みAI一般語だけの差分同期は `scripts/publish-ai-general-word-pool.py` を使う。全体同期は全候補へ同期IDを付けた後に、今回の同期に現れなかった既存行だけを非アクティブ化する。AI一般語同期は既存カタログを維持し、`ai-general` プール所属だけを差し替える。Vercel連携でSensitive指定されたNeon URLはCLIでも値を取得できないため、同期実行時だけ公開鍵署名で保護した期限付きFunctionを、本番カスタムドメインを切り替えない一時Production-targetデプロイへ置く。完了後はVercel標準別名を元の本番へ戻し、Function、デプロイ、秘密鍵を削除する。恒久的な無認証アップロードAPIは置かない。
 
 ## ワードウルフRAGの運用コンセプト
 

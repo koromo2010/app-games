@@ -279,6 +279,21 @@ export async function ensureWordMasterSchema() {
         )
       `;
 
+      await sql`
+        CREATE TABLE IF NOT EXISTS word_reading_corrections (
+          id BIGSERIAL PRIMARY KEY,
+          word_id BIGINT NOT NULL REFERENCES words(id) ON DELETE RESTRICT,
+          surface TEXT NOT NULL,
+          old_reading TEXT NOT NULL,
+          new_reading TEXT NOT NULL,
+          reason TEXT NOT NULL,
+          policy_version TEXT NOT NULL,
+          corrected_by TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE (word_id, policy_version)
+        )
+      `;
+
       // AI-generated general words stay in a local candidate area until a
       // separate review assigns difficulty and promotes them to the master.
       await sql`
@@ -303,7 +318,7 @@ export async function ensureWordMasterSchema() {
           input_checksum TEXT NOT NULL,
           category_keys TEXT[] NOT NULL,
           status TEXT NOT NULL DEFAULT 'importing'
-            CHECK (status IN ('importing', 'completed', 'partial', 'failed')),
+            CHECK (status IN ('importing', 'staged', 'completed', 'partial', 'failed')),
           requested_count INTEGER NOT NULL DEFAULT 0 CHECK (requested_count >= 0),
           inserted_count INTEGER NOT NULL DEFAULT 0 CHECK (inserted_count >= 0),
           duplicate_count INTEGER NOT NULL DEFAULT 0 CHECK (duplicate_count >= 0),
@@ -311,6 +326,51 @@ export async function ensureWordMasterSchema() {
           error_message TEXT NOT NULL DEFAULT '',
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           completed_at TIMESTAMPTZ
+        )
+      `;
+
+      await sql`
+        DO $ai_word_generation_batch_constraints$
+        BEGIN
+          IF EXISTS (
+            SELECT 1
+            FROM pg_constraint
+            WHERE conname = 'ai_word_generation_batches_status_check'
+              AND pg_get_constraintdef(oid) NOT LIKE '%''staged''::text%'
+          ) THEN
+            ALTER TABLE ai_word_generation_batches
+            DROP CONSTRAINT ai_word_generation_batches_status_check;
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1
+            FROM pg_constraint
+            WHERE conname = 'ai_word_generation_batches_status_check'
+          ) THEN
+            ALTER TABLE ai_word_generation_batches
+            ADD CONSTRAINT ai_word_generation_batches_status_check
+            CHECK (status IN ('importing', 'staged', 'completed', 'partial', 'failed'));
+          END IF;
+        END
+        $ai_word_generation_batch_constraints$
+      `;
+
+      // A staged generation keeps every generated word without comparing it
+      // with earlier candidates or the dictionary-backed master. The whole
+      // generation series is compared only after its final batch is ready.
+      await sql`
+        CREATE TABLE IF NOT EXISTS ai_word_staged_candidates (
+          id BIGSERIAL PRIMARY KEY,
+          generation_batch_id BIGINT NOT NULL
+            REFERENCES ai_word_generation_batches(id) ON DELETE RESTRICT,
+          item_order INTEGER NOT NULL CHECK (item_order > 0),
+          surface TEXT NOT NULL,
+          normalized_form TEXT NOT NULL,
+          reading TEXT NOT NULL,
+          category_key TEXT NOT NULL
+            REFERENCES ai_word_categories(category_key) ON DELETE RESTRICT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE (generation_batch_id, item_order),
+          UNIQUE (generation_batch_id, normalized_form)
         )
       `;
 
@@ -334,6 +394,14 @@ export async function ensureWordMasterSchema() {
           quality_review_model TEXT NOT NULL DEFAULT '',
           quality_policy_version TEXT NOT NULL DEFAULT '',
           quality_reviewed_at TIMESTAMPTZ,
+          content_safety_status TEXT NOT NULL DEFAULT 'unreviewed'
+            CHECK (content_safety_status IN ('unreviewed', 'clean', 'review', 'exclude')),
+          content_safety_flags TEXT[] NOT NULL DEFAULT '{}',
+          content_safety_reason TEXT NOT NULL DEFAULT '',
+          content_safety_reviewed_by TEXT NOT NULL DEFAULT '',
+          content_safety_review_model TEXT NOT NULL DEFAULT '',
+          content_safety_policy_version TEXT NOT NULL DEFAULT '',
+          content_safety_reviewed_at TIMESTAMPTZ,
           difficulty TEXT
             CHECK (difficulty IS NULL OR difficulty IN ('easy', 'normal', 'hard')),
           classification_confidence REAL
@@ -343,6 +411,69 @@ export async function ensureWordMasterSchema() {
           promoted_word_id BIGINT REFERENCES words(id) ON DELETE RESTRICT,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `;
+
+      // Keep an auditable link from every staged row to the candidate selected
+      // after cross-batch deduplication. Repeated generated rows point to the
+      // first staged occurrence instead of creating another candidate.
+      await sql`
+        CREATE TABLE IF NOT EXISTS ai_word_staging_resolutions (
+          id BIGSERIAL PRIMARY KEY,
+          staged_candidate_id BIGINT NOT NULL UNIQUE
+            REFERENCES ai_word_staged_candidates(id) ON DELETE RESTRICT,
+          canonical_staged_candidate_id BIGINT NOT NULL
+            REFERENCES ai_word_staged_candidates(id) ON DELETE RESTRICT,
+          candidate_id BIGINT NOT NULL
+            REFERENCES ai_word_candidates(id) ON DELETE RESTRICT,
+          resolution_kind TEXT NOT NULL
+            CHECK (resolution_kind IN (
+              'inserted_candidate',
+              'existing_candidate',
+              'generated_duplicate'
+            )),
+          resolved_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `;
+
+      await sql`
+        CREATE TABLE IF NOT EXISTS ai_word_candidate_match_resolutions (
+          id BIGSERIAL PRIMARY KEY,
+          candidate_id BIGINT NOT NULL UNIQUE
+            REFERENCES ai_word_candidates(id) ON DELETE RESTRICT,
+          word_id BIGINT REFERENCES words(id) ON DELETE RESTRICT,
+          resolution_kind TEXT NOT NULL
+            CHECK (resolution_kind IN (
+              'existing_word',
+              'new_lexeme',
+              'ambiguous_new_lexeme'
+            )),
+          exact_match_count INTEGER NOT NULL CHECK (exact_match_count >= 0),
+          policy_version TEXT NOT NULL,
+          resolved_by TEXT NOT NULL,
+          reason TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          CHECK (
+            (resolution_kind = 'existing_word' AND word_id IS NOT NULL)
+            OR (resolution_kind <> 'existing_word' AND word_id IS NULL)
+          )
+        )
+      `;
+
+      await sql`
+        CREATE TABLE IF NOT EXISTS ai_word_promotion_repairs (
+          candidate_id BIGINT PRIMARY KEY
+            REFERENCES ai_word_candidates(id) ON DELETE RESTRICT,
+          previous_word_id BIGINT NOT NULL
+            REFERENCES words(id) ON DELETE RESTRICT,
+          repaired_word_id BIGINT NOT NULL UNIQUE
+            REFERENCES words(id) ON DELETE RESTRICT,
+          repair_kind TEXT NOT NULL
+            CHECK (repair_kind IN ('name_fragment_to_common_lexeme')),
+          policy_version TEXT NOT NULL,
+          repaired_by TEXT NOT NULL,
+          reason TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )
       `;
 
@@ -375,6 +506,34 @@ export async function ensureWordMasterSchema() {
         ADD COLUMN IF NOT EXISTS quality_reviewed_at TIMESTAMPTZ
       `;
       await sql`
+        ALTER TABLE ai_word_candidates
+        ADD COLUMN IF NOT EXISTS content_safety_status TEXT NOT NULL DEFAULT 'unreviewed'
+      `;
+      await sql`
+        ALTER TABLE ai_word_candidates
+        ADD COLUMN IF NOT EXISTS content_safety_flags TEXT[] NOT NULL DEFAULT '{}'
+      `;
+      await sql`
+        ALTER TABLE ai_word_candidates
+        ADD COLUMN IF NOT EXISTS content_safety_reason TEXT NOT NULL DEFAULT ''
+      `;
+      await sql`
+        ALTER TABLE ai_word_candidates
+        ADD COLUMN IF NOT EXISTS content_safety_reviewed_by TEXT NOT NULL DEFAULT ''
+      `;
+      await sql`
+        ALTER TABLE ai_word_candidates
+        ADD COLUMN IF NOT EXISTS content_safety_review_model TEXT NOT NULL DEFAULT ''
+      `;
+      await sql`
+        ALTER TABLE ai_word_candidates
+        ADD COLUMN IF NOT EXISTS content_safety_policy_version TEXT NOT NULL DEFAULT ''
+      `;
+      await sql`
+        ALTER TABLE ai_word_candidates
+        ADD COLUMN IF NOT EXISTS content_safety_reviewed_at TIMESTAMPTZ
+      `;
+      await sql`
         DO $ai_word_candidate_constraints$
         BEGIN
           IF EXISTS (
@@ -398,6 +557,15 @@ export async function ensureWordMasterSchema() {
             ALTER TABLE ai_word_candidates
             ADD CONSTRAINT ai_word_candidates_quality_status_check
             CHECK (quality_status IN ('unreviewed', 'approved', 'review', 'rejected'));
+          END IF;
+          IF NOT EXISTS (
+            SELECT 1
+            FROM pg_constraint
+            WHERE conname = 'ai_word_candidates_content_safety_status_check'
+          ) THEN
+            ALTER TABLE ai_word_candidates
+            ADD CONSTRAINT ai_word_candidates_content_safety_status_check
+            CHECK (content_safety_status IN ('unreviewed', 'clean', 'review', 'exclude'));
           END IF;
         END
         $ai_word_candidate_constraints$
@@ -429,6 +597,40 @@ export async function ensureWordMasterSchema() {
           candidate_id BIGINT NOT NULL REFERENCES ai_word_candidates(id) ON DELETE RESTRICT,
           review_batch_id BIGINT NOT NULL REFERENCES ai_word_quality_review_batches(id) ON DELETE RESTRICT,
           decision TEXT NOT NULL CHECK (decision IN ('approved', 'review', 'rejected')),
+          flags TEXT[] NOT NULL DEFAULT '{}',
+          reason TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          UNIQUE (candidate_id, review_batch_id)
+        )
+      `;
+
+      await sql`
+        CREATE TABLE IF NOT EXISTS ai_word_content_safety_review_batches (
+          id BIGSERIAL PRIMARY KEY,
+          review_key TEXT NOT NULL UNIQUE,
+          reviewed_by TEXT NOT NULL,
+          model TEXT NOT NULL,
+          policy_version TEXT NOT NULL,
+          input_checksum TEXT NOT NULL,
+          expected_count INTEGER NOT NULL CHECK (expected_count > 0),
+          status TEXT NOT NULL DEFAULT 'reviewing'
+            CHECK (status IN ('reviewing', 'completed', 'failed')),
+          clean_count INTEGER NOT NULL DEFAULT 0 CHECK (clean_count >= 0),
+          review_count INTEGER NOT NULL DEFAULT 0 CHECK (review_count >= 0),
+          exclude_count INTEGER NOT NULL DEFAULT 0 CHECK (exclude_count >= 0),
+          error_message TEXT NOT NULL DEFAULT '',
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          completed_at TIMESTAMPTZ
+        )
+      `;
+
+      await sql`
+        CREATE TABLE IF NOT EXISTS ai_word_candidate_content_safety_reviews (
+          id BIGSERIAL PRIMARY KEY,
+          candidate_id BIGINT NOT NULL REFERENCES ai_word_candidates(id) ON DELETE RESTRICT,
+          review_batch_id BIGINT NOT NULL
+            REFERENCES ai_word_content_safety_review_batches(id) ON DELETE RESTRICT,
+          decision TEXT NOT NULL CHECK (decision IN ('clean', 'review', 'exclude')),
           flags TEXT[] NOT NULL DEFAULT '{}',
           reason TEXT NOT NULL,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -687,7 +889,9 @@ export async function ensureWordMasterSchema() {
       await sql`CREATE INDEX IF NOT EXISTS words_normalized_form_idx ON words (normalized_form)`;
       await sql`CREATE INDEX IF NOT EXISTS ai_word_candidates_category_status_idx ON ai_word_candidates (category_key, review_status, id)`;
       await sql`CREATE INDEX IF NOT EXISTS ai_word_candidates_quality_status_idx ON ai_word_candidates (quality_status, category_key, id)`;
+      await sql`CREATE INDEX IF NOT EXISTS ai_word_candidates_content_safety_status_idx ON ai_word_candidates (content_safety_status, id)`;
       await sql`CREATE INDEX IF NOT EXISTS ai_word_candidate_quality_reviews_candidate_idx ON ai_word_candidate_quality_reviews (candidate_id, id)`;
+      await sql`CREATE INDEX IF NOT EXISTS ai_word_candidate_content_safety_reviews_candidate_idx ON ai_word_candidate_content_safety_reviews (candidate_id, id)`;
       await sql`CREATE INDEX IF NOT EXISTS ai_word_candidate_classifications_candidate_idx ON ai_word_candidate_classifications (candidate_id, id)`;
       await sql`CREATE INDEX IF NOT EXISTS ai_word_candidate_corrections_candidate_idx ON ai_word_candidate_corrections (candidate_id, id)`;
       await sql`CREATE INDEX IF NOT EXISTS ai_word_candidate_enrichments_candidate_idx ON ai_word_candidate_enrichments (candidate_id, id)`;

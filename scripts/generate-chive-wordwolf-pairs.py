@@ -37,7 +37,7 @@ WHERE active
   AND form_status <> 'inflected'
   AND NOT is_name_fragment
   AND surface_quality_status = 'clean'
-  AND content_safety_status <> 'exclude'
+  AND content_safety_status NOT IN ('review', 'exclude')
   AND primary_part_of_speech = '名詞'
   AND zipf_frequency >= %s
   AND zipf_frequency < %s

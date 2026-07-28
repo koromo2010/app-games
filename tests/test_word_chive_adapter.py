@@ -47,8 +47,14 @@ class ChiVeAdapterTest(unittest.TestCase):
         self.assertIn("form_status <> 'inflected'", adapter.CANDIDATE_QUERY)
         self.assertIn("NOT is_name_fragment", adapter.CANDIDATE_QUERY)
         self.assertIn("surface_quality_status = 'clean'", adapter.CANDIDATE_QUERY)
-        self.assertIn("content_safety_status <> 'exclude'", adapter.CANDIDATE_QUERY)
-        self.assertIn("content_safety_status <> 'exclude'", pairs.CANDIDATE_QUERY)
+        self.assertIn(
+            "content_safety_status NOT IN ('review', 'exclude')",
+            adapter.CANDIDATE_QUERY,
+        )
+        self.assertIn(
+            "content_safety_status NOT IN ('review', 'exclude')",
+            pairs.CANDIDATE_QUERY,
+        )
 
     def test_archive_verification_rejects_size_or_hash_changes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

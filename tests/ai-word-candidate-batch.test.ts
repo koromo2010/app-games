@@ -5,12 +5,13 @@ import {
   normalizeAiWordSurface,
   parseAiWordBatchInput,
 } from "../lib/ai-word-candidate-batch.ts";
-import { generalWordGenres } from "../lib/general-word-genres.ts";
+import { generalWordGenres, hardWordGenres } from "../lib/general-word-genres.ts";
 
-test("general word genre catalog contains fifty unique genres", () => {
-  assert.equal(generalWordGenres.length, 50);
-  assert.equal(new Set(generalWordGenres.map((genre) => genre.key)).size, 50);
-  assert.equal(new Set(generalWordGenres.map((genre) => genre.name)).size, 50);
+test("general word genre catalog contains base and hard-word genres without duplicates", () => {
+  assert.equal(hardWordGenres.length, 50);
+  assert.equal(generalWordGenres.length, 125);
+  assert.equal(new Set(generalWordGenres.map((genre) => genre.key)).size, 125);
+  assert.equal(new Set(generalWordGenres.map((genre) => genre.name)).size, 125);
 });
 
 test("AI word batches normalize and accept Japanese candidates", () => {

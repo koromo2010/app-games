@@ -29,7 +29,10 @@ class UploadSharedWordCatalogTest(unittest.TestCase):
         self.assertIn("form_status <> 'inflected'", catalog.CANDIDATE_QUERY)
         self.assertIn("NOT is_name_fragment", catalog.CANDIDATE_QUERY)
         self.assertIn("surface_quality_status = 'clean'", catalog.CANDIDATE_QUERY)
-        self.assertIn("content_safety_status <> 'exclude'", catalog.CANDIDATE_QUERY)
+        self.assertIn(
+            "content_safety_status NOT IN ('review', 'exclude')",
+            catalog.CANDIDATE_QUERY,
+        )
 
     def test_target_catalog_uses_immutable_master_id(self) -> None:
         self.assertIn("word_master_id BIGINT PRIMARY KEY", catalog.CREATE_SCHEMA_SQL)

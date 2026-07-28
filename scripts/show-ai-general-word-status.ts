@@ -20,7 +20,12 @@ async function showStatus() {
     `
       SELECT category.category_key, category.display_name, category.target_count,
              COUNT(candidate.id) FILTER (WHERE candidate.review_status <> 'rejected')::INTEGER AS candidate_count,
-             COUNT(candidate.id) FILTER (WHERE candidate.quality_status = 'approved')::INTEGER AS approved_count
+             COUNT(candidate.id) FILTER (WHERE candidate.quality_status = 'approved')::INTEGER AS approved_count,
+             (
+               SELECT COUNT(*)::INTEGER
+               FROM ai_word_staged_candidates staged
+               WHERE staged.category_key = category.category_key
+             ) AS staged_count
       FROM ai_word_categories category
       LEFT JOIN ai_word_candidates candidate ON candidate.category_key = category.category_key
       WHERE category.active
@@ -32,6 +37,7 @@ async function showStatus() {
   const missingGenres = generalWordGenres.filter((genre) => !knownKeys.has(genre.key));
   console.table(rows.map((row) => ({
     category: row.display_name,
+    staged: Number(row.staged_count),
     candidates: Number(row.candidate_count),
     target: Number(row.target_count),
     approved: Number(row.approved_count),
@@ -45,12 +51,14 @@ async function showStatus() {
         COUNT(*) FILTER (WHERE difficulty = 'easy')::INTEGER AS easy,
         COUNT(*) FILTER (WHERE difficulty = 'normal')::INTEGER AS normal,
         COUNT(*) FILTER (WHERE difficulty = 'hard')::INTEGER AS hard,
-        COUNT(*) FILTER (WHERE quality_status = 'approved' AND difficulty IS NULL)::INTEGER AS unclassified
+        COUNT(*) FILTER (WHERE quality_status = 'approved' AND difficulty IS NULL)::INTEGER AS unclassified,
+        (SELECT COUNT(*)::INTEGER FROM ai_word_staged_candidates) AS staged
       FROM ai_word_candidates
     `,
   );
   console.table([{
     generated: Number(summary.generated),
+    staged: Number(summary.staged),
     approved: Number(summary.approved),
     rejected: Number(summary.rejected),
     easy: Number(summary.easy),

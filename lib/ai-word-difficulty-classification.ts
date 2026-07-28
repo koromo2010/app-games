@@ -26,7 +26,10 @@ function cleanString(value: unknown) {
   return typeof value === "string" ? value.normalize("NFKC").replace(/\s+/g, " ").trim() : "";
 }
 
-function parseJudgment(value: unknown, context: string): AiWordDifficultyJudgment {
+export function parseAiWordDifficultyJudgment(
+  value: unknown,
+  context: string,
+): AiWordDifficultyJudgment {
   if (!value || typeof value !== "object") throw new Error(`AI_WORD_CLASSIFICATION_INVALID:${context}`);
   const source = value as Partial<AiWordDifficultyJudgment>;
   const reason = cleanString(source.reason);
@@ -72,7 +75,7 @@ export function parseAiWordDifficultyClassificationInput(
       throw new Error(`AI_WORD_CLASSIFICATION_DUPLICATE_CATEGORY:${categoryKey}`);
     }
     seenCategories.add(categoryKey);
-    const defaultClassification = parseJudgment(
+    const defaultClassification = parseAiWordDifficultyJudgment(
       category.defaultClassification,
       `${categoryKey}:default`,
     );
@@ -89,7 +92,7 @@ export function parseAiWordDifficultyClassificationInput(
       seenSurfaces.add(normalized);
       return {
         surface,
-        ...parseJudgment(exception, `${categoryKey}:${surface}`),
+        ...parseAiWordDifficultyJudgment(exception, `${categoryKey}:${surface}`),
       };
     });
     return { categoryKey, defaultClassification, exceptions };

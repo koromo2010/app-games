@@ -50,16 +50,20 @@ async function promoteAiGeneralWords() {
        JOIN words word
          ON word.normalized_form = candidate.normalized_form
         AND translate(word.reading, $1, $2) = candidate.reading
+        AND word.content_safety_status NOT IN ('review', 'exclude')
        WHERE candidate.quality_status = 'approved'
+         AND candidate.content_safety_status = 'clean'
          AND candidate.difficulty IS NOT NULL
          AND candidate.review_status <> 'promoted'
        GROUP BY candidate.id
      )
      SELECT candidate.id, candidate.surface, candidate.reading,
+            candidate.matched_word_id,
             COALESCE(cardinality(exact_matches.word_ids), 0)::INTEGER AS exact_count
      FROM ai_word_candidates candidate
      LEFT JOIN exact_matches ON exact_matches.candidate_id = candidate.id
      WHERE candidate.quality_status = 'approved'
+       AND candidate.content_safety_status = 'clean'
        AND candidate.difficulty IS NOT NULL
        AND candidate.review_status <> 'promoted'
      ORDER BY candidate.id`,
@@ -83,10 +87,57 @@ async function promoteAiGeneralWords() {
        COUNT(*)::INTEGER AS approved,
        COUNT(*) FILTER (WHERE difficulty IS NULL)::INTEGER AS unclassified
      FROM ai_word_candidates
-     WHERE quality_status = 'approved'`,
+     WHERE quality_status = 'approved'
+       AND content_safety_status = 'clean'`,
   );
   if (Number(approvedState[0]?.unclassified ?? 0) !== 0) {
     throw new Error("AI_WORD_PROMOTION_UNCLASSIFIED_APPROVED_CANDIDATES");
+  }
+
+  const invalidMatchedWords = await sql.query(
+    `SELECT candidate.id, candidate.surface, candidate.reading,
+            candidate.matched_word_id,
+            word.surface AS matched_surface,
+            word.reading AS matched_reading,
+            word.content_safety_status
+     FROM ai_word_candidates candidate
+     JOIN words word ON word.id = candidate.matched_word_id
+     WHERE candidate.quality_status = 'approved'
+       AND candidate.content_safety_status = 'clean'
+       AND candidate.difficulty IS NOT NULL
+       AND candidate.review_status <> 'promoted'
+       AND (
+         word.normalized_form <> candidate.normalized_form
+         OR translate(word.reading, $1, $2) <> candidate.reading
+         OR word.content_safety_status IN ('review', 'exclude')
+       )
+     ORDER BY candidate.id`,
+    [katakanaForReadingNormalization, hiraganaForReadingNormalization],
+  );
+  if (invalidMatchedWords.length > 0) {
+    throw new Error(
+      `AI_WORD_PROMOTION_INVALID_MATCHED_WORDS:${JSON.stringify(invalidMatchedWords)}`,
+    );
+  }
+
+  if (process.argv.includes("--dry-run")) {
+    const matched = candidates.filter((candidate) => candidate.matched_word_id !== null).length;
+    console.log(JSON.stringify({
+      dryRun: true,
+      candidates: candidates.length,
+      reuseExisting: matched,
+      insertNew: candidates.length - matched,
+      ambiguousExactMatches: candidates
+        .filter((candidate) => Number(candidate.exact_count) > 1)
+        .map((candidate) => ({
+          surface: candidate.surface,
+          reading: candidate.reading,
+          exactMatchCount: Number(candidate.exact_count),
+          matchedWordId: candidate.matched_word_id,
+        })),
+      permanentWordIdsCreated: false,
+    }, null, 2));
+    return;
   }
 
   const specialMatches = await sql.query(
@@ -95,6 +146,7 @@ async function promoteAiGeneralWords() {
      JOIN words word
        ON word.normalized_form = candidate.normalized_form
       AND translate(word.reading, $1, $2) = candidate.reading
+      AND word.content_safety_status NOT IN ('review', 'exclude')
      WHERE (candidate.surface, candidate.reading) IN (('サイ', 'さい'), ('現金', 'げんきん'))
        AND word.surface = candidate.surface
        AND word.primary_part_of_speech = '名詞'
@@ -143,7 +195,9 @@ async function promoteAiGeneralWords() {
        JOIN words word
          ON word.normalized_form = candidate.normalized_form
         AND translate(word.reading, $1, $2) = candidate.reading
+        AND word.content_safety_status NOT IN ('review', 'exclude')
        WHERE candidate.quality_status = 'approved'
+         AND candidate.content_safety_status = 'clean'
          AND candidate.difficulty IS NOT NULL
          AND candidate.review_status <> 'promoted'
        GROUP BY candidate.id
@@ -151,6 +205,8 @@ async function promoteAiGeneralWords() {
      resolved AS (
        SELECT candidate.*,
               CASE
+                WHEN candidate.matched_word_id IS NOT NULL
+                  THEN candidate.matched_word_id
                 WHEN cardinality(exact_matches.word_ids) = 1 THEN exact_matches.word_ids[1]
                 WHEN (candidate.surface, candidate.reading) IN (('サイ', 'さい'), ('現金', 'げんきん'))
                   THEN (
@@ -158,6 +214,7 @@ async function promoteAiGeneralWords() {
                     FROM words word
                     WHERE word.normalized_form = candidate.normalized_form
                       AND translate(word.reading, $1, $2) = candidate.reading
+                      AND word.content_safety_status = 'clean'
                       AND word.surface = candidate.surface
                       AND word.primary_part_of_speech = '名詞'
                       AND word.proper_noun_status = 'common'
@@ -168,6 +225,7 @@ async function promoteAiGeneralWords() {
        FROM ai_word_candidates candidate
        LEFT JOIN exact_matches ON exact_matches.candidate_id = candidate.id
        WHERE candidate.quality_status = 'approved'
+         AND candidate.content_safety_status = 'clean'
          AND candidate.difficulty IS NOT NULL
          AND candidate.review_status <> 'promoted'
      ),
@@ -188,7 +246,9 @@ async function promoteAiGeneralWords() {
               'common', NULL,
               'not_person', FALSE, $4,
               'clean', ARRAY[]::TEXT[], $4,
-              'unreviewed', ARRAY[]::TEXT[], '',
+              resolved.content_safety_status,
+              resolved.content_safety_flags,
+              resolved.content_safety_policy_version,
               NULL, source.id, 'candidate:' || resolved.id, $4, TRUE
        FROM resolved
        CROSS JOIN source
@@ -213,6 +273,20 @@ async function promoteAiGeneralWords() {
        RETURNING candidate.id, candidate.promoted_word_id, candidate.difficulty,
                  (resolved.resolved_word_id IS NOT NULL) AS reused_existing
      ),
+     reviewed_existing_words AS (
+       UPDATE words word
+       SET surface_quality_status = 'clean',
+           surface_quality_flags = ARRAY[]::TEXT[],
+           surface_quality_policy_version = $4,
+           content_safety_status = 'clean',
+           content_safety_flags = ARRAY[]::TEXT[],
+           content_safety_policy_version = $4,
+           updated_at = NOW()
+       FROM promoted_candidates promoted
+       WHERE word.id = promoted.promoted_word_id
+         AND promoted.reused_existing
+       RETURNING word.id
+     ),
      applied_settings AS (
        INSERT INTO game_word_settings (
          word_id, game_type, usable, difficulty, review_status, updated_at
@@ -235,6 +309,7 @@ async function promoteAiGeneralWords() {
        COUNT(*) FILTER (WHERE difficulty = 'easy')::INTEGER AS easy,
        COUNT(*) FILTER (WHERE difficulty = 'normal')::INTEGER AS normal,
        COUNT(*) FILTER (WHERE difficulty = 'hard')::INTEGER AS hard,
+       (SELECT COUNT(*)::INTEGER FROM reviewed_existing_words) AS reviewed_existing_words,
        (SELECT COUNT(*)::INTEGER FROM applied_settings) AS applied_settings
      FROM promoted_candidates`,
     [
@@ -247,15 +322,23 @@ async function promoteAiGeneralWords() {
 
   const verification = await sql.query(
     `SELECT
-       COUNT(*) FILTER (WHERE quality_status = 'approved')::INTEGER AS approved,
        COUNT(*) FILTER (
-         WHERE quality_status = 'approved' AND review_status = 'promoted'
+         WHERE quality_status = 'approved' AND content_safety_status = 'clean'
+       )::INTEGER AS approved,
+       COUNT(*) FILTER (
+         WHERE quality_status = 'approved'
+           AND content_safety_status = 'clean'
+           AND review_status = 'promoted'
        )::INTEGER AS promoted,
        COUNT(DISTINCT promoted_word_id) FILTER (
-         WHERE quality_status = 'approved' AND promoted_word_id IS NOT NULL
+         WHERE quality_status = 'approved'
+           AND content_safety_status = 'clean'
+           AND promoted_word_id IS NOT NULL
        )::INTEGER AS distinct_word_ids,
        COUNT(*) FILTER (
-         WHERE quality_status = 'approved' AND promoted_word_id IS NULL
+         WHERE quality_status = 'approved'
+           AND content_safety_status = 'clean'
+           AND promoted_word_id IS NULL
        )::INTEGER AS missing_word_id
      FROM ai_word_candidates`,
   );
@@ -264,6 +347,7 @@ async function promoteAiGeneralWords() {
      FROM game_word_settings setting
      JOIN ai_word_candidates candidate ON candidate.promoted_word_id = setting.word_id
      WHERE candidate.quality_status = 'approved'
+       AND candidate.content_safety_status = 'clean'
        AND candidate.review_status = 'promoted'
        AND setting.usable
        AND setting.difficulty = candidate.difficulty

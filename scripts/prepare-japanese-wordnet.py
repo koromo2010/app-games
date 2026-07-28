@@ -27,7 +27,7 @@ WHERE active
   AND form_status <> 'inflected'
   AND NOT is_name_fragment
   AND surface_quality_status = 'clean'
-  AND content_safety_status <> 'exclude'
+  AND content_safety_status NOT IN ('review', 'exclude')
 ORDER BY id
 """
 REQUIRED_TABLES = {"word", "sense", "synset", "synlink", "synset_def"}
