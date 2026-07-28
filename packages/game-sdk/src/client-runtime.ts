@@ -6,12 +6,14 @@ import type {
 } from "./index.js";
 import {
   createGameSdkRoomWatcher,
+  type GameSdkRoomReadSource,
   type GameSdkRoomWatch,
   type GameSdkRoomWatchObserver,
   type GameSdkWebSocketLike,
 } from "./client-realtime.js";
 
 export type {
+  GameSdkRoomReadSource,
   GameSdkRoomWatch,
   GameSdkRoomWatchObserver,
   GameSdkRoomWatchStatus,
@@ -19,6 +21,24 @@ export type {
 } from "./client-realtime.js";
 
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+
+export type GameSdkRoomReadOperation =
+  | "read-room"
+  | "read-debug-viewer"
+  | "read-active-room"
+  | "list-rooms";
+
+export type GameSdkRoomReadTelemetryEvent = {
+  operationId: string;
+  operation: GameSdkRoomReadOperation;
+  source: GameSdkRoomReadSource;
+  durationMs: number;
+  outcome: "success" | "not-found" | "failed";
+  statusCode: number;
+  errorCode?: string;
+  revision?: number;
+  roomCount?: number;
+};
 
 export type GameSdkHttpClientRuntime<
   TCreateInput,
@@ -57,6 +77,7 @@ export type GameSdkHttpClientRuntimeOptions = {
   reconciliationInterval?: number;
   webSocketFactory?: (url: string) => GameSdkWebSocketLike;
   fetcher?: Fetcher;
+  onRoomReadTelemetry?(event: GameSdkRoomReadTelemetryEvent): void;
 };
 
 export class GameSdkHttpClientRuntimeError extends Error {
@@ -167,9 +188,19 @@ function createCommandId() {
   return `sdk-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`;
 }
 
+function emitRoomReadTelemetry(
+  sink: GameSdkHttpClientRuntimeOptions["onRoomReadTelemetry"],
+  event: GameSdkRoomReadTelemetryEvent,
+) {
+  try {
+    sink?.(event);
+  } catch {
+    // Observability must never change room transport behavior.
+  }
+}
+
 /**
  * Browser transport injected by Game Fields for an approved SDK game.
- *
  * Actor identity is intentionally absent. The platform resolves it from its
  * signed HttpOnly session at the HTTP boundary.
  */
@@ -185,12 +216,80 @@ export function createGameSdkHttpClientRuntime<
   reconciliationInterval = 45_000,
   webSocketFactory,
   fetcher = fetch,
+  onRoomReadTelemetry,
 }: GameSdkHttpClientRuntimeOptions): GameSdkHttpClientRuntime<TCreateInput, TCommand, TRoomView> {
   const endpoint = normalizeEndpoint(endpointInput);
   const gameId = gameIdInput.trim().toLowerCase();
   if (!/^[a-z][a-z0-9-]*$/.test(gameId)) {
     throw new Error("Game SDK gameId is invalid.");
   }
+
+  const readRoomWithSource = async (
+    code: string,
+    source: GameSdkRoomReadSource,
+  ): Promise<GameSdkRoomSnapshot<TRoomView> | null> => {
+    const operationId = createCommandId();
+    const startedAt = Date.now();
+    try {
+      const response = await fetcher(roomUrl(endpoint, code), {
+        method: "GET",
+        cache: "no-store",
+        credentials: "same-origin",
+      });
+      const payload = await readPayload(response);
+      if (response.status === 404) {
+        emitRoomReadTelemetry(onRoomReadTelemetry, {
+          operationId,
+          operation: "read-room",
+          source,
+          durationMs: Math.max(0, Date.now() - startedAt),
+          outcome: "not-found",
+          statusCode: 404,
+        });
+        return null;
+      }
+      if (!response.ok) {
+        throw new GameSdkHttpClientRuntimeError(
+          errorCode(payload, "GAME_SDK_ROOM_READ_FAILED"),
+          response.status,
+          payload,
+        );
+      }
+      const room = payload && typeof payload === "object"
+        ? (payload as { room?: unknown }).room
+        : null;
+      if (!isRoomSnapshot<TRoomView>(room)) {
+        throw new GameSdkHttpClientRuntimeError(
+          "GAME_SDK_INVALID_ROOM_RESPONSE",
+          502,
+          payload,
+        );
+      }
+      emitRoomReadTelemetry(onRoomReadTelemetry, {
+        operationId,
+        operation: "read-room",
+        source,
+        durationMs: Math.max(0, Date.now() - startedAt),
+        outcome: "success",
+        statusCode: response.status,
+        revision: room.revision,
+      });
+      return room;
+    } catch (error) {
+      emitRoomReadTelemetry(onRoomReadTelemetry, {
+        operationId,
+        operation: "read-room",
+        source,
+        durationMs: Math.max(0, Date.now() - startedAt),
+        outcome: "failed",
+        statusCode: error instanceof GameSdkHttpClientRuntimeError ? error.status : 0,
+        errorCode: error instanceof GameSdkHttpClientRuntimeError
+          ? error.code
+          : "GAME_SDK_ROOM_READ_NETWORK_FAILED",
+      });
+      throw error;
+    }
+  };
 
   const runtime: GameSdkHttpClientRuntime<TCreateInput, TCommand, TRoomView> = {
     async createRoom(input) {
@@ -224,91 +323,155 @@ export function createGameSdkHttpClientRuntime<
       return room;
     },
 
-    async readRoom(code) {
-      const response = await fetcher(roomUrl(endpoint, code), {
-        method: "GET",
-        cache: "no-store",
-        credentials: "same-origin",
-      });
-      const payload = await readPayload(response);
-      if (response.status === 404) return null;
-      if (!response.ok) {
-        throw new GameSdkHttpClientRuntimeError(
-          errorCode(payload, "GAME_SDK_ROOM_READ_FAILED"),
-          response.status,
-          payload,
-        );
-      }
-      const room = payload && typeof payload === "object"
-        ? (payload as { room?: unknown }).room
-        : null;
-      if (!isRoomSnapshot<TRoomView>(room)) {
-        throw new GameSdkHttpClientRuntimeError(
-          "GAME_SDK_INVALID_ROOM_RESPONSE",
-          502,
-          payload,
-        );
-      }
-      return room;
+    readRoom(code) {
+      return readRoomWithSource(code, "direct");
     },
 
     async readRoomAsDebugViewer(code, viewer) {
-      const payload = await requestJson(
-        fetcher,
-        queryUrl(endpoint, {
-          code,
-          debugViewer: String(viewer),
-        }),
-        { method: "GET" },
-        "GAME_SDK_DEBUG_VIEW_READ_FAILED",
-      );
-      const room = (payload as { room?: unknown }).room;
-      if (!isRoomSnapshot<TRoomView>(room)) {
-        throw new GameSdkHttpClientRuntimeError(
-          "GAME_SDK_INVALID_ROOM_RESPONSE",
-          502,
-          payload,
+      const operationId = createCommandId();
+      const startedAt = Date.now();
+      try {
+        const payload = await requestJson(
+          fetcher,
+          queryUrl(endpoint, {
+            code,
+            debugViewer: String(viewer),
+          }),
+          { method: "GET" },
+          "GAME_SDK_DEBUG_VIEW_READ_FAILED",
         );
+        const room = (payload as { room?: unknown }).room;
+        if (!isRoomSnapshot<TRoomView>(room)) {
+          throw new GameSdkHttpClientRuntimeError(
+            "GAME_SDK_INVALID_ROOM_RESPONSE",
+            502,
+            payload,
+          );
+        }
+        emitRoomReadTelemetry(onRoomReadTelemetry, {
+          operationId,
+          operation: "read-debug-viewer",
+          source: "direct",
+          durationMs: Math.max(0, Date.now() - startedAt),
+          outcome: "success",
+          statusCode: 200,
+          revision: room.revision,
+        });
+        return room;
+      } catch (error) {
+        emitRoomReadTelemetry(onRoomReadTelemetry, {
+          operationId,
+          operation: "read-debug-viewer",
+          source: "direct",
+          durationMs: Math.max(0, Date.now() - startedAt),
+          outcome: "failed",
+          statusCode: error instanceof GameSdkHttpClientRuntimeError ? error.status : 0,
+          errorCode: error instanceof GameSdkHttpClientRuntimeError
+            ? error.code
+            : "GAME_SDK_DEBUG_VIEW_NETWORK_FAILED",
+        });
+        throw error;
       }
-      return room;
     },
 
     async readActiveRoom() {
-      const payload = await requestJson(
-        fetcher,
-        queryUrl(endpoint, { active: "1" }),
-        { method: "GET" },
-        "GAME_SDK_ACTIVE_ROOM_READ_FAILED",
-      );
-      const room = (payload as { room?: unknown }).room;
-      if (room === null) return null;
-      if (!isRoomSnapshot<TRoomView>(room)) {
-        throw new GameSdkHttpClientRuntimeError(
-          "GAME_SDK_INVALID_ROOM_RESPONSE",
-          502,
-          payload,
+      const operationId = createCommandId();
+      const startedAt = Date.now();
+      try {
+        const payload = await requestJson(
+          fetcher,
+          queryUrl(endpoint, { active: "1" }),
+          { method: "GET" },
+          "GAME_SDK_ACTIVE_ROOM_READ_FAILED",
         );
+        const room = (payload as { room?: unknown }).room;
+        if (room === null) {
+          emitRoomReadTelemetry(onRoomReadTelemetry, {
+            operationId,
+            operation: "read-active-room",
+            source: "direct",
+            durationMs: Math.max(0, Date.now() - startedAt),
+            outcome: "not-found",
+            statusCode: 200,
+          });
+          return null;
+        }
+        if (!isRoomSnapshot<TRoomView>(room)) {
+          throw new GameSdkHttpClientRuntimeError(
+            "GAME_SDK_INVALID_ROOM_RESPONSE",
+            502,
+            payload,
+          );
+        }
+        emitRoomReadTelemetry(onRoomReadTelemetry, {
+          operationId,
+          operation: "read-active-room",
+          source: "direct",
+          durationMs: Math.max(0, Date.now() - startedAt),
+          outcome: "success",
+          statusCode: 200,
+          revision: room.revision,
+        });
+        return room;
+      } catch (error) {
+        emitRoomReadTelemetry(onRoomReadTelemetry, {
+          operationId,
+          operation: "read-active-room",
+          source: "direct",
+          durationMs: Math.max(0, Date.now() - startedAt),
+          outcome: "failed",
+          statusCode: error instanceof GameSdkHttpClientRuntimeError ? error.status : 0,
+          errorCode: error instanceof GameSdkHttpClientRuntimeError
+            ? error.code
+            : "GAME_SDK_ACTIVE_ROOM_READ_NETWORK_FAILED",
+        });
+        throw error;
       }
-      return room;
     },
 
     async listRooms(cursor = null) {
-      const query: Record<string, string> = {};
-      if (cursor) query.cursor = cursor;
-      const payload = await requestJson(
-        fetcher,
-        queryUrl(endpoint, query),
-        { method: "GET" },
-        "GAME_SDK_ROOM_LIST_FAILED",
-      );
-      if (!isRoomListPage(payload)) {
-        throw new GameSdkHttpClientRuntimeError(
-          "GAME_SDK_INVALID_ROOM_LIST_RESPONSE",
-          502,
-          payload,
+      const operationId = createCommandId();
+      const startedAt = Date.now();
+      try {
+        const query: Record<string, string> = {};
+        if (cursor) query.cursor = cursor;
+        const payload = await requestJson(
+          fetcher,
+          queryUrl(endpoint, query),
+          { method: "GET" },
+          "GAME_SDK_ROOM_LIST_FAILED",
         );
+        if (!isRoomListPage(payload)) {
+          throw new GameSdkHttpClientRuntimeError(
+            "GAME_SDK_INVALID_ROOM_LIST_RESPONSE",
+            502,
+            payload,
+          );
+        }
+        emitRoomReadTelemetry(onRoomReadTelemetry, {
+          operationId,
+          operation: "list-rooms",
+          source: "direct",
+          durationMs: Math.max(0, Date.now() - startedAt),
+          outcome: "success",
+          statusCode: 200,
+          roomCount: payload.rooms.length,
+        });
+        return payload;
+      } catch (error) {
+        emitRoomReadTelemetry(onRoomReadTelemetry, {
+          operationId,
+          operation: "list-rooms",
+          source: "direct",
+          durationMs: Math.max(0, Date.now() - startedAt),
+          outcome: "failed",
+          statusCode: error instanceof GameSdkHttpClientRuntimeError ? error.status : 0,
+          errorCode: error instanceof GameSdkHttpClientRuntimeError
+            ? error.code
+            : "GAME_SDK_ROOM_LIST_NETWORK_FAILED",
+        });
+        throw error;
       }
-      return payload;
     },
 
     async sendCommand(code, envelope) {
@@ -387,7 +550,7 @@ export function createGameSdkHttpClientRuntime<
         endpoint,
         realtimeEndpoint,
         fetcher,
-        readRoom: runtime.readRoom,
+        readRoom: readRoomWithSource,
         observer,
         pollingInterval,
         reconciliationInterval,
