@@ -9,7 +9,7 @@ import {
   completeGameSdkDebugViewerRequest,
   decideGameSdkDebugViewerResponse,
   gameSdkDebugControlCanSend,
-  gameSdkDebugTargetActorSeat,
+  gameSdkDebugSelectedActorSeat,
   gameSdkDebugTargetViewer,
   gameSdkDebugViewerRequestIsCurrent,
   resetGameSdkDebugControl,
@@ -176,7 +176,7 @@ export function useGameSdkDebugControlTarget<TRoom extends RoomIdentity>(
   ) => wrapGameSdkDebugCommand(stateRef.current, command), []);
 
   return {
-    actorSeat: gameSdkDebugTargetActorSeat(state),
+    actorSeat: gameSdkDebugSelectedActorSeat(state),
     canSend: gameSdkDebugControlCanSend(state),
     isSwitching: state.status === "switching",
     postRoom,
