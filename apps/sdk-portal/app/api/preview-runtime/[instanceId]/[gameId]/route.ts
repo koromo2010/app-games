@@ -12,7 +12,7 @@ import { getGamePackageContractVersion } from "@/lib/game-package-contract-versi
 import { normalizeGameSdkModuleProfile } from "@game-fields/game-sdk/modules";
 import { parseGameSdkSettingDefinitions } from "@game-fields/game-sdk";
 import { requireSdkServiceRequest } from "@/lib/sdk-service-auth";
-import platformRelease from "../../../../../../config/platform-release.json";
+import platformRelease from "../../../../../../../config/platform-release.json";
 
 export const dynamic = "force-dynamic";
 const GAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?$/;
