@@ -2,7 +2,6 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 
 const execute = process.argv.includes("--execute");
-const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const manifest = JSON.parse(readFileSync(new URL("../config/main-promotion-projects.json", import.meta.url), "utf8"));
 const requiredProjects = [
   "app-games",
@@ -19,6 +18,7 @@ function run(command, args, options = {}) {
   const result = execFileSync(command, args, {
     encoding: inherit ? undefined : "utf8",
     stdio: inherit ? "inherit" : "pipe",
+    shell: options.shell === true,
   });
   return inherit ? "" : String(result ?? "").trim();
 }
@@ -81,13 +81,17 @@ const report = {
 };
 
 if (execute) {
+  // npm ships as npm.cmd on Windows; child_process refuses to spawn .cmd/.bat
+  // files directly (Node's CVE-2024-27980 hardening) unless shell:true is set,
+  // so route through the platform shell instead of guessing an executable name.
+  const shell = process.platform === "win32";
   for (const [command, args] of [
-    [npmCommand, ["run", "verify"]],
-    [npmCommand, ["test"]],
-    [npmCommand, ["run", "build"]],
-    [npmCommand, ["run", "build:sdk"]],
-    [npmCommand, ["run", "build:sdk-preview"]]
-  ]) run(command, args, { inherit: true });
+    ["npm", ["run", "verify"]],
+    ["npm", ["test"]],
+    ["npm", ["run", "build"]],
+    ["npm", ["run", "build:sdk"]],
+    ["npm", ["run", "build:sdk-preview"]]
+  ]) run(command, args, { inherit: true, shell });
 }
 
 writeFileSync("main-promotion-gate-report.json", `${JSON.stringify(report, null, 2)}\n`);
