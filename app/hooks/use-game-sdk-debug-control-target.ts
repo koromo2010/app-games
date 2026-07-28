@@ -7,6 +7,7 @@ import {
   beginGameSdkDebugViewerRequest,
   completeGameSdkDebugControlSwitch,
   completeGameSdkDebugViewerRequest,
+  decideGameSdkDebugViewerResponse,
   gameSdkDebugControlCanSend,
   gameSdkDebugTargetActorSeat,
   gameSdkDebugTargetViewer,
@@ -71,44 +72,52 @@ export function useGameSdkDebugControlTarget<TRoom extends RoomIdentity>({
     }
 
     const generation = current.generation;
-    requestSequenceRef.current += 1;
-    const acquisition = beginGameSdkDebugViewerRequest(
-      inFlightRef.current,
-      generation,
-      requestSequenceRef.current,
-    );
-    if (!acquisition.started) return;
-
-    const request = acquisition.request;
-    inFlightRef.current = request;
-    void readRoomAsDebugViewer(room.code, viewer).then((debugRoom) => {
-      if (!gameSdkDebugViewerRequestIsCurrent(inFlightRef.current, request)) return;
-      inFlightRef.current = completeGameSdkDebugViewerRequest(
+    const requestViewerRoom = (requestedRoom: TRoom) => {
+      requestSequenceRef.current += 1;
+      const acquisition = beginGameSdkDebugViewerRequest(
         inFlightRef.current,
-        request,
+        generation,
+        requestSequenceRef.current,
       );
+      if (!acquisition.started) return;
 
-      const latest = stateRef.current;
-      const latestRoom = getRoom();
-      if (
-        latest.generation !== generation
-        || gameSdkDebugTargetViewer(latest.target) !== viewer
-        || latestRoom?.code !== room.code
-        || latestRoom.revision !== room.revision
-      ) return;
-      commit(completeGameSdkDebugControlSwitch(latest, generation));
-      postRoomSnapshot(debugRoom);
-    }).catch(() => {
-      if (!gameSdkDebugViewerRequestIsCurrent(inFlightRef.current, request)) return;
-      inFlightRef.current = completeGameSdkDebugViewerRequest(
-        inFlightRef.current,
-        request,
-      );
-      if (stateRef.current.generation !== generation) return;
-      commit(resetGameSdkDebugControl(stateRef.current));
-      postRoomSnapshot(getRoom());
-      onViewerError();
-    });
+      const request = acquisition.request;
+      inFlightRef.current = request;
+      void readRoomAsDebugViewer(requestedRoom.code, viewer).then((debugRoom) => {
+        if (!gameSdkDebugViewerRequestIsCurrent(inFlightRef.current, request)) return;
+        inFlightRef.current = completeGameSdkDebugViewerRequest(
+          inFlightRef.current,
+          request,
+        );
+
+        const latest = stateRef.current;
+        const latestRoom = getRoom();
+        const decision = decideGameSdkDebugViewerResponse({
+          state: latest,
+          generation,
+          viewer,
+          requestedRoom,
+          latestRoom,
+        });
+        if (!decision.apply) return;
+
+        commit(completeGameSdkDebugControlSwitch(latest, generation));
+        postRoomSnapshot(debugRoom);
+        if (decision.refetch && latestRoom) requestViewerRoom(latestRoom);
+      }).catch(() => {
+        if (!gameSdkDebugViewerRequestIsCurrent(inFlightRef.current, request)) return;
+        inFlightRef.current = completeGameSdkDebugViewerRequest(
+          inFlightRef.current,
+          request,
+        );
+        if (stateRef.current.generation !== generation) return;
+        commit(resetGameSdkDebugControl(stateRef.current));
+        postRoomSnapshot(getRoom());
+        onViewerError();
+      });
+    };
+
+    requestViewerRoom(room);
   }, [commit, getRoom, onViewerError, postRoomSnapshot, readRoomAsDebugViewer]);
 
   const selectTarget = useCallback((target: GameSdkDebugControlTarget) => {
