@@ -28,6 +28,9 @@ import {
 
 export type GameSdkDebugRoom = {
   appPhase: string | null;
+  autoFollowEnabled: boolean;
+  autoFollowOwnerSeat: number | null;
+  autoFollowWarning: string;
   canActAsDummy: boolean;
   canAutoProgress: boolean;
   canUseSpectatorView: boolean;
@@ -42,6 +45,7 @@ export type GameSdkDebugRoom = {
     target: "step" | "phase" | "result",
   ) => void | Promise<void>;
   onRemoveDummy: (seat: number) => void | Promise<void>;
+  onToggleAutoFollow: (enabled: boolean) => void;
   onSelectActor: (
     seat: number | null,
   ) => void | Promise<void>;
@@ -65,6 +69,7 @@ export type GameSdkDebugRoom = {
   revision: number;
   phase: string;
   statusMessage: string;
+  switchSource: "manual" | "auto-follow" | "reset";
 };
 
 type Props = {
@@ -247,6 +252,27 @@ export function GameSdkShellHeader({
           persistentContent={(
             <div className="text-xs font-bold text-cyan-950">
               <div>Room {debugRoom.code} · rev {debugRoom.revision}</div>
+              <label className="mt-2 flex items-center justify-between gap-3 rounded-md border border-cyan-200 bg-white px-2 py-1.5">
+                <span>自動追従</span>
+                <input
+                  type="checkbox"
+                  checked={debugRoom.autoFollowEnabled}
+                  onChange={(event) => debugRoom.onToggleAutoFollow(event.target.checked)}
+                  className="size-4 accent-cyan-600"
+                />
+              </label>
+              {debugRoom.autoFollowEnabled && (
+                <p className="mt-1 text-[10px] leading-4 text-cyan-800">
+                  {debugRoom.autoFollowOwnerSeat === null
+                    ? "明確な手番がないため、現在の選択を維持しています。"
+                    : "SEAT " + (debugRoom.autoFollowOwnerSeat + 1) + " を追従中（" + (debugRoom.switchSource === "auto-follow" ? "自動" : "手動確認中") + "）"}
+                </p>
+              )}
+              {debugRoom.autoFollowWarning && (
+                <p role="alert" className="mt-1 rounded border border-amber-400 bg-amber-50 px-2 py-1 text-[10px] text-amber-900">
+                  {debugRoom.autoFollowWarning}
+                </p>
+              )}
               {debugViewerControls}
               {debugActorControls}
             </div>

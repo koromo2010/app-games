@@ -27,6 +27,7 @@ import { AppLink as Link } from "@/app/components/AppLink";
 import { gameTopBannerActionClass } from "@/app/components/GameTopMenu";
 import { useGameSdkActiveRoomRestore } from "@/app/hooks/use-game-sdk-active-room-restore";
 import { useGameSdkDebugControlTarget } from "@/app/hooks/use-game-sdk-debug-control-target";
+import { gameSdkDebugAutoFollowTarget } from "@/lib/game-sdk-debug-control-target";
 import { useSdkPreviewSessionRequired } from "@/app/sdk-preview/SdkPreviewSessionGate";
 import { withAiActivity } from "@/lib/ai-activity-client";
 import { clearPlayerSession } from "@/lib/player-session";
@@ -231,6 +232,8 @@ export function GameSdkFrame({
   const [clockNow, setClockNow] = useState<number | null>(null);
   const [canReturnToRoom, setCanReturnToRoom] = useState(false);
   const [isRoomDissolved, setIsRoomDissolved] = useState(false);
+  const [debugAutoFollow, setDebugAutoFollow] = useState(false);
+  const lastAutoFollowOwnerSeatRef = useRef<number | null | undefined>(undefined);
   const [playerDefaults, setPlayerDefaults] = useState<
     Record<string, GameSdkSettingValue>
   >({});
@@ -296,6 +299,7 @@ export function GameSdkFrame({
     postRoom,
     reset: resetDebugControl,
     selectTarget: selectDebugTarget,
+    source: debugSwitchSource,
     viewer: debugViewer,
     wrapCommand: wrapDebugCommand,
   } = debugControl;
@@ -479,6 +483,21 @@ export function GameSdkFrame({
     }
     selectDebugTarget(seat === null ? { mode: "self" } : { mode: "dummy", seat });
   }, [selectDebugTarget]);
+
+  const debugOwnerSeat = room?.view.common.timer?.ownerSeat;
+  useEffect(() => {
+    if (!debugAutoFollow) {
+      lastAutoFollowOwnerSeatRef.current = undefined;
+      return;
+    }
+    if (debugOwnerSeat === null || debugOwnerSeat === undefined) return;
+    if (lastAutoFollowOwnerSeatRef.current === debugOwnerSeat) return;
+    lastAutoFollowOwnerSeatRef.current = debugOwnerSeat;
+    const currentPlayers = roomRef.current?.view.common.players ?? [];
+    const target = gameSdkDebugAutoFollowTarget(debugOwnerSeat, currentPlayers);
+    if (!target) {      return;
+    }    selectDebugTarget(target, "auto-follow");
+  }, [debugAutoFollow, debugOwnerSeat, selectDebugTarget]);
 
   const autoProgressDebug = useCallback(async (
     target: DebugAutoProgressTarget,
@@ -959,6 +978,14 @@ export function GameSdkFrame({
         }
         debugRoom={moduleRequired("debug") && common?.permissions.canDebug ? {
           appPhase: appPhase(room),
+          autoFollowEnabled: debugAutoFollow,
+          autoFollowOwnerSeat: debugOwnerSeat ?? null,
+          autoFollowWarning: debugAutoFollow
+            && debugOwnerSeat !== null
+            && debugOwnerSeat !== undefined
+            && !gameSdkDebugAutoFollowTarget(debugOwnerSeat, common.players)
+              ? "SEAT " + (debugOwnerSeat + 1) + " は実ユーザーのため、操作対象を自動変更できません。"
+              : "",
           canActAsDummy: common.permissions.canDebugActAsDummy === true,
           canAutoProgress: common.permissions.canDebugAutoProgress === true,
           canUseSpectatorView: (
@@ -985,6 +1012,7 @@ export function GameSdkFrame({
           onAutoProgress: async (target) => {
             await run(() => autoProgressDebug(target));
           },
+          onToggleAutoFollow: setDebugAutoFollow,
           onSelectActor: selectDebugActor,
           onSelectViewer: selectDebugViewer,
           onSetConnected: async (seat, connected) => {
@@ -1004,6 +1032,7 @@ export function GameSdkFrame({
           revision: room.revision,
           phase: room.phase,
           statusMessage: message,
+          switchSource: debugSwitchSource,
         } : null}
       >
         {!creatorSlug

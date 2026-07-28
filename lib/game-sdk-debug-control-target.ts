@@ -6,10 +6,13 @@ export type GameSdkDebugControlTarget =
   | { mode: "viewer"; seat: number }
   | { mode: "dummy"; seat: number };
 
+export type GameSdkDebugSwitchSource = "manual" | "auto-follow" | "reset";
+
 export type GameSdkDebugControlState = {
   generation: number;
   target: GameSdkDebugControlTarget;
   status: "ready" | "switching";
+  source: GameSdkDebugSwitchSource;
 };
 
 export type GameSdkDebugViewerRequest = {
@@ -26,6 +29,7 @@ export const INITIAL_GAME_SDK_DEBUG_CONTROL_STATE: GameSdkDebugControlState = {
   generation: 0,
   target: { mode: "self" },
   status: "ready",
+  source: "reset",
 };
 
 export function gameSdkDebugTargetViewer(
@@ -61,11 +65,13 @@ export function gameSdkDebugSelectedActorSeat(
 export function beginGameSdkDebugControlSwitch(
   state: Readonly<GameSdkDebugControlState>,
   target: GameSdkDebugControlTarget,
+  source: GameSdkDebugSwitchSource = "manual",
 ): GameSdkDebugControlState {
   return {
     generation: state.generation + 1,
     target,
     status: target.mode === "self" ? "ready" : "switching",
+    source,
   };
 }
 
@@ -86,6 +92,7 @@ export function resetGameSdkDebugControl(
     generation: state.generation + 1,
     target: { mode: "self" },
     status: "ready",
+    source: "reset",
   };
 }
 
@@ -190,4 +197,21 @@ export function wrapGameSdkDebugCommand<TCommand extends { type: string }>(
         command,
       }
     : command;
+}
+
+
+export function gameSdkDebugAutoFollowTarget(
+  ownerSeat: number | null | undefined,
+  players: readonly Readonly<{
+    seat: number;
+    isHost: boolean;
+    isSelf: boolean;
+    isDummy: boolean;
+  }>[],
+): GameSdkDebugControlTarget | null {
+  if (ownerSeat === null || ownerSeat === undefined) return null;
+  const player = players.find((candidate) => candidate.seat === ownerSeat);
+  if (!player) return null;
+  if (player.isHost || player.isSelf) return { mode: "self" };
+  return player.isDummy ? { mode: "dummy", seat: player.seat } : null;
 }

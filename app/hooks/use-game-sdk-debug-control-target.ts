@@ -18,6 +18,7 @@ import {
   type GameSdkDebugControlTarget,
   type GameSdkDebugViewer,
   type GameSdkDebugViewerRequest,
+  type GameSdkDebugSwitchSource,
 } from "@/lib/game-sdk-debug-control-target";
 
 type RoomIdentity = {
@@ -349,10 +350,13 @@ export function useGameSdkDebugControlTarget<TRoom extends RoomIdentity>(
     requestViewerRoom(room, "initial");
   }, [clearOperation, clearRetryTimer, commit, emitTelemetry]);
 
-  const selectTarget = useCallback((target: GameSdkDebugControlTarget) => {
+  const selectTarget = useCallback((
+    target: GameSdkDebugControlTarget,
+    source: GameSdkDebugSwitchSource = "manual",
+  ) => {
     clearOperation();
     const room = optionsRef.current.getRoom();
-    const next = commit(beginGameSdkDebugControlSwitch(stateRef.current, target));
+    const next = commit(beginGameSdkDebugControlSwitch(stateRef.current, target, source));
     if (target.mode === "self") {
       inFlightRef.current = null;
       optionsRef.current.postRoomSnapshot(room);
@@ -381,6 +385,7 @@ export function useGameSdkDebugControlTarget<TRoom extends RoomIdentity>(
     postRoom,
     reset,
     selectTarget,
+    source: state.source,
     state,
     viewer: gameSdkDebugTargetViewer(state.target),
     wrapCommand,

@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   INITIAL_GAME_SDK_DEBUG_CONTROL_STATE,
   beginGameSdkDebugControlSwitch,
+  gameSdkDebugAutoFollowTarget,
   beginGameSdkDebugViewerRequest,
   completeGameSdkDebugControlSwitch,
   completeGameSdkDebugViewerRequest,
@@ -280,4 +281,27 @@ test("a completed request can start exactly one follow-up in the same generation
   const duplicate = beginGameSdkDebugViewerRequest(inFlight, 9, 3);
   assert.equal(duplicate.started, false);
   assert.equal(duplicate.request, followUp.request);
+});
+
+
+test("DEBUG auto-follow maps host to self and dummy seats to unified targets", () => {
+  const players = [
+    { seat: 0, isHost: true, isSelf: true, isDummy: false },
+    { seat: 1, isHost: false, isSelf: false, isDummy: true },
+    { seat: 2, isHost: false, isSelf: false, isDummy: false },
+  ];
+  assert.deepEqual(gameSdkDebugAutoFollowTarget(0, players), { mode: "self" });
+  assert.deepEqual(gameSdkDebugAutoFollowTarget(1, players), { mode: "dummy", seat: 1 });
+  assert.equal(gameSdkDebugAutoFollowTarget(2, players), null);
+  assert.equal(gameSdkDebugAutoFollowTarget(null, players), null);
+});
+
+test("DEBUG switch records auto-follow as the trigger source", () => {
+  const next = beginGameSdkDebugControlSwitch(
+    INITIAL_GAME_SDK_DEBUG_CONTROL_STATE,
+    { mode: "dummy", seat: 3 },
+    "auto-follow",
+  );
+  assert.equal(next.source, "auto-follow");
+  assert.equal(next.status, "switching");
 });
