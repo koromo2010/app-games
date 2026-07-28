@@ -495,8 +495,8 @@ export function GameSdkFrame({
     lastAutoFollowOwnerSeatRef.current = debugOwnerSeat;
     const currentPlayers = roomRef.current?.view.common.players ?? [];
     const target = gameSdkDebugAutoFollowTarget(debugOwnerSeat, currentPlayers);
-    if (!target) {      return;
-    }    selectDebugTarget(target, "auto-follow");
+    if (!target) return;
+    selectDebugTarget(target, "auto-follow");
   }, [debugAutoFollow, debugOwnerSeat, selectDebugTarget]);
 
   const autoProgressDebug = useCallback(async (
