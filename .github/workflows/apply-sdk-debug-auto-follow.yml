@@ -32,7 +32,10 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Apply auto-follow implementation
-        run: node scripts/apply-sdk-debug-auto-follow.mjs
+        shell: bash
+        run: |
+          set -o pipefail
+          node scripts/apply-sdk-debug-auto-follow.mjs 2>&1 | tee "$RUNNER_TEMP/sdk-debug-auto-follow.log"
       - name: Build SDK package
         run: npm run build:sdk-package
       - name: Run focused tests
@@ -49,5 +52,10 @@ jobs:
           git add app/components/GameSdkFrame.tsx app/components/GameSdkShellHeader.tsx app/hooks/use-game-sdk-debug-control-target.ts lib/game-sdk-debug-control-target.ts tests/game-sdk-debug-control-target.test.ts
           git commit -m "Add SDK DEBUG auto-follow"
           git push origin HEAD:develop
-
-# PR diagnostics enabled.
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-debug-auto-follow-diagnostics
+          path: ${{ runner.temp }}/sdk-debug-auto-follow.log
+          if-no-files-found: warn
