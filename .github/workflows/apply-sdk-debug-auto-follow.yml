@@ -13,7 +13,6 @@ permissions:
 
 jobs:
   apply-and-verify:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -44,4 +43,4 @@ jobs:
           git commit -m "Add SDK DEBUG auto-follow"
           git push origin HEAD:develop
 
-# Manual trigger: 2026-07-29 auto-follow implementation.
+# Connector-triggered implementation run.
