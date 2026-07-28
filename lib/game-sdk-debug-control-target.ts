@@ -17,6 +17,11 @@ export type GameSdkDebugViewerRequest = {
   sequence: number;
 };
 
+export type GameSdkDebugViewerResponseDecision = {
+  apply: boolean;
+  refetch: boolean;
+};
+
 export const INITIAL_GAME_SDK_DEBUG_CONTROL_STATE: GameSdkDebugControlState = {
   generation: 0,
   target: { mode: "self" },
@@ -96,6 +101,27 @@ export function completeGameSdkDebugViewerRequest(
   request: Readonly<GameSdkDebugViewerRequest>,
 ): GameSdkDebugViewerRequest | null {
   return gameSdkDebugViewerRequestIsCurrent(current, request) ? null : current;
+}
+
+export function decideGameSdkDebugViewerResponse(input: {
+  state: Readonly<GameSdkDebugControlState>;
+  generation: number;
+  viewer: Exclude<GameSdkDebugViewer, "self">;
+  requestedRoom: Readonly<{ code: string; revision: number }>;
+  latestRoom: Readonly<{ code: string; revision: number }> | null;
+}): GameSdkDebugViewerResponseDecision {
+  const { state, generation, viewer, requestedRoom, latestRoom } = input;
+  if (
+    state.generation !== generation
+    || gameSdkDebugTargetViewer(state.target) !== viewer
+    || latestRoom?.code !== requestedRoom.code
+  ) {
+    return { apply: false, refetch: false };
+  }
+  return {
+    apply: true,
+    refetch: latestRoom.revision > requestedRoom.revision,
+  };
 }
 
 export function gameSdkDebugControlCanSend(
