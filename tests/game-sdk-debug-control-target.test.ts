@@ -3,13 +3,17 @@ import test from "node:test";
 import {
   INITIAL_GAME_SDK_DEBUG_CONTROL_STATE,
   beginGameSdkDebugControlSwitch,
+  beginGameSdkDebugViewerRequest,
   completeGameSdkDebugControlSwitch,
+  completeGameSdkDebugViewerRequest,
   gameSdkDebugControlCanSend,
   gameSdkDebugTargetActorSeat,
   gameSdkDebugTargetViewer,
+  gameSdkDebugViewerRequestIsCurrent,
   resetGameSdkDebugControl,
   wrapGameSdkDebugCommand,
   type GameSdkDebugControlState,
+  type GameSdkDebugViewerRequest,
 } from "../lib/game-sdk-debug-control-target.ts";
 
 function createDeterministicRandom(seed: number) {
@@ -131,4 +135,55 @@ test("spectator and self never become command actors", () => {
   state = resetGameSdkDebugControl(state);
   assert.equal(gameSdkDebugTargetViewer(state.target), "self");
   assert.equal(gameSdkDebugTargetActorSeat(state), null);
+});
+
+test("only one debug viewer request starts in the same generation", () => {
+  let inFlight: GameSdkDebugViewerRequest | null = null;
+  let started = 0;
+
+  for (let sequence = 1; sequence <= 100; sequence += 1) {
+    const acquisition = beginGameSdkDebugViewerRequest(inFlight, 7, sequence);
+    if (acquisition.started) {
+      started += 1;
+      inFlight = acquisition.request;
+    }
+  }
+
+  assert.equal(started, 1);
+  assert.deepEqual(inFlight, { generation: 7, sequence: 1 });
+
+  const current = inFlight!;
+  inFlight = completeGameSdkDebugViewerRequest(inFlight, current);
+  assert.equal(inFlight, null);
+
+  const next = beginGameSdkDebugViewerRequest(inFlight, 7, 101);
+  assert.equal(next.started, true);
+  assert.deepEqual(next.request, { generation: 7, sequence: 101 });
+});
+
+test("a newer generation replaces the old request and stale failures cannot reset it", () => {
+  const oldRequest = beginGameSdkDebugViewerRequest(null, 10, 1).request;
+  const newRequest = beginGameSdkDebugViewerRequest(oldRequest, 11, 2).request;
+  let inFlight: GameSdkDebugViewerRequest | null = newRequest;
+  let state = beginGameSdkDebugControlSwitch(
+    INITIAL_GAME_SDK_DEBUG_CONTROL_STATE,
+    { mode: "dummy", seat: 5 },
+  );
+  state = beginGameSdkDebugControlSwitch(state, { mode: "dummy", seat: 6 });
+
+  assert.equal(gameSdkDebugViewerRequestIsCurrent(inFlight, oldRequest), false);
+  if (gameSdkDebugViewerRequestIsCurrent(inFlight, oldRequest)) {
+    state = resetGameSdkDebugControl(state);
+  }
+  assert.equal(state.generation, 2);
+  assert.equal(gameSdkDebugTargetViewer(state.target), 6);
+
+  assert.equal(gameSdkDebugViewerRequestIsCurrent(inFlight, newRequest), true);
+  if (gameSdkDebugViewerRequestIsCurrent(inFlight, newRequest)) {
+    inFlight = completeGameSdkDebugViewerRequest(inFlight, newRequest);
+    state = resetGameSdkDebugControl(state);
+  }
+  assert.equal(inFlight, null);
+  assert.equal(state.generation, 3);
+  assert.equal(gameSdkDebugTargetViewer(state.target), "self");
 });
