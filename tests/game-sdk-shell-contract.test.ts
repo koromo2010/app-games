@@ -32,6 +32,7 @@ const roomHttp = source("lib/game-sdk-online-room-http.ts");
 const lifecycleActions = source("app/components/OnlineRoomLifecycleActions.tsx");
 const resultActions = source("app/components/RoomResultActions.tsx");
 const spectatorRegistry = source("lib/online-room-spectator-registry.ts");
+const debugControlLib = source("lib/game-sdk-debug-control-target.ts");
 
 test("reviewed SDK shell consumes every Room View permission it declares", () => {
   for (const permission of [
@@ -79,7 +80,8 @@ test("reviewed SDK shell consumes every Room View permission it declares", () =>
     assert.match(sdkRuntime, new RegExp(command.replace("/", "\\/")));
   }
   assert.match(frame, /readRoomAsDebugViewer/);
-  assert.match(frame, /room\/debug-act-as-dummy/);
+  assert.match(frame, /wrapDebugCommand/);
+  assert.match(debugControlLib, /room\/debug-act-as-dummy/);
   assert.match(platformAdapter, /platformDebugProxyCommand/);
   assert.match(platformAdapter, /target\?\.isDummy !== true/);
   assert.match(platformAdapter, /inner\.type\.startsWith\("room\/"\)/);
@@ -265,7 +267,8 @@ test("every shared Shell module has executable evidence in the formal package pa
       [frame, /room\/debug-simulate-timeout/],
       [frame, /room\/debug-set-connected/],
       [frame, /room\/debug-simulate-input-error/],
-      [frame, /room\/debug-act-as-dummy/],
+      [frame, /wrapDebugCommand/],
+      [debugControlLib, /room\/debug-act-as-dummy/],
       [header, /DebugParticipantControls/],
       [header, /閲覧視点/],
       [header, /操作対象/],
