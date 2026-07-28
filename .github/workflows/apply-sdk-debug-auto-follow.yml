@@ -4,12 +4,12 @@ on:
   push:
     branches: [develop]
     paths:
-      - scripts/apply-sdk-debug-auto-follow.mjs
+      - scripts/apply-sdk-debug-auto-follow-v2.mjs
       - .github/workflows/apply-sdk-debug-auto-follow.yml
   pull_request:
     branches: [develop]
     paths:
-      - scripts/apply-sdk-debug-auto-follow.mjs
+      - scripts/apply-sdk-debug-auto-follow-v2.mjs
       - .github/workflows/apply-sdk-debug-auto-follow.yml
       - .github/sdk-debug-auto-follow-trigger.txt
   workflow_dispatch:
@@ -35,7 +35,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          node scripts/apply-sdk-debug-auto-follow.mjs 2>&1 | tee "$RUNNER_TEMP/sdk-debug-auto-follow.log"
+          node scripts/apply-sdk-debug-auto-follow-v2.mjs 2>&1 | tee "$RUNNER_TEMP/sdk-debug-auto-follow.log"
       - name: Build SDK package
         run: npm run build:sdk-package
       - name: Run focused tests
