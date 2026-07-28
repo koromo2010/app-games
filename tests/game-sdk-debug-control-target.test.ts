@@ -8,6 +8,7 @@ import {
   completeGameSdkDebugViewerRequest,
   decideGameSdkDebugViewerResponse,
   gameSdkDebugControlCanSend,
+  gameSdkDebugSelectedActorSeat,
   gameSdkDebugTargetActorSeat,
   gameSdkDebugTargetViewer,
   gameSdkDebugViewerRequestIsCurrent,
@@ -35,12 +36,13 @@ function completeCurrentSwitch(state: GameSdkDebugControlState) {
   return completeGameSdkDebugControlSwitch(state, state.generation);
 }
 
-test("debug control keeps viewer and actor on one target", () => {
+test("debug control keeps the selected actor highlighted while command dispatch waits", () => {
   const switching = beginGameSdkDebugControlSwitch(
     INITIAL_GAME_SDK_DEBUG_CONTROL_STATE,
     { mode: "dummy", seat: 4 },
   );
   assert.equal(gameSdkDebugTargetViewer(switching.target), 4);
+  assert.equal(gameSdkDebugSelectedActorSeat(switching), 4);
   assert.equal(gameSdkDebugTargetActorSeat(switching), null);
   assert.equal(gameSdkDebugControlCanSend(switching), false);
   assert.throws(
@@ -49,6 +51,7 @@ test("debug control keeps viewer and actor on one target", () => {
   );
 
   const ready = completeCurrentSwitch(switching);
+  assert.equal(gameSdkDebugSelectedActorSeat(ready), 4);
   assert.equal(gameSdkDebugTargetActorSeat(ready), 4);
   assert.deepEqual(
     wrapGameSdkDebugCommand(ready, { type: "skull/place-card", card: "flower" }),
@@ -80,6 +83,7 @@ test("debug target invariants hold for arbitrary seat counts and switch orders",
 
       assert.equal(state.status, "switching");
       assert.equal(gameSdkDebugTargetViewer(state.target), lastSelectedSeat);
+      assert.equal(gameSdkDebugSelectedActorSeat(state), lastSelectedSeat);
       assert.equal(gameSdkDebugTargetActorSeat(state), null);
       assert.equal(gameSdkDebugControlCanSend(state), false);
       assert.throws(
@@ -96,12 +100,14 @@ test("debug target invariants hold for arbitrary seat counts and switch orders",
         );
         assert.equal(state, beforeStaleCompletion);
         assert.equal(state.status, "switching");
+        assert.equal(gameSdkDebugSelectedActorSeat(state), lastSelectedSeat);
         assert.equal(gameSdkDebugTargetActorSeat(state), null);
       }
     }
 
     state = completeCurrentSwitch(state);
     assert.equal(state.status, "ready");
+    assert.equal(gameSdkDebugSelectedActorSeat(state), lastSelectedSeat);
     assert.equal(gameSdkDebugTargetActorSeat(state), lastSelectedSeat);
     assert.deepEqual(
       wrapGameSdkDebugCommand(state, { type: "property/command" }),
@@ -115,6 +121,7 @@ test("debug target invariants hold for arbitrary seat counts and switch orders",
     for (const staleGeneration of priorGenerations.slice(0, -1)) {
       const completed = completeGameSdkDebugControlSwitch(state, staleGeneration);
       assert.equal(completed, state);
+      assert.equal(gameSdkDebugSelectedActorSeat(completed), lastSelectedSeat);
       assert.equal(gameSdkDebugTargetActorSeat(completed), lastSelectedSeat);
     }
   }
@@ -125,8 +132,10 @@ test("spectator and self never become command actors", () => {
     INITIAL_GAME_SDK_DEBUG_CONTROL_STATE,
     { mode: "spectator" },
   );
+  assert.equal(gameSdkDebugSelectedActorSeat(state), null);
   state = completeCurrentSwitch(state);
   assert.equal(gameSdkDebugTargetViewer(state.target), "spectator");
+  assert.equal(gameSdkDebugSelectedActorSeat(state), null);
   assert.equal(gameSdkDebugTargetActorSeat(state), null);
   assert.deepEqual(
     wrapGameSdkDebugCommand(state, { type: "skull/place-card" }),
@@ -135,6 +144,7 @@ test("spectator and self never become command actors", () => {
 
   state = resetGameSdkDebugControl(state);
   assert.equal(gameSdkDebugTargetViewer(state.target), "self");
+  assert.equal(gameSdkDebugSelectedActorSeat(state), null);
   assert.equal(gameSdkDebugTargetActorSeat(state), null);
 });
 
@@ -178,6 +188,7 @@ test("a newer generation replaces the old request and stale failures cannot rese
   }
   assert.equal(state.generation, 2);
   assert.equal(gameSdkDebugTargetViewer(state.target), 6);
+  assert.equal(gameSdkDebugSelectedActorSeat(state), 6);
 
   assert.equal(gameSdkDebugViewerRequestIsCurrent(inFlight, newRequest), true);
   if (gameSdkDebugViewerRequestIsCurrent(inFlight, newRequest)) {
@@ -187,6 +198,7 @@ test("a newer generation replaces the old request and stale failures cannot rese
   assert.equal(inFlight, null);
   assert.equal(state.generation, 3);
   assert.equal(gameSdkDebugTargetViewer(state.target), "self");
+  assert.equal(gameSdkDebugSelectedActorSeat(state), null);
 });
 
 test("viewer response completes the switch when the room revision advanced", () => {
