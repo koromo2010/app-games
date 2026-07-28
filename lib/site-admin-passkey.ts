@@ -28,7 +28,6 @@ export async function siteAdminRegistrationOptions(email: string) {
       residentKey: "required",
       userVerification: "required",
     },
-    preferredAuthenticatorType: "localDevice",
   });
 }
 
