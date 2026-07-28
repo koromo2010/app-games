@@ -8,11 +8,11 @@ const source = readFileSync(
 );
 
 test("admin passkey registration requires a discoverable local credential", () => {
-  assert.match(source, /preferredAuthenticatorType:\s*"localDevice"/);
-  assert.match(
-    source,
-    /authenticatorSelection:\s*\{[\s\S]*authenticatorAttachment:\s*"platform"[\s\S]*residentKey:\s*"required"[\s\S]*userVerification:\s*"required"/,
-  );
+  const selection = source.match(/authenticatorSelection:\s*\{([\s\S]*?)\n\s*\},/)?.[1] ?? "";
+  assert.match(selection, /authenticatorAttachment:\s*"platform"/);
+  assert.match(selection, /residentKey:\s*"required"/);
+  assert.match(selection, /userVerification:\s*"required"/);
+  assert.doesNotMatch(source, /preferredAuthenticatorType/);
   assert.match(source, /assertSiteAdminPlatformPasskeyRegistration/);
 });
 
