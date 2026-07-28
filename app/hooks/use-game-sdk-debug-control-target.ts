@@ -8,7 +8,7 @@ import {
   completeGameSdkDebugControlSwitch,
   completeGameSdkDebugViewerRequest,
   decideGameSdkDebugViewerResponse,
-  gameSdkDebugControlCanSend,
+  gameSdkDebugControlCanDispatch,
   gameSdkDebugSelectedActorSeat,
   gameSdkDebugTargetViewer,
   gameSdkDebugViewerRequestIsCurrent,
@@ -177,7 +177,7 @@ export function useGameSdkDebugControlTarget<TRoom extends RoomIdentity>(
 
   return {
     actorSeat: gameSdkDebugSelectedActorSeat(state),
-    canSend: gameSdkDebugControlCanSend(state),
+    canSend: gameSdkDebugControlCanDispatch(state),
     isSwitching: state.status === "switching",
     postRoom,
     reset,
