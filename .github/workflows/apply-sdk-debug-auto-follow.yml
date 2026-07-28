@@ -1,15 +1,15 @@
-name: Apply SDK DEBUG auto-follow
+name: Verify SDK DEBUG auto-follow
 
 on:
   push:
     branches: [develop]
     paths:
-      - scripts/apply-sdk-debug-auto-follow-v3.mjs
+      - scripts/cleanup-sdk-debug-auto-follow.mjs
       - .github/workflows/apply-sdk-debug-auto-follow.yml
   pull_request:
     branches: [develop]
     paths:
-      - scripts/apply-sdk-debug-auto-follow-v3.mjs
+      - scripts/cleanup-sdk-debug-auto-follow.mjs
       - .github/workflows/apply-sdk-debug-auto-follow.yml
       - .github/sdk-debug-auto-follow-trigger.txt
   workflow_dispatch:
@@ -18,7 +18,7 @@ permissions:
   contents: write
 
 jobs:
-  apply-and-verify:
+  verify-and-clean:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -31,37 +31,25 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - name: Apply auto-follow implementation
-        shell: bash
-        run: |
-          set -o pipefail
-          node scripts/apply-sdk-debug-auto-follow-v3.mjs 2>&1 | tee "$RUNNER_TEMP/sdk-debug-auto-follow.log"
+      - name: Clean auto-follow implementation
+        run: node scripts/cleanup-sdk-debug-auto-follow.mjs
       - name: Build SDK package
         run: npm run build:sdk-package
       - name: Run focused tests
         run: node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test tests/game-sdk-debug-control-target.test.ts tests/game-sdk-debug-command-dispatch.test.ts
       - name: Verify and build
-        shell: bash
         run: |
-          set -o pipefail
-          {
-            npm run verify
-            npm run build
-          } 2>&1 | tee "$RUNNER_TEMP/sdk-debug-auto-follow-verify.log"
-      - name: Commit implementation
+          npm run verify
+          npm run build
+      - name: Commit cleanup
         if: github.event_name != 'pull_request'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add app/components/GameSdkFrame.tsx app/components/GameSdkShellHeader.tsx app/hooks/use-game-sdk-debug-control-target.ts lib/game-sdk-debug-control-target.ts tests/game-sdk-debug-control-target.test.ts
-          git commit -m "Add SDK DEBUG auto-follow"
-          git push origin HEAD:develop
-      - name: Upload diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: sdk-debug-auto-follow-diagnostics
-          path: |
-            ${{ runner.temp }}/sdk-debug-auto-follow.log
-            ${{ runner.temp }}/sdk-debug-auto-follow-verify.log
-          if-no-files-found: warn
+          git add app/components/GameSdkFrame.tsx
+          if git diff --cached --quiet; then
+            echo "No cleanup changes required."
+          else
+            git commit -m "Clean SDK DEBUG auto-follow effect"
+            git push origin HEAD:develop
+          fi
