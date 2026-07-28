@@ -6,6 +6,12 @@ on:
     paths:
       - scripts/apply-sdk-debug-auto-follow.mjs
       - .github/workflows/apply-sdk-debug-auto-follow.yml
+  pull_request:
+    branches: [develop]
+    paths:
+      - scripts/apply-sdk-debug-auto-follow.mjs
+      - .github/workflows/apply-sdk-debug-auto-follow.yml
+      - .github/sdk-debug-auto-follow-trigger.txt
   workflow_dispatch:
 
 permissions:
@@ -36,6 +42,7 @@ jobs:
           npm run verify
           npm run build
       - name: Commit implementation
+        if: github.event_name != 'pull_request'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -43,4 +50,4 @@ jobs:
           git commit -m "Add SDK DEBUG auto-follow"
           git push origin HEAD:develop
 
-# Connector-triggered implementation run.
+# PR diagnostics enabled.
