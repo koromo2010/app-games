@@ -41,9 +41,13 @@ jobs:
       - name: Run focused tests
         run: node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test tests/game-sdk-debug-control-target.test.ts tests/game-sdk-debug-command-dispatch.test.ts
       - name: Verify and build
+        shell: bash
         run: |
-          npm run verify
-          npm run build
+          set -o pipefail
+          {
+            npm run verify
+            npm run build
+          } 2>&1 | tee "$RUNNER_TEMP/sdk-debug-auto-follow-verify.log"
       - name: Commit implementation
         if: github.event_name != 'pull_request'
         run: |
@@ -57,5 +61,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: sdk-debug-auto-follow-diagnostics
-          path: ${{ runner.temp }}/sdk-debug-auto-follow.log
+          path: |
+            ${{ runner.temp }}/sdk-debug-auto-follow.log
+            ${{ runner.temp }}/sdk-debug-auto-follow-verify.log
           if-no-files-found: warn
