@@ -1,3 +1,4 @@
+import { playerHasDebugAccess } from "@/lib/debug-access";
 import { createGameSdkOnlineRoomHttpHandlers } from "@/lib/game-sdk-online-room-http";
 import { createAuthenticatedGameSdkPlatformAdapter } from "@/lib/game-sdk-platform-adapter";
 import {
@@ -65,18 +66,20 @@ async function handle(request: Request, context: RouteContext, method: Method) {
       });
       return json({ error: "SDK_PREVIEW_PACKAGE_NOT_AVAILABLE" }, 404);
     }
+    const moduleProfile = normalizeGameSdkModuleProfile(
+      runtime.definition.modulePolicy,
+    );
+    const isSiteAdminIdentity = creatorPlayerId === session.id
+      ? false
+      : await playerHasDebugAccess(session.id);
     const identity = {
       playerId: session.id,
       displayName: session.name?.trim() || "SDK Player",
       debugAccess: creatorPlayerId === session.id
-        && gameSdkModuleIsRequired(
-          normalizeGameSdkModuleProfile(runtime.definition.modulePolicy),
-          "debug",
-        ),
+        || isSiteAdminIdentity
+        ? gameSdkModuleIsRequired(moduleProfile, "debug")
+        : false,
     };
-    const moduleProfile = normalizeGameSdkModuleProfile(
-      runtime.definition.modulePolicy,
-    );
     const adapter = createAuthenticatedGameSdkPlatformAdapter({
       module: runtime.module,
       moduleProfile,
