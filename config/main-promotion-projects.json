@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "projects": [
+    { "project": "app-games", "domain": "https://www.game-fields.com", "branch": "main", "role": "production-platform" },
+    { "project": "app-games-dev", "domain": "https://dev.game-fields.com", "branch": "develop", "role": "development-platform" },
+    { "project": "app-games-sdk", "domain": "https://sdk.game-fields.com", "branch": "main", "role": "production-sdk-portal" },
+    { "project": "app-games-sdk-dev", "domain": "https://sdk-dev.game-fields.com", "branch": "develop", "role": "development-sdk-portal" },
+    { "project": "app-games-sdk-preview", "domain": "https://app-games-sdk-preview.vercel.app", "branch": "main", "role": "production-sdk-preview" },
+    { "project": "app-games-preview-dev", "domain": "https://app-games-preview-dev.vercel.app", "branch": "develop", "role": "development-sdk-preview" },
+    { "project": "app-games-sdk-portal", "domain": "https://app-games-sdk-portal.vercel.app", "branch": "main", "role": "sdk-portal-compatibility" }
+  ]
+}
