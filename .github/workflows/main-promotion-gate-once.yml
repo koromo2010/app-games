@@ -138,3 +138,5 @@ jobs:
             ${{ runner.temp }}/main-promotion-gate.log
             main-promotion-gate-report.json
           if-no-files-found: warn
+
+# Manual retrigger after bot-applied compatibility fixes.
