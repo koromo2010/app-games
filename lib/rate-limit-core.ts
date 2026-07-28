@@ -86,10 +86,24 @@ export const rateLimitPolicies = {
     room: { limit: 600, windowMs: minute },
     failClosed: true,
   },
+  sdkRoomMutationDebug: {
+    id: "sdk-room-mutation-debug",
+    ip: { limit: 10_000, windowMs: minute },
+    player: { limit: 1_200, windowMs: minute },
+    creator: { limit: 8_000, windowMs: minute },
+    package: { limit: 6_000, windowMs: minute },
+    room: { limit: 3_000, windowMs: minute },
+    failClosed: true,
+  },
   sdkRuntimeRead: {
     id: "sdk-runtime-read",
     ip: { limit: 1_800, windowMs: minute },
     player: { limit: 120, windowMs: minute },
+  },
+  sdkRuntimeReadDebug: {
+    id: "sdk-runtime-read-debug",
+    ip: { limit: 10_000, windowMs: minute },
+    player: { limit: 1_200, windowMs: minute },
   },
   aiGeneration: {
     id: "ai-generation",
