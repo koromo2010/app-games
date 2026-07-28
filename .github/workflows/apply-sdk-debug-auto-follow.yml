@@ -1,0 +1,45 @@
+name: Apply SDK DEBUG auto-follow
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - scripts/apply-sdk-debug-auto-follow.mjs
+      - .github/workflows/apply-sdk-debug-auto-follow.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-verify:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Apply auto-follow implementation
+        run: node scripts/apply-sdk-debug-auto-follow.mjs
+      - name: Build SDK package
+        run: npm run build:sdk-package
+      - name: Run focused tests
+        run: node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test tests/game-sdk-debug-control-target.test.ts tests/game-sdk-debug-command-dispatch.test.ts
+      - name: Verify and build
+        run: |
+          npm run verify
+          npm run build
+      - name: Commit implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/components/GameSdkFrame.tsx app/components/GameSdkShellHeader.tsx app/hooks/use-game-sdk-debug-control-target.ts lib/game-sdk-debug-control-target.ts tests/game-sdk-debug-control-target.test.ts
+          git commit -m "Add SDK DEBUG auto-follow"
+          git push origin HEAD:develop
