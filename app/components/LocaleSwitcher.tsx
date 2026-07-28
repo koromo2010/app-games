@@ -2,10 +2,21 @@
 
 import { useAppLocale } from "@/app/components/AppLocaleProvider";
 import type { AppLocale } from "@/lib/app-locale";
+import { isPlayerAuthenticated } from "@/lib/player-session";
 
-export function LocaleSwitcher({ className = "" }: { className?: string }) {
+type LocaleSwitcherProps = {
+  className?: string;
+  hideWhenAuthenticated?: boolean;
+};
+
+export function LocaleSwitcher({
+  className = "",
+  hideWhenAuthenticated = false,
+}: LocaleSwitcherProps) {
   const { locale, setLocale, t } = useAppLocale();
   const options: AppLocale[] = ["ja", "en"];
+
+  if (hideWhenAuthenticated && isPlayerAuthenticated()) return null;
 
   return (
     <div
