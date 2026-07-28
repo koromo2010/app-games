@@ -73,7 +73,7 @@ const player = { playerId: "player-1", displayName: "Player", role: "player", de
 const spectatorViewer = { playerId: null, role: "spectator", debugAccess: false } as const;
 
 test("SDK manifest validates its version, id, localized titles and player range", () => {
-  assert.equal(manifest.sdkVersion, 1);
+  assert.equal(manifest.sdkVersion, GAME_SDK_VERSION);
   assert.throws(
     () => defineGameManifest({ ...manifest, id: "Invalid ID" }),
     /manifest id/,

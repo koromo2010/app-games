@@ -502,7 +502,7 @@ export type GameSdkClientRuntime<TCreateInput, TCommand extends { type: string }
 };
 
 export function assertGameManifest(manifest: GameSdkManifest): void {
-  if (manifest.sdkVersion !== GAME_SDK_VERSION) {
+  if (![1, GAME_SDK_VERSION].includes(manifest.sdkVersion)) {
     throw new Error(`Unsupported Game SDK version: ${String(manifest.sdkVersion)}`);
   }
   if (!/^[a-z][a-z0-9-]*$/.test(manifest.id)) {
