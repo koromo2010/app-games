@@ -1,0 +1,52 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import {
+  rewritePreviewJavaScriptAssetUrls,
+} from "../apps/sdk-preview/lib/preview-asset-rewriter.ts";
+
+function signed(assetPath: string) {
+  return `https://preview.example/package/creator/game/revision/a/token/${assetPath}`;
+}
+
+test("runtime JavaScript asset strings receive path-scoped signed URLs", () => {
+  const source = [
+    'const flower = "./assets/p1-flower.svg";',
+    "const skull = '../shared/p1-skull.svg';",
+    'image.src = "/assets/p2-flower.png";',
+  ].join("\n");
+
+  const rewritten = rewritePreviewJavaScriptAssetUrls(
+    source,
+    "mock.js",
+    signed,
+  );
+
+  assert.match(rewritten, /token\/assets\/p1-flower\.svg/);
+  assert.match(rewritten, /token\/shared\/p1-skull\.svg/);
+  assert.match(rewritten, /token\/assets\/p2-flower\.png/);
+  assert.doesNotMatch(rewritten, /["']\.\.?(?:\/)/);
+});
+
+test("runtime JavaScript rewriting leaves non-assets and remote URLs unchanged", () => {
+  const source = [
+    'const label = "./round-one";',
+    'const remote = "https://cdn.example/icon.svg";',
+    'const data = "data:image/svg+xml;base64,AAAA";',
+  ].join("\n");
+
+  assert.equal(
+    rewritePreviewJavaScriptAssetUrls(source, "mock.js", signed),
+    source,
+  );
+});
+
+test("runtime JavaScript imports remain individually signed", () => {
+  const rewritten = rewritePreviewJavaScriptAssetUrls(
+    'import icon from "./assets/icon.svg";\nimport("./chunks/view.js");',
+    "scripts/main.js",
+    signed,
+  );
+
+  assert.match(rewritten, /token\/scripts\/assets\/icon\.svg/);
+  assert.match(rewritten, /token\/scripts\/chunks\/view\.js/);
+});
