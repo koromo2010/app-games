@@ -12,6 +12,11 @@ export type GameSdkDebugControlState = {
   status: "ready" | "switching";
 };
 
+export type GameSdkDebugViewerRequest = {
+  generation: number;
+  sequence: number;
+};
+
 export const INITIAL_GAME_SDK_DEBUG_CONTROL_STATE: GameSdkDebugControlState = {
   generation: 0,
   target: { mode: "self" },
@@ -62,6 +67,35 @@ export function resetGameSdkDebugControl(
     target: { mode: "self" },
     status: "ready",
   };
+}
+
+export function beginGameSdkDebugViewerRequest(
+  current: Readonly<GameSdkDebugViewerRequest> | null,
+  generation: number,
+  sequence: number,
+): { request: GameSdkDebugViewerRequest; started: boolean } {
+  if (current?.generation === generation) {
+    return { request: current, started: false };
+  }
+  return {
+    request: { generation, sequence },
+    started: true,
+  };
+}
+
+export function gameSdkDebugViewerRequestIsCurrent(
+  current: Readonly<GameSdkDebugViewerRequest> | null,
+  request: Readonly<GameSdkDebugViewerRequest>,
+): boolean {
+  return current?.generation === request.generation
+    && current.sequence === request.sequence;
+}
+
+export function completeGameSdkDebugViewerRequest(
+  current: Readonly<GameSdkDebugViewerRequest> | null,
+  request: Readonly<GameSdkDebugViewerRequest>,
+): GameSdkDebugViewerRequest | null {
+  return gameSdkDebugViewerRequestIsCurrent(current, request) ? null : current;
 }
 
 export function gameSdkDebugControlCanSend(
