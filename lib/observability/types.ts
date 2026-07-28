@@ -29,6 +29,9 @@ export type ObservabilityFields = {
   provider?: string;
   model?: string;
   billingSource?: string;
+  tokenVersion?: string;
+  sourceKind?: string;
+  assetPath?: string;
   revision?: number;
   commandRevision?: number;
   roomSchemaVersion?: number;
