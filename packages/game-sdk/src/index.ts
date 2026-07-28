@@ -351,7 +351,7 @@ export function parseGameSdkSettingDefinitions(
 }
 
 export type GameSdkManifest = {
-  sdkVersion: typeof GAME_SDK_VERSION;
+  sdkVersion: 1 | typeof GAME_SDK_VERSION;
   id: string;
   title: Record<GameSdkLocale, string>;
   playMode: GameSdkPlayMode;
