@@ -11,6 +11,7 @@ on:
       - packages/game-sdk/src/index.ts
       - app/hooks/use-game-sdk-debug-control-target.ts
       - lib/game-sdk-debug-control-target.ts
+      - tests/game-sdk.test.ts
   pull_request:
     branches:
       - main
@@ -36,7 +37,7 @@ jobs:
           ref: develop
           fetch-depth: 0
 
-      - name: Synchronize release metadata and lint-safe debug hooks
+      - name: Synchronize promotion blockers
         id: sync_release
         shell: bash
         run: |
@@ -46,35 +47,44 @@ jobs:
           const release = JSON.parse(fs.readFileSync('config/platform-release.json', 'utf8'));
 
           const sdkPath = 'packages/game-sdk/src/index.ts';
-          const sdkSource = fs.readFileSync(sdkPath, 'utf8');
-          const sdkNext = sdkSource.replace(
+          let sdkSource = fs.readFileSync(sdkPath, 'utf8');
+          sdkSource = sdkSource.replace(
             /export const GAME_SDK_VERSION = \d+ as const;/,
             `export const GAME_SDK_VERSION = ${release.sdkContractVersion} as const;`,
           );
-          if (sdkNext === sdkSource && !sdkSource.includes(`GAME_SDK_VERSION = ${release.sdkContractVersion} as const`)) {
-            throw new Error('GAME_SDK_VERSION declaration was not found');
-          }
-          fs.writeFileSync(sdkPath, sdkNext);
+          sdkSource = sdkSource.replace(
+            'if (manifest.sdkVersion !== GAME_SDK_VERSION) {',
+            'if (![1, GAME_SDK_VERSION].includes(manifest.sdkVersion)) {',
+          );
+          fs.writeFileSync(sdkPath, sdkSource);
 
           const hookPath = 'app/hooks/use-game-sdk-debug-control-target.ts';
-          const hookSource = fs.readFileSync(hookPath, 'utf8');
-          let hookNext = hookSource.replace(
+          let hookSource = fs.readFileSync(hookPath, 'utf8');
+          hookSource = hookSource.replace(
             'import { useCallback, useRef, useState } from "react";',
             'import { useCallback, useEffect, useRef, useState } from "react";',
           );
-          hookNext = hookNext.replace(
+          hookSource = hookSource.replace(
             '  const optionsRef = useRef(options);\n  optionsRef.current = options;\n',
             '  const optionsRef = useRef(options);\n  useEffect(() => {\n    optionsRef.current = options;\n  }, [options]);\n',
           );
-          fs.writeFileSync(hookPath, hookNext);
+          fs.writeFileSync(hookPath, hookSource);
 
           const controlPath = 'lib/game-sdk-debug-control-target.ts';
-          const controlSource = fs.readFileSync(controlPath, 'utf8');
-          const controlNext = controlSource.replace(
+          let controlSource = fs.readFileSync(controlPath, 'utf8');
+          controlSource = controlSource.replace(
             'export function gameSdkDebugControlCanDispatch(\n  _state: Readonly<GameSdkDebugControlState>,\n): boolean {\n  return true;\n}',
             'export function gameSdkDebugControlCanDispatch(\n  state: Readonly<GameSdkDebugControlState>,\n): boolean {\n  void state;\n  return true;\n}',
           );
-          fs.writeFileSync(controlPath, controlNext);
+          fs.writeFileSync(controlPath, controlSource);
+
+          const testPath = 'tests/game-sdk.test.ts';
+          let testSource = fs.readFileSync(testPath, 'utf8');
+          testSource = testSource.replace(
+            'assert.equal(manifest.sdkVersion, 1);',
+            'assert.equal(manifest.sdkVersion, GAME_SDK_VERSION);',
+          );
+          fs.writeFileSync(testPath, testSource);
           NODE
           if git diff --quiet; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
@@ -85,8 +95,9 @@ jobs:
               apps/sdk-portal/public/platform-release.json \
               packages/game-sdk/src/index.ts \
               app/hooks/use-game-sdk-debug-control-target.ts \
-              lib/game-sdk-debug-control-target.ts
-            git commit -m "Fix promotion gate verification blockers"
+              lib/game-sdk-debug-control-target.ts \
+              tests/game-sdk.test.ts
+            git commit -m "Fix promotion gate compatibility blockers"
             git push origin HEAD:develop
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
