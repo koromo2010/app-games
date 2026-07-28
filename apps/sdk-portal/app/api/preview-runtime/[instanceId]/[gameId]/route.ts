@@ -8,12 +8,54 @@ import {
   createPackageRuntimeAccess,
   createPreviewRuntimeUrl,
 } from "@/lib/preview-links";
+import { getGamePackageContractVersion } from "@/lib/game-package-contract-version";
 import { normalizeGameSdkModuleProfile } from "@game-fields/game-sdk/modules";
 import { parseGameSdkSettingDefinitions } from "@game-fields/game-sdk";
 import { requireSdkServiceRequest } from "@/lib/sdk-service-auth";
+import platformRelease from "../../../../../../config/platform-release.json";
 
 export const dynamic = "force-dynamic";
 const GAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?$/;
+const observedVersionDrift = new Set<string>();
+
+function observeSdkContractVersionDrift(input: {
+  creatorSlug: string;
+  gameId: string;
+  revision: string;
+  serverBundleSha256: string;
+  sdkContractVersion: number;
+}) {
+  if (input.sdkContractVersion >= platformRelease.sdkContractVersion) return;
+  const key = [
+    input.creatorSlug,
+    input.gameId,
+    input.revision,
+    input.serverBundleSha256,
+    input.sdkContractVersion,
+    platformRelease.sdkContractVersion,
+  ].join(":");
+  if (observedVersionDrift.has(key)) return;
+  observedVersionDrift.add(key);
+  console.warn(JSON.stringify({
+    schemaVersion: 1,
+    occurredAt: new Date().toISOString(),
+    level: "warning",
+    event: "game_sdk.bundle_contract_version_drift",
+    service: "game-fields-sdk-portal",
+    environment: process.env.VERCEL_GIT_COMMIT_REF === "main"
+      ? "production"
+      : "development",
+    fields: {
+      creatorSlug: input.creatorSlug,
+      gameId: input.gameId,
+      revision: input.revision,
+      serverBundleSha256: input.serverBundleSha256,
+      bundleSdkContractVersion: input.sdkContractVersion,
+      platformSdkContractVersion: platformRelease.sdkContractVersion,
+      rebuildRequired: true,
+    },
+  }));
+}
 
 export async function GET(request: Request, { params }: { params: Promise<{ instanceId: string; gameId: string }> }) {
   try {
@@ -44,6 +86,26 @@ export async function GET(request: Request, { params }: { params: Promise<{ inst
           serverBundleSha256: game.packageBundleSha256!,
         })
       : null;
+    const sdkContractVersion = packageAccess
+      ? await getGamePackageContractVersion({
+          creatorSlug: instanceId,
+          gameId,
+          revision: game.packageRevision!,
+        })
+      : null;
+    if (
+      packageAccess
+      && sdkContractVersion !== null
+      && game.packageBundleSha256
+    ) {
+      observeSdkContractVersionDrift({
+        creatorSlug: instanceId,
+        gameId,
+        revision: game.packageRevision!,
+        serverBundleSha256: game.packageBundleSha256,
+        sdkContractVersion,
+      });
+    }
     return Response.json({
       title: game.title,
       runtimeKind: packageAccess ? "package" : "mock",
@@ -61,6 +123,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ inst
         serverBundleSha256: game.packageBundleSha256,
         appSetSourceSha256: game.packageAppSetSha256,
         packageRootSha256: game.packageRootSha256,
+        sdkContractVersion,
+        platformSdkContractVersion: platformRelease.sdkContractVersion,
+        sdkContractVersionDrift: sdkContractVersion !== null
+          && sdkContractVersion < platformRelease.sdkContractVersion,
       } : {}),
       modulePolicy: normalizeGameSdkModuleProfile(game.modulePolicy),
       settings: parseGameSdkSettingDefinitions(
