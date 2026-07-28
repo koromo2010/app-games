@@ -6,6 +6,7 @@ import {
   beginGameSdkDebugViewerRequest,
   completeGameSdkDebugControlSwitch,
   completeGameSdkDebugViewerRequest,
+  decideGameSdkDebugViewerResponse,
   gameSdkDebugControlCanSend,
   gameSdkDebugTargetActorSeat,
   gameSdkDebugTargetViewer,
@@ -186,4 +187,85 @@ test("a newer generation replaces the old request and stale failures cannot rese
   assert.equal(inFlight, null);
   assert.equal(state.generation, 3);
   assert.equal(gameSdkDebugTargetViewer(state.target), "self");
+});
+
+test("viewer response completes the switch when the room revision advanced", () => {
+  const state = beginGameSdkDebugControlSwitch(
+    INITIAL_GAME_SDK_DEBUG_CONTROL_STATE,
+    { mode: "dummy", seat: 4 },
+  );
+  const decision = decideGameSdkDebugViewerResponse({
+    state,
+    generation: state.generation,
+    viewer: 4,
+    requestedRoom: { code: "ROOM", revision: 10 },
+    latestRoom: { code: "ROOM", revision: 11 },
+  });
+
+  assert.deepEqual(decision, { apply: true, refetch: true });
+  assert.equal(
+    completeGameSdkDebugControlSwitch(state, state.generation).status,
+    "ready",
+  );
+});
+
+test("viewer response at the latest revision does not request another fetch", () => {
+  const state = beginGameSdkDebugControlSwitch(
+    INITIAL_GAME_SDK_DEBUG_CONTROL_STATE,
+    { mode: "viewer", seat: 2 },
+  );
+  assert.deepEqual(
+    decideGameSdkDebugViewerResponse({
+      state,
+      generation: state.generation,
+      viewer: 2,
+      requestedRoom: { code: "ROOM", revision: 12 },
+      latestRoom: { code: "ROOM", revision: 12 },
+    }),
+    { apply: true, refetch: false },
+  );
+});
+
+test("stale generations and changed room codes remain rejected", () => {
+  let state = beginGameSdkDebugControlSwitch(
+    INITIAL_GAME_SDK_DEBUG_CONTROL_STATE,
+    { mode: "dummy", seat: 3 },
+  );
+  const staleGeneration = state.generation;
+  state = beginGameSdkDebugControlSwitch(state, { mode: "dummy", seat: 4 });
+
+  assert.deepEqual(
+    decideGameSdkDebugViewerResponse({
+      state,
+      generation: staleGeneration,
+      viewer: 3,
+      requestedRoom: { code: "ROOM", revision: 1 },
+      latestRoom: { code: "ROOM", revision: 2 },
+    }),
+    { apply: false, refetch: false },
+  );
+  assert.deepEqual(
+    decideGameSdkDebugViewerResponse({
+      state,
+      generation: state.generation,
+      viewer: 4,
+      requestedRoom: { code: "OLD", revision: 1 },
+      latestRoom: { code: "NEW", revision: 1 },
+    }),
+    { apply: false, refetch: false },
+  );
+});
+
+test("a completed request can start exactly one follow-up in the same generation", () => {
+  const first = beginGameSdkDebugViewerRequest(null, 9, 1).request;
+  let inFlight: GameSdkDebugViewerRequest | null = first;
+  inFlight = completeGameSdkDebugViewerRequest(inFlight, first);
+
+  const followUp = beginGameSdkDebugViewerRequest(inFlight, 9, 2);
+  assert.equal(followUp.started, true);
+  inFlight = followUp.request;
+
+  const duplicate = beginGameSdkDebugViewerRequest(inFlight, 9, 3);
+  assert.equal(duplicate.started, false);
+  assert.equal(duplicate.request, followUp.request);
 });
