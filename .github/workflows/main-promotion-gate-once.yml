@@ -75,13 +75,17 @@ jobs:
         if: steps.sync_release.outputs.changed != 'true'
         run: npm ci
 
+      - name: Build SDK package for contract tests
+        if: steps.sync_release.outputs.changed != 'true'
+        run: npm run build:sdk-package
+
       - name: Run promotion gate with full verification
         if: steps.sync_release.outputs.changed != 'true'
         shell: bash
         run: |
           set -o pipefail
           {
-            echo "Git status after npm ci:"
+            echo "Git status after npm ci and SDK package build:"
             git status --short
             echo
             node scripts/check-main-promotion-gate.mjs --execute
