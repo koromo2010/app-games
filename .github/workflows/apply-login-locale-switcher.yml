@@ -1,0 +1,42 @@
+name: Apply login locale switcher
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - scripts/apply-login-locale-switcher.mjs
+      - .github/workflows/apply-login-locale-switcher.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Apply locale switcher
+        run: node scripts/apply-login-locale-switcher.mjs
+      - name: Run focused test
+        run: node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test tests/login-locale-switcher-contract.test.ts
+      - name: Verify and build
+        run: |
+          npm run verify
+          npm run build
+      - name: Commit implementation
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/components/LocaleSwitcher.tsx app/components/PlayerAuthGate.tsx app/layout.tsx lib/app-i18n.ts tests/login-locale-switcher-contract.test.ts
+          git commit -m "Add pre-login locale switcher"
+          git push origin HEAD:develop
