@@ -129,8 +129,7 @@ function localAssetReference(
   for (const part of decodedPath.split("/")) {
     if (!part || part === ".") continue;
     if (part === "..") {
-      if (parts.length === 0) throw new PreviewAssetReferenceError();
-      parts.pop();
+      if (parts.length > 0) parts.pop();
       continue;
     }
     parts.push(part);
