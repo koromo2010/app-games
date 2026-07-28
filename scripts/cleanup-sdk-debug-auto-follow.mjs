@@ -12,3 +12,5 @@ if (!frame.includes(malformed) && !frame.includes(formatted)) {
 
 frame = frame.replace(malformed, formatted);
 fs.writeFileSync(framePath, frame);
+
+// Re-run against the latest develop head.
