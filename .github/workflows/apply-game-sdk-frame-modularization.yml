@@ -1,0 +1,29 @@
+name: Apply GameSdkFrame modularization
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - scripts/apply-game-sdk-frame-modularization.mjs
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/apply-game-sdk-frame-modularization.mjs
+      - run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/components/GameSdkFrame.tsx tests/sdk-preview-auth.test.ts tests/game-sdk-shell-registry.test.ts
+          git commit -m "Extract GameSdkFrame sandbox boundary"
+          git push origin develop
