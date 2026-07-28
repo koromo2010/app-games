@@ -139,10 +139,26 @@ export function decideGameSdkDebugViewerResponse(input: {
   };
 }
 
+/**
+ * Strict execution readiness. Command wrapping and actor resolution must use
+ * this value so a genuinely switching target can never act.
+ */
 export function gameSdkDebugControlCanSend(
   state: Readonly<GameSdkDebugControlState>,
 ): boolean {
   return state.status === "ready";
+}
+
+/**
+ * Allows the frame transport to pass a command to the imperative wrapper.
+ * React render state can briefly lag behind stateRef after a viewer snapshot
+ * becomes visible. The wrapper performs the authoritative current-state check,
+ * so transport must not reject solely from a stale rendered canSend value.
+ */
+export function gameSdkDebugControlCanDispatch(
+  _state: Readonly<GameSdkDebugControlState>,
+): boolean {
+  return true;
 }
 
 export function wrapGameSdkDebugCommand<TCommand extends { type: string }>(
