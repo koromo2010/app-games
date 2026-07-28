@@ -41,12 +41,17 @@ jobs:
         run: npm ci
 
       - name: Run promotion gate with full verification
-        run: node scripts/check-main-promotion-gate.mjs --execute
+        shell: bash
+        run: |
+          set -o pipefail
+          node scripts/check-main-promotion-gate.mjs --execute 2>&1 | tee main-promotion-gate.log
 
-      - name: Upload promotion gate report
+      - name: Upload promotion gate diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: main-promotion-gate-report
-          path: main-promotion-gate-report.json
+          name: main-promotion-gate-diagnostics
+          path: |
+            main-promotion-gate.log
+            main-promotion-gate-report.json
           if-no-files-found: warn
