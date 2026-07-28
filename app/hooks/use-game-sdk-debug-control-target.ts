@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   INITIAL_GAME_SDK_DEBUG_CONTROL_STATE,
   beginGameSdkDebugControlSwitch,
@@ -41,7 +41,9 @@ export function useGameSdkDebugControlTarget<TRoom extends RoomIdentity>(
   options: Options<TRoom>,
 ) {
   const optionsRef = useRef(options);
-  optionsRef.current = options;
+  useEffect(() => {
+    optionsRef.current = options;
+  }, [options]);
 
   const stateRef = useRef<GameSdkDebugControlState>(
     INITIAL_GAME_SDK_DEBUG_CONTROL_STATE,

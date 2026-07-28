@@ -156,8 +156,9 @@ export function gameSdkDebugControlCanSend(
  * so transport must not reject solely from a stale rendered canSend value.
  */
 export function gameSdkDebugControlCanDispatch(
-  _state: Readonly<GameSdkDebugControlState>,
+  state: Readonly<GameSdkDebugControlState>,
 ): boolean {
+  void state;
   return true;
 }
 
