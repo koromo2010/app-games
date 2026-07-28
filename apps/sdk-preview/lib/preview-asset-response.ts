@@ -13,6 +13,11 @@ import {
   rewritePreviewJavaScriptAssetUrls,
 } from "@/lib/preview-asset-rewriter";
 import {
+  previewAssetTokenRejectionCode,
+  previewAssetTokenVersionHint,
+  recordPreviewAssetTokenEvent,
+} from "@/lib/preview-asset-token-observability";
+import {
   packageAssetPath,
   previewAssetCacheHeaders,
   previewAssetPath,
@@ -45,7 +50,9 @@ export async function renderAuthorizedPreviewAsset({
   assetToken: string;
   assetParts: string[];
 }) {
-  if (new URL(request.url).search) {
+  const parsedRequestUrl = new URL(request.url);
+  const telemetryContext = { route: parsedRequestUrl.pathname, method: request.method };
+  if (parsedRequestUrl.search) {
     return new Response("Preview asset queries are not accepted.", {
       status: 400,
       headers: PRIVATE_ERROR_HEADERS,
@@ -67,17 +74,49 @@ export async function renderAuthorizedPreviewAsset({
       assetPath,
     });
   } catch {
+    recordPreviewAssetTokenEvent({
+      action: "verify",
+      version: previewAssetTokenVersionHint(assetToken),
+      outcome: "failed",
+      sourceKind,
+      gameId: scope.gameId,
+      revision: Number(scope.revision),
+      assetPath,
+      errorCode: "PREVIEW_ASSET_TOKEN_RUNTIME_NOT_CONFIGURED",
+      context: telemetryContext,
+    });
     return new Response("Preview runtime is not configured.", {
       status: 503,
       headers: PRIVATE_ERROR_HEADERS,
     });
   }
   if (!capability) {
+    recordPreviewAssetTokenEvent({
+      action: "verify",
+      version: previewAssetTokenVersionHint(assetToken),
+      outcome: "rejected",
+      sourceKind,
+      gameId: scope.gameId,
+      revision: Number(scope.revision),
+      assetPath,
+      errorCode: previewAssetTokenRejectionCode(assetToken),
+      context: telemetryContext,
+    });
     return new Response("Preview asset capability is invalid or expired.", {
       status: 403,
       headers: PRIVATE_ERROR_HEADERS,
     });
   }
+  recordPreviewAssetTokenEvent({
+    action: "verify",
+    version: capability.version,
+    outcome: "success",
+    sourceKind,
+    gameId: scope.gameId,
+    revision: Number(scope.revision),
+    assetPath,
+    context: telemetryContext,
+  });
   if (!isBrowserReadablePreviewAsset(sourceKind, assetPath)) {
     return new Response("Preview asset was not found.", {
       status: 404,
@@ -85,7 +124,7 @@ export async function renderAuthorizedPreviewAsset({
     });
   }
 
-  const origin = new URL(request.url).origin;
+  const origin = parsedRequestUrl.origin;
   const signedAssetUrl = (childAssetPath: string) => {
     if (!isBrowserReadablePreviewAsset(sourceKind, childAssetPath)) {
       throw new PreviewAssetReferenceError();
