@@ -1,0 +1,47 @@
+name: Main Promotion Gate Once
+
+on:
+  push:
+    branches:
+      - develop
+    paths:
+      - .github/workflows/main-promotion-gate-once.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: main-promotion-gate
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout develop with full history
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run promotion gate with full verification
+        run: node scripts/check-main-promotion-gate.mjs --execute
+
+      - name: Upload promotion gate report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: main-promotion-gate-report
+          path: main-promotion-gate-report.json
+          if-no-files-found: warn
