@@ -53,6 +53,10 @@ jobs:
             `export const GAME_SDK_VERSION = ${release.sdkContractVersion} as const;`,
           );
           sdkSource = sdkSource.replace(
+            'sdkVersion: typeof GAME_SDK_VERSION;',
+            'sdkVersion: 1 | typeof GAME_SDK_VERSION;',
+          );
+          sdkSource = sdkSource.replace(
             'if (manifest.sdkVersion !== GAME_SDK_VERSION) {',
             'if (![1, GAME_SDK_VERSION].includes(manifest.sdkVersion)) {',
           );
