@@ -290,6 +290,7 @@ ChatGPT Workではスレッドごとに作業環境が新しくなり、前ス�
 - ローカルの完全版ワードDBと、本番のゲーム向け `shared_word_catalog` は分離する。
 - 単独単語ゲームの難易度・補正計算は `lib/word-selection-protocol.ts` に集約する。初期中心はeasy=6、normal=5、hard=4、幅0.5、3語バッチで、元Zipfは書き換えない。
 - ワードウルフのデバッグ用「ワード生成だけテスト」は、プレビューAPIが返す `debugTrace` を使い、候補3語、Zipf補正、RAG評価件数、LLM判定、抽選重み、保存結果、AI事業者の試行順を表示する。`debugTrace` はデバッグ中のホストによるプレビューだけに付与し、通常の部屋進行や観測ログへは保存しない。
+- Previewを本番DBへ直結してRAG開発を続けない。先に本番 `shared_word_catalog` と補助表だけを複製した開発DBを作り、Previewをそのコピーへ接続する。2026-07-16時点では診断画面は動作したがDB候補0件で直接LLMへフォールバックしており、最新mainとの競合もあるため本番公開は保留中。再開条件とコピー範囲は `docs/WORD_MASTER_DATABASE.md` の「開発DBと本番公開の方針」を正本とする。
 - ワードウルフの一般単語モードは `shared_word_catalog` から起点語を3件選び、共通LLMゲートウェイの1リクエストで安全判定、使用頻度補正、ゲーム適性補正、相方生成を行う。Good/Badは既存 `game-feedback` RAGを使い、起点IDと難易度を検索タグへ含める。
 - 本番補助表 `shared_word_game_evaluations` / `shared_wordwolf_pairs` は `scripts/upload-shared-word-catalog.py` が追加する。既存本番DBへ反映するには差分同期を再実行する。相方IDはカタログ一致時だけ入り、未収録の相方は文字列で保持する。
 - 2026-07-16 の初回同期は197,040件。本番DB全体は同期後51,273,728 bytes。

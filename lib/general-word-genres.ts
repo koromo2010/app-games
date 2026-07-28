@@ -1,0 +1,62 @@
+export const generalWordGenres = [
+  { key: "food_meals", name: "料理・食べ物" },
+  { key: "sweets_desserts", name: "お菓子・デザート" },
+  { key: "drinks", name: "飲み物" },
+  { key: "ingredients_seasonings", name: "食材・調味料" },
+  { key: "fruits_vegetables", name: "果物・野菜" },
+  { key: "mammals", name: "哺乳類" },
+  { key: "birds", name: "鳥" },
+  { key: "aquatic_animals", name: "魚・水の生き物" },
+  { key: "insects_small_animals", name: "昆虫・小さな生き物" },
+  { key: "plants_flowers_trees", name: "植物・花・樹木" },
+  { key: "home_rooms", name: "家・部屋" },
+  { key: "furniture_interior", name: "家具・インテリア" },
+  { key: "daily_goods", name: "生活用品" },
+  { key: "kitchen_tools", name: "台所用品" },
+  { key: "clothes_footwear", name: "服・履物" },
+  { key: "accessories_belongings", name: "装飾品・持ち物" },
+  { key: "stationery_office", name: "文房具・事務用品" },
+  { key: "road_vehicles", name: "自動車・道路の乗り物" },
+  { key: "rail_public_transport", name: "電車・公共交通" },
+  { key: "ships_aircraft", name: "船・飛行機" },
+  { key: "buildings_public_facilities", name: "建物・公共施設" },
+  { key: "shops_commercial_facilities", name: "店・商業施設" },
+  { key: "town_roads", name: "街・道路" },
+  { key: "travel_tourism_lodging", name: "旅行・観光・宿泊" },
+  { key: "terrain_geography", name: "地形・地理" },
+  { key: "weather_meteorology", name: "天気・気象" },
+  { key: "nature_environment", name: "自然・環境" },
+  { key: "space_astronomy", name: "宇宙・天体" },
+  { key: "body", name: "体・身体" },
+  { key: "health_medical", name: "健康・病気・医療" },
+  { key: "jobs_work", name: "仕事・職業" },
+  { key: "school_study", name: "学校・勉強" },
+  { key: "sports", name: "スポーツ" },
+  { key: "outdoor_leisure", name: "アウトドア・レジャー" },
+  { key: "toys_games", name: "おもちゃ・ゲーム" },
+  { key: "music_instruments", name: "音楽・楽器" },
+  { key: "film_theater_entertainment", name: "映画・演劇・芸能" },
+  { key: "books_language_writing", name: "本・言葉・文章" },
+  { key: "art_crafts", name: "美術・工芸" },
+  { key: "science_experiments", name: "科学・実験" },
+  { key: "computers_internet", name: "コンピューター・インターネット" },
+  { key: "machines_appliances_electricity", name: "機械・家電・電気" },
+  { key: "media_communications", name: "メディア・通信" },
+  { key: "society_law_public_services", name: "社会・法律・公共サービス" },
+  { key: "money_economy_shopping", name: "お金・経済・買い物" },
+  { key: "history_culture_customs", name: "歴史・文化・風習" },
+  { key: "family_relationships", name: "家族・人間関係" },
+  { key: "emotion_personality_abstract", name: "感情・性格・抽象概念" },
+  { key: "time_calendar_seasonal_events", name: "時間・暦・季節行事" },
+  { key: "colors_shapes_materials_quantities", name: "色・形・素材・数量" },
+] as const;
+
+export type GeneralWordGenreKey = (typeof generalWordGenres)[number]["key"];
+
+const generalWordGenreByKey = new Map(
+  generalWordGenres.map((genre, index) => [genre.key, { ...genre, sortOrder: index + 1 }]),
+);
+
+export function getGeneralWordGenre(key: string) {
+  return generalWordGenreByKey.get(key as GeneralWordGenreKey) ?? null;
+}
