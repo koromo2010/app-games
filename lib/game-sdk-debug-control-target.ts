@@ -169,10 +169,19 @@ export function wrapGameSdkDebugCommand<TCommand extends { type: string }>(
   seat: number;
   command: TCommand;
 } {
+  const actorSeat = gameSdkDebugTargetActorSeat(state);
+  const selectedSeat = gameSdkDebugSelectedActorSeat(state);
+  console.debug("[DEBUG_ACTOR]", {
+    status: state.status,
+    actorSeat,
+    selectedSeat,
+    command: command.type,
+    generation: state.generation,
+    timestamp: typeof performance !== "undefined" ? performance.now() : Date.now(),
+  });
   if (!gameSdkDebugControlCanSend(state)) {
     throw new Error("DEBUG_ACTOR_SWITCH_PENDING");
   }
-  const actorSeat = gameSdkDebugTargetActorSeat(state);
   return actorSeat !== null && !command.type.startsWith("room/")
     ? {
         type: "room/debug-act-as-dummy",
