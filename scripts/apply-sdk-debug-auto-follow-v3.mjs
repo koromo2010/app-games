@@ -40,3 +40,26 @@ if (v2.includes('const hookPath = "app/hooks/use-game-sdk-debug-control-target.t
 const tempPath = "/tmp/apply-sdk-debug-auto-follow-v3-delegate.mjs";
 fs.writeFileSync(tempPath, v2);
 await import(pathToFileURL(tempPath).href);
+
+const framePath = "app/components/GameSdkFrame.tsx";
+let frame = fs.readFileSync(framePath, "utf8");
+frame = replaceOrThrow(
+  frame,
+  `  const [debugAutoFollow, setDebugAutoFollow] = useState(false);\n  const [debugAutoFollowWarning, setDebugAutoFollowWarning] = useState("");\n  const lastAutoFollowOwnerSeatRef = useRef<number | null | undefined>(undefined);`,
+  `  const [debugAutoFollow, setDebugAutoFollow] = useState(false);\n  const lastAutoFollowOwnerSeatRef = useRef<number | null | undefined>(undefined);`,
+  "remove warning state",
+);
+frame = frame.replace('      setDebugAutoFollowWarning("");\n', "");
+frame = replaceOrThrow(
+  frame,
+  `    if (!target) {\n      setDebugAutoFollowWarning(\n        "SEAT " + (debugOwnerSeat + 1) + " は実ユーザーのため、操作対象を自動変更できません。",\n      );\n      return;\n    }\n    selectDebugTarget(target, "auto-follow");`,
+  `    if (!target) return;\n    selectDebugTarget(target, "auto-follow");`,
+  "derive warning instead of setting state",
+);
+frame = replaceOrThrow(
+  frame,
+  `          autoFollowWarning: debugAutoFollowWarning,`,
+  `          autoFollowWarning: debugAutoFollow\n            && debugOwnerSeat !== null\n            && debugOwnerSeat !== undefined\n            && !gameSdkDebugAutoFollowTarget(debugOwnerSeat, common.players)\n              ? "SEAT " + (debugOwnerSeat + 1) + " は実ユーザーのため、操作対象を自動変更できません。"\n              : "",`,
+  "derived warning prop",
+);
+fs.writeFileSync(framePath, frame);
