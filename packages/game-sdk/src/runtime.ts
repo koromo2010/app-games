@@ -804,12 +804,29 @@ export function createGameSdkOnlineRoomModule<
         ) {
           throw new Error("TIMER_TIMEOUT_PLAYERS_INVALID");
         }
-        let playerTimeouts = currentPlayerTimeouts;
+        const dummyPlayerIds = new Set(
+          room.players
+            .filter((player) => player.isDummy === true)
+            .map((player) => player.id),
+        );
+        let playerTimeouts = {
+          ...currentPlayerTimeouts,
+          statuses: Object.fromEntries(
+            room.players.map((player) => [
+              player.id,
+              player.isDummy === true
+                ? { consecutiveTimeouts: 0, reducedTime: false }
+                : currentPlayerTimeouts.statuses[player.id]
+                  ?? { consecutiveTimeouts: 0, reducedTime: false },
+            ]),
+          ),
+        };
         if (
           command.type === "room/expire-timer"
           || command.type === "room/debug-simulate-timeout"
         ) {
           for (const playerId of timedOutPlayerIds) {
+            if (dummyPlayerIds.has(playerId)) continue;
             playerTimeouts = recordGameSdkPlayerTimeout(
               playerTimeouts,
               playerId,
@@ -827,13 +844,17 @@ export function createGameSdkOnlineRoomModule<
           throw new Error("RESULT_PHASE_REQUIRED");
         }
         const ownerPlayerId = transition.timerOwnerPlayerId ?? null;
+        const timeoutOwnerPlayerId = ownerPlayerId !== null
+          && dummyPlayerIds.has(ownerPlayerId)
+          ? null
+          : ownerPlayerId;
         const timer = nextPhase === "result" || transition.timer === "stop"
           ? stoppedGameSdkTimer(timerDurationSeconds(room.settings), room.timer)
           : resetGameSdkTimer(
               gameSdkPlayerTimeLimitSeconds(
                 timerDurationSeconds(room.settings),
                 playerTimeouts,
-                ownerPlayerId,
+                timeoutOwnerPlayerId,
               ),
               context.now,
               room.timer,
