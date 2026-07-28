@@ -49,12 +49,14 @@ frame = replaceOrThrow(
   `  const [debugAutoFollow, setDebugAutoFollow] = useState(false);\n  const lastAutoFollowOwnerSeatRef = useRef<number | null | undefined>(undefined);`,
   "remove warning state",
 );
-frame = frame.replace('      setDebugAutoFollowWarning("");\n', "");
-frame = replaceOrThrow(
-  frame,
-  `    if (!target) {\n      setDebugAutoFollowWarning(\n        "SEAT " + (debugOwnerSeat + 1) + " は実ユーザーのため、操作対象を自動変更できません。",\n      );\n      return;\n    }\n    selectDebugTarget(target, "auto-follow");`,
+frame = frame.replaceAll('      setDebugAutoFollowWarning("");\n', "");
+const unsupportedTargetPattern = /    if \(!target\) \{[\s\S]*?      return;\n    \}\n    selectDebugTarget\(target, "auto-follow"\);/;
+if (!unsupportedTargetPattern.test(frame)) {
+  throw new Error("Missing patch anchor: derive warning instead of setting state");
+}
+frame = frame.replace(
+  unsupportedTargetPattern,
   `    if (!target) return;\n    selectDebugTarget(target, "auto-follow");`,
-  "derive warning instead of setting state",
 );
 frame = replaceOrThrow(
   frame,
