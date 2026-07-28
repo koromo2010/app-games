@@ -14,7 +14,12 @@ const requiredProjects = [
 ];
 
 function run(command, args, options = {}) {
-  return execFileSync(command, args, { encoding: "utf8", stdio: options.inherit ? "inherit" : "pipe" }).trim();
+  const inherit = options.inherit === true;
+  const result = execFileSync(command, args, {
+    encoding: inherit ? undefined : "utf8",
+    stdio: inherit ? "inherit" : "pipe",
+  });
+  return inherit ? "" : String(result ?? "").trim();
 }
 
 function fail(message) {
