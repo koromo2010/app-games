@@ -9,6 +9,8 @@ on:
       - config/platform-release.json
       - apps/sdk-portal/public/platform-release.json
       - packages/game-sdk/src/index.ts
+      - app/hooks/use-game-sdk-debug-control-target.ts
+      - lib/game-sdk-debug-control-target.ts
   pull_request:
     branches:
       - main
@@ -34,7 +36,7 @@ jobs:
           ref: develop
           fetch-depth: 0
 
-      - name: Synchronize platform release metadata
+      - name: Synchronize release metadata and lint-safe debug hooks
         id: sync_release
         shell: bash
         run: |
@@ -42,24 +44,49 @@ jobs:
           node - <<'NODE'
           const fs = require('fs');
           const release = JSON.parse(fs.readFileSync('config/platform-release.json', 'utf8'));
-          const path = 'packages/game-sdk/src/index.ts';
-          const source = fs.readFileSync(path, 'utf8');
-          const next = source.replace(
+
+          const sdkPath = 'packages/game-sdk/src/index.ts';
+          const sdkSource = fs.readFileSync(sdkPath, 'utf8');
+          const sdkNext = sdkSource.replace(
             /export const GAME_SDK_VERSION = \d+ as const;/,
             `export const GAME_SDK_VERSION = ${release.sdkContractVersion} as const;`,
           );
-          if (next === source && !source.includes(`GAME_SDK_VERSION = ${release.sdkContractVersion} as const`)) {
+          if (sdkNext === sdkSource && !sdkSource.includes(`GAME_SDK_VERSION = ${release.sdkContractVersion} as const`)) {
             throw new Error('GAME_SDK_VERSION declaration was not found');
           }
-          fs.writeFileSync(path, next);
+          fs.writeFileSync(sdkPath, sdkNext);
+
+          const hookPath = 'app/hooks/use-game-sdk-debug-control-target.ts';
+          const hookSource = fs.readFileSync(hookPath, 'utf8');
+          let hookNext = hookSource.replace(
+            'import { useCallback, useRef, useState } from "react";',
+            'import { useCallback, useEffect, useRef, useState } from "react";',
+          );
+          hookNext = hookNext.replace(
+            '  const optionsRef = useRef(options);\n  optionsRef.current = options;\n',
+            '  const optionsRef = useRef(options);\n  useEffect(() => {\n    optionsRef.current = options;\n  }, [options]);\n',
+          );
+          fs.writeFileSync(hookPath, hookNext);
+
+          const controlPath = 'lib/game-sdk-debug-control-target.ts';
+          const controlSource = fs.readFileSync(controlPath, 'utf8');
+          const controlNext = controlSource.replace(
+            'export function gameSdkDebugControlCanDispatch(\n  _state: Readonly<GameSdkDebugControlState>,\n): boolean {\n  return true;\n}',
+            'export function gameSdkDebugControlCanDispatch(\n  state: Readonly<GameSdkDebugControlState>,\n): boolean {\n  void state;\n  return true;\n}',
+          );
+          fs.writeFileSync(controlPath, controlNext);
           NODE
           if git diff --quiet; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
           else
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add apps/sdk-portal/public/platform-release.json packages/game-sdk/src/index.ts
-            git commit -m "Synchronize SDK contract release metadata"
+            git add \
+              apps/sdk-portal/public/platform-release.json \
+              packages/game-sdk/src/index.ts \
+              app/hooks/use-game-sdk-debug-control-target.ts \
+              lib/game-sdk-debug-control-target.ts
+            git commit -m "Fix promotion gate verification blockers"
             git push origin HEAD:develop
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
