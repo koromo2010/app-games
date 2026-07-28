@@ -44,7 +44,12 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          node scripts/check-main-promotion-gate.mjs --execute 2>&1 | tee main-promotion-gate.log
+          {
+            echo "Git status after npm ci:"
+            git status --short
+            echo
+            node scripts/check-main-promotion-gate.mjs --execute
+          } 2>&1 | tee main-promotion-gate.log
 
       - name: Upload promotion gate diagnostics
         if: always()
