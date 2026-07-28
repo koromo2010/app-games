@@ -50,13 +50,9 @@ frame = replaceOrThrow(
   "remove warning state",
 );
 frame = frame.replaceAll('      setDebugAutoFollowWarning("");\n', "");
-const unsupportedTargetPattern = /    if \(!target\) \{[\s\S]*?      return;\n    \}\n    selectDebugTarget\(target, "auto-follow"\);/;
-if (!unsupportedTargetPattern.test(frame)) {
-  throw new Error("Missing patch anchor: derive warning instead of setting state");
-}
 frame = frame.replace(
-  unsupportedTargetPattern,
-  `    if (!target) return;\n    selectDebugTarget(target, "auto-follow");`,
+  /\s*setDebugAutoFollowWarning\([\s\S]*?\);\n/g,
+  "",
 );
 frame = replaceOrThrow(
   frame,
