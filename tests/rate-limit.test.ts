@@ -103,3 +103,25 @@ test("SDK Room quota fails closed when its store is unavailable", async () => {
   assert.equal(result.storeAvailable, false);
   assert.equal(result.retryAfterMs, 1_000);
 });
+
+test("debug SDK policies are isolated and materially larger than player policies", () => {
+  assert.notEqual(
+    rateLimitPolicies.sdkRuntimeReadDebug.id,
+    rateLimitPolicies.sdkRuntimeRead.id,
+  );
+  assert.notEqual(
+    rateLimitPolicies.sdkRoomMutationDebug.id,
+    rateLimitPolicies.sdkRoomMutation.id,
+  );
+  assert.equal(rateLimitPolicies.sdkRuntimeRead.player.limit, 120);
+  assert.equal(rateLimitPolicies.sdkRoomMutation.player.limit, 180);
+  assert.ok(
+    rateLimitPolicies.sdkRuntimeReadDebug.player.limit
+      >= rateLimitPolicies.sdkRuntimeRead.player.limit * 10,
+  );
+  assert.ok(
+    rateLimitPolicies.sdkRoomMutationDebug.player.limit
+      >= rateLimitPolicies.sdkRoomMutation.player.limit * 6,
+  );
+  assert.equal(rateLimitPolicies.sdkRoomMutationDebug.failClosed, true);
+});
