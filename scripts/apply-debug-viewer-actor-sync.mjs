@@ -42,3 +42,5 @@ if (!header.includes("debugRoom.actorViewerMismatch")) {
   throw new Error("GameSdkShellHeader patch did not apply");
 }
 fs.writeFileSync(headerPath, header);
+
+// Workflow trigger marker.
