@@ -12,6 +12,7 @@ import {
 } from "@/lib/sdk-preview-account-session";
 import { loadSdkPreviewPackageModule } from "@/lib/sdk-preview-package-runtime";
 import { createRequestTelemetry } from "@/lib/observability";
+import platformRelease from "../../../../../../../config/platform-release.json";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -95,9 +96,19 @@ async function handle(request: Request, context: RouteContext, method: Method) {
           revision: contract.packageRevision,
         });
         if (!pinned) return null;
+        if (
+          pinned.definition.revision !== contract.packageRevision
+          || pinned.definition.packageRootSha256 !== contract.packageRootSha256
+          || !platformRelease.supportedSdkContractVersions.includes(
+            contract.sdkContractVersion,
+          )
+        ) return null;
         return {
           module: pinned.module,
-          runtimeContract: pinned.runtimeContract,
+          // The room owns its runtime contract for its full lifetime. The pinned
+          // package identity is verified above; reusing current platform release
+          // values here would invalidate every active room after an SDK upgrade.
+          runtimeContract: contract,
           moduleProfile: normalizeGameSdkModuleProfile(
             pinned.definition.modulePolicy,
           ),
