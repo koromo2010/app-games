@@ -20,6 +20,27 @@ const CLIENT_ASSET_EXTENSIONS = new Set([
   ".woff2",
 ]);
 
+const JAVASCRIPT_LOCAL_ASSET_REFERENCE = new RegExp(
+  `(["'])((?:\\.{1,2}\\/|\\/)[^"'\\\\\\r\\n]+?(?:${[
+    "css",
+    "gif",
+    "ico",
+    "jpeg",
+    "jpg",
+    "js",
+    "mjs",
+    "mp3",
+    "ogg",
+    "png",
+    "svg",
+    "wav",
+    "webp",
+    "woff",
+    "woff2",
+  ].join("|")})(?:#[^"']*)?)\\1`,
+  "gi",
+);
+
 export class PreviewAssetReferenceError extends Error {
   constructor() {
     super("PREVIEW_ASSET_REFERENCE_INVALID");
@@ -233,6 +254,16 @@ export function rewritePreviewJavaScriptAssetUrls(
         scriptAssetPath,
         signedAssetUrl,
       )}${quote}${suffix}`
+    ),
+  );
+  output = output.replace(
+    JAVASCRIPT_LOCAL_ASSET_REFERENCE,
+    (_match, quote: string, reference: string) => (
+      `${quote}${signedReference(
+        reference,
+        scriptAssetPath,
+        signedAssetUrl,
+      )}${quote}`
     ),
   );
   return output;
