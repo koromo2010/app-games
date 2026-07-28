@@ -40,3 +40,5 @@ jobs:
           git add app/components/LocaleSwitcher.tsx app/components/PlayerAuthGate.tsx app/layout.tsx lib/app-i18n.ts tests/login-locale-switcher-contract.test.ts
           git commit -m "Add pre-login locale switcher"
           git push origin HEAD:develop
+
+# trigger: 1
