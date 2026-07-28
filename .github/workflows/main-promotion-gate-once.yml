@@ -49,7 +49,7 @@ jobs:
             git status --short
             echo
             node scripts/check-main-promotion-gate.mjs --execute
-          } 2>&1 | tee main-promotion-gate.log
+          } 2>&1 | tee "$RUNNER_TEMP/main-promotion-gate.log"
 
       - name: Upload promotion gate diagnostics
         if: always()
@@ -57,6 +57,6 @@ jobs:
         with:
           name: main-promotion-gate-diagnostics
           path: |
-            main-promotion-gate.log
+            ${{ runner.temp }}/main-promotion-gate.log
             main-promotion-gate-report.json
           if-no-files-found: warn
