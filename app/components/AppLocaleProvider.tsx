@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { defaultAppLocale, isAppLocale, normalizeAppLocale, type AppLocale } from "@/lib/app-locale";
 import { translateApp, type AppMessageKey, type AppMessageValues } from "@/lib/app-i18n";
+import { translateAuthGate, type AuthGateMessageKey } from "@/lib/auth-gate-i18n";
 import { isPlayerAuthenticated, readPlayerSession } from "@/lib/player-session";
 
 const APP_LOCALE_COOKIE = "game_fields_locale";
@@ -10,7 +11,7 @@ const APP_LOCALE_COOKIE = "game_fields_locale";
 type AppLocaleContextValue = {
   locale: AppLocale;
   setLocale: (locale: AppLocale) => void;
-  t: (key: AppMessageKey, values?: AppMessageValues) => string;
+  t: (key: AppMessageKey | AuthGateMessageKey, values?: AppMessageValues) => string;
 };
 
 const AppLocaleContext = createContext<AppLocaleContextValue | null>(null);
@@ -48,9 +49,6 @@ export function AppLocaleProvider({
   }, []);
 
   useEffect(() => {
-    // The proxy passes the visible locale prefix to the server, which supplies
-    // initialLocale. Keep browser-owned locale metadata in sync without
-    // mirroring the same value through an effect-driven state update.
     const pathLocale = localeFromPathname(window.location.pathname);
     const activeLocale = pathLocale ?? locale;
     document.cookie = `${APP_LOCALE_COOKIE}=${activeLocale}; Path=/; Max-Age=31536000; SameSite=Lax`;
@@ -63,9 +61,6 @@ export function AppLocaleProvider({
       setLocale(value);
     };
 
-    // The account setting is authoritative after sign-in. This also covers
-    // embedded pages (My Page and SDK preview), whose initial URL may have
-    // been selected from the browser language before the session was loaded.
     if (isPlayerAuthenticated()) {
       applyAccountLocale(readPlayerSession()?.locale);
     }
@@ -81,7 +76,11 @@ export function AppLocaleProvider({
   const value = useMemo<AppLocaleContextValue>(() => ({
     locale,
     setLocale,
-    t: (key, values) => translateApp(locale, key, values),
+    t: (key, values) => (
+      key in { "locale.switchLabel": true, "authGate.loginRequired": true, "authGate.continueToLobby": true }
+        ? translateAuthGate(locale, key as AuthGateMessageKey)
+        : translateApp(locale, key as AppMessageKey, values)
+    ),
   }), [locale, setLocale]);
 
   return <AppLocaleContext.Provider value={value}>{children}</AppLocaleContext.Provider>;
