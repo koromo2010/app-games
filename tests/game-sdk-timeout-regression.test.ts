@@ -36,6 +36,7 @@ const manifest = defineGameManifest({
   title: { ja: "時間切れ回帰", en: "Timeout regression" },
   playMode: "online-room",
   minimumPlayers: 2,
+  previewMinimumPlayers: 1,
   maximumPlayers: 4,
   supportsDebug: true,
   supportsSpectators: false,
@@ -65,8 +66,8 @@ const appSet = defineGameSdkOnlineRoomAppSet({
       phase: "playing",
       app: room.app,
       timer: "reset" as const,
-      timerOwnerPlayerId: "host",
-      timedOutPlayerIds: ["host"],
+      timerOwnerPlayerId: room.timer?.ownerPlayerId ?? "host",
+      timedOutPlayerIds: [room.timer?.ownerPlayerId ?? "host"],
     };
   },
   createAppState() {
@@ -75,7 +76,9 @@ const appSet = defineGameSdkOnlineRoomAppSet({
   resetAppState() {
     return {};
   },
-  applyAppCommand(room, command: { type: "game/start" | "game/finish" }) {
+  applyAppCommand(room, command: {
+    type: "game/start" | "game/start-dummy" | "game/finish";
+  }) {
     if (command.type === "game/finish") {
       return {
         phase: "result",
@@ -83,11 +86,14 @@ const appSet = defineGameSdkOnlineRoomAppSet({
         timer: "stop" as const,
       };
     }
+    const dummy = room.players.find((candidate) => candidate.isDummy === true);
     return {
       phase: "playing",
       app: room.app,
       timer: "reset" as const,
-      timerOwnerPlayerId: "host",
+      timerOwnerPlayerId: command.type === "game/start-dummy"
+        ? dummy?.id ?? "host"
+        : "host",
     };
   },
   presentApp() {
@@ -95,18 +101,57 @@ const appSet = defineGameSdkOnlineRoomAppSet({
   },
 });
 
-test("DEBUG dummy timeout state never reduces its time limit", () => {
-  const dummyId = "debug:dummy-1";
-  let state = createGameSdkPlayerTimeoutState([dummyId]);
-  state = recordGameSdkPlayerTimeout(state, dummyId, 1_000);
-  state = recordGameSdkPlayerTimeout(state, dummyId, 2_000);
-  state = recordGameSdkPlayerTimeout(state, dummyId, 3_000);
-
-  assert.deepEqual(state.statuses[dummyId], {
-    consecutiveTimeouts: 0,
-    reducedTime: false,
+test("DEBUG dummy timeout state never reduces its time limit", async () => {
+  let now = 1_000;
+  const runtime = createGameSdkMockRuntime({
+    module: createGameSdkOnlineRoomModule(appSet),
+    now: () => now,
   });
-  assert.equal(gameSdkPlayerTimeLimitSeconds(30, state, dummyId), 30);
+  const created = await runtime.createRoom({
+    roomCode: "DUMY",
+    create: { app: {} },
+    actor: host,
+  });
+  const added = await runtime.sendCommand({
+    code: "DUMY",
+    envelope: {
+      expectedRevision: created.revision,
+      command: { type: "room/debug-add-dummy" },
+    },
+    actor: host,
+  });
+  const started = await runtime.sendCommand({
+    code: "DUMY",
+    envelope: {
+      expectedRevision: added.revision,
+      command: { type: "game/start-dummy" },
+    },
+    actor: host,
+  });
+  assert.equal(started.room.view.common.timer?.ownerSeat, 1);
+
+  now = 32_501;
+  const firstTimeout = await runtime.sendCommand({
+    code: "DUMY",
+    envelope: {
+      expectedRevision: started.revision,
+      command: { type: "room/expire-timer", turnSequence: 1 },
+    },
+    actor: host,
+  });
+  now = 64_002;
+  const secondTimeout = await runtime.sendCommand({
+    code: "DUMY",
+    envelope: {
+      expectedRevision: firstTimeout.revision,
+      command: { type: "room/expire-timer", turnSequence: 2 },
+    },
+    actor: host,
+  });
+
+  assert.equal(secondTimeout.room.view.common.players[1]?.isDummy, true);
+  assert.equal(secondTimeout.room.view.common.players[1]?.reducedTime, false);
+  assert.equal(secondTimeout.room.view.common.timer?.durationSeconds, 30);
 });
 
 test("normal players still receive the five-second reduction", () => {
@@ -185,10 +230,18 @@ test("rematch and the next lobby-to-game start reset timeout penalties", async (
   });
   assert.equal(rematched.room.view.common.players[0]?.reducedTime, false);
 
-  const restarted = await runtime.sendCommand({
+  const confirmed = await runtime.sendCommand({
     code: "RSET",
     envelope: {
       expectedRevision: rematched.revision,
+      command: { type: "room/confirm-lobby-return" },
+    },
+    actor: player,
+  });
+  const restarted = await runtime.sendCommand({
+    code: "RSET",
+    envelope: {
+      expectedRevision: confirmed.revision,
       command: { type: "game/start" },
     },
     actor: host,
