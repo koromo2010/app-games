@@ -16,9 +16,9 @@ export async function getGamePackageContractVersion(input: {
       AND r.revision = ${input.revision}
     LIMIT 1
   `;
-  const value = Number(
-    (Array.isArray(rows) ? rows[0] : undefined as unknown) &&
-      (rows[0] as { sdkContractVersion?: unknown }).sdkContractVersion,
-  );
+  const row = (Array.isArray(rows) ? rows[0] : undefined) as
+    | { sdkContractVersion?: unknown }
+    | undefined;
+  const value = Number(row?.sdkContractVersion);
   return Number.isSafeInteger(value) && value > 0 ? value : null;
 }
