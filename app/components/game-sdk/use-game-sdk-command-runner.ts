@@ -2,6 +2,7 @@
 
 import {
   useCallback,
+  useMemo,
   type Dispatch,
   type MutableRefObject,
   type SetStateAction,
@@ -110,9 +111,9 @@ export function useGameSdkCommandRunner({
     send(wrapDebugCommand(command))
   ), [send, wrapDebugCommand]);
 
-  return {
+  return useMemo(() => ({
     run,
     send,
     sendPackageCommand,
-  };
+  }), [run, send, sendPackageCommand]);
 }
