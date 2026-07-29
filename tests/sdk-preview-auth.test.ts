@@ -18,6 +18,7 @@ import {
 import {
   previewExchangeContentSecurityPolicy,
 } from "../apps/sdk-preview/lib/preview-security.ts";
+import { GAME_SDK_IFRAME_SANDBOX } from "../app/components/game-sdk/game-sdk-iframe-sandbox.ts";
 
 const secret = "sdk-preview-test-secret-with-at-least-32-bytes";
 const grant = {
@@ -287,17 +288,43 @@ test("client grants use a sandbox-safe fragment form exchange and never query cr
   assert.match(exchangeSource, /MAX_EXCHANGE_REQUEST_BYTES/);
   assert.match(exchangeSource, /"Referrer-Policy": "no-referrer"/);
   assert.doesNotMatch(exchangeSource, /document\.cookie/);
-  for (const path of [
-    "app/components/GameSdkFrame.tsx",
+
+  // GameSdkFrame.tsx's iframe now goes through the shared <GameSdkIframe>
+  // component (app/components/game-sdk/GameSdkIframe.tsx,
+  // app/components/game-sdk/GameSdkIframeBridge.tsx) instead of a literal
+  // `<iframe sandbox="...">`, so the sandbox guarantee for that side is
+  // checked against the single source of truth constant rather than a
+  // regex over GameSdkFrame.tsx's source. GameSdkIframe.tsx itself has JSX
+  // in its body and can't be imported by this plain-Node test runner, so the
+  // constant lives in the JSX-free game-sdk-iframe-sandbox.ts, which
+  // GameSdkIframe.tsx re-exports for app code.
+  assert.equal(
+    GAME_SDK_IFRAME_SANDBOX,
+    "allow-scripts allow-forms allow-modals allow-pointer-lock",
+  );
+  assert.doesNotMatch(GAME_SDK_IFRAME_SANDBOX, /allow-same-origin/);
+  assert.match(
+    readFileSync("app/components/game-sdk/GameSdkIframeBridge.tsx", "utf8"),
+    /<GameSdkIframe\b/,
+  );
+  assert.doesNotMatch(
+    readFileSync("app/components/GameSdkFrame.tsx", "utf8"),
+    /<iframe\b/,
+  );
+
+  // SdkPreviewGameShell.tsx is untouched by the GameSdkFrame.tsx split — it
+  // still writes its own literal `<iframe sandbox="...">`, so keep checking
+  // it the original way.
+  const sdkPreviewGameShellSource = readFileSync(
     "app/sdk-preview/[creatorSlug]/games/[gameId]/SdkPreviewGameShell.tsx",
-  ]) {
-    const source = readFileSync(path, "utf8");
-    assert.match(
-      source,
-      /sandbox="allow-scripts allow-forms allow-modals allow-pointer-lock"/,
-    );
-    assert.doesNotMatch(source, /sandbox="[^"]*allow-same-origin/);
-  }
+    "utf8",
+  );
+  assert.match(
+    sdkPreviewGameShellSource,
+    /sandbox="allow-scripts allow-forms allow-modals allow-pointer-lock"/,
+  );
+  assert.doesNotMatch(sdkPreviewGameShellSource, /sandbox="[^"]*allow-same-origin/);
+
   for (const path of [
     "apps/sdk-preview/app/open/[instanceId]/[gameId]/[revision]/route.ts",
     "apps/sdk-preview/app/package-open/[instanceId]/[gameId]/[revision]/route.ts",

@@ -34,6 +34,7 @@ import {
 import {
   gameSdkPlatformResourcePolicy,
 } from "../lib/game-sdk-platform-resource-policy.ts";
+import { buildGameSdkResultShareText } from "../app/components/game-sdk/game-sdk-frame-presentation.ts";
 
 function createLegacyPreviewAssetTokenForTest(
   scope: {
@@ -445,8 +446,34 @@ test("SDK preview composes the common room lifecycle around the game slot", () =
 });
 
 test("shared GameFrame owns the top banner and phase-specific common modules", () => {
-  const shell = readFileSync(
-    "app/components/GameSdkFrame.tsx",
+  // GameSdkFrame.tsx is now a thin composition root — see
+  // app/components/game-sdk/GameSdkFrame.tsx and its sibling modules.
+  // Assertions that used to grep GameSdkFrame.tsx's ~600-line source now grep
+  // whichever split module the relevant logic actually lives in; nothing
+  // here checks *new* behavior, only relocated evidence of the same
+  // behavior (plus the one deliberate fragility fix called out below).
+  const controller = readFileSync(
+    "app/components/game-sdk/use-game-sdk-frame-controller.ts",
+    "utf8",
+  );
+  const view = readFileSync(
+    "app/components/game-sdk/GameSdkFrameView.tsx",
+    "utf8",
+  );
+  const roomLifecycle = readFileSync(
+    "app/components/game-sdk/use-game-sdk-room-lifecycle.ts",
+    "utf8",
+  );
+  const commandRunner = readFileSync(
+    "app/components/game-sdk/use-game-sdk-command-runner.ts",
+    "utf8",
+  );
+  const lobbyPanel = readFileSync(
+    "app/components/game-sdk/GameSdkLobbyPanel.tsx",
+    "utf8",
+  );
+  const resultPanel = readFileSync(
+    "app/components/game-sdk/GameSdkResultPanel.tsx",
     "utf8",
   );
   const header = readFileSync(
@@ -477,31 +504,39 @@ test("shared GameFrame owns the top banner and phase-specific common modules", (
     header,
     /navigation\.showMenuBack[\s\S]*?<GameTopMenu>/,
   );
-  assert.match(shell, /GameSdkShellHeader/);
+  assert.match(view, /GameSdkShellHeader/);
   assert.match(
     approvedShell,
     /if \(!room\)[\s\S]*?<GameSdkShellHeader[\s\S]*?backHref="\/games"[\s\S]*?backLabel="広場へ戻る"[\s\S]*?surface="lounge"/,
   );
   assert.doesNotMatch(approvedShell, /<GameTopBanner/);
   assert.doesNotMatch(approvedShell, /ゲーム一覧へ/);
-  assert.match(shell, /room\.phase !== "playing" && \(\s*<aside/);
-  assert.match(shell, /room\.phase === "playing"\s*\? "mx-auto max-w-7xl"/);
-  assert.match(shell, /room\.phase === "lobby" && moduleRequired\("room-settings"\) && \(\s*<div className=\{panel\}>\s*<h2 className="text-lg font-black">部屋設定/);
-  assert.match(shell, /moduleRequired\("replay"\)/);
-  assert.match(shell, /moduleRequired\("result-share"\)/);
-  assert.match(shell, /moduleRequired\("feedback"\)/);
-  assert.match(shell, /GameSdkFeedbackPanel/);
+  assert.match(view, /room\.phase !== "playing" && \(\s*<aside/);
+  assert.match(view, /room\.phase === "playing"\s*\? "mx-auto max-w-7xl"/);
   assert.match(
-    shell,
+    view,
+    /visible=\{room\.phase === "lobby" && moduleRequired\("room-settings"\)\}/,
+  );
+  assert.match(
+    lobbyPanel,
+    /<div className=\{panel\}>\s*<h2 className="text-lg font-black">部屋設定/,
+  );
+  assert.match(resultPanel, /moduleRequired\("replay"\)/);
+  assert.match(resultPanel, /moduleRequired\("result-share"\)/);
+  assert.match(resultPanel, /moduleRequired\("feedback"\)/);
+  assert.match(resultPanel, /GameSdkFeedbackPanel/);
+  assert.match(
+    view,
     /room\.phase === "result" \? "order-2 lg:order-1" : "order-1"/,
   );
   assert.match(
-    shell,
+    view,
     /room\.phase === "result" \? "order-1 lg:order-2" : "order-2"/,
   );
-  assert.match(shell, /gameSdkResultReasonText\(standardResult, locale\)/);
-  assert.match(shell, /gameSdkResultPlayLog\(standardResult, locale\)/);
-  for (const formalShell of [shell, approvedShell]) {
+  assert.match(controller, /gameSdkResultReasonText\(standardResult, locale\)/);
+  assert.match(controller, /gameSdkResultPlayLog\(standardResult, locale\)/);
+  const gameSdkFrameSource = controller + roomLifecycle + view + commandRunner;
+  for (const formalShell of [gameSdkFrameSource, approvedShell]) {
     assert.match(formalShell, /useGameSdkActiveRoomRestore/);
     assert.match(formalShell, /isRestoringRoom/);
     assert.match(formalShell, /error\.code === "PLAYER_ACTIVE_ROOM"/);
@@ -510,12 +545,33 @@ test("shared GameFrame owns the top banner and phase-specific common modules", (
   assert.match(activeRoomRestore, /useState\(true\)/);
   assert.match(activeRoomRestore, /await onEmpty\(\)/);
   assert.match(activeRoomRestore, /setIsRestoringRoom\(false\)/);
-  assert.match(shell, /PLAYER\$\{ranking\.seat \+ 1\}/);
-  const resultShareSource = shell.slice(
-    shell.indexOf("const resultShareText"),
-    shell.indexOf("if (!room)"),
-  );
-  assert.doesNotMatch(resultShareSource, /ranking\.displayName/);
+
+  // The old fragile check here sliced GameSdkFrame.tsx's raw source between
+  // two string markers and asserted the slice didn't contain
+  // `ranking.displayName` — a check that depended entirely on GameSdkFrame.tsx
+  // staying a single file with that exact shape, and would have broken on
+  // this split (or any future split) regardless of whether the actual
+  // behavior it was guarding — result-sharing never leaking a real player
+  // name — still held. It's replaced with a real value assertion against the
+  // extracted `buildGameSdkResultShareText` pure function.
+  const shareText = buildGameSdkResultShareText({
+    title: "スカル",
+    locale: "ja",
+    playerCount: 3,
+    result: {
+      rankings: [{
+        seat: 0,
+        displayName: "SECRET_REAL_NAME",
+        rank: 1,
+        score: 3,
+        isSelf: true,
+      }],
+      reason: "finished",
+    },
+  });
+  assert.match(shareText, /PLAYER1/);
+  assert.doesNotMatch(shareText, /SECRET_REAL_NAME/);
+
   assert.match(runtimeCatalog, /r\.module_policy AS "modulePolicy"/);
   assert.match(runtimeCatalog, /moduleProfile: normalizeGameSdkModuleProfile\(modulePolicy\)/);
 });
