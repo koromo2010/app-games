@@ -6,6 +6,11 @@ on:
     paths:
       - scripts/apply-sdk-contract-v2-alignment.mjs
       - .github/workflows/apply-sdk-contract-v2-alignment.yml
+  pull_request:
+    branches: [develop]
+    paths:
+      - scripts/apply-sdk-contract-v2-alignment.mjs
+      - .github/workflows/apply-sdk-contract-v2-alignment.yml
   workflow_dispatch:
 
 permissions:
