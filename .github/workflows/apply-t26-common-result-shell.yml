@@ -6,12 +6,14 @@ on:
       - agent/t26-common-result-shell
     paths:
       - scripts/apply-t26-common-result-shell.mjs
+      - scripts/apply-t26-result-test-updates.mjs
       - .github/workflows/apply-t26-common-result-shell.yml
   pull_request:
     branches:
       - develop
     paths:
       - scripts/apply-t26-common-result-shell.mjs
+      - scripts/apply-t26-result-test-updates.mjs
       - .github/workflows/apply-t26-common-result-shell.yml
 
 permissions:
@@ -38,6 +40,7 @@ jobs:
 
       - run: npm ci
       - run: node scripts/apply-t26-common-result-shell.mjs
+      - run: node scripts/apply-t26-result-test-updates.mjs
       - run: npm run build:runtime-packages
 
       - name: Run T-26 focused tests
@@ -67,6 +70,7 @@ jobs:
       - name: Commit verified implementation
         run: |
           rm scripts/apply-t26-common-result-shell.mjs
+          rm scripts/apply-t26-result-test-updates.mjs
           rm .github/workflows/apply-t26-common-result-shell.yml
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
