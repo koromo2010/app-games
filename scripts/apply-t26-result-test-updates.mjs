@@ -33,7 +33,7 @@ test("ワードウルフの部屋操作はロビーと結果に一組ずつ表�
   const lifecycleActions = read("app/components/OnlineRoomLifecycleActions.tsx");
 
   assert.equal((sidebar.match(/<OnlineRoomLifecycleActions/g) ?? []).length, 1);
-  assert.match(sidebar, /surface=\{room\.phase === "lobby" \? "lobby" : "playing"\}/);
+  assert.ok(sidebar.includes('surface={room.phase === "lobby" ? "lobby" : "playing"}'));
   assert.doesNotMatch(sidebar, /room\.phase === "result" \? "result"/);
   assert.equal((resultPanel.match(/<OnlineRoomLifecycleActions/g) ?? []).length, 1);
   assert.match(resultPanel, /surface="result"/);
@@ -49,7 +49,7 @@ test("たほい屋もロビーと結果に部屋操作を一組ずつ表示す�
   const resultPanel = read("app/tahoiya/TahoiyaResultPanel.tsx");
 
   assert.equal((roomPanel.match(/<OnlineRoomLifecycleActions/g) ?? []).length, 1);
-  assert.match(roomPanel, /surface=\{room\.phase === "lobby" \? "lobby" : "playing"\}/);
+  assert.ok(roomPanel.includes('surface={room.phase === "lobby" ? "lobby" : "playing"}'));
   assert.doesNotMatch(roomPanel, /room\.phase === "result" \? "result"/);
   assert.equal((resultPanel.match(/<OnlineRoomLifecycleActions/g) ?? []).length, 1);
   assert.match(resultPanel, /surface="result"/);
