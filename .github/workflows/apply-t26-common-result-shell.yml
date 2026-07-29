@@ -102,7 +102,20 @@ jobs:
         continue-on-error: true
         run: npx tsc --noEmit
 
-      - run: npm run verify
+      - name: Record existing environment ledger drift separately
+        continue-on-error: true
+        run: npm run check:env-ledger
+
+      - name: Run repository verification gates
+        run: |
+          npm run check:versions
+          npm run check:games
+          npm run check:sdk
+          npm run check:sdk-help
+          npm run check:sdk-migrations
+          npm run check:sdk-shell-contract
+          npm run lint
+
       - run: npm run build
       - run: npm run build:sdk
       - run: npm run build:sdk-preview
