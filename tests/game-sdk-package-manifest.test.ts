@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 import {
+  isGamePackageReleaseSupported,
+} from "../apps/sdk-portal/lib/game-package-store.ts";
+import {
   parseGameFieldsPackageManifest,
 } from "../apps/sdk-portal/lib/game-package-manifest.ts";
 import type {
@@ -74,6 +77,36 @@ function packageFiles(input?: {
   }));
 }
 
+test("publish accepts every SDK contract version advertised by the release", () => {
+  const release = {
+    sdkPackageVersion: "0.1.1",
+    supportedSdkContractVersions: [1, 2],
+  } as const;
+  assert.equal(isGamePackageReleaseSupported({
+    sdkPackageVersion: "0.1.1",
+    sdkContractVersion: 1,
+  }, release), true);
+  assert.equal(isGamePackageReleaseSupported({
+    sdkPackageVersion: "0.1.1",
+    sdkContractVersion: 2,
+  }, release), true);
+});
+
+test("publish rejects unsupported contracts and SDK package mismatches", () => {
+  const release = {
+    sdkPackageVersion: "0.1.1",
+    supportedSdkContractVersions: [1, 2],
+  } as const;
+  assert.equal(isGamePackageReleaseSupported({
+    sdkPackageVersion: "0.1.1",
+    sdkContractVersion: 3,
+  }, release), false);
+  assert.equal(isGamePackageReleaseSupported({
+    sdkPackageVersion: "0.1.0",
+    sdkContractVersion: 1,
+  }, release), false);
+});
+
 test("game package accepts only hashes recomputed from its immutable files", () => {
   const parsed = parseGameFieldsPackageManifest({
     gameId: "portable-fixture",
@@ -128,6 +161,39 @@ test("game package rejects browser entrypoints and bundles outside the portable 
     gameId: "portable-fixture",
     files: packageFiles({ serverBundle: "x".repeat(1024 * 1024 + 1) }),
   }), /GAME_SDK_PACKAGE_SERVER_BUNDLE_TOO_LARGE/);
+});
+
+test("game package upload accepts generated Markdown documentation", () => {
+  const raw = packageFiles().map(({ path, content, encoding }) => ({
+    path,
+    content,
+    encoding,
+  }));
+  const prepared = prepareGamePackageUploadFiles([
+    ...raw,
+    {
+      path: "mock/README.md",
+      content: "# Mock instructions\n",
+      encoding: "utf-8",
+    },
+  ]);
+  assert.equal(prepared.some((file) => file.path === "mock/README.md"), true);
+});
+
+test("Markdown package files are validated as UTF-8 text", () => {
+  const raw = packageFiles().map(({ path, content, encoding }) => ({
+    path,
+    content,
+    encoding,
+  }));
+  assert.throws(() => prepareGamePackageUploadFiles([
+    ...raw,
+    {
+      path: "mock/README.md",
+      content: Buffer.from("# encoded").toString("base64"),
+      encoding: "base64",
+    },
+  ]), /SDK_UPLOAD_TEXT_ENCODING_INVALID/);
 });
 
 test("package inspection rejects active SVG and extension/MIME mismatches", () => {
