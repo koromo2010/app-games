@@ -22,11 +22,8 @@ const INVITE_TARGETS: InviteTarget[] = [
 ];
 
 type RoomPayload = {
-  room?: {
-    code?: string;
-    phase?: string;
-    players?: Array<{ id?: string }>;
-  } | null;
+  room?: { code?: string } | null;
+  rooms?: Array<{ code?: string }>;
   error?: string;
 };
 
@@ -52,44 +49,42 @@ export function InviteRoomJoiner({
 
     const join = async () => {
       for (const target of INVITE_TARGETS) {
-        const lookup = await fetch(`${target.endpoint}?code=${encodeURIComponent(roomCode)}&playerId=${encodeURIComponent(player.id)}`, {
+        const lookup = await fetch(target.endpoint, {
           credentials: "same-origin",
           cache: "no-store",
         }).catch(() => null);
-        if (!lookup || lookup.status === 404) continue;
-        if (!lookup.ok) continue;
+        if (!lookup?.ok) continue;
 
-        const found = await readPayload(lookup);
-        if (!found.room) continue;
+        const available = await readPayload(lookup);
+        const found = available.rooms?.some(
+          (room) => room.code?.trim().toUpperCase() === roomCode,
+        ) === true;
+        if (!found) continue;
 
         setMessage("部屋に参加しています…");
-        const alreadyJoined = found.room.players?.some((member) => member.id === player.id) === true;
-        if (!alreadyJoined) {
-          const joined = await fetch(target.endpoint, {
-            method: "POST",
-            credentials: "same-origin",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              code: roomCode,
-              action: {
-                type: "join-room",
-                player: {
-                  id: player.id,
-                  name: player.name,
-                  avatarColor: player.avatarColor,
-                  avatarImage: player.avatarImage,
-                },
+        const joined = await fetch(target.endpoint, {
+          method: "PATCH",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            code: roomCode,
+            action: {
+              type: "join-room",
+              player: {
+                id: player.id,
+                name: player.name,
+                avatarColor: player.avatarColor,
+                avatarImage: player.avatarImage,
               },
-            }),
-          });
-          if (!joined.ok) {
-            const payload = await readPayload(joined);
-            throw new Error(payload.error || "ROOM_INVITE_JOIN_FAILED");
-          }
+            },
+          }),
+        });
+        if (!joined.ok) {
+          const payload = await readPayload(joined);
+          throw new Error(payload.error || "ROOM_INVITE_JOIN_FAILED");
         }
 
-        const destination = `${target.href}?room=${encodeURIComponent(roomCode)}`;
-        router.replace(destination);
+        router.replace(`${target.href}?room=${encodeURIComponent(roomCode)}`);
         return;
       }
       throw new Error("ROOM_INVITE_NOT_FOUND");
@@ -99,7 +94,7 @@ export function InviteRoomJoiner({
       const code = error instanceof Error ? error.message : "ROOM_INVITE_JOIN_FAILED";
       setMessage(
         code === "ROOM_INVITE_NOT_FOUND"
-          ? "部屋が見つかりません。コードが正しいか、部屋が終了していないか確認してください。"
+          ? "参加できる部屋が見つかりません。コードが正しいか、部屋が終了・開始済みでないか確認してください。"
           : "部屋に参加できませんでした。満員・開始済み・別の部屋へ参加中などの可能性があります。",
       );
       setFailed(true);
