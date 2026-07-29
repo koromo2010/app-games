@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   gameSdkSettingOptionValue,
   type GameSdkSettingDefinition,
@@ -21,15 +22,6 @@ type Props = {
   send: (command: SafeCommand) => Promise<PackageRoom>;
 };
 
-/**
- * The "部屋設定" (room settings) block extracted out of GameSdkFrame.tsx —
- * rendered when `room.phase === "lobby" && moduleRequired("room-settings")`.
- * `visible` is passed in by GameSdkFrameView rather than recomputed here so
- * the gating stays identical to the pre-split component (module profile and
- * Room View phase remain the only feature gates, matching the
- * "module profile and Room View remain the only shell feature gates"
- * contract test).
- */
 export function GameSdkLobbyPanel({
   room,
   common,
@@ -42,11 +34,36 @@ export function GameSdkLobbyPanel({
   run,
   send,
 }: Props) {
+  const [copyingInvite, setCopyingInvite] = useState(false);
   if (!visible) return null;
+
+  const copyInviteLink = async () => {
+    if (copyingInvite) return;
+    setCopyingInvite(true);
+    try {
+      const inviteUrl = `${window.location.origin}/join/${encodeURIComponent(room.code)}`;
+      await navigator.clipboard.writeText(inviteUrl);
+      setMessage("招待リンクをコピーしました。");
+    } catch {
+      setMessage("招待リンクをコピーできませんでした。ブラウザの権限を確認してください。");
+    } finally {
+      setCopyingInvite(false);
+    }
+  };
 
   return (
     <div className={panel}>
-      <h2 className="text-lg font-black">部屋設定</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-lg font-black">部屋設定</h2>
+        <button
+          type="button"
+          className={secondary}
+          disabled={copyingInvite}
+          onClick={() => void copyInviteLink()}
+        >
+          {copyingInvite ? "コピー中…" : "招待リンクをコピー"}
+        </button>
+      </div>
       <div className="mt-3 space-y-3">
         {settingDefinitions.map((definition) => {
           const value = common?.settings[definition.key]
