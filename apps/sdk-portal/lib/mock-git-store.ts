@@ -5,7 +5,7 @@ const GAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?$/;
 const REVISION_PATTERN = /^[a-f0-9]{40}$/;
 const SAFE_SEGMENT_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._@()+, -]*$/;
 const ALLOWED_EXTENSIONS = new Set([
-  ".html", ".css", ".js", ".mjs", ".json", ".txt", ".svg", ".png", ".jpg", ".jpeg",
+  ".html", ".css", ".js", ".mjs", ".json", ".txt", ".md", ".svg", ".png", ".jpg", ".jpeg",
   ".webp", ".gif", ".ico", ".woff", ".woff2", ".mp3", ".ogg", ".wav", ".ts", ".tsx",
 ]);
 const REQUIRED_FILES = new Set(["index.html", "styles.css", "mock.js"]);
@@ -21,7 +21,7 @@ const MAX_FILES = 32;
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 5 * 1024 * 1024;
 const TEXT_EXTENSIONS = new Set([
-  ".html", ".css", ".js", ".mjs", ".json", ".txt", ".svg", ".ts", ".tsx",
+  ".html", ".css", ".js", ".mjs", ".json", ".txt", ".md", ".svg", ".ts", ".tsx",
 ]);
 
 export type MockUploadFile = {
@@ -281,9 +281,9 @@ function packageGitTargetCode(error: unknown) {
         ? "REPOSITORY_NOT_ACCESSIBLE"
         : error.status === 409 && error.operation === "read-ref"
           ? "REPOSITORY_EMPTY"
-        : error.status === 429
-          ? "RATE_LIMITED"
-          : `HTTP_${error.status}`;
+          : error.status === 429
+            ? "RATE_LIMITED"
+            : `HTTP_${error.status}`;
   return `SDK_PACKAGE_GIT_${reason}_${error.operation.toUpperCase().replaceAll("-", "_")}`;
 }
 
