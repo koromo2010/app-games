@@ -6,6 +6,11 @@ on:
       - agent/t26-common-result-shell
     paths:
       - .github/workflows/verify-t26-after-develop-sync.yml
+  pull_request:
+    branches:
+      - develop
+    paths:
+      - .github/workflows/verify-t26-after-develop-sync.yml
 
 permissions:
   contents: read
