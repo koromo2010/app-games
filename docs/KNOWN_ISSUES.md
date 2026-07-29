@@ -4,6 +4,30 @@
 
 この文書は、再調査を減らし、次に直す範囲を選びやすくするための監査記録である。将来構想ではなく、現在のコードで確認できた事実を記録する。状態が「修正済み」の項目は、同じ問題を再導入しないための回帰確認点として残す。
 
+## 2026-07-30 通常の正式Room作成が旧Mock Shellへ入りRuntime未接続になる
+
+状態: 根本原因確定・修正実装／自動検証済み／develop配備・通常正式Room実機確認待ち／main未反映
+
+`test10-1 / link-lines`をSDK Dashboardの制作者トップから通常選択すると、
+最新candidate Packageが存在するにもかかわらずrevisionなしのゲームURLへ遷移し、
+旧`SdkPreviewGameShell`を開いていた。通常カタログの`listCreatorGames`は最新candidate
+revisionを返さず、queryなしのPortal Runtime APIはimmutable
+`sdk_game_package_revisions`ではなく、mutableなゲーム行の`package_revision`または
+`mock_revision`を読んでいた。対象ゲームはcandidate作成済み・正式提出前だったため、
+通常導線だけがMockを解決し、revision指定URLはcandidate Packageを解決していた。
+
+問題Room `GF43`は旧ShellのReact state内で生成されたコードであり、正式Room APIへの
+作成POST、server Room record、保存済み`packageRevision`は存在しない。Runtime logでも
+同時刻の`GF43`作成はなく、queryなしRoom APIは
+`SDK_PREVIEW_PACKAGE_NOT_AVAILABLE`、revision指定Room APIは同じcandidateで成功していた。
+
+修正では通常カタログへ最新candidate revisionを載せ、通常カードもrevision固定URLへ
+遷移させる。さらにqueryなし／revision指定のPortal Runtime APIを同じimmutable Package
+resolverへ統一する。queryなしは最新candidate、revision指定は指定行を解決し、
+Packageが1件もない場合だけ旧Mockへ戻す。Package resolverの例外、Runtime bundle解決、
+grant生成の失敗は503または明示エラーで停止し、Mockへfallbackしない。Room保存、
+旧Room復帰、新revisionで新Roomを作る分岐は変更しない。
+
 ## 2026-07-29 SDK正式Room復帰で旧server stateと新clientが混在する
 
 状態: 修正済み／develop配備・正式Room実機確認済み／main未反映（2026-07-29）

@@ -1,11 +1,13 @@
 import type { GameCatalogEntry, GameTag } from "./game-catalog";
 import { catalogEntryFromDefinition, lockedPlatformModules, type GameDefinition, type GameModulePolicy } from "./game-definition-source";
+import { isSdkPackageRevision } from "./sdk-game-preview-navigation";
 import type { GameSdkModuleProfile } from "@game-fields/game-sdk/modules";
 
 export type SdkGameDescriptor = {
   id: string;
   title: string;
   description: string;
+  revision?: string | null;
   players?: string;
   time?: string;
   tags?: string[];
@@ -38,7 +40,16 @@ export function sdkGamesForCatalog(creatorSlug: string, descriptors: readonly Sd
       private: false,
       stats: "local-disabled",
     },
-    runtime: { kind: "sdk-package", creatorSlug, gameId: game.id },
+    runtime: {
+      kind: "sdk-package",
+      creatorSlug,
+      gameId: game.id,
+      ...(
+        isSdkPackageRevision(game.revision)
+          ? { revision: game.revision }
+          : {}
+      ),
+    },
     modules: {
       platform: lockedPlatformModules,
       core: { rules: { mode: "required" }, gameSurface: { mode: "required" }, domain: { mode: "required" }, presentation: { mode: "required" } },

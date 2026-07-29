@@ -4,7 +4,7 @@
 >
 > 資料を読む順番や作業別の参照先は `docs/README.md` を入口にする。この文書は「現在の開発状態と共通仕様」、`docs/CONTAINER_ARCHITECTURE.md` は「将来案」である。
 
-最終更新: 2026-07-27
+最終更新: 2026-07-30
 
 ## 2026-07-26 優先設計の修正
 
@@ -464,6 +464,7 @@ ChatGPT Workではスレッドごとに作業環境が新しくなり、前ス�
 - 正式Previewはcandidate packageのクライアントとserver AppSetを同じcommit、同じSHA-256で読み、本体の`/api/sdk-preview/<creator>/games/<game>/rooms`へ接続する。Room、参加者、設定、revision、Redis CAS、active room、一覧、再接続、解散、閲覧者別Viewは正式Runtimeと同じ契約を使い、ブラウザ内の模擬Roomを完成判定に使わない。未審査AppSetは本体プロセスへimportせず、QuickJS WASMの新規module／contextで1呼出しごとに隔離し、メモリ32 MiB、スタック1 MiB、実行750 ms、入出力1 MiB、bundle 1 MiBを上限とする。DB、Redis、Cookie、環境変数、filesystem、network、Platform adapterはguestへ渡さず、許可済みWord DB／LLM effectだけを外側Platformが実行する。
 - 現在の保存API名、MCP tool名、private Git階層には移行互換として`mock`が残るが、利用者向けの概念・URLには出さない。保存物はgame packageとして扱い、表URLは`https://<SDK Portal>/<slug>/games/<game-id>`とする。PortalはDBの確定commit SHAへEd25519署名grantを発行し、本体共通UI内のゲーム固有surfaceだけを隔離runtimeへ接続する。
 - モック保存後の最初の利用者向けリンクは、ゲーム単体ではなく制作者トップ`https://<SDK Portal>/<slug>/`とする。MCPの`publish_mock`はUI確認用の`creatorUrl`と`gameUrl`を返すが、正式提出完了にはしない。`publish_game_package`は`game-package/`を受け、Portal側でAppSet原文とserver bundleのSHA-256を再計算してcandidate commitへ固定し、`packageRevision`、`appSetSourceSha256`、`serverBundleSha256`、正式`packagePreviewUrl`を返す。
+- `publish_game_package`済みのゲームを制作者トップから通常選択した場合も、最新candidate revisionをカタログへ載せ、revision指定URLと同じimmutable Package resolver・正式`GameSdkFrame`・Room APIを使う。queryなしのgame URLも最新candidateを同じresolverから取得する。Packageが存在しない場合だけ旧Mock Shellを許可し、Package lookupまたはRuntime解決の例外をMock成功へ変換しない。通常導線で作ったRoomの`runtimeContract.packageRevision`は、そのとき解決したcandidate revisionでなければならない。
 - 隔離previewはGitの確定commitを動的に読むため、ゲームごとのVercel deploymentを行わない。実行ProjectはDB・Redis・Blob・管理API・Git書込権限を持たず、専用mock Gitの読取専用資格だけを持つ。60秒のclient grantはServer Component render時に固定せず、Room参加後にpackage iframeが実際にnavigateする直前、同一originの認証済み`client-runtime` routeで固定revision向けに再発行する。grantはfragmentから自originへのform POSTだけに使い、PreviewはCookieや303遷移を介さずPOST応答でHTML骨格を直接返す。`allow-same-origin`を付けないopaque-origin iframeでCSS・JavaScript等を読むため、HTML、CSS、静的module参照を、source kind・制作者・ゲーム・固定commit・正規化済みasset path・期限へ限定したHMAC URLへ書き換える。tokenは入口grant、別asset、別revisionへ転用できない。CSPとiframeの両方で`allow-same-origin`と外部通信を許可せず、`form-action`と`frame-ancestors`はPreview自身と許可済み親originへ限定し、inline script/styleと`unsafe-inline`を追加しない。
 - 正式packageのブラウザ側へ注入するのは`GameFieldsRoom.subscribe`と`GameFieldsRoom.send`だけで、Platform resource adapterは公開しない。クライアントは閲覧者別Viewを描画してCommandを送るだけとし、ゲーム状態、秘密、参加者同期、手番、結果をブラウザ正本にしない。AppSetだけが`context.resources.contentSource`と`context.resources.llm`を要求でき、portable protocolはeffectを外側へ返して承認済みPlatform adapterから結果を受け取る。effect失敗時に状態を進めるかどうかはAppSetの通常Command契約で決まり、共通側にゲーム固有fallbackを置かない。
 - package client用grantとportable server用grantはaudienceを分離する。ブラウザ用asset routeから`server.bundle.js`、package manifest、`source/`配下を返さない。server grantだけが保存済みbundle SHA-256を持ち、QuickJS runnerは実行直前に取得したbundleを再hashして不一致を拒否する。クライアントURLやasset tokenを取得してもserver AppSetを実行・取得できる権限へ昇格させない。path単位asset tokenは1時間bucket内で決定的、1〜2時間だけ有効とし、token期限以下のbrowser／CDN cacheだけを許可する。署名をpathへ含め、query付きasset要求、`stale-while-revalidate`、期限後の共有を拒否する。server grantは10分とし、runner URLは環境別の固定Preview originとrevision path以外を本体側でも拒否する。
