@@ -158,15 +158,23 @@ function escapeHtmlAttribute(value: string) {
     .replaceAll(">", "&gt;");
 }
 
+function removeLegacyPresetScripts(html: string) {
+  return html.replace(
+    /<script\b(?=[^>]*(?:data-game-fields-preset|src\s*=\s*["'][^"']*game-fields\/preset\.js(?:[?#][^"']*)?["']))[^>]*>\s*<\/script\s*>/gi,
+    "",
+  );
+}
+
 export function injectGameFieldsPackageClient(
   html: string,
   runtimeSrc: string,
 ) {
-  if (/<script\b[^>]*\bdata-game-fields-package-room(?:\s|=|>)/i.test(html)) {
-    return html;
+  const packageHtml = removeLegacyPresetScripts(html);
+  if (/<script\b[^>]*\bdata-game-fields-package-room(?:\s|=|>)/i.test(packageHtml)) {
+    return packageHtml;
   }
   const script = `<script data-game-fields-package-room src="${escapeHtmlAttribute(runtimeSrc)}"></script>`;
-  return /<\/head\s*>/i.test(html)
-    ? html.replace(/<\/head\s*>/i, `${script}</head>`)
-    : `${script}${html}`;
+  return /<head\b[^>]*>/i.test(packageHtml)
+    ? packageHtml.replace(/<head\b[^>]*>/i, (head) => `${head}${script}`)
+    : `${script}${packageHtml}`;
 }
