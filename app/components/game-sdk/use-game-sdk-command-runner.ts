@@ -3,6 +3,7 @@
 import {
   useCallback,
   useMemo,
+  useRef,
   type Dispatch,
   type MutableRefObject,
   type SetStateAction,
@@ -55,6 +56,8 @@ export function useGameSdkCommandRunner({
   moduleProfile,
   wrapDebugCommand,
 }: Options) {
+  const attemptedTimerExpiryRef = useRef(new Set<string>());
+
   const run = useCallback(async (operation: () => Promise<PackageRoom>) => {
     if (pendingActionRef.current) return null;
     pendingActionRef.current = true;
@@ -98,14 +101,56 @@ export function useGameSdkCommandRunner({
   const send = useCallback(async (command: SafeCommand) => {
     const current = roomRef.current;
     if (!current) throw new Error("ROOM_REQUIRED");
-    const operation = async () => (await runtime.sendCommand(current.code, {
-      expectedRevision: current.revision,
+
+    const isTimerExpiry = command.type === "room/expire-timer"
+      && "turnSequence" in command
+      && Number.isSafeInteger(command.turnSequence);
+    const turnSequence = isTimerExpiry ? Number(command.turnSequence) : null;
+    const expiryKey = turnSequence === null ? null : `${current.code}:${turnSequence}`;
+
+    if (expiryKey) {
+      if (attemptedTimerExpiryRef.current.has(expiryKey)) return current;
+      attemptedTimerExpiryRef.current.add(expiryKey);
+      if (attemptedTimerExpiryRef.current.size > 64) {
+        attemptedTimerExpiryRef.current = new Set([expiryKey]);
+      }
+    }
+
+    const dispatch = async (room: PackageRoom) => (await runtime.sendCommand(room.code, {
+      expectedRevision: room.revision,
       command,
     })).room;
-    return shouldTrackGameSdkAiActivity({ usesLlm, moduleProfile })
-      ? withAiActivity("SDKゲームのAI処理", operation)
-      : operation();
-  }, [moduleProfile, roomRef, runtime, usesLlm]);
+    const operation = () => dispatch(current);
+
+    try {
+      return shouldTrackGameSdkAiActivity({ usesLlm, moduleProfile })
+        ? await withAiActivity("SDKゲームのAI処理", operation)
+        : await operation();
+    } catch (error) {
+      if (
+        expiryKey
+        && turnSequence !== null
+        && error instanceof GameSdkHttpClientRuntimeError
+        && error.code === "STALE_REVISION"
+      ) {
+        const latest = await runtime.readRoom(current.code);
+        if (latest) {
+          attachLatestRoom(latest);
+          const latestTimer = latest.view.common.timer;
+          if (
+            latest.phase !== "result"
+            && latestTimer?.turnSequence === turnSequence
+            && latestTimer.deadlineAt !== null
+            && Date.now() >= latestTimer.deadlineAt
+          ) {
+            return dispatch(latest);
+          }
+          return latest;
+        }
+      }
+      throw error;
+    }
+  }, [attachLatestRoom, moduleProfile, roomRef, runtime, usesLlm]);
 
   const sendPackageCommand = useCallback(async (command: SafeCommand) => (
     send(wrapDebugCommand(command))
