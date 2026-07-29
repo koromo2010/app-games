@@ -1,5 +1,4 @@
-import { notFound } from "next/navigation";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import {
   authenticateCreatorOwner,
   getCreatorGameModuleProfile,
@@ -14,16 +13,33 @@ import { getCreatorModuleCustomizationAccess } from "@/lib/module-customization-
 import { GameModuleReview } from "./GameModuleReview";
 
 const GAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?$/;
+const REVISION_PATTERN = /^[a-f0-9]{40}$/;
 
-export default async function CreatorGamePage({ params }: { params: Promise<{ instanceId: string; gameId: string }> }) {
+export default async function CreatorGamePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ instanceId: string; gameId: string }>;
+  searchParams: Promise<{ revision?: string }>;
+}) {
   const raw = await params;
+  const query = await searchParams;
   const instanceId = normalizeInstanceSlug(raw.instanceId);
   const gameId = raw.gameId.trim().toLowerCase();
-  if (validateInstanceSlug(instanceId) || !GAME_PATTERN.test(gameId)) notFound();
+  const revision = query.revision?.trim() ?? "";
+  if (
+    validateInstanceSlug(instanceId)
+    || !GAME_PATTERN.test(gameId)
+    || (revision && !REVISION_PATTERN.test(revision))
+  ) notFound();
+
+  const returnPath = `/${instanceId}/games/${gameId}${
+    revision ? `?revision=${encodeURIComponent(revision)}` : ""
+  }`;
   const account = await getSdkAccountSession().catch(() => null);
   if (!account) {
     redirect(
-      `/api/account-link/start?returnTo=${encodeURIComponent(`/${instanceId}/games/${gameId}`)}`,
+      `/api/account-link/start?returnTo=${encodeURIComponent(returnPath)}`,
     );
   }
   const owner = account
@@ -50,7 +66,10 @@ export default async function CreatorGamePage({ params }: { params: Promise<{ in
     audience: new URL(appBaseUrl).origin,
     creatorSlug: instanceId,
   });
-  const previewUrl = `${appBaseUrl}/sdk-preview/${instanceId}/games/${gameId}#${new URLSearchParams({
+  const previewPath = `/sdk-preview/${instanceId}/games/${gameId}${
+    revision ? `?revision=${encodeURIComponent(revision)}` : ""
+  }`;
+  const previewUrl = `${appBaseUrl}${previewPath}#${new URLSearchParams({
     sdkPreviewLink: linkCode,
   }).toString()}`;
   return <main className="platform-preview-shell">
