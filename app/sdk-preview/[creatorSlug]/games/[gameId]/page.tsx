@@ -85,6 +85,11 @@ export default async function SdkGamePage({
         <GameSdkFrame
           backHref={`/sdk-preview/${creatorSlug}`}
           creatorSlug={creatorSlug}
+          endpoint={`/api/sdk-preview/${encodeURIComponent(
+            creatorSlug,
+          )}/games/${encodeURIComponent(
+            gameId,
+          )}/rooms?revision=${encodeURIComponent(game.revision)}`}
           gameId={gameId}
           runtimeId={sdkPreviewPackageRuntimeId(
             creatorSlug,
