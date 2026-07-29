@@ -10,7 +10,12 @@ import { GameSdkHttpClientRuntimeError } from "@game-fields/game-sdk/client-runt
 import type { GameSdkModuleProfile } from "@game-fields/game-sdk/modules";
 import { withAiActivity } from "@/lib/ai-activity-client";
 import { shouldTrackGameSdkAiActivity } from "./game-sdk-frame-presentation";
-import type { GameSdkFrameRuntime, PackageRoom, SafeCommand } from "./game-sdk-frame-types";
+import type {
+  DebugWrappedCommand,
+  GameSdkFrameRuntime,
+  PackageRoom,
+  SafeCommand,
+} from "./game-sdk-frame-types";
 
 type Options = {
   runtime: GameSdkFrameRuntime;
@@ -23,7 +28,7 @@ type Options = {
   attachLatestRoom: (next: PackageRoom) => PackageRoom;
   usesLlm: boolean;
   moduleProfile: GameSdkModuleProfile;
-  wrapDebugCommand: <TCommand extends { type: string }>(command: TCommand) => TCommand;
+  wrapDebugCommand: <TCommand extends { type: string }>(command: TCommand) => TCommand | DebugWrappedCommand<TCommand>;
 };
 
 /**
