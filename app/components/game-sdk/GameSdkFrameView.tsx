@@ -12,6 +12,7 @@ import { gameTopBannerActionClass } from "@/app/components/GameTopMenu";
 import { PlayerAuthGate } from "@/app/components/PlayerAuthGate";
 import { GameSdkDebugPanel } from "./GameSdkDebugPanel";
 import { GameSdkLobbyPanel } from "./GameSdkLobbyPanel";
+import { GameSdkPackageRevisionPanel } from "./GameSdkPackageRevisionPanel";
 import { GameSdkResultPanel } from "./GameSdkResultPanel";
 import { GameSdkIframeBridge } from "./GameSdkIframeBridge";
 import { panel, primary, secondary } from "./game-sdk-frame-shared";
@@ -23,6 +24,7 @@ import type {
   PackageRoom,
   SafeCommand,
 } from "./game-sdk-frame-types";
+import type { GameSdkPackageRevisionIssue } from "@/lib/game-sdk-package-revision";
 
 export type GameSdkFrameViewProps = {
   // top level
@@ -38,6 +40,9 @@ export type GameSdkFrameViewProps = {
   iframeRef: RefObject<HTMLIFrameElement | null>;
   runtime: GameSdkFrameRuntime;
   runtimeUrl: string;
+  packageRevisionIssue: GameSdkPackageRevisionIssue | null;
+  onResumePinnedRoom: () => void;
+  onCreateRequestedRoom: () => void;
   moduleRequired: (id: GameSdkModuleId) => boolean;
   pending: boolean;
   message: string;
@@ -117,6 +122,9 @@ export function GameSdkFrameView(props: GameSdkFrameViewProps) {
     iframeRef,
     runtime,
     runtimeUrl,
+    packageRevisionIssue,
+    onResumePinnedRoom,
+    onCreateRequestedRoom,
     moduleRequired,
     pending,
     message,
@@ -175,6 +183,22 @@ export function GameSdkFrameView(props: GameSdkFrameViewProps) {
       title={title}
       onAuthenticated={onPlayerAuthenticated}
     />;
+  }
+
+  if (!room && packageRevisionIssue) {
+    return (
+      <GameSdkPackageRevisionPanel
+        backHref={backHref}
+        creatorSlug={creatorSlug}
+        issue={packageRevisionIssue}
+        message={message}
+        onCreateRequestedRoom={onCreateRequestedRoom}
+        onResumePinnedRoom={onResumePinnedRoom}
+        pending={pending}
+        rules={rules}
+        title={title}
+      />
+    );
   }
 
   if (!room) {

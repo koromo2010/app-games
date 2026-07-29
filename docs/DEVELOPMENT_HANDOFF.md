@@ -511,7 +511,14 @@ playing中のダミー操作対象、AppSetの`expireAppTurn`を使う1手・次
 SDK RoomコードはRealtime、観戦、正式Room APIの全経路で4〜12文字を受け付ける。
 formal package Shellは共通`useGameSdkActiveRoomRestore`で初回active Room確認が
 終わるまで新規作成・参加を表示せず、参加中Roomがあれば自動復帰する。別タブ等との
-競合で`PLAYER_ACTIVE_ROOM`を受けた場合も同じ共通経路で既存Roomへ戻す。Storeは
+競合で`PLAYER_ACTIVE_ROOM`を受けた場合も同じ共通経路で既存Roomを再取得するが、
+Room recordからSnapshotへ引き継いだ`packageRevision`がShellのclient revisionと
+一致した場合だけattachしてiframeを起動する。不一致時は旧Room固定revisionで
+外側ページ・manifest・clientをまとめて再読込するか、URL指定revisionで新Roomを作るかを
+明示選択する。新Room作成時のactive索引置換は、本人・現在のRoomコード・旧revision・
+新revisionがserver側で一致した場合だけ許可し、旧Roomは解散・削除しない。
+固定revision不明、旧server package解決失敗、client ready未到達は明示エラーで停止し、
+Mockや別revisionへfallbackしない。Storeは
 進行中かつ本人が参加中のRoomだけを移動拒否し、result、期限切れ、欠損、非参加Roomの
 索引は新規Room確保時または復元時に安全に置き換え・解除する。旧result Roomの再戦や
 遅着したCommand応答は、別Roomへ移ったactive索引や新しいrevisionを上書きしない。

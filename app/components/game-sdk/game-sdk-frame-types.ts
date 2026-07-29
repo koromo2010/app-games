@@ -90,6 +90,7 @@ export type GameSdkFrameProps = {
   creatorSlug?: string;
   endpoint?: string;
   gameId: string;
+  packageRevision: string;
   runtimeId: string;
   runtimeUrl: string;
   title: string;

@@ -86,6 +86,14 @@ SDK Previewのportable serverを呼ぶ。Portalの`/api/health`はDB schemaに�
 408／502／503／504だけを1回再試行し、401／403の認証不整合は再試行で隠さず
 `GAME_SDK_REMOTE_RUNNER_AUTH_FAILED`として区別する。
 
+formal package Roomは作成時の`runtimeContract.packageRevision`を不変条件として保持し、
+すべてのRoom Snapshotと一覧へそのrevisionを返す。active Room復帰時にURL指定revisionと
+Room固定revisionが同じなら通常復帰し、異なる場合はclient iframeを起動しない。利用者は
+旧Room固定revisionでページ全体を再読込するか、URL指定revisionの新Roomへactive索引を
+明示置換する。置換はserver側で本人・active Roomコード・旧revision・新revisionを
+原子的に照合し、旧Roomの解散や削除は行わない。revisionまたはpackageを解決できない場合と
+clientがreadyにならない場合は明示エラーで停止し、Mockや別revisionへfallbackしない。
+
 ## 共通LLMゲートウェイ
 
 ゲームからAIプロバイダーを利用する処理は `lib/game-llm.ts` を経由する。ゲーム固有ルートからOpenAI、Gemini、Groqを直接呼ばない。

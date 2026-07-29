@@ -28,6 +28,12 @@ function json(payload: unknown, status: number) {
 async function handle(request: Request, context: RouteContext, method: Method) {
   const { gameId: rawGameId } = await context.params;
   const gameId = rawGameId.trim().toLowerCase();
+  const requestedRevision = new URL(request.url).searchParams
+    .get("revision")
+    ?.trim() || undefined;
+  if (requestedRevision && !/^[a-f0-9]{40}$/.test(requestedRevision)) {
+    return json({ error: "GAME_SDK_INVALID_PACKAGE_REVISION" }, 400);
+  }
   const route = `/api/game-sdk/${gameId}/rooms`;
   const telemetry = createRequestTelemetry(request, route, {
     game: `sdk:${gameId}`,
@@ -42,7 +48,11 @@ async function handle(request: Request, context: RouteContext, method: Method) {
   let registration;
   try {
     registration = approvedGameSdkRegistration(gameId)
-      ?? await loadApprovedGameSdkRuntimeRegistration(gameId);
+      ?? await loadApprovedGameSdkRuntimeRegistration(
+        gameId,
+        process.env,
+        requestedRevision,
+      );
   } catch (error) {
     telemetry.failure("game-sdk.catalog", error, 503, {
       action: "runtime-resolve",

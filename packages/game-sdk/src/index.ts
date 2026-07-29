@@ -398,6 +398,12 @@ export type GameSdkRoomSnapshot<TRoomView> = {
   revision: number;
   phase: string;
   view: TRoomView;
+  /**
+   * Immutable package revision fixed when a formal Platform Room is created.
+   * Mock runtimes may omit it, but formal package shells must fail closed when
+   * it is absent rather than choosing a client package implicitly.
+   */
+  packageRevision?: string;
 };
 
 export type GameSdkViewPermissions = {
@@ -445,6 +451,7 @@ export type GameSdkRoomListItem = {
   code: string;
   phase: string;
   revision: number;
+  packageRevision?: string;
   playerCount: number;
   maximumPlayers: number;
   updatedAt: number;
@@ -481,6 +488,10 @@ export type GameSdkClientRuntime<TCreateInput, TCommand extends { type: string }
     roomCode: string;
     create: TCreateInput;
     requestId?: string;
+    replaceActiveRoom?: {
+      code: string;
+      packageRevision: string;
+    };
   }): Promise<GameSdkRoomSnapshot<TRoomView>>;
   readRoom(code: string): Promise<GameSdkRoomSnapshot<TRoomView> | null>;
   readActiveRoom(): Promise<GameSdkRoomSnapshot<TRoomView> | null>;

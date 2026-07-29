@@ -2997,3 +2997,38 @@ Total output lines: 6329
 ### 未対応・保留
 
 - なし。
+
+## 2026-07-29 — SDK正式Room復帰のpackageRevision不整合を遮断
+
+### 利用者からの要望
+
+- `test10-1 / link-lines`の正式Room導線で、旧Room `30QT`のserver stateとURL指定の新revision clientが混在する高優先度ブロッカーを、#26より先にdevelopで修正する。
+- Room固定revisionとclient revisionの一致をロード構造で保証し、不一致時は旧Room復帰または新revisionでの新Room作成を明示選択させる。
+- Vercel Preview deploymentは使わず、関連dev ProjectのProduction DeploymentとSDK Portalの正式Room導線で確認する。mainへは反映しない。
+- 「部屋を解散した後にタブだけ閉じた」現象は、証拠付きで再現しない限り今回へ混ぜない。
+
+### 判断
+
+- Room recordの`runtimeContract.packageRevision`をSnapshot、Room一覧、HTTP clientへ欠落なく渡し、`GameSdkFrame`のattach、watch、Command応答、active Room再取得のすべてでclient revisionとの一致を先に検査する。
+- 不一致時の「旧Roomへ戻る」はrevision queryだけでなく外側ページ全体をRoom固定revisionへ再読込し、manifest、module profile、server bundle、client iframeを同じ版へ揃える。
+- 「新Roomを作る」は、server側で本人、現在のactive Roomコード、旧packageRevision、URL指定の新packageRevisionを再照合した場合だけactive索引を置換する。旧Roomの解散・削除・参加者変更は行わない。
+- Room固定revision不明、固定package解決失敗、client ready未到達はfail closedとし、Mockや別revisionへ暗黙fallbackしない。
+
+### 実施結果
+
+- 原因は、server adapterが旧Room固定bundleを正しく解決する一方、`GameSdkRoomSnapshot`が`packageRevision`を公開せず、ShellがURL指定revisionのiframeを独立して起動していたことと特定した。
+- formal package RoomのSnapshot・一覧へ固定revisionを追加し、revision一致ゲート、明示選択画面、固定revision URL再読込、照合付きactive Room置換、client load timeoutの明示エラーを共通基盤へ実装した。
+- candidate Previewと採用済みiframe packageの両方を同じ契約へ揃え、通常のSDK Roomとnative Roomの保存契約は変更していない。
+- 現時点ではdevelopへのcommit・push前であり、mainは変更していない。
+
+### 検証
+
+- 追加・関連テスト13件、SDK Shell契約8件、SDK依存境界検査、ESLintは成功した。
+- `npm run build`、`npm run build:sdk`、`npm run build:sdk-preview`は成功した。
+- 全体テストの初回実行は693/696件成功だった。3失敗のうちcloneで未取得だった`sdk-starter-dev` refは取得後に対象2件の成功を確認した。残る今回差分外の既存2件は、Node 24でJSON import attributeが必要な`game-sdk-package-manifest`と、既存`InviteRoomJoiner`がSDK Preview対応済みなのに否定する旧contract testである。
+
+### 未対応・保留
+
+- developへcommit・pushする。
+- `app-games-dev`、`app-games-sdk-dev`、`app-games-preview-dev`の対象commit Production DeploymentがREADYであることを確認する。
+- SDK Portalの「正式Roomで確認」から、Room `30QT`の不一致表示、旧revision復帰、新revisionでの新Room作成、両経路の実操作を確認する。

@@ -8,6 +8,7 @@ import {
 import type {
   GameFieldsAuthenticatedIdentity,
   GameFieldsPlatformRoomRecord,
+  GameFieldsPlatformRuntimeContract,
 } from "@game-fields/game-runtime";
 import {
   createAuthenticatedGameSdkPlatformAdapter,
@@ -106,14 +107,28 @@ function memoryRoomStore(): GameSdkPlatformRoomStore<SdkCountUpRoom> {
       delete entry.leaseExpiresAt;
       return true;
     },
-    async claimActiveRoom(playerId, targetCode) {
+    async claimActiveRoom(playerId, targetCode, replacement) {
       const previousCode = activeRooms.get(playerId) ?? null;
       const previous = previousCode ? rooms.get(previousCode) : null;
+      const replacementCode = replacement?.code.trim().toUpperCase();
+      const canReplaceCurrent = Boolean(
+        replacement
+        && previous
+        && previousCode === previous.code
+        && previous.code === replacementCode
+        && playerIds(previous).includes(playerId)
+        && previous.runtimeContract.packageRevision === replacement.packageRevision
+        && replacement.packageRevision !== replacement.nextPackageRevision
+      );
+      if (replacement && !canReplaceCurrent) {
+        throw new Error("GAME_SDK_ACTIVE_ROOM_REPLACEMENT_FORBIDDEN");
+      }
       if (
         previous
         && previousCode !== targetCode
         && playerIds(previous).includes(playerId)
         && previous.phase !== "result"
+        && !canReplaceCurrent
       ) {
         throw new Error("PLAYER_ACTIVE_ROOM");
       }
@@ -142,17 +157,22 @@ function memoryRoomStore(): GameSdkPlatformRoomStore<SdkCountUpRoom> {
       }
       return clone(record);
     },
-    async listRooms(_cursor, maximumPlayers) {
+    async listRooms(_cursor, maximumPlayers, packageRevision) {
       return {
         rooms: [...rooms.values()]
           .filter((record) => (
             record.phase === "lobby"
+            && (
+              !packageRevision
+              || record.runtimeContract.packageRevision === packageRevision
+            )
             && record.room.players.length < maximumPlayers
           ))
           .map((record) => ({
             code: record.code,
             phase: record.phase,
             revision: record.revision,
+            packageRevision: record.runtimeContract.packageRevision,
             playerCount: record.room.players.length,
             maximumPlayers,
             updatedAt: record.updatedAt,
@@ -218,6 +238,21 @@ const player: GameFieldsAuthenticatedIdentity = {
   debugAccess: false,
 };
 
+function packageRuntimeContract(
+  packageRevision: string,
+  packageRootSha256: string,
+): GameFieldsPlatformRuntimeContract {
+  return {
+    packageRevision,
+    packageRootSha256,
+    runtimeVersion: "game-fields-runner-test",
+    sdkContractVersion: 2,
+    roomSchemaVersion: 2,
+    resourceProtocolVersion: 1,
+    clientBridgeVersion: 1,
+  };
+}
+
 test("SDK HTTP Client Runtimeはactorを送らず認証adapterと永続Runtimeを縦断する", async () => {
   let identity = host;
   const adapter = createAuthenticatedGameSdkPlatformAdapter({
@@ -263,6 +298,7 @@ test("SDK HTTP Client Runtimeはactorを送らず認証adapterと永続Runtime�
       code: "RACE",
       phase: "lobby",
       revision: 1,
+      packageRevision: "builtin:sdk-count-up-proof:sdk-2",
       playerCount: 1,
       maximumPlayers: 4,
       updatedAt: 1_000,
@@ -428,6 +464,155 @@ test("SDK HTTP Client Runtimeはactorを送らず認証adapterと永続Runtime�
   identity = host;
   assert.equal(await runtime.dissolveHostedRooms(), 1);
   assert.equal(await runtime.readRoom("NEXT"), null);
+});
+
+test("正式Room復帰は固定packageRevisionを保持し、不一致時だけ明示的な新Room置換を許可する", async () => {
+  const oldRevision = "42292ad52a3bafcd751d6ba1767534d794c0c602";
+  const requestedRevision = "02efe902e4ed49ea525abb862da74c123651efcb";
+  const oldContract = packageRuntimeContract(oldRevision, "a".repeat(64));
+  const requestedContract = packageRuntimeContract(
+    requestedRevision,
+    "b".repeat(64),
+  );
+  const store = memoryRoomStore();
+  const createRuntime = (
+    adapter: AuthenticatedGameSdkPlatformAdapter<
+      SdkCountUpCreateInput,
+      SdkCountUpCommand,
+      SdkCountUpRoomView
+    >,
+  ) => createGameSdkHttpClientRuntime<
+    SdkCountUpCreateInput,
+    SdkCountUpCommand,
+    SdkCountUpRoomView
+  >({
+    endpoint: "https://game-fields.test/api/sdk-preview/test10-1/games/link-lines/rooms",
+    fetcher: httpFetcher(createGameSdkOnlineRoomHttpHandlers({
+      adapter: adapter as unknown as AuthenticatedGameSdkPlatformAdapter<
+        unknown,
+        { type: string },
+        unknown
+      >,
+    })),
+    gameId: "sdk-count-up-proof",
+  });
+  const oldAdapter = createAuthenticatedGameSdkPlatformAdapter({
+    module: sdkCountUpServerModule,
+    roomStore: store,
+    runtimeContract: oldContract,
+    resolveIdentity: async () => host,
+    now: () => 2_000,
+    createRequestId: () => "request-old-room",
+  });
+  const oldRuntime = createRuntime(oldAdapter);
+  const oldRoom = await oldRuntime.createRoom({
+    roomCode: "30QT",
+    create: {
+      settings: { target: 3 },
+      app: {},
+    },
+  });
+  assert.equal(oldRoom.packageRevision, oldRevision);
+  assert.equal(
+    (await oldRuntime.readActiveRoom())?.packageRevision,
+    oldRevision,
+    "same-revision active Room restore must retain the pinned package revision",
+  );
+
+  const requestedAdapter = createAuthenticatedGameSdkPlatformAdapter({
+    module: sdkCountUpServerModule,
+    roomStore: store,
+    runtimeContract: requestedContract,
+    allowActiveRoomPackageRevisionReplacement: true,
+    async resolveRuntime(contract) {
+      if (contract.packageRevision !== oldRevision) return null;
+      return {
+        module: sdkCountUpServerModule,
+        runtimeContract: oldContract,
+      };
+    },
+    resolveIdentity: async () => host,
+    now: () => 3_000,
+    createRequestId: () => "request-new-room",
+  });
+  const requestedRuntime = createRuntime(requestedAdapter);
+  const restoredFromRequestedUrl = await requestedRuntime.readActiveRoom();
+  assert.equal(restoredFromRequestedUrl?.code, "30QT");
+  assert.equal(
+    restoredFromRequestedUrl?.packageRevision,
+    oldRevision,
+    "the URL-selected revision must not overwrite Room metadata",
+  );
+  assert.deepEqual(
+    (await requestedRuntime.listRooms()).rooms,
+    [],
+    "a lounge must not advertise Rooms from a different package revision",
+  );
+  assert.equal((await oldRuntime.listRooms()).rooms[0]?.packageRevision, oldRevision);
+
+  await assert.rejects(
+    () => requestedRuntime.createRoom({
+      roomCode: "NEW1",
+      create: {
+        settings: { target: 3 },
+        app: {},
+      },
+    }),
+    (error: unknown) => (
+      error instanceof GameSdkHttpClientRuntimeError
+      && error.status === 409
+      && error.code === "PLAYER_ACTIVE_ROOM"
+    ),
+    "a mismatched active Room must not be silently replaced",
+  );
+  await assert.rejects(
+    () => requestedRuntime.createRoom({
+      roomCode: "NEW2",
+      create: {
+        settings: { target: 3 },
+        app: {},
+      },
+      replaceActiveRoom: {
+        code: "30QT",
+        packageRevision: "c".repeat(40),
+      },
+    }),
+    (error: unknown) => (
+      error instanceof GameSdkHttpClientRuntimeError
+      && error.status === 403
+      && error.code === "GAME_SDK_ACTIVE_ROOM_REPLACEMENT_FORBIDDEN"
+    ),
+    "the replacement must be bound to the exact active Room revision",
+  );
+
+  const requestedRoom = await requestedRuntime.createRoom({
+    roomCode: "NEW3",
+    create: {
+      settings: { target: 3 },
+      app: {},
+    },
+    replaceActiveRoom: {
+      code: "30QT",
+      packageRevision: oldRevision,
+    },
+  });
+  assert.equal(requestedRoom.packageRevision, requestedRevision);
+  assert.deepEqual(
+    {
+      code: (await requestedRuntime.readActiveRoom())?.code,
+      packageRevision: (await requestedRuntime.readActiveRoom())?.packageRevision,
+    },
+    {
+      code: "NEW3",
+      packageRevision: requestedRevision,
+    },
+    "explicit replacement must create and activate a Room on the URL revision",
+  );
+  assert.equal(
+    (await requestedRuntime.readRoom("30QT"))?.packageRevision,
+    oldRevision,
+    "the old Room remains pinned and is never reinterpreted as the new package",
+  );
 });
 
 test("Platform DEBUG bridge keeps pinned package bundles compatible", async () => {

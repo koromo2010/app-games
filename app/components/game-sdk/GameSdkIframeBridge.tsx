@@ -4,6 +4,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useRef,
   useState,
   type MutableRefObject,
   type RefObject,
@@ -23,6 +24,7 @@ type Options = {
   iframeRef: RefObject<HTMLIFrameElement | null>;
   roomRef: MutableRefObject<PackageRoom | null>;
   runtime: GameSdkFrameRuntime;
+  runtimeUrl: string;
   debugCanSend: boolean;
   debugViewer: DebugViewer;
   postRoom: (room: PackageRoom | null) => void;
@@ -36,6 +38,7 @@ export function useGameSdkIframeBridge({
   iframeRef,
   roomRef,
   runtime,
+  runtimeUrl,
   debugCanSend,
   debugViewer,
   postRoom,
@@ -45,6 +48,22 @@ export function useGameSdkIframeBridge({
   sendPackageCommand,
 }: Options) {
   const [frameHeight, setFrameHeight] = useState(720);
+  const [clientLoadFailed, setClientLoadFailed] = useState(false);
+  const clientReadyRef = useRef(false);
+  const clientLoadTimerRef = useRef<number | null>(null);
+
+  const clearClientLoadTimer = useCallback(() => {
+    if (clientLoadTimerRef.current !== null) {
+      window.clearTimeout(clientLoadTimerRef.current);
+      clientLoadTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    clientReadyRef.current = false;
+    clearClientLoadTimer();
+    return clearClientLoadTimer;
+  }, [clearClientLoadTimer, runtimeUrl]);
 
   useEffect(() => {
     const listener = (event: MessageEvent) => {
@@ -58,6 +77,9 @@ export function useGameSdkIframeBridge({
         return;
       }
       if (payload.type === "game-fields:room-ready") {
+        clientReadyRef.current = true;
+        clearClientLoadTimer();
+        setClientLoadFailed(false);
         postRoom(roomRef.current);
         return;
       }
@@ -114,6 +136,7 @@ export function useGameSdkIframeBridge({
     return () => window.removeEventListener("message", listener);
   }, [
     attachLatestRoom,
+    clearClientLoadTimer,
     debugCanSend,
     debugViewer,
     iframeRef,
@@ -127,9 +150,19 @@ export function useGameSdkIframeBridge({
 
   const handleLoad = useCallback(() => {
     postRoom(roomRef.current);
-  }, [postRoom, roomRef]);
+    clearClientLoadTimer();
+    setClientLoadFailed(false);
+    if (clientReadyRef.current) return;
+    clientLoadTimerRef.current = window.setTimeout(() => {
+      if (clientReadyRef.current) return;
+      setClientLoadFailed(true);
+      setMessage(
+        "固定revisionのclientを読み込めませんでした。旧Mockや別revisionには切り替えていません。",
+      );
+    }, 15_000);
+  }, [clearClientLoadTimer, postRoom, roomRef, setMessage]);
 
-  return { frameHeight, handleLoad };
+  return { clientLoadFailed, frameHeight, handleLoad };
 }
 
 type ViewProps = {
@@ -170,7 +203,6 @@ const GameSdkTimerCountdown = memo(function GameSdkTimerCountdown({
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    setNow(Date.now());
     const interval = window.setInterval(() => setNow(Date.now()), 250);
     return () => window.clearInterval(interval);
   }, [deadlineAt]);
@@ -223,10 +255,11 @@ export function GameSdkIframeBridge({
   attachLatestRoom,
   sendPackageCommand,
 }: ViewProps) {
-  const { frameHeight, handleLoad } = useGameSdkIframeBridge({
+  const { clientLoadFailed, frameHeight, handleLoad } = useGameSdkIframeBridge({
     iframeRef,
     roomRef,
     runtime,
+    runtimeUrl,
     debugCanSend,
     debugViewer,
     postRoom,
@@ -245,6 +278,20 @@ export function GameSdkIframeBridge({
           pending={pending}
           onRecoverTimeout={onRecoverTimeout}
         />
+      )}
+      {clientLoadFailed && (
+        <div
+          className="mb-3 rounded-xl border border-red-300 bg-red-50 p-4 font-bold text-red-800"
+          role="alert"
+        >
+          <p>Package clientを読み込めませんでした。</p>
+          <p className="mt-1 font-mono text-xs">
+            GAME_SDK_PACKAGE_CLIENT_LOAD_FAILED
+          </p>
+          <p className="mt-2 text-sm">
+            固定revisionのまま停止しています。旧Mockや別revisionへのフォールバックは行っていません。
+          </p>
+        </div>
       )}
       <GameSdkIframe
         ref={iframeRef}

@@ -91,6 +91,7 @@ export default async function SdkGamePage({
             gameId,
           )}/rooms?revision=${encodeURIComponent(game.revision)}`}
           gameId={gameId}
+          packageRevision={game.revision}
           runtimeId={sdkPreviewPackageRuntimeId(
             creatorSlug,
             gameId,

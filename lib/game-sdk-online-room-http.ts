@@ -58,6 +58,7 @@ const forbiddenCodes = new Set([
   "MEMBER_REQUIRED",
   "PLAYER_NOT_IN_ROOM",
   "HOST_MUST_DISSOLVE_ROOM",
+  "GAME_SDK_ACTIVE_ROOM_REPLACEMENT_FORBIDDEN",
 ]);
 
 const conflictCodes = new Set([
@@ -211,6 +212,23 @@ function commandEnvelope(value: unknown): GameSdkCommandEnvelope<SafeCommand> | 
   };
 }
 
+function activeRoomReplacement(value: unknown) {
+  if (value === undefined) return undefined;
+  const replacement = objectBody(value);
+  const code = roomCode(replacement?.code).normalize("NFKC").trim().toUpperCase();
+  const packageRevision = typeof replacement?.packageRevision === "string"
+    ? replacement.packageRevision.trim()
+    : "";
+  if (
+    !replacement
+    || !/^[A-Z0-9]{4,12}$/.test(code)
+    || !/^[a-f0-9]{40}$/.test(packageRevision)
+  ) {
+    throw new Error("GAME_SDK_INVALID_ACTIVE_ROOM_REPLACEMENT");
+  }
+  return { code, packageRevision };
+}
+
 /**
  * Transport-only Room handlers for one approved SDK module.
  *
@@ -291,6 +309,7 @@ export function createGameSdkOnlineRoomHttpHandlers({
         roomCode: roomCode(body.roomCode),
         create: body.create,
         requestId: body.requestId,
+        replaceActiveRoom: activeRoomReplacement(body.replaceActiveRoom),
       });
       onSuccess?.(operation, room);
       return json({ room });

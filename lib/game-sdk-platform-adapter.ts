@@ -131,17 +131,21 @@ function withPlatformDebugView<TRoomView>(
   input: {
     allowed: boolean;
     storedRoom: Readonly<GameSdkStoredRoom> | null;
+    packageRevision?: string;
   },
 ) {
   if (!snapshot) return snapshot;
-  const view = objectRecord(snapshot.view) as PlatformCommonRoomView | null;
+  const revisionedSnapshot = input.packageRevision
+    ? { ...snapshot, packageRevision: input.packageRevision }
+    : snapshot;
+  const view = objectRecord(revisionedSnapshot.view) as PlatformCommonRoomView | null;
   const common = objectRecord(view?.common);
   const permissions = objectRecord(common?.permissions);
-  if (!view || !common || !permissions) return snapshot;
+  if (!view || !common || !permissions) return revisionedSnapshot;
   const players = storedPlayers(input.storedRoom ?? {
-    code: snapshot.code,
-    revision: snapshot.revision,
-    phase: snapshot.phase,
+    code: revisionedSnapshot.code,
+    revision: revisionedSnapshot.revision,
+    phase: revisionedSnapshot.phase,
   });
   const presentedPlayers = Array.isArray(common.players)
     ? common.players.map((player, seat) => ({
@@ -157,13 +161,13 @@ function withPlatformDebugView<TRoomView>(
     );
   const canAutoProgress = Boolean(
     input.allowed
-    && snapshot.phase !== "lobby"
-    && snapshot.phase !== "result"
+    && revisionedSnapshot.phase !== "lobby"
+    && revisionedSnapshot.phase !== "result"
     && timer
     && Number.isSafeInteger(timer.turnSequence),
   );
   return {
-    ...snapshot,
+    ...revisionedSnapshot,
     view: {
       ...view,
       common: {
@@ -216,6 +220,7 @@ type AuthenticatedPlatformAdapterOptions<
   roomScopeId?: string;
   environment?: GameFieldsEnvironment;
   runtimeContract?: Readonly<GameFieldsPlatformRuntimeContract>;
+  allowActiveRoomPackageRevisionReplacement?: boolean;
   resolveRuntime?: (
     contract: Readonly<GameFieldsPlatformRuntimeContract>,
   ) => Promise<GameSdkPlatformRuntimeDefinition<
@@ -242,6 +247,10 @@ export type AuthenticatedGameSdkPlatformAdapter<
     roomCode: string;
     create: TCreateInput;
     requestId?: string;
+    replaceActiveRoom?: {
+      code: string;
+      packageRevision: string;
+    };
   }): Promise<GameSdkRoomSnapshot<TRoomView>>;
   readRoom(code: string): Promise<GameSdkRoomSnapshot<TRoomView> | null>;
   readRoomAsDebugViewer(
@@ -293,6 +302,7 @@ export function createAuthenticatedGameSdkPlatformAdapter<
   roomScopeId,
   environment,
   runtimeContract,
+  allowActiveRoomPackageRevisionReplacement = false,
   resolveRuntime,
   onRoomSaved,
   onResultConfirmed,
@@ -332,6 +342,10 @@ export function createAuthenticatedGameSdkPlatformAdapter<
       && definitionRequiresDebug(definition)
     ),
     storedRoom: record?.room ?? null,
+    packageRevision: record?.runtimeContract.packageRevision
+      ?? ("runtimeContract" in definition
+        ? definition.runtimeContract?.packageRevision
+        : undefined),
   });
 
   const createRuntime = (
@@ -555,12 +569,37 @@ export function createAuthenticatedGameSdkPlatformAdapter<
   }
 
   return {
-    async createRoom({ roomCode, create, requestId }) {
+    async createRoom({ roomCode, create, requestId, replaceActiveRoom }) {
       const identity = await resolveIdentity();
       assertModuleEnabled(currentDefinition, "online-room");
       const normalizedCode = normalizeGameSdkPlatformRoomCode(roomCode);
+      if (
+        replaceActiveRoom
+        && (
+          !allowActiveRoomPackageRevisionReplacement
+          || !runtimeContract
+          || !/^[a-f0-9]{40}$/.test(runtimeContract.packageRevision)
+          || !/^[a-f0-9]{40}$/.test(replaceActiveRoom.packageRevision)
+          || replaceActiveRoom.packageRevision === runtimeContract.packageRevision
+        )
+      ) {
+        throw new GameFieldsPlatformRuntimeError(
+          "GAME_SDK_ACTIVE_ROOM_REPLACEMENT_FORBIDDEN",
+          403,
+        );
+      }
       const claim = roomStore
-        ? await roomStore.claimActiveRoom(identity.playerId, normalizedCode)
+        ? await roomStore.claimActiveRoom(
+            identity.playerId,
+            normalizedCode,
+            replaceActiveRoom && runtimeContract
+              ? {
+                  code: replaceActiveRoom.code,
+                  packageRevision: replaceActiveRoom.packageRevision,
+                  nextPackageRevision: runtimeContract.packageRevision,
+                }
+              : undefined,
+          )
         : null;
       try {
         const room = await createRuntime(currentDefinition).createRoom({
@@ -687,7 +726,11 @@ export function createAuthenticatedGameSdkPlatformAdapter<
       await resolveIdentity();
       if (!roomStore) throw new Error("GAME_SDK_LIFECYCLE_UNAVAILABLE");
       assertModuleEnabled(currentDefinition, "online-room");
-      return roomStore.listRooms(cursor, module.manifest.maximumPlayers);
+      return roomStore.listRooms(
+        cursor,
+        module.manifest.maximumPlayers,
+        runtimeContract?.packageRevision,
+      );
     },
 
     async sendCommand({ code, envelope }) {

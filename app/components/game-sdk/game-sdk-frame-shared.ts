@@ -34,7 +34,23 @@ export function errorMessage(error: unknown, preview: boolean) {
     if (error.code === "GAME_SDK_REMOTE_RUNNER_UNAVAILABLE") {
       return "ゲーム実行サーバーへ接続できません。少し待ってから、もう一度お試しください。";
     }
+    if (error.code === "GAME_SDK_ACTIVE_ROOM_REPLACEMENT_FORBIDDEN") {
+      return "参加中Roomの固定revisionを再確認できなかったため、新Roomを作成していません。";
+    }
+    if (
+      error.code === "ROOM_RUNTIME_MISMATCH"
+      || error.code === "SDK_PREVIEW_PACKAGE_NOT_AVAILABLE"
+      || error.code === "GAME_SDK_RUNTIME_CATALOG_UNAVAILABLE"
+    ) {
+      return "Room固定revisionのpackageを取得できないため、clientの読込を停止しました。旧Mockや別revisionへは切り替えていません。";
+    }
     return `操作を完了できませんでした（${error.code}）。`;
+  }
+  if (
+    error instanceof Error
+    && error.message === "GAME_SDK_PACKAGE_REVISION_MISMATCH"
+  ) {
+    return "Room固定revisionと読み込むclient revisionが一致しないため、操作を停止しました。";
   }
   if (
     error instanceof Error

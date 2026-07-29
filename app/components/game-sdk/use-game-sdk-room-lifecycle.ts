@@ -33,6 +33,7 @@ type Options = {
   debugActorSeat: number | null;
   resetDebugControl: () => void;
   postRoom: (room: PackageRoom | null) => void;
+  acceptPackageRevision: (room: PackageRoom) => boolean;
 };
 
 /**
@@ -56,6 +57,7 @@ export function useGameSdkRoomLifecycle({
   debugActorSeat,
   resetDebugControl,
   postRoom,
+  acceptPackageRevision,
 }: Options) {
   const watchRef = useRef<{ close(): void } | null>(null);
   const pendingLobbyRoomRef = useRef<PackageRoom | null>(null);
@@ -70,15 +72,22 @@ export function useGameSdkRoomLifecycle({
   const [isRoomDissolved, setIsRoomDissolved] = useState(false);
 
   const commitRoom = useCallback((next: PackageRoom | null) => {
+    if (next && !acceptPackageRevision(next)) return false;
     if (next?.phase !== "playing" && debugActorSeat !== null) {
       resetDebugControl();
     }
     roomRef.current = next;
     setRoom(next);
     postRoom(next);
-  }, [debugActorSeat, postRoom, resetDebugControl, roomRef]);
+    return true;
+  }, [acceptPackageRevision, debugActorSeat, postRoom, resetDebugControl, roomRef]);
 
   const acceptIncomingRoom = useCallback((next: PackageRoom | null) => {
+    if (next && !acceptPackageRevision(next)) {
+      watchRef.current?.close();
+      watchRef.current = null;
+      return;
+    }
     const current = roomRef.current;
     if (!next) {
       if (shouldKeepRoomResultAfterDissolve(current, "result")) {
@@ -113,33 +122,38 @@ export function useGameSdkRoomLifecycle({
     setCanReturnToRoom(false);
     setIsRoomDissolved(false);
     commitRoom(next);
-  }, [commitRoom, roomRef]);
+  }, [acceptPackageRevision, commitRoom, roomRef]);
 
   const attachRoom = useCallback((next: PackageRoom | null) => {
+    if (next && !acceptPackageRevision(next)) return false;
     const previousCode = roomRef.current?.code;
     watchRef.current?.close();
     watchRef.current = null;
     if (!next || (previousCode && previousCode !== next.code)) {
       resetDebugControl();
     }
-    commitRoom(next);
+    if (!commitRoom(next)) return false;
     pendingLobbyRoomRef.current = null;
     setCanReturnToRoom(false);
     setIsRoomDissolved(false);
-    if (!next) return;
+    if (!next) return true;
     watchRef.current = runtime.watchRoom(next.code, {
       onRoom: acceptIncomingRoom,
       onError: handleRuntimeError,
     });
-  }, [acceptIncomingRoom, commitRoom, handleRuntimeError, resetDebugControl, roomRef, runtime]);
+    return true;
+  }, [acceptIncomingRoom, acceptPackageRevision, commitRoom, handleRuntimeError, resetDebugControl, roomRef, runtime]);
 
   const attachLatestRoom = useCallback((next: PackageRoom) => {
+    if (!acceptPackageRevision(next)) {
+      throw new Error("GAME_SDK_PACKAGE_REVISION_MISMATCH");
+    }
     const current = roomRef.current;
     const accepted = preferLatestOnlineRoom(current, next);
     if (accepted === current) return current;
     attachRoom(accepted);
     return accepted;
-  }, [attachRoom, roomRef]);
+  }, [acceptPackageRevision, attachRoom, roomRef]);
 
   const refreshRooms = useCallback(async () => {
     try {
@@ -168,7 +182,6 @@ export function useGameSdkRoomLifecycle({
     return () => {
       watchRef.current?.close();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const returnToRoom = useCallback(async () => {

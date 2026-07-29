@@ -81,7 +81,7 @@ SDKゲームのclientはAI事業者を選ばず、provider URL、APIキー、mod
 
 部屋作成・参加前のactive room確保は `lib/player-active-room.ts` が担当する。現在の別室から移動可能かを共通解散ポリシーで判定し、終了済みの索引解除と新しい部屋コードのCAS確保を一続きのapplication境界として扱う。参加人数、合言葉、フェーズなどの入室条件はゲーム固有storeで検証する。
 
-SDK formal Shellの初回復元は`app/hooks/use-game-sdk-active-room-restore.ts`を共通入口とする。active Room確認中は作成・参加UIを表示せず、参加中Roomがあれば先に復帰する。作成・参加と別タブ更新が競合して`PLAYER_ACTIVE_ROOM`になった場合も最新active Roomを再取得して接続する。Shellは進行中Roomの索引を削除せず、result・期限切れ・欠損・非参加Roomの解除可否は`lib/game-sdk-platform-room-store.ts`を正本とする。
+SDK formal Shellの初回復元は`app/hooks/use-game-sdk-active-room-restore.ts`を共通入口とする。active Room確認中は作成・参加UIを表示せず、参加中Roomがあれば先に復帰する。ただしRoom recordの`runtimeContract.packageRevision`をSnapshotへ必ず引き継ぎ、Shellが読み込もうとするclient revisionと一致した場合だけRoomをattachしてiframeを起動する。不一致時は自動復帰せず、Room固定revisionへページ全体を再読込するか、URL指定revisionで新Roomを作るかを明示選択する。新Roomへのactive索引置換は、本人が参加中のRoomコード・旧packageRevision・新packageRevisionをRedis側で再照合した場合だけ許可する。固定revision不明、旧server bundle解決失敗、client ready未到達はfail closedとし、旧Mockや別revisionへ切り替えない。作成・参加と別タブ更新が競合して`PLAYER_ACTIVE_ROOM`になった場合も、取得したRoomのpackageRevisionが一致したときだけ接続する。Shellは進行中Roomを解散せず、result・期限切れ・欠損・非参加Roomの解除可否は`lib/game-sdk-platform-room-store.ts`を正本とする。
 
 storage-neutralなrevision更新、競合時の最大6回再適用、保存前正規化、保存後hookは非公開 `@game-fields/game-runtime` の `online-room.ts` を正本とする。本体側の `lib/online-room-store-runtime.ts` がRedis CAS、TTL、一覧、1人1active room、新規作成、解散、Realtime、戦績・リプレイhookを注入し、登録済みオンラインゲーム8本のStoreは同じRuntimeを利用する。Redis Luaと索引の低水準処理は `lib/online-room-persistence.ts`、`lib/player-active-room.ts`、`lib/online-room-list.ts`、`lib/online-room-dissolution.ts` に維持する。ゲーム固有StoreにはCommand認可、進行、得点、秘匿、参加者変更後の補正、時間切れreconcileだけを残す。
 

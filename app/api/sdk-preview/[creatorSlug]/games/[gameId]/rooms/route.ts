@@ -95,6 +95,7 @@ async function handle(request: Request, context: RouteContext, method: Method) {
       environment: "candidate-preview",
       roomScopeId: runtime.roomScopeId,
       runtimeContract: runtime.runtimeContract,
+      allowActiveRoomPackageRevisionReplacement: true,
       async resolveRuntime(contract) {
         const pinned = await loadSdkPreviewPackageModule({
           creatorSlug,
@@ -144,7 +145,8 @@ async function handle(request: Request, context: RouteContext, method: Method) {
           void saveSdkPreviewRoomInviteTarget(room.code, {
             creatorSlug,
             gameId,
-            revision: runtime.runtimeContract.packageRevision,
+            revision: room.packageRevision
+              ?? runtime.runtimeContract.packageRevision,
           });
         } else if (operation === "dissolve" && requestedRoomCode) {
           void deleteSdkPreviewRoomInviteTarget(requestedRoomCode);
@@ -153,7 +155,8 @@ async function handle(request: Request, context: RouteContext, method: Method) {
         telemetry.success("game-sdk.preview-room", {
           action: operation,
           channel: "candidate-preview",
-          packageRevision: runtime.runtimeContract.packageRevision,
+          packageRevision: room?.packageRevision
+            ?? runtime.runtimeContract.packageRevision,
           packageRoot: runtime.runtimeContract.packageRootSha256,
           runtimeVersion: runtime.runtimeContract.runtimeVersion,
           roomSchemaVersion: runtime.runtimeContract.roomSchemaVersion,

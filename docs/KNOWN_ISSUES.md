@@ -4,6 +4,28 @@
 
 この文書は、再調査を減らし、次に直す範囲を選びやすくするための監査記録である。将来構想ではなく、現在のコードで確認できた事実を記録する。状態が「修正済み」の項目は、同じ問題を再導入しないための回帰確認点として残す。
 
+## 2026-07-29 SDK正式Room復帰で旧server stateと新clientが混在する
+
+状態: 共通基盤修正・自動テスト済み／develop配備と正式Room実機確認待ち（2026-07-29）
+
+`test10-1 / link-lines`の正式Room導線で、active Room `30QT`は作成時の
+package revision `42292ad52a3bafcd751d6ba1767534d794c0c602`を
+`runtimeContract`へ保持していた。一方、Room Snapshotは`packageRevision`を返さず、
+`GameSdkFrame`はURL指定revision
+`02efe902e4ed49ea525abb862da74c123651efcb`のclient iframeを先に選択していた。
+server adapterは旧Room用bundleを正しく解決していたため、同じRoom内で旧server stateと
+新clientが混在し、データ形式不一致で操作不能になった。active Roomの自動復帰により、
+新revisionで新Roomを作る入口も塞がれていた。
+
+修正ではRoom recordの固定`packageRevision`をSnapshot・一覧・HTTP clientまで保持し、
+Room attach、watch更新、Command応答、`PLAYER_ACTIVE_ROOM`復帰の全入口でclient revisionとの
+一致を先に検査する。不一致ならiframeを起動せず、旧Room固定revisionでページ全体を
+再読込するか、URL指定revisionで新Roomを作るかを明示選択する。新Roomへのactive索引置換は
+server側で本人・現在Room・旧revision・新revisionを再照合し、失敗時は索引をrollbackする。
+固定revision不明、package解決失敗、client ready未到達は明示エラーで停止し、旧Mockや
+別revisionへfallbackしない。旧Roomの解散や削除は行わず、「解散後にタブだけ閉じた」
+現象とは分離する。
+
 ## 2026-07-27 SDK LLMのJSON SchemaがGeminiへ渡らずCommandを拒否する
 
 状態: 共通基盤修正・回帰テスト済み／dev配備と実機再確認待ち（2026-07-27）

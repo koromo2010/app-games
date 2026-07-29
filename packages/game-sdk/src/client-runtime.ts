@@ -49,6 +49,10 @@ export type GameSdkHttpClientRuntime<
     roomCode: string;
     create: TCreateInput;
     requestId?: string;
+    replaceActiveRoom?: {
+      code: string;
+      packageRevision: string;
+    };
   }): Promise<GameSdkRoomSnapshot<TRoomView>>;
   readRoom(code: string): Promise<GameSdkRoomSnapshot<TRoomView> | null>;
   readRoomAsDebugViewer(
@@ -131,6 +135,14 @@ function isRoomSnapshot<TRoomView>(value: unknown): value is GameSdkRoomSnapshot
     && Number(room.revision) >= 1
     && typeof room.phase === "string"
     && "view" in room
+    && (
+      room.packageRevision === undefined
+      || (
+        typeof room.packageRevision === "string"
+        && room.packageRevision.length >= 1
+        && room.packageRevision.length <= 160
+      )
+    )
   );
 }
 
@@ -146,6 +158,14 @@ function isRoomListPage(value: unknown): value is GameSdkRoomListPage {
       && typeof room.code === "string"
       && typeof room.phase === "string"
       && Number.isSafeInteger(room.revision)
+      && (
+        room.packageRevision === undefined
+        || (
+          typeof room.packageRevision === "string"
+          && room.packageRevision.length >= 1
+          && room.packageRevision.length <= 160
+        )
+      )
       && Number.isSafeInteger(room.playerCount)
       && Number.isSafeInteger(room.maximumPlayers)
       && typeof room.updatedAt === "number"

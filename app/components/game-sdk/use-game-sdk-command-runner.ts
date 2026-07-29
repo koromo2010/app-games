@@ -26,7 +26,7 @@ type Options = {
   setPending: Dispatch<SetStateAction<boolean>>;
   setMessage: Dispatch<SetStateAction<string>>;
   handleRuntimeError: (error: unknown) => void;
-  attachRoom: (next: PackageRoom | null) => void;
+  attachRoom: (next: PackageRoom | null) => boolean;
   attachLatestRoom: (next: PackageRoom) => PackageRoom;
   usesLlm: boolean;
   moduleProfile: GameSdkModuleProfile;
@@ -73,8 +73,7 @@ export function useGameSdkCommandRunner({
       ) {
         try {
           const activeRoom = await runtime.readActiveRoom();
-          if (activeRoom) {
-            attachRoom(activeRoom);
+          if (activeRoom && attachRoom(activeRoom)) {
             setMessage("進行中の部屋へ戻りました。");
             return activeRoom;
           }
