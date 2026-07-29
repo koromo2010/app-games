@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  memo,
   useCallback,
   useEffect,
   useState,
@@ -31,14 +32,6 @@ type Options = {
   sendPackageCommand: (command: SafeCommand) => Promise<PackageRoom>;
 };
 
-/**
- * postMessage bridge extracted out of GameSdkFrame.tsx: listens for
- * `game-fields:frame-size`, `game-fields:room-ready` and
- * `game-fields:room-command` messages from the sandboxed package iframe and
- * replies with `game-fields:room-command-result` /
- * `game-fields:room-command-error`. Behavior is unchanged from the pre-split
- * implementation.
- */
 export function useGameSdkIframeBridge({
   iframeRef,
   roomRef,
@@ -161,11 +154,55 @@ type ViewProps = {
   sendPackageCommand: (command: SafeCommand) => Promise<PackageRoom>;
 };
 
-/**
- * Renders the residual-time HUD (when the `timer` module is required and the
- * room is mid-play) plus the sandboxed package `<iframe>` itself, wired
- * through `useGameSdkIframeBridge`.
- */
+type CountdownProps = {
+  deadlineAt: number | null;
+  reducedTime: boolean | undefined;
+  pending: boolean;
+  onRecoverTimeout: () => void;
+};
+
+const GameSdkTimerCountdown = memo(function GameSdkTimerCountdown({
+  deadlineAt,
+  reducedTime,
+  pending,
+  onRecoverTimeout,
+}: CountdownProps) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    setNow(Date.now());
+    const interval = window.setInterval(() => setNow(Date.now()), 250);
+    return () => window.clearInterval(interval);
+  }, [deadlineAt]);
+
+  const remainingSeconds = deadlineAt === null
+    ? null
+    : Math.max(0, Math.ceil((deadlineAt - now) / 1000));
+
+  return (
+    <div
+      className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-cyan-300/30 bg-cyan-300/10 px-4 py-3"
+      role="timer"
+      aria-live="polite"
+    >
+      <strong>残り時間</strong>
+      <span className="font-mono text-xl font-black">
+        {remainingSeconds === null ? "制限なし" : `${remainingSeconds}秒`}
+      </span>
+      {reducedTime && (
+        <button
+          type="button"
+          className={gameTopBannerActionClass}
+          disabled={pending}
+          onClick={onRecoverTimeout}
+        >
+          復帰して通常時間へ戻す
+        </button>
+      )}
+    </div>
+  );
+});
+
 export function GameSdkIframeBridge({
   iframeRef,
   roomRef,
@@ -174,7 +211,6 @@ export function GameSdkIframeBridge({
   title,
   phase,
   timer,
-  remainingSeconds,
   reducedTime,
   timerModuleRequired,
   pending,
@@ -203,26 +239,12 @@ export function GameSdkIframeBridge({
   return (
     <>
       {phase !== "lobby" && phase !== "result" && timerModuleRequired && timer && (
-        <div
-          className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-cyan-300/30 bg-cyan-300/10 px-4 py-3"
-          role="timer"
-          aria-live="polite"
-        >
-          <strong>残り時間</strong>
-          <span className="font-mono text-xl font-black">
-            {remainingSeconds === null ? "制限なし" : `${remainingSeconds}秒`}
-          </span>
-          {reducedTime && (
-            <button
-              type="button"
-              className={gameTopBannerActionClass}
-              disabled={pending}
-              onClick={onRecoverTimeout}
-            >
-              復帰して通常時間へ戻す
-            </button>
-          )}
-        </div>
+        <GameSdkTimerCountdown
+          deadlineAt={timer.deadlineAt}
+          reducedTime={reducedTime}
+          pending={pending}
+          onRecoverTimeout={onRecoverTimeout}
+        />
       )}
       <GameSdkIframe
         ref={iframeRef}
