@@ -52,7 +52,7 @@ export function WordWolfRoomSidebar({ room, activePlayerId, isHost, onCopyRoomCo
     </div>
     <RoomLobbyReturnStatus state={room.lobbyReturn} players={room.players} hostId={room.hostId} isHost={isHost} variant="light" onRemoveWaitingPlayer={(player) => onRemoveWaitingPlayer(player.id, player.name)} />
     <OnlineRoomLifecycleActions
-      surface={room.phase === "lobby" ? "lobby" : room.phase === "result" ? "result" : "playing"}
+      surface={room.phase === "lobby" ? "lobby" : "playing"}
       canReturnToRoom={canReturnToRoom}
       isHost={isHost}
       isRoomDissolved={isRoomDissolved}

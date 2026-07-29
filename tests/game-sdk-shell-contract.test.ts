@@ -349,11 +349,10 @@ test("formal Preview packages and promoted packages share GameSdkFrame", () => {
 // chapy should move it alongside the item above.
 
 test("shared package frame exposes Platform-owned Room dissolution in lobby and result", () => {
-  assert.match(view, /<OnlineRoomLifecycleActions/);
-  assert.match(
-    view,
-    /surface=\{room\.phase === "result" \? "result" : room\.phase === "lobby" \? "lobby" : "playing"\}/,
-  );
+  assert.match(view, /room\.phase === "lobby"[\s\S]*?<OnlineRoomLifecycleActions/);
+  assert.match(resultPanel, /<CommonGameResultShell/);
+  assert.match(resultPanel, /<OnlineRoomLifecycleActions/);
+  assert.match(resultPanel, /surface="result"/);
   assert.match(roomLifecycle, /moduleRequired\("dissolution"\)/);
   assert.match(roomLifecycle, /await runtime\.dissolveRoom\(current\.code\)/);
   assert.match(roomLifecycle, /window\.confirm\("部屋を解散しますか？参加者はこの部屋に戻れなくなります。"\)/);
@@ -447,8 +446,9 @@ test("every shared Shell module has executable evidence in the formal package pa
       [iframeBridge, /role="timer"/],
     ],
     result: [
-      [view, /moduleRequired\("result"\)/],
-      [view, /standardResult\.rankings\.map/],
+      [resultPanel, /moduleRequired\("result"\)/],
+      [resultPanel, /standardResult\.rankings\.map/],
+      [resultPanel, /<CommonGameResultShell/],
     ],
     rematch: [
       [controller, /moduleRequired\("rematch"\)/],

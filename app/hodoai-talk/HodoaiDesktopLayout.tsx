@@ -4,6 +4,7 @@ import { AppLink as Link } from "@/app/components/AppLink";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
 import { DebugToolButton, DebugToolsSection } from "@/app/components/DebugGameTools";
 import { GameAdSlot } from "@/app/components/GameAdSlot";
+import { CommonGameResultShell } from "@/app/components/CommonGameResultShell";
 import { GameLoungeVisual } from "@/app/components/GameLoungeVisual";
 import { PlayerTimeoutNotice } from "@/app/components/PlayerTimeoutNotice";
 import { GameResultShareButton } from "@/app/components/GameResultShareButton";
@@ -118,8 +119,18 @@ export function HodoaiDesktopLayout({ controller }: { controller: HodoaiControll
         <div className="space-y-4">
           {error && <p className="rounded-xl border border-rose-300/30 bg-rose-300/10 p-3 text-sm font-bold text-rose-100">{error}</p>}
           <HodoaiPlayPanels room={room} playerId={playerId} isHost={isHost} isSaving={isSaving} runAction={runAction} updateConfig={updateConfig} />
-          {room.phase === "result" && latestResult && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><h2 className="text-2xl font-black">最後の答え合わせ</h2><p className="mt-1 text-sm font-bold text-slate-400">上が120側、下が0側です。</p><div className="mt-4 space-y-2">{latestResultRows.map((row) => <div key={row.id} className="grid grid-cols-[2rem_1fr_auto] items-center gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3"><span className="text-center font-black text-cyan-300">{row.rank}</span><div><div className="flex flex-wrap gap-2">{row.expressions.map((expression, index) => <span key={`${row.id}:${index}`} className="rounded-lg bg-cyan-300/10 px-2 py-1 text-sm font-bold text-cyan-50">{expression}</span>)}</div><p className="mt-1 text-xs text-slate-400">{row.playerName}・カード{row.cardNumber}</p></div><span className="text-2xl font-black text-amber-300">{row.value}</span></div>)}</div><div className="mt-5 rounded-2xl bg-gradient-to-r from-cyan-400 to-amber-300 p-5 text-center text-slate-950"><p className="font-black">最終得点 {latestResult.points}/3点</p><p className="mt-1 text-sm font-bold">並び違い {latestResult.inversions}組</p></div><p className="mt-5 text-center text-lg font-black">{hodoaiFinalMessage(room.totalPoints, 3)}</p><OnlineRoomLifecycleActions surface="result" canReturnToRoom={isHost || resultReturnGate.canReturnToRoom} disabled={isSaving} isHost={isHost} isRoomDissolved={resultReturnGate.isRoomDissolved} onReturnToRoom={isHost ? () => runAction({ type: "reset-game", actorId: playerId }) : returnToRoom} onDissolve={isHost ? dissolveRoom : undefined} /></section>}
-          {room.phase === "result" && <GameResultShareButton title="ワードスケール プレイログ" text={hodoaiGameShareText(room)} url="/word-scale" />}
+          {room.phase === "result" && latestResult && <CommonGameResultShell
+            tone="dark"
+            eyebrow="Result"
+            title="最後の答え合わせ"
+            summary="上が120側、下が0側です。"
+            utilities={<GameResultShareButton title="ワードスケール プレイログ" text={hodoaiGameShareText(room)} url="/word-scale" />}
+            actions={<OnlineRoomLifecycleActions surface="result" canReturnToRoom={isHost || resultReturnGate.canReturnToRoom} disabled={isSaving} isHost={isHost} isRoomDissolved={resultReturnGate.isRoomDissolved} onReturnToRoom={isHost ? () => runAction({ type: "reset-game", actorId: playerId }) : returnToRoom} onDissolve={isHost ? dissolveRoom : undefined} />}
+          >
+            <div className="space-y-2">{latestResultRows.map((row) => <div key={row.id} className="grid grid-cols-[2rem_1fr_auto] items-center gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3"><span className="text-center font-black text-cyan-300">{row.rank}</span><div><div className="flex flex-wrap gap-2">{row.expressions.map((expression, index) => <span key={`${row.id}:${index}`} className="rounded-lg bg-cyan-300/10 px-2 py-1 text-sm font-bold text-cyan-50">{expression}</span>)}</div><p className="mt-1 text-xs text-slate-400">{row.playerName}・カード{row.cardNumber}</p></div><span className="text-2xl font-black text-amber-300">{row.value}</span></div>)}</div>
+            <div className="mt-5 rounded-2xl bg-gradient-to-r from-cyan-400 to-amber-300 p-5 text-center text-slate-950"><p className="font-black">最終得点 {latestResult.points}/3点</p><p className="mt-1 text-sm font-bold">並び違い {latestResult.inversions}組</p></div>
+            <p className="mt-5 text-center text-lg font-black">{hodoaiFinalMessage(room.totalPoints, 3)}</p>
+          </CommonGameResultShell>}
         </div>
       </div>
     </main>

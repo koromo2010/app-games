@@ -4,6 +4,7 @@ import { AppLink as Link } from "@/app/components/AppLink";
 import { DebugModeButton } from "@/app/components/DebugModeButton";
 import { DebugToolButton, DebugToolsSection } from "@/app/components/DebugGameTools";
 import { GameAdSlot } from "@/app/components/GameAdSlot";
+import { CommonGameResultShell } from "@/app/components/CommonGameResultShell";
 import { GameLoungeVisual } from "@/app/components/GameLoungeVisual";
 import { GamePhaseTimer } from "@/app/components/GamePhaseTimer";
 import { GamePlayerMenu } from "@/app/components/GamePlayerMenu";
@@ -294,9 +295,15 @@ export function NigoichiDesktopLayout({ controller }: { controller: NigoichiCont
             <p className="mt-4 text-center text-sm text-slate-300">全員が選ぶまで他人の予想は表示されません。</p>
           </section>}
 
-          {room.phase === "result" && room.missingNumber !== null && <section className="rounded-2xl border border-rose-300/30 bg-slate-950/80 p-6">
-            <div className="text-center"><p className="text-sm font-black text-rose-200">答え合わせ</p><h2 className="mt-2 text-3xl font-black">余りは {room.missingNumber + 1}番「{room.words[room.missingNumber]}」</h2><p className="mt-3 text-slate-300">{room.players.length}人中{correctCount}人が正解しました。</p></div>
-            <div className="mt-6 grid gap-3 sm:grid-cols-2">{room.players.map((player) => {
+          {room.phase === "result" && room.missingNumber !== null && <CommonGameResultShell
+            tone="dark"
+            eyebrow="Result"
+            title={<>余りは {room.missingNumber + 1}番「{room.words[room.missingNumber]}」</>}
+            summary={`${room.players.length}人中${correctCount}人が正解しました。`}
+            utilities={<GameResultShareButton title="ワードアウト プレイログ" text={nigoichiShareText(room)} url="/word-out" />}
+            actions={<OnlineRoomLifecycleActions surface="result" canReturnToRoom={isHost || resultReturnGate.canReturnToRoom} disabled={isSaving} isHost={isHost} isRoomDissolved={resultReturnGate.isRoomDissolved} onReturnToRoom={isHost ? () => runAction({ type: "reset-game", actorId: playerId }) : returnToRoom} onDissolve={isHost ? dissolveRoom : undefined} />}
+          >
+            <div className="grid gap-3 sm:grid-cols-2">{room.players.map((player) => {
               const hand = room.hands[player.id] ?? [];
               const correct = nigoichiGuessIsCorrect(room, player.id);
               const score = room.roundScores[player.id];
@@ -305,17 +312,10 @@ export function NigoichiDesktopLayout({ controller }: { controller: NigoichiCont
                 <p className="mt-3 text-sm text-slate-300">手札：{hand.map((number) => `${number + 1}.${room.words[number]}`).join(" / ")}</p>
                 <p className="mt-3 rounded-lg bg-slate-950/50 p-2 text-sm text-slate-300">連想語：<strong className="text-white">{room.associations[player.id]?.join(" / ")}</strong></p>
                 <p className="mt-3 text-sm text-slate-300">予想：{Number.isInteger(room.guesses[player.id]) ? `${room.guesses[player.id] + 1}番` : "未提出"}</p>
-                {score && <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2 rounded-xl border border-white/10 bg-slate-950/60 p-3 text-sm">
-                  <dt className="text-slate-400">余りを正解</dt><dd className="text-right font-black text-emerald-200">+{score.correctBonus}</dd>
-                  <dt className="text-slate-400">自分のカードへの回答</dt><dd className="text-right font-black text-rose-200">−{score.receivedWrongVotes}</dd>
-                  <dt className="font-bold">ラウンド得点</dt><dd className="text-right font-black">{score.roundScore >= 0 ? "+" : ""}{score.roundScore}</dd>
-                  <dt className="font-bold text-indigo-200">累計得点</dt><dd className="text-right text-lg font-black text-indigo-200">{score.totalScoreAfterRound}</dd>
-                </dl>}
+                {score && <dl className="mt-4 grid grid-cols-2 gap-x-3 gap-y-2 rounded-xl border border-white/10 bg-slate-950/60 p-3 text-sm"><dt className="text-slate-400">余りを正解</dt><dd className="text-right font-black text-emerald-200">+{score.correctBonus}</dd><dt className="text-slate-400">自分のカードへの回答</dt><dd className="text-right font-black text-rose-200">−{score.receivedWrongVotes}</dd><dt className="font-bold">ラウンド得点</dt><dd className="text-right font-black">{score.roundScore >= 0 ? "+" : ""}{score.roundScore}</dd><dt className="font-bold text-indigo-200">累計得点</dt><dd className="text-right text-lg font-black text-indigo-200">{score.totalScoreAfterRound}</dd></dl>}
               </article>;
             })}</div>
-            <OnlineRoomLifecycleActions surface="result" canReturnToRoom={isHost || resultReturnGate.canReturnToRoom} disabled={isSaving} isHost={isHost} isRoomDissolved={resultReturnGate.isRoomDissolved} onReturnToRoom={isHost ? () => runAction({ type: "reset-game", actorId: playerId }) : returnToRoom} onDissolve={isHost ? dissolveRoom : undefined} />
-          </section>}
-          {room.phase === "result" && <GameResultShareButton title="ワードアウト プレイログ" text={nigoichiShareText(room)} url="/word-out" />}
+          </CommonGameResultShell>}
           {room.phase === "clue" && !myHand && <p className="rounded-xl border border-rose-300/30 bg-rose-300/10 p-3 text-sm font-bold">あなたの手札を取得できませんでした。画面を再読み込みしてください。</p>}
         </div>
       </div>
