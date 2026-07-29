@@ -6,7 +6,7 @@ import {
   type GameSdkSettingDefinition,
   type GameSdkSettingValue,
 } from "@game-fields/game-sdk";
-import { panel, secondary } from "./game-sdk-frame-shared";
+import { panel, primary, secondary } from "./game-sdk-frame-shared";
 import type { CommonView, PackageRoom, SafeCommand } from "./game-sdk-frame-types";
 
 type Props = {
@@ -53,18 +53,19 @@ export function GameSdkLobbyPanel({
 
   return (
     <div className={panel}>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-black">部屋設定</h2>
-        <button
-          type="button"
-          className={secondary}
-          disabled={copyingInvite}
-          onClick={() => void copyInviteLink()}
-        >
-          {copyingInvite ? "コピー中…" : "招待リンクをコピー"}
-        </button>
-      </div>
-      <div className="mt-3 space-y-3">
+      <h2 className="text-lg font-black">部屋設定</h2>
+      <button
+        type="button"
+        className={`${primary} mt-4 w-full`}
+        disabled={copyingInvite}
+        onClick={() => void copyInviteLink()}
+      >
+        {copyingInvite ? "コピー中…" : "招待リンクをコピー"}
+      </button>
+      <p className="mt-2 text-xs text-slate-500">
+        この部屋へ直接参加できるURLをコピーします。
+      </p>
+      <div className="mt-4 space-y-3">
         {settingDefinitions.map((definition) => {
           const value = common?.settings[definition.key]
             ?? definition.defaultValue;
