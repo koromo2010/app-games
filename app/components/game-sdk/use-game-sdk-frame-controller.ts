@@ -34,24 +34,6 @@ import type {
 } from "./game-sdk-frame-types";
 import type { GameSdkFrameViewProps } from "./GameSdkFrameView";
 
-/**
- * Composition root extracted out of GameSdkFrame.tsx. Owns the state and
- * refs that are genuinely shared across more than one concern (room ref,
- * iframe ref, pending/message, module-profile lookup, error handling,
- * player-defaults fetch) and wires the four split hooks together in the
- * same dependency order the original single component implicitly had:
- *
- *   debug primitives -> room lifecycle -> command dispatch -> auto-follow
- *   effect + expiry/clock effects + derived view values
- *
- * `useGameSdkDebugState` cannot depend on `room` (owned by
- * `useGameSdkRoomLifecycle`) because the lifecycle hook itself depends on
- * `resetDebugControl`/`postRoom` from the debug hook — so the auto-follow
- * effect, which *does* need reactive `room`, lives here instead of inside
- * either hook. See use-game-sdk-debug-state.ts for details.
- *
- * No behavior differs from the pre-split GameSdkFrame.tsx.
- */
 export function useGameSdkFrameController(
   props: GameSdkFrameProps,
 ): { viewProps: GameSdkFrameViewProps } {
@@ -94,7 +76,6 @@ export function useGameSdkFrameController(
   const [joinCode, setJoinCode] = useState("");
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState("");
-  const [clockNow, setClockNow] = useState<number | null>(null);
   const [playerDefaults, setPlayerDefaults] = useState<
     Record<string, GameSdkSettingValue>
   >({});
@@ -224,23 +205,6 @@ export function useGameSdkFrameController(
     };
   }, [commandRunner, lifecycle.attachLatestRoom, moduleRequired, room]);
 
-  useEffect(() => {
-    const timer = room?.view.common.timer;
-    if (
-      !moduleRequired("timer")
-      || room?.phase === "lobby"
-      || room?.phase === "result"
-      || !timer
-    ) return;
-    const update = () => setClockNow(Date.now());
-    const initialUpdate = window.setTimeout(update, 0);
-    const interval = window.setInterval(update, 250);
-    return () => {
-      window.clearTimeout(initialUpdate);
-      window.clearInterval(interval);
-    };
-  }, [moduleRequired, room?.phase, room?.view.common.timer]);
-
   const joinRoomByCode = useCallback((code: string) => commandRunner.run(async () => {
     const target = await runtime.readRoom(code);
     if (!target) throw new Error("ROOM_NOT_FOUND");
@@ -260,9 +224,6 @@ export function useGameSdkFrameController(
   const common = room?.view.common;
   const self = common?.players.find((player) => player.isSelf);
   const timer = common?.timer;
-  const remainingSeconds = timer?.deadlineAt && clockNow !== null
-    ? Math.max(0, Math.ceil((timer.deadlineAt - clockNow) / 1000))
-    : null;
   const standardResult = common?.standardResult;
   const resultReason = standardResult
     ? gameSdkResultReasonText(standardResult, locale)
@@ -357,7 +318,7 @@ export function useGameSdkFrameController(
       usesLlm,
       reducedTime: self?.reducedTime,
       timer,
-      remainingSeconds,
+      remainingSeconds: null,
       standardResult,
       resultReason,
       resultPlayLog,
