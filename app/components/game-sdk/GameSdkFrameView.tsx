@@ -388,59 +388,16 @@ export function GameSdkFrameView(props: GameSdkFrameViewProps) {
                 ゲームを開始
               </button>
             )}
-            {room.phase === "result" && standardResult && moduleRequired("result") && (
-              <div className="mt-4 border-t border-slate-200 pt-4">
-                <p className="text-xs font-black uppercase tracking-wide text-cyan-700">
-                  Standard result
-                </p>
-                <p className="mt-2 text-sm font-semibold text-slate-600">
-                  {resultReason}
-                </p>
-                <ol className="mt-3 space-y-2">
-                  {standardResult.rankings.map((ranking) => (
-                    <li
-                      key={ranking.seat}
-                      className="flex items-center justify-between rounded-lg bg-slate-100 px-3 py-2 text-sm"
-                    >
-                      <span>
-                        {ranking.rank}位 · {ranking.displayName}
-                        {ranking.isSelf ? "（あなた）" : ""}
-                      </span>
-                      <strong>{ranking.score} pt</strong>
-                    </li>
-                  ))}
-                </ol>
-                {resultPlayLog.length > 0 && (
-                  <div className="mt-4 border-t border-slate-200 pt-4">
-                    <p className="text-xs font-black uppercase tracking-wide text-violet-700">
-                      プレイログ
-                    </p>
-                    <ol className="mt-2 space-y-2 text-sm leading-6 text-slate-700">
-                      {resultPlayLog.map((line, index) => (
-                        <li key={`${index}:${line}`} className="rounded-lg bg-slate-100 px-3 py-2">
-                          {line}
-                        </li>
-                      ))}
-                    </ol>
-                  </div>
-                )}
-              </div>
-            )}
             {message && <p className="mt-3 text-sm font-bold text-rose-700">{message}</p>}
-            <OnlineRoomLifecycleActions
-              surface={room.phase === "result" ? "result" : room.phase === "lobby" ? "lobby" : "playing"}
-              isHost={common?.isHost === true}
-              disabled={pending}
-              canReturnToRoom={
-                room.phase === "result"
-                && (common?.isHost === true || canReturnToRoom)
-              }
-              isRoomDissolved={isRoomDissolved}
-              onReturnToRoom={onReturnToRoom}
-              onDissolve={onDissolve}
-              onLeave={onLeave}
-              returnHref={backHref}
-            />
+            {room.phase === "lobby" && (
+              <OnlineRoomLifecycleActions
+                surface="lobby"
+                isHost={common?.isHost === true}
+                disabled={pending}
+                onDissolve={onDissolve}
+                onLeave={onLeave}
+              />
+            )}
           </div>
           <GameSdkLobbyPanel
             room={room}
@@ -466,6 +423,14 @@ export function GameSdkFrameView(props: GameSdkFrameViewProps) {
             resultShareText={resultShareText}
             resultReason={resultReason}
             feedbackEndpoint={feedbackEndpoint}
+            standardResult={standardResult}
+            resultPlayLog={resultPlayLog}
+            pending={pending}
+            isHost={common?.isHost === true}
+            canReturnToRoom={canReturnToRoom}
+            isRoomDissolved={isRoomDissolved}
+            onReturnToRoom={onReturnToRoom}
+            onDissolve={onDissolve}
           />
         </aside>
         )}
