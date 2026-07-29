@@ -6,7 +6,7 @@
 
 ## 2026-07-29 SDK正式Room復帰で旧server stateと新clientが混在する
 
-状態: 共通基盤修正・自動テスト済み／develop配備と正式Room実機確認待ち（2026-07-29）
+状態: 修正済み／develop配備・正式Room実機確認済み／main未反映（2026-07-29）
 
 `test10-1 / link-lines`の正式Room導線で、active Room `30QT`は作成時の
 package revision `42292ad52a3bafcd751d6ba1767534d794c0c602`を
@@ -25,6 +25,15 @@ server側で本人・現在Room・旧revision・新revisionを再照合し、失
 固定revision不明、package解決失敗、client ready未到達は明示エラーで停止し、旧Mockや
 別revisionへfallbackしない。旧Roomの解散や削除は行わず、「解散後にタブだけ閉じた」
 現象とは分離する。
+
+修正commit `ae6a39c184894f6a1849a3740b517575a6e537f5`は`develop`へ反映済みで、
+`app-games-dev`、`app-games-sdk-dev`、`app-games-preview-dev`の同commit Production
+Deploymentはすべて`READY`となった。SDK Portalの正式Room導線だけで、選択前にclientを
+読み込まないこと、旧Room `30QT`が固定revision
+`42292ad52a3bafcd751d6ba1767534d794c0c602`のclientでrev 12からrev 15まで正常動作すること、
+URL指定revision `02efe902e4ed49ea525abb862da74c123651efcb`で新Room `21GT`を作成して
+rev 1からrev 4まで正常動作することを確認した。同URLの再読込では不一致画面なしで
+`21GT`へ通常復帰し、新revision clientと配置済みstateを保持した。
 
 ## 2026-07-27 SDK LLMのJSON SchemaがGeminiへ渡らずCommandを拒否する
 

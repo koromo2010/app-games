@@ -3032,3 +3032,37 @@ Total output lines: 6329
 - developへcommit・pushする。
 - `app-games-dev`、`app-games-sdk-dev`、`app-games-preview-dev`の対象commit Production DeploymentがREADYであることを確認する。
 - SDK Portalの「正式Roomで確認」から、Room `30QT`の不一致表示、旧revision復帰、新revisionでの新Room作成、両経路の実操作を確認する。
+
+## 2026-07-29 — SDK正式Room復帰のpackageRevision修正をdevelop配備・実機確認
+
+### 実施結果
+
+- 修正commit `ae6a39c184894f6a1849a3740b517575a6e537f5`を`develop`へfast-forwardで反映した。`main`は変更していない。
+- 同commitのProduction Deploymentは、`app-games-dev`が`dpl_58Rve4X8uZueSXVXxrB3XAYgAv8G`、`app-games-sdk-dev`が`dpl_BwpG14aCM72JZFkM4AvYJA2r8vNx`、`app-games-preview-dev`が`dpl_8qj3QADMXKaR8vXewwXbVPR3KY4y`で、3件とも`READY`を確認した。
+- SDK Portalの正式Room導線
+  `https://sdk-dev.game-fields.com/test10-1/games/link-lines?revision=02efe902e4ed49ea525abb862da74c123651efcb`
+  だけを使用し、Vercel Preview deploymentは使用しなかった。
+
+### 正式Room実機確認
+
+- 旧Room `30QT`の固定revision
+  `42292ad52a3bafcd751d6ba1767534d794c0c602`と、URL指定revision
+  `02efe902e4ed49ea525abb862da74c123651efcb`の不一致を表示し、選択前のnested client iframeが0件であることを確認した。
+- 「旧Roomへ戻る」でRoom `30QT`へ戻ると、client iframeは旧revisionを明示した
+  `/api/sdk-preview/test10-1/games/link-lines/client-runtime?revision=42292ad52a3bafcd751d6ba1767534d794c0c602`
+  を読み込んだ。resultのrev 12からlobbyのrev 13、playingのrev 14へ進め、1行1列へ配置後にrev 15・青マスとなり、旧Roomを操作できた。
+- 新revision URLへ再読込すると再び不一致を表示し、「新revisionで新Roomを作る」でRoom `21GT`をrev 1として作成した。client iframeは新revisionを明示した
+  `/api/sdk-preview/test10-1/games/link-lines/client-runtime?revision=02efe902e4ed49ea525abb862da74c123651efcb`
+  を読み込んだ。ダミー追加でrev 2、ゲーム開始でrev 3、1行1列へ縦配置後にrev 4・青マスとなり、新revision Roomを操作できた。
+- 同じ新revision URLを再読込すると、不一致画面を出さずRoom `21GT`へ通常復帰した。rev 5、nested client iframe 1件、新revision client URL、配置済みの青マスを確認した。
+- 以上の各経路で、Room固定revisionとclient URLのrevisionが異なる状態は発生しなかった。不一致選択前はclientを読み込まず、旧Roomと新Roomではそれぞれ一致するclientだけを読み込んだ。
+
+### 検証
+
+- 追加・関連テスト13件、SDK Shell契約8件、SDK依存境界検査、ESLint、本体・SDK Portal・SDK Previewのproduction buildはすべて成功した。
+- 全体テストで残った今回差分外の既存2件は、Node 24のJSON import attributeと、SDK Preview対応済み実装を否定する旧contract testであり、今回の必須テストはすべて成功した。
+- 「部屋を解散した後にタブだけ閉じた」操作は今回行っておらず、同現象は再現していないため本件へ含めない。
+
+### 未対応・保留
+
+- `main`への反映は利用者の指示があるまで行わない。
