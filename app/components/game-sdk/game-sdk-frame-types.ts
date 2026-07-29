@@ -65,6 +65,19 @@ export type SafeCommand = { type: string; [key: string]: unknown };
 export type DebugViewer = "self" | "spectator" | number;
 export type DebugAutoProgressTarget = "step" | "phase" | "result";
 
+/**
+ * Shape returned by `wrapGameSdkDebugCommand` (lib/game-sdk-debug-control-target.ts,
+ * unchanged) when the active DEBUG viewer is acting as a dummy seat: the
+ * original command gets wrapped one level deeper instead of being sent as-is.
+ * Declared here so `use-game-sdk-command-runner.ts`'s `wrapDebugCommand`
+ * option can express its true return type instead of erasing it to `TCommand`.
+ */
+export type DebugWrappedCommand<TCommand extends SafeCommand = SafeCommand> = {
+  type: "room/debug-act-as-dummy";
+  seat: number;
+  command: TCommand;
+};
+
 /** Concrete runtime type used throughout the split GameSdkFrame modules. */
 export type GameSdkFrameRuntime = ReturnType<typeof createGameSdkHttpClientRuntime<
   { settings?: Record<string, GameSdkSettingValue>; app: Record<string, never> },
