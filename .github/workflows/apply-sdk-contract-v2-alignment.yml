@@ -20,7 +20,7 @@ permissions:
 jobs:
   align-and-verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -37,12 +37,10 @@ jobs:
         run: node scripts/apply-sdk-contract-v2-alignment.mjs
       - name: Verify release contract alignment
         run: node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test tests/sdk-release-contract-alignment.test.ts
+      - name: Verify platform release versions
+        run: npm run check:versions
       - name: Build SDK package
         run: npm run build:sdk-package
-      - name: Verify and build
-        run: |
-          npm run verify
-          npm run build
       - name: Commit alignment
         run: |
           git config user.name "github-actions[bot]"
