@@ -23,6 +23,11 @@ function gameHref(game: Game) {
   return `/${game.creatorSlug}`;
 }
 
+function candidatePreviewHref(game: Game) {
+  if (!game.packageCandidateRevision) return null;
+  return `/${game.creatorSlug}/games/${game.gameId}?revision=${encodeURIComponent(game.packageCandidateRevision)}`;
+}
+
 export default async function CreatorDashboard() {
   const account = await getSdkAccountSession().catch(() => null);
   if (!account) redirect("/api/account-link/start?returnTo=%2Fdashboard");
@@ -70,6 +75,7 @@ export default async function CreatorDashboard() {
       {games.length > 0 ? <div className="creator-game-grid">
         {games.map((game) => {
           const stage = gameStage(game);
+          const candidateHref = candidatePreviewHref(game);
           return <article className="creator-game-card" key={`${game.creatorSlug}/${game.gameId}`}>
             <div className="creator-game-card__meta">
               <span className={`game-stage game-stage--${stage.tone}`}>{stage.label}</span>
@@ -80,7 +86,11 @@ export default async function CreatorDashboard() {
               <p>{game.description || "説明はまだ登録されていません。"}</p>
             </div>
             <div className="creator-game-card__actions">
-              <Link className="primary-action" href={gameHref(game)}>ゲームを開く <span aria-hidden="true">→</span></Link>
+              {candidateHref && game.packageCandidateAvailable ? (
+                <Link className="primary-action" href={candidateHref}>検査済み版をPreview <span aria-hidden="true">→</span></Link>
+              ) : (
+                <Link className="primary-action" href={gameHref(game)}>ゲームを開く <span aria-hidden="true">→</span></Link>
+              )}
               <Link className="secondary-action" href={`/${game.creatorSlug}/games/${game.gameId}`}>共通モジュール設定</Link>
               <Link className="secondary-action" href={`/${game.creatorSlug}/games/${game.gameId}`}>制作環境</Link>
               {game.packageCandidateAvailable && (
@@ -93,7 +103,7 @@ export default async function CreatorDashboard() {
             </div>
             {!game.packageAvailable && !game.packageCandidateAvailable && <p className="submission-hint">正式提出データはまだ準備されていません。制作を完了すると、ここに正式提出ボタンが表示されます。</p>}
             {game.packageCandidateAvailable && <p className="submission-hint">
-              検査済みの{game.packageAvailable ? "更新版" : "提出データ"}があります。
+              検査済みの{game.packageAvailable ? "更新版" : "提出データ"}があります。提出前にこのrevisionを正式Roomで確認できます。
               packageRevision: <code>{game.packageCandidateRevision}</code> · ready-for-submission
             </p>}
           </article>;
