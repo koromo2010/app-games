@@ -6,7 +6,7 @@
 
 ## 2026-07-30 通常の正式Room作成が旧Mock Shellへ入りRuntime未接続になる
 
-状態: 根本原因確定・修正実装／自動検証済み／develop配備・通常正式Room実機確認待ち／main未反映
+状態: 修正済み／自動検証済み／develop配備・通常正式Room実機確認済み／main未反映
 
 `test10-1 / link-lines`をSDK Dashboardの制作者トップから通常選択すると、
 最新candidate Packageが存在するにもかかわらずrevisionなしのゲームURLへ遷移し、
@@ -27,6 +27,19 @@ resolverへ統一する。queryなしは最新candidate、revision指定は指�
 Packageが1件もない場合だけ旧Mockへ戻す。Package resolverの例外、Runtime bundle解決、
 grant生成の失敗は503または明示エラーで停止し、Mockへfallbackしない。Room保存、
 旧Room復帰、新revisionで新Roomを作る分岐は変更しない。
+
+修正commit `bbfb5979697e699b128d4e0e4481580b8621ff82`は`develop`へnon-forceで
+反映済みで、`app-games-dev`、`app-games-sdk-dev`、`app-games-preview-dev`の
+同commit Production Deploymentはすべて`READY`となった。
+
+SDK Portalの制作者トップから通常のゲームカードを選び、現行candidateで正式Room
+`N80U`を作成した。Runtime clientが`Room同期済み`まで接続し、ダミー参加者追加、
+ゲーム開始、1行1列への青の縦配置、青から赤への手番交代を確認した。SDK Portal全体を
+再読込した後に同じ通常カードを開くと、同Room、配置済み盤面、総手数、手番へ復帰した。
+revision指定URLでも同Roomへ復帰し、通常導線とclient Runtime endpointおよびrevisionが
+一致した。旧Roomへ戻る分岐、新revisionで新Roomを作る分岐、選択前にclient iframeを
+起動しない条件も再確認した。共通基盤の横断確認として、別のcandidate Package
+`ai-word-guess`も通常カードから正式Roomを作成し、固有Runtime clientの起動を確認した。
 
 ## 2026-07-29 SDK正式Room復帰で旧server stateと新clientが混在する
 

@@ -3097,10 +3097,25 @@ Total output lines: 6329
 - 全体テストは701/703成功。残る2件は今回差分外で既知の、Node 24 JSON import属性と、実装済みSDK Preview招待を否定する旧contract test。
 - ルート全体の単独`tsc`は既存test fixtureの型不一致で失敗した。変更対象のSDK Portal／SDK Preview型検査と3つのproduction buildには新規型エラーがない。
 
-### 未対応・保留
+### develop反映と配備
 
-- push直前にremote `develop`を再取得し、T-26等で進んでいれば安全に統合・影響範囲を再テストする。
-- developへnon-force pushし、`app-games-dev`、`app-games-sdk-dev`、`app-games-preview-dev`のProduction deploymentを確認する。
-- SDK Portalの通常「正式Roomで確認」で、新Room作成、Runtime接続、開始、1手、手番交代、再読込復帰、revision指定経路との一致、旧Room／新revision分岐を実機確認する。
-- 共通基盤変更のため、別のpublish済みSDKゲームを通常導線から起動確認する。
-- `main`は未反映のまま維持する。
+- push直前にremote `develop`を再取得し、報告済みHEADと一致していること、作業ツリーがクリーンであることを確認した。
+- 修正commit `bbfb5979697e699b128d4e0e4481580b8621ff82`を`develop`へnon-forceで反映した。
+- 同commitのProduction targetは、`app-games-dev`が`dpl_CqDHi6qyB571xDLRMzkpmbkKBDXs`、`app-games-sdk-dev`が`dpl_CUfw2Y2idLRnYNBdtZcJKNNfa2m5`、`app-games-preview-dev`が`dpl_JCgyDBnCG2CARd58heBmrHR3bW3G`で、3件とも`READY`を確認した。Vercel Previewは完了証拠に使用していない。
+- T-26の作業branchとPRが並行して進んでいることをVercel／GitHub状態から確認したが、remote `develop`は修正commitのままで、T-26側の変更を破棄・上書きしていない。
+
+### 通常正式Roomの実機確認
+
+- SDK Portalの制作者トップを再読込し、`link-lines`の通常ゲームカードが現行candidate revisionを固定した正式Room URLを持つことを確認した。
+- 旧revisionのactive Roomがある状態では不一致画面を表示し、選択前にnested client iframeを起動しなかった。「新revisionで新Roomを作る」から現行candidateの正式Room `N80U`を作成し、Room作成logでも同revision、portable Runtime版、成功結果を確認した。
+- `N80U`でPackage clientが起動して`Room同期済み`となり、ダミー参加者追加、ゲーム開始、1行1列への青の縦配置、Room rev 3から4への更新、青から赤への手番交代を確認した。
+- SDK Portal全体の再読込後は制作者トップへ戻るPortal仕様のため、同じ通常カードを開き直した。同Room `N80U`へ不一致画面なしで復帰し、配置済みの青マス、総手数1、赤手番、Room同期状態を保持した。
+- 現行candidateのrevision指定URLでも`N80U`へ復帰し、通常導線と同じclient Runtime endpoint、同じpackage revisionを解決した。Runtime接続、Room保存、Commandに別revisionの混在はなかった。
+- 旧Room／新revision分岐の回帰では、旧revision URLと現行Roomの不一致時に「旧Roomへ戻る」で現行Room `AAAV`をRoom固定revisionのclientへ復帰させた。逆に「新revisionで新Roomを作る」で旧revision固定Room `3HTX`を作成し、その後の通常カードでは`3HTX`との不一致を検出して現行revisionの`N80U`へactive索引を安全に置換した。旧Roomは解散・削除していない。
+- 共通基盤の横断確認として、別のcandidate Package `ai-word-guess`もSDK Portalの通常ゲームカードから正式Room `UYWB`を作成し、ゲーム固有Runtime clientと設定画面が起動した。
+- 同時間帯のRuntime logには別のpoll／timer invocationで一時的な`REDIS_STORE_REQUEST_TIMEOUT`も記録されたが、T-31のRoom作成、開始、配置Commandは成功し、再読込後の保存状態も復元された。T-31のPackage／Runtime未接続原因とは分離する。
+
+### 完了状態
+
+- T-31はdevelopmentで原因確定、最小修正、自動検証、non-force push、3 ProjectのProduction配備、通常正式Roomの実機確認まで完了した。
+- `main`は`85e702e7ed3b6acf5e7167d9fb3dcbe3a23c2389`のままで未反映。
