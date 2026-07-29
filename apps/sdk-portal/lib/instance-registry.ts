@@ -186,9 +186,18 @@ export async function listCreatorGames(slug: string) {
   const rows = await sdkSql()`
     SELECT g.game_id AS "gameId", g.title, g.description, g.status,
            g.module_policy AS "modulePolicy",
-           (g.mock_revision IS NOT NULL) AS "mockAvailable"
+           (g.mock_revision IS NOT NULL) AS "mockAvailable",
+           candidate.revision AS "packageCandidateRevision"
     FROM sdk_games g JOIN sdk_creators c ON c.id = g.creator_id
+    LEFT JOIN LATERAL (
+      SELECT revision
+      FROM sdk_game_package_revisions
+      WHERE game_id = g.id
+      ORDER BY created_at DESC, revision DESC
+      LIMIT 1
+    ) candidate ON TRUE
     WHERE c.slug = ${slug}
+      AND c.deleted_at IS NULL
       AND g.deleted_at IS NULL
     ORDER BY g.updated_at DESC
   `;
@@ -199,6 +208,7 @@ export async function listCreatorGames(slug: string) {
     status: string;
     modulePolicy: unknown;
     mockAvailable: boolean;
+    packageCandidateRevision: string | null;
   }>).map((game) => ({
     ...game,
     modulePolicy: normalizeGameSdkModuleProfile(game.modulePolicy),
@@ -240,25 +250,46 @@ export async function getCreatorGamePreview(slug: string, gameId: string) {
 export async function getCreatorGamePackageRevision(
   slug: string,
   gameId: string,
-  revision: string,
+  revision?: string,
 ) {
   await ensureSdkSchema();
-  const rows = await sdkSql()`
-    SELECT g.game_id AS "gameId", g.title, r.manifest,
-           NULL::CHAR(40) AS "mockRevision",
-           r.revision AS "packageRevision",
-           r.package_root_sha256 AS "packageRootSha256",
-           r.server_bundle_sha256 AS "packageBundleSha256",
-           r.app_set_source_sha256 AS "packageAppSetSha256",
-           g.module_policy AS "modulePolicy"
-    FROM sdk_games g
-    JOIN sdk_creators c ON c.id = g.creator_id
-    JOIN sdk_game_package_revisions r ON r.game_id = g.id
-    WHERE c.slug = ${slug}
-      AND g.game_id = ${gameId}
-      AND r.revision = ${revision}
-    LIMIT 1
-  `;
+  const rows = revision
+    ? await sdkSql()`
+      SELECT g.game_id AS "gameId", g.title, r.manifest,
+             NULL::CHAR(40) AS "mockRevision",
+             r.revision AS "packageRevision",
+             r.package_root_sha256 AS "packageRootSha256",
+             r.server_bundle_sha256 AS "packageBundleSha256",
+             r.app_set_source_sha256 AS "packageAppSetSha256",
+             g.module_policy AS "modulePolicy"
+      FROM sdk_games g
+      JOIN sdk_creators c ON c.id = g.creator_id
+      JOIN sdk_game_package_revisions r ON r.game_id = g.id
+      WHERE c.slug = ${slug}
+        AND c.deleted_at IS NULL
+        AND g.game_id = ${gameId}
+        AND g.deleted_at IS NULL
+        AND r.revision = ${revision}
+      LIMIT 1
+    `
+    : await sdkSql()`
+      SELECT g.game_id AS "gameId", g.title, r.manifest,
+             NULL::CHAR(40) AS "mockRevision",
+             r.revision AS "packageRevision",
+             r.package_root_sha256 AS "packageRootSha256",
+             r.server_bundle_sha256 AS "packageBundleSha256",
+             r.app_set_source_sha256 AS "packageAppSetSha256",
+             g.module_policy AS "modulePolicy"
+      FROM sdk_games g
+      JOIN sdk_creators c ON c.id = g.creator_id
+      JOIN sdk_game_package_revisions r ON r.game_id = g.id
+      WHERE c.slug = ${slug}
+        AND c.deleted_at IS NULL
+        AND g.game_id = ${gameId}
+        AND g.deleted_at IS NULL
+      ORDER BY r.created_at DESC, r.revision DESC
+      LIMIT 1
+    `;
   return (Array.isArray(rows) ? rows[0] : undefined) as
     | {
         gameId: string;

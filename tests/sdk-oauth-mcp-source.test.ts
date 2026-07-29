@@ -106,6 +106,31 @@ test("SDK Portal persists app-declared settings and exposes them to preview", ()
   assert.match(runtime, /settings: parseGameSdkSettingDefinitions/);
 });
 
+test("normal formal Room preview resolves and pins the latest immutable Package", () => {
+  const instanceRegistry = read("apps/sdk-portal/lib/instance-registry.ts");
+  const runtimeRoute = read("apps/sdk-portal/app/api/preview-runtime/[instanceId]/[gameId]/route.ts");
+  const catalogRoute = read("apps/sdk-portal/app/api/preview-catalog/[instanceId]/route.ts");
+  const catalog = read("app/games/sdk-game-catalog.ts");
+  const definition = read("app/games/game-definition-source.ts");
+  const previewPage = read("app/sdk-preview/[creatorSlug]/games/[gameId]/page.tsx");
+  const roomRoute = read("app/api/sdk-preview/[creatorSlug]/games/[gameId]/rooms/route.ts");
+
+  assert.match(instanceRegistry, /candidate\.revision AS "packageCandidateRevision"/);
+  assert.match(instanceRegistry, /ORDER BY created_at DESC, revision DESC/);
+  assert.match(instanceRegistry, /revision\?: string/);
+  assert.match(instanceRegistry, /ORDER BY r\.created_at DESC, r\.revision DESC/);
+  assert.match(runtimeRoute, /resolvePreviewRuntime/);
+  assert.match(runtimeRoute, /getCreatorGamePackageRevision\(instanceId, gameId, revision\)/);
+  assert.match(runtimeRoute, /status: 503/);
+  assert.match(catalogRoute, /revision: game\.packageCandidateRevision/);
+  assert.match(catalog, /isSdkPackageRevision\(game\.revision\)/);
+  assert.match(definition, /sdkGamePreviewHref\(definition\.runtime\)/);
+  assert.match(previewPage, /packageRevision=\{game\.revision\}/);
+  assert.match(previewPage, /rooms\?revision=\$\{encodeURIComponent\(game\.revision\)\}/);
+  assert.match(roomRoute, /revision: requestedRevision/);
+  assert.match(roomRoute, /runtime\.runtimeContract\.packageRevision/);
+});
+
 test("DownloadMe contains no embedded credential placeholders", () => {
   const entry = read("sdk/entry/START_GAME_FIELDS.md");
   assert.match(entry, /__SDK_PORTAL_BASE_URL__\/api\/mcp/);

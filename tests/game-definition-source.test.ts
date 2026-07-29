@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import registry from "../config/game-registry.json" with { type: "json" };
 import { builtInGameCapabilityPolicies } from "../app/games/built-in-game-module-policies.ts";
+import { sdkGamePreviewHref } from "../app/games/sdk-game-preview-navigation.ts";
 
 test("every built-in game has one explicit module policy", () => {
   assert.deepEqual(
@@ -18,4 +19,24 @@ test("disabled modules always explain the intentional omission", () => {
       }
     }
   }
+});
+
+test("SDK creator catalog pins the latest package revision on normal game links", () => {
+  const revision = "a".repeat(40);
+  assert.equal(
+    sdkGamePreviewHref({
+      creatorSlug: "creator-lab",
+      gameId: "sample-game",
+      revision,
+    }),
+    `/sdk-preview/creator-lab/games/sample-game?revision=${revision}`,
+  );
+  assert.equal(
+    sdkGamePreviewHref({
+      creatorSlug: "creator-lab",
+      gameId: "sample-game",
+      revision: "latest",
+    }),
+    "/sdk-preview/creator-lab/games/sample-game",
+  );
 });

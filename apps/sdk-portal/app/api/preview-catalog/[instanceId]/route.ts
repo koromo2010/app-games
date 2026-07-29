@@ -12,6 +12,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ instanceId
       id: game.gameId,
       title: game.title,
       description: game.description,
+      revision: game.packageCandidateRevision,
       moduleProfile: game.modulePolicy,
     })) }, { headers: { "Cache-Control": "no-store" } });
   } catch {

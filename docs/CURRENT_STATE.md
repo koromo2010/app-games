@@ -86,6 +86,12 @@ SDK Previewのportable serverを呼ぶ。Portalの`/api/health`はDB schemaに�
 408／502／503／504だけを1回再試行し、401／403の認証不整合は再試行で隠さず
 `GAME_SDK_REMOTE_RUNNER_AUTH_FAILED`として区別する。
 
+制作者トップの通常ゲームカードとrevision指定URLは、どちらも
+`sdk_game_package_revisions`の同じ不変Package resolverを使用する。通常カードには
+最新candidate revisionを明示して正式`GameSdkFrame`へ遷移し、queryなしの直接アクセスも
+同じ最新candidateを解決する。Packageが1件もない場合だけ旧Mock Previewを許可し、
+Package lookup、Runtime bundle、grant生成の失敗時はMockへfallbackしない。
+
 formal package Roomは作成時の`runtimeContract.packageRevision`を不変条件として保持し、
 すべてのRoom Snapshotと一覧へそのrevisionを返す。active Room復帰時にURL指定revisionと
 Room固定revisionが同じなら通常復帰し、異なる場合はclient iframeを起動しない。利用者は

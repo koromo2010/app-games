@@ -23,6 +23,7 @@ import {
   approvedGameSdkIds,
   approvedGameSdkRegistration,
 } from "../lib/game-sdk-server-registry.ts";
+import { resolvePreviewRuntime } from "../apps/sdk-portal/lib/preview-runtime-resolution.ts";
 import {
   sdkCountUpServerModule,
   type SdkCountUpCommand,
@@ -252,6 +253,59 @@ function packageRuntimeContract(
     clientBridgeVersion: 1,
   };
 }
+
+test("通常正式Roomは現在publish済みのpackageRevisionを永続化する", async () => {
+  const publishedRevision = "d".repeat(40);
+  const definition = await resolvePreviewRuntime({
+    resolvePackageRevision: async () => ({
+      packageRevision: publishedRevision,
+      packageRootSha256: "e".repeat(64),
+    }),
+    resolveLegacyPreview: async () => undefined,
+  });
+  assert.ok(definition);
+
+  const adapter = createAuthenticatedGameSdkPlatformAdapter({
+    module: sdkCountUpServerModule,
+    roomStore: memoryRoomStore(),
+    runtimeContract: packageRuntimeContract(
+      definition.packageRevision,
+      definition.packageRootSha256,
+    ),
+    resolveIdentity: async () => host,
+    now: () => 1_000,
+    createRequestId: () => "request-normal-formal-room",
+  });
+  const handlers = createGameSdkOnlineRoomHttpHandlers({
+    adapter: adapter as unknown as AuthenticatedGameSdkPlatformAdapter<
+      unknown,
+      { type: string },
+      unknown
+    >,
+  });
+  const runtime = createGameSdkHttpClientRuntime<
+    SdkCountUpCreateInput,
+    SdkCountUpCommand,
+    SdkCountUpRoomView
+  >({
+    endpoint: "https://game-fields.test/api/sdk-preview/creator/game/rooms",
+    fetcher: httpFetcher(handlers),
+    gameId: "sdk-count-up-proof",
+  });
+
+  const room = await runtime.createRoom({
+    roomCode: "NORM",
+    create: {
+      settings: { target: 3 },
+      app: {},
+    },
+  });
+  assert.equal(room.packageRevision, publishedRevision);
+  assert.equal(
+    (await runtime.readActiveRoom())?.packageRevision,
+    publishedRevision,
+  );
+});
 
 test("SDK HTTP Client Runtimeはactorを送らず認証adapterと永続Runtimeを縦断する", async () => {
   let identity = host;

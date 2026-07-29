@@ -3066,3 +3066,41 @@ Total output lines: 6329
 ### 未対応・保留
 
 - `main`への反映は利用者の指示があるまで行わない。
+
+## 2026-07-30 — T-31 通常の正式Room作成でRuntimeが接続されない問題を再オープン
+
+### 利用者からの要望
+
+- `test10-1 / link-lines`の通常「正式Roomで確認」で作った`GF43`がRuntime未接続となるため、development完了判定を撤回し、最優先で原因確定・最小修正・develop配備・通常導線実機確認まで行う。
+- revision指定URLの成功だけを完了証拠にせず、通常導線とrevision指定導線のPackage、Runtime bundle、`GameSdkFrame`接続結果を段階ごとに比較する。
+- T-26の並行変更を破棄せず、push前にremote `develop`を再取得し、force pushしない。`main`は変更しない。
+
+### 根本原因と証拠
+
+- `GF43`に保存済み`packageRevision`は存在しない。旧`SdkPreviewGameShell`がブラウザ内だけでRoomコードを生成しており、正式Room APIへの作成POSTとserver Room recordがなかった。
+- 制作者トップの通常カタログは最新candidate revisionを返さず、revisionなしのゲームURLを作っていた。
+- Portal Runtime APIはrevision指定時だけimmutable package revision行を読み、queryなしではmutableゲーム行を読んでいた。対象ゲームはcandidate作成済み・正式提出前のため、通常導線は旧Mock、revision指定導線はcandidate Packageを解決した。
+- development Runtime logでは`GF43`のRoom作成はなく、queryなしRoom APIはPackage未解決で404、revision指定Room APIは200だった。成功側の正式`GameSdkFrame`ではPackage client、portable server、Room作成、盤面Commandが同じrevisionで動作した。
+
+### 修正
+
+- 制作者カタログが最新candidate revisionを返し、通常のゲームカードもrevision固定の正式`GameSdkFrame`へ遷移するようにした。
+- queryなし／revision指定のPortal Runtime APIを同じimmutable Package resolverへ統一した。queryなしは最新candidate、revision指定は指定revisionを解決する。
+- Packageが存在しない通常導線だけ旧Mockを許可し、Package lookupの例外、Runtime bundle解決、grant生成失敗はMockへfallbackせず停止する。
+- 正式Roomの保存、旧Room復帰、新revisionで新Roomを作る既存分岐は変更していない。
+
+### 自動検証
+
+- 追加・関連テスト30/30成功。
+- SDK Portal、SDK Previewの単独型検査、ESLint、SDK依存境界、SDK Shell契約8/8成功。
+- `npm run build`、`npm run build:sdk`、`npm run build:sdk-preview`成功。
+- 全体テストは701/703成功。残る2件は今回差分外で既知の、Node 24 JSON import属性と、実装済みSDK Preview招待を否定する旧contract test。
+- ルート全体の単独`tsc`は既存test fixtureの型不一致で失敗した。変更対象のSDK Portal／SDK Preview型検査と3つのproduction buildには新規型エラーがない。
+
+### 未対応・保留
+
+- push直前にremote `develop`を再取得し、T-26等で進んでいれば安全に統合・影響範囲を再テストする。
+- developへnon-force pushし、`app-games-dev`、`app-games-sdk-dev`、`app-games-preview-dev`のProduction deploymentを確認する。
+- SDK Portalの通常「正式Roomで確認」で、新Room作成、Runtime接続、開始、1手、手番交代、再読込復帰、revision指定経路との一致、旧Room／新revision分岐を実機確認する。
+- 共通基盤変更のため、別のpublish済みSDKゲームを通常導線から起動確認する。
+- `main`は未反映のまま維持する。
