@@ -21,10 +21,19 @@ export function isGamePackageReleaseSupported(input: {
     && release.supportedSdkContractVersions.includes(input.sdkContractVersion);
 }
 
+export function candidatePackagePreviewPath(input: {
+  creatorSlug: string;
+  gameId: string;
+  revision: string;
+}) {
+  return `/${encodeURIComponent(input.creatorSlug)}/games/${encodeURIComponent(input.gameId)}?revision=${encodeURIComponent(input.revision)}`;
+}
+
 export type SavedGamePackage = {
   saved: true;
   gameId: string;
   packageRevision: string;
+  candidatePreviewPath: string;
   packageRootSha256: string;
   serverBundleSha256: string;
   appSetSourceSha256: string;
@@ -72,6 +81,11 @@ export async function saveCreatorGamePackage(input: {
       saved: true,
       gameId: input.gameId,
       packageRevision: existing.revision,
+      candidatePreviewPath: candidatePackagePreviewPath({
+        creatorSlug: input.creatorSlug,
+        gameId: input.gameId,
+        revision: existing.revision,
+      }),
       packageRootSha256: existing.packageRootSha256,
       serverBundleSha256: existing.serverBundleSha256,
       appSetSourceSha256: existing.appSetSourceSha256,
@@ -128,6 +142,11 @@ export async function saveCreatorGamePackage(input: {
     saved: true,
     gameId: input.gameId,
     packageRevision: revision,
+    candidatePreviewPath: candidatePackagePreviewPath({
+      creatorSlug: input.creatorSlug,
+      gameId: input.gameId,
+      revision,
+    }),
     packageRootSha256: parsed.packageRootSha256,
     serverBundleSha256: parsed.bundleSha256,
     appSetSourceSha256: parsed.appSetSourceSha256,
