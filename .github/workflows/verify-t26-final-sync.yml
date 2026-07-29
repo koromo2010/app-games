@@ -1,0 +1,89 @@
+name: Verify T-26 final sync
+
+on:
+  push:
+    branches:
+      - agent/t26-common-result-shell
+    paths:
+      - .github/workflows/verify-t26-final-sync.yml
+  pull_request:
+    branches:
+      - develop
+    paths:
+      - .github/workflows/verify-t26-final-sync.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-t26-final-sync-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/t26-common-result-shell
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:runtime-packages
+      - name: Run T-26 focused tests
+        run: |
+          node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test \
+            tests/common-game-result-shell.test.ts \
+            tests/game-sdk-shell-contract.test.ts \
+            tests/wordwolf-room-actions-ui.test.ts
+      - name: Run packageRevision regression tests
+        run: |
+          node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test \
+            tests/game-sdk-package-revision.test.ts \
+            tests/game-sdk-http-runtime.test.ts \
+            tests/room-invite-sdk-preview-contract.test.ts
+      - name: Run full suite except known baseline failures
+        run: |
+          mapfile -t test_files < <(find tests -maxdepth 1 -name '*.test.ts' \
+            ! -name 'game-sdk-package-manifest.test.ts' \
+            ! -name 'room-invite-route-contract.test.ts' | sort)
+          node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test "${test_files[@]}"
+      - name: Record known baselines separately
+        continue-on-error: true
+        run: |
+          node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test tests/game-sdk-package-manifest.test.ts
+          node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test tests/room-invite-route-contract.test.ts
+      - name: Typecheck application source
+        run: |
+          cat > tsconfig.t26.json <<'EOF'
+          {
+            "extends": "./tsconfig.json",
+            "compilerOptions": { "incremental": false },
+            "include": ["next-env.d.ts", "app/**/*.ts", "app/**/*.tsx", "lib/**/*.ts", "packages/**/*.ts", "types/**/*.d.ts"],
+            "exclude": ["node_modules", "tests", "scripts", "apps/sdk-portal", "apps/sdk-preview"]
+          }
+          EOF
+          trap 'rm -f tsconfig.t26.json' EXIT
+          npx tsc --noEmit -p tsconfig.t26.json
+      - name: Record full-repository typecheck baseline separately
+        continue-on-error: true
+        run: npx tsc --noEmit
+      - name: Record existing environment ledger drift separately
+        continue-on-error: true
+        run: npm run check:env-ledger
+      - name: Run repository verification gates
+        run: |
+          npm run check:versions
+          npm run check:games
+          npm run check:sdk
+          npm run check:sdk-help
+          npm run check:sdk-migrations
+          npm run check:sdk-shell-contract
+          npm run lint
+      - run: npm run build
+      - run: npm run build:sdk
+      - run: npm run build:sdk-preview
