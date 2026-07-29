@@ -22,13 +22,29 @@ const INVITE_TARGETS: InviteTarget[] = [
 ];
 
 type RoomPayload = {
-  room?: { code?: string } | null;
+  room?: { code?: string; revision?: number } | null;
   rooms?: Array<{ code?: string }>;
   error?: string;
 };
 
+type SdkInvitePayload = {
+  target?: {
+    kind: "sdk-preview";
+    roomCode: string;
+    creatorSlug: string;
+    gameId: string;
+    revision: string;
+    endpoint: string;
+    href: string;
+  } | null;
+};
+
 async function readPayload(response: Response): Promise<RoomPayload> {
   return response.json().catch(() => ({})) as Promise<RoomPayload>;
+}
+
+function commandId() {
+  return `invite-${Date.now()}-${crypto.randomUUID()}`;
 }
 
 export function InviteRoomJoiner({
@@ -47,7 +63,7 @@ export function InviteRoomJoiner({
     if (started.current) return;
     started.current = true;
 
-    const join = async () => {
+    const joinStandardRoom = async () => {
       for (const target of INVITE_TARGETS) {
         const lookup = await fetch(target.endpoint, {
           credentials: "same-origin",
@@ -85,8 +101,56 @@ export function InviteRoomJoiner({
         }
 
         router.replace(`${target.href}?room=${encodeURIComponent(roomCode)}`);
-        return;
+        return true;
       }
+      return false;
+    };
+
+    const joinSdkPreviewRoom = async () => {
+      const resolved = await fetch(`/api/room-invites/${encodeURIComponent(roomCode)}`, {
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+      if (!resolved.ok) return false;
+      const payload = await resolved.json().catch(() => ({})) as SdkInvitePayload;
+      const target = payload.target;
+      if (!target || target.kind !== "sdk-preview") return false;
+
+      const roomResponse = await fetch(`${target.endpoint}&code=${encodeURIComponent(roomCode)}`, {
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+      const roomPayload = await readPayload(roomResponse);
+      const expectedRevision = roomPayload.room?.revision;
+      if (!roomResponse.ok || !Number.isSafeInteger(expectedRevision)) {
+        throw new Error(roomPayload.error || "ROOM_INVITE_NOT_FOUND");
+      }
+
+      setMessage("SDK Previewの部屋に参加しています…");
+      const joined = await fetch(target.endpoint, {
+        method: "PATCH",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: roomCode,
+          envelope: {
+            commandId: commandId(),
+            expectedRevision,
+            command: { type: "room/join" },
+          },
+        }),
+      });
+      if (!joined.ok) {
+        const joinedPayload = await readPayload(joined);
+        throw new Error(joinedPayload.error || "ROOM_INVITE_JOIN_FAILED");
+      }
+      router.replace(target.href);
+      return true;
+    };
+
+    const join = async () => {
+      if (await joinStandardRoom()) return;
+      if (await joinSdkPreviewRoom()) return;
       throw new Error("ROOM_INVITE_NOT_FOUND");
     };
 
