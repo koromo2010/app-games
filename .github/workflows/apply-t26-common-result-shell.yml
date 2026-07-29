@@ -1,0 +1,51 @@
+name: Apply T-26 common result shell
+
+on:
+  push:
+    branches:
+      - agent/t26-common-result-shell
+    paths:
+      - scripts/apply-t26-common-result-shell.mjs
+      - .github/workflows/apply-t26-common-result-shell.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: t26-common-result-shell
+  cancel-in-progress: false
+
+jobs:
+  apply-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/t26-common-result-shell
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+      - run: node scripts/apply-t26-common-result-shell.mjs
+      - run: npm test
+      - run: npx tsc --noEmit
+      - run: npm run verify
+      - run: npm run build
+      - run: npm run build:sdk
+      - run: npm run build:sdk-preview
+
+      - name: Commit verified implementation
+        run: |
+          rm scripts/apply-t26-common-result-shell.mjs
+          rm .github/workflows/apply-t26-common-result-shell.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "feat: unify result screens with common shell"
+          git push origin HEAD:agent/t26-common-result-shell
