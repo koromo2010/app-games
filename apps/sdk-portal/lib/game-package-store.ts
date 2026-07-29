@@ -8,6 +8,19 @@ import { ensureSdkSchema, sdkSql } from "./sdk-postgres";
 
 const MAX_PACKAGE_REVISIONS_PER_GAME = 100;
 
+type GamePackageRelease = {
+  sdkPackageVersion: string;
+  supportedSdkContractVersions: readonly number[];
+};
+
+export function isGamePackageReleaseSupported(input: {
+  sdkPackageVersion: string;
+  sdkContractVersion: number;
+}, release: GamePackageRelease = platformRelease) {
+  return input.sdkPackageVersion === release.sdkPackageVersion
+    && release.supportedSdkContractVersions.includes(input.sdkContractVersion);
+}
+
 export type SavedGamePackage = {
   saved: true;
   gameId: string;
@@ -29,10 +42,7 @@ export async function saveCreatorGamePackage(input: {
     gameId: input.gameId,
     files,
   });
-  if (
-    parsed.manifest.sdkPackageVersion !== platformRelease.sdkPackageVersion
-    || parsed.manifest.sdkContractVersion !== platformRelease.sdkContractVersion
-  ) {
+  if (!isGamePackageReleaseSupported(parsed.manifest)) {
     throw new Error("GAME_SDK_PACKAGE_RELEASE_MISMATCH");
   }
 
