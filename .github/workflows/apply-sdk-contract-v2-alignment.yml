@@ -1,5 +1,6 @@
 name: Apply SDK contract v2 alignment
 
+# Diagnostic trigger for contract v2 alignment.
 on:
   push:
     branches: [develop]
