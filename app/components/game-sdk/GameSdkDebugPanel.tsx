@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 import { GameSdkShellHeader } from "@/app/components/GameSdkShellHeader";
 import type { GameSdkShellSurface } from "@/lib/game-sdk-shell-navigation";
 import type { GameSdkModuleId } from "@game-fields/game-sdk/modules";
@@ -54,7 +54,7 @@ type Props = {
  * handlers against a mock runtime — without needing a React renderer.
  * `GameSdkShellHeader.tsx` itself is unchanged.
  */
-export function GameSdkDebugPanel({
+export const GameSdkDebugPanel = memo(function GameSdkDebugPanel({
   eyebrow,
   title,
   rules,
@@ -115,4 +115,4 @@ export function GameSdkDebugPanel({
       {children}
     </GameSdkShellHeader>
   );
-}
+});
