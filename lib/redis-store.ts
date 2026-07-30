@@ -186,6 +186,10 @@ export function namespaceRedisCommand(command: unknown[], prefix: string) {
   return namespaced;
 }
 
+export function namespaceRedisCommands(commands: unknown[][], prefix: string) {
+  return commands.map((command) => namespaceRedisCommand(command, prefix));
+}
+
 export function getRedisConfig() {
   const devUrl = process.env.DEV_REDIS_KV_REST_API_URL;
   const devToken = process.env.DEV_REDIS_KV_REST_API_TOKEN;
@@ -299,15 +303,15 @@ export async function redisPipeline<T extends unknown[]>(commands: unknown[][]) 
   if (commands.length === 0) return [] as unknown as T;
   const config = getRedisConfig();
   if (!config) throw new Error("REDIS_STORE_NOT_CONFIGURED");
+  const namespacedCommands = namespaceRedisCommands(commands, config.keyPrefix);
 
   if (config.transport === "socket") {
     const client = await getSocketRedisClient(config.url);
     const transaction = client.multi();
-    for (const command of commands) transaction.addCommand(stringifyRedisCommand(namespaceRedisCommand(command, config.keyPrefix)));
+    for (const command of namespacedCommands) transaction.addCommand(stringifyRedisCommand(command));
     return await transaction.exec() as T;
   }
 
-  const namespacedCommands = commands.map((command) => namespaceRedisCommand(command, config.keyPrefix));
   const response = await fetchRedis(`${config.url}/pipeline`, config.token, JSON.stringify(namespacedCommands), commandsAreSafeToRetry(commands));
   if (!response.ok) throw await redisRequestError(response);
 
