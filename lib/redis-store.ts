@@ -46,6 +46,9 @@ const redisReadCommands = new Set([
   "SMEMBERS",
   "SSCAN",
   "TTL",
+  "XLEN",
+  "XRANGE",
+  "XREVRANGE",
   "ZCARD",
   "ZRANGE",
   "ZREVRANGE",
@@ -110,11 +113,17 @@ export function resolveSocketRedisUrl(env: RedisEnvironment = process.env) {
   return integrationUrls[0] ?? null;
 }
 
-function appRedisKeyPrefix(configKey: string) {
-  return configKey.startsWith("DEV_REDIS_") ? "app-dev:" : "";
+function developmentRedisEnvironment(env: RedisEnvironment) {
+  const configured = env.GAME_FIELDS_ENV?.trim().toLowerCase();
+  if (configured) return configured === "development" || configured === "candidate-preview";
+  return env.VERCEL_GIT_COMMIT_REF === "develop";
 }
 
-function prefixRedisKey(value: unknown, prefix: string) {
+export function redisKeyPrefixForConfigKey(configKey: string, env: RedisEnvironment = process.env) {
+  return configKey.startsWith("DEV_REDIS_") || developmentRedisEnvironment(env) ? "app-dev:" : "";
+}
+
+export function namespaceRedisKey(value: unknown, prefix: string) {
   if (!prefix || typeof value !== "string" || value.startsWith(prefix)) return value;
   return `${prefix}${value}`;
 }
@@ -122,32 +131,48 @@ function prefixRedisKey(value: unknown, prefix: string) {
 const singleKeyCommands = new Set([
   "DECR", "EXPIRE", "GET", "HDEL", "HGET", "HGETALL", "HINCRBY", "HKEYS", "HLEN", "HMGET", "HSCAN",
   "HSET", "HVALS", "INCR", "INCRBY", "LLEN", "LPUSH", "LRANGE", "LREM", "LTRIM", "RPUSH", "SADD", "SCARD",
-  "SISMEMBER", "SMEMBERS", "SMISMEMBER", "SREM", "SSCAN", "SET", "TTL", "ZADD", "ZCARD", "ZINCRBY",
-  "ZMSCORE", "ZRANGE", "ZREM", "ZREVRANGE", "ZSCORE",
+  "SISMEMBER", "SMEMBERS", "SMISMEMBER", "SREM", "SSCAN", "SET", "TTL", "XADD", "XDEL", "XLEN", "XRANGE",
+  "XREVRANGE", "XTRIM", "ZADD", "ZCARD", "ZINCRBY", "ZMSCORE", "ZRANGE", "ZREM", "ZREVRANGE", "ZSCORE",
 ]);
 const allKeyCommands = new Set(["DEL", "EXISTS", "MGET"]);
 
+function namespaceStreamReadCommand(command: unknown[], prefix: string) {
+  const streamIndex = command.findIndex((part) => String(part).toUpperCase() === "STREAMS");
+  if (streamIndex < 0) return command;
+  const namespaced = [...command];
+  const remaining = namespaced.length - streamIndex - 1;
+  const keyCount = Math.floor(remaining / 2);
+  for (let index = streamIndex + 1; index < streamIndex + 1 + keyCount; index += 1) {
+    namespaced[index] = namespaceRedisKey(namespaced[index], prefix);
+  }
+  return namespaced;
+}
+
 export function namespaceRedisCommand(command: unknown[], prefix: string) {
   if (!prefix || command.length === 0) return command;
-  const namespaced = [...command];
+  let namespaced = [...command];
   const name = commandName(namespaced);
   if (singleKeyCommands.has(name)) {
-    namespaced[1] = prefixRedisKey(namespaced[1], prefix);
+    namespaced[1] = namespaceRedisKey(namespaced[1], prefix);
   } else if (allKeyCommands.has(name)) {
-    for (let index = 1; index < namespaced.length; index += 1) namespaced[index] = prefixRedisKey(namespaced[index], prefix);
+    for (let index = 1; index < namespaced.length; index += 1) namespaced[index] = namespaceRedisKey(namespaced[index], prefix);
   } else if (name === "EVAL" || name === "EVALSHA") {
     const keyCount = Number(namespaced[2]);
     if (Number.isInteger(keyCount) && keyCount >= 0) {
       for (let index = 3; index < 3 + keyCount && index < namespaced.length; index += 1) {
-        namespaced[index] = prefixRedisKey(namespaced[index], prefix);
+        namespaced[index] = namespaceRedisKey(namespaced[index], prefix);
       }
     }
   } else if (name === "SCAN") {
     for (let index = 2; index < namespaced.length - 1; index += 1) {
       if (String(namespaced[index]).toUpperCase() === "MATCH") {
-        namespaced[index + 1] = prefixRedisKey(namespaced[index + 1], prefix);
+        namespaced[index + 1] = namespaceRedisKey(namespaced[index + 1], prefix);
       }
     }
+  } else if (name === "XREAD" || name === "XREADGROUP") {
+    namespaced = namespaceStreamReadCommand(namespaced, prefix);
+  } else if (name === "XGROUP" || name === "XINFO") {
+    namespaced[2] = namespaceRedisKey(namespaced[2], prefix);
   }
   return namespaced;
 }
@@ -156,6 +181,11 @@ export function getRedisConfig() {
   const devUrl = process.env.DEV_REDIS_KV_REST_API_URL;
   const devToken = process.env.DEV_REDIS_KV_REST_API_TOKEN;
   const usesDevIntegration = Boolean(devUrl && devToken);
+  const restUrlKey = usesDevIntegration
+    ? "DEV_REDIS_KV_REST_API_URL"
+    : process.env.UPSTASH_REDIS_REST_URL
+      ? "UPSTASH_REDIS_REST_URL"
+      : "KV_REST_API_URL";
   const url = usesDevIntegration ? devUrl : process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
   const token = usesDevIntegration ? devToken : process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
 
@@ -165,7 +195,7 @@ export function getRedisConfig() {
       transport: "rest",
       url: url.replace(/\/$/, ""),
       token,
-      keyPrefix: usesDevIntegration ? "app-dev:" : "",
+      keyPrefix: redisKeyPrefixForConfigKey(restUrlKey),
     } satisfies RedisConfig;
   }
 
@@ -176,7 +206,7 @@ export function getRedisConfig() {
   return {
     transport: "socket",
     url: socketConfig.url,
-    keyPrefix: appRedisKeyPrefix(socketConfig.key),
+    keyPrefix: redisKeyPrefixForConfigKey(socketConfig.key),
   } satisfies RedisConfig;
 }
 
