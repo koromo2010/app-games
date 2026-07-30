@@ -71,6 +71,9 @@ test("production Platformはprefixなし、production PreviewのRedis誤設定�
 
 test("共有Redis上のapp-devキーを通常・複数・Lua・SCANコマンドへ適用する", () => {
   assert.deepEqual(namespaceRedisCommand(["GET", "player:1"], "app-dev:"), ["GET", "app-dev:player:1"]);
+  assert.deepEqual(namespaceRedisCommand(["HSETNX", "wordwolf:topic:catalog:v1", "field", "value"], "app-dev:"), [
+    "HSETNX", "app-dev:wordwolf:topic:catalog:v1", "field", "value",
+  ]);
   assert.deepEqual(namespaceRedisCommand(["MGET", "player:1", "player:2"], "app-dev:"), ["MGET", "app-dev:player:1", "app-dev:player:2"]);
   assert.deepEqual(namespaceRedisCommand(["EVAL", "return 1", "2", "room:1", "room:2", "arg"], "app-dev:"), ["EVAL", "return 1", "2", "app-dev:room:1", "app-dev:room:2", "arg"]);
   assert.deepEqual(namespaceRedisCommand(["SCAN", "0", "MATCH", "account:*", "COUNT", "100"], "app-dev:"), ["SCAN", "0", "MATCH", "app-dev:account:*", "COUNT", "100"]);
