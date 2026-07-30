@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "ignoreCommand": "node -e \"const n=process.env.VERCEL_PROJECT_NAME,b=process.env.VERCEL_GIT_COMMIT_REF;process.exit((n==='app-games'&&b==='main')||(n==='app-games-dev'&&b==='develop')?1:0)\"",
+  "ignoreCommand": "node scripts/check-vercel-build-impact.mjs",
   "crons": [
     { "path": "/api/cron/storage-capacity", "schedule": "17 0 * * *" },
     { "path": "/api/cron/account-retention", "schedule": "43 0 * * *" }
