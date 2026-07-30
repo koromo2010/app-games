@@ -1,6 +1,6 @@
 # Redis namespace inventory review — 2026-07-30
 
-対象は`game-fields` scopeの` sdk-dev-redis`。秘密値、Redis value、password、token、接続URL全体は記録しない。
+対象は`game-fields` scopeの`sdk-dev-redis`。秘密値、Redis value、password、token、接続URL全体は記録しない。
 
 ## 取得条件
 
