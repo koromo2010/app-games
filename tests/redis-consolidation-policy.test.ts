@@ -9,6 +9,13 @@ const registry = JSON.parse(readFileSync("config/redis-consolidation-registry.js
   namespaceMigration: Record<string, unknown>;
   constraints: Record<string, unknown>;
 };
+const inventory = JSON.parse(readFileSync("config/redis-namespace-inventory-summary-20260730.json", "utf8")) as {
+  keyCount: number;
+  reviewedDisposition: Record<string, number>;
+  collection: Record<string, unknown>;
+  copyPlan: Record<string, unknown>;
+  groups: Array<Record<string, unknown>>;
+};
 
 function connection(project: string) {
   const item = registry.connections.find((entry) => entry.project === project);
@@ -74,6 +81,24 @@ test("両Redisの変更前Backup完了を記録する", () => {
   assert.equal(developmentBackup.secretValuesRecorded, false);
   assert.match(runbook, /1009\.74KB/);
   assert.match(runbook, /741\.45KB/);
+});
+
+test("metadata-only inventoryはcopy 0件として非破壊処理を固定する", () => {
+  assert.equal(inventory.keyCount, 206);
+  assert.deepEqual(inventory.reviewedDisposition, {
+    keep: 174,
+    copy: 0,
+    expireSource: 29,
+    retainSource: 3,
+  });
+  assert.equal(inventory.collection.redisValuesRead, false);
+  assert.equal(inventory.collection.secretValuesRecorded, false);
+  assert.equal(inventory.collection.rawInventoryCommitted, false);
+  assert.equal(inventory.copyPlan.entries, 0);
+  assert.equal(inventory.copyPlan.executionRequired, false);
+  assert.equal(inventory.copyPlan.sourceKeysDeleted, false);
+  assert.equal(inventory.copyPlan.targetKeysOverwritten, false);
+  assert.equal(inventory.groups.some((entry) => entry.classification === "preview-development-legacy-metrics" && entry.count === 29), true);
 });
 
 test("production Portalと正式Room Runtimeを混同しない", () => {
