@@ -1,7 +1,7 @@
 {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "updatedAt": "2026-07-30",
-  "status": "backups_completed_namespace_validation_in_progress",
+  "status": "inventory_reviewed_namespace_code_validation_in_progress",
   "constraints": {
     "createRedisDatabase": false,
     "connectDevelopmentToProductionRedis": false,
@@ -54,7 +54,7 @@
       "currentScope": "game-fields",
       "targetScope": "unchanged",
       "databaseId": "0861801f-9da0-47b3-a1cf-8b5847f625e0",
-      "endpointHost": "unverified",
+      "endpointHost": "driven-sawfly-189453.upstash.io",
       "primaryRegion": {
         "vercel": "hnd1",
         "upstash": "ap-northeast-1",
@@ -108,6 +108,20 @@
         "webSocketReconnectsDuringSixCommands": 0,
         "webSocketReconnectsAfterExplicitReload": 1
       },
+      "inventory": {
+        "status": "reviewed_metadata_only",
+        "createdAt": "2026-07-30T14:43:28.5412169+09:00",
+        "summaryPath": "config/redis-namespace-inventory-summary-20260730.json",
+        "commandsUsed": ["SCAN", "TYPE", "PTTL"],
+        "redisValuesRead": false,
+        "secretValuesRecorded": false,
+        "rawInventoryCommitted": false,
+        "keyCount": 206,
+        "keepCount": 174,
+        "copyCount": 0,
+        "expireSourceCount": 29,
+        "retainSourceCount": 3
+      },
       "deleteStatus": "forbidden"
     }
   ],
@@ -146,8 +160,9 @@
         "DEV_REDIS_KV_REST_API_URL",
         "DEV_REDIS_KV_REST_API_TOKEN"
       ],
+      "endpointHost": "driven-sawfly-189453.upstash.io",
       "namespace": "app-dev:",
-      "status": "resource_identity_and_watcher_recovery_confirmed_namespace_code_pending"
+      "status": "resource_identity_watcher_recovery_and_existing_namespace_confirmed_code_pending"
     },
     {
       "project": "app-games-sdk",
@@ -177,7 +192,7 @@
         "SDK_REDIS_REST_TOKEN"
       ],
       "namespace": "sdk:development:preview-instance:v1:",
-      "status": "live_connection_unverified_no_change_authorized"
+      "status": "no_portal_registry_keys_observed_live_connection_unverified_no_change_authorized"
     },
     {
       "project": "app-games-preview-dev",
@@ -194,7 +209,7 @@
         "REDIS_ENV"
       ],
       "namespace": "preview-dev:",
-      "status": "live_connection_unverified_no_change_authorized"
+      "status": "legacy_preview_metrics_observed_live_connection_identity_unverified_no_change_authorized"
     },
     {
       "project": "app-games-sdk-preview",
@@ -227,7 +242,13 @@
     "rollbackOnlyKeysCreatedByCurrentRun": true,
     "deleteSourceKeys": false,
     "databaseToDatabaseMigration": false,
-    "inventoryStatus": "pending_live_key_scan"
+    "inventoryStatus": "reviewed_metadata_only",
+    "inventorySummaryPath": "config/redis-namespace-inventory-summary-20260730.json",
+    "inventoryKeyCount": 206,
+    "copyCandidateCount": 0,
+    "copyExecutionRequired": false,
+    "sourceKeysDeleted": false,
+    "targetKeysOverwritten": false
   },
   "rollback": {
     "productionDeploymentId": "dpl_5XkpdpgtJP57ETaLTskmFi4Lkku6",
