@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "createdAt": "2026-07-30T14:43:28.5412169+09:00",
+  "reviewedAt": "2026-07-30T14:45:00+09:00",
+  "database": {
+    "name": "sdk-dev-redis",
+    "databaseId": "0861801f-9da0-47b3-a1cf-8b5847f625e0",
+    "endpointHost": "driven-sawfly-189453.upstash.io"
+  },
+  "collection": {
+    "commandsUsed": ["SCAN", "TYPE", "PTTL"],
+    "redisValuesRead": false,
+    "secretValuesRecorded": false,
+    "rawInventoryCommitted": false
+  },
+  "keyCount": 206,
+  "countsByType": {
+    "string": 118,
+    "hash": 32,
+    "list": 5,
+    "set": 19,
+    "zset": 31,
+    "stream": 1
+  },
+  "reviewedDisposition": {
+    "keep": 174,
+    "copy": 0,
+    "expireSource": 29,
+    "retainSource": 3
+  },
+  "groups": [
+    {
+      "classification": "platform-development",
+      "count": 174,
+      "disposition": "keep",
+      "namespace": "app-dev:",
+      "reason": "already isolated; physical key remains unchanged"
+    },
+    {
+      "classification": "preview-development-legacy-metrics",
+      "count": 29,
+      "type": "hash",
+      "disposition": "expireSource",
+      "targetNamespace": "preview-dev:",
+      "allKeysHaveTtl": true,
+      "observedPttlRangeMs": {
+        "minimum": 11516076,
+        "maximum": 171565930
+      },
+      "reason": "48-hour observability buckets; do not copy historical counters"
+    },
+    {
+      "classification": "platform-development-legacy-admin-observability",
+      "count": 1,
+      "type": "zset",
+      "disposition": "retainSource",
+      "targetKeyAlreadyExists": true,
+      "targetKey": "app-dev:admin-observability-issues:v1",
+      "sourceHasTtl": true,
+      "reason": "target collision policy forbids merge or overwrite; source remains until expiry"
+    },
+    {
+      "classification": "platform-development-legacy-wordwolf-catalog",
+      "count": 1,
+      "type": "hash",
+      "disposition": "retainSource",
+      "targetKeyAlreadyExists": true,
+      "targetKey": "app-dev:wordwolf:topic:catalog:v1",
+      "sourceHasTtl": false,
+      "reason": "target collision policy forbids merge or overwrite; HSETNX namespace omission fixed in code"
+    },
+    {
+      "classification": "realtime-stream-legacy",
+      "count": 1,
+      "type": "stream",
+      "disposition": "retainSource",
+      "targetKeyAlreadyExists": false,
+      "targetKey": "app-dev:online-room:events:v1",
+      "sourceHasTtl": false,
+      "reason": "historical transient events are not copied; new writer and reader switch together"
+    }
+  ],
+  "copyPlan": {
+    "entries": 0,
+    "executionRequired": false,
+    "sourceKeysDeleted": false,
+    "targetKeysOverwritten": false
+  }
+}
