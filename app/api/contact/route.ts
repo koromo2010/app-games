@@ -6,7 +6,7 @@ import {
 } from "@/lib/contact-store";
 import {
   sendContactReceiptEmail,
-  sendOperationsAlertEmail,
+  sendSupportAdminNotificationEmail,
 } from "@/lib/email";
 import { createContactThreadToken } from "@/lib/contact-thread-access";
 import {
@@ -58,12 +58,14 @@ export async function POST(request: Request) {
       || contact.notificationStatus !== "sent";
     const [notification] = await Promise.all([
       shouldNotify
-        ? sendOperationsAlertEmail({
-          audience: "contacts",
+        ? sendSupportAdminNotificationEmail({
+          reference: {
+            kind: "contact",
+            id: contact.id,
+          },
+          title: "新しい問い合わせ",
           replyTo: contact.email,
-          subject: `【GAME FIELDS】お問い合わせ ${contact.category}`,
           lines: [
-            `ID: ${contact.id}`,
             `Name: ${contact.name || "未入力"}`,
             `Email: ${contact.email}`,
             "",

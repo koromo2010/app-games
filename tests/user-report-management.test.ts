@@ -145,12 +145,14 @@ test("new reports and requester follow-ups notify the shared admin audience", ()
   const submitRoute = read("app/api/user-reports/route.ts");
   const supportRoute = read("app/api/internal/sdk-support/route.ts");
   const delivery = read("lib/user-report-admin-notification.ts");
+  const email = read("lib/email.ts");
   const accounts = read("app/admin/AdminAccountsPanel.tsx");
 
   assert.match(submitRoute, /user-report-admin-notification-/);
   assert.match(supportRoute, /user-report-admin-notification-/);
   assert.match(supportRoute, /user-report-admin-followup-/);
-  assert.match(delivery, /audience: "contacts"/);
+  assert.match(delivery, /sendSupportAdminNotificationEmail/);
+  assert.match(email, /audience: "contacts"/);
   assert.match(delivery, /updateUserReportNotificationStatus/);
   assert.match(accounts, /問い合わせ・報告を受け取る/);
   assert.match(accounts, /問い合わせフォーム、改善要望、バグ報告と、その追記内容/);

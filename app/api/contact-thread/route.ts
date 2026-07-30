@@ -4,7 +4,7 @@ import {
   updateContactNotificationStatus,
 } from "@/lib/contact-store";
 import { verifyContactThreadToken } from "@/lib/contact-thread-access";
-import { sendOperationsAlertEmail } from "@/lib/email";
+import { sendSupportAdminNotificationEmail } from "@/lib/email";
 import {
   createRequestTelemetry,
   observabilityErrorCode,
@@ -114,12 +114,14 @@ export async function POST(request: Request) {
       let notificationStatus: "sent" | "failed" = "sent";
       let notificationErrorCode: string | null = null;
       try {
-        await sendOperationsAlertEmail({
-          audience: "contacts",
+        await sendSupportAdminNotificationEmail({
+          reference: {
+            kind: "contact",
+            id: contact.id,
+          },
+          title: "問い合わせへの追記",
           replyTo: contact.email,
-          subject: `【GAME FIELDS】お問い合わせ追記 ${contact.id}`,
           lines: [
-            `ID: ${contact.id}`,
             `Email: ${contact.email}`,
             "",
             message,

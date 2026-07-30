@@ -1,4 +1,4 @@
-import { sendOperationsAlertEmail } from "@/lib/email";
+import { sendSupportAdminNotificationEmail } from "@/lib/email";
 import { observabilityErrorCode } from "@/lib/observability";
 import {
   updateUserReportNotificationStatus,
@@ -27,11 +27,15 @@ export async function deliverUserReportAdminNotification(
   let deliveryStatus: "sent" | "failed" = "sent";
   let errorCode: string | null = null;
   try {
-    await sendOperationsAlertEmail({
-      audience: "contacts",
-      subject: `【GAME FIELDS】${reportTypeLabels[report.type]} ${report.summary}`,
+    await sendSupportAdminNotificationEmail({
+      reference: {
+        kind: "report",
+        id: report.id,
+      },
+      title: input.body
+        ? "報告者からの追記"
+        : `新しい${reportTypeLabels[report.type]}`,
       lines: [
-        `報告ID: ${report.id}`,
         `種別: ${reportTypeLabels[report.type]}`,
         `概要: ${report.summary}`,
         `対象ページ: ${report.page || "未入力"}`,

@@ -9,7 +9,7 @@ import {
 } from "@/lib/contact-store";
 import { createContactThreadToken } from "@/lib/contact-thread-access";
 import {
-  sendOperationsAlertEmail,
+  sendSupportAdminNotificationEmail,
   sendSupportReplyEmail,
 } from "@/lib/email";
 import {
@@ -122,7 +122,7 @@ export async function POST(request: Request) {
       }).toString();
       const deliveryStatus = await sendSupportReplyEmail({
         to: existing.email,
-        subject: `【Game Fields】お問い合わせへの返信 ${existing.id}`,
+        contactId: existing.id,
         body: existingMessage.body,
         threadUrl: threadUrl.toString(),
         idempotencyKey: `contact-reply-${existingMessage.id}`,
@@ -190,7 +190,7 @@ export async function POST(request: Request) {
     ) {
       deliveryStatus = await sendSupportReplyEmail({
         to: result.contact.email,
-        subject: `【Game Fields】お問い合わせへの返信 ${result.contact.id}`,
+        contactId: result.contact.id,
         body: result.message.body,
         threadUrl: threadUrl.toString(),
         idempotencyKey: `contact-reply-${result.message.id}`,
@@ -277,12 +277,16 @@ export async function PUT(request: Request) {
     let deliveryStatus: "sent" | "failed" = "sent";
     let errorCode: string | null = null;
     try {
-      await sendOperationsAlertEmail({
-        audience: "contacts",
+      await sendSupportAdminNotificationEmail({
+        reference: {
+          kind: "contact",
+          id: existing.id,
+        },
+        title: latestRequesterMessage
+          ? "問い合わせへの追記"
+          : "新しい問い合わせ",
         replyTo: existing.email,
-        subject: `【GAME FIELDS】お問い合わせ ${existing.category}`,
         lines: [
-          `ID: ${existing.id}`,
           `Name: ${existing.name || "未入力"}`,
           `Email: ${existing.email}`,
           "",

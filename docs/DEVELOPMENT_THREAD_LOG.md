@@ -3207,3 +3207,41 @@ Total output lines: 6329
 - 通知から`contact_...` IDと到着時刻だけを受け取れれば、本文、氏名、メールアドレスを扱わず対象を固定できる。既知のSDK Portal報告IDはそのまま照合可能である。
 - T-33の完了後に同じ`REDIS_STORE_REQUEST_TIMEOUT`が88件再発し、Node process exitと別requestへの誤帰属を生んだ。監督DBではT-33がarchivedで、「再発時は新規TODO」と明記され、次番号は`T-39`である。履歴を戻さず、T-33再発を親参照する`T-39`として本修正と現物Redis照合を追跡する案をTODO監督へ提出する。
 - Redis接続先、環境変数、外部設定、テスト投稿、push、PR、merge、Deploymentは一切変更・実行していない。
+
+## 2026-07-30 — T-39 問い合わせ・報告メールへ保存済み受付IDを表示
+
+### 利用者からの要望
+
+- 現物Redis照合を待たず、次に届く通常問い合わせ、ゲーム内報告、SDK Portal報告から対象recordをメールだけで追跡できるようにする。
+- 保存時に発行された正規`contact_...`／`report_...`を通知層へそのまま渡し、メール専用IDは作らない。
+- 管理者新着、利用者受付確認、運営返信、追記、メール再送の件名とtext／HTML本文へ同じフルIDを維持する。
+- 本文、氏名、メールアドレス等をログへ追加せず、テスト問い合わせ、push、PR、Deployment、TODO DB更新を行わない。
+
+### 判断
+
+- メール件名とID欄を`lib/support-email-content.ts`へ集約し、保存済みrecord ID一つから件名、text、HTMLを同時生成する。各routeで件名を個別組立てしない。
+- 件名は`[Game Fields][問い合わせ|報告][フルID] ...`、本文冒頭は`受付ID：contact_...`または`報告ID：report_...`の選択・コピー可能な等幅ブロックへ統一する。
+- 既存の送信有無、宛先、本文、Resend冪等キーは変えない。ゲーム内・SDK Portal報告へ新しい受付メールを追加せず、現在存在する管理者通知と運営返信だけを揃える。
+- 現行の問い合わせ・報告メールテンプレートは日本語のみで、独立した英語メールテンプレートは存在しない。英語UI用の別メール経路は推測で追加しない。
+
+### 実施結果
+
+- 通常問い合わせの新着・利用者追記・管理者通知再送は、保存済み`contact.id`を共通管理者通知へ渡す。
+- 通常問い合わせの利用者受付メールと運営返信・メールだけの再送は、保存済み`contact.id`を件名・text・HTMLへ維持する。
+- ゲーム内報告とSDK Portal報告は同じ`deliverUserReportAdminNotification`を通し、保存済み`report.id`を新着・追記・再送へ維持する。
+- 報告への運営返信とメールだけの再送も、保存済み`report.id`を件名・text・HTMLへ維持する。
+- Telemetry、監査ログ、Redis schema、環境変数、外部設定へ本文、氏名、メールアドレス等の新しい記録を追加していない。
+
+### 検証
+
+- focused support／email testは22/22成功した。保存済みIDの伝播、問い合わせ・報告の管理者通知、問い合わせ受付、問い合わせ返信、報告返信の件名・text・HTML、メール層でのID非生成を確認した。
+- 全体lintは成功した。
+- 全体testは725/727成功した。基準checkpointの722/724へ新規3件が加算され、失敗2件は同じ既知問題（Node 24のJSON import属性、実装済みSDK Preview招待を否定する旧contract）である。
+- 本体production buildはRuntime package build、Next.js TypeScript検査、78ページ生成まで成功した。
+- build影響判定は`develop`で`app-games-dev`だけBUILD、`app-games`、`app-games-sdk`、`app-games-sdk-dev`、`app-games-sdk-portal`、`app-games-sdk-preview`、`app-games-preview-dev`はSKIPである。
+
+### 未対応・保留
+
+- 既に届いている通常問い合わせ2件の`contact_...`特定と現物Redis照合は別途継続し、本修正で完了扱いにしない。
+- テスト問い合わせと実メール送信は行っていない。dev反映後の実メール確認は別承認後に行う。
+- push、PR更新、Deploymentは行っていない。dev反映前に`app-games-dev`／`develop`／development／通知ID表示確認／想定1 Deployment／他Project BUILDなしを改めて報告して許可を待つ。
