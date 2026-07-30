@@ -34,21 +34,38 @@ test("開発Redis Integration URLを旧REDIS_URLより優先する", () => {
   });
 });
 
-test("共有有料Redisでもdevelopmentは物理prefixを強制する", () => {
+test("開発Redis内でPlatformとPreview Runtimeを別namespaceへ分離する", () => {
   assert.equal(redisKeyPrefixForConfigKey("APP_REDIS_URL", {
-    APP_REDIS_URL: "rediss://shared.test:6379",
+    APP_REDIS_URL: "rediss://development.test:6379",
     GAME_FIELDS_ENV: "development",
+    VERCEL_PROJECT_NAME: "app-games-dev",
   }), "app-dev:");
   assert.equal(redisKeyPrefixForConfigKey("UPSTASH_REDIS_REST_URL", {
-    UPSTASH_REDIS_REST_URL: "https://shared.test",
+    UPSTASH_REDIS_REST_URL: "https://development.test",
     VERCEL_GIT_COMMIT_REF: "develop",
+    VERCEL_PROJECT_NAME: "app-games-dev",
   }), "app-dev:");
   assert.equal(redisKeyPrefixForConfigKey("APP_REDIS_URL", {
-    APP_REDIS_URL: "rediss://shared.test:6379",
+    APP_REDIS_URL: "rediss://development.test:6379",
+    GAME_FIELDS_ENV: "candidate-preview",
+    VERCEL_PROJECT_NAME: "app-games-preview-dev",
+  }), "preview-dev:");
+  assert.notEqual(namespaceRedisKey("room:ABCD", "app-dev:"), namespaceRedisKey("room:ABCD", "preview-dev:"));
+});
+
+test("production Platformはprefixなし、production PreviewのRedis誤設定は拒否する", () => {
+  assert.equal(redisKeyPrefixForConfigKey("APP_REDIS_URL", {
+    APP_REDIS_URL: "rediss://production.test:6379",
     GAME_FIELDS_ENV: "production",
     VERCEL_GIT_COMMIT_REF: "main",
+    VERCEL_PROJECT_NAME: "app-games",
   }), "");
-  assert.notEqual(namespaceRedisKey("room:ABCD", "app-dev:"), namespaceRedisKey("room:ABCD", ""));
+  assert.throws(() => redisKeyPrefixForConfigKey("APP_REDIS_URL", {
+    APP_REDIS_URL: "rediss://production.test:6379",
+    GAME_FIELDS_ENV: "production",
+    VERCEL_GIT_COMMIT_REF: "main",
+    VERCEL_PROJECT_NAME: "app-games-sdk-preview",
+  }), /REDIS_STORE_PRODUCTION_PREVIEW_FORBIDDEN/);
 });
 
 test("共有Redis上のapp-devキーを通常・複数・Lua・SCANコマンドへ適用する", () => {
