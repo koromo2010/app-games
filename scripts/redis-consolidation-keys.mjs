@@ -48,12 +48,36 @@ export function classifyRedisConsolidationKey(sourceKey) {
       disposition: "copy",
     };
   }
+  if (key.startsWith("sdk-preview:asset-token-metrics:")) {
+    return {
+      classification: "preview-development-legacy-metrics",
+      targetKey: `preview-dev:${key}`,
+      automatic: false,
+      disposition: "expire-source",
+    };
+  }
+  if (key === "admin-observability-issues:v1") {
+    return {
+      classification: "platform-development-legacy-admin-observability",
+      targetKey: `app-dev:${key}`,
+      automatic: false,
+      disposition: "retain-source",
+    };
+  }
+  if (key === "wordwolf:topic:catalog:v1") {
+    return {
+      classification: "platform-development-legacy-wordwolf-catalog",
+      targetKey: `app-dev:${key}`,
+      automatic: false,
+      disposition: "retain-source",
+    };
+  }
   if (key === "online-room:events:v1") {
     return {
-      classification: "realtime-stream-legacy-ambiguous",
+      classification: "realtime-stream-legacy",
       targetKey: "app-dev:online-room:events:v1",
       automatic: false,
-      disposition: "manual",
+      disposition: "retain-source",
     };
   }
   if (key.startsWith("game-sdk-runtime:v2:production:") || key.startsWith("rate-limit:v2:production:")) {
