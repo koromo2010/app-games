@@ -1,7 +1,7 @@
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "updatedAt": "2026-07-30",
-  "status": "development_plan_changed_recovery_validation_in_progress",
+  "status": "backups_completed_namespace_validation_in_progress",
   "constraints": {
     "createRedisDatabase": false,
     "connectDevelopmentToProductionRedis": false,
@@ -10,7 +10,9 @@
     "overwriteTargetKeys": false,
     "changeNeonOrBlob": false,
     "changePersonalVercelPro": false,
-    "changeDevelopmentPlanBeforeApproval": false
+    "changeDevelopmentPlanAgainWithoutApproval": false,
+    "changeSecrets": false,
+    "changeRedisConnectionTarget": false
   },
   "resources": [
     {
@@ -25,7 +27,16 @@
       "readRegions": [],
       "connectedProjects": [],
       "currentPeriodTotalUsd": 3.55,
-      "backupStatus": "not_verified",
+      "backup": {
+        "status": "completed",
+        "type": "Backup",
+        "name": "pre-namespace-20260730-1256-jst",
+        "sizeDisplay": "1009.74KB",
+        "providerState": "Completed",
+        "completedObservedAtJst": "2026-07-30T13:03:00+09:00",
+        "dataContentsRecorded": false,
+        "secretValuesRecorded": false
+      },
       "transferStatus": "not_started",
       "allowedSurfaces": [
         "app-games Platform production",
@@ -68,8 +79,14 @@
       "otherConnectedProjects": "unverified",
       "backup": {
         "backupAndExportAvailable": true,
-        "existingBackups": 0,
-        "status": "not_started"
+        "status": "completed",
+        "type": "Backup",
+        "name": "pre-namespace-20260730-1300-jst",
+        "sizeDisplay": "741.45KB",
+        "providerState": "Completed",
+        "completedObservedAtJst": "2026-07-30T13:03:00+09:00",
+        "dataContentsRecorded": false,
+        "secretValuesRecorded": false
       },
       "planChange": {
         "status": "executed_by_user",
@@ -81,8 +98,15 @@
       },
       "recoveryObservation": {
         "lastObservedRequestLimitErrorUtc": "2026-07-30T03:08:25Z",
-        "no500WindowObservedUtc": "2026-07-30T03:09:02Z/2026-07-30T03:11:02Z",
-        "formalRoomSuccessPending": true
+        "formalRoomSuccessPending": false,
+        "roomCreateAndCommandsRecovered": true,
+        "continuousRevisionRange": "1-16",
+        "watcherFixCommit": "677e56fe9f88c6cd6a1dd63c8b2535f3d57c956e",
+        "watcherValidationRoomCode": "9F5N",
+        "watcherValidationFinalRevision": 8,
+        "watcherValidation5xx": 0,
+        "webSocketReconnectsDuringSixCommands": 0,
+        "webSocketReconnectsAfterExplicitReload": 1
       },
       "deleteStatus": "forbidden"
     }
@@ -123,7 +147,7 @@
         "DEV_REDIS_KV_REST_API_TOKEN"
       ],
       "namespace": "app-dev:",
-      "status": "resource_identity_confirmed_watcher_recovery_validation_in_progress"
+      "status": "resource_identity_and_watcher_recovery_confirmed_namespace_code_pending"
     },
     {
       "project": "app-games-sdk",
@@ -153,7 +177,7 @@
         "SDK_REDIS_REST_TOKEN"
       ],
       "namespace": "sdk:development:preview-instance:v1:",
-      "status": "live_connection_unverified"
+      "status": "live_connection_unverified_no_change_authorized"
     },
     {
       "project": "app-games-preview-dev",
@@ -170,7 +194,7 @@
         "REDIS_ENV"
       ],
       "namespace": "preview-dev:",
-      "status": "live_connection_unverified"
+      "status": "live_connection_unverified_no_change_authorized"
     },
     {
       "project": "app-games-sdk-preview",
@@ -199,12 +223,16 @@
     "targetResource": "sdk-dev-redis",
     "copyOnlyWhenTargetKeyAbsent": true,
     "preserveTypeDigestAndAbsoluteExpiry": true,
+    "preflightAllCopyTargetsBeforeWrite": true,
+    "rollbackOnlyKeysCreatedByCurrentRun": true,
     "deleteSourceKeys": false,
-    "databaseToDatabaseMigration": false
+    "databaseToDatabaseMigration": false,
+    "inventoryStatus": "pending_live_key_scan"
   },
   "rollback": {
     "productionDeploymentId": "dpl_5XkpdpgtJP57ETaLTskmFi4Lkku6",
-    "developmentDeploymentId": "dpl_ANs6QHwNK3JxALb8zZY7YCqBKNft",
+    "developmentDeploymentBeforeWatcherFix": "dpl_ANs6QHwNK3JxALb8zZY7YCqBKNft",
+    "developmentDeploymentCurrent": "dpl_9BfJji7FV2DKm4gVVqsaYBztpKd9",
     "existingKeysRetained": true,
     "forcePush": false
   }
