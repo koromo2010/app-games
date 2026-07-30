@@ -25,6 +25,6 @@ test("Redis移行ツールはtype・digest・TTLを検証する", () => {
 test("Redis移行ツールは値や資格をreportへ出さない", () => {
   assert.match(source, /sourceHost/);
   assert.match(source, /targetHost/);
-  assert.doesNotMatch(source, /console\.log\([^\n]*(?:sourceUrl|targetUrl|SOURCE_REDIS_URL|TARGET_REDIS_URL)/);
-  assert.doesNotMatch(source, /JSON\.stringify\([^\n]*snapshot/);
+  assert.doesNotMatch(source, /console\.log\([^\n]*(?:sourceUrl|targetUrl|SOURCE_REDIS_URL|TARGET_REDIS_URL|snapshot)/);
+  assert.doesNotMatch(source, /entries\.push\([^)]*snapshot/);
 });
