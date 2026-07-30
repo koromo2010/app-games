@@ -1,18 +1,18 @@
 import { randomUUID } from "node:crypto";
-import { redisCommand } from "@/lib/redis-store";
+import { redisCommand } from "./redis-store.ts";
 import {
   type SupportReplyDeliveryStatus,
   type SupportThreadAuthor,
-} from "@/lib/support-thread-core";
+} from "./support-thread-core.ts";
 import {
   normalizeStoredContactMessage,
   type ContactCategory,
   type ContactMessage,
   type ContactNotificationStatus,
   type ContactStatus,
-} from "@/lib/contact-core";
+} from "./contact-core.ts";
 
-export type { ContactCategory, ContactMessage, ContactNotificationStatus, ContactStatus } from "@/lib/contact-core";
+export type { ContactCategory, ContactMessage, ContactNotificationStatus, ContactStatus } from "./contact-core.ts";
 
 const contactIndexKey = "contacts:v1";
 const contactKeyPrefix = "contact:v1:";

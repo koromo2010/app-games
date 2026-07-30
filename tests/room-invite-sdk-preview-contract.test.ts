@@ -25,6 +25,13 @@ test("shared room invites resolve and join SDK Preview rooms by pinned revision"
   );
 
   assert.match(previewRoute, /saveSdkPreviewRoomInviteTarget/);
+  assert.match(previewRoute, /schedulePostResponseWork/);
+  assert.match(previewRoute, /sdk-preview-room-invite-index-save/);
+  assert.match(previewRoute, /sdk-preview-room-invite-index-delete/);
+  assert.doesNotMatch(
+    previewRoute,
+    /void (?:save|delete)SdkPreviewRoomInviteTarget/,
+  );
   assert.match(previewRoute, /revision: requestedRevision/);
   assert.match(resolver, /loadSdkPreviewRoomInviteTarget/);
   assert.match(resolver, /kind: "sdk-preview"/);

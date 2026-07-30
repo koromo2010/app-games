@@ -1149,3 +1149,34 @@ Dashboardは初回・更新を問わず新candidateがあれば提出操作を�
 `ready-for-submission`もカード上へ表示する。「制作環境」は制作者環境全体のロビーではなく、
 カードの`gameId`を含む既存ゲーム別制作画面へ遷移する。revision保存、所有者認可、
 正式提出APIは既存機構をそのまま使い、新しい権限や提出経路は追加しない。
+
+## 2026-07-30 管理受信箱の新着未反映とRedis timeoutの誤帰属
+
+状態: T-33再発・原因確定、ローカル修正／回帰検証済み、対象recordの現物Redis照合待ち
+
+dev管理画面の「問い合わせ・報告」で、新着通知がある一方、一覧が13件のまま、
+オープン0件と表示された。同時刻のVercel記録では
+`GET /api/admin/contact-messages`が200であるにもかかわらず、
+`REDIS_STORE_REQUEST_TIMEOUT`とNode process exit 128が同じ実行へ記録された。
+
+source mapでstackを復元すると、timeout元は問い合わせ一覧ではなく、
+SDK Preview Room更新成功後に投げっぱなしで実行していた
+`saveSdkPreviewRoomInviteTarget`／`deleteSdkPreviewRoomInviteTarget`だった。
+非同期処理のrejectが未処理のまま同じFluid Nodeプロセスを終了させ、
+並行していた管理APIのpathへ誤帰属された。T-33完了後の再発条件に該当する。
+
+Room成功後の招待索引更新はNext.jsのpost-response workへ登録し、失敗を安全な
+telemetryへ変換してprocessを終了させない。管理受信箱は、問い合わせと報告の
+どちらか一方でも取得に失敗した場合に旧itemsと件数を消し、状態フィルターを隠す。
+両管理GETは一覧件数または安全な失敗分類を構造化ログへ残す。
+
+devでは通常問い合わせ2件のPOST 201と、SDK Portal報告
+`report_8e58e0d0-3ba2-4cb8-90e5-c35f57b4729c`の承認POST 201を確認した。
+SDK報告はPortalと本体の対応時刻から`app-games-sdk-dev → app-games-dev`への接続を確認した。
+保存処理はLuaの単一`EVAL`でrecord SETとindex LPUSHを原子的に行うため、
+当初保存時の「recordだけ成功、indexだけ失敗」は起きない。
+
+現物Redisのrecord、index membership、status、createdAt、updatedAtは、
+通知の正確な`contact_...` IDと承認済みの読取専用接続経路がまだないため未照合である。
+この照合までは、後発の削除・索引破損・環境変更と、通知がアプリ外メール経路だった可能性を
+最終除外しない。Redis接続先、環境変数、外部設定は変更していない。

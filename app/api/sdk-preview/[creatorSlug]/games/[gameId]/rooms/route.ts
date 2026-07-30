@@ -16,6 +16,7 @@ import {
   saveSdkPreviewRoomInviteTarget,
 } from "@/lib/sdk-preview-room-invite-index";
 import { createRequestTelemetry } from "@/lib/observability";
+import { schedulePostResponseWork } from "@/lib/post-response-work";
 import platformRelease from "../../../../../../../config/platform-release.json";
 
 export const runtime = "nodejs";
@@ -142,14 +143,34 @@ async function handle(request: Request, context: RouteContext, method: Method) {
       ),
       onSuccess(operation, room, affected, command) {
         if (room?.code) {
-          void saveSdkPreviewRoomInviteTarget(room.code, {
-            creatorSlug,
-            gameId,
-            revision: room.packageRevision
-              ?? runtime.runtimeContract.packageRevision,
+          void schedulePostResponseWork(
+            "sdk-preview-room-invite-index-save",
+            () => saveSdkPreviewRoomInviteTarget(room.code, {
+              creatorSlug,
+              gameId,
+              revision: room.packageRevision
+                ?? runtime.runtimeContract.packageRevision,
+            }),
+          ).catch((error) => {
+            telemetry.failure(
+              "game-sdk.preview-room-invite-index",
+              error,
+              500,
+              { action: "save" },
+            );
           });
         } else if (operation === "dissolve" && requestedRoomCode) {
-          void deleteSdkPreviewRoomInviteTarget(requestedRoomCode);
+          void schedulePostResponseWork(
+            "sdk-preview-room-invite-index-delete",
+            () => deleteSdkPreviewRoomInviteTarget(requestedRoomCode),
+          ).catch((error) => {
+            telemetry.failure(
+              "game-sdk.preview-room-invite-index",
+              error,
+              500,
+              { action: "delete" },
+            );
+          });
         }
         if (method === "GET") return;
         telemetry.success("game-sdk.preview-room", {

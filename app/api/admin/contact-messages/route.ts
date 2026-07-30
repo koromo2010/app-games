@@ -27,16 +27,30 @@ import { appendSiteAdminAuditLog } from "@/lib/site-admin-passkey-store";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const telemetry = createRequestTelemetry(
+    request,
+    "/api/admin/contact-messages",
+    { operation: "contact-message-list" },
+  );
   try {
     await requireFullSiteAdminSession();
+    const contacts = await listContactMessages();
+    telemetry.success("contact-message.list", {
+      affectedCount: contacts.length,
+    });
     return Response.json(
-      { contacts: await listContactMessages() },
+      { contacts },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
-    return siteAdminAuthorizationError(error)
-      ?? Response.json({ error: "CONTACT_MESSAGES_LOAD_FAILED" }, { status: 500 });
+    const auth = siteAdminAuthorizationError(error);
+    if (auth) return auth;
+    telemetry.failure("contact-message.list", error, 500);
+    return Response.json(
+      { error: "CONTACT_MESSAGES_LOAD_FAILED" },
+      { status: 500 },
+    );
   }
 }
 

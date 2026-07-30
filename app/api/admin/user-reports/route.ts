@@ -24,16 +24,30 @@ import { appendSiteAdminAuditLog } from "@/lib/site-admin-passkey-store";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const telemetry = createRequestTelemetry(
+    request,
+    "/api/admin/user-reports",
+    { operation: "user-report-list" },
+  );
   try {
     await requireFullSiteAdminSession();
+    const reports = await listUserReports();
+    telemetry.success("user-report.list", {
+      affectedCount: reports.length,
+    });
     return Response.json(
-      { reports: await listUserReports() },
+      { reports },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
-    return siteAdminAuthorizationError(error)
-      ?? Response.json({ error: "USER_REPORTS_LOAD_FAILED" }, { status: 500 });
+    const auth = siteAdminAuthorizationError(error);
+    if (auth) return auth;
+    telemetry.failure("user-report.list", error, 500);
+    return Response.json(
+      { error: "USER_REPORTS_LOAD_FAILED" },
+      { status: 500 },
+    );
   }
 }
 

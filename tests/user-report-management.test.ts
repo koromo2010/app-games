@@ -61,6 +61,9 @@ test("admin has one authenticated inbox for reports and contacts", () => {
   assert.match(replyHandler, /入力内容は残っています/);
   assert.match(panel, /\/api\/admin\/user-reports/);
   assert.match(panel, /\/api\/admin\/contact-messages/);
+  assert.match(panel, /setItems\(\[\]\)/);
+  assert.match(panel, /古い件数は表示していません/);
+  assert.match(panel, /role="alert"/);
   assert.match(panel, /管理者通知を再送/);
   assert.equal(
     panel.match(/\{initialBody\(item\)\}/g)?.length,
@@ -70,6 +73,8 @@ test("admin has one authenticated inbox for reports and contacts", () => {
   assert.match(panel, /record\.messages\.length > 0/);
   assert.match(panel, /返信・追記/);
   assert.match(reportRoute, /requireFullSiteAdminSession/);
+  assert.match(reportRoute, /user-report\.list/);
+  assert.match(reportRoute, /USER_REPORTS_LOAD_FAILED/);
   assert.match(reportRoute, /requireRecentSiteAdminMfa/);
   const reportReplyRoute = reportRoute.slice(
     reportRoute.indexOf("export async function POST"),
@@ -87,6 +92,8 @@ test("admin has one authenticated inbox for reports and contacts", () => {
   assert.match(reportRoute, /user-report\.notification-retry/);
   assert.match(reportRoute, /appendSiteAdminAuditLog/);
   assert.match(contactRoute, /export async function PUT/);
+  assert.match(contactRoute, /contact-message\.list/);
+  assert.match(contactRoute, /CONTACT_MESSAGES_LOAD_FAILED/);
   assert.match(reportStore, /userReportRetentionSeconds/);
   assert.match(reportStore, /notificationErrorCode/);
   assert.match(reportStore, /redis\.call\('DEL',prefix\.\.id\)/);

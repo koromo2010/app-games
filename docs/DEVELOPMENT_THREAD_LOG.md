@@ -3156,3 +3156,54 @@ Total output lines: 6329
 
 - push許可後は変更パスのbuild判定に従い、必要なdevelopment Projectだけを1回配備して`道つなぎ`の同じ固定candidate採用を実機確認する。
 - `main`への反映と`SDK → main`の実機確認は別承認とする。
+
+## 2026-07-30 — 問い合わせ・報告の新着未反映とT-33再発調査
+
+### 利用者からの要望
+
+- `dev.game-fields.com/ja/admin`の「問い合わせ・報告」が新着を反映せず、すべて13、オープン0、ユーザー返信待ち9、対応済み3、見送り・終了1のままになった原因を調査する。
+- 通知から本文、氏名、メールアドレスを扱わず、ID、到着時刻、送信種別、dev／productionを特定し、4 ProjectのPOST、通知処理、Redisのrecord／index／namespaceを読取専用で照合する。
+- 保存失敗、index登録失敗、一覧timeout、環境違い、SDK Portal接続先、アプリ外メール経路を分離する。
+- 必要なら最新`develop`基準の専用worktreeでローカル修正し、問い合わせ、報告、利用者追記、Redis timeout、namespace分離を検証する。
+- Redis、環境変数、外部設定、push、PR、merge、Deploymentを変更せず、許可前のテスト投稿も行わない。
+
+### 読取調査
+
+- 専用worktree `agent/support-inbox-timeout-recurrence`を`develop@4cd963816538d5f0fb4cb6facf540b9fc792f8dd`から作成した。他の作業branchは変更していない。
+- 48時間のVercel Runtime記録で、`app-games-dev`の通常問い合わせPOST 201を2026-07-29 13:55:29 JSTと22:42:53 JSTに確認した。保存後の運用通知telemetryはそれぞれ`sent`である。ログはrequest本文とrecord IDを意図的に保持しないため、2件の`contact_...` IDは通知側の最小情報なしには復元できない。
+- SDK Portal devでは、2026-07-30 17:29:37 JSTの下書き作成と17:30:45 JSTの本人承認送信に対応する`app-games-dev`の`POST /api/internal/sdk-support` 201を確認した。確定IDは`report_8e58e0d0-3ba2-4cb8-90e5-c35f57b4729c`である。Portalと本体の対応時刻から、この報告の`GAME_FIELDS_APP_BASE_URL`はproductionでなくdev本体を指していた。
+- 観測範囲内で`app-games`、`app-games-sdk`に該当POSTはなく、`app-games-dev`の`POST /api/user-reports`もなかった。該当新着候補はdevの通常問い合わせ2件とSDK Portal報告1件である。
+- dev本体は共有物理Redisへ`app-dev:` prefixで接続する。問い合わせは`app-dev:contact:v1:<id>`と`app-dev:contacts:v1`、報告は`app-dev:user-report:v1:<id>`と`app-dev:user-reports:v1`を使用する。SDK Portal独自のPreview index namespaceはsupport record保存先ではない。
+- 問い合わせと報告の初回保存は、Luaの単一`EVAL`でrecord SET、index LPUSH、trimを行う。201応答済みの当初保存について、record保存後にindex登録だけ失敗する部分成功はない。後からindexだけ欠落していれば、後発の削除・破損・環境変更を別に調べる必要がある。
+- 公開問い合わせ通知メールはrequesterを`replyTo`にするが、受信メールをアプリへ取り込むwebhookはない。運営がメールクライアントから直接返信した場合、その返信は管理受信箱の会話へ入らない。
+
+### timeout原因と一覧13件の表示経路
+
+- Vercel runtime error集計で、2026-07-29 22:26:55 JSTから2026-07-30 17:06:30 JSTまで`REDIS_STORE_REQUEST_TIMEOUT`を88件確認した。記録上のrequest pathは複数に分散したが、全stackは同一だった。
+- 配備済みsource mapを復元すると、stackは`lib/redis-store.ts:91`、同`:245`、`lib/sdk-preview-room-invite-index.ts:24`へ到達した。問い合わせ／報告のlist処理ではない。
+- `app/api/sdk-preview/[creatorSlug]/games/[gameId]/rooms/route.ts`がRoom更新成功後に招待索引の保存・削除を`void`で開始し、rejectを回収していなかった。非重要な索引更新のtimeoutがUnhandled RejectionとなってNode processをexit 128にし、同じFluid Nodeプロセス上で並行していた別requestへ誤帰属された。
+- 2026-07-30 16:49:43 JSTの`GET /api/admin/contact-messages`はVercel上200であり、同時刻の`GET /api/admin/user-reports`も200である。後続の16:54:46 JST、17:07:39 JSTの問い合わせ一覧GETはerrorなしで成功したため、Redis／一覧取得の恒常障害ではなく一時的なprocess障害は復旧している。
+- Vercelは過去のresponse bodyを保存していない。問い合わせlist自身がthrowした場合の実装上の応答は500 `{"error":"CONTACT_MESSAGES_LOAD_FAILED"}`だが、当該記録は200で、timeout stackも別処理を指す。このため通常の`{"contacts":[...]}`を生成した可能性が高いが、process exitとsocket flushが競合した場合のブラウザ実受信bodyまでは確定できない。
+- 管理画面は両APIを`no-store`で取得し、両方の配列検証が成功した後だけitemsを置換していた。失敗時はエラー文だけを更新し、直前のitemsを保持したため、古い13件と状態件数が残った。サーバーcacheから古い13件を返す経路はない。
+
+### ローカル修正
+
+- Room成功後の招待索引保存・削除を既存のpost-response work helperへ登録し、Redis timeoutを安全なtelemetryに変換する。未処理rejectによるNode process終了と別requestへの誤帰属を防ぐ。
+- 管理受信箱は問い合わせ／報告の一方でも取得またはresponse検証に失敗した場合、旧itemsを消して件数・状態フィルターを隠し、「以前の件数は表示していない」と明示する。
+- 両管理GETへ、本文等を含めない一覧成功件数と安全な失敗分類のtelemetryを追加する。将来の200記録と実際のlist成否を区別できるようにする。
+- 問い合わせと報告の実storeをin-memory Redis REST fakeで通し、recordとindexの作成、一覧反映、利用者追記後の`open`復帰を同じproduction store実装で検証する回帰テストを追加する。
+
+### 検証
+
+- focused testは11/11、関連Redis／namespace／email／support testは29/29成功した。
+- 変更対象ESLintと全体`npm run lint`は成功した。
+- 全体testは722/724成功した。追加2件は成功し、残る2件は基準`4cd9638`と同じNode 24 JSON import attributeと、実装済みSDK Preview招待を否定する旧contract testである。新規失敗はない。
+- 本体production buildはRuntime package build、Next.js TypeScript検査、78ページ生成まで成功した。
+- 実差分のbuild判定は、developmentでは`app-games-dev`だけBUILDし、`app-games-sdk-dev`、`app-games-preview-dev`、無効化済みPortalはSKIPする。将来mainでは`app-games`だけBUILDし、SDK／Preview ProjectはSKIPする。Deploymentは行っていない。
+
+### 未確定・TODO監督への提出事項
+
+- 現物Redisのrecord存在、index membership、status、createdAt、updatedAtは未照合である。理由は、通常問い合わせ2件の正確な`contact_...` IDと、秘密値を受け渡さずに使える承認済みread-only接続経路が現在の作業環境にないためである。
+- 通知から`contact_...` IDと到着時刻だけを受け取れれば、本文、氏名、メールアドレスを扱わず対象を固定できる。既知のSDK Portal報告IDはそのまま照合可能である。
+- T-33の完了後に同じ`REDIS_STORE_REQUEST_TIMEOUT`が88件再発し、Node process exitと別requestへの誤帰属を生んだ。監督DBではT-33がarchivedで、「再発時は新規TODO」と明記され、次番号は`T-39`である。履歴を戻さず、T-33再発を親参照する`T-39`として本修正と現物Redis照合を追跡する案をTODO監督へ提出する。
+- Redis接続先、環境変数、外部設定、テスト投稿、push、PR、merge、Deploymentは一切変更・実行していない。

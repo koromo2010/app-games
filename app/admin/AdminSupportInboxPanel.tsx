@@ -103,10 +103,12 @@ export function AdminSupportInboxPanel({
   >({});
   const replyRequestIds = useRef<Record<string, string>>({});
   const [message, setMessage] = useState("");
+  const [loadError, setLoadError] = useState("");
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     setMessage("");
+    setLoadError("");
     try {
       const [reportResponse, contactResponse] = await Promise.all([
         fetch("/api/admin/user-reports", { cache: "no-store", signal }),
@@ -148,7 +150,10 @@ export function AdminSupportInboxPanel({
       )));
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") return;
-      setMessage("問い合わせ・報告の一覧を読み込めませんでした。");
+      setItems([]);
+      setLoadError(
+        "問い合わせ・報告の一覧を更新できませんでした。古い件数は表示していません。再読み込みしてください。",
+      );
     } finally {
       setLoading(false);
     }
@@ -461,33 +466,43 @@ export function AdminSupportInboxPanel({
           {loading ? "読込中…" : "再読み込み"}
         </button>
       </div>
-      <div
-        className="flex gap-2 overflow-x-auto"
-        role="tablist"
-        aria-label="問い合わせ・報告の対応状態"
-      >
-        {(["all", ...contactStatuses] as const).map((value) => {
-          const count = value === "all"
-            ? items.length
-            : items.filter((item) => recordFor(item).status === value).length;
-          return (
-            <button
-              key={value}
-              type="button"
-              role="tab"
-              aria-selected={filter === value}
-              onClick={() => setFilter(value)}
-              className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-bold ${
-                filter === value
-                  ? "bg-cyan-300 text-slate-950"
-                  : "border border-white/15 text-slate-300 hover:bg-white/10"
-              }`}
-            >
-              {value === "all" ? "すべて" : statusLabels[value]} {count}
-            </button>
-          );
-        })}
-      </div>
+      {!loadError && (
+        <div
+          className="flex gap-2 overflow-x-auto"
+          role="tablist"
+          aria-label="問い合わせ・報告の対応状態"
+        >
+          {(["all", ...contactStatuses] as const).map((value) => {
+            const count = value === "all"
+              ? items.length
+              : items.filter((item) => recordFor(item).status === value).length;
+            return (
+              <button
+                key={value}
+                type="button"
+                role="tab"
+                aria-selected={filter === value}
+                onClick={() => setFilter(value)}
+                className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-bold ${
+                  filter === value
+                    ? "bg-cyan-300 text-slate-950"
+                    : "border border-white/15 text-slate-300 hover:bg-white/10"
+                }`}
+              >
+                {value === "all" ? "すべて" : statusLabels[value]} {count}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {loadError && (
+        <p
+          role="alert"
+          className="rounded-xl border border-amber-300/35 bg-amber-300/10 px-4 py-3 text-sm font-bold text-amber-100"
+        >
+          {loadError}
+        </p>
+      )}
       {message && (
         <p
           role="status"

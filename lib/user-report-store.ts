@@ -1,18 +1,18 @@
 import { randomUUID } from "node:crypto";
-import { redisCommand } from "@/lib/redis-store";
+import { redisCommand } from "./redis-store.ts";
 import {
   type SupportReplyDeliveryStatus,
   type SupportThreadAuthor,
-} from "@/lib/support-thread-core";
+} from "./support-thread-core.ts";
 import {
   normalizeStoredUserReport,
   type UserReport,
   type UserReportNotificationStatus,
   type UserReportStatus,
   type UserReportType,
-} from "@/lib/user-report-core";
+} from "./user-report-core.ts";
 
-export type { UserReport, UserReportStatus, UserReportType } from "@/lib/user-report-core";
+export type { UserReport, UserReportStatus, UserReportType } from "./user-report-core.ts";
 
 const userReportIndexKey = "user-reports:v1";
 const userReportKeyPrefix = "user-report:v1:";
