@@ -1,4 +1,4 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "ignoreCommand": "node -e \"const n=process.env.VERCEL_PROJECT_NAME,b=process.env.VERCEL_GIT_COMMIT_REF;process.exit((n==='app-games-sdk-preview'&&b==='main')||(n==='app-games-preview-dev'&&b==='develop')?1:0)\""
+  "ignoreCommand": "node ../../scripts/check-vercel-build-impact.mjs"
 }
