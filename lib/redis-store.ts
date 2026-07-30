@@ -119,7 +119,16 @@ function developmentRedisEnvironment(env: RedisEnvironment) {
   return env.VERCEL_GIT_COMMIT_REF === "develop";
 }
 
+function redisProjectName(env: RedisEnvironment) {
+  return env.VERCEL_PROJECT_NAME?.trim().toLowerCase() ?? "";
+}
+
 export function redisKeyPrefixForConfigKey(configKey: string, env: RedisEnvironment = process.env) {
+  const projectName = redisProjectName(env);
+  if (projectName === "app-games-sdk-preview") {
+    throw new Error("REDIS_STORE_PRODUCTION_PREVIEW_FORBIDDEN");
+  }
+  if (projectName === "app-games-preview-dev") return "preview-dev:";
   return configKey.startsWith("DEV_REDIS_") || developmentRedisEnvironment(env) ? "app-dev:" : "";
 }
 
