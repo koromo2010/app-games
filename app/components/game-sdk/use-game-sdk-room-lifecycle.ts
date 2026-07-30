@@ -20,6 +20,7 @@ import {
   shouldHoldRoomResultTransition,
   shouldKeepRoomResultAfterDissolve,
 } from "@/lib/room-result-return";
+import { shouldRestartGameSdkRoomWatch } from "./game-sdk-room-watch-policy";
 import type { GameSdkFrameRuntime, PackageRoom } from "./game-sdk-frame-types";
 
 type Options = {
@@ -151,9 +152,16 @@ export function useGameSdkRoomLifecycle({
     const current = roomRef.current;
     const accepted = preferLatestOnlineRoom(current, next);
     if (accepted === current) return current;
+    if (!shouldRestartGameSdkRoomWatch(current?.code, accepted.code, Boolean(watchRef.current))) {
+      if (!commitRoom(accepted)) throw new Error("GAME_SDK_PACKAGE_REVISION_MISMATCH");
+      pendingLobbyRoomRef.current = null;
+      setCanReturnToRoom(false);
+      setIsRoomDissolved(false);
+      return accepted;
+    }
     attachRoom(accepted);
     return accepted;
-  }, [acceptPackageRevision, attachRoom, roomRef]);
+  }, [acceptPackageRevision, attachRoom, commitRoom, roomRef]);
 
   const refreshRooms = useCallback(async () => {
     try {
