@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
+import { pathToFileURL } from "node:url";
 import { createClient } from "redis";
 import { classifyRedisConsolidationKey } from "./redis-consolidation-keys.mjs";
 
@@ -34,7 +35,7 @@ function normalizeRaw(value) {
   return value;
 }
 
-async function keySnapshot(client, key, type) {
+export async function keySnapshot(client, key, type) {
   switch (type) {
     case "string": return await raw(client, ["GET", key]);
     case "hash": return await raw(client, ["HGETALL", key]);
@@ -46,7 +47,7 @@ async function keySnapshot(client, key, type) {
   }
 }
 
-async function keyDigest(client, key, type) {
+export async function keyDigest(client, key, type) {
   const snapshot = normalizeRaw(await keySnapshot(client, key, type));
   return createHash("sha256").update(JSON.stringify(snapshot)).digest("hex");
 }
@@ -62,13 +63,13 @@ async function scanKeys(client) {
   return keys.sort();
 }
 
-async function inspectKey(client, key) {
+export async function inspectKey(client, key) {
   const type = String(await raw(client, ["TYPE", key]));
   const pttl = Number(await raw(client, ["PTTL", key]));
   return { type, pttl, digest: await keyDigest(client, key, type) };
 }
 
-async function createPlan(source, target, sourceUrl, targetUrl) {
+export async function createPlan(source, target, sourceUrl, targetUrl) {
   const entries = [];
   for (const sourceKey of await scanKeys(source)) {
     const classification = classifyRedisConsolidationKey(sourceKey);
@@ -101,7 +102,7 @@ function flatPairs(value) {
   return [];
 }
 
-async function copyKey(source, target, entry) {
+export async function copyKey(source, target, entry) {
   const { sourceKey, targetKey } = entry;
   if (!targetKey) throw new Error(`REDIS_MIGRATION_TARGET_KEY_REQUIRED:${sourceKey}`);
   if (Number(await raw(target, ["EXISTS", targetKey])) !== 0) {
@@ -195,4 +196,5 @@ async function main() {
   }
 }
 
-await main();
+const invokedPath = process.argv[1] ? pathToFileURL(process.argv[1]).href : "";
+if (invokedPath === import.meta.url) await main();
