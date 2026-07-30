@@ -31,6 +31,7 @@ jobs:
           tests/redis-store-config.test.ts
           tests/redis-consolidation-keys.test.ts
           tests/redis-migration-safety-contract.test.ts
+          tests/redis-migration-dry-run.test.ts
           tests/redis-consolidation-policy.test.ts
           tests/game-sdk-room-watch-policy.test.ts
           tests/vercel-build-impact.test.ts
@@ -52,12 +53,35 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
       - run: npm ci
       - run: npm test
+
+  baseline-regressions:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Run current develop baseline failures
+        run: >-
+          node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON
+          --experimental-strip-types --test
+          tests/game-sdk-package-manifest.test.ts
+          tests/room-invite-route-contract.test.ts
+          tests/sdk-release-contract-alignment.test.ts
 
   platform-build:
     runs-on: ubuntu-latest
