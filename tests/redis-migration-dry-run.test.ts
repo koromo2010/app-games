@@ -16,9 +16,7 @@ class FakeRedis {
   readonly data = new Map<string, Entry>();
 
   constructor(entries: Record<string, Entry> = {}) {
-    for (const [key, entry] of Object.entries(entries)) {
-      this.data.set(key, structuredClone(entry));
-    }
+    for (const [key, entry] of Object.entries(entries)) this.data.set(key, structuredClone(entry));
   }
 
   async sendCommand(parts: string[]) {
@@ -26,19 +24,14 @@ class FakeRedis {
     const command = name.toUpperCase();
     const entry = key ? this.data.get(key) : undefined;
     switch (command) {
-      case "SCAN":
-        return ["0", [...this.data.keys()].sort()];
-      case "TYPE":
-        return entry?.type ?? "none";
-      case "EXISTS":
-        return entry ? 1 : 0;
+      case "SCAN": return ["0", [...this.data.keys()].sort()];
+      case "TYPE": return entry?.type ?? "none";
+      case "EXISTS": return entry ? 1 : 0;
       case "PTTL":
         if (!entry) return -2;
         return entry.expiresAt === null ? -1 : Math.max(0, entry.expiresAt - Date.now());
-      case "GET":
-        return entry?.value ?? null;
-      case "HGETALL":
-        return structuredClone(entry?.value ?? {});
+      case "GET": return entry?.value ?? null;
+      case "HGETALL": return structuredClone(entry?.value ?? {});
       case "LRANGE":
       case "SMEMBERS":
       case "ZRANGE":
@@ -76,13 +69,18 @@ class FakeRedis {
         if (!entry) return 0;
         entry.expiresAt = Number(args[0]);
         return 1;
-      case "DEL":
-        return this.data.delete(key) ? 1 : 0;
-      default:
-        throw new Error(`FAKE_REDIS_COMMAND_UNSUPPORTED:${command}`);
+      case "DEL": return this.data.delete(key) ? 1 : 0;
+      default: throw new Error(`FAKE_REDIS_COMMAND_UNSUPPORTED:${command}`);
     }
   }
 }
+
+const secretMarkers = [
+  "VALUE_SHOULD_NOT_APPEAR_A",
+  "VALUE_SHOULD_NOT_APPEAR_B",
+  "VALUE_SHOULD_NOT_APPEAR_C",
+  "VALUE_SHOULD_NOT_APPEAR_D",
+];
 
 function sourceFixture() {
   const expiresAt = Date.now() + 60_000;
@@ -93,16 +91,16 @@ function sourceFixture() {
     "app-dev:set": { type: "set", value: ["b", "a"], expiresAt: null },
     "app-dev:zset": { type: "zset", value: ["a", "1", "b", "2"], expiresAt: null },
     "app-dev:stream": { type: "stream", value: [["1-0", ["d", "one"]], ["2-0", ["d", "two"]]], expiresAt: null },
-    "sdk:preview-instance:v1:legacy": { type: "string", value: "reservation", expiresAt },
-    "sdk:production:preview-instance:v1:manual": { type: "string", value: "production", expiresAt: null },
-    "unknown:key": { type: "string", value: "unknown", expiresAt: null },
+    "sdk:preview-instance:v1:legacy": { type: "string", value: secretMarkers[0], expiresAt },
+    "sdk:production:preview-instance:v1:manual": { type: "string", value: secretMarkers[1], expiresAt: null },
+    "unknown:key": { type: "string", value: secretMarkers[2], expiresAt: null },
   });
 }
 
 test("dry-run planは自動移行、手動判定、衝突を分類し値を含めない", async () => {
   const source = sourceFixture();
   const target = new FakeRedis({
-    "app-dev:hash": { type: "hash", value: { a: "different" }, expiresAt: null },
+    "app-dev:hash": { type: "hash", value: { a: secretMarkers[3] }, expiresAt: null },
   });
   const plan = await createPlan(source, target, "rediss://source.example:6379", "rediss://target.example:6379");
   assert.equal(plan.sourceHost, "source.example");
@@ -117,7 +115,7 @@ test("dry-run planは自動移行、手動判定、衝突を分類し値を含�
   assert.equal(legacy?.action, "copy");
   const production = plan.entries.find((entry) => entry.sourceKey.startsWith("sdk:production:"));
   assert.equal(production?.action, "manual");
-  assert.doesNotMatch(JSON.stringify(plan), /reservation|production|unknown|different/);
+  for (const marker of secretMarkers) assert.doesNotMatch(JSON.stringify(plan), new RegExp(marker));
 });
 
 test("copyはRedis type・digest・絶対TTLを維持しsourceを変更しない", async () => {
