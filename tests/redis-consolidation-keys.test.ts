@@ -38,8 +38,34 @@ test("旧SDK予約キーと既知のunprefixed development keyだけcopy候補�
   });
 });
 
-test("曖昧なrealtime stream・production・未知キーはmanualにする", () => {
-  assert.equal(classifyRedisConsolidationKey("online-room:events:v1").disposition, "manual");
+test("実inventoryで観測したlegacy keyを非破壊方針へ分類する", () => {
+  assert.deepEqual(classifyRedisConsolidationKey("sdk-preview:asset-token-metrics:2026073005"), {
+    classification: "preview-development-legacy-metrics",
+    targetKey: "preview-dev:sdk-preview:asset-token-metrics:2026073005",
+    automatic: false,
+    disposition: "expire-source",
+  });
+  assert.deepEqual(classifyRedisConsolidationKey("admin-observability-issues:v1"), {
+    classification: "platform-development-legacy-admin-observability",
+    targetKey: "app-dev:admin-observability-issues:v1",
+    automatic: false,
+    disposition: "retain-source",
+  });
+  assert.deepEqual(classifyRedisConsolidationKey("wordwolf:topic:catalog:v1"), {
+    classification: "platform-development-legacy-wordwolf-catalog",
+    targetKey: "app-dev:wordwolf:topic:catalog:v1",
+    automatic: false,
+    disposition: "retain-source",
+  });
+  assert.deepEqual(classifyRedisConsolidationKey("online-room:events:v1"), {
+    classification: "realtime-stream-legacy",
+    targetKey: "app-dev:online-room:events:v1",
+    automatic: false,
+    disposition: "retain-source",
+  });
+});
+
+test("production・未知キーはmanualにする", () => {
   assert.equal(classifyRedisConsolidationKey("game-sdk-runtime:v2:production:game:room:ABCD").disposition, "manual");
   assert.deepEqual(classifyRedisConsolidationKey("other:key"), {
     classification: "unknown",
