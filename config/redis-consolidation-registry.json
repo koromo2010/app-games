@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-07-30",
+  "status": "blocked_pending_provider_access",
+  "constraints": {
+    "createPaidDatabase": false,
+    "upgradeSdkDevRedis": false,
+    "changePlan": false,
+    "changeRegion": false,
+    "deleteSource": false,
+    "overwriteTargetKeys": false,
+    "changeNeonOrBlob": false
+  },
+  "resources": [
+    {
+      "name": "wy-app-games",
+      "currentScope": "personal-unverified",
+      "targetScope": "game-fields",
+      "databaseId": "unverified",
+      "endpointHost": "unverified",
+      "plan": "Fixed 250MB documented; live verification required",
+      "region": "unverified",
+      "backupStatus": "not_started",
+      "transferStatus": "not_started"
+    },
+    {
+      "name": "sdk-dev-redis",
+      "currentScope": "game-fields-or-integration-unverified",
+      "targetScope": "unchanged",
+      "databaseId": "unverified",
+      "endpointHost": "unverified",
+      "plan": "Free documented; live verification required",
+      "limitStatus": "500K command limit observed through runtime errors; provider metrics verification required",
+      "backupStatus": "not_started",
+      "deleteStatus": "forbidden",
+      "upgradeStatus": "forbidden"
+    }
+  ],
+  "connections": [
+    {
+      "project": "app-games",
+      "branch": "main",
+      "environment": "Production",
+      "surface": "Platform production and formal SDK Runtime production",
+      "targetResource": "wy-app-games",
+      "variables": [
+        "APP_REDIS_URL",
+        "UPSTASH_REDIS_REST_URL",
+        "UPSTASH_REDIS_REST_TOKEN",
+        "REDIS_URL",
+        "KV_REST_API_URL",
+        "KV_REST_API_TOKEN"
+      ],
+      "namespace": "production keyspace; no app-dev prefix",
+      "status": "live_values_unverified"
+    },
+    {
+      "project": "app-games-dev",
+      "branch": "develop",
+      "environment": "Production",
+      "surface": "Platform development and formal SDK Runtime development",
+      "currentResource": "sdk-dev-redis documented",
+      "targetResource": "wy-app-games",
+      "variables": [
+        "APP_REDIS_URL",
+        "UPSTASH_REDIS_REST_URL",
+        "UPSTASH_REDIS_REST_TOKEN",
+        "DEV_REDIS_REDIS_URL",
+        "DEV_REDIS_KV_REST_API_URL",
+        "DEV_REDIS_KV_REST_API_TOKEN"
+      ],
+      "namespace": "app-dev:",
+      "status": "code_ready_env_not_changed"
+    },
+    {
+      "project": "app-games-sdk",
+      "branch": "main",
+      "environment": "Production",
+      "surface": "SDK Portal production registry only",
+      "currentResource": "sdk-dev-redis link requested in legacy ledger",
+      "targetResource": "wy-app-games",
+      "variables": ["SDK_REDIS_REST_URL", "SDK_REDIS_REST_TOKEN"],
+      "namespace": "sdk:production:preview-instance:v1:",
+      "status": "env_not_changed"
+    },
+    {
+      "project": "app-games-sdk-dev",
+      "branch": "develop",
+      "environment": "Production",
+      "surface": "SDK Portal development registry only",
+      "currentResource": "sdk-dev-redis documented",
+      "targetResource": "wy-app-games",
+      "variables": ["SDK_REDIS_REST_URL", "SDK_REDIS_REST_TOKEN"],
+      "namespace": "sdk:development:preview-instance:v1:",
+      "status": "env_not_changed"
+    },
+    {
+      "project": "app-games-sdk-preview,app-games-preview-dev",
+      "branch": "main/develop",
+      "environment": "Production",
+      "surface": "isolated SDK Preview",
+      "targetResource": "none",
+      "variables": [],
+      "namespace": "none",
+      "status": "redis_connection_forbidden"
+    }
+  ],
+  "rollback": {
+    "productionDeploymentId": "dpl_5XkpdpgtJP57ETaLTskmFi4Lkku6",
+    "developmentDeploymentId": "dpl_ANs6QHwNK3JxALb8zZY7YCqBKNft",
+    "sourceResourceRetained": true,
+    "forcePush": false
+  }
+}
