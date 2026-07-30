@@ -1,30 +1,31 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "updatedAt": "2026-07-30",
-  "status": "blocked_pending_live_resource_inventory",
+  "status": "awaiting_development_plan_approval_and_remaining_inventory",
   "constraints": {
     "createRedisDatabase": false,
     "connectDevelopmentToProductionRedis": false,
-    "upgradeSdkDevRedis": false,
     "deleteSdkDevRedis": false,
-    "deleteSourceKeys": false,
+    "deleteExistingKeys": false,
     "overwriteTargetKeys": false,
     "changeNeonOrBlob": false,
     "changePersonalVercelPro": false,
-    "upgradeDevelopmentRedisBeforePriceApproval": false
+    "changeDevelopmentPlanBeforeApproval": false
   },
   "resources": [
     {
       "name": "wy-app-games",
       "role": "production-only",
-      "currentScope": "personal-unverified",
+      "currentScope": "personal",
       "targetScope": "game-fields",
-      "databaseId": "unverified",
+      "databaseId": "83c9a0a5-4b6c-40af-933f-bf1294f82750",
       "endpointHost": "unverified",
-      "plan": "Fixed 250MB documented; live verification required",
-      "region": "unverified",
-      "connectedProjects": "unverified",
-      "backupStatus": "not_started",
+      "plan": "Fixed 250MB",
+      "primaryRegion": "hnd1",
+      "readRegions": [],
+      "connectedProjects": [],
+      "currentPeriodTotalUsd": 3.55,
+      "backupStatus": "not_verified",
       "transferStatus": "not_started",
       "allowedSurfaces": [
         "app-games Platform production",
@@ -37,32 +38,62 @@
       ]
     },
     {
-      "name": "app-games-dev-current-redis",
-      "role": "development-target-candidate",
-      "resourceName": "unverified",
-      "databaseId": "unverified",
-      "endpointHost": "unverified",
-      "plan": "unverified",
-      "region": "unverified",
-      "sameAsSdkDevRedis": "unverified",
-      "connectedProjects": ["app-games-dev documented; live verification required"],
-      "upgradeRequiresUserApprovalAfterPriceReport": true,
-      "existenceRequired": true
-    },
-    {
       "name": "sdk-dev-redis",
-      "role": "migration-source",
-      "currentScope": "game-fields-or-integration-unverified",
+      "role": "shared-development-database",
+      "currentScope": "game-fields",
       "targetScope": "unchanged",
-      "databaseId": "unverified",
+      "databaseId": "0861801f-9da0-47b3-a1cf-8b5847f625e0",
       "endpointHost": "unverified",
-      "plan": "Free documented; live verification required",
-      "region": "unverified",
-      "limitStatus": "500K command limit observed through runtime errors; provider metrics verification required",
-      "keyInventoryStatus": "not_started",
-      "backupStatus": "not_started",
-      "deleteStatus": "forbidden",
-      "upgradeStatus": "forbidden"
+      "primaryRegion": {
+        "vercel": "hnd1",
+        "upstash": "ap-northeast-1",
+        "location": "Tokyo, Japan"
+      },
+      "currentPlan": "Free",
+      "monthlyCommandAllowance": 500000,
+      "observedUsage": {
+        "commandsApprox": 650000,
+        "storageBytesApprox": 943104,
+        "storageDisplay": "921 KB / 256 MB",
+        "bandwidthDisplay": "0 B / 50 GB",
+        "costUsd": 0
+      },
+      "sameAsAppGamesDevCurrentRedis": true,
+      "separateExistingDevRedisExists": false,
+      "confirmedConnectedProjects": [
+        "app-games-dev"
+      ],
+      "otherConnectedProjects": "unverified",
+      "backup": {
+        "backupAndExportAvailable": true,
+        "existingBackups": 0,
+        "status": "not_started"
+      },
+      "planCandidates": [
+        {
+          "name": "Pay As You Go",
+          "price": "$0.20 per 100K commands",
+          "estimatedAtObserved650KUsd": 1.3,
+          "recommended": true,
+          "reason": "lowest expected cost at current usage; break-even with Fixed 250MB is about 5M commands/month"
+        },
+        {
+          "name": "Fixed 250MB",
+          "price": "$10 + ($5 x read region) per month",
+          "estimatedBaseMonthlyUsd": 10,
+          "recommended": false,
+          "reason": "predictable billing but more expensive at current command volume; capacity is sufficient"
+        },
+        {
+          "name": "Fixed 1GB",
+          "price": "$20 + ($10 x read region) per month",
+          "estimatedBaseMonthlyUsd": 20,
+          "recommended": false,
+          "reason": "over-provisioned for current 921 KB usage"
+        }
+      ],
+      "planChangeStatus": "not_executed_waiting_for_user_approval",
+      "deleteStatus": "forbidden"
     }
   ],
   "connections": [
@@ -71,7 +102,7 @@
       "branch": "main",
       "environment": "Production",
       "surface": "Platform production and formal SDK Runtime production",
-      "currentResource": "wy-app-games documented; live verification required",
+      "currentResource": "wy-app-games",
       "targetResource": "wy-app-games",
       "variables": [
         "APP_REDIS_URL",
@@ -82,15 +113,15 @@
         "KV_REST_API_TOKEN"
       ],
       "namespace": "production keyspace; no app-dev prefix",
-      "status": "live_values_unverified"
+      "status": "endpoint_and_live_variable_names_unverified"
     },
     {
       "project": "app-games-dev",
       "branch": "develop",
       "environment": "Production",
       "surface": "Platform development and formal SDK Runtime development",
-      "currentResource": "app-games-dev-current-redis unverified",
-      "targetResource": "app-games-dev-current-redis",
+      "currentResource": "sdk-dev-redis",
+      "targetResource": "sdk-dev-redis",
       "forbiddenTargetResource": "wy-app-games",
       "variables": [
         "APP_REDIS_URL",
@@ -101,17 +132,20 @@
         "DEV_REDIS_KV_REST_API_TOKEN"
       ],
       "namespace": "app-dev:",
-      "status": "resource_identity_unverified"
+      "status": "resource_identity_confirmed_namespace_code_pending_develop_merge"
     },
     {
       "project": "app-games-sdk",
       "branch": "main",
       "environment": "Production",
       "surface": "SDK Portal production registry only; not formal Room Runtime",
-      "currentResource": "sdk-dev-redis link requested in legacy ledger; live verification required",
+      "currentResource": "unverified",
       "targetResource": "pending_manual_classification",
       "forbiddenAutomaticTargetResource": "wy-app-games",
-      "variables": ["SDK_REDIS_REST_URL", "SDK_REDIS_REST_TOKEN"],
+      "variables": [
+        "SDK_REDIS_REST_URL",
+        "SDK_REDIS_REST_TOKEN"
+      ],
       "namespace": "sdk:production:preview-instance:v1:",
       "status": "do_not_change_until_production_registry_keys_are_classified"
     },
@@ -120,20 +154,23 @@
       "branch": "develop",
       "environment": "Production",
       "surface": "SDK Portal development registry only",
-      "currentResource": "sdk-dev-redis documented; live verification required",
-      "targetResource": "app-games-dev-current-redis",
+      "currentResource": "unverified",
+      "targetResource": "sdk-dev-redis",
       "forbiddenTargetResource": "wy-app-games",
-      "variables": ["SDK_REDIS_REST_URL", "SDK_REDIS_REST_TOKEN"],
+      "variables": [
+        "SDK_REDIS_REST_URL",
+        "SDK_REDIS_REST_TOKEN"
+      ],
       "namespace": "sdk:development:preview-instance:v1:",
-      "status": "resource_identity_unverified"
+      "status": "live_connection_unverified"
     },
     {
       "project": "app-games-preview-dev",
       "branch": "develop",
       "environment": "Production",
       "surface": "development isolated Preview Runtime",
-      "currentResource": "Redis previously forbidden/documented; live variables must be inspected",
-      "targetResource": "app-games-dev-current-redis when Redis use is required",
+      "currentResource": "unverified",
+      "targetResource": "sdk-dev-redis when Redis use is required",
       "forbiddenTargetResource": "wy-app-games",
       "variables": [
         "APP_REDIS_URL",
@@ -142,7 +179,7 @@
         "REDIS_ENV"
       ],
       "namespace": "preview-dev:",
-      "status": "env_not_changed"
+      "status": "live_connection_unverified"
     },
     {
       "project": "app-games-sdk-preview",
@@ -165,11 +202,19 @@
       "status": "build_skip_do_not_delete"
     }
   ],
+  "namespaceMigration": {
+    "mode": "same_database_non_destructive_key_copy",
+    "sourceResource": "sdk-dev-redis",
+    "targetResource": "sdk-dev-redis",
+    "copyOnlyWhenTargetKeyAbsent": true,
+    "preserveTypeDigestAndAbsoluteExpiry": true,
+    "deleteSourceKeys": false,
+    "databaseToDatabaseMigration": false
+  },
   "rollback": {
     "productionDeploymentId": "dpl_5XkpdpgtJP57ETaLTskmFi4Lkku6",
     "developmentDeploymentId": "dpl_ANs6QHwNK3JxALb8zZY7YCqBKNft",
-    "sourceResourceRetained": true,
-    "sourceKeysRetained": true,
+    "existingKeysRetained": true,
     "forcePush": false
   }
 }
