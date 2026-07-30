@@ -139,7 +139,7 @@ export function namespaceRedisKey(value: unknown, prefix: string) {
 
 const singleKeyCommands = new Set([
   "DECR", "EXPIRE", "GET", "HDEL", "HGET", "HGETALL", "HINCRBY", "HKEYS", "HLEN", "HMGET", "HSCAN",
-  "HSET", "HVALS", "INCR", "INCRBY", "LLEN", "LPUSH", "LRANGE", "LREM", "LTRIM", "RPUSH", "SADD", "SCARD",
+  "HSET", "HSETNX", "HVALS", "INCR", "INCRBY", "LLEN", "LPUSH", "LRANGE", "LREM", "LTRIM", "RPUSH", "SADD", "SCARD",
   "SISMEMBER", "SMEMBERS", "SMISMEMBER", "SREM", "SSCAN", "SET", "TTL", "XADD", "XDEL", "XLEN", "XRANGE",
   "XREVRANGE", "XTRIM", "ZADD", "ZCARD", "ZINCRBY", "ZMSCORE", "ZRANGE", "ZREM", "ZREVRANGE", "ZSCORE",
 ]);
