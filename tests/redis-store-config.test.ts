@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   namespaceRedisCommand,
+  namespaceRedisCommands,
   namespaceRedisKey,
   redisKeyPrefixForConfigKey,
   resolveSocketRedisUrl,
@@ -94,6 +95,23 @@ test("Redis Streamsのwriter・reader・groupも同じnamespaceへ分離する",
   assert.deepEqual(namespaceRedisCommand(["XINFO", "STREAM", "online-room:events:v1"], "app-dev:"), [
     "XINFO", "STREAM", "app-dev:online-room:events:v1",
   ]);
+});
+
+test("REST pipelineとsocket transactionは同じ複数command変換を使う", () => {
+  const commands = [
+    ["GET", "room:one"],
+    ["MGET", "player:one", "player:two"],
+    ["EVAL", "return redis.call('GET', KEYS[1])", "1", "lock:one"],
+    ["XREAD", "BLOCK", "1000", "STREAMS", "online-room:events:v1", "0-0"],
+  ];
+  assert.deepEqual(namespaceRedisCommands(commands, "app-dev:"), [
+    ["GET", "app-dev:room:one"],
+    ["MGET", "app-dev:player:one", "app-dev:player:two"],
+    ["EVAL", "return redis.call('GET', KEYS[1])", "1", "app-dev:lock:one"],
+    ["XREAD", "BLOCK", "1000", "STREAMS", "app-dev:online-room:events:v1", "0-0"],
+  ]);
+  assert.deepEqual(namespaceRedisCommands(commands, "preview-dev:")[0], ["GET", "preview-dev:room:one"]);
+  assert.deepEqual(namespaceRedisCommands(commands, ""), commands);
 });
 
 test("複数のIntegration Redis URLがあれば誤接続防止で停止する", () => {
