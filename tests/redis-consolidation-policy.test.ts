@@ -7,6 +7,7 @@ const registry = JSON.parse(readFileSync("config/redis-consolidation-registry.js
   resources: Array<Record<string, unknown>>;
   connections: Array<Record<string, unknown>>;
   namespaceMigration: Record<string, unknown>;
+  constraints: Record<string, unknown>;
 };
 
 function connection(project: string) {
@@ -39,21 +40,40 @@ test("sdk-dev-redisを開発共通DBとして同一DB内namespace分離する", 
   assert.equal(registry.namespaceMigration.databaseToDatabaseMigration, false);
   assert.equal(registry.namespaceMigration.sourceResource, "sdk-dev-redis");
   assert.equal(registry.namespaceMigration.targetResource, "sdk-dev-redis");
+  assert.equal(registry.namespaceMigration.preflightAllCopyTargetsBeforeWrite, true);
+  assert.equal(registry.namespaceMigration.rollbackOnlyKeysCreatedByCurrentRun, true);
   assert.equal(connection("app-games-dev").namespace, "app-dev:");
   assert.equal(connection("app-games-sdk-dev").namespace, "sdk:development:preview-instance:v1:");
   assert.equal(connection("app-games-preview-dev").namespace, "preview-dev:");
   assert.notEqual(connection("app-games-dev").namespace, connection("app-games-preview-dev").namespace);
 });
 
-test("開発Redisのplan変更は価格報告と了承前に実行しない", () => {
+test("開発Redisは了承済みPay As You Goで接続・Secretsを変更していない", () => {
   const development = resource("sdk-dev-redis");
-  assert.equal(development.currentPlan, "Free");
-  assert.equal(development.planChangeStatus, "not_executed_waiting_for_user_approval");
-  const candidates = development.planCandidates as Array<Record<string, unknown>>;
-  assert.equal(candidates.some((item) => item.name === "Pay As You Go" && item.recommended === true), true);
-  assert.equal(candidates.some((item) => item.name === "Fixed 250MB"), true);
-  assert.match(runbook, /`Pay As You Go`/);
-  assert.match(runbook, /`Fixed 250MB`/);
+  assert.equal(development.currentPlan, "Pay As You Go");
+  const planChange = development.planChange as Record<string, unknown>;
+  assert.equal(planChange.status, "executed_by_user");
+  assert.equal(planChange.dataMigration, false);
+  assert.equal(planChange.connectionTargetChanged, false);
+  assert.equal(planChange.secretsChanged, false);
+  assert.equal(registry.constraints.changeDevelopmentPlanAgainWithoutApproval, false);
+  assert.equal(registry.constraints.changeSecrets, false);
+  assert.equal(registry.constraints.changeRedisConnectionTarget, false);
+});
+
+test("両Redisの変更前Backup完了を記録する", () => {
+  const productionBackup = resource("wy-app-games").backup as Record<string, unknown>;
+  const developmentBackup = resource("sdk-dev-redis").backup as Record<string, unknown>;
+  assert.equal(productionBackup.status, "completed");
+  assert.equal(productionBackup.providerState, "Completed");
+  assert.equal(productionBackup.name, "pre-namespace-20260730-1256-jst");
+  assert.equal(developmentBackup.status, "completed");
+  assert.equal(developmentBackup.providerState, "Completed");
+  assert.equal(developmentBackup.name, "pre-namespace-20260730-1300-jst");
+  assert.equal(productionBackup.secretValuesRecorded, false);
+  assert.equal(developmentBackup.secretValuesRecorded, false);
+  assert.match(runbook, /1009\.74KB/);
+  assert.match(runbook, /741\.45KB/);
 });
 
 test("production Portalと正式Room Runtimeを混同しない", () => {
