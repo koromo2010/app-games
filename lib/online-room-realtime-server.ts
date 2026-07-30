@@ -11,7 +11,12 @@ import {
   emitObservabilityEvent,
   observabilityErrorCode,
 } from "./observability/index.ts";
-import { redisCommand, resolveSocketRedisUrl } from "./redis-store.ts";
+import {
+  namespaceRedisCommand,
+  redisCommand,
+  redisKeyPrefixForConfigKey,
+  resolveSocketRedisUrl,
+} from "./redis-store.ts";
 import { expectedAppEnvironment } from "./storage-environment-guard.ts";
 
 const eventStreamKey = "online-room:events:v1";
@@ -79,7 +84,11 @@ async function closeStreamClient(client: ReturnType<typeof createClient>) {
   await client.close().catch(() => undefined);
 }
 
-async function runStream(url: string) {
+function streamCommand(command: string[], keyPrefix: string) {
+  return namespaceRedisCommand(command, keyPrefix).map(String);
+}
+
+async function runStream(url: string, keyPrefix: string) {
   const client = createClient({
     url,
     socket: { reconnectStrategy: (retries) => Math.min(5_000, Math.max(200, retries * 200)) },
@@ -87,12 +96,14 @@ async function runStream(url: string) {
   hub.streamClient = client;
   try {
     await client.connect();
-    const tail = await client.sendCommand<string[][]>(["XREVRANGE", eventStreamKey, "+", "-", "COUNT", "1"]);
+    const tail = await client.sendCommand<string[][]>(streamCommand([
+      "XREVRANGE", eventStreamKey, "+", "-", "COUNT", "1",
+    ], keyPrefix));
     hub.lastEventId = tail?.[0]?.[0] ?? "0-0";
     while (hub.streaming && hub.sockets.size > 0) {
-      const result = await client.sendCommand<StreamResult>([
+      const result = await client.sendCommand<StreamResult>(streamCommand([
         "XREAD", "BLOCK", String(streamBlockMs), "COUNT", "100", "STREAMS", eventStreamKey, hub.lastEventId,
-      ]);
+      ], keyPrefix));
       for (const [, entries] of result ?? []) {
         for (const [id, flat] of entries) {
           hub.lastEventId = id;
@@ -127,7 +138,7 @@ function startStream() {
   }
   if (!socketConfig) return;
   hub.streaming = true;
-  void runStream(socketConfig.url);
+  void runStream(socketConfig.url, redisKeyPrefixForConfigKey(socketConfig.key));
 }
 
 function startHeartbeat() {

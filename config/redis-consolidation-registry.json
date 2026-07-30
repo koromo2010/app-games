@@ -1,0 +1,260 @@
+{
+  "schemaVersion": 5,
+  "updatedAt": "2026-07-30",
+  "status": "inventory_reviewed_namespace_code_validation_in_progress",
+  "constraints": {
+    "createRedisDatabase": false,
+    "connectDevelopmentToProductionRedis": false,
+    "deleteSdkDevRedis": false,
+    "deleteExistingKeys": false,
+    "overwriteTargetKeys": false,
+    "changeNeonOrBlob": false,
+    "changePersonalVercelPro": false,
+    "changeDevelopmentPlanAgainWithoutApproval": false,
+    "changeSecrets": false,
+    "changeRedisConnectionTarget": false
+  },
+  "resources": [
+    {
+      "name": "wy-app-games",
+      "role": "production-only",
+      "currentScope": "personal",
+      "targetScope": "game-fields",
+      "databaseId": "83c9a0a5-4b6c-40af-933f-bf1294f82750",
+      "endpointHost": "unverified",
+      "plan": "Fixed 250MB",
+      "primaryRegion": "hnd1",
+      "readRegions": [],
+      "connectedProjects": [],
+      "currentPeriodTotalUsd": 3.55,
+      "backup": {
+        "status": "completed",
+        "type": "Backup",
+        "name": "pre-namespace-20260730-1256-jst",
+        "sizeDisplay": "1009.74KB",
+        "providerState": "Completed",
+        "completedObservedAtJst": "2026-07-30T13:03:00+09:00",
+        "dataContentsRecorded": false,
+        "secretValuesRecorded": false
+      },
+      "transferStatus": "not_started",
+      "allowedSurfaces": [
+        "app-games Platform production",
+        "app-games formal SDK Runtime production"
+      ],
+      "forbiddenSurfaces": [
+        "app-games-dev",
+        "app-games-sdk-dev",
+        "app-games-preview-dev"
+      ]
+    },
+    {
+      "name": "sdk-dev-redis",
+      "role": "shared-development-database",
+      "currentScope": "game-fields",
+      "targetScope": "unchanged",
+      "databaseId": "0861801f-9da0-47b3-a1cf-8b5847f625e0",
+      "endpointHost": "driven-sawfly-189453.upstash.io",
+      "primaryRegion": {
+        "vercel": "hnd1",
+        "upstash": "ap-northeast-1",
+        "location": "Tokyo, Japan"
+      },
+      "currentPlan": "Pay As You Go",
+      "pricing": "$0.20 per 100K commands",
+      "previousPlan": "Free",
+      "previousMonthlyCommandAllowance": 500000,
+      "observedUsageBeforePlanChange": {
+        "commandsApprox": 650000,
+        "storageBytesApprox": 943104,
+        "storageDisplay": "921 KB / 256 MB",
+        "bandwidthDisplay": "0 B / 50 GB",
+        "costUsd": 0
+      },
+      "sameAsAppGamesDevCurrentRedis": true,
+      "separateExistingDevRedisExists": false,
+      "confirmedConnectedProjects": [
+        "app-games-dev"
+      ],
+      "otherConnectedProjects": "unverified",
+      "backup": {
+        "backupAndExportAvailable": true,
+        "status": "completed",
+        "type": "Backup",
+        "name": "pre-namespace-20260730-1300-jst",
+        "sizeDisplay": "741.45KB",
+        "providerState": "Completed",
+        "completedObservedAtJst": "2026-07-30T13:03:00+09:00",
+        "dataContentsRecorded": false,
+        "secretValuesRecorded": false
+      },
+      "planChange": {
+        "status": "executed_by_user",
+        "date": "2026-07-30",
+        "dataMigration": false,
+        "connectionTargetChanged": false,
+        "secretsChanged": false,
+        "databaseIdExpectedUnchanged": true
+      },
+      "recoveryObservation": {
+        "lastObservedRequestLimitErrorUtc": "2026-07-30T03:08:25Z",
+        "formalRoomSuccessPending": false,
+        "roomCreateAndCommandsRecovered": true,
+        "continuousRevisionRange": "1-16",
+        "watcherFixCommit": "677e56fe9f88c6cd6a1dd63c8b2535f3d57c956e",
+        "watcherValidationRoomCode": "9F5N",
+        "watcherValidationFinalRevision": 8,
+        "watcherValidation5xx": 0,
+        "webSocketReconnectsDuringSixCommands": 0,
+        "webSocketReconnectsAfterExplicitReload": 1
+      },
+      "inventory": {
+        "status": "reviewed_metadata_only",
+        "createdAt": "2026-07-30T14:43:28.5412169+09:00",
+        "summaryPath": "config/redis-namespace-inventory-summary-20260730.json",
+        "commandsUsed": ["SCAN", "TYPE", "PTTL"],
+        "redisValuesRead": false,
+        "secretValuesRecorded": false,
+        "rawInventoryCommitted": false,
+        "keyCount": 206,
+        "keepCount": 174,
+        "copyCount": 0,
+        "expireSourceCount": 29,
+        "retainSourceCount": 3
+      },
+      "deleteStatus": "forbidden"
+    }
+  ],
+  "connections": [
+    {
+      "project": "app-games",
+      "branch": "main",
+      "environment": "Production",
+      "surface": "Platform production and formal SDK Runtime production",
+      "currentResource": "wy-app-games",
+      "targetResource": "wy-app-games",
+      "variables": [
+        "APP_REDIS_URL",
+        "UPSTASH_REDIS_REST_URL",
+        "UPSTASH_REDIS_REST_TOKEN",
+        "REDIS_URL",
+        "KV_REST_API_URL",
+        "KV_REST_API_TOKEN"
+      ],
+      "namespace": "production keyspace; no app-dev prefix",
+      "status": "endpoint_and_live_variable_names_unverified"
+    },
+    {
+      "project": "app-games-dev",
+      "branch": "develop",
+      "environment": "Production",
+      "surface": "Platform development and formal SDK Runtime development",
+      "currentResource": "sdk-dev-redis",
+      "targetResource": "sdk-dev-redis",
+      "forbiddenTargetResource": "wy-app-games",
+      "variables": [
+        "APP_REDIS_URL",
+        "UPSTASH_REDIS_REST_URL",
+        "UPSTASH_REDIS_REST_TOKEN",
+        "DEV_REDIS_REDIS_URL",
+        "DEV_REDIS_KV_REST_API_URL",
+        "DEV_REDIS_KV_REST_API_TOKEN"
+      ],
+      "endpointHost": "driven-sawfly-189453.upstash.io",
+      "namespace": "app-dev:",
+      "status": "resource_identity_watcher_recovery_and_existing_namespace_confirmed_code_pending"
+    },
+    {
+      "project": "app-games-sdk",
+      "branch": "main",
+      "environment": "Production",
+      "surface": "SDK Portal production registry only; not formal Room Runtime",
+      "currentResource": "unverified",
+      "targetResource": "pending_manual_classification",
+      "forbiddenAutomaticTargetResource": "wy-app-games",
+      "variables": [
+        "SDK_REDIS_REST_URL",
+        "SDK_REDIS_REST_TOKEN"
+      ],
+      "namespace": "sdk:production:preview-instance:v1:",
+      "status": "do_not_change_until_production_registry_keys_are_classified"
+    },
+    {
+      "project": "app-games-sdk-dev",
+      "branch": "develop",
+      "environment": "Production",
+      "surface": "SDK Portal development registry only",
+      "currentResource": "unverified",
+      "targetResource": "sdk-dev-redis",
+      "forbiddenTargetResource": "wy-app-games",
+      "variables": [
+        "SDK_REDIS_REST_URL",
+        "SDK_REDIS_REST_TOKEN"
+      ],
+      "namespace": "sdk:development:preview-instance:v1:",
+      "status": "no_portal_registry_keys_observed_live_connection_unverified_no_change_authorized"
+    },
+    {
+      "project": "app-games-preview-dev",
+      "branch": "develop",
+      "environment": "Production",
+      "surface": "development isolated Preview Runtime",
+      "currentResource": "unverified",
+      "targetResource": "sdk-dev-redis when Redis use is required",
+      "forbiddenTargetResource": "wy-app-games",
+      "variables": [
+        "APP_REDIS_URL",
+        "UPSTASH_REDIS_REST_URL",
+        "UPSTASH_REDIS_REST_TOKEN",
+        "REDIS_ENV"
+      ],
+      "namespace": "preview-dev:",
+      "status": "legacy_preview_metrics_observed_live_connection_identity_unverified_no_change_authorized"
+    },
+    {
+      "project": "app-games-sdk-preview",
+      "branch": "main",
+      "environment": "Production",
+      "surface": "production isolated Preview",
+      "targetResource": "none",
+      "variables": [],
+      "namespace": "none",
+      "status": "redis_connection_forbidden_and_code_fail_closed"
+    },
+    {
+      "project": "app-games-sdk-portal",
+      "branch": "develop",
+      "environment": "Production",
+      "surface": "duplicate candidate; usage unverified",
+      "targetResource": "unchanged",
+      "variables": "unverified",
+      "namespace": "unverified",
+      "status": "build_skip_do_not_delete"
+    }
+  ],
+  "namespaceMigration": {
+    "mode": "same_database_non_destructive_key_copy",
+    "sourceResource": "sdk-dev-redis",
+    "targetResource": "sdk-dev-redis",
+    "copyOnlyWhenTargetKeyAbsent": true,
+    "preserveTypeDigestAndAbsoluteExpiry": true,
+    "preflightAllCopyTargetsBeforeWrite": true,
+    "rollbackOnlyKeysCreatedByCurrentRun": true,
+    "deleteSourceKeys": false,
+    "databaseToDatabaseMigration": false,
+    "inventoryStatus": "reviewed_metadata_only",
+    "inventorySummaryPath": "config/redis-namespace-inventory-summary-20260730.json",
+    "inventoryKeyCount": 206,
+    "copyCandidateCount": 0,
+    "copyExecutionRequired": false,
+    "sourceKeysDeleted": false,
+    "targetKeysOverwritten": false
+  },
+  "rollback": {
+    "productionDeploymentId": "dpl_5XkpdpgtJP57ETaLTskmFi4Lkku6",
+    "developmentDeploymentBeforeWatcherFix": "dpl_ANs6QHwNK3JxALb8zZY7YCqBKNft",
+    "developmentDeploymentCurrent": "dpl_9BfJji7FV2DKm4gVVqsaYBztpKd9",
+    "existingKeysRetained": true,
+    "forcePush": false
+  }
+}
