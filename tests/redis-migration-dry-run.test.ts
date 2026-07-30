@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  copyKey,
+  applyPlan,
   createPlan,
   inspectKey,
+  preflightCopyPlan,
 } from "../scripts/migrate-redis-namespace.mjs";
 
 type Entry = {
@@ -14,6 +15,7 @@ type Entry = {
 
 class FakeRedis {
   readonly data = new Map<string, Entry>();
+  failOnWriteKey: string | null = null;
 
   constructor(entries: Record<string, Entry> = {}) {
     for (const [key, entry] of Object.entries(entries)) this.data.set(key, structuredClone(entry));
@@ -23,6 +25,10 @@ class FakeRedis {
     const [name, key, ...args] = parts;
     const command = name.toUpperCase();
     const entry = key ? this.data.get(key) : undefined;
+    const writeCommands = new Set(["SET", "HSET", "RPUSH", "SADD", "ZADD", "XADD"]);
+    if (writeCommands.has(command) && key === this.failOnWriteKey) {
+      throw new Error(`FAKE_REDIS_WRITE_FAILED:${key}`);
+    }
     switch (command) {
       case "SCAN": return ["0", [...this.data.keys()].sort()];
       case "TYPE": return entry?.type ?? "none";
@@ -82,7 +88,7 @@ const secretMarkers = [
   "VALUE_SHOULD_NOT_APPEAR_D",
 ];
 
-function sourceFixture() {
+function sharedDevelopmentFixture() {
   const expiresAt = Date.now() + 60_000;
   return new FakeRedis({
     "app-dev:string": { type: "string", value: "value", expiresAt },
@@ -91,65 +97,118 @@ function sourceFixture() {
     "app-dev:set": { type: "set", value: ["b", "a"], expiresAt: null },
     "app-dev:zset": { type: "zset", value: ["a", "1", "b", "2"], expiresAt: null },
     "app-dev:stream": { type: "stream", value: [["1-0", ["d", "one"]], ["2-0", ["d", "two"]]], expiresAt: null },
+    "sdk:development:preview-instance:v1:current": { type: "string", value: "current", expiresAt },
+    "preview-dev:metric:current": { type: "string", value: "metric", expiresAt: null },
     "sdk:preview-instance:v1:legacy": { type: "string", value: secretMarkers[0], expiresAt },
-    "sdk:production:preview-instance:v1:manual": { type: "string", value: secretMarkers[1], expiresAt: null },
-    "unknown:key": { type: "string", value: secretMarkers[2], expiresAt: null },
+    "game-sdk-runtime:v2:development:game:room:ABCD": { type: "string", value: secretMarkers[1], expiresAt },
+    "online-room:events:v1": { type: "stream", value: [["1-0", ["d", secretMarkers[2]]]], expiresAt: null },
+    "sdk:production:preview-instance:v1:manual": { type: "string", value: "production", expiresAt: null },
+    "unknown:key": { type: "string", value: secretMarkers[3], expiresAt: null },
   });
 }
 
-test("dry-run planは自動移行、手動判定、衝突を分類し値を含めない", async () => {
-  const source = sourceFixture();
-  const target = new FakeRedis({
-    "app-dev:hash": { type: "hash", value: { a: secretMarkers[3] }, expiresAt: null },
-  });
-  const plan = await createPlan(source, target, "rediss://source.example:6379", "rediss://target.example:6379");
-  assert.equal(plan.sourceHost, "source.example");
-  assert.equal(plan.targetHost, "target.example");
-  assert.equal(plan.entries.length, 9);
+async function copyEntry(source: FakeRedis, sourceKey: string, targetKey: string) {
+  return {
+    sourceKey,
+    targetKey,
+    action: "copy",
+    sourceState: await inspectKey(source, sourceKey),
+  };
+}
 
-  const hash = plan.entries.find((entry) => entry.sourceKey === "app-dev:hash");
-  assert.equal(hash?.collision, "different");
-  assert.equal(hash?.action, "manual");
+test("同一DB dry-runはkeep・copy・manualを分類しvalueを含めない", async () => {
+  const database = sharedDevelopmentFixture();
+  const endpoint = "rediss://same.example:6379";
+  const plan = await createPlan(database, database, endpoint, endpoint);
+  assert.equal(plan.sourceHost, "same.example");
+  assert.equal(plan.targetHost, "same.example");
+  assert.equal(plan.sameEndpointHost, true);
+  assert.equal(plan.entries.length, 13);
+
+  assert.equal(plan.entries.find((entry) => entry.sourceKey === "app-dev:hash")?.action, "keep");
+  assert.equal(plan.entries.find((entry) => entry.sourceKey === "preview-dev:metric:current")?.action, "keep");
   const legacy = plan.entries.find((entry) => entry.sourceKey === "sdk:preview-instance:v1:legacy");
   assert.equal(legacy?.targetKey, "sdk:development:preview-instance:v1:legacy");
   assert.equal(legacy?.action, "copy");
-  const production = plan.entries.find((entry) => entry.sourceKey.startsWith("sdk:production:"));
-  assert.equal(production?.action, "manual");
+  assert.equal(plan.entries.find((entry) => entry.sourceKey === "online-room:events:v1")?.action, "manual");
+  assert.equal(plan.entries.find((entry) => entry.sourceKey.startsWith("sdk:production:"))?.action, "manual");
   for (const marker of secretMarkers) assert.doesNotMatch(JSON.stringify(plan), new RegExp(marker));
 });
 
-test("copyはRedis type・digest・絶対TTLを維持しsourceを変更しない", async () => {
-  const source = sourceFixture();
-  const target = new FakeRedis();
-  const plan = await createPlan(source, target, "rediss://source.example:6379", "rediss://target.example:6379");
-  const sourceBefore = structuredClone([...source.data.entries()]);
-
-  for (const entry of plan.entries.filter((item) => item.action === "copy")) {
-    const result = await copyKey(source, target, entry);
-    const sourceState = await inspectKey(source, entry.sourceKey);
-    const targetState = await inspectKey(target, entry.targetKey);
-    assert.equal(result.type, sourceState.type);
-    assert.equal(targetState.type, sourceState.type);
-    assert.equal(targetState.digest, sourceState.digest);
-    if (sourceState.pttl >= 0) assert.ok(Math.abs(targetState.pttl - sourceState.pttl) < 100);
-    else assert.equal(targetState.pttl, -1);
-  }
-
-  assert.deepEqual([...source.data.entries()], sourceBefore);
+test("同一DB applyは旧keyを残しnamespace付きtargetを追加する", async () => {
+  const database = sharedDevelopmentFixture();
+  const endpoint = "rediss://same.example:6379";
+  const plan = await createPlan(database, database, endpoint, endpoint);
+  const sourceKeys = plan.entries.filter((entry) => entry.action === "copy").map((entry) => entry.sourceKey);
+  const copied = await applyPlan(database, database, plan);
+  assert.equal(copied.length, 2);
+  for (const sourceKey of sourceKeys) assert.equal(database.data.has(sourceKey), true);
+  assert.equal(database.data.has("sdk:development:preview-instance:v1:legacy"), true);
+  assert.equal(database.data.has("app-dev:game-sdk-runtime:v2:development:game:room:ABCD"), true);
 });
 
-test("target衝突とplan後のsource変更でcopyを停止する", async () => {
-  const source = sourceFixture();
-  const target = new FakeRedis();
-  const plan = await createPlan(source, target, "rediss://source.example:6379", "rediss://target.example:6379");
-  const entry = plan.entries.find((item) => item.sourceKey === "app-dev:string");
-  assert.ok(entry);
+test("copyは全Redis type・digest・絶対TTLを維持する", async () => {
+  const expiresAt = Date.now() + 120_000;
+  const database = new FakeRedis({
+    "source:string": { type: "string", value: "one", expiresAt },
+    "source:hash": { type: "hash", value: { a: "1", b: "2" }, expiresAt: null },
+    "source:list": { type: "list", value: ["a", "b"], expiresAt: null },
+    "source:set": { type: "set", value: ["b", "a"], expiresAt: null },
+    "source:zset": { type: "zset", value: ["a", "1", "b", "2"], expiresAt: null },
+    "source:stream": { type: "stream", value: [["1-0", ["d", "one"]], ["2-0", ["d", "two"]]], expiresAt: null },
+  });
+  const entries = [];
+  for (const type of ["string", "hash", "list", "set", "zset", "stream"]) {
+    entries.push(await copyEntry(database, `source:${type}`, `target:${type}`));
+  }
+  const copied = await applyPlan(database, database, { entries });
+  assert.equal(copied.length, 6);
+  for (const type of ["string", "hash", "list", "set", "zset", "stream"]) {
+    const sourceState = await inspectKey(database, `source:${type}`);
+    const targetState = await inspectKey(database, `target:${type}`);
+    assert.equal(targetState.type, sourceState.type);
+    assert.equal(targetState.digest, sourceState.digest);
+    if (sourceState.expiresAt === null) assert.equal(targetState.expiresAt, null);
+    else assert.ok(Math.abs((targetState.expiresAt ?? 0) - sourceState.expiresAt) < 100);
+  }
+});
 
-  target.data.set(entry.targetKey, { type: "string", value: "occupied", expiresAt: null });
-  await assert.rejects(() => copyKey(source, target, entry), /REDIS_MIGRATION_TARGET_EXISTS/);
-  target.data.delete(entry.targetKey);
+test("全件preflightはtarget衝突・重複target・同一key・source変更をwrite前に停止する", async () => {
+  const database = new FakeRedis({
+    "source:one": { type: "string", value: "one", expiresAt: null },
+    "source:two": { type: "string", value: "two", expiresAt: null },
+    "target:occupied": { type: "string", value: "occupied", expiresAt: null },
+  });
+  const first = await copyEntry(database, "source:one", "target:one");
+  const collision = await copyEntry(database, "source:two", "target:occupied");
+  await assert.rejects(() => applyPlan(database, database, { entries: [first, collision] }), /REDIS_MIGRATION_TARGET_EXISTS/);
+  assert.equal(database.data.has("target:one"), false);
 
-  source.data.set(entry.sourceKey, { type: "string", value: "changed", expiresAt: null });
-  await assert.rejects(() => copyKey(source, target, entry), /REDIS_MIGRATION_SOURCE_CHANGED/);
-  assert.equal(target.data.has(entry.targetKey), false);
+  const duplicate = await copyEntry(database, "source:two", "target:one");
+  await assert.rejects(() => preflightCopyPlan(database, database, { entries: [first, duplicate] }), /REDIS_MIGRATION_DUPLICATE_TARGET/);
+  await assert.rejects(
+    () => preflightCopyPlan(database, database, { entries: [{ ...first, targetKey: "source:one" }] }),
+    /REDIS_MIGRATION_SAME_KEY_FORBIDDEN/,
+  );
+
+  database.data.set("source:one", { type: "string", value: "changed", expiresAt: null });
+  await assert.rejects(() => preflightCopyPlan(database, database, { entries: [first] }), /REDIS_MIGRATION_SOURCE_CHANGED/);
+  assert.equal(database.data.has("target:one"), false);
+});
+
+test("途中失敗時はその実行で作成したtargetだけをrollbackする", async () => {
+  const database = new FakeRedis({
+    "source:first": { type: "string", value: "first", expiresAt: null },
+    "source:second": { type: "string", value: "second", expiresAt: null },
+    "unrelated:existing": { type: "string", value: "keep", expiresAt: null },
+  });
+  const first = await copyEntry(database, "source:first", "target:first");
+  const second = await copyEntry(database, "source:second", "target:second");
+  database.failOnWriteKey = "target:second";
+  await assert.rejects(() => applyPlan(database, database, { entries: [first, second] }), /FAKE_REDIS_WRITE_FAILED/);
+  assert.equal(database.data.has("target:first"), false);
+  assert.equal(database.data.has("target:second"), false);
+  assert.equal(database.data.has("source:first"), true);
+  assert.equal(database.data.has("source:second"), true);
+  assert.equal(database.data.has("unrelated:existing"), true);
 });
