@@ -7,7 +7,7 @@ export function classifyRedisConsolidationKey(sourceKey) {
     return { classification: "sdk-portal-development", targetKey: key, automatic: true };
   }
   if (key.startsWith("sdk:production:preview-instance:v1:")) {
-    return { classification: "sdk-portal-production", targetKey: key, automatic: true };
+    return { classification: "sdk-portal-production", targetKey: key, automatic: false };
   }
   if (key.startsWith("sdk:preview-instance:v1:")) {
     return {
