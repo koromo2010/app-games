@@ -4,6 +4,30 @@
 
 この文書は、再調査を減らし、次に直す範囲を選びやすくするための監査記録である。将来構想ではなく、現在のコードで確認できた事実を記録する。状態が「修正済み」の項目は、同じ問題を再導入しないための回帰確認点として残す。
 
+## 2026-07-30 SDK candidate採用がrelease履歴の必須列欠落で503になる
+
+状態: ローカル修正・回帰テスト済み／develop未反映・実機未確認
+
+`SDK-dev → dev`で固定Packageのmanifest検証が成功した後、
+`POST /api/admin/sdk-promotions`が503 `promotion_failed`になった。
+migration 006は`sdk_app_releases.source_revision`を既存`revision`でbackfillして
+`NOT NULL`化しているが、candidate採用の新release INSERTだけが同列を指定していなかった。
+そのためPreview Runtime検証後のSDK PostgreSQL書込みがNOT NULL制約で失敗していた。
+同時刻のRedis timeoutはこの書込み失敗とは別事象である。
+
+candidate採用は、検証対象の`sdk_games.package_revision`を固定sourceとして使用し、
+同じ値を新releaseの`revision`と`source_revision`へ保存する。stable pointer、
+channel履歴、以前のcurrent解除、新release、判断履歴は従来どおり一つの
+data-modifying CTE文に保ち、どの書込みが失敗しても文全体をrollbackする。
+安全な構造化失敗ログには段階、`sdk-candidate`経路、制作者／ゲーム識別子、
+source revision、安全なエラー種別・コードだけを残し、例外本文、SQL、manifest、
+token、接続URL、判断理由、実行者は含めない。
+
+同じcandidate採用serviceを共有する`SDK → main`にも潜在的に同じ欠落があったため
+同時に修正対象となる。`dev app → main app`の昇格・復元は既に
+`source_revision`を保存しており変更しない。migration 004の初回backfill INSERTは
+source列を追加するmigration 006より前に一度だけ実行されるため現行順序で正しい。
+
 ## 2026-07-30 通常の正式Room作成が旧Mock Shellへ入りRuntime未接続になる
 
 状態: 修正済み／自動検証済み／develop配備・通常正式Room実機確認済み／main未反映

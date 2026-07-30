@@ -3119,3 +3119,40 @@ Total output lines: 6329
 
 - T-31はdevelopmentで原因確定、最小修正、自動検証、non-force push、3 ProjectのProduction配備、通常正式Roomの実機確認まで完了した。
 - `main`は`85e702e7ed3b6acf5e7167d9fb3dcbe3a23c2389`のままで未反映。
+
+## 2026-07-30 — SDK candidate採用のsource_revision欠落を修正
+
+### 利用者からの要望
+
+- `道つなぎ`の`SDK-dev → dev`採用が503 `promotion_failed`になる緊急障害を、Redis移管、PR #69、T-26、費用ダッシュボード、共通build抑制と分離してローカル修正する。
+- Preview Runtimeで検証した固定Packageの正確なrevisionをrelease履歴へ保存し、stable pointerだけが先に進まないことを保証する。
+- migration 006は変更せず、全INSERT／UPSERT経路、秘密値を含まないログ、必須列欠落を検知する回帰テストを確認する。
+- push、PR、Deployment、DB・Redis・Secrets・環境変数変更、実昇格再試行は行わない。
+
+### 判断
+
+- 費用ダッシュボードのlocal branchはそのまま保持し、remote `develop@677e56f`から専用worktreeと`agent/sdk-promotion-source-revision` branchを作成する。
+- candidateの`package_revision`をmanifest検証とreleaseの`revision`／`source_revision`で共通使用し、stable pointer、channel履歴、旧current解除、新release、判断履歴を既存の単一PostgreSQL文に保つ。
+- 実行時の`sdk_app_releases` INSERT／UPSERTを全走査し、migration 004/006から導出した現行必須列へ照合するschema-aware testを追加する。旧INSERTは`source_revision`のNOT NULL違反相当として再現する。
+- server logは入力・schema・source取得・manifest検証・release書込み・結果検査の段階を分け、識別子と安全な分類だけをJSONで出す。公開APIの未知エラーは従来どおり`promotion_failed`へ正規化する。
+
+### 実施結果
+
+- candidate採用の新release INSERTへ`source_revision`を追加した。保存値はstable pointerや最新版の再取得ではなく、Preview Runtime検証へ渡した固定candidate revisionと同一である。
+- `SDK-dev → dev`と`SDK → main`は同じserviceを使うため両方の潜在欠落を解消する。`dev app → main app`の昇格・復元2経路は既に同列を保存しており変更していない。
+- migration 004の初回backfillを含む全4 INSERTを監査した。migration 004は006より前のschemaで正しく、現行Runtimeの3 INSERTはすべてmigration 006適用後の必須列を満たす。
+- Redis接続先、namespace、plan、Secrets、環境変数、migration、Vercel／GitHub設定は変更していない。
+
+### 検証
+
+- focused promotion／manifest／release UI／schema-aware回帰テスト17件、昇格関連contractを含む拡張focused test 45件は成功した。
+- SDK Portal ESLint、SDK Portal単独TypeScript検査、全体lint、SDK migration 7件の整合性検査、SDK依存境界検査は成功した。
+- Game SDK／Game Runtime package、SDK Portal、本体のproduction buildは成功した。本体はTypeScript検査と78ページ生成まで完了した。
+- 全体testは720/722成功した。残る2件は基準`develop@677e56f`と同じ、Node 24のJSON import attributeと、実装済みSDK Preview招待を否定する旧contract testである。今回追加した5件はすべて成功した。
+- 環境台帳検査は基準と同じ既存`SDK_ACCOUNT_LINK_ALLOWED_ORIGINS` 1件だけで失敗した。今回差分に環境変数の追加・変更はない。
+- 実差分7ファイルのbuild影響判定は、developmentでは`app-games-sdk-dev`だけBUILD、`app-games-dev`、`app-games-preview-dev`、無効化済み`app-games-sdk-portal`はSKIPである。将来mainでは`app-games-sdk`だけBUILDし、`app-games`、`app-games-sdk-preview`はSKIPする。
+
+### 未対応・保留
+
+- push許可後は変更パスのbuild判定に従い、必要なdevelopment Projectだけを1回配備して`道つなぎ`の同じ固定candidate採用を実機確認する。
+- `main`への反映と`SDK → main`の実機確認は別承認とする。
