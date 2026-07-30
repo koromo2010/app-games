@@ -14,17 +14,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify:
+  focused-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
-      - name: Install dependencies
-        run: npm ci
+      - run: npm ci
       - name: Redis and build-gate focused tests
         run: >-
           node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON
@@ -35,13 +34,63 @@ jobs:
           tests/redis-consolidation-policy.test.ts
           tests/game-sdk-room-watch-policy.test.ts
           tests/vercel-build-impact.test.ts
-      - name: Repository verification
-        run: npm run verify
-      - name: Full test suite
-        run: npm test
-      - name: Platform build
-        run: npm run build
-      - name: SDK Portal build
-        run: npm run build:sdk
-      - name: SDK Preview build
-        run: npm run build:sdk-preview
+
+  repository-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run verify
+
+  full-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+  platform-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+
+  sdk-portal-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build:sdk
+
+  sdk-preview-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build:sdk-preview
