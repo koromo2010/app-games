@@ -1197,3 +1197,32 @@ SDK報告はPortalと本体の対応時刻から`app-games-sdk-dev → app-games
 同一スレッドの返信・メールだけの再送も保存済みrecord IDを維持する。
 メールの件名・本文生成は`lib/support-email-content.ts`へ集約し、ログへ本文、氏名、
 メールアドレスを追加しない。
+
+## 2026-07-31 T-39 SDK Preview Room GETが招待索引を書き換える
+
+状態: 原因確定・新規最小修正／ローカル検証完了、未push・未配備
+
+`/api/sdk-preview/[creatorSlug]/games/[gameId]/rooms`の成功callbackが、
+操作種別を判定せずRoom snapshotの存在だけで招待索引を保存していた。そのため
+Room GET、active取得、一覧、debug viewでもRedis `SET`が発生していた。
+app-games-devで確認された15件のtimeoutは、この不要write経路と一致する。
+
+招待索引の更新条件を成功callbackから独立した単一helperへ閉じ、
+GET系は0回、Room作成POSTは`SET` 1回、実際に適用されたPATCHは`SET` 1回、
+単一Roomを実際に解散したDELETEは`DEL` 1回とした。冪等PATCHと対象なしの解散は
+0回である。招待索引の`SET`はRoom本体と同じ6時間TTL引数を共用し、
+readでTTLを延長しない。
+
+招待索引、realtime通知、たほい屋の再利用用decoy候補保存等、
+正本でない処理だけを明示的なbest-effort background処理とし、
+失敗を固定enumのstructured telemetryへ変換する。telemetryは
+critical／best-effort、read／write／pipeline、REST／socket、Redis command、
+command件数、serialized bytesを記録できるが、Room code、playerId、
+Redis key/value、URL、tokenは記録しない。telemetry保存自体の失敗にも
+process-safeな構造化fallbackを設け、Unhandled Rejectionを残さない。
+
+Room本体、戦績、replay、SDK Room保存・SDK resultはcriticalのままawaitし、
+失敗を記録した上で呼出元へ再throwする。write retry、timeout値、Redis接続先、
+namespace、環境変数は変更していない。問い合わせ・報告・メールID対応にも
+差分はない。raw Redis照合は、安全なread-only経路がないとの確定済み判断に従い
+再試行していない。

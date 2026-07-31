@@ -18,6 +18,34 @@ test("観測イベントは許可済みフィールド以外を捨てる", () =>
   assert.equal(JSON.stringify(fields).includes("投稿本文"), false);
 });
 
+test("storage telemetry accepts only fixed enums and numeric sizes", () => {
+  assert.deepEqual(sanitizeObservabilityFields({
+    workClass: "best-effort",
+    storageOperation: "pipeline",
+    storageTransport: "socket",
+    storageCommand: "MULTIPLE",
+    commandCount: 3,
+    serializedBytes: 512,
+    redisKey: "private-key",
+    redisValue: "private-value",
+    url: "https://redis.example.test",
+    token: "secret-token",
+  }), {
+    commandCount: 3,
+    serializedBytes: 512,
+    workClass: "best-effort",
+    storageOperation: "pipeline",
+    storageTransport: "socket",
+    storageCommand: "MULTIPLE",
+  });
+  assert.deepEqual(sanitizeObservabilityFields({
+    workClass: "optional",
+    storageOperation: "delete",
+    storageTransport: "http",
+    storageCommand: "PRIVATE_COMMAND",
+  }), {});
+});
+
 test("部屋とactorは安定した不透明参照へ変換する", () => {
   const first = observabilityRef("room", "ABCD");
   const second = observabilityRef("room", "ABCD");

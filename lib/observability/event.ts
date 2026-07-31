@@ -1,5 +1,17 @@
 import { createHash, createHmac } from "node:crypto";
-import type { ObservabilityFields, ObservabilityLevel, ObservabilityOutcome } from "./types.ts";
+import {
+  observabilityStorageCommands,
+  observabilityStorageOperations,
+  observabilityStorageTransports,
+  observabilityWorkClasses,
+  type ObservabilityFields,
+  type ObservabilityLevel,
+  type ObservabilityOutcome,
+  type ObservabilityStorageCommand,
+  type ObservabilityStorageOperation,
+  type ObservabilityStorageTransport,
+  type ObservabilityWorkClass,
+} from "./types.ts";
 
 const stringFieldNames = [
   "game",
@@ -37,12 +49,26 @@ const numberFieldNames = [
   "attempt",
   "affectedCount",
   "sourceCount",
+  "commandCount",
+  "serializedBytes",
   "promptTokens",
   "completionTokens",
   "costMicros",
 ] as const;
 const booleanFieldNames = ["applied", "debugMode"] as const;
 const outcomes = new Set<ObservabilityOutcome>(["started", "success", "rejected", "conflict", "ignored", "failed"]);
+const workClasses = new Set<ObservabilityWorkClass>(
+  observabilityWorkClasses,
+);
+const storageOperations = new Set<ObservabilityStorageOperation>(
+  observabilityStorageOperations,
+);
+const storageTransports = new Set<ObservabilityStorageTransport>(
+  observabilityStorageTransports,
+);
+const storageCommands = new Set<ObservabilityStorageCommand>(
+  observabilityStorageCommands,
+);
 
 function cleanString(value: unknown, maximumLength = 100) {
   return typeof value === "string" ? value.trim().slice(0, maximumLength) : "";
@@ -67,6 +93,42 @@ export function sanitizeObservabilityFields(value: unknown): ObservabilityFields
   }
   if (typeof input.outcome === "string" && outcomes.has(input.outcome as ObservabilityOutcome)) {
     fields.outcome = input.outcome as ObservabilityOutcome;
+  }
+  if (
+    typeof input.workClass === "string"
+    && workClasses.has(input.workClass as ObservabilityWorkClass)
+  ) {
+    fields.workClass = input.workClass as ObservabilityWorkClass;
+  }
+  if (
+    typeof input.storageOperation === "string"
+    && storageOperations.has(
+      input.storageOperation as ObservabilityStorageOperation,
+    )
+  ) {
+    fields.storageOperation = (
+      input.storageOperation as ObservabilityStorageOperation
+    );
+  }
+  if (
+    typeof input.storageTransport === "string"
+    && storageTransports.has(
+      input.storageTransport as ObservabilityStorageTransport,
+    )
+  ) {
+    fields.storageTransport = (
+      input.storageTransport as ObservabilityStorageTransport
+    );
+  }
+  if (
+    typeof input.storageCommand === "string"
+    && storageCommands.has(
+      input.storageCommand as ObservabilityStorageCommand,
+    )
+  ) {
+    fields.storageCommand = (
+      input.storageCommand as ObservabilityStorageCommand
+    );
   }
   return fields;
 }

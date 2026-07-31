@@ -113,7 +113,7 @@ export async function saveStoredWordWolfRoom(room: unknown) {
   await schedulePostResponseWork(
     `online-room-realtime:wordwolf:${normalizedRoom.code}`,
     () => publishOnlineRoomRevision("wordwolf", normalizedRoom),
-    { outsideRequest: "skip" },
+    { mode: "best-effort", outsideRequest: "skip" },
   );
 
   if (shouldRecordResults) {

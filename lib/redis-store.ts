@@ -1,5 +1,12 @@
 import { assertRedisEnvironment } from "./storage-environment-guard.ts";
 import { createClient, type RedisClientType } from "redis";
+import {
+  observabilityStorageCommands,
+  type ObservabilityFields,
+  type ObservabilityStorageCommand,
+  type ObservabilityStorageOperation,
+  type ObservabilityStorageTransport,
+} from "./observability/types.ts";
 
 type RedisResponse<T> = {
   result: T;
@@ -13,6 +20,28 @@ type RedisErrorResponse = {
 type RedisConfig =
   | { transport: "rest"; url: string; token: string; keyPrefix: string }
   | { transport: "socket"; url: string; keyPrefix: string };
+
+type RedisStoreOperationTelemetry = {
+  storageOperation: ObservabilityStorageOperation;
+  storageTransport?: ObservabilityStorageTransport;
+  storageCommand: ObservabilityStorageCommand;
+  commandCount: number;
+  serializedBytes: number;
+};
+
+export class RedisStoreOperationError extends Error {
+  readonly telemetry: RedisStoreOperationTelemetry;
+
+  constructor(
+    message: string,
+    telemetry: RedisStoreOperationTelemetry,
+    cause?: unknown,
+  ) {
+    super(message, { cause });
+    this.name = "RedisStoreOperationError";
+    this.telemetry = telemetry;
+  }
+}
 
 let socketClient: RedisClientType | null = null;
 let socketClientUrl = "";
@@ -52,6 +81,9 @@ const redisReadCommands = new Set([
   "ZSCORE",
   "ZMSCORE",
 ]);
+const redisTelemetryCommands = new Set<string>(
+  observabilityStorageCommands,
+);
 
 export function getRedisRequestTimeoutMs() {
   const configured = Number(process.env.REDIS_REQUEST_TIMEOUT_MS);
@@ -61,6 +93,59 @@ export function getRedisRequestTimeoutMs() {
 
 function commandName(command: unknown[]) {
   return typeof command[0] === "string" ? command[0].trim().toUpperCase() : "";
+}
+
+function telemetryCommandName(
+  commands: unknown[][],
+): ObservabilityStorageCommand {
+  const names = [...new Set(commands.map(commandName).filter(Boolean))];
+  if (names.length > 1) return "MULTIPLE";
+  const name = names[0] ?? "";
+  return redisTelemetryCommands.has(name)
+    ? name as ObservabilityStorageCommand
+    : "UNKNOWN";
+}
+
+function serializedByteLength(value: unknown) {
+  try {
+    return Buffer.byteLength(JSON.stringify(value) ?? "", "utf8");
+  } catch {
+    return 0;
+  }
+}
+
+function redisOperationTelemetry(
+  commands: unknown[][],
+  operation: ObservabilityStorageOperation,
+  transport?: ObservabilityStorageTransport,
+  serializedValue: unknown = commands,
+): RedisStoreOperationTelemetry {
+  return {
+    storageOperation: operation,
+    ...(transport ? { storageTransport: transport } : {}),
+    storageCommand: telemetryCommandName(commands),
+    commandCount: commands.length,
+    serializedBytes: serializedByteLength(serializedValue),
+  };
+}
+
+function redisStoreOperationError(
+  error: unknown,
+  telemetry: RedisStoreOperationTelemetry,
+) {
+  if (error instanceof RedisStoreOperationError) return error;
+  const message = error instanceof Error
+    ? error.message
+    : "REDIS_STORE_REQUEST_FAILED";
+  return new RedisStoreOperationError(message, telemetry, error);
+}
+
+export function redisStoreObservabilityFields(
+  error: unknown,
+): ObservabilityFields {
+  return error instanceof RedisStoreOperationError
+    ? error.telemetry
+    : {};
 }
 
 function commandsAreSafeToRetry(commands: unknown[][]) {
@@ -231,50 +316,119 @@ export function isRedisStoreUnavailableError(error: unknown) {
 }
 
 export async function redisCommand<T>(command: unknown[]) {
-  const config = getRedisConfig();
+  const operation: ObservabilityStorageOperation = redisReadCommands.has(
+    commandName(command),
+  )
+    ? "read"
+    : "write";
+  let config: RedisConfig | null;
+  try {
+    config = getRedisConfig();
+  } catch (error) {
+    throw redisStoreOperationError(
+      error,
+      redisOperationTelemetry([command], operation),
+    );
+  }
   if (!config) {
-    throw new Error("REDIS_STORE_NOT_CONFIGURED");
+    throw new RedisStoreOperationError(
+      "REDIS_STORE_NOT_CONFIGURED",
+      redisOperationTelemetry([command], operation),
+    );
   }
 
-  if (config.transport === "socket") {
-    const client = await getSocketRedisClient(config.url);
-    return await client.sendCommand(stringifyRedisCommand(namespaceRedisCommand(command, config.keyPrefix))) as T;
+  const namespacedCommand = namespaceRedisCommand(
+    command,
+    config.keyPrefix,
+  );
+  const telemetry = redisOperationTelemetry(
+    [command],
+    operation,
+    config.transport,
+    namespacedCommand,
+  );
+  try {
+    if (config.transport === "socket") {
+      const client = await getSocketRedisClient(config.url);
+      return await client.sendCommand(
+        stringifyRedisCommand(namespacedCommand),
+      ) as T;
+    }
+
+    const body = JSON.stringify(namespacedCommand);
+    const response = await fetchRedis(
+      config.url,
+      config.token,
+      body,
+      redisReadCommands.has(commandName(command)),
+    );
+
+    if (!response.ok) {
+      throw await redisRequestError(response);
+    }
+
+    const data = (await response.json()) as RedisResponse<T>;
+    if (data.error) {
+      throw new Error(data.error);
+    }
+
+    return data.result;
+  } catch (error) {
+    throw redisStoreOperationError(error, telemetry);
   }
-
-  const namespacedCommand = namespaceRedisCommand(command, config.keyPrefix);
-  const response = await fetchRedis(config.url, config.token, JSON.stringify(namespacedCommand), redisReadCommands.has(commandName(command)));
-
-  if (!response.ok) {
-    throw await redisRequestError(response);
-  }
-
-  const data = (await response.json()) as RedisResponse<T>;
-  if (data.error) {
-    throw new Error(data.error);
-  }
-
-  return data.result;
 }
 
 export async function redisPipeline<T extends unknown[]>(commands: unknown[][]) {
   if (commands.length === 0) return [] as unknown as T;
-  const config = getRedisConfig();
-  if (!config) throw new Error("REDIS_STORE_NOT_CONFIGURED");
-
-  if (config.transport === "socket") {
-    const client = await getSocketRedisClient(config.url);
-    const transaction = client.multi();
-    for (const command of commands) transaction.addCommand(stringifyRedisCommand(namespaceRedisCommand(command, config.keyPrefix)));
-    return await transaction.exec() as T;
+  let config: RedisConfig | null;
+  try {
+    config = getRedisConfig();
+  } catch (error) {
+    throw redisStoreOperationError(
+      error,
+      redisOperationTelemetry(commands, "pipeline"),
+    );
+  }
+  if (!config) {
+    throw new RedisStoreOperationError(
+      "REDIS_STORE_NOT_CONFIGURED",
+      redisOperationTelemetry(commands, "pipeline"),
+    );
   }
 
-  const namespacedCommands = commands.map((command) => namespaceRedisCommand(command, config.keyPrefix));
-  const response = await fetchRedis(`${config.url}/pipeline`, config.token, JSON.stringify(namespacedCommands), commandsAreSafeToRetry(commands));
-  if (!response.ok) throw await redisRequestError(response);
+  const namespacedCommands = commands.map((command) => (
+    namespaceRedisCommand(command, config.keyPrefix)
+  ));
+  const telemetry = redisOperationTelemetry(
+    commands,
+    "pipeline",
+    config.transport,
+    namespacedCommands,
+  );
+  try {
+    if (config.transport === "socket") {
+      const client = await getSocketRedisClient(config.url);
+      const transaction = client.multi();
+      for (const command of namespacedCommands) {
+        transaction.addCommand(stringifyRedisCommand(command));
+      }
+      return await transaction.exec() as T;
+    }
 
-  const data = (await response.json()) as RedisResponse<unknown>[];
-  for (const item of data) {
-    if (item.error) throw new Error(item.error);
+    const response = await fetchRedis(
+      `${config.url}/pipeline`,
+      config.token,
+      JSON.stringify(namespacedCommands),
+      commandsAreSafeToRetry(commands),
+    );
+    if (!response.ok) throw await redisRequestError(response);
+
+    const data = (await response.json()) as RedisResponse<unknown>[];
+    for (const item of data) {
+      if (item.error) throw new Error(item.error);
+    }
+    return data.map((item) => item.result) as T;
+  } catch (error) {
+    throw redisStoreOperationError(error, telemetry);
   }
-  return data.map((item) => item.result) as T;
 }

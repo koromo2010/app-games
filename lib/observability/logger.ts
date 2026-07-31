@@ -6,7 +6,10 @@ import {
   sanitizeObservabilityFields,
   traceIdFromRequest,
 } from "./event.ts";
-import { getObservabilitySink } from "./sink.ts";
+import {
+  getObservabilitySink,
+  reportObservabilitySinkFailure,
+} from "./sink.ts";
 import type { ObservabilityFields, ObservabilityLevel } from "./types.ts";
 import { expectedAppEnvironment } from "../storage-environment-guard.ts";
 
@@ -29,7 +32,7 @@ export function emitObservabilityEvent(
 ) {
   if (!isObservabilityLevelEnabled(level)) return;
   const eventName = event.trim().replace(/[^a-z0-9._-]/gi, "_").slice(0, 100) || "unknown";
-  void getObservabilitySink().emit({
+  const observabilityEvent = {
     schemaVersion: 1,
     occurredAt: new Date().toISOString(),
     level,
@@ -37,7 +40,24 @@ export function emitObservabilityEvent(
     ...runtimeMetadata(),
     ...context,
     fields: sanitizeObservabilityFields(fields),
-  });
+  } as const;
+  try {
+    void Promise.resolve(
+      getObservabilitySink().emit(observabilityEvent),
+    ).catch((error) => {
+      reportObservabilitySinkFailure(
+        observabilityEvent,
+        error,
+        "event-sink",
+      );
+    });
+  } catch (error) {
+    reportObservabilitySinkFailure(
+      observabilityEvent,
+      error,
+      "event-sink",
+    );
+  }
 }
 
 export function createRequestTelemetry(request: Request, route: string, base: RequestLogBase = {}) {

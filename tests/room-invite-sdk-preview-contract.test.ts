@@ -19,19 +19,24 @@ test("shared room invites resolve and join SDK Preview rooms by pinned revision"
     "app/sdk-preview/[creatorSlug]/games/[gameId]/page.tsx",
     "utf8",
   );
+  const inviteIndex = readFileSync(
+    "lib/sdk-preview-room-invite-index.ts",
+    "utf8",
+  );
   const lobby = readFileSync(
     "app/components/game-sdk/GameSdkLobbyPanel.tsx",
     "utf8",
   );
 
-  assert.match(previewRoute, /saveSdkPreviewRoomInviteTarget/);
-  assert.match(previewRoute, /schedulePostResponseWork/);
-  assert.match(previewRoute, /sdk-preview-room-invite-index-save/);
-  assert.match(previewRoute, /sdk-preview-room-invite-index-delete/);
-  assert.doesNotMatch(
-    previewRoute,
-    /void (?:save|delete)SdkPreviewRoomInviteTarget/,
-  );
+  assert.match(previewRoute, /scheduleSdkPreviewRoomInviteIndexSuccess/);
+  assert.doesNotMatch(previewRoute, /saveSdkPreviewRoomInviteTarget/);
+  assert.doesNotMatch(previewRoute, /deleteSdkPreviewRoomInviteTarget/);
+  assert.match(inviteIndex, /operation === "create"/);
+  assert.match(inviteIndex, /operation === "command"/);
+  assert.match(inviteIndex, /commandApplied === true/);
+  assert.match(inviteIndex, /operation === "dissolve"/);
+  assert.match(inviteIndex, /affected === 1/);
+  assert.match(inviteIndex, /mode: "best-effort"/);
   assert.match(previewRoute, /revision: requestedRevision/);
   assert.match(resolver, /loadSdkPreviewRoomInviteTarget/);
   assert.match(resolver, /kind: "sdk-preview"/);

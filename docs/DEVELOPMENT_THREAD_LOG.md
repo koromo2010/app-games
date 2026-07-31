@@ -3245,3 +3245,42 @@ Total output lines: 6329
 - 既に届いている通常問い合わせ2件の`contact_...`特定と現物Redis照合は別途継続し、本修正で完了扱いにしない。
 - テスト問い合わせと実メール送信は行っていない。dev反映後の実メール確認は別承認後に行う。
 - push、PR更新、Deploymentは行っていない。dev反映前に`app-games-dev`／`develop`／development／通知ID表示確認／想定1 Deployment／他Project BUILDなしを改めて報告して許可を待つ。
+
+## 2026-07-31 — T-39 SDK Preview Room招待索引の不要writeを除去
+
+### 利用者からの要望
+
+- 取得不能になった旧ZIP／patchの探索を終え、`develop@f0d42d3bfed5e1a9faa4533befc20cb03e0d183a`の検証済みclean cloneへ、確認済み仕様を満たす新しい最小修正を実装する。
+- SDK Preview Room GETの招待索引writeを0回、POST／PATCH成功時の必要な更新を各1回、実際のRoom解散時の削除を1回へ固定し、Room TTLとの整合を保つ。
+- 非重要background失敗だけを安全なstructured telemetryへ変換し、Room状態、戦績、replay、SDK result等の重要write失敗は隠さない。
+- retry、timeout、Redis接続先・namespace・環境変数、問い合わせ・報告・メールID対応を変更しない。
+- raw Redis照合、T-40／T-41／T-42、外部write、commit、push、PR、Deploymentを行わない。
+
+### 実装
+
+- Room成功callbackの招待索引処理を単一helperへ集約した。read、active、list、debug-viewは索引writeなし、createは`SET` 1回、実際に適用されたcommandは`SET` 1回、単一Roomの解散成功は`DEL` 1回である。冪等commandと対象なしの解散はwriteしない。
+- 招待索引はRoom本体と同じ`multiplayerRoomExpiryArgs()`を使用する。GETや冪等PATCHで招待索引だけのTTLを延長しない。
+- post-response workは既定をcriticalにし、明示したbest-effort処理だけを応答後へ送る。best-effort失敗は内部で回収し、telemetry callbackの失敗もprocess-safeなsinkへ退避する。
+- Redis失敗へ、固定enumのwork class、read／write／pipeline、REST／socket、command名、command件数、serialized bytesだけを付与した。Room code、playerId、Redis key/value、URL、tokenはfieldsへ入れない。
+- Room／戦績／SDK resultの既存awaitを維持し、replay storeの失敗時`return false`を再throwへ修正した。realtime通知とTahoiyaの非重要なdecoy候補保存だけを明示的best-effortとした。
+- 問い合わせ・報告・メールID関連ファイル、write retry、timeout値、接続設定、namespace、環境変数に差分はない。
+
+### ローカル検証
+
+- focused testは43/43成功した。GET系0回、POST 1回、適用済みPATCH 1回、冪等PATCH 0回、解散成功1回、対象なし解散0回をRedis fakeの実command数で確認した。
+- 以前起動不能だった範囲に対応するRedis／Runtime系7 test fileは33/33成功し、依存不足は残っていない。
+- best-effort Redis失敗はstructured telemetry 1件へ変換され、Unhandled Rejection 0件である。critical Redis writeは1回だけ実行され、telemetry記録後にrejectが呼出元へ伝播する。
+- 全体lint、`git diff --check`、本体production buildは成功した。buildはRuntime package、Next.js TypeScript検査、78ページ生成まで完走した。
+- 全体testは736/738成功した。失敗2件はclean baselineと同一のNode 24 JSON import attributeと、実装済みSDK Preview招待を否定する旧contractであり、新規失敗はない。
+
+### 未実施
+
+- raw Redis独立照合は、安全なread-only経路がないとの確認済み判断に従い再試行していない。診断API追加・credential取得も行っていない。
+- 外部write、push、PR、Deploymentは行っていない。最終監査後、この記録を含むT-39のlocal commit 1件だけを作成してpush前で停止する。したがって15件の原因経路はローカル実装では閉じるが、app-games-devの稼働版は未変更である。
+
+### 最終監査とT-37 build-impact
+
+- `origin/develop`をread-only fetchし、baseとremoteがともに`f0d42d3bfed5e1a9faa4533befc20cb03e0d183a`であることを確認した。merge、rebase、cherry-pickは行っていない。
+- 差分はT-39の25ファイルだけで、Migration、料金台帳、Dynamic asset、問い合わせ・報告・メールID実装、環境変数、Redis接続先・namespace、timeout、retryの変更はない。
+- Vercelの基準commit実Deploymentをread-only確認した。develop pushでは6 ProjectすべてにGit連携Deployment recordが作られたが、`app-games-dev`だけがplatform差分としてbuild・READYとなり、`app-games`、`app-games-sdk`、`app-games-sdk-dev`、`app-games-sdk-portal`、`app-games-preview-dev`はIgnored Build StepでCANCELEDになった。
+- 今回25パスをT-37判定器へ入力した結果も、`app-games-dev/develop`だけが`surface-affected:platform`でbuild、他5 Projectはbranch mismatch、surface unaffected、またはproject disabledでskipとなった。想定buildはdevelopment platformの1件だけである。

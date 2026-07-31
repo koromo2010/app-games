@@ -180,6 +180,8 @@ SDK採用ゲームは `@game-fields/game-sdk/client-runtime` を利用する。S
 
 正式Package Shellはwatcher・HTTP Command・timerの応答をrevision順に統合し、遅着した応答で表示を巻き戻さない。Roomのactive索引は、参加者が結果後に別Roomへ移った場合に旧Roomの再戦で上書きしない。非参加者は参加前のlobby View以外を取得・操作できず、無効化されたmoduleのCommandとPlatform resourceもサーバー境界で拒否する。DEBUG権限とダミー属性は署名済みセッション・保存Room・module profileからPlatformが最終確定し、固定済みの旧Packageが返す表示値へ依存しない。結果Roomの解散前にはresult outboxを完了し、戦績・rating・playbackを失う状態ではRoomを削除しない。
 
+SDK Previewの招待用二次索引はRoom作成と実適用Commandの成功後だけ同じ6時間TTLで更新し、GETでは更新しない。実際に1 Roomを解散した場合だけ対応索引を1回削除する。索引とRealtime通知等の非重要処理は明示的なbest-effortとして失敗を構造化記録し、Room状態・戦績・replay・SDK result等の正本writeはawaitして失敗を呼出し元へ返す。
+
 ## 広告枠の現状
 
 `app/components/GameAdSlot.tsx` にプロバイダー非依存の枠がある。広告表示は初期状態で無効。

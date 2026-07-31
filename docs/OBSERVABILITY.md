@@ -65,6 +65,27 @@ GETポーリングの成功と通常の401/403/404は量とノイズが多いた
 
 部屋コード、プレイヤーID、Command ID、戦績event IDは `room_xxx`、`actor_xxx` 等の不透明参照へ変換する。同じ種類・同じ値は同じ参照になるため相関できるが、ログから元の値を復元できない。
 
+## Redis・background workの失敗分類
+
+`schedulePostResponseWork`は重要writeを既定の`critical`として同期実行し、失敗を
+telemetryへ記録したうえで呼出し元へ再throwする。Room状態、戦績、replay、
+SDK result outbox等を`best-effort`へ変更してはならない。Realtime通知、招待用の
+二次索引、再利用候補等、正本でない処理だけが明示的な`best-effort`を指定できる。
+`best-effort`の失敗はHTTP応答やprocessを失敗させず、必ず構造化イベントへ変換する。
+
+Redis失敗の安全な分類には、閉じたenumと数値だけを使う。
+
+- `workClass`: `critical | best-effort`
+- `storageOperation`: `read | write | pipeline`
+- `storageTransport`: `rest | socket`
+- `storageCommand`: 許可済みRedis command名、複数種類は`MULTIPLE`、未知は`UNKNOWN`
+- `commandCount`: command件数
+- `serializedBytes`: 送信前にserializeしたpayloadのbyte数
+
+Redis key/value、Room code、playerId、URL、token、接続文字列は記録しない。
+観測イベント自身のRedis保存が失敗した場合は、同じ保存を再帰的に呼ばず、
+`observability.sink-failure`をprocess logへ1回だけ出す。
+
 ## 環境変数
 
 - `OBSERVABILITY_LOG_LEVEL`: `debug | info | warn | error`。既定 `info`

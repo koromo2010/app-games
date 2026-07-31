@@ -12,11 +12,9 @@ import {
 } from "@/lib/sdk-preview-account-session";
 import { loadSdkPreviewPackageModule } from "@/lib/sdk-preview-package-runtime";
 import {
-  deleteSdkPreviewRoomInviteTarget,
-  saveSdkPreviewRoomInviteTarget,
+  scheduleSdkPreviewRoomInviteIndexSuccess,
 } from "@/lib/sdk-preview-room-invite-index";
 import { createRequestTelemetry } from "@/lib/observability";
-import { schedulePostResponseWork } from "@/lib/post-response-work";
 import platformRelease from "../../../../../../../config/platform-release.json";
 
 export const runtime = "nodejs";
@@ -142,36 +140,24 @@ async function handle(request: Request, context: RouteContext, method: Method) {
         )
       ),
       onSuccess(operation, room, affected, command) {
-        if (room?.code) {
-          void schedulePostResponseWork(
-            "sdk-preview-room-invite-index-save",
-            () => saveSdkPreviewRoomInviteTarget(room.code, {
-              creatorSlug,
-              gameId,
-              revision: room.packageRevision
-                ?? runtime.runtimeContract.packageRevision,
-            }),
-          ).catch((error) => {
+        void scheduleSdkPreviewRoomInviteIndexSuccess({
+          operation,
+          room,
+          affected,
+          commandApplied: command?.applied,
+          requestedRoomCode,
+          creatorSlug,
+          gameId,
+          fallbackRevision: runtime.runtimeContract.packageRevision,
+          onFailure(error, fields) {
             telemetry.failure(
               "game-sdk.preview-room-invite-index",
               error,
               500,
-              { action: "save" },
+              fields,
             );
-          });
-        } else if (operation === "dissolve" && requestedRoomCode) {
-          void schedulePostResponseWork(
-            "sdk-preview-room-invite-index-delete",
-            () => deleteSdkPreviewRoomInviteTarget(requestedRoomCode),
-          ).catch((error) => {
-            telemetry.failure(
-              "game-sdk.preview-room-invite-index",
-              error,
-              500,
-              { action: "delete" },
-            );
-          });
-        }
+          },
+        });
         if (method === "GET") return;
         telemetry.success("game-sdk.preview-room", {
           action: operation,

@@ -506,7 +506,7 @@ export function createRedisGameSdkPlatformRoomStore<TRoom extends GameSdkStoredR
           code: record.code,
           revision,
         }),
-        { outsideRequest: "skip" },
+        { mode: "best-effort", outsideRequest: "skip" },
       );
     },
   };

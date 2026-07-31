@@ -1,4 +1,7 @@
-import { multiplayerRoomTtlSeconds } from "./multiplayer-room-lifecycle.ts";
+import type { GameSdkOnlineRoomHttpOperation } from "./game-sdk-online-room-http.ts";
+import { multiplayerRoomExpiryArgs } from "./multiplayer-room-lifecycle.ts";
+import type { ObservabilityFields } from "./observability/types.ts";
+import { schedulePostResponseWork } from "./post-response-work.ts";
 import { redisCommand } from "./redis-store.ts";
 import { normalizeGameSdkPlatformRoomCode } from "./game-sdk-platform-room-store.ts";
 
@@ -25,8 +28,7 @@ export async function saveSdkPreviewRoomInviteTarget(
     "SET",
     inviteKey(code),
     JSON.stringify(value),
-    "EX",
-    String(multiplayerRoomTtlSeconds),
+    ...multiplayerRoomExpiryArgs(),
   ]);
 }
 
@@ -51,4 +53,81 @@ export async function loadSdkPreviewRoomInviteTarget(code: string) {
 
 export async function deleteSdkPreviewRoomInviteTarget(code: string) {
   await redisCommand<number>(["DEL", inviteKey(code)]);
+}
+
+type SdkPreviewRoomInviteIndexSuccess = {
+  operation: GameSdkOnlineRoomHttpOperation;
+  room?: {
+    code: string;
+    packageRevision?: string;
+  };
+  affected?: number;
+  commandApplied?: boolean;
+  requestedRoomCode: string;
+  creatorSlug: string;
+  gameId: string;
+  fallbackRevision: string;
+  onFailure?: (
+    error: unknown,
+    fields: ObservabilityFields,
+  ) => void;
+};
+
+/**
+ * Keeps the secondary invite lookup aligned with successful Room mutations.
+ * Reads and idempotent no-op Commands never refresh this index.
+ */
+export async function scheduleSdkPreviewRoomInviteIndexSuccess({
+  operation,
+  room,
+  affected,
+  commandApplied,
+  requestedRoomCode,
+  creatorSlug,
+  gameId,
+  fallbackRevision,
+  onFailure,
+}: SdkPreviewRoomInviteIndexSuccess) {
+  const shouldSave = operation === "create"
+    || (operation === "command" && commandApplied === true);
+  if (shouldSave && room?.code) {
+    await schedulePostResponseWork(
+      "sdk-preview-room-invite-index-save",
+      () => saveSdkPreviewRoomInviteTarget(room.code, {
+        creatorSlug,
+        gameId,
+        revision: room.packageRevision ?? fallbackRevision,
+      }),
+      {
+        mode: "best-effort",
+        telemetryEvent: "game-sdk.preview-room-invite-index",
+        telemetryFields: {
+          action: "save",
+          channel: "candidate-preview",
+        },
+        onFailure,
+      },
+    );
+    return;
+  }
+
+  if (
+    operation === "dissolve"
+    && affected === 1
+    && requestedRoomCode
+  ) {
+    await schedulePostResponseWork(
+      "sdk-preview-room-invite-index-delete",
+      () => deleteSdkPreviewRoomInviteTarget(requestedRoomCode),
+      {
+        mode: "best-effort",
+        telemetryEvent: "game-sdk.preview-room-invite-index",
+        telemetryFields: {
+          action: "delete",
+          channel: "candidate-preview",
+        },
+        onFailure,
+      },
+    );
+  }
 }
