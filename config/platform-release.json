@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
-  "platformVersion": "0.1.2",
-  "sdkPackageVersion": "0.1.2",
+  "platformVersion": "0.2.0",
+  "sdkPackageVersion": "0.2.0",
   "sdkHandshakeVersion": 1,
   "sdkContractVersion": 2,
   "supportedSdkContractVersions": [1, 2],

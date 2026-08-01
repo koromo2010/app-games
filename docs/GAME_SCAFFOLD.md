@@ -79,7 +79,7 @@ DesktopLayout
 npm run build:sdk-starter
 ```
 
-`artifacts/game-fields-sdk-starter-v0.1.2.zip`には、SDK tarball、`START_HERE.md`、`AGENTS.md`、`GAME_SPEC.md`、APIリファレンス、manifest、AppSet、Room View／Command、契約テスト、完走デモ、昇格診断、game package生成を含めます。SDK packageのversionとtarball名は生成時に自動反映し、`artifacts/`はGitへ保存しません。
+`artifacts/game-fields-sdk-starter-v0.2.0.zip`には、SDK tarball、`START_HERE.md`、`AGENTS.md`、`GAME_SPEC.md`、APIリファレンス、manifest、AppSet、Room View／Command、契約テスト、完走デモ、昇格診断、game package生成を含めます。SDK packageのversionとtarball名は生成時に自動反映し、`artifacts/`はGitへ保存しません。
 
 ```bash
 npm run test:sdk-starter

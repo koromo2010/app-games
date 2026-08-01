@@ -14,13 +14,15 @@
 
 ## 2026-08-02 SDK初回導入がプラグイン不在と本番instance registry未設定で停止する
 
-状態: ローカル修正・全回帰PASS／Vercel変数登録済み・未Redeploy／dev・main配備待ち
+状態: dev機能修正配備・health確認済み／本体版`0.2.0`への整合修正はローカル検証済み・再配備許可待ち／main未配備
 
 新規利用者が`game-fields`を検索しても候補が存在しない場合、DownloadMeは「Game Fields Appを追加」とだけ指示し、Developer modeの新規プラグイン作成、環境別MCP URL、`接続 → OAuth認証 → 更新`の順序を具体的に案内していなかった。手動作成後のhandshakeと既存環境一覧は成功したが、初回の制作者URL `krm`を予約する段階で`SDK_INSTANCE_REGISTRY_NOT_CONFIGURED`となり、環境作成は0件のまま停止した。
 
 本番`app-games-sdk`にはinstance registry用Redis資格がなく、handshakeだけが成功して初回予約で停止していた。2026-08-02に既存`sdk-dev-redis`の`UPSTASH_REDIS_REST_URL`と`UPSTASH_REDIS_REST_TOKEN`を本番PortalのProduction scopeだけへ登録した。mainは`sdk:production:`、developは`sdk:development:`へ分離するコードを使い、Previewや本体へRedisは追加しない。変数登録後の新Deploymentと実機確認はまだ行っていない。
 
-DownloadMe 0.1.2は、プラグイン候補不在時に環境profileから新規作成手順を生成する。instance registry REST clientを予約処理とhealthで共用し、healthは3秒上限の`PING`だけを実行して、資格未設定と接続不能を別codeで503にする。これにより、handshakeだけが成功して初回予約で初めて設定漏れが発覚する配備を正常扱いしない。
+最初のdev反映ではSDK内部だけを`0.1.2`へ揃えたため、本体正本`config/app-release.json@0.2.0`とPortal footerの表示が一致しなかった。`platform-release`と本体SemVerの一致を自動検査へ追加し、配布版を`0.2.0`へ修正する。誤版`0.1.2`の`sdk-starter-dev`は公開していない。
+
+DownloadMe 0.2.0は、プラグイン候補不在時に環境profileから新規作成手順を生成する。instance registry REST clientを予約処理とhealthで共用し、healthは3秒上限の`PING`だけを実行して、資格未設定と接続不能を別codeで503にする。これにより、handshakeだけが成功して初回予約で初めて設定漏れが発覚する配備を正常扱いしない。
 
 ## 2026-08-01 SDK packageの動的asset参照が保存後監査まで持ち越される
 

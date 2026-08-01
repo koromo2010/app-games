@@ -1,8 +1,8 @@
 # Game Fields SDK バージョン管理
 
-`config/platform-release.json`を、Game Fields本体とSDK配布のリリース互換性に関する版の正本とする。環境別のPortal、プラグイン、DownloadMe名、Starter branchは`config/sdk-release-profiles.json`を正本とし、版と環境名を一つの設定へ混在させない。
+`config/app-release.json`をGame Fields本体SemVerの正本とし、`config/platform-release.json`の`platformVersion`とSDK配布版は必ず同じ値にする。環境別のPortal、プラグイン、DownloadMe名、Starter branchは`config/sdk-release-profiles.json`を正本とし、版と環境名を一つの設定へ混在させない。`npm run check:versions`は本体SemVerとの不一致も拒否する。
 
-現在の開発候補はPlatform／SDK package `0.1.2`、SDK handshake `1`、SDK contract `2`、Room schema `2`である。Runner Runtimeは`quickjs-wasm-v1`、Resource ProtocolとClient Bridgeはそれぞれ`1`である。`0.1.1`はportable AppSet、正式Preview Room、hash固定昇格を追加した。`0.1.2`は新規プラグイン登録案内とSDK instance registryの配備前health検査を追加し、ゲーム契約schemaとRoom schemaは変更しない。
+現在の開発候補はPlatform／SDK package `0.2.0`、SDK handshake `1`、SDK contract `2`、Room schema `2`である。Runner Runtimeは`quickjs-wasm-v1`、Resource ProtocolとClient Bridgeはそれぞれ`1`である。`0.1.1`はportable AppSet、正式Preview Room、hash固定昇格を追加した。`0.2.0`は新規プラグイン登録案内とSDK instance registryの配備前health検査を追加し、ゲーム契約schemaとRoom schemaは変更しない。
 
 ## バージョンの役割
 

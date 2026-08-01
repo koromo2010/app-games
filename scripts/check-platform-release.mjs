@@ -10,6 +10,7 @@ import {
 
 const root = process.cwd();
 const readJson = (path) => JSON.parse(readFileSync(join(root, path), "utf8"));
+const appRelease = readJson("config/app-release.json");
 const release = readJson("config/platform-release.json");
 const profileConfig = readJson("config/sdk-release-profiles.json");
 const publishedRelease = readJson("apps/sdk-portal/public/platform-release.json");
@@ -23,6 +24,12 @@ const packages = [
   ["packages/sdk-preview-auth/package.json", readJson("packages/sdk-preview-auth/package.json")],
 ];
 const failures = [];
+
+if (release.platformVersion !== appRelease.version) {
+  failures.push(
+    `config/platform-release.json: platformVersion ${release.platformVersion} does not match app release ${appRelease.version}.`,
+  );
+}
 
 try {
   validateSdkReleaseConfiguration(release, profileConfig);

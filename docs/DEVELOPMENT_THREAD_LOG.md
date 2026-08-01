@@ -3579,3 +3579,28 @@ active HEADは基準SHAのままで、active commit、製品`origin` push、PR�
 
 - detached HEAD上のローカル差分であり、commit、push、PR、Actions、Vercel Deployment／Redeploy、dev／production実機確認は未実施。
 - 次の外部反映前に対象Project、branch、環境、想定Deployment数と他Projectへの波及を確定し、明示許可を得る。配備後は`app-games-sdk`の`/api/health`で現行schemaと`instanceRegistry.status: ok`／`namespace: production`を確認し、その後に同じ制作者アカウントからURL名`krm`の予約を再試行する。
+
+## 2026-08-02 — Intake #1／#2 dev反映と本体SemVer不一致の停止
+
+### 実施結果
+
+- `develop`を`a8885d370e2047ad9f5daba8cf1655e411584e98`から`7a68b52c48b4bd949d7a39ace07c5345a5867ccd`へforceなしで更新した。treeは公開前のローカル計算とGitHub生成で`5054b68c4c609b39eeb5c2bb5033917bb9cea6de`に一致した。
+- Vercelは`app-games-dev`、`app-games-sdk-dev`、`app-games-preview-dev`が同commitで`READY`となった。`app-games`、`app-games-sdk`、`app-games-sdk-preview`、重複`app-games-sdk-portal`はすべてIgnored Build Stepで`CANCELED`となり、対象外Projectのbuild／配備は0件だった。手動Redeployは行っていない。
+- `https://sdk-dev.game-fields.com/api/health`はschema 7、`instanceRegistry.status: ok`、`namespace: development`を返した。`GameFieldsDownloadMe-dev-ver0.1.2.md`にも新規プラグイン作成、canonical MCP URL、接続、OAuth、更新の案内が生成された。
+
+### 不整合と判断
+
+- 実配備ページでDownloadMeと本文が`0.1.2`、`config/app-release.json`を読むfooterが本体版`0.2.0`となり、利用者要望の「本体と同じ版」に反することを確認した。従来のversion検査はSDK内の一致だけを見て、本体SemVerとの一致を検査していなかった。
+- 誤版`0.1.2`の`sdk-starter-dev`は公開せず停止した。`config/app-release.json@0.2.0`を版の上位正本として、Platform、DownloadMe、SDK package、Runtime、Portal、Previewを`0.2.0`へ揃え、本体との不一致を`check:versions`で拒否する局所修正へ切り替えた。
+
+### `0.2.0`補正のローカル検証
+
+- `npm run verify`、repository-wide test 847/847、`git diff --check`がPASSした。本体SemVerとPlatform版の不一致を拒否する回帰検査を追加した。
+- `npm run test:sdk-package`は`game-fields-game-sdk-0.2.0.tgz`を外部fixtureへinstallし、公開exportと必須module profileを確認してPASSした。
+- development／production両profileの`npm run test:sdk-starter`は、入口、公開Git用snapshot、ZIP展開、同梱SDK install、型検査、契約test、1ゲーム完走、提出ZIPまでPASSした。生成物は外部公開していない。
+- Platform 78ページ、SDK Portal 15ページ、SDK Preview 5ページの`0.2.0` production buildがPASSした。追加push、Deployment、Redeployは行っていない。
+
+### 未対応・保留
+
+- `0.2.0`修正はローカル検証後、追加の`develop` pushとdev 3 Projectの新Deploymentが必要になる。2026-08-02に利用者から、補正commit 1回の`develop` push、`app-games-dev`／`app-games-sdk-dev`／`app-games-preview-dev`の自動Deployment、実機確認後の`sdk-starter-dev@0.2.0`更新について明示許可を得た。本項を含む補正commitを反映対象とする。
+- `main`、production、npm公開、`sdk-starter`、手動Redeploy、PRは対象外のまま維持する。`sdk-starter-dev`は正しい`0.2.0` dev Deploymentとhandshake確認後にだけ更新する。

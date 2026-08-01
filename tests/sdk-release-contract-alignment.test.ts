@@ -8,11 +8,13 @@ import {
   sdkDownloadMeVersion,
 } from "../packages/sdk-release-profiles/index.js";
 
+const appRelease = JSON.parse(readFileSync("config/app-release.json", "utf8"));
 const platformRelease = JSON.parse(readFileSync("config/platform-release.json", "utf8"));
 const profileConfig = JSON.parse(readFileSync("config/sdk-release-profiles.json", "utf8"));
 const template = readFileSync("sdk/entry/START_GAME_FIELDS.md", "utf8");
 
 test("DownloadMe uses the Platform SemVer and SDK contract release", () => {
+  assert.equal(platformRelease.platformVersion, appRelease.version);
   assert.equal(sdkDownloadMeVersion(platformRelease), platformRelease.platformVersion);
   assert.equal(platformRelease.sdkContractVersion, 2);
   assert.ok(platformRelease.supportedSdkContractVersions.includes(2));
@@ -33,8 +35,8 @@ test("production and development DownloadMe contracts stay environment-pure", ()
   const productionDownload = renderSdkDownloadMe(template, platformRelease, production);
   const developmentDownload = renderSdkDownloadMe(template, platformRelease, development);
 
-  assert.equal(sdkDownloadMeFileName(platformRelease, production), "GameFieldsDownloadMe-ver0.1.2.md");
-  assert.equal(sdkDownloadMeFileName(platformRelease, development), "GameFieldsDownloadMe-dev-ver0.1.2.md");
+  assert.equal(sdkDownloadMeFileName(platformRelease, production), "GameFieldsDownloadMe-ver0.2.0.md");
+  assert.equal(sdkDownloadMeFileName(platformRelease, development), "GameFieldsDownloadMe-dev-ver0.2.0.md");
   assert.match(productionDownload, /name: "game-fields"/);
   assert.match(productionDownload, /https:\/\/sdk\.game-fields\.com/);
   assert.match(productionDownload, /ref: "sdk-starter"/);

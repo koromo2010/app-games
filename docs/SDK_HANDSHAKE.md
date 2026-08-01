@@ -37,8 +37,8 @@ Portalの`get_sdk_handshake`へ送る`requiredCapabilities`はDownloadMe記載�
   },
   "expected": {
     "environment": "development",
-    "platformVersion": "0.1.2",
-    "sdkPackageVersion": "0.1.2",
+    "platformVersion": "0.2.0",
+    "sdkPackageVersion": "0.2.0",
     "sdkContractVersion": 2
   },
   "requiredCapabilities": [
@@ -67,8 +67,8 @@ Portalの`get_sdk_handshake`へ送る`requiredCapabilities`はDownloadMe記載�
   "surface": "creator-portal",
   "environment": "development",
   "release": {
-    "platformVersion": "0.1.2",
-    "sdkPackageVersion": "0.1.2",
+    "platformVersion": "0.2.0",
+    "sdkPackageVersion": "0.2.0",
     "sdkContractVersion": 2,
     "supportedSdkContractVersions": [1, 2],
     "roomSchemaVersion": 2
