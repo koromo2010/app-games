@@ -1,7 +1,11 @@
 import portalPackage from "../package.json";
-import platformRelease from "../../../config/platform-release.json";
 import Link from "next/link";
 import { getSdkAccountSession } from "@/lib/account-session";
+import {
+  sdkPortalDownloadMeFileName,
+  sdkPortalDownloadMeVersion,
+  sdkPortalReleaseProfile,
+} from "@/lib/sdk-release-profile";
 import { AccountMenu } from "./account-menu";
 
 const foundations = [
@@ -62,8 +66,9 @@ const firstBuildGuide = [
   },
 ];
 
-const downloadMeVersion = platformRelease.downloadMeVersion;
-const downloadMeFileName = `GameFieldsDownloadMe-ver${downloadMeVersion}.md`;
+const releaseProfile = sdkPortalReleaseProfile();
+const downloadMeVersion = sdkPortalDownloadMeVersion();
+const downloadMeFileName = sdkPortalDownloadMeFileName();
 const downloadMeHref = `/${downloadMeFileName}`;
 
 export default async function Home() {
@@ -89,7 +94,9 @@ export default async function Home() {
           <a href="#review">Review gate</a>
         </nav>
         <div className="header-account-area">
-          <span className="preview-badge">Developer preview · v{platformVersion}</span>
+          <span className="preview-badge">
+            {releaseProfile.environment === "production" ? "Stable" : "Developer preview"} · v{platformVersion}
+          </span>
           <AccountMenu />
         </div>
       </header>
@@ -107,7 +114,7 @@ export default async function Home() {
           </p>
           <div className="hero-actions">
             <a className="primary-action" href={downloadMeHref} download>
-              GameFieldsDownloadMe-ver{downloadMeVersion}
+              {downloadMeFileName.replace(/\.md$/, "")}
               <span aria-hidden="true">↓</span>
             </a>
             <a className="primary-action" href="#foundation">
@@ -198,7 +205,7 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
             </p>
             <p>
               <strong>プラグイン更新後は、必ず新しいチャットを作成してください。</strong>
-              既存チャットへ読み込まれたtool schemaは更新されないため、古いチャットへ最新版を追加しても制作を再開できません。新しいチャットで`gameapp-dev`を選択し、ver{downloadMeVersion}だけを添付します。
+              既存チャットへ読み込まれたtool schemaは更新されないため、古いチャットへ最新版を追加しても制作を再開できません。新しいチャットで`{releaseProfile.pluginName}`を選択し、{downloadMeFileName}だけを添付します。
             </p>
             <p>
               保存済みの制作者環境とゲームはアカウントに紐づいているため、新しいチャットから自動的に再取得できます。作り直しや新しいURLの予約は不要です。

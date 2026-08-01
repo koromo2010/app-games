@@ -6,6 +6,7 @@ import { extractStoredZip } from "./lib/stored-zip.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const outputFlag = process.argv.indexOf("--output");
+const environmentFlag = process.argv.indexOf("--environment");
 const outputPath = resolve(
   root,
   outputFlag >= 0 && process.argv[outputFlag + 1]
@@ -26,11 +27,15 @@ if (!outputIsSafe) {
 }
 
 try {
-  execFileSync(process.execPath, [
+  const buildArguments = [
     join(root, "scripts/build-game-sdk-starter.mjs"),
     "--output",
     zipPath,
-  ], { cwd: root, stdio: "pipe" });
+  ];
+  if (environmentFlag >= 0 && process.argv[environmentFlag + 1]) {
+    buildArguments.push("--environment", process.argv[environmentFlag + 1]);
+  }
+  execFileSync(process.execPath, buildArguments, { cwd: root, stdio: "pipe" });
   extractStoredZip(zipPath, extractRoot);
   const extractedStarter = join(extractRoot, "game-fields-sdk-starter");
   rmSync(outputPath, { recursive: true, force: true });

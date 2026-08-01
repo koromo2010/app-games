@@ -51,6 +51,10 @@ SDK制作者はPortalの`/support`から本人の報告を一覧・閲覧・追�
 
 報告への運営返信は、確認済みの復旧用メールがある送信者へ通知する。メールは会話の正本にせず、返信本文、該当スレッドを開くSDK Portal導線、別のGPTチャットへ貼り付ける報告IDだけを載せる。GPTが報告IDだけを受け取ったときに`get_support_thread`を呼ぶ規則と、最新返信までの要約、返信は`prepare_support_reply`の下書きだけ、Portalで人間が承認するまで未投稿、コード変更は確認後という進行規則はMCPサーバーが取得結果とともに返す。新規報告と報告者の追記は、公開問い合わせと同じ管理者購読先へ通知する。AI下書きの承認投稿も新しい追記メッセージ単位で通知し、以前のスレッド通知済み状態だけを理由に省略しない。メール未登録・未確認・配送失敗でもPortalの会話履歴は保持し、管理画面に配送状態を表示する。
 
+### SDK DownloadMeの環境別配布
+
+DownloadMeはPlatformと同じSemVerを使い、別の整数counterを持たない。productionは`game-fields`、`GameFieldsDownloadMe-ver<platformVersion>.md`、`https://sdk.game-fields.com`、`sdk-starter`、developmentは`dev-game-fields`、`GameFieldsDownloadMe-dev-ver<platformVersion>.md`、`https://sdk-dev.game-fields.com`、`sdk-starter-dev`を一組として扱う。版の正本は`config/platform-release.json`、環境別名称の正本は`config/sdk-release-profiles.json`である。Portal、MCP initialize、handshake、Starter manifest、DownloadMe生成は同じprofile resolverを使い、未知または競合する環境信号では停止する。旧整数版と別環境のSemVer版URLは、各Deploymentの現行ファイルへ一時redirectする。
+
 ### SDKアプリの昇格と復元
 
 devとmainの採用済みSDKアプリ情報は環境別DBに分離する。管理画面には次の独立した経路がある。

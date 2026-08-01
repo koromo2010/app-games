@@ -8,6 +8,10 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, relative, resolve } from "node:path";
+import {
+  resolveSdkReleaseProfile,
+  sdkDownloadMeVersion,
+} from "../packages/sdk-release-profiles/index.js";
 import { writeStoredZip } from "./lib/stored-zip.mjs";
 
 const root = resolve(import.meta.dirname, "..");
@@ -18,6 +22,20 @@ const version = packageJson.version;
 const platformRelease = JSON.parse(
   readFileSync(join(root, "config/platform-release.json"), "utf8"),
 );
+const profileConfig = JSON.parse(
+  readFileSync(join(root, "config/sdk-release-profiles.json"), "utf8"),
+);
+const environmentFlag = process.argv.indexOf("--environment");
+const releaseProfile = resolveSdkReleaseProfile({
+  release: platformRelease,
+  profileConfig,
+  requestedEnvironment: environmentFlag >= 0
+    ? process.argv[environmentFlag + 1]
+    : process.env.SDK_PORTAL_CHANNEL,
+  gitRef: process.env.VERCEL_GIT_COMMIT_REF,
+  portalBaseUrl: process.env.SDK_PORTAL_BASE_URL,
+  defaultEnvironment: process.env.VERCEL ? undefined : "development",
+});
 const archiveRoot = "game-fields-sdk-starter";
 const temporaryDirectory = mkdtempSync(join(tmpdir(), "game-fields-sdk-download-"));
 const outputFlag = process.argv.indexOf("--output");
@@ -53,10 +71,11 @@ try {
   const replacements = new Map([
     ["__SDK_VERSION__", version],
     ["__PLATFORM_VERSION__", platformRelease.platformVersion],
-    ["__DOWNLOAD_ME_VERSION__", String(platformRelease.downloadMeVersion)],
+    ["__DOWNLOAD_ME_VERSION__", sdkDownloadMeVersion(platformRelease)],
+    ["__SDK_ENVIRONMENT__", releaseProfile.environment],
     ["__SDK_HANDSHAKE_VERSION__", String(platformRelease.sdkHandshakeVersion)],
     ["__SDK_CONTRACT_VERSION__", String(platformRelease.sdkContractVersion)],
-    ["__STARTER_REF__", platformRelease.starterRef],
+    ["__STARTER_REF__", releaseProfile.starterRef],
     ["__SDK_TARBALL__", packResult.filename],
   ]);
   const entries = collectFiles(templateRoot).map((absolutePath) => {
@@ -74,7 +93,7 @@ try {
 
   const size = statSync(outputPath).size;
   console.log(`[game-sdk-starter] ${outputPath}`);
-  console.log(`[game-sdk-starter] SDK v${version}, DownloadMe v${platformRelease.downloadMeVersion}, ${entries.length} files, ${size} bytes`);
+  console.log(`[game-sdk-starter] SDK v${version}, DownloadMe v${sdkDownloadMeVersion(platformRelease)}, ${releaseProfile.environment}, ${entries.length} files, ${size} bytes`);
 } finally {
   rmSync(temporaryDirectory, { recursive: true, force: true });
 }

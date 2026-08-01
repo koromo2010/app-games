@@ -18,6 +18,7 @@ import {
 } from "@/lib/sdk-handshake";
 import { ensureSdkSchema, sdkSql } from "@/lib/sdk-postgres";
 import { searchSdkHelp } from "@/lib/sdk-help";
+import { sdkPortalMcpInstructions } from "@/lib/sdk-release-profile";
 import {
   listCreatorSupportReports,
   loadCreatorSupportReport,
@@ -321,7 +322,7 @@ export async function POST(request: Request) {
   if (!auth) return new Response(JSON.stringify({ error: "unauthorized" }), { status: 401, headers: { "Content-Type": "application/json", "WWW-Authenticate": `Bearer resource_metadata="${metadata}", scope="sdk:creator sdk:mock"` } });
   const body = await request.json().catch(() => null) as { jsonrpc?: unknown; id?: unknown; method?: unknown; params?: { protocolVersion?: unknown; name?: unknown; arguments?: unknown } } | null;
   if (!body || body.jsonrpc !== "2.0") return rpcError(body?.id ?? null, -32600, "Invalid Request", 400);
-  if (body.method === "initialize") return rpc(body.id, { protocolVersion: negotiateProtocolVersion(body.params?.protocolVersion), capabilities: { tools: { listChanged: false } }, serverInfo: { name: "Game Fields SDK", title: "Game Fields SDK", version: platformRelease.platformVersion }, gameFieldsHandshake: createSdkPortalHandshakeDescriptor(base), instructions: "最初にget_sdk_handshakeを呼び、添付された最新版DownloadMeに記載されたrequiredCapabilitiesだけをそのまま送り、accepted=trueを確認してください。requiredCapabilitiesの入力schemaは将来互換のため固定enumではありません。別surface向け機能を推測で追加してはいけません。Workではtoolが遅延読み込みされるため、初期一覧にget_sdk_handshakeがなくても、まずgameapp-dev get_sdk_handshake Game Fields SDK接続互換性でtool検索してください。既存チャットのtool schemaはプラグイン更新後も差し替わりません。明示的な検索後も古い固定enumまたは旧tool構成しか見えない場合は、そのチャットで続けず、利用者へgameapp-devの更新、更新後に作成した新しいチャットでの再選択、最新版DownloadMeだけの再添付を案内して停止してください。その後、Game Fieldsアカウント本人のSDK制作環境だけを操作します。保存後はsavedとcreatorUrlを確認し、制作者トップを最初の案内リンクにしてください。" });
+  if (body.method === "initialize") return rpc(body.id, { protocolVersion: negotiateProtocolVersion(body.params?.protocolVersion), capabilities: { tools: { listChanged: false } }, serverInfo: { name: "Game Fields SDK", title: "Game Fields SDK", version: platformRelease.platformVersion }, gameFieldsHandshake: createSdkPortalHandshakeDescriptor(base), instructions: sdkPortalMcpInstructions(base) });
   if (body.method === "notifications/initialized") return new Response(null, { status: 202 });
   if (body.method === "tools/list") return rpc(body.id, { tools });
   if (body.method === "tools/call") {

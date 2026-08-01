@@ -4,6 +4,7 @@ import {
   sdkInstanceRegistryReadKeys,
 } from "@/lib/instance-registry-namespace";
 import { ensureSdkSchema, sdkSql } from "@/lib/sdk-postgres";
+import { portalBaseUrl } from "@/lib/oauth-store";
 import {
   normalizeGameSdkModuleProfile,
   updateGameSdkModuleProfile,
@@ -66,8 +67,7 @@ export async function reserveInstanceSlug(slug: string, displayName: string, own
   const value = JSON.stringify({ slug, displayName: displayName.slice(0, 80), status: "reserved", reservationToken, ownerPlayerId: ownerPlayerId ?? null, createdAt: new Date().toISOString() });
   const response = await command(["SET", sdkInstanceRegistryKey(slug), value, "NX", "EX", String(7 * 24 * 60 * 60)]);
   if (response.result !== "OK") return null;
-  const baseUrl = process.env.SDK_PORTAL_BASE_URL?.replace(/\/$/, "")
-    ?? (process.env.VERCEL_GIT_COMMIT_REF === "main" ? "https://sdk.game-fields.com" : "https://sdk-dev.game-fields.com");
+  const baseUrl = portalBaseUrl();
   return { slug, url: `${baseUrl}/${slug}`, reservationToken, expiresInSeconds: 7 * 24 * 60 * 60 };
 }
 

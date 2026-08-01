@@ -7,6 +7,7 @@ import {
 } from "@game-fields/game-sdk/handshake";
 import platformRelease from "../../../config/platform-release.json";
 import { portalBaseUrl } from "@/lib/oauth-store";
+import { sdkPortalReleaseProfile } from "@/lib/sdk-release-profile";
 
 export const SDK_PORTAL_CAPABILITIES = [
   "oauth2-pkce",
@@ -22,12 +23,7 @@ export const SDK_PORTAL_CAPABILITIES = [
 ] as const;
 
 export function sdkPortalEnvironment(base: string) {
-  const requested = process.env.SDK_PORTAL_CHANNEL?.trim().toLowerCase();
-  if (requested === "production" || requested === "development") return requested;
-  const hostname = new URL(base).hostname;
-  if (hostname === "sdk.game-fields.com") return "production";
-  if (hostname === "sdk-dev.game-fields.com") return "development";
-  return process.env.VERCEL_GIT_COMMIT_REF === "main" ? "production" : "development";
+  return sdkPortalReleaseProfile(base).environment;
 }
 
 export function createSdkPortalHandshakeDescriptor(origin?: string): GameSdkHandshakeDescriptor {

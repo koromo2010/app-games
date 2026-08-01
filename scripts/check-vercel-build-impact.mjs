@@ -40,6 +40,7 @@ const surfaceBuildPaths = Object.freeze({
     /^packages\/game-sdk\//,
     /^packages\/sdk-preview-auth\//,
     /^packages\/sdk-package-assets\//,
+    /^packages\/sdk-release-profiles\//,
     /^packages\/sdk-runtime-artifact\//,
     /^packages\/sdk-service-auth\//,
     /^sdk\//,
