@@ -31,14 +31,13 @@ npm run build:game-package
 ゲームとしての確認は`npm run build:game-package`で作成した`game-package/`をMCPの`publish_game_package`へ渡します。AppSet、クライアント、source、SHA-256を1つのrevisionへ保存し、正式な共通Roomで実行します。OAuth資格情報を会話、ファイル、Git、コマンド引数へ展開しません。
 
 ```text
-SDK-devのcandidate package
-→ 同じrevisionをdevelopmentへ昇格
-→ devで複数端末E2E
-→ 同じrevisionをstableへ昇格
+SDKのcandidate package
+→ 正式Previewで複数端末E2E
+→ 運営が同じrevisionをmainへ採用
 → mainで表示
 ```
 
-昇格時にAppSetを翻訳、修正、再buildしません。`diagnose:promotion`で止まった項目は、ゲーム側の契約不足かSDKの指示・bridge不足として明示します。
+採用時にAppSetを翻訳、修正、再buildしません。`dev`は本体コードの検証環境であり、SDK作品の採用経路ではありません。`diagnose:promotion`で止まった項目は、ゲーム側の契約不足かSDKの指示・bridge不足として明示します。
 
 ## スターターの例
 

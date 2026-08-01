@@ -83,7 +83,7 @@ settings: [
 
 `defaultSettings`は宣言した全項目と同じキーを持ち、各値を`defaultValue`と一致させます。共通画面で変更された値はRoom設定として保存・同期され、クライアントでは`GameFieldsRoom`の`view.common.settings`、AppSetでは`room.settings`から参照します。iframe内へ同じ設定UIを重複配置しません。
 
-正式Runtimeでは、利用者が現在の宣言済み設定をゲーム別の個人既定値として保存できます。Platformはmanifestにないキー、型違い、未宣言のselect値を保存しません。
+正式Runtimeでは、利用者が現在の宣言済み設定をゲーム別の個人既定値として保存できます。Room作成と`room/update-settings`の両方で、Platformはmanifestにないキーを除去し、型違い・未宣言のselect値を安全な既定値へ戻し、数値を宣言範囲へ収めます。この最終検査はAppSetの`normalizeSettings`後にも実行されます。
 
 ## SDK基本セット + AppSet
 
@@ -265,7 +265,18 @@ type Command = GameSdkOnlineRoomCommand<Settings, AppCommand>;
 type RoomView = GameSdkOnlineRoomView<Settings, AppView>;
 ```
 
-共通Lifecycle Commandは`room/join`、`room/leave`、`room/update-settings`、`room/abort`、`room/rematch`、`room/confirm-lobby-return`、`room/expire-timer`、`room/recover-timeout`です。結果後はhostの`room/rematch`でRoomをロビーへ戻し、各参加者の`room/confirm-lobby-return`が揃うまで次ゲームを開始できません。DEBUG対応ゲームでは権限付きホストだけがロビーで`room/debug-add-dummy`、`room/debug-remove-dummy`を使えます。AppSetのCommandは`game/start`のようにゲーム固有namespaceを使い、`room/*`を定義しません。
+共通Lifecycle Commandは`room/join`、`room/leave`、`room/update-settings`、`room/abort`、`room/rematch`、`room/confirm-lobby-return`、`room/expire-timer`、`room/recover-timeout`です。結果後はhostの`room/rematch`でRoomをロビーへ戻し、各参加者の`room/confirm-lobby-return`が揃うまで次ゲームを開始できません。
+
+DEBUG対応ゲームでは、権限付きhostだけが外側Shellから次の共通操作を使えます。
+
+- lobbyで`room/debug-add-dummy`、`room/debug-remove-dummy`
+- playingで`room/debug-auto-progress`、`room/debug-simulate-timeout`
+- lobby／playing／resultで`room/debug-set-connected`、`room/debug-simulate-input-error`
+- 閲覧者別Viewの読取専用切替
+
+`room/debug-auto-progress`と`room/debug-simulate-timeout`はAppSetの`expireAppTurn`を経由し、ゲーム固有stateのphase文字列を直接書き換えません。閲覧視点は表示用Viewだけを切り替え、Commandのactorには使いません。切断再現は共通参加者状態だけを更新し、入力エラー再現は保存前に拒否してrevisionを進めません。進行中断は既存の`room/abort`を使います。
+
+AppSetのCommandは`game/start`のようにゲーム固有namespaceを使い、`room/*`を定義しません。
 
 ## 標準結果
 
@@ -273,6 +284,36 @@ type RoomView = GameSdkOnlineRoomView<Settings, AppView>;
 勝者、終了理由を返します。Platformはこれを共通結果、戦績、rating、
 playbackへ使用します。提出がない場合にPlatformが参加順から仮結果を作る
 ことはありません。
+
+`reason`は集計・監査用の機械コードです。利用者へは直接表示されない前提で、
+日本語・英語と安全な履歴を`presentation`へ分けます。
+
+```ts
+standardResult: defineGameSdkStandardResult({
+  winnerIds,
+  rankings,
+  reason: "turn-limit-reached",
+  presentation: {
+    reason: {
+      ja: "手数上限に達したため終了",
+      en: "The turn limit was reached",
+    },
+    highlights: [
+      { ja: "8手で決着", en: "Finished in 8 turns" },
+    ],
+    playLog: room.app.publicHistory.map((entry, index) => ({
+      ja: `${index + 1}手目：${entry.publicLabelJa}`,
+      en: `Turn ${index + 1}: ${entry.publicLabelEn}`,
+    })),
+  },
+}, {
+  participantIds: room.players.map((player) => player.id),
+})
+```
+
+`highlights`は共有文へ使える最大3件、`playLog`は参加者本人の詳細履歴へ
+保存できる最大50件です。どちらも結果時点で公開済みの情報だけを使い、
+内部player ID、prompt、未公開の秘密、同意のない参加者名を含めません。
 
 ## Trusted actor
 
@@ -339,9 +380,9 @@ const watch = runtime.watchRoom(room.code, {
 watch.close();
 ```
 
-`dissolveRoom(code)`はhostがロビーまたは結果後に使い、`dissolveHostedRooms()`は同じ条件でhost所有Roomを整理します。`watchRoom`のWebSocket通知はゲームID、部屋コード、revision、時刻だけを運び、Room状態や秘密情報を運びません。接続不能時はポーリングへフォールバックします。
+`dissolveRoom(code)`はhostがロビーまたは結果後に使い、`dissolveHostedRooms()`は同じ条件でhost所有Roomを整理します。結果Roomでは戦績・rating・playbackのresult outboxを完了してからRoomを削除し、保存が処理中ならRoomを保持して再試行可能なエラーを返します。`watchRoom`のWebSocket通知はゲームID、部屋コード、revision、時刻だけを運び、Room状態や秘密情報を運びません。接続不能時はポーリングへフォールバックします。
 
-Client Runtimeへactor ID、表示名、debug資格を渡す引数はありません。Game Fieldsが同一originの署名済みHttpOnly Cookieから本人を解決し、server moduleの`context.actor`へ注入します。404のRoom取得は`null`、認証・競合・入力拒否はstatusと安全なcodeを持つ`GameSdkHttpClientRuntimeError`になります。
+Client Runtimeへactor ID、表示名、debug資格を渡す引数はありません。Game Fieldsが同一originの署名済みHttpOnly Cookieから本人を解決し、server moduleの`context.actor`へ注入します。非参加者は参加用のlobby Viewだけを匿名で取得でき、playing／resultのViewと`room/join`以外のCommandは拒否されます。404のRoom取得は`null`、認証・競合・入力拒否はstatusと安全なcodeを持つ`GameSdkHttpClientRuntimeError`になります。
 
 PreviewはこのRoom APIへ接続し、candidate packageのAppSetを隔離server runnerで実行します。未審査コードへDB、Redis、認証Cookie、環境変数、外部networkは渡しません。AppSetが要求できる外部処理は、SDK protocolで宣言されたPlatform resource effectだけです。
 
@@ -389,4 +430,4 @@ Commandに`expectedRevision`、actor ID、認証情報を含める必要はあ�
 - `source/server-module.ts`
 - `game-fields-package.json`
 
-manifestにはserver bundleとAppSet sourceのSHA-256を記録します。Portalはupload時に実ファイルから再計算し、developmentとstableへ同じrevision・同じhashをコピーします。昇格処理はAppSetを翻訳、修正、再buildしません。
+manifestにはserver bundleとAppSet sourceのSHA-256を記録します。Portalはupload時に実ファイルから再計算し、Game Fields運営者がmain採用時に同じrevision・同じhashをコピーします。採用処理はAppSetを翻訳、修正、再buildしません。SDK作品は本体コードの検証環境であるdevを経由しません。

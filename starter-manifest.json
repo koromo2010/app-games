@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
-  "downloadMeVersion": 17,
+  "downloadMeVersion": "0.1.1",
+  "environment": "development",
   "platformVersion": "0.1.1",
   "starterVersion": "0.1.1",
   "sdkVersion": "0.1.1",
