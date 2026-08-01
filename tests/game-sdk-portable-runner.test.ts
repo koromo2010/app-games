@@ -3,9 +3,13 @@ import { test } from "node:test";
 import { build } from "esbuild";
 import {
   GAME_SDK_PORTABLE_SERVER_PROTOCOL_VERSION,
+  type GameSdkPortableCommandBatchRequest,
   type GameSdkPortableServerRequest,
 } from "../packages/game-sdk/src/portable-server.ts";
-import { runGameSdkPortableServer } from "../apps/sdk-preview/lib/server-runner.ts";
+import {
+  runGameSdkPortableCommandBatch,
+  runGameSdkPortableServer,
+} from "../apps/sdk-preview/lib/server-runner.ts";
 
 async function fixtureBundle() {
   const result = await build({
@@ -125,4 +129,88 @@ test("portable AppSet requests a platform effect and resumes unchanged", async (
       word: "ことば",
     },
   });
+});
+
+test("existing protocol-v1 bundle batches apply and final presentation in one isolated runner", async () => {
+  const bundle = await fixtureBundle();
+  const room = {
+    code: "BATCH",
+    revision: 1,
+    phase: "lobby",
+    hostPlayerId: "player-1",
+    word: null,
+  };
+  const effectRequest = {
+    pool: "general-words",
+    count: 1,
+    difficulty: "normal",
+  };
+  const effectId = `contentSource:drawWords:${JSON.stringify(effectRequest)}`;
+  const batch: GameSdkPortableCommandBatchRequest = {
+    kind: "game-fields-command-batch-v1",
+    apply: request({
+      operation: "applyCommand",
+      input: {
+        room,
+        command: { type: "draw" },
+        context: {
+          actor: {
+            playerId: "player-1",
+            displayName: "Player",
+            role: "host",
+            debugAccess: false,
+          },
+          now: 1_000,
+          requestId: "batch-request-1",
+        },
+      },
+    }, {
+      [effectId]: {
+        ok: true,
+        value: [{
+          id: "word-1",
+          surface: "ことば",
+          difficulty: "normal",
+        }],
+      },
+    }) as GameSdkPortableCommandBatchRequest["apply"],
+    presentationContext: {
+      viewer: {
+        playerId: "player-1",
+        role: "host",
+        debugAccess: false,
+      },
+      now: 1_000,
+    },
+  };
+  const counts = new Map<string, number>();
+  const result = await runGameSdkPortableCommandBatch({
+    bundle,
+    request: batch,
+    timing: {
+      record(stage) {
+        counts.set(stage, (counts.get(stage) ?? 0) + 1);
+      },
+    },
+  });
+
+  assert.deepEqual(result, {
+    ok: true,
+    value: {
+      room: {
+        ...room,
+        revision: 2,
+        phase: "playing",
+        word: "ことば",
+      },
+      view: {
+        phase: "playing",
+        hasWord: true,
+      },
+    },
+  });
+  assert.equal(counts.get("quickjs-init"), 1);
+  assert.equal(counts.get("bundle-eval"), 1);
+  assert.equal(counts.get("apply-command"), 1);
+  assert.equal(counts.get("present-room"), 1);
 });

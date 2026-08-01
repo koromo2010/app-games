@@ -28,7 +28,7 @@ const surfaceBuildPaths = Object.freeze({
     /^public\//,
     /^packages\/game-sdk\//,
     /^packages\/game-runtime\//,
-    /^packages\/sdk-preview-auth\//,
+    /^packages\/sdk-service-auth\//,
     /^middleware\.(?:ts|js|mjs)$/,
     /^instrumentation\.(?:ts|js|mjs)$/,
     /^next\.config\.(?:ts|js|mjs)$/,
@@ -39,6 +39,9 @@ const surfaceBuildPaths = Object.freeze({
     /^apps\/sdk-portal\//,
     /^packages\/game-sdk\//,
     /^packages\/sdk-preview-auth\//,
+    /^packages\/sdk-package-assets\//,
+    /^packages\/sdk-runtime-artifact\//,
+    /^packages\/sdk-service-auth\//,
     /^sdk\//,
     /^scripts\/migrate-sdk-database\.mjs$/,
   ],
@@ -46,6 +49,8 @@ const surfaceBuildPaths = Object.freeze({
     /^apps\/sdk-preview\//,
     /^packages\/game-sdk\//,
     /^packages\/sdk-preview-auth\//,
+    /^packages\/sdk-package-assets\//,
+    /^packages\/sdk-runtime-artifact\//,
   ],
 });
 

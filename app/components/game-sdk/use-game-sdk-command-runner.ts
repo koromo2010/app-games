@@ -14,6 +14,7 @@ import { withAiActivity } from "@/lib/ai-activity-client";
 import { shouldTrackGameSdkAiActivity } from "./game-sdk-frame-presentation";
 import type {
   DebugWrappedCommand,
+  DebugViewer,
   GameSdkFrameRuntime,
   PackageRoom,
   SafeCommand,
@@ -31,6 +32,7 @@ type Options = {
   usesLlm: boolean;
   moduleProfile: GameSdkModuleProfile;
   wrapDebugCommand: <TCommand extends { type: string }>(command: TCommand) => TCommand | DebugWrappedCommand<TCommand>;
+  debugViewer: DebugViewer;
 };
 
 /**
@@ -55,6 +57,7 @@ export function useGameSdkCommandRunner({
   usesLlm,
   moduleProfile,
   wrapDebugCommand,
+  debugViewer,
 }: Options) {
   const attemptedTimerExpiryRef = useRef(new Set<string>());
 
@@ -118,6 +121,8 @@ export function useGameSdkCommandRunner({
     const dispatch = async (room: PackageRoom) => (await runtime.sendCommand(room.code, {
       expectedRevision: room.revision,
       command,
+    }, {
+      finalViewer: debugViewer,
     })).room;
     const operation = () => dispatch(current);
 
@@ -149,7 +154,7 @@ export function useGameSdkCommandRunner({
       }
       throw error;
     }
-  }, [attachLatestRoom, moduleProfile, roomRef, runtime, usesLlm]);
+  }, [attachLatestRoom, debugViewer, moduleProfile, roomRef, runtime, usesLlm]);
 
   const sendPackageCommand = useCallback(async (command: SafeCommand) => (
     send(wrapDebugCommand(command))

@@ -61,11 +61,66 @@ devとmainの採用済みSDKアプリ情報は環境別DBに分離する。管�
 
 アプリ更新時はmainのゲームID・URL・公開設定を維持する。devとmainのpackage Gitは別リポジトリなので、昇格はdevの固定commitからpackage全ファイルを読み、3つのhashとmanifestを再検証してmain package Gitへ新しいcommitとして保存する。本番Previewでそのcommitのmanifestを起動確認してから`sdk_app_releases`の現在版を切り替える。`source_revision`はdevの元commit、`revision`はmainの実体commitを示す。
 
+game packageの最終`PreparedUploadFile[]`は、`@game-fields/sdk-package-assets`のpure validatorで保存前に監査する。HTML、CSS、JavaScript／TypeScriptを正式parserで解析し、静的に一意解決できるpackage相対assetは正規化後の存在とbrowser-readable policyを確認する。asset pathを含む未解決template literal、文字列連結、変数経由参照、またはparse不能なsourceはfail closedで拒否する。REST package PUTとMCP `publish_game_package`は認証DBへ入る前にも同じpreparationを実行し、認証結果の優先順位は変えずに検査結果を保存serviceへ引き継ぐ。dev→main artifact transferはvalidation後・target Git前のcallbackでschemaを確認する。全経路が同じ`saveValidatedGamePackage`境界を通り、package永続化callbackは監査成功後だけ実行できる。local／Actions相当監査は`npm run audit:sdk-package-assets -- <package-directory>`で同じvalidatorを1 packageだけに実行する。private package Git上の実`Dynamic asset audit` workflowへの反映と既存Dixit artifact修復は、このrepositoryのローカル実装には含まれない。
+
 各更新前の版は`sdk_app_releases`へ追加専用履歴として残り、管理画面から過去版を選んでアプリ単位で復元できる。migration 006で元dev SHAと本番実行SHAが同じままbackfillされた旧Releaseは未移送と判定し、同じdev版でも修復昇格を許可する。dev由来の過去版は元commitからpackage実体を再移送する。復元自体も新しい`rollback`リリースとして記録し、本体や他アプリ、既存Roomは巻き戻さない。
 
 採用済みSDKゲームのAppSetとmanifestは不変のまま保持し、公開後に調整する表示名と広場カード画像は`config/sdk-game-presentations.ts`で管理する。現行の`ai-word-guess`は公開名「コトバに迫れ」と専用カード画像を使用する。
 
 SDK Portalはpackage client／server grantをEd25519で署名する。portable server grantは隔離Previewが固定した公開鍵だけでローカル検証し、Portalの検証APIやcross-project共通秘密値へ依存しない。ブラウザ入口は60秒のclient交換grantをURL fragmentへ渡し、fragmentを履歴から即時消去してform POSTする。client grantはページrender時に固定せず、Room参加後にゲームiframeが実際にnavigateする直前の同一origin認証routeで固定revision向けに再発行する。Previewはgrant検証後のPOST応答で直接HTML骨格を返し、Cookieや303遷移を使わない。JS、CSS、画像、font、mediaとPlatform bridgeは外部assetのまま、同一source kind・制作者・ゲーム・固定revision・正規化済みasset path・期限へ限定したHMAC URLで取得する。Preview側の秘密値はこのpath単位asset tokenだけに使用する。
+
+### T-60 read-only監査境界（ローカル・未配備）
+
+2026-08-01に`develop@17c331e18908120b26cab85a2132c987999a924e`から再構築し、
+T-60.1 local checkpoint `dda0313273f7231232a8acae0a94fffd54f2b9a4`へ保存した差分では、
+公開ゲーム一覧・詳細・SDK catalogが読むgame operationsを
+`v3 → v2 → v1 → registry既定値`のGET専用境界へ分離した。legacy fallbackを読んでも
+Redisへ書き戻さない。永続化は認証済み管理PATCHと、環境・namespace・target key・
+`--apply`を明示するmaintenance CLIだけに限定する。CLIはlegacy raw JSONを保存schemaどおり
+厳格検証し、normalizerによる不正fieldの黙示修復を移行として扱わない。
+
+管理者向けSDK監査GETは、Platformのfull site-admin検証後にservice HMACでPortalの
+internal GETを呼ぶ。Portalはschema 7を一つの`REPEATABLE READ READ ONLY` transactionで読み、
+game status、decision ID、stable／current manifest SHA-256をDB行そのものから取得・算出する。
+各値はavailabilityを伴い、不存在とquery失敗を同じ値へ畳み込まない。stableとcurrentの
+revision／manifest hash不一致もanomalyとして分類し、監査field全体を行順非依存の
+canonical integrity digestへ含める。
+
+Runtime manifest監査はlowercase 40桁commitを指定してexact Git object graphとpackage全treeから
+hashを再計算する。一方、Preview Command runnerは既存の高速経路を維持し、grantで固定した
+`server.bundle.js`だけを1回取得してhashを照合する。runnerのapply／presentからrecursive treeや
+全blob読取へ到達しない。両経路が共有するのはimmutable locator検証とSHA-256等のpure処理であり、
+full-tree resolverはaudit専用である。
+すべての応答は`private, no-store`で、cookie、service署名、接続文字列、PII、判断理由、
+signed URLを返さない。
+
+schema 7にはDB自身のenvironment markerとstable pointer固有の`source_revision`がない。
+そのためsnapshotはdeployment branch由来値とDB markerを分け、DB markerを`null`かつ
+`unavailable:schema-7`、stable provenanceも`null`かつ`unavailable:schema-7`として返す。
+current releaseから推測して埋めない。この制限によりT-60.1の受入判定は、schema変更または
+別途証明が許可されるまで3層目の`schema 8待ち`であり、局所差分の安全性判定と分離する。
+T-60.1が直接所有する局所差分はローカル検証PASSである。既知だった
+`/games → loadGameDurationEstimates() → ensurePostgresSchema()`のwrite到達は、
+T-74 local merge `25b27cc096bd30b2176ba53209bf607b105cac41`（tree
+`8661072b6610600fb084ac06d7fd33f419496c6f`）でT-65の共通catalog read modelと統合済みである。
+正規checkpointはT-60.1 `dda0313273f7231232a8acae0a94fffd54f2b9a4`、T-65
+`40b6d97961f2cb909d55596e819af4155d8e08c4`、T-71
+`139f4ae8368a7646f70a18352b5f9db9f8adbf70`で、baseline比139パス、M97／A42／D0である。
+
+T-74のfocused 5/5、repository-wide 835/835、Runtime／SDK package／starter、
+`npm run verify`、Platform／SDK Portal／SDK Previewの3 buildはすべてPASSした。
+Portal buildのmigrationは`local/local`としてskipされ、DB接続・DDL・DMLは0、Main Promotion
+同期5対象も`would-change=0`だった。重複`app-games-sdk-portal`は引き続き
+`project-disabled`である。ローカル統合は完了したが、T-73B最終波及確認、push、PR、Actions、
+Deployment、production反映、実環境確認は未実施であり、T-60全体や稼働環境をPASSとは扱わない。
+
+Preview grant（Ed25519）は`@game-fields/sdk-preview-auth`、内部service HMACは
+`@game-fields/sdk-service-auth`、Runtime audit resolverとrunner用pure検証は
+`@game-fields/sdk-runtime-artifact`へ
+責務分離する。Preview Projectはservice HMAC packageと`SDK_ACCOUNT_LINK_SECRET`を持たない。
+Deployment build gateでは、利用実態がT-59で確定していない`app-games-sdk-portal`を引き続き
+project-disabledとしてSKIPする。Portal差分のローカルtypecheck／build対象であることと、
+Deployment build対象であることを混同しない。
 
 2026-07-27の段階移行中は、developの発行器はpath単位v2だけを発行し、
 共有verifierだけが旧revision単位v1とv2を一時的に受理する。旧v1の最長有効期間と

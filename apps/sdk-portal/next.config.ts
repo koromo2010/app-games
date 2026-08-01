@@ -15,7 +15,12 @@ const legacyDownloadMePaths = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
-  transpilePackages: ["@game-fields/sdk-preview-auth"],
+  transpilePackages: [
+    "@game-fields/sdk-preview-auth",
+    "@game-fields/sdk-package-assets",
+    "@game-fields/sdk-runtime-artifact",
+    "@game-fields/sdk-service-auth",
+  ],
   async redirects() {
     return legacyDownloadMePaths.map((source) => ({
       source,

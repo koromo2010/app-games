@@ -9,6 +9,7 @@ import {
 } from "react";
 import type { ContactCategory, ContactStatus } from "@/lib/contact-core";
 import type { SupportThreadMessage } from "@/lib/support-thread-core";
+import { SUPPORT_TEXT_LIMITS } from "@/config/support-text-contract";
 
 type PublicContact = {
   id: string;
@@ -59,6 +60,7 @@ export function ContactThread({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const requestIdRef = useRef<string | null>(null);
+  const messageTooLong = message.length > SUPPORT_TEXT_LIMITS.reply;
 
   const load = useCallback(async (signal?: AbortSignal) => {
     if (!credentials.contactId || !credentials.accessToken) {
@@ -103,8 +105,7 @@ export function ContactThread({
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    const body = message.trim();
-    if (!body || saving) return;
+    if (!message.trim() || messageTooLong || saving) return;
     setSaving(true);
     setNotice("");
     try {
@@ -116,13 +117,21 @@ export function ContactThread({
           contactId: credentials.contactId,
           accessToken: credentials.accessToken,
           requestId: requestIdRef.current,
-          message: body,
+          message,
         }),
       });
       const data = await response.json().catch(() => null) as {
         contact?: PublicContact;
+        error?: string;
+        limit?: number;
       } | null;
-      if (!response.ok || !data?.contact) throw new Error("REPLY_FAILED");
+      if (!response.ok || !data?.contact) {
+        if (data?.error === "support_text_too_long") {
+          setNotice(`追記は${(data.limit ?? SUPPORT_TEXT_LIMITS.reply).toLocaleString()}文字以内にしてください。`);
+          return;
+        }
+        throw new Error("REPLY_FAILED");
+      }
       requestIdRef.current = null;
       setContact(data.contact);
       setMessage("");
@@ -157,9 +166,11 @@ export function ContactThread({
       </div>
       <form className="space-y-3 border-t border-slate-200 pt-5" onSubmit={submit}>
         <label className="block text-sm font-black">追記・返信
-          <textarea className="mt-2 min-h-32 w-full rounded-lg border border-slate-300 px-3 py-2 font-normal" maxLength={3_000} value={message} onChange={(event) => { requestIdRef.current = null; setMessage(event.target.value); }} />
+          <textarea className="mt-2 min-h-32 w-full rounded-lg border border-slate-300 px-3 py-2 font-normal" aria-invalid={messageTooLong} value={message} onChange={(event) => { requestIdRef.current = null; setMessage(event.target.value); }} />
+          <span className={`mt-1 block text-right text-xs font-normal ${messageTooLong ? "text-rose-700" : "text-slate-500"}`}>{message.length.toLocaleString()} / {SUPPORT_TEXT_LIMITS.reply.toLocaleString()}</span>
+          {messageTooLong && <span className="mt-1 block text-xs font-normal text-rose-700" role="alert">追記が文字数上限を超えています。超過中の内容は保存されません。</span>}
         </label>
-        <button type="submit" disabled={saving || !message.trim()} className="rounded-lg bg-cyan-700 px-5 py-3 font-black text-white disabled:opacity-40">{saving ? "送信中…" : "追記を送信"}</button>
+        <button type="submit" disabled={saving || !message.trim() || messageTooLong} className="rounded-lg bg-cyan-700 px-5 py-3 font-black text-white disabled:opacity-40">{saving ? "送信中…" : "追記を送信"}</button>
       </form>
     </>}
   </div>;

@@ -20,6 +20,7 @@
         "verify": "npm run check:versions && npm run check:env-ledger && npm run check:games && npm run check:sdk && npm run check:sdk-help && npm run check:sdk-migrations && npm run check:sdk-shell-contract && npm run lint",
         "test": "npm run build:runtime-packages && node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test tests/*.test.ts",
         "test:sdk-package": "npm run build:sdk-package && node scripts/check-game-sdk-package.mjs",
+        "audit:sdk-package-assets": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types apps/sdk-portal/scripts/audit-game-package-assets.ts",
         "release:sdk:check": "npm run test:sdk-package && npm publish --workspace @game-fields/game-sdk --dry-run",
         "release:main:gate": "node scripts/check-main-promotion-gate.mjs",
         "release:main:gate:execute": "node scripts/check-main-promotion-gate.mjs --execute",
@@ -45,7 +46,7 @@
     },
     "dependencies": {
         "@game-fields/game-runtime": "0.1.1",
-        "@game-fields/sdk-preview-auth": "0.1.1",
+        "@game-fields/sdk-service-auth": "0.1.1",
         "@neondatabase/serverless": "^1.1.0",
         "@simplewebauthn/browser": "^13.3.0",
         "@simplewebauthn/server": "^13.3.2",

@@ -362,6 +362,27 @@ export type GameSdkPresentationContext = GameSdkResourceContext & {
   now: number;
 };
 
+export type GameSdkRuntimeTimingStage =
+  | "room-load"
+  | "runner-call"
+  | "runner-bundle"
+  | "runner-hash"
+  | "quickjs-init"
+  | "bundle-eval"
+  | "apply-command"
+  | "room-cas"
+  | "revision-publish"
+  | "present-room";
+
+/**
+ * Platform-owned, payload-free timing sink. Game state and identities must
+ * never be attached to these samples.
+ */
+export type GameSdkRuntimeTiming = {
+  record(stage: GameSdkRuntimeTimingStage, durationMs: number, count?: number): void;
+  importServerTiming?(value: string | null): void;
+};
+
 /**
  * Server contract implemented by one game package. Authentication, storage,
  * CAS and request IDs remain platform responsibilities.
@@ -383,6 +404,19 @@ export type GameSdkServerModule<
     room: Readonly<TRoom>,
     context: GameSdkPresentationContext,
   ): TRoomView | Promise<TRoomView>;
+  /**
+   * Optional platform optimization used by the remote Preview runner. The
+   * installed package still receives the existing applyCommand and
+   * presentRoom protocol-v1 invocations, so old package revisions remain
+   * executable without rebuilding their portable bundle.
+   */
+  applyCommandAndPresent?(
+    room: Readonly<TRoom>,
+    command: TCommand,
+    commandContext: GameSdkCommandContext,
+    presentationContext: GameSdkPresentationContext,
+    timing?: GameSdkRuntimeTiming,
+  ): Promise<{ room: TRoom; view: TRoomView }>;
 };
 
 export type GameSdkServerRuntime<

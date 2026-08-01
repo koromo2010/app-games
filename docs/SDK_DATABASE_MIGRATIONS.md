@@ -39,6 +39,29 @@ main側package Gitへ保存した実行revisionを`revision`として保持す�
 期間に欠けた`sdk_release_decisions`を作成する。runnerはこの既知の`005`だけを
 旧ledger entryとして受理し、未知の名前・checksum差異は引き続き拒否する。
 
+## schema 7 read-only監査の制約
+
+ローカルT-60差分のschema snapshotは、schema version、game／stable pointer、current release／
+decisionを、一つの`REPEATABLE READ READ ONLY` transaction内の固定3 SELECTで読む。
+versionが厳密に7でなければ、request中にmigrationせずfail closedにする。
+
+固定SELECTは`game.status`と、current releaseに対応する最新decisionの`id`をDB行から読む。
+同一`decided_at`では`id DESC`をtie-breakとし、取得行を決定的にする。stable manifestと
+current release manifestはそれぞれ別のJSONB行からcanonical SHA-256を算出し、別revision、
+branch、current/stableの他方から補完しない。status、decision ID、stable／current manifest hashは
+availabilityとともに返し、不存在は`absent`、query／transaction失敗は応答自体のfail-closedとして
+区別する。これらのfieldと不一致anomalyはcanonical integrity digestへ含める。
+
+schema 7には、接続中DBがproduction／developmentのどちらかを自己証明するmarkerがない。
+deployment branch由来のenvironmentはrouting contextであり、DB markerではない。snapshotは
+両者を区別し、database environmentを`null`、availabilityを`unavailable:schema-7`とする。
+接続文字列やDB名から推測して応答へ出してはならない。
+
+また、stable pointerには固有の`source_revision`保存値がない。current releaseの
+`source_revision`との一致から推定すると不整合を隠すため、stable provenanceは`null`、
+availabilityは`unavailable:schema-7`とする。これらを証明可能にするには将来の加算schemaか、
+別途承認された外部照合が必要である。本差分はschema 8、DDL、backfillを追加しない。
+
 ## コマンド
 
 接続先は`SDK_DATABASE_URL`を正本とし、移行期間だけ

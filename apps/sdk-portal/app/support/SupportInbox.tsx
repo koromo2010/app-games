@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { SUPPORT_TEXT_LIMITS } from "@/lib/support-text-contract";
 import { useMemo, useRef, useState } from "react";
 import type {
   CreatorSupportReport,
@@ -74,8 +75,12 @@ export function SupportInbox({
   };
 
   const reply = async (report: CreatorSupportReport) => {
-    const message = drafts[report.id]?.trim() ?? "";
-    if (!message || savingId) return;
+    const message = drafts[report.id] ?? "";
+    if (!message.trim() || savingId) return;
+    if (message.length > SUPPORT_TEXT_LIMITS.reply) {
+      setNotice("追記が文字数上限を超えています。超過中の内容は保存されません。");
+      return;
+    }
     setSavingId(report.id);
     setNotice("");
     try {
@@ -183,7 +188,6 @@ export function SupportInbox({
           <label htmlFor={`reply-${report.id}`}>追記・返信</label>
           <textarea
             id={`reply-${report.id}`}
-            maxLength={3_000}
             value={drafts[report.id] ?? ""}
             onChange={(event) => {
               delete replyRequestIds.current[report.id];
@@ -195,8 +199,8 @@ export function SupportInbox({
             placeholder="確認結果や再現手順などを入力してください"
           />
           <div>
-            <small>送信すると状態は「オープン」になります。</small>
-            <button type="submit" disabled={savingId !== null || !(drafts[report.id]?.trim())}>
+            <small>{(drafts[report.id]?.length ?? 0).toLocaleString()} / {SUPPORT_TEXT_LIMITS.reply.toLocaleString()} · 送信すると状態は「オープン」になります。</small>
+            <button type="submit" disabled={savingId !== null || !(drafts[report.id]?.trim()) || (drafts[report.id]?.length ?? 0) > SUPPORT_TEXT_LIMITS.reply}>
               {savingId === report.id ? "送信中…" : "追記を送信"}
             </button>
           </div>

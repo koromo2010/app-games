@@ -20,7 +20,6 @@ import type {
   CommonView,
   DebugAutoProgressTarget,
   DebugViewer,
-  GameSdkFrameRuntime,
   PackageRoom,
   SafeCommand,
 } from "./game-sdk-frame-types";
@@ -38,7 +37,6 @@ export type GameSdkFrameViewProps = {
   room: PackageRoom | null;
   roomRef: MutableRefObject<PackageRoom | null>;
   iframeRef: RefObject<HTMLIFrameElement | null>;
-  runtime: GameSdkFrameRuntime;
   runtimeUrl: string;
   packageRevisionIssue: GameSdkPackageRevisionIssue | null;
   onResumePinnedRoom: () => void;
@@ -89,7 +87,6 @@ export type GameSdkFrameViewProps = {
   debugSwitchSource: "manual" | "auto-follow" | "reset";
   debugCanSend: boolean;
   postRoom: (room: PackageRoom | null) => void;
-  resetDebugControl: () => void;
   run: (operation: () => Promise<PackageRoom>) => Promise<PackageRoom | null>;
   send: (command: SafeCommand) => Promise<PackageRoom>;
   sendPackageCommand: (command: SafeCommand) => Promise<PackageRoom>;
@@ -120,7 +117,6 @@ export function GameSdkFrameView(props: GameSdkFrameViewProps) {
     room,
     roomRef,
     iframeRef,
-    runtime,
     runtimeUrl,
     packageRevisionIssue,
     onResumePinnedRoom,
@@ -165,7 +161,6 @@ export function GameSdkFrameView(props: GameSdkFrameViewProps) {
     debugSwitchSource,
     debugCanSend,
     postRoom,
-    resetDebugControl,
     run,
     send,
     sendPackageCommand,
@@ -440,7 +435,6 @@ export function GameSdkFrameView(props: GameSdkFrameViewProps) {
           <GameSdkIframeBridge
             iframeRef={iframeRef}
             roomRef={roomRef}
-            runtime={runtime}
             runtimeUrl={runtimeUrl}
             title={title}
             phase={room.phase}
@@ -451,9 +445,7 @@ export function GameSdkFrameView(props: GameSdkFrameViewProps) {
             pending={pending}
             onRecoverTimeout={onRecoverTimeout}
             debugCanSend={debugCanSend}
-            debugViewer={debugViewer}
             postRoom={postRoom}
-            resetDebugControl={resetDebugControl}
             setMessage={setMessage}
             attachLatestRoom={attachLatestRoom}
             sendPackageCommand={sendPackageCommand}

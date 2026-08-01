@@ -6,6 +6,10 @@ import {
   type UserReport,
   type UserReportType,
 } from "@/lib/user-report-store";
+import {
+  validateSupportReportText,
+  validateSupportText,
+} from "@/config/support-text-contract";
 
 export type UserReportDraft = {
   id: string;
@@ -102,6 +106,7 @@ export async function saveUserReportDraft(input: {
   details: string;
   page: string;
 }) {
+  const text = validateSupportReportText(input);
   if (!requestIdPattern.test(input.requestId)) {
     throw new Error("USER_REPORT_DRAFT_REQUEST_ID_INVALID");
   }
@@ -110,9 +115,7 @@ export async function saveUserReportDraft(input: {
     id: `draft_${input.requestId.toLowerCase()}`,
     playerId: input.playerId,
     type: input.type,
-    summary: input.summary,
-    details: input.details,
-    page: input.page,
+    ...text,
     createdAt: now,
     expiresAt: now + draftRetentionSeconds * 1_000,
   };
@@ -126,7 +129,13 @@ export async function saveUserReportDraft(input: {
   ]);
   if (inserted === "OK") return draft;
   const existing = await loadUserReportDraft(draft.id, input.playerId);
-  if (!existing) throw new Error("USER_REPORT_DRAFT_CONFLICT");
+  if (
+    !existing
+    || existing.type !== input.type
+    || existing.summary !== text.summary
+    || existing.details !== text.details
+    || existing.page !== text.page
+  ) throw new Error("USER_REPORT_DRAFT_CONFLICT");
   return existing;
 }
 
@@ -158,19 +167,26 @@ export async function approveUserReportDraft(input: {
   details: string;
   page: string;
 }): Promise<UserReport> {
+  const text = validateSupportReportText(input);
   const existing = await loadApprovedUserReportForDraft(
     input.draftId,
     input.playerId,
   );
-  if (existing) return existing;
+  if (existing) {
+    if (
+      existing.type !== input.type
+      || existing.summary !== text.summary
+      || existing.details !== text.details
+      || existing.page !== text.page
+    ) throw new Error("USER_REPORT_DRAFT_APPROVAL_CONFLICT");
+    return existing;
+  }
   const draft = await loadUserReportDraft(input.draftId, input.playerId);
   if (!draft) throw new Error("USER_REPORT_DRAFT_NOT_FOUND");
   const saved = await saveUserReport({
     playerId: input.playerId,
     type: input.type,
-    summary: input.summary,
-    details: input.details,
-    page: input.page,
+    ...text,
   }, {
     reportId: reportIdForDraft(input.draftId),
   });
@@ -186,6 +202,7 @@ export async function saveUserReportReplyDraft(input: {
   requestId: string;
   message: string;
 }) {
+  const message = validateSupportText(input.message, "reply", { required: true });
   if (!requestIdPattern.test(input.requestId)) {
     throw new Error("USER_REPORT_REPLY_DRAFT_REQUEST_ID_INVALID");
   }
@@ -198,7 +215,7 @@ export async function saveUserReportReplyDraft(input: {
     id: `reply_draft_${input.requestId.toLowerCase()}`,
     playerId: input.playerId,
     reportId: input.reportId,
-    message: input.message,
+    message,
     createdAt: now,
     expiresAt: now + draftRetentionSeconds * 1_000,
   };
@@ -215,6 +232,7 @@ export async function saveUserReportReplyDraft(input: {
   if (
     !existing
     || existing.reportId !== input.reportId
+    || existing.message !== message
   ) {
     throw new Error("USER_REPORT_REPLY_DRAFT_CONFLICT");
   }
@@ -237,6 +255,7 @@ export async function approveUserReportReplyDraft(input: {
   playerId: string;
   message: string;
 }) {
+  const message = validateSupportText(input.message, "reply", { required: true });
   const draft = await loadUserReportReplyDraft(
     input.draftId,
     input.playerId,
@@ -247,7 +266,7 @@ export async function approveUserReportReplyDraft(input: {
     playerId: input.playerId,
     requestId: `approved-${draft.id.slice("reply_draft_".length)}`,
     author: "requester",
-    body: input.message,
+    body: message,
     status: "open",
   });
   if (!draft.approvedAt || draft.message !== result.message.body) {

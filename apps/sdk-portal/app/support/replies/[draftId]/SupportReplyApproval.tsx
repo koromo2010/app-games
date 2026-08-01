@@ -6,6 +6,7 @@ import type {
   CreatorSupportReplyDraft,
   CreatorSupportReport,
 } from "@/lib/support-api";
+import { SUPPORT_TEXT_LIMITS } from "@/lib/support-text-contract";
 
 export function SupportReplyApproval({
   draft,
@@ -18,10 +19,14 @@ export function SupportReplyApproval({
   const [message, setMessage] = useState(draft.message);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const messageTooLong = message.length > SUPPORT_TEXT_LIMITS.reply;
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (saving || !message.trim()) return;
+    if (saving || !message.trim() || messageTooLong) {
+      setError("返信が文字数上限を超えています。超過中の内容は保存されません。");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
@@ -56,10 +61,11 @@ export function SupportReplyApproval({
         <textarea
           id="support-reply-message"
           required
-          maxLength={3_000}
           value={message}
           onChange={(event) => setMessage(event.target.value)}
         />
+        <small>{message.length.toLocaleString()} / {SUPPORT_TEXT_LIMITS.reply.toLocaleString()}</small>
+        {messageTooLong && <span className="support-approval-error" role="alert">返信が文字数上限を超えています。</span>}
       </label>
       {error && <p className="support-approval-error" role="alert">{error}</p>}
       <div className="support-approval-actions">
@@ -70,7 +76,7 @@ export function SupportReplyApproval({
         >
           送信しない
         </button>
-        <button type="submit" disabled={saving || !message.trim()}>
+        <button type="submit" disabled={saving || !message.trim() || messageTooLong}>
           {saving ? "送信中…" : "内容を確認し、返信を送信"}
         </button>
       </div>

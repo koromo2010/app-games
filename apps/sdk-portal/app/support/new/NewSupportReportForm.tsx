@@ -2,6 +2,7 @@
 
 import { useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import { SUPPORT_TEXT_LIMITS } from "@/lib/support-text-contract";
 
 type ReportType = "bug" | "request";
 
@@ -14,10 +15,17 @@ export function NewSupportReportForm() {
   const [page, setPage] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const summaryTooLong = summary.length > SUPPORT_TEXT_LIMITS.summary;
+  const detailsTooLong = details.length > SUPPORT_TEXT_LIMITS.details;
+  const pageTooLong = page.length > SUPPORT_TEXT_LIMITS.page;
+  const textInvalid = summaryTooLong || detailsTooLong || pageTooLong;
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (saving || !summary.trim()) return;
+    if (saving || !summary.trim() || textInvalid) {
+      setError("文字数上限を超えた項目を修正してください。超過中の内容は保存されません。");
+      return;
+    }
     setSaving(true);
     setError("");
     try {
@@ -36,8 +44,15 @@ export function NewSupportReportForm() {
       });
       const data = await response.json().catch(() => null) as {
         report?: { id?: string };
+        error?: string;
+        field?: string;
+        limit?: number;
       } | null;
       if (!response.ok || !data?.report?.id) {
+        if (data?.error === "support_text_too_long") {
+          setError(`${data.field ?? "入力"}は${data.limit ?? "規定"}文字以内にしてください。`);
+          return;
+        }
         throw new Error("REPORT_FAILED");
       }
       router.push(
@@ -73,27 +88,30 @@ export function NewSupportReportForm() {
         <input
           autoFocus
           required
-          maxLength={120}
           value={summary}
           onChange={(event) => setSummary(event.target.value)}
           placeholder="例：ゲーム開始ボタンを押しても反応しない"
         />
+        <small>{summary.length.toLocaleString()} / {SUPPORT_TEXT_LIMITS.summary.toLocaleString()}</small>
+        {summaryTooLong && <span className="support-approval-error" role="alert">要約が文字数上限を超えています。</span>}
       </label>
       <label>詳細・再現手順
         <textarea
-          maxLength={1_200}
           value={details}
           onChange={(event) => setDetails(event.target.value)}
           placeholder="行った操作、期待した結果、実際に起きたことなど"
         />
+        <small>{details.length.toLocaleString()} / {SUPPORT_TEXT_LIMITS.details.toLocaleString()}</small>
+        {detailsTooLong && <span className="support-approval-error" role="alert">詳細が文字数上限を超えています。</span>}
       </label>
       <label>対象ページ・ゲームURL（任意）
         <input
-          maxLength={200}
           value={page}
           onChange={(event) => setPage(event.target.value)}
           placeholder="https://sdk.game-fields.com/..."
         />
+        <small>{page.length.toLocaleString()} / {SUPPORT_TEXT_LIMITS.page.toLocaleString()}</small>
+        {pageTooLong && <span className="support-approval-error" role="alert">対象ページが文字数上限を超えています。</span>}
       </label>
       <p className="support-form-hint">
         パスワード、APIキー、Cookieなどの秘密情報は入力しないでください。
@@ -107,7 +125,7 @@ export function NewSupportReportForm() {
         >
           キャンセル
         </button>
-        <button type="submit" disabled={saving || !summary.trim()}>
+        <button type="submit" disabled={saving || !summary.trim() || textInvalid}>
           {saving ? "送信中…" : "内容を確認し、報告を送信"}
         </button>
       </div>

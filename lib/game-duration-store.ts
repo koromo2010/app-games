@@ -125,7 +125,9 @@ export async function recordGameDurationSample(input: RecordGameDurationInput) {
 }
 
 async function loadPostgresSamples() {
-  await ensurePostgresSchema();
+  // Schema creation belongs to mutation and migration paths. A public catalog
+  // GET issues only this SELECT; a missing table is handled by the caller's
+  // existing Redis/default fallback.
   const sql = getPostgresClient();
   const rows = await sql.query(`
     SELECT game_type, duration_seconds, player_count, variant_key

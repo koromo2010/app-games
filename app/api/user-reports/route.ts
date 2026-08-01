@@ -9,10 +9,11 @@ import {
   deliverUserReportAdminNotification,
 } from "@/lib/user-report-admin-notification";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
-
-function clean(value: unknown, limit: number) {
-  return typeof value === "string" ? value.trim().slice(0, limit) : "";
-}
+import {
+  SupportTextValidationError,
+  supportTextValidationPayload,
+  validateSupportReportText,
+} from "@/config/support-text-contract";
 
 export async function POST(request: Request) {
   const telemetry = createRequestTelemetry(request, "/api/user-reports", { operation: "user-report-save" });
@@ -21,11 +22,20 @@ export async function POST(request: Request) {
   catch { return Response.json({ error: "Invalid request" }, { status: 400 }); }
 
   const type: UserReportType | null = body.type === "bug" || body.type === "request" ? body.type : null;
-  const summary = clean(body.summary, 120);
-  const requestId = clean(body.requestId, 36).toLowerCase();
+  let text;
+  try {
+    text = validateSupportReportText(body);
+  } catch (error) {
+    if (error instanceof SupportTextValidationError) {
+      return Response.json(supportTextValidationPayload(error), { status: 400 });
+    }
+    throw error;
+  }
+  const requestId = typeof body.requestId === "string"
+    ? body.requestId.trim().toLowerCase()
+    : "";
   if (
     !type
-    || !summary
     || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
       .test(requestId)
   ) {
@@ -41,9 +51,7 @@ export async function POST(request: Request) {
     if (limited) return limited;
     const saved = await saveUserReport({
       type,
-      summary,
-      details: clean(body.details, 1200),
-      page: clean(body.page, 200),
+      ...text,
       playerId: player.id,
     }, {
       reportId: `report_${requestId}`,

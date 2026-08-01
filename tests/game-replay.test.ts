@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { resolveGameReplayPolicy } from "../lib/game-replay-policy.ts";
 import { gameReplayShareText } from "../lib/game-replay-types.ts";
+import { createGameDisplayMetadataSnapshot } from "../lib/game-display-metadata.ts";
 import { shouldRecordGameReplay } from "../lib/debug-replay.ts";
 
 test("通常試合は記録し、デバッグ試合は明示的にONにした場合だけ記録する", () => {
@@ -23,12 +24,19 @@ test("リプレイ設定値は安全な範囲へ制限する", () => {
 });
 
 test("共有文にはプレイバックの見どころを含め、説明本文を要求しない", () => {
+  const gameDisplayMetadata = createGameDisplayMetadataSnapshot({
+    builtIn: {
+      ja: [{ id: "tahoiya", title: "たほい屋", href: "/tahoiya" }],
+      en: [{ id: "tahoiya", title: "Tahoiya", href: "/tahoiya" }],
+    },
+    sdk: { ja: [], en: [] },
+  });
   const text = gameReplayShareText({
     gameType: "tahoiya",
     title: "未知語",
     resultLabel: "3点",
     shareHighlights: ["本物を見抜いたのは2人", "偽説明に集まった票は3票"],
-  });
+  }, gameDisplayMetadata);
   assert.match(text, /たほい屋/);
   assert.match(text, /3点/);
   assert.match(text, /本物を見抜いたのは2人/);

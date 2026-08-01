@@ -84,8 +84,9 @@ test("admin exposes environment-paired SDK adoption and independent dev to main"
 test("admin publication management includes adopted SDK games", () => {
   const panel = read("app/admin/GameOperationsPanel.tsx");
   const route = read("app/api/admin/game-operations/route.ts");
-  const operations = read("lib/game-operations.ts");
-  const store = read("lib/game-operations-store.ts");
+  const operations = read("lib/game-operations-format.ts");
+  const writeStore = read("lib/game-operations-write-store.ts");
+  const keys = read("lib/game-operations-keys.ts");
 
   assert.match(panel, /\[\.\.\.registry, \.\.\.sdkGames\]/);
   assert.match(panel, /SDK採用作品/);
@@ -93,9 +94,10 @@ test("admin publication management includes adopted SDK games", () => {
   assert.match(route, /games: games\.map/);
   assert.match(route, /validateGameOperationsInput\(body\.operations, games\)/);
   assert.match(operations, /additionalGames: GameOperationDefinition\[\]/);
-  assert.match(store, /normalizeGameOperations\(value, additionalGames\)/);
-  assert.match(store, /site-game-operations:v3:\$\{environment\}/);
-  assert.match(store, /unscopedGameOperationsKey/);
+  assert.match(writeStore, /normalizeGameOperations\(value, additionalGames\)/);
+  assert.match(keys, /gameOperationsNamespace = "site-game-operations"/);
+  assert.match(keys, /`\$\{gameOperationsNamespace\}:v3:\$\{environment\}`/);
+  assert.match(read("lib/game-operations-read.ts"), /unscopedGameOperationsKey/);
 });
 
 test("adopted SDK runtime catalogs are paired to their deployment environment", () => {

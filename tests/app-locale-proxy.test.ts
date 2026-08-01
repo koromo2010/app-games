@@ -10,6 +10,28 @@ test("言語付きURLを内部routeへrewriteする", () => {
   });
 });
 
+test("トップ直アクセスは /、/ja、/en のすべてで同じ内部ホームrouteへ到達する", () => {
+  assert.deepEqual(appLocaleRouteAction("/", null, "ja"), {
+    kind: "redirect",
+    locale: "ja",
+    pathname: "/ja",
+  });
+  assert.deepEqual(appLocaleRouteAction("/ja", null, "en"), {
+    kind: "rewrite",
+    locale: "ja",
+    pathname: "/",
+  });
+  assert.deepEqual(appLocaleRouteAction("/en", null, "ja"), {
+    kind: "rewrite",
+    locale: "en",
+    pathname: "/",
+  });
+  assert.deepEqual(appLocaleRouteAction("/", "ja", "en"), {
+    kind: "next",
+    locale: "ja",
+  });
+});
+
 test("内部rewrite後の再実行では同じ言語URLへredirectしない", () => {
   assert.deepEqual(appLocaleRouteAction("/games", "ja", "ja"), {
     kind: "next",

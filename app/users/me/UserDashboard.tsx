@@ -3,10 +3,9 @@
 import { AppLink as Link } from "@/app/components/AppLink";
 import { useEffect, useState, type FormEvent, type MouseEvent } from "react";
 import { savePersistentPlayerSession, savePlayerSession, type PlayerSession } from "@/lib/player-session";
-import type { PlayerGameResult, PlayerStatsResponse } from "@/lib/player-stats-store";
+import type { PlayerStatsResponse } from "@/lib/player-stats-store";
 import { GameReplayPanel } from "@/app/components/GameReplayPanel";
 import { PlayerAvatarEditor } from "@/app/components/PlayerAvatarEditor";
-import { gamesForLocale } from "@/app/games/game-catalog";
 import { defaultAvatarImage } from "@/lib/player-session";
 import { appLocales, type AppLocale } from "@/lib/app-locale";
 import { useAppLocale } from "@/app/components/AppLocaleProvider";
@@ -16,6 +15,10 @@ import {
   playerPasswordMaximumLength,
   playerPasswordMinimumLength,
 } from "@/lib/player-password-policy";
+import {
+  resolveGameDisplayMetadata,
+  type GameDisplayMetadataSnapshot,
+} from "@/lib/game-display-metadata";
 
 function formatDate(timestamp: number, locale: AppLocale) {
   return new Intl.DateTimeFormat(appIntlLocale(locale), {
@@ -33,10 +36,6 @@ function summaryItems(stats: PlayerStatsResponse | null, labels: readonly [strin
     [labels[1], stats?.month],
     [labels[2], stats?.total],
   ] as const;
-}
-
-function gameEntry(gameType: PlayerGameResult["gameType"], locale: AppLocale) {
-  return gamesForLocale(locale).find((game) => game.id === gameType);
 }
 
 function recoveryEmailErrorMessage(code: string | undefined, locale: AppLocale) {
@@ -90,10 +89,13 @@ const dashboardCopy = {
   en: { shareSaved: "The shared-log name setting was saved.", shareLocal: "The setting was saved on this device only. Sign in again and retry.", shareFailed: "Could not save the shared-log name setting.", localeActiveRoom: "You cannot change language while you are in a language-based game room. Leave or dissolve the room first.", localeFailed: "Could not save the language.", localeSaved: "Language saved.", networkFailed: "Connection failed. Please try again.", userLoadFailed: "Could not load your account.", statsLoadFailed: "Could not load stats. Other account settings remain available.", recoverySaved: "Recovery email saved.", deleteConfirm: "Delete the account, stats, and settings? This cannot be undone.", passwordIncorrect: "The password is incorrect.", deleteFailed: "Could not delete the account.", loading: "Loading My Page...", loginRequired: "Sign-in required", privatePage: "Only you can view your My Page.", back: "Back", avatarEditor: "Open avatar editor", player: "Player", pageSummary: "Stats, replays, and favorites", languageTitle: "Display and game language", languageHelp: "Language-based games only show, create, and join rooms matching this setting. It cannot be changed from a room screen.", accountLanguage: "Account language", languageNotice: "Language-based game content is currently available in Japanese only. With English selected, you cannot enter Japanese rooms until English content is added.", recoveryTitle: "Recovery email", registered: "Registered", unregistered: "Not registered", recoveryHelp: "Used to reset your password. If it matches an administrator email, debug access is also granted automatically. Your current password is required to change it.", email: "Email address", currentPassword: "Current password", saving: "Saving…", saveRecovery: "Save or change", shareTitle: "Name in shared logs", shareConsent: "Allow my display name to appear in Word Scale play logs shared by other participants", shareHelp: "Player names in the game are always visible. When this is off, external shares use labels such as PLAYER1 in join order. The setting applies from the next room you join.", stats: "Stats", today: "Today", month: "This month", total: "All time", loadingShort: "Loading", ratingLoading: "Loading ratings...", ratingEmpty: "Ratings appear after you play a game at least once.", recent: "Recent results", statsLoading: "Loading stats...", replayHelp: "Use the replay panel on the right to add highlights before sharing.", statsEmpty: "No stats yet.", deleteAccount: "Delete account", deleteHelp: "This deletes the account, stats, and settings and cannot be undone. Enter your current password to confirm.", deleting: "Deleting...", deletePermanently: "Delete permanently" },
 } as const;
 
-export function UserDashboard() {
+export function UserDashboard({
+  gameDisplayMetadata,
+}: {
+  gameDisplayMetadata: GameDisplayMetadataSnapshot;
+}) {
   const { locale, t } = useAppLocale();
   const copy = dashboardCopy[locale];
-  const localizedGames = gamesForLocale(locale);
   const [session, setSession] = useState<PlayerSession | null>(null);
   const [stats, setStats] = useState<PlayerStatsResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -596,12 +598,16 @@ export function UserDashboard() {
             <p className="mt-4 text-sm text-slate-500">{copy.ratingLoading}</p>
           ) : (
             <div className="mt-4 grid gap-2 sm:grid-cols-2">
-              {localizedGames.filter((game) => game.stats === "account" && typeof stats?.ratings[game.id as PlayerGameResult["gameType"]] === "number").map((game) => (
-                <div key={game.id} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm">
-                  <span className="font-semibold text-slate-700">{game.title}</span>
-                  <span className="font-black text-cyan-700">{stats?.ratings[game.id as PlayerGameResult["gameType"]]}</span>
-                </div>
-              ))}
+              {Object.entries(stats?.ratings ?? {}).flatMap(([gameType, rating]) => {
+                if (typeof rating !== "number") return [];
+                const game = resolveGameDisplayMetadata(gameDisplayMetadata, gameType, locale);
+                return [(
+                  <div key={gameType} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                    <span className="font-semibold text-slate-700">{game.displayName}</span>
+                    <span className="font-black text-cyan-700">{rating}</span>
+                  </div>
+                )];
+              })}
               {stats && Object.keys(stats.ratings).length === 0 && <p className="text-sm text-slate-500 sm:col-span-2">{copy.ratingEmpty}</p>}
             </div>
           )}
@@ -615,7 +621,7 @@ export function UserDashboard() {
                 {stats.recent.map((result) => (
                   <article key={result.id} className="rounded-lg bg-slate-50 px-3 py-2">
                     <div>
-                      <p className="text-sm font-bold text-slate-800">{gameEntry(result.gameType, locale)?.title ?? result.gameType} · {result.resultLabel}</p>
+                      <p className="text-sm font-bold text-slate-800">{resolveGameDisplayMetadata(gameDisplayMetadata, result.gameType, locale).displayName} · {result.resultLabel}</p>
                       <p className="text-xs text-slate-500">{formatDate(result.finishedAt, locale)}</p>
                     </div>
                   </article>
@@ -628,7 +634,7 @@ export function UserDashboard() {
           </div>
           {message && <p className="mt-4 rounded-md bg-cyan-50 px-3 py-2 text-xs font-semibold text-cyan-800" role="status">{message}</p>}
           </section>
-          <GameReplayPanel />
+          <GameReplayPanel gameDisplayMetadata={gameDisplayMetadata} />
         </div>
 
         <section className="mt-6 border-t border-rose-300/15 pt-4" aria-labelledby="delete-account-heading">

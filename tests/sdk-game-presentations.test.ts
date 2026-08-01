@@ -23,6 +23,21 @@ test("approved SDK game presentation can evolve without rewriting its package", 
   );
 });
 
+test("link-lines uses one locale-aware public name without changing its stable ID", () => {
+  const presentation = resolveApprovedSdkGamePresentation({
+    gameId: "link-lines",
+    fallbackTitle: {
+      ja: "旧名称",
+      en: "Old name",
+    },
+  });
+
+  assert.deepEqual(presentation.title, {
+    ja: "道つなぎ",
+    en: "Link Lines",
+  });
+});
+
 test("unconfigured approved SDK games keep manifest titles and placeholder art", () => {
   const fallbackTitle = {
     ja: "新しいゲーム",

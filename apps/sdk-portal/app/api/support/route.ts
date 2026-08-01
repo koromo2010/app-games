@@ -4,6 +4,12 @@ import {
   listCreatorSupportReports,
   replyToCreatorSupportReport,
 } from "@/lib/support-api";
+import {
+  SupportTextValidationError,
+  supportTextValidationPayload,
+  validateSupportReportText,
+  validateSupportText,
+} from "@/lib/support-text-contract";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -48,16 +54,16 @@ export async function POST(request: Request) {
     const type = body.type === "bug" || body.type === "request"
       ? body.type
       : null;
-    const summary = typeof body.summary === "string"
-      ? body.summary.trim().slice(0, 120)
-      : "";
-    const details = typeof body.details === "string"
-      ? body.details.trim().slice(0, 1_200)
-      : "";
-    const page = typeof body.page === "string"
-      ? body.page.trim().slice(0, 200)
-      : "";
-    if (!requestId || !type || !summary) {
+    let text;
+    try {
+      text = validateSupportReportText(body);
+    } catch (error) {
+      if (error instanceof SupportTextValidationError) {
+        return Response.json(supportTextValidationPayload(error), { status: 400 });
+      }
+      throw error;
+    }
+    if (!requestId || !type) {
       return Response.json(
         { error: "support_report_invalid" },
         { status: 400 },
@@ -68,9 +74,7 @@ export async function POST(request: Request) {
         playerId: account.playerId,
         requestId,
         type,
-        summary,
-        details,
-        page,
+        ...text,
       });
       return Response.json({ report }, { status: 201 });
     } catch {
@@ -84,12 +88,18 @@ export async function POST(request: Request) {
     ? body.reportId.trim()
     : "";
   const requestId = typeof body?.requestId === "string"
-    ? body.requestId.trim().slice(0, 120)
+    ? body.requestId.trim()
     : "";
-  const message = typeof body?.message === "string"
-    ? body.message.trim().slice(0, 3_000)
-    : "";
-  if (!reportId || !requestId || !message) {
+  let message;
+  try {
+    message = validateSupportText(body?.message, "reply", { required: true });
+  } catch (error) {
+    if (error instanceof SupportTextValidationError) {
+      return Response.json(supportTextValidationPayload(error), { status: 400 });
+    }
+    throw error;
+  }
+  if (!reportId || !requestId) {
     return Response.json({ error: "support_reply_invalid" }, { status: 400 });
   }
   try {

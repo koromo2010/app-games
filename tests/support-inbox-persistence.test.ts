@@ -8,17 +8,24 @@ import {
 } from "../lib/contact-store.ts";
 import {
   appendUserReportMessage,
+  loadUserReport,
   listUserReports,
   saveUserReport,
   updateUserReportStatus,
 } from "../lib/user-report-store.ts";
+import {
+  SUPPORT_TEXT_LIMITS,
+  SupportTextValidationError,
+} from "../config/support-text-contract.ts";
 
 class InMemoryRedisRest {
   readonly strings = new Map<string, string>();
   readonly lists = new Map<string, string[]>();
   readonly atomicInsertKeys: string[][] = [];
+  readonly commands: unknown[][] = [];
 
   execute(command: unknown[]) {
+    this.commands.push(command);
     const name = String(command[0]).toUpperCase();
     if (name === "GET") {
       return this.strings.get(String(command[1])) ?? null;
@@ -172,6 +179,81 @@ test("requester follow-ups return contacts and reports to open", async () => {
 
     assert.equal((await listContactMessages())[0]?.status, "open");
     assert.equal((await listUserReports())[0]?.status, "open");
+  } finally {
+    restore();
+  }
+});
+
+test("report details are stored whole through 12,000 characters", async () => {
+  const redis = new InMemoryRedisRest();
+  const restore = useRedis(redis);
+  try {
+    const reportId = "report_55555555-5555-4555-8555-555555555555";
+    const details = "詳".repeat(SUPPORT_TEXT_LIMITS.details);
+    await saveUserReport({
+      playerId: "player-test",
+      type: "bug",
+      summary: "全文保存",
+      details,
+      page: "/sdk-preview/test",
+    }, { reportId });
+
+    assert.equal((await loadUserReport(reportId))?.details, details);
+    assert.equal((await listUserReports())[0]?.details, details);
+  } finally {
+    restore();
+  }
+});
+
+test("12,001 report characters are rejected before any Redis command", async () => {
+  const redis = new InMemoryRedisRest();
+  const restore = useRedis(redis);
+  try {
+    await assert.rejects(
+      saveUserReport({
+        playerId: "player-test",
+        type: "bug",
+        summary: "上限超過",
+        details: "詳".repeat(SUPPORT_TEXT_LIMITS.details + 1),
+        page: "/test",
+      }),
+      (error: unknown) => error instanceof SupportTextValidationError
+        && error.field === "details"
+        && error.length === SUPPORT_TEXT_LIMITS.details + 1,
+    );
+    assert.deepEqual(redis.commands, []);
+  } finally {
+    restore();
+  }
+});
+
+test("an idempotent retry cannot mix a legacy cutoff body with a complete body", async () => {
+  const redis = new InMemoryRedisRest();
+  const restore = useRedis(redis);
+  try {
+    const reportId = "report_66666666-6666-4666-8666-666666666666";
+    const legacyCutoff = `${"調".repeat(1_200 - "同一revisi".length)}同一revisi`;
+    const complete = `${legacyCutoff}on以降の全文も保存される`;
+    await saveUserReport({
+      playerId: "player-test",
+      type: "bug",
+      summary: "冪等再試行",
+      details: legacyCutoff,
+      page: "/test",
+    }, { reportId });
+
+    await assert.rejects(
+      saveUserReport({
+        playerId: "player-test",
+        type: "bug",
+        summary: "冪等再試行",
+        details: complete,
+        page: "/test",
+      }, { reportId }),
+      /USER_REPORT_ID_CONFLICT/,
+    );
+    assert.equal((await loadUserReport(reportId))?.details, legacyCutoff);
+    assert.equal((await listUserReports()).length, 1);
   } finally {
     restore();
   }

@@ -1,0 +1,21 @@
+{
+  "name": "@game-fields/sdk-package-assets",
+  "version": "0.1.1",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@babel/parser": "^7.29.8",
+    "@babel/traverse": "^7.29.8",
+    "@babel/types": "^7.29.8",
+    "@types/babel__traverse": "^7.28.0",
+    "parse5": "^8.0.1",
+    "postcss": "^8.5.25",
+    "postcss-value-parser": "^4.2.0",
+    "srcset": "^5.0.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

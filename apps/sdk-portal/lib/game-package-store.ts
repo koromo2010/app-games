@@ -1,10 +1,14 @@
-import platformRelease from "../../../config/platform-release.json";
-import { parseGameFieldsPackageManifest } from "./game-package-manifest";
+import platformRelease from "../../../config/platform-release.json" with { type: "json" };
+import { parseGameFieldsPackageManifest } from "./game-package-manifest.ts";
+import {
+  saveValidatedGamePackage,
+  type ValidatedGamePackage,
+} from "./game-package-persistence.ts";
 import {
   prepareGamePackageUploadFiles,
   saveGamePackageFilesToGit,
-} from "./mock-git-store";
-import { ensureSdkSchema, sdkSql } from "./sdk-postgres";
+} from "./mock-git-store.ts";
+import { ensureSdkSchema, sdkSql } from "./sdk-postgres.ts";
 
 const MAX_PACKAGE_REVISIONS_PER_GAME = 100;
 
@@ -45,18 +49,34 @@ export async function saveCreatorGamePackage(input: {
   creatorSlug: string;
   gameId: string;
   files: unknown;
-}): Promise<SavedGamePackage> {
-  const files = prepareGamePackageUploadFiles(input.files);
-  const parsed = parseGameFieldsPackageManifest({
-    gameId: input.gameId,
+  validatedPackage?: ValidatedGamePackage;
+}, dependencies: {
+  ensureSchema?: typeof ensureSdkSchema;
+  sql?: ReturnType<typeof sdkSql>;
+  saveFiles?: typeof saveGamePackageFilesToGit;
+} = {}): Promise<SavedGamePackage> {
+  const files = input.validatedPackage
+    ? input.validatedPackage.files
+    : prepareGamePackageUploadFiles(input.files);
+  const ensureSchema = dependencies.ensureSchema ?? ensureSdkSchema;
+  const saveFiles = dependencies.saveFiles ?? saveGamePackageFilesToGit;
+  return saveValidatedGamePackage({
     files,
-  });
-  if (!isGamePackageReleaseSupported(parsed.manifest)) {
-    throw new Error("GAME_SDK_PACKAGE_RELEASE_MISMATCH");
-  }
-
-  await ensureSdkSchema();
-  const existingRows = await sdkSql()`
+    validatedPackage: input.validatedPackage,
+    afterValidation: () => {
+      const parsed = parseGameFieldsPackageManifest({
+        gameId: input.gameId,
+        files,
+      });
+      if (!isGamePackageReleaseSupported(parsed.manifest)) {
+        throw new Error("GAME_SDK_PACKAGE_RELEASE_MISMATCH");
+      }
+      return parsed;
+    },
+    persist: async (validated, parsed) => {
+  const database = dependencies.sql ?? sdkSql();
+  await ensureSchema();
+  const existingRows = await database`
     SELECT r.revision,
            r.package_root_sha256 AS "packageRootSha256",
            r.server_bundle_sha256 AS "serverBundleSha256",
@@ -93,7 +113,7 @@ export async function saveCreatorGamePackage(input: {
     };
   }
 
-  const revisionCountRows = await sdkSql()`
+  const revisionCountRows = await database`
     SELECT COUNT(r.revision)::int AS count
     FROM sdk_games g
     LEFT JOIN sdk_game_package_revisions r ON r.game_id = g.id
@@ -114,13 +134,14 @@ export async function saveCreatorGamePackage(input: {
     throw new Error("GAME_SDK_PACKAGE_REVISION_QUOTA_EXCEEDED");
   }
 
-  const revision = await saveGamePackageFilesToGit({
+  const revision = await saveFiles({
     instanceId: input.creatorSlug,
     gameId: input.gameId,
     files,
+    validatedPackage: validated,
   });
   const manifestJson = JSON.stringify(parsed.manifest.manifest);
-  const revisionRows = await sdkSql()`
+  const revisionRows = await database`
     INSERT INTO sdk_game_package_revisions (
       game_id, revision, package_root_sha256, server_bundle_sha256,
       app_set_source_sha256, manifest, sdk_package_version,
@@ -152,4 +173,6 @@ export async function saveCreatorGamePackage(input: {
     appSetSourceSha256: parsed.appSetSourceSha256,
     status: "ready-for-submission",
   };
+    },
+  });
 }

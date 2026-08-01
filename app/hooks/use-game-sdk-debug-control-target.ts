@@ -159,10 +159,13 @@ export function useGameSdkDebugControlTarget<TRoom extends RoomIdentity>(
     return next;
   }, [clearOperation, commit]);
 
-  const postRoom = useCallback((room: TRoom | null) => {
+  const postRoom = useCallback((
+    room: TRoom | null,
+    delivery: { viewerResolved?: boolean } = {},
+  ) => {
     const current = stateRef.current;
     const viewer = gameSdkDebugTargetViewer(current.target);
-    if (!room || viewer === "self") {
+    if (!room || viewer === "self" || delivery.viewerResolved) {
       optionsRef.current.postRoomSnapshot(room);
       return;
     }

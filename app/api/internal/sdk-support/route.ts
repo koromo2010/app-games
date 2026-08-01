@@ -18,9 +18,56 @@ import {
   saveUserReportDraft,
 } from "@/lib/user-report-draft-store";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
+import {
+  SupportTextValidationError,
+  supportTextValidationPayload,
+  validateSupportReportText,
+  validateSupportText,
+} from "@/config/support-text-contract";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+
+function reportText(value: unknown) {
+  try {
+    const input = value && typeof value === "object"
+      ? value as Record<string, unknown>
+      : {};
+    return { value: validateSupportReportText({
+      summary: input.summary,
+      details: input.details,
+      page: input.page,
+    }) };
+  } catch (error) {
+    if (error instanceof SupportTextValidationError) {
+      return {
+        response: Response.json(
+          supportTextValidationPayload(error),
+          { status: 400 },
+        ),
+      };
+    }
+    throw error;
+  }
+}
+
+function replyText(value: unknown) {
+  try {
+    return {
+      value: validateSupportText(value, "reply", { required: true }),
+    };
+  } catch (error) {
+    if (error instanceof SupportTextValidationError) {
+      return {
+        response: Response.json(
+          supportTextValidationPayload(error),
+          { status: 400 },
+        ),
+      };
+    }
+    throw error;
+  }
+}
 
 function authorize(request: Request) {
   try {
@@ -156,20 +203,13 @@ export async function POST(request: Request) {
     const type = body?.type === "bug" || body?.type === "request"
       ? body.type
       : null;
-    const summary = typeof body?.summary === "string"
-      ? body.summary.trim().slice(0, 120)
-      : "";
-    const details = typeof body?.details === "string"
-      ? body.details.trim().slice(0, 1_200)
-      : "";
-    const page = typeof body?.page === "string"
-      ? body.page.trim().slice(0, 200)
-      : "";
+    const validatedText = reportText(body);
+    if (validatedText.response) return validatedText.response;
+    const { summary, details, page } = validatedText.value!;
     if (
       !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
         .test(requestId)
       || !type
-      || !summary
     ) {
       return Response.json(
         { error: "support_report_invalid" },
@@ -222,16 +262,10 @@ export async function POST(request: Request) {
     const type = body?.type === "bug" || body?.type === "request"
       ? body.type
       : null;
-    const summary = typeof body?.summary === "string"
-      ? body.summary.trim().slice(0, 120)
-      : "";
-    const details = typeof body?.details === "string"
-      ? body.details.trim().slice(0, 1_200)
-      : "";
-    const page = typeof body?.page === "string"
-      ? body.page.trim().slice(0, 200)
-      : "";
-    if (!requestId || !type || !summary) {
+    const validatedText = reportText(body);
+    if (validatedText.response) return validatedText.response;
+    const { summary, details, page } = validatedText.value!;
+    if (!requestId || !type) {
       return Response.json(
         { error: "support_draft_invalid" },
         { status: 400 },
@@ -247,7 +281,16 @@ export async function POST(request: Request) {
         page,
       });
       return Response.json({ draft }, { status: 201 });
-    } catch {
+    } catch (error) {
+      if (
+        error instanceof Error
+        && error.message === "USER_REPORT_DRAFT_CONFLICT"
+      ) {
+        return Response.json(
+          { error: "support_draft_conflict" },
+          { status: 409 },
+        );
+      }
       return Response.json(
         { error: "support_draft_unavailable" },
         { status: 503 },
@@ -261,10 +304,10 @@ export async function POST(request: Request) {
     const requestId = typeof body?.requestId === "string"
       ? body.requestId.trim()
       : "";
-    const message = typeof body?.message === "string"
-      ? body.message.trim().slice(0, 3_000)
-      : "";
-    if (!reportId || !requestId || !message) {
+    const validatedMessage = replyText(body?.message);
+    if (validatedMessage.response) return validatedMessage.response;
+    const message = validatedMessage.value!;
+    if (!reportId || !requestId) {
       return Response.json(
         { error: "support_reply_draft_invalid" },
         { status: 400 },
@@ -288,6 +331,15 @@ export async function POST(request: Request) {
           { status: 404 },
         );
       }
+      if (
+        error instanceof Error
+        && error.message === "USER_REPORT_REPLY_DRAFT_CONFLICT"
+      ) {
+        return Response.json(
+          { error: "support_reply_draft_conflict" },
+          { status: 409 },
+        );
+      }
       return Response.json(
         { error: "support_reply_draft_unavailable" },
         { status: 503 },
@@ -301,16 +353,10 @@ export async function POST(request: Request) {
     const type = body?.type === "bug" || body?.type === "request"
       ? body.type
       : null;
-    const summary = typeof body?.summary === "string"
-      ? body.summary.trim().slice(0, 120)
-      : "";
-    const details = typeof body?.details === "string"
-      ? body.details.trim().slice(0, 1_200)
-      : "";
-    const page = typeof body?.page === "string"
-      ? body.page.trim().slice(0, 200)
-      : "";
-    if (!draftId || !type || !summary) {
+    const validatedText = reportText(body);
+    if (validatedText.response) return validatedText.response;
+    const { summary, details, page } = validatedText.value!;
+    if (!draftId || !type) {
       return Response.json(
         { error: "support_draft_approval_invalid" },
         { status: 400 },
@@ -341,6 +387,15 @@ export async function POST(request: Request) {
           { status: 404 },
         );
       }
+      if (
+        error instanceof Error
+        && error.message === "USER_REPORT_DRAFT_APPROVAL_CONFLICT"
+      ) {
+        return Response.json(
+          { error: "support_draft_approval_conflict" },
+          { status: 409 },
+        );
+      }
       return Response.json(
         { error: "support_draft_approval_unavailable" },
         { status: 503 },
@@ -351,10 +406,10 @@ export async function POST(request: Request) {
     const replyDraftId = typeof body?.replyDraftId === "string"
       ? body.replyDraftId.trim()
       : "";
-    const message = typeof body?.message === "string"
-      ? body.message.trim().slice(0, 3_000)
-      : "";
-    if (!replyDraftId || !message) {
+    const validatedMessage = replyText(body?.message);
+    if (validatedMessage.response) return validatedMessage.response;
+    const message = validatedMessage.value!;
+    if (!replyDraftId) {
       return Response.json(
         { error: "support_reply_draft_approval_invalid" },
         { status: 400 },
@@ -388,6 +443,15 @@ export async function POST(request: Request) {
           { status: 404 },
         );
       }
+      if (
+        error instanceof Error
+        && error.message === "USER_REPORT_MESSAGE_ID_CONFLICT"
+      ) {
+        return Response.json(
+          { error: "support_reply_draft_approval_conflict" },
+          { status: 409 },
+        );
+      }
       return Response.json(
         { error: "support_reply_draft_approval_unavailable" },
         { status: 503 },
@@ -398,15 +462,14 @@ export async function POST(request: Request) {
     ? body.reportId.trim()
     : "";
   const requestId = typeof body?.requestId === "string"
-    ? body.requestId.trim().slice(0, 120)
+    ? body.requestId.trim()
     : "";
-  const message = typeof body?.message === "string"
-    ? body.message.trim().slice(0, 3_000)
-    : "";
+  const validatedMessage = replyText(body?.message);
+  if (validatedMessage.response) return validatedMessage.response;
+  const message = validatedMessage.value!;
   if (
     !reportId
     || !requestId
-    || !message
   ) {
     return Response.json({ error: "support_reply_invalid" }, { status: 400 });
   }
@@ -441,6 +504,15 @@ export async function POST(request: Request) {
       return Response.json(
         { error: "support_thread_not_found" },
         { status: 404 },
+      );
+    }
+    if (
+      error instanceof Error
+      && error.message === "USER_REPORT_MESSAGE_ID_CONFLICT"
+    ) {
+      return Response.json(
+        { error: "support_reply_conflict" },
+        { status: 409 },
       );
     }
     return Response.json(

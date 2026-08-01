@@ -62,6 +62,9 @@ const previewSecurityFile = join(
 const previewLinksFile = join(root, "apps/sdk-portal/lib/preview-links.ts");
 const packageManifestFile = join(root, "apps/sdk-portal/lib/game-package-manifest.ts");
 const packageGitStoreFile = join(root, "apps/sdk-portal/lib/mock-git-store.ts");
+const packageAssetRoot = join(root, "packages/sdk-package-assets");
+const packageAssetSourceFile = join(packageAssetRoot, "src/index.ts");
+const packagePersistenceFile = join(root, "apps/sdk-portal/lib/game-package-persistence.ts");
 const promotionRouteFile = join(root, "apps/sdk-portal/app/api/internal/promotions/route.ts");
 const promotionServiceFile = join(root, "apps/sdk-portal/lib/game-package-promotion-service.ts");
 const starterSourceFiles = ["src", "tests"].flatMap((directory) =>
@@ -258,6 +261,26 @@ for (const token of [
 ]) {
   if (!packageGitStoreSource.includes(token)) {
     failures.push(`${relative(root, packageGitStoreFile)}: package subtreeの完全置換境界 ${token} がありません。`);
+  }
+}
+const packageAssetSource = readFileSync(packageAssetSourceFile, "utf8");
+for (const token of [
+  "auditGamePackageAssets",
+  "GAME_SDK_PACKAGE_ASSET_DYNAMIC_REFERENCE",
+  "GAME_SDK_PACKAGE_ASSET_PARSE_ERROR",
+  "isBrowserReadableGamePackageAsset",
+]) {
+  if (!packageAssetSource.includes(token)) {
+    failures.push(`${relative(root, packageAssetSourceFile)}: package asset境界 ${token} がありません。`);
+  }
+}
+if (/\bfetch\s*\(|\bprocess\.env\b|from\s+["'](?:redis|@vercel\/blob|@neondatabase\/serverless)["']/.test(packageAssetSource)) {
+  failures.push(`${relative(root, packageAssetSourceFile)}: pure validatorがnetwork・環境・永続化へ依存しています。`);
+}
+const packagePersistenceSource = readFileSync(packagePersistenceFile, "utf8");
+for (const token of ["saveValidatedGamePackage", "assertPreparedGamePackageAssets", "afterValidation", "persist"]) {
+  if (!packagePersistenceSource.includes(token)) {
+    failures.push(`${relative(root, packagePersistenceFile)}: 保存前asset gate ${token} がありません。`);
   }
 }
 const promotionRouteSource = [

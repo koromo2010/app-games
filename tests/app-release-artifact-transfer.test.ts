@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { registerHooks } from "node:module";
+import * as nodeModule from "node:module";
 import test from "node:test";
 import {
   parseGameFieldsPackageManifest,
@@ -13,6 +13,16 @@ import {
   type MockUploadFile,
   type PreparedUploadFile,
 } from "../apps/sdk-portal/lib/mock-git-store.ts";
+
+const registerHooks = (nodeModule as unknown as {
+  registerHooks(options: {
+    resolve(
+      specifier: string,
+      context: object,
+      nextResolve: (specifier: string, context: object) => unknown,
+    ): unknown;
+  }): void;
+}).registerHooks;
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
@@ -162,16 +172,41 @@ test("dev to main promotion copies and verifies an immutable package artifact", 
       saved = prepareGamePackageUploadFiles(input.files);
       return targetRevision;
     },
-    env: { SDK_DEVELOPMENT_INTERNAL_URL: "https://sdk-dev.example.test" },
+    env: { NODE_ENV: "test", SDK_DEVELOPMENT_INTERNAL_URL: "https://sdk-dev.example.test" },
   });
 
   assert.equal(result.sourceRevision, sourceRevision);
   assert.equal(result.revision, targetRevision);
   assert.equal(result.packageRootSha256, parsed.packageRootSha256);
+  const savedFiles = saved as PreparedUploadFile[] | null;
   assert.deepEqual(
-    saved?.map((file) => [file.path, file.bytes]),
+    savedFiles?.map((file) => [file.path, file.bytes]),
     files.map((file) => [file.path, file.bytes]),
   );
+});
+
+test("dev to main promotion rejects assets before target Git write", async () => {
+  const sourceRevision = "a".repeat(40);
+  const { files, parsed } = packageFixture();
+  const invalidFiles = prepareGamePackageUploadFiles([
+    ...files.filter((file) => file.path !== "index.html"),
+    { path: "index.html", content: "<!doctype html><img src='./missing.png'>", encoding: "utf-8" },
+  ]);
+  let targetWrites = 0;
+  await assert.rejects(transferDevelopmentPackageArtifact({
+    sourceCreatorSlug: "moi-lab",
+    sourceGameId: "portable-fixture",
+    revision: sourceRevision,
+    packageRootSha256: parsed.packageRootSha256,
+    serverBundleSha256: parsed.bundleSha256,
+    appSetSourceSha256: parsed.appSetSourceSha256,
+    manifest: parsed.manifest.manifest,
+  }, {
+    fetchRuntime: artifactFetch(invalidFiles, sourceRevision),
+    saveFiles: async () => { targetWrites += 1; return "b".repeat(40); },
+    env: { NODE_ENV: "test", SDK_DEVELOPMENT_INTERNAL_URL: "https://sdk-dev.example.test" },
+  }), (error) => error instanceof AppReleaseArtifactTransferError && error.code === "APP_RELEASE_ARTIFACT_PACKAGE_INVALID");
+  assert.equal(targetWrites, 0);
 });
 
 test("main can probe the authenticated development artifact source", async () => {
@@ -189,7 +224,7 @@ test("main can probe the authenticated development artifact source", async () =>
       assert.equal(url, "https://sdk-dev.example.test/api/internal/package-artifacts");
       return { "X-Test-Service": "signed" };
     },
-    env: { SDK_DEVELOPMENT_INTERNAL_URL: "https://sdk-dev.example.test/" },
+    env: { NODE_ENV: "test", SDK_DEVELOPMENT_INTERNAL_URL: "https://sdk-dev.example.test/" },
   });
   assert.equal(
     signedUrl,
@@ -221,6 +256,7 @@ test("main target probe verifies repository identity and push permission", async
       });
     }) as typeof fetch,
     env: {
+      NODE_ENV: "test",
       SDK_MOCK_GITHUB_REPOSITORY: "koromo2010/game-fields-sdk-mocks",
       SDK_MOCK_GITHUB_WRITE_TOKEN: "test-secret",
     },
@@ -240,6 +276,7 @@ test("main target probe reports inaccessible repository without exposing credent
         { status: 404 },
       )) as typeof fetch,
       env: {
+        NODE_ENV: "test",
         SDK_MOCK_GITHUB_REPOSITORY: "koromo2010/game-fields-sdk-mocks",
         SDK_MOCK_GITHUB_WRITE_TOKEN: "test-secret",
       },
@@ -276,6 +313,7 @@ test("main target probe reports an empty repository before package transfer", as
         });
       }) as typeof fetch,
       env: {
+        NODE_ENV: "test",
         SDK_MOCK_GITHUB_REPOSITORY: "koromo2010/game-fields-sdk-mocks",
         SDK_MOCK_GITHUB_WRITE_TOKEN: "test-secret",
       },
@@ -301,6 +339,7 @@ test("package transfer initializes an empty repository before creating its stora
     files,
   }, {
     env: {
+      NODE_ENV: "test",
       SDK_MOCK_GITHUB_REPOSITORY: "koromo2010/game-fields-sdk-mocks",
       SDK_MOCK_GITHUB_WRITE_TOKEN: "test-secret",
     },

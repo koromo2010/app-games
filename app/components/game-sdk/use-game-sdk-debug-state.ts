@@ -129,6 +129,8 @@ export function useGameSdkDebugState({
         next = (await runtime.sendCommand(next.code, {
           expectedRevision: next.revision,
           command: { type: "room/debug-auto-progress" },
+        }, {
+          finalViewer: debugViewer,
         })).room;
         if (
           target === "step"
@@ -159,7 +161,7 @@ export function useGameSdkDebugState({
     return shouldTrackGameSdkAiActivity({ usesLlm, moduleProfile })
       ? withAiActivity("SDKゲームのDEBUG自動進行", perform)
       : perform();
-  }, [moduleProfile, roomRef, runtime, setMessage, usesLlm]);
+  }, [debugViewer, moduleProfile, roomRef, runtime, setMessage, usesLlm]);
 
   const simulateDebugInputError = useCallback(async () => {
     const current = roomRef.current;
@@ -171,6 +173,8 @@ export function useGameSdkDebugState({
       await runtime.sendCommand(current.code, {
         expectedRevision: current.revision,
         command: { type: "room/debug-simulate-input-error" },
+      }, {
+        finalViewer: debugViewer,
       });
       setMessage("入力エラーの拒否を再現できませんでした。");
     } catch (error) {
@@ -186,7 +190,7 @@ export function useGameSdkDebugState({
       pendingActionRef.current = false;
       setPending(false);
     }
-  }, [handleRuntimeError, pendingActionRef, roomRef, runtime, setMessage, setPending]);
+  }, [debugViewer, handleRuntimeError, pendingActionRef, roomRef, runtime, setMessage, setPending]);
 
   return {
     debugActorSeat,

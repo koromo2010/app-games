@@ -9,6 +9,7 @@ import {
   type MockUploadFile,
 } from "./mock-git-store";
 import { sdkServiceHeaders } from "./sdk-service-auth";
+import { saveValidatedGamePackage } from "./game-package-persistence.ts";
 
 const REVISION_PATTERN = /^[a-f0-9]{40}$/;
 const SHA256_PATTERN = /^[a-f0-9]{64}$/;
@@ -234,38 +235,55 @@ export async function transferDevelopmentPackageArtifact(
     headers,
   });
   let prepared;
-  let parsed;
   try {
     prepared = prepareGamePackageUploadFiles(downloaded);
-    parsed = parseGameFieldsPackageManifest({
-      gameId: snapshot.sourceGameId,
-      files: prepared,
-    });
   } catch {
     throw new AppReleaseArtifactTransferError(
       "APP_RELEASE_ARTIFACT_PACKAGE_INVALID",
       422,
     );
   }
-  if (
-    parsed.packageRootSha256 !== snapshot.packageRootSha256
-    || parsed.bundleSha256 !== snapshot.serverBundleSha256
-    || parsed.appSetSourceSha256 !== snapshot.appSetSourceSha256
-    || !jsonValuesEqual(parsed.manifest.manifest, snapshot.manifest)
-  ) {
-    throw new AppReleaseArtifactTransferError(
-      "APP_RELEASE_ARTIFACT_HASH_MISMATCH",
-      422,
-    );
-  }
-  let revision: string;
+  let saved;
   try {
-    revision = await saveFiles({
-      instanceId: snapshot.sourceCreatorSlug,
-      gameId: snapshot.sourceGameId,
+    saved = await saveValidatedGamePackage({
       files: prepared,
+      afterValidation: () => {
+        const parsed = parseGameFieldsPackageManifest({
+          gameId: snapshot.sourceGameId,
+          files: prepared,
+        });
+        if (
+          parsed.packageRootSha256 !== snapshot.packageRootSha256
+          || parsed.bundleSha256 !== snapshot.serverBundleSha256
+          || parsed.appSetSourceSha256 !== snapshot.appSetSourceSha256
+          || !jsonValuesEqual(parsed.manifest.manifest, snapshot.manifest)
+        ) {
+          throw new AppReleaseArtifactTransferError(
+            "APP_RELEASE_ARTIFACT_HASH_MISMATCH",
+            422,
+          );
+        }
+        return parsed;
+      },
+      persist: async (validated, parsed) => ({
+        parsed,
+        revision: await saveFiles({
+          instanceId: snapshot.sourceCreatorSlug,
+          gameId: snapshot.sourceGameId,
+          files: validated.files,
+          validatedPackage: validated,
+        }),
+      }),
     });
   } catch (error) {
+    if (error instanceof AppReleaseArtifactTransferError) throw error;
+    if (error instanceof Error && error.message.startsWith("GAME_SDK_PACKAGE_ASSET_")) {
+      throw new AppReleaseArtifactTransferError(
+        "APP_RELEASE_ARTIFACT_PACKAGE_INVALID",
+        422,
+        error.message,
+      );
+    }
     const diagnostic = gamePackageGitWriteFailureDiagnostic(error);
     console.error("[app-release-artifact-transfer] target write failed", {
       code: diagnostic.code,
@@ -278,7 +296,7 @@ export async function transferDevelopmentPackageArtifact(
       diagnostic.code,
     );
   }
-  if (!REVISION_PATTERN.test(revision)) {
+  if (!REVISION_PATTERN.test(saved.revision)) {
     throw new AppReleaseArtifactTransferError(
       "APP_RELEASE_ARTIFACT_TARGET_REVISION_INVALID",
       503,
@@ -286,10 +304,10 @@ export async function transferDevelopmentPackageArtifact(
   }
   return {
     sourceRevision: snapshot.revision,
-    revision,
-    packageRootSha256: parsed.packageRootSha256,
-    serverBundleSha256: parsed.bundleSha256,
-    appSetSourceSha256: parsed.appSetSourceSha256,
-    manifest: parsed.manifest.manifest,
+    revision: saved.revision,
+    packageRootSha256: saved.parsed.packageRootSha256,
+    serverBundleSha256: saved.parsed.bundleSha256,
+    appSetSourceSha256: saved.parsed.appSetSourceSha256,
+    manifest: saved.parsed.manifest.manifest,
   };
 }
