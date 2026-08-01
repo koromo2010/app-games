@@ -1,4 +1,4 @@
-# Game Fields SDK v0.1.0 最小リファレンス
+# Game Fields SDK v0.1.1 最小リファレンス
 
 ## SDK handshake
 
@@ -35,6 +35,16 @@ import {
   createGameSdkHttpClientRuntime,
   GameSdkHttpClientRuntimeError,
 } from "@game-fields/game-sdk/client-runtime";
+import {
+  requireGameSdkContentSource,
+  requireGameSdkLlmGateway,
+} from "@game-fields/game-sdk/resources";
+import type {
+  GameSdkContentDifficulty,
+  GameSdkWordContent,
+  GameSdkWordPairContent,
+  GameSdkWordDefinitionContent,
+} from "@game-fields/game-sdk/content-source";
 ```
 
 ## Manifest
@@ -46,6 +56,34 @@ import {
 - `playMode`: `online-room` または `local-pass-and-play`
 - `minimumPlayers` / `maximumPlayers`
 - debug、観戦、replay、rating、LLMの利用有無
+- `settings`: 共通設定画面へ表示する、このゲームの設定項目
+- `rules`: 共通Shellへ表示する`ja` / `en`のルール一覧
+
+`minimumPlayers`は公開カタログと通常Roomで実際に開始できる最少人数です。1人Previewが必要な場合だけ`previewMinimumPlayers: 1`を併記し、debug権限のPreview actorに限定して人数条件を緩和します。公開要件をPreview都合で1人へ書き換えません。
+
+### 共通設定画面へ出す項目
+
+共通設定画面は、`manifest.settings`へ宣言した項目だけを表示します。「最大人数」「ラウンド数」「難易度」「モード」等はゲームごとの任意項目であり、Platformが固定追加しません。
+
+`online-room`で必須なのは`platformRole: "time-limit"`を持つ制限時間1項目だけです。その`defaultValue`と`options`もゲーム側で決めます。`0`を選択肢へ含める場合は制限なしです。最大人数またはラウンド数を共通Shellの人数上限・表示にも使うゲームだけ、それぞれ`platformRole: "maximum-players"`、`"round-count"`を宣言します。
+
+```ts
+settings: [
+  {
+    key: "timeLimitSeconds",
+    label: { ja: "1手の制限時間", en: "Turn time limit" },
+    type: "select",
+    defaultValue: 45,
+    platformRole: "time-limit",
+    options: [0, 15, 45, 90],
+    unit: { ja: "秒", en: "s" },
+  },
+]
+```
+
+`defaultSettings`は宣言した全項目と同じキーを持ち、各値を`defaultValue`と一致させます。共通画面で変更された値はRoom設定として保存・同期され、クライアントでは`GameFieldsRoom`の`view.common.settings`、AppSetでは`room.settings`から参照します。iframe内へ同じ設定UIを重複配置しません。
+
+正式Runtimeでは、利用者が現在の宣言済み設定をゲーム別の個人既定値として保存できます。Room作成と`room/update-settings`の両方で、Platformはmanifestにないキーを除去し、型違い・未宣言のselect値を安全な既定値へ戻し、数値を宣言範囲へ収めます。この最終検査はAppSetの`normalizeSettings`後にも実行されます。
 
 ## SDK基本セット + AppSet
 
@@ -84,13 +122,135 @@ SDK基本セットが次を所有します。
 - `code`、revision、人数上限
 - 開始前へ戻す中断、結果後の再戦
 - 共通permissionsと内部player IDを除いた共通View
-- 本体統合後の認証、保存、active room、一覧、Realtime、解散
+- Platform側の認証、保存、active room、一覧、Realtime、解散
 
 AppSetが所有するのはゲーム固有state、ゲーム固有Command、フェーズ・勝敗、ゲーム固有Viewだけです。AppSetは`code`、revision、参加者配列、共通設定を更新できません。
 
+## 共通timerと手番完了
+
+締切、残り時間、受付猶予、時間切れCommandはSDK基本セットが所有します。ゲーム固有クライアントは表示位置と見た目だけを決め、締切時刻や残り時間を正本として更新しません。
+
+AppSetは部屋設定から制限時間を返し、正常に1手を採用したtransitionで`timer: "reset"`を返します。共通RuntimeはCommand成功後だけ新しい`startedAt`と`deadlineAt`を生成します。入力エラー、AI失敗、権限拒否、revision競合ではtransition自体が保存されないため、時間もリセットされません。
+
+```ts
+const appSet = defineGameSdkOnlineRoomAppSet({
+  // ...
+  timer: {
+    durationSeconds(settings) {
+      return settings.timeLimitSeconds; // 0は制限なし
+    },
+    graceMs: 1_500,
+  },
+  expireAppTurn(room) {
+    return {
+      phase: "playing",
+      app: applyServerTimeout(room.app),
+      timer: "reset",
+      timedOutPlayerIds: [currentPlayerId(room)],
+    };
+  },
+  applyAppCommand(room, command, context) {
+    const next = applyAcceptedTurn(room, command, context);
+    return {
+      phase: next.complete ? "result" : "playing",
+      app: next.app,
+      timer: next.complete ? "stop" : "reset",
+    };
+  },
+});
+```
+
+閲覧者別RoomViewでは`room.view.common.timer`から`durationSeconds`、`startedAt`、`deadlineAt`、`turnSequence`を読めます。表示はゲーム画面内の任意位置へ置けますが、ブラウザからtimer時刻を送ってサーバー正本を上書きしてはいけません。
+
+正式RoomではShellが`room/expire-timer`を要求し、Runtimeがサーバー時刻、
+turn sequence、graceを再検証してから`expireAppTurn`を実行します。2回連続
+時間切れの本人だけ5秒制限となり、本人の`room/recover-timeout`で復帰します。
+
+## Word DB resource
+
+単語・ペア・読み・語釈はGame Fields共通Word DBから取得します。ゲームpackageへ初期Word DB、固定単語配列、DB client、接続文字列、SQLを入れません。
+
+クライアントの難易度設定は次の値を保存します。
+
+| 表示 | 値 |
+| --- | --- |
+| 簡単 | `easy` |
+| 普通 | `normal` |
+| 難しい | `hard` |
+
+```ts
+type Settings = {
+  wordDifficulty: GameSdkContentDifficulty;
+};
+
+const contentSource = requireGameSdkContentSource(context.resources);
+const words = await contentSource.drawWords({
+  pool: "general-words",
+  difficulty: room.settings.wordDifficulty,
+  count: 8,
+  excludeIds: room.app.usedWordIds,
+});
+```
+
+### Request
+
+| API | フィールド |
+| --- | --- |
+| `drawWords` | `pool: "general-words"`（一般語彙）、`count: 1..100`、`difficulty?`、`excludeIds?`、`excludeSurfaces?` |
+| `drawWordPairs` | `pool: "word-pairs"`、`count: 1..100`、`difficulty?`、`excludeIds?` |
+| `findDefinitions` | `wordIds`。`drawWords`またはpair内のwordから返されたopaque IDだけを渡す |
+
+`general-words`は単語ゲーム向けに審査した一般語彙です。`word-pairs`の正式名は「審査済みワードペア」です。低認知語彙と、たほい屋の未審査候補・審査結果・採用済みお題はPlatform内部専用で、SDKからは取得できません。表示名と説明は`GAME_SDK_CONTENT_POOL_DEFINITIONS`を参照します。
+
+### Response
+
+| 型・フィールド | 説明 |
+| --- | --- |
+| `GameSdkWordContent.id` | 除外・語釈取得用のopaque ID。内部DB IDではない |
+| `surface` | 表示用の単語表記 |
+| `reading` | 登録されている場合の読み。なければ`null` |
+| `difficulty` | 返却項目自身の`easy | normal | hard` |
+| `tags` | 公開pool等の分類 |
+| `GameSdkWordPairContent.id` | ペア単位の既出除外用opaque ID |
+| `first` / `second` | ペアを構成する2語 |
+| `relation` | 登録されている場合の短い関係説明 |
+| `GameSdkWordDefinitionContent.wordId` | 語釈取得元のopaque word ID |
+| `definition` | 短いゲーム用語釈 |
+
+`general-words`は、普通で`normal` 80% + `easy` 20%、難しいで`hard` 50% + `normal` 40% + `easy` 10%を混ぜます。このためrequestの難易度と、個々の返却項目の`difficulty`が異なる場合があります。`word-pairs`は指定tierから取得します。
+
+取得に失敗した場合、ローカル固定語彙へfallbackせず、現在の入力・手番を維持して再試行可能なエラーを返します。
+
+## LLM resource
+
+本実装では、ブラウザは「AI回答を生成する」ゲームCommandと質問・履歴等のゲーム入力だけを送ります。審査済みAppSetのserver側が固定promptを組み立て、Game Fieldsから注入された共通LLM gatewayを呼びます。
+
+```ts
+const llm = requireGameSdkLlmGateway(context.resources);
+const generated = await llm.generate({
+  task: "answer-question",
+  prompt: buildReviewedPrompt(command.question, room.app.history),
+  promptVersion: "answer-question-v1",
+  quality: "standard",
+  responseJsonSchema: {
+    name: "answer",
+    schema: {
+      type: "object",
+      properties: {
+        answer: { type: "string" },
+      },
+      required: ["answer"],
+      additionalProperties: false,
+    },
+  },
+});
+```
+
+ゲーム側はprovider、モデル、APIキー、課金元、endpointを指定しません。Game Fieldsが利用者のpersonal／Game Fields提供枠／共有無料枠、provider fallback、認証、レート制限、観測を処理します。promptは20,000文字、JSON Schemaは32,000文字、timeoutは45秒が上限です。Previewでは`quality: "standard"`だけを利用します。
+
 ## 共通モジュールprofile
 
-最初のモックは`GAME_SDK_MODULE_CATALOG`の全件を必須としてPlatformが保存します。`mock/preview.json`、AppSet、manifestへmodule採否を表す独自キーを書いてはいけません。
+最初の候補packageは`GAME_SDK_MODULE_CATALOG`の全件を必須としてPlatformが保存します。`mock/preview.json`、AppSet、manifestへmodule採否を表す独自キーを書いてはいけません。
 
 制作AIが利用できるMCPは`get_game_module_requirements`による参照だけです。profileの変更はSDK-devの人間向け管理に限定します。AIは内部分類を推測せず、人間のレビュー後に返される`requiredModuleIds`をすべて使うAppSetを実装します。
 
@@ -105,7 +265,55 @@ type Command = GameSdkOnlineRoomCommand<Settings, AppCommand>;
 type RoomView = GameSdkOnlineRoomView<Settings, AppView>;
 ```
 
-共通Lifecycle Commandは`room/join`、`room/leave`、`room/update-settings`、`room/abort`、`room/rematch`です。AppSetのCommandは`game/start`のようにゲーム固有namespaceを使い、`room/*`を定義しません。
+共通Lifecycle Commandは`room/join`、`room/leave`、`room/update-settings`、`room/abort`、`room/rematch`、`room/confirm-lobby-return`、`room/expire-timer`、`room/recover-timeout`です。結果後はhostの`room/rematch`でRoomをロビーへ戻し、各参加者の`room/confirm-lobby-return`が揃うまで次ゲームを開始できません。
+
+DEBUG対応ゲームでは、権限付きhostだけが外側Shellから次の共通操作を使えます。
+
+- lobbyで`room/debug-add-dummy`、`room/debug-remove-dummy`
+- playingで`room/debug-auto-progress`、`room/debug-simulate-timeout`
+- lobby／playing／resultで`room/debug-set-connected`、`room/debug-simulate-input-error`
+- 閲覧者別Viewの読取専用切替
+
+`room/debug-auto-progress`と`room/debug-simulate-timeout`はAppSetの`expireAppTurn`を経由し、ゲーム固有stateのphase文字列を直接書き換えません。閲覧視点は表示用Viewだけを切り替え、Commandのactorには使いません。切断再現は共通参加者状態だけを更新し、入力エラー再現は保存前に拒否してrevisionを進めません。進行中断は既存の`room/abort`を使います。
+
+AppSetのCommandは`game/start`のようにゲーム固有namespaceを使い、`room/*`を定義しません。
+
+## 標準結果
+
+結果へ進むtransitionは`defineGameSdkStandardResult`で全参加者の順位、得点、
+勝者、終了理由を返します。Platformはこれを共通結果、戦績、rating、
+playbackへ使用します。提出がない場合にPlatformが参加順から仮結果を作る
+ことはありません。
+
+`reason`は集計・監査用の機械コードです。利用者へは直接表示されない前提で、
+日本語・英語と安全な履歴を`presentation`へ分けます。
+
+```ts
+standardResult: defineGameSdkStandardResult({
+  winnerIds,
+  rankings,
+  reason: "turn-limit-reached",
+  presentation: {
+    reason: {
+      ja: "手数上限に達したため終了",
+      en: "The turn limit was reached",
+    },
+    highlights: [
+      { ja: "8手で決着", en: "Finished in 8 turns" },
+    ],
+    playLog: room.app.publicHistory.map((entry, index) => ({
+      ja: `${index + 1}手目：${entry.publicLabelJa}`,
+      en: `Turn ${index + 1}: ${entry.publicLabelEn}`,
+    })),
+  },
+}, {
+  participantIds: room.players.map((player) => player.id),
+})
+```
+
+`highlights`は共有文へ使える最大3件、`playLog`は参加者本人の詳細履歴へ
+保存できる最大50件です。どちらも結果時点で公開済みの情報だけを使い、
+内部player ID、prompt、未公開の秘密、同意のない参加者名を含めません。
 
 ## Trusted actor
 
@@ -172,30 +380,54 @@ const watch = runtime.watchRoom(room.code, {
 watch.close();
 ```
 
-`dissolveRoom(code)`はhostがロビーまたは結果後に使い、`dissolveHostedRooms()`は同じ条件でhost所有Roomを整理します。`watchRoom`のWebSocket通知はゲームID、部屋コード、revision、時刻だけを運び、Room状態や秘密情報を運びません。接続不能時はポーリングへフォールバックします。
+`dissolveRoom(code)`はhostがロビーまたは結果後に使い、`dissolveHostedRooms()`は同じ条件でhost所有Roomを整理します。結果Roomでは戦績・rating・playbackのresult outboxを完了してからRoomを削除し、保存が処理中ならRoomを保持して再試行可能なエラーを返します。`watchRoom`のWebSocket通知はゲームID、部屋コード、revision、時刻だけを運び、Room状態や秘密情報を運びません。接続不能時はポーリングへフォールバックします。
 
-Client Runtimeへactor ID、表示名、debug資格を渡す引数はありません。Game Fieldsが同一originの署名済みHttpOnly Cookieから本人を解決し、server moduleの`context.actor`へ注入します。404のRoom取得は`null`、認証・競合・入力拒否はstatusと安全なcodeを持つ`GameSdkHttpClientRuntimeError`になります。
+Client Runtimeへactor ID、表示名、debug資格を渡す引数はありません。Game Fieldsが同一originの署名済みHttpOnly Cookieから本人を解決し、server moduleの`context.actor`へ注入します。非参加者は参加用のlobby Viewだけを匿名で取得でき、playing／resultのViewと`room/join`以外のCommandは拒否されます。404のRoom取得は`null`、認証・競合・入力拒否はstatusと安全なcodeを持つ`GameSdkHttpClientRuntimeError`になります。
 
-未審査の隔離PreviewはこのRoom APIへ接続しません。Previewで保存したHTMLやmetadataがserver moduleとして動的に実行されることもありません。
+PreviewはこのRoom APIへ接続し、candidate packageのAppSetを隔離server runnerで実行します。未審査コードへDB、Redis、認証Cookie、環境変数、外部networkは渡しません。AppSetが要求できる外部処理は、SDK protocolで宣言されたPlatform resource effectだけです。
 
-## Preview preset API
+## Package Room bridge
 
-SDK Previewでは`window.GameFieldsPreset`が自動で利用できます。`script`タグを自分で追加する必要はありません。
+packageの`index.html`へ`window.GameFieldsRoom`が自動注入されます。
 
 ```ts
-type PreviewPlatformState = {
-  roomCode: string;
-  phase: "lobby" | "playing" | "result";
-  debugOpen: boolean;
-  debugAccess: boolean;
-  viewerId: string;
-  players: Array<{ id: string; name: string; role: "host" | "player"; dummy: boolean }>;
+type GameFieldsRoomBridge<TRoomView> = {
+  getSnapshot(): GameSdkRoomSnapshot<TRoomView> | null;
+  subscribe(
+    listener: (snapshot: GameSdkRoomSnapshot<TRoomView> | null) => void,
+  ): () => void;
+  send(command: { type: string; [key: string]: unknown }): Promise<
+    GameSdkRoomSnapshot<TRoomView>
+  >;
 };
-
-GameFieldsPreset.getState(): PreviewPlatformState;
-GameFieldsPreset.command(name: string, payload?: Record<string, unknown>): void;
-GameFieldsPreset.subscribe(listener): () => void;
-GameFieldsPreset.registerGame(adapter): () => void;
 ```
 
-標準Commandは`debug:toggle`、`dummy:add`、`dummy:remove`、`viewer:set`、`phase:set`、`game:start`、`game:abort`、`game:auto-progress`、`game:rematch`です。ゲーム固有コードは`registerGame`で`start`、`abort`、`autoProgress`、`rematch`、`onStateChange`だけを接続します。
+```js
+GameFieldsRoom.subscribe((snapshot) => {
+  render(snapshot?.view?.app, snapshot?.view?.common);
+});
+
+await GameFieldsRoom.send({
+  type: "game/submit",
+  answer: answerInput.value
+});
+```
+
+Commandに`expectedRevision`、actor ID、認証情報を含める必要はありません。外側Shellが現在のrevisionを付け、同一originの署名済みsessionからactorを解決します。
+
+クライアントへ`contentSource`や`llm`は公開されません。Word DBとLLMはAppSetの`context.resources`から使います。effectが失敗した場合はCommand全体を失敗させ、Room state、revision、手番、timerを更新しません。
+
+`window.GameFieldsPreset.room`は移行用aliasです。`GameFieldsPreset.registerGame()`によるブラウザ内ゲーム進行と`GameFieldsPreset.resources`は昇格packageでは利用できません。
+
+## Hash固定と昇格
+
+`npm run build:game-package`は次を1つのpackageへまとめます。
+
+- クライアントassets
+- `server.bundle.js`
+- `source/app-set.ts`
+- `source/manifest.ts`
+- `source/server-module.ts`
+- `game-fields-package.json`
+
+manifestにはserver bundleとAppSet sourceのSHA-256を記録します。Portalはupload時に実ファイルから再計算し、Game Fields運営者がmain採用時に同じrevision・同じhashをコピーします。採用処理はAppSetを翻訳、修正、再buildしません。SDK作品は本体コードの検証環境であるdevを経由しません。

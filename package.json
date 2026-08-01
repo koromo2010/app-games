@@ -1,6 +1,6 @@
 {
   "name": "game-fields-my-first-game",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "description": "A game package created with the Game Fields SDK starter.",
@@ -9,15 +9,19 @@
     "test": "npm run build && node --test dist/tests/*.test.js",
     "demo": "npm run build && node dist/src/demo.js",
     "check:mock": "node scripts/check-mock.mjs",
-    "publish:mock": "node scripts/publish-mock.mjs",
-    "check": "npm test",
+    "publish:mock:legacy": "node scripts/publish-mock.mjs",
+    "diagnose:promotion": "node scripts/check-promotion-readiness.mjs",
+    "build:game-package": "node scripts/build-game-package.mjs",
+    "publish:game-package:legacy": "npm run build:game-package && node scripts/publish-game-package.mjs",
+    "check": "npm run check:mock && npm test && npm run diagnose:promotion",
     "package": "node scripts/build-submission.mjs"
   },
   "dependencies": {
-    "@game-fields/game-sdk": "file:vendor/game-fields-game-sdk-0.1.0.tgz"
+    "@game-fields/game-sdk": "file:vendor/game-fields-game-sdk-0.1.1.tgz"
   },
   "devDependencies": {
     "@types/node": "^20",
+    "esbuild": "^0.28.1",
     "typescript": "^5"
   },
   "engines": {
