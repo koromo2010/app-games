@@ -17,7 +17,7 @@
     "package": "node scripts/build-submission.mjs"
   },
   "dependencies": {
-    "@game-fields/game-sdk": "file:vendor/game-fields-game-sdk-0.1.1.tgz"
+    "@game-fields/game-sdk": "file:vendor/game-fields-game-sdk-0.2.0.tgz"
   },
   "devDependencies": {
     "@types/node": "^20",
