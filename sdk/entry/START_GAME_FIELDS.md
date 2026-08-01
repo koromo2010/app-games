@@ -46,6 +46,7 @@ capabilityVector:
 MODE_UNSUPPORTED: "このゲーム制作にはコード操作が必要です。ChatGPTのWorkモードまたはCodexを開き、このファイルをもう一度添付してください。"
 LEGACY_THREAD: "このチャットでは制作を再開できません。古いDownloadMeまたは古い`__SDK_PLUGIN_NAME__` tool schemaが会話へ固定されています。プラグイン管理画面で`__SDK_PLUGIN_NAME__`を更新したあと、現在のチャットを閉じて新しいWork／Codexチャットを作成し、`__SDK_PLUGIN_NAME__`を選択して__DOWNLOAD_ME_FILE_NAME__だけを添付してください。保存済みの制作者環境とゲームは、新しいチャットから再取得できます。"
 PLUGIN_STALE: "`__SDK_PLUGIN_NAME__`のtool schemaがこのDownloadMeより古いため、このチャットではSDK接続確認を実行できません。更新ボタンを押しても既存チャットのtool schemaは差し替わりません。プラグイン管理画面で`__SDK_PLUGIN_NAME__`を更新したあと、現在のチャットを閉じて新しいWork／Codexチャットを作成し、`__SDK_PLUGIN_NAME__`を選択して__DOWNLOAD_ME_FILE_NAME__だけを添付してください。"
+PLUGIN_SETUP: "プラグイン一覧に`__SDK_PLUGIN_NAME__`がないため、新規プラグインとして登録します。プラグイン管理画面で「新規プラグイン」を選び、名前を`__SDK_PLUGIN_NAME__`、MCP URLを`__SDK_PORTAL_BASE_URL__/api/mcp`として作成してください。作成後に「接続」を押してGame FieldsのOAuth認証を完了し、続けて「更新」を押してください。接続済みになったら、このチャットで`__SDK_PLUGIN_NAME__`を選択してください。認証情報やトークンを会話へ貼り付ける必要はありません。"
 SLUG_REQUEST: "あなた専用のGame Fields SDK環境で使うURL名を決めます。`yusuke-lab`のように、小文字英数字とハイフンで希望名を教えてください。"
 MOCK_REVIEW: "モックを作成しました。実際に画面を見て、変えたいところはありますか？ 気になる部分をそのまま教えてください。特になければ「これでOK」と答えてください。"
 HANDSHAKE_FAILURE_PREFIX: "SDKハンドシェイクに失敗しました:"
@@ -142,9 +143,12 @@ IF discovered(source=C0.plugin.name, any_tool)
   HALT.
 
 IF NOT discovered(source=C0.plugin.name, any_tool):
-  REQUIRE user to add/select Game Fields App.
+  REQUIRE user to add/select C0.plugin.name.
   IF plugin_candidate_absent:
-    REQUIRE user to enable developer mode and connect C0.transport.mcp as OAuth App.
+    REQUIRE user to enable developer mode.
+    EMIT C1.PLUGIN_SETUP.
+    REQUIRE user to create C0.plugin.name with C0.transport.mcp,
+      press Connect, complete OAuth, then press Update.
   HALT until connection is available.
 
 IF surface == Codex AND sdk_mcp_not_connected:

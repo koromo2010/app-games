@@ -100,6 +100,9 @@ const allowedRuntimeImports = new Set([
   "node:crypto",
 ]);
 const failures = [];
+const platformRelease = JSON.parse(
+  readFileSync(join(root, "config/platform-release.json"), "utf8"),
+);
 
 for (const absoluteFile of sdkFiles) {
   const file = relative(root, absoluteFile);
@@ -448,7 +451,11 @@ if (runtimePackageJson.name !== "@game-fields/game-runtime") {
 if (runtimePackageJson.private !== true || runtimePackageJson.license !== "UNLICENSED") {
   failures.push("packages/game-runtime/package.json: 内部RuntimeはprivateかつUNLICENSEDである必要があります。");
 }
-if (JSON.stringify(runtimePackageJson.dependencies ?? {}) !== JSON.stringify({ "@game-fields/game-sdk": "0.1.1" })) {
+const runtimeDependencies = runtimePackageJson.dependencies ?? {};
+if (
+  Object.keys(runtimeDependencies).length !== 1
+  || runtimeDependencies["@game-fields/game-sdk"] !== platformRelease.sdkPackageVersion
+) {
   failures.push("packages/game-runtime/package.json: 内部Runtime coreは公開SDK以外へ依存できません。");
 }
 

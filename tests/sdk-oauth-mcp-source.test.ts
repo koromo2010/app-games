@@ -69,6 +69,9 @@ test("SDK MCP challenges unauthenticated callers and scopes mock publication", (
   assert.match(mcp, /name: "list_creator_environments"/);
   assert.match(mcp, /name === "list_creator_environments"/);
   assert.match(mcp, /listCreatorEnvironments\(playerId\)/);
+  assert.match(mcp, /SDK_INSTANCE_REGISTRY_NOT_CONFIGURED: Game Fields運営側/);
+  assert.match(mcp, /SDK_INSTANCE_REGISTRY_UNAVAILABLE: 制作者URL機能へ一時的に接続できません/);
+  assert.match(mcp, /sdkToolErrorMessage\(error\)/);
   assert.match(mcp, /includes\("sdk:mock"\)/);
   assert.match(mcp, /authenticateCreatorOwner\(slug, playerId\)/);
   assert.doesNotMatch(mcp, /expectedPackageRootSha256/);
@@ -84,6 +87,20 @@ test("SDK MCP challenges unauthenticated callers and scopes mock publication", (
   assert.match(mcp, /parseSdkMockPreviewManifest\(gameId, args\.files\)/);
   assert.match(mcp, /manifest = EXCLUDED\.manifest/);
   assert.match(mcp, /creatorUrl, gameUrl, previewUrl: gameUrl/);
+});
+
+test("SDK Portal health probes the instance registry without reserving a slug", () => {
+  const health = read("apps/sdk-portal/app/api/health/route.ts");
+  const client = read("apps/sdk-portal/lib/instance-registry-client.ts");
+  const registry = read("apps/sdk-portal/lib/instance-registry.ts");
+
+  assert.match(health, /probeSdkInstanceRegistry/);
+  assert.match(health, /SDK_INSTANCE_REGISTRY_NOT_CONFIGURED/);
+  assert.match(health, /SDK_INSTANCE_REGISTRY_UNAVAILABLE/);
+  assert.match(client, /\["PING"\]/);
+  assert.match(client, /AbortSignal\.timeout\(3_000\)/);
+  assert.match(registry, /sdkInstanceRegistryCommand as command/);
+  assert.doesNotMatch(health, /reserveInstanceSlug|\["SET"/);
 });
 
 test("SDK Help uses one source for the creator UI and AI answers", () => {
@@ -140,6 +157,9 @@ test("DownloadMe contains no embedded credential placeholders", () => {
   assert.match(entry, /"environment": "__SDK_ENVIRONMENT__"/);
   assert.match(entry, /name: "__SDK_PLUGIN_NAME__"/);
   assert.match(entry, /__DOWNLOAD_ME_FILE_NAME__/);
+  assert.match(entry, /PLUGIN_SETUP/);
+  assert.match(entry, /「新規プラグイン」/);
+  assert.match(entry, /press Connect, complete OAuth, then press Update/);
   assert.match(entry, /accepted.*true/);
   assert.doesNotMatch(entry, /gameapp-dev/);
   assert.doesNotMatch(entry, /__GAME_FIELDS_AGENT_TOKEN__/);

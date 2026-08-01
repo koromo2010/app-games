@@ -270,7 +270,7 @@ try {
     "game-fields-submission/src/app-set.ts",
     "game-fields-submission/src/server-module.ts",
     "game-fields-submission/tests/game-contract.test.ts",
-    "game-fields-submission/vendor/game-fields-game-sdk-0.1.1.tgz",
+    `game-fields-submission/vendor/game-fields-game-sdk-${platformRelease.sdkPackageVersion}.tgz`,
   ]) {
     if (!submissionEntries.includes(required)) {
       throw new Error(`Submission archive is missing ${required}.`);

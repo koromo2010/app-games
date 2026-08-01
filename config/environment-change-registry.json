@@ -1,6 +1,6 @@
 {
     "schemaVersion": 1,
-    "updatedAt": "2026-07-27",
+    "updatedAt": "2026-08-02",
     "changes": [
           {
                   "id": "2026-07-26-app-games-dev-site-admin-password",
@@ -153,10 +153,10 @@
                   "environment": "Production",
                   "sensitive": true,
                   "operation": "link",
-                  "status": "requested",
+                  "status": "cancelled",
                   "redeployRequired": true,
                   "temporary": false,
-                  "note": "既存sdk-dev-redisをSDK Portal間だけで共用し、mainはsdk:production、developはsdk:development名前空間を使う。"
+                  "note": "2026-08-02にVercelへ実登録したキーはUPSTASH_REDIS_REST_URLだったため、この別名でのLink依頼は取り消した。コードの互換読取だけを残す。"
           },
           {
                   "id": "2026-07-26-sdk-production-redis-token-link",
@@ -166,10 +166,36 @@
                   "environment": "Production",
                   "sensitive": true,
                   "operation": "link",
-                  "status": "requested",
+                  "status": "cancelled",
                   "redeployRequired": true,
                   "temporary": false,
-                  "note": "既存sdk-dev-redisをSDK Portal間だけで共用し、mainはsdk:production、developはsdk:development名前空間を使う。"
+                  "note": "2026-08-02にVercelへ実登録したキーはUPSTASH_REDIS_REST_TOKENだったため、この別名でのLink依頼は取り消した。コードの互換読取だけを残す。"
+          },
+          {
+                  "id": "2026-08-02-sdk-production-upstash-redis-url",
+                  "key": "UPSTASH_REDIS_REST_URL",
+                  "project": "app-games-sdk",
+                  "branch": "main",
+                  "environment": "Production",
+                  "sensitive": true,
+                  "operation": "set",
+                  "status": "registered",
+                  "redeployRequired": true,
+                  "temporary": false,
+                  "note": "既存sdk-dev-redisのREST URLを本番SDK PortalのProductionだけへ登録済み。mainはsdk:production名前空間を使う。再デプロイとhealth確認は未実施。"
+          },
+          {
+                  "id": "2026-08-02-sdk-production-upstash-redis-token",
+                  "key": "UPSTASH_REDIS_REST_TOKEN",
+                  "project": "app-games-sdk",
+                  "branch": "main",
+                  "environment": "Production",
+                  "sensitive": true,
+                  "operation": "set",
+                  "status": "registered",
+                  "redeployRequired": true,
+                  "temporary": false,
+                  "note": "既存sdk-dev-redisのREST Tokenを本番SDK PortalのProductionだけへ登録済み。Preview、本体、dev本体には追加しない。再デプロイとhealth確認は未実施。"
           },
           {
                   "id": "2026-07-27-app-games-dev-sdk-account-link-secret",

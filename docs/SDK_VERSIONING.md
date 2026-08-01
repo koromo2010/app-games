@@ -2,7 +2,7 @@
 
 `config/platform-release.json`を、Game Fields本体とSDK配布のリリース互換性に関する版の正本とする。環境別のPortal、プラグイン、DownloadMe名、Starter branchは`config/sdk-release-profiles.json`を正本とし、版と環境名を一つの設定へ混在させない。
 
-現在の開発候補はPlatform／SDK package `0.1.1`、SDK handshake `1`、SDK contract `1`、Room schema `2`である。Runner Runtimeは`quickjs-wasm-v1`、Resource ProtocolとClient Bridgeはそれぞれ`1`である。`0.1.1`はportable AppSet、正式Preview Room、hash固定昇格を追加する。ゲームのSDK contract schemaは維持する一方、Room開始時の固定契約とsettings snapshotを保存するため、Platform内部のRoom envelopeだけをv2へ上げる。
+現在の開発候補はPlatform／SDK package `0.1.2`、SDK handshake `1`、SDK contract `2`、Room schema `2`である。Runner Runtimeは`quickjs-wasm-v1`、Resource ProtocolとClient Bridgeはそれぞれ`1`である。`0.1.1`はportable AppSet、正式Preview Room、hash固定昇格を追加した。`0.1.2`は新規プラグイン登録案内とSDK instance registryの配備前health検査を追加し、ゲーム契約schemaとRoom schemaは変更しない。
 
 ## バージョンの役割
 

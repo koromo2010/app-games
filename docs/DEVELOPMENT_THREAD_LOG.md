@@ -3546,3 +3546,36 @@ active HEADは基準SHAのままで、active commit、製品`origin` push、PR�
 
 - ローカルbranch `fix/downloadme-environment-profiles`だけを変更した。commit、push、PR、Actions、Vercel Deployment、DB／Redis／Blob write、ChatGPT側プラグインの登録・名称変更は実施していない。
 - 配備前にChatGPT側でproduction `game-fields`、development `dev-game-fields`を実在させ、各canonical MCP endpointへ接続する必要がある。旧DownloadMeは履歴として保持し、削除・上書きしていない。
+
+## 2026-08-02 — SDK初回導入Intake #1／#2のクリティカルブロッカー修正
+
+### 利用者からの要望
+
+- SDK導入を実際に進め、詰まった点をIntakeへ順番に記録する方針だったが、`game-fields`がプラグイン検索へ出ないIntake #1と、制作者URL予約が`SDK_INSTANCE_REGISTRY_NOT_CONFIGURED`で完全停止するIntake #2はクリティカルとして先行修正する。
+- push、Vercel Deployment、Redeployは個別許可まで行わず、ローカル実装・検証と必要なProduction変数の保存だけをまとめる。
+
+### 判断
+
+- 初回利用者には既存プラグインの「更新」だけでなく、Developer mode、新規プラグイン名、環境別canonical MCP URL、`接続 → OAuth認証 → 更新`を一続きで案内する。
+- 予約処理とhealthで同じinstance registry REST clientを使う。healthは書込みを行わない`PING`だけとし、資格未設定と接続不能を別codeでfail closedにする。
+- Redis資格は変数名のfamilyごとにURL／Tokenを一組で解決し、`SDK_REDIS_REST_*`、`KV_REST_API_*`、`UPSTASH_REDIS_REST_*`の異なるfamilyを混ぜない。fetch例外、非2xx、不正JSONは秘密を含まない`SDK_INSTANCE_REGISTRY_UNAVAILABLE`へ正規化する。
+- Platform／DownloadMe／SDK packageの版は同じSemVerを使い、今回の候補を`0.1.2`とする。productionは`game-fields`、developmentは`dev-game-fields`を維持する。
+
+### 実施結果
+
+- `START_GAME_FIELDS.md`へ、production／development profileから生成する新規プラグイン作成案内を追加した。
+- SDK Portalの`/api/health`へ3秒上限のinstance registry probeを追加し、通常の予約・確定処理も同じclientへ集約した。MCP tool errorも未設定／一時接続不能を利用者向けの固定文へ変換する。
+- Vercel `app-games-sdk`のProductionへ、既存`sdk-dev-redis`の`UPSTASH_REDIS_REST_URL`と`UPSTASH_REDIS_REST_TOKEN`をSensitiveで登録した。値は記録していない。`app-games-sdk-preview`、本体、dev本体には追加していない。新Deploymentは作成していない。
+- 当初案内した`SDK_REDIS_REST_URL`／`TOKEN`は実登録名ではなかったため、環境変更registryの旧依頼を取消し、実際の`UPSTASH_*`2件を`registered`として記録した。
+
+### 検証
+
+- focused regression 18/18 PASS。`UPSTASH_*`実登録名、資格family不混在、未設定、network例外、不正応答、healthのread-only `PING`、production／development別の新規プラグイン案内を確認した。
+- `npm run lint` PASS、`npm test` 847/847 PASS、`npm run build` PASS（Platform 78ページ）。
+- SDK Portalは`local/main`と`local/develop`でmigrationをskipしDB接続・DDL・DML 0のまま、両profileとも15ページbuild PASS。SDK Previewもmain／developの両profileで5ページbuild PASS。
+- `npm run verify`、`npm run test:sdk-package`、development／production両profileの`npm run test:sdk-starter`、`git diff --check` PASS。旧`0.1.1`を直書きしていたSDK境界・外部tarball・Starter提出物の検査は、版の正本から`0.1.2`を読むよう共通化した。
+
+### 未対応・保留
+
+- detached HEAD上のローカル差分であり、commit、push、PR、Actions、Vercel Deployment／Redeploy、dev／production実機確認は未実施。
+- 次の外部反映前に対象Project、branch、環境、想定Deployment数と他Projectへの波及を確定し、明示許可を得る。配備後は`app-games-sdk`の`/api/health`で現行schemaと`instanceRegistry.status: ok`／`namespace: production`を確認し、その後に同じ制作者アカウントからURL名`krm`の予約を再試行する。

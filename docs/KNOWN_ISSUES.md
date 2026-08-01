@@ -6,11 +6,21 @@
 
 ## 2026-08-02 DownloadMeがproduction URLとdevelopmentプラグインを混在させる
 
-状態: ローカル修正済み・外部プラグイン名変更／配備待ち（2026-08-02、回帰テスト追加）
+状態: 修正済み・dev／main配備済み（2026-08-02、回帰テストあり）
 
 従来の`config/platform-release.json`はproduction／developmentで共有する版情報に、development専用の`gameapp-dev`、`sdk-starter-dev`、整数版`ver17`を混在させていた。production PortalがURLとenvironmentだけをproductionへ差し替えてもプラグイン名とStarter refがdevのまま残り、DownloadMeのhandshakeが`ENVIRONMENT_MISMATCH`で停止した。また両環境が同じファイル名だったため、人間も添付先を判別できなかった。
 
-版情報と環境profileを分離し、DownloadMeはPlatformと同じSemVerを使う。productionは`game-fields`／`GameFieldsDownloadMe-ver<SemVer>.md`／`sdk-starter`、developmentは`dev-game-fields`／`GameFieldsDownloadMe-dev-ver<SemVer>.md`／`sdk-starter-dev`へ固定した。Portal、MCP、handshake、Room URL、Starter生成も同じresolverを使い、未知または競合するbranch／origin／明示channelはdevへfallbackせず停止する。旧整数版は履歴として保持し、各Deploymentの現行SemVer版へredirectする。ローカルコードの配備とChatGPT側プラグイン表示名の登録／変更は未実施である。
+版情報と環境profileを分離し、DownloadMeはPlatformと同じSemVerを使う。productionは`game-fields`／`GameFieldsDownloadMe-ver<SemVer>.md`／`sdk-starter`、developmentは`dev-game-fields`／`GameFieldsDownloadMe-dev-ver<SemVer>.md`／`sdk-starter-dev`へ固定した。Portal、MCP、handshake、Room URL、Starter生成も同じresolverを使い、未知または競合するbranch／origin／明示channelはdevへfallbackせず停止する。旧整数版は履歴として保持し、各Deploymentの現行SemVer版へredirectする。GitHubの現行基準はdevelop `a8885d370e2047ad9f5daba8cf1655e411584e98`、main `ed8c518eb6eb2eea80d8aaf0024b9d94ac16a448`で、mainはdevelopを1 commit先行して同じ製品treeを配備している。
+
+## 2026-08-02 SDK初回導入がプラグイン不在と本番instance registry未設定で停止する
+
+状態: ローカル修正・全回帰PASS／Vercel変数登録済み・未Redeploy／dev・main配備待ち
+
+新規利用者が`game-fields`を検索しても候補が存在しない場合、DownloadMeは「Game Fields Appを追加」とだけ指示し、Developer modeの新規プラグイン作成、環境別MCP URL、`接続 → OAuth認証 → 更新`の順序を具体的に案内していなかった。手動作成後のhandshakeと既存環境一覧は成功したが、初回の制作者URL `krm`を予約する段階で`SDK_INSTANCE_REGISTRY_NOT_CONFIGURED`となり、環境作成は0件のまま停止した。
+
+本番`app-games-sdk`にはinstance registry用Redis資格がなく、handshakeだけが成功して初回予約で停止していた。2026-08-02に既存`sdk-dev-redis`の`UPSTASH_REDIS_REST_URL`と`UPSTASH_REDIS_REST_TOKEN`を本番PortalのProduction scopeだけへ登録した。mainは`sdk:production:`、developは`sdk:development:`へ分離するコードを使い、Previewや本体へRedisは追加しない。変数登録後の新Deploymentと実機確認はまだ行っていない。
+
+DownloadMe 0.1.2は、プラグイン候補不在時に環境profileから新規作成手順を生成する。instance registry REST clientを予約処理とhealthで共用し、healthは3秒上限の`PING`だけを実行して、資格未設定と接続不能を別codeで503にする。これにより、handshakeだけが成功して初回予約で初めて設定漏れが発覚する配備を正常扱いしない。
 
 ## 2026-08-01 SDK packageの動的asset参照が保存後監査まで持ち越される
 

@@ -102,6 +102,19 @@ function negotiateProtocolVersion(value: unknown) {
     : SUPPORTED_PROTOCOL_VERSIONS[0];
 }
 
+function sdkToolErrorMessage(error: unknown) {
+  const message = error instanceof Error
+    ? error.message
+    : "SDK操作に失敗しました。";
+  if (message.includes("SDK_INSTANCE_REGISTRY_NOT_CONFIGURED")) {
+    return "SDK_INSTANCE_REGISTRY_NOT_CONFIGURED: Game Fields運営側の制作者URL機能が未設定です。URLの予約・環境作成は行われていません。設定復旧後に再試行してください。";
+  }
+  if (message.includes("SDK_INSTANCE_REGISTRY_UNAVAILABLE")) {
+    return "SDK_INSTANCE_REGISTRY_UNAVAILABLE: 制作者URL機能へ一時的に接続できません。URLの予約・環境作成は行われていません。時間を置いて再試行してください。";
+  }
+  return message;
+}
+
 async function callTool(name: string, args: Record<string, unknown>, playerId: string, origin: string) {
   if (name === "get_sdk_handshake") {
     return textResult(negotiateSdkPortalHandshake(args, origin));
@@ -330,7 +343,7 @@ export async function POST(request: Request) {
     if ((name === "publish_mock" || name === "publish_game_package") && !auth.scope.split(" ").includes("sdk:mock")) return rpcError(body.id, -32001, "Insufficient scope", 403);
     const args = body.params?.arguments && typeof body.params.arguments === "object" ? body.params.arguments as Record<string, unknown> : {};
     try { return rpc(body.id, await callTool(name, args, auth.playerId, base)); }
-    catch (error) { return rpc(body.id, { content: [{ type: "text", text: error instanceof Error ? error.message : "SDK操作に失敗しました。" }], isError: true }); }
+    catch (error) { return rpc(body.id, { content: [{ type: "text", text: sdkToolErrorMessage(error) }], isError: true }); }
   }
   if (body.method === "ping") return rpc(body.id, {});
   return rpcError(body.id, -32601, "Method not found");

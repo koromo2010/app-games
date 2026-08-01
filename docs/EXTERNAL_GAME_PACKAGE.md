@@ -116,7 +116,7 @@ revisionを直して再提出し、SDK共通契約の不足はSDKの説明、生
 
 SDK v1の公開型、認可済みactorを受けるserver module契約、閲覧者別presentation、メモリMock Runtime、manifest検証、生成雛形、import境界検査は`packages/game-sdk`と`scripts/create-game.mjs`へ実装済み。さらに、Online Roomの共通state・Lifecycle・安全な共通Viewを所有するSDK基本セットと、ゲーム固有state・Command・Viewだけを登録する`GameSdkOnlineRoomAppSet`の合成APIを実装した。Cookie認証、Redis、DB、管理機能には依存していない。
 
-公開package名は`@game-fields/game-sdk`で、npm安定版は`0.1.0`、developの昇格基盤候補は`0.1.1`である。独立TypeScript build、SemVer、用途別の公開`exports`、公開ファイル限定、tarballの外部install・実行検査を持つ。MIT License、`publishConfig.access=public`、provenanceを固定する。
+公開package名は`@game-fields/game-sdk`で、npm安定版は`0.1.0`、リポジトリの次期公開候補は`0.1.2`である。独立TypeScript build、SemVer、用途別の公開`exports`、公開ファイル限定、tarballの外部install・実行検査を持つ。MIT License、`publishConfig.access=public`、provenanceを固定する。
 
 npm workspacesと`apps/sdk-portal`の独立Next.jsアプリは実装済みで、SDKの目的、現在の契約層、提出から`main`公開までの管理ゲートを説明する。未審査mockの実行は別アプリ`apps/sdk-preview`、短時間署名grantは非公開`packages/sdk-preview-auth`へ分離した。Portalとpreviewは`npm run build:sdk`、`npm run build:sdk-preview`で独立buildする。
 

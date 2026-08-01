@@ -55,6 +55,8 @@ SDK制作者はPortalの`/support`から本人の報告を一覧・閲覧・追�
 
 DownloadMeはPlatformと同じSemVerを使い、別の整数counterを持たない。productionは`game-fields`、`GameFieldsDownloadMe-ver<platformVersion>.md`、`https://sdk.game-fields.com`、`sdk-starter`、developmentは`dev-game-fields`、`GameFieldsDownloadMe-dev-ver<platformVersion>.md`、`https://sdk-dev.game-fields.com`、`sdk-starter-dev`を一組として扱う。版の正本は`config/platform-release.json`、環境別名称の正本は`config/sdk-release-profiles.json`である。Portal、MCP initialize、handshake、Starter manifest、DownloadMe生成は同じprofile resolverを使い、未知または競合する環境信号では停止する。旧整数版と別環境のSemVer版URLは、各Deploymentの現行ファイルへ一時redirectする。
 
+DownloadMeは、対象プラグインが一覧に存在しない初回利用者へ、Developer mode、新規プラグイン名、環境別のcanonical MCP URL、`接続 → OAuth認証 → 更新`を一続きで案内する。既存プラグインの更新と初回作成を混同しない。SDK Portalの`/api/health`はDB schemaに加えて、制作者URL予約に使うinstance registryへ書込みを行わない`PING`を実施し、未設定を`SDK_INSTANCE_REGISTRY_NOT_CONFIGURED`、接続不能を`SDK_INSTANCE_REGISTRY_UNAVAILABLE`として503で区別する。
+
 ### SDKアプリの昇格と復元
 
 devとmainの採用済みSDKアプリ情報は環境別DBに分離する。管理画面には次の独立した経路がある。

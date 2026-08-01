@@ -4,6 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const root = process.cwd();
+const sdkPackageJson = JSON.parse(
+  readFileSync(join(root, "packages/game-sdk/package.json"), "utf8"),
+);
 const fixtureRoot = mkdtempSync(join(tmpdir(), "game-fields-sdk-pack-"));
 const npmEnvironment = {
   ...process.env,
@@ -241,7 +244,7 @@ if (
   ));
   if (
     installedPackage.name !== "@game-fields/game-sdk"
-    || installedPackage.version !== "0.1.1"
+    || installedPackage.version !== sdkPackageJson.version
     || installedPackage.private === true
     || installedPackage.license !== "MIT"
     || installedPackage.publishConfig?.access !== "public"

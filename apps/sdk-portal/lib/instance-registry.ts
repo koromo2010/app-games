@@ -3,6 +3,7 @@ import {
   sdkInstanceRegistryKey,
   sdkInstanceRegistryReadKeys,
 } from "@/lib/instance-registry-namespace";
+import { sdkInstanceRegistryCommand as command } from "@/lib/instance-registry-client";
 import { ensureSdkSchema, sdkSql } from "@/lib/sdk-postgres";
 import { portalBaseUrl } from "@/lib/oauth-store";
 import {
@@ -22,20 +23,6 @@ export function validateInstanceSlug(slug: string) {
   if (!SLUG_PATTERN.test(slug)) return "URL名は3〜32文字の小文字英数字とハイフンで指定してください。";
   if (RESERVED.has(slug)) return "このURL名はシステムで使用するため予約できません。";
   return null;
-}
-
-function redisConfig() {
-  const url = process.env.SDK_REDIS_REST_URL ?? process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.SDK_REDIS_REST_TOKEN ?? process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REDIS_REST_TOKEN;
-  if (!url || !token) throw new Error("SDK instance registry is not configured.");
-  return { url: url.replace(/\/$/, ""), token };
-}
-
-async function command(parts: readonly string[]) {
-  const { url, token } = redisConfig();
-  const response = await fetch(url, { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(parts), cache: "no-store" });
-  if (!response.ok) throw new Error("SDK instance registry request failed.");
-  return response.json() as Promise<{ result: unknown }>;
 }
 
 function tokenHash(value: string) {

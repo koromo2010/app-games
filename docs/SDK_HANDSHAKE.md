@@ -37,9 +37,9 @@ Portalの`get_sdk_handshake`へ送る`requiredCapabilities`はDownloadMe記載�
   },
   "expected": {
     "environment": "development",
-    "platformVersion": "0.1.1",
-    "sdkPackageVersion": "0.1.1",
-    "sdkContractVersion": 1
+    "platformVersion": "0.1.2",
+    "sdkPackageVersion": "0.1.2",
+    "sdkContractVersion": 2
   },
   "requiredCapabilities": [
     "oauth2-pkce",
@@ -67,10 +67,10 @@ Portalの`get_sdk_handshake`へ送る`requiredCapabilities`はDownloadMe記載�
   "surface": "creator-portal",
   "environment": "development",
   "release": {
-    "platformVersion": "0.1.1",
-    "sdkPackageVersion": "0.1.1",
-    "sdkContractVersion": 1,
-    "supportedSdkContractVersions": [1],
+    "platformVersion": "0.1.2",
+    "sdkPackageVersion": "0.1.2",
+    "sdkContractVersion": 2,
+    "supportedSdkContractVersions": [1, 2],
     "roomSchemaVersion": 2
   },
   "capabilities": [

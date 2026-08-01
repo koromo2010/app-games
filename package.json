@@ -1,6 +1,6 @@
 {
     "name": "app-games",
-    "version": "0.1.1",
+    "version": "0.1.2",
     "private": true,
     "workspaces": [
         "apps/*",
@@ -45,8 +45,8 @@
         "vocabulary:import-general-game-classifications": "node --experimental-strip-types scripts/import-legacy-general-game-classifications.ts"
     },
     "dependencies": {
-        "@game-fields/game-runtime": "0.1.1",
-        "@game-fields/sdk-service-auth": "0.1.1",
+        "@game-fields/game-runtime": "0.1.2",
+        "@game-fields/sdk-service-auth": "0.1.2",
         "@neondatabase/serverless": "^1.1.0",
         "@simplewebauthn/browser": "^13.3.0",
         "@simplewebauthn/server": "^13.3.2",

@@ -29,9 +29,9 @@ SDK利用者は、完成したゲーム固有package、manifest、テスト、�
 
 ### リポジトリを持たない試用者
 
-`npm run build:sdk-starter`で、ChatGPTへそのまま渡せる`game-fields-sdk-starter-v0.1.1.zip`を生成できる。ZIPには`@game-fields/game-sdk`のtarball、初回プロンプト、`AGENTS.md`、`GAME_SPEC.md`、APIリファレンス、AppSetと正式client、契約テスト、完走デモ、昇格診断、game package builderを含む。
+`npm run build:sdk-starter`で、ChatGPTへそのまま渡せる`game-fields-sdk-starter-v0.1.2.zip`を生成できる。ZIPには`@game-fields/game-sdk`のtarball、初回プロンプト、`AGENTS.md`、`GAME_SPEC.md`、APIリファレンス、AppSetと正式client、契約テスト、完走デモ、昇格診断、game package builderを含む。
 
-試用者はdevelopment Portalの`GameFieldsDownloadMe-dev-ver0.1.1.md`を、`dev-game-fields`更新後に作成した新しいWork／Codexチャットへ単独で渡し、そこから同じSemVerの`sdk-starter-dev`を取得する。productionでは`GameFieldsDownloadMe-ver0.1.1.md`、`game-fields`、`sdk-starter`の組合せを使う。DownloadMeの版は独立した`ver17`のような整数ではなくPlatform版と同じSemVerであり、次回Platform `0.2.0`ではそれぞれ`GameFieldsDownloadMe-dev-ver0.2.0.md`と`GameFieldsDownloadMe-ver0.2.0.md`になる。既存チャットのtool schemaはプラグイン更新後も差し替わらないため、旧DownloadMeの会話へ最新版を追加して継続しない。保存済み制作者環境は新しいチャットの`list_creator_environments`から再取得できる。DownloadMeは人間向けの説明書ではなく、AIが解釈する宣言的な実行契約とする。人間向けの導入説明はSDK Portalへ置き、DownloadMe内では状態、前提条件、禁止条件、tool呼出し、停止条件を機械的な識別子で記述する。安定版`sdk-starter`は現行npm安定版と同期させ、development候補で上書きしない。最初に仕様を相談して`GAME_SPEC.md`を確定したあと、同じフォルダ内だけを実装させる。`npm run test:sdk-starter`は別ディレクトリへの展開、同梱SDK install、型検査、契約テスト、デモ完走、提出ZIPまでを検査する。
+試用者はdevelopment Portalの`GameFieldsDownloadMe-dev-ver0.1.2.md`を、`dev-game-fields`更新後に作成した新しいWork／Codexチャットへ単独で渡し、そこから同じSemVerの`sdk-starter-dev`を取得する。productionでは`GameFieldsDownloadMe-ver0.1.2.md`、`game-fields`、`sdk-starter`の組合せを使う。DownloadMeの版は独立した`ver17`のような整数ではなくPlatform版と同じSemVerであり、次回Platform `0.2.0`ではそれぞれ`GameFieldsDownloadMe-dev-ver0.2.0.md`と`GameFieldsDownloadMe-ver0.2.0.md`になる。既存チャットのtool schemaはプラグイン更新後も差し替わらないため、旧DownloadMeの会話へ最新版を追加して継続しない。保存済み制作者環境は新しいチャットの`list_creator_environments`から再取得できる。DownloadMeは人間向けの説明書ではなく、AIが解釈する宣言的な実行契約とする。人間向けの導入説明はSDK Portalへ置き、DownloadMe内では状態、前提条件、禁止条件、tool呼出し、停止条件を機械的な識別子で記述する。安定版`sdk-starter`は現行npm安定版と同期させ、development候補で上書きしない。最初に仕様を相談して`GAME_SPEC.md`を確定したあと、同じフォルダ内だけを実装させる。`npm run test:sdk-starter`は別ディレクトリへの展開、同梱SDK install、型検査、契約テスト、デモ完走、提出ZIPまでを検査する。
 
 ## AIが編集してよい領域
 
@@ -89,7 +89,7 @@ MobileLayoutは将来追加する。DesktopLayout内でホスト判定や秘密�
 
 MCP `initialize`、OAuth認証、Game Fields SDK handshakeは別の責務である。DownloadMeから始めるAIは最初に`get_sdk_handshake`へ環境、Platform版、SDK package版、contract schema、必須capabilityを提示し、`accepted=true`を確認してから制作者環境やゲーム仕様へ進む。MCPの`requiredCapabilities`は固定enumにせず、将来のcapability名もserverへ到達させ、未提供なら`CAPABILITY_UNAVAILABLE`で停止する。これにより、capability追加だけで古い入力schemaがhandshake呼出し自体を遮断しない。初回は共通moduleを全件必須とだけ伝え、内部の解除可能性は制作AIへ渡さない。モック承認後はMCPが確定済み`requiredModuleIds`と各moduleの公開利用契約を返す。`sdk`と`sdk-dev`は同じhandshake schemaを使い、環境とcanonical endpointだけを応答で区別する。
 
-ソースは`packages/game-sdk/src`へ物理分離し、独立した`package.json`、SemVer、`exports`、TypeScript buildを持つ。npm安定版は`0.1.0`、developの昇格基盤候補は`0.1.1`で、MIT License、public access、provenanceを固定している。`npm run test:sdk-package`はtarballを一時外部projectへinstallし、Runtime、portable protocol、Platform resource契約、トランプ・描画の純粋ロジックとReact UIをpackage名だけで利用できることを検査する。
+ソースは`packages/game-sdk/src`へ物理分離し、独立した`package.json`、SemVer、`exports`、TypeScript buildを持つ。npm安定版は`0.1.0`、リポジトリの次期公開候補は`0.1.2`で、MIT License、public access、provenanceを固定している。`npm run test:sdk-package`はtarballを一時外部projectへinstallし、Runtime、portable protocol、Platform resource契約、トランプ・描画の純粋ロジックとReact UIをpackage名だけで利用できることを検査する。
 
 各ゲームはmanifestを宣言し、AIと自動監査が機能要件を確認できるようにする。共通設定画面は`manifest.settings`に宣言した項目だけを表示し、最大人数やラウンド数等を固定しない。`online-room`では制限時間1項目だけを必須とし、その初期値と選択肢もゲーム側が所有する。Create/Commandの本人IDと表示名はリクエストpayloadではなく、Game Fieldsが署名済みセッションから解決した`GameSdkTrustedActor`を使う。保存Roomは`presentRoom`を通して`GameSdkRoomSnapshot<RoomView>`へ変換し、秘密情報を含む保存Room全体をクライアントへ渡さない。
 
@@ -108,7 +108,7 @@ Mock Runtimeは作成時revision 1、Commandごとの1段階revision更新、古
 
 ## 現時点の限界
 
-SDK v1の型、サーバー契約、Mock Runtime、portable AppSet protocol、生成雛形、境界検査は`packages/game-sdk`へ物理分離済みである。`0.1.1`候補は単体build、tarball化、空の外部projectへのinstall、公開exportの実行検査まで成功している。正式packageはclient、server bundle、AppSet原文を同じrevisionとhashで保存し、正式Previewはmainと同じ`GameSdkFrame`と本体共通Roomを使う。運営による`SDK → main`採用では同じrevisionとhashをコピーし、AppSetを再build・変換・補正しない。
+SDK v1の型、サーバー契約、Mock Runtime、portable AppSet protocol、生成雛形、境界検査は`packages/game-sdk`へ物理分離済みである。`0.1.2`候補は単体build、tarball化、空の外部projectへのinstall、公開exportの実行検査をrelease gateで確認する。正式packageはclient、server bundle、AppSet原文を同じrevisionとhashで保存し、正式Previewはmainと同じ`GameSdkFrame`と本体共通Roomを使う。運営による`SDK → main`採用では同じrevisionとhashをコピーし、AppSetを再build・変換・補正しない。
 
 Game Fields本体では非公開`@game-fields/game-runtime`と`lib/game-sdk-platform-adapter.ts`を追加し、署名済みCookie由来identity、host/player判定、Redis TTL保存、revision CAS、閲覧者別presentationを小規模オンラインfixtureで実証済みである。外部ゲームfixtureは公開SDKだけをimportし、Commandへ偽のplayer IDを混ぜてもRuntime由来のidentityが使われ、同じrevisionの同時Commandは片方だけが保存される。
 
