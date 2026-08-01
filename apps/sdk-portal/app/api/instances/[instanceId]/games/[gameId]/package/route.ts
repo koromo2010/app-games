@@ -1,5 +1,7 @@
 import { authenticateCreator, normalizeInstanceSlug, validateInstanceSlug } from "@/lib/instance-registry";
 import { saveCreatorGamePackage } from "@/lib/game-package-store";
+import { validateGamePackageForPersistence } from "@/lib/game-package-persistence";
+import { prepareGamePackageUploadFiles } from "@/lib/mock-git-store";
 import { ensureSdkSchema, sdkSql } from "@/lib/sdk-postgres";
 
 export const dynamic = "force-dynamic";
@@ -32,16 +34,31 @@ export async function PUT(
     return Response.json({ saved: false, error: "ゲームパッケージが必要です。" }, { status: 400 });
   }
 
+  let prepared:
+    | {
+        files: ReturnType<typeof prepareGamePackageUploadFiles>;
+        validation: ReturnType<typeof validateGamePackageForPersistence>;
+      }
+    | Error;
+  try {
+    const files = prepareGamePackageUploadFiles(body.files);
+    prepared = { files, validation: validateGamePackageForPersistence(files) };
+  } catch (error) {
+    prepared = error instanceof Error ? error : new Error("GAME_SDK_PACKAGE_ASSET_INVALID");
+  }
+
   try {
     const creator = await authenticateCreator(slug, token);
     if (!creator) {
       return Response.json({ saved: false, error: "認証情報が正しくありません。" }, { status: 403 });
     }
+    if (prepared instanceof Error) throw prepared;
     return Response.json(await saveCreatorGamePackage({
       creatorId: creator.id,
       creatorSlug: slug,
       gameId,
-      files: body.files,
+      files: prepared.files,
+      validatedPackage: prepared.validation,
     }));
   } catch (error) {
     const code = error instanceof Error ? error.message : "";

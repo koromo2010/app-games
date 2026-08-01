@@ -116,7 +116,7 @@ export async function mutateOnlineRoomWithRetry<Room extends RevisionedOnlineRoo
         await schedulePostResponseWork(
           `online-room-realtime:${options.realtimeGame}:${room.code}`,
           () => publishOnlineRoomRevision(options.realtimeGame!, room),
-          { outsideRequest: "skip" },
+          { mode: "best-effort", outsideRequest: "skip" },
         );
       }
       if (options.afterSave) {

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   assertExpectedGamePackageSource,
+  gamePackagePromotionReleaseRevisions,
   gamePackagePromotionSource,
   GamePackagePromotionError,
 } from "../apps/sdk-portal/lib/game-package-promotion.ts";
@@ -15,12 +16,18 @@ const candidate = {
 };
 
 test("main adoption copies candidate revision and hashes unchanged", () => {
-  assert.deepEqual(gamePackagePromotionSource(candidate), {
+  const source = gamePackagePromotionSource(candidate);
+  assert.deepEqual(source, {
     revision: candidate.packageRevision,
     packageRootSha256: candidate.packageRootSha256,
     bundleSha256: candidate.packageBundleSha256,
     appSetSha256: candidate.packageAppSetSha256,
     manifest: candidate.manifest,
+  });
+  assert.ok(source);
+  assert.deepEqual(gamePackagePromotionReleaseRevisions(source), {
+    revision: candidate.packageRevision,
+    sourceRevision: candidate.packageRevision,
   });
 });
 

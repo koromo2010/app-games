@@ -38,7 +38,7 @@ App Games / Game Fields は Next.js で構築したオンラインゲーム基�
 
 `SITE_ADMIN_PASSWORD` を設定して `/admin` を使用する。未設定時は互換用として `DEBUG_MODE_PASSWORD` を受け付ける。
 
-管理画面では、サイト名、検索用タイトル・説明候補、favicon、管理者メール、共通メニューから届いた改善要望・バグ報告、公開フォームから届いたお問い合わせなどを管理する。本体広場はフッターに加えてヘッダーにもお問い合わせ導線を常設し、ゲーム一覧が短い場合も画面を下まで探さず公開フォームを開ける。改善・バグ報告フォームの入力は送信成功まで同じタブの`sessionStorage`へ一時保存し、ゲーム進行による再描画や再読込後も復元する。報告と問い合わせは管理画面の一つの「問い合わせ・報告」受信箱へ新しい順に混在表示し、種別バッジで判別する。初回投稿は「内容」に一度だけ表示し、会話欄は実際の返信・追記がある場合だけ追加メッセージを表示する。どちらも一覧・詳細・会話履歴、返信、対応状態、管理者通知の送信状態・安全な失敗理由・再送を同じ操作で管理できる。管理者アカウントの「問い合わせ・報告を受け取る」は、公開問い合わせ、ゲーム内・SDK Portalの新規報告、問い合わせ者・報告者の追記を共通の購読先へ送る。運営返信はfull管理者セッションで送信でき、追加のパスキー再確認は求めない。対応状態変更と管理者通知再送は直近MFAを維持する。運営返信は既定で「ユーザー返信待ち」、送信者の追記は「オープン」へ戻る。通知・返信メールが失敗しても管理画面と利用者向け会話画面の保存内容は失われない。失敗した運営返信メールは保存済み本文と同じ冪等キーでメールだけを再送でき、会話履歴を増やさない。管理セッションは署名付きHttpOnly Cookieで保持する。
+管理画面では、サイト名、検索用タイトル・説明候補、favicon、管理者メール、共通メニューから届いた改善要望・バグ報告、公開フォームから届いたお問い合わせなどを管理する。本体広場はフッターに加えてヘッダーにもお問い合わせ導線を常設し、ゲーム一覧が短い場合も画面を下まで探さず公開フォームを開ける。改善・バグ報告フォームの入力は送信成功まで同じタブの`sessionStorage`へ一時保存し、ゲーム進行による再描画や再読込後も復元する。報告と問い合わせは管理画面の一つの「問い合わせ・報告」受信箱へ新しい順に混在表示し、種別バッジで判別する。初回投稿は「内容」に一度だけ表示し、会話欄は実際の返信・追記がある場合だけ追加メッセージを表示する。どちらも一覧・詳細・会話履歴、返信、対応状態、管理者通知の送信状態・安全な失敗理由・再送を同じ操作で管理できる。問い合わせ・報告のどちらか一方でも一覧取得に失敗した場合は、以前の件数と一覧を消してフィルターを隠し、再読込が必要なエラーとして表示する。古い一覧を正常な最新結果として残さない。管理者アカウントの「問い合わせ・報告を受け取る」は、公開問い合わせ、ゲーム内・SDK Portalの新規報告、問い合わせ者・報告者の追記を共通の購読先へ送る。新着、追記、受付確認、運営返信の各メールは、保存済みの`contact_...`または`report_...`を別生成せず使い、件名とtext／HTML本文冒頭のコピー可能なID欄へ同じフルIDを表示する。運営返信はfull管理者セッションで送信でき、追加のパスキー再確認は求めない。対応状態変更と管理者通知再送は直近MFAを維持する。運営返信は既定で「ユーザー返信待ち」、送信者の追記は「オープン」へ戻る。通知・返信メールが失敗しても管理画面と利用者向け会話画面の保存内容は失われない。失敗した運営返信メールは保存済み本文と同じ冪等キーでメールだけを再送でき、会話履歴を増やさない。管理セッションは署名付きHttpOnly Cookieで保持する。
 
 管理者パスキーは端末内platform authenticator、discoverable credential、本人確認を登録・認証の両方で必須にする。復旧コードでログインした場合はWindows Helloの再登録へ誘導し、登録成功後に通常セッションへ切り替える。break-glass復旧モードはMFAリセットと読取診断に限定し、管理者追加・更新・削除を含む通常管理操作をAPI側でも拒否する。
 
@@ -61,11 +61,66 @@ devとmainの採用済みSDKアプリ情報は環境別DBに分離する。管�
 
 アプリ更新時はmainのゲームID・URL・公開設定を維持する。devとmainのpackage Gitは別リポジトリなので、昇格はdevの固定commitからpackage全ファイルを読み、3つのhashとmanifestを再検証してmain package Gitへ新しいcommitとして保存する。本番Previewでそのcommitのmanifestを起動確認してから`sdk_app_releases`の現在版を切り替える。`source_revision`はdevの元commit、`revision`はmainの実体commitを示す。
 
+game packageの最終`PreparedUploadFile[]`は、`@game-fields/sdk-package-assets`のpure validatorで保存前に監査する。HTML、CSS、JavaScript／TypeScriptを正式parserで解析し、静的に一意解決できるpackage相対assetは正規化後の存在とbrowser-readable policyを確認する。asset pathを含む未解決template literal、文字列連結、変数経由参照、またはparse不能なsourceはfail closedで拒否する。REST package PUTとMCP `publish_game_package`は認証DBへ入る前にも同じpreparationを実行し、認証結果の優先順位は変えずに検査結果を保存serviceへ引き継ぐ。dev→main artifact transferはvalidation後・target Git前のcallbackでschemaを確認する。全経路が同じ`saveValidatedGamePackage`境界を通り、package永続化callbackは監査成功後だけ実行できる。local／Actions相当監査は`npm run audit:sdk-package-assets -- <package-directory>`で同じvalidatorを1 packageだけに実行する。private package Git上の実`Dynamic asset audit` workflowへの反映と既存Dixit artifact修復は、このrepositoryのローカル実装には含まれない。
+
 各更新前の版は`sdk_app_releases`へ追加専用履歴として残り、管理画面から過去版を選んでアプリ単位で復元できる。migration 006で元dev SHAと本番実行SHAが同じままbackfillされた旧Releaseは未移送と判定し、同じdev版でも修復昇格を許可する。dev由来の過去版は元commitからpackage実体を再移送する。復元自体も新しい`rollback`リリースとして記録し、本体や他アプリ、既存Roomは巻き戻さない。
 
 採用済みSDKゲームのAppSetとmanifestは不変のまま保持し、公開後に調整する表示名と広場カード画像は`config/sdk-game-presentations.ts`で管理する。現行の`ai-word-guess`は公開名「コトバに迫れ」と専用カード画像を使用する。
 
 SDK Portalはpackage client／server grantをEd25519で署名する。portable server grantは隔離Previewが固定した公開鍵だけでローカル検証し、Portalの検証APIやcross-project共通秘密値へ依存しない。ブラウザ入口は60秒のclient交換grantをURL fragmentへ渡し、fragmentを履歴から即時消去してform POSTする。client grantはページrender時に固定せず、Room参加後にゲームiframeが実際にnavigateする直前の同一origin認証routeで固定revision向けに再発行する。Previewはgrant検証後のPOST応答で直接HTML骨格を返し、Cookieや303遷移を使わない。JS、CSS、画像、font、mediaとPlatform bridgeは外部assetのまま、同一source kind・制作者・ゲーム・固定revision・正規化済みasset path・期限へ限定したHMAC URLで取得する。Preview側の秘密値はこのpath単位asset tokenだけに使用する。
+
+### T-60 read-only監査境界（ローカル・未配備）
+
+2026-08-01に`develop@17c331e18908120b26cab85a2132c987999a924e`から再構築し、
+T-60.1 local checkpoint `dda0313273f7231232a8acae0a94fffd54f2b9a4`へ保存した差分では、
+公開ゲーム一覧・詳細・SDK catalogが読むgame operationsを
+`v3 → v2 → v1 → registry既定値`のGET専用境界へ分離した。legacy fallbackを読んでも
+Redisへ書き戻さない。永続化は認証済み管理PATCHと、環境・namespace・target key・
+`--apply`を明示するmaintenance CLIだけに限定する。CLIはlegacy raw JSONを保存schemaどおり
+厳格検証し、normalizerによる不正fieldの黙示修復を移行として扱わない。
+
+管理者向けSDK監査GETは、Platformのfull site-admin検証後にservice HMACでPortalの
+internal GETを呼ぶ。Portalはschema 7を一つの`REPEATABLE READ READ ONLY` transactionで読み、
+game status、decision ID、stable／current manifest SHA-256をDB行そのものから取得・算出する。
+各値はavailabilityを伴い、不存在とquery失敗を同じ値へ畳み込まない。stableとcurrentの
+revision／manifest hash不一致もanomalyとして分類し、監査field全体を行順非依存の
+canonical integrity digestへ含める。
+
+Runtime manifest監査はlowercase 40桁commitを指定してexact Git object graphとpackage全treeから
+hashを再計算する。一方、Preview Command runnerは既存の高速経路を維持し、grantで固定した
+`server.bundle.js`だけを1回取得してhashを照合する。runnerのapply／presentからrecursive treeや
+全blob読取へ到達しない。両経路が共有するのはimmutable locator検証とSHA-256等のpure処理であり、
+full-tree resolverはaudit専用である。
+すべての応答は`private, no-store`で、cookie、service署名、接続文字列、PII、判断理由、
+signed URLを返さない。
+
+schema 7にはDB自身のenvironment markerとstable pointer固有の`source_revision`がない。
+そのためsnapshotはdeployment branch由来値とDB markerを分け、DB markerを`null`かつ
+`unavailable:schema-7`、stable provenanceも`null`かつ`unavailable:schema-7`として返す。
+current releaseから推測して埋めない。この制限によりT-60.1の受入判定は、schema変更または
+別途証明が許可されるまで3層目の`schema 8待ち`であり、局所差分の安全性判定と分離する。
+T-60.1が直接所有する局所差分はローカル検証PASSである。既知だった
+`/games → loadGameDurationEstimates() → ensurePostgresSchema()`のwrite到達は、
+T-74 local merge `25b27cc096bd30b2176ba53209bf607b105cac41`（tree
+`8661072b6610600fb084ac06d7fd33f419496c6f`）でT-65の共通catalog read modelと統合済みである。
+正規checkpointはT-60.1 `dda0313273f7231232a8acae0a94fffd54f2b9a4`、T-65
+`40b6d97961f2cb909d55596e819af4155d8e08c4`、T-71
+`139f4ae8368a7646f70a18352b5f9db9f8adbf70`で、baseline比139パス、M97／A42／D0である。
+
+T-74のfocused 5/5、repository-wide 835/835、Runtime／SDK package／starter、
+`npm run verify`、Platform／SDK Portal／SDK Previewの3 buildはすべてPASSした。
+Portal buildのmigrationは`local/local`としてskipされ、DB接続・DDL・DMLは0、Main Promotion
+同期5対象も`would-change=0`だった。重複`app-games-sdk-portal`は引き続き
+`project-disabled`である。ローカル統合は完了したが、T-73B最終波及確認、push、PR、Actions、
+Deployment、production反映、実環境確認は未実施であり、T-60全体や稼働環境をPASSとは扱わない。
+
+Preview grant（Ed25519）は`@game-fields/sdk-preview-auth`、内部service HMACは
+`@game-fields/sdk-service-auth`、Runtime audit resolverとrunner用pure検証は
+`@game-fields/sdk-runtime-artifact`へ
+責務分離する。Preview Projectはservice HMAC packageと`SDK_ACCOUNT_LINK_SECRET`を持たない。
+Deployment build gateでは、利用実態がT-59で確定していない`app-games-sdk-portal`を引き続き
+project-disabledとしてSKIPする。Portal差分のローカルtypecheck／build対象であることと、
+Deployment build対象であることを混同しない。
 
 2026-07-27の段階移行中は、developの発行器はpath単位v2だけを発行し、
 共有verifierだけが旧revision単位v1とv2を一時的に受理する。旧v1の最長有効期間と
@@ -85,6 +140,20 @@ SDK Previewのportable serverを呼ぶ。Portalの`/api/health`はDB schemaに�
 対応Previewとの署名・環境scope一致を固定probeで確認する。実行時はネットワーク例外と
 408／502／503／504だけを1回再試行し、401／403の認証不整合は再試行で隠さず
 `GAME_SDK_REMOTE_RUNNER_AUTH_FAILED`として区別する。
+
+制作者トップの通常ゲームカードとrevision指定URLは、どちらも
+`sdk_game_package_revisions`の同じ不変Package resolverを使用する。通常カードには
+最新candidate revisionを明示して正式`GameSdkFrame`へ遷移し、queryなしの直接アクセスも
+同じ最新candidateを解決する。Packageが1件もない場合だけ旧Mock Previewを許可し、
+Package lookup、Runtime bundle、grant生成の失敗時はMockへfallbackしない。
+
+formal package Roomは作成時の`runtimeContract.packageRevision`を不変条件として保持し、
+すべてのRoom Snapshotと一覧へそのrevisionを返す。active Room復帰時にURL指定revisionと
+Room固定revisionが同じなら通常復帰し、異なる場合はclient iframeを起動しない。利用者は
+旧Room固定revisionでページ全体を再読込するか、URL指定revisionの新Roomへactive索引を
+明示置換する。置換はserver側で本人・active Roomコード・旧revision・新revisionを
+原子的に照合し、旧Roomの解散や削除は行わない。revisionまたはpackageを解決できない場合と
+clientがreadyにならない場合は明示エラーで停止し、Mockや別revisionへfallbackしない。
 
 ## 共通LLMゲートウェイ
 
@@ -165,6 +234,8 @@ Previewとローカル開発ではrevision通知だけをWebSocketで受け、�
 SDK採用ゲームは `@game-fields/game-sdk/client-runtime` を利用する。SDKクライアントはactor identityを送らず、署名付きプレイヤーセッションを正本とする。
 
 正式Package Shellはwatcher・HTTP Command・timerの応答をrevision順に統合し、遅着した応答で表示を巻き戻さない。Roomのactive索引は、参加者が結果後に別Roomへ移った場合に旧Roomの再戦で上書きしない。非参加者は参加前のlobby View以外を取得・操作できず、無効化されたmoduleのCommandとPlatform resourceもサーバー境界で拒否する。DEBUG権限とダミー属性は署名済みセッション・保存Room・module profileからPlatformが最終確定し、固定済みの旧Packageが返す表示値へ依存しない。結果Roomの解散前にはresult outboxを完了し、戦績・rating・playbackを失う状態ではRoomを削除しない。
+
+SDK Previewの招待用二次索引はRoom作成と実適用Commandの成功後だけ同じ6時間TTLで更新し、GETでは更新しない。実際に1 Roomを解散した場合だけ対応索引を1回削除する。索引とRealtime通知等の非重要処理は明示的なbest-effortとして失敗を構造化記録し、Room状態・戦績・replay・SDK result等の正本writeはawaitして失敗を呼出し元へ返す。
 
 ## 広告枠の現状
 

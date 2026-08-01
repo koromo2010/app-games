@@ -14,6 +14,11 @@ export type GamePackagePromotionSource = {
   manifest: object;
 };
 
+export type GamePackagePromotionReleaseRevisions = {
+  revision: string;
+  sourceRevision: string;
+};
+
 export type ExpectedGamePackageSource = {
   revision: string;
   packageRootSha256: string;
@@ -72,4 +77,27 @@ export function gamePackagePromotionSource(
     || typeof manifest !== "object"
   ) return null;
   return { revision, packageRootSha256, bundleSha256, appSetSha256, manifest };
+}
+
+export function gamePackagePromotionReleaseRevisions(
+  source: GamePackagePromotionSource,
+): GamePackagePromotionReleaseRevisions {
+  return {
+    revision: source.revision,
+    sourceRevision: source.revision,
+  };
+}
+
+export function promotionErrorResponse(error: unknown) {
+  if (error instanceof GamePackagePromotionError) {
+    return Response.json({ error: error.code }, { status: error.status });
+  }
+  const sqlState = typeof (error as { code?: unknown } | null)?.code === "string"
+    ? (error as { code: string }).code
+    : "";
+  const message = error instanceof Error ? error.message : "";
+  if (sqlState === "23505" || /unique/i.test(message)) {
+    return Response.json({ error: "public_game_id_conflict" }, { status: 409 });
+  }
+  return Response.json({ error: "promotion_failed" }, { status: 503 });
 }

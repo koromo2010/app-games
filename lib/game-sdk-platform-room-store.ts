@@ -36,16 +36,27 @@ export type GameSdkPlatformActiveRoomClaim = {
   changed: boolean;
 };
 
+export type GameSdkPlatformActiveRoomReplacement = {
+  code: string;
+  packageRevision: string;
+  nextPackageRevision: string;
+};
+
 export type GameSdkPlatformRoomStore<TRoom extends GameSdkStoredRoom> =
   GameFieldsPlatformRoomPersistence<TRoom> & {
     claimActiveRoom(
       playerId: string,
       targetCode: string,
+      replacement?: GameSdkPlatformActiveRoomReplacement,
     ): Promise<GameSdkPlatformActiveRoomClaim>;
     rollbackActiveRoomClaim(claim: GameSdkPlatformActiveRoomClaim): Promise<void>;
     releaseActiveRoom(playerId: string, roomCode: string): Promise<void>;
     loadActiveRoom(playerId: string): Promise<GameFieldsPlatformRoomRecord<TRoom> | null>;
-    listRooms(cursor: unknown, maximumPlayers: number): Promise<GameSdkRoomListPage>;
+    listRooms(
+      cursor: unknown,
+      maximumPlayers: number,
+      packageRevision?: string,
+    ): Promise<GameSdkRoomListPage>;
     dissolveRoom(
       code: string,
       actorId: string,
@@ -310,7 +321,7 @@ export function createRedisGameSdkPlatformRoomStore<TRoom extends GameSdkStoredR
       return saved === 1;
     },
 
-    async claimActiveRoom(playerIdInput, targetCodeInput) {
+    async claimActiveRoom(playerIdInput, targetCodeInput, replacementInput) {
       const playerId = playerIdInput.trim();
       const targetCode = normalizeGameSdkPlatformRoomCode(targetCodeInput);
       if (!playerId) throw new Error("INVALID_PLATFORM_IDENTITY");
@@ -318,6 +329,26 @@ export function createRedisGameSdkPlatformRoomStore<TRoom extends GameSdkStoredR
       const firstCode = await redisCommand<string | null>(["GET", key]);
       const current = firstCode ? await store.load(firstCode) : null;
       const currentCode = await redisCommand<string | null>(["GET", key]);
+      const replacement = replacementInput
+        ? {
+            code: normalizeGameSdkPlatformRoomCode(replacementInput.code),
+            packageRevision: replacementInput.packageRevision.trim(),
+            nextPackageRevision: replacementInput.nextPackageRevision.trim(),
+          }
+        : null;
+      const canReplaceCurrent = Boolean(
+        replacement
+        && currentCode
+        && current
+        && current.code === currentCode
+        && current.code === replacement.code
+        && roomPlayerIds(current).includes(playerId)
+        && current.runtimeContract.packageRevision === replacement.packageRevision
+        && replacement.packageRevision !== replacement.nextPackageRevision,
+      );
+      if (replacement && !canReplaceCurrent) {
+        throw new Error("GAME_SDK_ACTIVE_ROOM_REPLACEMENT_FORBIDDEN");
+      }
       if (
         currentCode
         && current
@@ -325,6 +356,7 @@ export function createRedisGameSdkPlatformRoomStore<TRoom extends GameSdkStoredR
         && roomPlayerIds(current).includes(playerId)
         && current.code !== targetCode
         && current.phase !== "result"
+        && !canReplaceCurrent
       ) {
         throw new Error("PLAYER_ACTIVE_ROOM");
       }
@@ -386,7 +418,7 @@ export function createRedisGameSdkPlatformRoomStore<TRoom extends GameSdkStoredR
       return record;
     },
 
-    async listRooms(cursor, maximumPlayers) {
+    async listRooms(cursor, maximumPlayers, packageRevision) {
       const page = await loadIndexedOnlineRoomPage(cursor, {
         indexKey,
         roomKey,
@@ -412,12 +444,17 @@ export function createRedisGameSdkPlatformRoomStore<TRoom extends GameSdkStoredR
             record
             && !isMultiplayerRoomExpired(record.updatedAt)
             && record.phase === "lobby"
+            && (
+              !packageRevision
+              || record.runtimeContract.packageRevision === packageRevision
+            )
             && roomPlayerIds(record).length < maximumPlayers,
           ))
           .map((record) => ({
             code: record.code,
             phase: record.phase,
             revision: record.revision,
+            packageRevision: record.runtimeContract.packageRevision,
             playerCount: roomPlayerIds(record).length,
             maximumPlayers,
             updatedAt: record.updatedAt,
@@ -469,7 +506,7 @@ export function createRedisGameSdkPlatformRoomStore<TRoom extends GameSdkStoredR
           code: record.code,
           revision,
         }),
-        { outsideRequest: "skip" },
+        { mode: "best-effort", outsideRequest: "skip" },
       );
     },
   };

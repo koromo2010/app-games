@@ -1,6 +1,6 @@
 # 環境変数管理台帳
 
-最終更新: 2026-07-27
+最終更新: 2026-08-01
 
 現在配置はこの文書、追加・変更・削除の進行中依頼は`config/environment-change-registry.json`を正本とする。実値、接続文字列、APIキー、パスワードはGitへ保存しない。Vercel、Neon、Upstash、Blob、各API提供元だけで管理する。
 
@@ -104,6 +104,13 @@ VercelではIgnored Build Stepの終了コード`0`がスキップ、`1`がビ�
 snapshot内の`apps/sdk-portal/vercel.json`と`apps/sdk-preview/vercel.json`にも
 同じbranch gateを`ignoreCommand`として持たせる。ゲーム提出ZIPからは除外する。
 
+### T-74 ローカル統合時の環境・build判定（2026-08-01）
+
+- 正規checkpointはT-60.1 `dda0313273f7231232a8acae0a94fffd54f2b9a4`、T-65 `40b6d97961f2cb909d55596e819af4155d8e08c4`、T-71 `139f4ae8368a7646f70a18352b5f9db9f8adbf70`。T-74 local mergeは`25b27cc096bd30b2176ba53209bf607b105cac41`、tree `8661072b6610600fb084ac06d7fd33f419496c6f`、baseline比139パス、M97／A42／D0である。
+- Platform、SDK Portal、SDK Previewのlocal production buildはすべてPASSした。Portal buildは`VERCEL_PROJECT_NAME`と`VERCEL_GIT_COMMIT_REF`を解除した`local/local`でmigrationをskipし、SDK DBへの接続、DDL、DMLは0件だった。環境変数の追加・変更・削除、Vercel Project設定変更はない。
+- Main Promotion workflowの同期5対象はメモリ上の再現で`would-change=0`。139パスのbuild-impactは通常6 Projectを各surface affected、重複`app-games-sdk-portal`だけを`project-disabled`／SKIPと判定した。これはローカル静的判定であり、Deploymentを作成していない。
+- T-74のローカル統合は完了し、T-73B最終波及確認待ちである。製品`origin`へのpush、PR、Actions、Deployment、production反映、DB／Redis／Blobその他のexternal writeは未実施で、現在配置表の実環境状態は変更していない。
+
 ChatGPTのVercel Connectorは`game-fields` Teamへ再認証済みで、Project一覧、Deployment、Build Logの参照とファイル直接Deploymentは利用できる。一方、現行ConnectorはGit接続、Project設定更新、Project間の独自ドメイン移管を公開していない。これらはVercel Dashboardまたは認証済みCLI／REST APIで行う。
 
 ### 本体dev反映用GitHub資格
@@ -120,6 +127,15 @@ fast-forward可能な場合だけ`force: false`でmain refを更新する。SDK�
 このtokenは`app-games-dev`、SDK Portal、隔離Previewへ設定しない。設定後は
 `app-games`を再デプロイし、管理画面で差分読取、分岐時拒否、MFA後の
 fast-forwardを実機確認する。
+
+### T-60.1一時checkpoint資格
+
+| 資格 | 対象 | 権限 | 現在状態 | 撤去条件 |
+| --- | --- | --- | --- | --- |
+| Deploy key `T-60.1 checkpoint temporary` | private `koromo2010/app-games-checkpoints`だけ | Read/write | 2026-08-01に空tree `main`と`t-60.1/pre-remediation-17c331e`の2 refを1回のatomic pushで作成し、remote commit／treeを再取得確認済み。秘密鍵値は記録しない | T-60.1の局所差分が別の耐久保存へ移行し、このcheckpointが不要になった時点でrepositoryから削除する |
+
+この資格は製品`koromo2010/app-games`、Vercel、SDK package Git、npmへ権限を持たせず、
+アプリの環境変数へ登録しない。checkpoint push以外の外部writeには再利用しない。
 
 ## 命名と移行ルール
 
@@ -169,6 +185,7 @@ Shared化候補:
 | `BLOB_ENV` | `production` | `development` | `sdk` | No | Blob誤接続防止 |
 | `APP_BASE_URL` | `https://game-fields.com` | `https://dev.game-fields.com` | `https://sdk.game-fields.com` | No | 絶対URL・メールリンク等 |
 | `SDK_PORTAL_INTERNAL_URL` | `https://sdk.game-fields.com` | `https://sdk-dev.game-fields.com` | 不要 | No | 本体が制作者catalog、既存所有者判定、SDKダッシュボード導線へ使うPortal接続先。branch fallbackはローカル互換用で、Vercelでは明示登録する |
+| `SDK_ACCOUNT_LINK_ALLOWED_ORIGINS` | `app-games` Production: 未登録／未確認 | `app-games-dev` Production: 未登録／未確認 | SDK Portal／隔離Previewには設定しない | No | 本体のSDKアカウントリンクcallbackへ、コード既定値以外の許可originを追加指定する。空白またはカンマ区切りのHTTPS origin（path・query・fragmentなし。任意のportを許可し、末尾`/`は正規化）として扱う。未設定時はコード既定originだけを使用する |
 
 ### PostgreSQL / Neon
 
@@ -271,6 +288,11 @@ Sensitive設定済みの互換変数をVercel上で複製できない移行期�
 
 preview実行Projectには`SDK_DATABASE_URL`、SDK Redis、管理者・本体資格、`SDK_MOCK_GITHUB_WRITE_TOKEN`をリンクしない。SDK本番とSDK-devでは署名鍵、Gitリポジトリまたはbranch、資格を分け、devの未審査mockが本番SDKへ現れないようにする。
 
+T-60の内部service HMACも既存`SDK_ACCOUNT_LINK_SECRET`を互換利用するが、生成・検証consumerは
+PlatformとSDK Portalのserver codeだけである。Preview Projectへこの変数や
+`@game-fields/sdk-service-auth`を追加しない。read-only SDK auditのための新しいenvironment変数は
+追加しない。snapshotのDB environmentを接続文字列、DB名、secretから推測しない。
+
 SDK `content-source`の実DB adapter、module lab、Preview中継API `/api/sdk-preview/content-source`は本体`app-games`／`app-games-dev`で動作する。一般語・ワードペア・語釈はいずれも両本体ProjectへLink済みの共通`VOCABULARY_DATABASE_URL`だけを読み、環境別`APP_DATABASE_URL`へ単語表を複製しない。Roomと認証は従来どおり環境別アプリDBを使う。`app-games-sdk*`および`app-games-preview*`へこれらのDB変数を追加・Linkしない。隔離iframeは外側ShellへのpostMessageだけを使い、DB接続、内部ID、直接endpointを受け取らない。opaque content IDの認証付き暗号化鍵は本体の既存`PLAYER_SESSION_SECRET`から導出し、新しい外部変数は追加しない。
 
 SDK `llm` adapter、module lab、Preview中継API `/api/sdk-preview/llm`も本体`app-games`／`app-games-dev`で動作し、既存の共通LLM変数と利用者の暗号化HttpOnly Cookieだけを使用する。`app-games-sdk*`および`app-games-preview*`へOpenAI・Gemini・GroqのAPIキー、`LLM_SESSION_SECRET`、`LLM_ACCESS_PASSWORD`を追加・Linkしない。iframeと公開SDKへ渡すのはtask、送信内容、prompt version、任意の返却schemaだけで、新しい外部変数は追加しない。
@@ -301,7 +323,7 @@ SDK `llm` adapter、module lab、Preview中継API `/api/sdk-preview/llm`も本�
 | Portal Vercel Project | `app-games-sdk-dev`、Root Directory `apps/sdk-portal`、Production Branch `develop`。OAuth接続、4 tool表示、`test10-1`保存を確認済み。カタログ分離コミット`38bf4ab`のPortal・本体dev DeploymentがREADY。`/test10-1`の本体広場には保存済み「21ゲーム」だけが表示され、組み込みゲームカードがないこと、`/test10-1/games/twenty-one-misere`が200であることを実機確認済み | ブラウザ上のログイン後操作とゲーム進行を確認する |
 | Preview Vercel Project | `app-games-preview-dev`、Root Directory `apps/sdk-preview`、Production Branch `develop` | Tailwind依存修正コミット`dfdab59`のProduction DeploymentがREADY |
 | Preview domain | `preview-dev.game-fields.com`割当済み・Valid Configuration。`/health`が200で隔離preview serviceを返す | Portalからのmock保存・iframe表示確認 |
-| 不要Project候補 | `app-games-sdk-portal`が作成途中に増加。custom domainなし | 使用予定がないことを再確認後に削除判断 |
+| 不要Project候補 | `app-games-sdk-portal`が作成途中に増加。custom domainなし。T-59で利用実態が確定するまでbuild gateはproject-disabled／SKIPを維持 | 使用予定がないことを再確認後に削除判断。Portalコードのローカルtypecheck／buildとDeployment build gateを分離する |
 
 #### SDK Production 現在配置（2026-07-26確認）
 

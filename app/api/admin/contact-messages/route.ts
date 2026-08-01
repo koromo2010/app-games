@@ -9,7 +9,7 @@ import {
 } from "@/lib/contact-store";
 import { createContactThreadToken } from "@/lib/contact-thread-access";
 import {
-  sendOperationsAlertEmail,
+  sendSupportAdminNotificationEmail,
   sendSupportReplyEmail,
 } from "@/lib/email";
 import {
@@ -23,20 +23,39 @@ import {
   siteAdminAuthorizationError,
 } from "@/lib/site-admin-auth";
 import { appendSiteAdminAuditLog } from "@/lib/site-admin-passkey-store";
+import {
+  SupportTextValidationError,
+  supportTextValidationPayload,
+  validateSupportText,
+} from "@/config/support-text-contract";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const telemetry = createRequestTelemetry(
+    request,
+    "/api/admin/contact-messages",
+    { operation: "contact-message-list" },
+  );
   try {
     await requireFullSiteAdminSession();
+    const contacts = await listContactMessages();
+    telemetry.success("contact-message.list", {
+      affectedCount: contacts.length,
+    });
     return Response.json(
-      { contacts: await listContactMessages() },
+      { contacts },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
-    return siteAdminAuthorizationError(error)
-      ?? Response.json({ error: "CONTACT_MESSAGES_LOAD_FAILED" }, { status: 500 });
+    const auth = siteAdminAuthorizationError(error);
+    if (auth) return auth;
+    telemetry.failure("contact-message.list", error, 500);
+    return Response.json(
+      { error: "CONTACT_MESSAGES_LOAD_FAILED" },
+      { status: 500 },
+    );
   }
 }
 
@@ -69,9 +88,9 @@ export async function POST(request: Request) {
         ? body.messageId
         : "";
       const retryRequestId = typeof body.requestId === "string"
-        ? body.requestId.trim().slice(0, 120)
+        ? body.requestId.trim()
         : "";
-      if (!contactId || !messageId || !retryRequestId) {
+      if (!contactId || !messageId || !retryRequestId || retryRequestId.length > 120) {
         return Response.json(
           { error: "CONTACT_REPLY_EMAIL_RETRY_INVALID" },
           { status: 400 },
@@ -108,7 +127,7 @@ export async function POST(request: Request) {
       }).toString();
       const deliveryStatus = await sendSupportReplyEmail({
         to: existing.email,
-        subject: `【Game Fields】お問い合わせへの返信 ${existing.id}`,
+        contactId: existing.id,
         body: existingMessage.body,
         threadUrl: threadUrl.toString(),
         idempotencyKey: `contact-reply-${existingMessage.id}`,
@@ -136,11 +155,13 @@ export async function POST(request: Request) {
       });
       return Response.json({ contact, deliveryStatus });
     }
-    const message = typeof body?.message === "string"
-      ? body.message.trim().slice(0, 3_000)
-      : "";
+    const message = validateSupportText(
+      body?.message,
+      "reply",
+      { required: true },
+    );
     const requestId = typeof body?.requestId === "string"
-      ? body.requestId.trim().slice(0, 120)
+      ? body.requestId.trim()
       : "";
     const status = isContactStatus(body?.status)
       ? body.status
@@ -148,7 +169,7 @@ export async function POST(request: Request) {
     if (
       typeof body?.contactId !== "string"
       || !requestId
-      || !message
+      || requestId.length > 120
     ) {
       return Response.json(
         { error: "CONTACT_MESSAGE_REPLY_INVALID" },
@@ -176,7 +197,7 @@ export async function POST(request: Request) {
     ) {
       deliveryStatus = await sendSupportReplyEmail({
         to: result.contact.email,
-        subject: `【Game Fields】お問い合わせへの返信 ${result.contact.id}`,
+        contactId: result.contact.id,
         body: result.message.body,
         threadUrl: threadUrl.toString(),
         idempotencyKey: `contact-reply-${result.message.id}`,
@@ -210,8 +231,17 @@ export async function POST(request: Request) {
   } catch (error) {
     const auth = siteAdminAuthorizationError(error);
     if (auth) return auth;
+    if (error instanceof SupportTextValidationError) {
+      return Response.json(supportTextValidationPayload(error), { status: 400 });
+    }
     if (error instanceof Error && error.message === "CONTACT_MESSAGE_NOT_FOUND") {
       return Response.json({ error: error.message }, { status: 404 });
+    }
+    if (
+      error instanceof Error
+      && error.message === "CONTACT_MESSAGE_REQUEST_ID_CONFLICT"
+    ) {
+      return Response.json({ error: error.message }, { status: 409 });
     }
     telemetry.failure("contact-message.reply", error, 500);
     return Response.json(
@@ -242,9 +272,9 @@ export async function PUT(request: Request) {
       ? body.contactId
       : "";
     const requestId = typeof body?.requestId === "string"
-      ? body.requestId.trim().slice(0, 120)
+      ? body.requestId.trim()
       : "";
-    if (!contactId || !requestId) {
+    if (!contactId || !requestId || requestId.length > 120) {
       return Response.json(
         { error: "CONTACT_NOTIFICATION_RETRY_INVALID" },
         { status: 400 },
@@ -263,12 +293,16 @@ export async function PUT(request: Request) {
     let deliveryStatus: "sent" | "failed" = "sent";
     let errorCode: string | null = null;
     try {
-      await sendOperationsAlertEmail({
-        audience: "contacts",
+      await sendSupportAdminNotificationEmail({
+        reference: {
+          kind: "contact",
+          id: existing.id,
+        },
+        title: latestRequesterMessage
+          ? "問い合わせへの追記"
+          : "新しい問い合わせ",
         replyTo: existing.email,
-        subject: `【GAME FIELDS】お問い合わせ ${existing.category}`,
         lines: [
-          `ID: ${existing.id}`,
           `Name: ${existing.name || "未入力"}`,
           `Email: ${existing.email}`,
           "",

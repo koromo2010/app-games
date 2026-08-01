@@ -2,12 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  gameReplayMetadataFor,
   gameReplayShareText,
   type GameReplayDetail,
   type GameReplayListResponse,
   type GameReplaySummary,
 } from "@/lib/game-replay-types";
+import {
+  resolveGameDisplayMetadata,
+  type GameDisplayMetadataSnapshot,
+} from "@/lib/game-display-metadata";
 import { shareGameResult } from "@/lib/game-share-client";
 import { useAppLocale } from "./AppLocaleProvider";
 import { appIntlLocale } from "@/lib/app-i18n";
@@ -22,7 +25,11 @@ function formatReplayDate(timestamp: number, locale: "ja" | "en") {
   }).format(new Date(timestamp));
 }
 
-export function GameReplayPanel() {
+export function GameReplayPanel({
+  gameDisplayMetadata,
+}: {
+  gameDisplayMetadata: GameDisplayMetadataSnapshot;
+}) {
   const { locale, t } = useAppLocale();
   const en = locale === "en";
   const panelRef = useRef<HTMLElement>(null);
@@ -119,11 +126,15 @@ export function GameReplayPanel() {
   };
 
   const openSharePreview = (replay: GameReplaySummary) => {
-    const text = gameReplayShareText(replay, locale);
-    const game = gameReplayMetadataFor(replay.gameType, replay.title);
+    const game = resolveGameDisplayMetadata(
+      gameDisplayMetadata,
+      replay.gameType,
+      locale,
+    );
+    const text = gameReplayShareText(replay, gameDisplayMetadata, locale);
     const url = new URL(game.href, window.location.origin).toString();
     setMessage("");
-    setSharePreview({ title: `Game Fields ${game.title} ${en ? "Replay" : "プレイバック"}`, text, url });
+    setSharePreview({ title: `Game Fields ${game.displayName} ${en ? "Replay" : "プレイバック"}`, text, url });
   };
 
   const shareReplay = async () => {
@@ -141,6 +152,19 @@ export function GameReplayPanel() {
       setMessage(t("share.failed"));
     }
   };
+
+  const selectedGame = selectedReplay
+    ? resolveGameDisplayMetadata(
+        gameDisplayMetadata,
+        selectedReplay.gameType,
+        locale,
+      )
+    : null;
+  const selectedTitle = selectedReplay && selectedGame
+    ? selectedGame.source === "sdk"
+      ? selectedGame.displayName
+      : selectedReplay.title
+    : "";
 
   return (
     <section ref={panelRef} className="rounded-lg border border-white/10 bg-white/[0.96] p-4 shadow-[0_18px_50px_rgba(15,23,42,0.18)]" aria-labelledby="replay-heading">
@@ -171,12 +195,21 @@ export function GameReplayPanel() {
         <p className="mt-4 text-sm text-slate-500">{t("stats.loading")}</p>
       ) : data?.replays.length ? (
         <div className="mt-4 space-y-2">
-          {data.replays.map((replay) => (
-            <article key={replay.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+          {data.replays.map((replay) => {
+            const game = resolveGameDisplayMetadata(
+              gameDisplayMetadata,
+              replay.gameType,
+              locale,
+            );
+            const replayTitle = game.source === "sdk"
+              ? game.displayName
+              : replay.title;
+            return (
+              <article key={replay.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-[11px] font-bold text-violet-700">{gameReplayMetadataFor(replay.gameType, replay.title).title}</p>
-                  <p className="truncate font-bold text-slate-900">{replay.title}</p>
+                  <p className="text-[11px] font-bold text-violet-700">{game.displayName}</p>
+                  <p className="truncate font-bold text-slate-900">{replayTitle}</p>
                   <p className="mt-1 text-xs text-slate-500">
                     {formatReplayDate(replay.finishedAt, locale)} / {replay.resultLabel} / {replay.playerCount} {en ? "players" : "人"}
                   </p>
@@ -195,7 +228,7 @@ export function GameReplayPanel() {
                 </div>
                 <button
                   type="button"
-                  aria-label={replay.favorite ? `${replay.title}をお気に入りから外す` : `${replay.title}をお気に入りにする`}
+                  aria-label={replay.favorite ? `${replayTitle}をお気に入りから外す` : `${replayTitle}をお気に入りにする`}
                   aria-pressed={replay.favorite}
                   disabled={busyReplayId === replay.id}
                   onClick={() => void toggleFavorite(replay, !replay.favorite)}
@@ -221,8 +254,9 @@ export function GameReplayPanel() {
                   {en ? "Share replay" : "プレイバックを共有"}
                 </button>
               </div>
-            </article>
-          ))}
+              </article>
+            );
+          })}
         </div>
       ) : (
         <p className="mt-4 text-sm leading-6 text-slate-500">{en ? "No replays yet. Completed non-debug games will appear here." : "まだプレイバックはありません。今後完了した、デバッグ以外のゲームから記録されます。"}</p>
@@ -242,8 +276,8 @@ export function GameReplayPanel() {
         >
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-xs font-semibold text-violet-700">{gameReplayMetadataFor(selectedReplay.gameType, selectedReplay.title).title} / PLAYBACK {selectedReplay.round}</p>
-              <h3 id="replay-detail-heading" className="text-lg font-black text-slate-950">{selectedReplay.title}</h3>
+              <p className="text-xs font-semibold text-violet-700">{selectedGame?.displayName} / PLAYBACK {selectedReplay.round}</p>
+              <h3 id="replay-detail-heading" className="text-lg font-black text-slate-950">{selectedTitle}</h3>
               {selectedReplay.gameType === "tahoiya" && selectedReplay.reading && <p className="text-xs text-slate-500">{selectedReplay.reading}</p>}
             </div>
             <button

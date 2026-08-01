@@ -67,6 +67,29 @@ export type GameSdkPortableServerResponse =
   | { ok: false; error: string }
   | { ok: false; effect: GameSdkPortableEffectRequest };
 
+/**
+ * Platform-to-runner transport envelope. It is deliberately not a new guest
+ * operation: the runner expands it into the existing protocol-v1
+ * applyCommand and presentRoom invocations inside one isolated VM.
+ */
+export type GameSdkPortableCommandBatchRequest = {
+  kind: "game-fields-command-batch-v1";
+  apply: GameSdkPortableServerRequest & {
+    invocation: Extract<PortableInvocation, { operation: "applyCommand" }>;
+  };
+  presentationContext: Omit<GameSdkPresentationContext, "resources">;
+};
+
+export type GameSdkPortableCommandBatchResponse =
+  | {
+      ok: true;
+      value: { room: unknown; view: unknown };
+    }
+  | ({ phase: "apply" | "present" } & Exclude<
+      GameSdkPortableServerResponse,
+      { ok: true; value: unknown }
+    >);
+
 export type GameSdkPortableServerGlobal = {
   protocolVersion: typeof GAME_SDK_PORTABLE_SERVER_PROTOCOL_VERSION;
   invoke(requestJson: string): Promise<string>;

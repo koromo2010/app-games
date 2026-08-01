@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { adminNotificationErrorLabels } from "@/lib/admin-notification-labels";
+import { SUPPORT_TEXT_LIMITS } from "@/config/support-text-contract";
 import {
   contactStatuses,
   type ContactCategory,
@@ -103,10 +104,12 @@ export function AdminSupportInboxPanel({
   >({});
   const replyRequestIds = useRef<Record<string, string>>({});
   const [message, setMessage] = useState("");
+  const [loadError, setLoadError] = useState("");
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setLoading(true);
     setMessage("");
+    setLoadError("");
     try {
       const [reportResponse, contactResponse] = await Promise.all([
         fetch("/api/admin/user-reports", { cache: "no-store", signal }),
@@ -148,7 +151,10 @@ export function AdminSupportInboxPanel({
       )));
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") return;
-      setMessage("問い合わせ・報告の一覧を読み込めませんでした。");
+      setItems([]);
+      setLoadError(
+        "問い合わせ・報告の一覧を更新できませんでした。古い件数は表示していません。再読み込みしてください。",
+      );
     } finally {
       setLoading(false);
     }
@@ -282,8 +288,18 @@ export function AdminSupportInboxPanel({
 
   const sendReply = async (item: SupportItem) => {
     const record = recordFor(item);
-    const reply = drafts[record.id]?.trim() ?? "";
-    if (!reply || savingId) return;
+    const reply = drafts[record.id] ?? "";
+    if (!reply.trim() || savingId) return;
+    if (reply.length > SUPPORT_TEXT_LIMITS.reply) {
+      setReplyMessages((current) => ({
+        ...current,
+        [record.id]: {
+          tone: "error",
+          text: `返信は${SUPPORT_TEXT_LIMITS.reply.toLocaleString()}文字以内にしてください。`,
+        },
+      }));
+      return;
+    }
     setSavingId(record.id);
     setMessage("");
     setReplyMessages((current) => {
@@ -461,33 +477,43 @@ export function AdminSupportInboxPanel({
           {loading ? "読込中…" : "再読み込み"}
         </button>
       </div>
-      <div
-        className="flex gap-2 overflow-x-auto"
-        role="tablist"
-        aria-label="問い合わせ・報告の対応状態"
-      >
-        {(["all", ...contactStatuses] as const).map((value) => {
-          const count = value === "all"
-            ? items.length
-            : items.filter((item) => recordFor(item).status === value).length;
-          return (
-            <button
-              key={value}
-              type="button"
-              role="tab"
-              aria-selected={filter === value}
-              onClick={() => setFilter(value)}
-              className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-bold ${
-                filter === value
-                  ? "bg-cyan-300 text-slate-950"
-                  : "border border-white/15 text-slate-300 hover:bg-white/10"
-              }`}
-            >
-              {value === "all" ? "すべて" : statusLabels[value]} {count}
-            </button>
-          );
-        })}
-      </div>
+      {!loadError && (
+        <div
+          className="flex gap-2 overflow-x-auto"
+          role="tablist"
+          aria-label="問い合わせ・報告の対応状態"
+        >
+          {(["all", ...contactStatuses] as const).map((value) => {
+            const count = value === "all"
+              ? items.length
+              : items.filter((item) => recordFor(item).status === value).length;
+            return (
+              <button
+                key={value}
+                type="button"
+                role="tab"
+                aria-selected={filter === value}
+                onClick={() => setFilter(value)}
+                className={`whitespace-nowrap rounded-lg px-3 py-2 text-sm font-bold ${
+                  filter === value
+                    ? "bg-cyan-300 text-slate-950"
+                    : "border border-white/15 text-slate-300 hover:bg-white/10"
+                }`}
+              >
+                {value === "all" ? "すべて" : statusLabels[value]} {count}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {loadError && (
+        <p
+          role="alert"
+          className="rounded-xl border border-amber-300/35 bg-amber-300/10 px-4 py-3 text-sm font-bold text-amber-100"
+        >
+          {loadError}
+        </p>
+      )}
       {message && (
         <p
           role="status"
@@ -691,10 +717,12 @@ export function AdminSupportInboxPanel({
                         ...current,
                         [record.id]: event.target.value,
                       }))}
-                      maxLength={3000}
                       className="mt-2 min-h-28 w-full rounded-lg border border-white/15 bg-slate-950/70 px-3 py-2 text-sm font-normal text-white"
                       placeholder="回答や追加で必要な情報を入力"
                     />
+                    <span className="mt-1 block text-right font-normal">
+                      {(drafts[record.id]?.length ?? 0).toLocaleString()} / {SUPPORT_TEXT_LIMITS.reply.toLocaleString()}
+                    </span>
                   </label>
                   <div className="flex flex-wrap items-end justify-between gap-3">
                     <label className="text-xs font-bold text-slate-400">
@@ -717,7 +745,9 @@ export function AdminSupportInboxPanel({
                     <button
                       type="submit"
                       disabled={
-                        savingId !== null || !(drafts[record.id]?.trim())
+                        savingId !== null
+                        || !(drafts[record.id]?.trim())
+                        || (drafts[record.id]?.length ?? 0) > SUPPORT_TEXT_LIMITS.reply
                       }
                       className="rounded-lg bg-cyan-300 px-4 py-2 text-sm font-black text-slate-950 disabled:opacity-40"
                     >

@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getRedisRequestTimeoutMs, redisCommand } from "../lib/redis-store.ts";
+import {
+  getRedisRequestTimeoutMs,
+  redisCommand,
+  redisPipeline,
+  redisStoreObservabilityFields,
+} from "../lib/redis-store.ts";
 
 function setRedisTestEnvironment() {
   const originalUrl = process.env.UPSTASH_REDIS_REST_URL;
@@ -50,6 +55,37 @@ test("安全なRedis読み取りだけ一時エラー後に1回再試行する",
   }
 });
 
+test("Redis read failure records safe read and transport metadata", async () => {
+  const restoreEnvironment = setRedisTestEnvironment();
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  let observed: unknown;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return new Response("unavailable", { status: 503 });
+  };
+  try {
+    await assert.rejects(
+      redisCommand(["GET", "private-read-key"]).catch((error) => {
+        observed = error;
+        throw error;
+      }),
+      /REDIS_STORE_REQUEST_FAILED_503/,
+    );
+    assert.equal(calls, 2);
+    const fields = redisStoreObservabilityFields(observed);
+    assert.equal(fields.storageOperation, "read");
+    assert.equal(fields.storageTransport, "rest");
+    assert.equal(fields.storageCommand, "GET");
+    assert.equal(fields.commandCount, 1);
+    assert.ok((fields.serializedBytes ?? 0) > 0);
+    assert.equal(JSON.stringify(fields).includes("private"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnvironment();
+  }
+});
+
 test("Redis書き込みは一時エラーでも自動再実行しない", async () => {
   const restoreEnvironment = setRedisTestEnvironment();
   const originalFetch = globalThis.fetch;
@@ -59,8 +95,58 @@ test("Redis書き込みは一時エラーでも自動再実行しない", async 
     return new Response("unavailable", { status: 503 });
   };
   try {
-    await assert.rejects(redisCommand(["SET", "key", "value"]), /REDIS_STORE_REQUEST_FAILED_503/);
+    let observed: unknown;
+    await assert.rejects(
+      redisCommand(["SET", "key", "value"]).catch((error) => {
+        observed = error;
+        throw error;
+      }),
+      /REDIS_STORE_REQUEST_FAILED_503/,
+    );
     assert.equal(calls, 1);
+    const fields = redisStoreObservabilityFields(observed);
+    assert.equal(fields.storageOperation, "write");
+    assert.equal(fields.storageTransport, "rest");
+    assert.equal(fields.storageCommand, "SET");
+    assert.equal(fields.commandCount, 1);
+    assert.ok((fields.serializedBytes ?? 0) > 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnvironment();
+  }
+});
+
+test("Redis pipeline failure records only fixed safe operation metadata", async () => {
+  const restoreEnvironment = setRedisTestEnvironment();
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  let observed: unknown;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return new Response("unavailable", { status: 503 });
+  };
+  try {
+    await assert.rejects(
+      redisPipeline([
+        ["GET", "private-read-key"],
+        ["SET", "private-write-key", "private-value"],
+      ]).catch((error) => {
+        observed = error;
+        throw error;
+      }),
+      /REDIS_STORE_REQUEST_FAILED_503/,
+    );
+    assert.equal(calls, 1);
+    const fields = redisStoreObservabilityFields(observed);
+    assert.deepEqual(fields, {
+      storageOperation: "pipeline",
+      storageTransport: "rest",
+      storageCommand: "MULTIPLE",
+      commandCount: 2,
+      serializedBytes: fields.serializedBytes,
+    });
+    assert.ok((fields.serializedBytes ?? 0) > 0);
+    assert.equal(JSON.stringify(fields).includes("private"), false);
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnvironment();

@@ -8,7 +8,12 @@ const nextConfig: NextConfig = {
     ],
   },
   serverExternalPackages: ["quickjs-emscripten"],
-  transpilePackages: ["@game-fields/game-sdk", "@game-fields/sdk-preview-auth"],
+  transpilePackages: [
+    "@game-fields/game-sdk",
+    "@game-fields/sdk-preview-auth",
+    "@game-fields/sdk-package-assets",
+    "@game-fields/sdk-runtime-artifact",
+  ],
   async headers() {
     return [
       {

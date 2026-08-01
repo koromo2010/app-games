@@ -105,7 +105,7 @@ function ActiveRoomPanel(props: Props & { room: TahoiyaRoom }) {
       </div>
       {room.phase === "lobby" && (props.isHost ? <HostActions {...props} room={room} /> : !room.topicGenerationProgress && <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-center text-xs font-semibold text-slate-600">ホストのラウンド開始を待っています。</p>)}
       <OnlineRoomLifecycleActions
-        surface={room.phase === "lobby" ? "lobby" : room.phase === "result" ? "result" : "playing"}
+        surface={room.phase === "lobby" ? "lobby" : "playing"}
         canReturnToRoom={props.canReturnToRoom}
         isHost={props.isHost}
         isRoomDissolved={props.isRoomDissolved}

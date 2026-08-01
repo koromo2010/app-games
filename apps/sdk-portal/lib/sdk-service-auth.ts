@@ -1,7 +1,7 @@
 import {
   createSdkServiceAuthorization,
   verifySdkServiceAuthorization,
-} from "@game-fields/sdk-preview-auth";
+} from "@game-fields/sdk-service-auth";
 
 function serviceSecret() {
   const secret = process.env.SDK_ACCOUNT_LINK_SECRET ?? "";

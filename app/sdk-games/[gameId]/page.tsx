@@ -10,12 +10,23 @@ export const dynamic = "force-dynamic";
 
 export default async function ApprovedSdkGamePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ gameId: string }>;
+  searchParams: Promise<{ revision?: string }>;
 }) {
   const { gameId } = await params;
+  const query = await searchParams;
+  const requestedRevision = query.revision?.trim() ?? "";
+  if (requestedRevision && !/^[a-f0-9]{40}$/.test(requestedRevision)) {
+    notFound();
+  }
   const registration = approvedGameSdkRegistration(gameId)
-    ?? await loadApprovedGameSdkRuntimeRegistration(gameId);
+    ?? await loadApprovedGameSdkRuntimeRegistration(
+      gameId,
+      process.env,
+      requestedRevision || undefined,
+    );
   if (!registration) notFound();
   if (!(await getAuthenticatedPlayer())) {
     return <PlayerAuthGate title={registration.title} />;
@@ -28,8 +39,11 @@ export default async function ApprovedSdkGamePage({
     return (
       <GameSdkFrame
         backHref="/games"
-        endpoint={`/api/game-sdk/${registration.id}/rooms`}
+        endpoint={`/api/game-sdk/${registration.id}/rooms?revision=${encodeURIComponent(
+          registration.revision,
+        )}`}
         gameId={registration.id}
+        packageRevision={registration.revision}
         runtimeId={registration.id}
         runtimeUrl={`/api/game-sdk/${encodeURIComponent(
           registration.id,

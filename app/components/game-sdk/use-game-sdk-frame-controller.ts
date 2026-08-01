@@ -11,12 +11,18 @@ import type { GameSdkSettingValue } from "@game-fields/game-sdk";
 import type { GameSdkModuleId } from "@game-fields/game-sdk/modules";
 import {
   createGameSdkHttpClientRuntime,
+  gameSdkCommandTimingForRoom,
   GameSdkHttpClientRuntimeError,
 } from "@game-fields/game-sdk/client-runtime";
 import { useAppLocale } from "@/app/components/AppLocaleProvider";
 import { useSdkPreviewSessionRequired } from "@/app/sdk-preview/SdkPreviewSessionGate";
 import { clearPlayerSession } from "@/lib/player-session";
 import { gameSdkDebugAutoFollowTarget } from "@/lib/game-sdk-debug-control-target";
+import {
+  gameSdkPackageRevisionHref,
+  gameSdkPackageRevisionIssue,
+  type GameSdkPackageRevisionIssue,
+} from "@/lib/game-sdk-package-revision";
 import {
   gameSdkResultPlayLog,
   gameSdkResultReasonText,
@@ -42,6 +48,7 @@ export function useGameSdkFrameController(
     creatorSlug,
     endpoint: endpointInput,
     gameId,
+    packageRevision,
     runtimeId,
     runtimeUrl,
     title,
@@ -76,6 +83,8 @@ export function useGameSdkFrameController(
   const [joinCode, setJoinCode] = useState("");
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState("");
+  const [packageRevisionIssue, setPackageRevisionIssue] =
+    useState<GameSdkPackageRevisionIssue | null>(null);
   const [playerDefaults, setPlayerDefaults] = useState<
     Record<string, GameSdkSettingValue>
   >({});
@@ -96,8 +105,23 @@ export function useGameSdkFrameController(
         setPlayerAuthRequired(true);
       }
     }
+    if (
+      error instanceof GameSdkHttpClientRuntimeError
+      && (
+        error.code === "ROOM_RUNTIME_MISMATCH"
+        || error.code === "SDK_PREVIEW_PACKAGE_NOT_AVAILABLE"
+        || error.code === "GAME_SDK_RUNTIME_CATALOG_UNAVAILABLE"
+      )
+    ) {
+      setPackageRevisionIssue({
+        kind: "unknown",
+        requestedRevision: packageRevision,
+        roomCode: "UNKNOWN",
+        roomRevision: null,
+      });
+    }
     setMessage(errorMessage(error, Boolean(creatorSlug)));
-  }, [creatorSlug, requirePreviewSession]);
+  }, [creatorSlug, packageRevision, requirePreviewSession]);
 
   const defaultsEndpoint = creatorSlug
     ? `/api/sdk-preview/${creatorSlug}/games/${gameId}/defaults`
@@ -122,11 +146,31 @@ export function useGameSdkFrameController(
   }, [defaultsEndpoint, moduleRequired]);
 
   const postRoomSnapshot = useCallback((next: PackageRoom | null) => {
+    const timing = gameSdkCommandTimingForRoom(next);
     iframeRef.current?.contentWindow?.postMessage({
       type: "game-fields:room-snapshot",
       room: next,
+      ...(timing ? {
+        timing: {
+          traceRef: timing.traceRef,
+          revision: timing.revision,
+        },
+      } : {}),
     }, "*");
   }, []);
+
+  const acceptPackageRevision = useCallback((next: PackageRoom) => {
+    const issue = gameSdkPackageRevisionIssue(packageRevision, next);
+    if (issue) {
+      setPackageRevisionIssue(issue);
+      setMessage(issue.kind === "mismatch"
+        ? "Room固定revisionとURL指定revisionが異なるため、自動復帰を停止しました。"
+        : "Room固定revisionを取得できないため、clientの読込を停止しました。");
+      return false;
+    }
+    setPackageRevisionIssue(null);
+    return true;
+  }, [packageRevision]);
 
   const debugState = useGameSdkDebugState({
     roomRef,
@@ -151,6 +195,7 @@ export function useGameSdkFrameController(
     debugActorSeat: debugState.debugActorSeat,
     resetDebugControl: debugState.resetDebugControl,
     postRoom: debugState.postRoom,
+    acceptPackageRevision,
   });
 
   const commandRunner = useGameSdkCommandRunner({
@@ -165,9 +210,10 @@ export function useGameSdkFrameController(
     usesLlm,
     moduleProfile,
     wrapDebugCommand: debugState.wrapDebugCommand,
+    debugViewer: debugState.debugViewer,
   });
 
-  const { room } = lifecycle;
+  const { room, refreshRooms } = lifecycle;
   const { selectDebugTarget, debugAutoFollow } = debugState;
   const debugOwnerSeat = room?.view.common.timer?.ownerSeat;
   useEffect(() => {
@@ -208,11 +254,14 @@ export function useGameSdkFrameController(
   const joinRoomByCode = useCallback((code: string) => commandRunner.run(async () => {
     const target = await runtime.readRoom(code);
     if (!target) throw new Error("ROOM_NOT_FOUND");
+    if (!acceptPackageRevision(target)) {
+      throw new Error("GAME_SDK_PACKAGE_REVISION_MISMATCH");
+    }
     return (await runtime.sendCommand(target.code, {
       expectedRevision: target.revision,
       command: { type: "room/join" },
     })).room;
-  }), [commandRunner, runtime]);
+  }), [acceptPackageRevision, commandRunner, runtime]);
 
   const defaultSettings = useMemo(() => Object.fromEntries(
     settingDefinitions.map((definition) => [
@@ -244,8 +293,8 @@ export function useGameSdkFrameController(
 
   const onPlayerAuthenticated = useCallback(() => {
     setPlayerAuthRequired(false);
-    void lifecycle.refreshRooms();
-  }, [lifecycle.refreshRooms]);
+    void refreshRooms();
+  }, [refreshRooms]);
 
   const onCreateRoom = useCallback(() => {
     void commandRunner.run(() => runtime.createRoom({
@@ -253,6 +302,37 @@ export function useGameSdkFrameController(
       create: { settings: defaultSettings, app: {} },
     }));
   }, [commandRunner, defaultSettings, runtime]);
+
+  const onResumePinnedRoom = useCallback(() => {
+    if (packageRevisionIssue?.kind !== "mismatch") return;
+    try {
+      window.location.assign(gameSdkPackageRevisionHref(
+        window.location.href,
+        packageRevisionIssue.roomRevision,
+      ));
+    } catch {
+      setMessage(
+        "Room固定revisionのURLを作成できませんでした。別revisionへは切り替えていません。",
+      );
+    }
+  }, [packageRevisionIssue]);
+
+  const onCreateRequestedRoom = useCallback(() => {
+    if (packageRevisionIssue?.kind !== "mismatch") return;
+    void commandRunner.run(() => runtime.createRoom({
+      roomCode: randomRoomCode(),
+      create: { settings: defaultSettings, app: {} },
+      replaceActiveRoom: {
+        code: packageRevisionIssue.roomCode,
+        packageRevision: packageRevisionIssue.roomRevision,
+      },
+    }));
+  }, [
+    commandRunner,
+    defaultSettings,
+    packageRevisionIssue,
+    runtime,
+  ]);
 
   const onStart = useCallback(() => {
     void commandRunner.run(() => commandRunner.send({ type: "game/start" }));
@@ -300,8 +380,10 @@ export function useGameSdkFrameController(
       room,
       roomRef,
       iframeRef,
-      runtime,
       runtimeUrl,
+      packageRevisionIssue,
+      onResumePinnedRoom,
+      onCreateRequestedRoom,
       moduleRequired,
       pending,
       message,
@@ -311,7 +393,7 @@ export function useGameSdkFrameController(
       rooms: lifecycle.rooms,
       onCreateRoom,
       onJoinRoomByCode: joinRoomByCode,
-      onRefreshRooms: () => void lifecycle.refreshRooms(),
+      onRefreshRooms: () => void refreshRooms(),
       common,
       supportsReplay,
       supportsSpectators,
@@ -342,7 +424,6 @@ export function useGameSdkFrameController(
       debugSwitchSource: debugState.debugSwitchSource,
       debugCanSend: debugState.debugCanSend,
       postRoom: debugState.postRoom,
-      resetDebugControl: debugState.resetDebugControl,
       run: commandRunner.run,
       send: commandRunner.send,
       sendPackageCommand: commandRunner.sendPackageCommand,

@@ -16,7 +16,7 @@ release:
   downloadMe: 17
   sdkPackage: "0.1.1"
   sdkHandshake: 1
-  sdkContract: 1
+  sdkContract: 2
   environment: "development"
 transport:
   portal: "https://sdk-dev.game-fields.com"
@@ -163,7 +163,7 @@ CALL get_sdk_handshake WITH:
     "environment": "development",
     "platformVersion": "0.1.1",
     "sdkPackageVersion": "0.1.1",
-    "sdkContractVersion": 1
+    "sdkContractVersion": 2
   },
   "requiredCapabilities": [
     "oauth2-pkce",

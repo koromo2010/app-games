@@ -24,6 +24,10 @@ import { LobbyInfoDrawer } from "./LobbyInfoDrawer";
 import { LobbyPrivateAccessControl } from "./LobbyPrivateAccessControl";
 import { useAppLocale } from "@/app/components/AppLocaleProvider";
 import { sdkDashboardHrefForAccess } from "@/lib/sdk-dashboard-navigation";
+import {
+  createGameDisplayMetadataSnapshot,
+  resolveGameDisplayMetadata,
+} from "@/lib/game-display-metadata";
 
 
 export function GameLobby({ siteName = "GAME FIELDS", gameOperations, durationEstimates = {}, additionalGames = [], includeBuiltInGames = true, sdkCreatorSlug, sdkDashboardHref }: { siteName?: string; gameOperations: GameOperation[]; durationEstimates?: Partial<Record<GameDurationGameId, GameDurationEstimate>>; additionalGames?: GameCatalogEntry[]; includeBuiltInGames?: boolean; sdkCreatorSlug?: string; sdkDashboardHref?: string }) {
@@ -103,10 +107,7 @@ export function GameLobby({ siteName = "GAME FIELDS", gameOperations, durationEs
     name, playerId, avatarColor, hasRecoveryEmail, setAvatarColor, setAvatarImage, setMessage,
   });
   const localizedGames = [...(includeBuiltInGames ? gamesForLocale(locale) : []), ...additionalGames];
-  const statsGameOptions = [
-    { value: "all" as const, label: t("stats.allGames") },
-    ...localizedGames.filter((game) => game.stats === "account").map((game) => ({ value: game.id as PlayerStatsGameFilter, label: game.title })),
-  ];
+  const sdkGameIds = new Set(additionalGames.map((game) => game.id));
   const gamesWithDurationEstimates = localizedGames.map((game) => {
     const estimate = durationEstimates[game.id as GameDurationGameId];
     return estimate ? { ...game, time: estimate.label, timeSampleCount: estimate.sampleCount } : game;
@@ -115,7 +116,37 @@ export function GameLobby({ siteName = "GAME FIELDS", gameOperations, durationEs
     const operation = gameOperationFor(gameOperations, game.id);
     return operation.publication !== "hidden" && (operation.publication === "public" || privateUnlocked);
   });
-  const orderedGames = [...visibleGames].sort((left, right) =>
+  const visibleGameIds = new Set(visibleGames.map((game) => game.id));
+  const displaySources = (entries: ReturnType<typeof gamesForLocale>) => entries
+    .filter((game) => visibleGameIds.has(game.id))
+    .map((game) => ({ id: game.id, title: game.title, href: game.href }));
+  const visibleSdkGames = additionalGames.filter((game) => visibleGameIds.has(game.id));
+  const gameDisplayMetadata = createGameDisplayMetadataSnapshot({
+    builtIn: {
+      ja: displaySources(gamesForLocale("ja")),
+      en: displaySources(gamesForLocale("en")),
+    },
+    sdk: {
+      ja: visibleSdkGames.map((game) => ({ id: game.id, title: game.title, href: game.href })),
+      en: visibleSdkGames.map((game) => ({ id: game.id, title: game.englishTitle?.trim() || game.title, href: game.href })),
+    },
+  });
+  const displayGames = visibleGames.map((game) => ({
+    ...game,
+    title: resolveGameDisplayMetadata(
+      gameDisplayMetadata,
+      sdkGameIds.has(game.id) ? `sdk:${game.id}` : game.id,
+      locale,
+    ).displayName,
+  }));
+  const statsGameOptions = [
+    { value: "all" as const, label: t("stats.allGames") },
+    ...displayGames.filter((game) => game.stats === "account").map((game) => ({
+      value: (sdkGameIds.has(game.id) ? `sdk:${game.id}` : game.id) as PlayerStatsGameFilter,
+      label: game.title,
+    })),
+  ];
+  const orderedGames = [...displayGames].sort((left, right) =>
     Number(Boolean(activeGameRooms[right.id])) - Number(Boolean(activeGameRooms[left.id])),
   );
 
@@ -147,7 +178,7 @@ export function GameLobby({ siteName = "GAME FIELDS", gameOperations, durationEs
 
           {isLoggedIn && <LobbyResumePanel room={activeRoom} isLoading={isActiveRoomLoading} onResume={rememberActiveRoom} />}
 
-          {isLoggedIn && <LobbyStatsPanel stats={stats} options={statsGameOptions} selectedGame={selectedStatsGame} isLoading={isStatsLoading}
+          {isLoggedIn && <LobbyStatsPanel stats={stats} options={statsGameOptions} gameDisplayMetadata={gameDisplayMetadata} selectedGame={selectedStatsGame} isLoading={isStatsLoading}
             onGameChange={changeStatsGame} onRefresh={() => void loadStats(playerId, selectedStatsGame)}
           />}
         </LobbyInfoDrawer>

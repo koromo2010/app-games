@@ -1,5 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "ignoreCommand": "node scripts/check-vercel-build-impact.mjs",
   "crons": [
     { "path": "/api/cron/storage-capacity", "schedule": "17 0 * * *" },
     { "path": "/api/cron/account-retention", "schedule": "43 0 * * *" }

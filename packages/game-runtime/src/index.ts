@@ -9,6 +9,9 @@ import type {
 } from "@game-fields/game-sdk";
 import {
   gameSdkViewerFromActor,
+  type GameSdkCommandContext,
+  type GameSdkPresentationContext,
+  type GameSdkRuntimeTiming,
   type GameSdkServerModule,
 } from "@game-fields/game-sdk/runtime";
 import type {
@@ -115,6 +118,7 @@ export type GameFieldsPlatformRuntimeErrorCode =
   | "COMMAND_ID_CONFLICT"
   | "PLAYER_NOT_IN_ROOM"
   | "GAME_SDK_MODULE_DISABLED"
+  | "GAME_SDK_ACTIVE_ROOM_REPLACEMENT_FORBIDDEN"
   | "GAME_SDK_RESULT_PERSISTENCE_PENDING"
   | "DEBUG_ACCESS_REQUIRED"
   | "DEBUG_VIEWER_INVALID"
@@ -175,11 +179,29 @@ export type GameFieldsPlatformRuntime<
     code: string;
     envelope: GameSdkCommandEnvelope<TCommand>;
     identity: GameFieldsAuthenticatedIdentity;
+    presentation?: {
+      identity: GameFieldsAuthenticatedIdentity;
+      debugViewer?: GameSdkViewer;
+    };
+    timing?: GameSdkRuntimeTiming;
   }): Promise<GameSdkCommandResult<TRoomView>>;
 };
 
 function clone<T>(value: T): T {
   return structuredClone(value);
+}
+
+async function measured<T>(
+  timing: GameSdkRuntimeTiming | undefined,
+  stage: Parameters<GameSdkRuntimeTiming["record"]>[0],
+  operation: () => T | Promise<T>,
+) {
+  const startedAt = performance.now();
+  try {
+    return await operation();
+  } finally {
+    timing?.record(stage, Math.max(0, performance.now() - startedAt));
+  }
 }
 
 function canonicalJson(value: unknown): string {
@@ -464,14 +486,56 @@ export function createGameFieldsPlatformRuntime<
     actor: GameSdkTrustedActor,
     timestamp: number,
     viewer: GameSdkViewer = gameSdkViewerFromActor(actor),
+    timing?: GameSdkRuntimeTiming,
   ) => snapshot(
     room,
-    await module.presentRoom(clone(room), {
+    await measured(timing, "present-room", () => module.presentRoom(clone(room), {
       viewer: clone(viewer),
       now: timestamp,
       resources,
-    }),
+    })),
   );
+
+  const resolveDebugViewer = (
+    record: Readonly<GameFieldsPlatformRoomRecord<TRoom>>,
+    requester: GameSdkTrustedActor,
+    debugViewer: GameSdkViewer | undefined,
+  ) => {
+    if (!debugViewer) return gameSdkViewerFromActor(requester);
+    if (
+      !module.manifest.supportsDebug
+      || !requester.debugAccess
+      || requester.role !== "host"
+    ) {
+      throw new GameFieldsPlatformRuntimeError(
+        "DEBUG_ACCESS_REQUIRED",
+        403,
+      );
+    }
+    const players = "players" in record.room
+      && Array.isArray(
+        (record.room as GameSdkStoredRoom & { players?: unknown }).players,
+      )
+      ? (record.room as GameSdkStoredRoom & {
+          players: Array<{ id?: unknown }>;
+        }).players
+      : [];
+    const playerExists = debugViewer.playerId === null
+      || players.some((player) => player.id === debugViewer.playerId);
+    const roleMatches = debugViewer.playerId === null
+      ? (
+          module.manifest.supportsSpectators
+          && debugViewer.role === "spectator"
+        )
+      : debugViewer.role === "host" || debugViewer.role === "player";
+    if (!playerExists || !roleMatches) {
+      throw new GameFieldsPlatformRuntimeError(
+        "DEBUG_VIEWER_INVALID",
+        400,
+      );
+    }
+    return clone(debugViewer);
+  };
 
   return {
     async createRoom({ roomCode, create, requestId: requestIdInput, identity }) {
@@ -534,47 +598,16 @@ export function createGameFieldsPlatformRuntime<
       assertStoredRecord(record, module.manifest.id, code, runtimeContract);
       const actor = trustedActor(identity, record.hostPlayerId);
       const isMember = storedRoomHasPlayer(record.room, actor.playerId);
-      if (debugViewer) {
-        if (
-          !module.manifest.supportsDebug
-          || !actor.debugAccess
-          || actor.role !== "host"
-        ) {
-          throw new GameFieldsPlatformRuntimeError(
-            "DEBUG_ACCESS_REQUIRED",
-            403,
-          );
-        }
-        const players = "players" in record.room
-          && Array.isArray(
-            (record.room as GameSdkStoredRoom & { players?: unknown }).players,
-          )
-          ? (record.room as GameSdkStoredRoom & {
-              players: Array<{ id?: unknown }>;
-            }).players
-          : [];
-        const playerExists = debugViewer.playerId === null
-          || players.some((player) => player.id === debugViewer.playerId);
-        const roleMatches = debugViewer.playerId === null
-          ? (
-              module.manifest.supportsSpectators
-              && debugViewer.role === "spectator"
-            )
-          : debugViewer.role === "host" || debugViewer.role === "player";
-        if (!playerExists || !roleMatches) {
-          throw new GameFieldsPlatformRuntimeError(
-            "DEBUG_VIEWER_INVALID",
-            400,
-          );
-        }
-      }
+      const resolvedDebugViewer = debugViewer
+        ? resolveDebugViewer(record, actor, debugViewer)
+        : undefined;
       if (!debugViewer && !isMember && record.phase !== "lobby") {
         throw new GameFieldsPlatformRuntimeError(
           "PLAYER_NOT_IN_ROOM",
           403,
         );
       }
-      const viewer = debugViewer ?? (
+      const viewer = resolvedDebugViewer ?? (
         isMember
           ? gameSdkViewerFromActor(actor)
           : {
@@ -586,12 +619,34 @@ export function createGameFieldsPlatformRuntime<
       return await present(record.room, actor, now(), viewer);
     },
 
-    async sendCommand({ code, envelope, identity }) {
-      const record = await persistence.load(code);
+    async sendCommand({ code, envelope, identity, presentation, timing }) {
+      const record = await measured(
+        timing,
+        "room-load",
+        () => persistence.load(code),
+      );
       if (!record) throw new GameFieldsPlatformRuntimeError("ROOM_NOT_FOUND", 404);
       assertStoredRecord(record, module.manifest.id, code, runtimeContract);
       const timestamp = now();
       const actor = trustedActor(identity, record.hostPlayerId);
+      const presenter = trustedActor(
+        presentation?.identity ?? identity,
+        record.hostPlayerId,
+      );
+      if (
+        presenter.playerId !== actor.playerId
+        && (!presenter.debugAccess || presenter.role !== "host")
+      ) {
+        throw new GameFieldsPlatformRuntimeError(
+          "DEBUG_ACCESS_REQUIRED",
+          403,
+        );
+      }
+      const responseViewer = resolveDebugViewer(
+        record,
+        presenter,
+        presentation?.debugViewer,
+      );
       if (
         envelope.command.type !== "room/join"
         && !storedRoomHasPlayer(record.room, actor.playerId)
@@ -623,7 +678,13 @@ export function createGameFieldsPlatformRuntime<
         ) {
           throw new GameFieldsPlatformRuntimeError("COMMAND_ID_CONFLICT", 409);
         }
-        const room = await present(source.room, actor, now());
+        const room = await present(
+          source.room,
+          presenter,
+          now(),
+          responseViewer,
+          timing,
+        );
         return {
           room,
           revision: room.revision,
@@ -720,16 +781,40 @@ export function createGameFieldsPlatformRuntime<
           409,
         );
       }
-      let nextRoom = platformRoom ?? await module.applyCommand(
-        commandRoom,
-        command,
-        {
-          actor: clone(actor),
-          now: commandTimestamp,
-          requestId: commandId,
-          resources,
-        },
+      const commandContext: GameSdkCommandContext = {
+        actor: clone(actor),
+        now: commandTimestamp,
+        requestId: commandId,
+        resources,
+      };
+      const presentationContext: GameSdkPresentationContext = {
+        viewer: clone(responseViewer),
+        now: timestamp,
+        resources,
+      };
+      const canBatchPresentation = Boolean(
+        !platformRoom
+        && !envelope.command.type.startsWith("room/debug-")
+        && module.applyCommandAndPresent
       );
+      const batched = canBatchPresentation
+        ? await measured(timing, "apply-command", () => (
+            module.applyCommandAndPresent!(
+              commandRoom,
+              command,
+              commandContext,
+              presentationContext,
+              timing,
+            )
+          ))
+        : null;
+      let nextRoom = platformRoom
+        ?? batched?.room
+        ?? await measured(timing, "apply-command", () => module.applyCommand(
+          commandRoom,
+          command,
+          commandContext,
+        ));
       if (
         (
           envelope.command.type === "room/debug-auto-progress"
@@ -823,7 +908,11 @@ export function createGameFieldsPlatformRuntime<
         })(),
         room: clone(nextRoom),
       };
-      const saved = await persistence.compareAndSet(record.revision, nextRecord);
+      const saved = await measured(
+        timing,
+        "room-cas",
+        () => persistence.compareAndSet(record.revision, nextRecord),
+      );
       if (saved === "missing") throw new GameFieldsPlatformRuntimeError("ROOM_NOT_FOUND", 404);
       if (saved === "conflict") {
         const latest = await persistence.load(code);
@@ -834,7 +923,15 @@ export function createGameFieldsPlatformRuntime<
         throw new GameFieldsPlatformRuntimeError("STALE_REVISION", 409);
       }
       await onSaved?.(clone(record), clone(nextRecord));
-      const room = await present(nextRoom, actor, timestamp);
+      const room = batched
+        ? snapshot(nextRoom, batched.view)
+        : await present(
+            nextRoom,
+            presenter,
+            timestamp,
+            responseViewer,
+            timing,
+          );
       return {
         room,
         revision: room.revision,

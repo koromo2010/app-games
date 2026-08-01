@@ -5,6 +5,7 @@ import {
   saveUserReportFormDraft,
   userReportFormDraftStorageKey,
 } from "../lib/user-report-form-draft.ts";
+import { SUPPORT_TEXT_LIMITS } from "../config/support-text-contract.ts";
 
 class MemoryStorage {
   private readonly values = new Map<string, string>();
@@ -69,17 +70,34 @@ test("a submitted report keeps its request ID across a component remount", () =>
   );
 });
 
-test("invalid or oversized report drafts are rejected or bounded", () => {
+test("invalid or oversized report drafts are rejected without truncation", () => {
   const storage = new MemoryStorage();
   storage.setItem(userReportFormDraftStorageKey, "{");
   assert.equal(loadUserReportFormDraft(storage), null);
 
+  const fullDetails = "b".repeat(SUPPORT_TEXT_LIMITS.details);
+  assert.equal(saveUserReportFormDraft({
+    type: "bug",
+    summary: "上限内の概要",
+    details: fullDetails,
+  }, storage), true);
+  assert.equal(loadUserReportFormDraft(storage)?.details, fullDetails);
+
+  assert.equal(saveUserReportFormDraft({
+    type: "bug",
+    summary: "上限内の概要",
+    details: `${fullDetails}x`,
+  }, storage), false);
+  assert.equal(
+    loadUserReportFormDraft(storage)?.details,
+    fullDetails,
+    "an oversized edit must not replace the last complete draft",
+  );
+
   storage.setItem(userReportFormDraftStorageKey, JSON.stringify({
     type: "bug",
-    summary: "a".repeat(200),
-    details: "b".repeat(2_000),
+    summary: "a".repeat(SUPPORT_TEXT_LIMITS.summary + 1),
+    details: "invalid",
   }));
-  const draft = loadUserReportFormDraft(storage);
-  assert.equal(draft?.summary.length, 120);
-  assert.equal(draft?.details.length, 1_200);
+  assert.equal(loadUserReportFormDraft(storage), null);
 });

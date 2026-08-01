@@ -1,0 +1,49 @@
+name: Apply SDK contract v2 alignment
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - scripts/apply-sdk-contract-v2-alignment.mjs
+      - .github/workflows/apply-sdk-contract-v2-alignment.yml
+  pull_request:
+    branches: [develop]
+    paths:
+      - scripts/apply-sdk-contract-v2-alignment.mjs
+      - .github/workflows/apply-sdk-contract-v2-alignment.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  align-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 0
+      - name: Fetch starter branch
+        run: git fetch origin sdk-starter-dev:refs/remotes/origin/sdk-starter-dev
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Apply alignment
+        run: node scripts/apply-sdk-contract-v2-alignment.mjs
+      - name: Verify release contract alignment
+        run: node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types --test tests/sdk-release-contract-alignment.test.ts
+      - name: Verify platform release versions
+        run: npm run check:versions
+      - name: Build SDK package
+        run: npm run build:sdk-package
+      - name: Commit alignment
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/sdk-portal/public/GameFieldsDownloadMe-ver17.md tests/sdk-release-contract-alignment.test.ts
+          git commit -m "Align DownloadMe 17 with SDK contract v2"
+          git push origin HEAD:develop

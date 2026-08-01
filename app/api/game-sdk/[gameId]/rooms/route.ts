@@ -8,6 +8,7 @@ import { createRequestTelemetry } from "@/lib/observability";
 import { commonOnlineRoomErrorResponse } from "@/lib/online-room-route-errors";
 import { requireAuthenticatedPlayer } from "@/lib/player-auth";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
+import { createGameSdkCommandTimingCollector } from "@/lib/game-sdk-command-timing";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,8 +27,15 @@ function json(payload: unknown, status: number) {
 }
 
 async function handle(request: Request, context: RouteContext, method: Method) {
+  const timing = createGameSdkCommandTimingCollector();
   const { gameId: rawGameId } = await context.params;
   const gameId = rawGameId.trim().toLowerCase();
+  const requestedRevision = new URL(request.url).searchParams
+    .get("revision")
+    ?.trim() || undefined;
+  if (requestedRevision && !/^[a-f0-9]{40}$/.test(requestedRevision)) {
+    return json({ error: "GAME_SDK_INVALID_PACKAGE_REVISION" }, 400);
+  }
   const route = `/api/game-sdk/${gameId}/rooms`;
   const telemetry = createRequestTelemetry(request, route, {
     game: `sdk:${gameId}`,
@@ -41,8 +49,14 @@ async function handle(request: Request, context: RouteContext, method: Method) {
   });
   let registration;
   try {
-    registration = approvedGameSdkRegistration(gameId)
-      ?? await loadApprovedGameSdkRuntimeRegistration(gameId);
+    registration = await timing.measure("runtime-resolve", async () => (
+      approvedGameSdkRegistration(gameId)
+        ?? await loadApprovedGameSdkRuntimeRegistration(
+          gameId,
+          process.env,
+          requestedRevision,
+        )
+    ));
   } catch (error) {
     telemetry.failure("game-sdk.catalog", error, 503, {
       action: "runtime-resolve",
@@ -58,14 +72,19 @@ async function handle(request: Request, context: RouteContext, method: Method) {
   }
 
   try {
-    const session = await requireAuthenticatedPlayer();
-    const identity = {
-      playerId: session.id,
-      displayName: session.name,
-      debugAccess: registration.supportsDebug
-        ? await playerHasDebugAccess(session.id)
-        : false,
-    };
+    const { session, identity } = await timing.measure("auth", async () => {
+      const authenticated = await requireAuthenticatedPlayer();
+      return {
+        session: authenticated,
+        identity: {
+          playerId: authenticated.id,
+          displayName: authenticated.name,
+          debugAccess: registration.supportsDebug
+            ? await playerHasDebugAccess(authenticated.id)
+            : false,
+        },
+      };
+    });
     if (method === "GET") {
       const limited = await rateLimitResponseFor(
         request,
@@ -79,6 +98,7 @@ async function handle(request: Request, context: RouteContext, method: Method) {
     const actorRef = telemetry.actorRef(session.id);
     let observed = false;
     const handlers = createGameSdkOnlineRoomHttpHandlers({
+      timing: method === "PATCH" ? timing : undefined,
       adapter: registration.createAdapter(
         async () => identity,
         request,
@@ -139,7 +159,11 @@ async function handle(request: Request, context: RouteContext, method: Method) {
         actorRef,
       });
     }
-    return response;
+    if (method !== "PATCH") return response;
+    for (const entry of timing.finish()) {
+      telemetry.info("game-sdk.command-timing", timing.observabilityFields(entry));
+    }
+    return timing.decorate(response);
   } catch (error) {
     const response = commonOnlineRoomErrorResponse(error)
       ?? json({ error: "GAME_SDK_RUNTIME_FAILED" }, 500);

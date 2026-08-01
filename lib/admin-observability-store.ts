@@ -41,21 +41,17 @@ function storedIssue(event: ObservabilityEvent): AdminIssue {
 export async function recordAdminIssue(event: ObservabilityEvent) {
   if (!getRedisConfig() || (event.level !== "warn" && event.level !== "error")) return;
   const issue = storedIssue(event);
-  try {
-    await redisCommand<number>([
-      "EVAL",
-      "redis.call('ZADD',KEYS[1],ARGV[1],ARGV[2]); redis.call('ZREMRANGEBYSCORE',KEYS[1],'-inf',ARGV[3]); redis.call('ZREMRANGEBYRANK',KEYS[1],'0',ARGV[4]); redis.call('EXPIRE',KEYS[1],ARGV[5]); return 1",
-      "1",
-      issueKey,
-      String(issue.occurredAt),
-      JSON.stringify(issue),
-      String(issue.occurredAt - retentionMs),
-      String(-(maximumStoredIssues + 1)),
-      String(Math.ceil(retentionMs / 1_000)),
-    ]);
-  } catch {
-    // Monitoring must never make a game request fail.
-  }
+  await redisCommand<number>([
+    "EVAL",
+    "redis.call('ZADD',KEYS[1],ARGV[1],ARGV[2]); redis.call('ZREMRANGEBYSCORE',KEYS[1],'-inf',ARGV[3]); redis.call('ZREMRANGEBYRANK',KEYS[1],'0',ARGV[4]); redis.call('EXPIRE',KEYS[1],ARGV[5]); return 1",
+    "1",
+    issueKey,
+    String(issue.occurredAt),
+    JSON.stringify(issue),
+    String(issue.occurredAt - retentionMs),
+    String(-(maximumStoredIssues + 1)),
+    String(Math.ceil(retentionMs / 1_000)),
+  ]);
 }
 
 function parseIssue(raw: string): AdminIssue | null {

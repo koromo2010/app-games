@@ -1,3 +1,9 @@
+import {
+  saveValidatedGamePackage,
+  type ValidatedGamePackage,
+} from "./game-package-persistence.ts";
+import type { RuntimeArtifactReader } from "@game-fields/sdk-runtime-artifact";
+
 const REPOSITORY_PATTERN = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 const BRANCH_PATTERN = /^[A-Za-z0-9._-]{1,100}$/;
 const INSTANCE_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])?$/;
@@ -454,6 +460,71 @@ export async function readGamePackageFileAtRevision(input: {
   return content;
 }
 
+export function createGamePackageRuntimeReader(dependencies: {
+  env?: NodeJS.ProcessEnv;
+  fetchRuntime?: typeof fetch;
+} = {}): RuntimeArtifactReader {
+  const config = mockGitConfig(dependencies.env);
+  const fetchRuntime = dependencies.fetchRuntime ?? fetch;
+  return {
+    async readCommit(revision) {
+      try {
+        const commit = await githubApi<{
+          sha?: unknown;
+          tree?: { sha?: unknown };
+        }>(config, `/git/commits/${revision}`, undefined, fetchRuntime);
+        return typeof commit.sha === "string" && typeof commit.tree?.sha === "string"
+          ? { commitSha: commit.sha, treeSha: commit.tree.sha }
+          : null;
+      } catch (error) {
+        if (error instanceof GitHubApiError && error.status === 404) return null;
+        throw error;
+      }
+    },
+    async readTree(treeSha) {
+      try {
+        const tree = await githubApi<{
+          truncated?: unknown;
+          tree?: Array<{ path?: unknown; type?: unknown; sha?: unknown; size?: unknown }>;
+        }>(config, `/git/trees/${treeSha}?recursive=1`, undefined, fetchRuntime);
+        if (tree.truncated !== false || !Array.isArray(tree.tree)) return null;
+        const entries = tree.tree.map((entry) => {
+          if (
+            typeof entry.path !== "string"
+            || typeof entry.sha !== "string"
+            || (entry.type !== "blob" && entry.type !== "tree")
+          ) return null;
+          return {
+            path: entry.path,
+            type: entry.type as "blob" | "tree",
+            sha: entry.sha,
+            ...(Number.isSafeInteger(entry.size) ? { bytes: Number(entry.size) } : {}),
+          };
+        });
+        return entries.every((entry) => entry !== null) ? entries : null;
+      } catch (error) {
+        if (error instanceof GitHubApiError && error.status === 404) return null;
+        throw error;
+      }
+    },
+    async readBlob(blobSha) {
+      try {
+        const blob = await githubApi<{ encoding?: unknown; content?: unknown }>(
+          config,
+          `/git/blobs/${blobSha}`,
+          undefined,
+          fetchRuntime,
+        );
+        if (blob.encoding !== "base64" || typeof blob.content !== "string") return null;
+        return Buffer.from(blob.content.replaceAll("\n", ""), "base64");
+      } catch (error) {
+        if (error instanceof GitHubApiError && error.status === 404) return null;
+        throw error;
+      }
+    },
+  };
+}
+
 export function gamePackageUploadFileFromBytes(
   path: string,
   content: Uint8Array,
@@ -676,16 +747,24 @@ export async function saveGamePackageFilesToGit(input: {
   instanceId: string;
   gameId: string;
   files: unknown;
+  validatedPackage?: ValidatedGamePackage;
 }, dependencies: {
   env?: NodeJS.ProcessEnv;
   fetchRuntime?: typeof fetch;
 } = {}) {
-  return saveFilesToGit({
-    instanceId: input.instanceId,
-    gameId: input.gameId,
-    files: prepareGamePackageUploadFiles(input.files),
-    prefix: `packages/${input.instanceId}/${input.gameId}/bundle`,
-    message: `Update SDK game package ${input.instanceId}/${input.gameId}`,
-    ...dependencies,
+  const files = input.validatedPackage
+    ? input.validatedPackage.files
+    : prepareGamePackageUploadFiles(input.files);
+  return saveValidatedGamePackage({
+    files,
+    validatedPackage: input.validatedPackage,
+    persist: (validated) => saveFilesToGit({
+      instanceId: input.instanceId,
+      gameId: input.gameId,
+      files: validated.files,
+      prefix: `packages/${input.instanceId}/${input.gameId}/bundle`,
+      message: `Update SDK game package ${input.instanceId}/${input.gameId}`,
+      ...dependencies,
+    }),
   });
 }

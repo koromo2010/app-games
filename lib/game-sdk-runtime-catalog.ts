@@ -374,6 +374,7 @@ export async function loadApprovedGameSdkRuntimeRegistration(
       return createAuthenticatedGameSdkPlatformAdapter({
         module: currentModule,
         runtimeContract: currentContract,
+        allowActiveRoomPackageRevisionReplacement: true,
         async resolveRuntime(contract) {
           const pinned = await loadRuntimeCatalogPayload(
             gameId,

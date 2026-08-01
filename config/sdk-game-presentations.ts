@@ -20,6 +20,13 @@ const defaultPresentation = {
 export const approvedSdkGamePresentations: Readonly<
   Record<string, ApprovedSdkGamePresentation>
 > = {
+  "link-lines": {
+    title: {
+      ja: "道つなぎ",
+      en: "Link Lines",
+    },
+    visual: "/game-visuals/sdk-game-placeholder.svg",
+  },
   "ai-word-guess": {
     title: {
       ja: "コトバに迫れ",

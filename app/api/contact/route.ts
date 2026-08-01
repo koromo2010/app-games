@@ -6,7 +6,7 @@ import {
 } from "@/lib/contact-store";
 import {
   sendContactReceiptEmail,
-  sendOperationsAlertEmail,
+  sendSupportAdminNotificationEmail,
 } from "@/lib/email";
 import { createContactThreadToken } from "@/lib/contact-thread-access";
 import {
@@ -15,8 +15,12 @@ import {
 } from "@/lib/observability";
 import { getAuthenticatedPlayerId } from "@/lib/player-auth";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
+import {
+  SupportTextValidationError,
+  supportTextValidationPayload,
+  validateSupportText,
+} from "@/config/support-text-contract";
 
-const clean = (value: unknown, length: number) => typeof value === "string" ? value.trim().slice(0, length) : "";
 export async function POST(request: Request) {
   const telemetry = createRequestTelemetry(request, "/api/contact", {
     operation: "contact-submit",
@@ -26,12 +30,25 @@ export async function POST(request: Request) {
   let body: Record<string, unknown>;
   try { body = await request.json() as Record<string, unknown>; } catch { return Response.json({ error: "Invalid request" }, { status: 400 }); }
   const category = isContactCategory(body.category) ? body.category : null;
-  const name = clean(body.name, 80); const email = clean(body.email, 254); const message = clean(body.message, 3000);
-  const requestId = clean(body.requestId, 36).toLowerCase();
+  const name = typeof body.name === "string" ? body.name.trim() : "";
+  const email = typeof body.email === "string" ? body.email.trim() : "";
+  let message;
+  try {
+    message = validateSupportText(body.message, "reply", { required: true });
+  } catch (error) {
+    if (error instanceof SupportTextValidationError) {
+      return Response.json(supportTextValidationPayload(error), { status: 400 });
+    }
+    throw error;
+  }
+  const requestId = typeof body.requestId === "string"
+    ? body.requestId.trim().toLowerCase()
+    : "";
   if (
     !category
     || !email
-    || !message
+    || name.length > 80
+    || email.length > 254
     || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
     || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
       .test(requestId)
@@ -58,12 +75,14 @@ export async function POST(request: Request) {
       || contact.notificationStatus !== "sent";
     const [notification] = await Promise.all([
       shouldNotify
-        ? sendOperationsAlertEmail({
-          audience: "contacts",
+        ? sendSupportAdminNotificationEmail({
+          reference: {
+            kind: "contact",
+            id: contact.id,
+          },
+          title: "新しい問い合わせ",
           replyTo: contact.email,
-          subject: `【GAME FIELDS】お問い合わせ ${contact.category}`,
           lines: [
-            `ID: ${contact.id}`,
             `Name: ${contact.name || "未入力"}`,
             `Email: ${contact.email}`,
             "",

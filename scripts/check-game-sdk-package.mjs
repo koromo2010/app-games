@@ -170,7 +170,7 @@ const round = nextGameSdkRoundStep({
   completedPhase: "result",
 });
 if (round.round !== 2 || round.phase !== "playing" || round.complete) process.exit(1);
-if (requiredGameSdkModuleIds(createInitialGameSdkModuleProfile()).length !== 38) process.exit(1);
+if (requiredGameSdkModuleIds(createInitialGameSdkModuleProfile()).length !== 39) process.exit(1);
 const contentSource = defineGameSdkContentSource({
   async drawWords(request) {
     return Array.from({ length: request.count }, (_, index) => ({

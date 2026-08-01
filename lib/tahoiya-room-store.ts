@@ -38,11 +38,17 @@ const roomRuntime = createPlatformOnlineRoomStoreRuntime({
     forbidden: "TAHOIYA_ROOM_FORBIDDEN",
     inProgress: "TAHOIYA_ROOM_IN_PROGRESS",
   },
-  afterSave: (room) => Promise.all([
-    recordTahoiyaRoundResults(room),
-    recordTahoiyaReplay(room),
-    recordTahoiyaDecoyCandidates(room),
-  ]),
+  afterSave: async (room) => {
+    await Promise.all([
+      recordTahoiyaRoundResults(room),
+      recordTahoiyaReplay(room),
+    ]);
+    await schedulePostResponseWork(
+      "tahoiya-decoy-candidate-persistence",
+      () => recordTahoiyaDecoyCandidates(room),
+      { mode: "best-effort" },
+    );
+  },
 });
 
 async function mutateStoredTahoiyaRoom(
@@ -65,7 +71,18 @@ export async function loadAndReconcileStoredTahoiyaRoom(code: string) {
       : current,
   );
   if (reconcileRoom(room) === room) {
-    await schedulePostResponseWork("tahoiya-result-persistence", () => Promise.all([recordTahoiyaRoundResults(room), recordTahoiyaReplay(room), recordTahoiyaDecoyCandidates(room)]));
+    await schedulePostResponseWork(
+      "tahoiya-result-persistence",
+      () => Promise.all([
+        recordTahoiyaRoundResults(room),
+        recordTahoiyaReplay(room),
+      ]),
+    );
+    await schedulePostResponseWork(
+      "tahoiya-decoy-candidate-persistence",
+      () => recordTahoiyaDecoyCandidates(room),
+      { mode: "best-effort" },
+    );
     return room;
   }
   return mutateStoredTahoiyaRoom(code, reconcileRoom);

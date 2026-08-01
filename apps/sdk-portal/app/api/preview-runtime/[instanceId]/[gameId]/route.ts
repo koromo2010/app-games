@@ -8,6 +8,7 @@ import {
   createPackageRuntimeAccess,
   createPreviewRuntimeUrl,
 } from "@/lib/preview-links";
+import { resolvePreviewRuntime } from "@/lib/preview-runtime-resolution";
 import { getGamePackageContractVersion } from "@/lib/game-package-contract-version";
 import { normalizeGameSdkModuleProfile } from "@game-fields/game-sdk/modules";
 import { parseGameSdkSettingDefinitions } from "@game-fields/game-sdk";
@@ -71,11 +72,23 @@ export async function GET(request: Request, { params }: { params: Promise<{ inst
   if (requestedRevision && !/^[a-f0-9]{40}$/.test(requestedRevision)) {
     return Response.json({ error: "revision_invalid" }, { status: 400 });
   }
-  const game = await (
-    requestedRevision
-      ? getCreatorGamePackageRevision(instanceId, gameId, requestedRevision)
-      : getCreatorGamePreview(instanceId, gameId)
-  ).catch(() => null);
+  const resolution = await resolvePreviewRuntime({
+    requestedRevision: requestedRevision || undefined,
+    resolvePackageRevision: (revision) => (
+      getCreatorGamePackageRevision(instanceId, gameId, revision)
+    ),
+    resolveLegacyPreview: () => getCreatorGamePreview(instanceId, gameId),
+  }).then(
+    (game) => ({ ok: true as const, game }),
+    () => ({ ok: false as const }),
+  );
+  if (!resolution.ok) {
+    return Response.json(
+      { error: "preview_unavailable" },
+      { status: 503, headers: { "Cache-Control": "no-store" } },
+    );
+  }
+  const game = resolution.game;
   if (!game) return Response.json({ error: "not_found" }, { status: 404 });
   try {
     const packageAccess = game.packageRevision

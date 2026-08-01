@@ -4,6 +4,108 @@
 
 この文書は、再調査を減らし、次に直す範囲を選びやすくするための監査記録である。将来構想ではなく、現在のコードで確認できた事実を記録する。状態が「修正済み」の項目は、同じ問題を再導入しないための回帰確認点として残す。
 
+## 2026-08-01 SDK packageの動的asset参照が保存後監査まで持ち越される
+
+状態: app-games側の共有validator・保存前gate・local auditをローカル再実装済み／checkpoint commit・private workflow反映・既存Dixit修復待ち
+
+T-46の17ファイル分のローカル実装は検証後にcommit／pushされないまま旧worktreeとともに失われ、参照可能なcommit、patch、worktreeが残っていなかった。`origin/develop@17c331e18908120b26cab85a2132c987999a924e`には直接参照を含むasset validator自体が存在しなかったため、T-46とT-62の明文化済み契約を正本として再実装した。
+
+共有pure validatorは最終`PreparedUploadFile[]`だけを入力とし、正式HTML／CSS／JavaScript／TypeScript parserから得た参照をpackage内で解決する。静的参照は存在とbrowser-readable policyを確認し、asset pathを含む未解決template literal、文字列連結、変数参照とparse errorは保存前にfail closedで拒否する。RESTとMCPは認証DBより先にも共有preparationを実行し、release artifact transferはvalidation後・target Git前にschemaを確認する。全経路を同じ保存serviceへ集約し、拒否時はschema、DB、Git、Blob、Redis、audit、submission、promotionの注入fake dependencyがすべて0回である。local audit CLIも同じvalidatorとerror codeを使い、指定package以外を監査しない。
+
+実際の`Dynamic asset audit`はprivate package Git側にあり、このrepositoryにはworkflow sourceがない。したがってapp-gamesのlocal gateが通っても、private workflow反映と既存Dixit artifact修復が明示許可後に完了するまでは、保存後通知を含む外部運用の完全解消とは判定しない。
+
+## 2026-07-30 SDK candidate採用がrelease履歴の必須列欠落で503になる
+
+状態: ローカル修正・回帰テスト済み／develop未反映・実機未確認
+
+`SDK-dev → dev`で固定Packageのmanifest検証が成功した後、
+`POST /api/admin/sdk-promotions`が503 `promotion_failed`になった。
+migration 006は`sdk_app_releases.source_revision`を既存`revision`でbackfillして
+`NOT NULL`化しているが、candidate採用の新release INSERTだけが同列を指定していなかった。
+そのためPreview Runtime検証後のSDK PostgreSQL書込みがNOT NULL制約で失敗していた。
+同時刻のRedis timeoutはこの書込み失敗とは別事象である。
+
+candidate採用は、検証対象の`sdk_games.package_revision`を固定sourceとして使用し、
+同じ値を新releaseの`revision`と`source_revision`へ保存する。stable pointer、
+channel履歴、以前のcurrent解除、新release、判断履歴は従来どおり一つの
+data-modifying CTE文に保ち、どの書込みが失敗しても文全体をrollbackする。
+安全な構造化失敗ログには段階、`sdk-candidate`経路、制作者／ゲーム識別子、
+source revision、安全なエラー種別・コードだけを残し、例外本文、SQL、manifest、
+token、接続URL、判断理由、実行者は含めない。
+
+同じcandidate採用serviceを共有する`SDK → main`にも潜在的に同じ欠落があったため
+同時に修正対象となる。`dev app → main app`の昇格・復元は既に
+`source_revision`を保存しており変更しない。migration 004の初回backfill INSERTは
+source列を追加するmigration 006より前に一度だけ実行されるため現行順序で正しい。
+
+## 2026-07-30 通常の正式Room作成が旧Mock Shellへ入りRuntime未接続になる
+
+状態: 修正済み／自動検証済み／develop配備・通常正式Room実機確認済み／main未反映
+
+`test10-1 / link-lines`をSDK Dashboardの制作者トップから通常選択すると、
+最新candidate Packageが存在するにもかかわらずrevisionなしのゲームURLへ遷移し、
+旧`SdkPreviewGameShell`を開いていた。通常カタログの`listCreatorGames`は最新candidate
+revisionを返さず、queryなしのPortal Runtime APIはimmutable
+`sdk_game_package_revisions`ではなく、mutableなゲーム行の`package_revision`または
+`mock_revision`を読んでいた。対象ゲームはcandidate作成済み・正式提出前だったため、
+通常導線だけがMockを解決し、revision指定URLはcandidate Packageを解決していた。
+
+問題Room `GF43`は旧ShellのReact state内で生成されたコードであり、正式Room APIへの
+作成POST、server Room record、保存済み`packageRevision`は存在しない。Runtime logでも
+同時刻の`GF43`作成はなく、queryなしRoom APIは
+`SDK_PREVIEW_PACKAGE_NOT_AVAILABLE`、revision指定Room APIは同じcandidateで成功していた。
+
+修正では通常カタログへ最新candidate revisionを載せ、通常カードもrevision固定URLへ
+遷移させる。さらにqueryなし／revision指定のPortal Runtime APIを同じimmutable Package
+resolverへ統一する。queryなしは最新candidate、revision指定は指定行を解決し、
+Packageが1件もない場合だけ旧Mockへ戻す。Package resolverの例外、Runtime bundle解決、
+grant生成の失敗は503または明示エラーで停止し、Mockへfallbackしない。Room保存、
+旧Room復帰、新revisionで新Roomを作る分岐は変更しない。
+
+修正commit `bbfb5979697e699b128d4e0e4481580b8621ff82`は`develop`へnon-forceで
+反映済みで、`app-games-dev`、`app-games-sdk-dev`、`app-games-preview-dev`の
+同commit Production Deploymentはすべて`READY`となった。
+
+SDK Portalの制作者トップから通常のゲームカードを選び、現行candidateで正式Room
+`N80U`を作成した。Runtime clientが`Room同期済み`まで接続し、ダミー参加者追加、
+ゲーム開始、1行1列への青の縦配置、青から赤への手番交代を確認した。SDK Portal全体を
+再読込した後に同じ通常カードを開くと、同Room、配置済み盤面、総手数、手番へ復帰した。
+revision指定URLでも同Roomへ復帰し、通常導線とclient Runtime endpointおよびrevisionが
+一致した。旧Roomへ戻る分岐、新revisionで新Roomを作る分岐、選択前にclient iframeを
+起動しない条件も再確認した。共通基盤の横断確認として、別のcandidate Package
+`ai-word-guess`も通常カードから正式Roomを作成し、固有Runtime clientの起動を確認した。
+
+## 2026-07-29 SDK正式Room復帰で旧server stateと新clientが混在する
+
+状態: 修正済み／develop配備・正式Room実機確認済み／main未反映（2026-07-29）
+
+`test10-1 / link-lines`の正式Room導線で、active Room `30QT`は作成時の
+package revision `42292ad52a3bafcd751d6ba1767534d794c0c602`を
+`runtimeContract`へ保持していた。一方、Room Snapshotは`packageRevision`を返さず、
+`GameSdkFrame`はURL指定revision
+`02efe902e4ed49ea525abb862da74c123651efcb`のclient iframeを先に選択していた。
+server adapterは旧Room用bundleを正しく解決していたため、同じRoom内で旧server stateと
+新clientが混在し、データ形式不一致で操作不能になった。active Roomの自動復帰により、
+新revisionで新Roomを作る入口も塞がれていた。
+
+修正ではRoom recordの固定`packageRevision`をSnapshot・一覧・HTTP clientまで保持し、
+Room attach、watch更新、Command応答、`PLAYER_ACTIVE_ROOM`復帰の全入口でclient revisionとの
+一致を先に検査する。不一致ならiframeを起動せず、旧Room固定revisionでページ全体を
+再読込するか、URL指定revisionで新Roomを作るかを明示選択する。新Roomへのactive索引置換は
+server側で本人・現在Room・旧revision・新revisionを再照合し、失敗時は索引をrollbackする。
+固定revision不明、package解決失敗、client ready未到達は明示エラーで停止し、旧Mockや
+別revisionへfallbackしない。旧Roomの解散や削除は行わず、「解散後にタブだけ閉じた」
+現象とは分離する。
+
+修正commit `ae6a39c184894f6a1849a3740b517575a6e537f5`は`develop`へ反映済みで、
+`app-games-dev`、`app-games-sdk-dev`、`app-games-preview-dev`の同commit Production
+Deploymentはすべて`READY`となった。SDK Portalの正式Room導線だけで、選択前にclientを
+読み込まないこと、旧Room `30QT`が固定revision
+`42292ad52a3bafcd751d6ba1767534d794c0c602`のclientでrev 12からrev 15まで正常動作すること、
+URL指定revision `02efe902e4ed49ea525abb862da74c123651efcb`で新Room `21GT`を作成して
+rev 1からrev 4まで正常動作することを確認した。同URLの再読込では不一致画面なしで
+`21GT`へ通常復帰し、新revision clientと配置済みstateを保持した。
+
 ## 2026-07-27 SDK LLMのJSON SchemaがGeminiへ渡らずCommandを拒否する
 
 状態: 共通基盤修正・回帰テスト済み／dev配備と実機再確認待ち（2026-07-27）
@@ -1057,3 +1159,80 @@ Dashboardは初回・更新を問わず新candidateがあれば提出操作を�
 `ready-for-submission`もカード上へ表示する。「制作環境」は制作者環境全体のロビーではなく、
 カードの`gameId`を含む既存ゲーム別制作画面へ遷移する。revision保存、所有者認可、
 正式提出APIは既存機構をそのまま使い、新しい権限や提出経路は追加しない。
+
+## 2026-07-30 管理受信箱の新着未反映とRedis timeoutの誤帰属
+
+状態: T-33再発・原因確定、ローカル修正／回帰検証済み、対象recordの現物Redis照合待ち
+
+dev管理画面の「問い合わせ・報告」で、新着通知がある一方、一覧が13件のまま、
+オープン0件と表示された。同時刻のVercel記録では
+`GET /api/admin/contact-messages`が200であるにもかかわらず、
+`REDIS_STORE_REQUEST_TIMEOUT`とNode process exit 128が同じ実行へ記録された。
+
+source mapでstackを復元すると、timeout元は問い合わせ一覧ではなく、
+SDK Preview Room更新成功後に投げっぱなしで実行していた
+`saveSdkPreviewRoomInviteTarget`／`deleteSdkPreviewRoomInviteTarget`だった。
+非同期処理のrejectが未処理のまま同じFluid Nodeプロセスを終了させ、
+並行していた管理APIのpathへ誤帰属された。T-33完了後の再発条件に該当する。
+
+Room成功後の招待索引更新はNext.jsのpost-response workへ登録し、失敗を安全な
+telemetryへ変換してprocessを終了させない。管理受信箱は、問い合わせと報告の
+どちらか一方でも取得に失敗した場合に旧itemsと件数を消し、状態フィルターを隠す。
+両管理GETは一覧件数または安全な失敗分類を構造化ログへ残す。
+
+devでは通常問い合わせ2件のPOST 201と、SDK Portal報告
+`report_8e58e0d0-3ba2-4cb8-90e5-c35f57b4729c`の承認POST 201を確認した。
+SDK報告はPortalと本体の対応時刻から`app-games-sdk-dev → app-games-dev`への接続を確認した。
+保存処理はLuaの単一`EVAL`でrecord SETとindex LPUSHを原子的に行うため、
+当初保存時の「recordだけ成功、indexだけ失敗」は起きない。
+
+現物Redisのrecord、index membership、status、createdAt、updatedAtは、
+通知の正確な`contact_...` IDと承認済みの読取専用接続経路がまだないため未照合である。
+この照合までは、後発の削除・索引破損・環境変更と、通知がアプリ外メール経路だった可能性を
+最終除外しない。Redis接続先、環境変数、外部設定は変更していない。
+
+## 2026-07-30 問い合わせ・報告メールから保存recordを追跡できない
+
+状態: T-39追加対応をローカル修正／focused検証済み、dev反映・実メール確認待ち
+
+通常問い合わせ、ゲーム内報告、SDK Portal報告は保存後の画面では
+`contact_...`／`report_...`を返していたが、管理者新着メールの件名にはフルIDがなく、
+通常問い合わせの運営返信本文にも受付IDがなかった。メールだけから対象recordを固定できず、
+障害時のRedis照合に本文や送信者情報が必要になる状態だった。
+
+保存済みrecord IDをメール通知層の唯一の追跡IDとし、メール専用IDは作らない。
+管理者新着・追記、通常問い合わせの受付確認・運営返信、報告への運営返信は、
+件名を`[Game Fields][問い合わせ|報告][フルID] ...`形式に揃え、textとHTML本文の
+冒頭付近にも`受付ID：contact_...`または`報告ID：report_...`をコピー可能な形で表示する。
+同一スレッドの返信・メールだけの再送も保存済みrecord IDを維持する。
+メールの件名・本文生成は`lib/support-email-content.ts`へ集約し、ログへ本文、氏名、
+メールアドレスを追加しない。
+
+## 2026-07-31 T-39 SDK Preview Room GETが招待索引を書き換える
+
+状態: 原因確定・新規最小修正／ローカル検証完了、未push・未配備
+
+`/api/sdk-preview/[creatorSlug]/games/[gameId]/rooms`の成功callbackが、
+操作種別を判定せずRoom snapshotの存在だけで招待索引を保存していた。そのため
+Room GET、active取得、一覧、debug viewでもRedis `SET`が発生していた。
+app-games-devで確認された15件のtimeoutは、この不要write経路と一致する。
+
+招待索引の更新条件を成功callbackから独立した単一helperへ閉じ、
+GET系は0回、Room作成POSTは`SET` 1回、実際に適用されたPATCHは`SET` 1回、
+単一Roomを実際に解散したDELETEは`DEL` 1回とした。冪等PATCHと対象なしの解散は
+0回である。招待索引の`SET`はRoom本体と同じ6時間TTL引数を共用し、
+readでTTLを延長しない。
+
+招待索引、realtime通知、たほい屋の再利用用decoy候補保存等、
+正本でない処理だけを明示的なbest-effort background処理とし、
+失敗を固定enumのstructured telemetryへ変換する。telemetryは
+critical／best-effort、read／write／pipeline、REST／socket、Redis command、
+command件数、serialized bytesを記録できるが、Room code、playerId、
+Redis key/value、URL、tokenは記録しない。telemetry保存自体の失敗にも
+process-safeな構造化fallbackを設け、Unhandled Rejectionを残さない。
+
+Room本体、戦績、replay、SDK Room保存・SDK resultはcriticalのままawaitし、
+失敗を記録した上で呼出元へ再throwする。write retry、timeout値、Redis接続先、
+namespace、環境変数は変更していない。問い合わせ・報告・メールID対応にも
+差分はない。raw Redis照合は、安全なread-only経路がないとの確定済み判断に従い
+再試行していない。

@@ -16,6 +16,23 @@ export function gameFieldsPackageClientRuntimeSource() {
   const clone = (value) => value == null
     ? value
     : JSON.parse(JSON.stringify(value));
+  const safeTiming = (value) => value
+    && typeof value === "object"
+    && typeof value.traceRef === "string"
+    && /^command_[A-Za-z0-9_-]{8,80}$/.test(value.traceRef)
+    && Number.isSafeInteger(value.revision)
+      ? { traceRef: value.traceRef, revision: value.revision }
+      : null;
+  const recordTiming = (stage, timing, startedAt) => {
+    if (!timing || typeof performance?.measure !== "function") return;
+    const duration = Math.max(0, performance.now() - startedAt);
+    try {
+      performance.measure(
+        "game-sdk:" + stage + ":" + timing.traceRef + ":r" + timing.revision,
+        { start: startedAt, duration }
+      );
+    } catch {}
+  };
   const notify = (command) => {
     const current = clone(snapshot);
     listeners.forEach((listener) => listener(current));
@@ -34,7 +51,12 @@ export function gameFieldsPackageClientRuntimeSource() {
       pending.delete(requestId);
       reject(new Error("GAME_SDK_COMMAND_TIMEOUT"));
     }, 60000);
-    pending.set(requestId, { resolve, reject, timeoutId });
+    pending.set(requestId, {
+      resolve,
+      reject,
+      timeoutId,
+      startedAt: performance.now()
+    });
     window.parent.postMessage({
       type: "game-fields:room-command",
       requestId,
@@ -105,9 +127,22 @@ export function gameFieldsPackageClientRuntimeSource() {
     const message = event.data;
     if (!message || typeof message !== "object") return;
     if (message.type === "game-fields:room-snapshot") {
+      const timing = safeTiming(message.timing);
+      const notificationStartedAt = performance.now();
       snapshot = clone(message.room);
       notify("room:hydrate");
+      recordTiming("iframe-state", timing, notificationStartedAt);
       scheduleMeasure();
+      if (timing) {
+        window.requestAnimationFrame(() => {
+          recordTiming("next-animation-frame", timing, notificationStartedAt);
+          window.parent.postMessage({
+            type: "game-fields:room-state-presented",
+            traceRef: timing.traceRef,
+            revision: timing.revision
+          }, "*");
+        });
+      }
       return;
     }
     if (
@@ -120,10 +155,15 @@ export function gameFieldsPackageClientRuntimeSource() {
       pending.delete(message.requestId);
       window.clearTimeout(request.timeoutId);
       if (message.type === "game-fields:room-command-result") {
-        if (message.room) {
+        if (message.room && message.stateDelivered !== true) {
           snapshot = clone(message.room);
           notify("room:command");
         }
+        recordTiming(
+          "command-resolve",
+          safeTiming(message.timing),
+          request.startedAt
+        );
         request.resolve(clone(message.room));
       } else {
         request.reject(new Error(
@@ -158,15 +198,23 @@ function escapeHtmlAttribute(value: string) {
     .replaceAll(">", "&gt;");
 }
 
+function removeLegacyPresetScripts(html: string) {
+  return html.replace(
+    /<script\b(?=[^>]*(?:data-game-fields-preset|src\s*=\s*["'][^"']*game-fields\/preset\.js(?:[?#][^"']*)?["']))[^>]*>\s*<\/script\s*>/gi,
+    "",
+  );
+}
+
 export function injectGameFieldsPackageClient(
   html: string,
   runtimeSrc: string,
 ) {
-  if (/<script\b[^>]*\bdata-game-fields-package-room(?:\s|=|>)/i.test(html)) {
-    return html;
+  const packageHtml = removeLegacyPresetScripts(html);
+  if (/<script\b[^>]*\bdata-game-fields-package-room(?:\s|=|>)/i.test(packageHtml)) {
+    return packageHtml;
   }
   const script = `<script data-game-fields-package-room src="${escapeHtmlAttribute(runtimeSrc)}"></script>`;
-  return /<\/head\s*>/i.test(html)
-    ? html.replace(/<\/head\s*>/i, `${script}</head>`)
-    : `${script}${html}`;
+  return /<head\b[^>]*>/i.test(packageHtml)
+    ? packageHtml.replace(/<head\b[^>]*>/i, (head) => `${head}${script}`)
+    : `${script}${packageHtml}`;
 }

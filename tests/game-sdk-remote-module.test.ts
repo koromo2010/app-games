@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { GameSdkManifest } from "@game-fields/game-sdk";
 import { createGameSdkRemoteServerModule } from "../lib/game-sdk-remote-module.ts";
+import { createGameSdkCommandTimingCollector } from "../lib/game-sdk-command-timing.ts";
 
 const manifest: GameSdkManifest = {
   id: "runner-test",
@@ -72,4 +73,148 @@ test("remote runner does not retry an authentication failure", async () => {
     /GAME_SDK_REMOTE_RUNNER_AUTH_FAILED/,
   );
   assert.equal(attempts, 1);
+});
+
+test("remote Command batch uses one runner HTTP call and keeps guest operations protocol-v1", async () => {
+  const requests: unknown[] = [];
+  const runnerModule = moduleWith(async (_input, init) => {
+    const body = JSON.parse(String(init?.body)) as {
+      kind?: unknown;
+      apply?: { version?: unknown; invocation?: { operation?: unknown } };
+    };
+    requests.push(body);
+    return Response.json({
+      ok: true,
+      value: {
+        room: { code: "BATCH", revision: 2, phase: "playing" },
+        view: { phase: "playing", viewer: "spectator" },
+      },
+    });
+  });
+  assert.ok(runnerModule.applyCommandAndPresent);
+  const result = await runnerModule.applyCommandAndPresent(
+    { code: "BATCH", revision: 1, phase: "lobby" },
+    { type: "game/start" },
+    {
+      actor: {
+        playerId: "host-player",
+        displayName: "Host",
+        role: "host",
+        debugAccess: true,
+      },
+      now: 1_000,
+      requestId: "batch-command-0001",
+      resources: {},
+    },
+    {
+      viewer: {
+        playerId: null,
+        role: "spectator",
+        debugAccess: true,
+      },
+      now: 1_000,
+      resources: {},
+    },
+  );
+
+  assert.deepEqual(result, {
+    room: { code: "BATCH", revision: 2, phase: "playing" },
+    view: { phase: "playing", viewer: "spectator" },
+  });
+  assert.equal(requests.length, 1);
+  assert.deepEqual(requests[0], {
+    kind: "game-fields-command-batch-v1",
+    apply: {
+      version: 1,
+      invocation: {
+        operation: "applyCommand",
+        input: {
+          room: { code: "BATCH", revision: 1, phase: "lobby" },
+          command: { type: "game/start" },
+          context: {
+            actor: {
+              playerId: "host-player",
+              displayName: "Host",
+              role: "host",
+              debugAccess: true,
+            },
+            now: 1_000,
+            requestId: "batch-command-0001",
+          },
+        },
+      },
+      effects: {},
+    },
+    presentationContext: {
+      viewer: {
+        playerId: null,
+        role: "spectator",
+        debugAccess: true,
+      },
+      now: 1_000,
+    },
+  });
+});
+
+test("an injected runner delay and runner-owned stages stay attributed to the runner", async () => {
+  const originalPerformance = globalThis.performance;
+  let now = 0;
+  Object.defineProperty(globalThis, "performance", {
+    configurable: true,
+    value: { now: () => now },
+  });
+  try {
+    const runnerModule = moduleWith(async () => {
+      now += 23;
+      return Response.json({
+        ok: true,
+        value: {
+          room: { code: "BATCH", revision: 2, phase: "playing" },
+          view: { phase: "playing" },
+        },
+      }, {
+        headers: {
+          "Server-Timing": "quickjs-init;dur=5, bundle-eval;dur=7",
+        },
+      });
+    });
+    assert.ok(runnerModule.applyCommandAndPresent);
+    const timing = createGameSdkCommandTimingCollector(() => now);
+    await runnerModule.applyCommandAndPresent(
+      { code: "BATCH", revision: 1, phase: "playing" },
+      { type: "game/move" },
+      {
+        actor: {
+          playerId: "host-player",
+          displayName: "Host",
+          role: "host",
+          debugAccess: true,
+        },
+        now: 1_000,
+        requestId: "batch-command-delay1",
+        resources: {},
+      },
+      {
+        viewer: {
+          playerId: "host-player",
+          role: "host",
+          debugAccess: true,
+        },
+        now: 1_000,
+        resources: {},
+      },
+      timing,
+    );
+
+    assert.deepEqual(timing.entries(), [
+      { stage: "runner-call", durationMs: 23, count: 1 },
+      { stage: "quickjs-init", durationMs: 5, count: 1 },
+      { stage: "bundle-eval", durationMs: 7, count: 1 },
+    ]);
+  } finally {
+    Object.defineProperty(globalThis, "performance", {
+      configurable: true,
+      value: originalPerformance,
+    });
+  }
 });

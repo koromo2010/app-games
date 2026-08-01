@@ -302,7 +302,7 @@ async function storeReplay(replay: StoredGameReplay, roomCode: string) {
       outcome: "failed",
       errorCode: observabilityErrorCode(error),
     });
-    return false;
+    throw error;
   }
 }
 

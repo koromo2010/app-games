@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import * as nodeModule from "node:module";
 import test from "node:test";
 import {
   isGamePackageReleaseSupported,
@@ -13,6 +14,34 @@ import type {
 import {
   prepareGamePackageUploadFiles,
 } from "../apps/sdk-portal/lib/mock-git-store.ts";
+import { sdkPackageAssetFixture } from "./sdk-package-asset-fixtures.ts";
+
+const registerHooks = (nodeModule as unknown as {
+  registerHooks(options: {
+    resolve(
+      specifier: string,
+      context: object,
+      nextResolve: (specifier: string, context: object) => unknown,
+    ): unknown;
+  }): void;
+}).registerHooks;
+
+registerHooks({
+  resolve(specifier, context, nextResolve) {
+    try {
+      return nextResolve(specifier, context);
+    } catch (error) {
+      if (
+        (error as { code?: string }).code === "ERR_MODULE_NOT_FOUND"
+        && (specifier.startsWith("./") || specifier.startsWith("../"))
+        && !/\.[cm]?[jt]sx?$/.test(specifier)
+      ) {
+        return nextResolve(`${specifier}.ts`, context);
+      }
+      throw error;
+    }
+  },
+});
 
 function sha256(content: string) {
   return createHash("sha256").update(content).digest("hex");
@@ -197,6 +226,8 @@ test("Markdown package files are validated as UTF-8 text", () => {
 });
 
 test("package inspection rejects active SVG and extension/MIME mismatches", () => {
+  const typedFixture: PreparedUploadFile[] = sdkPackageAssetFixture();
+  assert.equal(typedFixture.some((file) => file.path === "game-fields-package.json"), true);
   const raw = packageFiles().map(({ path, content, encoding }) => ({
     path,
     content,

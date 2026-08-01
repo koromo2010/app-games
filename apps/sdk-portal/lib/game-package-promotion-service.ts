@@ -4,17 +4,24 @@ import {
 import { createPackageRuntimeAccess } from "./preview-links";
 import {
   assertExpectedGamePackageSource,
+  gamePackagePromotionReleaseRevisions,
   gamePackagePromotionSource,
   GamePackagePromotionError,
   type ExpectedGamePackageSource,
   type GamePackagePromotionTarget,
 } from "./game-package-promotion";
+import {
+  logGamePackagePromotionFailure,
+  type GamePackagePromotionFailureContext,
+} from "./game-package-promotion-observability";
 import { jsonValuesEqual } from "./canonical-json";
 import {
   normalizeReleaseDecision,
   type ReleaseDecisionInput,
 } from "./release-decision";
 import { ensureSdkSchema, sdkSql } from "./sdk-postgres";
+
+export { promotionErrorResponse } from "./game-package-promotion";
 
 const IDENTIFIER_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?$/;
 const REVISION_PATTERN = /^[a-f0-9]{40}$/;
@@ -117,7 +124,10 @@ async function verifyPortableManifest(target: {
   }
 }
 
-export async function promoteGamePackage(input: PromoteGamePackageInput) {
+async function promoteGamePackageInner(
+  input: PromoteGamePackageInput,
+  failureContext: GamePackagePromotionFailureContext,
+) {
   const {
     creatorSlug,
     gameId,
@@ -125,10 +135,14 @@ export async function promoteGamePackage(input: PromoteGamePackageInput) {
     expected,
     decision,
   } = normalizedInput(input);
+  failureContext.creatorSlug = creatorSlug;
+  failureContext.gameId = gameId;
   if (!publicGameId) {
     throw new GamePackagePromotionError("promotion_input_invalid", 400);
   }
+  failureContext.stage = "schema_validation";
   await ensureSdkSchema();
+  failureContext.stage = "source_lookup";
   const targets = await sdkSql()`
     SELECT c.slug AS "creatorSlug", g.game_id AS "gameId", g.manifest,
            g.package_revision AS "packageRevision",
@@ -159,6 +173,12 @@ export async function promoteGamePackage(input: PromoteGamePackageInput) {
     appSetSha256,
     manifest,
   } = source;
+  const {
+    revision: releaseRevision,
+    sourceRevision,
+  } = gamePackagePromotionReleaseRevisions(source);
+  failureContext.sourceRevision = sourceRevision;
+  failureContext.stage = "manifest_verification";
   await verifyPortableManifest({
     creatorSlug,
     gameId,
@@ -168,6 +188,9 @@ export async function promoteGamePackage(input: PromoteGamePackageInput) {
   });
   const manifestJson = JSON.stringify(manifest);
   const lineageId = `${creatorSlug}/${gameId}`;
+  failureContext.stage = "release_write";
+  // Keep the stable pointer, release history, and decision in one PostgreSQL
+  // statement so any failed CTE write rolls the entire adoption back.
   const rows = await sdkSql()`
     WITH source AS (
       SELECT g.id, g.title, g.description, g.module_policy
@@ -222,14 +245,15 @@ export async function promoteGamePackage(input: PromoteGamePackageInput) {
     new_release AS (
       INSERT INTO sdk_app_releases (
         lineage_id, public_game_id, source_creator_slug, source_game_id,
-        title, description, revision, package_root_sha256, server_bundle_sha256,
-        app_set_source_sha256, manifest, module_policy, source_environment,
-        release_kind
+        title, description, revision, source_revision, package_root_sha256,
+        server_bundle_sha256, app_set_source_sha256, manifest, module_policy,
+        source_environment, release_kind
       )
       SELECT ${lineageId}, ${publicGameId}, ${creatorSlug}, ${gameId},
-             source.title, source.description, ${revision}, ${packageRootSha256},
-             ${bundleSha256}, ${appSetSha256}, ${manifestJson}::jsonb,
-             source.module_policy, ${input.target}, 'promotion'
+             source.title, source.description, ${releaseRevision},
+             ${sourceRevision}, ${packageRootSha256}, ${bundleSha256},
+             ${appSetSha256}, ${manifestJson}::jsonb, source.module_policy,
+             ${input.target}, 'promotion'
       FROM source
       JOIN updated_game ON updated_game.id = source.id
       CROSS JOIN release_gate
@@ -255,6 +279,7 @@ export async function promoteGamePackage(input: PromoteGamePackageInput) {
     JOIN new_release ON TRUE
     JOIN decision ON TRUE
   `;
+  failureContext.stage = "result_validation";
   const promoted = Array.isArray(rows) ? rows[0] : null;
   if (!promoted) {
     throw new GamePackagePromotionError("promotion_source_changed", 409);
@@ -275,6 +300,21 @@ export async function promoteGamePackage(input: PromoteGamePackageInput) {
       decidedAt: string;
     }),
   };
+}
+
+export async function promoteGamePackage(input: PromoteGamePackageInput) {
+  const failureContext: GamePackagePromotionFailureContext = {
+    stage: "input_validation",
+    targetEnvironment: input.target === "development" || input.target === "main"
+      ? input.target
+      : undefined,
+  };
+  try {
+    return await promoteGamePackageInner(input, failureContext);
+  } catch (error) {
+    logGamePackagePromotionFailure(failureContext, error);
+    throw error;
+  }
 }
 
 export async function rejectGamePackage(input: Omit<PromoteGamePackageInput, "publicGameId">) {
@@ -343,15 +383,4 @@ export async function rejectGamePackage(input: Omit<PromoteGamePackageInput, "pu
     revision: source.revision,
     ...(rejected as { decisionId: string; decidedAt: string }),
   };
-}
-
-export function promotionErrorResponse(error: unknown) {
-  if (error instanceof GamePackagePromotionError) {
-    return Response.json({ error: error.code }, { status: error.status });
-  }
-  const code = error instanceof Error ? error.message : "";
-  if (/unique/i.test(code)) {
-    return Response.json({ error: "public_game_id_conflict" }, { status: 409 });
-  }
-  return Response.json({ error: "promotion_failed" }, { status: 503 });
 }

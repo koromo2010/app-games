@@ -20,20 +20,39 @@ import {
   siteAdminAuthorizationError,
 } from "@/lib/site-admin-auth";
 import { appendSiteAdminAuditLog } from "@/lib/site-admin-passkey-store";
+import {
+  SupportTextValidationError,
+  supportTextValidationPayload,
+  validateSupportText,
+} from "@/config/support-text-contract";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const telemetry = createRequestTelemetry(
+    request,
+    "/api/admin/user-reports",
+    { operation: "user-report-list" },
+  );
   try {
     await requireFullSiteAdminSession();
+    const reports = await listUserReports();
+    telemetry.success("user-report.list", {
+      affectedCount: reports.length,
+    });
     return Response.json(
-      { reports: await listUserReports() },
+      { reports },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
-    return siteAdminAuthorizationError(error)
-      ?? Response.json({ error: "USER_REPORTS_LOAD_FAILED" }, { status: 500 });
+    const auth = siteAdminAuthorizationError(error);
+    if (auth) return auth;
+    telemetry.failure("user-report.list", error, 500);
+    return Response.json(
+      { error: "USER_REPORTS_LOAD_FAILED" },
+      { status: 500 },
+    );
   }
 }
 
@@ -64,9 +83,9 @@ export async function POST(request: Request) {
         ? body.messageId
         : "";
       const retryRequestId = typeof body.requestId === "string"
-        ? body.requestId.trim().slice(0, 120)
+        ? body.requestId.trim()
         : "";
-      if (!reportId || !messageId || !retryRequestId) {
+      if (!reportId || !messageId || !retryRequestId || retryRequestId.length > 120) {
         return Response.json(
           { error: "USER_REPORT_REPLY_EMAIL_RETRY_INVALID" },
           { status: 400 },
@@ -136,11 +155,13 @@ export async function POST(request: Request) {
       });
       return Response.json({ report, deliveryStatus });
     }
-    const message = typeof body?.message === "string"
-      ? body.message.trim().slice(0, 3_000)
-      : "";
+    const message = validateSupportText(
+      body?.message,
+      "reply",
+      { required: true },
+    );
     const requestId = typeof body?.requestId === "string"
-      ? body.requestId.trim().slice(0, 120)
+      ? body.requestId.trim()
       : "";
     const status = isUserReportStatus(body?.status)
       ? body.status
@@ -148,7 +169,7 @@ export async function POST(request: Request) {
     if (
       typeof body?.reportId !== "string"
       || !requestId
-      || !message
+      || requestId.length > 120
     ) {
       return Response.json(
         { error: "USER_REPORT_REPLY_INVALID" },
@@ -215,8 +236,17 @@ export async function POST(request: Request) {
   } catch (error) {
     const auth = siteAdminAuthorizationError(error);
     if (auth) return auth;
+    if (error instanceof SupportTextValidationError) {
+      return Response.json(supportTextValidationPayload(error), { status: 400 });
+    }
     if (error instanceof Error && error.message === "USER_REPORT_NOT_FOUND") {
       return Response.json({ error: error.message }, { status: 404 });
+    }
+    if (
+      error instanceof Error
+      && error.message === "USER_REPORT_MESSAGE_ID_CONFLICT"
+    ) {
+      return Response.json({ error: error.message }, { status: 409 });
     }
     telemetry.failure("user-report.reply", error, 500);
     return Response.json(
@@ -245,9 +275,9 @@ export async function PUT(request: Request) {
       ? body.reportId
       : "";
     const requestId = typeof body?.requestId === "string"
-      ? body.requestId.trim().slice(0, 120)
+      ? body.requestId.trim()
       : "";
-    if (!reportId || !requestId) {
+    if (!reportId || !requestId || requestId.length > 120) {
       return Response.json(
         { error: "USER_REPORT_NOTIFICATION_RETRY_INVALID" },
         { status: 400 },

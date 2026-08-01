@@ -240,8 +240,8 @@ export async function promoteAppRelease(
   }
   const snapshot = snapshotValue;
   const decision = normalizedDecision(decisionValue);
-  await ensureSdkSchema();
   const artifact = await transferArtifact(snapshot);
+  await ensureSdkSchema();
   await verifyRuntime(snapshot, artifact.revision);
   const manifest = JSON.stringify(snapshot.manifest);
   const modulePolicy = JSON.stringify(snapshot.modulePolicy);

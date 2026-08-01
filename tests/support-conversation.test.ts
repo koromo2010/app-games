@@ -41,6 +41,7 @@ test("admin inboxes reply into the shared thread and choose the next state", () 
   const reportRoute = read("app/api/admin/user-reports/route.ts");
   const contactRoute = read("app/api/admin/contact-messages/route.ts");
   const email = read("lib/email.ts");
+  const emailContent = read("lib/support-email-content.ts");
 
   assert.match(panel, /返信後の状態/);
   assert.match(panel, /waiting-user/);
@@ -57,10 +58,14 @@ test("admin inboxes reply into the shared thread and choose the next state", () 
   assert.match(contactRoute, /sendSupportReplyEmail/);
   assert.match(contactRoute, /contact-message\.reply/);
   assert.match(email, /idempotencyKey/);
-  assert.match(email, /SDK Portalで会話を確認・返信する/);
-  assert.match(email, /次の報告IDだけを貼り付けてください/);
-  assert.match(email, /経緯と安全な返信手順は自動で読み込まれます/);
+  assert.match(emailContent, /SDK Portalで会話を確認・返信する/);
+  assert.match(emailContent, /次の報告IDだけを貼り付けてください/);
+  assert.match(
+    emailContent,
+    /経緯と安全な返信手順は自動で読み込まれます/,
+  );
   assert.doesNotMatch(email, /aiContinuationPrompt/);
+  assert.doesNotMatch(emailContent, /aiContinuationPrompt/);
 });
 
 test("contact submitters can continue a private UI conversation", () => {

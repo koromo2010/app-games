@@ -1,6 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { validateGameOperationsInput } from "@/lib/game-operations";
-import { loadGameOperations, saveGameOperations } from "@/lib/game-operations-store";
+import { loadGameOperations } from "@/lib/game-operations-store";
+import { saveGameOperations } from "@/lib/game-operations-write-store";
 import { createRequestTelemetry } from "@/lib/observability";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 import { requireFullSiteAdminSession, requireRecentSiteAdminMfa, siteAdminAuthorizationError } from "@/lib/site-admin-auth";
