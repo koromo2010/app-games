@@ -3604,3 +3604,40 @@ active HEADは基準SHAのままで、active commit、製品`origin` push、PR�
 
 - `0.2.0`修正はローカル検証後、追加の`develop` pushとdev 3 Projectの新Deploymentが必要になる。2026-08-02に利用者から、補正commit 1回の`develop` push、`app-games-dev`／`app-games-sdk-dev`／`app-games-preview-dev`の自動Deployment、実機確認後の`sdk-starter-dev@0.2.0`更新について明示許可を得た。本項を含む補正commitを反映対象とする。
 - `main`、production、npm公開、`sdk-starter`、手動Redeploy、PRは対象外のまま維持する。`sdk-starter-dev`は正しい`0.2.0` dev Deploymentとhandshake確認後にだけ更新する。
+## 2026-08-02 — Intake #1／#2をmain・productionへ昇格
+
+### 利用者からの要望
+
+- devで確認済みのSDK初回導入Intake #1／#2とPlatform 0.2.0を、同じ実装のままmain・production・安定版Starterへ反映する。
+- 無関係なVercel Projectを配備せず、npm公開は今回の対象外とする。
+
+### 判断
+
+- 旧mainの昇格履歴を失わないよう、developの検証済みtreeを第一親、旧mainを第二親とするmerge commitへmain／developを揃える。force pushは使わない。
+- production対象は`app-games`、`app-games-sdk`、`app-games-sdk-preview`の3 Projectだけとし、dev 3 Projectと重複`app-games-sdk-portal`はIgnored Buildで停止する。
+- 安定版Starterは共通release設定からproduction profileを生成し、`game-fields`、`GameFieldsDownloadMe-ver0.2.0.md`、`sdk-starter`を手編集せず固定する。
+
+### 実施結果
+
+- main／developをmerge commit `14eb253776ea2bcb8b8b55dcd3a36335788fb940`、tree `4b1da20ebec5fd7a5690468c71229ae9ec1cbd18`へforceなしで統一した。
+- production Deploymentは`app-games` `dpl_4EjEua6CgAY3MeDPyYVHWpNWAkUk`、`app-games-sdk` `dpl_3S6SxxDQSBsYwFQsxzAuaCe13dpA`、`app-games-sdk-preview` `dpl_A1rVdSCBpxMrBgb2F8nzqqgNkF1T`で、3件ともREADY。main更新波のdev 3件と重複PortalはCANCELEDだった。
+- 履歴統合のdevelop更新では内容差分0だったが、`app-games-dev`だけが`diff-unavailable`として保守的に1回buildされ、`dpl_5j3is8hKBPRn3qk4hx8u6Her2ruG`が同一treeでREADY。他6件はCANCELEDだった。
+- `UPSTASH_REDIS_REST_URL`／`UPSTASH_REDIS_REST_TOKEN`は`app-games-sdk` Productionで再デプロイされ、`/api/health`がschema 7、instance registry `ok`、namespace `production`を返した。秘密値は記録していない。
+- 安定版`sdk-starter`を`af05b9cb2b3997647cbdd5edbf400830c53db607`、tree `0a4873f040d8b2faf81847546564026eec91b1dc`へforceなしで更新した。Starter branch由来のVercel 7件はすべてCANCELEDだった。
+
+### 検証
+
+- `npm run check:versions`、lint、全847 test、production profileのStarter外部install・契約検査・完走デモ・repository snapshot生成がPASSした。
+- 本番Portalは`GameFieldsDownloadMe-ver0.2.0.md`、`game-fields`、本番MCP URL、`sdk-starter`、新規プラグイン作成から接続・OAuth・更新までの案内を返した。
+- production 3 Deploymentのerror／fatal Runtime Logは0件。安定版Starterをbranchから再取得し、manifestと同梱SDK tarballのGit blobが生成物と一致した。
+
+### 関連コミット
+
+- `14eb253` — SDK onboarding fixes and Platform 0.2.0 production promotion
+- `af05b9c` — production SDK starter 0.2.0
+
+### 未対応・保留
+
+- 同じ制作者アカウントからURL名`krm`の予約を再試行し、Intake #2の利用者導線を完走確認する。
+- npmの`@game-fields/game-sdk@0.2.0`公開は今回実施していない。
+

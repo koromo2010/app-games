@@ -253,8 +253,8 @@ Sensitive設定済みの互換変数をVercel上で複製できない移行期�
 | キー | Production | Development | SDK | Sensitive | 用途 |
 | --- | --- | --- | --- | --- | --- |
 | `APP_REDIS_URL` | 本番Redis | 開発Redis | SDKでは未使用 | Yes | Redis接続文字列正本候補 |
-| `UPSTASH_REDIS_REST_URL` | 本番 | 開発 | `sdk-dev-redis`をSDK本番・開発Portalだけで共用。`app-games-sdk` Productionへ2026-08-02登録済み、未Redeploy | Yes | Upstash REST URL。SDK Portalでは予約registryに使用 |
-| `UPSTASH_REDIS_REST_TOKEN` | 本番 | 開発 | `sdk-dev-redis`をSDK本番・開発Portalだけで共用。`app-games-sdk` Productionへ2026-08-02登録済み、未Redeploy | Yes | Upstash REST Token。SDK Portalでは予約registryに使用 |
+| `UPSTASH_REDIS_REST_URL` | 本番 | 開発 | `sdk-dev-redis`をSDK本番・開発Portalだけで共用。`app-games-sdk` Productionへ2026-08-02登録・再デプロイ・health実機確認済み | Yes | Upstash REST URL。SDK Portalでは予約registryに使用 |
+| `UPSTASH_REDIS_REST_TOKEN` | 本番 | 開発 | `sdk-dev-redis`をSDK本番・開発Portalだけで共用。`app-games-sdk` Productionへ2026-08-02登録・再デプロイ・health実機確認済み | Yes | Upstash REST Token。SDK Portalでは予約registryに使用 |
 | `SDK_REDIS_REST_URL` | 不要 | 不要 | 互換読取名。現在の追加依頼なし | Yes | SDK予約registry専用REST URLの別名 |
 | `SDK_REDIS_REST_TOKEN` | 不要 | 不要 | 互換読取名。現在の追加依頼なし | Yes | SDK予約registry専用REST Tokenの別名 |
 
@@ -334,13 +334,13 @@ SDK `llm` adapter、module lab、Preview中継API `/api/sdk-preview/llm`も本�
 | `SDK_MOCK_GITHUB_WRITE_TOKEN` | Project Variable、Sensitive | 設定禁止・未設定 | Production | 対象repositoryのContents read/writeだけ。90日期限 |
 | `SDK_MOCK_GITHUB_READ_TOKEN` | 設定禁止・未設定 | Project Variable、Sensitive | Production | 対象repositoryのContents read-onlyだけ。90日期限 |
 | `SDK_DATABASE_URL` | `app-games-sdk-neon`をIntegrationでLink、Sensitive | 設定禁止・未設定 | Production | 正しい変数名で登録後にmain Deployment作成済み。main反映時のmigration 005・006と`schemaVersion: 6`確認待ち |
-| `UPSTASH_REDIS_REST_URL` | `sdk-dev-redis`のREST URLをProject Variableとして登録済み、Sensitive | 設定禁止・未設定 | Production | 2026-08-02登録。新Deployment未作成、未実機確認 |
-| `UPSTASH_REDIS_REST_TOKEN` | `sdk-dev-redis`のREST TokenをProject Variableとして登録済み、Sensitive | 設定禁止・未設定 | Production | 2026-08-02登録。新Deployment未作成、未実機確認 |
+| `UPSTASH_REDIS_REST_URL` | `sdk-dev-redis`のREST URLをProject Variableとして登録済み、Sensitive | 設定禁止・未設定 | Production | 2026-08-02登録。`main@14eb253`のDeployment `dpl_3S6SxxDQSBsYwFQsxzAuaCe13dpA`で再デプロイ済み。`/api/health`のinstance registry `ok`・namespace `production`を実機確認済み |
+| `UPSTASH_REDIS_REST_TOKEN` | `sdk-dev-redis`のREST TokenをProject Variableとして登録済み、Sensitive | 設定禁止・未設定 | Production | 2026-08-02登録。`main@14eb253`のDeployment `dpl_3S6SxxDQSBsYwFQsxzAuaCe13dpA`で再デプロイ済み。`/api/health`のinstance registry `ok`・namespace `production`を実機確認済み |
 
 | 対象 | 現在状態 | 次の確認 |
 | --- | --- | --- |
 | private package Git | `koromo2010/game-fields-sdk-mocks`をPrivateで作成済み。Portal書込資格とPreview読取資格を分離 | 本番package保存後に専用branch・commit・読取を実機確認 |
-| Portal Vercel Project | `app-games-sdk`、Root Directory `apps/sdk-portal`、Production Branch `main`。`main@0e7889c`のDeploymentがREADY。`app-games-sdk-neon`はProductionだけへLink済み。2026-08-02に`UPSTASH_REDIS_REST_URL`／`TOKEN`をProductionへ登録したが、新Deploymentは未作成 | コード統合後に対象を限定して1回Deploymentし、現行schemaと`instanceRegistry.status: ok`／`namespace: production`を確認 |
+| Portal Vercel Project | `app-games-sdk`、Root Directory `apps/sdk-portal`、Production Branch `main`。`main@0e7889c`のDeploymentがREADY。`app-games-sdk-neon`はProductionだけへLink済み。2026-08-02に`UPSTASH_REDIS_REST_URL`／`TOKEN`をProductionへ登録し、`main@14eb253`のDeployment `dpl_3S6SxxDQSBsYwFQsxzAuaCe13dpA`がREADY。schema 7、`instanceRegistry.status: ok`、`namespace: production`を実機確認済み | 同じ制作者アカウントからURL名`krm`の予約を再試行 |
 | Preview Vercel Project | `app-games-sdk-preview`、Root Directory `apps/sdk-preview`、Node.js 24.x、Production Branch `main`。production専用の署名鍵・Git読取資格だけを登録し再デプロイ済み | main同期後のDeploymentを確認 |
 | Preview domain | `preview.game-fields.com`割当済み・Valid Configuration | `/health`とPortal発行grantからのpackage読取を実機確認 |
 
