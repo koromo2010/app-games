@@ -15,6 +15,7 @@
     "@game-fields/game-sdk": "0.1.1",
     "@game-fields/sdk-package-assets": "0.1.1",
     "@game-fields/sdk-preview-auth": "0.1.1",
+    "@game-fields/sdk-release-profiles": "0.1.1",
     "@game-fields/sdk-runtime-artifact": "0.1.1",
     "@game-fields/sdk-service-auth": "0.1.1",
     "@neondatabase/serverless": "^1.1.0",

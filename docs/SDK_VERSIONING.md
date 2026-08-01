@@ -1,6 +1,6 @@
 # Game Fields SDK バージョン管理
 
-`config/platform-release.json`を、Game Fields本体とSDK配布のリリース互換性に関する正本とする。
+`config/platform-release.json`を、Game Fields本体とSDK配布のリリース互換性に関する版の正本とする。環境別のPortal、プラグイン、DownloadMe名、Starter branchは`config/sdk-release-profiles.json`を正本とし、版と環境名を一つの設定へ混在させない。
 
 現在の開発候補はPlatform／SDK package `0.1.1`、SDK handshake `1`、SDK contract `1`、Room schema `2`である。Runner Runtimeは`quickjs-wasm-v1`、Resource ProtocolとClient Bridgeはそれぞれ`1`である。`0.1.1`はportable AppSet、正式Preview Room、hash固定昇格を追加する。ゲームのSDK contract schemaは維持する一方、Room開始時の固定契約とsettings snapshotを保存するため、Platform内部のRoom envelopeだけをv2へ上げる。
 
@@ -15,7 +15,8 @@
 - `runnerRuntimeVersion`: AppSetを実行する隔離Runtime実装。旧Roomを継続する間は必要な版を併存させる。
 - `resourceProtocolVersion`: LLMやWord DB等をPlatformがserver側注入するResource要求・応答契約。
 - `clientBridgeVersion`: package iframeとPlatform Shell間のRoom UI／Command bridge契約。
-- `starterRef`: 対応する公開Starter branch。安定版は`sdk-starter`、development候補は`sdk-starter-dev`。
+- DownloadMe version: 独立した整数を持たず、常に`platformVersion`と同じSemVerを使う。
+- SDK release profile: productionはプラグイン`game-fields`、`GameFieldsDownloadMe-ver<SemVer>.md`、`sdk-starter`、developmentはプラグイン`dev-game-fields`、`GameFieldsDownloadMe-dev-ver<SemVer>.md`、`sdk-starter-dev`を使う。
 
 Platformの公開版を揃えることと、既存ゲームを最新SDKへ強制更新することは別である。各ゲームは作成時のSDK packageとcontract schemaをmanifestへ固定し、main Runtime側が対応するschemaをadapterで受け入れる。
 
@@ -29,7 +30,8 @@ Platformの公開版を揃えることと、既存ゲームを最新SDKへ強制
 6. 全登録ゲームの契約テストをmainのCIで実行し、未対応schemaの提出物は取込時に拒否する。
 7. Room開始時にPackage Revision、Package Root Hash、Runner Runtime、SDK／Room／Resource／Client Bridge各version、settings snapshotを固定し、進行中Roomをchannel pointer更新へ追従させない。
 8. Room schemaの異なる保存recordを、不足fieldへ現在値を補って自動昇格しない。開始時契約を証明できない旧recordは旧readerで完走させるか、下記の切替手順で排出する。
-9. `sdk-starter`はnpm安定版と本番Portalだけに対応させ、開発候補は`sdk-starter-dev`へ公開する。DownloadMeとstarter manifestは`config/platform-release.json`の同じ`starterRef`を使う。
+9. `sdk-starter`はnpm安定版と本番Portalだけに対応させ、開発候補は`sdk-starter-dev`へ公開する。DownloadMeとstarter manifestは`config/sdk-release-profiles.json`の同じ環境profileを使う。
+10. production／developmentの判定信号（明示channel、Portal origin、Git branch）が競合する場合や、未知のbranch／originの場合はdevへfallbackせずbuildを停止する。
 
 ## Room schema v1からv2への切替
 
@@ -39,15 +41,15 @@ Room schema v1にはPackage Root Hash、Runner Runtime、Resource Protocol、Cli
 
 ## リリース手順
 
-1. `config/platform-release.json`の次版を決める。
+1. `config/platform-release.json`の次版を決める。DownloadMeだけの別versionは作らない。
 2. root、SDK、Runtime、SDK Portalのpackage versionとRuntimeのSDK依存を同じ版へ更新する。
 3. 契約破壊がある場合だけ`sdkContractVersion`を上げる。
 4. Room schemaを上げる場合は、旧schemaの継続readerまたは既存Room排出手順を決め、切替条件を満たす。
 5. `npm run check:versions`、SDK検査、全ゲームテストをdevで通す。
 6. `docs/SDK_DATABASE_MIGRATIONS.md`に従い、加算migrationをDeploymentより先にdevelopmentへ適用する。
-7. 検証済みsnapshotを`sdk-starter-dev`へ公開し、dev SDKとGame Fields developの組合せを実機確認する。
+7. development profileから`GameFieldsDownloadMe-dev-ver<platformVersion>.md`と検証済みsnapshotを生成し、`dev-game-fields`、`sdk-starter-dev`、Game Fields developの組合せを実機確認する。
 8. `npm run release:sdk:check`で公開tarball・外部install・npm publish dry-runを確認する。
-9. main反映時に`channel: stable`と`starterRef: sdk-starter`へ切り替え、同じsnapshotを安定Starterへ公開する。
+9. main反映時はproduction profileから`GameFieldsDownloadMe-ver<platformVersion>.md`を生成し、`game-fields`と同じsnapshotの`sdk-starter`を確認する。共有version設定をstable用に手編集しない。
 10. 検証済みcommitをmainへ反映し、GitHub Actionsの`Publish Game SDK`をmainから手動実行する。versionは`config/platform-release.json`と完全一致させ、確認欄へ`publish-game-sdk`を入力する。
 11. npmの`@game-fields/game-sdk@<version>`、main、SDK本番の公開を確認し、Platform Version表示が一致することを確認する。
 

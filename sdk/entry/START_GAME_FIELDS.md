@@ -13,7 +13,7 @@ NORMATIVE_TERMS := MUST | MUST_NOT | MAY | HALT | EMIT | CALL | ASSERT
 ```yaml
 release:
   platform: "__PLATFORM_VERSION__"
-  downloadMe: __DOWNLOAD_ME_VERSION__
+  downloadMe: "__DOWNLOAD_ME_VERSION__"
   sdkPackage: "__SDK_VERSION__"
   sdkHandshake: __SDK_HANDSHAKE_VERSION__
   sdkContract: __SDK_CONTRACT_VERSION__
@@ -21,6 +21,8 @@ release:
 transport:
   portal: "__SDK_PORTAL_BASE_URL__"
   mcp: "__SDK_PORTAL_BASE_URL__/api/mcp"
+plugin:
+  name: "__SDK_PLUGIN_NAME__"
 starter:
   repository: "https://github.com/koromo2010/app-games"
   ref: "__SDK_STARTER_REF__"
@@ -42,8 +44,8 @@ capabilityVector:
 
 ```yaml
 MODE_UNSUPPORTED: "このゲーム制作にはコード操作が必要です。ChatGPTのWorkモードまたはCodexを開き、このファイルをもう一度添付してください。"
-LEGACY_THREAD: "このチャットでは制作を再開できません。古いDownloadMeまたは古い`gameapp-dev` tool schemaが会話へ固定されています。プラグイン管理画面で`gameapp-dev`を更新したあと、現在のチャットを閉じて新しいWork／Codexチャットを作成し、`gameapp-dev`を選択してGameFieldsDownloadMe-ver__DOWNLOAD_ME_VERSION__.mdだけを添付してください。保存済みの制作者環境とゲームは、新しいチャットから再取得できます。"
-PLUGIN_STALE: "`gameapp-dev`のtool schemaがこのDownloadMeより古いため、このチャットではSDK接続確認を実行できません。更新ボタンを押しても既存チャットのtool schemaは差し替わりません。プラグイン管理画面で`gameapp-dev`を更新したあと、現在のチャットを閉じて新しいWork／Codexチャットを作成し、`gameapp-dev`を選択してGameFieldsDownloadMe-ver__DOWNLOAD_ME_VERSION__.mdだけを添付してください。"
+LEGACY_THREAD: "このチャットでは制作を再開できません。古いDownloadMeまたは古い`__SDK_PLUGIN_NAME__` tool schemaが会話へ固定されています。プラグイン管理画面で`__SDK_PLUGIN_NAME__`を更新したあと、現在のチャットを閉じて新しいWork／Codexチャットを作成し、`__SDK_PLUGIN_NAME__`を選択して__DOWNLOAD_ME_FILE_NAME__だけを添付してください。保存済みの制作者環境とゲームは、新しいチャットから再取得できます。"
+PLUGIN_STALE: "`__SDK_PLUGIN_NAME__`のtool schemaがこのDownloadMeより古いため、このチャットではSDK接続確認を実行できません。更新ボタンを押しても既存チャットのtool schemaは差し替わりません。プラグイン管理画面で`__SDK_PLUGIN_NAME__`を更新したあと、現在のチャットを閉じて新しいWork／Codexチャットを作成し、`__SDK_PLUGIN_NAME__`を選択して__DOWNLOAD_ME_FILE_NAME__だけを添付してください。"
 SLUG_REQUEST: "あなた専用のGame Fields SDK環境で使うURL名を決めます。`yusuke-lab`のように、小文字英数字とハイフンで希望名を教えてください。"
 MOCK_REVIEW: "モックを作成しました。実際に画面を見て、変えたいところはありますか？ 気になる部分をそのまま教えてください。特になければ「これでOK」と答えてください。"
 HANDSHAKE_FAILURE_PREFIX: "SDKハンドシェイクに失敗しました:"
@@ -99,7 +101,7 @@ P_SUBMISSION_READY :=
 ## S0::HOST_CAPABILITY_GATE
 
 ```text
-DOWNLOADME_ATTACHMENTS := attached files matching /GameFieldsDownloadMe(?:-ver[0-9]+)?\.md/.
+DOWNLOADME_ATTACHMENTS := attached files matching /GameFieldsDownloadMe(?:-dev)?(?:-ver(?:[0-9]+|[0-9]+\.[0-9]+\.[0-9]+))?\.md/.
 
 IF count(DOWNLOADME_ATTACHMENTS) != 1:
   EMIT C1.LEGACY_THREAD;
@@ -124,21 +126,22 @@ ELSE EMIT C1.MODE_UNSUPPORTED; HALT.
 ## S1::TOOL_DISCOVERY_AUTH_HANDSHAKE
 
 ```text
-WORK_DISCOVERY_QUERY := "gameapp-dev get_sdk_handshake Game Fields SDK接続互換性"
+WORK_DISCOVERY_QUERY := "__SDK_PLUGIN_NAME__ get_sdk_handshake Game Fields SDK接続互換性"
 
 IF surface == Work AND get_sdk_handshake not_loaded:
   CALL tool検索(WORK_DISCOVERY_QUERY).
 
-IF discovered(gameapp-dev.get_sdk_handshake)
+IF discovered(source=C0.plugin.name, tool=get_sdk_handshake)
   AND NOT schema_accepts_all(C0.capabilityVector):
   EMIT C1.PLUGIN_STALE;
   HALT.
 
-IF discovered(gameapp-dev.*) AND NOT discovered(gameapp-dev.get_sdk_handshake):
+IF discovered(source=C0.plugin.name, any_tool)
+  AND NOT discovered(source=C0.plugin.name, tool=get_sdk_handshake):
   EMIT C1.PLUGIN_STALE;
   HALT.
 
-IF NOT discovered(gameapp-dev.*):
+IF NOT discovered(source=C0.plugin.name, any_tool):
   REQUIRE user to add/select Game Fields App.
   IF plugin_candidate_absent:
     REQUIRE user to enable developer mode and connect C0.transport.mcp as OAuth App.

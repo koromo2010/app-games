@@ -1,62 +1,94 @@
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import {
+  renderSdkDownloadMe,
+  resolveSdkReleaseProfile,
+  sdkDownloadMeFileName,
+  sdkDownloadMeVersion,
+  validateSdkReleaseConfiguration,
+} from "../packages/sdk-release-profiles/index.js";
 
 const root = process.cwd();
 const readJson = (path) => JSON.parse(readFileSync(join(root, path), "utf8"));
 const release = readJson("config/platform-release.json");
+const profileConfig = readJson("config/sdk-release-profiles.json");
 const publishedRelease = readJson("apps/sdk-portal/public/platform-release.json");
 const packages = [
   ["package.json", readJson("package.json")],
   ["packages/game-sdk/package.json", readJson("packages/game-sdk/package.json")],
   ["packages/game-runtime/package.json", readJson("packages/game-runtime/package.json")],
+  ["packages/sdk-release-profiles/package.json", readJson("packages/sdk-release-profiles/package.json")],
   ["apps/sdk-portal/package.json", readJson("apps/sdk-portal/package.json")],
   ["apps/sdk-preview/package.json", readJson("apps/sdk-preview/package.json")],
   ["packages/sdk-preview-auth/package.json", readJson("packages/sdk-preview-auth/package.json")],
 ];
 const failures = [];
 
-if (!/^\d+\.\d+\.\d+$/.test(release.platformVersion)) {
-  failures.push("platformVersion must be a semantic version such as 0.1.0.");
+try {
+  validateSdkReleaseConfiguration(release, profileConfig);
+} catch (error) {
+  failures.push(error instanceof Error ? error.message : String(error));
 }
-if (release.sdkPackageVersion !== release.platformVersion) {
-  failures.push("sdkPackageVersion must match platformVersion for the current release train.");
-}
-if (!Number.isInteger(release.downloadMeVersion) || release.downloadMeVersion < 1) {
-  failures.push("downloadMeVersion must be a positive integer.");
-}
+
 if (!Number.isInteger(release.sdkContractVersion) || release.sdkContractVersion < 1) {
   failures.push("sdkContractVersion must be a positive integer.");
 }
 if (!release.supportedSdkContractVersions?.includes(release.sdkContractVersion)) {
   failures.push("supportedSdkContractVersions must include the current sdkContractVersion.");
 }
-if (!/^sdk-starter(?:-dev)?$/.test(release.starterRef ?? "")) {
-  failures.push("starterRef must identify the stable or development starter branch.");
-}
-if (release.channel === "developer-preview" && release.starterRef !== "sdk-starter-dev") {
-  failures.push("developer-preview releases must use sdk-starter-dev.");
-}
-if (release.channel === "stable" && release.starterRef !== "sdk-starter") {
-  failures.push("stable releases must use sdk-starter.");
+if (JSON.stringify(publishedRelease) !== JSON.stringify(release)) {
+  failures.push("apps/sdk-portal/public/platform-release.json must exactly match config/platform-release.json.");
 }
 
-for (const [key, value] of Object.entries(release)) {
-  if (JSON.stringify(publishedRelease[key]) !== JSON.stringify(value)) {
-    failures.push(`apps/sdk-portal/public/platform-release.json: ${key} does not match config/platform-release.json.`);
+const entryTemplate = readFileSync(
+  join(root, "sdk/entry/START_GAME_FIELDS.md"),
+  "utf8",
+);
+for (const environment of ["production", "development"]) {
+  try {
+    const profile = resolveSdkReleaseProfile({
+      release,
+      profileConfig,
+      requestedEnvironment: environment,
+    });
+    const fileName = sdkDownloadMeFileName(release, profile);
+    const rendered = renderSdkDownloadMe(entryTemplate, release, profile);
+    if (!rendered.includes(`# GF-AECP/${sdkDownloadMeVersion(release)}`)) {
+      failures.push(`${environment} DownloadMe does not use the Platform SemVer.`);
+    }
+    if (!rendered.includes(`downloadMe: "${sdkDownloadMeVersion(release)}"`)) {
+      failures.push(`${environment} DownloadMe release.downloadMe is not the Platform SemVer string.`);
+    }
+    if (!rendered.includes(`name: "${profile.pluginName}"`)
+      || !rendered.includes(`${profile.pluginName} get_sdk_handshake`)) {
+      failures.push(`${environment} DownloadMe does not use its configured plugin name.`);
+    }
+    if (!rendered.includes(profile.portalBaseUrl)
+      || !rendered.includes(`ref: "${profile.starterRef}"`)
+      || !rendered.includes(fileName)) {
+      failures.push(`${environment} DownloadMe does not match its release profile.`);
+    }
+    const otherEnvironment = environment === "production" ? "development" : "production";
+    const other = profileConfig.profiles[otherEnvironment];
+    if (rendered.includes(`name: "${other.pluginName}"`)
+      || rendered.includes(`portal: "${other.portalBaseUrl}"`)
+      || rendered.includes(`ref: "${other.starterRef}"`)) {
+      failures.push(`${environment} DownloadMe contains ${otherEnvironment} profile values.`);
+    }
+  } catch (error) {
+    failures.push(`${environment} DownloadMe render failed: ${error instanceof Error ? error.message : String(error)}`);
   }
-}
-
-const downloadMePath = `apps/sdk-portal/public/GameFieldsDownloadMe-ver${release.downloadMeVersion}.md`;
-if (!existsSync(join(root, downloadMePath))) {
-  failures.push(`${downloadMePath} is missing for the configured downloadMeVersion.`);
 }
 
 const starterManifestTemplate = readFileSync(
   join(root, "sdk/starter-template/starter-manifest.json"),
   "utf8",
 );
-if (!starterManifestTemplate.includes('"downloadMeVersion": __DOWNLOAD_ME_VERSION__')) {
-  failures.push("sdk/starter-template/starter-manifest.json must derive downloadMeVersion from platform release metadata.");
+if (!starterManifestTemplate.includes('"downloadMeVersion": "__DOWNLOAD_ME_VERSION__"')) {
+  failures.push("sdk/starter-template/starter-manifest.json must derive its SemVer DownloadMe version from Platform metadata.");
+}
+if (!starterManifestTemplate.includes('"environment": "__SDK_ENVIRONMENT__"')) {
+  failures.push("sdk/starter-template/starter-manifest.json must identify its release environment.");
 }
 
 for (const [path, packageJson] of packages) {
@@ -75,7 +107,15 @@ if (rootPackage.dependencies?.["@game-fields/game-runtime"] !== release.platform
 }
 
 const packageLock = readJson("package-lock.json");
-for (const workspacePath of ["", "apps/sdk-portal", "apps/sdk-preview", "packages/game-sdk", "packages/game-runtime", "packages/sdk-preview-auth"]) {
+for (const workspacePath of [
+  "",
+  "apps/sdk-portal",
+  "apps/sdk-preview",
+  "packages/game-sdk",
+  "packages/game-runtime",
+  "packages/sdk-preview-auth",
+  "packages/sdk-release-profiles",
+]) {
   const lockedVersion = packageLock.packages?.[workspacePath]?.version;
   if (lockedVersion !== release.platformVersion) {
     failures.push(`package-lock.json workspace ${workspacePath || "root"} does not match platform ${release.platformVersion}.`);
@@ -111,4 +151,8 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(`[platform-release] Platform v${release.platformVersion}, DownloadMe v${release.downloadMeVersion}, SDK contract v${release.sdkContractVersion}, room schema v${release.roomSchemaVersion}`);
+const productionFile = sdkDownloadMeFileName(release, profileConfig.profiles.production);
+const developmentFile = sdkDownloadMeFileName(release, profileConfig.profiles.development);
+console.log(
+  `[platform-release] Platform/DownloadMe v${sdkDownloadMeVersion(release)}, ${productionFile}, ${developmentFile}, SDK contract v${release.sdkContractVersion}, room schema v${release.roomSchemaVersion}`,
+);

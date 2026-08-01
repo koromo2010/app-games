@@ -3518,3 +3518,31 @@ active HEADは基準SHAのままで、active commit、製品`origin` push、PR�
 ### 外部境界
 
 - canonical starterのremote readは1、product／external writeは0である。push、tag、PR、Actions、Vercel、DB、Redis、Blob、OAuthその他のdata-service writeは実施していない。
+
+## 2026-08-02 — DownloadMeのproduction／development命名とSemVerを分離
+
+### 利用者からの要望
+
+- production用プラグインを`game-fields`、development用を`dev-game-fields`とし、developmentのDownloadMeはファイル名だけでも環境を判別できるようにする。
+- `ver17`のようなDownloadMe専用counterを廃止し、今後はPlatform本体と同じ`0.2.0`等のSemVerを使う。
+- production URLを宣言したDownloadMeがdevelopmentプラグインを選んで`ENVIRONMENT_MISMATCH`になる不整合を、個別ファイルの置換ではなく共通経路で修正する。
+
+### 原因と実装
+
+- `config/platform-release.json`へ版情報とdevelopment専用のchannel／Starter refを混在させ、DownloadMe template、Portal UI、MCP initializeにも`gameapp-dev`を直接記述していた。build時にenvironmentとPortal URLだけを切り替えたため、production成果にもdevelopmentプラグインが残った。
+- 版の正本を`config/platform-release.json`、環境別名称の正本を`config/sdk-release-profiles.json`へ分離した。productionは`game-fields`／`GameFieldsDownloadMe-ver0.1.1.md`／`sdk-starter`、developmentは`dev-game-fields`／`GameFieldsDownloadMe-dev-ver0.1.1.md`／`sdk-starter-dev`である。
+- `@game-fields/sdk-release-profiles`を追加し、DownloadMe生成、Portal表示・metadata、MCP initialize、handshake、Portal／Room URL、Starter manifestが同じresolverを使うようにした。DownloadMe版は`platformVersion`を直接使い、将来版`0.2.0`も追加counterなしで両環境のファイル名へ反映する。
+- 明示channel、canonical Portal origin、Git branchの判定が未知または競合する場合はdevelopmentへfallbackせず停止する。旧整数版と反対環境のSemVer版URLは、そのDeploymentの現行DownloadMeへtemporary redirectする。
+- 旧`ver17`だけを書き換えて`develop`へ直接pushできた一回限りのalignment workflow／scriptを削除した。release profile packageだけの変更でもPortal Deploymentが起動するようbuild-impact判定を追加した。
+
+### 検証
+
+- production／developmentのDownloadMeを実生成し、UTF-8 BOM、SemVer、environment、plugin、Portal、Starter ref、反対環境値0件を確認した。production route manifestでは旧`GameFieldsDownloadMe-ver17.md`とdevelopment版SemVer URLが現行production版へredirectされる。
+- release／DownloadMe focused regressionは14/14、build-impact regressionは11/11、Starterの入口・snapshot・ZIP展開・同梱SDK install・型検査・契約test・1ゲーム完走・提出ZIPはPASSした。
+- SDK Portalはdevelopment／productionの両profileでTypeScriptと15ページbuildがPASSした。migrationはそれぞれ`local/develop`、`local/main`としてskipされ、DB接続・DDL・DMLは0である。
+- repository-wide test、`npm run verify`、ESLint、Runtime packages、PlatformのTypeScriptと78ページbuildはPASSした。
+
+### 外部境界
+
+- ローカルbranch `fix/downloadme-environment-profiles`だけを変更した。commit、push、PR、Actions、Vercel Deployment、DB／Redis／Blob write、ChatGPT側プラグインの登録・名称変更は実施していない。
+- 配備前にChatGPT側でproduction `game-fields`、development `dev-game-fields`を実在させ、各canonical MCP endpointへ接続する必要がある。旧DownloadMeは履歴として保持し、削除・上書きしていない。
