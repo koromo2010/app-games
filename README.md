@@ -11,7 +11,7 @@ ChatGPTと共同で、Game Fields向けゲーム固有packageを作るための�
 - `mock/`: 旧称。Previewと昇格後で同じものを使うゲーム固有クライアント
 - `mock/preview.json`: SDKの制作者広場へ表示するゲームID・名称・説明
 - `AGENTS.md`: ChatGPT/Codexが守る編集範囲と安全境界
-- `SDK_API.md`: 公開SDK v0.1.1 の最小リファレンス
+- `SDK_API.md`: 公開SDK v0.2.0 の最小リファレンス
 - `SDK_MODULE_CATALOG.md`: 初期状態で全件必須となる既存共通モジュール一覧
 - `SUBMISSION_CHECKLIST.md`: Game Fieldsへ返す前の確認項目
 - `src/manifest.ts`: ゲームの機能宣言
@@ -20,7 +20,7 @@ ChatGPTと共同で、Game Fields向けゲーム固有packageを作るための�
 - `src/server-module.ts`: SDK基本セットとアプリセットの合成だけを行う入口
 - `tests/game-contract.test.ts`: DB不要のMock Runtime契約テスト
 - `src/demo.ts`: ダミー2人で1ゲームを完走する例
-- `vendor/game-fields-game-sdk-0.1.1.tgz`: 同梱SDK package
+- `vendor/game-fields-game-sdk-0.2.0.tgz`: 同梱SDK package
 - `starter-manifest.json`: 公式取得元、starter version、SDK version
 - `scripts/build-submission.mjs`: 提出ZIP生成器
 - `scripts/publish-mock.mjs`: 既存管理トークン運用だけで使う互換スクリプト

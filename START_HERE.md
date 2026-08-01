@@ -1,6 +1,6 @@
 # Game Fields SDK — ここから始める
 
-これは、ChatGPTと一緒にGame Fields向けゲームを1本作り、同じAppSetのままPreviewから本番候補へ昇格させるスターターです。SDK本体`@game-fields/game-sdk` v0.1.1を`vendor/`へ同梱しています。
+これは、ChatGPTと一緒にGame Fields向けゲームを1本作り、同じAppSetのままPreviewから本番候補へ昇格させるスターターです。SDK本体`@game-fields/game-sdk` v0.2.0を`vendor/`へ同梱しています。
 
 ## ChatGPTへ渡す依頼
 

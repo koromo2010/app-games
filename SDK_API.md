@@ -1,4 +1,4 @@
-# Game Fields SDK v0.1.1 最小リファレンス
+# Game Fields SDK v0.2.0 最小リファレンス
 
 ## SDK handshake
 

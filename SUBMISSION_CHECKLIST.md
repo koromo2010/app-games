@@ -53,7 +53,7 @@
 ## 提出情報
 
 - ゲームID: `my-first-game`
-- SDK version: `0.1.1`
+- SDK version: `0.2.0`
 - 作成者表示名: 未記入
 - 外部依存: TypeScript（開発時のみ）
 - 素材ライセンス: 未記入
