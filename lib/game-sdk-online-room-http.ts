@@ -6,6 +6,7 @@ import type {
 import { GameFieldsPlatformRuntimeError } from "@game-fields/game-runtime";
 import type { AuthenticatedGameSdkPlatformAdapter } from "./game-sdk-platform-adapter.ts";
 import { GameSdkLlmRateLimitError } from "./game-sdk-llm-gateway.ts";
+import type { GameSdkCommandTimingCollector } from "./game-sdk-command-timing.ts";
 
 export type GameSdkOnlineRoomHttpOperation =
   | "read"
@@ -27,6 +28,7 @@ type HttpAdapter = AuthenticatedGameSdkPlatformAdapter<
 
 type HttpHandlerOptions = {
   adapter: HttpAdapter;
+  timing?: GameSdkCommandTimingCollector;
   beforeMutation?: (
     request: Request,
     operation: Extract<
@@ -190,7 +192,11 @@ function roomCode(value: unknown) {
   return typeof value === "string" ? value : "";
 }
 
-function commandEnvelope(value: unknown): GameSdkCommandEnvelope<SafeCommand> | null {
+type ValidCommandEnvelope = GameSdkCommandEnvelope<SafeCommand> & {
+  commandId: string;
+};
+
+function commandEnvelope(value: unknown): ValidCommandEnvelope | null {
   const envelope = objectBody(value);
   const command = objectBody(envelope?.command);
   if (
@@ -210,6 +216,13 @@ function commandEnvelope(value: unknown): GameSdkCommandEnvelope<SafeCommand> | 
     expectedRevision: Number(envelope.expectedRevision),
     command: command as SafeCommand,
   };
+}
+
+function commandFinalViewer(value: unknown) {
+  if (value === undefined || value === null || value === "self") return undefined;
+  if (value === "spectator") return value;
+  if (Number.isSafeInteger(value) && Number(value) >= 0) return Number(value);
+  throw new GameFieldsPlatformRuntimeError("DEBUG_VIEWER_INVALID", 400);
 }
 
 function activeRoomReplacement(value: unknown) {
@@ -237,6 +250,7 @@ function activeRoomReplacement(value: unknown) {
  */
 export function createGameSdkOnlineRoomHttpHandlers({
   adapter,
+  timing,
   beforeMutation,
   onSuccess,
   onError,
@@ -323,18 +337,25 @@ export function createGameSdkOnlineRoomHttpHandlers({
   async function PATCH(request: Request) {
     const operation = "command" as const;
     try {
-      const body = objectBody(await readRoomRequestJson(request));
+      const rawBody = timing
+        ? await timing.measure("http-receive", () => readRoomRequestJson(request))
+        : await readRoomRequestJson(request);
+      const body = objectBody(rawBody);
       const code = roomCode(body?.code);
       const envelope = commandEnvelope(body?.envelope);
       if (!code.trim() || !envelope) {
         return json({ error: "GAME_SDK_COMMAND_INPUT_REQUIRED" }, 400);
       }
+      timing?.setCommandId(envelope.commandId);
       const limited = await beforeMutation?.(request, operation, code);
       if (limited) return limited;
       const result: GameSdkCommandResult<unknown> = await adapter.sendCommand({
         code,
         envelope,
+        finalViewer: commandFinalViewer(body?.finalViewer),
+        timing,
       });
+      timing?.setRevision(result.revision);
       onSuccess?.(operation, result.room, undefined, {
         commandId: result.commandId,
         commandRevision: result.commandRevision,

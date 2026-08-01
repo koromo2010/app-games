@@ -1093,6 +1093,141 @@ test("SDK Room watcherはrevision通知を受けてHTTPの閲覧Viewだけを再
   watch.close();
 });
 
+test("通常・DEBUG・自動追従CommandはいずれもPATCH 1回、同revision viewer GET 0回", async () => {
+  const requests: Array<{ method: string; finalViewer?: unknown }> = [];
+  let revision = 1;
+  const timingEvents: Array<{ revision: number }> = [];
+  const runtime = createGameSdkHttpClientRuntime<
+    unknown,
+    { type: string },
+    { selectedViewer: unknown }
+  >({
+    gameId: "sdk-count-up-proof",
+    endpoint: "https://game-fields.test/api/game-sdk/sdk-count-up-proof/rooms",
+    onCommandTiming: (event) => timingEvents.push(event),
+    fetcher: async (_input, init) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as {
+        envelope?: { commandId?: string };
+        finalViewer?: unknown;
+      };
+      requests.push({
+        method: String(init?.method ?? "GET"),
+        finalViewer: body.finalViewer,
+      });
+      revision += 1;
+      return Response.json({
+        room: {
+          code: "TRACE",
+          revision,
+          phase: "playing",
+          view: { selectedViewer: body.finalViewer ?? "self" },
+        },
+        revision,
+        commandId: body.envelope?.commandId,
+        commandRevision: revision,
+        applied: true,
+      }, {
+        headers: {
+          "Server-Timing": "auth;dur=2.0, apply-command;dur=5.0, present-room;dur=3.0",
+          "X-Game-Sdk-Trace": "command_abcdefghijklmnop",
+          "X-Game-Sdk-Revision": String(revision),
+        },
+      });
+    },
+  });
+
+  for (const [mode, finalViewer] of [
+    ["normal", "self"],
+    ["debug-manual", 1],
+    ["debug-auto-follow-off", 2],
+    ["debug-auto-follow-on", 1],
+  ] as const) {
+    const result = await runtime.sendCommand("TRACE", {
+      expectedRevision: revision,
+      command: { type: `game/${mode}` },
+    }, { finalViewer });
+    assert.equal(result.room.view.selectedViewer, finalViewer);
+  }
+
+  assert.equal(requests.length, 4);
+  assert.deepEqual(requests.map((request) => request.method), [
+    "PATCH",
+    "PATCH",
+    "PATCH",
+    "PATCH",
+  ]);
+  assert.equal(requests.filter((request) => request.method === "GET").length, 0);
+  assert.deepEqual(requests.map((request) => request.finalViewer), [
+    "self",
+    1,
+    2,
+    1,
+  ]);
+  assert.equal(timingEvents.length, 4);
+});
+
+test("watcher accepts a Command revision and ignores both its notification and a late older read", async () => {
+  class FakeSocket implements GameSdkWebSocketLike {
+    readyState = 1;
+    listeners = new Map<string, Array<(event: { data?: unknown }) => void>>();
+    send() {}
+    close() {}
+    addEventListener(
+      type: "open" | "message" | "close" | "error",
+      listener: (event: { data?: unknown }) => void,
+    ) {
+      this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]);
+    }
+    emit(type: string, data?: unknown) {
+      for (const listener of this.listeners.get(type) ?? []) listener({ data });
+    }
+  }
+  const socket = new FakeSocket();
+  let reads = 0;
+  let releaseInitial!: () => void;
+  const initialGate = new Promise<void>((resolve) => { releaseInitial = resolve; });
+  const seen: number[] = [];
+  const runtime = createGameSdkHttpClientRuntime<
+    unknown,
+    { type: string },
+    Record<string, never>
+  >({
+    gameId: "sdk-count-up-proof",
+    endpoint: "https://game-fields.test/api/game-sdk/sdk-count-up-proof/rooms",
+    realtimeEndpoint: "https://game-fields.test/api/online-room-events",
+    webSocketFactory: () => socket,
+    fetcher: async (_input, init) => {
+      if (init?.method === "HEAD") return new Response(null, { status: 204 });
+      reads += 1;
+      await initialGate;
+      return Response.json({
+        room: { code: "TRACE", revision: 1, phase: "lobby", view: {} },
+      });
+    },
+  });
+  const watch = runtime.watchRoom("TRACE", {
+    onRoom(room) {
+      if (room) seen.push(room.revision);
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  watch.acceptRevision(2);
+  releaseInitial();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  socket.emit("open");
+  socket.emit("message", JSON.stringify({
+    type: "room-updated",
+    game: "sdk:sdk-count-up-proof",
+    code: "TRACE",
+    revision: 2,
+  }));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(reads, 1);
+  assert.deepEqual(seen, []);
+  watch.close();
+});
+
 test("SDK server registryは静的に審査登録したmoduleだけを環境別に公開する", () => {
   const development = {
     ...process.env,

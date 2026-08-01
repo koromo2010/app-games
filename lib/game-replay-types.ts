@@ -101,37 +101,6 @@ export function tahoiyaReplaySummaryHighlights({
   ];
 }
 
-export const gameReplayMetadata: Record<BuiltInGameReplayGameType, { title: string; href: string }> = {
-  wordwolf: { title: "ワードウルフ", href: "/wordwolf" },
-  tahoiya: { title: "たほい屋", href: "/tahoiya" },
-  "northern-branch": { title: "ノーザンブランチ", href: "/northern-branch" },
-  hodoai: { title: "ワードスケール", href: "/word-scale" },
-  "kotoba-senpuku": { title: "ワードソナー", href: "/word-sonar" },
-  nigoichi: { title: "ワードアウト", href: "/word-out" },
-  "code-intercept": { title: "コードインターセプト", href: "/games/code-intercept" },
-  daifugo: { title: "大富豪", href: "/daifugo" },
-  "wordwolf-sdk": { title: "ワードウルフ SDK", href: "/sdk-games/wordwolf-sdk" },
-};
-
-function isGameSdkReplayGameType(
-  gameType: GameReplayGameType,
-): gameType is GameSdkReplayGameType {
-  return gameType.startsWith("sdk:");
-}
-
-export function gameReplayMetadataFor(
-  gameType: GameReplayGameType,
-  fallbackTitle = "SDKゲーム",
-) {
-  if (isGameSdkReplayGameType(gameType)) {
-    return {
-      title: fallbackTitle,
-      href: `/sdk-games/${gameType.slice("sdk:".length)}`,
-    };
-  }
-  return gameReplayMetadata[gameType];
-}
-
 export function gameReplayShareText(
   replay: Pick<
     GameReplaySummary,
@@ -141,18 +110,30 @@ export function gameReplayShareText(
     | "shareHighlights"
     | "localizedShareHighlights"
   >,
+  gameDisplayMetadata: GameDisplayMetadataSnapshot,
   locale: AppLocale = "ja",
 ) {
-  const gameTitle = gameReplayMetadataFor(replay.gameType, replay.title).title;
+  const game = resolveGameDisplayMetadata(
+    gameDisplayMetadata,
+    replay.gameType,
+    locale,
+  );
+  const replayTitle = game.source === "sdk"
+    ? game.displayName
+    : replay.title;
   const localized = replay.localizedShareHighlights?.[locale]
     ?? replay.shareHighlights;
   const highlights = localized.slice(0, 3).map((highlight) => `・${highlight}`);
   return [
-    `${gameTitle}のプレイバック`,
-    replay.title,
+    `${game.displayName}のプレイバック`,
+    replayTitle,
     replay.resultLabel,
     ...highlights,
     "#GameFields",
   ].filter(Boolean).join("\n");
 }
-import type { AppLocale } from "./app-locale";
+import type { AppLocale } from "./app-locale.ts";
+import {
+  resolveGameDisplayMetadata,
+  type GameDisplayMetadataSnapshot,
+} from "./game-display-metadata.ts";

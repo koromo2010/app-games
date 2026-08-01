@@ -3,6 +3,11 @@ import {
   approveCreatorSupportReplyDraft,
   loadCreatorSupportReplyDraft,
 } from "@/lib/support-api";
+import {
+  SupportTextValidationError,
+  supportTextValidationPayload,
+  validateSupportText,
+} from "@/lib/support-text-contract";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -47,14 +52,14 @@ export async function POST(
   const body = await request.json().catch(() => null) as {
     message?: unknown;
   } | null;
-  const message = typeof body?.message === "string"
-    ? body.message.trim().slice(0, 3_000)
-    : "";
-  if (!message) {
-    return Response.json(
-      { error: "support_reply_draft_approval_invalid" },
-      { status: 400 },
-    );
+  let message;
+  try {
+    message = validateSupportText(body?.message, "reply", { required: true });
+  } catch (error) {
+    if (error instanceof SupportTextValidationError) {
+      return Response.json(supportTextValidationPayload(error), { status: 400 });
+    }
+    throw error;
   }
   try {
     const report = await approveCreatorSupportReplyDraft({

@@ -11,6 +11,7 @@ import type { GameSdkSettingValue } from "@game-fields/game-sdk";
 import type { GameSdkModuleId } from "@game-fields/game-sdk/modules";
 import {
   createGameSdkHttpClientRuntime,
+  gameSdkCommandTimingForRoom,
   GameSdkHttpClientRuntimeError,
 } from "@game-fields/game-sdk/client-runtime";
 import { useAppLocale } from "@/app/components/AppLocaleProvider";
@@ -145,9 +146,16 @@ export function useGameSdkFrameController(
   }, [defaultsEndpoint, moduleRequired]);
 
   const postRoomSnapshot = useCallback((next: PackageRoom | null) => {
+    const timing = gameSdkCommandTimingForRoom(next);
     iframeRef.current?.contentWindow?.postMessage({
       type: "game-fields:room-snapshot",
       room: next,
+      ...(timing ? {
+        timing: {
+          traceRef: timing.traceRef,
+          revision: timing.revision,
+        },
+      } : {}),
     }, "*");
   }, []);
 
@@ -202,6 +210,7 @@ export function useGameSdkFrameController(
     usesLlm,
     moduleProfile,
     wrapDebugCommand: debugState.wrapDebugCommand,
+    debugViewer: debugState.debugViewer,
   });
 
   const { room, refreshRooms } = lifecycle;
@@ -371,7 +380,6 @@ export function useGameSdkFrameController(
       room,
       roomRef,
       iframeRef,
-      runtime,
       runtimeUrl,
       packageRevisionIssue,
       onResumePinnedRoom,
@@ -416,7 +424,6 @@ export function useGameSdkFrameController(
       debugSwitchSource: debugState.debugSwitchSource,
       debugCanSend: debugState.debugCanSend,
       postRoom: debugState.postRoom,
-      resetDebugControl: debugState.resetDebugControl,
       run: commandRunner.run,
       send: commandRunner.send,
       sendPackageCommand: commandRunner.sendPackageCommand,

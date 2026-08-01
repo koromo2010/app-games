@@ -11,6 +11,7 @@ import {
   type ContactNotificationStatus,
   type ContactStatus,
 } from "./contact-core.ts";
+import { validateSupportText } from "../config/support-text-contract.ts";
 
 export type { ContactCategory, ContactMessage, ContactNotificationStatus, ContactStatus } from "./contact-core.ts";
 
@@ -35,6 +36,11 @@ export async function saveContactMessage(input: {
   message: string;
   playerId?: string | null;
 }, options: { contactId?: string } = {}) {
+  const validatedMessage = validateSupportText(
+    input.message,
+    "reply",
+    { required: true },
+  );
   const now = Date.now();
   const contactId = options.contactId ?? `contact_${randomUUID()}`;
   if (!/^contact_[0-9a-f-]{36}$/i.test(contactId)) {
@@ -43,6 +49,7 @@ export async function saveContactMessage(input: {
   const contact: ContactMessage = {
     id: contactId,
     ...input,
+    message: validatedMessage,
     playerId: input.playerId?.trim() || null,
     status: "open",
     notificationStatus: "pending",
@@ -158,6 +165,7 @@ export async function appendContactThreadMessage(input: {
   status: ContactStatus;
   deliveryStatus?: SupportReplyDeliveryStatus;
 }) {
+  const body = validateSupportText(input.body, "reply", { required: true });
   if (!/^contact_[0-9a-f-]{36}$/i.test(input.contactId)) {
     throw new Error("CONTACT_MESSAGE_NOT_FOUND");
   }
@@ -169,13 +177,18 @@ export async function appendContactThreadMessage(input: {
     const existing = current.messages.find(
       (message) => message.requestId === input.requestId,
     );
-    if (existing) return { contact: current, message: existing, inserted: false };
+    if (existing) {
+      if (existing.author !== input.author || existing.body !== body) {
+        throw new Error("CONTACT_MESSAGE_REQUEST_ID_CONFLICT");
+      }
+      return { contact: current, message: existing, inserted: false };
+    }
     const now = Date.now();
     const message = {
       id: `message_${randomUUID()}`,
       requestId: input.requestId,
       author: input.author,
-      body: input.body,
+      body,
       createdAt: now,
       deliveryStatus: input.deliveryStatus ?? "not-required",
     } as const;

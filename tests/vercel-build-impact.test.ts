@@ -53,6 +53,27 @@ test("使用しない重複Portal Projectは常にskipする", () => {
   });
 });
 
+test("package asset validatorはPortalとPreviewだけbuildする", () => {
+  const path = "packages/sdk-package-assets/src/index.ts";
+  assert.equal(decide("app-games-dev", "develop", [path]).build, false);
+  assert.equal(decide("app-games-sdk-dev", "develop", [path]).build, true);
+  assert.equal(decide("app-games-preview-dev", "develop", [path]).build, true);
+});
+
+test("service authはPlatformとPortalだけbuildする", () => {
+  const path = "packages/sdk-service-auth/src/index.ts";
+  assert.equal(decide("app-games-dev", "develop", [path]).build, true);
+  assert.equal(decide("app-games-sdk-dev", "develop", [path]).build, true);
+  assert.equal(decide("app-games-preview-dev", "develop", [path]).build, false);
+});
+
+test("runtime artifactはPortalとPreviewだけbuildする", () => {
+  const path = "packages/sdk-runtime-artifact/src/index.ts";
+  assert.equal(decide("app-games-dev", "develop", [path]).build, false);
+  assert.equal(decide("app-games-sdk-dev", "develop", [path]).build, true);
+  assert.equal(decide("app-games-preview-dev", "develop", [path]).build, true);
+});
+
 test("未知Projectまたはdiff取得不能は安全側でbuildする", () => {
   assert.deepEqual(decide("unknown", "develop", ["docs/a.md"]), {
     build: true,

@@ -1,4 +1,3 @@
-const GAME_FIELDS_PACKAGE_CLIENT_ASSET = "game-fields/package-room.js";
 const GAME_FIELDS_PRESET_ASSET = "game-fields/preset.js";
 type PreviewAssetSourceKind = "mock" | "package";
 
@@ -77,11 +76,12 @@ export function isBrowserReadablePreviewAsset(
   sourceKind: PreviewAssetSourceKind,
   assetPath: string,
 ) {
+  if (sourceKind === "package") {
+    return isBrowserReadableGamePackageAsset(assetPath);
+  }
   if (
     assetPath === (
-      sourceKind === "package"
-        ? GAME_FIELDS_PACKAGE_CLIENT_ASSET
-        : GAME_FIELDS_PRESET_ASSET
+      GAME_FIELDS_PRESET_ASSET
     )
   ) {
     return true;
@@ -267,3 +267,4 @@ export function rewritePreviewJavaScriptAssetUrls(
   );
   return output;
 }
+import { isBrowserReadableGamePackageAsset } from "@game-fields/sdk-package-assets";

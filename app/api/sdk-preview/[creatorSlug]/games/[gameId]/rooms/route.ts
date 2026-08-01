@@ -15,6 +15,7 @@ import {
   scheduleSdkPreviewRoomInviteIndexSuccess,
 } from "@/lib/sdk-preview-room-invite-index";
 import { createRequestTelemetry } from "@/lib/observability";
+import { createGameSdkCommandTimingCollector } from "@/lib/game-sdk-command-timing";
 import platformRelease from "../../../../../../../config/platform-release.json";
 
 export const runtime = "nodejs";
@@ -34,6 +35,7 @@ function json(payload: unknown, status: number) {
 }
 
 async function handle(request: Request, context: RouteContext, method: Method) {
+  const timing = createGameSdkCommandTimingCollector();
   const { creatorSlug, gameId } = await context.params;
   const requestUrl = new URL(request.url);
   const requestedRevision = requestUrl.searchParams.get("revision")?.trim() || undefined;
@@ -50,8 +52,13 @@ async function handle(request: Request, context: RouteContext, method: Method) {
           : "room-dissolve",
   });
   try {
-    const session = await requireSdkPreviewAuthenticatedPlayer(creatorSlug);
-    const creatorPlayerId = await getSdkPreviewAccountPlayerId(creatorSlug);
+    const { session, creatorPlayerId } = await timing.measure("auth", async () => {
+      const [authenticated, ownerPlayerId] = await Promise.all([
+        requireSdkPreviewAuthenticatedPlayer(creatorSlug),
+        getSdkPreviewAccountPlayerId(creatorSlug),
+      ]);
+      return { session: authenticated, creatorPlayerId: ownerPlayerId };
+    });
     if (method === "GET") {
       const limited = await rateLimitResponseFor(
         request,
@@ -60,13 +67,16 @@ async function handle(request: Request, context: RouteContext, method: Method) {
       );
       if (limited) return limited;
     }
-    const runtime = await loadSdkPreviewPackageModule({
-      creatorSlug,
-      gameId,
-      request,
-      playerId: session.id,
-      revision: requestedRevision,
-    });
+    const runtime = await timing.measure(
+      "runtime-resolve",
+      () => loadSdkPreviewPackageModule({
+        creatorSlug,
+        gameId,
+        request,
+        playerId: session.id,
+        revision: requestedRevision,
+      }),
+    );
     if (!runtime) {
       telemetry.reject("game-sdk.preview-room", 404, {
         channel: "candidate-preview",
@@ -79,7 +89,7 @@ async function handle(request: Request, context: RouteContext, method: Method) {
     );
     const isSiteAdminIdentity = creatorPlayerId === session.id
       ? false
-      : await playerHasDebugAccess(session.id);
+      : await timing.measure("auth", () => playerHasDebugAccess(session.id));
     const identity = {
       playerId: session.id,
       displayName: session.name?.trim() || "SDK Player",
@@ -125,6 +135,7 @@ async function handle(request: Request, context: RouteContext, method: Method) {
     });
     const actorRef = telemetry.actorRef(session.id);
     return createGameSdkOnlineRoomHttpHandlers({
+      timing: method === "PATCH" ? timing : undefined,
       adapter,
       beforeMutation: (mutationRequest, _operation, roomCode) => (
         rateLimitResponseFor(
@@ -189,7 +200,16 @@ async function handle(request: Request, context: RouteContext, method: Method) {
           actorRef,
         });
       },
-    })[method](request);
+    })[method](request).then((response) => {
+      if (method !== "PATCH") return response;
+      for (const entry of timing.finish()) {
+        telemetry.info(
+          "game-sdk.preview-command-timing",
+          timing.observabilityFields(entry),
+        );
+      }
+      return timing.decorate(response);
+    });
   } catch (error) {
     const code = error instanceof Error ? error.message : "";
     if (code === "PLAYER_AUTH_REQUIRED") {

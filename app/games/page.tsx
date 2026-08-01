@@ -1,9 +1,6 @@
 import type { Metadata } from "next";
 import { loadSiteSettings } from "@/lib/site-settings-store";
-import { loadGameOperations } from "@/lib/game-operations-store";
-import { loadGameDurationEstimates } from "@/lib/game-duration-store";
-import { loadApprovedGameSdkCatalog } from "@/lib/game-sdk-runtime-catalog";
-import { GameLobby } from "./GameLobby";
+import { GameLobbyRoute } from "./GameLobbyRoute";
 
 export const revalidate = 300;
 
@@ -18,19 +15,6 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-export default async function GameLobbyPage() {
-  const sdkGames = await loadApprovedGameSdkCatalog().catch(() => []);
-  const [settings, gameOperations, durationEstimates] = await Promise.all([
-    loadSiteSettings(),
-    loadGameOperations({}, sdkGames),
-    loadGameDurationEstimates(),
-  ]);
-  return (
-    <GameLobby
-      siteName={settings.siteName}
-      gameOperations={gameOperations}
-      durationEstimates={durationEstimates}
-      additionalGames={sdkGames}
-    />
-  );
+export default function GameLobbyPage() {
+  return <GameLobbyRoute />;
 }

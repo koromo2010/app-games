@@ -4,6 +4,16 @@
 
 この文書は、再調査を減らし、次に直す範囲を選びやすくするための監査記録である。将来構想ではなく、現在のコードで確認できた事実を記録する。状態が「修正済み」の項目は、同じ問題を再導入しないための回帰確認点として残す。
 
+## 2026-08-01 SDK packageの動的asset参照が保存後監査まで持ち越される
+
+状態: app-games側の共有validator・保存前gate・local auditをローカル再実装済み／checkpoint commit・private workflow反映・既存Dixit修復待ち
+
+T-46の17ファイル分のローカル実装は検証後にcommit／pushされないまま旧worktreeとともに失われ、参照可能なcommit、patch、worktreeが残っていなかった。`origin/develop@17c331e18908120b26cab85a2132c987999a924e`には直接参照を含むasset validator自体が存在しなかったため、T-46とT-62の明文化済み契約を正本として再実装した。
+
+共有pure validatorは最終`PreparedUploadFile[]`だけを入力とし、正式HTML／CSS／JavaScript／TypeScript parserから得た参照をpackage内で解決する。静的参照は存在とbrowser-readable policyを確認し、asset pathを含む未解決template literal、文字列連結、変数参照とparse errorは保存前にfail closedで拒否する。RESTとMCPは認証DBより先にも共有preparationを実行し、release artifact transferはvalidation後・target Git前にschemaを確認する。全経路を同じ保存serviceへ集約し、拒否時はschema、DB、Git、Blob、Redis、audit、submission、promotionの注入fake dependencyがすべて0回である。local audit CLIも同じvalidatorとerror codeを使い、指定package以外を監査しない。
+
+実際の`Dynamic asset audit`はprivate package Git側にあり、このrepositoryにはworkflow sourceがない。したがってapp-gamesのlocal gateが通っても、private workflow反映と既存Dixit artifact修復が明示許可後に完了するまでは、保存後通知を含む外部運用の完全解消とは判定しない。
+
 ## 2026-07-30 SDK candidate採用がrelease履歴の必須列欠落で503になる
 
 状態: ローカル修正・回帰テスト済み／develop未反映・実機未確認

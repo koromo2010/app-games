@@ -3,6 +3,11 @@ import {
   approveCreatorSupportDraft,
   loadCreatorSupportDraft,
 } from "@/lib/support-api";
+import {
+  SupportTextValidationError,
+  supportTextValidationPayload,
+  validateSupportReportText,
+} from "@/lib/support-text-contract";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -53,16 +58,16 @@ export async function POST(
   const type = body?.type === "bug" || body?.type === "request"
     ? body.type
     : null;
-  const summary = typeof body?.summary === "string"
-    ? body.summary.trim().slice(0, 120)
-    : "";
-  const details = typeof body?.details === "string"
-    ? body.details.trim().slice(0, 1_200)
-    : "";
-  const page = typeof body?.page === "string"
-    ? body.page.trim().slice(0, 200)
-    : "";
-  if (!type || !summary) {
+  let text;
+  try {
+    text = validateSupportReportText(body ?? {});
+  } catch (error) {
+    if (error instanceof SupportTextValidationError) {
+      return Response.json(supportTextValidationPayload(error), { status: 400 });
+    }
+    throw error;
+  }
+  if (!type) {
     return Response.json(
       { error: "support_draft_approval_invalid" },
       { status: 400 },
@@ -73,9 +78,7 @@ export async function POST(
       playerId: account.playerId,
       draftId,
       type,
-      summary,
-      details,
-      page,
+      ...text,
     });
     return Response.json({ report }, { status: 201 });
   } catch (error) {

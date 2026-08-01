@@ -9,13 +9,14 @@ import {
   type MutableRefObject,
   type RefObject,
 } from "react";
-import { GameSdkHttpClientRuntimeError } from "@game-fields/game-sdk/client-runtime";
+import {
+  gameSdkCommandTimingForRoom,
+  GameSdkHttpClientRuntimeError,
+} from "@game-fields/game-sdk/client-runtime";
 import { gameTopBannerActionClass } from "@/app/components/GameTopMenu";
 import { GameSdkIframe } from "./GameSdkIframe";
 import type {
   CommonView,
-  DebugViewer,
-  GameSdkFrameRuntime,
   PackageRoom,
   SafeCommand,
 } from "./game-sdk-frame-types";
@@ -23,12 +24,9 @@ import type {
 type Options = {
   iframeRef: RefObject<HTMLIFrameElement | null>;
   roomRef: MutableRefObject<PackageRoom | null>;
-  runtime: GameSdkFrameRuntime;
   runtimeUrl: string;
   debugCanSend: boolean;
-  debugViewer: DebugViewer;
   postRoom: (room: PackageRoom | null) => void;
-  resetDebugControl: () => void;
   setMessage: (message: string) => void;
   attachLatestRoom: (next: PackageRoom) => PackageRoom;
   sendPackageCommand: (command: SafeCommand) => Promise<PackageRoom>;
@@ -37,12 +35,9 @@ type Options = {
 export function useGameSdkIframeBridge({
   iframeRef,
   roomRef,
-  runtime,
   runtimeUrl,
   debugCanSend,
-  debugViewer,
   postRoom,
-  resetDebugControl,
   setMessage,
   attachLatestRoom,
   sendPackageCommand,
@@ -51,6 +46,7 @@ export function useGameSdkIframeBridge({
   const [clientLoadFailed, setClientLoadFailed] = useState(false);
   const clientReadyRef = useRef(false);
   const clientLoadTimerRef = useRef<number | null>(null);
+  const presentationWaitersRef = useRef(new Map<string, () => void>());
 
   const clearClientLoadTimer = useCallback(() => {
     if (clientLoadTimerRef.current !== null) {
@@ -66,10 +62,22 @@ export function useGameSdkIframeBridge({
   }, [clearClientLoadTimer, runtimeUrl]);
 
   useEffect(() => {
+    const presentationWaiters = presentationWaitersRef.current;
     const listener = (event: MessageEvent) => {
       if (event.source !== iframeRef.current?.contentWindow) return;
       const payload = event.data;
       if (!payload || typeof payload !== "object") return;
+      if (
+        payload.type === "game-fields:room-state-presented"
+        && typeof payload.traceRef === "string"
+        && /^command_[A-Za-z0-9_-]{8,80}$/.test(payload.traceRef)
+        && Number.isSafeInteger(payload.revision)
+      ) {
+        const key = `${payload.traceRef}:${payload.revision}`;
+        presentationWaitersRef.current.get(key)?.();
+        presentationWaitersRef.current.delete(key);
+        return;
+      }
       if (payload.type === "game-fields:frame-size") {
         if (Number.isFinite(payload.height)) {
           setFrameHeight(Math.min(12_000, Math.max(320, Math.ceil(payload.height))));
@@ -99,26 +107,30 @@ export function useGameSdkIframeBridge({
         return;
       }
       void sendPackageCommand(payload.command).then(async (next) => {
+        const timing = gameSdkCommandTimingForRoom(next);
+        const presentationKey = timing?.traceRef
+          ? `${timing.traceRef}:${timing.revision}`
+          : null;
+        const presented = presentationKey
+          ? new Promise<void>((resolve) => {
+              presentationWaiters.set(presentationKey, resolve);
+            })
+          : new Promise<void>((resolve) => {
+              window.requestAnimationFrame(() => resolve());
+            });
         const accepted = attachLatestRoom(next);
-        const viewer = debugViewer;
-        let responseRoom = accepted;
-        if (viewer !== "self") {
-          try {
-            responseRoom = await runtime.readRoomAsDebugViewer(
-              accepted.code,
-              viewer,
-            ) ?? accepted;
-          } catch {
-            resetDebugControl();
-            setMessage(
-              "選択した閲覧視点を取得できないため、本人視点へ戻しました。",
-            );
-          }
-        }
+        await presented;
         iframeRef.current?.contentWindow?.postMessage({
           type: "game-fields:room-command-result",
           requestId: payload.requestId,
-          room: responseRoom,
+          room: accepted,
+          stateDelivered: true,
+          ...(timing ? {
+            timing: {
+              traceRef: timing.traceRef,
+              revision: timing.revision,
+            },
+          } : {}),
         }, "*");
       }).catch((error) => {
         iframeRef.current?.contentWindow?.postMessage({
@@ -133,17 +145,18 @@ export function useGameSdkIframeBridge({
       });
     };
     window.addEventListener("message", listener);
-    return () => window.removeEventListener("message", listener);
+    return () => {
+      window.removeEventListener("message", listener);
+      for (const resolve of presentationWaiters.values()) resolve();
+      presentationWaiters.clear();
+    };
   }, [
     attachLatestRoom,
     clearClientLoadTimer,
     debugCanSend,
-    debugViewer,
     iframeRef,
     postRoom,
-    resetDebugControl,
     roomRef,
-    runtime,
     sendPackageCommand,
     setMessage,
   ]);
@@ -168,7 +181,6 @@ export function useGameSdkIframeBridge({
 type ViewProps = {
   iframeRef: RefObject<HTMLIFrameElement | null>;
   roomRef: MutableRefObject<PackageRoom | null>;
-  runtime: GameSdkFrameRuntime;
   runtimeUrl: string;
   title: string;
   phase: string;
@@ -179,9 +191,7 @@ type ViewProps = {
   pending: boolean;
   onRecoverTimeout: () => void;
   debugCanSend: boolean;
-  debugViewer: DebugViewer;
   postRoom: (room: PackageRoom | null) => void;
-  resetDebugControl: () => void;
   setMessage: (message: string) => void;
   attachLatestRoom: (next: PackageRoom) => PackageRoom;
   sendPackageCommand: (command: SafeCommand) => Promise<PackageRoom>;
@@ -238,7 +248,6 @@ const GameSdkTimerCountdown = memo(function GameSdkTimerCountdown({
 export function GameSdkIframeBridge({
   iframeRef,
   roomRef,
-  runtime,
   runtimeUrl,
   title,
   phase,
@@ -248,9 +257,7 @@ export function GameSdkIframeBridge({
   pending,
   onRecoverTimeout,
   debugCanSend,
-  debugViewer,
   postRoom,
-  resetDebugControl,
   setMessage,
   attachLatestRoom,
   sendPackageCommand,
@@ -258,12 +265,9 @@ export function GameSdkIframeBridge({
   const { clientLoadFailed, frameHeight, handleLoad } = useGameSdkIframeBridge({
     iframeRef,
     roomRef,
-    runtime,
     runtimeUrl,
     debugCanSend,
-    debugViewer,
     postRoom,
-    resetDebugControl,
     setMessage,
     attachLatestRoom,
     sendPackageCommand,

@@ -11,6 +11,10 @@ import {
   type UserReportStatus,
   type UserReportType,
 } from "./user-report-core.ts";
+import {
+  validateSupportReportText,
+  validateSupportText,
+} from "../config/support-text-contract.ts";
 
 export type { UserReport, UserReportStatus, UserReportType } from "./user-report-core.ts";
 
@@ -38,6 +42,7 @@ export async function saveUserReport(
   },
   options: { reportId?: string } = {},
 ) {
+  const text = validateSupportReportText(input);
   const now = Date.now();
   const reportId = options.reportId ?? `report_${randomUUID()}`;
   if (!/^report_[0-9a-f-]{36}$/i.test(reportId)) {
@@ -46,6 +51,7 @@ export async function saveUserReport(
   const report: UserReport = {
     id: reportId,
     ...input,
+    ...text,
     status: "open",
     notificationStatus: "pending",
     notificationErrorCode: null,
@@ -68,7 +74,14 @@ export async function saveUserReport(
   ]);
   if (inserted === 0) {
     const existing = await loadUserReport(report.id);
-    if (!existing || existing.playerId !== input.playerId) {
+    if (
+      !existing
+      || existing.playerId !== input.playerId
+      || existing.type !== input.type
+      || existing.summary !== text.summary
+      || existing.details !== text.details
+      || existing.page !== text.page
+    ) {
       throw new Error("USER_REPORT_ID_CONFLICT");
     }
     return {
@@ -195,6 +208,7 @@ export async function appendUserReportMessage(input: {
   status: UserReportStatus;
   deliveryStatus?: SupportReplyDeliveryStatus;
 }) {
+  const body = validateSupportText(input.body, "reply", { required: true });
   if (!/^report_[0-9a-f-]{36}$/i.test(input.reportId)) {
     throw new Error("USER_REPORT_NOT_FOUND");
   }
@@ -209,13 +223,18 @@ export async function appendUserReportMessage(input: {
     const existing = current.messages.find(
       (message) => message.requestId === input.requestId,
     );
-    if (existing) return { report: current, message: existing, inserted: false };
+    if (existing) {
+      if (existing.author !== input.author || existing.body !== body) {
+        throw new Error("USER_REPORT_MESSAGE_ID_CONFLICT");
+      }
+      return { report: current, message: existing, inserted: false };
+    }
     const now = Date.now();
     const message = {
       id: `message_${randomUUID()}`,
       requestId: input.requestId,
       author: input.author,
-      body: input.body,
+      body,
       createdAt: now,
       deliveryStatus: input.deliveryStatus ?? "not-required",
     } as const;

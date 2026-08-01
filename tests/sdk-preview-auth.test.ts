@@ -3,11 +3,13 @@ import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 import {
   createSdkPreviewToken,
-  createSdkServiceAuthorization,
   sdkPreviewPublicKey,
   verifySdkPreviewToken,
-  verifySdkServiceAuthorization,
 } from "../packages/sdk-preview-auth/src/index.ts";
+import {
+  createSdkServiceAuthorization,
+  verifySdkServiceAuthorization,
+} from "../packages/sdk-service-auth/src/index.ts";
 import {
   createPackageRuntimeAccess,
 } from "../apps/sdk-portal/lib/preview-links.ts";
@@ -185,6 +187,7 @@ test("isolated preview verifies the issuer with only its Ed25519 public key", as
   const token = createSdkPreviewToken(mainGrant, portalSecret);
   const verified = await verifyPortalPreviewGrant(token, {
     env: {
+      NODE_ENV: "test",
       VERCEL_GIT_COMMIT_REF: "main",
       SDK_PREVIEW_SIGNING_SECRET: previewLocalSecret,
     },
@@ -214,12 +217,12 @@ test("isolated preview obtains only a cacheable public key during key rollout", 
     });
   };
   assert.deepEqual(await verifyPortalPreviewGrant(token, {
-    env: { VERCEL_GIT_COMMIT_REF: "develop" },
+    env: { NODE_ENV: "test", VERCEL_GIT_COMMIT_REF: "develop" },
     fetchPublicKey,
     now: 10_000,
   }), { ...grant, expiresAt: 20_000 });
   assert.deepEqual(await verifyPortalPreviewGrant(token, {
-    env: { VERCEL_GIT_COMMIT_REF: "develop" },
+    env: { NODE_ENV: "test", VERCEL_GIT_COMMIT_REF: "develop" },
     fetchPublicKey,
     now: 10_000,
   }), { ...grant, expiresAt: 20_000 });
@@ -229,7 +232,7 @@ test("isolated preview obtains only a cacheable public key during key rollout", 
 test("production preview uses its pinned public key without runtime discovery", async () => {
   let fetchCount = 0;
   assert.equal(await verifyPortalPreviewGrant("invalid-token", {
-    env: { VERCEL_GIT_COMMIT_REF: "main" },
+    env: { NODE_ENV: "test", VERCEL_GIT_COMMIT_REF: "main" },
     fetchPublicKey: async () => {
       fetchCount += 1;
       throw new Error("production must not fetch the Portal public key");
@@ -245,7 +248,7 @@ test("isolated preview rejects invalid public keys and unavailable key discovery
   }), null);
   await assert.rejects(
     verifyPortalPreviewGrant("token.with-signature", {
-      env: { VERCEL_GIT_COMMIT_REF: "develop" },
+      env: { NODE_ENV: "test", VERCEL_GIT_COMMIT_REF: "develop" },
       fetchPublicKey: async () => Response.json({
         algorithm: "Ed25519",
         environment: "development",
@@ -258,7 +261,7 @@ test("isolated preview rejects invalid public keys and unavailable key discovery
   resetPreviewPublicKeyCacheForTests();
   await assert.rejects(
     verifyPortalPreviewGrant("token.with-signature", {
-      env: { VERCEL_GIT_COMMIT_REF: "develop" },
+      env: { NODE_ENV: "test", VERCEL_GIT_COMMIT_REF: "develop" },
       fetchPublicKey: async () => {
         throw new Error("network detail must not escape");
       },
@@ -400,4 +403,20 @@ test("SDK service authorization binds method and path within a short window", ()
     },
     secret,
   ), false);
+});
+
+test("Preview grant and service HMAC packages have disjoint responsibilities", () => {
+  const previewAuth = readFileSync("packages/sdk-preview-auth/src/index.ts", "utf8");
+  const serviceAuth = readFileSync("packages/sdk-service-auth/src/index.ts", "utf8");
+  assert.doesNotMatch(previewAuth, /SdkService|createHmac|timingSafeEqual|SDK_ACCOUNT_LINK_SECRET/);
+  assert.doesNotMatch(serviceAuth, /SdkPreview|Ed25519|createPrivateKey|createPublicKey|\bsign\(|\bverify\(/);
+  const previewFiles = [
+    "apps/sdk-preview/package.json",
+    "apps/sdk-preview/next.config.ts",
+    "apps/sdk-preview/lib/preview-source.ts",
+    "apps/sdk-preview/app/server/[instanceId]/[gameId]/[revision]/route.ts",
+  ].map((path) => readFileSync(path, "utf8")).join("\n");
+  assert.doesNotMatch(previewFiles, /SDK_ACCOUNT_LINK_SECRET|@game-fields\/sdk-service-auth/);
+  assert.match(readFileSync("lib/sdk-service-auth.ts", "utf8"), /@game-fields\/sdk-service-auth/);
+  assert.match(readFileSync("apps/sdk-portal/lib/sdk-service-auth.ts", "utf8"), /@game-fields\/sdk-service-auth/);
 });

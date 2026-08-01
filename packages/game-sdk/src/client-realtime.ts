@@ -22,6 +22,7 @@ export type GameSdkRoomWatchObserver<TRoomView> = {
 };
 
 export type GameSdkRoomWatch = {
+  acceptRevision(revision: number): void;
   close(): void;
 };
 
@@ -118,7 +119,8 @@ export function createGameSdkRoomWatcher<TRoomView>({
     refreshPromise = readRoom(normalizedCode, source)
       .then((room) => {
         if (closed) return;
-        lastRevision = room?.revision ?? lastRevision;
+        if (room && room.revision < lastRevision) return;
+        lastRevision = Math.max(lastRevision, room?.revision ?? 0);
         observer.onRoom(room);
       })
       .catch((error: unknown) => {
@@ -225,6 +227,10 @@ export function createGameSdkRoomWatcher<TRoomView>({
   void connect();
 
   return {
+    acceptRevision(revision) {
+      if (!Number.isSafeInteger(revision) || revision < 1) return;
+      lastRevision = Math.max(lastRevision, revision);
+    },
     close() {
       if (closed) return;
       closed = true;

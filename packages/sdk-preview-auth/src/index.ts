@@ -1,10 +1,8 @@
 import {
   createHash,
-  createHmac,
   createPrivateKey,
   createPublicKey,
   sign,
-  timingSafeEqual,
   verify,
 } from "node:crypto";
 
@@ -18,8 +16,6 @@ const ED25519_PKCS8_SEED_PREFIX = Buffer.from(
   "302e020100300506032b657004220420",
   "hex",
 );
-const SDK_SERVICE_AUTH_VERSION = 1;
-const SDK_SERVICE_AUTH_MAX_AGE_MS = 60_000;
 
 export type SdkPreviewGrant = {
   version: 4;
@@ -159,64 +155,5 @@ export function verifySdkPreviewToken(
     return parsed;
   } catch {
     return null;
-  }
-}
-
-function sdkServiceSignature(payload: string, secret: string) {
-  assertSecret(secret);
-  return createHmac("sha256", secret)
-    .update(`game-fields-sdk-service:${payload}`)
-    .digest("base64url");
-}
-
-export function createSdkServiceAuthorization(input: {
-  method: string;
-  path: string;
-  now?: number;
-}, secret: string) {
-  const payload = Buffer.from(JSON.stringify({
-    version: SDK_SERVICE_AUTH_VERSION,
-    method: input.method.toUpperCase(),
-    path: input.path,
-    issuedAt: input.now ?? Date.now(),
-  }), "utf8").toString("base64url");
-  return `${payload}.${sdkServiceSignature(payload, secret)}`;
-}
-
-export function verifySdkServiceAuthorization(
-  value: string,
-  expected: {
-    method: string;
-    path: string;
-    now?: number;
-  },
-  secret: string,
-) {
-  assertSecret(secret);
-  const [payload, suppliedSignature, extra] = value.split(".");
-  if (!payload || !suppliedSignature || extra) return false;
-  const actual = Buffer.from(suppliedSignature, "base64url");
-  const wanted = Buffer.from(sdkServiceSignature(payload, secret), "base64url");
-  if (actual.length !== wanted.length || !timingSafeEqual(actual, wanted)) {
-    return false;
-  }
-  try {
-    const parsed = JSON.parse(
-      Buffer.from(payload, "base64url").toString("utf8"),
-    ) as {
-      version?: unknown;
-      method?: unknown;
-      path?: unknown;
-      issuedAt?: unknown;
-    };
-    const now = expected.now ?? Date.now();
-    return parsed.version === SDK_SERVICE_AUTH_VERSION
-      && parsed.method === expected.method.toUpperCase()
-      && parsed.path === expected.path
-      && typeof parsed.issuedAt === "number"
-      && Number.isSafeInteger(parsed.issuedAt)
-      && Math.abs(now - parsed.issuedAt) <= SDK_SERVICE_AUTH_MAX_AGE_MS;
-  } catch {
-    return false;
   }
 }

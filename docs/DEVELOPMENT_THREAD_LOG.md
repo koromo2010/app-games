@@ -3284,3 +3284,237 @@ Total output lines: 6329
 - 差分はT-39の25ファイルだけで、Migration、料金台帳、Dynamic asset、問い合わせ・報告・メールID実装、環境変数、Redis接続先・namespace、timeout、retryの変更はない。
 - Vercelの基準commit実Deploymentをread-only確認した。develop pushでは6 ProjectすべてにGit連携Deployment recordが作られたが、`app-games-dev`だけがplatform差分としてbuild・READYとなり、`app-games`、`app-games-sdk`、`app-games-sdk-dev`、`app-games-sdk-portal`、`app-games-preview-dev`はIgnored Build StepでCANCELEDになった。
 - 今回25パスをT-37判定器へ入力した結果も、`app-games-dev/develop`だけが`surface-affected:platform`でbuild、他5 Projectはbranch mismatch、surface unaffected、またはproject disabledでskipとなった。想定buildはdevelopment platformの1件だけである。
+
+## 2026-08-01 — T-60再構築とT-60.1受入監査
+
+### 依頼と開始状態
+
+- workspace自動整理で消失したT-60未commit差分を再構築し、元のT-60.1要件に照らして独立監査するよう依頼された。
+- `develop@17c331e18908120b26cab85a2132c987999a924e`をclean checkoutし、`origin/develop`と同一、`origin/main@85e702e7ed3b6acf5e7167d9fb3dcbe3a23c2389`も前回報告から更新なしと確認した。
+- 元patchは保存されていないためbyte-for-byte復元ではなく、報告済み契約とT-60.1要件からテスト先行で再構築した。dirty checkoutのreset／stash／rebase、凍結checkoutの操作は行っていない。
+
+### 受入監査で確認した不足
+
+- 旧migration案は緩いarray parse後のnormalizerで不正legacy fieldを黙示修復し得たため、maintenance専用raw validatorが必要だった。
+- branch由来environmentをDB自身のmarkerとして扱えず、schema 7には証明可能なDB markerがない。
+- stable pointer固有の`source_revision`はschema 7に保存されず、current releaseから推測するとT-58相当の不整合を隠し得る。
+- anomaly分類、canonical digestのfield網羅、runner／auditのexact artifact同一性は、個別の分類・field mutation・Git object traceで証明する必要があった。
+
+### 実装判断
+
+- 公開game operationsをv3→v2→v1のGET専用readerへ分離した。legacy fallbackのwrite-backを廃止し、管理PATCHのSETと明示maintenance CLIを別moduleにした。
+- migrationはv2／v1のexact field、type、enum、message、updatedAt、duplicate、partial object、unknown field／IDをraw JSON段階で検証する。dry-run既定、applyは固定targetへの`SET ... NX`最大1回で、overwrite、delete、scan、TTL変更を行わない。
+- schema snapshotは固定3 SELECTを一つの`REPEATABLE READ READ ONLY` transactionで実行する。DB markerとstable provenanceは`null`＋`unavailable:schema-7`とし、推測で埋めない。
+- stable/current/partial/orphan/tombstone/lineage/public ID別multiple currentを独立分類し、返却する監査fieldをcanonical digestへ含め、配列順を正規化した。
+- Platform管理GETはfull site-admin cookie token検証後だけPortalへservice HMAC付きrequestを送る。認証chainにsession touch、cookie refresh、last-seen、audit INSERT、Redis touchはない。全応答を`private, no-store`とする。
+- exact Runtime契約を`@game-fields/sdk-runtime-artifact`へ集約した。requested lowercase 40hexとresolved commitの一致、exact tree、package全blob、manifest、server／AppSet／root hashをrunnerとauditで共有する。
+- Preview grantを`@game-fields/sdk-preview-auth`、内部HMACを`@game-fields/sdk-service-auth`へ分離した。Previewはservice secret非consumerである。
+- build gateはPlatform／Portal／Previewの実consumer依存を一般規則で判定し、`app-games-sdk-portal`を正式Portal consumerとした。
+
+### ローカル検証と境界
+
+- focused回帰、Portal／Preview typecheck、Runtime package build、repository verify、lint、`git diff --check`を成功させた。
+- production marker 4件、development marker 3件の全7 Project direct fixture buildが成功した。実secret、migration prebuild、live service接続は使用していない。
+- repository-wide testの失敗は、未変更の招待route契約testが未変更の既存SDK Preview招待実装を否定する既知baseline矛盾1件だけで、新規失敗はない。root aggregate typecheckの既存test fixture errorも変更surfaceのtypecheckとは分離して記録する。
+- live DB／Redis／Blob／private Git artifact、production／development公開pageへ接続していない。Redis external dry-run／apply、Migration、DDL、DML、backfill、commit、push、PR、Deployment、T-48.1再実行は0件である。
+
+### 判定
+
+- ローカルの安全性欠陥は修正し、変更surfaceと全7 Project buildは回帰なし。
+- ただしschema 7だけではDB自身のenvironment markerとstable source provenanceを証明できず、禁止されたschema変更や外部照合なしに受入PASSとはできない。
+- 最終判定は`T-60 LOCAL IMPLEMENTATION PARTIAL／BLOCKED`。push、Deployment、T-48.1へ自動進行しない。
+
+## 2026-08-01 — T-60.1耐久checkpoint保存と局所受入修正
+
+### checkpoint
+
+- 修正前のactive worktreeは`HEAD 17c331e18908120b26cab85a2132c987999a924e`、tracked変更31、untracked 20、deleted 0、合計51ファイルだった。status fingerprintは`2b39138c29e71f8499247d921a5deff913660e47471e2a894e0374af9e9fe802`、内容fingerprintは`f618c28cae9eb569afc8b9f9a1c95ff7a4dd86c57edfe2938fed3d356410e0b5`である。
+- private `koromo2010/app-games-checkpoints`へ、workflowを含まない空treeの`main@cc72519054cfb962c9c3ba073619acd83d2a01a6`と、51ファイルsnapshotの`t-60.1/pre-remediation-17c331e@5a7c9e268e0b77b625d111d5b7a1bc3c26f88d9b`を一度のatomic pushで作成した。snapshot treeは`6ada367b433dac963f3141ff86de890296d5129d`である。
+- remote 2 refを再取得し、snapshotの基準差分がM31／A20／D0、51/51 blobが保存時worktreeと一致することを確認した。active HEAD、index、status fingerprint、内容fingerprintはpush前後で不変だった。
+- 使用したDeploy keyは`T-60.1 checkpoint temporary`、対象repo限定Read/writeである。秘密値は表示・記録せず、秘密鍵permission 600を維持した。撤去はcheckpoint不要化後の運用作業として残る。
+- checkpoint以外の外部writeは0件である。製品`origin`、PR、Actions、Vercel Deployment、DB、Redis、Blob、SDK package Gitへwriteしていない。
+
+### 前回T-60記録の訂正
+
+- 前節の「runnerとauditがexact commit／full package treeを共有」はhot path回帰であり、T-60.1受入ではFAILだった。full commit／recursive tree／全blob／manifest／package root検証はPortal audit専用へ限定した。
+- Preview Command runnerは既存の単一file経路を復元し、固定`server.bundle.js`を1回取得してgrantのbundle SHA-256と照合する。apply／presentのcallerからaudit full-tree resolver、commit、tree、blob readerへ到達しない。両経路が共有するのはimmutable locatorとSHA-256等のpure処理だけである。
+- 前節で`app-games-sdk-portal`をDeployment consumerとした判定も訂正する。同ProjectはT-59で利用実態が確定するまでproject-disabled／SKIPを維持する。今回のPortal local typecheck／buildはDeployment build gateとは別の検証である。
+
+### 局所修正
+
+- schema snapshotへgame status、current release decision ID、stable manifest SHA-256、current manifest SHA-256と各availabilityを追加した。stable値はstable JSONB、current値はcurrent release JSONBから別々にcanonical計算し、他revision・branch・相手側から補完しない。
+- latest decisionは`decided_at DESC, id DESC`で決定的に取得する。stable source provenanceとDB environment markerは引き続き`null`＋`unavailable:schema-7`であり、current releaseやbranchから推測しない。
+- 複数game、同一gameの複数lineage、複数stable／current候補をfixture化し、game／release／lineage順を独立に変えてもdigestとanomalyが不変であること、各監査fieldの単独変更でintegrity digestが変わることを確認した。status、decision ID、stable／current manifest hashの不存在と不一致も独立anomalyで検出する。
+- snapshot loaderをdependency injection可能な狭いtest seamにし、反復GET相当の各呼出しが`REPEATABLE READ READ ONLY`の固定3 SELECTだけを実行すること、DDL、DML、schema ensure、自動migrationを呼ばないことをquery traceで固定した。
+- 公開game operationsの反復readはv3／v2／v1のGETだけで、mutation 0である。maintenance migrationは初回applyの`SET ... NX`最大1回、同一payload再適用write 0、NX race後の同一payloadは成功、別payloadは明示conflict、malformed／dry-run／既存target conflictはmutation 0である。
+- 現差分はtracked 30、untracked 20、deleted 0、合計50ファイルである。修正前51件のうち`apps/sdk-preview/lib/preview-source.ts`はfull-tree reader追加を取り消して基準内容へ戻ったためdirty対象から外れた。checkpoint側の51ファイルsnapshotは不変である。
+
+### 最終ローカル検証
+
+- focused regressionは60/60 PASS。Snapshot／digest／migration／admin auth／Runtime caller／build gateを含む。
+- `npm run verify`、単独ESLint、`git diff --check`はPASS。
+- Portal／Previewの`tsc --noEmit`は各0診断。root aggregate typecheckは既存fixture由来51診断でredだが、現50変更パス由来は0診断である。
+- Runtime package buildはPASS。direct Next buildはPlatform main／develop、Portal main／develop／disabled duplicate、Preview main／developの7/7 PASS。実secretとmigration prebuildは使用していない。
+- Deployment build gateは`app-games`、`app-games-dev`、`app-games-sdk`、`app-games-sdk-dev`、`app-games-sdk-preview`、`app-games-preview-dev`の6件BUILD、`app-games-sdk-portal`だけproject-disabled／SKIPである。
+- repository-wide testは769/770 PASS。失敗1件は未変更の`tests/room-invite-route-contract.test.ts`が未変更の`app/join/[roomCode]/InviteRoomJoiner.tsx`にある既存SDK Preview対応を否定するbaseline矛盾で、両ファイルの基準SHA差分は0である。
+
+### 3層判定と残存依存
+
+1. T-60.1が直接所有する局所差分は`PASS`。
+2. T-60 end-to-endは`/games → loadGameDurationEstimates() → ensurePostgresSchema()`の既知write到達を統合するT-61.2／T-65待ち。このworktreeへ重複修正していない。
+3. schema 7で証明不能なDB marker／stable provenanceはschema 8待ち。推測値でPASSにしない。
+
+active HEADは基準SHAのままで、active commit、製品`origin` push、PR、Actions、Vercel Deployment、T-48.1、T-58、schema 8、main昇格は0件である。T-60全体をPASSとはせず、外部環境へ進まない。
+
+## 2026-08-01 — T-65 SDK関連差分のローカル統合回帰
+
+### 対象と境界
+
+- `origin/develop@17c331e18908120b26cab85a2132c987999a924e`から専用のclean integration worktreeを作成し、T-61／T-61.1／T-61.2、T-62、T-63、T-64、T-66、T-67のLOCAL PASS差分を意味単位で統合した。
+- T-60／T-60.1、T-61、T-62、T-63／T-64、T-66／T-67の各既存worktreeは変更していない。commit、push、PR、Actions、Deployment、Migration、SDK package再保存・再提出、公開環境・live storageへの接続は行っていない。
+- 唯一の実コード競合はSDK Portal MCP routeだった。T-62の保存前asset gateとT-67の共有本文validationを手動で併存させ、認証応答の優先順を維持した。未commit差分の全体コピーは行っていない。
+
+### 統合結果
+
+- T-61はトップと`/games`を同じServer Component/read modelへ統合した。local production serverとSDK catalog／Redis fakeによる実HTTPでは、`/`、`/ja`、`/en`、`/games`がすべてSDKゲームを表示した。Redis 13 commandは`GET` 4件と`ZREVRANGE` 9件だけでwriteは0件だった。Postgres公開read経路にDDL／DMLはない。
+- T-62は共有package asset validator、保存前gate、auditを統合した。外部private artifactや実Package提出は行わず、fixtureとlocal buildで検証した。
+- T-63／T-64はstable IDを保存・URL・action keyに維持したまま、公開catalogから作るrequest-scoped表示metadata snapshotへユーザー向け名称解決を集約した。`sdk:link-lines`はjaで「道つなぎ」、enで「Link Lines」となり、unknown／private／deleted／catalog失敗はraw IDや非公開metadataでなく汎用「SDKゲーム」へ落ちる。
+- T-66はouter Room API、Preview runner、browser／iframeを同じopaque traceとrevisionで関連付けるallowlist timing collectorを追加した。DEBUG代理Commandはactorとfinal viewerを保存Room・権限から再検証し、applyCommandと最終viewer向けpresentRoomを同じ後方互換runner batchへ集約した。同一revisionの追加DEBUG viewer GETは0、mutation HTTPは1、runner起動とpresentRoomは各1である。watcherの既取得revisionと遅着旧revisionを無視し、iframeは最終View通知・次frame後にCommandを完了する。
+- T-67はsummary 120、details 12,000、page 200、reply 3,000の共有契約を本体、Portal、MCP、AI draft、内部API、Redis保存、管理画面、会話表示、通知メールへ適用した。入力を切って成功させる処理を除去し、12,001文字は保存0件の明示validation errorとした。1,200文字で「同一revisi」まで切れた旧fixture、12,000／12,001境界、冪等retryを回帰testで固定した。既存recordの補完・backfillはしていない。
+
+### ローカル検証
+
+- 統合focused testは116/116成功した。T-61 read-only、T-62 asset gate、T-63／T-64表示metadata、T-66 timing／roundtrip、T-67全文境界を含む。
+- 全体testは810/811成功した。T-62統合によりNode 24 JSON import attributeの既知失敗は解消し、残る1件は実装済みSDK Preview招待を否定する旧contractだけである。新規回帰はない。
+- root app source、SDK Portal、SDK Previewのtypecheck、全体lint、SDK shell test 8/8、game／SDK／help／migration／boundary gate、`git diff --check`は成功した。`packages/sdk-package-assets`は単独tsconfigを持たないsource-only packageであり、Portal typecheck/buildとfocused testで検査した。
+- Platform production buildはTypeScript検査と78ページ生成、SDK Portal buildは15ページ生成、SDK Preview buildは5ページ生成まで成功した。local SDK build内のmigrationは明示的にskipされ、DDL／DMLや外部接続はない。
+- `npm run verify`は基準にも存在する環境台帳漏れ`SDK_ACCOUNT_LINK_ALLOWED_ORIGINS`で停止した。独立問題としてT-68を採番し、今回の範囲では修正していない。停止後の各verify gateは個別に成功した。
+- 実差分104パスのbuild影響は、`develop`で`app-games-dev`、`app-games-sdk-dev`、`app-games-preview-dev`がBUILDである。main系3 Projectはbranch mismatch、`app-games-sdk-portal`はdisabledでSKIPとなる。
+
+### 未確認・次段階
+
+- 指定された既存revision `e5b9293a5c3c46a892d631d0dfcfa7057c28aaae`のprivate artifactには接続していない。protocol-v1 portable bundle fixtureでpackage format／revision再生成不要の後方互換性を確認した。
+- T-66の正式Preview実計測、private Package asset gate、実メール末尾、実Redis／Postgresは外部環境が必要なため未確認である。
+- 後続Deploymentが許可された場合の対象は`develop`のdevelopment論理環境で、`app-games-dev`、`app-games-sdk-dev`、`app-games-preview-dev`のProduction target各1件、合計3件を想定する。目的はPlatform Command／表示／support、Portal support／asset gate、Preview runner timingの実機確認であり、他Projectのbuildは想定しない。明示許可までpush・Deploymentへ進まない。
+
+## 2026-08-01 — T-68／T-69局所修正とT-65全体回帰
+
+### 利用者からの要望
+
+- T-65 local checkpoint `40b6d97961f2cb909d55596e819af4155d8e08c4`を凍結し、同commitから新しいdetached worktreeを作ってbaseline問題T-68／T-69だけを局所修正する。
+- T-68は`SDK_ACCOUNT_LINK_ALLOWED_ORIGINS`のコード参照と環境台帳を一致させ、外部設定の実績を推測で作らない。
+- T-69はSDK Preview対応を禁止する旧assertionを、通常RoomとSDK Preview Roomが共存するpositive contractへ置き換える。正規実装に問題がなければproductionコードを変更しない。
+- focused検証後に`npm test`と`npm run verify`を完走させ、commit、push、Actions、Deployment、実環境操作は行わない。
+
+### 判断
+
+- T-68の実体は`app/api/sdk-account-link/route.ts`が参照する非Sensitiveな任意allowlistの台帳漏れだった。外部配置は確認していないため、`app-games`／`app-games-dev`のProductionを「未登録／未確認」と記録し、`config/environment-change-registry.json`は変更しない。
+- T-69のproduction実装は、player認証済みの通常Room API 8件を先に探索し、見つからない場合だけ共通`/api/room-invites/` resolverからSDK Previewの固定revisionを解決し、取得したRoom revisionを`expectedRevision`として`room/join`へ渡す正規contractを既に満たしていた。このためproductionコードは変更せず、旧否定assertionだけをpositive assertionへ是正する。
+
+### 実施結果
+
+- `docs/ENVIRONMENT_VARIABLES.md`へ`SDK_ACCOUNT_LINK_ALLOWED_ORIGINS`の対象surface、Sensitive区分、未確認状態、空白／カンマ区切りのHTTPS origin契約、未設定時のコード既定origin利用を追加した。秘密値や実origin一覧は取得・記録していない。
+- `tests/room-invite-route-contract.test.ts`は、通常Room API一覧、player認証、`PATCH`／`join-room`、SDK Preview resolver、通常探索が先であること、`room/join`、`expectedRevision`、固定revision endpointをpositive assertionで検査する。
+- `tests/room-invite-sdk-preview-contract.test.ts`とproductionコードは変更していない。
+
+### 検証
+
+- 変更前は`npm run check:env-ledger`が`SDK_ACCOUNT_LINK_ALLOWED_ORIGINS` 1件だけで失敗し、招待contract 7件は旧generic test 1件だけ失敗、SDK Preview正規contractとinvite-index 6件は成功した。
+- 修正後のfocused検証は7/7、環境台帳検査はコード参照60キー／変更依頼16件を網羅して成功した。
+- 全体testは811/811成功した。T-65で残っていた旧SDK Preview招待contract失敗は解消し、新規失敗はない。
+- `npm run verify`はversion、環境台帳、9ゲーム基準、SDK境界、SDK Help、7 migrations、SDK Shell 8/8、全体lintを含めて成功した。
+- 差分は環境台帳文書、招待contract test、この開発ログだけで、productionコード、設定、package、依存関係に変更はない。Platform／SDK Portal／SDK Previewのproduction buildは再実行せず、T-65 checkpointで成功済みの3 surface buildを維持扱いとした。`npm test`内のRuntime package buildは成功した。
+
+### 未対応・保留
+
+- 外部Vercel変数の現在配置、実callback origin、実Room招待、正式Preview、live DB／Redis／Blobは確認していない。外部環境変数の登録・変更・削除も行っていない。
+- commit、stage、branch作成、push、PR、Actions、Deploymentは行っていない。local checkpoint更新は別の明示許可を待つ。
+
+## 2026-08-01 — T-74 SDK／公開read checkpointのローカル統合完了
+
+### 利用者からの要望
+
+- T-71を第一親、T-60.1を第二親として、T-65系SDK成果と公開read境界を隔離branchへ統合する。競合と追加修正は明示許可された範囲だけに限定し、全local gateがPASSした場合だけmerge commitと4文書finalizationの計2 commitを作る。
+- push、PR、Actions、Deployment、production反映、DB／Redis／Blobその他のexternal writeは行わない。T-73Bの最終波及確認が終わるまで固定starter refを保持する。
+
+### 統合と局所修正
+
+- 正規checkpointはT-60.1 `dda0313273f7231232a8acae0a94fffd54f2b9a4`、T-65 `40b6d97961f2cb909d55596e819af4155d8e08c4`、T-71 `139f4ae8368a7646f70a18352b5f9db9f8adbf70`である。
+- partial cloneのlocal fetchは固定tree内12 blob不足で停止した。許可された12 blob限定hydrateは成功したが、再fetchがtree外の到達履歴objectで停止したため再試行せず、canonical originから固定commit `4568d668c2e9542e89ddb058633d67b757f4e807`だけを1回direct fetchした。固定treeは`12d8c86d82ed8711bf21a12e3669ac1954f90706`、starter manifest SHA-256は`1cb62054b21519570aefcbfadfc0414ebb5a8da594fb0badc85bc0b26cdf11ae`、missing objectは0である。
+- SDK Preview routeのTypeScript narrowingは、grant hashの存在確認直後にimmutable localへ固定し、async callbackへ渡した。変更は`apps/sdk-preview/app/server/[instanceId]/[gameId]/[revision]/route.ts`の2行だけで、non-null assertion、cast、grant型、validator、認証条件、エラー応答、test、lockfile、別sourceは変更していない。
+- merge commitは`25b27cc096bd30b2176ba53209bf607b105cac41`、親はT-71、T-60.1の順、treeは`8661072b6610600fb084ac06d7fd33f419496c6f`。`develop@17c331e18908120b26cab85a2132c987999a924e`比は139パス、M97／A42／D0である。
+
+### 検証
+
+- focused 2 test fileは5/5、環境台帳は60 code key／16 change request、SDK境界、7 migrations、SDK Shell 8/8がPASSした。
+- Runtime packages build、SDK package外部fixture、starterの入口・snapshot・ZIP・同梱SDK・型検査・契約test・1ゲーム完走・提出ZIPがPASSした。`npm test`は835/835、`npm run verify`はPlatform v0.1.1、DownloadMe v17、SDK contract v2、9ゲーム、SDK Help 6件、ESLintを含めPASSした。
+- SDK Preview buildはTypeScriptと5ページ、Platform buildはTypeScriptと78ページ、SDK Portal buildはTypeScriptと15ページを生成してPASSした。Preview buildは局所修正直後の1回だけで重複実行していない。
+- Portal migrationは`local/local`としてskipし、DB接続・DDL・DMLは0。Main Promotion同期5対象は`would-change=0`、Vercel build-impactは通常6 Projectを各surface affected、重複`app-games-sdk-portal`だけを`project-disabled`でSKIPと判定した。
+- candidate treeは修正前`cb8e906c250e30cdbb2a7e97dcf4b6fd24981af4`から対象routeだけが変わり、修正後`8661072b6610600fb084ac06d7fd33f419496c6f`で2回一致した。139パス・M97／A42／D0、path union fingerprint `9de99b21b1bbb88457f4ab3f44db800b1ddb1dc9d647075268a9fd9e4b9c51ff`、status fingerprint `29e0d655d630b032ade883d108dcd388b85ddd201c2ee6b77e9d7344abf4718b`をcommit直前まで維持した。
+
+### 関連コミット
+
+- `25b27cc096bd30b2176ba53209bf607b105cac41` — `merge: integrate SDK and public-read checkpoints`
+
+### 未対応・保留
+
+- 判定は`T-74 LOCAL INTEGRATION COMPLETE／139-FILE TREE FIXED／T-73B FINAL RECHECK PENDING／PUSH PENDING`。T-73B完了まで固定local refを保持する。
+- push、PR、Actions、Deployment、production反映、実環境確認、外部環境writeは未実施である。T-73Bの最終波及確認と、その後の個別許可を待つ。
+
+## 2026-08-01 — T-76B T-62 package asset gateのsemantic reimplementation
+
+### 回収境界
+
+- T-76A recovery baseは`324efcdd5619062b64f091a0b3d8419b1197957a`（tree `5f3e3280a517953f12e89edb322d334c4e38bb15`）である。T-62由来25パスを、このbase上へexact recoveryではなく残存contract・consumer・test意図に基づくsemantic reimplementationとして新規実装した。
+- code checkpointは`4547e2d125c660f9fd86943dd68941cfcf5e0abc`（tree `2b6c4d716fc72e369ffba746141734db63a906e7`）。差分は指定25パスだけのM17／A8／D0で、package-lock、exact回収済み6パス、後続overlay 4パスは変更していない。
+- 残るoverlayは`apps/sdk-preview/app/server/[instanceId]/[gameId]/[revision]/route.ts`、`scripts/check-game-sdk-package.mjs`、`tests/game-visibility-source.test.ts`、`tests/room-invite-route-contract.test.ts`で、T-76Cまで凍結する。
+
+### 実装と検証
+
+- `@game-fields/sdk-package-assets`をpure deterministic validatorとして追加し、HTML、CSS、JavaScript／TypeScriptの静的参照、`src`／`href`／`poster`／`srcset`、CSS `url()`／`@import`、static／dynamic import、template literal、文字列連結、const／変数参照を解析する。parse errorと静的解決不能なasset候補はfail closedとした。
+- `saveValidatedGamePackage`へREST、MCP、creator save、低水準Git save、developmentからmainへのartifact transferを集約した。asset拒否時はschema、DB、Git、Blob、Redis、audit、submission、publication、promotion、stable pointerを呼ばないfixtureを固定した。local CLIは指定された単一packageだけを同じvalidatorで監査する。
+- focused regressionは54/54 PASS。`npm run check:sdk`、Portal／Preview typecheck、`npm run verify`、`npm run lint`、Runtime packages build、Platform／Portal／Previewのoffline build、`git diff --check`はPASSした。Portal migrationは`local/local`でskipし、DB接続は0である。
+- root typecheckは53診断で非0だが、25対象pathの診断は0で、T-76A baseの既存診断から増えていない。全体testは816/822 PASS。残る6件はrecovery base／凍結overlay／隔離bundleのremote ref不足に由来し、25-path focused regressionではない。`test:sdk-package`は凍結中のcheckerがmodule profile 38を期待し、現contract 39との不一致で停止した。
+
+### 外部境界
+
+- private GitHub checkpoint mirrorは未作成であり、remote pushは試行していない。product repository、checkpoint repository、PR、Actions、Vercel、DB、Redis、Blob、OAuthへのwriteはすべて0である。
+
+## 2026-08-01 — T-76C final four-path overlayのsemantic restoration
+
+### 回収境界
+
+- T-76Bはbaseline比較監査によりscoped passと確定した。T-76Cでは開始HEAD `3f19471877a84af0e09d6afce5084f12fea3748d`上の凍結4パスだけを、lost T-74 treeのexact recoveryではなく現行consumer、test、handoff、thread logを正本とするsemantic restorationとして更新した。
+- code checkpointは`b72bfe1e69d2558ace2358cc3168d0067a2a355c`（tree `948809dff0af12323e3b8440f4bbc4302ea6082f`）。親との差分は指定4パスだけのM4／A0／D0で、baseline比は139パス、M97／A42／D0である。T-76B 25パス、T-76A非ログ109パス、`package-lock.json`は変更していない。
+
+### 復元内容と検証
+
+- SDK Preview routeは固定revisionの`server.bundle.js`を1回だけ取得し、grantのimmutableな`bundleSha256` localと取得bytesのSHA-256を照合する。legacy protocol-v1は`runGameSdkPortableServer`、`game-fields-command-batch-v1`は`runGameSdkPortableCommandBatch`へ渡し、共有timing collectorでbundle取得、hash、QuickJS、apply、presentのallowlist timingを保持する。full-tree resolver、recursive tree、package全blob取得、二重fetch、service HMAC secretは導入していない。
+- SDK package checkerの唯一の旧profile固定値を38から正規contractの39へ更新した。visibility contract testは`GameLobbyRoute`、共有loader、`assembleGameLobbyPageData`、完全なgame集合を使うadmin read／save、正規`GameOperationDefinition[]`へ追従した。Room invite contract testは通常Room探索を先に維持し、共通resolver、固定revision、`expectedRevision`、SDK Preview `room/join`、成功後の`router.replace`をpositive contractとして固定した。productionのvisibility／invite実装は変更していない。
+- focused regressionは29/29、SDK package外部tarball検査、SDK Preview typecheck／build、Portal typecheck／build、Platform offline build、Runtime packages build、`check:sdk`、`verify`、`lint`、`git diff --check`がPASSした。全体testは819/822、5-file比較は6 PASS／3 FAILで、T-76B比のB-PASS／C-FAILは0である。
+
+### 残件と外部境界
+
+- 残る3件はT-76A recovery baseの旧catalog inline GET assertion、SDK Preview側`createPreviewRuntimeArtifactReader` export不足、隔離bundleに`origin/sdk-starter-dev`／期待objectがないtest environment条件である。今回修正せず、T-76Dの指示まで凍結する。
+- product／checkpoint remote push、PR、Actions、Vercel、DB、Redis、Blob、OAuth、live Package接続を含むexternal writeはすべて0である。
+
+## 2026-08-01 — T-76D final T-60.1 remediationとstarter fixture復元
+
+### 回収境界
+
+- T-76Cはscoped passであり、最終HEAD `0f416bd44a445f895c508a1d2e0118ef6efce0b6`（tree `dd5d89b2bc2a5297cd18b2f7647209a3a33ebe33`）を固定開始点とした。pre-remediationのPreview full-tree reader要求は最終single-bundle runner契約と矛盾する旧test由来であり、authoritativeな復元元から除外した。
+- code checkpointは`62afe308a08b83cf25ec5556fa486144444fa91c`。親との差分はschema snapshotと指定3 testのM4／A0／D0だけで、baseline比は引き続き139パス、M97／A42／D0である。Preview source／route、T-76B 25パス、T-76C 4パス、`package-lock.json`は変更していない。
+
+### Semantic restoration
+
+- Schema audit snapshotはschema version 7だけを受理し、単一のread-only／RepeatableRead transaction内のexactly 3 SELECTでgame、stable／candidate、current release、latest decisionを取得する。既存canonical manifest SHA-256 helperを再利用し、availability、status、tombstone、duplicate、orphan、partial／absent、decision／revision／manifest mismatchを決定的digestへ含めた。旧`package`／`decision` fieldを保持しつつ`candidate`／`latestDecision`を追加し、SQL executorとclockのdependency seamおよびquery／transaction fail-closedを固定した。
+- Audit testは14/14へ復元し、full-tree resolverをPortal audit専用とした。Preview source／routeがreaderをexport／importしないnegative boundary、固定revisionの`server.bundle.js`単一取得、grant hash照合、legacy／batch runner、共有timingを確認する。Game-operation migrationは7/7で同一payloadの再applyとNX raceのidempotency、異payloadの明示conflict、破壊的write 0を確認した。Catalog testは分離後の`game-operations-read.ts`がv3／v2／v1をGET-onlyで読む現行構造へ追従した。
+
+### Starter fixtureと検証
+
+- canonical `refs/heads/sdk-starter-dev`がexact commit `4568d668c2e9542e89ddb058633d67b757f4e807`を指すことをread-onlyで確認し、そのcommitだけをone-shot fetchした。treeは`12d8c86d82ed8711bf21a12e3669ac1954f90706`、starter manifest SHA-256は`1cb62054b21519570aefcbfadfc0414ebb5a8da594fb0badc85bc0b26cdf11ae`、DownloadMe contractは17、contract versionは2である。local `refs/remotes/origin/sdk-starter-dev`を固定後、remote URLは再び無効化した。
+- Focusedはaudit 14/14、migration 7/7、catalog 3/3、T-76C 29/29。保存済みT-60の同一7-file集合は後続追加1 entryを保持して61/61である。`npm test`は836/836で、T-76Cの822からaudit file-level import failure 1件が消え14 blockが復元され、migration 1 blockが追加されたため差引+14である。SDK package 39 profile、starter、SDK checker、7 migrations、verify、lint、Runtime packages、Portal／Preview typecheck、Platform／Portal／Preview offline buildはPASSした。root typecheckは既存40診断から増分0で、現行実数39、指定4パス由来0である。
+
+### 外部境界
+
+- canonical starterのremote readは1、product／external writeは0である。push、tag、PR、Actions、Vercel、DB、Redis、Blob、OAuthその他のdata-service writeは実施していない。

@@ -4,7 +4,35 @@
 >
 > 資料を読む順番や作業別の参照先は `docs/README.md` を入口にする。この文書は「現在の開発状態と共通仕様」、`docs/CONTAINER_ARCHITECTURE.md` は「将来案」である。
 
-最終更新: 2026-07-30
+最終更新: 2026-08-01
+
+## T-60／T-60.1 ローカル再構築状態
+
+- workspace自動整理で失われた未commit差分を、`develop@17c331e18908120b26cab85a2132c987999a924e`のclean checkoutから再構築した。元patchのbyte-for-byte復元ではない。T-60.1はlocal checkpoint `dda0313273f7231232a8acae0a94fffd54f2b9a4`へ保存済みで、製品`origin`未push・未配備である。
+- 局所修正前の51ファイルはprivate checkpoint repoの`main@cc72519054cfb962c9c3ba073619acd83d2a01a6`（空tree）と`t-60.1/pre-remediation-17c331e@5a7c9e268e0b77b625d111d5b7a1bc3c26f88d9b`（tree `6ada367b433dac963f3141ff86de890296d5129d`）へ、一度のatomic pushで保存・再取得確認済みである。製品`origin`、PR、Actions、Vercel Deploymentへのwriteはない。
+- 公開game operationsはRedis GET専用とし、v3／v2／v1 fallback時の永続writeを除去した。管理writeと明示maintenance migrationを別moduleへ分離した。
+- migrationはraw v2／v1を厳格検証し、不正publication／maintenance／mode／message／updatedAt、重複ID、部分object、未知fieldをnormalizerで修復して移行しない。dry-run／malformed／既存target conflict時のmutationは0、初回applyは`SET ... NX`最大1回、同一payload再適用はwrite 0、NX raceは再読したpayloadが同一の場合だけ成功する。
+- SDK schema snapshotとexact Runtime manifestの管理者GETを追加した。full site-admin認証、service HMAC、Portal read-only DB／Git境界を通し、全応答を`private, no-store`とする。snapshotはgame status、decision ID、stable／current manifest SHA-256とavailabilityを返し、stable／current不一致を独立分類してcanonical integrity digestへ含める。
+- schema 7にはDB自身のenvironment markerとstable pointer固有のsource provenanceがない。snapshotは推測値を返さず、各値を`unavailable:schema-7`として明示する。これはT-60.1局所差分の安全性判定とは分離し、schema 8待ちの第3層BLOCKEDとして扱う。
+- Runtime auditだけがexact commit／recursive tree／package全blob／manifest／全hashを検証する。Preview Command runnerは固定`server.bundle.js`の単一取得とgrant hash照合を維持し、audit用full-tree resolverへ到達しない。両者は`@game-fields/sdk-runtime-artifact`のlocator／SHA-256 pure処理だけを共有する。Preview grantとservice HMACも別packageへ分離し、Previewへ`SDK_ACCOUNT_LINK_SECRET`を持ち込まない。
+- `app-games-sdk-portal`はT-59で利用実態が確定するまでDeployment build gateではproject-disabled／SKIPを維持する。Portalは局所差分のローカルtypecheck／build対象には含める。
+- 最終ローカル検証はfocused 60/60、repository-wide 769/770、`npm run verify`、単独ESLint、Portal／Preview typecheck、Runtime package build、7 profile direct Next build、build-gate fixture、`git diff --check`が完了した。全体testの失敗1件とroot aggregate typecheckの51診断は未変更fixture由来で、現50パス由来の型診断は0件である。
+- 3層判定は、T-60.1が直接所有する局所差分=`PASS`、T-60 end-to-end=`T-74 local mergeでT-65 read modelと統合・全ローカル回帰PASS／T-73B最終波及確認とpush待ち`、DB marker／stable provenance=`schema 8待ち`である。公開広場の所要時間経路とgame operations fallbackはいずれもread-only境界へ統合した。
+- checkpoint以外の外部write、製品`origin` push、PR、Actions、Deployment、live DB／Redis／Blob／SDK package Gitへの接続、T-48.1再実行は行っていない。T-60全体や配備済み環境をPASSとは扱わない。
+
+## T-74 ローカル統合状態
+
+- 正規checkpointはT-60.1 `dda0313273f7231232a8acae0a94fffd54f2b9a4`、T-65 `40b6d97961f2cb909d55596e819af4155d8e08c4`、T-71 `139f4ae8368a7646f70a18352b5f9db9f8adbf70`である。T-74 merge commitは`25b27cc096bd30b2176ba53209bf607b105cac41`、親はT-71、T-60.1の順、treeは`8661072b6610600fb084ac06d7fd33f419496c6f`である。
+- `develop@17c331e18908120b26cab85a2132c987999a924e`比は139パス、M97／A42／D0。SDK Preview routeのoptional grant hashは、存在確認直後のimmutable localへ固定してasync callbackへ渡し、non-null assertion、cast、grant型、validator、認証条件、エラー応答は変更していない。
+- starter整合の固定local refは`refs/remotes/origin/sdk-starter-dev@4568d668c2e9542e89ddb058633d67b757f4e807`、tree `12d8c86d82ed8711bf21a12e3669ac1954f90706`、manifest SHA-256 `1cb62054b21519570aefcbfadfc0414ebb5a8da594fb0badc85bc0b26cdf11ae`で、T-73B完了まで保持する。
+- 最終local gateはfocused 5/5、`npm test` 835/835、Runtime packages build、SDK package test、starter test、`npm run verify`、Platform 78ページ、SDK Portal 15ページ、SDK Preview 5ページの各buildがPASS。Portal migrationは`local/local`でskipしDB接続・DDL・DML 0、Main Promotion同期5対象は`would-change=0`、`app-games-sdk-portal`は`project-disabled`でSKIPした。
+- 判定は`T-74 LOCAL INTEGRATION COMPLETE／139-FILE TREE FIXED／T-73B FINAL RECHECK PENDING／PUSH PENDING`。local commitはmergeと本4文書finalizationの2件だけとし、push、PR、Actions、Deployment、production反映、外部環境writeは未実施である。
+
+## 2026-08-01 広場の共通catalog read model
+
+- `/`（`/ja`・`/en`から内部rewriteされるトップ）と`/games`は、`app/games/load-game-lobby-page-data.ts`の同じserver read modelを使う。組み込みゲーム、採用済みSDK catalog、運用状態、実プレイ時間を一度組み立てて`GameLobby`へ渡し、SDK catalogの順序、公開判定、カード／一覧、お気に入り、localeの既存client表示を両経路で共有する。
+- SDK catalogは採用済みかつcurrentのreleaseだけを内部APIから読み、manifest・hash・module policyの検証に失敗したpayload全体を拒否する。運用状態が`hidden`のゲームとPrivate未解除のゲームは、組み込み／SDKを問わず同じ`GameLobby`の公開判定で除外する。
+- 公開広場のGETはread-onlyとする。所要時間のPostgres経路は`SELECT`だけを行い、schema作成・更新は記録／migration側へ限定する。ゲーム運用状態の旧v1/v2は読取互換だけを維持し、公開GET中にv3へ書き戻さず、次の認証済み保存でv3を正本化する。
 
 ## 2026-07-26 優先設計の修正
 
@@ -67,7 +95,7 @@
 | SDK Developer Portal / 隔離mock | `apps/sdk-portal`, `apps/sdk-preview`, `packages/sdk-preview-auth`, `npm run build:sdk`, `npm run build:sdk-preview`, `docs/EXTERNAL_GAME_PACKAGE.md` |
 | 共通戦績・マイページ | `lib/player-stats-store.ts`, `app/api/player-stats/route.ts`, `app/users/me/UserDashboard.tsx` |
 | ログイン後の部屋復元・広場の復帰一覧 | `app/hooks/use-online-game-session-restore.ts`, `app/api/player-active-rooms/route.ts`, `lib/player-active-room-summary.ts`, `app/games/use-lobby-room-data.ts` |
-| 実プレイ時間統計 | `lib/game-duration-statistics.ts`, `lib/game-duration-store.ts`, `app/api/game-duration/route.ts`, `app/games/page.tsx` |
+| 実プレイ時間統計 | `lib/game-duration-statistics.ts`, `lib/game-duration-store.ts`, `app/api/game-duration/route.ts`, `app/games/load-game-lobby-page-data.ts` |
 | 全ゲーム対戦プレイバック | `lib/game-replay-store.ts`, `app/api/player-replays/route.ts`, `app/components/GameReplayPanel.tsx`, `docs/GAME_REPLAYS.md` |
 | アカウント・メール復旧 | `lib/player-account-store.ts`, `lib/player-account-session.ts`, `lib/player-password-reset.ts`, `lib/email.ts`, `app/api/player-account/route.ts`, `app/api/player-password-reset/route.ts`, `app/reset-password` |
 | ワードウルフ | `app/wordwolf`, `app/api/wordwolf`, `lib/wordwolf-room-store.ts` |
@@ -464,12 +492,14 @@ ChatGPT Workではスレッドごとに作業環境が新しくなり、前ス�
 - 正式Previewはcandidate packageのクライアントとserver AppSetを同じcommit、同じSHA-256で読み、本体の`/api/sdk-preview/<creator>/games/<game>/rooms`へ接続する。Room、参加者、設定、revision、Redis CAS、active room、一覧、再接続、解散、閲覧者別Viewは正式Runtimeと同じ契約を使い、ブラウザ内の模擬Roomを完成判定に使わない。未審査AppSetは本体プロセスへimportせず、QuickJS WASMの新規module／contextで1呼出しごとに隔離し、メモリ32 MiB、スタック1 MiB、実行750 ms、入出力1 MiB、bundle 1 MiBを上限とする。DB、Redis、Cookie、環境変数、filesystem、network、Platform adapterはguestへ渡さず、許可済みWord DB／LLM effectだけを外側Platformが実行する。
 - 現在の保存API名、MCP tool名、private Git階層には移行互換として`mock`が残るが、利用者向けの概念・URLには出さない。保存物はgame packageとして扱い、表URLは`https://<SDK Portal>/<slug>/games/<game-id>`とする。PortalはDBの確定commit SHAへEd25519署名grantを発行し、本体共通UI内のゲーム固有surfaceだけを隔離runtimeへ接続する。
 - モック保存後の最初の利用者向けリンクは、ゲーム単体ではなく制作者トップ`https://<SDK Portal>/<slug>/`とする。MCPの`publish_mock`はUI確認用の`creatorUrl`と`gameUrl`を返すが、正式提出完了にはしない。`publish_game_package`は`game-package/`を受け、Portal側でAppSet原文とserver bundleのSHA-256を再計算してcandidate commitへ固定し、`packageRevision`、`appSetSourceSha256`、`serverBundleSha256`、正式`packagePreviewUrl`を返す。
+- game package保存は、入力形式を確定した最終`PreparedUploadFile[]`だけを`@game-fields/sdk-package-assets`へ渡す。HTMLは`parse5`、CSSはPostCSS、JavaScript／TypeScriptはBabel ASTで解析し、`src`／`href`／`poster`／`srcset`、`url()`／`@import`、static／dynamic import、asset URL、template literal、文字列連結、const／変数経由参照を同じ契約で扱う。静的に一意解決できる参照はpackage相対pathを正規化して存在とbrowser-readable policyを検査し、assetを指し得る未解決dynamic参照とparser errorはfail closedにする。コメント、通常の表示文字列、HTTP／HTTPS、data、blob URLは対象外とする。
+- REST package PUTとMCP `publish_game_package`は認証DBより先に共有preparationを実行した上で`saveCreatorGamePackage`へ入り、認証失敗の応答優先順位は維持する。app release artifact transferは`saveValidatedGamePackage`のvalidation後・target Git前callbackでschemaを確認する。低水準`saveGamePackageFilesToGit`にも同じgateを置き、別callerの迂回を拒否する。Actions相当のlocal入口は`npm run audit:sdk-package-assets -- <package-directory>`で、指定した1 packageだけを保存serviceと同じvalidator・error codeで監査する。Previewのasset URL書換えregexはvalidatorとして使用しない。private package Git上の実`Dynamic asset audit` workflow反映と既存Dixit修復は別の外部反映ゲートである。
 - `publish_game_package`済みのゲームを制作者トップから通常選択した場合も、最新candidate revisionをカタログへ載せ、revision指定URLと同じimmutable Package resolver・正式`GameSdkFrame`・Room APIを使う。queryなしのgame URLも最新candidateを同じresolverから取得する。Packageが存在しない場合だけ旧Mock Shellを許可し、Package lookupまたはRuntime解決の例外をMock成功へ変換しない。通常導線で作ったRoomの`runtimeContract.packageRevision`は、そのとき解決したcandidate revisionでなければならない。
 - 隔離previewはGitの確定commitを動的に読むため、ゲームごとのVercel deploymentを行わない。実行ProjectはDB・Redis・Blob・管理API・Git書込権限を持たず、専用mock Gitの読取専用資格だけを持つ。60秒のclient grantはServer Component render時に固定せず、Room参加後にpackage iframeが実際にnavigateする直前、同一originの認証済み`client-runtime` routeで固定revision向けに再発行する。grantはfragmentから自originへのform POSTだけに使い、PreviewはCookieや303遷移を介さずPOST応答でHTML骨格を直接返す。`allow-same-origin`を付けないopaque-origin iframeでCSS・JavaScript等を読むため、HTML、CSS、静的module参照を、source kind・制作者・ゲーム・固定commit・正規化済みasset path・期限へ限定したHMAC URLへ書き換える。tokenは入口grant、別asset、別revisionへ転用できない。CSPとiframeの両方で`allow-same-origin`と外部通信を許可せず、`form-action`と`frame-ancestors`はPreview自身と許可済み親originへ限定し、inline script/styleと`unsafe-inline`を追加しない。
 - 正式packageのブラウザ側へ注入するのは`GameFieldsRoom.subscribe`と`GameFieldsRoom.send`だけで、Platform resource adapterは公開しない。クライアントは閲覧者別Viewを描画してCommandを送るだけとし、ゲーム状態、秘密、参加者同期、手番、結果をブラウザ正本にしない。AppSetだけが`context.resources.contentSource`と`context.resources.llm`を要求でき、portable protocolはeffectを外側へ返して承認済みPlatform adapterから結果を受け取る。effect失敗時に状態を進めるかどうかはAppSetの通常Command契約で決まり、共通側にゲーム固有fallbackを置かない。
 - package client用grantとportable server用grantはaudienceを分離する。ブラウザ用asset routeから`server.bundle.js`、package manifest、`source/`配下を返さない。server grantだけが保存済みbundle SHA-256を持ち、QuickJS runnerは実行直前に取得したbundleを再hashして不一致を拒否する。クライアントURLやasset tokenを取得してもserver AppSetを実行・取得できる権限へ昇格させない。path単位asset tokenは1時間bucket内で決定的、1〜2時間だけ有効とし、token期限以下のbrowser／CDN cacheだけを許可する。署名をpathへ含め、query付きasset要求、`stale-while-revalidate`、期限後の共有を拒否する。server grantは10分とし、runner URLは環境別の固定Preview originとrevision path以外を本体側でも拒否する。
 - SDK Portalの`/api/health`はDB schemaだけでなく、対応Previewの`POST /health/auth`へ60秒・固定scopeのserver grantを送り、`SDK_PREVIEW_SIGNING_SECRET`、environment、audience、role、scopeが一致することを確認する。認証不整合はPreview側の構造化ログ`event=sdk.preview-runner-auth`へ本文・token・秘密値を含めず安全な理由だけを記録する。Room実行側はネットワーク例外と408／502／503／504だけを1回再試行し、401／403は`GAME_SDK_REMOTE_RUNNER_AUTH_FAILED`として停止する。正式PreviewのRoom作成調査では、本体の`event=game-sdk.preview-room`、Portalのruntime grant取得、Previewの`event=sdk.preview-runner-auth`を同じ時刻・revisionで照合する。
-- SDK作品の採用経路は環境対で分離する。develop管理画面の`SDK-dev → dev`はSDK-dev DBのcandidate revisionをdev専用`development`カタログへ採用し、main管理画面の`SDK → main`はSDK本番DBのcandidate revisionをmain専用カタログへ採用する。どちらもserver bundle SHA-256、AppSet原文SHA-256、manifestをそのまま同環境の採用カタログへコピーし、採用時の再build、変換、AppSet補正は禁止する。カタログAPIとRuntime grantは`development`／`main`を明示し、実行ブランチと異なるchannelを拒否する。アプリ名・説明・採用revision等は環境別Portal DB、公開／Private／非表示・メンテナンス設定は環境別Redisの`site-game-operations:v3:<environment>`を正本とし、devの編集をmainへ暗黙コピーしない。旧v1/v2公開設定は接続中の各環境Redis内だけで対応するv3キーへ移行する。署名済み内部APIから本体へ読み込み、広場・正式`GameSdkFrame`・戦績・rating・replayは`publicGameId`で汎用登録する。AIことば当て固有の分岐は共通catalog、Room Shell、resource bridgeへ入れない。
+- SDK作品の採用経路は環境対で分離する。develop管理画面の`SDK-dev → dev`はSDK-dev DBのcandidate revisionをdev専用`development`カタログへ採用し、main管理画面の`SDK → main`はSDK本番DBのcandidate revisionをmain専用カタログへ採用する。どちらもserver bundle SHA-256、AppSet原文SHA-256、manifestをそのまま同環境の採用カタログへコピーし、採用時の再build、変換、AppSet補正は禁止する。カタログAPIとRuntime grantは`development`／`main`を明示し、実行ブランチと異なるchannelを拒否する。アプリ名・説明・採用revision等は環境別Portal DB、公開／Private／非表示・メンテナンス設定は環境別Redisの`site-game-operations:v3:<environment>`を正本とし、devの編集をmainへ暗黙コピーしない。旧v1/v2公開設定は接続中の各環境Redis内だけで読取互換を維持し、公開GETでは移行writeを行わず、次の認証済み保存でv3へ正本化する。署名済み内部APIから本体へ読み込み、広場・正式`GameSdkFrame`・戦績・rating・replayは`publicGameId`で汎用登録する。AIことば当て固有の分岐は共通catalog、Room Shell、resource bridgeへ入れない。
 - 採用済みPackageのAppSetとmanifestを改変せず公開表示だけ更新する場合は、`config/sdk-game-presentations.ts`の`publicGameId`別presentationを使う。表示名、英語名、広場画像の選択を汎用catalog解決へ渡し、Room Shell、結果・戦績・replayにも同じ表示名を使う。`ai-word-guess`の現行公開名は「コトバに迫れ」。
 - 制作者向けOAuth MCPはgame package保存までを公開し、SDKからdevまたはmainへ昇格するtoolを公開しない。運営管理画面は本体管理者セッション＋直近MFAから署名済み内部APIを呼び、採用対象のrevision、package root、server bundle、AppSet原文の全hashを必須入力として照合する。Candidateが再提出等で変わっていれば採用せず409相当で停止する。
 - 本体コードの`dev → main`は別の管理カードで扱う。GitHubのmain/develop両SHAを再確認し、developがmainに対してfast-forward可能なときだけ`force: false`でmain refを更新する。`dev`はmainの検証環境であり、SDK packageの中間channelではない。

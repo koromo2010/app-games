@@ -4,8 +4,12 @@ import type {
   GameSdkRoomListPage,
   GameSdkRoomSnapshot,
   GameSdkStoredRoom,
+  GameSdkViewer,
 } from "@game-fields/game-sdk";
-import type { GameSdkServerModule } from "@game-fields/game-sdk/runtime";
+import type {
+  GameSdkRuntimeTiming,
+  GameSdkServerModule,
+} from "@game-fields/game-sdk/runtime";
 import type {
   GameSdkPlatformResources,
 } from "@game-fields/game-sdk/resources";
@@ -66,6 +70,19 @@ function objectRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : null;
+}
+
+async function measured<T>(
+  timing: GameSdkRuntimeTiming | undefined,
+  stage: Parameters<GameSdkRuntimeTiming["record"]>[0],
+  operation: () => T | Promise<T>,
+) {
+  const startedAt = performance.now();
+  try {
+    return await operation();
+  } finally {
+    timing?.record(stage, Math.max(0, performance.now() - startedAt));
+  }
 }
 
 function platformDebugProxyCommand(
@@ -262,6 +279,8 @@ export type AuthenticatedGameSdkPlatformAdapter<
   sendCommand(input: {
     code: string;
     envelope: GameSdkCommandEnvelope<TCommand>;
+    finalViewer?: number | "spectator";
+    timing?: GameSdkRuntimeTiming;
   }): Promise<GameSdkCommandResult<TRoomView>>;
   dissolveRoom(code: string): Promise<boolean>;
   dissolveHostedRooms(): Promise<number>;
@@ -347,6 +366,61 @@ export function createAuthenticatedGameSdkPlatformAdapter<
         ? definition.runtimeContract?.packageRevision
         : undefined),
   });
+
+  const resolveFinalViewer = (
+    selector: number | "spectator" | undefined,
+    identity: Readonly<GameFieldsAuthenticatedIdentity>,
+    definition: typeof currentDefinition | GameSdkPlatformRuntimeDefinition<
+      TRoom,
+      TCreateInput,
+      TCommand,
+      TRoomView
+    >,
+    record: Readonly<GameFieldsPlatformRoomRecord<TRoom>> | null,
+  ): GameSdkViewer | undefined => {
+    if (selector === undefined) return undefined;
+    if (
+      !record
+      || !identity.debugAccess
+      || identity.playerId !== record.hostPlayerId
+      || !definitionRequiresDebug(definition)
+    ) {
+      throw new GameFieldsPlatformRuntimeError(
+        "DEBUG_ACCESS_REQUIRED",
+        403,
+      );
+    }
+    if (selector === "spectator") {
+      if (!definition.module.manifest.supportsSpectators) {
+        throw new GameFieldsPlatformRuntimeError(
+          "DEBUG_VIEWER_INVALID",
+          400,
+        );
+      }
+      return {
+        playerId: null,
+        role: "spectator",
+        debugAccess: true,
+      };
+    }
+    const target = storedPlayers(record.room)[selector];
+    if (
+      !Number.isSafeInteger(selector)
+      || selector < 0
+      || !target
+      || typeof target.id !== "string"
+    ) {
+      throw new GameFieldsPlatformRuntimeError(
+        "DEBUG_VIEWER_INVALID",
+        400,
+      );
+    }
+    return {
+      playerId: target.id,
+      role: target.id === record.hostPlayerId ? "host" : "player",
+      debugAccess: true,
+    };
+  };
 
   const createRuntime = (
     definition: typeof currentDefinition | GameSdkPlatformRuntimeDefinition<
@@ -733,7 +807,7 @@ export function createAuthenticatedGameSdkPlatformAdapter<
       );
     },
 
-    async sendCommand({ code, envelope }) {
+    async sendCommand({ code, envelope, finalViewer, timing }) {
       const identity = await resolveIdentity();
       const normalizedCode = normalizeGameSdkPlatformRoomCode(code);
       const lifecycleType = envelope.command.type;
@@ -741,7 +815,11 @@ export function createAuthenticatedGameSdkPlatformAdapter<
         ? await roomStore.claimActiveRoom(identity.playerId, normalizedCode)
         : null;
       try {
-        const record = await persistence.load(normalizedCode);
+        const record = await measured(
+          timing,
+          "room-load",
+          () => persistence.load(normalizedCode),
+        );
         const definition = record
           ? await definitionForRecord(record)
           : currentDefinition;
@@ -789,33 +867,52 @@ export function createAuthenticatedGameSdkPlatformAdapter<
             command: debugProxy.command as TCommand,
           };
         }
+        const resolvedFinalViewer = resolveFinalViewer(
+          finalViewer,
+          identity,
+          definition,
+          record,
+        );
         const result = await runtime.sendCommand({
           code: normalizedCode,
           envelope: runtimeEnvelope,
           identity: runtimeIdentity,
+          presentation: {
+            identity,
+            ...(resolvedFinalViewer
+              ? { debugViewer: resolvedFinalViewer }
+              : {}),
+          },
+          timing,
         });
         if (roomStore && lifecycleType === "room/leave") {
           await roomStore.releaseActiveRoom(identity.playerId, normalizedCode);
         }
         const savedRecord = roomStore
-          ? await roomStore.load(normalizedCode)
+          ? await measured(
+              timing,
+              "room-load",
+              () => roomStore.load(normalizedCode),
+            )
           : null;
         if (savedRecord) {
-          await roomStore!.publishRevision(savedRecord);
+          await measured(
+            timing,
+            "revision-publish",
+            () => roomStore!.publishRevision(savedRecord),
+          );
           await scheduleResultOutbox(savedRecord);
         }
         const latestRecord = savedRecord
-          ?? await persistence.load(normalizedCode);
-        const hostRoom = debugProxy
-          ? await runtime.readRoom({
-              code: normalizedCode,
-              identity,
-            })
-          : result.room;
+          ?? await measured(
+              timing,
+              "room-load",
+              () => persistence.load(normalizedCode),
+            );
         return {
           ...result,
           room: presentPlatformDebugView(
-            hostRoom,
+            result.room,
             identity,
             definition,
             latestRecord,

@@ -1,3 +1,5 @@
+import { validateSupportText } from "../config/support-text-contract.ts";
+
 export type UserReportFormType = "bug" | "request";
 
 export type UserReportFormDraft = {
@@ -31,16 +33,20 @@ function normalizeUserReportFormDraft(
   if (typeof input.summary !== "string" || typeof input.details !== "string") {
     return null;
   }
-  return {
-    type: input.type,
-    summary: input.summary.slice(0, 120),
-    details: input.details.slice(0, 1_200),
-    ...(typeof input.requestId === "string"
-      && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-        .test(input.requestId)
-      ? { requestId: input.requestId.toLowerCase() }
-      : {}),
-  };
+  try {
+    return {
+      type: input.type,
+      summary: validateSupportText(input.summary, "summary"),
+      details: validateSupportText(input.details, "details"),
+      ...(typeof input.requestId === "string"
+        && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+          .test(input.requestId)
+        ? { requestId: input.requestId.toLowerCase() }
+        : {}),
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function loadUserReportFormDraft(
@@ -63,15 +69,24 @@ export function saveUserReportFormDraft(
   storage?: DraftStorage,
 ) {
   const resolvedStorage = resolveDraftStorage(storage);
-  if (!resolvedStorage) return;
+  if (!resolvedStorage) return false;
   try {
     if (!draft.summary && !draft.details) {
       resolvedStorage.removeItem(userReportFormDraftStorageKey);
-      return;
+      return true;
     }
-    resolvedStorage.setItem(userReportFormDraftStorageKey, JSON.stringify(draft));
+    const normalized = normalizeUserReportFormDraft(draft);
+    if (!normalized) {
+      return false;
+    }
+    resolvedStorage.setItem(
+      userReportFormDraftStorageKey,
+      JSON.stringify(normalized),
+    );
+    return true;
   } catch {
     // Storage can be unavailable in restricted browser contexts. Reporting
     // must remain usable even when draft persistence cannot be enabled.
+    return false;
   }
 }

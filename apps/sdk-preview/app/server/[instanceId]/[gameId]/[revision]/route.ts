@@ -1,21 +1,41 @@
 import { createHash } from "node:crypto";
-import type { GameSdkPortableServerRequest } from "@game-fields/game-sdk/portable-server";
+import type {
+  GameSdkPortableCommandBatchRequest,
+  GameSdkPortableServerRequest,
+} from "@game-fields/game-sdk/portable-server";
 import { fetchPreviewAsset } from "@/lib/preview-source";
 import { verifyPortalPreviewGrant } from "@/lib/preview-grant-verifier";
 import {
   GameSdkPortableRunnerError,
+  runGameSdkPortableCommandBatch,
   runGameSdkPortableServer,
 } from "@/lib/server-runner";
 import {
   logServerRuntimeAuthFailure,
   serverRuntimeAuthFailure,
 } from "@/lib/server-runtime-auth";
+import {
+  createGameSdkCommandTimingCollector,
+} from "../../../../../../../lib/game-sdk-command-timing.ts";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 10;
 
 const MAX_REQUEST_BYTES = 1024 * 1024;
+
+type PortableRunnerRequest =
+  | GameSdkPortableServerRequest
+  | GameSdkPortableCommandBatchRequest;
+
+function isCommandBatchRequest(
+  request: PortableRunnerRequest,
+): request is GameSdkPortableCommandBatchRequest {
+  return typeof request === "object"
+    && request !== null
+    && "kind" in request
+    && request.kind === "game-fields-command-batch-v1";
+}
 
 function bearerToken(request: Request) {
   const authorization = request.headers.get("authorization") ?? "";
@@ -43,7 +63,7 @@ export async function POST(
     gameId: params.gameId,
     revision: params.revision,
   });
-  if (authFailure || !grant) {
+  if (authFailure || !grant || !grant.bundleSha256) {
     const failure = authFailure ?? "TOKEN_INVALID";
     logServerRuntimeAuthFailure(failure, "invoke");
     const error = failure === "TOKEN_INVALID"
@@ -55,49 +75,63 @@ export async function POST(
           : "SERVER_RUNTIME_GRANT_SCOPE_INVALID";
     return Response.json({ error }, { status: 403 });
   }
+  const expectedBundleSha256 = grant.bundleSha256;
 
   const declaredLength = Number(request.headers.get("content-length") ?? 0);
   if (declaredLength > MAX_REQUEST_BYTES) {
     return Response.json({ error: "SERVER_RUNTIME_REQUEST_TOO_LARGE" }, { status: 413 });
   }
 
-  let invocation: GameSdkPortableServerRequest;
+  let invocation: PortableRunnerRequest;
   try {
     const body = await request.text();
     if (new TextEncoder().encode(body).byteLength > MAX_REQUEST_BYTES) {
       return Response.json({ error: "SERVER_RUNTIME_REQUEST_TOO_LARGE" }, { status: 413 });
     }
-    invocation = JSON.parse(body) as GameSdkPortableServerRequest;
+    invocation = JSON.parse(body) as PortableRunnerRequest;
   } catch {
     return Response.json({ error: "SERVER_RUNTIME_INVALID_REQUEST" }, { status: 400 });
   }
 
   try {
-    const bundleBytes = await fetchPreviewAsset({
-      ...params,
-      assetPath: "server.bundle.js",
-      sourceKind: "package",
-    });
+    const timing = createGameSdkCommandTimingCollector();
+    const bundleBytes = await timing.measure("runner-bundle", () => (
+      fetchPreviewAsset({
+        ...params,
+        assetPath: "server.bundle.js",
+        sourceKind: "package",
+      })
+    ));
     if (!bundleBytes) {
       return Response.json({ error: "SERVER_RUNTIME_BUNDLE_NOT_FOUND" }, { status: 404 });
     }
-    const bundleSha256 = createHash("sha256")
-      .update(new Uint8Array(bundleBytes))
-      .digest("hex");
-    if (bundleSha256 !== grant.bundleSha256) {
+    const bundleMatchesGrant = await timing.measure("runner-hash", async () => (
+      createHash("sha256")
+        .update(new Uint8Array(bundleBytes))
+        .digest("hex") === expectedBundleSha256
+    ));
+    if (!bundleMatchesGrant) {
       return Response.json({ error: "SERVER_RUNTIME_BUNDLE_HASH_MISMATCH" }, { status: 409 });
     }
-    const result = await runGameSdkPortableServer({
-      bundle: new TextDecoder().decode(bundleBytes),
-      request: invocation,
-    });
-    return Response.json(result, {
+    const bundle = new TextDecoder().decode(bundleBytes);
+    const result = isCommandBatchRequest(invocation)
+      ? await runGameSdkPortableCommandBatch({
+        bundle,
+        request: invocation,
+        timing,
+      })
+      : await runGameSdkPortableServer({
+        bundle,
+        request: invocation,
+        timing,
+      });
+    return timing.decorate(Response.json(result, {
       headers: {
         "Cache-Control": "private, no-store",
         "X-Content-Type-Options": "nosniff",
         "X-Robots-Tag": "noindex, nofollow, noarchive",
       },
-    });
+    }));
   } catch (error) {
     const code = error instanceof GameSdkPortableRunnerError
       ? error.code

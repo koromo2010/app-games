@@ -22,6 +22,30 @@ export type {
 
 type Fetcher = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
+const commandResponseRooms = new WeakSet<object>();
+const commandResponseTimings = new WeakMap<object, GameSdkCommandTransportTiming>();
+
+/** True only for snapshots returned directly by a successful Command PATCH. */
+export function gameSdkRoomHasCommandResponseView(value: unknown) {
+  return Boolean(value && typeof value === "object" && commandResponseRooms.has(value));
+}
+
+export type GameSdkCommandTransportTiming = {
+  traceRef?: string;
+  revision: number;
+  entries: Array<{
+    stage: string;
+    durationMs: number;
+    source: "server" | "browser";
+  }>;
+};
+
+export function gameSdkCommandTimingForRoom(value: unknown) {
+  return value && typeof value === "object"
+    ? commandResponseTimings.get(value) ?? null
+    : null;
+}
+
 export type GameSdkRoomReadOperation =
   | "read-room"
   | "read-debug-viewer"
@@ -64,6 +88,9 @@ export type GameSdkHttpClientRuntime<
   sendCommand(
     code: string,
     envelope: GameSdkCommandEnvelope<TCommand>,
+    options?: {
+      finalViewer?: number | "spectator" | "self";
+    },
   ): Promise<GameSdkCommandResult<TRoomView>>;
   dissolveRoom(code: string): Promise<boolean>;
   dissolveHostedRooms(): Promise<number>;
@@ -82,6 +109,7 @@ export type GameSdkHttpClientRuntimeOptions = {
   webSocketFactory?: (url: string) => GameSdkWebSocketLike;
   fetcher?: Fetcher;
   onRoomReadTelemetry?(event: GameSdkRoomReadTelemetryEvent): void;
+  onCommandTiming?(event: GameSdkCommandTransportTiming): void;
 };
 
 export class GameSdkHttpClientRuntimeError extends Error {
@@ -219,6 +247,19 @@ function emitRoomReadTelemetry(
   }
 }
 
+function commandServerTiming(value: string | null) {
+  if (!value) return [];
+  return value.split(",").flatMap((item) => {
+    const [stage = "", ...parameters] = item.trim().split(";");
+    if (!/^[a-z][a-z0-9-]{1,40}$/.test(stage)) return [];
+    const duration = parameters.find((parameter) => parameter.startsWith("dur="));
+    const durationMs = Number(duration?.slice("dur=".length));
+    return Number.isFinite(durationMs) && durationMs >= 0
+      ? [{ stage, durationMs, source: "server" as const }]
+      : [];
+  });
+}
+
 /**
  * Browser transport injected by Game Fields for an approved SDK game.
  * Actor identity is intentionally absent. The platform resolves it from its
@@ -237,6 +278,7 @@ export function createGameSdkHttpClientRuntime<
   webSocketFactory,
   fetcher = fetch,
   onRoomReadTelemetry,
+  onCommandTiming,
 }: GameSdkHttpClientRuntimeOptions): GameSdkHttpClientRuntime<TCreateInput, TCommand, TRoomView> {
   const endpoint = normalizeEndpoint(endpointInput);
   const gameId = gameIdInput.trim().toLowerCase();
@@ -494,29 +536,49 @@ export function createGameSdkHttpClientRuntime<
       }
     },
 
-    async sendCommand(code, envelope) {
+    async sendCommand(code, envelope, options) {
       const commandId = envelope.commandId?.trim() || createCommandId();
       envelope.commandId = commandId;
-      const request = () => requestJson(
-        fetcher,
-        endpoint,
-        {
+      const request = async () => {
+        const response = await fetcher(endpoint, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             code,
             envelope: { ...envelope, commandId },
+            ...(options?.finalViewer !== undefined
+              ? { finalViewer: options.finalViewer }
+              : {}),
           }),
-        },
-        "GAME_SDK_COMMAND_FAILED",
-      );
-      let payload: unknown;
+          cache: "no-store",
+          credentials: "same-origin",
+        });
+        const payload = await readPayload(response);
+        if (!response.ok) {
+          throw new GameSdkHttpClientRuntimeError(
+            errorCode(payload, "GAME_SDK_COMMAND_FAILED"),
+            response.status,
+            payload,
+          );
+        }
+        if (payload === null) {
+          throw new GameSdkHttpClientRuntimeError(
+            "GAME_SDK_COMMAND_FAILED",
+            response.status,
+            null,
+          );
+        }
+        return { payload, response };
+      };
+      const httpStartedAt = performance.now();
+      let transport: Awaited<ReturnType<typeof request>>;
       try {
-        payload = await request();
+        transport = await request();
       } catch (error) {
         if (error instanceof GameSdkHttpClientRuntimeError) throw error;
-        payload = await request();
+        transport = await request();
       }
+      const { payload, response } = transport;
       const result = payload as Partial<GameSdkCommandResult<TRoomView>>;
       if (
         !isRoomSnapshot<TRoomView>(result.room)
@@ -531,6 +593,28 @@ export function createGameSdkHttpClientRuntime<
           502,
           payload,
         );
+      }
+      commandResponseRooms.add(result.room as object);
+      const trace = response.headers.get("x-game-sdk-trace") ?? "";
+      const timing: GameSdkCommandTransportTiming = {
+        ...( /^command_[A-Za-z0-9_-]{8,80}$/.test(trace)
+          ? { traceRef: trace }
+          : {}),
+        revision: result.room.revision,
+        entries: [
+          ...commandServerTiming(response.headers.get("server-timing")),
+          {
+            stage: "http-receive",
+            durationMs: Math.max(0, performance.now() - httpStartedAt),
+            source: "browser",
+          },
+        ],
+      };
+      commandResponseTimings.set(result.room as object, timing);
+      try {
+        onCommandTiming?.(timing);
+      } catch {
+        // Timing observation must never change Command semantics.
       }
       return result as GameSdkCommandResult<TRoomView>;
     },

@@ -10,6 +10,11 @@ import {
   observabilityErrorCode,
 } from "@/lib/observability";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
+import {
+  SupportTextValidationError,
+  supportTextValidationPayload,
+  validateSupportText,
+} from "@/config/support-text-contract";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -83,13 +88,19 @@ export async function POST(request: Request) {
     requestId?: unknown;
     message?: unknown;
   } | null;
-  const message = typeof body?.message === "string"
-    ? body.message.trim().slice(0, 3_000)
-    : "";
+  let message;
+  try {
+    message = validateSupportText(body?.message, "reply", { required: true });
+  } catch (error) {
+    if (error instanceof SupportTextValidationError) {
+      return Response.json(supportTextValidationPayload(error), { status: 400 });
+    }
+    throw error;
+  }
   const requestId = typeof body?.requestId === "string"
-    ? body.requestId.trim().slice(0, 120)
+    ? body.requestId.trim()
     : "";
-  if (!message || !requestId) {
+  if (!requestId || requestId.length > 120) {
     return Response.json(
       { error: "CONTACT_THREAD_REPLY_INVALID" },
       { status: 400 },
@@ -154,6 +165,15 @@ export async function POST(request: Request) {
       { status: result.inserted ? 201 : 200 },
     );
   } catch (error) {
+    if (
+      error instanceof Error
+      && error.message === "CONTACT_MESSAGE_REQUEST_ID_CONFLICT"
+    ) {
+      return Response.json(
+        { error: "CONTACT_THREAD_REPLY_CONFLICT" },
+        { status: 409 },
+      );
+    }
     telemetry.failure("contact.thread-reply", error, 503);
     return Response.json(
       { error: "CONTACT_THREAD_REPLY_FAILED" },
