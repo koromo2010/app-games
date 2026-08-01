@@ -1,36 +1,46 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { spawnSync } from "node:child_process";
 import test from "node:test";
+import {
+  renderSdkDownloadMe,
+  resolveSdkReleaseProfile,
+  sdkDownloadMeFileName,
+  sdkDownloadMeVersion,
+} from "../packages/sdk-release-profiles/index.js";
 
 const platformRelease = JSON.parse(readFileSync("config/platform-release.json", "utf8"));
-const downloadMe = readFileSync("apps/sdk-portal/public/GameFieldsDownloadMe-ver17.md", "utf8");
+const profileConfig = JSON.parse(readFileSync("config/sdk-release-profiles.json", "utf8"));
+const template = readFileSync("sdk/entry/START_GAME_FIELDS.md", "utf8");
 
-function starterManifestFromGit() {
-  const result = spawnSync(
-    "git",
-    ["show", "origin/sdk-starter-dev:starter-manifest.json"],
-    { encoding: "utf8" },
-  );
-  assert.equal(result.status, 0, result.stderr || "Could not read sdk-starter-dev manifest");
-  return JSON.parse(result.stdout);
-}
-
-test("DownloadMe ver17 matches the platform SDK contract release", () => {
-  assert.match(downloadMe, /downloadMe:\s+17/);
-  assert.match(downloadMe, /sdkContract:\s+2/);
-  assert.match(downloadMe, /"sdkContractVersion":\s*2/);
-  assert.equal(platformRelease.downloadMeVersion, 17);
+test("DownloadMe uses the Platform SemVer and SDK contract release", () => {
+  assert.equal(sdkDownloadMeVersion(platformRelease), platformRelease.platformVersion);
   assert.equal(platformRelease.sdkContractVersion, 2);
   assert.ok(platformRelease.supportedSdkContractVersions.includes(2));
+  assert.equal(Object.hasOwn(platformRelease, "downloadMeVersion"), false);
 });
 
-test("sdk-starter-dev manifest matches DownloadMe ver17 and platform release", () => {
-  const starter = starterManifestFromGit();
-  assert.equal(starter.downloadMeVersion, platformRelease.downloadMeVersion);
-  assert.equal(starter.sdkContractVersion, platformRelease.sdkContractVersion);
-  assert.equal(starter.sdkHandshakeVersion, platformRelease.sdkHandshakeVersion ?? 1);
-  assert.equal(starter.platformVersion, platformRelease.platformVersion);
-  assert.equal(starter.sdkVersion, platformRelease.sdkPackageVersion);
-  assert.equal(starter.ref, "sdk-starter-dev");
+test("production and development DownloadMe contracts stay environment-pure", () => {
+  const production = resolveSdkReleaseProfile({
+    release: platformRelease,
+    profileConfig,
+    requestedEnvironment: "production",
+  });
+  const development = resolveSdkReleaseProfile({
+    release: platformRelease,
+    profileConfig,
+    requestedEnvironment: "development",
+  });
+  const productionDownload = renderSdkDownloadMe(template, platformRelease, production);
+  const developmentDownload = renderSdkDownloadMe(template, platformRelease, development);
+
+  assert.equal(sdkDownloadMeFileName(platformRelease, production), "GameFieldsDownloadMe-ver0.1.1.md");
+  assert.equal(sdkDownloadMeFileName(platformRelease, development), "GameFieldsDownloadMe-dev-ver0.1.1.md");
+  assert.match(productionDownload, /name: "game-fields"/);
+  assert.match(productionDownload, /https:\/\/sdk\.game-fields\.com/);
+  assert.match(productionDownload, /ref: "sdk-starter"/);
+  assert.doesNotMatch(productionDownload, /dev-game-fields|sdk-dev\.game-fields\.com|ref: "sdk-starter-dev"/);
+  assert.match(developmentDownload, /name: "dev-game-fields"/);
+  assert.match(developmentDownload, /https:\/\/sdk-dev\.game-fields\.com/);
+  assert.match(developmentDownload, /ref: "sdk-starter-dev"/);
+  assert.doesNotMatch(developmentDownload, /name: "game-fields"|portal: "https:\/\/sdk\.game-fields\.com"|ref: "sdk-starter"/);
 });

@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "profiles": {
+    "production": {
+      "environment": "production",
+      "channel": "stable",
+      "portalBaseUrl": "https://sdk.game-fields.com",
+      "pluginName": "game-fields",
+      "downloadMeBaseName": "GameFieldsDownloadMe",
+      "starterRef": "sdk-starter"
+    },
+    "development": {
+      "environment": "development",
+      "channel": "developer-preview",
+      "portalBaseUrl": "https://sdk-dev.game-fields.com",
+      "pluginName": "dev-game-fields",
+      "downloadMeBaseName": "GameFieldsDownloadMe-dev",
+      "starterRef": "sdk-starter-dev"
+    }
+  }
+}

@@ -1,5 +1,6 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { ensureSdkSchema, sdkSql } from "@/lib/sdk-postgres";
+import { sdkPortalReleaseProfile } from "@/lib/sdk-release-profile";
 
 export const SDK_SCOPES = ["sdk:creator", "sdk:mock"] as const;
 export const SDK_SCOPE = SDK_SCOPES.join(" ");
@@ -17,9 +18,12 @@ function safeEqual(left: string, right: string) {
 }
 
 export function portalBaseUrl(origin?: string) {
-  return process.env.SDK_PORTAL_BASE_URL?.replace(/\/$/, "")
-    ?? origin
-    ?? (process.env.VERCEL_GIT_COMMIT_REF === "main" ? "https://sdk.game-fields.com" : "https://sdk-dev.game-fields.com");
+  const configured = process.env.SDK_PORTAL_BASE_URL?.replace(/\/$/, "");
+  if (configured) {
+    return sdkPortalReleaseProfile(configured).portalBaseUrl;
+  }
+  if (origin) return origin.replace(/\/$/, "");
+  return sdkPortalReleaseProfile().portalBaseUrl;
 }
 
 export function normalizeScope(value: string | null | undefined) {

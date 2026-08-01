@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
 import release from "../../../config/app-release.json";
+import { sdkPortalReleaseProfile } from "@/lib/sdk-release-profile";
 import "./globals.css";
 
+const releaseProfile = sdkPortalReleaseProfile();
+
 export const metadata: Metadata = {
-  metadataBase: new URL("https://sdk.game-fields.com"),
+  metadataBase: new URL(releaseProfile.portalBaseUrl),
   title: {
     default: "Game Fields SDK",
     template: "%s | Game Fields SDK",

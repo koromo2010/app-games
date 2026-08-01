@@ -1,37 +1,59 @@
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  renderSdkDownloadMe,
+  resolveSdkReleaseProfile,
+  sdkDownloadMeFileName,
+} from "@game-fields/sdk-release-profiles";
 
 const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const source = resolve(appRoot, "../../sdk/entry/START_GAME_FIELDS.md");
-const releaseSource = resolve(appRoot, "../../config/platform-release.json");
-const releaseDestination = resolve(appRoot, "public/platform-release.json");
+const repositoryRoot = resolve(appRoot, "../..");
+const publicRoot = resolve(appRoot, "public");
+const source = resolve(repositoryRoot, "sdk/entry/START_GAME_FIELDS.md");
+const releaseSource = resolve(repositoryRoot, "config/platform-release.json");
+const profilesSource = resolve(repositoryRoot, "config/sdk-release-profiles.json");
+const releaseDestination = resolve(publicRoot, "platform-release.json");
 const release = JSON.parse(readFileSync(releaseSource, "utf8"));
-const downloadMeFileName =
-  `GameFieldsDownloadMe-ver${release.downloadMeVersion}.md`;
-const destination = resolve(appRoot, `public/${downloadMeFileName}`);
-const gitRef = process.env.VERCEL_GIT_COMMIT_REF?.trim();
-const requestedChannel = process.env.SDK_PORTAL_CHANNEL?.trim().toLowerCase();
-const isProduction = requestedChannel
-  ? requestedChannel === "production"
-  : gitRef === "main";
-const sdkChannel = isProduction ? "production" : "development";
-const sdkPortalBaseUrl = isProduction
-  ? "https://sdk.game-fields.com"
-  : "https://sdk-dev.game-fields.com";
+const profileConfig = JSON.parse(readFileSync(profilesSource, "utf8"));
+const environmentFlag = process.argv.indexOf("--environment");
+const requestedEnvironment = environmentFlag >= 0
+  ? process.argv[environmentFlag + 1]
+  : process.env.SDK_PORTAL_CHANNEL;
+const profile = resolveSdkReleaseProfile({
+  release,
+  profileConfig,
+  requestedEnvironment,
+  gitRef: process.env.VERCEL_GIT_COMMIT_REF,
+  portalBaseUrl: process.env.SDK_PORTAL_BASE_URL,
+  defaultEnvironment: process.env.VERCEL ? undefined : "development",
+});
+const downloadMeFileName = sdkDownloadMeFileName(release, profile);
+const destination = resolve(publicRoot, downloadMeFileName);
+const generatedDownloadMePattern =
+  /^GameFieldsDownloadMe(?:-dev)?-ver\d+\.\d+\.\d+\.md$/;
 
-mkdirSync(dirname(destination), { recursive: true });
-const download = readFileSync(source, "utf8")
-  .replaceAll("__DOWNLOAD_ME_VERSION__", String(release.downloadMeVersion))
-  .replaceAll("__PLATFORM_VERSION__", release.platformVersion)
-  .replaceAll("__SDK_VERSION__", release.sdkPackageVersion)
-  .replaceAll("__SDK_HANDSHAKE_VERSION__", String(release.sdkHandshakeVersion))
-  .replaceAll("__SDK_CONTRACT_VERSION__", String(release.sdkContractVersion))
-  .replaceAll("__SDK_ENVIRONMENT__", sdkChannel)
-  .replaceAll("__SDK_STARTER_REF__", release.starterRef)
-  .replaceAll("__SDK_PORTAL_BASE_URL__", sdkPortalBaseUrl);
+mkdirSync(publicRoot, { recursive: true });
+for (const fileName of readdirSync(publicRoot)) {
+  if (generatedDownloadMePattern.test(fileName)) {
+    rmSync(resolve(publicRoot, fileName));
+  }
+}
+
+const download = renderSdkDownloadMe(
+  readFileSync(source, "utf8"),
+  release,
+  profile,
+);
 writeFileSync(destination, download);
 copyFileSync(releaseSource, releaseDestination);
 console.log(
-  `[sdk-portal] ${downloadMeFileName} synced for ${sdkChannel} at ${sdkPortalBaseUrl} (platform v${release.platformVersion})`,
+  `[sdk-portal] ${downloadMeFileName} synced for ${profile.environment} via ${profile.pluginName} at ${profile.portalBaseUrl} (platform v${release.platformVersion})`,
 );

@@ -60,6 +60,13 @@ test("package asset validatorはPortalとPreviewだけbuildする", () => {
   assert.equal(decide("app-games-preview-dev", "develop", [path]).build, true);
 });
 
+test("SDK release profileはPortalだけbuildする", () => {
+  const path = "packages/sdk-release-profiles/index.js";
+  assert.equal(decide("app-games-dev", "develop", [path]).build, false);
+  assert.equal(decide("app-games-sdk-dev", "develop", [path]).build, true);
+  assert.equal(decide("app-games-preview-dev", "develop", [path]).build, false);
+});
+
 test("service authはPlatformとPortalだけbuildする", () => {
   const path = "packages/sdk-service-auth/src/index.ts";
   assert.equal(decide("app-games-dev", "develop", [path]).build, true);

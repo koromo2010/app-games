@@ -10,12 +10,29 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
+import {
+  renderSdkDownloadMe,
+  resolveSdkReleaseProfile,
+  sdkDownloadMeFileName,
+  sdkDownloadMeVersion,
+} from "../packages/sdk-release-profiles/index.js";
 import { extractStoredZip } from "./lib/stored-zip.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const platformRelease = JSON.parse(
   readFileSync(join(root, "config/platform-release.json"), "utf8"),
 );
+const profileConfig = JSON.parse(
+  readFileSync(join(root, "config/sdk-release-profiles.json"), "utf8"),
+);
+const releaseProfile = resolveSdkReleaseProfile({
+  release: platformRelease,
+  profileConfig,
+  requestedEnvironment: process.env.SDK_PORTAL_CHANNEL,
+  gitRef: process.env.VERCEL_GIT_COMMIT_REF,
+  portalBaseUrl: process.env.SDK_PORTAL_BASE_URL,
+  defaultEnvironment: process.env.VERCEL ? undefined : "development",
+});
 const fixtureRoot = mkdtempSync(join(tmpdir(), "game-fields-sdk-starter-check-"));
 const zipPath = join(fixtureRoot, "starter.zip");
 const extractRoot = join(fixtureRoot, "extracted");
@@ -156,9 +173,10 @@ try {
     }
   }
   const starterManifest = JSON.parse(readFileSync(join(starterRoot, "starter-manifest.json"), "utf8"));
-  if (starterManifest.downloadMeVersion !== platformRelease.downloadMeVersion
+  if (starterManifest.downloadMeVersion !== sdkDownloadMeVersion(platformRelease)
+    || starterManifest.environment !== releaseProfile.environment
     || starterManifest.repository !== "https://github.com/koromo2010/app-games"
-    || starterManifest.ref !== platformRelease.starterRef
+    || starterManifest.ref !== releaseProfile.starterRef
     || starterManifest.sdkVersion !== platformRelease.sdkPackageVersion
     || starterManifest.platformVersion !== platformRelease.platformVersion
     || starterManifest.sdkHandshakeVersion !== platformRelease.sdkHandshakeVersion
@@ -292,25 +310,23 @@ try {
   if (!entryTemplate.includes("__SDK_STARTER_REF__")) {
     throw new Error("Entry guide must receive its starter ref from the release ledger.");
   }
-  const entryGuide = entryTemplate
-    .replaceAll(
-      "__SDK_STARTER_REF__",
-      platformRelease.starterRef,
-    )
-    .replaceAll(
-      "__DOWNLOAD_ME_VERSION__",
-      String(platformRelease.downloadMeVersion),
-    );
+  const entryGuide = renderSdkDownloadMe(
+    entryTemplate,
+    platformRelease,
+    releaseProfile,
+  );
   if (entryGuide.charCodeAt(0) !== 0xfeff) {
     throw new Error("Entry guide must start with a UTF-8 BOM to prevent mojibake in browser downloads.");
   }
   for (const requiredText of [
-    `# GF-AECP/${platformRelease.downloadMeVersion}`,
+    `# GF-AECP/${sdkDownloadMeVersion(platformRelease)}`,
     "HUMAN_DOCUMENTATION := false",
-    `--branch ${platformRelease.starterRef}`,
+    `--branch ${releaseProfile.starterRef}`,
     "https://github.com/koromo2010/app-games.git",
     "starter-manifest.json",
-    `downloadMeVersion == ${platformRelease.downloadMeVersion}`,
+    `downloadMeVersion == ${sdkDownloadMeVersion(platformRelease)}`,
+    releaseProfile.pluginName,
+    sdkDownloadMeFileName(platformRelease, releaseProfile),
     "schema_accepts_all(C0.capabilityVector)",
     "更新ボタンを押しても既存チャットのtool schemaは差し替わりません",
     "get_sdk_handshake",

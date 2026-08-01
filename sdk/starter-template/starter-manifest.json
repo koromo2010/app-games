@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
-  "downloadMeVersion": __DOWNLOAD_ME_VERSION__,
+  "downloadMeVersion": "__DOWNLOAD_ME_VERSION__",
+  "environment": "__SDK_ENVIRONMENT__",
   "platformVersion": "__PLATFORM_VERSION__",
   "starterVersion": "__PLATFORM_VERSION__",
   "sdkVersion": "__SDK_VERSION__",

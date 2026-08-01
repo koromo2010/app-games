@@ -1,0 +1,13 @@
+{
+  "name": "@game-fields/sdk-release-profiles",
+  "version": "0.1.1",
+  "private": true,
+  "type": "module",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  }
+}

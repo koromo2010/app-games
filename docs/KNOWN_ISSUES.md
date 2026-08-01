@@ -4,6 +4,14 @@
 
 この文書は、再調査を減らし、次に直す範囲を選びやすくするための監査記録である。将来構想ではなく、現在のコードで確認できた事実を記録する。状態が「修正済み」の項目は、同じ問題を再導入しないための回帰確認点として残す。
 
+## 2026-08-02 DownloadMeがproduction URLとdevelopmentプラグインを混在させる
+
+状態: ローカル修正済み・外部プラグイン名変更／配備待ち（2026-08-02、回帰テスト追加）
+
+従来の`config/platform-release.json`はproduction／developmentで共有する版情報に、development専用の`gameapp-dev`、`sdk-starter-dev`、整数版`ver17`を混在させていた。production PortalがURLとenvironmentだけをproductionへ差し替えてもプラグイン名とStarter refがdevのまま残り、DownloadMeのhandshakeが`ENVIRONMENT_MISMATCH`で停止した。また両環境が同じファイル名だったため、人間も添付先を判別できなかった。
+
+版情報と環境profileを分離し、DownloadMeはPlatformと同じSemVerを使う。productionは`game-fields`／`GameFieldsDownloadMe-ver<SemVer>.md`／`sdk-starter`、developmentは`dev-game-fields`／`GameFieldsDownloadMe-dev-ver<SemVer>.md`／`sdk-starter-dev`へ固定した。Portal、MCP、handshake、Room URL、Starter生成も同じresolverを使い、未知または競合するbranch／origin／明示channelはdevへfallbackせず停止する。旧整数版は履歴として保持し、各Deploymentの現行SemVer版へredirectする。ローカルコードの配備とChatGPT側プラグイン表示名の登録／変更は未実施である。
+
 ## 2026-08-01 SDK packageの動的asset参照が保存後監査まで持ち越される
 
 状態: app-games側の共有validator・保存前gate・local auditをローカル再実装済み／checkpoint commit・private workflow反映・既存Dixit修復待ち
