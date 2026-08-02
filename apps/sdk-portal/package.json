@@ -6,7 +6,7 @@
     "sync:download": "node scripts/sync-download.mjs",
     "predev": "npm run sync:download && npm run build --workspace @game-fields/game-sdk",
     "dev": "next dev -p 3001",
-    "prebuild": "npm run sync:download && node ../../scripts/migrate-sdk-database.mjs --deploy && npm run build --workspace @game-fields/game-sdk",
+    "prebuild": "npm run sync:download && npm run build --workspace @game-fields/game-sdk",
     "build": "next build",
     "start": "next start -p 3001",
     "lint": "eslint ."

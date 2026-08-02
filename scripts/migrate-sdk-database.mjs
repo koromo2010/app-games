@@ -1,46 +1,91 @@
 import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { neon } from "@neondatabase/serverless";
+import { fileURLToPath } from "node:url";
 
 const root = resolve(import.meta.dirname, "..");
 const migrationDirectory = join(root, "db/sdk");
-const deployMode = process.argv.includes("--deploy");
-const mode = process.argv.includes("--status")
-  ? "status"
-  : process.argv.includes("--check")
-    ? "check"
-    : "apply";
 
-if (deployMode) {
-  const projectName = process.env.VERCEL_PROJECT_NAME?.trim();
-  const branch = process.env.VERCEL_GIT_COMMIT_REF?.trim();
-  const allowed = (
-    projectName === "app-games-sdk-dev"
-    && branch === "develop"
-  ) || (
-    projectName === "app-games-sdk"
-    && branch === "main"
-  );
-  if (!allowed) {
-    console.log(
-      `[sdk-migration] skipped deploy migration for ${projectName ?? "local"}/${branch ?? "local"}.`,
+const environmentContracts = Object.freeze({
+  development: Object.freeze({
+    project: "app-games-sdk-dev",
+    branch: "develop",
+  }),
+  production: Object.freeze({
+    project: "app-games-sdk",
+    branch: "main",
+  }),
+});
+
+function parseArgs(argv = process.argv.slice(2)) {
+  if (argv.includes("--help") || argv.includes("-h")) {
+    return { help: true };
+  }
+  if (argv.includes("--deploy")) {
+    throw new Error(
+      "--deploy was removed: Vercel builds never run migrations. "
+      + "Run the explicit command with --environment development|production.",
     );
-    process.exit(0);
+  }
+
+  const environmentIndex = argv.indexOf("--environment");
+  const environment = environmentIndex >= 0 ? argv[environmentIndex + 1] : undefined;
+  const mode = argv.includes("--status")
+    ? "status"
+    : argv.includes("--check")
+      ? "check"
+      : "apply";
+
+  if (!environment || !Object.hasOwn(environmentContracts, environment)) {
+    throw new Error(
+      "Migration target is required. Use --environment development or --environment production.",
+    );
+  }
+  return { environment, mode };
+}
+
+function assertEnvironmentTarget(environment, env = process.env) {
+  const contract = environmentContracts[environment];
+  const configuredEnvironment = env.SDK_DATABASE_ENV?.trim();
+  if (configuredEnvironment !== environment) {
+    throw new Error(
+      `SDK_DATABASE_ENV must be ${environment} for this migration target.`,
+    );
+  }
+
+  const project = env.VERCEL_PROJECT_NAME?.trim();
+  const branch = env.VERCEL_GIT_COMMIT_REF?.trim();
+  if ((project || branch) && (project !== contract.project || branch !== contract.branch)) {
+    throw new Error(
+      `Migration target ${environment} is not allowed for ${project ?? "unknown"}/${branch ?? "unknown"}.`,
+    );
   }
 }
 
-function databaseUrl() {
-  const url = process.env.SDK_DATABASE_URL
-    ?? process.env.POSTGRES_PRISMA_URL
-    ?? process.env.DATABASE_URL;
+function databaseUrl(env = process.env) {
+  const url = env.SDK_DATABASE_URL?.trim();
   if (!url) {
     throw new Error(
-      "SDK PostgreSQL is not configured. Set SDK_DATABASE_URL (preferred), "
-      + "POSTGRES_PRISMA_URL, or DATABASE_URL.",
+      "SDK PostgreSQL is not configured. Set the SDK_DATABASE_URL for the explicitly selected target.",
     );
   }
   return url;
+}
+
+function printHelp() {
+  console.log(`SDK database migration (explicit operational command only)
+
+Usage:
+  SDK_DATABASE_ENV=development SDK_DATABASE_URL=<dev-url> \\
+    npm run sdk:migrate -- --environment development
+  SDK_DATABASE_ENV=production SDK_DATABASE_URL=<prod-url> \\
+    npm run sdk:migrate -- --environment production
+
+Optional read-only modes:
+  --status   list applied and pending migrations
+  --check    fail when any migration is pending
+
+The build and Vercel prebuild paths do not invoke this command.`);
 }
 
 function canonicalJson(value) {
@@ -249,10 +294,8 @@ async function readAppliedMigrations(sql) {
 }
 
 const migrations = loadMigrations();
-const sql = neon(databaseUrl());
-let applied = await readAppliedMigrations(sql);
 
-function verifyAppliedChecksums() {
+export function verifyAppliedChecksums(applied) {
   for (const row of applied) {
     const migration = migrations.find((candidate) => candidate.version === row.version);
     if (!migration) {
@@ -273,48 +316,71 @@ function verifyAppliedChecksums() {
   }
 }
 
-verifyAppliedChecksums();
-const appliedVersions = new Set(applied.map((row) => row.version));
-const pending = migrations.filter((migration) => !appliedVersions.has(migration.version));
+export async function runMigration({ environment, mode = "apply", env = process.env }) {
+  assertEnvironmentTarget(environment, env);
+  const url = databaseUrl(env);
+  const { neon } = await import("@neondatabase/serverless");
+  const sql = neon(url);
+  let applied = await readAppliedMigrations(sql);
+  verifyAppliedChecksums(applied);
+  const appliedVersions = new Set(applied.map((row) => row.version));
+  const pending = migrations.filter((migration) => !appliedVersions.has(migration.version));
 
-if (mode === "status" || mode === "check") {
-  for (const migration of migrations) {
-    const state = appliedVersions.has(migration.version) ? "applied" : "pending";
-    console.log(`[sdk-migration] ${state} ${migration.name}`);
+  if (mode === "status" || mode === "check") {
+    for (const migration of migrations) {
+      const state = appliedVersions.has(migration.version) ? "applied" : "pending";
+      console.log(`[sdk-migration] ${state} ${migration.name}`);
+    }
+    if (mode === "check" && pending.length > 0) {
+      throw new Error(
+        `SDK database has ${pending.length} pending migration(s); latest required version is `
+        + `${migrations.at(-1)?.version ?? 0}.`,
+      );
+    }
+    return;
   }
-  if (mode === "check" && pending.length > 0) {
-    throw new Error(
-      `SDK database has ${pending.length} pending migration(s); latest required version is `
-      + `${migrations.at(-1)?.version ?? 0}.`,
-    );
-  }
-  process.exit(0);
-}
 
-await sql`
-  CREATE TABLE IF NOT EXISTS sdk_schema_migrations (
-    version INTEGER PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE,
-    checksum CHAR(64) NOT NULL,
-    applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-  )
-`;
-
-for (const migration of pending) {
-  await sql.transaction(migrationQueries(sql, migration.sql));
-  if (migration.hook) await migration.hook(sql);
   await sql`
-    INSERT INTO sdk_schema_migrations (version, name, checksum)
-    VALUES (${migration.version}, ${migration.name}, ${migration.checksum})
-    ON CONFLICT (version) DO NOTHING
+    CREATE TABLE IF NOT EXISTS sdk_schema_migrations (
+      version INTEGER PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      checksum CHAR(64) NOT NULL,
+      applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
   `;
-  console.log(`[sdk-migration] applied ${migration.name}`);
+
+  for (const migration of pending) {
+    await sql.transaction(migrationQueries(sql, migration.sql));
+    if (migration.hook) await migration.hook(sql);
+    await sql`
+      INSERT INTO sdk_schema_migrations (version, name, checksum)
+      VALUES (${migration.version}, ${migration.name}, ${migration.checksum})
+      ON CONFLICT (version) DO NOTHING
+    `;
+    console.log(`[sdk-migration] applied ${migration.name}`);
+  }
+
+  applied = await readAppliedMigrations(sql);
+  verifyAppliedChecksums(applied);
+  const latestVersion = migrations.at(-1)?.version ?? 0;
+  if (applied.at(-1)?.version !== latestVersion) {
+    throw new Error(`SDK database migration stopped before version ${latestVersion}.`);
+  }
+  console.log(`[sdk-migration] database is current at version ${latestVersion}`);
 }
 
-applied = await readAppliedMigrations(sql);
-verifyAppliedChecksums();
-const latestVersion = migrations.at(-1)?.version ?? 0;
-if (applied.at(-1)?.version !== latestVersion) {
-  throw new Error(`SDK database migration stopped before version ${latestVersion}.`);
+async function main() {
+  const parsed = parseArgs();
+  if (parsed.help) {
+    printHelp();
+    return;
+  }
+  await runMigration(parsed);
 }
-console.log(`[sdk-migration] database is current at version ${latestVersion}`);
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(`[sdk-migration] ${error.message}`);
+    process.exitCode = 1;
+  });
+}

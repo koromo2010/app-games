@@ -44,7 +44,6 @@ const surfaceBuildPaths = Object.freeze({
     /^packages\/sdk-runtime-artifact\//,
     /^packages\/sdk-service-auth\//,
     /^sdk\//,
-    /^scripts\/migrate-sdk-database\.mjs$/,
   ],
   preview: [
     /^apps\/sdk-preview\//,

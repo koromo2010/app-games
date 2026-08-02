@@ -6,6 +6,22 @@
 
 最終更新: 2026-08-02
 
+## 2026-08-02 APP migration control plane reimplementation checkpoint
+
+`bb8242bd2fefb215f8dafb8a7a4f1e72a931006b`をbaselineとして、消失した
+APP migration checkpointとは別identityのlocal reimplementationを行った。
+正本は`Intake-3-M0-app-migration-final-design.md`であり、消失した29-path記録へ
+機械的に合わせていない。
+
+- APP専用`db/app/0000`〜`0002`、exact-byte SHA-256 manifest、ledger/control、
+  transaction runner、legacy adoption契約、schema fingerprint、SELECT-only readinessを追加。
+- `ensurePostgresSchema()`のrequest-time DDL／marker mutationを撤去し、store群は
+  `APP_SCHEMA_NOT_READY`を返すreadiness境界へ接続した。
+- `package.json`、`package-lock.json`、SDK migration、guest `0003`、Redis／Blob／OAuth、
+  環境変数の実値は変更していない。
+- このcheckpointではDB status／dry-run／check／apply／adopt、Vercel、Deployment、
+  production access、product repository pushを実行していない。
+
 ## T-60／T-60.1 ローカル再構築状態
 
 - workspace自動整理で失われた未commit差分を、`develop@17c331e18908120b26cab85a2132c987999a924e`のclean checkoutから再構築した。元patchのbyte-for-byte復元ではない。T-60.1はlocal checkpoint `dda0313273f7231232a8acae0a94fffd54f2b9a4`へ保存済みで、製品`origin`未push・未配備である。
@@ -487,6 +503,7 @@ ChatGPT Workではスレッドごとに作業環境が新しくなり、前ス�
 - URL名は3〜32文字の小文字英数字とハイフン。AIは制作開始時に希望名を聞き、`/api/instances/check`で重複確認後、`/api/instances/reserve`で7日間仮予約し、予約トークンを`/api/instances/finalize`へ渡して正式確定する。仮予約はRedisの`SET NX`、正式slugと制作者情報はPostgreSQLを正本とする。確定時に一度だけ返す管理トークンはハッシュだけをDBへ保存する。
 - 制作者のゲーム登録は`/api/instances/<slug>/games`で取得し、管理トークンをBearer認証に使うPUTで登録・更新する。manifest、SDK package版、SDK契約schema、公開状態をPostgreSQLへ保存し、Portalが対応しない契約schemaは拒否する。
 - 必須環境変数はSDK Portal専用のRedis接続`SDK_REDIS_REST_URL` / `SDK_REDIS_REST_TOKEN`とPostgreSQL接続`SDK_DATABASE_URL`。Vercel統合の標準名`KV_*`、`POSTGRES_PRISMA_URL`、`DATABASE_URL`も互換読取する。SDK本番・開発Portalは無料枠内の同じ`sdk-dev-redis`を共用するが、予約キーを`main = sdk:production:`、`develop = sdk:development:`へ分離し、その他のProduction branchではfail-closedにする。切替前の開発予約は7日の有効期限が切れるまで旧キーも読み、本番は旧キーを読まない。本体ゲーム用Redisとは共有しない。未設定時は空きや保存成功を推測せず503を返す。
+- SDK database migrationはPortalの`prebuild`・Vercel build・Preview buildから分離し、`SDK_DATABASE_ENV`と`SDK_DATABASE_URL`を指定した明示的な`npm run sdk:migrate -- --environment development|production`だけで実行する。migration runnerは汎用`DATABASE_URL`／`POSTGRES_PRISMA_URL`へfallbackせず、developmentは`app-games-sdk-dev`／`develop`、productionは`app-games-sdk`／`main`の組合せだけを許可する。`--deploy`は廃止し、migration失敗はbuildを停止させない。実行・snapshot・rollback方針は`docs/SDK_DATABASE_MIGRATIONS.md`を正本とする。
 - 表のGame FieldsアカウントをSDK所有権の正本として使う。Portalの`/api/account-link/start`は本体`/api/sdk-account-link`へ遷移し、本体の署名済みプレイヤーCookieで本人確認した後、プレイヤーIDと表示名を含む60秒の署名コードをSDKへ返す。Portalはstateを照合して30日のSDK専用HttpOnly Cookieへ交換し、新規制作者の`owner_player_id`へ紐づける。PortalヘッダーはSDKログイン状態、本体の連携表示名、再連携、ログアウトを常時確認できるメニューを表示する。旧Cookieも有効だが、表示名は一度再連携した後に表示する。表サイトのパスワードとCookieをSDKへ渡さない。環境別の`SDK_ACCOUNT_LINK_SECRET`を本体とPortalだけで共有し、`GAME_FIELDS_APP_BASE_URL`で接続する本体を固定する。
 - ChatGPT WorkとCodexの共通制作経路は`/api/mcp`のOAuth 2.1付きリモートMCPとする。DownloadMeへ秘密値を埋め込まない。protected resource metadata、authorization server discovery、DCR、authorization code + S256 PKCE、refresh token rotation、scope検証をPortalで提供する。MCP toolsはログイン中アカウントの既存制作者環境一覧、URL空き確認、本人名義の予約・確定、本人所有環境へのgame package保存だけを公開し、本体DB・管理機能・他利用者環境へは到達させない。制作開始時はまず`get_sdk_handshake`へDownloadMe記載の環境・release・contract・必須capabilityを送り、`accepted=true`とcanonical endpoint一致を確認する。その後に`list_creator_environments`を呼び、既存環境が1件なら再利用、複数なら選択、0件の場合だけ新規URLを予約する。WorkはGame Fields App、Codexは同じリモートMCP URLを使う。初回のApp／MCP接続とブラウザ承認は利用者操作が必要で、DownloadMe添付だけで未登録Appを自動導入できるとは説明しない。
 - 正式Previewはcandidate packageのクライアントとserver AppSetを同じcommit、同じSHA-256で読み、本体の`/api/sdk-preview/<creator>/games/<game>/rooms`へ接続する。Room、参加者、設定、revision、Redis CAS、active room、一覧、再接続、解散、閲覧者別Viewは正式Runtimeと同じ契約を使い、ブラウザ内の模擬Roomを完成判定に使わない。未審査AppSetは本体プロセスへimportせず、QuickJS WASMの新規module／contextで1呼出しごとに隔離し、メモリ32 MiB、スタック1 MiB、実行750 ms、入出力1 MiB、bundle 1 MiBを上限とする。DB、Redis、Cookie、環境変数、filesystem、network、Platform adapterはguestへ渡さず、許可済みWord DB／LLM effectだけを外側Platformが実行する。

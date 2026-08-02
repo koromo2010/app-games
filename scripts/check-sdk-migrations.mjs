@@ -51,6 +51,34 @@ if (!packageJson.scripts?.["sdk:migrate"]?.includes("migrate-sdk-database.mjs"))
   failures.push("package.json must expose the SDK migration runner as sdk:migrate.");
 }
 
+const portalPackageJson = JSON.parse(readFileSync(
+  join(root, "apps/sdk-portal/package.json"),
+  "utf8",
+));
+const portalPrebuild = portalPackageJson.scripts?.prebuild ?? "";
+if (/migrate-sdk-database|--deploy/.test(portalPrebuild)) {
+  failures.push("SDK Portal prebuild must not invoke the migration runner.");
+}
+
+const migrationRunner = readFileSync(
+  join(root, "scripts/migrate-sdk-database.mjs"),
+  "utf8",
+);
+if (!migrationRunner.includes("--environment development")
+  || !migrationRunner.includes("--environment production")) {
+  failures.push("SDK migration runner must require an explicit environment target.");
+}
+if (!migrationRunner.includes("SDK_DATABASE_ENV")
+  || !migrationRunner.includes("SDK_DATABASE_URL")) {
+  failures.push("SDK migration runner must use explicit SDK environment and URL variables.");
+}
+if (/process\.env\.(?:POSTGRES_PRISMA_URL|DATABASE_URL)/.test(migrationRunner)) {
+  failures.push("SDK migration runner must not fall back to generic database URLs.");
+}
+if (/VERCEL_PROJECT_NAME.*skip|skipped deploy migration/.test(migrationRunner)) {
+  failures.push("SDK migration runner must not silently skip an implicit Vercel deploy mode.");
+}
+
 if (failures.length > 0) {
   console.error("\n[sdk-migrations] Contract check failed:\n");
   failures.forEach((failure) => console.error(`- ${failure}`));
