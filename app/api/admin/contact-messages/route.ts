@@ -237,6 +237,9 @@ export async function POST(request: Request) {
     if (error instanceof Error && error.message === "CONTACT_MESSAGE_NOT_FOUND") {
       return Response.json({ error: error.message }, { status: 404 });
     }
+    if (error instanceof Error && error.message === "CONTACT_MESSAGE_STATUS_TRANSITION_INVALID") {
+      return Response.json({ error: error.message }, { status: 409 });
+    }
     if (
       error instanceof Error
       && error.message === "CONTACT_MESSAGE_REQUEST_ID_CONFLICT"

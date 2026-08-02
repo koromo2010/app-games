@@ -2,7 +2,10 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { AccountMenu } from "../../../account-menu";
 import { getSdkAccountSession } from "@/lib/account-session";
-import { loadCreatorSupportDraft } from "@/lib/support-api";
+import {
+  CreatorSupportServiceError,
+  loadCreatorSupportDraft,
+} from "@/lib/support-api";
 import { SupportDraftApproval } from "./SupportDraftApproval";
 
 export const dynamic = "force-dynamic";
@@ -19,9 +22,15 @@ export default async function SupportDraftPage({
       `/api/account-link/start?returnTo=${encodeURIComponent(`/support/drafts/${draftId}`)}`,
     );
   }
-  const state = await loadCreatorSupportDraft(account.playerId, draftId)
-    .catch(() => null);
-  if (!state) notFound();
+  let state;
+  try {
+    state = await loadCreatorSupportDraft(account.playerId, draftId);
+  } catch (error) {
+    if (error instanceof CreatorSupportServiceError && error.status === 404) {
+      notFound();
+    }
+    throw error;
+  }
   if (state.state === "approved") redirect("/support");
 
   return <main className="creator-dashboard">

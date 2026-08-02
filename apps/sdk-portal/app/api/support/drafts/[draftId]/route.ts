@@ -1,6 +1,7 @@
 import { getSdkAccountSession } from "@/lib/account-session";
 import {
   approveCreatorSupportDraft,
+  CreatorSupportServiceError,
   loadCreatorSupportDraft,
 } from "@/lib/support-api";
 import {
@@ -27,6 +28,15 @@ export async function GET(
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
+    if (error instanceof CreatorSupportServiceError) {
+      return Response.json(
+        {
+          error: error.code,
+          ...(error.errorCode ? { errorCode: error.errorCode } : {}),
+        },
+        { status: error.status },
+      );
+    }
     if (
       error instanceof Error
       && error.message === "support_draft_not_found"
@@ -82,6 +92,15 @@ export async function POST(
     });
     return Response.json({ report }, { status: 201 });
   } catch (error) {
+    if (error instanceof CreatorSupportServiceError) {
+      return Response.json(
+        {
+          error: error.code,
+          ...(error.errorCode ? { errorCode: error.errorCode } : {}),
+        },
+        { status: error.status },
+      );
+    }
     if (
       error instanceof Error
       && error.message === "support_draft_not_found"

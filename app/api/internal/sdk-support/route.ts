@@ -26,6 +26,10 @@ import {
 } from "@/config/support-text-contract";
 import { createRequestTelemetry } from "@/lib/observability/logger";
 import { redisStoreObservabilityFields } from "@/lib/redis-store";
+import {
+  normalizeSupportRequestId,
+} from "@/lib/support-request-contract";
+import { observabilityErrorCode } from "@/lib/observability";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -204,20 +208,14 @@ export async function POST(request: Request) {
   );
   if (limited) return limited;
   if (action === "create-report") {
-    const requestId = typeof body?.requestId === "string"
-      ? body.requestId.trim().toLowerCase()
-      : "";
+    const requestId = normalizeSupportRequestId(body?.requestId);
     const type = body?.type === "bug" || body?.type === "request"
       ? body.type
       : null;
     const validatedText = reportText(body);
     if (validatedText.response) return validatedText.response;
     const { summary, details, page } = validatedText.value!;
-    if (
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
-        .test(requestId)
-      || !type
-    ) {
+    if (!requestId || !type) {
       return Response.json(
         { error: "support_report_invalid" },
         { status: 400 },
@@ -263,9 +261,7 @@ export async function POST(request: Request) {
     }
   }
   if (action === "create-draft") {
-    const requestId = typeof body?.requestId === "string"
-      ? body.requestId.trim()
-      : "";
+    const requestId = normalizeSupportRequestId(body?.requestId);
     const type = body?.type === "bug" || body?.type === "request"
       ? body.type
       : null;
@@ -274,7 +270,12 @@ export async function POST(request: Request) {
     const { summary, details, page } = validatedText.value!;
     if (!requestId || !type) {
       return Response.json(
-        { error: "support_draft_invalid" },
+        {
+          error: "support_draft_invalid",
+          errorCode: requestId
+            ? "SUPPORT_REPORT_TYPE_INVALID"
+            : "SUPPORT_REQUEST_ID_INVALID",
+        },
         { status: 400 },
       );
     }
@@ -291,19 +292,28 @@ export async function POST(request: Request) {
     } catch (error) {
       if (
         error instanceof Error
-        && error.message === "USER_REPORT_DRAFT_CONFLICT"
+        && (
+          error.message === "USER_REPORT_DRAFT_CONFLICT"
+          || error.message === "USER_REPORT_DRAFT_REQUEST_ID_INVALID"
+        )
       ) {
         return Response.json(
-          { error: "support_draft_conflict" },
-          { status: 409 },
+          {
+            error: error.message === "USER_REPORT_DRAFT_CONFLICT"
+              ? "support_draft_conflict"
+              : "support_draft_invalid",
+            errorCode: error.message,
+          },
+          { status: error.message === "USER_REPORT_DRAFT_CONFLICT" ? 409 : 400 },
         );
       }
+      const errorCode = observabilityErrorCode(error);
       telemetry.failure("support.draft", error, 503, {
         action: "create-draft",
         ...redisStoreObservabilityFields(error),
       });
       return Response.json(
-        { error: "support_draft_unavailable" },
+        { error: "support_draft_unavailable", errorCode },
         { status: 503 },
       );
     }
@@ -312,15 +322,18 @@ export async function POST(request: Request) {
     const reportId = typeof body?.reportId === "string"
       ? body.reportId.trim()
       : "";
-    const requestId = typeof body?.requestId === "string"
-      ? body.requestId.trim()
-      : "";
+    const requestId = normalizeSupportRequestId(body?.requestId);
     const validatedMessage = replyText(body?.message);
     if (validatedMessage.response) return validatedMessage.response;
     const message = validatedMessage.value!;
     if (!reportId || !requestId) {
       return Response.json(
-        { error: "support_reply_draft_invalid" },
+        {
+          error: "support_reply_draft_invalid",
+          errorCode: requestId
+            ? "SUPPORT_REPORT_ID_INVALID"
+            : "SUPPORT_REQUEST_ID_INVALID",
+        },
         { status: 400 },
       );
     }
@@ -344,15 +357,24 @@ export async function POST(request: Request) {
       }
       if (
         error instanceof Error
-        && error.message === "USER_REPORT_REPLY_DRAFT_CONFLICT"
+        && (
+          error.message === "USER_REPORT_REPLY_DRAFT_CONFLICT"
+          || error.message === "USER_REPORT_REPLY_DRAFT_REQUEST_ID_INVALID"
+        )
       ) {
         return Response.json(
-          { error: "support_reply_draft_conflict" },
-          { status: 409 },
+          {
+            error: error.message === "USER_REPORT_REPLY_DRAFT_CONFLICT"
+              ? "support_reply_draft_conflict"
+              : "support_reply_draft_invalid",
+            errorCode: error.message,
+          },
+          { status: error.message === "USER_REPORT_REPLY_DRAFT_CONFLICT" ? 409 : 400 },
         );
       }
+      const errorCode = observabilityErrorCode(error);
       return Response.json(
-        { error: "support_reply_draft_unavailable" },
+        { error: "support_reply_draft_unavailable", errorCode },
         { status: 503 },
       );
     }
@@ -472,17 +494,18 @@ export async function POST(request: Request) {
   const reportId = typeof body?.reportId === "string"
     ? body.reportId.trim()
     : "";
-  const requestId = typeof body?.requestId === "string"
-    ? body.requestId.trim()
-    : "";
+  const requestId = normalizeSupportRequestId(body?.requestId);
   const validatedMessage = replyText(body?.message);
   if (validatedMessage.response) return validatedMessage.response;
   const message = validatedMessage.value!;
-  if (
-    !reportId
-    || !requestId
-  ) {
-    return Response.json({ error: "support_reply_invalid" }, { status: 400 });
+  if (!reportId || !requestId) {
+    return Response.json(
+      {
+        error: "support_reply_invalid",
+        errorCode: requestId ? "SUPPORT_REPORT_ID_INVALID" : "SUPPORT_REQUEST_ID_INVALID",
+      },
+      { status: 400 },
+    );
   }
   try {
     const result = await appendUserReportMessage({

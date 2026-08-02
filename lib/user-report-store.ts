@@ -3,6 +3,7 @@ import { redisCommand } from "./redis-store.ts";
 import {
   type SupportReplyDeliveryStatus,
   type SupportThreadAuthor,
+  isSupportThreadStatusTransitionAllowed,
 } from "./support-thread-core.ts";
 import {
   normalizeStoredUserReport,
@@ -178,11 +179,16 @@ export async function updateUserReportStatus(
   reportId: string,
   status: UserReportStatus,
 ) {
-  return updateUserReport(reportId, (current) => ({
-    ...current,
-    status,
-    updatedAt: Date.now(),
-  }));
+  return updateUserReport(reportId, (current) => {
+    if (!isSupportThreadStatusTransitionAllowed(current.status, status)) {
+      throw new Error("USER_REPORT_STATUS_TRANSITION_INVALID");
+    }
+    return {
+      ...current,
+      status,
+      updatedAt: Date.now(),
+    };
+  });
 }
 
 export async function updateUserReportNotificationStatus(
@@ -228,6 +234,9 @@ export async function appendUserReportMessage(input: {
         throw new Error("USER_REPORT_MESSAGE_ID_CONFLICT");
       }
       return { report: current, message: existing, inserted: false };
+    }
+    if (!isSupportThreadStatusTransitionAllowed(current.status, input.status)) {
+      throw new Error("USER_REPORT_STATUS_TRANSITION_INVALID");
     }
     const now = Date.now();
     const message = {

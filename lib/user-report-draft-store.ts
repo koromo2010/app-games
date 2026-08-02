@@ -10,6 +10,7 @@ import {
   validateSupportReportText,
   validateSupportText,
 } from "@/config/support-text-contract";
+import { normalizeSupportRequestId } from "@/lib/support-request-contract";
 
 export type UserReportDraft = {
   id: string;
@@ -26,6 +27,7 @@ export type UserReportReplyDraft = {
   id: string;
   playerId: string;
   reportId: string;
+  requestId: string;
   message: string;
   createdAt: number;
   expiresAt: number;
@@ -35,9 +37,6 @@ export type UserReportReplyDraft = {
 const draftKeyPrefix = "user-report-draft:v1:";
 const replyDraftKeyPrefix = "user-report-reply-draft:v1:";
 const draftRetentionSeconds = 7 * 24 * 60 * 60;
-const requestIdPattern =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
 function parseDraft(value: string | null) {
   if (!value) return null;
   try {
@@ -68,6 +67,13 @@ function parseReplyDraft(value: string | null) {
   if (!value) return null;
   try {
     const input = JSON.parse(value) as Partial<UserReportReplyDraft>;
+    const requestId = normalizeSupportRequestId(
+      typeof input.requestId === "string"
+        ? input.requestId
+        : typeof input.id === "string"
+        ? input.id.slice("reply_draft_".length)
+        : null,
+    );
     if (
       typeof input.id !== "string"
       || !/^reply_draft_[0-9a-f-]{36}$/i.test(input.id)
@@ -75,6 +81,7 @@ function parseReplyDraft(value: string | null) {
       || !input.playerId
       || typeof input.reportId !== "string"
       || !/^report_[0-9a-f-]{36}$/i.test(input.reportId)
+      || !requestId
       || typeof input.message !== "string"
       || !input.message
       || !Number.isFinite(input.createdAt)
@@ -84,7 +91,7 @@ function parseReplyDraft(value: string | null) {
         && !Number.isFinite(input.approvedAt)
       )
     ) return null;
-    return input as UserReportReplyDraft;
+    return { ...input, requestId } as UserReportReplyDraft;
   } catch {
     return null;
   }
@@ -107,12 +114,13 @@ export async function saveUserReportDraft(input: {
   page: string;
 }) {
   const text = validateSupportReportText(input);
-  if (!requestIdPattern.test(input.requestId)) {
+  const requestId = normalizeSupportRequestId(input.requestId);
+  if (!requestId) {
     throw new Error("USER_REPORT_DRAFT_REQUEST_ID_INVALID");
   }
   const now = Date.now();
   const draft: UserReportDraft = {
-    id: `draft_${input.requestId.toLowerCase()}`,
+    id: `draft_${requestId}`,
     playerId: input.playerId,
     type: input.type,
     ...text,
@@ -203,7 +211,8 @@ export async function saveUserReportReplyDraft(input: {
   message: string;
 }) {
   const message = validateSupportText(input.message, "reply", { required: true });
-  if (!requestIdPattern.test(input.requestId)) {
+  const requestId = normalizeSupportRequestId(input.requestId);
+  if (!requestId) {
     throw new Error("USER_REPORT_REPLY_DRAFT_REQUEST_ID_INVALID");
   }
   const report = await loadUserReport(input.reportId);
@@ -212,9 +221,10 @@ export async function saveUserReportReplyDraft(input: {
   }
   const now = Date.now();
   const draft: UserReportReplyDraft = {
-    id: `reply_draft_${input.requestId.toLowerCase()}`,
+    id: `reply_draft_${requestId}`,
     playerId: input.playerId,
     reportId: input.reportId,
+    requestId,
     message,
     createdAt: now,
     expiresAt: now + draftRetentionSeconds * 1_000,
@@ -264,7 +274,7 @@ export async function approveUserReportReplyDraft(input: {
   const result = await appendUserReportMessage({
     reportId: draft.reportId,
     playerId: input.playerId,
-    requestId: `approved-${draft.id.slice("reply_draft_".length)}`,
+    requestId: draft.requestId,
     author: "requester",
     body: message,
     status: "open",

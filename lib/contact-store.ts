@@ -3,6 +3,7 @@ import { redisCommand } from "./redis-store.ts";
 import {
   type SupportReplyDeliveryStatus,
   type SupportThreadAuthor,
+  isSupportThreadStatusTransitionAllowed,
 } from "./support-thread-core.ts";
 import {
   normalizeStoredContactMessage,
@@ -136,11 +137,16 @@ async function updateContactMessage(
 }
 
 export async function updateContactMessageStatus(contactId: string, status: ContactStatus) {
-  return updateContactMessage(contactId, (current) => ({
-    ...current,
-    status,
-    updatedAt: Date.now(),
-  }));
+  return updateContactMessage(contactId, (current) => {
+    if (!isSupportThreadStatusTransitionAllowed(current.status, status)) {
+      throw new Error("CONTACT_MESSAGE_STATUS_TRANSITION_INVALID");
+    }
+    return {
+      ...current,
+      status,
+      updatedAt: Date.now(),
+    };
+  });
 }
 
 export async function updateContactNotificationStatus(
@@ -182,6 +188,9 @@ export async function appendContactThreadMessage(input: {
         throw new Error("CONTACT_MESSAGE_REQUEST_ID_CONFLICT");
       }
       return { contact: current, message: existing, inserted: false };
+    }
+    if (!isSupportThreadStatusTransitionAllowed(current.status, input.status)) {
+      throw new Error("CONTACT_MESSAGE_STATUS_TRANSITION_INVALID");
     }
     const now = Date.now();
     const message = {

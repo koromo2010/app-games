@@ -40,6 +40,7 @@ import {
   creatorAccountLinkUrl,
   creatorMockGameUrl,
 } from "@/lib/creator-access-links";
+import { normalizeSupportRequestId } from "@/lib/support-request-contract";
 
 export const dynamic = "force-dynamic";
 const GAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?$/;
@@ -163,11 +164,12 @@ async function callTool(name: string, args: Record<string, unknown>, playerId: s
     const reportId = typeof args.reportId === "string"
       ? args.reportId.trim()
       : "";
-    const requestId = typeof args.requestId === "string"
-      ? args.requestId.trim()
-      : "";
+    const requestId = normalizeSupportRequestId(args.requestId);
     const message = validateSupportText(args.message, "reply", { required: true });
-    if (!/^report_[0-9a-f-]{36}$/i.test(reportId) || !requestId || !message) {
+    if (!requestId) {
+      throw new Error("SUPPORT_REQUEST_ID_INVALID");
+    }
+    if (!/^report_[0-9a-f-]{36}$/i.test(reportId) || !message) {
       throw new Error("報告への追記内容が不正です。");
     }
     const draft = await prepareCreatorSupportReplyDraft({
@@ -185,9 +187,7 @@ async function callTool(name: string, args: Record<string, unknown>, playerId: s
     });
   }
   if (name === "prepare_support_report") {
-    const requestId = typeof args.requestId === "string"
-      ? args.requestId.trim()
-      : "";
+    const requestId = normalizeSupportRequestId(args.requestId);
     const type = args.type === "bug" || args.type === "request"
       ? args.type
       : null;
@@ -208,7 +208,9 @@ async function callTool(name: string, args: Record<string, unknown>, playerId: s
       || !checkedReportIds
       || checkedReportIds.length !== rawCheckedReportIdCount
     ) {
-      throw new Error("報告下書きの内容が不正です。");
+      throw new Error(
+        requestId ? "報告下書きの内容が不正です。" : "SUPPORT_REQUEST_ID_INVALID",
+      );
     }
     const currentReports = await listCreatorSupportReports(playerId);
     const currentReportIds = currentReports.map((report) => report.id).sort();

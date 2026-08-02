@@ -43,11 +43,26 @@ export type CreatorSupportReplyDraft = {
   id: string;
   playerId: string;
   reportId: string;
+  requestId: string;
   message: string;
   createdAt: number;
   expiresAt: number;
   approvedAt?: number;
 };
+
+export class CreatorSupportServiceError extends Error {
+  readonly status: number;
+  readonly code: string;
+  readonly errorCode: string | null;
+
+  constructor(code: string, status: number, errorCode: string | null = null) {
+    super(code);
+    this.name = "CreatorSupportServiceError";
+    this.code = code;
+    this.status = status;
+    this.errorCode = errorCode;
+  }
+}
 
 function appBaseUrl() {
   return process.env.GAME_FIELDS_APP_BASE_URL?.replace(/\/$/, "")
@@ -64,20 +79,30 @@ async function supportRequest<T>(
   body?: object,
 ) {
   const url = `${appBaseUrl()}${path}`;
-  const response = await fetch(url, {
-    method,
-    headers: {
-      ...sdkServiceHeaders(method, url),
-      ...(body ? { "Content-Type": "application/json" } : {}),
-    },
-    ...(body ? { body: JSON.stringify(body) } : {}),
-    cache: "no-store",
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method,
+      headers: {
+        ...sdkServiceHeaders(method, url),
+        ...(body ? { "Content-Type": "application/json" } : {}),
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+      cache: "no-store",
+    });
+  } catch {
+    throw new CreatorSupportServiceError("support_service_unavailable", 503);
+  }
   const data = await response.json().catch(() => null) as T & {
     error?: string;
+    errorCode?: string;
   } | null;
   if (!response.ok || !data) {
-    throw new Error(data?.error || "SUPPORT_SERVICE_UNAVAILABLE");
+    throw new CreatorSupportServiceError(
+      data?.error || "support_service_unavailable",
+      response.status || 503,
+      data?.errorCode || null,
+    );
   }
   return data;
 }

@@ -2,7 +2,10 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { AccountMenu } from "../../../account-menu";
 import { getSdkAccountSession } from "@/lib/account-session";
-import { loadCreatorSupportReplyDraft } from "@/lib/support-api";
+import {
+  CreatorSupportServiceError,
+  loadCreatorSupportReplyDraft,
+} from "@/lib/support-api";
 import { SupportReplyApproval } from "./SupportReplyApproval";
 
 export const dynamic = "force-dynamic";
@@ -19,11 +22,18 @@ export default async function SupportReplyDraftPage({
       `/api/account-link/start?returnTo=${encodeURIComponent(`/support/replies/${draftId}`)}`,
     );
   }
-  const state = await loadCreatorSupportReplyDraft(
-    account.playerId,
-    draftId,
-  ).catch(() => null);
-  if (!state) notFound();
+  let state;
+  try {
+    state = await loadCreatorSupportReplyDraft(
+      account.playerId,
+      draftId,
+    );
+  } catch (error) {
+    if (error instanceof CreatorSupportServiceError && error.status === 404) {
+      notFound();
+    }
+    throw error;
+  }
   if (state.state === "approved") {
     redirect(`/support?thread=${encodeURIComponent(state.report.id)}`);
   }

@@ -26,6 +26,24 @@ export type SupportThreadMessage = {
   deliveryStatus: SupportReplyDeliveryStatus;
 };
 
+const supportThreadStatusTransitions: Record<
+  SupportThreadStatus,
+  readonly SupportThreadStatus[]
+> = {
+  open: supportThreadStatuses,
+  "in-progress": supportThreadStatuses,
+  "waiting-user": supportThreadStatuses,
+  resolved: ["open", "resolved", "closed"],
+  closed: ["closed"],
+};
+
+export function isSupportThreadStatusTransitionAllowed(
+  from: SupportThreadStatus,
+  to: SupportThreadStatus,
+) {
+  return supportThreadStatusTransitions[from].includes(to);
+}
+
 export function isSupportThreadStatus(
   value: unknown,
 ): value is SupportThreadStatus {

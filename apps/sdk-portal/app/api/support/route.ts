@@ -1,6 +1,7 @@
 import { getSdkAccountSession } from "@/lib/account-session";
 import {
   createCreatorSupportReport,
+  CreatorSupportServiceError,
   listCreatorSupportReports,
   replyToCreatorSupportReport,
 } from "@/lib/support-api";
@@ -10,6 +11,7 @@ import {
   validateSupportReportText,
   validateSupportText,
 } from "@/lib/support-text-contract";
+import { normalizeSupportRequestId } from "@/lib/support-request-contract";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -24,7 +26,16 @@ export async function GET() {
       { reports: await listCreatorSupportReports(account.playerId) },
       { headers: { "Cache-Control": "no-store" } },
     );
-  } catch {
+  } catch (error) {
+    if (error instanceof CreatorSupportServiceError) {
+      return Response.json(
+        {
+          error: error.code,
+          ...(error.errorCode ? { errorCode: error.errorCode } : {}),
+        },
+        { status: error.status },
+      );
+    }
     return Response.json(
       { error: "support_unavailable" },
       { status: 503 },
@@ -48,9 +59,7 @@ export async function POST(request: Request) {
     page?: unknown;
   } | null;
   if (body?.action === "create-report") {
-    const requestId = typeof body.requestId === "string"
-      ? body.requestId.trim()
-      : "";
+    const requestId = normalizeSupportRequestId(body.requestId);
     const type = body.type === "bug" || body.type === "request"
       ? body.type
       : null;
@@ -65,7 +74,10 @@ export async function POST(request: Request) {
     }
     if (!requestId || !type) {
       return Response.json(
-        { error: "support_report_invalid" },
+        {
+          error: "support_report_invalid",
+          errorCode: requestId ? "SUPPORT_REPORT_TYPE_INVALID" : "SUPPORT_REQUEST_ID_INVALID",
+        },
         { status: 400 },
       );
     }
@@ -77,7 +89,16 @@ export async function POST(request: Request) {
         ...text,
       });
       return Response.json({ report }, { status: 201 });
-    } catch {
+    } catch (error) {
+      if (error instanceof CreatorSupportServiceError) {
+        return Response.json(
+          {
+            error: error.code,
+            ...(error.errorCode ? { errorCode: error.errorCode } : {}),
+          },
+          { status: error.status },
+        );
+      }
       return Response.json(
         { error: "support_report_unavailable" },
         { status: 503 },
@@ -87,9 +108,7 @@ export async function POST(request: Request) {
   const reportId = typeof body?.reportId === "string"
     ? body.reportId.trim()
     : "";
-  const requestId = typeof body?.requestId === "string"
-    ? body.requestId.trim()
-    : "";
+  const requestId = normalizeSupportRequestId(body?.requestId);
   let message;
   try {
     message = validateSupportText(body?.message, "reply", { required: true });
@@ -100,7 +119,13 @@ export async function POST(request: Request) {
     throw error;
   }
   if (!reportId || !requestId) {
-    return Response.json({ error: "support_reply_invalid" }, { status: 400 });
+    return Response.json(
+      {
+        error: "support_reply_invalid",
+        errorCode: requestId ? "SUPPORT_REPORT_ID_INVALID" : "SUPPORT_REQUEST_ID_INVALID",
+      },
+      { status: 400 },
+    );
   }
   try {
     const report = await replyToCreatorSupportReport({
@@ -111,6 +136,15 @@ export async function POST(request: Request) {
     });
     return Response.json({ report }, { status: 201 });
   } catch (error) {
+    if (error instanceof CreatorSupportServiceError) {
+      return Response.json(
+        {
+          error: error.code,
+          ...(error.errorCode ? { errorCode: error.errorCode } : {}),
+        },
+        { status: error.status },
+      );
+    }
     if (
       error instanceof Error
       && error.message === "support_thread_not_found"
