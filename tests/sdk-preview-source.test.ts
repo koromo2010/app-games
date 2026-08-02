@@ -909,12 +909,11 @@ test("SDK preview rewrites HTML, CSS, and module references to exact signed asse
     ),
     PreviewAssetReferenceError,
   );
-  assert.throws(
-    () => rewritePreviewHtmlAssetUrls(
-      '<script src="./client.js?v=1"></script>',
-      "index.html",
-      signed,
-    ),
-    PreviewAssetReferenceError,
+  const queriedHtml = rewritePreviewHtmlAssetUrls(
+    '<script src="./client.js?v=1#entry"></script>',
+    "index.html",
+    signed,
   );
+  assert.match(queriedHtml, /signed\/client\.js#entry/);
+  assert.doesNotMatch(queriedHtml, /signed\/[^"']*\?/);
 });

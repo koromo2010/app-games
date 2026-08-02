@@ -123,6 +123,13 @@ test("percent-encoded package references normalize before lookup", () => {
   assert.equal(audit.valid, true);
 });
 
+test("query and fragment suffixes use the same package path for lookup", () => {
+  const audit = auditPreparedGamePackageAssets(sdkPackageAssetFixture({
+    "index.html": "<!doctype html><img src='./assets/icon.png?cache=1#front'>",
+  }));
+  assert.deepEqual(audit, { valid: true, findings: [] });
+});
+
 test("every finding exposes the structured contract", () => {
   const finding = auditPreparedGamePackageAssets(sdkPackageAssetFixture({
     "index.html": "<!doctype html><img src='./missing.png'>",

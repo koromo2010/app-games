@@ -1,42 +1,13 @@
+import {
+  isBrowserReadableGamePackageAsset,
+  normalizeGamePackageAssetReference,
+} from "@game-fields/sdk-package-assets";
+
 const GAME_FIELDS_PRESET_ASSET = "game-fields/preset.js";
 type PreviewAssetSourceKind = "mock" | "package";
 
-const CLIENT_ASSET_EXTENSIONS = new Set([
-  ".css",
-  ".gif",
-  ".ico",
-  ".jpeg",
-  ".jpg",
-  ".js",
-  ".mjs",
-  ".mp3",
-  ".ogg",
-  ".png",
-  ".svg",
-  ".wav",
-  ".webp",
-  ".woff",
-  ".woff2",
-]);
-
 const JAVASCRIPT_LOCAL_ASSET_REFERENCE = new RegExp(
-  `(["'])((?:\\.{1,2}\\/|\\/)[^"'\\\\\\r\\n]+?(?:${[
-    "css",
-    "gif",
-    "ico",
-    "jpeg",
-    "jpg",
-    "js",
-    "mjs",
-    "mp3",
-    "ogg",
-    "png",
-    "svg",
-    "wav",
-    "webp",
-    "woff",
-    "woff2",
-  ].join("|")})(?:#[^"']*)?)\\1`,
+  `(["'])((?:\\.{1,2}\\/|\\/)[^"'\\\\\\r\\n]+)\\1`,
   "gi",
 );
 
@@ -66,12 +37,6 @@ function normalizeAssetPath(parts: readonly string[]) {
   return path.length <= 500 ? path : null;
 }
 
-function assetExtension(assetPath: string) {
-  const name = assetPath.toLowerCase();
-  const dot = name.lastIndexOf(".");
-  return dot >= 0 ? name.slice(dot) : "";
-}
-
 export function isBrowserReadablePreviewAsset(
   sourceKind: PreviewAssetSourceKind,
   assetPath: string,
@@ -95,48 +60,7 @@ export function isBrowserReadablePreviewAsset(
   ) {
     return false;
   }
-  return CLIENT_ASSET_EXTENSIONS.has(assetExtension(assetPath));
-}
-
-function localAssetReference(
-  reference: string,
-  parentAssetPath: string,
-) {
-  const trimmed = reference.trim();
-  if (
-    !trimmed
-    || trimmed.startsWith("#")
-    || /^(?:data|blob|https?|mailto|tel|javascript):/i.test(trimmed)
-    || trimmed.startsWith("//")
-  ) {
-    return null;
-  }
-  if (trimmed.includes("?")) throw new PreviewAssetReferenceError();
-
-  const hashIndex = trimmed.indexOf("#");
-  const rawPath = hashIndex >= 0 ? trimmed.slice(0, hashIndex) : trimmed;
-  const fragment = hashIndex >= 0 ? trimmed.slice(hashIndex) : "";
-  let decodedPath: string;
-  try {
-    decodedPath = decodeURIComponent(rawPath);
-  } catch {
-    throw new PreviewAssetReferenceError();
-  }
-
-  const parts = decodedPath.startsWith("/")
-    ? []
-    : parentAssetPath.split("/").slice(0, -1);
-  for (const part of decodedPath.split("/")) {
-    if (!part || part === ".") continue;
-    if (part === "..") {
-      if (parts.length > 0) parts.pop();
-      continue;
-    }
-    parts.push(part);
-  }
-  const assetPath = normalizeAssetPath(parts);
-  if (!assetPath) throw new PreviewAssetReferenceError();
-  return { assetPath, fragment };
+  return isBrowserReadableGamePackageAsset(assetPath);
 }
 
 function signedReference(
@@ -144,9 +68,18 @@ function signedReference(
   parentAssetPath: string,
   signedAssetUrl: (assetPath: string) => string,
 ) {
-  const local = localAssetReference(reference, parentAssetPath);
+  const local = normalizeGamePackageAssetReference(parentAssetPath, reference);
   if (!local) return reference;
-  return `${signedAssetUrl(local.assetPath)}${local.fragment}`;
+  if (local.outside || !normalizeAssetPath(local.path.split("/"))) {
+    throw new PreviewAssetReferenceError();
+  }
+  if (!/(?:^|\/)[^/]+\.[A-Za-z0-9]{1,8}$/.test(local.path)) {
+    return reference;
+  }
+  if (!isBrowserReadableGamePackageAsset(local.path)) {
+    throw new PreviewAssetReferenceError();
+  }
+  return `${signedAssetUrl(local.path)}${local.fragment}`;
 }
 
 function rejectInlineExecutableContent(html: string) {
@@ -267,4 +200,3 @@ export function rewritePreviewJavaScriptAssetUrls(
   );
   return output;
 }
-import { isBrowserReadableGamePackageAsset } from "@game-fields/sdk-package-assets";

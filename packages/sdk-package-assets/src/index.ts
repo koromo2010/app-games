@@ -35,6 +35,12 @@ export type GamePackageAssetAudit = {
   findings: GamePackageAssetFinding[];
 };
 
+export type NormalizedGamePackageAssetReference = {
+  outside: boolean;
+  path: string;
+  fragment: string;
+};
+
 const SOURCE_EXTENSIONS = new Set([".html", ".htm", ".css", ".js", ".mjs", ".cjs", ".jsx", ".ts", ".mts", ".cts", ".tsx"]);
 const BROWSER_EXTENSIONS = new Set([
   ".css", ".gif", ".ico", ".jpeg", ".jpg", ".js", ".mjs", ".cjs", ".json",
@@ -73,18 +79,29 @@ function withoutSuffix(reference: string) {
   return end < 0 ? reference : reference.slice(0, end);
 }
 
-function resolveReference(parent: string, reference: string) {
+export function normalizeGamePackageAssetReference(
+  parent: string,
+  reference: string,
+): NormalizedGamePackageAssetReference | null {
+  const trimmed = reference.trim();
+  if (ignoredReference(trimmed)) return null;
+  const hashIndex = trimmed.indexOf("#");
+  const fragment = hashIndex < 0 ? "" : trimmed.slice(hashIndex);
+  const pathAndQuery = hashIndex < 0 ? trimmed : trimmed.slice(0, hashIndex);
+  const queryIndex = pathAndQuery.indexOf("?");
+  const pathReference = queryIndex < 0 ? pathAndQuery : pathAndQuery.slice(0, queryIndex);
   let decoded: string;
   try {
-    decoded = decodeURIComponent(withoutSuffix(reference.trim()).replaceAll("\\", "/"));
+    decoded = decodeURIComponent(pathReference.replaceAll("\\", "/"));
   } catch {
-    return { outside: true, path: "" };
+    return { outside: true, path: "", fragment };
   }
   const raw = decoded.startsWith("/") ? decoded.slice(1) : posix.join(posix.dirname(parent), decoded);
   const normalized = posix.normalize(raw);
   return {
     outside: normalized === ".." || normalized.startsWith("../") || posix.isAbsolute(normalized),
     path: normalized.replace(/^\.\//, ""),
+    fragment,
   };
 }
 
@@ -108,7 +125,8 @@ function inspectReference(input: {
   if (ignoredReference(reference)) return;
   if (!referenceLooksLikeAsset(reference)) return;
   const position = sourcePosition(input.line, input.column);
-  const resolved = resolveReference(input.parent, reference);
+  const resolved = normalizeGamePackageAssetReference(input.parent, reference);
+  if (!resolved) return;
   if (resolved.outside) {
     input.add({ code: "GAME_SDK_PACKAGE_ASSET_OUTSIDE_ROOT", file: input.parent, ...position, reference, hint: "Keep package-relative assets inside the package root." });
     return;
