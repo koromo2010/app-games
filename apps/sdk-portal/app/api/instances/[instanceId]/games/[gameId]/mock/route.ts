@@ -4,6 +4,10 @@ import { parseSdkMockPreviewManifest } from "@/lib/mock-preview-manifest";
 import { ensureSdkSchema, sdkSql } from "@/lib/sdk-postgres";
 import platformRelease from "../../../../../../../../../config/platform-release.json";
 import { createInitialGameSdkModuleProfile } from "@game-fields/game-sdk/modules";
+import {
+  creatorAccountLinkUrl,
+  creatorMockGameUrl,
+} from "@/lib/creator-access-links";
 
 export const dynamic = "force-dynamic";
 
@@ -72,8 +76,15 @@ export async function PUT(
     `;
     const portalBaseUrl = process.env.SDK_PORTAL_BASE_URL?.replace(/\/$/, "")
       ?? (process.env.VERCEL_GIT_COMMIT_REF === "main" ? "https://sdk.game-fields.com" : "https://sdk-dev.game-fields.com");
-    const creatorUrl = `${portalBaseUrl}/${slug}/`;
-    const gameUrl = `${portalBaseUrl}/${slug}/games/${gameId}`;
+    const creatorUrl = creatorAccountLinkUrl({
+      portalBaseUrl,
+      creatorSlug: slug,
+    });
+    const gameUrl = creatorMockGameUrl({
+      portalBaseUrl,
+      creatorSlug: slug,
+      gameId,
+    });
     return Response.json({
       saved: true,
       gameId,

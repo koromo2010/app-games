@@ -10,6 +10,7 @@ import {
   normalizeInstanceSlug,
   validateInstanceSlug,
 } from "@/lib/instance-registry";
+import { CreatorAccountReconnect } from "../CreatorAccountReconnect";
 
 export default async function PreviewInstancePage({ params }: {
   params: Promise<{ instanceId: string }>;
@@ -26,7 +27,9 @@ export default async function PreviewInstancePage({ params }: {
   const isOwner = Boolean(
     await authenticateCreatorOwner(slug, account.playerId).catch(() => null),
   );
-  if (!isOwner) notFound();
+  if (!isOwner) {
+    return <CreatorAccountReconnect returnTo={`/${slug}`} />;
+  }
 
   const creatorGames = (await listAccountGames(account.playerId).catch(() => []))
     .filter((game) => game.creatorSlug === slug);

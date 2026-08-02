@@ -107,6 +107,9 @@ test("SDK Portal UI and AI use the same creator-owned support service", () => {
   assert.match(rootRoute, /appendUserReportMessage/);
   assert.match(rootRoute, /action === "create-report"/);
   assert.match(rootRoute, /saveUserReport/);
+  assert.match(rootRoute, /createRequestTelemetry/);
+  assert.match(rootRoute, /support\.draft/);
+  assert.match(rootRoute, /redisStoreObservabilityFields\(error\)/);
   assert.match(portalApi, /sdkServiceHeaders/);
   assert.match(portalApi, /listCreatorSupportReports/);
   assert.match(portalApi, /replyToCreatorSupportReport/);

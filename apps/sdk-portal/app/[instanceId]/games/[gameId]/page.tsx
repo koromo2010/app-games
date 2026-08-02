@@ -12,6 +12,7 @@ import {
 } from "@/lib/account-session";
 import { getCreatorModuleCustomizationAccess } from "@/lib/module-customization-access";
 import { GameModuleReview } from "./GameModuleReview";
+import { CreatorAccountReconnect } from "../../../CreatorAccountReconnect";
 
 const GAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?$/;
 const REVISION_PATTERN = /^[a-f0-9]{40}$/;
@@ -48,7 +49,9 @@ export default async function CreatorGamePage({
     instanceId,
     account.playerId,
   ).catch(() => null);
-  if (!owner) notFound();
+  if (!owner) {
+    return <CreatorAccountReconnect returnTo={requestedReturnPath} />;
+  }
 
   const games = await listAccountGames(account.playerId).catch(() => []);
   const currentGame = games.find((game) => (

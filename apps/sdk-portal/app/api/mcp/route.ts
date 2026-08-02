@@ -36,6 +36,10 @@ import {
   createInitialGameSdkModuleProfile,
   requiredGameSdkModuleIds,
 } from "@game-fields/game-sdk/modules";
+import {
+  creatorAccountLinkUrl,
+  creatorMockGameUrl,
+} from "@/lib/creator-access-links";
 
 export const dynamic = "force-dynamic";
 const GAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?$/;
@@ -267,8 +271,16 @@ async function callTool(name: string, args: Record<string, unknown>, playerId: s
       createInitialGameSdkModuleProfile(),
     );
     await sdkSql()`INSERT INTO sdk_games (creator_id, game_id, title, description, manifest, module_policy, sdk_package_version, sdk_contract_version, mock_revision) VALUES (${creator.id}, ${gameId}, ${title}, ${description}, ${manifestJson}::jsonb, ${initialModulePolicy}::jsonb, ${platformRelease.sdkPackageVersion}, ${platformRelease.sdkContractVersion}, ${revision}) ON CONFLICT (creator_id, game_id) DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description, manifest = EXCLUDED.manifest, mock_revision = EXCLUDED.mock_revision, updated_at = NOW()`;
-    const creatorUrl = `${portalBaseUrl(origin)}/${slug}/`;
-    const gameUrl = `${portalBaseUrl(origin)}/${slug}/games/${gameId}`;
+    const baseUrl = portalBaseUrl(origin);
+    const creatorUrl = creatorAccountLinkUrl({
+      portalBaseUrl: baseUrl,
+      creatorSlug: slug,
+    });
+    const gameUrl = creatorMockGameUrl({
+      portalBaseUrl: baseUrl,
+      creatorSlug: slug,
+      gameId,
+    });
     return textResult({ saved: true, gameId, mockRevision: revision, creatorUrl, gameUrl, previewUrl: gameUrl });
   }
   if (name === "get_game_module_requirements") {

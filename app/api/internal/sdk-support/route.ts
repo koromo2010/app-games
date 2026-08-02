@@ -24,6 +24,8 @@ import {
   validateSupportReportText,
   validateSupportText,
 } from "@/config/support-text-contract";
+import { createRequestTelemetry } from "@/lib/observability/logger";
+import { redisStoreObservabilityFields } from "@/lib/redis-store";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -168,6 +170,11 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const telemetry = createRequestTelemetry(
+    request,
+    "/api/internal/sdk-support",
+    { operation: "sdk-support" },
+  );
   const denied = authorize(request);
   if (denied) return denied;
   const body = await request.json().catch(() => null) as {
@@ -291,6 +298,10 @@ export async function POST(request: Request) {
           { status: 409 },
         );
       }
+      telemetry.failure("support.draft", error, 503, {
+        action: "create-draft",
+        ...redisStoreObservabilityFields(error),
+      });
       return Response.json(
         { error: "support_draft_unavailable" },
         { status: 503 },
