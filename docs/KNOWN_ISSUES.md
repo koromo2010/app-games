@@ -4,6 +4,28 @@
 
 この文書は、再調査を減らし、次に直す範囲を選びやすくするための監査記録である。将来構想ではなく、現在のコードで確認できた事実を記録する。状態が「修正済み」の項目は、同じ問題を再導入しないための回帰確認点として残す。
 
+## 2026-08-02 SDK公開リンクが404になりAI不具合報告も503になる
+
+状態: 修正済み・dev／main配備・実機確認済み（2026-08-02、回帰テストあり）
+
+`publish_mock`は静的モックを保存した後にも、正式Package用の
+`/{creatorSlug}/games/{gameId}`を`gameUrl`として返していた。モックの実在routeは
+`/{creatorSlug}/mock/{gameId}`であるため、AIから受け取ったゲームURLが404になった。
+また制作者トップと正式Package画面は、ブラウザで接続中のアカウントが対象環境の所有者と
+一致しない場合も`notFound()`へ落とし、再接続方法を示していなかった。
+
+モック保存のMCP／REST両経路は共通URL生成関数を使い、`gameUrl`を実在するMock route、
+`creatorUrl`を対象slugへ戻るアカウント接続開始URLとして返す。所有者不一致時は存在しない
+slugの404契約を維持しつつ、既知slugでは対象環境の所有アカウントへ再接続する画面を表示する。
+Intake #3の第三者ゲスト参加は別機能であり、この修正では権限を拡張しない。
+
+同時にAI経由の不具合報告下書きは、本体`POST /api/internal/sdk-support`のRedis
+`SET ... NX`失敗が一律503になり、未設定、認証拒否、接続失敗をRuntime Logで区別できなかった。
+下書き本文、token、接続URLを記録せず、既存の安全なRedis分類だけを構造化Telemetryへ追加した。
+`app-games` Productionへの同一tree反映後、`game-fields`経由で確認用draftを作成し、
+`submitted:false`と承認URLを取得した。Redisは書込み可能なため環境変数を変更していない。
+dev／productionの確認用draftはいずれも運営へ送信せず、7日TTLで失効する。
+
 ## 2026-08-02 DownloadMeがproduction URLとdevelopmentプラグインを混在させる
 
 状態: 修正済み・dev／main配備済み（2026-08-02、回帰テストあり）

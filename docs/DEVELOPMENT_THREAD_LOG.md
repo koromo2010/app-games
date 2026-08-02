@@ -3641,3 +3641,54 @@ active HEADは基準SHAのままで、active commit、製品`origin` push、PR�
 - 同じ制作者アカウントからURL名`krm`の予約を再試行し、Intake #2の利用者導線を完走確認する。
 - npmの`@game-fields/game-sdk@0.2.0`公開は今回実施していない。
 
+## 2026-08-02 — SDK公開リンク404とAI不具合報告503のcritical対応
+
+### 利用者からの要望
+
+- SDK制作者URLとAIが返したゲームURLが404になり、同じ会話からの不具合報告下書きも
+  `support_draft_unavailable`で作成できないため、最優先で原因特定・修正・dev確認・本番反映を行う。
+- devで確認後に同じtreeをmainへ昇格し、VercelはPlatformとSDK Portalだけを配備する。
+  Preview、npm、Starter、DB schema、第三者ゲスト参加機能は変更しない。
+
+### 原因と判断
+
+- `publish_mock`のMCP／REST両経路が、保存したMockに対して正式Package用の
+  `/{slug}/games/{gameId}`を返していた。実在routeは`/{slug}/mock/{gameId}`である。
+- 制作者slugは実在しても、ブラウザの接続アカウントが所有者と一致しない場合に
+  `notFound()`となり、利用者が再接続できなかった。存在しないslugの404とは分離する。
+- 不具合報告一覧の読取は成功し、下書きのRedis `SET ... NX`だけが503だった。
+  catchが原因分類を残さないため、Production資格の未設定・認証拒否・接続失敗を区別できなかった。
+
+### ローカル実装と検証
+
+- Mock URLと制作者再接続URLを共通生成し、MCP／REST両経路で同じ契約を使う。
+  所有者不一致は対象slugへ戻る再接続画面とし、所有権やゲスト権限は変更しない。
+- AI不具合報告下書きの保存失敗は、秘密と本文を除外した既存Redis observability項目だけを
+  `support.draft`失敗Telemetryへ記録する。
+- focused 18/18、lint、repository-wide 849/849、Platform 78ページ、SDK Portal 15ページ、
+  SDK Preview 5ページのbuildがPASSした。SDK migrationは`local/local`としてskipされ、
+  DB接続・DDL・DMLは0だった。
+
+### 外部反映
+
+- 利用者から`develop` push、devの`app-games-dev`／`app-games-sdk-dev`配備、
+  `app-games` Production Redis資格の必要時修正、同一treeの`main`昇格、
+  productionの`app-games`／`app-games-sdk`配備と実機下書き確認まで許可を得た。
+- GitHub連携でcommit `31780b9feb785e396439554786786124ea4f3b20`、tree
+  `c9f95ce36f81c645c25715ebcc8fd48f2312fe45`を作成し、`develop`へforceなしで更新した。
+  devは`app-games-dev` `dpl_5GNkNM77zgdtyYfH6k5RmAp5DcUE`と`app-games-sdk-dev`
+  `dpl_BncpfcFBR1h5XsRFD9NiNfP2S4gE`がREADY、対象外5 ProjectはCANCELEDとなった。
+- dev healthはschema 7、instance registry `ok`、namespace `development`を返した。
+  `/krm`は404ではなく`/api/account-link/start?returnTo=%2Fkrm`へ307となり、
+  `dev-game-fields`の確認用draftは`submitted:false`と承認URLを返した。運営へ送信していない。
+- devで確認した同じcommitへ`main`をforceなしでfast-forwardした。productionは`app-games`
+  `dpl_7Ly2XV9YLuVf1oMaLTMuCD34s3qc`と`app-games-sdk`
+  `dpl_F2po85AgncPCWEBi8ngSfaRt6fpS`がREADY、対象外5 ProjectはCANCELEDとなった。
+- production healthはschema 7、instance registry `ok`、namespace `production`を返した。
+  `/krm`はアカウント再接続へ307、実在する`/krm/mock/corners`は200、旧
+  `/krm/games/corners`も無言404ではなく再接続へ307となった。
+- `game-fields`の確認用draftも`submitted:false`と承認URLを返したため、`app-games`
+  ProductionのRedisは書込み可能と確定し、環境変数変更は0件とした。dev／productionの
+  確認用draftはいずれも送信せず、7日TTLで失効する。
+- dev／productionの対象4 Deploymentでerror／fatal Runtime Logは0件だった。
+  Preview、npm、Starter、DB schema、第三者ゲスト参加機能は変更していない。
