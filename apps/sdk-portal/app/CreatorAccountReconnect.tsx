@@ -1,9 +1,8 @@
 import Link from "next/link";
+import { normalizeAccountLinkReturnPath } from "@/lib/account-link-return";
 
 export function CreatorAccountReconnect({ returnTo }: { returnTo: string }) {
-  const reconnectHref = `/api/account-link/start?returnTo=${encodeURIComponent(
-    returnTo,
-  )}`;
+  const safeReturnTo = normalizeAccountLinkReturnPath(returnTo);
 
   return <main className="mock-review-error creator-account-reconnect">
     <section>
@@ -13,9 +12,12 @@ export function CreatorAccountReconnect({ returnTo }: { returnTo: string }) {
         現在接続中のアカウントでは、この制作環境を開けません。
         この環境を作成したGame Fieldsアカウントへ再接続してから、同じURLへ戻ります。
       </p>
-      <Link className="primary-action" href={reconnectHref}>
-        Game Fieldsアカウントを再接続
-      </Link>
+      <form method="get" action="/api/account-link/start">
+        <input type="hidden" name="returnTo" value={safeReturnTo} />
+        <button className="primary-action" type="submit">
+          Game Fieldsアカウントを再接続
+        </button>
+      </form>
       <Link className="secondary-action" href="/dashboard">
         マイゲームへ戻る
       </Link>

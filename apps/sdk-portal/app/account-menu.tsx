@@ -9,7 +9,11 @@ export async function AccountMenu() {
   const account = await getSdkAccountSession().catch(() => null);
 
   if (!account) {
-    return <Link className="account-login" href="/api/account-link/start">ログイン</Link>;
+    return (
+      <form method="get" action="/api/account-link/start">
+        <button className="account-login" type="submit">ログイン</button>
+      </form>
+    );
   }
 
   const label = account.playerName || "連携済みアカウント";
@@ -31,7 +35,9 @@ export async function AccountMenu() {
         </div>
         <Link href="/dashboard">マイゲーム</Link>
         <Link href="/support">サポート・報告</Link>
-        <Link href="/api/account-link/start">本体アカウントを再連携</Link>
+        <form className="account-link-form" method="get" action="/api/account-link/start">
+          <button type="submit">本体アカウントを再連携</button>
+        </form>
         <form action="/api/account-link/logout" method="post">
           <button type="submit">ログアウト</button>
         </form>

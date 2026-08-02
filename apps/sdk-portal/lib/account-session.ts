@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
+import { normalizeAccountLinkReturnPath } from "./account-link-return";
 
 const cookieName = "game-fields-sdk-account";
 const stateCookieName = "game-fields-sdk-link-state";
@@ -104,7 +105,7 @@ export async function setAccountLinkState(state: string, returnTo = "/") {
   store.set(stateCookieName, state, {
     httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/api/account-link", maxAge: 5 * 60,
   });
-  store.set(returnCookieName, returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : "/", {
+  store.set(returnCookieName, normalizeAccountLinkReturnPath(returnTo), {
     httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/api/account-link", maxAge: 5 * 60,
   });
 }
@@ -125,5 +126,5 @@ export async function consumeAccountLinkReturn() {
   const store = await cookies();
   const value = store.get(returnCookieName)?.value ?? "/";
   store.set(returnCookieName, "", { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/api/account-link", maxAge: 0 });
-  return value.startsWith("/") && !value.startsWith("//") ? value : "/";
+  return normalizeAccountLinkReturnPath(value);
 }

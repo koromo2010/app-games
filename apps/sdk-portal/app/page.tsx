@@ -179,7 +179,11 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
           <div>
             <h3 id="account-link-title">{linked ? `${account?.playerName || "Game Fieldsアカウント"}へ接続済みです` : "先にGame Fieldsアカウントを接続してください"}</h3>
             <p>表のGame Fieldsと同じアカウントへ制作物を紐づけます。パスワードや表サイトのログインCookieをSDKやChatGPTへ渡すことはありません。</p>
-            {!linked && <Link className="secondary-action" href="/api/account-link/start">Game Fieldsでログインして接続</Link>}
+            {!linked && (
+              <form method="get" action="/api/account-link/start">
+                <button className="secondary-action" type="submit">Game Fieldsでログインして接続</button>
+              </form>
+            )}
           </div>
         </aside>
         <div className="first-build-guide" aria-label="初めてゲームを作る方への案内">
