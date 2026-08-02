@@ -18,11 +18,14 @@ export type GameFieldsPackageManifest = {
   sdkContractVersion: number;
   manifest: GameSdkManifest;
   client: {
+    /** Browser asset graph root. Server bundle and source are not client assets. */
     entry: string;
   };
   server: {
+    /** Server runtime entry; it is executed by the isolated server runtime. */
     entry: "server.bundle.js";
     bundleSha256: string;
+    /** Server source graph root; it is audited separately from browser assets. */
     appSetSource: "source/app-set.ts";
     appSetSourceSha256: string;
   };

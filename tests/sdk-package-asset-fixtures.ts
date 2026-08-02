@@ -16,7 +16,7 @@ export function sdkPackageAssetFixture(
   remove: readonly string[] = [],
 ): PreparedUploadFile[] {
   const serverBundle = "globalThis.GameFieldsServerBundle={};";
-  const appSetSource = "export const appSet = {};\n";
+  const appSetSource = "import type { FixtureState } from \"./contracts.js\";\nimport { fixtureManifest } from \"./manifest.js\";\nexport const appSet: FixtureState = { manifest: fixtureManifest };\n";
   const manifest = {
     schemaVersion: 1,
     gameId: "portable-fixture",
@@ -55,8 +55,9 @@ export function sdkPackageAssetFixture(
     ["client/module.js", { path: "client/module.js", content: "export default true;", encoding: "utf-8" }],
     ["server.bundle.js", { path: "server.bundle.js", content: serverBundle, encoding: "utf-8" }],
     ["source/app-set.ts", { path: "source/app-set.ts", content: appSetSource, encoding: "utf-8" }],
-    ["source/manifest.ts", { path: "source/manifest.ts", content: "export const manifest = {};\n", encoding: "utf-8" }],
-    ["source/server-module.ts", { path: "source/server-module.ts", content: "export const serverModule = {};\n", encoding: "utf-8" }],
+    ["source/contracts.ts", { path: "source/contracts.ts", content: "export type FixtureState = { manifest: unknown };\n", encoding: "utf-8" }],
+    ["source/manifest.ts", { path: "source/manifest.ts", content: "export const fixtureManifest = {};\n", encoding: "utf-8" }],
+    ["source/server-module.ts", { path: "source/server-module.ts", content: "import { appSet } from \"./app-set.js\";\nexport const serverModule = { appSet };\n", encoding: "utf-8" }],
   ]);
   for (const [path, content] of Object.entries(replacements)) {
     const existing = values.get(path);

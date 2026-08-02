@@ -1,10 +1,10 @@
-import type { GamePackageAssetAudit } from "./game-package-asset-audit.ts";
+import type { GamePackageAudit } from "./game-package-asset-audit.ts";
 import { assertPreparedGamePackageAssets } from "./game-package-asset-audit.ts";
 import type { PreparedUploadFile } from "./mock-git-store.ts";
 
 export type ValidatedGamePackage = {
   files: readonly PreparedUploadFile[];
-  assetAudit: GamePackageAssetAudit;
+  assetAudit: GamePackageAudit;
 };
 
 const issuedValidations = new WeakSet<object>();

@@ -112,10 +112,13 @@ type PackageManifest = {
   sdkPackageVersion: string;
   sdkContractVersion: number;
   manifest: Record<string, unknown> & { sdkVersion: number; id: string };
+  /** Browser asset graph root. */
   client: { entry: string };
   server: {
+    /** Server runtime entry; it is not part of the browser asset graph. */
     entry: "server.bundle.js";
     bundleSha256: string;
+    /** Server source graph root; it is audited separately from browser assets. */
     appSetSource: "source/app-set.ts";
     appSetSourceSha256: string;
   };

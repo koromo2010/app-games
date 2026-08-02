@@ -16,6 +16,19 @@ test("HTML, CSS, JS and TS static references are accepted deterministically", ()
   assert.deepEqual(auditPreparedGamePackageAssets([...files].reverse()), { valid: true, findings: [] });
 });
 
+test("the generated package's server source imports stay out of the browser asset graph", () => {
+  const audit = auditPreparedGamePackageAssets(sdkPackageAssetFixture());
+  assert.equal(audit.valid, true);
+  assert.deepEqual(audit.findings, []);
+});
+
+test("only the client.entry browser graph is scanned as browser assets", () => {
+  const audit = auditPreparedGamePackageAssets(sdkPackageAssetFixture({
+    "orphan.js": "import './orphan-missing.js';",
+  }));
+  assert.equal(audit.valid, true);
+});
+
 test("missing asset and exact path casing are distinguished", () => {
   assert.ok(codes(sdkPackageAssetFixture({ "index.html": "<!doctype html><img src='./assets/missing.png'>" })).includes("GAME_SDK_PACKAGE_ASSET_MISSING"));
   assert.ok(codes(sdkPackageAssetFixture({ "index.html": "<!doctype html><img src='./Assets/icon.png'>" })).includes("GAME_SDK_PACKAGE_ASSET_CASE_MISMATCH"));
@@ -47,7 +60,7 @@ test("source parse errors fail closed with location and hint", () => {
 
 test("srcset, CSS import and url references use the same policy", () => {
   const files = sdkPackageAssetFixture({
-    "index.html": "<!doctype html><img srcset='./assets/missing.png 1x, ./assets/Icon.png 2x'>",
+    "index.html": "<!doctype html><link rel='stylesheet' href='./assets/styles.css'><img srcset='./assets/missing.png 1x, ./assets/Icon.png 2x'>",
     "assets/styles.css": "@import './missing.css'; .x{background:url('../source/app-set.ts')}",
   });
   assert.deepEqual(new Set(codes(files)), new Set([
@@ -107,6 +120,26 @@ test("dynamic import expressions fail closed", () => {
   assert.ok(codes(sdkPackageAssetFixture({
     "client/main.js": "import(`./${moduleName}.js`);",
   })).includes("GAME_SDK_PACKAGE_ASSET_DYNAMIC_REFERENCE"));
+});
+
+test("server source imports resolve emitted .js specifiers to packaged TypeScript source", () => {
+  const missing = auditPreparedGamePackageAssets(sdkPackageAssetFixture({
+    "source/app-set.ts": "import './missing.js';\nexport const appSet = {};\n",
+  }));
+  assert.ok(missing.findings.some((finding) => finding.code === "GAME_SDK_PACKAGE_SERVER_SOURCE_MISSING"));
+
+  const caseMismatch = auditPreparedGamePackageAssets(sdkPackageAssetFixture({
+    "source/app-set.ts": "import './Contracts.js';\nexport const appSet = {};\n",
+  }));
+  assert.ok(caseMismatch.findings.some((finding) => finding.code === "GAME_SDK_PACKAGE_SERVER_SOURCE_CASE_MISMATCH"));
+});
+
+test("server source syntax errors remain fail-closed without browser asset findings", () => {
+  const audit = auditPreparedGamePackageAssets(sdkPackageAssetFixture({
+    "source/contracts.ts": "const = ;\n",
+  }));
+  assert.ok(audit.findings.some((finding) => finding.code === "GAME_SDK_PACKAGE_SERVER_SOURCE_PARSE_ERROR"));
+  assert.equal(audit.findings.some((finding) => finding.code === "GAME_SDK_PACKAGE_ASSET_MISSING"), false);
 });
 
 test("fetch package references are checked", () => {
