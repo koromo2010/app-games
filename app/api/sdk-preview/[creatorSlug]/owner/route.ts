@@ -1,5 +1,5 @@
 import { getAuthenticatedPlayerId } from "@/lib/player-auth";
-import { checkSdkCreatorOwnership } from "@/lib/sdk-dashboard-navigation";
+import { checkSdkCreatorOwnership } from "@/lib/sdk-dashboard-ownership";
 import { sdkPreviewCreatorSlugPattern } from "@/lib/sdk-preview-runtime-source";
 
 export const runtime = "nodejs";
