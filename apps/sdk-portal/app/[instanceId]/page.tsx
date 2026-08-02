@@ -5,12 +5,18 @@ import {
   getSdkAccountSession,
 } from "@/lib/account-session";
 import {
-  authenticateCreatorOwner,
   listAccountGames,
   normalizeInstanceSlug,
+  resolveCreatorOwner,
   validateInstanceSlug,
 } from "@/lib/instance-registry";
+import { resolveSdkSession } from "@/lib/sdk-owner-classification";
+import {
+  logSdkOwnerLookupFailure,
+  logSdkSessionLookupFailure,
+} from "@/lib/sdk-owner-observability";
 import { CreatorAccountReconnect } from "../CreatorAccountReconnect";
+import { CreatorOwnershipIssue } from "../CreatorOwnershipIssue";
 
 export default async function PreviewInstancePage({ params }: {
   params: Promise<{ instanceId: string }>;
@@ -18,20 +24,40 @@ export default async function PreviewInstancePage({ params }: {
   const { instanceId } = await params;
   const slug = normalizeInstanceSlug(instanceId);
   if (validateInstanceSlug(slug)) notFound();
-  const account = await getSdkAccountSession().catch(() => null);
-  if (!account) {
+  let session;
+  try {
+    session = await resolveSdkSession(getSdkAccountSession);
+  } catch (error) {
+    logSdkSessionLookupFailure(error);
+    return <CreatorOwnershipIssue kind="lookup_unavailable" />;
+  }
+  if (session.status === "session_missing") {
     redirect(
       `/api/account-link/start?returnTo=${encodeURIComponent(`/${slug}`)}`,
     );
   }
-  const isOwner = Boolean(
-    await authenticateCreatorOwner(slug, account.playerId).catch(() => null),
-  );
-  if (!isOwner) {
+  const account = session.account;
+  let owner;
+  try {
+    owner = await resolveCreatorOwner(slug, account.playerId);
+  } catch {
+    return <CreatorOwnershipIssue kind="lookup_unavailable" />;
+  }
+  if (owner.status === "owner_mismatch") {
     return <CreatorAccountReconnect returnTo={`/${slug}`} />;
   }
+  if (owner.status !== "authorized") {
+    return <CreatorOwnershipIssue kind="record_inconsistency" />;
+  }
 
-  const creatorGames = (await listAccountGames(account.playerId).catch(() => []))
+  let creatorGames;
+  try {
+    creatorGames = await listAccountGames(account.playerId);
+  } catch (error) {
+    logSdkOwnerLookupFailure(error);
+    return <CreatorOwnershipIssue kind="lookup_unavailable" />;
+  }
+  creatorGames = creatorGames
     .filter((game) => game.creatorSlug === slug);
   const packageReadyGames = creatorGames.filter((game) => (
     game.packageCandidateAvailable && game.packageCandidateRevision

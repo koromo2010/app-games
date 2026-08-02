@@ -1,9 +1,9 @@
 import { notFound, redirect } from "next/navigation";
 import {
-  authenticateCreatorOwner,
   getCreatorGameModuleProfile,
   listAccountGames,
   normalizeInstanceSlug,
+  resolveCreatorOwner,
   validateInstanceSlug,
 } from "@/lib/instance-registry";
 import {
@@ -11,8 +11,14 @@ import {
   getSdkAccountSession,
 } from "@/lib/account-session";
 import { getCreatorModuleCustomizationAccess } from "@/lib/module-customization-access";
+import { resolveSdkSession } from "@/lib/sdk-owner-classification";
+import {
+  logSdkOwnerLookupFailure,
+  logSdkSessionLookupFailure,
+} from "@/lib/sdk-owner-observability";
 import { GameModuleReview } from "./GameModuleReview";
 import { CreatorAccountReconnect } from "../../../CreatorAccountReconnect";
+import { CreatorOwnershipIssue } from "../../../CreatorOwnershipIssue";
 
 const GAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?$/;
 const REVISION_PATTERN = /^[a-f0-9]{40}$/;
@@ -38,22 +44,40 @@ export default async function CreatorGamePage({
   const requestedReturnPath = `/${instanceId}/games/${gameId}${
     requestedRevision ? `?revision=${encodeURIComponent(requestedRevision)}` : ""
   }`;
-  const account = await getSdkAccountSession().catch(() => null);
-  if (!account) {
+  let session;
+  try {
+    session = await resolveSdkSession(getSdkAccountSession);
+  } catch (error) {
+    logSdkSessionLookupFailure(error);
+    return <CreatorOwnershipIssue kind="lookup_unavailable" />;
+  }
+  if (session.status === "session_missing") {
     redirect(
       `/api/account-link/start?returnTo=${encodeURIComponent(requestedReturnPath)}`,
     );
   }
 
-  const owner = await authenticateCreatorOwner(
-    instanceId,
-    account.playerId,
-  ).catch(() => null);
-  if (!owner) {
+  const account = session.account;
+  let owner;
+  try {
+    owner = await resolveCreatorOwner(instanceId, account.playerId);
+  } catch {
+    return <CreatorOwnershipIssue kind="lookup_unavailable" />;
+  }
+  if (owner.status === "owner_mismatch") {
     return <CreatorAccountReconnect returnTo={requestedReturnPath} />;
   }
+  if (owner.status !== "authorized") {
+    return <CreatorOwnershipIssue kind="record_inconsistency" />;
+  }
 
-  const games = await listAccountGames(account.playerId).catch(() => []);
+  let games;
+  try {
+    games = await listAccountGames(account.playerId);
+  } catch (error) {
+    logSdkOwnerLookupFailure(error);
+    return <CreatorOwnershipIssue kind="lookup_unavailable" />;
+  }
   const currentGame = games.find((game) => (
     game.creatorSlug === instanceId && game.gameId === gameId
   ));
@@ -61,14 +85,26 @@ export default async function CreatorGamePage({
     || currentGame?.packageCandidateRevision
     || "";
 
-  const moduleProfile = await getCreatorGameModuleProfile(
-    instanceId,
-    gameId,
-  ).catch(() => null);
-  const customizationAccess = await getCreatorModuleCustomizationAccess({
-    creatorSlug: instanceId,
-    ownerPlayerId: account.playerId,
-  }).catch(() => null);
+  let moduleProfile;
+  try {
+    moduleProfile = await getCreatorGameModuleProfile(
+      instanceId,
+      gameId,
+    );
+  } catch (error) {
+    logSdkOwnerLookupFailure(error);
+    return <CreatorOwnershipIssue kind="lookup_unavailable" />;
+  }
+  let customizationAccess;
+  try {
+    customizationAccess = await getCreatorModuleCustomizationAccess({
+      creatorSlug: instanceId,
+      ownerPlayerId: account.playerId,
+    });
+  } catch (error) {
+    logSdkOwnerLookupFailure(error);
+    return <CreatorOwnershipIssue kind="lookup_unavailable" />;
+  }
 
   const appBaseUrl = process.env.GAME_FIELDS_PREVIEW_APP_URL?.replace(/\/$/, "")
     ?? (process.env.VERCEL_GIT_COMMIT_REF === "main" ? "https://www.game-fields.com" : "https://dev.game-fields.com");

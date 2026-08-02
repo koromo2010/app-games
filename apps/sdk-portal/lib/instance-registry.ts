@@ -7,6 +7,16 @@ import { sdkInstanceRegistryCommand as command } from "@/lib/instance-registry-c
 import { ensureSdkSchema, sdkSql } from "@/lib/sdk-postgres";
 import { portalBaseUrl } from "@/lib/oauth-store";
 import {
+  classifyCreatorOwner,
+  type CreatorOwnerRecord,
+  type SdkOwnerResolution,
+} from "@/lib/sdk-owner-classification";
+import {
+  logSdkOwnerLookupFailure,
+  logSdkOwnerResult,
+  SdkOwnerLookupError,
+} from "@/lib/sdk-owner-observability";
+import {
   normalizeGameSdkModuleProfile,
   updateGameSdkModuleProfile,
   type GameSdkModuleProfile,
@@ -41,6 +51,29 @@ async function registeredCreator(slug: string) {
   return (Array.isArray(rows) ? rows[0] : undefined) as
     | { id: string; slug: string; display_name: string; management_token_hash: string; owner_player_id: string | null; deleted_at: string | null }
     | undefined;
+}
+
+async function registeredCreatorForOwner(slug: string): Promise<CreatorOwnerRecord | undefined> {
+  try {
+    await ensureSdkSchema();
+  } catch (error) {
+    const failure = new SdkOwnerLookupError("schema", error);
+    logSdkOwnerLookupFailure(failure);
+    throw failure;
+  }
+  try {
+    const rows = await sdkSql()`
+      SELECT id, slug, display_name, owner_player_id, deleted_at
+      FROM sdk_creators
+      WHERE slug = ${slug}
+      LIMIT 1
+    `;
+    return (Array.isArray(rows) ? rows[0] : undefined) as CreatorOwnerRecord | undefined;
+  } catch (error) {
+    const failure = new SdkOwnerLookupError("lookup", error);
+    logSdkOwnerLookupFailure(failure);
+    throw failure;
+  }
 }
 
 export async function instanceSlugAvailable(slug: string) {
@@ -98,11 +131,26 @@ export async function authenticateCreator(slug: string, managementToken: string)
 }
 
 export async function authenticateCreatorOwner(slug: string, playerId: string) {
-  const creator = await registeredCreator(slug);
-  if (!creator || creator.deleted_at || creator.owner_player_id !== playerId) {
-    return null;
+  const result = await resolveCreatorOwner(slug, playerId);
+  return result.status === "authorized" ? result.creator : null;
+}
+
+export async function resolveCreatorOwner(
+  slug: string,
+  playerId: string,
+  dependencies?: {
+    lookupCreator?: (slug: string) => Promise<CreatorOwnerRecord | undefined>;
+    reportResult?: (status: SdkOwnerResolution["status"]) => void;
+  },
+): Promise<SdkOwnerResolution> {
+  const creator = dependencies?.lookupCreator
+    ? await dependencies.lookupCreator(slug)
+    : await registeredCreatorForOwner(slug);
+  const result = classifyCreatorOwner(creator, playerId);
+  if (result.status !== "authorized") {
+    (dependencies?.reportResult ?? logSdkOwnerResult)(result.status);
   }
-  return creator;
+  return result;
 }
 
 export async function listCreatorEnvironments(ownerPlayerId: string) {

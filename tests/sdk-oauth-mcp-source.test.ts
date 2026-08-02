@@ -35,7 +35,9 @@ test("SDK MCP challenges unauthenticated callers and scopes mock publication", (
   assert.doesNotMatch(packageStore, /status = 'submitted'/);
   assert.match(dashboardSubmit, /package_app_set_sha256/);
   assert.match(dashboardSubmit, /status = 'submitted'/);
-  assert.match(dashboardSubmit, /authenticateCreatorOwner/);
+  assert.match(dashboardSubmit, /resolveCreatorOwner/);
+  assert.match(dashboardSubmit, /status === "owner_mismatch"/);
+  assert.match(dashboardSubmit, /status: 409/);
   assert.match(dashboardSubmit, /r\.revision IS DISTINCT FROM g\.package_revision/);
   assert.match(dashboard, /<SubmitGameButton/);
   assert.match(dashboard, /game\.packageCandidateAvailable &&/);

@@ -170,7 +170,7 @@ test("SDK dev preview exposes the owner-only module review surface", () => {
   const review = read(
     "apps/sdk-portal/app/[instanceId]/games/[gameId]/GameModuleReview.tsx",
   );
-  assert.match(page, /authenticateCreatorOwner/);
+  assert.match(page, /resolveCreatorOwner/);
   assert.match(page, /getCreatorModuleCustomizationAccess/);
   assert.match(page, /GameModuleReview/);
   assert.match(review, /HUMAN REVIEW ONLY/);
