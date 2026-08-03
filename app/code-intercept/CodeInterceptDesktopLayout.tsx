@@ -418,9 +418,22 @@ export function CodeInterceptDesktopLayout({ controller }: { controller: CodeInt
           summary={`全${room.roundNumber}ラウンドで決着しました。`}
           utilities={<GameResultShareButton title="コードインターセプト プレイログ" text={codeInterceptShareText(room)} url="/games/code-intercept" />}
           actions={<OnlineRoomLifecycleActions surface="result" canReturnToRoom={isHost || resultReturnGate.canReturnToRoom} disabled={isSaving} isHost={isHost} isRoomDissolved={resultReturnGate.isRoomDissolved} onReturnToRoom={isHost ? () => runAction({ type: "reset-game", actorId: playerId }) : returnToRoom} onDissolve={isHost ? dissolveRoom : undefined} />}
-        />}
+        >
+          {latestRound && <section aria-labelledby="code-intercept-final-round">
+            <h3 id="code-intercept-final-round" className="text-xs font-black uppercase tracking-wide text-amber-300">最終ラウンド結果</h3>
+            <div className="mt-3 grid gap-4 lg:grid-cols-2">{latestRound.teams.map((result) => <ResultCard key={result.teamId} result={result} room={room} />)}</div>
+          </section>}
+          <section aria-labelledby="code-intercept-result-participants" className="mt-5 border-t border-white/10 pt-4">
+            <h3 id="code-intercept-result-participants" className="text-xs font-black uppercase tracking-wide text-sky-300">参加者</h3>
+            <ul className="mt-2 grid gap-2 sm:grid-cols-2">{codeInterceptTeamIds.map((teamId) => <li key={teamId} className={`rounded-lg border px-3 py-2 ${teamStyle(teamId)}`}><strong>{teamLabel(teamId)}</strong><p className="mt-1 text-sm">{teamPlayers(room, teamId).map((player) => player.name).join("・") || "未所属"}</p></li>)}</ul>
+          </section>
+          <section aria-labelledby="code-intercept-result-history" className="mt-5 border-t border-white/10 pt-4">
+            <h3 id="code-intercept-result-history" className="text-xs font-black uppercase tracking-wide text-slate-200">公開済みの全ラウンドログ</h3>
+            <div className="mt-3 grid gap-4 xl:grid-cols-2">{codeInterceptTeamIds.map((teamId) => <TeamRoundHistoryTable key={teamId} room={room} teamId={teamId} />)}</div>
+          </section>
+        </CommonGameResultShell>}
 
-        {room.phase !== "lobby" && room.roundHistory.length > 0 && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><h2 className="text-xl font-black">公開済みの過去ログ</h2><p className="mt-1 text-sm text-slate-400">チームごとに、ヒント・味方回答・相手からの傍受結果を確認できます。</p><div className="mt-4 grid gap-4 xl:grid-cols-2">{codeInterceptTeamIds.map((teamId) => <TeamRoundHistoryTable key={teamId} room={room} teamId={teamId} />)}</div></section>}
+        {room.phase !== "lobby" && room.phase !== "game-result" && room.roundHistory.length > 0 && <section className="rounded-2xl border border-white/10 bg-slate-950/80 p-6"><h2 className="text-xl font-black">公開済みの過去ログ</h2><p className="mt-1 text-sm text-slate-400">チームごとに、ヒント・味方回答・相手からの傍受結果を確認できます。</p><div className="mt-4 grid gap-4 xl:grid-cols-2">{codeInterceptTeamIds.map((teamId) => <TeamRoundHistoryTable key={teamId} room={room} teamId={teamId} />)}</div></section>}
       </div>
     </div>
   </main>;
