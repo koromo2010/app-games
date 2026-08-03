@@ -152,6 +152,7 @@ export function useGameSdkFrameController(
       room: next,
       ...(timing ? {
         timing: {
+          requestRef: timing.requestRef,
           traceRef: timing.traceRef,
           revision: timing.revision,
         },

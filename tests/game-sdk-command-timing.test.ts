@@ -17,6 +17,7 @@ test("shared Command timing collector attributes injected delays to the exact al
   timing.record("runner-call", 23);
   timing.record("room-cas", 29);
   timing.record("present-room", 31);
+  timing.setRequestId("raw-request-id-must-not-appear");
   timing.setCommandId("raw-room-code-player-token-must-not-appear");
   timing.setRevision(7);
   now += 5;
@@ -32,6 +33,10 @@ test("shared Command timing collector attributes injected delays to the exact al
   assert.equal(
     response.headers.get("x-game-sdk-revision"),
     "7",
+  );
+  assert.match(
+    response.headers.get("x-game-sdk-request") ?? "",
+    /^event_[A-Za-z0-9_-]{16}$/,
   );
   assert.match(
     response.headers.get("x-game-sdk-trace") ?? "",
@@ -75,7 +80,7 @@ test("iframe completion waits for final state notification and a rendered animat
   assert.match(packageRuntime, /message\.stateDelivered !== true/);
 });
 
-test("injected iframe delay is attributed to state, animation-frame, and Command resolution", async () => {
+test("injected iframe delay is attributed to receive, state, animation-frame, and Command resolution", async () => {
   type MessageListener = (event: { source: unknown; data: unknown }) => void;
   type FrameCallback = (timestamp: number) => void;
   let now = 0;
@@ -151,7 +156,11 @@ test("injected iframe delay is attributed to state, animation-frame, and Command
   ));
   assert.equal(typeof request?.requestId, "string");
 
-  const timing = { traceRef: "command_safeTimingRef1", revision: 8 };
+  const timing = {
+    requestRef: "event_safeTimingRef001",
+    traceRef: "command_safeTimingRef1",
+    revision: 8,
+  };
   now = 30;
   assert.ok(listeners.message);
   listeners.message({
@@ -172,6 +181,7 @@ test("injected iframe delay is attributed to state, animation-frame, and Command
   assert.equal(resolved, false, "Command must remain locked until the parent acknowledges the rendered View");
   assert.ok(posted.some((message) => (
     message.type === "game-fields:room-state-presented"
+    && message.requestRef === timing.requestRef
     && message.traceRef === timing.traceRef
     && message.revision === timing.revision
   )));
@@ -192,12 +202,20 @@ test("injected iframe delay is attributed to state, animation-frame, and Command
   assert.equal(notifications, 1, "the Command result must not notify the same View twice");
   assert.deepEqual(measures, [
     {
+      name: "game-sdk:iframe-receive:command_safeTimingRef1:r8",
+      duration: 7,
+    },
+    {
       name: "game-sdk:iframe-state:command_safeTimingRef1:r8",
       duration: 7,
     },
     {
       name: "game-sdk:next-animation-frame:command_safeTimingRef1:r8",
       duration: 20,
+    },
+    {
+      name: "game-sdk:view-render:command_safeTimingRef1:r8",
+      duration: 45,
     },
     {
       name: "game-sdk:command-resolve:command_safeTimingRef1:r8",

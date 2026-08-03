@@ -47,6 +47,7 @@ async function handle(request: Request, context: RouteContext, method: Method) {
           ? "room-command"
           : "room-dissolve",
   });
+  timing.setRequestId(telemetry.requestId);
   let registration;
   try {
     registration = await timing.measure("runtime-resolve", async () => (

@@ -51,6 +51,7 @@ async function handle(request: Request, context: RouteContext, method: Method) {
           ? "room-command"
           : "room-dissolve",
   });
+  timing.setRequestId(telemetry.requestId);
   try {
     const { session, creatorPlayerId } = await timing.measure("auth", async () => {
       const [authenticated, ownerPlayerId] = await Promise.all([

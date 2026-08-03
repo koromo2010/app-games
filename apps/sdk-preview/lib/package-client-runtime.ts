@@ -18,10 +18,16 @@ export function gameFieldsPackageClientRuntimeSource() {
     : JSON.parse(JSON.stringify(value));
   const safeTiming = (value) => value
     && typeof value === "object"
+    && typeof value.requestRef === "string"
+    && /^event_[A-Za-z0-9_-]{16}$/.test(value.requestRef)
     && typeof value.traceRef === "string"
     && /^command_[A-Za-z0-9_-]{8,80}$/.test(value.traceRef)
     && Number.isSafeInteger(value.revision)
-      ? { traceRef: value.traceRef, revision: value.revision }
+      ? {
+          requestRef: value.requestRef,
+          traceRef: value.traceRef,
+          revision: value.revision
+        }
       : null;
   const recordTiming = (stage, timing, startedAt) => {
     if (!timing || typeof performance?.measure !== "function") return;
@@ -131,6 +137,7 @@ export function gameFieldsPackageClientRuntimeSource() {
       const notificationStartedAt = performance.now();
       snapshot = clone(message.room);
       notify("room:hydrate");
+      recordTiming("iframe-receive", timing, notificationStartedAt);
       recordTiming("iframe-state", timing, notificationStartedAt);
       scheduleMeasure();
       if (timing) {
@@ -138,6 +145,7 @@ export function gameFieldsPackageClientRuntimeSource() {
           recordTiming("next-animation-frame", timing, notificationStartedAt);
           window.parent.postMessage({
             type: "game-fields:room-state-presented",
+            requestRef: timing.requestRef,
             traceRef: timing.traceRef,
             revision: timing.revision
           }, "*");
@@ -159,11 +167,8 @@ export function gameFieldsPackageClientRuntimeSource() {
           snapshot = clone(message.room);
           notify("room:command");
         }
-        recordTiming(
-          "command-resolve",
-          safeTiming(message.timing),
-          request.startedAt
-        );
+        recordTiming("view-render", safeTiming(message.timing), request.startedAt);
+        recordTiming("command-resolve", safeTiming(message.timing), request.startedAt);
         request.resolve(clone(message.room));
       } else {
         request.reject(new Error(

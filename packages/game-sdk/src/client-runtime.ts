@@ -31,6 +31,7 @@ export function gameSdkRoomHasCommandResponseView(value: unknown) {
 }
 
 export type GameSdkCommandTransportTiming = {
+  requestRef?: string;
   traceRef?: string;
   revision: number;
   entries: Array<{
@@ -595,8 +596,12 @@ export function createGameSdkHttpClientRuntime<
         );
       }
       commandResponseRooms.add(result.room as object);
+      const requestRef = response.headers.get("x-game-sdk-request") ?? "";
       const trace = response.headers.get("x-game-sdk-trace") ?? "";
       const timing: GameSdkCommandTransportTiming = {
+        ...( /^event_[A-Za-z0-9_-]{16}$/.test(requestRef)
+          ? { requestRef }
+          : {}),
         ...( /^command_[A-Za-z0-9_-]{8,80}$/.test(trace)
           ? { traceRef: trace }
           : {}),

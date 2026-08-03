@@ -69,11 +69,13 @@ export function useGameSdkIframeBridge({
       if (!payload || typeof payload !== "object") return;
       if (
         payload.type === "game-fields:room-state-presented"
+        && typeof payload.requestRef === "string"
+        && /^event_[A-Za-z0-9_-]{16}$/.test(payload.requestRef)
         && typeof payload.traceRef === "string"
         && /^command_[A-Za-z0-9_-]{8,80}$/.test(payload.traceRef)
         && Number.isSafeInteger(payload.revision)
       ) {
-        const key = `${payload.traceRef}:${payload.revision}`;
+        const key = `${payload.requestRef}:${payload.traceRef}:${payload.revision}`;
         presentationWaitersRef.current.get(key)?.();
         presentationWaitersRef.current.delete(key);
         return;
@@ -108,8 +110,8 @@ export function useGameSdkIframeBridge({
       }
       void sendPackageCommand(payload.command).then(async (next) => {
         const timing = gameSdkCommandTimingForRoom(next);
-        const presentationKey = timing?.traceRef
-          ? `${timing.traceRef}:${timing.revision}`
+        const presentationKey = timing?.requestRef && timing.traceRef
+          ? `${timing.requestRef}:${timing.traceRef}:${timing.revision}`
           : null;
         const presented = presentationKey
           ? new Promise<void>((resolve) => {
@@ -127,6 +129,7 @@ export function useGameSdkIframeBridge({
           stateDelivered: true,
           ...(timing ? {
             timing: {
+              requestRef: timing.requestRef,
               traceRef: timing.traceRef,
               revision: timing.revision,
             },

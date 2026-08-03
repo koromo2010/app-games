@@ -94,6 +94,7 @@ async function fetchRunnerResponse(
   >,
   request: GameSdkPortableServerRequest | GameSdkPortableCommandBatchRequest,
   fetchRunner: typeof fetch,
+  timing?: GameSdkRuntimeTiming,
 ) {
   for (let attempt = 0; attempt < RUNNER_FETCH_ATTEMPTS; attempt += 1) {
     try {
@@ -102,6 +103,7 @@ async function fetchRunnerResponse(
         headers: {
           Authorization: `Bearer ${definition.serverRuntimeToken}`,
           "Content-Type": "application/json",
+          ...timingHeaders(timing),
         },
         body: JSON.stringify(request),
         cache: "no-store",
@@ -120,6 +122,13 @@ async function fetchRunnerResponse(
     }
   }
   throw new Error("GAME_SDK_REMOTE_RUNNER_UNAVAILABLE");
+}
+
+function timingHeaders(timing: GameSdkRuntimeTiming | undefined) {
+  const candidate = timing as (GameSdkRuntimeTiming & {
+    correlationHeaders?: () => Record<string, string>;
+  }) | undefined;
+  return candidate?.correlationHeaders?.() ?? {};
 }
 
 async function readRunnerPayload(response: Response) {
@@ -271,6 +280,7 @@ export function createGameSdkRemoteServerModule(
         definition,
         request,
         fetchRunner,
+        timing,
       );
       timing?.record(
         "runner-call",

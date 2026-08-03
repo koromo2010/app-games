@@ -95,6 +95,8 @@ export async function POST(
 
   try {
     const timing = createGameSdkCommandTimingCollector();
+    timing.setRequestRef(request.headers.get("x-game-sdk-request"));
+    timing.setCommandId(request.headers.get("x-game-sdk-trace") ?? "");
     const bundleBytes = await timing.measure("runner-bundle", () => (
       fetchPreviewAsset({
         ...params,

@@ -156,6 +156,55 @@ test("remote Command batch uses one runner HTTP call and keeps guest operations 
   });
 });
 
+test("remote Command batch propagates only opaque request and command correlation headers", async () => {
+  let receivedHeaders: Headers | undefined;
+  const runnerModule = moduleWith(async (_input, init) => {
+    receivedHeaders = new Headers(init?.headers);
+    return Response.json({
+      ok: true,
+      value: {
+        room: { code: "TRACE", revision: 2, phase: "playing" },
+        view: { phase: "playing" },
+      },
+    });
+  });
+  const timing = createGameSdkCommandTimingCollector(() => 0);
+  timing.setRequestId("request-id-with-secrets-that-must-not-cross");
+  timing.setCommandId("command-id-with-room-code-and-token");
+  await runnerModule.applyCommandAndPresent?.(
+    { code: "TRACE", revision: 1, phase: "playing" },
+    { type: "game/move" },
+    {
+      actor: {
+        playerId: "host-player",
+        displayName: "Host",
+        role: "host",
+        debugAccess: true,
+      },
+      now: 1_000,
+      requestId: "command-id-with-room-code-and-token",
+      resources: {},
+    },
+    {
+      viewer: {
+        playerId: "host-player",
+        role: "host",
+        debugAccess: true,
+      },
+      now: 1_000,
+      resources: {},
+    },
+    timing,
+  );
+
+  assert.match(receivedHeaders?.get("x-game-sdk-request") ?? "", /^event_[A-Za-z0-9_-]{16}$/);
+  assert.match(receivedHeaders?.get("x-game-sdk-trace") ?? "", /^command_[A-Za-z0-9_-]{16}$/);
+  assert.doesNotMatch(
+    [...(receivedHeaders?.entries() ?? [])].flat().join("\n"),
+    /request-id-with-secrets|command-id-with-room-code-and-token/,
+  );
+});
+
 test("an injected runner delay and runner-owned stages stay attributed to the runner", async () => {
   const originalPerformance = globalThis.performance;
   let now = 0;

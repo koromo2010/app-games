@@ -8,7 +8,11 @@ export type GameSdkCommandTimingStage = GameSdkRuntimeTimingStage
   | "auth"
   | "runtime-resolve"
   | "http-receive"
+  | "subscription-notify"
+  | "portal-receive"
   | "iframe-state"
+  | "iframe-receive"
+  | "view-render"
   | "next-animation-frame"
   | "command-resolve"
   | "total";
@@ -47,6 +51,7 @@ export class GameSdkCommandTimingCollector implements GameSdkRuntimeTiming {
     durationMs: number;
     count: number;
   }>();
+  #requestRef: string | undefined;
   #commandRef: string | undefined;
   #revision: number | undefined;
   #finished = false;
@@ -59,6 +64,10 @@ export class GameSdkCommandTimingCollector implements GameSdkRuntimeTiming {
   record(stage: GameSdkCommandTimingStage, durationMs: number, count = 1) {
     if (!serverTimingStages.has(stage) && ![
       "iframe-state",
+      "iframe-receive",
+      "portal-receive",
+      "subscription-notify",
+      "view-render",
       "next-animation-frame",
       "command-resolve",
     ].includes(stage)) return;
@@ -83,6 +92,24 @@ export class GameSdkCommandTimingCollector implements GameSdkRuntimeTiming {
 
   setCommandId(commandId: string) {
     this.#commandRef = observabilityRef("command", commandId);
+  }
+
+  setRequestId(requestId: string) {
+    this.#requestRef = observabilityRef("event", requestId);
+  }
+
+  /** Adopt an already-opaque ref received from a trusted internal hop. */
+  setRequestRef(requestRef: string | null | undefined) {
+    if (requestRef && /^event_[A-Za-z0-9_-]{16}$/.test(requestRef)) {
+      this.#requestRef = requestRef;
+    }
+  }
+
+  correlationHeaders() {
+    return {
+      ...(this.#requestRef ? { "X-Game-Sdk-Request": this.#requestRef } : {}),
+      ...(this.#commandRef ? { "X-Game-Sdk-Trace": this.#commandRef } : {}),
+    };
   }
 
   setRevision(revision: number) {
@@ -141,6 +168,7 @@ export class GameSdkCommandTimingCollector implements GameSdkRuntimeTiming {
     const headers = new Headers(response.headers);
     const serverTiming = this.serverTimingHeader();
     if (serverTiming) headers.set("Server-Timing", serverTiming);
+    if (this.#requestRef) headers.set("X-Game-Sdk-Request", this.#requestRef);
     if (this.#commandRef) headers.set("X-Game-Sdk-Trace", this.#commandRef);
     if (this.#revision !== undefined) {
       headers.set("X-Game-Sdk-Revision", String(this.#revision));
@@ -157,6 +185,7 @@ export class GameSdkCommandTimingCollector implements GameSdkRuntimeTiming {
       action: entry.stage,
       durationMs: entry.durationMs,
       commandCount: entry.count,
+      ...(this.#requestRef ? { requestRef: this.#requestRef } : {}),
       ...(this.#commandRef ? { commandRef: this.#commandRef } : {}),
       ...(this.#revision !== undefined ? { revision: this.#revision } : {}),
     };
