@@ -19,6 +19,7 @@ import {
 import { GameModuleReview } from "./GameModuleReview";
 import { CreatorAccountReconnect } from "../../../CreatorAccountReconnect";
 import { CreatorOwnershipIssue } from "../../../CreatorOwnershipIssue";
+import { CreatorPreviewFrame } from "../../../CreatorPreviewFrame";
 
 const GAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?$/;
 const REVISION_PATTERN = /^[a-f0-9]{40}$/;
@@ -122,7 +123,11 @@ export default async function CreatorGamePage({
   }).toString()}`;
 
   return <main className="platform-preview-shell">
-    <iframe className="platform-preview-frame" src={previewUrl} title={`${gameId}のGame Fields開発環境`} allow="fullscreen" />
+    <CreatorPreviewFrame
+      creatorSlug={instanceId}
+      previewUrl={previewUrl}
+      previewOrigin={new URL(appBaseUrl).origin}
+    />
     {moduleProfile && (
       <GameModuleReview
         instanceId={instanceId}

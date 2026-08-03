@@ -9,6 +9,7 @@ import {
 } from "@/lib/sdk-preview-runtime-source";
 import { SdkPreviewSessionGate } from "@/app/sdk-preview/SdkPreviewSessionGate";
 import { sdkPreviewPackageRuntimeId } from "@/lib/sdk-preview-package-runtime";
+import { SdkPreviewNavigationBridge } from "@/app/sdk-preview/SdkPreviewNavigationBridge";
 
 export const dynamic = "force-dynamic";
 const REVISION_PATTERN = /^[a-f0-9]{40}$/;
@@ -81,6 +82,10 @@ export default async function SdkGamePage({
       creatorSlug={creatorSlug}
       portalHref={portalHref}
     >
+      <SdkPreviewNavigationBridge
+        creatorSlug={creatorSlug}
+        portalOrigin={new URL(portalBaseUrl).origin}
+      />
       {game.runtimeKind === "package" && game.revision && game.manifest ? (
         <GameSdkFrame
           backHref={`/sdk-preview/${creatorSlug}`}

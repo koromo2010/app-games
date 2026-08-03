@@ -17,6 +17,7 @@ import {
 } from "@/lib/sdk-owner-observability";
 import { CreatorAccountReconnect } from "../CreatorAccountReconnect";
 import { CreatorOwnershipIssue } from "../CreatorOwnershipIssue";
+import { CreatorPreviewFrame } from "../CreatorPreviewFrame";
 
 export default async function PreviewInstancePage({ params }: {
   params: Promise<{ instanceId: string }>;
@@ -87,7 +88,11 @@ export default async function PreviewInstancePage({ params }: {
     sdkPreviewLink: linkCode,
   }).toString()}`;
   return <main className="platform-preview-shell">
-    <iframe className="platform-preview-frame" src={previewUrl} title={`${slug}のGame Fields開発環境`} allow="fullscreen" />
+    <CreatorPreviewFrame
+      creatorSlug={slug}
+      previewUrl={previewUrl}
+      previewOrigin={new URL(appBaseUrl).origin}
+    />
     <nav className="creator-preview-actions" aria-label="制作者用メニュー">
       <span>CREATOR</span>
       <Link href="/support">サポート</Link>

@@ -5,6 +5,7 @@ import { GameLobby } from "@/app/games/GameLobby";
 import { sdkGamesForCatalog, type SdkGameDescriptor } from "@/app/games/sdk-game-catalog";
 import { SdkPreviewSessionGate } from "@/app/sdk-preview/SdkPreviewSessionGate";
 import { sdkPortalInternalBaseUrl } from "@/lib/sdk-dashboard-navigation";
+import { SdkPreviewNavigationBridge } from "@/app/sdk-preview/SdkPreviewNavigationBridge";
 
 export const dynamic = "force-dynamic";
 const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])?$/;
@@ -39,6 +40,10 @@ export default async function SdkCreatorLobbyPage({ params }: { params: Promise<
       creatorSlug={creatorSlug}
       portalHref={`${sdkPortalInternalBaseUrl()}/${creatorSlug}`}
     >
+      <SdkPreviewNavigationBridge
+        creatorSlug={creatorSlug}
+        portalOrigin={new URL(sdkPortalInternalBaseUrl()).origin}
+      />
       <GameLobby
         siteName={settings.siteName}
         gameOperations={[...operations, ...creatorOperations]}
