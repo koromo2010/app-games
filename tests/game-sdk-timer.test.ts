@@ -48,7 +48,13 @@ const manifest = defineGameManifest({
     options: [0, 30, 60],
   }],
 });
-const appSet = defineGameSdkOnlineRoomAppSet({
+const appSet = defineGameSdkOnlineRoomAppSet<
+  { timeLimitSeconds: number },
+  { turns: number },
+  Record<string, never>,
+  { type: "game/start" | "game/complete-turn" | "game/finish" | "game/reject" },
+  { turns: number }
+>({
   manifest,
   defaultSettings: { timeLimitSeconds: 30 },
   timer: {

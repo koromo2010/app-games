@@ -9,6 +9,7 @@ import { gameSdkShellNavigationPlacement } from "../lib/game-sdk-shell-navigatio
 
 const development = {
   VERCEL_GIT_COMMIT_REF: "develop",
+  NODE_ENV: "development",
 } as NodeJS.ProcessEnv;
 
 test("SDK Shell navigation keeps lounge return direct and Room return in the menu", () => {

@@ -11,7 +11,7 @@ const scope = {
 };
 
 const grant: SdkPreviewGrant = {
-  version: 3,
+  version: 4,
   audience: "package-server",
   environment: "development",
   channel: "candidate-preview",

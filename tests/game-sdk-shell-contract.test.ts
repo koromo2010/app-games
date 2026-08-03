@@ -7,6 +7,7 @@ import {
   normalizeGameSdkModuleProfile,
   updateGameSdkModuleProfile,
 } from "@game-fields/game-sdk/modules";
+import type { PackageRoom } from "../app/components/game-sdk/game-sdk-frame-types.ts";
 import { wrapGameSdkDebugCommand } from "../lib/game-sdk-debug-control-target.ts";
 import {
   buildGameSdkDebugRoom,
@@ -56,19 +57,35 @@ const debugControlLib = source("lib/game-sdk-debug-control-target.ts");
 const previewDefaultsRoute = source("app/api/sdk-preview/[creatorSlug]/games/[gameId]/defaults/route.ts");
 
 // Minimal fixtures shared by the DEBUG-related assertions below.
-const fixtureRoom = {
+const fixturePlayers: PackageRoom["view"]["common"]["players"] = [
+  { seat: 0, displayName: "Host", connected: true, isHost: true, isSelf: true, isDummy: false, reducedTime: false },
+  { seat: 1, displayName: "Dummy 1", connected: true, isHost: false, isSelf: false, isDummy: true, reducedTime: false },
+];
+const fixtureRoom: PackageRoom = {
   code: "ABCD",
   revision: 7,
   phase: "lobby",
   view: {
     app: {},
-    common: {},
+    common: {
+      phase: "lobby",
+      players: fixturePlayers,
+      settings: {},
+      pendingLobbyReturnSeats: [],
+      minimumPlayers: 2,
+      maximumPlayers: 6,
+      isHost: true,
+      permissions: {
+        canStartGame: false,
+        canEditRoomSettings: false,
+        canAbort: false,
+        canDebug: false,
+        canDebugActAsDummy: false,
+        canDebugAutoProgress: false,
+      },
+    },
   },
-} as const;
-const fixturePlayers = [
-  { seat: 0, displayName: "Host", connected: true, isHost: true, isSelf: true, isDummy: false, reducedTime: false },
-  { seat: 1, displayName: "Dummy 1", connected: true, isHost: false, isSelf: false, isDummy: true, reducedTime: false },
-];
+};
 function fixtureCommon(overrides: Partial<{
   canDebug: boolean;
   canDebugActAsDummy: boolean;

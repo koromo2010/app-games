@@ -25,7 +25,7 @@ test("critical persistence failure is reported and propagated", async () => {
     calls += 1;
     return new Response("unavailable", { status: 503 });
   };
-  setObservabilitySink({ emit: (event) => events.push(event) });
+  setObservabilitySink({ emit: (event) => { events.push(event); } });
 
   try {
     await assert.rejects(

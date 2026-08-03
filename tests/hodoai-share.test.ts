@@ -81,8 +81,8 @@ test("ワードスケールの共有ログは本人が許可した表示名だ�
   const text = hodoaiGameShareText({
     totalPoints: 2,
     players: [
-      { id: "player-1", name: "あかり", shareNameAllowed: true },
-      { id: "player-2", name: "ひみつ", shareNameAllowed: false },
+      { id: "player-1", name: "あかり", joinedAt: 1, shareNameAllowed: true },
+      { id: "player-2", name: "ひみつ", joinedAt: 2, shareNameAllowed: false },
     ],
     history: [{
       round: 1,

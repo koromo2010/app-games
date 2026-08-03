@@ -25,6 +25,11 @@ const verdictSchema = {
   },
 };
 
+function requireCapturedBody(value: Record<string, unknown> | null) {
+  if (!value) throw new Error("Gemini request body was not captured.");
+  return value;
+}
+
 test("structured LLM output validation rejects malformed and off-schema JSON", () => {
   assert.equal(
     gameLlmTextMatchesJsonSchema(
@@ -76,16 +81,13 @@ test("Gemini receives the SDK response JSON schema", async () => {
     globalThis.fetch = originalFetch;
   }
 
+  const capturedRequestBody = requireCapturedBody(requestBody);
   assert.deepEqual(
-    (
-      requestBody?.generationConfig as Record<string, unknown>
-    )?.responseJsonSchema,
+    (capturedRequestBody.generationConfig as Record<string, unknown>)?.responseJsonSchema,
     verdictSchema.schema,
   );
   assert.equal(
-    (
-      requestBody?.generationConfig as Record<string, unknown>
-    )?.responseMimeType,
+    (capturedRequestBody.generationConfig as Record<string, unknown>)?.responseMimeType,
     "application/json",
   );
 });
