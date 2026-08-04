@@ -24,7 +24,7 @@ import {
 } from "../lib/nigoichi.ts";
 import { beginGame } from "../lib/nigoichi-room-domain.ts";
 
-const players = ["a", "b", "c"].map((id) => ({ id }));
+const players = ["a", "b", "c"].map((id, index) => ({ id, name: id, joinedAt: index + 1 }));
 const words = Array.from({ length: 30 }, (_, index) => `単語${index + 1}`);
 
 test("B=P×A+1枚から、重複しない手札と余り1枚を作る", () => {

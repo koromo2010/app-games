@@ -559,6 +559,7 @@ test("shared GameFrame owns the top banner and phase-specific common modules", (
     locale: "ja",
     playerCount: 3,
     result: {
+      winnerSeats: [0],
       rankings: [{
         seat: 0,
         displayName: "SECRET_REAL_NAME",

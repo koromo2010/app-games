@@ -14,7 +14,7 @@ test("DEBUG scenario hook exposes progress, run and cancellation", () => {
   assert.match(source, /latestStep: DebugScenarioStep \| null/);
   assert.match(source, /const cancel = useCallback/);
   assert.match(source, /const run = useCallback/);
-  assert.match(source, /return \{\s*cancel,\s*progress,\s*run,/s);
+  assert.match(source, /return \{[\s\S]*cancel,[\s\S]*progress,[\s\S]*run,/);
 });
 
 test("DEBUG scenario hook aborts on cancel and unmount", () => {

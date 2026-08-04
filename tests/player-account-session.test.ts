@@ -24,6 +24,11 @@ const account: PlayerAccountSessionSource & {
   updatedAt: 200,
 };
 
+function requireStoredInput(value: (Omit<PlayerSession, "updatedAt"> & { updatedAt?: number }) | null) {
+  if (!value) throw new Error("Player session was not saved.");
+  return value;
+}
+
 test("Postgresだけに存在する既存アカウントのログインでRedisセッションを再作成する", async () => {
   let storedInput: Omit<PlayerSession, "updatedAt"> & { updatedAt?: number } | null = null;
   const session = await ensurePlayerAccountSession(account, {
@@ -43,11 +48,12 @@ test("Postgresだけに存在する既存アカウントのログインでRedis�
   assert.equal(session.hasRecoveryEmail, true);
   assert.equal(session.hasUnverifiedRecoveryEmail, false);
   assert.equal(session.locale, account.locale);
-  assert.equal(storedInput?.id, account.playerId);
-  assert.equal("passwordHash" in (storedInput ?? {}), false);
-  assert.equal("passwordSalt" in (storedInput ?? {}), false);
-  assert.equal("email" in (storedInput ?? {}), false);
-  assert.equal("emailVerifiedAt" in (storedInput ?? {}), false);
+  const capturedInput = requireStoredInput(storedInput);
+  assert.equal(capturedInput.id, account.playerId);
+  assert.equal("passwordHash" in capturedInput, false);
+  assert.equal("passwordSalt" in capturedInput, false);
+  assert.equal("email" in capturedInput, false);
+  assert.equal("emailVerifiedAt" in capturedInput, false);
 });
 
 test("未確認メールは復旧用メールとしてセッションへ公開しない", async () => {

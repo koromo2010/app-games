@@ -45,7 +45,7 @@ function releaseFetch(calls: Array<{ url: string; init?: RequestInit }>) {
 test("dev release status only allows a fast-forward develop to main", async () => {
   const calls: Array<{ url: string; init?: RequestInit }> = [];
   const status = await loadDevMainReleaseStatus(
-    {},
+    { NODE_ENV: "test" },
     releaseFetch(calls),
   );
   assert.equal(status.mainSha, mainSha);
@@ -62,7 +62,7 @@ test("dev release updates main without force after rechecking both SHAs", async 
       expectedMainSha: mainSha,
       expectedDevelopSha: developSha,
     },
-    { GAME_FIELDS_GITHUB_RELEASE_TOKEN: "test-token" },
+    { NODE_ENV: "test", GAME_FIELDS_GITHUB_RELEASE_TOKEN: "test-token" },
     releaseFetch(calls),
   );
   const update = calls.find((call) => call.init?.method === "PATCH");
@@ -81,7 +81,7 @@ test("dev release refuses a stale reviewed SHA", async () => {
         expectedMainSha: "c".repeat(40),
         expectedDevelopSha: developSha,
       },
-      { GAME_FIELDS_GITHUB_RELEASE_TOKEN: "test-token" },
+      { NODE_ENV: "test", GAME_FIELDS_GITHUB_RELEASE_TOKEN: "test-token" },
       releaseFetch([]),
     ),
     (error) =>

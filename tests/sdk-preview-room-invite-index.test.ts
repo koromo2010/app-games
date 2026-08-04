@@ -159,7 +159,7 @@ test("best-effort invite write failure is structured and never rejects", async (
     () => new Response("unavailable", { status: 503 }),
   );
   process.on("unhandledRejection", onUnhandled);
-  setObservabilitySink({ emit: (event) => events.push(event) });
+  setObservabilitySink({ emit: (event) => { events.push(event); } });
   try {
     await scheduleSdkPreviewRoomInviteIndexSuccess({
       ...successInput(),

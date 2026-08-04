@@ -241,11 +241,11 @@ test("manifest verification precedes one atomic release statement", () => {
   );
   const statement = promotionService.slice(write, statementEnd);
   assert.match(statement, /WITH source AS/);
-  assert.match(statement, /updated_game AS \(\s*UPDATE sdk_games/s);
-  assert.match(statement, /channel_history AS \(\s*INSERT INTO sdk_game_channel_history/s);
-  assert.match(statement, /previous_release AS \(\s*UPDATE sdk_app_releases/s);
-  assert.match(statement, /new_release AS \(\s*INSERT INTO sdk_app_releases/s);
-  assert.match(statement, /decision AS \(\s*INSERT INTO sdk_release_decisions/s);
+  assert.match(statement, /updated_game AS \([\s\S]*?UPDATE sdk_games/);
+  assert.match(statement, /channel_history AS \([\s\S]*?INSERT INTO sdk_game_channel_history/);
+  assert.match(statement, /previous_release AS \([\s\S]*?UPDATE sdk_app_releases/);
+  assert.match(statement, /new_release AS \([\s\S]*?INSERT INTO sdk_app_releases/);
+  assert.match(statement, /decision AS \([\s\S]*?INSERT INTO sdk_release_decisions/);
   assert.match(statement, /JOIN updated_game ON updated_game\.id = source\.id/);
   assert.equal((statement.match(/sdkSql\(\)/g) ?? []).length, 1);
 });

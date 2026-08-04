@@ -57,3 +57,19 @@ test("server-projected result fields are passed through without shell recalculat
   assert.match(sdkResultPanel, /ranking\.score/);
   assert.doesNotMatch(sdkResultPanel, /sort\(|reduce\(|tally|calculate|recalculate/);
 });
+
+test("result surfaces keep their saved details and logs inside the shared result boundary", () => {
+  const northern = source("app/northern-branch/NorthernBranchDesktopLayout.tsx");
+  const codeIntercept = source("app/code-intercept/CodeInterceptDesktopLayout.tsx");
+  const hodoai = source("app/hodoai-talk/HodoaiDesktopLayout.tsx");
+
+  assert.match(northern, /room\.phase === "finished" && winner && <CommonGameResultShell/);
+  assert.match(northern, /game\.log\.slice/);
+  assert.match(northern, /最終順位/);
+  assert.match(codeIntercept, /room\.phase === "game-result" && <CommonGameResultShell/);
+  assert.match(codeIntercept, /latestRound\.teams\.map/);
+  assert.match(codeIntercept, /TeamRoundHistoryTable/);
+  assert.match(codeIntercept, /参加者/);
+  assert.match(hodoai, /latestResult\.clueRounds\.map/);
+  assert.match(hodoai, /hodoai-result-log/);
+});

@@ -80,8 +80,8 @@ test("WebSocketは既定でdevelop、Preview、ローカル開発だけ有効に
   assert.equal(onlineRoomRealtimeEnabled({ VERCEL_ENV: "preview", NODE_ENV: "production" }), true);
   assert.equal(onlineRoomRealtimeEnabled({ VERCEL_ENV: "production", NODE_ENV: "production" }), false);
   assert.equal(onlineRoomRealtimeEnabled({ NODE_ENV: "development" }), true);
-  assert.equal(onlineRoomRealtimeEnabled({ VERCEL_ENV: "preview", ONLINE_ROOM_WEBSOCKET_ENABLED: "0" }), false);
-  assert.equal(onlineRoomRealtimeEnabled({ VERCEL_ENV: "production", ONLINE_ROOM_WEBSOCKET_ENABLED: "1" }), true);
+  assert.equal(onlineRoomRealtimeEnabled({ NODE_ENV: "production", VERCEL_ENV: "preview", ONLINE_ROOM_WEBSOCKET_ENABLED: "0" }), false);
+  assert.equal(onlineRoomRealtimeEnabled({ NODE_ENV: "production", VERCEL_ENV: "production", ONLINE_ROOM_WEBSOCKET_ENABLED: "1" }), true);
 });
 
 test("WebSocket再接続は30秒を上限に指数バックオフする", () => {

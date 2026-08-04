@@ -130,6 +130,12 @@ export function HodoaiDesktopLayout({ controller }: { controller: HodoaiControll
             <div className="space-y-2">{latestResultRows.map((row) => <div key={row.id} className="grid grid-cols-[2rem_1fr_auto] items-center gap-3 rounded-xl border border-white/10 bg-white/[0.05] p-3"><span className="text-center font-black text-cyan-300">{row.rank}</span><div><div className="flex flex-wrap gap-2">{row.expressions.map((expression, index) => <span key={`${row.id}:${index}`} className="rounded-lg bg-cyan-300/10 px-2 py-1 text-sm font-bold text-cyan-50">{expression}</span>)}</div><p className="mt-1 text-xs text-slate-400">{row.playerName}・カード{row.cardNumber}</p></div><span className="text-2xl font-black text-amber-300">{row.value}</span></div>)}</div>
             <div className="mt-5 rounded-2xl bg-gradient-to-r from-cyan-400 to-amber-300 p-5 text-center text-slate-950"><p className="font-black">最終得点 {latestResult.points}/3点</p><p className="mt-1 text-sm font-bold">並び違い {latestResult.inversions}組</p></div>
             <p className="mt-5 text-center text-lg font-black">{hodoaiFinalMessage(room.totalPoints, 3)}</p>
+            <section aria-labelledby="hodoai-result-log" className="mt-5 border-t border-white/10 pt-4">
+              <h3 id="hodoai-result-log" className="text-xs font-black uppercase tracking-wide text-amber-300">保存済み手掛かりラウンド履歴</h3>
+              <ol className="mt-2 space-y-2 text-sm leading-6 text-slate-300">
+                {latestResult.clueRounds.map((clueRound) => <li key={clueRound.round} className="rounded-lg bg-white/[0.06] px-3 py-2"><strong>ことば{clueRound.round}「{clueRound.theme.title}」</strong><span className="mt-1 block text-xs text-slate-400">{Object.values(clueRound.clues).filter(Boolean).join("・") || "提出なし"}</span></li>)}
+              </ol>
+            </section>
           </CommonGameResultShell>}
         </div>
       </div>

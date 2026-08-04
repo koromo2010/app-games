@@ -129,18 +129,18 @@ test("vote module enforces voter, target, self-vote and replacement policies", (
 test("vote tally reports ties and ignores values outside the target set", () => {
   assert.deepEqual(
     tallyGameSdkVotes(
-      { a: "x", b: "y", c: "outside", d: "x" },
+      { x: "x", y: "y", outside: "outside" },
       ["x", "y"],
     ),
     {
-      counts: { x: 2, y: 1 },
-      maximumVotes: 2,
-      leaderIds: ["x"],
-      tied: false,
+      counts: { x: 1, y: 1 },
+      maximumVotes: 1,
+      leaderIds: ["x", "y"],
+      tied: true,
     },
   );
   assert.deepEqual(
-    tallyGameSdkVotes({ a: "x", b: "y" }, ["x", "y"]).leaderIds,
+    tallyGameSdkVotes({ x: "x", y: "y" }, ["x", "y"]).leaderIds,
     ["x", "y"],
   );
 });

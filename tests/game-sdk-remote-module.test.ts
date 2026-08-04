@@ -5,13 +5,17 @@ import { createGameSdkRemoteServerModule } from "../lib/game-sdk-remote-module.t
 import { createGameSdkCommandTimingCollector } from "../lib/game-sdk-command-timing.ts";
 
 const manifest: GameSdkManifest = {
+  sdkVersion: 1,
   id: "runner-test",
-  title: "Runner test",
+  title: { ja: "Runner test", en: "Runner test" },
+  playMode: "online-room",
   minimumPlayers: 1,
   maximumPlayers: 2,
-  supportsOnlineRoom: true,
+  supportsDebug: false,
+  supportsSpectators: false,
   supportsRating: false,
   supportsReplay: false,
+  usesLlm: false,
 };
 
 function moduleWith(fetchRunner: typeof fetch) {
@@ -44,7 +48,7 @@ test("remote runner retries one transient response before succeeding", async () 
   });
 
   const room = await runnerModule.createRoom({}, {
-    actor: { id: "player-1", name: "Player 1" },
+    actor: { playerId: "player-1", displayName: "Player 1", role: "player", debugAccess: false },
     now: 1,
     requestId: "request-1",
     roomCode: "ABCD",
@@ -63,13 +67,13 @@ test("remote runner does not retry an authentication failure", async () => {
   });
 
   await assert.rejects(
-    () => runnerModule.createRoom({}, {
-      actor: { id: "player-1", name: "Player 1" },
+    () => Promise.resolve(runnerModule.createRoom({}, {
+      actor: { playerId: "player-1", displayName: "Player 1", role: "player", debugAccess: false },
       now: 1,
       requestId: "request-1",
       roomCode: "ABCD",
       resources: {},
-    }),
+    })),
     /GAME_SDK_REMOTE_RUNNER_AUTH_FAILED/,
   );
   assert.equal(attempts, 1);
