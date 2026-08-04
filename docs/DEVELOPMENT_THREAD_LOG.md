@@ -3692,3 +3692,42 @@ active HEADは基準SHAのままで、active commit、製品`origin` push、PR�
   確認用draftはいずれも送信せず、7日TTLで失効する。
 - dev／productionの対象4 Deploymentでerror／fatal Runtime Logは0件だった。
   Preview、npm、Starter、DB schema、第三者ゲスト参加機能は変更していない。
+
+## 2026-08-04 — T-89/T-90 localized Preview navigation root fix
+
+### 利用者からの要望
+
+- T-90で確認された、locale prefix付きPreview URLからPortalへ現在状態を通知できない問題を、
+  統合済みT-26／T-89／T-90 treeから根本修正する。
+- T-89の正式runtime計測は別途dev反映が必要なため、local contract readinessとformal measurementを
+  混同しない。
+
+### 判断
+
+- Preview navigation parserは、既存`lib/app-locale.ts`の正規locale定義を参照し、
+  `/sdk-preview/...`、`/ja/sdk-preview/...`、`/en/sdk-preview/...`だけを受理する。
+- unsupported locale、creator／game／revision不正、壊れたURL encodingはfail closedにする。
+  Portalのorigin／event.source検証、postMessage target origin、history制御、T-89 timing意味論は変更しない。
+
+### 実施結果
+
+- `lib/sdk-preview-navigation-contract.ts`の共通parserへlocale-aware path contractを追加した。
+- localized creator／game detail、revision保持、invalid locale／stateのbehavior testを追加した。
+- T-89計測コードは変更せず、T-90 root fixと直接関連する2ファイル、および本ログだけをcheckpoint対象とした。
+
+### 検証
+
+- localized navigation／T-89 timing・correlation／T-26 fixed-scope focused suite: 64/64 PASS
+- repository-wide `npm test`: 884/884 PASS
+- lint、TypeScript noEmit、Platform／SDK Portal／SDK Preview build: PASS
+- product push、Vercel Deployment、main／production、normal Room、DB／Redis／Blob／OAuth write: 0
+- T-89 formal Preview measurement、T-90 real browser verification: dev反映待ち
+
+### 関連コミット
+
+- 本項目を含むT-89/T-90 local checkpoint commit — localized Preview navigation contract root fix
+
+### 未対応・保留
+
+- dev push／Deploymentのpreflightと、正式PreviewでのT-89 timing計測およびT-90 browser Back／Forward確認は、
+  別途明示許可後に実施する。

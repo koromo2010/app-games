@@ -1,3 +1,5 @@
+import { isAppLocale } from "./app-locale.ts";
+
 const CREATOR_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])?$/;
 const GAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?$/;
 const REVISION_PATTERN = /^[a-f0-9]{40}$/;
@@ -78,13 +80,22 @@ export function sdkPreviewNavigationStateFromPath(
   search = "",
 ) {
   const match = pathname.match(
-    /^\/sdk-preview\/([^/]+)(?:\/games\/([^/]+))?\/?$/,
+    /^\/(?:([^/]+)\/)?sdk-preview\/([^/]+)(?:\/games\/([^/]+))?\/?$/,
   );
   if (!match) return null;
+  if (match[1] !== undefined && !isAppLocale(match[1])) return null;
+  let creatorSlug: string;
+  let gameId: string | undefined;
+  try {
+    creatorSlug = decodeURIComponent(match[2] ?? "");
+    gameId = match[3] ? decodeURIComponent(match[3]) : undefined;
+  } catch {
+    return null;
+  }
   const query = new URLSearchParams(search);
   return normalizeSdkPreviewNavigationState({
-    creatorSlug: decodeURIComponent(match[1] ?? ""),
-    ...(match[2] ? { gameId: decodeURIComponent(match[2]) } : {}),
+    creatorSlug,
+    ...(gameId ? { gameId } : {}),
     ...(query.get("revision") ? { revision: query.get("revision") } : {}),
   });
 }
