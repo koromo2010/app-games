@@ -426,6 +426,8 @@ SDKゲームは`SDK基本セット + アプリセット`の二層とする。Roo
 
 ## 9. 開発・検証・公開
 
+実行許可、保存レベル、証拠identity、終了状態は`docs/DEVELOPMENT_EXECUTION_RULES.md`を正本とする。この節は現行システムの検証・公開方法を説明するものであり、pushやDeploymentの許可を与えるものではない。
+
 更新系API、タイマー、認証、戦績、LLMは `lib/observability` から1行JSONの構造化イベントを出力する。Vercel Runtime Logsでは `event`、`roomRef`、`requestId`、`outcome`、`errorCode` で追跡する。GETポーリング成功は記録しない。post-response workは重要writeを既定の`critical`としてawait・再throwし、正本でない処理だけを明示的な`best-effort`として失敗回収する。Redis失敗は固定enumのread／write／pipeline、REST／socket、command名・件数・serialized bytesだけを記録し、key/value、URL、tokenは出さない。ログ禁止情報、調査順、将来collector構成は `docs/OBSERVABILITY.md` を正本とする。
 
 ブラウザのWeb Vitalsはセッション単位で50%を抽出し、1サンプルの追加・期限切れ削除・件数上限・TTL更新を1 Redis commandへまとめる。運営ダッシュボードは表示中だけ60秒間隔で基本集計を更新し、外部容量確認を含む診断詳細は初回・手動または5分経過後のタブ復帰時だけ更新する。

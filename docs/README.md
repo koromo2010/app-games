@@ -5,11 +5,12 @@
 ## 最初の読み順
 
 1. ルートの `AGENTS.md` で、変更してはいけない共通制約を確認する。
-2. [`CURRENT_STATE.md`](./CURRENT_STATE.md) で、現在実装・運用されている全体像を確認する。
-3. `DEVELOPMENT_HANDOFF.md` で、現在の仕様・主要ファイル・環境変数・公開手順を確認する。
-4. 下表から、今回の作業に該当する資料だけを追加で読む。
-5. `git status --short --branch` と直近コミットを確認し、既存変更を上書きしない。
-6. 変更後は最低限 `npm run lint`、`npm test`、`npm run build` を実行する。
+2. [`DEVELOPMENT_EXECUTION_RULES.md`](./DEVELOPMENT_EXECUTION_RULES.md) で、許可・保存・検証・証拠・終了状態を確認する。
+3. [`CURRENT_STATE.md`](./CURRENT_STATE.md) で、現在実装・運用されている全体像を確認する。
+4. `DEVELOPMENT_HANDOFF.md` で、現在の仕様・主要ファイル・環境変数・公開手順を確認する。
+5. 下表から、今回の作業に該当する資料だけを追加で読む。
+6. `git status --short --branch` と直近コミットを確認し、既存変更を上書きしない。
+7. 変更後は影響範囲に応じたfocused test、回帰、lint／buildを実行する。
 
 現状と構想は明確に分離する。
 
@@ -27,6 +28,7 @@
 
 | 作業 | 最初に読む資料 | 次に確認する正本・コード |
 | --- | --- | --- |
+| 実行許可・保存・証拠・終了判定 | `DEVELOPMENT_EXECUTION_RULES.md` | 個別指示、Git差分、対象Deployment／runtime identity |
 | 現在の全体像 | `CURRENT_STATE.md` | `DEVELOPMENT_HANDOFF.md`、コード、設定 |
 | 将来構想・未実装計画 | `FUTURE_PLAN.md` | `PLATFORM_VISION.md`、SDK関連資料 |
 | 未修正バグ・次の修正順 | `KNOWN_ISSUES.md` | 対象項目に記載したAPI・store・domain |
@@ -57,7 +59,7 @@
 | 戦績・レーティング | `DEVELOPMENT_HANDOFF.md` 5章 | `lib/player-stats-store.ts`、`lib/game-rating.ts` |
 | マイページ・対戦プレイバック・お気に入り・共有 | `GAME_REPLAYS.md` | `lib/game-replay-store.ts`、`app/api/player-replays/route.ts`、`app/users/me` |
 | サイト名・favicon・検索用メタ情報の管理 | `SITE_ADMIN.md` | `app/admin`、`app/api/admin`、`lib/site-settings-store.ts` |
-| 開発会話・作業ログの保存運用 | `DEVELOPMENT_LOGGING.md` | 作業終了前に `DEVELOPMENT_THREAD_LOG.md` へ追記 |
+| durableな開発判断の保存運用 | `DEVELOPMENT_LOGGING.md` | コードまたは正本仕様へ影響する場合だけ同じcommitへ追記 |
 | 過去スレッドの要望・判断経緯 | `DEVELOPMENT_THREAD_LOG.md`（参考ログ） | 現在仕様は必ず該当資料とコードで再確認する |
 | 公開・引き継ぎ更新 | `DEVELOPMENT_HANDOFF.md` 9〜10章 | `git diff`、Vercelの対象デプロイ |
 

@@ -7,7 +7,7 @@ Total output lines: 6329
 
 ## 記録ルール
 
-- 開発上の要望・判断・調査・実装・外部設定・公開・保留が生じた作業単位は、明示依頼がなくても終了前に必ず追記する。詳細は `DEVELOPMENT_LOGGING.md` を正本とする。
+- コードまたは正本仕様へ影響するdurableな判断・実装・外部設定変更だけを、`DEVELOPMENT_LOGGING.md`に従って追記する。TODO進行、監督判定、指示書・結果書はChatGPTプロジェクト側で管理する。
 - 新しい記録は末尾へ追記し、過去の記録は原則として書き換えない。訂正は新しい項目として追記する。
 - 利用者の要望、主要な判断、実施内容、関連コミット、未対応事項を簡潔に残す。
 - APIキー、Cookie、パスワード、メールアドレス、内部プロンプト、ツールの生出力、ゲームの秘密情報、個人情報は残さない。
@@ -3731,3 +3731,29 @@ active HEADは基準SHAのままで、active commit、製品`origin` push、PR�
 
 - dev push／Deploymentのpreflightと、正式PreviewでのT-89 timing計測およびT-90 browser Back／Forward確認は、
   別途明示許可後に実施する。
+## 2026-08-04 — 開発実行ルールの再編
+
+## 利用者からの要望
+
+- 開発履歴で繰り返していた対象identityの取り違え、状態混同、過剰保存、スレッド役割混線を減らすため、Git側とChatGPTプロジェクト側のルールを分離する。
+- ChatGPTプロジェクト側は短い常設ルールにし、実装・検証・保存・Deployment・証拠の詳細はGit側へ置く。
+
+## 判断
+
+- `AGENTS.md`を短い入口にし、詳細な実行規則を`docs/DEVELOPMENT_EXECUTION_RULES.md`へ分離した。
+- Gitログはコードまたは正本仕様に影響するdurableな事実へ限定し、TODO指示書、監督結果、handoffはプロジェクト運用記録へ分離した。
+- local、dev、productionの状態、Deployment許可、証拠identity、保存レベルを固定語彙で扱う。
+
+## 実施結果
+
+- `AGENTS.md`、`docs/README.md`、`docs/DEVELOPMENT_HANDOFF.md`、`docs/DEVELOPMENT_LOGGING.md`を新しい責務分離へ更新した。
+- `docs/DEVELOPMENT_EXECUTION_RULES.md`を追加した。
+
+## 検証
+
+- 文書間の参照と差分を確認し、`git diff --check`を実行する。
+
+## 未対応・保留
+
+- ChatGPTプロジェクト設定への短縮版反映はGit外の操作として扱う。
+- 今回はpushおよびVercel Deploymentを行わない。
