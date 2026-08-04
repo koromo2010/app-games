@@ -1,8 +1,13 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
 import { useAppLocale } from "@/app/components/AppLocaleProvider";
 import type { AppLocale } from "@/lib/app-locale";
-import { isPlayerAuthenticated } from "@/lib/player-session";
+import {
+  getPlayerAuthenticatedSnapshot,
+  getServerPlayerAuthenticatedSnapshot,
+  subscribePlayerSession,
+} from "@/lib/player-session";
 
 type LocaleSwitcherProps = {
   className?: string;
@@ -14,9 +19,14 @@ export function LocaleSwitcher({
   hideWhenAuthenticated = false,
 }: LocaleSwitcherProps) {
   const { locale, setLocale, t } = useAppLocale();
+  const playerAuthenticated = useSyncExternalStore(
+    subscribePlayerSession,
+    getPlayerAuthenticatedSnapshot,
+    getServerPlayerAuthenticatedSnapshot,
+  );
   const options: AppLocale[] = ["ja", "en"];
 
-  if (hideWhenAuthenticated && isPlayerAuthenticated()) return null;
+  if (hideWhenAuthenticated && playerAuthenticated) return null;
 
   return (
     <div

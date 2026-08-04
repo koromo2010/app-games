@@ -18,6 +18,7 @@ const playerSessionIdKey = "app-games-player-id";
 const playerAuthenticatedKey = "app-games-player-authenticated";
 const legacyAvatarColorKey = "wordwolf-avatar-color";
 const legacyAvatarImageKey = "wordwolf-avatar-image";
+const playerSessionChangedEvent = "game-fields:player-session-saved";
 
 export const defaultAvatarImages = [
   "/wordwolf-avatars/avatar-01.svg",
@@ -152,17 +153,44 @@ export function savePlayerSession(session: Omit<PlayerSession, "updatedAt">) {
   } else {
     localStorage.removeItem(legacyAvatarImageKey);
   }
-  window.dispatchEvent(new CustomEvent("game-fields:player-session-saved", { detail: { locale: nextSession.locale } }));
+  notifyPlayerSessionChanged(nextSession.locale);
 }
 
 export function markPlayerAuthenticated() {
   if (typeof window === "undefined") return;
   localStorage.setItem(playerAuthenticatedKey, "1");
+  notifyPlayerSessionChanged();
 }
 
 export function isPlayerAuthenticated() {
   if (typeof window === "undefined") return false;
   return localStorage.getItem(playerAuthenticatedKey) === "1" && Boolean(readPlayerSession());
+}
+
+export function getPlayerAuthenticatedSnapshot() {
+  return isPlayerAuthenticated();
+}
+
+export function getServerPlayerAuthenticatedSnapshot() {
+  return false;
+}
+
+export function subscribePlayerSession(listener: () => void) {
+  if (typeof window === "undefined") return () => undefined;
+
+  const handleSessionChange = () => listener();
+  window.addEventListener(playerSessionChangedEvent, handleSessionChange);
+  window.addEventListener("storage", handleSessionChange);
+
+  return () => {
+    window.removeEventListener(playerSessionChangedEvent, handleSessionChange);
+    window.removeEventListener("storage", handleSessionChange);
+  };
+}
+
+function notifyPlayerSessionChanged(locale = defaultAppLocale) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(playerSessionChangedEvent, { detail: { locale } }));
 }
 
 export function clearPlayerSession() {
@@ -172,7 +200,7 @@ export function clearPlayerSession() {
   localStorage.removeItem(playerAuthenticatedKey);
   localStorage.removeItem(legacyAvatarColorKey);
   localStorage.removeItem(legacyAvatarImageKey);
-  window.dispatchEvent(new CustomEvent("game-fields:player-session-saved", { detail: { locale: defaultAppLocale } }));
+  notifyPlayerSessionChanged();
 }
 
 export async function loadPersistentPlayerSession() {

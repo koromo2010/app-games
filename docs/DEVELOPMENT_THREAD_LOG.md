@@ -3757,3 +3757,22 @@ active HEADは基準SHAのままで、active commit、製品`origin` push、PR�
 
 - ChatGPTプロジェクト設定への短縮版反映はGit外の操作として扱う。
 - 今回はpushおよびVercel Deploymentを行わない。
+
+## 2026-08-04 — T-91 Preview shell hydration root fix reconstruction
+
+### 原因
+
+`LocaleSwitcher`がrender中に`isPlayerAuthenticated()`を呼び、SSRでは未認証、初回client renderでは
+残存localStorageの認証状態を返してhydration結果が不一致になる。React `#418`が一次症状で、
+streaming cleanup中の`parentNode`例外が二次症状として現れる。
+
+### 実施
+
+- `useSyncExternalStore`でSSR snapshotを常に未認証へ固定し、client snapshotだけ既存player sessionを読む。
+- player sessionの保存、認証mark、clear、storage変更を購読可能な通知へ接続した。
+- hydration契約をfocused regressionへ追加した。
+
+### 境界
+
+旧T-91 checkpointのSHAは再利用せず、最新`develop`から別のtask-owned commitとして保存する。
+dev反映後はT-91 browser → T-90 → T-89 → T-26の順に実機確認する。
