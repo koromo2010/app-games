@@ -216,6 +216,50 @@ export async function listAccountGames(ownerPlayerId: string) {
   }>;
 }
 
+export type OwnedGamePackageRevision = {
+  revision: string;
+  packageRootSha256: string | null;
+  serverBundleSha256: string | null;
+  appSetSourceSha256: string | null;
+  sdkPackageVersion: string | null;
+  sdkContractVersion: number | null;
+  createdAt: string;
+  channel: "candidate" | "development" | "stable" | null;
+};
+
+export async function listOwnedGamePackageRevisions(input: {
+  ownerPlayerId: string;
+  creatorSlug: string;
+  gameId: string;
+}) {
+  await ensureSdkSchema();
+  const rows = await sdkSql()`
+    SELECT r.revision,
+           r.package_root_sha256 AS "packageRootSha256",
+           r.server_bundle_sha256 AS "serverBundleSha256",
+           r.app_set_source_sha256 AS "appSetSourceSha256",
+           r.sdk_package_version AS "sdkPackageVersion",
+           r.sdk_contract_version AS "sdkContractVersion",
+           r.created_at AS "createdAt",
+           CASE
+             WHEN r.revision = g.stable_revision THEN 'stable'
+             WHEN r.revision = g.development_revision THEN 'development'
+             WHEN r.revision = g.package_revision THEN 'candidate'
+             ELSE NULL
+           END AS channel
+    FROM sdk_game_package_revisions r
+    JOIN sdk_games g ON g.id = r.game_id
+    JOIN sdk_creators c ON c.id = g.creator_id
+    WHERE c.owner_player_id = ${input.ownerPlayerId}
+      AND c.slug = ${input.creatorSlug}
+      AND c.deleted_at IS NULL
+      AND g.game_id = ${input.gameId}
+      AND g.deleted_at IS NULL
+    ORDER BY r.created_at DESC, r.revision DESC
+  `;
+  return rows as OwnedGamePackageRevision[];
+}
+
 export async function listCreatorGames(slug: string) {
   await ensureSdkSchema();
   const rows = await sdkSql()`

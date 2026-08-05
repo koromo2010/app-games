@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import {
   getCreatorGameModuleProfile,
   listAccountGames,
+  listOwnedGamePackageRevisions,
   normalizeInstanceSlug,
   resolveCreatorOwner,
   validateInstanceSlug,
@@ -20,6 +21,7 @@ import { GameModuleReview } from "./GameModuleReview";
 import { CreatorAccountReconnect } from "../../../CreatorAccountReconnect";
 import { CreatorOwnershipIssue } from "../../../CreatorOwnershipIssue";
 import { CreatorPreviewFrame } from "../../../CreatorPreviewFrame";
+import { GamePackageRevisionExport } from "./GamePackageRevisionExport";
 
 const GAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?$/;
 const REVISION_PATTERN = /^[a-f0-9]{40}$/;
@@ -106,6 +108,17 @@ export default async function CreatorGamePage({
     logSdkOwnerLookupFailure(error);
     return <CreatorOwnershipIssue kind="lookup_unavailable" />;
   }
+  let packageRevisions;
+  try {
+    packageRevisions = await listOwnedGamePackageRevisions({
+      ownerPlayerId: account.playerId,
+      creatorSlug: instanceId,
+      gameId,
+    });
+  } catch (error) {
+    logSdkOwnerLookupFailure(error);
+    return <CreatorOwnershipIssue kind="lookup_unavailable" />;
+  }
 
   const appBaseUrl = process.env.GAME_FIELDS_PREVIEW_APP_URL?.replace(/\/$/, "")
     ?? (process.env.VERCEL_GIT_COMMIT_REF === "main" ? "https://www.game-fields.com" : "https://dev.game-fields.com");
@@ -128,6 +141,7 @@ export default async function CreatorGamePage({
       previewUrl={previewUrl}
       previewOrigin={new URL(appBaseUrl).origin}
     />
+    <GamePackageRevisionExport instanceId={instanceId} gameId={gameId} revisions={packageRevisions} />
     {moduleProfile && (
       <GameModuleReview
         instanceId={instanceId}

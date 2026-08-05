@@ -23,6 +23,7 @@ export type RuntimeArtifactTreeEntry = {
   type: "blob" | "tree";
   sha: string;
   bytes?: number;
+  mode?: string;
 };
 
 export type RuntimeArtifactReader = {
@@ -180,6 +181,7 @@ export async function resolveRuntimeExecutionArtifact(input: {
   if (
     new Set(paths).size !== paths.length
     || paths.some((path) => !safeRelativePath(path))
+    || entries.some((entry) => entry.mode !== undefined && entry.mode !== "100644")
     || entries.some((entry) => entry.bytes !== undefined && (!Number.isSafeInteger(entry.bytes) || entry.bytes < 0 || entry.bytes > MAX_FILE_BYTES))
   ) fail("TREE_INVALID");
   for (const required of ["game-fields-package.json", "server.bundle.js", "source/app-set.ts"]) {

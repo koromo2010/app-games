@@ -117,6 +117,17 @@ main {
 .mock-review-error p:not(.eyebrow) { color: var(--muted); line-height: 1.8; }
 .creator-account-reconnect form { margin: 18px 0 10px; }
 .creator-account-reconnect button.primary-action { cursor: pointer; }
+.package-export { position: fixed; z-index: 45; left: 18px; bottom: 18px; width: min(430px, calc(100vw - 36px)); max-height: min(70vh, 620px); overflow: auto; padding: 14px; border: 1px solid rgba(34,211,238,.35); border-radius: 12px; background: rgba(7,16,28,.96); box-shadow: 0 16px 48px rgba(0,0,0,.42); }
+.package-export header,.package-export section,.package-export section div { display: flex; gap: 7px; }
+.package-export header,.package-export section { flex-direction: column; }
+.package-export header { padding-bottom: 10px; border-bottom: 1px solid var(--line); }
+.package-export header strong,.package-export section b { color: #67e8f9; }
+.package-export header span,.package-export small,.package-export time { color: var(--muted); font-size: .65rem; }
+.package-export section { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.package-export section div { justify-content: space-between; }
+.package-export code,.package-export small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.package-export code { font-size: .65rem; }
+.package-export a { width: fit-content; margin-top: 4px; padding: 8px 10px; border-radius: 7px; background: #0891b2; color: white; font-size: .7rem; font-weight: 700; }
 
 @media (max-width: 900px) {
   .preview-room { grid-template-columns: 1fr; }

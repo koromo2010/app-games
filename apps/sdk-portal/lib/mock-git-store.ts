@@ -485,7 +485,7 @@ export function createGamePackageRuntimeReader(dependencies: {
       try {
         const tree = await githubApi<{
           truncated?: unknown;
-          tree?: Array<{ path?: unknown; type?: unknown; sha?: unknown; size?: unknown }>;
+          tree?: Array<{ path?: unknown; type?: unknown; sha?: unknown; size?: unknown; mode?: unknown }>;
         }>(config, `/git/trees/${treeSha}?recursive=1`, undefined, fetchRuntime);
         if (tree.truncated !== false || !Array.isArray(tree.tree)) return null;
         const entries = tree.tree.map((entry) => {
@@ -498,6 +498,7 @@ export function createGamePackageRuntimeReader(dependencies: {
             path: entry.path,
             type: entry.type as "blob" | "tree",
             sha: entry.sha,
+            ...(typeof entry.mode === "string" ? { mode: entry.mode } : {}),
             ...(Number.isSafeInteger(entry.size) ? { bytes: Number(entry.size) } : {}),
           };
         });
