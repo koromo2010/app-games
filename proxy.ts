@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { defaultAppLocale, isAppLocale, type AppLocale } from "@/lib/app-locale";
 import { appLocaleRouteAction } from "@/lib/app-locale-routing";
+import { legacyGamePlayRoute } from "@/lib/game-routes";
 
 const APP_LOCALE_COOKIE = "game_fields_locale";
 
@@ -16,6 +17,13 @@ function preferredLocale(request: NextRequest): AppLocale {
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const legacyGameRoute = legacyGamePlayRoute(pathname);
+  if (legacyGameRoute) {
+    const redirectUrl = request.nextUrl.clone();
+    const locale = legacyGameRoute.locale ?? preferredLocale(request);
+    redirectUrl.pathname = `/${locale}${legacyGameRoute.playPath}`;
+    return NextResponse.redirect(redirectUrl, 308);
+  }
   const action = appLocaleRouteAction(
     pathname,
     request.headers.get("x-app-locale"),

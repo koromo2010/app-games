@@ -1,14 +1,15 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { CodeInterceptGame } from "@/app/code-intercept/CodeInterceptGame";
 import { gamePageAccessAllowed } from "@/lib/game-access";
+import BuiltInGameLandingRoute, { generateMetadata as generateBuiltInGameMetadata } from "../[game]/page";
 
-export const metadata: Metadata = {
-  title: "コードインターセプト | Game Fields",
-  description: "秘密の単語をヒントに暗号を伝達し、相手チームの暗号を傍受するチーム対抗ゲーム。",
-};
+const params = Promise.resolve({ game: "code-intercept" });
 
-export default async function CodeInterceptPage() {
+export function generateMetadata(): Promise<Metadata> {
+  return generateBuiltInGameMetadata({ params });
+}
+
+export default async function CodeInterceptLandingPage() {
   if (!(await gamePageAccessAllowed("code-intercept"))) redirect("/games");
-  return <CodeInterceptGame />;
+  return BuiltInGameLandingRoute({ params });
 }

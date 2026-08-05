@@ -15,6 +15,7 @@ import { isGameLocaleAvailable, isGameUiLocaleAvailable } from "@/lib/game-langu
 import type { GameOperation } from "@/lib/game-operations";
 import { gameOperationFor } from "@/lib/game-operations";
 import type { LocalizedGameCatalogEntry } from "./game-catalog";
+import { gamePlayHref } from "@/lib/game-routes";
 import {
   parseFavoriteGameIds,
   readFavoriteGameIds,
@@ -24,7 +25,7 @@ import {
 } from "./lobby-game-favorites";
 
 type ActiveRoom = { code: string; phase: string; players: { id: string; name: string }[]; updatedAt: number };
-type Props = { games: LocalizedGameCatalogEntry[]; operations: GameOperation[]; activeRooms: Record<string, ActiveRoom>; isLoggedIn: boolean; locale: AppLocale; onLoginRequired: () => void; onRememberWordWolf: () => void };
+type Props = { games: LocalizedGameCatalogEntry[]; operations: GameOperation[]; activeRooms: Record<string, ActiveRoom>; isLoggedIn: boolean; locale: AppLocale; onRememberWordWolf: () => void };
 type ViewMode = "cards" | "list";
 
 const viewModeStorageKey = "game-fields:lobby-game-view-mode";
@@ -53,7 +54,7 @@ function subscribeViewMode(onStoreChange: () => void) {
   };
 }
 
-export function LobbyGameGrid({ games, operations, activeRooms, isLoggedIn, locale, onLoginRequired, onRememberWordWolf }: Props) {
+export function LobbyGameGrid({ games, operations, activeRooms, isLoggedIn, locale, onRememberWordWolf }: Props) {
   const { t } = useAppLocale();
   const [searchQuery, setSearchQuery] = useState("");
   const viewMode = useSyncExternalStore(
@@ -117,13 +118,13 @@ export function LobbyGameGrid({ games, operations, activeRooms, isLoggedIn, loca
       {searchQuery.trim() && <p className="mt-2 text-xs text-slate-300">{t("games.searchResults", { count: filteredGames.length })}</p>}
     </div>
     {filteredGames.length > 0 ? viewMode === "cards"
-      ? <div className="grid grid-cols-1 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(210px,230px))] sm:justify-start">{filteredGames.map((game) => <LobbyGameCard key={game.id} game={game} operation={gameOperationFor(operations, game.id)} activeRoom={activeRooms[game.id]} isLoggedIn={isLoggedIn} locale={locale} favorite={favoriteGameIds.has(game.id)} onToggleFavorite={() => toggleFavorite(game.id)} onLoginRequired={onLoginRequired} onRememberWordWolf={onRememberWordWolf} />)}</div>
-      : <div className="overflow-hidden rounded-xl border border-white/10 bg-white/[0.06]">{filteredGames.map((game) => <LobbyGameListRow key={game.id} game={game} operation={gameOperationFor(operations, game.id)} activeRoom={activeRooms[game.id]} isLoggedIn={isLoggedIn} locale={locale} favorite={favoriteGameIds.has(game.id)} onToggleFavorite={() => toggleFavorite(game.id)} onLoginRequired={onLoginRequired} onRememberWordWolf={onRememberWordWolf} />)}</div>
+      ? <div className="grid grid-cols-1 gap-3 sm:grid-cols-[repeat(auto-fill,minmax(210px,230px))] sm:justify-start">{filteredGames.map((game) => <LobbyGameCard key={game.id} game={game} operation={gameOperationFor(operations, game.id)} activeRoom={activeRooms[game.id]} locale={locale} favorite={favoriteGameIds.has(game.id)} onToggleFavorite={() => toggleFavorite(game.id)} onRememberWordWolf={onRememberWordWolf} />)}</div>
+      : <div className="overflow-hidden rounded-xl border border-white/10 bg-white/[0.06]">{filteredGames.map((game) => <LobbyGameListRow key={game.id} game={game} operation={gameOperationFor(operations, game.id)} activeRoom={activeRooms[game.id]} locale={locale} favorite={favoriteGameIds.has(game.id)} onToggleFavorite={() => toggleFavorite(game.id)} onRememberWordWolf={onRememberWordWolf} />)}</div>
       : <div className="rounded-lg border border-dashed border-white/20 bg-white/[0.06] px-5 py-8 text-center text-white"><p className="font-bold">{t("games.noResults")}</p><p className="mt-1 text-sm text-slate-400">{t("games.noResultsHelp")}</p><button type="button" onClick={() => setSearchQuery("")} className="mt-4 rounded-lg border border-white/20 px-4 py-2 text-sm font-bold hover:bg-white/10">{t("games.clearSearch")}</button></div>}
   </div>;
 }
 
-function LobbyGameCard({ game, operation, activeRoom, isLoggedIn, locale, favorite, onToggleFavorite, onLoginRequired, onRememberWordWolf }: { game: LocalizedGameCatalogEntry; operation: GameOperation; activeRoom?: ActiveRoom; isLoggedIn: boolean; locale: AppLocale; favorite: boolean; onToggleFavorite: () => void; onLoginRequired: () => void; onRememberWordWolf: () => void }) {
+function LobbyGameCard({ game, operation, activeRoom, locale, favorite, onToggleFavorite, onRememberWordWolf }: { game: LocalizedGameCatalogEntry; operation: GameOperation; activeRoom?: ActiveRoom; locale: AppLocale; favorite: boolean; onToggleFavorite: () => void; onRememberWordWolf: () => void }) {
   const { t } = useAppLocale();
   const localeAvailable = isGameLocaleAvailable(game.id, locale);
   const uiLocaleAvailable = isGameUiLocaleAvailable(game.id, locale);
@@ -140,20 +141,19 @@ function LobbyGameCard({ game, operation, activeRoom, isLoggedIn, locale, favori
     {localeAvailable && !uiLocaleAvailable && <p className="mt-2 rounded-md bg-cyan-100 px-2 py-1.5 text-xs font-bold leading-5 text-cyan-950">{t("games.uiUnavailable")}</p>}
     {maintenance && <p className="mt-2 rounded-md bg-amber-100 px-2 py-1.5 text-xs font-bold leading-5 text-amber-900">{operation.message || t("games.maintenanceDefault")}</p>}
     <div className={`mt-3 flex flex-wrap gap-x-4 gap-y-1 border-t pt-2 text-xs ${active ? "border-white/15 text-slate-200" : "border-slate-200 text-slate-600"}`}><p><span className={active ? "text-cyan-200" : "text-slate-400"}>{t("games.players")}</span> <strong>{game.players}</strong></p><p title={game.timeSampleCount ? t("games.actualEstimateTitle", { count: game.timeSampleCount }) : t("games.initialEstimateTitle")}><span className={active ? "text-cyan-200" : "text-slate-400"}>{game.timeSampleCount ? t("games.actualEstimate") : t("games.estimate")}</span> <strong>{game.time}</strong></p></div>
-    <div className="mt-3">{maintenance || unavailable ? <span className="inline-flex rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800">{t("games.unavailable")}</span> : game.href ? <span className={`inline-flex rounded-md px-3 py-1.5 text-xs font-bold shadow-sm ${active ? "bg-amber-300 text-amber-950" : isLoggedIn ? "bg-cyan-600 text-white" : "bg-slate-200 text-slate-500"}`}>{active ? t("games.return") : isLoggedIn ? t("games.play") : t("games.loginToPlay")}</span> : <span className="inline-flex rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-400">{t("games.comingSoon")}</span>}</div>
+    <div className="mt-3">{maintenance || unavailable ? <span className="inline-flex rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800">{t("games.unavailable")}</span> : game.href ? <span className={`inline-flex rounded-md px-3 py-1.5 text-xs font-bold shadow-sm ${active ? "bg-amber-300 text-amber-950" : "bg-cyan-600 text-white"}`}>{active ? t("games.return") : locale === "en" ? "View game" : "ゲームを見る"}</span> : <span className="inline-flex rounded-md border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-semibold text-slate-400">{t("games.comingSoon")}</span>}</div>
   </article>;
-  const entry = !game.href || maintenance || unavailable
+  const entryHref = activeRoom ? gamePlayHref(game.id, activeRoom.code) : game.href;
+  const entry = !entryHref || maintenance || unavailable
     ? <div className="block h-full opacity-80">{card}</div>
-    : isLoggedIn
-      ? <Link href={game.href} onClick={game.id === "wordwolf" && active ? onRememberWordWolf : undefined} className="block h-full">{card}</Link>
-      : <button type="button" onClick={onLoginRequired} className="block h-full w-full text-left">{card}</button>;
+    : <Link href={entryHref} onClick={game.id === "wordwolf" && active ? onRememberWordWolf : undefined} className="block h-full">{card}</Link>;
   return <div className="relative h-full">
     {entry}
     <FavoriteButton gameTitle={game.title} favorite={favorite} onToggle={onToggleFavorite} variant="card" />
   </div>;
 }
 
-function LobbyGameListRow({ game, operation, activeRoom, isLoggedIn, locale, favorite, onToggleFavorite, onLoginRequired, onRememberWordWolf }: { game: LocalizedGameCatalogEntry; operation: GameOperation; activeRoom?: ActiveRoom; isLoggedIn: boolean; locale: AppLocale; favorite: boolean; onToggleFavorite: () => void; onLoginRequired: () => void; onRememberWordWolf: () => void }) {
+function LobbyGameListRow({ game, operation, activeRoom, locale, favorite, onToggleFavorite, onRememberWordWolf }: { game: LocalizedGameCatalogEntry; operation: GameOperation; activeRoom?: ActiveRoom; locale: AppLocale; favorite: boolean; onToggleFavorite: () => void; onRememberWordWolf: () => void }) {
   const { t } = useAppLocale();
   const localeAvailable = isGameLocaleAvailable(game.id, locale);
   const uiLocaleAvailable = isGameUiLocaleAvailable(game.id, locale);
@@ -166,7 +166,7 @@ function LobbyGameListRow({ game, operation, activeRoom, isLoggedIn, locale, fav
     : maintenance || unavailable
       ? t("games.unavailable")
       : game.href
-        ? isLoggedIn ? t("games.play") : t("games.loginToPlay")
+        ? locale === "en" ? "View game" : "ゲームを見る"
         : t("games.comingSoon");
   const row = (
     <article className={`flex min-h-16 items-center gap-3 px-3 py-3 pr-14 text-white transition sm:px-4 sm:pr-14 ${active ? "bg-cyan-300/10 ring-1 ring-inset ring-cyan-300/40" : "hover:bg-white/[0.06]"} ${maintenance || unavailable ? "opacity-75" : ""}`}>
@@ -183,13 +183,13 @@ function LobbyGameListRow({ game, operation, activeRoom, isLoggedIn, locale, fav
         </div>
         {activeRoom && <p className="mt-1 text-xs font-bold text-cyan-200">{t("games.roomJoined", { code: activeRoom.code })}</p>}
       </div>
-      <span className={`shrink-0 rounded-lg px-3 py-2 text-xs font-black sm:min-w-24 sm:text-center ${active ? "bg-amber-300 text-amber-950" : maintenance || unavailable || !game.href ? "border border-white/15 bg-white/5 text-slate-400" : isLoggedIn ? "bg-cyan-600 text-white" : "bg-slate-700 text-slate-300"}`}>
+      <span className={`shrink-0 rounded-lg px-3 py-2 text-xs font-black sm:min-w-24 sm:text-center ${active ? "bg-amber-300 text-amber-950" : maintenance || unavailable || !game.href ? "border border-white/15 bg-white/5 text-slate-400" : "bg-cyan-600 text-white"}`}>
         {actionLabel}
       </span>
     </article>
   );
   return <div className="relative border-b border-white/10 last:border-b-0">
-    <GameEntryAction game={game} active={active} disabled={maintenance || unavailable} isLoggedIn={isLoggedIn} onLoginRequired={onLoginRequired} onRememberWordWolf={onRememberWordWolf}>{row}</GameEntryAction>
+    <GameEntryAction game={game} activeRoom={activeRoom} disabled={maintenance || unavailable} onRememberWordWolf={onRememberWordWolf}>{row}</GameEntryAction>
     <FavoriteButton gameTitle={game.title} favorite={favorite} onToggle={onToggleFavorite} variant="list" />
   </div>;
 }
@@ -208,11 +208,10 @@ function FavoriteButton({ gameTitle, favorite, onToggle, variant }: { gameTitle:
   </button>;
 }
 
-function GameEntryAction({ game, active, disabled, isLoggedIn, onLoginRequired, onRememberWordWolf, children }: { game: LocalizedGameCatalogEntry; active: boolean; disabled: boolean; isLoggedIn: boolean; onLoginRequired: () => void; onRememberWordWolf: () => void; children: ReactNode }) {
-  if (!game.href || disabled) return <div>{children}</div>;
-  return isLoggedIn
-    ? <Link href={game.href} onClick={game.id === "wordwolf" && active ? onRememberWordWolf : undefined} className="block">{children}</Link>
-    : <button type="button" onClick={onLoginRequired} className="block w-full text-left">{children}</button>;
+function GameEntryAction({ game, activeRoom, disabled, onRememberWordWolf, children }: { game: LocalizedGameCatalogEntry; activeRoom?: ActiveRoom; disabled: boolean; onRememberWordWolf: () => void; children: ReactNode }) {
+  const href = activeRoom ? gamePlayHref(game.id, activeRoom.code) : game.href;
+  if (!href || disabled) return <div>{children}</div>;
+  return <Link href={href} onClick={game.id === "wordwolf" && activeRoom ? onRememberWordWolf : undefined} className="block">{children}</Link>;
 }
 
 function Badge({ active, state = false, tag, children }: { active: boolean; state?: boolean; tag?: string; children: React.ReactNode }) {

@@ -1,10 +1,12 @@
 import type { MetadataRoute } from "next";
 import { appLocales } from "@/lib/app-locale";
+import { publicGameRoutes } from "@/lib/game-routes";
 
-const paths = ["", "/games", "/wordwolf", "/tahoiya", "/word-scale", "/word-sonar", "/word-out", "/daifugo", "/terms", "/privacy", "/contact"];
+const staticPaths = ["", "/games", "/terms", "/privacy", "/contact"];
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
+  const paths = [...staticPaths, ...publicGameRoutes().map((route) => route.landingPath)];
   return appLocales.flatMap(({ id: locale }) => paths.map((path) => ({
     url: `https://www.game-fields.com/${locale}${path}`,
     lastModified: now,

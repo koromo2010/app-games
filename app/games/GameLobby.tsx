@@ -184,7 +184,7 @@ export function GameLobby({ siteName = "GAME FIELDS", gameOperations, durationEs
         </LobbyInfoDrawer>
 
         <LobbyGameGrid games={orderedGames} operations={gameOperations} activeRooms={activeGameRooms} isLoggedIn={isLoggedIn}
-          locale={locale} onLoginRequired={() => setMessage(t("account.loginRequired"))}
+          locale={locale}
           onRememberWordWolf={rememberActiveRoom}
         />
       </section>

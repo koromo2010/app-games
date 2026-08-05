@@ -1,6 +1,7 @@
 import registry from "../../config/game-registry.json" with { type: "json" };
 import { builtInCapabilityPolicy } from "./built-in-game-module-policies";
 import { sdkGamePreviewHref } from "./sdk-game-preview-navigation";
+import { gameLandingHref } from "@/lib/game-routes";
 
 export type GameDefinitionTag = "対戦" | "協力" | "チーム戦" | "正体隠匿" | "会話" | "ブラフ" | "作文" | "戦略" | "連想" | "推理" | "お絵描き";
 
@@ -135,7 +136,7 @@ export function catalogEntryFromDefinition(definition: GameDefinition) {
     id: definition.id,
     ...definition.catalog,
     href: definition.runtime.kind === "built-in"
-      ? definition.runtime.href
+      ? gameLandingHref(definition.id)
       : sdkGamePreviewHref(definition.runtime),
   };
 }

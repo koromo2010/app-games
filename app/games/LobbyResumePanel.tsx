@@ -4,6 +4,7 @@ import { AppLink as Link } from "@/app/components/AppLink";
 import { useAppLocale } from "@/app/components/AppLocaleProvider";
 import { appIntlLocale } from "@/lib/app-i18n";
 import type { ActiveWordWolfRoom } from "./use-lobby-room-data";
+import { gamePlayHref } from "@/lib/game-routes";
 
 export function LobbyResumePanel({ room, isLoading, onResume }: { room: ActiveWordWolfRoom | null; isLoading: boolean; onResume: () => void }) {
   const { locale, t } = useAppLocale();
@@ -19,7 +20,7 @@ export function LobbyResumePanel({ room, isLoading, onResume }: { room: ActiveWo
     {isLoading && !room ? <p className="mt-3 text-sm text-slate-600">{t("resume.checking")}</p> : room ? <>
       <div className="mt-3 grid grid-cols-2 gap-2 text-sm"><div className="rounded-lg bg-white px-3 py-2"><p className="text-xs text-slate-500">ROOM</p><p className="font-bold text-slate-950">{room.code}</p></div><div className="rounded-lg bg-white px-3 py-2"><p className="text-xs text-slate-500">{t("resume.status")}</p><p className="font-bold text-slate-950">{phase}</p></div></div>
       <p className="mt-2 text-xs text-slate-600">{t("resume.participants", { count: room.players.length, date })}</p>
-      <Link href="/wordwolf" onClick={onResume} className="mt-3 inline-flex w-full justify-center rounded-lg bg-cyan-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-500">{t("resume.action")}</Link>
+      <Link href={gamePlayHref("wordwolf", room.code)} onClick={onResume} className="mt-3 inline-flex w-full justify-center rounded-lg bg-cyan-600 px-3 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-500">{t("resume.action")}</Link>
     </> : null}
   </div>;
 }

@@ -3,22 +3,22 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { PlayerSession } from "@/lib/player-session";
+import { gamePlayHref } from "@/lib/game-routes";
 
 type InviteTarget = {
   gameId: string;
   endpoint: string;
-  href: string;
 };
 
 const INVITE_TARGETS: InviteTarget[] = [
-  { gameId: "wordwolf", endpoint: "/api/wordwolf/rooms", href: "/wordwolf" },
-  { gameId: "tahoiya", endpoint: "/api/tahoiya/rooms", href: "/tahoiya" },
-  { gameId: "hodoai", endpoint: "/api/hodoai/rooms", href: "/hodoai-talk" },
-  { gameId: "kotoba-senpuku", endpoint: "/api/kotoba-senpuku/rooms", href: "/kotoba-senpuku" },
-  { gameId: "northern-branch", endpoint: "/api/northern-branch/rooms", href: "/northern-branch" },
-  { gameId: "nigoichi", endpoint: "/api/nigoichi/rooms", href: "/nigoichi" },
-  { gameId: "code-intercept", endpoint: "/api/code-intercept/rooms", href: "/code-intercept" },
-  { gameId: "daifugo", endpoint: "/api/daifugo/rooms", href: "/daifugo" },
+  { gameId: "wordwolf", endpoint: "/api/wordwolf/rooms" },
+  { gameId: "tahoiya", endpoint: "/api/tahoiya/rooms" },
+  { gameId: "hodoai", endpoint: "/api/hodoai/rooms" },
+  { gameId: "kotoba-senpuku", endpoint: "/api/kotoba-senpuku/rooms" },
+  { gameId: "northern-branch", endpoint: "/api/northern-branch/rooms" },
+  { gameId: "nigoichi", endpoint: "/api/nigoichi/rooms" },
+  { gameId: "code-intercept", endpoint: "/api/code-intercept/rooms" },
+  { gameId: "daifugo", endpoint: "/api/daifugo/rooms" },
 ];
 
 type RoomPayload = {
@@ -100,7 +100,7 @@ export function InviteRoomJoiner({
           throw new Error(payload.error || "ROOM_INVITE_JOIN_FAILED");
         }
 
-        router.replace(`${target.href}?room=${encodeURIComponent(roomCode)}`);
+        router.replace(gamePlayHref(target.gameId, roomCode));
         return true;
       }
       return false;
