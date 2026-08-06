@@ -169,6 +169,20 @@ Room固定revisionが同じなら通常復帰し、異なる場合はclient ifra
 原子的に照合し、旧Roomの解散や削除は行わない。revisionまたはpackageを解決できない場合と
 clientがreadyにならない場合は明示エラーで停止し、Mockや別revisionへfallbackしない。
 
+### T-98 Preview server artifact cache（2026-08-06 local reimplementation）
+
+最新`origin/develop`（`64c7ffcca44da35ac2f97c135fab14dd7e6c0dd5`）を基準に、SDK Previewの
+portable server bundleだけを対象とするprocess-local immutable artifact cacheを再実装した。
+cache keyはschema、環境、instance、game、package revision、grantのserver bundle SHA-256を含み、
+grant検証とscope確認の後だけsourceへ到達する。cacheはRuntime／Context／globals、grant、token、
+Room状態、結果表示を保持しない。entry 16件、合計16 MiB、単体1 MiB、決定的LRU、exact-key
+single-flight、clear／disable、hash mismatch時のfallbackなし、失敗のnegative cacheなしを契約とする。
+QuickJSはguestの`Error("interrupted")`をbundle errorとして維持し、実際のdeadline interruptだけを
+`EXECUTION_LIMIT`／HTTP 408へ分類する。各呼出しのRuntime／Contextは破棄し、次の呼出しへ持ち越さない。
+focused cache／runner／route契約、T-36 Redis namespace／realtime境界、repository test、lint、
+typecheck、SDK boundary、root／Portal／Preview buildはlocalでPASSしている。製品origin push、
+Vercel、DB／Redis／Blob／OAuth／DNS write、Deployment、production確認は未実施である。
+
 ## 共通LLMゲートウェイ
 
 ゲームからAIプロバイダーを利用する処理は `lib/game-llm.ts` を経由する。ゲーム固有ルートからOpenAI、Gemini、Groqを直接呼ばない。

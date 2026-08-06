@@ -4,7 +4,7 @@
 >
 > 資料を読む順番や作業別の参照先は `docs/README.md` を入口にする。この文書は「現在の開発状態と共通仕様」、`docs/CONTAINER_ARCHITECTURE.md` は「将来案」である。
 
-最終更新: 2026-08-02
+最終更新: 2026-08-06
 
 ## 2026-08-02 APP migration control plane reimplementation checkpoint
 
@@ -43,6 +43,33 @@ APP migration checkpointとは別identityのlocal reimplementationを行った�
 - starter整合の固定local refは`refs/remotes/origin/sdk-starter-dev@4568d668c2e9542e89ddb058633d67b757f4e807`、tree `12d8c86d82ed8711bf21a12e3669ac1954f90706`、manifest SHA-256 `1cb62054b21519570aefcbfadfc0414ebb5a8da594fb0badc85bc0b26cdf11ae`で、T-73B完了まで保持する。
 - 最終local gateはfocused 5/5、`npm test` 835/835、Runtime packages build、SDK package test、starter test、`npm run verify`、Platform 78ページ、SDK Portal 15ページ、SDK Preview 5ページの各buildがPASS。Portal migrationは`local/local`でskipしDB接続・DDL・DML 0、Main Promotion同期5対象は`would-change=0`、`app-games-sdk-portal`は`project-disabled`でSKIPした。
 - 判定は`T-74 LOCAL INTEGRATION COMPLETE／139-FILE TREE FIXED／T-73B FINAL RECHECK PENDING／PUSH PENDING`。local commitはmergeと本4文書finalizationの2件だけとし、push、PR、Actions、Deployment、production反映、外部環境writeは未実施である。
+
+## 2026-08-06 T-98 Preview artifact cache local reimplementation
+
+消失したT-98旧checkpointは復元せず、最新`origin/develop@64c7ffcca44da35ac2f97c135fab14dd7e6c0dd5`
+（tree `c52183666995229b2a5b3a499d79edba8307c33c`）から独立worktreeで再実装した。
+対象は`apps/sdk-preview`のserver bundle取得・検証・portable runner境界だけで、製品push、Deployment、
+Vercel、DB／Redis／Blob／OAuth／DNS write、main／production操作は行っていない。
+
+- `runtime-artifact-cache.ts`をPreview専用のprocess-local cache ownerとして追加した。keyはschema marker、
+  environment、instanceId、gameId、packageRevision、serverBundleSha256の全要素を含み、検証済みの
+  immutable bytes、canonical SHA-256、byte length、LRU metadataだけを保持する。entry 16、合計16 MiB、
+  単体1 MiB、決定的LRU、exact-key single-flight、失敗後retry、clear／disable、oversize／budget bypass、
+  hash mismatch時の旧bytes fallbackなし、negative cacheなしを実装した。返却bytesは毎回copyし、cacheの
+  payloadを呼出し側へ直接公開しない。
+- Preview routeはgrantのaudience／role／environment／instance／game／revisionを確認してからcacheを
+  解決する。cache hitではsource fetchとSHA計算を行わず、miss／waiter／bypassの観測ヘッダーだけを返す。
+  Portal auditのfull-tree resolverはPreview routeへ導入していない。
+- QuickJS runnerは実際のdeadline interrupt状態だけを`EXECUTION_LIMIT`（HTTP 408）へ分類する。
+  guestが同じ語を含む`Error`を投げても`INVALID_BUNDLE`（HTTP 422）とし、timeout後はRuntime／Contextを
+  disposeして次のvalid invocationを新規隔離環境で実行する。
+- focused 13/13、T-36相当29/29、repository-wide test、lint、root／Portal／Preview typecheck、
+  `npm run check:sdk`、SDK package／Preview／Portal／root build、`git diff --check`をlocalで確認した。
+  local measurementはcache source read 1回、hash 1回、同一key concurrent source read 1回、failure retry、
+  QuickJS init／eval、4並行invocation、RSS差分を小規模fixtureで取得した。正式Preview、GitHub Actions、
+  Vercel、productionの証拠には扱わない。
+- この作業のdurable artifact（patch、bundle、manifest、checksums）とresult Markdownは、全local gate後に
+  checkpoint branchへ保存し、remote read-backとfresh restoreを確認するまで`CHECKPOINT_SAVED`と判定しない。
 
 ## 2026-08-01 広場の共通catalog read model
 

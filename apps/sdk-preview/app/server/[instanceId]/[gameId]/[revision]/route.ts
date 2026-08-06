@@ -1,15 +1,22 @@
-import { createHash } from "node:crypto";
 import type {
   GameSdkPortableCommandBatchRequest,
   GameSdkPortableServerRequest,
 } from "@game-fields/game-sdk/portable-server";
 import { fetchPreviewAsset } from "@/lib/preview-source";
-import { verifyPortalPreviewGrant } from "@/lib/preview-grant-verifier";
+import {
+  previewEnvironment,
+  verifyPortalPreviewGrant,
+} from "@/lib/preview-grant-verifier";
 import {
   GameSdkPortableRunnerError,
+  gameSdkPortableRunnerHttpStatus,
   runGameSdkPortableCommandBatch,
   runGameSdkPortableServer,
 } from "@/lib/server-runner";
+import {
+  RuntimeArtifactCacheError,
+  sdkPreviewRuntimeArtifactCache,
+} from "@/lib/runtime-artifact-cache";
 import {
   logServerRuntimeAuthFailure,
   serverRuntimeAuthFailure,
@@ -53,12 +60,9 @@ export async function POST(
   } catch {
     return Response.json({ error: "SERVER_RUNTIME_NOT_CONFIGURED" }, { status: 503 });
   }
+  const environment = previewEnvironment();
   const authFailure = serverRuntimeAuthFailure(grant, {
-    environment: (
-      process.env.VERCEL_GIT_COMMIT_REF === "main"
-        ? "production"
-        : "development"
-    ),
+    environment,
     instanceId: params.instanceId,
     gameId: params.gameId,
     revision: params.revision,
@@ -97,25 +101,28 @@ export async function POST(
     const timing = createGameSdkCommandTimingCollector();
     timing.setRequestRef(request.headers.get("x-game-sdk-request"));
     timing.setCommandId(request.headers.get("x-game-sdk-trace") ?? "");
-    const bundleBytes = await timing.measure("runner-bundle", () => (
-      fetchPreviewAsset({
-        ...params,
-        assetPath: "server.bundle.js",
-        sourceKind: "package",
+    const artifact = await timing.measure("runner-bundle", () => (
+      sdkPreviewRuntimeArtifactCache.resolve({
+        environment,
+        instanceId: params.instanceId,
+        gameId: params.gameId,
+        packageRevision: params.revision,
+        serverBundleSha256: expectedBundleSha256,
+        recordHashDuration: (durationMs) => timing.record("runner-hash", durationMs),
+        load: async () => {
+          const bundleBytes = await fetchPreviewAsset({
+            ...params,
+            assetPath: "server.bundle.js",
+            sourceKind: "package",
+          });
+          return bundleBytes ? new Uint8Array(bundleBytes) : null;
+        },
       })
     ));
-    if (!bundleBytes) {
+    if (!artifact) {
       return Response.json({ error: "SERVER_RUNTIME_BUNDLE_NOT_FOUND" }, { status: 404 });
     }
-    const bundleMatchesGrant = await timing.measure("runner-hash", async () => (
-      createHash("sha256")
-        .update(new Uint8Array(bundleBytes))
-        .digest("hex") === expectedBundleSha256
-    ));
-    if (!bundleMatchesGrant) {
-      return Response.json({ error: "SERVER_RUNTIME_BUNDLE_HASH_MISMATCH" }, { status: 409 });
-    }
-    const bundle = new TextDecoder().decode(bundleBytes);
+    const bundle = new TextDecoder().decode(artifact.artifact.bytes);
     const result = isCommandBatchRequest(invocation)
       ? await runGameSdkPortableCommandBatch({
         bundle,
@@ -132,17 +139,23 @@ export async function POST(
         "Cache-Control": "private, no-store",
         "X-Content-Type-Options": "nosniff",
         "X-Robots-Tag": "noindex, nofollow, noarchive",
+        "X-Game-Sdk-Artifact-Cache": artifact.outcome,
       },
     }));
   } catch (error) {
+    if (error instanceof RuntimeArtifactCacheError) {
+      if (error.code === "HASH_MISMATCH") {
+        return Response.json({ error: "SERVER_RUNTIME_BUNDLE_HASH_MISMATCH" }, { status: 409 });
+      }
+      if (error.code === "ARTIFACT_TOO_LARGE") {
+        return Response.json({ error: "SERVER_RUNTIME_BUNDLE_TOO_LARGE" }, { status: 413 });
+      }
+      return Response.json({ error: "SERVER_RUNTIME_INVALID_ARTIFACT_IDENTITY" }, { status: 422 });
+    }
     const code = error instanceof GameSdkPortableRunnerError
       ? error.code
       : "INVALID_BUNDLE";
-    const status = code === "BUNDLE_TOO_LARGE" || code === "REQUEST_TOO_LARGE"
-      ? 413
-      : code === "EXECUTION_LIMIT"
-        ? 408
-        : 422;
+    const status = gameSdkPortableRunnerHttpStatus(code);
     return Response.json({ error: `SERVER_RUNTIME_${code}` }, { status });
   }
 }

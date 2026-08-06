@@ -21,28 +21,32 @@ const VM_STACK_LIMIT_BYTES = 1024 * 1024;
 const VM_EXECUTION_LIMIT_MS = 750;
 const MAX_PENDING_JOB_PASSES = 1_000;
 
+export type GameSdkPortableRunnerErrorCode =
+  | "BUNDLE_TOO_LARGE"
+  | "REQUEST_TOO_LARGE"
+  | "RESPONSE_TOO_LARGE"
+  | "INVALID_BUNDLE"
+  | "INVALID_RESPONSE"
+  | "EXECUTION_LIMIT";
+
 export class GameSdkPortableRunnerError extends Error {
-  readonly code:
-    | "BUNDLE_TOO_LARGE"
-    | "REQUEST_TOO_LARGE"
-    | "RESPONSE_TOO_LARGE"
-    | "INVALID_BUNDLE"
-    | "INVALID_RESPONSE"
-    | "EXECUTION_LIMIT";
+  readonly code: GameSdkPortableRunnerErrorCode;
 
   constructor(
-    code:
-      | "BUNDLE_TOO_LARGE"
-      | "REQUEST_TOO_LARGE"
-      | "RESPONSE_TOO_LARGE"
-      | "INVALID_BUNDLE"
-      | "INVALID_RESPONSE"
-      | "EXECUTION_LIMIT",
+    code: GameSdkPortableRunnerErrorCode,
   ) {
     super(code);
     this.name = "GameSdkPortableRunnerError";
     this.code = code;
   }
+}
+
+export function gameSdkPortableRunnerHttpStatus(code: GameSdkPortableRunnerErrorCode) {
+  return code === "BUNDLE_TOO_LARGE" || code === "REQUEST_TOO_LARGE"
+    ? 413
+    : code === "EXECUTION_LIMIT"
+      ? 408
+      : 422;
 }
 
 function utf8Bytes(value: string) {
@@ -86,9 +90,14 @@ async function runPortableSession<T>(input: {
   const QuickJS = await newQuickJSWASMModule(RELEASE_SYNC);
   const runtime = QuickJS.newRuntime();
   const deadline = Date.now() + VM_EXECUTION_LIMIT_MS;
+  let executionDeadlineExceeded = false;
   runtime.setMemoryLimit(VM_MEMORY_LIMIT_BYTES);
   runtime.setMaxStackSize(VM_STACK_LIMIT_BYTES);
-  runtime.setInterruptHandler(() => Date.now() > deadline);
+  runtime.setInterruptHandler(() => {
+    const exceeded = Date.now() > deadline;
+    if (exceeded) executionDeadlineExceeded = true;
+    return exceeded;
+  });
   const context = runtime.newContext();
   input.timing?.record(
     "quickjs-init",
@@ -125,16 +134,21 @@ async function runPortableSession<T>(input: {
           }
           if (state.type === "rejected") {
             state.error.dispose();
-            throw new GameSdkPortableRunnerError("INVALID_BUNDLE");
+            throw new GameSdkPortableRunnerError(
+              executionDeadlineExceeded ? "EXECUTION_LIMIT" : "INVALID_BUNDLE",
+            );
           }
           if (Date.now() > deadline) {
+            executionDeadlineExceeded = true;
             throw new GameSdkPortableRunnerError("EXECUTION_LIMIT");
           }
           const jobs = runtime.executePendingJobs(100);
           try {
             if (jobs.error) {
               jobs.error.dispose();
-              throw new GameSdkPortableRunnerError("INVALID_BUNDLE");
+              throw new GameSdkPortableRunnerError(
+                executionDeadlineExceeded ? "EXECUTION_LIMIT" : "INVALID_BUNDLE",
+              );
             }
             if (jobs.value === 0 && !runtime.hasPendingJob()) {
               throw new GameSdkPortableRunnerError("INVALID_BUNDLE");
@@ -153,8 +167,7 @@ async function runPortableSession<T>(input: {
     return await input.execute(invoke);
   } catch (error) {
     if (error instanceof GameSdkPortableRunnerError) throw error;
-    const message = error instanceof Error ? error.message : "";
-    if (/interrupted|out of memory|stack overflow/i.test(message)) {
+    if (executionDeadlineExceeded) {
       throw new GameSdkPortableRunnerError("EXECUTION_LIMIT");
     }
     throw new GameSdkPortableRunnerError("INVALID_BUNDLE");

@@ -20,7 +20,7 @@ export class PreviewGrantVerifierError extends Error {
   }
 }
 
-function previewEnvironment(
+export function previewEnvironment(
   env: NodeJS.ProcessEnv = process.env,
 ): PreviewEnvironment {
   return env.VERCEL_GIT_COMMIT_REF === "main"

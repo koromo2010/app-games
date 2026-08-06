@@ -467,6 +467,7 @@ test("full-tree resolver stays Portal-audit-only while Preview runner single-fet
   const portalReader = readFileSync("apps/sdk-portal/lib/mock-git-store.ts", "utf8");
   const portalAudit = readFileSync("apps/sdk-portal/lib/runtime-manifest-audit.ts", "utf8");
   const previewSource = readFileSync("apps/sdk-preview/lib/preview-source.ts", "utf8");
+  const previewCache = readFileSync("apps/sdk-preview/lib/runtime-artifact-cache.ts", "utf8");
   const previewRoute = readFileSync("apps/sdk-preview/app/server/[instanceId]/[gameId]/[revision]/route.ts", "utf8");
   assert.match(portalReader, /createGamePackageRuntimeReader/);
   assert.match(portalReader, /recursive=1/);
@@ -476,7 +477,9 @@ test("full-tree resolver stays Portal-audit-only while Preview runner single-fet
   assert.equal((previewRoute.match(/fetchPreviewAsset\s*\(/g) ?? []).length, 1);
   assert.match(previewRoute, /assetPath:\s*"server\.bundle\.js"/);
   assert.match(previewRoute, /expectedBundleSha256 = grant\.bundleSha256/);
-  assert.match(previewRoute, /createHash\("sha256"\)[\s\S]*expectedBundleSha256/);
+  assert.match(previewRoute, /sdkPreviewRuntimeArtifactCache\.resolve/);
+  assert.match(previewCache, /createHash\("sha256"\)/);
+  assert.match(previewCache, /serverBundleSha256/);
   assert.match(previewRoute, /runGameSdkPortableServer/);
   assert.match(previewRoute, /runGameSdkPortableCommandBatch/);
   assert.match(previewRoute, /createGameSdkCommandTimingCollector/);

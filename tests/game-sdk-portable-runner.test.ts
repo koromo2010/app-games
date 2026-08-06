@@ -7,6 +7,8 @@ import {
   type GameSdkPortableServerRequest,
 } from "../packages/game-sdk/src/portable-server.ts";
 import {
+  GameSdkPortableRunnerError,
+  gameSdkPortableRunnerHttpStatus,
   runGameSdkPortableCommandBatch,
   runGameSdkPortableServer,
 } from "../apps/sdk-preview/lib/server-runner.ts";
@@ -213,4 +215,36 @@ test("existing protocol-v1 bundle batches apply and final presentation in one is
   assert.equal(counts.get("bundle-eval"), 1);
   assert.equal(counts.get("apply-command"), 1);
   assert.equal(counts.get("present-room"), 1);
+});
+
+test("guest interrupted text is not treated as a deadline timeout", async () => {
+  const bundle = "globalThis.GameFieldsServerBundle={async invoke(){throw new Error('interrupted by guest')}};";
+  await assert.rejects(
+    runGameSdkPortableServer({ bundle, request: request({ operation: "manifest" }) }),
+    (error: unknown) => error instanceof GameSdkPortableRunnerError && error.code === "INVALID_BUNDLE",
+  );
+  assert.equal(gameSdkPortableRunnerHttpStatus("INVALID_BUNDLE"), 422);
+});
+
+test("actual QuickJS deadline interruption maps to execution limit and 408", async () => {
+  const bundle = "globalThis.GameFieldsServerBundle={async invoke(){while(true){}}};";
+  await assert.rejects(
+    runGameSdkPortableServer({ bundle, request: request({ operation: "manifest" }) }),
+    (error: unknown) => error instanceof GameSdkPortableRunnerError && error.code === "EXECUTION_LIMIT",
+  );
+  assert.equal(gameSdkPortableRunnerHttpStatus("EXECUTION_LIMIT"), 408);
+});
+
+test("a timed-out session is disposed before the next valid invocation", async () => {
+  const timeoutBundle = "globalThis.GameFieldsServerBundle={async invoke(){while(true){}}};";
+  await assert.rejects(
+    runGameSdkPortableServer({ bundle: timeoutBundle, request: request({ operation: "manifest" }) }),
+    (error: unknown) => error instanceof GameSdkPortableRunnerError && error.code === "EXECUTION_LIMIT",
+  );
+  const validBundle = "globalThis.GameFieldsServerBundle={async invoke(){return JSON.stringify({ok:true,value:{alive:true}})}};";
+  const result = await runGameSdkPortableServer({
+    bundle: validBundle,
+    request: request({ operation: "manifest" }),
+  });
+  assert.deepEqual(result, { ok: true, value: { alive: true } });
 });
