@@ -108,6 +108,10 @@ type Props = {
   title: string;
   moduleProfile: GameSdkModuleProfile;
   settingDefinitions: readonly GameSdkSettingDefinition[];
+  previewIdentity?: {
+    environment: "development" | "production";
+    revision: string;
+  };
 };
 
 const commandClass = "rounded-lg border border-white/20 bg-white/10 px-3 py-2 font-bold text-white transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-45";
@@ -258,6 +262,7 @@ export function SdkPreviewGameShell({
   title,
   moduleProfile,
   settingDefinitions,
+  previewIdentity,
 }: Props) {
   const requirePreviewSession = useSdkPreviewSessionRequired();
   const frameRef = useRef<HTMLIFrameElement>(null);
@@ -908,6 +913,23 @@ export function SdkPreviewGameShell({
           </Link>
         </GameTopMenu>
       </GameTopBanner>
+
+      {previewIdentity && (
+        <section
+          className="mx-auto mt-4 flex max-w-6xl flex-wrap items-center justify-between gap-3 rounded-xl border border-cyan-400/35 bg-cyan-400/10 px-4 py-3 text-sm"
+          data-sdk-preview-identity
+        >
+          <div>
+            <strong className="text-cyan-200">
+              {previewIdentity.environment === "development" ? "DEV PREVIEW" : "PRODUCTION PREVIEW"}
+            </strong>
+            <span className="ml-3 text-slate-300">制作確認用Preview · 正式Roomではありません</span>
+          </div>
+          <code className="break-all text-xs text-cyan-100">
+            {creatorSlug}/{gameId}@{previewIdentity.revision}
+          </code>
+        </section>
+      )}
 
       {surface === "entry" && (
         <section className="mx-auto grid max-w-6xl gap-5 px-4 py-8 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,.85fr)]" data-sdk-preview-surface="entry">

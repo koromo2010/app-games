@@ -24,7 +24,7 @@ function CandidatePreviewUnavailable({ portalHref }: { portalHref: string }) {
         SDK Portalへ戻ってrevisionを確認し、同じPackageで再試行してください。
       </p>
       <p className="mt-3 font-mono text-sm text-red-800">SDK_PREVIEW_CANDIDATE_PACKAGE_NOT_AVAILABLE</p>
-      <a className="mt-5 inline-flex rounded-xl bg-slate-950 px-4 py-3 font-bold text-white" href={portalHref}>
+      <a className="mt-5 inline-flex rounded-xl bg-slate-950 px-4 py-3 font-bold text-white" href={portalHref} target="_top">
         SDK Portalへ戻る
       </a>
     </section>
@@ -36,19 +36,27 @@ export default async function SdkGamePage({
   searchParams,
 }: {
   params: Promise<{ creatorSlug: string; gameId: string }>;
-  searchParams: Promise<{ revision?: string }>;
+  searchParams: Promise<{ revision?: string; view?: string }>;
 }) {
   const { creatorSlug, gameId } = await params;
   const query = await searchParams;
   const revision = query.revision?.trim() ?? "";
-  if (revision && !REVISION_PATTERN.test(revision)) notFound();
+  const previewOnly = query.view === "preview";
+  if (
+    (revision && !REVISION_PATTERN.test(revision))
+    || (query.view !== undefined && !previewOnly)
+    || (previewOnly && !revision)
+  ) notFound();
 
   const portalBaseUrl = process.env.SDK_PORTAL_INTERNAL_URL?.replace(/\/$/, "")
     ?? (process.env.VERCEL_GIT_COMMIT_REF === "main"
       ? "https://sdk.game-fields.com"
       : "https://sdk-dev.game-fields.com");
+  const portalQuery = new URLSearchParams();
+  if (previewOnly) portalQuery.set("view", "preview");
+  if (revision) portalQuery.set("revision", revision);
   const portalHref = `${portalBaseUrl}/${creatorSlug}/games/${gameId}${
-    revision ? `?revision=${encodeURIComponent(revision)}` : ""
+    portalQuery.size > 0 ? `?${portalQuery.toString()}` : ""
   }`;
   const game = await loadSdkPreviewRuntimeDefinition(
     creatorSlug,
@@ -86,7 +94,7 @@ export default async function SdkGamePage({
         creatorSlug={creatorSlug}
         portalOrigin={new URL(portalBaseUrl).origin}
       />
-      {game.runtimeKind === "package" && game.revision && game.manifest ? (
+      {game.runtimeKind === "package" && game.revision && game.manifest && !previewOnly ? (
         <GameSdkFrame
           backHref={`/sdk-preview/${creatorSlug}`}
           creatorSlug={creatorSlug}
@@ -123,6 +131,12 @@ export default async function SdkGamePage({
           title={game.title}
           moduleProfile={normalizeGameSdkModuleProfile(game.modulePolicy)}
           settingDefinitions={game.settings}
+          previewIdentity={previewOnly && game.revision ? {
+            environment: process.env.VERCEL_GIT_COMMIT_REF === "main"
+              ? "production"
+              : "development",
+            revision: game.revision,
+          } : undefined}
         />
       )}
     </SdkPreviewSessionGate>

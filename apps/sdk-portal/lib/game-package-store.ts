@@ -9,6 +9,7 @@ import {
   saveGamePackageFilesToGit,
 } from "./mock-git-store.ts";
 import { ensureSdkSchema, sdkSql } from "./sdk-postgres.ts";
+import { creatorGamePreviewPath } from "./creator-game-route-contract.ts";
 
 const MAX_PACKAGE_REVISIONS_PER_GAME = 100;
 
@@ -30,7 +31,7 @@ export function candidatePackagePreviewPath(input: {
   gameId: string;
   revision: string;
 }) {
-  return `/${encodeURIComponent(input.creatorSlug)}/games/${encodeURIComponent(input.gameId)}?revision=${encodeURIComponent(input.revision)}`;
+  return creatorGamePreviewPath(input);
 }
 
 export type SavedGamePackage = {

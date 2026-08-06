@@ -13,6 +13,7 @@ export type SdkPreviewNavigationState = {
   creatorSlug: string;
   gameId?: string;
   revision?: string;
+  view?: "preview";
 };
 
 function optionalRevision(value: unknown) {
@@ -20,6 +21,19 @@ function optionalRevision(value: unknown) {
   return typeof value === "string" && REVISION_PATTERN.test(value)
     ? value
     : null;
+}
+
+function optionalView(value: unknown) {
+  if (value === undefined || value === "") return undefined;
+  return value === "preview" ? value : null;
+}
+
+function navigationQuery(state: SdkPreviewNavigationState) {
+  const query = new URLSearchParams();
+  if (state.view) query.set("view", state.view);
+  if (state.revision) query.set("revision", state.revision);
+  const value = query.toString();
+  return value ? `?${value}` : "";
 }
 
 export function normalizeSdkPreviewNavigationState(
@@ -36,15 +50,19 @@ export function normalizeSdkPreviewNavigationState(
       ? input.gameId.trim().toLowerCase()
       : "";
   const revision = optionalRevision(input.revision);
+  const view = optionalView(input.view);
   if (
     !CREATOR_PATTERN.test(creatorSlug)
     || (gameId !== undefined && !GAME_PATTERN.test(gameId))
     || revision === null
+    || view === null
+    || (view === "preview" && (!gameId || !revision))
   ) return null;
   return {
     creatorSlug,
     ...(gameId ? { gameId } : {}),
     ...(revision ? { revision } : {}),
+    ...(view ? { view } : {}),
   };
 }
 
@@ -60,18 +78,14 @@ export function sdkPreviewNavigationMessage(
 export function sdkPreviewPathForState(state: SdkPreviewNavigationState) {
   const base = `/sdk-preview/${encodeURIComponent(state.creatorSlug)}`;
   if (!state.gameId) return base;
-  const query = state.revision
-    ? `?revision=${encodeURIComponent(state.revision)}`
-    : "";
+  const query = navigationQuery(state);
   return `${base}/games/${encodeURIComponent(state.gameId)}${query}`;
 }
 
 export function sdkPortalPathForState(state: SdkPreviewNavigationState) {
   const base = `/${encodeURIComponent(state.creatorSlug)}`;
   if (!state.gameId) return base;
-  const query = state.revision
-    ? `?revision=${encodeURIComponent(state.revision)}`
-    : "";
+  const query = navigationQuery(state);
   return `${base}/games/${encodeURIComponent(state.gameId)}${query}`;
 }
 
@@ -97,6 +111,7 @@ export function sdkPreviewNavigationStateFromPath(
     creatorSlug,
     ...(gameId ? { gameId } : {}),
     ...(query.get("revision") ? { revision: query.get("revision") } : {}),
+    ...(query.get("view") ? { view: query.get("view") } : {}),
   });
 }
 
@@ -113,5 +128,6 @@ export function sdkPortalNavigationStateFromPath(
     creatorSlug: decodeURIComponent(match[1] ?? ""),
     ...(match[2] ? { gameId: decodeURIComponent(match[2]) } : {}),
     ...(query.get("revision") ? { revision: query.get("revision") } : {}),
+    ...(query.get("view") ? { view: query.get("view") } : {}),
   });
 }

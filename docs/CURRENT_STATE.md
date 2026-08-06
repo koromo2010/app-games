@@ -161,6 +161,15 @@ SDK Previewのportable serverを呼ぶ。Portalの`/api/health`はDB schemaに�
 同じ最新candidateを解決する。Packageが1件もない場合だけ旧Mock Previewを許可し、
 Package lookup、Runtime bundle、grant生成の失敗時はMockへfallbackしない。
 
+SDK Portalの制作者導線は、`/<creator>`の制作環境、`/<creator>/games/<game>?view=modules`の
+共通モジュール設定、同じ固定revisionへ`view=preview&revision=<sha>`を付けるブラウザ内Preview、
+`revision=<sha>`だけを付ける正式Roomの4責務へ分離する。Previewはclient packageのUI確認専用で、
+Room API、Redis、active Room復帰、戦績・結果保存を使用しない。正式RoomだけがRoom参加、CAS、
+portable server、actor別View、復帰を扱う。既存RoomのrevisionとURL指定revisionが異なる場合も、
+Previewへ遷移・fallbackせず正式Room上で明示選択を求める。MCPの`packagePreviewUrl`は
+`view=preview`を含む固定revision URLを返し、Runtime packageは既存revisionを上書きせず、
+内容変更時に新revisionとして追加する。
+
 formal package Roomは作成時の`runtimeContract.packageRevision`を不変条件として保持し、
 すべてのRoom Snapshotと一覧へそのrevisionを返す。active Room復帰時にURL指定revisionと
 Room固定revisionが同じなら通常復帰し、異なる場合はclient iframeを起動しない。利用者は

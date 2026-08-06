@@ -14,6 +14,7 @@ type SyncMessage = {
   creatorSlug?: unknown;
   gameId?: unknown;
   revision?: unknown;
+  view?: unknown;
 };
 
 function navigationState(creatorSlug: string): SdkPreviewNavigationState | null {
@@ -52,7 +53,7 @@ export function SdkPreviewNavigationBridge({
           ? `/sdk-preview/${event.data.creatorSlug}${event.data.gameId ? `/games/${event.data.gameId}` : ""}`
           : "",
         typeof event.data.revision === "string"
-          ? `?revision=${encodeURIComponent(event.data.revision)}`
+          ? `${event.data.view === "preview" ? "?view=preview&" : "?"}revision=${encodeURIComponent(event.data.revision)}`
           : "",
       );
       if (!requested || requested.creatorSlug !== creatorSlug) return;

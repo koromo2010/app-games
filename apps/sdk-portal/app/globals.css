@@ -50,6 +50,8 @@ main {
 .creator-preview-actions a { padding: 9px 12px; border-radius: 8px; background: #0891b2; color: #fff; font-size: .76rem; font-weight: 700; }
 .creator-preview-actions a:hover { background: #06b6d4; }
 .module-review { position: fixed; z-index: 50; right: 18px; bottom: 18px; }
+.module-review--inline { position: static; z-index: auto; }
+.module-review--inline .module-review-trigger { width: 100%; min-height: 112px; padding: 20px; }
 .module-review-trigger { min-width: 188px; display: flex; align-items: flex-start; flex-direction: column; gap: 3px; padding: 11px 14px; border: 1px solid rgba(145,242,176,.45); border-radius: 12px; background: rgba(7,16,12,.94); box-shadow: 0 16px 48px rgba(0,0,0,.4); cursor: pointer; font-size: .72rem; text-align: left; }
 .module-review-trigger strong { color: var(--accent); font: .68rem ui-monospace, monospace; }
 .module-review-backdrop { position: fixed; z-index: 60; inset: 0; display: flex; justify-content: flex-end; background: rgba(2,6,23,.6); backdrop-filter: blur(3px); }
@@ -118,6 +120,7 @@ main {
 .creator-account-reconnect form { margin: 18px 0 10px; }
 .creator-account-reconnect button.primary-action { cursor: pointer; }
 .package-export { position: fixed; z-index: 45; left: 18px; bottom: 18px; width: min(430px, calc(100vw - 36px)); max-height: min(70vh, 620px); overflow: auto; padding: 14px; border: 1px solid rgba(34,211,238,.35); border-radius: 12px; background: rgba(7,16,28,.96); box-shadow: 0 16px 48px rgba(0,0,0,.42); }
+.package-export--inline { position: static; z-index: auto; width: 100%; max-height: none; padding: 20px; }
 .package-export header,.package-export section,.package-export section div { display: flex; gap: 7px; }
 .package-export header,.package-export section { flex-direction: column; }
 .package-export header { padding-bottom: 10px; border-bottom: 1px solid var(--line); }
@@ -128,6 +131,9 @@ main {
 .package-export code,.package-export small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .package-export code { font-size: .65rem; }
 .package-export a { width: fit-content; margin-top: 4px; padding: 8px 10px; border-radius: 7px; background: #0891b2; color: white; font-size: .7rem; font-weight: 700; }
+.package-export .package-export__actions { flex-wrap: wrap; justify-content: flex-start; }
+.game-management-grid { display: grid; gap: 18px; grid-template-columns: minmax(240px,.7fr) minmax(0,1.3fr); align-items: start; }
+@media (max-width: 840px) { .game-management-grid { grid-template-columns: 1fr; } }
 
 @media (max-width: 900px) {
   .preview-room { grid-template-columns: 1fr; }

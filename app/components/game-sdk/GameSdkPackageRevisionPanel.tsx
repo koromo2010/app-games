@@ -39,7 +39,7 @@ export function GameSdkPackageRevisionPanel({
         title={title}
         rules={rules}
         backHref={backHref}
-        backLabel={creatorSlug ? "制作者ページへ" : "広場へ戻る"}
+        backLabel={creatorSlug ? "制作環境へ戻る" : "広場へ戻る"}
         surface="lounge"
       />
       <section className="mx-auto max-w-3xl">

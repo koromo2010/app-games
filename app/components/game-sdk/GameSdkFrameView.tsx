@@ -216,15 +216,16 @@ export function GameSdkFrameView(props: GameSdkFrameViewProps) {
           title={title}
           rules={rules}
           backHref={backHref}
-          backLabel={creatorSlug ? "制作者ページへ" : "広場へ戻る"}
+          backLabel={creatorSlug ? "制作環境へ戻る" : "広場へ戻る"}
           surface="lounge"
         />
         {isRestoringRoom ? (
           <section className="mx-auto max-w-5xl">
             <div className={panel}>
-              <h2 className="text-xl font-black">前の部屋を確認中</h2>
+              <h2 className="text-xl font-black">既存Roomへの復帰を確認中</h2>
               <p className="mt-2 text-sm text-slate-600">
-                参加中の部屋があれば、そのまま復帰します。
+                これは正式Roomの復帰確認です。制作確認用Previewとは別の状態です。
+                参加中のRoomがある場合だけ、その固定revisionへ復帰します。
               </p>
             </div>
           </section>
@@ -308,7 +309,7 @@ export function GameSdkFrameView(props: GameSdkFrameViewProps) {
         title={title}
         rules={rules}
         backHref={backHref}
-        backLabel={creatorSlug ? "制作者ページへ" : "広場へ戻る"}
+        backLabel={creatorSlug ? "制作環境へ戻る" : "広場へ戻る"}
         surface={
           room.phase === "lobby"
             ? "lobby"

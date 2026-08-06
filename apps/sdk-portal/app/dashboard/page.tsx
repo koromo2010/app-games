@@ -4,6 +4,12 @@ import { AccountMenu } from "../account-menu";
 import { getSdkAccountSession } from "@/lib/account-session";
 import { listAccountGames, listCreatorEnvironments } from "@/lib/instance-registry";
 import { SubmitGameButton } from "./SubmitGameButton";
+import {
+  creatorEnvironmentPath,
+  creatorGameFormalRoomPath,
+  creatorGameModulesPath,
+  creatorGamePreviewPath,
+} from "@/lib/creator-game-route-contract";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +31,20 @@ function gameHref(game: Game) {
 
 function candidatePreviewHref(game: Game) {
   if (!game.packageCandidateRevision) return null;
-  return `/${game.creatorSlug}/games/${game.gameId}?revision=${encodeURIComponent(game.packageCandidateRevision)}`;
+  return creatorGamePreviewPath({
+    creatorSlug: game.creatorSlug,
+    gameId: game.gameId,
+    revision: game.packageCandidateRevision,
+  });
+}
+
+function candidateFormalRoomHref(game: Game) {
+  if (!game.packageCandidateRevision) return null;
+  return creatorGameFormalRoomPath({
+    creatorSlug: game.creatorSlug,
+    gameId: game.gameId,
+    revision: game.packageCandidateRevision,
+  });
 }
 
 export default async function CreatorDashboard() {
@@ -76,6 +95,7 @@ export default async function CreatorDashboard() {
         {games.map((game) => {
           const stage = gameStage(game);
           const candidateHref = candidatePreviewHref(game);
+          const formalRoomHref = candidateFormalRoomHref(game);
           return <article className="creator-game-card" key={`${game.creatorSlug}/${game.gameId}`}>
             <div className="creator-game-card__meta">
               <span className={`game-stage game-stage--${stage.tone}`}>{stage.label}</span>
@@ -87,12 +107,15 @@ export default async function CreatorDashboard() {
             </div>
             <div className="creator-game-card__actions">
               {candidateHref && game.packageCandidateAvailable ? (
-                <Link className="primary-action" href={candidateHref}>正式Roomで確認 <span aria-hidden="true">→</span></Link>
+                <Link className="primary-action" href={candidateHref}>Preview <span aria-hidden="true">→</span></Link>
               ) : (
                 <Link className="primary-action" href={gameHref(game)}>ゲームを開く <span aria-hidden="true">→</span></Link>
               )}
-              <Link className="secondary-action" href={`/${game.creatorSlug}/games/${game.gameId}`}>共通モジュール設定</Link>
-              <Link className="secondary-action" href={`/${game.creatorSlug}/games/${game.gameId}`}>制作環境</Link>
+              {formalRoomHref && game.packageCandidateAvailable && (
+                <Link className="secondary-action" href={formalRoomHref}>正式Roomで確認</Link>
+              )}
+              <Link className="secondary-action" href={creatorGameModulesPath({ creatorSlug: game.creatorSlug, gameId: game.gameId })}>共通モジュール設定</Link>
+              <Link className="secondary-action" href={creatorEnvironmentPath(game.creatorSlug)}>制作環境</Link>
               {game.packageCandidateAvailable && (
                 <SubmitGameButton
                   instanceId={game.creatorSlug}

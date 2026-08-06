@@ -47,8 +47,12 @@ test("SDK MCP challenges unauthenticated callers and scopes mock publication", (
   assert.match(dashboard, /ready-for-submission/);
   assert.match(
     dashboard,
-    /href=\{`\/\$\{game\.creatorSlug\}\/games\/\$\{game\.gameId\}`\}>制作環境/,
+    /href=\{creatorEnvironmentPath\(game\.creatorSlug\)\}>制作環境/,
   );
+  assert.match(dashboard, /creatorGameModulesPath/);
+  assert.match(dashboard, /creatorGamePreviewPath/);
+  assert.match(dashboard, /creatorGameFormalRoomPath/);
+  assert.match(mcp, /packagePreviewUrl: `\$\{portalBaseUrl\(origin\)\}\$\{result\.candidatePreviewPath\}`/);
   assert.match(instanceRegistry, /candidate\.revision AS "packageCandidateRevision"/);
   assert.match(submitButton, /更新版を正式提出/);
   assert.match(mcp, /immutableAppSet: true/);

@@ -5,16 +5,12 @@ import {
   getSdkAccountSession,
 } from "@/lib/account-session";
 import {
-  listAccountGames,
   normalizeInstanceSlug,
   resolveCreatorOwner,
   validateInstanceSlug,
 } from "@/lib/instance-registry";
 import { resolveSdkSession } from "@/lib/sdk-owner-classification";
-import {
-  logSdkOwnerLookupFailure,
-  logSdkSessionLookupFailure,
-} from "@/lib/sdk-owner-observability";
+import { logSdkSessionLookupFailure } from "@/lib/sdk-owner-observability";
 import { CreatorAccountReconnect } from "../CreatorAccountReconnect";
 import { CreatorOwnershipIssue } from "../CreatorOwnershipIssue";
 import { CreatorPreviewFrame } from "../CreatorPreviewFrame";
@@ -49,31 +45,6 @@ export default async function PreviewInstancePage({ params }: {
   }
   if (owner.status !== "authorized") {
     return <CreatorOwnershipIssue kind="record_inconsistency" />;
-  }
-
-  let creatorGames;
-  try {
-    creatorGames = await listAccountGames(account.playerId);
-  } catch (error) {
-    logSdkOwnerLookupFailure(error);
-    return <CreatorOwnershipIssue kind="lookup_unavailable" />;
-  }
-  creatorGames = creatorGames
-    .filter((game) => game.creatorSlug === slug);
-  const packageReadyGames = creatorGames.filter((game) => (
-    game.packageCandidateAvailable && game.packageCandidateRevision
-  ));
-
-  // A creator environment with one package-ready game should open the same
-  // revision-pinned GameSdkFrame used by formal Room verification. The legacy
-  // preview shell remains only for environments that still have no package.
-  if (creatorGames.length === 1 && packageReadyGames.length === 1) {
-    const game = packageReadyGames[0];
-    redirect(
-      `/${slug}/games/${game.gameId}?revision=${encodeURIComponent(
-        game.packageCandidateRevision!,
-      )}`,
-    );
   }
 
   const appBaseUrl = process.env.GAME_FIELDS_PREVIEW_APP_URL?.replace(/\/$/, "")

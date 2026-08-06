@@ -332,7 +332,7 @@ async function callTool(name: string, args: Record<string, unknown>, playerId: s
     });
     return textResult({
       ...result,
-      packagePreviewUrl: `${portalBaseUrl(origin)}/${slug}/games/${gameId}`,
+      packagePreviewUrl: `${portalBaseUrl(origin)}${result.candidatePreviewPath}`,
       immutableAppSet: true,
       instruction:
         "提出候補を保存しました。制作者本人がSDKダッシュボードの「正式提出」を押すまで審査候補にはなりません。",

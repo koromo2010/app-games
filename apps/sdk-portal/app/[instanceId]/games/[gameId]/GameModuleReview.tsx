@@ -15,6 +15,7 @@ type Props = {
   gameId: string;
   initialProfile: GameSdkModuleProfile;
   canCustomize: boolean;
+  placement?: "fixed" | "inline";
 };
 
 const groupLabels: Record<GameSdkModuleGroup, string> = {
@@ -33,6 +34,7 @@ export function GameModuleReview({
   gameId,
   initialProfile,
   canCustomize,
+  placement = "fixed",
 }: Props) {
   const [open, setOpen] = useState(false);
   const [profile, setProfile] = useState(initialProfile);
@@ -138,7 +140,7 @@ export function GameModuleReview({
   };
 
   return (
-    <div className="module-review">
+    <div className={`module-review module-review--${placement}`}>
       <button
         type="button"
         className="module-review-trigger"

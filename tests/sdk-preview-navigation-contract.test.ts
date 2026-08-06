@@ -36,6 +36,44 @@ test("navigation contract maps list and detail state without a fixed game fallba
   );
 });
 
+test("navigation contract preserves the client-only Preview surface independently from formal Room", () => {
+  const state = {
+    creatorSlug: "creator-1",
+    gameId: "game-a",
+    revision,
+    view: "preview" as const,
+  };
+  assert.equal(
+    sdkPreviewPathForState(state),
+    `/sdk-preview/creator-1/games/game-a?view=preview&revision=${revision}`,
+  );
+  assert.equal(
+    sdkPortalPathForState(state),
+    `/creator-1/games/game-a?view=preview&revision=${revision}`,
+  );
+  assert.deepEqual(
+    sdkPreviewNavigationStateFromPath(
+      "/sdk-preview/creator-1/games/game-a",
+      `?view=preview&revision=${revision}`,
+    ),
+    state,
+  );
+  assert.equal(
+    sdkPreviewNavigationStateFromPath(
+      "/sdk-preview/creator-1/games/game-a",
+      "?view=preview",
+    ),
+    null,
+  );
+  assert.equal(
+    sdkPortalNavigationStateFromPath(
+      "/creator-1/games/game-a",
+      `?view=modules&revision=${revision}`,
+    ),
+    null,
+  );
+});
+
 test("Preview parser accepts the unprefixed and canonical localized route forms", () => {
   const creatorState = { creatorSlug: "creator-1" };
   for (const pathname of [
