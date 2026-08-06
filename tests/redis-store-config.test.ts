@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { namespaceRedisCommand, resolveSocketRedisUrl } from "../lib/redis-store.ts";
+import {
+  namespaceRedisCommand,
+  namespaceRedisCommands,
+  resolveSocketRedisConfig,
+  resolveSocketRedisUrl,
+} from "../lib/redis-store.ts";
 
 test("Integrationが発行した単一のRedis URLを検出する", () => {
   assert.deepEqual(resolveSocketRedisUrl({ devredis_REDIS_URL: "rediss://example.test:6379" }), {
@@ -35,6 +40,82 @@ test("共有Redis上のapp-devキーを通常・複数・Lua・SCANコマンド�
   assert.deepEqual(namespaceRedisCommand(["EVAL", "return 1", "2", "room:1", "room:2", "arg"], "app-dev:"), ["EVAL", "return 1", "2", "app-dev:room:1", "app-dev:room:2", "arg"]);
   assert.deepEqual(namespaceRedisCommand(["SCAN", "0", "MATCH", "account:*", "COUNT", "100"], "app-dev:"), ["SCAN", "0", "MATCH", "app-dev:account:*", "COUNT", "100"]);
   assert.deepEqual(namespaceRedisCommand(["GET", "app-dev:player:1"], "app-dev:"), ["GET", "app-dev:player:1"]);
+});
+
+test("HSETNXとStreamsの単一key commandだけをnamespace化する", () => {
+  for (const command of [
+    ["HSETNX", "wordwolf:topic:catalog:v1", "topic", "payload"],
+    ["XADD", "online-room:events:v1", "*", "d", "payload"],
+    ["XDEL", "online-room:events:v1", "1-0"],
+    ["XLEN", "online-room:events:v1"],
+    ["XRANGE", "online-room:events:v1", "-", "+"],
+    ["XREVRANGE", "online-room:events:v1", "+", "-"],
+    ["XTRIM", "online-room:events:v1", "MAXLEN", "~", "100"],
+  ]) {
+    assert.equal(namespaceRedisCommand(command, "app-dev:")[1], "app-dev:" + command[1]);
+  }
+});
+
+test("XREADとXREADGROUPはSTREAMS後のkey群だけをnamespace化する", () => {
+  assert.deepEqual(
+    namespaceRedisCommand([
+      "XREAD", "COUNT", "10", "BLOCK", "5000", "STREAMS",
+      "events:a", "events:b", "0-0", "1-0",
+    ], "app-dev:"),
+    [
+      "XREAD", "COUNT", "10", "BLOCK", "5000", "STREAMS",
+      "app-dev:events:a", "app-dev:events:b", "0-0", "1-0",
+    ],
+  );
+  assert.deepEqual(
+    namespaceRedisCommand([
+      "XREADGROUP", "GROUP", "group-a", "consumer-a", "COUNT", "10", "NOACK", "STREAMS",
+      "events:a", "events:b", "0-0", "1-0",
+    ], "app-dev:"),
+    [
+      "XREADGROUP", "GROUP", "group-a", "consumer-a", "COUNT", "10", "NOACK", "STREAMS",
+      "app-dev:events:a", "app-dev:events:b", "0-0", "1-0",
+    ],
+  );
+});
+
+test("XGROUPとXINFOは既知subcommandのkeyだけをnamespace化しHELPや未知値を変換しない", () => {
+  assert.deepEqual(
+    namespaceRedisCommand(["XGROUP", "CREATE", "events", "group-a", "0-0"], "app-dev:"),
+    ["XGROUP", "CREATE", "app-dev:events", "group-a", "0-0"],
+  );
+  assert.deepEqual(namespaceRedisCommand(["XGROUP", "HELP"], "app-dev:"), ["XGROUP", "HELP"]);
+  assert.deepEqual(
+    namespaceRedisCommand(["XINFO", "STREAM", "events", "FULL"], "app-dev:"),
+    ["XINFO", "STREAM", "app-dev:events", "FULL"],
+  );
+  assert.deepEqual(namespaceRedisCommand(["XINFO", "HELP"], "app-dev:"), ["XINFO", "HELP"]);
+  assert.deepEqual(namespaceRedisCommand(["XINFO", "UNKNOWN", "events"], "app-dev:"), ["XINFO", "UNKNOWN", "events"]);
+});
+
+test("REST pipelineとsocket transactionは同じnamespace command列を使う", () => {
+  const commands = [
+    ["XADD", "online-room:events:v1", "*", "d", "payload"],
+    ["XREAD", "STREAMS", "online-room:events:v1", "0-0"],
+  ];
+  assert.deepEqual(namespaceRedisCommands(commands, "app-dev:"), commands.map((command) => namespaceRedisCommand(command, "app-dev:")));
+});
+
+test("isolated Previewのsocket Redis資格は接続前にfail-closedする", () => {
+  assert.throws(
+    () => resolveSocketRedisConfig({
+      VERCEL_PROJECT_NAME: "app-games-preview-dev",
+      DEV_REDIS_REDIS_URL: "rediss://preview.example.test:6379",
+    }),
+    /REDIS_STORE_FORBIDDEN_FOR_ISOLATED_PREVIEW/,
+  );
+  assert.deepEqual(
+    resolveSocketRedisConfig({
+      VERCEL_PROJECT_NAME: "app-games-dev",
+      DEV_REDIS_REDIS_URL: "rediss://development.example.test:6379",
+    }),
+    { url: "rediss://development.example.test:6379", keyPrefix: "app-dev:" },
+  );
 });
 
 test("複数のIntegration Redis URLがあれば誤接続防止で停止する", () => {

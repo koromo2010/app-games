@@ -11,7 +11,11 @@ import {
   emitObservabilityEvent,
   observabilityErrorCode,
 } from "./observability/index.ts";
-import { redisCommand, resolveSocketRedisUrl } from "./redis-store.ts";
+import {
+  namespaceRedisCommand,
+  redisCommand,
+  resolveSocketRedisConfig,
+} from "./redis-store.ts";
 import { expectedAppEnvironment } from "./storage-environment-guard.ts";
 
 const eventStreamKey = "online-room:events:v1";
@@ -39,7 +43,7 @@ export function onlineRoomRealtimeEnabled(env: NodeJS.ProcessEnv = process.env) 
 
 export function onlineRoomRealtimeSocketConfigured() {
   try {
-    return Boolean(resolveSocketRedisUrl());
+    return Boolean(resolveSocketRedisConfig());
   } catch {
     return false;
   }
@@ -74,12 +78,29 @@ function parseStoredEvent(raw: string | undefined) {
   }
 }
 
+function stringifyRedisCommand(command: unknown[]) {
+  return command.map((part) => typeof part === "string" ? part : String(part));
+}
+
+export function onlineRoomRealtimeReaderCommands(keyPrefix: string, lastEventId = "0-0") {
+  return {
+    tail: stringifyRedisCommand(namespaceRedisCommand(
+      ["XREVRANGE", eventStreamKey, "+", "-", "COUNT", "1"],
+      keyPrefix,
+    )),
+    read: stringifyRedisCommand(namespaceRedisCommand(
+      ["XREAD", "BLOCK", String(streamBlockMs), "COUNT", "100", "STREAMS", eventStreamKey, lastEventId],
+      keyPrefix,
+    )),
+  };
+}
+
 async function closeStreamClient(client: ReturnType<typeof createClient>) {
   if (!client.isOpen) return;
   await client.close().catch(() => undefined);
 }
 
-async function runStream(url: string) {
+async function runStream(url: string, keyPrefix: string) {
   const client = createClient({
     url,
     socket: { reconnectStrategy: (retries) => Math.min(5_000, Math.max(200, retries * 200)) },
@@ -87,12 +108,12 @@ async function runStream(url: string) {
   hub.streamClient = client;
   try {
     await client.connect();
-    const tail = await client.sendCommand<string[][]>(["XREVRANGE", eventStreamKey, "+", "-", "COUNT", "1"]);
+    const tail = await client.sendCommand<string[][]>(onlineRoomRealtimeReaderCommands(keyPrefix).tail);
     hub.lastEventId = tail?.[0]?.[0] ?? "0-0";
     while (hub.streaming && hub.sockets.size > 0) {
-      const result = await client.sendCommand<StreamResult>([
-        "XREAD", "BLOCK", String(streamBlockMs), "COUNT", "100", "STREAMS", eventStreamKey, hub.lastEventId,
-      ]);
+      const result = await client.sendCommand<StreamResult>(
+        onlineRoomRealtimeReaderCommands(keyPrefix, hub.lastEventId).read,
+      );
       for (const [, entries] of result ?? []) {
         for (const [id, flat] of entries) {
           hub.lastEventId = id;
@@ -119,15 +140,15 @@ async function runStream(url: string) {
 
 function startStream() {
   if (hub.streaming || hub.sockets.size === 0 || !onlineRoomRealtimeEnabled()) return;
-  let socketConfig: ReturnType<typeof resolveSocketRedisUrl>;
+  let socketConfig: ReturnType<typeof resolveSocketRedisConfig>;
   try {
-    socketConfig = resolveSocketRedisUrl();
+    socketConfig = resolveSocketRedisConfig();
   } catch {
     return;
   }
   if (!socketConfig) return;
   hub.streaming = true;
-  void runStream(socketConfig.url);
+  void runStream(socketConfig.url, socketConfig.keyPrefix);
 }
 
 function startHeartbeat() {

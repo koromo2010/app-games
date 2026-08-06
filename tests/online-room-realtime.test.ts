@@ -7,7 +7,11 @@ import {
   parseOnlineRoomRevisionEvent,
   parseOnlineRoomSubscription,
 } from "../lib/online-room-realtime-protocol.ts";
-import { onlineRoomRealtimeEnabled } from "../lib/online-room-realtime-server.ts";
+import {
+  onlineRoomRealtimeEnabled,
+  onlineRoomRealtimeReaderCommands,
+} from "../lib/online-room-realtime-server.ts";
+import { namespaceRedisCommand } from "../lib/redis-store.ts";
 
 test("部屋更新通知はゲームと4文字の部屋番号だけを購読する", () => {
   assert.deepEqual(parseOnlineRoomSubscription({ type: "subscribe", game: "tahoiya", code: "ab12" }), {
@@ -89,4 +93,26 @@ test("WebSocket再接続は30秒を上限に指数バックオフする", () => 
   assert.equal(nextOnlineRoomRealtimeReconnectDelay(16_000), 30_000);
   assert.equal(nextOnlineRoomRealtimeReconnectDelay(30_000), 30_000);
   assert.equal(onlineRoomRealtimeTimings.reconciliation, 45_000);
+});
+
+test("developmentのrealtime writerとdirect socket readerは同じnamespaced stream keyを使う", () => {
+  const prefix = "app-dev:";
+  const writer = namespaceRedisCommand(
+    ["XADD", "online-room:events:v1", "*", "d", "payload"],
+    prefix,
+  );
+  const reader = onlineRoomRealtimeReaderCommands(prefix, "12-0");
+  const streamIndex = reader.read.indexOf("STREAMS");
+
+  assert.equal(writer[1], "app-dev:online-room:events:v1");
+  assert.equal(reader.tail[1], writer[1]);
+  assert.equal(streamIndex > -1, true);
+  assert.equal(reader.read[streamIndex + 1], writer[1]);
+  assert.equal(reader.read.at(-1), "12-0");
+});
+
+test("productionのrealtime stream keyは既存prefixなしを維持する", () => {
+  const reader = onlineRoomRealtimeReaderCommands("");
+  assert.equal(reader.tail[1], "online-room:events:v1");
+  assert.equal(reader.read[reader.read.indexOf("STREAMS") + 1], "online-room:events:v1");
 });

@@ -80,6 +80,11 @@ const redisReadCommands = new Set([
   "ZREVRANGE",
   "ZSCORE",
   "ZMSCORE",
+  "XINFO",
+  "XLEN",
+  "XRANGE",
+  "XREVRANGE",
+  "XREAD",
 ]);
 const redisTelemetryCommands = new Set<string>(
   observabilityStorageCommands,
@@ -206,11 +211,35 @@ function prefixRedisKey(value: unknown, prefix: string) {
 
 const singleKeyCommands = new Set([
   "DECR", "EXPIRE", "GET", "HDEL", "HGET", "HGETALL", "HINCRBY", "HKEYS", "HLEN", "HMGET", "HSCAN",
-  "HSET", "HVALS", "INCR", "INCRBY", "LLEN", "LPUSH", "LRANGE", "LREM", "LTRIM", "RPUSH", "SADD", "SCARD",
+  "HSET", "HSETNX", "HVALS", "INCR", "INCRBY", "LLEN", "LPUSH", "LRANGE", "LREM", "LTRIM", "RPUSH", "SADD", "SCARD",
   "SISMEMBER", "SMEMBERS", "SMISMEMBER", "SREM", "SSCAN", "SET", "TTL", "ZADD", "ZCARD", "ZINCRBY",
   "ZMSCORE", "ZRANGE", "ZREM", "ZREVRANGE", "ZSCORE",
+  "XADD", "XDEL", "XLEN", "XRANGE", "XREVRANGE", "XTRIM",
 ]);
 const allKeyCommands = new Set(["DEL", "EXISTS", "MGET"]);
+
+const xgroupKeySubcommands = new Set([
+  "CREATE",
+  "CREATECONSUMER",
+  "DELCONSUMER",
+  "DESTROY",
+  "SETID",
+]);
+const xinfoKeySubcommands = new Set(["CONSUMERS", "GROUPS", "STREAM"]);
+
+function namespaceStreamKeysAfterStreams(command: unknown[], prefix: string, namespaced: unknown[]) {
+  const streamsIndex = command.findIndex((part, index) => (
+    index > 0 && typeof part === "string" && part.trim().toUpperCase() === "STREAMS"
+  ));
+  if (streamsIndex < 0) return;
+  const streamAndIdCount = command.length - streamsIndex - 1;
+  if (streamAndIdCount < 2 || streamAndIdCount % 2 !== 0) return;
+  const streamCount = streamAndIdCount / 2;
+  for (let index = 0; index < streamCount; index += 1) {
+    const keyIndex = streamsIndex + 1 + index;
+    namespaced[keyIndex] = prefixRedisKey(namespaced[keyIndex], prefix);
+  }
+}
 
 export function namespaceRedisCommand(command: unknown[], prefix: string) {
   if (!prefix || command.length === 0) return command;
@@ -233,8 +262,30 @@ export function namespaceRedisCommand(command: unknown[], prefix: string) {
         namespaced[index + 1] = prefixRedisKey(namespaced[index + 1], prefix);
       }
     }
+  } else if (name === "XREAD" || name === "XREADGROUP") {
+    namespaceStreamKeysAfterStreams(command, prefix, namespaced);
+  } else if (name === "XGROUP" && xgroupKeySubcommands.has(String(command[1]).trim().toUpperCase())) {
+    namespaced[2] = prefixRedisKey(namespaced[2], prefix);
+  } else if (name === "XINFO" && xinfoKeySubcommands.has(String(command[1]).trim().toUpperCase())) {
+    namespaced[2] = prefixRedisKey(namespaced[2], prefix);
   }
   return namespaced;
+}
+
+export function namespaceRedisCommands(commands: unknown[][], prefix: string) {
+  return commands.map((command) => namespaceRedisCommand(command, prefix));
+}
+
+const isolatedPreviewProjects = new Set([
+  "app-games-sdk-preview",
+  "app-games-preview-dev",
+]);
+
+export function assertRedisStoreAccessAllowed(env: RedisEnvironment = process.env) {
+  const projectName = env.VERCEL_PROJECT_NAME?.trim().toLowerCase();
+  if (projectName && isolatedPreviewProjects.has(projectName)) {
+    throw new Error("REDIS_STORE_FORBIDDEN_FOR_ISOLATED_PREVIEW");
+  }
 }
 
 export function getRedisConfig() {
@@ -245,6 +296,7 @@ export function getRedisConfig() {
   const token = usesDevIntegration ? devToken : process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
 
   if (url && token) {
+    assertRedisStoreAccessAllowed();
     assertRedisEnvironment();
     return {
       transport: "rest",
@@ -254,15 +306,25 @@ export function getRedisConfig() {
     } satisfies RedisConfig;
   }
 
-  const socketConfig = resolveSocketRedisUrl();
+  const socketConfig = resolveSocketRedisConfig();
   if (!socketConfig) return null;
   assertRedisEnvironment();
 
   return {
     transport: "socket",
     url: socketConfig.url,
-    keyPrefix: appRedisKeyPrefix(socketConfig.key),
+    keyPrefix: socketConfig.keyPrefix,
   } satisfies RedisConfig;
+}
+
+export function resolveSocketRedisConfig(env: RedisEnvironment = process.env) {
+  const socketConfig = resolveSocketRedisUrl(env);
+  if (!socketConfig) return null;
+  assertRedisStoreAccessAllowed(env);
+  return {
+    url: socketConfig.url,
+    keyPrefix: appRedisKeyPrefix(socketConfig.key),
+  };
 }
 
 async function getSocketRedisClient(url: string) {
@@ -396,9 +458,7 @@ export async function redisPipeline<T extends unknown[]>(commands: unknown[][]) 
     );
   }
 
-  const namespacedCommands = commands.map((command) => (
-    namespaceRedisCommand(command, config.keyPrefix)
-  ));
+  const namespacedCommands = namespaceRedisCommands(commands, config.keyPrefix);
   const telemetry = redisOperationTelemetry(
     commands,
     "pipeline",

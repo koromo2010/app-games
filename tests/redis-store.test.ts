@@ -116,6 +116,66 @@ test("Redis書き込みは一時エラーでも自動再実行しない", async 
   }
 });
 
+test("isolated PreviewにRedis資格があってもREST fetch前にfail-closedする", async () => {
+  const originalUrl = process.env.UPSTASH_REDIS_REST_URL;
+  const originalToken = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const originalDevUrl = process.env.DEV_REDIS_KV_REST_API_URL;
+  const originalDevToken = process.env.DEV_REDIS_KV_REST_API_TOKEN;
+  const originalProject = process.env.VERCEL_PROJECT_NAME;
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  process.env.UPSTASH_REDIS_REST_URL = "https://redis.example.test";
+  process.env.UPSTASH_REDIS_REST_TOKEN = "test-token";
+  delete process.env.DEV_REDIS_KV_REST_API_URL;
+  delete process.env.DEV_REDIS_KV_REST_API_TOKEN;
+  process.env.VERCEL_PROJECT_NAME = "app-games-sdk-preview";
+  globalThis.fetch = async () => {
+    calls += 1;
+    return new Response(JSON.stringify({ result: "unexpected" }), { status: 200 });
+  };
+  try {
+    await assert.rejects(
+      redisCommand(["GET", "preview-private-key"]),
+      /REDIS_STORE_FORBIDDEN_FOR_ISOLATED_PREVIEW/,
+    );
+    assert.equal(calls, 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalUrl === undefined) delete process.env.UPSTASH_REDIS_REST_URL;
+    else process.env.UPSTASH_REDIS_REST_URL = originalUrl;
+    if (originalToken === undefined) delete process.env.UPSTASH_REDIS_REST_TOKEN;
+    else process.env.UPSTASH_REDIS_REST_TOKEN = originalToken;
+    if (originalDevUrl === undefined) delete process.env.DEV_REDIS_KV_REST_API_URL;
+    else process.env.DEV_REDIS_KV_REST_API_URL = originalDevUrl;
+    if (originalDevToken === undefined) delete process.env.DEV_REDIS_KV_REST_API_TOKEN;
+    else process.env.DEV_REDIS_KV_REST_API_TOKEN = originalDevToken;
+    if (originalProject === undefined) delete process.env.VERCEL_PROJECT_NAME;
+    else process.env.VERCEL_PROJECT_NAME = originalProject;
+  }
+});
+
+test("XREADGROUPはstateful commandとして自動再試行しない", async () => {
+  const restoreEnvironment = setRedisTestEnvironment();
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls += 1;
+    return new Response("unavailable", { status: 503 });
+  };
+  try {
+    await assert.rejects(
+      redisCommand([
+        "XREADGROUP", "GROUP", "group-a", "consumer-a", "STREAMS", "events", "0-0",
+      ]),
+      /REDIS_STORE_REQUEST_FAILED_503/,
+    );
+    assert.equal(calls, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreEnvironment();
+  }
+});
+
 test("Redis pipeline failure records only fixed safe operation metadata", async () => {
   const restoreEnvironment = setRedisTestEnvironment();
   const originalFetch = globalThis.fetch;
