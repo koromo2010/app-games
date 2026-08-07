@@ -8,6 +8,7 @@ import {
   requireSdkPreviewAuthenticatedPlayer,
 } from "@/lib/sdk-preview-account-session";
 import { playerHasDebugAccess } from "@/lib/debug-access";
+import { gameSdkModuleIsRequired } from "@game-fields/game-sdk/modules";
 import { loadSdkPreviewPackageModule } from "@/lib/sdk-preview-package-runtime";
 import {
   createSdkPreviewPackageRouteHandler,
@@ -66,6 +67,10 @@ async function target(
   }
   const debugAccess = creatorPlayerId === session.id
     || await playerHasDebugAccess(session.id);
+  const debugEnabled = Boolean(
+    packageRuntime.definition.manifest?.supportsDebug === true
+    && gameSdkModuleIsRequired(packageRuntime.definition.modulePolicy, "debug")
+  );
   return {
     creatorSlug,
     gameId,
@@ -74,8 +79,9 @@ async function target(
       playerId: session.id,
       displayName: session.name?.trim() || "SDK Player",
       role: "host",
-      debugAccess,
+      debugAccess: debugAccess && debugEnabled,
     } satisfies GameSdkTrustedActor,
+    debugEnabled,
     module: packageRuntime,
   };
 }

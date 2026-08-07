@@ -50,7 +50,7 @@ export {
 
 type IdentityResolver = () => Promise<GameFieldsAuthenticatedIdentity>;
 
-type PlatformDebugProxyCommand = {
+export type PlatformDebugProxyCommand = {
   type: "room/debug-act-as-dummy";
   seat: number;
   command: {
@@ -85,7 +85,7 @@ async function measured<T>(
   }
 }
 
-function platformDebugProxyCommand(
+export function platformDebugProxyCommand(
   value: unknown,
 ): PlatformDebugProxyCommand | null {
   const command = objectRecord(value);
@@ -143,7 +143,7 @@ function definitionRequiresDebug(
   );
 }
 
-function withPlatformDebugView<TRoomView>(
+export function withPlatformDebugView<TRoomView>(
   snapshot: GameSdkRoomSnapshot<TRoomView> | null,
   input: {
     allowed: boolean;

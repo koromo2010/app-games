@@ -1,11 +1,16 @@
 import {
   type GameSdkCommandEnvelope,
+  type GameSdkRoomSnapshot,
   type GameSdkStoredRoom,
   type GameSdkTrustedActor,
   type GameSdkViewer,
 } from "@game-fields/game-sdk";
 import { GameSdkRuntimeError } from "@game-fields/game-sdk/mock-runtime";
 import { gameSdkViewerFromActor } from "@game-fields/game-sdk/runtime";
+import {
+  platformDebugProxyCommand,
+  withPlatformDebugView,
+} from "./game-sdk-platform-adapter.ts";
 import {
   readSdkPreviewPackageSession,
   sdkPreviewPackageSessionPlayers,
@@ -27,6 +32,7 @@ export type SdkPreviewPackageRouteTarget = {
   gameId: string;
   scope: SdkPreviewPackageSessionScope;
   actor: GameSdkTrustedActor;
+  debugEnabled: boolean;
   module: unknown;
 };
 
@@ -34,12 +40,12 @@ type PreviewRuntime = {
   readRoom(
     code: string,
     viewer: GameSdkViewer,
-  ): Promise<GameSdkStoredRoom | null>;
+  ): Promise<GameSdkRoomSnapshot<unknown> | null>;
   createRoom(input: {
     roomCode: string;
     create: Record<string, unknown>;
     actor: GameSdkTrustedActor;
-  }): Promise<GameSdkStoredRoom>;
+  }): Promise<GameSdkRoomSnapshot<unknown>>;
   inspectStoredRoom(code: string): GameSdkStoredRoom | null;
   sendCommand(input: {
     code: string;
@@ -108,6 +114,25 @@ function packageRevisionSnapshot<T>(
     ...(snapshot as Record<string, unknown>),
     packageRevision: revision,
   };
+}
+
+function previewRoomSnapshot(
+  target: SdkPreviewPackageRouteTarget,
+  snapshot: GameSdkRoomSnapshot<unknown> | null,
+  storedRoom: GameSdkStoredRoom | null,
+) {
+  return withPlatformDebugView(snapshot, {
+    allowed: Boolean(
+      target.debugEnabled
+      && target.actor.debugAccess
+      && target.actor.role === "host"
+      && storedRoom
+      && "hostPlayerId" in storedRoom
+      && storedRoom.hostPlayerId === target.actor.playerId
+    ),
+    storedRoom,
+    packageRevision: target.scope.revision,
+  });
 }
 
 function commandEnvelope(value: unknown): GameSdkCommandEnvelope<PreviewCommand> | null {
@@ -198,10 +223,10 @@ export function createSdkPreviewPackageRouteHandler(input: {
         }
         if (query.get("active") === "1") {
           const runtime = input.createRuntime(resolved, state.room);
-          const room = await runtime.readRoom(
+          const room = previewRoomSnapshot(resolved, await runtime.readRoom(
             state.room.code,
             gameSdkViewerFromActor(resolved.actor),
-          );
+          ), state.room);
           return json({
             room: room ? packageRevisionSnapshot(room, resolved.scope.revision) : null,
           });
@@ -217,10 +242,10 @@ export function createSdkPreviewPackageRouteHandler(input: {
           });
         }
         const runtime = input.createRuntime(resolved, state.room);
-        const room = await runtime.readRoom(
+        const room = previewRoomSnapshot(resolved, await runtime.readRoom(
           state.room.code,
           previewViewer(state.room, resolved.actor, query.get("debugViewer") ?? undefined),
-        );
+        ), state.room);
         return room
           ? json({ room: packageRevisionSnapshot(room, resolved.scope.revision) })
           : json({ error: "ROOM_NOT_FOUND" }, 404);
@@ -240,6 +265,7 @@ export function createSdkPreviewPackageRouteHandler(input: {
         });
         const stored = runtime.inspectStoredRoom(code);
         if (!stored) throw new Error("GAME_SDK_PREVIEW_SESSION_INVALID");
+        const presented = previewRoomSnapshot(resolved, room, stored);
         const sessionValue: SdkPreviewPackageSession = {
           version: 1,
           scope: resolved.scope,
@@ -249,7 +275,7 @@ export function createSdkPreviewPackageRouteHandler(input: {
         };
         const token = encodeSdkPreviewPackageSession(sessionValue);
         return json(
-          { room: packageRevisionSnapshot(room, resolved.scope.revision) },
+          { room: packageRevisionSnapshot(presented, resolved.scope.revision) },
           200,
           sdkPreviewPackageSessionSetCookie(resolved.scope, token),
         );
@@ -269,10 +295,46 @@ export function createSdkPreviewPackageRouteHandler(input: {
           return json({ error: "GAME_SDK_INVALID_COMMAND" }, 400);
         }
         const runtime = input.createRuntime(resolved, state.room);
+        const debugProxy = platformDebugProxyCommand(envelope.command);
+        let commandActor = resolved.actor;
+        let commandEnvelopeValue = envelope;
+        if (debugProxy) {
+          if (
+            !resolved.debugEnabled
+            || !resolved.actor.debugAccess
+            || resolved.actor.role !== "host"
+            || !state.room
+            || !("hostPlayerId" in state.room)
+            || state.room.hostPlayerId !== resolved.actor.playerId
+          ) {
+            throw new Error("DEBUG_ACCESS_REQUIRED");
+          }
+          if (state.room.phase !== "playing") {
+            throw new Error("DEBUG_PROGRESS_PHASE_REQUIRED");
+          }
+          const target = sdkPreviewPackageSessionPlayers(state.room)[debugProxy.seat];
+          if (
+            target?.isDummy !== true
+            || typeof target.id !== "string"
+            || typeof target.displayName !== "string"
+          ) {
+            throw new Error("DEBUG_DUMMY_REQUIRED");
+          }
+          commandActor = {
+            playerId: target.id,
+            displayName: target.displayName,
+            role: "player",
+            debugAccess: false,
+          };
+          commandEnvelopeValue = {
+            ...envelope,
+            command: debugProxy.command,
+          };
+        }
         const result = await runtime.sendCommand({
           code,
-          envelope,
-          actor: resolved.actor,
+          envelope: commandEnvelopeValue,
+          actor: commandActor,
         });
         const stored = runtime.inspectStoredRoom(code);
         if (!stored) throw new Error("GAME_SDK_PREVIEW_SESSION_INVALID");
@@ -289,7 +351,11 @@ export function createSdkPreviewPackageRouteHandler(input: {
           resolved.actor,
           inputBody?.finalViewer,
         );
-        const presented = await runtime.readRoom(code, selectedViewer);
+        const presented = previewRoomSnapshot(
+          resolved,
+          await runtime.readRoom(code, selectedViewer),
+          stored,
+        );
         if (!presented) throw new Error("ROOM_NOT_FOUND");
         return json({
           room: packageRevisionSnapshot(presented, resolved.scope.revision),

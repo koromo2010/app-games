@@ -23,6 +23,7 @@ const target: SdkPreviewPackageRouteTarget = {
     role: "host",
     debugAccess: true,
   },
+  debugEnabled: true,
   module: sdkCountUpServerModule,
 };
 
