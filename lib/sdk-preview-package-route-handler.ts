@@ -101,6 +101,7 @@ function errorStatus(code: string) {
     || code === "UNKNOWN_COMMAND"
   ) return 409;
   if (code === "DEBUG_ACCESS_REQUIRED" || code === "PLAYER_NOT_IN_ROOM") return 403;
+  if (code === "DEBUG_VIEWER_INVALID") return 400;
   if (code === "SDK_PREVIEW_SESSION_TOO_LARGE") return 413;
   if (code.startsWith("GAME_SDK_INVALID_")) return 400;
   return 409;
@@ -161,26 +162,46 @@ function roomCode(value: unknown) {
   return /^[A-Z0-9]{4,12}$/.test(normalized) ? normalized : null;
 }
 
+function previewViewerValue(value: unknown): "self" | "spectator" | number {
+  if (value === undefined || value === null || value === "self") {
+    return "self";
+  }
+  if (value === "spectator") return "spectator";
+  if (typeof value === "number") {
+    if (Number.isSafeInteger(value) && value >= 0) return value;
+    throw new Error("DEBUG_VIEWER_INVALID");
+  }
+  if (
+    typeof value !== "string"
+    || !/^(0|[1-9][0-9]*)$/.test(value)
+  ) {
+    throw new Error("DEBUG_VIEWER_INVALID");
+  }
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    throw new Error("DEBUG_VIEWER_INVALID");
+  }
+  return parsed;
+}
+
 function previewViewer(
   room: GameSdkStoredRoom,
   actor: GameSdkTrustedActor,
   value: unknown,
 ): GameSdkViewer {
-  if (value === undefined || value === null || value === "self") {
+  const normalized = previewViewerValue(value);
+  if (normalized === "self") {
     return gameSdkViewerFromActor(actor);
   }
   if (!actor.debugAccess) throw new Error("DEBUG_ACCESS_REQUIRED");
-  if (value === "spectator") {
+  if (normalized === "spectator") {
     return {
       playerId: null,
       role: "spectator",
       debugAccess: true,
     };
   }
-  if (!Number.isSafeInteger(value) || Number(value) < 0) {
-    throw new Error("DEBUG_VIEWER_INVALID");
-  }
-  const player = sdkPreviewPackageSessionPlayers(room)[Number(value)];
+  const player = sdkPreviewPackageSessionPlayers(room)[normalized];
   if (!player) throw new Error("DEBUG_VIEWER_INVALID");
   return {
     playerId: player.id,

@@ -90,7 +90,7 @@ async function patch(cookie: string, body: Record<string, unknown>) {
       revision: number;
       view: {
         common: {
-          players: Array<{ isDummy?: boolean }>;
+          players: Array<{ isDummy?: boolean; isSelf?: boolean }>;
           permissions: {
             canDebug: boolean;
             canDebugActAsDummy?: boolean;
@@ -154,6 +154,52 @@ test("T-103 Preview keeps DEBUG controls across Lobby -> playing", async () => {
     assert.equal(playing.data.room.view.common.permissions.canDebug, true);
     assert.equal(playing.data.room.view.common.permissions.canDebugActAsDummy, true);
 
+    const debugViewerUrl = new URL(url());
+    debugViewerUrl.search = new URLSearchParams({
+      code: "GF1234",
+      debugViewer: "1",
+    }).toString();
+    const debugViewerResponse = await route(
+      new Request(debugViewerUrl, {
+        method: "GET",
+        headers: { cookie: playing.cookie },
+      }),
+      context(),
+      "GET",
+    );
+    assert.equal(debugViewerResponse.status, 200);
+    const debugViewerPayload = await debugViewerResponse.json() as {
+      room: {
+        view: {
+          common: {
+            players: Array<{ isSelf?: boolean }>;
+          };
+        };
+      };
+    };
+    assert.equal(debugViewerPayload.room.view.common.players[0]?.isSelf, false);
+    assert.equal(debugViewerPayload.room.view.common.players[1]?.isSelf, true);
+
+    for (const value of ["-1", "1.5", "abc", "01", "9007199254740992", "2"]) {
+      const invalidViewerUrl = new URL(url());
+      invalidViewerUrl.search = new URLSearchParams({
+        code: "GF1234",
+        debugViewer: value,
+      }).toString();
+      const invalidViewerResponse = await route(
+        new Request(invalidViewerUrl, {
+          method: "GET",
+          headers: { cookie: playing.cookie },
+        }),
+        context(),
+        "GET",
+      );
+      assert.equal(invalidViewerResponse.status, 400);
+      assert.deepEqual(await invalidViewerResponse.json(), {
+        error: "DEBUG_VIEWER_INVALID",
+      });
+    }
+
     const debugRoom = buildGameSdkDebugRoom({
       room: playing.data.room as PackageRoom,
       common: playing.data.room.view.common as PackageRoom["view"]["common"],
@@ -193,6 +239,7 @@ test("T-103 Preview keeps DEBUG controls across Lobby -> playing", async () => {
     assert.equal(dummyAction.data.room.phase, "playing");
     assert.equal(dummyAction.data.room.view.app.count, 1);
     assert.equal(dummyAction.data.room.view.common.permissions.canDebug, true);
+    assert.equal(dummyAction.data.room.view.common.players[0]?.isSelf, true);
   } finally {
     if (previousSecret === undefined) delete process.env.PLAYER_SESSION_SECRET;
     else process.env.PLAYER_SESSION_SECRET = previousSecret;
@@ -224,6 +271,52 @@ test("T-103 Preview does not expose DEBUG permissions to an unauthorized actor",
     };
     assert.equal(payload.room.view.common.permissions.canDebug, false);
     assert.equal(payload.room.view.common.permissions.canDebugActAsDummy, false);
+
+    const cookie = cookieHeaderFromSetCookie(response);
+    const debugViewerUrl = new URL(url());
+    debugViewerUrl.search = new URLSearchParams({
+      code: "GF5678",
+      debugViewer: "0",
+    }).toString();
+    const debugViewerResponse = await unauthorizedRoute(
+      new Request(debugViewerUrl, {
+        method: "GET",
+        headers: { cookie },
+      }),
+      context(),
+      "GET",
+    );
+    assert.equal(debugViewerResponse.status, 403);
+    assert.deepEqual(await debugViewerResponse.json(), {
+      error: "DEBUG_ACCESS_REQUIRED",
+    });
+
+    const proxyResponse = await unauthorizedRoute(
+      new Request(url(), {
+        method: "PATCH",
+        headers: {
+          "content-type": "application/json",
+          cookie,
+        },
+        body: JSON.stringify({
+          code: "GF5678",
+          envelope: {
+            expectedRevision: 1,
+            command: {
+              type: "room/debug-act-as-dummy",
+              seat: 1,
+              command: { type: "game/count-up" },
+            },
+          },
+        }),
+      }),
+      context(),
+      "PATCH",
+    );
+    assert.equal(proxyResponse.status, 403);
+    assert.deepEqual(await proxyResponse.json(), {
+      error: "DEBUG_ACCESS_REQUIRED",
+    });
   } finally {
     if (previousSecret === undefined) delete process.env.PLAYER_SESSION_SECRET;
     else process.env.PLAYER_SESSION_SECRET = previousSecret;
