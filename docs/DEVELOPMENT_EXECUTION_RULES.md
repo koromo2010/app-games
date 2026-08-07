@@ -84,12 +84,13 @@ bundle、immutable tag、object closure、remote read-back、追加保存は毎�
 - force push、履歴改変、手動Redeploy、DB／Redis／Blob／OAuth／DNS／環境変数writeは、個別の明示許可と対象特定なしに行わない。
 
 
-### Vercel control planeの操作経路
+### Vercel control planeの操作主体
 
-- Vercelのcontrol planeは、read-only／writeを問わずCloud Browserで開かない。ログイン、再認証、OAuth、MFA、Team切替、Project、Deployment、log、設定、Environment Variable、Domain、DNS、Storage等の画面を含む。
-- 個別タスクの指示や過去の承認にCloud Browser操作が含まれていても、この経路禁止は解除しない。
-- Vercel connector、公式API、CLI等の非Browser経路は、上記のDeployment、外部write、productionの許可境界に従う場合のみ利用してよい。
-- Web UIでしか実施できない場合は、`VERCEL_USER_ACTION_REQUIRED`として対象service／Team／Project、画面、操作、成功条件、再開に必要な証拠を一度に示す。
+- Vercelのcontrol plane操作は利用者専用とする。read-only／writeを問わず、AIはCloud Browser、connector、公式API、CLIその他の経路でVercelへアクセス・確認・操作しない。ログイン、再認証、OAuth、MFA、Team切替、Project、Deployment、log、設定、Environment Variable、Domain、DNS、Storage等を含む。
+- 個別タスクの指示、過去の承認、dev／production Phaseの承認によっても、AIによるVercel control plane操作は許可されない。
+- Vercel側の確認または操作が実際に必要になった時点で、`VERCEL_USER_ACTION_REQUIRED / WAITING_FOR_USER_RESULT`として、対象service／Team／Project、画面、操作、禁止事項、成功条件、必要な証拠、再開点を一度に提示する。結果受領後は、残る許可済み作業を再開する。
+- この方針だけを理由に、Vercel依存点へ到達する前から`HOLD`または`SAFE STOP`にしない。local作業、テスト、許可済みGit操作その他の非Vercel作業は継続する。
+- 明示承認済みのGit pushは、Vercelの自動Deploymentを発生させ得る場合でもGit操作として実施できる。ただし、そのDeployment影響を含む事前承認を必要とし、AIはVercel側の状態確認・log確認・Redeploy等を行わない。
 - デプロイ済みのGame Fields製品runtime URLをCloud Browserで検査することは許可されたruntime検証であり、Vercel control plane操作とは区別する。
 
 ## 7. 証拠identity
