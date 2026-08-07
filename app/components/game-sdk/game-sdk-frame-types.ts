@@ -100,4 +100,6 @@ export type GameSdkFrameProps = {
   supportsReplay: boolean;
   supportsSpectators: boolean;
   usesLlm: boolean;
+  /** Candidate package Preview keeps state in its Preview session only. */
+  previewOnly?: boolean;
 };

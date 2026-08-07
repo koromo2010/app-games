@@ -94,15 +94,21 @@ export default async function SdkGamePage({
         creatorSlug={creatorSlug}
         portalOrigin={new URL(portalBaseUrl).origin}
       />
-      {game.runtimeKind === "package" && game.revision && game.manifest && !previewOnly ? (
+      {game.runtimeKind === "package" && game.revision && game.manifest ? (
         <GameSdkFrame
           backHref={`/sdk-preview/${creatorSlug}`}
           creatorSlug={creatorSlug}
-          endpoint={`/api/sdk-preview/${encodeURIComponent(
-            creatorSlug,
-          )}/games/${encodeURIComponent(
-            gameId,
-          )}/rooms?revision=${encodeURIComponent(game.revision)}`}
+          endpoint={previewOnly
+            ? `/api/sdk-preview/${encodeURIComponent(
+                creatorSlug,
+              )}/games/${encodeURIComponent(
+                gameId,
+              )}/preview?revision=${encodeURIComponent(game.revision)}`
+            : `/api/sdk-preview/${encodeURIComponent(
+                creatorSlug,
+              )}/games/${encodeURIComponent(
+                gameId,
+              )}/rooms?revision=${encodeURIComponent(game.revision)}`}
           gameId={gameId}
           packageRevision={game.revision}
           runtimeId={sdkPreviewPackageRuntimeId(
@@ -121,6 +127,7 @@ export default async function SdkGamePage({
           supportsReplay={game.manifest.supportsReplay}
           supportsSpectators={game.manifest.supportsSpectators}
           usesLlm={game.manifest.usesLlm}
+          previewOnly={previewOnly}
         />
       ) : (
         <SdkPreviewGameShell

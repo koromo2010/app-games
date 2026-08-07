@@ -97,7 +97,7 @@ test("正式Room shellはrevision確認前にRoomやclientを接続しない", (
   );
   assert.match(
     view,
-    /if \(!room && packageRevisionIssue\)[\s\S]*?<GameSdkPackageRevisionPanel[\s\S]*?if \(!room\)/,
+    /if \(!room && packageRevisionIssue && !previewOnly\)[\s\S]*?<GameSdkPackageRevisionPanel[\s\S]*?if \(!room\)/,
   );
   assert.match(
     controller,

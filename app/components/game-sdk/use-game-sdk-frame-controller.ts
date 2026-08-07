@@ -58,6 +58,7 @@ export function useGameSdkFrameController(
     supportsReplay,
     supportsSpectators,
     usesLlm,
+    previewOnly = false,
   } = props;
 
   const { locale } = useAppLocale();
@@ -128,7 +129,7 @@ export function useGameSdkFrameController(
     : `/api/game-sdk/${gameId}/defaults`;
 
   useEffect(() => {
-    if (!moduleRequired("room-settings")) return;
+    if (previewOnly || !moduleRequired("room-settings")) return;
     let active = true;
     void fetch(defaultsEndpoint, {
       cache: "no-store",
@@ -143,7 +144,7 @@ export function useGameSdkFrameController(
     return () => {
       active = false;
     };
-  }, [defaultsEndpoint, moduleRequired]);
+  }, [defaultsEndpoint, moduleRequired, previewOnly]);
 
   const postRoomSnapshot = useCallback((next: PackageRoom | null) => {
     const timing = gameSdkCommandTimingForRoom(next);
@@ -187,6 +188,7 @@ export function useGameSdkFrameController(
 
   const lifecycle = useGameSdkRoomLifecycle({
     runtime,
+    previewOnly,
     moduleRequired,
     handleRuntimeError,
     roomRef,
@@ -304,6 +306,19 @@ export function useGameSdkFrameController(
     }));
   }, [commandRunner, defaultSettings, runtime]);
 
+  const previewCreateStartedRef = useRef(false);
+  useEffect(() => {
+    if (
+      !previewOnly
+      || previewCreateStartedRef.current
+      || lifecycle.isRestoringRoom
+      || lifecycle.room
+      || pending
+    ) return;
+    previewCreateStartedRef.current = true;
+    onCreateRoom();
+  }, [lifecycle.isRestoringRoom, lifecycle.room, onCreateRoom, pending, previewOnly]);
+
   const onResumePinnedRoom = useCallback(() => {
     if (packageRevisionIssue?.kind !== "mismatch") return;
     try {
@@ -351,19 +366,24 @@ export function useGameSdkFrameController(
     setPlayerDefaults(settings);
   }, []);
 
-  const onReturnToRoom = room && room.phase === "result" && moduleRequired("rematch")
+  const onReturnToRoom = !previewOnly
+    && room
+    && room.phase === "result"
+    && moduleRequired("rematch")
     ? (common?.isHost
       ? () => {
         void commandRunner.run(() => commandRunner.send({ type: "room/rematch" }));
       }
       : lifecycle.returnToRoom)
     : undefined;
-  const onDissolve = moduleRequired("dissolution")
+  const onDissolve = !previewOnly
+    && moduleRequired("dissolution")
     && room
     && (room.phase === "lobby" || room.phase === "result")
     ? lifecycle.dissolveRoom
     : undefined;
-  const onLeave = moduleRequired("online-room")
+  const onLeave = !previewOnly
+    && moduleRequired("online-room")
     && room?.phase === "lobby"
     && common?.isHost === false
     ? lifecycle.leaveRoom
@@ -377,6 +397,8 @@ export function useGameSdkFrameController(
       gameId,
       backHref,
       creatorSlug,
+      packageRevision,
+      previewOnly,
       rules,
       room,
       roomRef,

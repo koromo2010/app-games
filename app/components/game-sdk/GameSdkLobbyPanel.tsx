@@ -16,6 +16,7 @@ type Props = {
   settingDefinitions: readonly GameSdkSettingDefinition[];
   pending: boolean;
   defaultsEndpoint: string;
+  previewOnly: boolean;
   onSaveDefaults: (settings: Record<string, GameSdkSettingValue>) => void;
   setMessage: (message: string) => void;
   run: (operation: () => Promise<PackageRoom>) => Promise<PackageRoom | null>;
@@ -29,6 +30,7 @@ export function GameSdkLobbyPanel({
   settingDefinitions,
   pending,
   defaultsEndpoint,
+  previewOnly,
   onSaveDefaults,
   setMessage,
   run,
@@ -154,7 +156,7 @@ export function GameSdkLobbyPanel({
           );
         })}
       </div>
-      {common?.permissions.canEditRoomSettings && (
+      {common?.permissions.canEditRoomSettings && !previewOnly && (
         <button
           type="button"
           className={`${secondary} mt-4 w-full`}

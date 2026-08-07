@@ -33,6 +33,8 @@ export type GameSdkFrameViewProps = {
   gameId: string;
   backHref: string;
   creatorSlug?: string;
+  packageRevision: string;
+  previewOnly: boolean;
   rules: readonly string[];
   room: PackageRoom | null;
   roomRef: MutableRefObject<PackageRoom | null>;
@@ -113,6 +115,8 @@ export function GameSdkFrameView(props: GameSdkFrameViewProps) {
     gameId,
     backHref,
     creatorSlug,
+    packageRevision,
+    previewOnly,
     rules,
     room,
     roomRef,
@@ -180,7 +184,7 @@ export function GameSdkFrameView(props: GameSdkFrameViewProps) {
     />;
   }
 
-  if (!room && packageRevisionIssue) {
+  if (!room && packageRevisionIssue && !previewOnly) {
     return (
       <GameSdkPackageRevisionPanel
         backHref={backHref}
@@ -193,6 +197,49 @@ export function GameSdkFrameView(props: GameSdkFrameViewProps) {
         rules={rules}
         title={title}
       />
+    );
+  }
+
+  if (!room && previewOnly) {
+    return (
+      <main className={`min-h-screen bg-slate-950 px-4 py-10 text-white ${gameTopBannerOffsetClass}`}>
+        <GameSdkShellHeader
+          eyebrow="SDK PACKAGE PREVIEW"
+          title={title}
+          rules={rules}
+          backHref={backHref}
+          backLabel="制作環境へ戻る"
+          surface="lounge"
+        />
+        <section className="mx-auto max-w-3xl">
+          <div
+            className={`${panel} border-cyan-300/50`}
+            data-sdk-preview-identity
+            data-formal-room="false"
+            data-revision={packageRevision}
+          >
+            <p className="text-xs font-black uppercase tracking-[.14em] text-cyan-700">
+              制作確認用Preview · 正式Roomではありません
+            </p>
+            <h2 className="mt-2 text-xl font-black">Package Previewを準備中</h2>
+            <p className="mt-2 text-sm text-slate-600">
+              固定revisionのPackage clientをPreview session内で起動します。正式Roomの作成・保存・復帰は行いません。
+            </p>
+            <p className="mt-3 break-all font-mono text-xs text-slate-500">
+              {packageRevision}
+            </p>
+            <button
+              type="button"
+              className={`${primary} mt-5 w-full`}
+              disabled={pending}
+              onClick={onCreateRoom}
+            >
+              Previewを開始
+            </button>
+            {message && <p className="mt-3 text-sm font-bold text-rose-700">{message}</p>}
+          </div>
+        </section>
+      </main>
     );
   }
 
@@ -304,8 +351,20 @@ export function GameSdkFrameView(props: GameSdkFrameViewProps) {
 
   return (
     <main className={`min-h-screen bg-slate-950 px-4 py-8 text-white ${gameTopBannerOffsetClass}`}>
+      {previewOnly && (
+        <div
+          className="mx-auto mb-4 max-w-7xl rounded-xl border border-cyan-300/40 bg-cyan-300/10 px-4 py-3 text-sm font-bold text-cyan-50"
+          data-sdk-preview-identity
+          data-formal-room="false"
+          data-revision={packageRevision}
+        >
+          制作確認用Preview · 正式Roomではありません · revision {packageRevision}
+        </div>
+      )}
       <GameSdkDebugPanel
-        eyebrow={`ROOM ${room.code} · rev ${room.revision}`}
+        eyebrow={previewOnly
+          ? `SDK PACKAGE PREVIEW · rev ${room.revision}`
+          : `ROOM ${room.code} · rev ${room.revision}`}
         title={title}
         rules={rules}
         backHref={backHref}
@@ -402,6 +461,7 @@ export function GameSdkFrameView(props: GameSdkFrameViewProps) {
             settingDefinitions={settingDefinitions}
             pending={pending}
             defaultsEndpoint={defaultsEndpoint}
+            previewOnly={previewOnly}
             onSaveDefaults={onSaveDefaults}
             setMessage={setMessage}
             run={run}

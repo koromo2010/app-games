@@ -50,9 +50,10 @@ test("game detail keeps modules, client Preview, and formal Room as separate sta
   assert.match(portalPage, /moduleView && Boolean\(requestedRevision\)/);
   assert.match(portalPage, /previewView && !requestedRevision/);
   assert.match(portalPage, /previewQuery\.set\("view", "preview"\)/);
-  assert.match(platformPage, /game\.runtimeKind === "package" && game\.revision && game\.manifest && !previewOnly/);
+  assert.match(platformPage, /game\.runtimeKind === "package" && game\.revision && game\.manifest/);
+  assert.match(platformPage, /previewOnly[\s\S]*?\/preview\?revision/);
   assert.match(platformPage, /<SdkPreviewGameShell/);
-  assert.match(platformPage, /previewIdentity=/);
+  assert.match(platformPage, /previewOnly=\{previewOnly\}/);
 });
 
 test("Preview identity is explicit and excludes formal Room", () => {
@@ -67,9 +68,10 @@ test("Preview identity is explicit and excludes formal Room", () => {
       formalRoom: false,
     },
   );
-  const shell = read("app/sdk-preview/[creatorSlug]/games/[gameId]/SdkPreviewGameShell.tsx");
-  assert.match(shell, /data-sdk-preview-identity/);
-  assert.match(shell, /制作確認用Preview · 正式Roomではありません/);
+  const frame = read("app/components/game-sdk/GameSdkFrameView.tsx");
+  assert.match(frame, /data-sdk-preview-identity/);
+  assert.match(frame, /data-formal-room="false"/);
+  assert.match(frame, /制作確認用Preview · 正式Roomではありません/);
 });
 
 test("existing Room recovery is formal-only and labels match their actual targets", () => {

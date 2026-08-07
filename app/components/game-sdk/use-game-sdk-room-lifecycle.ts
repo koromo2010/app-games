@@ -29,6 +29,7 @@ import type { GameSdkFrameRuntime, PackageRoom } from "./game-sdk-frame-types";
 
 type Options = {
   runtime: GameSdkFrameRuntime;
+  previewOnly: boolean;
   moduleRequired: (id: GameSdkModuleId) => boolean;
   handleRuntimeError: (error: unknown) => void;
   roomRef: MutableRefObject<PackageRoom | null>;
@@ -56,6 +57,7 @@ type Options = {
  */
 export function useGameSdkRoomLifecycle({
   runtime,
+  previewOnly,
   moduleRequired,
   handleRuntimeError,
   roomRef,
@@ -146,13 +148,13 @@ export function useGameSdkRoomLifecycle({
     pendingLobbyRoomRef.current = null;
     setCanReturnToRoom(false);
     setIsRoomDissolved(false);
-    if (!next) return true;
+    if (!next || previewOnly) return true;
     watchRef.current = runtime.watchRoom(next.code, {
       onRoom: acceptIncomingRoom,
       onError: handleRuntimeError,
     });
     return true;
-  }, [acceptIncomingRoom, acceptPackageRevision, commitRoom, handleRuntimeError, resetDebugControl, roomRef, runtime]);
+  }, [acceptIncomingRoom, acceptPackageRevision, commitRoom, handleRuntimeError, previewOnly, resetDebugControl, roomRef, runtime]);
 
   const attachLatestRoom = useCallback((next: PackageRoom) => {
     if (!acceptPackageRevision(next)) {
@@ -164,7 +166,10 @@ export function useGameSdkRoomLifecycle({
     const current = roomRef.current;
     const accepted = preferLatestOnlineRoom(current, next);
     if (accepted === current) return current;
-    if (!shouldRestartGameSdkRoomWatch(current?.code, accepted.code, Boolean(watchRef.current))) {
+    if (
+      previewOnly
+      || !shouldRestartGameSdkRoomWatch(current?.code, accepted.code, Boolean(watchRef.current))
+    ) {
       if (!commitRoom(accepted)) throw new Error("GAME_SDK_PACKAGE_REVISION_MISMATCH");
       pendingLobbyRoomRef.current = null;
       setCanReturnToRoom(false);
@@ -173,20 +178,24 @@ export function useGameSdkRoomLifecycle({
     }
     attachRoom(accepted);
     return accepted;
-  }, [acceptPackageRevision, attachRoom, commitRoom, roomRef]);
+  }, [acceptPackageRevision, attachRoom, commitRoom, previewOnly, roomRef]);
 
   const refreshRooms = useCallback(async () => {
+    if (previewOnly) {
+      setRooms([]);
+      return;
+    }
     try {
       const page = await runtime.listRooms();
       setRooms(page.rooms);
     } catch (error) {
       handleRuntimeError(error);
     }
-  }, [handleRuntimeError, runtime]);
+  }, [handleRuntimeError, previewOnly, runtime]);
 
   const loadActiveRoom = useCallback(
-    () => runtime.readActiveRoom(),
-    [runtime],
+    () => previewOnly ? Promise.resolve(null) : runtime.readActiveRoom(),
+    [previewOnly, runtime],
   );
   const handleRestoreError = useCallback((error: unknown) => {
     handleRuntimeError(error);
