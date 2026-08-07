@@ -83,6 +83,15 @@ bundle、immutable tag、object closure、remote read-back、追加保存は毎�
 - 過去の許可、Vercel表示上の`Production`、Deploymentされないだろうという推測を許可根拠にしない。
 - force push、履歴改変、手動Redeploy、DB／Redis／Blob／OAuth／DNS／環境変数writeは、個別の明示許可と対象特定なしに行わない。
 
+
+### Vercel control planeの操作経路
+
+- Vercelのcontrol planeは、read-only／writeを問わずCloud Browserで開かない。ログイン、再認証、OAuth、MFA、Team切替、Project、Deployment、log、設定、Environment Variable、Domain、DNS、Storage等の画面を含む。
+- 個別タスクの指示や過去の承認にCloud Browser操作が含まれていても、この経路禁止は解除しない。
+- Vercel connector、公式API、CLI等の非Browser経路は、上記のDeployment、外部write、productionの許可境界に従う場合のみ利用してよい。
+- Web UIでしか実施できない場合は、`VERCEL_USER_ACTION_REQUIRED`として対象service／Team／Project、画面、操作、成功条件、再開に必要な証拠を一度に示す。
+- デプロイ済みのGame Fields製品runtime URLをCloud Browserで検査することは許可されたruntime検証であり、Vercel control plane操作とは区別する。
+
 ## 7. 証拠identity
 
 CI、test、Deployment、runtime確認は、対象identityが一致した場合だけ採用する。該当する項目を最低限確認する。
