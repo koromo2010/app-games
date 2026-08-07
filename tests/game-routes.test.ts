@@ -24,6 +24,23 @@ test("legacy game routes retain locale responsibility without matching landing r
   assert.equal(legacyGamePlayRoute("/ja/play/word-wolf"), null);
 });
 
+test("every registered legacy alias resolves with or without locale and trailing slash", () => {
+  for (const route of builtInGameRoutes) {
+    for (const legacyPath of route.legacyPaths) {
+      for (const locale of [null, "ja", "en"] as const) {
+        const localizedPath = locale ? `/${locale}${legacyPath}` : legacyPath;
+        for (const suffix of ["", "/"]) {
+          assert.deepEqual(
+            legacyGamePlayRoute(`${localizedPath}${suffix}`),
+            { locale, playPath: route.playPath },
+            `${localizedPath}${suffix}`,
+          );
+        }
+      }
+    }
+  }
+});
+
 test("sitemap candidates contain only public landing routes", () => {
   const routes = publicGameRoutes();
   assert.ok(routes.every((route) => !route.registration.private));

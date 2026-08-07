@@ -19,11 +19,22 @@ export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const legacyGameRoute = legacyGamePlayRoute(pathname);
   if (legacyGameRoute) {
-    const redirectUrl = request.nextUrl.clone();
+    const redirectUrl = new URL(request.url);
     const locale = legacyGameRoute.locale ?? preferredLocale(request);
     redirectUrl.pathname = `/${locale}${legacyGameRoute.playPath}`;
     return NextResponse.redirect(redirectUrl, 308);
   }
+
+  // Next.js' automatic trailing-slash redirect is disabled so legacy aliases
+  // can be resolved first. Keep the normal no-slash canonical URL for all
+  // application routes that reach this matcher, while leaving APIs, assets,
+  // and metadata routes outside this redirect boundary.
+  if (pathname.length > 1 && pathname.endsWith("/")) {
+    const redirectUrl = new URL(request.url);
+    redirectUrl.pathname = pathname.slice(0, -1);
+    return NextResponse.redirect(redirectUrl, 308);
+  }
+
   const action = appLocaleRouteAction(
     pathname,
     request.headers.get("x-app-locale"),
@@ -62,6 +73,6 @@ export function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico|site-icon|robots.txt|sitemap.xml|manifest.webmanifest|.*\\.[^/]+$).*)",
+    "/((?!api|_next(?:/|$)|favicon.ico|site-icon|robots.txt|sitemap.xml|manifest.webmanifest|.*\\.[^/]+$).*)",
   ],
 };
