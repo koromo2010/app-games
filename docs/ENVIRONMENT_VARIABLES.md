@@ -1,6 +1,6 @@
 # 環境変数管理台帳
 
-最終更新: 2026-08-02
+最終更新: 2026-08-07
 
 現在配置はこの文書、追加・変更・削除の進行中依頼は`config/environment-change-registry.json`を正本とする。実値、接続文字列、APIキー、パスワードはGitへ保存しない。Vercel、Neon、Upstash、Blob、各API提供元だけで管理する。
 
@@ -10,7 +10,7 @@
 
 1. 対象ブランチの最新版でこの文書と`config/environment-change-registry.json`を読み、対象Projectと「現在配置」「進行中依頼」「未確認・更新が必要な項目」を確認する。
 2. 対象のTeam、Project、branch、Root Directory、Deployment Environment、キー名、Sensitive区分を特定する。記載がなければ未確認として扱い、過去チャットから補完しない。
-3. Vercel等の画面または読取APIで確認できた事実だけを現在状態へ反映する。期待仕様と実際の配置を混ぜない。
+3. Vercel control plane上の事実は、利用者が管理画面等で確認して返却した情報だけを現在状態へ反映する。AIはCloud Browser、connector、公式API、CLIその他の経路でVercelへ直接アクセスしない。期待仕様と実際の配置を混ぜない。
 4. 変数の追加・変更・削除・Shared Link、再デプロイ、ドメイン割当、Ignored Build Step変更は、それぞれ別の進捗として直後に更新する。
 5. 作業終了前に、次回の担当がチャット履歴なしで次の操作と未完了事項を判断できるか確認する。経緯が必要なら `DEVELOPMENT_THREAD_LOG.md` にも要約を残す。
 6. 秘密値は記録しない。トークンを含む画面は共有せず、キー名、配置先、最小権限、Sensitive区分、失効・更新期限だけを記録する。
@@ -29,7 +29,7 @@
 
 ## コード参照キーの完全性検査
 
-`npm run check:env-ledger`は、リポジトリ内の静的な`process.env.KEY`参照を抽出し、この台帳にキー名が存在するか検査する。さらに、`config/environment-change-registry.json`の各依頼について、対象Project、branch、Environment、Sensitive、操作、状態、再デプロイ要否、一時変数区分とMarkdown台帳へのキー記載を検査する。新しい環境変数をコードへ追加したのに台帳を更新していない場合や、設定依頼の機械可読情報が欠ける場合は`npm run lint`も失敗する。Vercel上の実値や実際の配置は別途画面または読取APIで確認する。
+`npm run check:env-ledger`は、リポジトリ内の静的な`process.env.KEY`参照を抽出し、この台帳にキー名が存在するか検査する。さらに、`config/environment-change-registry.json`の各依頼について、対象Project、branch、Environment、Sensitive、操作、状態、再デプロイ要否、一時変数区分とMarkdown台帳へのキー記載を検査する。新しい環境変数をコードへ追加したのに台帳を更新していない場合や、設定依頼の機械可読情報が欠ける場合は`npm run lint`も失敗する。Vercel上の実値や実際の配置は利用者がcontrol planeで確認し、AIは返却された画面情報・値・証拠に基づいて台帳を更新する。
 
 ### その他のコード参照キー（配置監査待ち）
 
@@ -111,7 +111,7 @@ snapshot内の`apps/sdk-portal/vercel.json`と`apps/sdk-preview/vercel.json`に�
 - Main Promotion workflowの同期5対象はメモリ上の再現で`would-change=0`。139パスのbuild-impactは通常6 Projectを各surface affected、重複`app-games-sdk-portal`だけを`project-disabled`／SKIPと判定した。これはローカル静的判定であり、Deploymentを作成していない。
 - T-74のローカル統合は完了し、T-73B最終波及確認待ちである。製品`origin`へのpush、PR、Actions、Deployment、production反映、DB／Redis／Blobその他のexternal writeは未実施で、現在配置表の実環境状態は変更していない。
 
-ChatGPTのVercel Connectorは`game-fields` Teamへ再認証済みで、Project一覧、Deployment、Build Logの参照とファイル直接Deploymentは利用できる。一方、現行ConnectorはGit接続、Project設定更新、Project間の独自ドメイン移管を公開していない。これらはVercel Dashboardまたは認証済みCLI／REST APIで行う。
+Vercel control planeの確認・操作は利用者専用である。AIは接続状態や機能の有無にかかわらず、Vercel Dashboard、Cloud Browser、connector、公式API、CLIその他の経路を使用しない。必要な確認・操作は`VERCEL_USER_ACTION_REQUIRED`として利用者へ一度に案内し、返却された結果だけを証拠として扱う。デプロイ済みGame Fields製品runtime URLのbrowser検証はcontrol plane操作と区別する。
 
 ### 本体dev反映用GitHub資格
 
