@@ -22,6 +22,12 @@ function source(path: string) {
   return readFileSync(path, "utf8");
 }
 
+function cookieHeaderFromSetCookie(setCookie: string) {
+  const separator = setCookie.indexOf(";");
+  assert.ok(separator > 0, "Set-Cookie must contain a cookie pair");
+  return setCookie.slice(0, separator);
+}
+
 test("package Preview selects the shared package frame without formal Room semantics", () => {
   const page = source("app/sdk-preview/[creatorSlug]/games/[gameId]/page.tsx");
   const controller = source("app/components/game-sdk/use-game-sdk-frame-controller.ts");
@@ -41,15 +47,17 @@ test("package Preview selects the shared package frame without formal Room seman
 
 test("Preview endpoint owns package room protocol and has no formal Room store dependency", () => {
   const route = source("app/api/sdk-preview/[creatorSlug]/games/[gameId]/preview/route.ts");
+  const handler = source("lib/sdk-preview-package-route-handler.ts");
   const bridge = source("app/components/game-sdk/GameSdkIframeBridge.tsx");
   const client = source("apps/sdk-preview/lib/package-client-runtime.ts");
 
   assert.match(route, /createGameSdkMockRuntime/);
-  assert.match(route, /runtime\.sendCommand/);
-  assert.match(route, /encodeSdkPreviewPackageSession/);
-  assert.doesNotMatch(route, /SDK_PREVIEW_SIGNING_SECRET/);
-  assert.match(route, /sdkPreviewPackageSessionMaxAgeSeconds/);
-  assert.doesNotMatch(route, /createGameSdkOnlineRoomHttpHandlers|createRedisGameSdk/);
+  assert.match(route, /createSdkPreviewPackageRouteHandler/);
+  assert.match(handler, /runtime\.sendCommand/);
+  assert.match(handler, /encodeSdkPreviewPackageSession/);
+  assert.doesNotMatch(`${route}\n${handler}`, /SDK_PREVIEW_SIGNING_SECRET/);
+  assert.match(handler, /sdkPreviewPackageSessionMaxAgeSeconds/);
+  assert.doesNotMatch(`${route}\n${handler}`, /createGameSdkOnlineRoomHttpHandlers|createRedisGameSdk/);
   assert.match(bridge, /game-fields:room-ready/);
   assert.match(bridge, /game-fields:room-command/);
   assert.match(bridge, /game-fields:room-command-result/);
@@ -115,6 +123,75 @@ test("Preview session state is encrypted, scope-bound, and browser-cookie bounde
   assert.match(
     sdkPreviewPackageSessionSetCookie(scope, token, false),
     /HttpOnly; SameSite=Lax; Max-Age=3600$/,
+  );
+  assert.match(
+    sdkPreviewPackageSessionSetCookie(scope, token, true),
+    /HttpOnly; SameSite=Lax; Secure; Max-Age=3600$/,
+  );
+});
+
+test("Preview package session survives the production-equivalent Set-Cookie roundtrip", () => {
+  const session = {
+    version: 1 as const,
+    scope,
+    playerId: "player-1",
+    expiresAt: now + 60 * 60 * 1_000,
+    room: {
+      code: "GF1234",
+      revision: 1,
+      phase: "lobby",
+      players: [],
+    },
+  };
+  const token = encodeSdkPreviewPackageSession(session, secret, now);
+  const setCookie = sdkPreviewPackageSessionSetCookie(scope, token, false);
+  const cookieHeader = cookieHeaderFromSetCookie(setCookie);
+
+  assert.equal(cookieHeader.startsWith(`${sdkPreviewPackageSessionCookieName(scope)}=${token}`), true);
+  assert.deepEqual(
+    readSdkPreviewPackageSession(
+      cookieHeader,
+      scope,
+      session.playerId,
+      secret,
+      now,
+    ),
+    session,
+  );
+
+  const [nameValue] = cookieHeader.split(";", 1);
+  const [name, value] = nameValue.split("=", 2);
+  assert.equal(name, sdkPreviewPackageSessionCookieName(scope));
+  assert.equal(value, token);
+
+  const cookie = (nextValue: string) => `${name}=${nextValue}`;
+  assert.equal(
+    readSdkPreviewPackageSession(
+      cookie(token),
+      { ...scope, revision: "7".repeat(40) },
+      session.playerId,
+      secret,
+      now,
+    ),
+    null,
+  );
+  assert.equal(
+    readSdkPreviewPackageSession(cookie(token), scope, "player-2", secret, now),
+    null,
+  );
+  const [noncePart, authTagPart, ciphertextPart] = token.split(".");
+  const tampered = [
+    noncePart,
+    `${authTagPart?.startsWith("a") ? "b" : "a"}${authTagPart?.slice(1) ?? ""}`,
+    ciphertextPart,
+  ].join(".");
+  assert.equal(
+    readSdkPreviewPackageSession(cookie(tampered), scope, session.playerId, secret, now),
+    null,
+  );
+  assert.equal(
+    readSdkPreviewPackageSession(cookie(token), scope, session.playerId, secret, session.expiresAt),
+    null,
   );
 });
 

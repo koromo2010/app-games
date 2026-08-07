@@ -79,10 +79,6 @@ function isStoredRoom(value: unknown): value is GameSdkStoredRoom & Record<strin
   );
 }
 
-function encode(value: string) {
-  return Buffer.from(value, "utf8").toString("base64url");
-}
-
 export function sdkPreviewPackageSessionCookieName(
   scope: SdkPreviewPackageSessionScope,
 ) {
@@ -200,7 +196,12 @@ export function sdkPreviewPackageSessionSetCookie(
       ? "Max-Age=0"
       : `Max-Age=${sdkPreviewPackageSessionMaxAgeSeconds}`,
   ];
-  return `${name}=${token === null ? "" : encode(token)}; ${attributes.join("; ")}`;
+  // The encrypted token is already cookie-safe: each component is base64url
+  // encoded and the three components are separated by dots. Keep the value
+  // unchanged so the next request can pass it directly to the authenticated
+  // decoder. Encoding the complete token here would create a second
+  // serialization format that readCookies does not reverse.
+  return `${name}=${token ?? ""}; ${attributes.join("; ")}`;
 }
 
 export function sdkPreviewPackageSessionPlayers(room: GameSdkStoredRoom) {
