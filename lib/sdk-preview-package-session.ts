@@ -19,21 +19,24 @@ export type SdkPreviewPackageSession = {
   version: 1;
   scope: SdkPreviewPackageSessionScope;
   playerId: string;
+  expiresAt: number;
   room: GameSdkStoredRoom & Record<string, unknown>;
 };
 
 export const sdkPreviewPackageSessionMaxAgeSeconds = 60 * 60;
 export const sdkPreviewPackageSessionCookiePrefix = "game-fields-sdk-preview-";
 
-function signingSecret() {
-  const value = process.env.SDK_PREVIEW_SIGNING_SECRET?.trim() ?? "";
-  if (value.length < 32) throw new Error("SDK_PREVIEW_SIGNING_SECRET_NOT_CONFIGURED");
+function platformSessionSecret() {
+  const value = process.env.PLAYER_SESSION_SECRET?.trim()
+    || process.env.LLM_SESSION_SECRET?.trim()
+    || "";
+  if (value.length < 32) throw new Error("PLAYER_SESSION_SECRET_NOT_CONFIGURED");
   return value;
 }
 
 function encryptionKey(secret: string) {
   return createHash("sha256")
-    .update("game-fields-sdk-preview-session:v1:")
+    .update("game-fields-sdk-preview-package-session:v1:")
     .update(secret)
     .digest();
 }
@@ -88,12 +91,16 @@ export function sdkPreviewPackageSessionCookieName(
 
 export function encodeSdkPreviewPackageSession(
   session: SdkPreviewPackageSession,
-  secret = signingSecret(),
+  secret = platformSessionSecret(),
+  now = Date.now(),
 ) {
   if (
     session.version !== 1
     || !isScope(session.scope)
     || !session.playerId.trim()
+    || !Number.isSafeInteger(session.expiresAt)
+    || session.expiresAt <= now
+    || session.expiresAt > now + sdkPreviewPackageSessionMaxAgeSeconds * 1_000
     || !isStoredRoom(session.room)
   ) {
     throw new Error("SDK_PREVIEW_SESSION_INVALID");
@@ -118,7 +125,8 @@ export function decodeSdkPreviewPackageSession(
   token: string,
   scope: SdkPreviewPackageSessionScope,
   playerId: string,
-  secret = signingSecret(),
+  secret = platformSessionSecret(),
+  now = Date.now(),
 ): SdkPreviewPackageSession | null {
   if (!token || token.length > 3_800) return null;
   try {
@@ -140,6 +148,9 @@ export function decodeSdkPreviewPackageSession(
       || !isScope(parsed.scope)
       || JSON.stringify(parsed.scope) !== JSON.stringify(scope)
       || parsed.playerId !== playerId
+      || typeof parsed.expiresAt !== "number"
+      || !Number.isSafeInteger(parsed.expiresAt)
+      || parsed.expiresAt <= now
       || !isStoredRoom(parsed.room)
     ) return null;
     return parsed as SdkPreviewPackageSession;
@@ -165,11 +176,12 @@ export function readSdkPreviewPackageSession(
   cookieHeader: string | null,
   scope: SdkPreviewPackageSessionScope,
   playerId: string,
-  secret = signingSecret(),
+  secret = platformSessionSecret(),
+  now = Date.now(),
 ) {
   const token = readCookies(cookieHeader).get(cookieName(scope));
   return token
-    ? decodeSdkPreviewPackageSession(token, scope, playerId, secret)
+    ? decodeSdkPreviewPackageSession(token, scope, playerId, secret, now)
     : null;
 }
 

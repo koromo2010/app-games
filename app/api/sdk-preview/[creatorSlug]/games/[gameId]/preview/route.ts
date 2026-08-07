@@ -16,6 +16,7 @@ import {
   encodeSdkPreviewPackageSession,
   readSdkPreviewPackageSession,
   sdkPreviewPackageSessionPlayers,
+  sdkPreviewPackageSessionMaxAgeSeconds,
   sdkPreviewPackageSessionSetCookie,
   type SdkPreviewPackageSession,
   type SdkPreviewPackageSessionScope,
@@ -60,6 +61,7 @@ function errorCode(error: unknown) {
 }
 
 function errorStatus(code: string) {
+  if (code === "PLAYER_SESSION_SECRET_NOT_CONFIGURED") return 503;
   if (code === "ROOM_NOT_FOUND") return 404;
   if (
     code === "STALE_REVISION"
@@ -274,6 +276,7 @@ async function handle(request: Request, context: RouteContext, method: "GET" | "
         version: 1,
         scope: resolved.scope,
         playerId: resolved.actor.playerId,
+        expiresAt: Date.now() + sdkPreviewPackageSessionMaxAgeSeconds * 1_000,
         room: stored as GameSdkStoredRoom & Record<string, unknown>,
       };
       const token = encodeSdkPreviewPackageSession(sessionValue);
@@ -304,6 +307,7 @@ async function handle(request: Request, context: RouteContext, method: "GET" | "
         version: 1,
         scope: resolved.scope,
         playerId: resolved.actor.playerId,
+        expiresAt: Date.now() + sdkPreviewPackageSessionMaxAgeSeconds * 1_000,
         room: stored as GameSdkStoredRoom & Record<string, unknown>,
       };
       const token = encodeSdkPreviewPackageSession(nextSession);

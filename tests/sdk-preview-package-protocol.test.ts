@@ -4,6 +4,8 @@ import test from "node:test";
 import {
   decodeSdkPreviewPackageSession,
   encodeSdkPreviewPackageSession,
+  readSdkPreviewPackageSession,
+  sdkPreviewPackageSessionCookieName,
   sdkPreviewPackageSessionSetCookie,
 } from "../lib/sdk-preview-package-session.ts";
 
@@ -14,6 +16,7 @@ const scope = {
   revision,
 };
 const secret = "preview-test-secret-that-is-long-enough-32";
+const now = 1_000;
 
 function source(path: string) {
   return readFileSync(path, "utf8");
@@ -44,6 +47,8 @@ test("Preview endpoint owns package room protocol and has no formal Room store d
   assert.match(route, /createGameSdkMockRuntime/);
   assert.match(route, /runtime\.sendCommand/);
   assert.match(route, /encodeSdkPreviewPackageSession/);
+  assert.doesNotMatch(route, /SDK_PREVIEW_SIGNING_SECRET/);
+  assert.match(route, /sdkPreviewPackageSessionMaxAgeSeconds/);
   assert.doesNotMatch(route, /createGameSdkOnlineRoomHttpHandlers|createRedisGameSdk/);
   assert.match(bridge, /game-fields:room-ready/);
   assert.match(bridge, /game-fields:room-command/);
@@ -57,6 +62,7 @@ test("Preview session state is encrypted, scope-bound, and browser-cookie bounde
     version: 1 as const,
     scope,
     playerId: "player-1",
+    expiresAt: now + 60 * 60 * 1_000,
     room: {
       code: "GF1234",
       revision: 1,
@@ -70,18 +76,120 @@ test("Preview session state is encrypted, scope-bound, and browser-cookie bounde
       app: { safe: true },
     },
   };
-  const token = encodeSdkPreviewPackageSession(session, secret);
+  const token = encodeSdkPreviewPackageSession(session, secret, now);
   assert.notEqual(token.includes('"safe"'), true);
   assert.deepEqual(
-    decodeSdkPreviewPackageSession(token, scope, "player-1", secret),
+    decodeSdkPreviewPackageSession(token, scope, "player-1", secret, now),
     session,
   );
   assert.equal(
-    decodeSdkPreviewPackageSession(token, { ...scope, revision: "7".repeat(40) }, "player-1", secret),
+    decodeSdkPreviewPackageSession(token, { ...scope, revision: "7".repeat(40) }, "player-1", secret, now),
+    null,
+  );
+  assert.equal(
+    decodeSdkPreviewPackageSession(token, { ...scope, creatorSlug: "other" }, "player-1", secret, now),
+    null,
+  );
+  assert.equal(
+    decodeSdkPreviewPackageSession(token, { ...scope, gameId: "other" }, "player-1", secret, now),
+    null,
+  );
+  assert.equal(
+    decodeSdkPreviewPackageSession(token, scope, "player-2", secret, now),
+    null,
+  );
+  const [noncePart, authTagPart, ciphertextPart] = token.split(".");
+  const tampered = [
+    noncePart,
+    `${authTagPart?.startsWith("a") ? "b" : "a"}${authTagPart?.slice(1) ?? ""}`,
+    ciphertextPart,
+  ].join(".");
+  assert.equal(
+    decodeSdkPreviewPackageSession(tampered, scope, "player-1", secret, now),
+    null,
+  );
+  assert.equal(
+    decodeSdkPreviewPackageSession(token, scope, "player-1", secret, session.expiresAt),
     null,
   );
   assert.match(
     sdkPreviewPackageSessionSetCookie(scope, token, false),
     /HttpOnly; SameSite=Lax; Max-Age=3600$/,
   );
+});
+
+test("Preview package session uses only the platform session secret with a domain-separated key", () => {
+  const packageSession = source("lib/sdk-preview-package-session.ts");
+  assert.doesNotMatch(packageSession, /SDK_PREVIEW_SIGNING_SECRET/);
+
+  const previousPlayerSecret = process.env.PLAYER_SESSION_SECRET;
+  const previousLlmSecret = process.env.LLM_SESSION_SECRET;
+  const previousPreviewSecret = process.env.SDK_PREVIEW_SIGNING_SECRET;
+  process.env.PLAYER_SESSION_SECRET = secret;
+  delete process.env.LLM_SESSION_SECRET;
+  process.env.SDK_PREVIEW_SIGNING_SECRET = "this-must-not-be-used-by-platform";
+  try {
+    const session = {
+      version: 1 as const,
+      scope,
+      playerId: "player-1",
+      expiresAt: now + 60 * 60 * 1_000,
+      room: {
+        code: "GF1234",
+        revision: 1,
+        phase: "lobby",
+        players: [],
+      },
+    };
+    const token = encodeSdkPreviewPackageSession(session, undefined, now);
+    assert.deepEqual(
+      decodeSdkPreviewPackageSession(token, scope, "player-1", undefined, now),
+      session,
+    );
+    assert.deepEqual(
+      readSdkPreviewPackageSession(
+        `${sdkPreviewPackageSessionCookieName(scope)}=${token}`,
+        scope,
+        "player-1",
+        undefined,
+        now,
+      ),
+      session,
+    );
+  } finally {
+    if (previousPlayerSecret === undefined) delete process.env.PLAYER_SESSION_SECRET;
+    else process.env.PLAYER_SESSION_SECRET = previousPlayerSecret;
+    if (previousLlmSecret === undefined) delete process.env.LLM_SESSION_SECRET;
+    else process.env.LLM_SESSION_SECRET = previousLlmSecret;
+    if (previousPreviewSecret === undefined) delete process.env.SDK_PREVIEW_SIGNING_SECRET;
+    else process.env.SDK_PREVIEW_SIGNING_SECRET = previousPreviewSecret;
+  }
+});
+
+test("Preview package session fails closed when no platform session secret is configured", () => {
+  const previousPlayerSecret = process.env.PLAYER_SESSION_SECRET;
+  const previousLlmSecret = process.env.LLM_SESSION_SECRET;
+  delete process.env.PLAYER_SESSION_SECRET;
+  delete process.env.LLM_SESSION_SECRET;
+  try {
+    assert.throws(
+      () => encodeSdkPreviewPackageSession({
+        version: 1,
+        scope,
+        playerId: "player-1",
+        expiresAt: now + 60 * 60 * 1_000,
+        room: { code: "GF1234", revision: 1, phase: "lobby", players: [] },
+      }, undefined, now),
+      /PLAYER_SESSION_SECRET_NOT_CONFIGURED/,
+    );
+    assert.throws(
+      () => decodeSdkPreviewPackageSession("invalid", scope, "player-1"),
+      /PLAYER_SESSION_SECRET_NOT_CONFIGURED/,
+    );
+  } finally {
+    if (previousPlayerSecret === undefined) delete process.env.PLAYER_SESSION_SECRET;
+    else process.env.PLAYER_SESSION_SECRET = previousPlayerSecret;
+    if (previousLlmSecret === undefined) delete process.env.LLM_SESSION_SECRET;
+    else process.env.LLM_SESSION_SECRET = previousLlmSecret;
+  }
 });
