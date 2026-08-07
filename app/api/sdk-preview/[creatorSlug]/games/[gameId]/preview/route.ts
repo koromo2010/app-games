@@ -3,6 +3,7 @@ import {
   type GameSdkTrustedActor,
 } from "@game-fields/game-sdk";
 import { createGameSdkMockRuntime } from "@game-fields/game-sdk/mock-runtime";
+import type { GameSdkRuntimeTiming } from "@game-fields/game-sdk/runtime";
 import {
   getSdkPreviewAccountPlayerId,
   requireSdkPreviewAuthenticatedPlayer,
@@ -89,12 +90,14 @@ async function target(
 function previewRuntime(
   targetValue: SdkPreviewPackageRouteTarget,
   initialRoom?: GameSdkStoredRoom,
+  timing?: GameSdkRuntimeTiming,
 ) {
   const packageRuntime = targetValue.module as PreviewTarget["module"];
   return createGameSdkMockRuntime({
     module: packageRuntime.module,
     ...(initialRoom ? { initialRooms: [initialRoom] } : {}),
     resources: packageRuntime.resources,
+    timing,
   });
 }
 

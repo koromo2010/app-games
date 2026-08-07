@@ -5,7 +5,9 @@ import {
   type GameSdkTrustedActor,
   type GameSdkViewer,
 } from "@game-fields/game-sdk";
+import type { GameSdkRuntimeTiming } from "@game-fields/game-sdk/runtime";
 import { GameSdkRuntimeError } from "@game-fields/game-sdk/mock-runtime";
+import { createGameSdkCommandTimingCollector } from "./game-sdk-command-timing.ts";
 import { gameSdkViewerFromActor } from "@game-fields/game-sdk/runtime";
 import {
   platformDebugProxyCommand,
@@ -61,6 +63,7 @@ type PreviewRuntime = {
 type PreviewRuntimeFactory = (
   target: SdkPreviewPackageRouteTarget,
   initialRoom?: GameSdkStoredRoom,
+  timing?: GameSdkRuntimeTiming,
 ) => PreviewRuntime;
 
 type TargetResolver = (
@@ -223,6 +226,9 @@ export function createSdkPreviewPackageRouteHandler(input: {
     context: RouteContext,
     method: "GET" | "POST" | "PATCH" | "DELETE",
   ) {
+    const timing = method === "PATCH"
+      ? createGameSdkCommandTimingCollector()
+      : undefined;
     try {
       const resolved = await input.resolveTarget(request, context);
       if (resolved instanceof Response) return resolved;
@@ -315,7 +321,7 @@ export function createSdkPreviewPackageRouteHandler(input: {
         if (!code || code !== state.room.code || !envelope) {
           return json({ error: "GAME_SDK_INVALID_COMMAND" }, 400);
         }
-        const runtime = input.createRuntime(resolved, state.room);
+        const runtime = input.createRuntime(resolved, state.room, timing);
         const debugProxy = platformDebugProxyCommand(envelope.command);
         let commandActor = resolved.actor;
         let commandEnvelopeValue = envelope;
@@ -378,13 +384,16 @@ export function createSdkPreviewPackageRouteHandler(input: {
           stored,
         );
         if (!presented) throw new Error("ROOM_NOT_FOUND");
-        return json({
+        const response = json({
           room: packageRevisionSnapshot(presented, resolved.scope.revision),
           revision: presented.revision,
           commandId: result.commandId,
           commandRevision: result.commandRevision,
           applied: result.applied,
         }, 200, sdkPreviewPackageSessionSetCookie(resolved.scope, token));
+        if (!timing) return response;
+        timing.setRevision(result.commandRevision);
+        return timing.decorate(response, { exposeArtifactCacheOutcome: true });
       }
 
       if (query.get("hosted") === "1") {

@@ -23,6 +23,15 @@ export type GameSdkCommandTimingEntry = {
   count: number;
 };
 
+export type GameSdkArtifactCacheOutcome = "hit" | "miss" | "waiter" | "bypass";
+
+const artifactCacheOutcomes = new Set<GameSdkArtifactCacheOutcome>([
+  "hit",
+  "miss",
+  "waiter",
+  "bypass",
+]);
+
 const serverTimingStages = new Set<GameSdkCommandTimingStage>([
   "auth",
   "runtime-resolve",
@@ -54,6 +63,7 @@ export class GameSdkCommandTimingCollector implements GameSdkRuntimeTiming {
   #requestRef: string | undefined;
   #commandRef: string | undefined;
   #revision: number | undefined;
+  #artifactCacheOutcome: GameSdkArtifactCacheOutcome | undefined;
   #finished = false;
 
   constructor(now: () => number = () => performance.now()) {
@@ -138,6 +148,13 @@ export class GameSdkCommandTimingCollector implements GameSdkRuntimeTiming {
     }
   }
 
+  setArtifactCacheOutcome(value: string | null) {
+    if (this.#artifactCacheOutcome !== undefined) return;
+    if (value && artifactCacheOutcomes.has(value as GameSdkArtifactCacheOutcome)) {
+      this.#artifactCacheOutcome = value as GameSdkArtifactCacheOutcome;
+    }
+  }
+
   finish() {
     if (!this.#finished) {
       this.record("total", this.#now() - this.#startedAt);
@@ -164,7 +181,10 @@ export class GameSdkCommandTimingCollector implements GameSdkRuntimeTiming {
       .join(", ");
   }
 
-  decorate(response: Response) {
+  decorate(
+    response: Response,
+    options: { exposeArtifactCacheOutcome?: boolean } = {},
+  ) {
     const headers = new Headers(response.headers);
     const serverTiming = this.serverTimingHeader();
     if (serverTiming) headers.set("Server-Timing", serverTiming);
@@ -172,6 +192,9 @@ export class GameSdkCommandTimingCollector implements GameSdkRuntimeTiming {
     if (this.#commandRef) headers.set("X-Game-Sdk-Trace", this.#commandRef);
     if (this.#revision !== undefined) {
       headers.set("X-Game-Sdk-Revision", String(this.#revision));
+    }
+    if (options.exposeArtifactCacheOutcome && this.#artifactCacheOutcome) {
+      headers.set("X-Game-Sdk-Artifact-Cache", this.#artifactCacheOutcome);
     }
     return new Response(response.body, {
       status: response.status,

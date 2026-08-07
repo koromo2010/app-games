@@ -60,6 +60,26 @@ test("runner Server-Timing import rejects unapproved fields and payload-like des
   ]);
 });
 
+test("artifact-cache outcome stays private unless a Preview route opts in", () => {
+  const timing = createGameSdkCommandTimingCollector(() => 0);
+  timing.setArtifactCacheOutcome("hit");
+  const normalResponse = timing.decorate(Response.json({ ok: true }));
+  assert.equal(normalResponse.headers.get("x-game-sdk-artifact-cache"), null);
+  const previewResponse = timing.decorate(Response.json({ ok: true }), {
+    exposeArtifactCacheOutcome: true,
+  });
+  assert.equal(previewResponse.headers.get("x-game-sdk-artifact-cache"), "hit");
+
+  const invalid = createGameSdkCommandTimingCollector(() => 0);
+  invalid.setArtifactCacheOutcome("Authorization=secret");
+  assert.equal(
+    invalid.decorate(Response.json({ ok: true }), {
+      exposeArtifactCacheOutcome: true,
+    }).headers.get("x-game-sdk-artifact-cache"),
+    null,
+  );
+});
+
 test("iframe completion waits for final state notification and a rendered animation frame without viewer GET", () => {
   const bridge = readFileSync(
     "app/components/game-sdk/GameSdkIframeBridge.tsx",

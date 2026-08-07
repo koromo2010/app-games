@@ -381,6 +381,7 @@ export type GameSdkRuntimeTimingStage =
 export type GameSdkRuntimeTiming = {
   record(stage: GameSdkRuntimeTimingStage, durationMs: number, count?: number): void;
   importServerTiming?(value: string | null): void;
+  setArtifactCacheOutcome?(value: string | null): void;
 };
 
 /**

@@ -151,6 +151,15 @@ async function readRunnerPayload(response: Response) {
   }
 }
 
+function importArtifactCacheOutcome(
+  response: Response,
+  timing: GameSdkRuntimeTiming | undefined,
+) {
+  timing?.setArtifactCacheOutcome?.(
+    response.headers.get("x-game-sdk-artifact-cache"),
+  );
+}
+
 export function createGameSdkRemoteServerModule(
   definition: GameSdkRemoteBundleDefinition,
   fetchRunner: typeof fetch = fetch,
@@ -282,6 +291,7 @@ export function createGameSdkRemoteServerModule(
         fetchRunner,
         timing,
       );
+      importArtifactCacheOutcome(response, timing);
       timing?.record(
         "runner-call",
         Math.max(0, performance.now() - runnerStartedAt),

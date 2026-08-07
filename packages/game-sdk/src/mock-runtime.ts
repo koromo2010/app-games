@@ -8,6 +8,7 @@ import {
   gameSdkViewerFromActor,
   type GameSdkServerModule,
   type GameSdkServerRuntime,
+  type GameSdkRuntimeTiming,
 } from "./runtime.js";
 import type { GameSdkPlatformResources } from "./resources.js";
 
@@ -42,6 +43,7 @@ type MockRuntimeOptions<
   now?: () => number;
   createRequestId?: () => string;
   resources?: Readonly<GameSdkPlatformResources>;
+  timing?: GameSdkRuntimeTiming;
 };
 
 export type GameSdkMockRuntime<
@@ -55,6 +57,19 @@ export type GameSdkMockRuntime<
 
 function clone<T>(value: T): T {
   return structuredClone(value);
+}
+
+async function measured<T>(
+  timing: GameSdkRuntimeTiming | undefined,
+  stage: Parameters<GameSdkRuntimeTiming["record"]>[0],
+  operation: () => T | Promise<T>,
+) {
+  const startedAt = performance.now();
+  try {
+    return await operation();
+  } finally {
+    timing?.record(stage, Math.max(0, performance.now() - startedAt));
+  }
 }
 
 function snapshot<TRoom extends GameSdkStoredRoom, TRoomView>(
@@ -84,6 +99,7 @@ export function createGameSdkMockRuntime<
   now = Date.now,
   createRequestId,
   resources = {},
+  timing,
 }: MockRuntimeOptions<TRoom, TCreateInput, TCommand, TRoomView>): GameSdkMockRuntime<TRoom, TCreateInput, TCommand, TRoomView> {
   const rooms = new Map<string, TRoom>();
   const commandReceipts = new Map<string, {
@@ -102,11 +118,11 @@ export function createGameSdkMockRuntime<
 
   const present = async (room: Readonly<TRoom>, viewer: GameSdkViewer) => snapshot(
     room,
-    await module.presentRoom(clone(room), {
+    await measured(timing, "present-room", () => module.presentRoom(clone(room), {
       viewer: clone(viewer),
       now: now(),
       resources,
-    }),
+    })),
   );
 
   return {
@@ -158,12 +174,31 @@ export function createGameSdkMockRuntime<
       if (stored.revision !== envelope.expectedRevision) {
         throw new GameSdkRuntimeError("STALE_REVISION", 409);
       }
-      const nextRoom = await module.applyCommand(clone(stored), clone(envelope.command), {
+      const commandContext = {
         actor: clone(actor),
         now: now(),
         requestId: nextRequestId(),
         resources,
-      });
+      };
+      const presentationContext = {
+        viewer: gameSdkViewerFromActor(actor),
+        now: now(),
+        resources,
+      };
+      const batched = module.applyCommandAndPresent
+        ? await measured(timing, "apply-command", () => (
+            module.applyCommandAndPresent!(
+              clone(stored),
+              clone(envelope.command),
+              commandContext,
+              presentationContext,
+              timing,
+            )
+          ))
+        : null;
+      const nextRoom = batched?.room ?? await measured(timing, "apply-command", () => (
+        module.applyCommand(clone(stored), clone(envelope.command), commandContext)
+      ));
       const current = rooms.get(code);
       if (!current) throw new GameSdkRuntimeError("ROOM_NOT_FOUND", 404);
       if (current.revision !== envelope.expectedRevision) {
@@ -184,7 +219,9 @@ export function createGameSdkMockRuntime<
           resultRevision: nextRoom.revision,
         },
       ].slice(-128));
-      const room = await present(nextRoom, gameSdkViewerFromActor(actor));
+      const room = batched
+        ? snapshot(nextRoom, batched.view)
+        : await present(nextRoom, gameSdkViewerFromActor(actor));
       return {
         room,
         revision: room.revision,
