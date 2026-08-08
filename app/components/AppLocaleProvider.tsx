@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { defaultAppLocale, isAppLocale, normalizeAppLocale, type AppLocale } from "@/lib/app-locale";
+import { reconcileAccountLocaleAfterDocumentLoad } from "@/lib/app-locale-reconciliation";
 import { translateApp, type AppMessageKey, type AppMessageValues } from "@/lib/app-i18n";
 import { translateAuthGate, type AuthGateMessageKey } from "@/lib/auth-gate-i18n";
 import { isPlayerAuthenticated, readPlayerSession } from "@/lib/player-session";
@@ -56,9 +57,22 @@ export function AppLocaleProvider({
   }, [locale]);
 
   useEffect(() => {
+    let cancelPendingLocaleReconciliation: () => void = () => undefined;
+
     const applyAccountLocale = (value: unknown) => {
       if (!isAppLocale(value) || value === locale) return;
-      setLocale(value);
+      cancelPendingLocaleReconciliation();
+      cancelPendingLocaleReconciliation = reconcileAccountLocaleAfterDocumentLoad({
+        accountLocale: value,
+        currentLocale: locale,
+        documentReadyState: document.readyState,
+        applyLocale: setLocale,
+        subscribeToLoad: (listener) => {
+          const handleLoad = () => listener();
+          window.addEventListener("load", handleLoad, { once: true });
+          return () => window.removeEventListener("load", handleLoad);
+        },
+      });
     };
 
     if (isPlayerAuthenticated()) {
@@ -70,7 +84,10 @@ export function AppLocaleProvider({
       applyAccountLocale(detail?.locale);
     };
     window.addEventListener("game-fields:player-session-saved", handleSessionSaved);
-    return () => window.removeEventListener("game-fields:player-session-saved", handleSessionSaved);
+    return () => {
+      cancelPendingLocaleReconciliation();
+      window.removeEventListener("game-fields:player-session-saved", handleSessionSaved);
+    };
   }, [locale, setLocale]);
 
   const value = useMemo<AppLocaleContextValue>(() => ({
