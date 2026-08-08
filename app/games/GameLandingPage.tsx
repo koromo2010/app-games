@@ -3,7 +3,10 @@ import type { ReactNode } from "react";
 import { AppLink } from "@/app/components/AppLink";
 import { gamesForLocale } from "@/app/games/game-catalog";
 import type { AppLocale } from "@/lib/app-locale";
-import { builtInGameRoutes, type BuiltInGameRoute } from "@/lib/game-routes";
+import {
+  publishedMarketingGameRoutes,
+  type BuiltInGameRoute,
+} from "@/lib/game-routes";
 
 const copy = {
   ja: {
@@ -66,10 +69,16 @@ export function GameLandingPage({
   children?: ReactNode;
 }) {
   const text = copy[locale];
-  const game = gamesForLocale(locale).find((candidate) => candidate.id === route.id);
+  const localizedGames = gamesForLocale(locale);
+  const localizedGamesById = new Map(localizedGames.map((candidate) => [candidate.id, candidate]));
+  const game = localizedGamesById.get(route.id);
   if (!game) return null;
-  const related = gamesForLocale(locale)
-    .filter((candidate) => candidate.id !== route.id && !candidate.private)
+  const related = publishedMarketingGameRoutes()
+    .filter((candidateRoute) => candidateRoute.id !== route.id)
+    .flatMap((candidateRoute) => {
+      const candidate = localizedGamesById.get(candidateRoute.id);
+      return candidate ? [{ candidate, candidateRoute }] : [];
+    })
     .slice(0, 3);
   const canonical = `https://www.game-fields.com/${locale}${route.landingPath}`;
   const breadcrumb = {
@@ -127,10 +136,9 @@ export function GameLandingPage({
 
         <section><h2 className="text-2xl font-black">{text.faq}</h2><div className="mt-5 space-y-3">{text.faqItems.map(([question, answer]) => <details key={question} className="rounded-2xl border border-white/10 bg-white/[.04] p-5"><summary className="cursor-pointer font-black">{question}</summary><p className="mt-3 leading-7 text-slate-300">{answer}</p></details>)}</div></section>
 
-        <section><h2 className="text-2xl font-black">{text.related}</h2>{related.length ? <div className="mt-5 grid gap-4 md:grid-cols-3">{related.map((candidate) => {
-          const relatedRoute = builtInGameRoutes.find((item) => item.id === candidate.id);
-          return relatedRoute ? <AppLink key={candidate.id} href={relatedRoute.landingPath} className="rounded-2xl border border-white/10 bg-white/[.04] p-5 transition hover:border-cyan-300/50 hover:bg-cyan-300/10"><h3 className="font-black">{candidate.title}</h3><p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-300">{candidate.summary}</p></AppLink> : null;
-        })}</div> : <p className="mt-4 text-slate-300">{text.relatedEmpty}</p>}</section>
+        <section><h2 className="text-2xl font-black">{text.related}</h2>{related.length ? <div className="mt-5 grid gap-4 md:grid-cols-3">{related.map(({ candidate, candidateRoute }) => (
+          <AppLink key={candidate.id} href={candidateRoute.landingPath} className="rounded-2xl border border-white/10 bg-white/[.04] p-5 transition hover:border-cyan-300/50 hover:bg-cyan-300/10"><h3 className="font-black">{candidate.title}</h3><p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-300">{candidate.summary}</p></AppLink>
+        ))}</div> : <p className="mt-4 text-slate-300">{text.relatedEmpty}</p>}</section>
 
         <section className="rounded-3xl bg-gradient-to-r from-cyan-300 to-violet-300 p-7 text-center text-slate-950 sm:p-10"><h2 className="text-2xl font-black">{text.bottomTitle}</h2><p className="mt-2 font-bold">{game.title}</p><AppLink href={route.playPath} className="mt-6 inline-flex rounded-xl bg-slate-950 px-7 py-3 font-black text-white shadow-lg">{text.play}</AppLink></section>
       </div>

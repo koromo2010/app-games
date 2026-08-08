@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { defaultAppLocale, isAppLocale, type AppLocale } from "@/lib/app-locale";
 import { appLocaleRouteAction } from "@/lib/app-locale-routing";
-import { legacyGamePlayRoute } from "@/lib/game-routes";
+import { isGameMarketingPageVisible } from "@/lib/game-marketing-publication";
+import { gameMarketingRouteForPathname, legacyGamePlayRoute } from "@/lib/game-routes";
 
 const APP_LOCALE_COOKIE = "game_fields_locale";
 
@@ -23,6 +24,22 @@ export function proxy(request: NextRequest) {
     const locale = legacyGameRoute.locale ?? preferredLocale(request);
     redirectUrl.pathname = `/${locale}${legacyGameRoute.playPath}`;
     return NextResponse.redirect(redirectUrl, 308);
+  }
+
+  const marketingRoute = gameMarketingRouteForPathname(pathname);
+  if (marketingRoute && !isGameMarketingPageVisible(marketingRoute.registration)) {
+    const notFoundUrl = request.nextUrl.clone();
+    notFoundUrl.pathname = "/_not-found";
+    const requestHeaders = new Headers(request.headers);
+    const requestedLocale = pathname.split("/")[1];
+    requestHeaders.set(
+      "x-app-locale",
+      isAppLocale(requestedLocale) ? requestedLocale : preferredLocale(request),
+    );
+    return NextResponse.rewrite(notFoundUrl, {
+      status: 404,
+      request: { headers: requestHeaders },
+    });
   }
 
   // Next.js' automatic trailing-slash redirect is disabled so legacy aliases
