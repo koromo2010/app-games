@@ -101,19 +101,19 @@ export function GameLandingPage({
   };
 
   return (
-    <main className="min-h-screen bg-slate-950 text-white">
+    <main className="min-h-screen bg-slate-100 text-slate-950">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(breadcrumb) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(faq) }} />
-      <section className="relative isolate overflow-hidden border-b border-white/10">
-        <Image src={game.visual} alt="" fill priority sizes="100vw" unoptimized className="-z-20 object-cover opacity-45" />
-        <div className="absolute inset-0 -z-10 bg-gradient-to-r from-slate-950 via-slate-950/90 to-slate-950/45" />
+      <section className="relative isolate overflow-hidden border-b border-slate-800 bg-slate-950 text-white">
+        <Image src={game.visual} alt="" fill priority sizes="100vw" unoptimized className="-z-20 object-cover opacity-60" />
+        <div className="absolute inset-0 -z-10 bg-gradient-to-r from-slate-950 via-slate-950/80 to-slate-950/30" />
         <div className="mx-auto max-w-6xl px-5 py-20 sm:py-28">
           <p className="text-xs font-black uppercase tracking-[.2em] text-cyan-300">{text.eyebrow}</p>
           <h1 className="mt-4 max-w-3xl text-4xl font-black tracking-tight sm:text-6xl">{game.title}</h1>
           <p className="mt-5 max-w-2xl text-base leading-8 text-slate-200 sm:text-lg">{game.summary}</p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <AppLink href={route.playPath} className="rounded-xl bg-cyan-300 px-6 py-3 font-black text-slate-950 shadow-lg shadow-cyan-950/40 transition hover:bg-cyan-200">{text.play}</AppLink>
-            <AppLink href="/games" className="rounded-xl border border-white/25 bg-slate-950/60 px-6 py-3 font-black text-white transition hover:bg-white/10">{text.catalog}</AppLink>
+            <AppLink href={route.playPath} className="rounded-lg bg-cyan-300 px-6 py-3 font-black text-slate-950 shadow-lg shadow-cyan-950/40 transition hover:bg-cyan-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950">{text.play}</AppLink>
+            <AppLink href="/games" className="rounded-lg border border-white/30 bg-slate-950/60 px-6 py-3 font-black text-white transition hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950">{text.catalog}</AppLink>
           </div>
         </div>
       </section>
@@ -121,26 +121,26 @@ export function GameLandingPage({
       <div className="mx-auto max-w-6xl space-y-14 px-5 py-12 sm:py-16">
         <section className="grid gap-3 sm:grid-cols-3">
           {[[text.players, game.players], [text.time, game.time], [text.devices, text.deviceValue]].map(([label, value]) => (
-            <div key={label} className="rounded-2xl border border-white/10 bg-white/[.06] p-5"><p className="text-xs font-black uppercase tracking-wider text-cyan-300">{label}</p><p className="mt-2 text-lg font-black">{value}</p></div>
+            <div key={label} className="rounded-xl border border-slate-300 bg-white p-5 shadow-sm"><p className="text-xs font-black uppercase tracking-wider text-cyan-800">{label}</p><p className="mt-2 text-lg font-black text-slate-950">{value}</p></div>
           ))}
         </section>
 
         <section className="grid gap-8 lg:grid-cols-2">
-          <div><h2 className="text-2xl font-black">{text.overview}</h2><p className="mt-4 leading-8 text-slate-300">{game.summary}</p></div>
-          <div><h2 className="text-2xl font-black">{text.features}</h2><ul className="mt-4 flex flex-wrap gap-2">{game.tags.map((tag) => <li key={tag} className="rounded-full border border-cyan-300/30 bg-cyan-300/10 px-4 py-2 text-sm font-bold text-cyan-100">{tag}</li>)}</ul></div>
+          <div><h2 className="text-2xl font-black text-slate-950">{text.overview}</h2><p className="mt-4 leading-8 text-slate-700">{game.summary}</p></div>
+          <div><h2 className="text-2xl font-black text-slate-950">{text.features}</h2><ul className="mt-4 flex flex-wrap gap-2">{game.tags.map((tag) => <li key={tag} className="rounded-full border border-cyan-700/30 bg-cyan-100 px-4 py-2 text-sm font-bold text-cyan-950">{tag}</li>)}</ul></div>
         </section>
 
-        <section><h2 className="text-2xl font-black">{text.howTo}</h2><ol className="mt-5 grid gap-4 md:grid-cols-3">{text.steps.map((step, index) => <li key={step} className="rounded-2xl border border-white/10 bg-white/[.04] p-5"><span className="text-3xl font-black text-cyan-300">{index + 1}</span><p className="mt-3 leading-7 text-slate-300">{step}</p></li>)}</ol></section>
+        <section><h2 className="text-2xl font-black text-slate-950">{text.howTo}</h2><ol className="mt-5 grid gap-4 md:grid-cols-3">{text.steps.map((step, index) => <li key={step} className="rounded-xl border border-slate-300 bg-white p-5 shadow-sm"><span className="text-3xl font-black text-cyan-800">{index + 1}</span><p className="mt-3 leading-7 text-slate-700">{step}</p></li>)}</ol></section>
 
         {children && <section data-game-landing-extension>{children}</section>}
 
-        <section><h2 className="text-2xl font-black">{text.faq}</h2><div className="mt-5 space-y-3">{text.faqItems.map(([question, answer]) => <details key={question} className="rounded-2xl border border-white/10 bg-white/[.04] p-5"><summary className="cursor-pointer font-black">{question}</summary><p className="mt-3 leading-7 text-slate-300">{answer}</p></details>)}</div></section>
+        <section><h2 className="text-2xl font-black text-slate-950">{text.faq}</h2><div className="mt-5 space-y-3">{text.faqItems.map(([question, answer]) => <details key={question} className="rounded-xl border border-slate-300 bg-white p-5 shadow-sm"><summary className="cursor-pointer rounded-sm font-black text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-700 focus-visible:ring-offset-2">{question}</summary><p className="mt-3 leading-7 text-slate-700">{answer}</p></details>)}</div></section>
 
-        <section><h2 className="text-2xl font-black">{text.related}</h2>{related.length ? <div className="mt-5 grid gap-4 md:grid-cols-3">{related.map(({ candidate, candidateRoute }) => (
-          <AppLink key={candidate.id} href={candidateRoute.landingPath} className="rounded-2xl border border-white/10 bg-white/[.04] p-5 transition hover:border-cyan-300/50 hover:bg-cyan-300/10"><h3 className="font-black">{candidate.title}</h3><p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-300">{candidate.summary}</p></AppLink>
-        ))}</div> : <p className="mt-4 text-slate-300">{text.relatedEmpty}</p>}</section>
+        <section><h2 className="text-2xl font-black text-slate-950">{text.related}</h2>{related.length ? <div className="mt-5 grid gap-4 md:grid-cols-3">{related.map(({ candidate, candidateRoute }) => (
+          <AppLink key={candidate.id} href={candidateRoute.landingPath} className="rounded-xl border border-slate-300 bg-white p-5 shadow-sm transition hover:border-cyan-700 hover:bg-cyan-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-700 focus-visible:ring-offset-2"><h3 className="font-black text-slate-950">{candidate.title}</h3><p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-700">{candidate.summary}</p></AppLink>
+        ))}</div> : <p className="mt-4 text-slate-700">{text.relatedEmpty}</p>}</section>
 
-        <section className="rounded-3xl bg-gradient-to-r from-cyan-300 to-violet-300 p-7 text-center text-slate-950 sm:p-10"><h2 className="text-2xl font-black">{text.bottomTitle}</h2><p className="mt-2 font-bold">{game.title}</p><AppLink href={route.playPath} className="mt-6 inline-flex rounded-xl bg-slate-950 px-7 py-3 font-black text-white shadow-lg">{text.play}</AppLink></section>
+        <section className="rounded-2xl border border-slate-800 bg-slate-950 p-7 text-center text-white shadow-sm sm:p-10"><h2 className="text-2xl font-black">{text.bottomTitle}</h2><p className="mt-2 font-bold text-slate-300">{game.title}</p><AppLink href={route.playPath} className="mt-6 inline-flex rounded-lg bg-cyan-300 px-7 py-3 font-black text-slate-950 shadow-lg transition hover:bg-cyan-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-100 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950">{text.play}</AppLink></section>
       </div>
     </main>
   );
