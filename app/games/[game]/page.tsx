@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { GameLandingPage } from "@/app/games/GameLandingPage";
 import { gamesForLocale } from "@/app/games/game-catalog";
+import { gameLandingContent } from "@/app/games/game-landing-content";
 import { normalizeAppLocale } from "@/lib/app-locale";
 import { gameMarketingMetadata } from "@/lib/game-marketing-metadata";
 import { isGameMarketingPageVisible } from "@/lib/game-marketing-publication";
@@ -21,7 +22,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const locale = normalizeAppLocale((await headers()).get("x-app-locale"));
   const localizedGame = gamesForLocale(locale).find((candidate) => candidate.id === route.id);
   const title = localizedGame?.title ?? route.registration.title;
-  const description = localizedGame?.summary ?? route.registration.summary;
+  const description = gameLandingContent(route.id, locale)?.heroDescription
+    ?? localizedGame?.summary
+    ?? route.registration.summary;
   const metadata = gameMarketingMetadata({
     route,
     locale,
