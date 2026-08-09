@@ -105,8 +105,8 @@ export function GameLandingPage({
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(breadcrumb) }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(faq) }} />
       <section className="relative isolate overflow-hidden border-b border-slate-800 bg-slate-950 text-white">
-        <Image src={game.visual} alt="" fill priority sizes="100vw" unoptimized className="-z-20 object-cover opacity-60" />
-        <div className="absolute inset-0 -z-10 bg-gradient-to-r from-slate-950 via-slate-950/80 to-slate-950/30" />
+        <Image src={game.visual} alt="" fill priority sizes="100vw" unoptimized className="-z-20 object-cover opacity-90 brightness-110 saturate-[1.08]" />
+        <div className="absolute inset-0 -z-10 bg-gradient-to-r from-slate-950/90 via-slate-900/55 to-slate-950/5" />
         <div className="mx-auto max-w-6xl px-5 py-20 sm:py-28">
           <p className="text-xs font-black uppercase tracking-[.2em] text-cyan-300">{text.eyebrow}</p>
           <h1 className="mt-4 max-w-3xl text-4xl font-black tracking-tight sm:text-6xl">{game.title}</h1>
