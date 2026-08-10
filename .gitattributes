@@ -1,0 +1,2 @@
+/db/sdk/*.sql text eol=lf
+/scripts/migrate-sdk-database.mjs text eol=lf

@@ -58,6 +58,13 @@ The migration contract check rejects destructive SQL patterns such as `DROP`,
 `TRUNCATE`, and `DELETE FROM`. That is a review gate, not an automatic rollback
 mechanism.
 
+Migration checksums use LF as their canonical line ending for both SQL and
+versioned hook source. The runner normalizes CRLF and lone CR before hashing or
+executing migration SQL, so the same migration ledger is valid from Windows,
+macOS, Linux, and Vercel checkouts. `.gitattributes` also keeps the migration
+contract files on LF, but checksum correctness does not depend on Git checkout
+configuration.
+
 ## Failure and rollback policy
 
 1. Take or verify a provider snapshot/restore point for the exact target before

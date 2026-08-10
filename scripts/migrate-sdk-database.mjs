@@ -248,19 +248,29 @@ const acceptedLegacyMigrationEntries = new Map([
   ])],
 ]);
 
+export function normalizeMigrationSource(source) {
+  return source.replace(/\r\n?/g, "\n");
+}
+
+export function migrationChecksum(sql, hookSource = "") {
+  return createHash("sha256")
+    .update(normalizeMigrationSource(sql))
+    .update("\0")
+    .update(normalizeMigrationSource(hookSource))
+    .digest("hex");
+}
+
 function loadMigrations() {
   const migrations = readdirSync(migrationDirectory)
     .filter((name) => /^\d{3}_[a-z0-9_]+\.sql$/.test(name))
     .sort()
     .map((name) => {
       const version = Number(name.slice(0, 3));
-      const sql = readFileSync(join(migrationDirectory, name), "utf8");
+      const sql = normalizeMigrationSource(
+        readFileSync(join(migrationDirectory, name), "utf8"),
+      );
       const hook = hooks.get(version);
-      const checksum = createHash("sha256")
-        .update(sql)
-        .update("\0")
-        .update(hook ? hook.toString() : "")
-        .digest("hex");
+      const checksum = migrationChecksum(sql, hook ? hook.toString() : "");
       return { version, name, sql, checksum, hook };
     });
   migrations.forEach((migration, index) => {
