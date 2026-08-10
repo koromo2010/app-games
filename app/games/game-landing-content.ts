@@ -34,7 +34,7 @@ const tahoiyaContent: Record<AppLocale, GameLandingContent> = {
     features: [
       { title: "辞書も出題役もいらない", description: "珍しい言葉、読み方、本当の説明はAIが用意します。" },
       { title: "当てても、だましても得点", description: "本物を当てると1点。自分の偽説明に1票入るごとに1点を獲得します。" },
-      { title: "2つの遊び方", description: "1人の回答者をみんなでだます遊び方と、全員が偽説明を書いて投票する遊び方を選べます。" },
+      { title: "全員が書いて、全員が投票", description: "全員が偽説明を作り、本物だと思う説明へ投票します。自分の偽説明には投票できません。" },
     ],
     steps: [
       { title: "お題を確認する", description: "意味を知らない人が多い、珍しい言葉がお題として表示されます。" },
@@ -59,7 +59,7 @@ const tahoiyaContent: Record<AppLocale, GameLandingContent> = {
     features: [
       { title: "No dictionary or moderator", description: "AI supplies the unusual word, its reading, and the real definition." },
       { title: "Score by guessing or bluffing", description: "Earn one point for finding the real definition and one point for every vote your fake receives." },
-      { title: "Two ways to play", description: "Choose one answerer for everyone else to fool, or have every player write a fake and vote." },
+      { title: "Everyone writes and votes", description: "Every player writes a fake definition and votes for the real one. You cannot vote for your own fake." },
     ],
     steps: [
       { title: "See the word", description: "The game presents an unusual word that most players are unlikely to know." },

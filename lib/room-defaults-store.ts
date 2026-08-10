@@ -11,6 +11,7 @@ import { normalizeKotobaSenpukuConfig } from "@/lib/kotoba-senpuku";
 import { redisCommand } from "@/lib/redis-store";
 import { normalizeWordDifficulty, type WordDifficulty } from "@/lib/word-selection-protocol";
 import { normalizeTahoiyaFakeDefinitionsPerPlayer } from "@/lib/tahoiya-definitions";
+import { TAHOIYA_DEFAULT_PLAY_MODE } from "@/lib/tahoiya-types";
 
 export type RoomDefaultsGame = "wordwolf" | "tahoiya" | "hodoai-talk" | "kotoba-senpuku";
 
@@ -104,7 +105,7 @@ function normalizeWordWolfDefaults(value: unknown): StoredWordWolfRoomDefaults {
 
 function normalizeTahoiyaDefaults(value: unknown): StoredTahoiyaRoomDefaults {
   const parsed = value && typeof value === "object" ? value as Partial<StoredTahoiyaRoomDefaults> : {};
-  const playMode = parsed.playMode === "all-vote" ? "all-vote" : "single-answerer";
+  const playMode = TAHOIYA_DEFAULT_PLAY_MODE;
   return {
     playMode,
     topicDifficulty: parsed.topicDifficulty === "extreme" ? "extreme" : "standard",

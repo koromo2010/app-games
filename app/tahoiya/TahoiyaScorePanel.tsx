@@ -6,5 +6,5 @@ export function TahoiyaScorePanel({ room, players }: { room: TahoiyaRoom; player
 }
 
 export function TahoiyaEmptyState() {
-  return <div className="min-h-[520px] rounded-lg border border-white/10 bg-white/[0.96] p-6 shadow-[0_18px_50px_rgba(15,23,42,0.16)]"><div className="grid min-h-[460px] place-items-center rounded-lg border border-dashed border-amber-200 bg-[linear-gradient(135deg,#ffffff_0%,#f8fafc_55%,#fff7ed_100%)]"><div className="max-w-md text-center"><p className="text-sm font-semibold text-amber-700">Prototype ready</p><h2 className="mt-2 text-3xl font-black text-slate-950">辞書の本物を見抜く</h2><p className="mt-3 text-sm leading-6 text-slate-600">回答者1人で遊ぶルールと、全員が偽説明を書いて全員投票するルールを選べます。</p></div></div></div>;
+  return <div className="min-h-[520px] rounded-lg border border-white/10 bg-white/[0.96] p-6 shadow-[0_18px_50px_rgba(15,23,42,0.16)]"><div className="grid min-h-[460px] place-items-center rounded-lg border border-dashed border-amber-200 bg-[linear-gradient(135deg,#ffffff_0%,#f8fafc_55%,#fff7ed_100%)]"><div className="max-w-md text-center"><p className="text-sm font-semibold text-amber-700">Prototype ready</p><h2 className="mt-2 text-3xl font-black text-slate-950">辞書の本物を見抜く</h2><p className="mt-3 text-sm leading-6 text-slate-600">全員が偽説明を書き、全員で本物の説明を見抜きます。</p></div></div></div>;
 }

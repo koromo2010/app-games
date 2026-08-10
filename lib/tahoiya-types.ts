@@ -6,6 +6,8 @@ import type { AppLocale } from "./app-locale.ts";
 export type TahoiyaPhase = "lobby" | "writing" | "voting" | "result";
 export type TahoiyaAnswererMode = "manual" | "random";
 export type TahoiyaPlayMode = "single-answerer" | "all-vote";
+export const TAHOIYA_DEFAULT_PLAY_MODE: TahoiyaPlayMode = "all-vote";
+export const TAHOIYA_PLAY_MODE_SELECTION_VISIBLE = false;
 export type TahoiyaDifficulty = "standard" | "extreme";
 export type TahoiyaTopicGenerationStage =
   | "checking-reusable"

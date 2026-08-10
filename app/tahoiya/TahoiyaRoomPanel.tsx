@@ -1,4 +1,4 @@
-import type { TahoiyaAnswererMode, TahoiyaDifficulty, TahoiyaPlayMode, TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomChoice } from "@/lib/tahoiya-types";
+import { TAHOIYA_PLAY_MODE_SELECTION_VISIBLE, type TahoiyaAnswererMode, type TahoiyaDifficulty, type TahoiyaPlayMode, type TahoiyaPlayer, type TahoiyaRoom, type TahoiyaRoomChoice } from "@/lib/tahoiya-types";
 import { allRoomPlayersReturned } from "@/lib/room-lobby-return";
 import { RoomConfigSummary } from "../components/RoomConfigSummary";
 import { RoomTimeLimitControl } from "../components/RoomTimeLimitControl";
@@ -121,9 +121,9 @@ function HostSettings(props: Props & { room: TahoiyaRoom }) {
   const { room } = props;
   return (
     <fieldset disabled={Boolean(room.topicGenerationProgress)} className="space-y-3 disabled:opacity-60">
-      <Setting title="遊び方" description={room.playMode === "all-vote" ? "全員が偽説明を書き、全員で投票して最多得票を競います。" : "1人だけが回答し、それ以外の参加者が偽説明を書きます。"}>
+      {TAHOIYA_PLAY_MODE_SELECTION_VISIBLE ? <Setting title="遊び方" description={room.playMode === "all-vote" ? "全員が偽説明を書き、全員で投票して最多得票を競います。" : "1人だけが回答し、それ以外の参加者が偽説明を書きます。"}>
         <ChoiceButtons value={room.playMode} onChange={props.onPlayModeChange} choices={[{ label: "回答者1人", value: "single-answerer", activeClass: amberChoice }, { label: "全員投票", value: "all-vote", activeClass: cyanChoice }]} />
-      </Setting>
+      </Setting> : null}
       <Setting title="お題の難易度" description={room.topicDifficulty === "extreme" ? "難語好きでも知らないほど深い魔境の語を選びます。" : "一般的な大人が意味を知らない秘境の語を選びます。"}>
         <ChoiceButtons value={room.topicDifficulty} onChange={props.onDifficultyChange} choices={[{ label: "秘境", value: "standard", activeClass: cyanChoice }, { label: "魔境", value: "extreme", activeClass: roseChoice }]} />
       </Setting>

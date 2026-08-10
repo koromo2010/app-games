@@ -3,7 +3,7 @@ import { loadPlayerRoomDefaults, savePlayerRoomDefaults } from "@/lib/game-room-
 import { normalizeCommonTimeLimit } from "@/lib/game-room-config";
 import { OnlineRoomApiError } from "@/lib/online-room-api-client";
 import { isTerminalOnlineRoomFetchError } from "@/lib/online-room-fetch-policy";
-import type { TahoiyaPlayer, TahoiyaRoom, TahoiyaRoomAction } from "@/lib/tahoiya-types";
+import { TAHOIYA_DEFAULT_PLAY_MODE, type TahoiyaPlayer, type TahoiyaRoom, type TahoiyaRoomAction } from "@/lib/tahoiya-types";
 import { TAHOIYA_CORRECT_VOTE_POINTS, TAHOIYA_FOOLED_VOTE_POINTS } from "@/lib/tahoiya-scoring";
 import { normalizeTahoiyaFakeDefinitions, normalizeTahoiyaFakeDefinitionsPerPlayer } from "@/lib/tahoiya-definitions";
 import { applyTahoiyaRoomAction, createTahoiyaRoom, tahoiyaRoomApi } from "./tahoiya-room-api-client";
@@ -40,10 +40,10 @@ export function getRoomDefaultsKey(playerId: string, ownerId: string) {
 
 export function normalizeRoomDefaults(value: unknown): TahoiyaRoomDefaults {
   if (!value || typeof value !== "object") {
-    return { playMode: "single-answerer", topicDifficulty: "standard", answererMode: "random", showRealDefinitionToWriters: true, fakeDefinitionsPerPlayer: 1, actionTimeLimitSeconds: 0 };
+    return { playMode: TAHOIYA_DEFAULT_PLAY_MODE, topicDifficulty: "standard", answererMode: "random", showRealDefinitionToWriters: false, fakeDefinitionsPerPlayer: 1, actionTimeLimitSeconds: 0 };
   }
   const parsed = value as Partial<TahoiyaRoomDefaults>;
-  const playMode = parsed.playMode === "all-vote" ? "all-vote" : "single-answerer";
+  const playMode = TAHOIYA_DEFAULT_PLAY_MODE;
   return {
     playMode,
     topicDifficulty: parsed.topicDifficulty === "extreme" ? "extreme" : "standard",
@@ -270,10 +270,10 @@ export function createEmptyRoom(
     lobbyReturn: undefined,
     players: [host],
     parentId: host.id,
-    playMode: defaults.playMode,
+    playMode: TAHOIYA_DEFAULT_PLAY_MODE,
     topicDifficulty: defaults.topicDifficulty,
     answererMode: defaults.answererMode,
-    showRealDefinitionToWriters: defaults.showRealDefinitionToWriters,
+    showRealDefinitionToWriters: false,
     fakeDefinitionsPerPlayer: defaults.fakeDefinitionsPerPlayer,
     actionTimeLimitSeconds: defaults.actionTimeLimitSeconds,
     correctVotePoints: TAHOIYA_CORRECT_VOTE_POINTS,

@@ -165,7 +165,7 @@ export function loadAdminHyperparameterCatalog(): AdminHyperparameterCatalog {
         item("tahoiya-cooldown", "同じ単語の再出題間隔", "未実装", "過去指定", "未実装", "参加者の誰かが期限内に見た単語を除外します。", "共通ワードDB計画", "TAHOIYA_WORD_COOLDOWN_DAYS=90"),
         item("tahoiya-unseen", "未使用判定", "DB移行前・未実装", "過去指定", "未実装", "参加者全員が未使用の単語だけを候補にする絶対条件です。", "共通ワードDB計画", "誰か1人でも使用済みなら除外"),
         item("tahoiya-priority", "未使用候補の優先順", "Good−Bad→Good数→Bad少→使用少→最終使用が古い", "過去指定", "固定値", "未使用条件を守った上で、高評価候補を先に消化します。", "lib/tahoiya-topic-catalog.ts"),
-        item("tahoiya-mode", "初期プレイ方式", "回答者1人・回答者はランダム", "コード抽出", "部屋設定", "全員投票方式や回答者指定へ変更できます。", "app/tahoiya/TahoiyaGame.tsx"),
+        item("tahoiya-mode", "初期プレイ方式", "全員作成・全員投票", "コード抽出", "固定値", "新規ルームでは全員が偽説明を書いて投票します。回答者1人方式の選択UIは非表示です。", "lib/tahoiya-types.ts / app/tahoiya/TahoiyaRoomPanel.tsx"),
         item("tahoiya-feedback-threshold", "単語評価の除外条件", "最低票・割合は未実装", "追加候補", "未実装", "悪い単語を自動で候補から外す条件です。", "lib/tahoiya-topic-catalog.ts", "最低5票かつBad率60%以上"),
       ],
     },

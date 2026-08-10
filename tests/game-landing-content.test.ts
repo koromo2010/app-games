@@ -17,6 +17,8 @@ test("Tahoiya landing copy is game-specific in both locales", () => {
 
   assert.match(gameLandingContent("tahoiya", "ja")?.eyebrow ?? "", /辞書いらず/);
   assert.match(gameLandingContent("tahoiya", "ja")?.faqItems[0]?.[0] ?? "", /辞書や出題役/);
+  assert.doesNotMatch(JSON.stringify(gameLandingContent("tahoiya", "ja")), /回答者1人|2つの遊び方/);
+  assert.doesNotMatch(JSON.stringify(gameLandingContent("tahoiya", "en")), /one answerer|Two ways to play/i);
 });
 
 test("shared Game Fields FAQ remains separate from game-specific FAQ", () => {
