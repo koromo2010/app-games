@@ -134,7 +134,7 @@ export default async function CreatorDashboard() {
       </div> : <section className="dashboard-empty">
         <p className="eyebrow">NO GAMES YET</p>
         <h2>まだアカウントにゲームがありません</h2>
-        <p>ゲームを制作して最初のモックをSDKへ保存すると、正式提出前でもここに追加されます。</p>
+        <p>ゲーム仕様からgame draftを作るとここに追加されます。操作プロトタイプの前にGame Fields機能を確認・確定します。</p>
         <Link className="primary-action" href="/#start">最初のゲームを作る <span aria-hidden="true">→</span></Link>
       </section>}
 

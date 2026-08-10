@@ -12,6 +12,10 @@ import {
   GAME_SDK_MODULE_CATALOG,
   requiredGameSdkModuleIds,
 } from "@game-fields/game-sdk/modules";
+import {
+  confirmCreatorGameModuleProfile,
+  getCreatorGameModuleAuthoringState,
+} from "@/lib/module-authoring-store";
 
 export const dynamic = "force-dynamic";
 
@@ -27,13 +31,14 @@ async function requestIdentity(
   const gameId = raw.gameId.trim().toLowerCase();
   if (validateInstanceSlug(slug) || !GAME_PATTERN.test(gameId)) return null;
   const playerId = await getSdkAccountPlayerId();
-  if (!playerId) return { slug, gameId, playerId: null, owner: false };
+  if (!playerId) return { slug, gameId, playerId: null, owner: false, creatorId: null };
   const creator = await authenticateCreatorOwner(slug, playerId);
   return {
     slug,
     gameId,
     playerId,
     owner: Boolean(creator),
+    creatorId: creator?.id ?? null,
   };
 }
 
@@ -84,6 +89,12 @@ export async function GET(
       })
     ).allowed,
     editableByAi: false,
+    moduleContract: identity.creatorId
+      ? await getCreatorGameModuleAuthoringState({
+        creatorId: identity.creatorId,
+        gameId: identity.gameId,
+      })
+      : null,
   });
 }
 
@@ -144,6 +155,12 @@ export async function PATCH(
       requiredModuleIds: requiredGameSdkModuleIds(moduleProfile),
       classification: classifyCreatorGameModules(moduleProfile),
       editableByAi: false,
+      moduleContract: identity.creatorId
+        ? await getCreatorGameModuleAuthoringState({
+          creatorId: identity.creatorId,
+          gameId: identity.gameId,
+        })
+        : null,
     });
   } catch (error) {
     const code = error instanceof Error ? error.message : "";
@@ -168,5 +185,35 @@ export async function PATCH(
       { saved: false, error: "temporarily_unavailable" },
       { status: 503 },
     );
+  }
+}
+
+export async function POST(
+  request: Request,
+  context: {
+    params: Promise<{ instanceId: string; gameId: string }>;
+  },
+) {
+  const identity = await requestIdentity(context);
+  if (!identity) return Response.json({ confirmed: false, error: "not_found" }, { status: 404 });
+  if (!identity.playerId) return Response.json({ confirmed: false, error: "login_required" }, { status: 401 });
+  if (!identity.owner || !identity.creatorId) {
+    return Response.json({ confirmed: false, error: "owner_required" }, { status: 403 });
+  }
+  const body = await request.json().catch(() => null) as { humanConfirmed?: unknown } | null;
+  if (body?.humanConfirmed !== true) {
+    return Response.json({ confirmed: false, error: "explicit_confirmation_required" }, { status: 400 });
+  }
+  try {
+    const moduleContract = await confirmCreatorGameModuleProfile({
+      creatorId: identity.creatorId,
+      gameId: identity.gameId,
+      playerId: identity.playerId,
+      origin: new URL(request.url).origin,
+    });
+    return Response.json({ confirmed: true, moduleContract, editableByAi: false });
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "temporarily_unavailable";
+    return Response.json({ confirmed: false, error: code }, { status: code === "MODULE_PROFILE_STALE" ? 409 : 503 });
   }
 }

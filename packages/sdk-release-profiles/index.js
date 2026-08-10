@@ -1,6 +1,8 @@
 const SEMVER_PATTERN = /^\d+\.\d+\.\d+$/;
 const PLUGIN_NAME_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const DOWNLOAD_ME_BASE_NAME_PATTERN = /^GameFieldsDownloadMe(?:-dev)?$/;
+const CLAUDE_CODE_BASE_NAME_PATTERN = /^GameFieldsClaudeCode(?:-dev)?$/;
+const ONBOARDING_PROFILE_ID_PATTERN = /^game-fields-(?:production|development)-authoring-v\d+$/;
 const ENVIRONMENTS = ["production", "development"];
 
 function assertObject(value, label) {
@@ -41,6 +43,15 @@ export function validateSdkReleaseProfiles(profileConfig) {
     const expectedBaseName = environment === "production"
       ? "GameFieldsDownloadMe"
       : "GameFieldsDownloadMe-dev";
+    const expectedClaudeCodeBaseName = environment === "production"
+      ? "GameFieldsClaudeCode"
+      : "GameFieldsClaudeCode-dev";
+    const expectedConnectorDisplayName = environment === "production"
+      ? "Game Fields"
+      : "Game Fields Development — TEST ONLY";
+    const expectedToolDescriptionPrefix = environment === "production"
+      ? "[PRODUCTION]"
+      : "[DEVELOPMENT / TEST ONLY]";
     if (profile.channel !== expectedChannel) {
       throw new Error(`SDK release profile ${environment} must use channel=${expectedChannel}.`);
     }
@@ -53,6 +64,19 @@ export function validateSdkReleaseProfiles(profileConfig) {
     }
     if (!PLUGIN_NAME_PATTERN.test(profile.pluginName ?? "")) {
       throw new Error(`SDK release profile ${environment} must define a concrete lowercase pluginName.`);
+    }
+    if (profile.connectorDisplayName !== expectedConnectorDisplayName) {
+      throw new Error(`SDK release profile ${environment} must use connectorDisplayName=${expectedConnectorDisplayName}.`);
+    }
+    if (profile.toolDescriptionPrefix !== expectedToolDescriptionPrefix) {
+      throw new Error(`SDK release profile ${environment} must use toolDescriptionPrefix=${expectedToolDescriptionPrefix}.`);
+    }
+    if (!ONBOARDING_PROFILE_ID_PATTERN.test(profile.onboardingProfileId ?? "")) {
+      throw new Error(`SDK release profile ${environment} must define a stable onboardingProfileId.`);
+    }
+    if (profile.claudeCodeProfileBaseName !== expectedClaudeCodeBaseName
+      || !CLAUDE_CODE_BASE_NAME_PATTERN.test(profile.claudeCodeProfileBaseName ?? "")) {
+      throw new Error(`SDK release profile ${environment} must use Claude Code profile base name ${expectedClaudeCodeBaseName}.`);
     }
     const normalizedPortalBaseUrl = normalizePortalBaseUrl(
       profile.portalBaseUrl,
@@ -173,10 +197,23 @@ export function sdkDownloadMeFileName(release, profile) {
   return `${profile.downloadMeBaseName}-ver${sdkDownloadMeVersion(release)}.md`;
 }
 
-export function renderSdkDownloadMe(template, release, profile) {
+export function sdkClaudeCodeProfileFileName(release, profile) {
+  if (!CLAUDE_CODE_BASE_NAME_PATTERN.test(profile?.claudeCodeProfileBaseName ?? "")) {
+    throw new Error("Claude Code profile base name is invalid.");
+  }
+  return `${profile.claudeCodeProfileBaseName}-ver${sdkDownloadMeVersion(release)}.md`;
+}
+
+export function sdkCanonicalMcpUrl(profile) {
+  return `${normalizePortalBaseUrl(profile?.portalBaseUrl, "SDK release profile portalBaseUrl")}/api/mcp`;
+}
+
+export function renderSdkOnboardingTemplate(template, release, profile) {
+  const canonicalMcpUrl = sdkCanonicalMcpUrl(profile);
   const replacements = new Map([
     ["__DOWNLOAD_ME_VERSION__", sdkDownloadMeVersion(release)],
     ["__DOWNLOAD_ME_FILE_NAME__", sdkDownloadMeFileName(release, profile)],
+    ["__CLAUDE_CODE_PROFILE_FILE_NAME__", sdkClaudeCodeProfileFileName(release, profile)],
     ["__PLATFORM_VERSION__", release.platformVersion],
     ["__SDK_VERSION__", release.sdkPackageVersion],
     ["__SDK_HANDSHAKE_VERSION__", String(release.sdkHandshakeVersion)],
@@ -184,13 +221,21 @@ export function renderSdkDownloadMe(template, release, profile) {
     ["__SDK_ENVIRONMENT__", profile.environment],
     ["__SDK_STARTER_REF__", profile.starterRef],
     ["__SDK_PORTAL_BASE_URL__", profile.portalBaseUrl],
+    ["__SDK_MCP_URL__", canonicalMcpUrl],
     ["__SDK_PLUGIN_NAME__", profile.pluginName],
+    ["__SDK_CONNECTOR_DISPLAY_NAME__", profile.connectorDisplayName],
+    ["__SDK_TOOL_DESCRIPTION_PREFIX__", profile.toolDescriptionPrefix],
+    ["__ONBOARDING_PROFILE_ID__", profile.onboardingProfileId],
   ]);
   let rendered = template;
   for (const [token, value] of replacements) rendered = rendered.replaceAll(token, value);
   const unresolved = [...rendered.matchAll(/__[A-Z0-9_]+__/g)].map((match) => match[0]);
   if (unresolved.length > 0) {
-    throw new Error(`DownloadMe contains unresolved tokens: ${[...new Set(unresolved)].join(", ")}`);
+    throw new Error(`Onboarding template contains unresolved tokens: ${[...new Set(unresolved)].join(", ")}`);
   }
   return rendered;
+}
+
+export function renderSdkDownloadMe(template, release, profile) {
+  return renderSdkOnboardingTemplate(template, release, profile);
 }

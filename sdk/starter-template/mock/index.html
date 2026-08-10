@@ -3,19 +3,35 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>ゲーム固有プレビュー</title>
+    <title>カウントラリー</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <!-- このファイルは外側のGame Fields Shellへ差し込まれます。共通ヘッダー、広場、部屋、参加者、ルール、デバッグUIを追加しないでください。 -->
     <main id="game-slot" data-game-slot>
-      <section class="game-board" aria-labelledby="game-title">
-        <p class="eyebrow">GAME-SPECIFIC UI</p>
-        <h1 id="game-title">新しいゲーム</h1>
-        <p class="game-status" data-game-status>ゲーム開始前です</p>
-        <div class="game-actions" aria-label="ゲーム固有の操作">
-          <button type="button" data-game-action="primary">ゲーム固有操作</button>
+      <section class="game-board" aria-labelledby="game-title" data-evidence="counter-board counting-progress target-reached">
+        <p class="eyebrow">COUNT RALLY</p>
+        <h1 id="game-title">カウントラリー</h1>
+        <div class="participant-summary" data-evidence="participant-summary">
+          <span>PLAYER1</span><span>PLAYER2</span><span>PLAYER3</span>
         </div>
+        <p class="game-status" data-game-status data-evidence="current-actor">PLAYER2の手番です</p>
+        <div class="target-progress" data-evidence="target-progress count-updated">
+          <strong data-game-count>2</strong><span>/</span><span data-game-target>3</span>
+        </div>
+        <p class="action-explanation">中央のボタンでカウントを1つ進め、目標値へ到達した人が勝者です。</p>
+        <div class="game-actions" aria-label="カウント操作">
+          <button id="count-button" type="button" data-game-action="advance-count" data-evidence="count-button">
+            カウントを進める
+          </button>
+          <button type="button" data-game-action="reset-count" data-evidence="reset-count reset-prototype">
+            試作版をリセット
+          </button>
+        </div>
+        <section class="winner-banner" data-evidence="winner-banner" hidden>
+          <strong>PLAYER2の勝利</strong>
+          <span>3回目の操作で目標へ到達しました</span>
+        </section>
       </section>
     </main>
     <div id="game-toast" role="status" aria-live="polite"></div>

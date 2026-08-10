@@ -56,53 +56,57 @@ test("only the linked human owner route can mutate module requirements", () => {
   assert.match(route, /getSdkAccountPlayerId/);
   assert.match(route, /authenticateCreatorOwner/);
   assert.match(route, /updateCreatorGameModuleProfile/);
+  assert.match(route, /confirmCreatorGameModuleProfile/);
+  assert.match(route, /humanConfirmed/);
   assert.doesNotMatch(route, /Bearer/);
 
   const mcp = read("apps/sdk-portal/app/api/mcp/route.ts");
+  assert.match(mcp, /create_game_draft/);
   assert.match(mcp, /get_game_module_requirements/);
-  assert.match(mcp, /requiredModuleIds\s*=\s*requiredGameSdkModuleIds/);
-  assert.match(mcp, /requiredModules/);
-  assert.match(mcp, /GAME_SDK_MODULE_CATALOG/);
-  assert.match(mcp, /packageExports/);
-  assert.doesNotMatch(mcp, /classification:/);
-  assert.doesNotMatch(mcp, /\n\s+moduleProfile,\n/);
-  assert.match(mcp, /editableByAi:\s*false/);
+  assert.match(mcp, /requireConfirmedCreatorGameModuleContract/);
+  assert.match(mcp, /moduleProfileRevision/);
+  assert.match(mcp, /moduleContractDigest/);
+  assert.match(mcp, /editableByAi: false/);
   assert.doesNotMatch(
     mcp,
     /name:\s*"set_game_module_requirements"/,
   );
 });
 
-test("both mock publishing paths attach the all-required profile on first insert", () => {
+test("game draft owns the initial profile and legacy static prototype REST is disabled", () => {
   const api = read(
     "apps/sdk-portal/app/api/instances/[instanceId]/games/[gameId]/mock/route.ts",
   );
+  const draftStore = read("apps/sdk-portal/lib/module-authoring-store.ts");
   const mcp = read("apps/sdk-portal/app/api/mcp/route.ts");
-  for (const source of [api, mcp]) {
-    assert.match(source, /createInitialGameSdkModuleProfile/);
-    assert.match(source, /module_policy/);
-    assert.doesNotMatch(
-      source,
-      /ON CONFLICT[\s\S]{0,500}module_policy\s*=\s*EXCLUDED\.module_policy/,
-    );
-  }
+  assert.match(api, /LEGACY_STATIC_MOCK_PATH_DISABLED/);
+  assert.match(api, /status: 410/);
+  assert.match(draftStore, /createInitialGameSdkModuleProfile/);
+  assert.match(draftStore, /module_profile_revision/);
+  assert.match(mcp, /name === "create_game_draft"/);
+  assert.match(mcp, /name === "publish_mock"/);
+  assert.ok(mcp.indexOf('name === "create_game_draft"') < mcp.indexOf('name === "publish_mock"'));
 });
 
-test("creator AI receives only the current all-required contract", () => {
+test("creator AI receives the confirmed revision-bound delivery contract", () => {
   const aiFacingSources = [
     read("sdk/entry/START_GAME_FIELDS.md"),
+    read("sdk/entry/START_CLAUDE_CODE.md"),
     read("sdk/starter-template/AGENTS.md"),
     read("sdk/starter-template/SDK_API.md"),
     read("sdk/starter-template/SDK_MODULE_CATALOG.md"),
     read("packages/game-sdk/README.md"),
   ];
   for (const source of aiFacingSources) {
-    assert.match(source, /全.*必須|requiredModuleIds/);
-    assert.doesNotMatch(
-      source,
-      /解除可|任意へ|必須解除|理由付き解除|humanReviewable|classification\./,
-    );
+    assert.match(source, /module|requiredModuleIds/i);
   }
+  const work = aiFacingSources[0]!;
+  const claude = aiFacingSources[1]!;
+  assert.match(work, /moduleProfileRevision/);
+  assert.match(work, /moduleContractDigest/);
+  assert.match(work, /delivery/);
+  assert.match(claude, /moduleProfileRevision/);
+  assert.match(claude, /moduleContractDigest/);
 });
 
 test("creator contract enumerates the complete Platform DEBUG surface", () => {
@@ -184,4 +188,21 @@ test("SDK dev preview exposes the owner-only module review surface", () => {
   assert.match(route, /getCreatorModuleCustomizationAccess/);
   assert.match(route, /customization_not_available/);
   assert.match(route, /status:\s*402/);
+});
+
+test("changing a module profile invalidates prototype approval and hides stale package candidates", () => {
+  const registry = read("apps/sdk-portal/lib/instance-registry.ts");
+  const submit = read(
+    "apps/sdk-portal/app/api/dashboard/games/[instanceId]/[gameId]/submit/route.ts",
+  );
+  assert.match(registry, /module_profile_revision = gen_random_uuid\(\)/);
+  assert.match(registry, /module_contract_digest = NULL/);
+  assert.match(registry, /mock_revision = NULL/);
+  assert.match(registry, /mock_approved_revision = NULL/);
+  for (const source of [registry, submit]) {
+    assert.match(source, /module_profile_revision = g\.module_profile_revision/);
+    assert.match(source, /module_contract_digest = g\.module_contract_digest/);
+    assert.match(source, /prototype_revision = g\.mock_approved_revision/);
+    assert.match(source, /shared_source_sha256 = g\.prototype_source_sha256/);
+  }
 });

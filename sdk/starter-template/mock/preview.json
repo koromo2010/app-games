@@ -2,6 +2,49 @@
   "gameId": "my-first-game",
   "title": "はじめてのゲーム",
   "description": "Game Fields SDKで制作中の画面モック",
+  "reviewEvidence": {
+    "representativeStates": [
+      {
+        "id": "counting-progress",
+        "role": "in-progress",
+        "label": "PLAYER2の手番でカウントが2の状態"
+      },
+      {
+        "id": "target-reached",
+        "role": "completion",
+        "label": "目標値へ到達して勝者が表示された状態"
+      }
+    ],
+    "visibleGameSpecificElements": [
+      "counter-board",
+      "current-actor",
+      "participant-summary",
+      "target-progress"
+    ],
+    "primaryActions": [
+      {
+        "id": "advance-count",
+        "targetId": "count-button",
+        "observableResultId": "count-updated"
+      }
+    ],
+    "completionState": {
+      "stateId": "target-reached",
+      "visibleResultIds": ["winner-banner"]
+    },
+    "mockOnlyDataSource": "fixed-fixture",
+    "coreLoopSequence": [
+      "current-actor",
+      "advance-count",
+      "count-updated",
+      "target-reached"
+    ],
+    "resetAction": {
+      "id": "reset-prototype",
+      "targetId": "reset-count",
+      "observableResultId": "count-updated"
+    }
+  },
   "settings": [
     {
       "key": "timeLimitSeconds",

@@ -27,7 +27,7 @@ export default async function GameMockPage({ params }: {
       <main className="mock-review-error">
         <section>
           <p className="eyebrow">PREVIEW UNAVAILABLE</p>
-          <h1>モック表示の準備中です</h1>
+          <h1>操作プロトタイプ表示の準備中です</h1>
           <p>隔離プレビューの接続設定後に、この同じURLから確認できます。</p>
           <Link className="secondary-action" href={`/${instanceId}`}>制作者の広場へ戻る</Link>
         </section>
@@ -54,7 +54,7 @@ export default async function GameMockPage({ params }: {
       <iframe
         className="mock-review-frame"
         src={previewUrl}
-        title={`${game.title}の画面モック`}
+        title={`${game.title}の操作プロトタイプ`}
         sandbox="allow-scripts allow-modals allow-pointer-lock"
         referrerPolicy="no-referrer"
         allow="fullscreen"

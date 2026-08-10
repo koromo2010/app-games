@@ -5,6 +5,7 @@ DOCUMENT_CLASS := AI_EXECUTION_CONTRACT
 HUMAN_DOCUMENTATION := false
 PROTOCOL := game-fields-sdk
 AGENT_ROLE := GAME_PACKAGE_AUTHOR
+AUTHORING_CLIENT := ChatGPT Work
 NORMATIVE_TERMS := MUST | MUST_NOT | MAY | HALT | EMIT | CALL | ASSERT
 ```
 
@@ -20,9 +21,12 @@ release:
   environment: "__SDK_ENVIRONMENT__"
 transport:
   portal: "__SDK_PORTAL_BASE_URL__"
-  mcp: "__SDK_PORTAL_BASE_URL__/api/mcp"
+  mcp: "__SDK_MCP_URL__"
 plugin:
   name: "__SDK_PLUGIN_NAME__"
+  displayName: "__SDK_CONNECTOR_DISPLAY_NAME__"
+  toolPrefix: "__SDK_TOOL_DESCRIPTION_PREFIX__"
+onboardingProfileId: "__ONBOARDING_PROFILE_ID__"
 starter:
   repository: "https://github.com/koromo2010/app-games"
   ref: "__SDK_STARTER_REF__"
@@ -32,6 +36,10 @@ capabilityVector:
   - creator-environments
   - starter-download
   - mock-publish
+  - game-draft
+  - module-first-authoring
+  - module-usage-validation
+  - node-free-package
   - game-package-publish
   - formal-room-preview
   - hash-pinned-promotion
@@ -43,12 +51,12 @@ capabilityVector:
 ## C1::OUTPUT_LITERALS
 
 ```yaml
-MODE_UNSUPPORTED: "このゲーム制作にはコード操作が必要です。ChatGPTのWorkモードまたはCodexを開き、このファイルをもう一度添付してください。"
-LEGACY_THREAD: "このチャットでは制作を再開できません。古いDownloadMeまたは古い`__SDK_PLUGIN_NAME__` tool schemaが会話へ固定されています。プラグイン管理画面で`__SDK_PLUGIN_NAME__`を更新したあと、現在のチャットを閉じて新しいWork／Codexチャットを作成し、`__SDK_PLUGIN_NAME__`を選択して__DOWNLOAD_ME_FILE_NAME__だけを添付してください。保存済みの制作者環境とゲームは、新しいチャットから再取得できます。"
-PLUGIN_STALE: "`__SDK_PLUGIN_NAME__`のtool schemaがこのDownloadMeより古いため、このチャットではSDK接続確認を実行できません。更新ボタンを押しても既存チャットのtool schemaは差し替わりません。プラグイン管理画面で`__SDK_PLUGIN_NAME__`を更新したあと、現在のチャットを閉じて新しいWork／Codexチャットを作成し、`__SDK_PLUGIN_NAME__`を選択して__DOWNLOAD_ME_FILE_NAME__だけを添付してください。"
+MODE_UNSUPPORTED: "このファイルはChatGPT Work用です。Workで新しいチャットを作成し、このファイルだけを添付してください。Claude Codeでは専用の__CLAUDE_CODE_PROFILE_FILE_NAME__を使ってください。通常のClaudeチャット、Claude Desktop通常チャット、Coworkは制作クライアントとして未対応です。"
+LEGACY_THREAD: "このチャットでは制作を再開できません。古いDownloadMeまたは古い`__SDK_PLUGIN_NAME__` tool schemaが会話へ固定されています。プラグイン管理画面で`__SDK_PLUGIN_NAME__`を更新したあと、現在のチャットを閉じて新しいWorkチャットを作成し、`__SDK_PLUGIN_NAME__`を選択して__DOWNLOAD_ME_FILE_NAME__だけを添付してください。保存済みの制作者環境とゲームは、新しいチャットから再取得できます。"
+PLUGIN_STALE: "`__SDK_PLUGIN_NAME__`のtool schemaがこのDownloadMeより古いため、このチャットではSDK接続確認を実行できません。更新ボタンを押しても既存チャットのtool schemaは差し替わりません。プラグイン管理画面で`__SDK_PLUGIN_NAME__`を更新したあと、現在のチャットを閉じて新しいWorkチャットを作成し、`__SDK_PLUGIN_NAME__`を選択して__DOWNLOAD_ME_FILE_NAME__だけを添付してください。"
 PLUGIN_SETUP: "プラグイン一覧に`__SDK_PLUGIN_NAME__`がないため、新規プラグインとして登録します。プラグイン管理画面で「新規プラグイン」を選び、名前を`__SDK_PLUGIN_NAME__`、MCP URLを`__SDK_PORTAL_BASE_URL__/api/mcp`として作成してください。作成後に「接続」を押してGame FieldsのOAuth認証を完了し、続けて「更新」を押してください。接続済みになったら、このチャットで`__SDK_PLUGIN_NAME__`を選択してください。認証情報やトークンを会話へ貼り付ける必要はありません。"
 SLUG_REQUEST: "あなた専用のGame Fields SDK環境で使うURL名を決めます。`yusuke-lab`のように、小文字英数字とハイフンで希望名を教えてください。"
-MOCK_REVIEW: "モックを作成しました。実際に画面を見て、変えたいところはありますか？ 気になる部分をそのまま教えてください。特になければ「これでOK」と答えてください。"
+MOCK_REVIEW: "操作プロトタイプを作成しました。実際に主要操作、状態変化、完了、リセット、Game Fields機能の利用状況を確認してください。変えたいところはそのまま教えてください。特になければ「これでOK」と答えてください。"
 HANDSHAKE_FAILURE_PREFIX: "SDKハンドシェイクに失敗しました:"
 SUBMISSION_INCOMPLETE: "SDKへの提出は未完了です。"
 ```
@@ -57,13 +65,13 @@ SUBMISSION_INCOMPLETE: "SDKへの提出は未完了です。"
 
 ```text
 I00 MUST execute only when the current attachment set contains exactly one DownloadMe and its release.downloadMe == __DOWNLOAD_ME_VERSION__.
-I01 MUST bind every SDK operation to C0.transport.portal; MUST_NOT infer or substitute another SDK origin.
+I01 MUST bind every SDK operation to C0.transport.portal, C0.transport.mcp, C0.release.environment, and C0.onboardingProfileId; MUST_NOT infer or substitute another SDK origin or semantic environment.
 I02 MUST treat MCP initialize, OAuth authorization, and SDK handshake as distinct predicates.
 I03 MUST_NOT request, print, persist, commit, or pass through shell arguments any password, Cookie, access token, refresh token, reservationToken, or management token.
-I04 MUST use OAuth MCP tools for new Work/Codex flows; MUST_NOT invoke either legacy publish script.
-I05 MUST clone only C0.starter.repository@C0.starter.ref; MUST_NOT clone main, develop, mirrors, or alternate templates.
-I06 MUST mutate files only inside C0.starter.directory after checkout.
-I07 MUST treat all 39 initial Platform modules as immutable mandatory dependencies; MUST_NOT duplicate Platform-owned behavior.
+I04 MUST use OAuth MCP tools for ChatGPT Work; MUST_NOT invoke either legacy publish script.
+I05 MUST use only C0.starter.repository@C0.starter.ref when starter files are needed; MUST_NOT obtain main, develop, mirrors, or alternate templates.
+I06 MUST mutate files only inside the dedicated C0.starter.directory workspace.
+I07 MUST treat the draft's initial module profile as Game Fields-owned, wait for human confirmation, and then implement exactly the returned requiredModuleIds; MUST_NOT duplicate Platform-owned behavior or use disabled modules.
 I08 MUST keep browser state non-authoritative; Room state, identity, secrets, turn validation, result, and revision remain server-authoritative.
 I09 MUST_NOT access Game Fields DB, Redis, Blob, admin state, authentication Cookie, API keys, Vercel, develop, or main.
 I10 MUST_NOT push or deploy to Game Fields repositories or environments.
@@ -74,28 +82,32 @@ I14 MUST preserve submitted AppSet source and package hashes through preview/rev
 I15 MUST use returned URLs; MUST_NOT synthesize SDK URLs.
 I16 MUST define bilingual standardResult.presentation.reason, no more than 3 share-safe highlights, and a participant-safe playLog for every result transition; MUST_NOT expose machine reason codes, prompts, internal IDs, undisclosed secrets, or non-consenting participant names as human-facing result text.
 I17 MUST_NOT submit a new support report or reply directly; prepare_support_report and prepare_support_reply create drafts only, and the human creator MUST review and approve them in Portal.
+I18 MUST keep the opaque environmentBinding returned by accepted handshake in tool-flow memory and pass it unchanged to every later SDK tool; MUST_NOT decode, hand-enter, persist, or reuse it across a chat, OAuth identity, client, origin, or environment.
+I19 MUST verify sdkIdentity.targetEnvironment, canonicalMcpUrl, release, and onboardingProfileId on every SDK response; mismatch means HALT before further read or write.
+I20 MUST_NOT treat MCP Connected, tool discovery, URL issuance, shared Shell rendering, local HTML, or package candidate save as completion.
+I21 MUST resolve and freeze the human-confirmed module contract before prototype implementation, then require explicit human approval of the exact published prototypeRevision before formal packaging; AI self-approval is forbidden.
+I22 MUST use publish_mock and publish_game_source_package as the server-side Node-free path when local Node.js is unavailable; MUST_NOT ask a general creator to install Node.js, npm, Git, or Vercel CLI as the default path.
 ```
 
 ## P0::TERMINAL_PREDICATES
 
 ```text
-P_MOCK :=
-  check_mock.exitCode == 0
-  && publish_mock.saved == true
+P_PROTOTYPE :=
+  publish_mock.saved == true
+  && isNonEmpty(publish_mock.prototypeRevision)
+  && publish_mock.qualityEvidence exists
+  && publish_mock.moduleBinding == MODULE_CONTRACT identity fields
+  && publish_mock.moduleUsage covers every MODULE_CONTRACT.requiredModuleIds item
+  && isNonEmpty(publish_mock.sharedSourceSha256)
+  && publish_mock.humanApprovalRequired == true
   && isURL(publish_mock.creatorUrl)
   && isURL(publish_mock.gameUrl)
 
 P_SUBMISSION_READY :=
-  check.exitCode == 0
-  && demo.exitCode == 0
-  && diagnose_promotion.exitCode == 0
-  && build_game_package.exitCode == 0
-  && publish_game_package.saved == true
-  && publish_game_package.immutableAppSet == true
-  && publish_game_package.serverBundleSha256 == local_manifest.server.bundleSha256
-  && publish_game_package.appSetSourceSha256 == local_manifest.server.appSetSourceSha256
-  && isNonEmpty(publish_game_package.packageRevision)
-  && isURL(publish_game_package.packagePreviewUrl)
+  formal_package.saved == true
+  && isNonEmpty(formal_package.packageRevision)
+  && isURL(formal_package.packagePreviewUrl)
+  && formal_room_preview_verified == true
 
 ```
 
@@ -113,10 +125,7 @@ IF DOWNLOADME_ATTACHMENTS[0].release.downloadMe != C0.release.downloadMe:
   HALT.
 
 REQUIRE := {
-  public_git_fetch,
   multi_file_read_write,
-  node_command_execution,
-  zip_artifact_return,
   sdk_mcp_tool_access
 }
 
@@ -151,10 +160,6 @@ IF NOT discovered(source=C0.plugin.name, any_tool):
       press Connect, complete OAuth, then press Update.
   HALT until connection is available.
 
-IF surface == Codex AND sdk_mcp_not_connected:
-  REQUIRE user to connect C0.transport.mcp as remote MCP.
-  HALT until connection is available.
-
 REQUIRE browser authorization using the user's already-linked Game Fields account.
 MUST_NOT request credentials in conversation.
 
@@ -164,10 +169,12 @@ CALL get_sdk_handshake WITH:
   "handshakeVersion": __SDK_HANDSHAKE_VERSION__,
   "client": {
     "kind": "ai-agent",
-    "name": "ChatGPT"
+    "name": "ChatGPT Work"
   },
   "expected": {
     "environment": "__SDK_ENVIRONMENT__",
+    "canonicalMcpUrl": "__SDK_MCP_URL__",
+    "onboardingProfileId": "__ONBOARDING_PROFILE_ID__",
     "platformVersion": "__PLATFORM_VERSION__",
     "sdkPackageVersion": "__SDK_VERSION__",
     "sdkContractVersion": __SDK_CONTRACT_VERSION__
@@ -177,6 +184,10 @@ CALL get_sdk_handshake WITH:
     "creator-environments",
     "starter-download",
     "mock-publish",
+    "game-draft",
+    "module-first-authoring",
+    "module-usage-validation",
+    "node-free-package",
     "game-package-publish",
     "formal-room-preview",
     "hash-pinned-promotion",
@@ -191,14 +202,27 @@ ASSERT response.problems.length == 0.
 ASSERT response.environment == C0.release.environment.
 ASSERT response.release matches C0.release.
 ASSERT response.endpoints.portal == C0.transport.portal.
+ASSERT response.endpoints.mcp == C0.transport.mcp.
+ASSERT response.onboardingProfileId == C0.onboardingProfileId.
+ASSERT isNonEmpty(response.environmentBinding).
 
 ON_ASSERT_FAILURE:
   EMIT C1.HANDSHAKE_FAILURE_PREFIX + join(response.problems[*].code);
   HALT.
 
 ON_ASSERT_SUCCESS:
+  KEEP response.environmentBinding in tool-flow memory as ENVIRONMENT_BINDING.
+  CALL get_authoring_profile WITH {
+    "clientId": "chatgpt-work",
+    "environmentBinding": ENVIRONMENT_BINDING
+  }.
+  ASSERT response.client.displayName == "ChatGPT Work".
+  ASSERT response.identity matches C0 environment, mcp, release, and onboardingProfileId.
   GOTO S2.
 ```
+
+Every `CALL` after `get_sdk_handshake` in this contract includes
+`environmentBinding: ENVIRONMENT_BINDING`, even where omitted below for readability.
 
 ## S2::CREATOR_ENVIRONMENT_RESOLUTION
 
@@ -290,12 +314,17 @@ IF the proposed report text says or implies "previously reported", "reported bef
 
 ## S3::STARTER_ACQUISITION
 
-```bash
-git clone --depth 1 --single-branch --branch __SDK_STARTER_REF__ https://github.com/koromo2010/app-games.git game-fields-game
-cd game-fields-game
-```
-
 ```text
+IF an exact starter workspace is already attached or synchronized:
+  USE it as C0.starter.directory.
+ELSE IF the authoring host has native public repository import/download:
+  IMPORT only C0.starter.repository@C0.starter.ref into C0.starter.directory.
+ELSE IF Git already exists:
+  MAY clone --depth 1 --single-branch --branch C0.starter.ref into C0.starter.directory.
+ELSE:
+  EMIT official_starter_acquisition_failed;
+  HALT without asking the creator to install Git, Node.js, npm, or another CLI.
+
 ASSERT starter-manifest.json.repository == C0.starter.repository.
 ASSERT starter-manifest.json.ref == C0.starter.ref.
 ASSERT starter-manifest.json.downloadMeVersion == __DOWNLOAD_ME_VERSION__.
@@ -342,32 +371,96 @@ IF required, group all such questions into one turn.
 MUST_NOT ask serial preference/detail questions.
 
 WRITE completed GAME_SPEC.md.
+GOTO S4A.
+```
+
+## S4A::GAME_DRAFT_AND_HUMAN_MODULE_CONFIRMATION
+
+```text
+CALL create_game_draft WITH {
+  slug: selected.slug,
+  gameId,
+  title,
+  description,
+  playMode: "online-room",
+  minimumPlayers,
+  maximumPlayers
+}.
+ASSERT created == true.
+ASSERT prototypeSaved == false.
+ASSERT packageSaved == false.
+ASSERT moduleReviewUrl is URL.
+
+EMIT target environment, creator URL, gameId, moduleReviewUrl, and:
+  "操作プロトタイプを作る前に、Game Fields機能の構成を確認して確定してください。確定後、このチャットへ戻って『確定しました』と伝えてください。"
+WAIT human module confirmation.
+MUST_NOT implement game HTML, React client, AppSet, prototype adapter, or formal adapter before confirmation.
+
+CALL get_game_module_requirements(selected.slug, gameId).
+ASSERT response.editableByAi == false.
+ASSERT response.moduleProfileRevision exists.
+ASSERT sha256(response.moduleContractDigest).
+ASSERT response.sdkPackage.version == C0.release.sdkPackage.
+ASSERT every response.requiredModuleIds item has requiredModules contract data.
+FREEZE MODULE_CONTRACT := {
+  environment,
+  moduleProfileRevision,
+  moduleContractDigest,
+  sdkPackage,
+  sdkContractVersion,
+  requiredModuleIds,
+  disabledModuleIds,
+  requiredModules
+}.
 GOTO S5.
 ```
 
-## S5::MOCK_CONSTRUCTION_AND_REVIEW
+## S5::INTERACTIVE_PROTOTYPE_CONSTRUCTION_AND_REVIEW
 
 ```text
 MUTATE := {
-  mock/**,
-  mock/preview.json,
-  specification-owned starter files
+  index.html, styles.css, mock.js, preview.json,
+  source/app-set.ts, source/contracts.ts, source/manifest.ts,
+  source/server-module.ts, source/game-client.tsx, source/prototype-adapter.ts,
+  specification-owned files
 }.
+
+MUST build the interactive prototype and formal package from the same game-specific source.
+MUST use source/prototype-adapter.ts only to inject deterministic fixture state, scene fast-forward, and reset.
+MUST_NOT rewrite the game UI, AppSet logic, module components, or Command types after prototype approval.
+MUST follow each MODULE_CONTRACT.requiredModules[*].delivery:
+  sdk-resource => import and use the official packageExports/publicApis;
+  sdk-helper => import and call the official helper in the shared transition;
+  platform-resource => use the public injected interface and a prototype fixture adapter;
+  platform-owned => delegate to Game Fields host and do not create a fictitious import or duplicate implementation.
+MUST_NOT import or use MODULE_CONTRACT.disabledModuleIds.
 
 preview.json MUST define gameId, displayName, description, and declared settings.
 online-room MUST declare exactly one required time-limit setting with platformRole == "time-limit".
 minimumPlayers MUST equal real publication minimum.
 previewMinimumPlayers MAY equal 1 only when one-player preview is required.
 Game-specific UI MUST_NOT duplicate Platform settings, room, lobby, player list, debug panel, or GameFieldsRoom transport.
-All 39 initial modules remain mandatory.
 
-RUN npm run check:mock.
-ASSERT exitCode == 0.
-CALL publish_mock WITH {creatorSlug, game metadata, every validated mock/** file}.
+preview.json MUST include reviewEvidence with representative in-progress and completion states,
+at least four visible game-specific element IDs, each primary action target and observable result,
+completion result IDs, and mockOnlyDataSource=fixed-fixture|mock-local-state.
+The declared IDs MUST be visible in index.html or mock.js.
+preview.json MUST include a representative coreLoopSequence and resetAction.
+CREATE moduleUsage for every requiredModuleId with delivery, status, actual exports/APIs,
+source paths, observable runtime marker, and non-reimplementation evidence.
+IF local Node.js already exists, MAY RUN npm run check:mock; MUST_NOT require installation.
+CALL publish_mock WITH {
+  slug: selected.slug,
+  game metadata,
+  manifest,
+  moduleBinding: MODULE_CONTRACT identity fields,
+  moduleUsage,
+  every shared prototype/source file
+}.
 MUST_NOT run npm run publish:mock:legacy.
-ASSERT P_MOCK.
+ASSERT P_PROTOTYPE.
 
-IF NOT P_MOCK:
+IF NOT P_PROTOTYPE:
   EMIT C1.SUBMISSION_INCOMPLETE;
   HALT.
 
@@ -382,45 +475,53 @@ EMIT publish_mock.gameUrl as secondary clickable link.
 MUST_NOT prefer backward-compatible previewUrl.
 
 EMIT:
-  "「ゲーム名」をGame Fields SDKへ保存しました。"
+  "「ゲーム名」の操作プロトタイプをGame Fields SDKへ保存しました。"
   "[あなたのGame Fields環境を開く](creatorUrl)"
   "[今回のゲームを直接開く](gameUrl)"
-  C1.MOCK_REVIEW
+  module usage matrix and C1.MOCK_REVIEW
 
-WAIT explicit mock approval.
+WAIT explicit prototype and module-usage approval.
 IF change_request:
   APPLY changes;
   REPEAT S5.
 IF approval:
+  CALL approve_mock WITH {
+    slug: selected.slug,
+    gameId,
+    prototypeRevision: publish_mock.prototypeRevision,
+    humanApproved: true
+  }.
+  ASSERT response.approved == true.
+  ASSERT response.prototypeRevision == publish_mock.prototypeRevision.
   GOTO S6.
 ```
 
 ## S6::FORMAL_IMPLEMENTATION
 
 ```text
-CALL get_game_module_requirements(selected.slug, gameId).
-ASSERT response.editableByAi == false.
-ASSERT every response.requiredModuleIds item has requiredModules contract data.
+ASSERT current MODULE_CONTRACT still matches get_game_module_requirements.
+IF profile revision or digest changed, invalidate prototype approval and REPEAT S5.
+KEEP the approved shared game source unchanged.
+IMPLEMENT only formal adapter wiring and tests that do not duplicate or replace the approved UI, AppSet, module components, or Command types.
 
-ON_ASSERT_FAILURE:
-  EMIT sdk_profile_unavailable;
-  HALT.
-
-IMPLEMENT only game-specific AppSet, client surface, and tests.
-FOLLOW each requiredModules[*].delivery/packageExports/publicApis/usage.
-MUST_NOT infer internal SDK classification or edit module profile.
-
-RUN_IN_ORDER := [
-  "npm install",
-  "npm run check:mock",
-  "npm run check",
-  "npm run demo",
-  "npm run diagnose:promotion",
-  "npm run build:game-package",
-  "npm run package"
-].
-
-ASSERT every exitCode == 0.
+IF local Node.js already exists:
+  MAY RUN_IN_ORDER := [
+    "npm install",
+    "npm run check:mock",
+    "npm run check",
+    "npm run demo",
+    "npm run diagnose:promotion",
+    "npm run build:game-package",
+    "npm run package"
+  ].
+  ASSERT every executed exitCode == 0.
+ELSE:
+  MUST_NOT request Node.js installation.
+  PREPARE UTF-8 files := {
+    index.html, styles.css, mock.js, preview.json,
+    source/app-set.ts, source/contracts.ts, source/manifest.ts, source/server-module.ts,
+    source/game-client.tsx, source/prototype-adapter.ts
+  }.
 
 IF diagnose:promotion fails:
   PARTITION findings INTO {appset_violation, sdk_contract_gap}.
@@ -428,40 +529,46 @@ IF diagnose:promotion fails:
   MUST_NOT introduce bypass.
   HALT until corrected and full RUN_IN_ORDER succeeds.
 
-LOAD local_manifest := game-package/game-fields-package.json.
-ASSERT sha256(local_manifest.server.bundleSha256).
-ASSERT sha256(local_manifest.server.appSetSourceSha256).
-FREEZE {AppSet source, client, package manifest, both hashes}.
+IF local package exists:
+  LOAD local_manifest := game-package/game-fields-package.json.
+  ASSERT sha256(local_manifest.server.bundleSha256).
+  ASSERT sha256(local_manifest.server.appSetSourceSha256).
+  FREEZE {AppSet source, client, package manifest, both hashes}.
 GOTO S7.
 ```
 
 ## S7::SUBMISSION_PREPARATION
 
 ```text
-CALL publish_game_package WITH every file under game-package/.
+IF verified local game-package/ exists:
+  CALL publish_game_package WITH MODULE_CONTRACT binding, moduleUsage, and every file under game-package/.
+  SET formal_package := publish_game_package.
+ELSE:
+  CALL publish_game_source_package WITH {slug, gameId, manifest, moduleBinding: MODULE_CONTRACT, moduleUsage, files}.
+  SET formal_package := publish_game_source_package.
 MUST_NOT run npm run publish:game-package:legacy.
 
-ASSERT publish_game_package.saved == true.
-ASSERT publish_game_package.packageRevision exists.
-ASSERT publish_game_package.serverBundleSha256 == local_manifest.server.bundleSha256.
-ASSERT publish_game_package.appSetSourceSha256 == local_manifest.server.appSetSourceSha256.
-ASSERT publish_game_package.immutableAppSet == true.
-ASSERT publish_game_package.packagePreviewUrl is URL.
+ASSERT formal_package.saved == true.
+ASSERT formal_package.packageRevision exists.
+ASSERT formal_package.packagePreviewUrl is URL.
+IF local_manifest exists:
+  ASSERT formal_package.serverBundleSha256 == local_manifest.server.bundleSha256.
+  ASSERT formal_package.appSetSourceSha256 == local_manifest.server.appSetSourceSha256.
 
 IF any assertion fails:
   EMIT C1.SUBMISSION_INCOMPLETE;
   HALT.
 
-OPEN publish_game_package.packagePreviewUrl.
+OPEN formal_package.packagePreviewUrl.
 VERIFY candidate revision through formal shared Room API/Redis/CAS/reconnect/participant-sync path.
 MUST_NOT substitute mock preview.
 
-RETURN submission/game-fields-submission.zip.
+IF local ZIP exists, MAY RETURN submission/game-fields-submission.zip.
 EMIT {
-  packageRevision,
-  serverBundleSha256,
-  appSetSourceSha256,
-  packagePreviewUrl,
+  formal_package.packageRevision,
+  formal_package.serverBundleSha256,
+  formal_package.appSetSourceSha256,
+  formal_package.packagePreviewUrl,
   test_summary,
   remaining_items
 }.

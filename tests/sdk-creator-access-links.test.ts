@@ -27,18 +27,18 @@ test("published mocks return a reconnecting creator link and the real mock route
     "https://sdk.game-fields.com/krm/mock/corners",
   );
 
-  for (const path of [
-    "apps/sdk-portal/app/api/mcp/route.ts",
+  const mcp = read("apps/sdk-portal/app/api/mcp/route.ts");
+  assert.match(mcp, /creatorAccountLinkUrl/);
+  assert.match(mcp, /creatorMockGameUrl/);
+  assert.doesNotMatch(
+    mcp,
+    /const gameUrl = `\$\{portalBaseUrl[^\n]*\$\{slug\}\/games\/\$\{gameId\}`/,
+  );
+  const legacy = read(
     "apps/sdk-portal/app/api/instances/[instanceId]/games/[gameId]/mock/route.ts",
-  ]) {
-    const source = read(path);
-    assert.match(source, /creatorAccountLinkUrl/);
-    assert.match(source, /creatorMockGameUrl/);
-    assert.doesNotMatch(
-      source,
-      /const gameUrl = `\$\{portalBaseUrl[^\n]*\$\{slug\}\/games\/\$\{gameId\}`/,
-    );
-  }
+  );
+  assert.match(legacy, /LEGACY_STATIC_MOCK_PATH_DISABLED/);
+  assert.match(legacy, /status: 410/);
 });
 
 test("creator ownership mismatch offers account reconnection instead of a silent 404", () => {

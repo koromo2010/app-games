@@ -1,0 +1,130 @@
+# GF-CLAUDE-CODE-AUTHORING/__DOWNLOAD_ME_VERSION__
+
+```text
+DOCUMENT_CLASS := AI_EXECUTION_CONTRACT
+HUMAN_DOCUMENTATION := false
+PROTOCOL := game-fields-sdk
+AUTHORING_CLIENT := Claude Code
+TARGET_ENVIRONMENT := __SDK_ENVIRONMENT__
+CANONICAL_MCP_URL := __SDK_MCP_URL__
+ONBOARDING_PROFILE_ID := __ONBOARDING_PROFILE_ID__
+```
+
+## Scope
+
+This profile is only for Claude Code in a dedicated empty game folder. It is
+not a profile for regular Claude chat, Claude Desktop regular chat, or Cowork.
+Never use an app-games checkout as the creator workspace. Do not ask the user
+to install Node.js, npm, Git, or Vercel CLI as the default completion path.
+
+The common workflow and invariants are authoritative from
+`get_authoring_profile(clientId="claude-code")`; this file only defines Claude
+Code connection, environment binding, workspace, and Node-free routing.
+
+Do not implement prototype HTML, React UI, AppSet, or adapters before
+`create_game_draft`, human module review/confirmation, and
+`get_game_module_requirements` return a fixed profile revision, contract digest,
+and SDK version. Honor each module's delivery contract. Use official SDK
+resources/helpers, injected platform-resource fixtures, and platform-owned host
+delegation; never build bespoke substitutes or fictitious platform imports.
+
+## Remote HTTP MCP + OAuth
+
+Use Claude Code's remote HTTP MCP support. Add exactly this URL:
+
+```text
+__SDK_MCP_URL__
+```
+
+Recommended CLI form when the user has not already configured the server:
+
+```bash
+claude mcp add --transport http __SDK_PLUGIN_NAME__ __SDK_MCP_URL__
+```
+
+Then run `/mcp`, select `__SDK_PLUGIN_NAME__`, and complete browser OAuth. The
+server supports protected-resource discovery, authorization-server discovery,
+dynamic client registration, S256 PKCE, refresh rotation, and the localhost
+loopback `/callback` used by Claude Code. Never request OAuth tokens, browser
+cookies, passwords, MFA codes, or Vercel credentials in chat or files.
+
+MCP "Connected" and tool discovery are not workflow completion.
+
+## Mandatory handshake
+
+Before any other SDK tool, call `get_sdk_handshake` with:
+
+```json
+{
+  "protocol": "game-fields-sdk",
+  "handshakeVersion": __SDK_HANDSHAKE_VERSION__,
+  "client": { "kind": "ai-agent", "name": "Claude Code" },
+  "expected": {
+    "environment": "__SDK_ENVIRONMENT__",
+    "canonicalMcpUrl": "__SDK_MCP_URL__",
+    "onboardingProfileId": "__ONBOARDING_PROFILE_ID__",
+    "platformVersion": "__PLATFORM_VERSION__",
+    "sdkPackageVersion": "__SDK_VERSION__",
+    "sdkContractVersion": __SDK_CONTRACT_VERSION__
+  },
+  "requiredCapabilities": [
+    "oauth2-pkce",
+    "creator-environments",
+    "starter-download",
+    "mock-publish",
+    "game-draft",
+    "module-first-authoring",
+    "module-usage-validation",
+    "node-free-package",
+    "game-package-publish",
+    "formal-room-preview",
+    "hash-pinned-promotion",
+    "support-threads",
+    "human-approved-reporting",
+    "human-approved-support-replies"
+  ]
+}
+```
+
+Require `accepted=true`, `problems=[]`, and exact matches for environment,
+canonical MCP URL, release, and onboarding profile. Keep the returned opaque
+`environmentBinding` only in tool-flow memory. Pass it unchanged to every
+later SDK tool. Never decode, hand-enter, persist, or reuse it across a Claude
+session, OAuth identity, URL, or environment.
+
+Call `get_authoring_profile` with `clientId="claude-code"` and that binding.
+Follow the returned common contract. Verify `sdkIdentity` in every read/write
+response; halt on any semantic environment mismatch.
+
+## Claude Code execution profile
+
+- Work only in the dedicated empty game folder.
+- Create the specification first, then game draft. Stop for human module review before source implementation.
+- Freeze moduleProfileRevision, moduleContractDigest, SDK version, required/disabled lists and delivery contracts.
+- Build `source/game-client.tsx`, AppSet/Command source and module components once. Use a prototype fixture adapter and formal Room adapter around that same source.
+- Keep Platform room/lobby/settings/player/debug Shell out of the game-specific UI.
+- `preview.json.reviewEvidence` must declare representative in-progress and
+  completion states, at least four visible game-specific elements, primary
+  action target/result IDs, completion result IDs, and a fixed/mock-only data
+  source. All IDs must be observable in the interactive prototype.
+- `publish_mock` is a compatibility tool name for the authoritative module-bound interactive prototype validation path; it rejects static HTML without shared SDK source.
+- Show the returned game URL and checklist, wait for explicit human approval,
+  then call `approve_mock` for that exact `prototypeRevision`. AI self-approval is
+  forbidden.
+- Call `get_game_module_requirements` before prototype implementation, after human module confirmation. Only after module usage validation and prototype approval may formal packaging start.
+- If Node.js already exists, local checks are optional extra evidence. Never
+  block the standard path on them or ask the user to install Node.js.
+- Use `publish_game_source_package` with the prototype files, manifest,
+  module binding/usage matrix, and shared `source/**`. Portal performs static
+  import checks, bundling, package hashing, and asset validation without
+  executing creator code there. Execute only through the isolated formal Room
+  Preview returned by the package result.
+- A saved package is only a candidate. The human creator must verify formal
+  Room Preview and press the SDK dashboard's formal submission action.
+- Never push, deploy, write Game Fields DB/Redis/Blob directly, or claim dev/main
+  promotion.
+
+Official Claude Code references used by this profile:
+
+- https://code.claude.com/docs/en/mcp
+- https://code.claude.com/docs/en/mcp-quickstart

@@ -7,13 +7,14 @@
 1. `APP_REQUIREMENTS.md`、`SDK_MODULE_CATALOG.md`、`GAME_SPEC.md`、`MOCK_GUIDE.md`、`SDK_API.md`を読む。
 2. ゲームの核が決まるまでは自然に対話し、面白さ・人数・勝敗が決まったら詳細案を一括提示する。
 3. 「おまかせ」「未定」を安全な初期値で補い、`GAME_SPEC.md`へAI判断と分かる形で記録する。
-4. 共通moduleは最初全件必須として扱う。AIはprofileを変更せず、既存moduleと同等の処理をAppSetへ複製しない。
-5. ゲーム固有AppSet、閲覧者別View、正式クライアント、契約テストを一緒に実装する。
-6. `npm run check`、`npm run demo`、`npm run diagnose:promotion`を成功させる。
-7. OAuth接続済みGame Fields SDK MCPの`publish_game_package`へ、検査済み`game-package/`を渡す。アクセストークンや管理トークンを取得・表示・保存しない。
-8. SDKが返した制作者URLと正式Preview Roomを案内し、複数ブラウザ参加・同期・再接続を確認する。
+4. 仕様確定後はgame draftだけを作り、人間がPortalでmodule profileを確定するまでUI、AppSet、adapterを実装しない。
+5. 確定済み`moduleProfileRevision`・`moduleContractDigest`・SDK versionを固定し、required moduleをdelivery別の公式SDK契約で実利用する。disabled moduleや同等の独自処理を使わない。
+6. ゲーム固有AppSet、閲覧者別View、共有`game-client.tsx`、prototype adapter、契約テストを一緒に実装する。
+7. ローカルNode.jsが既にある場合は`npm run check`、`npm run demo`、`npm run diagnose:promotion`を追加検証として成功させる。インストールを標準経路の前提にしない。
+8. OAuth接続済みGame Fields SDK MCPの`publish_game_source_package`、または検査済み`game-package/`を渡す`publish_game_package`を使う。アクセストークンや管理トークンを取得・表示・保存しない。
+9. SDKが返した制作者URLと正式Preview Roomを案内し、複数ブラウザ参加・同期・再接続を確認する。
 
-MCPの`publish_mock`は任意の静的UIレビューです。成功してもRoom、AppSet、同期、昇格の検証完了とは扱いません。`publish:*:legacy` npm scriptは既存の管理トークン運用専用で、新規Work／Codex制作では実行しません。
+MCPの`publish_mock`は互換tool名で、確定module contractと共有sourceに結び付いた操作プロトタイプ検査です。`preview.json.reviewEvidence`の代表状態・固有要素・操作結果・完了・core loop・resetとmodule usageを検査し、利用者本人が`prototypeRevision`を明示承認するまで正式packageへ進みません。任意の静的HTMLだけでは通過せず、成功しても正式Room同期や昇格の検証完了とは扱いません。`publish:*:legacy` npm scriptは既存の管理トークン運用専用で、新規ChatGPT Work / Claude Code制作では実行しません。
 
 ## 編集してよい範囲
 
@@ -31,7 +32,7 @@ MCPの`publish_mock`は任意の静的UIレビューです。成功してもRoom
 
 - `mock/`は旧称だが、Previewと昇格後に同じrevisionで使う正式クライアントである。
 - `mock/index.html`はゲーム固有slotだけにする。広場、ヘッダー、部屋作成・参加、参加者、設定、ルール、デバッグ、退出・再戦を複製しない。
-- `mock/mock.js`は`GameFieldsRoom.subscribe()`のViewを描画し、`GameFieldsRoom.send()`でCommandだけを送る。
+- 正式Room bundleは共有`game-client.tsx`を`GameFieldsRoom.subscribe()/send()` adapterへ接続して生成し、Commandだけを送る。prototype bundleは同じclientをfixture adapterへ接続する。
 - ブラウザ内の変数、localStorage、IndexedDBをゲーム状態の正本にしない。
 - `GameFieldsPreset.registerGame()`へローカル進行を登録しない。
 - Word DBとLLMをブラウザから呼ばない。AppSetの`context.resources`だけを使う。
@@ -49,19 +50,21 @@ MCPの`publish_mock`は任意の静的UIレビューです。成功してもRoom
 ## 実装の順番
 
 1. `GAME_SPEC.md`を完成させる。
-2. `mock/preview.json`と`src/manifest.ts`を同じゲームIDへ更新する。
-3. `contracts.ts`へsettings、AppState、AppInput、AppCommand、AppViewを定義する。
-4. `app-set.ts`へ作成・リセット、認可、フェーズ、手番、終了条件、presentationを実装する。
-5. `server-module.ts`はSDK基本セットとAppSetの合成だけに保つ。
-6. `mock/`の正式クライアントをRoom ViewとCommandへ接続する。
-7. 正常完走、権限拒否、古いrevision、秘密遮断、失敗時非更新をテストする。
-8. `npm run check`、`npm run demo`、`npm run diagnose:promotion`を実行する。
-9. `npm run build:game-package`後、MCPの`publish_game_package`でhash固定packageを保存する。
-10. 正式Preview Roomで別ブラウザ参加、同期、再読込復帰、Word DB／LLM失敗を検証する。
+2. `create_game_draft`でmetadataだけを作り、人間のmodule profile確定を待つ。
+3. `get_game_module_requirements`のrevision/digest/SDK versionとdelivery契約を固定する。
+4. `mock/preview.json`と`src/manifest.ts`を同じゲームIDへ更新する。
+5. `contracts.ts`へsettings、AppState、AppInput、AppCommand、AppViewを定義する。
+6. `app-set.ts`へ作成・リセット、認可、フェーズ、手番、終了条件、presentationを実装する。
+7. `game-client.tsx`を正式UI正本とし、`prototype-adapter.ts`はfixture、状態早送り、resetだけに保つ。
+8. required moduleごとの実import/API、source path、runtime evidenceを検証し、`server-module.ts`はSDK基本セットとAppSetの合成だけに保つ。
+9. 正常完走、権限拒否、古いrevision、秘密遮断、失敗時非更新をテストする。
+10. Node.jsが既にある場合だけ`npm run check`、`npm run demo`、`npm run diagnose:promotion`を追加検査として実行する。
+11. 同じ共有sourceをMCPの`publish_game_source_package`（または検査済みpackage用`publish_game_package`）でhash固定保存する。
+12. 正式Preview Roomで別ブラウザ参加、同期、再読込復帰、Word DB／LLM失敗を検証する。
 
 ## 完了条件
 
-- `npm run diagnose:promotion`が`promotionReady: true`を返す。
+- Node.jsで追加検査を実行した場合は`npm run diagnose:promotion`が`promotionReady: true`を返す。Node-free経路では対応するserver-side gateが成功する。
 - Previewと昇格後が同じpackage revision、AppSet source SHA-256、server bundle SHA-256を使う。
 - 昇格処理がAppSetを翻訳、修正、再buildしない。
 - 未実装やPlatform側に必要なbridgeは`SDK_REQUESTS.md`へ明記する。

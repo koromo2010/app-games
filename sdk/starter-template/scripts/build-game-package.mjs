@@ -52,6 +52,8 @@ for (const sourceName of [
   "contracts.ts",
   "manifest.ts",
   "server-module.ts",
+  "game-client.tsx",
+  "prototype-adapter.ts",
 ]) {
   const source = join(root, "src", sourceName);
   const destination = join(outputRoot, "source", sourceName);
@@ -78,6 +80,27 @@ await build({
     loader: "js",
     resolveDir: root,
     sourcefile: "game-fields-portable-entry.js",
+  },
+});
+
+await build({
+  absWorkingDir: root,
+  bundle: true,
+  format: "iife",
+  platform: "browser",
+  target: "es2022",
+  minify: true,
+  outfile: join(outputRoot, "mock.js"),
+  stdin: {
+    contents: [
+      'import { mountGameClient } from "./src/game-client.tsx";',
+      "const room = globalThis.GameFieldsRoom;",
+      "if (!room) throw new Error('GAME_FIELDS_ROOM_REQUIRED');",
+      "mountGameClient({ subscribe: room.subscribe.bind(room), send: room.send.bind(room), mode: 'formal-room' });",
+    ].join("\n"),
+    loader: "ts",
+    resolveDir: root,
+    sourcefile: "game-fields-client-entry.ts",
   },
 });
 

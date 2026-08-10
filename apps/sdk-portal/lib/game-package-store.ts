@@ -51,6 +51,13 @@ export async function saveCreatorGamePackage(input: {
   gameId: string;
   files: unknown;
   validatedPackage?: ValidatedGamePackage;
+  authoringBinding: {
+    environment: "production" | "development";
+    moduleProfileRevision: string;
+    moduleContractDigest: string;
+    prototypeRevision: string;
+    sharedSourceSha256: string;
+  };
 }, dependencies: {
   ensureSchema?: typeof ensureSdkSchema;
   sql?: ReturnType<typeof sdkSql>;
@@ -72,6 +79,15 @@ export async function saveCreatorGamePackage(input: {
       if (!isGamePackageReleaseSupported(parsed.manifest)) {
         throw new Error("GAME_SDK_PACKAGE_RELEASE_MISMATCH");
       }
+      if (
+        parsed.manifest.authoring?.environment !== input.authoringBinding.environment
+        || parsed.manifest.authoring.moduleProfileRevision !== input.authoringBinding.moduleProfileRevision
+        || parsed.manifest.authoring.moduleContractDigest !== input.authoringBinding.moduleContractDigest
+        || parsed.manifest.authoring.prototypeRevision !== input.authoringBinding.prototypeRevision
+        || parsed.manifest.authoring.sharedSourceSha256 !== input.authoringBinding.sharedSourceSha256
+      ) {
+        throw new Error("GAME_SDK_PACKAGE_AUTHORING_BINDING_MISMATCH");
+      }
       return parsed;
     },
     persist: async (validated, parsed) => {
@@ -87,6 +103,10 @@ export async function saveCreatorGamePackage(input: {
     WHERE g.creator_id = ${input.creatorId}
       AND g.game_id = ${input.gameId}
       AND r.package_root_sha256 = ${parsed.packageRootSha256}
+      AND r.module_profile_revision = ${input.authoringBinding.moduleProfileRevision}::uuid
+      AND r.module_contract_digest = ${input.authoringBinding.moduleContractDigest}
+      AND r.prototype_revision = ${input.authoringBinding.prototypeRevision}
+      AND r.shared_source_sha256 = ${input.authoringBinding.sharedSourceSha256}
     LIMIT 1
   `;
   const existing = (Array.isArray(existingRows) ? existingRows[0] : null) as
@@ -146,14 +166,23 @@ export async function saveCreatorGamePackage(input: {
     INSERT INTO sdk_game_package_revisions (
       game_id, revision, package_root_sha256, server_bundle_sha256,
       app_set_source_sha256, manifest, sdk_package_version,
-      sdk_contract_version
+      sdk_contract_version, module_profile_revision,
+      module_contract_digest, prototype_revision, shared_source_sha256
     )
     SELECT id, ${revision}, ${parsed.packageRootSha256}, ${parsed.bundleSha256},
            ${parsed.appSetSourceSha256}, ${manifestJson}::jsonb,
            ${parsed.manifest.sdkPackageVersion},
-           ${parsed.manifest.sdkContractVersion}
+           ${parsed.manifest.sdkContractVersion},
+           ${input.authoringBinding.moduleProfileRevision},
+           ${input.authoringBinding.moduleContractDigest},
+           ${input.authoringBinding.prototypeRevision},
+           ${input.authoringBinding.sharedSourceSha256}
     FROM sdk_games
     WHERE creator_id = ${input.creatorId} AND game_id = ${input.gameId}
+      AND module_profile_revision = ${input.authoringBinding.moduleProfileRevision}::uuid
+      AND module_contract_digest = ${input.authoringBinding.moduleContractDigest}
+      AND mock_approved_revision = ${input.authoringBinding.prototypeRevision}
+      AND prototype_source_sha256 = ${input.authoringBinding.sharedSourceSha256}
     ON CONFLICT (game_id, package_root_sha256) DO NOTHING
     RETURNING revision
   `;

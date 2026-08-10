@@ -1,6 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { ensureSdkSchema, sdkSql } from "@/lib/sdk-postgres";
 import { sdkPortalReleaseProfile } from "@/lib/sdk-release-profile";
+import { isAllowedOAuthRedirectUri } from "@/lib/oauth-redirect-uri";
 
 export const SDK_SCOPES = ["sdk:creator", "sdk:mock"] as const;
 export const SDK_SCOPE = SDK_SCOPES.join(" ");
@@ -58,9 +59,12 @@ async function prepareOAuthStore() {
 
 export async function registerOAuthClient(input: { clientName?: string; redirectUris: string[] }) {
   await prepareOAuthStore();
-  if (!input.redirectUris.length || input.redirectUris.some((uri) => {
-    try { return new URL(uri).protocol !== "https:"; } catch { return true; }
-  })) throw new Error("INVALID_REDIRECT_URI");
+  if (
+    !input.redirectUris.length
+    || input.redirectUris.length > 20
+    || new Set(input.redirectUris).size !== input.redirectUris.length
+    || input.redirectUris.some((uri) => !isAllowedOAuthRedirectUri(uri))
+  ) throw new Error("INVALID_REDIRECT_URI");
   const clientId = `gf_${token()}`;
   await sdkSql()`INSERT INTO sdk_oauth_clients (client_id, client_name, redirect_uris) VALUES (${clientId}, ${input.clientName?.slice(0, 120) ?? "AI client"}, ${JSON.stringify(input.redirectUris)}::jsonb)`;
   return clientId;
@@ -106,10 +110,10 @@ export async function refreshAccessToken(refreshToken: string, clientId: string)
 
 export async function authenticateAccessToken(value: string, requiredScope: string, audience: string) {
   await prepareOAuthStore();
-  const rows = await sdkSql()`SELECT player_id, scope FROM sdk_oauth_grants WHERE access_token_hash = ${hash(value)} AND audience = ${audience} AND revoked_at IS NULL AND access_expires_at > NOW() LIMIT 1`;
-  const row = (Array.isArray(rows) ? rows[0] : null) as { player_id: string; scope: string } | null;
+  const rows = await sdkSql()`SELECT player_id, client_id, scope FROM sdk_oauth_grants WHERE access_token_hash = ${hash(value)} AND audience = ${audience} AND revoked_at IS NULL AND access_expires_at > NOW() LIMIT 1`;
+  const row = (Array.isArray(rows) ? rows[0] : null) as { player_id: string; client_id: string; scope: string } | null;
   if (!row || !row.scope.split(" ").includes(requiredScope)) return null;
-  return { playerId: row.player_id, scope: row.scope };
+  return { playerId: row.player_id, clientId: row.client_id, scope: row.scope };
 }
 
 export async function revokeOAuthToken(value: string) {

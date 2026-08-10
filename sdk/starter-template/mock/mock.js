@@ -1,6 +1,10 @@
 const status = document.querySelector("[data-game-status]");
-const action = document.querySelector("[data-game-action=\"primary\"]");
+const action = document.querySelector("[data-game-action=\"advance-count\"]");
+const count = document.querySelector("[data-game-count]");
+const target = document.querySelector("[data-game-target]");
+const winner = document.querySelector(".winner-banner");
 const toast = document.querySelector("#game-toast");
+const reset = document.querySelector("[data-game-action=\"reset-count\"]");
 
 function notify(message) {
   toast.textContent = message;
@@ -21,13 +25,29 @@ function render(snapshot) {
     : phase === "playing"
       ? `ゲーム固有の進行: ${app.count} / ${app.target}`
       : "ゲーム開始前です";
+  count.textContent = String(app.count);
+  target.textContent = String(app.target);
+  winner.hidden = phase !== "result";
   action.disabled = !app.canAdvance;
 }
 
 function connectRoom() {
   if (!window.GameFieldsRoom) {
-    status.textContent = "Game Fields Roomから開いてください";
-    action.disabled = true;
+    render({
+      phase: "playing",
+      view: { app: { count: 2, target: 3, canAdvance: true } },
+    });
+    action.addEventListener("click", () => {
+      render({
+        phase: "result",
+        view: { app: { count: 3, target: 3, canAdvance: false } },
+      });
+      notify("カウントが3になり、勝敗が確定しました");
+    });
+    reset.addEventListener("click", () => render({
+      phase: "playing",
+      view: { app: { count: 2, target: 3, canAdvance: true } },
+    }));
     return;
   }
   window.GameFieldsRoom.subscribe(render);

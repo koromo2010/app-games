@@ -14,7 +14,11 @@ export type SdkReleaseProfile = {
   channel: "stable" | "developer-preview";
   portalBaseUrl: string;
   pluginName: string;
+  connectorDisplayName: "Game Fields" | "Game Fields Development — TEST ONLY";
+  toolDescriptionPrefix: "[PRODUCTION]" | "[DEVELOPMENT / TEST ONLY]";
+  onboardingProfileId: string;
   downloadMeBaseName: "GameFieldsDownloadMe" | "GameFieldsDownloadMe-dev";
+  claudeCodeProfileBaseName: "GameFieldsClaudeCode" | "GameFieldsClaudeCode-dev";
   starterRef: "sdk-starter" | "sdk-starter-dev";
 };
 
@@ -23,7 +27,11 @@ export type SdkReleaseProfileInput = {
   channel: string;
   portalBaseUrl: string;
   pluginName: string;
+  connectorDisplayName: string;
+  toolDescriptionPrefix: string;
+  onboardingProfileId: string;
   downloadMeBaseName: string;
+  claudeCodeProfileBaseName: string;
   starterRef: string;
 };
 
@@ -65,6 +73,16 @@ export function resolveSdkReleaseProfile(input: {
 
 export function sdkDownloadMeVersion(release: PlatformRelease): string;
 export function sdkDownloadMeFileName(
+  release: PlatformRelease,
+  profile: SdkReleaseProfile,
+): string;
+export function sdkClaudeCodeProfileFileName(
+  release: PlatformRelease,
+  profile: SdkReleaseProfile,
+): string;
+export function sdkCanonicalMcpUrl(profile: SdkReleaseProfile): string;
+export function renderSdkOnboardingTemplate(
+  template: string,
   release: PlatformRelease,
   profile: SdkReleaseProfile,
 ): string;

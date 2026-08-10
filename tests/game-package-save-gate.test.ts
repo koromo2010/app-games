@@ -11,7 +11,10 @@ import {
 } from "../apps/sdk-portal/lib/game-package-persistence.ts";
 import { GamePackageAssetValidationError } from "../apps/sdk-portal/lib/game-package-asset-audit.ts";
 import { saveCreatorGamePackage } from "../apps/sdk-portal/lib/game-package-store.ts";
-import { saveGamePackageFilesToGit } from "../apps/sdk-portal/lib/mock-git-store.ts";
+import {
+  prepareGamePackageUploadFiles,
+  saveGamePackageFilesToGit,
+} from "../apps/sdk-portal/lib/mock-git-store.ts";
 import { sdkPackageAssetFixture } from "./sdk-package-asset-fixtures.ts";
 
 test("asset rejection calls no schema or persistence dependency", async () => {
@@ -107,6 +110,13 @@ test("saveCreatorGamePackage rejects assets before schema, DB or Git", async () 
     creatorSlug: "moi-lab",
     gameId: "portable-fixture",
     files: sdkPackageAssetFixture({ "index.html": "<!doctype html><img src='./missing.png'>" }),
+    authoringBinding: {
+      environment: "development",
+      moduleProfileRevision: "11111111-1111-4111-8111-111111111111",
+      moduleContractDigest: "a".repeat(64),
+      prototypeRevision: "b".repeat(40),
+      sharedSourceSha256: "c".repeat(64),
+    },
   }, {
     ensureSchema: async () => { calls.schema += 1; },
     sql: (async () => { calls.db += 1; return []; }) as never,
@@ -115,11 +125,48 @@ test("saveCreatorGamePackage rejects assets before schema, DB or Git", async () 
   assert.deepEqual(calls, { schema: 0, db: 0, git: 0 });
 });
 
-test("REST prepares and validates before creator authentication but preserves auth response order", async () => {
+test("formal package persistence rejects a stale authoring binding before DB or Git", async () => {
+  const calls = { schema: 0, db: 0, git: 0 };
+  const rawFiles = sdkPackageAssetFixture().map(({ path, content, encoding }) => ({ path, content, encoding }));
+  const manifestFile = rawFiles.find((file) => file.path === "game-fields-package.json")!;
+  const manifest = JSON.parse(manifestFile.content);
+  manifest.sdkPackageVersion = "0.2.0";
+  manifest.sdkContractVersion = 2;
+  manifest.manifest.settings = [{
+    key: "timeLimitSeconds",
+    label: { ja: "制限時間", en: "Time limit" },
+    type: "select",
+    defaultValue: 60,
+    platformRole: "time-limit",
+    options: [0, 60],
+  }];
+  manifestFile.content = `${JSON.stringify(manifest)}\n`;
+  const validReleaseFiles = prepareGamePackageUploadFiles(rawFiles);
+  await assert.rejects(saveCreatorGamePackage({
+    creatorId: "creator",
+    creatorSlug: "moi-lab",
+    gameId: "portable-fixture",
+    files: validReleaseFiles,
+    authoringBinding: {
+      environment: "development",
+      moduleProfileRevision: "11111111-1111-4111-8111-111111111111",
+      moduleContractDigest: "a".repeat(64),
+      prototypeRevision: "b".repeat(40),
+      sharedSourceSha256: "c".repeat(64),
+    },
+  }, {
+    ensureSchema: async () => { calls.schema += 1; },
+    sql: (async () => { calls.db += 1; return []; }) as never,
+    saveFiles: async () => { calls.git += 1; return "d".repeat(40); },
+  }), /GAME_SDK_PACKAGE_AUTHORING_BINDING_MISMATCH/);
+  assert.deepEqual(calls, { schema: 0, db: 0, git: 0 });
+});
+
+test("legacy REST package write is disabled in favor of the module-bound OAuth MCP path", async () => {
   const source = await readFile("apps/sdk-portal/app/api/instances/[instanceId]/games/[gameId]/package/route.ts", "utf8");
-  assert.ok(source.indexOf("prepareGamePackageUploadFiles(body.files)") < source.indexOf("authenticateCreator(slug, token)"));
-  assert.ok(source.indexOf("if (!creator)") < source.indexOf("if (prepared instanceof Error)"));
-  assert.match(source, /validatedPackage: prepared\.validation/);
+  assert.match(source, /LEGACY_UNBOUND_PACKAGE_PATH_DISABLED/);
+  assert.match(source, /status: 410/);
+  assert.doesNotMatch(source, /export async function PUT[\s\S]*saveCreatorGamePackage/);
 });
 
 test("MCP publish path continues through the shared creator save boundary", async () => {

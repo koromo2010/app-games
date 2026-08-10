@@ -16,6 +16,13 @@ export type GameFieldsPackageManifest = {
   gameId: string;
   sdkPackageVersion: string;
   sdkContractVersion: number;
+  authoring?: {
+    environment: "production" | "development";
+    moduleProfileRevision: string;
+    moduleContractDigest: string;
+    prototypeRevision?: string;
+    sharedSourceSha256: string;
+  };
   manifest: GameSdkManifest;
   client: {
     /** Browser asset graph root. Server bundle and source are not client assets. */

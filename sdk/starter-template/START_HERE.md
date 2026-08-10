@@ -1,22 +1,22 @@
 # Game Fields SDK — ここから始める
 
-これは、ChatGPTと一緒にGame Fields向けゲームを1本作り、同じAppSetのままPreviewから本番候補へ昇格させるスターターです。SDK本体`@game-fields/game-sdk` v__SDK_VERSION__を`vendor/`へ同梱しています。
+これは、ChatGPT WorkまたはClaude Codeと一緒にGame Fields向けゲームを1本作り、同じ共有sourceのままPreviewから本番候補へ昇格させるスターターです。SDK本体`@game-fields/game-sdk` v__SDK_VERSION__を`vendor/`へ同梱しています。通常チャット、Claude Desktop通常チャット、Coworkは制作クライアントとして未対応です。
 
-## ChatGPTへ渡す依頼
+## ChatGPT Work / Claude Codeへ渡す依頼
 
 ```text
 このGame Fields SDKスターターを使ってゲームを1本作りたいです。
 最初にAGENTS.md、APP_REQUIREMENTS.md、MOCK_GUIDE.md、SDK_API.mdを読んでください。
-必要事項の質問票を一度にまとめ、回答後はGAME_SPEC.md、AppSet、正式クライアント、契約テストまで実装してください。
+面白さ・人数・勝敗を自然な対話で決め、詳細案を一度に提示してください。GAME_SPEC.mdの確定後にgame draftを作り、人間がmodule profileを確定するまではUIやAppSetを実装しないでください。
 クライアントはGameFieldsRoomのViewだけを描画し、Commandだけを送ってください。ブラウザ内にゲーム状態の正本を作らないでください。
 Word DBとLLMはAppSetのcontext.resourcesからだけ利用してください。
-共通モジュールは最初すべて必須です。profileを変更したり、同等機能をゲーム側へ複製しないでください。
+共通moduleはgame draftで最初すべて必須です。人間がPortalで確定したrevision/digestを取得し、required moduleはdelivery別の公式SDK契約で実利用し、disabled moduleは使わないでください。同等機能をゲーム側へ複製しないでください。
 npm run check、npm run demo、npm run diagnose:promotionを成功させ、最後にOAuth接続済みGame Fields SDK MCPのpublish_game_packageで正式Previewへ保存してください。
 ```
 
 ## ローカル確認
 
-Node.js 20以上で次を実行します。
+Node.js 20以上が既にある場合だけ、追加のローカル証拠として次を実行できます。一般の制作者にNode.jsのインストールを求めず、標準経路はMCPのserver-side検査を使います。
 
 ```bash
 npm install
@@ -26,9 +26,9 @@ npm run diagnose:promotion
 npm run build:game-package
 ```
 
-画面だけを先に相談するときはMCPの`publish_mock`を使えます。ただし静的UIレビューであり、Room同期や本番昇格の検証ではありません。
+共有する`src/game-client.tsx`・AppSet・Command sourceを一度だけ作り、`src/prototype-adapter.ts`から操作可能なfixtureを注入します。MCPの`publish_mock`は互換tool名で、module-boundな操作プロトタイプをserver-side検査します。利用者は主要操作、状態変化、完了、reset、module利用表を確認し、返された`prototypeRevision`を明示承認します。これは正式Room同期や本番昇格の検証ではありません。
 
-ゲームとしての確認は`npm run build:game-package`で作成した`game-package/`をMCPの`publish_game_package`へ渡します。AppSet、クライアント、source、SHA-256を1つのrevisionへ保存し、正式な共通Roomで実行します。OAuth資格情報を会話、ファイル、Git、コマンド引数へ展開しません。
+ゲームとしての確認は、Node.jsがすでにある場合だけ`game-package/`を`publish_game_package`へ渡し、ない場合は同じ共有sourceを`publish_game_source_package`へ渡します。AppSet、クライアント、module binding、source、SHA-256を1つのrevisionへ保存し、制作者コードは隔離された正式な共通Roomだけで実行します。Node.js、npm、Git、CLIのインストールを標準経路の前提にせず、OAuth資格情報を会話、ファイル、Git、コマンド引数へ展開しません。
 
 ```text
 SDKのcandidate package

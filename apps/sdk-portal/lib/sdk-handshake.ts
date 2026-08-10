@@ -14,6 +14,10 @@ export const SDK_PORTAL_CAPABILITIES = [
   "creator-environments",
   "starter-download",
   "mock-publish",
+  "game-draft",
+  "module-first-authoring",
+  "module-usage-validation",
+  "node-free-package",
   "game-package-publish",
   "formal-room-preview",
   "hash-pinned-promotion",
@@ -28,11 +32,13 @@ export function sdkPortalEnvironment(base: string) {
 
 export function createSdkPortalHandshakeDescriptor(origin?: string): GameSdkHandshakeDescriptor {
   const base = portalBaseUrl(origin);
+  const profile = sdkPortalReleaseProfile(base);
   return {
     protocol: GAME_FIELDS_SDK_HANDSHAKE_PROTOCOL,
     handshakeVersion: GAME_FIELDS_SDK_HANDSHAKE_VERSION,
     surface: "creator-portal",
-    environment: sdkPortalEnvironment(base),
+    environment: profile.environment,
+    onboardingProfileId: profile.onboardingProfileId,
     release: {
       platformVersion: platformRelease.platformVersion,
       sdkPackageVersion: platformRelease.sdkPackageVersion,

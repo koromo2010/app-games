@@ -1,4 +1,4 @@
-# ChatGPT向け Game Fields ゲーム開発SDK
+# ChatGPT Work / Claude Code向け Game Fields ゲーム開発SDK
 
 ## 目的
 
@@ -31,7 +31,7 @@ SDK利用者は、完成したゲーム固有package、manifest、テスト、�
 
 `npm run build:sdk-starter`で、ChatGPTへそのまま渡せる`game-fields-sdk-starter-v0.2.0.zip`を生成できる。ZIPには`@game-fields/game-sdk`のtarball、初回プロンプト、`AGENTS.md`、`GAME_SPEC.md`、APIリファレンス、AppSetと正式client、契約テスト、完走デモ、昇格診断、game package builderを含む。
 
-試用者はdevelopment Portalの`GameFieldsDownloadMe-dev-ver0.2.0.md`を、`dev-game-fields`更新後に作成した新しいWork／Codexチャットへ単独で渡し、そこから同じSemVerの`sdk-starter-dev`を取得する。productionでは`GameFieldsDownloadMe-ver0.2.0.md`、`game-fields`、`sdk-starter`の組合せを使う。DownloadMeは独立した`ver17`のような整数やSDKだけのpatch版を持たず、常に`config/app-release.json`の本体SemVerと一致させる。既存チャットのtool schemaはプラグイン更新後も差し替わらないため、旧DownloadMeの会話へ最新版を追加して継続しない。保存済み制作者環境は新しいチャットの`list_creator_environments`から再取得できる。DownloadMeは人間向けの説明書ではなく、AIが解釈する宣言的な実行契約とする。人間向けの導入説明はSDK Portalへ置き、DownloadMe内では状態、前提条件、禁止条件、tool呼出し、停止条件を機械的な識別子で記述する。安定版`sdk-starter`は現行npm安定版と同期させ、development候補で上書きしない。最初に仕様を相談して`GAME_SPEC.md`を確定したあと、同じフォルダ内だけを実装させる。`npm run test:sdk-starter`は別ディレクトリへの展開、同梱SDK install、型検査、契約テスト、デモ完走、提出ZIPまでを検査する。
+試用者はdevelopment Portalで、ChatGPT Workには`GameFieldsDownloadMe-dev-ver0.2.0.md`、Claude Codeには`GameFieldsClaudeCode-dev-ver0.2.0.md`を使う。productionではそれぞれ`GameFieldsDownloadMe-ver0.2.0.md`と`GameFieldsClaudeCode-ver0.2.0.md`を使う。通常のClaudeチャット、Claude Desktop通常チャット、Coworkは制作クライアントとして未対応である。両クライアントは共通authoring contractをMCPから取得し、同じMock品質検査、人間承認、module確定、正式package検査、Room Preview、提出ゲートを通る。DownloadMeとClaude Code profileは本体SemVerに一致させる。既存チャットのtool schemaは更新後も差し替わらないため、旧会話へ最新版を追加して継続しない。保存済み制作者環境は新しいセッションの`list_creator_environments`から再取得できる。
 
 ## AIが編集してよい領域
 
@@ -87,7 +87,7 @@ MobileLayoutは将来追加する。DesktopLayout内でホスト判定や秘密�
 - `@game-fields/game-sdk/portable-server`: 未審査AppSetを隔離runnerから呼ぶeffect protocol
 - `@game-fields/game-sdk/handshake`: 接続環境、release、contract schema、必須capabilityの互換性判定
 
-MCP `initialize`、OAuth認証、Game Fields SDK handshakeは別の責務である。DownloadMeから始めるAIは最初に`get_sdk_handshake`へ環境、Platform版、SDK package版、contract schema、必須capabilityを提示し、`accepted=true`を確認してから制作者環境やゲーム仕様へ進む。MCPの`requiredCapabilities`は固定enumにせず、将来のcapability名もserverへ到達させ、未提供なら`CAPABILITY_UNAVAILABLE`で停止する。これにより、capability追加だけで古い入力schemaがhandshake呼出し自体を遮断しない。初回は共通moduleを全件必須とだけ伝え、内部の解除可能性は制作AIへ渡さない。モック承認後はMCPが確定済み`requiredModuleIds`と各moduleの公開利用契約を返す。`sdk`と`sdk-dev`は同じhandshake schemaを使い、環境とcanonical endpointだけを応答で区別する。
+MCP `initialize`、OAuth認証、Game Fields SDK handshakeは別の責務である。制作AIは最初に`get_sdk_handshake`へクライアント名、環境、canonical MCP URL、onboarding profile、release、必須capabilityを提示し、`accepted=true`を確認する。成功時の署名済み`environmentBinding`はOAuth利用者・client・環境へ結び付き、以後すべてのtoolで必須となる。各応答にも環境identityを含め、production/developmentの意味的混線をfail-closedで拒否する。`requiredCapabilities`は固定enumにせず、未提供なら`CAPABILITY_UNAVAILABLE`で停止する。仕様確定後はgame draftだけを作り、人間がmodule profileを確定した後にrevision・digest・SDK versionを固定する。操作プロトタイプと正式packageは同じgame client・AppSet・Command sourceを別adapterへ接続して生成し、required moduleの実import/API/runtime evidenceとdisabled module不使用をserver-sideで検査する。`publish_mock`はこのmodule-bound操作プロトタイプ検査の互換tool名であり、任意の静的HTMLだけでは通過しない。人間が主要操作、完了、reset、module利用表とexact `prototypeRevision`を承認するまで正式packageへ進めない。ローカルNode.jsがない場合は`publish_game_source_package`がPortal上で静的import検査、bundle、hash、package検査を行い、制作者コードの実行は隔離された正式Room Previewだけで行う。
 
 ソースは`packages/game-sdk/src`へ物理分離し、独立した`package.json`、SemVer、`exports`、TypeScript buildを持つ。npm安定版は`0.1.0`、リポジトリの次期公開候補は`0.2.0`で、MIT License、public access、provenanceを固定している。`npm run test:sdk-package`はtarballを一時外部projectへinstallし、Runtime、portable protocol、Platform resource契約、トランプ・描画の純粋ロジックとReact UIをpackage名だけで利用できることを検査する。
 

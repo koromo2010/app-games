@@ -96,6 +96,16 @@
       "import": "./dist/handshake.js",
       "default": "./dist/handshake.js"
     },
+    "./mock-quality": {
+      "types": "./dist/mock-quality.d.ts",
+      "import": "./dist/mock-quality.js",
+      "default": "./dist/mock-quality.js"
+    },
+    "./module-usage": {
+      "types": "./dist/module-usage.d.ts",
+      "import": "./dist/module-usage.js",
+      "default": "./dist/module-usage.js"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {

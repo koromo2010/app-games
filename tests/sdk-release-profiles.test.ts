@@ -3,6 +3,8 @@ import test from "node:test";
 import {
   resolveSdkReleaseEnvironment,
   resolveSdkReleaseProfile,
+  sdkClaudeCodeProfileFileName,
+  sdkCanonicalMcpUrl,
   sdkDownloadMeFileName,
   validateSdkReleaseConfiguration,
 } from "../packages/sdk-release-profiles/index.js";
@@ -63,4 +65,8 @@ test("future DownloadMe filenames follow Platform SemVer without another counter
   });
   assert.equal(sdkDownloadMeFileName(futureRelease, production), "GameFieldsDownloadMe-ver0.2.0.md");
   assert.equal(sdkDownloadMeFileName(futureRelease, development), "GameFieldsDownloadMe-dev-ver0.2.0.md");
+  assert.equal(sdkClaudeCodeProfileFileName(futureRelease, production), "GameFieldsClaudeCode-ver0.2.0.md");
+  assert.equal(sdkClaudeCodeProfileFileName(futureRelease, development), "GameFieldsClaudeCode-dev-ver0.2.0.md");
+  assert.equal(sdkCanonicalMcpUrl(production), "https://sdk.game-fields.com/api/mcp");
+  assert.equal(sdkCanonicalMcpUrl(development), "https://sdk-dev.game-fields.com/api/mcp");
 });

@@ -29,6 +29,8 @@ import {
   creatorGameFormalRoomPath,
   creatorGamePreviewPath,
 } from "@/lib/creator-game-route-contract";
+import { getCreatorGameModuleAuthoringState } from "@/lib/module-authoring-store";
+import { sdkPortalReleaseProfile } from "@/lib/sdk-release-profile";
 
 const GAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?$/;
 const REVISION_PATTERN = /^[a-f0-9]{40}$/;
@@ -118,8 +120,9 @@ export default async function CreatorGamePage({
     let moduleProfile;
     let customizationAccess;
     let packageRevisions;
+    let moduleContract;
     try {
-      [moduleProfile, customizationAccess, packageRevisions] = await Promise.all([
+      [moduleProfile, customizationAccess, packageRevisions, moduleContract] = await Promise.all([
         getCreatorGameModuleProfile(instanceId, gameId),
         getCreatorModuleCustomizationAccess({
           creatorSlug: instanceId,
@@ -130,12 +133,17 @@ export default async function CreatorGamePage({
           creatorSlug: instanceId,
           gameId,
         }),
+        getCreatorGameModuleAuthoringState({
+          creatorId: owner.creator.id,
+          gameId,
+        }),
       ]);
     } catch (error) {
       logSdkOwnerLookupFailure(error);
       return <CreatorOwnershipIssue kind="lookup_unavailable" />;
     }
     const candidateRevision = currentGame.packageCandidateRevision;
+    const releaseProfile = sdkPortalReleaseProfile();
     return <main className="creator-dashboard">
       <header className="dashboard-header">
         <Link className="brand" href="/" aria-label="Game Fields SDK ホーム">
@@ -155,6 +163,7 @@ export default async function CreatorGamePage({
           <div>
             <p className="eyebrow">GAME MANAGEMENT</p>
             <h1>{currentGame.title}</h1>
+            <p><strong>{releaseProfile.connectorDisplayName}</strong> · creator {instanceId} · game {gameId}</p>
             <p>共通モジュール設定とRuntime package履歴を管理します。Preview／正式Roomとは別の画面です。</p>
           </div>
           <Link className="secondary-action" href={creatorEnvironmentPath(instanceId)}>制作環境へ戻る</Link>
@@ -167,6 +176,7 @@ export default async function CreatorGamePage({
               initialProfile={moduleProfile}
               canCustomize={customizationAccess?.allowed === true}
               placement="inline"
+              initialContract={moduleContract}
             />
           ) : <section className="dashboard-empty"><p>共通モジュール設定を取得できません。</p></section>}
           <GamePackageRevisionExport

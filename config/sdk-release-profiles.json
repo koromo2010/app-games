@@ -6,7 +6,11 @@
       "channel": "stable",
       "portalBaseUrl": "https://sdk.game-fields.com",
       "pluginName": "game-fields",
+      "connectorDisplayName": "Game Fields",
+      "toolDescriptionPrefix": "[PRODUCTION]",
+      "onboardingProfileId": "game-fields-production-authoring-v1",
       "downloadMeBaseName": "GameFieldsDownloadMe",
+      "claudeCodeProfileBaseName": "GameFieldsClaudeCode",
       "starterRef": "sdk-starter"
     },
     "development": {
@@ -14,7 +18,11 @@
       "channel": "developer-preview",
       "portalBaseUrl": "https://sdk-dev.game-fields.com",
       "pluginName": "dev-game-fields",
+      "connectorDisplayName": "Game Fields Development — TEST ONLY",
+      "toolDescriptionPrefix": "[DEVELOPMENT / TEST ONLY]",
+      "onboardingProfileId": "game-fields-development-authoring-v1",
       "downloadMeBaseName": "GameFieldsDownloadMe-dev",
+      "claudeCodeProfileBaseName": "GameFieldsClaudeCode-dev",
       "starterRef": "sdk-starter-dev"
     }
   }

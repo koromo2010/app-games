@@ -190,6 +190,12 @@ export async function listAccountGames(ownerPlayerId: string) {
       SELECT revision
       FROM sdk_game_package_revisions
       WHERE game_id = g.id
+        AND module_profile_revision = g.module_profile_revision
+        AND module_contract_digest = g.module_contract_digest
+        AND prototype_revision = g.mock_approved_revision
+        AND shared_source_sha256 = g.prototype_source_sha256
+        AND sdk_package_version = g.sdk_package_version
+        AND g.module_profile_confirmed_at IS NOT NULL
       ORDER BY created_at DESC
       LIMIT 1
     ) candidate ON TRUE
@@ -272,6 +278,12 @@ export async function listCreatorGames(slug: string) {
       SELECT revision
       FROM sdk_game_package_revisions
       WHERE game_id = g.id
+        AND module_profile_revision = g.module_profile_revision
+        AND module_contract_digest = g.module_contract_digest
+        AND prototype_revision = g.mock_approved_revision
+        AND shared_source_sha256 = g.prototype_source_sha256
+        AND sdk_package_version = g.sdk_package_version
+        AND g.module_profile_confirmed_at IS NOT NULL
       ORDER BY created_at DESC, revision DESC
       LIMIT 1
     ) candidate ON TRUE
@@ -420,6 +432,18 @@ export async function updateCreatorGameModuleProfile(input: {
   const rows = await sdkSql()`
     UPDATE sdk_games g
     SET module_policy = ${JSON.stringify(next)}::jsonb,
+        module_profile_revision = gen_random_uuid(),
+        module_contract_digest = NULL,
+        module_profile_confirmed_at = NULL,
+        module_profile_confirmed_by_player_id = NULL,
+        prototype_module_profile_revision = NULL,
+        prototype_module_contract_digest = NULL,
+        prototype_sdk_package_version = NULL,
+        prototype_source_sha256 = NULL,
+        mock_revision = NULL,
+        mock_approved_revision = NULL,
+        mock_approved_at = NULL,
+        mock_approved_by_player_id = NULL,
         updated_at = NOW()
     FROM sdk_creators c
     WHERE g.creator_id = c.id

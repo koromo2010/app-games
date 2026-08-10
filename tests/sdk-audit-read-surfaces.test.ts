@@ -26,7 +26,7 @@ const revision = "a".repeat(40);
 
 function snapshotRows(): SdkSchemaAuditInput {
   return {
-    schemaVersion: 7,
+    schemaVersion: 8,
     deploymentEnvironment: "development" as const,
     observedAt: "2026-08-01T00:00:00.000Z",
     games: [{
@@ -76,15 +76,15 @@ function snapshotRows(): SdkSchemaAuditInput {
   };
 }
 
-test("schema 7 reports deployment context but never invents a database marker or stable provenance", () => {
+test("schema 8 reports deployment context but never invents a database marker or stable provenance", () => {
   const snapshot = createSdkSchemaAuditSnapshot(snapshotRows());
   assert.deepEqual(snapshot.environment, {
     deployment: "development",
     database: null,
-    databaseAvailability: "unavailable:schema-7",
+    databaseAvailability: "unavailable:schema-8",
   });
   assert.equal(snapshot.games[0]?.stable.sourceRevision, null);
-  assert.equal(snapshot.games[0]?.stable.sourceRevisionAvailability, "unavailable:schema-7");
+  assert.equal(snapshot.games[0]?.stable.sourceRevisionAvailability, "unavailable:schema-8");
   assert.equal(snapshot.games[0]?.status, "stable");
   assert.equal(snapshot.games[0]?.statusAvailability, "complete");
   assert.equal(snapshot.games[0]?.candidate.availability, "complete");
@@ -245,14 +245,14 @@ test("canonical digest is row-order independent and covers every integrity-beari
 });
 
 test("schema mismatch is fail-closed and never auto-migrates", () => {
-  assert.throws(() => createSdkSchemaAuditSnapshot({ ...snapshotRows(), schemaVersion: 6 }), /SDK_SCHEMA_AUDIT_VERSION_MISMATCH/);
-  assert.throws(() => createSdkSchemaAuditSnapshot({ ...snapshotRows(), schemaVersion: 8 }), /SDK_SCHEMA_AUDIT_VERSION_MISMATCH/);
+  assert.throws(() => createSdkSchemaAuditSnapshot({ ...snapshotRows(), schemaVersion: 7 }), /SDK_SCHEMA_AUDIT_VERSION_MISMATCH/);
+  assert.throws(() => createSdkSchemaAuditSnapshot({ ...snapshotRows(), schemaVersion: 9 }), /SDK_SCHEMA_AUDIT_VERSION_MISMATCH/);
 });
 
 test("schema loader uses one read-only repeatable-read transaction with exactly three SELECTs and injected clock", async () => {
   const statements: string[] = [];
   let options: unknown;
-  const rows = [[{ version: 7 }], snapshotRows().games, snapshotRows().currentReleases];
+  const rows = [[{ version: 8 }], snapshotRows().games, snapshotRows().currentReleases];
   const sql = {
     transaction: async (callback: (tx: unknown) => Array<Promise<unknown>>, transactionOptions: unknown) => {
       options = transactionOptions;
@@ -282,7 +282,7 @@ test("schema loader propagates query failure without returning an absent snapsho
       let index = 0;
       const tx = () => index++ === 1
         ? Promise.reject(new Error("query-failed"))
-        : Promise.resolve(index === 1 ? [{ version: 7 }] : []);
+        : Promise.resolve(index === 1 ? [{ version: 8 }] : []);
       return Promise.all(callback(tx));
     },
   } as unknown as NonNullable<Parameters<typeof loadSdkSchemaAuditSnapshot>[1]>["sql"];

@@ -16,6 +16,11 @@ type Props = {
   initialProfile: GameSdkModuleProfile;
   canCustomize: boolean;
   placement?: "fixed" | "inline";
+  initialContract?: {
+    moduleProfileRevision: string;
+    moduleContractDigest: string | null;
+    moduleProfileConfirmedAt: string | null;
+  } | null;
 };
 
 const groupLabels: Record<GameSdkModuleGroup, string> = {
@@ -35,12 +40,14 @@ export function GameModuleReview({
   initialProfile,
   canCustomize,
   placement = "fixed",
+  initialContract = null,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [profile, setProfile] = useState(initialProfile);
   const [savedProfile, setSavedProfile] = useState(initialProfile);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [contract, setContract] = useState(initialContract);
   const classification = classifyCreatorGameModules(profile);
   const requiredSet = new Set(classification.required);
   const composedCount = classification.required.length
@@ -125,15 +132,54 @@ export function GameModuleReview({
       const result = await response.json().catch(() => null) as {
         saved?: boolean;
         moduleProfile?: GameSdkModuleProfile;
+        moduleContract?: Props["initialContract"];
       } | null;
       if (!response.ok || result?.saved !== true || !result.moduleProfile) {
         throw new Error("SAVE_FAILED");
       }
       setProfile(result.moduleProfile);
       setSavedProfile(result.moduleProfile);
-      setMessage("人間レビューのmodule profileを保存しました。");
+      setContract(result.moduleContract ?? null);
+      setMessage("module profileを保存しました。操作プロトタイプ作成前に内容を確定してください。");
     } catch {
       setMessage("保存できませんでした。ログイン状態を確認してください。");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const confirm = async () => {
+    if (saving || dirty) return;
+    setSaving(true);
+    setMessage("");
+    try {
+      const response = await fetch(
+        `/api/instances/${instanceId}/games/${gameId}/modules`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ humanConfirmed: true }),
+        },
+      );
+      const result = await response.json().catch(() => null) as {
+        confirmed?: boolean;
+        moduleContract?: {
+          moduleProfileRevision: string;
+          moduleContractDigest: string;
+          confirmedAt: string;
+        };
+      } | null;
+      if (!response.ok || result?.confirmed !== true || !result.moduleContract) {
+        throw new Error("CONFIRM_FAILED");
+      }
+      setContract({
+        moduleProfileRevision: result.moduleContract.moduleProfileRevision,
+        moduleContractDigest: result.moduleContract.moduleContractDigest,
+        moduleProfileConfirmedAt: result.moduleContract.confirmedAt,
+      });
+      setMessage("module profileを人間の判断で確定しました。制作クライアントへ戻り、操作プロトタイプ作成を続けられます。");
+    } catch {
+      setMessage("確定できませんでした。保存状態とログイン状態を確認してください。");
     } finally {
       setSaving(false);
     }
@@ -170,7 +216,7 @@ export function GameModuleReview({
             </header>
             <div className="module-review-intro">
               <strong>
-                初期モックは全{GAME_SDK_MODULE_IDS.length}件を使用します。
+                game draftは全{GAME_SDK_MODULE_IDS.length}件を初期必須にします。
               </strong>
               <span>
                 必須はPlatform固定、解除可は初期必須、任意は自動合成しません。制作GPTには確定後の必須一覧だけを渡します。
@@ -182,6 +228,10 @@ export function GameModuleReview({
               )}
               <span>
                 必須 {classification.required.length}件 · 解除可 {classification.removable.length}件 · 任意 {classification.optional.length}件
+              </span>
+              <span>
+                状態: {contract?.moduleProfileConfirmedAt ? "確定済み" : "未確定"}
+                {contract?.moduleProfileRevision ? ` · profile ${contract.moduleProfileRevision}` : ""}
               </span>
             </div>
             <div className="module-review-list">
@@ -239,6 +289,13 @@ export function GameModuleReview({
                 onClick={() => void save()}
               >
                 {saving ? "保存中…" : "人間の判断を保存"}
+              </button>
+              <button
+                type="button"
+                disabled={saving || dirty || Boolean(contract?.moduleProfileConfirmedAt)}
+                onClick={() => void confirm()}
+              >
+                このmodule構成を確定
               </button>
             </footer>
           </aside>

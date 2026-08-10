@@ -89,10 +89,14 @@ test("SDK MCP challenges unauthenticated callers and scopes mock publication", (
   assert.match(mcp, /body\.params\?\.protocolVersion/);
   assert.match(mcp, /listChanged: false/);
   assert.match(mcp, /readOnlyHint: true/);
-  assert.match(mcp, /title: "ゲームモックの保存"/);
-  assert.match(mcp, /parseSdkMockPreviewManifest\(gameId, args\.files\)/);
-  assert.match(mcp, /manifest = EXCLUDED\.manifest/);
-  assert.match(mcp, /creatorUrl, gameUrl, previewUrl: gameUrl/);
+  assert.match(mcp, /title: "操作プロトタイプの検査・保存"/);
+  assert.match(mcp, /parseSdkMockPreviewManifest\(gameId, prototypeFiles\)/);
+  assert.match(mcp, /requireConfirmedCreatorGameModuleContract/);
+  assert.match(mcp, /validateGameSdkModuleUsage/);
+  assert.match(mcp, /prototype_source_sha256/);
+  assert.match(mcp, /creatorUrl,/);
+  assert.match(mcp, /gameUrl,/);
+  assert.match(mcp, /previewUrl: gameUrl/);
 });
 
 test("SDK Portal health probes the instance registry without reserving a slug", () => {
@@ -182,7 +186,7 @@ test("SDK Portal derives the current DownloadMe from one environment profile", (
   assert.match(page, /releaseProfile\.pluginName/);
   assert.match(nextConfig, /resolveSdkReleaseProfile/);
   assert.match(nextConfig, /sdkDownloadMeFileName/);
-  assert.match(syncScript, /renderSdkDownloadMe/);
+  assert.match(syncScript, /renderSdkOnboardingTemplate/);
   assert.match(syncScript, /generatedDownloadMePattern/);
   assert.match(releaseProfile, /sdkPortalMcpInstructions/);
   assert.match(releaseProfile, /profile\.pluginName/);

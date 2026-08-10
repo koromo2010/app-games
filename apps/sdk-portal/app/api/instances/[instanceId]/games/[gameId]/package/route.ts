@@ -1,90 +1,20 @@
 import { authenticateCreator, normalizeInstanceSlug, validateInstanceSlug } from "@/lib/instance-registry";
-import { saveCreatorGamePackage } from "@/lib/game-package-store";
-import { validateGamePackageForPersistence } from "@/lib/game-package-persistence";
-import { prepareGamePackageUploadFiles } from "@/lib/mock-git-store";
 import { ensureSdkSchema, sdkSql } from "@/lib/sdk-postgres";
 
 export const dynamic = "force-dynamic";
 
 const GAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?$/;
-const MAX_REQUEST_BYTES = 7 * 1024 * 1024;
-
 function bearerToken(request: Request) {
   const header = request.headers.get("authorization") ?? "";
   return header.startsWith("Bearer ") ? header.slice(7).trim() : "";
 }
 
-export async function PUT(
-  request: Request,
-  context: { params: Promise<{ instanceId: string; gameId: string }> },
-) {
-  const params = await context.params;
-  const slug = normalizeInstanceSlug(params.instanceId);
-  const gameId = params.gameId.trim().toLowerCase();
-  const token = bearerToken(request);
-  const declaredLength = Number(request.headers.get("content-length") ?? 0);
-  if (validateInstanceSlug(slug) || !GAME_PATTERN.test(gameId) || !token) {
-    return Response.json({ saved: false, error: "認証情報が必要です。" }, { status: 401 });
-  }
-  if (declaredLength > MAX_REQUEST_BYTES) {
-    return Response.json({ saved: false, error: "ゲームパッケージが大きすぎます。" }, { status: 413 });
-  }
-  const body = await request.json().catch(() => null) as { files?: unknown } | null;
-  if (!body?.files) {
-    return Response.json({ saved: false, error: "ゲームパッケージが必要です。" }, { status: 400 });
-  }
-
-  let prepared:
-    | {
-        files: ReturnType<typeof prepareGamePackageUploadFiles>;
-        validation: ReturnType<typeof validateGamePackageForPersistence>;
-      }
-    | Error;
-  try {
-    const files = prepareGamePackageUploadFiles(body.files);
-    prepared = { files, validation: validateGamePackageForPersistence(files) };
-  } catch (error) {
-    prepared = error instanceof Error ? error : new Error("GAME_SDK_PACKAGE_ASSET_INVALID");
-  }
-
-  try {
-    const creator = await authenticateCreator(slug, token);
-    if (!creator) {
-      return Response.json({ saved: false, error: "認証情報が正しくありません。" }, { status: 403 });
-    }
-    if (prepared instanceof Error) throw prepared;
-    return Response.json(await saveCreatorGamePackage({
-      creatorId: creator.id,
-      creatorSlug: slug,
-      gameId,
-      files: prepared.files,
-      validatedPackage: prepared.validation,
-    }));
-  } catch (error) {
-    const code = error instanceof Error ? error.message : "";
-    if (code === "GAME_SDK_PACKAGE_RELEASE_MISMATCH") {
-      return Response.json({
-        saved: false,
-        error: "現在のPlatformと異なるSDK版のゲームパッケージです。",
-      }, { status: 409 });
-    }
-    if (code === "GAME_SDK_PACKAGE_GAME_NOT_FOUND") {
-      return Response.json({
-        saved: false,
-        error: "先にモックを保存してゲームIDを確定してください。",
-      }, { status: 409 });
-    }
-    if (code === "GAME_SDK_PACKAGE_REVISION_QUOTA_EXCEEDED") {
-      return Response.json({
-        saved: false,
-        error: code,
-      }, { status: 409 });
-    }
-    if (code.startsWith("GAME_SDK_PACKAGE_") || /upload|missing|invalid|large|path|encoding/i.test(code)) {
-      return Response.json({ saved: false, error: code || "ゲームパッケージが不正です。" }, { status: 400 });
-    }
-    return Response.json({ saved: false, error: "ゲームパッケージを現在保存できません。" }, { status: 503 });
-  }
+export async function PUT() {
+  return Response.json({
+    saved: false,
+    error: "LEGACY_UNBOUND_PACKAGE_PATH_DISABLED",
+    instruction: "承認済み操作プロトタイプと同じmodule binding・usage・sourceをOAuth MCPのpublish_game_packageまたはpublish_game_source_packageへ渡してください。",
+  }, { status: 410 });
 }
 
 /**

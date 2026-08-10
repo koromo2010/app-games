@@ -9,7 +9,9 @@
 ## 安全性
 
 - [ ] 共通モジュールは全件必須から開始し、AIがprofileを変更していない
-- [ ] `get_game_module_requirements`の`requiredModuleIds`を取得して全件実装した
+- [ ] game draft作成後、人間がmodule profileを確定するまでUIやAppSetを実装していない
+- [ ] `get_game_module_requirements`のrevision・digest・SDK versionを固定し、`requiredModuleIds`をdelivery別の公式契約で実利用した
+- [ ] disabled moduleを使わず、required moduleごとのsource・API・runtime evidence・非再実装証拠を記録した
 - [ ] `server-module.ts`はSDK基本セットとアプリセットの合成だけで、Room作成・参加者・設定・revisionを再実装していない
 - [ ] `app-set.ts`にはゲーム固有state、Command、勝敗、固有presentationだけがある
 - [ ] Commandは権限、フェーズ、手番、入力値をサーバー契約内で検証する
@@ -23,7 +25,8 @@
 
 - [ ] `APP_REQUIREMENTS.md`を確認した
 - [ ] `mock/index.html`で主要画面と状態を確認できる
-- [ ] `mock/mock.js`は`GameFieldsRoom`のViewを描画し、Commandだけを送る
+- [ ] 共有`game-client.tsx`をprototype fixture adapterと正式`GameFieldsRoom` adapterへ接続し、UIやCommand型を作り直していない
+- [ ] 操作プロトタイプで主要操作、状態変化、完了、reset、module利用表を確認した
 - [ ] ブラウザ内に正本のゲーム状態やWord DB／LLM bridgeがない
 - [ ] PCとスマホ幅で操作できる
 - [ ] `MOCK_REVIEW.md`に画面、操作、要件対応、未実装を書いた
@@ -31,17 +34,17 @@
 - [ ] MCPの`publish_game_package`でAppSetとクライアントを一緒に保存した
 - [ ] 正式Preview Roomで別ブラウザ参加、同期、再読込復帰を確認した
 - [ ] 利用者が正式Previewを確認した
-- [ ] `npm run check:mock`が成功する
+- [ ] Node.jsで追加検査した場合は`npm run check:mock`が成功し、Node-freeの場合はserver-side prototype gateが成功した
 
 ## 動作
 
-- [ ] `npm run check`が成功する
-- [ ] `npm run demo`でダミーだけの1ゲームが最後まで進む
-- [ ] `npm run diagnose:promotion`が`promotionReady: true`を返す
+- [ ] Node.jsで追加検査した場合は`npm run check`が成功する
+- [ ] Node.jsで追加検査した場合は`npm run demo`でダミーだけの1ゲームが最後まで進む
+- [ ] Node.jsで追加検査した場合は`npm run diagnose:promotion`が`promotionReady: true`を返す
 - [ ] 保存revisionのAppSet source SHA-256とserver bundle SHA-256を記録した
 - [ ] ホスト以外にホスト専用操作を拒否するテストがある
 - [ ] 終了条件のテストがある
-- [ ] `npm run package`が成功し、提出ZIPを生成できる
+- [ ] Node.jsで追加検査した場合は`npm run package`が成功し、提出ZIPを生成できる
 
 ## 権利・依存関係
 

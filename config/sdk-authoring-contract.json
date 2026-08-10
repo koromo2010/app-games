@@ -1,0 +1,93 @@
+{
+  "schemaVersion": 1,
+  "supportedClients": [
+    {
+      "id": "chatgpt-work",
+      "displayName": "ChatGPT Work",
+      "support": "formal",
+      "workspace": "Work conversation workspace",
+      "localNodeRequired": false
+    },
+    {
+      "id": "claude-code",
+      "displayName": "Claude Code",
+      "support": "formal",
+      "workspace": "Dedicated empty game folder",
+      "localNodeRequired": false,
+      "officialDocumentation": [
+        "https://code.claude.com/docs/en/mcp",
+        "https://code.claude.com/docs/en/mcp-quickstart"
+      ]
+    }
+  ],
+  "unsupportedClients": [
+    "Claude regular chat",
+    "Claude Desktop regular chat",
+    "Cowork"
+  ],
+  "workflow": [
+    "handshake",
+    "authoring-profile",
+    "creator-environment",
+    "specification",
+    "game-draft",
+    "human-module-review-and-confirmation",
+    "module-requirements",
+    "shared-game-source",
+    "interactive-prototype-build",
+    "module-usage-validate",
+    "interactive-prototype-publish",
+    "human-prototype-and-module-approval",
+    "formal-package-validate-and-save",
+    "formal-room-preview",
+    "submission-candidate"
+  ],
+  "invariants": {
+    "must": [
+      "Confirm accepted=true, problems=[], environment, canonicalMcpUrl, release and onboardingProfileId before any other SDK tool.",
+      "Use the environmentBinding returned by the successful handshake for every later SDK tool call.",
+      "Create a game draft and wait for human module profile confirmation before implementing prototype UI or AppSet source.",
+      "Bind shared source to moduleProfileRevision, moduleContractDigest, SDK version and delivery-specific usage evidence.",
+      "Build the interactive prototype and formal package from the same game source with different adapters.",
+      "Show the published prototype URL, module usage matrix and review checklist, then wait for explicit human approval.",
+      "Use server-side Node-free validation and packaging when the authoring host has no Node.js."
+    ],
+    "mustNot": [
+      "Treat MCP Connected, tool discovery, a URL, or the shared Shell alone as workflow completion.",
+      "Switch production and development inside one authoring chat or session.",
+      "Reuse creator IDs, game IDs, revisions, URLs or environment bindings across semantic environments.",
+      "Implement or publish a prototype before human module profile confirmation.",
+      "Publish a formal package before the current module-bound prototype revision has human approval.",
+      "Replace a required SDK module with bespoke game code or require fictitious imports for platform-owned modules.",
+      "Ask a general creator to install Node.js, npm, Git or Vercel CLI as the default completion path.",
+      "Request or persist passwords, tokens, Cookies, MFA codes or Vercel credentials."
+    ]
+  },
+  "mockQuality": {
+    "purpose": "Human operation and review of the module-bound interactive prototype built from the same shared source as the formal package.",
+    "requiredEvidence": [
+      "representativeStates",
+      "visibleGameSpecificElements",
+      "primaryActions",
+      "completionState",
+      "mockOnlyDataSource",
+      "coreLoopSequence",
+      "resetAction",
+      "moduleUsage"
+    ],
+    "rejected": [
+      "shared Shell or title only",
+      "placeholder-led content",
+      "missing representative in-progress state",
+      "missing selectable target or observable action result",
+      "missing completion or result presentation",
+      "static HTML without shared SDK source",
+      "required module replaced by bespoke UI or logic"
+    ]
+  },
+  "nodeFreePath": {
+    "mockValidationTool": "publish_mock",
+    "formalPackageTool": "publish_game_source_package",
+    "localCommandsOptional": true
+  }
+}

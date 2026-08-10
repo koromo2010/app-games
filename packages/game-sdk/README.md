@@ -23,6 +23,8 @@ npm install @game-fields/game-sdk
 - `@game-fields/game-sdk/mock-runtime`: DB不要のメモリRuntimeと契約エラー
 - `@game-fields/game-sdk/client-runtime`: 採用済みゲームをGame Fieldsの認証済みRoom APIへ接続するbrowser transport
 - `@game-fields/game-sdk/handshake`: SDK環境・release・契約schema・必須capabilityの接続前互換性判定
+- `@game-fields/game-sdk/mock-quality`: 操作プロトタイプの代表状態・主要操作・完了・reset証拠の検査
+- `@game-fields/game-sdk/module-usage`: 確定module contractに対する実import・API利用・runtime evidence・非再実装の検査
 
 ## Example
 
@@ -284,7 +286,9 @@ export function Board() {
 
 オンラインゲームは`SDK基本セット + AppSet`で構成します。基本セットが認証済みRoom、参加・退出、設定、revision、共通View、中断・再戦を所有し、AppSetはゲーム固有state、Command、勝敗、固有Viewだけを登録します。新規ゲームで`createRoom`や参加者配列を再実装する必要はありません。
 
-新規モックの共通モジュールは全項目を`required`で開始します。AppSetや制作AIは必須一覧を変更できません。モック承認後はSDKが返す`requiredModuleIds`をすべて使います。この一覧は新しい共通機能の実装ではなく、Game Fields本体で既に使われているRoom Runtime、Route、共通UI、進行部品をAppSetへ合成する採用レシピです。
+新規game draftの共通module profileは全項目を`required`で開始します。AppSetや制作AIはprofileを変更できません。人間がPortalで構成を確定した後、制作AIは操作プロトタイプより先に`moduleProfileRevision`・`moduleContractDigest`・SDK versionと`requiredModuleIds`を取得します。この一覧は新しい共通機能の実装ではなく、Game Fields本体で既に使われているRoom Runtime、Route、共通UI、進行部品をAppSetへ合成する採用レシピです。
+
+required moduleはdeliveryごとに扱います。`sdk-resource`は公開data/UI packageをimportして利用し、`sdk-helper`はゲーム固有transitionから公開helperを呼び、`platform-resource`は公開型とGame Fields注入interfaceだけを使い、`platform-owned`はhostへ委譲して架空importや独自実装を作りません。操作プロトタイプと正式packageは同じgame client・AppSet・Command sourceを別adapterへ接続し、server-side module usage gateを両方で通します。
 
 MCPの`initialize`やOAuth成功だけではSDK互換性の合意になりません。AI、スターター、browser Runtimeは制作者操作・Room操作より先にGame Fields SDK handshakeを行い、接続環境、Platform／package release、contract schema、必須capabilityが一致した場合だけ後続処理へ進みます。
 

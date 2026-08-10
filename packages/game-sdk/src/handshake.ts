@@ -6,6 +6,10 @@ export const GAME_FIELDS_SDK_CAPABILITIES = [
   "creator-environments",
   "starter-download",
   "mock-publish",
+  "game-draft",
+  "module-first-authoring",
+  "module-usage-validation",
+  "node-free-package",
   "game-package-publish",
   "formal-room-preview",
   "hash-pinned-promotion",
@@ -26,6 +30,7 @@ export type GameSdkHandshakeClientKind =
   | "starter-cli"
   | "browser-runtime"
   | "platform";
+export type GameSdkAuthoringClientName = "ChatGPT Work" | "Claude Code";
 
 export type GameSdkHandshakeRequest = {
   protocol: typeof GAME_FIELDS_SDK_HANDSHAKE_PROTOCOL;
@@ -37,6 +42,8 @@ export type GameSdkHandshakeRequest = {
   };
   expected: {
     environment: GameSdkEnvironment;
+    canonicalMcpUrl: string;
+    onboardingProfileId: string;
     platformVersion: string;
     sdkPackageVersion: string;
     sdkContractVersion: number;
@@ -55,6 +62,7 @@ export type GameSdkHandshakeDescriptor = {
   handshakeVersion: typeof GAME_FIELDS_SDK_HANDSHAKE_VERSION;
   surface: GameSdkHandshakeSurface;
   environment: GameSdkEnvironment;
+  onboardingProfileId: string;
   release: {
     platformVersion: string;
     sdkPackageVersion: string;
@@ -75,7 +83,10 @@ export type GameSdkHandshakeProblemCode =
   | "INVALID_REQUEST"
   | "PROTOCOL_MISMATCH"
   | "HANDSHAKE_VERSION_UNSUPPORTED"
+  | "CLIENT_UNSUPPORTED"
   | "ENVIRONMENT_MISMATCH"
+  | "CANONICAL_MCP_URL_MISMATCH"
+  | "ONBOARDING_PROFILE_MISMATCH"
   | "PLATFORM_VERSION_MISMATCH"
   | "SDK_PACKAGE_VERSION_MISMATCH"
   | "SDK_CONTRACT_UNSUPPORTED"
@@ -101,6 +112,10 @@ const CLIENT_KINDS = new Set<GameSdkHandshakeClientKind>([
 ]);
 const ENVIRONMENTS = new Set<GameSdkEnvironment>(["development", "production"]);
 const CAPABILITY_NAME_PATTERN = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+const AUTHORING_CLIENT_NAMES = new Set<GameSdkAuthoringClientName>([
+  "ChatGPT Work",
+  "Claude Code",
+]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -137,8 +152,13 @@ function readRequest(value: unknown): {
     && Number.isInteger(value.handshakeVersion)
     && typeof value.client.kind === "string"
     && CLIENT_KINDS.has(value.client.kind as GameSdkHandshakeClientKind)
+    && (value.client.kind !== "ai-agent" || typeof value.client.name === "string")
     && typeof value.expected.environment === "string"
     && ENVIRONMENTS.has(value.expected.environment as GameSdkEnvironment)
+    && typeof value.expected.canonicalMcpUrl === "string"
+    && value.expected.canonicalMcpUrl.length > 0
+    && typeof value.expected.onboardingProfileId === "string"
+    && value.expected.onboardingProfileId.length > 0
     && typeof value.expected.platformVersion === "string"
     && value.expected.platformVersion.length > 0
     && typeof value.expected.sdkPackageVersion === "string"
@@ -183,7 +203,19 @@ export function negotiateGameSdkHandshake(
   const parsed = readRequest(value);
   const problems = [...parsed.problems];
   const request = parsed.request;
+  const canonicalMcpUrl = descriptor.endpoints.mcp ?? "";
   if (request) {
+    if (
+      request.client.kind === "ai-agent"
+      && !AUTHORING_CLIENT_NAMES.has(request.client.name as GameSdkAuthoringClientName)
+    ) {
+      problems.push(problem(
+        "CLIENT_UNSUPPORTED",
+        "client.name",
+        "ChatGPT Work | Claude Code",
+        request.client.name,
+      ));
+    }
     if (request.handshakeVersion !== descriptor.handshakeVersion) {
       problems.push(problem(
         "HANDSHAKE_VERSION_UNSUPPORTED",
@@ -198,6 +230,22 @@ export function negotiateGameSdkHandshake(
         "expected.environment",
         descriptor.environment,
         request.expected.environment,
+      ));
+    }
+    if (request.expected.canonicalMcpUrl !== canonicalMcpUrl) {
+      problems.push(problem(
+        "CANONICAL_MCP_URL_MISMATCH",
+        "expected.canonicalMcpUrl",
+        canonicalMcpUrl,
+        request.expected.canonicalMcpUrl,
+      ));
+    }
+    if (request.expected.onboardingProfileId !== descriptor.onboardingProfileId) {
+      problems.push(problem(
+        "ONBOARDING_PROFILE_MISMATCH",
+        "expected.onboardingProfileId",
+        descriptor.onboardingProfileId,
+        request.expected.onboardingProfileId,
       ));
     }
     if (request.expected.platformVersion !== descriptor.release.platformVersion) {

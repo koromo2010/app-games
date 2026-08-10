@@ -14,6 +14,7 @@ pnpm-debug.log*
 .DS_Store
 main-promotion-gate-report.json
 apps/sdk-portal/public/GameFieldsDownloadMe*-ver[0-9]*.[0-9]*.[0-9]*.md
+apps/sdk-portal/public/GameFieldsClaudeCode*-ver[0-9]*.[0-9]*.[0-9]*.md
 
 env-keys-dev.txt
 env-keys-prod.txt

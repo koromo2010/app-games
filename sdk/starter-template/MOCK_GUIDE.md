@@ -2,7 +2,7 @@
 
 ## 目的
 
-`mock/`は旧称です。ここにあるHTML・CSS・JavaScriptは画面確認だけの使い捨てモックではなく、AppSetと同じpackageへ入り、Previewと昇格後に同じrevisionで実行される正式クライアントです。
+`mock/`は互換上の旧ディレクトリ名です。ここにあるHTML・CSSと生成済みJavaScriptは使い捨ての静的モックではなく、共有する`src/game-client.tsx`を操作プロトタイプ用adapterと正式Room用adapterへ接続して生成します。
 
 Previewと正式版で変わるのは公開channelだけです。昇格時にAppSetを翻訳、再build、差し替えしてはいけません。
 
@@ -10,11 +10,13 @@ Previewと正式版で変わるのは公開channelだけです。昇格時にApp
 
 - `mock/index.html`: 外側のGame Fields Shellへ差し込むゲーム固有slot
 - `mock/styles.css`: ゲーム固有画面のPC・スマホ表示
-- `mock/mock.js`: `GameFieldsRoom`のView描画とCommand送信
-- `mock/preview.json`: ゲームID・表示名・説明
+- `mock/mock.js`: 共有client sourceから生成されるbrowser bundle
+- `mock/preview.json`: ゲームID・表示名・説明・人間レビュー用の品質証拠
 - `src/manifest.ts`: AppSetと共通Shellの機能宣言
 - `src/contracts.ts`: AppState・AppCommand・AppView
 - `src/app-set.ts`: サーバーを正本とするゲーム進行
+- `src/game-client.tsx`: 操作プロトタイプと正式Roomで共有するゲーム固有UI
+- `src/prototype-adapter.ts`: 固定fixture、状態早送り、resetだけを提供するadapter
 - `tests/`: 完走、権限、revision、秘密情報の契約テスト
 
 ## 必須の接続
@@ -65,18 +67,18 @@ const generated = await requireGameSdkLlmGateway(
 
 ## 実装順
 
-1. `GAME_SPEC.md`を確定する。
-2. `manifest.ts`と`preview.json`を同じゲームIDへ更新する。
-3. `contracts.ts`と`app-set.ts`へゲーム固有state・Command・Viewを実装する。
-4. `mock.js`を`GameFieldsRoom.subscribe/send`へ接続する。
-5. PC幅・スマホ幅、ホスト・一般参加者、待機・エラー・結果を確認する。
-6. 正常完走、権限拒否、古いrevision、秘密遮断をテストする。
-7. `npm run check`と`npm run demo`を通す。
-8. `npm run diagnose:promotion`を実行する。
-9. `npm run build:game-package`後、OAuth接続済みMCPの`publish_game_package`でpackageを保存する。
-10. 返された正式Preview Roomを複数ブラウザで確認する。
+1. `GAME_SPEC.md`を確定し、`create_game_draft`だけを呼ぶ。
+2. Portalのmodule review URLを利用者へ示して停止し、人間の確定後に`get_game_module_requirements`でrevision・digest・SDK versionを固定する。
+3. required moduleをdelivery別に公式import/API、注入interface、またはPlatform委譲で実利用する。disabled moduleや独自代替実装は使わない。
+4. `manifest.ts`、`preview.json`、`contracts.ts`、`app-set.ts`、`game-client.tsx`を同じゲームIDと共有sourceとして実装する。
+5. `prototype-adapter.ts`は固定fixture、代表scene、resetだけを注入し、正式UI・AppSet・Command型を作り直さない。
+6. `reviewEvidence`へ代表的な進行中・完了状態、固有要素4件以上、主操作のtarget/result、core loop、resetを宣言し、対応IDを操作プロトタイプで観測可能にする。
+7. required moduleごとのimport/API、source path、runtime marker、非再実装証拠を`moduleUsage`へ記録する。
+8. `publish_mock`でmodule usageと操作プロトタイプのserver-side検査を通し、URLと利用表を利用者へ提示する。
+9. 利用者の明示承認後に、そのexact `prototypeRevision`を`approve_mock`で固定する。
+10. Node.jsが既にあれば追加のローカル検査と`publish_game_package`、なければ同じsourceを`publish_game_source_package`へ渡し、正式Preview Roomを確認する。
 
-画面だけを先に相談したい場合はMCPの`publish_mock`を使えますが、これは静的UIレビューです。Room同期、再接続、AppSet、Word DB、LLM、本番昇格の検証結果には数えません。`publish:*:legacy` npm scriptは既存管理トークン運用専用です。
+MCPの`publish_mock`は互換tool名で、確定済みmodule contractと共有sourceに結び付いた必須の操作プロトタイプ検査です。任意の静的HTMLだけでは通過しません。Room同期、再接続、Platform resource実接続、本番昇格の検証結果には数えません。`publish:*:legacy` npm scriptは既存管理トークン運用専用です。
 
 ## 完了条件
 

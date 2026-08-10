@@ -13,6 +13,7 @@ const descriptor: GameSdkHandshakeDescriptor = {
   handshakeVersion: GAME_FIELDS_SDK_HANDSHAKE_VERSION,
   surface: "creator-portal",
   environment: "development",
+  onboardingProfileId: "game-fields-development-authoring-v1",
   release: {
     platformVersion: "0.1.1",
     sdkPackageVersion: "0.1.1",
@@ -36,9 +37,11 @@ const descriptor: GameSdkHandshakeDescriptor = {
 const request: GameSdkHandshakeRequest = {
   protocol: GAME_FIELDS_SDK_HANDSHAKE_PROTOCOL,
   handshakeVersion: GAME_FIELDS_SDK_HANDSHAKE_VERSION,
-  client: { kind: "ai-agent", name: "Contract test" },
+  client: { kind: "ai-agent", name: "ChatGPT Work" },
   expected: {
     environment: "development",
+    canonicalMcpUrl: "https://sdk-dev.game-fields.com/api/mcp",
+    onboardingProfileId: "game-fields-development-authoring-v1",
     platformVersion: "0.1.1",
     sdkPackageVersion: "0.1.1",
     sdkContractVersion: 1,
@@ -66,6 +69,23 @@ test("SDK handshake rejects a wrong SDK environment before creator actions", () 
   }, descriptor);
   assert.equal(result.accepted, false);
   assert.deepEqual(result.problems.map(({ code }) => code), ["ENVIRONMENT_MISMATCH"]);
+});
+
+test("SDK handshake rejects client, canonical MCP and onboarding profile mismatches", () => {
+  const result = negotiateGameSdkHandshake({
+    ...request,
+    client: { kind: "ai-agent", name: "Codex" },
+    expected: {
+      ...request.expected,
+      canonicalMcpUrl: "https://sdk.game-fields.com/api/mcp",
+      onboardingProfileId: "game-fields-production-authoring-v1",
+    },
+  }, descriptor);
+  assert.deepEqual(result.problems.map(({ code }) => code), [
+    "CLIENT_UNSUPPORTED",
+    "CANONICAL_MCP_URL_MISMATCH",
+    "ONBOARDING_PROFILE_MISMATCH",
+  ]);
 });
 
 test("SDK handshake rejects release, contract and capability mismatches together", () => {

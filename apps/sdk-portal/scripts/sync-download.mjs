@@ -9,8 +9,9 @@ import {
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  renderSdkDownloadMe,
+  renderSdkOnboardingTemplate,
   resolveSdkReleaseProfile,
+  sdkClaudeCodeProfileFileName,
   sdkDownloadMeFileName,
 } from "@game-fields/sdk-release-profiles";
 
@@ -18,6 +19,7 @@ const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const repositoryRoot = resolve(appRoot, "../..");
 const publicRoot = resolve(appRoot, "public");
 const source = resolve(repositoryRoot, "sdk/entry/START_GAME_FIELDS.md");
+const claudeCodeSource = resolve(repositoryRoot, "sdk/entry/START_CLAUDE_CODE.md");
 const releaseSource = resolve(repositoryRoot, "config/platform-release.json");
 const profilesSource = resolve(repositoryRoot, "config/sdk-release-profiles.json");
 const releaseDestination = resolve(publicRoot, "platform-release.json");
@@ -37,23 +39,35 @@ const profile = resolveSdkReleaseProfile({
 });
 const downloadMeFileName = sdkDownloadMeFileName(release, profile);
 const destination = resolve(publicRoot, downloadMeFileName);
+const claudeCodeProfileFileName = sdkClaudeCodeProfileFileName(release, profile);
+const claudeCodeDestination = resolve(publicRoot, claudeCodeProfileFileName);
 const generatedDownloadMePattern =
   /^GameFieldsDownloadMe(?:-dev)?-ver\d+\.\d+\.\d+\.md$/;
+const generatedClaudeCodeProfilePattern =
+  /^GameFieldsClaudeCode(?:-dev)?-ver\d+\.\d+\.\d+\.md$/;
 
 mkdirSync(publicRoot, { recursive: true });
 for (const fileName of readdirSync(publicRoot)) {
-  if (generatedDownloadMePattern.test(fileName)) {
+  if (generatedDownloadMePattern.test(fileName) || generatedClaudeCodeProfilePattern.test(fileName)) {
     rmSync(resolve(publicRoot, fileName));
   }
 }
 
-const download = renderSdkDownloadMe(
+const download = renderSdkOnboardingTemplate(
   readFileSync(source, "utf8"),
   release,
   profile,
 );
 writeFileSync(destination, download);
+writeFileSync(
+  claudeCodeDestination,
+  renderSdkOnboardingTemplate(
+    readFileSync(claudeCodeSource, "utf8"),
+    release,
+    profile,
+  ),
+);
 copyFileSync(releaseSource, releaseDestination);
 console.log(
-  `[sdk-portal] ${downloadMeFileName} synced for ${profile.environment} via ${profile.pluginName} at ${profile.portalBaseUrl} (platform v${release.platformVersion})`,
+  `[sdk-portal] ${downloadMeFileName} and ${claudeCodeProfileFileName} synced for ${profile.environment} via ${profile.pluginName} at ${profile.portalBaseUrl} (platform v${release.platformVersion})`,
 );

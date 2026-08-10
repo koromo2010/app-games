@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parseGameSdkSettingDefinitions } from "@game-fields/game-sdk";
+import { validateGameSdkMockQuality } from "@game-fields/game-sdk/mock-quality";
 
 const root = resolve(import.meta.dirname, "..");
 const requiredFiles = [
@@ -44,6 +45,14 @@ for (const marker of [
 }
 
 const previewMetadata = JSON.parse(readFileSync(resolve(root, "mock/preview.json"), "utf8"));
+validateGameSdkMockQuality({
+  files: Object.fromEntries([
+    "index.html",
+    "styles.css",
+    "mock.js",
+    "preview.json",
+  ].map((path) => [path, readFileSync(resolve(root, `mock/${path}`), "utf8")])),
+});
 if (!/^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?$/.test(previewMetadata.gameId ?? "")) {
   throw new Error("mock/preview.jsonのgameIdが不正です。");
 }

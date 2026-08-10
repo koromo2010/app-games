@@ -390,10 +390,20 @@ if (starterPackageJson.private !== true) {
 if (starterPackageJson.dependencies?.["@game-fields/game-sdk"] !== "file:vendor/__SDK_TARBALL__") {
   failures.push("sdk/starter-template/package.json: SDKは同梱tarballだけを参照する必要があります。");
 }
-const starterRuntimeDependencies = Object.keys(starterPackageJson.dependencies ?? {})
-  .filter((name) => name !== "@game-fields/game-sdk");
-if (starterRuntimeDependencies.length > 0) {
-  failures.push(`sdk/starter-template/package.json: 未承認のruntime依存があります: ${starterRuntimeDependencies.join(", ")}`);
+const starterRuntimeDependencies = starterPackageJson.dependencies ?? {};
+const allowedStarterRuntimeDependencies = new Map([
+  ["@game-fields/game-sdk", "file:vendor/__SDK_TARBALL__"],
+  ["react", "^19.2.4"],
+  ["react-dom", "^19.2.4"],
+]);
+const unexpectedStarterRuntimeDependencies = Object.entries(starterRuntimeDependencies)
+  .filter(([name, version]) => allowedStarterRuntimeDependencies.get(name) !== version)
+  .map(([name]) => name);
+if (
+  unexpectedStarterRuntimeDependencies.length > 0
+  || Object.keys(starterRuntimeDependencies).length !== allowedStarterRuntimeDependencies.size
+) {
+  failures.push(`sdk/starter-template/package.json: 未承認または不足したruntime依存があります: ${unexpectedStarterRuntimeDependencies.join(", ") || "dependency set mismatch"}`);
 }
 
 const packageJson = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8"));

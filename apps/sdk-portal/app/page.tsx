@@ -4,6 +4,7 @@ import { getSdkAccountSession } from "@/lib/account-session";
 import {
   sdkPortalDownloadMeFileName,
   sdkPortalDownloadMeVersion,
+  sdkPortalClaudeCodeProfileFileName,
   sdkPortalReleaseProfile,
 } from "@/lib/sdk-release-profile";
 import { AccountMenu } from "./account-menu";
@@ -50,7 +51,7 @@ const reviewFlow = [
 
 const firstBuildGuide = [
   {
-    title: "最初のモックは10〜20分が目安",
+    title: "最初の操作プロトタイプは10〜20分が目安",
     description:
       "ゲーム内容を伝えたあと、AIが画面作成・検査・SDKへの保存まで進めます。内容によってはもう少しかかることがあります。",
   },
@@ -70,6 +71,8 @@ const releaseProfile = sdkPortalReleaseProfile();
 const downloadMeVersion = sdkPortalDownloadMeVersion();
 const downloadMeFileName = sdkPortalDownloadMeFileName();
 const downloadMeHref = `/${downloadMeFileName}`;
+const claudeCodeProfileFileName = sdkPortalClaudeCodeProfileFileName();
+const claudeCodeProfileHref = `/${claudeCodeProfileFileName}`;
 
 export default async function Home() {
   const platformVersion = portalPackage.version;
@@ -95,7 +98,7 @@ export default async function Home() {
         </nav>
         <div className="header-account-area">
           <span className="preview-badge">
-            {releaseProfile.environment === "production" ? "Stable" : "Developer preview"} · v{platformVersion}
+            {releaseProfile.connectorDisplayName} · {releaseProfile.environment === "production" ? "PRODUCTION" : "DEVELOPMENT / TEST ONLY"} · v{platformVersion}
           </span>
           <AccountMenu />
         </div>
@@ -114,7 +117,11 @@ export default async function Home() {
           </p>
           <div className="hero-actions">
             <a className="primary-action" href={downloadMeHref} download>
-              {downloadMeFileName.replace(/\.md$/, "")}
+              ChatGPT Workで作る
+              <span aria-hidden="true">↓</span>
+            </a>
+            <a className="primary-action" href={claudeCodeProfileHref} download>
+              Claude Codeで作る
               <span aria-hidden="true">↓</span>
             </a>
             <a className="primary-action" href="#foundation">
@@ -200,22 +207,22 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
         <aside className="required-environment" aria-labelledby="required-environment-title">
           <span className="required-environment-label">ご利用前に確認</span>
           <div>
-            <h3 id="required-environment-title">ゲーム制作にはChatGPTのCodexまたはWorkが必要です</h3>
+            <h3 id="required-environment-title">ChatGPT WorkまたはClaude Codeを選んで制作します</h3>
             <p>
-              ダウンロードしたファイルは、CodexまたはWorkのチャットへ添付してください。ゲームのコード取得・複数ファイルの編集・動作検査・SDKへの保存とURL発行を行うため、通常のChatGPTチャットだけでは制作を完了できません。
+              ChatGPT WorkではDownloadMeを新しいWorkチャットへ添付します。Claude Codeでは専用プロファイルを空のゲームフォルダで使い、Remote HTTP MCPのOAuth接続を完了します。
             </p>
             <p>
-              DownloadMeはAIが読む実行契約です。人間向けの説明書ではないため、内容を読んだり編集したりせず、そのままチャットへ添付してください。
+              どちらもゲーム仕様の確定後、先にGame Fields機能を人間が確認し、同じ共有sourceから操作プロトタイプと正式Packageを作ります。module採用検査、操作承認、正式Room Preview、提出ゲートは共通です。
             </p>
             <p>
               <strong>プラグイン更新後は、必ず新しいチャットを作成してください。</strong>
-              既存チャットへ読み込まれたtool schemaは更新されないため、古いチャットへ最新版を追加しても制作を再開できません。新しいチャットで`{releaseProfile.pluginName}`を選択し、{downloadMeFileName}だけを添付します。
+              既存チャットへ読み込まれたtool schemaは更新されないため、古いチャットへ最新版を追加しても制作を再開できません。ChatGPT Workは新しいチャットで`{releaseProfile.pluginName}`を選択し、{downloadMeFileName}だけを添付します。
             </p>
             <p>
               保存済みの制作者環境とゲームはアカウントに紐づいているため、新しいチャットから自動的に再取得できます。作り直しや新しいURLの予約は不要です。
             </p>
             <p>
-              通常チャットでHTMLファイルだけが作られた場合、それはGame Fields SDKへ保存された完成版ではありません。CodexまたはWorkの新しいチャットへ切り替え、最新版ファイルとゲームの希望を送ってください。
+              通常のClaudeチャット、Claude Desktopの通常チャット、Cowork、通常のChatGPTチャットは制作クライアントとして未対応です。HTMLだけが作られてもGame Fields SDKへ保存された完成版ではありません。
             </p>
           </div>
         </aside>
@@ -224,7 +231,11 @@ createGameSdkOnlineRoomModule(appSet)`}</code>
         </p>
         <div className="hero-actions">
           <a className="primary-action" href={downloadMeHref} download>
-            {downloadMeFileName}を取得
+            ChatGPT Work用を取得
+            <span aria-hidden="true">↓</span>
+          </a>
+          <a className="primary-action" href={claudeCodeProfileHref} download>
+            Claude Code用を取得
             <span aria-hidden="true">↓</span>
           </a>
           <Link className="secondary-action" href="/demo">

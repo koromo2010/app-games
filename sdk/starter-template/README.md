@@ -1,6 +1,6 @@
 # Game Fields SDK Starter
 
-ChatGPTと共同で、Game Fields向けゲーム固有packageを作るための外部開発スターターです。
+ChatGPT WorkまたはClaude Codeと共同で、Game Fields向けゲーム固有packageを作るための外部開発スターターです。通常チャット、Claude Desktop通常チャット、Coworkは制作クライアントとして未対応です。
 
 ## ファイル
 
@@ -10,7 +10,7 @@ ChatGPTと共同で、Game Fields向けゲーム固有packageを作るための�
 - `MOCK_GUIDE.md`: 仕様確定後に昇格可能なゲーム画面を作る手順
 - `mock/`: 旧称。Previewと昇格後で同じものを使うゲーム固有クライアント
 - `mock/preview.json`: SDKの制作者広場へ表示するゲームID・名称・説明
-- `AGENTS.md`: ChatGPT/Codexが守る編集範囲と安全境界
+- `AGENTS.md`: ChatGPT Work / Claude Codeが守る編集範囲と安全境界
 - `SDK_API.md`: 公開SDK v__SDK_VERSION__ の最小リファレンス
 - `SDK_MODULE_CATALOG.md`: 初期状態で全件必須となる既存共通モジュール一覧
 - `SUBMISSION_CHECKLIST.md`: Game Fieldsへ返す前の確認項目
@@ -18,6 +18,8 @@ ChatGPTと共同で、Game Fields向けゲーム固有packageを作るための�
 - `src/contracts.ts`: ゲーム固有のsettings、AppState、AppCommand、AppViewとSDK合成型
 - `src/app-set.ts`: ゲーム固有state、Command、勝敗、閲覧者別固有表示
 - `src/server-module.ts`: SDK基本セットとアプリセットの合成だけを行う入口
+- `src/game-client.tsx`: 操作プロトタイプと正式Roomで共有するゲーム固有UI
+- `src/prototype-adapter.ts`: 固定fixture、状態早送り、resetだけを注入するadapter
 - `tests/game-contract.test.ts`: DB不要のMock Runtime契約テスト
 - `src/demo.ts`: ダミー2人で1ゲームを完走する例
 - `vendor/__SDK_TARBALL__`: 同梱SDK package
@@ -42,6 +44,6 @@ npm run build:game-package
 npm run package
 ```
 
-新規Work／Codex制作はOAuth接続済みGame Fields SDK MCPの`publish_mock`と`publish_game_package`を使います。正式なPreviewではAppSet・クライアント・source hashを一緒に保存します。`npm run publish:mock:legacy`と`npm run publish:game-package:legacy`は既存管理トークン運用専用です。Previewと昇格後は同じpackage revisionを実行し、昇格時にAppSetを変換・再buildしません。
+新規ChatGPT Work / Claude Code制作はOAuth接続済みGame Fields SDK MCPを使います。仕様確定後はgame draftだけを作り、人間によるmodule profile確定後に共有sourceを実装します。`publish_mock`は互換tool名で、module usage検査済みの操作プロトタイプを保存します。人間がその`prototypeRevision`を`approve_mock`で明示承認した後だけ正式packageへ進みます。ローカルNode.jsがない標準経路では`publish_game_source_package`がbundle・hash・package検査を行います。既にNode.jsがある環境では`publish_game_package`も使えます。`publish:*:legacy`は既存管理トークン運用専用です。
 
-共通モジュール39件は最初すべて必須です。ChatGPTはprofileを変更せず、確定済みの`requiredModuleIds`と各moduleの公開契約を使ってAppSetを実装します。
+共通moduleはdraft時点で39件すべて必須です。AIはprofileを変更せず、人間が確定した`moduleProfileRevision`・`moduleContractDigest`・`requiredModuleIds`と各moduleのdelivery契約を使って共有UI/AppSetを実装します。

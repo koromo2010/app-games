@@ -17,10 +17,14 @@
     "package": "node scripts/build-submission.mjs"
   },
   "dependencies": {
-    "@game-fields/game-sdk": "file:vendor/__SDK_TARBALL__"
+    "@game-fields/game-sdk": "file:vendor/__SDK_TARBALL__",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
   },
   "devDependencies": {
     "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
     "esbuild": "^0.28.1",
     "typescript": "^5"
   },

@@ -250,9 +250,11 @@ const generated = await llm.generate({
 
 ## 共通モジュールprofile
 
-最初の候補packageは`GAME_SDK_MODULE_CATALOG`の全件を必須としてPlatformが保存します。`mock/preview.json`、AppSet、manifestへmodule採否を表す独自キーを書いてはいけません。
+最初のgame draftは`GAME_SDK_MODULE_CATALOG`の全件を必須としてPlatformが保存します。`mock/preview.json`、AppSet、manifestへmodule採否を表す独自キーを書いてはいけません。
 
-制作AIが利用できるMCPは`get_game_module_requirements`による参照だけです。profileの変更はSDK-devの人間向け管理に限定します。AIは内部分類を推測せず、人間のレビュー後に返される`requiredModuleIds`をすべて使うAppSetを実装します。
+制作AIは仕様確定後に`create_game_draft`でmetadataだけを作り、Portalの人間レビューを待ちます。profileの変更・確定は所有者向け管理画面に限定します。確定後に`get_game_module_requirements`を呼び、`moduleProfileRevision`・`moduleContractDigest`・SDK version・`requiredModuleIds`・delivery契約を固定してから共有UI/AppSetを実装します。
+
+`sdk-resource`は指定された公開package exportとdata/React API、`sdk-helper`は公開helper、`platform-resource`は公開型と注入interface、`platform-owned`はhost委譲を使います。required moduleごとにsource path・実API・runtime marker・非再実装証拠を提出し、disabled moduleはimportも利用もしません。操作プロトタイプと正式packageは同じ`game-client.tsx`・AppSet・Command sourceを別adapterへ接続します。
 
 提出完了、投票集計、次の手番、ラウンド、役職・チーム割当、内部IDからseatへの変換、標準結果は`@game-fields/game-sdk/modules`の純粋関数を利用します。同じ処理をAppSetへ複製しません。
 

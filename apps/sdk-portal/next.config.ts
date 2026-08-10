@@ -2,6 +2,7 @@ import { readdirSync } from "node:fs";
 import type { NextConfig } from "next";
 import {
   resolveSdkReleaseProfile,
+  sdkClaudeCodeProfileFileName,
   sdkDownloadMeFileName,
 } from "@game-fields/sdk-release-profiles";
 import platformRelease from "../../config/platform-release.json";
@@ -20,9 +21,16 @@ const currentDownloadMeFileName = sdkDownloadMeFileName(
   releaseProfile,
 );
 const currentDownloadMePath = `/${currentDownloadMeFileName}`;
+const currentClaudeCodeProfileFileName = sdkClaudeCodeProfileFileName(
+  platformRelease,
+  releaseProfile,
+);
+const currentClaudeCodeProfilePath = `/${currentClaudeCodeProfileFileName}`;
 const historicalIntegerName = /^GameFieldsDownloadMe-ver\d+\.md$/;
 const generatedSemverName =
   /^GameFieldsDownloadMe(?:-dev)?-ver\d+\.\d+\.\d+\.md$/;
+const generatedClaudeCodeSemverName =
+  /^GameFieldsClaudeCode(?:-dev)?-ver\d+\.\d+\.\d+\.md$/;
 const legacyDownloadMePaths = [...new Set([
   "/DownloadMe.md",
   "/GameFieldsDownloadMe.md",
@@ -41,9 +49,26 @@ const legacyDownloadMePaths = [...new Set([
     .filter((fileName) => historicalIntegerName.test(fileName) || generatedSemverName.test(fileName))
     .map((fileName) => `/${fileName}`),
 ])];
+const legacyClaudeCodeProfilePaths = [...new Set([
+  ...(["production", "development"] as const)
+    .map((environment) => `/${sdkClaudeCodeProfileFileName(
+      platformRelease,
+      resolveSdkReleaseProfile({
+        release: platformRelease,
+        profileConfig,
+        requestedEnvironment: environment,
+      }),
+    )}`)
+    .filter((path) => path !== currentClaudeCodeProfilePath),
+  ...readdirSync(new URL("./public", import.meta.url))
+    .filter((fileName) => fileName !== currentClaudeCodeProfileFileName)
+    .filter((fileName) => generatedClaudeCodeSemverName.test(fileName))
+    .map((fileName) => `/${fileName}`),
+])];
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  serverExternalPackages: ["esbuild"],
   transpilePackages: [
     "@game-fields/sdk-preview-auth",
     "@game-fields/sdk-package-assets",
@@ -52,20 +77,29 @@ const nextConfig: NextConfig = {
     "@game-fields/sdk-service-auth",
   ],
   async redirects() {
-    return legacyDownloadMePaths.map((source) => ({
-      source,
-      destination: currentDownloadMePath,
-      permanent: false,
-    }));
+    return [
+      ...legacyDownloadMePaths.map((source) => ({
+        source,
+        destination: currentDownloadMePath,
+        permanent: false,
+      })),
+      ...legacyClaudeCodeProfilePaths.map((source) => ({
+        source,
+        destination: currentClaudeCodeProfilePath,
+        permanent: false,
+      })),
+    ];
   },
   async headers() {
     return [
-      {
-        source: currentDownloadMePath,
+      [currentDownloadMePath, currentDownloadMeFileName],
+      [currentClaudeCodeProfilePath, currentClaudeCodeProfileFileName],
+    ].map(([source, fileName]) => ({
+        source,
         headers: [
           {
             key: "Content-Disposition",
-            value: `attachment; filename="${currentDownloadMeFileName}"`,
+            value: `attachment; filename="${fileName}"`,
           },
           {
             key: "Content-Type",
@@ -76,8 +110,7 @@ const nextConfig: NextConfig = {
             value: "public, max-age=0, must-revalidate",
           },
         ],
-      },
-    ];
+      }));
   },
 };
 

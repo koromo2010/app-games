@@ -60,6 +60,12 @@ export async function POST(
           AND g.game_id = ${gameId}
           AND g.deleted_at IS NULL
           AND r.revision IS DISTINCT FROM g.package_revision
+          AND g.module_profile_confirmed_at IS NOT NULL
+          AND r.module_profile_revision = g.module_profile_revision
+          AND r.module_contract_digest = g.module_contract_digest
+          AND r.prototype_revision = g.mock_approved_revision
+          AND r.shared_source_sha256 = g.prototype_source_sha256
+          AND r.sdk_package_version = g.sdk_package_version
         ORDER BY r.created_at DESC
         LIMIT 1
       )

@@ -18,5 +18,5 @@ test("SDK migration runner accepts only the known production 005 fork", () => {
   assert.match(runner, /!isCanonical && !isAcceptedLegacy/);
   assert.match(reconciliation, /CREATE TABLE IF NOT EXISTS sdk_release_decisions/);
   assert.match(reconciliation, /CREATE INDEX IF NOT EXISTS sdk_release_decisions_lineage_idx/);
-  assert.match(postgres, /SDK_SCHEMA_VERSION = 7/);
+  assert.match(postgres, /SDK_SCHEMA_VERSION = 8/);
 });
