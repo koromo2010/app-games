@@ -2,8 +2,28 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { reconcileAccountLocaleAfterDocumentLoad } from "../lib/app-locale-reconciliation.ts";
 
-test("初回documentのstream完了前はaccount locale再遷移をloadまで待つ", () => {
+function createLoadListenerHarness() {
   let listener: (() => void) | null = null;
+  return {
+    subscribe(nextListener: () => void) {
+      listener = nextListener;
+      return () => {
+        listener = null;
+      };
+    },
+    current() {
+      return listener;
+    },
+    emit() {
+      const registeredListener = listener;
+      assert.ok(registeredListener);
+      registeredListener();
+    },
+  };
+}
+
+test("初回documentのstream完了前はaccount locale再遷移をloadまで待つ", () => {
+  const load = createLoadListenerHarness();
   const applied: string[] = [];
 
   const cancel = reconcileAccountLocaleAfterDocumentLoad({
@@ -11,21 +31,15 @@ test("初回documentのstream完了前はaccount locale再遷移をloadまで待
     currentLocale: "en",
     documentReadyState: "interactive",
     applyLocale: (locale) => applied.push(locale),
-    subscribeToLoad: (nextListener) => {
-      listener = nextListener;
-      return () => {
-        listener = null;
-      };
-    },
+    subscribeToLoad: load.subscribe,
   });
 
   assert.deepEqual(applied, []);
-  assert.ok(listener);
-  listener();
+  load.emit();
   assert.deepEqual(applied, ["ja"]);
 
   cancel();
-  assert.equal(listener, null);
+  assert.equal(load.current(), null);
 });
 
 test("document完了後のsession locale変更は即時反映する", () => {
@@ -48,7 +62,7 @@ test("document完了後のsession locale変更は即時反映する", () => {
 });
 
 test("load前に新しい状態へ切り替わった場合は古いlocaleを適用しない", () => {
-  let listener: (() => void) | null = null;
+  const load = createLoadListenerHarness();
   const applied: string[] = [];
 
   const cancel = reconcileAccountLocaleAfterDocumentLoad({
@@ -56,15 +70,13 @@ test("load前に新しい状態へ切り替わった場合は古いlocaleを適�
     currentLocale: "en",
     documentReadyState: "loading",
     applyLocale: (locale) => applied.push(locale),
-    subscribeToLoad: (nextListener) => {
-      listener = nextListener;
-      return () => undefined;
-    },
+    subscribeToLoad: load.subscribe,
   });
 
-  const staleListener = listener;
+  const staleListener = load.current();
+  assert.ok(staleListener);
   cancel();
-  staleListener?.();
+  staleListener();
   assert.deepEqual(applied, []);
 });
 
