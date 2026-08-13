@@ -556,7 +556,9 @@ function normalizeDeclaredGameSdkSettings<TSettings extends Record<string, unkno
         value,
       ),
     );
-    normalized[definition.key] = option
+    // A select option may be a primitive number. The no-limit value is 0,
+    // which is valid but falsy; only an absent match should use the fallback.
+    normalized[definition.key] = option !== undefined
       ? gameSdkSettingOptionValue(option)
       : fallbackValue;
   }

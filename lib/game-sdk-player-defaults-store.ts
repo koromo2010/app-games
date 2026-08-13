@@ -48,7 +48,9 @@ export function normalizeGameSdkPlayerDefaults(
       const option = definition.options.find(
         (candidate) => gameSdkSettingOptionValue(candidate) === value,
       );
-      if (option) normalized[definition.key] = gameSdkSettingOptionValue(option);
+      if (option !== undefined) {
+        normalized[definition.key] = gameSdkSettingOptionValue(option);
+      }
     }
   }
   return normalized;

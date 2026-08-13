@@ -127,6 +127,11 @@ test("reviewed SDK shell consumes every Room View permission it declares", async
   assert.match(view, /common\?\.permissions\.canStartGame/);
   assert.match(view, /common\?\.permissions\.canAbort/);
   assert.match(lobbyPanel, /common\?\.permissions\.canEditRoomSettings/);
+  assert.match(
+    lobbyPanel,
+    /if \(option === undefined\) return;/,
+    "the valid numeric zero option must not be treated as a missing option",
+  );
 
   // canDebug / canDebugActAsDummy / canDebugAutoProgress now gate a real,
   // directly-testable function (buildGameSdkDebugRoom) instead of a regex

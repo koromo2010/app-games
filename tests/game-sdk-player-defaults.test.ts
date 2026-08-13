@@ -36,4 +36,9 @@ test("SDK player defaults keep only declared, valid setting values", () => {
     timeLimitSeconds: 45,
     rounds: "3",
   }, definitions), {});
+  assert.deepEqual(normalizeGameSdkPlayerDefaults({
+    timeLimitSeconds: 0,
+  }, definitions), {
+    timeLimitSeconds: 0,
+  });
 });

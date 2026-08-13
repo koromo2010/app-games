@@ -83,7 +83,10 @@ export function GameSdkLobbyPanel({
                     const option = definition.options?.find(
                       (candidate) => String(gameSdkSettingOptionValue(candidate)) === event.target.value,
                     );
-                    if (!option) return;
+                    // Options may be primitive values. In particular, the
+                    // valid no-limit option is the number 0, which is falsy
+                    // but must still be sent to the shared Room Runtime.
+                    if (option === undefined) return;
                     void run(() => send({
                       type: "room/update-settings",
                       settings: {

@@ -255,6 +255,53 @@ test("SDK settings boundary rejects unknown and undeclared values", async () => 
   );
 });
 
+test("SDK settings accepts zero as the shared no-limit value and increments the Room revision", async () => {
+  const runtime = createGameSdkMockRuntime({
+    module: createGameSdkOnlineRoomModule(appSet),
+    now: () => 1_000,
+  });
+  const created = await runtime.createRoom({
+    roomCode: "ZERO",
+    create: {
+      settings: { timeLimitSeconds: 60 },
+      app: {},
+    },
+    actor: host,
+  });
+  assert.equal(created.view.common.settings.timeLimitSeconds, 60);
+
+  const unlimited = await runtime.sendCommand({
+    code: "ZERO",
+    envelope: {
+      expectedRevision: created.revision,
+      command: {
+        type: "room/update-settings",
+        settings: { timeLimitSeconds: 0 },
+      },
+    },
+    actor: host,
+  });
+  assert.equal(unlimited.revision, created.revision + 1);
+  assert.equal(unlimited.room.view.common.settings.timeLimitSeconds, 0);
+  assert.equal(unlimited.room.view.common.timer?.durationSeconds, 0);
+  assert.equal(unlimited.room.view.common.timer?.deadlineAt, null);
+  assert.equal(runtime.inspectStoredRoom("ZERO")?.settings.timeLimitSeconds, 0);
+
+  const restored = await runtime.sendCommand({
+    code: "ZERO",
+    envelope: {
+      expectedRevision: unlimited.revision,
+      command: {
+        type: "room/update-settings",
+        settings: { timeLimitSeconds: 30 },
+      },
+    },
+    actor: host,
+  });
+  assert.equal(restored.room.view.common.settings.timeLimitSeconds, 30);
+  assert.equal(runtime.inspectStoredRoom("ZERO")?.settings.timeLimitSeconds, 30);
+});
+
 test("SDK timer expires on the server, applies grace and requires explicit recovery", async () => {
   let now = 1_000;
   const runtime = createGameSdkMockRuntime({

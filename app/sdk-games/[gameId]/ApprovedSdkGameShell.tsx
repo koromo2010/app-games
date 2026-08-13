@@ -578,7 +578,9 @@ export function ApprovedSdkGameShell({
                               (option) => String(gameSdkSettingOptionValue(option))
                                 === event.target.value,
                             );
-                            if (!selected) return;
+                            // 0 is the valid no-limit option; only a missing
+                            // option should be treated as an invalid value.
+                            if (selected === undefined) return;
                             void run(() => send({
                               type: "room/update-settings",
                               settings: {
