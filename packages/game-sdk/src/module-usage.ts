@@ -23,6 +23,42 @@ export type GameSdkModuleUsageEvidence = {
   nonReimplementationEvidence: string[];
 };
 
+export type GameSdkModuleUsageProblem = {
+  moduleId: string | null;
+  path: string;
+  reason: string;
+  expected: string;
+  actual: string;
+};
+
+/** Public contract for MCP, documentation and runtime validation. */
+export const GAME_SDK_MODULE_USAGE_ITEM_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["id", "delivery", "status", "packageExports", "publicApis", "sourcePaths", "observableRuntimeMarker", "nonReimplementationEvidence"],
+  properties: {
+    id: { type: "string" },
+    delivery: { type: "string", enum: ["platform-owned", "platform-resource", "sdk-package"] },
+    status: { type: "string", enum: ["used", "delegated-to-platform"] },
+    packageExports: { type: "array", items: { type: "string", minLength: 1 }, maxItems: 128, uniqueItems: true },
+    publicApis: { type: "array", items: { type: "string", minLength: 1 }, maxItems: 128, uniqueItems: true },
+    sourcePaths: { type: "array", items: { type: "string", minLength: 1 }, minItems: 1, maxItems: 128, uniqueItems: true },
+    observableRuntimeMarker: { type: "array", items: { type: "string", minLength: 1 }, minItems: 1, maxItems: 128, uniqueItems: true },
+    nonReimplementationEvidence: { type: "array", items: { type: "string", minLength: 1 }, minItems: 1, maxItems: 128, uniqueItems: true },
+  },
+} as const;
+
+export class GameSdkModuleUsageValidationError extends Error {
+  constructor(readonly code: string, readonly problems: readonly GameSdkModuleUsageProblem[]) {
+    const first = problems[0];
+    super([
+      code,
+      first?.moduleId,
+      first && first.path !== "moduleUsage" ? first.path : undefined,
+    ].filter(Boolean).join(":"));
+  }
+}
+
 export type GameSdkModuleUsageAudit = {
   binding: GameSdkModuleBinding;
   requiredModuleIds: readonly GameSdkModuleId[];
@@ -37,8 +73,14 @@ export type GameSdkModuleUsageContract = GameSdkModuleBinding & {
   requiredModules: readonly GameSdkModuleDefinition[];
 };
 
-function fail(code: string, moduleId?: string, predicate?: string): never {
-  throw new Error([code, moduleId, predicate].filter(Boolean).join(":"));
+function fail(code: string, moduleId?: string, path = "moduleUsage", expected = "valid module usage evidence", actual = "invalid") : never {
+  throw new GameSdkModuleUsageValidationError(code, [{
+    moduleId: moduleId ?? null,
+    path,
+    reason: code,
+    expected,
+    actual,
+  }]);
 }
 
 function stringArray(value: unknown, code: string, minimum = 0) {
@@ -95,14 +137,21 @@ export function validateGameSdkModuleUsage(input: {
       fail("MODULE_PROFILE_STALE", undefined, field);
     }
   }
-  if (!Array.isArray(input.moduleUsage)) fail("MODULE_USAGE_MATRIX_INCOMPLETE");
+  if (!Array.isArray(input.moduleUsage)) fail("MODULE_USAGE_MATRIX_INCOMPLETE", undefined, "moduleUsage", "array containing one row per required module", typeof input.moduleUsage);
   const rows = input.moduleUsage as Array<Record<string, unknown>>;
   const requiredSet = new Set(input.contract.requiredModuleIds);
-  if (
-    rows.length !== requiredSet.size
-    || new Set(rows.map((row) => row?.id)).size !== rows.length
-    || rows.some((row) => typeof row?.id !== "string" || !requiredSet.has(row.id as GameSdkModuleId))
-  ) fail("MODULE_USAGE_MATRIX_INCOMPLETE");
+  const ids = rows.map((row) => row?.id);
+  const duplicate = ids.find((id, index) => ids.indexOf(id) !== index);
+  const invalid = ids.find((id) => typeof id !== "string" || !requiredSet.has(id as GameSdkModuleId));
+  const missing = [...requiredSet].filter((id) => !ids.includes(id));
+  if (rows.length !== requiredSet.size || duplicate !== undefined || invalid !== undefined || missing.length) {
+    const problems: GameSdkModuleUsageProblem[] = [
+      ...missing.map((id) => ({ moduleId: id, path: "moduleUsage", reason: "REQUIRED_MODULE_MISSING", expected: "exactly one row", actual: "missing" })),
+      ...(duplicate !== undefined ? [{ moduleId: typeof duplicate === "string" ? duplicate : null, path: "moduleUsage[].id", reason: "DUPLICATE_MODULE_ID", expected: "unique required module id", actual: String(duplicate) }] : []),
+      ...(invalid !== undefined ? [{ moduleId: typeof invalid === "string" ? invalid : null, path: "moduleUsage[].id", reason: "UNKNOWN_OR_DISABLED_MODULE", expected: "a required module id", actual: String(invalid) }] : []),
+    ];
+    throw new GameSdkModuleUsageValidationError("MODULE_USAGE_MATRIX_INCOMPLETE", problems);
+  }
   const allSource = Object.entries(input.files)
     .filter(([path]) => /^(?:source\/|index\.html$|mock\.js$)/.test(path))
     .map(([path, content]) => `/* ${path} */\n${content}`)
@@ -112,10 +161,12 @@ export function validateGameSdkModuleUsage(input: {
     if (raw.delivery !== definition.delivery) {
       fail("MODULE_USAGE_MATRIX_INCOMPLETE", definition.id, "delivery");
     }
-    const packageExportsUsed = stringArray(raw.packageExportsUsed, "MODULE_USAGE_MATRIX_INCOMPLETE");
-    const publicApisUsed = stringArray(raw.publicApisUsed, "MODULE_USAGE_MATRIX_INCOMPLETE");
+    // The shorter names are the public MCP contract.  Legacy names remain
+    // accepted on input while existing creators migrate.
+    const packageExportsUsed = stringArray(raw.packageExports ?? raw.packageExportsUsed, "MODULE_USAGE_MATRIX_INCOMPLETE");
+    const publicApisUsed = stringArray(raw.publicApis ?? raw.publicApisUsed, "MODULE_USAGE_MATRIX_INCOMPLETE");
     const sourcePaths = stringArray(raw.sourcePaths, "MODULE_USAGE_MATRIX_INCOMPLETE", 1);
-    const runtimeEvidence = stringArray(raw.runtimeEvidence, "REQUIRED_MODULE_RUNTIME_EVIDENCE_MISSING", 1);
+    const runtimeEvidence = stringArray(raw.observableRuntimeMarker ?? raw.runtimeEvidence, "REQUIRED_MODULE_RUNTIME_EVIDENCE_MISSING", 1);
     const nonReimplementationEvidence = stringArray(raw.nonReimplementationEvidence, "MODULE_USAGE_MATRIX_INCOMPLETE", 1);
     for (const sourcePath of sourcePaths) {
       if (typeof input.files[sourcePath] !== "string") {
