@@ -159,7 +159,7 @@ export function createSdkSchemaAuditSnapshot(input: SdkSchemaAuditInput) {
         availability: availability(stableValues),
         revision: game.stableRevision,
         sourceRevision: null,
-        sourceRevisionAvailability: "unavailable:schema-8" as const,
+        sourceRevisionAvailability: "unavailable:schema-9" as const,
         packageRootSha256: game.stableRootSha256,
         serverBundleSha256: game.stableBundleSha256,
         appSetSourceSha256: game.stableAppSetSha256,
@@ -277,7 +277,7 @@ export function createSdkSchemaAuditSnapshot(input: SdkSchemaAuditInput) {
   const environment = {
     deployment: input.deploymentEnvironment,
     database: null,
-    databaseAvailability: "unavailable:schema-8",
+    databaseAvailability: "unavailable:schema-9",
   } as const;
   const integrity = { schemaVersion: input.schemaVersion, environment, games, currentReleases, anomalies };
   return {

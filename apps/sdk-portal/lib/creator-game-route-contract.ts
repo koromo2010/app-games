@@ -14,6 +14,10 @@ export function creatorGameModulesPath(input: Omit<CreatorGameRouteIdentity, "re
   return `/${encode(input.creatorSlug)}/games/${encode(input.gameId)}?view=modules`;
 }
 
+export function creatorGameModuleProposalPath(input: Omit<CreatorGameRouteIdentity, "revision"> & { proposalId: string }) {
+  return `/${encode(input.creatorSlug)}/games/${encode(input.gameId)}/module-proposals/${encode(input.proposalId)}`;
+}
+
 export function creatorGamePreviewPath(input: CreatorGameRouteIdentity) {
   return `/${encode(input.creatorSlug)}/games/${encode(input.gameId)}?view=preview&revision=${encode(input.revision)}`;
 }

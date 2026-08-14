@@ -37,6 +37,15 @@ export const SDK_HELP_ENTRIES: readonly SdkHelpEntry[] = [
     relatedToolNames: ["publish_game_package"],
   },
   {
+    id: "module-profile-proposals",
+    title: "module構成変更案と本人承認",
+    question: "確定済みmodule構成を変更したいとき、AIがそのまま反映できますか？",
+    answer:
+      "いいえ。AIはprepare_game_module_profile_updateでゲーム仕様・変更差分・依存関係・影響・警告をproposalとして保存できますが、active profileは変更しません。返されたreviewUrlを制作者本人が開き、内容を確認・編集して明示承認した1回のPortal操作だけがactive revision・digestを更新します。古いprototype承認はその時点で無効化されます。",
+    keywords: ["module", "module profile", "変更案", "proposal", "本人承認", "reviewUrl", "active", "依存関係"],
+    relatedToolNames: ["prepare_game_module_profile_update", "get_game_module_profile_proposal", "get_game_module_requirements"],
+  },
+  {
     id: "submission-permission",
     title: "AIが提出候補を準備できる条件",
     question: "AIは勝手に提出候補を作れますか？",

@@ -286,7 +286,7 @@ export function Board() {
 
 オンラインゲームは`SDK基本セット + AppSet`で構成します。基本セットが認証済みRoom、参加・退出、設定、revision、共通View、中断・再戦を所有し、AppSetはゲーム固有state、Command、勝敗、固有Viewだけを登録します。新規ゲームで`createRoom`や参加者配列を再実装する必要はありません。
 
-新規game draftの共通module profileは全項目を`required`で開始します。AppSetや制作AIはprofileを変更できません。人間がPortalで構成を確定した後、制作AIは操作プロトタイプより先に`moduleProfileRevision`・`moduleContractDigest`・SDK versionと`requiredModuleIds`を取得します。この一覧は新しい共通機能の実装ではなく、Game Fields本体で既に使われているRoom Runtime、Route、共通UI、進行部品をAppSetへ合成する採用レシピです。
+新規game draftの共通module profileは全項目を`required`で開始します。AppSetや制作AIはactive profileを直接変更できません。確定後に変更が必要な場合、制作AIは`prepare_game_module_profile_update`で仕様・差分・依存関係・影響・警告をproposalとして保存し、Portalの`reviewUrl`を制作者本人へ渡して停止します。本人のowner-only承認だけがactive revision・digestを原子的に更新し、以前のprototype承認を無効化します。人間がPortalで構成を確定した後、制作AIは操作プロトタイプより先に`moduleProfileRevision`・`moduleContractDigest`・SDK versionと`requiredModuleIds`を取得します。この一覧は新しい共通機能の実装ではなく、Game Fields本体で既に使われているRoom Runtime、Route、共通UI、進行部品をAppSetへ合成する採用レシピです。
 
 required moduleはdeliveryごとに扱います。`sdk-resource`は公開data/UI packageをimportして利用し、`sdk-helper`はゲーム固有transitionから公開helperを呼び、`platform-resource`は公開型とGame Fields注入interfaceだけを使い、`platform-owned`はhostへ委譲して架空importや独自実装を作りません。操作プロトタイプと正式packageは同じgame client・AppSet・Command sourceを別adapterへ接続し、server-side module usage gateを両方で通します。
 

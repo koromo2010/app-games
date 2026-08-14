@@ -25,6 +25,11 @@ starter:
   repository: "https://github.com/koromo2010/app-games"
   ref: "sdk-starter-dev"
   directory: "game-fields-game"
+
+Module profile changes after human confirmation MUST use
+`prepare_game_module_profile_update` to create a proposal only. The returned
+`reviewUrl` MUST be opened by the creator, who may inspect or edit the diff and
+approve it in Portal. AI MUST NOT treat a proposal as active or approve it.
 capabilityVector:
   - oauth2-pkce
   - creator-environments

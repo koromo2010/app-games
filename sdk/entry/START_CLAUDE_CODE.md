@@ -28,6 +28,11 @@ and SDK version. Honor each module's delivery contract. Use official SDK
 resources/helpers, injected platform-resource fixtures, and platform-owned host
 delegation; never build bespoke substitutes or fictitious platform imports.
 
+If a confirmed composition must change, call
+`prepare_game_module_profile_update` with a stable requestId. It creates a
+reviewable proposal only; follow its `reviewUrl` and wait for the owner-only
+Portal approval before treating a new revision or digest as active.
+
 ## Remote HTTP MCP + OAuth
 
 Use Claude Code's remote HTTP MCP support. Add exactly this URL:
