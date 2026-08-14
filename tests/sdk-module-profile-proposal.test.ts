@@ -7,11 +7,23 @@ const read = (path: string) => readFileSync(path, "utf8");
 test("module profile proposal flow exposes preparation and readback but no AI approval", () => {
   const route = read("apps/sdk-portal/app/api/mcp/route.ts");
   assert.match(route, /name: "prepare_game_module_profile_update"/);
+  assert.match(route, /name: "prepare_module_profile_update"/);
   assert.match(route, /name: "get_game_module_profile_proposal"/);
   assert.match(route, /activeProfileChanged: false/);
   assert.match(route, /humanApprovalRequired: true/);
   assert.match(route, /reviewUrl/);
   assert.doesNotMatch(route, /name: "approve_game_module_profile_proposal"/);
+});
+
+test("short proposal alias shares the canonical contract, binding, scope, and handler", () => {
+  const route = read("apps/sdk-portal/app/api/mcp/route.ts");
+  assert.match(route, /const prepareModuleProfileUpdateToolDefinition =/);
+  assert.match(route, /name: "prepare_game_module_profile_update", \.\.\.prepareModuleProfileUpdateToolDefinition/);
+  assert.match(route, /name: "prepare_module_profile_update", \.\.\.prepareModuleProfileUpdateToolDefinition/);
+  assert.match(route, /prepareModuleProfileUpdateToolNames\.has\(name\)/);
+  assert.match(route, /\.\.\.prepareModuleProfileUpdateToolNames/);
+  assert.match(route, /environmentBinding: environmentBindingSchema/);
+  assert.match(route, /prepareCreatorGameModuleProfileUpdate\(\{/);
 });
 
 test("proposal persistence binds the base revision and digest and approval clears prototype approval", () => {

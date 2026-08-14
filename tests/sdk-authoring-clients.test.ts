@@ -42,7 +42,8 @@ test("every post-handshake MCP tool is environment-bound and authoring writes re
   assert.match(route, /environmentBinding: environmentBindingSchema/);
   assert.match(route, /verifyAuthoringEnvironmentBinding/);
   assert.match(route, /sdkIdentity/);
-  assert.match(route, /"create_game_draft",\s*\n\s*"prepare_game_module_profile_update",\s*\n\s*"publish_mock"/);
+  assert.match(route, /const prepareModuleProfileUpdateToolNames = new Set\(\[\s*"prepare_game_module_profile_update",\s*"prepare_module_profile_update",/);
+  assert.match(route, /"create_game_draft",\s*\n\s*\.\.\.prepareModuleProfileUpdateToolNames,\s*\n\s*"publish_mock"/);
   assert.match(route, /includes\("sdk:mock"\)/);
 });
 

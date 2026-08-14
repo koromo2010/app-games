@@ -112,6 +112,18 @@ const supportThreadAiPolicy = {
   },
 } as const;
 
+const prepareModuleProfileUpdateToolNames = new Set([
+  "prepare_game_module_profile_update",
+  "prepare_module_profile_update",
+]);
+
+const prepareModuleProfileUpdateToolDefinition = {
+  title: "module構成変更案の準備",
+  description: "確定済みmodule profileを土台に、AIがゲーム仕様と変更案を検査・保存します。active profileは変更せず、Portalで制作者本人が確認・編集・承認するまで反映されません。requestIdは再試行時も同じ値を使います。",
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  inputSchema: { type: "object", properties: { slug: { type: "string" }, gameId: { type: "string" }, requestId: { type: "string", format: "uuid" }, specification: { type: "object", description: "titleとcoreLoopを含むゲーム仕様", additionalProperties: true }, moduleDecisions: { type: "object", description: "変更するmodule idからrequiredまたはdisabled decisionへのmap", additionalProperties: true } }, required: ["slug", "gameId", "requestId", "specification", "moduleDecisions"], additionalProperties: false },
+};
+
 const baseTools = [
   { name: "get_sdk_handshake", title: "SDK接続互換性の確認", description: "制作を始める前に、接続先環境、canonicalMcpUrl、onboardingProfileId、Platform・SDK契約版、DownloadMe記載の必要機能だけを送って互換性を確認します。requiredCapabilitiesは将来の機能名も送信でき、未提供の機能は応答のCAPABILITY_UNAVAILABLEで判定します。accepted=trueになるまで他のSDK toolを使わないでください。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { protocol: { type: "string", const: "game-fields-sdk" }, handshakeVersion: { type: "integer", minimum: 1 }, client: { type: "object", properties: { kind: { type: "string", enum: ["ai-agent"] }, name: { type: "string", enum: ["ChatGPT Work", "Claude Code"] }, version: { type: "string" } }, required: ["kind", "name"], additionalProperties: false }, expected: { type: "object", properties: { environment: { type: "string", enum: ["development", "production"] }, canonicalMcpUrl: { type: "string", format: "uri" }, onboardingProfileId: { type: "string" }, platformVersion: { type: "string" }, sdkPackageVersion: { type: "string" }, sdkContractVersion: { type: "integer", minimum: 1 } }, required: ["environment", "canonicalMcpUrl", "onboardingProfileId", "platformVersion", "sdkPackageVersion", "sdkContractVersion"], additionalProperties: false }, requiredCapabilities: { type: "array", description: "添付されたDownloadMeのrequiredCapabilitiesをそのまま指定します。固定enumではなく、Portal未提供名はhandshake応答で拒否します。", items: { type: "string", minLength: 1, maxLength: 64, pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" }, maxItems: 64, uniqueItems: true } }, required: ["protocol", "handshakeVersion", "client", "expected", "requiredCapabilities"], additionalProperties: false } },
   { name: "get_authoring_profile", title: "制作クライアント契約の取得", description: "handshake成功後に、ChatGPT WorkまたはClaude Code向けの共通制作契約とクライアント固有プロファイルを取得します。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { clientId: { type: "string", enum: ["chatgpt-work", "claude-code"] } }, required: ["clientId"], additionalProperties: false } },
@@ -125,7 +137,8 @@ const baseTools = [
   { name: "reserve_creator_url", title: "制作者URLの予約", description: "ログイン中のGame Fieldsアカウント用に制作者URLを7日間予約します。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "予約する制作者URL名" }, displayName: { type: "string", description: "制作者の表示名" } }, required: ["slug", "displayName"], additionalProperties: false } },
   { name: "finalize_creator_url", title: "制作者URLの確定", description: "予約トークンを使い、制作者URLをログイン中のアカウントへ正式登録します。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "確定する制作者URL名" }, reservationToken: { type: "string", description: "予約時に発行されたトークン" } }, required: ["slug", "reservationToken"], additionalProperties: false } },
   { name: "create_game_draft", title: "module確認用game draft作成", description: "ゲーム仕様のcore loop確定後、操作プロトタイプより先に本人所有環境へmetadataとGame Fields所有の初期module profileだけを作り、人間用module review URLを返します。prototypeやpackageは保存しません。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string" }, gameId: { type: "string" }, title: { type: "string", minLength: 1, maxLength: 120 }, description: { type: "string", maxLength: 500 }, playMode: { type: "string", const: "online-room" }, minimumPlayers: { type: "integer", minimum: 1, maximum: 20 }, maximumPlayers: { type: "integer", minimum: 1, maximum: 20 } }, required: ["slug", "gameId", "title", "description", "playMode", "minimumPlayers", "maximumPlayers"], additionalProperties: false } },
-  { name: "prepare_game_module_profile_update", title: "module構成変更案の準備", description: "確定済みmodule profileを土台に、AIがゲーム仕様と変更案を検査・保存します。active profileは変更せず、Portalで制作者本人が確認・編集・承認するまで反映されません。requestIdは再試行時も同じ値を使います。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string" }, gameId: { type: "string" }, requestId: { type: "string", format: "uuid" }, specification: { type: "object", description: "titleとcoreLoopを含むゲーム仕様", additionalProperties: true }, moduleDecisions: { type: "object", description: "変更するmodule idからrequiredまたはdisabled decisionへのmap", additionalProperties: true } }, required: ["slug", "gameId", "requestId", "specification", "moduleDecisions"], additionalProperties: false } },
+  { name: "prepare_game_module_profile_update", ...prepareModuleProfileUpdateToolDefinition },
+  { name: "prepare_module_profile_update", ...prepareModuleProfileUpdateToolDefinition },
   { name: "get_game_module_profile_proposal", title: "module構成変更案の取得", description: "保存済みのmodule構成変更案、差分、依存関係、影響、警告、監査履歴を取得します。承認・active profile更新は行いません。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string" }, gameId: { type: "string" }, proposalId: { type: "string", format: "uuid" } }, required: ["slug", "gameId", "proposalId"], additionalProperties: false } },
   { name: "publish_mock", title: "操作プロトタイプの検査・保存", description: "互換tool名です。確定済みmodule contractに結び付いた共有SDK sourceから操作プロトタイプを検査し、module usage matrixと人間確認URLを保存します。任意の静的HTMLだけの保存は拒否します。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string" }, gameId: { type: "string" }, title: { type: "string" }, description: { type: "string" }, manifest: { type: "object" }, moduleBinding: { type: "object" }, moduleUsage: { type: "array", maxItems: 64, items: GAME_SDK_MODULE_USAGE_ITEM_SCHEMA }, files: { type: "object", description: "操作プロトタイプと正式Packageで共有するindex/styles/mock/previewおよびsource/**のUTF-8本文。", additionalProperties: { type: "string" } } }, required: ["slug", "gameId", "title", "manifest", "moduleBinding", "moduleUsage", "files"], additionalProperties: false } },
   { name: "approve_mock", title: "人間確認済み操作プロトタイプの承認", description: "互換tool名です。利用者本人が主要操作、状態変化、完了、reset、module利用状況を確認し、明示承認した現在revisionだけを正式Packageの前提として固定します。AIの自己判断では呼び出せません。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string" }, gameId: { type: "string" }, prototypeRevision: { type: "string", pattern: "^[a-f0-9]{40}$" }, humanApproved: { type: "boolean", const: true } }, required: ["slug", "gameId", "prototypeRevision", "humanApproved"], additionalProperties: false } },
@@ -411,7 +424,7 @@ async function callTool(name: string, args: Record<string, unknown>, auth: ToolA
       instruction: "利用者へmoduleReviewUrl、対象environment、creator、gameを一度に示して停止し、本人がmodule構成を確定した後にget_game_module_requirementsを呼んでください。",
     });
   }
-  if (name === "prepare_game_module_profile_update") {
+  if (prepareModuleProfileUpdateToolNames.has(name)) {
     const creator = await authenticateCreatorOwner(slug, playerId);
     if (!creator) throw new Error("この制作者URLは現在のアカウントに属していません。");
     const gameId = typeof args.gameId === "string" ? args.gameId.trim().toLowerCase() : "";
@@ -724,7 +737,7 @@ export async function POST(request: Request) {
     const name = typeof body.params?.name === "string" ? body.params.name : "";
     const mockWriteTools = new Set([
       "create_game_draft",
-      "prepare_game_module_profile_update",
+      ...prepareModuleProfileUpdateToolNames,
       "publish_mock",
       "approve_mock",
       "publish_game_package",
