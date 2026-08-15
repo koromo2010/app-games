@@ -42,6 +42,19 @@ export type ModuleProfileProposal = {
   updatedAt: string;
 };
 
+export const MODULE_PROFILE_STATUS_STORE_ERROR = {
+  code: "SDK_MODULE_UPDATE_STATUS_UNAVAILABLE",
+  message: "module update status is temporarily unavailable.",
+  layer: "store" as const,
+};
+
+export class ModuleProfileStatusStoreError extends Error {
+  constructor() {
+    super(MODULE_PROFILE_STATUS_STORE_ERROR.code);
+    this.name = "ModuleProfileStatusStoreError";
+  }
+}
+
 type ProposalRow = Omit<ModuleProfileProposal, "proposedProfile" | "diff" | "specification"> & {
   proposedProfile: unknown;
   diff: unknown;
@@ -148,6 +161,18 @@ export function impactReport(diff: ModuleProfileProposalDiff[], profile: GameSdk
   ];
 }
 
+export async function resolveExistingModuleProfileProposal(input: {
+  creatorId: string;
+  gameId: string;
+  requestId: string;
+}, dependencies: {
+  findProposalId: () => Promise<string | null>;
+  loadProposal: (proposalId: string) => Promise<ModuleProfileProposal | null>;
+}) {
+  const proposalId = await dependencies.findProposalId();
+  return proposalId ? dependencies.loadProposal(proposalId) : null;
+}
+
 export async function prepareCreatorGameModuleProfileUpdate(input: {
   creatorId: string;
   gameId: string;
@@ -158,22 +183,27 @@ export async function prepareCreatorGameModuleProfileUpdate(input: {
   moduleDecisions: unknown;
 }) {
   await ensureSdkSchema();
-  const existingRows = await sdkSql()`
-    SELECT id
-    FROM sdk_game_module_profile_proposals p
-    JOIN sdk_games g ON g.id = p.game_row_id
-    WHERE p.creator_id = ${input.creatorId}
-      AND p.game_id = ${input.gameId}
-      AND p.request_id = ${input.requestId}::uuid
-    LIMIT 1
-  `;
-  if (Array.isArray(existingRows) && existingRows[0]) {
-    return getCreatorGameModuleProfileProposal({
+  const existing = await resolveExistingModuleProfileProposal(input, {
+    findProposalId: async () => {
+      const existingRows = await sdkSql()`
+        SELECT id
+        FROM sdk_game_module_profile_proposals p
+        JOIN sdk_games g ON g.id = p.game_row_id
+        WHERE p.creator_id = ${input.creatorId}
+          AND p.game_id = ${input.gameId}
+          AND p.request_id = ${input.requestId}::uuid
+        LIMIT 1
+      `;
+      const row = Array.isArray(existingRows) ? existingRows[0] as { id?: unknown } | undefined : undefined;
+      return row && typeof row.id === "string" ? row.id : null;
+    },
+    loadProposal: (proposalId) => getCreatorGameModuleProfileProposal({
       creatorId: input.creatorId,
       gameId: input.gameId,
-      proposalId: String((existingRows[0] as { id: string }).id),
-    });
-  }
+      proposalId,
+    }),
+  });
+  if (existing) return existing;
   const current = await getCreatorGameModuleAuthoringState({
     creatorId: input.creatorId,
     gameId: input.gameId,
@@ -261,6 +291,54 @@ export async function getCreatorGameModuleProfileProposal(input: {
   `;
   const row = Array.isArray(rows) ? rows[0] as ProposalRow | undefined : undefined;
   return row ? mapProposal(row) : null;
+}
+
+export type ModuleProfileStatusLookupDependencies = {
+  ensureSchema: () => Promise<void>;
+  findProposalId: (input: { creatorId: string; gameId: string; requestId: string }) => Promise<string | null>;
+  loadProposal: (input: { creatorId: string; gameId: string; proposalId: string }) => Promise<ModuleProfileProposal | null>;
+};
+
+export async function resolveCreatorGameModuleProfileUpdateStatus(
+  input: { creatorId: string; gameId: string; requestId: string },
+  dependencies: ModuleProfileStatusLookupDependencies,
+) {
+  try {
+    await dependencies.ensureSchema();
+    const proposalId = await dependencies.findProposalId(input);
+    if (!proposalId) return null;
+    return dependencies.loadProposal({
+      creatorId: input.creatorId,
+      gameId: input.gameId,
+      proposalId,
+    });
+  } catch {
+    throw new ModuleProfileStatusStoreError();
+  }
+}
+
+export async function getCreatorGameModuleProfileUpdateStatus(input: {
+  creatorId: string;
+  gameId: string;
+  requestId: string;
+}) {
+  return resolveCreatorGameModuleProfileUpdateStatus(input, {
+    ensureSchema: ensureSdkSchema,
+    findProposalId: async (statusInput) => {
+      const rows = await sdkSql()`
+        SELECT p.id
+        FROM sdk_game_module_profile_proposals p
+        JOIN sdk_games g ON g.id = p.game_row_id
+        WHERE p.creator_id = ${statusInput.creatorId}::uuid
+          AND g.game_id = ${statusInput.gameId}
+          AND p.request_id = ${statusInput.requestId}::uuid
+        LIMIT 1
+      `;
+      const row = Array.isArray(rows) ? rows[0] as { id?: unknown } | undefined : undefined;
+      return row && typeof row.id === "string" ? row.id : null;
+    },
+    loadProposal: getCreatorGameModuleProfileProposal,
+  });
 }
 
 export async function listCreatorGameModuleProfileProposalAudit(input: {

@@ -57,6 +57,8 @@ import {
 } from "@/lib/module-authoring-store";
 import {
   getCreatorGameModuleProfileProposal,
+  getCreatorGameModuleProfileUpdateStatus,
+  MODULE_PROFILE_STATUS_STORE_ERROR,
   listCreatorGameModuleProfileProposalAudit,
   prepareCreatorGameModuleProfileUpdate,
 } from "@/lib/module-profile-proposal-store";
@@ -64,6 +66,8 @@ import {
   bindGamePackageAuthoringManifest,
   sharedGameSourceSha256,
 } from "@/lib/module-authoring-contract";
+import { handleModuleProfileStatus } from "@/lib/module-profile-status-handler";
+import { buildSdkToolErrorResult } from "@/lib/sdk-tool-error-contract";
 import { appendModuleUsageReview } from "@/lib/module-usage-review";
 import { creatorGameModulesPath } from "@/lib/creator-game-route-contract";
 
@@ -124,6 +128,13 @@ const prepareModuleProfileUpdateToolDefinition = {
   inputSchema: { type: "object", properties: { slug: { type: "string" }, gameId: { type: "string" }, requestId: { type: "string", format: "uuid" }, specification: { type: "object", description: "titleとcoreLoopを含むゲーム仕様", additionalProperties: true }, moduleDecisions: { type: "object", description: "変更するmodule idからrequiredまたはdisabled decisionへのmap", additionalProperties: true } }, required: ["slug", "gameId", "requestId", "specification", "moduleDecisions"], additionalProperties: false },
 };
 
+const moduleUpdateStatusToolDefinition = {
+  title: "module変更案の状態照合",
+  description: "proposalを作成せず、固定requestIdに対応する既存module変更案の有無と状態だけを確認します。",
+  annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  inputSchema: { type: "object", properties: { slug: { type: "string" }, gameId: { type: "string" }, requestId: { type: "string", format: "uuid" }, environmentBinding: { type: "string", minLength: 32 } }, required: ["slug", "gameId", "requestId", "environmentBinding"], additionalProperties: false },
+};
+
 const baseTools = [
   { name: "get_sdk_handshake", title: "SDK接続互換性の確認", description: "制作を始める前に、接続先環境、canonicalMcpUrl、onboardingProfileId、Platform・SDK契約版、DownloadMe記載の必要機能だけを送って互換性を確認します。requiredCapabilitiesは将来の機能名も送信でき、未提供の機能は応答のCAPABILITY_UNAVAILABLEで判定します。accepted=trueになるまで他のSDK toolを使わないでください。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { protocol: { type: "string", const: "game-fields-sdk" }, handshakeVersion: { type: "integer", minimum: 1 }, client: { type: "object", properties: { kind: { type: "string", enum: ["ai-agent"] }, name: { type: "string", enum: ["ChatGPT Work", "Claude Code"] }, version: { type: "string" } }, required: ["kind", "name"], additionalProperties: false }, expected: { type: "object", properties: { environment: { type: "string", enum: ["development", "production"] }, canonicalMcpUrl: { type: "string", format: "uri" }, onboardingProfileId: { type: "string" }, platformVersion: { type: "string" }, sdkPackageVersion: { type: "string" }, sdkContractVersion: { type: "integer", minimum: 1 } }, required: ["environment", "canonicalMcpUrl", "onboardingProfileId", "platformVersion", "sdkPackageVersion", "sdkContractVersion"], additionalProperties: false }, requiredCapabilities: { type: "array", description: "添付されたDownloadMeのrequiredCapabilitiesをそのまま指定します。固定enumではなく、Portal未提供名はhandshake応答で拒否します。", items: { type: "string", minLength: 1, maxLength: 64, pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" }, maxItems: 64, uniqueItems: true } }, required: ["protocol", "handshakeVersion", "client", "expected", "requiredCapabilities"], additionalProperties: false } },
   { name: "get_authoring_profile", title: "制作クライアント契約の取得", description: "handshake成功後に、ChatGPT WorkまたはClaude Code向けの共通制作契約とクライアント固有プロファイルを取得します。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { clientId: { type: "string", enum: ["chatgpt-work", "claude-code"] } }, required: ["clientId"], additionalProperties: false } },
@@ -138,6 +149,7 @@ const baseTools = [
   { name: "finalize_creator_url", title: "制作者URLの確定", description: "予約トークンを使い、制作者URLをログイン中のアカウントへ正式登録します。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string", description: "確定する制作者URL名" }, reservationToken: { type: "string", description: "予約時に発行されたトークン" } }, required: ["slug", "reservationToken"], additionalProperties: false } },
   { name: "create_game_draft", title: "module確認用game draft作成", description: "ゲーム仕様のcore loop確定後、操作プロトタイプより先に本人所有環境へmetadataとGame Fields所有の初期module profileだけを作り、人間用module review URLを返します。prototypeやpackageは保存しません。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string" }, gameId: { type: "string" }, title: { type: "string", minLength: 1, maxLength: 120 }, description: { type: "string", maxLength: 500 }, playMode: { type: "string", const: "online-room" }, minimumPlayers: { type: "integer", minimum: 1, maximum: 20 }, maximumPlayers: { type: "integer", minimum: 1, maximum: 20 } }, required: ["slug", "gameId", "title", "description", "playMode", "minimumPlayers", "maximumPlayers"], additionalProperties: false } },
   { name: "prepare_module_profile_update", ...prepareModuleProfileUpdateToolDefinition },
+  { name: "get_module_update_status", ...moduleUpdateStatusToolDefinition },
   { name: "get_game_module_profile_proposal", title: "module構成変更案の取得", description: "保存済みのmodule構成変更案、差分、依存関係、影響、警告、監査履歴を取得します。承認・active profile更新は行いません。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string" }, gameId: { type: "string" }, proposalId: { type: "string", format: "uuid" } }, required: ["slug", "gameId", "proposalId"], additionalProperties: false } },
   { name: "publish_mock", title: "操作プロトタイプの検査・保存", description: "互換tool名です。確定済みmodule contractに結び付いた共有SDK sourceから操作プロトタイプを検査し、module usage matrixと人間確認URLを保存します。任意の静的HTMLだけの保存は拒否します。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string" }, gameId: { type: "string" }, title: { type: "string" }, description: { type: "string" }, manifest: { type: "object" }, moduleBinding: { type: "object" }, moduleUsage: { type: "array", maxItems: 64, items: GAME_SDK_MODULE_USAGE_ITEM_SCHEMA }, files: { type: "object", description: "操作プロトタイプと正式Packageで共有するindex/styles/mock/previewおよびsource/**のUTF-8本文。", additionalProperties: { type: "string" } } }, required: ["slug", "gameId", "title", "manifest", "moduleBinding", "moduleUsage", "files"], additionalProperties: false } },
   { name: "approve_mock", title: "人間確認済み操作プロトタイプの承認", description: "互換tool名です。利用者本人が主要操作、状態変化、完了、reset、module利用状況を確認し、明示承認した現在revisionだけを正式Packageの前提として固定します。AIの自己判断では呼び出せません。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string" }, gameId: { type: "string" }, prototypeRevision: { type: "string", pattern: "^[a-f0-9]{40}$" }, humanApproved: { type: "boolean", const: true } }, required: ["slug", "gameId", "prototypeRevision", "humanApproved"], additionalProperties: false } },
@@ -203,6 +215,39 @@ function sdkToolErrorMessage(error: unknown) {
     return "SDK_INSTANCE_REGISTRY_UNAVAILABLE: 制作者URL機能へ一時的に接続できません。URLの予約・環境作成は行われていません。時間を置いて再試行してください。";
   }
   return message;
+}
+
+export function sdkToolErrorDetails(error: unknown) {
+  if (error instanceof GameSdkModuleUsageValidationError) {
+    return { code: error.code, message: "moduleUsage validation failed.", layer: "validation" as const };
+  }
+  const source = `${error instanceof Error ? error.message : ""}\n${sdkToolErrorMessage(error)}`;
+  const explicitCodes = new Map([
+    ["SDK_MOCK_SCOPE_REQUIRED", ["SDK_MOCK_SCOPE_REQUIRED", "authorization"]],
+    ["SDK_OWNER_REQUIRED", ["SDK_OWNER_REQUIRED", "authorization"]],
+    ["SDK_AUTHORING_CLIENT_UNSUPPORTED", ["SDK_AUTHORING_CLIENT_UNSUPPORTED", "validation"]],
+    ["GAME_SDK_PROPOSAL_INPUT_INVALID", ["GAME_SDK_PROPOSAL_INPUT_INVALID", "validation"]],
+    ["GAME_SDK_DRAFT_NOT_FOUND", ["GAME_SDK_DRAFT_NOT_FOUND", "validation"]],
+    ["MODULE_PROFILE_NOT_CONFIRMED", ["MODULE_PROFILE_NOT_CONFIRMED", "validation"]],
+    ["GAME_SDK_PROPOSAL_NOT_FOUND", ["GAME_SDK_PROPOSAL_NOT_FOUND", "validation"]],
+    ["GAME_SDK_PROPOSAL_NOOP", ["GAME_SDK_PROPOSAL_NOOP", "validation"]],
+    ["GAME_SDK_PROPOSAL_DEPENDENCY_CONFLICT", ["GAME_SDK_PROPOSAL_DEPENDENCY_CONFLICT", "validation"]],
+    ["MODULE_PROFILE_STALE", ["MODULE_PROFILE_STALE", "validation"]],
+    ["SDK_INSTANCE_REGISTRY_NOT_CONFIGURED", ["SDK_INSTANCE_REGISTRY_NOT_CONFIGURED", "store"]],
+    ["SDK_INSTANCE_REGISTRY_UNAVAILABLE", ["SDK_INSTANCE_REGISTRY_UNAVAILABLE", "store"]],
+    [MODULE_PROFILE_STATUS_STORE_ERROR.code, [MODULE_PROFILE_STATUS_STORE_ERROR.code, MODULE_PROFILE_STATUS_STORE_ERROR.layer]],
+  ] as const);
+  const matched = [...explicitCodes].find(([code]) => source.includes(code));
+  const [code, layer] = matched?.[1] ?? ["SDK_OPERATION_FAILED", "handler"];
+  const message = code === MODULE_PROFILE_STATUS_STORE_ERROR.code
+    ? MODULE_PROFILE_STATUS_STORE_ERROR.message
+    : matched ? code : "SDK操作に失敗しました。";
+  return { code, message, layer };
+}
+
+export function sdkToolErrorResult(error: unknown) {
+  const errorDetails = sdkToolErrorDetails(error);
+  return buildSdkToolErrorResult(errorDetails);
 }
 
 type ToolAuth = { playerId: string; clientId: string; scope: string };
@@ -422,6 +467,21 @@ async function callTool(name: string, args: Record<string, unknown>, auth: ToolA
       humanConfirmationRequired: true,
       instruction: "利用者へmoduleReviewUrl、対象environment、creator、gameを一度に示して停止し、本人がmodule構成を確定した後にget_game_module_requirementsを呼んでください。",
     });
+  }
+  if (name === "get_module_update_status") {
+    const environmentBinding = typeof args.environmentBinding === "string" ? args.environmentBinding : "";
+    return respond(await handleModuleProfileStatus({
+      gameId: args.gameId,
+      requestId: args.requestId,
+      scope: auth.scope,
+      slug,
+    }, {
+      verifyBinding: () => {
+        if (environmentBinding.length < 32) throw new Error("SDK_ENVIRONMENT_BINDING_REQUIRED");
+      },
+      authenticateOwner: (ownerSlug) => authenticateCreatorOwner(ownerSlug, playerId),
+      lookupStatus: getCreatorGameModuleProfileUpdateStatus,
+    }));
   }
   if (prepareModuleProfileUpdateToolNames.has(name)) {
     const creator = await authenticateCreatorOwner(slug, playerId);
@@ -742,10 +802,10 @@ export async function POST(request: Request) {
       "publish_game_package",
       "publish_game_source_package",
     ]);
-    if (mockWriteTools.has(name) && !auth.scope.split(" ").includes("sdk:mock")) return rpcError(body.id, -32001, "Insufficient scope", 403);
+    if (mockWriteTools.has(name) && !auth.scope.split(" ").includes("sdk:mock")) return rpc(body.id, sdkToolErrorResult(new Error("SDK_MOCK_SCOPE_REQUIRED")), 200);
     const args = body.params?.arguments && typeof body.params.arguments === "object" ? body.params.arguments as Record<string, unknown> : {};
     try { return rpc(body.id, await callTool(name, args, auth, base)); }
-    catch (error) { return rpc(body.id, { content: [{ type: "text", text: sdkToolErrorMessage(error) }], isError: true }); }
+    catch (error) { return rpc(body.id, sdkToolErrorResult(error)); }
   }
   if (body.method === "ping") return rpc(body.id, {});
   return rpcError(body.id, -32601, "Method not found");
