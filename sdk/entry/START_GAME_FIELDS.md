@@ -88,7 +88,8 @@ I20 MUST_NOT treat MCP Connected, tool discovery, URL issuance, shared Shell ren
 I21 MUST resolve and freeze the human-confirmed module contract before prototype implementation, then require explicit human approval of the exact published prototypeRevision before formal packaging; AI self-approval is forbidden.
 I22 MUST use publish_mock and publish_game_source_package as the server-side Node-free path when local Node.js is unavailable; MUST_NOT ask a general creator to install Node.js, npm, Git, or Vercel CLI as the default path.
 I23 MUST use prepare_module_profile_update only to save a proposal; MUST read it back with get_game_module_profile_proposal in the same tool flow before stopping; MUST_NOT treat it as active profile mutation, and MUST wait for the owner-only Portal review/approval URL before continuing.
-I24 MUST parse MCP CallToolResult by checking isError first and then using structuredContent; canonical paths are structuredContent.environmentBinding and structuredContent.proposal.id; MUST_NOT search guessed aliases.
+I24 MUST parse MCP CallToolResult by checking isError first and then using structuredContent; only when structuredContent is absent MAY parse one JSON text content item once; canonical paths are structuredContent.environmentBinding and structuredContent.proposal.id; MUST_NOT search guessed aliases.
+I25 MUST distinguish a logical product write from a tool invocation. A replay with the same frozen requestId and identical semantic payload for outcome reconciliation is not a second logical write; a new requestId, target, or semantic payload is a new write.
 ```
 
 ## P0::TERMINAL_PREDICATES
@@ -199,13 +200,23 @@ CALL get_sdk_handshake WITH:
   ]
 }
 
-ASSERT MCP_RESULT.isError != true.
+PARSE MCP_RESULT by checking transport/RPC failure, then isError.
 SET HANDSHAKE := MCP_RESULT.structuredContent.
-ASSERT HANDSHAKE is object.
+IF HANDSHAKE is absent AND MCP_RESULT.content contains exactly one JSON text item:
+  PARSE that text once as HANDSHAKE.
+IF transport/RPC failed, isError == true, or HANDSHAKE is not an object:
+  INSPECT current tool schema, server source, tests, and the fixed parser.
+  IF the request/parser can be corrected within the explicit invocation limit:
+    REPEAT this handshake with the corrected contract in the same tool flow.
+  ELSE EMIT a sanitized failure and HALT on the unresolved external or contract blocker.
 
 IF HANDSHAKE.accepted != true:
-  EMIT C1.HANDSHAKE_FAILURE_PREFIX + join(HANDSHAKE.problems[*].code);
-  HALT.
+  CLASSIFY HANDSHAKE.problems[*].code.
+  IF current DownloadMe/source permits a request or parser correction within the explicit invocation limit:
+    REPEAT this handshake after that correction in the same tool flow.
+  ELSE:
+    EMIT C1.HANDSHAKE_FAILURE_PREFIX + join(HANDSHAKE.problems[*].code);
+    HALT on the true compatibility blocker.
 
 ASSERT isNonEmpty(HANDSHAKE.environmentBinding).
 KEEP HANDSHAKE.environmentBinding in tool-flow memory as ENVIRONMENT_BINDING.
@@ -412,9 +423,21 @@ ASSERT every response.requiredModuleIds item has requiredModules contract data.
 
 IF a confirmed module composition needs to change:
   FREEZE MODULE_PROPOSAL_REQUEST_ID := stable requestId.
-  CALL prepare_module_profile_update WITH the current specification, module decisions, and MODULE_PROPOSAL_REQUEST_ID.
-  ASSERT MCP_RESULT.isError != true.
-  SET PREPARED_PROPOSAL := MCP_RESULT.structuredContent.
+  FREEZE MODULE_PROPOSAL_PAYLOAD := current specification, module decisions, target, and MODULE_PROPOSAL_REQUEST_ID.
+  CALL prepare_module_profile_update WITH MODULE_PROPOSAL_PAYLOAD.
+  PARSE MCP_RESULT using I24.
+  IF transport outcome is unknown AND proposal ID is unavailable:
+    REPARSE the retained result before another call.
+    IF the explicit tool invocation limit permits one reconciliation replay:
+      CALL prepare_module_profile_update once with the identical frozen MODULE_PROPOSAL_PAYLOAD.
+      PARSE MCP_RESULT using I24.
+    ELSE EMIT WRITE_OUTCOME_UNKNOWN and HALT without a new requestId or second logical proposal.
+  IF a confirmed pre-persistence validation error is caused only by serialization/schema shape:
+    INSPECT source/schema, correct the representation without changing the product decision,
+    and retry once with the same MODULE_PROPOSAL_REQUEST_ID when the invocation limit permits.
+  IF MCP_RESULT.isError == true after recovery:
+    EMIT the sanitized classified error and HALT without a new requestId or second logical proposal.
+  SET PREPARED_PROPOSAL := parsed payload.
   ASSERT isNonEmpty(PREPARED_PROPOSAL.proposal.id).
   ASSERT PREPARED_PROPOSAL.proposal.requestId == MODULE_PROPOSAL_REQUEST_ID.
   CALL get_game_module_profile_proposal WITH {
@@ -422,8 +445,10 @@ IF a confirmed module composition needs to change:
     gameId,
     proposalId: PREPARED_PROPOSAL.proposal.id
   }.
+  PARSE MCP_RESULT using I24.
+  IF read-back transport/parser fails, recover the same read-only call; MUST_NOT prepare another proposal.
   ASSERT MCP_RESULT.isError != true.
-  SET PROPOSAL_READBACK := MCP_RESULT.structuredContent.
+  SET PROPOSAL_READBACK := parsed payload.
   ASSERT PROPOSAL_READBACK.proposal.id == PREPARED_PROPOSAL.proposal.id.
   ASSERT PROPOSAL_READBACK.proposal.requestId == MODULE_PROPOSAL_REQUEST_ID.
   ASSERT PROPOSAL_READBACK.proposal.status == "pending".

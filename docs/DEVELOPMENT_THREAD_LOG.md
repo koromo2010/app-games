@@ -3804,3 +3804,35 @@ streaming cleanup中の`parentNode`例外が二次症状として現れる。
 
 旧T-91 checkpointのSHAは再利用せず、最新`develop`から別のtask-owned commitとして保存する。
 dev反映後はT-91 browser → T-90 → T-89 → T-26の順に実機確認する。
+
+## 2026-08-15 — AI実行ルールとSDK回復契約の再構築
+
+### 利用者からの要望
+
+- 全体指示の継ぎ足しで解析上の不確実性が正式停止へ変換され、T-105が細切れになった原因を解消する。
+- 全体指示を権限・原則へ縮小し、実行、troubleshooting、SDK wire contractをGit側の責務別正本へ分離する。
+
+### 判断
+
+- `accepted=true`はserverのaggregate verdictとして扱い、矛盾する実観測なしにclientが同じfieldを再判定しない。
+- CallToolResultは`isError`、`structuredContent`の順で読み、bindingとproposal IDのpathを固定する。
+- logical product write、control-plane write、tool invocationを分離する。同一request ID・同一意味内容の冪等replayは二件目のlogical writeへ数えない。
+- request／parser訂正、同一request IDのreconciliation、read-only復旧は真の外部blockerになるまで同じ作業内で続ける。
+- 正式resultはタスク完了、真の外部blocker、Portal owner承認待ち、利用者の明示要求へ限定する。
+
+### 実施結果
+
+- `AGENTS.md`と`docs/DEVELOPMENT_EXECUTION_RULES.md`を責務別runbookとして再編した。
+- `docs/AI_EXECUTION_TROUBLESHOOTING.md`を追加し、handshakeとproposalの固定parser・回復順を定義した。
+- ChatGPT WorkとClaude Codeのhandshake、post-handshake identity、proposal read-back契約を統一した。
+- 現行詳細仕様に残っていた旧client名とhandshake二重検証表現を訂正した。
+
+### 検証
+
+- AI実行契約のnegative testを含むfocused suite、version gate、SDK boundary gate、`git diff --check`を実行する。
+- product push、Deployment、handshake、proposal、DB／Redis／Blob writeは行わない。
+
+### 未対応・保留
+
+- local candidateは利用者の明示承認なしに`develop`へpushしない。
+- Project Instructionsの後継版は、このGit policy candidateがremote `develop`へ到達した後に有効化する。

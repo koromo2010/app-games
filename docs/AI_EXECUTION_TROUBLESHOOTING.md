@@ -34,7 +34,7 @@ IF transport_or_rpc_error:
   classify the error; do not inspect a success payload.
 
 IF result.isError == true:
-  classify the tool error before reading success fields.
+  classify the tool error before reading success fields; do not run success assertions.
 
 payload := result.structuredContent
 
@@ -44,6 +44,8 @@ IF payload is absent AND result.content contains exactly one JSON text item:
 IF payload is still not an object:
   inspect schema/source; do not guess field paths.
 ```
+
+このparserで保持済みresponseを再解析できる間はtoolを再callしない。transport結果が失われている場合だけ、各節の冪等回復規則へ進む。
 
 canonical pathは次のとおり。
 
@@ -66,13 +68,13 @@ handshake requestは`docs/SDK_HANDSHAKE.md`の必須fieldをすべて送る。AI
 
 `accepted`はserverのaggregate verdictである。`accepted=true`は、requestに含まれるprotocol、handshake version、authoring client、environment、canonical MCP URL、onboarding profile、Platform／SDK／contract version、required capabilitiesが一致したことを表す。
 
-- `accepted=false`: `problems[*].code`を読み、request訂正、tool更新、真の互換性blockerを区別する。
+- `accepted=false`: `problems[*].code`を読み、request／parser訂正、tool更新、真の互換性blockerを区別する。現在のDownloadMeとsourceから期待値を訂正できる場合は同じ作業内で再handshakeし、別environment、旧版、非公式mirrorへは切り替えない。
 - `accepted=true`: 同じ条件をclient側で再判定して否定しない。矛盾する別の実観測がない限り「acceptedだがidentity未確認」としない。
 - accepted responseのbindingは`structuredContent.environmentBinding`から一度だけ取得し、同一tool flowの変数に保持する。
 - bindingが解析上見つからない場合は固定parserとsourceを確認する。実際に欠落していれば、個別指示で禁止されていない限りhandshakeを再取得できる。
 - handshake response自体にpost-handshake用`sdkIdentity`を要求しない。
 
-handshakeを再実行する場合も、盲目的に同じparserを反復せず、先にrequestとresponse contractを訂正する。個別指示がhandshake回数を明示制限している場合はその制限を優先する。
+handshakeを再実行する場合も、盲目的に同じparserを反復せず、先にrequestとresponse contractを訂正する。`accepted=false`そのものは正式resultのterminal boundaryではない。訂正不能な真の互換性不一致、接続不能、または個別指示が明示したhandshake invocation上限に到達した場合だけ停止する。
 
 ## 5. Bindingとpost-handshake identity
 
@@ -98,6 +100,15 @@ field path不明、wrapper誤認、binding抽出失敗はidentity不一致では
 proposal callの結果が不明な場合は、別request IDや二件目proposalを作らない。同一request IDの冪等契約と既存proposalのread-backで照合する。validationでDB INSERT前に拒否されたことをcontractまたはread-backで確認できた場合だけproduct write 0件とする。
 
 read-back失敗は二件目proposalの根拠にならない。許可済みread-only復旧を行い、成功結果を確認できるまでwriteを増やさない。
+
+proposal IDが取得できない場合、`get_game_module_profile_proposal`をrequest IDで呼ばない。同toolはproposal IDを要求する。回復順は次のとおり。
+
+1. 最初のCallToolResultを固定parserで再解析する。
+2. transport outcomeが不明でproposal IDもない場合だけ、freeze済みの同一request ID・同一payloadで`prepare_module_profile_update`を冪等replayする。serverは既存proposalがあれば同じproposalを返す。このreplayは二件目のlogical product writeへ数えない。
+3. `structuredContent.proposal.id`を取得後、`get_game_module_profile_proposal`でread-backする。
+4. 明示されたtool invocation上限へ到達している場合、または同一payloadを再構成できない場合はreplayせず`WRITE_OUTCOME_UNKNOWN`で停止する。
+
+永続化前validationで拒否された場合、製品上の意図を変えないserialization／schema表現の訂正だけは、同じrequest IDで同じ作業内に行える。module decision、対象、理由等の意味内容が変わる訂正は新しいproduct判断なので、現在の明示許可がなければ行わない。
 
 ## 7. Browser・Vercel・証拠
 

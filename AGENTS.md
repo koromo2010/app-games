@@ -39,7 +39,7 @@
 - 現在状態と資料索引: `docs/README.md`、`docs/CURRENT_STATE.md`
 - 現行仕様と主要ファイル: `docs/DEVELOPMENT_HANDOFF.md`
 - 既知の不具合: `docs/KNOWN_ISSUES.md`
-- SDK／Runtime境界: `docs/CHATGPT_GAME_SDK.md`、`docs/SDK_HANDSHAKE.md`、`sdk/entry/START_GAME_FIELDS.md`、`docs/EXTERNAL_GAME_PACKAGE.md`
+- SDK／Runtime境界: `docs/CHATGPT_GAME_SDK.md`、`docs/SDK_HANDSHAKE.md`、`sdk/entry/START_GAME_FIELDS.md`、`sdk/entry/START_CLAUDE_CODE.md`、`docs/EXTERNAL_GAME_PACKAGE.md`
 - モジュール境界: `docs/MODULAR_GAME_ARCHITECTURE.md`、`docs/UI_ARCHITECTURE.md`
 - 外部設定: `docs/ENVIRONMENT_VARIABLES.md`
 - durableな開発判断ログ: `docs/DEVELOPMENT_LOGGING.md`

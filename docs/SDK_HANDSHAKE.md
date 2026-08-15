@@ -81,7 +81,7 @@ Portalへ送る`requiredCapabilities`はDownloadMe記載のcontrol-plane機能�
 
 `accepted=true`を受け取ったclientは、矛盾する別の実観測がない限り、同じfieldを独自parserで再判定してacceptedを覆さない。「acceptedだがidentity未確認」という中間状態を作らない。
 
-`accepted=false`では`problems[*].code`を確認し、request訂正、plugin更新、真の互換性blockerを区別する。複数の不一致は一度のresponseへまとめる。
+`accepted=false`では`problems[*].code`を確認し、request／parser訂正、plugin更新、真の互換性blockerを区別する。現在のDownloadMeとsourceから訂正できる場合は同じ作業内で再handshakeし、`accepted=false`だけを正式resultのterminal boundaryにしない。複数の不一致は一度のresponseへまとめる。
 
 ## MCP CallToolResult
 

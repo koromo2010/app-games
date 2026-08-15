@@ -45,7 +45,15 @@ TRUE_STOP_CONDITIONS
 
 ## 3. 操作と回数の数え方
 
-product writeとは、製品、利用者データ、業務状態、製品runtimeまたは外部serviceの状態を永続的に変える論理操作をいう。proposal作成もproduct writeである。
+回数は次の三種類を分けて固定する。
+
+| 種類 | 対象 |
+| --- | --- |
+| logical product write | proposal、game draft、Room、Command、package、support draft、製品DB／Redis／Blob等、製品domainの永続状態を変える一つの論理操作 |
+| control-plane write | Git ref、Deployment、Vercel、OAuth、DNS、環境変数等、開発・配備基盤の状態変更 |
+| tool invocation | MCP、HTTP、browser、CLI等を実際に呼び出したtransport attempt |
+
+proposal作成はlogical product writeである。Git push、Deployment、checkpoint保存はlogical product write件数へ含めず、それぞれ独立した許可と回数で管理する。control-plane writeや外部送信が無許可でよいという意味ではない。
 
 次はproduct write件数へ含めない。
 
@@ -55,7 +63,9 @@ product writeとは、製品、利用者データ、業務状態、製品runtime
 - 同一request IDによるread-back／冪等照合
 - checkpoint repositoryへの許可済み新規immutable記録
 
-個別指示が操作名と回数を明示した場合は、その操作へ適用する。操作名のない「最大1回」「最大1件」は、明示がなければproduct write上限とし、read-only確認、source／schema確認、parser修正、冪等照合、非product-write handshakeを制限しない。外部call回数とproduct write件数を混同しない。
+個別指示の「proposalを最大1件」「proposalを1回」は、`tool invocation`または`transport attempt`と明記されない限り、一つのlogical product writeを意味する。同じrequest ID・同じ意味内容による冪等replayとread-backは二件目のlogical product writeではない。tool invocation自体を制限する場合は、tool名、総call回数、retryを含むかを明記する。操作名のない「最大1回」「最大1件」もlogical product write上限とし、read-only確認、source／schema確認、parser修正、冪等照合、非product-write handshakeを制限しない。外部call回数、logical product write件数、control-plane write件数を混同しない。
+
+結果が不明なwriteでは、保持済みresponseを正しいparserで再解析してから、必要な場合だけ同じrequest ID・同じpayloadを冪等replayする。これは二件目のlogical product writeではないが、明示されたtool invocation上限は超えない。別request ID、意味内容を変えたpayload、別対象へのwriteは新しいlogical product writeとして扱う。
 
 validationで永続化前に拒否されたcallは、contractまたはread-backで無変更を確認できた場合だけ`WRITE_REJECTED_BEFORE_PERSISTENCE`、product write 0件とする。成否不明は`WRITE_OUTCOME_UNKNOWN`とし、新しいrequest IDや二つ目の論理writeを作らない。
 

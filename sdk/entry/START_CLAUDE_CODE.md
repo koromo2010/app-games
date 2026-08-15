@@ -33,9 +33,21 @@ If a confirmed composition must change, call
 reviewable proposal only. Check `isError` first, read the proposal ID from
 `structuredContent.proposal.id`, and call
 `get_game_module_profile_proposal` in the same tool flow with that ID and the
-same binding. Verify the requestId and pending state from the read-back, then
-follow its `reviewUrl` and wait for the owner-only Portal approval before
-treating a new revision or digest as active.
+same binding. Verify the proposal ID, requestId, pending state, exact diff,
+dependencies, impact, warnings, base revision/digest, audit,
+`activeProfileChanged=false`, and `humanApprovalRequired=true` from that
+read-back. Follow the read-back `reviewUrl` and wait for the owner-only Portal
+approval before treating a new revision or digest as active.
+
+If the prepare outcome is unknown and no proposal ID can be parsed, reparse the
+retained CallToolResult first. If the task's explicit tool-invocation limit
+allows reconciliation, replay `prepare_module_profile_update` once with the
+same frozen requestId and identical semantic payload; this is not a second
+logical product write. Never invent a new requestId. A confirmed
+pre-persistence serialization/schema error may be corrected once with the same
+requestId only when the product decision is unchanged. After obtaining the ID,
+recover read-back with `get_game_module_profile_proposal`; never create another
+proposal because read-back failed.
 
 ## Remote HTTP MCP + OAuth
 
@@ -105,9 +117,19 @@ memory. Pass it unchanged to every later SDK tool. Never decode, hand-enter,
 persist, or reuse it across a Claude session, OAuth identity, URL, or
 environment.
 
+For `accepted=false`, classify `problems[*].code`. Correct a request or parser
+that the current profile and source resolve, then repeat the handshake in the
+same tool flow when the explicit invocation limit permits. Do not switch
+environment, release, or mirror. Halt only for a true unresolved compatibility,
+connection, or explicit invocation-limit blocker. When `structuredContent` is
+absent, parse exactly one JSON text content item once as the compatibility
+fallback; never search guessed wrapper paths.
+
 Call `get_authoring_profile` with `clientId="claude-code"` and that binding.
 Follow the returned common contract. Verify `structuredContent.sdkIdentity` in
-every post-handshake response; halt on any semantic environment mismatch.
+every post-handshake response; halt before further read or write if its target
+environment, canonical MCP URL, release, or onboarding profile mismatches the
+fixed target.
 
 ## Claude Code execution profile
 
