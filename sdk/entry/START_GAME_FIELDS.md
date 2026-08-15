@@ -87,7 +87,7 @@ I19 MUST verify sdkIdentity.targetEnvironment, canonicalMcpUrl, release, and onb
 I20 MUST_NOT treat MCP Connected, tool discovery, URL issuance, shared Shell rendering, local HTML, or package candidate save as completion.
 I21 MUST resolve and freeze the human-confirmed module contract before prototype implementation, then require explicit human approval of the exact published prototypeRevision before formal packaging; AI self-approval is forbidden.
 I22 MUST use publish_mock and publish_game_source_package as the server-side Node-free path when local Node.js is unavailable; MUST_NOT ask a general creator to install Node.js, npm, Git, or Vercel CLI as the default path.
-I23 MUST use prepare_game_module_profile_update only to save a proposal; MUST_NOT treat it as active profile mutation, and MUST wait for the owner-only Portal review/approval URL before continuing.
+I23 MUST use prepare_module_profile_update only to save a proposal; MUST_NOT treat it as active profile mutation, and MUST wait for the owner-only Portal review/approval URL before continuing.
 ```
 
 ## P0::TERMINAL_PREDICATES
@@ -405,7 +405,7 @@ ASSERT response.sdkPackage.version == C0.release.sdkPackage.
 ASSERT every response.requiredModuleIds item has requiredModules contract data.
 
 IF a confirmed module composition needs to change:
-  CALL prepare_game_module_profile_update WITH the current specification, module decisions, and a stable requestId.
+  CALL prepare_module_profile_update WITH the current specification, module decisions, and a stable requestId.
   EMIT response.reviewUrl and stop for the creator's Portal review.
   MUST_NOT call any tool that assumes the proposed profile is active until the owner approves the proposal.
 FREEZE MODULE_CONTRACT := {

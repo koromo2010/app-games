@@ -6,7 +6,6 @@ const read = (path: string) => readFileSync(path, "utf8");
 
 test("module profile proposal flow exposes preparation and readback but no AI approval", () => {
   const route = read("apps/sdk-portal/app/api/mcp/route.ts");
-  assert.match(route, /name: "prepare_game_module_profile_update"/);
   assert.match(route, /name: "prepare_module_profile_update"/);
   assert.match(route, /name: "get_game_module_profile_proposal"/);
   assert.match(route, /activeProfileChanged: false/);
@@ -15,11 +14,20 @@ test("module profile proposal flow exposes preparation and readback but no AI ap
   assert.doesNotMatch(route, /name: "approve_game_module_profile_proposal"/);
 });
 
-test("short proposal alias shares the canonical contract, binding, scope, and handler", () => {
+test("short proposal name is published once while the legacy name remains accepted", () => {
   const route = read("apps/sdk-portal/app/api/mcp/route.ts");
+  const publishedTools = route.slice(
+    route.indexOf("const baseTools = ["),
+    route.indexOf("type ToolDefinition"),
+  );
   assert.match(route, /const prepareModuleProfileUpdateToolDefinition =/);
-  assert.match(route, /name: "prepare_game_module_profile_update", \.\.\.prepareModuleProfileUpdateToolDefinition/);
-  assert.match(route, /name: "prepare_module_profile_update", \.\.\.prepareModuleProfileUpdateToolDefinition/);
+  assert.match(route, /const prepareModuleProfileUpdateToolNames = new Set\(\[\s*"prepare_game_module_profile_update",\s*"prepare_module_profile_update",/);
+  assert.doesNotMatch(publishedTools, /name: "prepare_game_module_profile_update"/);
+  assert.match(publishedTools, /name: "prepare_module_profile_update", \.\.\.prepareModuleProfileUpdateToolDefinition/);
+  assert.equal(
+    [...publishedTools.matchAll(/name: "prepare_(?:game_)?module_profile_update"/g)].length,
+    1,
+  );
   assert.match(route, /prepareModuleProfileUpdateToolNames\.has\(name\)/);
   assert.match(route, /\.\.\.prepareModuleProfileUpdateToolNames/);
   assert.match(route, /environmentBinding: environmentBindingSchema/);

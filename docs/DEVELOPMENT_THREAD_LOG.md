@@ -3758,6 +3758,34 @@ active HEADは基準SHAのままで、active commit、製品`origin` push、PR�
 - ChatGPTプロジェクト設定への短縮版反映はGit外の操作として扱う。
 - 今回はpushおよびVercel Deploymentを行わない。
 
+## 2026-08-14 — T-105 MCP短名の単一公開とlegacy受理互換
+
+### 利用者からの要望
+
+- metadata Refresh後も`prepare_module_profile_update`が接続面へ現れない原因を、runtime writeを行わずlocalで切り分ける。
+- 短名を利用可能にする修正候補を検証し、push／Deployment前のcheckpointとして保存する。
+
+### 判断
+
+- MCPのraw registryがlegacy名と短名を同じtitle・description・schemaで同時公開した結果、接続面では20件中19件だけが投影され、legacy相当だけが残っていた。
+- 新規metadataには短名だけを1件公開する。旧`prepare_game_module_profile_update`はcached client互換のdispatch・scope判定で引き続き受理し、公開重複だけを除去する。
+- 制作ガイド、Help、release profileは公開名`prepare_module_profile_update`へ統一する。
+
+### 実施結果
+
+- `baseTools`のproposal prepare公開を短名1件へ限定した。
+- legacy名と短名を受理する共通handler、environment binding、`sdk:mock` scope、proposal semanticsは変更していない。
+- raw registryの単一公開とauthoring guidanceの短名統一を回帰testへ追加した。
+
+### 検証
+
+- focused test、repository-wide test、lint、buildをlocal candidateで実行する。
+- handshake、proposal、approval、DB write、product push、Deployment、main／production操作は行わない。
+
+### 未対応・保留
+
+- dev反映と、Refresh後の接続面で短名が1件だけ表示されることのruntime確認は別途承認後に行う。
+
 ## 2026-08-04 — T-91 Preview shell hydration root fix reconstruction
 
 ### 原因

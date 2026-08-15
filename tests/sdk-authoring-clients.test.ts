@@ -47,6 +47,19 @@ test("every post-handshake MCP tool is environment-bound and authoring writes re
   assert.match(route, /includes\("sdk:mock"\)/);
 });
 
+test("authoring guidance consistently uses the published short module profile tool name", () => {
+  const guidance = [
+    "sdk/entry/START_CLAUDE_CODE.md",
+    "sdk/entry/START_GAME_FIELDS.md",
+    "packages/game-sdk/README.md",
+    "apps/sdk-portal/lib/sdk-help.ts",
+    "apps/sdk-portal/lib/sdk-release-profile.ts",
+    "apps/sdk-portal/public/GameFieldsDownloadMe-ver17.md",
+  ].map(read).join("\n");
+  assert.match(guidance, /prepare_module_profile_update/);
+  assert.doesNotMatch(guidance, /prepare_game_module_profile_update/);
+});
+
 test("development identity is visibly and semantically TEST ONLY", () => {
   const profiles = JSON.parse(read("config/sdk-release-profiles.json"));
   assert.equal(
