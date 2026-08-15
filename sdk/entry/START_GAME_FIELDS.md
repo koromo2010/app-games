@@ -83,11 +83,12 @@ I15 MUST use returned URLs; MUST_NOT synthesize SDK URLs.
 I16 MUST define bilingual standardResult.presentation.reason, no more than 3 share-safe highlights, and a participant-safe playLog for every result transition; MUST_NOT expose machine reason codes, prompts, internal IDs, undisclosed secrets, or non-consenting participant names as human-facing result text.
 I17 MUST_NOT submit a new support report or reply directly; prepare_support_report and prepare_support_reply create drafts only, and the human creator MUST review and approve them in Portal.
 I18 MUST keep the opaque environmentBinding returned by accepted handshake in tool-flow memory and pass it unchanged to every later SDK tool; MUST_NOT decode, hand-enter, persist, or reuse it across a chat, OAuth identity, client, origin, or environment.
-I19 MUST verify sdkIdentity.targetEnvironment, canonicalMcpUrl, release, and onboardingProfileId on every SDK response; mismatch means HALT before further read or write.
+I19 MUST verify sdkIdentity.targetEnvironment, canonicalMcpUrl, release, and onboardingProfileId on every post-handshake SDK response; mismatch means HALT before further read or write.
 I20 MUST_NOT treat MCP Connected, tool discovery, URL issuance, shared Shell rendering, local HTML, or package candidate save as completion.
 I21 MUST resolve and freeze the human-confirmed module contract before prototype implementation, then require explicit human approval of the exact published prototypeRevision before formal packaging; AI self-approval is forbidden.
 I22 MUST use publish_mock and publish_game_source_package as the server-side Node-free path when local Node.js is unavailable; MUST_NOT ask a general creator to install Node.js, npm, Git, or Vercel CLI as the default path.
-I23 MUST use prepare_module_profile_update only to save a proposal; MUST_NOT treat it as active profile mutation, and MUST wait for the owner-only Portal review/approval URL before continuing.
+I23 MUST use prepare_module_profile_update only to save a proposal; MUST read it back with get_game_module_profile_proposal in the same tool flow before stopping; MUST_NOT treat it as active profile mutation, and MUST wait for the owner-only Portal review/approval URL before continuing.
+I24 MUST parse MCP CallToolResult by checking isError first and then using structuredContent; canonical paths are structuredContent.environmentBinding and structuredContent.proposal.id; MUST_NOT search guessed aliases.
 ```
 
 ## P0::TERMINAL_PREDICATES
@@ -198,32 +199,37 @@ CALL get_sdk_handshake WITH:
   ]
 }
 
-ASSERT response.accepted == true.
-ASSERT response.problems.length == 0.
-ASSERT response.environment == C0.release.environment.
-ASSERT response.release matches C0.release.
-ASSERT response.endpoints.portal == C0.transport.portal.
-ASSERT response.endpoints.mcp == C0.transport.mcp.
-ASSERT response.onboardingProfileId == C0.onboardingProfileId.
-ASSERT isNonEmpty(response.environmentBinding).
+ASSERT MCP_RESULT.isError != true.
+SET HANDSHAKE := MCP_RESULT.structuredContent.
+ASSERT HANDSHAKE is object.
 
-ON_ASSERT_FAILURE:
-  EMIT C1.HANDSHAKE_FAILURE_PREFIX + join(response.problems[*].code);
+IF HANDSHAKE.accepted != true:
+  EMIT C1.HANDSHAKE_FAILURE_PREFIX + join(HANDSHAKE.problems[*].code);
   HALT.
 
-ON_ASSERT_SUCCESS:
-  KEEP response.environmentBinding in tool-flow memory as ENVIRONMENT_BINDING.
-  CALL get_authoring_profile WITH {
-    "clientId": "chatgpt-work",
-    "environmentBinding": ENVIRONMENT_BINDING
-  }.
-  ASSERT response.client.displayName == "ChatGPT Work".
-  ASSERT response.identity matches C0 environment, mcp, release, and onboardingProfileId.
-  GOTO S2.
+ASSERT isNonEmpty(HANDSHAKE.environmentBinding).
+KEEP HANDSHAKE.environmentBinding in tool-flow memory as ENVIRONMENT_BINDING.
+
+# accepted=true is the aggregate verdict for client, environment, canonical MCP,
+# onboarding profile, release, contract, and required capabilities. Do not
+# independently re-parse those same fields to overturn the accepted verdict.
+
+CALL get_authoring_profile WITH {
+  "clientId": "chatgpt-work",
+  "environmentBinding": ENVIRONMENT_BINDING
+}.
+ASSERT MCP_RESULT.isError != true.
+SET PROFILE := MCP_RESULT.structuredContent.
+ASSERT PROFILE.client.displayName == "ChatGPT Work".
+ASSERT PROFILE.sdkIdentity matches C0 environment, mcp, release, and onboardingProfileId.
+GOTO S2.
 ```
 
 Every `CALL` after `get_sdk_handshake` in this contract includes
 `environmentBinding: ENVIRONMENT_BINDING`, even where omitted below for readability.
+Every `CALL` returns `MCP_RESULT`; check `MCP_RESULT.isError` before success
+fields and use `MCP_RESULT.structuredContent` as the payload. The name
+`response` below means that parsed payload, never the CallToolResult wrapper.
 
 ## S2::CREATOR_ENVIRONMENT_RESOLUTION
 
@@ -405,9 +411,27 @@ ASSERT response.sdkPackage.version == C0.release.sdkPackage.
 ASSERT every response.requiredModuleIds item has requiredModules contract data.
 
 IF a confirmed module composition needs to change:
-  CALL prepare_module_profile_update WITH the current specification, module decisions, and a stable requestId.
-  EMIT response.reviewUrl and stop for the creator's Portal review.
+  FREEZE MODULE_PROPOSAL_REQUEST_ID := stable requestId.
+  CALL prepare_module_profile_update WITH the current specification, module decisions, and MODULE_PROPOSAL_REQUEST_ID.
+  ASSERT MCP_RESULT.isError != true.
+  SET PREPARED_PROPOSAL := MCP_RESULT.structuredContent.
+  ASSERT isNonEmpty(PREPARED_PROPOSAL.proposal.id).
+  ASSERT PREPARED_PROPOSAL.proposal.requestId == MODULE_PROPOSAL_REQUEST_ID.
+  CALL get_game_module_profile_proposal WITH {
+    slug: selected.slug,
+    gameId,
+    proposalId: PREPARED_PROPOSAL.proposal.id
+  }.
+  ASSERT MCP_RESULT.isError != true.
+  SET PROPOSAL_READBACK := MCP_RESULT.structuredContent.
+  ASSERT PROPOSAL_READBACK.proposal.id == PREPARED_PROPOSAL.proposal.id.
+  ASSERT PROPOSAL_READBACK.proposal.requestId == MODULE_PROPOSAL_REQUEST_ID.
+  ASSERT PROPOSAL_READBACK.proposal.status == "pending".
+  ASSERT PROPOSAL_READBACK.activeProfileChanged == false.
+  ASSERT PROPOSAL_READBACK.humanApprovalRequired == true.
+  EMIT PROPOSAL_READBACK exact diff, dependencies, impact, warnings, base identity, audit, and reviewUrl.
   MUST_NOT call any tool that assumes the proposed profile is active until the owner approves the proposal.
+  HALT for the creator's Portal review.
 FREEZE MODULE_CONTRACT := {
   environment,
   moduleProfileRevision,

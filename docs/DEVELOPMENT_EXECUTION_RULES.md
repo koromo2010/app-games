@@ -1,154 +1,176 @@
 # 開発実行ルール
 
-この文書は、`app-games`での実装、検証、保存、Git操作、Deployment、証拠判定の正本である。スレッドの役割、TODO採番、指示書・結果書の管理はChatGPTプロジェクト側の運用ルールに置き、Gitへ重複させない。
+この文書は、`koromo2010/app-games`での実装、検証、保存、Git操作、Deployment、証拠、終了判定の共通runbookである。権限を新たに与える文書ではない。tool、schema、response解析の復旧手順は`AI_EXECUTION_TROUBLESHOOTING.md`を正本とする。
 
-## 1. 指示の優先順位
+## 1. 適用関係
 
-適用順は次のとおり。
+文書を一列の優先順位で競合させず、判断対象ごとに正本を分ける。
 
-1. 現在の利用者による個別指示と許可
-2. タスク固有の指示書
-3. 作業種別に該当する現行資料
-4. `AGENTS.md`と本書の常設ルール
+| 判断対象 | 正本 |
+| --- | --- |
+| 作業範囲・権限 | 利用者の現在の明示指示・承認とChatGPTプロジェクト全体指示 |
+| 目的・対象・product write上限・禁止・成功／停止条件 | 最新のタスク固有指示 |
+| field・response path・aggregate verdict・冪等性 | 現行source、schema、SDK等のinterface／protocol正本 |
+| 実行・検証・保存・証拠手順 | `AGENTS.md`と本書 |
+| 解析復旧 | `AI_EXECUTION_TROUBLESHOOTING.md` |
 
-ただし、main／production Deployment、秘密情報、破壊的な外部writeの安全境界を、曖昧な文言や過去の許可で解除してはならない。矛盾がある場合は、推測で進めず対象と許可範囲を確認する。
+- タスク指示は許可範囲を狭められるが、曖昧な表現や過去の承認から権限を広げない。
+- タスク指示の略記や古いfield名から、現行interfaceと異なる仕様を作らない。
+- 旧指示、旧result、会話ログは履歴であり、最新版と累積適用しない。
+- 同じ判断対象の真の矛盾だけを利用者へ確認する。解析で解消できる差は同じ作業内で直す。
 
 ## 2. 作業開始ゲート
 
-開始時に次を確認する。
+開始時に次を固定する。
 
 ```text
-TASK:
-TARGET:
-REPOSITORY:
-WORKTREE:
-BRANCH:
-HEAD:
-ALLOWED:
-NOT_ALLOWED:
-EXIT_CONDITION:
+TASK / TARGET
+REPOSITORY / REMOTE
+WORKTREE / BRANCH
+BASE / TARGET_COMMIT
+POLICY_COMMIT
+SEMANTIC_ENVIRONMENT
+ALLOWED_PRODUCT_WRITES
+FORBIDDEN_EFFECTS
+SUCCESS_CONDITION
+TRUE_STOP_CONDITIONS
 ```
 
-- 既存のdirty差分は所有者と対象を確認し、無関係な変更を編集、stage、commitしない。
-- target commit、package revision、Project、semantic environmentが指定されている場合は開始前に一致を確認する。
-- 認証、Cookie、プラグイン、ブラウザsessionの有無を推測しない。利用可能なread-only preflightで実状態を確認する。
-- 人間操作が必要な場合は、service、screen、action、success condition、resume pointを一度に示す。
+- repository、remote、PROJECT_ID、branch、baseが不一致ならwriteせず、read-onlyで正本を再確認する。訂正不能な場合だけ`PROJECT_MISMATCH`または`IDENTITY_MISMATCH`で停止する。
+- dirty差分は利用者の所有物として保持し、無関係な変更を編集、stage、commitしない。
+- 認証、Cookie、plugin、browser session、Deploymentを推測しない。
+- 検証前に対象identity、必要な証拠、成功条件を固定し、失敗後に基準を緩めない。
 
-## 3. 実装原則
+指定ファイルが見つからない場合は、添付を求める前に、対象branchのcanonical Git、checkpoint正本、共有済み領域、Library、current pointerの順で探索する。取得不能が現在の依存点になった場合だけ、正確なファイル名と探索済み範囲を示して依頼する。
 
-- 最初に再現条件と根本原因を特定する。workaroundしか安全に実施できない場合は、暫定であること、残る根本原因、恒久対応の条件を明記する。
-- 共通化できる挙動は既存のdomain、Runtime、adapter、componentへ置き、ゲーム・画面・環境ごとの複製を増やさない。
-- local、mock、isolated Preview、formal Preview、dev、productionを別の検証面として扱い、相互代用しない。
-- 外部writeを伴う診断は、同等のread-onlyまたはlocal再現で足りないことを確認してから許可を求める。
+## 3. 操作と回数の数え方
 
-## 4. 検証
+product writeとは、製品、利用者データ、業務状態、製品runtimeまたは外部serviceの状態を永続的に変える論理操作をいう。proposal作成もproduct writeである。
 
-変更後は、影響に応じて次の順で実行する。
+次はproduct write件数へ含めない。
 
-1. 根本原因を直接覆うfocused test
-2. 変更境界の回帰テスト
-3. lint、typecheck、build等のrepository gate
-4. UIまたはruntimeを変えた場合の実操作シナリオ
+- read-only確認
+- local file変更、test、local commit
+- 契約上product writeを行わないhandshake
+- 同一request IDによるread-back／冪等照合
+- checkpoint repositoryへの許可済み新規immutable記録
 
-標準コマンドは`npm run lint`、`npm test`、`npm run build`だが、文書だけの変更では`git diff --check`等の内容に見合う検証でよい。依存不足や既存baseline failureは対象変更の失敗と混同せず、`NOT_RUN`、`BLOCKED`、`BASELINE_FAILURE`を区別する。
+個別指示が操作名と回数を明示した場合は、その操作へ適用する。操作名のない「最大1回」「最大1件」は、明示がなければproduct write上限とし、read-only確認、source／schema確認、parser修正、冪等照合、非product-write handshakeを制限しない。外部call回数とproduct write件数を混同しない。
 
-不具合修正では、可能な限り実際の利用者導線を再現する恒久テストを追加する。unit testがGreenでも、対象runtimeシナリオを代用したことにはならない。
+validationで永続化前に拒否されたcallは、contractまたはread-backで無変更を確認できた場合だけ`WRITE_REJECTED_BEFORE_PERSISTENCE`、product write 0件とする。成否不明は`WRITE_OUTCOME_UNKNOWN`とし、新しいrequest IDや二つ目の論理writeを作らない。
 
-## 5. 成果保存
+## 4. 実行継続と停止
 
-保存強度は作業内容で決める。
+許可済み範囲では、タスクの成功条件または真の停止条件まで連続して進める。local commit、checkpoint、承認済みpush、`READY`、tool探索、parser修正、read-only確認の完了だけで作業を分割しない。
+
+tool名、schema、response path、parser、binding、許可済みread-only経路の見落としは、`AI_EXECUTION_TROUBLESHOOTING.md`に従い同じ作業内で修正する。途中経過は共有してよいが、許可済みの次工程を止めない。
+
+正式に停止するのは次の場合に限る。
+
+- 未許可の外部write、push、Deployment、production反映が必要
+- project、repository、remote、branch、commit、environmentの真の不一致から復帰不能
+- 利用者判断で結果が大きく変わる仕様分岐
+- 許可範囲を超える修正が必要
+- 認証、権限、接続、外部service障害で継続不能
+- Portal owner承認など利用者専用操作が現在の依存点
+- タスク指示が対象操作とともに明示した停止条件へ到達
+
+通常のGit push承認待ちは実行停止点にはなり得るが、それだけで正式resultを作るterminal boundaryにはしない。
+
+## 5. 実装と検証
+
+- 再現条件、根本原因、影響範囲を確認し、共通境界で恒久修正する。
+- 外部writeを伴う診断は、read-onlyまたはlocal再現で足りないことを確認してから承認を求める。
+- local、mock、isolated Preview、formal Preview、dev、productionを相互代用しない。
+- 変更後は、focused test、変更境界の回帰、repository gate、必要なruntimeシナリオの順で検証する。
+- 文書・契約変更では、内容を固定するcontract testと`git diff --check`を最低限実行する。
+- `NOT_RUN`、`BLOCKED`、`BASELINE_FAILURE`、対象変更の失敗を区別する。
+
+runtime／browser項目は`VALUE_VERIFIABLE`、`INTERACTION_REQUIRED`、`VISUAL_REQUIRED`へ分類する。値で判定できる項目へ不要なスクリーンショットを要求せず、視覚項目を値だけでPASSにしない。一つのbrowser経路の失敗だけで製品不具合または全面的な`BROWSER_UNAVAILABLE`と判定しない。
+
+同種の検査でDevTools操作やスクリーンショットが反復する場合は、秘密を含まない診断表示、revision表示、計測hook、read-only endpoint等の製品改善候補へ登録する。
+
+## 6. Git・Deployment・外部write
+
+- local修正、test、task-owned local commitは個別禁止がなければ進めてよい。
+- 製品repositoryへのpush／ref更新は、Deploymentの有無にかかわらず、repository、ref、更新前後のcommit、force有無を特定した利用者の明示承認を必要とする。
+- Deploymentが起こり得る場合はProject、environment、影響も承認対象に含める。
+- dev許可をmain／productionへ流用しない。main反映とproduction Deploymentは別に明示承認を得る。
+- force push、履歴改変、手動Redeploy、DB／Redis／Blob／OAuth／DNS／環境変数writeは、対象を特定した個別の明示承認なしに行わない。
+- checkpoint repositoryの許可済み保存は製品pushの承認として流用しない。
+
+## 7. Vercelと製品runtime
+
+ログイン、認証情報、Cookie、認証済みsessionを使わず、公に取得できるVercel情報はread-only確認してよい。公開Deployment状態、URL、identity、対応commit、時刻、HTTP、header、revision、公開metadata等を含む。
+
+匿名Vercel証拠には、取得経路、対象DeploymentまたはURL、identity、取得時刻を記録する。Vercel未ログインだけを理由に`HOLD`しない。
+
+次は利用者専用とする。
+
+- Vercelへのログイン
+- 認証済みsession、Cookie、password、MFA、tokenの取得・使用
+- 認証を要するDashboard、connector、API、CLIによる閲覧・変更
+- Redeploy、Promote、Rollback、Cancel等のcontrol plane操作
+
+認証要求へ到達したら匿名確認を終了する。認証済み操作または匿名では取得不能な情報が現在の依存点の場合だけ`VERCEL_USER_ACTION_REQUIRED`とし、対象、画面、操作、禁止事項、成功条件、返却する非秘密情報、resume pointを一度に示す。秘密情報を貼らせない。
+
+`game-fields.com`、dev／preview／SDK、対象Deploymentの製品runtimeはVercel control planeではなく、作業スレで検査してよい。
+
+## 8. 証拠と利用者操作
+
+test、CI、Deployment、runtimeは、固定したrepository、remote、branch、commit、tree、Project、environment、revision、対象ID等と一致する場合だけ採用する。
+
+- 別commitのCI、build skip、ignored build、`CANCELED`を対象修正のPASSにしない。
+- `READY`はDeployment完了でありruntime PASSではない。
+- field pathやparserが不明な状態をidentity不一致と断定しない。
+- 真のidentity不一致は証拠として不採用とし、そのidentityのままwriteしない。read-onlyで正しい対象へ復帰できるなら続行する。
+
+利用者へ操作を依頼する前に、同一対象・surfaceの最新状態を許可済みread-onlyで確認する。
+
+- `REQUIREMENT_SATISFIED`: 条件充足済み。再依頼せず続行する。
+- `USER_ACTION_REQUIRED`: 利用者専用操作が今必要と実観測できた場合だけ依頼する。
+- `STATE_UNKNOWN`: 証拠不足。未完了と推測せず、再取得または別の許可済み経路を確認する。
+
+利用者から返却された値は再利用し、同じ操作・情報を再要求しない。`GPT_OBSERVED`、`USER_OBSERVED`、`NOT_OBSERVED`を区別する。
+
+`USER_ACTION_REQUIRED`では依頼を小出しにせず、同一surface・identity・許可範囲で連続できる操作を一つの実行シートにまとめる。対象environment／URL、目的、発生するwriteと上限、実行前状態、手順、成功条件、即時停止条件、返却する非秘密情報、共有禁止の秘密情報、resume pointを含める。途中結果で未承認writeへ分岐する場合は、その地点を停止条件とする。
+
+## 9. 保存レベル
 
 | Level | 対象 | 必須保存 |
 | --- | --- | --- |
-| L1 | 調査、相談、変更なし | 作業結果の報告のみ |
-| L2 | 通常の製品コード・正本文書変更 | 自分の変更だけlocal checkpoint commit＋検証 |
-| L3 | migration、認証、重要基盤、復元困難な一時成果 | L2＋個別指定のbundle、closure、耐久保存 |
+| L1 | 調査、相談、変更なし | チャット報告。明示要求がなければ正式result不要 |
+| L2 | 通常の製品コード・正本文書変更 | 最終candidateを自分の変更だけlocal commit＋検証。remote未到達のままturnを終える場合は下記耐久checkpoint |
+| L3 | migration、認証、重要基盤、復元困難な成果 | L2＋成果確定時点でbundle、manifest、fresh restore、耐久保存 |
 
-次は原則としてGit checkpoint対象外とする。
+内部retryや中間candidateごとにbundleを作らない。remote未到達の最終task-owned commitを保持して、turn終了、承認待ち、利用者操作待ち、スレ移行、workspace整理、長時間停止、別タスク移行へ進む前に次を1回行う。
 
-- 調査・分析だけ
-- TODO指示書、監督結果、handoff等の運用Markdownだけ
-- コードも正本文書も変更していない作業
-- 個別指示が`NO COMMIT`の作業
+1. repository、remote、branch、base、commit、tree、parent、変更ファイルを固定する。
+2. 必要objectを含むbundle等を承認済み耐久領域へ保存し、場所、size、SHA-256、identityをmanifestへ記録する。
+3. 元workspaceと別の空領域からfresh restoreし、commit、tree、parent、差分、必要objectを照合する。
+4. artifact、manifest、復元証拠をcheckpoint正本へ新規immutable保存し、双方をread-backした場合だけ`CHECKPOINT_SAVED`とする。
 
-bundle、immutable tag、object closure、remote read-back、追加保存は毎回行わない。scratch消失リスク、通常リポジトリにないGit object、L3指定がある場合だけ実施する。保存できなかった成果は消失と断定せず、`UNSAVED / AT RISK`として実在場所と復元可能性を報告する。
+許可済みpushで同一turnに正本remoteへ到達した場合は、その到達確認を耐久保存とできる。未許可branch、tag、pushをcheckpoint目的で作らない。保存不能時は`UNSAVED / AT RISK`として所在地と復元可能性を示す。
 
-## 6. Push・Deployment許可
+再開時はremoteまたは耐久artifactから復元し、固定identityを再照合する。commitを再構築した場合は新しいidentityとして扱い、旧commitの承認、test、CI、Deployment、runtime証拠を流用しない。
 
-- ローカル修正、テスト、task-owned local commitは、個別禁止がなければ進めてよい。
-- Git push自体ではなく、Vercel Deploymentが起こり得るかを許可境界とする。
-- Deploymentが起こり得るpush、ref更新、Redeploy、設定変更は、実行前に対象Projectと環境を示して許可を得る。
-- devは、1回または指定Project単位の明示許可後、同一修正のDeployment、build log、runtime確認まで進めてよい。
-- main反映とproduction Deploymentはdevとは別の明示許可を必要とする。
-- 過去の許可、Vercel表示上の`Production`、Deploymentされないだろうという推測を許可根拠にしない。
-- force push、履歴改変、手動Redeploy、DB／Redis／Blob／OAuth／DNS／環境変数writeは、個別の明示許可と対象特定なしに行わない。
+## 10. 正式result
 
+正式result Markdownを作るterminal boundaryは次に限定する。
 
-### Vercel control planeの操作主体
+- 追跡対象TODOまたは実装タスク全体の成功条件を満たした
+- 許可済み作業を尽くした真の外部blocker
+- proposal等がPortal owner承認待ちとなり、そのturnを終了する
+- 利用者が正式報告を明示要求した
 
-- Vercelのcontrol plane操作は利用者専用とする。read-only／writeを問わず、AIはCloud Browser、connector、公式API、CLIその他の経路でVercelへアクセス・確認・操作しない。ログイン、再認証、OAuth、MFA、Team切替、Project、Deployment、log、設定、Environment Variable、Domain、DNS、Storage等を含む。
-- 個別タスクの指示、過去の承認、dev／production Phaseの承認によっても、AIによるVercel control plane操作は許可されない。
-- Vercel側の確認または操作が実際に必要になった時点で、`VERCEL_USER_ACTION_REQUIRED / WAITING_FOR_USER_RESULT`として、対象service／Team／Project、画面、操作、禁止事項、成功条件、必要な証拠、再開点を一度に提示する。結果受領後は、残る許可済み作業を再開する。
-- この方針だけを理由に、Vercel依存点へ到達する前から`HOLD`または`SAFE STOP`にしない。local作業、テスト、許可済みGit操作その他の非Vercel作業は継続する。
-- 明示承認済みのGit pushは、Vercelの自動Deploymentを発生させ得る場合でもGit操作として実施できる。ただし、そのDeployment影響を含む事前承認を必要とし、AIはVercel側の状態確認・log確認・Redeploy等を行わない。
-- デプロイ済みのGame Fields製品runtime URLをCloud Browserで検査することは許可されたruntime検証であり、Vercel control plane操作とは区別する。
+相談、分析、個別指示、内部phase、local commit、checkpoint、通常のpush承認待ち、承認済みpush、`READY`、tool探索、schema／response path確認、parser修正、read-only retry、非product-write handshake、同一request IDの冪等照合は、それだけではterminal boundaryではない。
 
-## 7. 証拠identity
+正式resultの保存先は`koromo2010/app-games-checkpoints`、branch `ops/game-fields-supervisor-records-20260803`、`docs/gpt-save/`とする。既存pathを更新せず、record commit、blob SHA、pathと内容のremote read-backを確認する。保存不能時は`RESULT_RECORD_UNSAVED / AT RISK`とする。
 
-CI、test、Deployment、runtime確認は、対象identityが一致した場合だけ採用する。該当する項目を最低限確認する。
+resultには、受領指示、実施範囲、状態、変更、commit／tree、検証、push・Deployment・外部write件数、blocker、未完了、次操作を含める。追跡対象TODOの既定名は`Game-Fields-T-<number>-result-v<NNN>-<YYYYMMDD>.md`とする。
 
-```text
-repository
-branch
-targetCommit
-tree
-vercelProject
-semanticEnvironment
-deploymentId / deploymentUrl
-packageRevision
-roomCode / testScenarioId
-```
+## 11. 状態表示
 
-- target commitが違うCI Greenは対象修正の証拠にしない。
-- Vercelの`READY`はDeployment完了であり、runtime動作成功ではない。
-- build skip、ignored build、`CANCELED`を対象Projectの検証PASSにしない。
-- dev結果をproduction結果へ、mock結果をformal Preview結果へ読み替えない。
-- identity不一致を検出したら、内容評価より先に`EVIDENCE_IDENTITY_MISMATCH`として止める。
+`IMPLEMENTATION_COMPLETE`、`LOCAL_PASS`、`LOCAL_COMMITTED_UNSAFE`、`CHECKPOINT_SAVED`、`DEV_DEPLOYED`、`DEV_RUNTIME_PASS`、`PRODUCTION_DEPLOYED`、`PRODUCTION_RUNTIME_PASS`、`CLOSED`を組み合わせる。`CLOSED`はタスク固有の完了条件をすべて満たした場合だけ使用する。
 
-## 8. 状態と終了報告
-
-単独の「完了」は使わず、到達した状態を組み合わせて報告する。
-
-```text
-IMPLEMENTATION_COMPLETE
-LOCAL_PASS
-CHECKPOINT_SAVED
-DEV_DEPLOYED
-DEV_RUNTIME_PASS
-PRODUCTION_AUTHORIZED
-PRODUCTION_DEPLOYED
-PRODUCTION_RUNTIME_PASS
-CLOSED
-```
-
-例: `LOCAL_PASS / CHECKPOINT_SAVED / DEV_DEPLOYMENT_PENDING`
-
-終了報告には次を含める。
-
-```text
-STATUS:
-ROOT_CAUSE:
-CHANGED_FILES:
-COMMIT / TREE:
-VERIFICATION:
-DEPLOYMENT:
-RUNTIME_EVIDENCE:
-UNRESOLVED:
-NEXT_STATE:
-```
-
-`CLOSED`はタスク固有の完了条件をすべて満たした場合だけ使用する。production runtimeを完了条件とするタスクを、local PASSやDeployment `READY`だけで閉じない。
-
-## 9. DurableなGit記録
-
-Gitへ残すログは、コードまたは正本仕様へ影響する確定事項に限定する。日々のTODO進行、監督判定、指示書・結果書の履歴はChatGPTプロジェクト側で管理する。詳細は`docs/DEVELOPMENT_LOGGING.md`に従う。
+Gitへ残す判断ログは、コードまたは正本仕様へ影響する確定事項に限定する。日々のTODO進行、指示書、result履歴はcheckpoint正本で管理する。

@@ -30,8 +30,12 @@ delegation; never build bespoke substitutes or fictitious platform imports.
 
 If a confirmed composition must change, call
 `prepare_module_profile_update` with a stable requestId. It creates a
-reviewable proposal only; follow its `reviewUrl` and wait for the owner-only
-Portal approval before treating a new revision or digest as active.
+reviewable proposal only. Check `isError` first, read the proposal ID from
+`structuredContent.proposal.id`, and call
+`get_game_module_profile_proposal` in the same tool flow with that ID and the
+same binding. Verify the requestId and pending state from the read-back, then
+follow its `reviewUrl` and wait for the owner-only Portal approval before
+treating a new revision or digest as active.
 
 ## Remote HTTP MCP + OAuth
 
@@ -91,15 +95,19 @@ Before any other SDK tool, call `get_sdk_handshake` with:
 }
 ```
 
-Require `accepted=true`, `problems=[]`, and exact matches for environment,
-canonical MCP URL, release, and onboarding profile. Keep the returned opaque
-`environmentBinding` only in tool-flow memory. Pass it unchanged to every
-later SDK tool. Never decode, hand-enter, persist, or reuse it across a Claude
-session, OAuth identity, URL, or environment.
+Check the CallToolResult `isError` first and use `structuredContent` as the
+payload. `accepted=true` is the aggregate verdict for the client, environment,
+canonical MCP URL, onboarding profile, release, contract, and required
+capabilities. Do not independently revalidate those same fields unless a
+separate observation contradicts the verdict. Read the returned opaque binding
+from `structuredContent.environmentBinding` and keep it only in tool-flow
+memory. Pass it unchanged to every later SDK tool. Never decode, hand-enter,
+persist, or reuse it across a Claude session, OAuth identity, URL, or
+environment.
 
 Call `get_authoring_profile` with `clientId="claude-code"` and that binding.
-Follow the returned common contract. Verify `sdkIdentity` in every read/write
-response; halt on any semantic environment mismatch.
+Follow the returned common contract. Verify `structuredContent.sdkIdentity` in
+every post-handshake response; halt on any semantic environment mismatch.
 
 ## Claude Code execution profile
 

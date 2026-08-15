@@ -6,17 +6,21 @@
 2. `docs/README.md` の読書順
 3. `docs/DEVELOPMENT_EXECUTION_RULES.md` の許可・保存・証拠ルール
 4. 作業に該当する現行資料とコード
+5. tool、schema、response解析で詰まった場合だけ`docs/AI_EXECUTION_TROUBLESHOOTING.md`
 
 会話履歴や `docs/DEVELOPMENT_THREAD_LOG.md` を現在仕様の正本にしない。既存差分は利用者の所有物として保持し、自分の作業に必要なファイルだけを変更する。
 
 ## 最優先原則
 
 - 症状だけを隠す暫定対策で終えず、再現条件・根本原因・影響範囲を確認して共通境界で直す。
+- tool名、schema、response path、parser等の解析問題だけで正式停止せず、sourceと契約を確認して同じ作業内で直す。
 - 本番固有の再実装を作らず、devで検証した同じ実装をmainへ昇格する。
 - ローカル修正、テスト、自分の差分だけのlocal checkpoint commitは、個別指示で禁止されていない限り進めてよい。
+- 製品repositoryへのpush／ref更新は、Deploymentの有無にかかわらず対象refとcommitを特定した利用者の明示承認を得る。
 - Vercel Deploymentが起こり得る操作は環境別の明示許可を得る。dev許可をmain／productionへ流用しない。
-- Vercelのcontrol plane操作は利用者専用とする。read-only／writeを問わず、AIはCloud Browser、connector、公式API、CLIその他の経路でVercelへアクセス・確認・操作しない。必要時は`VERCEL_USER_ACTION_REQUIRED`として利用者向け手順を一度に提示し、結果受領後に作業を再開する。承認済みGit操作と、デプロイ済み製品runtime URLのbrowser検証はこの禁止と区別する。
+- Vercelへログインせず資格情報を使わない公開read-only確認と、デプロイ済み製品runtimeの検査は行ってよい。認証済みVercel control planeの閲覧・操作は利用者専用とする。
 - CI、Deployment、runtime結果は対象identityが一致した場合だけ証拠として採用する。`READY`はruntime PASSではない。
+- 正式resultは、タスク全体の完了、真の外部blocker、Portal owner承認待ち、または利用者の明示要求に限定する。内部phase、解析修正、通常のGit push承認待ちだけでは作らない。
 - secret、個人情報、ゲーム秘密情報をコード、Git、ログ、報告へ残さない。
 
 ## 必須アーキテクチャ境界
@@ -31,10 +35,11 @@
 詳細は次を正本とする。
 
 - 実行、検証、保存、公開、証拠: `docs/DEVELOPMENT_EXECUTION_RULES.md`
+- 実行時の自己回復: `docs/AI_EXECUTION_TROUBLESHOOTING.md`
 - 現在状態と資料索引: `docs/README.md`、`docs/CURRENT_STATE.md`
 - 現行仕様と主要ファイル: `docs/DEVELOPMENT_HANDOFF.md`
 - 既知の不具合: `docs/KNOWN_ISSUES.md`
-- SDK／Runtime境界: `docs/CHATGPT_GAME_SDK.md`、`docs/EXTERNAL_GAME_PACKAGE.md`
+- SDK／Runtime境界: `docs/CHATGPT_GAME_SDK.md`、`docs/SDK_HANDSHAKE.md`、`sdk/entry/START_GAME_FIELDS.md`、`docs/EXTERNAL_GAME_PACKAGE.md`
 - モジュール境界: `docs/MODULAR_GAME_ARCHITECTURE.md`、`docs/UI_ARCHITECTURE.md`
 - 外部設定: `docs/ENVIRONMENT_VARIABLES.md`
 - durableな開発判断ログ: `docs/DEVELOPMENT_LOGGING.md`

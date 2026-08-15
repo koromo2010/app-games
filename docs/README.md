@@ -8,7 +8,7 @@
 2. [`DEVELOPMENT_EXECUTION_RULES.md`](./DEVELOPMENT_EXECUTION_RULES.md) で、許可・保存・検証・証拠・終了状態を確認する。
 3. [`CURRENT_STATE.md`](./CURRENT_STATE.md) で、現在実装・運用されている全体像を確認する。
 4. `DEVELOPMENT_HANDOFF.md` で、現在の仕様・主要ファイル・環境変数・公開手順を確認する。
-5. 下表から、今回の作業に該当する資料だけを追加で読む。
+5. 下表から、今回の作業に該当する資料だけを追加で読む。tool、schema、response解析で詰まった場合は[`AI_EXECUTION_TROUBLESHOOTING.md`](./AI_EXECUTION_TROUBLESHOOTING.md)を読む。
 6. `git status --short --branch` と直近コミットを確認し、既存変更を上書きしない。
 7. 変更後は影響範囲に応じたfocused test、回帰、lint／buildを実行する。
 
@@ -29,6 +29,7 @@
 | 作業 | 最初に読む資料 | 次に確認する正本・コード |
 | --- | --- | --- |
 | 実行許可・保存・証拠・終了判定 | `DEVELOPMENT_EXECUTION_RULES.md` | 個別指示、Git差分、対象Deployment／runtime identity |
+| tool・schema・response解析の自己回復 | `AI_EXECUTION_TROUBLESHOOTING.md` | 現行source、schema、関連test、structured response |
 | 現在の全体像 | `CURRENT_STATE.md` | `DEVELOPMENT_HANDOFF.md`、コード、設定 |
 | 将来構想・未実装計画 | `FUTURE_PLAN.md` | `PLATFORM_VISION.md`、SDK関連資料 |
 | 未修正バグ・次の修正順 | `KNOWN_ISSUES.md` | 対象項目に記載したAPI・store・domain |
@@ -44,6 +45,7 @@
 | PC/Mobile UI境界・Controller・権限層 | `UI_ARCHITECTURE.md` | `app/wordwolf/use-wordwolf-controller.ts`、`app/wordwolf/WordWolfDesktopLayout.tsx`、`app/wordwolf/wordwolf-view-permissions.ts` |
 | 外部開発者へゲーム部分だけ依頼する境界 | `EXTERNAL_GAME_PACKAGE.md` | ゲームmanifest、SDK、Runtime interface、`apps/sdk-preview`、import境界監査 |
 | SDK共通機能・ワード・トランプ・お絵描き棚卸し | `SDK_MODULE_INVENTORY.md` | `packages/game-sdk/src/modules/profile.ts`、resource別public export |
+| SDK handshake・MCP response契約 | `SDK_HANDSHAKE.md` | `packages/game-sdk/src/handshake.ts`、`apps/sdk-portal/app/api/mcp/route.ts`、`sdk/entry/START_GAME_FIELDS.md` |
 | SDK・mainの版管理と後方互換 | `SDK_VERSIONING.md` | `config/platform-release.json`、`scripts/check-platform-release.mjs` |
 | SDKデータの正本・保持・削除 | `SDK_DATA_LIFECYCLE.md` | Room、effect、replay、戦績、Package、OAuth、Account削除 |
 | SDK PostgreSQL schema更新 | `SDK_DATABASE_MIGRATIONS.md` | `db/sdk`、`scripts/migrate-sdk-database.mjs`、`apps/sdk-portal/lib/sdk-postgres.ts` |

@@ -44,13 +44,16 @@
   ],
   "invariants": {
     "must": [
-      "Confirm accepted=true, problems=[], environment, canonicalMcpUrl, release and onboardingProfileId before any other SDK tool.",
+      "Treat accepted=true as the aggregate verdict for client, environment, canonicalMcpUrl, onboardingProfileId, release, contract and required capabilities; do not independently revalidate the same fields without a contradictory observation.",
+      "Parse MCP CallToolResult by checking isError first and then reading structuredContent; use structuredContent.environmentBinding and structuredContent.proposal.id as the canonical paths.",
       "Use the environmentBinding returned by the successful handshake for every later SDK tool call.",
+      "Verify sdkIdentity on every post-handshake SDK response; do not require post-handshake sdkIdentity on the handshake response itself.",
       "Create a game draft and wait for human module profile confirmation before implementing prototype UI or AppSet source.",
       "Bind shared source to moduleProfileRevision, moduleContractDigest, SDK version and delivery-specific usage evidence.",
       "Build the interactive prototype and formal package from the same game source with different adapters.",
       "Show the published prototype URL, module usage matrix and review checklist, then wait for explicit human approval.",
-      "Use server-side Node-free validation and packaging when the authoring host has no Node.js."
+      "Use server-side Node-free validation and packaging when the authoring host has no Node.js.",
+      "After preparing a module profile proposal, read it back in the same tool flow with the same requestId before waiting for Portal owner approval."
     ],
     "mustNot": [
       "Treat MCP Connected, tool discovery, a URL, or the shared Shell alone as workflow completion.",
