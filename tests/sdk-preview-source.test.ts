@@ -415,7 +415,8 @@ test("SDK preview composes the common room lifecycle around the game slot", () =
     1,
     "lobby and playing must retain the same game-specific iframe",
   );
-  assert.match(shell, /max-w-\[1600px\]/);
+  assert.doesNotMatch(shell, /max-w-\[1600px\]/);
+  assert.match(shell, /mx-auto grid w-full gap-5 px-4 py-6/);
   assert.match(shell, /lg:grid-cols-\[minmax\(0,1fr\)_280px\]/);
   assert.doesNotMatch(shell, /lg:grid-cols-\[260px_minmax\(0,1fr\)\]/);
   assert.match(shell, /data\?\.type === "game-fields:frame-size"/);
@@ -512,7 +513,7 @@ test("shared GameFrame owns the top banner and phase-specific common modules", (
   assert.doesNotMatch(approvedShell, /<GameTopBanner/);
   assert.doesNotMatch(approvedShell, /ゲーム一覧へ/);
   assert.match(view, /room\.phase !== "playing" && \(\s*<aside/);
-  assert.match(view, /room\.phase === "playing"\s*\? "mx-auto max-w-7xl"/);
+  assert.match(view, /room\.phase === "playing"\s*\? "mx-auto w-full"/);
   assert.match(
     view,
     /visible=\{room\.phase === "lobby" && moduleRequired\("room-settings"\)\}/,

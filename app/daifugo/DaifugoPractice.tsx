@@ -117,7 +117,7 @@ export function DaifugoPracticeGame() {
       <GamePlayerMenu id={session?.id} name={session?.name || d.guest} avatarColor={session?.avatarColor || fallbackAvatarColor} avatarImage={session?.avatarImage} />
     </GameTopBanner>
 
-    <div className="mx-auto max-w-6xl px-3 py-5 sm:px-5">
+    <div className="mx-auto w-full px-3 py-5 sm:px-5">
       <DaifugoTable state={game} />
 
       <section className={`mt-4 rounded-3xl border bg-slate-900/90 p-4 shadow-2xl ${humanTurn ? "border-cyan-300 ring-2 ring-cyan-300/30" : "border-white/10"}`}>

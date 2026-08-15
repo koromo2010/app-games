@@ -100,11 +100,11 @@ export function TahoiyaDesktopLayout({ controller }: { controller: TahoiyaContro
         </GameTopMenu>
         <GamePlayerMenu id={playerId || undefined} name={playerName || "未ログイン"} avatarColor={avatarColor} avatarImage={avatarImage} />
       </GameTopBanner>
-      {room && <div className="mx-auto max-w-6xl px-4 pt-4"><PlayerTimeoutNotice playerTimeouts={room.playerTimeouts} playerTimeoutNotice={room.playerTimeoutNotice} currentPlayerId={playerId} onRecover={() => actions.runRoomAction({ type: "recover-player", actorId: playerId }).then(() => undefined)} /></div>}
+      {room && <div className="mx-auto w-full px-4 pt-4"><PlayerTimeoutNotice playerTimeouts={room.playerTimeouts} playerTimeoutNotice={room.playerTimeoutNotice} currentPlayerId={playerId} onRecover={() => actions.runRoomAction({ type: "recover-player", actorId: playerId }).then(() => undefined)} /></div>}
       <TahoiyaRulesDialog open={rulesOpen} onClose={() => setters.setRulesOpen(false)} />
       <GameAdSlot gameId="tahoiya" surface={!room ? "game-entry" : room.phase === "lobby" ? "room-lobby" : room.phase === "result" ? "result" : null} disabled={Boolean(room?.debugMode)} />
-      {(!room || room.phase === "lobby") && <div className="mx-auto max-w-6xl px-4 pt-4"><GameLoungeVisual gameId="tahoiya" /></div>}
-      <section className="mx-auto grid max-w-6xl gap-4 px-4 py-5 lg:grid-cols-[340px_1fr]">
+      {(!room || room.phase === "lobby") && <div className="mx-auto w-full px-4 pt-4"><GameLoungeVisual gameId="tahoiya" /></div>}
+      <section className="mx-auto grid w-full gap-4 px-4 py-5 lg:grid-cols-[340px_1fr]">
         <aside className="space-y-4">
           <TahoiyaRoomPanel room={room} passphrase={passphrase} joinCode={joinCode} joinableRooms={joinableRooms}
             answerer={answerer} answererCandidates={answererCandidates} roomConfigItems={roomConfigItems}

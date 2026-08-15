@@ -916,7 +916,7 @@ export function SdkPreviewGameShell({
 
       {previewIdentity && (
         <section
-          className="mx-auto mt-4 flex max-w-6xl flex-wrap items-center justify-between gap-3 rounded-xl border border-cyan-400/35 bg-cyan-400/10 px-4 py-3 text-sm"
+          className="mx-auto mt-4 flex w-full flex-wrap items-center justify-between gap-3 rounded-xl border border-cyan-400/35 bg-cyan-400/10 px-4 py-3 text-sm"
           data-sdk-preview-identity
         >
           <div>
@@ -932,7 +932,7 @@ export function SdkPreviewGameShell({
       )}
 
       {surface === "entry" && (
-        <section className="mx-auto grid max-w-6xl gap-5 px-4 py-8 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,.85fr)]" data-sdk-preview-surface="entry">
+        <section className="mx-auto grid w-full gap-5 px-4 py-8 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,.85fr)]" data-sdk-preview-surface="entry">
           <div className={panelClass}>
             <p className="text-xs font-black uppercase tracking-[.18em] text-cyan-700">Online room</p>
             <h2 className="mt-2 text-3xl font-black">プレイする部屋を選ぶ</h2>
@@ -987,7 +987,7 @@ export function SdkPreviewGameShell({
 
       {(surface === "lobby" || surface === "playing") && (
         <section
-          className={`mx-auto grid w-full gap-5 px-4 py-6 ${surface === "lobby" ? "max-w-6xl lg:grid-cols-[340px_minmax(0,1fr)]" : "max-w-[1600px] lg:grid-cols-[minmax(0,1fr)_280px]"}`}
+          className={`mx-auto grid w-full gap-5 px-4 py-6 ${surface === "lobby" ? "lg:grid-cols-[340px_minmax(0,1fr)]" : "lg:grid-cols-[minmax(0,1fr)_280px]"}`}
           data-sdk-preview-surface={surface}
         >
           <aside className={`space-y-4 ${surface === "playing" ? "lg:order-2" : "lg:order-1"}`}>
@@ -1088,7 +1088,7 @@ export function SdkPreviewGameShell({
       )}
 
       {surface === "result" && (
-        <section className="mx-auto grid max-w-5xl gap-5 px-4 py-7 lg:grid-cols-[minmax(0,1fr)_340px]" data-sdk-preview-surface="result">
+        <section className="mx-auto grid w-full gap-5 px-4 py-7 lg:grid-cols-[minmax(0,1fr)_340px]" data-sdk-preview-surface="result">
           <div className={`${panelClass} overflow-hidden`}>
             <p className="text-xs font-black uppercase tracking-[.18em] text-amber-700">Standard result</p>
             <h2 className="mt-2 text-4xl font-black">ゲーム終了</h2>

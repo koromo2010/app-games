@@ -211,7 +211,7 @@ export function GameSdkFrameView(props: GameSdkFrameViewProps) {
           backLabel="制作環境へ戻る"
           surface="lounge"
         />
-        <section className="mx-auto max-w-3xl">
+        <section className="mx-auto w-full">
           <div
             className={`${panel} border-cyan-300/50`}
             data-sdk-preview-identity
@@ -247,7 +247,7 @@ export function GameSdkFrameView(props: GameSdkFrameViewProps) {
     if (!moduleRequired("online-room")) {
       return (
         <main className={`min-h-screen bg-slate-100 px-4 py-8 text-slate-900 ${gameTopBannerOffsetClass}`}>
-          <section className={`${panel} mx-auto max-w-2xl`}>
+          <section className={`${panel} mx-auto w-full`}>
             <h2 className="text-xl font-black">オンラインRoomは無効です</h2>
             <p className="mt-2 text-sm text-slate-600">
               このPackageではonline-room moduleが無効化されています。
@@ -267,7 +267,7 @@ export function GameSdkFrameView(props: GameSdkFrameViewProps) {
           surface="lounge"
         />
         {isRestoringRoom ? (
-          <section className="mx-auto max-w-5xl">
+          <section className="mx-auto w-full">
             <div className={panel}>
               <h2 className="text-xl font-black">既存Roomへの復帰を確認中</h2>
               <p className="mt-2 text-sm text-slate-600">
@@ -277,7 +277,7 @@ export function GameSdkFrameView(props: GameSdkFrameViewProps) {
             </div>
           </section>
         ) : (
-        <section className="mx-auto grid max-w-5xl gap-5 lg:grid-cols-2">
+        <section className="mx-auto grid w-full gap-5 lg:grid-cols-2">
           <div className={panel}>
             <h2 className="text-xl font-black">正式Roomで確認</h2>
             <p className="mt-2 text-sm text-slate-600">
@@ -353,7 +353,7 @@ export function GameSdkFrameView(props: GameSdkFrameViewProps) {
     <main className={`min-h-screen bg-slate-950 px-4 py-8 text-white ${gameTopBannerOffsetClass}`}>
       {previewOnly && (
         <div
-          className="mx-auto mb-4 max-w-7xl rounded-xl border border-cyan-300/40 bg-cyan-300/10 px-4 py-3 text-sm font-bold text-cyan-50"
+          className="mx-auto mb-4 w-full rounded-xl border border-cyan-300/40 bg-cyan-300/10 px-4 py-3 text-sm font-bold text-cyan-50"
           data-sdk-preview-identity
           data-formal-room="false"
           data-revision={packageRevision}
@@ -418,8 +418,8 @@ export function GameSdkFrameView(props: GameSdkFrameViewProps) {
         )}
       </GameSdkDebugPanel>
       <section className={room.phase === "playing"
-        ? "mx-auto max-w-7xl"
-        : "mx-auto grid max-w-7xl gap-5 lg:grid-cols-[300px_minmax(0,1fr)]"}
+        ? "mx-auto w-full"
+        : "mx-auto grid w-full gap-5 lg:grid-cols-[300px_minmax(0,1fr)]"}
       >
         {room.phase !== "playing" && (
         <aside className={`space-y-4 ${

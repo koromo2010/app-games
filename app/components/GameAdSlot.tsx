@@ -26,7 +26,7 @@ export function GameAdSlot({ gameId, surface, disabled = false, className = "" }
       aria-label="広告"
       data-game-ad-slot={slotId}
       data-game-ad-surface={surface}
-      className={`mx-auto my-4 min-h-24 w-[calc(100%-2rem)] max-w-6xl rounded-xl border border-dashed border-white/15 bg-slate-950/55 px-4 py-3 text-slate-300 ${className}`}
+      className={`mx-auto my-4 min-h-24 w-[calc(100%-2rem)] rounded-xl border border-dashed border-white/15 bg-slate-950/55 px-4 py-3 text-slate-300 ${className}`}
     >
       <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Advertisement</p>
       {mode === "preview" ? (

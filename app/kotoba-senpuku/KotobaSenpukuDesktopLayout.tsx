@@ -157,7 +157,7 @@ export function KotobaSenpukuDesktopLayout({ controller }: { controller: KotobaS
   if (!room) {
     return (
       <main className="min-h-screen bg-[radial-gradient(circle_at_top,#701a75_0%,#172033_42%,#020617_82%)] px-4 py-8 text-white">
-        <div className="mx-auto max-w-4xl">
+        <div className="mx-auto w-full">
           <div className="flex items-center justify-between gap-2"><Link href="/games" className="text-sm font-bold text-fuchsia-200">← 広場</Link><div className="flex items-center gap-2"><button type="button" onClick={() => setRulesOpen(true)} className="rounded-lg border border-white/20 px-3 py-2 text-sm font-bold">ルール</button><span className="text-sm font-bold">{session.name}</span></div></div>
           <GameLoungeVisual gameId="kotoba-senpuku" className="mt-5" />
           <section className="mt-5 overflow-hidden rounded-3xl border border-white/10 bg-slate-950/80 shadow-2xl">
@@ -210,14 +210,14 @@ export function KotobaSenpukuDesktopLayout({ controller }: { controller: KotobaS
         />}
         <GamePlayerMenu id={session.id} name={session.name} avatarColor={session.avatarColor} avatarImage={session.avatarImage} hasRecoveryEmail={session.hasRecoveryEmail} />
       </GameTopBanner>
-      <div className="mx-auto max-w-7xl px-4 pt-4"><PlayerTimeoutNotice playerTimeouts={room.playerTimeouts} playerTimeoutNotice={room.playerTimeoutNotice} currentPlayerId={playerId} disabled={isSaving} onRecover={() => runAction({ type: "recover-player", actorId: playerId }).then(() => undefined)} /></div>
+      <div className="mx-auto w-full px-4 pt-4"><PlayerTimeoutNotice playerTimeouts={room.playerTimeouts} playerTimeoutNotice={room.playerTimeoutNotice} currentPlayerId={playerId} disabled={isSaving} onRecover={() => runAction({ type: "recover-player", actorId: playerId }).then(() => undefined)} /></div>
       <GameAdSlot
         gameId="kotoba-senpuku"
         surface={room.phase === "lobby" ? "room-lobby" : room.phase === "result" ? "result" : null}
         disabled={room.debugMode}
       />
-      {room.phase === "lobby" && <div className="mx-auto max-w-7xl px-4 pt-4"><GameLoungeVisual gameId="kotoba-senpuku" /></div>}
-      <div className="mx-auto grid max-w-7xl gap-4 px-4 py-5 md:grid-cols-[minmax(0,1fr)_240px] xl:grid-cols-[270px_minmax(0,1fr)_280px]">
+      {room.phase === "lobby" && <div className="mx-auto w-full px-4 pt-4"><GameLoungeVisual gameId="kotoba-senpuku" /></div>}
+      <div className="mx-auto grid w-full gap-4 px-4 py-5 md:grid-cols-[minmax(0,1fr)_240px] xl:grid-cols-[270px_minmax(0,1fr)_280px]">
         <aside className="space-y-4 md:col-span-2 md:grid md:grid-cols-2 md:gap-4 md:space-y-0 xl:col-span-1 xl:block xl:space-y-4"><section className="rounded-2xl border border-white/10 bg-slate-950/75 p-4"><div className="flex items-center justify-between"><h2 className="font-black">参加者</h2><span className="text-sm text-slate-400">{room.players.length}人</span></div><ul className="mt-3 space-y-2">{room.players.map((player) => <PlayerRow key={player.id} player={player} isHost={player.id === room.hostId} isMe={player.id === playerId} eliminated={room.exposedIds.includes(player.id)} />)}</ul><RoomLobbyReturnStatus state={room.lobbyReturn} players={room.players} hostId={room.hostId} isHost={isHost} onRemoveWaitingPlayer={(player) => { if (window.confirm(`${player.name}さんを退出扱いにしますか？`)) void runAction({ type: "remove-waiting-player", actorId: playerId, targetPlayerId: player.id }); }} /></section><RoomConfigSummary items={configItems} /></aside>
         <div className="space-y-4">
           {error && <p className="rounded-xl border border-rose-300/30 bg-rose-300/10 p-3 text-sm font-bold text-rose-100">{error}</p>}

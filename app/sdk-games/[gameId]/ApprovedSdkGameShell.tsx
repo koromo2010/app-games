@@ -368,7 +368,7 @@ export function ApprovedSdkGameShell({
           surface="lounge"
         />
         {isRestoringRoom ? (
-          <section className="mx-auto max-w-5xl">
+          <section className="mx-auto w-full">
             <div className={panelClass}>
               <h2 className="text-2xl font-black">前の部屋を確認中</h2>
               <p className="mt-2 text-sm text-slate-600">
@@ -377,7 +377,7 @@ export function ApprovedSdkGameShell({
             </div>
           </section>
         ) : (
-        <section className="mx-auto grid max-w-5xl gap-5 lg:grid-cols-2">
+        <section className="mx-auto grid w-full gap-5 lg:grid-cols-2">
           <div className={panelClass}>
             <h2 className="text-2xl font-black">新しい部屋</h2>
             <p className="mt-2 text-sm text-slate-600">
@@ -474,7 +474,7 @@ export function ApprovedSdkGameShell({
           </Link>
         )}
       </GameSdkShellHeader>
-      <section className="mx-auto grid max-w-6xl gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
+      <section className="mx-auto grid w-full gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
         <aside className="space-y-4">
           <div className={panelClass}>
             <div className="flex items-center justify-between">

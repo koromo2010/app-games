@@ -13,7 +13,7 @@ export const gameTopBannerOffsetClass = "pt-[132px] sm:pt-[82px]";
 export function GameTopBanner({ eyebrow, title, children }: GameTopBannerProps) {
   return (
     <header className="fixed inset-x-0 top-0 z-40 border-b border-white/10 bg-[radial-gradient(circle_at_20%_0%,rgba(34,211,238,0.22),transparent_34%),linear-gradient(135deg,#020617_0%,#111827_55%,#3f2b12_100%)] text-white shadow-2xl shadow-slate-950/30">
-      <div className="mx-auto flex max-w-6xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="mx-auto flex w-full flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 shrink-0 items-center gap-3">
           <Image src="/site-icon" alt="" width={44} height={44} unoptimized className="h-11 w-11 shrink-0 rounded-xl object-cover shadow-lg shadow-slate-950/30" />
           <div className="min-w-0">

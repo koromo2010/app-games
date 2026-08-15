@@ -37,8 +37,8 @@ export function WordWolfDesktopLayout({ controller }: { controller: WordWolfCont
   } = viewModel;
 
   const layoutClass = room && shouldShowClueLog
-    ? "mx-auto grid max-w-[1500px] gap-4 px-4 py-5 lg:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)_360px]"
-    : "mx-auto grid max-w-6xl gap-4 px-4 py-5 lg:grid-cols-[340px_1fr]";
+    ? "mx-auto grid w-full gap-4 px-4 py-5 lg:grid-cols-[320px_minmax(0,1fr)] xl:grid-cols-[320px_minmax(0,1fr)_360px]"
+    : "mx-auto grid w-full gap-4 px-4 py-5 lg:grid-cols-[340px_1fr]";
 
   return (
     <main className={`min-h-screen bg-slate-950 text-slate-950 ${gameTopBannerOffsetClass}`}>
@@ -76,7 +76,7 @@ export function WordWolfDesktopLayout({ controller }: { controller: WordWolfCont
         disabled={Boolean(room?.debugMode)}
       />
 
-      {(!room || room.phase === "lobby") && <div className="mx-auto max-w-7xl px-4 pt-4"><GameLoungeVisual gameId="wordwolf" /></div>}
+      {(!room || room.phase === "lobby") && <div className="mx-auto w-full px-4 pt-4"><GameLoungeVisual gameId="wordwolf" /></div>}
 
       <section className={layoutClass}>
         <aside className="space-y-4">
