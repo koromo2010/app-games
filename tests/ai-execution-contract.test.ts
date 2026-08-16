@@ -17,6 +17,32 @@ test("execution rules separate product writes, recovery, checkpoints and formal 
   assert.match(rules, /remote未到達のままturnを終える場合は下記耐久checkpoint/);
   assert.match(rules, /canonical Git、checkpoint正本、共有済み領域、Library、current pointer/);
   assert.match(rules, /取得経路、対象DeploymentまたはURL、identity、取得時刻/);
+  assert.match(rules, /内部のcommand、tool、workspace、順序、retry、helper等は.*実行計画/);
+  assert.match(rules, /一つの指示は内部成果物ではなく、利用者が確認できる成果または真の外部境界までを単位とし、その間は同じタスクと権限範囲が継続する/);
+  assert.match(rules, /同じfailure classと残りの実行flowを横断監査/);
+  assert.match(rules, /実行方法の失敗を正式resultや次指示の境界へ変換しない/);
+  assert.match(rules, /実行側の環境不足、未検証手順、実装上の不確実性を利用者操作へ移さない/);
+  assert.match(rules, /第一目的は.*タスクの成功条件を満たすこと/);
+  assert.match(rules, /立証できない`BLOCKED`、`INCONCLUSIVE`.*`INTERNAL_RECOVERY_REQUIRED`/);
+  assert.match(rules, /監督は立証を欠く停止報告をterminal resultとして受理しない/);
+  assert.match(rules, /次指示も発行せず、同じ指示のまま再計画して続行する/);
+  assert.match(rules, /devは早期の実装・runtime feedback自体に価値がある検証環境/);
+  assert.match(rules, /実装、利用可能な最短の関連check、承認済みdev反映、runtime観測、forward fixまたはrollback/);
+  assert.match(rules, /test、lint、build、視覚検証、全履歴artifactをdev push前の一律必須条件にしない/);
+  assert.match(rules, /未検証項目だけでdev反映をblockしない/);
+  assert.match(rules, /main／production昇格前までに必要な全gateを満たす/);
+  assert.match(rules, /利用者は識別可能な直前の実行シートを.*短い自然文で承認でき/);
+  assert.match(rules, /direct push、Git-data materialization等のtransport選択は実行方法/);
+  assert.match(rules, /main／productionまたは不可逆操作では、ref更新前に最終commitを確定/);
+  assert.match(rules, /一度受理したタスクは`TASK_ACTIVE`/);
+  assert.match(rules, /`TASK_DONE`.*`EXTERNAL_BLOCKED`/);
+  assert.match(rules, /所有権を利用者や監督へ戻さず/);
+  assert.match(rules, /authorization envelopeは`TASK_ACTIVE`の間継続/);
+  assert.match(rules, /承認待ちは外部writeの実行ゲートであってタスクの終了ではなく/);
+  assert.match(rules, /`INTERNAL_RECOVERY_REQUIRED`という内部診断にすぎず、`TASK_ACTIVE`から状態遷移しない/);
+  assert.match(rules, /一つの`TASK_ACTIVE` feedback loop/);
+  assert.match(rules, /タスクlife cycleは`TASK_ACTIVE`、`TASK_DONE`、`EXTERNAL_BLOCKED`/);
+  assert.match(rules, /`TASK_ACTIVE`中のmilestoneであり、それだけで所有権を手放さない/);
 });
 
 test("troubleshooting fixes the MCP response paths and proposal reconciliation", () => {
@@ -30,6 +56,9 @@ test("troubleshooting fixes the MCP response paths and proposal reconciliation",
   assert.match(troubleshooting, /同一request ID・同一payloadで`prepare_module_profile_update`を冪等replay/);
   assert.match(troubleshooting, /`get_game_module_profile_proposal`をrequest IDで呼ばない/);
   assert.match(troubleshooting, /DevTools操作やスクリーンショットが反復/);
+  assert.match(troubleshooting, /未検証scriptの反復実行を利用者へ依頼しない/);
+  assert.match(troubleshooting, /Windows path separator、空白、文字code、quoting/);
+  assert.match(troubleshooting, /観測された一行だけを直さず、同じfailure classと残りの全分岐を横断監査/);
 });
 
 test("handshake documentation matches the implemented request and aggregate verdict", () => {
@@ -97,4 +126,6 @@ test("current SDK specifications name the supported clients and do not recheck a
   assert.match(handoff, /`accepted=true`をaggregate verdictとして採用/);
   assert.doesNotMatch(handoff, /`accepted=true`とcanonical endpoint一致を確認/);
   assert.match(overview, /handshake response自体にはpost-handshake用`sdkIdentity`を要求しない/);
+  assert.match(agents, /一度受理したタスクは、成功条件を満たすか、許可済み内部回復では解消できない真の外部依存へ到達するまで実行側が所有する/);
+  assert.match(agents, /完了報告、次指示、再承認の理由にしない/);
 });

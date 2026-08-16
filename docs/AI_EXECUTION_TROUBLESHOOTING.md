@@ -126,7 +126,27 @@ proposal IDが取得できない場合、`get_game_module_profile_proposal`をre
 
 同じ検査でDevTools操作やスクリーンショットが反復する場合は、運用手順を増やすだけで終えず、秘密を含まない診断表示、revision表示、計測hook、read-only endpoint等の製品改善候補へ登録する。
 
-## 8. 正式停止へ変換する前のchecklist
+## 8. 利用者PC向けhelperとPowerShell
+
+この節は、実行計画を同じ作業内で再計画する上位原則の具体化であり、新しい停止条件を追加しない。
+
+利用者PCでしか実行できない操作へ到達しても、未検証scriptの反復実行を利用者へ依頼しない。次の順で進める。
+
+1. 対象file、path、address、key、current value、workspace候補等が未確定なら、最小のread-only確認だけを先に依頼する。
+2. 返却値を固定し、長文の部分置換、path入力、SHA入力等を要しない完成scriptまたはpackageを作る。
+3. 提示前に、利用可能な範囲で構文解析、静的検査、mock／fixture、dry-runを使い、正常系だけでなく次を一括確認する。
+   - Windows path separator、空白、文字code、quoting
+   - workspace候補が0件、1件、複数件の場合
+   - 外部commandのstdout、stderr、exit codeの組合せ
+   - 対象操作が既に完了している場合の冪等停止
+   - 途中failure時に未許可writeや二重writeへ進まないこと
+   - logの保存先、秘密・個人pathのsanitization、利用者が返却する情報
+4. 対象OSで完全実行できない場合は、その未検証範囲を明示し、最初からwriteを伴う長いhelperを渡さず、短いread-only discoveryで前提を埋める。
+5. 利用者実行でhelper自体のfailureが判明した場合は、それを新しい外部blockerにしない。観測された一行だけを直さず、同じfailure classと残りの全分岐を横断監査してから一つの修正版を出す。
+
+利用者の操作または環境が真の依存点であっても、helperの設計・検証不足は実行側の内部問題である。新しい権限、利用者専用の秘密操作、仕様判断または外部service障害が必要になるまでは、正式resultや次指示の境界にしない。
+
+## 9. 正式停止へ変換する前のchecklist
 
 次をすべて確認する。
 

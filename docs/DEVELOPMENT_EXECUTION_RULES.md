@@ -15,6 +15,7 @@
 | 解析復旧 | `AI_EXECUTION_TROUBLESHOOTING.md` |
 
 - タスク指示は許可範囲を狭められるが、曖昧な表現や過去の承認から権限を広げない。
+- タスク指示が固定するのは目的、対象、権限、不変条件、成功条件、真の停止条件である。内部のcommand、tool、workspace、順序、retry、helper等は、外部効果や安全境界そのものを定める場合を除き実行計画であり、作業中に再計画できる。一つの指示は内部成果物ではなく、利用者が確認できる成果または真の外部境界までを単位とし、その間は同じタスクと権限範囲が継続する。
 - タスク指示の略記や古いfield名から、現行interfaceと異なる仕様を作らない。
 - 旧指示、旧result、会話ログは履歴であり、最新版と累積適用しない。
 - 同じ判断対象の真の矛盾だけを利用者へ確認する。解析で解消できる差は同じ作業内で直す。
@@ -69,13 +70,21 @@ proposal作成はlogical product writeである。Git push、Deployment、checkp
 
 validationで永続化前に拒否されたcallは、contractまたはread-backで無変更を確認できた場合だけ`WRITE_REJECTED_BEFORE_PERSISTENCE`、product write 0件とする。成否不明は`WRITE_OUTCOME_UNKNOWN`とし、新しいrequest IDや二つ目の論理writeを作らない。
 
-## 4. 実行継続と停止
+## 4. タスク所有権・実行継続・停止
+
+一度受理したタスクは`TASK_ACTIVE`とし、成功条件を満たした`TASK_DONE`、または許可済み内部回復では解消できない真の外部依存を立証した`EXTERNAL_BLOCKED`まで実行側が完遂責任を持つ。途中の失敗、検証、手段変更、承認待ち、dev反映、観測、修正は同じタスクの内部進捗であり、所有権を利用者や監督へ戻さず、完了報告、正式result、next-instructionの境界にしない。
+
+第一目的は、固定した権限と不変条件の中でタスクの成功条件を満たすことである。安全規則、checkpoint、証拠、報告は完遂を支える境界・手段であり、それ自体を成功や停止目標にしない。
+
+受理時に固定したauthorization envelopeは`TASK_ACTIVE`の間継続する。新しい指示または承認を求めるのは、対象範囲、権限、固定済みwrite対象、許可回数または不可逆性が実質的に変わり、現在のenvelopeでは必要操作を覆えない場合だけとする。承認待ちは外部writeの実行ゲートであってタスクの終了ではなく、承認後はnext-instructionを介さず同じ`TASK_ACTIVE`から再開する。
 
 許可済み範囲では、タスクの成功条件または真の停止条件まで連続して進める。local commit、checkpoint、承認済みpush、`READY`、tool探索、parser修正、read-only確認の完了だけで作業を分割しない。
 
 tool名、schema、response path、parser、binding、許可済みread-only経路の見落としは、`AI_EXECUTION_TROUBLESHOOTING.md`に従い同じ作業内で修正する。途中経過は共有してよいが、許可済みの次工程を止めない。
 
-正式に停止するのは次の場合に限る。
+実行計画は適応的に扱う。選択したcommand、tool、workspace、順序、retry、helper等が失敗した場合は、目的、権限、不変条件を維持したまま方法を再計画する。観測された一箇所だけを直して再実行せず、同じfailure classと残りの実行flowを横断監査し、許可済み範囲で修正・再検証を続ける。実行方法の失敗を正式resultや次指示の境界へ変換しない。次指示を発行するのは、対象、方針、許可範囲または真の外部blockerが実質的に変わる場合に限る。
+
+`TASK_ACTIVE`から正式に停止するのは次の場合に限る。
 
 - 未許可の外部write、push、Deployment、production反映が必要
 - project、repository、remote、branch、commit、environmentの真の不一致から復帰不能
@@ -83,7 +92,9 @@ tool名、schema、response path、parser、binding、許可済みread-only経�
 - 許可範囲を超える修正が必要
 - 認証、権限、接続、外部service障害で継続不能
 - Portal owner承認など利用者専用操作が現在の依存点
-- タスク指示が対象操作とともに明示した停止条件へ到達
+- タスク指示が対象操作と継続不能理由を対応づけて明示した停止条件へ到達
+
+正式停止には、残る成功条件、許可済み回復を尽くした証拠、内部回復では解消できない理由、現在必要な外部依存、再開に必要な次の一操作を対応づける。これを立証できない`BLOCKED`、`INCONCLUSIVE`、環境・tool・手順上のfailureは`INTERNAL_RECOVERY_REQUIRED`という内部診断にすぎず、`TASK_ACTIVE`から状態遷移しない。正式resultを作らず、次指示も発行せず、同じ指示のまま再計画して続行する。監督は立証を欠く停止報告をterminal resultとして受理しない。
 
 通常のGit push承認待ちは実行停止点にはなり得るが、それだけで正式resultを作るterminal boundaryにはしない。
 
@@ -96,6 +107,14 @@ tool名、schema、response path、parser、binding、許可済みread-only経�
 - 文書・契約変更では、内容を固定するcontract testと`git diff --check`を最低限実行する。
 - `NOT_RUN`、`BLOCKED`、`BASELINE_FAILURE`、対象変更の失敗を区別する。
 
+検証深度はenvironment、可逆性、影響に比例させる。
+
+- devは早期の実装・runtime feedback自体に価値がある検証環境である。candidate commit、更新前dev SHA、rollback先、変更範囲を固定し、不可逆なmigration／data write／認証・権限変更を含まない可逆な変更では、実装、利用可能な最短の関連check、承認済みdev反映、runtime観測、forward fixまたはrollbackを一つの`TASK_ACTIVE` feedback loopとして優先する。
+- test、lint、build、視覚検証、全履歴artifactをdev push前の一律必須条件にしない。実行済みcheckと既知の未検証項目を承認依頼へ示すが、未検証項目だけでdev反映をblockしない。明白な破壊操作、secret混入、対象外差分はpush前に除外する。
+- 同じturnでremoteへ到達できる場合はremote到達確認を耐久化とし、既知の更新前SHAをrollback targetにできる。Deployment／runtimeをdev検証の一部として使い、devを広く利用不能にするfailureではrollbackまたはforward fixを同じタスク内で判断する。
+- 残る全体test、lint、build、runtime回帰は、変更リスクに応じてdev反映後に続け、main／production昇格前までに必要な全gateを満たす。
+- production、不可逆操作、migration、認証・権限境界はdevの可逆性を根拠に緩和しない。
+
 runtime／browser項目は`VALUE_VERIFIABLE`、`INTERACTION_REQUIRED`、`VISUAL_REQUIRED`へ分類する。値で判定できる項目へ不要なスクリーンショットを要求せず、視覚項目を値だけでPASSにしない。一つのbrowser経路の失敗だけで製品不具合または全面的な`BROWSER_UNAVAILABLE`と判定しない。
 
 同種の検査でDevTools操作やスクリーンショットが反復する場合は、秘密を含まない診断表示、revision表示、計測hook、read-only endpoint等の製品改善候補へ登録する。
@@ -103,8 +122,11 @@ runtime／browser項目は`VALUE_VERIFIABLE`、`INTERACTION_REQUIRED`、`VISUAL_
 ## 6. Git・Deployment・外部write
 
 - local修正、test、task-owned local commitは個別禁止がなければ進めてよい。
-- 製品repositoryへのpush／ref更新は、Deploymentの有無にかかわらず、repository、ref、更新前後のcommit、force有無を特定した利用者の明示承認を必要とする。
+- 製品repositoryへのpush／ref更新は、Deploymentの有無にかかわらず、repository、ref、更新前commit、candidate commitまたは承認済み固定tree、force有無を固定した利用者の明示承認を必要とする。
 - Deploymentが起こり得る場合はProject、environment、影響も承認対象に含める。
+- 実行側は承認前に、repository、ref、更新前commit、candidate commitまたは固定tree、force有無、environment、外部効果、禁止範囲を一つの実行シートへ固定する。利用者は識別可能な直前の実行シートを「この内容で進めて」等の短い自然文で承認でき、SHAや承認文全体を転記する必要はない。
+- 固定したbase、tree、変更path、target ref、force有無、environment、外部効果が変わらない場合、direct push、Git-data materialization等のtransport選択は実行方法であり、追加承認を要しない。ref更新は承認済み回数を超えず、作成したcommitのparent／treeをread-backしてから行う。
+- main／productionまたは不可逆操作では、ref更新前に最終commitを確定し、対象を特定した個別承認を得る。devの可逆な反映だけを理由にこの境界を緩和しない。
 - dev許可をmain／productionへ流用しない。main反映とproduction Deploymentは別に明示承認を得る。
 - force push、履歴改変、手動Redeploy、DB／Redis／Blob／OAuth／DNS／環境変数writeは、対象を特定した個別の明示承認なしに行わない。
 - checkpoint repositoryの許可済み保存は製品pushの承認として流用しない。
@@ -145,6 +167,8 @@ test、CI、Deployment、runtimeは、固定したrepository、remote、branch�
 
 `USER_ACTION_REQUIRED`では依頼を小出しにせず、同一surface・identity・許可範囲で連続できる操作を一つの実行シートにまとめる。対象environment／URL、目的、発生するwriteと上限、実行前状態、手順、成功条件、即時停止条件、返却する非秘密情報、共有禁止の秘密情報、resume pointを含める。途中結果で未承認writeへ分岐する場合は、その地点を停止条件とする。
 
+利用者操作は、利用者だけが実行できる能力または認証が現在必要な場合に限る。実行側の環境不足、未検証手順、実装上の不確実性を利用者操作へ移さない。依頼前に実行側で可能な調査、準備、検証を完了し、利用者には検証済みの一つの実行シートまたは成果物を渡す。PowerShell等の具体的な事前検証は`AI_EXECUTION_TROUBLESHOOTING.md`に従う。
+
 ## 9. 保存レベル
 
 | Level | 対象 | 必須保存 |
@@ -173,7 +197,7 @@ test、CI、Deployment、runtimeは、固定したrepository、remote、branch�
 - proposal等がPortal owner承認待ちとなり、そのturnを終了する
 - 利用者が正式報告を明示要求した
 
-相談、分析、個別指示、内部phase、local commit、checkpoint、通常のpush承認待ち、承認済みpush、`READY`、tool探索、schema／response path確認、parser修正、read-only retry、非product-write handshake、同一request IDの冪等照合は、それだけではterminal boundaryではない。
+相談、分析、個別指示、内部phase、local commit、checkpoint、通常のpush承認待ち、承認済みpush、`READY`、tool探索、schema／response path確認、parser修正、実行計画の修正、read-only retry、非product-write handshake、同一request IDの冪等照合は、それだけではterminal boundaryではない。
 
 正式resultの保存先は`koromo2010/app-games-checkpoints`、branch `ops/game-fields-supervisor-records-20260803`、`docs/gpt-save/`とする。既存pathを更新せず、record commit、blob SHA、pathと内容のremote read-backを確認する。保存不能時は`RESULT_RECORD_UNSAVED / AT RISK`とする。
 
@@ -181,6 +205,6 @@ resultには、受領指示、実施範囲、状態、変更、commit／tree、�
 
 ## 11. 状態表示
 
-`IMPLEMENTATION_COMPLETE`、`LOCAL_PASS`、`LOCAL_COMMITTED_UNSAFE`、`CHECKPOINT_SAVED`、`DEV_DEPLOYED`、`DEV_RUNTIME_PASS`、`PRODUCTION_DEPLOYED`、`PRODUCTION_RUNTIME_PASS`、`CLOSED`を組み合わせる。`CLOSED`はタスク固有の完了条件をすべて満たした場合だけ使用する。
+タスクlife cycleは`TASK_ACTIVE`、`TASK_DONE`、`EXTERNAL_BLOCKED`で表す。`IMPLEMENTATION_COMPLETE`、`LOCAL_PASS`、`LOCAL_COMMITTED_UNSAFE`、`CHECKPOINT_SAVED`、`DEV_DEPLOYED`、`DEV_RUNTIME_PASS`、`PRODUCTION_DEPLOYED`、`PRODUCTION_RUNTIME_PASS`は`TASK_ACTIVE`中のmilestoneであり、それだけで所有権を手放さない。`CLOSED`は`TASK_DONE`かつタスク固有の完了条件をすべて満たした場合だけ使用する。`INTERNAL_RECOVERY_REQUIRED`は内部診断であり、状態遷移、正式result、close、次指示の根拠にしない。
 
 Gitへ残す判断ログは、コードまたは正本仕様へ影響する確定事項に限定する。日々のTODO進行、指示書、result履歴はcheckpoint正本で管理する。
