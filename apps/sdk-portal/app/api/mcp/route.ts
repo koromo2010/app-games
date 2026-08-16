@@ -132,7 +132,7 @@ const moduleUpdateStatusToolDefinition = {
   title: "module変更案の状態照合",
   description: "proposalを作成せず、固定requestIdに対応する既存module変更案の有無と状態だけを確認します。",
   annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  inputSchema: { type: "object", properties: { slug: { type: "string" }, gameId: { type: "string" }, requestId: { type: "string", format: "uuid" }, environmentBinding: { type: "string", minLength: 32 } }, required: ["slug", "gameId", "requestId", "environmentBinding"], additionalProperties: false },
+  inputSchema: { type: "object", properties: { slug: { type: "string" }, gameId: { type: "string" }, requestId: { type: "string", format: "uuid" } }, required: ["slug", "gameId", "requestId"], additionalProperties: false },
 };
 
 const baseTools = [
