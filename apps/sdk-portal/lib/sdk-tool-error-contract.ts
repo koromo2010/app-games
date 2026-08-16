@@ -2,6 +2,7 @@ export type SdkToolErrorDetails = {
   code: string;
   message: string;
   layer: "authorization" | "validation" | "store" | "handler";
+  correlationId?: string;
 };
 
 export function buildSdkToolErrorResult(error: SdkToolErrorDetails) {

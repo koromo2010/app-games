@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
+  MODULE_PROFILE_PROPOSAL_STORE_ERROR,
   MODULE_PROFILE_STATUS_STORE_ERROR,
+  ModuleProfileProposalStoreError,
   ModuleProfileStatusStoreError,
   resolveExistingModuleProfileProposal,
   resolveCreatorGameModuleProfileUpdateStatus,
@@ -198,6 +200,24 @@ test("status error wrapper is structured and sanitized at runtime", () => {
   assert.equal(result.structuredContent.error.layer, "store");
   assert.equal(result.content[0].text, "module update status is temporarily unavailable.");
   assert.doesNotMatch(JSON.stringify(result), /SQL|internal-token|stack trace/);
+});
+
+test("proposal store error exposes only a stable code, layer and safe correlation id", () => {
+  const error = new ModuleProfileProposalStoreError("mpp-0123456789abcdef");
+  const result = buildSdkToolErrorResult({
+    code: MODULE_PROFILE_PROPOSAL_STORE_ERROR.code,
+    message: MODULE_PROFILE_PROPOSAL_STORE_ERROR.message,
+    layer: MODULE_PROFILE_PROPOSAL_STORE_ERROR.layer,
+    correlationId: error.correlationId,
+  });
+  assert.equal(result.isError, true);
+  assert.deepEqual(result.structuredContent.error, {
+    code: "SDK_MODULE_PROPOSAL_STORE_UNAVAILABLE",
+    message: "module profile proposal is temporarily unavailable.",
+    layer: "store",
+    correlationId: "mpp-0123456789abcdef",
+  });
+  assert.doesNotMatch(JSON.stringify(result), /SQL|secret-token|stack trace|requestId/);
 });
 
 test("proposal preparation keeps the existing requestId idempotent without a second generator", async () => {

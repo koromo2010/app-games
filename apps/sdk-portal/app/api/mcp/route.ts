@@ -58,7 +58,9 @@ import {
 import {
   getCreatorGameModuleProfileProposal,
   getCreatorGameModuleProfileUpdateStatus,
+  MODULE_PROFILE_PROPOSAL_STORE_ERROR,
   MODULE_PROFILE_STATUS_STORE_ERROR,
+  ModuleProfileProposalStoreError,
   listCreatorGameModuleProfileProposalAudit,
   prepareCreatorGameModuleProfileUpdate,
 } from "@/lib/module-profile-proposal-store";
@@ -235,14 +237,20 @@ export function sdkToolErrorDetails(error: unknown) {
     ["MODULE_PROFILE_STALE", ["MODULE_PROFILE_STALE", "validation"]],
     ["SDK_INSTANCE_REGISTRY_NOT_CONFIGURED", ["SDK_INSTANCE_REGISTRY_NOT_CONFIGURED", "store"]],
     ["SDK_INSTANCE_REGISTRY_UNAVAILABLE", ["SDK_INSTANCE_REGISTRY_UNAVAILABLE", "store"]],
+    [MODULE_PROFILE_PROPOSAL_STORE_ERROR.code, [MODULE_PROFILE_PROPOSAL_STORE_ERROR.code, MODULE_PROFILE_PROPOSAL_STORE_ERROR.layer]],
     [MODULE_PROFILE_STATUS_STORE_ERROR.code, [MODULE_PROFILE_STATUS_STORE_ERROR.code, MODULE_PROFILE_STATUS_STORE_ERROR.layer]],
   ] as const);
   const matched = [...explicitCodes].find(([code]) => source.includes(code));
   const [code, layer] = matched?.[1] ?? ["SDK_OPERATION_FAILED", "handler"];
   const message = code === MODULE_PROFILE_STATUS_STORE_ERROR.code
     ? MODULE_PROFILE_STATUS_STORE_ERROR.message
+    : code === MODULE_PROFILE_PROPOSAL_STORE_ERROR.code
+      ? MODULE_PROFILE_PROPOSAL_STORE_ERROR.message
     : matched ? code : "SDK操作に失敗しました。";
-  return { code, message, layer };
+  const correlationId = error instanceof ModuleProfileProposalStoreError
+    ? error.correlationId
+    : undefined;
+  return { code, message, layer, ...(correlationId ? { correlationId } : {}) };
 }
 
 export function sdkToolErrorResult(error: unknown) {

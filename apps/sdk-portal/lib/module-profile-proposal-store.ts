@@ -48,10 +48,39 @@ export const MODULE_PROFILE_STATUS_STORE_ERROR = {
   layer: "store" as const,
 };
 
+export const MODULE_PROFILE_PROPOSAL_STORE_ERROR = {
+  code: "SDK_MODULE_PROPOSAL_STORE_UNAVAILABLE",
+  message: "module profile proposal is temporarily unavailable.",
+  layer: "store" as const,
+};
+
 export class ModuleProfileStatusStoreError extends Error {
   constructor() {
     super(MODULE_PROFILE_STATUS_STORE_ERROR.code);
     this.name = "ModuleProfileStatusStoreError";
+  }
+}
+
+export class ModuleProfileProposalStoreError extends Error {
+  readonly correlationId: string;
+
+  constructor(correlationId: string) {
+    super(MODULE_PROFILE_PROPOSAL_STORE_ERROR.code);
+    this.name = "ModuleProfileProposalStoreError";
+    this.correlationId = correlationId;
+  }
+}
+
+function safeProposalCorrelationId(value: string) {
+  return `mpp-${createHash("sha256").update(value).digest("hex").slice(0, 16)}`;
+}
+
+async function proposalStoreBoundary<T>(correlationSource: string, operation: () => Promise<T>) {
+  try {
+    return await operation();
+  } catch (error) {
+    if (error instanceof ModuleProfileProposalStoreError) throw error;
+    throw new ModuleProfileProposalStoreError(safeProposalCorrelationId(correlationSource));
   }
 }
 
@@ -182,18 +211,18 @@ export async function prepareCreatorGameModuleProfileUpdate(input: {
   specification: unknown;
   moduleDecisions: unknown;
 }) {
-  await ensureSdkSchema();
+  await proposalStoreBoundary(input.requestId, ensureSdkSchema);
   const existing = await resolveExistingModuleProfileProposal(input, {
     findProposalId: async () => {
-      const existingRows = await sdkSql()`
-        SELECT id
-        FROM sdk_game_module_profile_proposals p
-        JOIN sdk_games g ON g.id = p.game_row_id
-        WHERE p.creator_id = ${input.creatorId}
-          AND p.game_id = ${input.gameId}
-          AND p.request_id = ${input.requestId}::uuid
-        LIMIT 1
-      `;
+      const existingRows = await proposalStoreBoundary(input.requestId, async () => sdkSql()`
+          SELECT id
+          FROM sdk_game_module_profile_proposals p
+          JOIN sdk_games g ON g.id = p.game_row_id
+          WHERE p.creator_id = ${input.creatorId}
+            AND p.game_id = ${input.gameId}
+            AND p.request_id = ${input.requestId}::uuid
+          LIMIT 1
+        `);
       const row = Array.isArray(existingRows) ? existingRows[0] as { id?: unknown } | undefined : undefined;
       return row && typeof row.id === "string" ? row.id : null;
     },
@@ -204,10 +233,10 @@ export async function prepareCreatorGameModuleProfileUpdate(input: {
     }),
   });
   if (existing) return existing;
-  const current = await getCreatorGameModuleAuthoringState({
+  const current = await proposalStoreBoundary(input.requestId, () => getCreatorGameModuleAuthoringState({
     creatorId: input.creatorId,
     gameId: input.gameId,
-  });
+  }));
   if (!current) throw new Error("GAME_SDK_DRAFT_NOT_FOUND");
   if (!current.moduleProfileConfirmedAt || !current.moduleContractDigest) {
     throw new Error("MODULE_PROFILE_NOT_CONFIRMED");
@@ -224,39 +253,39 @@ export async function prepareCreatorGameModuleProfileUpdate(input: {
   const catalogDigest = moduleCatalogDigest();
   const id = randomUUID();
   const impact = impactReport(diff, proposedProfile);
-  const rows = await sdkSql()`
-    INSERT INTO sdk_game_module_profile_proposals (
-      id, creator_id, game_row_id, game_id, proposer_client, environment,
-      request_id, base_module_profile_revision, base_module_contract_digest,
-      catalog_digest, specification, proposed_profile, diff, dependencies,
-      impact, warnings
-    )
-    SELECT ${id}::uuid, c.id, g.id, g.game_id, ${input.proposerClient}, ${input.environment},
-           ${input.requestId}::uuid, g.module_profile_revision, g.module_contract_digest,
-           ${catalogDigest}, ${JSON.stringify(specification)}::jsonb,
-           ${JSON.stringify(proposedProfile)}::jsonb, ${JSON.stringify(diff)}::jsonb,
-           ${JSON.stringify(dependencyReportResult.dependencies)}::jsonb,
-           ${JSON.stringify(impact)}::jsonb, ${JSON.stringify(dependencyReportResult.warnings)}::jsonb
-    FROM sdk_games g
-    JOIN sdk_creators c ON c.id = g.creator_id
-    WHERE c.id = ${input.creatorId}::uuid
-      AND g.game_id = ${input.gameId}
-      AND g.deleted_at IS NULL
-      AND g.module_profile_confirmed_at IS NOT NULL
-      AND g.module_contract_digest = ${current.moduleContractDigest}
-    RETURNING id
-  `;
+  const rows = await proposalStoreBoundary(input.requestId, async () => sdkSql()`
+      INSERT INTO sdk_game_module_profile_proposals (
+        id, creator_id, game_row_id, game_id, proposer_client, environment,
+        request_id, base_module_profile_revision, base_module_contract_digest,
+        catalog_digest, specification, proposed_profile, diff, dependencies,
+        impact, warnings
+      )
+      SELECT ${id}::uuid, c.id, g.id, g.game_id, ${input.proposerClient}, ${input.environment},
+             ${input.requestId}::uuid, g.module_profile_revision, g.module_contract_digest,
+             ${catalogDigest}, ${JSON.stringify(specification)}::jsonb,
+             ${JSON.stringify(proposedProfile)}::jsonb, ${JSON.stringify(diff)}::jsonb,
+             ${JSON.stringify(dependencyReportResult.dependencies)}::jsonb,
+             ${JSON.stringify(impact)}::jsonb, ${JSON.stringify(dependencyReportResult.warnings)}::jsonb
+      FROM sdk_games g
+      JOIN sdk_creators c ON c.id = g.creator_id
+      WHERE c.id = ${input.creatorId}::uuid
+        AND g.game_id = ${input.gameId}
+        AND g.deleted_at IS NULL
+        AND g.module_profile_confirmed_at IS NOT NULL
+        AND g.module_contract_digest = ${current.moduleContractDigest}
+      RETURNING id
+    `);
   if (!Array.isArray(rows) || rows.length === 0) throw new Error("MODULE_PROFILE_STALE");
-  await sdkSql()`
-    INSERT INTO sdk_game_module_profile_audit (
-      proposal_id, creator_id, game_row_id, action, actor_kind, actor_client,
-      base_module_profile_revision, base_module_contract_digest, diff
-    )
-    SELECT p.id, p.creator_id, p.game_row_id, 'prepared', 'ai', p.proposer_client,
-           p.base_module_profile_revision, p.base_module_contract_digest, p.diff
-    FROM sdk_game_module_profile_proposals p
-    WHERE p.id = ${id}::uuid
-  `;
+  await proposalStoreBoundary(input.requestId, async () => sdkSql()`
+      INSERT INTO sdk_game_module_profile_audit (
+        proposal_id, creator_id, game_row_id, action, actor_kind, actor_client,
+        base_module_profile_revision, base_module_contract_digest, diff
+      )
+      SELECT p.id, p.creator_id, p.game_row_id, 'prepared', 'ai', p.proposer_client,
+             p.base_module_profile_revision, p.base_module_contract_digest, p.diff
+      FROM sdk_game_module_profile_proposals p
+      WHERE p.id = ${id}::uuid
+    `);
   return getCreatorGameModuleProfileProposal({
     creatorId: input.creatorId,
     gameId: input.gameId,
@@ -269,28 +298,30 @@ export async function getCreatorGameModuleProfileProposal(input: {
   gameId: string;
   proposalId: string;
 }) {
-  await ensureSdkSchema();
-  const rows = await sdkSql()`
-    SELECT p.id, p.creator_id AS "creatorId", p.game_id AS "gameId",
-           p.proposer_client AS "proposerClient", p.environment,
-           p.request_id AS "requestId",
-           p.base_module_profile_revision AS "baseModuleProfileRevision",
-           p.base_module_contract_digest AS "baseModuleContractDigest",
-           p.catalog_digest AS "catalogDigest", p.specification,
-           p.proposed_profile AS "proposedProfile", p.diff, p.dependencies,
-           p.impact, p.warnings, p.status,
-           p.approved_by_player_id AS "approvedByPlayerId",
-           p.approved_at AS "approvedAt", p.created_at AS "createdAt",
-           p.updated_at AS "updatedAt"
-    FROM sdk_game_module_profile_proposals p
-    JOIN sdk_games g ON g.id = p.game_row_id
-    WHERE p.id = ${input.proposalId}::uuid
-      AND p.creator_id = ${input.creatorId}::uuid
-      AND g.game_id = ${input.gameId}
-    LIMIT 1
-  `;
-  const row = Array.isArray(rows) ? rows[0] as ProposalRow | undefined : undefined;
-  return row ? mapProposal(row) : null;
+  return proposalStoreBoundary(input.proposalId, async () => {
+    await ensureSdkSchema();
+    const rows = await sdkSql()`
+      SELECT p.id, p.creator_id AS "creatorId", p.game_id AS "gameId",
+             p.proposer_client AS "proposerClient", p.environment,
+             p.request_id AS "requestId",
+             p.base_module_profile_revision AS "baseModuleProfileRevision",
+             p.base_module_contract_digest AS "baseModuleContractDigest",
+             p.catalog_digest AS "catalogDigest", p.specification,
+             p.proposed_profile AS "proposedProfile", p.diff, p.dependencies,
+             p.impact, p.warnings, p.status,
+             p.approved_by_player_id AS "approvedByPlayerId",
+             p.approved_at AS "approvedAt", p.created_at AS "createdAt",
+             p.updated_at AS "updatedAt"
+      FROM sdk_game_module_profile_proposals p
+      JOIN sdk_games g ON g.id = p.game_row_id
+      WHERE p.id = ${input.proposalId}::uuid
+        AND p.creator_id = ${input.creatorId}::uuid
+        AND g.game_id = ${input.gameId}
+      LIMIT 1
+    `;
+    const row = Array.isArray(rows) ? rows[0] as ProposalRow | undefined : undefined;
+    return row ? mapProposal(row) : null;
+  });
 }
 
 export type ModuleProfileStatusLookupDependencies = {
