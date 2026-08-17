@@ -203,12 +203,13 @@ test("status error wrapper is structured and sanitized at runtime", () => {
 });
 
 test("proposal store error exposes only a stable code, layer and safe correlation id", () => {
-  const error = new ModuleProfileProposalStoreError("mpp-0123456789abcdef");
+  const error = new ModuleProfileProposalStoreError("mpp-0123456789abcdef", "proposal-insert");
   const result = buildSdkToolErrorResult({
     code: MODULE_PROFILE_PROPOSAL_STORE_ERROR.code,
     message: MODULE_PROFILE_PROPOSAL_STORE_ERROR.message,
     layer: MODULE_PROFILE_PROPOSAL_STORE_ERROR.layer,
     correlationId: error.correlationId,
+    operation: error.operation,
   });
   assert.equal(result.isError, true);
   assert.deepEqual(result.structuredContent.error, {
@@ -216,8 +217,24 @@ test("proposal store error exposes only a stable code, layer and safe correlatio
     message: "module profile proposal is temporarily unavailable.",
     layer: "store",
     correlationId: "mpp-0123456789abcdef",
+    operation: "proposal-insert",
   });
   assert.doesNotMatch(JSON.stringify(result), /SQL|secret-token|stack trace|requestId/);
+});
+
+test("proposal store boundaries identify only the safe failing operation", () => {
+  const store = read("apps/sdk-portal/lib/module-profile-proposal-store.ts");
+  for (const operation of [
+    "schema",
+    "proposal-lookup",
+    "authoring-state",
+    "proposal-insert",
+    "audit-insert",
+    "proposal-readback",
+  ]) {
+    assert.match(store, new RegExp(`\\"${operation}\\"`));
+  }
+  assert.doesNotMatch(store, /SDK_DATABASE_URL|POSTGRES_PRISMA_URL|DATABASE_URL/);
 });
 
 test("proposal preparation keeps the existing requestId idempotent without a second generator", async () => {

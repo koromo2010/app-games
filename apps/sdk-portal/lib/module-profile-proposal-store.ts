@@ -54,6 +54,17 @@ export const MODULE_PROFILE_PROPOSAL_STORE_ERROR = {
   layer: "store" as const,
 };
 
+export const MODULE_PROFILE_PROPOSAL_OPERATIONS = [
+  "schema",
+  "proposal-lookup",
+  "authoring-state",
+  "proposal-insert",
+  "audit-insert",
+  "proposal-readback",
+] as const;
+
+export type ModuleProfileProposalStoreOperation = typeof MODULE_PROFILE_PROPOSAL_OPERATIONS[number];
+
 export class ModuleProfileStatusStoreError extends Error {
   constructor() {
     super(MODULE_PROFILE_STATUS_STORE_ERROR.code);
@@ -63,11 +74,13 @@ export class ModuleProfileStatusStoreError extends Error {
 
 export class ModuleProfileProposalStoreError extends Error {
   readonly correlationId: string;
+  readonly operation?: ModuleProfileProposalStoreOperation;
 
-  constructor(correlationId: string) {
+  constructor(correlationId: string, operation?: ModuleProfileProposalStoreOperation) {
     super(MODULE_PROFILE_PROPOSAL_STORE_ERROR.code);
     this.name = "ModuleProfileProposalStoreError";
     this.correlationId = correlationId;
+    this.operation = operation;
   }
 }
 
@@ -75,12 +88,16 @@ function safeProposalCorrelationId(value: string) {
   return `mpp-${createHash("sha256").update(value).digest("hex").slice(0, 16)}`;
 }
 
-async function proposalStoreBoundary<T>(correlationSource: string, operation: () => Promise<T>) {
+async function proposalStoreBoundary<T>(
+  correlationSource: string,
+  operationName: ModuleProfileProposalStoreOperation,
+  operation: () => Promise<T>,
+) {
   try {
     return await operation();
   } catch (error) {
     if (error instanceof ModuleProfileProposalStoreError) throw error;
-    throw new ModuleProfileProposalStoreError(safeProposalCorrelationId(correlationSource));
+    throw new ModuleProfileProposalStoreError(safeProposalCorrelationId(correlationSource), operationName);
   }
 }
 
@@ -211,10 +228,10 @@ export async function prepareCreatorGameModuleProfileUpdate(input: {
   specification: unknown;
   moduleDecisions: unknown;
 }) {
-  await proposalStoreBoundary(input.requestId, ensureSdkSchema);
+  await proposalStoreBoundary(input.requestId, "schema", ensureSdkSchema);
   const existing = await resolveExistingModuleProfileProposal(input, {
     findProposalId: async () => {
-      const existingRows = await proposalStoreBoundary(input.requestId, async () => sdkSql()`
+      const existingRows = await proposalStoreBoundary(input.requestId, "proposal-lookup", async () => sdkSql()`
           SELECT id
           FROM sdk_game_module_profile_proposals p
           JOIN sdk_games g ON g.id = p.game_row_id
@@ -233,7 +250,7 @@ export async function prepareCreatorGameModuleProfileUpdate(input: {
     }),
   });
   if (existing) return existing;
-  const current = await proposalStoreBoundary(input.requestId, () => getCreatorGameModuleAuthoringState({
+  const current = await proposalStoreBoundary(input.requestId, "authoring-state", () => getCreatorGameModuleAuthoringState({
     creatorId: input.creatorId,
     gameId: input.gameId,
   }));
@@ -253,7 +270,7 @@ export async function prepareCreatorGameModuleProfileUpdate(input: {
   const catalogDigest = moduleCatalogDigest();
   const id = randomUUID();
   const impact = impactReport(diff, proposedProfile);
-  const rows = await proposalStoreBoundary(input.requestId, async () => sdkSql()`
+  const rows = await proposalStoreBoundary(input.requestId, "proposal-insert", async () => sdkSql()`
       INSERT INTO sdk_game_module_profile_proposals (
         id, creator_id, game_row_id, game_id, proposer_client, environment,
         request_id, base_module_profile_revision, base_module_contract_digest,
@@ -276,7 +293,7 @@ export async function prepareCreatorGameModuleProfileUpdate(input: {
       RETURNING id
     `);
   if (!Array.isArray(rows) || rows.length === 0) throw new Error("MODULE_PROFILE_STALE");
-  await proposalStoreBoundary(input.requestId, async () => sdkSql()`
+  await proposalStoreBoundary(input.requestId, "audit-insert", async () => sdkSql()`
       INSERT INTO sdk_game_module_profile_audit (
         proposal_id, creator_id, game_row_id, action, actor_kind, actor_client,
         base_module_profile_revision, base_module_contract_digest, diff
@@ -298,7 +315,7 @@ export async function getCreatorGameModuleProfileProposal(input: {
   gameId: string;
   proposalId: string;
 }) {
-  return proposalStoreBoundary(input.proposalId, async () => {
+  return proposalStoreBoundary(input.proposalId, "proposal-readback", async () => {
     await ensureSdkSchema();
     const rows = await sdkSql()`
       SELECT p.id, p.creator_id AS "creatorId", p.game_id AS "gameId",

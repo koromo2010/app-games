@@ -63,6 +63,7 @@ import {
   ModuleProfileProposalStoreError,
   listCreatorGameModuleProfileProposalAudit,
   prepareCreatorGameModuleProfileUpdate,
+  type ModuleProfileProposalStoreOperation,
 } from "@/lib/module-profile-proposal-store";
 import {
   bindGamePackageAuthoringManifest,
@@ -250,7 +251,16 @@ export function sdkToolErrorDetails(error: unknown) {
   const correlationId = error instanceof ModuleProfileProposalStoreError
     ? error.correlationId
     : undefined;
-  return { code, message, layer, ...(correlationId ? { correlationId } : {}) };
+  const operation: ModuleProfileProposalStoreOperation | undefined = error instanceof ModuleProfileProposalStoreError
+    ? error.operation
+    : undefined;
+  return {
+    code,
+    message,
+    layer,
+    ...(correlationId ? { correlationId } : {}),
+    ...(operation ? { operation } : {}),
+  };
 }
 
 export function sdkToolErrorResult(error: unknown) {
