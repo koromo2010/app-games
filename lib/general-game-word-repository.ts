@@ -2,6 +2,7 @@ import {
   getVocabularyPostgresClient,
   isVocabularyPostgresConfigured,
 } from "./vocabulary-postgres-store.ts";
+import { loadReviewedWordPoolRecords } from "./reviewed-word-pool.ts";
 import {
   generalGameWordDifficulties,
   generalGameWordDifficultyTags,
@@ -43,8 +44,29 @@ export async function loadGeneralGameWordRecords(
   if (!isVocabularyPostgresConfigured()) {
     throw new Error("GENERAL_GAME_WORD_POOL_UNAVAILABLE");
   }
-  const sql = getVocabularyPostgresClient();
   const safeLimit = Math.max(1, Math.min(500, Math.floor(limitPerDifficulty)));
+  try {
+    const reviewedRows = await loadReviewedWordPoolRecords({
+      pool: "general",
+      limitPerDifficulty: safeLimit,
+    });
+    return reviewedRows.map((row) => ({
+      id: row.id,
+      surface: row.surface,
+      normalizedSurface: row.normalizedSurface,
+      reading: row.reading,
+      difficulty: row.difficulty,
+    }));
+  } catch (error) {
+    if (!(error instanceof Error) || error.message !== "REVIEWED_WORD_POOL_SCHEMA_UNAVAILABLE") {
+      throw error;
+    }
+  }
+
+  // Compatibility for a local database that has the pre-membership schema.
+  // This remains the same reviewed standard-game eligibility boundary; it is
+  // not a fixed vocabulary fallback.
+  const sql = getVocabularyPostgresClient();
   const rows = await sql`
     WITH classified AS (
       SELECT word.id, word.surface, word.normalized_surface, word.reading,

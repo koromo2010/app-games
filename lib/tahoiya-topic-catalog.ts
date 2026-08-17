@@ -6,10 +6,10 @@ import { redisCommand } from "@/lib/redis-store";
 import { emitObservabilityEvent } from "@/lib/observability";
 import { hasVeryCommonSpokenHomophone } from "@/lib/tahoiya-difficulty";
 import {
-  listActiveTahoiyaTopics,
-  recordTahoiyaTopicUsageByWord,
-  type StoredTahoiyaTopic,
-} from "@/lib/tahoiya-topic-repository";
+  loadRareWordTopics,
+  recordRareWordUsage,
+  type RareWordTopicRecord,
+} from "@/lib/rare-word-content-source";
 import {
   listScreenedTahoiyaWordCandidates,
   listUnscreenedTahoiyaWordCandidates,
@@ -194,7 +194,7 @@ export async function findReusableTahoiyaTopic(
   if (playerIds.length === 0) return null;
   const blocked = new Set(blockedWords.map(normalizeWord));
   const [storedTopics, legacyValues, ratingScores] = await Promise.all([
-    listActiveTahoiyaTopics(difficulty, 200).catch(() => []),
+    loadRareWordTopics(difficulty, 200).catch(() => []),
     redisCommand<string[]>(["HVALS", legacyTahoiyaCatalogKey]).catch(() => []),
     loadTopicRatingScores().catch(() => new Map<string, { good: number; bad: number }>()),
   ]);
@@ -213,7 +213,7 @@ export async function findReusableTahoiyaTopic(
     sharedCandidates.map((record) => ({ ...record, word: record.topic.word })),
     playerIds,
   );
-  const candidates: Array<StoredTahoiyaTopic | LegacyTahoiyaTopicCatalogRecord> = unexperiencedShared.length > 0
+  const candidates: Array<RareWordTopicRecord | LegacyTahoiyaTopicCatalogRecord> = unexperiencedShared.length > 0
     ? unexperiencedShared
     : await filterWithDeviceHistoryFallback(
       legacyRecords
@@ -243,7 +243,7 @@ export async function rememberTahoiyaTopicExperience(
   if (!topic.word || playerIds.length === 0) return;
   const now = Date.now();
   await rememberTahoiyaTopicHistory(topic.word, playerIds);
-  await recordTahoiyaTopicUsageByWord(normalizeWord(topic.word)).catch(() => false);
+  await recordRareWordUsage(normalizeWord(topic.word)).catch(() => false);
   await redisCommand<number>([
     "EVAL",
     "local raw=redis.call('HGET',KEYS[1],ARGV[1]); if not raw then return 0 end; local item=cjson.decode(raw); item.lastUsedAt=tonumber(ARGV[2]); item.useCount=tonumber(item.useCount or 0)+1; redis.call('HSET',KEYS[1],ARGV[1],cjson.encode(item)); return 1",
