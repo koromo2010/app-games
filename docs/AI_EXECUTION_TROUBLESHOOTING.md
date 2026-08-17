@@ -62,6 +62,21 @@ canonical pathは次のとおり。
 
 `proposalId`、`response.proposalId`、wrapper直下の`environmentBinding`等を候補検索しない。wrapperをpayloadとして扱わない。秘密を含み得るraw response全体を報告へ保存しない。
 
+### 外部responseの即時capture
+
+再取得不能、tool invocation上限付き、または後続write判断の根拠となるresponseでは、外部call前に新規保存pathとwriterを準備し、call後の最初の処理として同じtool flow内でcaptureする。
+
+1. raw responseは同じflowの変数にだけ保持し、schemaに基づくsafe projectionからbinding、secret、Cookie、token、password、認証header、個人情報を除く。
+2. `node scripts/write-immutable-json.mjs <new-path.json>`へsafe projectionをstdinで渡す。response本文をcommand引数、stdout、会話へ展開しない。
+3. helperのtemporary file write、`fsync`、close、atomic rename、JSON parse、deep equality、SHA-256、read-backがPASSしたことを確認する。
+4. そのcaptureをcheckpoint repositoryの新規immutable pathへ保存してremote read-backする。ここまで完了してからMarkdown result、追加call、proposal等へ進む。
+
+machine outputの初回保存に`apply_patch`を使わない。Markdownは保存済みJSONから生成する二次成果物とする。writer未検証のworkspaceでは、外部call前にsynthetic fixtureを1回PASSさせる。
+
+captureが失敗してもresponseが変数に残る間は外部toolを再callせず、同じresponseを別の新規pathへ保存する。response自体を失った場合は、保持済みtranscriptやartifactを探索してから冪等契約と個別のcall上限に従う。保存失敗を新しいproduct writeや別request IDの理由にしない。
+
+`write-immutable-json.mjs`は既存pathを上書きせず、既知のsecret-bearing keyを検出した場合は保存前に停止する。generic helperの検査だけに依存せず、呼出側で現行schemaに基づくallowlist projectionを作る。
+
 ## 4. Handshake
 
 handshake requestは`docs/SDK_HANDSHAKE.md`の必須fieldをすべて送る。AI authoring client名は`ChatGPT Work`または`Claude Code`だけを使用する。
