@@ -207,6 +207,34 @@ export function impactReport(diff: ModuleProfileProposalDiff[], profile: GameSdk
   ];
 }
 
+export type ModuleProfileProposalLookupInput = {
+  creatorId: string;
+  gameId: string;
+  requestId: string;
+};
+
+export type ModuleProfileProposalLookupSql = (
+  strings: TemplateStringsArray,
+  ...values: unknown[]
+) => Promise<unknown>;
+
+export async function findCreatorGameModuleProfileProposalId(
+  input: ModuleProfileProposalLookupInput,
+  sql: ModuleProfileProposalLookupSql = sdkSql() as unknown as ModuleProfileProposalLookupSql,
+) {
+  const rows = await sql`
+    SELECT p.id
+    FROM sdk_game_module_profile_proposals p
+    JOIN sdk_games g ON g.id = p.game_row_id
+    WHERE p.creator_id = ${input.creatorId}::uuid
+      AND g.game_id = ${input.gameId}
+      AND p.request_id = ${input.requestId}::uuid
+    LIMIT 1
+  `;
+  const row = Array.isArray(rows) ? rows[0] as { id?: unknown } | undefined : undefined;
+  return row && typeof row.id === "string" ? row.id : null;
+}
+
 export async function resolveExistingModuleProfileProposal(input: {
   creatorId: string;
   gameId: string;
@@ -230,19 +258,11 @@ export async function prepareCreatorGameModuleProfileUpdate(input: {
 }) {
   await proposalStoreBoundary(input.requestId, "schema", ensureSdkSchema);
   const existing = await resolveExistingModuleProfileProposal(input, {
-    findProposalId: async () => {
-      const existingRows = await proposalStoreBoundary(input.requestId, "proposal-lookup", async () => sdkSql()`
-          SELECT id
-          FROM sdk_game_module_profile_proposals p
-          JOIN sdk_games g ON g.id = p.game_row_id
-          WHERE p.creator_id = ${input.creatorId}
-            AND p.game_id = ${input.gameId}
-            AND p.request_id = ${input.requestId}::uuid
-          LIMIT 1
-        `);
-      const row = Array.isArray(existingRows) ? existingRows[0] as { id?: unknown } | undefined : undefined;
-      return row && typeof row.id === "string" ? row.id : null;
-    },
+    findProposalId: () => proposalStoreBoundary(
+      input.requestId,
+      "proposal-lookup",
+      () => findCreatorGameModuleProfileProposalId(input),
+    ),
     loadProposal: (proposalId) => getCreatorGameModuleProfileProposal({
       creatorId: input.creatorId,
       gameId: input.gameId,
@@ -372,19 +392,7 @@ export async function getCreatorGameModuleProfileUpdateStatus(input: {
 }) {
   return resolveCreatorGameModuleProfileUpdateStatus(input, {
     ensureSchema: ensureSdkSchema,
-    findProposalId: async (statusInput) => {
-      const rows = await sdkSql()`
-        SELECT p.id
-        FROM sdk_game_module_profile_proposals p
-        JOIN sdk_games g ON g.id = p.game_row_id
-        WHERE p.creator_id = ${statusInput.creatorId}::uuid
-          AND g.game_id = ${statusInput.gameId}
-          AND p.request_id = ${statusInput.requestId}::uuid
-        LIMIT 1
-      `;
-      const row = Array.isArray(rows) ? rows[0] as { id?: unknown } | undefined : undefined;
-      return row && typeof row.id === "string" ? row.id : null;
-    },
+    findProposalId: findCreatorGameModuleProfileProposalId,
     loadProposal: getCreatorGameModuleProfileProposal,
   });
 }

@@ -6,6 +6,7 @@ import {
   MODULE_PROFILE_STATUS_STORE_ERROR,
   ModuleProfileProposalStoreError,
   ModuleProfileStatusStoreError,
+  findCreatorGameModuleProfileProposalId,
   resolveExistingModuleProfileProposal,
   resolveCreatorGameModuleProfileUpdateStatus,
 } from "../apps/sdk-portal/lib/module-profile-proposal-store.ts";
@@ -123,6 +124,24 @@ test("status lookup returns an absent result without invoking proposal loading",
   );
   assert.equal(result, null);
   assert.equal(loadCalls, 0);
+});
+
+test("status and prepare share one typed canonical proposal lookup", async () => {
+  let query = "";
+  let values: unknown[] = [];
+  const result = await findCreatorGameModuleProfileProposalId(
+    { creatorId: "creator-1", gameId: "twixt-repro", requestId: "request-absent" },
+    async (strings, ...queryValues) => {
+      query = strings.join("?");
+      values = queryValues;
+      return [];
+    },
+  );
+  assert.equal(result, null);
+  assert.match(query, /p\.creator_id = \?::uuid/);
+  assert.match(query, /g\.game_id = \?/);
+  assert.match(query, /p\.request_id = \?::uuid/);
+  assert.deepEqual(values, ["creator-1", "twixt-repro", "request-absent"]);
 });
 
 test("status lookup converts store failures to a sanitized stable error", async () => {
