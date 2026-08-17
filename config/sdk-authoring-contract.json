@@ -42,6 +42,15 @@
     "formal-room-preview",
     "submission-candidate"
   ],
+  "efficiencyGuidance": {
+    "purpose": "Avoid needless authoring-turn repetition without skipping required validation or approval.",
+    "rules": [
+      "Reuse unchanged IDs, bindings, responses, source, schemas and results; do not reread or restate them without a reason.",
+      "Before retrying a failed command or tool, inspect the error and contract; retry only after a concrete correction or allowed idempotent reconciliation.",
+      "Batch related read-only checks and return concise diffs or summaries instead of repeating unchanged logs or intermediate reports.",
+      "Never skip required tests, validation, human approval or safety checks for efficiency."
+    ]
+  },
   "invariants": {
     "must": [
       "Treat accepted=true as the aggregate verdict for client, environment, canonicalMcpUrl, onboardingProfileId, release, contract and required capabilities; do not independently revalidate the same fields without a contradictory observation.",

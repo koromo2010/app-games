@@ -24,6 +24,21 @@ test("the formal authoring surfaces are exactly ChatGPT Work and Claude Code", (
   assert.doesNotMatch(portal, /Codex/);
 });
 
+test("the shared authoring profile exposes one short efficiency guidance", () => {
+  const contract = JSON.parse(read("config/sdk-authoring-contract.json"));
+  const guidance = contract.efficiencyGuidance;
+  assert.equal(typeof guidance?.purpose, "string");
+  assert.equal(Array.isArray(guidance?.rules), true);
+  assert.equal(guidance.rules.length, 4);
+  assert.equal(new Set(guidance.rules).size, guidance.rules.length);
+  assert.ok(guidance.rules.every((rule: string) => rule.length <= 180));
+
+  const chatgptEntry = read("sdk/entry/START_GAME_FIELDS.md");
+  const claudeEntry = read("sdk/entry/START_CLAUDE_CODE.md");
+  assert.match(chatgptEntry, /CALL get_authoring_profile/);
+  assert.match(claudeEntry, /get_authoring_profile.*clientId="claude-code"/s);
+});
+
 test("Claude Code profile uses remote HTTP OAuth and never embeds credentials", () => {
   const profile = read("sdk/entry/START_CLAUDE_CODE.md");
   assert.match(profile, /--transport http/);
