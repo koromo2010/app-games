@@ -43,6 +43,7 @@
 
 - 実行、検証、保存、公開、証拠: `docs/DEVELOPMENT_EXECUTION_RULES.md`
 - 実行時の自己回復: `docs/AI_EXECUTION_TROUBLESHOOTING.md`
+- 全体構成、環境、主要flowと正本への入口: `docs/SYSTEM_MAP.md`
 - 現在状態と資料索引: `docs/README.md`、`docs/CURRENT_STATE.md`
 - 現行仕様と主要ファイル: `docs/DEVELOPMENT_HANDOFF.md`
 - 既知の不具合: `docs/KNOWN_ISSUES.md`
