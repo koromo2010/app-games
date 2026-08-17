@@ -9,7 +9,7 @@
 3. [`SYSTEM_MAP.md`](./SYSTEM_MAP.md) で、app・環境・主要flowと正本の位置関係を掴む。
 4. [`CURRENT_STATE.md`](./CURRENT_STATE.md) で、現在実装・運用されている全体像を確認する。
 5. `DEVELOPMENT_HANDOFF.md` で、現在の仕様・主要ファイル・環境変数・公開手順を確認する。
-6. 下表から、今回の作業に該当する資料だけを追加で読む。tool、schema、response解析で詰まった場合は[`AI_EXECUTION_TROUBLESHOOTING.md`](./AI_EXECUTION_TROUBLESHOOTING.md)を読む。
+6. 下表から、今回の作業に該当する資料だけを追加で読む。tool、schema、response解析、利用者PC向けhelper／PowerShellで詰まった場合は[`AI_EXECUTION_TROUBLESHOOTING.md`](./AI_EXECUTION_TROUBLESHOOTING.md)を読む。
 7. `git status --short --branch` と直近コミットを確認し、既存変更を上書きしない。
 8. 変更後は影響範囲に応じたfocused test、回帰、lint／buildを実行する。
 
@@ -32,6 +32,7 @@
 | 実行許可・保存・証拠・終了判定 | `DEVELOPMENT_EXECUTION_RULES.md` | 個別指示、Git差分、対象Deployment／runtime identity |
 | システム全体の構成・環境・主要flow | `SYSTEM_MAP.md` | 機械可読な設定、`CURRENT_STATE.md`、対象source |
 | tool・schema・response解析の自己回復 | `AI_EXECUTION_TROUBLESHOOTING.md` | 現行source、schema、関連test、structured response |
+| 利用者PC向けone-click helper・PowerShell | `AI_EXECUTION_TROUBLESHOOTING.md` 8章 | 対象OS fixture、外部commandのstdout／stderr／exit code、launcher source |
 | 現在の全体像 | `CURRENT_STATE.md` | `DEVELOPMENT_HANDOFF.md`、コード、設定 |
 | 将来構想・未実装計画 | `FUTURE_PLAN.md` | `PLATFORM_VISION.md`、SDK関連資料 |
 | 未修正バグ・次の修正順 | `KNOWN_ISSUES.md` | 対象項目に記載したAPI・store・domain |

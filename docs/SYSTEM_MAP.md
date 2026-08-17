@@ -138,6 +138,7 @@ Vercel buildの判定正本は[`scripts/check-vercel-build-impact.mjs`](../scrip
 | SDKでゲームを作る | `CHATGPT_GAME_SDK.md` → `SDK_HANDSHAKE.md` → `sdk/entry/` |
 | PackageをPreview・採用・昇格する | `EXTERNAL_GAME_PACKAGE.md` → `SDK_VERSIONING.md` |
 | DB・Redis・Blob・Vercel設定を扱う | `ENVIRONMENT_VARIABLES.md` → environment ledger → live identity |
+| 利用者PC向けhelperやPowerShellを作る | `AI_EXECUTION_TROUBLESHOOTING.md` 8章 → launcher source → 対象OS fixture |
 | 未修正の問題を探す | `KNOWN_ISSUES.md` |
 | 将来案を確認する | `FUTURE_PLAN.md`、`PLATFORM_VISION.md`、`CONTAINER_ARCHITECTURE.md` |
 

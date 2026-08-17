@@ -6,7 +6,7 @@
 2. `docs/README.md` の読書順
 3. `docs/DEVELOPMENT_EXECUTION_RULES.md` の許可・保存・証拠ルール
 4. 作業に該当する現行資料とコード
-5. tool、schema、response解析で詰まった場合だけ`docs/AI_EXECUTION_TROUBLESHOOTING.md`
+5. tool、schema、response解析、または利用者PC向けhelper／PowerShellで詰まった場合は`docs/AI_EXECUTION_TROUBLESHOOTING.md`
 
 会話履歴や `docs/DEVELOPMENT_THREAD_LOG.md` を現在仕様の正本にしない。既存差分は利用者の所有物として保持し、自分の作業に必要なファイルだけを変更する。
 

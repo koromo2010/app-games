@@ -146,6 +146,54 @@ proposal IDが取得できない場合、`get_game_module_profile_proposal`をre
 
 利用者の操作または環境が真の依存点であっても、helperの設計・検証不足は実行側の内部問題である。新しい権限、利用者専用の秘密操作、仕様判断または外部service障害が必要になるまでは、正式resultや次指示の境界にしない。
 
+### Windows改行と変更file集合
+
+PowerShellのdouble-quoted string内では、`` `r ``と`` `n ``がregex engineへ渡る前に実改行へ展開される。raw textを改行で分割する場合はsingle-quoted regexを使う。
+
+```powershell
+$lines = @($raw -split '\r\n|\n|\r')
+```
+
+``-split "`r?`n"``のようにPowerShell escapeとregex quantifierを混在させない。native commandのstdoutが既に行配列なら、いったん連結して再分割せず、その配列を正規化する。
+
+変更fileの一致判定では、表示行数やraw multiline stringを比較しない。actual／expectedの双方について、空行除去、trim、path separator統一、`Sort-Object -Unique`を行い、集合の両方向差分を計算する。
+
+```powershell
+$actual = @($gitLines | ForEach-Object { $_.Trim().Replace('\', '/') } |
+    Where-Object { $_ } | Sort-Object -Unique)
+$expected = @($expectedLines | ForEach-Object { $_.Trim().Replace('\', '/') } |
+    Where-Object { $_ } | Sort-Object -Unique)
+$missing = @($expected | Where-Object { $_ -notin $actual })
+$unexpected = @($actual | Where-Object { $_ -notin $expected })
+$equal = $missing.Count -eq 0 -and $unexpected.Count -eq 0
+```
+
+helperは成功・停止の両方で`actual count`、`expected count`、`missing`、`unexpected`、`equal`を表示する。集合不一致では後続writeへ進まない。
+
+`actual count`は正しいのに`expected count`だけが1となり、その1要素の表示内に複数pathと改行が残る場合は、repository差分ではなく改行parserの不具合として扱う。期待file数へ合わせて判定を緩めず、raw input、正規化後の各要素、両方向差分を確認してparserを直す。
+
+### Git stderrとexit code
+
+Gitは成功時にも進捗やverify情報をstderrへ書くことがある。`$ErrorActionPreference = "Stop"`のscopeでnative commandのstderrをstdoutへ`2>&1`で混合すると、Windows PowerShellでは成功したGitのstderrがPowerShell error recordとなり得る。
+
+Gitのstdoutとstderrは分離し、成否は非空stderrではなくcommand直後の`$LASTEXITCODE`で判定する。stderrはsecretと個人pathを除いた診断にだけ使い、exit code 0ならwarning／progressとして保持する。exit codeが非0の場合だけ停止し、stdout解析やwriteへ進まない。
+
+```powershell
+$gitLines = @(& git -C $repo diff --name-only $base $head 2> $gitStderrPath)
+$gitExitCode = $LASTEXITCODE
+if ($gitExitCode -ne 0) {
+    throw "git diff failed with exit code $gitExitCode"
+}
+```
+
+### one-click launcherの完了条件
+
+- 外側の`.cmd`は固定相対pathから`.ps1`を起動し、PowerShellのexit codeを保持する。
+- 成功・停止のどちらでも`pause`等により利用者が最終markerと診断を読むまでwindowを閉じない。
+- scriptはwrite前にbase／HEAD／parent／tree／変更file集合を照合し、`missing`または`unexpected`が1件でもあればfail closedとする。
+- 修正版packageは旧版を上書きせず新しい識別子とhashを持たせ、利用者には一つの現行packageだけを再実行してもらう。
+- Windowsを直接実行できない場合も、LF、CRLF、lone CR、順序違い、重複、空行、spaceを含むpath、Git成功＋非空stderr、Git失敗をfixtureで確認する。静的確認だけを「Windows実行済み」と報告しない。
+
 ## 9. 正式停止へ変換する前のchecklist
 
 次をすべて確認する。

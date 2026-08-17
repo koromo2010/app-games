@@ -59,6 +59,27 @@ test("troubleshooting fixes the MCP response paths and proposal reconciliation",
   assert.match(troubleshooting, /未検証scriptの反復実行を利用者へ依頼しない/);
   assert.match(troubleshooting, /Windows path separator、空白、文字code、quoting/);
   assert.match(troubleshooting, /観測された一行だけを直さず、同じfailure classと残りの全分岐を横断監査/);
+  assert.match(troubleshooting, /PowerShellのdouble-quoted string内では/);
+  assert.match(troubleshooting, /-split '\\r\\n\|\\n\|\\r'/);
+  assert.match(troubleshooting, /表示行数やraw multiline stringを比較しない/);
+  assert.match(troubleshooting, /`missing`、`unexpected`、`equal`/);
+  assert.match(troubleshooting, /`expected count`だけが1/);
+  assert.match(troubleshooting, /改行parserの不具合/);
+  assert.match(troubleshooting, /成功したGitのstderrがPowerShell error recordとなり得る/);
+  assert.match(troubleshooting, /非空stderrではなくcommand直後の`\$LASTEXITCODE`で判定/);
+  assert.match(troubleshooting, /成功・停止のどちらでも`pause`/);
+  assert.match(troubleshooting, /LF、CRLF、lone CR、順序違い、重複、空行/);
+});
+
+test("Windows helper troubleshooting is reachable from every canonical entry point", () => {
+  const agents = read("AGENTS.md");
+  const navigation = read("docs/README.md");
+  const systemMap = read("docs/SYSTEM_MAP.md");
+  assert.match(agents, /利用者PC向けhelper／PowerShell.*`docs\/AI_EXECUTION_TROUBLESHOOTING\.md`/);
+  assert.match(navigation, /利用者PC向けone-click helper・PowerShell/);
+  assert.match(navigation, /`AI_EXECUTION_TROUBLESHOOTING\.md` 8章/);
+  assert.match(systemMap, /利用者PC向けhelperやPowerShellを作る/);
+  assert.match(systemMap, /`AI_EXECUTION_TROUBLESHOOTING\.md` 8章/);
 });
 
 test("handshake documentation matches the implemented request and aggregate verdict", () => {
