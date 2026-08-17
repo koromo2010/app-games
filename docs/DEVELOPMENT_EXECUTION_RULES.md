@@ -70,6 +70,15 @@ proposal作成はlogical product writeである。Git push、Deployment、checkp
 
 validationで永続化前に拒否されたcallは、contractまたはread-backで無変更を確認できた場合だけ`WRITE_REJECTED_BEFORE_PERSISTENCE`、product write 0件とする。成否不明は`WRITE_OUTCOME_UNKNOWN`とし、新しいrequest IDや二つ目の論理writeを作らない。
 
+### Runtime Roomの環境別許可
+
+ここでいう`Room`はGame Fields製品runtime上のRoomであり、ChatGPTの会話スレッドを意味しない。
+
+- developmentでは、タスクの実装・再現・runtime検証に必要なRoomの作成、通常操作、正規導線によるcleanupを事前許可済みとする。Roomごとの追加承認や一律の作成数上限を設けず、既存Roomのcleanup未確認だけを理由に新規Roomを一律禁止しない。
+- developmentでcleanupまたはremaining read-backが失敗した場合は、そのRoomとfailure classを記録して許可済み内部回復を行う。同じ障害で永続状態を無制限に増殖させる具体的危険が確認された場合だけ、その作成経路を止める。無関係なRoom作成やタスク全体の停止へ自動拡張しない。
+- main／productionでのRoom作成は、environment・目的・対象を特定した利用者の明示承認を必要とする。承認済みRoomの目的達成に必要な通常操作とcleanupは、個別指示で狭められていない限り同じ許可に含む。devでの許可、過去タスクの許可、read-only検査の許可を流用しない。
+- environmentを問わず、Room code、secret、Cookie、token等をGit、正式result、共有ログへ保存しない。DB／Redis管理write、認証・権限変更、別environment操作はRoom許可に含めない。
+
 ## 4. タスク所有権・実行継続・停止
 
 一度受理したタスクは`TASK_ACTIVE`とし、成功条件を満たした`TASK_DONE`、または許可済み内部回復では解消できない真の外部依存を立証した`EXTERNAL_BLOCKED`まで実行側が完遂責任を持つ。途中の失敗、検証、手段変更、承認待ち、dev反映、観測、修正は同じタスクの内部進捗であり、所有権を利用者や監督へ戻さず、完了報告、正式result、next-instructionの境界にしない。
@@ -176,6 +185,13 @@ test、CI、Deployment、runtimeは、固定したrepository、remote、branch�
 | L1 | 調査、相談、変更なし | チャット報告。明示要求がなければ正式result不要 |
 | L2 | 通常の製品コード・正本文書変更 | 最終candidateを自分の変更だけlocal commit＋検証。remote未到達のままturnを終える場合は下記耐久checkpoint |
 | L3 | migration、認証、重要基盤、復元困難な成果 | L2＋成果確定時点でbundle、manifest、fresh restore、耐久保存 |
+
+正式resultと復旧用checkpointを分ける。正式resultは第10節のterminal boundaryでだけ作るが、復旧用checkpointは`TASK_ACTIVE`中にも作り、報告や状態遷移として扱わない。
+
+- 再取得不能または回数制限のある外部responseは、取得と同じtool flowで秘密を除いたstructured JSONを新規immutable pathへatomic保存し、parse、deep equality、SHA-256、read-backを確認してから次のcall、解析、Markdown整形へ進む。machine outputの初回保存に`apply_patch`を使わない。
+- 実装とfocused checkが一区切りついた時、push／Deployment／長いbuild／browser session切替等のrisk boundary前、または最後の耐久checkpointから約10分経過した時は、自分の変更と再開点をcheckpointする。外部responseは10分を待たず即時保存する。
+- scratch file、会話表示、実行中変数、local commitだけでは耐久保存完了としない。安全なcaptureまたはtask-owned commitをcheckpoint repositoryの新規pathへ保存し、remote上のblob、内容、identityをread-backして`CHECKPOINT_SAVED`とする。
+- checkpointにはTASK、対象identity、完了済み工程、未完了、外部write回数、再開点を含める。秘密、binding、Cookie、token、Room codeを含めない。短時間の連続したread-only操作は節目までまとめてよい。
 
 内部retryや中間candidateごとにbundleを作らない。remote未到達の最終task-owned commitを保持して、turn終了、承認待ち、利用者操作待ち、スレ移行、workspace整理、長時間停止、別タスク移行へ進む前に次を1回行う。
 
