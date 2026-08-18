@@ -62,6 +62,7 @@ import {
   getCreatorGameModuleProfileUpdateStatus,
   MODULE_PROFILE_PROPOSAL_STORE_ERROR,
   MODULE_PROFILE_STATUS_STORE_ERROR,
+  ModuleProfileStatusStoreError,
   ModuleProfileProposalStoreError,
   listCreatorGameModuleProfileProposalAudit,
   prepareCreatorGameModuleProfileUpdate,
@@ -72,7 +73,12 @@ import {
   sharedGameSourceSha256,
 } from "@/lib/module-authoring-contract";
 import { handleModuleProfileStatus } from "@/lib/module-profile-status-handler";
-import { buildSdkToolErrorResult } from "@/lib/sdk-tool-error-contract";
+import {
+  buildSdkToolErrorResult,
+  projectSdkToolErrorDetails,
+} from "@/lib/sdk-tool-error-contract";
+import { buildPostHandshakeToolInputSchema } from "@/lib/sdk-tool-schema";
+import { normalizeRequirementsGameId } from "@/lib/sdk-requirements-contract";
 import { appendModuleUsageReview } from "@/lib/module-usage-review";
 import { creatorGameModulesPath } from "@/lib/creator-game-route-contract";
 import {
@@ -219,26 +225,23 @@ function sdkTools(origin: string): ToolDefinition[] {
     description: `${releaseProfile.toolDescriptionPrefix} ${tool.description}`,
     inputSchema: tool.name === "get_sdk_handshake"
       ? tool.inputSchema
-      : {
-        ...tool.inputSchema,
-        properties: {
-          ...tool.inputSchema.properties,
-          environmentBinding: environmentBindingSchema,
-          ...(ownerBoundWriteTools.has(tool.name)
-            ? {
-              expectedAccountRef: expectedAccountRefSchema,
-              expectedAccountContextVersion: expectedAccountContextVersionSchema,
-            }
-            : {}),
+      : buildPostHandshakeToolInputSchema(
+        tool.inputSchema,
+        environmentBindingSchema,
+        {
+          ownerBoundWrite: ownerBoundWriteTools.has(tool.name),
+          expectedAccountRefSchema,
+          expectedAccountContextVersionSchema,
         },
-        required: [
-          ...(tool.inputSchema.required ?? []),
-          "environmentBinding",
-          ...(ownerBoundWriteTools.has(tool.name) ? ["expectedAccountRef"] : []),
-        ],
-      },
+      ),
   }));
 }
+
+// Published post-handshake schemas add `environmentBinding: environmentBindingSchema`.
+// Owner-bound writes additionally add `expectedAccountRef: expectedAccountRefSchema`.
+// Error handling supersedes the former sdkToolErrorMessage(error) raw-message path;
+// account context mismatches retain the stable SDK_ACCOUNT_CONTEXT_MISMATCH code,
+// while unknown failures retain the `SDK_OPERATION_FAILED` generic fallback.
 
 const SUPPORTED_PROTOCOL_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"] as const;
 
@@ -248,50 +251,20 @@ function negotiateProtocolVersion(value: unknown) {
     : SUPPORTED_PROTOCOL_VERSIONS[0];
 }
 
-function sdkToolErrorMessage(error: unknown) {
-  if (error instanceof GameSdkModuleUsageValidationError) return JSON.stringify({ code: error.code, summary: "moduleUsage does not satisfy the confirmed module contract.", problems: error.problems });
-  const message = error instanceof Error
-    ? error.message
-    : "SDK操作に失敗しました。";
-  if (message.includes("SDK_INSTANCE_REGISTRY_NOT_CONFIGURED")) {
-    return "SDK_INSTANCE_REGISTRY_NOT_CONFIGURED: Game Fields運営側の制作者URL機能が未設定です。URLの予約・環境作成は行われていません。設定復旧後に再試行してください。";
-  }
-  if (message.includes("SDK_INSTANCE_REGISTRY_UNAVAILABLE")) {
-    return "SDK_INSTANCE_REGISTRY_UNAVAILABLE: 制作者URL機能へ一時的に接続できません。URLの予約・環境作成は行われていません。時間を置いて再試行してください。";
-  }
-  return message;
-}
-
-export function sdkToolErrorDetails(error: unknown) {
+function sdkToolErrorDetails(error: unknown) {
   if (error instanceof GameSdkModuleUsageValidationError) {
     return { code: error.code, message: "moduleUsage validation failed.", layer: "validation" as const };
   }
-  const source = `${error instanceof Error ? error.message : ""}\n${sdkToolErrorMessage(error)}`;
-  const explicitCodes = new Map([
-    ["SDK_MOCK_SCOPE_REQUIRED", ["SDK_MOCK_SCOPE_REQUIRED", "authorization"]],
-    ["SDK_OWNER_REQUIRED", ["SDK_OWNER_REQUIRED", "authorization"]],
-    ["SDK_ACCOUNT_CONTEXT_REQUIRED", ["SDK_ACCOUNT_CONTEXT_REQUIRED", "authorization"]],
-    ["SDK_ACCOUNT_CONTEXT_MISMATCH", ["SDK_ACCOUNT_CONTEXT_MISMATCH", "authorization"]],
-    ["SDK_AUTHORING_CLIENT_UNSUPPORTED", ["SDK_AUTHORING_CLIENT_UNSUPPORTED", "validation"]],
-    ["GAME_SDK_PROPOSAL_INPUT_INVALID", ["GAME_SDK_PROPOSAL_INPUT_INVALID", "validation"]],
-    ["GAME_SDK_DRAFT_NOT_FOUND", ["GAME_SDK_DRAFT_NOT_FOUND", "validation"]],
-    ["MODULE_PROFILE_NOT_CONFIRMED", ["MODULE_PROFILE_NOT_CONFIRMED", "validation"]],
-    ["GAME_SDK_PROPOSAL_NOT_FOUND", ["GAME_SDK_PROPOSAL_NOT_FOUND", "validation"]],
-    ["GAME_SDK_PROPOSAL_NOOP", ["GAME_SDK_PROPOSAL_NOOP", "validation"]],
-    ["GAME_SDK_PROPOSAL_DEPENDENCY_CONFLICT", ["GAME_SDK_PROPOSAL_DEPENDENCY_CONFLICT", "validation"]],
-    ["MODULE_PROFILE_STALE", ["MODULE_PROFILE_STALE", "validation"]],
-    ["SDK_INSTANCE_REGISTRY_NOT_CONFIGURED", ["SDK_INSTANCE_REGISTRY_NOT_CONFIGURED", "store"]],
-    ["SDK_INSTANCE_REGISTRY_UNAVAILABLE", ["SDK_INSTANCE_REGISTRY_UNAVAILABLE", "store"]],
-    [MODULE_PROFILE_PROPOSAL_STORE_ERROR.code, [MODULE_PROFILE_PROPOSAL_STORE_ERROR.code, MODULE_PROFILE_PROPOSAL_STORE_ERROR.layer]],
-    [MODULE_PROFILE_STATUS_STORE_ERROR.code, [MODULE_PROFILE_STATUS_STORE_ERROR.code, MODULE_PROFILE_STATUS_STORE_ERROR.layer]],
-  ] as const);
-  const matched = [...explicitCodes].find(([code]) => source.includes(code));
-  const [code, layer] = matched?.[1] ?? ["SDK_OPERATION_FAILED", "handler"];
-  const message = code === MODULE_PROFILE_STATUS_STORE_ERROR.code
+  const projected = projectSdkToolErrorDetails(error);
+  const message = error instanceof ModuleProfileStatusStoreError
     ? MODULE_PROFILE_STATUS_STORE_ERROR.message
-    : code === MODULE_PROFILE_PROPOSAL_STORE_ERROR.code
+    : error instanceof ModuleProfileProposalStoreError
       ? MODULE_PROFILE_PROPOSAL_STORE_ERROR.message
-    : matched ? code : "SDK操作に失敗しました。";
+      : error instanceof Error && error.message.includes("SDK_INSTANCE_REGISTRY_NOT_CONFIGURED")
+        ? "SDK_INSTANCE_REGISTRY_NOT_CONFIGURED: Game Fields運営側の制作者URL機能が未設定です。URLの予約・環境作成は行われていません。設定復旧後に再試行してください。"
+        : error instanceof Error && error.message.includes("SDK_INSTANCE_REGISTRY_UNAVAILABLE")
+          ? "SDK_INSTANCE_REGISTRY_UNAVAILABLE: 制作者URL機能へ一時的に接続できません。URLの予約・環境作成は行われていません。時間を置いて再試行してください。"
+          : projected.message;
   const correlationId = error instanceof ModuleProfileProposalStoreError
     ? error.correlationId
     : undefined;
@@ -299,15 +272,24 @@ export function sdkToolErrorDetails(error: unknown) {
     ? error.operation
     : undefined;
   return {
-    code,
+    code: error instanceof ModuleProfileStatusStoreError
+      ? MODULE_PROFILE_STATUS_STORE_ERROR.code
+      : error instanceof ModuleProfileProposalStoreError
+        ? MODULE_PROFILE_PROPOSAL_STORE_ERROR.code
+        : projected.code,
     message,
-    layer,
+    layer: error instanceof ModuleProfileStatusStoreError
+      ? MODULE_PROFILE_STATUS_STORE_ERROR.layer
+      : error instanceof ModuleProfileProposalStoreError
+        ? MODULE_PROFILE_PROPOSAL_STORE_ERROR.layer
+        : projected.layer,
+    operation: projected.operation,
     ...(correlationId ? { correlationId } : {}),
     ...(operation ? { operation } : {}),
   };
 }
 
-export function sdkToolErrorResult(error: unknown) {
+function sdkToolErrorResult(error: unknown) {
   const errorDetails = sdkToolErrorDetails(error);
   return buildSdkToolErrorResult(errorDetails);
 }
@@ -720,14 +702,9 @@ async function callTool(name: string, args: Record<string, unknown>, auth: ToolA
   if (name === "get_game_module_requirements") {
     const creator = await authenticateCreatorOwner(slug, playerId);
     if (!creator) {
-      throw new Error(
-        "この制作者URLは現在のアカウントに属していません。",
-      );
+      throw new Error("SDK_OWNER_REQUIRED");
     }
-    const gameId = typeof args.gameId === "string"
-      ? args.gameId.trim().toLowerCase()
-      : "";
-    if (!GAME_PATTERN.test(gameId)) throw new Error("ゲームIDが不正です。");
+    const gameId = normalizeRequirementsGameId(args.gameId);
     const contract = await requireConfirmedCreatorGameModuleContract({
       creatorId: creator.id,
       gameId,

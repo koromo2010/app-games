@@ -132,6 +132,22 @@ handshake responseにはpost-handshake用`sdkIdentity`を要求しない。後�
 
 clientは自動的に別environment、旧版、非公式mirrorへ切り替えない。request／parser修正で解決できる拒否は、個別指示で回数を制限されていない限り同じ作業内で再handshakeできる。
 
+## Requirements error projection
+
+`get_game_module_requirements`の既知failureは、raw exceptionやbindingを返さず、MCP `CallToolResult`の`structuredContent.error`へstableな`code`、安全な`message`、`layer`、`operation`を投影する。
+
+| failure | code | layer | operation |
+| --- | --- | --- | --- |
+| binding missing | `SDK_HANDSHAKE_REQUIRED` | `authorization` | `environment-binding` |
+| binding mismatch | `AUTHORING_ENVIRONMENT_BINDING_MISMATCH` | `authorization` | `environment-binding` |
+| owner mismatch | `SDK_OWNER_REQUIRED` | `authorization` | `requirements-owner` |
+| invalid game ID | `GAME_SDK_GAME_ID_INVALID` | `validation` | `requirements-input` |
+| draft missing | `GAME_SDK_DRAFT_NOT_FOUND` | `validation` | `requirements-contract` |
+| profile unconfirmed | `MODULE_PROFILE_NOT_CONFIRMED` | `validation` | `requirements-contract` |
+| stale digest | `MODULE_PROFILE_STALE` | `validation` | `requirements-contract` |
+
+成功時のrequirements payload、creator-facing governance projection、hidden platform moduleの非露出は変更しない。
+
 ## Versioning
 
 `sdkHandshakeVersion`はhandshake JSONの破壊的変更で上げる。`sdkContractVersion`はgame manifest／Runtime契約、`roomSchemaVersion`は内部保存envelopeの版であり相互代用しない。同じhandshake version内ではfieldを削除・改名せず、追加fieldは省略可能にする。
