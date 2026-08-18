@@ -59,5 +59,5 @@ export function sdkPortalMcpInstructions(origin?: string) {
     + `明示的な検索後も古い固定enumまたは旧tool構成しか見えない場合は、そのチャットで続けず、利用者へ${profile.pluginName}の更新、更新後に作成した新しいチャットでの再選択、${fileName}だけの再添付を案内して停止してください。`
     + "成功後はget_authoring_profileを呼び、environmentBindingを以後すべてのtoolへ渡します。"
     + "sdkIdentityの環境・canonicalMcpUrl・release・onboardingProfileIdが一致しない場合は停止してください。"
-    + "その後、Game Fieldsアカウント本人のSDK制作環境だけを操作します。確定済みmodule構成を変更したい場合はprepare_module_profile_updateでproposalだけを保存し、返されたreviewUrlで本人が承認するまでactive profileを変更したりprototypeへ進んだりしてはいけません。保存後はsavedとcreatorUrlを確認し、制作者トップを最初の案内リンクにしてください。";
+    + "その後、Game Fieldsアカウント本人のSDK制作環境だけを操作します。accepted handshakeまたはread responseのaccountContext.accountRef・environmentを実際のMCPアカウントとして使い、ユーザーの発言、slug、表示名、Portal URLからアカウントを推測してはいけません。owner-bound writeの前に実際のMCPアカウントとtarget creatorを一度示し、同じaccountRefをexpectedAccountRefとして渡してください。確定済みmodule構成を変更したい場合はprepare_module_profile_updateでproposalだけを保存し、返されたreviewUrlで本人が承認するまでactive profileを変更したりprototypeへ進んだりしてはいけません。保存後はsavedとcreatorUrlを確認し、制作者トップを最初の案内リンクにしてください。";
 }

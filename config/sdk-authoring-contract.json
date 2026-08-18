@@ -49,6 +49,8 @@
       "Parse MCP CallToolResult by checking isError first and then reading structuredContent; only when structuredContent is absent, parse one JSON text content item once; use structuredContent.environmentBinding and structuredContent.proposal.id as the canonical paths.",
       "Use the environmentBinding returned by the successful handshake for every later SDK tool call.",
       "Verify sdkIdentity on every post-handshake SDK response; do not require post-handshake sdkIdentity on the handshake response itself.",
+      "Treat accountContext.accountRef, environment and contextVersion from the handshake or a read response as the canonical MCP account context; do not infer the actual account from user wording, a creator slug, a display name or a Portal URL.",
+      "Before every owner-bound write, show the actual MCP account and target creator once and pass the same accountRef as expectedAccountRef; missing, stale, different-account or different-environment values must fail closed before persistence.",
       "Create a game draft and wait for human module profile confirmation before implementing prototype UI or AppSet source.",
       "Bind shared source to moduleProfileRevision, moduleContractDigest, SDK version and delivery-specific usage evidence.",
       "Build the interactive prototype and formal package from the same game source with different adapters.",

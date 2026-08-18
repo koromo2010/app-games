@@ -72,6 +72,11 @@ import { handleModuleProfileStatus } from "@/lib/module-profile-status-handler";
 import { buildSdkToolErrorResult } from "@/lib/sdk-tool-error-contract";
 import { appendModuleUsageReview } from "@/lib/module-usage-review";
 import { creatorGameModulesPath } from "@/lib/creator-game-route-contract";
+import {
+  assertExpectedAccountContext,
+  createAccountContext,
+  type PublicAccountContext,
+} from "@/lib/account-context";
 
 export const dynamic = "force-dynamic";
 const GAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?$/;
@@ -137,6 +142,31 @@ const moduleUpdateStatusToolDefinition = {
   inputSchema: { type: "object", properties: { slug: { type: "string" }, gameId: { type: "string" }, requestId: { type: "string", format: "uuid" } }, required: ["slug", "gameId", "requestId"], additionalProperties: false },
 };
 
+const ownerBoundWriteTools = new Set([
+  "prepare_support_reply",
+  "prepare_support_report",
+  "reserve_creator_url",
+  "finalize_creator_url",
+  "create_game_draft",
+  ...prepareModuleProfileUpdateToolNames,
+  "publish_mock",
+  "approve_mock",
+  "publish_game_package",
+  "publish_game_source_package",
+]);
+
+const expectedAccountRefSchema = {
+  type: "string",
+  minLength: 20,
+  description: "list_creator_environments等で確認した現在のMCPアカウントの公開accountRef。raw player ID・token・Cookieではありません。",
+};
+
+const expectedAccountContextVersionSchema = {
+  type: "integer",
+  const: 1,
+  description: "accountRefの文脈版。省略可能です。",
+};
+
 const baseTools = [
   { name: "get_sdk_handshake", title: "SDK接続互換性の確認", description: "制作を始める前に、接続先環境、canonicalMcpUrl、onboardingProfileId、Platform・SDK契約版、DownloadMe記載の必要機能だけを送って互換性を確認します。requiredCapabilitiesは将来の機能名も送信でき、未提供の機能は応答のCAPABILITY_UNAVAILABLEで判定します。accepted=trueになるまで他のSDK toolを使わないでください。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { protocol: { type: "string", const: "game-fields-sdk" }, handshakeVersion: { type: "integer", minimum: 1 }, client: { type: "object", properties: { kind: { type: "string", enum: ["ai-agent"] }, name: { type: "string", enum: ["ChatGPT Work", "Claude Code"] }, version: { type: "string" } }, required: ["kind", "name"], additionalProperties: false }, expected: { type: "object", properties: { environment: { type: "string", enum: ["development", "production"] }, canonicalMcpUrl: { type: "string", format: "uri" }, onboardingProfileId: { type: "string" }, platformVersion: { type: "string" }, sdkPackageVersion: { type: "string" }, sdkContractVersion: { type: "integer", minimum: 1 } }, required: ["environment", "canonicalMcpUrl", "onboardingProfileId", "platformVersion", "sdkPackageVersion", "sdkContractVersion"], additionalProperties: false }, requiredCapabilities: { type: "array", description: "添付されたDownloadMeのrequiredCapabilitiesをそのまま指定します。固定enumではなく、Portal未提供名はhandshake応答で拒否します。", items: { type: "string", minLength: 1, maxLength: 64, pattern: "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" }, maxItems: 64, uniqueItems: true } }, required: ["protocol", "handshakeVersion", "client", "expected", "requiredCapabilities"], additionalProperties: false } },
   { name: "get_authoring_profile", title: "制作クライアント契約の取得", description: "handshake成功後に、ChatGPT WorkまたはClaude Code向けの共通制作契約とクライアント固有プロファイルを取得します。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { clientId: { type: "string", enum: ["chatgpt-work", "claude-code"] } }, required: ["clientId"], additionalProperties: false } },
@@ -191,8 +221,18 @@ function sdkTools(origin: string): ToolDefinition[] {
         properties: {
           ...tool.inputSchema.properties,
           environmentBinding: environmentBindingSchema,
+          ...(ownerBoundWriteTools.has(tool.name)
+            ? {
+              expectedAccountRef: expectedAccountRefSchema,
+              expectedAccountContextVersion: expectedAccountContextVersionSchema,
+            }
+            : {}),
         },
-        required: [...(tool.inputSchema.required ?? []), "environmentBinding"],
+        required: [
+          ...(tool.inputSchema.required ?? []),
+          "environmentBinding",
+          ...(ownerBoundWriteTools.has(tool.name) ? ["expectedAccountRef"] : []),
+        ],
       },
   }));
 }
@@ -227,6 +267,8 @@ export function sdkToolErrorDetails(error: unknown) {
   const explicitCodes = new Map([
     ["SDK_MOCK_SCOPE_REQUIRED", ["SDK_MOCK_SCOPE_REQUIRED", "authorization"]],
     ["SDK_OWNER_REQUIRED", ["SDK_OWNER_REQUIRED", "authorization"]],
+    ["SDK_ACCOUNT_CONTEXT_REQUIRED", ["SDK_ACCOUNT_CONTEXT_REQUIRED", "authorization"]],
+    ["SDK_ACCOUNT_CONTEXT_MISMATCH", ["SDK_ACCOUNT_CONTEXT_MISMATCH", "authorization"]],
     ["SDK_AUTHORING_CLIENT_UNSUPPORTED", ["SDK_AUTHORING_CLIENT_UNSUPPORTED", "validation"]],
     ["GAME_SDK_PROPOSAL_INPUT_INVALID", ["GAME_SDK_PROPOSAL_INPUT_INVALID", "validation"]],
     ["GAME_SDK_DRAFT_NOT_FOUND", ["GAME_SDK_DRAFT_NOT_FOUND", "validation"]],
@@ -269,6 +311,7 @@ async function callTool(name: string, args: Record<string, unknown>, auth: ToolA
     if (clientName !== "ChatGPT Work" && clientName !== "Claude Code") {
       throw new Error("SDK_AUTHORING_CLIENT_UNSUPPORTED");
     }
+    const accountContext = createAccountContext({ playerId: auth.playerId, origin });
     return textResult({
       ...negotiated,
       ...createAuthoringEnvironmentBinding({
@@ -276,6 +319,7 @@ async function callTool(name: string, args: Record<string, unknown>, auth: ToolA
         clientName: clientName as GameSdkAuthoringClientName,
         origin,
       }),
+      accountContext,
       instruction: "environmentBindingを手入力・解析・別環境へ転用せず、この制作セッションの以後すべてのSDK toolへそのまま渡してください。",
     });
   }
@@ -284,7 +328,18 @@ async function callTool(name: string, args: Record<string, unknown>, auth: ToolA
     auth,
     origin,
   });
-  const respond = (value: unknown) => textResult(value, binding.identity);
+  const accountContext: PublicAccountContext = ownerBoundWriteTools.has(name)
+    ? assertExpectedAccountContext({
+      expectedAccountRef: args.expectedAccountRef,
+      expectedContextVersion: args.expectedAccountContextVersion,
+      playerId: auth.playerId,
+      origin,
+    })
+    : createAccountContext({ playerId: auth.playerId, origin });
+  const respond = (value: unknown) => textResult({
+    accountContext,
+    ...(value && typeof value === "object" && !Array.isArray(value) ? value : { value }),
+  }, binding.identity);
   const playerId = auth.playerId;
   if (name === "get_authoring_profile") {
     const clientId = args.clientId;
@@ -306,8 +361,11 @@ async function callTool(name: string, args: Record<string, unknown>, auth: ToolA
   if (name === "list_creator_environments") {
     const environments = await listCreatorEnvironments(playerId);
     return respond({
+      accountContext,
       environments: environments.map((environment) => ({
         ...environment,
+        accountRef: accountContext.accountRef,
+        environment: accountContext.environment,
         url: `${portalBaseUrl(origin)}/${environment.slug}`,
       })),
       count: environments.length,
@@ -355,7 +413,7 @@ async function callTool(name: string, args: Record<string, unknown>, auth: ToolA
       replied: false,
       humanApprovalRequired: true,
       draft,
-      approvalUrl: `${origin}/support/replies/${draft.id}`,
+      approvalUrl: `${origin}/support/replies/${draft.id}?accountRef=${encodeURIComponent(accountContext.accountRef)}`,
       instruction: "この返信下書きはまだ投稿されておらず、状態も変わっていません。利用者へapprovalUrlを提示し、本人が内容を確認して送信するまで返信済みと扱わないでください。",
     });
   }
@@ -410,7 +468,7 @@ async function callTool(name: string, args: Record<string, unknown>, auth: ToolA
       submitted: false,
       humanApprovalRequired: true,
       draft,
-      approvalUrl: `${origin}/support/drafts/${draft.id}`,
+      approvalUrl: `${origin}/support/drafts/${draft.id}?accountRef=${encodeURIComponent(accountContext.accountRef)}`,
       instruction: "この下書きはまだ運営へ送信されていません。利用者へapprovalUrlを提示し、本人が内容を確認して送信するまで対応済みと扱わないでください。",
     });
   }

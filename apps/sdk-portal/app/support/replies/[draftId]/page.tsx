@@ -7,21 +7,33 @@ import {
   loadCreatorSupportReplyDraft,
 } from "@/lib/support-api";
 import { SupportReplyApproval } from "./SupportReplyApproval";
+import { createAccountContext } from "@/lib/account-context";
+import { SupportAccountMismatch } from "../../SupportAccountMismatch";
 
 export const dynamic = "force-dynamic";
 
 export default async function SupportReplyDraftPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ draftId: string }>;
+  searchParams: Promise<{ accountRef?: string }>;
 }) {
   const account = await getSdkAccountSession().catch(() => null);
   const { draftId } = await params;
+  const { accountRef } = await searchParams;
   if (!account) {
     redirect(
       `/api/account-link/start?returnTo=${encodeURIComponent(`/support/replies/${draftId}`)}`,
     );
   }
+  if (
+    accountRef
+    && accountRef !== createAccountContext({
+      playerId: account.playerId,
+      displayName: account.playerName,
+    }).accountRef
+  ) return <SupportAccountMismatch />;
   let state;
   try {
     state = await loadCreatorSupportReplyDraft(
