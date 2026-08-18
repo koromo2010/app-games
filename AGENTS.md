@@ -18,6 +18,8 @@
 - tool名、schema、response path、parser等の解析問題だけで正式停止せず、sourceと契約を確認して同じ作業内で直す。
 - タスク指示は目的、権限、不変条件、成功条件、真の停止条件を固定し、実行方法を固定しない。選んだ方法が失敗しても、同じ権限内で再計画し、成果または真の外部境界まで進める。
 - devは利用者が早く触って学ぶための検証面である。不可逆な外部効果がなく、candidate・差分・rollback先を固定できる変更は、実装、最短の関連check、承認済みdev反映、観測、forward fixまたはrollbackを同じタスクのfeedback loopとして進める。test、lint、buildの全完了をdev pushの一律条件にせず、main／production昇格前に必要な全gateを満たす。
+- developmentは、目的・成功条件・許可済みproduct write・明示した禁止効果を境界とし、それ以外の可逆な内部手段を許可する禁止リスト方式で運用する。監督や作業指示は、利用者の明示なしに実装file、command、tool、順序、retry、内部checkpointを網羅的な許可リストへ変えない。main／production、未許可の外部write、不可逆操作は従来どおり明示許可制とする。
+- 監督が停止を求められるのは、次に必要な具体的操作と、それが越える明示済みの禁止線を対応づけられる場合だけである。想定外、確信不足、指示書への未記載、checkpointまたは監査時刻への到達だけを停止理由にしない。
 - 製品runtimeの`Room`はChatGPTの会話スレッドと区別する。developmentではタスクに必要なRoomの作成・利用・通常cleanupを事前許可済みとし、個別承認や一律の作成数上限を要求しない。main／productionではRoom作成前に、environment・目的・対象を特定した利用者の明示承認を得る。承認済みRoomの通常操作とcleanupは同じ許可に含み、devの許可をmain／productionへ流用しない。
 - 正式resultをterminal boundaryに限定することと、復旧用耐久保存を最後まで遅らせることを混同しない。再取得困難な外部responseは取得直後、作業状態は意味のある節目・risk boundary・遅くとも約10分ごとに新規immutable checkpointへ保存し、remote read-back後に続行する。
 - 利用者操作は利用者だけが実行できる能力が現在必要な場合に限る。実行側の環境や未検証手順の代替にせず、依頼前に実行側で可能な準備と検証を完了する。
