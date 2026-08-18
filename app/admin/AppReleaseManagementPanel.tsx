@@ -13,6 +13,7 @@ type Release = {
   description: string;
   revision: string;
   sourceRevision?: string;
+  sourceEnvironment?: string;
   artifactTransferred?: boolean;
   packageRootSha256: string;
   serverBundleSha256: string;
@@ -167,6 +168,45 @@ export function AppReleaseManagementPanel({
     }
   };
 
+  const exportMainRelease = async (release: Release) => {
+    setBusy(`export:${release.lineageId}`);
+    setMessage("");
+    try {
+      await ensureSiteAdminStepUp();
+      const query = new URLSearchParams({
+        publicGameId: release.publicGameId,
+        lineageId: release.lineageId,
+        revision: release.revision,
+        packageRootSha256: release.packageRootSha256,
+        serverBundleSha256: release.serverBundleSha256,
+        appSetSourceSha256: release.appSetSourceSha256,
+      });
+      const response = await fetch(`/api/admin/app-releases/export?${query}`, { cache: "no-store" });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(payload?.error || "APP_RELEASE_EXPORT_FAILED");
+      }
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = `${release.publicGameId}-${release.revision.slice(0, 12)}-main-runtime-package.zip`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(objectUrl);
+      setMessage(`${release.title}のmain runtime packageを取得しました。`);
+    } catch (error) {
+      if (error instanceof Error && error.message === "ADMIN_AUTH_REQUIRED") {
+        onAuthExpired();
+        return;
+      }
+      setMessage(`main runtime packageの取得に失敗しました。\n${error instanceof Error ? error.message : "UNKNOWN"}`);
+    } finally {
+      setBusy("");
+    }
+  };
+
   return (
     <section className="overflow-hidden rounded-2xl border border-cyan-300/20 bg-white/[0.05]">
       <div className="border-b border-white/10 px-5 py-5">
@@ -281,6 +321,31 @@ export function AppReleaseManagementPanel({
           })}
         </div>
       )}
+      <div className="border-t border-white/10 bg-cyan-300/[0.04] px-5 py-5">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-cyan-300">read-only operator export</p>
+          <h4 className="mt-1 font-black">main現在版の検証用package取得</h4>
+          <p className="mt-1 text-sm leading-6 text-slate-400">昇格・却下・復元とは独立したGET専用経路です。現在版のidentityと3つのhashを再照合してからruntime packageを生成します。</p>
+        </div>
+        {main.length === 0 ? (
+          <p className="mt-4 text-sm text-slate-400">main現在版はありません。</p>
+        ) : (
+          <div className="mt-4 space-y-2">
+            {main.map((release) => (
+              <div key={release.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 p-3">
+                <div>
+                  <p className="font-black">{release.title}</p>
+                  <p className="mt-1 font-mono text-xs text-slate-500">{release.lineageId} / {release.publicGameId} / {short(release.revision)}</p>
+                  <p className="mt-1 text-xs text-slate-400">source: {release.sourceEnvironment ?? "unknown"} ・ released: {new Date(release.releasedAt).toLocaleString("ja-JP")}</p>
+                </div>
+                <button type="button" disabled={Boolean(busy) || Boolean(mainError)} onClick={() => void exportMainRelease(release)} className="rounded-lg border border-cyan-300/50 px-3 py-2 text-sm font-black text-cyan-100 disabled:opacity-40">
+                  {busy === `export:${release.lineageId}` ? "取得中…" : "検証用ZIPを取得"}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
       {selected && (
         <div className="border-t border-white/10 bg-black/20 px-5 py-5">
           <div className="flex items-center justify-between gap-3">

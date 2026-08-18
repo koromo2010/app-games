@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { buildGamePackageExport } from "../apps/sdk-portal/lib/game-package-export.ts";
 import { prepareOwnedGamePackageExport } from "../apps/sdk-portal/lib/owned-game-package-export.ts";
+import { prepareOperatorPackageExport } from "../apps/sdk-portal/lib/operator-package-export.ts";
 import type { RuntimeArtifactReader } from "@game-fields/sdk-runtime-artifact";
 
 const revision = "a".repeat(40);
@@ -164,6 +165,58 @@ test("an authorized owner receives unavailable when the artifact is missing", as
   assert.deepEqual(result, { status: "unavailable" });
 });
 
+test("operator export binds current main identity and all package hashes before building", async () => {
+  const release = {
+    id: "release-1",
+    lineageId: "test-owner/test-game",
+    publicGameId: "public-game",
+    sourceCreatorSlug: "test-owner",
+    sourceGameId: "test-game",
+    sourceEnvironment: "development",
+    title: "Test game",
+    revision,
+    sourceRevision: "b".repeat(40),
+    packageRootSha256: null,
+    serverBundleSha256: null,
+    appSetSourceSha256: null,
+    manifest: {},
+    modulePolicy: {},
+    releasedAt: "2026-08-05T00:00:00.000Z",
+  } as const;
+  const input = {
+    publicGameId: release.publicGameId,
+    lineageId: release.lineageId,
+    revision,
+    packageRootSha256: "1".repeat(64),
+    serverBundleSha256: "2".repeat(64),
+    appSetSourceSha256: "3".repeat(64),
+  };
+  const calls: unknown[] = [];
+  const result = await prepareOperatorPackageExport(input, {
+    findCurrent: async (value) => {
+      calls.push(value);
+      return release as never;
+    },
+    reader: fixture(),
+    now: "2026-08-05T01:00:00.000Z",
+  });
+  assert.equal(result.status, "ok");
+  assert.deepEqual(calls, [input]);
+  if (result.status === "ok") {
+    assert.match(result.filename, /^public-game-aaaaaaaaaaaa-main-runtime-package\.zip$/);
+  }
+  const mismatched = await prepareOperatorPackageExport(
+    { ...input, serverBundleSha256: "4".repeat(64) },
+    { findCurrent: async () => undefined, reader: fixture() },
+  );
+  assert.deepEqual(mismatched, { status: "not_found" });
+  const nonDevelopment = await prepareOperatorPackageExport(input, {
+    findCurrent: async () => ({ ...release, sourceEnvironment: "production" } as never),
+    reader: fixture(),
+  });
+  assert.deepEqual(nonDevelopment, { status: "not_found" });
+});
+
 test("route, owner query, and UI retain the secure download contract", () => {
   const route = readFileSync("apps/sdk-portal/app/api/instances/[instanceId]/games/[gameId]/exports/[revision]/route.ts", "utf8");
   const registry = readFileSync("apps/sdk-portal/lib/instance-registry.ts", "utf8");
@@ -179,4 +232,27 @@ test("route, owner query, and UI retain the secure download contract", () => {
   assert.match(page, /Runtime package/);
   assert.match(page, /完全な編集用ソースは保証されません/);
   assert.match(page, /検査済みパッケージを取得/);
+});
+
+test("operator export is read-only, main-bound, and never widens owner export", () => {
+  const internal = readFileSync("apps/sdk-portal/app/api/internal/app-releases/export/route.ts", "utf8");
+  const admin = readFileSync("app/api/admin/app-releases/export/route.ts", "utf8");
+  const store = readFileSync("apps/sdk-portal/lib/app-release-store.ts", "utf8");
+  const panel = readFileSync("app/admin/AppReleaseManagementPanel.tsx", "utf8");
+  assert.match(internal, /requireSdkServiceRequest/);
+  assert.match(internal, /VERCEL_GIT_COMMIT_REF !== "main"/);
+  assert.match(internal, /findCurrentAppReleaseForExport/);
+  assert.match(internal, /application\/zip/);
+  assert.match(internal, /private, no-store/);
+  assert.match(internal, /X-Content-Type-Options/);
+  assert.match(admin, /requireRecentSiteAdminMfa/);
+  assert.match(admin, /sdkServiceHeaders\("GET"/);
+  assert.match(admin, /operator-package-export/);
+  assert.match(store, /WHERE is_current/);
+  assert.match(store, /package_root_sha256 = \$\{input\.packageRootSha256\}/);
+  assert.match(store, /server_bundle_sha256 = \$\{input\.serverBundleSha256\}/);
+  assert.match(store, /app_set_source_sha256 = \$\{input\.appSetSourceSha256\}/);
+  assert.match(panel, /read-only operator export/);
+  assert.match(panel, /検証用ZIPを取得/);
+  assert.match(panel, /method: "POST"/);
 });

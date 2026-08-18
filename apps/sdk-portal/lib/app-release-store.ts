@@ -30,6 +30,24 @@ export type AppReleaseSnapshot = {
   modulePolicy: unknown;
 };
 
+export type CurrentAppReleaseExportRecord = {
+  id: string;
+  lineageId: string;
+  publicGameId: string;
+  sourceCreatorSlug: string;
+  sourceGameId: string;
+  sourceEnvironment: string;
+  title: string;
+  revision: string;
+  sourceRevision: string;
+  packageRootSha256: string;
+  serverBundleSha256: string;
+  appSetSourceSha256: string;
+  manifest: unknown;
+  modulePolicy: unknown;
+  releasedAt: string;
+};
+
 export class AppReleaseError extends Error {
   constructor(
     readonly code: string,
@@ -174,6 +192,37 @@ export async function listCurrentAppReleases() {
     WHERE release.is_current
     ORDER BY released_at DESC
   `;
+}
+
+export async function findCurrentAppReleaseForExport(input: {
+  publicGameId: string;
+  lineageId: string;
+  revision: string;
+  packageRootSha256: string;
+  serverBundleSha256: string;
+  appSetSourceSha256: string;
+}) {
+  await ensureSdkSchema();
+  const rows = await sdkSql()`
+    SELECT id, lineage_id AS "lineageId", public_game_id AS "publicGameId",
+           source_creator_slug AS "sourceCreatorSlug",
+           source_game_id AS "sourceGameId", source_environment AS "sourceEnvironment",
+           title, revision, source_revision AS "sourceRevision",
+           package_root_sha256 AS "packageRootSha256",
+           server_bundle_sha256 AS "serverBundleSha256",
+           app_set_source_sha256 AS "appSetSourceSha256",
+           manifest, module_policy AS "modulePolicy", released_at AS "releasedAt"
+    FROM sdk_app_releases
+    WHERE is_current
+      AND public_game_id = ${input.publicGameId}
+      AND lineage_id = ${input.lineageId}
+      AND revision = ${input.revision}
+      AND package_root_sha256 = ${input.packageRootSha256}
+      AND server_bundle_sha256 = ${input.serverBundleSha256}
+      AND app_set_source_sha256 = ${input.appSetSourceSha256}
+    LIMIT 1
+  `;
+  return (Array.isArray(rows) ? rows[0] : undefined) as CurrentAppReleaseExportRecord | undefined;
 }
 
 export async function listAppReleaseHistory(lineageId?: string) {
