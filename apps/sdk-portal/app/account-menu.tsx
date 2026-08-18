@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { getSdkAccountSession } from "@/lib/account-session";
+import { createAccountContext, shortenAccountRef } from "@/lib/account-context";
 
 function accountInitial(name: string | null) {
   return (name?.trim().charAt(0) || "GF").toUpperCase();
@@ -17,6 +18,10 @@ export async function AccountMenu() {
   }
 
   const label = account.playerName || "連携済みアカウント";
+  const context = createAccountContext({
+    playerId: account.playerId,
+    displayName: account.playerName,
+  });
   return (
     <details className="account-menu">
       <summary aria-label={`${label}のアカウントメニュー`}>
@@ -29,6 +34,11 @@ export async function AccountMenu() {
       </summary>
       <div className="account-popover">
         <p className="account-status"><span aria-hidden="true">✓</span> SDKログイン中</p>
+        <div className="linked-account">
+          <small>現在のSDKアカウント / 環境</small>
+          <strong>{context.displayName || "Game Fieldsアカウント"} · {context.environment}</strong>
+          <small>accountRef: {shortenAccountRef(context.accountRef)}</small>
+        </div>
         <div className="linked-account">
           <small>Game Fields本体との連携</small>
           <strong>{account.playerName ? `${account.playerName} と連携済み` : "連携済み（表示名は再連携後に表示）"}</strong>

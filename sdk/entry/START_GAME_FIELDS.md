@@ -84,6 +84,9 @@ I16 MUST define bilingual standardResult.presentation.reason, no more than 3 sha
 I17 MUST_NOT submit a new support report or reply directly; prepare_support_report and prepare_support_reply create drafts only, and the human creator MUST review and approve them in Portal.
 I18 MUST keep the opaque environmentBinding returned by accepted handshake in tool-flow memory and pass it unchanged to every later SDK tool; MUST_NOT decode, hand-enter, persist, or reuse it across a chat, OAuth identity, client, origin, or environment.
 I19 MUST verify sdkIdentity.targetEnvironment, canonicalMcpUrl, release, and onboardingProfileId on every post-handshake SDK response; mismatch means HALT before further read or write.
+I19A MUST read the public `accountContext` from the accepted handshake or a post-handshake read response and treat `accountRef`, `environment`, and `contextVersion` as the canonical MCP account context; MUST NOT infer the actual account from the user's wording, slug, display name, or Portal URL.
+I19B MUST show the user the actual MCP account context and target creator once before any owner-bound write, then pass that context's `accountRef` as `expectedAccountRef`; a missing, stale, different-account, or different-environment ref MUST fail closed before persistence.
+I19C MUST treat `accountRef` as a comparison value only; MUST NOT request, display, persist, log, decode, or transmit raw player IDs, OAuth grants, tokens, Cookies, or opaque environment bindings.
 I20 MUST_NOT treat MCP Connected, tool discovery, URL issuance, shared Shell rendering, local HTML, or package candidate save as completion.
 I21 MUST resolve and freeze the human-confirmed module contract before prototype implementation, then require explicit human approval of the exact published prototypeRevision before formal packaging; AI self-approval is forbidden.
 I22 MUST use publish_mock and publish_game_source_package as the server-side Node-free path when local Node.js is unavailable; MUST_NOT ask a general creator to install Node.js, npm, Git, or Vercel CLI as the default path.
@@ -246,6 +249,9 @@ fields and use `MCP_RESULT.structuredContent` as the payload. The name
 
 ```text
 CALL list_creator_environments.
+ASSERT response.accountContext.accountRef exists.
+SET ACTUAL_ACCOUNT_CONTEXT := response.accountContext.
+EMIT the actual MCP accountRef/environment once before any owner-bound write; do not infer it from user wording, slug, display name, or Portal URL.
 
 CASE count(environments):
   1:
@@ -278,11 +284,11 @@ IF service_failure:
   EMIT reservation_not_completed;
   HALT.
 
-CALL reserve_creator_url(normalized_slug).
+CALL reserve_creator_url(normalized_slug, expectedAccountRef=ACTUAL_ACCOUNT_CONTEXT.accountRef).
 ASSERT response.url exists.
 KEEP response.reservationToken in tool-flow memory only.
 EMIT response.url.
-CALL finalize_creator_url(response.reservationToken).
+CALL finalize_creator_url(response.reservationToken, expectedAccountRef=ACTUAL_ACCOUNT_CONTEXT.accountRef).
 ASSERT finalized == true.
 SELECT finalized.slug.
 
@@ -299,7 +305,7 @@ IF user asks to inspect existing reports:
 
 IF user asks to reply to an existing report:
   ASSERT the exact reply body was provided or confirmed by the user.
-  CALL prepare_support_reply with a stable UUID requestId.
+  CALL prepare_support_reply with a stable UUID requestId and expectedAccountRef=ACTUAL_ACCOUNT_CONTEXT.accountRef.
   ASSERT replied == false.
   ASSERT humanApprovalRequired == true.
   ASSERT approvalUrl is URL.
@@ -312,11 +318,12 @@ IF AI detects a probable SDK or game defect AND user asks to report it:
   COMPARE the defect, game, page, symptom, and prior conversation with every returned thread.
   IF any thread may describe the same defect, recurrence, or follow-up:
     CALL get_support_thread for that reportId.
-    CALL prepare_support_reply with a stable UUID requestId and the new evidence.
+    CALL prepare_support_reply with a stable UUID requestId, the new evidence, and expectedAccountRef=ACTUAL_ACCOUNT_CONTEXT.accountRef.
     MUST_NOT call prepare_support_report.
   ELSE:
     CALL prepare_support_report with a stable UUID requestId, the observed evidence,
-    and checkedReportIds containing every reportId returned by list_support_threads.
+    checkedReportIds containing every reportId returned by list_support_threads,
+    and expectedAccountRef=ACTUAL_ACCOUNT_CONTEXT.accountRef.
   ASSERT submitted == false.
   ASSERT humanApprovalRequired == true.
   ASSERT approvalUrl is URL.
@@ -402,7 +409,8 @@ CALL create_game_draft WITH {
   description,
   playMode: "online-room",
   minimumPlayers,
-  maximumPlayers
+  maximumPlayers,
+  expectedAccountRef: ACTUAL_ACCOUNT_CONTEXT.accountRef
 }.
 ASSERT created == true.
 ASSERT prototypeSaved == false.

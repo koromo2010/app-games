@@ -125,6 +125,17 @@ connection, or explicit invocation-limit blocker. When `structuredContent` is
 absent, parse exactly one JSON text content item once as the compatibility
 fallback; never search guessed wrapper paths.
 
+The accepted handshake and post-handshake read responses also expose a public
+`accountContext` with `accountRef`, `displayName`, `environment`, and
+`contextVersion`. Treat `accountRef` as the canonical MCP account identity:
+do not infer the account from the user's wording, a creator slug, a display
+name, or the Portal URL. Before every owner-bound write, show the actual MCP
+account and target creator once and pass that same `accountRef` as
+`expectedAccountRef`. Missing, stale, different-account, or
+different-environment values must fail closed before persistence. Never
+request, display, persist, log, or transmit raw player IDs, OAuth grants,
+tokens, Cookies, or the opaque environment binding.
+
 Call `get_authoring_profile` with `clientId="claude-code"` and that binding.
 Follow the returned common contract. Verify `structuredContent.sdkIdentity` in
 every post-handshake response; halt before further read or write if its target

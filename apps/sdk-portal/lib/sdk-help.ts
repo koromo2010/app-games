@@ -10,6 +10,15 @@ export type SdkHelpEntry = {
 /** SDK画面と制作AIの回答で共有するHelp正本。 */
 export const SDK_HELP_ENTRIES: readonly SdkHelpEntry[] = [
   {
+    id: "account-context-and-write-guard",
+    title: "MCPアカウントと制作者環境の確認",
+    question: "MCPのアカウントとPortalのアカウントが同じか確認できますか？",
+    answer:
+      "はい。accepted handshakeまたはread responseのaccountContextに、秘密情報ではないaccountRefとsemantic environmentが含まれます。accountRefはユーザーの発言、creator slug、表示名、Portal URLから推測できる値ではありません。owner-bound writeの前に実際のMCPアカウントとtarget creatorを一度示し、そのaccountRefをexpectedAccountRefとして渡します。欠落・別アカウント・別environmentのaccountRefは保存前に拒否されます。Portalには現在のSDKアカウント名、environment、短縮accountRefを表示します。",
+    keywords: ["account", "accountRef", "アカウント", "Portal", "環境", "owner", "expectedAccountRef"],
+    relatedToolNames: ["get_sdk_handshake", "list_creator_environments", "create_game_draft", "prepare_support_report"],
+  },
+  {
     id: "support-conversations",
     title: "報告後の運営とのやりとり",
     question: "送った不具合報告へ返信したり、運営からの回答を確認できますか？",
