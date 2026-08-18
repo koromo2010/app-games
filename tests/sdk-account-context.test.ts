@@ -95,3 +95,16 @@ test("MCP route declares expectedAccountRef for every owner-bound write and neve
   assert.match(source, /accountContext/);
   assert.doesNotMatch(source, /return .*playerId/);
 });
+
+test("support draft and reply pages receive accountRef before loading a resource", () => {
+  for (const file of [
+    "apps/sdk-portal/app/support/drafts/[draftId]/page.tsx",
+    "apps/sdk-portal/app/support/replies/[draftId]/page.tsx",
+  ]) {
+    const source = readFileSync(file, "utf8");
+    assert.match(source, /params,\s*searchParams,/s);
+    assert.match(source, /const \{ accountRef \} = await searchParams;/);
+    assert.match(source, /SupportAccountMismatch/);
+    assert.ok(source.indexOf("return <SupportAccountMismatch />") < source.indexOf("state = await loadCreatorSupport"));
+  }
+});

@@ -14,6 +14,7 @@ export const dynamic = "force-dynamic";
 
 export default async function SupportReplyDraftPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ draftId: string }>;
   searchParams: Promise<{ accountRef?: string }>;
