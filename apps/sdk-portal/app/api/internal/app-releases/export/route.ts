@@ -31,9 +31,15 @@ export async function GET(request: Request) {
     findCurrent: findCurrentAppReleaseForExport,
     reader: createGamePackageRuntimeReader(),
   });
-  if (result.status === "input_invalid") return Response.json({ error: "APP_RELEASE_EXPORT_INPUT_INVALID" }, { status: 400 });
-  if (result.status === "not_found") return Response.json({ error: "APP_RELEASE_EXPORT_NOT_FOUND" }, { status: 404 });
-  if (result.status === "unavailable") return Response.json({ error: "APP_RELEASE_EXPORT_UNAVAILABLE" }, { status: 422 });
+  if (result.status !== "ok") {
+    const status = result.status === "input_invalid" ? 400 : result.status === "not_found" ? 404 : 422;
+    const error = result.status === "input_invalid"
+      ? "APP_RELEASE_EXPORT_INPUT_INVALID"
+      : result.status === "not_found"
+        ? "APP_RELEASE_EXPORT_NOT_FOUND"
+        : "APP_RELEASE_EXPORT_UNAVAILABLE";
+    return Response.json({ error }, { status });
+  }
   return new Response(new Uint8Array(result.archive), {
     status: 200,
     headers: {
