@@ -43,6 +43,10 @@ test("execution rules separate product writes, recovery, checkpoints and formal 
   assert.match(rules, /一つの`TASK_ACTIVE` feedback loop/);
   assert.match(rules, /タスクlife cycleは`TASK_ACTIVE`、`TASK_DONE`、`EXTERNAL_BLOCKED`/);
   assert.match(rules, /`TASK_ACTIVE`中のmilestoneであり、それだけで所有権を手放さない/);
+  assert.match(rules, /developmentは.*禁止リスト方式/);
+  assert.match(rules, /監督が作るnext-instructionや実行シート.*新しい禁止、file scope、tool／call回数、内部phase停止を追加しない/);
+  assert.match(rules, /次に必要な具体的操作.*越える明示済みの禁止線/);
+  assert.match(rules, /checkpointと定期監査はreview triggerであり、authorizationの失効やタスク終了ではない/);
 });
 
 test("troubleshooting fixes the MCP response paths and proposal reconciliation", () => {
@@ -149,4 +153,6 @@ test("current SDK specifications name the supported clients and do not recheck a
   assert.match(overview, /handshake response自体にはpost-handshake用`sdkIdentity`を要求しない/);
   assert.match(agents, /一度受理したタスクは、成功条件を満たすか、許可済み内部回復では解消できない真の外部依存へ到達するまで実行側が所有する/);
   assert.match(agents, /完了報告、次指示、再承認の理由にしない/);
+  assert.match(agents, /developmentは.*禁止リスト方式/);
+  assert.match(agents, /次に必要な具体的操作.*越える明示済みの禁止線/);
 });

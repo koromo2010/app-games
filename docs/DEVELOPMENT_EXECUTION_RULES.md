@@ -14,7 +14,9 @@
 | 実行・検証・保存・証拠手順 | `AGENTS.md`と本書 |
 | 解析復旧 | `AI_EXECUTION_TROUBLESHOOTING.md` |
 
-- タスク指示は許可範囲を狭められるが、曖昧な表現や過去の承認から権限を広げない。
+- 利用者の明示指示は許可範囲を狭められるが、監督が作るnext-instructionや実行シートは利用者のauthorization envelopeを説明・固定する二次成果物であり、利用者の明示なしに新しい禁止、file scope、tool／call回数、内部phase停止を追加しない。曖昧な表現や過去の承認から権限を広げない。
+- developmentは、目的、成功条件、`ALLOWED_PRODUCT_WRITES`、`FORBIDDEN_EFFECTS`を固定し、それ以外の可逆なlocal変更、関連fileへの修正、調査、test、build、read-only確認、内部回復、手段変更を許可する禁止リスト方式とする。監督またはタスク指示は、観測済みの具体的危険と直接対応する場合を除き、これらを網羅的な許可リストへ変換しない。
+- main／production、未許可のlogical product write、control-plane write、不可逆操作は許可リスト方式を維持し、environment、対象、操作、上限を利用者承認へ固定する。developmentの禁止リスト方式からこれらの権限を推論しない。
 - タスク指示が固定するのは目的、対象、権限、不変条件、成功条件、真の停止条件である。内部のcommand、tool、workspace、順序、retry、helper等は、外部効果や安全境界そのものを定める場合を除き実行計画であり、作業中に再計画できる。一つの指示は内部成果物ではなく、利用者が確認できる成果または真の外部境界までを単位とし、その間は同じタスクと権限範囲が継続する。
 - タスク指示の略記や古いfield名から、現行interfaceと異なる仕様を作らない。
 - 旧指示、旧result、会話ログは履歴であり、最新版と累積適用しない。
@@ -92,6 +94,8 @@ validationで永続化前に拒否されたcallは、contractまたはread-back�
 tool名、schema、response path、parser、binding、許可済みread-only経路の見落としは、`AI_EXECUTION_TROUBLESHOOTING.md`に従い同じ作業内で修正する。途中経過は共有してよいが、許可済みの次工程を止めない。
 
 実行計画は適応的に扱う。選択したcommand、tool、workspace、順序、retry、helper等が失敗した場合は、目的、権限、不変条件を維持したまま方法を再計画する。観測された一箇所だけを直して再実行せず、同じfailure classと残りの実行flowを横断監査し、許可済み範囲で修正・再検証を続ける。実行方法の失敗を正式resultや次指示の境界へ変換しない。次指示を発行するのは、対象、方針、許可範囲または真の外部blockerが実質的に変わる場合に限る。
+
+監督が作業停止を要求するには、次に必要な具体的操作と、その操作が越える明示済みの禁止線、未許可write、不可逆性または利用者専用依存を一対一で示す。これを示せない「想定外」「確信不足」「指示書に未記載」「checkpointまたは監査時刻に到達」は停止理由ではなく、耐久保存後も同じ`TASK_ACTIVE`で続行する。checkpointと定期監査はreview triggerであり、authorizationの失効やタスク終了ではない。
 
 `TASK_ACTIVE`から正式に停止するのは次の場合に限る。
 
