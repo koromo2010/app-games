@@ -4,6 +4,8 @@ export type SdkToolErrorDetails = {
   layer: "authorization" | "validation" | "store" | "handler";
   correlationId?: string;
   operation?: string;
+  revision?: string;
+  partialState?: "git_saved_db_not_updated";
 };
 
 const SAFE_ERROR_PROJECTIONS = new Map<string, [string, SdkToolErrorDetails["layer"], string]>([

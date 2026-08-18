@@ -19,6 +19,7 @@ test("SDK MCP challenges unauthenticated callers and scopes mock publication", (
   const mcp = read("apps/sdk-portal/app/api/mcp/route.ts");
   const releaseProfile = read("apps/sdk-portal/lib/sdk-release-profile.ts");
   const packageStore = read("apps/sdk-portal/lib/game-package-store.ts");
+  const mockPipeline = read("apps/sdk-portal/lib/publish-mock-pipeline.ts");
   const dashboardSubmit = read("apps/sdk-portal/app/api/dashboard/games/[instanceId]/[gameId]/submit/route.ts");
   const dashboard = read("apps/sdk-portal/app/dashboard/page.tsx");
   const instanceRegistry = read("apps/sdk-portal/lib/instance-registry.ts");
@@ -90,10 +91,13 @@ test("SDK MCP challenges unauthenticated callers and scopes mock publication", (
   assert.match(mcp, /listChanged: false/);
   assert.match(mcp, /readOnlyHint: true/);
   assert.match(mcp, /title: "操作プロトタイプの検査・保存"/);
-  assert.match(mcp, /parseSdkMockPreviewManifest\(gameId, prototypeFiles\)/);
+  assert.match(mcp, /publishMockPipeline\(/);
+  assert.match(mockPipeline, /parseManifest\(input\.gameId, prototypeFiles\)/);
+  assert.match(mockPipeline, /SDK_PROTOTYPE_GIT_WRITE_FAILED/);
+  assert.match(mockPipeline, /revision,/);
   assert.match(mcp, /requireConfirmedCreatorGameModuleContract/);
   assert.match(mcp, /validateGameSdkModuleUsage/);
-  assert.match(mcp, /prototype_source_sha256/);
+  assert.match(mockPipeline, /prototype_source_sha256/);
   assert.match(mcp, /creatorUrl,/);
   assert.match(mcp, /gameUrl,/);
   assert.match(mcp, /previewUrl: gameUrl/);

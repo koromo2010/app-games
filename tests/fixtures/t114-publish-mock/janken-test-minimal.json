@@ -1,0 +1,30 @@
+{
+  "fixturePurpose": "secret-free local publish_mock pipeline contract fixture",
+  "creatorSlug": "krm",
+  "gameId": "janken-test",
+  "manifest": {
+    "stage": "mock",
+    "id": "janken-test",
+    "playMode": "online-room",
+    "minimumPlayers": 1,
+    "maximumPlayers": 2
+  },
+  "moduleBinding": {
+    "environment": "production",
+    "moduleProfileRevision": "11111111-1111-4111-8111-111111111111",
+    "moduleContractDigest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "sdkPackageVersion": "0.2.0",
+    "sdkContractVersion": 2
+  },
+  "files": [
+    { "path": "index.html", "purpose": "preview shell", "contentIncluded": false },
+    { "path": "styles.css", "purpose": "preview styles", "contentIncluded": false },
+    { "path": "mock.js", "purpose": "mock entrypoint", "contentIncluded": false },
+    { "path": "preview.json", "purpose": "preview manifest", "contentIncluded": false }
+  ],
+  "sourceImportGraph": [
+    { "from": "source/app-set.ts", "to": "@game-fields/game-sdk", "boundary": "SDK contract" }
+  ],
+  "externalWrites": 0,
+  "productionPayloadIncluded": false
+}

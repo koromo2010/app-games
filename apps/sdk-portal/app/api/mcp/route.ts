@@ -8,14 +8,11 @@ import {
   reserveInstanceSlug,
   validateInstanceSlug,
 } from "@/lib/instance-registry";
-import { saveMockFilesToGit } from "@/lib/mock-git-store";
 import { saveCreatorGamePackage } from "@/lib/game-package-store";
-import { parseSdkMockPreviewManifest } from "@/lib/mock-preview-manifest";
 import {
   createSdkPortalHandshakeDescriptor,
   negotiateSdkPortalHandshake,
 } from "@/lib/sdk-handshake";
-import { ensureSdkSchema, sdkSql } from "@/lib/sdk-postgres";
 import { searchSdkHelp } from "@/lib/sdk-help";
 import { sdkPortalMcpInstructions } from "@/lib/sdk-release-profile";
 import {
@@ -79,8 +76,11 @@ import {
 } from "@/lib/sdk-tool-error-contract";
 import { buildPostHandshakeToolInputSchema } from "@/lib/sdk-tool-schema";
 import { normalizeRequirementsGameId } from "@/lib/sdk-requirements-contract";
-import { appendModuleUsageReview } from "@/lib/module-usage-review";
 import { creatorGameModulesPath } from "@/lib/creator-game-route-contract";
+import {
+  PublishMockPipelineError,
+  publishMockPipeline,
+} from "@/lib/publish-mock-pipeline";
 import {
   assertExpectedAccountContext,
   createAccountContext,
@@ -252,6 +252,16 @@ function negotiateProtocolVersion(value: unknown) {
 }
 
 function sdkToolErrorDetails(error: unknown) {
+  if (error instanceof PublishMockPipelineError) {
+    return {
+      code: error.code,
+      message: error.message,
+      layer: error.layer,
+      correlationId: error.correlationId,
+      operation: error.operation,
+      ...(error.revision ? { revision: error.revision, partialState: "git_saved_db_not_updated" as const } : {}),
+    };
+  }
   if (error instanceof GameSdkModuleUsageValidationError) {
     return { code: error.code, message: "moduleUsage validation failed.", layer: "validation" as const };
   }
@@ -594,15 +604,15 @@ async function callTool(name: string, args: Record<string, unknown>, auth: ToolA
   }
   if (name === "publish_mock") {
     const creator = await authenticateCreatorOwner(slug, playerId);
-    if (!creator) throw new Error("この制作者URLは現在のアカウントに属していません。");
+    if (!creator) throw new Error("SDK_OWNER_REQUIRED");
     const gameId = typeof args.gameId === "string" ? args.gameId.trim().toLowerCase() : "";
     const title = typeof args.title === "string" ? args.title.trim() : "";
     const description = typeof args.description === "string" ? args.description.trim().slice(0, 500) : "";
-    if (!GAME_PATTERN.test(gameId) || !title || title.length > 120 || !args.files || typeof args.files !== "object" || Array.isArray(args.files)) throw new Error("操作プロトタイプ登録情報が不正です。");
+    if (!GAME_PATTERN.test(gameId) || !title || title.length > 120 || !args.files || typeof args.files !== "object" || Array.isArray(args.files)) throw new Error("SDK_PROTOTYPE_INPUT_INVALID");
     const files = args.files as Record<string, string>;
     for (const requiredSource of ["source/app-set.ts", "source/contracts.ts", "source/manifest.ts", "source/server-module.ts", "source/game-client.tsx", "source/prototype-adapter.ts"]) {
       if (typeof files[requiredSource] !== "string" || !files[requiredSource].trim()) {
-        throw new Error(`MODULE_SHARED_SOURCE_MISSING:${requiredSource}`);
+        throw new Error("SDK_PROTOTYPE_INPUT_INVALID");
       }
     }
     const contract = await requireConfirmedCreatorGameModuleContract({
@@ -616,41 +626,17 @@ async function callTool(name: string, args: Record<string, unknown>, auth: ToolA
       moduleUsage: args.moduleUsage,
       files,
     });
-    const builtPrototype = await buildNodeFreeGamePackage({
+    const saved = await publishMockPipeline({
+      creatorId: creator.id,
+      creatorSlug: slug,
       gameId,
+      title,
+      description,
       manifest: args.manifest,
       files,
-      moduleBinding: usageAudit.binding,
-    });
-    const sourceSha256 = sharedGameSourceSha256(files);
-    const prototypeFiles = appendModuleUsageReview(
-      builtPrototype.prototypeFiles,
+      contract,
       usageAudit,
-    );
-    const manifest = parseSdkMockPreviewManifest(gameId, prototypeFiles);
-    const revision = await saveMockFilesToGit({ instanceId: slug, gameId, files: prototypeFiles });
-    await ensureSdkSchema();
-    const manifestJson = JSON.stringify(manifest);
-    const savedRows = await sdkSql()`
-      UPDATE sdk_games
-      SET title = ${title}, description = ${description},
-          manifest = ${manifestJson}::jsonb, mock_revision = ${revision},
-          prototype_module_profile_revision = ${contract.moduleProfileRevision},
-          prototype_module_contract_digest = ${contract.moduleContractDigest},
-          prototype_sdk_package_version = ${contract.sdkPackage.version},
-          prototype_source_sha256 = ${sourceSha256},
-          mock_approved_revision = NULL, mock_approved_at = NULL,
-          mock_approved_by_player_id = NULL, updated_at = NOW()
-      WHERE creator_id = ${creator.id}
-        AND game_id = ${gameId}
-        AND module_profile_revision = ${contract.moduleProfileRevision}
-        AND module_contract_digest = ${contract.moduleContractDigest}
-        AND module_profile_confirmed_at IS NOT NULL
-      RETURNING id
-    `;
-    if (!Array.isArray(savedRows) || savedRows.length === 0) {
-      throw new Error("MODULE_PROFILE_STALE");
-    }
+    });
     const baseUrl = portalBaseUrl(origin);
     const creatorUrl = creatorAccountLinkUrl({
       portalBaseUrl: baseUrl,
@@ -664,15 +650,15 @@ async function callTool(name: string, args: Record<string, unknown>, auth: ToolA
     return respond({
       saved: true,
       gameId,
-      prototypeRevision: revision,
-      mockRevision: revision,
+      prototypeRevision: saved.prototypeRevision,
+      mockRevision: saved.mockRevision,
       creatorUrl,
       gameUrl,
       previewUrl: gameUrl,
-      qualityEvidence: manifest.reviewEvidence,
-      moduleBinding: usageAudit.binding,
-      moduleUsage: usageAudit.moduleUsage,
-      sharedSourceSha256: sourceSha256,
+      qualityEvidence: saved.qualityEvidence,
+      moduleBinding: saved.moduleBinding,
+      moduleUsage: saved.moduleUsage,
+      sharedSourceSha256: saved.sharedSourceSha256,
       reviewChecklist: [
         "ゲーム固有のレイアウトと情報階層が意図どおりか",
         "代表的な進行中状態と主操作の結果が理解できるか",
