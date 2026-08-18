@@ -1,14 +1,15 @@
 # Game Fields SDK モジュールカタログ
 
-ゲームをゼロから作り直さず、ここにある公式モジュールを組み合わせます。最初の候補packageでは全moduleが必須です。AIは採否を決めず、同等機能をAppSetへ再実装しません。
+ゲームをゼロから作り直さず、確定済みauthoring contractに公開された公式モジュールを組み合わせます。AIは非公開のPlatform構成を推測・変更せず、同等機能をAppSetへ再実装しません。
 
 ## 初期profile
 
-- 初回ゲーム登録時にPlatformが39件すべてを`required`として付与する。
-- `mock/preview.json`、manifest、AppSet、管理トークン、MCPから必須一覧を変更できない。
-- AIは読み取り専用`get_game_module_requirements`で返る`requiredModuleIds`と各moduleの`delivery`、`packageExports`、`publicApis`、`usage`を正本としてAppSetを作る。
+- 初回ゲーム登録時にPlatformが内部policyとゲーム仕様からprofileを作り、制作者には確認可能または選択可能な項目だけを表示する。
+- Platform内部項目はcatalog、件数、help、proposal、packageの`moduleUsage`へ含めない。
+- `mock/preview.json`、manifest、AppSet、管理トークン、MCPから確定済み一覧を変更できない。
+- AIは読み取り専用`get_game_module_requirements`で返るpackage対象の`requiredModuleIds`と各moduleの`delivery`、`packageExports`、`publicApis`、`usage`を正本としてAppSetを作る。
 
-機械可読な正本は`@game-fields/game-sdk/modules`の`GAME_SDK_MODULE_CATALOG`です。
+機械可読なauthoring正本は`get_game_module_requirements`の応答です。SDK内のPlatform policyや非公開moduleを列挙・推測しません。
 
 ## 利用区分
 
@@ -178,11 +179,11 @@ Game Fields本体には共通キャンバス基盤があります。描画を使
 
 ## AIの利用ルール
 
-1. 最初の候補packageでは全moduleを必須として扱い、AI判断で外さない。
+1. 返されたpackage向けcontractの全`requiredModuleIds`を必須として扱い、AI判断で外さない。
 2. 利用者へ内部コンポーネント名の選択を求めず、SDK-devで実物を確認してもらう。
 3. 既存モジュールで満たせる機能をゲーム固有コードへ複製しない。
 4. カタログにない再利用価値の高い機能は、今回だけの実装にするか共通モジュール候補にするかを明記する。
-5. `get_game_module_requirements`の`requiredModuleIds`と`requiredModules`の公開契約を正本とし、必須moduleを省略しない。
+5. `get_game_module_requirements`の`requiredModuleIds`と`requiredModules`の公開契約だけを正本とし、必須moduleを省略しない。応答にないPlatform内部moduleを`moduleUsage`へ追加しない。
 6. `delivery=platform-owned`または`platform-resource`のmoduleは本体ファイルをコピーせず、注入契約を使う。`sdk-helper`または`sdk-resource`は返された`packageExports`からimportする。
 
 このカタログはモジュール追加時に更新します。スターターへ固定コピーした共通UIではなく、将来はSDKのversionに対応するモジュール実体と機械可読manifestを正本にします。

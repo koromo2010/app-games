@@ -284,17 +284,22 @@ test("platform adapterのAPIはactorを受け取らず、認証失敗時は永�
   assert.equal(persistenceCalls, 0);
 });
 
-test("disabled module commands are rejected at the authenticated adapter boundary", async () => {
+test("game-derived readonly commands cannot be disabled by creator profile input", async () => {
   const harness = installRedisHarness();
-  const moduleProfile = updateGameSdkModuleProfile(
-    createInitialGameSdkModuleProfile(),
-    {
-      "room-settings": {
-        mode: "disabled",
-        reason: "This game has no editable Room settings.",
-      },
+  const initial = createInitialGameSdkModuleProfile();
+  assert.throws(() => updateGameSdkModuleProfile(initial, {
+    "room-settings": {
+      mode: "disabled",
+      reason: "This game has no editable Room settings.",
     },
-  );
+  }), /GAME_SDK_MODULE_CHANGE_NOT_ALLOWED/);
+  const moduleProfile = {
+    ...initial,
+    "room-settings": {
+      mode: "disabled",
+      reason: "legacy creator decision",
+    },
+  } as typeof initial;
   const adapter = createAuthenticatedGameSdkPlatformAdapter({
     module: sdkCountUpServerModule,
     moduleProfile,
@@ -311,22 +316,16 @@ test("disabled module commands are rejected at the authenticated adapter boundar
       roomCode: "GATE",
       create: { settings: { target: 3 }, app: {} },
     });
-    await assert.rejects(
-      () => adapter.sendCommand({
-        code: room.code,
-        envelope: {
-          expectedRevision: room.revision,
-          command: {
-            type: "room/update-settings",
-            settings: { target: 8 },
-          },
+    await assert.doesNotReject(() => adapter.sendCommand({
+      code: room.code,
+      envelope: {
+        expectedRevision: room.revision,
+        command: {
+          type: "room/update-settings",
+          settings: { target: 8 },
         },
-      }),
-      (error: unknown) => (
-        error instanceof GameFieldsPlatformRuntimeError
-        && error.code === "GAME_SDK_MODULE_DISABLED"
-      ),
-    );
+      },
+    }));
   } finally {
     harness.restore();
   }

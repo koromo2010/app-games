@@ -56,6 +56,8 @@ import {
   requireConfirmedCreatorGameModuleContract,
 } from "@/lib/module-authoring-store";
 import {
+  creatorModuleProfileProposalAuditView,
+  creatorModuleProfileProposalView,
   getCreatorGameModuleProfileProposal,
   getCreatorGameModuleProfileUpdateStatus,
   MODULE_PROFILE_PROPOSAL_STORE_ERROR,
@@ -131,9 +133,9 @@ const prepareModuleProfileUpdateToolNames = new Set([
 
 const prepareModuleProfileUpdateToolDefinition = {
   title: "module構成変更案の準備",
-  description: "確定済みmodule profileを土台に、AIがゲーム仕様と変更案を検査・保存します。active profileは変更せず、Portalで制作者本人が確認・編集・承認するまで反映されません。requestIdは再試行時も同じ値を使います。",
+  description: "確定済みmodule profileを土台に、authoring profileでcreator-configurableと返されたmoduleだけの変更案を検査・保存します。active profileは変更せず、Portalで制作者本人が確認・編集・承認するまで反映されません。requestIdは再試行時も同じ値を使います。",
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  inputSchema: { type: "object", properties: { slug: { type: "string" }, gameId: { type: "string" }, requestId: { type: "string", format: "uuid" }, specification: { type: "object", description: "titleとcoreLoopを含むゲーム仕様", additionalProperties: true }, moduleDecisions: { type: "object", description: "変更するmodule idからrequiredまたはdisabled decisionへのmap", additionalProperties: true } }, required: ["slug", "gameId", "requestId", "specification", "moduleDecisions"], additionalProperties: false },
+  inputSchema: { type: "object", properties: { slug: { type: "string" }, gameId: { type: "string" }, requestId: { type: "string", format: "uuid" }, specification: { type: "object", description: "titleとcoreLoopを含むゲーム仕様", additionalProperties: true }, moduleDecisions: { type: "object", description: "直前のauthoring profileでcreator-configurableと明示されたmoduleだけをrequiredまたはdisabled decisionへ変更するmap", additionalProperties: true } }, required: ["slug", "gameId", "requestId", "specification", "moduleDecisions"], additionalProperties: false },
 };
 
 const moduleUpdateStatusToolDefinition = {
@@ -183,7 +185,7 @@ const baseTools = [
   { name: "create_game_draft", title: "module確認用game draft作成", description: "ゲーム仕様のcore loop確定後、操作プロトタイプより先に本人所有環境へmetadataとGame Fields所有の初期module profileだけを作り、人間用module review URLを返します。prototypeやpackageは保存しません。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string" }, gameId: { type: "string" }, title: { type: "string", minLength: 1, maxLength: 120 }, description: { type: "string", maxLength: 500 }, playMode: { type: "string", const: "online-room" }, minimumPlayers: { type: "integer", minimum: 1, maximum: 20 }, maximumPlayers: { type: "integer", minimum: 1, maximum: 20 } }, required: ["slug", "gameId", "title", "description", "playMode", "minimumPlayers", "maximumPlayers"], additionalProperties: false } },
   { name: "prepare_module_profile_update", ...prepareModuleProfileUpdateToolDefinition },
   { name: "get_module_update_status", ...moduleUpdateStatusToolDefinition },
-  { name: "get_game_module_profile_proposal", title: "module構成変更案の取得", description: "保存済みのmodule構成変更案、差分、依存関係、影響、警告、監査履歴を取得します。承認・active profile更新は行いません。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string" }, gameId: { type: "string" }, proposalId: { type: "string", format: "uuid" } }, required: ["slug", "gameId", "proposalId"], additionalProperties: false } },
+  { name: "get_game_module_profile_proposal", title: "module構成変更案の取得", description: "保存済みのmodule構成変更案について、現在のgovernanceで公開可能な差分とreview状態を取得します。互換性のないlegacy差分の内容は返しません。承認・active profile更新は行いません。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string" }, gameId: { type: "string" }, proposalId: { type: "string", format: "uuid" } }, required: ["slug", "gameId", "proposalId"], additionalProperties: false } },
   { name: "publish_mock", title: "操作プロトタイプの検査・保存", description: "互換tool名です。確定済みmodule contractに結び付いた共有SDK sourceから操作プロトタイプを検査し、module usage matrixと人間確認URLを保存します。任意の静的HTMLだけの保存は拒否します。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string" }, gameId: { type: "string" }, title: { type: "string" }, description: { type: "string" }, manifest: { type: "object" }, moduleBinding: { type: "object" }, moduleUsage: { type: "array", maxItems: 64, items: GAME_SDK_MODULE_USAGE_ITEM_SCHEMA }, files: { type: "object", description: "操作プロトタイプと正式Packageで共有するindex/styles/mock/previewおよびsource/**のUTF-8本文。", additionalProperties: { type: "string" } } }, required: ["slug", "gameId", "title", "manifest", "moduleBinding", "moduleUsage", "files"], additionalProperties: false } },
   { name: "approve_mock", title: "人間確認済み操作プロトタイプの承認", description: "互換tool名です。利用者本人が主要操作、状態変化、完了、reset、module利用状況を確認し、明示承認した現在revisionだけを正式Packageの前提として固定します。AIの自己判断では呼び出せません。", annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string" }, gameId: { type: "string" }, prototypeRevision: { type: "string", pattern: "^[a-f0-9]{40}$" }, humanApproved: { type: "boolean", const: true } }, required: ["slug", "gameId", "prototypeRevision", "humanApproved"], additionalProperties: false } },
   { name: "get_game_module_requirements", title: "操作プロトタイプ前の確定module contract取得", description: "game draftのmodule profileを本人がPortalで確定した後、操作プロトタイプ実装前にrevision・digest・SDK version・delivery別利用契約を固定します。AIはprofileを変更できません。", annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }, inputSchema: { type: "object", properties: { slug: { type: "string" }, gameId: { type: "string" } }, required: ["slug", "gameId"], additionalProperties: false } },
@@ -578,13 +580,16 @@ async function callTool(name: string, args: Record<string, unknown>, auth: ToolA
       moduleDecisions: args.moduleDecisions,
     });
     if (!proposal) throw new Error("GAME_SDK_PROPOSAL_NOT_FOUND");
+    const proposalView = creatorModuleProfileProposalView(proposal);
     return respond({
       prepared: true,
       activeProfileChanged: false,
-      proposal,
+      proposal: proposalView,
       reviewUrl: `${origin}/${encodeURIComponent(slug)}/games/${encodeURIComponent(gameId)}/module-proposals/${encodeURIComponent(proposal.id)}`,
-      humanApprovalRequired: true,
-      instruction: "PortalのreviewUrlを利用者へ提示し、制作者本人が差分・依存関係・影響・警告を確認して承認するまで、module contract取得やprototype作成へ進まないでください。AIは承認を代行できません。",
+      humanApprovalRequired: proposalView.approvalAllowed,
+      instruction: proposalView.approvalAllowed
+        ? "PortalのreviewUrlを利用者へ提示し、制作者本人が差分・依存関係・影響・警告を確認して承認するまで、module contract取得やprototype作成へ進まないでください。AIは承認を代行できません。"
+        : "この既存変更案は現在のモジュール構成ルールと互換性がありません。詳細の再表示や承認は行わず、active profileが未変更であることを利用者へ案内してください。",
     });
   }
   if (name === "get_game_module_profile_proposal") {
@@ -595,12 +600,14 @@ async function callTool(name: string, args: Record<string, unknown>, auth: ToolA
     if (!GAME_PATTERN.test(gameId) || !UUID_PATTERN.test(proposalId)) throw new Error("GAME_SDK_PROPOSAL_INPUT_INVALID");
     const proposal = await getCreatorGameModuleProfileProposal({ creatorId: creator.id, gameId, proposalId });
     if (!proposal) throw new Error("GAME_SDK_PROPOSAL_NOT_FOUND");
+    const proposalView = creatorModuleProfileProposalView(proposal);
+    const audit = await listCreatorGameModuleProfileProposalAudit({ creatorId: creator.id, gameId, proposalId });
     return respond({
-      proposal,
-      audit: await listCreatorGameModuleProfileProposalAudit({ creatorId: creator.id, gameId, proposalId }),
-      activeProfileChanged: proposal.status === "approved",
+      proposal: proposalView,
+      audit: creatorModuleProfileProposalAuditView(audit),
+      activeProfileChanged: proposalView.activeProfileChanged,
       reviewUrl: `${origin}/${encodeURIComponent(slug)}/games/${encodeURIComponent(gameId)}/module-proposals/${encodeURIComponent(proposal.id)}`,
-      humanApprovalRequired: proposal.status === "pending",
+      humanApprovalRequired: proposalView.approvalAllowed,
     });
   }
   if (name === "publish_mock") {

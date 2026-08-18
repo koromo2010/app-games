@@ -48,6 +48,7 @@
 | PC/Mobile UI境界・Controller・権限層 | `UI_ARCHITECTURE.md` | `app/wordwolf/use-wordwolf-controller.ts`、`app/wordwolf/WordWolfDesktopLayout.tsx`、`app/wordwolf/wordwolf-view-permissions.ts` |
 | 外部開発者へゲーム部分だけ依頼する境界 | `EXTERNAL_GAME_PACKAGE.md` | ゲームmanifest、SDK、Runtime interface、`apps/sdk-preview`、import境界監査 |
 | SDK共通機能・ワード・トランプ・お絵描き棚卸し | `SDK_MODULE_INVENTORY.md` | `packages/game-sdk/src/modules/profile.ts`、resource別public export |
+| SDK moduleのactor別governance監査 | `SDK_MODULE_GOVERNANCE.md` | `GAME_SDK_MODULE_GOVERNANCE`、creator/proposal/package/runtime projection |
 | SDK handshake・MCP response契約 | `SDK_HANDSHAKE.md` | `packages/game-sdk/src/handshake.ts`、`apps/sdk-portal/app/api/mcp/route.ts`、`sdk/entry/START_GAME_FIELDS.md`、`sdk/entry/START_CLAUDE_CODE.md` |
 | SDK・mainの版管理と後方互換 | `SDK_VERSIONING.md` | `config/platform-release.json`、`scripts/check-platform-release.mjs` |
 | SDKデータの正本・保持・削除 | `SDK_DATA_LIFECYCLE.md` | Room、effect、replay、戦績、Package、OAuth、Account削除 |

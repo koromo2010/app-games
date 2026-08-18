@@ -72,7 +72,7 @@ test("proposal persistence binds the base revision and digest and approval clear
   assert.match(migration, /status VARCHAR\(16\)/);
   assert.match(store, /GAME_SDK_PROPOSAL_NOOP/);
   assert.match(store, /MODULE_PROFILE_STALE/);
-  assert.match(store, /proposal\.catalogDigest !== moduleCatalogDigest\(\)/);
+  assert.match(store, /moduleProfileProposalCompatibility\(proposal\) !== "compatible"/);
   assert.match(store, /mock_approved_revision = NULL/);
   assert.match(store, /prototype_module_contract_digest = NULL/);
   assert.match(store, /actor_kind, actor_player_id/);
@@ -201,6 +201,9 @@ test("status handler covers validation, owner, scope and common binding boundari
   assert.equal(result.proposalWriteAuthorized, false);
   assert.equal(result.activeProfileChanged, false);
   assert.equal(result.proposalId, "proposal-1");
+  assert.equal(result.proposalCompatible, false);
+  assert.equal("diff" in result, false);
+  assert.equal("requestId" in result, false);
   await assert.rejects(handleModuleProfileStatus({ ...base, gameId: "BAD!" }, dependencies), /GAME_SDK_PROPOSAL_INPUT_INVALID/);
   await assert.rejects(handleModuleProfileStatus({ ...base, requestId: "not-a-uuid" }, dependencies), /GAME_SDK_PROPOSAL_INPUT_INVALID/);
   await assert.rejects(handleModuleProfileStatus(base, { ...dependencies, authenticateOwner: async () => null }), /SDK_OWNER_REQUIRED/);

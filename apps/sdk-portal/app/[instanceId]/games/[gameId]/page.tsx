@@ -29,7 +29,10 @@ import {
   creatorGameFormalRoomPath,
   creatorGamePreviewPath,
 } from "@/lib/creator-game-route-contract";
-import { getCreatorGameModuleAuthoringState } from "@/lib/module-authoring-store";
+import {
+  creatorGameModuleAuthoringSummary,
+  getCreatorGameModuleAuthoringState,
+} from "@/lib/module-authoring-store";
 import { sdkPortalReleaseProfile } from "@/lib/sdk-release-profile";
 
 const GAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?$/;
@@ -176,7 +179,7 @@ export default async function CreatorGamePage({
               initialProfile={moduleProfile}
               canCustomize={customizationAccess?.allowed === true}
               placement="inline"
-              initialContract={moduleContract}
+              initialContract={creatorGameModuleAuthoringSummary(moduleContract)}
             />
           ) : <section className="dashboard-empty"><p>共通モジュール設定を取得できません。</p></section>}
           <GamePackageRevisionExport

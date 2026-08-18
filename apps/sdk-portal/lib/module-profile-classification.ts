@@ -1,5 +1,5 @@
 import {
-  GAME_SDK_MODULE_CATALOG,
+  GAME_SDK_CREATOR_VISIBLE_MODULE_CATALOG,
   normalizeGameSdkModuleProfile,
   type GameSdkModuleId,
 } from "@game-fields/game-sdk/modules";
@@ -10,16 +10,6 @@ export type CreatorModuleClassification = {
   optional: GameSdkModuleId[];
 };
 
-const requiredModuleIdSet = new Set<GameSdkModuleId>([
-  "authentication",
-  "account-session",
-  "authorization",
-  "persistence",
-  "observability",
-  "common-navigation",
-  "player-menu",
-]);
-
 export function classifyCreatorGameModules(
   profile: unknown,
 ): CreatorModuleClassification {
@@ -29,11 +19,11 @@ export function classifyCreatorGameModules(
     removable: [],
     optional: [],
   };
-  for (const definition of GAME_SDK_MODULE_CATALOG) {
-    if (normalized[definition.id].mode === "disabled") {
-      classification.optional.push(definition.id);
-    } else if (requiredModuleIdSet.has(definition.id)) {
+  for (const definition of GAME_SDK_CREATOR_VISIBLE_MODULE_CATALOG) {
+    if (definition.creatorVisibility === "read-only") {
       classification.required.push(definition.id);
+    } else if (normalized[definition.id].mode === "disabled") {
+      classification.optional.push(definition.id);
     } else {
       classification.removable.push(definition.id);
     }

@@ -51,7 +51,7 @@ test("only a human review path can disable reviewable modules with a reason", ()
         reason: "外したい",
       },
     }),
-    /GAME_SDK_MODULE_PLATFORM_LOCKED/,
+    /GAME_SDK_MODULE_CHANGE_NOT_ALLOWED/,
   );
   assert.throws(
     () => updateGameSdkModuleProfile(initial, {

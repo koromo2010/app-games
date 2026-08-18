@@ -5,6 +5,7 @@ import { GameSdkFrame } from "@/app/components/GameSdkFrame";
 import { PlayerAuthGate } from "@/app/components/PlayerAuthGate";
 import { loadApprovedGameSdkRuntimeRegistration } from "@/lib/game-sdk-runtime-catalog";
 import { getAuthenticatedPlayer } from "@/lib/player-auth";
+import { playerVisibleGameSdkModuleProfile } from "@game-fields/game-sdk/modules";
 
 export const dynamic = "force-dynamic";
 
@@ -53,7 +54,7 @@ export default async function ApprovedSdkGamePage({
         title={registration.title}
         settingDefinitions={registration.settings}
         rules={registration.rules}
-        moduleProfile={registration.moduleProfile}
+        moduleProfile={playerVisibleGameSdkModuleProfile(registration.moduleProfile)}
         supportsReplay={registration.supportsReplay}
         supportsSpectators={registration.supportsSpectators}
         usesLlm={registration.usesLlm}

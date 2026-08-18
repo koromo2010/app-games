@@ -18,8 +18,8 @@ test("new SDK mock starts with every module required", () => {
   const classification = classifyCreatorGameModules(initial);
   assert.equal(GAME_SDK_MODULE_IDS.length, GAME_SDK_MODULE_CATALOG.length);
   assert.deepEqual(requiredGameSdkModuleIds(initial), GAME_SDK_MODULE_IDS);
-  assert.equal(classification.required.length, 7);
-  assert.equal(classification.removable.length, 32);
+  assert.equal(classification.required.length, 6);
+  assert.equal(classification.removable.length, 19);
   assert.equal(classification.optional.length, 0);
   assert.deepEqual(normalizeGameSdkModuleProfile(undefined), initial);
 });
@@ -45,7 +45,7 @@ test("human review keeps required modules locked and records optional reasons", 
         reason: "解除",
       },
     }),
-    /GAME_SDK_MODULE_PLATFORM_LOCKED/,
+    /GAME_SDK_MODULE_CHANGE_NOT_ALLOWED/,
   );
 });
 
@@ -178,8 +178,8 @@ test("SDK dev preview exposes the owner-only module review surface", () => {
   assert.match(page, /getCreatorModuleCustomizationAccess/);
   assert.match(page, /GameModuleReview/);
   assert.match(review, /HUMAN REVIEW ONLY/);
-  assert.match(review, /制作GPTには確定後の必須一覧だけを渡します/);
-  assert.match(review, /GAME_SDK_MODULE_CATALOG/);
+  assert.match(review, /制作GPTには確定後のpackage向け契約だけを渡します/);
+  assert.match(review, /GAME_SDK_CREATOR_VISIBLE_MODULE_CATALOG/);
   assert.match(review, /canCustomize/);
 
   const route = read(

@@ -242,7 +242,7 @@ export function resolveRequiredSdkPreviewModules(
     if (normalized[definition.id].mode !== "required") return [];
     const implementation = SDK_PREVIEW_MODULE_IMPLEMENTATIONS[definition.id];
     if (!implementation) {
-      throw new Error(`SDK_PREVIEW_REQUIRED_MODULE_UNIMPLEMENTED:${definition.id}`);
+      throw new Error("SDK_PREVIEW_REQUIRED_MODULE_UNIMPLEMENTED");
     }
     return [{
       ...definition,

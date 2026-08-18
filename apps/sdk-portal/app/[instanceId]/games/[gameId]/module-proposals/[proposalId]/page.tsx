@@ -2,7 +2,12 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { getSdkAccountSession } from "@/lib/account-session";
 import { authenticateCreatorOwner, normalizeInstanceSlug, validateInstanceSlug } from "@/lib/instance-registry";
-import { getCreatorGameModuleProfileProposal, listCreatorGameModuleProfileProposalAudit } from "@/lib/module-profile-proposal-store";
+import {
+  creatorModuleProfileProposalAuditView,
+  creatorModuleProfileProposalView,
+  getCreatorGameModuleProfileProposal,
+  listCreatorGameModuleProfileProposalAudit,
+} from "@/lib/module-profile-proposal-store";
 import { AccountMenu } from "../../../../../account-menu";
 import { ModuleProfileProposalReview } from "./ModuleProfileProposalReview";
 
@@ -24,6 +29,7 @@ export default async function ModuleProfileProposalPage({ params }: { params: Pr
   const proposal = await getCreatorGameModuleProfileProposal({ creatorId: owner.id, gameId, proposalId });
   if (!proposal) notFound();
   const audit = await listCreatorGameModuleProfileProposalAudit({ creatorId: owner.id, gameId, proposalId });
+  const proposalView = creatorModuleProfileProposalView(proposal);
   return <main className="creator-dashboard">
     <header className="dashboard-header">
       <Link className="brand" href="/" aria-label="Game Fields SDK ホーム"><span className="brand-mark" aria-hidden="true">GF</span><span>Game Fields <strong>SDK</strong></span></Link>
@@ -31,8 +37,13 @@ export default async function ModuleProfileProposalPage({ params }: { params: Pr
       <div className="header-account-area"><AccountMenu /></div>
     </header>
     <section className="dashboard-main">
-      <div className="dashboard-heading"><div><p className="eyebrow">HUMAN REVIEW ONLY</p><h1>module構成変更案</h1><p>creator {slug} · game {gameId} · proposal {proposal.id}</p><p>AIが保存した変更案を確認・編集し、本人の明示承認でのみactive profileへ反映します。</p></div><Link className="secondary-action" href={`/${slug}/games/${gameId}?view=modules`}>module設定へ戻る</Link></div>
-      <ModuleProfileProposalReview initialProposal={proposal} initialAudit={audit as unknown[]} instanceId={slug} gameId={gameId} />
+      <div className="dashboard-heading"><div><p className="eyebrow">HUMAN REVIEW ONLY</p><h1>module構成変更案</h1><p>creator {slug} · game {gameId} · proposal {proposal.id}</p><p>{proposalView.approvalAllowed ? "AIが保存した公開可能な変更案を確認・編集し、本人の明示承認でのみactive profileへ反映します。" : "この変更案は現在の構成ルールでは確認・編集・承認できません。proposalの識別子と状態だけを保持しています。"}</p></div><Link className="secondary-action" href={`/${slug}/games/${gameId}?view=modules`}>module設定へ戻る</Link></div>
+      <ModuleProfileProposalReview
+        initialProposal={proposalView}
+        initialAudit={creatorModuleProfileProposalAuditView(audit)}
+        instanceId={slug}
+        gameId={gameId}
+      />
     </section>
   </main>;
 }

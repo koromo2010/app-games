@@ -90,7 +90,7 @@ I19C MUST treat `accountRef` as a comparison value only; MUST NOT request, displ
 I20 MUST_NOT treat MCP Connected, tool discovery, URL issuance, shared Shell rendering, local HTML, or package candidate save as completion.
 I21 MUST resolve and freeze the human-confirmed module contract before prototype implementation, then require explicit human approval of the exact published prototypeRevision before formal packaging; AI self-approval is forbidden.
 I22 MUST use publish_mock and publish_game_source_package as the server-side Node-free path when local Node.js is unavailable; MUST_NOT ask a general creator to install Node.js, npm, Git, or Vercel CLI as the default path.
-I23 MUST use prepare_module_profile_update only to save a proposal; MUST read it back with get_game_module_profile_proposal in the same tool flow before stopping; MUST_NOT treat it as active profile mutation, and MUST wait for the owner-only Portal review/approval URL before continuing.
+I23 MUST use prepare_module_profile_update only for module IDs explicitly returned as creator-configurable by the current authoring surface; MUST read a compatible proposal back with get_game_module_profile_proposal in the same tool flow before stopping; MUST_NOT infer or submit hidden Platform modules, treat a proposal as active profile mutation, or continue past an incompatible legacy proposal.
 I24 MUST parse MCP CallToolResult by checking isError first and then using structuredContent; only when structuredContent is absent MAY parse one JSON text content item once; canonical paths are structuredContent.environmentBinding and structuredContent.proposal.id; MUST_NOT search guessed aliases.
 I25 MUST distinguish a logical product write from a tool invocation. A replay with the same frozen requestId and identical semantic payload for outcome reconciliation is not a second logical write; a new requestId, target, or semantic payload is a new write.
 ```
@@ -430,6 +430,8 @@ ASSERT response.sdkPackage.version == C0.release.sdkPackage.
 ASSERT every response.requiredModuleIds item has requiredModules contract data.
 
 IF a confirmed module composition needs to change:
+  ASSERT every requested module decision is present in the current creator-configurable authoring profile.
+  MUST_NOT guess, enumerate, or submit Platform/internal module IDs.
   FREEZE MODULE_PROPOSAL_REQUEST_ID := stable requestId.
   FREEZE MODULE_PROPOSAL_PAYLOAD := current specification, module decisions, target, and MODULE_PROPOSAL_REQUEST_ID.
   CALL prepare_module_profile_update WITH MODULE_PROPOSAL_PAYLOAD.
@@ -447,7 +449,6 @@ IF a confirmed module composition needs to change:
     EMIT the sanitized classified error and HALT without a new requestId or second logical proposal.
   SET PREPARED_PROPOSAL := parsed payload.
   ASSERT isNonEmpty(PREPARED_PROPOSAL.proposal.id).
-  ASSERT PREPARED_PROPOSAL.proposal.requestId == MODULE_PROPOSAL_REQUEST_ID.
   CALL get_game_module_profile_proposal WITH {
     slug: selected.slug,
     gameId,
@@ -458,7 +459,9 @@ IF a confirmed module composition needs to change:
   ASSERT MCP_RESULT.isError != true.
   SET PROPOSAL_READBACK := parsed payload.
   ASSERT PROPOSAL_READBACK.proposal.id == PREPARED_PROPOSAL.proposal.id.
-  ASSERT PROPOSAL_READBACK.proposal.requestId == MODULE_PROPOSAL_REQUEST_ID.
+  IF PROPOSAL_READBACK.proposal.compatibilityState != "compatible":
+    EMIT the generic compatibility state and review URL without hidden diff detail.
+    HALT. MUST_NOT request approval or retry with guessed module IDs.
   ASSERT PROPOSAL_READBACK.proposal.status == "pending".
   ASSERT PROPOSAL_READBACK.activeProfileChanged == false.
   ASSERT PROPOSAL_READBACK.humanApprovalRequired == true.

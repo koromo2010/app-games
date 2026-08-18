@@ -280,6 +280,8 @@ SDK Previewの招待用二次索引はRoom作成と実適用Commandの成功後�
 
 `NEXT_PUBLIC_GAME_ADS_MODE=preview` は予約レイアウトの確認にのみ使用する。現時点で本番広告配信は有効化しない。
 
+この枠はPlatform policyであり、creator/player向けmodule catalog、設定、件数、help、proposal、package `moduleUsage`へ公開しない。legacy profileやpending proposalの判断で無効化せず、runtimeはcreator profileと分離してPlatform policyから合成する。39件全体の分類は`SDK_MODULE_GOVERNANCE.md`を参照する。
+
 ## 語彙データ
 
 たほいや用候補生成では、JMdict/EDICT、MeSH、Getty Vocabularies、国立国会図書館などを参照元として利用する。保存する説明はゲーム向けの短い言い換えとし、辞書本文を転載しない。

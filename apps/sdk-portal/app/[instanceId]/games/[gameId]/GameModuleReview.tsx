@@ -1,11 +1,11 @@
 "use client";
 
 import {
-  GAME_SDK_MODULE_CATALOG,
-  GAME_SDK_MODULE_IDS,
+  GAME_SDK_CREATOR_CONFIGURABLE_MODULE_IDS,
+  GAME_SDK_CREATOR_VISIBLE_MODULE_CATALOG,
+  type CreatorGameSdkModuleProfile,
   type GameSdkModuleGroup,
   type GameSdkModuleId,
-  type GameSdkModuleProfile,
 } from "@game-fields/game-sdk/modules";
 import { classifyCreatorGameModules } from "@/lib/module-profile-classification";
 import { useMemo, useState } from "react";
@@ -13,7 +13,7 @@ import { useMemo, useState } from "react";
 type Props = {
   instanceId: string;
   gameId: string;
-  initialProfile: GameSdkModuleProfile;
+  initialProfile: CreatorGameSdkModuleProfile;
   canCustomize: boolean;
   placement?: "fixed" | "inline";
   initialContract?: {
@@ -30,7 +30,7 @@ const groupLabels: Record<GameSdkModuleGroup, string> = {
   resource: "素材・外部機能",
 };
 
-function profileSignature(profile: GameSdkModuleProfile) {
+function profileSignature(profile: CreatorGameSdkModuleProfile) {
   return JSON.stringify(profile);
 }
 
@@ -49,7 +49,8 @@ export function GameModuleReview({
   const [message, setMessage] = useState("");
   const [contract, setContract] = useState(initialContract);
   const classification = classifyCreatorGameModules(profile);
-  const requiredSet = new Set(classification.required);
+  const readOnlySet = new Set(classification.required);
+  const configurableSet = new Set(GAME_SDK_CREATOR_CONFIGURABLE_MODULE_IDS);
   const composedCount = classification.required.length
     + classification.removable.length;
   const dirty = profileSignature(profile) !== profileSignature(savedProfile);
@@ -57,21 +58,21 @@ export function GameModuleReview({
     Object.fromEntries(
       (Object.keys(groupLabels) as GameSdkModuleGroup[]).map((group) => [
         group,
-        GAME_SDK_MODULE_CATALOG.filter(
+        GAME_SDK_CREATOR_VISIBLE_MODULE_CATALOG.filter(
           (definition) => definition.group === group,
         ),
       ]),
     ) as Record<
       GameSdkModuleGroup,
-      typeof GAME_SDK_MODULE_CATALOG[number][]
+      typeof GAME_SDK_CREATOR_VISIBLE_MODULE_CATALOG[number][]
     >
   ), []);
 
   const setRequired = (id: GameSdkModuleId, required: boolean) => {
-    const definition = GAME_SDK_MODULE_CATALOG.find(
+    const definition = GAME_SDK_CREATOR_VISIBLE_MODULE_CATALOG.find(
       (item) => item.id === id,
     );
-    if (!canCustomize || !definition || requiredSet.has(id)) return;
+    if (!canCustomize || !definition || !configurableSet.has(id)) return;
     if (required) {
       setProfile((current) => ({
         ...current,
@@ -80,7 +81,7 @@ export function GameModuleReview({
       setMessage("");
       return;
     }
-    const current = profile[id];
+    const current = profile[id] ?? { mode: "required" as const };
     const reason = window.prompt(
       `${definition.label}を必須から外す理由を入力してください。`,
       current.mode === "disabled" ? current.reason : "",
@@ -98,13 +99,13 @@ export function GameModuleReview({
 
   const resetRequired = () => {
     setProfile((current) => Object.fromEntries(
-      GAME_SDK_MODULE_CATALOG.map((definition) => [
+      GAME_SDK_CREATOR_VISIBLE_MODULE_CATALOG.map((definition) => [
         definition.id,
-        !requiredSet.has(definition.id)
+        configurableSet.has(definition.id)
           ? { mode: "required" as const }
-          : current[definition.id],
+          : current[definition.id] ?? { mode: "required" as const },
       ]),
-    ) as GameSdkModuleProfile);
+    ) as CreatorGameSdkModuleProfile);
     setMessage("");
   };
 
@@ -113,11 +114,11 @@ export function GameModuleReview({
     setSaving(true);
     setMessage("");
     const updates = Object.fromEntries(
-      GAME_SDK_MODULE_CATALOG
-        .filter((definition) => !requiredSet.has(definition.id))
+      GAME_SDK_CREATOR_VISIBLE_MODULE_CATALOG
+        .filter((definition) => configurableSet.has(definition.id))
         .map((definition) => [
           definition.id,
-          profile[definition.id],
+          profile[definition.id] ?? { mode: "required" as const },
         ]),
     );
     try {
@@ -131,7 +132,7 @@ export function GameModuleReview({
       );
       const result = await response.json().catch(() => null) as {
         saved?: boolean;
-        moduleProfile?: GameSdkModuleProfile;
+        moduleProfile?: CreatorGameSdkModuleProfile;
         moduleContract?: Props["initialContract"];
       } | null;
       if (!response.ok || result?.saved !== true || !result.moduleProfile) {
@@ -193,7 +194,7 @@ export function GameModuleReview({
         onClick={() => setOpen(true)}
       >
         共通モジュール
-        <strong>{composedCount}/{GAME_SDK_MODULE_IDS.length} 使用</strong>
+        <strong>{composedCount}/{GAME_SDK_CREATOR_VISIBLE_MODULE_CATALOG.length} 使用</strong>
       </button>
       {open && (
         <div
@@ -216,10 +217,10 @@ export function GameModuleReview({
             </header>
             <div className="module-review-intro">
               <strong>
-                game draftは全{GAME_SDK_MODULE_IDS.length}件を初期必須にします。
+                このゲームで確認できるモジュールは{GAME_SDK_CREATOR_VISIBLE_MODULE_CATALOG.length}件です。
               </strong>
               <span>
-                必須はPlatform固定、解除可は初期必須、任意は自動合成しません。制作GPTには確定後の必須一覧だけを渡します。
+                ゲーム仕様から決まる項目は確認専用、選択可能な項目だけを変更できます。制作GPTには確定後のpackage向け契約だけを渡します。
               </span>
               {!canCustomize && (
                 <span>
@@ -227,7 +228,7 @@ export function GameModuleReview({
                 </span>
               )}
               <span>
-                必須 {classification.required.length}件 · 解除可 {classification.removable.length}件 · 任意 {classification.optional.length}件
+                確認専用 {classification.required.length}件 · 使用 {classification.removable.length}件 · 未使用 {classification.optional.length}件
               </span>
               <span>
                 状態: {contract?.moduleProfileConfirmedAt ? "確定済み" : "未確定"}
@@ -235,24 +236,27 @@ export function GameModuleReview({
               </span>
             </div>
             <div className="module-review-list">
-              {(Object.keys(groupLabels) as GameSdkModuleGroup[]).map(
+              {(Object.keys(groupLabels) as GameSdkModuleGroup[])
+                .filter((group) => definitionsByGroup[group].length > 0)
+                .map(
                 (group) => (
                   <section key={group}>
                     <h3>{groupLabels[group]}</h3>
                     {definitionsByGroup[group].map((definition) => {
-                      const decision = profile[definition.id];
+                      const decision = profile[definition.id]
+                        ?? { mode: "required" as const };
                       const required = decision.mode === "required";
-                      const tierLabel = requiredSet.has(definition.id)
-                        ? "必須"
+                      const tierLabel = readOnlySet.has(definition.id)
+                        ? "確認専用"
                         : required
-                          ? "解除可"
-                          : "任意";
+                          ? "使用"
+                          : "未使用";
                       return (
                         <label key={definition.id}>
                           <input
                             type="checkbox"
                             checked={required}
-                            disabled={!canCustomize || requiredSet.has(definition.id)}
+                            disabled={!canCustomize || !configurableSet.has(definition.id)}
                             onChange={(event) => setRequired(
                               definition.id,
                               event.target.checked,
@@ -261,9 +265,9 @@ export function GameModuleReview({
                           <span>
                             <b>{definition.label}</b>
                             <small>{definition.description}</small>
-                            <em>{tierLabel}{requiredSet.has(definition.id) ? " · Platform固定" : ""}</em>
+                            <em>{tierLabel}</em>
                             {decision.mode === "disabled" && decision.reason && (
-                              <em>任意化理由: {decision.reason}</em>
+                              <em>未使用の理由: {decision.reason}</em>
                             )}
                           </span>
                         </label>
@@ -276,7 +280,7 @@ export function GameModuleReview({
             <footer>
               <div>
                 <strong>
-                  必須 {classification.required.length} · 解除可 {classification.removable.length} · 任意 {classification.optional.length}
+                  確認専用 {classification.required.length} · 使用 {classification.removable.length} · 未使用 {classification.optional.length}
                 </strong>
                 {message && <span role="status">{message}</span>}
               </div>

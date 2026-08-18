@@ -112,7 +112,8 @@ test("DownloadMe parses one handshake verdict and reads proposals back before Po
   assert.doesNotMatch(entry, /ASSERT response\.environment == C0\.release\.environment/);
   assert.match(entry, /CALL get_game_module_profile_proposal/);
   assert.match(entry, /proposalId: PREPARED_PROPOSAL\.proposal\.id/);
-  assert.match(entry, /PROPOSAL_READBACK\.proposal\.requestId == MODULE_PROPOSAL_REQUEST_ID/);
+  assert.match(entry, /PROPOSAL_READBACK\.proposal\.compatibilityState != "compatible"/);
+  assert.doesNotMatch(entry, /PROPOSAL_READBACK\.proposal\.requestId/);
   assert.match(entry, /PROPOSAL_READBACK\.activeProfileChanged == false/);
   assert.match(entry, /identical frozen MODULE_PROPOSAL_PAYLOAD/);
   assert.match(entry, /HALT without a new requestId or second logical proposal/);

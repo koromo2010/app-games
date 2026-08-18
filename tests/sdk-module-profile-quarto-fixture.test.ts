@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { GAME_SDK_MODULE_CATALOG } from "@game-fields/game-sdk/modules";
+import {
+  GAME_SDK_MODULE_CATALOG,
+  GAME_SDK_PACKAGE_MODULE_IDS,
+} from "@game-fields/game-sdk/modules";
 import { validateGameSdkModuleUsage, GameSdkModuleUsageValidationError } from "@game-fields/game-sdk/module-usage";
 import {
   QUARTO_DISABLED_MODULE_IDS,
@@ -16,14 +19,14 @@ const binding = {
   sdkContractVersion: 2,
 };
 
-test("Quarto fixture deterministically contains 25 required and 14 disabled modules", () => {
+test("Quarto fixture declares only package-governed module usage", () => {
   assert.equal(GAME_SDK_MODULE_CATALOG.length, 39);
-  assert.equal(QUARTO_REQUIRED_MODULE_IDS.length, 25);
-  assert.equal(QUARTO_DISABLED_MODULE_IDS.length, 14);
+  assert.equal(QUARTO_REQUIRED_MODULE_IDS.length, 5);
+  assert.equal(QUARTO_DISABLED_MODULE_IDS.length, 10);
   assert.equal(Object.keys(QUARTO_MODULE_PROFILE).length, 39);
   assert.deepEqual(
-    QUARTO_REQUIRED_MODULE_IDS.concat(QUARTO_DISABLED_MODULE_IDS).sort(),
-    GAME_SDK_MODULE_CATALOG.map((definition) => definition.id).sort(),
+    [...QUARTO_REQUIRED_MODULE_IDS, ...QUARTO_DISABLED_MODULE_IDS].sort(),
+    [...GAME_SDK_PACKAGE_MODULE_IDS].sort(),
   );
 });
 

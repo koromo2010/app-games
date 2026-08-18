@@ -13,7 +13,6 @@ export async function GET(_: Request, { params }: { params: Promise<{ instanceId
       title: game.title,
       description: game.description,
       revision: game.packageCandidateRevision,
-      moduleProfile: game.modulePolicy,
     })) }, { headers: { "Cache-Control": "no-store" } });
   } catch {
     return Response.json({ error: "not_found" }, { status: 404 });

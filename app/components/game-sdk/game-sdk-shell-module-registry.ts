@@ -23,12 +23,12 @@ export function assertCompleteShellRegistry(
   const expected = shellModuleIds();
   const actual = Object.keys(registry);
   if (expected.length !== actual.length || expected.some((id, index) => id !== actual[index])) {
-    throw new Error(`GAME_SDK_SHELL_REGISTRY_INCOMPLETE:${expected.join(",")}:${actual.join(",")}`);
+    throw new Error("GAME_SDK_SHELL_REGISTRY_INCOMPLETE");
   }
   for (const id of expected) {
     const implementation = registry[id];
     if (!implementation || implementation.executable.length === 0 || implementation.surfaces.length === 0) {
-      throw new Error(`GAME_SDK_SHELL_IMPLEMENTATION_MISSING:${id}`);
+      throw new Error("GAME_SDK_SHELL_IMPLEMENTATION_MISSING");
     }
   }
 }

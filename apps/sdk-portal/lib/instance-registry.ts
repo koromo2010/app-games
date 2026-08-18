@@ -17,9 +17,10 @@ import {
   SdkOwnerLookupError,
 } from "@/lib/sdk-owner-observability";
 import {
+  creatorVisibleGameSdkModuleProfile,
   normalizeGameSdkModuleProfile,
   updateGameSdkModuleProfile,
-  type GameSdkModuleProfile,
+  type CreatorGameSdkModuleProfile,
 } from "@game-fields/game-sdk/modules";
 
 const SLUG_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])?$/;
@@ -399,7 +400,15 @@ export async function getCreatorGamePackageRevision(
 export async function getCreatorGameModuleProfile(
   slug: string,
   gameId: string,
-): Promise<GameSdkModuleProfile | null> {
+): Promise<CreatorGameSdkModuleProfile | null> {
+  const profile = await getStoredGameModuleProfile(slug, gameId);
+  return profile ? creatorVisibleGameSdkModuleProfile(profile) : null;
+}
+
+async function getStoredGameModuleProfile(
+  slug: string,
+  gameId: string,
+) {
   await ensureSdkSchema();
   const rows = await sdkSql()`
     SELECT g.module_policy AS "modulePolicy"
@@ -421,9 +430,9 @@ export async function updateCreatorGameModuleProfile(input: {
   gameId: string;
   ownerPlayerId: string;
   updates: unknown;
-}): Promise<GameSdkModuleProfile | null> {
+}): Promise<CreatorGameSdkModuleProfile | null> {
   await ensureSdkSchema();
-  const current = await getCreatorGameModuleProfile(
+  const current = await getStoredGameModuleProfile(
     input.slug,
     input.gameId,
   );
@@ -457,6 +466,6 @@ export async function updateCreatorGameModuleProfile(input: {
     | { modulePolicy?: unknown }
     | undefined;
   return saved
-    ? normalizeGameSdkModuleProfile(saved.modulePolicy)
+    ? creatorVisibleGameSdkModuleProfile(saved.modulePolicy)
     : null;
 }

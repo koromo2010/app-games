@@ -2,8 +2,9 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   GAME_SDK_MODULE_CATALOG,
   GAME_SDK_MODULE_IDS,
+  creatorRequiredGameSdkModuleIds,
+  gameSdkModuleIsProposalEligible,
   normalizeGameSdkModuleProfile,
-  requiredGameSdkModuleIds,
   updateGameSdkModuleProfile,
   type GameSdkModuleId,
   type GameSdkModuleProfile,
@@ -40,6 +41,29 @@ export type ModuleProfileProposal = {
   approvedAt: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type ModuleProfileProposalCompatibility =
+  | "compatible"
+  | "legacy-incompatible";
+
+export type CreatorModuleProfileProposalView = {
+  id: string;
+  proposerClient: string;
+  environment: "development" | "production";
+  baseModuleProfileRevision: string;
+  baseModuleContractDigest: string;
+  specification: Record<string, unknown>;
+  diff: ModuleProfileProposalDiff[];
+  dependencies: string[];
+  impact: string[];
+  warnings: string[];
+  status: ModuleProfileProposal["status"];
+  createdAt: string;
+  updatedAt: string;
+  compatibilityState: ModuleProfileProposalCompatibility;
+  approvalAllowed: boolean;
+  activeProfileChanged: boolean;
 };
 
 export const MODULE_PROFILE_STATUS_STORE_ERROR = {
@@ -137,6 +161,75 @@ function mapProposal(row: ProposalRow): ModuleProfileProposal {
   };
 }
 
+export function moduleProfileProposalCompatibility(
+  proposal: ModuleProfileProposal,
+): ModuleProfileProposalCompatibility {
+  if (proposal.catalogDigest !== moduleCatalogDigest()) {
+    return "legacy-incompatible";
+  }
+  if (
+    proposal.diff.length === 0
+    || proposal.diff.some((change) => !gameSdkModuleIsProposalEligible(change.id))
+  ) {
+    return "legacy-incompatible";
+  }
+  return "compatible";
+}
+
+export function creatorModuleProfileProposalView(
+  proposal: ModuleProfileProposal,
+): CreatorModuleProfileProposalView {
+  const compatibilityState = moduleProfileProposalCompatibility(proposal);
+  const diff = compatibilityState === "compatible" ? proposal.diff : [];
+  const report = compatibilityState === "compatible"
+    ? dependencyReport(proposal.proposedProfile, diff)
+    : { dependencies: [], warnings: [] };
+  return {
+    id: proposal.id,
+    proposerClient: proposal.proposerClient,
+    environment: proposal.environment,
+    baseModuleProfileRevision: proposal.baseModuleProfileRevision,
+    baseModuleContractDigest: proposal.baseModuleContractDigest,
+    specification: compatibilityState === "compatible"
+      ? proposal.specification
+      : {},
+    diff,
+    dependencies: report.dependencies,
+    impact: compatibilityState === "compatible"
+      ? impactReport(diff, proposal.proposedProfile)
+      : [],
+    warnings: report.warnings,
+    status: proposal.status,
+    createdAt: proposal.createdAt,
+    updatedAt: proposal.updatedAt,
+    compatibilityState,
+    approvalAllowed: compatibilityState === "compatible"
+      && proposal.status === "pending",
+    activeProfileChanged: proposal.status === "approved",
+  };
+}
+
+export function creatorModuleProfileProposalAuditView(rows: unknown) {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((value) => {
+    const row = value && typeof value === "object" && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : {};
+    return {
+      action: typeof row.action === "string" ? row.action : "unknown",
+      actorKind: typeof row.actorKind === "string" ? row.actorKind : null,
+      actorClient: typeof row.actorClient === "string" ? row.actorClient : null,
+      baseModuleProfileRevision: typeof row.baseModuleProfileRevision === "string"
+        ? row.baseModuleProfileRevision
+        : null,
+      newModuleProfileRevision: typeof row.newModuleProfileRevision === "string"
+        ? row.newModuleProfileRevision
+        : null,
+      createdAt: typeof row.createdAt === "string" ? row.createdAt : null,
+    };
+  });
+}
+
 function validateSpecification(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("GAME_SDK_PROPOSAL_SPECIFICATION_REQUIRED");
@@ -199,7 +292,7 @@ export function dependencyReport(profile: GameSdkModuleProfile, diff: ModuleProf
 }
 
 export function impactReport(diff: ModuleProfileProposalDiff[], profile: GameSdkModuleProfile) {
-  const required = requiredGameSdkModuleIds(profile);
+  const required = creatorRequiredGameSdkModuleIds(profile);
   return [
     `${diff.length} module decision(s) change`,
     `active required module count becomes ${required.length}`,
@@ -432,6 +525,9 @@ export async function updateCreatorGameModuleProfileProposal(input: {
   const proposal = await getCreatorGameModuleProfileProposal(input);
   if (!proposal) throw new Error("GAME_SDK_PROPOSAL_NOT_FOUND");
   if (proposal.status !== "pending") throw new Error("GAME_SDK_PROPOSAL_NOT_EDITABLE");
+  if (moduleProfileProposalCompatibility(proposal) !== "compatible") {
+    throw new Error("GAME_SDK_PROPOSAL_GOVERNANCE_INCOMPATIBLE");
+  }
   const current = await getCreatorGameModuleAuthoringState(input);
   if (!current || current.moduleProfileRevision !== proposal.baseModuleProfileRevision || current.moduleContractDigest !== proposal.baseModuleContractDigest) {
     throw new Error("MODULE_PROFILE_STALE");
@@ -478,11 +574,13 @@ export async function approveCreatorGameModuleProfileProposal(input: {
   const proposal = await getCreatorGameModuleProfileProposal(input);
   if (!proposal) throw new Error("GAME_SDK_PROPOSAL_NOT_FOUND");
   if (proposal.status !== "pending") throw new Error("GAME_SDK_PROPOSAL_NOT_APPROVABLE");
+  if (moduleProfileProposalCompatibility(proposal) !== "compatible") {
+    throw new Error("GAME_SDK_PROPOSAL_GOVERNANCE_INCOMPATIBLE");
+  }
   const current = await getCreatorGameModuleAuthoringState(input);
   if (!current || current.moduleProfileRevision !== proposal.baseModuleProfileRevision || current.moduleContractDigest !== proposal.baseModuleContractDigest) {
     throw new Error("MODULE_PROFILE_STALE");
   }
-  if (proposal.catalogDigest !== moduleCatalogDigest()) throw new Error("GAME_SDK_PROPOSAL_CATALOG_STALE");
   const nextRevision = randomUUID();
   const nextContract = createGameSdkModuleContract({
     moduleProfile: proposal.proposedProfile,

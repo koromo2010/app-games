@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { SdkPreviewGameShell } from "./SdkPreviewGameShell";
 import { GameSdkFrame } from "@/app/components/GameSdkFrame";
 import {
-  normalizeGameSdkModuleProfile,
+  creatorVisibleGameSdkModuleProfile,
 } from "@game-fields/game-sdk/modules";
 import {
   loadSdkPreviewRuntimeDefinition,
@@ -123,7 +123,7 @@ export default async function SdkGamePage({
           title={game.title}
           settingDefinitions={game.settings}
           rules={(game.manifest.rules ?? []).map((rule) => rule.ja)}
-          moduleProfile={normalizeGameSdkModuleProfile(game.modulePolicy)}
+          moduleProfile={creatorVisibleGameSdkModuleProfile(game.modulePolicy)}
           supportsReplay={game.manifest.supportsReplay}
           supportsSpectators={game.manifest.supportsSpectators}
           usesLlm={game.manifest.usesLlm}
@@ -136,7 +136,7 @@ export default async function SdkGamePage({
           gameId={gameId}
           runtimeUrl={game.runtimeUrl}
           title={game.title}
-          moduleProfile={normalizeGameSdkModuleProfile(game.modulePolicy)}
+          moduleProfile={creatorVisibleGameSdkModuleProfile(game.modulePolicy)}
           settingDefinitions={game.settings}
           previewIdentity={previewOnly && game.revision ? {
             environment: process.env.VERCEL_GIT_COMMIT_REF === "main"

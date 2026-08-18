@@ -9,11 +9,12 @@ import {
 import { getCreatorModuleCustomizationAccess } from "@/lib/module-customization-access";
 import { classifyCreatorGameModules } from "@/lib/module-profile-classification";
 import {
-  GAME_SDK_MODULE_CATALOG,
-  requiredGameSdkModuleIds,
+  GAME_SDK_CREATOR_VISIBLE_MODULE_CATALOG,
+  creatorRequiredGameSdkModuleIds,
 } from "@game-fields/game-sdk/modules";
 import {
   confirmCreatorGameModuleProfile,
+  creatorGameModuleAuthoringSummary,
   getCreatorGameModuleAuthoringState,
 } from "@/lib/module-authoring-store";
 
@@ -79,8 +80,8 @@ export async function GET(
   }
   return Response.json({
     moduleProfile,
-    catalog: GAME_SDK_MODULE_CATALOG,
-    requiredModuleIds: requiredGameSdkModuleIds(moduleProfile),
+    catalog: GAME_SDK_CREATOR_VISIBLE_MODULE_CATALOG,
+    requiredModuleIds: creatorRequiredGameSdkModuleIds(moduleProfile),
     classification: classifyCreatorGameModules(moduleProfile),
     canCustomize: (
       await getCreatorModuleCustomizationAccess({
@@ -90,10 +91,10 @@ export async function GET(
     ).allowed,
     editableByAi: false,
     moduleContract: identity.creatorId
-      ? await getCreatorGameModuleAuthoringState({
+      ? creatorGameModuleAuthoringSummary(await getCreatorGameModuleAuthoringState({
         creatorId: identity.creatorId,
         gameId: identity.gameId,
-      })
+      }))
       : null,
   });
 }
@@ -152,21 +153,21 @@ export async function PATCH(
     return Response.json({
       saved: true,
       moduleProfile,
-      requiredModuleIds: requiredGameSdkModuleIds(moduleProfile),
+      requiredModuleIds: creatorRequiredGameSdkModuleIds(moduleProfile),
       classification: classifyCreatorGameModules(moduleProfile),
       editableByAi: false,
       moduleContract: identity.creatorId
-        ? await getCreatorGameModuleAuthoringState({
+        ? creatorGameModuleAuthoringSummary(await getCreatorGameModuleAuthoringState({
           creatorId: identity.creatorId,
           gameId: identity.gameId,
-        })
+        }))
         : null,
     });
   } catch (error) {
     const code = error instanceof Error ? error.message : "";
-    if (code === "GAME_SDK_MODULE_PLATFORM_LOCKED") {
+    if (code === "GAME_SDK_MODULE_CHANGE_NOT_ALLOWED") {
       return Response.json(
-        { saved: false, error: "platform_locked" },
+        { saved: false, error: "module_change_not_allowed" },
         { status: 409 },
       );
     }

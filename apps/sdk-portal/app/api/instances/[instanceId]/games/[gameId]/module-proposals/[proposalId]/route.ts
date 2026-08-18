@@ -6,6 +6,8 @@ import {
 } from "@/lib/instance-registry";
 import {
   approveCreatorGameModuleProfileProposal,
+  creatorModuleProfileProposalAuditView,
+  creatorModuleProfileProposalView,
   getCreatorGameModuleProfileProposal,
   listCreatorGameModuleProfileProposalAudit,
   updateCreatorGameModuleProfileProposal,
@@ -31,7 +33,7 @@ async function identity(context: { params: Promise<{ instanceId: string; gameId:
 function errorResponse(error: unknown) {
   const code = error instanceof Error ? error.message : "temporarily_unavailable";
   const status = code === "GAME_SDK_PROPOSAL_NOT_FOUND" ? 404
-    : code.includes("STALE") || code.includes("NOT_APPROVABLE") || code.includes("NOT_EDITABLE") ? 409
+    : code.includes("STALE") || code.includes("NOT_APPROVABLE") || code.includes("NOT_EDITABLE") || code.includes("INCOMPATIBLE") ? 409
       : code.includes("REQUIRED") || code.includes("INVALID") || code.includes("NOOP") || code.includes("CONFLICT") ? 400
         : 503;
   return Response.json({ saved: false, error: code }, { status });
@@ -44,7 +46,11 @@ export async function GET(_: Request, context: { params: Promise<{ instanceId: s
   if (!current.creatorId) return Response.json({ error: "owner_required" }, { status: 403 });
   const proposal = await getCreatorGameModuleProfileProposal({ creatorId: current.creatorId, gameId: current.gameId, proposalId: current.proposalId });
   if (!proposal) return Response.json({ error: "not_found" }, { status: 404 });
-  return Response.json({ proposal, audit: await listCreatorGameModuleProfileProposalAudit({ creatorId: current.creatorId, gameId: current.gameId, proposalId: current.proposalId }) });
+  const audit = await listCreatorGameModuleProfileProposalAudit({ creatorId: current.creatorId, gameId: current.gameId, proposalId: current.proposalId });
+  return Response.json({
+    proposal: creatorModuleProfileProposalView(proposal),
+    audit: creatorModuleProfileProposalAuditView(audit),
+  });
 }
 
 export async function PATCH(request: Request, context: { params: Promise<{ instanceId: string; gameId: string; proposalId: string }> }) {
@@ -61,7 +67,10 @@ export async function PATCH(request: Request, context: { params: Promise<{ insta
       ownerPlayerId: current.playerId,
       moduleDecisions: body?.moduleDecisions,
     });
-    return Response.json({ saved: true, proposal });
+    return Response.json({
+      saved: true,
+      proposal: proposal ? creatorModuleProfileProposalView(proposal) : null,
+    });
   } catch (error) {
     return errorResponse(error);
   }

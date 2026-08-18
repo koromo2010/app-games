@@ -29,15 +29,20 @@ resources/helpers, injected platform-resource fixtures, and platform-owned host
 delegation; never build bespoke substitutes or fictitious platform imports.
 
 If a confirmed composition must change, call
-`prepare_module_profile_update` with a stable requestId. It creates a
+`prepare_module_profile_update` with a stable requestId and only module IDs
+explicitly exposed as creator-configurable by the current authoring surface. It creates a
 reviewable proposal only. Check `isError` first, read the proposal ID from
 `structuredContent.proposal.id`, and call
 `get_game_module_profile_proposal` in the same tool flow with that ID and the
-same binding. Verify the proposal ID, requestId, pending state, exact diff,
-dependencies, impact, warnings, base revision/digest, audit,
+same binding. Verify the proposal ID, compatible state, pending state, public diff,
+dependencies, impact, warnings, base revision/digest, sanitized audit,
 `activeProfileChanged=false`, and `humanApprovalRequired=true` from that
 read-back. Follow the read-back `reviewUrl` and wait for the owner-only Portal
 approval before treating a new revision or digest as active.
+
+If read-back reports a legacy-incompatible proposal, show only its generic
+compatibility state and review URL. Do not request approval, display hidden
+diff details, guess internal IDs, or retry with a reconstructed payload.
 
 If the prepare outcome is unknown and no proposal ID can be parsed, reparse the
 retained CallToolResult first. If the task's explicit tool-invocation limit

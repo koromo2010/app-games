@@ -1,19 +1,24 @@
 import {
   GAME_SDK_MODULE_CATALOG,
+  GAME_SDK_PACKAGE_MODULE_IDS,
+  type GameSdkModuleId,
   type GameSdkModuleProfile,
 } from "@game-fields/game-sdk/modules";
 
-const disabledIds = GAME_SDK_MODULE_CATALOG
-  .filter((definition) => definition.group !== "platform")
-  .slice(0, 14)
-  .map((definition) => definition.id);
+const requiredIds: readonly GameSdkModuleId[] = [
+  "start-guard",
+  "phase-flow",
+  "turn-order",
+  "collect-choice",
+  "standard-outcome",
+] as const;
+
+const disabledIds = GAME_SDK_PACKAGE_MODULE_IDS.filter(
+  (id) => !requiredIds.includes(id),
+);
 
 export const QUARTO_DISABLED_MODULE_IDS = Object.freeze(disabledIds);
-export const QUARTO_REQUIRED_MODULE_IDS = Object.freeze(
-  GAME_SDK_MODULE_CATALOG
-    .map((definition) => definition.id)
-    .filter((id) => !disabledIds.includes(id)),
-);
+export const QUARTO_REQUIRED_MODULE_IDS = Object.freeze([...requiredIds]);
 
 export const QUARTO_MODULE_PROFILE: GameSdkModuleProfile = Object.fromEntries(
   GAME_SDK_MODULE_CATALOG.map((definition) => [

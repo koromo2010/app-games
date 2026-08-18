@@ -1,4 +1,7 @@
-import type { ModuleProfileProposal } from "./module-profile-proposal-store";
+import {
+  moduleProfileProposalCompatibility,
+  type ModuleProfileProposal,
+} from "./module-profile-proposal-store.ts";
 
 const GAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{1,62}[a-z0-9])?$/;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -40,10 +43,8 @@ export async function handleModuleProfileStatus(
     ...(proposal ? {
       proposalId: proposal.id,
       status: proposal.status,
-      requestId: proposal.requestId,
-      baseModuleProfileRevision: proposal.baseModuleProfileRevision,
-      baseModuleContractDigest: proposal.baseModuleContractDigest,
-      diff: proposal.diff,
+      proposalCompatible:
+        moduleProfileProposalCompatibility(proposal) === "compatible",
       reviewUrl: `/games/${encodeURIComponent(gameId)}/module-proposals/${encodeURIComponent(proposal.id)}`,
     } : {}),
     activeProfileChanged: false,

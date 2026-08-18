@@ -54,6 +54,47 @@ export type GameSdkModuleDelivery =
   | "platform-resource"
   | "sdk-resource";
 
+export type GameSdkModuleAuthority =
+  | "platform"
+  | "creator"
+  | "game-derived"
+  | "player"
+  | "internal";
+
+export type GameSdkModuleVisibility =
+  | "hidden"
+  | "read-only"
+  | "configurable";
+
+export type GameSdkModuleMutability =
+  | "none"
+  | "owner-review"
+  | "preference";
+
+export type GameSdkModulePackageTreatment =
+  | "excluded"
+  | "derived"
+  | "module-usage";
+
+export type GameSdkModuleRuntimePolicySource =
+  | "platform-policy"
+  | "creator-profile"
+  | "game-manifest"
+  | "game-package"
+  | "player-preference"
+  | "internal-policy";
+
+export type GameSdkModuleGovernance = {
+  authority: GameSdkModuleAuthority;
+  creatorVisibility: GameSdkModuleVisibility;
+  creatorMutability: GameSdkModuleMutability;
+  playerVisibility: GameSdkModuleVisibility;
+  playerMutability: GameSdkModuleMutability;
+  proposalEligible: boolean;
+  packageTreatment: GameSdkModulePackageTreatment;
+  runtimePolicySource: GameSdkModuleRuntimePolicySource;
+};
+
 export type GameSdkModuleDefinition = {
   id: GameSdkModuleId;
   group: GameSdkModuleGroup;
@@ -63,7 +104,110 @@ export type GameSdkModuleDefinition = {
   packageExports: readonly string[];
   publicApis: readonly string[];
   usage: string;
-};
+} & GameSdkModuleGovernance;
+
+const platformHidden = (
+  playerVisibility: GameSdkModuleVisibility = "hidden",
+): GameSdkModuleGovernance => ({
+  authority: "platform",
+  creatorVisibility: "hidden",
+  creatorMutability: "none",
+  playerVisibility,
+  playerMutability: "none",
+  proposalEligible: false,
+  packageTreatment: "excluded",
+  runtimePolicySource: "platform-policy",
+});
+
+const internalHidden = (
+  playerVisibility: GameSdkModuleVisibility = "hidden",
+): GameSdkModuleGovernance => ({
+  authority: "internal",
+  creatorVisibility: "hidden",
+  creatorMutability: "none",
+  playerVisibility,
+  playerMutability: "none",
+  proposalEligible: false,
+  packageTreatment: "excluded",
+  runtimePolicySource: "internal-policy",
+});
+
+const derivedReadOnly = (
+  packageTreatment: GameSdkModulePackageTreatment,
+  runtimePolicySource: GameSdkModuleRuntimePolicySource,
+  playerVisibility: GameSdkModuleVisibility = "read-only",
+): GameSdkModuleGovernance => ({
+  authority: "game-derived",
+  creatorVisibility: "read-only",
+  creatorMutability: "none",
+  playerVisibility,
+  playerMutability: "none",
+  proposalEligible: false,
+  packageTreatment,
+  runtimePolicySource,
+});
+
+const creatorConfigurable = (
+  packageTreatment: GameSdkModulePackageTreatment,
+  runtimePolicySource: GameSdkModuleRuntimePolicySource,
+  authority: GameSdkModuleAuthority = "creator",
+): GameSdkModuleGovernance => ({
+  authority,
+  creatorVisibility: "configurable",
+  creatorMutability: "owner-review",
+  playerVisibility: "read-only",
+  playerMutability: "none",
+  proposalEligible: true,
+  packageTreatment,
+  runtimePolicySource,
+});
+
+/**
+ * The single exhaustive governance source for every known module. Product
+ * projections must be derived from this record instead of maintaining local
+ * allow/deny lists.
+ */
+export const GAME_SDK_MODULE_GOVERNANCE = {
+  authentication: platformHidden(),
+  "account-session": platformHidden(),
+  authorization: platformHidden(),
+  persistence: platformHidden(),
+  observability: internalHidden(),
+  "common-navigation": platformHidden("read-only"),
+  "player-menu": platformHidden("read-only"),
+  "common-shell": platformHidden("read-only"),
+  "online-room": platformHidden("read-only"),
+  "room-sync": internalHidden(),
+  "room-settings": derivedReadOnly("derived", "game-manifest"),
+  debug: internalHidden(),
+  timer: derivedReadOnly("derived", "game-manifest"),
+  result: derivedReadOnly("derived", "game-manifest"),
+  rematch: creatorConfigurable("derived", "creator-profile"),
+  dissolution: platformHidden("read-only"),
+  stats: creatorConfigurable("derived", "creator-profile"),
+  rating: creatorConfigurable("derived", "creator-profile"),
+  replay: creatorConfigurable("derived", "creator-profile"),
+  "result-share": creatorConfigurable("derived", "creator-profile"),
+  feedback: creatorConfigurable("derived", "creator-profile"),
+  spectators: creatorConfigurable("derived", "creator-profile"),
+  "ai-activity": internalHidden("read-only"),
+  ads: platformHidden(),
+  "start-guard": derivedReadOnly("module-usage", "game-package", "hidden"),
+  "phase-flow": derivedReadOnly("module-usage", "game-package", "hidden"),
+  rounds: creatorConfigurable("module-usage", "game-package", "game-derived"),
+  "turn-order": creatorConfigurable("module-usage", "game-package", "game-derived"),
+  "collect-text": creatorConfigurable("module-usage", "game-package", "game-derived"),
+  "collect-choice": creatorConfigurable("module-usage", "game-package", "game-derived"),
+  vote: creatorConfigurable("module-usage", "game-package", "game-derived"),
+  "role-assignment": creatorConfigurable("module-usage", "game-package", "game-derived"),
+  "team-assignment": creatorConfigurable("module-usage", "game-package", "game-derived"),
+  "secret-presentation": creatorConfigurable("module-usage", "game-package", "game-derived"),
+  "standard-outcome": derivedReadOnly("module-usage", "game-package", "hidden"),
+  "content-source": creatorConfigurable("module-usage", "game-package", "game-derived"),
+  llm: creatorConfigurable("module-usage", "game-package", "game-derived"),
+  "playing-cards": creatorConfigurable("module-usage", "game-package", "game-derived"),
+  drawing: creatorConfigurable("module-usage", "game-package", "game-derived"),
+} as const satisfies Record<GameSdkModuleId, GameSdkModuleGovernance>;
 
 const FLOW_MODULE_PUBLIC_APIS: Partial<
   Record<GameSdkModuleId, readonly string[]>
@@ -192,6 +336,7 @@ const moduleDefinition = (
   group,
   label,
   description,
+  ...GAME_SDK_MODULE_GOVERNANCE[id],
   ...moduleContract(id, group),
 });
 
@@ -255,16 +400,58 @@ export type GameSdkModuleProfile = Record<
   GameSdkModuleDecision
 >;
 
+export type VisibleGameSdkModuleProfile = Partial<
+  Record<GameSdkModuleId, GameSdkModuleDecision>
+>;
+
+export type CreatorGameSdkModuleProfile = VisibleGameSdkModuleProfile;
+export type PlayerGameSdkModuleProfile = VisibleGameSdkModuleProfile;
+
 const moduleIdSet = new Set<string>(GAME_SDK_MODULE_IDS);
-const platformLockedModuleIdSet = new Set<GameSdkModuleId>([
-  "authentication",
-  "account-session",
-  "authorization",
-  "persistence",
-  "observability",
-  "common-navigation",
-  "player-menu",
-]);
+
+export const GAME_SDK_CREATOR_VISIBLE_MODULE_CATALOG =
+  GAME_SDK_MODULE_CATALOG.filter(
+    (definition) => definition.creatorVisibility !== "hidden",
+  );
+
+export const GAME_SDK_PLAYER_VISIBLE_MODULE_CATALOG =
+  GAME_SDK_MODULE_CATALOG.filter(
+    (definition) => definition.playerVisibility !== "hidden",
+  );
+
+export const GAME_SDK_CREATOR_CONFIGURABLE_MODULE_IDS =
+  GAME_SDK_MODULE_CATALOG.filter(
+    (definition) => definition.creatorVisibility === "configurable"
+      && definition.creatorMutability === "owner-review",
+  ).map((definition) => definition.id);
+
+export const GAME_SDK_PROPOSAL_ELIGIBLE_MODULE_IDS =
+  GAME_SDK_MODULE_CATALOG.filter(
+    (definition) => definition.proposalEligible,
+  ).map((definition) => definition.id);
+
+export const GAME_SDK_PACKAGE_MODULE_IDS = GAME_SDK_MODULE_CATALOG.filter(
+  (definition) => definition.packageTreatment === "module-usage",
+).map((definition) => definition.id);
+
+export const GAME_SDK_PLATFORM_RUNTIME_MODULE_IDS =
+  GAME_SDK_MODULE_CATALOG.filter(
+    (definition) => definition.runtimePolicySource === "platform-policy"
+      || definition.runtimePolicySource === "internal-policy",
+  ).map((definition) => definition.id);
+
+const creatorConfigurableModuleIdSet = new Set<GameSdkModuleId>(
+  GAME_SDK_CREATOR_CONFIGURABLE_MODULE_IDS,
+);
+const proposalEligibleModuleIdSet = new Set<GameSdkModuleId>(
+  GAME_SDK_PROPOSAL_ELIGIBLE_MODULE_IDS,
+);
+const packageModuleIdSet = new Set<GameSdkModuleId>(
+  GAME_SDK_PACKAGE_MODULE_IDS,
+);
+const platformRuntimeModuleIdSet = new Set<GameSdkModuleId>(
+  GAME_SDK_PLATFORM_RUNTIME_MODULE_IDS,
+);
 
 export function createInitialGameSdkModuleProfile(): GameSdkModuleProfile {
   return Object.fromEntries(
@@ -281,7 +468,7 @@ export function normalizeGameSdkModuleProfile(
   }
   const input = value as Record<string, unknown>;
   for (const definition of GAME_SDK_MODULE_CATALOG) {
-    if (platformLockedModuleIdSet.has(definition.id)) continue;
+    if (!creatorConfigurableModuleIdSet.has(definition.id)) continue;
     const decision = input[definition.id];
     if (!decision || typeof decision !== "object" || Array.isArray(decision)) {
       continue;
@@ -308,11 +495,11 @@ export function updateGameSdkModuleProfile(
     updates as Record<string, unknown>,
   )) {
     if (!moduleIdSet.has(rawId)) {
-      throw new Error("GAME_SDK_UNKNOWN_MODULE");
+      throw new Error("GAME_SDK_MODULE_CHANGE_NOT_ALLOWED");
     }
     const id = rawId as GameSdkModuleId;
-    if (platformLockedModuleIdSet.has(id)) {
-      throw new Error("GAME_SDK_MODULE_PLATFORM_LOCKED");
+    if (!creatorConfigurableModuleIdSet.has(id)) {
+      throw new Error("GAME_SDK_MODULE_CHANGE_NOT_ALLOWED");
     }
     if (
       !rawDecision
@@ -341,13 +528,84 @@ export function updateGameSdkModuleProfile(
 export function requiredGameSdkModuleIds(profile: unknown) {
   const normalized = normalizeGameSdkModuleProfile(profile);
   return GAME_SDK_MODULE_IDS.filter(
+    (id) => platformRuntimeModuleIdSet.has(id)
+      || normalized[id].mode === "required",
+  );
+}
+
+export function creatorVisibleGameSdkModuleProfile(
+  profile: unknown,
+): CreatorGameSdkModuleProfile {
+  const normalized = normalizeGameSdkModuleProfile(profile);
+  return Object.fromEntries(
+    GAME_SDK_CREATOR_VISIBLE_MODULE_CATALOG.map((definition) => [
+      definition.id,
+      normalized[definition.id],
+    ]),
+  );
+}
+
+export function playerVisibleGameSdkModuleProfile(
+  profile: unknown,
+): PlayerGameSdkModuleProfile {
+  const normalized = normalizeGameSdkModuleProfile(profile);
+  return Object.fromEntries(
+    GAME_SDK_PLAYER_VISIBLE_MODULE_CATALOG.map((definition) => [
+      definition.id,
+      normalized[definition.id],
+    ]),
+  );
+}
+
+export function creatorConfigurableGameSdkModuleProfile(
+  profile: unknown,
+): CreatorGameSdkModuleProfile {
+  const normalized = normalizeGameSdkModuleProfile(profile);
+  return Object.fromEntries(
+    GAME_SDK_CREATOR_CONFIGURABLE_MODULE_IDS.map((id) => [
+      id,
+      normalized[id],
+    ]),
+  );
+}
+
+export function creatorRequiredGameSdkModuleIds(profile: unknown) {
+  const normalized = normalizeGameSdkModuleProfile(profile);
+  return GAME_SDK_CREATOR_VISIBLE_MODULE_CATALOG
+    .filter((definition) => normalized[definition.id].mode === "required")
+    .map((definition) => definition.id);
+}
+
+export function requiredGameSdkPackageModuleIds(profile: unknown) {
+  const normalized = normalizeGameSdkModuleProfile(profile);
+  return GAME_SDK_PACKAGE_MODULE_IDS.filter(
     (id) => normalized[id].mode === "required",
   );
+}
+
+export function disabledGameSdkPackageModuleIds(profile: unknown) {
+  const normalized = normalizeGameSdkModuleProfile(profile);
+  return GAME_SDK_PACKAGE_MODULE_IDS.filter(
+    (id) => normalized[id].mode === "disabled",
+  );
+}
+
+export function gameSdkModuleIsCreatorConfigurable(id: GameSdkModuleId) {
+  return creatorConfigurableModuleIdSet.has(id);
+}
+
+export function gameSdkModuleIsProposalEligible(id: GameSdkModuleId) {
+  return proposalEligibleModuleIdSet.has(id);
+}
+
+export function gameSdkModuleBelongsInPackage(id: GameSdkModuleId) {
+  return packageModuleIdSet.has(id);
 }
 
 export function gameSdkModuleIsRequired(
   profile: unknown,
   id: GameSdkModuleId,
 ) {
+  if (platformRuntimeModuleIdSet.has(id)) return true;
   return normalizeGameSdkModuleProfile(profile)[id].mode === "required";
 }

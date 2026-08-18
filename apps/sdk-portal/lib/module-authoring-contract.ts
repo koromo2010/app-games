@@ -1,8 +1,10 @@
 import { createHash } from "node:crypto";
 import {
   GAME_SDK_MODULE_CATALOG,
+  GAME_SDK_MODULE_GOVERNANCE,
+  disabledGameSdkPackageModuleIds,
   normalizeGameSdkModuleProfile,
-  requiredGameSdkModuleIds,
+  requiredGameSdkPackageModuleIds,
   type GameSdkModuleProfile,
 } from "@game-fields/game-sdk/modules";
 import platformRelease from "../../../config/platform-release.json" with { type: "json" };
@@ -24,15 +26,16 @@ export function gameSdkModuleContractDigest(input: {
   sdkContractVersion?: number;
 }) {
   const profile = normalizeGameSdkModuleProfile(input.moduleProfile);
-  const requiredModuleIds = requiredGameSdkModuleIds(profile);
+  const requiredModuleIds = requiredGameSdkPackageModuleIds(profile);
   const requiredModules = GAME_SDK_MODULE_CATALOG.filter((definition) => (
     requiredModuleIds.includes(definition.id)
   ));
   return createHash("sha256").update(canonicalJson({
-    schemaVersion: 1,
+    schemaVersion: 2,
     environment: input.environment,
     sdkPackageVersion: input.sdkPackageVersion ?? platformRelease.sdkPackageVersion,
     sdkContractVersion: input.sdkContractVersion ?? platformRelease.sdkContractVersion,
+    governance: GAME_SDK_MODULE_GOVERNANCE,
     profile,
     requiredModules,
   })).digest("hex");
@@ -44,13 +47,11 @@ export function createGameSdkModuleContract(input: {
   origin?: string;
 }) {
   const environment = sdkPortalReleaseProfile(input.origin).environment;
-  const requiredModuleIds = requiredGameSdkModuleIds(input.moduleProfile);
+  const requiredModuleIds = requiredGameSdkPackageModuleIds(input.moduleProfile);
   const requiredModules = GAME_SDK_MODULE_CATALOG.filter((definition) => (
     requiredModuleIds.includes(definition.id)
   ));
-  const disabledModuleIds = GAME_SDK_MODULE_CATALOG
-    .map((definition) => definition.id)
-    .filter((id) => !requiredModuleIds.includes(id));
+  const disabledModuleIds = disabledGameSdkPackageModuleIds(input.moduleProfile);
   const disabledModules = GAME_SDK_MODULE_CATALOG.filter((definition) => (
     disabledModuleIds.includes(definition.id)
   ));

@@ -31,7 +31,7 @@ import type {
   GameSdkContentSource,
 } from "@game-fields/game-sdk/content-source";
 import {
-  GAME_SDK_MODULE_IDS,
+  GAME_SDK_CREATOR_VISIBLE_MODULE_CATALOG,
   allGameSdkParticipantsComplete,
   assertGameSdkCanStart,
   assignGameSdkRoles,
@@ -40,12 +40,13 @@ import {
   gameSdkModuleIsRequired,
   nextGameSdkEligibleSeat,
   nextGameSdkRoundStep,
+  normalizeGameSdkModuleProfile,
   recordGameSdkParticipantValue,
   recordGameSdkVote,
   requiredGameSdkModuleIds,
   tallyGameSdkVotes,
   type GameSdkModuleGroup,
-  type GameSdkModuleProfile,
+  type CreatorGameSdkModuleProfile,
   type GameSdkStandardResultView,
 } from "@game-fields/game-sdk/modules";
 import {
@@ -106,7 +107,7 @@ type Props = {
   gameId: string;
   runtimeUrl: string;
   title: string;
-  moduleProfile: GameSdkModuleProfile;
+  moduleProfile: CreatorGameSdkModuleProfile;
   settingDefinitions: readonly GameSdkSettingDefinition[];
   previewIdentity?: {
     environment: "development" | "production";
@@ -301,14 +302,18 @@ export function SdkPreviewGameShell({
   const [standardResult, setStandardResult] =
     useState<GameSdkStandardResultView | null>(null);
 
-  const requiredModuleIds = requiredGameSdkModuleIds(moduleProfile);
-  const resolvedModules = useMemo(
-    () => resolveRequiredSdkPreviewModules(moduleProfile),
+  const runtimeModuleProfile = useMemo(
+    () => normalizeGameSdkModuleProfile(moduleProfile),
     [moduleProfile],
+  );
+  const requiredModuleIds = requiredGameSdkModuleIds(runtimeModuleProfile);
+  const resolvedModules = useMemo(
+    () => resolveRequiredSdkPreviewModules(runtimeModuleProfile),
+    [runtimeModuleProfile],
   );
   const moduleRequired = (
     id: Parameters<typeof gameSdkModuleIsRequired>[1],
-  ) => gameSdkModuleIsRequired(moduleProfile, id);
+  ) => gameSdkModuleIsRequired(runtimeModuleProfile, id);
   const phase: PreviewPhase = surface === "entry" ? "lobby" : surface;
   const dummyPlayers = players.filter((player) => player.dummy);
   const configuredMaximumPlayers = sdkPreviewNumericSettingValue(
@@ -415,7 +420,7 @@ export function SdkPreviewGameShell({
       ) {
         const requestId = data.requestId.slice(0, 120);
         const target = frameRef.current?.contentWindow;
-        if (!gameSdkModuleIsRequired(moduleProfile, "content-source")) {
+        if (!gameSdkModuleIsRequired(runtimeModuleProfile, "content-source")) {
           target?.postMessage({
             type: "game-fields:resource-response",
             resource: "content-source",
@@ -489,7 +494,7 @@ export function SdkPreviewGameShell({
       ) {
         const requestId = data.requestId.slice(0, 120);
         const target = frameRef.current?.contentWindow;
-        if (!gameSdkModuleIsRequired(moduleProfile, "llm")) {
+        if (!gameSdkModuleIsRequired(runtimeModuleProfile, "llm")) {
           target?.postMessage({
             type: "game-fields:resource-response",
             resource: "llm",
@@ -574,7 +579,7 @@ export function SdkPreviewGameShell({
   }, [
     creatorSlug,
     gameId,
-    moduleProfile,
+    runtimeModuleProfile,
     players.length,
     requirePreviewSession,
     surface,
@@ -882,8 +887,19 @@ export function SdkPreviewGameShell({
 
   const groupedModules = (["platform", "shell", "flow", "resource"] as const).map((group) => ({
     group,
-    modules: resolvedModules.filter((module) => module.group === group),
-  }));
+    modules: resolvedModules.filter((module) => (
+      module.group === group
+      && GAME_SDK_CREATOR_VISIBLE_MODULE_CATALOG.some(
+        (definition) => definition.id === module.id,
+      )
+    )),
+  })).filter(({ modules }) => modules.length > 0);
+  const visibleRequiredModuleCount = GAME_SDK_CREATOR_VISIBLE_MODULE_CATALOG
+    .filter((definition) => requiredModuleIds.includes(definition.id)).length;
+  const visibleResolvedModuleCount = groupedModules.reduce(
+    (count, group) => count + group.modules.length,
+    0,
+  );
 
   return (
     <main className={`min-h-screen bg-slate-950 text-white ${gameTopBannerOffsetClass}`}>
@@ -906,7 +922,7 @@ export function SdkPreviewGameShell({
             onClick={() => setModuleListOpen(true)}
           >
             <span>共通モジュール</span>
-            <span>{requiredModuleIds.length}/{GAME_SDK_MODULE_IDS.length} 接続</span>
+            <span>{visibleRequiredModuleCount}/{GAME_SDK_CREATOR_VISIBLE_MODULE_CATALOG.length} 接続</span>
           </button>
           <Link href={backHref} data-menu-close="true" className={gameTopMenuItemClass}>
             制作者の広場へ戻る
@@ -1238,7 +1254,7 @@ export function SdkPreviewGameShell({
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <p className="text-xs font-bold uppercase tracking-[.14em] text-cyan-200">Executable platform composition</p>
-                <h2 className="mt-1 text-2xl font-black">必須 {requiredModuleIds.length}/{GAME_SDK_MODULE_IDS.length} · 実体接続済み {resolvedModules.length}</h2>
+                <h2 className="mt-1 text-2xl font-black">使用 {visibleRequiredModuleCount}/{GAME_SDK_CREATOR_VISIBLE_MODULE_CATALOG.length} · 実体接続済み {visibleResolvedModuleCount}</h2>
                 <p className="mt-1 text-xs text-slate-400">IDだけでなく、下記の本体部品・SDK helper・Preview adapterへ解決しています。</p>
               </div>
               <button type="button" className={commandClass} onClick={() => setModuleListOpen(false)}>閉じる</button>

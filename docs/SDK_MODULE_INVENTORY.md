@@ -2,7 +2,7 @@
 
 ## 目的
 
-Game Fields本体にある共通機能と、外部ゲームpackageが直接利用できる公開ライブラリを混同しないための台帳。機械可読な採用正本は`@game-fields/game-sdk/modules`の`GAME_SDK_MODULE_CATALOG`とし、この文書は責任境界と実装状況を説明する。
+Game Fields本体にある共通機能と、外部ゲームpackageが直接利用できる公開ライブラリを混同しないための台帳。機械可読なgovernance正本は`packages/game-sdk/src/modules/profile.ts`の`GAME_SDK_MODULE_GOVERNANCE`とし、39件の可視性・変更権限・proposal・package・runtime監査は[SDK_MODULE_GOVERNANCE.md](./SDK_MODULE_GOVERNANCE.md)に固定する。この文書は技術区分と実装状況を説明する。
 
 ## 全39モジュールの区分
 
@@ -53,11 +53,10 @@ Game Fields本体にある共通機能と、外部ゲームpackageが直接利�
 
 ## 制作AIへの通知経路
 
-1. DownloadMeの`SDK_MODULE_CATALOG.md`
-2. `GAME_SDK_MODULE_CATALOG`の`delivery`、`packageExports`、`publicApis`、`usage`
-3. SDK Portal module APIの`catalog`
-4. MCP `get_game_module_requirements`の`requiredModules`
-5. npm packageのREADMEと型定義
-6. SDK-dev module labの実物
+1. DownloadMeの`SDK_MODULE_CATALOG.md`（Platform内部項目を含めない）
+2. SDK Portal module APIのcreator-visible `catalog`
+3. MCP `get_game_module_requirements`のpackage向け`requiredModules`
+4. npm packageのREADMEと型定義
+5. SDK-dev module labの実物
 
 MCPはIDだけではなく、確定済みmoduleごとの公開importと利用方法を返す。`platform-owned`をコピーせず、`platform-resource`は注入adapter、`sdk-helper`と`sdk-resource`はnpm importとして扱う。

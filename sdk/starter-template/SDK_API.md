@@ -22,7 +22,6 @@ import {
   type GameSdkOnlineRoomView,
 } from "@game-fields/game-sdk/runtime";
 import {
-  GAME_SDK_MODULE_CATALOG,
   allGameSdkParticipantsComplete,
   nextGameSdkEligibleSeat,
   tallyGameSdkVotes,
@@ -250,9 +249,9 @@ const generated = await llm.generate({
 
 ## 共通モジュールprofile
 
-最初のgame draftは`GAME_SDK_MODULE_CATALOG`の全件を必須としてPlatformが保存します。`mock/preview.json`、AppSet、manifestへmodule採否を表す独自キーを書いてはいけません。
+最初のgame draftではPlatformが内部policyとゲーム仕様からmodule profileを保存します。制作者と制作AIは公開されたauthoring contractだけを扱い、非公開moduleを列挙・推測しません。`mock/preview.json`、AppSet、manifestへmodule採否を表す独自キーを書いてはいけません。
 
-制作AIは仕様確定後に`create_game_draft`でmetadataだけを作り、Portalの人間レビューを待ちます。profileの変更・確定は所有者向け管理画面に限定します。確定後に`get_game_module_requirements`を呼び、`moduleProfileRevision`・`moduleContractDigest`・SDK version・`requiredModuleIds`・delivery契約を固定してから共有UI/AppSetを実装します。
+制作AIは仕様確定後に`create_game_draft`でmetadataだけを作り、Portalの人間レビューを待ちます。profileの変更・確定は所有者向け管理画面に限定し、選択可能と明示された項目だけを扱います。確定後に`get_game_module_requirements`を呼び、`moduleProfileRevision`・`moduleContractDigest`・SDK version・package向け`requiredModuleIds`・delivery契約を固定してから共有UI/AppSetを実装します。
 
 `sdk-resource`は指定された公開package exportとdata/React API、`sdk-helper`は公開helper、`platform-resource`は公開型と注入interface、`platform-owned`はhost委譲を使います。required moduleごとにsource path・実API・runtime marker・非再実装証拠を提出し、disabled moduleはimportも利用もしません。操作プロトタイプと正式packageは同じ`game-client.tsx`・AppSet・Command sourceを別adapterへ接続します。
 

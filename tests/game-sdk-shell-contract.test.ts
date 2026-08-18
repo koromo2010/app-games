@@ -275,18 +275,17 @@ test("reviewed SDK shell consumes manifest capabilities passed by Preview", () =
   assert.equal(mapped.usesLlm, true);
   assert.deepEqual(mapped.moduleProfile, normalizeGameSdkModuleProfile(definition.modulePolicy));
 
-  // usesLlm && moduleRequired("llm") && moduleRequired("ai-activity") — full
-  // truth table against the extracted pure function.
+  // AI activity is an internal policy module. Creator decisions can disable
+  // LLM use, but cannot enumerate or disable the activity boundary itself.
   const required = createInitialGameSdkModuleProfile();
   const llmDisabled = updateGameSdkModuleProfile(required, {
     llm: { mode: "disabled", reason: "not used" },
   });
-  const aiActivityDisabled = updateGameSdkModuleProfile(required, {
+  assert.throws(() => updateGameSdkModuleProfile(required, {
     "ai-activity": { mode: "disabled", reason: "not tracked" },
-  });
+  }), /GAME_SDK_MODULE_CHANGE_NOT_ALLOWED/);
   assert.equal(shouldTrackGameSdkAiActivity({ usesLlm: false, moduleProfile: required }), false);
   assert.equal(shouldTrackGameSdkAiActivity({ usesLlm: true, moduleProfile: llmDisabled }), false);
-  assert.equal(shouldTrackGameSdkAiActivity({ usesLlm: true, moduleProfile: aiActivityDisabled }), false);
   assert.equal(shouldTrackGameSdkAiActivity({ usesLlm: true, moduleProfile: required }), true);
 
   assert.match(resultPanel, /supportsReplay && moduleRequired\("replay"\)/);
@@ -294,10 +293,8 @@ test("reviewed SDK shell consumes manifest capabilities passed by Preview", () =
   assert.match(commandRunnerSource, /withAiActivity\(/);
   assert.match(debugStateSource, /shouldTrackGameSdkAiActivity/);
 
-  // page.tsx itself is unchanged (out of scope for the GameSdkFrame.tsx
-  // split) — keep the original guard that it still derives these props the
-  // same way gameSdkFramePropsFromPreviewDefinition expects, so the two
-  // don't silently drift apart.
+  // Manifest capabilities remain direct immutable package inputs, while the
+  // profile crossing the server/client boundary is creator-visible only.
   for (const prop of ["supportsReplay", "supportsSpectators", "usesLlm"]) {
     assert.match(
       previewPage,
@@ -305,7 +302,7 @@ test("reviewed SDK shell consumes manifest capabilities passed by Preview", () =
       `${prop} must be passed from the immutable package manifest`,
     );
   }
-  assert.match(previewPage, /moduleProfile=\{normalizeGameSdkModuleProfile\(game\.modulePolicy\)\}/);
+  assert.match(previewPage, /moduleProfile=\{creatorVisibleGameSdkModuleProfile\(game\.modulePolicy\)\}/);
   assert.match(previewPage, /rules=\{\(game\.manifest\.rules \?\? \[\]\)\.map/);
 });
 

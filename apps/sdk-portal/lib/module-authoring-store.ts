@@ -13,6 +13,16 @@ export type CreatorGameModuleAuthoringState = {
   moduleProfileConfirmedAt: string | null;
 };
 
+export function creatorGameModuleAuthoringSummary(
+  state: CreatorGameModuleAuthoringState | null,
+) {
+  return state ? {
+    moduleProfileRevision: state.moduleProfileRevision,
+    moduleContractDigest: state.moduleContractDigest,
+    moduleProfileConfirmedAt: state.moduleProfileConfirmedAt,
+  } : null;
+}
+
 export async function createCreatorGameDraft(input: {
   creatorId: string;
   gameId: string;

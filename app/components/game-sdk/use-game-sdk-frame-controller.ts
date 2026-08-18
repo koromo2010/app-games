@@ -8,7 +8,10 @@ import {
   useState,
 } from "react";
 import type { GameSdkSettingValue } from "@game-fields/game-sdk";
-import type { GameSdkModuleId } from "@game-fields/game-sdk/modules";
+import {
+  normalizeGameSdkModuleProfile,
+  type GameSdkModuleId,
+} from "@game-fields/game-sdk/modules";
 import {
   createGameSdkHttpClientRuntime,
   gameSdkCommandTimingForRoom,
@@ -90,9 +93,14 @@ export function useGameSdkFrameController(
     Record<string, GameSdkSettingValue>
   >({});
 
+  const runtimeModuleProfile = useMemo(
+    () => normalizeGameSdkModuleProfile(moduleProfile),
+    [moduleProfile],
+  );
+
   const moduleRequired = useCallback((id: GameSdkModuleId) => (
-    moduleProfile[id].mode === "required"
-  ), [moduleProfile]);
+    runtimeModuleProfile[id].mode === "required"
+  ), [runtimeModuleProfile]);
 
   const handleRuntimeError = useCallback((error: unknown) => {
     if (
@@ -178,7 +186,7 @@ export function useGameSdkFrameController(
     roomRef,
     runtime,
     usesLlm,
-    moduleProfile,
+    moduleProfile: runtimeModuleProfile,
     postRoomSnapshot,
     setMessage,
     pendingActionRef,
@@ -211,7 +219,7 @@ export function useGameSdkFrameController(
     attachRoom: lifecycle.attachRoom,
     attachLatestRoom: lifecycle.attachLatestRoom,
     usesLlm,
-    moduleProfile,
+    moduleProfile: runtimeModuleProfile,
     wrapDebugCommand: debugState.wrapDebugCommand,
     debugViewer: debugState.debugViewer,
   });

@@ -3,7 +3,7 @@ import type {
   GameSdkSettingDefinition,
   GameSdkSettingValue,
 } from "@game-fields/game-sdk";
-import type { GameSdkModuleProfile } from "@game-fields/game-sdk/modules";
+import type { VisibleGameSdkModuleProfile } from "@game-fields/game-sdk/modules";
 import type { createGameSdkHttpClientRuntime } from "@game-fields/game-sdk/client-runtime";
 
 export type CommonView = {
@@ -96,7 +96,7 @@ export type GameSdkFrameProps = {
   title: string;
   settingDefinitions: readonly GameSdkSettingDefinition[];
   rules: readonly string[];
-  moduleProfile: GameSdkModuleProfile;
+  moduleProfile: VisibleGameSdkModuleProfile;
   supportsReplay: boolean;
   supportsSpectators: boolean;
   usesLlm: boolean;
