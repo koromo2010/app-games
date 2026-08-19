@@ -176,18 +176,10 @@ test("SDK package runtime accepts only its configured isolated origin and exact 
   }
 });
 
-test("SDK package runtime injects only resources enabled by the reviewed module profile", () => {
+test("SDK package runtime keeps common resources available and gates actual LLM use by the manifest", () => {
   const manifest = { usesLlm: true };
   const initial = createInitialGameSdkModuleProfile();
   const modulePolicy = updateGameSdkModuleProfile(initial, {
-    "content-source": {
-      mode: "disabled",
-      reason: "This package has no word source.",
-    },
-    llm: {
-      mode: "disabled",
-      reason: "This package does not call the LLM gateway.",
-    },
     feedback: {
       mode: "disabled",
       reason: "There are no generated artifacts.",
@@ -197,7 +189,16 @@ test("SDK package runtime injects only resources enabled by the reviewed module 
     gameSdkPlatformResourcePolicy(manifest, modulePolicy),
     {
       moduleProfile: modulePolicy,
-      contentSource: false,
+      contentSource: true,
+      llm: true,
+      feedback: false,
+    },
+  );
+  assert.deepEqual(
+    gameSdkPlatformResourcePolicy({ usesLlm: false }, initial),
+    {
+      moduleProfile: initial,
+      contentSource: true,
       llm: false,
       feedback: false,
     },
@@ -279,7 +280,7 @@ test("SDK preview content bridge authenticates and validates the saved game prof
     "requireSdkPreviewAuthenticatedPlayer",
     "rateLimitPolicies.sdkContentRead",
     "loadSdkPreviewRuntimeDefinition",
-    "gameSdkModuleIsRequired(moduleProfile, \"content-source\")",
+    "gameSdkModuleIsEnabled(moduleProfile, \"content-source\")",
     "createGameFieldsSdkContentSource",
     "\"drawWords\"",
     "\"drawWordPairs\"",
@@ -356,7 +357,7 @@ test("every required SDK module resolves to a concrete preview implementation", 
   );
   const initial = createInitialGameSdkModuleProfile();
   const resolved = resolveRequiredSdkPreviewModules(initial);
-  assert.deepEqual(resolved.map((module) => module.id), [...GAME_SDK_MODULE_IDS]);
+  assert.equal(resolved.length, GAME_SDK_MODULE_IDS.length - 4);
   assert.equal(
     resolved.every((module) => (
       module.implementation.source.trim().length > 0
@@ -365,12 +366,12 @@ test("every required SDK module resolves to a concrete preview implementation", 
     true,
   );
 
-  const withoutDrawing = updateGameSdkModuleProfile(initial, {
-    drawing: { mode: "disabled", reason: "描画を利用しないため" },
+  const withoutVote = updateGameSdkModuleProfile(initial, {
+    vote: { mode: "disabled" },
   });
   assert.equal(
-    resolveRequiredSdkPreviewModules(withoutDrawing).some(
-      (module) => module.id === "drawing",
+    resolveRequiredSdkPreviewModules(withoutVote).some(
+      (module) => module.id === "vote",
     ),
     false,
   );

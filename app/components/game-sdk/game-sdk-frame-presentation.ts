@@ -100,7 +100,7 @@ export function shouldTrackGameSdkAiActivity(input: {
 }): boolean {
   return (
     input.usesLlm
-    && input.moduleProfile.llm.mode === "required"
+    && input.moduleProfile.llm.mode !== "disabled"
     && input.moduleProfile["ai-activity"].mode === "required"
   );
 }

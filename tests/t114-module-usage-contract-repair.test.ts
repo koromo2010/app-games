@@ -34,6 +34,8 @@ const disabledIds = [
   "vote",
   "role-assignment",
   "team-assignment",
+] as const;
+const availableIds = [
   "content-source",
   "llm",
   "playing-cards",
@@ -79,8 +81,10 @@ function contract() {
   return {
     ...binding,
     requiredModuleIds: [...requiredIds],
+    availableModuleIds: [...availableIds],
     disabledModuleIds: [...disabledIds],
     requiredModules: requiredIds.map(definition),
+    availableModules: availableIds.map(definition),
     disabledModules: disabledIds.map(definition),
   };
 }
@@ -105,9 +109,11 @@ function oneModuleInput(
   return {
     contract: {
       ...binding,
-      requiredModuleIds: [id],
+      requiredModuleIds: [],
+      availableModuleIds: [id],
       disabledModuleIds: [],
-      requiredModules: [moduleDefinition],
+      requiredModules: [],
+      availableModules: [moduleDefinition],
       disabledModules: [],
     },
     binding,
@@ -295,18 +301,17 @@ test("five-module contract rejects missing rows, old fifteen-row matrices, and d
   );
 });
 
-test("profile delta is exactly five required and ten disabled modules with no local write", () => {
+test("profile delta keeps five required, six disabled and four available modules with no local write", () => {
   const delta = JSON.parse(readFileSync(`${fixtureRoot}/profile-delta.json`, "utf8"));
   const fixture = JSON.parse(readFileSync(`${fixtureRoot}/fixture.json`, "utf8"));
   assert.equal(delta.baseModuleProfileRevision, binding.moduleProfileRevision);
   assert.deepEqual(delta.required, requiredIds);
   assert.deepEqual(delta.disabled, disabledIds);
+  assert.deepEqual(delta.available, availableIds);
   assert.deepEqual(Object.keys(delta.moduleDecisions), disabledIds);
   for (const id of disabledIds) {
     assert.equal(delta.moduleDecisions[id].mode, "disabled");
-    assert.equal(typeof delta.moduleDecisions[id].reason, "string");
-    assert.ok(delta.moduleDecisions[id].reason.length > 0);
-    assert.ok(delta.moduleDecisions[id].reason.length <= 240);
+    assert.equal("reason" in delta.moduleDecisions[id], false);
   }
   assert.equal(delta.profileWritesPerformed, 0);
   assert.equal(delta.confirmationWritesPerformed, 0);

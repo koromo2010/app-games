@@ -21,13 +21,13 @@ import {
   updateGameSdkModuleProfile,
 } from "@game-fields/game-sdk/modules";
 
-test("initial mock profile requires every shared module", () => {
+test("initial mock profile requires progression modules and exposes shared resources", () => {
   const profile = createInitialGameSdkModuleProfile();
-  assert.deepEqual(requiredGameSdkModuleIds(profile), GAME_SDK_MODULE_IDS);
+  assert.equal(requiredGameSdkModuleIds(profile).length, GAME_SDK_MODULE_IDS.length - 4);
   assert.equal(
-    GAME_SDK_MODULE_CATALOG.every(
-      (definition) => profile[definition.id].mode === "required",
-    ),
+    GAME_SDK_MODULE_CATALOG
+      .filter((definition) => definition.group === "resource")
+      .every((definition) => profile[definition.id].mode === "available"),
     true,
   );
 });

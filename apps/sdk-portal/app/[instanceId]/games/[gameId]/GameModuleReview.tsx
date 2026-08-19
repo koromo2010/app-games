@@ -185,7 +185,9 @@ export function GameModuleReview({
         onClick={() => setOpen(true)}
       >
         共通モジュール
-        <strong>{composedCount}/{GAME_SDK_CREATOR_VISIBLE_MODULE_CATALOG.length} 使用</strong>
+        <strong>
+          進行・共通 {composedCount} · 任意 {classification.available.length} · 共通DB {classification.standard.length}
+        </strong>
       </button>
       {open && (
         <div
@@ -211,7 +213,10 @@ export function GameModuleReview({
                 このゲームで確認できるモジュールは{GAME_SDK_CREATOR_VISIBLE_MODULE_CATALOG.length}件です。
               </strong>
               <span>
-                ゲーム仕様から決まる項目は確認専用、選択可能な項目だけを変更できます。制作GPTには確定後のpackage向け契約だけを渡します。
+                進行部品は原則必須です。不要な場合はAIから削除を提案でき、人間の確認後にだけ外せます。制作GPTには確定後のpackage向け契約だけを渡します。
+              </span>
+              <span>
+                共通DBはPlatform標準として固定です。LLM・トランプ・描画はゲーム側が必要に応じて自由に利用でき、module構成で使用を強制・禁止しません。
               </span>
               {!canCustomize && (
                 <span>
@@ -219,7 +224,7 @@ export function GameModuleReview({
                 </span>
               )}
               <span>
-                確認専用 {classification.required.length}件 · 使用 {classification.removable.length}件 · 未使用 {classification.optional.length}件
+                確認専用 {classification.required.length}件 · 使用 {classification.removable.length}件 · 未使用 {classification.optional.length}件 · 任意利用 {classification.available.length}件 · 共通DB標準 {classification.standard.length}件
               </span>
               <span>
                 状態: {contract?.moduleProfileConfirmedAt ? "確定済み" : "未確定"}
@@ -235,24 +240,39 @@ export function GameModuleReview({
                     <h3>{groupLabels[group]}</h3>
                     {definitionsByGroup[group].map((definition) => {
                       const decision = profile[definition.id]
-                        ?? { mode: "required" as const };
+                        ?? (definition.profilePolicy === "available"
+                          || definition.profilePolicy === "platform-standard"
+                          ? { mode: "available" as const }
+                          : { mode: "required" as const });
                       const required = decision.mode === "required";
-                      const tierLabel = readOnlySet.has(definition.id)
+                      const tierLabel = definition.profilePolicy === "platform-standard"
+                        ? "共通DB標準"
+                        : definition.profilePolicy === "available"
+                          ? "任意利用"
+                          : readOnlySet.has(definition.id)
                         ? "確認専用"
                         : required
                           ? "使用"
                           : "未使用";
+                      const selectable = configurableSet.has(definition.id);
                       return (
-                        <label key={definition.id}>
-                          <input
-                            type="checkbox"
-                            checked={required}
-                            disabled={!canCustomize || !configurableSet.has(definition.id)}
-                            onChange={(event) => setRequired(
-                              definition.id,
-                              event.target.checked,
-                            )}
-                          />
+                        <div className="module-review-item" key={definition.id}>
+                          {selectable ? (
+                            <input
+                              type="checkbox"
+                              aria-label={`${definition.label}を使用する`}
+                              checked={required}
+                              disabled={!canCustomize}
+                              onChange={(event) => setRequired(
+                                definition.id,
+                                event.target.checked,
+                              )}
+                            />
+                          ) : (
+                            <span className="module-review-policy-marker" aria-hidden="true">
+                              {definition.profilePolicy === "available" ? "任" : "固"}
+                            </span>
+                          )}
                           <span>
                             <b>{definition.label}</b>
                             <small>{definition.description}</small>
@@ -261,7 +281,7 @@ export function GameModuleReview({
                               <em>未使用の理由: {decision.reason}</em>
                             )}
                           </span>
-                        </label>
+                        </div>
                       );
                     })}
                   </section>
@@ -271,7 +291,7 @@ export function GameModuleReview({
             <footer>
               <div>
                 <strong>
-                  確認専用 {classification.required.length} · 使用 {classification.removable.length} · 未使用 {classification.optional.length}
+                  確認専用 {classification.required.length} · 使用 {classification.removable.length} · 未使用 {classification.optional.length} · 任意 {classification.available.length} · 共通DB {classification.standard.length}
                 </strong>
                 {message && <span role="status">{message}</span>}
               </div>

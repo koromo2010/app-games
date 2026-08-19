@@ -1,6 +1,6 @@
 import type { GameSdkLlmRequest } from "@game-fields/game-sdk/llm";
 import {
-  gameSdkModuleIsRequired,
+  gameSdkModuleIsEnabled,
   normalizeGameSdkModuleProfile,
 } from "@game-fields/game-sdk/modules";
 import {
@@ -115,7 +115,7 @@ export async function POST(request: Request) {
     const moduleProfile = normalizeGameSdkModuleProfile(
       definition.modulePolicy,
     );
-    if (!gameSdkModuleIsRequired(moduleProfile, "llm")) {
+    if (!gameSdkModuleIsEnabled(moduleProfile, "llm")) {
       telemetry.reject("ai.generation", 403, {
         game: `sdk-preview:${gameId}`,
         errorCode: "GAME_SDK_LLM_MODULE_REQUIRED",

@@ -13,31 +13,34 @@ import { classifyCreatorGameModules } from "../apps/sdk-portal/lib/module-profil
 
 const read = (path: string) => readFileSync(path, "utf8");
 
-test("new SDK mock starts with every module required", () => {
+test("new SDK mock starts with progression required and resources available", () => {
   const initial = createInitialGameSdkModuleProfile();
   const classification = classifyCreatorGameModules(initial);
   assert.equal(GAME_SDK_MODULE_IDS.length, GAME_SDK_MODULE_CATALOG.length);
-  assert.deepEqual(requiredGameSdkModuleIds(initial), GAME_SDK_MODULE_IDS);
+  assert.equal(requiredGameSdkModuleIds(initial).length, GAME_SDK_MODULE_IDS.length - 4);
   assert.equal(classification.required.length, 6);
-  assert.equal(classification.removable.length, 19);
+  assert.equal(classification.removable.length, 15);
   assert.equal(classification.optional.length, 0);
+  assert.equal(classification.available.length, 3);
+  assert.equal(classification.standard.length, 1);
   assert.deepEqual(normalizeGameSdkModuleProfile(undefined), initial);
 });
 
-test("human review keeps required modules locked and records optional reasons", () => {
+test("human review can remove progression modules but cannot disable shared resources", () => {
   const initial = createInitialGameSdkModuleProfile();
   const reviewed = updateGameSdkModuleProfile(initial, {
     vote: {
       mode: "disabled",
       reason: "投票が存在しないゲームのため",
     },
-    drawing: {
+    rounds: {
       mode: "disabled",
-      reason: "描画操作が存在しないゲームのため",
+      reason: "複数ラウンドが存在しないゲームのため",
     },
   });
-  assert.equal(requiredGameSdkModuleIds(reviewed).length, GAME_SDK_MODULE_IDS.length - 2);
+  assert.equal(requiredGameSdkModuleIds(reviewed).length, GAME_SDK_MODULE_IDS.length - 6);
   assert.equal(reviewed.authentication.mode, "required");
+  assert.equal(reviewed.drawing.mode, "available");
   assert.deepEqual(
     updateGameSdkModuleProfile(initial, {
       vote: { mode: "disabled" },
@@ -56,6 +59,12 @@ test("human review keeps required modules locked and records optional reasons", 
         mode: "disabled",
         reason: "解除",
       },
+    }),
+    /GAME_SDK_MODULE_CHANGE_NOT_ALLOWED/,
+  );
+  assert.throws(
+    () => updateGameSdkModuleProfile(initial, {
+      "content-source": { mode: "disabled" },
     }),
     /GAME_SDK_MODULE_CHANGE_NOT_ALLOWED/,
   );

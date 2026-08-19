@@ -34,8 +34,8 @@ export async function GET(request: Request, context: RouteContext) {
     if (
       !runtime
       || !runtime.definition.manifest?.usesLlm
-      || moduleProfile?.llm.mode !== "required"
-      || moduleProfile.feedback.mode !== "required"
+      || moduleProfile?.llm.mode === "disabled"
+      || moduleProfile?.feedback.mode !== "required"
     ) {
       return Response.json({ artifacts: [] }, {
         headers: { "Cache-Control": "private, no-store" },

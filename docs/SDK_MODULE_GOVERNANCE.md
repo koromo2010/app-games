@@ -14,6 +14,11 @@ enforced server-side even if a caller constructs a request manually. An
 unclassified new module fails the exhaustive TypeScript record and must not be
 released with an implicit default.
 
+`profilePolicy=required` is the default for common/progression modules;
+`creator-choice` permits an owner-reviewed removal proposal;
+`platform-standard` is always available through the Platform-owned path; and
+`available` permits package use without making use mandatory or creator-toggleable.
+
 ## Exhaustive 39-module audit
 
 All player mutability values are `none` in the current product.
@@ -55,10 +60,10 @@ All player mutability values are `none` in the current product.
 | `team-assignment` | game-derived | configurable / owner-review | read-only | yes | module-usage | game-package |
 | `secret-presentation` | game-derived | configurable / owner-review | read-only | yes | module-usage | game-package |
 | `standard-outcome` | game-derived | read-only / none | hidden | no | module-usage | game-package |
-| `content-source` | game-derived | configurable / owner-review | read-only | yes | module-usage | game-package |
-| `llm` | game-derived | configurable / owner-review | read-only | yes | module-usage | game-package |
-| `playing-cards` | game-derived | configurable / owner-review | read-only | yes | module-usage | game-package |
-| `drawing` | game-derived | configurable / owner-review | read-only | yes | module-usage | game-package |
+| `content-source` | game-derived | read-only / none | read-only | no | module-usage | game-package |
+| `llm` | game-derived | read-only / none | read-only | no | module-usage | game-package |
+| `playing-cards` | game-derived | read-only / none | read-only | no | module-usage | game-package |
+| `drawing` | game-derived | read-only / none | read-only | no | module-usage | game-package |
 
 ## Derived surfaces
 
@@ -69,9 +74,15 @@ All player mutability values are `none` in the current product.
 - Proposal creation and editing accept only `proposal=yes` rows. Unknown and
   non-eligible IDs share one generic rejection so the guard is not an
   enumeration oracle.
-- Package contracts and `moduleUsage` include only
-  `package treatment=module-usage` rows. Platform-owned and derived Shell work
-  is not delegated back to a game package.
+- Package contracts separate `package treatment=module-usage` rows into
+  required, available, and disabled sets. Every required row needs usage
+  evidence. Available resources need a row only when the package uses them;
+  disabled rows remain forbidden. Platform-owned and derived Shell work is not
+  delegated back to a game package.
+- `content-source` is the fixed Platform common-database path. Games without
+  words do not have to call it, but word games cannot replace it with a local
+  database. LLM, playing cards, and drawing remain available without a profile
+  toggle and are never mandatory merely because they are available.
 - Runtime evaluates the normalized full profile. Platform/internal rows are
   always required by their policy source, so a legacy creator decision cannot
   disable them.

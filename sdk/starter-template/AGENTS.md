@@ -8,7 +8,7 @@
 2. ゲームの核が決まるまでは自然に対話し、面白さ・人数・勝敗が決まったら詳細案を一括提示する。
 3. 「おまかせ」「未定」を安全な初期値で補い、`GAME_SPEC.md`へAI判断と分かる形で記録する。
 4. 仕様確定後はgame draftだけを作り、人間がPortalでmodule profileを確定するまでUI、AppSet、adapterを実装しない。
-5. 確定済み`moduleProfileRevision`・`moduleContractDigest`・SDK versionを固定し、required moduleをdelivery別の公式SDK契約で実利用する。disabled moduleや同等の独自処理を使わない。
+5. 確定済み`moduleProfileRevision`・`moduleContractDigest`・SDK versionを固定し、required moduleをdelivery別の公式SDK契約で実利用する。available moduleは必要な場合だけ公式契約で利用し、disabled moduleや同等の独自処理を使わない。
 6. ゲーム固有AppSet、閲覧者別View、共有`game-client.tsx`、prototype adapter、契約テストを一緒に実装する。
 7. ローカルNode.jsが既にある場合は`npm run check`、`npm run demo`、`npm run diagnose:promotion`を追加検証として成功させる。インストールを標準経路の前提にしない。
 8. OAuth接続済みGame Fields SDK MCPの`publish_game_source_package`、または検査済み`game-package/`を渡す`publish_game_package`を使う。アクセストークンや管理トークンを取得・表示・保存しない。
@@ -56,7 +56,7 @@ MCPの`publish_mock`は互換tool名で、確定module contractと共有source�
 5. `contracts.ts`へsettings、AppState、AppInput、AppCommand、AppViewを定義する。
 6. `app-set.ts`へ作成・リセット、認可、フェーズ、手番、終了条件、presentationを実装する。
 7. `game-client.tsx`を正式UI正本とし、`prototype-adapter.ts`はfixture、状態早送り、resetだけに保つ。
-8. required moduleごとの実import/API、source path、runtime evidenceを検証し、`server-module.ts`はSDK基本セットとAppSetの合成だけに保つ。
+8. required moduleと実際に使うavailable moduleの実import/API、source path、runtime evidenceを検証し、`server-module.ts`はSDK基本セットとAppSetの合成だけに保つ。
 9. 正常完走、権限拒否、古いrevision、秘密遮断、失敗時非更新をテストする。
 10. Node.jsが既にある場合だけ`npm run check`、`npm run demo`、`npm run diagnose:promotion`を追加検査として実行する。
 11. 同じ共有sourceをMCPの`publish_game_source_package`（または検査済みpackage用`publish_game_package`）でhash固定保存する。

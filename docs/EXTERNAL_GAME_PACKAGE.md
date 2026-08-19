@@ -144,13 +144,13 @@ SDK専用Vercel Project `app-games-sdk`は同一Gitリポジトリへ接続済�
 
 この分離moduleはserver契約と汎用Room transportの境界fixtureであり、現行ワードウルフの代替完成品ではない。SDK-devの公式ワードウルフは現行`WordWolfGame`そのものを表示する受け入れ基準へ切り替えた。今後もこの基準を保ち、現行版で再利用可能性を確認した共通UI・時間管理・DEBUG・結果導線をSDK基本セットへ順に追加する。
 
-共通モジュールは`@game-fields/game-sdk/modules`の一つのcatalogへ集約する。初回モックはcatalog全件を必須として保存し、制作AIと管理トークンには変更手段を与えない。SDK-devへ署名済みアカウントでログインした環境所有者だけが、Platform固定以外を理由付きで必須解除できる。モック再発行では人間レビューを上書きしない。これはSDK側へ別のRoom・認証・UI基盤を再実装する仕組みではなく、既存の`online-room-route-factory`、`online-room-store-runtime`、`@game-fields/game-runtime`、共通UIと純粋domain部品を採用するprofileである。
+共通モジュールは`@game-fields/game-sdk/modules`の一つのcatalogへ集約する。進行・共通部品は原則必須で開始し、制作AIが削除proposalを作成しても、署名済み環境所有者の確認まではactive profileを変えない。`content-source`はPlatform共通DB標準として固定し、`llm`・`playing-cards`・`drawing`は使用を強制も禁止もしないavailable resourceとする。モック再発行では人間レビューを上書きしない。
 
 catalogは採用方針であり、それだけを表示して実装済みとは判定しない。SDK-devは`app/sdk-preview/[creatorSlug]/games/[gameId]/sdk-preview-module-registry.ts`で全module IDを具体的な本体共通部品、SDK helper、または隔離Preview adapterへ解決する。必須IDに実装割当がない場合はPreview合成を失敗させ、`39/39`の件数表示だけで完成扱いにしない。画面を持たない進行helperやリソースも、共通モジュール確認画面から実行または表示を確認できる状態にする。
 
-`content-source`の実体は`lib/game-sdk-content-source.ts`とする。SDKへ公開するのはアプリDBの一般語プール、共通語彙DBの審査済みワードペア、その返却IDに対応する語釈だけとする。低認知語彙と、たほい屋の未審査候補・審査結果・採用済みお題は内部専用で、公開型・定数・APIへ出さず、文字列による直接要求も拒否する。外部には認証付き暗号化opaque IDと必要な表示値だけを返す。静的に審査登録したSDK server moduleへは`context.resources.contentSource`を注入する。未審査の隔離iframeにはDB接続、テーブル、SQL、内部ID、直接endpointを渡さず、`GameFieldsPreset.resources.contentSource`だけを注入する。外側ShellはpostMessageをログイン必須の`/api/sdk-preview/content-source`へ中継し、保存済みゲーム、`content-source`必須profile、レート制限を確認してから`drawWords`、`drawWordPairs`、`findDefinitions`を実行する。制作AIはモック用の初期Word DBや固定・seed・fallback語彙を作らない。難易度はクライアント設定の`easy | normal | hard`を使い、表示は「簡単・普通・難しい」とする。
+`content-source`の実体は`lib/game-sdk-content-source.ts`とする。SDKへ公開するのはアプリDBの一般語プール、共通語彙DBの審査済みワードペア、その返却IDに対応する語釈だけとする。低認知語彙と、たほい屋の未審査候補・審査結果・採用済みお題は内部専用で、公開型・定数・APIへ出さず、文字列による直接要求も拒否する。外部には認証付き暗号化opaque IDと必要な表示値だけを返す。静的に審査登録したSDK server moduleへは`context.resources.contentSource`を注入する。未審査の隔離iframeにはDB接続、テーブル、SQL、内部ID、直接endpointを渡さず、`GameFieldsPreset.resources.contentSource`だけを注入する。外側ShellはpostMessageをログイン必須の`/api/sdk-preview/content-source`へ中継し、保存済みゲーム、Platform標準resource、レート制限を確認してから`drawWords`、`drawWordPairs`、`findDefinitions`を実行する。単語を扱わないゲームに呼出しを強制しない一方、制作AIはゲーム個別の初期Word DBや固定・seed・fallback語彙を作らない。
 
-`llm`の実体は`lib/game-sdk-llm-gateway.ts`とする。clientはゲーム固有Commandと入力値だけを送り、審査済みserver AppSetがtaskとpromptを組み立てて`context.resources.llm.generate`を呼ぶ。adapterは実生成単位の利用者別レート制限を適用し、共通`lib/game-llm.ts`へprovider選択、持込／Game Fields課金、model、fallbackを委譲する。Previewでは同じ公開request型をpostMessage bridgeから`/api/sdk-preview/llm`へ送るが、high qualityは許可せず、保存済みゲームと`llm`必須profileを毎回検証する。
+`llm`の実体は`lib/game-sdk-llm-gateway.ts`とする。clientはゲーム固有Commandと入力値だけを送り、審査済みserver AppSetがtaskとpromptを組み立てて`context.resources.llm.generate`を呼ぶ。adapterは実生成単位の利用者別レート制限を適用し、共通`lib/game-llm.ts`へprovider選択、持込／Game Fields課金、model、fallbackを委譲する。Previewでは同じ公開request型をpostMessage bridgeから`/api/sdk-preview/llm`へ送り、保存済みゲーム、manifestの利用宣言、レート制限を検証する。LLMはavailable resourceであり、profileによる必須化・禁止は行わない。
 
 formal packageの外側は候補Previewとmainで共通の`GameSdkFrame`を使い、その内側へAppSet clientを描画する。SDK専用の白枠や別ロビーは作らない。`GameSdkFrame`は`GameTopBanner`、manifestルール、プレイヤーメニューを本体共通部品から合成する。部屋設定はロビーだけに表示し、playingでは共通サイド欄ごと隠してgame iframeを全幅にする。中断はトップバナーへ移し、resultでは結果用共通moduleだけを表示する。DEBUGでは権限付きhostへダミー管理、読取専用の閲覧視点、安全な自動進行、時間切れ・切断・入力拒否の再現を共通Shellから提供する。自動進行はAppSetの`expireAppTurn`を使い、固定済み旧package bundleにはPlatform Runtimeが既存の`room/expire-timer`へ変換する互換bridgeを持つ。Portalで確定したmodule profileはmain採用カタログへ渡し、`stats`、`rating`、`replay`、`result-share`、`feedback`の保存・表示を同じ採否で制御する。共有文はseat由来の`PLAYERn`だけを用い、フィードバック対象は結果phaseの参加者へだけ返す。LLM生成物への評価は既存の共通feedback storeへ保存し、同じgame/taskの次回生成では命令として信用しない参考例として利用する。
 
@@ -196,9 +196,10 @@ Platform runtime -> Game package manifest / commands / presentation
 
 - `platform`: 認証、アカウントsession、共通ナビ、プレイヤーメニュー、永続化adapter、最終認可、観測。Game Fields固定で、ゲームpackageは無効化・置換できない。
 - `core`: ルール、ゲーム固有surface、純粋domain、閲覧者別presentation。すべてのプレイ可能なゲームで必須。
-- `capabilities`: online room、timer、debug、spectator、stats、rating、replay、result share、LLM。ゲームごとに採用できる。
+- `capabilities`: online room、timer、debug、spectator、stats、rating、replay、result share。進行部品は原則必須で、不要時はAI提案と人間確認により外せる。
+- `resources`: 共通Word DBはPlatform標準、LLM・カード・描画は常に利用可能な任意機能。未使用を理由にdisabled化しない。
 
-任意moduleを採用しない場合も定義自体を省略せず、`disabled`と具体的な理由を宣言する。これにより、意図した不採用と実装漏れを自動検査で区別する。ゲーム種別によって実質必須になるmodule（例: `online-room`でのroom command・復帰）は、manifestとの組合せをpolicy検査する。
+進行moduleを外す場合はPortal profileへ`disabled`を保存する。理由は必須入力にしない。available resourceは未使用なら`moduleUsage`行を省略し、使用する場合だけ公式import・API・runtime evidenceを検査する。ゲーム種別によって実質必須になるmodule（例: `online-room`でのroom command・復帰）は、manifestとの組合せをpolicy検査する。
 
 現行の`config/game-registry.json`は`app/games/game-definition-source.ts`で組み込み`GameDefinition`へ変換する。任意moduleの明示的な採否は`app/games/built-in-game-module-policies.ts`を正本とし、登録ゲームとの過不足と理由なし`disabled`をテストで拒否する。SDK制作者環境の定義も同じ契約へ変換し、本体の`GameLobby`と固定カード外枠へ追加する。SDK Portal独自ロビーは廃止し、制作者URLはGame Fields本体のdev UIを全画面で使用する。
 

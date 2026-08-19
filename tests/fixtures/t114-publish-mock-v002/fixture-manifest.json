@@ -3,7 +3,7 @@
   "fixtureId": "t114-publish-mock-fixture-v002",
   "inventoryExcludes": ["fixture-manifest.json"],
   "payloadFileCount": 14,
-  "payloadTotalUtf8Bytes": 32562,
+  "payloadTotalUtf8Bytes": 31292,
   "sourceFileCount": 6,
   "sourceTotalUtf8Bytes": 16844,
   "sharedGameSourceSha256": "0e18d89ca2888764741b71682f7a198b58ca4cdd8fabb34de6e0a77a82be8fe0",
@@ -74,10 +74,10 @@
     },
     {
       "path": "profile-delta.json",
-      "utf8Bytes": 2165,
-      "sha256": "760c51cc7b83fa0f141a87a94c7e6517dd74ecab4ac03cceeecec16c126f9f6d",
-      "gitBlob": "dbb079c6416133fc52f24348d8bfed9daa4ae4dd",
-      "role": "future ten-module disable decisions with reasons"
+      "utf8Bytes": 895,
+      "sha256": "5a59c5e8582b0ca6024295313c6a97ed4a7aa5c19e80713d9277c7daf16dc1b4",
+      "gitBlob": "fbdfe7055e1aed14312d2f899b114840705cff8e",
+      "role": "future six-module disable decisions with four always-available resources"
     },
     {
       "path": "source/app-set.ts",

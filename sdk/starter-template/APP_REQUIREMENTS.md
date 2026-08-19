@@ -13,7 +13,7 @@
 ## 共通画面と導線
 
 - 本実装は`SDK基本セット + アプリセット`で構成する。SDK基本セットが認証済みRoom、参加・退出・復帰、設定、revision、Realtime、共通画面、DEBUG、結果・再戦・解散を所有し、アプリセットはゲーム固有部分だけを登録する。
-- 最初の候補packageでは共通moduleをすべて必須として合成する。AIやAppSetは必須一覧を変更できない。
+- 最初の候補packageでは進行・共通moduleを原則必須として合成する。AIは不要な進行部品の削除を提案できるが、active profileから外すのはPortalでの人間確認後だけとする。
 - SDK Previewの外側に、Game Fields標準の広場、ゲームカード、入室、部屋、参加者、共通トップ領域、ルール、デバッグ、結果導線がある。ゲームpackageはこれらをHTMLで再生成しない。
 - `mock/index.html`は外側Shellのゲーム領域へ差し込まれる。盤面、固有操作、手番、ゲーム固有の得点・結果など、ゲーム固有slotだけを描画する。
 - 部屋作成・参加、参加者一覧、ダミー追加、プレイヤー視点、進行中断、再戦は外側Shellと共通Room Commandを利用する。同名のUIや独自状態を作らない。
@@ -35,7 +35,7 @@
 - Command payload内のplayer IDや表示名を本人証明に使わない。
 - 古いrevision、フェーズ違い、手番違い、権限違い、重複送信を拒否できる設計にする。
 - Room作成、参加者配列、設定更新、revision増分、開始前へ戻す処理をアプリセットへ複製しない。SDK基本セットの型と合成関数を使う。
-- moduleの必須一覧はPortal保存profileを正本とし、`mock/preview.json`、manifest、AppSet内に独自の採否表を作らない。
+- moduleの必須・利用可能一覧はPortal保存profileを正本とし、`mock/preview.json`、manifest、AppSet内に独自の採否表を作らない。
 - 観戦がある場合、プレイヤーの秘密情報を観戦者へ見せない。ゲーム上必要なら仕様に例外と理由を書く。
 
 ## 時間・切断・復帰
@@ -62,6 +62,8 @@
 
 ## LLM・外部サービス・素材
 
+- 共通Word DBはPlatform標準として固定し、profileから外さない。単語を扱わないゲームにDB利用を強制するものではないが、単語を扱う場合はゲーム個別のDBや語彙コピーを作らず共通Word DBを使う。
+- LLM、共通トランプ、共通描画は常に利用可能な任意機能とし、module profileで利用を強制・禁止しない。使う場合だけ公式SDK契約とusage evidenceを含める。
 - LLMはGame Fields共通ゲートウェイ経由で使い、ゲームから事業者APIを直接呼ばない。
 - Previewと昇格後の両方で、ブラウザから任意promptを送らず、ゲームCommandに必要な入力だけを含める。AppSetのserver側でpromptを組み立て、`context.resources.llm`を呼ぶ。
 - 単語、ペア、読み、短い語釈を使うゲームはGame Fields共通Word DBを正本にする。モック用の初期DB、固定単語配列、seed語彙、取得失敗時の偽データfallbackを作らない。

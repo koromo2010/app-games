@@ -27,7 +27,7 @@ export async function GET(request: Request, context: RouteContext) {
     if (
       !registration
       || !registration.usesLlm
-      || registration.moduleProfile.llm.mode !== "required"
+      || registration.moduleProfile.llm.mode === "disabled"
       || registration.moduleProfile.feedback.mode !== "required"
     ) {
       return Response.json({ artifacts: [] }, {

@@ -11,11 +11,11 @@ export function gameSdkPlatformResourcePolicy(
   const moduleProfile = normalizeGameSdkModuleProfile(moduleProfileInput);
   return {
     moduleProfile,
-    contentSource: moduleProfile["content-source"].mode === "required",
-    llm: manifest.usesLlm && moduleProfile.llm.mode === "required",
+    contentSource: moduleProfile["content-source"].mode !== "disabled",
+    llm: manifest.usesLlm && moduleProfile.llm.mode !== "disabled",
     feedback: (
       manifest.usesLlm
-      && moduleProfile.llm.mode === "required"
+      && moduleProfile.llm.mode !== "disabled"
       && moduleProfile.feedback.mode === "required"
     ),
   } satisfies {

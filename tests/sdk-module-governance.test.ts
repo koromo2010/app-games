@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   GAME_SDK_CREATOR_CONFIGURABLE_MODULE_IDS,
   GAME_SDK_CREATOR_VISIBLE_MODULE_CATALOG,
+  GAME_SDK_AVAILABLE_MODULE_IDS,
   GAME_SDK_MODULE_CATALOG,
   GAME_SDK_MODULE_GOVERNANCE,
   GAME_SDK_MODULE_IDS,
@@ -18,7 +19,10 @@ import {
   playerVisibleGameSdkModuleProfile,
   updateGameSdkModuleProfile,
 } from "@game-fields/game-sdk/modules";
-import { createGameSdkModuleContract } from "../apps/sdk-portal/lib/module-authoring-contract.ts";
+import {
+  createGameSdkModuleContract,
+  legacyGameSdkModuleContractDigest,
+} from "../apps/sdk-portal/lib/module-authoring-contract.ts";
 import {
   creatorModuleProfileProposalView,
   moduleCatalogDigest,
@@ -71,15 +75,22 @@ test("all 39 modules have exhaustive orthogonal governance metadata", () => {
         proposalEligible: definition.proposalEligible,
         packageTreatment: definition.packageTreatment,
         runtimePolicySource: definition.runtimePolicySource,
+        profilePolicy: definition.profilePolicy,
       },
       GAME_SDK_MODULE_GOVERNANCE[definition.id],
     );
   }
   assert.equal(GAME_SDK_CREATOR_VISIBLE_MODULE_CATALOG.length, 25);
   assert.equal(GAME_SDK_PLAYER_VISIBLE_MODULE_CATALOG.length, 28);
-  assert.equal(GAME_SDK_CREATOR_CONFIGURABLE_MODULE_IDS.length, 19);
-  assert.equal(GAME_SDK_PROPOSAL_ELIGIBLE_MODULE_IDS.length, 19);
+  assert.equal(GAME_SDK_CREATOR_CONFIGURABLE_MODULE_IDS.length, 15);
+  assert.equal(GAME_SDK_PROPOSAL_ELIGIBLE_MODULE_IDS.length, 15);
   assert.equal(GAME_SDK_PACKAGE_MODULE_IDS.length, 15);
+  assert.deepEqual(GAME_SDK_AVAILABLE_MODULE_IDS, [
+    "content-source",
+    "llm",
+    "playing-cards",
+    "drawing",
+  ]);
   assert.equal(GAME_SDK_PLATFORM_RUNTIME_MODULE_IDS.length, 14);
 });
 
@@ -93,6 +104,7 @@ test("the platform advertising policy is hidden, immutable, non-proposable and p
     proposalEligible: false,
     packageTreatment: "excluded",
     runtimePolicySource: "platform-policy",
+    profilePolicy: "required",
   });
   assert.equal(
     GAME_SDK_CREATOR_VISIBLE_MODULE_CATALOG.some(({ id }) => id === "ads"),
@@ -136,16 +148,49 @@ test("legacy creator decisions cannot disable platform runtime policy", () => {
   assert.equal(gameSdkModuleIsRequired(legacy, "ads"), true);
 });
 
-test("authoring contracts include package-governed modules only", () => {
+test("authoring contracts separate required package modules from available resources", () => {
   const contract = createGameSdkModuleContract({
     moduleProfile: createInitialGameSdkModuleProfile(),
     moduleProfileRevision: "11111111-1111-4111-8111-111111111111",
     origin: "https://dev.sdk.game-fields.com",
   });
-  assert.deepEqual(contract.requiredModuleIds, GAME_SDK_PACKAGE_MODULE_IDS);
+  assert.deepEqual(contract.requiredModuleIds, GAME_SDK_PACKAGE_MODULE_IDS.filter(
+    (id) => !GAME_SDK_AVAILABLE_MODULE_IDS.includes(id),
+  ));
+  assert.deepEqual(contract.availableModuleIds, GAME_SDK_AVAILABLE_MODULE_IDS);
   assert.equal(contract.requiredModules.some(({ id }) => id === "ads"), false);
   assert.equal(contract.requiredModules.some(({ id }) => id === "authentication"), false);
   assert.deepEqual(contract.disabledModuleIds, []);
+});
+
+test("resources are not creator-removable while the shared content source stays a platform standard", () => {
+  const initial = createInitialGameSdkModuleProfile();
+  for (const id of GAME_SDK_AVAILABLE_MODULE_IDS) {
+    assert.deepEqual(initial[id], { mode: "available" });
+    assert.throws(() => updateGameSdkModuleProfile(initial, {
+      [id]: { mode: "disabled" },
+    }), /GAME_SDK_MODULE_CHANGE_NOT_ALLOWED/);
+  }
+  assert.equal(GAME_SDK_MODULE_GOVERNANCE["content-source"].profilePolicy, "platform-standard");
+  assert.equal(GAME_SDK_MODULE_GOVERNANCE.llm.profilePolicy, "available");
+});
+
+test("pre-available-resource contract digests remain verifiable without a profile write", () => {
+  const legacyProfile = {
+    ...createInitialGameSdkModuleProfile(),
+    vote: { mode: "disabled" as const },
+    "content-source": { mode: "disabled" as const, reason: "no words" },
+    llm: { mode: "disabled" as const },
+    "playing-cards": { mode: "disabled" as const },
+    drawing: { mode: "disabled" as const },
+  };
+  assert.equal(
+    legacyGameSdkModuleContractDigest({
+      moduleProfile: legacyProfile,
+      environment: "development",
+    }),
+    "b76c6805cfae22d1901e953175a52fa6de24d9b12d430f50ceda1d6ffa3e1c3e",
+  );
 });
 
 test("legacy hidden-module proposals retain lifecycle identity but suppress detail and approval", () => {

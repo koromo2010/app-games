@@ -94,15 +94,18 @@ export class GameSdkModuleUsageValidationError extends Error {
 export type GameSdkModuleUsageAudit = {
   binding: GameSdkModuleBinding;
   requiredModuleIds: readonly GameSdkModuleId[];
+  availableModuleIds?: readonly GameSdkModuleId[];
   disabledModuleIds: readonly GameSdkModuleId[];
   moduleUsage: readonly GameSdkModuleUsageEvidence[];
 };
 
 export type GameSdkModuleUsageContract = GameSdkModuleBinding & {
   requiredModuleIds: readonly GameSdkModuleId[];
+  availableModuleIds?: readonly GameSdkModuleId[];
   disabledModuleIds: readonly GameSdkModuleId[];
   disabledModules: readonly GameSdkModuleDefinition[];
   requiredModules: readonly GameSdkModuleDefinition[];
+  availableModules?: readonly GameSdkModuleDefinition[];
 };
 
 function fail(code: string, moduleId?: string, path = "moduleUsage", expected = "valid module usage evidence", actual = "invalid") : never {
@@ -148,6 +151,8 @@ const PROHIBITED_REIMPLEMENTATION_PATTERNS: Partial<Record<GameSdkModuleId, RegE
   "playing-cards": [/type\s+(?:Card|PlayingCard)\s*=/i, /function\s+(?:createDeck|shuffleDeck|dealCards)\b/i],
 };
 
+const DIRECT_EXTERNAL_RESOURCE_ACCESS = /\b(?:fetch|XMLHttpRequest|WebSocket)\s*(?:\(|\.)|https?:\/\/|\bprocess\.env\b|\b(?:DATABASE|REDIS|API)_KEY\b/;
+
 export function validateGameSdkModuleUsage(input: {
   contract: GameSdkModuleUsageContract;
   binding: unknown;
@@ -169,18 +174,21 @@ export function validateGameSdkModuleUsage(input: {
       fail("MODULE_PROFILE_STALE", undefined, field);
     }
   }
-  if (!Array.isArray(input.moduleUsage)) fail("MODULE_USAGE_MATRIX_INCOMPLETE", undefined, "moduleUsage", "array containing one row per required module", typeof input.moduleUsage);
+  if (!Array.isArray(input.moduleUsage)) fail("MODULE_USAGE_MATRIX_INCOMPLETE", undefined, "moduleUsage", "array containing every required module and any used available modules", typeof input.moduleUsage);
   const rows = input.moduleUsage as Array<Record<string, unknown>>;
   const requiredSet = new Set(input.contract.requiredModuleIds);
+  const availableModuleIds = input.contract.availableModuleIds ?? [];
+  const availableSet = new Set(availableModuleIds);
+  const allowedSet = new Set([...requiredSet, ...availableSet]);
   const ids = rows.map((row) => row?.id);
   const duplicate = ids.find((id, index) => ids.indexOf(id) !== index);
-  const invalid = ids.find((id) => typeof id !== "string" || !requiredSet.has(id as GameSdkModuleId));
+  const invalid = ids.find((id) => typeof id !== "string" || !allowedSet.has(id as GameSdkModuleId));
   const missing = [...requiredSet].filter((id) => !ids.includes(id));
-  if (rows.length !== requiredSet.size || duplicate !== undefined || invalid !== undefined || missing.length) {
+  if (duplicate !== undefined || invalid !== undefined || missing.length) {
     const problems: GameSdkModuleUsageProblem[] = [
       ...missing.map((id) => ({ moduleId: id, path: "moduleUsage", reason: "REQUIRED_MODULE_MISSING", expected: "exactly one row", actual: "missing" })),
-      ...(duplicate !== undefined ? [{ moduleId: typeof duplicate === "string" ? duplicate : null, path: "moduleUsage[].id", reason: "DUPLICATE_MODULE_ID", expected: "unique required module id", actual: String(duplicate) }] : []),
-      ...(invalid !== undefined ? [{ moduleId: typeof invalid === "string" ? invalid : null, path: "moduleUsage[].id", reason: "UNKNOWN_OR_DISABLED_MODULE", expected: "a required module id", actual: String(invalid) }] : []),
+      ...(duplicate !== undefined ? [{ moduleId: typeof duplicate === "string" ? duplicate : null, path: "moduleUsage[].id", reason: "DUPLICATE_MODULE_ID", expected: "unique required or available module id", actual: String(duplicate) }] : []),
+      ...(invalid !== undefined ? [{ moduleId: typeof invalid === "string" ? invalid : null, path: "moduleUsage[].id", reason: "UNKNOWN_OR_DISABLED_MODULE", expected: "a required or available module id", actual: String(invalid) }] : []),
     ];
     throw new GameSdkModuleUsageValidationError("MODULE_USAGE_MATRIX_INCOMPLETE", problems);
   }
@@ -188,7 +196,14 @@ export function validateGameSdkModuleUsage(input: {
     .filter(([path]) => /^(?:source\/|index\.html$|mock\.js$)/.test(path))
     .map(([path, content]) => `/* ${path} */\n${content}`)
     .join("\n");
-  const normalizedRows = input.contract.requiredModules.map((definition) => {
+  if (DIRECT_EXTERNAL_RESOURCE_ACCESS.test(allSource)) {
+    fail("BESPOKE_RESOURCE_REIMPLEMENTATION", "content-source", "direct-external-access");
+  }
+  const selectedDefinitions = [
+    ...input.contract.requiredModules,
+    ...(input.contract.availableModules ?? []),
+  ].filter((definition) => ids.includes(definition.id));
+  const normalizedRows = selectedDefinitions.map((definition) => {
     const raw = rows.find((row) => row.id === definition.id)!;
     const delivery = normalizeGameSdkModuleUsageDelivery(
       raw.delivery,
@@ -247,12 +262,6 @@ export function validateGameSdkModuleUsage(input: {
           fail("REQUIRED_MODULE_API_UNUSED", definition.id, api);
         }
       }
-      if (
-        definition.delivery === "platform-resource"
-        && /\b(?:fetch|XMLHttpRequest|WebSocket)\s*(?:\(|\.)|https?:\/\/|\bprocess\.env\b|\b(?:DATABASE|REDIS|API)_KEY\b/.test(allSource)
-      ) {
-        fail("BESPOKE_RESOURCE_REIMPLEMENTATION", definition.id, "direct-external-access");
-      }
     }
     for (const evidence of runtimeEvidence) {
       if (definition.delivery === "platform-owned") {
@@ -303,20 +312,24 @@ export function validateGameSdkModuleUsage(input: {
     };
   });
 
-  const requiredPackageExports = new Set(
-    input.contract.requiredModules.flatMap((definition) => definition.packageExports),
+  const allowedModules = [
+    ...input.contract.requiredModules,
+    ...(input.contract.availableModules ?? []),
+  ];
+  const allowedPackageExports = new Set(
+    allowedModules.flatMap((definition) => definition.packageExports),
   );
-  const requiredPublicApis = new Set(
-    input.contract.requiredModules.flatMap((definition) => definition.publicApis),
+  const allowedPublicApis = new Set(
+    allowedModules.flatMap((definition) => definition.publicApis),
   );
   for (const definition of input.contract.disabledModules) {
     for (const packageExport of definition.packageExports) {
-      if (!requiredPackageExports.has(packageExport) && includesImport(allSource, packageExport)) {
+      if (!allowedPackageExports.has(packageExport) && includesImport(allSource, packageExport)) {
         fail("DISABLED_MODULE_USED", definition.id, packageExport);
       }
     }
     for (const api of definition.publicApis) {
-      if (!requiredPublicApis.has(api) && tokenCount(allSource, apiToken(api)) > 0) {
+      if (!allowedPublicApis.has(api) && tokenCount(allSource, apiToken(api)) > 0) {
         fail("DISABLED_MODULE_USED", definition.id, api);
       }
     }
@@ -329,6 +342,7 @@ export function validateGameSdkModuleUsage(input: {
   return {
     binding: binding as GameSdkModuleBinding,
     requiredModuleIds: input.contract.requiredModuleIds,
+    availableModuleIds,
     disabledModuleIds: input.contract.disabledModuleIds,
     moduleUsage: normalizedRows,
   };

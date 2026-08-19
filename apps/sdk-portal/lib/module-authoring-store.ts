@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 import { createInitialGameSdkModuleProfile, normalizeGameSdkModuleProfile } from "@game-fields/game-sdk/modules";
 import platformRelease from "../../../config/platform-release.json" with { type: "json" };
 import { ensureSdkSchema, sdkSql } from "./sdk-postgres.ts";
-import { createGameSdkModuleContract } from "./module-authoring-contract.ts";
+import {
+  createGameSdkModuleContract,
+  legacyGameSdkModuleContractDigest,
+} from "./module-authoring-contract.ts";
 
 export type CreatorGameModuleAuthoringState = {
   creatorId: string;
@@ -11,6 +14,7 @@ export type CreatorGameModuleAuthoringState = {
   moduleProfileRevision: string;
   moduleContractDigest: string | null;
   moduleProfileConfirmedAt: string | null;
+  persistedModuleProfile?: unknown;
 };
 
 export function creatorGameModuleAuthoringSummary(
@@ -83,7 +87,16 @@ export async function getCreatorGameModuleAuthoringState(input: {
   const row = (Array.isArray(rows) ? rows[0] : null) as
     | Omit<CreatorGameModuleAuthoringState, "moduleProfile"> & { moduleProfile: unknown }
     | null;
-  return row ? { ...row, moduleProfile: normalizeGameSdkModuleProfile(row.moduleProfile) } : null;
+  if (!row) return null;
+  const state: CreatorGameModuleAuthoringState = {
+    ...row,
+    moduleProfile: normalizeGameSdkModuleProfile(row.moduleProfile),
+  };
+  Object.defineProperty(state, "persistedModuleProfile", {
+    value: row.moduleProfile,
+    enumerable: false,
+  });
+  return state;
 }
 
 export async function confirmCreatorGameModuleProfile(input: {
@@ -133,7 +146,17 @@ export async function requireConfirmedCreatorGameModuleContract(input: {
     origin: input.origin,
   });
   if (contract.moduleContractDigest !== state.moduleContractDigest) {
-    throw new Error("MODULE_PROFILE_STALE");
+    const legacyDigest = legacyGameSdkModuleContractDigest({
+      moduleProfile: state.persistedModuleProfile,
+      environment: contract.environment,
+    });
+    if (legacyDigest !== state.moduleContractDigest) {
+      throw new Error("MODULE_PROFILE_STALE");
+    }
+    return {
+      ...contract,
+      moduleContractDigest: state.moduleContractDigest,
+    };
   }
   return contract;
 }

@@ -4,7 +4,7 @@ import type {
   GameSdkFindDefinitionsRequest,
 } from "@game-fields/game-sdk/content-source";
 import {
-  gameSdkModuleIsRequired,
+  gameSdkModuleIsEnabled,
   normalizeGameSdkModuleProfile,
 } from "@game-fields/game-sdk/modules";
 import { createGameFieldsSdkContentSource } from "@/lib/game-sdk-content-source";
@@ -173,7 +173,7 @@ export async function POST(request: Request) {
     const moduleProfile = normalizeGameSdkModuleProfile(
       definition.modulePolicy,
     );
-    if (!gameSdkModuleIsRequired(moduleProfile, "content-source")) {
+    if (!gameSdkModuleIsEnabled(moduleProfile, "content-source")) {
       return json({ error: "GAME_SDK_CONTENT_MODULE_REQUIRED" }, 403);
     }
 

@@ -8,6 +8,7 @@ import {
   updateGameSdkModuleProfile,
   type GameSdkModuleId,
   type GameSdkModuleProfile,
+  type CreatorMutableGameSdkModuleDecision,
 } from "@game-fields/game-sdk/modules";
 import { ensureSdkSchema, sdkSql } from "./sdk-postgres.ts";
 import { createGameSdkModuleContract } from "./module-authoring-contract.ts";
@@ -15,8 +16,8 @@ import { getCreatorGameModuleAuthoringState } from "./module-authoring-store.ts"
 
 export type ModuleProfileProposalDiff = {
   id: GameSdkModuleId;
-  before: GameSdkModuleProfile[GameSdkModuleId];
-  after: GameSdkModuleProfile[GameSdkModuleId];
+  before: CreatorMutableGameSdkModuleDecision;
+  after: CreatorMutableGameSdkModuleDecision;
   reason: string | null;
 };
 
@@ -246,6 +247,13 @@ export function profileDiff(before: GameSdkModuleProfile, after: GameSdkModulePr
     const previous = before[id];
     const next = after[id];
     if (JSON.stringify(previous) === JSON.stringify(next)) return [];
+    if (
+      !gameSdkModuleIsProposalEligible(id)
+      || previous.mode === "available"
+      || next.mode === "available"
+    ) {
+      throw new Error("GAME_SDK_MODULE_CHANGE_NOT_ALLOWED");
+    }
     return [{
       id,
       before: previous,

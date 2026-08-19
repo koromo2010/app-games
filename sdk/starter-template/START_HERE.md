@@ -10,7 +10,7 @@
 面白さ・人数・勝敗を自然な対話で決め、詳細案を一度に提示してください。GAME_SPEC.mdの確定後にgame draftを作り、人間がmodule profileを確定するまではUIやAppSetを実装しないでください。
 クライアントはGameFieldsRoomのViewだけを描画し、Commandだけを送ってください。ブラウザ内にゲーム状態の正本を作らないでください。
 Word DBとLLMはAppSetのcontext.resourcesからだけ利用してください。
-共通moduleはgame draftで最初すべて必須です。人間がPortalで確定したrevision/digestを取得し、required moduleはdelivery別の公式SDK契約で実利用し、disabled moduleは使わないでください。同等機能をゲーム側へ複製しないでください。
+進行・共通moduleはgame draftで原則必須です。不要な進行部品はAIが削除提案できますが、人間がPortalで確認するまで外しません。共通Word DBは固定標準、LLM・カード・描画は任意利用です。確定revision/digestを取得し、required moduleと実際に使うavailable moduleはdelivery別の公式SDK契約で利用してください。同等機能をゲーム側へ複製しないでください。
 npm run check、npm run demo、npm run diagnose:promotionを成功させ、最後にOAuth接続済みGame Fields SDK MCPのpublish_game_packageで正式Previewへ保存してください。
 ```
 

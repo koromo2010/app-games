@@ -275,17 +275,16 @@ test("reviewed SDK shell consumes manifest capabilities passed by Preview", () =
   assert.equal(mapped.usesLlm, true);
   assert.deepEqual(mapped.moduleProfile, normalizeGameSdkModuleProfile(definition.modulePolicy));
 
-  // AI activity is an internal policy module. Creator decisions can disable
-  // LLM use, but cannot enumerate or disable the activity boundary itself.
+  // AI activity is an internal policy module. LLM is available to packages
+  // without a profile toggle; the package manifest decides whether it is used.
   const required = createInitialGameSdkModuleProfile();
-  const llmDisabled = updateGameSdkModuleProfile(required, {
-    llm: { mode: "disabled", reason: "not used" },
-  });
+  assert.throws(() => updateGameSdkModuleProfile(required, {
+    llm: { mode: "disabled" },
+  }), /GAME_SDK_MODULE_CHANGE_NOT_ALLOWED/);
   assert.throws(() => updateGameSdkModuleProfile(required, {
     "ai-activity": { mode: "disabled", reason: "not tracked" },
   }), /GAME_SDK_MODULE_CHANGE_NOT_ALLOWED/);
   assert.equal(shouldTrackGameSdkAiActivity({ usesLlm: false, moduleProfile: required }), false);
-  assert.equal(shouldTrackGameSdkAiActivity({ usesLlm: true, moduleProfile: llmDisabled }), false);
   assert.equal(shouldTrackGameSdkAiActivity({ usesLlm: true, moduleProfile: required }), true);
 
   assert.match(resultPanel, /supportsReplay && moduleRequired\("replay"\)/);

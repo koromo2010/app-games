@@ -230,6 +230,25 @@ fetch("https://example.test/words");`,
   assert.throws(() => validateGameSdkModuleUsage(delegated), /PLATFORM_MODULE_REIMPLEMENTED:authentication/);
 });
 
+test("the platform-standard content source rejects bespoke external data access even when unused", () => {
+  assert.throws(() => validateGameSdkModuleUsage({
+    contract: {
+      ...binding,
+      requiredModuleIds: [],
+      availableModuleIds: ["content-source"],
+      disabledModuleIds: [],
+      requiredModules: [],
+      availableModules: [definition("content-source")],
+      disabledModules: [],
+    },
+    binding,
+    moduleUsage: [],
+    files: {
+      "source/app-set.ts": 'export const loadWords = () => fetch("https://example.test/words");',
+    },
+  }), /BESPOKE_RESOURCE_REIMPLEMENTATION:content-source:direct-external-access/);
+});
+
 test("disabled modules and bespoke SDK-helper replacements fail closed", () => {
   const vote = definition("vote");
   assert.throws(() => validateGameSdkModuleUsage({
@@ -307,7 +326,7 @@ moduleRuntimeEvidence("turn-order");`,
 test("module contract and shared source digests change on semantic boundaries", () => {
   const initial = createInitialGameSdkModuleProfile();
   const reviewed = updateGameSdkModuleProfile(initial, {
-    drawing: { mode: "disabled", reason: "描画操作がないため" },
+    vote: { mode: "disabled" },
   });
   const stable = gameSdkModuleContractDigest({
     moduleProfile: initial,

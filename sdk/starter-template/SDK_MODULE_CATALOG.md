@@ -7,7 +7,9 @@
 - 初回ゲーム登録時にPlatformが内部policyとゲーム仕様からprofileを作り、制作者には確認可能または選択可能な項目だけを表示する。
 - Platform内部項目はcatalog、件数、help、proposal、packageの`moduleUsage`へ含めない。
 - `mock/preview.json`、manifest、AppSet、管理トークン、MCPから確定済み一覧を変更できない。
-- AIは読み取り専用`get_game_module_requirements`で返るpackage対象の`requiredModuleIds`と各moduleの`delivery`、`packageExports`、`publicApis`、`usage`を正本としてAppSetを作る。
+- AIは読み取り専用`get_game_module_requirements`で返るpackage対象の`requiredModuleIds`、`availableModuleIds`と各moduleの`delivery`、`packageExports`、`publicApis`、`usage`を正本としてAppSetを作る。
+
+進行部品は原則`required`です。AIはゲーム仕様に不要な進行部品の削除を提案できますが、人間がPortalで承認するまでactive profileは変わりません。`content-source`はPlatform共通DB標準、`llm`・`playing-cards`・`drawing`は任意利用で、いずれもcreatorの有効／無効toggleにはしません。
 
 機械可読なauthoring正本は`get_game_module_requirements`の応答です。SDK内のPlatform policyや非公開moduleを列挙・推測しません。
 
@@ -123,7 +125,7 @@ const words = await requireGameSdkContentSource(context.resources).drawWords({
 });
 ```
 
-`wordDifficulty`はクライアントで「簡単・普通・難しい」から選び、SDK基本セットのRoom settingsとして保存します。取得結果の`id`はopaqueです。DBキーとして解釈せず、API・Redis・PostgreSQLへ直接接続しません。利用可能なpoolは確定済みprofileとPlatform権限に従います。
+`wordDifficulty`はクライアントで「簡単・普通・難しい」から選び、SDK基本セットのRoom settingsとして保存します。取得結果の`id`はopaqueです。DBキーとして解釈せず、API・Redis・PostgreSQLへ直接接続しません。共通DB adapterはPlatform標準として利用可能で、利用可能なpoolはPlatform権限に従います。
 
 PreviewでもこのAppSetコードをそのまま実行します。クライアントには取得済みの安全なViewだけを返します。取得失敗時はtransitionを保存せず、入力と手番を維持して再試行表示にします。
 
@@ -146,7 +148,7 @@ const generated = await requireGameSdkLlmGateway(
 });
 ```
 
-Preview iframeはLLMを直接呼びません。AppSetのeffect requestを信頼済みPlatform側が検査し、module profile・レート制限・共通gatewayを通してから、同じAppSet実行へ結果を返します。
+Preview iframeはLLMを直接呼びません。AppSetのeffect requestを信頼済みPlatform側が検査し、manifestの利用宣言・レート制限・共通gatewayを通してから、同じAppSet実行へ結果を返します。LLMを使わないゲームに呼出しを強制せず、使うゲームの利用もmodule profileで禁止しません。
 
 ## トランプ
 
@@ -183,7 +185,7 @@ Game Fields本体には共通キャンバス基盤があります。描画を使
 2. 利用者へ内部コンポーネント名の選択を求めず、SDK-devで実物を確認してもらう。
 3. 既存モジュールで満たせる機能をゲーム固有コードへ複製しない。
 4. カタログにない再利用価値の高い機能は、今回だけの実装にするか共通モジュール候補にするかを明記する。
-5. `get_game_module_requirements`の`requiredModuleIds`と`requiredModules`の公開契約だけを正本とし、必須moduleを省略しない。応答にないPlatform内部moduleを`moduleUsage`へ追加しない。
+5. `get_game_module_requirements`の`requiredModuleIds`、`requiredModules`、`availableModuleIds`、`availableModules`を公開契約の正本とする。必須moduleを省略せず、任意moduleは実際に使う場合だけ`moduleUsage`へ追加する。応答にないPlatform内部moduleを追加しない。
 6. `delivery=platform-owned`または`platform-resource`のmoduleは本体ファイルをコピーせず、注入契約を使う。`sdk-helper`または`sdk-resource`は返された`packageExports`からimportする。
 
 このカタログはモジュール追加時に更新します。スターターへ固定コピーした共通UIではなく、将来はSDKのversionに対応するモジュール実体と機械可読manifestを正本にします。

@@ -8,6 +8,8 @@ export type CreatorModuleClassification = {
   required: GameSdkModuleId[];
   removable: GameSdkModuleId[];
   optional: GameSdkModuleId[];
+  available: GameSdkModuleId[];
+  standard: GameSdkModuleId[];
 };
 
 export function classifyCreatorGameModules(
@@ -18,9 +20,15 @@ export function classifyCreatorGameModules(
     required: [],
     removable: [],
     optional: [],
+    available: [],
+    standard: [],
   };
   for (const definition of GAME_SDK_CREATOR_VISIBLE_MODULE_CATALOG) {
-    if (definition.creatorVisibility === "read-only") {
+    if (definition.profilePolicy === "platform-standard") {
+      classification.standard.push(definition.id);
+    } else if (definition.profilePolicy === "available") {
+      classification.available.push(definition.id);
+    } else if (definition.creatorVisibility === "read-only") {
       classification.required.push(definition.id);
     } else if (normalized[definition.id].mode === "disabled") {
       classification.optional.push(definition.id);

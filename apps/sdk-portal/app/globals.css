@@ -67,15 +67,15 @@ main {
 .module-review-list { overflow: auto; padding: 16px 20px 30px; }
 .module-review-list section + section { margin-top: 20px; }
 .module-review-list h3 { position: sticky; top: -16px; z-index: 1; margin: 0 0 8px; padding: 11px 0 8px; background: #07100c; color: var(--accent); font: .65rem ui-monospace, monospace; letter-spacing: .1em; }
-.module-review-list label { display: grid; grid-template-columns: auto 1fr; gap: 11px; padding: 11px 8px; border-bottom: 1px solid var(--line); cursor: pointer; }
-.module-review-list label:has(input:disabled) { cursor: default; }
+.module-review-item { display: grid; grid-template-columns: auto 1fr; gap: 11px; padding: 11px 8px; border-bottom: 1px solid var(--line); }
 .module-review-list input { width: 18px; height: 18px; margin-top: 2px; accent-color: var(--accent-strong); }
-.module-review-list label > span { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.module-review-item > span:last-child { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.module-review-policy-marker { width: 18px; height: 18px; display: grid; place-items: center; margin-top: 2px; border: 1px solid rgba(145,242,176,.45); border-radius: 4px; color: var(--accent); font: .58rem ui-monospace, monospace; }
 .module-review-list b { font-size: .8rem; }
 .module-review-list small { color: var(--muted); font-size: .68rem; line-height: 1.5; }
 .module-review-list em { width: fit-content; padding: 3px 6px; border: 1px solid rgba(145,242,176,.2); color: var(--accent); font-size: .62rem; font-style: normal; }
-.module-review-list label:has(input:not(:checked)) { background: rgba(251,113,133,.055); }
-.module-review-list label:has(input:not(:checked)) em { border-color: rgba(251,113,133,.26); color: #fda4af; }
+.module-review-item:has(input:not(:checked)) { background: rgba(251,113,133,.055); }
+.module-review-item:has(input:not(:checked)) em { border-color: rgba(251,113,133,.26); color: #fda4af; }
 .module-review-panel > footer { display: grid; grid-template-columns: minmax(0,1fr) auto auto; align-items: center; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--line); background: #0a1510; }
 .module-review-panel > footer div { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
 .module-review-panel > footer strong { color: var(--accent); font-size: .72rem; }

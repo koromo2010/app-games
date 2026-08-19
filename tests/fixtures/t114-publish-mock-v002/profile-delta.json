@@ -15,7 +15,9 @@
     "collect-text",
     "vote",
     "role-assignment",
-    "team-assignment",
+    "team-assignment"
+  ],
+  "available": [
     "content-source",
     "llm",
     "playing-cards",
@@ -23,44 +25,22 @@
   ],
   "moduleDecisions": {
     "rounds": {
-      "mode": "disabled",
-      "reason": "1回のじゃんけんで結果へ進み、複数ラウンドを管理しないため。"
+      "mode": "disabled"
     },
     "turn-order": {
-      "mode": "disabled",
-      "reason": "2人が順不同で同時にchoiceを提出し、手番を進めないため。"
+      "mode": "disabled"
     },
     "collect-text": {
-      "mode": "disabled",
-      "reason": "rock・paper・scissorsの選択だけを収集し、自由記述を扱わないため。"
+      "mode": "disabled"
     },
     "vote": {
-      "mode": "disabled",
-      "reason": "choiceは本人の手として直接採用し、候補への投票や集計を行わないため。"
+      "mode": "disabled"
     },
     "role-assignment": {
-      "mode": "disabled",
-      "reason": "両参加者は同じプレイヤー権限で遊び、秘密役職を割り当てないため。"
+      "mode": "disabled"
     },
     "team-assignment": {
-      "mode": "disabled",
-      "reason": "2人の個人対戦であり、チーム分けやチーム得点を使用しないため。"
-    },
-    "content-source": {
-      "mode": "disabled",
-      "reason": "手は固定された3選択肢で、Word DB等のPlatformコンテンツ供給を使わないため。"
-    },
-    "llm": {
-      "mode": "disabled",
-      "reason": "生成処理を含まず、共通LLM gatewayを呼び出さないため。"
-    },
-    "playing-cards": {
-      "mode": "disabled",
-      "reason": "じゃんけんの手だけを扱い、カード型・デッキ操作・カードUIを使わないため。"
-    },
-    "drawing": {
-      "mode": "disabled",
-      "reason": "描画入力・stroke・canvas UIを使用しないため。"
+      "mode": "disabled"
     }
   },
   "profileWritesPerformed": 0,
