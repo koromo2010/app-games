@@ -55,7 +55,7 @@ export default async function GameMockPage({ params }: {
         className="mock-review-frame"
         src={previewUrl}
         title={`${game.title}の操作プロトタイプ`}
-        sandbox="allow-scripts allow-modals allow-pointer-lock"
+        sandbox="allow-scripts allow-forms allow-modals allow-pointer-lock"
         referrerPolicy="no-referrer"
         allow="fullscreen"
       />

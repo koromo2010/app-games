@@ -328,6 +328,24 @@ test("client grants use a sandbox-safe fragment form exchange and never query cr
   );
   assert.doesNotMatch(sdkPreviewGameShellSource, /sandbox="[^"]*allow-same-origin/);
 
+  // The Portal mock-review page uses the same fragment-to-same-origin POST
+  // exchange as the SDK runtime surfaces. Keep its literal sandbox aligned
+  // without cross-importing app-local UI code between independently built apps.
+  const portalMockReviewSource = readFileSync(
+    "apps/sdk-portal/app/[instanceId]/mock/[gameId]/page.tsx",
+    "utf8",
+  );
+  assert.match(portalMockReviewSource, /createPreviewRuntimeUrl\(/);
+  assert.match(
+    portalMockReviewSource,
+    /sandbox="allow-scripts allow-forms allow-modals allow-pointer-lock"/,
+  );
+  assert.match(portalMockReviewSource, /referrerPolicy="no-referrer"/);
+  assert.match(portalMockReviewSource, /allow="fullscreen"/);
+  assert.doesNotMatch(portalMockReviewSource, /sandbox="[^"]*allow-same-origin/);
+  assert.doesNotMatch(portalMockReviewSource, /sandbox="[^"]*allow-top-navigation/);
+  assert.doesNotMatch(portalMockReviewSource, /sandbox="[^"]*allow-popups/);
+
   for (const path of [
     "apps/sdk-preview/app/open/[instanceId]/[gameId]/[revision]/route.ts",
     "apps/sdk-preview/app/package-open/[instanceId]/[gameId]/[revision]/route.ts",
