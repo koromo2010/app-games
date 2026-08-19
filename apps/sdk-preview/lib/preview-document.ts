@@ -13,6 +13,7 @@ import {
   PreviewAssetReferenceError,
   rewritePreviewHtmlDocument,
 } from "@/lib/preview-asset-rewriter";
+import { previewAssetReferenceFailureResponse } from "@/lib/preview-document-error";
 import { recordPreviewAssetTokenEvent } from "@/lib/preview-asset-token-observability";
 import {
   createPreviewAssetToken,
@@ -177,9 +178,7 @@ export async function renderAuthorizedPreviewDocument({
     });
   } catch (error) {
     if (error instanceof PreviewAssetReferenceError) {
-      return new Response("Preview document contains an unsupported asset reference.", {
-        status: 422,
-      });
+      return previewAssetReferenceFailureResponse(error.code);
     }
     return new Response("Preview document is temporarily unavailable.", { status: 502 });
   }
