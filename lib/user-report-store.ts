@@ -1,6 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { redisCommand } from "./redis-store.ts";
 import {
+  auditUserReportStorage,
+  userReportIndexKey,
+  userReportKeyPrefix,
+  userReportMaximumCount,
+  userReportRetentionSeconds,
+} from "./user-report-storage-audit.ts";
+import {
   type SupportReplyDeliveryStatus,
   type SupportThreadAuthor,
   isSupportThreadStatusTransitionAllowed,
@@ -19,15 +26,11 @@ import {
 
 export type { UserReport, UserReportStatus, UserReportType } from "./user-report-core.ts";
 
-const userReportIndexKey = "user-reports:v1";
-const userReportKeyPrefix = "user-report:v1:";
-const userReportMaximumCount = 1_000;
-const userReportRetentionSeconds = 180 * 24 * 60 * 60;
-
-function parseStoredUserReport(value: string | null) {
+function parseStoredUserReport(value: string | null, expectedId?: string) {
   if (!value) return null;
   try {
-    return normalizeStoredUserReport(JSON.parse(value));
+    const report = normalizeStoredUserReport(JSON.parse(value));
+    return report && (!expectedId || report.id === expectedId) ? report : null;
   } catch {
     return null;
   }
@@ -63,7 +66,7 @@ export async function saveUserReport(
   };
   const inserted = await redisCommand<number>([
     "EVAL",
-    "if redis.call('EXISTS',KEYS[1])==1 then return 0 end; redis.call('SET',KEYS[1],ARGV[1],'EX',ARGV[3]); redis.call('LPUSH',KEYS[2],ARGV[2]); local removed=redis.call('LRANGE',KEYS[2],ARGV[4],-1); redis.call('LTRIM',KEYS[2],0,ARGV[5]); local prefix=string.sub(KEYS[1],1,string.len(KEYS[1])-string.len(ARGV[2])); for _,id in ipairs(removed) do redis.call('DEL',prefix..id) end; return 1",
+    "if redis.call('EXISTS',KEYS[1])==1 then return 0 end; redis.call('SET',KEYS[1],ARGV[1],'EX',ARGV[3]); redis.call('LREM',KEYS[2],0,ARGV[2]); redis.call('LPUSH',KEYS[2],ARGV[2]); local removed=redis.call('LRANGE',KEYS[2],ARGV[4],-1); redis.call('LTRIM',KEYS[2],0,ARGV[5]); local prefix=string.sub(KEYS[1],1,string.len(KEYS[1])-string.len(ARGV[2])); for _,id in ipairs(removed) do if not redis.call('LPOS',KEYS[2],id) then redis.call('DEL',prefix..id) end end; return 1",
     "2",
     `${userReportKeyPrefix}${report.id}`,
     userReportIndexKey,
@@ -101,21 +104,21 @@ export async function loadUserReport(reportId: string) {
       "GET",
       `${userReportKeyPrefix}${reportId}`,
     ]),
+    reportId,
   );
 }
 
-async function readIndexedUserReports() {
-  const ids = await redisCommand<string[]>(["LRANGE", userReportIndexKey, "0", String(userReportMaximumCount - 1)]);
-  if (!ids.length) return [];
-  const values = await redisCommand<Array<string | null>>(["MGET", ...ids.map((id) => `${userReportKeyPrefix}${id}`)]);
-  const reports = values.map(parseStoredUserReport).filter((report): report is UserReport => report !== null);
-  return reports
-    .sort((left, right) => right.createdAt - left.createdAt);
+export async function listUserReportsWithDiagnostics(limit = 100) {
+  const safeLimit = Math.max(1, Math.min(200, Math.round(limit)));
+  const audit = await auditUserReportStorage({ includeTtl: true });
+  return {
+    reports: audit.reports.slice(0, safeLimit),
+    audit,
+  };
 }
 
 export async function listUserReports(limit = 100) {
-  const safeLimit = Math.max(1, Math.min(200, Math.round(limit)));
-  return (await readIndexedUserReports()).slice(0, safeLimit);
+  return (await listUserReportsWithDiagnostics(limit)).reports;
 }
 
 export async function listUserReportsForPlayer(
@@ -124,7 +127,8 @@ export async function listUserReportsForPlayer(
 ) {
   const playerId = playerIdInput.trim();
   if (!playerId) return [];
-  return (await readIndexedUserReports())
+  const audit = await auditUserReportStorage({ includeTtl: false });
+  return audit.reports
     .filter((report) => report.playerId === playerId)
     .slice(0, Math.max(1, Math.min(200, Math.round(limit))));
 }
@@ -132,12 +136,15 @@ export async function listUserReportsForPlayer(
 export async function deleteUserReportsForPlayer(playerIdInput: string) {
   const playerId = playerIdInput.trim();
   if (!playerId) return 0;
-  const ids = await redisCommand<string[]>(["LRANGE", userReportIndexKey, "0", String(userReportMaximumCount - 1)]);
-  if (!ids.length) return 0;
-  const values = await redisCommand<Array<string | null>>(["MGET", ...ids.map((id) => `${userReportKeyPrefix}${id}`)]);
-  const reportIds = values
-    .map(parseStoredUserReport)
-    .filter((report): report is UserReport => report?.playerId === playerId)
+  const audit = await auditUserReportStorage({ includeTtl: false });
+  if (
+    !audit.complete
+    || audit.records.some((record) => record.parseStatus === "malformed")
+  ) {
+    throw new Error("USER_REPORT_INVENTORY_INCOMPLETE");
+  }
+  const reportIds = audit.reports
+    .filter((report) => report.playerId === playerId)
     .map((report) => report.id);
   if (!reportIds.length) return 0;
   return await redisCommand<number>([
@@ -158,17 +165,21 @@ async function updateUserReport(
   const key = `${userReportKeyPrefix}${reportId}`;
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const raw = await redisCommand<string | null>(["GET", key]);
-    const current = parseStoredUserReport(raw);
+    const current = parseStoredUserReport(raw, reportId);
     if (!raw || !current) throw new Error("USER_REPORT_NOT_FOUND");
     const updated = update(current);
     const saved = await redisCommand<number>([
       "EVAL",
-      "if redis.call('GET',KEYS[1])==ARGV[1] then redis.call('SET',KEYS[1],ARGV[2],'EX',ARGV[3]); return 1 end return 0",
-      "1",
+      "if redis.call('GET',KEYS[1])==ARGV[1] then redis.call('SET',KEYS[1],ARGV[2],'EX',ARGV[3]); redis.call('LREM',KEYS[2],0,ARGV[4]); redis.call('LPUSH',KEYS[2],ARGV[4]); local removed=redis.call('LRANGE',KEYS[2],ARGV[5],-1); redis.call('LTRIM',KEYS[2],0,ARGV[6]); local prefix=string.sub(KEYS[1],1,string.len(KEYS[1])-string.len(ARGV[4])); for _,id in ipairs(removed) do if not redis.call('LPOS',KEYS[2],id) then redis.call('DEL',prefix..id) end end; return 1 end return 0",
+      "2",
       key,
+      userReportIndexKey,
       raw,
       JSON.stringify(updated),
       String(userReportRetentionSeconds),
+      reportId,
+      String(userReportMaximumCount),
+      String(userReportMaximumCount - 1),
     ]);
     if (saved === 1) return updated;
   }
@@ -221,7 +232,7 @@ export async function appendUserReportMessage(input: {
   const key = `${userReportKeyPrefix}${input.reportId}`;
   for (let attempt = 0; attempt < 5; attempt += 1) {
     const raw = await redisCommand<string | null>(["GET", key]);
-    const current = parseStoredUserReport(raw);
+    const current = parseStoredUserReport(raw, input.reportId);
     if (!raw || !current) throw new Error("USER_REPORT_NOT_FOUND");
     if (input.playerId && current.playerId !== input.playerId) {
       throw new Error("USER_REPORT_FORBIDDEN");
@@ -262,12 +273,16 @@ export async function appendUserReportMessage(input: {
     };
     const saved = await redisCommand<number>([
       "EVAL",
-      "if redis.call('GET',KEYS[1])==ARGV[1] then redis.call('SET',KEYS[1],ARGV[2],'EX',ARGV[3]); return 1 end return 0",
-      "1",
+      "if redis.call('GET',KEYS[1])==ARGV[1] then redis.call('SET',KEYS[1],ARGV[2],'EX',ARGV[3]); redis.call('LREM',KEYS[2],0,ARGV[4]); redis.call('LPUSH',KEYS[2],ARGV[4]); local removed=redis.call('LRANGE',KEYS[2],ARGV[5],-1); redis.call('LTRIM',KEYS[2],0,ARGV[6]); local prefix=string.sub(KEYS[1],1,string.len(KEYS[1])-string.len(ARGV[4])); for _,id in ipairs(removed) do if not redis.call('LPOS',KEYS[2],id) then redis.call('DEL',prefix..id) end end; return 1 end return 0",
+      "2",
       key,
+      userReportIndexKey,
       raw,
       JSON.stringify(updated),
       String(userReportRetentionSeconds),
+      input.reportId,
+      String(userReportMaximumCount),
+      String(userReportMaximumCount - 1),
     ]);
     if (saved === 1) return { report: updated, message, inserted: true };
   }

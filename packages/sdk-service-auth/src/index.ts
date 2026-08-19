@@ -20,12 +20,14 @@ function signature(payload: string, secret: string) {
 export function createSdkServiceAuthorization(input: {
   method: string;
   path: string;
+  environment?: string;
   now?: number;
 }, secret: string) {
   const payload = Buffer.from(JSON.stringify({
     version: SDK_SERVICE_AUTH_VERSION,
     method: input.method.toUpperCase(),
     path: input.path,
+    ...(input.environment ? { environment: input.environment } : {}),
     issuedAt: input.now ?? Date.now(),
   }), "utf8").toString("base64url");
   return `${payload}.${signature(payload, secret)}`;
@@ -33,7 +35,12 @@ export function createSdkServiceAuthorization(input: {
 
 export function verifySdkServiceAuthorization(
   value: string,
-  expected: { method: string; path: string; now?: number },
+  expected: {
+    method: string;
+    path: string;
+    environment?: string;
+    now?: number;
+  },
   secret: string,
 ) {
   assertSecret(secret);
@@ -48,6 +55,10 @@ export function verifySdkServiceAuthorization(
     return parsed.version === SDK_SERVICE_AUTH_VERSION
       && parsed.method === expected.method.toUpperCase()
       && parsed.path === expected.path
+      && (
+        expected.environment === undefined
+        || parsed.environment === expected.environment
+      )
       && typeof parsed.issuedAt === "number"
       && Number.isSafeInteger(parsed.issuedAt)
       && Math.abs(now - parsed.issuedAt) <= SDK_SERVICE_AUTH_MAX_AGE_MS;

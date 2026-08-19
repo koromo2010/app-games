@@ -28,6 +28,11 @@ export function assertRuntimeEnvironmentAgreement() {
   return configured;
 }
 
+export function sdkSupportEnvironment(): "production" | "development" {
+  const environment = assertRuntimeEnvironmentAgreement();
+  return environment === "test" ? "development" : environment;
+}
+
 function assertResourceEnvironment(resource: "APP_DATABASE" | "REDIS" | "BLOB", configured: string | undefined) {
   const appEnvironment = assertRuntimeEnvironmentAgreement();
   if (appEnvironment === "test") return;

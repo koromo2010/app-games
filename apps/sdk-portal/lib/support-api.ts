@@ -1,4 +1,7 @@
 import { sdkServiceHeaders } from "@/lib/sdk-service-auth";
+import {
+  resolveSdkInstanceRegistryNamespace,
+} from "@/lib/instance-registry-namespace";
 
 export type CreatorSupportStatus =
   | "open"
@@ -79,12 +82,13 @@ async function supportRequest<T>(
   body?: object,
 ) {
   const url = `${appBaseUrl()}${path}`;
+  const environment = resolveSdkInstanceRegistryNamespace();
   let response: Response;
   try {
     response = await fetch(url, {
       method,
       headers: {
-        ...sdkServiceHeaders(method, url),
+        ...sdkServiceHeaders(method, url, { environment }),
         ...(body ? { "Content-Type": "application/json" } : {}),
       },
       ...(body ? { body: JSON.stringify(body) } : {}),

@@ -21,6 +21,7 @@ import {
 class InMemoryRedisRest {
   readonly strings = new Map<string, string>();
   readonly lists = new Map<string, string[]>();
+  readonly ttls = new Map<string, number>();
   readonly atomicInsertKeys: string[][] = [];
   readonly commands: unknown[][] = [];
 
@@ -42,6 +43,17 @@ class InMemoryRedisRest {
         (key) => this.strings.get(String(key)) ?? null,
       );
     }
+    if (name === "TTL") {
+      const key = String(command[1]);
+      return this.strings.has(key) ? this.ttls.get(key) ?? 1_000 : -2;
+    }
+    if (name === "SCAN") {
+      const pattern = String(command[3] ?? "*");
+      const prefix = pattern.endsWith("*") ? pattern.slice(0, -1) : pattern;
+      return ["0", [...this.strings.keys()].filter((key) => (
+        pattern === "*" || key.startsWith(prefix)
+      )).sort()];
+    }
     if (name !== "EVAL") {
       throw new Error(`UNSUPPORTED_REDIS_COMMAND_${name}`);
     }
@@ -55,23 +67,39 @@ class InMemoryRedisRest {
       const [recordKey, indexKey] = keys;
       if (this.strings.has(recordKey)) return 0;
       this.strings.set(recordKey, argv[0]);
-      const index = this.lists.get(indexKey) ?? [];
+      this.ttls.set(recordKey, Number(argv[2]));
+      const index = (this.lists.get(indexKey) ?? []).filter(
+        (id) => id !== argv[1],
+      );
       index.unshift(argv[1]);
-      this.lists.set(indexKey, index);
+      this.lists.set(indexKey, index.slice(0, Number(argv[4]) + 1));
       return 1;
     }
     if (script.includes("redis.call('GET',KEYS[1])==ARGV[1]")) {
-      const [recordKey] = keys;
+      const [recordKey, indexKey] = keys;
       if (this.strings.get(recordKey) !== argv[0]) return 0;
       this.strings.set(recordKey, argv[1]);
+      this.ttls.set(recordKey, Number(argv[2]));
+      if (indexKey) {
+        const index = (this.lists.get(indexKey) ?? []).filter(
+          (id) => id !== argv[3],
+        );
+        index.unshift(argv[3]);
+        this.lists.set(indexKey, index.slice(0, Number(argv[5]) + 1));
+      }
       return 1;
     }
     throw new Error("UNSUPPORTED_REDIS_SCRIPT");
   }
 
   fetch = async (_input: string | URL | Request, init?: RequestInit) => {
-    const command = JSON.parse(String(init?.body)) as unknown[];
-    return Response.json({ result: this.execute(command) });
+    const payload = JSON.parse(String(init?.body)) as unknown[];
+    if (String(_input).endsWith("/pipeline")) {
+      return Response.json((payload as unknown[][]).map((command) => ({
+        result: this.execute(command),
+      })));
+    }
+    return Response.json({ result: this.execute(payload) });
   };
 }
 

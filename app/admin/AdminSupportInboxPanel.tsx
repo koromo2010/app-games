@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { adminNotificationErrorLabels } from "@/lib/admin-notification-labels";
 import { SUPPORT_TEXT_LIMITS } from "@/config/support-text-contract";
 import {
@@ -42,6 +49,25 @@ type SupportItem =
 type ReplyMessage = {
   tone: "success" | "error";
   text: string;
+};
+type StorageWarning = {
+  code: string;
+  reportId?: string;
+  count?: number;
+};
+
+const storageWarningLabels: Record<string, string> = {
+  BODY_PRESENT_INDEX_MISSING: "本文は存在しますが一覧索引にありません。read-only検索結果として表示しています。",
+  INDEX_PRESENT_BODY_MISSING: "一覧索引は存在しますが本文がありません。",
+  INDEX_DUPLICATE: "一覧索引に同じ報告IDが重複しています。",
+  BODY_MALFORMED: "本文を公開schemaとして解析できません。",
+  BODY_TTL_ANOMALY: "本文TTLが保持契約の範囲外です。",
+  BODY_SCAN_TRUNCATED: "本文の有界列挙が上限に達したため、一覧は不完全な可能性があります。",
+  INDEX_TRUNCATED: "一覧索引が上限を超えているため、末尾は監査対象外です。",
+  INVENTORY_LIMIT_REACHED: "報告inventoryが1,000件上限に達しました。",
+  BODY_KEY_INVALID: "報告本文keyにreport ID形式ではない要素があります。",
+  INDEX_ENTRY_INVALID: "一覧索引に報告ID形式ではない要素があります。",
+  REPORT_NOT_FOUND: "指定した報告IDは本文・一覧索引のどちらにも見つかりません。",
 };
 
 function recordFor(item: SupportItem) {
@@ -105,12 +131,43 @@ export function AdminSupportInboxPanel({
   const replyRequestIds = useRef<Record<string, string>>({});
   const [message, setMessage] = useState("");
   const [loadError, setLoadError] = useState("");
+  const [storageWarnings, setStorageWarnings] = useState<StorageWarning[]>([]);
+  const [reportSearchInput, setReportSearchInput] = useState("");
+  const [activeReportSearch, setActiveReportSearch] = useState("");
 
-  const load = useCallback(async (signal?: AbortSignal) => {
+  const load = useCallback(async (
+    signal?: AbortSignal,
+    reportId = "",
+  ) => {
     setLoading(true);
     setMessage("");
     setLoadError("");
+    setStorageWarnings([]);
     try {
+      if (reportId) {
+        const query = new URLSearchParams({ reportId });
+        const reportResponse = await fetch(
+          `/api/admin/user-reports?${query.toString()}`,
+          { cache: "no-store", signal },
+        );
+        if (reportResponse.status === 401) {
+          onAuthExpired();
+          return;
+        }
+        const reportData = await reportResponse.json().catch(() => null) as {
+          reports?: UserReport[];
+          lookup?: { warnings?: StorageWarning[] };
+          error?: string;
+        } | null;
+        if (!reportResponse.ok || !reportData?.reports) {
+          throw new Error(reportData?.error ?? "LOAD_FAILED");
+        }
+        setItems(reportData.reports.map(
+          (report): SupportItem => ({ kind: "report", report }),
+        ));
+        setStorageWarnings(reportData.lookup?.warnings ?? []);
+        return;
+      }
       const [reportResponse, contactResponse] = await Promise.all([
         fetch("/api/admin/user-reports", { cache: "no-store", signal }),
         fetch("/api/admin/contact-messages", { cache: "no-store", signal }),
@@ -122,6 +179,7 @@ export function AdminSupportInboxPanel({
       const [reportData, contactData] = await Promise.all([
         reportResponse.json().catch(() => null) as Promise<{
           reports?: UserReport[];
+          storageAudit?: { warnings?: StorageWarning[] };
           error?: string;
         } | null>,
         contactResponse.json().catch(() => null) as Promise<{
@@ -147,8 +205,11 @@ export function AdminSupportInboxPanel({
           (contact): SupportItem => ({ kind: "contact", contact }),
         ),
       ].sort((left, right) => (
-        recordFor(right).createdAt - recordFor(left).createdAt
+        recordFor(right).updatedAt - recordFor(left).updatedAt
+        || recordFor(right).createdAt - recordFor(left).createdAt
+        || recordFor(left).id.localeCompare(recordFor(right).id)
       )));
+      setStorageWarnings(reportData.storageAudit?.warnings ?? []);
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") return;
       setItems([]);
@@ -175,6 +236,24 @@ export function AdminSupportInboxPanel({
       : items.filter((item) => recordFor(item).status === filter),
     [filter, items],
   );
+
+  const searchByReportId = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const reportId = reportSearchInput.trim();
+    if (!/^report_[0-9a-f-]{36}$/i.test(reportId)) {
+      setLoadError("report_から始まる完全な報告IDを入力してください。");
+      return;
+    }
+    setActiveReportSearch(reportId);
+    setFilter("all");
+    void load(undefined, reportId);
+  };
+
+  const clearReportSearch = () => {
+    setReportSearchInput("");
+    setActiveReportSearch("");
+    void load(undefined, "");
+  };
 
   const updateStatus = async (
     item: SupportItem,
@@ -465,18 +544,64 @@ export function AdminSupportInboxPanel({
         <div>
           <h2 className="text-2xl font-black">問い合わせ・報告</h2>
           <p className="mt-1 text-sm leading-6 text-slate-400">
-            問い合わせ、改善要望、バグ報告を新しい順にまとめて表示します。通知メールが失敗しても、会話はここに保存されます。
+            問い合わせ、改善要望、バグ報告を最終更新順にまとめて表示します。通知メールが失敗しても、会話はここに保存されます。
           </p>
         </div>
         <button
           type="button"
-          onClick={() => void load()}
+          onClick={() => void load(undefined, activeReportSearch)}
           disabled={loading}
           className="rounded-lg border border-white/15 px-4 py-2 text-sm font-bold text-slate-200 hover:bg-white/10 disabled:opacity-40"
         >
           {loading ? "読込中…" : "再読み込み"}
         </button>
       </div>
+      <form
+        onSubmit={searchByReportId}
+        className="flex flex-wrap items-end gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-4"
+      >
+        <label className="min-w-0 flex-1 text-sm font-bold text-slate-300">
+          報告IDで直接検索
+          <input
+            value={reportSearchInput}
+            onChange={(event) => setReportSearchInput(event.target.value)}
+            placeholder="report_00000000-0000-4000-8000-000000000000"
+            className="mt-2 w-full rounded-lg border border-white/15 bg-slate-950/60 px-3 py-2 font-mono text-sm text-white outline-none focus:border-cyan-300"
+          />
+        </label>
+        <button
+          type="submit"
+          disabled={loading}
+          className="rounded-lg bg-cyan-300 px-4 py-2 text-sm font-black text-slate-950 disabled:opacity-40"
+        >
+          直接検索
+        </button>
+        {activeReportSearch && (
+          <button
+            type="button"
+            onClick={clearReportSearch}
+            disabled={loading}
+            className="rounded-lg border border-white/15 px-4 py-2 text-sm font-bold text-slate-200 disabled:opacity-40"
+          >
+            全一覧へ戻る
+          </button>
+        )}
+      </form>
+      {storageWarnings.length > 0 && (
+        <div
+          role="alert"
+          className="space-y-1 rounded-xl border border-amber-300/35 bg-amber-300/10 px-4 py-3 text-sm text-amber-100"
+        >
+          <p className="font-black">保存状態の警告</p>
+          {storageWarnings.map((warning, index) => (
+            <p key={`${warning.code}-${warning.reportId ?? index}`}>
+              {warning.reportId ? `${warning.reportId}: ` : ""}
+              {storageWarningLabels[warning.code] ?? warning.code}
+              {warning.count ? ` (${warning.count})` : ""}
+            </p>
+          ))}
+        </div>
+      )}
       {!loadError && (
         <div
           className="flex gap-2 overflow-x-auto"
@@ -562,7 +687,7 @@ export function AdminSupportInboxPanel({
                     {new Intl.DateTimeFormat("ja-JP", {
                       dateStyle: "medium",
                       timeStyle: "short",
-                    }).format(new Date(record.createdAt))}
+                    }).format(new Date(record.updatedAt))}
                   </time>
                 </div>
               </summary>

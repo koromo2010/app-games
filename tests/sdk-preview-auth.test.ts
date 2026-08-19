@@ -405,6 +405,32 @@ test("SDK service authorization binds method and path within a short window", ()
   ), false);
 });
 
+test("SDK service authorization signs the expected support environment", () => {
+  const authorization = createSdkServiceAuthorization({
+    method: "GET",
+    path: "/api/internal/sdk-support?playerId=player-test",
+    environment: "development",
+    now: 10_000,
+  }, secret);
+  assert.equal(verifySdkServiceAuthorization(authorization, {
+    method: "GET",
+    path: "/api/internal/sdk-support?playerId=player-test",
+    environment: "development",
+    now: 10_000,
+  }, secret), true);
+  assert.equal(verifySdkServiceAuthorization(authorization, {
+    method: "GET",
+    path: "/api/internal/sdk-support?playerId=player-test",
+    environment: "production",
+    now: 10_000,
+  }, secret), false);
+  assert.equal(verifySdkServiceAuthorization(authorization, {
+    method: "GET",
+    path: "/api/internal/sdk-support?playerId=player-test",
+    now: 10_000,
+  }, secret), true);
+});
+
 test("Preview grant and service HMAC packages have disjoint responsibilities", () => {
   const previewAuth = readFileSync("packages/sdk-preview-auth/src/index.ts", "utf8");
   const serviceAuth = readFileSync("packages/sdk-service-auth/src/index.ts", "utf8");

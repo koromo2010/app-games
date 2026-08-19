@@ -2,11 +2,16 @@ import { createRequestTelemetry } from "@/lib/observability";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 import {
   appendUserReportMessage,
-  listUserReports,
+  listUserReportsWithDiagnostics,
   loadUserReport,
   updateUserReportMessageDelivery,
   updateUserReportStatus,
 } from "@/lib/user-report-store";
+import {
+  inspectUserReportStorage,
+  safeUserReportStorageAudit,
+  safeUserReportStorageInspection,
+} from "@/lib/user-report-storage-audit";
 import {
   deliverUserReportAdminNotification,
 } from "@/lib/user-report-admin-notification";
@@ -37,12 +42,36 @@ export async function GET(request: Request) {
   );
   try {
     await requireFullSiteAdminSession();
-    const reports = await listUserReports();
+    const reportId = new URL(request.url).searchParams.get("reportId");
+    if (reportId !== null) {
+      const normalizedReportId = reportId.trim();
+      if (!/^report_[0-9a-f-]{36}$/i.test(normalizedReportId)) {
+        return Response.json(
+          { error: "USER_REPORT_ID_INVALID" },
+          { status: 400 },
+        );
+      }
+      const inspection = await inspectUserReportStorage(normalizedReportId);
+      telemetry.success("user-report.lookup", {
+        affectedCount: inspection.report ? 1 : 0,
+      });
+      return Response.json(
+        {
+          reports: inspection.report ? [inspection.report] : [],
+          lookup: safeUserReportStorageInspection(inspection),
+        },
+        { headers: { "Cache-Control": "no-store" } },
+      );
+    }
+    const result = await listUserReportsWithDiagnostics();
     telemetry.success("user-report.list", {
-      affectedCount: reports.length,
+      affectedCount: result.reports.length,
     });
     return Response.json(
-      { reports },
+      {
+        reports: result.reports,
+        storageAudit: safeUserReportStorageAudit(result.audit),
+      },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
