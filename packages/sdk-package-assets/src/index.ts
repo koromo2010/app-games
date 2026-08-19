@@ -4,7 +4,7 @@ import * as t from "@babel/types";
 import { parse as parseHtml } from "parse5";
 import postcss from "postcss";
 import valueParser from "postcss-value-parser";
-import { parseSrcset } from "srcset";
+import { parseSrcset, stringifySrcset } from "srcset";
 import { posix } from "node:path";
 
 export type PackageAssetFile = {
@@ -22,7 +22,13 @@ export type GamePackageAssetFinding = {
     | "GAME_SDK_PACKAGE_ASSET_MISSING"
     | "GAME_SDK_PACKAGE_ASSET_CASE_MISMATCH"
     | "GAME_SDK_PACKAGE_ASSET_NOT_BROWSER_READABLE"
-    | "GAME_SDK_PACKAGE_ASSET_ENCODING_INVALID";
+    | "GAME_SDK_PACKAGE_ASSET_ENCODING_INVALID"
+    | "GAME_SDK_PACKAGE_BASE_ELEMENT_UNSUPPORTED"
+    | "GAME_SDK_PACKAGE_INLINE_SCRIPT_UNSUPPORTED"
+    | "GAME_SDK_PACKAGE_EVENT_HANDLER_UNSUPPORTED"
+    | "GAME_SDK_PACKAGE_STYLE_ATTRIBUTE_UNSUPPORTED"
+    | "GAME_SDK_PACKAGE_INLINE_STYLE_PARSE_ERROR"
+    | "GAME_SDK_PACKAGE_INLINE_STYLE_ASSET_INVALID";
   file: string;
   line: number;
   column: number;
@@ -70,6 +76,63 @@ export type NormalizedGamePackageAssetReference = {
   path: string;
   fragment: string;
 };
+
+export type GamePackageHtmlPolicyErrorCode =
+  | "HTML_PARSE_ERROR"
+  | "BASE_ELEMENT_UNSUPPORTED"
+  | "INLINE_SCRIPT_UNSUPPORTED"
+  | "EVENT_HANDLER_UNSUPPORTED"
+  | "STYLE_ATTRIBUTE_UNSUPPORTED"
+  | "INLINE_STYLE_PARSE_ERROR"
+  | "INLINE_STYLE_ASSET_INVALID";
+
+export type GamePackageDocumentReferenceContext =
+  | "html-attribute"
+  | "inline-style"
+  | "stylesheet";
+
+export type GamePackageDocumentAssetReference = {
+  parent: string;
+  reference: string;
+  context: GamePackageDocumentReferenceContext;
+  kind: "src" | "href" | "poster" | "srcset" | "url" | "import";
+  line: number;
+  column: number;
+};
+
+export type GamePackageInlineStyle = {
+  content: string;
+  startOffset: number;
+  endOffset: number;
+  line: number;
+  column: number;
+};
+
+export type GamePackageHtmlPolicyIssue = {
+  code: GamePackageHtmlPolicyErrorCode;
+  line: number;
+  column: number;
+};
+
+export type GamePackageHtmlAnalysis = {
+  issues: GamePackageHtmlPolicyIssue[];
+  references: GamePackageDocumentAssetReference[];
+  inlineStyles: GamePackageInlineStyle[];
+};
+
+export class GamePackageHtmlPolicyError extends Error {
+  readonly code: GamePackageHtmlPolicyErrorCode;
+  readonly line: number;
+  readonly column: number;
+
+  constructor(issue: GamePackageHtmlPolicyIssue) {
+    super(issue.code);
+    this.name = "GamePackageHtmlPolicyError";
+    this.code = issue.code;
+    this.line = issue.line;
+    this.column = issue.column;
+  }
+}
 
 const SOURCE_EXTENSIONS = new Set([".html", ".htm", ".css", ".js", ".mjs", ".cjs", ".jsx", ".ts", ".mts", ".cts", ".tsx"]);
 const SERVER_SOURCE_EXTENSIONS = new Set([".js", ".mjs", ".cjs", ".jsx", ".ts", ".mts", ".cts", ".tsx"]);
@@ -311,6 +374,427 @@ function inspectJavaScript(
   });
 }
 
+type HtmlSourceLocation = {
+  startLine?: number;
+  startCol?: number;
+  startOffset?: number;
+  endLine?: number;
+  endCol?: number;
+  endOffset?: number;
+  attrs?: Record<string, HtmlSourceLocation>;
+  startTag?: HtmlSourceLocation;
+  endTag?: HtmlSourceLocation;
+};
+
+type HtmlNode = {
+  nodeName?: string;
+  tagName?: string;
+  attrs?: Array<{ name: string; value: string }>;
+  childNodes?: HtmlNode[];
+  content?: { childNodes?: HtmlNode[] };
+  sourceCodeLocation?: HtmlSourceLocation;
+};
+
+type HtmlAttributeTarget = {
+  name: "src" | "href" | "poster" | "srcset";
+  value: string;
+  startOffset: number;
+  endOffset: number;
+  line: number;
+  column: number;
+};
+
+type StructuralHtmlAnalysis = GamePackageHtmlAnalysis & {
+  attributes: HtmlAttributeTarget[];
+};
+
+type CssValueNode = {
+  type: string;
+  value: string;
+  quote?: string;
+  nodes?: CssValueNode[];
+};
+
+export type RewriteGamePackageDocumentReference = (
+  input: GamePackageDocumentAssetReference,
+) => string;
+
+function htmlPosition(location?: HtmlSourceLocation) {
+  return {
+    line: Math.max(1, location?.startLine ?? 1),
+    column: Math.max(1, location?.startCol ?? 1),
+  };
+}
+
+function inlineCssPosition(
+  style: GamePackageInlineStyle,
+  line?: number,
+  column?: number,
+) {
+  const relativeLine = Math.max(1, line ?? 1);
+  const relativeColumn = Math.max(1, column ?? 1);
+  return {
+    line: style.line + relativeLine - 1,
+    column: relativeLine === 1
+      ? style.column + relativeColumn - 1
+      : relativeColumn,
+  };
+}
+
+function simpleCssReference(
+  nodes: readonly CssValueNode[],
+  issue: GamePackageHtmlPolicyIssue,
+) {
+  const meaningful = nodes.filter((node) => (
+    node.type !== "space" && node.type !== "comment"
+  ));
+  if (
+    meaningful.length !== 1
+    || !["string", "word"].includes(meaningful[0]?.type ?? "")
+    || !(meaningful[0]?.value.trim())
+    || (meaningful[0]?.type === "word" && /[()]/.test(meaningful[0].value))
+  ) {
+    throw new GamePackageHtmlPolicyError(issue);
+  }
+  return meaningful[0]!.value;
+}
+
+function quotedCssValue(value: string, issue: GamePackageHtmlPolicyIssue) {
+  if (/\0|[\r\n]/.test(value)) {
+    throw new GamePackageHtmlPolicyError(issue);
+  }
+  const escaped = value.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+  const node = valueParser(`"${escaped}"`).nodes[0] as unknown as CssValueNode | undefined;
+  if (!node) throw new GamePackageHtmlPolicyError(issue);
+  return node;
+}
+
+function processInlineStyle(
+  style: GamePackageInlineStyle,
+  parent: string,
+  rewriteReference?: RewriteGamePackageDocumentReference,
+) {
+  const references: GamePackageDocumentAssetReference[] = [];
+  let root: ReturnType<typeof postcss.parse>;
+  try {
+    root = postcss.parse(style.content, { from: parent });
+  } catch (error) {
+    const relative = errorPosition(error);
+    throw new GamePackageHtmlPolicyError({
+      code: "INLINE_STYLE_PARSE_ERROR",
+      ...inlineCssPosition(style, relative.line, relative.column),
+    });
+  }
+  root.walkAtRules("import", (rule) => {
+    const position = inlineCssPosition(
+      style,
+      rule.source?.start?.line,
+      rule.source?.start?.column,
+    );
+    const issue = { code: "INLINE_STYLE_ASSET_INVALID" as const, ...position };
+    const parsed = valueParser(rule.params);
+    const first = (parsed.nodes as unknown as CssValueNode[]).find((node) => (
+      node.type !== "space" && node.type !== "comment"
+    ));
+    if (!first) throw new GamePackageHtmlPolicyError(issue);
+    const reference = first.type === "function"
+      && first.value.toLowerCase() === "url"
+      ? simpleCssReference(first.nodes ?? [], issue)
+      : simpleCssReference([first], issue);
+    const input: GamePackageDocumentAssetReference = {
+      parent,
+      reference,
+      context: "inline-style",
+      kind: "import",
+      ...position,
+    };
+    references.push(input);
+    if (!rewriteReference) return;
+    const rewritten = rewriteReference(input);
+    const replacement = quotedCssValue(rewritten, issue);
+    if (first.type === "function") first.nodes = [replacement];
+    else Object.assign(first, replacement);
+    rule.params = parsed.toString();
+  });
+  root.walkDecls((decl) => {
+    const parsed = valueParser(decl.value);
+    parsed.walk((rawNode) => {
+      const node = rawNode as unknown as CssValueNode;
+      if (node.type !== "function" || node.value.toLowerCase() !== "url") {
+        return undefined;
+      }
+      const position = inlineCssPosition(
+        style,
+        decl.source?.start?.line,
+        decl.source?.start?.column,
+      );
+      const issue = { code: "INLINE_STYLE_ASSET_INVALID" as const, ...position };
+      const reference = simpleCssReference(node.nodes ?? [], issue);
+      const input: GamePackageDocumentAssetReference = {
+        parent,
+        reference,
+        context: "inline-style",
+        kind: "url",
+        ...position,
+      };
+      references.push(input);
+      if (rewriteReference) {
+        node.nodes = [quotedCssValue(rewriteReference(input), issue)];
+        decl.value = parsed.toString();
+      }
+      return false;
+    });
+  });
+  return { content: root.toString(), references };
+}
+
+function structuralHtmlAnalysis(
+  html: string,
+  documentAssetPath: string,
+): StructuralHtmlAnalysis {
+  const issues: GamePackageHtmlPolicyIssue[] = [];
+  const references: GamePackageDocumentAssetReference[] = [];
+  const inlineStyles: GamePackageInlineStyle[] = [];
+  const attributes: HtmlAttributeTarget[] = [];
+  const parseErrors: HtmlSourceLocation[] = [];
+  let document: HtmlNode;
+  try {
+    document = parseHtml(html, {
+      sourceCodeLocationInfo: true,
+      onParseError: (error) => parseErrors.push(error),
+    }) as unknown as HtmlNode;
+  } catch (error) {
+    const position = errorPosition(error);
+    return {
+      issues: [{ code: "HTML_PARSE_ERROR", ...position }],
+      references,
+      inlineStyles,
+      attributes,
+    };
+  }
+  for (const error of parseErrors) {
+    issues.push({ code: "HTML_PARSE_ERROR", ...htmlPosition(error) });
+  }
+  const visit = (node: HtmlNode) => {
+    const location = node.sourceCodeLocation;
+    const position = htmlPosition(location);
+    const tagName = node.tagName?.toLowerCase();
+    if (tagName === "base") {
+      issues.push({ code: "BASE_ELEMENT_UNSUPPORTED", ...position });
+    }
+    const attrs = node.attrs ?? [];
+    if (
+      tagName === "script"
+      && !attrs.some((attr) => attr.name.toLowerCase() === "src" && attr.value.trim())
+    ) {
+      issues.push({ code: "INLINE_SCRIPT_UNSUPPORTED", ...position });
+    }
+    for (const attr of attrs) {
+      const name = attr.name.toLowerCase();
+      const attrLocation = location?.attrs?.[attr.name] ?? location?.attrs?.[name];
+      const attrPosition = htmlPosition(attrLocation ?? location);
+      if (name === "style") {
+        issues.push({ code: "STYLE_ATTRIBUTE_UNSUPPORTED", ...attrPosition });
+      }
+      if (name.startsWith("on")) {
+        issues.push({ code: "EVENT_HANDLER_UNSUPPORTED", ...attrPosition });
+      }
+      if (!["src", "href", "poster", "srcset"].includes(name)) continue;
+      if (
+        typeof attrLocation?.startOffset !== "number"
+        || typeof attrLocation.endOffset !== "number"
+      ) {
+        issues.push({ code: "HTML_PARSE_ERROR", ...attrPosition });
+        continue;
+      }
+      const attribute = {
+        name: name as HtmlAttributeTarget["name"],
+        value: attr.value,
+        startOffset: attrLocation.startOffset,
+        endOffset: attrLocation.endOffset,
+        ...attrPosition,
+      };
+      attributes.push(attribute);
+      try {
+        const values = name === "srcset"
+          ? parseSrcset(attr.value, { strict: true }).map((candidate) => candidate.url)
+          : [attr.value];
+        for (const reference of values) {
+          references.push({
+            parent: documentAssetPath,
+            reference,
+            context: "html-attribute",
+            kind: name as GamePackageDocumentAssetReference["kind"],
+            ...attrPosition,
+          });
+        }
+      } catch {
+        issues.push({ code: "HTML_PARSE_ERROR", ...attrPosition });
+      }
+    }
+    if (tagName === "style") {
+      const startOffset = location?.startTag?.endOffset;
+      const endOffset = location?.endTag?.startOffset;
+      if (typeof startOffset !== "number" || typeof endOffset !== "number") {
+        issues.push({ code: "HTML_PARSE_ERROR", ...position });
+      } else {
+        const style: GamePackageInlineStyle = {
+          content: html.slice(startOffset, endOffset),
+          startOffset,
+          endOffset,
+          line: Math.max(1, location?.startTag?.endLine ?? position.line),
+          column: Math.max(1, location?.startTag?.endCol ?? position.column),
+        };
+        inlineStyles.push(style);
+        try {
+          references.push(...processInlineStyle(
+            style,
+            documentAssetPath,
+          ).references);
+        } catch (error) {
+          if (error instanceof GamePackageHtmlPolicyError) {
+            issues.push({ code: error.code, line: error.line, column: error.column });
+          } else {
+            issues.push({ code: "INLINE_STYLE_PARSE_ERROR", ...position });
+          }
+        }
+      }
+    }
+    for (const child of [
+      ...(node.childNodes ?? []),
+      ...(node.content?.childNodes ?? []),
+    ]) visit(child);
+  };
+  visit(document);
+  issues.sort((left, right) => (
+    left.line - right.line
+    || left.column - right.column
+    || left.code.localeCompare(right.code)
+  ));
+  references.sort((left, right) => (
+    left.line - right.line
+    || left.column - right.column
+    || left.kind.localeCompare(right.kind)
+    || left.reference.localeCompare(right.reference)
+  ));
+  inlineStyles.sort((left, right) => left.startOffset - right.startOffset);
+  attributes.sort((left, right) => left.startOffset - right.startOffset);
+  return { issues, references, inlineStyles, attributes };
+}
+
+export function analyzeGamePackageHtmlDocument(
+  html: string,
+  documentAssetPath: string,
+): GamePackageHtmlAnalysis {
+  const { issues, references, inlineStyles } = structuralHtmlAnalysis(
+    html,
+    documentAssetPath,
+  );
+  return { issues, references, inlineStyles };
+}
+
+function escapeHtmlAttribute(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;");
+}
+
+function applyTextReplacements(
+  source: string,
+  replacements: Array<{ startOffset: number; endOffset: number; value: string }>,
+) {
+  let output = source;
+  let previousStart = source.length;
+  for (const replacement of [...replacements].sort((left, right) => (
+    right.startOffset - left.startOffset || right.endOffset - left.endOffset
+  ))) {
+    if (
+      replacement.startOffset < 0
+      || replacement.endOffset < replacement.startOffset
+      || replacement.endOffset > source.length
+      || replacement.endOffset > previousStart
+    ) {
+      throw new GamePackageHtmlPolicyError({
+        code: "HTML_PARSE_ERROR",
+        line: 1,
+        column: 1,
+      });
+    }
+    output = `${output.slice(0, replacement.startOffset)}${replacement.value}${output.slice(replacement.endOffset)}`;
+    previousStart = replacement.startOffset;
+  }
+  return output;
+}
+
+export function rewriteGamePackageHtmlDocument(
+  html: string,
+  documentAssetPath: string,
+  rewriteReference: RewriteGamePackageDocumentReference,
+) {
+  const analysis = structuralHtmlAnalysis(html, documentAssetPath);
+  const issue = analysis.issues[0];
+  if (issue) throw new GamePackageHtmlPolicyError(issue);
+  const replacements: Array<{
+    startOffset: number;
+    endOffset: number;
+    value: string;
+  }> = [];
+  for (const attribute of analysis.attributes) {
+    let value: string;
+    if (attribute.name === "srcset") {
+      const candidates = parseSrcset(attribute.value, { strict: true });
+      value = stringifySrcset(candidates.map((candidate) => ({
+        ...candidate,
+        url: rewriteReference({
+          parent: documentAssetPath,
+          reference: candidate.url,
+          context: "html-attribute",
+          kind: "srcset",
+          line: attribute.line,
+          column: attribute.column,
+        }),
+      })), { strict: true });
+    } else {
+      value = rewriteReference({
+        parent: documentAssetPath,
+        reference: attribute.value,
+        context: "html-attribute",
+        kind: attribute.name,
+        line: attribute.line,
+        column: attribute.column,
+      });
+    }
+    if (value !== attribute.value) {
+      replacements.push({
+        startOffset: attribute.startOffset,
+        endOffset: attribute.endOffset,
+        value: `${attribute.name}="${escapeHtmlAttribute(value)}"`,
+      });
+    }
+  }
+  const inlineStyleContents: string[] = [];
+  for (const style of analysis.inlineStyles) {
+    const rewritten = processInlineStyle(
+      style,
+      documentAssetPath,
+      rewriteReference,
+    ).content;
+    inlineStyleContents.push(rewritten);
+    if (rewritten !== style.content) {
+      replacements.push({
+        startOffset: style.startOffset,
+        endOffset: style.endOffset,
+        value: rewritten,
+      });
+    }
+  }
+  return {
+    html: applyTextReplacements(html, replacements),
+    inlineStyleContents,
+  };
+}
+
 function inspectHtml(
   file: PackageAssetFile,
   exactPaths: ReadonlySet<string>,
@@ -322,36 +806,42 @@ function inspectHtml(
     observeReference?.(input);
     inspectReference({ ...input, exactPaths, foldedPaths, add });
   };
-  try {
-    const parseErrors: Array<{ startLine?: number; startCol?: number }> = [];
-    const document = parseHtml(file.content, {
-      sourceCodeLocationInfo: true,
-      onParseError: (error) => parseErrors.push(error),
-    }) as unknown as { childNodes?: unknown[] };
-    for (const error of parseErrors) {
-      add({
-        code: "GAME_SDK_PACKAGE_ASSET_PARSE_ERROR",
-        file: file.path,
-        line: Math.max(1, error.startLine ?? 1),
-        column: Math.max(1, error.startCol ?? 1),
-        reference: "",
-        hint: "Fix the HTML parse error before saving.",
-      });
-    }
-    const visit = (node: unknown) => {
-      const item = node as { attrs?: Array<{ name: string; value: string }>; childNodes?: unknown[]; content?: { childNodes?: unknown[] }; sourceCodeLocation?: { attrs?: Record<string, { startLine?: number; startCol?: number }> } };
-      for (const attr of item.attrs ?? []) {
-        if (!["src", "href", "poster", "srcset"].includes(attr.name)) continue;
-        const location = item.sourceCodeLocation?.attrs?.[attr.name];
-        const references = attr.name === "srcset" ? parseSrcset(attr.value).map((candidate) => candidate.url) : [attr.value];
-        for (const reference of references) inspect({ parent: file.path, reference, line: location?.startLine, column: location?.startCol ? location.startCol - 1 : 0 });
-      }
-      for (const child of [...(item.childNodes ?? []), ...(item.content?.childNodes ?? [])]) visit(child);
-    };
-    visit(document);
-  } catch (error) {
-    const position = errorPosition(error);
-    add({ code: "GAME_SDK_PACKAGE_ASSET_PARSE_ERROR", file: file.path, ...position, reference: "", hint: "Fix the HTML parse error before saving." });
+  const analysis = analyzeGamePackageHtmlDocument(file.content, file.path);
+  const issueCodes: Record<GamePackageHtmlPolicyErrorCode, GamePackageAssetFinding["code"]> = {
+    HTML_PARSE_ERROR: "GAME_SDK_PACKAGE_ASSET_PARSE_ERROR",
+    BASE_ELEMENT_UNSUPPORTED: "GAME_SDK_PACKAGE_BASE_ELEMENT_UNSUPPORTED",
+    INLINE_SCRIPT_UNSUPPORTED: "GAME_SDK_PACKAGE_INLINE_SCRIPT_UNSUPPORTED",
+    EVENT_HANDLER_UNSUPPORTED: "GAME_SDK_PACKAGE_EVENT_HANDLER_UNSUPPORTED",
+    STYLE_ATTRIBUTE_UNSUPPORTED: "GAME_SDK_PACKAGE_STYLE_ATTRIBUTE_UNSUPPORTED",
+    INLINE_STYLE_PARSE_ERROR: "GAME_SDK_PACKAGE_INLINE_STYLE_PARSE_ERROR",
+    INLINE_STYLE_ASSET_INVALID: "GAME_SDK_PACKAGE_INLINE_STYLE_ASSET_INVALID",
+  };
+  const issueHints: Record<GamePackageHtmlPolicyErrorCode, string> = {
+    HTML_PARSE_ERROR: "Fix the HTML parse error before saving.",
+    BASE_ELEMENT_UNSUPPORTED: "Remove the base element and use package-relative asset references.",
+    INLINE_SCRIPT_UNSUPPORTED: "Move inline scripts into a browser-readable package JavaScript asset.",
+    EVENT_HANDLER_UNSUPPORTED: "Move inline event handlers into a browser-readable package JavaScript asset.",
+    STYLE_ATTRIBUTE_UNSUPPORTED: "Move style attributes into an external stylesheet or a static style element.",
+    INLINE_STYLE_PARSE_ERROR: "Fix the inline style CSS parse error before saving.",
+    INLINE_STYLE_ASSET_INVALID: "Use a static package-relative URL or import in inline style CSS.",
+  };
+  for (const issue of analysis.issues) {
+    add({
+      code: issueCodes[issue.code],
+      file: file.path,
+      line: issue.line,
+      column: issue.column,
+      reference: "",
+      hint: issueHints[issue.code],
+    });
+  }
+  for (const reference of analysis.references) {
+    inspect({
+      parent: reference.parent,
+      reference: reference.reference,
+      line: reference.line,
+      column: reference.column - 1,
+    });
   }
 }
 

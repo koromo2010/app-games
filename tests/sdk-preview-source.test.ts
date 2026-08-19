@@ -631,6 +631,7 @@ test("SDK preview content stays sandboxed while explicit-origin assets remain lo
   assert.match(policy, /base-uri 'none'/);
   assert.match(policy, /script-src https:\/\/preview\.example/);
   assert.match(policy, /style-src https:\/\/preview\.example/);
+  assert.match(policy, /style-src-attr 'none'/);
   assert.doesNotMatch(policy, /unsafe-inline/);
   assert.match(policy, /frame-ancestors https:\/\/sdk-dev\.game-fields\.com https:\/\/dev\.game-fields\.com/);
 });
@@ -906,14 +907,14 @@ test("SDK preview rewrites HTML, CSS, and module references to exact signed asse
 
   assert.throws(
     () => rewritePreviewHtmlAssetUrls(
-      "<script>window.bad = true</script>",
+      "<!doctype html><script>window.bad = true</script>",
       "index.html",
       signed,
     ),
     PreviewAssetReferenceError,
   );
   const queriedHtml = rewritePreviewHtmlAssetUrls(
-    '<script src="./client.js?v=1#entry"></script>',
+    '<!doctype html><script src="./client.js?v=1#entry"></script>',
     "index.html",
     signed,
   );

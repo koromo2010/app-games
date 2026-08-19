@@ -70,6 +70,65 @@ test("srcset, CSS import and url references use the same policy", () => {
   ]));
 });
 
+test("safe inline style references join the same reachable asset graph", () => {
+  const files = sdkPackageAssetFixture({
+    "index.html": `<!doctype html><html><head><style>
+      @import "./assets/theme.css";
+      .icon{background:url("./assets/icon.png")}
+    </style></head><body><script src="./client/main.js"></script></body></html>`,
+  });
+  assert.deepEqual(auditPreparedGamePackageAssets(files), {
+    valid: true,
+    findings: [],
+  });
+});
+
+test("inline style local references fail closed through package asset policy", () => {
+  const missing = codes(sdkPackageAssetFixture({
+    "index.html": "<!doctype html><style>.x{background:url('./assets/missing.png')}</style>",
+  }));
+  const outside = codes(sdkPackageAssetFixture({
+    "index.html": "<!doctype html><style>.x{background:url('../outside.png')}</style>",
+  }));
+  const browserPrivate = codes(sdkPackageAssetFixture({
+    "index.html": "<!doctype html><style>@import './source/app-set.ts';</style>",
+  }));
+  assert.ok(missing.includes("GAME_SDK_PACKAGE_ASSET_MISSING"));
+  assert.ok(outside.includes("GAME_SDK_PACKAGE_ASSET_OUTSIDE_ROOT"));
+  assert.ok(browserPrivate.includes("GAME_SDK_PACKAGE_ASSET_NOT_BROWSER_READABLE"));
+});
+
+test("inline style malformed and dynamic CSS are typed package findings", () => {
+  assert.ok(codes(sdkPackageAssetFixture({
+    "index.html": "<!doctype html><style>.x{color:red</style>",
+  })).includes("GAME_SDK_PACKAGE_INLINE_STYLE_PARSE_ERROR"));
+  assert.ok(codes(sdkPackageAssetFixture({
+    "index.html": "<!doctype html><style>.x{background:url(var(--asset))}</style>",
+  })).includes("GAME_SDK_PACKAGE_INLINE_STYLE_ASSET_INVALID"));
+});
+
+test("save-time HTML policy structurally rejects executable inline surfaces", () => {
+  const cases = [
+    ["<!doctype html><base href='./'>", "GAME_SDK_PACKAGE_BASE_ELEMENT_UNSUPPORTED"],
+    ["<!doctype html><script>window.bad=true</script>", "GAME_SDK_PACKAGE_INLINE_SCRIPT_UNSUPPORTED"],
+    ["<!doctype html><button onclick='bad()'>x</button>", "GAME_SDK_PACKAGE_EVENT_HANDLER_UNSUPPORTED"],
+    ["<!doctype html><p style='color:red'>x</p>", "GAME_SDK_PACKAGE_STYLE_ATTRIBUTE_UNSUPPORTED"],
+  ] as const;
+  for (const [html, expected] of cases) {
+    assert.ok(codes(sdkPackageAssetFixture({ "index.html": html })).includes(expected));
+  }
+});
+
+test("HTML comments and text that mention style syntax are not executable", () => {
+  const files = sdkPackageAssetFixture({
+    "index.html": "<!doctype html><p>&lt;style&gt; style= onclick=</p><!-- <style>.x{}</style> -->",
+  });
+  assert.deepEqual(auditPreparedGamePackageAssets(files), {
+    valid: true,
+    findings: [],
+  });
+});
+
 test("external, data and blob URLs are excluded", () => {
   const files = sdkPackageAssetFixture({
     "index.html": "<!doctype html><img src='https://example.test/a.png'><img src='data:image/png;base64,AA=='><script src='blob:test'></script>",

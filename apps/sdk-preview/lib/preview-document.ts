@@ -9,8 +9,9 @@ import {
 } from "@/lib/preset-runtime";
 import {
   isBrowserReadablePreviewAsset,
+  previewInlineStyleAssetPaths,
   PreviewAssetReferenceError,
-  rewritePreviewHtmlAssetUrls,
+  rewritePreviewHtmlDocument,
 } from "@/lib/preview-asset-rewriter";
 import { recordPreviewAssetTokenEvent } from "@/lib/preview-asset-token-observability";
 import {
@@ -18,6 +19,7 @@ import {
   packageAssetPath,
   previewAssetPath,
   previewContentSecurityPolicy,
+  previewInlineStyleHashes,
   type PreviewAssetSourceKind,
 } from "@/lib/preview-security";
 import {
@@ -27,11 +29,17 @@ import {
 
 const DOCUMENT_ASSET_PATH = "index.html";
 
-function previewDocumentHeaders(origin: string) {
+function previewDocumentHeaders(
+  origin: string,
+  inlineStyleHashes: readonly string[],
+) {
   return {
     "Content-Type": previewContentType(DOCUMENT_ASSET_PATH),
     "Cache-Control": "private, no-store",
-    "Content-Security-Policy": previewContentSecurityPolicy(origin),
+    "Content-Security-Policy": previewContentSecurityPolicy(
+      origin,
+      inlineStyleHashes,
+    ),
     "Cross-Origin-Resource-Policy": "cross-origin",
     "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
     "Referrer-Policy": "no-referrer",
@@ -127,24 +135,45 @@ export async function renderAuthorizedPreviewDocument({
     }
 
     const source = new TextDecoder().decode(content);
-    const rewritten = rewritePreviewHtmlAssetUrls(
+    const inlineStyleAssetPaths = previewInlineStyleAssetPaths(
+      source,
+      DOCUMENT_ASSET_PATH,
+    );
+    const inlineStyleAssetAvailability = await Promise.all(
+      inlineStyleAssetPaths.map(async (assetPath) => ({
+        assetPath,
+        content: await fetchPreviewAsset({
+          ...scope,
+          assetPath,
+          ...(sourceKind === "package" ? { sourceKind: "package" as const } : {}),
+        }),
+      })),
+    );
+    if (inlineStyleAssetAvailability.some((asset) => !asset.content)) {
+      throw new PreviewAssetReferenceError("INLINE_STYLE_ASSET_MISSING");
+    }
+    const rewritten = rewritePreviewHtmlDocument(
       source,
       DOCUMENT_ASSET_PATH,
       signedAssetUrl,
+      new Set(inlineStyleAssetAvailability.map((asset) => asset.assetPath)),
+    );
+    const inlineStyleHashes = previewInlineStyleHashes(
+      rewritten.inlineStyleContents,
     );
     const responseContent = sourceKind === "package"
       ? injectGameFieldsPackageClient(
-          rewritten,
+          rewritten.html,
           signedAssetUrl(GAME_FIELDS_PACKAGE_CLIENT_ASSET),
         )
       : injectGameFieldsPreset(
-          rewritten,
+          rewritten.html,
           signedAssetUrl(GAME_FIELDS_PRESET_ASSET),
         );
 
     return new Response(responseContent, {
       status: 200,
-      headers: previewDocumentHeaders(origin),
+      headers: previewDocumentHeaders(origin, inlineStyleHashes),
     });
   } catch (error) {
     if (error instanceof PreviewAssetReferenceError) {
