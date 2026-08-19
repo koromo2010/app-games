@@ -3836,3 +3836,29 @@ dev反映後はT-91 browser → T-90 → T-89 → T-26の順に実機確認す�
 
 - local candidateは利用者の明示承認なしに`develop`へpushしない。
 - Project Instructionsの後継版は、このGit policy candidateがremote `develop`へ到達した後に有効化する。
+
+## 2026-08-19 — T-118 報告inventory・索引耐障害化candidate
+
+### 利用者からの要望
+
+- 消失したreportについてproduction／developmentの本文、一覧索引、TTL、parse、environmentをread-only監査する。
+- 過去事象との比較、全inventory、failure再現、索引自己修復、最終更新順、report ID直接検索、environment fail-closed、production修復dry-runをlocal candidateとして検証する。
+
+### 判断
+
+- 一覧索引だけを報告存在判定の正本にせず、最大1,000件・最大100 pageの有界`SCAN`で本文inventoryを照合する。`KEYS`は使用しない。
+- 本文と索引の不整合、malformed本文、TTL異常、環境間ID重複を独立分類する。監査結果には自由記述やplayer識別子を複製しない。
+- 既存本文への正規mutationは、本文CASと索引の重複除去・先頭追加・trimを同じLua transactionで行う。read-only一覧と監査は自己修復writeを行わない。
+- SDK supportのservice authorizationへ期待環境を署名し、本体runtime環境と不一致ならbody parseやrate-limitより前に409でfail closedする。
+- production修復はdeterministicなdry-runだけを実装し、apply経路を提供しない。
+
+### 実施結果
+
+- report inventory監査、分類、安全な管理API response、report ID直接検索、最終更新順、索引自己修復を追加した。
+- 12種のfailure matrixにTTL異常と直接検索の回帰を加えた。
+- read-only CLI、repair plan、environment署名境界、運用正本を追加した。
+
+### 境界
+
+- live storage本体、索引、TTL、parseを観測できない場合は`NOT_OBSERVED`とし、推測で分類しない。
+- Redis write、report修復、状態変更、返信、product push、Deploymentはこのcandidateで行わない。

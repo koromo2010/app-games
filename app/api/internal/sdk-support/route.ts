@@ -30,6 +30,7 @@ import {
   normalizeSupportRequestId,
 } from "@/lib/support-request-contract";
 import { observabilityErrorCode } from "@/lib/observability";
+import { sdkSupportEnvironment } from "@/lib/storage-environment-guard";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -77,9 +78,24 @@ function replyText(value: unknown) {
 
 function authorize(request: Request) {
   try {
-    requireSdkServiceRequest(request);
+    requireSdkServiceRequest(request, {
+      expectedEnvironment: sdkSupportEnvironment(),
+    });
     return null;
-  } catch {
+  } catch (error) {
+    if (
+      error instanceof Error
+      && (
+        error.message === "SDK_SERVICE_ENVIRONMENT_MISMATCH"
+        || error.message === "APP_ENV_MISSING_OR_INVALID"
+        || error.message === "APP_ENV_VERCEL_ENV_MISMATCH"
+      )
+    ) {
+      return Response.json(
+        { error: "support_environment_mismatch" },
+        { status: 409 },
+      );
+    }
     return Response.json({ error: "forbidden" }, { status: 403 });
   }
 }
@@ -174,13 +190,13 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const denied = authorize(request);
+  if (denied) return denied;
   const telemetry = createRequestTelemetry(
     request,
     "/api/internal/sdk-support",
     { operation: "sdk-support" },
   );
-  const denied = authorize(request);
-  if (denied) return denied;
   const body = await request.json().catch(() => null) as {
     action?: unknown;
     playerId?: unknown;

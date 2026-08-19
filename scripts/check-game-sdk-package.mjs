@@ -124,6 +124,7 @@ import { GAME_SDK_VERSION, defineGameManifest } from "@game-fields/game-sdk";
 import { advanceGameSdkRoom, defineGameServerModule } from "@game-fields/game-sdk/runtime";
 import {
   createInitialGameSdkModuleProfile,
+  GAME_SDK_MODULE_IDS,
   nextGameSdkRoundStep,
   requiredGameSdkModuleIds,
 } from "@game-fields/game-sdk/modules";
@@ -264,7 +265,10 @@ const round = nextGameSdkRoundStep({
   completedPhase: "result",
 });
 if (round.round !== 2 || round.phase !== "playing" || round.complete) process.exit(1);
-if (requiredGameSdkModuleIds(createInitialGameSdkModuleProfile()).length !== 39) process.exit(1);
+if (
+  requiredGameSdkModuleIds(createInitialGameSdkModuleProfile()).length
+  !== GAME_SDK_MODULE_IDS.length - 4
+) process.exit(1);
 const contentSource = defineGameSdkContentSource({
   async drawWords(request) {
     return Array.from({ length: request.count }, (_, index) => ({

@@ -64,6 +64,8 @@ test("admin has one authenticated inbox for reports and contacts", () => {
   assert.match(panel, /setItems\(\[\]\)/);
   assert.match(panel, /古い件数は表示していません/);
   assert.match(panel, /role="alert"/);
+  assert.match(panel, /報告IDで直接検索/);
+  assert.match(panel, /recordFor\(right\)\.updatedAt/);
   assert.match(panel, /管理者通知を再送/);
   assert.equal(
     panel.match(/\{initialBody\(item\)\}/g)?.length,
@@ -74,6 +76,8 @@ test("admin has one authenticated inbox for reports and contacts", () => {
   assert.match(panel, /返信・追記/);
   assert.match(reportRoute, /requireFullSiteAdminSession/);
   assert.match(reportRoute, /user-report\.list/);
+  assert.match(reportRoute, /inspectUserReportStorage/);
+  assert.match(reportRoute, /safeUserReportStorageAudit/);
   assert.match(reportRoute, /USER_REPORTS_LOAD_FAILED/);
   assert.match(reportRoute, /requireRecentSiteAdminMfa/);
   const reportReplyRoute = reportRoute.slice(
