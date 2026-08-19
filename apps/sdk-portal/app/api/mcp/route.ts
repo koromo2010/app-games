@@ -260,6 +260,10 @@ function sdkToolErrorDetails(error: unknown) {
       layer: error.layer,
       correlationId: error.correlationId,
       operation: error.operation,
+      ...(error.buildStage ? { buildStage: error.buildStage } : {}),
+      ...(error.buildFailureCode ? { buildFailureCode: error.buildFailureCode } : {}),
+      ...(error.retryable === false ? { retryable: false as const } : {}),
+      ...(error.builderIdentity ? { builderIdentity: error.builderIdentity } : {}),
       ...(error.revision ? { revision: error.revision, partialState: "git_saved_db_not_updated" as const } : {}),
     };
   }

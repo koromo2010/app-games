@@ -1,0 +1,81 @@
+{
+  "gameId": "t114-publish-mock-fixture",
+  "title": "T-114 Publish Mock Fixture",
+  "description": "2人が手を選び、両者選択後に公開して勝敗または引き分けを表示する最小じゃんけんfixture",
+  "reviewEvidence": {
+    "representativeStates": [
+      {
+        "id": "initial-state",
+        "role": "additional",
+        "label": "両者が未選択でPLAYER 1の入力を待つ状態"
+      },
+      {
+        "id": "waiting-for-both",
+        "role": "in-progress",
+        "label": "PLAYER 1の提出後も手を秘匿しPLAYER 2を待つ状態"
+      },
+      {
+        "id": "choices-revealed",
+        "role": "additional",
+        "label": "両者の選択後に2つの手を同時公開した状態"
+      },
+      {
+        "id": "result-state",
+        "role": "completion",
+        "label": "勝者または引き分けを表示した状態"
+      },
+      {
+        "id": "reset-state",
+        "role": "additional",
+        "label": "リセット後に初期状態へ戻った状態"
+      }
+    ],
+    "visibleGameSpecificElements": [
+      "janken-board",
+      "two-player-choice-area",
+      "choice-buttons",
+      "result-banner"
+    ],
+    "primaryActions": [
+      {
+        "id": "player-one-choice",
+        "targetId": "player-one-controls",
+        "observableResultId": "waiting-for-both"
+      },
+      {
+        "id": "player-two-choice",
+        "targetId": "player-two-controls",
+        "observableResultId": "choices-revealed"
+      }
+    ],
+    "completionState": {
+      "stateId": "result-state",
+      "visibleResultIds": ["result-banner"]
+    },
+    "mockOnlyDataSource": "fixed-fixture",
+    "coreLoopSequence": [
+      "initial-state",
+      "player-one-choice",
+      "waiting-for-both",
+      "player-two-choice",
+      "choices-revealed",
+      "result-state"
+    ],
+    "resetAction": {
+      "id": "reset-prototype",
+      "targetId": "reset-button",
+      "observableResultId": "reset-state"
+    }
+  },
+  "settings": [
+    {
+      "key": "timeLimitSeconds",
+      "label": { "ja": "選択の制限時間", "en": "Choice time limit" },
+      "type": "select",
+      "defaultValue": 60,
+      "platformRole": "time-limit",
+      "options": [0, 30, 60, 90, 120],
+      "unit": { "ja": "秒", "en": "s" }
+    }
+  ]
+}

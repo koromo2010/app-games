@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>T-114 Publish Mock Fixture</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main id="game-slot" data-game-slot>
+      <section class="game-board" aria-labelledby="game-title" data-evidence="janken-board initial-state waiting-for-both choices-revealed result-state reset-state">
+        <p class="eyebrow">T-114 · TWO-PLAYER FIXTURE</p>
+        <h1 id="game-title">じゃんけん</h1>
+        <p class="game-status" data-game-status aria-live="polite">PLAYER 1 の手を選んでください</p>
+
+        <div class="players" data-evidence="two-player-choice-area">
+          <section class="player-card" aria-labelledby="player-one-title" data-evidence="player-one-controls choice-buttons player-one-choice">
+            <h2 id="player-one-title">PLAYER 1</h2>
+            <p class="hand" data-player-hand="0">未選択</p>
+            <div class="choice-row" aria-label="PLAYER 1 の手">
+              <button type="button" data-player="0" data-choice="rock">✊ グー</button>
+              <button type="button" data-player="0" data-choice="scissors">✌️ チョキ</button>
+              <button type="button" data-player="0" data-choice="paper">✋ パー</button>
+            </div>
+          </section>
+
+          <div class="versus" aria-hidden="true">VS</div>
+
+          <section class="player-card" aria-labelledby="player-two-title" data-evidence="player-two-controls player-two-choice">
+            <h2 id="player-two-title">PLAYER 2</h2>
+            <p class="hand" data-player-hand="1">未選択</p>
+            <div class="choice-row" aria-label="PLAYER 2 の手">
+              <button type="button" data-player="1" data-choice="rock" disabled>✊ グー</button>
+              <button type="button" data-player="1" data-choice="scissors" disabled>✌️ チョキ</button>
+              <button type="button" data-player="1" data-choice="paper" disabled>✋ パー</button>
+            </div>
+          </section>
+        </div>
+
+        <section class="result" data-game-result data-evidence="result-banner" hidden>
+          <strong data-result-label></strong>
+          <span>両者の手を公開しました</span>
+        </section>
+
+        <button id="reset-button" class="reset" type="button" data-game-action="reset" data-evidence="reset-prototype">
+          もう一度（リセット）
+        </button>
+      </section>
+    </main>
+    <aside data-module-runtime-evidence aria-label="SDK module runtime evidence"></aside>
+    <script src="./mock.js"></script>
+  </body>
+</html>

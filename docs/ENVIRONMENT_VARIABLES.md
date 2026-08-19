@@ -1,6 +1,6 @@
 # 環境変数管理台帳
 
-最終更新: 2026-08-07
+最終更新: 2026-08-19
 
 現在配置はこの文書、追加・変更・削除の進行中依頼は`config/environment-change-registry.json`を正本とする。実値、接続文字列、APIキー、パスワードはGitへ保存しない。Vercel、Neon、Upstash、Blob、各API提供元だけで管理する。
 
@@ -41,6 +41,7 @@
 | `GAME_FIELDS_INSTANCE_ID` | 配置未監査 |
 | `GAME_FIELDS_MANAGEMENT_TOKEN` | 配置未監査 |
 | `GAME_FIELDS_SDK_URL` | 配置未監査 |
+| `GAME_FIELDS_SOURCE_TREE_SHA` | 任意の非秘密build provenance。SDK Portalのprototype-build診断へGit treeを記録する場合だけ設定し、未設定・不正形式は`NOT_OBSERVED`として扱う |
 | `GAME_FIELDS_GITHUB_REPOSITORY` | `app-games` Productionだけ。未登録時は`koromo2010/app-games` |
 | `GAME_FIELDS_GITHUB_RELEASE_TOKEN` | `app-games` Productionだけ。2026-07-26登録済み。Sensitive、対象repositoryのContents read/writeに限定。新Deployment・実機確認は未実施 |
 | `LLM_SESSION_SECRET` | 配置未監査 |
@@ -63,7 +64,7 @@
 | `STORAGE_ALERT_THRESHOLD_PERCENT` | 配置未監査 |
 | `WORDWOLF_PAIR_COOLDOWN_DAYS` | 配置未監査 |
 
-Vercel／Next.jsが実行時に提供するSystem Variableとして、`NODE_ENV`、`NEXT_RUNTIME`、`VERCEL_ENV`、`VERCEL_GIT_COMMIT_REF`、`VERCEL_GIT_COMMIT_SHA`、`VERCEL_OIDC_TOKEN`、`VERCEL_PROJECT_NAME`、`VERCEL_REGION`もコードから参照する。これらはProject Variableとして手動追加しない。
+Vercel／Next.jsまたはNode.jsの実行環境が提供するSystem Variableとして、`LAMBDA_TASK_ROOT`、`NODE_ENV`、`NEXT_RUNTIME`、`NODE_PATH`、`VERCEL_ENV`、`VERCEL_GIT_COMMIT_REF`、`VERCEL_GIT_COMMIT_SHA`、`VERCEL_OIDC_TOKEN`、`VERCEL_PROJECT_NAME`、`VERCEL_REGION`もコードから参照する。`LAMBDA_TASK_ROOT`はSDK Portalの固定dependency resolverが配備root候補として読む。`NODE_PATH`はtrace-only検査が外部解決に依存していないことを確認するため一時的に解除する。これらはProject Variableとして手動追加しない。
 
 ## 環境構成
 

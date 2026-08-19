@@ -120,6 +120,7 @@ function dependencies(options: {
       build: async () => options.build ? options.build() : fakeBuild(),
       parseManifest: () => fakeManifest(),
       sourceHash: () => sourceHash,
+      recordBuildFailure: () => {},
       saveGit: async () => {
         gitWrites += 1;
         return options.saveGit ? options.saveGit() : revision;
@@ -147,17 +148,31 @@ test("same payload reuses an existing revision without a second Git or DB write"
 
 test("build failure reports a stable validation stage and performs no downstream write", async () => {
   const fixture = dependencies({ build: () => { throw new Error("esbuild secret stack"); } });
+  const telemetry: unknown[] = [];
+  const correlationId = "pmk-11111111111111111111";
   await assert.rejects(
-    publishMockPipeline(input, fixture.dependencies),
+    publishMockPipeline(input, {
+      ...fixture.dependencies,
+      createCorrelationId: () => correlationId,
+      recordBuildFailure: (event) => { telemetry.push(event); },
+    }),
     (error: unknown) => {
       assert.ok(error instanceof PublishMockPipelineError);
       assert.equal(error.code, "SDK_PROTOTYPE_BUILD_FAILED");
       assert.equal(error.layer, "validation");
       assert.equal(error.operation, "prototype-build");
+      assert.equal(error.correlationId, correlationId);
+      assert.equal(error.buildStage, "server-bundle");
+      assert.equal(error.buildFailureCode, "ESBUILD_COMPILE_FAILED");
+      assert.equal(error.retryable, false);
+      assert.match(error.builderIdentity ?? "", /^[a-f0-9]{64}$/);
+      assert.match(error.inputFingerprint?.manifestSha256 ?? "", /^[a-f0-9]{64}$/);
       assert.doesNotMatch(JSON.stringify(error), /secret|stack/);
       return true;
     },
   );
+  assert.equal(telemetry.length, 1);
+  assert.equal((telemetry[0] as { correlationId?: string }).correlationId, correlationId);
   assert.equal(fixture.gitWrites(), 0);
   assert.deepEqual(fixture.db.calls, []);
 });

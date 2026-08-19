@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "environment": "development",
+  "gameId": "t114-publish-mock-fixture",
+  "moduleProfileRevision": "4c029ae9-0eef-4b77-9625-b309d947dbcf",
+  "moduleContractDigest": "04a8d1f8ae6edb559c12d5717b738b29c9807cae928f0d5b62456393fbeb17f8",
+  "sdkPackageVersion": "0.2.0",
+  "sdkContractVersion": 2,
+  "required": [
+    "start-guard",
+    "phase-flow",
+    "collect-choice",
+    "secret-presentation",
+    "standard-outcome"
+  ],
+  "disabled": [
+    "rounds",
+    "turn-order",
+    "collect-text",
+    "vote",
+    "role-assignment",
+    "team-assignment"
+  ],
+  "available": [
+    "content-source",
+    "llm",
+    "playing-cards",
+    "drawing"
+  ],
+  "profileWritesPerformed": 0,
+  "confirmationWritesPerformed": 0
+}

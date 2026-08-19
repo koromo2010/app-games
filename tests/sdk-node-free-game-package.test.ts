@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { buildNodeFreeGamePackage } from "../apps/sdk-portal/lib/node-free-game-package.ts";
+import { PrototypeBuildError } from "../apps/sdk-portal/lib/prototype-builder-diagnostics.ts";
 import { myFirstGameManifest } from "../sdk/starter-template/src/manifest.ts";
 
 function starterFiles() {
@@ -54,12 +55,56 @@ test("Node-free builder creates a hash-pinned package from starter source", asyn
 test("Node-free builder rejects creator imports outside the public SDK", async () => {
   const files = starterFiles();
   files["source/server-module.ts"] = 'import "node:fs";\n' + files["source/server-module.ts"];
-  await assert.rejects(buildNodeFreeGamePackage({
-    gameId: "my-first-game",
-    manifest: myFirstGameManifest,
-    files,
-    moduleBinding,
-  }), /GAME_SDK_NODE_FREE_IMPORT_FORBIDDEN/);
+  await assert.rejects(
+    buildNodeFreeGamePackage({
+      gameId: "my-first-game",
+      manifest: myFirstGameManifest,
+      files,
+      moduleBinding,
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof PrototypeBuildError);
+      assert.equal(error.code, "IMPORT_FORBIDDEN");
+      assert.equal(error.stage, "dependency-resolution");
+      return true;
+    },
+  );
+});
+
+test("Node-free builder reports a closed source-not-found reason", async () => {
+  const files = starterFiles();
+  files["source/server-module.ts"] = 'import "./missing-module.js";\n' + files["source/server-module.ts"];
+  await assert.rejects(
+    buildNodeFreeGamePackage({
+      gameId: "my-first-game",
+      manifest: myFirstGameManifest,
+      files,
+      moduleBinding,
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof PrototypeBuildError);
+      assert.equal(error.code, "SOURCE_NOT_FOUND");
+      assert.equal(error.stage, "dependency-resolution");
+      return true;
+    },
+  );
+});
+
+test("Node-free builder reports a closed invalid-manifest reason", async () => {
+  await assert.rejects(
+    buildNodeFreeGamePackage({
+      gameId: "my-first-game",
+      manifest: {},
+      files: starterFiles(),
+      moduleBinding,
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof PrototypeBuildError);
+      assert.equal(error.code, "MANIFEST_INVALID");
+      assert.equal(error.stage, "input-validation");
+      return true;
+    },
+  );
 });
 
 test("Node-free builder bundles a card game using SDK data helpers and React card UI", async () => {

@@ -6,6 +6,10 @@ export type SdkToolErrorDetails = {
   operation?: string;
   revision?: string;
   partialState?: "git_saved_db_not_updated";
+  buildStage?: string;
+  buildFailureCode?: string;
+  retryable?: false;
+  builderIdentity?: string;
 };
 
 const SAFE_ERROR_PROJECTIONS = new Map<string, [string, SdkToolErrorDetails["layer"], string]>([

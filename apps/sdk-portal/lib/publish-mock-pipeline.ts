@@ -1,12 +1,23 @@
 import { createHash, randomUUID } from "node:crypto";
 import { appendModuleUsageReview } from "./module-usage-review.ts";
-import { buildNodeFreeGamePackage } from "./node-free-game-package.ts";
+import {
+  buildNodeFreeGamePackage,
+  PROTOTYPE_BUILDER_IDENTITY,
+} from "./node-free-game-package.ts";
 import { parseSdkMockPreviewManifest } from "./mock-preview-manifest.ts";
 import { saveMockFilesToGit } from "./mock-git-store.ts";
 import { ensureSdkSchema, sdkSql } from "./sdk-postgres.ts";
 import {
   sharedGameSourceSha256,
 } from "./module-authoring-contract.ts";
+import { recordPrototypeBuildFailure } from "./prototype-build-observability.ts";
+import {
+  createPrototypeBuildInputFingerprint,
+  PrototypeBuildError,
+  type PrototypeBuildFailureCode,
+  type PrototypeBuildInputFingerprint,
+  type PrototypeBuildStage,
+} from "./prototype-builder-diagnostics.ts";
 import type {
   GameSdkModuleBinding,
   GameSdkModuleUsageAudit,
@@ -48,6 +59,9 @@ export type PublishMockPipelineDependencies = {
   saveGit?: typeof saveMockFilesToGit;
   parseManifest?: typeof parseSdkMockPreviewManifest;
   sourceHash?: typeof sharedGameSourceSha256;
+  createCorrelationId?: () => string;
+  builderIdentity?: string;
+  recordBuildFailure?: typeof recordPrototypeBuildFailure;
 };
 
 export class PublishMockPipelineError extends Error {
@@ -56,6 +70,11 @@ export class PublishMockPipelineError extends Error {
   readonly operation: string;
   readonly correlationId: string;
   readonly revision?: string;
+  readonly buildStage?: PrototypeBuildStage;
+  readonly buildFailureCode?: PrototypeBuildFailureCode;
+  readonly retryable?: false;
+  readonly builderIdentity?: string;
+  readonly inputFingerprint?: PrototypeBuildInputFingerprint;
 
   constructor(input: {
     code: string;
@@ -63,14 +82,26 @@ export class PublishMockPipelineError extends Error {
     layer: "validation" | "store" | "handler";
     operation: string;
     revision?: string;
+    correlationId?: string;
+    buildStage?: PrototypeBuildStage;
+    buildFailureCode?: PrototypeBuildFailureCode;
+    retryable?: false;
+    builderIdentity?: string;
+    inputFingerprint?: PrototypeBuildInputFingerprint;
   }) {
     super(input.message);
     this.name = "PublishMockPipelineError";
     this.code = input.code;
     this.layer = input.layer;
     this.operation = input.operation;
-    this.correlationId = `pmk-${randomUUID().replaceAll("-", "").slice(0, 20)}`;
+    this.correlationId = input.correlationId
+      ?? `pmk-${randomUUID().replaceAll("-", "").slice(0, 20)}`;
     this.revision = input.revision;
+    this.buildStage = input.buildStage;
+    this.buildFailureCode = input.buildFailureCode;
+    this.retryable = input.retryable;
+    this.builderIdentity = input.builderIdentity;
+    this.inputFingerprint = input.inputFingerprint;
   }
 }
 
@@ -129,11 +160,20 @@ export async function publishMockPipeline(
   input: PublishMockPipelineInput,
   dependencies: PublishMockPipelineDependencies = {},
 ): Promise<PublishMockPipelineResult> {
+  const correlationId = (dependencies.createCorrelationId
+    ?? (() => `pmk-${randomUUID().replaceAll("-", "").slice(0, 20)}`))();
   const build = dependencies.build ?? buildNodeFreeGamePackage;
   const saveGit = dependencies.saveGit ?? saveMockFilesToGit;
   const parseManifest = dependencies.parseManifest ?? parseSdkMockPreviewManifest;
   const sourceHash = dependencies.sourceHash ?? sharedGameSourceSha256;
   const ensureSchema = dependencies.ensureSchema ?? ensureSdkSchema;
+  const builderIdentity = dependencies.builderIdentity ?? PROTOTYPE_BUILDER_IDENTITY;
+  const inputFingerprint = createPrototypeBuildInputFingerprint({
+    manifest: input.manifest,
+    files: input.files,
+    moduleUsage: input.usageAudit.moduleUsage,
+    moduleBinding: input.usageAudit.binding,
+  });
 
   let builtPrototype: Awaited<ReturnType<typeof build>>;
   try {
@@ -144,11 +184,33 @@ export async function publishMockPipeline(
       moduleBinding: input.usageAudit.binding,
     });
   } catch (error) {
+    const buildError = error instanceof PrototypeBuildError
+      ? error
+      : new PrototypeBuildError({
+        code: "ESBUILD_COMPILE_FAILED",
+        stage: "server-bundle",
+      });
+    try {
+      (dependencies.recordBuildFailure ?? recordPrototypeBuildFailure)({
+        correlationId,
+        error: buildError,
+        builderIdentity,
+        inputFingerprint,
+      });
+    } catch {
+      // Telemetry is best-effort and must not replace the closed build error.
+    }
     throw pipelineError({
       code: "SDK_PROTOTYPE_BUILD_FAILED",
       message: "prototype build failed.",
       layer: "validation",
       operation: "prototype-build",
+      correlationId,
+      buildStage: buildError.stage,
+      buildFailureCode: buildError.code,
+      retryable: false,
+      builderIdentity,
+      inputFingerprint,
     }, error);
   }
 
@@ -166,6 +228,7 @@ export async function publishMockPipeline(
       message: "prototype files failed preparation.",
       layer: "validation",
       operation: "prototype-file-preparation",
+      correlationId,
     }, error);
   }
   let manifest: ReturnType<typeof parseManifest>;
@@ -177,6 +240,7 @@ export async function publishMockPipeline(
       message: "prototype files failed preparation.",
       layer: "validation",
       operation: "prototype-file-preparation",
+      correlationId,
     }, error);
   }
 
@@ -190,6 +254,7 @@ export async function publishMockPipeline(
       message: "prototype database boundary is unavailable.",
       layer: "store",
       operation: "mock-revision-schema",
+      correlationId,
     }, error);
   }
 
@@ -202,6 +267,7 @@ export async function publishMockPipeline(
       message: "prototype database lookup failed.",
       layer: "store",
       operation: "mock-revision-lookup",
+      correlationId,
     }, error);
   }
 
@@ -219,6 +285,7 @@ export async function publishMockPipeline(
         message: "prototype Git revision could not be saved.",
         layer: "store",
         operation: "mock-revision-git-save",
+        correlationId,
       }, error);
     }
   }
@@ -229,6 +296,7 @@ export async function publishMockPipeline(
       message: "prototype Git revision was not returned.",
       layer: "store",
       operation: "mock-revision-git-save",
+      correlationId,
     });
   }
 
@@ -260,6 +328,7 @@ export async function publishMockPipeline(
           layer: "validation",
           operation: "mock-revision-update",
           revision,
+          correlationId,
         });
       }
     } catch (error) {
@@ -270,6 +339,7 @@ export async function publishMockPipeline(
         layer: "store",
         operation: "mock-revision-update",
         revision,
+        correlationId,
       }, error);
     }
   }

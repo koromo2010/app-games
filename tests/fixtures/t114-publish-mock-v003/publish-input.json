@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "fixtureId": "t114-publish-mock-fixture-v003",
+  "gameId": "t114-publish-mock-fixture",
+  "title": "T-114 Publish Mock Fixture",
+  "description": "2人が手を選び、両者選択後に公開して勝敗または引き分けを表示する最小じゃんけんfixture",
+  "manifestPath": "manifest.json",
+  "moduleUsagePath": "module-usage.json",
+  "profileBindingPath": "profile-binding.json",
+  "files": {
+    "index.html": "index.html",
+    "styles.css": "styles.css",
+    "mock.js": "mock.js",
+    "preview.json": "preview.json",
+    "source/app-set.ts": "source/app-set.ts",
+    "source/contracts.ts": "source/contracts.ts",
+    "source/manifest.ts": "source/manifest.ts",
+    "source/server-module.ts": "source/server-module.ts",
+    "source/game-client.tsx": "source/game-client.tsx",
+    "source/prototype-adapter.ts": "source/prototype-adapter.ts"
+  }
+}
