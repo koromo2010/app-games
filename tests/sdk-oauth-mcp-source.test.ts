@@ -17,6 +17,7 @@ test("SDK OAuth discovery requires authorization code with S256 PKCE", () => {
 
 test("SDK MCP challenges unauthenticated callers and scopes mock publication", () => {
   const mcp = read("apps/sdk-portal/app/api/mcp/route.ts");
+  const toolDefinitions = read("apps/sdk-portal/lib/sdk-mcp-tool-definitions.ts");
   const releaseProfile = read("apps/sdk-portal/lib/sdk-release-profile.ts");
   const packageStore = read("apps/sdk-portal/lib/game-package-store.ts");
   const mockPipeline = read("apps/sdk-portal/lib/publish-mock-pipeline.ts");
@@ -90,7 +91,8 @@ test("SDK MCP challenges unauthenticated callers and scopes mock publication", (
   assert.match(mcp, /body\.params\?\.protocolVersion/);
   assert.match(mcp, /listChanged: false/);
   assert.match(mcp, /readOnlyHint: true/);
-  assert.match(mcp, /title: "操作プロトタイプの検査・保存"/);
+  assert.match(mcp, /PUBLISH_MOCK_TOOL_DEFINITION/);
+  assert.match(toolDefinitions, /title: "操作プロトタイプの検査・保存"/);
   assert.match(mcp, /publishMockPipeline\(/);
   assert.match(mockPipeline, /parseManifest\(input\.gameId, prototypeFiles\)/);
   assert.match(mockPipeline, /SDK_PROTOTYPE_GIT_WRITE_FAILED/);

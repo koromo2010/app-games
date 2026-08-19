@@ -48,11 +48,16 @@ export type GameSdkModuleGroup =
   | "flow"
   | "resource";
 
+/** Canonical delivery values emitted by every module-contract projection. */
+export const GAME_SDK_MODULE_DELIVERIES = [
+  "platform-owned",
+  "sdk-helper",
+  "platform-resource",
+  "sdk-resource",
+] as const;
+
 export type GameSdkModuleDelivery =
-  | "platform-owned"
-  | "sdk-helper"
-  | "platform-resource"
-  | "sdk-resource";
+  (typeof GAME_SDK_MODULE_DELIVERIES)[number];
 
 export type GameSdkModuleAuthority =
   | "platform"

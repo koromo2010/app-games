@@ -1,0 +1,55 @@
+[
+  {
+    "id": "start-guard",
+    "delivery": "sdk-helper",
+    "status": "used",
+    "packageExports": ["@game-fields/game-sdk/modules"],
+    "publicApis": ["assertGameSdkCanStart"],
+    "sourcePaths": ["source/app-set.ts"],
+    "observableRuntimeMarker": ["t114-start-guard"],
+    "nonReimplementationEvidence": ["official-sdk:start-guard"]
+  },
+  {
+    "id": "phase-flow",
+    "delivery": "sdk-helper",
+    "status": "used",
+    "packageExports": ["@game-fields/game-sdk/modules"],
+    "publicApis": ["assertGameSdkPhase"],
+    "sourcePaths": ["source/app-set.ts"],
+    "observableRuntimeMarker": ["t114-phase-flow"],
+    "nonReimplementationEvidence": ["official-sdk:phase-flow"]
+  },
+  {
+    "id": "collect-choice",
+    "delivery": "sdk-helper",
+    "status": "used",
+    "packageExports": ["@game-fields/game-sdk/modules"],
+    "publicApis": [
+      "recordGameSdkParticipantValue",
+      "allGameSdkParticipantsComplete"
+    ],
+    "sourcePaths": ["source/app-set.ts"],
+    "observableRuntimeMarker": ["t114-collect-choice"],
+    "nonReimplementationEvidence": ["official-sdk:collect-choice"]
+  },
+  {
+    "id": "secret-presentation",
+    "delivery": "sdk-helper",
+    "status": "used",
+    "packageExports": ["@game-fields/game-sdk/modules"],
+    "publicApis": ["gameSdkPlayerSeat", "gameSdkPlayerSeats"],
+    "sourcePaths": ["source/app-set.ts"],
+    "observableRuntimeMarker": ["t114-secret-presentation"],
+    "nonReimplementationEvidence": ["official-sdk:secret-presentation"]
+  },
+  {
+    "id": "standard-outcome",
+    "delivery": "sdk-helper",
+    "status": "used",
+    "packageExports": ["@game-fields/game-sdk/modules"],
+    "publicApis": ["defineGameSdkStandardResult"],
+    "sourcePaths": ["source/app-set.ts"],
+    "observableRuntimeMarker": ["t114-standard-outcome"],
+    "nonReimplementationEvidence": ["official-sdk:standard-outcome"]
+  }
+]

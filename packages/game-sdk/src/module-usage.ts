@@ -1,8 +1,36 @@
-import type {
-  GameSdkModuleDefinition,
-  GameSdkModuleDelivery,
-  GameSdkModuleId,
+import {
+  GAME_SDK_MODULE_DELIVERIES,
+  type GameSdkModuleDefinition,
+  type GameSdkModuleDelivery,
+  type GameSdkModuleId,
 } from "./modules/profile.js";
+
+export const GAME_SDK_MODULE_USAGE_INPUT_DELIVERIES = [
+  ...GAME_SDK_MODULE_DELIVERIES,
+  "sdk-package",
+] as const;
+
+export type GameSdkModuleUsageInputDelivery =
+  (typeof GAME_SDK_MODULE_USAGE_INPUT_DELIVERIES)[number];
+
+/*
+ * `sdk-package` was exposed by the initial MCP schema. It remains an input-only
+ * compatibility alias for either SDK-backed canonical delivery. Audits and
+ * saved projections always use the module definition's canonical value.
+ */
+export function normalizeGameSdkModuleUsageDelivery(
+  submitted: unknown,
+  expected: GameSdkModuleDelivery,
+): GameSdkModuleDelivery | null {
+  if (submitted === expected) return expected;
+  if (
+    submitted === "sdk-package"
+    && (expected === "sdk-helper" || expected === "sdk-resource")
+  ) {
+    return expected;
+  }
+  return null;
+}
 
 export type GameSdkModuleBinding = {
   environment: "production" | "development";
@@ -38,7 +66,11 @@ export const GAME_SDK_MODULE_USAGE_ITEM_SCHEMA = {
   required: ["id", "delivery", "status", "packageExports", "publicApis", "sourcePaths", "observableRuntimeMarker", "nonReimplementationEvidence"],
   properties: {
     id: { type: "string" },
-    delivery: { type: "string", enum: ["platform-owned", "platform-resource", "sdk-package"] },
+    delivery: {
+      type: "string",
+      enum: GAME_SDK_MODULE_USAGE_INPUT_DELIVERIES,
+      description: "Canonical delivery value. sdk-package is a deprecated input-only alias accepted only for sdk-helper or sdk-resource modules.",
+    },
     status: { type: "string", enum: ["used", "delegated-to-platform"] },
     packageExports: { type: "array", items: { type: "string", minLength: 1 }, maxItems: 128, uniqueItems: true },
     publicApis: { type: "array", items: { type: "string", minLength: 1 }, maxItems: 128, uniqueItems: true },
@@ -158,8 +190,18 @@ export function validateGameSdkModuleUsage(input: {
     .join("\n");
   const normalizedRows = input.contract.requiredModules.map((definition) => {
     const raw = rows.find((row) => row.id === definition.id)!;
-    if (raw.delivery !== definition.delivery) {
-      fail("MODULE_USAGE_MATRIX_INCOMPLETE", definition.id, "delivery");
+    const delivery = normalizeGameSdkModuleUsageDelivery(
+      raw.delivery,
+      definition.delivery,
+    );
+    if (!delivery) {
+      fail(
+        "MODULE_USAGE_MATRIX_INCOMPLETE",
+        definition.id,
+        "delivery",
+        definition.delivery,
+        typeof raw.delivery === "string" ? raw.delivery : String(raw.delivery),
+      );
     }
     // The shorter names are the public MCP contract.  Legacy names remain
     // accepted on input while existing creators migrate.
@@ -251,7 +293,7 @@ export function validateGameSdkModuleUsage(input: {
     }
     return {
       id: definition.id,
-      delivery: definition.delivery,
+      delivery,
       status: raw.status as "used" | "delegated-to-platform",
       packageExportsUsed,
       publicApisUsed,

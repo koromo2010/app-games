@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 2,
+  "fixtureId": "t114-publish-mock-fixture-v002",
+  "creator": "test10-1",
+  "gameId": "t114-publish-mock-fixture",
+  "title": "T-114 Publish Mock Fixture v002",
+  "environmentIntent": "development",
+  "playMode": "online-room",
+  "minimumPlayers": 2,
+  "maximumPlayers": 2,
+  "contractState": "LOCAL_PROFILE_DELTA_PENDING",
+  "baseConfirmedModuleProfileRevision": "83c26b8c-18da-4933-a448-1c933ada1ea5",
+  "runtimeWritesPerformed": 0,
+  "moduleConfirmationsPerformed": 0,
+  "publishMockCallsPerformed": 0
+}

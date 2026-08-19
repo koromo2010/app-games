@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 2,
+  "fixtureId": "t114-publish-mock-fixture-v002",
+  "inventoryExcludes": ["fixture-manifest.json"],
+  "payloadFileCount": 14,
+  "payloadTotalUtf8Bytes": 32562,
+  "sourceFileCount": 6,
+  "sourceTotalUtf8Bytes": 16844,
+  "sharedGameSourceSha256": "0e18d89ca2888764741b71682f7a198b58ca4cdd8fabb34de6e0a77a82be8fe0",
+  "manifestIdentitySha256": "d0fea9ac1cd6a359325ec3051a9940cb940fce65aade22724c37bc9478d6b33c",
+  "expectedBuildArtifacts": [
+    "game-fields-package.json",
+    "index.html",
+    "mock.js",
+    "preview.json",
+    "server.bundle.js",
+    "source/app-set.ts",
+    "source/contracts.ts",
+    "source/game-client.tsx",
+    "source/manifest.ts",
+    "source/prototype-adapter.ts",
+    "source/server-module.ts",
+    "styles.css"
+  ],
+  "files": [
+    {
+      "path": "GAME_SPEC.md",
+      "utf8Bytes": 2066,
+      "sha256": "7818919710e04f8063135ace1052b12772e3750cd4491433d49595b872b294ae",
+      "gitBlob": "49b471bb98312ec3512366ce450ba0b3b77e066d",
+      "role": "game specification and local-only binding guard"
+    },
+    {
+      "path": "fixture.json",
+      "utf8Bytes": 531,
+      "sha256": "a0584c6e4c18ff946b0a86543d73bf4f7e4817983805614d766e9f3633cba44e",
+      "gitBlob": "cedc513a302e58369340e04d25564e29ec85ebc8",
+      "role": "fixture identity and zero-write counters"
+    },
+    {
+      "path": "mock/index.html",
+      "utf8Bytes": 2707,
+      "sha256": "930b1c716313f3657241d40389790380a3237dca068c4835b97ba1e64ef794bf",
+      "gitBlob": "b387d060aa5685b85c5aeb2aa885799d6b2219ed",
+      "role": "interactive game-only mock markup and runtime evidence slot"
+    },
+    {
+      "path": "mock/mock.js",
+      "utf8Bytes": 2220,
+      "sha256": "672d434c0155fe747a091b890ec35d5bc08971fdc4ede2b18aad3c30730330ed",
+      "gitBlob": "179d3a31f600e70e54f9b3c99f82665976f82b81",
+      "role": "standalone two-choice reveal and reset behavior"
+    },
+    {
+      "path": "mock/preview.json",
+      "utf8Bytes": 2293,
+      "sha256": "254de68fb15aa06feb3982c2ba68bd6baf7882d63d975c0fe2ae960b1dc2855c",
+      "gitBlob": "181fdf604361e18dc7eeb84383e99d9b7bb9a90c",
+      "role": "preview metadata and review evidence"
+    },
+    {
+      "path": "mock/styles.css",
+      "utf8Bytes": 1872,
+      "sha256": "17689175d2c99570711497e977b7d58863c6c26492b6a62fd89511631c30f6b9",
+      "gitBlob": "465e3fa22fdbae304a8bcbb4cd12ef0f452e5c7d",
+      "role": "responsive game presentation"
+    },
+    {
+      "path": "module-usage.json",
+      "utf8Bytes": 1864,
+      "sha256": "fedf8b7d32a3c36049f8d435da00f0d0795cc22fa9ec313cce3c9428ffcbea89",
+      "gitBlob": "e311f89433f8249938cc0ef65bab350c323be82a",
+      "role": "canonical five-module usage matrix"
+    },
+    {
+      "path": "profile-delta.json",
+      "utf8Bytes": 2165,
+      "sha256": "760c51cc7b83fa0f141a87a94c7e6517dd74ecab4ac03cceeecec16c126f9f6d",
+      "gitBlob": "dbb079c6416133fc52f24348d8bfed9daa4ae4dd",
+      "role": "future ten-module disable decisions with reasons"
+    },
+    {
+      "path": "source/app-set.ts",
+      "utf8Bytes": 7182,
+      "sha256": "0f35d2c702984ba587923050365251eba24e8d43b83a9aee674aeaa23a1cc541",
+      "gitBlob": "72066220c7d616f9e449adc32f63faf07f5402b9",
+      "role": "five-module SDK-backed state transitions and views"
+    },
+    {
+      "path": "source/contracts.ts",
+      "utf8Bytes": 1370,
+      "sha256": "ba1afef9395cf391b3e2b909cc69e0efd6e2b7bcb9a3e290ecb19a936383005f",
+      "gitBlob": "e6ac1787afd0c2bd2a4e2ef6ee7e222ecee8b49a",
+      "role": "typed game state command and view contracts"
+    },
+    {
+      "path": "source/game-client.tsx",
+      "utf8Bytes": 4123,
+      "sha256": "73cfd9d9e2f4f8adeee85966dca4a813f4f17f214c8c5e95649936618e76f3d1",
+      "gitBlob": "345df3ba203adda72e5ab36496a3a53c816e0497",
+      "role": "shared formal and prototype UI with rendered runtime evidence"
+    },
+    {
+      "path": "source/manifest.ts",
+      "utf8Bytes": 1198,
+      "sha256": "d1400c7e38cc5c8eb4578e18cb7078119c2c5b16fd6c187d53ee4bc765ef429a",
+      "gitBlob": "ddf217e5d00ce04d23945045c2c70c9816d3e462",
+      "role": "game manifest identity and settings"
+    },
+    {
+      "path": "source/prototype-adapter.ts",
+      "utf8Bytes": 2767,
+      "sha256": "bf8f40f95c945c5cfdcf6ff714acf04f622d67bcdee336f7ab2b30fdf1ee0531",
+      "gitBlob": "375a21d7fcd9ac2fe45606e078844afaf13a1722",
+      "role": "local deterministic two-player transition adapter"
+    },
+    {
+      "path": "source/server-module.ts",
+      "utf8Bytes": 204,
+      "sha256": "c03cccde4329336e569ca3eb3348b751c3cb753bc204ff2a4579f05cd402b952",
+      "gitBlob": "942d2237942a1ac6b30c6994d7f8da5181994434",
+      "role": "portable server module export"
+    }
+  ]
+}

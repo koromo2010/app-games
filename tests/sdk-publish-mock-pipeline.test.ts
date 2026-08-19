@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import * as nodeModule from "node:module";
 import test from "node:test";
 
@@ -33,6 +34,8 @@ const {
   publishMockPipeline,
   PublishMockPipelineError,
 } = await import("../apps/sdk-portal/lib/publish-mock-pipeline.ts");
+const { GAME_SDK_MODULE_CATALOG } = await import("@game-fields/game-sdk/modules");
+const { validateGameSdkModuleUsage } = await import("@game-fields/game-sdk/module-usage");
 
 const revision = "a".repeat(40);
 const sourceHash = "b".repeat(64);
@@ -215,4 +218,55 @@ test("stale confirmed module profile is typed and records the partial revision",
     },
   );
   assert.equal(fixture.gitWrites(), 1);
+});
+
+test("validated T-114 five-module audit reaches the injected persistence boundary exactly once", async () => {
+  const root = "tests/fixtures/t114-publish-mock-v002";
+  const requiredModuleIds = [
+    "start-guard",
+    "phase-flow",
+    "collect-choice",
+    "secret-presentation",
+    "standard-outcome",
+  ];
+  const disabledModuleIds = [
+    "rounds",
+    "turn-order",
+    "collect-text",
+    "vote",
+    "role-assignment",
+    "team-assignment",
+    "content-source",
+    "llm",
+    "playing-cards",
+    "drawing",
+  ];
+  const files = Object.fromEntries([
+    "app-set.ts",
+    "contracts.ts",
+    "game-client.tsx",
+    "manifest.ts",
+    "prototype-adapter.ts",
+    "server-module.ts",
+  ].map((file) => [
+    `source/${file}`,
+    readFileSync(`${root}/source/${file}`, "utf8"),
+  ]));
+  const audit = validateGameSdkModuleUsage({
+    contract: {
+      ...usageAudit.binding,
+      requiredModuleIds,
+      disabledModuleIds,
+      requiredModules: GAME_SDK_MODULE_CATALOG.filter((item) => requiredModuleIds.includes(item.id)),
+      disabledModules: GAME_SDK_MODULE_CATALOG.filter((item) => disabledModuleIds.includes(item.id)),
+    },
+    binding: usageAudit.binding,
+    moduleUsage: JSON.parse(readFileSync(`${root}/module-usage.json`, "utf8")),
+    files,
+  });
+  const fixture = dependencies();
+  const result = await publishMockPipeline({ ...input, files, usageAudit: audit }, fixture.dependencies);
+  assert.equal(result.saved, true);
+  assert.equal(fixture.gitWrites(), 1);
+  assert.deepEqual(fixture.db.calls, ["lookup", "update"]);
 });
