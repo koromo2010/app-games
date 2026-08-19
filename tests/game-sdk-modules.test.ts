@@ -32,7 +32,7 @@ test("initial mock profile requires every shared module", () => {
   );
 });
 
-test("only a human review path can disable reviewable modules with a reason", () => {
+test("only a human review path can disable reviewable modules without a required reason", () => {
   const initial = createInitialGameSdkModuleProfile();
   const reviewed = updateGameSdkModuleProfile(initial, {
     vote: {
@@ -53,14 +53,11 @@ test("only a human review path can disable reviewable modules with a reason", ()
     }),
     /GAME_SDK_MODULE_CHANGE_NOT_ALLOWED/,
   );
-  assert.throws(
-    () => updateGameSdkModuleProfile(initial, {
-      vote: {
-        mode: "disabled",
-        reason: "",
-      },
-    }),
-    /GAME_SDK_MODULE_REASON_REQUIRED/,
+  assert.deepEqual(
+    updateGameSdkModuleProfile(initial, {
+      vote: { mode: "disabled" },
+    }).vote,
+    { mode: "disabled" },
   );
 });
 

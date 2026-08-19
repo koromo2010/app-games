@@ -250,7 +250,7 @@ export function profileDiff(before: GameSdkModuleProfile, after: GameSdkModulePr
       id,
       before: previous,
       after: next,
-      reason: next.mode === "disabled" ? next.reason : null,
+      reason: next.mode === "disabled" ? next.reason ?? null : null,
     } satisfies ModuleProfileProposalDiff];
   });
 }

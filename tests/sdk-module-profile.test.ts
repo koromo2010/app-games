@@ -38,6 +38,18 @@ test("human review keeps required modules locked and records optional reasons", 
   });
   assert.equal(requiredGameSdkModuleIds(reviewed).length, GAME_SDK_MODULE_IDS.length - 2);
   assert.equal(reviewed.authentication.mode, "required");
+  assert.deepEqual(
+    updateGameSdkModuleProfile(initial, {
+      vote: { mode: "disabled" },
+    }).vote,
+    { mode: "disabled" },
+  );
+  assert.deepEqual(
+    normalizeGameSdkModuleProfile({
+      vote: { mode: "disabled", reason: "   " },
+    }).vote,
+    { mode: "disabled" },
+  );
   assert.throws(
     () => updateGameSdkModuleProfile(initial, {
       authorization: {
@@ -47,6 +59,15 @@ test("human review keeps required modules locked and records optional reasons", 
     }),
     /GAME_SDK_MODULE_CHANGE_NOT_ALLOWED/,
   );
+});
+
+test("owner module selection does not ask for a reason when a module is unchecked", () => {
+  const review = read(
+    "apps/sdk-portal/app/[instanceId]/games/[gameId]/GameModuleReview.tsx",
+  );
+  assert.doesNotMatch(review, /window\.prompt/);
+  assert.doesNotMatch(review, /必須から外す理由/);
+  assert.match(review, /\[id\]: \{ mode: "disabled" \}/);
 });
 
 test("only the linked human owner route can mutate module requirements", () => {

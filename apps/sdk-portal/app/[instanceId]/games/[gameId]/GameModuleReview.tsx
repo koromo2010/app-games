@@ -81,18 +81,9 @@ export function GameModuleReview({
       setMessage("");
       return;
     }
-    const current = profile[id] ?? { mode: "required" as const };
-    const reason = window.prompt(
-      `${definition.label}を必須から外す理由を入力してください。`,
-      current.mode === "disabled" ? current.reason : "",
-    )?.trim();
-    if (!reason) return;
     setProfile((value) => ({
       ...value,
-      [id]: {
-        mode: "disabled",
-        reason: reason.slice(0, 240),
-      },
+      [id]: { mode: "disabled" },
     }));
     setMessage("");
   };

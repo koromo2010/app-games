@@ -398,7 +398,7 @@ export const GAME_SDK_MODULE_CATALOG: readonly GameSdkModuleDefinition[] = [
 
 export type GameSdkModuleDecision =
   | { mode: "required" }
-  | { mode: "disabled"; reason: string };
+  | { mode: "disabled"; reason?: string };
 
 export type GameSdkModuleProfile = Record<
   GameSdkModuleId,
@@ -483,7 +483,9 @@ export function normalizeGameSdkModuleProfile(
     const reason = typeof candidate.reason === "string"
       ? candidate.reason.trim().slice(0, 240)
       : "";
-    if (reason) profile[definition.id] = { mode: "disabled", reason };
+    profile[definition.id] = reason
+      ? { mode: "disabled", reason }
+      : { mode: "disabled" };
   }
   return profile;
 }
@@ -524,8 +526,9 @@ export function updateGameSdkModuleProfile(
     const reason = typeof decision.reason === "string"
       ? decision.reason.trim().slice(0, 240)
       : "";
-    if (!reason) throw new Error("GAME_SDK_MODULE_REASON_REQUIRED");
-    profile[id] = { mode: "disabled", reason };
+    profile[id] = reason
+      ? { mode: "disabled", reason }
+      : { mode: "disabled" };
   }
   return profile;
 }

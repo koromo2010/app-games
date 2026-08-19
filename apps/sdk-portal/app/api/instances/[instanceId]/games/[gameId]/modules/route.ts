@@ -172,8 +172,7 @@ export async function PATCH(
       );
     }
     if (
-      code === "GAME_SDK_MODULE_REASON_REQUIRED"
-      || code === "GAME_SDK_INVALID_MODULE_DECISION"
+      code === "GAME_SDK_INVALID_MODULE_DECISION"
       || code === "GAME_SDK_UNKNOWN_MODULE"
       || code === "GAME_SDK_MODULE_UPDATES_REQUIRED"
     ) {

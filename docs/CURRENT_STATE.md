@@ -168,7 +168,8 @@ Room API、Redis、active Room復帰、戦績・結果保存を使用しない�
 portable server、actor別View、復帰を扱う。既存RoomのrevisionとURL指定revisionが異なる場合も、
 Previewへ遷移・fallbackせず正式Room上で明示選択を求める。MCPの`packagePreviewUrl`は
 `view=preview`を含む固定revision URLを返し、Runtime packageは既存revisionを上書きせず、
-内容変更時に新revisionとして追加する。
+内容変更時に新revisionとして追加する。共通モジュール設定では、選択可能なmoduleをチェック解除
+するだけで未使用へ変更でき、理由入力は必須にしない。既存の理由付きprofileは互換保持する。
 
 formal package Roomは作成時の`runtimeContract.packageRevision`を不変条件として保持し、
 すべてのRoom Snapshotと一覧へそのrevisionを返す。active Room復帰時にURL指定revisionと
