@@ -1,6 +1,10 @@
 import {
+  analyzeGamePackageHtmlDocument,
+  GamePackageHtmlPolicyError,
   isBrowserReadableGamePackageAsset,
   normalizeGamePackageAssetReference,
+  rewriteGamePackageHtmlDocument,
+  type GamePackageDocumentReferenceContext,
 } from "@game-fields/sdk-package-assets";
 
 const GAME_FIELDS_PRESET_ASSET = "game-fields/preset.js";
@@ -12,11 +16,27 @@ const JAVASCRIPT_LOCAL_ASSET_REFERENCE = new RegExp(
 );
 
 export class PreviewAssetReferenceError extends Error {
-  constructor() {
-    super("PREVIEW_ASSET_REFERENCE_INVALID");
+  readonly code: PreviewAssetReferenceErrorCode;
+
+  constructor(code: PreviewAssetReferenceErrorCode = "PREVIEW_ASSET_REFERENCE_INVALID") {
+    super(code);
     this.name = "PreviewAssetReferenceError";
+    this.code = code;
   }
 }
+
+export type PreviewAssetReferenceErrorCode =
+  | "PREVIEW_ASSET_REFERENCE_INVALID"
+  | "HTML_PARSE_ERROR"
+  | "BASE_ELEMENT_UNSUPPORTED"
+  | "INLINE_SCRIPT_UNSUPPORTED"
+  | "EVENT_HANDLER_UNSUPPORTED"
+  | "STYLE_ATTRIBUTE_UNSUPPORTED"
+  | "INLINE_STYLE_PARSE_ERROR"
+  | "INLINE_STYLE_ASSET_OUTSIDE_ROOT"
+  | "INLINE_STYLE_ASSET_INVALID"
+  | "INLINE_STYLE_ASSET_MISSING"
+  | "INLINE_STYLE_ASSET_NOT_BROWSER_READABLE";
 
 function normalizeAssetPath(parts: readonly string[]) {
   if (parts.length === 0 || parts.length > 20) return null;
@@ -63,34 +83,116 @@ export function isBrowserReadablePreviewAsset(
   return isBrowserReadableGamePackageAsset(assetPath);
 }
 
+function resolvedReference(
+  reference: string,
+  parentAssetPath: string,
+  context: GamePackageDocumentReferenceContext = "html-attribute",
+) {
+  const local = normalizeGamePackageAssetReference(parentAssetPath, reference);
+  if (!local) return null;
+  if (local.outside) {
+    throw new PreviewAssetReferenceError(
+      context === "inline-style" && local.path
+        ? "INLINE_STYLE_ASSET_OUTSIDE_ROOT"
+        : context === "inline-style"
+          ? "INLINE_STYLE_ASSET_INVALID"
+          : "PREVIEW_ASSET_REFERENCE_INVALID",
+    );
+  }
+  if (!normalizeAssetPath(local.path.split("/"))) {
+    throw new PreviewAssetReferenceError(
+      context === "inline-style"
+        ? "INLINE_STYLE_ASSET_INVALID"
+        : "PREVIEW_ASSET_REFERENCE_INVALID",
+    );
+  }
+  if (!/(?:^|\/)[^/]+\.[A-Za-z0-9]{1,8}$/.test(local.path)) {
+    if (context === "inline-style") {
+      throw new PreviewAssetReferenceError("INLINE_STYLE_ASSET_INVALID");
+    }
+    return null;
+  }
+  if (!isBrowserReadableGamePackageAsset(local.path)) {
+    throw new PreviewAssetReferenceError(
+      context === "inline-style"
+        ? "INLINE_STYLE_ASSET_NOT_BROWSER_READABLE"
+        : "PREVIEW_ASSET_REFERENCE_INVALID",
+    );
+  }
+  return local;
+}
+
 function signedReference(
   reference: string,
   parentAssetPath: string,
   signedAssetUrl: (assetPath: string) => string,
+  context: GamePackageDocumentReferenceContext = "html-attribute",
+  availableInlineStyleAssetPaths?: ReadonlySet<string>,
 ) {
-  const local = normalizeGamePackageAssetReference(parentAssetPath, reference);
+  const local = resolvedReference(reference, parentAssetPath, context);
   if (!local) return reference;
-  if (local.outside || !normalizeAssetPath(local.path.split("/"))) {
-    throw new PreviewAssetReferenceError();
-  }
-  if (!/(?:^|\/)[^/]+\.[A-Za-z0-9]{1,8}$/.test(local.path)) {
-    return reference;
-  }
-  if (!isBrowserReadableGamePackageAsset(local.path)) {
-    throw new PreviewAssetReferenceError();
+  if (
+    context === "inline-style"
+    && !availableInlineStyleAssetPaths?.has(local.path)
+  ) {
+    throw new PreviewAssetReferenceError("INLINE_STYLE_ASSET_MISSING");
   }
   return `${signedAssetUrl(local.path)}${local.fragment}`;
 }
 
-function rejectInlineExecutableContent(html: string) {
-  if (
-    /<base\b/i.test(html)
-    || /<style\b/i.test(html)
-    || /\sstyle\s*=/i.test(html)
-    || /\son[a-z]+\s*=/i.test(html)
-    || /<script\b(?![^>]*\bsrc\s*=)[^>]*>/i.test(html)
-  ) {
-    throw new PreviewAssetReferenceError();
+function policyError(error: unknown): never {
+  if (error instanceof PreviewAssetReferenceError) throw error;
+  if (error instanceof GamePackageHtmlPolicyError) {
+    throw new PreviewAssetReferenceError(error.code);
+  }
+  throw error;
+}
+
+export function previewInlineStyleAssetPaths(
+  html: string,
+  documentAssetPath: string,
+) {
+  try {
+    const analysis = analyzeGamePackageHtmlDocument(html, documentAssetPath);
+    if (analysis.issues[0]) {
+      throw new GamePackageHtmlPolicyError(analysis.issues[0]);
+    }
+    const paths = new Set<string>();
+    for (const reference of analysis.references) {
+      if (reference.context !== "inline-style") continue;
+      const local = resolvedReference(
+        reference.reference,
+        reference.parent,
+        reference.context,
+      );
+      if (local) paths.add(local.path);
+    }
+    return [...paths].sort();
+  } catch (error) {
+    policyError(error);
+  }
+}
+
+export function rewritePreviewHtmlDocument(
+  html: string,
+  documentAssetPath: string,
+  signedAssetUrl: (assetPath: string) => string,
+  availableInlineStyleAssetPaths: ReadonlySet<string> = new Set(),
+) {
+  try {
+    return rewriteGamePackageHtmlDocument(
+      html,
+      documentAssetPath,
+      (reference) => signedReference(
+        reference.reference,
+        reference.parent,
+        signedAssetUrl,
+        reference.context,
+        availableInlineStyleAssetPaths,
+      ),
+    );
+  } catch (error) {
+    policyError(error);
   }
 }
 
@@ -98,34 +200,14 @@ export function rewritePreviewHtmlAssetUrls(
   html: string,
   documentAssetPath: string,
   signedAssetUrl: (assetPath: string) => string,
+  availableInlineStyleAssetPaths: ReadonlySet<string> = new Set(),
 ) {
-  rejectInlineExecutableContent(html);
-  let output = html.replace(
-    /(\s(?:src|href|poster)\s*=\s*)(["'])([^"']+)\2/gi,
-    (_match, prefix: string, quote: string, reference: string) => (
-      `${prefix}${quote}${signedReference(
-        reference,
-        documentAssetPath,
-        signedAssetUrl,
-      )}${quote}`
-    ),
-  );
-  output = output.replace(
-    /(\ssrcset\s*=\s*)(["'])([^"']+)\2/gi,
-    (_match, prefix: string, quote: string, value: string) => {
-      const rewritten = value.split(",").map((candidate) => {
-        const match = candidate.trim().match(/^(\S+)([\s\S]*)$/);
-        if (!match) return candidate;
-        return `${signedReference(
-          match[1],
-          documentAssetPath,
-          signedAssetUrl,
-        )}${match[2]}`;
-      }).join(", ");
-      return `${prefix}${quote}${rewritten}${quote}`;
-    },
-  );
-  return output;
+  return rewritePreviewHtmlDocument(
+    html,
+    documentAssetPath,
+    signedAssetUrl,
+    availableInlineStyleAssetPaths,
+  ).html;
 }
 
 export function rewritePreviewCssAssetUrls(

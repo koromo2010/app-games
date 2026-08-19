@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import type { SdkPreviewGrant } from "@game-fields/sdk-preview-auth";
 
 const PREVIEW_ASSET_TOKEN_AUDIENCE = "game-fields-preview-assets";
@@ -305,10 +305,55 @@ export function previewExchangeContentSecurityPolicy(
   ].join("; ");
 }
 
-export function previewContentSecurityPolicy(assetOrigin?: string) {
+const PREVIEW_STYLE_HASH_PATTERN = /^sha256-[A-Za-z0-9+/]{43}=$/;
+
+export class PreviewCspHashGenerationError extends Error {
+  readonly code = "CSP_HASH_GENERATION_FAILED";
+
+  constructor() {
+    super("CSP_HASH_GENERATION_FAILED");
+    this.name = "PreviewCspHashGenerationError";
+  }
+}
+
+export function previewInlineStyleHash(content: string) {
+  try {
+    return `sha256-${createHash("sha256").update(content, "utf8").digest("base64")}`;
+  } catch {
+    throw new PreviewCspHashGenerationError();
+  }
+}
+
+export function previewInlineStyleHashes(contents: readonly string[]) {
+  try {
+    return [...new Set(contents.map(previewInlineStyleHash))].sort();
+  } catch {
+    throw new PreviewCspHashGenerationError();
+  }
+}
+
+function validatedPreviewStyleHashes(hashes: readonly string[]) {
+  if (hashes.some((hash) => !PREVIEW_STYLE_HASH_PATTERN.test(hash))) {
+    throw new PreviewCspHashGenerationError();
+  }
+  return [...new Set(hashes)].sort();
+}
+
+export function previewContentSecurityPolicy(
+  assetOrigin?: string,
+  inlineStyleHashes: readonly string[] = [],
+) {
   const ancestors = configuredFrameAncestors();
   const explicitAssetOrigin = configuredPreviewOrigin(assetOrigin);
   const assetSource = explicitAssetOrigin ?? "'none'";
+  const styleHashes = validatedPreviewStyleHashes(inlineStyleHashes);
+  const styleSources = [
+    ...(explicitAssetOrigin ? [explicitAssetOrigin] : []),
+    ...styleHashes.map((hash) => `'${hash}'`),
+  ];
+  const styleSource = styleSources.length > 0
+    ? styleSources.join(" ")
+    : "'none'";
   return [
     "default-src 'none'",
     "base-uri 'none'",
@@ -316,7 +361,9 @@ export function previewContentSecurityPolicy(assetOrigin?: string) {
     `form-action ${assetSource}`,
     "connect-src 'none'",
     `script-src ${assetSource}`,
-    `style-src ${assetSource}`,
+    `style-src ${styleSource}`,
+    `style-src-elem ${styleSource}`,
+    "style-src-attr 'none'",
     `img-src ${assetSource} data: blob:`,
     `font-src ${assetSource} data:`,
     `media-src ${assetSource} blob:`,
