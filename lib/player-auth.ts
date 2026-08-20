@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { loadStoredPlayerSession } from "@/lib/player-store";
+import { touchPlayerAccountActivity } from "@/lib/player-account-store";
 import {
   authenticatedPlayerIdFromCookieStore,
   createPlayerAuthToken,
@@ -44,6 +45,7 @@ export async function getAuthenticatedPlayerId() {
 export async function requireAuthenticatedPlayerId() {
   const playerId = await getAuthenticatedPlayerId();
   if (!playerId) throw new Error("PLAYER_AUTH_REQUIRED");
+  await touchPlayerAccountActivity(playerId).catch(() => undefined);
   return playerId;
 }
 
@@ -55,6 +57,7 @@ export async function getAuthenticatedPlayer() {
 export async function requireAuthenticatedPlayer() {
   const player = await getAuthenticatedPlayer();
   if (!player?.id) throw new Error("PLAYER_AUTH_REQUIRED");
+  await touchPlayerAccountActivity(player.id).catch(() => undefined);
   return player as typeof player & { id: string };
 }
 

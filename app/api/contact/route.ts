@@ -14,6 +14,7 @@ import {
   observabilityErrorCode,
 } from "@/lib/observability";
 import { getAuthenticatedPlayerId } from "@/lib/player-auth";
+import { touchPlayerAccountActivity } from "@/lib/player-account-store";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
 import {
   SupportTextValidationError,
@@ -64,6 +65,7 @@ export async function POST(request: Request) {
     }, {
       contactId: `contact_${requestId}`,
     });
+    if (playerId) await touchPlayerAccountActivity(playerId).catch(() => undefined);
     const contact = await loadContactMessage(saved.id);
     if (!contact) throw new Error("CONTACT_MESSAGE_SAVE_FAILED");
     const threadUrl = new URL("/contact/thread", request.url);

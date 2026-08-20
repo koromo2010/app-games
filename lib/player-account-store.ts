@@ -16,12 +16,22 @@ import {
   savePostgresPlayerAccount,
   updatePostgresPlayerAccountProfile,
   listExpiredPostgresPlayerAccountIds,
+  countPostgresUnverifiedAccountsMissingActivity,
   deletePostgresPlayerAccount,
 } from "@/lib/player-account-postgres-store";
 import { usesStrictAppDatabase } from "@/lib/player-account-environment";
 import { hasPlayerAccountEmailOwnerConflict } from "@/lib/player-account-migration";
 import { legalConsentIsCurrent } from "@/lib/legal";
-import { unverifiedAccountIsExpired, unverifiedPlayerAccountRetentionMs } from "@/lib/player-account-retention";
+import {
+  playerAccountHasReliableActivity,
+  unverifiedAccountIsExpired,
+  unverifiedPlayerAccountRetentionMs,
+} from "@/lib/player-account-retention";
+import {
+  nextPlayerAccountActivityAt,
+  normalizePlayerAccountActivityAt,
+  playerAccountActivityTouchDue,
+} from "@/lib/player-account-activity";
 import { deletePlayerDependentData } from "@/lib/player-data-deletion";
 import { normalizeAppLocale, type AppLocale } from "@/lib/app-locale";
 import { ensurePlayerAccountSession } from "@/lib/player-account-session";
@@ -56,6 +66,7 @@ export type PlayerAccount = {
   privacyVersion: string | null;
   createdAt: number;
   updatedAt: number;
+  lastActivityAt: number | null;
 };
 
 export type PlayerAccountAuthInput = {
@@ -143,6 +154,7 @@ function normalizeAccount(value: unknown): PlayerAccount | null {
     privacyVersion: typeof parsed.privacyVersion === "string" ? parsed.privacyVersion : null,
     createdAt: typeof parsed.createdAt === "number" ? parsed.createdAt : Date.now(),
     updatedAt: typeof parsed.updatedAt === "number" ? parsed.updatedAt : Date.now(),
+    lastActivityAt: normalizePlayerAccountActivityAt(parsed.lastActivityAt),
   };
 }
 
@@ -167,19 +179,42 @@ async function loadRedisAccountByEmail(email: string) {
 }
 
 async function mirrorAccountToRedis(account: PlayerAccount) {
+  const accountJson = JSON.stringify(account);
+  const preserveActivityScript = [
+    "local next = cjson.decode(ARGV[1])",
+    "local storedRaw = redis.call('GET', KEYS[1])",
+    "if storedRaw then",
+    "  local ok, stored = pcall(cjson.decode, storedRaw)",
+    "  if ok and type(stored) == 'table' then",
+    "    local storedActivity = tonumber(stored.lastActivityAt) or 0",
+    "    local nextActivity = tonumber(next.lastActivityAt) or 0",
+    "    if storedActivity > nextActivity then next.lastActivityAt = stored.lastActivityAt end",
+    "  end",
+    "end",
+    "redis.call('SET', KEYS[1], cjson.encode(next))",
+    "if #KEYS == 2 then redis.call('SET', KEYS[2], ARGV[2]) end",
+    "return 1",
+  ].join("; ");
+
   if (account.email) {
     await redisCommand<number>([
       "EVAL",
-      "redis.call('SET',KEYS[1],ARGV[1]); redis.call('SET',KEYS[2],ARGV[2]); return 1",
+      preserveActivityScript,
       "2",
       accountKey(account.loginName),
       playerAccountEmailKey(account.email),
-      JSON.stringify(account),
+      accountJson,
       account.loginName,
     ]);
     return;
   }
-  await redisCommand<"OK">(["SET", accountKey(account.loginName), JSON.stringify(account)]);
+  await redisCommand<number>([
+    "EVAL",
+    preserveActivityScript,
+    "1",
+    accountKey(account.loginName),
+    accountJson,
+  ]);
 }
 
 async function loadAccount(name: string) {
@@ -200,6 +235,47 @@ async function loadAccount(name: string) {
     await savePostgresPlayerAccount(legacy).catch(() => undefined);
   }
   return legacy;
+}
+
+async function loadPlayerAccountForActivity(playerId: string) {
+  if (isPostgresConfigured()) {
+    try {
+      const stored = await loadPostgresPlayerAccountByPlayerId(playerId);
+      if (stored) return normalizeAccount(stored);
+      if (usesStrictAppDatabase()) return null;
+    } catch (error) {
+      if (usesStrictAppDatabase()) throw error;
+    }
+  }
+
+  const session = await loadStoredPlayerSession(playerId);
+  if (!session) return null;
+  const legacy = await loadRedisAccount(session.name);
+  return legacy?.playerId === playerId ? legacy : null;
+}
+
+/**
+ * Records only server-observed authenticated activity. The persisted value is
+ * monotonic and the daily throttle keeps normal polling from becoming an
+ * unbounded account write stream.
+ */
+export async function touchPlayerAccountActivity(
+  playerIdInput: string,
+  now = Date.now(),
+) {
+  const playerId = playerIdInput.trim();
+  if (!playerId) return { touched: false, lastActivityAt: null };
+  const account = await loadPlayerAccountForActivity(playerId);
+  if (!account) return { touched: false, lastActivityAt: null };
+  if (!playerAccountActivityTouchDue(account.lastActivityAt, now)) {
+    return { touched: false, lastActivityAt: account.lastActivityAt };
+  }
+
+  const lastActivityAt = nextPlayerAccountActivityAt(account.lastActivityAt, now);
+  const activeAccount: PlayerAccount = { ...account, lastActivityAt };
+  if (isPostgresConfigured()) await savePostgresPlayerAccount(activeAccount);
+  if (!usesStrictAppDatabase()) await mirrorAccountToRedis(activeAccount);
+  return { touched: true, lastActivityAt };
 }
 
 async function accountSession(account: PlayerAccount): Promise<PlayerSession> {
@@ -251,6 +327,7 @@ export async function registerPlayerAccount(input: PlayerAccountAuthInput) {
     privacyVersion: input.privacyVersion!,
     createdAt: now,
     updatedAt: now,
+    lastActivityAt: now,
   };
 
   if (isPostgresConfigured()) {
@@ -310,7 +387,8 @@ export async function loginPlayerAccount(input: PlayerAccountAuthInput) {
     throw new Error("PLAYER_ACCOUNT_INVALID_CREDENTIALS");
   }
 
-  const activeAccount = { ...account, updatedAt: Date.now() };
+  const now = Date.now();
+  const activeAccount = { ...account, updatedAt: now, lastActivityAt: now };
   if (isPostgresConfigured()) await savePostgresPlayerAccount(activeAccount);
   if (!usesStrictAppDatabase()) await mirrorAccountToRedis(activeAccount).catch(() => undefined);
   return accountSession(activeAccount);
@@ -385,6 +463,7 @@ export async function changePlayerAccountPassword(
     passwordHash: hashPassword(input.newPassword, passwordSalt),
     passwordSalt,
     updatedAt: Date.now(),
+    lastActivityAt: Date.now(),
   };
   if (isPostgresConfigured()) await savePostgresPlayerAccount(updatedAccount);
   if (!usesStrictAppDatabase()) await mirrorAccountToRedis(updatedAccount).catch(() => undefined);
@@ -394,9 +473,14 @@ export async function changePlayerAccountPassword(
 export async function deleteExpiredUnverifiedPlayerAccounts(now = Date.now()) {
   const cutoff = now - unverifiedPlayerAccountRetentionMs;
   let postgresDeleted = 0;
+  let postgresProtectedMissingActivity = 0;
   const cleanedPlayerIds = new Set<string>();
   if (isPostgresConfigured()) {
-    const expiredPlayerIds = await listExpiredPostgresPlayerAccountIds(cutoff);
+    const [expiredPlayerIds, protectedCount] = await Promise.all([
+      listExpiredPostgresPlayerAccountIds(cutoff),
+      countPostgresUnverifiedAccountsMissingActivity(),
+    ]);
+    postgresProtectedMissingActivity = protectedCount;
     for (const playerId of expiredPlayerIds) {
       await deletePlayerDependentData(playerId);
       cleanedPlayerIds.add(playerId);
@@ -406,6 +490,7 @@ export async function deleteExpiredUnverifiedPlayerAccounts(now = Date.now()) {
 
   let cursor = "0";
   let redisDeleted = 0;
+  let redisProtectedMissingActivity = 0;
   do {
     const page = await redisCommand<[string, string[]]>(["SCAN", cursor, "MATCH", `${accountKeyPrefix}*`, "COUNT", "100"]);
     cursor = page[0];
@@ -414,6 +499,10 @@ export async function deleteExpiredUnverifiedPlayerAccounts(now = Date.now()) {
       if (!raw) continue;
       try {
         const account = normalizeAccount(JSON.parse(raw));
+        if (account && !account.email && !playerAccountHasReliableActivity(account)) {
+          redisProtectedMissingActivity += 1;
+          continue;
+        }
         if (!account || !unverifiedAccountIsExpired(account, now)) continue;
         if (!cleanedPlayerIds.has(account.playerId)) {
           await deletePlayerDependentData(account.playerId);
@@ -432,7 +521,13 @@ export async function deleteExpiredUnverifiedPlayerAccounts(now = Date.now()) {
     }
   } while (cursor !== "0");
 
-  return { cutoff, postgresDeleted, redisDeleted };
+  return {
+    cutoff,
+    postgresDeleted,
+    redisDeleted,
+    postgresProtectedMissingActivity,
+    redisProtectedMissingActivity,
+  };
 }
 
 export type PlayerEmailVerificationCandidate = {
@@ -532,6 +627,7 @@ export async function confirmPlayerAccountEmail(
     email,
     emailVerifiedAt: Date.now(),
     updatedAt: Date.now(),
+    lastActivityAt: Date.now(),
   };
 
   if (isPostgresConfigured()) {
@@ -653,6 +749,7 @@ export async function resetPlayerAccountPassword(loginName: string, password: st
     passwordHash: hashPassword(password, passwordSalt),
     passwordSalt,
     updatedAt: Date.now(),
+    lastActivityAt: Date.now(),
   };
   return { account, updatedAccount };
 }

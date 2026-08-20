@@ -6,6 +6,7 @@ import {
   type SdkAccountLinkPayload,
 } from "@/lib/sdk-account-link";
 import { getAuthenticatedPlayer } from "@/lib/player-auth";
+import { touchPlayerAccountActivity } from "@/lib/player-account-store";
 
 const sdkPreviewSessionMaxAgeSeconds = 8 * 60 * 60;
 
@@ -74,6 +75,7 @@ export async function requireSdkPreviewAuthenticatedPlayer(
 ) {
   const player = await getAuthenticatedPlayer();
   if (player?.id) {
+    await touchPlayerAccountActivity(player.id).catch(() => undefined);
     return {
       id: player.id,
       name: player.name,
@@ -82,6 +84,7 @@ export async function requireSdkPreviewAuthenticatedPlayer(
   }
   const playerId = await getSdkPreviewAccountPlayerId(creatorSlug);
   if (!playerId) throw new Error("PLAYER_AUTH_REQUIRED");
+  await touchPlayerAccountActivity(playerId).catch(() => undefined);
   return {
     id: playerId,
     name: null,

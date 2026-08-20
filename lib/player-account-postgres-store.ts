@@ -19,6 +19,7 @@ type PlayerAccountRow = {
   privacy_version: string | null;
   created_at: string | number;
   updated_at: string | number;
+  last_activity_at: string | number | null;
 };
 
 function rowToAccount(row: PlayerAccountRow): PlayerAccount {
@@ -40,6 +41,7 @@ function rowToAccount(row: PlayerAccountRow): PlayerAccount {
     privacyVersion: row.privacy_version,
     createdAt: Number(row.created_at),
     updatedAt: Number(row.updated_at),
+    lastActivityAt: row.last_activity_at === null ? null : Number(row.last_activity_at),
   };
 }
 
@@ -52,7 +54,7 @@ export async function loadPostgresPlayerAccountByLogin(loginName: string) {
   const sql = getPostgresClient();
   const rows = await sql`
     SELECT player_id, login_name, display_name, password_hash, password_salt, email, email_verified_at,
-           avatar_color, avatar_image, share_name_allowed, locale, terms_version, privacy_version, terms_accepted_at, created_at, updated_at
+           avatar_color, avatar_image, share_name_allowed, locale, terms_version, privacy_version, terms_accepted_at, created_at, updated_at, last_activity_at
     FROM player_accounts
     WHERE login_name = ${loginName}
     LIMIT 1
@@ -65,7 +67,7 @@ export async function loadPostgresPlayerAccountByEmail(email: string) {
   const sql = getPostgresClient();
   const rows = await sql`
     SELECT player_id, login_name, display_name, password_hash, password_salt, email, email_verified_at,
-           avatar_color, avatar_image, share_name_allowed, locale, terms_version, privacy_version, terms_accepted_at, created_at, updated_at
+           avatar_color, avatar_image, share_name_allowed, locale, terms_version, privacy_version, terms_accepted_at, created_at, updated_at, last_activity_at
     FROM player_accounts
     WHERE email = ${email}
     LIMIT 1
@@ -78,7 +80,7 @@ export async function loadPostgresPlayerAccountByPlayerId(playerId: string) {
   const sql = getPostgresClient();
   const rows = await sql`
     SELECT player_id, login_name, display_name, password_hash, password_salt, email, email_verified_at,
-           avatar_color, avatar_image, share_name_allowed, locale, terms_version, privacy_version, terms_accepted_at, created_at, updated_at
+           avatar_color, avatar_image, share_name_allowed, locale, terms_version, privacy_version, terms_accepted_at, created_at, updated_at, last_activity_at
     FROM player_accounts
     WHERE player_id = ${playerId}
     LIMIT 1
@@ -92,11 +94,11 @@ export async function createPostgresPlayerAccount(account: PlayerAccount) {
   const inserted = await sql`
     INSERT INTO player_accounts (
       login_name, player_id, display_name, password_hash, password_salt, email, email_verified_at,
-      avatar_color, avatar_image, share_name_allowed, locale, terms_version, privacy_version, terms_accepted_at, created_at, updated_at
+      avatar_color, avatar_image, share_name_allowed, locale, terms_version, privacy_version, terms_accepted_at, created_at, updated_at, last_activity_at
     ) VALUES (
       ${account.loginName}, ${account.playerId}, ${account.name}, ${account.passwordHash},
       ${account.passwordSalt}, ${account.email}, ${account.emailVerifiedAt}, ${account.avatarColor}, ${account.avatarImage}, ${account.shareNameAllowed}, ${account.locale}, ${account.termsVersion}, ${account.privacyVersion}, ${account.termsAcceptedAt},
-      ${account.createdAt}, ${account.updatedAt}
+      ${account.createdAt}, ${account.updatedAt}, ${account.lastActivityAt}
     )
     ON CONFLICT DO NOTHING
     RETURNING login_name
@@ -118,11 +120,11 @@ export async function savePostgresPlayerAccount(account: PlayerAccount) {
   await sql`
     INSERT INTO player_accounts (
       login_name, player_id, display_name, password_hash, password_salt, email, email_verified_at,
-      avatar_color, avatar_image, share_name_allowed, locale, terms_version, privacy_version, terms_accepted_at, created_at, updated_at
+      avatar_color, avatar_image, share_name_allowed, locale, terms_version, privacy_version, terms_accepted_at, created_at, updated_at, last_activity_at
     ) VALUES (
       ${account.loginName}, ${account.playerId}, ${account.name}, ${account.passwordHash},
       ${account.passwordSalt}, ${account.email}, ${account.emailVerifiedAt}, ${account.avatarColor}, ${account.avatarImage}, ${account.shareNameAllowed}, ${account.locale}, ${account.termsVersion}, ${account.privacyVersion}, ${account.termsAcceptedAt},
-      ${account.createdAt}, ${account.updatedAt}
+      ${account.createdAt}, ${account.updatedAt}, ${account.lastActivityAt}
     )
     ON CONFLICT (login_name) DO UPDATE SET
       player_id = EXCLUDED.player_id,
@@ -138,7 +140,12 @@ export async function savePostgresPlayerAccount(account: PlayerAccount) {
       terms_version = COALESCE(player_accounts.terms_version, EXCLUDED.terms_version),
       privacy_version = COALESCE(player_accounts.privacy_version, EXCLUDED.privacy_version),
       terms_accepted_at = COALESCE(player_accounts.terms_accepted_at, EXCLUDED.terms_accepted_at),
-      updated_at = EXCLUDED.updated_at
+      updated_at = EXCLUDED.updated_at,
+      last_activity_at = CASE
+        WHEN EXCLUDED.last_activity_at IS NULL THEN player_accounts.last_activity_at
+        WHEN player_accounts.last_activity_at IS NULL THEN EXCLUDED.last_activity_at
+        ELSE GREATEST(player_accounts.last_activity_at, EXCLUDED.last_activity_at)
+      END
   `;
 }
 
@@ -164,10 +171,19 @@ export async function listExpiredPostgresPlayerAccountIds(cutoff: number) {
   await ensurePlayerAccountSchema();
   const rows = await getPostgresClient()`
     SELECT player_id FROM player_accounts
-    WHERE email IS NULL AND updated_at <= ${cutoff}
-    ORDER BY updated_at ASC
+    WHERE email IS NULL AND last_activity_at IS NOT NULL AND last_activity_at <= ${cutoff}
+    ORDER BY last_activity_at ASC
   ` as Array<{ player_id: string }>;
   return rows.map((row) => row.player_id);
+}
+
+export async function countPostgresUnverifiedAccountsMissingActivity() {
+  await ensurePlayerAccountSchema();
+  const rows = await getPostgresClient()`
+    SELECT COUNT(*)::int AS count FROM player_accounts
+    WHERE email IS NULL AND last_activity_at IS NULL
+  ` as Array<{ count: number | string }>;
+  return Number(rows[0]?.count ?? 0);
 }
 
 export async function deletePostgresPlayerAccount(playerId: string) {

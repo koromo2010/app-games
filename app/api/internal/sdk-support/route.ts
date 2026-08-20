@@ -31,6 +31,7 @@ import {
 } from "@/lib/support-request-contract";
 import { observabilityErrorCode } from "@/lib/observability";
 import { sdkSupportEnvironment } from "@/lib/storage-environment-guard";
+import { touchPlayerAccountActivity } from "@/lib/player-account-store";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -256,6 +257,7 @@ export async function POST(request: Request) {
           idempotencyKey: `user-report-admin-notification-${report.id}`,
         })).report;
       }
+      await touchPlayerAccountActivity(playerId).catch(() => undefined);
       return Response.json(
         { report },
         { status: saved.inserted ? 201 : 200 },
@@ -425,6 +427,7 @@ export async function POST(request: Request) {
           idempotencyKey: `user-report-admin-notification-${report.id}`,
         })).report;
       }
+      await touchPlayerAccountActivity(playerId).catch(() => undefined);
       return Response.json({ report }, { status: 201 });
     } catch (error) {
       if (
@@ -477,6 +480,7 @@ export async function POST(request: Request) {
           body: result.message.body,
         })).report;
       }
+      await touchPlayerAccountActivity(playerId).catch(() => undefined);
       return Response.json({ report }, { status: 201 });
     } catch (error) {
       if (
@@ -539,6 +543,7 @@ export async function POST(request: Request) {
         body: result.message.body,
       })).report;
     }
+    await touchPlayerAccountActivity(playerId).catch(() => undefined);
     return Response.json(
       { report },
       { status: result.inserted ? 201 : 200 },

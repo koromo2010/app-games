@@ -23,7 +23,8 @@ export async function ensurePostgresSchema() {
           privacy_version TEXT,
           terms_accepted_at BIGINT,
           created_at BIGINT NOT NULL,
-          updated_at BIGINT NOT NULL
+          updated_at BIGINT NOT NULL,
+          last_activity_at BIGINT
         )
       `;
       await sql`ALTER TABLE player_accounts ADD COLUMN IF NOT EXISTS share_name_allowed BOOLEAN NOT NULL DEFAULT FALSE`;
@@ -50,7 +51,12 @@ export async function ensurePostgresSchema() {
       await sql`ALTER TABLE player_accounts ADD COLUMN IF NOT EXISTS terms_version TEXT`;
       await sql`ALTER TABLE player_accounts ADD COLUMN IF NOT EXISTS privacy_version TEXT`;
       await sql`ALTER TABLE player_accounts ADD COLUMN IF NOT EXISTS terms_accepted_at BIGINT`;
+      // Existing accounts do not have a reliable server-trusted activity
+      // baseline. Leave this nullable so retention protects them until their
+      // next authenticated activity records one.
+      await sql`ALTER TABLE player_accounts ADD COLUMN IF NOT EXISTS last_activity_at BIGINT`;
       await sql`CREATE INDEX IF NOT EXISTS player_accounts_updated_at_idx ON player_accounts (updated_at DESC)`;
+      await sql`CREATE INDEX IF NOT EXISTS player_accounts_last_activity_at_idx ON player_accounts (last_activity_at ASC)`;
       await sql`
         CREATE TABLE IF NOT EXISTS player_game_results (
           id TEXT PRIMARY KEY,
