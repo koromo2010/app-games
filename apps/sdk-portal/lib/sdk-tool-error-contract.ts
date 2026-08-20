@@ -22,6 +22,7 @@ const SAFE_ERROR_PROJECTIONS = new Map<string, [string, SdkToolErrorDetails["lay
   ["SDK_ACCOUNT_CONTEXT_REQUIRED", ["SDK_ACCOUNT_CONTEXT_REQUIRED", "authorization", "account-context"]],
   ["SDK_ACCOUNT_CONTEXT_MISMATCH", ["SDK_ACCOUNT_CONTEXT_MISMATCH", "authorization", "account-context"]],
   ["SDK_AUTHORING_CLIENT_UNSUPPORTED", ["SDK_AUTHORING_CLIENT_UNSUPPORTED", "validation", "client-binding"]],
+  ["SDK_PROTOTYPE_INPUT_INVALID", ["SDK_PROTOTYPE_INPUT_INVALID", "validation", "prototype-input"]],
   ["GAME_SDK_GAME_ID_INVALID", ["GAME_SDK_GAME_ID_INVALID", "validation", "requirements-input"]],
   ["GAME_SDK_PROPOSAL_INPUT_INVALID", ["GAME_SDK_PROPOSAL_INPUT_INVALID", "validation", "proposal-input"]],
   ["GAME_SDK_DRAFT_NOT_FOUND", ["GAME_SDK_DRAFT_NOT_FOUND", "validation", "requirements-contract"]],

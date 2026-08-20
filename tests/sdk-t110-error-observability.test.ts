@@ -42,6 +42,7 @@ test("known requirements failures expose safe code, layer, and operation", () =>
     ["AUTHORING_ENVIRONMENT_BINDING_MISMATCH", "AUTHORING_ENVIRONMENT_BINDING_MISMATCH", "authorization", "environment-binding"],
     ["SDK_AUTHORING_CLIENT_BINDING_MISMATCH", "SDK_AUTHORING_CLIENT_BINDING_MISMATCH", "authorization", "client-binding"],
     ["SDK_OWNER_REQUIRED", "SDK_OWNER_REQUIRED", "authorization", "requirements-owner"],
+    ["SDK_PROTOTYPE_INPUT_INVALID", "SDK_PROTOTYPE_INPUT_INVALID", "validation", "prototype-input"],
     ["GAME_SDK_GAME_ID_INVALID", "GAME_SDK_GAME_ID_INVALID", "validation", "requirements-input"],
     ["GAME_SDK_DRAFT_NOT_FOUND", "GAME_SDK_DRAFT_NOT_FOUND", "validation", "requirements-contract"],
     ["MODULE_PROFILE_NOT_CONFIRMED", "MODULE_PROFILE_NOT_CONFIRMED", "validation", "requirements-contract"],
