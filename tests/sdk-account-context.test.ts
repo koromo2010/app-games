@@ -96,6 +96,91 @@ test("MCP route declares expectedAccountRef for every owner-bound write and neve
   assert.doesNotMatch(source, /return .*playerId/);
 });
 
+test("MCP route inventories every current main owner-bound write and guards it before persistence", () => {
+  const source = readFileSync("apps/sdk-portal/app/api/mcp/route.ts", "utf8");
+  const aliases = source.match(
+    /const prepareModuleProfileUpdateToolNames = new Set\(\[([\s\S]*?)\]\);/,
+  )?.[1];
+  const ownerBound = source.match(
+    /const ownerBoundWriteTools = new Set\(\[([\s\S]*?)\]\);/,
+  )?.[1];
+  assert.ok(aliases);
+  assert.ok(ownerBound);
+
+  const quotedNames = (value: string) =>
+    [...value.matchAll(/"([a-z0-9_]+)"/g)].map((match) => match[1]);
+  const ownerBoundInventory = [...new Set([
+    ...quotedNames(ownerBound),
+    ...quotedNames(aliases),
+  ])].sort();
+  const expectedInventory = [
+    "approve_mock",
+    "create_game_draft",
+    "finalize_creator_url",
+    "prepare_game_module_profile_update",
+    "prepare_module_profile_update",
+    "prepare_support_reply",
+    "prepare_support_report",
+    "publish_game_package",
+    "publish_game_source_package",
+    "publish_mock",
+    "reserve_creator_url",
+  ].sort();
+  assert.deepEqual(ownerBoundInventory, expectedInventory);
+
+  const baseTools = source.match(/const baseTools = \[([\s\S]*?)\n\];/)?.[1];
+  assert.ok(baseTools);
+  const catalogWrites = [...baseTools.matchAll(
+    /\{ name: "([a-z0-9_]+)"[\s\S]*?annotations: \{ readOnlyHint: (true|false),[\s\S]*?(?=\n\s*\{ name:|$)/g,
+  )]
+    .filter((match) => match[2] === "false")
+    .map((match) => match[1]);
+  if (
+    baseTools.includes('{ name: "prepare_module_profile_update", ...prepareModuleProfileUpdateToolDefinition }')
+    && /const prepareModuleProfileUpdateToolDefinition = \{[\s\S]*?readOnlyHint: false/.test(source)
+  ) catalogWrites.push("prepare_module_profile_update");
+  if (
+    /\{ name: "approve_mock",[\s\S]*?annotations: \{ readOnlyHint: false/.test(baseTools)
+  ) catalogWrites.push("approve_mock");
+  const expectedCatalogWrites = expectedInventory.filter(
+    (name) => name !== "prepare_game_module_profile_update",
+  );
+  assert.deepEqual([...new Set(catalogWrites)].sort(), expectedCatalogWrites);
+
+  assert.match(source, /expectedAccountRef: expectedAccountRefSchema/);
+  assert.match(source, /ownerBoundWriteTools\.has\(tool\.name\)/);
+  assert.match(source, /ownerBoundWriteTools\.has\(name\)[\s\S]*?assertExpectedAccountContext/);
+  assert.match(source, /SDK_ACCOUNT_CONTEXT_MISMATCH/);
+  assert.match(source, /accountContext/);
+  assert.doesNotMatch(source, /return .*playerId/);
+  assert.ok(
+    source.indexOf("const accountContext: PublicAccountContext")
+      < source.indexOf('if (name === "prepare_support_reply")'),
+  );
+});
+
+test("account mismatch fixture invokes no persistent store", () => {
+  const previous = process.env.SDK_ACCOUNT_LINK_SECRET;
+  process.env.SDK_ACCOUNT_LINK_SECRET = secret;
+  let persistentStoreInvocations = 0;
+  const guardedWrite = (expectedAccountRef: string) => {
+    assertExpectedAccountContext({
+      expectedAccountRef,
+      playerId: "actual-player",
+      origin: "https://sdk.game-fields.com",
+    });
+    persistentStoreInvocations += 1;
+  };
+  try {
+    const otherAccount = createAccountRef("other-player", "production");
+    assert.throws(() => guardedWrite(otherAccount), /SDK_ACCOUNT_CONTEXT_MISMATCH/);
+    assert.equal(persistentStoreInvocations, 0);
+  } finally {
+    if (previous === undefined) delete process.env.SDK_ACCOUNT_LINK_SECRET;
+    else process.env.SDK_ACCOUNT_LINK_SECRET = previous;
+  }
+});
+
 test("support draft and reply pages receive accountRef before loading a resource", () => {
   for (const file of [
     "apps/sdk-portal/app/support/drafts/[draftId]/page.tsx",
