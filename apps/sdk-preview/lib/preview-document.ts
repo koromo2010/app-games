@@ -1,4 +1,5 @@
 import type { SdkPreviewGrant } from "@game-fields/sdk-preview-auth";
+import { normalizeLegacyModuleUsageReview } from "@/lib/legacy-module-usage-review";
 import {
   GAME_FIELDS_PACKAGE_CLIENT_ASSET,
   injectGameFieldsPackageClient,
@@ -135,7 +136,9 @@ export async function renderAuthorizedPreviewDocument({
       return new Response("Preview document was not found.", { status: 404 });
     }
 
-    const source = new TextDecoder().decode(content);
+    const source = normalizeLegacyModuleUsageReview(
+      new TextDecoder().decode(content),
+    );
     const inlineStyleAssetPaths = previewInlineStyleAssetPaths(
       source,
       DOCUMENT_ASSET_PATH,

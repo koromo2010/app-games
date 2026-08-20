@@ -46,6 +46,16 @@ const {
 const { sharedGameSourceSha256 } = await import(
   "../apps/sdk-portal/lib/module-authoring-contract.ts"
 );
+const { appendModuleUsageReview } = await import(
+  "../apps/sdk-portal/lib/module-usage-review.ts"
+);
+const { normalizeLegacyModuleUsageReview } = await import(
+  "../apps/sdk-preview/lib/legacy-module-usage-review.ts"
+);
+const {
+  previewInlineStyleAssetPaths,
+  PreviewAssetReferenceError,
+} = await import("../apps/sdk-preview/lib/preview-asset-rewriter.ts");
 const { GAME_SDK_MODULE_CATALOG } = await import("@game-fields/game-sdk/modules");
 const { validateGameSdkMockQuality } = await import("@game-fields/game-sdk/mock-quality");
 const { validateGameSdkModuleUsage } = await import("@game-fields/game-sdk/module-usage");
@@ -320,6 +330,36 @@ test("fixture v003 builds all bounded outputs and preserves binding/source ident
   assert.equal(packageManifest.authoring.sharedSourceSha256, sharedGameSourceSha256(assembly.files));
   assert.equal(sha256(packageManifestFile.content), inventory.manifestIdentitySha256);
   assert.match(built.prototypeFiles["mock.js"], /t114-standard-outcome/);
+});
+
+test("fixture v003 post-validation module usage review remains Preview-compatible", () => {
+  const assembly = fixtureAssembly();
+  const reviewed = appendModuleUsageReview(assembly.files, assembly.usageAudit);
+  const html = reviewed["index.html"] ?? "";
+  assert.match(html, /class="game-fields-module-usage-table"/);
+  assert.doesNotMatch(html, /<div style="overflow:auto">/);
+  assert.deepEqual(previewInlineStyleAssetPaths(html, "index.html"), []);
+});
+
+test("fixture v003 fixed legacy module usage wrapper is normalized before Preview policy", () => {
+  const assembly = fixtureAssembly();
+  const reviewed = appendModuleUsageReview(assembly.files, assembly.usageAudit);
+  const current = reviewed["index.html"] ?? "";
+  const legacy = current.replace(
+    '<div class="game-fields-module-usage-table">',
+    '<div style="overflow:auto">',
+  );
+  const normalized = normalizeLegacyModuleUsageReview(legacy);
+  assert.match(normalized, /class="game-fields-module-usage-table"/);
+  assert.deepEqual(previewInlineStyleAssetPaths(normalized, "index.html"), []);
+  assert.throws(
+    () => previewInlineStyleAssetPaths(
+      '<!doctype html><html><body><div style="overflow:auto"></div></body></html>',
+      "index.html",
+    ),
+    (error) => error instanceof PreviewAssetReferenceError
+      && error.code === "STYLE_ATTRIBUTE_UNSUPPORTED",
+  );
 });
 
 test("fixture v003 reaches only injected publish persistence boundaries once", async () => {
