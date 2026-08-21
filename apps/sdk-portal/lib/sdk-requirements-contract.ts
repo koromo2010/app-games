@@ -5,4 +5,3 @@ export function normalizeRequirementsGameId(value: unknown) {
   if (!GAME_PATTERN.test(gameId)) throw new Error("GAME_SDK_GAME_ID_INVALID");
   return gameId;
 }
-
