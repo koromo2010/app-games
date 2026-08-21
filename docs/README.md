@@ -6,12 +6,13 @@
 
 1. ルートの `AGENTS.md` で、変更してはいけない共通制約を確認する。
 2. [`DEVELOPMENT_EXECUTION_RULES.md`](./DEVELOPMENT_EXECUTION_RULES.md) で、許可・保存・検証・証拠・終了状態を確認する。
-3. [`SYSTEM_MAP.md`](./SYSTEM_MAP.md) で、app・環境・主要flowと正本の位置関係を掴む。
-4. [`CURRENT_STATE.md`](./CURRENT_STATE.md) で、現在実装・運用されている全体像を確認する。
-5. `DEVELOPMENT_HANDOFF.md` で、現在の仕様・主要ファイル・環境変数・公開手順を確認する。
-6. 下表から、今回の作業に該当する資料だけを追加で読む。tool、schema、response解析、利用者PC向けhelper／PowerShellで詰まった場合は[`AI_EXECUTION_TROUBLESHOOTING.md`](./AI_EXECUTION_TROUBLESHOOTING.md)を読む。
-7. `git status --short --branch` と直近コミットを確認し、既存変更を上書きしない。
-8. 変更後は影響範囲に応じたfocused test、回帰、lint／buildを実行する。
+3. 監査、TA／CP、監督への受け渡しを扱う場合は[`AUDIT_THREAD_RULES.md`](./AUDIT_THREAD_RULES.md)を確認する。
+4. [`SYSTEM_MAP.md`](./SYSTEM_MAP.md) で、app・環境・主要flowと正本の位置関係を掴む。
+5. [`CURRENT_STATE.md`](./CURRENT_STATE.md) で、現在実装・運用されている全体像を確認する。
+6. `DEVELOPMENT_HANDOFF.md` で、現在の仕様・主要ファイル・環境変数・公開手順を確認する。
+7. 下表から、今回の作業に該当する資料だけを追加で読む。tool、schema、response解析、利用者PC向けhelper／PowerShellで詰まった場合は[`AI_EXECUTION_TROUBLESHOOTING.md`](./AI_EXECUTION_TROUBLESHOOTING.md)を読む。
+8. `git status --short --branch` と直近コミットを確認し、既存変更を上書きしない。
+9. 変更後は影響範囲に応じたfocused test、回帰、lint／buildを実行する。
 
 現状と構想は明確に分離する。
 
@@ -36,6 +37,7 @@
 | 現在の全体像 | `CURRENT_STATE.md` | `DEVELOPMENT_HANDOFF.md`、コード、設定 |
 | 将来構想・未実装計画 | `FUTURE_PLAN.md` | `PLATFORM_VISION.md`、SDK関連資料 |
 | 未修正バグ・次の修正順 | `KNOWN_ISSUES.md` | 対象項目に記載したAPI・store・domain |
+| 監査スレ／監査作業スレ／監督スレの分離、TA／CP、finding受け渡し | `AUDIT_THREAD_RULES.md` | `DEVELOPMENT_EXECUTION_RULES.md`、checkpoint正本 |
 | バグ調査・全体監査 | `DEVELOPMENT_HANDOFF.md` の共通ルールと現行仕様 | `config/game-registry.json`、対象ゲームの画面・API route・room store、`package.json` |
 | ワードウルフのルール・進行 | `DEVELOPMENT_HANDOFF.md` 6章、`game-concept.md` 2章 | `lib/wordwolf-command-domain.ts`、`lib/wordwolf-room-store.ts`、`app/wordwolf/game-flow.ts` |
 | たほい屋のルール・進行 | `DEVELOPMENT_HANDOFF.md` 7章 | `lib/tahoiya-room-store.ts`、`lib/tahoiya-types.ts`、`app/tahoiya/TahoiyaGame.tsx` |

@@ -5,8 +5,9 @@
 1. `git status --short --branch`、repository、worktree、branch、HEAD
 2. `docs/README.md` の読書順
 3. `docs/DEVELOPMENT_EXECUTION_RULES.md` の許可・保存・証拠ルール
-4. 作業に該当する現行資料とコード
-5. tool、schema、response解析、または利用者PC向けhelper／PowerShellで詰まった場合は`docs/AI_EXECUTION_TROUBLESHOOTING.md`
+4. 監査、TA／CP、監督への受け渡しを扱う場合は`docs/AUDIT_THREAD_RULES.md`
+5. 作業に該当する現行資料とコード
+6. tool、schema、response解析、または利用者PC向けhelper／PowerShellで詰まった場合は`docs/AI_EXECUTION_TROUBLESHOOTING.md`
 
 会話履歴や `docs/DEVELOPMENT_THREAD_LOG.md` を現在仕様の正本にしない。既存差分は利用者の所有物として保持し、自分の作業に必要なファイルだけを変更する。
 
@@ -47,6 +48,7 @@
 
 - 実行、検証、保存、公開、証拠: `docs/DEVELOPMENT_EXECUTION_RULES.md`
 - 実行時の自己回復: `docs/AI_EXECUTION_TROUBLESHOOTING.md`
+- 監査スレ／監査作業スレ／監督スレ／作業スレの責務と受け渡し: `docs/AUDIT_THREAD_RULES.md`
 - 全体構成、環境、主要flowと正本への入口: `docs/SYSTEM_MAP.md`
 - 現在状態と資料索引: `docs/README.md`、`docs/CURRENT_STATE.md`
 - 現行仕様と主要ファイル: `docs/DEVELOPMENT_HANDOFF.md`
