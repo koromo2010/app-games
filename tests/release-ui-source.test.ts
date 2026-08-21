@@ -26,6 +26,23 @@ test("lobby keeps card and list views with persisted accessible favorites", () =
   assert.match(source, /GameEntryAction/);
 });
 
+test("Tahoiya play top uses the platform-owned entry overview instead of a prototype placeholder", () => {
+  const tahoiya = read("app/tahoiya/TahoiyaScorePanel.tsx");
+  const overview = read("app/components/GameEntryOverview.tsx");
+  const overviewModel = read("lib/game-entry-overview.ts");
+  const definitions = read("app/games/game-definition-source.ts");
+
+  assert.match(tahoiya, /GameEntryOverview gameId="tahoiya"/);
+  assert.doesNotMatch(tahoiya, /Prototype ready/);
+  assert.match(overview, /遊び方はこちら/);
+  assert.match(overview, /AppLink/);
+  assert.match(overviewModel, /isGameMarketingPagePublished/);
+  assert.match(overviewModel, /isGameLocaleAvailable/);
+  assert.match(overviewModel, /isGameUiLocaleAvailable/);
+  assert.match(definitions, /catalogEntryFromDefinition/);
+  assert.match(definitions, /gameCatalogHref\(definition\.id\)/);
+});
+
 test("admin exposes environment-paired SDK adoption and independent dev to main", () => {
   const panel = read("app/admin/ReleaseManagementPanel.tsx");
   const page = read("app/admin/page.tsx");

@@ -70,9 +70,7 @@ export function gameLandingHref(gameId: string) {
 export function gameCatalogHref(gameId: string) {
   const route = gameRouteForId(gameId);
   if (!route) return "";
-  return isGameMarketingPagePublished(route.registration)
-    ? route.landingPath
-    : route.playPath;
+  return route.playPath;
 }
 
 export function gamePlayHref(gameId: string, roomCode?: string) {

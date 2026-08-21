@@ -20,10 +20,16 @@ test("built-in game routes resolve one landing and play route per registration",
   assert.equal(builtInGameRoutes.length, 9);
   assert.equal(new Set(builtInGameRoutes.map((route) => route.slug)).size, 9);
   assert.equal(gameLandingHref("wordwolf"), "/games/word-wolf");
-  assert.equal(gameCatalogHref("tahoiya"), "/games/tahoiya");
+  assert.equal(gameCatalogHref("tahoiya"), "/play/tahoiya");
   assert.equal(gameCatalogHref("wordwolf"), "/play/word-wolf");
   assert.equal(gamePlayHref("hodoai"), "/play/word-scale");
   assert.equal(gamePlayHref("tahoiya", "AB C"), "/play/tahoiya?room=AB%20C");
+});
+
+test("catalog entries always use direct play even when their marketing page is published", () => {
+  for (const route of builtInGameRoutes) {
+    assert.equal(gameCatalogHref(route.id), route.playPath, route.id);
+  }
 });
 
 test("legacy game routes retain locale responsibility without matching landing routes", () => {
