@@ -16,6 +16,7 @@
 | 監査スレ、監査作業スレ、監督スレ、TA／CP、監査findingの受け渡し | `AUDIT_THREAD_RULES.md` |
 
 - 監査起点のfinding、TA／CP、新規T採番は`AUDIT_THREAD_RULES.md`の役割分離と`AUDIT_INSTRUCTION`→`AUDIT_RESULT`→`AUDIT_ACCEPTANCE`を経る。監督は新規Tを作成せず、受理済みTだけを管理する。
+- 監査系列は通常T系列の前提、release gate、close gateではない。監査が何もしなくても既存Tは監督と作業スレだけで完遂できる構造を維持し、監督は全ての既存T、監査はfinding／TA／CPをそれぞれ独立して判定・closeする。どちらのcloseも他方へ自動伝播しない。
 - 利用者の明示指示は許可範囲を狭められるが、監督が作るnext-instructionや実行シートは利用者のauthorization envelopeを説明・固定する二次成果物であり、利用者の明示なしに新しい禁止、file scope、tool／call回数、内部phase停止を追加しない。曖昧な表現や過去の承認から権限を広げない。
 - developmentは、目的、成功条件、`ALLOWED_PRODUCT_WRITES`、`FORBIDDEN_EFFECTS`を固定し、それ以外の可逆なlocal変更、関連fileへの修正、調査、test、build、read-only確認、内部回復、手段変更を許可する禁止リスト方式とする。監督またはタスク指示は、観測済みの具体的危険と直接対応する場合を除き、これらを網羅的な許可リストへ変換しない。
 - main／production、未許可のlogical product write、control-plane write、不可逆操作は許可リスト方式を維持し、environment、対象、操作、上限を利用者承認へ固定する。developmentの禁止リスト方式からこれらの権限を推論しない。

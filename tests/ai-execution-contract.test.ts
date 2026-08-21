@@ -159,15 +159,23 @@ test("current SDK specifications name the supported clients and do not recheck a
 });
 
 
-test("audit findings cross an immutable audit acceptance boundary before supervision", () => {
+test("audit and supervision remain independent responsibility lines", () => {
   const audit = read("docs/AUDIT_THREAD_RULES.md");
   const agents = read("AGENTS.md");
   const execution = read("docs/DEVELOPMENT_EXECUTION_RULES.md");
   const navigation = read("docs/README.md");
 
+  assert.match(audit, /監査なしで通常運用が完結する/);
+  assert.match(audit, /監査が未起動、停止、遅延、未完了、または一件も存在しなくても/);
+  assert.match(audit, /監査起点かどうかに関係なく、全ての既存T/);
   assert.match(audit, /監督スレは新規Tを作成・採番しない/);
+  assert.match(audit, /監査の開始、再開、停止、範囲、頻度、TA／CPの状態を指示または変更しない/);
+  assert.match(audit, /自分が取得・read-backしたTの正本証拠で`TASK_DONE \/ CLOSED`を判定/);
+  assert.match(audit, /監査スレは.*既存Tをcloseまたはreopenしない/s);
+  assert.match(audit, /Tのcloseとfinding／TA／CPのcloseは別の状態/);
+  assert.match(audit, /片方をもう片方へ自動伝播しない/);
   assert.match(audit, /監査作業スレはTを作成・採番せず/);
-  assert.match(audit, /監査起点の新規Tの作成・採番/);
+  assert.match(audit, /監督スレまたは作業スレの要約を成功証拠として信頼せず/);
   assert.match(audit, /AUDIT_INSTRUCTION/);
   assert.match(audit, /AUDIT_RESULT/);
   assert.match(audit, /AUDIT_ACCEPTANCE/);
@@ -177,14 +185,10 @@ test("audit findings cross an immutable audit acceptance boundary before supervi
   assert.match(audit, /NOT_TESTED/);
   assert.match(audit, /record commit、blob SHA、path、内容をremote read-back/);
   assert.match(audit, /checkpointは復旧用であり/);
-  assert.match(audit, /未受理finding、途中checkpoint、ファイル名だけの報告からT、優先順位、完了を推定しない/);
-  assert.match(audit, /AUDIT_RESULT_SUBMITTED/);
-  assert.match(audit, /READY_FOR_REAUDIT/);
-  assert.match(audit, /監査起点Tを自分の判断で`CLOSED`にしない/);
-  assert.match(audit, /監督スレまたは作業スレの要約を成功証拠として信頼せず/);
-  assert.match(audit, /`FIX_VERIFIED`または`REOPENED`/);
-  assert.match(audit, /FIX_VERIFIEDならclose \/ 不成立ならREOPENED/);
-  assert.match(agents, /docs\/AUDIT_THREAD_RULES\.md/);
-  assert.match(execution, /AUDIT_INSTRUCTION.*AUDIT_RESULT.*AUDIT_ACCEPTANCE/);
+  assert.match(audit, /通常T系列（監査なしで完結）/);
+  assert.match(audit, /監査系列（独立した追加線）/);
+  assert.doesNotMatch(audit, /READY_FOR_REAUDIT/);
+  assert.match(agents, /監査は通常T系列から独立した追加線/);
+  assert.match(execution, /監査が何もしなくても既存Tは監督と作業スレだけで完遂/);
   assert.match(navigation, /AUDIT_THREAD_RULES\.md/);
 });
