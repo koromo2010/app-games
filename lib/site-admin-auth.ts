@@ -80,10 +80,10 @@ export async function requireRecentSiteAdminMfa() {
   return session;
 }
 
-export async function refreshSiteAdminMfaCookie() {
+export async function refreshSiteAdminMfaCookie(method?: SiteAdminSessionPayload["method"]) {
   const store = await cookies();
   const token = store.get(siteAdminCookieName)?.value;
-  const refreshed = token ? refreshSiteAdminMfaToken(token, siteAdminSecret()) : null;
+  const refreshed = token ? refreshSiteAdminMfaToken(token, siteAdminSecret(), Date.now(), method) : null;
   if (!refreshed) throw new Error("SITE_ADMIN_AUTH_REQUIRED");
   store.set(siteAdminCookieName, refreshed, { ...cookieBase, maxAge: siteAdminSessionMaxAgeSeconds });
 }

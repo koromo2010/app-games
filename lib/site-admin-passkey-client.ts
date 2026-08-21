@@ -7,12 +7,13 @@ type PasskeyResponse = {
   error?: string;
   verified?: boolean;
   options?: unknown;
+  totpAvailable?: boolean;
   session?: SiteAdminPublicSession;
 };
 
 export type SiteAdminPublicSession = {
   scope: "full" | "recovery";
-  method: "passkey" | "recovery-code" | "master";
+  method: "passkey" | "totp" | "recovery-code" | "master";
   email: string | null;
   expiresAt: number;
   mfaAt: number | null;
@@ -51,6 +52,27 @@ async function completeStepUpWithRecoveryCode() {
   return data.session;
 }
 
+async function completeStepUpWithTotp() {
+  const accepted = window.confirm(
+    "Authenticatorアプリの6桁コードで本人確認しますか？",
+  );
+  if (!accepted) throw new Error("ADMIN_STEP_UP_CANCELLED");
+
+  const totpCode = window.prompt("Authenticatorに表示された6桁コードを入力してください。")?.replace(/\D/g, "");
+  if (!totpCode || !/^\d{6}$/.test(totpCode)) throw new Error("ADMIN_STEP_UP_CANCELLED");
+
+  const response = await fetch("/api/admin/passkeys", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "verify-totp", totpCode }),
+  });
+  const data = await responseJson(response);
+  if (!response.ok || !data?.verified || !data.session || data.session.scope !== "full" || data.session.method !== "totp") {
+    throw new Error(data?.error || "ADMIN_TOTP_STEP_UP_FAILED");
+  }
+  return data.session;
+}
+
 export async function ensureSiteAdminStepUp() {
   const begin = await fetch("/api/admin/passkeys", {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "begin-step-up" }),
@@ -58,24 +80,33 @@ export async function ensureSiteAdminStepUp() {
   const beginData = await responseJson(begin);
   if (!begin.ok) throw new Error(beginData?.error || "ADMIN_STEP_UP_FAILED");
   if (beginData?.verified) return null;
-  if (!beginData?.options) throw new Error("ADMIN_STEP_UP_FAILED");
+  if (!beginData?.options && !beginData?.totpAvailable) throw new Error("ADMIN_STEP_UP_FAILED");
 
-  let credential;
-  try {
-    credential = await startAuthentication({
-      optionsJSON: beginData.options as PublicKeyCredentialRequestOptionsJSON,
+  if (beginData.options) {
+    let credential;
+    try {
+      credential = await startAuthentication({
+        optionsJSON: beginData.options as PublicKeyCredentialRequestOptionsJSON,
+      });
+    } catch (error) {
+      if (!isCancelledWebAuthn(error)) throw error;
+      if (beginData.totpAvailable) {
+        try { return await completeStepUpWithTotp(); }
+        catch (totpError) {
+          if (!(totpError instanceof Error) || totpError.message !== "ADMIN_STEP_UP_CANCELLED") throw totpError;
+        }
+      }
+      return await completeStepUpWithRecoveryCode();
+    }
+
+    const verify = await fetch("/api/admin/passkeys", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "verify-authentication", response: credential }),
     });
-  } catch (error) {
-    if (!isCancelledWebAuthn(error)) throw error;
-    return await completeStepUpWithRecoveryCode();
+    const verifyData = await responseJson(verify);
+    if (!verify.ok || !verifyData?.verified) throw new Error(verifyData?.error || "ADMIN_STEP_UP_FAILED");
+    return verifyData.session ?? null;
   }
-
-  const verify = await fetch("/api/admin/passkeys", {
-    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "verify-authentication", response: credential }),
-  });
-  const verifyData = await responseJson(verify);
-  if (!verify.ok || !verifyData?.verified) throw new Error(verifyData?.error || "ADMIN_STEP_UP_FAILED");
-  return verifyData.session ?? null;
+  return await completeStepUpWithTotp();
 }
 
 export async function addSiteAdminPasskey() {

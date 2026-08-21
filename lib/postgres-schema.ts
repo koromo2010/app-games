@@ -176,6 +176,20 @@ export async function ensurePostgresSchema() {
       `;
       await sql`CREATE INDEX IF NOT EXISTS site_admin_recovery_codes_email_idx ON site_admin_recovery_codes (admin_email, used_at)`;
       await sql`
+        CREATE TABLE IF NOT EXISTS site_admin_totp (
+          admin_email TEXT PRIMARY KEY REFERENCES site_admin_accounts(email) ON DELETE CASCADE,
+          secret_ciphertext TEXT NOT NULL,
+          secret_iv TEXT NOT NULL,
+          secret_tag TEXT NOT NULL,
+          enrollment_challenge_hash TEXT,
+          created_at BIGINT NOT NULL,
+          confirmed_at BIGINT,
+          last_used_counter BIGINT,
+          last_used_at BIGINT
+        )
+      `;
+      await sql`CREATE INDEX IF NOT EXISTS site_admin_totp_confirmed_idx ON site_admin_totp (confirmed_at)`;
+      await sql`
         CREATE TABLE IF NOT EXISTS site_admin_audit_logs (
           id TEXT PRIMARY KEY,
           actor_email TEXT,

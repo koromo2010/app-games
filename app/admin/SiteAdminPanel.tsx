@@ -18,7 +18,7 @@ import { ReleaseManagementPanel } from "./ReleaseManagementPanel";
 type ScreenState = "checking" | "login" | "mfa" | "recovery-codes" | "settings";
 type LoginMethod = "account" | "master";
 type AdminSection = "dashboard" | "support" | "releases" | "site-settings" | "games" | "vocabulary" | "hyperparameters" | "accounts" | "audit";
-type AdminSession = { scope: "full" | "recovery"; method: "passkey" | "recovery-code" | "master"; email: string | null; expiresAt: number; mfaAt: number | null };
+type AdminSession = { scope: "full" | "recovery"; method: "passkey" | "totp" | "recovery-code" | "master"; email: string | null; expiresAt: number; mfaAt: number | null };
 type MfaMode = "login" | "enroll";
 const messages: Record<string, string> = {
   INVALID_ADMIN_PASSWORD: "管理パスワードが違います。",
@@ -30,6 +30,8 @@ const messages: Record<string, string> = {
   SITE_ADMIN_CHALLENGE_EXPIRED: "本人確認の有効期限が切れました。パスワードからもう一度ログインしてください。",
   SITE_ADMIN_PASSKEY_VERIFICATION_FAILED: "パスキーを確認できませんでした。もう一度お試しください。",
   SITE_ADMIN_PLATFORM_PASSKEY_REQUIRED: "Windows Helloなど、この端末内のパスキーを選んでください。USBキーや別端末は登録できません。",
+  INVALID_TOTP_CODE: "Authenticatorの6桁コードが違うか、すでに使用されています。",
+  SITE_ADMIN_TOTP_UNAVAILABLE: "Authenticator認証を利用できません。復旧コードまたはパスキーを使用してください。",
   SITE_SETTINGS_STORE_NOT_CONFIGURED: "サイト設定の保存先が設定されていません。",
   INVALID_TEXT: "未入力の項目、または文字数を超えている項目があります。",
   INVALID_ICON_URL: "アイコン画像を確認してください。",
@@ -55,6 +57,8 @@ export function SiteAdminPanel({ showPreviewVocabularyMigrations, releaseManagem
   const [session, setSession] = useState<AdminSession | null>(null);
   const [mfaMode, setMfaMode] = useState<MfaMode>("login");
   const [mfaOptions, setMfaOptions] = useState<PublicKeyCredentialRequestOptionsJSON | PublicKeyCredentialCreationOptionsJSON | null>(null);
+  const [totpAvailable, setTotpAvailable] = useState(false);
+  const [totpCode, setTotpCode] = useState("");
   const [recoveryCode, setRecoveryCode] = useState("");
   const [issuedRecoveryCodes, setIssuedRecoveryCodes] = useState<string[]>([]);
   const [settings, setSettings] = useState<SiteSettings>(defaultSiteSettings);
@@ -85,15 +89,15 @@ export function SiteAdminPanel({ showPreviewVocabularyMigrations, releaseManagem
     try {
       const body = loginMethod === "account" ? { email, password } : { password };
       const response = await fetch("/api/admin/site-settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      const data = await response.json().catch(() => null) as { settings?: SiteSettings; session?: AdminSession; mfaRequired?: boolean; passkeySetupRequired?: boolean; options?: PublicKeyCredentialRequestOptionsJSON | PublicKeyCredentialCreationOptionsJSON; error?: string } | null;
+      const data = await response.json().catch(() => null) as { settings?: SiteSettings; session?: AdminSession; mfaRequired?: boolean; passkeySetupRequired?: boolean; totpAvailable?: boolean; options?: PublicKeyCredentialRequestOptionsJSON | PublicKeyCredentialCreationOptionsJSON; error?: string } | null;
       if (!response.ok) throw new Error(data?.error || "ADMIN_LOGIN_FAILED");
       setPassword("");
       if (data?.settings && data.session) {
         setSettings(data.settings); setSession(data.session); setEmail(""); setScreen("settings"); setSection(data.session.scope === "recovery" ? "accounts" : "dashboard");
         return;
       }
-      if (data?.options && (data.mfaRequired || data.passkeySetupRequired)) {
-        setMfaMode(data.passkeySetupRequired ? "enroll" : "login"); setMfaOptions(data.options); setScreen("mfa");
+      if (data && (data.mfaRequired || data.passkeySetupRequired)) {
+        setMfaMode(data.passkeySetupRequired ? "enroll" : "login"); setMfaOptions(data.options ?? null); setTotpAvailable(data.totpAvailable === true); setTotpCode(""); setScreen("mfa");
         return;
       }
       throw new Error("ADMIN_LOGIN_FAILED");
@@ -124,6 +128,20 @@ export function SiteAdminPanel({ showPreviewVocabularyMigrations, releaseManagem
       if (data.recoveryCodes?.length) { setIssuedRecoveryCodes(data.recoveryCodes); setScreen("recovery-codes"); return; }
       await loadAuthenticatedSettings();
     } catch (error) { setMessage(errorMessage(error, "パスキーを確認できませんでした。")); }
+    finally { setIsSaving(false); }
+  };
+
+  const completeTotp = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!/^\d{6}$/.test(totpCode) || isSaving) return;
+    setIsSaving(true); setMessage("");
+    try {
+      const response = await fetch("/api/admin/passkeys", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "verify-totp", totpCode }) });
+      const data = await response.json().catch(() => null) as { verified?: boolean; error?: string } | null;
+      if (!response.ok || !data?.verified) throw new Error(data?.error || "INVALID_TOTP_CODE");
+      setTotpCode("");
+      await loadAuthenticatedSettings();
+    } catch (error) { setMessage(errorMessage(error, "Authenticatorでログインできませんでした。")); }
     finally { setIsSaving(false); }
   };
 
@@ -203,12 +221,13 @@ export function SiteAdminPanel({ showPreviewVocabularyMigrations, releaseManagem
     <main className="grid min-h-screen place-items-center bg-[radial-gradient(circle_at_top,#164e63_0%,#020617_48%)] p-4 text-white">
       <section className="w-full max-w-md rounded-2xl border border-white/10 bg-slate-900/90 p-6 shadow-2xl">
         <p className="text-xs font-bold uppercase tracking-[0.22em] text-cyan-300">Two-factor authentication</p>
-        <h1 className="mt-2 text-2xl font-black">{mfaMode === "enroll" ? "パスキーを登録" : "パスキーで本人確認"}</h1>
-        <p className="mt-3 text-sm leading-6 text-slate-300">{mfaMode === "enroll" ? "この管理者には端末内パスキーがありません。このPCのWindows Hello（PIN・指紋・顔認証）を登録してください。USBキーや別端末は登録できません。" : "このPCのWindows Hello（PIN・指紋・顔認証）を使ってログインを完了します。"}</p>
-        <button type="button" onClick={() => void completePasskey()} disabled={isSaving} className="mt-6 w-full rounded-xl bg-cyan-300 px-4 py-3 font-black text-slate-950 hover:bg-cyan-200 disabled:opacity-40">{isSaving ? "確認中…" : mfaMode === "enroll" ? "パスキーを登録する" : "パスキーで続ける"}</button>
+        <h1 className="mt-2 text-2xl font-black">{mfaMode === "enroll" ? "パスキーを登録" : "本人確認"}</h1>
+        <p className="mt-3 text-sm leading-6 text-slate-300">{mfaMode === "enroll" ? "この管理者にはMFAがまだありません。このPCのWindows Hello（PIN・指紋・顔認証）を登録してください。USBキーや別端末は登録できません。登録後、Authenticatorも追加できます。" : "Windows Helloまたは登録済みAuthenticatorの6桁コードでログインを完了します。"}</p>
+        {mfaOptions && <button type="button" onClick={() => void completePasskey()} disabled={isSaving} className="mt-6 w-full rounded-xl bg-cyan-300 px-4 py-3 font-black text-slate-950 hover:bg-cyan-200 disabled:opacity-40">{isSaving ? "確認中…" : mfaMode === "enroll" ? "パスキーを登録する" : "パスキーで続ける"}</button>}
+        {mfaMode === "login" && totpAvailable && <form onSubmit={completeTotp} className="mt-6 border-t border-white/10 pt-5"><label className="block text-sm font-bold text-slate-200">Authenticatorの6桁コード<input value={totpCode} onChange={(event) => setTotpCode(event.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" pattern="[0-9]*" autoComplete="one-time-code" placeholder="123456" className="mt-2 w-full rounded-xl border border-white/15 bg-black/25 px-4 py-3 font-mono tracking-[0.3em] text-white outline-none focus:border-cyan-300" /></label><button type="submit" disabled={!/^\d{6}$/.test(totpCode) || isSaving} className="mt-3 w-full rounded-xl border border-cyan-300/30 px-4 py-3 text-sm font-bold text-cyan-100 hover:bg-cyan-300/10 disabled:opacity-40">Authenticatorでログイン</button></form>}
         {mfaMode === "login" && <form onSubmit={useRecoveryCode} className="mt-6 border-t border-white/10 pt-5"><label className="block text-sm font-bold text-slate-200">パスキーを使えない場合<input value={recoveryCode} onChange={(event) => setRecoveryCode(event.target.value)} placeholder="復旧コード" autoComplete="one-time-code" className="mt-2 w-full rounded-xl border border-white/15 bg-black/25 px-4 py-3 font-mono text-white outline-none focus:border-cyan-300" /></label><button type="submit" disabled={!recoveryCode.trim() || isSaving} className="mt-3 w-full rounded-xl border border-white/15 px-4 py-3 text-sm font-bold hover:bg-white/10 disabled:opacity-40">復旧コードでログイン</button></form>}
         {message && <p role="alert" className="mt-4 rounded-lg border border-amber-300/30 bg-amber-300/10 px-3 py-2 text-sm text-amber-100">{message}</p>}
-        <button type="button" onClick={() => { setScreen("login"); setMfaOptions(null); setMessage(""); }} className="mt-4 w-full text-sm font-bold text-slate-400 hover:text-white">ログイン方法を選び直す</button>
+        <button type="button" onClick={() => { setScreen("login"); setMfaOptions(null); setTotpAvailable(false); setTotpCode(""); setMessage(""); }} className="mt-4 w-full text-sm font-bold text-slate-400 hover:text-white">ログイン方法を選び直す</button>
       </section>
     </main>
   );

@@ -23,6 +23,8 @@ export type SiteAdminAccountSummary = {
   externalPasskeyCount: number;
   unknownPasskeyCount: number;
   unusedRecoveryCodeCount: number;
+  totpEnabled: boolean;
+  totpEnrollmentPending: boolean;
 };
 
 export type SiteAdminNotificationKind = "alerts" | "contacts";
@@ -50,6 +52,8 @@ type SiteAdminAccountSummaryRow = Pick<SiteAdminAccountRow, "email" | "receive_a
   external_passkey_count?: string | number;
   unknown_passkey_count?: string | number;
   recovery_code_count?: string | number;
+  totp_enabled?: boolean;
+  totp_enrollment_pending?: boolean;
   matching_player_name?: string | null;
   debug_access_enabled?: boolean;
 };
@@ -68,6 +72,8 @@ function summary(row: SiteAdminAccountSummaryRow): SiteAdminAccountSummary {
     externalPasskeyCount: Number(row.external_passkey_count ?? 0),
     unknownPasskeyCount: Number(row.unknown_passkey_count ?? 0),
     unusedRecoveryCodeCount: Number(row.recovery_code_count ?? 0),
+    totpEnabled: row.totp_enabled === true,
+    totpEnrollmentPending: row.totp_enrollment_pending === true,
   };
 }
 
@@ -88,6 +94,8 @@ export async function listSiteAdminAccounts() {
         WHERE p.admin_email = a.email
           AND jsonb_array_length(p.transports) = 0) AS unknown_passkey_count,
       (SELECT COUNT(*)::int FROM site_admin_recovery_codes r WHERE r.admin_email = a.email AND r.used_at IS NULL) AS recovery_code_count,
+      (SELECT COUNT(*) > 0 FROM site_admin_totp t WHERE t.admin_email = a.email AND t.confirmed_at IS NOT NULL) AS totp_enabled,
+      (SELECT COUNT(*) > 0 FROM site_admin_totp t WHERE t.admin_email = a.email AND t.confirmed_at IS NULL) AS totp_enrollment_pending,
       player.display_name AS matching_player_name,
       (player.player_id IS NOT NULL) AS debug_access_enabled
     FROM site_admin_accounts a

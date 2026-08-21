@@ -5,7 +5,7 @@ export const siteAdminRecoverySessionMaxAgeSeconds = 60 * 15;
 export const siteAdminChallengeMaxAgeSeconds = 60 * 5;
 export const siteAdminStepUpMaxAgeSeconds = 60 * 5;
 
-export type SiteAdminAuthMethod = "passkey" | "recovery-code" | "master";
+export type SiteAdminAuthMethod = "passkey" | "totp" | "recovery-code" | "master";
 export type SiteAdminSessionScope = "full" | "recovery";
 
 export type SiteAdminSessionPayload = {
@@ -18,7 +18,7 @@ export type SiteAdminSessionPayload = {
   email: string | null;
 };
 
-export type SiteAdminChallengePurpose = "login" | "enroll" | "step-up" | "add-passkey";
+export type SiteAdminChallengePurpose = "login" | "enroll" | "step-up" | "add-passkey" | "enroll-totp";
 export type SiteAdminChallengePayload = {
   version: 1;
   expiresAt: number;
@@ -74,10 +74,10 @@ export function createSiteAdminToken(
   return signPayload(payload, secret);
 }
 
-export function refreshSiteAdminMfaToken(token: string, secret: string, now = Date.now()) {
+export function refreshSiteAdminMfaToken(token: string, secret: string, now = Date.now(), method?: SiteAdminAuthMethod) {
   const payload = parseSiteAdminToken(token, secret, now);
   if (!payload || payload.scope !== "full") return null;
-  return signPayload({ ...payload, mfaAt: now }, secret);
+  return signPayload({ ...payload, mfaAt: now, ...(method ? { method } : {}) }, secret);
 }
 
 export function parseSiteAdminToken(token: string, secret: string, now = Date.now()): SiteAdminSessionPayload | null {
@@ -85,7 +85,7 @@ export function parseSiteAdminToken(token: string, secret: string, now = Date.no
   if (!payload || payload.version !== 2 || typeof payload.expiresAt !== "number" || payload.expiresAt <= now) return null;
   if (typeof payload.authenticatedAt !== "number" || (payload.mfaAt !== null && typeof payload.mfaAt !== "number")) return null;
   if (payload.scope !== "full" && payload.scope !== "recovery") return null;
-  if (payload.method !== "passkey" && payload.method !== "recovery-code" && payload.method !== "master") return null;
+  if (payload.method !== "passkey" && payload.method !== "totp" && payload.method !== "recovery-code" && payload.method !== "master") return null;
   if (payload.email !== null && typeof payload.email !== "string") return null;
   return payload as SiteAdminSessionPayload;
 }
@@ -102,7 +102,7 @@ export function parseSiteAdminChallengeToken(token: string, secret: string, now 
   const payload = parseSignedPayload(token, secret);
   if (!payload || payload.version !== 1 || typeof payload.expiresAt !== "number" || payload.expiresAt <= now) return null;
   if (typeof payload.email !== "string" || typeof payload.challenge !== "string") return null;
-  if (payload.purpose !== "login" && payload.purpose !== "enroll" && payload.purpose !== "step-up" && payload.purpose !== "add-passkey") return null;
+  if (payload.purpose !== "login" && payload.purpose !== "enroll" && payload.purpose !== "step-up" && payload.purpose !== "add-passkey" && payload.purpose !== "enroll-totp") return null;
   return payload as SiteAdminChallengePayload;
 }
 

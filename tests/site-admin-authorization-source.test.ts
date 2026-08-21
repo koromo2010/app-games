@@ -40,7 +40,7 @@ test("break-glass sessions cannot create, update, or delete admin accounts", () 
   assert.match(source, /resettingOwnAccount \? await requireRecentSiteAdminMfa\(\) : session/);
 });
 
-test("full administrators can only reset their own passkeys after recent MFA", () => {
+test("full administrators can only reset their own MFA methods after recent MFA", () => {
   const route = read("app/api/admin/accounts/route.ts");
   const panel = read("app/admin/AdminAccountsPanel.tsx");
   assert.match(route, /resettingOwnAccount = session\.scope === "full" && session\.email === email/);
@@ -48,10 +48,11 @@ test("full administrators can only reset their own passkeys after recent MFA", (
   assert.match(route, /resetOwnAccount: resettingOwnAccount/);
   assert.match(panel, /const stepUpSession = !recoveryMode \? await ensureSiteAdminStepUp\(\) : null/);
   assert.match(panel, /stepUpSession\?\.method === "recovery-code"[\s\S]*onRecoveryCodeSessionEstablished/);
-  assert.match(panel, /!recoveryMode && currentEmail === account\.email && account\.passkeyCount > 0/);
-  assert.match(panel, /パスキー初期化/);
-  assert.match(panel, /recoveryMode && account\.passkeyCount > 0/);
+  assert.match(panel, /!recoveryMode && currentEmail === account\.email && \(account\.passkeyCount > 0 \|\| account\.totpEnabled\)/);
+  assert.match(panel, /MFAを初期化/);
+  assert.match(panel, /recoveryMode && \(account\.passkeyCount > 0 \|\| account\.totpEnabled\)/);
   assert.match(panel, /MFAを再設定/);
+  assert.match(route, /resetSiteAdminMfa\(email\)[\s\S]*removedTotpCount/);
 });
 
 test("recovery codes can satisfy a same-admin step-up without widening recovery scope", () => {

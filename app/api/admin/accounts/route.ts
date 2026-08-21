@@ -63,7 +63,7 @@ export async function PATCH(request: Request) {
       const authorizedSession = resettingOwnAccount ? await requireRecentSiteAdminMfa() : session;
       const result = await resetSiteAdminMfa(email);
       const accounts = await listSiteAdminAccounts();
-      await appendSiteAdminAuditLog(request, authorizedSession, "admin-account.mfa-reset", result.email, { passkeyCount: result.removedPasskeyCount }, { passkeyCount: 0 });
+      await appendSiteAdminAuditLog(request, authorizedSession, "admin-account.mfa-reset", result.email, { passkeyCount: result.removedPasskeyCount, totpCount: result.removedTotpCount }, { passkeyCount: 0, totpCount: 0 });
       telemetry.success("auth.access", { action: "site-admin-mfa-reset" });
       return Response.json({ accounts, resetOwnAccount: resettingOwnAccount });
     }

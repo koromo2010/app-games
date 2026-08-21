@@ -161,7 +161,8 @@ export async function resetSiteAdminMfa(emailInput: string) {
     DELETE FROM site_admin_passkeys WHERE admin_email = ${email} RETURNING credential_id
   ` as Array<{ credential_id: string }>;
   await sql`DELETE FROM site_admin_recovery_codes WHERE admin_email = ${email}`;
-  return { email, removedPasskeyCount: passkeys.length };
+  const totp = await sql`DELETE FROM site_admin_totp WHERE admin_email = ${email} RETURNING admin_email` as Array<{ admin_email: string }>;
+  return { email, removedPasskeyCount: passkeys.length, removedTotpCount: totp.length };
 }
 
 function requestFingerprint(request: Request) {

@@ -67,6 +67,12 @@ export const rateLimitPolicies = {
     ip: { limit: 30, windowMs: tenMinutes },
     identity: { limit: 12, windowMs: tenMinutes },
   },
+  adminTotp: {
+    id: "admin-totp",
+    ip: { limit: 30, windowMs: tenMinutes },
+    identity: { limit: 6, windowMs: tenMinutes },
+    failClosed: true,
+  },
   avatarUpload: {
     id: "avatar-upload",
     ip: { limit: 150, windowMs: tenMinutes },

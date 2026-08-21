@@ -1,4 +1,5 @@
 import type { AuthenticationResponseJSON, RegistrationResponseJSON } from "@simplewebauthn/server";
+import { randomBytes } from "node:crypto";
 import {
   clearSiteAdminChallengeCookie,
   publicSiteAdminSession,
@@ -21,6 +22,14 @@ import {
   saveSiteAdminPasskey,
   updateSiteAdminPasskeyCounter,
 } from "@/lib/site-admin-passkey-store";
+import {
+  beginSiteAdminTotpEnrollment,
+  cancelSiteAdminTotpEnrollment,
+  confirmSiteAdminTotpEnrollment,
+  consumeSiteAdminTotpCode,
+  resetSiteAdminTotp,
+  siteAdminTotpStatus,
+} from "@/lib/site-admin-totp-store";
 
 export const runtime = "nodejs";
 
@@ -33,13 +42,21 @@ function errorResponse(error: unknown) {
   if (code === "SITE_ADMIN_PLATFORM_PASSKEY_REQUIRED") return Response.json({ error: code }, { status: 400 });
   if (code === "SITE_ADMIN_CHALLENGE_INVALID") return Response.json({ error: "SITE_ADMIN_CHALLENGE_EXPIRED" }, { status: 400 });
   if (code === "SITE_ADMIN_PASSKEY_NOT_FOUND") return Response.json({ error: "SITE_ADMIN_PASSKEY_VERIFICATION_FAILED" }, { status: 400 });
+  if (code === "SITE_ADMIN_TOTP_ALREADY_ENROLLED") return Response.json({ error: code }, { status: 409 });
+  if (code === "SITE_ADMIN_TOTP_SECRET_UNAVAILABLE" || code === "SITE_ADMIN_TOTP_ENCRYPTION_NOT_CONFIGURED") return Response.json({ error: "SITE_ADMIN_TOTP_UNAVAILABLE" }, { status: 503 });
   return Response.json({ error: "SITE_ADMIN_PASSKEY_VERIFICATION_FAILED" }, { status: 400 });
+}
+
+function privateJson(body: unknown, init: ResponseInit = {}) {
+  const headers = new Headers(init.headers);
+  headers.set("Cache-Control", "no-store");
+  return Response.json(body, { ...init, headers });
 }
 
 export async function POST(request: Request) {
   const telemetry = createRequestTelemetry(request, "/api/admin/passkeys", { operation: "site-admin-passkey" });
   try {
-    const body = await request.json() as { action?: unknown; response?: unknown; recoveryCode?: unknown };
+    const body = await request.json() as { action?: unknown; response?: unknown; recoveryCode?: unknown; totpCode?: unknown };
     const action = typeof body.action === "string" ? body.action : "";
     const limited = await rateLimitResponseFor(request, rateLimitPolicies.adminAuth, { identity: action });
     if (limited) return limited;
@@ -48,10 +65,17 @@ export async function POST(request: Request) {
       const session = await requireFullSiteAdminSession();
       if (isRecentSiteAdminMfa(session)) return Response.json({ verified: true });
       if (!session.email) throw new Error("SITE_ADMIN_AUTH_REQUIRED");
-      const options = await siteAdminAuthenticationOptions(session.email);
-      if (!options) throw new Error("SITE_ADMIN_PASSKEY_NOT_FOUND");
-      await setSiteAdminChallengeCookie({ email: session.email, purpose: "step-up", challenge: options.challenge });
-      return Response.json({ verified: false, options });
+      const [options, totp] = await Promise.all([
+        siteAdminAuthenticationOptions(session.email),
+        siteAdminTotpStatus(session.email),
+      ]);
+      if (!options && !totp.enabled) throw new Error("SITE_ADMIN_PASSKEY_NOT_FOUND");
+      await setSiteAdminChallengeCookie({
+        email: session.email,
+        purpose: "step-up",
+        challenge: options?.challenge ?? randomBytes(24).toString("base64url"),
+      });
+      return privateJson({ verified: false, ...(options ? { options } : {}), totpAvailable: totp.enabled });
     }
 
     if (action === "begin-add-passkey") {
@@ -86,6 +110,35 @@ export async function POST(request: Request) {
         { removedCount },
       );
       return Response.json({ removedCount });
+    }
+
+    if (action === "begin-totp-enrollment") {
+      const session = await requireFullSiteAdminSession();
+      if (!isRecentSiteAdminMfa(session)) throw new Error("SITE_ADMIN_STEP_UP_REQUIRED");
+      if (!session.email) throw new Error("SITE_ADMIN_AUTH_REQUIRED");
+      const enrollment = await beginSiteAdminTotpEnrollment(session.email);
+      await setSiteAdminChallengeCookie({ email: session.email, purpose: "enroll-totp", challenge: enrollment.challenge });
+      await appendSiteAdminAuditLog(request, session, "admin.totp-enrollment-start", session.email);
+      return privateJson({ enrollment: { secret: enrollment.secret, provisioningUri: enrollment.provisioningUri } });
+    }
+
+    if (action === "cancel-totp-enrollment") {
+      const session = await requireFullSiteAdminSession();
+      if (!isRecentSiteAdminMfa(session)) throw new Error("SITE_ADMIN_STEP_UP_REQUIRED");
+      if (!session.email) throw new Error("SITE_ADMIN_AUTH_REQUIRED");
+      const cancelled = await cancelSiteAdminTotpEnrollment(session.email);
+      await clearSiteAdminChallengeCookie();
+      await appendSiteAdminAuditLog(request, session, "admin.totp-enrollment-cancel", session.email, undefined, { cancelled });
+      return privateJson({ cancelled });
+    }
+
+    if (action === "reset-totp") {
+      const session = await requireFullSiteAdminSession();
+      if (!isRecentSiteAdminMfa(session)) throw new Error("SITE_ADMIN_STEP_UP_REQUIRED");
+      if (!session.email) throw new Error("SITE_ADMIN_AUTH_REQUIRED");
+      const reset = await resetSiteAdminTotp(session.email);
+      await appendSiteAdminAuditLog(request, session, "admin.totp-reset", session.email, undefined, { reset });
+      return privateJson({ reset });
     }
 
     const challenge = await readSiteAdminChallenge();
@@ -142,6 +195,47 @@ export async function POST(request: Request) {
       await appendSiteAdminAuditLog(request, session, challenge.purpose === "enroll" ? "admin.passkey-enroll" : "admin.passkey-add", challenge.email);
       telemetry.success("auth.access", { action: challenge.purpose });
       return Response.json({ verified: true, session: publicSiteAdminSession(session), ...(recoveryCodes ? { recoveryCodes } : {}) });
+    }
+
+    if (action === "verify-totp-enrollment") {
+      if (challenge.purpose !== "enroll-totp" || typeof body.totpCode !== "string") throw new Error("SITE_ADMIN_CHALLENGE_INVALID");
+      const session = await requireFullSiteAdminSession();
+      if (!isRecentSiteAdminMfa(session) || !session.email || session.email !== challenge.email) throw new Error("SITE_ADMIN_STEP_UP_REQUIRED");
+      const limitedTotp = await rateLimitResponseFor(request, rateLimitPolicies.adminTotp, { identity: challenge.email });
+      if (limitedTotp) return limitedTotp;
+      if (!(await confirmSiteAdminTotpEnrollment(challenge.email, challenge.challenge, body.totpCode))) {
+        telemetry.reject("auth.access", 401, { action: "totp-enrollment", errorCode: "INVALID_TOTP_CODE" });
+        return privateJson({ error: "INVALID_TOTP_CODE" }, { status: 401 });
+      }
+      await clearSiteAdminChallengeCookie();
+      await appendSiteAdminAuditLog(request, session, "admin.totp-enroll", challenge.email);
+      telemetry.success("auth.access", { action: "totp-enrollment" });
+      return privateJson({ verified: true });
+    }
+
+    if (action === "verify-totp") {
+      if ((challenge.purpose !== "login" && challenge.purpose !== "step-up") || typeof body.totpCode !== "string") throw new Error("SITE_ADMIN_CHALLENGE_INVALID");
+      const current = challenge.purpose === "step-up" ? await requireFullSiteAdminSession() : null;
+      if (current && (!current.email || current.email !== challenge.email)) throw new Error("SITE_ADMIN_CHALLENGE_INVALID");
+      const limitedTotp = await rateLimitResponseFor(request, rateLimitPolicies.adminTotp, { identity: challenge.email });
+      if (limitedTotp) return limitedTotp;
+      if (!(await consumeSiteAdminTotpCode(challenge.email, body.totpCode))) {
+        telemetry.reject("auth.access", 401, { action: "totp", errorCode: "INVALID_TOTP_CODE" });
+        return privateJson({ error: "INVALID_TOTP_CODE" }, { status: 401 });
+      }
+      const now = Date.now();
+      let session: SiteAdminSessionPayload;
+      if (challenge.purpose === "login") {
+        await setSiteAdminCookie({ scope: "full", method: "totp", email: challenge.email });
+        session = { version: 2, scope: "full", method: "totp", email: challenge.email, authenticatedAt: now, mfaAt: now, expiresAt: now + siteAdminSessionMaxAgeSeconds * 1_000 };
+      } else {
+        await refreshSiteAdminMfaCookie("totp");
+        session = { ...current!, method: "totp", mfaAt: now };
+      }
+      await clearSiteAdminChallengeCookie();
+      await appendSiteAdminAuditLog(request, session, challenge.purpose === "login" ? "admin.totp-login" : "admin.totp-step-up", "site-admin");
+      telemetry.success("auth.access", { action: challenge.purpose === "login" ? "totp" : "totp-step-up" });
+      return privateJson({ verified: true, session: publicSiteAdminSession(session) });
     }
 
     if (action === "use-recovery-code") {

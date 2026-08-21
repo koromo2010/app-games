@@ -1,4 +1,5 @@
 import { revalidatePath } from "next/cache";
+import { randomBytes } from "node:crypto";
 import { clearSiteAdminCookie, publicSiteAdminSession, requireRecentSiteAdminMfa, requireSiteAdminSession, setSiteAdminChallengeCookie, setSiteAdminCookie, siteAdminAuthorizationError } from "@/lib/site-admin-auth";
 import { resolveSiteAdminPassword, verifySiteAdminPassword } from "@/lib/site-admin-auth-core";
 import { createRequestTelemetry } from "@/lib/observability";
@@ -7,6 +8,7 @@ import { countSiteAdminAccounts, verifySiteAdminAccount } from "@/lib/site-admin
 import { normalizeSiteAdminEmail } from "@/lib/site-admin-account-core";
 import { siteAdminAuthenticationOptions, siteAdminRegistrationOptions } from "@/lib/site-admin-passkey";
 import { appendSiteAdminAuditLog } from "@/lib/site-admin-passkey-store";
+import { siteAdminTotpStatus } from "@/lib/site-admin-totp-store";
 import { validateSiteSettingsInput } from "@/lib/site-settings";
 import { loadSiteSettings, saveSiteSettings } from "@/lib/site-settings-store";
 
@@ -62,14 +64,27 @@ export async function POST(request: Request) {
       telemetry.reject("auth.access", 401, { action: "site-admin-login", errorCode: "INVALID_CREDENTIAL" });
       return Response.json({ error: "INVALID_ADMIN_CREDENTIALS" }, { status: 401 });
     }
-    const authenticationOptions = await siteAdminAuthenticationOptions(normalizedEmail);
-    const options = authenticationOptions ?? await siteAdminRegistrationOptions(normalizedEmail);
-    const purpose = authenticationOptions ? "login" as const : "enroll" as const;
-    await setSiteAdminChallengeCookie({ email: normalizedEmail, purpose, challenge: options.challenge });
-    telemetry.success("auth.access", { action: authenticationOptions ? "site-admin-password-accepted" : "site-admin-enrollment-started" });
-    return Response.json(authenticationOptions
-      ? { mfaRequired: true, options }
-      : { passkeySetupRequired: true, options });
+    const [authenticationOptions, totp] = await Promise.all([
+      siteAdminAuthenticationOptions(normalizedEmail),
+      siteAdminTotpStatus(normalizedEmail),
+    ]);
+    if (!authenticationOptions && !totp.enabled) {
+      const options = await siteAdminRegistrationOptions(normalizedEmail);
+      await setSiteAdminChallengeCookie({ email: normalizedEmail, purpose: "enroll", challenge: options.challenge });
+      telemetry.success("auth.access", { action: "site-admin-enrollment-started" });
+      return Response.json({ passkeySetupRequired: true, options });
+    }
+    await setSiteAdminChallengeCookie({
+      email: normalizedEmail,
+      purpose: "login",
+      challenge: authenticationOptions?.challenge ?? randomBytes(24).toString("base64url"),
+    });
+    telemetry.success("auth.access", { action: "site-admin-password-accepted" });
+    return Response.json({
+      mfaRequired: true,
+      ...(authenticationOptions ? { options: authenticationOptions } : {}),
+      totpAvailable: totp.enabled,
+    });
   } catch (error) {
     if (error instanceof Error && error.message === "SITE_ADMIN_ACCOUNTS_STORE_NOT_CONFIGURED") {
       telemetry.reject("auth.access", 503, { action: "site-admin-login", errorCode: error.message });

@@ -8,13 +8,16 @@
 - WebAuthnのOriginとRP IDは環境ごとに分離する。`main`はOrigin `https://game-fields.com`／`https://www.game-fields.com`とRP ID `game-fields.com`、`develop`はOrigin `https://dev.game-fields.com`とRP ID `dev.game-fields.com`を使う。これにより、端末側でもmainとdevを別のパスキー名前空間として扱う。
 - 独自管理originを使う場合だけ`SITE_ADMIN_WEBAUTHN_ORIGIN`と`SITE_ADMIN_WEBAUTHN_RP_ID`を組で上書きする。OriginがRP IDの同一hostまたはsubdomainでなければ起動時に拒否し、developへ親RP ID `game-fields.com`を指定する設定も拒否する。
 - 新規パスキーは`authenticatorAttachment: "platform"`、`residentKey: "required"`、`userVerification: "required"`を指定し、端末内platform authenticatorかつdiscoverable credentialを必須にする。登録応答も`internal` transportであることを検査し、USBキー、別端末、種別不明の登録を拒否する。認証候補は現在の環境DBへ登録済みのCredential IDだけに制限し、transportを`internal`へ限定する。RP ID分離後も、DB内の未登録Credentialを認証候補にしない境界を維持する。
+- 通常ログインはメール・パスワードを第一要素とし、その後に既存の端末内パスキー、登録済みAuthenticatorのTOTP、または一回限りの復旧コードのいずれかを要求する。TOTPだけでのログイン、マスターパスワードからのTOTP経路、break-glass scopeへのTOTP経路は提供しない。
+- TOTPはRFC 6238互換の6桁・30秒コードで、時刻ずれは前後1 periodまでに限定する。使用済みcounterはDBのcompare-and-setで単調増加だけを許可し、同じコードのreplayと並行消費を拒否する。TOTP検証はIPと管理者identityのfail-closed rate limitを通す。
+- Authenticatorの追加、保留設定の取消、再設定は、同じfull管理者の直近MFAだけに許可する。セットアップsecretと`otpauth://` URIは追加開始時のowner browserへ`no-store`で一度だけ返し、DBには既存サーバーsecretから導出した鍵でAES-GCM暗号化して保存する。secret、URI、6桁code、recovery code、Credentialは監査ログ・構造化ログ・fixture・checkpointへ残さない。
 - プレイヤーログイン、非公開ゲームキーとは共有しない。管理画面CookieはプレイヤーCookieと分離するが、登録済み管理者メールとプレイヤーの所有確認済み復旧メールが一致すると、そのプレイヤーへデバッグ資格を自動付与する。未確認メールは一致しても権限判定に使わない。
 - 成功時は署名付きHttpOnly Cookie `game-fields-site-admin` を発行する。
 - CookieはSameSite=Strict、本番Secure、全パス有効、12時間で失効する。
 - ログイン試行、設定保存、画像アップロードは共通レート制限を通す。
 - 管理者アカウント一覧には、同じメールのプレイヤーが存在するかと、デバッグ資格の付与状態を表示する。加えて、メール未登録を含むプレイヤーを名前で検索し、プレイヤーID単位でデバッグ資格を個別付与・解除できる。変更には直近5分以内のMFA再確認を必須とし、監査ログへ記録する。プレイヤー側からの自己付与APIは提供しない。
-- 通常のfull管理者は、直近5分以内のMFA再確認後に、自分自身の「パスキー初期化」を実行できる。対象のパスキーと復旧コードを無効化するが、管理者アカウント、パスワード、通知設定は保持する。通常セッションから他の管理者を初期化することはできない。
-- パスキーを失い復旧コードも使えない場合は、Vercelで一時的に復旧モードを有効化し、マスターパスワードで入った管理者アカウント画面から対象メールの「MFAを再設定」を実行する。対象の全パスキーと旧復旧コードを無効化し、監査ログへ記録する。復旧モードを無効化した後、対象管理者はメールとパスワードでログインし、新しいパスキーと復旧コードを登録する。
+- 通常のfull管理者は、直近5分以内のMFA再確認後に、自分自身の「MFAを初期化」を実行できる。対象のパスキー、Authenticator、復旧コードを無効化するが、管理者アカウント、パスワード、通知設定は保持する。通常セッションから他の管理者を初期化することはできない。
+- パスキー、Authenticator、復旧コードを失った場合は、Vercelで一時的に復旧モードを有効化し、マスターパスワードで入った管理者アカウント画面から対象メールの「MFAを再設定」を実行する。対象の全パスキー、Authenticator、旧復旧コードを無効化し、監査ログへ件数だけ記録する。復旧モードを無効化した後、対象管理者はメールとパスワードでログインし、新しいパスキーを登録してからAuthenticatorを追加できる。
 - 復旧モードは対象Projectの`SITE_ADMIN_BREAK_GLASS_ENABLED=true`で有効化する。復旧完了後は変数を削除し、再デプロイして無効化する。恒常設定にしない。
 - 復旧コードでログインした場合は管理者アカウント画面へ誘導し、この端末のWindows Hello登録を優先表示する。登録のユーザー確認が成功した時点で通常のパスキーセッションへ切り替える。端末内パスキーが1件以上ある場合だけ、同じ管理者に残った`usb`等の外部キー登録を削除できる。
 - break-glass復旧セッションは15分の`recovery` scopeとし、管理者一覧、ダッシュボード、監査ログの読取とMFAリセットだけを許可する。管理者の追加・パスワード更新・削除、通知設定、公開設定、ゲーム運用、単語候補、昇格管理の読取・変更は画面とAPIの両方で拒否する。

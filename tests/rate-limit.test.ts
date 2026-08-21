@@ -58,6 +58,20 @@ test("rate limiting fails open when its Redis check is unavailable", async () =>
   assert.equal(result.storeAvailable, false);
 });
 
+test("TOTP verification has a tighter, fail-closed admin identity budget", async () => {
+  const result = await checkRateLimitCore(
+    new Request("https://game-fields.com/api/admin/passkeys"),
+    rateLimitPolicies.adminTotp,
+    { identity: "admin@example.test" },
+    async <T>(): Promise<T> => {
+      throw new Error("REDIS_UNAVAILABLE");
+    },
+  );
+  assert.equal(rateLimitPolicies.adminTotp.identity?.limit, 6);
+  assert.equal(result.allowed, false);
+  assert.equal(result.storeAvailable, false);
+});
+
 test("SDK Room quota combines actor, creator, package and Room buckets", async () => {
   let captured: unknown[] = [];
   const execute = async <T>(command: unknown[]) => {
