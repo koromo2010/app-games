@@ -10,7 +10,7 @@
 - 新規パスキーは`authenticatorAttachment: "platform"`、`residentKey: "required"`、`userVerification: "required"`を指定し、端末内platform authenticatorかつdiscoverable credentialを必須にする。登録応答も`internal` transportであることを検査し、USBキー、別端末、種別不明の登録を拒否する。認証候補は現在の環境DBへ登録済みのCredential IDだけに制限し、transportを`internal`へ限定する。RP ID分離後も、DB内の未登録Credentialを認証候補にしない境界を維持する。
 - 通常ログインはメール・パスワードを第一要素とし、その後に既存の端末内パスキー、登録済みAuthenticatorのTOTP、または一回限りの復旧コードのいずれかを要求する。TOTPだけでのログイン、マスターパスワードからのTOTP経路、break-glass scopeへのTOTP経路は提供しない。
 - TOTPはRFC 6238互換の6桁・30秒コードで、時刻ずれは前後1 periodまでに限定する。使用済みcounterはDBのcompare-and-setで単調増加だけを許可し、同じコードのreplayと並行消費を拒否する。TOTP検証はIPと管理者identityのfail-closed rate limitを通す。
-- Authenticatorの追加、保留設定の取消、再設定は、同じfull管理者の直近MFAだけに許可する。セットアップsecretと`otpauth://` URIは追加開始時のowner browserへ`no-store`で一度だけ返し、DBには既存サーバーsecretから導出した鍵でAES-GCM暗号化して保存する。secret、URI、6桁code、recovery code、Credentialは監査ログ・構造化ログ・fixture・checkpointへ残さない。
+- Authenticatorの追加、保留設定の取消、再設定は、同じfull管理者の直近MFAだけに許可する。セットアップsecretと`otpauth://` URIは追加開始時のowner browserへ`no-store`で一度だけ返し、画面はURIからローカルSVG QRコードを生成し、手入力用setup keyもfallbackとして表示する。QRとsetup materialを外部QR生成サービス、監査ログ、構造化ログ、fixture、checkpoint、cacheへ送らない。DBには既存サーバーsecretから導出した鍵でAES-GCM暗号化して保存する。secret、URI、6桁code、recovery code、Credentialは監査ログ・構造化ログ・fixture・checkpointへ残さない。
 - プレイヤーログイン、非公開ゲームキーとは共有しない。管理画面CookieはプレイヤーCookieと分離するが、登録済み管理者メールとプレイヤーの所有確認済み復旧メールが一致すると、そのプレイヤーへデバッグ資格を自動付与する。未確認メールは一致しても権限判定に使わない。
 - 成功時は署名付きHttpOnly Cookie `game-fields-site-admin` を発行する。
 - CookieはSameSite=Strict、本番Secure、全パス有効、12時間で失効する。
