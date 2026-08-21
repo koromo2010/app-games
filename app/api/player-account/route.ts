@@ -76,6 +76,10 @@ function statusForError(error: unknown) {
       return { code: "EMAIL_SEND_FAILED", status: 502 };
     case "SDK_ACCOUNT_DELETION_UNAVAILABLE":
       return { code: error.message, status: 503 };
+    case "PLAYER_ACCOUNT_DELETION_ACTIVE":
+      return { code: error.message, status: 410 };
+    case "PLAYER_DELETION_DURABLE_STORE_REQUIRED":
+      return { code: error.message, status: 503 };
     default:
       return { code: "UNKNOWN", status: 500 };
   }

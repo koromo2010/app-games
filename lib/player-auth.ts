@@ -1,6 +1,8 @@
 import { cookies } from "next/headers";
 import { loadStoredPlayerSession } from "@/lib/player-store";
 import { touchPlayerAccountActivity } from "@/lib/player-account-store";
+import { isPostgresConfigured } from "@/lib/postgres-store";
+import { playerDeletionBlocksAccess } from "@/lib/player-deletion-operation-store";
 import {
   authenticatedPlayerIdFromCookieStore,
   createPlayerAuthToken,
@@ -39,7 +41,9 @@ export async function clearPlayerAuthCookie() {
 
 /** Verifies the signed cookie without reading the player record from Redis. */
 export async function getAuthenticatedPlayerId() {
-  return authenticatedPlayerIdFromCookieStore(await cookies());
+  const playerId = authenticatedPlayerIdFromCookieStore(await cookies());
+  if (playerId && isPostgresConfigured() && await playerDeletionBlocksAccess(playerId)) return null;
+  return playerId;
 }
 
 export async function requireAuthenticatedPlayerId() {

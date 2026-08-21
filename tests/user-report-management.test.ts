@@ -186,7 +186,8 @@ test("retention deletion uses the same dependent-data cleanup before deleting ac
   const deletion = read("lib/player-data-deletion.ts");
 
   assert.match(accounts, /listExpiredPostgresPlayerAccountIds/);
-  assert.match(accounts, /await deletePlayerDependentData\(playerId\)/);
+  assert.match(accounts, /beginPlayerDeletion\(playerId, "retention"\)/);
+  assert.match(accounts, /await driveStoredPlayerDeletion\(operation\)/);
   assert.match(accounts, /playerAccountEmailKey\(account\.email\)/);
   assert.match(postgres, /SELECT player_id FROM player_accounts/);
   assert.doesNotMatch(postgres, /WITH expired AS/);

@@ -64,7 +64,8 @@ test("retention preserves true expiry and dependent deletion while exposing only
 
   assert.match(postgres, /last_activity_at IS NOT NULL AND last_activity_at <= \$\{cutoff\}/);
   assert.match(postgres, /last_activity_at IS NULL/);
-  assert.match(accounts, /await deletePlayerDependentData\(playerId\)/);
+  assert.match(accounts, /beginPlayerDeletion\(playerId, "retention"\)/);
+  assert.match(accounts, /await driveStoredPlayerDeletion\(operation\)/);
   assert.match(accounts, /postgresProtectedMissingActivity/);
   assert.match(accounts, /redisProtectedMissingActivity/);
   assert.match(deletion, /deleteUserReportsForPlayer/);

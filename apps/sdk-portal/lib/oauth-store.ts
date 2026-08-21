@@ -2,6 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { ensureSdkSchema, sdkSql } from "@/lib/sdk-postgres";
 import { sdkPortalReleaseProfile } from "@/lib/sdk-release-profile";
 import { isAllowedOAuthRedirectUri } from "@/lib/oauth-redirect-uri";
+import { sdkAccountDeletionBlocksAccess } from "@/lib/account-deletion-state";
 
 export const SDK_SCOPES = ["sdk:creator", "sdk:mock"] as const;
 export const SDK_SCOPE = SDK_SCOPES.join(" ");
@@ -79,6 +80,7 @@ export async function validateOAuthClient(clientId: string, redirectUri: string)
 
 export async function createAuthorizationCode(input: { clientId: string; redirectUri: string; playerId: string; scope: string; codeChallenge: string; audience: string }) {
   await prepareOAuthStore();
+  if (await sdkAccountDeletionBlocksAccess(input.playerId)) throw new Error("SDK_ACCOUNT_DELETION_ACTIVE");
   const code = token();
   await sdkSql()`INSERT INTO sdk_oauth_codes (code_hash, client_id, redirect_uri, player_id, scope, audience, code_challenge, expires_at) VALUES (${hash(code)}, ${input.clientId}, ${input.redirectUri}, ${input.playerId}, ${input.scope}, ${input.audience}, ${input.codeChallenge}, NOW() + INTERVAL '5 minutes')`;
   return code;
@@ -95,6 +97,7 @@ export async function exchangeAuthorizationCode(input: { code: string; clientId:
 }
 
 async function issueTokens(playerId: string, clientId: string, scope: string, audience: string) {
+  if (await sdkAccountDeletionBlocksAccess(playerId)) return null;
   const accessToken = token();
   const refreshToken = token();
   await sdkSql()`INSERT INTO sdk_oauth_grants (access_token_hash, refresh_token_hash, client_id, player_id, scope, audience, access_expires_at, refresh_expires_at) VALUES (${hash(accessToken)}, ${hash(refreshToken)}, ${clientId}, ${playerId}, ${scope}, ${audience}, NOW() + INTERVAL '30 days', NOW() + INTERVAL '365 days')`;
@@ -112,7 +115,7 @@ export async function authenticateAccessToken(value: string, requiredScope: stri
   await prepareOAuthStore();
   const rows = await sdkSql()`SELECT player_id, client_id, scope FROM sdk_oauth_grants WHERE access_token_hash = ${hash(value)} AND audience = ${audience} AND revoked_at IS NULL AND access_expires_at > NOW() LIMIT 1`;
   const row = (Array.isArray(rows) ? rows[0] : null) as { player_id: string; client_id: string; scope: string } | null;
-  if (!row || !row.scope.split(" ").includes(requiredScope)) return null;
+  if (!row || !row.scope.split(" ").includes(requiredScope) || await sdkAccountDeletionBlocksAccess(row.player_id)) return null;
   return { playerId: row.player_id, clientId: row.client_id, scope: row.scope };
 }
 

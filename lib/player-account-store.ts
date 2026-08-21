@@ -32,7 +32,15 @@ import {
   normalizePlayerAccountActivityAt,
   playerAccountActivityTouchDue,
 } from "@/lib/player-account-activity";
-import { deletePlayerDependentData } from "@/lib/player-data-deletion";
+import { deletePlayerDependentData, revokeSdkAccount } from "@/lib/player-data-deletion";
+import { drivePlayerDeletion, type PlayerDeletionOperation } from "@/lib/player-deletion-operation";
+import {
+  beginPlayerDeletion,
+  completePlayerDeletionOperation,
+  completePlayerDeletionStep,
+  listActivePlayerDeletions,
+  playerDeletionBlocksAccess,
+} from "@/lib/player-deletion-operation-store";
 import { normalizeAppLocale, type AppLocale } from "@/lib/app-locale";
 import { ensurePlayerAccountSession } from "@/lib/player-account-session";
 import {
@@ -265,6 +273,9 @@ export async function touchPlayerAccountActivity(
 ) {
   const playerId = playerIdInput.trim();
   if (!playerId) return { touched: false, lastActivityAt: null };
+  if (isPostgresConfigured() && await playerDeletionBlocksAccess(playerId)) {
+    return { touched: false, lastActivityAt: null };
+  }
   const account = await loadPlayerAccountForActivity(playerId);
   if (!account) return { touched: false, lastActivityAt: null };
   if (!playerAccountActivityTouchDue(account.lastActivityAt, now)) {
@@ -386,6 +397,9 @@ export async function loginPlayerAccount(input: PlayerAccountAuthInput) {
   if (!account || !verifyPassword(input.password, account.passwordSalt, account.passwordHash)) {
     throw new Error("PLAYER_ACCOUNT_INVALID_CREDENTIALS");
   }
+  if (isPostgresConfigured() && await playerDeletionBlocksAccess(account.playerId)) {
+    throw new Error("PLAYER_ACCOUNT_DELETION_ACTIVE");
+  }
 
   const now = Date.now();
   const activeAccount = { ...account, updatedAt: now, lastActivityAt: now };
@@ -396,6 +410,7 @@ export async function loginPlayerAccount(input: PlayerAccountAuthInput) {
 
 export async function refreshPlayerAccountSession(authenticatedPlayerId: string) {
   if (!isPostgresConfigured()) return null;
+  if (await playerDeletionBlocksAccess(authenticatedPlayerId)) return null;
   const stored = await loadPostgresPlayerAccountByPlayerId(authenticatedPlayerId);
   const account = stored ? normalizeAccount(stored) : null;
   if (!account || account.playerId !== authenticatedPlayerId) return null;
@@ -471,21 +486,20 @@ export async function changePlayerAccountPassword(
 }
 
 export async function deleteExpiredUnverifiedPlayerAccounts(now = Date.now()) {
+  if (!isPostgresConfigured()) throw new Error("PLAYER_DELETION_DURABLE_STORE_REQUIRED");
   const cutoff = now - unverifiedPlayerAccountRetentionMs;
   let postgresDeleted = 0;
   let postgresProtectedMissingActivity = 0;
-  const cleanedPlayerIds = new Set<string>();
-  if (isPostgresConfigured()) {
-    const [expiredPlayerIds, protectedCount] = await Promise.all([
-      listExpiredPostgresPlayerAccountIds(cutoff),
-      countPostgresUnverifiedAccountsMissingActivity(),
-    ]);
-    postgresProtectedMissingActivity = protectedCount;
-    for (const playerId of expiredPlayerIds) {
-      await deletePlayerDependentData(playerId);
-      cleanedPlayerIds.add(playerId);
-      if (await deletePostgresPlayerAccount(playerId)) postgresDeleted += 1;
-    }
+  const resumed = await resumePendingPlayerDeletions();
+  const [expiredPlayerIds, protectedCount] = await Promise.all([
+    listExpiredPostgresPlayerAccountIds(cutoff),
+    countPostgresUnverifiedAccountsMissingActivity(),
+  ]);
+  postgresProtectedMissingActivity = protectedCount;
+  for (const playerId of expiredPlayerIds) {
+    const operation = await beginPlayerDeletion(playerId, "retention");
+    await driveStoredPlayerDeletion(operation);
+    postgresDeleted += 1;
   }
 
   let cursor = "0";
@@ -504,16 +518,8 @@ export async function deleteExpiredUnverifiedPlayerAccounts(now = Date.now()) {
           continue;
         }
         if (!account || !unverifiedAccountIsExpired(account, now)) continue;
-        if (!cleanedPlayerIds.has(account.playerId)) {
-          await deletePlayerDependentData(account.playerId);
-          cleanedPlayerIds.add(account.playerId);
-        }
-        await redisCommand<number>([
-          "DEL",
-          key,
-          `player:${account.playerId}`,
-          ...(account.email ? [playerAccountEmailKey(account.email)] : []),
-        ]);
+        const operation = await beginPlayerDeletion(account.playerId, "retention");
+        await driveStoredPlayerDeletion(operation);
         redisDeleted += 1;
       } catch {
         // Malformed legacy records are left in place for manual inspection.
@@ -527,6 +533,7 @@ export async function deleteExpiredUnverifiedPlayerAccounts(now = Date.now()) {
     redisDeleted,
     postgresProtectedMissingActivity,
     redisProtectedMissingActivity,
+    resumedOperations: resumed.completed,
   };
 }
 
@@ -666,18 +673,53 @@ export async function confirmPlayerAccountEmail(
   return accountSession(updatedAccount);
 }
 
+async function driveStoredPlayerDeletion(operation: PlayerDeletionOperation) {
+  return drivePlayerDeletion(operation, {
+    completeStep: completePlayerDeletionStep,
+    completeOperation: completePlayerDeletionOperation,
+    runStep: async (step) => {
+      const stored = isPostgresConfigured()
+        ? await loadPostgresPlayerAccountByPlayerId(operation.playerId)
+        : null;
+      const account = stored ? normalizeAccount(stored) : null;
+      if (step === "sdk-revoked") {
+        await revokeSdkAccount(operation.playerId, operation.operationId);
+      } else if (step === "dependent-data-deleted") {
+        await deletePlayerDependentData(operation.playerId);
+      } else if (step === "redis-account-deleted") {
+        const keys = [`player:${operation.playerId}`];
+        if (account) {
+          keys.push(accountKey(account.loginName));
+          if (account.email) keys.push(playerAccountEmailKey(account.email));
+        }
+        await redisCommand<number>(["DEL", ...keys]);
+      } else if (step === "postgres-account-deleted") {
+        if (isPostgresConfigured()) await deletePostgresPlayerAccount(operation.playerId);
+      }
+    },
+  });
+}
+
+export async function resumePendingPlayerDeletions() {
+  const pending = await listActivePlayerDeletions();
+  let completed = 0;
+  for (const operation of pending) {
+    await driveStoredPlayerDeletion(operation);
+    completed += 1;
+  }
+  return { pending: pending.length, completed };
+}
+
 export async function deletePlayerAccount(input: PlayerAccountAuthInput, authenticatedPlayerId: string) {
+  if (!isPostgresConfigured()) throw new Error("PLAYER_DELETION_DURABLE_STORE_REQUIRED");
   const account = await loadAccount(input.name);
   if (!account || account.playerId !== authenticatedPlayerId || !verifyPassword(input.password, account.passwordSalt, account.passwordHash)) {
     throw new Error("PLAYER_ACCOUNT_INVALID_CREDENTIALS");
   }
 
-  await deletePlayerDependentData(account.playerId);
-  const keys = [accountKey(account.loginName), `player:${account.playerId}`];
-  if (account.email) keys.push(playerAccountEmailKey(account.email));
-  await redisCommand<number>(["DEL", ...keys]);
-  if (isPostgresConfigured()) await deletePostgresPlayerAccount(account.playerId);
-  return { playerId: account.playerId };
+  const operation = await beginPlayerDeletion(account.playerId, "explicit");
+  const receipt = await driveStoredPlayerDeletion(operation);
+  return { playerId: account.playerId, ...receipt };
 }
 
 export async function loadPlayerAccountByEmail(email: string) {

@@ -1,5 +1,9 @@
 import { requireSdkServiceRequest } from "@/lib/sdk-service-auth";
 import { ensureSdkSchema, sdkSql } from "@/lib/sdk-postgres";
+import {
+  blockSdkAccountForDeletion,
+  completeSdkAccountDeletion,
+} from "@/lib/account-deletion-state";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -23,16 +27,19 @@ export async function DELETE(request: Request) {
   if (denied) return denied;
   const body = await request.json().catch(() => null) as {
     playerId?: unknown;
+    operationId?: unknown;
   } | null;
   const playerId = typeof body?.playerId === "string"
     ? body.playerId.trim()
     : "";
-  if (!playerId || playerId.length > 120) {
+  const operationId = typeof body?.operationId === "string" ? body.operationId.trim() : "";
+  if (!playerId || playerId.length > 120 || !/^[0-9a-f-]{36}$/i.test(operationId)) {
     return Response.json({ error: "account_input_invalid" }, { status: 400 });
   }
 
   try {
     await ensureSdkSchema();
+    await blockSdkAccountForDeletion(operationId, playerId);
     const games = await sdkSql()`
       UPDATE sdk_games g
       SET status = 'deleted',
@@ -58,6 +65,7 @@ export async function DELETE(request: Request) {
       WHERE owner_player_id = ${playerId}
       RETURNING id
     `;
+    await completeSdkAccountDeletion(operationId, playerId);
     return Response.json({
       deleted: true,
       affectedCreators: Array.isArray(creators) ? creators.length : 0,

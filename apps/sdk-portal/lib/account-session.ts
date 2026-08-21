@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { normalizeAccountLinkReturnPath } from "./account-link-return";
+import { sdkAccountDeletionBlocksAccess } from "./account-deletion-state";
 
 const cookieName = "game-fields-sdk-account";
 const stateCookieName = "game-fields-sdk-link-state";
@@ -83,6 +84,7 @@ export async function getSdkAccountSession(): Promise<SdkAccountSession | null> 
   if (!value) return null;
   const payload = parseSigned<SdkAccountSession>(value);
   if (!payload?.playerId || payload.expiresAt < Date.now()) return null;
+  if (await sdkAccountDeletionBlocksAccess(payload.playerId)) return null;
   return {
     playerId: payload.playerId,
     playerName: typeof payload.playerName === "string" && payload.playerName.trim() ? payload.playerName : null,

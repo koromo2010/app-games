@@ -11,7 +11,7 @@ import { deleteUserReportsForPlayer } from "./user-report-store.ts";
 import { deleteUserReportDraftsForPlayer } from "./user-report-draft-store.ts";
 import { deleteWordWolfTopicHistory } from "./wordwolf-topic-history-store.ts";
 
-async function revokeSdkAccount(playerId: string) {
+export async function revokeSdkAccount(playerId: string, operationId: string) {
   if (!process.env.SDK_ACCOUNT_LINK_SECRET) return;
   const url = `${sdkPortalInternalBaseUrl()}/api/internal/accounts`;
   const response = await fetch(url, {
@@ -20,14 +20,13 @@ async function revokeSdkAccount(playerId: string) {
       ...sdkServiceHeaders("DELETE", url),
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ playerId }),
+    body: JSON.stringify({ playerId, operationId }),
     cache: "no-store",
   });
   if (!response.ok) throw new Error("SDK_ACCOUNT_DELETION_UNAVAILABLE");
 }
 
 export async function deletePlayerDependentData(playerId: string) {
-  await revokeSdkAccount(playerId);
   await Promise.all([
     deletePlayerStatsData(playerId),
     deletePlayerGameReplayData(playerId),
