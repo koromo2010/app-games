@@ -49,6 +49,7 @@
 | `OBSERVABILITY_HASH_SECRET` | 配置未監査 |
 | `OBSERVABILITY_LOG_LEVEL` | 配置未監査 |
 | `OBSERVABILITY_SERVICE_NAME` | 配置未監査 |
+| `SDK_DATABASE_BINDING_DIAGNOSTIC` | 未設定（通常時）。`1`のときSDK schema確認時に接続先を不可逆fingerprintだけでruntime logへ1件出力。接続文字列・host・credential・queryは出力しない |
 | `OPERATIONS_ALERT_EMAIL` | 配置未監査 |
 | `PRODUCTION_SMOKE_URL` | GitHub Actionsまたは監視環境の配置未監査 |
 | `RATE_LIMIT_HASH_SECRET` | 配置未監査 |

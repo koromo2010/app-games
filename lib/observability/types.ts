@@ -150,6 +150,12 @@ export type ObservabilityFields = {
   outcome?: ObservabilityOutcome;
   errorCode?: string;
   databaseCode?: string;
+  databaseSelectorKey?: "SDK_DATABASE_URL" | "POSTGRES_PRISMA_URL" | "DATABASE_URL" | "NONE";
+  databaseFallbackUsed?: boolean;
+  databaseTargetFingerprint?: string;
+  databaseNameFingerprint?: string;
+  observedSchemaVersion?: number;
+  requiredSchemaVersion?: number;
 };
 
 export type ObservabilityEvent = {

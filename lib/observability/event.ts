@@ -35,6 +35,8 @@ const stringFieldNames = [
   "assetPath",
   "errorCode",
   "databaseCode",
+  "databaseTargetFingerprint",
+  "databaseNameFingerprint",
 ] as const;
 const numberFieldNames = [
   "revision",
@@ -54,9 +56,17 @@ const numberFieldNames = [
   "promptTokens",
   "completionTokens",
   "costMicros",
+  "observedSchemaVersion",
+  "requiredSchemaVersion",
 ] as const;
-const booleanFieldNames = ["applied", "debugMode"] as const;
+const booleanFieldNames = ["applied", "debugMode", "databaseFallbackUsed"] as const;
 const outcomes = new Set<ObservabilityOutcome>(["started", "success", "rejected", "conflict", "ignored", "failed"]);
+const databaseSelectorKeys = new Set<NonNullable<ObservabilityFields["databaseSelectorKey"]>>([
+  "SDK_DATABASE_URL",
+  "POSTGRES_PRISMA_URL",
+  "DATABASE_URL",
+  "NONE",
+]);
 const workClasses = new Set<ObservabilityWorkClass>(
   observabilityWorkClasses,
 );
@@ -90,6 +100,14 @@ export function sanitizeObservabilityFields(value: unknown): ObservabilityFields
   }
   for (const name of booleanFieldNames) {
     if (typeof input[name] === "boolean") fields[name] = input[name];
+  }
+  if (
+    typeof input.databaseSelectorKey === "string"
+    && databaseSelectorKeys.has(
+      input.databaseSelectorKey as NonNullable<ObservabilityFields["databaseSelectorKey"]>,
+    )
+  ) {
+    fields.databaseSelectorKey = input.databaseSelectorKey as NonNullable<ObservabilityFields["databaseSelectorKey"]>;
   }
   if (typeof input.outcome === "string" && outcomes.has(input.outcome as ObservabilityOutcome)) {
     fields.outcome = input.outcome as ObservabilityOutcome;

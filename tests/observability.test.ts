@@ -46,6 +46,30 @@ test("storage telemetry accepts only fixed enums and numeric sizes", () => {
   }), {});
 });
 
+test("database binding telemetry accepts only its closed safe schema", () => {
+  assert.deepEqual(sanitizeObservabilityFields({
+    databaseSelectorKey: "POSTGRES_PRISMA_URL",
+    databaseFallbackUsed: true,
+    databaseTargetFingerprint: "a".repeat(64),
+    databaseNameFingerprint: "b".repeat(64),
+    observedSchemaVersion: 9,
+    requiredSchemaVersion: 10,
+    url: "private-value",
+    host: "private-value",
+    query: "private-value",
+  }), {
+    databaseSelectorKey: "POSTGRES_PRISMA_URL",
+    databaseFallbackUsed: true,
+    databaseTargetFingerprint: "a".repeat(64),
+    databaseNameFingerprint: "b".repeat(64),
+    observedSchemaVersion: 9,
+    requiredSchemaVersion: 10,
+  });
+  assert.deepEqual(sanitizeObservabilityFields({
+    databaseSelectorKey: "UNSAFE_VARIABLE_NAME",
+  }), {});
+});
+
 test("部屋とactorは安定した不透明参照へ変換する", () => {
   const first = observabilityRef("room", "ABCD");
   const second = observabilityRef("room", "ABCD");
