@@ -3,16 +3,12 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   createSdkDatabaseBindingDiagnostic,
+  createSdkDatabaseBindingDiagnosticLogEvent,
   emitSdkDatabaseBindingDiagnostic,
   resolveSdkDatabaseBinding,
   sdkDatabaseBindingOperatorDiagnosticEnabled,
   shouldEmitSdkDatabaseBindingDiagnostic,
 } from "../apps/sdk-portal/lib/sdk-database-binding-diagnostic.ts";
-import {
-  consoleObservabilitySink,
-  getObservabilitySink,
-  setObservabilitySink,
-} from "../lib/observability/sink.ts";
 
 function syntheticDatabaseUrl() {
   return [
@@ -111,30 +107,50 @@ test("schema 10 suppresses default diagnostic output, while mismatch or explicit
 });
 
 test("one mismatch attempt emits one safe structured runtime event; replay keeps source values absent", () => {
-  const events: unknown[] = [];
-  const previousSink = getObservabilitySink();
-  setObservabilitySink({ emit: (event) => { events.push(event); } });
+  const input = {
+    binding: resolveSdkDatabaseBinding({ POSTGRES_PRISMA_URL: syntheticDatabaseUrl() }),
+    observedSchemaVersion: 9,
+    requiredSchemaVersion: 10,
+  } as const;
+  const event = createSdkDatabaseBindingDiagnosticLogEvent(input, {
+    VERCEL_GIT_COMMIT_REF: "develop",
+    VERCEL_GIT_COMMIT_SHA: "1234567890abcdef",
+    VERCEL_REGION: "hnd1",
+  });
+  assert.deepEqual(event, {
+    schemaVersion: 1,
+    occurredAt: event.occurredAt,
+    level: "info",
+    event: "sdk.database-binding-diagnostic",
+    service: "game-fields-sdk-portal",
+    environment: "development",
+    deployment: "1234567890ab",
+    region: "hnd1",
+    fields: createSdkDatabaseBindingDiagnostic(input),
+  });
+  const serializedEvent = JSON.stringify(event);
+  for (const fragment of forbiddenFragments) assert.equal(serializedEvent.includes(fragment), false);
+
+  const lines: string[] = [];
+  const previousInfo = console.info;
+  console.info = (value?: unknown) => { lines.push(String(value)); };
   try {
-    const input = {
-      binding: resolveSdkDatabaseBinding({ POSTGRES_PRISMA_URL: syntheticDatabaseUrl() }),
-      observedSchemaVersion: 9,
-      requiredSchemaVersion: 10,
-    } as const;
     emitSdkDatabaseBindingDiagnostic(input);
-    assert.equal(events.length, 1);
-    for (const event of events) {
-      const serialized = JSON.stringify(event);
-      for (const fragment of forbiddenFragments) assert.equal(serialized.includes(fragment), false);
-    }
     emitSdkDatabaseBindingDiagnostic(input);
-    assert.equal(events.length, 2);
-    for (const event of events) {
-      const serialized = JSON.stringify(event);
+    assert.equal(lines.length, 2);
+    for (const line of lines) {
+      const serialized = JSON.stringify(JSON.parse(line));
       for (const fragment of forbiddenFragments) assert.equal(serialized.includes(fragment), false);
     }
   } finally {
-    setObservabilitySink(previousSink ?? consoleObservabilitySink);
+    console.info = previousInfo;
   }
+});
+
+test("SDK DB diagnostic remains within the isolated Portal dependency boundary", () => {
+  const source = readFileSync("apps/sdk-portal/lib/sdk-database-binding-diagnostic.ts", "utf8");
+  assert.doesNotMatch(source, /from\s+["'][^"']*(?:observability|redis)[^"']*["']/);
+  assert.doesNotMatch(source, /require\(["'][^"']*(?:observability|redis)[^"']*["']\)/);
 });
 
 test("health remains response-compatible and delegates selection to the shared SDK PostgreSQL path", () => {
