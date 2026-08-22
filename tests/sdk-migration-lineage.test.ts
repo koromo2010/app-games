@@ -25,8 +25,9 @@ test("SDK migration runner accepts only the known production 005 fork", () => {
   assert.match(runner, /!isCanonical && !isAcceptedLegacy/);
   assert.match(reconciliation, /CREATE TABLE IF NOT EXISTS sdk_release_decisions/);
   assert.match(reconciliation, /CREATE INDEX IF NOT EXISTS sdk_release_decisions_lineage_idx/);
-  assert.match(postgres, /SDK_SCHEMA_VERSION = 9/);
+  assert.match(postgres, /SDK_SCHEMA_VERSION = 10/);
   assert.match(read("db/sdk/009_module_profile_proposals.sql"), /sdk_game_module_profile_proposals/);
+  assert.match(read("db/sdk/010_bounded_creator_quarantine_recovery.sql"), /sdk_creator_recovery_operations/);
 });
 
 test("SDK migration checksums are independent of checkout line endings", () => {

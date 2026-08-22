@@ -52,6 +52,19 @@ Platform account削除は、player IDをキーに戦績、rating、replay、sett
 
 異なるDBを一つの分散transactionとはみなさない。各段階を同じplayer IDで再実行可能にし、後段の正本を消す前に前段を完了する。Package Revisionは開始済みRoomの固定契約と監査証跡のため保持し、新規catalog・Preview・昇格からは即時除外する。
 
+### 削除済みCreatorの限定復旧
+
+履歴backupを利用できず、tombstone済みのCreator／game行とimmutable artifactだけが残る場合は、通常のgame再送信や`deleted_at`の直接解除を復旧手段にしない。専用の限定復旧は次の4段階を分離する。
+
+1. exact targetのread-only dry-run
+2. 元行をtombstoneのまま保持する非公開・未所有のquarantine reconstruction
+3. 別途検証したowner binding
+4. 利用者が別途確認したpublication
+
+各段階は次の段階を暗黙承認しない。quarantine reconstructionはdurable operation UUID、dry-run receipt、transaction内の再検証、terminal receiptを必須とする。同一operationの完了済みreplayは追加mutationなしで同じreceiptを返し、別operationはfuture reset手順が明示承認されるまで拒否する。
+
+quarantineは元のCreator／game ID、slug、Package Revision、artifact locatorを参照して保存するが、元statusを推測せず、owner／accountを自動選択せず、旧management token、OAuth grant、sessionを復元しない。quarantine表はcatalog、Preview、public release、anonymous play、current release pointerの読取経路へ接続しない。
+
 ## 運用確認
 
 - `GAME_FIELDS_ENV`が各deploymentに明示され、`NODE_ENV`だけで保存先を決めていない。

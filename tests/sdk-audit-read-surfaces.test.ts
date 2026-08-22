@@ -26,7 +26,7 @@ const revision = "a".repeat(40);
 
 function snapshotRows(): SdkSchemaAuditInput {
   return {
-    schemaVersion: 9,
+    schemaVersion: 10,
     deploymentEnvironment: "development" as const,
     observedAt: "2026-08-01T00:00:00.000Z",
     games: [{
@@ -76,7 +76,7 @@ function snapshotRows(): SdkSchemaAuditInput {
   };
 }
 
-test("schema 9 reports deployment context but never invents a database marker or stable provenance", () => {
+test("schema 10 preserves the schema-9 unavailable markers without inventing database provenance", () => {
   const snapshot = createSdkSchemaAuditSnapshot(snapshotRows());
   assert.deepEqual(snapshot.environment, {
     deployment: "development",
@@ -246,13 +246,13 @@ test("canonical digest is row-order independent and covers every integrity-beari
 
 test("schema mismatch is fail-closed and never auto-migrates", () => {
   assert.throws(() => createSdkSchemaAuditSnapshot({ ...snapshotRows(), schemaVersion: 7 }), /SDK_SCHEMA_AUDIT_VERSION_MISMATCH/);
-  assert.throws(() => createSdkSchemaAuditSnapshot({ ...snapshotRows(), schemaVersion: 8 }), /SDK_SCHEMA_AUDIT_VERSION_MISMATCH/);
+  assert.throws(() => createSdkSchemaAuditSnapshot({ ...snapshotRows(), schemaVersion: 9 }), /SDK_SCHEMA_AUDIT_VERSION_MISMATCH/);
 });
 
 test("schema loader uses one read-only repeatable-read transaction with exactly three SELECTs and injected clock", async () => {
   const statements: string[] = [];
   let options: unknown;
-  const rows = [[{ version: 9 }], snapshotRows().games, snapshotRows().currentReleases];
+  const rows = [[{ version: 10 }], snapshotRows().games, snapshotRows().currentReleases];
   const sql = {
     transaction: async (callback: (tx: unknown) => Array<Promise<unknown>>, transactionOptions: unknown) => {
       options = transactionOptions;
@@ -282,7 +282,7 @@ test("schema loader propagates query failure without returning an absent snapsho
       let index = 0;
       const tx = () => index++ === 1
         ? Promise.reject(new Error("query-failed"))
-        : Promise.resolve(index === 1 ? [{ version: 9 }] : []);
+        : Promise.resolve(index === 1 ? [{ version: 10 }] : []);
       return Promise.all(callback(tx));
     },
   } as unknown as NonNullable<Parameters<typeof loadSdkSchemaAuditSnapshot>[1]>["sql"];
