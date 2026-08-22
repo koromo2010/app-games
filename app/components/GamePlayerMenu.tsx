@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { avatarColorOptions, clearPlayerSession, defaultAvatarImage, defaultAvatarImages, isAvatarColor, isAvatarImage, savePersistentPlayerSession, type PlayerSession } from "@/lib/player-session";
 import { FullScreenPageOverlay } from "@/app/components/FullScreenPageOverlay";
 import { useAppLocale } from "@/app/components/AppLocaleProvider";
+import { useKeyboardLayer } from "@/app/components/keyboard-focus-contract";
 
 type Props = { id?: string; name: string; avatarColor: string; avatarImage?: string | null; hasRecoveryEmail?: boolean };
 
@@ -19,10 +20,12 @@ export function GamePlayerMenu(props: Props) {
   const [isMyPageOpen, setIsMyPageOpen] = useState(false);
   const [position, setPosition] = useState({ top: 80, left: 12 });
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
   const avatarSavingRef = useRef(false);
   const logoutRef = useRef(false);
   const color = colorOverride ?? props.avatarColor;
   const image = imageOverride ?? props.avatarImage ?? defaultAvatarImage;
+  useKeyboardLayer({ open: isOpen, containerRef: menuRef, restoreFallbackRef: buttonRef, onDismiss: () => setIsOpen(false), modal: false });
 
   useEffect(() => {
     const receiveSessionUpdate = (event: MessageEvent) => {
@@ -98,7 +101,7 @@ export function GamePlayerMenu(props: Props) {
         <span className="max-w-[120px] truncate">{props.name}</span>
         <span className="text-[10px] text-slate-300" aria-hidden="true">▼</span>
       </button>
-      {isOpen && createPortal(<div className="fixed inset-0 z-[9999]" onClick={() => setIsOpen(false)}><div role="dialog" aria-label={t("account.openMenu", { name: props.name })} className="fixed w-[min(18rem,calc(100vw-1.5rem))] rounded-lg border border-slate-200 bg-white p-3 text-slate-900 shadow-2xl" style={position} onClick={(event) => event.stopPropagation()}>
+      {isOpen && createPortal(<div className="fixed inset-0 z-[9999]" onClick={() => setIsOpen(false)}><div ref={menuRef} role="dialog" aria-label={t("account.openMenu", { name: props.name })} tabIndex={-1} className="fixed w-[min(18rem,calc(100vw-1.5rem))] rounded-lg border border-slate-200 bg-white p-3 text-slate-900 shadow-2xl" style={position} onClick={(event) => event.stopPropagation()}>
         <div className="flex items-center justify-between gap-2"><p className="truncate px-1 text-xs font-semibold text-slate-500">{t("account.playingAs", { name: props.name })}</p><button type="button" onClick={() => setIsOpen(false)} className="rounded border border-slate-200 px-2 py-1 text-xs font-bold text-slate-500">{t("site.close")}</button></div>
         <p className="mt-3 text-xs font-bold">{t("account.avatarColor")}</p>
         <div className="mt-2 grid grid-cols-8 gap-1.5">

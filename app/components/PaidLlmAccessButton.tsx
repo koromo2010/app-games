@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { freeGroqLlmModel, freeLlmModel, paidLlmModel } from "@/lib/llm-model";
 import { FullScreenPageOverlay } from "@/app/components/FullScreenPageOverlay";
+import { useKeyboardLayer } from "@/app/components/keyboard-focus-contract";
 
 type AccessSource = "personal" | "game-fields" | null;
 type PersonalProvider = "openai" | "gemini" | "groq";
@@ -74,6 +75,17 @@ export function PaidLlmAccessButton({ variant = "banner" }: { variant?: "banner"
   const [message, setMessage] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [isGuideOpen, setIsGuideOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  const closeDialog = () => {
+    setIsOpen(false);
+    setPersonalApiKey("");
+    setGameFieldsPassword("");
+    setMessage("");
+  };
+
+  useKeyboardLayer({ open: isOpen, containerRef: dialogRef, restoreFallbackRef: triggerRef, onDismiss: closeDialog });
 
   const refreshStatus = async () => {
     try {
@@ -162,6 +174,7 @@ export function PaidLlmAccessButton({ variant = "banner" }: { variant?: "banner"
   return (
     <>
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => {
           setMessage("");
@@ -185,7 +198,7 @@ export function PaidLlmAccessButton({ variant = "banner" }: { variant?: "banner"
 
       {isOpen && createPortal(
         <div className="fixed inset-0 z-[9999] grid place-items-center overflow-y-auto bg-slate-950/70 px-4 py-6 text-slate-950 backdrop-blur-sm">
-          <div role="dialog" aria-modal="true" aria-labelledby="llm-access-title" className="my-auto max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-lg border border-white/20 bg-white p-5 shadow-2xl">
+          <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="llm-access-title" tabIndex={-1} className="my-auto max-h-[calc(100vh-2rem)] w-full max-w-lg overflow-y-auto rounded-lg border border-white/20 bg-white p-5 shadow-2xl">
             <p className="text-xs font-semibold uppercase text-emerald-700">AI API access</p>
             <h2 id="llm-access-title" className="mt-1 text-xl font-bold">利用するAI API</h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">
@@ -292,12 +305,7 @@ export function PaidLlmAccessButton({ variant = "banner" }: { variant?: "banner"
               )}
               <button
                 type="button"
-                onClick={() => {
-                  setIsOpen(false);
-                  setPersonalApiKey("");
-                  setGameFieldsPassword("");
-                  setMessage("");
-                }}
+                onClick={closeDialog}
                 className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
                 disabled={isSaving}
               >

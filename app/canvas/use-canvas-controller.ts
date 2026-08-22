@@ -11,6 +11,7 @@ import { readPlayerSession, type PlayerSession } from "@/lib/player-session";
 import type { CanvasLayer, CanvasLayerMode } from "@/lib/canvas-room";
 import { activeCanvasLobbyStrokes } from "@/lib/canvas-lobby-board";
 import { canvasFeatures } from "@/lib/canvas-features";
+import { shouldHandleGameKeyboardEvent } from "@/app/components/keyboard-focus-contract";
 
 const storageKey = "canvas-prototype-board";
 const channelName = "game-fields-canvas-prototype";
@@ -78,7 +79,9 @@ export function useCanvasController() {
 
   useEffect(() => {
     const onFullscreenChange = () => { if (!document.fullscreenElement) setBoardFullscreen(false); };
-    const onKeyDown = (event: KeyboardEvent) => { if (event.key === "Escape" && boardFullscreen) void closeBoardFullscreen(); };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && boardFullscreen && !event.defaultPrevented && !event.isComposing) void closeBoardFullscreen();
+    };
     document.addEventListener("fullscreenchange", onFullscreenChange);
     window.addEventListener("keydown", onKeyDown);
     return () => { document.removeEventListener("fullscreenchange", onFullscreenChange); window.removeEventListener("keydown", onKeyDown); };
@@ -193,9 +196,8 @@ export function useCanvasController() {
   }, [room]);
 
   useEffect(() => {
-    const editableTarget = (event: KeyboardEvent) => (event.target as HTMLElement | null)?.closest("input, textarea, select, [contenteditable='true']");
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.ctrlKey || event.metaKey || event.altKey || editableTarget(event)) return;
+      if (!shouldHandleGameKeyboardEvent(event, boardViewportRef.current)) return;
       const key = event.key.toLowerCase();
       if (event.code === "Space") {
         if (!room) activateLobbySync();
@@ -285,10 +287,17 @@ export function useCanvasController() {
       if (event.code === "Space") releaseSpace();
       if (event.key.startsWith("Arrow")) pressedArrowKeysRef.current.delete(event.key);
     };
+    const onFocusOut = (event: FocusEvent) => {
+      const owner = boardViewportRef.current;
+      if (owner && event.relatedTarget instanceof Node && owner.contains(event.relatedTarget)) return;
+      releaseAllKeys();
+    };
+    const owner = boardViewportRef.current;
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("blur", releaseAllKeys);
-    return () => { window.removeEventListener("keydown", onKeyDown); window.removeEventListener("keyup", onKeyUp); window.removeEventListener("blur", releaseAllKeys); };
+    owner?.addEventListener("focusout", onFocusOut);
+    return () => { window.removeEventListener("keydown", onKeyDown); window.removeEventListener("keyup", onKeyUp); window.removeEventListener("blur", releaseAllKeys); owner?.removeEventListener("focusout", onFocusOut); };
   }, [activeLayerId, activateLobbySync, changeZoom, color, keyboardCursor, opacity, redo, room, roomRequest, session?.id, tool, undo, width]);
 
 

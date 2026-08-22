@@ -14,6 +14,7 @@ import {
 import { shareGameResult } from "@/lib/game-share-client";
 import { useAppLocale } from "./AppLocaleProvider";
 import { appIntlLocale } from "@/lib/app-i18n";
+import { useKeyboardLayer } from "./keyboard-focus-contract";
 
 function formatReplayDate(timestamp: number, locale: "ja" | "en") {
   return new Intl.DateTimeFormat(appIntlLocale(locale), {
@@ -39,6 +40,10 @@ export function GameReplayPanel({
   const [busyReplayId, setBusyReplayId] = useState("");
   const [message, setMessage] = useState("");
   const [sharePreview, setSharePreview] = useState<{ title: string; text: string; url: string } | null>(null);
+  const detailDialogRef = useRef<HTMLDivElement>(null);
+  const shareDialogRef = useRef<HTMLDivElement>(null);
+  useKeyboardLayer({ open: Boolean(selectedReplay), containerRef: detailDialogRef, onDismiss: () => setSelectedReplay(null) });
+  useKeyboardLayer({ open: Boolean(sharePreview), containerRef: shareDialogRef, onDismiss: () => setSharePreview(null) });
 
   const loadReplays = useCallback(async (signal?: AbortSignal) => {
     try {
@@ -264,10 +269,12 @@ export function GameReplayPanel({
 
       {selectedReplay && (
         <div
+          ref={detailDialogRef}
           className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-950/70 p-3 pt-10 backdrop-blur-sm sm:p-6 sm:pt-16"
           role="dialog"
           aria-modal="true"
           aria-labelledby="replay-detail-heading"
+          tabIndex={-1}
           onClick={() => setSelectedReplay(null)}
         >
         <div
@@ -357,7 +364,7 @@ export function GameReplayPanel({
       )}
 
       {sharePreview && (
-        <div className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-slate-950/70 p-3 pt-10 backdrop-blur-sm sm:p-6 sm:pt-16" role="dialog" aria-modal="true" aria-labelledby="replay-share-heading" onClick={() => setSharePreview(null)}>
+        <div ref={shareDialogRef} className="fixed inset-0 z-[60] flex items-start justify-center overflow-y-auto bg-slate-950/70 p-3 pt-10 backdrop-blur-sm sm:p-6 sm:pt-16" role="dialog" aria-modal="true" aria-labelledby="replay-share-heading" tabIndex={-1} onClick={() => setSharePreview(null)}>
           <div className="w-full max-w-xl rounded-xl border border-violet-200 bg-violet-50 p-4 shadow-2xl sm:p-6" onClick={(event) => event.stopPropagation()}>
             <h3 id="replay-share-heading" className="text-lg font-black text-slate-950">共有される文章</h3>
             <p className="mt-1 text-xs text-slate-500">内容を確認してから共有先を選びます。</p>
