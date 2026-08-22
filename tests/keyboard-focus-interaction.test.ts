@@ -84,6 +84,8 @@ test("platform modal and menu surfaces share one topmost keyboard/focus lifecycl
   assert.match(lifecycle, /candidates\.length === 0/);
   assert.match(lifecycle, /restoreFocusSafely\(origin, fallback\)/);
   assert.match(lifecycle, /previousOpenRef\.current = open/);
+  assert.match(lifecycle, /candidate === document\.body \|\| candidate === document\.documentElement/);
+  assert.match(lifecycle, /requestAnimationFrame\(\(\) => \{[\s\S]*originRef\.current = document\.activeElement/);
 
   for (const path of [
     "app/components/GameRulesDialog.tsx",

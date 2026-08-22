@@ -119,6 +119,7 @@ export function focusableElements(container: HTMLElement) {
 
 function focusSafely(candidate: HTMLElement | null | undefined) {
   if (!candidate || !isVisibleEnabled(candidate)) return false;
+  if (candidate === document.body || candidate === document.documentElement) return false;
   candidate.focus({ preventScroll: true });
   return document.activeElement === candidate;
 }
@@ -171,7 +172,7 @@ export function useKeyboardLayer({
 
   useEffect(() => {
     if (open && !previousOpenRef.current) {
-      originRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      originRef.current = null;
     } else if (!open && previousOpenRef.current) {
       const origin = originRef.current;
       const fallback = restoreFallbackRef?.current ?? null;
@@ -188,6 +189,9 @@ export function useKeyboardLayer({
     const focusFrame = window.requestAnimationFrame(() => {
       const container = containerRef.current;
       if (!container) return;
+      if (!originRef.current && document.activeElement instanceof HTMLElement) {
+        originRef.current = document.activeElement;
+      }
       const initial = initialFocusRef?.current ?? focusableElements(container)[0];
       if (!focusSafely(initial)) focusFallback(container);
     });
