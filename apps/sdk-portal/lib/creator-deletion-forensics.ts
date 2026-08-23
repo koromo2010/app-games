@@ -1,6 +1,7 @@
 import type { RuntimeArtifactReader } from "@game-fields/sdk-runtime-artifact";
 
 export const creatorDeletionForensicsTarget = "moi-lab2";
+export const yabobojpnLabSafeProjectionTarget = "yabobojpn-lab";
 
 export type ForensicArtifactTarget = {
   kind: "mock" | "package";
@@ -19,9 +20,10 @@ export type ForensicArtifactSummary = {
 
 const maximumArtifactChecks = 50;
 
-export async function inspectCreatorArtifacts(
+async function inspectExactCreatorArtifacts(
   targets: readonly ForensicArtifactTarget[],
   reader: Pick<RuntimeArtifactReader, "readCommit" | "readTree">,
+  creatorSlug: string,
 ): Promise<ForensicArtifactSummary> {
   const unique = [...new Map(targets.map((target) => [
     `${target.kind}:${target.gameId}:${target.revision}`,
@@ -52,8 +54,8 @@ export async function inspectCreatorArtifacts(
         continue;
       }
       const prefix = target.kind === "mock"
-        ? `previews/${creatorDeletionForensicsTarget}/${target.gameId}/mock/`
-        : `packages/${creatorDeletionForensicsTarget}/${target.gameId}/bundle/`;
+        ? `previews/${creatorSlug}/${target.gameId}/mock/`
+        : `packages/${creatorSlug}/${target.gameId}/bundle/`;
       if (tree.some((entry) => entry.type === "blob" && entry.path.startsWith(prefix))) {
         present += 1;
       } else {
@@ -76,6 +78,20 @@ export async function inspectCreatorArtifacts(
     missing,
     unavailable,
   };
+}
+
+export async function inspectCreatorArtifacts(
+  targets: readonly ForensicArtifactTarget[],
+  reader: Pick<RuntimeArtifactReader, "readCommit" | "readTree">,
+): Promise<ForensicArtifactSummary> {
+  return inspectExactCreatorArtifacts(targets, reader, creatorDeletionForensicsTarget);
+}
+
+export async function inspectYabobojpnLabArtifacts(
+  targets: readonly ForensicArtifactTarget[],
+  reader: Pick<RuntimeArtifactReader, "readCommit" | "readTree">,
+): Promise<ForensicArtifactSummary> {
+  return inspectExactCreatorArtifacts(targets, reader, yabobojpnLabSafeProjectionTarget);
 }
 
 function timestamp(value: unknown) {
