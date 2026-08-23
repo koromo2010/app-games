@@ -18,8 +18,13 @@ export default function SiteAdminPage() {
       && process.env.VERCEL_GIT_COMMIT_REF === "develop"
       ? "preview"
       : null;
+  const showOriginalDataPreservation = appEnvironment === "production"
+    && process.env.APP_ENV === "production"
+    && process.env.VERCEL_ENV === "production"
+    && process.env.VERCEL_GIT_COMMIT_REF === "main";
   return <SiteAdminPanel
     showPreviewVocabularyMigrations={showPreviewVocabularyMigrations}
     releaseManagementMode={releaseManagementMode}
+    showOriginalDataPreservation={showOriginalDataPreservation}
   />;
 }
