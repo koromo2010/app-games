@@ -4,10 +4,12 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  acceptedLegacyMigrationEntries,
   migrationChecksum,
   normalizeMigrationSource,
   verifyAppliedChecksums,
 } from "../scripts/migrate-sdk-database.mjs";
+import { originalDataPreservationSchema9AcceptedLegacyEntries } from "../apps/sdk-portal/lib/original-data-preservation.ts";
 
 const read = (path: string) => readFileSync(path, "utf8");
 
@@ -28,6 +30,15 @@ test("SDK migration runner accepts only the known production 005 fork", () => {
   assert.match(postgres, /SDK_SCHEMA_VERSION = 10/);
   assert.match(read("db/sdk/009_module_profile_proposals.sql"), /sdk_game_module_profile_proposals/);
   assert.match(read("db/sdk/010_bounded_creator_quarantine_recovery.sql"), /sdk_creator_recovery_operations/);
+});
+
+test("A0 schema-9 rescue lineage stays byte-identical to the migration runner contract", () => {
+  const runnerEntries = [...acceptedLegacyMigrationEntries.entries()]
+    .flatMap(([version, entries]) => [...entries.entries()]
+      .map(([name, checksum]) => ({ version, name, checksum })));
+
+  assert.deepEqual(runnerEntries, originalDataPreservationSchema9AcceptedLegacyEntries);
+  assert.doesNotThrow(() => verifyAppliedChecksums(runnerEntries));
 });
 
 test("SDK migration checksums are independent of checkout line endings", () => {

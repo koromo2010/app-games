@@ -239,7 +239,7 @@ const hooks = new Map([[3, backfillImmutablePackages]]);
 // before the development branch assigned 005 to release decisions and moved the
 // artifact migration to 006. Keep that one known ledger entry readable while a
 // forward-only reconciliation migration makes both databases structurally equal.
-const acceptedLegacyMigrationEntries = new Map([
+export const acceptedLegacyMigrationEntries = new Map([
   [5, new Map([
     [
       "005_cross_environment_package_artifacts.sql",

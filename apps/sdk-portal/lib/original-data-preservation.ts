@@ -173,6 +173,14 @@ export const originalDataPreservationSchema9Ledger = Object.freeze([
   { version: 9, name: "009_module_profile_proposals.sql", checksum: "b7f306bf3d236118d38719722647984119cdb18aec8614cf042fde757f67c723" },
 ]);
 
+export const originalDataPreservationSchema9AcceptedLegacyEntries = Object.freeze([
+  Object.freeze({
+    version: 5,
+    name: "005_cross_environment_package_artifacts.sql",
+    checksum: "ef3f71bcb5ef919b392aa69fdbd0577580dcb1fab16bfeaa6514225f4d7487e7",
+  }),
+]);
+
 export const originalDataPreservationCredentialExclusions = Object.freeze([
   { table: "sdk_creators", columns: ["management_token_hash"] },
   { table: "sdk_oauth_codes", columns: ["code_hash", "code_challenge"] },
@@ -252,12 +260,16 @@ export function assertOriginalDataPreservationLedger(
   for (let index = 0; index < originalDataPreservationSchema9Ledger.length; index += 1) {
     const expected = originalDataPreservationSchema9Ledger[index]!;
     const row = rows[index];
-    if (
-      !row
-      || Number(row.version) !== expected.version
-      || row.name !== expected.name
-      || row.checksum !== expected.checksum
-    ) {
+    if (!row || Number(row.version) !== expected.version) {
+      throw new OriginalDataPreservationError("A0_SCHEMA_PRECONDITION_FAILED");
+    }
+    const isCanonical = row.name === expected.name
+      && row.checksum === expected.checksum;
+    const isAcceptedLegacy = originalDataPreservationSchema9AcceptedLegacyEntries
+      .some((entry) => entry.version === expected.version
+        && row.name === entry.name
+        && row.checksum === entry.checksum);
+    if (!isCanonical && !isAcceptedLegacy) {
       throw new OriginalDataPreservationError("A0_SCHEMA_PRECONDITION_FAILED");
     }
   }

@@ -13,6 +13,7 @@ import {
   originalDataPreservationInternalPath,
   originalDataPreservationReceiptHeader,
   originalDataPreservationRecordTables,
+  originalDataPreservationSchema9AcceptedLegacyEntries,
   originalDataPreservationSchema9Ledger,
   verifyOriginalDataPreservationArchive,
   type OriginalDataPreservationSnapshot,
@@ -46,6 +47,15 @@ function ledger() {
     ...row,
     applied_at: "2026-08-23T00:00:00.000Z",
   }));
+}
+
+function knownLegacyV5Ledger() {
+  const rows = ledger();
+  rows[4] = {
+    ...originalDataPreservationSchema9AcceptedLegacyEntries[0]!,
+    applied_at: "2026-08-23T00:00:00.000Z",
+  };
+  return rows;
 }
 
 function targetSnapshot(target: OriginalDataPreservationTarget) {
@@ -169,8 +179,20 @@ test("one deterministic ZIP preserves both exact targets from one schema-9 snaps
   assert.equal([...files.keys()].filter((path) => path.endsWith("index.html")).length, 1);
 });
 
-test("schema 10, migration 010, missing ledger rows, and checksum drift fail closed", () => {
+test("schema-9 ledger accepts only canonical or the exact known production v5 lineage", () => {
   assert.doesNotThrow(() => assertOriginalDataPreservationLedger(ledger()));
+  assert.doesNotThrow(() => assertOriginalDataPreservationLedger(knownLegacyV5Ledger()));
+
+  const nameDrift = knownLegacyV5Ledger();
+  nameDrift[4] = { ...nameDrift[4]!, name: `${nameDrift[4]!.name.slice(0, -1)}x` };
+  assert.throws(() => assertOriginalDataPreservationLedger(nameDrift), /A0_SCHEMA_PRECONDITION_FAILED/);
+
+  const checksumDrift = knownLegacyV5Ledger();
+  checksumDrift[4] = { ...checksumDrift[4]!, checksum: `${checksumDrift[4]!.checksum.slice(0, -1)}0` };
+  assert.throws(() => assertOriginalDataPreservationLedger(checksumDrift), /A0_SCHEMA_PRECONDITION_FAILED/);
+});
+
+test("migration 010, gaps, duplicates, ordering drift, unknown versions, and other drift fail closed", () => {
   assert.throws(
     () => assertOriginalDataPreservationLedger([
       ...ledger(),
@@ -180,6 +202,19 @@ test("schema 10, migration 010, missing ledger rows, and checksum drift fail clo
       && error.code === "A0_SCHEMA_PRECONDITION_FAILED",
   );
   assert.throws(() => assertOriginalDataPreservationLedger(ledger().slice(1)), /A0_SCHEMA_PRECONDITION_FAILED/);
+
+  const duplicated = ledger();
+  duplicated[5] = { ...duplicated[4]! };
+  assert.throws(() => assertOriginalDataPreservationLedger(duplicated), /A0_SCHEMA_PRECONDITION_FAILED/);
+
+  const reordered = ledger();
+  [reordered[3], reordered[4]] = [reordered[4]!, reordered[3]!];
+  assert.throws(() => assertOriginalDataPreservationLedger(reordered), /A0_SCHEMA_PRECONDITION_FAILED/);
+
+  const unknown = ledger();
+  unknown[5] = { ...unknown[5]!, version: 99 };
+  assert.throws(() => assertOriginalDataPreservationLedger(unknown), /A0_SCHEMA_PRECONDITION_FAILED/);
+
   const drifted = ledger();
   drifted[8] = { ...drifted[8]!, checksum: "0".repeat(64) };
   assert.throws(() => assertOriginalDataPreservationLedger(drifted), /A0_SCHEMA_PRECONDITION_FAILED/);
