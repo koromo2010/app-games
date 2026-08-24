@@ -5,6 +5,7 @@ import { loadCanvasLobbyBoardView } from "@/app/canvas/canvas-lobby-board-api-cl
 import { loadCanvasRoomView, type PublicCanvasRoom } from "@/app/canvas/canvas-room-api-client";
 import type { DrawingStroke } from "@/lib/drawing-canvas";
 import { canvasLobbyActiveSyncMs, canvasPollInterval } from "@/lib/canvas-sync-policy";
+import { canAcceptRoomRevision, recordRoomRevision } from "@/lib/room-scoped-reconciliation";
 
 type SharedSyncState = {
   keyboardStrokeRef: MutableRefObject<DrawingStroke | null>;
@@ -18,7 +19,7 @@ function mergeActiveStroke(strokes: DrawingStroke[], active: DrawingStroke | nul
 
 export function useCanvasRoomSync({ activeRoomCode, roomRevisionRef, setRoom, keyboardStrokeRef, setStrokes, setPendingStrokes }: SharedSyncState & {
   activeRoomCode?: string;
-  roomRevisionRef: MutableRefObject<number>;
+  roomRevisionRef: MutableRefObject<Map<string, number>>;
   setRoom: Dispatch<SetStateAction<PublicCanvasRoom | null>>;
 }) {
   useEffect(() => {
@@ -26,8 +27,8 @@ export function useCanvasRoomSync({ activeRoomCode, roomRevisionRef, setRoom, ke
     let active = true;
     const load = async () => {
       const room = await loadCanvasRoomView(activeRoomCode).catch(() => null);
-      if (!active || !room || room.revision < roomRevisionRef.current) return;
-      roomRevisionRef.current = room.revision;
+      if (!active || !room || !canAcceptRoomRevision(roomRevisionRef.current, activeRoomCode, room.revision)) return;
+      recordRoomRevision(roomRevisionRef.current, activeRoomCode, room.revision);
       setRoom(room);
       setStrokes(mergeActiveStroke(room.strokes, keyboardStrokeRef.current));
       setPendingStrokes((pending) => pending.filter((stroke) => !room.strokes.some((saved) => saved.id === stroke.id && !saved.inProgress)));

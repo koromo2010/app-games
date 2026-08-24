@@ -92,6 +92,7 @@ export function useOnlineRoomPolling<Room>({
         if (latest) callbacks.current.onRoom(latest);
         else callbacks.current.onMissing();
       } catch (error) {
+        if (!active) return;
         consecutiveFailures += 1;
         callbacks.current.onError?.(error);
       } finally {

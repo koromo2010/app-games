@@ -149,6 +149,7 @@ export function ApprovedSdkGameShell({
 
   const acceptIncomingRoom = useCallback((next: RoomSnapshot | null) => {
     const current = roomRef.current;
+    if (next && current && current.code !== next.code) return;
     if (!next) {
       if (shouldKeepRoomResultAfterDissolve(current, "result")) {
         pendingLobbyRoomRef.current = null;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { mutateCanvasLobbyBoard } from "./canvas-lobby-board-api-client";
 import { canvasPlayerLayerId, deleteCanvasRoomView, mutateCanvasRoom, type PublicCanvasRoom } from "./canvas-room-api-client";
 import { useCanvasStrokeQueue } from "./use-canvas-stroke-queue";
@@ -12,6 +12,7 @@ import type { CanvasLayer, CanvasLayerMode } from "@/lib/canvas-room";
 import { activeCanvasLobbyStrokes } from "@/lib/canvas-lobby-board";
 import { canvasFeatures } from "@/lib/canvas-features";
 import { shouldHandleGameKeyboardEvent } from "@/app/components/keyboard-focus-contract";
+import { canAcceptRoomRevision, isRoomScopedResponseCurrent, recordRoomRevision } from "@/lib/room-scoped-reconciliation";
 
 const storageKey = "canvas-prototype-board";
 const channelName = "game-fields-canvas-prototype";
@@ -54,8 +55,10 @@ export function useCanvasController() {
   const keyboardStrokeIdRef = useRef<string | null>(null);
   const keyboardStrokeRef = useRef<DrawingStroke | null>(null);
   const pressedArrowKeysRef = useRef(new Set<string>());
-  const roomRevisionRef = useRef(0);
+  const roomRevisionRef = useRef(new Map<string, number>());
   const lobbyRevisionRef = useRef(0);
+  const activeRoomCodeRef = useRef<string | undefined>(undefined);
+  useLayoutEffect(() => { activeRoomCodeRef.current = room?.code; }, [room?.code]);
   const boardViewportRef = useRef<HTMLDivElement>(null);
   const boardShellRef = useRef<HTMLDivElement>(null);
 
@@ -133,11 +136,18 @@ export function useCanvasController() {
   }, []);
 
   const roomRequest = useCallback(async (method: string, body?: unknown) => {
+    const originRoomCode = method === "PATCH"
+      && body
+      && typeof body === "object"
+      && typeof (body as { code?: unknown }).code === "string"
+      ? (body as { code: string }).code
+      : undefined;
     setRoomBusy(true);
     try {
       const nextRoom = await mutateCanvasRoom(method as "POST" | "PATCH", body);
-      if (nextRoom.revision < roomRevisionRef.current) return nextRoom;
-      roomRevisionRef.current = nextRoom.revision;
+      if (originRoomCode && !isRoomScopedResponseCurrent(activeRoomCodeRef.current, originRoomCode, nextRoom.code)) return nextRoom;
+      if (!canAcceptRoomRevision(roomRevisionRef.current, nextRoom.code, nextRoom.revision)) return nextRoom;
+      recordRoomRevision(roomRevisionRef.current, nextRoom.code, nextRoom.revision);
       setRoom(nextRoom); setStrokes(() => { const active = keyboardStrokeRef.current; return active ? [...nextRoom.strokes.filter((stroke) => stroke.id !== active.id), active] : nextRoom.strokes; });
       setTool((current) => current === "pan" ? "pen" : current);
       setPendingStrokes((pending) => pending.filter((stroke) => !nextRoom.strokes.some((saved) => saved.id === stroke.id && !saved.inProgress)));
@@ -308,6 +318,7 @@ export function useCanvasController() {
     try {
       if (isOwner) await deleteCanvasRoomView(room.code);
       else await roomRequest("PATCH", { code: room.code, action: { type: "leave" } });
+      if (activeRoomCodeRef.current !== room.code) return;
       setRoom(null);
       setActiveLayerId("base");
       setHiddenLayerIds(new Set());

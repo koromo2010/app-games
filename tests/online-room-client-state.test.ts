@@ -8,8 +8,8 @@ test("late room responses cannot replace a newer client revision", () => {
   assert.equal(preferLatestOnlineRoom(current, { code: "ABCD", revision: 4, value: "same" }), current);
 });
 
-test("newer and different-room responses are accepted", () => {
+test("newer same-Room responses are accepted while a stale different-Room response is isolated", () => {
   const current = { code: "ABCD", revision: 4, value: "old" };
   assert.deepEqual(preferLatestOnlineRoom(current, { code: "ABCD", revision: 5, value: "new" }), { code: "ABCD", revision: 5, value: "new" });
-  assert.deepEqual(preferLatestOnlineRoom(current, { code: "WXYZ", revision: 1, value: "other" }), { code: "WXYZ", revision: 1, value: "other" });
+  assert.equal(preferLatestOnlineRoom(current, { code: "WXYZ", revision: 1, value: "other" }), current);
 });

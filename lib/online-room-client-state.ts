@@ -11,7 +11,10 @@ export function preferLatestOnlineRoom<Room extends RevisionedOnlineRoom>(
   current: Room | null,
   incoming: Room,
 ) {
-  if (!current || current.code !== incoming.code) return incoming;
+  if (!current) return incoming;
+  // Joining/creating a Room uses its explicit lifecycle path. Reconciliation
+  // and command responses must never replace an already active different Room.
+  if (current.code !== incoming.code) return current;
   if (
     typeof current.revision === "number"
     && typeof incoming.revision === "number"

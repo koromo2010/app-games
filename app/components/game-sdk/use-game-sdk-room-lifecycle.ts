@@ -101,6 +101,7 @@ export function useGameSdkRoomLifecycle({
       return;
     }
     const current = roomRef.current;
+    if (next && current && current.code !== next.code) return;
     if (!next) {
       if (shouldKeepRoomResultAfterDissolve(current, "result")) {
         watchRef.current?.close();

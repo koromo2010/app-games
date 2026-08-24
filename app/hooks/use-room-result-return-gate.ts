@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useCallback, useLayoutEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { roomHasReturningPlayer, roomUpdateIsOlder, roomUpdateIsUnchanged, shouldHoldRoomResultTransition, shouldKeepRoomResultAfterDissolve } from "@/lib/room-result-return";
 
 type ResultRoom = {
@@ -26,11 +26,14 @@ export function useRoomResultReturnGate<Room extends ResultRoom>({
   setRoom,
 }: RoomResultReturnGateOptions<Room>) {
   const pendingLobbyRoomRef = useRef<Room | null>(null);
+  const activeRoomCodeRef = useRef<string | undefined>(room?.code);
+  useLayoutEffect(() => { activeRoomCodeRef.current = room?.code; }, [room?.code]);
   const [canReturnToRoom, setCanReturnToRoom] = useState(false);
   const [isRoomDissolved, setIsRoomDissolved] = useState(false);
 
   const acceptIncomingRoom = useCallback((incomingRoom: Room) => {
     if (isRoomDissolved) return;
+    if (activeRoomCodeRef.current !== incomingRoom.code) return;
     if (roomUpdateIsOlder(room, incomingRoom) || roomUpdateIsUnchanged(room, incomingRoom)) return;
     if (shouldHoldRoomResultTransition(room, incomingRoom, resultPhase)) {
       if (!roomHasReturningPlayer(incomingRoom, playerId)) {
@@ -63,6 +66,7 @@ export function useRoomResultReturnGate<Room extends ResultRoom>({
       onUnavailable();
       return;
     }
+    if (activeRoomCodeRef.current !== pendingLobbyRoom.code) return;
     if (!latestRoom || latestRoom.phase !== "lobby" || !roomHasReturningPlayer(latestRoom, playerId)) {
       setCanReturnToRoom(false);
       setIsRoomDissolved(true);
