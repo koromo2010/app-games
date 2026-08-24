@@ -1,4 +1,3 @@
-import Image from "next/image";
 import {
   resolveApprovedSdkGamePresentation,
 } from "../../../../../../config/sdk-game-presentations.ts";
@@ -19,6 +18,11 @@ export default async function CreatorGameLayout({
       en: gameId,
     },
   });
+  const appBaseUrl = process.env.GAME_FIELDS_PREVIEW_APP_URL?.replace(/\/$/, "")
+    ?? (process.env.VERCEL_GIT_COMMIT_REF === "main"
+      ? "https://www.game-fields.com"
+      : "https://dev.game-fields.com");
+  const visualSrc = `${appBaseUrl}${presentation.visual}`;
 
   return <>
     <div
@@ -28,11 +32,12 @@ export default async function CreatorGameLayout({
         padding: "16px clamp(16px, 4vw, 48px)",
       }}
     >
-      <Image
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
         alt={`${presentation.title.ja}のゲームサムネイル`}
+        fetchPriority="high"
         height={500}
-        priority
-        src={presentation.visual}
+        src={visualSrc}
         style={{
           borderRadius: 12,
           display: "block",
