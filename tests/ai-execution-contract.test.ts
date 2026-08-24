@@ -164,7 +164,7 @@ test("current SDK specifications name the supported clients and do not recheck a
 });
 
 
-test("audit and supervision remain independent responsibility lines", () => {
+test("audit, management and supervision remain independent responsibility lines", () => {
   const audit = read("docs/AUDIT_THREAD_RULES.md");
   const agents = read("AGENTS.md");
   const execution = read("docs/DEVELOPMENT_EXECUTION_RULES.md");
@@ -172,15 +172,23 @@ test("audit and supervision remain independent responsibility lines", () => {
 
   assert.match(audit, /監査なしで通常運用が完結する/);
   assert.match(audit, /監査が未起動、停止、遅延、未完了、または一件も存在しなくても/);
+  assert.match(audit, /通常報告または利用者要求を管理スレが受理/);
+  assert.match(audit, /監査は通常報告を監査経由へ迂回させる入口でも、TODO化、T採番/);
   assert.match(audit, /監査起点かどうかに関係なく、全ての既存T/);
-  assert.match(audit, /監督スレは新規Tを作成・採番しない/);
+  assert.match(audit, /管理スレは通常T系列の案件管理者/);
+  assert.match(audit, /`NO_ACTION`、`ABSORB:<existing-T>`、`NEW_T_REQUIRED`/);
+  assert.match(audit, /空きT番号の採番、title、priority、owner、依存関係、実行順/);
+  assert.match(audit, /正式なintake判断は`TODO_DECISION`/);
+  assert.match(audit, /管理スレはタスク固有のauthorization envelope.*`TASK_DONE \/ CLOSED`を決定せず/s);
+  assert.match(audit, /監督スレはintakeの`NO_ACTION \/ ABSORB \/ NEW_T_REQUIRED`、新規T作成・採番/);
   assert.match(audit, /監査の開始、再開、停止、範囲、頻度、TA／CPの状態を指示または変更しない/);
   assert.match(audit, /自分が取得・read-backしたTの正本証拠で`TASK_DONE \/ CLOSED`を判定/);
+  assert.match(audit, /監査スレはTODO化、既存Tへの吸収、新規T作成・採番/);
   assert.match(audit, /監査スレは.*既存Tをcloseまたはreopenしない/s);
   assert.match(audit, /Tのcloseとfinding／TA／CPのcloseは別の状態/);
   assert.match(audit, /片方をもう片方へ自動伝播しない/);
-  assert.match(audit, /監査作業スレはTを作成・採番せず/);
-  assert.match(audit, /監督スレまたは作業スレの要約を成功証拠として信頼せず/);
+  assert.match(audit, /監査作業スレはTODO化、既存Tへの吸収、T作成・採番/);
+  assert.match(audit, /管理スレ、監督スレまたは作業スレの要約を成功証拠として信頼せず/);
   assert.match(audit, /AUDIT_INSTRUCTION/);
   assert.match(audit, /AUDIT_RESULT/);
   assert.match(audit, /AUDIT_ACCEPTANCE/);
@@ -191,9 +199,12 @@ test("audit and supervision remain independent responsibility lines", () => {
   assert.match(audit, /record commit、blob SHA、path、内容をremote read-back/);
   assert.match(audit, /checkpointは復旧用であり/);
   assert.match(audit, /通常T系列（監査なしで完結）/);
+  assert.match(audit, /利用者要求／通常報告／不具合報告/);
+  assert.match(audit, /既に登録済みのT/);
+  assert.match(audit, /新しい監査やTODO_DECISIONを待たず/);
   assert.match(audit, /監査系列（独立した追加線）/);
   assert.doesNotMatch(audit, /READY_FOR_REAUDIT/);
-  assert.match(agents, /監査、TA／CP、監督との受け渡しを実際に扱う場合だけ/);
-  assert.match(execution, /監査が何もしなくても既存Tは監督と作業スレだけで完遂/);
+  assert.match(agents, /監査、TA／CP、管理、監督、TODO／Tの受け渡しを実際に扱う場合だけ/);
+  assert.match(execution, /監査が何もしなくても管理、監督、作業スレだけでTODO化からcloseまで完遂/);
   assert.match(navigation, /AUDIT_THREAD_RULES\.md/);
 });

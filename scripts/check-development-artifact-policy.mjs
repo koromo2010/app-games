@@ -7,6 +7,7 @@ const artifactTypes = new Set([
   "execution-sheet",
   "result",
   "handoff",
+  "todo-decision",
 ]);
 
 const duplicatedCommonRules = [
@@ -18,6 +19,7 @@ const duplicatedCommonRules = [
 ];
 
 const checkpointOnlyLabels = /^(?:CURRENT_CANDIDATE|COMPLETED_STEPS|PENDING_STEPS|RESUME_POINT|LAST_CHECKPOINT|CHECKPOINT_COMMIT)\s*:/mi;
+const managementForbiddenLabels = /^(?:ALLOWED_PRODUCT_WRITES|FORBIDDEN_EFFECTS|SUCCESS_CONDITION|TRUE_STOP_CONDITIONS|TASK_DONE|CLOSED)\s*:/mi;
 
 const countMatches = (text, pattern) => Array.from(text.matchAll(pattern)).length;
 
@@ -50,6 +52,18 @@ export function validateDevelopmentArtifact(type, text, path = "<memory>") {
     }
     if (checkpointOnlyLabels.test(text)) {
       errors.push(`${path}: CHECKPOINT_STATE_IN_NEXT_INSTRUCTION`);
+    }
+  }
+
+  if (type === "todo-decision") {
+    if (!/^SOURCE\s*:\s*\S+/mi.test(text)) {
+      errors.push(`${path}: TODO_DECISION_SOURCE_MISSING`);
+    }
+    if (!/^DECISION\s*:\s*(?:NO_ACTION|NEW_T_REQUIRED|ABSORB(?::\S+)?)\s*$/mi.test(text)) {
+      errors.push(`${path}: TODO_DECISION_INVALID`);
+    }
+    if (managementForbiddenLabels.test(text)) {
+      errors.push(`${path}: TECHNICAL_CONTRACT_IN_TODO_DECISION`);
     }
   }
 
@@ -88,7 +102,7 @@ function runCli(argv) {
   }
 
   if (argv[0] !== "--type" || argv.length < 3) {
-    return ["usage: node scripts/check-development-artifact-policy.mjs [--type <next-instruction|checkpoint|execution-sheet|result|handoff> <file> ...]"];
+    return ["usage: node scripts/check-development-artifact-policy.mjs [--type <next-instruction|checkpoint|execution-sheet|result|handoff|todo-decision> <file> ...]"];
   }
 
   const [, type, ...paths] = argv;

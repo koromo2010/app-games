@@ -6,7 +6,7 @@
 
 - 許可、タスク所有権、成果物の使い分け、保存、検証、Git、Deployment、停止・完了判定は`docs/DEVELOPMENT_EXECUTION_RULES.md`を唯一の実行正本とする。
 - 作業別の追加資料は`docs/README.md`から今回に該当するものだけを読む。全資料、`CURRENT_STATE.md`、`DEVELOPMENT_HANDOFF.md`を毎回通読しない。
-- 監査、TA／CP、監督との受け渡しを実際に扱う場合だけ`docs/AUDIT_THREAD_RULES.md`を読む。
+- 監査、TA／CP、管理、監督、TODO／Tの受け渡しを実際に扱う場合だけ`docs/AUDIT_THREAD_RULES.md`を読む。
 - tool、schema、response解析、browser経路、または利用者PC向けhelper／PowerShellで詰まった場合だけ`docs/AI_EXECUTION_TROUBLESHOOTING.md`を読む。
 
 ## 変更してはいけない境界
