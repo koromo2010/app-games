@@ -35,7 +35,7 @@
 | 現在の全体像 | `CURRENT_STATE.md` | `DEVELOPMENT_HANDOFF.md`、コード、設定 |
 | 将来構想・未実装計画 | `FUTURE_PLAN.md` | `PLATFORM_VISION.md`、SDK関連資料 |
 | 未修正バグ・次の修正順 | `KNOWN_ISSUES.md` | 対象項目に記載したAPI・store・domain |
-| 監査スレ／監査作業スレ／監督スレの分離、TA／CP、finding受け渡し | `AUDIT_THREAD_RULES.md` | `DEVELOPMENT_EXECUTION_RULES.md`、checkpoint正本 |
+| 監査スレ／監査作業スレ／管理スレ／監督スレの分離、TA／CP、finding、TODO／T受け渡し | `AUDIT_THREAD_RULES.md` | `DEVELOPMENT_EXECUTION_RULES.md`、checkpoint正本 |
 | バグ調査・全体監査 | `SYSTEM_MAP.md`、対象surfaceの現行資料 | `config/game-registry.json`、対象ゲームの画面・API route・room store、`package.json` |
 | ワードウルフのルール・進行 | `DEVELOPMENT_HANDOFF.md` 6章、`game-concept.md` 2章 | `lib/wordwolf-command-domain.ts`、`lib/wordwolf-room-store.ts`、`app/wordwolf/game-flow.ts` |
 | たほい屋のルール・進行 | `DEVELOPMENT_HANDOFF.md` 7章 | `lib/tahoiya-room-store.ts`、`lib/tahoiya-types.ts`、`app/tahoiya/TahoiyaGame.tsx` |

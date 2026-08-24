@@ -46,3 +46,28 @@ RESUME_POINT: continue the same TASK_ACTIVE contract
 `;
   assert.deepEqual(validateDevelopmentArtifact("checkpoint", checkpoint), []);
 });
+
+test("a management TODO decision is a distinct durable artifact", () => {
+  const decision = `
+ARTIFACT_TYPE: todo-decision
+SOURCE: Game-Fields-TA-035-audit-acceptance.md
+DECISION: NEW_T_REQUIRED
+TASK: T-181
+PRIORITY: P2
+OWNER: supervisor
+DEPENDENCIES: none
+`;
+  assert.deepEqual(validateDevelopmentArtifact("todo-decision", decision), []);
+});
+
+test("a management TODO decision cannot absorb the supervisor contract", () => {
+  const decision = `
+ARTIFACT_TYPE: todo-decision
+SOURCE: user-request-20260824
+DECISION: NEW_T_REQUIRED
+TASK: T-181
+SUCCESS_CONDITION: production behavior is accepted
+`;
+  const errors = validateDevelopmentArtifact("todo-decision", decision);
+  assert.ok(errors.some((error) => error.includes("TECHNICAL_CONTRACT_IN_TODO_DECISION")));
+});

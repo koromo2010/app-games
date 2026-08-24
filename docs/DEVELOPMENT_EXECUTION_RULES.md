@@ -13,10 +13,10 @@
 | field・response path・aggregate verdict・冪等性 | 現行source、schema、SDK等のinterface／protocol正本 |
 | 実行・検証・保存・証拠手順 | 本書。`AGENTS.md`は入口と変更禁止境界だけを示す |
 | 解析復旧 | `AI_EXECUTION_TROUBLESHOOTING.md` |
-| 監査スレ、監査作業スレ、監督スレ、TA／CP、監査findingの受け渡し | `AUDIT_THREAD_RULES.md` |
+| 監査スレ、監査作業スレ、管理スレ、監督スレ、TA／CP、finding、TODO／Tの受け渡し | `AUDIT_THREAD_RULES.md` |
 
-- 監査起点のfinding、TA／CP、新規T採番は`AUDIT_THREAD_RULES.md`の役割分離と`AUDIT_INSTRUCTION`→`AUDIT_RESULT`→`AUDIT_ACCEPTANCE`を経る。監督は新規Tを作成せず、受理済みTだけを管理する。
-- 監査系列は通常T系列の前提、release gate、close gateではない。監査が何もしなくても既存Tは監督と作業スレだけで完遂できる構造を維持し、監督は全ての既存T、監査はfinding／TA／CPをそれぞれ独立して判定・closeする。どちらのcloseも他方へ自動伝播しない。
+- TODO化、既存Tへの吸収、新規T作成・採番、priority、owner、依存関係は`AUDIT_THREAD_RULES.md`に従い管理スレが専有する。監査起点intakeは`AUDIT_INSTRUCTION`→`AUDIT_RESULT`→`AUDIT_ACCEPTANCE`を経るが、通常報告と利用者要求は監査を経ず管理スレが直接受理する。監督は登録済みTだけを技術監督する。
+- 監査系列は通常T系列の前提、release gate、close gateではない。監査が何もしなくても管理、監督、作業スレだけでTODO化からcloseまで完遂できる構造を維持し、管理は案件台帳、監督は全ての既存T、監査はfinding／TA／CPをそれぞれ独立して判定する。Tのcloseと監査closeを相互に自動伝播しない。
 - 利用者の明示指示は許可範囲を狭められるが、監督が作るnext-instructionや実行シートは利用者のauthorization envelopeを説明・固定する二次成果物であり、利用者の明示なしに新しい禁止、file scope、tool／call回数、内部phase停止を追加しない。曖昧な表現や過去の承認から権限を広げない。
 - developmentは、目的、成功条件、`ALLOWED_PRODUCT_WRITES`、`FORBIDDEN_EFFECTS`を固定し、それ以外の可逆なlocal変更、関連fileへの修正、調査、test、build、read-only確認、内部回復、手段変更を許可する禁止リスト方式とする。監督またはタスク指示は、観測済みの具体的危険と直接対応する場合を除き、これらを網羅的な許可リストへ変換しない。
 - main／production、未許可のlogical product write、control-plane write、不可逆操作は許可リスト方式を維持し、environment、対象、操作、上限を利用者承認へ固定する。developmentの禁止リスト方式からこれらの権限を推論しない。
@@ -36,6 +36,7 @@
 | 承認が必要な一つの外部操作または利用者専用操作へ到達した | `EXECUTION_SHEET` | 契約が変わらない限り`NEXT_INSTRUCTION` |
 | 第10節のterminal boundaryへ到達した | `RESULT` | 継続用`NEXT_INSTRUCTION` |
 | threadを移すが契約は変わらない | 最新instructionとcheckpointを指す短い`HANDOFF` | 指示本文の複製、指示の改版 |
+| 利用者要求、通常報告、不具合報告、または受理済み監査findingをTODO系列へ取り込む | 管理スレの`TODO_DECISION` | 監査artifact、`NEXT_INSTRUCTION`、技術的close判定 |
 | 監査系列の正式受け渡し | `AUDIT_THREAD_RULES.md`所定のartifact | 通常Tの指示・resultとの混載 |
 
 `NEXT_INSTRUCTION`は本書を共通policyの唯一の直接参照先とする。参照にはpathと、参照する本文を一意に固定できるpolicy commitを記載し、branch名や会話上の最新版だけから内容を推測しない。
