@@ -12,6 +12,19 @@ export function isRoomScopedResponseCurrent(
   return activeRoomCode === originRoomCode && responseRoomCode === originRoomCode;
 }
 
+/**
+ * A join can establish a Room only from the lobby, and only if the response
+ * names the Room explicitly requested by that join. Once a Room is active,
+ * every response remains subject to the normal Room-scoped guard above.
+ */
+export function canEstablishRoomFromLobby(
+  activeRoomCode: string | null | undefined,
+  requestedRoomCode: string,
+  responseRoomCode: string,
+) {
+  return !activeRoomCode && responseRoomCode === requestedRoomCode;
+}
+
 /** Same-Room revisions are monotonic; watermarks never cross Room identities. */
 export function canAcceptRoomRevision(
   watermarks: RoomRevisionWatermarks,

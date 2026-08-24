@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   canAcceptRoomRevision,
+  canEstablishRoomFromLobby,
   isRoomScopedResponseCurrent,
   recordRoomRevision,
 } from "../lib/room-scoped-reconciliation.ts";
@@ -43,6 +44,43 @@ test("a delayed Room A success, failure, retry, and reconciliation cannot affect
     preferLatestOnlineRoom({ code: "ROOM-B", revision: 1 }, { code: "ROOM-A", revision: 10 }),
     { code: "ROOM-B", revision: 1 },
   );
+});
+
+test("a lobby join establishes only the explicitly requested Room", () => {
+  assert.equal(canEstablishRoomFromLobby(undefined, "ROOM-B", "ROOM-B"), true);
+  assert.equal(canEstablishRoomFromLobby(null, "ROOM-B", "ROOM-B"), true);
+  assert.equal(canEstablishRoomFromLobby(undefined, "ROOM-B", "ROOM-A"), false);
+});
+
+test("after Room B is established, Room A join responses and lifecycle effects stay isolated", async () => {
+  const lateSuccess = deferred<{ code: string; revision: number }>();
+  const lateFailure = deferred<Error>();
+  const lateRetry = deferred<{ code: string; revision: number }>();
+  const lateReconciliation = deferred<{ code: string; revision: number }>();
+  let activeRoomCode: string | undefined;
+  const effects: string[] = [];
+
+  if (canEstablishRoomFromLobby(activeRoomCode, "ROOM-B", "ROOM-B")) activeRoomCode = "ROOM-B";
+  lateSuccess.resolve({ code: "ROOM-A", revision: 8 });
+  lateFailure.resolve(new Error("late"));
+  lateRetry.resolve({ code: "ROOM-A", revision: 9 });
+  lateReconciliation.resolve({ code: "ROOM-A", revision: 10 });
+
+  const apply = (originRoomCode: string, response: { code: string; revision: number }) => {
+    if (isRoomScopedResponseCurrent(activeRoomCode, originRoomCode, response.code)) effects.push(`${response.code}:${response.revision}`);
+  };
+  const reportFailure = (originRoomCode: string) => {
+    if (activeRoomCode === originRoomCode) effects.push("failure");
+  };
+
+  apply("ROOM-A", await lateSuccess.promise);
+  try { throw await lateFailure.promise; } catch { reportFailure("ROOM-A"); }
+  apply("ROOM-A", await lateRetry.promise);
+  apply("ROOM-A", await lateReconciliation.promise);
+
+  assert.equal(activeRoomCode, "ROOM-B");
+  assert.equal(canEstablishRoomFromLobby(activeRoomCode, "ROOM-A", "ROOM-A"), false);
+  assert.deepEqual(effects, []);
 });
 
 test("Room B accepts a lower revision after Room A and still rejects equal or older same-Room responses", () => {

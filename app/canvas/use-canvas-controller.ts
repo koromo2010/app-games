@@ -12,7 +12,7 @@ import type { CanvasLayer, CanvasLayerMode } from "@/lib/canvas-room";
 import { activeCanvasLobbyStrokes } from "@/lib/canvas-lobby-board";
 import { canvasFeatures } from "@/lib/canvas-features";
 import { shouldHandleGameKeyboardEvent } from "@/app/components/keyboard-focus-contract";
-import { canAcceptRoomRevision, isRoomScopedResponseCurrent, recordRoomRevision } from "@/lib/room-scoped-reconciliation";
+import { canAcceptRoomRevision, canEstablishRoomFromLobby, isRoomScopedResponseCurrent, recordRoomRevision } from "@/lib/room-scoped-reconciliation";
 
 const storageKey = "canvas-prototype-board";
 const channelName = "game-fields-canvas-prototype";
@@ -142,10 +142,19 @@ export function useCanvasController() {
       && typeof (body as { code?: unknown }).code === "string"
       ? (body as { code: string }).code
       : undefined;
+    const isJoinRequest = originRoomCode
+      && body
+      && typeof body === "object"
+      && (body as { action?: { type?: unknown } }).action?.type === "join";
     setRoomBusy(true);
     try {
       const nextRoom = await mutateCanvasRoom(method as "POST" | "PATCH", body);
-      if (originRoomCode && !isRoomScopedResponseCurrent(activeRoomCodeRef.current, originRoomCode, nextRoom.code)) return nextRoom;
+      if (originRoomCode) {
+        const responseIsCurrent = isJoinRequest
+          ? canEstablishRoomFromLobby(activeRoomCodeRef.current, originRoomCode, nextRoom.code)
+          : isRoomScopedResponseCurrent(activeRoomCodeRef.current, originRoomCode, nextRoom.code);
+        if (!responseIsCurrent) return nextRoom;
+      }
       if (!canAcceptRoomRevision(roomRevisionRef.current, nextRoom.code, nextRoom.revision)) return nextRoom;
       recordRoomRevision(roomRevisionRef.current, nextRoom.code, nextRoom.revision);
       setRoom(nextRoom); setStrokes(() => { const active = keyboardStrokeRef.current; return active ? [...nextRoom.strokes.filter((stroke) => stroke.id !== active.id), active] : nextRoom.strokes; });
