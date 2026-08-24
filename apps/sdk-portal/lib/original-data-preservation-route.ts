@@ -9,6 +9,7 @@ import {
   originalDataPreservationInternalPath,
   originalDataPreservationReceiptHeader,
   type OriginalDataPreservationArchive,
+  type OriginalDataPreservationArchiveInvalidStage,
   type OriginalDataPreservationCode,
 } from "./original-data-preservation.ts";
 import {
@@ -44,12 +45,19 @@ const responseHeaders = {
   "X-Content-Type-Options": "nosniff",
 };
 
-function stopped(code: OriginalDataPreservationCode, status: number) {
+function stopped(
+  code: OriginalDataPreservationCode,
+  status: number,
+  archiveInvalidStage?: OriginalDataPreservationArchiveInvalidStage,
+) {
   return Response.json({
     schemaVersion: 1,
     phaseId: "T-131-A0",
     status: "STOPPED",
     code,
+    ...(code === "A0_ARCHIVE_INVALID" && archiveInvalidStage
+      ? { archiveInvalidStage }
+      : {}),
     secretFree: true,
   }, { status, headers: responseHeaders });
 }
@@ -134,6 +142,8 @@ export async function processOriginalDataPreservationRequest(
     safeLog(dependencies, "stopped", "A0_SOURCE_IDENTITY_INVALID");
     return stopped("A0_SOURCE_IDENTITY_INVALID", 409);
   }
+  let archiveInvalidStage: OriginalDataPreservationArchiveInvalidStage =
+    "INTERNAL_ARCHIVE_STRUCTURE_VERIFY";
   try {
     const database = dependencies.databaseContext();
     const snapshot = await (dependencies.readSnapshot ?? readOriginalDataPreservationSnapshot)({
@@ -146,6 +156,7 @@ export async function processOriginalDataPreservationRequest(
       snapshot,
       reader: dependencies.artifactReader(),
     });
+    archiveInvalidStage = "INTERNAL_RECEIPT_ENCODE";
     const receipt = encodeOriginalDataPreservationReceipt(result.receipt);
     safeLog(dependencies, "ready", "A0_ARCHIVE_READY");
     return new Response(verifiedBufferStream(result.archive), {
@@ -162,6 +173,10 @@ export async function processOriginalDataPreservationRequest(
       ? error.code
       : "A0_EXPORT_UNAVAILABLE";
     safeLog(dependencies, "stopped", code);
-    return stopped(code, statusFor(code));
+    return stopped(
+      code,
+      statusFor(code),
+      code === "A0_ARCHIVE_INVALID" ? archiveInvalidStage : undefined,
+    );
   }
 }

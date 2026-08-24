@@ -1,4 +1,9 @@
 import { createHash } from "node:crypto";
+import {
+  isOriginalDataPreservationInternalArchiveInvalidStage,
+  parseOriginalDataPreservationArchiveInvalidStage,
+  type OriginalDataPreservationArchiveInvalidStage,
+} from "./original-data-preservation-stage.ts";
 
 export const originalDataPreservationAdminPath =
   "/api/admin/sdk-original-data-preservation";
@@ -98,12 +103,19 @@ const allowedStopCodes = new Set([
   "A0_EXPORT_UNAVAILABLE",
 ]);
 
-function stopped(code: string, status: number) {
+function stopped(
+  code: string,
+  status: number,
+  archiveInvalidStage?: OriginalDataPreservationArchiveInvalidStage,
+) {
   return Response.json({
     schemaVersion: 1,
     phaseId: "T-131-A0",
     status: "STOPPED",
     code,
+    ...(code === "A0_ARCHIVE_INVALID" && archiveInvalidStage
+      ? { archiveInvalidStage }
+      : {}),
     secretFree: true,
   }, { status, headers: responseHeaders });
 }
@@ -161,7 +173,6 @@ function decodeReceipt(value: string): OriginalDataPreservationSafeReceipt | nul
       && /^Game-Fields-T-131-A0-original-data-\d{8}T\d{6}Z\.zip$/.test(receipt.filename)
       && Number.isSafeInteger(receipt.zipBytes)
       && Number(receipt.zipBytes) > 0
-      && Number(receipt.zipBytes) <= maximumZipBytes
       && typeof receipt.zipSha256 === "string"
       && sha256Pattern.test(receipt.zipSha256)
       && receipt.serverArchiveVerification === "PASS"
@@ -243,30 +254,54 @@ export async function proxyOriginalDataPreservation(
       cache: "no-store",
     });
     if (!response.ok) {
-      const payload = await response.json().catch(() => null) as { code?: unknown } | null;
+      const payload = await response.json().catch(() => null) as {
+        code?: unknown;
+        archiveInvalidStage?: unknown;
+      } | null;
       const code = typeof payload?.code === "string" && allowedStopCodes.has(payload.code)
         ? payload.code
         : "A0_EXPORT_UNAVAILABLE";
-      return stopped(code, response.status >= 400 && response.status < 600 ? response.status : 503);
+      const upstreamStage = parseOriginalDataPreservationArchiveInvalidStage(
+        payload?.archiveInvalidStage,
+      );
+      const archiveInvalidStage = code === "A0_ARCHIVE_INVALID"
+        && isOriginalDataPreservationInternalArchiveInvalidStage(upstreamStage)
+        ? upstreamStage
+        : code === "A0_ARCHIVE_INVALID"
+          ? "PROXY_UPSTREAM_ARCHIVE_INVALID"
+          : undefined;
+      return stopped(
+        code,
+        response.status >= 400 && response.status < 600 ? response.status : 503,
+        archiveInvalidStage,
+      );
     }
     const receiptValue = response.headers.get(originalDataPreservationReceiptHeader) ?? "";
     const receipt = decodeReceipt(receiptValue);
     const contentType = response.headers.get("content-type")?.split(";", 1)[0]?.trim();
     const disposition = response.headers.get("content-disposition");
     const declaredLength = Number(response.headers.get("content-length") ?? 0);
-    if (
-      !receipt
-      || receipt.sourceMainCommit !== runtime.sourceMainCommit
-      || contentType !== "application/zip"
-      || disposition !== `attachment; filename="${receipt.filename}"`
-      || declaredLength !== receipt.zipBytes
-      || declaredLength > maximumZipBytes
-    ) {
-      return stopped("A0_ARCHIVE_INVALID", 502);
+    if (!receipt) {
+      return stopped("A0_ARCHIVE_INVALID", 502, "PROXY_RECEIPT_DECODE_OR_SHAPE");
+    }
+    if (receipt.sourceMainCommit !== runtime.sourceMainCommit) {
+      return stopped("A0_ARCHIVE_INVALID", 502, "PROXY_SOURCE_COMMIT");
+    }
+    if (contentType !== "application/zip") {
+      return stopped("A0_ARCHIVE_INVALID", 502, "PROXY_CONTENT_TYPE");
+    }
+    if (disposition !== `attachment; filename="${receipt.filename}"`) {
+      return stopped("A0_ARCHIVE_INVALID", 502, "PROXY_CONTENT_DISPOSITION");
+    }
+    if (declaredLength !== receipt.zipBytes || declaredLength > maximumZipBytes) {
+      return stopped("A0_ARCHIVE_INVALID", 502, "PROXY_DECLARED_LENGTH_OR_CEILING");
     }
     const archive = new Uint8Array(await response.arrayBuffer());
-    if (archive.byteLength !== receipt.zipBytes || sha256(archive) !== receipt.zipSha256) {
-      return stopped("A0_ARCHIVE_INVALID", 502);
+    if (archive.byteLength !== receipt.zipBytes) {
+      return stopped("A0_ARCHIVE_INVALID", 502, "PROXY_RECEIVED_LENGTH");
+    }
+    if (sha256(archive) !== receipt.zipSha256) {
+      return stopped("A0_ARCHIVE_INVALID", 502, "PROXY_RECEIVED_SHA256");
     }
     return new Response(verifiedBufferStream(archive), {
       headers: {

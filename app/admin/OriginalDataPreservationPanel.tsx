@@ -2,6 +2,7 @@
 
 import { type ChangeEvent, useRef, useState } from "react";
 import { ensureSiteAdminStepUp } from "@/lib/site-admin-passkey-client";
+import { formatOriginalDataPreservationArchiveInvalidStage } from "@/lib/original-data-preservation-stage";
 import {
   decodeOriginalDataOfflineReceipt,
   hashOriginalDataOfflineContainer,
@@ -75,14 +76,20 @@ export function OriginalDataPreservationPanel({
       setDownloadInvocationCount((current) => current + 1);
       const response = await fetch(endpoint, { method: "POST", cache: "no-store" });
       if (!response.ok) {
-        const payload = await response.json().catch(() => null) as { code?: unknown; error?: unknown } | null;
+        const payload = await response.json().catch(() => null) as {
+          code?: unknown;
+          error?: unknown;
+          archiveInvalidStage?: unknown;
+        } | null;
         if (response.status === 401) onAuthExpired();
         const code = typeof payload?.code === "string"
           ? payload.code
           : typeof payload?.error === "string"
             ? payload.error
             : `HTTP_${response.status}`;
-        throw new Error(code);
+        throw new Error(`${code}${formatOriginalDataPreservationArchiveInvalidStage(
+          payload?.archiveInvalidStage,
+        )}`);
       }
       const safeReceipt = decodeOriginalDataOfflineReceipt(response.headers.get(receiptHeader));
       const archive = await response.arrayBuffer();

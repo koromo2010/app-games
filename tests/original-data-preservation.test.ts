@@ -10,6 +10,7 @@ import {
   encodeOriginalDataPreservationReceipt,
   OriginalDataPreservationError,
   originalDataPreservationAdminPath,
+  originalDataPreservationArchiveInvalidStages,
   originalDataPreservationInternalPath,
   originalDataPreservationReceiptHeader,
   originalDataPreservationRecordTables,
@@ -27,8 +28,14 @@ import {
   originalDataPreservationInternalPath as proxyInternalPath,
   originalDataPreservationReceiptHeader as proxyReceiptHeader,
   proxyOriginalDataPreservation,
+  type OriginalDataPreservationSafeReceipt,
 } from "../lib/original-data-preservation-proxy.ts";
 import { verifyOriginalDataOfflineArchive } from "../lib/original-data-offline-verifier.ts";
+import {
+  formatOriginalDataPreservationArchiveInvalidStage,
+  originalDataPreservationArchiveInvalidStages as platformArchiveInvalidStages,
+  parseOriginalDataPreservationArchiveInvalidStage,
+} from "../lib/original-data-preservation-stage.ts";
 
 const sourceMainCommit = "3".repeat(40);
 const sourceDeploymentFingerprint = "4".repeat(64);
@@ -472,6 +479,72 @@ test("internal operator returns no receipt when generation fails", async () => {
   });
 });
 
+test("archive-invalid stage contract is exact, shared, and UI formatting fails closed", () => {
+  const expected = [
+    "INTERNAL_ARCHIVE_STRUCTURE_VERIFY",
+    "INTERNAL_RECEIPT_ENCODE",
+    "PROXY_UPSTREAM_ARCHIVE_INVALID",
+    "PROXY_RECEIPT_DECODE_OR_SHAPE",
+    "PROXY_SOURCE_COMMIT",
+    "PROXY_CONTENT_TYPE",
+    "PROXY_CONTENT_DISPOSITION",
+    "PROXY_DECLARED_LENGTH_OR_CEILING",
+    "PROXY_RECEIVED_LENGTH",
+    "PROXY_RECEIVED_SHA256",
+  ];
+  assert.deepEqual(originalDataPreservationArchiveInvalidStages, expected);
+  assert.deepEqual(platformArchiveInvalidStages, expected);
+  for (const stage of expected) {
+    assert.equal(parseOriginalDataPreservationArchiveInvalidStage(stage), stage);
+    assert.equal(formatOriginalDataPreservationArchiveInvalidStage(stage), ` / ${stage}`);
+  }
+  for (const invalid of [null, undefined, 1, {}, [], "", "UNKNOWN", "PROXY_SOURCE_COMMIT\nraw"]) {
+    assert.equal(parseOriginalDataPreservationArchiveInvalidStage(invalid), null);
+    assert.equal(formatOriginalDataPreservationArchiveInvalidStage(invalid), "");
+  }
+});
+
+test("internal operator assigns only the two exact archive-invalid stages", async () => {
+  const request = () => new Request(
+    `https://sdk.example${originalDataPreservationInternalPath}`,
+    { method: "POST" },
+  );
+  const dependencies = {
+    authorize: () => undefined,
+    runtimeIdentity: () => ({
+      environment: "production" as const,
+      sourceRef: "main",
+      sourceMainCommit,
+      sourceDeploymentIdentity: "production-deployment",
+    }),
+    databaseContext: () => ({
+      sql: null as never,
+      binding: { selectedKey: "SDK_DATABASE_URL" as const, fallbackUsed: false, databaseUrl: "unused" },
+    }),
+    serviceSecret: () => "s".repeat(64),
+    artifactReader: reader,
+    readSnapshot: async () => snapshot(),
+    log: () => undefined,
+  };
+  const archiveFailure = await processOriginalDataPreservationRequest(request(), {
+    ...dependencies,
+    buildArchive: async () => { throw new OriginalDataPreservationError("A0_ARCHIVE_INVALID"); },
+  });
+  assert.equal(archiveFailure.status, 409);
+  assert.equal((await archiveFailure.json()).archiveInvalidStage, "INTERNAL_ARCHIVE_STRUCTURE_VERIFY");
+
+  const built = await buildOriginalDataPreservationArchive({ snapshot: snapshot(), reader: reader() });
+  const receiptFailure = await processOriginalDataPreservationRequest(request(), {
+    ...dependencies,
+    buildArchive: async () => ({
+      ...built,
+      receipt: { ...built.receipt, zipBytes: 0 },
+    }),
+  });
+  assert.equal(receiptFailure.status, 409);
+  assert.equal((await receiptFailure.json()).archiveInvalidStage, "INTERNAL_RECEIPT_ENCODE");
+});
+
 test("Site Admin proxy requires recent MFA and exact production/main identity before SDK fetch", async () => {
   let fetches = 0;
   const baseDependencies = {
@@ -541,6 +614,146 @@ test("Site Admin proxy verifies complete upstream bytes and streams the fixed ZI
   );
   assert.equal(damaged.status, 502);
   assert.equal(damaged.headers.has(proxyReceiptHeader), false);
+});
+
+test("Site Admin proxy preserves only exact internal stages and collapses all other upstream values", async () => {
+  const baseDependencies = {
+    requireRecentMfa: async () => undefined,
+    authorizationError: () => null,
+    runtimeIdentity: () => ({ environment: "production" as const, sourceRef: "main", sourceMainCommit }),
+    targetUrl: () => `https://sdk.example${proxyInternalPath}`,
+    serviceHeaders: () => ({ "x-test-service": "signed" }),
+    fetchTarget: async () => new Response(),
+  };
+  const upstreamFailure = (archiveInvalidStage?: unknown, code = "A0_ARCHIVE_INVALID") =>
+    new Response(JSON.stringify({
+      schemaVersion: 1,
+      phaseId: "T-131-A0",
+      status: "STOPPED",
+      code,
+      ...(archiveInvalidStage === undefined ? {} : { archiveInvalidStage }),
+      secretFree: true,
+    }), { status: 409, headers: { "Content-Type": "application/json" } });
+  for (const stage of [
+    "INTERNAL_ARCHIVE_STRUCTURE_VERIFY",
+    "INTERNAL_RECEIPT_ENCODE",
+  ]) {
+    const response = await proxyOriginalDataPreservation(
+      new Request(`https://app.example${proxyAdminPath}`, { method: "POST" }),
+      { ...baseDependencies, fetchTarget: async () => upstreamFailure(stage) },
+    );
+    assert.deepEqual(await response.json(), {
+      schemaVersion: 1,
+      phaseId: "T-131-A0",
+      status: "STOPPED",
+      code: "A0_ARCHIVE_INVALID",
+      archiveInvalidStage: stage,
+      secretFree: true,
+    });
+  }
+  for (const stage of [
+    undefined,
+    null,
+    1,
+    "",
+    "UNKNOWN",
+    "PROXY_SOURCE_COMMIT",
+    "INTERNAL_RECEIPT_ENCODE\nraw",
+  ]) {
+    const response = await proxyOriginalDataPreservation(
+      new Request(`https://app.example${proxyAdminPath}`, { method: "POST" }),
+      { ...baseDependencies, fetchTarget: async () => upstreamFailure(stage) },
+    );
+    assert.equal((await response.json()).archiveInvalidStage, "PROXY_UPSTREAM_ARCHIVE_INVALID");
+  }
+  const nonA0 = await proxyOriginalDataPreservation(
+    new Request(`https://app.example${proxyAdminPath}`, { method: "POST" }),
+    { ...baseDependencies, fetchTarget: async () => upstreamFailure("INTERNAL_RECEIPT_ENCODE", "A0_ARTIFACT_INCOMPLETE") },
+  );
+  assert.equal("archiveInvalidStage" in await nonA0.json(), false);
+});
+
+test("Site Admin proxy assigns one exact stage to every local archive guard", async () => {
+  const built = await buildOriginalDataPreservationArchive({ snapshot: snapshot(), reader: reader() });
+  const baseReceipt = built.receipt as OriginalDataPreservationSafeReceipt;
+  const encodeReceipt = (receipt: OriginalDataPreservationSafeReceipt) =>
+    Buffer.from(JSON.stringify(receipt), "utf8").toString("base64url");
+  const upstream = (input: {
+    receipt?: OriginalDataPreservationSafeReceipt | null;
+    contentType?: string;
+    disposition?: string;
+    declaredLength?: number;
+    archive?: Uint8Array;
+  } = {}) => {
+    const receipt = input.receipt === undefined ? baseReceipt : input.receipt;
+    const archive = input.archive ?? built.archive;
+    const headers = new Headers({
+      "Content-Type": input.contentType ?? "application/zip",
+      "Content-Disposition": input.disposition ?? `attachment; filename="${baseReceipt.filename}"`,
+      "Content-Length": String(input.declaredLength ?? archive.byteLength),
+    });
+    if (receipt) headers.set(proxyReceiptHeader, encodeReceipt(receipt));
+    return new Response(archive, { headers });
+  };
+  const dependencies = {
+    requireRecentMfa: async () => undefined,
+    authorizationError: () => null,
+    runtimeIdentity: () => ({ environment: "production" as const, sourceRef: "main", sourceMainCommit }),
+    targetUrl: () => `https://sdk.example${proxyInternalPath}`,
+    serviceHeaders: () => ({ "x-test-service": "signed" }),
+    fetchTarget: async () => upstream(),
+  };
+  const cases: Array<{
+    stage: string;
+    response: Response;
+  }> = [
+    { stage: "PROXY_RECEIPT_DECODE_OR_SHAPE", response: upstream({ receipt: null }) },
+    {
+      stage: "PROXY_SOURCE_COMMIT",
+      response: upstream({ receipt: { ...baseReceipt, sourceMainCommit: "a".repeat(40) } }),
+    },
+    { stage: "PROXY_CONTENT_TYPE", response: upstream({ contentType: "application/json" }) },
+    { stage: "PROXY_CONTENT_DISPOSITION", response: upstream({ disposition: "attachment" }) },
+    {
+      stage: "PROXY_DECLARED_LENGTH_OR_CEILING",
+      response: upstream({ declaredLength: built.archive.byteLength + 1 }),
+    },
+    {
+      stage: "PROXY_DECLARED_LENGTH_OR_CEILING",
+      response: upstream({
+        receipt: { ...baseReceipt, zipBytes: 300 * 1024 * 1024 + 1 },
+        declaredLength: 300 * 1024 * 1024 + 1,
+      }),
+    },
+    {
+      stage: "PROXY_RECEIVED_LENGTH",
+      response: upstream({
+        receipt: { ...baseReceipt, zipBytes: built.archive.byteLength + 1 },
+        declaredLength: built.archive.byteLength + 1,
+      }),
+    },
+    {
+      stage: "PROXY_RECEIVED_SHA256",
+      response: upstream({
+        receipt: { ...baseReceipt, zipSha256: "a".repeat(64) },
+      }),
+    },
+  ];
+  for (const fixture of cases) {
+    const response = await proxyOriginalDataPreservation(
+      new Request(`https://app.example${proxyAdminPath}`, { method: "POST" }),
+      { ...dependencies, fetchTarget: async () => fixture.response },
+    );
+    assert.equal(response.status, 502);
+    assert.deepEqual(await response.json(), {
+      schemaVersion: 1,
+      phaseId: "T-131-A0",
+      status: "STOPPED",
+      code: "A0_ARCHIVE_INVALID",
+      archiveInvalidStage: fixture.stage,
+      secretFree: true,
+    });
+  }
 });
 
 test("browser local verifier checks outer digest, extraction, manifest, counts, and every entry without upload", async () => {
