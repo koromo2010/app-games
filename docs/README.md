@@ -30,7 +30,7 @@
 
 | 作業 | 最初に読む資料 | 次に確認する正本・コード |
 | --- | --- | --- |
-| 実行許可・保存・証拠・終了判定 | `DEVELOPMENT_EXECUTION_RULES.md` | 個別指示、Git差分、対象Deployment／runtime identity |
+| 個別指示の作成、実行許可・保存・証拠・終了判定 | `DEVELOPMENT_EXECUTION_RULES.md` | 最新の個別指示、Git差分、対象Deployment／runtime identity |
 | システム全体の構成・環境・主要flow | `SYSTEM_MAP.md` | 機械可読な設定、`CURRENT_STATE.md`、対象source |
 | tool・schema・response解析の自己回復 | `AI_EXECUTION_TROUBLESHOOTING.md` | 現行source、schema、関連test、structured response |
 | 利用者PC向けone-click helper・PowerShell | `AI_EXECUTION_TROUBLESHOOTING.md` 8章 | 対象OS fixture、外部commandのstdout／stderr／exit code、launcher source |

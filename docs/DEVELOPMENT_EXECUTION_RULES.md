@@ -25,6 +25,38 @@
 - 旧指示、旧result、会話ログは履歴であり、最新版と累積適用しない。
 - 同じ判断対象の真の矛盾だけを利用者へ確認する。解析で解消できる差は同じ作業内で直す。
 
+### 個別指示の単一参照方式
+
+個別指示は本書を共通policyの唯一の直接参照先とする。参照にはpathと、参照する本文を一意に固定できるpolicy commitを記載し、branch名や会話上の最新版だけから内容を推測しない。
+
+```text
+POLICY_REFERENCE: docs/DEVELOPMENT_EXECUTION_RULES.md @ <product-commit>
+```
+
+個別指示の本文へ記載するのは、今回固有の次の情報だけとする。
+
+- TASK、対象、目的、対象Phase
+- base、candidate、target ref、artifact等、今回の対象を一意にするidentity
+- 利用者が今回承認したproduct／control-plane writeと上限、および今回固有の禁止効果
+- 維持すべき不変条件
+- 成功条件と、許可済み内部回復では越えられない真の停止条件
+
+本書、`AGENTS.md`、`AI_EXECUTION_TROUBLESHOOTING.md`、`AUDIT_THREAD_RULES.md`に既にある保存方法、検証順、自己回復、retry、報告形式、役割分担は個別指示へ複製しない。これらの共通規則を、作業ごとのcommand、file、tool、順序、内部checkpointの許可リストへ展開しない。
+
+旧指示、旧result、会話要約をpolicy参照先にせず、そこから条件を連鎖継承しない。再開に必要なcandidate、checkpoint、result等は入力artifactとして正本のpath、commit、blob、Library ID等を直接指すことができるが、そのartifactに書かれた過去の指示全体を現行指示へ累積適用しない。案件固有の現在地とauthorization envelopeは、参照を辿らなくても最新指示だけで判定できるようにする。
+
+詳細な操作列を持つ実行シートは、main／production、DB／migration／recovery、回数制限付き本番操作、利用者専用画面操作等、対象と不可逆な外部効果を事前固定する必要がある境界に限る。実行シートはその一操作のための一回限りの成果物であり、通常のnext-instructionへ手順を持ち越さない。
+
+`POLICY_REFERENCE`、checkpoint、manifest、result、実行シートは、新しい権限または禁止を付与しない。利用者の現在の明示指示・承認と矛盾する場合は、利用者の境界を維持する。
+
+保存前に、次の逸脱がないことを確認する。
+
+1. 共通規則を本文へ再掲していない。
+2. 外部効果の固定に不要な実行方法を指定していない。
+3. 別タスクの整理、採番、保守登録を混載していない。
+4. 旧artifactへの多段参照または条件の累積適用を作っていない。
+5. 利用者の明示なしに禁止、file scope、call回数、内部停止点を追加していない。
+
 ## 2. 作業開始ゲート
 
 開始時に次を固定する。

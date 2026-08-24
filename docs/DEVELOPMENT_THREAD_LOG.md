@@ -3862,3 +3862,30 @@ dev反映後はT-91 browser → T-90 → T-89 → T-26の順に実機確認す�
 
 - live storage本体、索引、TTL、parseを観測できない場合は`NOT_OBSERVED`とし、推測で分類しない。
 - Redis write、report修復、状態変更、返信、product push、Deploymentはこのcandidateで行わない。
+
+## 2026-08-24 — 個別指示の単一参照方式
+
+### 利用者からの要望
+
+- コアルールを破壊せず、細かくなった個別指示を共通正本への参照方式へ戻す。
+- 履歴と安全境界を保持しながら、共通の保存・検証・自己回復手順を毎回の指示へ再展開しない。
+
+### 判断
+
+- 新しい正本を増やさず、`docs/DEVELOPMENT_EXECUTION_RULES.md`を個別指示からの唯一の直接policy参照先とする。
+- 個別指示は案件固有の目的、identity、authorization envelope、不変条件、成功条件、真の停止条件だけを自己完結して記載する。
+- 詳細実行シートは不可逆または利用者専用の外部操作へ限定し、通常のnext-instructionへ手順を持ち越さない。
+
+### 実施結果
+
+- `AGENTS.md`と`docs/DEVELOPMENT_EXECUTION_RULES.md`へ単一参照方式と逸脱検査を追加した。
+- `docs/README.md`の資料索引から個別指示の作成規約へ到達できるようにした。
+- 既存の権限、Phase継続、true-stop、耐久保存、監査分離、main／production境界は変更していない。
+
+### 検証
+
+- 文書差分、参照先、既存コアルールの保持、`git diff --check`を確認する。
+
+### 未対応・保留
+
+- product repositoryの`develop`／`main` ref更新は、candidate確定後の個別承認を得るまで実施しない。
