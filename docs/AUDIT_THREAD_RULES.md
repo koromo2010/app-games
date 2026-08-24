@@ -99,7 +99,7 @@ STATUS
 
 ## 5. checkpointと正式報告
 
-再取得困難な外部responseは取得直後、監査状態は意味のある節目、risk boundary、遅くとも約10分ごとに新規immutable checkpointへ保存し、remote read-back後に続行する。checkpointには監査ID、対象identity、完了済み、未完了、証拠所在地、再開点を含める。
+保存頻度、`RECOVERY_CHECKPOINT`と`FULL_RECOVERY_CHECKPOINT`の境界、remote read-backは`DEVELOPMENT_EXECUTION_RULES.md`第9節をそのまま使い、この文書へ別の保存手順を作らない。監査checkpointへ追加する固有情報は監査ID、対象identity、証拠所在地だけとする。
 
 checkpointは復旧用であり、`AUDIT_RESULT`または`AUDIT_ACCEPTANCE`ではない。checkpoint到達だけで監査を止めず、途中checkpointを監督スレが正式報告として受理しない。
 

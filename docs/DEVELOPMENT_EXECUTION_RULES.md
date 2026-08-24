@@ -11,7 +11,7 @@
 | 作業範囲・権限 | 利用者の現在の明示指示・承認とChatGPTプロジェクト全体指示 |
 | 目的・対象・product write上限・禁止・成功／停止条件 | 最新のタスク固有指示 |
 | field・response path・aggregate verdict・冪等性 | 現行source、schema、SDK等のinterface／protocol正本 |
-| 実行・検証・保存・証拠手順 | `AGENTS.md`と本書 |
+| 実行・検証・保存・証拠手順 | 本書。`AGENTS.md`は入口と変更禁止境界だけを示す |
 | 解析復旧 | `AI_EXECUTION_TROUBLESHOOTING.md` |
 | 監査スレ、監査作業スレ、監督スレ、TA／CP、監査findingの受け渡し | `AUDIT_THREAD_RULES.md` |
 
@@ -25,41 +25,48 @@
 - 旧指示、旧result、会話ログは履歴であり、最新版と累積適用しない。
 - 同じ判断対象の真の矛盾だけを利用者へ確認する。解析で解消できる差は同じ作業内で直す。
 
-### 個別指示の単一参照方式
+### 成果物routerと個別指示の単一参照方式
 
-個別指示は本書を共通policyの唯一の直接参照先とする。参照にはpathと、参照する本文を一意に固定できるpolicy commitを記載し、branch名や会話上の最新版だけから内容を推測しない。
+進捗ごとに成果物を積み増さず、起きた変化に対応する一種類だけを作る。
+
+| 起きた変化 | 作る成果物 | 作らないもの |
+| --- | --- | --- |
+| 目的、対象範囲、継続的なauthorization envelope、不変条件、成功条件、真の停止条件のいずれかが実質的に変わった | `NEXT_INSTRUCTION` | checkpointや一操作の承認を新しい指示へ昇格しない |
+| 契約は同じで、現在地、candidate、完了済み工程、外部write件数、再開点だけが変わった | `CHECKPOINT` | `NEXT_INSTRUCTION`、正式result |
+| 承認が必要な一つの外部操作または利用者専用操作へ到達した | `EXECUTION_SHEET` | 契約が変わらない限り`NEXT_INSTRUCTION` |
+| 第10節のterminal boundaryへ到達した | `RESULT` | 継続用`NEXT_INSTRUCTION` |
+| threadを移すが契約は変わらない | 最新instructionとcheckpointを指す短い`HANDOFF` | 指示本文の複製、指示の改版 |
+| 監査系列の正式受け渡し | `AUDIT_THREAD_RULES.md`所定のartifact | 通常Tの指示・resultとの混載 |
+
+`NEXT_INSTRUCTION`は本書を共通policyの唯一の直接参照先とする。参照にはpathと、参照する本文を一意に固定できるpolicy commitを記載し、branch名や会話上の最新版だけから内容を推測しない。
 
 ```text
 POLICY_REFERENCE: docs/DEVELOPMENT_EXECUTION_RULES.md @ <product-commit>
 ```
 
-個別指示の本文へ記載するのは、今回固有の次の情報だけとする。
+`NEXT_INSTRUCTION`へ記載するのは、今回固有の継続契約だけとする。一操作だけの外部write承認は`EXECUTION_SHEET`で固定し、その承認・消費だけを理由に指示を改版しない。
 
-- TASK、対象、目的、対象Phase
-- base、candidate、target ref、artifact等、今回の対象を一意にするidentity
+- TASK、対象、目的
+- target ref、固定write対象等、変更するとauthorizationが変わるidentity
 - 利用者が今回承認したproduct／control-plane writeと上限、および今回固有の禁止効果
 - 維持すべき不変条件
 - 成功条件と、許可済み内部回復では越えられない真の停止条件
 
-本書、`AGENTS.md`、`AI_EXECUTION_TROUBLESHOOTING.md`、`AUDIT_THREAD_RULES.md`に既にある保存方法、検証順、自己回復、retry、報告形式、役割分担は個別指示へ複製しない。これらの共通規則を、作業ごとのcommand、file、tool、順序、内部checkpointの許可リストへ展開しない。
+base、current candidate、完了済み工程、未完了、診断結果、再開点等の進行状態は`CHECKPOINT`へ置き、契約を変えない限り`NEXT_INSTRUCTION`へ移さない。本書、`AGENTS.md`、`AI_EXECUTION_TROUBLESHOOTING.md`、`AUDIT_THREAD_RULES.md`に既にある保存方法、検証順、自己回復、retry、報告形式、役割分担は個別指示へ複製しない。これらの共通規則を、作業ごとのcommand、file、tool、順序、内部checkpointの許可リストへ展開しない。
 
-旧指示、旧result、会話要約をpolicy参照先にせず、そこから条件を連鎖継承しない。再開に必要なcandidate、checkpoint、result等は入力artifactとして正本のpath、commit、blob、Library ID等を直接指すことができるが、そのartifactに書かれた過去の指示全体を現行指示へ累積適用しない。案件固有の現在地とauthorization envelopeは、参照を辿らなくても最新指示だけで判定できるようにする。
+旧指示、旧result、会話要約をpolicy参照先にせず、そこから条件を連鎖継承しない。最新instructionだけで契約とauthorizationを判定し、最新checkpointだけで現在地と再開点を判定する。再開に必要なartifactは正本のpath、record commit、blob、Library ID等を直接指せるが、そのartifactに書かれた過去の指示全体を累積適用しない。
 
 詳細な操作列を持つ実行シートは、main／production、DB／migration／recovery、回数制限付き本番操作、利用者専用画面操作等、対象と不可逆な外部効果を事前固定する必要がある境界に限る。実行シートはその一操作のための一回限りの成果物であり、通常のnext-instructionへ手順を持ち越さない。
 
 `POLICY_REFERENCE`、checkpoint、manifest、result、実行シートは、新しい権限または禁止を付与しない。利用者の現在の明示指示・承認と矛盾する場合は、利用者の境界を維持する。
 
-保存前に、次の逸脱がないことを確認する。
+新しい実行入口となる`NEXT_INSTRUCTION`は、checkpoint repositoryのbranch `ops/game-fields-supervisor-records-20260803`、`docs/gpt-save/`へ新規immutable Markdownとして保存する。record commit、blob、path、内容をremote read-backした後だけ作業スレへ引き渡す。保存不能なら`INSTRUCTION_RECORD_UNSAVED / AT RISK`とし、チャット本文だけを正式な新入口として扱わない。同じ契約の継続、checkpoint、承認待ち解除、内部phase進行、thread移行だけでは改版しない。
 
-1. 共通規則を本文へ再掲していない。
-2. 外部効果の固定に不要な実行方法を指定していない。
-3. 別タスクの整理、採番、保守登録を混載していない。
-4. 旧artifactへの多段参照または条件の累積適用を作っていない。
-5. 利用者の明示なしに禁止、file scope、call回数、内部停止点を追加していない。
+保存前の重複・混載検査には`scripts/check-development-artifact-policy.mjs`を使う。検査を通すために本文へfieldや手順を追加せず、共通規則、進行状態、別artifactを取り除く。
 
 ## 2. 作業開始ゲート
 
-開始時に次を固定する。
+開始時に次を実行状態として固定する。このblockはread-onlyのpreflightであり、`NEXT_INSTRUCTION`のtemplateでも新しい成果物でもない。契約に属さない現在値はcheckpointへ置く。
 
 ```text
 TASK / TARGET
@@ -128,7 +135,7 @@ validationで永続化前に拒否されたcallは、contractまたはread-back�
 
 tool名、schema、response path、parser、binding、許可済みread-only経路の見落としは、`AI_EXECUTION_TROUBLESHOOTING.md`に従い同じ作業内で修正する。途中経過は共有してよいが、許可済みの次工程を止めない。
 
-実行計画は適応的に扱う。選択したcommand、tool、workspace、順序、retry、helper等が失敗した場合は、目的、権限、不変条件を維持したまま方法を再計画する。観測された一箇所だけを直して再実行せず、同じfailure classと残りの実行flowを横断監査し、許可済み範囲で修正・再検証を続ける。実行方法の失敗を正式resultや次指示の境界へ変換しない。次指示を発行するのは、対象、方針、許可範囲または真の外部blockerが実質的に変わる場合に限る。
+実行計画は適応的に扱う。選択したcommand、tool、workspace、順序、retry、helper等が失敗した場合は、目的、権限、不変条件を維持したまま方法を再計画する。観測された一箇所だけを直して再実行せず、同じfailure classと残りの実行flowを横断監査し、許可済み範囲で修正・再検証を続ける。実行方法の失敗を正式resultや次指示の境界へ変換しない。次指示を発行するのは、第1節の契約情報が実質的に変わる場合に限る。
 
 監督が作業停止を要求するには、次に必要な具体的操作と、その操作が越える明示済みの禁止線、未許可write、不可逆性または利用者専用依存を一対一で示す。これを示せない「想定外」「確信不足」「指示書に未記載」「checkpointまたは監査時刻に到達」は停止理由ではなく、耐久保存後も同じ`TASK_ACTIVE`で続行する。checkpointと定期監査はreview triggerであり、authorizationの失効やタスク終了ではない。
 
@@ -225,14 +232,15 @@ test、CI、Deployment、runtimeは、固定したrepository、remote、branch�
 | L2 | 通常の製品コード・正本文書変更 | 最終candidateを自分の変更だけlocal commit＋検証。remote未到達のままturnを終える場合は下記耐久checkpoint |
 | L3 | migration、認証、重要基盤、復元困難な成果 | L2＋成果確定時点でbundle、manifest、fresh restore、耐久保存 |
 
-正式resultと復旧用checkpointを分ける。正式resultは第10節のterminal boundaryでだけ作るが、復旧用checkpointは`TASK_ACTIVE`中にも作り、報告や状態遷移として扱わない。
+正式resultと復旧用checkpointを分ける。正式resultは第10節のterminal boundaryでだけ作る。checkpointは現在地を失わないための非terminal成果物であり、契約、承認、報告、状態遷移を兼ねない。
 
 - 再取得不能または回数制限のある外部responseは、取得と同じtool flowで秘密を除いたstructured JSONを新規immutable pathへatomic保存し、parse、deep equality、SHA-256、read-backを確認してから次のcall、解析、Markdown整形へ進む。machine outputの初回保存に`apply_patch`を使わない。
-- 実装とfocused checkが一区切りついた時、push／Deployment／長いbuild／browser session切替等のrisk boundary前、または最後の耐久checkpointから約10分経過した時は、自分の変更と再開点をcheckpointする。外部responseは10分を待たず即時保存する。
-- scratch file、会話表示、実行中変数、local commitだけでは耐久保存完了としない。安全なcaptureまたはtask-owned commitをcheckpoint repositoryの新規pathへ保存し、remote上のblob、内容、identityをread-backして`CHECKPOINT_SAVED`とする。
-- checkpointにはTASK、対象identity、完了済み工程、未完了、外部write回数、再開点を含める。秘密、binding、Cookie、token、Room codeを含めない。短時間の連続したread-only操作は節目までまとめてよい。
+- 実装とfocused checkが一区切りついた時、外部操作前、または最後の耐久checkpointから約10分経過した時は`RECOVERY_CHECKPOINT`を作る。TASK、対象identity、task-owned commitまたは復元に必要な最小artifact、完了済み、未完了、外部write件数、再開点を新規immutable保存し、remote上のartifactと内容をread-backする。fresh restoreはこの軽量checkpointごとには行わない。
+- scratch file、会話表示、実行中変数、local commitだけでは耐久保存完了としない。ただし同一turnの許可済みpushで正本remoteへ到達し、現在地もそこから一意に復元できる場合は、そのremote read-backをcode byteの耐久保存としてよい。
+- 短時間の連続したread-only操作、内部retry、同じ意味の中間candidateは節目までまとめ、checkpoint、bundle、manifestを操作ごとに増やさない。
+- checkpointには秘密、binding、Cookie、token、Room codeを含めない。
 
-内部retryや中間candidateごとにbundleを作らない。remote未到達の最終task-owned commitを保持して、turn終了、承認待ち、利用者操作待ち、スレ移行、workspace整理、長時間停止、別タスク移行へ進む前に次を1回行う。
+turn終了、承認待ち、利用者操作待ち、thread移行、workspace整理、長時間停止、別タスク移行、またはremote未到達bytesを失うrisk boundaryへ進む前は、最後の`RECOVERY_CHECKPOINT`を`FULL_RECOVERY_CHECKPOINT`へ確定する。内部retryや中間candidateごとには行わず、対象状態について次を1回行う。
 
 1. repository、remote、branch、base、commit、tree、parent、変更ファイルを固定する。
 2. 必要objectを含むbundle等を承認済み耐久領域へ保存し、場所、size、SHA-256、identityをmanifestへ記録する。

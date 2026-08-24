@@ -83,58 +83,7 @@ game packageの最終`PreparedUploadFile[]`は、`@game-fields/sdk-package-asset
 
 SDK Portalはpackage client／server grantをEd25519で署名する。portable server grantは隔離Previewが固定した公開鍵だけでローカル検証し、Portalの検証APIやcross-project共通秘密値へ依存しない。ブラウザ入口は60秒のclient交換grantをURL fragmentへ渡し、fragmentを履歴から即時消去してform POSTする。client grantはページrender時に固定せず、Room参加後にゲームiframeが実際にnavigateする直前の同一origin認証routeで固定revision向けに再発行する。Previewはgrant検証後のPOST応答で直接HTML骨格を返し、Cookieや303遷移を使わない。JS、CSS、画像、font、mediaとPlatform bridgeは外部assetのまま、同一source kind・制作者・ゲーム・固定revision・正規化済みasset path・期限へ限定したHMAC URLで取得する。Preview側の秘密値はこのpath単位asset tokenだけに使用する。
 
-### T-60 read-only監査境界（ローカル・未配備）
-
-2026-08-01に`develop@17c331e18908120b26cab85a2132c987999a924e`から再構築し、
-T-60.1 local checkpoint `dda0313273f7231232a8acae0a94fffd54f2b9a4`へ保存した差分では、
-公開ゲーム一覧・詳細・SDK catalogが読むgame operationsを
-`v3 → v2 → v1 → registry既定値`のGET専用境界へ分離した。legacy fallbackを読んでも
-Redisへ書き戻さない。永続化は認証済み管理PATCHと、環境・namespace・target key・
-`--apply`を明示するmaintenance CLIだけに限定する。CLIはlegacy raw JSONを保存schemaどおり
-厳格検証し、normalizerによる不正fieldの黙示修復を移行として扱わない。
-
-管理者向けSDK監査GETは、Platformのfull site-admin検証後にservice HMACでPortalの
-internal GETを呼ぶ。Portalはschema 7を一つの`REPEATABLE READ READ ONLY` transactionで読み、
-game status、decision ID、stable／current manifest SHA-256をDB行そのものから取得・算出する。
-各値はavailabilityを伴い、不存在とquery失敗を同じ値へ畳み込まない。stableとcurrentの
-revision／manifest hash不一致もanomalyとして分類し、監査field全体を行順非依存の
-canonical integrity digestへ含める。
-
-Runtime manifest監査はlowercase 40桁commitを指定してexact Git object graphとpackage全treeから
-hashを再計算する。一方、Preview Command runnerは既存の高速経路を維持し、grantで固定した
-`server.bundle.js`だけを1回取得してhashを照合する。runnerのapply／presentからrecursive treeや
-全blob読取へ到達しない。両経路が共有するのはimmutable locator検証とSHA-256等のpure処理であり、
-full-tree resolverはaudit専用である。
-すべての応答は`private, no-store`で、cookie、service署名、接続文字列、PII、判断理由、
-signed URLを返さない。
-
-schema 7にはDB自身のenvironment markerとstable pointer固有の`source_revision`がない。
-そのためsnapshotはdeployment branch由来値とDB markerを分け、DB markerを`null`かつ
-`unavailable:schema-7`、stable provenanceも`null`かつ`unavailable:schema-7`として返す。
-current releaseから推測して埋めない。この制限によりT-60.1の受入判定は、schema変更または
-別途証明が許可されるまで3層目の`schema 8待ち`であり、局所差分の安全性判定と分離する。
-T-60.1が直接所有する局所差分はローカル検証PASSである。既知だった
-`/games → loadGameDurationEstimates() → ensurePostgresSchema()`のwrite到達は、
-T-74 local merge `25b27cc096bd30b2176ba53209bf607b105cac41`（tree
-`8661072b6610600fb084ac06d7fd33f419496c6f`）でT-65の共通catalog read modelと統合済みである。
-正規checkpointはT-60.1 `dda0313273f7231232a8acae0a94fffd54f2b9a4`、T-65
-`40b6d97961f2cb909d55596e819af4155d8e08c4`、T-71
-`139f4ae8368a7646f70a18352b5f9db9f8adbf70`で、baseline比139パス、M97／A42／D0である。
-
-T-74のfocused 5/5、repository-wide 835/835、Runtime／SDK package／starter、
-`npm run verify`、Platform／SDK Portal／SDK Previewの3 buildはすべてPASSした。
-Portal buildのmigrationは`local/local`としてskipされ、DB接続・DDL・DMLは0、Main Promotion
-同期5対象も`would-change=0`だった。重複`app-games-sdk-portal`は引き続き
-`project-disabled`である。ローカル統合は完了したが、T-73B最終波及確認、push、PR、Actions、
-Deployment、production反映、実環境確認は未実施であり、T-60全体や稼働環境をPASSとは扱わない。
-
-Preview grant（Ed25519）は`@game-fields/sdk-preview-auth`、内部service HMACは
-`@game-fields/sdk-service-auth`、Runtime audit resolverとrunner用pure検証は
-`@game-fields/sdk-runtime-artifact`へ
-責務分離する。Preview Projectはservice HMAC packageと`SDK_ACCOUNT_LINK_SECRET`を持たない。
-Deployment build gateでは、利用実態がT-59で確定していない`app-games-sdk-portal`を引き続き
-project-disabledとしてSKIPする。Portal差分のローカルtypecheck／build対象であることと、
-Deployment build対象であることを混同しない。
+未反映の個別T、local candidate、checkpoint commit、検証結果はこの現行実装資料へ載せない。現在のread/write境界、SDK監査境界、Deployment対象は対象refのsource、schema、`config/main-promotion-projects.json`から確認し、checkpoint正本の未反映内容を現行仕様へ混ぜない。
 
 2026-07-27の段階移行中は、developの発行器はpath単位v2だけを発行し、
 共有verifierだけが旧revision単位v1とv2を一時的に受理する。旧v1の最長有効期間と
@@ -178,20 +127,6 @@ Room固定revisionが同じなら通常復帰し、異なる場合はclient ifra
 明示置換する。置換はserver側で本人・active Roomコード・旧revision・新revisionを
 原子的に照合し、旧Roomの解散や削除は行わない。revisionまたはpackageを解決できない場合と
 clientがreadyにならない場合は明示エラーで停止し、Mockや別revisionへfallbackしない。
-
-### T-98 Preview server artifact cache（2026-08-06 local reimplementation）
-
-最新`origin/develop`（`64c7ffcca44da35ac2f97c135fab14dd7e6c0dd5`）を基準に、SDK Previewの
-portable server bundleだけを対象とするprocess-local immutable artifact cacheを再実装した。
-cache keyはschema、環境、instance、game、package revision、grantのserver bundle SHA-256を含み、
-grant検証とscope確認の後だけsourceへ到達する。cacheはRuntime／Context／globals、grant、token、
-Room状態、結果表示を保持しない。entry 16件、合計16 MiB、単体1 MiB、決定的LRU、exact-key
-single-flight、clear／disable、hash mismatch時のfallbackなし、失敗のnegative cacheなしを契約とする。
-QuickJSはguestの`Error("interrupted")`をbundle errorとして維持し、実際のdeadline interruptだけを
-`EXECUTION_LIMIT`／HTTP 408へ分類する。各呼出しのRuntime／Contextは破棄し、次の呼出しへ持ち越さない。
-focused cache／runner／route契約、T-36 Redis namespace／realtime境界、repository test、lint、
-typecheck、SDK boundary、root／Portal／Preview buildはlocalでPASSしている。製品origin push、
-Vercel、DB／Redis／Blob／OAuth／DNS write、Deployment、production確認は未実施である。
 
 ## 共通LLMゲートウェイ
 

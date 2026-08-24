@@ -4,72 +4,11 @@
 >
 > 資料を読む順番や作業別の参照先は `docs/README.md` を入口にする。この文書は「現在の開発状態と共通仕様」、`docs/CONTAINER_ARCHITECTURE.md` は「将来案」である。
 
-最終更新: 2026-08-06
+最終更新: 2026-08-24
 
-## 2026-08-02 APP migration control plane reimplementation checkpoint
+## 運用履歴の扱い
 
-`bb8242bd2fefb215f8dafb8a7a4f1e72a931006b`をbaselineとして、消失した
-APP migration checkpointとは別identityのlocal reimplementationを行った。
-正本は`Intake-3-M0-app-migration-final-design.md`であり、消失した29-path記録へ
-機械的に合わせていない。
-
-- APP専用`db/app/0000`〜`0002`、exact-byte SHA-256 manifest、ledger/control、
-  transaction runner、legacy adoption契約、schema fingerprint、SELECT-only readinessを追加。
-- `ensurePostgresSchema()`のrequest-time DDL／marker mutationを撤去し、store群は
-  `APP_SCHEMA_NOT_READY`を返すreadiness境界へ接続した。
-- `package.json`、`package-lock.json`、SDK migration、guest `0003`、Redis／Blob／OAuth、
-  環境変数の実値は変更していない。
-- このcheckpointではDB status／dry-run／check／apply／adopt、Vercel、Deployment、
-  production access、product repository pushを実行していない。
-
-## T-60／T-60.1 ローカル再構築状態
-
-- workspace自動整理で失われた未commit差分を、`develop@17c331e18908120b26cab85a2132c987999a924e`のclean checkoutから再構築した。元patchのbyte-for-byte復元ではない。T-60.1はlocal checkpoint `dda0313273f7231232a8acae0a94fffd54f2b9a4`へ保存済みで、製品`origin`未push・未配備である。
-- 局所修正前の51ファイルはprivate checkpoint repoの`main@cc72519054cfb962c9c3ba073619acd83d2a01a6`（空tree）と`t-60.1/pre-remediation-17c331e@5a7c9e268e0b77b625d111d5b7a1bc3c26f88d9b`（tree `6ada367b433dac963f3141ff86de890296d5129d`）へ、一度のatomic pushで保存・再取得確認済みである。製品`origin`、PR、Actions、Vercel Deploymentへのwriteはない。
-- 公開game operationsはRedis GET専用とし、v3／v2／v1 fallback時の永続writeを除去した。管理writeと明示maintenance migrationを別moduleへ分離した。
-- migrationはraw v2／v1を厳格検証し、不正publication／maintenance／mode／message／updatedAt、重複ID、部分object、未知fieldをnormalizerで修復して移行しない。dry-run／malformed／既存target conflict時のmutationは0、初回applyは`SET ... NX`最大1回、同一payload再適用はwrite 0、NX raceは再読したpayloadが同一の場合だけ成功する。
-- SDK schema snapshotとexact Runtime manifestの管理者GETを追加した。full site-admin認証、service HMAC、Portal read-only DB／Git境界を通し、全応答を`private, no-store`とする。snapshotはgame status、decision ID、stable／current manifest SHA-256とavailabilityを返し、stable／current不一致を独立分類してcanonical integrity digestへ含める。
-- schema 7にはDB自身のenvironment markerとstable pointer固有のsource provenanceがない。snapshotは推測値を返さず、各値を`unavailable:schema-7`として明示する。これはT-60.1局所差分の安全性判定とは分離し、schema 8待ちの第3層BLOCKEDとして扱う。
-- Runtime auditだけがexact commit／recursive tree／package全blob／manifest／全hashを検証する。Preview Command runnerは固定`server.bundle.js`の単一取得とgrant hash照合を維持し、audit用full-tree resolverへ到達しない。両者は`@game-fields/sdk-runtime-artifact`のlocator／SHA-256 pure処理だけを共有する。Preview grantとservice HMACも別packageへ分離し、Previewへ`SDK_ACCOUNT_LINK_SECRET`を持ち込まない。
-- `app-games-sdk-portal`はT-59で利用実態が確定するまでDeployment build gateではproject-disabled／SKIPを維持する。Portalは局所差分のローカルtypecheck／build対象には含める。
-- 最終ローカル検証はfocused 60/60、repository-wide 769/770、`npm run verify`、単独ESLint、Portal／Preview typecheck、Runtime package build、7 profile direct Next build、build-gate fixture、`git diff --check`が完了した。全体testの失敗1件とroot aggregate typecheckの51診断は未変更fixture由来で、現50パス由来の型診断は0件である。
-- 3層判定は、T-60.1が直接所有する局所差分=`PASS`、T-60 end-to-end=`T-74 local mergeでT-65 read modelと統合・全ローカル回帰PASS／T-73B最終波及確認とpush待ち`、DB marker／stable provenance=`schema 8待ち`である。公開広場の所要時間経路とgame operations fallbackはいずれもread-only境界へ統合した。
-- checkpoint以外の外部write、製品`origin` push、PR、Actions、Deployment、live DB／Redis／Blob／SDK package Gitへの接続、T-48.1再実行は行っていない。T-60全体や配備済み環境をPASSとは扱わない。
-
-## T-74 ローカル統合状態
-
-- 正規checkpointはT-60.1 `dda0313273f7231232a8acae0a94fffd54f2b9a4`、T-65 `40b6d97961f2cb909d55596e819af4155d8e08c4`、T-71 `139f4ae8368a7646f70a18352b5f9db9f8adbf70`である。T-74 merge commitは`25b27cc096bd30b2176ba53209bf607b105cac41`、親はT-71、T-60.1の順、treeは`8661072b6610600fb084ac06d7fd33f419496c6f`である。
-- `develop@17c331e18908120b26cab85a2132c987999a924e`比は139パス、M97／A42／D0。SDK Preview routeのoptional grant hashは、存在確認直後のimmutable localへ固定してasync callbackへ渡し、non-null assertion、cast、grant型、validator、認証条件、エラー応答は変更していない。
-- starter整合の固定local refは`refs/remotes/origin/sdk-starter-dev@4568d668c2e9542e89ddb058633d67b757f4e807`、tree `12d8c86d82ed8711bf21a12e3669ac1954f90706`、manifest SHA-256 `1cb62054b21519570aefcbfadfc0414ebb5a8da594fb0badc85bc0b26cdf11ae`で、T-73B完了まで保持する。
-- 最終local gateはfocused 5/5、`npm test` 835/835、Runtime packages build、SDK package test、starter test、`npm run verify`、Platform 78ページ、SDK Portal 15ページ、SDK Preview 5ページの各buildがPASS。Portal migrationは`local/local`でskipしDB接続・DDL・DML 0、Main Promotion同期5対象は`would-change=0`、`app-games-sdk-portal`は`project-disabled`でSKIPした。
-- 判定は`T-74 LOCAL INTEGRATION COMPLETE／139-FILE TREE FIXED／T-73B FINAL RECHECK PENDING／PUSH PENDING`。local commitはmergeと本4文書finalizationの2件だけとし、push、PR、Actions、Deployment、production反映、外部環境writeは未実施である。
-
-## 2026-08-06 T-98 Preview artifact cache local reimplementation
-
-消失したT-98旧checkpointは復元せず、最新`origin/develop@64c7ffcca44da35ac2f97c135fab14dd7e6c0dd5`
-（tree `c52183666995229b2a5b3a499d79edba8307c33c`）から独立worktreeで再実装した。
-対象は`apps/sdk-preview`のserver bundle取得・検証・portable runner境界だけで、製品push、Deployment、
-Vercel、DB／Redis／Blob／OAuth／DNS write、main／production操作は行っていない。
-
-- `runtime-artifact-cache.ts`をPreview専用のprocess-local cache ownerとして追加した。keyはschema marker、
-  environment、instanceId、gameId、packageRevision、serverBundleSha256の全要素を含み、検証済みの
-  immutable bytes、canonical SHA-256、byte length、LRU metadataだけを保持する。entry 16、合計16 MiB、
-  単体1 MiB、決定的LRU、exact-key single-flight、失敗後retry、clear／disable、oversize／budget bypass、
-  hash mismatch時の旧bytes fallbackなし、negative cacheなしを実装した。返却bytesは毎回copyし、cacheの
-  payloadを呼出し側へ直接公開しない。
-- Preview routeはgrantのaudience／role／environment／instance／game／revisionを確認してからcacheを
-  解決する。cache hitではsource fetchとSHA計算を行わず、miss／waiter／bypassの観測ヘッダーだけを返す。
-  Portal auditのfull-tree resolverはPreview routeへ導入していない。
-- QuickJS runnerは実際のdeadline interrupt状態だけを`EXECUTION_LIMIT`（HTTP 408）へ分類する。
-  guestが同じ語を含む`Error`を投げても`INVALID_BUNDLE`（HTTP 422）とし、timeout後はRuntime／Contextを
-  disposeして次のvalid invocationを新規隔離環境で実行する。
-- focused 13/13、T-36相当29/29、repository-wide test、lint、root／Portal／Preview typecheck、
-  `npm run check:sdk`、SDK package／Preview／Portal／root build、`git diff --check`をlocalで確認した。
-  local measurementはcache source read 1回、hash 1回、同一key concurrent source read 1回、failure retry、
-  QuickJS init／eval、4並行invocation、RSS差分を小規模fixtureで取得した。正式Preview、GitHub Actions、
-  Vercel、productionの証拠には扱わない。
-- この作業のdurable artifact（patch、bundle、manifest、checksums）とresult Markdownは、全local gate後に
-  checkpoint branchへ保存し、remote read-backとfresh restoreを確認するまで`CHECKPOINT_SAVED`と判定しない。
+この文書には現在の共通仕様だけを置く。個別T、local candidate、checkpoint commit、未反映作業、過去の検証結果はcheckpoint正本と`DEVELOPMENT_THREAD_LOG.md`へ残し、ここへ複製しない。未反映candidateを現行実装として扱わず、現在値は対象refのsourceと機械可読な設定から確認する。
 
 ## 2026-08-01 広場の共通catalog read model
 
@@ -471,16 +410,7 @@ npm test
 npm run build
 ```
 
-変更後はlint、回帰テスト、production buildを通す。UI状態を変えた場合は、ホストと非ホスト、通常モードとデバッグモード、フェーズ遷移前後を確認する。
-
-`main` へのpushでVercelが自動デプロイする。公開作業の完了条件は以下。
-
-ChatGPT Workではスレッドごとに作業環境が新しくなり、前スレッドにあったローカルcheckoutやGitHub CLI（`gh`）が存在しない場合がある。最初にリポジトリを取得して最新mainとの一致を確認する。`gh` がなくても接続済みのGitHubアプリが使える場合は、GitHub APIでblob、tree、commitを作成し、mainのrefをfast-forward更新して公開できる。CLIがないことだけを理由に公開不可と判断せず、GitHub連携ツールの利用可否を確認する。
-
-1. GitHubのmainへ意図したファイルだけをコミット
-2. Vercel対象デプロイが `READY`
-3. 必要に応じて本番APIまたは画面を1回だけ確認
-4. APIテストを無意味に繰り返して無料枠・有料枠を消費しない
+上記commandは候補であり一律gateではない。変更後の検証深度、push承認、transport再計画、Deployment、runtime acceptance、完了判定は`docs/DEVELOPMENT_EXECUTION_RULES.md`だけを正本とする。`READY`をruntime PASSにせず、対象identityが一致する証拠だけを採用する。
 
 ## 10. 引き継ぎメモの保守
 

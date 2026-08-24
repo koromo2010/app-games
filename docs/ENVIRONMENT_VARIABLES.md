@@ -10,7 +10,7 @@
 
 1. 対象ブランチの最新版でこの文書と`config/environment-change-registry.json`を読み、対象Projectと「現在配置」「進行中依頼」「未確認・更新が必要な項目」を確認する。
 2. 対象のTeam、Project、branch、Root Directory、Deployment Environment、キー名、Sensitive区分を特定する。記載がなければ未確認として扱い、過去チャットから補完しない。
-3. Vercel control plane上の事実は、利用者が管理画面等で確認して返却した情報だけを現在状態へ反映する。AIはCloud Browser、connector、公式API、CLIその他の経路でVercelへ直接アクセスしない。期待仕様と実際の配置を混ぜない。
+3. 認証済みVercel control plane上の事実は、利用者が管理画面等で確認して返却した情報だけを現在状態へ反映する。AIはログイン、Cookie、token、認証済みCloud Browser／connector／API／CLIを使用しない。資格情報を使わない公開Deployment metadata、公開HTTP、製品runtimeのread-only確認は`DEVELOPMENT_EXECUTION_RULES.md`第7節に従ってよい。期待仕様と実際の配置を混ぜない。
 4. 変数の追加・変更・削除・Shared Link、再デプロイ、ドメイン割当、Ignored Build Step変更は、それぞれ別の進捗として直後に更新する。
 5. 作業終了前に、次回の担当がチャット履歴なしで次の操作と未完了事項を判断できるか確認する。経緯が必要なら `DEVELOPMENT_THREAD_LOG.md` にも要約を残す。
 6. 秘密値は記録しない。トークンを含む画面は共有せず、キー名、配置先、最小権限、Sensitive区分、失効・更新期限だけを記録する。
@@ -113,7 +113,7 @@ snapshot内の`apps/sdk-portal/vercel.json`と`apps/sdk-preview/vercel.json`に�
 - Main Promotion workflowの同期5対象はメモリ上の再現で`would-change=0`。139パスのbuild-impactは通常6 Projectを各surface affected、重複`app-games-sdk-portal`だけを`project-disabled`／SKIPと判定した。これはローカル静的判定であり、Deploymentを作成していない。
 - T-74のローカル統合は完了し、T-73B最終波及確認待ちである。製品`origin`へのpush、PR、Actions、Deployment、production反映、DB／Redis／Blobその他のexternal writeは未実施で、現在配置表の実環境状態は変更していない。
 
-Vercel control planeの確認・操作は利用者専用である。AIは接続状態や機能の有無にかかわらず、Vercel Dashboard、Cloud Browser、connector、公式API、CLIその他の経路を使用しない。必要な確認・操作は`VERCEL_USER_ACTION_REQUIRED`として利用者へ一度に案内し、返却された結果だけを証拠として扱う。デプロイ済みGame Fields製品runtime URLのbrowser検証はcontrol plane操作と区別する。
+認証済みVercel control planeの確認・操作は利用者専用である。AIはログイン、Cookie、token、認証済みCloud Browser／connector／API／CLIを使用しない。必要な認証済み確認・操作は`VERCEL_USER_ACTION_REQUIRED`として利用者へ一度に案内し、返却された結果だけをcontrol-plane証拠として扱う。資格情報を使わない公開Deployment metadata、公開HTTP、デプロイ済みGame Fields製品runtime URLのbrowser検証はcontrol plane操作と区別し、AIのread-only確認を許可する。
 
 ### 本体dev反映用GitHub資格
 

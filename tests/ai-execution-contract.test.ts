@@ -47,6 +47,12 @@ test("execution rules separate product writes, recovery, checkpoints and formal 
   assert.match(rules, /監督が作るnext-instructionや実行シート.*新しい禁止、file scope、tool／call回数、内部phase停止を追加しない/);
   assert.match(rules, /次に必要な具体的操作.*越える明示済みの禁止線/);
   assert.match(rules, /checkpointと定期監査はreview triggerであり、authorizationの失効やタスク終了ではない/);
+  assert.match(rules, /成果物routerと個別指示の単一参照方式/);
+  assert.match(rules, /最新instructionだけで契約とauthorizationを判定し、最新checkpointだけで現在地と再開点を判定/);
+  assert.match(rules, /`NEXT_INSTRUCTION`.*`CHECKPOINT`.*`EXECUTION_SHEET`.*`RESULT`/s);
+  assert.match(rules, /INSTRUCTION_RECORD_UNSAVED \/ AT RISK/);
+  assert.match(rules, /`RECOVERY_CHECKPOINT`.*`FULL_RECOVERY_CHECKPOINT`/s);
+  assert.match(rules, /fresh restoreはこの軽量checkpointごとには行わない/);
 });
 
 test("troubleshooting fixes the MCP response paths and proposal reconciliation", () => {
@@ -152,10 +158,9 @@ test("current SDK specifications name the supported clients and do not recheck a
   assert.match(handoff, /`accepted=true`をaggregate verdictとして採用/);
   assert.doesNotMatch(handoff, /`accepted=true`とcanonical endpoint一致を確認/);
   assert.match(overview, /handshake response自体にはpost-handshake用`sdkIdentity`を要求しない/);
-  assert.match(agents, /一度受理したタスクは、成功条件を満たすか、許可済み内部回復では解消できない真の外部依存へ到達するまで実行側が所有する/);
-  assert.match(agents, /完了報告、次指示、再承認の理由にしない/);
-  assert.match(agents, /developmentは.*禁止リスト方式/);
-  assert.match(agents, /次に必要な具体的操作.*越える明示済みの禁止線/);
+  assert.match(agents, /`docs\/DEVELOPMENT_EXECUTION_RULES\.md`を唯一の実行正本/);
+  assert.match(agents, /checkpoint、内部failure、承認待ち、解析修正を新しいタスクや正式resultへ変換しない/);
+  assert.match(agents, /developmentの可逆な内部手段は同書の禁止リスト方式/);
 });
 
 
@@ -188,7 +193,7 @@ test("audit and supervision remain independent responsibility lines", () => {
   assert.match(audit, /通常T系列（監査なしで完結）/);
   assert.match(audit, /監査系列（独立した追加線）/);
   assert.doesNotMatch(audit, /READY_FOR_REAUDIT/);
-  assert.match(agents, /監査は通常T系列から独立した追加線/);
+  assert.match(agents, /監査、TA／CP、監督との受け渡しを実際に扱う場合だけ/);
   assert.match(execution, /監査が何もしなくても既存Tは監督と作業スレだけで完遂/);
   assert.match(navigation, /AUDIT_THREAD_RULES\.md/);
 });

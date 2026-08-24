@@ -4,15 +4,13 @@
 
 ## 最初の読み順
 
-1. ルートの `AGENTS.md` で、変更してはいけない共通制約を確認する。
-2. [`DEVELOPMENT_EXECUTION_RULES.md`](./DEVELOPMENT_EXECUTION_RULES.md) で、許可・保存・検証・証拠・終了状態を確認する。
-3. 監査、TA／CP、監督への受け渡しを扱う場合は[`AUDIT_THREAD_RULES.md`](./AUDIT_THREAD_RULES.md)を確認する。
-4. [`SYSTEM_MAP.md`](./SYSTEM_MAP.md) で、app・環境・主要flowと正本の位置関係を掴む。
-5. [`CURRENT_STATE.md`](./CURRENT_STATE.md) で、現在実装・運用されている全体像を確認する。
-6. `DEVELOPMENT_HANDOFF.md` で、現在の仕様・主要ファイル・環境変数・公開手順を確認する。
-7. 下表から、今回の作業に該当する資料だけを追加で読む。tool、schema、response解析、利用者PC向けhelper／PowerShellで詰まった場合は[`AI_EXECUTION_TROUBLESHOOTING.md`](./AI_EXECUTION_TROUBLESHOOTING.md)を読む。
-8. `git status --short --branch` と直近コミットを確認し、既存変更を上書きしない。
-9. 変更後は影響範囲に応じたfocused test、回帰、lint／buildを実行する。
+1. ルートの`AGENTS.md`と[`DEVELOPMENT_EXECUTION_RULES.md`](./DEVELOPMENT_EXECUTION_RULES.md)を読む。
+2. 下表から今回の作業に該当する資料とsourceだけを選ぶ。該当しない資料を予防的に通読しない。
+3. 複数app・環境・主要flowをまたぐ場合、または正本の位置が不明な場合だけ[`SYSTEM_MAP.md`](./SYSTEM_MAP.md)を読む。
+4. 全体の現行実装を確認する作業だけ[`CURRENT_STATE.md`](./CURRENT_STATE.md)を読み、詳細仕様が必要な場合も`DEVELOPMENT_HANDOFF.md`の該当節だけを読む。過去T、旧checkpoint、会話履歴を現在地として取り込まない。
+5. 監査、TA／CP、監督への正式受け渡しを扱う場合だけ[`AUDIT_THREAD_RULES.md`](./AUDIT_THREAD_RULES.md)を読む。tool、schema、response解析、browser経路、利用者PC向けhelper／PowerShellで詰まった場合だけ[`AI_EXECUTION_TROUBLESHOOTING.md`](./AI_EXECUTION_TROUBLESHOOTING.md)を読む。
+6. `git status --short --branch`と直近commitを確認し、既存変更を上書きしない。
+7. 変更後は影響範囲に応じたfocused test、回帰、lint／buildを実行する。
 
 現状と構想は明確に分離する。
 
@@ -30,7 +28,7 @@
 
 | 作業 | 最初に読む資料 | 次に確認する正本・コード |
 | --- | --- | --- |
-| 個別指示の作成、実行許可・保存・証拠・終了判定 | `DEVELOPMENT_EXECUTION_RULES.md` | 最新の個別指示、Git差分、対象Deployment／runtime identity |
+| 個別指示の作成、実行許可・保存・証拠・終了判定 | `DEVELOPMENT_EXECUTION_RULES.md` | 最新の個別指示、Git差分、対象Deployment／runtime identity、`scripts/check-development-artifact-policy.mjs` |
 | システム全体の構成・環境・主要flow | `SYSTEM_MAP.md` | 機械可読な設定、`CURRENT_STATE.md`、対象source |
 | tool・schema・response解析の自己回復 | `AI_EXECUTION_TROUBLESHOOTING.md` | 現行source、schema、関連test、structured response |
 | 利用者PC向けone-click helper・PowerShell | `AI_EXECUTION_TROUBLESHOOTING.md` 8章 | 対象OS fixture、外部commandのstdout／stderr／exit code、launcher source |
@@ -38,7 +36,7 @@
 | 将来構想・未実装計画 | `FUTURE_PLAN.md` | `PLATFORM_VISION.md`、SDK関連資料 |
 | 未修正バグ・次の修正順 | `KNOWN_ISSUES.md` | 対象項目に記載したAPI・store・domain |
 | 監査スレ／監査作業スレ／監督スレの分離、TA／CP、finding受け渡し | `AUDIT_THREAD_RULES.md` | `DEVELOPMENT_EXECUTION_RULES.md`、checkpoint正本 |
-| バグ調査・全体監査 | `DEVELOPMENT_HANDOFF.md` の共通ルールと現行仕様 | `config/game-registry.json`、対象ゲームの画面・API route・room store、`package.json` |
+| バグ調査・全体監査 | `SYSTEM_MAP.md`、対象surfaceの現行資料 | `config/game-registry.json`、対象ゲームの画面・API route・room store、`package.json` |
 | ワードウルフのルール・進行 | `DEVELOPMENT_HANDOFF.md` 6章、`game-concept.md` 2章 | `lib/wordwolf-command-domain.ts`、`lib/wordwolf-room-store.ts`、`app/wordwolf/game-flow.ts` |
 | たほい屋のルール・進行 | `DEVELOPMENT_HANDOFF.md` 7章 | `lib/tahoiya-room-store.ts`、`lib/tahoiya-types.ts`、`app/tahoiya/TahoiyaGame.tsx` |
 | 一人たほい屋（仮）・偽回答再利用 | `SOLO_TAHOIYA.md` | `lib/tahoiya-decoy-candidate-core.ts`、`lib/tahoiya-decoy-candidate-store.ts`、`lib/tahoiya-decoy-salvage.ts` |
@@ -70,7 +68,7 @@
 | 改善要望・バグ報告のinventory、索引不整合、read-only監査 | `USER_REPORT_STORAGE_RESILIENCE.md` | `lib/user-report-storage-audit.ts`、`lib/user-report-store.ts`、`scripts/audit-user-report-storage.ts` |
 | durableな開発判断の保存運用 | `DEVELOPMENT_LOGGING.md` | コードまたは正本仕様へ影響する場合だけ同じcommitへ追記 |
 | 過去スレッドの要望・判断経緯 | `DEVELOPMENT_THREAD_LOG.md`（参考ログ） | 現在仕様は必ず該当資料とコードで再確認する |
-| 公開・引き継ぎ更新 | `DEVELOPMENT_HANDOFF.md` 9〜10章 | `git diff`、Vercelの対象デプロイ |
+| 公開・引き継ぎ更新 | `DEVELOPMENT_EXECUTION_RULES.md` 6〜10章 | `git diff`、対象ref／Deployment identity、必要な現行資料の該当節 |
 
 ## バグ調査で見る順番
 

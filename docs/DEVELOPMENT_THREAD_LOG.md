@@ -3889,3 +3889,31 @@ dev反映後はT-91 browser → T-90 → T-89 → T-26の順に実機確認す�
 ### 未対応・保留
 
 - product repositoryの`develop`／`main` ref更新は、candidate確定後の個別承認を得るまで実施しない。
+
+## 2026-08-24 — 指示・checkpoint・保存経路の統合整理
+
+### 利用者からの要望
+
+- 次指示の耐久保存を維持しつつ、入口文書、個別指示、checkpoint、監査、障害対応の規則増殖と相互流入を止める。
+- CURRENT_STATE／HANDOFFへ過去Tやlocal checkpointを混ぜず、Vercel／Cloud Browser境界の食い違いを解消する。
+
+### 判断
+
+- 個別指示は契約、checkpointは現在地、実行シートは一操作の外部gate、resultはterminal成果物として排他的に選ぶ。
+- 軽量な`RECOVERY_CHECKPOINT`とfresh restoreを伴う`FULL_RECOVERY_CHECKPOINT`を分け、約10分ごとに完全bundleを反復しない。
+- `AGENTS.md`は入口と変更禁止境界へ縮小し、実行規則を`DEVELOPMENT_EXECUTION_RULES.md`へ一本化する。
+- 認証済みVercel control planeは利用者専用のまま、資格情報を使わない公開metadata／HTTP／製品runtimeのread-only確認と区別する。
+
+### 実施結果
+
+- 成果物router、正当な次指示のimmutable保存、instruction／checkpoint分離を実行正本へ統合した。
+- 通常の読書経路を対象資料だけへ縮小し、CURRENT_STATE／HANDOFFから未反映T・checkpoint履歴を除いた。
+- 共通規則の再掲とcheckpoint状態のnext-instruction混入を検出する`check-development-artifact-policy.mjs`を追加した。
+
+### 検証
+
+- focused contract test、artifact policy check、`git diff --check`を実行する。
+
+### 未対応・保留
+
+- product repositoryのref更新、Deployment、Vercel、DB／Redis／Blobその他の外部writeは行わない。
