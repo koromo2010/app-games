@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -10,6 +10,10 @@ import {
   verifyAppliedChecksums,
 } from "../scripts/migrate-sdk-database.mjs";
 import { originalDataPreservationSchema9AcceptedLegacyEntries } from "../apps/sdk-portal/lib/original-data-preservation.ts";
+import {
+  sdkMigration010Checksum,
+  sdkMigration010Source,
+} from "../apps/sdk-portal/lib/sdk-migration-010-operator.ts";
 
 const read = (path: string) => readFileSync(path, "utf8");
 
@@ -86,4 +90,47 @@ test("line-ending normalization preserves existing canonical ledger checksums", 
       checksum: "e8b31e6debda55d6a70977a5d9c96aa97403983821d52b1ebcd8d1b32b608894",
     },
   ]);
+});
+
+test("migration 010 source and checksum stay canonical at schema version 10", () => {
+  const migration010 = normalizeMigrationSource(
+    read("db/sdk/010_bounded_creator_quarantine_recovery.sql"),
+  );
+  const postgres = read("apps/sdk-portal/lib/sdk-postgres.ts");
+  assert.equal(sdkMigration010Source, migration010);
+  assert.equal(migrationChecksum(migration010), sdkMigration010Checksum);
+  assert.match(postgres, /SDK_SCHEMA_VERSION = 10/);
+  assert.equal(existsSync("db/sdk/011_bounded_creator_quarantine_recovery.sql"), false);
+});
+
+test("migration 010 is target-neutral, live-counted schema-only quarantine infrastructure", () => {
+  const migration010 = read("db/sdk/010_bounded_creator_quarantine_recovery.sql");
+  assert.doesNotMatch(migration010, /moi-lab2|yabobojpn-lab/);
+  assert.doesNotMatch(
+    migration010,
+    /(?:game_count|package_revision_count|artifact_locator_count|release_count)\s*=\s*[0-9]+/,
+  );
+  for (const count of [
+    "game_count",
+    "package_revision_count",
+    "artifact_locator_count",
+    "release_count",
+  ]) {
+    assert.match(migration010, new RegExp(`${count} >= 0`));
+  }
+  assert.match(migration010, /operation_id UUID PRIMARY KEY/);
+  assert.match(migration010, /operation_nonce UUID NOT NULL UNIQUE/);
+  assert.match(migration010, /target_key VARCHAR\(64\) NOT NULL/);
+  assert.match(migration010, /plan_receipt CHAR\(64\) NOT NULL/);
+  assert.match(migration010, /terminal_receipt CHAR\(64\),/);
+  assert.match(migration010, /state IN \('pending', 'completed'\)/);
+  assert.match(migration010, /created_at TIMESTAMPTZ/);
+  assert.match(migration010, /updated_at TIMESTAMPTZ/);
+  assert.match(migration010, /completed_at TIMESTAMPTZ/);
+  assert.match(migration010, /visibility = 'non-public'/);
+  assert.match(migration010, /owner_binding_state = 'unbound'/);
+  assert.match(migration010, /grant_state = 'blocked'/);
+  assert.match(migration010, /release_state = 'blocked'/);
+  assert.match(migration010, /publication_state = 'blocked'/);
+  assert.doesNotMatch(migration010, /\bINSERT\s+INTO\b|\bUPDATE\b|\bDELETE\s+FROM\b/i);
 });

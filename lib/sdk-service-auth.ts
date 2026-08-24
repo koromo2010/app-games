@@ -1,7 +1,10 @@
 import {
   createSdkServiceAuthorization,
+  createSdkServiceOperationAuthorization,
   verifySdkServiceAuthorization,
 } from "@game-fields/sdk-service-auth";
+
+export const sdkMigration010OperationAction = "sdk-migration-010";
 
 function serviceSecret() {
   const secret = process.env.SDK_ACCOUNT_LINK_SECRET ?? "";
@@ -14,7 +17,7 @@ type SdkServiceEnvironment = "production" | "development";
 export function sdkServiceHeaders(
   method: string,
   url: string,
-  options: { environment?: SdkServiceEnvironment } = {},
+  options: { environment?: SdkServiceEnvironment; now?: number } = {},
 ) {
   const target = new URL(url);
   const path = `${target.pathname}${target.search}`;
@@ -23,10 +26,35 @@ export function sdkServiceHeaders(
       method,
       path,
       environment: options.environment,
+      now: options.now,
     }, serviceSecret()),
     ...(options.environment
       ? { "X-Game-Fields-SDK-Environment": options.environment }
       : {}),
+  };
+}
+
+export function sdkMigration010OperationHeaders(
+  url: string,
+  input: { operationId: string; nonce: string; now?: number },
+) {
+  const target = new URL(url);
+  const path = `${target.pathname}${target.search}`;
+  const now = input.now ?? Date.now();
+  return {
+    ...sdkServiceHeaders("POST", url, {
+      environment: "production",
+      now,
+    }),
+    "X-Game-Fields-SDK-Operation": createSdkServiceOperationAuthorization({
+      method: "POST",
+      path,
+      environment: "production",
+      action: sdkMigration010OperationAction,
+      operationId: input.operationId,
+      nonce: input.nonce,
+      now,
+    }, serviceSecret()),
   };
 }
 

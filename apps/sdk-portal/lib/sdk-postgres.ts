@@ -26,8 +26,22 @@ function sdkSqlForBinding(binding: SdkDatabaseBinding) {
   return { sql: client, binding: clientBinding ?? binding };
 }
 
+/**
+ * Returns the module-scoped SQL client used by health and all SDK stores,
+ * together with selector metadata only. The configured URL never leaves this
+ * module boundary.
+ */
+export function sdkRuntimeSqlContext() {
+  const { sql, binding } = sdkSqlForBinding(resolveSdkDatabaseBinding());
+  return {
+    sql,
+    selectedKey: binding.selectedKey,
+    fallbackUsed: binding.fallbackUsed,
+  };
+}
+
 export function sdkSql() {
-  return sdkSqlForBinding(resolveSdkDatabaseBinding()).sql;
+  return sdkRuntimeSqlContext().sql;
 }
 
 export async function ensureSdkSchema() {
