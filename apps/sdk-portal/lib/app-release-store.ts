@@ -9,6 +9,10 @@ import {
   AppReleaseArtifactTransferError,
   transferDevelopmentPackageArtifact,
 } from "./app-release-artifact-transfer";
+import {
+  GameSdkRunnerClientError,
+  invokeGameSdkRunner,
+} from "../../../lib/game-sdk-runner-client.ts";
 
 const ID = /^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/;
 const REVISION = /^[a-f0-9]{40}$/;
@@ -98,30 +102,28 @@ async function verifyRuntime(
     serverBundleSha256: snapshot.serverBundleSha256,
     channel: "main",
   });
-  const response = await fetch(access.serverRuntimeUrl, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${access.serverRuntimeToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      version: GAME_SDK_PORTABLE_SERVER_PROTOCOL_VERSION,
-      invocation: { operation: "manifest" },
-      effects: {},
-    }),
-    cache: "no-store",
-  });
-  const payload = await response.json().catch(() => null) as {
-    ok?: unknown;
-    value?: unknown;
-    error?: unknown;
-  } | null;
-  if (!response.ok) {
-    const upstream = typeof payload?.error === "string" ? payload.error : "UNKNOWN";
+  let payload: { ok?: unknown; value?: unknown } | null;
+  try {
+    const result = await invokeGameSdkRunner({
+      url: access.serverRuntimeUrl,
+      token: access.serverRuntimeToken,
+      artifactIdentity: snapshot.serverBundleSha256,
+      operation: "manifest",
+      request: {
+        version: GAME_SDK_PORTABLE_SERVER_PROTOCOL_VERSION,
+        invocation: { operation: "manifest" },
+        effects: {},
+      },
+    });
+    payload = result.payload as { ok?: unknown; value?: unknown } | null;
+  } catch (error) {
+    const detail = error instanceof GameSdkRunnerClientError
+      ? error.code
+      : "GAME_SDK_REMOTE_RUNNER_UNAVAILABLE";
     throw new AppReleaseError(
       "APP_RELEASE_RUNTIME_MANIFEST_MISMATCH",
       422,
-      `RUNTIME_HTTP_${response.status}_${upstream}`,
+      detail,
     );
   }
   if (payload?.ok !== true) {

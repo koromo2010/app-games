@@ -3,6 +3,11 @@ import test from "node:test";
 import type { GameSdkManifest } from "@game-fields/game-sdk";
 import { createGameSdkRemoteServerModule } from "../lib/game-sdk-remote-module.ts";
 import { createGameSdkCommandTimingCollector } from "../lib/game-sdk-command-timing.ts";
+import type { GameSdkEffectJournal } from "../lib/game-sdk-effect-journal.ts";
+import { GameSdkRunnerCircuitBreakerRegistry } from "../lib/game-sdk-runner-client.ts";
+import { setObservabilitySink } from "../lib/observability/index.ts";
+import { consoleObservabilitySink } from "../lib/observability/sink.ts";
+import type { ObservabilityEvent } from "../lib/observability/types.ts";
 
 const manifest: GameSdkManifest = {
   sdkVersion: 1,
@@ -18,7 +23,17 @@ const manifest: GameSdkManifest = {
   usesLlm: false,
 };
 
-function moduleWith(fetchRunner: typeof fetch) {
+function moduleWith(
+  fetchRunner: typeof fetch,
+  options: {
+    effectJournal?: GameSdkEffectJournal;
+    resilience?: Parameters<typeof createGameSdkRemoteServerModule>[2];
+  } = {},
+) {
+  const resilience = {
+    breakerRegistry: new GameSdkRunnerCircuitBreakerRegistry(),
+    ...options.resilience,
+  };
   return createGameSdkRemoteServerModule({
     manifest,
     runtimeId: "runner-test",
@@ -26,7 +41,8 @@ function moduleWith(fetchRunner: typeof fetch) {
     serverBundleSha256: "b".repeat(64),
     serverRuntimeUrl: "https://preview.example/server/runner-test",
     serverRuntimeToken: "signed-token",
-  }, fetchRunner);
+    effectJournal: options.effectJournal,
+  }, fetchRunner, resilience);
 }
 
 test("remote runner retries one transient response before succeeding", async () => {
@@ -269,5 +285,177 @@ test("an injected runner delay and runner-owned stages stay attributed to the ru
       configurable: true,
       value: originalPerformance,
     });
+  }
+});
+
+test("resource-effect passes reuse the journal and never duplicate a side effect", async () => {
+  const completed = new Map<string, Awaited<ReturnType<Parameters<GameSdkEffectJournal["execute"]>[1]>>>();
+  let effectExecutions = 0;
+  const effectJournal: GameSdkEffectJournal = {
+    async execute(input, operation) {
+      const key = `${input.runtimeId}:${input.packageRevision}:${input.roomCode}:${input.requestId}:${input.effect.id}`;
+      const existing = completed.get(key);
+      if (existing) return structuredClone(existing);
+      effectExecutions += 1;
+      const result = await operation();
+      completed.set(key, structuredClone(result));
+      return result;
+    },
+  };
+  const requestBodies: Array<{ effects?: Record<string, unknown> }> = [];
+  const runnerModule = moduleWith((async (_url, init) => {
+    const body = JSON.parse(String(init?.body)) as {
+      effects?: Record<string, unknown>;
+    };
+    requestBodies.push(body);
+    if (!body.effects?.["effect-words-1"]) {
+      return Response.json({
+        ok: false,
+        effect: {
+          id: "effect-words-1",
+          resource: "contentSource",
+          operation: "drawWords",
+          request: { pool: "general-words", count: 1 },
+        },
+      });
+    }
+    return Response.json({
+      ok: true,
+      value: { code: "EFFECT", revision: 1, phase: "lobby", state: {} },
+    });
+  }) as typeof fetch, { effectJournal });
+  const context = {
+    actor: {
+      playerId: "player-effect",
+      displayName: "Effect Player",
+      role: "player" as const,
+      debugAccess: false,
+    },
+    now: 1,
+    requestId: "create-effect-request-0001",
+    roomCode: "EFFECT",
+    resources: {
+      contentSource: {
+        async drawWords() {
+          return [];
+        },
+        async drawWordPairs() {
+          return [];
+        },
+        async findDefinitions() {
+          return [];
+        },
+      },
+    },
+  };
+
+  await runnerModule.createRoom({}, context);
+  await runnerModule.createRoom({}, context);
+
+  assert.equal(requestBodies.length, 4);
+  assert.equal(effectExecutions, 1);
+  assert.deepEqual(requestBodies[1]?.effects, requestBodies[3]?.effects);
+});
+
+test("an unresolved effect pass stays unknown without a second effect execution", async () => {
+  let effectExecutions = 0;
+  let runnerCalls = 0;
+  const effectJournal: GameSdkEffectJournal = {
+    async execute(_input, operation) {
+      effectExecutions += 1;
+      return operation();
+    },
+  };
+  const runnerModule = moduleWith((async (_url, init) => {
+    runnerCalls += 1;
+    const body = JSON.parse(String(init?.body)) as {
+      effects?: Record<string, unknown>;
+    };
+    if (Object.keys(body.effects ?? {}).length === 0) {
+      return Response.json({
+        ok: false,
+        effect: {
+          id: "effect-words-timeout",
+          resource: "contentSource",
+          operation: "drawWords",
+          request: { pool: "general-words", count: 1 },
+        },
+      });
+    }
+    return await new Promise<Response>(() => undefined);
+  }) as typeof fetch, {
+    effectJournal,
+    resilience: {
+      attemptTimeoutMs: 8,
+      invocationTimeoutMs: 100,
+      maxAttempts: 2,
+      retryBaseDelayMs: 0,
+    },
+  });
+
+  await assert.rejects(
+    () => Promise.resolve(runnerModule.createRoom({}, {
+      actor: {
+        playerId: "player-timeout",
+        displayName: "Timeout Player",
+        role: "player",
+        debugAccess: false,
+      },
+      now: 1,
+      requestId: "create-effect-timeout-0001",
+      roomCode: "TIMEOUT",
+      resources: {
+        contentSource: {
+          async drawWords() {
+            return [];
+          },
+          async drawWordPairs() {
+            return [];
+          },
+          async findDefinitions() {
+            return [];
+          },
+        },
+      },
+    })),
+    /GAME_SDK_REMOTE_RUNNER_TIMEOUT/,
+  );
+  assert.equal(runnerCalls, 3);
+  assert.equal(effectExecutions, 1);
+});
+
+test("runner observability excludes token, Room, player and prompt material", async () => {
+  const events: ObservabilityEvent[] = [];
+  setObservabilitySink({ emit: (event) => { events.push(event); } });
+  try {
+    const runnerModule = moduleWith((async () => Response.json(
+      { error: "SERVER_RUNTIME_BUSY" },
+      { status: 503 },
+    )) as typeof fetch, {
+      resilience: { maxAttempts: 1 },
+    });
+    await assert.rejects(
+      () => Promise.resolve(runnerModule.createRoom({ prompt: "private-prompt" }, {
+        actor: {
+          playerId: "private-player",
+          displayName: "Private Player",
+          role: "player",
+          debugAccess: false,
+        },
+        now: 1,
+        requestId: "private-command",
+        roomCode: "PRIVATE-ROOM",
+        resources: {},
+      })),
+      /GAME_SDK_REMOTE_RUNNER_UNAVAILABLE/,
+    );
+    await Promise.resolve();
+    assert.ok(events.length > 0);
+    assert.doesNotMatch(
+      JSON.stringify(events),
+      /signed-token|PRIVATE-ROOM|private-player|Private Player|private-prompt|private-command/,
+    );
+  } finally {
+    setObservabilitySink(consoleObservabilitySink);
   }
 });

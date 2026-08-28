@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "owner": "lib/game-sdk-runner-client.ts",
+  "consumers": [
+    {
+      "id": "approved-current-runtime",
+      "source": "lib/game-sdk-runtime-catalog.ts",
+      "gateway": "lib/game-sdk-remote-module.ts",
+      "operations": [
+        "create-room",
+        "apply-command",
+        "apply-command-and-present",
+        "present-room",
+        "resource-effect-pass"
+      ],
+      "revisionPolicy": "catalog-exact"
+    },
+    {
+      "id": "approved-active-room-fixed-revision",
+      "source": "lib/game-sdk-runtime-catalog.ts",
+      "gateway": "lib/game-sdk-remote-module.ts",
+      "operations": [
+        "create-room",
+        "apply-command",
+        "apply-command-and-present",
+        "present-room",
+        "resource-effect-pass"
+      ],
+      "revisionPolicy": "room-contract-exact"
+    },
+    {
+      "id": "creator-candidate-package-preview",
+      "source": "lib/sdk-preview-package-runtime.ts",
+      "gateway": "lib/game-sdk-remote-module.ts",
+      "operations": [
+        "create-room",
+        "apply-command",
+        "apply-command-and-present",
+        "present-room",
+        "resource-effect-pass"
+      ],
+      "revisionPolicy": "preview-request-exact"
+    },
+    {
+      "id": "package-promotion-manifest-verifier",
+      "source": "apps/sdk-portal/lib/game-package-promotion-service.ts",
+      "gateway": "lib/game-sdk-runner-client.ts",
+      "operations": ["manifest"],
+      "revisionPolicy": "promotion-source-exact"
+    },
+    {
+      "id": "app-release-manifest-verifier",
+      "source": "apps/sdk-portal/lib/app-release-store.ts",
+      "gateway": "lib/game-sdk-runner-client.ts",
+      "operations": ["manifest"],
+      "revisionPolicy": "release-artifact-exact"
+    }
+  ]
+}

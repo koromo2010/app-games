@@ -2,7 +2,10 @@ import type {
   GameSdkPortableCommandBatchRequest,
   GameSdkPortableServerRequest,
 } from "@game-fields/game-sdk/portable-server";
-import { fetchPreviewAsset } from "@/lib/preview-source";
+import {
+  fetchPreviewAsset,
+  PreviewSourceError,
+} from "@/lib/preview-source";
 import {
   previewEnvironment,
   verifyPortalPreviewGrant,
@@ -114,6 +117,7 @@ export async function POST(
             ...params,
             assetPath: "server.bundle.js",
             sourceKind: "package",
+            classifyMissingRevision: true,
           });
           return bundleBytes ? new Uint8Array(bundleBytes) : null;
         },
@@ -143,6 +147,24 @@ export async function POST(
       },
     }));
   } catch (error) {
+    if (error instanceof PreviewSourceError) {
+      if (error.code === "SDK_RUNTIME_ARTIFACT_COMMIT_NOT_FOUND") {
+        return Response.json(
+          { error: "SERVER_RUNTIME_ARTIFACT_COMMIT_NOT_FOUND" },
+          { status: 404 },
+        );
+      }
+      if (error.code === "SDK_RUNTIME_ARTIFACT_TOO_LARGE") {
+        return Response.json(
+          { error: "SERVER_RUNTIME_BUNDLE_TOO_LARGE" },
+          { status: 413 },
+        );
+      }
+      return Response.json(
+        { error: "SERVER_RUNTIME_ARTIFACT_SOURCE_UNAVAILABLE" },
+        { status: 503 },
+      );
+    }
     if (error instanceof RuntimeArtifactCacheError) {
       if (error.code === "HASH_MISMATCH") {
         return Response.json({ error: "SERVER_RUNTIME_BUNDLE_HASH_MISMATCH" }, { status: 409 });

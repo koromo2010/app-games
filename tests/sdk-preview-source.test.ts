@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { normalizePreviewAssetPath, previewContentType } from "../apps/sdk-preview/lib/preview-source.ts";
+import {
+  fetchPreviewAsset,
+  normalizePreviewAssetPath,
+  previewContentType,
+  PreviewSourceError,
+} from "../apps/sdk-preview/lib/preview-source.ts";
 import {
   createPreviewAssetToken,
   packageAssetPath,
@@ -62,6 +67,116 @@ test("SDK preview source keeps every asset inside its mock directory", () => {
   assert.equal(normalizePreviewAssetPath(["images", "table.webp"]), "images/table.webp");
   assert.equal(normalizePreviewAssetPath(["..", "secret.txt"]), null);
   assert.equal(normalizePreviewAssetPath(["folder\\secret.js"]), null);
+});
+
+test("SDK runner loader distinguishes an absent exact revision from an absent path", async () => {
+  const beforeRepository = process.env.SDK_MOCK_GITHUB_REPOSITORY;
+  const beforeToken = process.env.SDK_MOCK_GITHUB_READ_TOKEN;
+  process.env.SDK_MOCK_GITHUB_REPOSITORY = "owner/private-packages";
+  process.env.SDK_MOCK_GITHUB_READ_TOKEN = "read-token";
+  const revision = "7".repeat(40);
+  const requests: string[] = [];
+  try {
+    await assert.rejects(
+      () => fetchPreviewAsset({
+        instanceId: "creator",
+        gameId: "sample",
+        revision,
+        assetPath: "server.bundle.js",
+        sourceKind: "package",
+        classifyMissingRevision: true,
+      }, (async (url) => {
+        requests.push(String(url));
+        return Response.json({ message: "Not Found" }, { status: 404 });
+      }) as typeof fetch),
+      (error: unknown) => {
+        assert.ok(error instanceof PreviewSourceError);
+        assert.equal(error.code, "SDK_RUNTIME_ARTIFACT_COMMIT_NOT_FOUND");
+        return true;
+      },
+    );
+    assert.equal(requests.length, 2);
+    assert.match(requests[0] ?? "", new RegExp(`\\?ref=${revision}$`));
+    assert.match(requests[1] ?? "", new RegExp(`/git/commits/${revision}$`));
+
+    let pathChecks = 0;
+    const missingPath = await fetchPreviewAsset({
+      instanceId: "creator",
+      gameId: "sample",
+      revision,
+      assetPath: "server.bundle.js",
+      sourceKind: "package",
+      classifyMissingRevision: true,
+    }, (async () => {
+      pathChecks += 1;
+      return pathChecks === 1
+        ? Response.json({ message: "Not Found" }, { status: 404 })
+        : Response.json({ sha: revision });
+    }) as typeof fetch);
+    assert.equal(missingPath, null);
+    assert.equal(pathChecks, 2);
+  } finally {
+    if (beforeRepository === undefined) delete process.env.SDK_MOCK_GITHUB_REPOSITORY;
+    else process.env.SDK_MOCK_GITHUB_REPOSITORY = beforeRepository;
+    if (beforeToken === undefined) delete process.env.SDK_MOCK_GITHUB_READ_TOKEN;
+    else process.env.SDK_MOCK_GITHUB_READ_TOKEN = beforeToken;
+  }
+});
+
+test("SDK runner source fetch is bounded even if transport ignores abort", async () => {
+  const beforeRepository = process.env.SDK_MOCK_GITHUB_REPOSITORY;
+  process.env.SDK_MOCK_GITHUB_REPOSITORY = "owner/private-packages";
+  try {
+    await assert.rejects(
+      () => fetchPreviewAsset({
+        instanceId: "creator",
+        gameId: "sample",
+        revision: "8".repeat(40),
+        assetPath: "server.bundle.js",
+        sourceKind: "package",
+        classifyMissingRevision: true,
+        sourceBudgetMs: 8,
+      }, (async () => await new Promise<Response>(() => undefined)) as typeof fetch),
+      /SDK_RUNTIME_ARTIFACT_SOURCE_TIMEOUT/,
+    );
+  } finally {
+    if (beforeRepository === undefined) delete process.env.SDK_MOCK_GITHUB_REPOSITORY;
+    else process.env.SDK_MOCK_GITHUB_REPOSITORY = beforeRepository;
+  }
+});
+
+test("SDK runner classifies a source-body transport failure without leaking it", async () => {
+  const beforeRepository = process.env.SDK_MOCK_GITHUB_REPOSITORY;
+  process.env.SDK_MOCK_GITHUB_REPOSITORY = "owner/private-packages";
+  try {
+    const brokenBody = {
+      status: 200,
+      ok: true,
+      headers: new Headers(),
+      arrayBuffer: async () => {
+        throw new Error("private upstream detail");
+      },
+    } as Response;
+    await assert.rejects(
+      () => fetchPreviewAsset({
+        instanceId: "creator",
+        gameId: "sample",
+        revision: "9".repeat(40),
+        assetPath: "server.bundle.js",
+        sourceKind: "package",
+        classifyMissingRevision: true,
+      }, (async () => brokenBody) as typeof fetch),
+      (error: unknown) => {
+        assert.ok(error instanceof PreviewSourceError);
+        assert.equal(error.code, "SDK_RUNTIME_ARTIFACT_SOURCE_UNAVAILABLE");
+        assert.doesNotMatch(error.message, /private upstream detail/);
+        return true;
+      },
+    );
+  } finally {
+    if (beforeRepository === undefined) delete process.env.SDK_MOCK_GITHUB_REPOSITORY;
+    else process.env.SDK_MOCK_GITHUB_REPOSITORY = beforeRepository;
+  }
 });
 
 test("SDK preview loads app-declared settings and gives legacy mocks only a timer", async () => {

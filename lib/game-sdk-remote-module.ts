@@ -21,11 +21,17 @@ import {
 } from "@game-fields/game-sdk/portable-server";
 import type { GameSdkEffectJournal } from "./game-sdk-effect-journal.ts";
 import type { GameSdkFeedbackCapture } from "./game-sdk-feedback-store.ts";
+import {
+  createGameSdkRunnerInvocationBudget,
+  invokeGameSdkRunner,
+  runWithinGameSdkRunnerBudget,
+  type GameSdkRunnerClientEvent,
+  type GameSdkRunnerOperation,
+  type GameSdkRunnerResilienceOptions,
+} from "./game-sdk-runner-client.ts";
+import { emitObservabilityEvent } from "./observability/index.ts";
 
 const MAX_RESOURCE_EFFECTS = 8;
-const MAX_RUNNER_RESPONSE_BYTES = 1024 * 1024;
-const TRANSIENT_RUNNER_STATUSES = new Set([408, 502, 503, 504]);
-const RUNNER_FETCH_ATTEMPTS = 2;
 
 export type GameSdkRemoteBundleDefinition = {
   manifest: GameSdkManifest;
@@ -87,68 +93,11 @@ function parseBatchResponse(value: unknown): GameSdkPortableCommandBatchResponse
   return value as GameSdkPortableCommandBatchResponse;
 }
 
-async function fetchRunnerResponse(
-  definition: Pick<
-    GameSdkRemoteBundleDefinition,
-    "serverRuntimeToken" | "serverRuntimeUrl"
-  >,
-  request: GameSdkPortableServerRequest | GameSdkPortableCommandBatchRequest,
-  fetchRunner: typeof fetch,
-  timing?: GameSdkRuntimeTiming,
-) {
-  for (let attempt = 0; attempt < RUNNER_FETCH_ATTEMPTS; attempt += 1) {
-    try {
-      const response = await fetchRunner(definition.serverRuntimeUrl, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${definition.serverRuntimeToken}`,
-          "Content-Type": "application/json",
-          ...timingHeaders(timing),
-        },
-        body: JSON.stringify(request),
-        cache: "no-store",
-      });
-      if (
-        attempt + 1 < RUNNER_FETCH_ATTEMPTS
-        && TRANSIENT_RUNNER_STATUSES.has(response.status)
-      ) {
-        continue;
-      }
-      return response;
-    } catch {
-      if (attempt + 1 >= RUNNER_FETCH_ATTEMPTS) {
-        throw new Error("GAME_SDK_REMOTE_RUNNER_UNAVAILABLE");
-      }
-    }
-  }
-  throw new Error("GAME_SDK_REMOTE_RUNNER_UNAVAILABLE");
-}
-
 function timingHeaders(timing: GameSdkRuntimeTiming | undefined) {
   const candidate = timing as (GameSdkRuntimeTiming & {
     correlationHeaders?: () => Record<string, string>;
   }) | undefined;
   return candidate?.correlationHeaders?.() ?? {};
-}
-
-async function readRunnerPayload(response: Response) {
-  const declaredLength = Number(response.headers.get("content-length") ?? 0);
-  if (declaredLength > MAX_RUNNER_RESPONSE_BYTES) {
-    throw new Error("GAME_SDK_REMOTE_RESPONSE_TOO_LARGE");
-  }
-  const text = await response.text();
-  if (Buffer.byteLength(text, "utf8") > MAX_RUNNER_RESPONSE_BYTES) {
-    throw new Error("GAME_SDK_REMOTE_RESPONSE_TOO_LARGE");
-  }
-  if (response.status === 401 || response.status === 403) {
-    throw new Error("GAME_SDK_REMOTE_RUNNER_AUTH_FAILED");
-  }
-  if (!response.ok) throw new Error("GAME_SDK_REMOTE_RUNNER_UNAVAILABLE");
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    throw new Error("GAME_SDK_REMOTE_RESPONSE_INVALID");
-  }
 }
 
 function importArtifactCacheOutcome(
@@ -160,14 +109,68 @@ function importArtifactCacheOutcome(
   );
 }
 
+function runnerOperation(
+  operation: GameSdkPortableServerRequest["invocation"]["operation"],
+  effectPass: boolean,
+): GameSdkRunnerOperation {
+  if (effectPass) return "resource-effect-pass";
+  if (operation === "createRoom") return "create-room";
+  if (operation === "applyCommand") return "apply-command";
+  return "present-room";
+}
+
+function runnerRequestIdentity(
+  invocation: GameSdkPortableServerRequest["invocation"],
+) {
+  const input = invocation.input as {
+    context?: { requestId?: unknown };
+  };
+  return typeof input.context?.requestId === "string"
+    ? input.context.requestId
+    : undefined;
+}
+
+function observeRunnerEvent(runtimeId: string, event: GameSdkRunnerClientEvent) {
+  if (event.type === "attempt" && event.attempt === 1) return;
+  const breakerEvent = event.type.startsWith("breaker-");
+  const outcome = event.type === "breaker-closed"
+    ? "success" as const
+    : event.type === "breaker-half-open" || event.type === "attempt"
+      ? "started" as const
+      : "failed" as const;
+  emitObservabilityEvent(
+    event.type === "failure" || event.type === "breaker-open" ? "warn" : "info",
+    breakerEvent ? "game-sdk.runner-breaker" : "game-sdk.runner-dependency",
+    {
+      game: `sdk:${runtimeId}`,
+      operation: event.operation,
+      action: event.type,
+      ...(event.state ? { phase: event.state } : {}),
+      ...(event.attempt === undefined ? {} : { attempt: event.attempt }),
+      ...(event.statusCode === undefined ? {} : { statusCode: event.statusCode }),
+      ...(event.errorCode ? { errorCode: event.errorCode } : {}),
+      outcome,
+    },
+  );
+}
+
 export function createGameSdkRemoteServerModule(
   definition: GameSdkRemoteBundleDefinition,
   fetchRunner: typeof fetch = fetch,
+  resilience: GameSdkRunnerResilienceOptions = {},
 ): GameSdkServerModule<GameSdkStoredRoom, unknown, { type: string }, unknown> {
+  const runnerResilience: GameSdkRunnerResilienceOptions = {
+    ...resilience,
+    onEvent(event) {
+      observeRunnerEvent(definition.runtimeId, event);
+      resilience.onEvent?.(event);
+    },
+  };
   const invoke = async (
     invocation: GameSdkPortableServerRequest["invocation"],
     resources: Readonly<GameSdkPlatformResources>,
   ) => {
+    const budget = createGameSdkRunnerInvocationBudget(runnerResilience);
     const effects: Record<string, GameSdkPortableEffectResult> = {};
     let llmEffects = 0;
     for (let pass = 0; pass <= MAX_RESOURCE_EFFECTS; pass += 1) {
@@ -176,12 +179,18 @@ export function createGameSdkRemoteServerModule(
         invocation,
         effects,
       };
-      const response = await fetchRunnerResponse(
-        definition,
+      const { payload } = await invokeGameSdkRunner({
+        url: definition.serverRuntimeUrl,
+        token: definition.serverRuntimeToken,
+        artifactIdentity: definition.serverBundleSha256,
+        operation: runnerOperation(invocation.operation, pass > 0),
         request,
+        requestId: runnerRequestIdentity(invocation),
         fetchRunner,
-      );
-      const result = parseRunnerResponse(await readRunnerPayload(response));
+        budget,
+        resilience: runnerResilience,
+      });
+      const result = parseRunnerResponse(payload);
       if (result.ok) return result.value;
       if ("error" in result) throw new Error(result.error);
       if (pass === MAX_RESOURCE_EFFECTS || effects[result.effect.id]) {
@@ -207,36 +216,42 @@ export function createGameSdkRemoteServerModule(
       const roomCode = invocation.operation === "createRoom"
         ? invocationInput.context?.roomCode
         : invocationInput.room?.code;
-      let effectResult: GameSdkPortableEffectResult;
-      if (definition.effectJournal) {
-        if (
-          typeof requestId !== "string"
-          || !requestId
-          || typeof roomCode !== "string"
-          || !roomCode
-        ) {
-          throw new Error("GAME_SDK_EFFECT_CONTEXT_INVALID");
-        }
-        effectResult = await definition.effectJournal.execute({
+      if (
+        typeof requestId !== "string"
+        || !requestId
+        || typeof roomCode !== "string"
+        || !roomCode
+      ) {
+        throw new Error("GAME_SDK_EFFECT_CONTEXT_INVALID");
+      }
+      if (!definition.effectJournal) {
+        throw new Error("GAME_SDK_EFFECT_JOURNAL_MISSING");
+      }
+      const effectResult = await runWithinGameSdkRunnerBudget(
+        budget,
+        () => definition.effectJournal!.execute({
           runtimeId: definition.runtimeId,
           packageRevision: definition.revision,
           roomCode,
           requestId,
           effect: result.effect,
-        }, () => executeEffect(result.effect, resources));
-      } else {
-        effectResult = await executeEffect(result.effect, resources);
-      }
+        }, () => executeEffect(result.effect, resources)),
+        "GAME_SDK_EFFECT_INDETERMINATE",
+      );
       effects[result.effect.id] = effectResult;
       if (definition.feedbackCapture && result.effect.resource === "llm") {
-        await definition.feedbackCapture.capture({
-          runtimeId: definition.runtimeId,
-          packageRevision: definition.revision,
-          roomCode: String(roomCode),
-          requestId: String(requestId),
-          effect: result.effect,
-          result: effectResult,
-        }).catch(() => undefined);
+        await runWithinGameSdkRunnerBudget(
+          budget,
+          () => definition.feedbackCapture!.capture({
+            runtimeId: definition.runtimeId,
+            packageRevision: definition.revision,
+            roomCode,
+            requestId,
+            effect: result.effect,
+            result: effectResult,
+          }),
+          "GAME_SDK_FEEDBACK_CAPTURE_TIMEOUT",
+        ).catch(() => undefined);
       }
     }
     throw new Error("GAME_SDK_RESOURCE_EFFECT_LIMIT");
@@ -249,6 +264,7 @@ export function createGameSdkRemoteServerModule(
     presentationContext: GameSdkPresentationContext,
     timing?: GameSdkRuntimeTiming,
   ) => {
+    const budget = createGameSdkRunnerInvocationBudget(runnerResilience);
     const { resources } = commandContext;
     const trustedCommandContext = {
       actor: commandContext.actor,
@@ -285,19 +301,27 @@ export function createGameSdkRemoteServerModule(
         presentationContext: trustedPresentationContext,
       };
       const runnerStartedAt = performance.now();
-      const response = await fetchRunnerResponse(
-        definition,
+      const { response, payload } = await invokeGameSdkRunner({
+        url: definition.serverRuntimeUrl,
+        token: definition.serverRuntimeToken,
+        artifactIdentity: definition.serverBundleSha256,
+        operation: pass === 0
+          ? "apply-command-and-present"
+          : "resource-effect-pass",
         request,
+        requestId: commandContext.requestId,
+        headers: timingHeaders(timing),
         fetchRunner,
-        timing,
-      );
+        budget,
+        resilience: runnerResilience,
+      });
       importArtifactCacheOutcome(response, timing);
       timing?.record(
         "runner-call",
         Math.max(0, performance.now() - runnerStartedAt),
       );
       timing?.importServerTiming?.(response.headers.get("server-timing"));
-      const result = parseBatchResponse(await readRunnerPayload(response));
+      const result = parseBatchResponse(payload);
       if (result.ok) {
         return result.value as { room: GameSdkStoredRoom; view: unknown };
       }
@@ -312,28 +336,34 @@ export function createGameSdkRemoteServerModule(
         llmEffects += 1;
         if (llmEffects > 1) throw new Error("GAME_SDK_LLM_EFFECT_LIMIT");
       }
-      let effectResult: GameSdkPortableEffectResult;
-      if (definition.effectJournal) {
-        effectResult = await definition.effectJournal.execute({
+      if (!definition.effectJournal) {
+        throw new Error("GAME_SDK_EFFECT_JOURNAL_MISSING");
+      }
+      const effectResult = await runWithinGameSdkRunnerBudget(
+        budget,
+        () => definition.effectJournal!.execute({
           runtimeId: definition.runtimeId,
           packageRevision: definition.revision,
           roomCode: room.code,
           requestId: commandContext.requestId,
           effect: result.effect,
-        }, () => executeEffect(result.effect, resources));
-      } else {
-        effectResult = await executeEffect(result.effect, resources);
-      }
+        }, () => executeEffect(result.effect, resources)),
+        "GAME_SDK_EFFECT_INDETERMINATE",
+      );
       effects[result.effect.id] = effectResult;
       if (definition.feedbackCapture && result.effect.resource === "llm") {
-        await definition.feedbackCapture.capture({
-          runtimeId: definition.runtimeId,
-          packageRevision: definition.revision,
-          roomCode: room.code,
-          requestId: commandContext.requestId,
-          effect: result.effect,
-          result: effectResult,
-        }).catch(() => undefined);
+        await runWithinGameSdkRunnerBudget(
+          budget,
+          () => definition.feedbackCapture!.capture({
+            runtimeId: definition.runtimeId,
+            packageRevision: definition.revision,
+            roomCode: room.code,
+            requestId: commandContext.requestId,
+            effect: result.effect,
+            result: effectResult,
+          }),
+          "GAME_SDK_FEEDBACK_CAPTURE_TIMEOUT",
+        ).catch(() => undefined);
       }
     }
     throw new Error("GAME_SDK_RESOURCE_EFFECT_LIMIT");

@@ -20,6 +20,7 @@ import {
   type ReleaseDecisionInput,
 } from "./release-decision";
 import { ensureSdkSchema, sdkSql } from "./sdk-postgres";
+import { invokeGameSdkRunner } from "../../../lib/game-sdk-runner-client.ts";
 
 export { promotionErrorResponse } from "./game-package-promotion";
 
@@ -95,26 +96,28 @@ async function verifyPortableManifest(target: {
     revision: target.revision,
     serverBundleSha256: target.bundleSha256,
   });
-  const response = await fetch(access.serverRuntimeUrl, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${access.serverRuntimeToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
+  let payload: { ok?: unknown; value?: unknown } | null;
+  try {
+    const result = await invokeGameSdkRunner({
+      url: access.serverRuntimeUrl,
+      token: access.serverRuntimeToken,
+      artifactIdentity: target.bundleSha256,
+      operation: "manifest",
+      request: {
       version: GAME_SDK_PORTABLE_SERVER_PROTOCOL_VERSION,
       invocation: { operation: "manifest" },
       effects: {},
-    }),
-    cache: "no-store",
-  });
-  const payload = await response.json().catch(() => null) as {
-    ok?: unknown;
-    value?: unknown;
-  } | null;
+      },
+    });
+    payload = result.payload as { ok?: unknown; value?: unknown } | null;
+  } catch {
+    throw new GamePackagePromotionError(
+      "GAME_SDK_PACKAGE_RUNTIME_MANIFEST_MISMATCH",
+      422,
+    );
+  }
   if (
-    !response.ok
-    || payload?.ok !== true
+    payload?.ok !== true
     || !jsonValuesEqual(payload.value, target.manifest)
   ) {
     throw new GamePackagePromotionError(

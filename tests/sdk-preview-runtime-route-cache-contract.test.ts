@@ -16,4 +16,7 @@ test("Preview server route authenticates before exact cache resolution and never
   assert.doesNotMatch(route, /createHash|digest\("hex"\)/);
   assert.match(route, /runGameSdkPortableServer/);
   assert.match(route, /runGameSdkPortableCommandBatch/);
+  assert.match(route, /classifyMissingRevision: true/);
+  assert.match(route, /SERVER_RUNTIME_ARTIFACT_COMMIT_NOT_FOUND/);
+  assert.match(route, /SERVER_RUNTIME_ARTIFACT_SOURCE_UNAVAILABLE/);
 });
