@@ -1,8 +1,16 @@
 import type { NeonQueryFunction } from "@neondatabase/serverless";
 import type { SdkServiceOperationGrant } from "@game-fields/sdk-service-auth";
+import {
+  compareSdkMigration011Ledger,
+  sdkMigration011AcceptedLegacy005 as legacyMigration005,
+  sdkMigration011CanonicalLedger as expectedLedger,
+  sdkMigration011Checksum,
+  sdkMigration011Name,
+  type SdkMigrationLedgerRow,
+} from "./sdk-migration-011-ledger.ts";
 
-export const sdkMigration011Name = "011_development_private_workspace_import.sql";
-export const sdkMigration011Checksum = "99d1d516bff011502b1aed50c5a4f26b81e2b2354e2eabb1fa31385d3c7a91ef";
+export { sdkMigration011Checksum, sdkMigration011Name } from "./sdk-migration-011-ledger.ts";
+export type { SdkMigrationLedgerRow } from "./sdk-migration-011-ledger.ts";
 
 export const sdkMigration011Source = String.raw`CREATE TABLE IF NOT EXISTS sdk_development_private_workspace_import_operations (
   operation_id UUID PRIMARY KEY,
@@ -209,32 +217,6 @@ AS $snapshot$
     (SELECT md5(value) || md5('private|' || value) FROM unrelated_private_text)::CHAR(64)
 $snapshot$;
 `;
-
-export type SdkMigrationLedgerRow = {
-  version: number;
-  name: string;
-  checksum: string;
-};
-
-const expectedLedger = Object.freeze([
-  { version: 1, name: "001_sdk_registry.sql", checksum: "5456100f4e2bf5cbba4cdf64bc883699ce0a89971e293c08a353803a1e965117" },
-  { version: 2, name: "002_sdk_portal_runtime.sql", checksum: "22a80f2062ff27bcadb0be6e940ee6b32a79d171f74865cd043415acb516ce63" },
-  { version: 3, name: "003_immutable_packages_and_lifecycle.sql", checksum: "60c88555bb042c28f5196d7c916ac222fb2ab37ef4294e64b32e5d4ddd2507c5" },
-  { version: 4, name: "004_app_release_history.sql", checksum: "51fd28e7b1d2452fe96ba850d1dd7089201031230cdf710733085949099a4571" },
-  { version: 5, name: "005_release_decisions.sql", checksum: "242ec4c6fa3004dc8c91605960b5cfe1f0241108d00d114e9cc2f4f494363d34" },
-  { version: 6, name: "006_cross_environment_package_artifacts.sql", checksum: "ef3f71bcb5ef919b392aa69fdbd0577580dcb1fab16bfeaa6514225f4d7487e7" },
-  { version: 7, name: "007_reconcile_release_decisions.sql", checksum: "242ec4c6fa3004dc8c91605960b5cfe1f0241108d00d114e9cc2f4f494363d34" },
-  { version: 8, name: "008_mock_approval_and_authoring_gate.sql", checksum: "e8b31e6debda55d6a70977a5d9c96aa97403983821d52b1ebcd8d1b32b608894" },
-  { version: 9, name: "009_module_profile_proposals.sql", checksum: "b7f306bf3d236118d38719722647984119cdb18aec8614cf042fde757f67c723" },
-  { version: 10, name: "010_bounded_creator_quarantine_recovery.sql", checksum: "f0ca21664864b5827819873ab4de29b75c9710097bf4a18cf15b069edca71f0c" },
-  { version: 11, name: sdkMigration011Name, checksum: sdkMigration011Checksum },
-]);
-
-const legacyMigration005 = Object.freeze({
-  version: 5,
-  name: "005_cross_environment_package_artifacts.sql",
-  checksum: "ef3f71bcb5ef919b392aa69fdbd0577580dcb1fab16bfeaa6514225f4d7487e7",
-});
 
 const expectedBefore011Sql = expectedLedger
   .slice(0, 10)
@@ -473,39 +455,30 @@ export class SdkMigration011OperatorError extends Error {
   }
 }
 
-function canonicalLedgerRow(row: SdkMigrationLedgerRow) {
-  const expected = expectedLedger.find((candidate) => candidate.version === Number(row.version));
-  if (!expected) return false;
-  if (row.name === expected.name && row.checksum === expected.checksum) return true;
-  return Number(row.version) === legacyMigration005.version
-    && row.name === legacyMigration005.name
-    && row.checksum === legacyMigration005.checksum;
-}
-
 export function assertSdkMigration011Ledger(
   rows: SdkMigrationLedgerRow[],
   phase: "before" | "after",
 ) {
   const normalized = rows.map((row) => ({ ...row, version: Number(row.version) }));
-  const versions = new Set(normalized.map((row) => row.version));
   if (normalized.some((row) => row.version > 11)) {
     throw new SdkMigration011OperatorError("SDK_MIGRATION_LEDGER_AHEAD");
   }
+  const expectedLength = phase === "before" ? 10 : 11;
+  const beforeComparison = compareSdkMigration011Ledger(
+    normalized.filter((row) => row.version <= 10),
+  );
+  const version11 = normalized.find((row) => row.version === 11);
+  const canonical11 = expectedLedger[10];
   if (
-    normalized.some((row) => !Number.isInteger(row.version) || row.version < 1)
-    || normalized.length !== versions.size
-    || normalized.some((row) => !canonicalLedgerRow(row))
+    !beforeComparison.consistent
+    || normalized.length !== expectedLength
+    || (phase === "after" && (
+      !version11
+      || version11.name !== canonical11.name
+      || version11.checksum !== canonical11.checksum
+    ))
   ) {
     throw new SdkMigration011OperatorError("SDK_MIGRATION_LEDGER_INCONSISTENT");
-  }
-  const expectedLength = phase === "before" ? 10 : 11;
-  if (normalized.length !== expectedLength) {
-    throw new SdkMigration011OperatorError("SDK_MIGRATION_LEDGER_INCONSISTENT");
-  }
-  for (let version = 1; version <= expectedLength; version += 1) {
-    if (!versions.has(version)) {
-      throw new SdkMigration011OperatorError("SDK_MIGRATION_LEDGER_INCONSISTENT");
-    }
   }
 }
 

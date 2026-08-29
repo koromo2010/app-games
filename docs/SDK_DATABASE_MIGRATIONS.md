@@ -84,3 +84,27 @@ The application may require the latest schema version at runtime, but it does
 not create tables or apply migrations while serving requests. A migration
 failure therefore blocks only the explicitly requested operational command;
 normal Portal, SDK, and Preview builds remain database-free.
+
+## Development migration 011 ledger diagnostic
+
+Migration 011 has a separate, read-only diagnostic surface for investigating a
+stopped operator response. It does not share the operator's `POST` route and it
+cannot execute migration SQL.
+
+- Platform: authenticated Site Admin `GET
+  /api/admin/sdk-migration-011/diagnostic`, with a full session and recent MFA.
+- SDK Portal: service-authenticated `GET
+  /api/internal/operations/migration-011/diagnostic`.
+
+Both routes reject query strings and request bodies, require the canonical
+Development runtime tuple, and fail closed unless the runtime database selector
+and fingerprints satisfy the migration-011 binding lock. The Portal performs a
+single `REPEATABLE READ`, read-only transaction containing only ledger and
+catalog `SELECT` queries. Its secret-free result reports the ordered ledger,
+the canonical versions 1–10 comparison (including the accepted historical
+version-5 identity), and migration-011 object-contract presence. The Platform
+recursively validates an exact response allowlist before returning that result.
+
+Running this diagnostic never authorizes a retry. A retry of migration 011, a
+manual SQL change, or any other corrective action requires a separate reviewed
+execution sheet.

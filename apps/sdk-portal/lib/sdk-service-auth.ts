@@ -7,6 +7,7 @@ import {
 
 export const sdkMigration010OperationAction = "sdk-migration-010";
 export const sdkMigration011OperationAction = "sdk-migration-011";
+export const sdkMigration011DiagnosticAction = "sdk-migration-011-diagnostic";
 
 function serviceSecret() {
   const secret = process.env.SDK_ACCOUNT_LINK_SECRET ?? "";
@@ -44,6 +45,24 @@ export function requireSdkMigration011OperationRequest(
     path: `${url.pathname}${url.search}`,
     environment: "development",
     action: sdkMigration011OperationAction,
+    now: options.now,
+  }, serviceSecret());
+  if (!grant) throw new Error("SDK_OPERATION_GRANT_REQUIRED");
+  return grant;
+}
+
+export function requireSdkMigration011DiagnosticRequest(
+  request: Request,
+  options: { now?: number } = {},
+): SdkServiceOperationGrant {
+  requireSdkServiceRequest(request, { expectedEnvironment: "development" });
+  const url = new URL(request.url);
+  const value = request.headers.get("x-game-fields-sdk-operation") ?? "";
+  const grant = verifySdkServiceOperationAuthorization(value, {
+    method: request.method,
+    path: `${url.pathname}${url.search}`,
+    environment: "development",
+    action: sdkMigration011DiagnosticAction,
     now: options.now,
   }, serviceSecret());
   if (!grant) throw new Error("SDK_OPERATION_GRANT_REQUIRED");

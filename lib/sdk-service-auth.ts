@@ -6,6 +6,7 @@ import {
 
 export const sdkMigration010OperationAction = "sdk-migration-010";
 export const sdkMigration011OperationAction = "sdk-migration-011";
+export const sdkMigration011DiagnosticAction = "sdk-migration-011-diagnostic";
 
 function serviceSecret() {
   const secret = process.env.SDK_ACCOUNT_LINK_SECRET ?? "";
@@ -76,6 +77,30 @@ export function sdkMigration011OperationHeaders(
       path,
       environment: "development",
       action: sdkMigration011OperationAction,
+      operationId: input.operationId,
+      nonce: input.nonce,
+      now,
+    }, serviceSecret()),
+  };
+}
+
+export function sdkMigration011DiagnosticHeaders(
+  url: string,
+  input: { operationId: string; nonce: string; now?: number },
+) {
+  const target = new URL(url);
+  const path = `${target.pathname}${target.search}`;
+  const now = input.now ?? Date.now();
+  return {
+    ...sdkServiceHeaders("GET", url, {
+      environment: "development",
+      now,
+    }),
+    "X-Game-Fields-SDK-Operation": createSdkServiceOperationAuthorization({
+      method: "GET",
+      path,
+      environment: "development",
+      action: sdkMigration011DiagnosticAction,
       operationId: input.operationId,
       nonce: input.nonce,
       now,
