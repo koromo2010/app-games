@@ -40,6 +40,7 @@
         "sdk:migrate": "node scripts/migrate-sdk-database.mjs",
         "sdk:migrate:status": "node scripts/migrate-sdk-database.mjs --status",
         "sdk:migrate:check": "node scripts/migrate-sdk-database.mjs --check",
+        "t131:a4:authoring-state": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --experimental-strip-types scripts/t131-a4-authoring-state-reconstruction.ts",
         "create-game": "node scripts/create-game.mjs",
         "load:smoke": "node scripts/load-test.mjs",
         "monitor:production": "node scripts/production-smoke.mjs",
@@ -73,6 +74,7 @@
         "esbuild": "^0.28.1",
         "eslint": "^9",
         "eslint-config-next": "16.2.4",
+        "linkedom": "0.18.13",
         "tailwindcss": "^4",
         "typescript": "^5"
     }

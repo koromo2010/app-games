@@ -11,7 +11,7 @@ let client: NeonQueryFunction<boolean, boolean> | null = null;
 let clientBinding: SdkDatabaseBinding | null = null;
 let initialized: Promise<void> | null = null;
 
-export const SDK_SCHEMA_VERSION = 10;
+export const SDK_SCHEMA_VERSION = 11;
 
 function configuredDatabaseUrl(binding: SdkDatabaseBinding) {
   if (!binding.databaseUrl) throw new Error("SDK PostgreSQL is not configured.");

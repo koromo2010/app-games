@@ -31,9 +31,10 @@ test("SDK migration runner accepts only the known production 005 fork", () => {
   assert.match(runner, /!isCanonical && !isAcceptedLegacy/);
   assert.match(reconciliation, /CREATE TABLE IF NOT EXISTS sdk_release_decisions/);
   assert.match(reconciliation, /CREATE INDEX IF NOT EXISTS sdk_release_decisions_lineage_idx/);
-  assert.match(postgres, /SDK_SCHEMA_VERSION = 10/);
+  assert.match(postgres, /SDK_SCHEMA_VERSION = 11/);
   assert.match(read("db/sdk/009_module_profile_proposals.sql"), /sdk_game_module_profile_proposals/);
   assert.match(read("db/sdk/010_bounded_creator_quarantine_recovery.sql"), /sdk_creator_recovery_operations/);
+  assert.match(read("db/sdk/011_development_private_workspace_import.sql"), /sdk_development_private_workspaces/);
 });
 
 test("A0 schema-9 rescue lineage stays byte-identical to the migration runner contract", () => {
@@ -92,15 +93,15 @@ test("line-ending normalization preserves existing canonical ledger checksums", 
   ]);
 });
 
-test("migration 010 source and checksum stay canonical at schema version 10", () => {
+test("migration 010 stays canonical while schema 11 adds the isolated private importer", () => {
   const migration010 = normalizeMigrationSource(
     read("db/sdk/010_bounded_creator_quarantine_recovery.sql"),
   );
   const postgres = read("apps/sdk-portal/lib/sdk-postgres.ts");
   assert.equal(sdkMigration010Source, migration010);
   assert.equal(migrationChecksum(migration010), sdkMigration010Checksum);
-  assert.match(postgres, /SDK_SCHEMA_VERSION = 10/);
-  assert.equal(existsSync("db/sdk/011_bounded_creator_quarantine_recovery.sql"), false);
+  assert.match(postgres, /SDK_SCHEMA_VERSION = 11/);
+  assert.equal(existsSync("db/sdk/011_development_private_workspace_import.sql"), true);
 });
 
 test("migration 010 is target-neutral, live-counted schema-only quarantine infrastructure", () => {

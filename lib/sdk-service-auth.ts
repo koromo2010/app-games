@@ -5,6 +5,7 @@ import {
 } from "@game-fields/sdk-service-auth";
 
 export const sdkMigration010OperationAction = "sdk-migration-010";
+export const sdkMigration011OperationAction = "sdk-migration-011";
 
 function serviceSecret() {
   const secret = process.env.SDK_ACCOUNT_LINK_SECRET ?? "";
@@ -51,6 +52,30 @@ export function sdkMigration010OperationHeaders(
       path,
       environment: "production",
       action: sdkMigration010OperationAction,
+      operationId: input.operationId,
+      nonce: input.nonce,
+      now,
+    }, serviceSecret()),
+  };
+}
+
+export function sdkMigration011OperationHeaders(
+  url: string,
+  input: { operationId: string; nonce: string; now?: number },
+) {
+  const target = new URL(url);
+  const path = `${target.pathname}${target.search}`;
+  const now = input.now ?? Date.now();
+  return {
+    ...sdkServiceHeaders("POST", url, {
+      environment: "development",
+      now,
+    }),
+    "X-Game-Fields-SDK-Operation": createSdkServiceOperationAuthorization({
+      method: "POST",
+      path,
+      environment: "development",
+      action: sdkMigration011OperationAction,
       operationId: input.operationId,
       nonce: input.nonce,
       now,

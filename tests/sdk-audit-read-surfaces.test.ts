@@ -26,7 +26,7 @@ const revision = "a".repeat(40);
 
 function snapshotRows(): SdkSchemaAuditInput {
   return {
-    schemaVersion: 10,
+    schemaVersion: 11,
     deploymentEnvironment: "development" as const,
     observedAt: "2026-08-01T00:00:00.000Z",
     games: [{
@@ -76,7 +76,7 @@ function snapshotRows(): SdkSchemaAuditInput {
   };
 }
 
-test("schema 10 preserves the schema-9 unavailable markers without inventing database provenance", () => {
+test("schema 11 preserves the schema-9 unavailable markers without inventing database provenance", () => {
   const snapshot = createSdkSchemaAuditSnapshot(snapshotRows());
   assert.deepEqual(snapshot.environment, {
     deployment: "development",
@@ -252,7 +252,7 @@ test("schema mismatch is fail-closed and never auto-migrates", () => {
 test("schema loader uses one read-only repeatable-read transaction with exactly three SELECTs and injected clock", async () => {
   const statements: string[] = [];
   let options: unknown;
-  const rows = [[{ version: 10 }], snapshotRows().games, snapshotRows().currentReleases];
+  const rows = [[{ version: 11 }], snapshotRows().games, snapshotRows().currentReleases];
   const sql = {
     transaction: async (callback: (tx: unknown) => Array<Promise<unknown>>, transactionOptions: unknown) => {
       options = transactionOptions;
@@ -282,7 +282,7 @@ test("schema loader propagates query failure without returning an absent snapsho
       let index = 0;
       const tx = () => index++ === 1
         ? Promise.reject(new Error("query-failed"))
-        : Promise.resolve(index === 1 ? [{ version: 10 }] : []);
+        : Promise.resolve(index === 1 ? [{ version: 11 }] : []);
       return Promise.all(callback(tx));
     },
   } as unknown as NonNullable<Parameters<typeof loadSdkSchemaAuditSnapshot>[1]>["sql"];
