@@ -9,6 +9,7 @@ import {
   sdkDatabaseBindingOperatorDiagnosticEnabled,
   shouldEmitSdkDatabaseBindingDiagnostic,
 } from "../apps/sdk-portal/lib/sdk-database-binding-diagnostic.ts";
+import { sdkRuntimeSqlContext } from "../apps/sdk-portal/lib/sdk-postgres.ts";
 
 function syntheticDatabaseUrl() {
   return [
@@ -86,6 +87,32 @@ test("SDK DB selector fails closed for NONE without a target fingerprint", () =>
     observedSchemaVersion: 0,
     requiredSchemaVersion: 10,
   });
+});
+
+test("SDK runtime SQL context reduces its selected URL to fingerprints without exposing the URL", () => {
+  const keys = ["SDK_DATABASE_URL", "POSTGRES_PRISMA_URL", "DATABASE_URL"] as const;
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  for (const key of keys) delete process.env[key];
+  process.env.POSTGRES_PRISMA_URL = syntheticDatabaseUrl();
+  try {
+    const context = sdkRuntimeSqlContext();
+    const diagnostic = createSdkDatabaseBindingDiagnostic({
+      binding: resolveSdkDatabaseBinding({ POSTGRES_PRISMA_URL: syntheticDatabaseUrl() }),
+      observedSchemaVersion: 10,
+      requiredSchemaVersion: 11,
+    });
+    assert.equal(context.selectedKey, "POSTGRES_PRISMA_URL");
+    assert.equal(context.fallbackUsed, true);
+    assert.equal(context.databaseTargetFingerprint, diagnostic.databaseTargetFingerprint);
+    assert.equal(context.databaseNameFingerprint, diagnostic.databaseNameFingerprint);
+    assert.equal("databaseUrl" in context, false);
+  } finally {
+    for (const key of keys) {
+      const value = previous[key];
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
 });
 
 test("schema 10 suppresses default diagnostic output, while mismatch or explicit operator mode permits one", () => {

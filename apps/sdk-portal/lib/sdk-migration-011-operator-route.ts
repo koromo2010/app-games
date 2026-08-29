@@ -14,6 +14,33 @@ const replayGuard = new SdkMigration011OperationGrantReplayGuard();
 
 type RuntimeContext = ReturnType<typeof sdkRuntimeSqlContext>;
 
+export const sdkMigration011DevelopmentFallbackIdentity = {
+  selectedKey: "POSTGRES_PRISMA_URL",
+  fallbackUsed: true,
+  databaseTargetFingerprint: "43a021d13864615b4b73b65847e2e8e41a4de31cd5793fd6ab36c9acf507da0b",
+  databaseNameFingerprint: "693fe5919fc229a2cf404ad99e03e8e9277fa4a6d34e88a0d4224d81b0b057a8",
+} as const;
+
+function isSha256Fingerprint(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
+}
+
+export function isAcceptedSdkMigration011DatabaseIdentity(context: RuntimeContext) {
+  if (
+    !isSha256Fingerprint(context.databaseTargetFingerprint)
+    || !isSha256Fingerprint(context.databaseNameFingerprint)
+  ) return false;
+  if (context.selectedKey === "SDK_DATABASE_URL" && context.fallbackUsed === false) {
+    return true;
+  }
+  return context.selectedKey === sdkMigration011DevelopmentFallbackIdentity.selectedKey
+    && context.fallbackUsed === sdkMigration011DevelopmentFallbackIdentity.fallbackUsed
+    && context.databaseTargetFingerprint
+      === sdkMigration011DevelopmentFallbackIdentity.databaseTargetFingerprint
+    && context.databaseNameFingerprint
+      === sdkMigration011DevelopmentFallbackIdentity.databaseNameFingerprint;
+}
+
 export type SdkMigration011PortalRuntimeIdentity = {
   vercelEnvironment?: string;
   project?: string;
@@ -99,8 +126,16 @@ export async function processSdkMigration011OperatorRequest(
   try {
     dependencies.consumeGrant(grant);
     const context = dependencies.runtimeContext();
-    if (context.selectedKey !== "SDK_DATABASE_URL" || context.fallbackUsed) {
+    const selectorAccepted = (
+      context.selectedKey === "SDK_DATABASE_URL" && context.fallbackUsed === false
+    ) || (
+      context.selectedKey === "POSTGRES_PRISMA_URL" && context.fallbackUsed === true
+    );
+    if (!selectorAccepted) {
       return stopped("SDK_DATABASE_SELECTOR_NOT_EXACT", 409);
+    }
+    if (!isAcceptedSdkMigration011DatabaseIdentity(context)) {
+      return stopped("SDK_DATABASE_FINGERPRINT_MISMATCH", 409);
     }
     const result = await dependencies.execute(context);
     safeLog(
@@ -117,8 +152,10 @@ export async function processSdkMigration011OperatorRequest(
       operation: "SDK_MIGRATION_011",
       operationId: grant.operationId,
       environment: "development",
-      databaseSelectorKey: "SDK_DATABASE_URL",
-      databaseFallbackUsed: false,
+      databaseSelectorKey: context.selectedKey,
+      databaseFallbackUsed: context.fallbackUsed,
+      databaseTargetFingerprint: context.databaseTargetFingerprint,
+      databaseNameFingerprint: context.databaseNameFingerprint,
       migrationVersion: result.migrationVersion,
       observedSchemaVersion: result.schemaVersion,
       writesPerformed: result.writesPerformed,

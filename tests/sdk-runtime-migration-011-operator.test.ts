@@ -24,8 +24,10 @@ import {
   type SdkMigrationLedgerRow,
 } from "../apps/sdk-portal/lib/sdk-migration-011-operator.ts";
 import {
+  isAcceptedSdkMigration011DatabaseIdentity,
   isCanonicalDevelopmentSdkPortalRuntime,
   processSdkMigration011OperatorRequest,
+  sdkMigration011DevelopmentFallbackIdentity,
   type OperatorDependencies,
 } from "../apps/sdk-portal/lib/sdk-migration-011-operator-route.ts";
 import { requireSdkMigration011OperationRequest } from "../apps/sdk-portal/lib/sdk-service-auth.ts";
@@ -44,6 +46,8 @@ const action = "sdk-migration-011";
 const operationId = "11111111-1111-4111-8111-111111111111";
 const nonce = "22222222-2222-4222-8222-222222222222";
 const issuedAt = 1_000_000;
+const targetFingerprint = "43a021d13864615b4b73b65847e2e8e41a4de31cd5793fd6ab36c9acf507da0b";
+const nameFingerprint = "693fe5919fc229a2cf404ad99e03e8e9277fa4a6d34e88a0d4224d81b0b057a8";
 
 const ledgerThrough010: SdkMigrationLedgerRow[] = [
   { version: 1, name: "001_sdk_registry.sql", checksum: "5456100f4e2bf5cbba4cdf64bc883699ce0a89971e293c08a353803a1e965117" },
@@ -100,6 +104,8 @@ function operatorDependencies(
       sql: null as never,
       selectedKey: "SDK_DATABASE_URL",
       fallbackUsed: false,
+      databaseTargetFingerprint: targetFingerprint,
+      databaseNameFingerprint: nameFingerprint,
     }),
     execute: async () => ({
       status: "APPLIED",
@@ -134,6 +140,8 @@ function proxyDependencies(
       environment: "development",
       databaseSelectorKey: "SDK_DATABASE_URL",
       databaseFallbackUsed: false,
+      databaseTargetFingerprint: targetFingerprint,
+      databaseNameFingerprint: nameFingerprint,
       migrationVersion: 11,
       observedSchemaVersion: 11,
       writesPerformed: 1,
@@ -329,7 +337,13 @@ test("Production, Preview, and ambiguous Portal identities reject before authori
         },
         runtimeContext: () => {
           resolved = true;
-          return { sql: null as never, selectedKey: "SDK_DATABASE_URL", fallbackUsed: false };
+          return {
+            sql: null as never,
+            selectedKey: "SDK_DATABASE_URL",
+            fallbackUsed: false,
+            databaseTargetFingerprint: targetFingerprint,
+            databaseNameFingerprint: nameFingerprint,
+          };
         },
       }),
     );
@@ -339,7 +353,7 @@ test("Production, Preview, and ambiguous Portal identities reject before authori
   }
 });
 
-test("Portal rejects query/body, invalid grant, fallback selector, and replay", async () => {
+test("Portal rejects query/body and invalid grant, then enforces replay protection", async () => {
   for (const request of [
     new Request(`https://sdk.example${portalPath}?target=x`, { method: "POST" }),
     new Request(`https://sdk.example${portalPath}`, { method: "POST", body: "{}" }),
@@ -352,24 +366,6 @@ test("Portal rejects query/body, invalid grant, fallback selector, and replay", 
     operatorDependencies({ authorize: () => { throw new Error("invalid"); } }),
   );
   assert.equal(invalidGrant.status, 403);
-
-  let executed = false;
-  const fallback = await processSdkMigration011OperatorRequest(
-    new Request(`https://sdk.example${portalPath}`, { method: "POST" }),
-    operatorDependencies({
-      runtimeContext: () => ({
-        sql: null as never,
-        selectedKey: "POSTGRES_PRISMA_URL",
-        fallbackUsed: true,
-      }),
-      execute: async () => {
-        executed = true;
-        return { status: "APPLIED", schemaVersion: 11, migrationVersion: 11, writesPerformed: 1 };
-      },
-    }),
-  );
-  assert.equal(fallback.status, 409);
-  assert.equal(executed, false);
 
   const guard = new SdkMigration011OperationGrantReplayGuard();
   const dependencies = operatorDependencies({
@@ -386,6 +382,78 @@ test("Portal rejects query/body, invalid grant, fallback selector, and replay", 
   assert.equal(first.status, 200);
   assert.equal(replay.status, 409);
   assert.equal((await responseJson(replay)).code, "SDK_OPERATION_GRANT_REPLAY");
+});
+
+test("Portal accepts canonical binding and the exact Development fingerprint-locked fallback", async () => {
+  assert.equal(isAcceptedSdkMigration011DatabaseIdentity({
+    sql: null as never,
+    selectedKey: "SDK_DATABASE_URL",
+    fallbackUsed: false,
+    databaseTargetFingerprint: "1".repeat(64),
+    databaseNameFingerprint: "2".repeat(64),
+  }), true);
+  assert.deepEqual(sdkMigration011DevelopmentFallbackIdentity, {
+    selectedKey: "POSTGRES_PRISMA_URL",
+    fallbackUsed: true,
+    databaseTargetFingerprint: targetFingerprint,
+    databaseNameFingerprint: nameFingerprint,
+  });
+  const response = await processSdkMigration011OperatorRequest(
+    new Request(`https://sdk.example${portalPath}`, { method: "POST" }),
+    operatorDependencies({
+      runtimeContext: () => ({
+        sql: null as never,
+        ...sdkMigration011DevelopmentFallbackIdentity,
+      }),
+    }),
+  );
+  assert.equal(response.status, 200);
+  assert.deepEqual(await responseJson(response), {
+    schemaVersion: 1,
+    task: "T-131-A4",
+    phase: "T-131-A4-v008",
+    status: "APPLIED",
+    operation: "SDK_MIGRATION_011",
+    operationId,
+    environment: "development",
+    databaseSelectorKey: "POSTGRES_PRISMA_URL",
+    databaseFallbackUsed: true,
+    databaseTargetFingerprint: targetFingerprint,
+    databaseNameFingerprint: nameFingerprint,
+    migrationVersion: 11,
+    observedSchemaVersion: 11,
+    writesPerformed: 1,
+    secretFree: true,
+  });
+});
+
+test("Portal rejects every selector or fingerprint mismatch before execute", async () => {
+  const cases = [
+    { selectedKey: "DATABASE_URL" as const, fallbackUsed: true, databaseTargetFingerprint: targetFingerprint, databaseNameFingerprint: nameFingerprint, code: "SDK_DATABASE_SELECTOR_NOT_EXACT" },
+    { selectedKey: "NONE" as const, fallbackUsed: false, databaseTargetFingerprint: targetFingerprint, databaseNameFingerprint: nameFingerprint, code: "SDK_DATABASE_SELECTOR_NOT_EXACT" },
+    { selectedKey: "SDK_DATABASE_URL" as const, fallbackUsed: true, databaseTargetFingerprint: targetFingerprint, databaseNameFingerprint: nameFingerprint, code: "SDK_DATABASE_SELECTOR_NOT_EXACT" },
+    { selectedKey: "POSTGRES_PRISMA_URL" as const, fallbackUsed: false, databaseTargetFingerprint: targetFingerprint, databaseNameFingerprint: nameFingerprint, code: "SDK_DATABASE_SELECTOR_NOT_EXACT" },
+    { selectedKey: "POSTGRES_PRISMA_URL" as const, fallbackUsed: true, databaseTargetFingerprint: "0".repeat(64), databaseNameFingerprint: nameFingerprint, code: "SDK_DATABASE_FINGERPRINT_MISMATCH" },
+    { selectedKey: "POSTGRES_PRISMA_URL" as const, fallbackUsed: true, databaseTargetFingerprint: targetFingerprint, databaseNameFingerprint: "0".repeat(64), code: "SDK_DATABASE_FINGERPRINT_MISMATCH" },
+    { selectedKey: "POSTGRES_PRISMA_URL" as const, fallbackUsed: true, databaseTargetFingerprint: undefined, databaseNameFingerprint: nameFingerprint, code: "SDK_DATABASE_FINGERPRINT_MISMATCH" },
+    { selectedKey: "SDK_DATABASE_URL" as const, fallbackUsed: false, databaseTargetFingerprint: "invalid", databaseNameFingerprint: nameFingerprint, code: "SDK_DATABASE_FINGERPRINT_MISMATCH" },
+  ];
+  for (const context of cases) {
+    let executed = false;
+    const response = await processSdkMigration011OperatorRequest(
+      new Request(`https://sdk.example${portalPath}`, { method: "POST" }),
+      operatorDependencies({
+        runtimeContext: () => ({ sql: null as never, ...context }),
+        execute: async () => {
+          executed = true;
+          return { status: "APPLIED", schemaVersion: 11, migrationVersion: 11, writesPerformed: 1 };
+        },
+      }),
+    );
+    assert.equal(response.status, 409);
+    assert.equal((await responseJson(response)).code, context.code);
+    assert.equal(executed, false);
+  }
 });
 
 test("ledger accepts canonical and legacy 005 lineage and rejects missing, duplicate, mismatch, and ahead rows", () => {
@@ -537,6 +605,8 @@ test("proxy accepts only APPLIED or exact ALREADY_APPLIED_MATCH receipts", async
         environment: "development",
         databaseSelectorKey: "SDK_DATABASE_URL",
         databaseFallbackUsed: false,
+        databaseTargetFingerprint: targetFingerprint,
+        databaseNameFingerprint: nameFingerprint,
         migrationVersion: 11,
         observedSchemaVersion: 11,
         writesPerformed: 0,
@@ -547,9 +617,77 @@ test("proxy accepts only APPLIED or exact ALREADY_APPLIED_MATCH receipts", async
   assert.equal(already.status, 200);
   assert.equal((await responseJson(already)).status, "ALREADY_APPLIED_MATCH");
 
+  const fallback = await proxySdkMigration011Operator(
+    new Request(`https://dev.game-fields.com${platformPath}`, { method: "POST" }),
+    proxyDependencies({
+      fetchTarget: (async () => Response.json({
+        status: "APPLIED",
+        phase: "T-131-A4-v008",
+        operation: "SDK_MIGRATION_011",
+        operationId,
+        environment: "development",
+        databaseSelectorKey: "POSTGRES_PRISMA_URL",
+        databaseFallbackUsed: true,
+        databaseTargetFingerprint: targetFingerprint,
+        databaseNameFingerprint: nameFingerprint,
+        migrationVersion: 11,
+        observedSchemaVersion: 11,
+        writesPerformed: 1,
+        secretFree: true,
+      })) as typeof fetch,
+    }),
+  );
+  assert.equal(fallback.status, 200);
+  assert.equal((await responseJson(fallback)).databaseSelectorKey, "POSTGRES_PRISMA_URL");
+
   for (const payload of [
     { status: "APPLIED", operationId: "different" },
     { status: "ALREADY_APPLIED_MATCH", operationId, writesPerformed: 1 },
+    {
+      status: "APPLIED",
+      phase: "T-131-A4-v008",
+      operation: "SDK_MIGRATION_011",
+      operationId,
+      environment: "development",
+      databaseSelectorKey: "POSTGRES_PRISMA_URL",
+      databaseFallbackUsed: true,
+      databaseTargetFingerprint: "0".repeat(64),
+      databaseNameFingerprint: nameFingerprint,
+      migrationVersion: 11,
+      observedSchemaVersion: 11,
+      writesPerformed: 1,
+      secretFree: true,
+    },
+    {
+      status: "APPLIED",
+      phase: "T-131-A4-v008",
+      operation: "SDK_MIGRATION_011",
+      operationId,
+      environment: "development",
+      databaseSelectorKey: "POSTGRES_PRISMA_URL",
+      databaseFallbackUsed: true,
+      databaseTargetFingerprint: targetFingerprint,
+      databaseNameFingerprint: "0".repeat(64),
+      migrationVersion: 11,
+      observedSchemaVersion: 11,
+      writesPerformed: 1,
+      secretFree: true,
+    },
+    {
+      status: "APPLIED",
+      phase: "T-131-A4-v008",
+      operation: "SDK_MIGRATION_011",
+      operationId,
+      environment: "development",
+      databaseSelectorKey: "DATABASE_URL",
+      databaseFallbackUsed: true,
+      databaseTargetFingerprint: targetFingerprint,
+      databaseNameFingerprint: nameFingerprint,
+      migrationVersion: 11,
+      observedSchemaVersion: 11,
+      writesPerformed: 1,
+      secretFree: true,
+    },
   ]) {
     const invalid = await proxySdkMigration011Operator(
       new Request(`https://dev.game-fields.com${platformPath}`, { method: "POST" }),
@@ -580,7 +718,9 @@ test("both routes are POST-only and expose no database, SQL, migration, target, 
     platformRoute + portalRoute + proxy,
     /SDK_DATABASE_URL\s*=|databaseUrl|migrationName|migrationVersion\s*:.*request|targetSlug|targetKey|planReceipt/,
   );
-  assert.match(operatorRoute, /selectedKey !== "SDK_DATABASE_URL"/);
-  assert.match(operatorRoute, /context\.fallbackUsed/);
+  assert.match(operatorRoute, /selectedKey === "SDK_DATABASE_URL"/);
+  assert.match(operatorRoute, /SDK_DATABASE_FINGERPRINT_MISMATCH/);
+  assert.match(operatorRoute, /POSTGRES_PRISMA_URL/);
   assert.doesNotMatch(operatorRoute, /process\.env\.SDK_DATABASE_URL/);
+  assert.doesNotMatch(operatorRoute + proxy, /process\.env\..*FINGERPRINT/);
 });

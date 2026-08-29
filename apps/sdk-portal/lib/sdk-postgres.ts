@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import {
   emitSdkDatabaseBindingDiagnostic,
@@ -26,6 +27,31 @@ function sdkSqlForBinding(binding: SdkDatabaseBinding) {
   return { sql: client, binding: clientBinding ?? binding };
 }
 
+type RuntimeDatabaseIdentity = {
+  databaseTargetFingerprint?: string;
+  databaseNameFingerprint?: string;
+};
+
+function runtimeDatabaseIdentity(databaseUrl: string | undefined): RuntimeDatabaseIdentity {
+  if (!databaseUrl) return {};
+  try {
+    const parsed = new URL(databaseUrl);
+    if (
+      (parsed.protocol !== "postgres:" && parsed.protocol !== "postgresql:")
+      || !parsed.hostname
+      || !parsed.pathname.replace(/^\/+/, "")
+    ) return {};
+    const fingerprint = (value: string) => createHash("sha256").update(value).digest("hex");
+    const target = `${parsed.protocol}//${parsed.hostname.toLowerCase()}${parsed.port ? `:${parsed.port}` : ""}`;
+    return {
+      databaseTargetFingerprint: fingerprint(target),
+      databaseNameFingerprint: fingerprint(parsed.pathname.replace(/^\/+/, "")),
+    };
+  } catch {
+    return {};
+  }
+}
+
 /**
  * Returns the module-scoped SQL client used by health and all SDK stores,
  * together with selector metadata only. The configured URL never leaves this
@@ -37,6 +63,7 @@ export function sdkRuntimeSqlContext() {
     sql,
     selectedKey: binding.selectedKey,
     fallbackUsed: binding.fallbackUsed,
+    ...runtimeDatabaseIdentity(binding.databaseUrl),
   };
 }
 

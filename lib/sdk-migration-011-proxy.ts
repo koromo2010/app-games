@@ -21,11 +21,18 @@ export type SdkMigration011ProxyDependencies = {
 const responseHeaders = { "Cache-Control": "private, no-store" };
 const canonicalPortalOrigin = "https://sdk-dev.game-fields.com";
 const canonicalPortalPath = "/api/internal/operations/migration-011";
+const developmentFallbackIdentity = {
+  databaseSelectorKey: "POSTGRES_PRISMA_URL",
+  databaseFallbackUsed: true,
+  databaseTargetFingerprint: "43a021d13864615b4b73b65847e2e8e41a4de31cd5793fd6ab36c9acf507da0b",
+  databaseNameFingerprint: "693fe5919fc229a2cf404ad99e03e8e9277fa4a6d34e88a0d4224d81b0b057a8",
+} as const;
 const upstreamStopCodes = new Set([
   "SDK_OPERATION_GRANT_REQUIRED",
   "SDK_OPERATION_GRANT_REPLAY",
   "DEVELOPMENT_RUNTIME_REQUIRED",
   "SDK_DATABASE_SELECTOR_NOT_EXACT",
+  "SDK_DATABASE_FINGERPRINT_MISMATCH",
   "SDK_MIGRATION_LEDGER_AHEAD",
   "SDK_MIGRATION_LEDGER_INCONSISTENT",
   "SDK_MIGRATION_011_OBJECT_CONTRACT_MISMATCH",
@@ -33,6 +40,25 @@ const upstreamStopCodes = new Set([
   "SDK_MIGRATION_011_POST_COMMIT_READBACK_FAILED",
   "SDK_MIGRATION_011_UNAVAILABLE",
 ]);
+
+function isSha256Fingerprint(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
+}
+
+function isAcceptedDatabaseIdentity(payload: Record<string, unknown>) {
+  if (
+    !isSha256Fingerprint(payload.databaseTargetFingerprint)
+    || !isSha256Fingerprint(payload.databaseNameFingerprint)
+  ) return false;
+  if (
+    payload.databaseSelectorKey === "SDK_DATABASE_URL"
+    && payload.databaseFallbackUsed === false
+  ) return true;
+  return payload.databaseSelectorKey === developmentFallbackIdentity.databaseSelectorKey
+    && payload.databaseFallbackUsed === developmentFallbackIdentity.databaseFallbackUsed
+    && payload.databaseTargetFingerprint === developmentFallbackIdentity.databaseTargetFingerprint
+    && payload.databaseNameFingerprint === developmentFallbackIdentity.databaseNameFingerprint;
+}
 
 function stopped(code: string, status: number) {
   return Response.json({
@@ -120,8 +146,7 @@ export async function proxySdkMigration011Operator(
       || payload.operation !== "SDK_MIGRATION_011"
       || payload.operationId !== identity.operationId
       || payload.environment !== "development"
-      || payload.databaseSelectorKey !== "SDK_DATABASE_URL"
-      || payload.databaseFallbackUsed !== false
+      || !isAcceptedDatabaseIdentity(payload)
       || payload.migrationVersion !== 11
       || payload.observedSchemaVersion !== 11
       || payload.writesPerformed !== expectedWrites
@@ -137,8 +162,10 @@ export async function proxySdkMigration011Operator(
       operation: "SDK_MIGRATION_011",
       operationId: identity.operationId,
       environment: "development",
-      databaseSelectorKey: "SDK_DATABASE_URL",
-      databaseFallbackUsed: false,
+      databaseSelectorKey: payload.databaseSelectorKey,
+      databaseFallbackUsed: payload.databaseFallbackUsed,
+      databaseTargetFingerprint: payload.databaseTargetFingerprint,
+      databaseNameFingerprint: payload.databaseNameFingerprint,
       migrationVersion: 11,
       observedSchemaVersion: 11,
       writesPerformed: expectedWrites,
