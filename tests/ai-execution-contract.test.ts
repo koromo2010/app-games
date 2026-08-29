@@ -5,7 +5,11 @@ import test from "node:test";
 const read = (path: string) => readFileSync(path, "utf8");
 
 test("execution rules separate product writes, recovery, checkpoints and formal results", () => {
-  const rules = read("docs/DEVELOPMENT_EXECUTION_RULES.md");
+  const rules = [
+    read("docs/DEVELOPMENT_EXECUTION_RULES.md"),
+    read("docs/DEVELOPMENT_DELIVERY_RUNBOOK.md"),
+    read("docs/DEVELOPMENT_RECORDS_RUNBOOK.md"),
+  ].join("\n");
   assert.match(rules, /外部call回数、logical product write件数、control-plane write件数を混同しない/);
   assert.match(rules, /logical product write/);
   assert.match(rules, /control-plane write/);
@@ -53,6 +57,35 @@ test("execution rules separate product writes, recovery, checkpoints and formal 
   assert.match(rules, /INSTRUCTION_RECORD_UNSAVED \/ AT RISK/);
   assert.match(rules, /`RECOVERY_CHECKPOINT`.*`FULL_RECOVERY_CHECKPOINT`/s);
   assert.match(rules, /fresh restoreはこの軽量checkpointごとには行わない/);
+});
+
+test("execution policy has one canonical root and conditionally loaded satellites", () => {
+  const root = read("docs/DEVELOPMENT_EXECUTION_RULES.md");
+  const satellites = [
+    "docs/DEVELOPMENT_DELIVERY_RUNBOOK.md",
+    "docs/DEVELOPMENT_RECORDS_RUNBOOK.md",
+    "docs/AI_EXECUTION_TROUBLESHOOTING.md",
+    "docs/AUDIT_THREAD_RULES.md",
+  ];
+
+  assert.match(root, /唯一の実行正本/);
+  assert.match(root, /正本とサテライト/);
+  assert.match(root, /個別成果物からサテライトを直接policy参照しない/);
+  assert.match(root, /個別タスクの番号、特定commit、URL、credential、transport、画面操作、回数上限を恒久ルールへ固定しない/);
+  assert.match(root, /監督スレ、監査スレ、監査作業スレ、作業スレは、本書.*変更candidateを作成する権限も反映を承認する権限も持たない/s);
+  assert.match(root, /管理スレは通常時にはルール変更候補の整理・提案だけを行う/);
+  assert.match(root, /利用者が管理スレでルール変更を目的として明示的に開始した独立したルール保守作業に限り.*変更candidateを作成できる/s);
+  assert.match(root, /通常Tの着手・継続・close.*一般的な承認を、ルール保守の開始または反映承認へ流用しない/s);
+  assert.match(root, /監督スレが発行する成果物は、この所有権境界を上書きできない/);
+  assert.doesNotMatch(root, /\bT-\d+/);
+
+  for (const path of satellites) {
+    const satellite = read(path);
+    assert.match(root, new RegExp(path.split("/").at(-1)!.replaceAll(".", "\\.")));
+    assert.match(satellite, /`APPLIES_WHEN`/);
+    assert.match(satellite, /`DOES_NOT_APPLY`/);
+    assert.match(satellite, /`AUTHORITY`.*DEVELOPMENT_EXECUTION_RULES\.md/);
+  }
 });
 
 test("troubleshooting fixes the MCP response paths and proposal reconciliation", () => {

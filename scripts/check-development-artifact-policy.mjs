@@ -15,7 +15,7 @@ const duplicatedCommonRules = [
   ["COMMON_FULL_RESTORE", /fresh restore[^\n]*(?:remote read-back|read-back)/i],
   ["COMMON_TASK_LIFECYCLE", /TASK_ACTIVE[^\n]*TASK_DONE[^\n]*EXTERNAL_BLOCKED/i],
   ["COMMON_AUDIT_ROLE", /監査[^\n]*通常T系列[^\n]*独立/],
-  ["SECOND_POLICY_REFERENCE", /docs\/(?:AI_EXECUTION_TROUBLESHOOTING|AUDIT_THREAD_RULES)\.md/],
+  ["SECOND_POLICY_REFERENCE", /docs\/(?:DEVELOPMENT_DELIVERY_RUNBOOK|DEVELOPMENT_RECORDS_RUNBOOK|AI_EXECUTION_TROUBLESHOOTING|AUDIT_THREAD_RULES)\.md/],
 ];
 
 const checkpointOnlyLabels = /^(?:CURRENT_CANDIDATE|COMPLETED_STEPS|PENDING_STEPS|RESUME_POINT|LAST_CHECKPOINT|CHECKPOINT_COMMIT)\s*:/mi;
@@ -74,6 +74,12 @@ export function checkCanonicalDevelopmentPolicy(read = (path) => readFileSync(pa
   const errors = [];
   const agents = read("AGENTS.md");
   const rules = read("docs/DEVELOPMENT_EXECUTION_RULES.md");
+  const satellites = [
+    ["docs/DEVELOPMENT_DELIVERY_RUNBOOK.md", read("docs/DEVELOPMENT_DELIVERY_RUNBOOK.md")],
+    ["docs/DEVELOPMENT_RECORDS_RUNBOOK.md", read("docs/DEVELOPMENT_RECORDS_RUNBOOK.md")],
+    ["docs/AI_EXECUTION_TROUBLESHOOTING.md", read("docs/AI_EXECUTION_TROUBLESHOOTING.md")],
+    ["docs/AUDIT_THREAD_RULES.md", read("docs/AUDIT_THREAD_RULES.md")],
+  ];
   const current = read("docs/CURRENT_STATE.md");
   const handoff = read("docs/DEVELOPMENT_HANDOFF.md");
   const environment = read("docs/ENVIRONMENT_VARIABLES.md");
@@ -85,6 +91,24 @@ export function checkCanonicalDevelopmentPolicy(read = (path) => readFileSync(pa
   }
   if (!rules.includes("INSTRUCTION_RECORD_UNSAVED / AT RISK")) {
     errors.push("docs/DEVELOPMENT_EXECUTION_RULES.md: DURABLE_NEXT_INSTRUCTION_MISSING");
+  }
+  if (/\bT-\d+/.test(rules)) {
+    errors.push("docs/DEVELOPMENT_EXECUTION_RULES.md: TASK_SPECIFIC_RULE_IN_ROOT");
+  }
+  if (!rules.includes("監督スレ、監査スレ、監査作業スレ、作業スレは、本書")) {
+    errors.push("docs/DEVELOPMENT_EXECUTION_RULES.md: RULE_CHANGE_OWNERSHIP_MISSING");
+  }
+  if (!rules.includes("利用者が管理スレでルール変更を目的として明示的に開始した独立したルール保守作業に限り")) {
+    errors.push("docs/DEVELOPMENT_EXECUTION_RULES.md: MANAGEMENT_RULE_MAINTENANCE_BOUNDARY_MISSING");
+  }
+  for (const [path, satellite] of satellites) {
+    const filename = path.split("/").at(-1);
+    if (!rules.includes(filename)) errors.push(`${path}: ROOT_ROUTE_MISSING`);
+    if (!satellite.includes("`APPLIES_WHEN`")) errors.push(`${path}: APPLIES_WHEN_MISSING`);
+    if (!satellite.includes("`DOES_NOT_APPLY`")) errors.push(`${path}: DOES_NOT_APPLY_MISSING`);
+    if (!satellite.includes("`AUTHORITY`") || !satellite.includes("DEVELOPMENT_EXECUTION_RULES.md")) {
+      errors.push(`${path}: ROOT_AUTHORITY_MISSING`);
+    }
   }
   if (/^#{2,4}\s+.*\bT-\d+/m.test(current) || /^#{2,4}\s+.*\bT-\d+/m.test(handoff)) {
     errors.push("CURRENT_STATE_OR_HANDOFF: TASK_HISTORY_HEADING_IN_CURRENT_DOC");

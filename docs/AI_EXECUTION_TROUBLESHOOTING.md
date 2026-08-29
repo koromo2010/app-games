@@ -1,6 +1,12 @@
 # AI実行トラブルシューティング
 
-この文書は、tool discovery、schema、MCP response、parser、binding、read-only検査で詰まった場合の自己回復手順である。新しい権限やproduct writeを許可する文書ではない。許可、停止、保存、正式resultは`DEVELOPMENT_EXECUTION_RULES.md`に従う。
+`APPLIES_WHEN`: tool discovery、schema、MCP response、parser、binding、browser、helper、read-only検査で詰まったとき。
+
+`DOES_NOT_APPLY`: taskの権限、停止、保存、正式resultを決めるとき。
+
+`AUTHORITY`: [`DEVELOPMENT_EXECUTION_RULES.md`](./DEVELOPMENT_EXECUTION_RULES.md)
+
+この文書は実行経路が詰まった場合の自己回復サテライトである。新しい権限やproduct writeを許可せず、許可と停止は正本、保存と正式resultは正本が委任した記録runbookに従う。
 
 ## 1. 原則
 

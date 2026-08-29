@@ -392,7 +392,7 @@ SDKゲームは`SDK基本セット + アプリセット`の二層とする。Roo
 
 ## 9. 開発・検証・公開
 
-実行許可、保存レベル、証拠identity、終了状態は`docs/DEVELOPMENT_EXECUTION_RULES.md`を正本とする。この節は現行システムの検証・公開方法を説明するものであり、pushやDeploymentの許可を与えるものではない。
+実行許可と終了状態は`docs/DEVELOPMENT_EXECUTION_RULES.md`を正本とし、検証・Git・Deployment・証拠は`docs/DEVELOPMENT_DELIVERY_RUNBOOK.md`、保存は`docs/DEVELOPMENT_RECORDS_RUNBOOK.md`に従う。この節は現行システムの検証・公開方法を説明するものであり、pushやDeploymentの許可を与えるものではない。
 
 更新系API、タイマー、認証、戦績、LLMは `lib/observability` から1行JSONの構造化イベントを出力する。Vercel Runtime Logsでは `event`、`roomRef`、`requestId`、`outcome`、`errorCode` で追跡する。GETポーリング成功は記録しない。post-response workは重要writeを既定の`critical`としてawait・再throwし、正本でない処理だけを明示的な`best-effort`として失敗回収する。Redis失敗は固定enumのread／write／pipeline、REST／socket、command名・件数・serialized bytesだけを記録し、key/value、URL、tokenは出さない。ログ禁止情報、調査順、将来collector構成は `docs/OBSERVABILITY.md` を正本とする。
 
@@ -410,7 +410,7 @@ npm test
 npm run build
 ```
 
-上記commandは候補であり一律gateではない。変更後の検証深度、push承認、transport再計画、Deployment、runtime acceptance、完了判定は`docs/DEVELOPMENT_EXECUTION_RULES.md`だけを正本とする。`READY`をruntime PASSにせず、対象identityが一致する証拠だけを採用する。
+上記commandは候補であり一律gateではない。完了判定は`docs/DEVELOPMENT_EXECUTION_RULES.md`、検証深度、push承認、transport再計画、Deployment、runtime acceptanceは同書から委任された`docs/DEVELOPMENT_DELIVERY_RUNBOOK.md`に従う。`READY`をruntime PASSにせず、対象identityが一致する証拠だけを採用する。
 
 ## 10. 引き継ぎメモの保守
 

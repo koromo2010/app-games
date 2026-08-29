@@ -1,6 +1,12 @@
 # 監査・管理・監督スレッド運用ルール
 
-この文書は、監査スレ、監査作業スレ、管理スレ、監督スレ、作業スレを分離し、案件管理と技術監督の混同、監査結果の欠落・重複・誤昇格、監査への責任委譲を防ぐための正本である。実行・保存・Git・Deploymentの一般規則は`DEVELOPMENT_EXECUTION_RULES.md`に従う。
+`APPLIES_WHEN`: 監査スレ、監査作業スレ、管理スレ、監督スレ、TA／CP、finding、TODO／Tの受け渡しを扱うとき。
+
+`DOES_NOT_APPLY`: 通常の実装・検証・Git・Deployment・記録だけを扱うとき。
+
+`AUTHORITY`: [`DEVELOPMENT_EXECUTION_RULES.md`](./DEVELOPMENT_EXECUTION_RULES.md)
+
+この文書は各threadを分離し、案件管理と技術監督の混同、監査結果の欠落・重複・誤昇格、監査への責任委譲を防ぐためのサテライトである。実行・保存・Git・Deploymentの一般規則は正本のrouterが指すrunbookに従う。
 
 ## 0. 最上位原則: 監査なしで通常運用が完結する
 
@@ -113,7 +119,7 @@ STATUS
 
 ## 5. checkpointと正式報告
 
-保存頻度、`RECOVERY_CHECKPOINT`と`FULL_RECOVERY_CHECKPOINT`の境界、remote read-backは`DEVELOPMENT_EXECUTION_RULES.md`第9節をそのまま使い、この文書へ別の保存手順を作らない。監査checkpointへ追加する固有情報は監査ID、対象identity、証拠所在地だけとする。
+保存、`RECOVERY_CHECKPOINT`と`FULL_RECOVERY_CHECKPOINT`の境界、remote read-backは`DEVELOPMENT_RECORDS_RUNBOOK.md`をそのまま使い、この文書へ別の保存手順を作らない。監査checkpointへ追加する固有情報は監査ID、対象identity、証拠所在地だけとする。
 
 checkpointは復旧用であり、`AUDIT_RESULT`、`AUDIT_ACCEPTANCE`、`TODO_DECISION`ではない。checkpoint到達だけで監査を止めず、途中checkpointを管理スレまたは監督スレが正式なintake・結果として受理しない。
 

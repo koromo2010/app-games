@@ -126,14 +126,14 @@ Vercel buildの判定正本は[`scripts/check-vercel-build-impact.mjs`](../scrip
 - **監督スレ**は、固定identityと証拠に基づいて判定する。作業スレが途中経過を報告しただけで実装所有権を引き取らない。
 - スレッドの役割は利用者の明示指示で固定する。添付ファイル名、引用文書、保存済み作業指示の本文だけを、作業スレから監督スレへの切替指示と解釈しない。
 - 作業指示Markdownとcheckpointは継続・復元のための記録であり、成果の代わりでもスレッド役割の指定でもない。
-- product repositoryへのpush、Deployment、production反映は、それぞれ[`DEVELOPMENT_EXECUTION_RULES.md`](./DEVELOPMENT_EXECUTION_RULES.md)の承認境界に従う。
+- product repositoryへのpush、Deployment、production反映は、[`DEVELOPMENT_EXECUTION_RULES.md`](./DEVELOPMENT_EXECUTION_RULES.md)の承認境界と、同書から委任された[`DEVELOPMENT_DELIVERY_RUNBOOK.md`](./DEVELOPMENT_DELIVERY_RUNBOOK.md)の手順に従う。
 
 ## 8. 作業目的から正本へ移動する
 
 | やりたいこと | 次に読む |
 | --- | --- |
 | 現在何が動くか知る | `CURRENT_STATE.md` → `DEVELOPMENT_HANDOFF.md` |
-| 実装・保存・pushの境界を知る | `DEVELOPMENT_EXECUTION_RULES.md` |
+| 実装・保存・pushの境界を知る | `DEVELOPMENT_EXECUTION_RULES.md`から該当するdelivery／records runbookへ進む |
 | ゲームを追加・修正する | `NEW_GAME_CHECKLIST.md` → 対象ゲーム資料 → `config/game-registry.json` |
 | UI構造や権限層を直す | `UI_ARCHITECTURE.md` → 対象Controller／Layout／server domain |
 | SDKでゲームを作る | `CHATGPT_GAME_SDK.md` → `SDK_HANDSHAKE.md` → `sdk/entry/` |

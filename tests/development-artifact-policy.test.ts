@@ -36,6 +36,15 @@ CURRENT_CANDIDATE: abcdef
   assert.ok(errors.some((error) => error.includes("CHECKPOINT_STATE_IN_NEXT_INSTRUCTION")));
 });
 
+test("an individual artifact cannot bypass the root router to reference a satellite", () => {
+  const instruction = `
+POLICY_REFERENCE: docs/DEVELOPMENT_EXECUTION_RULES.md @ 0123456789abcdef0123456789abcdef01234567
+SECONDARY_POLICY: docs/DEVELOPMENT_DELIVERY_RUNBOOK.md
+`;
+  const errors = validateDevelopmentArtifact("next-instruction", instruction);
+  assert.ok(errors.some((error) => error.includes("SECOND_POLICY_REFERENCE")));
+});
+
 test("checkpoint state remains valid as a checkpoint", () => {
   const checkpoint = `
 ARTIFACT_TYPE: checkpoint
