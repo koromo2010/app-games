@@ -23,6 +23,7 @@ import {
 } from "../apps/sdk-portal/lib/sdk-migration-011-diagnostic-route.ts";
 import { requireSdkMigration011DiagnosticRequest } from "../apps/sdk-portal/lib/sdk-service-auth.ts";
 import {
+  loadSdkMigration011DiagnosticPageModel,
   proxySdkMigration011Diagnostic,
   type SdkMigration011DiagnosticProxyDependencies,
 } from "../lib/sdk-migration-011-diagnostic-proxy.ts";
@@ -279,6 +280,112 @@ test("Platform strict allowlist rejects extra fields, malformed hashes, and mism
     );
     assert.equal(response.status, 502);
   }
+});
+
+test("server-rendered diagnostic blocks auth and noncanonical runtimes before the internal operation", async () => {
+  for (const [dependencies, expectedStatus, expectedCode] of [
+    [proxyDependencies({
+      requireRecentMfa: async () => { throw new Error("SITE_ADMIN_AUTH_REQUIRED"); },
+      authorizationError: () => Response.json({ error: "ADMIN_AUTH_REQUIRED" }, { status: 401 }),
+    }), 401, "SITE_ADMIN_AUTH_REQUIRED"],
+    [proxyDependencies({
+      requireRecentMfa: async () => { throw new Error("SITE_ADMIN_FULL_AUTH_REQUIRED"); },
+      authorizationError: () => Response.json({ error: "ADMIN_FULL_AUTH_REQUIRED" }, { status: 403 }),
+    }), 403, "SITE_ADMIN_STEP_UP_OR_DEVELOPMENT_RUNTIME_REQUIRED"],
+    [proxyDependencies({
+      requireRecentMfa: async () => { throw new Error("SITE_ADMIN_STEP_UP_REQUIRED"); },
+      authorizationError: () => Response.json({ error: "ADMIN_STEP_UP_REQUIRED" }, { status: 403 }),
+    }), 403, "SITE_ADMIN_STEP_UP_OR_DEVELOPMENT_RUNTIME_REQUIRED"],
+    [proxyDependencies({
+      runtimeIdentity: () => ({
+        semanticEnvironment: "production",
+        vercelEnvironment: "production",
+        project: "app-games",
+        ref: "main",
+      }),
+    }), 403, "SITE_ADMIN_STEP_UP_OR_DEVELOPMENT_RUNTIME_REQUIRED"],
+  ] as const) {
+    let operations = 0;
+    const model = await loadSdkMigration011DiagnosticPageModel({
+      ...dependencies,
+      fetchTarget: (async () => {
+        operations += 1;
+        return Response.json(validPayload());
+      }) as typeof fetch,
+    });
+    assert.equal(model.httpStatus, expectedStatus);
+    assert.equal(model.payload.code, expectedCode);
+    assert.equal(model.payload.secretFree, true);
+    assert.equal(operations, 0);
+  }
+});
+
+test("server-rendered diagnostic performs one fixed operation and preserves complete allowlisted JSON", async () => {
+  let operations = 0;
+  let target = "";
+  let method = "";
+  const expected = validPayload();
+  const model = await loadSdkMigration011DiagnosticPageModel(proxyDependencies({
+    fetchTarget: (async (input, init) => {
+      operations += 1;
+      target = String(input);
+      method = init?.method ?? "";
+      return Response.json(expected);
+    }) as typeof fetch,
+  }));
+  assert.equal(operations, 1);
+  assert.equal(target, `https://sdk-dev.game-fields.com${portalPath}`);
+  assert.equal(method, "GET");
+  assert.equal(model.httpStatus, 200);
+  assert.deepEqual(model.payload, expected);
+  assert.deepEqual(JSON.parse(model.serializedPayload), expected);
+});
+
+test("server-rendered diagnostic bounds non-200, malformed, secret-bearing, and unavailable errors", async () => {
+  const cases: Array<() => Promise<Response>> = [
+    async () => Response.json({ status: "STOPPED", secretFree: true }, { status: 409 }),
+    async () => new Response("not-json", { status: 200 }),
+    async () => Response.json({ ...validPayload(), databaseUrl: "postgres://secret" }),
+    async () => { throw new Error("postgres://secret"); },
+  ];
+  for (const fetchCase of cases) {
+    const model = await loadSdkMigration011DiagnosticPageModel(proxyDependencies({
+      fetchTarget: fetchCase as typeof fetch,
+    }));
+    assert.notEqual(model.httpStatus, 200);
+    assert.equal(model.payload.secretFree, true);
+    assert.equal(model.payload.status, "STOPPED");
+    assert.equal(model.serializedPayload.includes("postgres://"), false);
+    assert.deepEqual(Object.keys(model.payload).sort(), [
+      "code", "phase", "schemaVersion", "secretFree", "status", "task",
+    ]);
+  }
+});
+
+test("Site Admin diagnostic page is server-only, unlinked, input-free, and uncached", () => {
+  const page = readFileSync(
+    new URL("../app/site-admin/runtime-diagnostics/sdk-ledger/page.tsx", import.meta.url),
+    "utf8",
+  );
+  const server = readFileSync(
+    new URL("../lib/sdk-migration-011-diagnostic-server.ts", import.meta.url),
+    "utf8",
+  );
+  const api = readFileSync(
+    new URL("../app/api/admin/sdk-migration-011/diagnostic/route.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(page, /export const dynamic = "force-dynamic"/);
+  assert.match(page, /export const revalidate = 0/);
+  assert.match(page, /export const fetchCache = "force-no-store"/);
+  assert.match(page, /<pre/);
+  assert.doesNotMatch(page, /["']use client["']|\bfetch\s*\(|searchParams|useRouter|<Link|<a\s/);
+  assert.match(server, /import "server-only"/);
+  assert.match(server, /requireRecentSiteAdminMfa/);
+  assert.match(server, /loadSdkMigration011DiagnosticPageModel/);
+  assert.doesNotMatch(server, /\/api\/admin\/sdk-migration-011\/diagnostic/);
+  assert.match(api, /export async function GET/);
+  assert.doesNotMatch(api, /export async function POST/);
 });
 
 test("diagnostic routes expose GET only and diagnostic SQL contains no mutation path", () => {

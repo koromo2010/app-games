@@ -15,6 +15,12 @@ export type SdkMigration011DiagnosticProxyDependencies = {
   fetchTarget: typeof fetch;
 };
 
+export type SdkMigration011DiagnosticPageModel = {
+  httpStatus: number;
+  payload: Record<string, unknown>;
+  serializedPayload: string;
+};
+
 const responseHeaders = { "Cache-Control": "private, no-store" };
 const canonicalTarget = "https://sdk-dev.game-fields.com/api/internal/operations/migration-011/diagnostic";
 const fallbackIdentity = {
@@ -33,6 +39,17 @@ function stopped(code: string, status: number) {
     code,
     secretFree: true,
   }, { status, headers: responseHeaders });
+}
+
+function stoppedPayload(code: string) {
+  return {
+    schemaVersion: 1,
+    task: "T-131-A4",
+    phase: "T-131-A4-v012",
+    status: "STOPPED",
+    code,
+    secretFree: true,
+  };
 }
 
 function exactKeys(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
@@ -123,11 +140,9 @@ export function isCanonicalDevelopmentDiagnosticPlatformRuntime(
     && identity.ref === "develop";
 }
 
-export async function proxySdkMigration011Diagnostic(
-  request: Request,
+async function authorizeSdkMigration011Diagnostic(
   dependencies: SdkMigration011DiagnosticProxyDependencies,
 ) {
-  if (request.method !== "GET") return stopped("METHOD_NOT_ALLOWED", 405);
   try {
     await dependencies.requireRecentMfa();
   } catch (error) {
@@ -136,10 +151,12 @@ export async function proxySdkMigration011Diagnostic(
   if (!isCanonicalDevelopmentDiagnosticPlatformRuntime(dependencies.runtimeIdentity())) {
     return stopped("DEVELOPMENT_RUNTIME_REQUIRED", 403);
   }
-  const incoming = new URL(request.url);
-  if (incoming.search || (await request.text()).length !== 0) {
-    return stopped("DIAGNOSTIC_INPUT_NOT_ALLOWED", 400);
-  }
+  return null;
+}
+
+async function dispatchSdkMigration011Diagnostic(
+  dependencies: SdkMigration011DiagnosticProxyDependencies,
+) {
   const target = dependencies.targetUrl();
   if (target !== canonicalTarget) return stopped("DEVELOPMENT_RUNTIME_REQUIRED", 403);
   const identity = dependencies.operationIdentity();
@@ -156,4 +173,47 @@ export async function proxySdkMigration011Diagnostic(
   } catch {
     return stopped("SDK_MIGRATION_011_DIAGNOSTIC_UNAVAILABLE", 503);
   }
+}
+
+export async function renderSdkMigration011Diagnostic(
+  dependencies: SdkMigration011DiagnosticProxyDependencies,
+) {
+  const authorizationFailure = await authorizeSdkMigration011Diagnostic(dependencies);
+  if (authorizationFailure) return authorizationFailure;
+  return dispatchSdkMigration011Diagnostic(dependencies);
+}
+
+export async function loadSdkMigration011DiagnosticPageModel(
+  dependencies: SdkMigration011DiagnosticProxyDependencies,
+): Promise<SdkMigration011DiagnosticPageModel> {
+  const response = await renderSdkMigration011Diagnostic(dependencies);
+  const responsePayload = await response.json().catch(() => null);
+  const payload = response.ok && validPayload(responsePayload)
+    ? responsePayload
+    : stoppedPayload(
+      response.status === 401
+        ? "SITE_ADMIN_AUTH_REQUIRED"
+        : response.status === 403
+          ? "SITE_ADMIN_STEP_UP_OR_DEVELOPMENT_RUNTIME_REQUIRED"
+          : "SDK_MIGRATION_011_DIAGNOSTIC_UNAVAILABLE",
+    );
+  return {
+    httpStatus: response.status,
+    payload,
+    serializedPayload: JSON.stringify(payload, null, 2),
+  };
+}
+
+export async function proxySdkMigration011Diagnostic(
+  request: Request,
+  dependencies: SdkMigration011DiagnosticProxyDependencies,
+) {
+  if (request.method !== "GET") return stopped("METHOD_NOT_ALLOWED", 405);
+  const authorizationFailure = await authorizeSdkMigration011Diagnostic(dependencies);
+  if (authorizationFailure) return authorizationFailure;
+  const incoming = new URL(request.url);
+  if (incoming.search || (await request.text()).length !== 0) {
+    return stopped("DIAGNOSTIC_INPUT_NOT_ALLOWED", 400);
+  }
+  return dispatchSdkMigration011Diagnostic(dependencies);
 }
