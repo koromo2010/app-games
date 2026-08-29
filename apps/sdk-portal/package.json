@@ -20,7 +20,10 @@
     "@game-fields/sdk-service-auth": "0.2.0",
     "@neondatabase/serverless": "^1.1.0",
     "esbuild": "^0.28.1",
+    "linkedom": "0.18.13",
     "next": "16.2.4",
+    "postcss": "8.5.25",
+    "quickjs-emscripten": "^0.32.0",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
