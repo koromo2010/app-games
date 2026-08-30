@@ -1,6 +1,7 @@
 "use client";
 
 import { AppLink as Link } from "@/app/components/AppLink";
+import { LocaleSwitcher } from "@/app/components/LocaleSwitcher";
 import { type ChangeEvent, type FormEvent, useCallback, useEffect, useState } from "react";
 import { startAuthentication, startRegistration, type PublicKeyCredentialCreationOptionsJSON, type PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/browser";
 import { uploadSiteIcon } from "@/lib/site-icon-image-client";
@@ -48,12 +49,13 @@ function errorMessage(error: unknown, fallback: string) {
   return messages[code] ?? fallback;
 }
 
-export function SiteAdminPanel({ showPreviewVocabularyMigrations, releaseManagementMode, showOriginalDataPreservation, showDevelopmentMigration011Operator, initialLogoutResult }: {
+export function SiteAdminPanel({ showPreviewVocabularyMigrations, releaseManagementMode, showOriginalDataPreservation, showDevelopmentMigration011Operator, initialLogoutResult, showInlineLocaleSwitcher = true }: {
   showPreviewVocabularyMigrations: boolean;
   releaseManagementMode: "preview" | "live" | null;
   showOriginalDataPreservation: boolean;
   showDevelopmentMigration011Operator: boolean;
   initialLogoutResult?: SiteAdminLogoutResult;
+  showInlineLocaleSwitcher?: boolean;
 }) {
   const [screen, setScreen] = useState<ScreenState>(initialLogoutResult === "LOGOUT_COMPLETE" ? "login" : "checking");
   const [loginMethod, setLoginMethod] = useState<LoginMethod>("account");
@@ -201,10 +203,11 @@ export function SiteAdminPanel({ showPreviewVocabularyMigrations, releaseManagem
     finally { setIsUploading(false); }
   };
 
-  if (screen === "checking") return <main className="grid min-h-screen place-items-center bg-slate-950 p-6 text-white"><p className="animate-pulse text-sm font-bold text-cyan-200">管理画面を確認中…</p></main>;
+  if (screen === "checking") return <main className="flex min-h-screen flex-col bg-slate-950 p-4 text-white">{showInlineLocaleSwitcher && <div className="flex shrink-0 justify-end"><LocaleSwitcher className="shrink-0" /></div>}<div className="grid flex-1 place-items-center p-2"><p className="animate-pulse text-sm font-bold text-cyan-200">管理画面を確認中…</p></div></main>;
   if (screen === "login") return (
-    <main className="grid min-h-screen place-items-center bg-[radial-gradient(circle_at_top,#164e63_0%,#020617_48%)] p-4 text-white">
-      <form onSubmit={login} className="w-full max-w-md rounded-2xl border border-white/10 bg-slate-900/90 p-6 shadow-2xl">
+    <main className="flex min-h-screen flex-col bg-[radial-gradient(circle_at_top,#164e63_0%,#020617_48%)] p-4 text-white">
+      {showInlineLocaleSwitcher && <div className="flex shrink-0 justify-end"><LocaleSwitcher className="shrink-0" /></div>}
+      <div className="grid flex-1 place-items-center py-4"><form onSubmit={login} className="w-full max-w-md rounded-2xl border border-white/10 bg-slate-900/90 p-6 shadow-2xl">
         <p className="text-xs font-bold uppercase tracking-[0.22em] text-cyan-300">Game Fields Admin</p><h1 className="mt-2 text-3xl font-black">サイト管理</h1>
         <p className="mt-3 text-sm leading-6 text-slate-300">管理者アカウントでログインしてください。ログイン状態はこのブラウザに12時間だけ保持されます。</p>
         <div className="mt-5 grid grid-cols-2 rounded-xl bg-black/25 p-1" role="tablist" aria-label="ログイン方法">
@@ -216,13 +219,14 @@ export function SiteAdminPanel({ showPreviewVocabularyMigrations, releaseManagem
         {message && <p role="alert" className="mt-4 rounded-lg border border-amber-300/30 bg-amber-300/10 px-3 py-2 text-sm text-amber-100">{message}</p>}
         <button type="submit" disabled={!password || (loginMethod === "account" && !email.trim()) || isSaving} className="mt-5 w-full rounded-xl bg-cyan-300 px-4 py-3 font-black text-slate-950 transition hover:bg-cyan-200 disabled:opacity-40">{isSaving ? "確認中…" : "管理画面を開く"}</button>
         <Link href="/games" className="mt-4 block text-center text-sm font-bold text-slate-400 hover:text-white">ゲームロビーへ戻る</Link>
-      </form>
+      </form></div>
     </main>
   );
 
   if (screen === "mfa") return (
-    <main className="grid min-h-screen place-items-center bg-[radial-gradient(circle_at_top,#164e63_0%,#020617_48%)] p-4 text-white">
-      <section className="w-full max-w-md rounded-2xl border border-white/10 bg-slate-900/90 p-6 shadow-2xl">
+    <main className="flex min-h-screen flex-col bg-[radial-gradient(circle_at_top,#164e63_0%,#020617_48%)] p-4 text-white">
+      {showInlineLocaleSwitcher && <div className="flex shrink-0 justify-end"><LocaleSwitcher className="shrink-0" /></div>}
+      <div className="grid flex-1 place-items-center py-4"><section className="w-full max-w-md rounded-2xl border border-white/10 bg-slate-900/90 p-6 shadow-2xl">
         <p className="text-xs font-bold uppercase tracking-[0.22em] text-cyan-300">Two-factor authentication</p>
         <h1 className="mt-2 text-2xl font-black">{mfaMode === "enroll" ? "パスキーを登録" : "本人確認"}</h1>
         <p className="mt-3 text-sm leading-6 text-slate-300">{mfaMode === "enroll" ? "この管理者にはMFAがまだありません。このPCのWindows Hello（PIN・指紋・顔認証）を登録してください。USBキーや別端末は登録できません。登録後、Authenticatorも追加できます。" : totpAvailable ? "Windows Helloまたは登録済みAuthenticatorの6桁コードでログインを完了します。" : "Windows Helloまたは下の一回限りの復旧コードでログインを完了します。Authenticatorの6桁コードはこのログインでは利用できず、復旧コード欄に入力しないでください。"}</p>
@@ -231,17 +235,17 @@ export function SiteAdminPanel({ showPreviewVocabularyMigrations, releaseManagem
         {mfaMode === "login" && <form onSubmit={useRecoveryCode} className="mt-6 border-t border-white/10 pt-5"><label className="block text-sm font-bold text-slate-200">パスキーを使えない場合の一回限りの復旧コード<input value={recoveryCode} onChange={(event) => setRecoveryCode(event.target.value)} placeholder="復旧コード" autoComplete="one-time-code" className="mt-2 w-full rounded-xl border border-white/15 bg-black/25 px-4 py-3 font-mono text-white outline-none focus:border-cyan-300" /><span className="mt-2 block text-xs font-normal leading-5 text-slate-400">Authenticatorの6桁コードはこの欄に入力しません。利用できる場合は上のAuthenticator専用欄を使ってください。</span></label><button type="submit" disabled={!recoveryCode.trim() || isSaving} className="mt-3 w-full rounded-xl border border-white/15 px-4 py-3 text-sm font-bold hover:bg-white/10 disabled:opacity-40">復旧コードでログイン</button></form>}
         {message && <p role="alert" className="mt-4 rounded-lg border border-amber-300/30 bg-amber-300/10 px-3 py-2 text-sm text-amber-100">{message}</p>}
         <button type="button" onClick={() => { setScreen("login"); setMfaOptions(null); setTotpAvailable(false); setTotpCode(""); setMessage(""); }} className="mt-4 w-full text-sm font-bold text-slate-400 hover:text-white">ログイン方法を選び直す</button>
-      </section>
+      </section></div>
     </main>
   );
 
   if (screen === "recovery-codes") return (
-    <main className="grid min-h-screen place-items-center bg-slate-950 p-4 text-white"><section className="w-full max-w-lg rounded-2xl border border-amber-300/25 bg-slate-900 p-6 shadow-2xl"><p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-300">Recovery codes</p><h1 className="mt-2 text-2xl font-black">復旧コードを保存してください</h1><p className="mt-3 text-sm leading-6 text-slate-300">パスキーを使えないときに、各コードを1回だけ使えます。この画面を閉じると再表示できません。</p><pre className="mt-5 grid grid-cols-2 gap-2 rounded-xl bg-black/30 p-4 text-center font-mono text-sm">{issuedRecoveryCodes.map((code) => <span key={code}>{code}</span>)}</pre><button type="button" onClick={() => void navigator.clipboard.writeText(issuedRecoveryCodes.join("\n"))} className="mt-4 w-full rounded-xl border border-white/15 px-4 py-3 text-sm font-bold hover:bg-white/10">すべてコピー</button>{message && <p role="alert" className="mt-4 rounded-lg border border-amber-300/30 bg-amber-300/10 px-3 py-2 text-sm text-amber-100">{message}</p>}<button type="button" onClick={() => void continueAfterRecoveryCodes()} className="mt-3 w-full rounded-xl bg-cyan-300 px-4 py-3 font-black text-slate-950 hover:bg-cyan-200">保存したので管理画面へ進む</button></section></main>
+    <main className="flex min-h-screen flex-col bg-slate-950 p-4 text-white">{showInlineLocaleSwitcher && <div className="flex shrink-0 justify-end"><LocaleSwitcher className="shrink-0" /></div>}<div className="grid flex-1 place-items-center py-4"><section className="w-full max-w-lg rounded-2xl border border-amber-300/25 bg-slate-900 p-6 shadow-2xl"><p className="text-xs font-bold uppercase tracking-[0.2em] text-amber-300">Recovery codes</p><h1 className="mt-2 text-2xl font-black">復旧コードを保存してください</h1><p className="mt-3 text-sm leading-6 text-slate-300">パスキーを使えないときに、各コードを1回だけ使えます。この画面を閉じると再表示できません。</p><pre className="mt-5 grid grid-cols-2 gap-2 rounded-xl bg-black/30 p-4 text-center font-mono text-sm">{issuedRecoveryCodes.map((code) => <span key={code}>{code}</span>)}</pre><button type="button" onClick={() => void navigator.clipboard.writeText(issuedRecoveryCodes.join("\n"))} className="mt-4 w-full rounded-xl border border-white/15 px-4 py-3 text-sm font-bold hover:bg-white/10">すべてコピー</button>{message && <p role="alert" className="mt-4 rounded-lg border border-amber-300/30 bg-amber-300/10 px-3 py-2 text-sm text-amber-100">{message}</p>}<button type="button" onClick={() => void continueAfterRecoveryCodes()} className="mt-3 w-full rounded-xl bg-cyan-300 px-4 py-3 font-black text-slate-950 hover:bg-cyan-200">保存したので管理画面へ進む</button></section></div></main>
   );
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
-      <header className="border-b border-white/10 bg-slate-900/90"><div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4"><div><p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-300">Game Fields Admin</p><h1 className="text-2xl font-black">サイト管理</h1></div><div className="flex flex-wrap justify-end gap-2">{showDevelopmentMigration011Operator && session?.scope === "full" && <Link href="/site-admin/runtime-operations/sdk-migration-011" className="rounded-lg border border-amber-300/30 px-3 py-2 text-sm font-bold text-amber-100 hover:bg-amber-300/10">Migration 011</Link>}<Link href="/games" className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold hover:bg-white/10">サイトを見る</Link><form method="post" action={siteAdminLogoutPath}><button type="submit" className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold text-slate-300 hover:bg-white/10">ログアウト</button></form></div></div></header>
+      <header className="border-b border-white/10 bg-slate-900/90"><div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"><div className="shrink-0"><p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-300">Game Fields Admin</p><h1 className="text-2xl font-black">サイト管理</h1></div><div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end" data-site-admin-header-actions>{showInlineLocaleSwitcher && <LocaleSwitcher className="shrink-0" />}{showDevelopmentMigration011Operator && session?.scope === "full" && <Link href="/site-admin/runtime-operations/sdk-migration-011" className="rounded-lg border border-amber-300/30 px-3 py-2 text-sm font-bold text-amber-100 hover:bg-amber-300/10">Migration 011</Link>}<Link href="/games" className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold hover:bg-white/10">サイトを見る</Link><form method="post" action={siteAdminLogoutPath}><button type="submit" className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold text-slate-300 hover:bg-white/10">ログアウト</button></form></div></div></header>
       {message && section !== "site-settings" && <p role="alert" className="mx-auto mt-4 max-w-6xl rounded-xl border border-amber-300/30 bg-amber-300/10 px-4 py-3 text-sm text-amber-100">{message}</p>}
       {session?.scope === "recovery" && <div className="border-b border-amber-300/20 bg-amber-300/10 px-4 py-3 text-center text-sm font-bold text-amber-100">復旧モード：15分間、管理者アカウントの復旧と診断だけを行えます。設定変更はできません。</div>}
       {session?.scope === "full" && session.method === "recovery-code" && <div className="border-b border-amber-300/20 bg-amber-300/10 px-4 py-3 text-center text-sm font-bold text-amber-100">復旧コードでログイン中です。管理者アカウントから、このPCのWindows Helloを登録してください。</div>}

@@ -53,6 +53,7 @@ export default async function SiteAdminLogoutReconciliationPage() {
         ref: process.env.VERCEL_GIT_COMMIT_REF,
       })}
       initialLogoutResult={result}
+      showInlineLocaleSwitcher={false}
     />
   </div>;
 }
