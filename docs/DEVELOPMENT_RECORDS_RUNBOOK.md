@@ -38,16 +38,27 @@ POLICY_REFERENCE: docs/DEVELOPMENT_EXECUTION_RULES.md @ <product-commit>
 
 repo-backedのsourceや文書を同じ内容でLibraryへ二重保存しない。secret、token、Cookie、接続文字列、Room codeはどの記録にも含めない。
 
-新しい実行入口となる`NEXT_INSTRUCTION`は、所定のcheckpoint repositoryとpathへ新規immutable Markdownとして保存し、record commit、blob、path、内容をremote read-backしてから引き渡す。保存不能なら`INSTRUCTION_RECORD_UNSAVED / AT RISK`とし、チャット本文だけを正式な新入口として扱わない。
+checkpoint repositoryの正規記録先は次に固定する。
+
+- repository: `koromo2010/app-games-checkpoints`
+- branch: `ops/game-fields-supervisor-records-20260803`
+- immutable Markdown: `docs/gpt-save/`
+- task current pointer: `tasks/<task-id>/current.json`
+
+`NEXT_INSTRUCTION`、`CHECKPOINT`、`EXECUTION_SHEET`、`RESULT`、`HANDOFF`は、既存pathを上書きせず`docs/gpt-save/`へ新規immutable Markdownとして保存する。taskのcurrent pointerだけは、remote read-back済みの最新recordを指す可変索引として`tasks/<task-id>/current.json`を更新できる。repository、branch、path、record commit、blob、内容をremote read-backしてから引き渡す。
+
+新しい実行入口となる`NEXT_INSTRUCTION`をこの記録先へ保存できない場合は`INSTRUCTION_RECORD_UNSAVED / AT RISK`とし、チャット本文だけを正式な新入口として扱わない。
 
 ## 3. checkpointと復旧
 
-remote未到達のままturnを終える場合は下記耐久checkpointを作り、少なくともtask、instruction identity、base、candidateまたは作業差分、完了済み工程、外部write件数、未完了、再開点を保存する。
+remote未到達のままturnを終える場合、または再生成困難な進捗が最後の耐久保存から約10分以上remote未到達のまま蓄積した場合は、下記耐久checkpointを作る。少なくともtask、instruction identity、base、candidateまたは作業差分、完了済み工程、外部write件数、未完了、再開点を保存する。
 
 - `RECOVERY_CHECKPOINT`: 同じ実行環境での短期再開に必要な最小記録
 - `FULL_RECOVERY_CHECKPOINT`: workspaceやthreadを失っても正本から再構成できる完全記録
 
-軽量checkpointは進捗損失を防ぐために作るが、fresh restoreはこの軽量checkpointごとには行わない。完全復旧性は重要な境界、candidate確定、外部write前後、handoff、terminal resultで検証する。
+約10分の基準は、突然のthread／workspace停止によるデータ損失を防ぐ軽量checkpointの契機であり、task停止、承認失効、正式result、bundle作成の契機ではない。短時間のread-only確認、再生成可能な中間出力、同じ意味の内部retryだけを理由にcheckpointを増やさない。
+
+軽量checkpointは進捗損失を防ぐために作るが、bundleやfresh restoreはこの軽量checkpointごとには行わない。完全復旧性は重要な境界、candidate確定、外部write前後、handoff、terminal resultで検証する。
 
 current pointerは最新の有効artifactを指す可変索引であり、履歴本文ではない。pointer更新前に対象recordとblobをremote read-backし、pointer更新後も参照先を再取得する。旧pointerや会話要約から条件を累積しない。
 

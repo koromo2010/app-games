@@ -18,7 +18,7 @@ test("execution rules separate product writes, recovery, checkpoints and formal 
   assert.match(rules, /tool名、schema、response path、parser、binding/);
   assert.match(rules, /通常のGit push承認待ち.*正式resultを作るterminal boundaryにはしない/);
   assert.match(rules, /Portal owner承認/);
-  assert.match(rules, /remote未到達のままturnを終える場合は下記耐久checkpoint/);
+  assert.match(rules, /remote未到達のままturnを終える場合.*下記耐久checkpoint/s);
   assert.match(rules, /canonical Git、checkpoint正本、共有済み領域、Library、current pointer/);
   assert.match(rules, /取得経路、対象DeploymentまたはURL、identity、取得時刻/);
   assert.match(rules, /内部のcommand、tool、workspace、順序、retry、helper等は.*実行計画/);
@@ -57,6 +57,12 @@ test("execution rules separate product writes, recovery, checkpoints and formal 
   assert.match(rules, /INSTRUCTION_RECORD_UNSAVED \/ AT RISK/);
   assert.match(rules, /`RECOVERY_CHECKPOINT`.*`FULL_RECOVERY_CHECKPOINT`/s);
   assert.match(rules, /fresh restoreはこの軽量checkpointごとには行わない/);
+  assert.match(rules, /`koromo2010\/app-games-checkpoints`/);
+  assert.match(rules, /`ops\/game-fields-supervisor-records-20260803`/);
+  assert.match(rules, /immutable Markdown: `docs\/gpt-save\/`/);
+  assert.match(rules, /task current pointer: `tasks\/<task-id>\/current\.json`/);
+  assert.match(rules, /約10分以上remote未到達/);
+  assert.match(rules, /task停止、承認失効、正式result、bundle作成の契機ではない/);
 });
 
 test("execution policy has one canonical root and conditionally loaded satellites", () => {

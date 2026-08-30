@@ -83,6 +83,7 @@ export function checkCanonicalDevelopmentPolicy(read = (path) => readFileSync(pa
   const current = read("docs/CURRENT_STATE.md");
   const handoff = read("docs/DEVELOPMENT_HANDOFF.md");
   const environment = read("docs/ENVIRONMENT_VARIABLES.md");
+  const records = read("docs/DEVELOPMENT_RECORDS_RUNBOOK.md");
 
   const agentLines = agents.split(/\r?\n/).filter((line) => line.trim()).length;
   if (agentLines > 40) errors.push(`AGENTS.md: ENTRY_GUIDE_TOO_LARGE lines=${agentLines}`);
@@ -115,6 +116,20 @@ export function checkCanonicalDevelopmentPolicy(read = (path) => readFileSync(pa
   }
   if (/AIはCloud Browser、connector、公式API、CLIその他の経路でVercelへ直接アクセスしない/.test(environment)) {
     errors.push("docs/ENVIRONMENT_VARIABLES.md: VERCEL_PUBLIC_READ_CONFLICT");
+  }
+  const recordLocators = [
+    "`koromo2010/app-games-checkpoints`",
+    "`ops/game-fields-supervisor-records-20260803`",
+    "`docs/gpt-save/`",
+    "`tasks/<task-id>/current.json`",
+  ];
+  for (const locator of recordLocators) {
+    if (!records.includes(locator)) {
+      errors.push(`docs/DEVELOPMENT_RECORDS_RUNBOOK.md: RECORD_LOCATOR_MISSING ${locator}`);
+    }
+  }
+  if (!records.includes("約10分以上remote未到達") || !records.includes("task停止、承認失効、正式result、bundle作成の契機ではない")) {
+    errors.push("docs/DEVELOPMENT_RECORDS_RUNBOOK.md: LIGHTWEIGHT_CHECKPOINT_CADENCE_MISSING");
   }
 
   return errors;
