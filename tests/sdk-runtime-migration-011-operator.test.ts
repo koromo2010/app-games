@@ -71,6 +71,14 @@ function canonicalLedger(through = 11): SdkMigrationLedgerRow[] {
     ];
 }
 
+function acceptedLegacy010Ledger(): SdkMigrationLedgerRow[] {
+  return canonicalLedger(10).map((row) => row.version === 10 ? {
+    version: 10,
+    name: "010_bounded_creator_quarantine_recovery.sql",
+    checksum: "a972cc0527040b3f2420e21ee59a0bf2bd1204d480ac5ac5cd62b7fad903f035",
+  } : row);
+}
+
 function operationGrant(
   overrides: Partial<SdkServiceOperationGrant> = {},
 ): SdkServiceOperationGrant {
@@ -456,6 +464,34 @@ test("Portal rejects every selector or fingerprint mismatch before execute", asy
   }
 });
 
+test("Portal preserves known preflight failures and classifies unexpected operator failures", async () => {
+  const preflight = await processSdkMigration011OperatorRequest(
+    new Request(`https://sdk.example${portalPath}`, { method: "POST" }),
+    operatorDependencies({
+      execute: async () => {
+        throw new SdkMigration011OperatorError(
+          "SDK_MIGRATION_011_PREFLIGHT_READ_FAILED",
+        );
+      },
+    }),
+  );
+  assert.equal(preflight.status, 503);
+  assert.equal(
+    (await responseJson(preflight)).code,
+    "SDK_MIGRATION_011_PREFLIGHT_READ_FAILED",
+  );
+
+  const unexpected = await processSdkMigration011OperatorRequest(
+    new Request(`https://sdk.example${portalPath}`, { method: "POST" }),
+    operatorDependencies({ execute: async () => { throw new Error("unexpected"); } }),
+  );
+  assert.equal(unexpected.status, 503);
+  assert.equal(
+    (await responseJson(unexpected)).code,
+    "SDK_MIGRATION_011_OPERATOR_FAILED",
+  );
+});
+
 test("ledger accepts canonical and exact legacy 005/010 lineages and rejects all near matches", () => {
   assert.doesNotThrow(() => assertSdkMigration011Ledger(canonicalLedger(10), "before"));
   assert.doesNotThrow(() => assertSdkMigration011Ledger(canonicalLedger(11), "after"));
@@ -465,11 +501,7 @@ test("ledger accepts canonical and exact legacy 005/010 lineages and rejects all
     checksum: "ef3f71bcb5ef919b392aa69fdbd0577580dcb1fab16bfeaa6514225f4d7487e7",
   } : row);
   assert.doesNotThrow(() => assertSdkMigration011Ledger(legacy005, "before"));
-  const legacy010 = canonicalLedger(10).map((row) => row.version === 10 ? {
-    version: 10,
-    name: "010_bounded_creator_quarantine_recovery.sql",
-    checksum: "a972cc0527040b3f2420e21ee59a0bf2bd1204d480ac5ac5cd62b7fad903f035",
-  } : row);
+  const legacy010 = acceptedLegacy010Ledger();
   assert.doesNotThrow(() => assertSdkMigration011Ledger(legacy010, "before"));
   assert.doesNotThrow(() => assertSdkMigration011Ledger([
     ...legacy010,
@@ -534,6 +566,30 @@ test("object contract rejects partial state and accepts only complete schema 11 
   }
 });
 
+test("schema 10 with accepted legacy 010 and zero migration objects reaches the apply boundary", async () => {
+  let ledger = acceptedLegacy010Ledger();
+  let objects = { ...emptySdkMigration011ObjectContract };
+  let applyCount = 0;
+  const database: SdkMigration011Database = {
+    readLedger: async () => ledger.map((row) => ({ ...row })),
+    readSchemaVersion: async () => ledger.at(-1)?.version ?? 0,
+    readObjectContract: async () => ({ ...objects }),
+    applyGuardedMigration: async () => {
+      applyCount += 1;
+      ledger = [...acceptedLegacy010Ledger(), canonicalLedger(11)[10]];
+      objects = { ...completeSdkMigration011ObjectContract };
+    },
+  };
+
+  assert.deepEqual(await executeSdkMigration011ExactlyOnce(database), {
+    status: "APPLIED",
+    schemaVersion: 11,
+    migrationVersion: 11,
+    writesPerformed: 1,
+  });
+  assert.equal(applyCount, 1);
+});
+
 test("one-time apply reaches exact schema 11 and already-applied match performs zero writes", async () => {
   let ledger = canonicalLedger(10);
   let objects = { ...emptySdkMigration011ObjectContract };
@@ -562,6 +618,30 @@ test("one-time apply reaches exact schema 11 and already-applied match performs 
     writesPerformed: 0,
   });
   assert.equal(applyCount, 1);
+});
+
+test("preflight ledger and object read failures are classified and never apply", async () => {
+  for (const failingRead of ["ledger", "objects"] as const) {
+    let applyCount = 0;
+    const database: SdkMigration011Database = {
+      readLedger: async () => {
+        if (failingRead === "ledger") throw new Error("ledger unavailable");
+        return canonicalLedger(10);
+      },
+      readSchemaVersion: async () => 10,
+      readObjectContract: async () => {
+        if (failingRead === "objects") throw new Error("catalog unavailable");
+        return { ...emptySdkMigration011ObjectContract };
+      },
+      applyGuardedMigration: async () => { applyCount += 1; },
+    };
+    await assert.rejects(
+      () => executeSdkMigration011ExactlyOnce(database),
+      (error: unknown) => error instanceof SdkMigration011OperatorError
+        && error.code === "SDK_MIGRATION_011_PREFLIGHT_READ_FAILED",
+    );
+    assert.equal(applyCount, 0);
+  }
 });
 
 test("transaction and post-commit failures never produce accepted application", async () => {
@@ -608,6 +688,12 @@ test("operator source is byte-equivalent to migration 011 and binds the canonica
   assert.match(sdkMigration011GuardedSql, /a972cc0527040b3f2420e21ee59a0bf2bd1204d480ac5ac5cd62b7fad903f035/);
   assert.match(sdkMigration011ObjectContractSql, /presentObjectCount/);
   assert.match(sdkMigration011ObjectContractSql, /COUNT\(\*\) = 40/);
+  assert.match(sdkMigration011ObjectContractSql, /target_relation_oids/);
+  assert.match(
+    sdkMigration011ObjectContractSql,
+    /to_regclass\('public\.sdk_development_private_workspace_import_operations'\)/,
+  );
+  assert.doesNotMatch(sdkMigration011ObjectContractSql, /::regclass/);
   assert.doesNotMatch(
     sdkMigration011Source,
     /INSERT\s+INTO\s+(?:sdk_development_private_workspace|sdk_creators|sdk_games|sdk_app_releases|sdk_oauth_grants)/i,
@@ -724,6 +810,36 @@ test("proxy accepts only APPLIED or exact ALREADY_APPLIED_MATCH receipts", async
     );
     assert.equal(invalid.status, 502);
   }
+});
+
+test("proxy preserves known operator causes and reserves unavailable for unknown upstream transport", async () => {
+  const preflight = await proxySdkMigration011Operator(
+    new Request(`https://dev.game-fields.com${platformPath}`, { method: "POST" }),
+    proxyDependencies({
+      fetchTarget: (async () => Response.json({
+        schemaVersion: 1,
+        task: "T-131-A4",
+        phase: "T-131-A4-v008",
+        status: "STOPPED",
+        code: "SDK_MIGRATION_011_PREFLIGHT_READ_FAILED",
+        secretFree: true,
+      }, { status: 503 })) as typeof fetch,
+    }),
+  );
+  assert.equal(preflight.status, 503);
+  assert.equal(
+    (await responseJson(preflight)).code,
+    "SDK_MIGRATION_011_PREFLIGHT_READ_FAILED",
+  );
+
+  const unavailable = await proxySdkMigration011Operator(
+    new Request(`https://dev.game-fields.com${platformPath}`, { method: "POST" }),
+    proxyDependencies({
+      fetchTarget: (async () => { throw new Error("transport unknown"); }) as typeof fetch,
+    }),
+  );
+  assert.equal(unavailable.status, 503);
+  assert.equal((await responseJson(unavailable)).code, "SDK_MIGRATION_011_UNAVAILABLE");
 });
 
 test("both routes are POST-only and expose no database, SQL, migration, target, or operation input", () => {

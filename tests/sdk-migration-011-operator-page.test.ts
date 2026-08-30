@@ -80,15 +80,22 @@ test("operator accepts only the fixed Development fingerprint tuple", async () =
 });
 
 test("operator projects bounded STOPPED responses and rejects unknown output", async () => {
-  const stopped = createSingleUseMigration011Submitter((async () => Response.json({
-    schemaVersion: 1,
-    task: "T-131-A4",
-    phase: "T-131-A4-v008",
-    status: "STOPPED",
-    code: "SITE_ADMIN_STEP_UP_REQUIRED",
-    secretFree: true,
-  }, { status: 403 })) as typeof fetch);
-  assert.deepEqual(await stopped(), { kind: "stopped", code: "SITE_ADMIN_STEP_UP_REQUIRED" });
+  for (const code of [
+    "SITE_ADMIN_STEP_UP_REQUIRED",
+    "SDK_MIGRATION_011_PREFLIGHT_READ_FAILED",
+    "SDK_MIGRATION_011_OPERATOR_FAILED",
+    "SDK_MIGRATION_011_UNAVAILABLE",
+  ]) {
+    const stopped = createSingleUseMigration011Submitter((async () => Response.json({
+      schemaVersion: 1,
+      task: "T-131-A4",
+      phase: "T-131-A4-v008",
+      status: "STOPPED",
+      code,
+      secretFree: true,
+    }, { status: code === "SITE_ADMIN_STEP_UP_REQUIRED" ? 403 : 503 })) as typeof fetch);
+    assert.deepEqual(await stopped(), { kind: "stopped", code });
+  }
 
   const invalid = createSingleUseMigration011Submitter((async () => Response.json({ secret: "leak" }, { status: 500 })) as typeof fetch);
   assert.deepEqual(await invalid(), { kind: "failed", code: "INVALID_RESPONSE" });

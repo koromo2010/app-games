@@ -373,16 +373,17 @@ WITH expected_columns(table_name, column_name) AS (
       'sdk_development_private_workspace_games',
       'sdk_development_private_workspace_files'
     )
+), target_relation_oids(oid) AS (
+  VALUES
+    (to_regclass('public.sdk_development_private_workspace_import_operations')::oid),
+    (to_regclass('public.sdk_development_private_workspaces')::oid),
+    (to_regclass('public.sdk_development_private_workspace_games')::oid),
+    (to_regclass('public.sdk_development_private_workspace_files')::oid)
 ), constraint_contract AS (
   SELECT COUNT(*) = 40
-    AND bool_and(contype IN ('p', 'u', 'f', 'c')) AS exact
+    AND COALESCE(bool_and(contype IN ('p', 'u', 'f', 'c')), false) AS exact
   FROM pg_constraint
-  WHERE conrelid IN (
-    'public.sdk_development_private_workspace_import_operations'::regclass,
-    'public.sdk_development_private_workspaces'::regclass,
-    'public.sdk_development_private_workspace_games'::regclass,
-    'public.sdk_development_private_workspace_files'::regclass
-  )
+  WHERE conrelid IN (SELECT oid FROM target_relation_oids WHERE oid IS NOT NULL)
 ), function_contract AS (
   SELECT COUNT(*) = 1
     AND bool_and(p.provolatile = 's')
@@ -448,8 +449,10 @@ export type SdkMigration011OperatorCode =
   | "SDK_MIGRATION_LEDGER_INCONSISTENT"
   | "SDK_MIGRATION_LEDGER_AHEAD"
   | "SDK_MIGRATION_011_OBJECT_CONTRACT_MISMATCH"
+  | "SDK_MIGRATION_011_PREFLIGHT_READ_FAILED"
   | "SDK_MIGRATION_011_TRANSACTION_FAILED"
   | "SDK_MIGRATION_011_POST_COMMIT_READBACK_FAILED"
+  | "SDK_MIGRATION_011_OPERATOR_FAILED"
   | "SDK_OPERATION_GRANT_REPLAY";
 
 export class SdkMigration011OperatorError extends Error {
@@ -603,7 +606,14 @@ async function readAfterState(database: SdkMigration011Database) {
 export async function executeSdkMigration011ExactlyOnce(
   database: SdkMigration011Database,
 ): Promise<SdkMigration011ExecutionResult> {
-  const before = await database.readLedger();
+  let before: SdkMigrationLedgerRow[];
+  try {
+    before = await database.readLedger();
+  } catch {
+    throw new SdkMigration011OperatorError(
+      "SDK_MIGRATION_011_PREFLIGHT_READ_FAILED",
+    );
+  }
   const alreadyApplied = before.some((row) => Number(row.version) === 11);
   if (alreadyApplied) {
     await readAfterState(database);
@@ -615,7 +625,14 @@ export async function executeSdkMigration011ExactlyOnce(
     };
   }
   assertSdkMigration011Ledger(before, "before");
-  const beforeObjects = await database.readObjectContract();
+  let beforeObjects: SdkMigration011ObjectContract;
+  try {
+    beforeObjects = await database.readObjectContract();
+  } catch {
+    throw new SdkMigration011OperatorError(
+      "SDK_MIGRATION_011_PREFLIGHT_READ_FAILED",
+    );
+  }
   assertSdkMigration011Objects(beforeObjects, "before");
   try {
     await database.applyGuardedMigration();

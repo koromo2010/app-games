@@ -169,6 +169,6 @@ export async function processSdkMigration011OperatorRequest(
         || error.code === "SDK_MIGRATION_011_OBJECT_CONTRACT_MISMATCH";
       return stopped(error.code, conflict ? 409 : 503);
     }
-    return stopped("SDK_MIGRATION_011_UNAVAILABLE", 503);
+    return stopped("SDK_MIGRATION_011_OPERATOR_FAILED", 503);
   }
 }
