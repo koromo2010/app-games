@@ -1,12 +1,12 @@
 "use client";
 
 import { AppLink as Link } from "@/app/components/AppLink";
-import { type ChangeEvent, type FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { type ChangeEvent, type FormEvent, useCallback, useEffect, useState } from "react";
 import { startAuthentication, startRegistration, type PublicKeyCredentialCreationOptionsJSON, type PublicKeyCredentialRequestOptionsJSON } from "@simplewebauthn/browser";
 import { uploadSiteIcon } from "@/lib/site-icon-image-client";
 import { ensureSiteAdminStepUp } from "@/lib/site-admin-passkey-client";
 import { defaultSiteSettings, siteSettingsLimits, type SiteSettings } from "@/lib/site-settings";
-import { logoutSiteAdmin, type SiteAdminLogoutFailureCode } from "@/lib/site-admin-logout-client";
+import { siteAdminLogoutPath, type SiteAdminLogoutResult } from "@/lib/site-admin-logout-navigation";
 import { AdminAccountsPanel } from "./AdminAccountsPanel";
 import { AdminDashboard } from "./AdminDashboard";
 import { AdminHyperparametersPanel } from "./AdminHyperparametersPanel";
@@ -48,13 +48,14 @@ function errorMessage(error: unknown, fallback: string) {
   return messages[code] ?? fallback;
 }
 
-export function SiteAdminPanel({ showPreviewVocabularyMigrations, releaseManagementMode, showOriginalDataPreservation, showDevelopmentMigration011Operator }: {
+export function SiteAdminPanel({ showPreviewVocabularyMigrations, releaseManagementMode, showOriginalDataPreservation, showDevelopmentMigration011Operator, initialLogoutResult }: {
   showPreviewVocabularyMigrations: boolean;
   releaseManagementMode: "preview" | "live" | null;
   showOriginalDataPreservation: boolean;
   showDevelopmentMigration011Operator: boolean;
+  initialLogoutResult?: SiteAdminLogoutResult;
 }) {
-  const [screen, setScreen] = useState<ScreenState>("checking");
+  const [screen, setScreen] = useState<ScreenState>(initialLogoutResult === "LOGOUT_COMPLETE" ? "login" : "checking");
   const [loginMethod, setLoginMethod] = useState<LoginMethod>("account");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -66,15 +67,16 @@ export function SiteAdminPanel({ showPreviewVocabularyMigrations, releaseManagem
   const [recoveryCode, setRecoveryCode] = useState("");
   const [issuedRecoveryCodes, setIssuedRecoveryCodes] = useState<string[]>([]);
   const [settings, setSettings] = useState<SiteSettings>(defaultSiteSettings);
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState(initialLogoutResult === "SESSION_STILL_AUTHENTICATED"
+    ? "サーバー上の管理者セッションが残っているため、ログアウトを完了できませんでした。"
+    : "");
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const logoutInFlight = useRef(false);
   const [section, setSection] = useState<AdminSection>("dashboard");
   const authExpired = useCallback(() => { setSession(null); setScreen("login"); setMessage("管理画面のログイン期限が切れました。もう一度ログインしてください。"); }, []);
 
   useEffect(() => {
+    if (initialLogoutResult === "LOGOUT_COMPLETE") return;
     const controller = new AbortController();
     void fetch("/api/admin/site-settings", { cache: "no-store", signal: controller.signal }).then(async (response) => {
       const data = await response.json().catch(() => null) as { settings?: SiteSettings; session?: AdminSession; error?: string } | null;
@@ -86,7 +88,7 @@ export function SiteAdminPanel({ showPreviewVocabularyMigrations, releaseManagem
       setScreen("login"); setMessage("管理画面を読み込めませんでした。");
     });
     return () => controller.abort();
-  }, []);
+  }, [initialLogoutResult]);
 
   const login = async (event: FormEvent) => {
     event.preventDefault();
@@ -199,36 +201,6 @@ export function SiteAdminPanel({ showPreviewVocabularyMigrations, releaseManagem
     finally { setIsUploading(false); }
   };
 
-  const logout = async () => {
-    if (logoutInFlight.current) return;
-    logoutInFlight.current = true;
-    setIsLoggingOut(true);
-    setMessage("");
-    const result = await logoutSiteAdmin();
-    if (result.ok) {
-      setSession(null);
-      setScreen("login");
-      setEmail("");
-      setPassword("");
-      setMfaOptions(null);
-      setTotpAvailable(false);
-      setTotpCode("");
-      setRecoveryCode("");
-      setMessage("");
-    } else {
-      const failureMessages: Record<SiteAdminLogoutFailureCode, string> = {
-        DELETE_FAILED: "ログアウト要求がサーバーに拒否されました。認証済み画面を維持しています。",
-        DELETE_RESPONSE_INVALID: "ログアウト結果を確認できませんでした。認証済み画面を維持しています。",
-        RECONCILIATION_FAILED: "ログアウト後のセッション状態を確認できませんでした。認証済み画面を維持しています。",
-        SESSION_STILL_AUTHENTICATED: "サーバー上の管理者セッションが残っているため、ログアウトを完了できませんでした。",
-        TRANSPORT_FAILED: "ログアウト通信に失敗しました。認証済み画面を維持しています。",
-      };
-      setMessage(failureMessages[result.code]);
-    }
-    setIsLoggingOut(false);
-    logoutInFlight.current = false;
-  };
-
   if (screen === "checking") return <main className="grid min-h-screen place-items-center bg-slate-950 p-6 text-white"><p className="animate-pulse text-sm font-bold text-cyan-200">管理画面を確認中…</p></main>;
   if (screen === "login") return (
     <main className="grid min-h-screen place-items-center bg-[radial-gradient(circle_at_top,#164e63_0%,#020617_48%)] p-4 text-white">
@@ -269,7 +241,7 @@ export function SiteAdminPanel({ showPreviewVocabularyMigrations, releaseManagem
 
   return (
     <main className="min-h-screen bg-slate-950 text-white">
-      <header className="border-b border-white/10 bg-slate-900/90"><div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4"><div><p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-300">Game Fields Admin</p><h1 className="text-2xl font-black">サイト管理</h1></div><div className="flex flex-wrap justify-end gap-2">{showDevelopmentMigration011Operator && session?.scope === "full" && <Link href="/site-admin/runtime-operations/sdk-migration-011" className="rounded-lg border border-amber-300/30 px-3 py-2 text-sm font-bold text-amber-100 hover:bg-amber-300/10">Migration 011</Link>}<Link href="/games" className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold hover:bg-white/10">サイトを見る</Link><button type="button" disabled={isLoggingOut} onClick={() => void logout()} className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold text-slate-300 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40">{isLoggingOut ? "ログアウト確認中…" : "ログアウト"}</button></div></div></header>
+      <header className="border-b border-white/10 bg-slate-900/90"><div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4"><div><p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-300">Game Fields Admin</p><h1 className="text-2xl font-black">サイト管理</h1></div><div className="flex flex-wrap justify-end gap-2">{showDevelopmentMigration011Operator && session?.scope === "full" && <Link href="/site-admin/runtime-operations/sdk-migration-011" className="rounded-lg border border-amber-300/30 px-3 py-2 text-sm font-bold text-amber-100 hover:bg-amber-300/10">Migration 011</Link>}<Link href="/games" className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold hover:bg-white/10">サイトを見る</Link><form method="post" action={siteAdminLogoutPath}><button type="submit" className="rounded-lg border border-white/15 px-3 py-2 text-sm font-bold text-slate-300 hover:bg-white/10">ログアウト</button></form></div></div></header>
       {message && section !== "site-settings" && <p role="alert" className="mx-auto mt-4 max-w-6xl rounded-xl border border-amber-300/30 bg-amber-300/10 px-4 py-3 text-sm text-amber-100">{message}</p>}
       {session?.scope === "recovery" && <div className="border-b border-amber-300/20 bg-amber-300/10 px-4 py-3 text-center text-sm font-bold text-amber-100">復旧モード：15分間、管理者アカウントの復旧と診断だけを行えます。設定変更はできません。</div>}
       {session?.scope === "full" && session.method === "recovery-code" && <div className="border-b border-amber-300/20 bg-amber-300/10 px-4 py-3 text-center text-sm font-bold text-amber-100">復旧コードでログイン中です。管理者アカウントから、このPCのWindows Helloを登録してください。</div>}

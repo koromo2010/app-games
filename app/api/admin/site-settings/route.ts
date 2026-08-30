@@ -1,6 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { randomBytes } from "node:crypto";
-import { clearSiteAdminCookie, publicSiteAdminSession, requireRecentSiteAdminMfa, requireSiteAdminSession, setSiteAdminChallengeCookie, setSiteAdminCookie, siteAdminAuthorizationError } from "@/lib/site-admin-auth";
+import { publicSiteAdminSession, requireRecentSiteAdminMfa, requireSiteAdminSession, setSiteAdminChallengeCookie, setSiteAdminCookie, siteAdminAuthorizationError } from "@/lib/site-admin-auth";
 import { resolveSiteAdminPassword, verifySiteAdminPassword } from "@/lib/site-admin-auth-core";
 import { createRequestTelemetry } from "@/lib/observability";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
@@ -129,17 +129,5 @@ export async function PATCH(request: Request) {
     if (error instanceof Error && error.message === "SITE_SETTINGS_STORE_NOT_CONFIGURED") return Response.json({ error: "SITE_SETTINGS_STORE_NOT_CONFIGURED" }, { status: 503 });
     telemetry.failure("site.settings", error, 500, { action: "update" });
     return Response.json({ error: "SITE_SETTINGS_SAVE_FAILED" }, { status: 500 });
-  }
-}
-
-export async function DELETE() {
-  try {
-    await clearSiteAdminCookie();
-    return Response.json({ ok: true }, { headers: privateNoStoreHeaders });
-  } catch {
-    return Response.json(
-      { error: "SITE_ADMIN_LOGOUT_FAILED" },
-      { status: 500, headers: privateNoStoreHeaders },
-    );
   }
 }
