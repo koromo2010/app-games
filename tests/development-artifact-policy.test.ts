@@ -17,6 +17,14 @@ test("policy identity is reused during one active task instead of remote-reading
   assert.match(records, /record作成.*remote再確認の契機にしない/);
 });
 
+test("user-facing task references pair the first ID with a short title", () => {
+  const records = readFileSync("docs/DEVELOPMENT_RECORDS_RUNBOOK.md", "utf8");
+  assert.match(records, /T番号を案件説明の代わりにしない/);
+  assert.match(records, /`T-<id>（短い案件名）`/);
+  assert.match(records, /同じ表示内の再出.*IDだけでよい/);
+  assert.match(records, /新しいscopeやstateを加えない/);
+});
+
 test("a next instruction contains only its pinned contract reference", () => {
   const instruction = `
 # T-200 next instruction

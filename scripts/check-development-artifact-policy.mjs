@@ -223,6 +223,9 @@ export function checkCanonicalDevelopmentPolicy(read = (path) => readFileSync(pa
   if (!hasAll(records, [
     "`ARTIFACT_TYPE`", "`TARGET`", "`AUTHORIZATION`", "`TASK_CONTRACT_POINTER`", "`TERMINAL_DISPOSITION`",
   ])) errors.push("docs/DEVELOPMENT_RECORDS_RUNBOOK.md: ARTIFACT_SAFETY_SCHEMA_MISSING");
+  if (!hasAll(records, [
+    "T番号を案件説明の代わりにしない", "`T-<id>（短い案件名）`", "同じ表示内の再出",
+  ])) errors.push("docs/DEVELOPMENT_RECORDS_RUNBOOK.md: USER_FACING_TASK_TITLE_MISSING");
 
   const recordLocators = [
     "`koromo2010/app-games-checkpoints`",

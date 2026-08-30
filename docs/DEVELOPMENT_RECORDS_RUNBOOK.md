@@ -72,6 +72,8 @@ current pointer更新前に参照先recordとblobをremote read-backし、更新
 
 ## 4. Approval requestとfinal resultの表示
 
+利用者向けの一覧、依頼、進捗、承認、resultでは、T番号を案件説明の代わりにしない。同じ表示の初出は`T-<id>（短い案件名）`の形で案件名を併記する。同じ表示内の再出、machine-readable field、path、pointer、commit subjectではIDだけでよい。案件名はtask contractまたはledgerの目的を短く平易に表し、新しいscopeやstateを加えない。
+
 approval requestは利用者が判断する一つのlogical changeだけを対象にし、次の構造化fieldを一つずつ示す。tool callごとに分割せず、最大影響内で事前に明示した決定的な自動配備、read-back、health確認、rollbackは同じ承認へ含められる。独立して選択可能な別writeは別承認にする。直前のrequestを一意に特定でき、environment、対象、最大影響が変わらない場合は短い自然文で承認でき、固定文言を要求しない。契約が変わらなければ新しいtask contractを作らない。
 
 ```text
