@@ -25,6 +25,7 @@ function siteAdminSecret() {
 }
 
 const cookieBase = { httpOnly: true, sameSite: "strict" as const, secure: process.env.NODE_ENV === "production", path: "/" };
+const expiredCookie = { ...cookieBase, maxAge: 0, expires: new Date(0) };
 
 export async function setSiteAdminCookie(input: Pick<SiteAdminSessionPayload, "scope" | "method" | "email">) {
   const store = await cookies();
@@ -45,13 +46,13 @@ export async function readSiteAdminChallenge() {
 
 export async function clearSiteAdminChallengeCookie() {
   const store = await cookies();
-  store.set(siteAdminChallengeCookieName, "", { ...cookieBase, maxAge: 0 });
+  store.set(siteAdminChallengeCookieName, "", expiredCookie);
 }
 
 export async function clearSiteAdminCookie() {
   const store = await cookies();
-  store.set(siteAdminCookieName, "", { ...cookieBase, maxAge: 0 });
-  store.set(siteAdminChallengeCookieName, "", { ...cookieBase, maxAge: 0 });
+  store.set(siteAdminCookieName, "", expiredCookie);
+  store.set(siteAdminChallengeCookieName, "", expiredCookie);
 }
 
 export async function getSiteAdminSession() {

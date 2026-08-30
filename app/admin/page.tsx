@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { expectedAppEnvironment } from "@/lib/storage-environment-guard";
+import { isCanonicalDevelopmentPlatformRuntime } from "@/lib/sdk-migration-011-proxy";
 import { SiteAdminPanel } from "./SiteAdminPanel";
 
 export const dynamic = "force-dynamic";
@@ -22,9 +23,16 @@ export default function SiteAdminPage() {
     && process.env.APP_ENV === "production"
     && process.env.VERCEL_ENV === "production"
     && process.env.VERCEL_GIT_COMMIT_REF === "main";
+  const showDevelopmentMigration011Operator = isCanonicalDevelopmentPlatformRuntime({
+    semanticEnvironment: process.env.APP_ENV,
+    vercelEnvironment: process.env.VERCEL_ENV,
+    project: process.env.VERCEL_PROJECT_NAME,
+    ref: process.env.VERCEL_GIT_COMMIT_REF,
+  });
   return <SiteAdminPanel
     showPreviewVocabularyMigrations={showPreviewVocabularyMigrations}
     releaseManagementMode={releaseManagementMode}
     showOriginalDataPreservation={showOriginalDataPreservation}
+    showDevelopmentMigration011Operator={showDevelopmentMigration011Operator}
   />;
 }

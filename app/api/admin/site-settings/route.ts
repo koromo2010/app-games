@@ -15,6 +15,8 @@ import { loadSiteSettings, saveSiteSettings } from "@/lib/site-settings-store";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+const privateNoStoreHeaders = { "Cache-Control": "private, no-store" };
+
 function authError(error: unknown) {
   return siteAdminAuthorizationError(error);
 }
@@ -22,9 +24,15 @@ function authError(error: unknown) {
 export async function GET() {
   try {
     const session = await requireSiteAdminSession();
-    return Response.json({ settings: await loadSiteSettings(), session: publicSiteAdminSession(session) });
+    return Response.json(
+      { settings: await loadSiteSettings(), session: publicSiteAdminSession(session) },
+      { headers: privateNoStoreHeaders },
+    );
   } catch (error) {
-    return authError(error) ?? Response.json({ error: "SITE_SETTINGS_LOAD_FAILED" }, { status: 500 });
+    const response = authError(error)
+      ?? Response.json({ error: "SITE_SETTINGS_LOAD_FAILED" }, { status: 500 });
+    response.headers.set("Cache-Control", privateNoStoreHeaders["Cache-Control"]);
+    return response;
   }
 }
 
@@ -125,6 +133,13 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE() {
-  await clearSiteAdminCookie();
-  return Response.json({ ok: true });
+  try {
+    await clearSiteAdminCookie();
+    return Response.json({ ok: true }, { headers: privateNoStoreHeaders });
+  } catch {
+    return Response.json(
+      { error: "SITE_ADMIN_LOGOUT_FAILED" },
+      { status: 500, headers: privateNoStoreHeaders },
+    );
+  }
 }
