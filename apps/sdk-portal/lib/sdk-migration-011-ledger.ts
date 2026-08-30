@@ -27,6 +27,12 @@ export const sdkMigration011AcceptedLegacy005 = Object.freeze({
   checksum: "ef3f71bcb5ef919b392aa69fdbd0577580dcb1fab16bfeaa6514225f4d7487e7",
 });
 
+export const sdkMigration011AcceptedLegacy010 = Object.freeze({
+  version: 10,
+  name: "010_bounded_creator_quarantine_recovery.sql",
+  checksum: "a972cc0527040b3f2420e21ee59a0bf2bd1204d480ac5ac5cd62b7fad903f035",
+});
+
 export type SdkMigrationLedgerMismatch = {
   version: number;
   expected: string;
@@ -36,6 +42,7 @@ export type SdkMigrationLedgerMismatch = {
 export type SdkMigration011LedgerComparison = {
   consistent: boolean;
   acceptedLegacyVersion5: boolean;
+  acceptedLegacyVersion10: boolean;
   missingVersions: number[];
   unexpectedVersions: number[];
   duplicateVersions: number[];
@@ -69,6 +76,7 @@ export function compareSdkMigration011Ledger(
   const nameMismatches: SdkMigrationLedgerMismatch[] = [];
   const checksumMismatches: SdkMigrationLedgerMismatch[] = [];
   let acceptedLegacyVersion5 = false;
+  let acceptedLegacyVersion10 = false;
   for (const canonical of expected) {
     const actual = normalized.find((row) => row.version === canonical.version);
     if (!actual) continue;
@@ -78,6 +86,14 @@ export function compareSdkMigration011Ledger(
       && actual.checksum === sdkMigration011AcceptedLegacy005.checksum
     ) {
       acceptedLegacyVersion5 = true;
+      continue;
+    }
+    if (
+      actual.version === sdkMigration011AcceptedLegacy010.version
+      && actual.name === sdkMigration011AcceptedLegacy010.name
+      && actual.checksum === sdkMigration011AcceptedLegacy010.checksum
+    ) {
+      acceptedLegacyVersion10 = true;
       continue;
     }
     if (actual.name !== canonical.name) {
@@ -96,6 +112,7 @@ export function compareSdkMigration011Ledger(
   return {
     consistent,
     acceptedLegacyVersion5,
+    acceptedLegacyVersion10,
     missingVersions,
     unexpectedVersions,
     duplicateVersions,

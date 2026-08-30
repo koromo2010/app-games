@@ -456,7 +456,7 @@ test("Portal rejects every selector or fingerprint mismatch before execute", asy
   }
 });
 
-test("ledger accepts canonical and legacy 005 lineage and rejects missing, duplicate, mismatch, and ahead rows", () => {
+test("ledger accepts canonical and exact legacy 005/010 lineages and rejects all near matches", () => {
   assert.doesNotThrow(() => assertSdkMigration011Ledger(canonicalLedger(10), "before"));
   assert.doesNotThrow(() => assertSdkMigration011Ledger(canonicalLedger(11), "after"));
   const legacy005 = canonicalLedger(10).map((row) => row.version === 5 ? {
@@ -465,10 +465,32 @@ test("ledger accepts canonical and legacy 005 lineage and rejects missing, dupli
     checksum: "ef3f71bcb5ef919b392aa69fdbd0577580dcb1fab16bfeaa6514225f4d7487e7",
   } : row);
   assert.doesNotThrow(() => assertSdkMigration011Ledger(legacy005, "before"));
+  const legacy010 = canonicalLedger(10).map((row) => row.version === 10 ? {
+    version: 10,
+    name: "010_bounded_creator_quarantine_recovery.sql",
+    checksum: "a972cc0527040b3f2420e21ee59a0bf2bd1204d480ac5ac5cd62b7fad903f035",
+  } : row);
+  assert.doesNotThrow(() => assertSdkMigration011Ledger(legacy010, "before"));
+  assert.doesNotThrow(() => assertSdkMigration011Ledger([
+    ...legacy010,
+    canonicalLedger(11)[10],
+  ], "after"));
+  const bothLegacy = [
+    ...legacy010.slice(0, 4),
+    legacy005[4],
+    ...legacy010.slice(5),
+  ];
+  assert.doesNotThrow(() => assertSdkMigration011Ledger(bothLegacy, "before"));
+  assert.doesNotThrow(() => assertSdkMigration011Ledger([
+    ...bothLegacy,
+    canonicalLedger(11)[10],
+  ], "after"));
   for (const rows of [
     canonicalLedger(10).filter((row) => row.version !== 4),
     [...canonicalLedger(10), { ...canonicalLedger(10)[9] }],
     canonicalLedger(10).map((row) => row.version === 8 ? { ...row, checksum: "0".repeat(64) } : row),
+    legacy010.map((row) => row.version === 10 ? { ...row, checksum: "0".repeat(64) } : row),
+    legacy010.map((row) => row.version === 10 ? { ...row, name: "010_other.sql" } : row),
   ]) {
     assert.throws(
       () => assertSdkMigration011Ledger(rows, "before"),
@@ -581,6 +603,9 @@ test("operator source is byte-equivalent to migration 011 and binds the canonica
   assert.match(sdkMigration011GuardedSql, /game-fields-sdk-migration-011-development-v1/);
   assert.match(sdkMigration011GuardedSql, /SDK_MIGRATION_011_OBJECT_CONTRACT_MISMATCH/);
   assert.match(sdkMigration011GuardedSql, /INSERT INTO sdk_schema_migrations/);
+  assert.match(sdkMigration011GuardedSql, /expected\.version = 10/);
+  assert.match(sdkMigration011GuardedSql, /010_bounded_creator_quarantine_recovery\.sql/);
+  assert.match(sdkMigration011GuardedSql, /a972cc0527040b3f2420e21ee59a0bf2bd1204d480ac5ac5cd62b7fad903f035/);
   assert.match(sdkMigration011ObjectContractSql, /presentObjectCount/);
   assert.match(sdkMigration011ObjectContractSql, /COUNT\(\*\) = 40/);
   assert.doesNotMatch(
@@ -590,6 +615,10 @@ test("operator source is byte-equivalent to migration 011 and binds the canonica
   assert.doesNotMatch(
     sdkMigration011GuardedSql,
     /UPDATE\s+sdk_schema_migrations|DELETE\s+FROM|ON\s+CONFLICT/i,
+  );
+  assert.doesNotMatch(
+    sdkMigration011Source,
+    /sdk_creator_recovery_(?:operations|quarantine_games)/i,
   );
 });
 

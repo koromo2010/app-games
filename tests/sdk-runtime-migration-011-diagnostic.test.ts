@@ -10,6 +10,7 @@ import {
 import {
   compareSdkMigration011Ledger,
   sdkMigration011AcceptedLegacy005,
+  sdkMigration011AcceptedLegacy010,
   sdkMigration011CanonicalLedger,
   type SdkMigrationLedgerRow,
 } from "../apps/sdk-portal/lib/sdk-migration-011-ledger.ts";
@@ -130,10 +131,11 @@ function proxyDependencies(
   };
 }
 
-test("canonical comparison classifies missing, unexpected, duplicate, name, checksum, and accepted legacy v5", () => {
+test("canonical comparison classifies mismatches and only exact legacy v5/v10 lineages", () => {
   assert.deepEqual(compareSdkMigration011Ledger(canonical()), {
     consistent: true,
     acceptedLegacyVersion5: false,
+    acceptedLegacyVersion10: false,
     missingVersions: [],
     unexpectedVersions: [],
     duplicateVersions: [],
@@ -144,6 +146,35 @@ test("canonical comparison classifies missing, unexpected, duplicate, name, chec
   legacy[4] = { ...sdkMigration011AcceptedLegacy005 };
   assert.equal(compareSdkMigration011Ledger(legacy).consistent, true);
   assert.equal(compareSdkMigration011Ledger(legacy).acceptedLegacyVersion5, true);
+  assert.equal(compareSdkMigration011Ledger(legacy).acceptedLegacyVersion10, false);
+  const legacy010 = canonical();
+  legacy010[9] = { ...sdkMigration011AcceptedLegacy010 };
+  assert.deepEqual(compareSdkMigration011Ledger(legacy010), {
+    consistent: true,
+    acceptedLegacyVersion5: false,
+    acceptedLegacyVersion10: true,
+    missingVersions: [],
+    unexpectedVersions: [],
+    duplicateVersions: [],
+    nameMismatches: [],
+    checksumMismatches: [],
+  });
+  const bothLegacy = legacy010.map((row) => ({ ...row }));
+  bothLegacy[4] = { ...sdkMigration011AcceptedLegacy005 };
+  assert.equal(compareSdkMigration011Ledger(bothLegacy).consistent, true);
+  assert.equal(compareSdkMigration011Ledger(bothLegacy).acceptedLegacyVersion5, true);
+  assert.equal(compareSdkMigration011Ledger(bothLegacy).acceptedLegacyVersion10, true);
+  for (const invalid of [
+    { ...sdkMigration011AcceptedLegacy010, checksum: "0".repeat(64) },
+    { ...sdkMigration011AcceptedLegacy010, name: "010_other.sql" },
+    { ...sdkMigration011AcceptedLegacy010, version: 9 },
+  ]) {
+    const rows = canonical();
+    rows[9] = invalid;
+    const comparison = compareSdkMigration011Ledger(rows);
+    assert.equal(comparison.consistent, false);
+    assert.equal(comparison.acceptedLegacyVersion10, false);
+  }
   const changed = canonical();
   changed.splice(1, 1);
   changed.push({ ...changed[0] }, { version: 12, name: "012_unknown.sql", checksum: "a".repeat(64) });
@@ -271,6 +302,9 @@ test("Platform strict allowlist rejects extra fields, malformed hashes, and mism
     (payload: ReturnType<typeof validPayload>) => { Object.assign(payload.ledger[0], { raw: "secret" }); },
     (payload: ReturnType<typeof validPayload>) => { payload.databaseTargetFingerprint = "bad"; },
     (payload: ReturnType<typeof validPayload>) => { payload.databaseNameFingerprint = "0".repeat(64); },
+    (payload: ReturnType<typeof validPayload>) => {
+      (payload.comparison as Record<string, unknown>).acceptedLegacyVersion10 = "true";
+    },
   ]) {
     const payload = validPayload();
     mutate(payload);

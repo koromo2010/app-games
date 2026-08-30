@@ -105,12 +105,14 @@ function validPayload(payload: unknown): payload is Record<string, unknown> {
     exactKeys(row, ["version", "name", "checksum"])
     && Number.isInteger(row.version) && typeof row.name === "string" && sha256(row.checksum))) return false;
   if (!exactKeys(payload.comparison, [
-    "consistent", "acceptedLegacyVersion5", "missingVersions", "unexpectedVersions",
+    "consistent", "acceptedLegacyVersion5", "acceptedLegacyVersion10",
+    "missingVersions", "unexpectedVersions",
     "duplicateVersions", "nameMismatches", "checksumMismatches",
   ])) return false;
   const comparison = payload.comparison;
   if (typeof comparison.consistent !== "boolean"
     || typeof comparison.acceptedLegacyVersion5 !== "boolean"
+    || typeof comparison.acceptedLegacyVersion10 !== "boolean"
     || !numberArray(comparison.missingVersions)
     || !numberArray(comparison.unexpectedVersions)
     || !numberArray(comparison.duplicateVersions)

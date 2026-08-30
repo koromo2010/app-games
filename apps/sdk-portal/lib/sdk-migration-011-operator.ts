@@ -3,6 +3,7 @@ import type { SdkServiceOperationGrant } from "@game-fields/sdk-service-auth";
 import {
   compareSdkMigration011Ledger,
   sdkMigration011AcceptedLegacy005 as legacyMigration005,
+  sdkMigration011AcceptedLegacy010 as legacyMigration010,
   sdkMigration011CanonicalLedger as expectedLedger,
   sdkMigration011Checksum,
   sdkMigration011Name,
@@ -261,6 +262,11 @@ BEGIN
            expected.version = ${legacyMigration005.version}
            AND applied.name = '${legacyMigration005.name}'
            AND applied.checksum = '${legacyMigration005.checksum}'
+         )
+         AND NOT (
+           expected.version = ${legacyMigration010.version}
+           AND applied.name = '${legacyMigration010.name}'
+           AND applied.checksum = '${legacyMigration010.checksum}'
          )
        )
   ) OR (SELECT COUNT(*) FROM sdk_schema_migrations) <> 10 THEN
