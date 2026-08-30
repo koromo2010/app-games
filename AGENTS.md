@@ -1,20 +1,12 @@
 # App Games agent guide
 
-このrepositoryで作業するAI・開発者は、最初にrepository、remote、worktree、branch、HEAD、dirty差分を確認し、利用者の既存差分を保持する。会話履歴や`docs/DEVELOPMENT_THREAD_LOG.md`を現在仕様の正本にしない。
+最初にrepository、remote、worktree、branch、HEAD、dirty差分を確認し、利用者の既存差分を保持する。会話履歴や`docs/DEVELOPMENT_THREAD_LOG.md`を現在仕様の正本にしない。
 
 ## 実行入口
 
-- 許可、タスク所有権、成果物の使い分け、保存、検証、Git、Deployment、停止・完了判定は`docs/DEVELOPMENT_EXECUTION_RULES.md`を唯一の実行正本とする。詳細手順は同書のrouterから該当サテライトだけを読む。
-- 作業別の追加資料は`docs/README.md`から今回に該当するものだけを読む。全資料、`CURRENT_STATE.md`、`DEVELOPMENT_HANDOFF.md`を毎回通読しない。
-- 監査、TA／CP、管理、監督、TODO／Tの受け渡しを実際に扱う場合だけ`docs/AUDIT_THREAD_RULES.md`を読む。
-- tool、schema、response解析、browser経路、または利用者PC向けhelper／PowerShellで詰まった場合だけ`docs/AI_EXECUTION_TROUBLESHOOTING.md`を読む。
-
-## 変更してはいけない境界
-
-- 一度受理したタスクは`docs/DEVELOPMENT_EXECUTION_RULES.md`のlife cycleに従って完遂する。checkpoint、内部failure、承認待ち、解析修正を新しいタスクや正式resultへ変換しない。
-- developmentの可逆な内部手段は同書の禁止リスト方式で扱う。main／production、製品repositoryのref更新、Deployment、DB／Redis／Blob／OAuth／DNS／環境変数等の外部writeは、対象を固定した利用者の明示承認なしに行わない。devの許可をmain／productionへ流用しない。
-- Vercelの認証済みcontrol planeは利用者専用とする。資格情報を使わない公開read-only情報と、デプロイ済み製品runtimeの検査だけをAIが行える。
-- secret、個人情報、Room code、ゲーム秘密情報をコード、Git、checkpoint、ログ、報告へ残さない。
+- 新しいthread／workspaceで最初のtaskを受理するとき、承認済みpolicy変更が通知されたとき、またはpolicy identityが不明なときだけ、`origin/develop:docs/DEVELOPMENT_EXECUTION_RULES.md`をremote read-backする。同時に観測した`origin/develop`のexact commitを`POLICY_APPLIED`にし、同じtaskの連続turnでは再利用する。commitとpathでpolicy bytesを一意に取得できるためhistory探索や別blob fieldは使わず、未反映のlocal candidateや作業branchを承認済みpolicyとして使わない。
+- 作業別の仕様は`docs/README.md`から探す。全資料、`CURRENT_STATE.md`、`DEVELOPMENT_HANDOFF.md`を毎回通読しない。
+- 認証済みVercel control planeは利用者専用とする。AIは資格情報を使わない公開read-only情報と、デプロイ済み製品runtimeだけを検査できる。
 
 ## 必須アーキテクチャ境界
 

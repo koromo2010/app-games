@@ -5,7 +5,7 @@
 ## 最初の読み順
 
 1. ルートの`AGENTS.md`と[`DEVELOPMENT_EXECUTION_RULES.md`](./DEVELOPMENT_EXECUTION_RULES.md)を読む。
-2. 実装・検証・外部操作では[`DEVELOPMENT_DELIVERY_RUNBOOK.md`](./DEVELOPMENT_DELIVERY_RUNBOOK.md)、記録・引継ぎ・resultでは[`DEVELOPMENT_RECORDS_RUNBOOK.md`](./DEVELOPMENT_RECORDS_RUNBOOK.md)を読む。正本のrouterが示す該当サテライトだけを選び、予防的に全資料を通読しない。
+2. 実装・検証・外部操作では[`DEVELOPMENT_DELIVERY_RUNBOOK.md`](./DEVELOPMENT_DELIVERY_RUNBOOK.md)、記録・引継ぎ・resultでは[`DEVELOPMENT_RECORDS_RUNBOOK.md`](./DEVELOPMENT_RECORDS_RUNBOOK.md)を読む。正本のrouterが示す該当runbookまたはreferenceだけを選び、予防的に全資料を通読しない。
 3. 複数app・環境・主要flowをまたぐ場合、または正本の位置が不明な場合だけ[`SYSTEM_MAP.md`](./SYSTEM_MAP.md)を読む。
 4. 全体の現行実装を確認する作業だけ[`CURRENT_STATE.md`](./CURRENT_STATE.md)を読み、詳細仕様が必要な場合も`DEVELOPMENT_HANDOFF.md`の該当節だけを読む。過去T、旧checkpoint、会話履歴を現在地として取り込まない。
 5. 監査、TA／CP、監督への正式受け渡しを扱う場合だけ[`AUDIT_THREAD_RULES.md`](./AUDIT_THREAD_RULES.md)を読む。tool、schema、response解析、browser経路、利用者PC向けhelper／PowerShellで詰まった場合だけ[`AI_EXECUTION_TROUBLESHOOTING.md`](./AI_EXECUTION_TROUBLESHOOTING.md)を読む。
@@ -28,7 +28,7 @@
 
 | 作業 | 最初に読む資料 | 次に確認する正本・コード |
 | --- | --- | --- |
-| 個別指示、実行許可、停止・終了判定 | `DEVELOPMENT_EXECUTION_RULES.md` | 最新の個別指示、該当サテライト |
+| 個別指示、実行許可、停止・終了判定 | `DEVELOPMENT_EXECUTION_RULES.md` | 最新のtask contract、該当runbook |
 | 実装、検証、write計数、Git、Deployment、runtime、証拠 | `DEVELOPMENT_DELIVERY_RUNBOOK.md` | Git差分、対象Deployment／runtime identity |
 | checkpoint、保存、引継ぎ、正式result | `DEVELOPMENT_RECORDS_RUNBOOK.md` | checkpoint正本、`scripts/check-development-artifact-policy.mjs` |
 | システム全体の構成・環境・主要flow | `SYSTEM_MAP.md` | 機械可読な設定、`CURRENT_STATE.md`、対象source |

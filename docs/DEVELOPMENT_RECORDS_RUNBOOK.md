@@ -1,98 +1,103 @@
 # Development Records Runbook
 
-`APPLIES_WHEN`: instruction、checkpoint、execution sheet、handoff、正式result、current pointer、耐久保存を扱うとき。
+`APPLIES_WHEN`: task contract、current status、approval request、final result、current pointer、耐久保存を扱うとき。
 
-`DOES_NOT_APPLY`: taskの権限を追加するとき、実装・Git・Deployment手順を決めるとき、監査系列のartifactを定義するとき。
+`DOES_NOT_APPLY`: 権限、task state、停止条件、実装・Git・Deployment手順、監査artifactを決めるとき。
 
 `AUTHORITY`: [`DEVELOPMENT_EXECUTION_RULES.md`](./DEVELOPMENT_EXECUTION_RULES.md)
 
-本書は実行正本から委任された記録手順であり、記録の作成や保存によって権限、禁止、task scope、成功条件を変えない。
+本書は正本が決めた四つの役割を保存・復旧する方法だけを定める。記録によってtask contract、権限、stateを変更しない。
 
-## 1. 成果物の責任分離
+## 1. 記録単位
 
-| 成果物 | 所有する情報 |
-| --- | --- |
-| `NEXT_INSTRUCTION` | 目的、対象、authorization envelope、不変条件、成功条件、真の停止条件 |
-| `CHECKPOINT` | 現在地、candidate、完了済み工程、外部write件数、未完了、再開点 |
-| `EXECUTION_SHEET` | 承認が必要な一つの外部操作の対象、最大影響、事前条件、rollback |
-| `RESULT` | terminal boundaryの結論と成功・停止の直接証拠 |
-| `HANDOFF` | 最新instructionとcheckpointへの短い導線 |
-| `TODO_DECISION` | 管理スレのintake判断 |
+| 役割 | 保存する内容 | 既存label |
+| --- | --- | --- |
+| `TASK_CONTRACT` | 目的、対象、authorization、不変条件、成功・停止条件 | `NEXT_INSTRUCTION` |
+| `CURRENT_STATUS` | 現在地、candidate、完了工程、外部write件数、未完了、再開点 | `CHECKPOINT` |
+| `APPROVAL_REQUEST` | 承認対象の一つのlogical change、最大影響、事前条件、rollback | `EXECUTION_SHEET` |
+| `FINAL_RESULT` | 正本が判定したterminal state／dispositionと直接証拠 | `RESULT` |
 
-一つの事実を複数artifactへ複製しない。契約が変わらない進捗、承認待ち解除、内部phase進行、thread移行では`NEXT_INSTRUCTION`を改版しない。保存前の重複・混載検査には`scripts/check-development-artifact-policy.mjs`を使う。
+同じ事実を複数の役割へ複製しない。契約が変わらない進捗、承認待ち解除、内部phase、thread移行では`TASK_CONTRACT`を改版しない。`HANDOFF`は`TASK_CONTRACT_POINTER`と`CURRENT_STATUS_POINTER`だけを持ち、第五の情報所有者にしない。
 
-`NEXT_INSTRUCTION`の直接policy参照は次の一つだけとし、サテライトを列挙しない。
+各記録には実際に適用したpolicy観測commitを一つだけ記載する。canonical locatorはremote read-backした`origin/develop:docs/DEVELOPMENT_EXECUTION_RULES.md`であり、commitとpathからpolicy bytesを取得するためhistory探索や別blob fieldは使わない。新しいthread／workspaceの初回、承認済みpolicy変更の通知時、またはidentity不明時だけ確認する。同じ`TASK_ACTIVE`で確認済みのidentityはそのまま再利用し、連続turn、内部retry、checkpoint、承認後再開、record作成、製品commitの前進だけをremote再確認の契機にしない。
 
 ```text
-POLICY_REFERENCE: docs/DEVELOPMENT_EXECUTION_RULES.md @ <product-commit>
+POLICY_APPLIED: docs/DEVELOPMENT_EXECUTION_RULES.md @ <product-commit>
 ```
 
-## 2. 保存レベル
+旧`POLICY_REFERENCE`は発行時の履歴として保持できるが、新しい権限やpolicy freezeを意味しない。重複・混載検査には`scripts/check-development-artifact-policy.mjs`を使う。
 
-記録先は目的に応じて分ける。
+本policy反映前のimmutable recordは上書き・一括移行せず、`LEGACY_READ_ONLY`の履歴として保持する。これはtask stateではなく保存上の区分である。validatorは反映後に新規作成するrecordのsave gateとし、legacy recordの直接証拠を遡及的に無効化しない。legacyから再開するときはtask contractを再発行せず、最初の新しい`CURRENT_STATUS`へexact `POLICY_APPLIED`を記録する。
+
+新規artifactは`ARTIFACT_TYPE`を一つだけ持つ。validatorは権限・対象・停止・承認・terminal境界と役割混載だけを検査し、進捗、結果、証拠の文章表現を固定しない。
+
+| 役割 | 最小field |
+| --- | --- |
+| `TASK_CONTRACT` | `TARGET`、`AUTHORIZATION`または`ALLOWED_PRODUCT_WRITES`＋`FORBIDDEN_EFFECTS`、`SUCCESS_CONDITION`、`TRUE_STOP_CONDITIONS` |
+| `CURRENT_STATUS` | `TASK_CONTRACT_POINTER`または`TASK_CONTRACT_IDENTITY` |
+| `APPROVAL_REQUEST` | §4の六field |
+| `FINAL_RESULT` | `TERMINAL_DISPOSITION` |
+
+## 2. 保存先
 
 - local worktree: 再生成可能な作業中差分
-- product Git: 製品sourceと本repoの正本文書
-- checkpoint repository: taskのimmutable instruction、checkpoint、result、current pointer
+- product Git: 製品sourceと本repositoryの正本文書
+- checkpoint repository: immutable task recordとcurrent pointer
 - Libraryまたは共有済み領域: Git正本でない利用者向け耐久artifact
 
-repo-backedのsourceや文書を同じ内容でLibraryへ二重保存しない。secret、token、Cookie、接続文字列、Room codeはどの記録にも含めない。
+repo-backedのsourceや文書を同じ内容でLibraryへ二重保存しない。secret、token、Cookie、接続文字列、Room codeを保存しない。
 
-checkpoint repositoryの正規記録先は次に固定する。
+checkpoint repositoryの正規位置は次に固定する。
 
 - repository: `koromo2010/app-games-checkpoints`
 - branch: `ops/game-fields-supervisor-records-20260803`
 - immutable Markdown: `docs/gpt-save/`
 - task current pointer: `tasks/<task-id>/current.json`
 
-`NEXT_INSTRUCTION`、`CHECKPOINT`、`EXECUTION_SHEET`、`RESULT`、`HANDOFF`は、既存pathを上書きせず`docs/gpt-save/`へ新規immutable Markdownとして保存する。taskのcurrent pointerだけは、remote read-back済みの最新recordを指す可変索引として`tasks/<task-id>/current.json`を更新できる。repository、branch、path、record commit、blob、内容をremote read-backしてから引き渡す。
+記録本文は既存pathを上書きせず、`docs/gpt-save/`へ新規immutable Markdownとして保存する。current pointerだけは、remote read-back済みの最新recordを指す可変索引として更新できる。repository、branch、path、record commit、blob、内容をremote read-backしてから引き渡す。
 
-新しい実行入口となる`NEXT_INSTRUCTION`をこの記録先へ保存できない場合は`INSTRUCTION_RECORD_UNSAVED / AT RISK`とし、チャット本文だけを正式な新入口として扱わない。
+新しい`TASK_CONTRACT`を保存できない場合は`INSTRUCTION_RECORD_UNSAVED / AT RISK`とし、チャット本文だけを正式な新入口として扱わない。
 
-## 3. checkpointと復旧
+## 3. Status checkpointと復旧
 
-remote未到達のままturnを終える場合、または再生成困難な進捗が最後の耐久保存から約10分以上remote未到達のまま蓄積した場合は、下記耐久checkpointを作る。少なくともtask、instruction identity、base、candidateまたは作業差分、完了済み工程、外部write件数、未完了、再開点を保存する。
+remote未到達のままturnを終える場合、または再生成困難な進捗が最後の耐久保存から約10分以上remote未到達のまま蓄積した場合は、`CURRENT_STATUS`を軽量checkpointとして保存する。最低限、task、contract identity、base、candidateまたは差分、完了工程、外部write件数、未完了、再開点を含める。
 
-- `RECOVERY_CHECKPOINT`: 同じ実行環境での短期再開に必要な最小記録
-- `FULL_RECOVERY_CHECKPOINT`: workspaceやthreadを失っても正本から再構成できる完全記録
+旧labelとの互換上、軽量な`CURRENT_STATUS`を`RECOVERY_CHECKPOINT`、完全復旧artifactを伴うものを`FULL_RECOVERY_CHECKPOINT`と表記できる。どちらも新しいstateや第五の成果物役割ではない。
 
-約10分の基準は、突然のthread／workspace停止によるデータ損失を防ぐ軽量checkpointの契機であり、task停止、承認失効、正式result、bundle作成の契機ではない。短時間のread-only確認、再生成可能な中間出力、同じ意味の内部retryだけを理由にcheckpointを増やさない。
+約10分はデータ損失を防ぐ契機であり、task停止、承認失効、正式result、bundle作成の契機ではない。read-only確認、再生成可能な中間出力、同じ意味のretryだけでcheckpointを増やさない。
 
-軽量checkpointは進捗損失を防ぐために作るが、bundleやfresh restoreはこの軽量checkpointごとには行わない。完全復旧性は重要な境界、candidate確定、外部write前後、handoff、terminal resultで検証する。
+完全復旧artifactを作るのは、canonical remoteとcurrent statusだけでは空のworkspaceから同じcandidateまたは未反映作業を再構成できない場合だけである。その場合は不足する最小artifact、manifest、hash、復旧手順を保存し、空のworkspaceからidentity一致を確認する。exact commitや必要blobがcanonical remoteにあり再取得を確認できる場合は、重複bundleを作らない。
 
-current pointerは最新の有効artifactを指す可変索引であり、履歴本文ではない。pointer更新前に対象recordとblobをremote read-backし、pointer更新後も参照先を再取得する。旧pointerや会話要約から条件を累積しない。
+current pointer更新前に参照先recordとblobをremote read-backし、更新後もpointerから同じ内容を再取得する。旧pointerや会話要約から条件を累積しない。
 
-## 4. 正式result
+## 4. Approval requestとfinal resultの表示
 
-正式resultを作るのは次のterminal boundaryだけとする。
+approval requestは利用者が判断する一つのlogical changeだけを対象にし、次の構造化fieldを一つずつ示す。tool callごとに分割せず、最大影響内で事前に明示した決定的な自動配備、read-back、health確認、rollbackは同じ承認へ含められる。独立して選択可能な別writeは別承認にする。直前のrequestを一意に特定でき、environment、対象、最大影響が変わらない場合は短い自然文で承認でき、固定文言を要求しない。契約が変わらなければ新しいtask contractを作らない。
 
-- 成功条件を満たし、必要な証拠をread-backした`TASK_DONE`
-- 許可済み内部回復では越えられない真の外部依存を立証した`EXTERNAL_BLOCKED`
-- 利用者が明示的にtaskを中止・置換した
+```text
+OPERATION: <one logical change>
+SEMANTIC_ENVIRONMENT: <environment>
+TARGET_IDENTITY: <exact target>
+MAXIMUM_EXTERNAL_EFFECT: <maximum effect and count>
+PRECONDITIONS: <required checks or NONE>
+ROLLBACK: <method or NOT_AVAILABLE with reason>
+```
 
-local candidate、test完了、checkpoint保存、push準備、`READY`、承認待ち、dev反映、runtime観測開始は正式resultの境界ではない。通常のGit push承認待ちもそれだけではterminal boundaryではない。Portal owner承認等の利用者専用操作が現在の依存点なら、残る成功条件と一操作を対応づけて`EXTERNAL_BLOCKED`を立証する。
+final resultは正本がterminal state／dispositionを判定した場合だけ保存し、次のいずれかを一つ記録する。
 
-resultは先に人間向け結論を示し、その後に証拠を置く。
+```text
+TERMINAL_DISPOSITION: TASK_DONE | EXTERNAL_BLOCKED | USER_CANCELED | SUPERSEDED:<replacement>
+```
+
+`TASK_ACTIVE`、milestone、approval待ちをterminal dispositionにしない。先に次を自然文で示し、その後に技術証拠を置く。
+
+旧状態表記との互換上、`CLOSED:YES`は`TASK_DONE`の直接証拠が揃った場合だけ、`CLOSED:NO`は`TASK_ACTIVE`または`EXTERNAL_BLOCKED`の補助表記として使う。`DONE`、`STOPPED`、`WAITING`を独立した主stateにしない。
 
 1. 顧客または運用への結果
-2. 完了した成功条件、または残る成功条件
+2. 満たした、または残る成功条件
 3. 実行した外部writeと件数
 4. 未検証事項と影響
 5. rollbackまたは再開点
-6. commit、tree、blob、record、Deployment等の技術証拠
+6. commit、tree、blob、record、Deployment等の証拠
 
-## 5. 状態表記
-
-タスクlife cycleは`TASK_ACTIVE`、`TASK_DONE`、`EXTERNAL_BLOCKED`の三つだけとする。
-
-`READY`、`CANDIDATE_READY`、`PUSH_PENDING`、`DEPLOYED`、`OBSERVING`、`INTERNAL_RECOVERY_REQUIRED`、`RECOVERY_CHECKPOINT_SAVED`は`TASK_ACTIVE`中のmilestoneであり、それだけで所有権を手放さない。
-
-状態行を使う場合は、主状態を一つだけ書き、milestoneと原因を別行にする。
-
-```text
-TASK_STATE: TASK_ACTIVE
-MILESTONE: CANDIDATE_READY
-NEXT: <next concrete action>
-```
-
-`CLOSED:YES`は`TASK_DONE`の証拠が揃った場合だけ、`CLOSED:NO`はactiveまたはblockedの補助表記として使う。曖昧な`DONE`、`STOPPED`、`WAITING`を主状態にしない。
+local candidate、test完了、checkpoint保存、approval待ち、`READY`、dev反映、runtime観測開始をfinal resultへ変換しない。

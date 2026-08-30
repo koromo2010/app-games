@@ -4,15 +4,17 @@
 
 `DOES_NOT_APPLY`: taskの権限、停止、保存、正式resultを決めるとき。
 
-`AUTHORITY`: [`DEVELOPMENT_EXECUTION_RULES.md`](./DEVELOPMENT_EXECUTION_RULES.md)
+`REFERENCE_TYPE`: `NON_NORMATIVE`
 
-この文書は実行経路が詰まった場合の自己回復サテライトである。新しい権限やproduct writeを許可せず、許可と停止は正本、保存と正式resultは正本が委任した記録runbookに従う。
+`POLICY`: [`DEVELOPMENT_EXECUTION_RULES.md`](./DEVELOPMENT_EXECUTION_RULES.md)と[`DEVELOPMENT_DELIVERY_RUNBOOK.md`](./DEVELOPMENT_DELIVERY_RUNBOOK.md)
 
-## 1. 原則
+この文書は既知のtool・SDK・browser・helper問題を検索するための技術referenceであり、policy、権限、task state、停止条件ではない。fieldやtoolの事実が現行source・schemaと異なる場合は、現行interfaceを正として本書を訂正する。
+
+## 1. Referenceの使い方
 
 - 解析上の不確実性を、製品不具合、identity不一致、外部blockerへ変換しない。
 - 推測でfield名を増やさず、現行tool schema、server source、関連test、秘密を含まないstructured responseの順で確定する。
-- parser修正、source確認、許可済みread-only確認は同じ作業内で行い、それだけで正式resultを作らない。
+- parser修正、source確認、許可済みread-only確認を同じ作業内で行う。
 - read-only retryや非product-write handshakeを、product write件数と混同しない。
 - opaque値、secret、Cookie、token、bindingは表示、転記、永続化、ログ出力しない。
 
@@ -89,13 +91,13 @@ handshake requestは`docs/SDK_HANDSHAKE.md`の必須fieldをすべて送る。AI
 
 `accepted`はserverのaggregate verdictである。`accepted=true`は、requestに含まれるprotocol、handshake version、authoring client、environment、canonical MCP URL、onboarding profile、Platform／SDK／contract version、required capabilitiesが一致したことを表す。
 
-- `accepted=false`: `problems[*].code`を読み、request／parser訂正、tool更新、真の互換性blockerを区別する。現在のDownloadMeとsourceから期待値を訂正できる場合は同じ作業内で再handshakeし、別environment、旧版、非公式mirrorへは切り替えない。
+- `accepted=false`: `problems[*].code`を読み、request／parser訂正、tool更新、真の互換性不一致を区別する。現在のDownloadMeとsourceから期待値を訂正できる場合は同じ作業内で再handshakeし、別environment、旧版、非公式mirrorへは切り替えない。
 - `accepted=true`: 同じ条件をclient側で再判定して否定しない。矛盾する別の実観測がない限り「acceptedだがidentity未確認」としない。
 - accepted responseのbindingは`structuredContent.environmentBinding`から一度だけ取得し、同一tool flowの変数に保持する。
 - bindingが解析上見つからない場合は固定parserとsourceを確認する。実際に欠落していれば、個別指示で禁止されていない限りhandshakeを再取得できる。
 - handshake response自体にpost-handshake用`sdkIdentity`を要求しない。
 
-handshakeを再実行する場合も、盲目的に同じparserを反復せず、先にrequestとresponse contractを訂正する。`accepted=false`そのものは正式resultのterminal boundaryではない。訂正不能な真の互換性不一致、接続不能、または個別指示が明示したhandshake invocation上限に到達した場合だけ停止する。
+handshakeを再実行する場合も、盲目的に同じparserを反復せず、先にrequestとresponse contractを訂正する。訂正後も残る互換性不一致や接続不能は、観測事実として正本のdecision kernelへ返す。
 
 ## 5. Bindingとpost-handshake identity
 
@@ -116,7 +118,7 @@ field path不明、wrapper誤認、binding抽出失敗はidentity不一致では
 3. 同じbindingで`get_game_module_profile_proposal`を呼ぶ。
 4. proposal ID、request ID、status、exact diff、依存関係、影響、警告、base revision／digest、catalog／identity、audit、review URLをread-backする。
 5. `activeProfileChanged=false`、`humanApprovalRequired=true`、statusがpendingであることを確認する。
-6. Portal owner承認待ちとして停止する。approve／rejectやactive反映をAIが代行しない。
+6. Portal ownerのapprove／rejectやactive反映をAIが代行しない。現在のtask stateは正本のdecision kernelで判定する。
 
 proposal callの結果が不明な場合は、別request IDや二件目proposalを作らない。同一request IDの冪等契約と既存proposalのread-backで照合する。validationでDB INSERT前に拒否されたことをcontractまたはread-backで確認できた場合だけproduct write 0件とする。
 
@@ -127,7 +129,7 @@ proposal IDが取得できない場合、`get_game_module_profile_proposal`をre
 1. 最初のCallToolResultを固定parserで再解析する。
 2. transport outcomeが不明でproposal IDもない場合だけ、freeze済みの同一request ID・同一payloadで`prepare_module_profile_update`を冪等replayする。serverは既存proposalがあれば同じproposalを返す。このreplayは二件目のlogical product writeへ数えない。
 3. `structuredContent.proposal.id`を取得後、`get_game_module_profile_proposal`でread-backする。
-4. 明示されたtool invocation上限へ到達している場合、または同一payloadを再構成できない場合はreplayせず`WRITE_OUTCOME_UNKNOWN`で停止する。
+4. 明示されたtool invocation上限へ到達している場合、または同一payloadを再構成できない場合はreplayせず`WRITE_OUTCOME_UNKNOWN`を観測結果として返す。
 
 永続化前validationで拒否された場合、製品上の意図を変えないserialization／schema表現の訂正だけは、同じrequest IDで同じ作業内に行える。module decision、対象、理由等の意味内容が変わる訂正は新しいproduct判断なので、現在の明示許可がなければ行わない。
 
@@ -214,19 +216,3 @@ if ($gitExitCode -ne 0) {
 - scriptはwrite前にbase／HEAD／parent／tree／変更file集合を照合し、`missing`または`unexpected`が1件でもあればfail closedとする。
 - 修正版packageは旧版を上書きせず新しい識別子とhashを持たせ、利用者には一つの現行packageだけを再実行してもらう。
 - Windowsを直接実行できない場合も、LF、CRLF、lone CR、順序違い、重複、空行、spaceを含むpath、Git成功＋非空stderr、Git失敗をfixtureで確認する。静的確認だけを「Windows実行済み」と報告しない。
-
-## 9. 正式停止へ変換する前のchecklist
-
-次をすべて確認する。
-
-- 現行tool名とschemaを確認した
-- wrapperと`structuredContent`を分離した
-- `isError`を先に判定した
-- canonical pathをsourceまたはtestで確認した
-- read-only／非product-writeの復旧余地を確認した
-- 同一request IDでreconciliationした
-- 未許可writeを増やしていない
-- 利用者返却済みの証拠を再要求していない
-- 残っているのが解析問題ではなく真の外部依存である
-
-一つでも未実施なら、正式resultを作らず同じ作業内で自己回復を続ける。
