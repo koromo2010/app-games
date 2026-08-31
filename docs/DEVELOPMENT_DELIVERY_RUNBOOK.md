@@ -53,7 +53,9 @@ write結果が不明なら保持済みresponseを現行schemaで再解析し、�
 - 文書・契約変更では、構造を固定するcontract testと`git diff --check`を最低限実行する。
 - `NOT_RUN`、`BLOCKED`、`BASELINE_FAILURE`、対象変更によるfailureを区別する。
 
-developmentは早期のruntime feedbackを得る環境である。candidate、更新前SHA、rollback、差分を固定し、不可逆なmigration、data write、認証・権限変更を含まない可逆な変更では、最短の関連check、承認済みdev反映、runtime観測、forward fixまたはrollbackを一つのfeedback loopとして進める。
+developmentは早期のruntime feedbackを得る環境である。candidate、更新前SHA、rollback、差分を固定し、不可逆なmigration、再生成不能なdata write、認証・権限変更を含まない可逆な変更では、最短の関連check、dev反映、決定的な自動delivery、runtime観測、forward fixまたはrollbackをstanding authorization内の一つのfeedback loopとして進める。各commit、再配備、runtime failure、forward fixを新しいapproval requestやExecution sheetへ変換しない。
+
+専用development dataの変更は、task contractが対象を含み、resetまたはrollback可能で、実利用者・再生成不能data・別environmentへ影響しない場合だけこのloopへ含められる。結果不明時は新しいwriteを作らず、read-only reconciliationとlocal原因修正を先に行う。
 
 全test、lint、build、視覚検証、全履歴artifactをdev反映前の一律gateにしない。未実施項目とリスクは示し、main／production昇格前までに変更リスクに応じた必要gateを満たす。
 
@@ -61,7 +63,8 @@ developmentは早期のruntime feedbackを得る環境である。candidate、�
 
 - local candidateはtask範囲だけをstageし、base、parent、tree、changed paths、検証結果を固定する。
 - direct pushとGit-data materializationは実行方法であり、固定対象・tree・最大外部効果が同じならtransport failureだけで新しいtaskや規則を作らない。
-- ref更新は対象を識別した利用者承認後に行い、non-force等の既存refを不意に失わない方法を使う。
+- `develop` ref更新が正本のstanding authorization内にある場合は、固定したbase、tree、差分、rollbackを確認してnon-forceで進める。同じtask scopeのremote head前進、transport failure、forward fixだけを理由に再承認を作らない。
+- mainその他の保護対象ref、force更新、scopeまたは最大影響が変わるref更新は、対象を識別した利用者承認後に行う。
 - main ref反映とProduction Deploymentは別の外部効果であり、それぞれを明示した承認がない限り一方から他方を推論しない。
 - pushまたはDeployment後はremote ref、Deployment identity、source SHA、status、healthをread-backし、不一致なら成功扱いせずforward fixまたはrollbackを判断する。
 

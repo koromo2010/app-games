@@ -114,6 +114,21 @@ test("records serialize four roles without becoming a second lifecycle owner", (
   assert.deepEqual(validateDevelopmentArtifact("next-instruction", artifact), []);
 });
 
+test("prototype development uses standing authorization while protected operations remain gated", () => {
+  const root = read("docs/DEVELOPMENT_EXECUTION_RULES.md");
+  const delivery = read("docs/DEVELOPMENT_DELIVERY_RUNBOOK.md");
+  const records = read("docs/DEVELOPMENT_RECORDS_RUNBOOK.md");
+
+  assert.match(root, /prototype／development taskの受理.*standing authorization/s);
+  assert.match(root, /phase、retry、commit、Deployment、checkpointごとの承認へ分割せず/);
+  assert.match(root, /main／production.*再生成不能.*不可逆なmigration／data write.*認証・権限/s);
+  assert.match(root, /write結果.*不明.*writeとretryだけを止める/s);
+  assert.match(delivery, /`develop` ref更新.*standing authorization.*non-force/s);
+  assert.match(delivery, /各commit、再配備、runtime failure、forward fix.*Execution sheet/);
+  assert.match(records, /standing authorizationは一回の内部attemptで消費しない/);
+  assert.match(records, /Execution sheetは、main／production.*保護対象operation/s);
+});
+
 test("artifact validator enforces each role without duplicating prose policy", () => {
   const policy = "POLICY_APPLIED: docs/DEVELOPMENT_EXECUTION_RULES.md @ 0123456789012345678901234567890123456789";
   const status = [

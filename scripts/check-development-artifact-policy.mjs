@@ -220,6 +220,10 @@ export function checkCanonicalDevelopmentPolicy(read = (path) => readFileSync(pa
   if (!hasAll(rules + records, ["logical change", "tool call", "MAXIMUM_EXTERNAL_EFFECT", "ROLLBACK"])) {
     errors.push("DEVELOPMENT_POLICY: USER_DECISION_APPROVAL_UNIT_MISSING");
   }
+  if (!hasAll(rules + delivery + records, [
+    "standing authorization", "prototype／development", "non-force", "forward fix",
+    "main／production", "再生成不能", "Execution sheet", "一回の内部attemptで消費しない",
+  ])) errors.push("DEVELOPMENT_POLICY: PROTOTYPE_STANDING_AUTHORIZATION_MISSING");
   if (!hasAll(records, [
     "`ARTIFACT_TYPE`", "`TARGET`", "`AUTHORIZATION`", "`TASK_CONTRACT_POINTER`", "`TERMINAL_DISPOSITION`",
   ])) errors.push("docs/DEVELOPMENT_RECORDS_RUNBOOK.md: ARTIFACT_SAFETY_SCHEMA_MISSING");

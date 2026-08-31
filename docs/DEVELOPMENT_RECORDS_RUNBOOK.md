@@ -19,6 +19,8 @@
 
 同じ事実を複数の役割へ複製しない。契約が変わらない進捗、承認待ち解除、内部phase、thread移行では`TASK_CONTRACT`を改版しない。`HANDOFF`は`TASK_CONTRACT_POINTER`と`CURRENT_STATUS_POINTER`だけを持ち、第五の情報所有者にしない。
 
+prototype／developmentのstanding authorization内にあるcommit、non-force `develop`更新、自動delivery、runtime観測、retry、forward fixには`APPROVAL_REQUEST`を作らない。Execution sheetは、main／production、不可逆または再生成不能なdata、認証・権限等、正本が追加承認を要求する一つの保護対象operationだけに使う。
+
 各記録には実際に適用したpolicy観測commitを一つだけ記載する。canonical locatorはremote read-backした`origin/develop:docs/DEVELOPMENT_EXECUTION_RULES.md`であり、commitとpathからpolicy bytesを取得するためhistory探索や別blob fieldは使わない。新しいthread／workspaceの初回、承認済みpolicy変更の通知時、またはidentity不明時だけ確認する。同じ`TASK_ACTIVE`で確認済みのidentityはそのまま再利用し、連続turn、内部retry、checkpoint、承認後再開、record作成、製品commitの前進だけをremote再確認の契機にしない。
 
 ```text
@@ -75,6 +77,8 @@ current pointer更新前に参照先recordとblobをremote read-backし、更新
 利用者向けの一覧、依頼、進捗、承認、resultでは、T番号を案件説明の代わりにしない。同じ表示の初出は`T-<id>（短い案件名）`の形で案件名を併記する。同じ表示内の再出、machine-readable field、path、pointer、commit subjectではIDだけでよい。案件名はtask contractまたはledgerの目的を短く平易に表し、新しいscopeやstateを加えない。
 
 approval requestは利用者が判断する一つのlogical changeだけを対象にし、次の構造化fieldを一つずつ示す。tool callごとに分割せず、最大影響内で事前に明示した決定的な自動配備、read-back、health確認、rollbackは同じ承認へ含められる。独立して選択可能な別writeは別承認にする。直前のrequestを一意に特定でき、environment、対象、最大影響が変わらない場合は短い自然文で承認でき、固定文言を要求しない。契約が変わらなければ新しいtask contractを作らない。
+
+standing authorizationは一回の内部attemptで消費しない。taskのterminal disposition、利用者による中止、scope・environment・最大影響の変更、または保護対象operationへの到達まで継続し、checkpointや失敗ごとに再承認を求めない。
 
 ```text
 OPERATION: <one logical change>
