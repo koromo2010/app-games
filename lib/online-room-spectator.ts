@@ -47,6 +47,7 @@ const gameTitles: Record<OnlineRoomRealtimeGame, string> = {
   "northern-branch": "ノーザンブランチ",
   "code-intercept": "コードインターセプト",
   daifugo: "大富豪",
+  canvas: "キャンバス",
 };
 
 const phaseLabels: Record<string, string> = {

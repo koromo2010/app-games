@@ -13,35 +13,17 @@ import {
 } from "../lib/online-room-realtime-server.ts";
 import { namespaceRedisCommand } from "../lib/redis-store.ts";
 
-test("部屋更新通知はゲームと4文字の部屋番号だけを購読する", () => {
-  assert.deepEqual(parseOnlineRoomSubscription({ type: "subscribe", game: "tahoiya", code: "ab12" }), {
-    type: "subscribe", game: "tahoiya", code: "AB12",
+test("部屋更新通知の購読はopaque capabilityと許可済みfamilyだけを受け付ける", () => {
+  const capability = `${"a".repeat(100)}.${"b".repeat(43)}`;
+  assert.deepEqual(parseOnlineRoomSubscription({ type: "subscribe", capability, families: ["room-revision"] }), {
+    type: "subscribe", capability, families: ["room-revision"],
   });
-  assert.equal(parseOnlineRoomSubscription({ type: "subscribe", game: "unknown", code: "AB12" }), null);
-  assert.equal(parseOnlineRoomSubscription({ type: "subscribe", game: "tahoiya", code: "TOO-LONG" }), null);
+  assert.equal(parseOnlineRoomSubscription({ type: "subscribe", game: "tahoiya", code: "AB12" }), null);
+  assert.equal(parseOnlineRoomSubscription({ type: "subscribe", capability, families: ["chat"] }), null);
   assert.equal(onlineRoomRealtimeChannel("wordwolf", "xy99"), "wordwolf:XY99");
 });
 
-test("審査済みSDKゲームは名前空間付きtopicと4〜12文字の部屋番号を購読する", () => {
-  assert.deepEqual(parseOnlineRoomSubscription({
-    type: "subscribe",
-    game: "sdk:wordwolf-sdk",
-    code: "longcode12",
-  }), {
-    type: "subscribe",
-    game: "sdk:wordwolf-sdk",
-    code: "LONGCODE12",
-  });
-  assert.equal(parseOnlineRoomSubscription({
-    type: "subscribe",
-    game: "sdk:Creator_Upload",
-    code: "ABCD",
-  }), null);
-  assert.equal(parseOnlineRoomSubscription({
-    type: "subscribe",
-    game: "wordwolf",
-    code: "LONGCODE12",
-  }), null);
+test("SDK channelは名前空間付きtopicと4〜12文字の部屋番号を維持する", () => {
   assert.equal(
     onlineRoomRealtimeChannel("sdk:wordwolf-sdk", "longcode12"),
     "sdk:wordwolf-sdk:LONGCODE12",

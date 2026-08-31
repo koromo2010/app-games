@@ -57,8 +57,9 @@ async function loadTarget(request: Request, input?: { game?: unknown; code?: unk
   return { game, code, room } as const;
 }
 
-function sameGrant(grant: ReturnType<typeof parseOnlineRoomSpectatorGrant>, input: { game: string; code: string; playerId: string; roomCreatedAt: number }) {
-  return Boolean(grant && grant.game === input.game && grant.code === input.code && grant.playerId === input.playerId && grant.roomCreatedAt === input.roomCreatedAt);
+function sameGrant(grant: ReturnType<typeof parseOnlineRoomSpectatorGrant>, input: { game: string; code: string; playerId: string; roomCreatedAt: number; roomInstanceId?: string; grantVersion?: number }) {
+  return Boolean(grant && grant.game === input.game && grant.code === input.code && grant.playerId === input.playerId && grant.roomCreatedAt === input.roomCreatedAt
+    && (grant.version === 1 || (grant.roomInstanceId === input.roomInstanceId && grant.grantVersion === input.grantVersion)));
 }
 
 export async function GET(request: Request) {
@@ -74,12 +75,12 @@ export async function GET(request: Request) {
         new URL(request.url).searchParams.get("contentLanguage") ?? player.locale,
       );
     }
-    const policy = await loadOnlineRoomSpectatorPolicy(target.game, target.code, target.room.createdAt);
+    const policy = await loadOnlineRoomSpectatorPolicy(target.game, target.code, target.room.createdAt, target.room.roomInstanceId);
     const isHost = target.room.hostId === playerId;
     const isParticipant = target.room.players.some((player) => player.id === playerId);
     const cookieStore = await cookies();
     const grant = parseOnlineRoomSpectatorGrant(cookieStore.get(onlineRoomSpectatorCookieName)?.value ?? "");
-    const granted = sameGrant(grant, { game: target.game, code: target.code, playerId, roomCreatedAt: target.room.createdAt });
+    const granted = sameGrant(grant, { game: target.game, code: target.code, playerId, roomCreatedAt: target.room.createdAt, roomInstanceId: target.room.roomInstanceId, grantVersion: policy.grantVersion });
     if (!isHost && !isParticipant && (!policy.enabled || !granted)) return Response.json({ error: "Spectator access is not allowed" }, { status: 403 });
     const access = { enabled: policy.enabled, canManage: isHost, requiresPassphrase: Boolean(target.room.passphrase) };
     return conditionalVersionedJsonResponse(
@@ -104,12 +105,12 @@ export async function POST(request: Request) {
     if (isLanguageBoundGame(target.game)) {
       assertRoomContentLanguageAccess(target.game, target.room, body.contentLanguage ?? player.locale);
     }
-    const policy = await loadOnlineRoomSpectatorPolicy(target.game, target.code, target.room.createdAt);
+    const policy = await loadOnlineRoomSpectatorPolicy(target.game, target.code, target.room.createdAt, target.room.roomInstanceId);
     const isParticipant = target.room.players.some((player) => player.id === playerId);
     if (!isParticipant && !policy.enabled) return Response.json({ error: "Spectator access is not allowed" }, { status: 403 });
     const passphrase = typeof body.passphrase === "string" ? body.passphrase : "";
     if (!isParticipant && target.room.passphrase && passphrase !== target.room.passphrase) return Response.json({ error: "Bad passphrase" }, { status: 401 });
-    const token = createOnlineRoomSpectatorGrant({ game: target.game, code: target.code, playerId, roomCreatedAt: target.room.createdAt });
+    const token = createOnlineRoomSpectatorGrant({ game: target.game, code: target.code, playerId, roomCreatedAt: target.room.createdAt, roomInstanceId: target.room.roomInstanceId, grantVersion: policy.grantVersion });
     const cookieStore = await cookies();
     cookieStore.set(onlineRoomSpectatorCookieName, token, {
       httpOnly: true,
@@ -138,7 +139,7 @@ export async function PATCH(request: Request) {
     }
     if (target.room.hostId !== playerId) return Response.json({ error: "Only the host can change spectator access" }, { status: 403 });
     if (typeof body.enabled !== "boolean") return Response.json({ error: "enabled is required" }, { status: 400 });
-    const policy = await saveOnlineRoomSpectatorPolicy(target.game, target.code, target.room.createdAt, body.enabled);
+    const policy = await saveOnlineRoomSpectatorPolicy(target.game, target.code, target.room.createdAt, body.enabled, target.room.roomInstanceId);
     await publishOnlineRoomRevision(target.game, target.room);
     return Response.json({ enabled: policy.enabled });
   } catch (error) {

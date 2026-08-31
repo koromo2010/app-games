@@ -3,16 +3,21 @@ import { builtInCommonOnlineRoomGameIds } from "./game-locale-registry.ts";
 export const onlineRoomRealtimeGames = builtInCommonOnlineRoomGameIds;
 
 export type BuiltInOnlineRoomRealtimeGame = typeof onlineRoomRealtimeGames[number];
+export type CanvasOnlineRoomRealtimeGame = "canvas";
 export type GameSdkOnlineRoomRealtimeGame = `sdk:${string}`;
 export type OnlineRoomRealtimeGame =
   | BuiltInOnlineRoomRealtimeGame
+  | CanvasOnlineRoomRealtimeGame
   | GameSdkOnlineRoomRealtimeGame;
 
 export type OnlineRoomSubscription = {
   type: "subscribe";
-  game: OnlineRoomRealtimeGame;
-  code: string;
+  capability: string;
+  families: ["room-revision"];
 };
+
+export const onlineRoomNotificationFamilies = ["room-revision"] as const;
+export type OnlineRoomNotificationFamily = typeof onlineRoomNotificationFamilies[number];
 
 export type OnlineRoomRevisionEvent = {
   type: "room-updated";
@@ -39,6 +44,7 @@ const gameSdkRealtimeGamePattern = /^sdk:[a-z][a-z0-9-]{0,63}$/;
 export function normalizeOnlineRoomRealtimeGame(value: unknown): OnlineRoomRealtimeGame | null {
   if (typeof value !== "string") return null;
   if (gameSet.has(value)) return value as BuiltInOnlineRoomRealtimeGame;
+  if (value === "canvas") return value;
   return gameSdkRealtimeGamePattern.test(value)
     ? value as GameSdkOnlineRoomRealtimeGame
     : null;
@@ -62,9 +68,14 @@ export function normalizeOnlineRoomRealtimeCode(
 export function parseOnlineRoomSubscription(value: unknown): OnlineRoomSubscription | null {
   if (!value || typeof value !== "object") return null;
   const input = value as Record<string, unknown>;
-  const game = normalizeOnlineRoomRealtimeGame(input.game);
-  const code = game ? normalizeOnlineRoomRealtimeCode(game, input.code) : "";
-  return input.type === "subscribe" && game && code ? { type: "subscribe", game, code } : null;
+  return input.type === "subscribe"
+    && typeof input.capability === "string"
+    && /^[A-Za-z0-9_-]{80,420}\.[A-Za-z0-9_-]{43}$/.test(input.capability)
+    && Array.isArray(input.families)
+    && input.families.length === 1
+    && input.families[0] === "room-revision"
+    ? { type: "subscribe", capability: input.capability, families: ["room-revision"] }
+    : null;
 }
 
 export function parseOnlineRoomRevisionEvent(value: unknown): OnlineRoomRevisionEvent | null {

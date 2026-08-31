@@ -15,6 +15,7 @@ import { isEmailDeliveryError } from "@/lib/email-delivery-error";
 import { clearPlayerAuthCookie, getAuthenticatedPlayer, isPlayerAuthConfigurationError, setPlayerAuthCookie } from "@/lib/player-auth";
 import { createRequestTelemetry, type ObservabilityFields } from "@/lib/observability";
 import { rateLimitPolicies, rateLimitResponseFor } from "@/lib/rate-limit";
+import { revokeOnlineRoomRealtimeActor } from "@/lib/online-room-realtime-revocation";
 
 type PlayerAccountRequest = PlayerAccountAuthInput & {
   mode?: "login" | "register" | "update-email" | "resend-email-verification" | "change-password" | "delete" | "logout";
@@ -101,6 +102,7 @@ export async function POST(request: Request) {
   try {
     if (body.mode === "logout") {
       const previous = await getAuthenticatedPlayer().catch(() => null);
+      if (previous?.id) await revokeOnlineRoomRealtimeActor(previous.id);
       await clearPlayerAuthCookie();
       telemetry.success("auth.session", { ...logFields, actorRef: telemetry.actorRef(previous?.id) });
       return Response.json({ ok: true });
@@ -111,6 +113,7 @@ export async function POST(request: Request) {
       const limited = await rateLimitResponseFor(request, rateLimitPolicies.auth, { identity: authenticated.id });
       if (limited) return limited;
       await deletePlayerAccount(body, authenticated.id);
+      await revokeOnlineRoomRealtimeActor(authenticated.id);
       await clearPlayerAuthCookie();
       telemetry.success("auth.session", { ...logFields, actorRef: telemetry.actorRef(authenticated.id) });
       return Response.json({ ok: true });
@@ -173,6 +176,7 @@ export async function POST(request: Request) {
     }
 
     if (!session.id) throw new Error("PLAYER_ACCOUNT_SESSION_INVALID");
+    await revokeOnlineRoomRealtimeActor(session.id);
     await setPlayerAuthCookie(session.id);
     const accountSecurity = await loadPlayerAccountSecuritySummary(session.id, session.name);
     telemetry.success("auth.session", { ...logFields, actorRef: telemetry.actorRef(session.id) });

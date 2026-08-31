@@ -7,6 +7,8 @@ import {
   type OnlineRoomRevisionEvent,
   type OnlineRoomSubscription,
 } from "./online-room-realtime-protocol.ts";
+import type { OnlineRoomRealtimeCapability } from "./online-room-realtime-capability.ts";
+import { onOnlineRoomRealtimeRevocation } from "./online-room-realtime-revocation.ts";
 import {
   emitObservabilityEvent,
   observabilityErrorCode,
@@ -23,17 +25,29 @@ const eventStreamMaxLength = 2_000;
 const streamBlockMs = 5_000;
 const heartbeatMs = 25_000;
 
-type SocketState = { channels: Set<string> };
+export type OnlineRoomRealtimeSocketState = {
+  actorId: string;
+  capability: OnlineRoomRealtimeCapability | null;
+  capabilityToken: string | null;
+};
 type StreamEntry = [string, string[]];
 type StreamResult = Array<[string, StreamEntry[]]> | null;
 
 const hub = {
-  sockets: new Map<WebSocket, SocketState>(),
+  sockets: new Map<WebSocket, OnlineRoomRealtimeSocketState>(),
   streaming: false,
   streamClient: null as ReturnType<typeof createClient> | null,
   heartbeat: null as ReturnType<typeof setInterval> | null,
   lastEventId: "0-0",
 };
+
+let authorizeCapability: (token: string) => Promise<OnlineRoomRealtimeCapability | null> = async () => null;
+
+export function configureOnlineRoomRealtimeAuthorization(
+  authorize: (token: string) => Promise<OnlineRoomRealtimeCapability | null>,
+) {
+  authorizeCapability = authorize;
+}
 
 export function onlineRoomRealtimeEnabled(env: NodeJS.ProcessEnv = process.env) {
   if (env.ONLINE_ROOM_WEBSOCKET_ENABLED === "0") return false;
@@ -60,11 +74,24 @@ function send(ws: WebSocket, event: OnlineRoomRevisionEvent | { type: "subscribe
   ws.send(JSON.stringify(event));
 }
 
-function broadcast(event: OnlineRoomRevisionEvent) {
+export async function deliverOnlineRoomRevision(
+  event: OnlineRoomRevisionEvent,
+  sockets: Map<WebSocket, OnlineRoomRealtimeSocketState> = hub.sockets,
+  authorize: (token: string) => Promise<OnlineRoomRealtimeCapability | null> = authorizeCapability,
+) {
   const channel = onlineRoomRealtimeChannel(event.game, event.code);
   if (!channel.endsWith(":")) {
-    for (const [ws, state] of hub.sockets) {
-      if (state.channels.has(channel)) send(ws, event);
+    for (const [ws, state] of sockets) {
+      const previous = state.capability;
+      if (!previous || onlineRoomRealtimeChannel(previous.game, previous.code) !== channel) continue;
+      const current = state.capabilityToken ? await authorize(state.capabilityToken) : null;
+      if (!current || current.actorId !== state.actorId) {
+        state.capability = null;
+        state.capabilityToken = null;
+        ws.close(1008, "authorization-revoked");
+        continue;
+      }
+      send(ws, event);
     }
   }
 }
@@ -118,7 +145,7 @@ async function runStream(url: string, keyPrefix: string) {
         for (const [id, flat] of entries) {
           hub.lastEventId = id;
           const event = parseStoredEvent(fields(flat).d);
-          if (event) broadcast(event);
+          if (event) await deliverOnlineRoomRevision(event);
         }
       }
     }
@@ -166,24 +193,42 @@ function stopHeartbeat() {
   hub.heartbeat = null;
 }
 
-export function registerOnlineRoomSocket(ws: WebSocket) {
-  hub.sockets.set(ws, { channels: new Set() });
+export function registerOnlineRoomSocket(ws: WebSocket, actorId: string) {
+  hub.sockets.set(ws, { actorId, capability: null, capabilityToken: null });
   startHeartbeat();
   startStream();
 }
 
-export function subscribeOnlineRoomSocket(ws: WebSocket, subscription: OnlineRoomSubscription) {
+export async function subscribeOnlineRoomSocket(ws: WebSocket, subscription: OnlineRoomSubscription) {
   const state = hub.sockets.get(ws);
-  if (!state) return;
-  state.channels.clear();
-  state.channels.add(onlineRoomRealtimeChannel(subscription.game, subscription.code));
+  if (!state) return false;
+  const capability = await authorizeCapability(subscription.capability);
+  if (!capability || capability.actorId !== state.actorId) {
+    state.capability = null;
+    state.capabilityToken = null;
+    ws.close(1008, "authorization-denied");
+    return false;
+  }
+  state.capability = capability;
+  state.capabilityToken = subscription.capability;
   send(ws, { type: "subscribed" });
+  return true;
 }
 
 export function unregisterOnlineRoomSocket(ws: WebSocket) {
   hub.sockets.delete(ws);
   stopHeartbeat();
 }
+
+onOnlineRoomRealtimeRevocation((signal) => {
+  for (const [ws, state] of hub.sockets) {
+    if (state.actorId === signal.actorId) {
+      state.capability = null;
+      state.capabilityToken = null;
+      ws.close(1008, "authorization-revoked");
+    }
+  }
+});
 
 export async function publishOnlineRoomRevision(game: OnlineRoomRealtimeGame, room: { code: string; revision: number }) {
   if (!onlineRoomRealtimeEnabled()) return false;

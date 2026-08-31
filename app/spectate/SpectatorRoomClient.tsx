@@ -42,6 +42,7 @@ export function SpectatorRoomClient({ game, code }: { game: OnlineRoomRealtimeGa
     game,
     roomCode: data ? code : null,
     intervalMs: onlineRoomPollingIntervals.active,
+    realtimeRole: "spectator",
     fetchRoom: async () => (await load()).snapshot,
     onRoom: (snapshot) => setData((current) => current ? { ...current, snapshot } : current),
     onMissing: () => { setData(null); setMessage("部屋が解散されました。"); },

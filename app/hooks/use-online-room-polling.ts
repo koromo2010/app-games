@@ -29,6 +29,7 @@ type OnlineRoomPollingOptions<Room> = {
   onMissing: () => void;
   onError?: (error: unknown) => void;
   storageKey?: (code: string) => string;
+  realtimeRole?: "participant" | "spectator";
 };
 
 /** Uses WebSocket update hints when available and visible-only polling as its fallback. */
@@ -41,6 +42,7 @@ export function useOnlineRoomPolling<Room>({
   onMissing,
   onError,
   storageKey,
+  realtimeRole = "participant",
 }: OnlineRoomPollingOptions<Room>) {
   const callbacks = useRef({ fetchRoom, onRoom, onMissing, onError, intervalMs, storageKey });
   useEffect(() => {
@@ -172,14 +174,32 @@ export function useOnlineRoomPolling<Room>({
       startFallbackPolling();
       reconnectTimer = window.setTimeout(() => {
         reconnectTimer = undefined;
-        if (realtimeAvailable) connectRealtime();
+        if (realtimeAvailable) void connectRealtime();
         else void checkRealtimeAvailability();
       }, reconnectDelay);
       reconnectDelay = nextOnlineRoomRealtimeReconnectDelay(reconnectDelay);
     };
 
-    const connectRealtime = () => {
+    const connectRealtime = async () => {
       if (!active || !realtimeAvailable || socket || typeof WebSocket === "undefined") return;
+      const capabilityResponse = await fetch("/api/online-room-events", {
+        method: "POST",
+        credentials: "same-origin",
+        cache: "no-store",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ game, code, role: realtimeRole }),
+      }).catch(() => null);
+      const capabilityPayload = capabilityResponse?.ok
+        ? await capabilityResponse.json().catch(() => null) as { capability?: unknown } | null
+        : null;
+      const capability = typeof capabilityPayload?.capability === "string"
+        ? capabilityPayload.capability
+        : "";
+      if (!active || !capability) {
+        startFallbackPolling();
+        scheduleReconnect();
+        return;
+      }
       const protocol = window.location.protocol === "https:" ? "wss" : "ws";
       const candidate = new WebSocket(`${protocol}://${window.location.host}/api/online-room-events`);
       socket = candidate;
@@ -189,7 +209,7 @@ export function useOnlineRoomPolling<Room>({
       candidate.addEventListener("open", () => {
         if (!active || socket !== candidate) return candidate.close();
         try {
-          candidate.send(JSON.stringify({ type: "subscribe", game, code }));
+          candidate.send(JSON.stringify({ type: "subscribe", capability, families: ["room-revision"] }));
           clearSubscriptionTimeout();
           subscriptionTimer = window.setTimeout(() => candidate.close(), onlineRoomRealtimeTimings.subscriptionTimeout);
         } catch {
@@ -263,7 +283,7 @@ export function useOnlineRoomPolling<Room>({
         if (!response.ok) throw new Error("Realtime availability check failed");
         realtimeAvailable = true;
         realtimeDisabled = false;
-        connectRealtime();
+        void connectRealtime();
       } catch {
         if (!active || controller.signal.aborted) return;
         updateDiagnostics({ mode: "reconnecting" });
@@ -288,5 +308,5 @@ export function useOnlineRoomPolling<Room>({
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("storage", onStorage);
     };
-  }, [game, roomCode]);
+  }, [game, realtimeRole, roomCode]);
 }

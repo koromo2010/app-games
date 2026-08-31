@@ -178,6 +178,25 @@ export function createGameSdkRoomWatcher<TRoomView>({
       return;
     }
 
+    const capabilityResponse = await fetcher(realtimeEndpoint, {
+      method: "POST",
+      cache: "no-store",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ game: realtimeGame, code: normalizedCode, role: "participant" }),
+    }).catch(() => null);
+    const capabilityPayload = capabilityResponse?.ok
+      ? await capabilityResponse.json().catch(() => null) as { capability?: unknown } | null
+      : null;
+    const capability = typeof capabilityPayload?.capability === "string"
+      ? capabilityPayload.capability
+      : "";
+    if (closed || !capability) {
+      connecting = false;
+      startPolling();
+      return;
+    }
+
     setStatus("connecting");
     const nextSocket = webSocketFactory(url);
     socket = nextSocket;
@@ -185,11 +204,7 @@ export function createGameSdkRoomWatcher<TRoomView>({
     nextSocket.addEventListener("open", () => {
       if (closed || socket !== nextSocket) return;
       reconnectDelay = 1_000;
-      nextSocket.send(JSON.stringify({
-        type: "subscribe",
-        game: realtimeGame,
-        code: normalizedCode,
-      }));
+      nextSocket.send(JSON.stringify({ type: "subscribe", capability, families: ["room-revision"] }));
       stopPolling();
       startReconciliation();
       setStatus("connected");

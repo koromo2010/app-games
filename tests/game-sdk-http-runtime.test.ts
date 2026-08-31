@@ -1054,6 +1054,7 @@ test("SDK Room watcherはrevision通知を受けてHTTPの閲覧Viewだけを再
     webSocketFactory: () => socket,
     fetcher: async (_input, init) => {
       if (init?.method === "HEAD") return new Response(null, { status: 204 });
+      if (init?.method === "POST") return Response.json({ capability: "opaque-capability" });
       return Response.json({
         room: {
           code: "LONGCODE12",
@@ -1076,8 +1077,8 @@ test("SDK Room watcherはrevision通知を受けてHTTPの閲覧Viewだけを再
   socket.emit("open");
   assert.deepEqual(JSON.parse(socket.sent[0] ?? "{}"), {
     type: "subscribe",
-    game: "sdk:sdk-count-up-proof",
-    code: "LONGCODE12",
+    capability: "opaque-capability",
+    families: ["room-revision"],
   });
   assert.equal(socket.sent[0]?.includes("playerId"), false);
   revision = 2;
@@ -1198,6 +1199,7 @@ test("watcher accepts a Command revision and ignores both its notification and a
     webSocketFactory: () => socket,
     fetcher: async (_input, init) => {
       if (init?.method === "HEAD") return new Response(null, { status: 204 });
+      if (init?.method === "POST") return Response.json({ capability: "opaque-capability" });
       reads += 1;
       await initialGate;
       return Response.json({

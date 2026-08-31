@@ -8,11 +8,13 @@ export const onlineRoomSpectatorCookieName = "game-fields-spectator";
 export const onlineRoomSpectatorGrantMaxAgeSeconds = 6 * 60 * 60;
 
 type SpectatorGrant = {
-  version: 1;
+  version: 1 | 2;
   game: OnlineRoomRealtimeGame;
   code: string;
   playerId: string;
   roomCreatedAt: number;
+  roomInstanceId?: string;
+  grantVersion?: number;
   expiresAt: number;
 };
 
@@ -27,7 +29,8 @@ function sign(payload: string) {
 }
 
 export function createOnlineRoomSpectatorGrant(input: Omit<SpectatorGrant, "version" | "expiresAt">, now = Date.now()) {
-  const encoded = Buffer.from(JSON.stringify({ ...input, version: 1, expiresAt: now + onlineRoomSpectatorGrantMaxAgeSeconds * 1000 }), "utf8").toString("base64url");
+  const version = input.roomInstanceId && Number.isSafeInteger(input.grantVersion) ? 2 : 1;
+  const encoded = Buffer.from(JSON.stringify({ ...input, version, expiresAt: now + onlineRoomSpectatorGrantMaxAgeSeconds * 1000 }), "utf8").toString("base64url");
   return `${encoded}.${sign(encoded)}`;
 }
 
@@ -39,7 +42,8 @@ export function parseOnlineRoomSpectatorGrant(token: string, now = Date.now()): 
   if (expected.length !== received.length || !timingSafeEqual(expected, received)) return null;
   try {
     const payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")) as Partial<SpectatorGrant>;
-    return payload.version === 1 && normalizeOnlineRoomRealtimeGame(payload.game) && typeof payload.code === "string" && typeof payload.playerId === "string" && typeof payload.roomCreatedAt === "number" && typeof payload.expiresAt === "number" && payload.expiresAt > now
+    return (payload.version === 1 || payload.version === 2) && normalizeOnlineRoomRealtimeGame(payload.game) && typeof payload.code === "string" && typeof payload.playerId === "string" && typeof payload.roomCreatedAt === "number" && typeof payload.expiresAt === "number" && payload.expiresAt > now
+      && (payload.version === 1 || (typeof payload.roomInstanceId === "string" && Number.isSafeInteger(payload.grantVersion)))
       ? payload as SpectatorGrant
       : null;
   } catch {

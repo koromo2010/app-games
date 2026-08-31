@@ -30,13 +30,14 @@ export type SpectatorSourceRoom = {
   revision: number;
   createdAt: number;
   updatedAt: number;
+  roomInstanceId?: string;
   gameTitle?: string;
   [key: string]: unknown;
 };
 
 type Loader = (code: string) => Promise<unknown | null>;
 
-const loaders: Record<OnlineRoomRealtimeGame, Loader> = {
+const loaders: Partial<Record<OnlineRoomRealtimeGame, Loader>> = {
   wordwolf: loadStoredWordWolfRoom,
   tahoiya: loadAndReconcileStoredTahoiyaRoom,
   hodoai: loadAndReconcileHodoaiRoom,
@@ -98,9 +99,11 @@ export async function loadOnlineRoomForSpectator(
       revision: record.revision,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
+      roomInstanceId: record.creationRequestId,
     } satisfies SpectatorSourceRoom;
   }
-  return await loaders[game](code) as SpectatorSourceRoom | null;
+  const loader = loaders[game];
+  return loader ? await loader(code) as SpectatorSourceRoom | null : null;
 }
 
 export function onlineRoomSpectatorSnapshot(game: OnlineRoomRealtimeGame, room: SpectatorSourceRoom, locale: AppLocale = "ja") {
