@@ -55,6 +55,8 @@ PRIORITY / OWNER / DEPENDENCIES / ORDER
 
 `NEW_T_REQUIRED`なら管理が採番・登録し、監督へsource pointerを渡す。登録後は新しい監査やTODO判断を待たず、監督と作業で継続する。監督のtechnical close後、管理は結論を再判定せずledgerへ同期する。
 
+監督はtask開始時にcontractを一度固定し、作業は成功条件と直接証拠が揃うまで同じ`TASK_ACTIVE`で内部回復する。通常Developmentの途中phase、tool failure、利用者操作待ち、ref前進を監督handoffへ変換しない。作業は完了時に一つのacceptance packetだけを渡し、監督はpacketが示すcanonical sourceと証拠identityを一度read-backしてtechnical closeを判定する。同じruntime操作・test・証拠収集の再実行や利用者の追加承認を前提にしない。保護対象operation、利用者判断が必要な仕様分岐、証拠不一致だけは実行正本のdecision kernelへ返す。
+
 同じintakeの再掲、途中経過、checkpoint、監督の技術判定を新しい`TODO_DECISION`にしない。通常報告を監査経由へ迂回させない。
 
 ## 4. 監査系列の受け渡し

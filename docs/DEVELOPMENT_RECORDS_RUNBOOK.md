@@ -12,14 +12,16 @@
 
 | 役割 | 保存する内容 | 既存label |
 | --- | --- | --- |
-| `TASK_CONTRACT` | 目的、対象、authorization、不変条件、成功・停止条件 | `NEXT_INSTRUCTION` |
-| `CURRENT_STATUS` | 現在地、candidate、完了工程、外部write件数、未完了、再開点 | `CHECKPOINT` |
+| `TASK_CONTRACT` | 目的、対象、利用者が明示したtask固有境界、成功条件 | `NEXT_INSTRUCTION` |
+| `CURRENT_STATUS` | 現在地、candidate、完了工程、未完了、再開点、存在する場合だけ保護対象または結果不明write | `CHECKPOINT` |
 | `APPROVAL_REQUEST` | 承認対象の一つのlogical change、最大影響、事前条件、rollback | `EXECUTION_SHEET` |
 | `FINAL_RESULT` | 正本が判定したterminal state／dispositionと直接証拠 | `RESULT` |
 
-同じ事実を複数の役割へ複製しない。契約が変わらない進捗、承認待ち解除、内部phase、thread移行では`TASK_CONTRACT`を改版しない。`HANDOFF`は`TASK_CONTRACT_POINTER`と`CURRENT_STATUS_POINTER`だけを持ち、第五の情報所有者にしない。
+同じ事実を複数の役割へ複製しない。`TASK_CONTRACT`は利用者の明示指示を要約し、通常のprototype／development authorizationと共通停止条件は正本から継承する。artifact作成者がattempt回数、固定commit／tool／transport、中間停止・再承認点を追加しない。利用者が明示したtask固有の上限、禁止、順序だけを`USER_BOUNDARIES`として記録できる。契約が変わらない進捗、承認待ち解除、内部phase、thread移行では改版しない。`HANDOFF`は`TASK_CONTRACT_POINTER`と`CURRENT_STATUS_POINTER`だけを持ち、第五の情報所有者にしない。
 
-prototype／developmentのstanding authorization内にあるcommit、non-force `develop`更新、自動delivery、runtime観測、retry、forward fixには`APPROVAL_REQUEST`を作らない。Execution sheetは、main／production、不可逆または再生成不能なdata、認証・権限等、正本が追加承認を要求する一つの保護対象operationだけに使う。
+prototype／developmentのstanding authorization内にあるcommit、non-force `develop`更新、自動delivery、runtime観測、retry、forward fixには`APPROVAL_REQUEST`を作らない。Execution sheetは、main／production、不可逆または再生成不能なdata、credential・account／MFA登録・role／grant・環境binding等、正本が追加承認を要求する一つの保護対象operationだけに使う。
+
+standing authorization内のrollbackには独立artifactを作らない。Delivery Runbook所定の変更前remote commit／tree、対象branch、変更範囲が既存preflightまたは`CURRENT_STATUS`から識別できれば足り、rollback計画書、事前rollback commit、復元訓練、rollback専用checkpointを追加しない。canonical remoteとcurrent statusだけでは復元できない場合に限り、本書第3節の完全復旧artifact条件を使う。
 
 各記録には実際に適用したpolicy観測commitを一つだけ記載する。canonical locatorはremote read-backした`origin/develop:docs/DEVELOPMENT_EXECUTION_RULES.md`であり、commitとpathからpolicy bytesを取得するためhistory探索や別blob fieldは使わない。新しいthread／workspaceの初回、承認済みpolicy変更の通知時、またはidentity不明時だけ確認する。同じ`TASK_ACTIVE`で確認済みのidentityはそのまま再利用し、連続turn、内部retry、checkpoint、承認後再開、record作成、製品commitの前進だけをremote再確認の契機にしない。
 
@@ -35,7 +37,7 @@ POLICY_APPLIED: docs/DEVELOPMENT_EXECUTION_RULES.md @ <product-commit>
 
 | 役割 | 最小field |
 | --- | --- |
-| `TASK_CONTRACT` | `TARGET`、`AUTHORIZATION`または`ALLOWED_PRODUCT_WRITES`＋`FORBIDDEN_EFFECTS`、`SUCCESS_CONDITION`、`TRUE_STOP_CONDITIONS` |
+| `TASK_CONTRACT` | `TARGET`、`AUTHORIZATION`、`SUCCESS_CONDITION`。利用者が明示した場合だけ`USER_BOUNDARIES`。旧形式の`ALLOWED_PRODUCT_WRITES`＋`FORBIDDEN_EFFECTS`も履歴互換で読めるが、新規生成しない |
 | `CURRENT_STATUS` | `TASK_CONTRACT_POINTER`または`TASK_CONTRACT_IDENTITY` |
 | `APPROVAL_REQUEST` | §4の六field |
 | `FINAL_RESULT` | `TERMINAL_DISPOSITION` |
@@ -58,11 +60,11 @@ checkpoint repositoryの正規位置は次に固定する。
 
 記録本文は既存pathを上書きせず、`docs/gpt-save/`へ新規immutable Markdownとして保存する。current pointerだけは、remote read-back済みの最新recordを指す可変索引として更新できる。repository、branch、path、record commit、blob、内容をremote read-backしてから引き渡す。
 
-新しい`TASK_CONTRACT`を保存できない場合は`INSTRUCTION_RECORD_UNSAVED / AT RISK`とし、チャット本文だけを正式な新入口として扱わない。
+新しい`TASK_CONTRACT`を保存できない場合は`INSTRUCTION_RECORD_UNSAVED / AT RISK`とするが、権限元である利用者指示は失効せず、可逆なlocal／prototype／development作業を続ける。対象identityを一意に維持できない保護対象writeだけを待ち、保存経路の回復後に最小recordを追記する。
 
 ## 3. Status checkpointと復旧
 
-remote未到達のままturnを終える場合、または再生成困難な進捗が最後の耐久保存から約10分以上remote未到達のまま蓄積した場合は、`CURRENT_STATUS`を軽量checkpointとして保存する。最低限、task、contract identity、base、candidateまたは差分、完了工程、外部write件数、未完了、再開点を含める。
+remote未到達のままturnを終える場合、または再生成困難な進捗が最後の耐久保存から約10分以上remote未到達のまま蓄積した場合は、`CURRENT_STATUS`を軽量checkpointとして保存する。最低限、task、contract identity、base、candidateまたは差分、完了工程、未完了、再開点を含める。保護対象または結果不明writeが存在する場合だけ、対象と論理件数を追加する。通常Developmentのcommit、retry、自動Deployment、read-only確認を0件一覧として列挙しない。
 
 旧labelとの互換上、軽量な`CURRENT_STATUS`を`RECOVERY_CHECKPOINT`、完全復旧artifactを伴うものを`FULL_RECOVERY_CHECKPOINT`と表記できる。どちらも新しいstateや第五の成果物役割ではない。
 
@@ -89,19 +91,19 @@ PRECONDITIONS: <required checks or NONE>
 ROLLBACK: <method or NOT_AVAILABLE with reason>
 ```
 
-final resultは正本がterminal state／dispositionを判定した場合だけ保存し、次のいずれかを一つ記録する。
+final resultは監督がacceptance packetからterminal state／dispositionを判定した場合だけ保存し、次のいずれかを一つ記録する。作業側は途中phaseごとにhandoffせず、成功条件と直接証拠が揃った時点で一つのpacketを渡す。packetは第五のartifactではなく、既存の`CURRENT_STATUS`または同じ内容の作業結果を一度だけ渡す呼称である。監督はpacket内のcanonical pointerと証拠identityを一度read-backし、同じruntime操作・test・証拠収集の再実行や利用者の追加承認をtechnical closeの前提にしない。
 
 ```text
 TERMINAL_DISPOSITION: TASK_DONE | EXTERNAL_BLOCKED | USER_CANCELED | SUPERSEDED:<replacement>
 ```
 
-`TASK_ACTIVE`、milestone、approval待ちをterminal dispositionにしない。先に次を自然文で示し、その後に技術証拠を置く。
+`TASK_ACTIVE`、milestone、approval待ち、ログイン・MFA・選択等の利用者操作待ちをterminal dispositionにしない。`EXTERNAL_BLOCKED`は利用可能な内部回復、利用者の一操作、承認のいずれでも解消できず実行所有を終了する場合だけに使う。先に次を自然文で示し、その後に技術証拠を置く。
 
 旧状態表記との互換上、`CLOSED:YES`は`TASK_DONE`の直接証拠が揃った場合だけ、`CLOSED:NO`は`TASK_ACTIVE`または`EXTERNAL_BLOCKED`の補助表記として使う。`DONE`、`STOPPED`、`WAITING`を独立した主stateにしない。
 
 1. 顧客または運用への結果
 2. 満たした、または残る成功条件
-3. 実行した外部writeと件数
+3. 存在する場合だけ、保護対象または結果不明writeと論理件数
 4. 未検証事項と影響
 5. rollbackまたは再開点
 6. commit、tree、blob、record、Deployment等の証拠

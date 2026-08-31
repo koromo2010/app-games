@@ -17,8 +17,8 @@ const artifactRoles = new Map([
 const satellitePolicyReference = /docs\/(?:DEVELOPMENT_DELIVERY_RUNBOOK|DEVELOPMENT_RECORDS_RUNBOOK|AI_EXECUTION_TROUBLESHOOTING|AUDIT_THREAD_RULES)\.md/i;
 
 const checkpointOnlyLabels = /^(?:CURRENT_CANDIDATE|COMPLETED_STEPS|PENDING_STEPS|RESUME_POINT|LAST_CHECKPOINT|CHECKPOINT_COMMIT)\s*:/mi;
-const managementForbiddenLabels = /^(?:ALLOWED_PRODUCT_WRITES|FORBIDDEN_EFFECTS|SUCCESS_CONDITION|TRUE_STOP_CONDITIONS|TASK_DONE|CLOSED)\s*:/mi;
-const contractOnlyLabels = /^(?:ALLOWED_PRODUCT_WRITES|FORBIDDEN_EFFECTS|SUCCESS_CONDITION|TRUE_STOP_CONDITIONS)\s*:/mi;
+const managementForbiddenLabels = /^(?:ALLOWED_PRODUCT_WRITES|FORBIDDEN_EFFECTS|SUCCESS_CONDITION|TRUE_STOP_CONDITIONS|USER_BOUNDARIES|TASK_DONE|CLOSED)\s*:/mi;
+const contractOnlyLabels = /^(?:ALLOWED_PRODUCT_WRITES|FORBIDDEN_EFFECTS|SUCCESS_CONDITION|TRUE_STOP_CONDITIONS|USER_BOUNDARIES)\s*:/mi;
 const statusOwnedLabels = /^(?:CURRENT_CANDIDATE|COMPLETED_STEPS|PENDING_STEPS|RESUME_POINT|TASK_STATE|TERMINAL_DISPOSITION)\s*:/mi;
 const approvalFields = /^(?:OPERATION|SEMANTIC_ENVIRONMENT|TARGET_IDENTITY|MAXIMUM_EXTERNAL_EFFECT|PRECONDITIONS|ROLLBACK)\s*:/mi;
 const approvalExclusiveLabels = /^(?:OPERATION|MAXIMUM_EXTERNAL_EFFECT|PRECONDITIONS)\s*:/mi;
@@ -90,16 +90,17 @@ export function validateDevelopmentArtifact(type, text, path = "<memory>") {
     if (countMatches(text, /^POLICY_(?:APPLIED|REFERENCE)\s*:/gmi) !== 1) {
       errors.push(`${path}: POLICY_IDENTITY_NOT_SINGLE`);
     }
-    requireSingleFields(errors, text, path, "TASK_CONTRACT", [
-      "TARGET", "SUCCESS_CONDITION", "TRUE_STOP_CONDITIONS",
-    ]);
+    requireSingleFields(errors, text, path, "TASK_CONTRACT", ["TARGET", "SUCCESS_CONDITION"]);
     const authorizationCount = countLabel(text, "AUTHORIZATION");
     const allowedCount = countLabel(text, "ALLOWED_PRODUCT_WRITES");
     const forbiddenCount = countLabel(text, "FORBIDDEN_EFFECTS");
     const compactAuthorization = authorizationCount === 1 && allowedCount === 0 && forbiddenCount === 0;
-    const splitAuthorization = authorizationCount === 0 && allowedCount === 1 && forbiddenCount === 1;
-    if (!compactAuthorization && !splitAuthorization) {
+    const legacySplitAuthorization = authorizationCount === 0 && allowedCount === 1 && forbiddenCount === 1;
+    if (!compactAuthorization && !legacySplitAuthorization) {
       errors.push(`${path}: TASK_CONTRACT_AUTHORIZATION_INVALID`);
+    }
+    if (countLabel(text, "TRUE_STOP_CONDITIONS") > 0) {
+      errors.push(`${path}: TASK_CONTRACT_GENERATED_STOP_CONDITIONS_DEPRECATED`);
     }
     if (checkpointOnlyLabels.test(text)) {
       errors.push(`${path}: CHECKPOINT_STATE_IN_NEXT_INSTRUCTION`);
@@ -163,6 +164,10 @@ export function validateDevelopmentArtifact(type, text, path = "<memory>") {
 
 const hasAll = (text, values) => values.every((value) => text.includes(value));
 
+function decisionCaseRow(text, caseId) {
+  return text.split(/\r?\n/).find((line) => line.includes(`\`${caseId}\``)) ?? "";
+}
+
 export function getCanonicalDevelopmentPolicyWarnings(read = (path) => readFileSync(path, "utf8")) {
   const warnings = [];
   const agentLines = read("AGENTS.md").split(/\r?\n/).filter((line) => line.trim()).length;
@@ -220,12 +225,45 @@ export function checkCanonicalDevelopmentPolicy(read = (path) => readFileSync(pa
   if (!hasAll(rules + records, ["logical change", "tool call", "MAXIMUM_EXTERNAL_EFFECT", "ROLLBACK"])) {
     errors.push("DEVELOPMENT_POLICY: USER_DECISION_APPROVAL_UNIT_MISSING");
   }
+  const expectedDecisionCases = new Map([
+    ["ACCEPTED", "TASK_DONE"],
+    ["USER_ACTION_AVAILABLE", "TASK_ACTIVE"],
+    ["PROTECTED_EFFECT", "TASK_ACTIVE"],
+    ["UNKNOWN_WRITE", "TASK_ACTIVE"],
+    ["REVERSIBLE_DEVELOPMENT", "TASK_ACTIVE"],
+    ["INTERNAL_FAILURE", "TASK_ACTIVE"],
+    ["NO_RECOVERY_PATH", "EXTERNAL_BLOCKED"],
+  ]);
+  for (const [caseId, expectedState] of expectedDecisionCases) {
+    const row = decisionCaseRow(rules, caseId);
+    if (!row.includes(`\`${expectedState}\``)) {
+      errors.push(`docs/DEVELOPMENT_EXECUTION_RULES.md: DECISION_CASE_MISSING_OR_WRONG ${caseId} expected=${expectedState}`);
+    }
+  }
   if (!hasAll(rules + delivery + records, [
-    "standing authorization", "prototype／development", "non-force", "forward fix",
-    "main／production", "再生成不能", "Execution sheet", "一回の内部attemptで消費しない",
-  ])) errors.push("DEVELOPMENT_POLICY: PROTOTYPE_STANDING_AUTHORIZATION_MISSING");
+    "standing authorization", "main／production", "再生成不能", "一回の内部attemptで消費しない",
+  ])) errors.push("DEVELOPMENT_POLICY: AUTHORIZATION_BOUNDARY_MISSING");
+  if (!rules.includes("[「Rollbackの成立と最小証拠」](./DEVELOPMENT_DELIVERY_RUNBOOK.md#rollbackの成立と最小証拠)")
+    || !rules.includes("[Records Runbook](./DEVELOPMENT_RECORDS_RUNBOOK.md)")
+    || !delivery.includes("### Rollbackの成立と最小証拠")
+    || !records.includes("standing authorization内のrollbackには独立artifactを作らない")) {
+    errors.push("DEVELOPMENT_POLICY: ROLLBACK_ROUTE_OR_ARTIFACT_BOUNDARY_MISSING");
+  }
+  const overbroadDevelopmentGates = [
+    "secret・認証・権限・接続設定の変更",
+    "認証・権限変更を含まない可逆な変更",
+    "認証・権限等、正本が追加承認",
+    "pushまたはDeployment後はremote ref、Deployment identity、source SHA、status、health",
+    "チャット本文だけを正式な新入口として扱わない",
+    "利用者専用操作、仕様分岐、権限・接続・外部service等が唯一の残存依存である",
+  ];
+  for (const obsolete of overbroadDevelopmentGates) {
+    if ((rules + delivery + records).includes(obsolete)) {
+      errors.push(`DEVELOPMENT_POLICY: OVERBROAD_DEVELOPMENT_GATE ${obsolete}`);
+    }
+  }
   if (!hasAll(records, [
-    "`ARTIFACT_TYPE`", "`TARGET`", "`AUTHORIZATION`", "`TASK_CONTRACT_POINTER`", "`TERMINAL_DISPOSITION`",
+    "`ARTIFACT_TYPE`", "`TARGET`", "`AUTHORIZATION`", "`USER_BOUNDARIES`", "`TASK_CONTRACT_POINTER`", "`TERMINAL_DISPOSITION`",
   ])) errors.push("docs/DEVELOPMENT_RECORDS_RUNBOOK.md: ARTIFACT_SAFETY_SCHEMA_MISSING");
   if (!hasAll(records, [
     "T番号を案件説明の代わりにしない", "`T-<id>（短い案件名）`", "同じ表示内の再出",

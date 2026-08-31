@@ -7,6 +7,8 @@ import {
 } from "../scripts/check-development-artifact-policy.mjs";
 
 const read = (path: string) => readFileSync(path, "utf8");
+const decisionCase = (text: string, id: string) =>
+  text.split(/\r?\n/).find((line) => line.includes(`\`${id}\``)) ?? "";
 
 test("execution policy is a compact decision kernel with routed runbooks", () => {
   const agents = read("AGENTS.md");
@@ -52,12 +54,20 @@ test("state, authorization, evidence and policy adoption each have one owner", (
   assert.match(root, /task stateは次の三つだけ/);
   assert.match(root, /`TASK_ACTIVE`[\s\S]*`TASK_DONE`[\s\S]*`EXTERNAL_BLOCKED`/);
   assert.match(root, /各判断では上から最初/);
-  assert.match(root, /未承認の外部write.*`TASK_ACTIVE`/);
-  assert.match(root, /再計画し.*内部回復/);
+  for (const [caseId, state] of [
+    ["ACCEPTED", "TASK_DONE"],
+    ["USER_ACTION_AVAILABLE", "TASK_ACTIVE"],
+    ["PROTECTED_EFFECT", "TASK_ACTIVE"],
+    ["UNKNOWN_WRITE", "TASK_ACTIVE"],
+    ["REVERSIBLE_DEVELOPMENT", "TASK_ACTIVE"],
+    ["INTERNAL_FAILURE", "TASK_ACTIVE"],
+    ["NO_RECOVERY_PATH", "EXTERNAL_BLOCKED"],
+  ]) assert.match(decisionCase(root, caseId), new RegExp("`" + state + "`"));
   for (const subordinate of [delivery, records, audit]) {
     assert.doesNotMatch(subordinate, /task stateは次の三つだけ/);
   }
-  assert.match(delivery, /Room.*許可しない/);
+  assert.match(delivery, /disposable Development Room.*standing authorization/);
+  assert.match(delivery, /production Room.*明示承認/);
   assert.match(delivery, /`READY`.*runtime PASS/);
   assert.match(delivery, /`VALUE_VERIFIABLE`.*`INTERACTION_REQUIRED`.*`VISUAL_REQUIRED`/);
   assert.match(delivery, /`REQUIREMENT_SATISFIED`.*`USER_ACTION_REQUIRED`.*`STATE_UNKNOWN`/);
@@ -106,12 +116,24 @@ test("records serialize four roles without becoming a second lifecycle owner", (
     "TASK: T-200",
     "OBJECTIVE: Complete the accepted correction",
     "TARGET: development product source",
-    "AUTHORIZATION: local reversible work only",
+    "AUTHORIZATION: standing prototype/development authorization; protected effects excluded",
     "SUCCESS_CONDITION: accepted tests pass",
-    "TRUE_STOP_CONDITIONS: an external dependency is the only remaining blocker",
   ].join("\n");
   assert.deepEqual(validateDevelopmentArtifact("task-contract", artifact), []);
   assert.deepEqual(validateDevelopmentArtifact("next-instruction", artifact), []);
+
+  const withUserBoundary = artifact + "\nUSER_BOUNDARIES: user explicitly limited one protected write";
+  assert.deepEqual(validateDevelopmentArtifact("task-contract", withUserBoundary), []);
+  const legacySplitBoundary = artifact
+    .replace("AUTHORIZATION: standing prototype/development authorization; protected effects excluded", [
+      "ALLOWED_PRODUCT_WRITES: one user-approved protected write",
+      "FORBIDDEN_EFFECTS: every other protected effect",
+    ].join("\n"));
+  assert.deepEqual(validateDevelopmentArtifact("task-contract", legacySplitBoundary), []);
+  assert.match(
+    validateDevelopmentArtifact("task-contract", artifact + "\nTRUE_STOP_CONDITIONS: generated stop").join("\n"),
+    /GENERATED_STOP_CONDITIONS_DEPRECATED/,
+  );
 });
 
 test("prototype development uses standing authorization while protected operations remain gated", () => {
@@ -121,12 +143,61 @@ test("prototype development uses standing authorization while protected operatio
 
   assert.match(root, /prototype／development taskの受理.*standing authorization/s);
   assert.match(root, /phase、retry、commit、Deployment、checkpointごとの承認へ分割せず/);
-  assert.match(root, /main／production.*再生成不能.*不可逆なmigration／data write.*認証・権限/s);
+  assert.match(root, /main／production.*再生成不能.*不可逆なmigration／data write.*credential.*MFA.*role.*binding/s);
   assert.match(root, /write結果.*不明.*writeとretryだけを止める/s);
+  assert.match(root, /rollbackは別成果物の作成ではなく復元可能性.*Rollbackの成立と最小証拠/s);
+  assert.match(root, /\[「Rollbackの成立と最小証拠」\]\(\.\/DEVELOPMENT_DELIVERY_RUNBOOK\.md#rollbackの成立と最小証拠\)/);
+  assert.match(root, /\[Records Runbook\]\(\.\/DEVELOPMENT_RECORDS_RUNBOOK\.md\)/);
   assert.match(delivery, /`develop` ref更新.*standing authorization.*non-force/s);
   assert.match(delivery, /各commit、再配備、runtime failure、forward fix.*Execution sheet/);
+  assert.match(delivery, /変更前のremote commitまたはtree.*revert／restore commitをnon-forceで追加/s);
+  assert.match(delivery, /current headをparent.*対象logical changeの逆差分だけ.*無関係な後続変更を保持/s);
+  assert.match(delivery, /古いtree全体への置換には使わない.*競合を理由にforce更新や全tree復元へ切り替えない/s);
+  assert.match(delivery, /別のrollback計画書、事前rollback commit.*復元訓練.*rollback専用checkpoint/s);
+  assert.match(delivery, /Git refを過去へforceで巻き戻すことは通常のrollbackとみなさない/);
   assert.match(records, /standing authorizationは一回の内部attemptで消費しない/);
   assert.match(records, /Execution sheetは、main／production.*保護対象operation/s);
+  assert.match(records, /standing authorization内のrollbackには独立artifactを作らない/);
+});
+
+test("development gates follow external effects instead of feature names or generated task limits", () => {
+  const root = read("docs/DEVELOPMENT_EXECUTION_RULES.md");
+  const delivery = read("docs/DEVELOPMENT_DELIVERY_RUNBOOK.md");
+  const records = read("docs/DEVELOPMENT_RECORDS_RUNBOOK.md");
+  const checker = read("scripts/check-development-artifact-policy.mjs");
+
+  assert.match(root, /task contract.*新しい権限、禁止、停止条件の出所ではない/);
+  assert.match(root, /利用者が明示していないattempt回数.*追加しない/s);
+  assert.match(root, /旧task contract.*attempt上限.*carry-forwardしない/s);
+  assert.match(root, /認証・権限・接続logicのsource実装.*standing authorizationに含む/s);
+  assert.match(delivery, /認証・権限・接続logicのsource変更.*保護対象状態を実際に変更しない限りこのloopに含む/s);
+  assert.match(root, /disposable Development Roomの作成・通常操作・cleanup/);
+  assert.match(delivery, /disposable Development Room.*操作ごとの追加承認を作らない/s);
+  assert.match(delivery, /push後は更新対象remote ref.*自動Deployment.*場合だけ.*runtime health.*必要な場合だけ/s);
+  assert.match(delivery, /docs・test・配備対象外path.*一律に要求しない/s);
+  assert.match(records, /artifact作成者がattempt回数.*中間停止・再承認点を追加しない/s);
+  assert.match(records, /利用者が明示したtask固有の上限、禁止、順序だけを`USER_BOUNDARIES`/);
+  assert.match(records, /INSTRUCTION_RECORD_UNSAVED \/ AT RISK.*利用者指示は失効せず.*可逆なlocal／prototype／development作業を続ける/s);
+  assert.doesNotMatch(checker, /"事前rollback commit"|"復元訓練"|"rollback専用checkpoint"/);
+});
+
+test("routine development waits and accounting stay lightweight without weakening protected effects", () => {
+  const root = read("docs/DEVELOPMENT_EXECUTION_RULES.md");
+  const delivery = read("docs/DEVELOPMENT_DELIVERY_RUNBOOK.md");
+  const records = read("docs/DEVELOPMENT_RECORDS_RUNBOOK.md");
+  const audit = read("docs/AUDIT_THREAD_RULES.md");
+
+  assert.match(decisionCase(root, "USER_ACTION_AVAILABLE"), /`TASK_ACTIVE`/);
+  assert.match(decisionCase(root, "NO_RECOVERY_PATH"), /`EXTERNAL_BLOCKED`/);
+  assert.match(delivery, /通常のprototype／development loop.*attempt ledgerで数えず/s);
+  assert.match(delivery, /利用者がtask固有の上限を明示した場合.*論理件数を管理/s);
+  assert.match(delivery, /利用者操作.*`EXTERNAL_BLOCKED`、final result、新しいtask contract、approval requestを作らず/s);
+  assert.match(records, /保護対象または結果不明writeが存在する場合だけ.*論理件数/s);
+  assert.match(records, /通常Development.*0件一覧として列挙しない/s);
+  assert.match(records, /packetは第五のartifactではなく/);
+  assert.match(audit, /途中phase.*監督handoffへ変換しない/s);
+  assert.match(audit, /完了時に一つのacceptance packetだけ/s);
+  assert.match(audit, /保護対象operation.*decision kernelへ返す/s);
 });
 
 test("artifact validator enforces each role without duplicating prose policy", () => {
@@ -139,7 +210,6 @@ test("artifact validator enforces each role without duplicating prose policy", (
     "CURRENT_CANDIDATE: abc",
     "COMPLETED_STEPS: implementation",
     "PENDING_STEPS: focused tests",
-    "EXTERNAL_WRITE_COUNT: 0",
     "RESUME_POINT: run focused tests",
   ].join("\n");
   assert.deepEqual(validateDevelopmentArtifact("current-status", status), []);
@@ -149,12 +219,12 @@ test("artifact validator enforces each role without duplicating prose policy", (
   const approval = [
     "ARTIFACT_TYPE: APPROVAL_REQUEST",
     policy,
-    "OPERATION: update develop once",
-    "SEMANTIC_ENVIRONMENT: development",
-    "TARGET_IDENTITY: refs/heads/develop @ old-sha",
-    "MAXIMUM_EXTERNAL_EFFECT: one non-force ref update",
-    "PRECONDITIONS: remote ref unchanged",
-    "ROLLBACK: restore prior ref with separate approval",
+    "OPERATION: promote one logical change to main with its declared automatic Production delivery",
+    "SEMANTIC_ENVIRONMENT: production",
+    "TARGET_IDENTITY: refs/heads/main @ old-sha",
+    "MAXIMUM_EXTERNAL_EFFECT: one non-force main update and its declared automatic Production delivery",
+    "PRECONDITIONS: candidate and both protected effects approved",
+    "ROLLBACK: add a forward revert commit under separate approval",
   ].join("\n");
   assert.deepEqual(validateDevelopmentArtifact("approval-request", approval), []);
   assert.match(validateDevelopmentArtifact("approval-request", approval.replace(/^ROLLBACK:.*$/m, "")).join("\n"), /APPROVAL_FIELD_NOT_SINGLE ROLLBACK/);

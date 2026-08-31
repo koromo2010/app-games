@@ -36,9 +36,8 @@ docs/DEVELOPMENT_EXECUTION_RULES.md @ 0123456789abcdef0123456789abcdef01234567
 TASK: T-200
 OBJECTIVE: Complete the accepted development correction.
 TARGET: development product source
-AUTHORIZATION: local reversible work only
+AUTHORIZATION: standing prototype/development authorization; protected effects excluded
 SUCCESS_CONDITION: The task-specific acceptance passes.
-TRUE_STOP_CONDITIONS: A required operation exceeds the accepted authorization.
 `;
   assert.deepEqual(validateDevelopmentArtifact("next-instruction", instruction), []);
 });
@@ -50,9 +49,8 @@ POLICY_REFERENCE: docs/DEVELOPMENT_EXECUTION_RULES.md @ 0123456789abcdef01234567
 TASK: T-200
 OBJECTIVE: Complete the correction
 TARGET: development product source
-AUTHORIZATION: local reversible work only
+AUTHORIZATION: standing prototype/development authorization; protected effects excluded
 SUCCESS_CONDITION: accepted tests pass
-TRUE_STOP_CONDITIONS: external dependency only
 CURRENT_CANDIDATE: abcdef
 EXECUTION_RULES: 遅くとも約10分ごとにcheckpointを保存する。
 `;
@@ -68,9 +66,8 @@ POLICY_REFERENCE: docs/DEVELOPMENT_EXECUTION_RULES.md @ 0123456789abcdef01234567
 TASK: T-200
 OBJECTIVE: Complete the correction
 TARGET: development product source
-AUTHORIZATION: local reversible work only
+AUTHORIZATION: standing prototype/development authorization; protected effects excluded
 SUCCESS_CONDITION: accepted tests pass
-TRUE_STOP_CONDITIONS: external dependency only
 SECONDARY_POLICY: docs/DEVELOPMENT_DELIVERY_RUNBOOK.md
 `;
   const errors = validateDevelopmentArtifact("next-instruction", instruction);
@@ -86,7 +83,6 @@ TASK_CONTRACT_POINTER: checkpoint://task/contract
 CURRENT_CANDIDATE: abcdef
 COMPLETED_STEPS: focused test
 PENDING_STEPS: runtime acceptance
-EXTERNAL_WRITE_COUNT: 0
 RESUME_POINT: continue the same TASK_ACTIVE contract
 `;
   assert.deepEqual(validateDevelopmentArtifact("checkpoint", checkpoint), []);
@@ -100,7 +96,6 @@ TASK_CONTRACT_POINTER: checkpoint://task/contract
 CURRENT_CANDIDATE: abcdef
 COMPLETED_STEPS: implementation
 PENDING_STEPS: runtime acceptance
-EXTERNAL_WRITE_COUNT: 0
 RESUME_POINT: continue the same TASK_ACTIVE contract
 `;
   const errors = validateDevelopmentArtifact("checkpoint", checkpoint);
