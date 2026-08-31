@@ -107,6 +107,8 @@ debug機能は実際の正規command、validation、認証・認可、Room membe
 
 browser確認は、値だけで判定可能な`VALUE_VERIFIABLE`、利用者の認証・入力が必要な`INTERACTION_REQUIRED`、見た目自体が要件の`VISUAL_REQUIRED`に分ける。値を別経路で取得できる場合は画面操作を要求しない。
 
+browser-native dialogが疑われる場合は、利用中browser surfaceの専用dialog API（現行の`getJsDialog()`または同等機能）をDOM探索、browser UIへの座標操作、利用者handoffより先に確認する。dialogがDOMに現れないこと、またはclickがtimeoutしたことだけで操作不能と判定しない。dialogを処理した後は、画面、route、response、対象stateのうち主張に直接対応するものをread-backし、結果不明のまま同じ操作を再実行しない。専用APIがadvertiseされていない、または実際に失敗し、許可済みの代替経路でも解消できない場合だけ利用者操作を判断する。
+
 利用者操作を求める前に`REQUIREMENT_SATISFIED`、`USER_ACTION_REQUIRED`、`STATE_UNKNOWN`を判定する。返却済みの証拠を再要求せず、`STATE_UNKNOWN`は許可済みread-only経路で解消する。真に`USER_ACTION_REQUIRED`なら、理由、対象、最大影響、成功表示、失敗時の停止方法を一つの短い手順として示す。この待機だけで`EXTERNAL_BLOCKED`、final result、新しいtask contract、approval requestを作らず、操作後は同じ`TASK_ACTIVE`へ再開する。
 
 反復的なDevTools操作やsecret／token／接続文字列の表示・転記を利用者へ依頼しない。

@@ -180,6 +180,9 @@ test("development gates follow external effects instead of feature names or gene
   assert.match(delivery, /debug mode、runner、operator、fixture、seed、状態表示.*再ログイン、アカウント切替、一手ごとの入力より先に使う/s);
   assert.match(delivery, /既存debug機能.*利用者へ手作業を転嫁する前にroot causeを特定.*共通debug機能.*改善してtestする/s);
   assert.match(delivery, /debug機能.*正規command、validation、認証・認可、Room membership、server側状態遷移.*権限回避、production有効化で受入を偽装しない/s);
+  assert.match(delivery, /browser-native dialog.*専用dialog API.*DOM探索.*利用者handoffより先に確認する/s);
+  assert.match(delivery, /dialogがDOMに現れない.*clickがtimeout.*操作不能と判定しない/s);
+  assert.match(delivery, /dialogを処理した後.*read-back.*結果不明のまま同じ操作を再実行しない/s);
   assert.match(delivery, /別TODO、別task contract、追加承認を作らない/);
   assert.match(delivery, /push後は更新対象remote ref.*自動Deployment.*場合だけ.*runtime health.*必要な場合だけ/s);
   assert.match(delivery, /docs・test・配備対象外path.*一律に要求しない/s);
