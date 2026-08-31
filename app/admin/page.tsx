@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { expectedAppEnvironment } from "@/lib/storage-environment-guard";
 import { isCanonicalDevelopmentPlatformRuntime } from "@/lib/sdk-migration-011-proxy";
+import { productionPrivateWorkspaceImportPageMode } from "@/lib/production-private-workspace-import-page-access";
 import { SiteAdminPanel } from "./SiteAdminPanel";
 
 export const dynamic = "force-dynamic";
@@ -29,11 +30,18 @@ export default function SiteAdminPage() {
     project: process.env.VERCEL_PROJECT_NAME,
     ref: process.env.VERCEL_GIT_COMMIT_REF,
   });
+  const showProductionPrivateWorkspaceImport = productionPrivateWorkspaceImportPageMode({
+    semanticEnvironment: process.env.APP_ENV,
+    vercelEnvironment: process.env.VERCEL_ENV,
+    project: process.env.VERCEL_PROJECT_NAME,
+    ref: process.env.VERCEL_GIT_COMMIT_REF,
+  }) !== null;
   return <SiteAdminPanel
     showPreviewVocabularyMigrations={showPreviewVocabularyMigrations}
     releaseManagementMode={releaseManagementMode}
     showOriginalDataPreservation={showOriginalDataPreservation}
     showDevelopmentMigration011Operator={showDevelopmentMigration011Operator}
     showDevelopmentPrivateWorkspaceImport={showDevelopmentMigration011Operator}
+    showProductionPrivateWorkspaceImport={showProductionPrivateWorkspaceImport}
   />;
 }

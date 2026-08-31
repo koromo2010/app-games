@@ -3,6 +3,7 @@ import { SiteAdminPanel } from "@/app/admin/SiteAdminPanel";
 import { getSiteAdminSession } from "@/lib/site-admin-auth";
 import { isCanonicalDevelopmentPlatformRuntime } from "@/lib/sdk-migration-011-proxy";
 import { expectedAppEnvironment } from "@/lib/storage-environment-guard";
+import { productionPrivateWorkspaceImportPageMode } from "@/lib/production-private-workspace-import-page-access";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -58,6 +59,12 @@ export default async function SiteAdminLogoutReconciliationPage() {
         project: process.env.VERCEL_PROJECT_NAME,
         ref: process.env.VERCEL_GIT_COMMIT_REF,
       })}
+      showProductionPrivateWorkspaceImport={productionPrivateWorkspaceImportPageMode({
+        semanticEnvironment: process.env.APP_ENV,
+        vercelEnvironment: process.env.VERCEL_ENV,
+        project: process.env.VERCEL_PROJECT_NAME,
+        ref: process.env.VERCEL_GIT_COMMIT_REF,
+      }) !== null}
       initialLogoutResult={result}
       showInlineLocaleSwitcher={false}
     />
