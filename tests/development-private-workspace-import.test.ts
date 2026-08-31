@@ -8,6 +8,7 @@ import {
   executeDevelopmentPrivateWorkspaceImport,
   isDevelopmentPrivateWorkspaceImportTarget,
   prepareDevelopmentPrivateWorkspaceImportPlan,
+  readDevelopmentPrivateWorkspaceImportStatus,
   validateDevelopmentPrivateWorkspaceBundle,
   type CompletedDevelopmentPrivateWorkspaceImport,
   type DevelopmentPrivateWorkspaceImportAdapter,
@@ -16,6 +17,12 @@ import {
   type DevelopmentPrivateWorkspaceImportTargetSpec,
 } from "../apps/sdk-portal/lib/development-private-workspace-import.ts";
 import { createStoredZip } from "../apps/sdk-portal/lib/stored-zip.ts";
+import {
+  parseDevelopmentPrivateWorkspaceImportExecute,
+  parseDevelopmentPrivateWorkspaceImportPlan,
+  parseDevelopmentPrivateWorkspaceImportStatus,
+} from "../lib/development-private-workspace-import-client.ts";
+import { requireDevelopmentPrivateWorkspaceImportPageAccess } from "../lib/development-private-workspace-import-page-access.ts";
 
 const operationA = "11111111-1111-4111-8111-111111111111";
 const operationB = "22222222-2222-4222-8222-222222222222";
@@ -281,6 +288,64 @@ test("independent plan and execute operations import both synthetic targets priv
   assert.equal(state.effects.targetWrites.get("yabobojpn-lab"), 1);
 });
 
+test("read-only status binds target, bundle, receipt and actual acceptance identity", async () => {
+  const moi = syntheticBundle({ target: "moi-lab2", gameCount: 2 });
+  const yabo = syntheticBundle({ target: "yabobojpn-lab", gameCount: 5 });
+  const specs = specsFor(moi.spec, yabo.spec);
+  const state = memoryAdapter();
+  const plan = await prepareDevelopmentPrivateWorkspaceImportPlan({
+    target: "moi-lab2", archive: moi.archive, specs, adapter: state.adapter,
+  });
+  const identity = {
+    operationId: operationA,
+    planReceipt: plan.response.planReceipt,
+    bundleSha256: moi.spec.bundleSha256,
+  };
+  const notFound = await readDevelopmentPrivateWorkspaceImportStatus({
+    target: "moi-lab2", identity, specs, adapter: state.adapter,
+  });
+  assert.deepEqual(notFound, {
+    schemaVersion: 1,
+    environment: "development",
+    target: "moi-lab2",
+    phase: "status",
+    operationId: operationA,
+    state: "not-found",
+    acceptance: null,
+  });
+  await executeDevelopmentPrivateWorkspaceImport({
+    target: "moi-lab2", archive: moi.archive, specs, adapter: state.adapter,
+    identity: { operationId: operationA, planReceipt: plan.response.planReceipt },
+  });
+  const completed = await readDevelopmentPrivateWorkspaceImportStatus({
+    target: "moi-lab2", identity, specs, adapter: state.adapter,
+  });
+  assert.equal(completed.state, "completed");
+  assert.equal(completed.acceptance?.workspaceId, operationA);
+  assert.equal(completed.acceptance?.gameRows, 2);
+  assert.equal(completed.acceptance?.private, true);
+  assert.equal(completed.acceptance?.quarantined, true);
+  assert.equal(completed.acceptance?.ownerBinding, "unbound");
+  assert.equal(completed.acceptance?.grants, 0);
+  assert.match(completed.acceptance?.statusReceipt ?? "", /^[0-9a-f]{64}$/);
+  await assert.rejects(readDevelopmentPrivateWorkspaceImportStatus({
+    target: "moi-lab2",
+    identity: { ...identity, planReceipt: sha256("substituted") },
+    specs,
+    adapter: state.adapter,
+  }), (error) => code(error) === "DEVELOPMENT_PRIVATE_IMPORT_OPERATION_CONFLICT");
+  await assert.rejects(readDevelopmentPrivateWorkspaceImportStatus({
+    target: "yabobojpn-lab",
+    identity: { operationId: operationA, planReceipt: plan.response.planReceipt, bundleSha256: yabo.spec.bundleSha256 },
+    specs,
+    adapter: state.adapter,
+  }), (error) => code(error) === "DEVELOPMENT_PRIVATE_IMPORT_OPERATION_CONFLICT");
+  state.completed.get(operationA)!.readBack.grantRows = 1 as 0;
+  await assert.rejects(readDevelopmentPrivateWorkspaceImportStatus({
+    target: "moi-lab2", identity, specs, adapter: state.adapter,
+  }), (error) => code(error) === "DEVELOPMENT_PRIVATE_IMPORT_CONCURRENT_CHANGE");
+});
+
 test("target and receipt substitution fail before any target write", async () => {
   const moi = syntheticBundle({ target: "moi-lab2", gameCount: 2 });
   const yabo = syntheticBundle({ target: "yabobojpn-lab", gameCount: 5 });
@@ -300,7 +365,7 @@ test("target and receipt substitution fail before any target write", async () =>
   assert.notEqual(moiPlan.response.planReceipt, yaboPlan.response.planReceipt);
 });
 
-test("completed replay is idempotent and an operation id cannot cross targets", async () => {
+test("completed replay and cross-target operation reuse both fail closed", async () => {
   const moi = syntheticBundle({ target: "moi-lab2", gameCount: 2 });
   const yabo = syntheticBundle({ target: "yabobojpn-lab", gameCount: 5 });
   const specs = specsFor(moi.spec, yabo.spec);
@@ -308,11 +373,10 @@ test("completed replay is idempotent and an operation id cannot cross targets", 
   const plan = await prepareDevelopmentPrivateWorkspaceImportPlan({ target: "moi-lab2", archive: moi.archive, specs, adapter: state.adapter });
   const identity = { operationId: operationA, planReceipt: plan.response.planReceipt };
   const first = await executeDevelopmentPrivateWorkspaceImport({ target: "moi-lab2", archive: moi.archive, specs, adapter: state.adapter, identity });
-  const replay = await executeDevelopmentPrivateWorkspaceImport({ target: "moi-lab2", archive: moi.archive, specs, adapter: state.adapter, identity });
   assert.equal(first.replayed, false);
-  assert.equal(replay.replayed, true);
-  assert.equal(replay.logicalWrites, 0);
-  assert.equal(replay.terminalReceipt, first.terminalReceipt);
+  await assert.rejects(executeDevelopmentPrivateWorkspaceImport({
+    target: "moi-lab2", archive: moi.archive, specs, adapter: state.adapter, identity,
+  }), (error) => code(error) === "DEVELOPMENT_PRIVATE_IMPORT_OPERATION_CONFLICT");
   assert.equal(state.effects.targetWrites.get("moi-lab2"), 1);
   await assert.rejects(executeDevelopmentPrivateWorkspaceImport({
     target: "yabobojpn-lab", archive: yabo.archive, specs, adapter: state.adapter,
@@ -424,19 +488,200 @@ test("cross-target workspace rows, non-READY games and owner guesses are rejecte
   }
 });
 
+test("browser projections accept only exact write-free plan, execute and status contracts", () => {
+  const target = "moi-lab2" as const;
+  const spec = developmentPrivateWorkspaceImportTargetSpecs[target];
+  const contentSetSha256 = "a".repeat(64);
+  const planReceipt = "b".repeat(64);
+  const plan = parseDevelopmentPrivateWorkspaceImportPlan({
+    schemaVersion: 1,
+    environment: "development",
+    target,
+    phase: "plan",
+    writesPerformed: 0,
+    bundle: {
+      bytes: spec.bundleBytes,
+      sha256: spec.bundleSha256,
+      schemaVersion: 1,
+      gameCount: spec.gameCount,
+      gameIdentitySetSha256: spec.gameIdentitySetSha256,
+      perGameIdentitySha256: spec.perGameIdentitySha256,
+      contentSetSha256,
+    },
+    intendedMutations: {
+      privateWorkspaceRows: 1,
+      privateGameRows: 2,
+      privateFileRows: 9,
+      visibility: "private-quarantined",
+      ownerBinding: "unbound",
+      grants: 0,
+      releases: 0,
+      publications: 0,
+      aliases: 0,
+      rooms: 0,
+    },
+    beforeStateSha256: "c".repeat(64),
+    planReceipt,
+  }, target);
+  assert.equal(plan?.writesPerformed, 0);
+  assert.equal(plan?.planReceipt, planReceipt);
+  assert.equal(parseDevelopmentPrivateWorkspaceImportPlan({ ...plan, writesPerformed: 1 }, target), null);
+
+  const terminal = parseDevelopmentPrivateWorkspaceImportExecute({
+    schemaVersion: 1,
+    environment: "development",
+    target,
+    phase: "execute",
+    operationId: operationA,
+    state: "completed",
+    visibility: "private-quarantined",
+    ownerBinding: "unbound",
+    logicalWrites: 1,
+    replayed: false,
+    bundle: {
+      bytes: spec.bundleBytes,
+      sha256: spec.bundleSha256,
+      schemaVersion: 1,
+      gameCount: spec.gameCount,
+      gameIdentitySetSha256: spec.gameIdentitySetSha256,
+      perGameIdentitySha256: spec.perGameIdentitySha256,
+      contentSetSha256,
+    },
+    imported: { workspaceRows: 1, gameRows: 2, fileRows: 9 },
+    nonEffects: {
+      unrelatedTarget: "byte-for-byte-unchanged",
+      sourceWorkspace: "row-for-row-unchanged",
+      grants: 0,
+      releases: 0,
+      publications: 0,
+      aliases: 0,
+      rooms: 0,
+    },
+    readBackSha256: "d".repeat(64),
+    terminalReceipt: "e".repeat(64),
+  }, target, operationA);
+  assert.equal(terminal?.logicalWrites, 1);
+  assert.equal(terminal?.acceptance.ownerBinding, "unbound");
+  assert.equal(parseDevelopmentPrivateWorkspaceImportExecute({
+    schemaVersion: 1,
+    environment: "development",
+    target,
+    phase: "execute",
+    operationId: operationA,
+    state: "completed",
+    visibility: "private-quarantined",
+    ownerBinding: "unbound",
+    logicalWrites: 0,
+    replayed: true,
+    bundle: {
+      bytes: spec.bundleBytes,
+      sha256: spec.bundleSha256,
+      schemaVersion: 1,
+      gameCount: spec.gameCount,
+      gameIdentitySetSha256: spec.gameIdentitySetSha256,
+      perGameIdentitySha256: spec.perGameIdentitySha256,
+      contentSetSha256,
+    },
+    imported: { workspaceRows: 1, gameRows: 2, fileRows: 9 },
+    nonEffects: {
+      unrelatedTarget: "byte-for-byte-unchanged",
+      sourceWorkspace: "row-for-row-unchanged",
+      grants: 0,
+      releases: 0,
+      publications: 0,
+      aliases: 0,
+      rooms: 0,
+    },
+    readBackSha256: "d".repeat(64),
+    terminalReceipt: "e".repeat(64),
+  }, target, operationA), null);
+
+  const acceptance = {
+    ...terminal!.acceptance,
+    statusReceipt: "f".repeat(64),
+  };
+  const status = parseDevelopmentPrivateWorkspaceImportStatus({
+    schemaVersion: 1,
+    environment: "development",
+    target,
+    phase: "status",
+    operationId: operationA,
+    state: "completed",
+    acceptance,
+  }, target, operationA);
+  assert.equal(status?.state, "completed");
+  assert.equal(parseDevelopmentPrivateWorkspaceImportStatus({
+    schemaVersion: 1,
+    environment: "development",
+    target: "yabobojpn-lab",
+    phase: "status",
+    operationId: operationA,
+    state: "completed",
+    acceptance,
+  }, target, operationA), null);
+  assert.equal(parseDevelopmentPrivateWorkspaceImportStatus({
+    schemaVersion: 1,
+    environment: "development",
+    target,
+    phase: "status",
+    operationId: operationA,
+    state: "completed",
+    acceptance: { ...acceptance, grants: 1 },
+  }, target, operationA), null);
+});
+
+test("operator page requires canonical Development, full session and explicit recent MFA", async () => {
+  const runtimeIdentity = () => ({
+    semanticEnvironment: "development",
+    vercelEnvironment: "production",
+    project: "app-games-dev",
+    ref: "develop",
+  });
+  assert.equal(await requireDevelopmentPrivateWorkspaceImportPageAccess({
+    runtimeIdentity,
+    requireFullSession: async () => ({ recentMfa: true }),
+  }), "ready");
+  assert.equal(await requireDevelopmentPrivateWorkspaceImportPageAccess({
+    runtimeIdentity,
+    requireFullSession: async () => ({ recentMfa: false }),
+  }), "step-up-required");
+  await assert.rejects(requireDevelopmentPrivateWorkspaceImportPageAccess({
+    runtimeIdentity: () => ({ ...runtimeIdentity(), project: "app-games" }),
+    requireFullSession: async () => ({ recentMfa: true }),
+  }), /DEVELOPMENT_RUNTIME_REQUIRED/);
+  await assert.rejects(requireDevelopmentPrivateWorkspaceImportPageAccess({
+    runtimeIdentity,
+    requireFullSession: async () => { throw new Error("SITE_ADMIN_FULL_AUTH_REQUIRED"); },
+  }), /SITE_ADMIN_FULL_AUTH_REQUIRED/);
+});
+
 test("source boundary is Development-only, MFA-gated, serializable and has no public mutation path", () => {
   const paths = [
     "apps/sdk-portal/lib/development-private-workspace-import-store.ts",
     "apps/sdk-portal/app/api/internal/recovery/development-private-workspace-import/[target]/plan/route.ts",
     "apps/sdk-portal/app/api/internal/recovery/development-private-workspace-import/[target]/execute/route.ts",
+    "apps/sdk-portal/app/api/internal/recovery/development-private-workspace-import/[target]/status/[operationId]/route.ts",
     "app/api/admin/sdk-development-private-workspace-import/[target]/plan/route.ts",
     "app/api/admin/sdk-development-private-workspace-import/[target]/execute/route.ts",
+    "app/api/admin/sdk-development-private-workspace-import/[target]/status/[operationId]/route.ts",
   ];
   const source = paths.map((path) => readFileSync(path, "utf8")).join("\n");
+  const panel = readFileSync(
+    "app/site-admin/runtime-operations/development-private-workspace-import/[target]/DevelopmentPrivateWorkspaceImportPanel.tsx",
+    "utf8",
+  );
+  const targetPage = readFileSync(
+    "app/site-admin/runtime-operations/development-private-workspace-import/[target]/page.tsx",
+    "utf8",
+  );
+  const adminPanel = readFileSync("app/admin/SiteAdminPanel.tsx", "utf8");
+  const store = readFileSync("apps/sdk-portal/lib/development-private-workspace-import-store.ts", "utf8");
   const migration = readFileSync("db/sdk/011_development_private_workspace_import.sql", "utf8");
   assert.match(source, /expectedEnvironment: "development"/);
   assert.match(source, /sdkSupportEnvironment\(\) !== "development"/);
   assert.match(source, /requireRecentSiteAdminMfa/);
+  assert.match(source, /requireFullSiteAdminSession/);
+  assert.match(source, /isCanonicalDevelopmentPlatformRuntime/);
   assert.match(source, /isolationLevel: "Serializable"/);
   assert.match(source, /pg_advisory_xact_lock/);
   assert.doesNotMatch(source, /expectedEnvironment: "production"/);
@@ -447,4 +692,17 @@ test("source boundary is Development-only, MFA-gated, serializable and has no pu
   assert.match(migration, /historical_restoration_claim = FALSE/);
   assert.doesNotMatch(migration, /REFERENCES sdk_(?:creators|games|app_releases|oauth_grants)/i);
   assert.doesNotMatch(migration, /\b(?:DROP|TRUNCATE|DELETE FROM)\b/i);
+  assert.match(store, /game_rows\.game_rows = o\.game_count/);
+  assert.match(store, /file_rows\.file_rows = o\.runtime_file_count/);
+  assert.match(store, /file_rows\.exact_file_rows = o\.runtime_file_count/);
+  assert.match(panel, /crypto\.subtle|verifyDevelopmentPrivateWorkspaceImportFile/);
+  assert.match(panel, /planUsed\.current = true/);
+  assert.match(panel, /executeUsed\.current = true/);
+  assert.match(panel, /method: "GET"/);
+  assert.match(panel, /execute POSTは再送しません/);
+  assert.match(panel, /同じFile object、固定operation ID、表示済みreceipt/);
+  assert.doesNotMatch(panel, /localStorage|sessionStorage|console\./);
+  assert.match(targetPage, /requireDevelopmentPrivateWorkspaceImportPageAccess/);
+  assert.match(targetPage, /planやimportは自動実行されません|DevelopmentPrivateWorkspaceImportPanel/);
+  assert.match(adminPanel, />Private import<\/Link>/);
 });

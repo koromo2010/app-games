@@ -1,10 +1,23 @@
 import { createHash } from "node:crypto";
 import { extractStoredZip, type StoredZipEntry } from "./stored-zip.ts";
+import {
+  developmentPrivateWorkspaceImportEnvironment,
+  developmentPrivateWorkspaceImportIntent,
+  developmentPrivateWorkspaceImportSchemaVersion,
+  developmentPrivateWorkspaceImportTargetSpecs,
+  type DevelopmentPrivateWorkspaceImportTarget,
+  type DevelopmentPrivateWorkspaceImportTargetSpec,
+} from "./development-private-workspace-import-public-contract.ts";
 
-export const developmentPrivateWorkspaceImportEnvironment = "development" as const;
-export const developmentPrivateWorkspaceImportIntent =
-  "development-private-workspace-import-v1" as const;
-export const developmentPrivateWorkspaceImportSchemaVersion = 1 as const;
+export {
+  developmentPrivateWorkspaceImportEnvironment,
+  developmentPrivateWorkspaceImportIntent,
+  developmentPrivateWorkspaceImportSchemaVersion,
+  developmentPrivateWorkspaceImportTargetSpecs,
+  isDevelopmentPrivateWorkspaceImportTarget,
+  type DevelopmentPrivateWorkspaceImportTarget,
+  type DevelopmentPrivateWorkspaceImportTargetSpec,
+} from "./development-private-workspace-import-public-contract.ts";
 
 const t131A4Parent = "98dec9adf87d3876998275b8a70326e8a8214419";
 const t131A4A0Bytes = 14_375_278;
@@ -17,36 +30,6 @@ const maximumArchiveBytes = 1_048_576;
 const maximumEntryBytes = 2_097_152;
 const maximumPayloadBytes = 8_388_608;
 const maximumEntries = 4_096;
-
-export type DevelopmentPrivateWorkspaceImportTarget = "moi-lab2" | "yabobojpn-lab";
-
-export type DevelopmentPrivateWorkspaceImportTargetSpec = {
-  target: DevelopmentPrivateWorkspaceImportTarget;
-  bundleBytes: number;
-  bundleSha256: string;
-  gameCount: number;
-  gameIdentitySetSha256: string;
-  perGameIdentitySha256: string;
-};
-
-export const developmentPrivateWorkspaceImportTargetSpecs = Object.freeze({
-  "moi-lab2": Object.freeze({
-    target: "moi-lab2",
-    bundleBytes: 127_345,
-    bundleSha256: "71834a0633bb35cb3021c01a758db9f9005f148b790bab9c8b89fd3adb346305",
-    gameCount: 2,
-    gameIdentitySetSha256: "02391d46bc5f142458873e0e7263be48f23bb72f426635663032a438d6dc79fc",
-    perGameIdentitySha256: "f93f01e078cb10a08bf5822e185f1cad0b8ab2734c5d695327d7f2b0c0799220",
-  }),
-  "yabobojpn-lab": Object.freeze({
-    target: "yabobojpn-lab",
-    bundleBytes: 794_921,
-    bundleSha256: "fb743dca6eec13359b8f3f397d3a6c9a73445d7dfb5c72a28ea832cb9e56e522",
-    gameCount: 5,
-    gameIdentitySetSha256: "979f902cdd8ff70a1946d4f989088fbdfd0dbcdf53a37a0344bbdb0e163682ce",
-    perGameIdentitySha256: "e9111e91c17aa9d467b6a6ef13f1b6e82b5d6bc638b3874ed255af27195fa7a4",
-  }),
-} satisfies Record<DevelopmentPrivateWorkspaceImportTarget, DevelopmentPrivateWorkspaceImportTargetSpec>);
 
 export type DevelopmentPrivateWorkspaceImportFile = {
   path: string;
@@ -182,6 +165,37 @@ export type DevelopmentPrivateWorkspaceImportTerminalReceipt = {
   };
   readBackSha256: string;
   terminalReceipt: string;
+};
+
+export type DevelopmentPrivateWorkspaceImportStatus = {
+  schemaVersion: 1;
+  environment: "development";
+  target: DevelopmentPrivateWorkspaceImportTarget;
+  phase: "status";
+  operationId: string;
+  state: "not-found" | "completed";
+  acceptance: null | {
+    workspaceId: string;
+    workspaceRows: 1;
+    gameRows: number;
+    fileRows: number;
+    bundleBytes: number;
+    bundleSha256: string;
+    gameIdentitySetSha256: string;
+    perGameIdentitySha256: string;
+    contentSetSha256: string;
+    visibility: "private-quarantined";
+    private: true;
+    quarantined: true;
+    ownerBinding: "unbound";
+    ownerBindingRows: 0;
+    grants: 0;
+    releases: 0;
+    publications: 0;
+    aliases: 0;
+    rooms: 0;
+    statusReceipt: string;
+  };
 };
 
 export type DevelopmentPrivateWorkspaceImportFaultPoint =
@@ -375,12 +389,6 @@ function normalizeSpec(
     || !sha256Pattern.test(spec.perGameIdentitySha256)
   ) fail("DEVELOPMENT_PRIVATE_IMPORT_INVARIANT_UNRESOLVED");
   return spec;
-}
-
-export function isDevelopmentPrivateWorkspaceImportTarget(
-  value: string,
-): value is DevelopmentPrivateWorkspaceImportTarget {
-  return value === "moi-lab2" || value === "yabobojpn-lab";
 }
 
 export function validateDevelopmentPrivateWorkspaceBundle(input: {
@@ -699,6 +707,24 @@ export function parseDevelopmentPrivateWorkspaceImportExecuteIdentity(value: unk
   return { operationId: input.operationId.toLowerCase(), planReceipt: input.planReceipt };
 }
 
+export function parseDevelopmentPrivateWorkspaceImportStatusIdentity(value: unknown) {
+  const input = record(value);
+  exactKeys(input, ["bundleSha256", "operationId", "planReceipt"]);
+  if (
+    typeof input.operationId !== "string"
+    || !uuidPattern.test(input.operationId)
+    || typeof input.planReceipt !== "string"
+    || !sha256Pattern.test(input.planReceipt)
+    || typeof input.bundleSha256 !== "string"
+    || !sha256Pattern.test(input.bundleSha256)
+  ) fail("DEVELOPMENT_PRIVATE_IMPORT_INPUT_INVALID");
+  return {
+    operationId: input.operationId.toLowerCase(),
+    planReceipt: input.planReceipt,
+    bundleSha256: input.bundleSha256,
+  };
+}
+
 function terminalFrom(input: {
   bundle: ValidatedDevelopmentPrivateWorkspaceBundle;
   operationId: string;
@@ -819,35 +845,7 @@ export async function executeDevelopmentPrivateWorkspaceImport(input: {
   const bundle = validateDevelopmentPrivateWorkspaceBundle(input);
   const completed = await input.adapter.readCompletedOperation(identity.operationId);
   if (completed) {
-    if (
-      completed.target !== input.target
-      || completed.planReceipt !== identity.planReceipt
-      || completed.bundleSha256 !== bundle.bundleSha256
-    ) fail("DEVELOPMENT_PRIVATE_IMPORT_OPERATION_CONFLICT");
-    assertReadBack(bundle, {
-      targetCreatorRowId: bundle.creatorRowId,
-      targetCreatorRows: 1,
-      targetDeletedCreatorRows: 1,
-      targetCreatorOwnerRows: 0,
-      targetGameRows: bundle.gameCount,
-      targetDeletedGameRows: bundle.gameCount,
-      targetActiveGameRows: 0,
-      targetReleaseRows: 0,
-      targetCurrentReleaseRows: 0,
-      targetWorkspaceRows: 0,
-      targetWorkspaceGameRows: 0,
-      targetWorkspaceFileRows: 0,
-      sourceStateToken: completed.readBack.sourceStateToken,
-      publicStateToken: completed.readBack.publicStateToken,
-      unrelatedPrivateStateToken: completed.readBack.unrelatedPrivateStateToken,
-    }, completed.readBack);
-    return terminalFrom({
-      bundle,
-      operationId: identity.operationId,
-      planReceipt: identity.planReceipt,
-      replayed: true,
-      readBack: completed.readBack,
-    });
+    fail("DEVELOPMENT_PRIVATE_IMPORT_OPERATION_CONFLICT");
   }
   const beforeState = await input.adapter.readBeforeState(input.target);
   const plan = planFrom(bundle, beforeState);
@@ -873,6 +871,7 @@ export async function executeDevelopmentPrivateWorkspaceImport(input: {
     expectedReadBack,
     ...(input.faultAt ? { faultAt: input.faultAt } : {}),
   });
+  if (executed.replayed) fail("DEVELOPMENT_PRIVATE_IMPORT_OPERATION_CONFLICT");
   assertReadBack(bundle, beforeState, executed.readBack);
   return terminalFrom({
     bundle,
@@ -881,6 +880,103 @@ export async function executeDevelopmentPrivateWorkspaceImport(input: {
     replayed: executed.replayed,
     readBack: executed.readBack,
   });
+}
+
+export async function readDevelopmentPrivateWorkspaceImportStatus(input: {
+  target: DevelopmentPrivateWorkspaceImportTarget;
+  identity: unknown;
+  adapter: Pick<DevelopmentPrivateWorkspaceImportAdapter, "readCompletedOperation">;
+  specs?: Readonly<Record<DevelopmentPrivateWorkspaceImportTarget, DevelopmentPrivateWorkspaceImportTargetSpec>>;
+}): Promise<DevelopmentPrivateWorkspaceImportStatus> {
+  const identity = parseDevelopmentPrivateWorkspaceImportStatusIdentity(input.identity);
+  const spec = normalizeSpec(
+    input.target,
+    input.specs ?? developmentPrivateWorkspaceImportTargetSpecs,
+  );
+  if (identity.bundleSha256 !== spec.bundleSha256) {
+    fail("DEVELOPMENT_PRIVATE_IMPORT_BUNDLE_IDENTITY_MISMATCH");
+  }
+  const completed = await input.adapter.readCompletedOperation(identity.operationId);
+  if (!completed) {
+    return {
+      schemaVersion: 1,
+      environment: developmentPrivateWorkspaceImportEnvironment,
+      target: input.target,
+      phase: "status",
+      operationId: identity.operationId,
+      state: "not-found",
+      acceptance: null,
+    };
+  }
+  if (
+    completed.target !== input.target
+    || completed.operationId !== identity.operationId
+    || completed.planReceipt !== identity.planReceipt
+    || completed.bundleSha256 !== identity.bundleSha256
+  ) fail("DEVELOPMENT_PRIVATE_IMPORT_OPERATION_CONFLICT");
+
+  const readBack = completed.readBack;
+  if (
+    readBack.targetWorkspaceRows !== 1
+    || readBack.targetWorkspaceGameRows !== spec.gameCount
+    || !Number.isSafeInteger(readBack.targetWorkspaceFileRows)
+    || readBack.targetWorkspaceFileRows < 1
+    || readBack.bundleSha256 !== spec.bundleSha256
+    || readBack.gameIdentitySetSha256 !== spec.gameIdentitySetSha256
+    || readBack.perGameIdentitySha256 !== spec.perGameIdentitySha256
+    || !sha256Pattern.test(readBack.contentSetSha256)
+    || !sha256Pattern.test(readBack.sourceStateToken)
+    || !sha256Pattern.test(readBack.publicStateToken)
+    || !sha256Pattern.test(readBack.unrelatedPrivateStateToken)
+    || readBack.ownerBindingRows !== 0
+    || readBack.grantRows !== 0
+    || readBack.releaseRows !== 0
+    || readBack.publicationRows !== 0
+    || readBack.aliasRows !== 0
+    || readBack.roomRows !== 0
+  ) fail("DEVELOPMENT_PRIVATE_IMPORT_CONCURRENT_CHANGE");
+
+  const acceptanceBase = {
+    workspaceId: identity.operationId,
+    workspaceRows: 1 as const,
+    gameRows: readBack.targetWorkspaceGameRows,
+    fileRows: readBack.targetWorkspaceFileRows,
+    bundleBytes: spec.bundleBytes,
+    bundleSha256: spec.bundleSha256,
+    gameIdentitySetSha256: spec.gameIdentitySetSha256,
+    perGameIdentitySha256: spec.perGameIdentitySha256,
+    contentSetSha256: readBack.contentSetSha256,
+    visibility: "private-quarantined" as const,
+    private: true as const,
+    quarantined: true as const,
+    ownerBinding: "unbound" as const,
+    ownerBindingRows: 0 as const,
+    grants: 0 as const,
+    releases: 0 as const,
+    publications: 0 as const,
+    aliases: 0 as const,
+    rooms: 0 as const,
+  };
+  return {
+    schemaVersion: 1,
+    environment: developmentPrivateWorkspaceImportEnvironment,
+    target: input.target,
+    phase: "status",
+    operationId: identity.operationId,
+    state: "completed",
+    acceptance: {
+      ...acceptanceBase,
+      statusReceipt: digest({
+        schemaVersion: 1,
+        environment: developmentPrivateWorkspaceImportEnvironment,
+        target: input.target,
+        operationId: identity.operationId,
+        planReceipt: identity.planReceipt,
+        state: "completed",
+        acceptance: acceptanceBase,
+      }),
+    },
+  };
 }
 
 export async function readDevelopmentPrivateWorkspaceImportBody(

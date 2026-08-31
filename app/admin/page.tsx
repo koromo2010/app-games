@@ -34,5 +34,6 @@ export default function SiteAdminPage() {
     releaseManagementMode={releaseManagementMode}
     showOriginalDataPreservation={showOriginalDataPreservation}
     showDevelopmentMigration011Operator={showDevelopmentMigration011Operator}
+    showDevelopmentPrivateWorkspaceImport={showDevelopmentMigration011Operator}
   />;
 }

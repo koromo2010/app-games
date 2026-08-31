@@ -4,6 +4,7 @@ import {
   readDevelopmentPrivateWorkspaceImportBody,
 } from "@/apps/sdk-portal/lib/development-private-workspace-import";
 import { requireRecentSiteAdminMfa, siteAdminAuthorizationError } from "@/lib/site-admin-auth";
+import { isCanonicalDevelopmentPlatformRuntime } from "@/lib/sdk-migration-011-proxy";
 import { sdkPromotionInternalBaseUrl } from "@/lib/sdk-preview-runtime-source";
 import { sdkServiceHeaders } from "@/lib/sdk-service-auth";
 import { sdkSupportEnvironment } from "@/lib/storage-environment-guard";
@@ -18,6 +19,12 @@ export async function POST(request: Request, context: { params: Promise<{ target
     const { target } = await context.params;
     if (
       sdkSupportEnvironment() !== "development"
+      || !isCanonicalDevelopmentPlatformRuntime({
+        semanticEnvironment: process.env.APP_ENV,
+        vercelEnvironment: process.env.VERCEL_ENV,
+        project: process.env.VERCEL_PROJECT_NAME,
+        ref: process.env.VERCEL_GIT_COMMIT_REF,
+      })
       || !isDevelopmentPrivateWorkspaceImportTarget(target)
       || new URL(request.url).search !== ""
     ) {

@@ -136,8 +136,8 @@ export async function readCompletedDevelopmentPrivateWorkspaceImport(
       o.plan_receipt AS "planReceipt",
       o.bundle_sha256 AS "bundleSha256",
       1::INTEGER AS "targetWorkspaceRows",
-      o.game_count AS "targetWorkspaceGameRows",
-      o.runtime_file_count AS "targetWorkspaceFileRows",
+      game_rows.game_rows AS "targetWorkspaceGameRows",
+      file_rows.file_rows AS "targetWorkspaceFileRows",
       o.game_identity_set_sha256 AS "gameIdentitySetSha256",
       o.per_game_identity_sha256 AS "perGameIdentitySha256",
       o.content_set_sha256 AS "contentSetSha256",
@@ -152,16 +152,58 @@ export async function readCompletedDevelopmentPrivateWorkspaceImport(
       0::INTEGER AS "roomRows"
     FROM sdk_development_private_workspace_import_operations o
     JOIN sdk_development_private_workspaces w ON w.operation_id = o.operation_id
+    JOIN LATERAL (
+      SELECT
+        COUNT(*)::INTEGER AS game_rows,
+        COALESCE(SUM(g.runtime_file_count), 0)::INTEGER AS declared_file_rows,
+        COALESCE(SUM(g.runtime_bytes), 0)::INTEGER AS declared_runtime_bytes
+      FROM sdk_development_private_workspace_games g
+      WHERE g.workspace_id = w.workspace_id
+        AND g.historical_restoration_claim = FALSE
+    ) game_rows ON TRUE
+    JOIN LATERAL (
+      SELECT
+        COUNT(*)::INTEGER AS file_rows,
+        COALESCE(SUM(f.byte_length), 0)::INTEGER AS runtime_bytes,
+        COUNT(*) FILTER (
+          WHERE f.content_sha256 ~ '^[0-9a-f]{64}$'
+            AND octet_length(f.content_bytes) = f.byte_length
+        )::INTEGER AS exact_file_rows
+      FROM sdk_development_private_workspace_files f
+      WHERE f.workspace_id = w.workspace_id
+    ) file_rows ON TRUE
     WHERE o.operation_id = ${operationId}::UUID
       AND o.state = 'completed'
       AND o.phase = 'imported-private'
+      AND o.environment = 'development'
+      AND o.intent = ${developmentPrivateWorkspaceImportIntent}
+      AND o.operation_nonce = o.operation_id
+      AND o.terminal_receipt IS NOT NULL
+      AND o.read_back_sha256 IS NOT NULL
+      AND w.workspace_id = o.operation_id
+      AND w.target_key = o.target_key
+      AND w.environment = o.environment
       AND w.visibility = 'private-quarantined'
       AND w.owner_binding_state = 'unbound'
+      AND w.bundle_bytes = o.bundle_bytes
+      AND w.bundle_sha256 = o.bundle_sha256
+      AND w.bundle_schema_version = o.bundle_schema_version
+      AND w.game_count = o.game_count
+      AND w.game_identity_set_sha256 = o.game_identity_set_sha256
+      AND w.per_game_identity_sha256 = o.per_game_identity_sha256
+      AND w.content_set_sha256 = o.content_set_sha256
+      AND w.workspace_manifest_sha256 = o.workspace_manifest_sha256
       AND w.grants_created = 0
       AND w.releases_created = 0
       AND w.publications_created = 0
       AND w.aliases_created = 0
       AND w.rooms_created = 0
+      AND game_rows.game_rows = o.game_count
+      AND game_rows.declared_file_rows = o.runtime_file_count
+      AND game_rows.declared_runtime_bytes = o.runtime_bytes
+      AND file_rows.file_rows = o.runtime_file_count
+      AND file_rows.runtime_bytes = o.runtime_bytes
+      AND file_rows.exact_file_rows = o.runtime_file_count
   `;
   const row = (rows as unknown as CompletedRow[])[0];
   if (!row) return null;

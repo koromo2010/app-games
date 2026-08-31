@@ -52,6 +52,12 @@ export default async function SiteAdminLogoutReconciliationPage() {
         project: process.env.VERCEL_PROJECT_NAME,
         ref: process.env.VERCEL_GIT_COMMIT_REF,
       })}
+      showDevelopmentPrivateWorkspaceImport={isCanonicalDevelopmentPlatformRuntime({
+        semanticEnvironment: process.env.APP_ENV,
+        vercelEnvironment: process.env.VERCEL_ENV,
+        project: process.env.VERCEL_PROJECT_NAME,
+        ref: process.env.VERCEL_GIT_COMMIT_REF,
+      })}
       initialLogoutResult={result}
       showInlineLocaleSwitcher={false}
     />
