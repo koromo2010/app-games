@@ -43,6 +43,7 @@ function errorResponse(error: unknown) {
   if (code === "SITE_ADMIN_CHALLENGE_INVALID") return Response.json({ error: "SITE_ADMIN_CHALLENGE_EXPIRED" }, { status: 400 });
   if (code === "SITE_ADMIN_PASSKEY_NOT_FOUND") return Response.json({ error: "SITE_ADMIN_PASSKEY_VERIFICATION_FAILED" }, { status: 400 });
   if (code === "SITE_ADMIN_TOTP_ALREADY_ENROLLED") return Response.json({ error: code }, { status: 409 });
+  if (code === "SITE_ADMIN_TOTP_UNAVAILABLE") return Response.json({ error: code }, { status: 503 });
   if (code === "SITE_ADMIN_TOTP_SECRET_UNAVAILABLE" || code === "SITE_ADMIN_TOTP_ENCRYPTION_NOT_CONFIGURED") return Response.json({ error: "SITE_ADMIN_TOTP_UNAVAILABLE" }, { status: 503 });
   return Response.json({ error: "SITE_ADMIN_PASSKEY_VERIFICATION_FAILED" }, { status: 400 });
 }
@@ -60,6 +61,20 @@ export async function POST(request: Request) {
     const action = typeof body.action === "string" ? body.action : "";
     const limited = await rateLimitResponseFor(request, rateLimitPolicies.adminAuth, { identity: action });
     if (limited) return limited;
+
+    if (action === "begin-totp-step-up") {
+      const session = await requireFullSiteAdminSession();
+      if (isRecentSiteAdminMfa(session)) return privateJson({ verified: true });
+      if (!session.email) throw new Error("SITE_ADMIN_AUTH_REQUIRED");
+      const totp = await siteAdminTotpStatus(session.email);
+      if (!totp.enabled) throw new Error("SITE_ADMIN_TOTP_UNAVAILABLE");
+      await setSiteAdminChallengeCookie({
+        email: session.email,
+        purpose: "step-up",
+        challenge: randomBytes(24).toString("base64url"),
+      });
+      return privateJson({ verified: false, totpAvailable: true });
+    }
 
     if (action === "begin-step-up") {
       const session = await requireFullSiteAdminSession();
