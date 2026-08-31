@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { type ChangeEvent, type FormEvent, useRef, useState } from "react";
 import { productionPrivateWorkspaceImportTargetSpec } from "@/apps/sdk-portal/lib/production-private-workspace-import-public-contract";
 import {
+  diagnoseProductionPrivateWorkspaceImportTargetState,
   parseProductionPrivateWorkspaceImportExecute,
   parseProductionPrivateWorkspaceImportPlan,
   parseProductionPrivateWorkspaceImportStatus,
@@ -43,6 +44,36 @@ function Acceptance({ value }: { value: ProductionPrivateWorkspaceImportAcceptan
       <p className="mt-1 break-all font-mono text-xs">ledger {value.perGameLedgerSha256}</p>
       <p className="mt-1 break-all font-mono text-xs">receipt {value.statusReceipt}</p>
     </section>
+  );
+}
+
+function TargetStateEvidence({
+  value,
+  expectedCreatorIdentitySha256,
+}: {
+  value: ProductionPrivateWorkspaceImportTargetState;
+  expectedCreatorIdentitySha256: string;
+}) {
+  const failures = diagnoseProductionPrivateWorkspaceImportTargetState(value, expectedCreatorIdentitySha256);
+  return (
+    <div
+      className={`mt-4 rounded-xl border p-4 text-sm ${failures.length === 0
+        ? "border-emerald-300/30 bg-emerald-300/10"
+        : "border-amber-300/30 bg-amber-300/10"}`}
+      data-production-private-import-target-state={failures.length === 0 ? "ready" : "blocked"}
+    >
+      <p className="font-black">TARGET STATE: {failures.length === 0 ? "READY" : "BLOCKED"}</p>
+      <p className="mt-2">creator identity exact={String(value.creatorIdentitySha256 === expectedCreatorIdentitySha256)} / A3 exact={String(value.recoveryIdentityExact)}</p>
+      <p className="mt-2">creator {value.counts.creatorRows}/{value.counts.deletedCreatorRows}/{value.counts.creatorOwnerRows} / games {value.counts.gameRows}/{value.counts.deletedGameRows}/{value.counts.activeGameRows}</p>
+      <p className="mt-2">releases {value.counts.releaseRows}/{value.counts.currentReleaseRows} / A3 {value.counts.recoveryOperationRows}/{value.counts.recoveryQuarantineGameRows}</p>
+      <p className="mt-2">workspace {value.counts.workspaceRows}/{value.counts.workspaceGameRows}/{value.counts.workspaceFileRows}</p>
+      <p className="mt-2">state tokens source={String(value.sourceStateTokenValid)} / public={String(value.publicStateTokenValid)} / unrelated-private={String(value.unrelatedPrivateStateTokenValid)}</p>
+      {failures.length > 0 && <ul className="mt-3 list-disc space-y-1 pl-5 font-mono text-xs" data-production-private-import-target-failures>
+        {failures.map((failure) => <li key={`${failure.code}:${failure.field}`}>
+          {failure.code}: {failure.field} expected={String(failure.expected)} observed={String(failure.observed)}
+        </li>)}
+      </ul>}
+    </div>
   );
 }
 
@@ -116,12 +147,21 @@ export function ProductionPrivateWorkspaceImportPanel({
       const parsed = response.ok
         ? parseProductionPrivateWorkspaceImportTargetState(await payload(response), "moi-lab2")
         : null;
-      if (!parsed || !parsed.ready || parsed.creatorIdentitySha256 !== verified.manifest.creatorIdentitySha256) {
+      if (!parsed) {
         setState("stopped");
-        setMessage("Production target identityまたはA3 quarantine境界が一致しません。bundleは送信していません。");
+        setMessage("Production target preflightの応答形式が不正です。bundleは送信していません。");
         return;
       }
       setTargetState(parsed);
+      const failures = diagnoseProductionPrivateWorkspaceImportTargetState(
+        parsed,
+        verified.manifest.creatorIdentitySha256,
+      );
+      if (failures.length > 0) {
+        setState("stopped");
+        setMessage(`Production target preflightはBLOCKEDです (${failures.map(({ code }) => code).join(", ")})。bundleは送信していません。`);
+        return;
+      }
     } catch {
       setState("stopped");
       setMessage("Production targetのread-only確認結果が不明です。bundleは送信していません。");
@@ -258,7 +298,10 @@ export function ProductionPrivateWorkspaceImportPanel({
         <section className="rounded-2xl border border-cyan-300/30 bg-cyan-300/10 p-5">
           <h2 className="text-lg font-black">Production target preflight</h2>
           <button type="button" onClick={() => void checkTarget()} disabled={!verified || targetStateLocked} className="mt-4 w-full rounded-xl border border-cyan-200/40 px-4 py-3 font-black disabled:opacity-40">read-only target stateを1回確認</button>
-          {targetState && <p className="mt-3 text-sm">READY / A3 exact={String(targetState.recoveryIdentityExact)} / existing workspace {targetState.counts.workspaceRows ?? -1}</p>}
+          {targetState && verified && <TargetStateEvidence
+            value={targetState}
+            expectedCreatorIdentitySha256={verified.manifest.creatorIdentitySha256}
+          />}
         </section>
         <section className="rounded-2xl border border-amber-300/30 bg-amber-300/10 p-5">
           <h2 className="text-lg font-black">Write-free plan</h2>

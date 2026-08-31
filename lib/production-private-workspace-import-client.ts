@@ -39,7 +39,74 @@ export type ProductionPrivateWorkspaceImportTargetState = {
   creatorIdentitySha256: string | null;
   counts: Record<string, number>;
   recoveryIdentityExact: boolean;
+  sourceStateTokenValid: boolean;
+  publicStateTokenValid: boolean;
+  unrelatedPrivateStateTokenValid: boolean;
 };
+
+export type ProductionPrivateWorkspaceImportTargetStateFailure = {
+  code: string;
+  field: string;
+  expected: string | number | boolean;
+  observed: string | number | boolean | null;
+};
+
+const productionPrivateWorkspaceImportExpectedCounts = Object.freeze({
+  creatorRows: 1,
+  deletedCreatorRows: 1,
+  creatorOwnerRows: 0,
+  gameRows: productionPrivateWorkspaceImportTargetSpec.gameCount,
+  deletedGameRows: productionPrivateWorkspaceImportTargetSpec.gameCount,
+  activeGameRows: 0,
+  releaseRows: 0,
+  currentReleaseRows: 0,
+  recoveryOperationRows: 1,
+  recoveryQuarantineGameRows: productionPrivateWorkspaceImportTargetSpec.gameCount,
+  workspaceRows: 0,
+  workspaceGameRows: 0,
+  workspaceFileRows: 0,
+});
+
+export function diagnoseProductionPrivateWorkspaceImportTargetState(
+  state: ProductionPrivateWorkspaceImportTargetState,
+  expectedCreatorIdentitySha256: string,
+) {
+  const failures: ProductionPrivateWorkspaceImportTargetStateFailure[] = [];
+  if (state.creatorIdentitySha256 !== expectedCreatorIdentitySha256) {
+    failures.push({
+      code: state.creatorIdentitySha256 === null
+        ? "TARGET_CREATOR_IDENTITY_MISSING"
+        : "TARGET_CREATOR_IDENTITY_MISMATCH",
+      field: "creatorIdentitySha256",
+      expected: expectedCreatorIdentitySha256,
+      observed: state.creatorIdentitySha256,
+    });
+  }
+  for (const [field, expected] of Object.entries(productionPrivateWorkspaceImportExpectedCounts)) {
+    const observed = state.counts[field] ?? null;
+    if (observed !== expected) failures.push({
+      code: `TARGET_COUNT_${field.replace(/([a-z])([A-Z])/g, "$1_$2").toUpperCase()}_MISMATCH`,
+      field,
+      expected,
+      observed,
+    });
+  }
+  for (const [field, valid, code] of [
+    ["recoveryIdentityExact", state.recoveryIdentityExact, "A3_RECOVERY_IDENTITY_MISMATCH"],
+    ["sourceStateTokenValid", state.sourceStateTokenValid, "SOURCE_STATE_TOKEN_INVALID"],
+    ["publicStateTokenValid", state.publicStateTokenValid, "PUBLIC_STATE_TOKEN_INVALID"],
+    ["unrelatedPrivateStateTokenValid", state.unrelatedPrivateStateTokenValid, "UNRELATED_PRIVATE_STATE_TOKEN_INVALID"],
+  ] as const) {
+    if (!valid) failures.push({ code, field, expected: true, observed: valid });
+  }
+  if (state.ready !== (failures.length === 0)) failures.push({
+    code: "TARGET_READY_FLAG_CONTRACT_MISMATCH",
+    field: "ready",
+    expected: failures.length === 0,
+    observed: state.ready,
+  });
+  return failures;
+}
 
 export type ProductionPrivateWorkspaceImportPlan = {
   planReceipt: string;
@@ -311,6 +378,7 @@ export function parseProductionPrivateWorkspaceImportTargetState(
   const input = record(value);
   const counts = record(input?.counts);
   const integrity = record(input?.integrity);
+  const expectedCountKeys = Object.keys(productionPrivateWorkspaceImportExpectedCounts).sort().join(",");
   if (
     !input || !counts || !integrity
     || input.schemaVersion !== 1 || input.environment !== "production"
@@ -319,6 +387,10 @@ export function parseProductionPrivateWorkspaceImportTargetState(
     || (integrity.creatorIdentitySha256 !== null
       && (typeof integrity.creatorIdentitySha256 !== "string" || !sha256Pattern.test(integrity.creatorIdentitySha256)))
     || typeof integrity.recoveryIdentityExact !== "boolean"
+    || typeof integrity.sourceStateTokenValid !== "boolean"
+    || typeof integrity.publicStateTokenValid !== "boolean"
+    || typeof integrity.unrelatedPrivateStateTokenValid !== "boolean"
+    || Object.keys(counts).sort().join(",") !== expectedCountKeys
     || Object.values(counts).some((entry) => !Number.isSafeInteger(entry) || Number(entry) < 0)
   ) return null;
   return {
@@ -327,6 +399,9 @@ export function parseProductionPrivateWorkspaceImportTargetState(
     creatorIdentitySha256: integrity.creatorIdentitySha256 as string | null,
     counts: counts as Record<string, number>,
     recoveryIdentityExact: integrity.recoveryIdentityExact,
+    sourceStateTokenValid: integrity.sourceStateTokenValid,
+    publicStateTokenValid: integrity.publicStateTokenValid,
+    unrelatedPrivateStateTokenValid: integrity.unrelatedPrivateStateTokenValid,
   };
 }
 
