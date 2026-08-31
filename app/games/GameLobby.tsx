@@ -28,10 +28,28 @@ import {
   createGameDisplayMetadataSnapshot,
   resolveGameDisplayMetadata,
 } from "@/lib/game-display-metadata";
+import { useDeferredGameLobbyCatalog } from "./use-deferred-game-lobby-catalog";
 
+type GameLobbyProps = {
+  siteName?: string;
+  gameOperations: GameOperation[];
+  durationEstimates?: Partial<Record<GameDurationGameId, GameDurationEstimate>>;
+  additionalGames?: GameCatalogEntry[];
+  includeBuiltInGames?: boolean;
+  sdkCreatorSlug?: string;
+  sdkDashboardHref?: string;
+  deferredCatalogEndpoint?: string;
+};
 
-export function GameLobby({ siteName = "GAME FIELDS", gameOperations, durationEstimates = {}, additionalGames = [], includeBuiltInGames = true, sdkCreatorSlug, sdkDashboardHref }: { siteName?: string; gameOperations: GameOperation[]; durationEstimates?: Partial<Record<GameDurationGameId, GameDurationEstimate>>; additionalGames?: GameCatalogEntry[]; includeBuiltInGames?: boolean; sdkCreatorSlug?: string; sdkDashboardHref?: string }) {
+export function GameLobby({ siteName = "GAME FIELDS", gameOperations, durationEstimates = {}, additionalGames = [], includeBuiltInGames = true, sdkCreatorSlug, sdkDashboardHref, deferredCatalogEndpoint }: GameLobbyProps) {
   const { locale, t } = useAppLocale();
+  const deferredCatalog = useDeferredGameLobbyCatalog({
+    endpoint: deferredCatalogEndpoint,
+    initialGames: additionalGames,
+    initialOperations: gameOperations,
+  });
+  const effectiveAdditionalGames = deferredCatalog.additionalGames;
+  const effectiveGameOperations = deferredCatalog.gameOperations;
   const sdkLoginRequired = useSearchParams().get("sdkLoginRequired") === "1";
   const [password, setPassword] = useState("");
   const [email, setEmail] = useState("");
@@ -106,21 +124,21 @@ export function GameLobby({ siteName = "GAME FIELDS", gameOperations, durationEs
   const { isAvatarSaving, isAvatarDragging, setIsAvatarDragging, updateAvatar, uploadAvatar, dropAvatar } = useLobbyAvatarActions({
     name, playerId, avatarColor, hasRecoveryEmail, setAvatarColor, setAvatarImage, setMessage,
   });
-  const localizedGames = [...(includeBuiltInGames ? gamesForLocale(locale) : []), ...additionalGames];
-  const sdkGameIds = new Set(additionalGames.map((game) => game.id));
+  const localizedGames = [...(includeBuiltInGames ? gamesForLocale(locale) : []), ...effectiveAdditionalGames];
+  const sdkGameIds = new Set(effectiveAdditionalGames.map((game) => game.id));
   const gamesWithDurationEstimates = localizedGames.map((game) => {
     const estimate = durationEstimates[game.id as GameDurationGameId];
     return estimate ? { ...game, time: estimate.label, timeSampleCount: estimate.sampleCount } : game;
   });
   const visibleGames = gamesWithDurationEstimates.filter((game) => {
-    const operation = gameOperationFor(gameOperations, game.id);
+    const operation = gameOperationFor(effectiveGameOperations, game.id);
     return operation.publication !== "hidden" && (operation.publication === "public" || privateUnlocked);
   });
   const visibleGameIds = new Set(visibleGames.map((game) => game.id));
   const displaySources = (entries: ReturnType<typeof gamesForLocale>) => entries
     .filter((game) => visibleGameIds.has(game.id))
     .map((game) => ({ id: game.id, title: game.title, href: game.href }));
-  const visibleSdkGames = additionalGames.filter((game) => visibleGameIds.has(game.id));
+  const visibleSdkGames = effectiveAdditionalGames.filter((game) => visibleGameIds.has(game.id));
   const gameDisplayMetadata = createGameDisplayMetadataSnapshot({
     builtIn: {
       ja: displaySources(gamesForLocale("ja")),
@@ -151,7 +169,7 @@ export function GameLobby({ siteName = "GAME FIELDS", gameOperations, durationEs
   );
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-950">
+    <main className="min-h-screen bg-slate-950 text-slate-950" data-sdk-catalog-state={deferredCatalog.status}>
       <LobbyHeader siteName={siteName} name={name} avatarColor={avatarColor} avatarImage={avatarImage} isLoggedIn={isLoggedIn}
         isInfoOpen={isMobileInfoOpen} isAvatarSaving={isAvatarSaving} isAvatarDragging={isAvatarDragging}
         sdkDashboardHref={visibleSdkDashboardHref}
@@ -183,7 +201,7 @@ export function GameLobby({ siteName = "GAME FIELDS", gameOperations, durationEs
           />}
         </LobbyInfoDrawer>
 
-        <LobbyGameGrid games={orderedGames} operations={gameOperations} activeRooms={activeGameRooms} isLoggedIn={isLoggedIn}
+        <LobbyGameGrid games={orderedGames} operations={effectiveGameOperations} activeRooms={activeGameRooms} isLoggedIn={isLoggedIn}
           locale={locale}
           onRememberWordWolf={rememberActiveRoom}
         />

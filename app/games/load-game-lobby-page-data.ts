@@ -1,13 +1,11 @@
 import { loadGameDurationEstimates } from "@/lib/game-duration-store";
 import { loadGameOperations } from "@/lib/game-operations-store";
-import { loadApprovedGameSdkCatalog } from "@/lib/game-sdk-runtime-catalog";
 import { loadSiteSettings } from "@/lib/site-settings-store";
-import { assembleGameLobbyPageData } from "./game-lobby-page-data";
+import { assembleGameLobbyCriticalPageData } from "./game-lobby-page-data";
 
-/** Server-only read model for the public built-in + approved SDK catalog. */
+/** Server-only critical read model for the public built-in catalog. */
 export function loadGameLobbyPageData() {
-  return assembleGameLobbyPageData({
-    loadApprovedGameSdkCatalog,
+  return assembleGameLobbyCriticalPageData({
     loadSiteSettings,
     loadGameOperations,
     loadGameDurationEstimates,

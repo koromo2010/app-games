@@ -8,6 +8,9 @@ const gamesPage = source("app/games/page.tsx");
 const lobbyRoute = source("app/games/GameLobbyRoute.tsx");
 const lobbyLoader = source("app/games/load-game-lobby-page-data.ts");
 const lobbyPageData = source("app/games/game-lobby-page-data.ts");
+const criticalLobbyPageData = lobbyPageData.split(
+  "export type DeferredGameLobbyCatalogSources",
+)[0]!;
 const adminRoute = source("app/api/admin/game-operations/route.ts");
 const store = source("lib/game-operations-store.ts");
 const readStore = source("lib/game-operations-read.ts");
@@ -17,13 +20,13 @@ test("lobby uses canonical stored visibility for approved SDK games", () => {
   assert.match(gamesPage, /return <GameLobbyRoute \/>/);
   assert.match(lobbyRoute, /loadGameLobbyPageData/);
   assert.match(lobbyRoute, /return <GameLobby \{\.\.\.props\} \/>/);
-  assert.match(lobbyLoader, /loadApprovedGameSdkCatalog/);
   assert.match(lobbyLoader, /loadGameOperations/);
-  assert.match(lobbyLoader, /assembleGameLobbyPageData\(\{/);
-  assert.match(lobbyPageData, /sources\.loadGameOperations\(\{\}, sdkGames\)/);
+  assert.doesNotMatch(lobbyLoader, /loadApprovedGameSdkCatalog/);
+  assert.match(lobbyLoader, /assembleGameLobbyCriticalPageData\(\{/);
+  assert.match(lobbyPageData, /sources\.loadGameOperations\(\{\}, \[\]\)/);
 
-  const readModel = [gamesPage, lobbyRoute, lobbyLoader, lobbyPageData].join("\n");
-  assert.doesNotMatch(readModel, /sdkOperations/);
+  const readModel = [gamesPage, lobbyRoute, lobbyLoader, criticalLobbyPageData].join("\n");
+  assert.doesNotMatch(readModel, /loadApprovedGameSdkCatalogSnapshot/);
   assert.doesNotMatch(readModel, /publication:\s*"public"/);
 });
 

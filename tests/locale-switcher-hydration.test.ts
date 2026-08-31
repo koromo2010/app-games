@@ -78,3 +78,42 @@ test("認証snapshotはSSRで固定され、session変更通知後だけclient�
     else (globalThis as { localStorage?: unknown }).localStorage = previousStorage;
   }
 });
+
+test("locale未指定のsession lifecycle通知は現在のURL localeを上書きしない", () => {
+  const previousWindow = (globalThis as { window?: unknown }).window;
+  const previousStorage = (globalThis as { localStorage?: unknown }).localStorage;
+  const storage = new MemoryStorage();
+  const eventTarget = new EventTarget();
+  const browserWindow = Object.assign(eventTarget, { localStorage: storage });
+  const observedLocales: unknown[] = [];
+
+  try {
+    (globalThis as { window?: unknown }).window = browserWindow;
+    (globalThis as { localStorage?: unknown }).localStorage = storage;
+    browserWindow.addEventListener("game-fields:player-session-saved", (event) => {
+      observedLocales.push((event as CustomEvent<{ locale?: unknown }>).detail?.locale);
+    });
+
+    savePlayerSession({
+      name: "English route player",
+      avatarColor: "#22d3ee",
+      avatarImage: null,
+    });
+    markPlayerAuthenticated();
+    clearPlayerSession();
+    assert.deepEqual(observedLocales, [undefined, undefined, undefined]);
+
+    savePlayerSession({
+      name: "English account",
+      avatarColor: "#22d3ee",
+      avatarImage: null,
+      locale: "en",
+    });
+    assert.equal(observedLocales.at(-1), "en");
+  } finally {
+    if (previousWindow === undefined) delete (globalThis as { window?: unknown }).window;
+    else (globalThis as { window?: unknown }).window = previousWindow;
+    if (previousStorage === undefined) delete (globalThis as { localStorage?: unknown }).localStorage;
+    else (globalThis as { localStorage?: unknown }).localStorage = previousStorage;
+  }
+});
