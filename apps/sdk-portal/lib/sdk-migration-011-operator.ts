@@ -9,9 +9,23 @@ import {
   sdkMigration011Name,
   type SdkMigrationLedgerRow,
 } from "./sdk-migration-011-ledger.ts";
+import {
+  isCompleteSdkMigration011ObjectContract,
+  readSdkMigration011ObjectContract,
+  sdkMigration011CompleteContractPredicateSql,
+  type SdkMigration011ObjectContract,
+} from "./sdk-migration-011-object-contract.ts";
 
 export { sdkMigration011Checksum, sdkMigration011Name } from "./sdk-migration-011-ledger.ts";
 export type { SdkMigrationLedgerRow } from "./sdk-migration-011-ledger.ts";
+export {
+  completeSdkMigration011ObjectContract,
+  emptySdkMigration011ObjectContract,
+  sdkMigration011ExpectedConstraintCount,
+  sdkMigration011ExpectedConstraints,
+  sdkMigration011ObjectContractSql,
+} from "./sdk-migration-011-object-contract.ts";
+export type { SdkMigration011ObjectContract } from "./sdk-migration-011-object-contract.ts";
 
 export const sdkMigration011Source = String.raw`CREATE TABLE IF NOT EXISTS sdk_development_private_workspace_import_operations (
   operation_id UUID PRIMARY KEY,
@@ -277,173 +291,13 @@ BEGIN
   END IF;
 
 ${sdkMigration011Source}
+  IF NOT (${sdkMigration011CompleteContractPredicateSql}) THEN
+    RAISE EXCEPTION 'SDK_MIGRATION_011_OBJECT_CONTRACT_MISMATCH';
+  END IF;
   INSERT INTO sdk_schema_migrations (version, name, checksum)
   VALUES (11, '${sdkMigration011Name}', '${sdkMigration011Checksum}');
 END
 $sdk_migration_011$;`;
-
-const expectedColumnsSql = [
-  ["sdk_development_private_workspace_import_operations", [
-    "operation_id", "operation_nonce", "target_key", "environment", "intent",
-    "plan_receipt", "terminal_receipt", "bundle_bytes", "bundle_sha256",
-    "bundle_schema_version", "game_count", "game_identity_set_sha256",
-    "per_game_identity_sha256", "content_set_sha256", "workspace_manifest_sha256",
-    "per_game_ledger_sha256", "runtime_file_count", "runtime_bytes",
-    "before_state_sha256", "source_state_token", "public_state_token",
-    "unrelated_private_state_token", "read_back_sha256", "state", "phase",
-    "created_at", "updated_at", "completed_at",
-  ]],
-  ["sdk_development_private_workspaces", [
-    "workspace_id", "operation_id", "target_key", "environment", "visibility",
-    "owner_binding_state", "bundle_bytes", "bundle_sha256", "bundle_schema_version",
-    "game_count", "game_identity_set_sha256", "per_game_identity_sha256",
-    "content_set_sha256", "workspace_manifest_sha256", "workspace_manifest",
-    "grants_created", "releases_created", "publications_created", "aliases_created",
-    "rooms_created", "created_at",
-  ]],
-  ["sdk_development_private_workspace_games", [
-    "workspace_id", "game_id", "reconstruction_mode", "original_revision",
-    "historical_restoration_claim", "workspace_document_sha256", "provenance_sha256",
-    "runtime_files_sha256", "workspace_document", "runtime_file_count",
-    "runtime_bytes", "created_at",
-  ]],
-  ["sdk_development_private_workspace_files", [
-    "workspace_id", "game_id", "path", "content_bytes", "byte_length",
-    "content_sha256", "created_at",
-  ]],
-] as const;
-
-const expectedColumnValues = expectedColumnsSql
-  .flatMap(([table, columns]) => columns.map((column) => `('${table}', '${column}')`))
-  .join(",\n      ");
-
-export const sdkMigration011ObjectContractSql = `
-WITH expected_columns(table_name, column_name) AS (
-  VALUES
-      ${expectedColumnValues}
-), actual_columns AS (
-  SELECT table_name, column_name
-  FROM information_schema.columns
-  WHERE table_schema = 'public'
-    AND table_name IN (
-      'sdk_development_private_workspace_import_operations',
-      'sdk_development_private_workspaces',
-      'sdk_development_private_workspace_games',
-      'sdk_development_private_workspace_files'
-    )
-), object_presence AS (
-  SELECT
-    (to_regclass('public.sdk_development_private_workspace_import_operations') IS NOT NULL)::integer
-    + (to_regclass('public.sdk_development_private_workspaces') IS NOT NULL)::integer
-    + (to_regclass('public.sdk_development_private_workspace_games') IS NOT NULL)::integer
-    + (to_regclass('public.sdk_development_private_workspace_files') IS NOT NULL)::integer
-    + (to_regclass('public.sdk_development_private_workspace_operation_idx') IS NOT NULL)::integer
-    + (to_regclass('public.sdk_development_private_workspace_game_idx') IS NOT NULL)::integer
-    + (to_regprocedure(
-        'public.sdk_development_private_workspace_import_snapshot(character varying)'
-      ) IS NOT NULL)::integer AS present_object_count
-), index_contract AS (
-  SELECT
-    COUNT(*) FILTER (
-      WHERE indexname = 'sdk_development_private_workspace_operation_idx'
-        AND indexdef LIKE '%(state, created_at)%'
-    ) = 1
-    AND COUNT(*) FILTER (
-      WHERE indexname = 'sdk_development_private_workspace_game_idx'
-        AND indexdef LIKE '%(game_id, reconstruction_mode)%'
-    ) = 1
-    AND COUNT(*) FILTER (
-      WHERE indexname = 'sdk_development_private_workspace_import_operations_pkey'
-    ) = 1
-    AND COUNT(*) FILTER (
-      WHERE indexname = 'sdk_development_private_workspaces_pkey'
-    ) = 1
-    AND COUNT(*) FILTER (
-      WHERE indexname = 'sdk_development_private_workspace_games_pkey'
-    ) = 1
-    AND COUNT(*) FILTER (
-      WHERE indexname = 'sdk_development_private_workspace_files_pkey'
-    ) = 1
-    AND COUNT(*) = 10 AS exact
-  FROM pg_indexes
-  WHERE schemaname = 'public'
-    AND tablename IN (
-      'sdk_development_private_workspace_import_operations',
-      'sdk_development_private_workspaces',
-      'sdk_development_private_workspace_games',
-      'sdk_development_private_workspace_files'
-    )
-), target_relation_oids(oid) AS (
-  VALUES
-    (to_regclass('public.sdk_development_private_workspace_import_operations')::oid),
-    (to_regclass('public.sdk_development_private_workspaces')::oid),
-    (to_regclass('public.sdk_development_private_workspace_games')::oid),
-    (to_regclass('public.sdk_development_private_workspace_files')::oid)
-), constraint_contract AS (
-  SELECT COUNT(*) = 40
-    AND COALESCE(bool_and(contype IN ('p', 'u', 'f', 'c')), false) AS exact
-  FROM pg_constraint
-  WHERE conrelid IN (SELECT oid FROM target_relation_oids WHERE oid IS NOT NULL)
-), function_contract AS (
-  SELECT COUNT(*) = 1
-    AND bool_and(p.provolatile = 's')
-    AND bool_and(p.proretset)
-    AND bool_and(l.lanname = 'sql')
-    AND bool_and(position('target_creators AS MATERIALIZED' in p.prosrc) > 0)
-    AND bool_and(position('sdk_development_private_workspaces' in p.prosrc) > 0)
-    AND bool_and(position('unrelated_private_state_token' in pg_get_function_result(p.oid)) > 0)
-      AS exact
-  FROM pg_proc p
-  JOIN pg_namespace n ON n.oid = p.pronamespace
-  JOIN pg_language l ON l.oid = p.prolang
-  WHERE n.nspname = 'public'
-    AND p.proname = 'sdk_development_private_workspace_import_snapshot'
-    AND pg_get_function_identity_arguments(p.oid) = 'p_target character varying'
-)
-SELECT
-  object_presence.present_object_count AS "presentObjectCount",
-  (
-    (SELECT COUNT(*) FROM actual_columns) = 68
-    AND NOT EXISTS (
-      SELECT table_name, column_name FROM expected_columns
-      EXCEPT
-      SELECT table_name, column_name FROM actual_columns
-    )
-    AND NOT EXISTS (
-      SELECT table_name, column_name FROM actual_columns
-      EXCEPT
-      SELECT table_name, column_name FROM expected_columns
-    )
-  ) AS "columnsExact",
-  index_contract.exact AS "indexesExact",
-  constraint_contract.exact AS "constraintsExact",
-  function_contract.exact AS "functionExact"
-FROM object_presence, index_contract, constraint_contract, function_contract
-`;
-
-export type SdkMigration011ObjectContract = {
-  presentObjectCount: number;
-  columnsExact: boolean;
-  indexesExact: boolean;
-  constraintsExact: boolean;
-  functionExact: boolean;
-};
-
-export const emptySdkMigration011ObjectContract: SdkMigration011ObjectContract = {
-  presentObjectCount: 0,
-  columnsExact: false,
-  indexesExact: false,
-  constraintsExact: false,
-  functionExact: false,
-};
-
-export const completeSdkMigration011ObjectContract: SdkMigration011ObjectContract = {
-  presentObjectCount: 7,
-  columnsExact: true,
-  indexesExact: true,
-  constraintsExact: true,
-  functionExact: true,
-};
 
 export type SdkMigration011OperatorCode =
   | "SDK_MIGRATION_LEDGER_INCONSISTENT"
@@ -503,13 +357,7 @@ export function assertSdkMigration011Objects(
     }
     return;
   }
-  if (
-    contract.presentObjectCount !== completeSdkMigration011ObjectContract.presentObjectCount
-    || !contract.columnsExact
-    || !contract.indexesExact
-    || !contract.constraintsExact
-    || !contract.functionExact
-  ) {
+  if (!isCompleteSdkMigration011ObjectContract(contract)) {
     throw new SdkMigration011OperatorError(
       "SDK_MIGRATION_011_OBJECT_CONTRACT_MISMATCH",
     );
@@ -542,21 +390,7 @@ export function createSdkMigration011Database(
       return Number(rows[0]?.version ?? 0);
     },
     async readObjectContract() {
-      const rows = await sql.query(sdkMigration011ObjectContractSql) as Array<{
-        presentObjectCount?: number | string;
-        columnsExact?: boolean;
-        indexesExact?: boolean;
-        constraintsExact?: boolean;
-        functionExact?: boolean;
-      }>;
-      const row = rows[0] ?? {};
-      return {
-        presentObjectCount: Number(row.presentObjectCount ?? 0),
-        columnsExact: row.columnsExact === true,
-        indexesExact: row.indexesExact === true,
-        constraintsExact: row.constraintsExact === true,
-        functionExact: row.functionExact === true,
-      };
+      return readSdkMigration011ObjectContract(sql);
     },
     async applyGuardedMigration() {
       await sql.transaction((transactionSql) => [

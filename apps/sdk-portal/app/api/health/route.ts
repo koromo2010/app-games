@@ -1,7 +1,12 @@
 import {
   ensureSdkSchema,
   SDK_SCHEMA_VERSION,
+  sdkSql,
 } from "@/lib/sdk-postgres";
+import {
+  isCompleteSdkMigration011ObjectContract,
+  readSdkMigration011ObjectContract,
+} from "@/lib/sdk-migration-011-object-contract";
 import { probeSdkInstanceRegistry } from "@/lib/instance-registry-client";
 import { probePrototypeBuilderRuntime } from "@/lib/node-free-game-package";
 import { PrototypeBuildError } from "@/lib/prototype-builder-diagnostics";
@@ -11,15 +16,23 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     await ensureSdkSchema();
+    const objectContract = await readSdkMigration011ObjectContract(sdkSql());
+    if (!isCompleteSdkMigration011ObjectContract(objectContract)) {
+      throw new Error("SDK_MIGRATION_011_OBJECT_CONTRACT_MISMATCH");
+    }
   } catch (error) {
     const migrationRequired = error instanceof Error
       && error.message.includes("SDK_SCHEMA_MIGRATION_REQUIRED");
+    const objectContractMismatch = error instanceof Error
+      && error.message.includes("SDK_MIGRATION_011_OBJECT_CONTRACT_MISMATCH");
     return Response.json(
       {
         service: "game-fields-sdk-portal",
         status: "unavailable",
         code: migrationRequired
           ? "SDK_SCHEMA_MIGRATION_REQUIRED"
+          : objectContractMismatch
+            ? "SDK_MIGRATION_011_OBJECT_CONTRACT_MISMATCH"
           : "SDK_DATABASE_UNAVAILABLE",
       },
       {

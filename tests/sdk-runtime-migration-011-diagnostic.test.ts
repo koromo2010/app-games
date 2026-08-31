@@ -17,7 +17,9 @@ import {
 import {
   createSdkMigration011DiagnosticDatabase,
   diagnoseSdkMigration011Ledger,
+  sdkMigration011DiagnosticObjectContractSql,
 } from "../apps/sdk-portal/lib/sdk-migration-011-diagnostic.ts";
+import { sdkMigration011ObjectContractSql } from "../apps/sdk-portal/lib/sdk-migration-011-object-contract.ts";
 import {
   processSdkMigration011DiagnosticRequest,
   type DiagnosticDependencies,
@@ -61,6 +63,7 @@ function diagnosticResult(rows: SdkMigrationLedgerRow[] = canonical()) {
       presentObjectCount: 0,
       columnsExact: false,
       indexesExact: false,
+      constraintCount: 0,
       constraintsExact: false,
       functionExact: false,
       state: "ABSENT" as const,
@@ -103,6 +106,7 @@ function validPayload() {
       presentObjectCount: 0,
       columnsExact: false,
       indexesExact: false,
+      constraintCount: 0,
       constraintsExact: false,
       functionExact: false,
       state: "ABSENT",
@@ -206,6 +210,49 @@ test("database diagnostic uses one repeatable-read read-only transaction", async
   assert.deepEqual(options, { isolationLevel: "RepeatableRead", readOnly: true });
   assert.equal(result.comparison.consistent, true);
   assert.equal(result.objectContract.state, "ABSENT");
+});
+
+test("diagnostic and SDK health use the shared exact 44-constraint contract", () => {
+  assert.equal(sdkMigration011DiagnosticObjectContractSql, sdkMigration011ObjectContractSql);
+  assert.match(sdkMigration011DiagnosticObjectContractSql, /expected_constraints/);
+  assert.match(sdkMigration011DiagnosticObjectContractSql, /actual_constraints/);
+  assert.match(sdkMigration011DiagnosticObjectContractSql, /constraint_count AS "constraintCount"/);
+  assert.doesNotMatch(sdkMigration011DiagnosticObjectContractSql, /COUNT\(\*\) = 40/);
+
+  const health = readFileSync("apps/sdk-portal/app/api/health/route.ts", "utf8");
+  assert.match(health, /readSdkMigration011ObjectContract\(sdkSql\(\)\)/);
+  assert.match(health, /isCompleteSdkMigration011ObjectContract/);
+  assert.match(health, /SDK_MIGRATION_011_OBJECT_CONTRACT_MISMATCH/);
+});
+
+test("diagnostic never classifies the legacy 40-count or a 44-count identity mismatch as COMPLETE", async () => {
+  for (const objectContract of [
+    {
+      presentObjectCount: 7,
+      columnsExact: true,
+      indexesExact: true,
+      constraintCount: 40,
+      constraintsExact: true,
+      functionExact: true,
+    },
+    {
+      presentObjectCount: 7,
+      columnsExact: true,
+      indexesExact: true,
+      constraintCount: 44,
+      constraintsExact: false,
+      functionExact: true,
+    },
+  ]) {
+    const result = await diagnoseSdkMigration011Ledger({
+      readSnapshot: async () => ({
+        ledger: sdkMigration011CanonicalLedger.map((row) => ({ ...row })),
+        observedSchemaVersion: 11,
+        objectContract,
+      }),
+    });
+    assert.equal(result.objectContract.state, "PARTIAL");
+  }
 });
 
 test("Portal diagnostic authorization binds service HMAC and operation grant to GET Development path", () => {

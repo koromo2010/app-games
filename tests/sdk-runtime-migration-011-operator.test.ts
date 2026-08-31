@@ -15,6 +15,8 @@ import {
   executeSdkMigration011ExactlyOnce,
   sdkMigration011Checksum,
   sdkMigration011GuardedSql,
+  sdkMigration011ExpectedConstraintCount,
+  sdkMigration011ExpectedConstraints,
   sdkMigration011Name,
   sdkMigration011ObjectContractSql,
   sdkMigration011Source,
@@ -552,6 +554,8 @@ test("object contract rejects partial state and accepts only complete schema 11 
   for (const contract of [
     { ...emptySdkMigration011ObjectContract, presentObjectCount: 1 },
     { ...completeSdkMigration011ObjectContract, columnsExact: false },
+    { ...completeSdkMigration011ObjectContract, constraintCount: 40 },
+    { ...completeSdkMigration011ObjectContract, constraintCount: 45 },
     { ...completeSdkMigration011ObjectContract, constraintsExact: false },
     { ...completeSdkMigration011ObjectContract, functionExact: false },
   ]) {
@@ -687,13 +691,34 @@ test("operator source is byte-equivalent to migration 011 and binds the canonica
   assert.match(sdkMigration011GuardedSql, /010_bounded_creator_quarantine_recovery\.sql/);
   assert.match(sdkMigration011GuardedSql, /a972cc0527040b3f2420e21ee59a0bf2bd1204d480ac5ac5cd62b7fad903f035/);
   assert.match(sdkMigration011ObjectContractSql, /presentObjectCount/);
-  assert.match(sdkMigration011ObjectContractSql, /COUNT\(\*\) = 40/);
+  assert.equal(sdkMigration011ExpectedConstraintCount, 44);
+  assert.equal(sdkMigration011ExpectedConstraints.length, 44);
+  const expectedKindCounts = Object.fromEntries(["p", "u", "f", "c"].map((kind) => [
+    kind,
+    sdkMigration011ExpectedConstraints.filter((constraint) => constraint.kind === kind).length,
+  ]));
+  assert.deepEqual(expectedKindCounts, { p: 4, u: 4, f: 3, c: 33 });
+  assert.equal((sdkMigration011Source.match(/\bPRIMARY KEY\b/g) ?? []).length, 4);
+  assert.equal((sdkMigration011Source.match(/\bUNIQUE\b/g) ?? []).length, 4);
+  assert.equal((sdkMigration011Source.match(/\bREFERENCES\b/g) ?? []).length, 3);
+  assert.equal((sdkMigration011Source.match(/\bCHECK\s*\(/g) ?? []).length, 33);
+  assert.equal(new Set(sdkMigration011ExpectedConstraints.map(
+    ({ table, name }) => `${table}.${name}`,
+  )).size, 44);
+  assert.match(sdkMigration011ObjectContractSql, /expected_constraints/);
+  assert.match(sdkMigration011ObjectContractSql, /constraint_count AS "constraintCount"/);
+  assert.match(sdkMigration011ObjectContractSql, /COUNT\(\*\) FROM actual_constraints\) = 44/);
+  assert.match(sdkMigration011ObjectContractSql, /SELECT \* FROM expected_constraints\s+EXCEPT\s+SELECT \* FROM actual_constraints/);
+  assert.match(sdkMigration011ObjectContractSql, /SELECT \* FROM actual_constraints\s+EXCEPT\s+SELECT \* FROM expected_constraints/);
+  assert.match(sdkMigration011ObjectContractSql, /pg_get_constraintdef/);
+  assert.doesNotMatch(sdkMigration011ObjectContractSql, /COUNT\(\*\) = 40/);
   assert.match(sdkMigration011ObjectContractSql, /target_relation_oids/);
   assert.match(
     sdkMigration011ObjectContractSql,
     /to_regclass\('public\.sdk_development_private_workspace_import_operations'\)/,
   );
   assert.doesNotMatch(sdkMigration011ObjectContractSql, /::regclass/);
+  assert.match(sdkMigration011GuardedSql, /contract\."constraintCount" = 44/);
   assert.doesNotMatch(
     sdkMigration011Source,
     /INSERT\s+INTO\s+(?:sdk_development_private_workspace|sdk_creators|sdk_games|sdk_app_releases|sdk_oauth_grants)/i,

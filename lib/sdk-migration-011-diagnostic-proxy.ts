@@ -29,6 +29,7 @@ const fallbackIdentity = {
   databaseTargetFingerprint: "43a021d13864615b4b73b65847e2e8e41a4de31cd5793fd6ab36c9acf507da0b",
   databaseNameFingerprint: "693fe5919fc229a2cf404ad99e03e8e9277fa4a6d34e88a0d4224d81b0b057a8",
 } as const;
+const canonicalConstraintCount = 44;
 
 function stopped(code: string, status: number) {
   return Response.json({
@@ -121,16 +122,31 @@ function validPayload(payload: unknown): payload is Record<string, unknown> {
     || !Array.isArray(comparison.checksumMismatches)
     || !comparison.checksumMismatches.every(validMismatch)) return false;
   if (!exactKeys(payload.objectContract, [
-    "presentObjectCount", "columnsExact", "indexesExact", "constraintsExact", "functionExact", "state",
+    "presentObjectCount", "columnsExact", "indexesExact", "constraintCount",
+    "constraintsExact", "functionExact", "state",
   ])) return false;
   const object = payload.objectContract;
-  return Number.isInteger(object.presentObjectCount)
+  if (!(typeof object.presentObjectCount === "number"
+    && Number.isInteger(object.presentObjectCount)
     && typeof object.columnsExact === "boolean"
     && typeof object.indexesExact === "boolean"
+    && typeof object.constraintCount === "number"
+    && Number.isInteger(object.constraintCount)
     && typeof object.constraintsExact === "boolean"
     && typeof object.functionExact === "boolean"
     && stringArray([object.state])
-    && ["ABSENT", "PARTIAL", "COMPLETE"].includes(object.state as string);
+    && ["ABSENT", "PARTIAL", "COMPLETE"].includes(object.state as string))) return false;
+  const complete = object.presentObjectCount === 7
+    && object.columnsExact === true
+    && object.indexesExact === true
+    && object.constraintCount === canonicalConstraintCount
+    && object.constraintsExact === true
+    && object.functionExact === true;
+  if (object.state === "COMPLETE") return complete;
+  if (object.state === "ABSENT") {
+    return object.presentObjectCount === 0 && object.constraintCount === 0;
+  }
+  return object.state === "PARTIAL" && object.presentObjectCount > 0 && !complete;
 }
 
 export function isCanonicalDevelopmentDiagnosticPlatformRuntime(
