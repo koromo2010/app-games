@@ -8,7 +8,7 @@ import {
   parseProductionPrivateWorkspaceImportExecute,
   parseProductionPrivateWorkspaceImportPlan,
   parseProductionPrivateWorkspaceImportStatus,
-  parseProductionPrivateWorkspaceImportTargetState,
+  requestProductionPrivateWorkspaceImportTargetState,
   verifyProductionPrivateWorkspaceImportFile,
   type ProductionPrivateWorkspaceImportAcceptance,
   type ProductionPrivateWorkspaceImportPlan,
@@ -145,32 +145,32 @@ export function ProductionPrivateWorkspaceImportPanel({
     targetStateUsed.current = true;
     setTargetStateLocked(true);
     setMessage("");
-    try {
-      const response = await fetch("/api/admin/sdk-production-private-workspace-import/moi-lab2/target-state", {
-        method: "GET",
-        cache: "no-store",
-      });
-      const parsed = response.ok
-        ? parseProductionPrivateWorkspaceImportTargetState(await payload(response), "moi-lab2")
-        : null;
-      if (!parsed) {
-        setState("stopped");
-        setMessage("Production target preflightの応答形式が不正です。bundleは送信していません。");
-        return;
-      }
-      setTargetState(parsed);
-      const failures = diagnoseProductionPrivateWorkspaceImportTargetState(
-        parsed,
-        verified.manifest.creatorIdentitySha256,
-      );
-      if (failures.length > 0) {
-        setState("stopped");
-        setMessage(`Production target preflightはBLOCKEDです (${failures.map(({ code }) => code).join(", ")})。bundleは送信していません。`);
-        return;
-      }
-    } catch {
+    const result = await requestProductionPrivateWorkspaceImportTargetState("moi-lab2");
+    if (result.kind === "transport-error") {
       setState("stopped");
       setMessage("Production targetのread-only確認結果が不明です。bundleは送信していません。");
+      return;
+    }
+    if (result.kind === "http-error") {
+      setState("stopped");
+      setMessage(`Production target preflightはHTTP ${result.status} / ${result.code}で停止しました。bundleは送信していません。`);
+      return;
+    }
+    if (result.kind === "contract-error") {
+      setState("stopped");
+      setMessage(`Production target preflightはHTTP ${result.status} / ${result.code}で停止しました。bundleは送信していません。`);
+      return;
+    }
+    const parsed = result.value;
+    setTargetState(parsed);
+    const failures = diagnoseProductionPrivateWorkspaceImportTargetState(
+      parsed,
+      verified.manifest.creatorIdentitySha256,
+    );
+    if (failures.length > 0) {
+      setState("stopped");
+      setMessage(`Production target preflightはBLOCKEDです (${failures.map(({ code }) => code).join(", ")})。bundleは送信していません。`);
+      return;
     }
   };
 

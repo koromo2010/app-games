@@ -51,6 +51,41 @@ export type ProductionPrivateWorkspaceImportTargetStateFailure = {
   observed: string | number | boolean | null;
 };
 
+export const productionPrivateWorkspaceImportTargetStateSafeErrorStatuses = Object.freeze({
+  ADMIN_AUTH_REQUIRED: 401,
+  ADMIN_FULL_AUTH_REQUIRED: 403,
+  ADMIN_STEP_UP_REQUIRED: 403,
+  SITE_ADMIN_PASSWORD_NOT_CONFIGURED: 503,
+  PRODUCTION_PRIVATE_IMPORT_INPUT_INVALID: 400,
+  PRODUCTION_PRIVATE_IMPORT_UNAVAILABLE: 503,
+  PRODUCTION_PRIVATE_IMPORT_TARGET_INVALID: 503,
+  SDK_ACCOUNT_LINK_SECRET_NOT_CONFIGURED: 503,
+  SDK_SERVICE_ENVIRONMENT_MISMATCH: 503,
+  SDK_SERVICE_AUTH_REQUIRED: 503,
+} as const);
+
+export type ProductionPrivateWorkspaceImportTargetStateSafeErrorCode =
+  keyof typeof productionPrivateWorkspaceImportTargetStateSafeErrorStatuses;
+
+export type ProductionPrivateWorkspaceImportTargetStateHttpFailure = {
+  status: number;
+  code: ProductionPrivateWorkspaceImportTargetStateSafeErrorCode;
+};
+
+export type ProductionPrivateWorkspaceImportTargetStateResponse =
+  | { kind: "success"; status: number; value: ProductionPrivateWorkspaceImportTargetState }
+  | {
+    kind: "http-error";
+    status: number;
+    code: ProductionPrivateWorkspaceImportTargetStateSafeErrorCode | "SAFE_ERROR_UNAVAILABLE";
+  }
+  | {
+    kind: "contract-error";
+    status: number;
+    code: "TARGET_STATE_RESPONSE_CONTRACT_INVALID";
+  }
+  | { kind: "transport-error"; code: "TARGET_STATE_TRANSPORT_UNKNOWN" };
+
 const productionPrivateWorkspaceImportExpectedCounts = Object.freeze({
   creatorRows: 1,
   deletedCreatorRows: 1,
@@ -403,6 +438,65 @@ export function parseProductionPrivateWorkspaceImportTargetState(
     publicStateTokenValid: integrity.publicStateTokenValid,
     unrelatedPrivateStateTokenValid: integrity.unrelatedPrivateStateTokenValid,
   };
+}
+
+export function parseProductionPrivateWorkspaceImportTargetStateHttpFailure(
+  value: unknown,
+  status: number,
+): ProductionPrivateWorkspaceImportTargetStateHttpFailure | null {
+  const input = record(value);
+  if (
+    !input
+    || Object.keys(input).sort().join(",") !== "error"
+    || typeof input.error !== "string"
+    || !Object.prototype.hasOwnProperty.call(
+      productionPrivateWorkspaceImportTargetStateSafeErrorStatuses,
+      input.error,
+    )
+  ) return null;
+  const code = input.error as ProductionPrivateWorkspaceImportTargetStateSafeErrorCode;
+  return productionPrivateWorkspaceImportTargetStateSafeErrorStatuses[code] === status
+    ? { status, code }
+    : null;
+}
+
+export async function requestProductionPrivateWorkspaceImportTargetState(
+  target: ProductionPrivateWorkspaceImportTarget,
+  fetcher: typeof fetch = fetch,
+): Promise<ProductionPrivateWorkspaceImportTargetStateResponse> {
+  try {
+    const response = await fetcher(
+      `/api/admin/sdk-production-private-workspace-import/${encodeURIComponent(target)}/target-state`,
+      { method: "GET", cache: "no-store" },
+    );
+    let responsePayload: Record<string, unknown> | null = null;
+    try {
+      responsePayload = record(await response.json());
+    } catch {
+      // A missing or non-JSON body is classified below without retrying or exposing it.
+    }
+    if (!response.ok) {
+      const failure = parseProductionPrivateWorkspaceImportTargetStateHttpFailure(
+        responsePayload,
+        response.status,
+      );
+      return {
+        kind: "http-error",
+        status: response.status,
+        code: failure?.code ?? "SAFE_ERROR_UNAVAILABLE",
+      };
+    }
+    const parsed = parseProductionPrivateWorkspaceImportTargetState(responsePayload, target);
+    return parsed
+      ? { kind: "success", status: response.status, value: parsed }
+      : {
+        kind: "contract-error",
+        status: response.status,
+        code: "TARGET_STATE_RESPONSE_CONTRACT_INVALID",
+      };
+  } catch {
+    return { kind: "transport-error", code: "TARGET_STATE_TRANSPORT_UNKNOWN" };
+  }
 }
 
 export function parseProductionPrivateWorkspaceImportPlan(
