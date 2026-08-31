@@ -12,6 +12,7 @@ import {
   publishedMarketingGameRoutes,
   type BuiltInGameRoute,
 } from "@/lib/game-routes";
+import { serializeJsonLd } from "@/lib/safe-json-ld";
 
 const copy = {
   ja: {
@@ -49,10 +50,6 @@ const copy = {
     bottomTitle: "Ready to play?",
   },
 } as const;
-
-function jsonLd(value: unknown) {
-  return JSON.stringify(value).replaceAll("<", "\\u003c");
-}
 
 function FaqList({ items }: { items: readonly GameLandingFaqItem[] }) {
   return <div className="mt-5 space-y-3">{items.map(([question, answer]) => (
@@ -109,8 +106,8 @@ export function GameLandingPage({
 
   return (
     <main className="min-h-screen bg-slate-100 text-slate-950">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(breadcrumb) }} />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd(faq) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(breadcrumb) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd(faq) }} />
       <section className="relative isolate overflow-hidden border-b border-slate-800 bg-slate-950 text-white">
         <Image src={game.visual} alt="" fill priority sizes="100vw" unoptimized className="-z-20 object-cover opacity-90 brightness-110 saturate-[1.08]" />
         <div className="absolute inset-0 -z-10 bg-gradient-to-r from-slate-950/90 via-slate-900/55 to-slate-950/5" />

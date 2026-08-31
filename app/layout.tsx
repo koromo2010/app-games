@@ -8,6 +8,7 @@ import { AppLocaleProvider } from "@/app/components/AppLocaleProvider";
 import { GlobalLocaleSwitcher } from "@/app/components/GlobalLocaleSwitcher";
 import { RouteTransitionProvider } from "@/app/components/RouteTransitionProvider";
 import { appLocaleDefinition, normalizeAppLocale } from "@/lib/app-locale";
+import { serializeJsonLd } from "@/lib/safe-json-ld";
 
 export async function generateMetadata(): Promise<Metadata> {
   const settings = await loadSiteSettings();
@@ -35,7 +36,7 @@ export default async function RootLayout({
   const localeDefinition = appLocaleDefinition(locale);
   return (
     <html lang={localeDefinition.htmlLang} className="h-full antialiased">
-      <body className="min-h-full flex flex-col"><AppLocaleProvider initialLocale={locale}><GlobalLocaleSwitcher /><RouteTransitionProvider>{children}<SiteFooter siteName={settings.siteName} /></RouteTransitionProvider></AppLocaleProvider><WebVitalsReporter /><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({ "@context": "https://schema.org", "@type": "WebSite", name: settings.siteName, alternateName: "ゲームフィールド", url: `https://www.game-fields.com/${locale}`, inLanguage: localeDefinition.htmlLang, description: settings.searchDescription }) }} /></body>
+      <body className="min-h-full flex flex-col"><AppLocaleProvider initialLocale={locale}><GlobalLocaleSwitcher /><RouteTransitionProvider>{children}<SiteFooter siteName={settings.siteName} /></RouteTransitionProvider></AppLocaleProvider><WebVitalsReporter /><script type="application/ld+json" dangerouslySetInnerHTML={{ __html: serializeJsonLd({ "@context": "https://schema.org", "@type": "WebSite", name: settings.siteName, alternateName: "ゲームフィールド", url: `https://www.game-fields.com/${locale}`, inLanguage: localeDefinition.htmlLang, description: settings.searchDescription }) }} /></body>
     </html>
   );
 }
