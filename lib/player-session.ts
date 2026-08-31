@@ -1,4 +1,4 @@
-import { defaultAppLocale, normalizeAppLocale, type AppLocale } from "./app-locale.ts";
+import { normalizeAppLocale, type AppLocale } from "./app-locale.ts";
 
 export type PlayerSession = {
   id?: string;
@@ -153,7 +153,10 @@ export function savePlayerSession(session: Omit<PlayerSession, "updatedAt">) {
   } else {
     localStorage.removeItem(legacyAvatarImageKey);
   }
-  notifyPlayerSessionChanged(nextSession.locale);
+  // Only an explicitly supplied account locale is authoritative. Session
+  // lifecycle notifications without a locale must not force an anonymous or
+  // already-localized /en document back to the default /ja route.
+  notifyPlayerSessionChanged(session.locale);
 }
 
 export function markPlayerAuthenticated() {
@@ -188,9 +191,11 @@ export function subscribePlayerSession(listener: () => void) {
   };
 }
 
-function notifyPlayerSessionChanged(locale = defaultAppLocale) {
+function notifyPlayerSessionChanged(locale?: AppLocale) {
   if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent(playerSessionChangedEvent, { detail: { locale } }));
+  window.dispatchEvent(new CustomEvent(playerSessionChangedEvent, {
+    detail: locale ? { locale } : {},
+  }));
 }
 
 export function clearPlayerSession() {

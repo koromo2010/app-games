@@ -37,6 +37,7 @@ import { expectedAppEnvironment } from "./storage-environment-guard.ts";
 import {
   resolveApprovedSdkGamePresentation,
 } from "../config/sdk-game-presentations.ts";
+import { publicGameCatalogVersion } from "./public-game-catalog-cache.ts";
 
 type RuntimeCatalogChannel = "development" | "main";
 
@@ -121,9 +122,9 @@ function validCatalogListPayload(
   });
 }
 
-export async function loadApprovedGameSdkCatalog(
+export async function loadApprovedGameSdkCatalogSnapshot(
   env: NodeJS.ProcessEnv = process.env,
-): Promise<GameCatalogEntry[]> {
+): Promise<{ games: GameCatalogEntry[]; sourceVersion: string }> {
   const channel = deploymentChannel(env);
   const url = `${sdkPortalInternalBaseUrl(env)}/api/runtime-catalog?channel=${channel}`;
   const response = await fetch(url, {
@@ -135,7 +136,7 @@ export async function loadApprovedGameSdkCatalog(
   if (!validCatalogListPayload(payload, channel)) {
     throw new Error("GAME_SDK_RUNTIME_CATALOG_INVALID");
   }
-  return payload.games.map((game) => {
+  const games = payload.games.map((game): GameCatalogEntry => {
     const moduleProfile = normalizeGameSdkModuleProfile(game.modulePolicy);
     const presentation = resolveApprovedSdkGamePresentation({
       gameId: game.id,
@@ -162,6 +163,28 @@ export async function loadApprovedGameSdkCatalog(
       ...(game.manifest.localePolicy ? { localePolicy: game.manifest.localePolicy } : {}),
     };
   });
+  return {
+    games,
+    sourceVersion: publicGameCatalogVersion({
+      channel: payload.channel,
+      games: payload.games.map((game) => ({
+        id: game.id,
+        revision: game.revision,
+        packageRootSha256: game.packageRootSha256,
+        serverBundleSha256: game.serverBundleSha256,
+        appSetSourceSha256: game.appSetSourceSha256,
+        description: game.description,
+        manifest: game.manifest,
+        modulePolicy: game.modulePolicy,
+      })),
+    }),
+  };
+}
+
+export async function loadApprovedGameSdkCatalog(
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<GameCatalogEntry[]> {
+  return (await loadApprovedGameSdkCatalogSnapshot(env)).games;
 }
 
 function validCatalogPayload(

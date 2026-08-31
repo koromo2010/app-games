@@ -23,14 +23,36 @@ test("top and /games render the same server-side lobby read model", () => {
   assert.match(route, /loadGameLobbyPageData\(\)/);
   assert.match(route, /<GameLobby \{\.\.\.props\} \/>/);
   for (const read of [
-    "loadApprovedGameSdkCatalog",
     "loadSiteSettings",
     "loadGameOperations",
     "loadGameDurationEstimates",
   ]) {
     assert.match(loader, new RegExp(read));
   }
+  assert.doesNotMatch(loader, /loadApprovedGameSdkCatalog/);
+  assert.match(loader, /assembleGameLobbyCriticalPageData/);
   assert.doesNotMatch(loader, /save|record|ensurePostgresSchema|redisCommand|sdkSql/);
+});
+
+test("approved SDK catalog is revalidated after the critical lobby render", () => {
+  const route = source("app/api/public/game-catalog/route.ts");
+  const lobby = source("app/games/GameLobby.tsx");
+  const client = source("app/games/use-deferred-game-lobby-catalog.ts");
+
+  assert.match(route, /loadApprovedGameSdkCatalogSnapshot/);
+  assert.match(route, /loadGameOperations/);
+  assert.match(route, /publicGameCatalogResponse/);
+  assert.match(client, /cache: "no-cache"/);
+  assert.match(client, /credentials: "omit"/);
+  assert.match(lobby, /data-sdk-catalog-state/);
+});
+
+test("only the measured above-fold Word Wolf visual receives high fetch priority", () => {
+  const grid = source("app/games/LobbyGameGrid.tsx");
+  assert.match(grid, /isMeasuredLobbyLcpImage = game\.id === "wordwolf"/);
+  assert.match(grid, /loading=\{isMeasuredLobbyLcpImage \? "eager" : "lazy"\}/);
+  assert.match(grid, /fetchPriority=\{isMeasuredLobbyLcpImage \? "high" : "auto"\}/);
+  assert.equal((grid.match(/fetchPriority=/g) ?? []).length, 1);
 });
 
 test("public catalog storage paths contain reads only", () => {

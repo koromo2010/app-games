@@ -1,21 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { assembleGameLobbyPageData } from "../app/games/game-lobby-page-data.ts";
+import {
+  assembleDeferredGameLobbyCatalog,
+  assembleGameLobbyCriticalPageData,
+} from "../app/games/game-lobby-page-data.ts";
 
-test("shared lobby data includes approved SDK games without changing catalog order", async () => {
-  const sdkGames = [
-    { id: "sdk-newer", title: "Newer SDK game" },
-    { id: "sdk-older", title: "Older SDK game" },
-  ];
+test("critical lobby data does not wait for the approved SDK catalog", async () => {
   const operations = [
-    { gameId: "sdk-newer", publication: "public" },
-    { gameId: "sdk-older", publication: "hidden" },
+    { gameId: "wordwolf", publication: "public" },
   ];
   const durationEstimates = { wordwolf: { label: "8–12 min", sampleCount: 12 } };
   let operationsInput: unknown;
 
-  const data = await assembleGameLobbyPageData({
-    loadApprovedGameSdkCatalog: async () => sdkGames,
+  const data = await assembleGameLobbyCriticalPageData({
     loadSiteSettings: async () => ({ siteName: "GAME FIELDS TEST" }),
     loadGameOperations: async (_options, additionalGames) => {
       operationsInput = additionalGames;
@@ -24,36 +21,39 @@ test("shared lobby data includes approved SDK games without changing catalog ord
     loadGameDurationEstimates: async () => durationEstimates,
   });
 
-  assert.strictEqual(operationsInput, sdkGames);
+  assert.deepEqual(operationsInput, []);
   assert.deepEqual(data, {
     siteName: "GAME FIELDS TEST",
     gameOperations: operations,
     durationEstimates,
-    additionalGames: sdkGames,
+    deferredCatalogEndpoint: "/api/public/game-catalog",
   });
-  assert.deepEqual(data.additionalGames.map((game) => game.id), [
-    "sdk-newer",
-    "sdk-older",
-  ]);
 });
 
-test("SDK catalog failure keeps built-in lobby data available", async () => {
-  let operationsInput: unknown = null;
-  const data = await assembleGameLobbyPageData({
-    loadApprovedGameSdkCatalog: async () => {
-      throw new Error("catalog unavailable");
-    },
-    loadSiteSettings: async () => ({ siteName: "GAME FIELDS" }),
-    loadGameOperations: async (_options, additionalGames) => {
+test("deferred catalog preserves source order and reads operations fresh", async () => {
+  const sdkGames = [
+    { id: "sdk-newer", title: "Newer SDK game" },
+    { id: "sdk-older", title: "Older SDK game" },
+  ];
+  let operationsOptions: unknown;
+  let operationsInput: unknown;
+  const data = await assembleDeferredGameLobbyCatalog({
+    loadApprovedGameSdkCatalogSnapshot: async () => ({
+      games: sdkGames,
+      sourceVersion: "a".repeat(64),
+    }),
+    loadGameOperations: async (options, additionalGames) => {
+      operationsOptions = options;
       operationsInput = additionalGames;
-      return [{ gameId: "wordwolf", publication: "public" }];
+      return [{ gameId: "sdk-newer", publication: "public" }];
     },
-    loadGameDurationEstimates: async () => ({}),
   });
 
-  assert.deepEqual(operationsInput, []);
-  assert.deepEqual(data.additionalGames, []);
+  assert.deepEqual(operationsOptions, { fresh: true });
+  assert.strictEqual(operationsInput, sdkGames);
+  assert.deepEqual(data.additionalGames, sdkGames);
   assert.deepEqual(data.gameOperations, [
-    { gameId: "wordwolf", publication: "public" },
+    { gameId: "sdk-newer", publication: "public" },
   ]);
+  assert.equal(data.sourceVersion, "a".repeat(64));
 });

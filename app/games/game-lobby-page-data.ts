@@ -2,37 +2,31 @@ type GameOperationsLoadOptions = {
   fresh?: boolean;
 };
 
-export type GameLobbyPageDataSources<TGame, TOperation, TDurationEstimates> = {
-  loadApprovedGameSdkCatalog: () => Promise<TGame[]>;
+export type GameLobbyCriticalPageDataSources<TOperation, TDurationEstimates> = {
   loadSiteSettings: () => Promise<{ siteName: string }>;
   loadGameOperations: (
     options: GameOperationsLoadOptions,
-    additionalGames: TGame[],
+    additionalGames: never[],
   ) => Promise<TOperation[]>;
   loadGameDurationEstimates: () => Promise<TDurationEstimates>;
 };
 
 /**
- * Builds the serializable props shared by every public Game Fields catalog
- * route. SDK catalog failure stays isolated, while the other independent reads
- * start in parallel and preserve the source catalog order.
+ * Builds the critical, serializable props shared by every public Game Fields
+ * catalog route. The remote SDK catalog is deliberately not a dependency of
+ * this read model: it is revalidated after the built-in lobby has rendered.
  */
-export async function assembleGameLobbyPageData<
-  TGame,
+export async function assembleGameLobbyCriticalPageData<
   TOperation,
   TDurationEstimates,
 >(
-  sources: GameLobbyPageDataSources<TGame, TOperation, TDurationEstimates>,
+  sources: GameLobbyCriticalPageDataSources<TOperation, TDurationEstimates>,
 ) {
-  const sdkGamesPromise = sources.loadApprovedGameSdkCatalog().catch(() => [] as TGame[]);
   const settingsPromise = sources.loadSiteSettings();
   const durationEstimatesPromise = sources.loadGameDurationEstimates();
-  const gameOperationsPromise = sdkGamesPromise.then((sdkGames) => (
-    sources.loadGameOperations({}, sdkGames)
-  ));
+  const gameOperationsPromise = sources.loadGameOperations({}, []);
 
-  const [sdkGames, settings, gameOperations, durationEstimates] = await Promise.all([
-    sdkGamesPromise,
+  const [settings, gameOperations, durationEstimates] = await Promise.all([
     settingsPromise,
     gameOperationsPromise,
     durationEstimatesPromise,
@@ -42,6 +36,37 @@ export async function assembleGameLobbyPageData<
     siteName: settings.siteName,
     gameOperations,
     durationEstimates,
-    additionalGames: sdkGames,
+    deferredCatalogEndpoint: "/api/public/game-catalog",
+  };
+}
+
+export type DeferredGameLobbyCatalogSources<TGame, TOperation> = {
+  loadApprovedGameSdkCatalogSnapshot: () => Promise<{
+    games: TGame[];
+    sourceVersion: string;
+  }>;
+  loadGameOperations: (
+    options: GameOperationsLoadOptions,
+    additionalGames: TGame[],
+  ) => Promise<TOperation[]>;
+};
+
+/**
+ * Loads a fresh SDK catalog outside the root HTML critical path. Operations
+ * are read fresh against the same complete game set so a revalidated response
+ * cannot pair a new catalog with stale visibility controls.
+ */
+export async function assembleDeferredGameLobbyCatalog<TGame, TOperation>(
+  sources: DeferredGameLobbyCatalogSources<TGame, TOperation>,
+) {
+  const snapshot = await sources.loadApprovedGameSdkCatalogSnapshot();
+  const gameOperations = await sources.loadGameOperations(
+    { fresh: true },
+    snapshot.games,
+  );
+  return {
+    sourceVersion: snapshot.sourceVersion,
+    additionalGames: snapshot.games,
+    gameOperations,
   };
 }
