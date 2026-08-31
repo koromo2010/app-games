@@ -6,6 +6,16 @@ import {
 
 const sha256Pattern = /^[0-9a-f]{64}$/;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const storedZipUtf8Flag = 0x0800;
+const storedZipMaximumEntries = 16_384;
+
+const storedZipCrcTable = Array.from({ length: 256 }, (_, index) => {
+  let value = index;
+  for (let bit = 0; bit < 8; bit += 1) {
+    value = (value & 1) === 1 ? (value >>> 1) ^ 0xedb88320 : value >>> 1;
+  }
+  return value >>> 0;
+});
 
 export type VerifiedProductionPrivateWorkspaceImportFile = {
   target: ProductionPrivateWorkspaceImportTarget;
@@ -19,7 +29,7 @@ export type VerifiedProductionPrivateWorkspaceImportFile = {
     workspaceManifestSha256: string;
     perGameLedgerSha256: string;
     creatorIdentitySha256: string;
-    gameCount: 2;
+    gameCount: number;
   };
 };
 
@@ -79,39 +89,100 @@ function record(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+function storedZipCrc32(content: Uint8Array) {
+  let crc = 0xffffffff;
+  for (const byte of content) crc = (crc >>> 8) ^ storedZipCrcTable[(crc ^ byte) & 0xff]!;
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function equalBytes(left: Uint8Array, right: Uint8Array) {
+  return left.byteLength === right.byteLength && left.every((byte, index) => byte === right[index]);
+}
+
 function storedZipEntries(archive: ArrayBuffer) {
   const bytes = new Uint8Array(archive);
   const view = new DataView(archive);
   const end = bytes.byteLength - 22;
-  if (end < 0 || view.getUint32(end, true) !== 0x06054b50 || view.getUint16(end + 20, true) !== 0) {
+  if (end < 0 || view.getUint32(end, true) !== 0x06054b50) {
     throw new Error("ZIP_INVALID");
   }
+  const disk = view.getUint16(end + 4, true);
+  const directoryDisk = view.getUint16(end + 6, true);
+  const entriesOnDisk = view.getUint16(end + 8, true);
   const count = view.getUint16(end + 10, true);
-  let cursor = view.getUint32(end + 16, true);
+  const directoryBytes = view.getUint32(end + 12, true);
+  const directoryOffset = view.getUint32(end + 16, true);
+  const commentBytes = view.getUint16(end + 20, true);
+  if (
+    disk !== 0
+    || directoryDisk !== 0
+    || entriesOnDisk !== count
+    || count > storedZipMaximumEntries
+    || commentBytes !== 0
+    || directoryOffset + directoryBytes !== end
+  ) throw new Error("ZIP_INVALID");
+  let cursor = directoryOffset;
   const decoder = new TextDecoder("utf-8", { fatal: true });
   const entries = new Map<string, Uint8Array>();
+  const foldedNames = new Set<string>();
   for (let index = 0; index < count; index += 1) {
     if (cursor + 46 > end || view.getUint32(cursor, true) !== 0x02014b50) throw new Error("ZIP_INVALID");
     const flags = view.getUint16(cursor + 8, true);
     const method = view.getUint16(cursor + 10, true);
+    const expectedCrc = view.getUint32(cursor + 16, true);
     const compressed = view.getUint32(cursor + 20, true);
     const uncompressed = view.getUint32(cursor + 24, true);
     const nameLength = view.getUint16(cursor + 28, true);
     const extraLength = view.getUint16(cursor + 30, true);
     const commentLength = view.getUint16(cursor + 32, true);
     const localOffset = view.getUint32(cursor + 42, true);
-    if (flags !== 0 || method !== 0 || compressed !== uncompressed || localOffset + 30 > end) {
+    const next = cursor + 46 + nameLength + extraLength + commentLength;
+    if (
+      flags !== storedZipUtf8Flag
+      || method !== 0
+      || compressed !== uncompressed
+      || next > end
+      || localOffset + 30 > directoryOffset
+      || view.getUint32(localOffset, true) !== 0x04034b50
+    ) {
       throw new Error("ZIP_INVALID");
     }
     const name = decoder.decode(bytes.slice(cursor + 46, cursor + 46 + nameLength));
-    if (!name || entries.has(name) || view.getUint32(localOffset, true) !== 0x04034b50) throw new Error("ZIP_INVALID");
+    const foldedName = name.toLocaleLowerCase("en-US");
+    const localFlags = view.getUint16(localOffset + 6, true);
+    const localMethod = view.getUint16(localOffset + 8, true);
+    const localCrc = view.getUint32(localOffset + 14, true);
+    const localCompressed = view.getUint32(localOffset + 18, true);
+    const localUncompressed = view.getUint32(localOffset + 22, true);
     const localNameLength = view.getUint16(localOffset + 26, true);
     const localExtraLength = view.getUint16(localOffset + 28, true);
-    const dataStart = localOffset + 30 + localNameLength + localExtraLength;
+    const localNameStart = localOffset + 30;
+    const localNameEnd = localNameStart + localNameLength;
+    const dataStart = localNameEnd + localExtraLength;
     const dataEnd = dataStart + uncompressed;
-    if (dataEnd > bytes.byteLength) throw new Error("ZIP_INVALID");
-    entries.set(name, bytes.slice(dataStart, dataEnd));
-    cursor += 46 + nameLength + extraLength + commentLength;
+    if (
+      !name
+      || name.length > 1_024
+      || name.startsWith("/")
+      || name.includes("\\")
+      || name.includes("\0")
+      || name.split("/").some((part) => part === "" || part === "." || part === "..")
+      || entries.has(name)
+      || foldedNames.has(foldedName)
+      || localNameEnd > directoryOffset
+      || !equalBytes(bytes.slice(localNameStart, localNameEnd), bytes.slice(cursor + 46, cursor + 46 + nameLength))
+      || localFlags !== flags
+      || localMethod !== method
+      || localCrc !== expectedCrc
+      || localCompressed !== compressed
+      || localUncompressed !== uncompressed
+      || dataEnd > directoryOffset
+    ) throw new Error("ZIP_INVALID");
+    const content = bytes.slice(dataStart, dataEnd);
+    if (storedZipCrc32(content) !== expectedCrc) throw new Error("ZIP_INVALID");
+    entries.set(name, content);
+    foldedNames.add(foldedName);
+    cursor = next;
   }
   if (cursor !== end || entries.size !== count) throw new Error("ZIP_INVALID");
   return entries;
@@ -126,21 +197,27 @@ function parseJson(entries: ReadonlyMap<string, Uint8Array>, path: string) {
   return { bytes, value: parsed };
 }
 
-export async function verifyProductionPrivateWorkspaceImportFile(
+export async function verifyProductionPrivateWorkspaceImportFileAgainstSpec(
   file: File,
   target: ProductionPrivateWorkspaceImportTarget,
+  expectedSpec: {
+    target: ProductionPrivateWorkspaceImportTarget;
+    bundleBytes: number;
+    bundleSha256: string;
+    gameCount: number;
+  },
   browserCrypto: Pick<Crypto, "subtle"> = crypto,
 ): Promise<
   | { kind: "verified"; value: VerifiedProductionPrivateWorkspaceImportFile }
   | { kind: "rejected"; code: "BUNDLE_IDENTITY_MISMATCH" | "BUNDLE_CONTENT_INVALID" | "BROWSER_CRYPTO_UNAVAILABLE" }
 > {
-  if (target !== productionPrivateWorkspaceImportTargetSpec.target || file.size !== productionPrivateWorkspaceImportTargetSpec.bundleBytes) {
+  if (target !== expectedSpec.target || file.size !== expectedSpec.bundleBytes) {
     return { kind: "rejected", code: "BUNDLE_IDENTITY_MISMATCH" };
   }
   try {
     const archive = await file.arrayBuffer();
     const sha256 = await digest(archive, browserCrypto);
-    if (sha256 !== productionPrivateWorkspaceImportTargetSpec.bundleSha256) {
+    if (sha256 !== expectedSpec.bundleSha256) {
       return { kind: "rejected", code: "BUNDLE_IDENTITY_MISMATCH" };
     }
     const entries = storedZipEntries(archive);
@@ -154,8 +231,8 @@ export async function verifyProductionPrivateWorkspaceImportFile(
       || manifest.value.phaseId !== "T-131-A4"
       || manifest.value.artifactType !== "PRIVATE_LOCAL_AUTHORING_WORKSPACE_BUNDLE"
       || manifest.value.target !== target
-      || manifest.value.gameCount !== 2
-      || manifest.value.readyGameCount !== 2
+      || manifest.value.gameCount !== expectedSpec.gameCount
+      || manifest.value.readyGameCount !== expectedSpec.gameCount
       || manifest.value.blockedGameCount !== 0
       || manifest.value.transferAuthorized !== false
       || manifest.value.ownerBindingApplied !== false
@@ -167,8 +244,8 @@ export async function verifyProductionPrivateWorkspaceImportFile(
       || ledger.value.schemaVersion !== 1
       || ledger.value.target !== target
       || !Array.isArray(ledgerGames)
-      || ledgerGames.length !== 2
-      || runtimeFileCount < 2
+      || ledgerGames.length !== expectedSpec.gameCount
+      || runtimeFileCount < expectedSpec.gameCount
     ) return { kind: "rejected", code: "BUNDLE_CONTENT_INVALID" };
     const perGameLedgerSha256 = await digest(ledger.bytes, browserCrypto);
     if (manifest.value.perGameLedgerSha256 !== perGameLedgerSha256) {
@@ -205,13 +282,26 @@ export async function verifyProductionPrivateWorkspaceImportFile(
           workspaceManifestSha256: await digest(manifest.bytes, browserCrypto),
           perGameLedgerSha256,
           creatorIdentitySha256,
-          gameCount: 2,
+          gameCount: expectedSpec.gameCount,
         },
       },
     };
   } catch {
     return { kind: "rejected", code: "BUNDLE_CONTENT_INVALID" };
   }
+}
+
+export async function verifyProductionPrivateWorkspaceImportFile(
+  file: File,
+  target: ProductionPrivateWorkspaceImportTarget,
+  browserCrypto: Pick<Crypto, "subtle"> = crypto,
+) {
+  return verifyProductionPrivateWorkspaceImportFileAgainstSpec(
+    file,
+    target,
+    productionPrivateWorkspaceImportTargetSpec,
+    browserCrypto,
+  );
 }
 
 export function parseProductionPrivateWorkspaceImportTargetState(

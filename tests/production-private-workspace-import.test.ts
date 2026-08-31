@@ -24,6 +24,7 @@ import {
   productionPrivateWorkspaceImportSchemaStatements,
 } from "../apps/sdk-portal/lib/production-private-workspace-import-schema.ts";
 import { createStoredZip } from "../apps/sdk-portal/lib/stored-zip.ts";
+import { verifyProductionPrivateWorkspaceImportFileAgainstSpec } from "../lib/production-private-workspace-import-client.ts";
 import { productionPrivateWorkspaceImportPageMode } from "../lib/production-private-workspace-import-page-access.ts";
 
 const operationDevA = "5ba6f1b1-eed4-49dd-8a26-9c9bd8969519";
@@ -183,6 +184,39 @@ test("Production target and A3 recovery identities are exact and immutable", () 
   assert.equal(productionPrivateWorkspaceImportTargetSpec.bundleBytes, 127_345);
   assert.equal(productionPrivateWorkspaceImportRecoveryIdentity.operationId, "fa5eca14-a961-4bd1-9e68-78a609895971");
   assert.equal(productionPrivateWorkspaceImportRecoveryIdentity.terminalReceipt, "f449b3b2114ef863ea290d26c123a40ac3038e6e9861a3a576cb5bc2b9d35162");
+});
+
+test("browser verification accepts the canonical UTF-8 stored ZIP dialect", async () => {
+  const fixture = syntheticBundle();
+  const file = new File([fixture.archive], "moi-lab2.bundle.zip", { type: "application/zip" });
+  const result = await verifyProductionPrivateWorkspaceImportFileAgainstSpec(
+    file,
+    "moi-lab2",
+    fixture.specs["moi-lab2"],
+  );
+  assert.equal(result.kind, "verified");
+  if (result.kind === "verified") {
+    assert.equal(result.value.bytes, fixture.archive.byteLength);
+    assert.equal(result.value.sha256, fixture.specs["moi-lab2"].bundleSha256);
+    assert.equal(result.value.manifest.entryCount, 9);
+    assert.equal(result.value.manifest.runtimeFileCount, 4);
+  }
+});
+
+test("browser verification rejects a stored ZIP whose central flags differ from the canonical dialect", async () => {
+  const fixture = syntheticBundle();
+  const altered = Buffer.from(fixture.archive);
+  const end = altered.byteLength - 22;
+  const directoryOffset = altered.readUInt32LE(end + 16);
+  altered.writeUInt16LE(0, directoryOffset + 8);
+  const spec = {
+    ...fixture.specs["moi-lab2"],
+    bundleBytes: altered.byteLength,
+    bundleSha256: sha256(altered),
+  };
+  const file = new File([altered], "moi-lab2-invalid.bundle.zip", { type: "application/zip" });
+  const result = await verifyProductionPrivateWorkspaceImportFileAgainstSpec(file, "moi-lab2", spec);
+  assert.deepEqual(result, { kind: "rejected", code: "BUNDLE_CONTENT_INVALID" });
 });
 
 test("target state accepts only deleted, non-public, exact-A3 and source-absent Production state", () => {
